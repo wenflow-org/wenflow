@@ -223,7 +223,8 @@ describe('ModelProvidersPanel', () => {
     const target = rows.find((r) => r.text().includes('acme-pro'))!
     await target.find('button').trigger('click')
     await flushPromises()
-    const idInput = w.find('.med-modal input[placeholder="deepseek-v4-flash"]')
+    // 占位符随已下线模型归一（deepseek-v4-flash → v4.1-flash）
+    const idInput = w.find('.med-modal input[placeholder="deepseek-v4.1-flash"]')
     expect(idInput.exists()).toBe(true)
     expect((idInput.element as HTMLInputElement).value).toBe('acme-pro')
   })

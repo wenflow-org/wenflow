@@ -38,7 +38,8 @@ if (!BASE) {
 
 const arg = (n, d = null) => { const h = process.argv.find((a) => a.startsWith(`--${n}=`)); return h ? h.slice(n.length + 3) : (process.argv.includes(`--${n}`) ? true : d); };
 const TAG = String(arg('tag') || 'vl50');
-const MODEL = ({ flash: 'deepseek-v4-flash', pro: 'deepseek-v4-pro' })[String(arg('model') || 'flash')] || String(arg('model') || 'deepseek-v4-flash');
+// 已下线模型不再给别名：--model 传裸 id（默认标准通道 dsv4.1-flash）
+const MODEL = String(arg('model') || 'deepseek-v4.1-flash');
 const PHASE = String(arg('phase') || 'both');
 const CONCURRENCY = Math.min(Number(arg('concurrency', 5)) || 5, 5); // 硬性上限 5
 const RUNS = Math.max(1, Number(arg('runs', 3)) || 3);

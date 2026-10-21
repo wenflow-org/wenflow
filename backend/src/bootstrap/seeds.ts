@@ -11,7 +11,7 @@ import { logger } from '../utils/logger';
 import { ensureCoreAgentPrompts } from '../services/prompt-manifest/seed-core-agent-prompts';
 import { initializeAdmin } from '../services/auth/init-admin.service';
 import { ensureBuiltinVirtualLearners } from '../virtual-lab/builtin-learners';
-import { bootstrapFieldRoutings } from '../services/field-routing-bootstrap.service';
+import { bootstrapFieldRoutings, reconcileStaleFieldDefinitions } from '../services/field-routing-bootstrap.service';
 import { seedSkillModelConfigsIfEmpty } from '../services/seed-skill-model-configs';
 
 /** 启动仍应继续时返回；进入 draining 时抛错终止后续步骤 */
@@ -37,6 +37,12 @@ export async function runFieldRoutingSeed(assertActive: AssertActive): Promise<v
   const fieldRoutingBootstrap = await bootstrapFieldRoutings({ database: systemPrisma });
   assertActive();
   logger.info('阶段字段路由 seed 完成（V3 §3）', fieldRoutingBootstrap);
+  // 字段换阶段/删除后的旧 (stage, fieldId) 行对账清理（#125）；admin 覆盖行不动
+  const reconciled = await reconcileStaleFieldDefinitions(systemPrisma);
+  assertActive();
+  if (reconciled.deleted > 0) {
+    logger.warn('字段定义对账：清理编排声明外的残留行', reconciled);
+  }
 }
 
 export async function runAdminSeed(assertActive: AssertActive): Promise<void> {

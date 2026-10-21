@@ -1321,13 +1321,30 @@ async function saveEdit() {
   editError.value = false
   try {
     const handoff = editDraft.handoffText.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
-    await adminFieldRoutingsApi.patchRouting(c.agentId, c.fieldId, {
-      render: editDraft.render as 'visible' | 'hidden',
-      handoff,
-      internal: editDraft.internal,
-      accumulate: editDraft.accumulate,
-      notes: editDraft.notes || null,
-    })
+    // #10：只发与当前值不同的键——未改动的 notes/handoff 不再随每次保存重新序列化写回
+    const patch: {
+      render?: 'visible' | 'hidden'
+      handoff?: string[]
+      internal?: boolean
+      accumulate?: boolean
+      notes?: string | null
+    } = {}
+    if (editDraft.render !== c.render) patch.render = editDraft.render as 'visible' | 'hidden'
+    if (
+      handoff.length !== c.handoffTargets.length ||
+      handoff.some((v, i) => v !== c.handoffTargets[i])
+    ) {
+      patch.handoff = handoff
+    }
+    if (editDraft.internal !== c.internal) patch.internal = editDraft.internal
+    if (editDraft.accumulate !== c.accumulate) patch.accumulate = editDraft.accumulate
+    const notes = editDraft.notes || null
+    if (notes !== (c.notes || null)) patch.notes = notes
+    if (Object.keys(patch).length === 0) {
+      editMsg.value = '没有需要保存的修改'
+      return
+    }
+    await adminFieldRoutingsApi.patchRouting(c.agentId, c.fieldId, patch)
     editMsg.value = '已保存：编排文件与 DB 已同步'
     toast.success('字段路由已更新')
     onRoutingChanged()

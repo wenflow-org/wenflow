@@ -1,0 +1,239 @@
+{
+  "issue": "#119",
+  "generatedAt": "2026-10-19T17:20:54.551Z",
+  "commitSha": "e2c5535e2fcbff8c75bc02193537739aab6d2651",
+  "commitShaNote": "该批路径生成于 2026-10-19T04:51:18Z–05:35:17Z，晚于 e2c5535e（04:50:26Z）",
+  "model": {
+    "ai": "deepseek-v4.1-flash",
+    "reasoning": null
+  },
+  "modelSource": "doc/local/ab-goal-path/run-20261019-quota3b.log（423 处 model=\"deepseek-v4.1-flash\"）；run JSON 本身不含 model 字段",
+  "arms": [
+    "new"
+  ],
+  "armsNote": "本批只有 new 臂（--arms=new）。merged-1792388275960.json 的 old 是 10-17 的 new 臂改名（arms.old.arm=\"new\"），不是真 A/B。",
+  "goals": 20,
+  "files": {
+    "run-1792388187455.json": {
+      "sha256": "8a7a8b5141daddc65f174f13945b2cf885c7f92b855ca1a632bb31a8b86cc5a2",
+      "role": "生成产物索引（20 goal × new 臂）"
+    },
+    "merged-1792388275960.json": {
+      "sha256": "2754c33ded0f815a712694f2bd89c62176c35a9e424a1b21e33c6af3ff3e4010",
+      "role": "与历史 new 臂合并的对照（old=new 改名，非真 A/B）"
+    },
+    "dual-metric-1792430145340.json": {
+      "sha256": "ffe02a86967448cb2babbc10f3abde00fd390473aa420fa03571a0335043d5d3",
+      "role": "逐 ref 的 chunk/section 分位明细 + totals（2026-10-20 用新脚本对同一 run 重算，含全量 detail）",
+      "refScope": "combined"
+    },
+    "semantic-alignment-1792388305106.json": {
+      "sha256": "5730ddd6cd43279f5d1c8bad73c6b32e46ce9c99cd541ec8fde82936b463465a",
+      "role": "逐阶段 refPct / 语义对齐读数",
+      "refScope": "combined"
+    },
+    "coverage-1792388275960.json": {
+      "sha256": "b1aff914dc0ce6d48bf021aefa8032da02c2c4baa339c00f29112c14cf74f2d6",
+      "role": "20 路径逐阶段引用分布快照（task/milestone/combined 三列），从 aiPromptTemplate.materialRefs 只读抽取"
+    }
+  },
+  "expected": {
+    "zeroRefTask": 3,
+    "zeroRefCombined": 0,
+    "stages": 74,
+    "refs": 338,
+    "lateChunk": 97,
+    "lateSection": 117,
+    "sectionOnly": 37,
+    "refPct": 0.7331
+  },
+  "fixtures": [
+    {
+      "goal": "safety-engineer",
+      "name": "中级注册安全工程师职业资格考试大纲",
+      "sha256": "90ec648d2a8f487355d066f13edab82807296a69d4d424bcc2a8741c00d15c5e",
+      "charCount": 21201,
+      "sourceUrl": "https://156.225.111.238/gk/tzgg/tz/201905/W020190505430431195972.pdf"
+    },
+    {
+      "goal": "cpa-accounting",
+      "name": "2019 年注册会计师全国统一考试大纲——专业阶段考试（会计）",
+      "sha256": "b35efb94d7f56e1f02d03fe24a4013601c880870666ab75d414ca7c5c5f08cbf",
+      "charCount": 57431,
+      "sourceUrl": "https://157.185.148.60/ztzl1/exam/exam_outline/201903/W020210420565992311966.pdf"
+    },
+    {
+      "goal": "high-school-history",
+      "name": "普通高中教科书 历史 必修 中外历史纲要（上）",
+      "sha256": "132258ca684e9874b18d9fa49485f2302419086810e507ca7044cd16df0fb392",
+      "charCount": 100035,
+      "sourceUrl": "https://222.221.252.162/temp/1689239715677.pdf"
+    },
+    {
+      "goal": "german-a2",
+      "name": "Goethe-Zertifikat A2 Modellsatz Erwachsene",
+      "sha256": "54720d741362dc092e0050e2563fbb0b6289d5a23b0f5df01b4f77c92447652a",
+      "charCount": 40546,
+      "sourceUrl": "https://104.68.106.25/pro/relaunch/prf/materialien/A2/A2_Modellsatz_Erwachsene.pdf"
+    },
+    {
+      "goal": "feline-nursing",
+      "name": "2021 AAHA/AAFP Feline Life Stage Guidelines",
+      "sha256": "4017e8f43c08cebdf6fdbb4e4f97f04306091e6946adc5ce41c5e5533104892f",
+      "charCount": 100035,
+      "sourceUrl": "https://104.26.12.2/wp-content/uploads/2021/02/2021-aaha-aafp-feline-life-stage-guidelines.pdf"
+    },
+    {
+      "goal": "feline-nursing",
+      "name": "全国执业兽医资格考试大纲（兽医全科类）（2023 版）",
+      "sha256": "4b581eea7889c52dfa36de8b88671a870917a1c909efb6b1e822fe8afc178566",
+      "charCount": 70669,
+      "sourceUrl": "https://61.183.52.213/nync/index/ywgl/zysy/2023080315590210971/2023080315584021865.pdf"
+    },
+    {
+      "goal": "agile-pm",
+      "name": "PMI《敏捷实践指南》(Agile Practice Guide)",
+      "sha256": "4fc5a01d5bf01570055d9d6cb2c82cebfeacd780015ec3ef8ec8222d2661cf14",
+      "charCount": 100035,
+      "sourceUrl": "https://35.215.95.129/wp-content/uploads/2018/07/AgilePG_CHI.pdf"
+    },
+    {
+      "goal": "systematic-review",
+      "name": "Cochrane Handbook for Systematic Reviews of Interventions",
+      "sha256": "2f92de96a86e9ea44fdf2dbdbf60cae9b81e2e74484232098f2112ebc242ed66",
+      "charCount": 100035,
+      "sourceUrl": "https://192.0.78.12/wp-content/uploads/2017/01/cochrane-handbook-for-systematic-reviews-of-interventions-2019-1.pdf"
+    },
+    {
+      "goal": "fire-code",
+      "name": "建筑设计防火规范 GB 50016-2014（2018年版）",
+      "sha256": "42ca14ed2d53244063602abbf0bd28de182cbd354c071d54b4d032f121b3a084",
+      "charCount": 100035,
+      "sourceUrl": "https://222.143.52.145/attachment/2018%E5%B9%B4%E7%89%88%E3%80%8A%E5%BB%BA%E7%AD%91%E8%AE%BE%E8%AE%A1%E9%98%B2%E7%81%AB%E8%A7%84%E8%8C%83%E3%80%8BGB50016%EF%BC%88%E9%99%84%E6%9D%A1%E6%96%87%E8%AF%B4%E6%98%8E%EF%BC%8C%E5%9C%A8%E7%BA%BF%E5%9B%BE%E7%A4%BA%EF%BC%89%20.pdf?5KzJkx7rp11BI2X9TDdzHhl5VpB3qIycUDDuTLForOjxut2HILLJcb8ij2ozDKbOVFYNwBzBQWSalA35Y8TSLHHqC6CDdHo_"
+    },
+    {
+      "goal": "civil-code",
+      "name": "中华人民共和国民法典",
+      "sha256": "3931245364a1982725b3a5e67b11334ace33f2fc56835fc25aaab637f4a10197",
+      "charCount": 100035,
+      "sourceUrl": "https://www.moj.gov.cn/pub/sfbgw/zwgkztzl/2025nianzhuanti/2025mfdxcy/2025mfdxcy_mfdql/202505/t20250507_518708.html"
+    },
+    {
+      "goal": "child-development",
+      "name": "《3-6岁儿童学习与发展指南》",
+      "sha256": "9c9d2c7bb8d78099716165f1054fefa179d63ea24ce8e29d93e7d3ac81d491f4",
+      "charCount": 29466,
+      "sourceUrl": "https://104.18.2.128/media/8456/file/%E3%80%8A3%E2%80%946%E5%B2%81%E5%84%BF%E7%AB%A5%E5%AD%A6%E4%B9%A0%E4%B8%8E%E5%8F%91%E5%B1%95%E6%8C%87%E5%8D%97%E3%80%8B.pdf"
+    },
+    {
+      "goal": "child-development",
+      "name": "《3～6岁儿童学习与发展指南》",
+      "sha256": "9c9d2c7bb8d78099716165f1054fefa179d63ea24ce8e29d93e7d3ac81d491f4",
+      "charCount": 29466,
+      "sourceUrl": "https://104.18.3.128/media/8456/file/%E3%80%8A3%E2%80%946%E5%B2%81%E5%84%BF%E7%AB%A5%E5%AD%A6%E4%B9%A0%E4%B8%8E%E5%8F%91%E5%B1%95%E6%8C%87%E5%8D%97%E3%80%8B.pdf"
+    },
+    {
+      "goal": "mbsr",
+      "name": "正念减压（MBSR）八周课程",
+      "sha256": "3526975f597bfcba4512a218eaf8ba6e71f6fbaec8d97ef29ca5dcbc0ad9435b",
+      "charCount": 20286,
+      "sourceUrl": "https://zh.wikipedia.org/zh-cn/%E6%AD%A3%E5%BF%B5%E6%B8%9B%E5%A3%93"
+    },
+    {
+      "goal": "c-language",
+      "name": "C语言程序设计教程（第三版）（微课版）",
+      "sha256": "a3859dfc59f18e506ae0372516de27ddfaf698d2ab7bd2dad1d35cc6c27de013",
+      "charCount": 59363,
+      "sourceUrl": "https://124.17.26.243/upload/books/yz/107898-01.pdf"
+    },
+    {
+      "goal": "veteran-training",
+      "name": "金寨县2026年度退役军人适应性培训和职业技能培训实施方案（征求意见稿）",
+      "sha256": "c3c064e1219e002b39a9ee19a039badfe38dc52fe36d6ab55d936d5e54dda756",
+      "charCount": 22772,
+      "sourceUrl": "https://www.ahjinzhai.gov.cn/content/article/38471744"
+    },
+    {
+      "goal": "first-class-builder",
+      "name": "一级建造师执业资格考试大纲（2024 年版）",
+      "sha256": "70aa5d1431bc421f1cea75a1ca8e729870f3af3e3d7374557c27cdd7320fc54f",
+      "charCount": 39345,
+      "sourceUrl": "https://182.92.183.80/upfile/download/7c5685e5-04b5-d48d-c2df-0f93f149bed3.pdf"
+    },
+    {
+      "goal": "mandarin-test",
+      "name": "普通话水平测试用朗读作品",
+      "sha256": "7dc9f31540bfdc2147e30cd56897eedc4265cf5c12c1dd8a484605b59d92fe13",
+      "charCount": 56018,
+      "sourceUrl": "http://222.185.254.205/_upload/article/files/d1/3a/7372bf4f4745a6c838a7e98f1883/b953be57-e662-458c-a95b-4d4d54c87567.pdf"
+    },
+    {
+      "goal": "gaokao-math",
+      "name": "2024 新高考II卷高考真题 数学",
+      "sha256": "654bd3d6daf0a0baac8b5df781c136784183fb1fdb5f1917d1bd77a47bdd57fb",
+      "charCount": 26068,
+      "sourceUrl": "https://118.183.246.87/17182599823312024%E6%96%B0%E9%AB%98%E8%80%83II%E5%8D%B7%E9%AB%98%E8%80%83%E7%9C%9F%E9%A2%98%E6%95%B0%E5%AD%A6%EF%BC%88%E6%95%99%E5%B8%88%E7%89%88%EF%BC%89.pdf"
+    },
+    {
+      "goal": "gaokao-math",
+      "name": "高考英语完形填空历年真题（含新高考卷、全国卷）",
+      "sha256": "9782cb9d28fd1fc5361907b60fc0695cfbf762cb29250c42a9bf6a0ab1407f10",
+      "charCount": 42792,
+      "sourceUrl": "https://zhuanlan.zhihu.com/p/107659349"
+    },
+    {
+      "goal": "cet",
+      "name": "全国大学英语四、六级考试大纲（2016年修订版）",
+      "sha256": "0e08e9644abc8bdb4a085b9526ea9f614775d34a8e839d2b1d2069388062ff31",
+      "charCount": 100035,
+      "sourceUrl": "https://119.96.7.51/res/Home/1704/55b02330ac17274664f06d9d3db8249d.pdf"
+    },
+    {
+      "goal": "diabetes-guide",
+      "name": "中国糖尿病防治指南（2024版）",
+      "sha256": "fa3f1389409299fe36af08a8e20c3a306d5f2eca0a8d82785268010f388d9dad",
+      "charCount": 100035,
+      "sourceUrl": "https://114.116.248.58/wp-content/uploads/2025/10/%E4%B8%AD%E5%9B%BD%E7%B3%96%E5%B0%BF%E7%97%85%E9%98%B2%E6%B2%BB%E6%8C%87%E5%8D%97%EF%BC%882024%E7%89%88%EF%BC%89.pdf"
+    },
+    {
+      "goal": "reading-method",
+      "name": "如何阅读一本书",
+      "sha256": "1892d8150f05f7ec1422df2f34997e275469f8383340f2353f102f4c4035b356",
+      "charCount": 100035,
+      "sourceUrl": "https://185.199.110.153/others/%E5%A6%82%E4%BD%95%E9%98%85%E8%AF%BB%E4%B8%80%E6%9C%AC%E4%B9%A6.pdf"
+    },
+    {
+      "goal": "tax-agent",
+      "name": "2026年度税务师职业资格考试五科目大纲",
+      "sha256": "708680153d6d57ea6aa50892008226847eade1da64b472d0fb2a9471f628bc92",
+      "charCount": 29576,
+      "sourceUrl": "https://42.97.39.188/xxgk2019/tztg/202605/W020260513535035538240.pdf"
+    }
+  ],
+  "missingFixtures": [],
+  "notInRepo": [
+    "backend/prisma/dev.db（.gitignore：*.db）",
+    "backend/data/uploads/materials/**（.gitignore：data/）——带版权的资料正文，只登记 sha256，不入库"
+  ],
+  "repro": {
+    "recompute": "cd backend && npx ts-node --transpile-only src/scripts/recompute-goal-path-readings.ts --bundle=../doc/measurement/119",
+    "dualMetric": "cd backend && npx ts-node --transpile-only src/scripts/verify-goal-path-section-metric.ts --run=../doc/measurement/119/run-1792388187455.json --refScope=combined",
+    "semantic": "cd backend && npx ts-node --transpile-only src/scripts/verify-semantic-stage-alignment.ts --run=../doc/measurement/119/run-1792388187455.json --refScope=combined",
+    "ab": "npm --prefix backend run material:ab:goal-path -- --goals=20 --arms=both --fixtureManifest=../doc/measurement/119/manifest.json"
+  },
+  "switches": {
+    "old": {
+      "MATERIAL_PACK_SEMANTIC_DISABLED": "1",
+      "STAGE_MATERIAL_SEMANTIC_ORDER": "0",
+      "STAGE_MATERIAL_QUOTA_RERANK": "0",
+      "STAGE_MATERIAL_ZERO_REF_SUPPLEMENT": "0"
+    },
+    "new": {
+      "MATERIAL_PACK_SEMANTIC_DISABLED": "0",
+      "STAGE_MATERIAL_SEMANTIC_ORDER": "1",
+      "STAGE_MATERIAL_QUOTA_RERANK": "1",
+      "STAGE_MATERIAL_ZERO_REF_SUPPLEMENT": "1"
+    },
+    "thisBatch": "本批（run-1792388187455.json）只跑 new 臂，old 列为 10-17 new 臂改名，不构成真 A/B"
+  }
+}

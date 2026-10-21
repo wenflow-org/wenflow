@@ -125,7 +125,7 @@ async function main() {
   const cfg = await apiConfigService.getConfig();
   const base = String(cfg.apiUrl || '').replace(/\/$/, '');
   const endpoint = base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`;
-  const model = String(cfg.defaultModel || 'deepseek-v4-flash');
+  const model = String(cfg.defaultModel || 'deepseek-v4.1-flash');
   console.log(`模型 ${model} @ ${new URL(endpoint).host}`);
 
   const results: any[] = [];

@@ -267,6 +267,22 @@ const ROUTING_EDIT_KEYS: Array<keyof OrchestrationRoutingEdits> = [
   'notes',
 ];
 
+/** 空值归一：null/undefined/空串都表示「没有该值」 */
+function normalizeOptional(value: string | null | undefined): string | undefined {
+  return value == null || value === '' ? undefined : value;
+}
+
+/**
+ * 样式保持标量写入（#10）：优先用 js-yaml 的裸标量（未改动值不再被无谓加引号），
+ * 含冒号/井号/布尔样式等不安全值由 js-yaml 自行加引号；块标量（多行）退化为
+ * JSON 双引号标量——行级编辑无法安全写入 `|`/`>` 块，JSON 字符串是合法 YAML 标量。
+ */
+function dumpYamlScalar(value: string): string {
+  const dumped = yaml.dump(value, { lineWidth: -1, noRefs: true }).replace(/\n$/, '');
+  if (dumped.includes('\n') || dumped.includes('\r')) return JSON.stringify(value);
+  return dumped;
+}
+
 /**
  * 行级路由编辑：把 (agentId, fieldId) 目标 routing 条目上的可编辑键写回编排 YAML 文本。
  *
@@ -289,6 +305,39 @@ export function applyRoutingEditsToOrchestrationText(
   const lines = yamlText.replace(/\r\n/g, '\n').split('\n');
   // 去掉 split 产生的尾部空元素：否则新增键会被追加到换行占位之后，丢掉文末换行（#10）
   while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+
+  // 语义短路（#10）：先解析当前文件条目，未改动的键不再重新序列化写回——
+  // 否则前端全量 payload（notes/handoff 原值）也会被重写，导致「改回去≠还原」。
+  // 解析失败不阻断行级编辑（写盘前路由侧还会整体校验）。
+  let currentRouting: OrchestrationRouting | undefined;
+  try {
+    currentRouting = parseOrchestrationText(yamlText, '<current>').routings.find(
+      (r) => r.agentId === agentId && r.fieldId === fieldId,
+    );
+  } catch {
+    currentRouting = undefined;
+  }
+  const isUnchanged = (key: keyof OrchestrationRoutingEdits, raw: unknown): boolean => {
+    const current = currentRouting;
+    if (!current) return false;
+    switch (key) {
+      case 'notes':
+      case 'visibilityPreset':
+        return normalizeOptional(raw as string | null | undefined) === normalizeOptional(current[key]);
+      case 'handoff': {
+        const next = Array.isArray(raw) ? raw.map(String) : [];
+        return next.length === current.handoff.length
+          && next.every((v, i) => v === current.handoff[i]);
+      }
+      case 'internal':
+      case 'accumulate':
+        return Boolean(raw) === current[key];
+      case 'render':
+        return String(raw) === current.render;
+      default:
+        return false;
+    }
+  };
 
   // 定位该 (agentId, fieldId) 的 routing 条目：routings 段内逐块扫描
   // （块 = 每条「- agentId: X」起始到下一个「- agentId:」前；goal-agent 的桥接路由
@@ -331,21 +380,22 @@ export function applyRoutingEditsToOrchestrationText(
   for (const key of ROUTING_EDIT_KEYS) {
     if (edits[key] === undefined) continue;
     const raw = edits[key];
+    if (isUnchanged(key, raw)) continue; // 语义未变：保持原行逐字不动（#10）
     if (key === 'notes' || key === 'visibilityPreset') {
-      // 安全审计批次3：自由文本字段以 JSON 双引号标量写回——JSON 字符串是合法 YAML 标量，
-      // 换行/引号/控制字符天然转义；原样拼接会让值中换行注入任意 YAML 结构。
+      // 自由文本字段：裸标量优先（样式保持），不安全值由 js-yaml 加引号 /
+      // 多行值退化为 JSON 双引号标量——原样拼接会让值中换行注入任意 YAML 结构。
       if (raw == null || raw === '') {
         const idx = findKey(key);
         if (idx >= 0) edited.splice(idx, 1); // 删除键行而不是写 `key: null`（#10）
         continue;
       }
-      setKey(key, JSON.stringify(String(raw)));
+      setKey(key, dumpYamlScalar(String(raw)));
       continue;
     }
     let value: string;
     if (key === 'handoff') {
       const arr = Array.isArray(raw) ? raw : [];
-      value = arr.length ? `[${arr.map((v) => `'${v}'`).join(', ')}]` : '[]';
+      value = arr.length ? `[${arr.map((v) => dumpYamlScalar(String(v))).join(', ')}]` : '[]';
     } else if (key === 'internal' || key === 'accumulate') {
       value = raw ? 'true' : 'false';
     } else {

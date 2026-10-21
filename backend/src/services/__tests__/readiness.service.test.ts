@@ -34,7 +34,7 @@ function createDatabases() {
       ])
     },
     agent_contracts: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds.length), findMany: jest.fn().mockResolvedValue([]) },
-    field_definitions: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.fieldIds.length), findMany: jest.fn().mockResolvedValue([]) },
+    field_definitions: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.fieldKeys.length), findMany: jest.fn().mockResolvedValue([]) },
     agent_field_routings: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.routings.length), findMany: jest.fn().mockResolvedValue([]) },
     agent_registrations: { count: jest.fn().mockResolvedValue(1) },
     skill_registrations: { count: jest.fn().mockResolvedValue(1) }
@@ -148,7 +148,7 @@ describe('ReadinessService', () => {
 
   it('字段路由 seed 只完成一部分时不 ready', async () => {
     const { main, system } = createDatabases()
-    system.field_definitions.count.mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.fieldIds.length - 1)
+    system.field_definitions.count.mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.fieldKeys.length - 1)
     const result = await new ReadinessService(main, system).check()
 
     expect(result.ready).toBe(false)

@@ -288,6 +288,17 @@ async function enrichLearningPathWithAndersonInner(
       refs: number;
       minSection: number | null;
       maxSection: number | null;
+      /**
+       * 里程碑级引用数（#119 口径拆分，2026-10-20）。
+       * `refs` 只数**任务级**（subtasks[].materialRefs）——零引用守卫/补课的对象就是它；
+       * 而「后半引用」「refPct」等度量把里程碑级也算进 combinedRefs，
+       * 两条口径此前混用（20 goal 实测 task=233 / combined=338，zeroRef 3 vs 0）。
+       * 两个数字都落库，引用时必须写明 refScope。
+       */
+      milestoneRefs: number;
+      combinedRefs: number;
+      /** 本字段的 refs 口径：固定为任务级。 */
+      refScope: 'task';
       /** 零引用补课结果（#119 优化项 1）：仅在该阶段首轮零引用时出现。 */
       materialSupplement?: ZeroRefSupplementAudit;
     }> = [];
@@ -546,7 +557,9 @@ async function enrichLearningPathWithAndersonInner(
         let stageMaterialSummary = summarizeSectionRefPositions(
           stageTasks.flatMap((task: any) => (Array.isArray(task?.materialRefs) ? task.materialRefs : [])),
         );
-        if (stageMaterialSummary.count === 0) {
+        // kill switch：STAGE_MATERIAL_ZERO_REF_SUPPLEMENT=0 关闭补课（A/B 的 old 臂用）。
+        // 只关「补课调用」，覆盖审计照常落库——否则 old 臂连缺口都看不见。
+        if (stageMaterialSummary.count === 0 && process.env.STAGE_MATERIAL_ZERO_REF_SUPPLEMENT !== '0') {
           const outcome = await supplementZeroRefStage({
             stageNumber: milestone.stageNumber,
             materials: stageMaterials,
@@ -589,11 +602,19 @@ async function enrichLearningPathWithAndersonInner(
             logger.info('[stage-material-supplement] 零引用阶段定向补课', supplementLogPayload);
           }
         }
+        // 里程碑级引用与任务级分开计数（见 stageMaterialAudit 字段注释）：只读，不参与补课决策。
+        const milestoneRefsRaw = (milestone as any)?.materialRefs;
+        const stageMilestoneSummary = summarizeSectionRefPositions(
+          Array.isArray(milestoneRefsRaw) ? milestoneRefsRaw : [],
+        );
         stageMaterialAudit.push({
           stageNumber: milestone.stageNumber,
           refs: stageMaterialSummary.count,
           minSection: stageMaterialSummary.minSection,
           maxSection: stageMaterialSummary.maxSection,
+          milestoneRefs: stageMilestoneSummary.count,
+          combinedRefs: stageMaterialSummary.count + stageMilestoneSummary.count,
+          refScope: 'task',
           ...(materialSupplement ? { materialSupplement } : {}),
         });
         if (stageMaterialSummary.count === 0) {
@@ -1198,9 +1219,18 @@ async function enrichLearningPathWithAndersonInner(
                     // 2026-10-19（#119 优化项 1）：零引用阶段经定向补课后 refs 已按补后清单重算，
                     // `zeroRefStages` 即补后缺口（下降幅度 = 补课效果）。
                     materialCoverage: {
+                      // 口径声明（2026-10-20，#119）：stages[].refs / zeroRefStages = **任务级**；
+                      // 需要与「后半引用 / refPct」同口径时读 combinedRefs / zeroCombinedRefStages。
+                      refScope: 'task',
                       stages: [...stageMaterialAudit].sort((a, b) => a.stageNumber - b.stageNumber),
                       zeroRefStages: stageMaterialAudit
                         .filter((item) => item.refs === 0)
+                        .map((item) => item.stageNumber)
+                        .sort((a, b) => a - b),
+                      // 里程碑级 + 任务级（与 collectRefs / milestoneRefs 度量同口径）的零引用阶段。
+                      // 旧读数只报任务级，复算时误以为能从路径对象对出 issue 里的 3/74——见 #119。
+                      zeroCombinedRefStages: stageMaterialAudit
+                        .filter((item) => item.combinedRefs === 0)
                         .map((item) => item.stageNumber)
                         .sort((a, b) => a - b),
                       // 零引用补课审计（#119 优化项 1）：闸是否被消耗 + 逐阶段补课结果。

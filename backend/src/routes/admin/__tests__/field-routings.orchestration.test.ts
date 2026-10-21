@@ -137,6 +137,21 @@ describe('编排文件 PUT 保存（P2 审计补强）', () => {
     expect(mockEnsureStageFieldRoutings).toHaveBeenCalled();
     expect(res.json.mock.calls[0][0].data.syncHint).toContain('已有行属性修改需执行同步后生效');
   });
+
+  it('整文件保存沿用原文件 CRLF 行尾（textarea 归一出的 LF 不落盘，#10）', async () => {
+    const filePath = path.join(process.env.ORCHESTRATION_DIR!, 'goal.yaml');
+    fs.writeFileSync(filePath, MINIMAL_GOAL_YAML.replace(/\n/g, '\r\n'), 'utf-8');
+    const newContent = MINIMAL_GOAL_YAML.replace('displayName: Goal 阶段', 'displayName: Goal 阶段 v2');
+
+    const handler = getRouteHandler('/orchestration/:stage', 'put');
+    const res = createResponse();
+    await handler({ params: { stage: 'goal' }, body: { content: newContent }, user: { userId: 'u1' } }, res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    const onDisk = fs.readFileSync(filePath, 'utf-8');
+    expect(onDisk).toBe(newContent.replace(/\n/g, '\r\n'));
+    expect(onDisk.replace(/\r\n/g, '')).not.toContain('\n');
+  });
 });
 
 describe('GET /orchestration/:stage 相关审计查询', () => {

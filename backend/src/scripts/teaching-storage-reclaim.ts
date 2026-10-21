@@ -16,7 +16,6 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { prisma } from '../config/database';
 
 const APPLY = process.argv.includes('--apply');
@@ -46,7 +45,7 @@ async function main(): Promise<void> {
   if (!DRY_RUN && (targets.length || columnRows.length)) {
     const d = new Date();
     const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-    const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const ROOT = path.resolve(__dirname, '..', '..', '..');
     const outDir = path.join(ROOT, 'doc', 'local', 'runs', date);
     fs.mkdirSync(outDir, { recursive: true });
     const backupPath = path.join(outDir, `reclaim-backup-${Date.now()}.db`);

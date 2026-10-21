@@ -105,6 +105,31 @@ describe('SessionFinalizationService', () => {
     )
   })
 
+  it('延伸课拒绝 complete_task / complete_review，只允许 end_only（#124）', async () => {
+    const extensionSession = completedSession({ mode: 'extension' })
+    mockRepository.assertOwnership.mockResolvedValue(extensionSession)
+
+    await expect(service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op',
+      revision: 4
+    })).rejects.toMatchObject({ code: 'FINALIZATION_ACTION_MODE_MISMATCH', status: 409 })
+
+    await expect(service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_review',
+      operationId: 'review-op',
+      revision: 4
+    })).rejects.toMatchObject({ code: 'FINALIZATION_ACTION_MODE_MISMATCH', status: 409 })
+
+    expect(mockEndSession).not.toHaveBeenCalled()
+    expect(mockCompleteTask).not.toHaveBeenCalled()
+    expect(mockRepository.claimFinalization).not.toHaveBeenCalled()
+  })
+
   it('complete_task 在会话未结束时自动先 end 生成 wrapup 再完成任务', async () => {
     const activeSession = { ...completedSession(), status: 'paused', wrapup: null }
     mockRepository.assertOwnership.mockResolvedValue(activeSession)

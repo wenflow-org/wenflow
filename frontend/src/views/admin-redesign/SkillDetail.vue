@@ -157,7 +157,7 @@
                 <span class="mk-card__meta">JSON · 可编辑</span>
               </div>
               <div class="skd-pad">
-                <textarea v-model="trialInput" class="mk-input mono skd-ta" rows="7" spellcheck="false" aria-label="样例输入" placeholder='{"input": "…"}'></textarea>
+                <textarea v-model="trialInput" class="mk-input mono skd-ta" rows="7" spellcheck="false" aria-label="样例输入" placeholder="{}" @input="trialInputDirty = true"></textarea>
                 <div class="skd-ta-foot">
                   <!-- P3-23（设计评审）：「尚未试跑」全页签只在此脚注说一次（含入口指引） -->
                   <span class="mk-card__note">
@@ -541,7 +541,7 @@ import { toast } from '@/utils/toast'
 /* 设计页能力平铺（2026-10-15 用户拍板：独立设计页退役，内容就地铺进本页）——
    6 个 tab 正文是自包含子组件（各自 scoped 样式），直接挂到本页各页签只读区块下方。
    各子组件的脏态经 @dirty 上报，离开守卫见文件尾（原 SkillDesignPage 的守卫整套迁入）。 */
-import { coreEditorState } from './skill-design/sdp-shared'
+import { coreEditorState, buildTrialInputFromContract, type TrialInputDecl } from './skill-design/sdp-shared'
 import ProtocolTab from './skill-design/protocol-tab.vue'
 import TrialTab from './skill-design/trial-tab.vue'
 import VersionsTab from './skill-design/versions-tab.vue'
@@ -1007,7 +1007,7 @@ const coreFilePath = ref('')
    原型 SKILL_STATE_MACHINE / SKILL_TERMINATIONS / SKILL_ENGINEERING.deps（index.html 1229-1250）
    的数据取 core YAML（prompt-lab getCore）；当前 CoreFile schema 无 stateMachine / states /
    termination / limits 字段 → 一律空态，不硬造（字段名按原型口径做防御式读取，便于后续后端补齐）。 */
-interface CoreInputRef { ref?: string; kind?: string }
+interface CoreInputRef extends TrialInputDecl { ref?: string; kind?: string }
 interface CoreSnap {
   stateMachine?: unknown
   states?: unknown
@@ -1169,6 +1169,11 @@ async function load(force = false) {
         const res = await adminPromptWorkbenchApi.getCore(id)
         if (!guard(true)) return
         coreSnap.value = (res.data?.core ?? null) as CoreSnap | null
+        // #15：宿主「样例输入」卡与设计区块 trial-tab 同口径——按输入契约生成默认载荷，
+        // 不再拿一个与契约无关的 `input` 键去撞 INVALID_INPUT。用户已改过则不覆盖。
+        if (!trialInputDirty.value) {
+          trialInput.value = buildTrialInputFromContract(coreSnap.value?.inputs as TrialInputDecl[])
+        }
       } catch {
         if (guard(true)) coreSnap.value = null
       }
@@ -1229,7 +1234,9 @@ function recentRowTitle(s: TraceSpan): string {
 }
 
 /* ===== 试跑（试跑页签；adminSkillsApi.testSkill 与设计页 trial-tab 同一接口） ===== */
-const trialInput = ref('{\n  "input": "用一句话介绍你自己"\n}')
+const trialInput = ref('{}')
+/** #15：用户改过样例输入后，契约异步返回时不再覆盖其编辑 */
+const trialInputDirty = ref(false)
 const trialRunning = ref(false)
 /** steps/dimensions/scores 为原型「执行链路 / 试跑对比」防御式读取字段；当前 testSkill 只回最终输出 → 均空 */
 const trialResult = ref<{
@@ -1287,6 +1294,9 @@ function resetTrial() {
   trialRunning.value = false
   trialResult.value = null
   trialError.value = ''
+  // #15：切 Skill 时样例输入一并复位（清掉脏标记，等新技能的 core 契约到达后再派生）
+  trialInput.value = '{}'
+  trialInputDirty.value = false
 }
 async function runTrial() {
   const id = skillId.value

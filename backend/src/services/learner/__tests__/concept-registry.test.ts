@@ -106,6 +106,17 @@ describe('ConceptRegistryService.resolveConcept（身份解析）', () => {
     expect(aliases.size).toBe(0);
   });
 
+  it('#109 路径骨架 concept-N 占位不是概念身份：返回 null，不建概念/别名', async () => {
+    const { deps, concepts, aliases, calls } = makeDeps();
+    const svc = new ConceptRegistryService(deps);
+    expect(await svc.resolveConcept('u1', 'concept-1')).toBeNull();
+    expect(await svc.resolveConcept('u1', ' Concept-12 ')).toBeNull();
+    expect(concepts.size).toBe(0);
+    expect(aliases.size).toBe(0);
+    expect(calls.createConcept).toBe(0);
+    expect(calls.createAlias).toBe(0);
+  });
+
   it('身份按用户隔离：同名文本对不同用户是不同概念', async () => {
     const { deps, concepts } = makeDeps();
     const svc = new ConceptRegistryService(deps);

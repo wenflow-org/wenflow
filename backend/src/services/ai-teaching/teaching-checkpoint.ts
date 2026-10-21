@@ -373,6 +373,15 @@ export async function recordCheckpointResultEvidence(
     judgedBy: 'code' | 'model-reference';
     detail: string | null;
     submission: { selectedOptionIds?: string[] };
+    /**
+     * #96 阈值拟合前置：判分**之前**系统对该概念的掌握度预测（0-1）与来源。
+     * 无可用预测时 predictedMastery=null（不猜）；旧调用方不传则不落这几个字段，形状与历史行一致。
+     */
+    prediction?: {
+      predictedMastery: number | null;
+      source: 'kt-estimate' | 'knowledge-state' | 'none';
+      understanding: number | null;
+    } | null;
   },
 ): Promise<void> {
   try {
@@ -393,10 +402,20 @@ export async function recordCheckpointResultEvidence(
           passed: result.passed,
           judgedBy: result.judgedBy,
           detail: result.detail,
+          /** 判定通道置信度：code 可复算 0.95，model-reference 含自证风险 0.6（与行级 confidence 同源） */
+          judgeConfidence: result.judgedBy === 'code' ? 0.95 : 0.6,
           // 概念归属（F1 修复轮 a）：失败证据知道自己是哪个概念的
           ...checkpointConceptPayloadFields(checkpoint),
           ...(result.submission.selectedOptionIds?.length
             ? { selectedOptionIds: result.submission.selectedOptionIds }
+            : {}),
+          // #96：判分前的系统预测（用于校准表/阈值拟合）；source='none' 时 predictedMastery 为 null
+          ...(result.prediction
+            ? {
+                predictedMastery: result.prediction.predictedMastery,
+                predictionSource: result.prediction.source,
+                understanding: result.prediction.understanding,
+              }
             : {}),
         }),
         confidence: result.judgedBy === 'code' ? 0.95 : 0.6,

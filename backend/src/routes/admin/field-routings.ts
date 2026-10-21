@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../../utils/logger';
+import { readFileEol, withEol, writeTextPreservingEol } from '../../utils/write-text-preserving-eol';
 import { clearRoutingCache } from '../../services/field-dispatcher';
 import { clearSupplementRenderCache } from '../../services/prompt-composer';
 import {
@@ -464,7 +465,10 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
     });
   }
 
-  await fs.promises.writeFile(filePath, nextText, 'utf-8');
+  // 语义未变（全量 payload 发回原值）时不写盘：避免只改 mtime / 触发无意义备份（#10）
+  if (nextText !== yaml) {
+    await fs.promises.writeFile(filePath, nextText, 'utf-8');
+  }
 
   // DB 同步（仅更新业务列；managedByCode=false 的 admin 覆盖行也允许（行级编辑即 admin 覆盖））
   const nextData: Record<string, unknown> = {
@@ -651,8 +655,11 @@ router.put('/orchestration/:stage', async (req: Request, res: Response) => {
     logger.warn('[field-routings] orchestration before-snapshot read failed', { stage, error: error instanceof Error ? error.message : String(error) });
   }
 
-  // 写盘（文件为准）
-  await fs.promises.writeFile(filePath, content, 'utf-8');
+  // 写盘（文件为准）：沿用原文件 EOL——textarea 会把 CRLF 归一为 LF，
+  // 直接 writeFile 会造成「内容相同但整文件行尾变化」的伪改动（#10）
+  const targetEol = await readFileEol(filePath);
+  const persistedText = withEol(content, targetEol);
+  await writeTextPreservingEol(filePath, content);
 
   // P2 审计补强：编排保存写 node_config_changes（changeType='orchestration-save'，
   // before/after = 保存前/后文件摘要：行数 + 字符数 + sha1 短哈希）——失败不阻断保存
@@ -663,7 +670,7 @@ router.put('/orchestration/:stage', async (req: Request, res: Response) => {
       targetTable: 'orchestration',
       targetId: stage,
       before: summarizeTextDigest(beforeText),
-      after: summarizeTextDigest(content),
+      after: summarizeTextDigest(persistedText),
       actorId,
       reason: '编排文件 PUT 保存（admin 管理端编排弹窗）',
     });

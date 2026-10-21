@@ -130,7 +130,7 @@ const DEFECT_CRITERIA: Record<string, string> = {
   dump: '整本标准/手册/PDF 转储，体量远超单份学习材料所需',
 };
 
-async function gateOne(cfg: JudgeCfg, doc: Doc): Promise<{ usable: number | null; defect: string | null; topic: number | null; raw: unknown }> {
+async function gateOne(cfg: JudgeCfg, doc: Doc): Promise<{ usable: number | null; defect: string | null; topic: number | null; hasProse: number | null; raw: unknown }> {
   const state = {
     目标主题: TOPIC_LABEL[doc.topicKey] ?? doc.topicKey,
     页面标题: doc.title,
@@ -164,7 +164,7 @@ async function gateOne(cfg: JudgeCfg, doc: Doc): Promise<{ usable: number | null
       },
     }),
   });
-  if (!res.ok) return { usable: null, defect: null, topic: null, raw: `HTTP ${res.status}` };
+  if (!res.ok) return { usable: null, defect: null, topic: null, hasProse: null, raw: `HTTP ${res.status}` };
   const answers = cfg.extract(await res.json()) as Record<string, { noul?: number; choice?: string }> | null;
   return {
     usable: typeof answers?.usable?.noul === 'number' ? answers.usable.noul : null,

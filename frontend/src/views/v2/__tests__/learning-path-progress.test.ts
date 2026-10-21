@@ -34,10 +34,11 @@ describe('formatWaited', () => {
 });
 
 describe('buildGenerationProgress 主行', () => {
-  it('core 阶段给时长承诺（#112 的 10 分钟实测口径）', () => {
+  it('core 阶段不再承诺具体分钟数（#112：实测 56 条里 34 条 >120s）', () => {
     const copy = buildGenerationProgress({ phase: 'core', completedStages: 0, totalStages: 5 }, NOW);
     expect(copy.primary).toContain('正在生成路径');
-    expect(copy.primary).toContain('1-2 分钟');
+    expect(copy.primary).toContain('几分钟');
+    expect(copy.primary, '用户侧文案又写回了 1-2/1-3 分钟的数值承诺').not.toMatch(/1-[23]\s*分钟/);
   });
 
   it('阶段数满 → 课时正在写入（不再显示 M/M 的「准备课程」）', () => {

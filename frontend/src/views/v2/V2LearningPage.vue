@@ -32,7 +32,7 @@
           </div>
           <div class="learn__menu-group">
               <span class="learn__menu-label">结束本节课</span>
-              <button type="button" class="learn__menu-item learn__menu-item--primary" @click="completeAndSettle">
+              <button type="button" class="learn__menu-item learn__menu-item--primary" v-if="!extensionMode" @click="completeAndSettle">
                 <span class="learn__menu-item-main"><strong>完成并结算任务</strong><small>{{ finishHint }}</small></span>
               </button>
               <button type="button" class="learn__menu-item" @click="endSession">
@@ -505,6 +505,7 @@
             </div>
             <div class="finish__actions">
               <span class="btn-primary" role="button" tabindex="0" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack">回到路径详情</span>
+              <span v-if="!isReviewMode && !extensionMode" class="btn-ghost" role="button" tabindex="0" @click="startExtension" @keydown.enter="startExtension" @keydown.space.prevent="startExtension">延伸学习</span>
               <span v-if="evaluationUrl" class="btn-ghost" role="button" tabindex="0" @click="goEvaluation" @keydown.enter="goEvaluation" @keydown.space.prevent="goEvaluation">查看学习反馈</span>
             </div>
           </div>
@@ -676,6 +677,16 @@ const route = useRoute();
 const router = useRouter();
 const taskId = String(route.params.taskId || '');
 const isReviewMode = computed(() => route.query.mode === 'review');
+/** 延伸学（#124）：从完成浮层进入，基于已完成的本课做额外学习；不结算任务。用 ref 而非 computed——
+ *  进入延伸课时只改 URL 不触发路由重载，刷新后靠 ?mode=extension 恢复。 */
+const extensionMode = ref(route.query.mode === 'extension');
+
+/** 按模式开课：常规 / 复习 / 延伸（三处调用点共用，避免各写一份三元）。 */
+function startSessionByMode() {
+  if (isReviewMode.value) return aiTeachingAPI.startReviewSession(taskId);
+  if (extensionMode.value) return aiTeachingAPI.startExtensionSession(taskId);
+  return aiTeachingAPI.startSession(taskId);
+}
 const interactionMeta = useInteractionMeta();
 
 /* 知识点面板：原型是单列 880 无侧栏 → 头部入口打开非模态浮窗
@@ -1233,9 +1244,7 @@ async function boot() {
       pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
     });
 
-    const s = (isReviewMode.value
-      ? await aiTeachingAPI.startReviewSession(taskId)
-      : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
+    const s = (await startSessionByMode()) as unknown as Record<string, any>;
 
     const task = await taskPromise;
     if (task) {
@@ -1494,6 +1503,9 @@ async function sendTurnOnce(
       signal: streamCtrl.signal,
       idempotencyKey,
       onDelta: (delta) => {
+        // 空文本 delta 不算可见进展：不建气泡、不喂看门狗（#111——若链路上出现空 delta，
+        // 喂狗会让「90s 无可见进展即中止」的判定永远不触发，发送键就一直卡在停止生成）。
+        if (!delta) return;
         onActivity();
         // 首个 delta 到达时才建 AI 气泡，避免 JSON 输出（无 delta）产生空气泡
         let m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
@@ -1618,9 +1630,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
     const staleCode = raw?.response?.data?.error?.code || raw?.response?.data?.error || raw?.code || '';
     if (String(staleCode).includes('TEACHING_SESSION_STALE') && session.value && allowStaleRetry) {
       try {
-        const fresh = (isReviewMode.value
-          ? await aiTeachingAPI.startReviewSession(taskId)
-          : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
+        const fresh = (await startSessionByMode()) as unknown as Record<string, any>;
         if (typeof fresh?.revision === 'number') session.value.revision = fresh.revision;
       } catch { /* 同步失败则直接展示失败气泡 */ }
       // 重发不再重复推送用户气泡：首轮已经乐观渲染过，再推一次就是两条同样的「你」
@@ -1714,7 +1724,11 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
     confirmCheck.value = null;
   }
   if (r.isCompletion) {
-    await finish(isReviewMode.value ? 'complete_review' : 'complete_task');
+    // 延伸课不自动结算（#124）：服务端延伸会话已抑制完成信号，这里再兜一层旧载荷——
+    // 延伸段由学习者主动「结束学习」（end_only）收尾。
+    if (!extensionMode.value) {
+      await finish(isReviewMode.value ? 'complete_review' : 'complete_task');
+    }
   }
 }
 
@@ -1760,6 +1774,15 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
     finishStats.value = stats;
     evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
   } catch (e: any) {
+    // 收束门禁 409（#51 P-25）：不是故障，是「课还没到能结的状态」——检查点未答 /
+    // 老师末问未回应 / 末次检查未过。此时重试结算必然再 409，引导进反馈页也只会看到
+    // 「课堂还在进行中」（#115 稳定复现的死胡同）。给出后端原因原文，让用户先回应再结算。
+    const gateCode = String(e?.response?.data?.error?.code || e?.code || '');
+    if (gateCode === 'FINALIZATION_PENDING_CHECKPOINT' || gateCode === 'FINALIZATION_OPEN_QUESTION' || gateCode === 'FINALIZATION_LAST_CHECKPOINT_FAILED') {
+      toast.error(e?.response?.data?.error?.message || e?.message || '先完成课内问答，再结算课堂');
+      finalizing.value = false;
+      return;
+    }
     // 结算失败不冒充完成：保留重试入口，用户仍可去学习反馈页查看
     const msg = e?.message || e?.response?.data?.error?.message || '结算失败';
     toast.error(`课堂结算未完成：${msg}`);
@@ -1782,6 +1805,8 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
 
 /** 完成并结算（拍板 2026-08-21 方案 B 主路径）：计入任务/里程碑/路径完成进度 */
 async function completeAndSettle() {
+  // 延伸课不结算任务（服务端也会 409）；入口在延伸模式下已隐藏，这里防程序化调用
+  if (extensionMode.value) return;
   if (actionBusy.value) return;
   const ok = await askConfirm({
     title: '完成并结算任务',
@@ -1845,6 +1870,35 @@ async function pauseAndLeave() {
     「暂停并离开」会写 pause 状态，「结束/完成」会结算——都替用户做了决定。 */
 function leaveWithoutSideEffect() {
   goBack();
+}
+
+/**
+ * 延伸学（#124）：完成浮层出口——基于已完成的本课继续额外学习。
+ * 任务已结算，延伸课不结算任务（服务端 finalize 只放行 end_only）；
+ * 学到的东西照常进记忆/画像与负载指标，一期只观测，不触发路径调整。
+ */
+async function startExtension() {
+  if (actionBusy.value) return;
+  actionBusy.value = true;
+  try {
+    extensionMode.value = true;
+    // URL 同步 ?mode=extension：刷新后仍回到延伸课（服务端凭「本课已有一节常规完结课堂」准入）
+    const url = new URL(window.location.href);
+    url.searchParams.set('mode', 'extension');
+    window.history.replaceState({}, '', url.toString());
+    // 清场：延伸段是全新会话，不残留上一课的消息/检查点/伴学内容
+    msgs.value = [];
+    checkpoint.value = null;
+    checkpointPending.value = false;
+    completed.value = false;
+    finalizing.value = false;
+    resetPeer();
+    await boot();
+  } catch (e: any) {
+    toast.error(e?.message || e?.response?.data?.error?.message || '延伸学习暂不可用，请稍后重试');
+  } finally {
+    actionBusy.value = false;
+  }
 }
 
 async function restart() {
@@ -1982,9 +2036,7 @@ async function recoverSession(sid: string) {
   const cur = session.value;
   if (!cur || cur.sessionId !== sid || completed.value) return;
   try {
-    const s = (isReviewMode.value
-      ? await aiTeachingAPI.startReviewSession(taskId)
-      : await aiTeachingAPI.startSession(taskId)) as unknown as Record<string, any>;
+    const s = (await startSessionByMode()) as unknown as Record<string, any>;
     if (!session.value || session.value.sessionId !== sid) return;
     session.value = { sessionId: s.sessionId, revision: s.revision ?? 0 };
     if (s.mode === 'resumed') {

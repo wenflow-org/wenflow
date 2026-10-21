@@ -10,7 +10,7 @@
         <div class="settings-status__left">
           <div>
             <strong>{{ apiConfig.enabled ? '使用自定义模型服务' : '使用平台默认模型服务' }}</strong>
-            <p>对话模型 {{ apiConfig.chatModel || 'deepseek-v4-flash' }} · 推理模型 {{ apiConfig.reasoningModel || 'deepseek-v4-pro' }}</p>
+            <p>对话模型 {{ apiConfig.chatModel || 'deepseek-v4.1-flash' }} · 推理模型 {{ apiConfig.reasoningModel || 'deepseek-v4.1-flash' }}</p>
           </div>
         </div>
         <label class="uc-switch" :class="{ 'uc-switch--off': !apiConfig.enabled }">
@@ -73,11 +73,11 @@
             <div class="api-form__grid">
               <label class="uc-field">
                 <span class="uc-field__label">对话模型</span>
-                <input v-model="apiConfig.chatModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4-flash" :disabled="busy" />
+                <input v-model="apiConfig.chatModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4.1-flash" :disabled="busy" />
               </label>
               <label class="uc-field">
                 <span class="uc-field__label">推理模型</span>
-                <input v-model="apiConfig.reasoningModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4-pro" :disabled="busy" />
+                <input v-model="apiConfig.reasoningModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4.1-flash" :disabled="busy" />
               </label>
               <datalist id="api-model-options">
                 <option v-for="m in modelOptions" :key="m" :value="m" />
@@ -328,8 +328,8 @@ const apiConfig = reactive({
   enabled: false,
   endpoint: '',
   apiKey: '',
-  chatModel: 'deepseek-v4-flash',
-  reasoningModel: 'deepseek-v4-pro',
+  chatModel: 'deepseek-v4.1-flash',
+  reasoningModel: 'deepseek-v4.1-flash',
 });
 
 onMounted(async () => {
@@ -346,8 +346,8 @@ const loadApiConfig = async () => {
     apiConfig.endpoint = data.endpoint || '';
     apiConfig.apiKey = '';
     hasSavedApiKey.value = !!data.hasApiKey;
-    apiConfig.chatModel = data.chatModel || 'deepseek-v4-flash';
-    apiConfig.reasoningModel = data.reasoningModel || 'deepseek-v4-pro';
+    apiConfig.chatModel = data.chatModel || 'deepseek-v4.1-flash';
+    apiConfig.reasoningModel = data.reasoningModel || 'deepseek-v4.1-flash';
   } catch {
     loadError.value = '无法读取已保存的配置，请检查网络或服务状态。';
     toast.error('加载 API 配置失败');

@@ -42,6 +42,7 @@ import {
   resolveCheckpointConsumption,
   shouldEmitCheckpoint,
   } from './teaching-checkpoint';
+import { resolveCheckpointPrediction } from './checkpoint-prediction';
 import {
   extractWarmupOutcomes,
   markWarmupAsked,
@@ -493,11 +494,11 @@ export async function processStudentMessage(
   // 失败检查点概念的**后续回合**肯定语护栏（#84，2026-10-19 实证）：提交轮硬门只管当轮——
   // zhongkao-streaming 批实测两次 code failed（缺要点）后，老师在随后自由回合仍称
   // 「你答对了/这一关你走通了」。口径收紧（精度优先）：仅当本回合知识点命中会话内
-  // code 失败概念时剥离；遥测单列一类，不污染切口2 的一致性口径（分子/分母不变）。
+  // code 失败概念时剥离；遥测单列一类，不污染切口2 一致性口径（#85 双臂 A 臂可显式关闭）。
   const judgingFailedThisTurn = !!(submittedCheckpoint
     && options.checkpointJudgement?.judgedBy === 'code'
     && options.checkpointJudgement.passed === false);
-  if (rawTeachingOutput?.reply && !judgingFailedThisTurn) {
+  if (options.failedConceptFollowupGuard !== false && rawTeachingOutput?.reply && !judgingFailedThisTurn) {
     const failedConceptNames = buildCheckpointCodeArbitration(previousTeachingState.checkpointHistory).codeFailedConceptNames;
     if (shouldGuardReplyForFailedConcept({
       currentPoint: rawTeachingOutput.knowledge?.currentPoint,
@@ -619,7 +620,12 @@ export async function processStudentMessage(
     checkpointEmittedThisTurn: !!teachingOutput.control?.checkpoint,
     priorDeferrals: Number(previousTeachingState.completionDeferrals) || 0,
   });
-  const completionReady = (targetsConsolidated || backstopReady || softCompletionReady) && !closureGate.defer;
+  // 延伸学（#124）：延伸课不产生「完成」终态——它不是任务结算课，教师可一直陪学到学员主动结束
+  // （finalize 仅允许 end_only）。任务完成判据仍照常计算并留痕，只是不把完成信号发出去。
+  const extensionMode = session.mode === 'extension';
+  const completionReady = !extensionMode
+    && (targetsConsolidated || backstopReady || softCompletionReady)
+    && !closureGate.defer;
   if (closureGate.defer) {
     logger.info('[AITeaching] 收口闭合门禁：完成信号延迟一轮（末问未答，先让学员作答）', {
       sessionId: session.id,
@@ -640,10 +646,11 @@ export async function processStudentMessage(
           ? 'knowledge-only'
           : 'neither';
   const completionPath: 'targets' | 'backstop' | 'soft-model' | 'none' =
-    targetsConsolidated ? 'targets'
-      : backstopReady ? 'backstop'
-        : softCompletionReady ? 'soft-model'
-          : 'none';
+    extensionMode ? 'none'
+      : targetsConsolidated ? 'targets'
+        : backstopReady ? 'backstop'
+          : softCompletionReady ? 'soft-model'
+            : 'none';
   if (completionAlignment === 'envelope-only' || completionAlignment === 'knowledge-only') {
     logger.debug('[AITeaching] completion soft-AND 分歧', {
       sessionId: session.id,
@@ -1198,7 +1205,8 @@ export async function processStudentMessage(
 
     let checkpointResolution: { passed: boolean; understanding: number; judgedBy: 'code' | 'model-reference' } | undefined;
     if (submittedCheckpoint) {
-      const understanding = Number(teachingOutput.analysis?.understanding ?? 0);
+      const rawUnderstanding = teachingOutput.analysis?.understanding;
+      const understanding = Number(rawUnderstanding ?? 0);
       const currentPoint = effectiveTeachingOutput.knowledge.currentPoint?.trim().toLowerCase();
       const modelDerivedPassed = completionReady || !!currentPoint && mergedKnowledge.some(
         (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'
@@ -1228,12 +1236,23 @@ export async function processStudentMessage(
         ...(submittedCheckpoint.conceptKey ? { conceptKey: submittedCheckpoint.conceptKey } : {}),
       });
 
+      // #96 阈值拟合前置：在判分前解析系统对「该概念已掌握」的预测（ktEstimate 优先，
+      // 回落到本回合知识看板），随证据落库；无预测时 null，不猜。
+      const prediction = resolveCheckpointPrediction({
+        conceptName: submittedCheckpoint.conceptName,
+        conceptKey: submittedCheckpoint.conceptKey,
+        knowledgePoints: mergedKnowledge,
+        ktConceptMastery: teachingOutput.analysis?.ktEstimate?.conceptMastery,
+        understanding: Number.isFinite(Number(rawUnderstanding)) ? Number(rawUnderstanding) : null,
+      });
+
       // 检查点结果留痕（learner_evidence）：独立传感器的原始观测，供 §7 P1-1 的成功率带与控制律消费
       void recordCheckpointResultEvidence(session, submittedCheckpoint, {
         passed,
         judgedBy,
         detail: codeJudgement?.detail ?? null,
         submission: { selectedOptionIds: options.checkpointSubmission?.selectedOptionIds },
+        prediction,
       });
 
       // 独立锚题探针（Q13/B4）：仅对带 purpose='anchor' 的检查点、且**代码裁决**（纪律 1）时
@@ -1358,17 +1377,19 @@ export async function processStudentMessage(
     // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的
     // conceptKey 是路径骨架 concept-N 占位时改挂检查点归属键（发出时带上的当前教学点概念；
     // 无检查点回合退到当前教学点），真键原样，无归属可挂 → 丢弃（宁缺勿错挂）。
+    // 本回合的概念归属（检查点归属优先，无检查点回落到当前教学点）：误解与 ktEstimate
+    // 两条写入通道共用——占位键的改挂目标必须同源，否则同一回合两处落到不同概念。
+    const checkpointConceptAttribution = (submittedCheckpoint?.conceptKey
+      ? {
+          conceptName: submittedCheckpoint.conceptName ?? '',
+          conceptKey: submittedCheckpoint.conceptKey,
+          conceptSource: submittedCheckpoint.conceptSource ?? ('derived' as const),
+        }
+      : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint));
     const misconceptions = teachingOutput.analysis?.misconceptions;
     if (Array.isArray(misconceptions) && misconceptions.length > 0) {
-      const misconceptionAttribution = (submittedCheckpoint?.conceptKey
-        ? {
-            conceptName: submittedCheckpoint.conceptName ?? '',
-            conceptKey: submittedCheckpoint.conceptKey,
-            conceptSource: submittedCheckpoint.conceptSource ?? ('derived' as const),
-          }
-        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint));
       void recordMisconceptions(session.userId, sessionId, misconceptions.map((m) => ({
-        conceptKey: rerouteMisconceptionConceptKey(m.conceptKey, misconceptionAttribution) || '',
+        conceptKey: rerouteMisconceptionConceptKey(m.conceptKey, checkpointConceptAttribution) || '',
         hypothesis: m.hypothesis,
         canonicalLabel: m.canonicalLabel ?? null,
         confidence: m.confidence,
@@ -1382,15 +1403,24 @@ export async function processStudentMessage(
     // 未命中/缺失回落自由文本名（见 memory-trace.service resolveConceptIdSafe）。
     const ktConceptMastery = teachingOutput.analysis?.ktEstimate?.conceptMastery;
     if (Array.isArray(ktConceptMastery) && ktConceptMastery.length > 0) {
-      void memoryTraceService.applyKtEstimate(session.userId, ktConceptMastery.map((c) => ({
-        conceptKey: c.conceptKey,
-        ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
-        mastery: c.mastery,
-      })), session.learningPathId ?? null).catch((error) => {
-        logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
+      // #109：模型把路径骨架 concept-N 回填进 conceptKey 时，与误解台账同口径改挂本回合
+      // 概念归属；无归属可挂 → 丢弃（宁缺勿错挂）。此前原样透传 → 写入侧按文本名
+      // 新建 concepts/memory_traces（历史 36 条 kt-estimate 痕迹的生成侧根因）。
+      const ktItems = ktConceptMastery.flatMap((c) => {
+        const conceptKey = rerouteMisconceptionConceptKey(c.conceptKey, checkpointConceptAttribution);
+        if (!conceptKey) return [];
+        return [{
+          conceptKey,
+          ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
+          mastery: c.mastery,
+        }];
       });
+      if (ktItems.length > 0) {
+        void memoryTraceService.applyKtEstimate(session.userId, ktItems, session.learningPathId ?? null).catch((error) => {
+          logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
+        });
+      }
     }
-
 
     return baseResult;
   } finally {

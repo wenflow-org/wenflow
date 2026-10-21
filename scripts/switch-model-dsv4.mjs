@@ -1,6 +1,7 @@
 /**
- * 一次性：把 skill 级模型配置从 agnes-3.0-flash 切到 deepseek-v4-flash（只读-改配置，可回滚）
- * 用法：node scripts/switch-model-dsv4.mjs [--to=deepseek-v4-flash] [--from=agnes-3.0-flash] [--dry-run]
+ * 一次性：把 skill 级模型配置从 agnes-3.0-flash 切到标准通道 dsv4.1-flash（只读-改配置，可回滚）
+ * 用法：node scripts/switch-model-dsv4.mjs [--to=deepseek-v4.1-flash] [--from=agnes-3.0-flash] [--dry-run]
+ * 注：旧目标 deepseek-v4-flash 已下线（2026-10-19），本脚本默认目标随标准通道更新。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = 'http://127.0.0.1:3001';
 const arg = (n, d) => { const h = process.argv.find((a) => a.startsWith(`--${n}=`)); return h ? h.slice(n.length + 3) : d; };
-const TO = String(arg('to', 'deepseek-v4-flash'));
+const TO = String(arg('to', 'deepseek-v4.1-flash'));
 const FROM = String(arg('from', 'agnes-3.0-flash'));
 const DRY = process.argv.includes('--dry-run');
 

@@ -9,6 +9,7 @@
 import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig } from '../../config/pedagogy.config';
 import { normalizePathDifficulty } from './path-difficulty';
 import { normalizeDeadlineDate } from './deadline-date';
+import { resolveCapacity, parseSessionMinutes } from './capacity-authority';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
 export type TimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
@@ -295,7 +296,7 @@ export interface TriageHint {
  * 「一节课」量级边界（出口不变量 B 的**唯一口径**）。
  * 依据：60 例混合数据实测，一次性操作类产出 2.3–7.4h，构成为
  * 「阶段数 × 每段任务数(2–3) × 单任务分钟」，而单任务中位 37 分钟恰是 standard 档
- * `defaultMinutesRange=[30,90]` 的下沿 ⇒ 学时是模板产物。
+ * `[30,90]` 的下沿 ⇒ 学时是模板产物。
  * 最坏量级 = 2 段 × 2 任务 × 15 分钟 = 60 分钟。
  */
 export const ONE_SITTING_BOUNDS = {
@@ -313,11 +314,10 @@ export const ONE_SITTING_BOUNDS = {
 export const ONE_SITTING_MAX_HOURS = 1;
 
 /**
- * 「一节课」的默认时长（分钟）：当 Goal 层没能从用户原话里取到"一次多久"时用它兜底。
- * 为什么需要默认值：`sessionsLengthMin` 实测常为 null（用户没说"一次学多久"），
- * 而"课次 × 一次时长"必须两项都有才能算出体量 —— 缺一项就退化成模具（= 通胀）。
+ * 「一节课」的默认时长与分钟档兜底（#106）：
+ * 统一由 services/learning/capacity-authority.ts 的 CAPACITY_DEFAULTS / resolveCapacity 提供，
+ * 本模块不再自定 40 分钟默认值，避免「改一处不传导」。
  */
-export const DEFAULT_SESSION_MINUTES = 40;
 
 /**
  * hints 硬执行（2026-09-21）：把 stage-designer 的**产出**按 hints 兜底裁剪。
@@ -397,7 +397,12 @@ export function derivePlanningHints(
   const scopeConfig = scope ? SCOPE_SIZE_RANGES[scope] : null;
 
   let conceptRange: [number, number] = [...paceConfig.conceptRange];
+  // 无自由文本会话信号时的任务分钟档：由 pace 档位（时间跨度→粒度）决定，
+  // 不是「一次学多久」的兜底——后者统一在 capacity-authority（#106）。
   const defaultMinutesRange: [number, number] = [...paceConfig.defaultMinutesRange];
+  // #106：可用时间单一权威——单次时长/每日分钟/展示文本统一由 capacity-authority 解析，
+  // 本模块不再保留自己的分钟常量。
+  const capacity = resolveCapacity({ timeDimensions, timePerSession, timeBudget });
 
   const HARD_MILESTONE_CAP = 8;
   const scopeMilestoneFloor = scopeConfig ? scopeConfig.milestoneRange[0] : 2;
@@ -456,11 +461,9 @@ export function derivePlanningHints(
   const totalSessions = Number.isFinite(timeDimensions?.totalSessions) && (timeDimensions!.totalSessions as number) > 0
     ? (timeDimensions!.totalSessions as number)
     : null;
-  // 一次时长：优先用户原话，缺失用默认（40 分钟）——否则"课次 × 一次时长"算不出体量，锚失效
+  // 一次时长：结构化 timeDimensions 优先，其次用户原话；缺失时由 capacity-authority 统一兜底
   const oneSessionMinutes = totalSessions !== null
-    ? (Number.isFinite(timeDimensions?.sessionsLengthMin) && (timeDimensions!.sessionsLengthMin as number) > 0
-        ? (timeDimensions!.sessionsLengthMin as number)
-        : DEFAULT_SESSION_MINUTES)
+    ? capacity.sessionMinutes
     : null;
 
   const inferredWeeks = Number.isFinite(timeDimensions?.totalWeeks) && (timeDimensions!.totalWeeks as number) > 0
@@ -470,55 +473,10 @@ export function derivePlanningHints(
     ? Math.min(52, Math.max(1, Math.ceil(inferredWeeks * 1.2)))
     : paceConfig.maxWeeks;
 
-  // 单次时长解析（2026-09-28 修单位 bug）：「每天3小时」此前被解析成 3 **分钟**
-  //（正则只抓首个数字），所有「每天N小时」用户的预算被静默压缩 20-60 倍，
-  // 且单课分钟档被压到 30min 下限——大预算守恒异常的一大隐藏根因。
-  // 顺序：N小时（×60）→ N分钟 → 半小时(=30) → 裸数字（当分钟）。
-  // 会话时长解析（含中文数字——2026-09-29 第三波评审实证漏解析：「一天三小时」
+  // 单次时长解析（含中文数字——2026-09-29 第三波评审实证漏解析：「一天三小时」
   // 正则只认阿拉伯数字 → 回退默认档 [30,120]，本该 [45,120]，整条路径排了 90min 课）。
-  // 支持：3小时/3.5小时/三个半小时/半小时/三十分钟/30分钟/裸数字（分钟）/一个钟头。
-  const CN_DIGIT: Record<string, number> = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
-  const parseCnNum = (s: string): number | null => {
-    if (!s) return null;
-    if (/^\d+(?:\.\d+)?$/.test(s)) return Number(s);
-    let total = 0;
-    let num = 0;
-    for (const ch of s) {
-      if (ch in CN_DIGIT) num = CN_DIGIT[ch];
-      else if (ch === '十') { total += (num === 0 ? 1 : num) * 10; num = 0; }
-      else if (ch === '百') { total += (num === 0 ? 1 : num) * 100; num = 0; }
-      else return null;
-    }
-    return total + num;
-  };
-  const NUM = '[0-9]+(?:\\.[0-9]+)?|[零一二两三四五六七八九十百]+';
-  const parsedSessionMinutes = (() => {
-    const text = (timePerSession || '').trim();
-    if (!text) return null;
-    // X个半小时 → (X+0.5) 小时（「一个半小时」=1.5h=90min，「三个半小时」=3.5h=210min）
-    const halfHours = text.match(new RegExp(`(${NUM})\\s*(?:个)?半\\s*(?:个)?小时`));
-    if (halfHours) {
-      const n = parseCnNum(halfHours[1]);
-      if (n !== null) return Math.round(n * 60 + 30);
-    }
-    const hour = text.match(new RegExp(`(${NUM})\\s*(?:个)?\\s*(?:小时|钟头|时辰)`));
-    if (hour) {
-      const n = parseCnNum(hour[1]);
-      if (n !== null) return Math.round(n * 60);
-    }
-    const minute = text.match(new RegExp(`(${NUM})\\s*(?:分钟|分种|min)`));
-    if (minute) {
-      const n = parseCnNum(minute[1]);
-      if (n !== null) return Math.round(n);
-    }
-    if (/半\s*小时/.test(text)) return 30;
-    const bare = text.match(new RegExp(`(${NUM})`));
-    if (bare) {
-      const n = parseCnNum(bare[1]);
-      if (n !== null) return Math.round(n);
-    }
-    return null;
-  })();
+  // 解析实现与默认值统一在 services/learning/capacity-authority.ts（#106）。
+  const parsedSessionMinutes = parseSessionMinutes(timePerSession);
 
   // 2026-09-28 R2（rw-school-15 案例：20min 早读被排 30min 课）：上界不得突破会话时长——
   // 「每步一次坐完」的硬约束优先于「任务别太小」的下限偏好。
@@ -528,9 +486,9 @@ export function derivePlanningHints(
   // 且无实证依据（原案例只要求「别超会话」，从没要求留 20% 余量）。改为一比一取用户自述会话时长；
   // 120 分钟只作**理智上界**（防「一次 8 小时」这类口语被当单课长度），不是负荷判断。
   // 实证：CPA 案例（自述一次 2h）单课档从 96 → 120，结构容量 240h → 300h（对 416h 目标缺口 42%→28%）。
-  let subtaskMinutesRange: [number, number] = Number.isFinite(parsedSessionMinutes)
+  let subtaskMinutesRange: [number, number] = parsedSessionMinutes !== null
     ? (() => {
-        const s = parsedSessionMinutes as number;
+        const s = parsedSessionMinutes;
         const lower = Math.max(8, Math.min(45, Math.round(s * 0.3)));
         const upper = Math.max(15, Math.min(120, s));
         return [lower, Math.max(lower, upper)] as [number, number];
@@ -604,7 +562,7 @@ export function derivePlanningHints(
   // ---- 分流钳制（出口不变量 B，2026-09-21）：Goal 层判为「低可迁移 × 低复现」⇒ 压到"一节"量级 ----
   // 依据（60 例混合数据实测）：一次性操作类产出 2.3–7.4h，构成为
   //   「阶段数 × 每段任务数(2–3) × 单任务分钟」；单任务中位 37 分钟恰是 standard 档
-  //   defaultMinutesRange=[30,90] 的下沿 ⇒ 学时是模板产物，不是"这件事要多久"的估计。
+  //   [30,90] 的下沿 ⇒ 学时是模板产物，不是"这件事要多久"的估计。
   // 只收紧上界，不拍死数字（数字仍由 LLM 在区间内定）；且**不用单点区间**，
   // 与不变量 A（区间永不为单点，见下方出口收束）兼容：最坏 2 段 × 2 任务 × 15 分钟 = 60 分钟。
   // 缺失 triage 时，本分支不生效，行为与今天完全一致。

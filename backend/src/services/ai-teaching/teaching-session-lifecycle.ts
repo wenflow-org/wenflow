@@ -26,7 +26,7 @@ import {
   buildSessionEvaluationShadow,
 } from '../learning/session-evaluation-aggregate';
 import { isCalibratableDirection, replanAttributionService, type ReplanAttributionEvidence } from './ReplanAttributionService';
-import { replanAdvisoryService, toAttributionRecall, type ReplanAdvisory } from './ReplanAdvisoryService';
+import { replanAdvisoryService, toAttributionRecall, NO_ADVISORY, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { teachingSessionRepository, TeachingSessionConflictError, type TeachingSessionRecord, type TeachingSessionMessage } from './TeachingSessionRepository';
 import { runWithTeachingSession } from './teaching-session-context';
@@ -354,6 +354,8 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
         userId: input.userId,
         taskId: input.taskId,
         status: { in: ['completed', 'discarded'] },
+        // 延伸课不是「重学本课」：不计入同任务重学次数（否则延伸一次，下次重学的开场卡会误报）
+        NOT: { mode: 'extension' },
       },
     });
   } catch { /* 统计失败不阻断 */ }
@@ -910,6 +912,26 @@ export async function endSession(
       runtimeEnvelope: wrapupRuntimeEnvelope,
       // 影子双写：确定性聚合 vs LLM，仅供比对，不被任何消费方读取
       shadowDeterministic,
+      // 延伸学一期（#124）：只观测——延伸段学了什么、有多重（负荷/回合），
+      // 供后续「与后续路径比对」使用；本期不进任何重排判据。
+      ...(session.mode === 'extension' ? {
+        extensionObservability: {
+          kind: 'extension' as const,
+          phase: 'observation' as const,
+          sourceTaskId: session.taskId,
+          sourcePathId: session.learningPathId || null,
+          observedAt: new Date().toISOString(),
+          turnCount: session.messages.filter((message) => message.role === 'assistant').length,
+          sessionLss: evaluationResult?.evaluation?.sessionLss ?? null,
+          sessionLf: evaluationResult?.evaluation?.sessionLf ?? null,
+          // 本课已掌握的知识点（延伸段学到的内容也在此状态里），供后续与路径比对
+          learnedConcepts: (Array.isArray(session.knowledgeState) ? session.knowledgeState : [])
+            .filter((point: any) => point?.status === 'mastered')
+            .map((point: any) => String(point?.name || ''))
+            .filter(Boolean)
+            .slice(0, 12),
+        },
+      } : {}),
     };
     const snapshotInput = {
       userId: session.userId,
@@ -929,7 +951,11 @@ export async function endSession(
     const currentPath = learnerSnapshot.knowledgeMemory.currentPath;
     const currentStageNumber = currentPath?.currentPosition.stageNumber || 1;
     const nextMilestone = currentPath?.milestoneProgress.find((item) => item.stageNumber === currentStageNumber + 1) || null;
-    const thresholdAdvisory = replanAdvisoryService.build({
+    // 延伸学一期（#124）：只观测，不产生路径调整建议——延伸课不是任务完成课，
+    // 其信号也不该在样本积累前推动重排（2026-10-19 拍板「先不进入，先观测」）。
+    const thresholdAdvisory = session.mode === 'extension'
+      ? NO_ADVISORY
+      : replanAdvisoryService.build({
       wrapup: persistedWrapup,
       learnerReplanProjection,
       nextMilestone: nextMilestone ? {

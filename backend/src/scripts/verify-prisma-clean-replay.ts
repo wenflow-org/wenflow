@@ -2,7 +2,13 @@ import { execFileSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'fs';
 import { join, resolve } from 'path';
-import { readExpectedMigrations, validateSqliteDatabase } from '../operations/sqlite-database';
+import {
+  closeDatabase,
+  openDatabase,
+  queryAll,
+  readExpectedMigrations,
+  validateSqliteDatabase
+} from '../operations/sqlite-database';
 
 const workspace = resolve(__dirname, '..', '..');
 const prismaCli = join(workspace, 'node_modules', 'prisma', 'build', 'index.js');
@@ -61,6 +67,26 @@ function assertMigrationLayout() {
   }
 }
 
+/**
+ * #92：concept_edges 的用户级边（scope='user', pathId IS NULL）靠部分唯一索引去重。
+ * 该索引无法由 schema.prisma 表达，也不出现在 `prisma migrate diff` 的 SQLite 输出里，
+ * 迁移被压平时会静默丢失；这里在干净回放库上直接核对 sqlite_master。
+ */
+async function assertUserScopeUniqueIndex(filePath: string) {
+  const database = await openDatabase(filePath);
+  try {
+    const rows = await queryAll<any>(
+      database,
+      "SELECT name FROM sqlite_master WHERE type='index' AND name='concept_edges_user_scope_unique'"
+    );
+    if (rows.length !== 1) {
+      throw new Error('干净回放库缺少 concept_edges_user_scope_unique 部分唯一索引（#92）');
+    }
+  } finally {
+    await closeDatabase(database);
+  }
+}
+
 async function main() {
   assertMigrationLayout();
   mkdirSync(tempDir, { recursive: true });
@@ -87,6 +113,7 @@ async function main() {
     if (systemDiff && systemDiff !== '-- This is an empty migration.') throw new Error('system database drift detected');
 
     await validateSqliteDatabase(mainDb, 'main', workspace);
+    await assertUserScopeUniqueIndex(mainDb);
     await validateSqliteDatabase(systemDb, 'system', workspace);
     const [mainMigrations, systemMigrations] = await Promise.all([
       readExpectedMigrations(workspace, 'main'),

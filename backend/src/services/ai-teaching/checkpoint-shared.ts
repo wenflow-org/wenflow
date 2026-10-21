@@ -43,12 +43,8 @@ export function parseSessionArtifacts(teachingState: Record<string, any> | null 
  * （同名跨课同键），标注 source='derived'；确实无点名 → null（宁缺勿挂占位键）。
  */
 
-/** 路径生成骨架的 concept-N 序列占位形态（path-generation.core.ts 的 `concept-${index+1}`） */
-const PLACEHOLDER_CONCEPT_KEY_PATTERN = /^concept-\d+$/i;
-
-export function isPlaceholderConceptKey(key: unknown): boolean {
-  return typeof key === 'string' && PLACEHOLDER_CONCEPT_KEY_PATTERN.test(key.trim());
-}
+/** 路径生成骨架的 concept-N 序列占位形态（唯一定义点已迁到 memory/concept-key，registry 侧同用） */
+export { isPlaceholderConceptKey } from '../memory/concept-key';
 
 /** 概念名归一（键派生口径）：剔除全部空白 + 小写，同名异写派生同键 */
 export function normalizeConceptName(name: unknown): string {

@@ -156,3 +156,33 @@ describe('applyKtEstimate 走同一条键控契约', () => {
     expect(mockCreate.mock.calls[0][0].data.masteryScore).toBe(0.8)
   })
 })
+
+/**
+ * #109：路径骨架 concept-N 是路径内局部序号，不是概念身份。写入侧最后一道防线——
+ * 即使上游漏了改挂，也不得 upsert 痕迹 / create 痕迹 / 解析出概念身份。
+ */
+describe('#109 占位概念键写入护栏（concept-N）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockUpsert.mockResolvedValue({})
+    mockUpdateMany.mockResolvedValue({ count: 1 })
+    mockCreate.mockResolvedValue({})
+  })
+
+  it('recordExtraction 直接返回：不 upsert、不解析身份', async () => {
+    await memoryTraceService.recordExtraction({ userId: 'u1', conceptKey: 'concept-1', masteryScore: 0.5 })
+    expect(mockUpsert).not.toHaveBeenCalled()
+    expect(mockResolveConcept).not.toHaveBeenCalled()
+  })
+
+  it('recordSessionOutcome 经同一漏斗：占位名不落痕', async () => {
+    await memoryTraceService.recordSessionOutcome('u1', [{ name: 'concept-2', status: 'learning', progress: 40 }])
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('applyKtEstimate 跳过占位键：不 create、不 update', async () => {
+    await memoryTraceService.applyKtEstimate('u1', [{ conceptKey: 'concept-1', mastery: 0.5 }])
+    expect(mockCreate).not.toHaveBeenCalled()
+    expect(mockUpdateMany).not.toHaveBeenCalled()
+  })
+})

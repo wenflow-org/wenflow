@@ -81,8 +81,12 @@ export type TeachingMode = 'tutor' | 'peer' | 'debate';
 export interface TeachingSessionStartInput {
   userId: string;
   taskId: string;
-  /** 会话模式：tutor（默认教学）/ review（复习课，knowledgeState 注入到期复习点） */
-  mode?: 'tutor' | 'review';
+  /**
+   * 会话模式：tutor（默认教学）/ review（复习课，knowledgeState 注入到期复习点）/
+   * extension（延伸学，#124：基于已完成的本课做额外学习；不结算任务，只允许 end_only 收尾，
+   * 一期仅观测——学到的东西照常进记忆/画像，但不产生路径调整建议）。
+   */
+  mode?: 'tutor' | 'review' | 'extension';
 }
 
 export interface TeachingOpening {
@@ -125,6 +129,12 @@ export interface ProcessStudentMessageOptions {
   /** 原始作答（供检查点结果留痕；不含答案键） */
   checkpointSubmission?: { selectedOptionIds?: string[]; answerText?: string };
   expectedRevision?: number;
+  /**
+   * 失败检查点概念的后续回合肯定语护栏（#84，commit 36fc5662）。
+   * 默认开启；仅冻结考卷双臂协议（#85）的 A 臂显式传入 false 以复现护栏前口径。
+   * 不对外暴露为产品开关——除对照实验外不应关闭。
+   */
+  failedConceptFollowupGuard?: boolean;
   /** 前端交互特征（认知负荷量测 · 前端情报层）：随学生消息落库并注入教学上下文 */
   interactionMeta?: InteractionMetaRecord | null;
   /**
@@ -256,8 +266,9 @@ export class AITeachingOrchestrator {
     payload: CheckpointSubmitPayload,
     expectedRevision?: number,
     idempotencyKey?: string,
+    turnOptions: { failedConceptFollowupGuard?: boolean } = {},
   ): Promise<CheckpointSubmitResult> {
-    return submitCheckpointImpl(sessionId, checkpointId, payload, expectedRevision, idempotencyKey);
+    return submitCheckpointImpl(sessionId, checkpointId, payload, expectedRevision, idempotencyKey, turnOptions);
   }
 
   async judgeCheckpointSubmission(

@@ -123,6 +123,8 @@ export interface LearnLearnerSimulationOutput {
     satisfaction: number;
     confidence: number;
     wantsMoreHelp: boolean;
+    /** 达标后仍想就本课内容继续深入的延伸意愿（#124；不是未完成卡点） */
+    wantsExtension: boolean;
     stopAsking: boolean;
     remainingBlockers: string[];
     reason: string;
@@ -183,6 +185,8 @@ function buildFeedbackFromState(state: LearnLearnerSimulationOutput['learnerStat
     satisfaction: clamp01(selfReportedTaskDone ? 0.86 : state.taskUnderstanding, 0.45),
     confidence: clamp01(Math.max(state.conceptualMastery, state.proceduralMastery, state.taskUnderstanding), 0.45),
     wantsMoreHelp,
+    // 默认无延伸意愿：只有模拟器显式输出且已达标时才成立（归一化处再钳一次）
+    wantsExtension: false,
     stopAsking: selfReportedTaskDone,
     remainingBlockers: blockers,
     reason: reason || (selfReportedTaskDone ? '当前 task 已能跟上，愿意停止继续追问。' : '当前 task 仍有未完全确认的地方。')
@@ -349,6 +353,9 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
   const selfReportedTaskDone = safeBool(rawFeedback.selfReportedTaskDone, fallbackFeedback.selfReportedTaskDone)
     && !wantsMoreHelp
     && feedbackBlockers.length === 0;
+  // 延伸意愿（#124）：只有「已达标 + 无卡点」时才成立——它是达标后的深入兴趣，不是继续纠缠的借口
+  const wantsExtension = safeBool(rawFeedback.wantsExtension, fallbackFeedback.wantsExtension)
+    && selfReportedTaskDone;
   const checkpointAnswer = normalizeCheckpointAnswer(parsed?.checkpointAnswer, input.pendingCheckpoint);
 
   return {
@@ -362,6 +369,7 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
       satisfaction: clamp01(rawFeedback.satisfaction, fallbackFeedback.satisfaction),
       confidence: clamp01(rawFeedback.confidence, fallbackFeedback.confidence),
       wantsMoreHelp,
+      wantsExtension,
       stopAsking: safeBool(rawFeedback.stopAsking, fallbackFeedback.stopAsking) && selfReportedTaskDone,
       remainingBlockers: feedbackBlockers,
       reason: sanitizeVisibleContent(rawFeedback.reason || fallbackFeedback.reason),
@@ -415,7 +423,7 @@ const LEARN_STATE_FIELDS = [
 
 const LEARN_FEEDBACK_FIELDS = [
   'selfReportedTaskDone', 'satisfaction', 'confidence', 'wantsMoreHelp',
-  'stopAsking', 'remainingBlockers', 'reason',
+  'wantsExtension', 'stopAsking', 'remainingBlockers', 'reason',
 ] as const;
 
 export { normalizeOutput, LEARN_STATE_FIELDS, LEARN_FEEDBACK_FIELDS };

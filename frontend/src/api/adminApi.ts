@@ -1489,8 +1489,6 @@ export const adminVirtualLearnersApi = {
     dateSimulation?: {
       enabled?: boolean;
       timezone?: string;
-      defaultDailyMinutesCap?: number;
-      defaultDaysPerWeek?: number;
       defaultPaceDaysPerAdvance?: number;
       maxSimulatedDays?: number;
       pauseOnIntervention?: boolean;

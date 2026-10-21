@@ -1,0 +1,1332 @@
+[
+  {
+    "goal": "safety-engineer",
+    "rawGoal": "我要备考中级注册安全工程师，半年内系统学完《安全生产管理》，能对上考试大纲的重点章节。",
+    "materials": [
+      "中级注册安全工程师职业资格考试大纲"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_safety-engineer-new_7b6da757",
+      "pathId": "lp_1792234451724_gro2mnr",
+      "ms": 150668,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 20.5,
+      "stageRefs": 3,
+      "taskRefs": 9,
+      "refsTotal": 12,
+      "refsLate": 5,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1224,
+        "points": 24,
+        "pointsLate": 6,
+        "packChars": 7181,
+        "chars": 2634,
+        "sections": 24,
+        "sectionsLate": 3
+      },
+      "error": null,
+      "milestoneTitles": [
+        "对照考纲条目建立《安全生产管理》覆盖地图",
+        "识别责任主体与法定职责的对应关系",
+        "梳理管理程序与记录证据的闭环链条",
+        "打通风险分级与事故致因的因果映射并完成模考收口"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_safety-engineer-new_55390c6c",
+      "pathId": "lp_1792385478698_u9ph2hl",
+      "ms": 145675,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 21.3,
+      "stageRefs": 2,
+      "taskRefs": 10,
+      "refsTotal": 12,
+      "refsLate": 1,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1224,
+        "points": 37,
+        "pointsLate": 18,
+        "packChars": 7181,
+        "chars": 7181,
+        "sections": 24,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "对照考纲建立管理科目章节地图与术语底座",
+        "识别责任体系与管理制度之间的支撑关系",
+        "在场景中应用危险源辨识与风险管控链条",
+        "用真题与模拟题校准考纲覆盖度并收口"
+      ]
+    }
+  },
+  {
+    "goal": "cpa-accounting",
+    "rawGoal": "我想在一年内通过注册会计师的专业阶段考试，先从会计和审计两科开始，需要按大纲把重点章节排出来。",
+    "materials": [
+      "2019 年注册会计师全国统一考试大纲——专业阶段考试（会计）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_cpa-accounting-new_4dd539fd",
+      "pathId": "lp_1792234589404_bpgnrfy",
+      "ms": 133930,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 22.8,
+      "stageRefs": 4,
+      "taskRefs": 11,
+      "refsTotal": 24,
+      "refsLate": 0,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1393,
+        "points": 24,
+        "pointsLate": 0,
+        "packChars": 9023,
+        "chars": 2757,
+        "sections": 24,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别会计大纲章节的能力等级与重点权重",
+        "识别审计大纲章节的风险导向重点分布",
+        "按能力等级与分值权重排出会计审计复习顺序",
+        "用真题分布校验排期并收敛为可执行计划"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_cpa-accounting-new_c07c9e75",
+      "pathId": "lp_1792385652190_d47u4p5",
+      "ms": 175169,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 18.8,
+      "stageRefs": 4,
+      "taskRefs": 9,
+      "refsTotal": 17,
+      "refsLate": 1,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1393,
+        "points": 48,
+        "pointsLate": 16,
+        "packChars": 9023,
+        "chars": 9023,
+        "sections": 24,
+        "sectionsLate": 11
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别大纲能力等级并建立章节优先级判断",
+        "建立会计确认计量链条并定位核心章节",
+        "建立审计风险流程并定位审计章节依赖",
+        "用真题验证排期并校准时间投入"
+      ]
+    }
+  },
+  {
+    "goal": "high-school-history",
+    "rawGoal": "我是高中历史老师，想利用暑假把中外历史纲要（上）通读一遍，梳理出可以上课的单元脉络和关键概念。",
+    "materials": [
+      "普通高中教科书 历史 必修 中外历史纲要（上）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_high-school-history-new_064789e8",
+      "pathId": "lp_1792234767630_plym6s0",
+      "ms": 184822,
+      "milestones": 4,
+      "tasks": 19,
+      "estimatedHours": 19.4,
+      "stageRefs": 4,
+      "taskRefs": 15,
+      "refsTotal": 27,
+      "refsLate": 12,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1554,
+        "points": 24,
+        "pointsLate": 0,
+        "packChars": 9282,
+        "chars": 1744,
+        "sections": 24,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别教材单元导语与栏目的结构功能",
+        "锚定统一多民族国家主线并串联古代史单元",
+        "识别近代社会性质转折并串联晚清至民国单元",
+        "在模拟课堂讲授中检验并修正单元脉络框架"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_high-school-history-new_17733e3e",
+      "pathId": "lp_1792385839867_hcgakep",
+      "ms": 180320,
+      "milestones": 4,
+      "tasks": 18,
+      "estimatedHours": 19.3,
+      "stageRefs": 4,
+      "taskRefs": 12,
+      "refsTotal": 23,
+      "refsLate": 8,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1554,
+        "points": 48,
+        "pointsLate": 24,
+        "packChars": 9282,
+        "chars": 9282,
+        "sections": 24,
+        "sectionsLate": 12
+      },
+      "error": null,
+      "milestoneTitles": [
+        "建立全册时段地图与单元主题定位",
+        "提炼古代单元的制度因革与民族交融主线",
+        "识别近代社会转型临界点与救亡方案比较",
+        "整合全册单元脉络并校准关键概念表述"
+      ]
+    }
+  },
+  {
+    "goal": "german-a2",
+    "rawGoal": "我计划四个月后考 Goethe-Zertifikat A2，需要按主题掌握词汇并用德语做简单日常交流。",
+    "materials": [
+      "Goethe-Zertifikat A2 Modellsatz Erwachsene"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_german-a2-new_9260875f",
+      "pathId": "lp_1792234922107_14nqbkf",
+      "ms": 224040,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 18.3,
+      "stageRefs": 4,
+      "taskRefs": 14,
+      "refsTotal": 18,
+      "refsLate": 6,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1242,
+        "points": 24,
+        "pointsLate": 4,
+        "packChars": 8970,
+        "chars": 2165,
+        "sections": 24,
+        "sectionsLate": 4
+      },
+      "error": null,
+      "milestoneTitles": [
+        "建立德语发音与最简句型的入门框架",
+        "按主题建立词汇与场景功能的对应关系",
+        "把主题词汇组装成阅读听力可解的句子",
+        "用评分标准校准写作与口语输出"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_german-a2-new_ac33d2f6",
+      "pathId": "lp_1792385987833_2aziq9x",
+      "ms": 145212,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 18.8,
+      "stageRefs": 4,
+      "taskRefs": 15,
+      "refsTotal": 19,
+      "refsLate": 11,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1242,
+        "points": 48,
+        "pointsLate": 26,
+        "packChars": 8970,
+        "chars": 8970,
+        "sections": 24,
+        "sectionsLate": 13
+      },
+      "error": null,
+      "milestoneTitles": [
+        "建立发音与高频词块的主题入口",
+        "用题干信号词定位听读中的主题信息",
+        "用 A2 句型框架完成写作与口语产出",
+        "用完整模拟考试校准弱项主题"
+      ]
+    }
+  },
+  {
+    "goal": "feline-nursing",
+    "rawGoal": "我是宠物医院的新手护士，想系统学习猫科动物的生命周期照护要点，用于日常门诊护理。",
+    "materials": [
+      "2021 AAHA/AAFP Feline Life Stage Guidelines",
+      "全国执业兽医资格考试大纲（兽医全科类）（2023 版）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_feline-nursing-new_d8d134e2",
+      "pathId": "lp_1792235177674_wwsuatc",
+      "ms": 137482,
+      "milestones": 3,
+      "tasks": 13,
+      "estimatedHours": 10.2,
+      "stageRefs": 3,
+      "taskRefs": 9,
+      "refsTotal": 13,
+      "refsLate": 3,
+      "pack": {
+        "files": 2,
+        "tldrChars": 2979,
+        "points": 48,
+        "pointsLate": 3,
+        "packChars": 18339,
+        "chars": 6198,
+        "sections": 48,
+        "sectionsLate": 4
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别猫的生命阶段并建立照护重点对应框架",
+        "在病史与体查中捕捉各阶段特征信号",
+        "整合阶段判断与照护重点形成门诊护理动作"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_feline-nursing-new_c138490d",
+      "pathId": "lp_1792386160031_t14b9g0",
+      "ms": 168459,
+      "milestones": 3,
+      "tasks": 14,
+      "estimatedHours": 10.9,
+      "stageRefs": 0,
+      "taskRefs": 8,
+      "refsTotal": 8,
+      "refsLate": 3,
+      "pack": {
+        "files": 2,
+        "tldrChars": 2979,
+        "points": 96,
+        "pointsLate": 42,
+        "packChars": 18339,
+        "chars": 18339,
+        "sections": 48,
+        "sectionsLate": 23
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别猫的生命阶段并建立照护重点对应表",
+        "用外观与行为线索交叉验证阶段判断",
+        "把阶段特征转化为门诊分诊配合动作"
+      ]
+    }
+  },
+  {
+    "goal": "agile-pm",
+    "rawGoal": "公司要推敏捷转型，我需要系统学习敏捷实践指南，能主持迭代计划会和回顾会。",
+    "materials": [
+      "PMI《敏捷实践指南》(Agile Practice Guide)"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_agile-pm-new_fd1b35ed",
+      "pathId": "lp_1792235288506_izfg7l2",
+      "ms": 147897,
+      "milestones": 4,
+      "tasks": 19,
+      "estimatedHours": 18.3,
+      "stageRefs": 4,
+      "taskRefs": 14,
+      "refsTotal": 19,
+      "refsLate": 0,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1283,
+        "points": 24,
+        "pointsLate": 0,
+        "packChars": 9011,
+        "chars": 3346,
+        "sections": 24,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别敏捷思维模式与预测型工作的分界",
+        "建立迭代计划会的产能与优先级校准框架",
+        "设计回顾会的事实提取与改进项收口",
+        "在转型阻力中维持会议机制的有效运转"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_agile-pm-new_ecd088c6",
+      "pathId": "lp_1792386340273_1swdrx0",
+      "ms": 149418,
+      "milestones": 3,
+      "tasks": 12,
+      "estimatedHours": 10.2,
+      "stageRefs": 3,
+      "taskRefs": 9,
+      "refsTotal": 14,
+      "refsLate": 0,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1283,
+        "points": 48,
+        "pointsLate": 23,
+        "packChars": 9011,
+        "chars": 9011,
+        "sections": 24,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别敏捷思维模式与迭代反馈回路的底层关系",
+        "建立迭代计划会的承诺边界判断与主持框架",
+        "建立回顾会的可观测信号转行动判断与主持收口"
+      ]
+    }
+  },
+  {
+    "goal": "systematic-review",
+    "rawGoal": "我要写一篇系统综述，想学会 Cochrane 手册里的检索、偏倚评估和证据合成方法。",
+    "materials": [
+      "Cochrane Handbook for Systematic Reviews of Interventions"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_systematic-review-new_446b4277",
+      "pathId": "lp_1792235421118_lju22m6",
+      "ms": 100114,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 20.9,
+      "stageRefs": 4,
+      "taskRefs": 18,
+      "refsTotal": 23,
+      "refsLate": 10,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1554,
+        "points": 24,
+        "pointsLate": 2,
+        "packChars": 9282,
+        "chars": 4355,
+        "sections": 24,
+        "sectionsLate": 2
+      },
+      "error": null,
+      "milestoneTitles": [
+        "把临床疑问转成 PICO 可检索结构并写出综述方案",
+        "设计检索策略并建立纳入筛选的判断标准",
+        "用 RoB 2 评估偏倚风险并判断其对效应估计的影响",
+        "选择效应量完成证据合成并解释异质性与结论稳健性"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_systematic-review-new_34132fb1",
+      "pathId": "lp_1792386460720_j9f1xm3",
+      "ms": 153172,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 22,
+      "stageRefs": 4,
+      "taskRefs": 17,
+      "refsTotal": 25,
+      "refsLate": 15,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1554,
+        "points": 48,
+        "pointsLate": 25,
+        "packChars": 9282,
+        "chars": 9282,
+        "sections": 24,
+        "sectionsLate": 13
+      },
+      "error": null,
+      "milestoneTitles": [
+        "把综述问题转成可复现的检索策略",
+        "用 RoB 2 判断纳入研究的偏倚风险",
+        "按异质性判断选择合成模型并完成 meta 分析",
+        "校准合成结论的可信度并收口综述证据链"
+      ]
+    }
+  },
+  {
+    "goal": "fire-code",
+    "rawGoal": "我在做建筑消防设计，需要把建筑设计防火规范 GB 50016 的条文体系学清楚，能按建筑类别查要求。",
+    "materials": [
+      "建筑设计防火规范 GB 50016-2014（2018年版）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_fire-code-new_b0f60a88",
+      "pathId": "lp_1792235530763_wvamgvg",
+      "ms": 87974,
+      "milestones": 3,
+      "tasks": 6,
+      "estimatedHours": 1.5,
+      "stageRefs": 3,
+      "taskRefs": 4,
+      "refsTotal": 12,
+      "refsLate": 2,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1251,
+        "points": 24,
+        "pointsLate": 6,
+        "packChars": 8979,
+        "chars": 3376,
+        "sections": 24,
+        "sectionsLate": 3
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别建筑类别与火灾危险性并定位对应章节",
+        "识别条文适用范围边界并排除不适用情形",
+        "建立从建筑类别到条文的稳定查询路径"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_fire-code-new_4cf7a5a5",
+      "pathId": "lp_1792386639113_ldeoa0v",
+      "ms": 155326,
+      "milestones": 4,
+      "tasks": 15,
+      "estimatedHours": 11.6,
+      "stageRefs": 4,
+      "taskRefs": 11,
+      "refsTotal": 21,
+      "refsLate": 8,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1251,
+        "points": 48,
+        "pointsLate": 28,
+        "packChars": 8979,
+        "chars": 8979,
+        "sections": 24,
+        "sectionsLate": 12
+      },
+      "error": null,
+      "milestoneTitles": [
+        "建立火灾危险性与耐火等级的双重定级入口",
+        "识别建筑类别并定位到规范对应章节",
+        "在厂房与仓库场景中联动查防火分区、间距与疏散",
+        "在民用建筑与储罐堆场场景中复用定级与联动框架并区分条文效力"
+      ]
+    }
+  },
+  {
+    "goal": "civil-code",
+    "rawGoal": "我想系统学习民法典合同编，能判断常见合同的成立、效力和违约责任。",
+    "materials": [
+      "中华人民共和国民法典"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_civil-code-new_2e153afc",
+      "pathId": "lp_1792235616296_tactjat",
+      "ms": 98198,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 20.5,
+      "stageRefs": 4,
+      "taskRefs": 14,
+      "refsTotal": 23,
+      "refsLate": 4,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1243,
+        "points": 24,
+        "pointsLate": 4,
+        "packChars": 8891,
+        "chars": 2307,
+        "sections": 24,
+        "sectionsLate": 1
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别要约承诺合致时点并判断合同是否成立",
+        "建立主体资格与意思表示瑕疵的效力过滤框架",
+        "识别义务群与违约形态并对应责任方式",
+        "权衡违约责任承担方式与免责事由并完成综合判断"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_civil-code-new_cfd6b59f",
+      "pathId": "lp_1792386757278_vyy7ep2",
+      "ms": 109891,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 22.1,
+      "stageRefs": 4,
+      "taskRefs": 16,
+      "refsTotal": 20,
+      "refsLate": 2,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1243,
+        "points": 48,
+        "pointsLate": 24,
+        "packChars": 8891,
+        "chars": 8891,
+        "sections": 24,
+        "sectionsLate": 5
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别意思表示合致与合同成立的判断入口",
+        "区分合同效力障碍类型并推导法律后果",
+        "对应义务违反行为与违约责任形式",
+        "整合合同变动与抗辩权完成综合判断"
+      ]
+    }
+  },
+  {
+    "goal": "child-development",
+    "rawGoal": "我是幼儿园老师，想弄懂《3-6岁儿童学习与发展指南》对五大领域的发展要求，用来观察和评价班里孩子。",
+    "materials": [
+      "《3-6岁儿童学习与发展指南》",
+      "《3～6岁儿童学习与发展指南》"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_child-development-new_e8d16bf0",
+      "pathId": "lp_1792235710438_evv19u3",
+      "ms": 95399,
+      "milestones": 3,
+      "tasks": 14,
+      "estimatedHours": 10.4,
+      "stageRefs": 3,
+      "taskRefs": 14,
+      "refsTotal": 18,
+      "refsLate": 4,
+      "pack": {
+        "files": 2,
+        "tldrChars": 3106,
+        "points": 48,
+        "pointsLate": 0,
+        "packChars": 17272,
+        "chars": 4920,
+        "sections": 48,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "建立《指南》五大领域与年龄段的条目地图",
+        "把班里孩子的行为片段挂到具体目标条目上",
+        "在年龄段阶梯上定位表现并找到支持方向"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_child-development-new_a1e02da2",
+      "pathId": "lp_1792386870087_d7lpc6d",
+      "ms": 128871,
+      "milestones": 3,
+      "tasks": 11,
+      "estimatedHours": 9.6,
+      "stageRefs": 3,
+      "taskRefs": 8,
+      "refsTotal": 14,
+      "refsLate": 4,
+      "pack": {
+        "files": 2,
+        "tldrChars": 3106,
+        "points": 88,
+        "pointsLate": 42,
+        "packChars": 17272,
+        "chars": 17272,
+        "sections": 48,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "建立五领域目标地图并定位班里孩子的年龄档",
+        "把幼儿行为翻译成对应领域的目标语言",
+        "在领域交叉与个体差异中校准评价结论"
+      ]
+    }
+  },
+  {
+    "goal": "mbsr",
+    "rawGoal": "我压力很大，想跟着正念减压八周课程系统练习，能独立完成身体扫描和坐姿冥想。",
+    "materials": [
+      "正念减压（MBSR）八周课程"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_mbsr-new_d81c4e36",
+      "pathId": "lp_1792235805177_a95c41y",
+      "ms": 96740,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 17.1,
+      "stageRefs": 4,
+      "taskRefs": 8,
+      "refsTotal": 12,
+      "refsLate": 0,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1553,
+        "points": 24,
+        "pointsLate": 0,
+        "packChars": 5417,
+        "chars": 2930,
+        "sections": 24,
+        "sectionsLate": 1
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别压力下的注意力漂移并建立呼吸锚定",
+        "用身体扫描读取压力信号并容纳不适感",
+        "在坐姿冥想中辨识自我评判并保持非判断性接纳",
+        "把身体扫描与坐姿冥想嵌入高压日常并循环校准"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_mbsr-new_f539ac11",
+      "pathId": "lp_1792386981656_fl91uhn",
+      "ms": 89919,
+      "milestones": 4,
+      "tasks": 17,
+      "estimatedHours": 12.4,
+      "stageRefs": 4,
+      "taskRefs": 9,
+      "refsTotal": 13,
+      "refsLate": 0,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1553,
+        "points": 24,
+        "pointsLate": 13,
+        "packChars": 5417,
+        "chars": 5417,
+        "sections": 24,
+        "sectionsLate": 19
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别注意力漂移并建立非判断性回锚入口",
+        "读取身体压力信号并完成身体扫描全流程",
+        "在坐姿中稳定呼吸锚点并完成坐姿冥想",
+        "把身体扫描与坐姿冥想带入日常压力情境"
+      ]
+    }
+  },
+  {
+    "goal": "c-language",
+    "rawGoal": "我零基础想学 C 语言，目标是能独立写出结构体加文件读写的小程序。",
+    "materials": [
+      "C语言程序设计教程（第三版）（微课版）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_c-language-new_75a72193",
+      "pathId": "lp_1792235899116_zrbgk6t",
+      "ms": 101398,
+      "milestones": 4,
+      "tasks": 19,
+      "estimatedHours": 17.2,
+      "stageRefs": 4,
+      "taskRefs": 16,
+      "refsTotal": 25,
+      "refsLate": 9,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1489,
+        "points": 24,
+        "pointsLate": 0,
+        "packChars": 9211,
+        "chars": 2910,
+        "sections": 24,
+        "sectionsLate": 2
+      },
+      "error": null,
+      "milestoneTitles": [
+        "读懂并跑通第一个 C 程序，建立语句与执行顺序的对应",
+        "用变量与函数把输入数据加工成可复用的计算单元",
+        "定义结构体把一条记录聚合成可整体操作的数据对象",
+        "用文件读写把结构体记录存入磁盘并重新读出"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_c-language-new_a73ec27a",
+      "pathId": "lp_1792387088107_xw7j6jk",
+      "ms": 143395,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 17.7,
+      "stageRefs": 4,
+      "taskRefs": 12,
+      "refsTotal": 21,
+      "refsLate": 7,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1489,
+        "points": 48,
+        "pointsLate": 23,
+        "packChars": 9211,
+        "chars": 9211,
+        "sections": 24,
+        "sectionsLate": 12
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别 C 程序从 main 到输出结果的执行链条",
+        "建立变量类型与内存存储空间的对应判断",
+        "用结构体把多条字段绑定成一条可整体存取的记录",
+        "把结构体记录写入文件再读回并核对一致性"
+      ]
+    }
+  },
+  {
+    "goal": "veteran-training",
+    "rawGoal": "我在做退役军人适应性培训的项目设计，需要参考现成的培训实施方案排出课程模块。",
+    "materials": [
+      "金寨县2026年度退役军人适应性培训和职业技能培训实施方案（征求意见稿）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_veteran-training-new_db3143e3",
+      "pathId": "lp_1792235994012_yhyaosu",
+      "ms": 58118,
+      "milestones": 3,
+      "tasks": 6,
+      "estimatedHours": 1.5,
+      "stageRefs": 3,
+      "taskRefs": 6,
+      "refsTotal": 12,
+      "refsLate": 9,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1209,
+        "points": 24,
+        "pointsLate": 3,
+        "packChars": 6684,
+        "chars": 2935,
+        "sections": 24,
+        "sectionsLate": 2
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别实施方案中培训对象与培训目标的对应关系",
+        "把培训项目展开成具体课程模块并匹配补助约束",
+        "用合格率与取证率指标校准课程模块排布"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_veteran-training-new_e75b91ce",
+      "pathId": "lp_1792387216574_t5306cf",
+      "ms": 127956,
+      "milestones": 3,
+      "tasks": 15,
+      "estimatedHours": 13.8,
+      "stageRefs": 3,
+      "taskRefs": 12,
+      "refsTotal": 15,
+      "refsLate": 13,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1209,
+        "points": 35,
+        "pointsLate": 29,
+        "packChars": 6684,
+        "chars": 6684,
+        "sections": 24,
+        "sectionsLate": 20
+      },
+      "error": null,
+      "milestoneTitles": [
+        "从实施方案中识别培训对象与两类培训的边界",
+        "依据培训项目与补助政策确定课程模块的容量与形式",
+        "把政策要求收敛成可执行的课程模块排布表"
+      ]
+    }
+  },
+  {
+    "goal": "first-class-builder",
+    "rawGoal": "我要备考一级建造师，需要按考试大纲把四门课的重点和学时分配理清楚。",
+    "materials": [
+      "一级建造师执业资格考试大纲（2024 年版）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_first-class-builder-new_133bb995",
+      "pathId": "lp_1792236054092_kc3jtlx",
+      "ms": 93444,
+      "milestones": 3,
+      "tasks": 11,
+      "estimatedHours": 9.3,
+      "stageRefs": 3,
+      "taskRefs": 9,
+      "refsTotal": 16,
+      "refsLate": 5,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1421,
+        "points": 24,
+        "pointsLate": 0,
+        "packChars": 9034,
+        "chars": 2412,
+        "sections": 24,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "从大纲考试说明读出四科题型分值权重",
+        "按大纲章节层级逐科拆出可核对考点清单",
+        "用分值权重与掌握程度校准各科学时分配"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_first-class-builder-new_3d995cb4",
+      "pathId": "lp_1792387353820_whaodn0",
+      "ms": 129079,
+      "milestones": 3,
+      "tasks": 14,
+      "estimatedHours": 12.1,
+      "stageRefs": 3,
+      "taskRefs": 11,
+      "refsTotal": 18,
+      "refsLate": 5,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1421,
+        "points": 48,
+        "pointsLate": 21,
+        "packChars": 9034,
+        "chars": 9034,
+        "sections": 24,
+        "sectionsLate": 11
+      },
+      "error": null,
+      "milestoneTitles": [
+        "读通四科考纲结构并定位各科分值权重",
+        "按大纲章节拆解四科重点层级与掌握要求",
+        "按分值权重与可用时间排出四科学时分配方案"
+      ]
+    }
+  },
+  {
+    "goal": "mandarin-test",
+    "rawGoal": "我准备参加普通话水平测试，想通过朗读作品练习纠正发音，目标是二级甲等。",
+    "materials": [
+      "普通话水平测试用朗读作品"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_mandarin-test-new_87493d71",
+      "pathId": "lp_1792236184749_synhoeh",
+      "ms": 131362,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 21.3,
+      "stageRefs": 4,
+      "taskRefs": 18,
+      "refsTotal": 25,
+      "refsLate": 11,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1553,
+        "points": 24,
+        "pointsLate": 0,
+        "packChars": 9281,
+        "chars": 2256,
+        "sections": 24,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "定位自身方言语音与标准音的偏差并建立个人纠音清单",
+        "按成因归类语音偏差并匹配纠正动作",
+        "在50篇朗读作品中迁移纠音并处理语流音变与多音字",
+        "按测试要求完成整卷朗读并稳定达到二甲水平"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_mandarin-test-new_698d3e3c",
+      "pathId": "lp_1792387489593_34fufnq",
+      "ms": 132715,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 19.7,
+      "stageRefs": 4,
+      "taskRefs": 15,
+      "refsTotal": 23,
+      "refsLate": 8,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1553,
+        "points": 48,
+        "pointsLate": 24,
+        "packChars": 9281,
+        "chars": 9281,
+        "sections": 24,
+        "sectionsLate": 10
+      },
+      "error": null,
+      "milestoneTitles": [
+        "建立拼音标注与偏差听辨的对应关系",
+        "识别语流中声韵调的相互影响并建立纠正策略",
+        "在整篇朗读中控制停连节奏与语速稳定",
+        "在限时模拟中稳定输出并收敛残余偏差"
+      ]
+    }
+  },
+  {
+    "goal": "gaokao-math",
+    "rawGoal": "我明年参加新高考，数学基础一般，想先用一套真题摸清题型分布再安排复习。",
+    "materials": [
+      "2024 新高考II卷高考真题 数学",
+      "高考英语完形填空历年真题（含新高考卷、全国卷）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_gaokao-math-new_44c660ee",
+      "pathId": "lp_1792236398205_imy0yp1",
+      "ms": 192148,
+      "milestones": 3,
+      "tasks": 13,
+      "estimatedHours": 9.8,
+      "stageRefs": 3,
+      "taskRefs": 4,
+      "refsTotal": 10,
+      "refsLate": 1,
+      "pack": {
+        "files": 2,
+        "tldrChars": 2815,
+        "points": 48,
+        "pointsLate": 1,
+        "packChars": 16710,
+        "chars": 6705,
+        "sections": 48,
+        "sectionsLate": 1
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别新高考数学真题卷的题型分布与分值结构",
+        "对照真题难度梯度标定自身可解边界",
+        "依据题型分布与得分地图排出复习优先级"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_gaokao-math-new_ba0a155c",
+      "pathId": "lp_1792387613479_yhenq2v",
+      "ms": 86279,
+      "milestones": 3,
+      "tasks": 14,
+      "estimatedHours": 11.7,
+      "stageRefs": 3,
+      "taskRefs": 7,
+      "refsTotal": 12,
+      "refsLate": 2,
+      "pack": {
+        "files": 2,
+        "tldrChars": 2815,
+        "points": 89,
+        "pointsLate": 46,
+        "packChars": 16710,
+        "chars": 16710,
+        "sections": 48,
+        "sectionsLate": 35
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别新高考数学卷的题型板块与分值骨架",
+        "判断各知识板块题目与自身可解程度的匹配",
+        "按题型权重与可解程度排出复习优先级"
+      ]
+    }
+  },
+  {
+    "goal": "cet",
+    "rawGoal": "我大三，想在下一次四级考试前系统准备，按考试大纲把听力和阅读的重点练起来。",
+    "materials": [
+      "全国大学英语四、六级考试大纲（2016年修订版）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_cet-new_f727de25",
+      "pathId": "lp_1792236479075_wfmasqb",
+      "ms": 116424,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 18.1,
+      "stageRefs": 4,
+      "taskRefs": 9,
+      "refsTotal": 14,
+      "refsLate": 0,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1316,
+        "points": 24,
+        "pointsLate": 0,
+        "packChars": 9044,
+        "chars": 2580,
+        "sections": 24,
+        "sectionsLate": 2
+      },
+      "error": null,
+      "milestoneTitles": [
+        "对照大纲识别四级听力与阅读的题型能力要求",
+        "建立题干预期到原文定位的听力判断链",
+        "建立阅读定位效率与选项干扰排除的判断框架",
+        "限时成套练习中校准听力与阅读的答题节奏"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_cet-new_0f4bf3b8",
+      "pathId": "lp_1792387701907_1hhfn7y",
+      "ms": 131360,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 19.4,
+      "stageRefs": 4,
+      "taskRefs": 11,
+      "refsTotal": 16,
+      "refsLate": 0,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1316,
+        "points": 48,
+        "pointsLate": 24,
+        "packChars": 9044,
+        "chars": 9044,
+        "sections": 24,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "对照四级大纲定位听力与阅读的考核要求与当前差距",
+        "建立听力语流切分与题干关键信息同步捕获的判断方式",
+        "建立阅读篇章结构预判与定位效率匹配的判断方式",
+        "在成套限时训练中收敛听力与阅读的取舍与校准方式"
+      ]
+    }
+  },
+  {
+    "goal": "diabetes-guide",
+    "rawGoal": "我是基层全科医生，想学习中国糖尿病防治指南，能按指南给患者做初诊评估和随访计划。",
+    "materials": [
+      "中国糖尿病防治指南（2024版）"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_diabetes-guide-new_f4e10ffc",
+      "pathId": "lp_1792236599938_uagdq47",
+      "ms": 88048,
+      "milestones": 3,
+      "tasks": 13,
+      "estimatedHours": 11.7,
+      "stageRefs": 3,
+      "taskRefs": 10,
+      "refsTotal": 17,
+      "refsLate": 5,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1253,
+        "points": 24,
+        "pointsLate": 1,
+        "packChars": 8938,
+        "chars": 2594,
+        "sections": 24,
+        "sectionsLate": 0
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别血糖阈值与糖代谢状态的对应关系",
+        "建立初诊评估条目与并发症风险的映射",
+        "匹配个体化控制目标与随访频率形成随访计划"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_diabetes-guide-new_14b2b86e",
+      "pathId": "lp_1792387835820_a75o5cf",
+      "ms": 111647,
+      "milestones": 4,
+      "tasks": 8,
+      "estimatedHours": 2,
+      "stageRefs": 4,
+      "taskRefs": 6,
+      "refsTotal": 14,
+      "refsLate": 4,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1253,
+        "points": 48,
+        "pointsLate": 22,
+        "packChars": 8938,
+        "chars": 8938,
+        "sections": 24,
+        "sectionsLate": 8
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别血糖阈值与糖代谢状态的判定边界",
+        "建立病因分型线索与临床信息的对应框架",
+        "匹配并发症筛查节点与随访检查频率",
+        "校准个体化控制目标与随访强度"
+      ]
+    }
+  },
+  {
+    "goal": "reading-method",
+    "rawGoal": "我想学会更高效的读书方法，能对一本专业书做检视阅读和分析阅读，并输出读书笔记。",
+    "materials": [
+      "如何阅读一本书"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_reading-method-new_acd9713b",
+      "pathId": "lp_1792236683008_7fhesu0",
+      "ms": 134005,
+      "milestones": 4,
+      "tasks": 14,
+      "estimatedHours": 11.3,
+      "stageRefs": 4,
+      "taskRefs": 14,
+      "refsTotal": 20,
+      "refsLate": 9,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1554,
+        "points": 24,
+        "pointsLate": 5,
+        "packChars": 9282,
+        "chars": 3257,
+        "sections": 24,
+        "sectionsLate": 5
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别阅读目标层级并建立检视阅读的骨架扫描框架",
+        "透视全书架构并还原作者的核心词义与主旨",
+        "判断作者主旨与论述完整性并形成自己的评断",
+        "把阅读理解落成可回溯的读书笔记并完成一次复查"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_reading-method-new_189a8783",
+      "pathId": "lp_1792387946732_dw81od9",
+      "ms": 120753,
+      "milestones": 4,
+      "tasks": 17,
+      "estimatedHours": 15.4,
+      "stageRefs": 4,
+      "taskRefs": 12,
+      "refsTotal": 19,
+      "refsLate": 0,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1554,
+        "points": 48,
+        "pointsLate": 24,
+        "packChars": 9282,
+        "chars": 9282,
+        "sections": 24,
+        "sectionsLate": 1
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别阅读目标并建立检视阅读的快速判断框架",
+        "透视专业书骨架并还原作者的整体架构",
+        "与作者达成词义共识并还原核心论述",
+        "公正评断作者并输出结构化分析阅读笔记"
+      ]
+    }
+  },
+  {
+    "goal": "tax-agent",
+    "rawGoal": "我在备考税务师，想按考试大纲系统学习税法，能独立完成企业所得税汇算清缴的常见调整。",
+    "materials": [
+      "2026年度税务师职业资格考试五科目大纲"
+    ],
+    "old": {
+      "arm": "new",
+      "userId": "ab_tax-agent-new_cf5b3f00",
+      "pathId": "lp_1792236810889_sszi5sm",
+      "ms": 88304,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 20.4,
+      "stageRefs": 4,
+      "taskRefs": 13,
+      "refsTotal": 17,
+      "refsLate": 3,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1427,
+        "points": 24,
+        "pointsLate": 5,
+        "packChars": 6139,
+        "chars": 2267,
+        "sections": 24,
+        "sectionsLate": 4
+      },
+      "error": null,
+      "milestoneTitles": [
+        "识别税法要素与会计利润的差异关系",
+        "建立应纳税所得额的收入与扣除确认框架",
+        "掌握纳税调整项目的方向与限额判断",
+        "完成税收优惠与亏损弥补的适用校准"
+      ]
+    },
+    "new": {
+      "arm": "new",
+      "userId": "ab_tax-agent-new_a4d7cc77",
+      "pathId": "lp_1792388059249_f5w3f33",
+      "ms": 142266,
+      "milestones": 4,
+      "tasks": 20,
+      "estimatedHours": 19.6,
+      "stageRefs": 4,
+      "taskRefs": 9,
+      "refsTotal": 14,
+      "refsLate": 5,
+      "pack": {
+        "files": 1,
+        "tldrChars": 1427,
+        "points": 33,
+        "pointsLate": 17,
+        "packChars": 6139,
+        "chars": 6139,
+        "sections": 24,
+        "sectionsLate": 9
+      },
+      "error": null,
+      "milestoneTitles": [
+        "对照税法(II)大纲第一章建立应纳税所得额计算框架",
+        "识别税会差异性质并判定常见扣除项目的调整方向",
+        "在汇算清缴场景中完成收入类与资产类调整判断",
+        "用申报表勾稽关系校验汇算清缴调整结果"
+      ]
+    }
+  }
+]

@@ -78,7 +78,8 @@ interface BuildInput {
   } | null;
 }
 
-const NO_ADVISORY: ReplanAdvisory = {
+/** 「无建议」单例：延伸课一期只观测（#124），与其它不满足建议条件的场景共用。 */
+export const NO_ADVISORY: ReplanAdvisory = {
   shouldSuggest: false,
   priority: 'none',
   recommendation: 'keep',

@@ -175,6 +175,24 @@ export interface TeachingState {
   currentTaskIdx?: number
   totalMilestones?: number
   taskRuntime?: Record<string, unknown>
+  /**
+   * 延伸学运行时（#124 assisted 轨）：任务收束后、任务结算前插入的一段有界陪学。
+   * active=true 时 teachingSessionId 指向延伸课（mode=extension），turns 计已进行的延伸回合，
+   * 到 maxTurns 或学员自评结束即收尾并回到正常任务结算。sourceTaskId 兼作「本任务已延伸过」标记。
+   */
+  extensionRuntime?: {
+    active: boolean
+    sourceSessionId: string | null
+    sourceTaskId: string | null
+    turns: number
+    maxTurns: number
+    startedAt?: string | null
+  } | null
+  /**
+   * 当前课堂类型（assisted 轨）：review = 复习课（到期点注入，收束不结算任务）。
+   * 缺省 = tutor（正常课）。
+   */
+  classroomMode?: 'tutor' | 'review' | 'extension' | null
   teachingSessionHistory?: Array<Record<string, unknown>>
   conversationHistory?: Array<{ role: string; content: string }>
   closureDecision?: Record<string, unknown>

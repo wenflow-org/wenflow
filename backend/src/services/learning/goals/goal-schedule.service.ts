@@ -9,6 +9,7 @@ import { logger } from '../../../utils/logger';
 import type { CreateGoalData } from '../learning.types';
 import { dayKeyOf, startOfDay } from '../../time/day-boundary';
 import { simulatedNowOr } from '../../virtual-lab/simulation-clock-context';
+import { resolveCapacity } from '../capacity-authority';
 
 // 创建学习目标
 export async function createLearningGoal(data: CreateGoalData) {
@@ -108,6 +109,8 @@ export async function getTodaySchedule(userId: string) {
   ]);
 
   const ledgerByGoal = new Map(ledgers.map((l) => [l.goalId, l]));
+  // #106：目标未配置 plannedMinutesPerDay 时，日预算兜底统一取 capacity-authority
+  const defaultDailyMinutes = resolveCapacity().dailyMinutes;
 
   // 今日真实学习分钟：终态会话取落库 duration；进行中的取「开课至今」流逝分钟
   const settledMinutes = todaySessions.reduce((sum, s) => sum + (s.duration ?? 0), 0);
@@ -158,10 +161,10 @@ export async function getTodaySchedule(userId: string) {
         pathId: goal.pathId,
         priority: goal.priority,
         cognitiveBandwidth: goal.cognitiveBandwidth,
-        plannedMinutes: goal.plannedMinutesPerDay ?? 30,
+        plannedMinutes: goal.plannedMinutesPerDay ?? defaultDailyMinutes,
         consumedMinutes,
         loadAvg: ledger?.loadAvg ?? null,
-        remainingMinutes: Math.max((goal.plannedMinutesPerDay ?? 30) - consumedMinutes, 0),
+        remainingMinutes: Math.max((goal.plannedMinutesPerDay ?? defaultDailyMinutes) - consumedMinutes, 0),
       };
     }),
     activeSessions: activeSessions.length,

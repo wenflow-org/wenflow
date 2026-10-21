@@ -77,7 +77,7 @@
   </header>
 
   <!-- ===== 底部导航：<1024px（独立于 header，避免 backdrop-filter 成为 fixed 包含块）===== -->
-  <nav class="v2nav__dock" aria-label="底部导航">
+  <nav ref="dockRef" class="v2nav__dock" aria-label="底部导航">
     <router-link
       v-for="item in items"
       :key="item.to"
@@ -110,6 +110,17 @@ const userStore = useUserStore();
 
 const menuOpen = ref(false);
 const userMenuRef = ref<HTMLElement | null>(null);
+
+/* #20 / 跟踪单 #45：窄屏底栏避让不能写死 66px——字号缩放或 iOS 安全区（env(safe-area-inset-bottom)）
+   都会改变实际高度。这里实测 dock 盒高（含内边距与安全区）写入根上的 --v2-dock-h，
+   由 v2.css 的窄屏壳层规则用它给滚动视口预留空间。desktop 档 dock 为 display:none（高度 0），
+   只在量到正高度时写入，避免把移动档预留量刷成 0。 */
+const dockRef = ref<HTMLElement | null>(null);
+let dockObserver: ResizeObserver | null = null;
+function publishDockHeight() {
+  const h = dockRef.value?.getBoundingClientRect().height ?? 0;
+  if (h > 0) document.documentElement.style.setProperty('--v2-dock-h', `${Math.round(h * 100) / 100}px`);
+}
 
 /* 图标统一走 lucide（1.75 线宽与全站一致）；逐项对齐原型 2026-09-30 版顶栏：
    学习台=House、目标规划=圆角气泡 MessageCircle（原型对话气泡，非方框带线）、
@@ -191,11 +202,20 @@ onMounted(() => {
   applyTheme(readTheme() === 'dark');
   document.addEventListener('click', onDocClick);
   document.addEventListener('keydown', onKey);
+  publishDockHeight();
+  /* 字号/安全区/视口宽度变化都会改变 dock 高度；ResizeObserver 在 display 切换（desktop↔narrow）
+     时同样会回调，故无需自己监听 matchMedia。jsdom 无 ResizeObserver，测试里跳过。 */
+  if (typeof ResizeObserver !== 'undefined' && dockRef.value) {
+    dockObserver = new ResizeObserver(publishDockHeight);
+    dockObserver.observe(dockRef.value);
+  }
 });
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick);
   document.removeEventListener('keydown', onKey);
+  dockObserver?.disconnect();
+  dockObserver = null;
 });
 </script>
 

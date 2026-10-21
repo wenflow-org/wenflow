@@ -198,6 +198,10 @@ async function streamGoalRequest(
     };
     streamSsePost(url, body, {
       signal,
+      // 空闲窗放宽到 5 分钟：sse.ts 的空闲超时修复接线后此参数首次真实生效，而目标回合
+      // （尤其首条消息触发规划）出首个字节可以远超 60s——按默认会误杀慢回合。留 5 分钟
+      // 零字节兜底（≈此前「从不中止」的现状），真死连接不再永久挂起。
+      idleTimeoutMs: 300_000,
       onEvent: (event, data) => {
         if (event === 'final') {
           receivedAnything = true;

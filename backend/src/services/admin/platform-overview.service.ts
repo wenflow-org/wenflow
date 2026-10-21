@@ -100,6 +100,12 @@ export function clearOverviewAllTimeCache(): void {
  * handler 成功路径**恒返回 success:true**，用 success 推断会把降级输出统计成「模型产出」，
  * 降级率长期看不见——必须读显式 sources/summarySource。
  * 返回 null = 不是可识别的 agent-output-v1 输出。
+ *
+ * 注意：agent_call_logs.output 在落库前经 executor 的 summarizeSkillPayload 深度裁剪
+ * （executor.ts:54 对 depth>=2 直接写 '[max-depth]'），session-wrapup 唯一的来源字段
+ * internal.ext.sessionWrapup 会被整段抹掉。因此本函数只看「未裁剪」的日志形状，
+ * 不能因为 ext 不是对象就回退 success（那会把裁剪后的行误判成 model）；
+ * KPI 实际读数是持久化产物 teaching_sessions.wrapup，见 classifyPersistedWrapupSource。
  */
 export function classifyWrapupSource(output: unknown): {
   summaryModel: boolean;
@@ -125,7 +131,12 @@ export function classifyWrapupSource(output: unknown): {
     return null;
   }
   if (parsed?.schemaVersion !== 'agent-output-v1') return null;
-  const wrapup = parsed?.internal?.ext?.sessionWrapup;
+  const ext = parsed?.internal?.ext;
+  // 落库日志被深度裁剪（ext 变成 '[max-depth]' 字符串）时来源不可知——返回 null 不计数，
+  // 不能回退 success 推断，否则 100% 被误判为 model（#70 的 0 降级就是这么来的）。
+  if (!ext || typeof ext !== 'object') return null;
+  const wrapup = ext.sessionWrapup;
+  if (!wrapup || typeof wrapup !== 'object') return null;
   const summarySource = wrapup?.result?.summarySource ?? wrapup?.artifact?.sources?.summary;
   const evaluationSource = wrapup?.result?.evaluationSource ?? wrapup?.artifact?.sources?.evaluation;
   // 旧格式（无来源字段）才回退 success 推断
@@ -133,6 +144,40 @@ export function classifyWrapupSource(output: unknown): {
   return {
     summaryModel: summarySource ? summarySource === 'model' : legacyOk,
     evaluationModel: evaluationSource ? evaluationSource === 'model' : legacyOk,
+    evaluationAiFallback: evaluationSource === 'ai-fallback',
+  };
+}
+
+/**
+ * 从持久化产物 teaching_sessions.wrapup 判定来源（#70 的正式读数口径）。
+ * 形状见 session-wrapup 的 artifact：{ status, sources: { summary, evaluation }, ... }；
+ * 兼容顶层 summarySource/evaluationSource（与 learning-state.service.ts 的既有解析同构）。
+ * 返回 null = wrapup 缺失/坏 JSON/无任何来源字段（不参与抽样分母）。
+ */
+export function classifyPersistedWrapupSource(wrapup: unknown): {
+  summaryModel: boolean;
+  evaluationModel: boolean;
+  evaluationAiFallback: boolean;
+} | null {
+  type PersistedWrapupShape = {
+    summarySource?: unknown;
+    evaluationSource?: unknown;
+    sources?: { summary?: unknown; evaluation?: unknown };
+  };
+  let parsed: PersistedWrapupShape | null;
+  try {
+    parsed = (typeof wrapup === 'string' ? JSON.parse(wrapup) : wrapup) as PersistedWrapupShape;
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const summarySource = parsed.summarySource ?? parsed.sources?.summary;
+  const evaluationSource = parsed.evaluationSource ?? parsed.sources?.evaluation;
+  // 两者都缺失 = 不是带来源信息的 wrapup 产物，不计数（不能猜）
+  if (summarySource == null && evaluationSource == null) return null;
+  return {
+    summaryModel: summarySource === 'model',
+    evaluationModel: evaluationSource === 'model',
     evaluationAiFallback: evaluationSource === 'ai-fallback',
   };
 }
@@ -202,7 +247,7 @@ type AgentScanRow = {
 type SevenDayScans = {
   agentScan7d: AgentScanRow[];
   llmScan7d: Array<{ userId: string | null; resolvedModel: string | null; totalTokens: number | null }>;
-  wrapupLogs: Array<{ output: string | null }>;
+  wrapupRows: Array<{ wrapup: string | null }>;
   newUsers7dRows: Array<{ createdAt: Date }>;
   activeUsers7dRows: Array<{ startTime: Date; userId: string }>;
 };
@@ -210,10 +255,9 @@ let sevenDayScanCache: { payload: SevenDayScans; cachedAt: number } | null = nul
 let sevenDayScanInflight: Promise<SevenDayScans> | null = null;
 
 async function getSevenDayScans(
-  realUserIds: string[],
   sevenDaysAgo: Date,
   force = false,
-  /** 与 realUserIds 同一快照派生的真实用户 where（users 表上用「小排除集」而非全量 IN） */
+  /** 与真实用户集同一快照派生的 where（users 表上用「小排除集」而非全量 IN） */
   realUserWhere: Record<string, unknown> = { deletedAt: null },
 ): Promise<SevenDayScans> {
   if (!force && sevenDayScanCache && Date.now() - sevenDayScanCache.cachedAt < SEVEN_DAY_SCAN_CACHE_TTL_MS) {
@@ -247,12 +291,15 @@ async function getSevenDayScans(
       select: { userId: true, resolvedModel: true, totalTokens: true },
     });
 
-    // wrapup 来源分布抽样（200 → 50：仅用于 wrapupSourceStats 比例估算；真实用户口径）
-    const wrapupLogs = await prisma.agent_call_logs.findMany({
-      where: { agentId: 'skill:session-wrapup', userId: { in: realUserIds } },
-      orderBy: { calledAt: 'desc' },
+    // wrapup 来源分布抽样（50 条；真实用户口径）
+    // #70：读持久化产物 teaching_sessions.wrapup，而不是 agent_call_logs.output——
+    // 后者落库前经 summarizeSkillPayload 深度裁剪（internal.ext 变成 '[max-depth]'），
+    // 来源字段结构性丢失，导致 summaryFallback 恒 0。
+    const wrapupRows = await prisma.teaching_sessions.findMany({
+      where: { users: realUserWhere, wrapup: { not: null } },
+      orderBy: { updatedAt: 'desc' },
       take: 50,
-      select: { output: true },
+      select: { wrapup: true },
     });
 
     // G2 总览「用户增长」：近 7 天新增注册（真实用户）
@@ -267,7 +314,7 @@ async function getSevenDayScans(
       select: { startTime: true, userId: true },
     });
 
-    return { agentScan7d, llmScan7d, wrapupLogs, newUsers7dRows, activeUsers7dRows };
+    return { agentScan7d, llmScan7d, wrapupRows, newUsers7dRows, activeUsers7dRows };
   })();
   sevenDayScanInflight = computation;
   try {
@@ -419,10 +466,10 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       computeAllTimeCallStats([...realUserSet], force),
 
       // 近 7 天两次大扫描（长缓存子层：10 分钟 TTL，见 getSevenDayScans）
-      getSevenDayScans([...realUserSet], sevenDaysAgo, force, statRealUserWhere)
+      getSevenDayScans(sevenDaysAgo, force, statRealUserWhere)
     ]);
 
-    const { agentScan7d, llmScan7d, wrapupLogs, newUsers7dRows, activeUsers7dRows } = sevenDayScans;
+    const { agentScan7d, llmScan7d, wrapupRows, newUsers7dRows, activeUsers7dRows } = sevenDayScans;
 
     const wrapupSourceStats = {
       sampleSize: 0,
@@ -433,9 +480,8 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       evaluationFailed: 0,
     };
 
-    for (const log of wrapupLogs) {
-      if (!log.output) continue;
-      const source = classifyWrapupSource(log.output);
+    for (const row of wrapupRows) {
+      const source = classifyPersistedWrapupSource(row.wrapup);
       if (!source) continue;
       wrapupSourceStats.sampleSize += 1;
       if (source.summaryModel) wrapupSourceStats.summaryModel += 1;

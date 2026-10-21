@@ -256,6 +256,8 @@ interface RunTeachingTurnParams {
   teachingRevision: number | undefined;
   pendingCheckpoint: PendingTeachingCheckpoint | null;
   checkpointAnswer: SimulatorCheckpointAnswer | null;
+  /** #85 双臂协议 A 臂：关闭失败检查点概念的后续肯定语护栏（缺省开启） */
+  failedConceptFollowupGuard?: boolean;
 }
 
 /** 普通聊天回合 → 归一化结果（字段与改动前逐字一致）。 */
@@ -690,7 +692,9 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
             params.teachingSessionId,
             action.checkpointId,
             action.payload,
-            params.teachingRevision
+            params.teachingRevision,
+            undefined,
+            { ...(params.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}) }
           )
         );
         return normalizeCheckpointSubmitTurn(submitResult);
@@ -708,7 +712,10 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       aiTeachingOrchestrator.processStudentMessage(
         params.teachingSessionId,
         params.learnerMessage,
-        { expectedRevision: params.teachingRevision }
+        {
+          expectedRevision: params.teachingRevision,
+          ...(params.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}),
+        }
       )
     );
     return normalizeProcessTeachingTurn(turn);
@@ -1182,7 +1189,10 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
   async resolvePathReview(sessionId: string, options: { startLearning?: boolean } = {}) {
     return pathPhaseResolvePathReview(this, sessionId, options);
   }
-  async startLearningPhase(sessionId: string, options: { taskId?: string } = {}): Promise<{
+  async startLearningPhase(
+    sessionId: string,
+    options: { taskId?: string; mode?: 'tutor' | 'review' } = {}
+  ): Promise<{
     success: boolean;
     teachingSessionId?: string;
     welcomeMessage?: string;

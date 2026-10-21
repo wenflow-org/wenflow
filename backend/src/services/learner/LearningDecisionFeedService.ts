@@ -240,15 +240,21 @@ export class LearningDecisionFeedService {
     }
 
     // ---------- 5. 节奏调控（状态级建议） ----------
+    // #41（2026-10-20）：旧判据只看 stateLevel==='recover'，而 recover 只代表 form<0；
+    // 冷启动（ktl 未成熟）同样为负，于是「KPI 全 0」的新用户也会被断言
+    // 「近 7 天疲劳度持续高于健康度」。现在必须有疲劳证据：fatigueLevel==='high'
+    // （ACWR ≥1.5）或 critical 预警；文案也只陈述当前判据能验证的事实。
     const global = input.summary?.global;
-    if (global && (global.stateLevel === 'recover' || global.warningLevel === 'critical')) {
+    const fatigueConfirmed = global?.fatigueLevel === 'high';
+    const criticalWarnings = global?.warningLevel === 'critical';
+    if (global && ((global.stateLevel === 'recover' && fatigueConfirmed) || criticalWarnings)) {
       cards.push({
         id: 'pace',
         kind: 'pace',
-        captured: '近 7 天疲劳度持续高于健康度',
+        captured: fatigueConfirmed ? '当前疲劳度高于知识积累' : '当前有需要优先处理的学习信号',
         judgment: '继续加量，吸收效率会下降',
         action: '建议今天轻量学习或休息',
-        priority: global.warningLevel === 'critical' ? 'medium' : 'info',
+        priority: criticalWarnings ? 'medium' : 'info',
         at: null
       });
     }

@@ -43,11 +43,29 @@ function sectionOrdinal(sectionId: unknown): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-function milestoneRefs(milestone: unknown): string[] {
+/**
+ * 引用口径（#119，2026-10-20）：
+ *   combined = 里程碑级 + 任务级（默认，历史读数口径）
+ *   task     = 只数任务级（与 _generation.materialCoverage.refs 同口径）
+ * 报告会回写 refScope 字段，复算必须同口径比较。
+ */
+type RefScope = 'combined' | 'task';
+
+function parseRefScope(raw: string | null): RefScope {
+  const value = (raw || 'combined').trim().toLowerCase();
+  if (value !== 'task' && value !== 'combined') {
+    throw new Error(`--refScope 只接受 task|combined（收到 ${raw}）`);
+  }
+  return value;
+}
+
+function milestoneRefs(milestone: unknown, scope: RefScope = 'combined'): string[] {
   const ids: string[] = [];
   const node = (milestone && typeof milestone === 'object' ? milestone : {}) as Record<string, unknown>;
-  for (const ref of Array.isArray(node.materialRefs) ? node.materialRefs : []) {
-    if (ref?.sectionId) ids.push(String(ref.sectionId));
+  if (scope === 'combined') {
+    for (const ref of Array.isArray(node.materialRefs) ? node.materialRefs : []) {
+      if (ref?.sectionId) ids.push(String(ref.sectionId));
+    }
   }
   for (const task of Array.isArray(node.subtasks) ? node.subtasks : []) {
     for (const ref of Array.isArray(task?.materialRefs) ? task.materialRefs : []) {
@@ -79,6 +97,7 @@ async function packSections(userId: string): Promise<SectionRow[]> {
 async function main(): Promise<void> {
   const runFile = argText('run');
   if (!runFile) throw new Error('需要 --run=<run.json>');
+  const refScope = parseRefScope(argText('refScope'));
   const rows = JSON.parse(fs.readFileSync(runFile, 'utf8'));
   const byStage: Record<string, {
     semantic: number[];
@@ -159,7 +178,7 @@ async function main(): Promise<void> {
         : 0;
       bucket.quotaThirds.push(quotaThirds);
       bucket.quotaPct.push(quotaPctValue);
-      const refOrdinals = Array.from(new Set(milestoneRefs(milestone)
+      const refOrdinals = Array.from(new Set(milestoneRefs(milestone, refScope)
         .map((sectionId) => sectionOrdinal(sectionId))
         .filter((value): value is number => value !== null && value >= 1 && value <= total)));
       const refCosines = refOrdinals.map((ordinal) => cosines[ordinal - 1]).filter((value) => Number.isFinite(value));
@@ -200,6 +219,7 @@ async function main(): Promise<void> {
   }
 
   console.log('\n=== 按阶段归一汇总（语义均值 vs 位置窗口中点；三分位=前/中/后各几个） ===');
+  console.log(`引用口径 refScope=${refScope}（task=仅任务级；combined=里程碑级+任务级）`);
   for (const key of Object.keys(byStage).sort((a, b) => Number(a.split('/')[0]) - Number(b.split('/')[0]))) {
     const bucket = byStage[key];
     const thirdMean = [0, 1, 2].map((index) => mean(bucket.thirds.map((thirds) => thirds[index])));
@@ -217,7 +237,7 @@ async function main(): Promise<void> {
   }
 
   const outFile = path.join(path.dirname(runFile), `semantic-alignment-${Date.now()}.json`);
-  fs.writeFileSync(outFile, JSON.stringify({ runFile, byStage, perGoal }, null, 2), 'utf-8');
+  fs.writeFileSync(outFile, JSON.stringify({ runFile, refScope, byStage, perGoal }, null, 2), 'utf-8');
   console.log(`\n明细 → ${outFile}`);
 }
 

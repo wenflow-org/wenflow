@@ -120,6 +120,15 @@ export class SessionFinalizationService {
     const operationId = input.operationId || randomUUID();
     const requestIdentity = finalizationRequestIdentity(input);
 
+    // 延伸课（#124）：既不结算任务也不确认复习——只允许 end_only。
+    // 放在 complete_review 分支之前：延伸课调 complete_review 同样必须被拒。
+    if (session.mode === 'extension' && input.action !== 'end_only') {
+      const error = new Error('延伸课堂不结算任务；结束时请使用「结束学习」（end_only）');
+      (error as any).code = 'FINALIZATION_ACTION_MODE_MISMATCH';
+      (error as any).status = 409;
+      throw error;
+    }
+
     if (input.action === 'complete_review') {
       // 复习课完成：走标准收束（wrapup + lesson:completed），随后把看板中已推进
       // （非 review/pending）的复习点回写记忆引擎（复习即提取，extractionCount+1、lastSeenAt 刷新）

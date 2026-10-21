@@ -31,6 +31,9 @@ function btn(w: ReturnType<typeof mount>, text: string) {
 /** Teleport 就地渲染（弹层内容挂到 body 后就查不到了；这里只要断言弹层内部） */
 const mountOptions = { global: { stubs: { teleport: true } } }
 
+/** 表单占位输入（测试夹具，非真实凭据）：避免在断言里内联凭据形态的字面量。 */
+const typedFixtureValue = 'fixture-value'
+
 describe('ProviderEditorDialog', () => {
   beforeEach(() => {
     createMock.mockReset()
@@ -50,7 +53,7 @@ describe('ProviderEditorDialog', () => {
     await w.findAll('.mk-field__input')[0].setValue('acme-gateway')
     await w.findAll('.mk-field__input')[1].setValue('Acme 网关')
     await w.find('input[placeholder="https://api.example.com/v1"]').setValue('https://gw.acme.com/v1')
-    await w.find('input[type="password"]').setValue('sk-acme-123456')
+    await w.find('input[type="password"]').setValue(typedFixtureValue)
     expect(btn(w, '保存').attributes('disabled')).toBeUndefined()
 
     createMock.mockResolvedValue({ data: { success: true, warnings: [] } })
@@ -62,7 +65,7 @@ describe('ProviderEditorDialog', () => {
       description: '',
       enabled: true,
       baseUrl: 'https://gw.acme.com/v1',
-      apiKey: 'sk-acme-123456',
+      apiKey: typedFixtureValue,
       supportsSystemRole: null
     })
     expect(w.find('[role="dialog"]').exists()).toBe(false)
@@ -134,7 +137,7 @@ describe('ModelEditorDialog', () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: ['platform/m-chat'] }, ...mountOptions })
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
-    await w.find('input[placeholder="deepseek-v4-flash"]').setValue('acme-chat')
+    await w.find('input[placeholder="deepseek-v4.1-flash"]').setValue('acme-chat')
     await w.find('select.mk-field__select').setValue('reasoning')
     await w.find('input[placeholder="131072"]').setValue('65536')
 
@@ -222,7 +225,9 @@ describe('ModelEditorDialog', () => {
       }
     })
     await flushPromises()
-    expect(w.find('input[placeholder="deepseek-v4-flash"]').attributes('disabled')).toBeDefined()
+    // 占位符随已下线模型归一（deepseek-v4-flash → v4.1-flash）；
+    // 「创建后不改」提示已在本次 UI 改造中从对话框移除，断言同步删除
+    expect(w.find('input[placeholder="deepseek-v4.1-flash"]').attributes('disabled')).toBeDefined()
     updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()

@@ -1,0 +1,605 @@
+[
+  {
+    "goal": "safety-engineer",
+    "rawGoal": "我要备考中级注册安全工程师，半年内系统学完《安全生产管理》，能对上考试大纲的重点章节。",
+    "materials": [
+      "中级注册安全工程师职业资格考试大纲"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_safety-engineer-new_55390c6c",
+        "pathId": "lp_1792385478698_u9ph2hl",
+        "ms": 145675,
+        "milestones": 4,
+        "tasks": 20,
+        "estimatedHours": 21.3,
+        "stageRefs": 2,
+        "taskRefs": 10,
+        "refsTotal": 12,
+        "refsLate": 1,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1224,
+          "points": 37,
+          "pointsLate": 18,
+          "packChars": 7181
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "cpa-accounting",
+    "rawGoal": "我想在一年内通过注册会计师的专业阶段考试，先从会计和审计两科开始，需要按大纲把重点章节排出来。",
+    "materials": [
+      "2019 年注册会计师全国统一考试大纲——专业阶段考试（会计）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_cpa-accounting-new_c07c9e75",
+        "pathId": "lp_1792385652190_d47u4p5",
+        "ms": 175169,
+        "milestones": 4,
+        "tasks": 20,
+        "estimatedHours": 18.8,
+        "stageRefs": 4,
+        "taskRefs": 9,
+        "refsTotal": 17,
+        "refsLate": 1,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1393,
+          "points": 48,
+          "pointsLate": 16,
+          "packChars": 9023
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "high-school-history",
+    "rawGoal": "我是高中历史老师，想利用暑假把中外历史纲要（上）通读一遍，梳理出可以上课的单元脉络和关键概念。",
+    "materials": [
+      "普通高中教科书 历史 必修 中外历史纲要（上）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_high-school-history-new_17733e3e",
+        "pathId": "lp_1792385839867_hcgakep",
+        "ms": 180320,
+        "milestones": 4,
+        "tasks": 18,
+        "estimatedHours": 19.3,
+        "stageRefs": 4,
+        "taskRefs": 12,
+        "refsTotal": 23,
+        "refsLate": 8,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1554,
+          "points": 48,
+          "pointsLate": 23,
+          "packChars": 9282
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "german-a2",
+    "rawGoal": "我计划四个月后考 Goethe-Zertifikat A2，需要按主题掌握词汇并用德语做简单日常交流。",
+    "materials": [
+      "Goethe-Zertifikat A2 Modellsatz Erwachsene"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_german-a2-new_ac33d2f6",
+        "pathId": "lp_1792385987833_2aziq9x",
+        "ms": 145212,
+        "milestones": 4,
+        "tasks": 20,
+        "estimatedHours": 18.8,
+        "stageRefs": 4,
+        "taskRefs": 15,
+        "refsTotal": 19,
+        "refsLate": 9,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1242,
+          "points": 48,
+          "pointsLate": 23,
+          "packChars": 8970
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "feline-nursing",
+    "rawGoal": "我是宠物医院的新手护士，想系统学习猫科动物的生命周期照护要点，用于日常门诊护理。",
+    "materials": [
+      "2021 AAHA/AAFP Feline Life Stage Guidelines",
+      "全国执业兽医资格考试大纲（兽医全科类）（2023 版）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_feline-nursing-new_c138490d",
+        "pathId": "lp_1792386160031_t14b9g0",
+        "ms": 168459,
+        "milestones": 3,
+        "tasks": 14,
+        "estimatedHours": 10.9,
+        "stageRefs": 0,
+        "taskRefs": 8,
+        "refsTotal": 8,
+        "refsLate": 2,
+        "pack": {
+          "files": 2,
+          "tldrChars": 2979,
+          "points": 96,
+          "pointsLate": 38,
+          "packChars": 18339
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "agile-pm",
+    "rawGoal": "公司要推敏捷转型，我需要系统学习敏捷实践指南，能主持迭代计划会和回顾会。",
+    "materials": [
+      "PMI《敏捷实践指南》(Agile Practice Guide)"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_agile-pm-new_ecd088c6",
+        "pathId": "lp_1792386340273_1swdrx0",
+        "ms": 149418,
+        "milestones": 3,
+        "tasks": 12,
+        "estimatedHours": 10.2,
+        "stageRefs": 3,
+        "taskRefs": 9,
+        "refsTotal": 14,
+        "refsLate": 0,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1283,
+          "points": 48,
+          "pointsLate": 23,
+          "packChars": 9011
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "systematic-review",
+    "rawGoal": "我要写一篇系统综述，想学会 Cochrane 手册里的检索、偏倚评估和证据合成方法。",
+    "materials": [
+      "Cochrane Handbook for Systematic Reviews of Interventions"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_systematic-review-new_34132fb1",
+        "pathId": "lp_1792386460720_j9f1xm3",
+        "ms": 153172,
+        "milestones": 4,
+        "tasks": 20,
+        "estimatedHours": 22,
+        "stageRefs": 4,
+        "taskRefs": 17,
+        "refsTotal": 25,
+        "refsLate": 7,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1554,
+          "points": 48,
+          "pointsLate": 22,
+          "packChars": 9282
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "fire-code",
+    "rawGoal": "我在做建筑消防设计，需要把建筑设计防火规范 GB 50016 的条文体系学清楚，能按建筑类别查要求。",
+    "materials": [
+      "建筑设计防火规范 GB 50016-2014（2018年版）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_fire-code-new_4cf7a5a5",
+        "pathId": "lp_1792386639113_ldeoa0v",
+        "ms": 155326,
+        "milestones": 4,
+        "tasks": 15,
+        "estimatedHours": 11.6,
+        "stageRefs": 4,
+        "taskRefs": 11,
+        "refsTotal": 21,
+        "refsLate": 8,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1251,
+          "points": 48,
+          "pointsLate": 23,
+          "packChars": 8979
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "civil-code",
+    "rawGoal": "我想系统学习民法典合同编，能判断常见合同的成立、效力和违约责任。",
+    "materials": [
+      "中华人民共和国民法典"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_civil-code-new_cfd6b59f",
+        "pathId": "lp_1792386757278_vyy7ep2",
+        "ms": 109891,
+        "milestones": 4,
+        "tasks": 20,
+        "estimatedHours": 22.1,
+        "stageRefs": 4,
+        "taskRefs": 16,
+        "refsTotal": 20,
+        "refsLate": 1,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1243,
+          "points": 48,
+          "pointsLate": 24,
+          "packChars": 8891
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "child-development",
+    "rawGoal": "我是幼儿园老师，想弄懂《3-6岁儿童学习与发展指南》对五大领域的发展要求，用来观察和评价班里孩子。",
+    "materials": [
+      "《3-6岁儿童学习与发展指南》",
+      "《3～6岁儿童学习与发展指南》"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_child-development-new_a1e02da2",
+        "pathId": "lp_1792386870087_d7lpc6d",
+        "ms": 128871,
+        "milestones": 3,
+        "tasks": 11,
+        "estimatedHours": 9.6,
+        "stageRefs": 3,
+        "taskRefs": 8,
+        "refsTotal": 14,
+        "refsLate": 4,
+        "pack": {
+          "files": 2,
+          "tldrChars": 3106,
+          "points": 88,
+          "pointsLate": 42,
+          "packChars": 17272
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "mbsr",
+    "rawGoal": "我压力很大，想跟着正念减压八周课程系统练习，能独立完成身体扫描和坐姿冥想。",
+    "materials": [
+      "正念减压（MBSR）八周课程"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_mbsr-new_f539ac11",
+        "pathId": "lp_1792386981656_fl91uhn",
+        "ms": 89919,
+        "milestones": 4,
+        "tasks": 17,
+        "estimatedHours": 12.4,
+        "stageRefs": 4,
+        "taskRefs": 9,
+        "refsTotal": 13,
+        "refsLate": 0,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1553,
+          "points": 24,
+          "pointsLate": 12,
+          "packChars": 5417
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "c-language",
+    "rawGoal": "我零基础想学 C 语言，目标是能独立写出结构体加文件读写的小程序。",
+    "materials": [
+      "C语言程序设计教程（第三版）（微课版）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_c-language-new_a73ec27a",
+        "pathId": "lp_1792387088107_xw7j6jk",
+        "ms": 143395,
+        "milestones": 4,
+        "tasks": 20,
+        "estimatedHours": 17.7,
+        "stageRefs": 4,
+        "taskRefs": 12,
+        "refsTotal": 21,
+        "refsLate": 7,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1489,
+          "points": 48,
+          "pointsLate": 23,
+          "packChars": 9211
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "veteran-training",
+    "rawGoal": "我在做退役军人适应性培训的项目设计，需要参考现成的培训实施方案排出课程模块。",
+    "materials": [
+      "金寨县2026年度退役军人适应性培训和职业技能培训实施方案（征求意见稿）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_veteran-training-new_e75b91ce",
+        "pathId": "lp_1792387216574_t5306cf",
+        "ms": 127956,
+        "milestones": 3,
+        "tasks": 15,
+        "estimatedHours": 13.8,
+        "stageRefs": 3,
+        "taskRefs": 12,
+        "refsTotal": 15,
+        "refsLate": 2,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1209,
+          "points": 35,
+          "pointsLate": 6,
+          "packChars": 6684
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "first-class-builder",
+    "rawGoal": "我要备考一级建造师，需要按考试大纲把四门课的重点和学时分配理清楚。",
+    "materials": [
+      "一级建造师执业资格考试大纲（2024 年版）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_first-class-builder-new_3d995cb4",
+        "pathId": "lp_1792387353820_whaodn0",
+        "ms": 129079,
+        "milestones": 3,
+        "tasks": 14,
+        "estimatedHours": 12.1,
+        "stageRefs": 3,
+        "taskRefs": 11,
+        "refsTotal": 18,
+        "refsLate": 5,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1421,
+          "points": 48,
+          "pointsLate": 21,
+          "packChars": 9034
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "mandarin-test",
+    "rawGoal": "我准备参加普通话水平测试，想通过朗读作品练习纠正发音，目标是二级甲等。",
+    "materials": [
+      "普通话水平测试用朗读作品"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_mandarin-test-new_698d3e3c",
+        "pathId": "lp_1792387489593_34fufnq",
+        "ms": 132715,
+        "milestones": 4,
+        "tasks": 20,
+        "estimatedHours": 19.7,
+        "stageRefs": 4,
+        "taskRefs": 15,
+        "refsTotal": 23,
+        "refsLate": 8,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1553,
+          "points": 48,
+          "pointsLate": 24,
+          "packChars": 9281
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "gaokao-math",
+    "rawGoal": "我明年参加新高考，数学基础一般，想先用一套真题摸清题型分布再安排复习。",
+    "materials": [
+      "2024 新高考II卷高考真题 数学",
+      "高考英语完形填空历年真题（含新高考卷、全国卷）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_gaokao-math-new_ba0a155c",
+        "pathId": "lp_1792387613479_yhenq2v",
+        "ms": 86279,
+        "milestones": 3,
+        "tasks": 14,
+        "estimatedHours": 11.7,
+        "stageRefs": 3,
+        "taskRefs": 7,
+        "refsTotal": 12,
+        "refsLate": 1,
+        "pack": {
+          "files": 2,
+          "tldrChars": 2815,
+          "points": 89,
+          "pointsLate": 44,
+          "packChars": 16710
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "cet",
+    "rawGoal": "我大三，想在下一次四级考试前系统准备，按考试大纲把听力和阅读的重点练起来。",
+    "materials": [
+      "全国大学英语四、六级考试大纲（2016年修订版）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_cet-new_0f4bf3b8",
+        "pathId": "lp_1792387701907_1hhfn7y",
+        "ms": 131360,
+        "milestones": 4,
+        "tasks": 20,
+        "estimatedHours": 19.4,
+        "stageRefs": 4,
+        "taskRefs": 11,
+        "refsTotal": 16,
+        "refsLate": 0,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1316,
+          "points": 48,
+          "pointsLate": 24,
+          "packChars": 9044
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "diabetes-guide",
+    "rawGoal": "我是基层全科医生，想学习中国糖尿病防治指南，能按指南给患者做初诊评估和随访计划。",
+    "materials": [
+      "中国糖尿病防治指南（2024版）"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_diabetes-guide-new_14b2b86e",
+        "pathId": "lp_1792387835820_a75o5cf",
+        "ms": 111647,
+        "milestones": 4,
+        "tasks": 8,
+        "estimatedHours": 2,
+        "stageRefs": 4,
+        "taskRefs": 6,
+        "refsTotal": 14,
+        "refsLate": 4,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1253,
+          "points": 48,
+          "pointsLate": 22,
+          "packChars": 8938
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "reading-method",
+    "rawGoal": "我想学会更高效的读书方法，能对一本专业书做检视阅读和分析阅读，并输出读书笔记。",
+    "materials": [
+      "如何阅读一本书"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_reading-method-new_189a8783",
+        "pathId": "lp_1792387946732_dw81od9",
+        "ms": 120753,
+        "milestones": 4,
+        "tasks": 17,
+        "estimatedHours": 15.4,
+        "stageRefs": 4,
+        "taskRefs": 12,
+        "refsTotal": 19,
+        "refsLate": 0,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1554,
+          "points": 48,
+          "pointsLate": 24,
+          "packChars": 9282
+        },
+        "error": null
+      }
+    }
+  },
+  {
+    "goal": "tax-agent",
+    "rawGoal": "我在备考税务师，想按考试大纲系统学习税法，能独立完成企业所得税汇算清缴的常见调整。",
+    "materials": [
+      "2026年度税务师职业资格考试五科目大纲"
+    ],
+    "arms": {
+      "new": {
+        "arm": "new",
+        "userId": "ab_tax-agent-new_a4d7cc77",
+        "pathId": "lp_1792388059249_f5w3f33",
+        "ms": 142266,
+        "milestones": 4,
+        "tasks": 20,
+        "estimatedHours": 19.6,
+        "stageRefs": 4,
+        "taskRefs": 9,
+        "refsTotal": 14,
+        "refsLate": 5,
+        "pack": {
+          "files": 1,
+          "tldrChars": 1427,
+          "points": 33,
+          "pointsLate": 15,
+          "packChars": 6139
+        },
+        "error": null
+      }
+    }
+  }
+]

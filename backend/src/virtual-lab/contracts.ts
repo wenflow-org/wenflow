@@ -2,6 +2,14 @@ export type LearnerAction =
   | { type: 'chat'; text: string }
   | { type: 'request_hint'; text: string }
   | { type: 'request_example'; text: string }
+  | {
+      /**
+       * 延伸意愿（#124）：任务已达标（completion candidate）后，学习者表示还想就本课内容继续深入。
+       * 平台不结算任务，继续陪学；autoStep 侧有次数上限，防止把收束点拖成无限轮。
+       */
+      type: 'request_extension'
+      text: string
+    }
   | { type: 'submit_answer'; answer: string; checkpointId?: string; selectedOptionIds?: string[]; skip?: boolean }
   | { type: 'submit_code'; code: string }
   | { type: 'confirm_proposal'; text: string }
@@ -65,6 +73,17 @@ export type PlatformControlReceipt = {
   teachingRevision?: number | null
   taskId?: string | null
   taskCompletionCheckpoint?: TaskCompletionCheckpoint | null
+  /**
+   * 延伸课（#124）：`pending`=学习者已表达延伸意愿、等本课结算后开课；
+   * `active`=延伸课进行中（`extensionMode`）；`completed`=已 end_only 收束、回到路径。
+   */
+  extensionPhase?: 'pending' | 'active' | 'completed'
+  extensionMode?: boolean
+  extensionTaskId?: string | null
+  extensionSourceSessionId?: string | null
+  extensionTurns?: number
+  /** 学习者表达延伸意愿的原话（开延伸课时作为开场白） */
+  extensionText?: string | null
   platformStage?: string
   goalCompleted?: boolean
   taskCompleted?: boolean

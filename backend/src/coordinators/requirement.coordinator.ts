@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import goalConversationService from '../services/learning/goal-conversation.service';
+import { resolveCapacity } from '../services/learning/capacity-authority';
 
 const COORDINATOR_ID = 'goal-agent';
 
@@ -65,7 +66,8 @@ class RequirementCoordinator {
     return goalConversationService.quickGeneratePath(userId, {
       goal: params.goal,
       level: params.level || 'beginner',
-      timePerDay: params.timePerDay || '1 小时',
+      // #106：默认可用时间由 capacity-authority 统一提供（不再在本处写死 1 小时）
+      timePerDay: params.timePerDay || resolveCapacity({ timePerDay: params.timePerDay }).display,
       learningStyle: params.learningStyle || 'mixed'
     });
   }
