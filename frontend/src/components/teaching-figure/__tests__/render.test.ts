@@ -348,8 +348,7 @@ describe('几何隐喻图元（2026-10-20：形状要承载关系，不是白框
   });
 });
 
-describe('compare 链路形态（客户端 → 集群边界 → 节点）', () => {
-  const chainFigure = (spec: any = {}) => ({
+describe('compare 链路形态（客户端 → 集群边界 → 节点）', () => {  const chainFigure = (spec: any = {}) => ({
     engine: 'svg' as const,
     kind: 'compare' as const,
     palette: 'tech' as const,
@@ -399,6 +398,24 @@ describe('compare 链路形态（客户端 → 集群边界 → 节点）', () =
     const countNumbers = (s: string) => (s.match(/r="8.5"/g) || []).length;
     expect(countNumbers(two)).toBe(3); // 2 + 1
     expect(countNumbers(one)).toBe(2); // 1 + 1
+  });
+
+  it('边界文案可随内容改：同进程请求链不再硬显示「集群边界」（外部评审 #3）', () => {
+    const { svg } = renderSpecFigure(
+      'compare',
+      chainFigure({
+        left: {
+          head: '错误现状',
+          client: '搜索框',
+          boundaryLabel: '组件异步边界',
+          chain: [{ label: '请求发出', sub: '什么都没记' }],
+          items: [],
+        },
+      }).spec,
+    ) as any;
+    expect(svg).toContain('组件异步边界');
+    // 右栏没给 boundaryLabel → 保持旧默认，架构图观感不变
+    expect(svg).toContain('集群边界');
   });
 });
 

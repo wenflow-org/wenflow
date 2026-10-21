@@ -217,7 +217,8 @@ fields:
       若本轮正要布置"由学生自己画位置线"的练习，本轮**不要**画（答案泄漏）。
       `at` 用与题意一致的数值（米/格/秒都行，**同一图内同单位**；不必按真实比例，但先后与差值必须对）；
       标签写学科实指（甲/乙/小明/起点/追及点），不要写"物体 1"这类占位；reply 必须脱离图也成立。
-      结构 { "engine": "svg（缺省）", "kind": "position-line（缺省，v1 唯一图型）", "axis": { "min": 0, "max": 100, "unit": "米（可选）", "ticks": [{ "at": 0, "label": "起点（可选）" }] }, "marks": [{ "at": 20, "label": "甲（必填，≤16 字）", "dir": "right|left|none（朝向，静态点用 none）" }], "spans": [{ "from": 20, "to": 60, "label": "相距 40 米（≤24 字）" }], "guides": [{ "at": 80, "label": "追及点（可选）" }], "why": "可选：一句话说明为什么用这张图（≤40 字，只给复盘看，不进 reply）", "caption": "可选：图下方一句说明" }
+      除 position-line 外，其余 kind 的字段放在 `spec` 里（形状见本轮图型指南）；下面的顶层 axis/marks/spans 只用于 position-line。
+      结构 { "engine": "svg（缺省）", "kind": "position-line | compare | range-bar | bins | grid | matrix | balance | ladder | quadrant | bipartite | cycle | tree | venn | bullseye | board（缺省 position-line；**按本轮图型指南选，别默认画位置线**）", "axis": { "min": 0, "max": 100, "unit": "米（可选）", "ticks": [{ "at": 0, "label": "起点（可选）" }] }, "marks": [{ "at": 20, "label": "甲（必填，≤16 字）", "dir": "right|left|none（朝向，静态点用 none）" }], "spans": [{ "from": 20, "to": 60, "label": "相距 40 米（≤24 字）" }], "guides": [{ "at": 80, "label": "追及点（可选）" }], "why": "可选：一句话说明为什么用这张图（≤40 字，只给复盘看，不进 reply）", "caption": "可选：图下方一句说明" }
       约束：marks 1~6 个（必填，**至少一个**）；spans ≤3；guides ≤4；ticks ≤8；所有 `at/from/to` 必须是数字（不是"x 米"这类字符串）；**why 可选**——写了会被留档当作「模型自述」，用于复盘；不写不影响出图（是否该画由代码判据留痕）。
 constraints:
   - 需要图示结构时**不要用字符画**（箭头/方框/`●`/`┌─┐` 这类 ASCII 示意）——结构类走 `diagram`、空间位置类走 `figure`（见 fields）

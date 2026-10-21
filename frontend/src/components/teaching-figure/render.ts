@@ -621,7 +621,9 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
     const badgeTone = COMPARE_TONES[side.badgeTone] || tone;
     if (side.badge) parts.push(text(x, titleH + 34, side.badge, 't-micro', 'start', `fill="${badgeTone.ink}"`));
 
-    // 集群边界：客户端画在框**外**，箭头穿过边框 = 一次跨集群往返
+    // 边界：客户端画在框**外**，箭头穿过边框 = 一次跨界往返。
+    // 标签由内容决定（架构=集群边界；同进程请求链=组件异步边界），默认保持旧文案。
+    const boundaryLabel = String((side as { boundaryLabel?: unknown }).boundaryLabel || '集群边界');
     const borderX = x + nodeXOff;
     const borderW = panelW - nodeXOff;
     parts.push(rect(borderX, bodyTop, borderW, borderH, {
@@ -631,9 +633,9 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
       sw: isFocus ? T.strokeStrong : 1.2,
     }));
     // 区域标签骑在边框**顶边**上：放框底会被读成只圈住最后一张卡（外部视觉审校实测）
-    const labelW = est('集群边界', T.fontMicro) + 16;
+    const labelW = est(boundaryLabel, T.fontMicro) + 16;
     parts.push(rect(borderX + 12, bodyTop - 18, labelW, 16, { r: 8, fill: T.surface, stroke: tone.color, sw: 1 }));
-    parts.push(text(borderX + 12 + labelW / 2, bodyTop - 6.5, '集群边界', 't-tiny', 'middle', `fill="${tone.ink}"`));
+    parts.push(text(borderX + 12 + labelW / 2, bodyTop - 6.5, boundaryLabel, 't-tiny', 'middle', `fill="${tone.ink}"`));
 
     const stackTop = bodyTop + Math.max(0, (rowsH - layout.total) / 2);
     const client = side.client || '客户端';

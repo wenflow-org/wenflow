@@ -1728,6 +1728,9 @@ function normalizeCompareSide(value: unknown): Record<string, unknown> | null {
   const badge = toFigureLabel(side.badge, 24);
   const badgeTone = normalizeTone(side.badgeTone, ['ok', 'accent', 'warn', 'neutral']);
   const client = toFigureLabel(side.client, 12);
+  // 边界叫什么由内容决定：架构对比是「集群边界」，前端请求/响应链更像「组件异步边界」。
+  // 不给就用旧默认值，既有架构图的观感不变（2026-10-21 外部评审 #3）。
+  const boundaryLabel = toFigureLabel(side.boundaryLabel, 10);
   return {
     head,
     items,
@@ -1735,6 +1738,7 @@ function normalizeCompareSide(value: unknown): Record<string, unknown> | null {
     ...(client ? { client } : {}),
     ...(badge ? { badge } : {}),
     ...(badgeTone ? { badgeTone } : {}),
+    ...(boundaryLabel ? { boundaryLabel } : {}),
     ...(chain.length ? { chain } : {}),
   };
 }

@@ -650,6 +650,27 @@ describe('compare 链路形态（架构/请求路径对比）', () => {
     expect(out.figure.spec.left.items).toEqual([]);
   });
 
+  it('boundaryLabel：随内容传（组件异步边界），不给则保持默认（渲染器回落集群边界）', async () => {
+    const out = await runWithFigure({
+      kind: 'compare',
+      spec: {
+        left: { head: '错误现状', boundaryLabel: '组件异步边界', chain: [{ label: '请求发出' }] },
+        right: { head: '应有形状', chain: [{ label: '带号请求' }] },
+      },
+    });
+    expect(out.figure.spec.left.boundaryLabel).toBe('组件异步边界');
+    expect(out.figure.spec.right.boundaryLabel).toBeUndefined();
+
+    const tooLong = await runWithFigure({
+      kind: 'compare',
+      spec: {
+        left: { head: '左', boundaryLabel: '这是一个非常非常长的边界说明文字', chain: [{ label: '一跳' }] },
+        right: { head: '右', chain: [{ label: '一跳' }] },
+      },
+    });
+    expect(String(tooLong.figure.spec.left.boundaryLabel).length).toBeLessThanOrEqual(10);
+  });
+
   it('链节点缺 label 丢弃；全部无效且无 items → 整块丢弃', async () => {
     const out = await runWithFigure({
       kind: 'compare',

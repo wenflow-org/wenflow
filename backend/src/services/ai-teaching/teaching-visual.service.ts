@@ -283,7 +283,7 @@ const FIGURE_KIND_GUIDE = [
   '- matrix：二维命中矩阵（✓有/—无/叠=重复堆砌/≡两边同一项）。{"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":1,"tone":"hit|miss|dup|key"}],"legend":[{"text":"✓ 已写到","fill":"#e6f4f1"}]}',
   '- range-bar：**多组数值区间并排**（新组/旧组的波动范围、上下限、从哪到哪）。{"unit":"%","rows":[{"label":"新组四天","from":3.1,"to":3.8,"tone":"accent"},{"label":"旧组四天","from":2.9,"to":3.6,"tone":"neutral"}],"marks":[{"at":0.5,"label":"汇报的均值差"}],"note":"…"}——**数值区间不要塞进 position-line**：一根时间轴画不出带宽，把「幅度」横着放会被读成日期跨度。',
   '- compare：两条分支并排对照（**对等**的两边）。卡片形态：{"left":{"head":"…","sub":"…","items":["…"]},"right":{"head":"…","items":["…"]},"divider":"…","leftTone":"neutral","rightTone":"accent"}',
-  '- **compare 的链路形态（架构/请求路径类对比必须用它，2026-10-20 实跑）**：当差别是「几跳」「几次跨集群往返」时，不要只给两栏条目——把每侧的请求链路写进 chain，渲染器会画出客户端、集群边界与穿过边界的箭头，**箭头数就是跳数**。{"left":{"head":"外置协调","badge":"2 套集群 · 2 次独立共识","badgeTone":"warn","client":"客户端","chain":[{"label":"共识 ①：ZooKeeper 集群","sub":"定路由、选主","tone":"warn"},{"label":"共识 ②：业务存储节点","sub":"写日志与数据","tone":"warn"}],"items":["两份结论必须互相迁就"]},"right":{"head":"内置共识","badge":"单一系统 · 1 次共识","badgeTone":"ok","client":"客户端","chain":[{"label":"业务进程内置 Raft 状态机","sub":"元数据与数据落同一条日志","merged":true,"tone":"ok"}],"items":["省掉一次跨集群往返"]}}。**顺序段与往返**：若请求是一段接一段（网关→订单→库存，都在同一个集群内），第二张卡起写 `"from":"prev"`——它承接上一张卡、不占边界序号；第一张卡才跨集群。要强调「发出去还要等回话」，给该节点 `"rtt":true`，箭头上会出现反向箭头。**铁律**：①链上必须至少两层实体（客户端 → 组件 → 组件），不许把两边各写成三行文字；②「省掉/差异」只能体现在链的条数与 merged 节点上，不要靠中间悬浮一句话；③badge 是这一栏的结论，贴在栏头，不要写进正文。',
+  '- **compare 的链路形态（架构/请求路径类对比必须用它，2026-10-20 实跑）**：当差别是「几跳」「几次跨集群往返」时，不要只给两栏条目——把每侧的请求链路写进 chain，渲染器会画出客户端、集群边界与穿过边界的箭头，**箭头数就是跳数**。{"left":{"head":"外置协调","badge":"2 套集群 · 2 次独立共识","badgeTone":"warn","client":"客户端","chain":[{"label":"共识 ①：ZooKeeper 集群","sub":"定路由、选主","tone":"warn"},{"label":"共识 ②：业务存储节点","sub":"写日志与数据","tone":"warn"}],"items":["两份结论必须互相迁就"]},"right":{"head":"内置共识","badge":"单一系统 · 1 次共识","badgeTone":"ok","client":"客户端","chain":[{"label":"业务进程内置 Raft 状态机","sub":"元数据与数据落同一条日志","merged":true,"tone":"ok"}],"items":["省掉一次跨集群往返"]}}。**顺序段与往返**：若请求是一段接一段（网关→订单→库存，都在同一个集群内），第二张卡起写 `"from":"prev"`——它承接上一张卡、不占边界序号；第一张卡才跨集群。要强调「发出去还要等回话」，给该节点 `"rtt":true`，箭头上会出现反向箭头。**铁律**：①链上必须至少两层实体（客户端 → 组件 → 组件），不许把两边各写成三行文字；②「省掉/差异」只能体现在链的条数与 merged 节点上，不要靠中间悬浮一句话；③badge 是这一栏的结论，贴在栏头，不要写进正文；④同一进程内的请求/响应链（前端回调、网关→服务）给每一侧 `boundaryLabel`（如「组件异步边界」），否则边界会显示成「集群边界」。',
   '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',
   '- ladder：**层级/先后/进度**（先到哪、再到哪）。{"steps":[{"label":"定角度","state":"done"},{"label":"落材料","state":"done"},{"label":"扣设问","state":"current"},{"label":"排层次","state":"todo"}]}',
   '- quadrant：2×2（四格顺序：左上、右上、左下、右下）。{"colLabels":["左","右"],"rowLabels":[{"label":"上","sub":"…"},{"label":"下"}],"cells":[{"title":"…","body":["…"],"tone":"ok|warn|neutral"}]}',
@@ -572,8 +572,18 @@ function countFiguresOfKind(messages: TeachingSessionMessage[], kind: string): n
   return n;
 }
 
-export function shouldEmitTeachingFigure(
-  messages: TeachingSessionMessage[] | null | undefined,
+/** 本课已经用过的图型（「收一张」时做软提示，不强制换形状）。 */
+function usedFigureKinds(messages: TeachingSessionMessage[]): string[] {
+  const kinds = new Set<string>();
+  for (const message of messages) {
+    for (const figure of Array.isArray(message?.figures) ? message.figures : []) {
+      kinds.add(String((figure as { kind?: string })?.kind || 'position-line'));
+    }
+  }
+  return [...kinds];
+}
+
+export function shouldEmitTeachingFigure(  messages: TeachingSessionMessage[] | null | undefined,
   figure: unknown,
 ): boolean {
   if (!figure) return false;
@@ -767,6 +777,13 @@ export function buildVisualOpportunity(
   // 只收「已讲过的东西」不含新内容，因此不受答案泄漏约束；总量仍由每会话上限兜底。
   const turnsSinceFigure = assistantTurnsSinceLastFigure(list);
   if (!lastHasFigure && !figureCapReached && turnsSinceFigure >= FIGURE_RECAP_TURNS) {
+    // 收一张时顺手报一下「本课已经用过哪些形状」：不强制换，只在更贴切时提醒——
+    // 否则 recap 时模型会条件反射再画一张位置线（2026-10-21 真课：20 张里 10 张位置线）。
+    const used = usedFigureKinds(list);
+    const varietyLine = used.length
+      ? `\n本课已经用过这些图型：${used.join('、')}。如果这轮要说清的关系用**另一种还没用过的形状**更贴切，就换一种；`
+        + '不合适就照旧，不要为了换形状硬凑。'
+      : '';
     return {
       suggested: true,
       reason: 'recap-cadence',
@@ -780,6 +797,7 @@ export function buildVisualOpportunity(
         + '即使这轮你还想继续追问，也先出图再问——这一轮不出图，学生这次课结束时手里什么都没有。'
         + '**唯一例外**：这一轮你正要让学生脱稿复述/自己排出这条链（答出来就是他自己的证据）→ 本轮不出图，'
         + '但学生答完的下一轮必须把链收成图，不能再往后拖。'
+        + varietyLine
         + kindHintLine + '\n'
         + FIGURE_KIND_GUIDE,
     };

@@ -658,6 +658,15 @@ describe('节奏兜底：长回合苏格拉底课至少收一张图（2026-10-20
     expect(opportunity?.instruction).toContain('不要放进新内容');
   });
 
+  it('本课已用过某图型时，收一张的提示里报出来（软提醒，不强制换）', () => {
+    const withFigure = [turn('assistant', '先把这条时间线收一下。', [{ kind: 'position-line' }]), ...qa];
+    const opportunity = buildVisualOpportunity(withFigure, '把日志比对接回共识层');
+    expect(opportunity?.reason).toBe('recap-cadence');
+    expect(opportunity?.instruction).toContain('本课已经用过这些图型');
+    expect(opportunity?.instruction).toContain('position-line');
+    expect(opportunity?.instruction).toContain('不要为了换形状硬凑');
+  });
+
   it('不足 6 个回合 → 不打扰（保持追问节奏）', () => {
     const short = qa.slice(-4);
     expect(buildVisualOpportunity(short, '把日志比对接回共识层')).toBeNull();
