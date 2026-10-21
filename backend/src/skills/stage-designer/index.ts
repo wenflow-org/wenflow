@@ -8,7 +8,9 @@ import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { normalizeMaterialRefs } from '../../services/materials/material-refs';
+import { assessMaterialRefCoverage } from '../../services/materials/material-ref-coverage.service';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
+import { logger } from '../../utils/logger';
 
 const STAGE_DESIGNER_MAX_TOKENS = 64000;
 const STAGE_DESIGNER_TEMPERATURE = 0.3;
@@ -195,6 +197,20 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       throw new Error('STAGE_DESIGNER_INVALID_INPUT: milestone is required');
     }
     const fallbackConcept = normalizeString(milestone?.coreConcept);
+    const stageMaterials = Array.isArray(input?.materials) ? (input.materials as PromptMaterial[]) : [];
+    const coverageNodes = (subtasks: any[]) => (Array.isArray(subtasks) ? subtasks : []).map((task: any, index: number) => ({
+      label: `任务 ${index + 1}「${normalizeString(task?.title) || '未命名'}」`,
+      refs: task?.materialRefs,
+    }));
+    const coverageText = (subtasks: any[]) => [
+      milestone.title,
+      milestone.goal,
+      milestone.description,
+      milestone.coreConcept,
+      ...(Array.isArray(subtasks) ? subtasks : []).map((task: any) => (
+        [task?.title, task?.description, task?.acceptanceHint].filter(Boolean).join(' ')
+      )),
+    ].filter(Boolean).join(' ');
     const result = await callPrompt<any, { subtasks: any[] }>({
       agentId: 'skill:stage-designer',
       defaultSystemPrompt: STAGE_DESIGNER_PROMPT,
@@ -235,13 +251,50 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             previousStageOutcome: payload.previousStageOutcome || null,
             supplementRequest: payload.supplementRequest || null,
           }),
-      normalizeOutput: (parsed, payload) => ({
-        subtasks: withMaterialRefs(
+      normalizeOutput: (parsed, payload) => {
+        const subtasks = withMaterialRefs(
           normalizeSubtasks(parsed?.subtasks, normalizeString(payload?.milestone?.coreConcept)),
           payload?.materials,
-        ),
-      }),
+        );
+        if (stageMaterials.length) {
+          const coverage = assessMaterialRefCoverage({
+            materials: stageMaterials,
+            nodes: coverageNodes(subtasks),
+            text: coverageText(subtasks),
+            scope: 'STAGE',
+          });
+          logger.info('[stage-designer] materialRefs 覆盖度', {
+            milestone: milestone.title,
+            materials: stageMaterials.length,
+            subtasks: subtasks.length,
+            relevant: coverage.relevant,
+            covered: coverage.covered,
+            coverageRatio: `${coverage.covered}/${coverage.total}`,
+          });
+          if (coverage.relevant && coverage.covered === 0) {
+            logger.warn('[stage-designer] 相关资料但零引用（软校验重试后仍未通过）', {
+              milestone: milestone.title,
+              materials: stageMaterials.length,
+              subtasks: subtasks.length,
+            });
+          }
+        }
+        return { subtasks };
+      },
       validateParsedOutput: (parsed) => validateStageDesignerOutput(parsed),
+      // 软校验：相关资料却零引用 → 带反馈重试一次；仍失败按当前输出继续（不阻断阶段设计）。
+      softValidateParsedOutput: (parsed) => {
+        const subtasks = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
+        const coverage = assessMaterialRefCoverage({
+          materials: stageMaterials,
+          nodes: coverageNodes(subtasks),
+          text: coverageText(subtasks),
+          scope: 'STAGE',
+        });
+        return coverage.valid
+          ? { valid: true }
+          : { valid: false, failureReason: coverage.failureReason, violations: coverage.violations };
+      },
       mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
         contract: runtimeContract,
         artifact: output,
@@ -253,7 +306,13 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       }),
       retryStrategy: {
         maxAttempts: 2,
-        onValidationFail: ({ failureReason }) => `请只输出一个阶段任务 JSON 对象，必须包含 subtasks 数组。上次失败原因：${failureReason}`,
+        onValidationFail: ({ failureReason }) => [
+          '请只输出一个阶段任务 JSON 对象，必须包含 subtasks 数组。',
+          failureReason.startsWith('MATERIAL_REFS_MISSING_')
+            ? '本阶段资料与目标相关时，每个 subtask 至少给 1 条 materialRefs：sectionId 取自资料 sections[].id，quote 逐字复制该章节标题或 keyPoints[].cite；不得改写、不得编造。与目标明显无关的资料可以整体不引用。'
+            : null,
+          `上次失败原因：${failureReason}`,
+        ].filter(Boolean).join('\n\n'),
       },
     }, input);
 

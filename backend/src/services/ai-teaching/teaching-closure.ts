@@ -102,11 +102,20 @@ export function evaluateSessionClosable(input: {
   messages: Array<{ role?: string; content?: string }> | null | undefined;
   teachingState: Record<string, unknown> | null | undefined;
   endReason?: string | null;
+  /**
+   * 允许「教师刚提问、学生还没答」时收束。用于两类非结算场景：
+   * - 复习课（complete_review）：有界课，回合上限到点就收，教师的下一问本来就是被截断的那一问；
+   *   待答检查点同理（未答点按「本次无观测」跳过，由 collectReviewOutcomes 只收集已判定点）。
+   * - 主动退出（end_only「结束学习，不计入完成」）：退出通道不该被「先答题」挡住，
+   *   否则真人只能关页走 abandoned 豁免。
+   * 结算（complete_task）不放行——那正是本门禁要守的假完成。
+   */
+  allowOpenQuestion?: boolean;
 }): SessionClosableDecision {
   if (input.endReason && ABNORMAL_END_REASONS.has(input.endReason)) return { closable: true };
 
   const state = input.teachingState || {};
-  if (state.pendingCheckpoint) {
+  if (state.pendingCheckpoint && !input.allowOpenQuestion) {
     return {
       closable: false,
       code: 'FINALIZATION_PENDING_CHECKPOINT',
@@ -118,7 +127,7 @@ export function evaluateSessionClosable(input: {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message?.role === 'user') break;
-    if (message?.role === 'assistant' && detectTrailingQuestion(String(message.content || ''))) {
+    if (message?.role === 'assistant' && !input.allowOpenQuestion && detectTrailingQuestion(String(message.content || ''))) {
       return {
         closable: false,
         code: 'FINALIZATION_OPEN_QUESTION',

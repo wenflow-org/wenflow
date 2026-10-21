@@ -126,10 +126,10 @@ export async function submitCheckpoint(
   checkpointId: string,
   payload: CheckpointSubmitPayload,
   expectedRevision?: number,
-  /** 路由幂等键：传入后检查点结果与回合提交同事务落账本（崩溃后可重放） */
-  idempotencyKey?: string,
   /** 透传给本回合 processStudentMessage 的选项（#85 双臂：A 臂关闭后续回合肯定语护栏） */
   turnOptions: { failedConceptFollowupGuard?: boolean } = {},
+  /** 路由幂等键：传入后检查点结果与回合提交同事务落账本（崩溃后可重放） */
+  idempotencyKey?: string,
 ): Promise<CheckpointSubmitResult> {
   const operationClaim = await teachingSessionRepository.claimOperation(
     sessionId,
@@ -239,11 +239,11 @@ export async function submitCheckpoint(
           // 简答不落原文（可能含学生隐私细节），只留长度特征
           ...(payload.answerText ? { answerText: undefined } : {}),
         },
+        // #85 双臂 A 臂：提交回合后的后续护栏同样受会话级开关控制（此前只覆盖聊天回合）
+        ...(turnOptions.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}),
         idempotencyKey,
         // 账本存的是检查点对外结果而非回合原始载荷：重放时直接返回同一形状
         ...(idempotencyKey ? { settlementResult: (base: any) => buildCheckpointSubmitResult(base) } : {}),
-        // #85 双臂 A 臂：提交回合后的后续护栏同样受会话级开关控制（此前只覆盖聊天回合）
-        ...(turnOptions.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}),
       }
     );
     const passed = turn.checkpointResolution?.passed === true;

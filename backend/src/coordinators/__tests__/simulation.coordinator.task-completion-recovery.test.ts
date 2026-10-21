@@ -31,6 +31,9 @@ jest.mock('../../config/database', () => ({
     learning_paths: {
       findUnique: mockLearningPathFindUnique
     },
+    teaching_sessions: {
+      findFirst: jest.fn(async () => null)
+    },
     goal_conversations: {
       findFirst: jest.fn()
     }

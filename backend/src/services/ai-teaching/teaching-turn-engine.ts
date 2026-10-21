@@ -1373,6 +1373,7 @@ export async function processStudentMessage(
     });
     committed = true;
 
+
     // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合。
     // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的
     // conceptKey 是路径骨架 concept-N 占位时改挂检查点归属键（发出时带上的当前教学点概念；

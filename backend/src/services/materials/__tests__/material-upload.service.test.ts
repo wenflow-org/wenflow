@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import {
   deleteMaterial,
+  getMaterialLibraryStats,
   listMaterials,
   readMaterial,
   saveUploadedMaterial,
@@ -13,10 +14,12 @@ let root = '';
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'wenflow-materials-'));
   process.env.MATERIAL_UPLOAD_DIR = root;
+  delete process.env.MATERIAL_USER_QUOTA_BYTES;
 });
 
 afterEach(() => {
   delete process.env.MATERIAL_UPLOAD_DIR;
+  delete process.env.MATERIAL_USER_QUOTA_BYTES;
   try {
     fs.rmSync(root, { recursive: true, force: true });
   } catch {
@@ -74,6 +77,54 @@ describe('material-upload.service', () => {
     expect(deleteMaterial('user-2', id)).toBe(false);
     // 原用户的数据仍在
     expect(readMaterial('user-1', id)).not.toBeNull();
+  });
+
+  it('内容相同换文件名 → 复用已有记录，不重复落盘', async () => {
+    const first = await saveUploadedMaterial({
+      userId: 'user-1',
+      originalName: '第一份.txt',
+      buffer: Buffer.from(LONG_ENOUGH_TEXT, 'utf-8'),
+    });
+    const second = await saveUploadedMaterial({
+      userId: 'user-1',
+      originalName: '改名后.txt',
+      buffer: Buffer.from(LONG_ENOUGH_TEXT, 'utf-8'),
+    });
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(second.deduped).toBe(true);
+    expect(second.record!.id).toBe(first.record!.id);
+    expect(second.record!.contentHash).toBe(first.record!.contentHash);
+    expect(listMaterials('user-1')).toHaveLength(1);
+  });
+
+  it('超过用户容量上限 → 拒收 quota_exceeded，不落盘', async () => {
+    process.env.MATERIAL_USER_QUOTA_BYTES = '50';
+    const saved = await saveUploadedMaterial({
+      userId: 'user-1',
+      originalName: '大文件.txt',
+      buffer: Buffer.from(LONG_ENOUGH_TEXT, 'utf-8'),
+    });
+
+    expect(saved.ok).toBe(false);
+    expect(saved.reason).toBe('quota_exceeded');
+    expect(saved.message).toContain('资料库空间不足');
+    expect(listMaterials('user-1')).toEqual([]);
+  });
+
+  it('容量统计返回资料数、字节数与配额', async () => {
+    const saved = await saveUploadedMaterial({
+      userId: 'user-1',
+      originalName: '统计.txt',
+      buffer: Buffer.from(LONG_ENOUGH_TEXT, 'utf-8'),
+    });
+    const stats = getMaterialLibraryStats('user-1');
+    expect(stats.total).toBe(1);
+    expect(stats.uploadCount).toBe(1);
+    expect(stats.webCount).toBe(0);
+    expect(stats.totalBytes).toBe(saved.record!.size);
+    expect(stats.quotaBytes).toBeGreaterThan(0);
   });
 
   it('非法 id 不会造成目录穿越', () => {

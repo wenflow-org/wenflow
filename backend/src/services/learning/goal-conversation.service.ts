@@ -4,15 +4,8 @@ import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
 import { executeSkill } from '../../skills';
-import { goalConversationAgentDefinition, type GoalUploadedMaterialSummary } from '../../skills/goal-conversation';
-import { listMaterials } from '../materials/material-store';
-import { collectBriefsWithDeadline } from '../materials/material-brief.service';
-
-/**
- * goal 回合等待资料 brief 就绪的总预算（毫秒）。
- * 到点未就绪的资料降级为 headings 元信息；brief 生成在后台继续落盘，下次对话拾取。
- */
-const GOAL_BRIEF_DEADLINE_MS = 20_000;
+import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
+import { collectGoalUploadedMaterialSummaries } from './goal-material-summaries.service';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 import { normalizeDeadlineDate } from './deadline-date';
@@ -920,51 +913,6 @@ async continueConversation(
   }
 
   /**
-   * goal 阶段的「已上传资料清单」（元信息 + 理解摘要）。
-   * brief（material-brief，Document Summary Index 摘要节点）：惰性生成一次、持久化复用；
-   * 本方法受总等待预算约束——到点未就绪的降级为 headings 元信息（生成在后台继续落盘，下次对话拾取）。
-   * 纯本地读盘 + fail-open：任何异常返回空清单，绝不阻塞对话。
-   */
-  private async collectUploadedMaterialSummaries(userId?: string): Promise<GoalUploadedMaterialSummary[]> {
-    const id = typeof userId === 'string' ? userId.trim() : '';
-    if (!id) return [];
-    try {
-      const records = listMaterials(id).slice(0, 5);
-      const briefs = await collectBriefsWithDeadline(records, GOAL_BRIEF_DEADLINE_MS);
-      return records.map((record, index) => {
-        const brief = briefs[index];
-        return {
-          name: record.name,
-          ext: record.ext,
-          format: record.format,
-          charCount: record.charCount,
-          headingCount: record.structure?.headingCount ?? 0,
-          headings: (record.anchors || [])
-            .map((anchor) => String(anchor?.heading || '').trim())
-            .filter((heading) => heading && heading !== '（无标题）')
-            .slice(0, 6),
-          brief: brief
-            ? {
-                docType: brief.docType,
-                subject: brief.subject,
-                audience: brief.audience,
-                overview: brief.overview,
-                naturalDivisions: brief.naturalDivisions,
-                toc: brief.toc,
-              }
-            : null,
-        };
-      });
-    } catch (error) {
-      logger.warn('[goal-conversation] 读取上传资料清单失败，已跳过（fail-open）', {
-        userId: id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return [];
-    }
-  }
-
-  /**
    * 调用AI生成回复
    */
   private async callAI(
@@ -1011,6 +959,13 @@ async continueConversation(
       }
 
       // 调用专用 GoalConversationAgent
+      const materialSelectionQuery = [
+        (previousUnderstanding as { surface_goal?: string }).surface_goal,
+        (previousUnderstanding as { real_problem?: string }).real_problem,
+        userInput,
+      ]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .join(' ');
       const aiResponse = await executeSkill(goalConversationAgentDefinition, {
         input: userInput,
         userId: userId || 'anonymous',
@@ -1026,7 +981,7 @@ async continueConversation(
         systemPromptOverride: options?.systemPromptOverrides?.goalAgent,
         // 已上传资料清单（元信息 + 理解摘要）：让 goal-agent 知道用户提供了什么、资料讲什么，
         // 避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键
-        uploadedMaterials: await this.collectUploadedMaterialSummaries(userId)
+        uploadedMaterials: await collectGoalUploadedMaterialSummaries(userId, materialSelectionQuery)
       }, {
         // 会话标识进 envelope（与教学链 A6 同模式）：此前只有 SSE 流式路由在 ALS 注入
         // conversationId，非流式路径（API 直连/驱动）恒 null → prompt_call_logs 缺值、

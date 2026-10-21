@@ -1,5 +1,5 @@
 /**
- * 向量化 / 重排编排服务（外挂能力 embedding / rerank 的运行时入口）。
+ * 向量化 / 重排编排服务（平台基础设施模型 embedding / rerank 的运行时入口）。
  *
  * 职责：校验入参 → 按 EMBEDDING_PROVIDER 顺序逐个 provider 尝试 → 失败自动降级 →
  * 返回统一结构（含实际命中的 provider 与尝试链）。
@@ -10,6 +10,7 @@
 
 import { logger } from '../../utils/logger';
 import { createEmbeddingProviders, asRerankProvider, resolveEmbeddingProviderOrder } from './providers';
+import { getInfraModelConfigSync } from './infra-config.service';
 import { EmbeddingError } from './types';
 import type {
   EmbeddedVector,
@@ -33,7 +34,7 @@ export interface EmbedCallOptions {
 }
 
 /**
- * 批量分组的**偏好**大小（`EMBEDDING_BATCH_SIZE`，默认 32，上限 MAX_BATCH_SIZE）。
+ * 批量分组的**偏好**大小（平台配置 `infraModels.embedding.batchSize`，默认 32，上限 MAX_BATCH_SIZE）。
  * 为什么不是直接用 128 上限：真机实测把整篇文档一次发出去（最多 128 块 × ~900 字 ≈ 11 万字）
  * 会让上游 20s 预算扛不住 —— `EMBEDDING_UPSTREAM_TIMEOUT` 出现过 5 次，每次整篇索引全废。
  * 小批多次对上游更友好，也给了「超时对半拆」足够的降级空间。
@@ -43,8 +44,10 @@ const DEFAULT_EMBEDDING_BATCH_SIZE = 32;
 const MAX_TIMEOUT_SPLIT_DEPTH = 3;
 
 function preferredEmbeddingBatchSize(): number {
-  const raw = Number(process.env.EMBEDDING_BATCH_SIZE);
-  const size = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_EMBEDDING_BATCH_SIZE;
+  const configured = Number(getInfraModelConfigSync().embedding.batchSize);
+  const size = Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured)
+    : DEFAULT_EMBEDDING_BATCH_SIZE;
   return Math.max(1, Math.min(size, MAX_BATCH_SIZE));
 }
 

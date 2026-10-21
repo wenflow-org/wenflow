@@ -1,9 +1,10 @@
 /**
- * 向量化与重排统一类型（外挂能力 embedding / rerank）。
+ * 向量化与重排统一类型（平台基础设施模型 embedding / rerank）。
  *
  * 与 services/search / services/fetch / services/image 同构：调用方只依赖本文件，
- * provider 可替换、可降级。新增 provider 只需实现 EmbeddingProvider / RerankProvider
- * 并在 providers/index.ts 注册。
+ * provider 可替换、可降级。但分类不同：embedding/rerank 是平台必需的基础设施模型
+ * （模型原语），不是用户可见插件；配置走「模型与接入」，provider 适配器可替换。
+ * 新增 provider 只需实现 EmbeddingProvider / RerankProvider 并在 providers/index.ts 注册。
  *
  * 与 search / fetch / image 的差异（决定了接口形态）：
  * 1. 输入是**文本数组**（不是 query / urls / prompt），产出是**浮点向量**（不是 URL / 图片）——

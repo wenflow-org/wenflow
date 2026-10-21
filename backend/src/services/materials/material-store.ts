@@ -29,6 +29,8 @@ export interface MaterialRecord {
   anchors: DocumentAnchor[];
   warnings: string[];
   createdAt: string;
+  /** 抽取后正文的 SHA-256；用于内容级去重（旧记录可能缺省）。 */
+  contentHash?: string;
   /**
    * 资料理解摘要（Document Summary Index 摘要节点，2026-09-24）。
    * 惰性生成一次后持久化，goal 对话与 path 生成复用；缺省=尚未生成（fail-open 降级元信息）。

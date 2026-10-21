@@ -486,10 +486,10 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, {
         signal: handlers.signal,
-        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('msg') },
         // 教学回合为 JSON 输出、final 前可以整段无字节（实测 2~3 分钟），60s 空闲默认会把
         // 慢回合误判成死连接并触发非流式重发（双倍回合）。放到 120s：上层 90s 停滞看门狗
         // 先出手（有可见的超时气泡、不重发），这里只兜真正的死连接。
+        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('msg') },
         idleTimeoutMs: 120_000,
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {
@@ -882,8 +882,8 @@ export const aiTeachingAPI = {
         { ...payload, revision },
         {
           signal: handlers.signal,
-          headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey(`cp-${checkpointId}`) },
           // 同 streamSendMessage：讲解回合 final 前可整段无字节，60s 默认会误杀慢回合
+          headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey(`cp-${checkpointId}`) },
           idleTimeoutMs: 120_000,
           onEvent: (event, data) => {
             if (event === 'judgement') {

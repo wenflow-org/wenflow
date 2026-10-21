@@ -14,6 +14,9 @@ const materials: GoalUploadedMaterialSummary[] = [
     charCount: 6250,
     headingCount: 12,
     headings: ['健康', '语言', '社会'],
+    selectedForPath: true,
+    libraryTotal: 8,
+    libraryOmitted: 7,
     brief: {
       docType: '课程标准',
       subject: '3-6 岁儿童学习与发展指南',
@@ -42,6 +45,9 @@ describe('goal payload 已上传资料清单注入', () => {
       ext: '.docx',
       format: 'docx',
       charCount: 6250,
+      selectedForPath: true,
+      libraryTotal: 8,
+      libraryOmitted: 7,
       docType: '课程标准',
       subject: '3-6 岁儿童学习与发展指南',
       overview: '按五大领域、每领域三个年龄段描述典型发展表现，并附教育建议。',
@@ -54,6 +60,8 @@ describe('goal payload 已上传资料清单注入', () => {
     expect(parsed.uploadedMaterialsNote).toContain('重点学某些章节')
     expect(parsed.uploadedMaterialsNote).toContain('禁止假装读过')
     expect(parsed.uploadedMaterialsNote).toContain('needsMaterial')
+    expect(parsed.uploadedMaterialsNote).toContain('selectedForPath')
+    expect(parsed.uploadedMaterialsNote).toContain('libraryOmitted')
   })
 
   it('brief 未就绪时降级为 headings 元信息（不出现 brief 字段键）', () => {

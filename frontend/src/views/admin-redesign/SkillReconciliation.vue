@@ -15,7 +15,7 @@
       <template v-else-if="recReport">
         <!-- 口径 pill（中性 mk-pill）+ 异常计数（mk-badge 语气，替代自造色块） -->
         <div class="sk-rec__pills">
-          <span class="mk-pill" :title="`已上线数 / 登记册全量（登记册含外挂能力，多于目录）`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
+          <span class="mk-pill" :title="`已上线数 / 登记册全量（登记册含插件，多于目录）`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
           <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
           <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" :title="ACTIVE_MISSING_HINT">无生效版本 {{ recReport.summary.activeMissing }}</span>
           <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>

@@ -26,6 +26,7 @@ vi.mock('@/utils/api', () => ({
 }));
 
 vi.mock('@/api/aiTeaching', () => ({
+  createTeachingIdempotencyKey: (scope: string) => `test-${scope}`,
   aiTeachingAPI: {
     startSession: api.startSession,
     startReviewSession: vi.fn(),

@@ -98,6 +98,17 @@ export const NO_ADVISORY: ReplanAdvisory = {
 export const REMEDIAL_ADVISORY_ACTIONS = ['reinforce', 'slow_down'] as const;
 
 /**
+ * 哪些课型不产出路径调整建议。
+ * - extension（#124）：不是任务完成课，一期只观测。
+ * - review：复习课的知识看板是**跨路径**到期点，而建议会挂到「开课时借用的那条路径」上，
+ *   属于对象错配（2026-10-21 实测 105 个复习课堂里 32 个带了 shouldSuggest 建议）。
+ *   复习结果只走 FSRS/温故，不推动路径重排；要重排也应从正课或路径视图发起。
+ */
+export function shouldBuildReplanAdvisory(mode: string | null | undefined): boolean {
+  return mode !== 'extension' && mode !== 'review';
+}
+
+/**
  * 建议可信度阈值（2026-10-15）。此前判据是「计数>0 即发」→ 建议退化成**每课必发**
  * （实测全库 51 条带建议会话：`reinforce` 27 条、`resequence` 10 条，其中
  * **19 条是 `reinforce` 打在 sessionLss=low 且 sessionLf=low 的课上**——这节课并没有吃力，

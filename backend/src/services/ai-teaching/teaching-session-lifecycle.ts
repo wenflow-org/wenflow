@@ -26,7 +26,7 @@ import {
   buildSessionEvaluationShadow,
 } from '../learning/session-evaluation-aggregate';
 import { isCalibratableDirection, replanAttributionService, type ReplanAttributionEvidence } from './ReplanAttributionService';
-import { replanAdvisoryService, toAttributionRecall, NO_ADVISORY, type ReplanAdvisory } from './ReplanAdvisoryService';
+import { replanAdvisoryService, shouldBuildReplanAdvisory, toAttributionRecall, NO_ADVISORY, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { teachingSessionRepository, TeachingSessionConflictError, type TeachingSessionRecord, type TeachingSessionMessage } from './TeachingSessionRepository';
 import { runWithTeachingSession } from './teaching-session-context';
@@ -953,7 +953,8 @@ export async function endSession(
     const nextMilestone = currentPath?.milestoneProgress.find((item) => item.stageNumber === currentStageNumber + 1) || null;
     // 延伸学一期（#124）：只观测，不产生路径调整建议——延伸课不是任务完成课，
     // 其信号也不该在样本积累前推动重排（2026-10-19 拍板「先不进入，先观测」）。
-    const thresholdAdvisory = session.mode === 'extension'
+    // 复习课同理（2026-10-21）：看板是跨路径到期点，建议却会挂到借用的那条路径上，对象错配。
+    const thresholdAdvisory = !shouldBuildReplanAdvisory(session.mode)
       ? NO_ADVISORY
       : replanAdvisoryService.build({
       wrapup: persistedWrapup,

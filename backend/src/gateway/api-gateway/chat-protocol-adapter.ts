@@ -40,7 +40,7 @@ export function buildChatAuthHeaders(apiKey: string | null | undefined): Record<
  * - 策略字段为空 = 不触碰请求体里已有的值。
  */
 export function applyThinkingPolicyToBody(
-  body: Record<string, any>,
+  body: Record<string, unknown>,
   policy: ThinkingPolicyResult
 ): void {
   if (policy.thinking) body.thinking = policy.thinking;
@@ -54,7 +54,7 @@ export function buildStreamOptions(includeUsage: boolean): Record<string, unknow
 }
 
 /** 非流式请求必须剥离流式字段，否则上游可能返回 SSE（executor 兼容分支的纯函数形态）。 */
-export function stripStreamFields(body: Record<string, any>): void {
+export function stripStreamFields(body: Record<string, unknown>): void {
   if (!body || body.stream === true) return;
   delete body.stream_options;
 }

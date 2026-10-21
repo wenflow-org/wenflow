@@ -1,7 +1,7 @@
 <template>
   <div class="mk-page mk-page--fill ac-host">
     <!-- 页头（newui/admin pagehead）：页名 + 各 tab 的主操作上移（2026-10-04 状态条退役：页头只剩页名与主操作） -->
-    <MkPageHead title="模型与接入" sub="管理模型供应商、Skill 路由与后台访问安全策略">
+    <MkPageHead title="模型与接入" sub="管理模型供应商、基础设施模型、Skill 路由与后台访问安全策略">
       <template #actions>
         <!-- 本页唯一主操作升 primary（2026-10-04 全站评审 P3#37：此前 sm 次要形态，
              动作权重与视觉权重倒挂）；sm 档保留，与页头动作位其余刷新钮同高 -->
@@ -148,6 +148,9 @@
           </template>
       </ModelProvidersPanel>
 
+      <!-- 基础设施模型（2026-10-20）：embedding/rerank 是平台必需配置，不是插件。
+           与供应商/模型同域，但独立卡：它们不参与对话路由，缺失时消费方 fail-open。 -->
+      <InfraModelsPanel />
 
     </div>
     </template>
@@ -648,6 +651,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
 import ModelRegistryOverview from './ModelRegistryOverview.vue'
 import ModelProvidersPanel from './ModelProvidersPanel.vue'
+import InfraModelsPanel from './InfraModelsPanel.vue'
 import { splitUpstreamByRegistry } from './modelNameMatch'
 import VirtualLabLoadSettings from './VirtualLabLoadSettings.vue'
 import {

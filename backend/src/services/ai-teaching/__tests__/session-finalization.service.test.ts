@@ -588,4 +588,48 @@ describe('SessionFinalizationService', () => {
 
     expect(mockEnqueueReviewCompletedEvent).not.toHaveBeenCalled()
   })
+
+  it('end_only（主动退出）不被未答检查点挡住：照样收束课堂', async () => {
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'end-op', revision: 5 })
+    mockRepository.assertOwnership
+      .mockResolvedValueOnce(completedSession({
+        status: 'active',
+        wrapup: null,
+        revision: 4,
+        teachingState: { pendingCheckpoint: { id: 'cp-1', question: '先算什么？' } },
+        messages: [{ role: 'assistant', content: '那这一步为什么要先乘？' }],
+      }))
+      .mockResolvedValueOnce(completedSession({ revision: 5 }))
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'end_only',
+      operationId: 'end-op',
+      revision: 4,
+      endReason: 'manual-end',
+    })
+
+    expect(mockEndSession).toHaveBeenCalled()
+  })
+
+  it('complete_task（结算）仍被未答检查点拦住，不放行假完成', async () => {
+    mockRepository.assertOwnership.mockResolvedValue(completedSession({
+      status: 'active',
+      wrapup: null,
+      revision: 4,
+      teachingState: { pendingCheckpoint: { id: 'cp-1', question: '先算什么？' } },
+      messages: [{ role: 'assistant', content: '先说说你的思路？' }],
+    }))
+
+    await expect(service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op',
+      revision: 4,
+    })).rejects.toMatchObject({ code: 'FINALIZATION_PENDING_CHECKPOINT', status: 409 })
+
+    expect(mockEndSession).not.toHaveBeenCalled()
+  })
 })

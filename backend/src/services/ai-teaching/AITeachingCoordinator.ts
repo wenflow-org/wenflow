@@ -265,10 +265,15 @@ export class AITeachingOrchestrator {
     checkpointId: string,
     payload: CheckpointSubmitPayload,
     expectedRevision?: number,
+    turnOptionsOrIdempotencyKey: { failedConceptFollowupGuard?: boolean } | string = {},
     idempotencyKey?: string,
-    turnOptions: { failedConceptFollowupGuard?: boolean } = {},
   ): Promise<CheckpointSubmitResult> {
-    return submitCheckpointImpl(sessionId, checkpointId, payload, expectedRevision, idempotencyKey, turnOptions);
+    // 兼容两种调用形态：#85 双臂传 turnOptions 对象；写路由传 idempotencyKey 字符串。
+    const turnOptions = typeof turnOptionsOrIdempotencyKey === 'string' ? {} : turnOptionsOrIdempotencyKey;
+    const effectiveIdempotencyKey = typeof turnOptionsOrIdempotencyKey === 'string'
+      ? turnOptionsOrIdempotencyKey
+      : idempotencyKey;
+    return submitCheckpointImpl(sessionId, checkpointId, payload, expectedRevision, turnOptions, effectiveIdempotencyKey);
   }
 
   async judgeCheckpointSubmission(

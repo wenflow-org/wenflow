@@ -11,11 +11,13 @@ import { logger } from '../utils/logger';
 import { MAX_UPLOAD_BYTES } from '../services/materials/document-parser';
 import {
   deleteMaterial,
+  getMaterialLibraryStats,
   listMaterials,
   readMaterial,
   saveUploadedMaterial,
 } from '../services/materials/material-upload.service';
 import { extractSectionWindow } from '../services/materials/material-sections';
+import { getMaterialUsageMap } from '../services/materials/material-usage.service';
 import { isMaterialSemanticEnabled, recallMaterialChunks } from '../services/materials/material-semantic.service';
 
 const router = express.Router();
@@ -88,12 +90,26 @@ router.post('/', receiveSingleFile, async (req: Request, res: Response) => {
   }
 });
 
-/** 列出当前用户已上传（且解析成功）的资料。 */
-router.get('/', (req: Request, res: Response) => {
+/**
+ * 列出当前用户已上传（且解析成功）的资料。
+ * `?usage=1` 时附带“被哪些路径采用/引用”的只读投影（需解析路径模板，默认不开启）。
+ */
+router.get('/', async (req: Request, res: Response) => {
   const userId = requireUserId(req, res);
   if (!userId) return;
   try {
-    return res.json({ success: true, data: { items: listMaterials(userId) } });
+    const items = listMaterials(userId);
+    const withUsage = ['1', 'true', 'yes'].includes(String(req.query.usage || '').toLowerCase());
+    const usageMap = withUsage ? await getMaterialUsageMap(userId) : null;
+    return res.json({
+      success: true,
+      data: {
+        items: usageMap
+          ? items.map((item) => ({ ...item, usage: usageMap.get(item.id) || null }))
+          : items,
+        library: getMaterialLibraryStats(userId),
+      },
+    });
   } catch (error) {
     logger.error('列出资料失败:', error);
     return res.status(500).json({ success: false, error: '获取资料列表失败，请稍后重试' });
@@ -101,7 +117,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /**
- * 语义召回（外挂能力 embedding/rerank 的业务出口）：
+ * 语义召回（基础设施模型 embedding/rerank 的业务出口）：
  *   GET /:id/recall?q=…&topK=…&rerank=1   —— 在单份资料内召回最相关的原文块
  *   GET /recall?q=…&topK=…&rerank=1       —— 在当前用户最近若干资料里跨库召回
  * 未启用语义层（MATERIAL_SEMANTIC_DISABLED=1）时返回空列表 + enabled=false，不报错。

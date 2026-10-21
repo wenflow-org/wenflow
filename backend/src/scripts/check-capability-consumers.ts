@@ -42,7 +42,7 @@ export interface CapabilityCheckIssue {
 
 /** 纯函数：给定注册表内容与账本，产出问题清单（便于单测）。 */
 export function auditCapabilityConsumers(
-  registry: any,
+  registry: unknown,
   entries: CapabilityConsumerEntry[] = CAPABILITY_CONSUMERS,
   readSource: (relativePath: string) => string | null = (relativePath) => {
     const absolute = path.join(SRC_ROOT, relativePath);
@@ -76,24 +76,30 @@ export function auditCapabilityConsumers(
   };
 
   if (registry && typeof registry === 'object') {
-    for (const key of Object.keys(registry)) {
+    const root = registry as Record<string, unknown>;
+    for (const key of Object.keys(root)) {
       if (key === 'providers' || key === 'aliases' || key === 'defaults') visit(`root.${key}`);
       else visit(`root.${key}`, true);
     }
-    const providers = registry.providers && typeof registry.providers === 'object' ? registry.providers : {};
-    for (const provider of Object.values<any>(providers)) {
+    const providers = root.providers && typeof root.providers === 'object'
+      ? root.providers as Record<string, unknown>
+      : {};
+    for (const provider of Object.values(providers)) {
       if (!provider || typeof provider !== 'object') continue;
-      for (const key of Object.keys(provider)) {
+      const providerRecord = provider as Record<string, unknown>;
+      for (const key of Object.keys(providerRecord)) {
         if (key === 'models') {
           visit('provider.models');
           continue;
         }
         visit(`provider.${key}`);
       }
-      const models = provider.models && typeof provider.models === 'object' ? provider.models : {};
-      for (const model of Object.values<any>(models)) {
+      const models = providerRecord.models && typeof providerRecord.models === 'object'
+        ? providerRecord.models as Record<string, unknown>
+        : {};
+      for (const model of Object.values(models)) {
         if (!model || typeof model !== 'object') continue;
-        for (const key of Object.keys(model)) visit(`model.${key}`);
+        for (const key of Object.keys(model as Record<string, unknown>)) visit(`model.${key}`);
       }
     }
   }
@@ -141,7 +147,7 @@ function main(): void {
     console.error(`[capability-check] 找不到注册表：${REGISTRY_PATH}`);
     process.exit(1);
   }
-  let registry: any;
+  let registry: unknown;
   try {
     registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
   } catch (error) {

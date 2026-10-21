@@ -188,6 +188,12 @@ export interface GoalUploadedMaterialSummary {
   headingCount: number;
   /** 降级目录（brief 未就绪时使用，≤6 个标题）。 */
   headings: string[];
+  /** 本次路径主线（后端按目标相关性选出的前 3 份）；false=资料库里的补充资料。 */
+  selectedForPath?: boolean;
+  /** 资料库总份数（可能大于本清单条数）。 */
+  libraryTotal?: number;
+  /** 未列进本清单的资料份数；>0 时模型不应声称看完全部资料。 */
+  libraryOmitted?: number;
   /** 资料理解摘要（material-brief；未生成/生成失败为 null → 降级 headings）。 */
   brief: {
     docType: string | null;
@@ -204,7 +210,9 @@ export interface GoalUploadedMaterialSummary {
 
 /** 资料清单纪律注记：随清单一起注入 user payload（system prompt 纯静态，不进 prompt 治理管线）。 */
 const UPLOADED_MATERIALS_NOTE =
-  'uploadedMaterials 字段是用户已上传的资料清单及其理解摘要（brief）：已收到，将在路径生成时作为主线依据。'
+  'uploadedMaterials 字段是用户已上传的资料清单及其理解摘要（brief）：已收到，路径生成会按目标相关性从资料库选 3 份作为主线。'
+  + 'selectedForPath=true 的条目是本次路径主线；false 为资料库补充资料，路径不保证打包，但仍可按需引用。'
+  + '若 libraryOmitted>0，说明资料库还有未列出的资料，不要声称已看完全部；需要时请用户指定范围。'
   + '你可基于 brief 的 subject/overview/toc 与用户澄清学习范围（「全面学习整份资料」还是「重点学某些章节」），'
   + '并可参考 naturalDivisions 建议切分维度；除摘要所载信息外，正文细节你尚未读取——'
   + '禁止假装读过或凭记忆引用正文细节；这些资料无需在 needsMaterial 中重复声明（下游会自动使用已上传文件）。';
@@ -251,6 +259,10 @@ export function buildGoalConversationUserPayload(input: {
           ext: material.ext,
           charCount: material.charCount,
           headingCount: material.headingCount,
+          selectedForPath: material.selectedForPath === true,
+          ...(material.libraryTotal !== undefined
+            ? { libraryTotal: material.libraryTotal, libraryOmitted: material.libraryOmitted ?? 0 }
+            : {}),
           // brief 就绪：带理解摘要（目录截 12 条）；未就绪：降级 headings 元信息
           ...(material.brief
             ? {

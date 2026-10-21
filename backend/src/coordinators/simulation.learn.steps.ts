@@ -52,6 +52,65 @@ export const LEARN_EXTENSION_MAX_TURNS = 4;
  */
 export const LEARN_REVIEW_TURN_CAP = 10;
 
+/**
+ * 卡死判定（课堂探针 2026-10-21）：教师连续多回合不给收束信号、掌握度不再变化、判决持续判错时，
+ * 提前把课堂收为 unclosed 并留归因，避免一道收不了尾的课烧满回合上限（实测每道约 10 分钟）。
+ * 判据刻意保守——回合下限、连续窗口、掌握度不再变化、判错次数四者同时成立才算卡死；
+ * 任一条件缺数据（如模拟器没给掌握度）即 fail-open，不提前收课。
+ */
+export const LEARN_STUCK_MIN_TURNS = 8;
+export const LEARN_STUCK_TRACE_WINDOW = 3;
+export const LEARN_STUCK_MASTERY_EPSILON = 0.03;
+export const LEARN_STUCK_JUDGE_FALSE_MIN = 2;
+
+export type ClosureTraceEntry = {
+  turn: number;
+  teacherReady: boolean;
+  judgeFalse: boolean;
+  mastery: number | null;
+};
+
+/** 追加一回合的收束轨迹（保留最近 window 条；坏数据静默丢弃，不影响主链）。 */
+export function appendClosureTrace(
+  prior: unknown,
+  entry: ClosureTraceEntry,
+  window = LEARN_STUCK_TRACE_WINDOW
+): ClosureTraceEntry[] {
+  const list = Array.isArray(prior)
+    ? prior.filter((item): item is ClosureTraceEntry =>
+        !!item && typeof item === 'object' && typeof (item as ClosureTraceEntry).turn === 'number')
+    : [];
+  return [...list, entry].slice(-Math.max(1, window));
+}
+
+export function evaluateStuckClosure(params: {
+  trace: ClosureTraceEntry[] | null | undefined;
+  totalTurns: number;
+  minTurns?: number;
+  window?: number;
+  masteryEpsilon?: number;
+  judgeFalseMin?: number;
+}): { stuck: boolean; reason: string | null; masteryDelta: number | null; judgeFalseCount: number } {
+  const window = Math.max(1, params.window ?? LEARN_STUCK_TRACE_WINDOW);
+  const minTurns = params.minTurns ?? LEARN_STUCK_MIN_TURNS;
+  const epsilon = params.masteryEpsilon ?? LEARN_STUCK_MASTERY_EPSILON;
+  const judgeFalseMin = params.judgeFalseMin ?? LEARN_STUCK_JUDGE_FALSE_MIN;
+  const trace = (params.trace || []).slice(-window);
+  const judgeFalseCount = trace.filter((item) => item.judgeFalse).length;
+  const quiet = { stuck: false, reason: null, masteryDelta: null, judgeFalseCount } as const;
+  if ((Number(params.totalTurns) || 0) < minTurns) return { ...quiet };
+  if (trace.length < window) return { ...quiet };
+  if (trace.some((item) => item.teacherReady === true)) return { ...quiet };
+  const masteries = trace
+    .map((item) => item.mastery)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (masteries.length < window) return { ...quiet };
+  const masteryDelta = Math.max(...masteries) - Math.min(...masteries);
+  if (masteryDelta > epsilon) return { stuck: false, reason: null, masteryDelta, judgeFalseCount };
+  if (judgeFalseCount < judgeFalseMin) return { stuck: false, reason: null, masteryDelta, judgeFalseCount };
+  return { stuck: true, reason: 'non-convergence', masteryDelta, judgeFalseCount };
+}
+
 type ExtensionRuntimeLike = {
   active?: boolean;
   turns?: number;

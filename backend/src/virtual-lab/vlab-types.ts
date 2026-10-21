@@ -193,6 +193,16 @@ export interface TeachingState {
    * 缺省 = tutor（正常课）。
    */
   classroomMode?: 'tutor' | 'review' | 'extension' | null
+  /**
+   * 收束轨迹（课堂探针 2026-10-21）：最近几个回合的教师收束信号 / 判决判错 / 掌握度。
+   * 供卡死判定（连续无进展即提前收课）与离线归因（为什么这节没收住）使用；缺省即未采。
+   */
+  closureTrace?: Array<{
+    turn: number
+    teacherReady: boolean
+    judgeFalse: boolean
+    mastery: number | null
+  }> | null
   teachingSessionHistory?: Array<Record<string, unknown>>
   conversationHistory?: Array<{ role: string; content: string }>
   closureDecision?: Record<string, unknown>

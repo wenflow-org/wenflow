@@ -1,5 +1,5 @@
 /**
- * 资料**语义层**（外挂能力 embedding/rerank 在业务里的落地点）。
+ * 资料**语义层**（基础设施模型 embedding/rerank 在业务里的落地点）。
  *
  * 分工：
  *   - 本模块只做「**召回与排序**」——绝不做合并/裁决（裁决仍走 material-refs 的逐字核对）。
@@ -31,6 +31,7 @@ import {
   writeVectorIndex,
   type MaterialVectorIndex,
 } from './material-vector-store';
+import { selectMaterials } from './material-selection.service';
 
 /** 召回默认最多考察几份资料（防一次查询把整个库都嵌入）。 */
 export const MAX_RECALL_MATERIALS = 8;
@@ -176,7 +177,7 @@ export async function recallMaterialChunks(params: {
       (async (): Promise<RecallHit[]> => {
         const records = params.records
           ? params.records
-          : selectRecords(params.userId, params.materialIds);
+          : selectRecords(params.userId, query, params.materialIds);
 
         // 没有候选资料就直接返回 —— 必须在嵌入查询词**之前**（2026-10-17 真机发现）：
         // 零资料账号（如无附件的目标型学员）每回合都会走到这里，先嵌入再空转等于白烧一次往返；
@@ -249,7 +250,11 @@ async function applyRerank(query: string, hits: RecallHit[], topK: number): Prom
   }
 }
 
-function selectRecords(userId: string, materialIds?: string[] | null): MaterialRecord[] {
+function selectRecords(
+  userId: string,
+  query: string,
+  materialIds?: string[] | null
+): MaterialRecord[] {
   let records: MaterialRecord[] = [];
   try {
     records = listMaterials(userId);
@@ -260,7 +265,14 @@ function selectRecords(userId: string, materialIds?: string[] | null): MaterialR
     const wanted = new Set(materialIds);
     return records.filter((r) => wanted.has(r.id));
   }
-  return records.slice(0, MAX_RECALL_MATERIALS);
+  // 跨库召回不再取“最新 8 份”，改为按查询相关性选 8 份；无命中时退回最近上传。
+  return selectMaterials({
+    userId,
+    query,
+    limit: MAX_RECALL_MATERIALS,
+    includeWeb: true,
+    records,
+  }).selected;
 }
 
 /**

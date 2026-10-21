@@ -15,12 +15,29 @@ import { validateManifest, listTopLevelAgents } from '../services/agent-manifest
 import { loadSkillsFile } from '../services/skill-registry/skills-file';
 import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
 import { getRuntimeCapabilityProbeEnabled } from '../services/capability-probe-settings.service';
+import { loadInfraModelConfig } from '../services/embedding/infra-config.service';
 
 /**
  * 初始化 EduClaw Gateway
  */
 export async function initializeGateway(): Promise<EduClawGateway> {
   logger.info('Initializing EduClaw Gateway...');
+
+  // 基础设施模型（embedding/rerank）：平台配置水合进进程内快照。
+  // 失败不阻断启动：消费方全部 fail-open，缺失会在管理端与模型注册表告警。
+  try {
+    const infra = await loadInfraModelConfig();
+    logger.info('[startup] 基础设施模型配置已加载', {
+      source: infra.source,
+      required: infra.required,
+      embeddingConfigured: Boolean(infra.embedding.apiKey && infra.embedding.endpoint),
+      rerankConfigured: Boolean(infra.rerank.apiKey && infra.rerank.endpoint),
+    });
+  } catch (error) {
+    logger.warn('[startup] 基础设施模型配置加载失败，按环境变量兜底', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   // 创建 Gateway
   const instance = createGateway(prisma, {

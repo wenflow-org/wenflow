@@ -54,6 +54,7 @@ export type DocumentRejectReason =
   | 'no_text_layer'
   | 'empty_document'
   | 'file_too_large'
+  | 'quota_exceeded'
   | 'timeout'
   | 'parse_failed';
 
@@ -120,6 +121,8 @@ export function rejectMessageFor(reason: DocumentRejectReason): string {
       return '这份文件几乎是空的，没读到可用内容';
     case 'file_too_large':
       return `文件太大，单个文件不超过 ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB`;
+    case 'quota_exceeded':
+      return '资料库空间不足，请先删除一些旧资料再上传';
     case 'timeout':
       return '文件解析超时，请换一份文件或直接把内容粘贴进来';
     case 'parse_failed':

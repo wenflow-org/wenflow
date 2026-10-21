@@ -31,7 +31,7 @@ import { withTransaction } from '../../utils/with-transaction';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { logger } from '../../utils/logger';
 import { clamp01 } from '../memory/actr';
-import { fsrsSchedule, fsrsStateFromLegacy, type FsrsGradeCode, type FsrsMemoryState } from '../memory/fsrs';
+import { fsrsSchedule, fsrsStateFromLegacy, FSRS_MIN_STABILITY, type FsrsGradeCode, type FsrsMemoryState } from '../memory/fsrs';
 import { resolveConceptIdSafe } from '../memory/memory-trace.service';
 import { isPlaceholderConceptKey, normalizeConceptKey } from '../memory/concept-key';
 import { getActiveForConcepts } from './misconception-ledger.service';
@@ -252,7 +252,10 @@ export class ReviewCompletedConsumer {
             : fsrsStateFromLegacy(existing.masteryScore, existing.extractionCount, existing.lastSeenAt))
           : null;
         const result = fsrsSchedule(prev, grade, now);
-        const adjustedStability = result.state.stability * interferenceMultiplier;
+        // 干扰惩罚会把极小稳定性（FSRS 地板 0.001）压到地板以下（×0.85 → 0.00085）。
+        // 落库值必须夹回地板：ts-fsrs 下一次读到 < S_MIN 的状态会抛 Invalid memory state，
+        // 整条事件重试到死信，该概念的调度永久停摆（2026-10-21 实测 2 条事件 / 29 次重试）。
+        const adjustedStability = Math.max(FSRS_MIN_STABILITY, result.state.stability * interferenceMultiplier);
         const dueAt = new Date(now.getTime() + Math.round(result.intervalDays * interferenceMultiplier) * DAY_MS);
         await tx.memory_traces.upsert({
           where: {

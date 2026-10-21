@@ -5,6 +5,7 @@ import {
   fsrsStateFromLegacy,
   fsrsSchedule,
   fsrsRetrievability,
+  FSRS_MIN_STABILITY,
 } from '../fsrs'
 import { Rating } from 'ts-fsrs'
 
@@ -147,6 +148,26 @@ describe('fsrs lapses（2026-09-17 起落库；此前 5 处硬编码 0、schema 
       expect(asRelearning.state.difficulty).toBe(asReview.state.difficulty)
       expect(asRelearning.intervalDays).toBe(asReview.intervalDays)
     }
+  })
+})
+
+describe('FSRS 稳定性地板（S_MIN 守卫）', () => {
+  it('调度结果不低于地板（干扰惩罚不得把状态压成非法值）', () => {
+    const r = fsrsSchedule(
+      { stability: FSRS_MIN_STABILITY, difficulty: 9.97, reps: 3, lapses: 1, lastReviewAt: new Date() },
+      Rating.Again,
+      new Date(),
+    )
+    expect(r.state.stability).toBeGreaterThanOrEqual(FSRS_MIN_STABILITY)
+    expect(r.intervalDays).toBeGreaterThanOrEqual(1)
+  })
+
+  it('历史行稳定性低于地板（干扰惩罚 ×0.85 压出的 0.00085）读回不抛 Invalid memory state', () => {
+    expect(() => fsrsSchedule(
+      { stability: 0.00085, difficulty: 9.97, reps: 2, lapses: 1, lastReviewAt: new Date() },
+      Rating.Again,
+      new Date(),
+    )).not.toThrow()
   })
 })
 
