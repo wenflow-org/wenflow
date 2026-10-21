@@ -342,7 +342,41 @@ const body = `
 5. 重复闸门：同骨架（bigram Jaccard ≥ 0.45）不重摆；会话 ≤4 张；同图型 ≤3 张（按库计数）
 6. 留痕：figureSource = { trigger, reason, kindHint, ruleWhy, matched[] }，随消息落库，评审页直接展示</pre>
 
-  <h2>五、复现与文件</h2>
+  <h2>五、外部评审的三条主张：核验与处置</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>主张</th><th>核验</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>双进程共用一个 SQLite 会让夜间跑批中断，建议把库拷到工作树并用 <span class="mono">file:./dev-overnight.db</span> 隔离</td>
+          <td><b>隐患成立</b>：我们确实被「进程重启」中断过。<b>但配方在本仓库布局下无效</b>——worktree 的 node_modules 是指向主树的 junction，Prisma 的相对路径按 schema 所在目录解析，实测 <span class="mono">file:./probe.db</span> 落在<b>主树</b> prisma 目录，工作树里的拷贝根本不会被打开。</td>
+          <td>改用<b>绝对路径</b> <span class="mono">file:D:/test/wenflow-figures/backend/prisma/dev-night.db</span>（同法实测文件落在工作树），夜间跑批已按此隔离；WAL 与 busy_timeout 本来就在 database.ts 里开启（30000ms），无需另加。</td>
+        </tr>
+        <tr>
+          <td>核心提示词里 <span class="mono">kind</span> 仍写「position-line（缺省，v1 唯一图型）」，导致 recap 时模型回退画位置线</td>
+          <td><b>成立</b>：yaml 的 figure 字段契约确实这么写，且顶层 axis/marks 容易让模型以为只有这一种形状。</td>
+          <td>已改为 15 种 kind 枚举，并注明顶层 axis/marks 只属于 position-line、其余走 <span class="mono">spec</span>；recap 时改为报出「本课已用过的图型」做<b>软提醒</b>，不按关键词硬推图型（强制换形状会逼出与内容不符的几何）。</td>
+        </tr>
+        <tr>
+          <td>compare 链路把容器徽标硬编码成「集群边界」，前端课的请求/响应链也这么显示</td>
+          <td><b>成立</b>：渲染器里是字符串常量。</td>
+          <td>侧对象新增 <span class="mono">boundaryLabel</span>（≤10 字），不给仍回落「集群边界」——架构图观感不变；指南里补了「同进程请求链请传组件异步边界」。</td>
+        </tr>
+        <tr>
+          <td>夜间开 6 个虚拟学习者协程、每人 4~5 个任务，把 16 种图型全部逼出来</td>
+          <td><b>不采纳</b>：① 与「一次只跑一个虚拟学习者」的运行约束冲突，6 个并发还会在 SQLite 上互相压写（正是上一行那个隐患）；② 矩阵里的象棋盘面（board）属于明确排除的案例范围；③ 「16 种全亮」不是验收目标——图型要跟着内容走，硬凑出来的图只会污染评审集。</td>
+          <td>改为<b>串行</b>跑：一次一个学习者、用独立库、按内容自然隐含的冷门图型选画像（波动→range-bar、信度效度→bullseye、分类配对→bins/venn/bipartite/tree），棋盘类跳过。</td>
+        </tr>
+        <tr>
+          <td>另加一张关键词 → kind 的平行路由表（KIND_HINT_RULES）</td>
+          <td><b>不采纳</b>：现有 <span class="mono">chooseFigureKind</span> 的 KIND_RULES 已经在做同一件事，平行表会与它冲突；关键词还容易把「命中」这类词误推成 matrix。</td>
+          <td>如要扩覆盖，扩现有那张表，并只作为 hint（模型仍可按内容改选）。</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>六、复现与文件</h2>
   <div class="card">
     <p>评审页（图库，36 张，含出图动机）：<span class="mono">outputs/teaching-figures-review.html</span></p>
     <p>本报告：<span class="mono">outputs/teaching-figures-report-20261021.html</span></p>
