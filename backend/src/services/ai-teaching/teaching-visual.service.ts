@@ -223,10 +223,80 @@ export function detectAsciiStructure(text: string | null | undefined): boolean {
 /** 本轮"结构图/配图时机"信号（喂给教学回合的**显式**输入，见 buildVisualOpportunity 注释）。 */
 export interface VisualOpportunity {
   suggested: true;
-  reason: 'ascii-structure' | 'position-description';
+  reason: 'ascii-structure' | 'position-description' | 'structure-content' | 'task-structure' | 'recap-cadence';
   /** 给模型的**显式、正向**要求 */
   instruction: string;
 }
+
+/**
+ * 结构内容线索（2026-10-18 扩图型）：老师上一轮在讲**二维/多对多/象限**关系。
+ *
+ * 为什么需要这个信号：位置线的触发器（学生描述空间关系）只覆盖追及题那一类；
+ * 对账、归类、象限、多对多这些课型本来就需要图，但模型不会主动请求 `figure`。
+ * 判据取"≥1 个结构词 + 回复有实质长度"——宁可多给一次机会让模型自己判断，
+ * 也不要整节课一张图都不出；总量仍由每会话上限兜底。
+ */
+const STRUCTURE_CUE = /(对比|对照|区别|区分|归类|分类|矩阵|象限|两个维度|两维|多对多|一一对应|一对多|映射|对账|归位|两栏|两大|两边|两层|一层|分层|命中|重复|堆砌|棋盘|走法|信度|效度|四类|三类|两类|两列|成对|配对)/g;
+
+export function detectStructuralCue(text: string | null | undefined, minCues = 2): boolean {
+  const value = String(text ?? '');
+  if (!value) return false;
+  // **默认 ≥2 种**结构词才算（单个「对比」在日常讲解里太常见）；
+  // 任务标题/描述可以传 minCues=1——任务本身只讲一件事，一个结构词就足以定性。
+  const hits = value.match(STRUCTURE_CUE) || [];
+  return new Set(hits).size >= Math.max(1, minCues);
+}
+
+/**
+ * 学科 → 调色板：服务端按学习路径的 subject 盖章。
+ * 只影响观感（色相与材质），不改变几何与语义；判据取「讲的是什么」，不取界面语言。
+ */
+const SUBJECT_PALETTES: Array<{ test: RegExp; palette: 'earth' | 'violet' | 'warm' | 'tech' }> = [
+  { test: /地理|区位|气候|地形|水文|人口迁移|城市|农业|工业区/, palette: 'earth' },
+  { test: /心理|教育|动机|信度|效度|学习理论|认知|发展/, palette: 'violet' },
+  { test: /象棋|围棋|棋盘|古文|诗词|写作|语言|幼儿园|五大领域/, palette: 'warm' },
+  { test: /代码|程序|算法|数据库|共识|分布式|日志|系统|网络|前端|后端|并发|张量|模型/, palette: 'tech' },
+];
+
+export function paletteOfSubject(subject?: string | null): 'indigo' | 'earth' | 'tech' | 'warm' | 'violet' | 'mono' {
+  const text = String(subject ?? '');
+  for (const entry of SUBJECT_PALETTES) {
+    if (entry.test.test(text)) return entry.palette;
+  }
+  return 'indigo';
+}
+
+/** 图型选择表 + spec 形状：只在"该出图"的回合随 visualOpportunity 送进 prompt。
+ * 不常驻 system prompt（避免每轮都付这段 token）；字段上限与 normalizeFigure 的 SPEC 一致。
+ */
+const FIGURE_KIND_GUIDE = [
+  '（系统提示里若是旧版"v1 唯一图型 position-line"，以本轮为准：下列 kind 代码已支持并会逐字段校验。）',
+  '若确实该出图，按关系选 kind（最多 8 行/6 列、8 个条目；标签用学科实指，≤18 字）：',
+  '- bins：**归属/分类**（这些条目各归哪一堆）。{"bins":[{"label":"自然条件","tone":"ok","items":["水源","地形"]},{"label":"社会经济条件","items":["交通"]}],"note":"…"}——条目画在容器**里面**，表达「属于」，比两列并排更贴切。',
+  '- grid：二维排布、每格是内容（比较表）。{"rows":2,"cols":3,"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":0,"text":"…","hl":"accent|warn|ok"}],"note":"…"}——**已有内容**的表才画，等待学生填写的空表不画（那是练习控件）。',
+  '- matrix：二维命中矩阵（✓有/—无/叠=重复堆砌/≡两边同一项）。{"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":1,"tone":"hit|miss|dup|key"}],"legend":[{"text":"✓ 已写到","fill":"#e6f4f1"}]}',
+  '- compare：两条分支并排对照（**对等**的两边）。卡片形态：{"left":{"head":"…","sub":"…","items":["…"]},"right":{"head":"…","items":["…"]},"divider":"…","leftTone":"neutral","rightTone":"accent"}',
+  '- **compare 的链路形态（架构/请求路径类对比必须用它，2026-10-20 实跑）**：当差别是「几跳」「几次跨集群往返」时，不要只给两栏条目——把每侧的请求链路写进 chain，渲染器会画出客户端、集群边界与穿过边界的箭头，**箭头数就是跳数**。{"left":{"head":"外置协调","badge":"2 套集群 · 2 次独立共识","badgeTone":"warn","client":"客户端","chain":[{"label":"共识 ①：ZooKeeper 集群","sub":"定路由、选主","tone":"warn"},{"label":"共识 ②：业务存储节点","sub":"写日志与数据","tone":"warn"}],"items":["两份结论必须互相迁就"]},"right":{"head":"内置共识","badge":"单一系统 · 1 次共识","badgeTone":"ok","client":"客户端","chain":[{"label":"业务进程内置 Raft 状态机","sub":"元数据与数据落同一条日志","merged":true,"tone":"ok"}],"items":["省掉一次跨集群往返"]}}。**顺序段与往返**：若请求是一段接一段（网关→订单→库存，都在同一个集群内），第二张卡起写 `"from":"prev"`——它承接上一张卡、不占边界序号；第一张卡才跨集群。要强调「发出去还要等回话」，给该节点 `"rtt":true`，箭头上会出现反向箭头。**铁律**：①链上必须至少两层实体（客户端 → 组件 → 组件），不许把两边各写成三行文字；②「省掉/差异」只能体现在链的条数与 merged 节点上，不要靠中间悬浮一句话；③badge 是这一栏的结论，贴在栏头，不要写进正文。',
+  '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',
+  '- ladder：**层级/先后/进度**（先到哪、再到哪）。{"steps":[{"label":"定角度","state":"done"},{"label":"落材料","state":"done"},{"label":"扣设问","state":"current"},{"label":"排层次","state":"todo"}]}',
+  '- quadrant：2×2（四格顺序：左上、右上、左下、右下）。{"colLabels":["左","右"],"rowLabels":[{"label":"上","sub":"…"},{"label":"下"}],"cells":[{"title":"…","body":["…"],"tone":"ok|warn|neutral"}]}',
+  '- bipartite：左右两列 + 连线（多对多映射）。{"left":{"head":"…","nodes":[{"id":"a","label":"…"}]},"right":{"head":"…","nodes":[{"id":"x","label":"…"}]},"edges":[{"from":"a","to":"x"}]}——一条建议挂两个目标就是两条线；**次要/附带的连接加 "dash":"4 3"（虚线）**，渲染器会自动补图例，别把主次写成同一根实线。',
+  '- cycle：**首尾相接的闭环**（一轮结束要回到起点）。{"center":"每一轮都回到同一个问题","nodes":[{"label":"驱动问题","sub":"为什么非做不可"},{"label":"持续探究"},{"label":"公开产出","sub":"?"}]}——3~6 个节点；说不出来的一格写 "?"。',
+  '- tree：**一个上位概念长出哪些下位**（派生/分类体系）。{"root":{"label":"五大领域"},"branches":[{"label":"健康","items":["易混：社会"]},{"label":"语言","items":["?"]}]}——2~6 个分支、每支最多两条要点。',
+  '- venn：**两个概念的重叠与独有**（易混/边界）。{"left":{"head":"社会","items":["轮流收玩具"]},"right":{"head":"科学","items":["按属性分类"]},"overlap":{"head":"两边都算","items":["按同一规则排"]}}',
+  '- bullseye：**稳不稳 × 准不准**这类"点落在哪儿"的几何问题（信度/效度、误差分布、命中集中度）。{"colLabels":["高效度","低效度"],"rowLabels":[{"label":"高信度","sub":"每次一致"},{"label":"低信度"}],"cells":[{"title":"稳且准","tone":"ok","dots":[[0.05,0.08],[-0.08,0.02]]},…]}——**四格必须齐**；dots 取 [-1,1]，(0,0)=靶心。',
+  '- board：中国象棋（col 0-8 左→右，rank 0-9 上→下；大写黑方、小写红方：R车 N马 B象 A士 K将 C炮 P卒）。{"pieces":[{"col":4,"rank":9,"key":"K"}],"arrows":[{"a1":{"col":4,"rank":9},"a2":{"col":4,"rank":7},"label":"进一"}]}',
+  '- position-line：只有**一维的先后/远近**才用（顶层 axis/marks/spans/guides/group，不用 spec）。'
+  + '**spans 只表示区间/距离**（「相距 40 米」「从第 1 题到第 3 题」）。若你要说的是「这几道题是同一类」，'
+  + '用 `group`：{"from":1,"to":3,"label":"同一个毛病：方向没跟已知条件对"}——画成花括号（归在一起）；'
+  + '用区间线表达同一性会被读成跨度，把同一句标签在每点下重复一遍又会被读成「重复的题」，两种都别用。',
+  '可选 `focus` 指出本轮该看哪里（只填位置，不要填颜色）：grid/matrix 用 {"row":0} 或 {"col":1}；compare 用 "left"/"right"；bins 用下标数字；ladder 用下标数字。',
+  '纯流程、层级、时序用 diagram（mermaid）。但**内容本质是表**时（多个条目 × 多个维度/栏目，或一格一格判断命中/漏/重复）**必须**用 grid/matrix：',
+  'mermaid 会把它压成树，丢掉「哪一格」这个信息——学生看不出自己在哪一个格子上判断错了。',
+  '图里不要写出本轮要学生自己产出的答案；reply 脱离图也必须成立。',
+  '**留白槽位**：课上用来让学生自己填的那一格/那一支，label 写 "?"（渲染成虚线待填），不要把答案先填上。',
+  '**不要用 grid 代替有专属形状的关系**：能画成闭环/辐射/交集/靶盘/二分连线的，画成一个表格等于把几何信息丢回文字。',
+].join('\n');
 
 /**
  * 学生用文字描述**空间位置关系**的语言特征（位置/方向/距离/先后）。
@@ -241,8 +311,75 @@ export function detectPositionDescription(text: string | null | undefined): bool
   return new Set(hits).size >= 2 || hits.length >= 3;
 }
 
-/** 位置线图每会话上限（默认 4；防"每轮都摆一遍"）。 */
+/**
+ * 视觉教具路由（2026-10-20）：把「该画成什么形状」从模型的自由发挥变成代码裁决。
+ *
+ * 为什么需要：提示词里给了十几种 kind，模型默认永远挑 grid（白框填字）——
+ * 用户点名的典型：信度×效度本该画 4 个靶盘，结果画了 4 个写字的方框；
+ * 「一条建议服务两个目标」本该画二分连线，结果画成打勾矩阵。
+ * 这里只做**建议**（写进本轮输入），真正的白名单与字段校验仍在 teaching-turn。
+ */
+export type FigureKindHint =
+  | 'bullseye'
+  | 'cycle'
+  | 'bipartite'
+  | 'venn'
+  | 'tree'
+  | 'balance'
+  | 'ladder'
+  | 'bins'
+  | 'matrix'
+  | 'compare';
+
+interface KindRule {
+  kind: FigureKindHint;
+  test: RegExp;
+  why: string;
+}
+
+/**
+ * 顺序即优先级：先判「有专属几何原型」的（靶盘/闭环/交集/二分/辐射），
+ * 再判容器/权衡/层级，最后才是矩阵与对照表——越靠后越接近「表格也能画」。
+ */
+const KIND_RULES: readonly KindRule[] = [
+  { kind: 'bullseye', test: /(信度|效度|稳不稳|准不准|打偏|靶心|误差分布|系统性偏差|每次都一致|忽高忽低)/, why: '稳不准是两个几何量，点聚不聚、偏不偏要一眼看出来' },
+  { kind: 'cycle', test: /(闭环|回到起点|每一轮|迭代|循环|反馈回路|下一段.{0,6}前提|前置条件|一轮结束)/, why: '走完要回到起点，是环不是列' },
+  { kind: 'venn', test: /(易混|分不清|分不开|重叠|边界|两边都算|交集|既有.{0,6}又有|既.{0,4}又)/, why: '要看出重叠与各自独有，并排两栏会把重叠吃掉' },
+  { kind: 'bipartite', test: /(多对多|一对多|同时服务|同时满足|连线|映射|一一对应|对应关系|配对|交叉关系)/, why: '一条对应多条，交叉连线本身是信息' },
+  { kind: 'tree', test: /(五大领域|分类体系|子领域|子类|派生|词根|上位|下位|包含关系|长成|分为几大类|三层结构)/, why: '一个上位概念长出一层下位，是派生不是并列' },
+  { kind: 'balance', test: /(取舍|权衡|哪边更重|压得住|孰轻孰重|代价|成本与收益|两难|牺牲)/, why: '两边各自的分量，靠倾斜方向表达' },
+  { kind: 'ladder', test: /(门槛|阶梯|逐级|先从.{0,12}再到|一级一级|递进)/, why: '先后与层级，位置本身就是信息' },
+  { kind: 'bins', test: /(归类|归位|分到|放进|哪一堆|三类|四类|两类各)/, why: '条目要放进容器，表达属于关系' },
+  { kind: 'matrix', test: /(对账|命中|漏了|漏掉|堆砌|逐条核|一格一格|核对表)/, why: '逐条对账要看哪一格对上了' },
+  { kind: 'compare', test: /(架构|选型|链路|请求路径|来回|往返|跳数|跨集群|集群边界|协调服务|内置还是外置|省掉一次|多一次)/, why: '两边差的不是文字条目，是请求要穿过几层网络边界——走 compare 的链路形态，箭头数就是跳数' },
+  { kind: 'compare', test: /(对比|对照|区别|差异|不同点)/, why: '两边对等对照' },
+];
+
+export function chooseFigureKind(text: string | null | undefined): { kind: FigureKindHint; why: string } | null {
+  const value = String(text ?? '');
+  if (!value.trim()) return null;
+  for (const rule of KIND_RULES) {
+    if (rule.test.test(value)) return { kind: rule.kind, why: rule.why };
+  }
+  return null;
+}
+
+/** 给模型的一句话：本轮该用哪种形状（无命中就返回空串，沿用原指南）。 */
+export function figureKindHintLine(kind: { kind: FigureKindHint; why: string } | null): string {
+  if (!kind) return '';
+  return `\n本轮判断：这段内容的关系是「${kind.why}」——**优先用 kind=${kind.kind}**；`
+    + `只有确实不适合时才退回 grid/compare，并说明理由。`;
+}
+
+
 const DEFAULT_FIGURE_MAX_PER_SESSION = 4;
+
+/**
+ * 节奏兜底阈值：连续多少个老师回合没有出图就必须收一张。
+ * 取 6 是因为苏格拉底课一节通常 12~18 个老师回合 —— 6 保证至少出 1~2 张，
+ * 又不至于每三四轮就打断追问节奏；与 per-session 上限（默认 4）配合，不会铺满。
+ */
+const FIGURE_RECAP_TURNS = 6;
 
 export function resolveFigureMaxPerSession(value = process.env.TEACHING_FIGURE_MAX_PER_SESSION): number {
   if (!value || String(value).trim() === '') return DEFAULT_FIGURE_MAX_PER_SESSION;
@@ -266,6 +403,161 @@ function lastAssistantHasFigure(messages: TeachingSessionMessage[]): boolean {
   return Boolean(lastAssistant && Array.isArray(lastAssistant.figures) && lastAssistant.figures.length);
 }
 
+/**
+ * 图的内容指纹（kind + 结构规格）。刻意不含 palette/caption，也不含 spec 里的 title/note：
+ * 换配色、换说明句不是新图，仍是同一张画。
+ */
+function figureSignature(figure: unknown): string {
+  const f = figure as {
+    kind?: string;
+    spec?: Record<string, unknown>;
+    axis?: unknown;
+    marks?: unknown;
+    spans?: unknown;
+    guides?: unknown;
+  } | null;
+  const spec = f?.spec && typeof f.spec === 'object' ? { ...f.spec } : f?.spec ?? null;
+  if (spec && typeof spec === 'object') {
+    delete (spec as Record<string, unknown>).note;
+    delete (spec as Record<string, unknown>).title;
+  }
+  return JSON.stringify({
+    kind: f?.kind ?? null,
+    spec,
+    axis: f?.axis ?? null,
+    marks: f?.marks ?? null,
+    spans: f?.spans ?? null,
+    guides: f?.guides ?? null,
+  });
+}
+
+/**
+ * 本轮这张图该不该落库：与上一轮**完全同一张**（同 kind、同规格）就丢掉。
+ *
+ * 为什么需要：2026-10-19 实跑地理课，一节里同一张「三格归类表」连出两次——学生只补了一句
+ * 措辞，图的内容一字未变。重复渲染不加信息，还让学生以为"老师又画了一遍"。
+ * 只挡「完全相同」：内容变了的图照常出——逐步填满的归类表正是这类课的教具本身。
+ */
+/**
+ * 形状指纹（粗指纹）：只留「这张图画的是什么骨架」，抹掉措辞与标点。
+ *
+ * 为什么需要它：精确指纹只比得出「一字不改的重画」。2026-10-20 实跑里同一节出现了三张 bins，
+ * 第 2、3 张只是把「（挂起）」改成「(挂起)」、把两条挪成三条——精确比对放行了，学生看到的是
+ * 「老师每轮都在摆同一张分类表」。所以对「标签即骨架」的图型（bins/compare/venn/ladder/cycle/tree），
+ * 用去过标点、去空白后的结构标签比对；grid/matrix 的差别在格内文字，仍只做精确比对。
+ */
+function shapeSignature(figure: unknown): string | null {
+  const f = figure as { kind?: string; spec?: Record<string, unknown> } | null;
+  const kind = String(f?.kind || '');
+  const shapely = ['bins', 'compare', 'venn', 'ladder', 'cycle', 'tree'];
+  if (!shapely.includes(kind)) return null;
+  // 只留汉字与 ASCII 字母数字：等价于「去标点、去空白」，但不用正则也不用字面量引号
+  // ——本仓库的工具层会吃掉反斜杠与转义引号，正则写法落盘后会静默变成错误判据（踩过一次）。
+  const norm = (v: unknown) => {
+    let out = '';
+    for (const ch of String(v ?? '').toLowerCase()) {
+      const code = ch.charCodeAt(0);
+      const isCjk = code >= 0x3400 && code <= 0x9fff;
+      const isAscii = (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
+      if (isCjk || isAscii) out += ch;
+    }
+    return out;
+  };
+  const spec = (f?.spec || {}) as Record<string, any>;
+  const parts: string[] = [kind];
+  if (Array.isArray(spec.bins)) parts.push(...spec.bins.map((b: any) => norm(b?.label)));
+  else if (spec.left && spec.right) parts.push(norm(spec.left.head), norm(spec.right.head));
+  else if (Array.isArray(spec.nodes)) parts.push(...spec.nodes.map((n: any) => norm(n?.label)));
+  else if (spec.center || spec.root) parts.push(norm(spec.center || spec.root));
+  return parts.join('|');
+}
+
+/** 把标签拆成「汉字二元组」集合：换个说法（漏判（有信号没停） vs 漏判（该停没停））仍高度重叠。 */
+function shapeBigrams(figure: unknown): Set<string> | null {
+  const sig = shapeSignature(figure);
+  if (!sig) return null;
+  // 去掉图型前缀：所有 bins 都含「bins」三个字母，会虚抬任意两张 bins 的相似度
+  const flat = sig.split('|').slice(1).join('').split('').filter((c) => c < '0' || c > '9').join('');
+  const grams = new Set<string>();
+  for (let i = 0; i < flat.length - 1; i += 1) grams.add(flat.slice(i, i + 2));
+  return grams.size >= 4 ? grams : null;
+}
+
+function similarShape(a: unknown, b: unknown): boolean {
+  const A = shapeBigrams(a);
+  const B = shapeBigrams(b);
+  if (!A || !B) return false;
+  let inter = 0;
+  for (const gram of A) if (B.has(gram)) inter += 1;
+  const union = A.size + B.size - inter;
+  // 0.45：2026-10-20 实跑语料里同一分类的改写版 Jaccard 落在 0.55~0.78，
+  // 而换了一套分类轴的（力类依据 vs 运动状态依据）在 0.1 以下，阈值取中间。
+  return union > 0 && inter / union >= 0.45;
+}
+
+/** 同一图型每会话最多三张：近义改写由相似度拦，剩下的名额留给真正换轴的那一张。 */
+const FIGURE_MAX_PER_KIND = 3;
+function countFiguresOfKind(messages: TeachingSessionMessage[], kind: string): number {
+  let n = 0;
+  for (const message of messages) {
+    for (const figure of Array.isArray(message?.figures) ? message.figures : []) {
+      if (String((figure as { kind?: string })?.kind || '') === kind) n += 1;
+    }
+  }
+  return n;
+}
+
+export function shouldEmitTeachingFigure(
+  messages: TeachingSessionMessage[] | null | undefined,
+  figure: unknown,
+): boolean {
+  if (!figure) return false;
+  const list = Array.isArray(messages) ? messages : [];
+  const lastAssistant = [...list].reverse().find((message) => message?.role === 'assistant');
+  const previous = Array.isArray(lastAssistant?.figures) ? lastAssistant.figures[lastAssistant.figures.length - 1] : null;
+  if (previous && figureSignature(previous) === figureSignature(figure)) return false;
+  // 同类数量上限
+  const kind = String((figure as { kind?: string })?.kind || '');
+  if (kind && countFiguresOfKind(list, kind) >= FIGURE_MAX_PER_KIND) return false;
+  // 全会话骨架去重：换个说法重画的（精确不等但高度相似）也拦
+  const shape = shapeSignature(figure);
+  if (shape) {
+    for (const message of list) {
+      for (const existing of Array.isArray(message?.figures) ? message.figures : []) {
+        if (shapeSignature(existing) === shape) return false;
+        if (similarShape(existing, figure)) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** 上一轮已经出过任何视觉产物（figure 或 mermaid diagram）——模型做过选择了，本轮不再反复提示。 */
+function lastAssistantHasVisual(messages: TeachingSessionMessage[]): boolean {
+  const lastAssistant = [...messages].reverse().find((message) => message?.role === 'assistant');
+  if (!lastAssistant) return false;
+  return Boolean(
+    (Array.isArray(lastAssistant.figures) && lastAssistant.figures.length) ||
+      (Array.isArray(lastAssistant.diagrams) && lastAssistant.diagrams.length),
+  );
+}
+
+/**
+ * 距离上一张图已经推进了多少个老师回合（从未出图 = 全部老师回合数）。
+ * 用于「节奏兜底」：词表判据只能覆盖它认识的词汇，苏格拉底式的短回合课
+ * （2026-10-20 实跑：「任期定标 + 多数派交集」整节 15 回合 0 图）永远等不到词表命中。
+ */
+function assistantTurnsSinceLastFigure(messages: TeachingSessionMessage[]): number {
+  let turns = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role !== 'assistant') continue;
+    if (Array.isArray(message.figures) && message.figures.length) return turns;
+    turns += 1;
+  }
+  return turns;
+}
+
 
 /**
  * 算本轮的"结构图时机"（**代码裁决**，2026-09-23 建、2026-09-27 双通道重构）。
@@ -282,10 +574,18 @@ function lastAssistantHasFigure(messages: TeachingSessionMessage[]): boolean {
  * 字符画本身就是最精简的结构图，翻成扩散生图会丢语义精度（断口丢失事故）且图内不能标字；
  * mermaid 零乱码、图内可写中文标签、毫秒渲染零成本（owner 终审拍板双通道，设计文档 §七-§十）。
  */
-export function buildVisualOpportunity(messages: TeachingSessionMessage[] | null | undefined): VisualOpportunity | null {
+export function buildVisualOpportunity(
+  messages: TeachingSessionMessage[] | null | undefined,
+  taskHint?: string | null,
+): VisualOpportunity | null {
   if (!isTeachingVisualEnabled() && !isTeachingDiagramOpportunityEnabled()) return null;
   const list = Array.isArray(messages) ? messages : [];
   const lastAssistant = [...list].reverse().find((message) => message?.role === 'assistant');
+  const figureCount = countTeachingFigures(list);
+  const figureCapReached = figureCount >= resolveFigureMaxPerSession();
+  const lastHasFigure = lastAssistantHasFigure(list);
+  // 形状路由：按「任务标题 + 上一轮讲解」判这段内容该用哪种几何（靶盘/闭环/交集/二分/辐射/…）
+  const kindHintLine = figureKindHintLine(chooseFigureKind([taskHint, lastAssistant?.content].filter(Boolean).join('\n')));
   if (detectAsciiStructure(lastAssistant?.content)) {
     return {
       suggested: true,
@@ -295,10 +595,13 @@ export function buildVisualOpportunity(messages: TeachingSessionMessage[] | null
         + '**先判断**：若本轮正要布置「由学习者自己排出/画出这个结构」的练习（答案泄漏，2026-09-24 实测），'
         + '则本轮**不要**输出 diagram/figure，直接布置练习，把图留到学生完成后的下一轮总结印证时再用；'
         + '**再分流**：内容是**空间位置关系**（谁在前谁在后、朝哪走、隔多远、追及/相遇）→ 输出 `figure`（位置线图，'
-        + '数值域 + 对象 + 朝向箭头 + 区间标注，mermaid 画不出位置）；其余结构类（流程/层级/时序/对比）→ 输出 `diagram`：'
+        + '数值域 + 对象 + 朝向箭头 + 区间标注，mermaid 画不出位置）；内容是**二维表/对账/命中矩阵/象限**→ 输出 `figure`'
+        + '（kind 用 grid 或 matrix，按图型选择表）；其余结构类（流程/层级/时序）→ 输出 `diagram`：'
         + 'engine 用 mermaid，把这段结构画成 flowchart（流程/层级/对比）或 sequenceDiagram（时序）——'
         + '**图内要写中文标签**（节点名、关键量、方向词），标签就是教学信息本身；'
-        + 'caption 写一句给学生看的说明；reply 里不必再用字符画结构。',
+        + 'caption 写一句给学生看的说明；reply 里不必再用字符画结构。'
+        + kindHintLine + '\n'
+        + (!figureCapReached ? FIGURE_KIND_GUIDE : ''),
     };
   }
   // 位置线时机（Scope B，2026-09-27 语料实证的"正当时机①：学生描述完 → 外化其描述以核验"）：
@@ -306,8 +609,8 @@ export function buildVisualOpportunity(messages: TeachingSessionMessage[] | null
   // 上一轮老师已摆过 / 本会话已达上限 → 不再触发（判据天然带节奏）。
   const lastUser = [...list].reverse().find((message) => message?.role === 'user');
   if (detectPositionDescription(lastUser?.content)) {
-    if (lastAssistantHasFigure(list)) return null;
-    if (countTeachingFigures(list) >= resolveFigureMaxPerSession()) return null;
+    if (lastHasFigure) return null;
+    if (figureCapReached) return null;
     return {
       suggested: true,
       reason: 'position-description',
@@ -318,6 +621,62 @@ export function buildVisualOpportunity(messages: TeachingSessionMessage[] | null
         + 'marks 写学生的对象与朝向、spans 写他提到的距离、guides 写追及点/相遇点这类参考位置），'
         + '**图内标签写学科实指**（甲/乙/小明/追及点）；caption 一句给学生看的话；**不要**改用 mermaid（节点-边画不出位置）。'
         + 'reply 里不必再复述位置关系。',
+    };
+  }
+  // 任务级时机（2026-10-18）：**当前任务的标题/描述本身就是结构化关系**——
+  // 这是最强的信号（任务决定这节课要处理哪种关系）。只在上一轮任何视觉产物都没出、
+  // 且总量未到顶时给一次机会：模型可以选择用 diagram，做过选择后本轮就不再追问。
+  if ((detectStructuralCue(taskHint, 1) || chooseFigureKind(taskHint)) && !lastAssistantHasVisual(list) && !figureCapReached) {
+    return {
+      suggested: true,
+      reason: 'task-structure',
+      instruction:
+        '当前这个任务本身就在处理一组**结构化关系**（归属/对应/对比/对账/分层这类）。'
+        + '如果这轮的内容已经可以用一张图讲清，就在 reply 之后输出顶层块 `figure`；'
+        + '**先判断**：若本轮正要布置「由学生自己填这张表/排这组关系」的练习（答案泄漏），本轮**不要**输出，'
+        + '留到学生完成后的下一轮印证；若确实是流程/时序，用 `diagram`（mermaid）。'
+        + kindHintLine + '\n'
+        + FIGURE_KIND_GUIDE,
+    };
+  }
+  // 结构内容时机（2026-10-18 扩图型）：老师上一轮在讲二维/多对多/象限关系——
+  // 这类课型本来就需要图，但模型不会主动请求 figure。只在"上一轮已摆过图"或"总量到顶"时退让。
+  if (detectStructuralCue(lastAssistant?.content) || chooseFigureKind(lastAssistant?.content)) {
+    if (lastHasFigure) return null;
+    if (figureCapReached) return null;
+    return {
+      suggested: true,
+      reason: 'structure-content',
+      instruction:
+        '上一轮你在讲一组**结构化关系**（对比/归类/对账/维度/映射这类）。把它摆成一张图，学生能比读段落更快看清关系。'
+        + '**先判断**：若本轮正要布置「由学生自己填这张表/排这组关系」的练习（答案泄漏），本轮**不要**输出，'
+        + '留到学生完成后的下一轮印证；若关系是纯流程/层级/时序，用 `diagram`（mermaid）而不是 figure；'
+        + '若用一维先后就能说清（谁在前、隔多远），用 position-line。'
+        + '**反向要求（2026-10-20 实跑教训）**：如果你这一轮是在**复述/收束学生刚说的内容、把它归成结构**'
+        + '（出现「对，就是…」「这两层是…」「这部分拆成…」这类收束语），那就**必须**出图——'
+        + '这种轮次不出图，学生拿走的就是一段听过就散的话。'
+        + kindHintLine + '\n'
+        + FIGURE_KIND_GUIDE,
+    };
+  }
+  // 节奏兜底（2026-10-20 实跑教训）：词表只认它认识的词。苏格拉底课的回合很短、
+  // 每轮都在追问，结构词一次也凑不齐 —— 整节 15 回合 0 图，学生手里只剩一段段听过就散的话。
+  // 所以给一条与内容词表无关的兜底：连续 N 个老师回合没出过图，就要求把「到目前站住的那条链」收成一张图。
+  // 只收「已讲过的东西」不含新内容，因此不受答案泄漏约束；总量仍由每会话上限兜底。
+  const turnsSinceFigure = assistantTurnsSinceLastFigure(list);
+  if (!lastHasFigure && !figureCapReached && turnsSinceFigure >= FIGURE_RECAP_TURNS) {
+    return {
+      suggested: true,
+      reason: 'recap-cadence',
+      instruction:
+        `你和这位学生已经连着推进了 ${turnsSinceFigure} 个回合，中间没有出现过任何图。`
+        + '这一轮在 reply 之后，把**到目前为止已经站住的那条关系链**收成一张图：'
+        + '图里只放学生已经自己说对的东西和你在上面补硬的约束，**不要放进新内容**，也不要在图里提问。'
+        + '即使这轮你还想继续追问，也先出图再问——这一轮不出图，学生这次课结束时手里什么都没有。'
+        + '**唯一例外**：这一轮你正要让学生脱稿复述/自己排出这条链（答出来就是他自己的证据）→ 本轮不出图，'
+        + '但学生答完的下一轮必须把链收成图，不能再往后拖。'
+        + kindHintLine + '\n'
+        + FIGURE_KIND_GUIDE,
     };
   }
   return null;

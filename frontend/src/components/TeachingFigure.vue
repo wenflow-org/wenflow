@@ -1,12 +1,13 @@
 <template>
-  <figure class="teaching-figure">
+  <figure class="teaching-figure" :class="{ 'teaching-figure--spec': !isPositionLine }" :style="cardStyle">
     <button
+      v-if="isPositionLine"
       type="button"
       class="teaching-figure__canvas"
       aria-label="放大查看位置线图"
       @click="zoomed = true"
     >
-      <svg :viewBox="`0 0 ${W} ${height}`" :width="W" :height="height" role="img" :aria-label="ariaLabel">
+      <svg :viewBox="`0 0 ${W} ${height}`" :width="W" :height="height" role="img" :aria-label="ariaLabel" :style="tfVars">
         <!-- 单位（左上角，避免与参考线标签抢位） -->
         <text v-if="unit" class="tf-unit" x="10" :y="20">{{ `单位：${unit}` }}</text>
 
@@ -59,15 +60,31 @@
           <line class="tf-span" :x1="s.x1" :y1="s.y" :x2="s.x2" :y2="s.y" />
           <text class="tf-span-label" :x="(s.x1 + s.x2) / 2" :y="s.y - 9" text-anchor="middle">{{ s.label }}</text>
         </g>
+        <!-- 归类括号：这几个点是同一类，不是「从 A 到 B 的距离」 -->
+        <g v-if="groupRow">
+          <path class="tf-group-brace" :d="groupRow.d" />
+          <text class="tf-group-label" :x="groupRow.mid" :y="groupRow.y + 30" text-anchor="middle">{{ groupRow.label }}</text>
+        </g>
       </svg>
     </button>
-    <span class="teaching-figure__hint" aria-hidden="true">点击放大</span>
+    <!-- 二维图型（grid/matrix/compare/quadrant/bipartite/board）：确定性渲染器直接产出 SVG 字符串。
+         所有文字都已转义、颜色/虚线都过白名单（后端 + 渲染器两道），可以安全内联。 -->
+    <button
+      v-else-if="specRendered"
+      type="button"
+      class="teaching-figure__canvas"
+      aria-label="放大查看教学图"
+      @click="zoomed = true"
+      v-html="specRendered.svg"
+    />
     <figcaption v-if="caption">{{ caption }}</figcaption>
+    <span class="teaching-figure__hint" aria-hidden="true">点击放大</span>
     <!-- 放大层：窄卡里位置线按比例缩小后标签会挤，点开满屏按 1:1 看 -->
     <Teleport to="body">
-      <div v-if="zoomed" class="figure-zoom" role="dialog" aria-modal="true" aria-label="位置线图放大" @click="zoomed = false">
-        <div class="figure-zoom__canvas" @click.stop>
-          <svg :viewBox="`0 0 ${W} ${height}`" :width="W" :height="height" role="img" :aria-label="ariaLabel">
+      <div v-if="zoomed" class="figure-zoom" role="dialog" aria-modal="true" aria-label="教学图放大" @click="zoomed = false">
+        <div v-if="!isPositionLine && specRendered" class="figure-zoom__canvas" @click.stop v-html="specRendered.svg" />
+        <div v-else class="figure-zoom__canvas" @click.stop>
+          <svg :viewBox="`0 0 ${W} ${height}`" :width="W" :height="height" role="img" :aria-label="ariaLabel" :style="tfVars">
             <text v-if="unit" class="tf-unit" x="10" :y="20">{{ `单位：${unit}` }}</text>
             <g v-for="(g, gi) in guideRows" :key="`zg${gi}`">
               <line class="tf-guide" :x1="g.x" :y1="28" :x2="g.x" :y2="axisY + spanBlock" />
@@ -106,6 +123,11 @@
               <line class="tf-span" :x1="s.x1" :y1="s.y" :x2="s.x2" :y2="s.y" />
               <text class="tf-span-label" :x="(s.x1 + s.x2) / 2" :y="s.y - 9" text-anchor="middle">{{ s.label }}</text>
             </g>
+            <!-- 归类括号：这几个点是同一类，不是「从 A 到 B 的距离」 -->
+            <g v-if="groupRow">
+              <path class="tf-group-brace" :d="groupRow.d" />
+              <text class="tf-group-label" :x="groupRow.mid" :y="groupRow.y + 30" text-anchor="middle">{{ groupRow.label }}</text>
+            </g>
           </svg>
         </div>
         <button type="button" class="figure-zoom__btn" @click="zoomed = false">关闭</button>
@@ -127,8 +149,46 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { TeachingFigure } from '@/views/v2/learningChat';
+import { renderSpecFigure } from './teaching-figure/render';
+import { materialForPalette, resolveTheme } from './teaching-figure/style';
 
 const props = defineProps<{ figure: TeachingFigure }>();
+
+/**
+ * 图型分派：`position-line` 走本文件的 Vue 模板（既有契约，标签避让更精细）；
+ * 其余图型（grid/matrix/compare/quadrant/bipartite/board）走确定性渲染器产出的 SVG 字符串。
+ * 旧消息没有 kind/spec → 一律按位置线处理（向后兼容）。
+ */
+const isPositionLine = computed(() => (props.figure?.kind || 'position-line') === 'position-line');
+const specRendered = computed(() => {
+  if (isPositionLine.value) return null;
+  return renderSpecFigure(props.figure?.kind || '', props.figure?.spec, {
+    palette: props.figure?.palette as never,
+  });
+});
+
+/**
+ * 位置线通道也要吃学科配色（2026-10-19）：它是手写模板，不走 `renderSpecFigure`，
+ * 不注入令牌就会出现「纸纹暖色的 bins + 冷灰的位置线」并排在一节课里。
+ * 只换色，不动几何与字号。
+ */
+const theme = computed(() => resolveTheme(props.figure?.palette as never));
+const tfVars = computed(() => {
+  // 老消息没有 palette：不注入任何变量（CSS 的 var 回落值就是改动前的颜色，画面零变化）
+  if (!props.figure?.palette) return {};
+  return {
+    '--tf-ink': theme.value.ink,
+    '--tf-line': theme.value.line,
+    '--tf-line-strong': theme.value.lineStrong,
+    '--tf-muted': theme.value.muted,
+    '--tf-faint': theme.value.faint,
+    '--tf-accent': theme.value.accent,
+    '--tf-accent-ink': theme.value.accentInk,
+  };
+});
+const cardStyle = computed(() =>
+  materialForPalette(props.figure?.palette as never) === 'paper' ? { background: theme.value.surface } : {},
+);
 
 /** 画布固定宽（自然尺寸出图，窄卡内横向滚动；放大层按 1:1 显示） */
 const W = 760;
@@ -161,7 +221,7 @@ const guides = computed(() => props.figure?.guides || []);
 const spans = computed(() => props.figure?.spans || []);
 
 /** 参考线占用的底部高度（区间标注逐行下移，避免与参考线交叠） */
-const spanBlock = computed(() => (spans.value.length ? spans.value.length * 36 + 12 : 0));
+const spanBlock = computed(() => (spans.value.length ? spans.value.length * 36 + 30 : 0) + (props.figure?.group ? 46 : 0));
 const height = computed(() => axisY + 34 + spanBlock.value + 16);
 
 const guideRows = computed(() => guides.value.map((g) => ({ x: toX(g.at), label: g.label || null })));
@@ -187,12 +247,30 @@ const markRows = computed(() => {
   return rows;
 });
 
+/**
+ * 归类括号（group）：花括号的语义是「这几个归在一起」，与 spans（跨度/距离）刻意区分。
+ * 2026-10-20 两轮外部视觉审校：用区间线说「同一性」会被读成跨度，用重复标签会被读成重复的题。
+ */
+const groupRow = computed(() => {
+  const g = props.figure?.group;
+  if (!g || typeof g.from !== 'number' || typeof g.to !== 'number' || !g.label) return null;
+  const x1 = toX(Math.min(g.from, g.to));
+  const x2 = toX(Math.max(g.from, g.to));
+  const y = axisY + 40;
+  const mid = (x1 + x2) / 2;
+  return {
+    x1, x2, mid, y,
+    label: g.label,
+    d: `M ${x1} ${y} L ${x1} ${y + 5} L ${mid - 8} ${y + 5} L ${mid} ${y + 13} L ${mid + 8} ${y + 5} L ${x2} ${y + 5} L ${x2} ${y}`,
+  };
+});
 const spanRows = computed(() =>
   spans.value.map((s, i) => ({
     x1: toX(s.from),
     x2: toX(s.to),
     label: s.label,
-    y: axisY + 46 + i * 36,
+    // 上移 18px：区间标注原来紧贴刻度标签（「第二道」与区间说明撞在同一行位置）
+    y: axisY + 64 + i * 36,
   }))
 );
 
@@ -239,6 +317,15 @@ const ariaLabel = computed(() => {
   font-size: var(--mk-fs-micro);
   pointer-events: none;
 }
+/* 二维图型：SVG 自带标题/页脚，绝对定位的角标会压住正文——改为图下方一行右对齐提示 */
+.teaching-figure--spec .teaching-figure__hint {
+  position: static;
+  display: block;
+  margin-top: 2px;
+  padding: 0;
+  background: none;
+  text-align: right;
+}
 .teaching-figure figcaption {
   margin-top: 6px;
   font-size: var(--mk-fs-micro);
@@ -254,56 +341,69 @@ const ariaLabel = computed(() => {
 }
 /* 图元样式（SVG 内，纯视觉；文字一律 ≥12px 保证可读） */
 .tf-axis {
-  stroke: #334155;
+  stroke: var(--tf-line-strong, #334155);
   stroke-width: 1.6;
 }
 .tf-axis-head {
-  fill: #334155;
+  fill: var(--tf-line-strong, #334155);
 }
 .tf-tick {
-  stroke: #94a3b8;
+  stroke: var(--tf-line, #94a3b8);
   stroke-width: 1.2;
 }
 .tf-tick-label {
   font-size: 13px;
-  fill: #64748b;
+  fill: var(--tf-muted, #64748b);
 }
 .tf-mark {
-  fill: #1e293b;
+  fill: var(--tf-ink, #1e293b);
 }
 .tf-mark-arrow {
-  stroke: #1e293b;
+  stroke: var(--tf-ink, #1e293b);
   stroke-width: 1.6;
 }
 .tf-mark-head {
-  fill: #1e293b;
+  fill: var(--tf-ink, #1e293b);
 }
 .tf-mark-label {
   font-size: 15px;
   font-weight: 600;
-  fill: #0f172a;
+  fill: var(--tf-ink, #0f172a);
+}
+
+/* 归类括号（不是区间线）：花括号=「归在一起」，直连杆+端线=跨度 */
+.tf-group-brace {
+  fill: none;
+  stroke: var(--tf-accent, #4f46e5);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.tf-group-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  fill: var(--tf-accent-ink, #4338ca);
 }
 .tf-span,
 .tf-span-end {
-  stroke: #2563eb;
+  stroke: var(--tf-accent, #2563eb);
   stroke-width: 1.3;
 }
 .tf-span-label {
   font-size: 13px;
-  fill: #1d4ed8;
+  fill: var(--tf-accent-ink, #1d4ed8);
 }
 .tf-guide {
-  stroke: #94a3b8;
+  stroke: var(--tf-line, #94a3b8);
   stroke-width: 1.2;
   stroke-dasharray: 5 4;
 }
 .tf-guide-label {
   font-size: 13px;
-  fill: #64748b;
+  fill: var(--tf-muted, #64748b);
 }
 .tf-unit {
   font-size: 13px;
-  fill: #94a3b8;
+  fill: var(--tf-faint, #94a3b8);
 }
 /* 放大层 */
 .figure-zoom {

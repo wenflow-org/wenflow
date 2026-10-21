@@ -74,7 +74,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitTeachingFigure, countTeachingFigures, resolveFigureMaxPerSession } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -378,9 +378,10 @@ export async function processStudentMessage(
   if (supplementPromotion.payload) {
     (turnInput.scenario as Record<string, unknown>).supplementaryMaterial = supplementPromotion.payload;
   }
-  // 教学配图时机（S1，代码裁决 → **显式**送进本轮输入）：老师上一轮用字符画了结构 → 本轮要求出图。
+  // 教学配图时机（代码裁决 → **显式**送进本轮输入）：上一轮画了字符结构 / 学生在描述位置 /
+  // 当前任务本身就是结构化关系 → 本轮给模型一次出图机会。
   // 为什么必须显式送：实测埋在 2 万字 system prompt 里的规则会被忽略，写进本轮输入才生效。
-  const visualOpportunity = buildVisualOpportunity(updatedMessages);
+  const visualOpportunity = buildVisualOpportunity(updatedMessages, session.topic);
   if (visualOpportunity) {
     (turnInput as { visualOpportunity?: typeof visualOpportunity }).visualOpportunity = visualOpportunity;
   }
@@ -884,13 +885,35 @@ export async function processStudentMessage(
   // 位置线图（2026-09-27 双通道重构 Scope B，同一条防答案泄漏硬闸）：
   // 追及/相遇题里"学生自己画位置线"正是练习本体——本轮布置了这类练习就不能给图，给了等于把答案摆出来。
   if (teachingOutput.figure) {
+    const wanted = {
+      ...teachingOutput.figure,
+      // 学科调色板在这里盖章（模型不参与）：同一份 spec 换个学科就是另一套色相/材质，
+      // 只影响观感，不改变任何几何与语义。模型自己给了合法 palette 则以它为准。
+      palette: teachingOutput.figure.palette || paletteOfSubject(session.subject),
+    };
     if (detectExerciseLeakInReply(teachingOutput.reply)) {
       logger.info('[AITeaching] 本轮回复布置了由学生自己画的练习，跳过位置线图（防答案泄漏）', {
         sessionId,
         taskId: session.taskId,
       });
+    } else if (countTeachingFigures(updatedMessages) >= resolveFigureMaxPerSession()) {
+      // 会话配额是**硬闸**（2026-10-19）：提示词里的"上限"只是建议，模型仍会每轮出图——
+      // 实跑地理课一节课出了 12 张同类图，读起来就是"老师每轮都在摆同一张表"。
+      logger.info('[AITeaching] 本会话图数已达上限，跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
+        count: countTeachingFigures(updatedMessages),
+      });
+    } else if (!shouldEmitTeachingFigure(updatedMessages, wanted)) {
+      // 与上一轮同一张图（学生只改了措辞）→ 不再重摆；下方悬空引用清理会把"见下图"一并剥掉
+      logger.info('[AITeaching] 本会话已有同骨架的图（只改了措辞/条目），跳过重复渲染', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
+      });
     } else {
-      assistantMessage.figures = [teachingOutput.figure];
+      assistantMessage.figures = [wanted];
     }
   }
 

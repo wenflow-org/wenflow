@@ -13,6 +13,7 @@ import {
   countTeachingVisuals,
   detectAsciiStructure,
   detectPositionDescription,
+  detectStructuralCue,
   detectExerciseLeakInReply,
   generateTeachingVisual,
   hasDanglingFigureReference,
@@ -22,6 +23,9 @@ import {
   resolveTeachingVisualMaxPerSession,
   resolveTeachingVisualMaxPerTask,
   resolveTeachingVisualSpec,
+  shouldEmitTeachingFigure,
+  chooseFigureKind,
+  figureKindHintLine,
   stripDanglingFigureReferences,
 } from '../teaching-visual.service';
 import { ImageError } from '../../image/types';
@@ -401,6 +405,56 @@ describe('教学配图时机（S1：老师用字符画结构）', () => {
       delete process.env.TEACHING_FIGURE_MAX_PER_SESSION;
     }
   });
+
+  // 结构内容时机（2026-10-18 扩图型）：老师上一轮在讲二维/多对多/象限关系
+  it('detectStructuralCue：结构词 + 实质长度才为真', () => {
+    expect(detectStructuralCue('一条教育建议往往服务多个目标，所以要成对摆放，看清目标和建议之间的多对多映射关系。')).toBe(true);
+    expect(detectStructuralCue('对比一下这两种做法：前者看结果，后者看过程。')).toBe(false); // 太短，宁漏不误
+    expect(detectStructuralCue('今天我们继续把上一段读一遍，然后你说说你的理解。')).toBe(false);
+  });
+
+  it('老师上一轮讲了二维关系 → 建议输出 figure，并带上图型选择表', () => {
+    const opportunity = buildVisualOpportunity([
+      assistant('评分点可以先整理成一张两维对账表：行是评分点，列是你答案的段落，逐格判断命中还是重复堆砌，这样容易看出漏答。'),
+    ]);
+    expect(opportunity).not.toBeNull();
+    expect(opportunity!.reason).toBe('structure-content');
+    expect(opportunity!.instruction).toContain('matrix');
+    expect(opportunity!.instruction).toContain('bipartite');
+    expect(opportunity!.instruction).toContain('position-line');
+  });
+
+  it('上一轮刚出过图 / 总量到顶 → 结构内容信号退让', () => {
+    process.env.TEACHING_FIGURE_MAX_PER_SESSION = '1';
+    try {
+      expect(
+        buildVisualOpportunity([
+          assistantWithFigure('这是一张对账矩阵，逐格看命中还是重复堆砌。'),
+        ]),
+      ).toBeNull();
+    } finally {
+      delete process.env.TEACHING_FIGURE_MAX_PER_SESSION;
+    }
+  });
+
+  // 任务级时机（2026-10-18）：任务标题本身就是结构关系时，任务开头就该给一次机会
+  it('任务本身是二维关系 → task-structure', () => {
+    const opportunity = buildVisualOpportunity([assistant('先说说你的想法。')], '把答案逐条归位到自然/社会经济两大角度');
+    expect(opportunity).not.toBeNull();
+    expect(opportunity!.reason).toBe('task-structure');
+    expect(opportunity!.instruction).toContain('grid');
+  });
+
+  it('上一轮已出过 mermaid → 不再追问；任务不像结构关系 → 不出信号', () => {
+    const withDiagram: TeachingSessionMessage = {
+      role: 'assistant',
+      content: '先说说你的想法。',
+      timestamp: '2026-10-18T00:00:00.000Z',
+      diagrams: [{ engine: 'mermaid', code: 'flowchart TD\nA-->B', caption: null }],
+    };
+    expect(buildVisualOpportunity([withDiagram], '把答案逐条归位到自然/社会经济两大角度')).toBeNull();
+    expect(buildVisualOpportunity([assistant('先说说你的想法。')], '读一遍这段材料并复述大意')).toBeNull();
+  });
 });
 
 describe('防答案泄漏硬闸门（detectExerciseLeakInReply，2026-09-24 配图审计）', () => {
@@ -446,5 +500,200 @@ describe('悬空图引用剥离（hasDanglingFigureReference / stripDanglingFigu
     expect(out).not.toContain('，，');
     expect(out).not.toContain(' 。');
     expect(out).toContain('你对照一下自己刚填好的三条线');
+  });
+});
+
+describe('同图去重（2026-10-19 地理课实跑：同一张三格表连出两次）', () => {
+  const figure = (spec: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+    engine: 'svg',
+    kind: 'bins',
+    spec,
+    caption: null,
+    ...extra,
+  });
+  const assistant = (figures: unknown[]) =>
+    ({ role: 'assistant', content: '看这张表', figures } as unknown as TeachingSessionMessage);
+
+  it('上一轮没有图 → 出', () => {
+    expect(shouldEmitTeachingFigure([{ role: 'assistant', content: '先说说看' } as TeachingSessionMessage], figure({ bins: [{ label: '甲' }] }))).toBe(true);
+  });
+
+  it('与上一轮完全相同（kind + 规格）→ 丢；换配色/换说明句仍算同一张', () => {
+    const spec = { bins: [{ label: '可迁移', items: [{ label: '气候' }] }] };
+    const messages = [assistant([figure(spec, { palette: 'earth', caption: '旧说明' })])];
+    expect(shouldEmitTeachingFigure(messages, figure(spec, { palette: 'tech', caption: '新说明' }))).toBe(false);
+  });
+
+  it('只改了图内标题/脚注（结构一字未变）→ 仍算同一张', () => {
+    const base = { bins: [{ label: '可迁移', items: [{ label: '气候' }] }] };
+    const before = [assistant([figure({ ...base, title: '旧标题', note: '旧脚注' })])];
+    const after = figure({ ...base, title: '新标题', note: '学生补了一句措辞后的新脚注' });
+    expect(shouldEmitTeachingFigure(before, after)).toBe(false);
+  });
+
+  it('同样的分类轴再画一张 → 不出（2026-10-20 实跑：一节里三张 bins，只改了措辞与条目数）', () => {
+    // 判据从「条目变了就出」收紧为「bins 的标签没变就是同一张分类图」：
+    // 修的是「老师每轮都在摆同一张表」——新条目该进正文，不该再画一遍。
+    const before = [assistant([figure({ bins: [{ label: '可迁移', items: [{ label: '气候' }] }] })])];
+    const after = figure({ bins: [{ label: '可迁移', items: [{ label: '气候' }, { label: '地形' }] }] });
+    expect(shouldEmitTeachingFigure(before, after)).toBe(false);
+  });
+
+  it('分类轴换了 → 出（换的是问题，不是措辞）', () => {
+    const before = [assistant([figure({ bins: [{ label: '可迁移' }] })])];
+    const after = figure({ bins: [{ label: '不可迁移' }] });
+    expect(shouldEmitTeachingFigure(before, after)).toBe(true);
+  });
+
+  it('换图型 → 出', () => {
+    const messages = [assistant([{ engine: 'svg', kind: 'compare', spec: { left: {}, right: {} } }])];
+    expect(shouldEmitTeachingFigure(messages, figure({ bins: [{ label: '甲' }] }))).toBe(true);
+  });
+
+  it('空图 / 无消息 → 不出（不落空壳）', () => {
+    expect(shouldEmitTeachingFigure([], null)).toBe(false);
+    expect(shouldEmitTeachingFigure(null, figure({ bins: [{ label: '甲' }] }))).toBe(true);
+  });
+});
+
+describe('视觉教具路由（2026-10-20：形状由内容裁决，不靠模型自觉）', () => {
+  it('靶盘：信度/效度类内容路由到 bullseye', () => {
+    expect(chooseFigureKind('信度是稳不稳，效度是准不准，点打在靶心附近才算准')?.kind).toBe('bullseye');
+    expect(chooseFigureKind('这两个指标每次测都一致，但系统性偏差很稳定')?.kind).toBe('bullseye');
+  });
+
+  it('闭环 / 交集 / 二分 / 辐射各自命中', () => {
+    expect(chooseFigureKind('这四个部件是一个闭环，一轮结束还要回到起点')?.kind).toBe('cycle');
+    expect(chooseFigureKind('这两个动作词最容易混，边界在哪儿要摆出来')?.kind).toBe('venn');
+    expect(chooseFigureKind('一条建议往往同时服务两个目标，是多对多')?.kind).toBe('bipartite');
+    expect(chooseFigureKind('幼儿园五大领域，一个总概念长出的子领域')?.kind).toBe('tree');
+  });
+
+  it('权衡 / 层级 / 归类 / 对账 / 对照：按语义落到各自的形状', () => {
+    expect(chooseFigureKind('这是取舍，要看哪边更重')?.kind).toBe('balance');
+    expect(chooseFigureKind('先过后一个门槛，再逐级往上')?.kind).toBe('ladder');
+    expect(chooseFigureKind('把这个概念归位，分到三类里')?.kind).toBe('bins');
+    expect(chooseFigureKind('逐条核一核对账，看哪一格漏了')?.kind).toBe('matrix');
+    expect(chooseFigureKind('对比两种写法的区别')?.kind).toBe('compare');
+  });
+
+  it('没有结构线索 / 空文本 → 不路由（沿用原指南，不硬塞形状）', () => {
+    expect(chooseFigureKind('今天我们把这段话读完')).toBeNull();
+    expect(chooseFigureKind('')).toBeNull();
+    expect(chooseFigureKind(null)).toBeNull();
+  });
+
+  it('提示句：命中时写出 kind 与理由；未命中返回空串', () => {
+    const line = figureKindHintLine(chooseFigureKind('信度和效度'));
+    expect(line).toContain('kind=bullseye');
+    expect(line).toContain('稳不准');
+    expect(figureKindHintLine(null)).toBe('');
+  });
+});
+
+describe('路由已接进本轮输入（不是只写了个纯函数）', () => {
+  const msg = (role: string, content: string) => ({ role, content, timestamp: Date.now() } as unknown as TeachingSessionMessage);
+
+  it('讲信度×效度的回合：instruction 里带 kind=bullseye', () => {
+    const opportunity = buildVisualOpportunity(
+      [msg('assistant', '信度是稳不稳，效度是准不准：一组点聚不聚、偏不偏，是两件事。')],
+      '区分信度与效度',
+    );
+    expect(opportunity?.suggested).toBe(true);
+    expect(opportunity?.instruction).toContain('kind=bullseye');
+  });
+
+  it('讲闭环的回合：instruction 里带 kind=cycle', () => {
+    const opportunity = buildVisualOpportunity(
+      [msg('assistant', '这四个部件是一个闭环，一轮走完还要回到起点。')],
+      '四部件为什么是一个环',
+    );
+    expect(opportunity?.instruction).toContain('kind=cycle');
+  });
+
+  it('没有结构线索：不硬塞形状（instruction 里不出现 kind=）', () => {
+    const opportunity = buildVisualOpportunity([msg('assistant', '先把这段材料读完，读完我们再聊。')], '读材料');
+    expect(opportunity?.instruction.includes('kind=') ?? false).toBe(false);
+  });
+});
+
+describe('节奏兜底：长回合苏格拉底课至少收一张图（2026-10-20 实跑）', () => {
+  const turn = (role: 'assistant' | 'user', content: string, figures?: unknown[]) => ({
+    role,
+    content,
+    timestamp: '2026-10-20T13:00:00.000Z',
+    ...(figures ? { figures } : {}),
+  } as unknown as TeachingSessionMessage);
+
+  // 真实语料：这节 15 回合 0 图，词表里一个结构词都没命中（交集/覆盖/复用/两处都不在表里）
+  const qa: TeachingSessionMessage[] = [];
+  for (let i = 0; i < 7; i += 1) {
+    qa.push(turn('assistant', `你说得对，再往前走一步：想一想它凭什么是这样？第 ${i} 问。`));
+    qa.push(turn('user', `因为它本来就该这样。第 ${i} 答。`));
+  }
+
+  it('连续 6 个老师回合没出图 → 给一次「把已站住的链收成一张图」的机会', () => {
+    const opportunity = buildVisualOpportunity(qa, '把日志比对接回共识层');
+    expect(opportunity?.suggested).toBe(true);
+    expect(opportunity?.reason).toBe('recap-cadence');
+    expect(opportunity?.instruction).toContain('收成一张图');
+    expect(opportunity?.instruction).toContain('不要放进新内容');
+  });
+
+  it('不足 6 个回合 → 不打扰（保持追问节奏）', () => {
+    const short = qa.slice(-4);
+    expect(buildVisualOpportunity(short, '把日志比对接回共识层')).toBeNull();
+  });
+
+  it('上一轮刚出过图 → 不触发节奏兜底', () => {
+    const withFigure = [...qa, turn('assistant', '这轮收个尾。', [{ kind: 'venn' }])];
+    expect(buildVisualOpportunity(withFigure, '把日志比对接回共识层')).toBeNull();
+  });
+
+  it('本会话图已到上限 → 不触发（总量仍由上限兜底）', () => {
+    const capped: TeachingSessionMessage[] = [
+      turn('assistant', '四张图摆完了。', [{ kind: 'venn' }, { kind: 'grid' }, { kind: 'compare' }, { kind: 'tree' }]),
+      ...qa,
+    ];
+    expect(buildVisualOpportunity(capped, '把日志比对接回共识层')).toBeNull();
+  });
+});
+
+describe('形状路由：架构/请求链路 → compare 的链路形态', () => {
+  it('讲架构选型与跨集群往返时，提示句要求走 compare 链路形态', () => {
+    const opportunity = buildVisualOpportunity(
+      [{ role: 'assistant', content: '外置 ZooKeeper 要跨集群再往返一次，自研 Raft 把共识内置进业务进程。', timestamp: '2026-10-20T00:00:00.000Z' }] as unknown as TeachingSessionMessage[],
+      '架构选型：为什么自研 Raft 而不是继续用 ZooKeeper',
+    );
+    expect(opportunity?.instruction).toContain('kind=compare');
+    expect(opportunity?.instruction).toContain('链路形态');
+  });
+});
+
+describe('去重加严：同义改写与同类数量上限（2026-10-20 实跑：一节 5 张 bins）', () => {
+  const msgWith = (figures: unknown[]) => ({
+    role: 'assistant', content: '这轮收个尾。', timestamp: '2026-10-20T00:00:00.000Z', figures,
+  } as unknown as TeachingSessionMessage);
+  const bins = (labels: string[]) => ({ engine: 'svg', kind: 'bins', spec: { bins: labels.map((l) => ({ label: l, items: [] })) } });
+
+  it('同一分类换个说法（漏判（有信号没停）→ 漏判（该停没停））→ 不出', () => {
+    const before = [msgWith([bins(['漏判（有信号没停）', '误判（不该停却停）'])])];
+    const after = bins(['漏判（该停没停）', '误判：不该停']);
+    expect(shouldEmitTeachingFigure(before, after)).toBe(false);
+  });
+
+  it('换了一套分类轴（力类依据 vs 运动状态依据）→ 照出', () => {
+    const before = [msgWith([bins(['漏判', '误判'])])];
+    const after = bins(['力类依据', '运动状态依据']);
+    expect(shouldEmitTeachingFigure(before, after)).toBe(true);
+  });
+
+  it('同一图型到 3 张就停手（第四种分类改走文字）', () => {
+    const messages = [
+      msgWith([bins(['甲一', '甲二'])]),
+      msgWith([bins(['乙一', '乙二'])]),
+      msgWith([bins(['丙一', '丙二'])]),
+    ];
+    expect(shouldEmitTeachingFigure(messages, bins(['丁一', '丁二']))).toBe(false);
   });
 });

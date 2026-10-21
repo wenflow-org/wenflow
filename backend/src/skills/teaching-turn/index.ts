@@ -497,46 +497,81 @@ export interface TeachingTurnOutput {
     caption: string | null;
   } | null;
   /**
-   * 位置线图（2026-09-27 双通道重构 Scope B）：**空间位置关系**的确定性渲染。
+   * 教学图（确定性 SVG 渲染）：**mermaid 画不好的那几类关系**才走这里。
    *
-   * 真实语料实证（小学追及题：把「小明在前、小红在后，两人都往右」摆成一条线）——
-   * 这类内容 mermaid 的节点-边表达不了，需要自由定位原语（线段/箭头/刻度/标注）。
-   * 与 diagram 分工：节点-边类（流程/时序/层级/分类）走 mermaid；**位置/距离/方向**类走本块。
+   * 分工（2026-10-18 扩图型）：
+   * - 节点-边类（流程/时序/层级/分类）→ `diagram`（mermaid），本块不重复承担；
+   * - 位置/距离/方向 → `position-line`；
+   * - 二维对账/命中矩阵 → `matrix`；二维排布但每格是内容 → `grid`；
+   * - 两分支对照 → `compare`；多对多映射 → `bipartite`；2×2 象限 → `quadrant`；棋盘 → `board`。
    *
    * 规则：
-   * - 只画"对话正在用文字描述的空间关系"（谁在哪、朝哪、隔多远），**不要**画抽象结构；
-   * - `at` 用与题意一致的数值（米/格/序号都行，只要同一图内同单位）；不必等比真实比例，但顺序必须对；
-   * - 标签写**学科实指**（甲/乙/小明/起点/追及点），不要写"物体 1"这类占位；
-   * - 若本轮正要布置"由学生自己画位置线"的练习，本轮**不要**输出（答案泄漏）；
-   * - reply 必须脱离图也成立（图是同一关系的更直观呈现）。
+   * - 只画**对话正在处理的**关系，不要画本轮要学生自己产出的答案（答案泄漏）；
+   * - 标签写**学科实指**（甲/乙/评分点原文/概念名），不要写"项目 1"这类占位；
+   * - `caption` 写一句给学生看的话；reply 必须脱离图也成立（图是同一关系的更直观呈现）；
+   * - `position-line` 用顶层字段（axis/marks/spans/guides），其余图型用 `spec`（见各图型说明）。
    */
-  figure?: {
-    /** 渲染引擎；归一化后恒为 'svg'（其他值整块丢弃，见 normalizeFigure） */
-    engine: string;
-    /** 图型；归一化后恒为 'position-line'（v1 唯一图型） */
-    kind: string;
-    /** 轴（数值域 + 单位 + 刻度）；归一化保证存在且覆盖所有取值 */
-    axis: {
-      min: number;
-      max: number;
-      /** 单位（如「米」「格」「秒」）；无单位则 null */
-      unit: string | null;
-      ticks: Array<{ at: number; label: string | null }>;
-    };
-    /** 线上的对象（人物/物/点）；1~6 个，按 at 升序 */
-    marks: Array<{
-      at: number;
-      label: string;
-      /** 朝向箭头：right/left/none（静态点） */
-      dir: 'right' | 'left' | 'none';
-    }>;
-    /** 区间标注（距离/差）；0~3 条，画在轴下方 */
-    spans: Array<{ from: number; to: number; label: string }>;
-    /** 竖直参考线（追及点/相遇点/分界）；0~4 条 */
-    guides: Array<{ at: number; label: string | null }>;
-    /** 图下方一句说明（学生可见）；归一化后恒为 string|null */
-    caption: string | null;
-  } | null;
+  figure?: TeachingFigure | null;
+}
+
+/** 教学图图型：mermaid 表达不了的二维/位置/多对多关系，以及按「关系形状」分的包含/权衡/层级。 */
+export type TeachingFigureKind =
+  | 'position-line'
+  | 'grid'
+  | 'matrix'
+  | 'compare'
+  | 'quadrant'
+  | 'bipartite'
+  | 'board'
+  | 'bins'
+  | 'balance'
+  | 'ladder'
+  | 'cycle'
+  | 'tree'
+  | 'venn'
+  | 'bullseye';
+
+export interface TeachingFigure {
+  /** 渲染引擎；归一化后恒为 'svg'（其他值整块丢弃，见 normalizeFigure） */
+  engine: string;
+  /** 图型；归一化后恒为上述白名单之一 */
+  kind: TeachingFigureKind;
+  /**
+   * 学科调色板（服务端按学习路径的 subject 盖章；模型不给也行）。
+   * 只影响观感（色相/材质），不改变任何几何与语义。
+   */
+  palette?: 'indigo' | 'earth' | 'tech' | 'warm' | 'violet' | 'mono';
+  /** 图下方一句说明（学生可见）；归一化后恒为 string|null */
+  caption: string | null;
+  /** position-line 专用（kind='position-line' 时由归一化保证存在） */
+  axis?: {
+    min: number;
+    max: number;
+    /** 单位（如「米」「格」「秒」）；无单位则 null */
+    unit: string | null;
+    ticks: Array<{ at: number; label: string | null }>;
+  };
+  /** 位置线上的对象（人物/物/点）；1~6 个，按 at 升序 */
+  marks?: Array<{
+    at: number;
+    label: string;
+    /** 朝向箭头：right/left/none（静态点） */
+    dir: 'right' | 'left' | 'none';
+  }>;
+  /** 区间标注（距离/差）；0~3 条，画在轴下方 */
+  spans?: Array<{ from: number; to: number; label: string }>;
+  /** 竖直参考线（追及点/相遇点/分界）；0~4 条 */
+  guides?: Array<{ at: number; label: string | null }>;
+  /**
+   * 其余图型的规格（kind≠'position-line' 时由归一化保证存在且已逐字段裁剪）：
+   * - grid: {title?, rows, cols, rowLabels?, colLabels?, colWidths?, cells?[{r,c,text,mask?,ghost?,hl?,mark?}], note?}
+   * - matrix: {title?, rowLabels[], colLabels[], cells?[{r,c,tone:'hit'|'miss'|'dup'|'key'}], note?, legend?}
+   * - compare: {title?, left{head,sub?,items[]}, right{...}, divider?, note?, leftTone?, rightTone?}
+   * - quadrant: {title?, colLabels?[2], rowLabels?[{label,sub?}], cells?[4]{title,body[],tone?,icon?}, note?}
+   * - bipartite: {title?, left{head?,nodes[]}, right{head?,nodes[]}, edges?[{from,to,tone?,dash?}], note?, width?}
+   * - board: {title?, pieces[]={col,rank,key}, files?, arrows?, marks?, note?, size?, panelLabel?}
+   */
+  spec?: Record<string, unknown>;
 }
 
 /**
@@ -601,7 +636,8 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
       visual: { type: 'object' },
       // 可选：课堂结构图（mermaid 代码，前端确定性渲染；见 TeachingTurnOutput.diagram）
       diagram: { type: 'object' },
-      // 可选：位置线图（空间位置关系，确定性 SVG 渲染；见 TeachingTurnOutput.figure）
+      // 可选：教学图（确定性 SVG 渲染；kind 见 TeachingTurnOutput.figure）
+      // position-line 用顶层 axis/marks/spans/guides，其余图型用 spec
       figure: { type: 'object' }
     },
     required: ['reply', 'analysis', 'knowledge', 'pedagogy', 'control']
@@ -838,7 +874,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
     },
     ...(normalizeVisual(parsed.visual) ?? {}),
     ...(normalizeDiagram(parsed.diagram) ?? {}),
-    ...(normalizeFigure(parsed.figure) ?? {}),
+    ...(normalizeFigureOrLog(parsed.figure) ?? {}),
   };
 }
 
@@ -851,6 +887,62 @@ const FIGURE_LABEL_MAX = 16;
 const FIGURE_SPAN_LABEL_MAX = 24;
 const FIGURE_CAPTION_MAX = 200;
 const FIGURE_UNIT_MAX = 8;
+
+/** 图型白名单（2026-10-18 扩图型；flow 不在此列——节点-边类继续走 mermaid）。 */
+const FIGURE_KINDS: ReadonlySet<string> = new Set([
+  'position-line',
+  'grid',
+  'matrix',
+  'compare',
+  'quadrant',
+  'bipartite',
+  'board',
+  // 2026-10-19：按「关系形状」补三种——包含（bins）、权衡（balance）、层级（ladder）。
+  // 它们与 compare 的差别不是外观，而是语义：并排≠包含，并列≠谁压得住，列表≠先后。
+  'bins',
+  'balance',
+  'ladder',
+  // 2026-10-20：按「几何隐喻」补四种——闭环（cycle）、辐射树（tree）、交集（venn）、靶盘（bullseye）。
+  // 用户点名的失败模式：能一眼看出几何差别的结构被压成了白框填字（信效度画成四格文字、
+  // 多对多画成打勾矩阵）。这四种让关系本身有形状，模型只负责给节点和点坐标。
+  'cycle',
+  'tree',
+  'venn',
+  'bullseye',
+]);
+
+/** 调色板白名单：由服务端按学科盖章，模型不给也行。 */
+const FIGURE_PALETTES: ReadonlySet<string> = new Set(['indigo', 'earth', 'tech', 'warm', 'violet', 'mono']);
+
+/**
+ * 结构图规格上限：单一来源，前后端渲染器也按这个量级出图。
+ * 超过上限不是"截断"而是"丢弃该条"——多出来的一定是模型把段落塞进格子。
+ */
+const SPEC = {
+  rowsMax: 8,
+  colsMax: 6,
+  cellTextMax: 26,
+  cellMarkMax: 4,
+  titleMax: 42,
+  noteMax: 160,
+  labelMax: 18,
+  subMax: 22,
+  itemsMax: 8,
+  itemTextMax: 26,
+  nodesMax: 8,
+  edgesMax: 14,
+  piecesMax: 32,
+  arrowsMax: 8,
+  filesMax: 4,
+  legendMax: 4,
+  bodyLinesMax: 4,
+  bodyLineMax: 26,
+  dotsMax: 6,
+} as const;
+
+/** 棋盘棋子：大写黑方 / 小写红方（只认中国象棋七种）。 */
+const BOARD_KEYS = new Set(['R', 'N', 'B', 'A', 'K', 'C', 'P', 'r', 'n', 'b', 'a', 'k', 'c', 'p']);
+
 
 /** 数值字段归一：只认有限数（含数字字符串）；其余 → null */
 function toFiniteNumber(value: unknown): number | null {
@@ -885,23 +977,75 @@ function toFigureLabel(value: unknown, max: number): string | null {
 }
 
 /**
- * 归一化老师给的位置线图（契约见 `TeachingTurnOutput.figure`，2026-09-27 Scope B）。
+ * 归一化老师给的教学图（契约见 `TeachingTurnOutput.figure`）。
+ *
+ * 入口只做两件事：**白名单图型** + **交给对应图型的归一化**。
+ * `position-line` 沿用 2026-09-27 的既有契约（顶层 axis/marks/spans/guides）；
+ * 其余图型走 `spec`，每个分支都**重建一个新对象**——模型多给的字段一律不进入渲染层
+ * （前端会把 spec 直接拼进 SVG，白名单是首道防线）。
+ */
+/**
+ * 出口包装：模型给了 figure 但归一化拒绝时**留一条 warn**。
+ * 静默丢弃会让「reply 里写着『这张对照表』、消息里却没有图」变成不可观测的悬空引用——
+ * 2026-10-20 实跑里整节 0 图就是靠这条日志才定位到是块被拒，而不是模型没画。
+ */
+function normalizeFigureOrLog(raw: unknown): { figure: NonNullable<TeachingTurnOutput['figure']> } | null {
+  const result = normalizeFigure(raw);
+  if (!result && raw && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>;
+    logger.warn('[teaching-figure] 模型给了 figure 但被归一化拒绝，本轮不出图', {
+      kind: typeof record.kind === 'string' ? record.kind : null,
+      keys: Object.keys(record).slice(0, 12),
+      hasSpec: Boolean(record.spec),
+    });
+  }
+  return result;
+}
+
+function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput['figure']> } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const kindRaw = typeof record.kind === 'string' ? record.kind.trim().toLowerCase() : '';
+  const kind = kindRaw || 'position-line';
+  if (!FIGURE_KINDS.has(kind) || !isFigureKindEnabled(kind)) return null;
+  const caption = toFigureText(record.caption, FIGURE_CAPTION_MAX);
+  const paletteRaw = typeof record.palette === 'string' ? record.palette.trim().toLowerCase() : '';
+  const palette = FIGURE_PALETTES.has(paletteRaw) ? (paletteRaw as TeachingFigure['palette']) : null;
+
+  if (kind === 'position-line') {
+    const figure = normalizePositionLineFigure(record);
+    return figure ? { figure: { ...figure, caption, ...(palette ? { palette } : {}) } } : null;
+  }
+  const specRaw = record.spec && typeof record.spec === 'object' ? (record.spec as Record<string, unknown>) : record;
+  const spec = normalizeFigureSpec(kind as TeachingFigureKind, specRaw);
+  if (!spec) return null;
+  return { figure: { engine: 'svg', kind: kind as TeachingFigureKind, caption, spec, ...(palette ? { palette } : {}) } };
+}
+
+/** 新图型灰度开关：`TEACHING_FIGURE_SPEC_DISABLED=1` 时只保留位置线（回滚用）。 */
+function isFigureKindEnabled(kind: string): boolean {
+  if (kind === 'position-line') return true;
+  return process.env.TEACHING_FIGURE_SPEC_DISABLED !== '1';
+}
+
+/**
+ * 归一化位置线图（2026-09-27 Scope B 既有契约，2026-10-18 从 normalizeFigure 拆出）。
  *
  * 规则（宁缺毋滥 + 确定性可渲染）：
- * - 只认 `kind: position-line`（缺省视为 position-line；其他图型整块丢弃）；
  * - **必须至少有一个有效 mark**（没有对象就没有位置关系，整块丢弃）；
  * - 数值域由代码统一推导：取 axis/ticks/marks/spans/guides 的全部取值求并集，两端各留 4% 余量——
  *   模型给的 min/max 只作为单位与刻度的来源，**不得把取值挡在域外**（挡了就是画错图）；
  * - marks 按 at 升序、去重（同位置只留第一个）；spans 要求 from≠to；越界/非法项丢弃；
  * - 各数组超上限截断；标签超长丢弃该条（不截断成半句话）。
  */
-function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput['figure']> } | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const record = raw as Record<string, unknown>;
-  const kind = typeof record.kind === 'string' ? record.kind.trim().toLowerCase() : '';
-  if (kind && kind !== 'position-line') return null;
+function normalizePositionLineFigure(record: Record<string, unknown>): Omit<TeachingFigure, 'caption'> | null {
 
   const rawMarks = Array.isArray(record.marks) ? record.marks : [];
+  // 三种「下方标注」的分工（2026-10-20 两轮外部视觉审校定的）：
+  //   spans = 跨度/距离（A 到 B 隔多远）；
+  //   group = 归类/共性（这几个点是同一类）——画成花括号，花括号的语义就是「归在一起」；
+  //   tag   = 单个点的短标签。
+  // 用区间线表达「同一性」会被读成跨度，用重复标签又会被读成「重复的题」——两种都试过，都不行。
   const marks: Array<{ at: number; label: string; dir: 'right' | 'left' | 'none' }> = [];
   for (const item of rawMarks) {
     if (!item || typeof item !== 'object') continue;
@@ -918,6 +1062,14 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
 
   const axisRecord = record.axis && typeof record.axis === 'object' ? (record.axis as Record<string, unknown>) : null;
   const unit = toFigureText(axisRecord?.unit, FIGURE_UNIT_MAX);
+  // 位置线的轴必须是**量**（米/秒/℃/元/百分比）。
+  // 「题/个/条/种/类/项/步」是计数或序号，不是可以排先后远近的量——
+  // 2026-10-20 实跑里模型把「第1/2/3道题」画成了一条位置线，看着像坐标系，其实是三个并列项：
+  // 这类内容该用 bins/compare，不该借位置线的壳。
+  const COUNTER_UNITS = new Set([
+    '题', '题号', '道', '道题', '个', '条', '种', '类', '项', '步', '次', '序号', '排名',
+  ]);
+  if (unit && COUNTER_UNITS.has(unit.trim())) return null;
   const ticks: Array<{ at: number; label: string | null }> = [];
   for (const item of Array.isArray(axisRecord?.ticks) ? (axisRecord?.ticks as unknown[]) : []) {
     if (!item || typeof item !== 'object') continue;
@@ -928,6 +1080,16 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
     if (ticks.length >= FIGURE_TICKS_MAX) break;
   }
 
+  let group: { from: number; to: number; label: string } | null = null;
+  if (record.group && typeof record.group === 'object') {
+    const g = record.group as Record<string, unknown>;
+    const from = toFiniteNumber(g.from);
+    const to = toFiniteNumber(g.to);
+    const label = toFigureText(g.label, FIGURE_SPAN_LABEL_MAX);
+    if (from !== null && to !== null && from !== to && label) {
+      group = { from: Math.min(from, to), to: Math.max(from, to), label };
+    }
+  }
   const spans: Array<{ from: number; to: number; label: string }> = [];
   for (const item of Array.isArray(record.spans) ? (record.spans as unknown[]) : []) {
     if (!item || typeof item !== 'object') continue;
@@ -955,6 +1117,7 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
     ...marks.map((m) => m.at),
     ...ticks.map((t) => t.at),
     ...spans.flatMap((s) => [s.from, s.to]),
+    ...(group ? [group.from, group.to] : []),
     ...guides.map((g) => g.at),
     toFiniteNumber(axisRecord?.min),
     toFiniteNumber(axisRecord?.max),
@@ -969,18 +1132,735 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
   const dedupedMarks = marks
     .sort((a, b) => a.at - b.at)
     .filter((mark, index, list) => index === 0 || mark.at !== list[index - 1].at);
-  const caption = toFigureText(record.caption, FIGURE_CAPTION_MAX);
 
   return {
-    figure: {
-      engine: 'svg',
-      kind: 'position-line',
-      axis,
-      marks: dedupedMarks,
-      spans,
-      guides,
-      caption,
-    },
+    engine: 'svg',
+    kind: 'position-line',
+    axis,
+    marks: dedupedMarks,
+    spans,
+    ...(group ? { group } : {}),
+    guides,
+  };
+}
+
+/* ---------------- 结构图规格归一化（2026-10-18 扩图型） ---------------- */
+
+function toBoundedInt(value: unknown, min: number, max: number): number | null {
+  const n = toFiniteNumber(value);
+  if (n === null) return null;
+  const i = Math.trunc(n);
+  return i >= min && i <= max ? i : null;
+}
+
+function toStringList(value: unknown, maxItems: number, maxLen: number): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const item of value) {
+    const text = toFigureLabel(item, maxLen);
+    if (text) out.push(text);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
+function normalizeTone(value: unknown, allowed: readonly string[]): string | null {
+  const tone = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return allowed.includes(tone) ? tone : null;
+}
+
+/** 颜色只认十六进制：spec 会被前端拼进 SVG 属性，这是首道注入防线。 */
+function normalizeHex(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return /^#[0-9a-fA-F]{3,8}$/.test(value.trim()) ? value.trim() : null;
+}
+
+/** 虚线只认「数字 + 空格/逗号」：同上，属性注入的首道防线。 */
+function normalizeDash(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return /^[0-9][0-9\s,.]{0,18}$/.test(value.trim()) ? value.trim() : null;
+}
+
+function normalizeFigureSpec(kind: TeachingFigureKind, raw: Record<string, unknown>): Record<string, unknown> | null {
+  switch (kind) {
+    case 'grid':
+      return normalizeGridSpec(raw);
+    case 'matrix':
+      return normalizeMatrixSpec(raw);
+    case 'compare':
+      return normalizeCompareSpec(raw);
+    case 'quadrant':
+      return normalizeQuadrantSpec(raw);
+    case 'bipartite':
+      return normalizeBipartiteSpec(raw);
+    case 'board':
+      return normalizeBoardSpec(raw);
+    case 'bins':
+      return normalizeBinsSpec(raw);
+    case 'balance':
+      return normalizeBalanceSpec(raw);
+    case 'ladder':
+      return normalizeLadderSpec(raw);
+    case 'cycle':
+      return normalizeCycleSpec(raw);
+    case 'tree':
+      return normalizeTreeSpec(raw);
+    case 'venn':
+      return normalizeVennSpec(raw);
+    case 'bullseye':
+      return normalizeBullseyeSpec(raw);
+    default:
+      return null;
+  }
+}
+
+/**
+ * 焦点：只允许「哪一行/哪一列/哪一侧」，不允许模型指定颜色或自由坐标。
+ * `bounds` 是表格的真实行列数（不含上界）：越界焦点会指向不存在的行/列，
+ * 保留下来只会让前端白算一次高亮，直接丢掉。
+ */
+function normalizeFocus(
+  raw: unknown,
+  allowed: readonly string[],
+  bounds?: { rows?: number; cols?: number },
+): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of ['row', 'col'] as const) {
+    if (!allowed.includes(key)) continue;
+    const limit = bounds?.[key === 'row' ? 'rows' : 'cols'];
+    if (limit !== undefined && limit < 1) continue;
+    const n = toBoundedInt(record[key], 0, limit !== undefined ? limit - 1 : 15);
+    if (n !== null) out[key] = n;
+  }
+  const side = normalizeSide(record.side, allowed);
+  if (side) out.side = side;
+  return Object.keys(out).length ? out : null;
+}
+
+function normalizeSide(value: unknown, allowed: readonly string[]): string | null {
+  const side = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return allowed.includes(side) ? side : null;
+}
+
+/**
+ * bins：把条目**放进容器**（所属关系）。要求 2~4 个箱子、每箱 1~8 条，
+ * 且至少有一箱装东西——空箱子不构成信息。
+ */
+function normalizeBinsSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rawBins = Array.isArray(raw.bins) ? raw.bins : [];
+  if (rawBins.length < 2 || rawBins.length > 4) return null;
+  const bins: Array<Record<string, unknown>> = [];
+  for (const item of rawBins) {
+    if (!item || typeof item !== 'object') continue;
+    const bin = item as Record<string, unknown>;
+    const label = toFigureLabel(bin.label, SPEC.labelMax);
+    if (!label) continue;
+    const items: Array<Record<string, unknown>> = [];
+    for (const rawItem of Array.isArray(bin.items) ? bin.items : []) {
+      const text = typeof rawItem === 'string' ? toFigureLabel(rawItem, SPEC.itemTextMax) : toFigureLabel((rawItem as Record<string, unknown>)?.label, SPEC.itemTextMax);
+      if (!text) continue;
+      const mark = typeof rawItem === 'object' ? toFigureLabel((rawItem as Record<string, unknown>)?.mark, SPEC.cellMarkMax) : null;
+      items.push({ label: text, ...(mark ? { mark } : {}) });
+      if (items.length >= SPEC.itemsMax) break;
+    }
+    const tone = normalizeTone(bin.tone, ['accent', 'ok', 'warn']);
+    bins.push({ label, items, ...(tone ? { tone } : {}) });
+  }
+  if (bins.length < 2) return null;
+  if (!bins.some((bin) => (bin.items as unknown[]).length)) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const focusBin = toBoundedInt(raw.focus, 0, bins.length - 1);
+  return {
+    bins,
+    ...(focusBin !== null ? { focus: focusBin } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** balance：两边各自的分量（weight 由代码换算成倾角，模型只给数）。 */
+function normalizeBalanceSide(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  const side = value as Record<string, unknown>;
+  const head = toFigureLabel(side.head, SPEC.labelMax);
+  if (!head) return null;
+  const items = toStringList(side.items, SPEC.itemsMax, SPEC.itemTextMax);
+  const sub = toFigureText(side.sub, SPEC.subMax);
+  const weight = toBoundedInt(side.weight, 0, 10);
+  return { head, items, ...(sub ? { sub } : {}), ...(weight !== null ? { weight } : {}) };
+}
+
+function normalizeBalanceSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const left = normalizeBalanceSide(raw.left);
+  const right = normalizeBalanceSide(raw.right);
+  if (!left || !right) return null;
+  if (!(left.items as unknown[]).length || !(right.items as unknown[]).length) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const pivotLabel = toFigureText(raw.pivotLabel, SPEC.subMax);
+  const focus = normalizeSide(raw.focus, ['left', 'right']);
+  return {
+    left,
+    right,
+    ...(pivotLabel ? { pivotLabel } : {}),
+    ...(focus ? { focus } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** ladder：2~6 级台阶，state 决定实心/描边/虚线。 */
+function normalizeLadderSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const steps: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.steps) ? raw.steps : []) {
+    if (!item || typeof item !== 'object') continue;
+    const step = item as Record<string, unknown>;
+    const label = toFigureLabel(step.label, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(step.sub, SPEC.subMax);
+    const state = normalizeTone(step.state, ['done', 'current', 'todo']);
+    steps.push({ label, ...(sub ? { sub } : {}), ...(state ? { state } : {}) });
+    if (steps.length >= 6) break;
+  }
+  if (steps.length < 2) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const focus = toBoundedInt(raw.focus, 0, steps.length - 1);
+  return {
+    steps,
+    ...(focus !== null ? { focus } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/**
+ * 留白槽位（2026-10-20）：模型只标「这一格留给学生」，不填答案。
+ * 课上直接填好答案的图会把思考步骤替学生做完——用户点名的失败模式。
+ * `?` / `？` / `待定` / `mask:true` 都归一成同一个占位符 `?`，渲染层画成虚线待填。
+ */
+function normalizeSlot(value: unknown, mask: unknown, max: number): string | null {
+  if (mask === true) return '?';
+  const text = toFigureLabel(value, max);
+  if (!text) return null;
+  if (text === '?' || text === '？' || text === '待定' || text === '…') return '?';
+  return text;
+}
+
+/** cycle：3~6 个节点首尾相接（阶段回流），一个可选的环心说明。 */
+function normalizeCycleSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const nodes: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.nodes) ? raw.nodes : []) {
+    if (!item || typeof item !== 'object') continue;
+    const node = item as Record<string, unknown>;
+    const label = normalizeSlot(node.label, node.mask, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(node.sub, SPEC.subMax);
+    const tone = normalizeTone(node.tone, ['accent', 'ok', 'warn']);
+    nodes.push({ label, ...(sub ? { sub } : {}), ...(tone ? { tone } : {}), ...(label === '?' ? { mask: true } : {}) });
+    if (nodes.length >= 6) break;
+  }
+  if (nodes.length < 3) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const center = toFigureText(raw.center, SPEC.subMax);
+  return {
+    nodes,
+    ...(center ? { center } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** tree：一个根长出 2~6 个分支，每个分支最多挂两条要点（第三条一定是在写段落）。 */
+function normalizeTreeSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rootRaw = (raw.root && typeof raw.root === 'object' ? raw.root : {}) as Record<string, unknown>;
+  const rootLabel = toFigureLabel(rootRaw.label, SPEC.labelMax);
+  if (!rootLabel) return null;
+  const rootSub = toFigureText(rootRaw.sub, SPEC.subMax);
+  const branches: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.branches) ? raw.branches : []) {
+    if (!item || typeof item !== 'object') continue;
+    const branch = item as Record<string, unknown>;
+    const label = normalizeSlot(branch.label, branch.mask, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(branch.sub, SPEC.subMax);
+    const tone = normalizeTone(branch.tone, ['accent', 'ok', 'warn']);
+    const items: string[] = [];
+    for (const rawItem of Array.isArray(branch.items) ? branch.items : []) {
+      const text = typeof rawItem === 'string' ? normalizeSlot(rawItem, null, SPEC.itemTextMax) : null;
+      if (text) items.push(text);
+      if (items.length >= 2) break;
+    }
+    branches.push({
+      label,
+      ...(sub ? { sub } : {}),
+      ...(items.length ? { items } : {}),
+      ...(tone ? { tone } : {}),
+      ...(label === '?' ? { mask: true } : {}),
+    });
+    if (branches.length >= 6) break;
+  }
+  if (branches.length < 2) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    root: { label: rootLabel, ...(rootSub ? { sub: rootSub } : {}) },
+    branches,
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** venn：两个概念的重叠区（易混/边界）。两侧各 2~4 条例子，交集最多 2 条短例。 */
+function normalizeVennSide(value: unknown, itemsMax: number): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  const side = value as Record<string, unknown>;
+  const head = toFigureLabel(side.head, SPEC.labelMax);
+  if (!head) return null;
+  const items = toStringList(side.items, itemsMax, SPEC.itemTextMax);
+  return { head, ...(items.length ? { items } : {}) };
+}
+
+function normalizeVennSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const left = normalizeVennSide(raw.left, 4);
+  const right = normalizeVennSide(raw.right, 4);
+  if (!left || !right) return null;
+  const overlap = normalizeVennSide(raw.overlap, 2);
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    left,
+    right,
+    ...(overlap ? { overlap } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/**
+ * bullseye：2×2 靶盘，点坐标取 [-1,1]（0,0 = 靶心）。
+ * 坐标只做一次 clamp：越界的点会被画到靶外，看起来像"数据错了"，不如直接夹回边缘。
+ */
+function normalizeBullseyeSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const colLabels = toStringList(raw.colLabels, 2, SPEC.labelMax);
+  if (colLabels.length < 2) return null;
+  const rowLabels: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.rowLabels) ? raw.rowLabels : []) {
+    const record = (item && typeof item === 'object' ? item : { label: item }) as Record<string, unknown>;
+    const label = toFigureLabel(record.label, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(record.sub, SPEC.subMax);
+    rowLabels.push({ label, ...(sub ? { sub } : {}) });
+    if (rowLabels.length >= 2) break;
+  }
+  if (rowLabels.length < 2) return null;
+  const cells: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.cells) ? raw.cells : []) {
+    if (!item || typeof item !== 'object') continue;
+    const cell = item as Record<string, unknown>;
+    const title = toFigureLabel(cell.title, SPEC.labelMax);
+    if (!title) continue;
+    const desc = toFigureText(cell.desc, SPEC.noteMax);
+    const tone = normalizeTone(cell.tone, ['ok', 'warn', 'accent', 'neutral']);
+    const dots: number[][] = [];
+    for (const dot of Array.isArray(cell.dots) ? cell.dots : []) {
+      if (!Array.isArray(dot) || dot.length < 2) continue;
+      const x = Number(dot[0]);
+      const y = Number(dot[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      dots.push([Math.max(-1, Math.min(1, x)), Math.max(-1, Math.min(1, y))]);
+      if (dots.length >= 12) break;
+    }
+    cells.push({ title, ...(desc ? { desc } : {}), ...(tone ? { tone } : {}), ...(dots.length ? { dots } : {}) });
+    if (cells.length >= 4) break;
+  }
+  if (cells.length < 4) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    colLabels,
+    rowLabels,
+    cells,
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** grid：二维排布，每格是内容（不是"等待填写的空表"——那类属于输入控件，不是图）。 */
+function normalizeGridSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rows = toBoundedInt(raw.rows, 1, SPEC.rowsMax);
+  const cols = toBoundedInt(raw.cols, 1, SPEC.colsMax);
+  if (!rows || !cols) return null;
+  const rowLabels = toStringList(raw.rowLabels, rows, SPEC.labelMax);
+  const colLabels = toStringList(raw.colLabels, cols, SPEC.labelMax);
+  const cells: Array<Record<string, unknown>> = [];
+  let filled = 0;
+  for (const item of Array.isArray(raw.cells) ? raw.cells : []) {
+    if (!item || typeof item !== 'object') continue;
+    const cell = item as Record<string, unknown>;
+    const r = toBoundedInt(cell.r, 0, rows - 1);
+    const c = toBoundedInt(cell.c, 0, cols - 1);
+    if (r === null || c === null) continue;
+    const out: Record<string, unknown> = { r, c };
+    const text = toFigureLabel(cell.text, SPEC.cellTextMax);
+    if (text) {
+      out.text = text;
+      filled += 1;
+    }
+    if (cell.mask === true) out.mask = true;
+    if (cell.ghost === true) out.ghost = true;
+    const hl = normalizeTone(cell.hl, ['accent', 'warn', 'ok']);
+    if (hl) out.hl = hl;
+    const mark = toFigureLabel(cell.mark, SPEC.cellMarkMax);
+    if (mark) out.mark = mark;
+    // 什么内容都没有的格子不保留：渲染层会为它画一个空框，纯噪音。
+    if (!out.text && !out.mask && !out.ghost && !out.mark) continue;
+    cells.push(out);
+    if (cells.length >= rows * cols) break;
+  }
+  // 全空网格 = 一张等待填写的表格图片——用户 2026-10-17 判定"填表做成图片没有意义"，整块丢弃。
+  if (filled < 2) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const focus = normalizeFocus(raw.focus, ['row', 'col'], { rows, cols });
+  return {
+    rows,
+    cols,
+    cells,
+    ...(rowLabels.length ? { rowLabels } : {}),
+    ...(colLabels.length ? { colLabels } : {}),
+    ...(focus ? { focus } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+const MATRIX_TONES = ['hit', 'miss', 'dup', 'key'] as const;
+
+/** matrix：二维命中矩阵（✓ / — / 叠 / ≡）——对账类课堂的核心教具。 */
+function normalizeMatrixSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rowLabels = toStringList(raw.rowLabels, SPEC.rowsMax, SPEC.labelMax);
+  const colLabels = toStringList(raw.colLabels, SPEC.colsMax, SPEC.labelMax);
+  if (rowLabels.length < 2 || colLabels.length < 2) return null;
+  const cells: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.cells) ? raw.cells : []) {
+    if (!item || typeof item !== 'object') continue;
+    const cell = item as Record<string, unknown>;
+    const r = toBoundedInt(cell.r, 0, rowLabels.length - 1);
+    const c = toBoundedInt(cell.c, 0, colLabels.length - 1);
+    const tone = normalizeTone(cell.tone, MATRIX_TONES);
+    if (r === null || c === null || !tone) continue;
+    cells.push({ r, c, tone });
+    if (cells.length >= rowLabels.length * colLabels.length) break;
+  }
+  if (!cells.length) return null;
+  const legend: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.legend) ? raw.legend : []) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    const text = toFigureLabel(entry.text, SPEC.labelMax);
+    const fill = normalizeHex(entry.fill);
+    if (!text || !fill) continue;
+    const stroke = normalizeHex(entry.stroke);
+    legend.push({ text, fill, ...(stroke ? { stroke } : {}) });
+    if (legend.length >= SPEC.legendMax) break;
+  }
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const focus = normalizeFocus(raw.focus, ['row', 'col'], { rows: rowLabels.length, cols: colLabels.length });
+  return {
+    rowLabels,
+    colLabels,
+    cells,
+    ...(legend.length ? { legend } : {}),
+    ...(focus ? { focus } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/**
+ * compare 的一侧。两种形态：
+ * - 卡片形态（历史）：head + items（若干条对照点）；
+ * - **链路形态**（2026-10-20 实跑教训：两栏文字卡里学生看不出架构差异）：
+ *   head + chain（客户端 → 组件 → 组件，**箭头数就是跳数**）+ 可选的 items（痛点/收口）。
+ *   chain 一旦给出，items 允许为空——跳数本身就是这张图的信息，不再靠条目凑版面。
+ *   merged:true 的节点表示「两件事并进同一条日志/同一个状态机」，渲染成节点内的合一徽标。
+ */
+function normalizeCompareSide(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  const side = value as Record<string, unknown>;
+  const head = toFigureLabel(side.head, SPEC.labelMax);
+  if (!head) return null;
+  const items = toStringList(side.items, SPEC.itemsMax, SPEC.itemTextMax);
+  const chain: Array<Record<string, unknown>> = [];
+  for (const rawNode of Array.isArray(side.chain) ? side.chain : []) {
+    if (!rawNode || typeof rawNode !== 'object') continue;
+    const node = rawNode as Record<string, unknown>;
+    const label = toFigureLabel(node.label, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(node.sub, SPEC.subMax);
+    const tone = normalizeTone(node.tone, ['ok', 'accent', 'warn', 'neutral']);
+    // from: "prev" 表示这一跳承接上一张卡（顺序链路：网关→服务→存储），默认从客户端直连。
+    // 跨集群次数只数「从客户端进集群」的那几条，所以顺序段不占边界序号。
+    const fromPrev = node.from === 'prev' || node.from === true;
+    chain.push({
+      label,
+      ...(sub ? { sub } : {}),
+      ...(tone ? { tone } : {}),
+      ...(node.merged === true ? { merged: true } : {}),
+      ...(fromPrev && chain.length ? { from: 'prev' } : {}),
+      ...(node.rtt === true ? { rtt: true } : {}),
+    });
+    if (chain.length >= 4) break;
+  }
+  if (!items.length && !chain.length) return null;
+  const sub = toFigureText(side.sub, SPEC.subMax);
+  // 侧栏结论徽标（「2 套集群 · 2 次独立共识」这类）：它必须贴在这一栏上，
+  // 不能像旧版那样悬浮在两栏中间——位置本身在回答「这句结论说的是哪一边」。
+  const badge = toFigureLabel(side.badge, 24);
+  const badgeTone = normalizeTone(side.badgeTone, ['ok', 'accent', 'warn', 'neutral']);
+  const client = toFigureLabel(side.client, 12);
+  return {
+    head,
+    items,
+    ...(sub ? { sub } : {}),
+    ...(client ? { client } : {}),
+    ...(badge ? { badge } : {}),
+    ...(badgeTone ? { badgeTone } : {}),
+    ...(chain.length ? { chain } : {}),
+  };
+}
+
+/** compare：两条分支并排对照（左/右各一个头 + 若干条目）。 */
+function normalizeCompareSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const left = normalizeCompareSide(raw.left);
+  const right = normalizeCompareSide(raw.right);
+  if (!left || !right) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const divider = toFigureText(raw.divider, 40);
+  const leftTone = normalizeTone(raw.leftTone, ['ok', 'accent', 'neutral']) || 'ok';
+  const rightTone = normalizeTone(raw.rightTone, ['ok', 'accent', 'neutral']) || 'accent';
+  const focus = normalizeFocus(raw.focus, ['side']);
+  return {
+    left,
+    right,
+    leftTone,
+    rightTone,
+    ...(divider ? { divider } : {}),
+    ...(focus?.side ? { focus: focus.side } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** quadrant：2×2，四格各自有标题（顺序：左上、右上、左下、右下）。 */
+function normalizeQuadrantSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rawCells = Array.isArray(raw.cells) ? raw.cells : [];
+  if (rawCells.length < 4) return null;
+  const cells: Array<Record<string, unknown>> = [];
+  for (const item of rawCells.slice(0, 4)) {
+    if (!item || typeof item !== 'object') return null;
+    const cell = item as Record<string, unknown>;
+    const title = toFigureLabel(cell.title, SPEC.labelMax);
+    if (!title) return null;
+    const body = toStringList(cell.body, SPEC.bodyLinesMax, SPEC.bodyLineMax);
+    const tone = normalizeTone(cell.tone, ['ok', 'warn', 'neutral', 'muted']) || 'neutral';
+    const out: Record<string, unknown> = { title, body, tone };
+    const icon = cell.icon;
+    if (icon && typeof icon === 'object') {
+      const iconRecord = icon as Record<string, unknown>;
+      if (iconRecord.kind === 'target') {
+        const dots: Array<[number, number]> = [];
+        for (const dot of Array.isArray(iconRecord.dots) ? iconRecord.dots : []) {
+          if (!Array.isArray(dot) || dot.length < 2) continue;
+          const dx = toFiniteNumber(dot[0]);
+          const dy = toFiniteNumber(dot[1]);
+          if (dx === null || dy === null || Math.abs(dx) > 28 || Math.abs(dy) > 28) continue;
+          dots.push([dx, dy]);
+          if (dots.length >= SPEC.dotsMax) break;
+        }
+        out.icon = { kind: 'target', dots };
+      }
+    }
+    cells.push(out);
+  }
+  const colLabels = toStringList(raw.colLabels, 2, SPEC.labelMax);
+  const rowLabels: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.rowLabels) ? raw.rowLabels : []) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    const label = toFigureLabel(entry.label, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(entry.sub, SPEC.subMax);
+    rowLabels.push({ label, ...(sub ? { sub } : {}) });
+    if (rowLabels.length >= 2) break;
+  }
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    cells,
+    ...(colLabels.length ? { colLabels } : {}),
+    ...(rowLabels.length ? { rowLabels } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+function normalizeBipartiteSide(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  const side = value as Record<string, unknown>;
+  const nodes: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(side.nodes) ? side.nodes : []) {
+    if (!item || typeof item !== 'object') continue;
+    const node = item as Record<string, unknown>;
+    const id = toFigureLabel(node.id, 24);
+    const label = toFigureLabel(node.label, SPEC.labelMax);
+    if (!id || !label) continue;
+    const tone = normalizeTone(node.tone, ['accent', 'ok', 'warn', 'neutral']);
+    nodes.push({ id, label, ...(tone ? { tone } : {}) });
+    if (nodes.length >= SPEC.nodesMax) break;
+  }
+  if (!nodes.length) return null;
+  const head = toFigureText(side.head, SPEC.subMax);
+  return { nodes, ...(head ? { head } : {}) };
+}
+
+/** bipartite：左右两列 + 连线（多对多映射；连线交叉本身就是信息）。 */
+function normalizeBipartiteSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const left = normalizeBipartiteSide(raw.left);
+  const right = normalizeBipartiteSide(raw.right);
+  if (!left || !right) return null;
+  const leftIds = new Set((left.nodes as Array<Record<string, unknown>>).map((n) => String(n.id)));
+  const rightIds = new Set((right.nodes as Array<Record<string, unknown>>).map((n) => String(n.id)));
+  const edges: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.edges) ? raw.edges : []) {
+    if (!item || typeof item !== 'object') continue;
+    const edge = item as Record<string, unknown>;
+    const from = toFigureLabel(edge.from, 24);
+    const to = toFigureLabel(edge.to, 24);
+    if (!from || !to) continue;
+    // 允许模型把方向写反：只要一端在左、另一端在右就接受
+    const forward = leftIds.has(from) && rightIds.has(to);
+    const backward = rightIds.has(from) && leftIds.has(to);
+    if (!forward && !backward) continue;
+    const tone = normalizeTone(edge.tone, ['accent', 'ok', 'warn', 'neutral']);
+    const dash = normalizeDash(edge.dash);
+    edges.push({ from, to, ...(tone ? { tone } : {}), ...(dash ? { dash } : {}) });
+    if (edges.length >= SPEC.edgesMax) break;
+  }
+  if (!edges.length) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const width = toBoundedInt(raw.width, 520, 720) || 640;
+  // focus：只保留两端都存在的节点 id（最多 4 个），避免模型给出不存在的 id 让渲染器画空环
+  const knownIds = new Set([
+    ...(left.nodes as Array<Record<string, unknown>>).map((n) => String(n.id)),
+    ...(right.nodes as Array<Record<string, unknown>>).map((n) => String(n.id)),
+  ]);
+  const focus: string[] = [];
+  for (const item of Array.isArray(raw.focus) ? raw.focus : []) {
+    const id = toFigureLabel(item, 24);
+    if (!id || !knownIds.has(id) || focus.includes(id)) continue;
+    focus.push(id);
+    if (focus.length >= 4) break;
+  }
+  return {
+    left,
+    right,
+    edges,
+    width,
+    ...(focus.length ? { focus } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+function normalizeBoardPoint(value: unknown): { col: number; rank: number } | null {
+  if (!value || typeof value !== 'object') return null;
+  const point = value as Record<string, unknown>;
+  const col = toBoundedInt(point.col, 0, 8);
+  const rank = toBoundedInt(point.rank, 0, 9);
+  if (col === null || rank === null) return null;
+  return { col, rank };
+}
+
+/** board：中国象棋（9 列 × 10 行）；坐标由模型给，越界即丢。 */
+function normalizeBoardSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const pieces: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.pieces) ? raw.pieces : []) {
+    if (!item || typeof item !== 'object') continue;
+    const piece = item as Record<string, unknown>;
+    const point = normalizeBoardPoint(piece);
+    const key = typeof piece.key === 'string' ? piece.key.trim() : '';
+    if (!point || !BOARD_KEYS.has(key)) continue;
+    const hl = normalizeTone(piece.hl, ['accent', 'warn']);
+    pieces.push({ ...point, key, ...(hl ? { hl } : {}) });
+    if (pieces.length >= SPEC.piecesMax) break;
+  }
+  if (pieces.length < 2) return null;
+
+  const files: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.files) ? raw.files : []) {
+    if (!item || typeof item !== 'object') continue;
+    const file = item as Record<string, unknown>;
+    const col = toBoundedInt(file.col, 0, 8);
+    if (col === null) continue;
+    const label = toFigureText(file.label, 10);
+    const tone = normalizeTone(file.tone, ['accent', 'warn', 'ok']);
+    files.push({ col, ...(label ? { label } : {}), ...(tone ? { tone } : {}) });
+    if (files.length >= SPEC.filesMax) break;
+  }
+
+  const arrows: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.arrows) ? raw.arrows : []) {
+    if (!item || typeof item !== 'object') continue;
+    const arrow = item as Record<string, unknown>;
+    const label = toFigureText(arrow.label, 10);
+    const tone = normalizeTone(arrow.tone, ['accent', 'warn', 'ok']);
+    const dash = normalizeDash(arrow.dash);
+    const common = { ...(label ? { label } : {}), ...(tone ? { tone } : {}), ...(dash ? { dash } : {}) };
+    const a1 = normalizeBoardPoint(arrow.a1);
+    const a2 = normalizeBoardPoint(arrow.a2);
+    if (a1 && a2) {
+      arrows.push({ a1, a2, ...common });
+    } else {
+      const col = toBoundedInt(arrow.col, 0, 8);
+      const from = toBoundedInt(arrow.from, 0, 9);
+      const to = toBoundedInt(arrow.to, 0, 9);
+      if (col === null || from === null || to === null || from === to) continue;
+      arrows.push({ col, from, to, ...common });
+    }
+    if (arrows.length >= SPEC.arrowsMax) break;
+  }
+
+  const marks: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.marks) ? raw.marks : []) {
+    const point = normalizeBoardPoint(item);
+    if (!point) continue;
+    const color = normalizeHex((item as Record<string, unknown>)?.color);
+    marks.push({ ...point, ...(color ? { color } : {}) });
+    if (marks.length >= SPEC.arrowsMax) break;
+  }
+
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const panelLabel = toFigureText(raw.panelLabel, 12);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const size = toBoundedInt(raw.size, 38, 56) || 46;
+  return {
+    pieces,
+    size,
+    ...(files.length ? { files } : {}),
+    ...(arrows.length ? { arrows } : {}),
+    ...(marks.length ? { marks } : {}),
+    ...(title ? { title } : {}),
+    ...(panelLabel ? { panelLabel } : {}),
+    ...(note ? { note } : {}),
   };
 }
 
