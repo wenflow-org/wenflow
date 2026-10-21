@@ -133,6 +133,20 @@ describe('TeachingFigure 多图型', () => {
     expect(wrapper.text()).toContain('追及点');
   });
 
+  it('靠边的参考线标签改用内侧对齐，不顶出画布', () => {
+    const wrapper = mount(TeachingFigure, {
+      props: {
+        figure: {
+          ...positionLine,
+          guides: [{ at: 99, label: '最后写视图：屏幕停在「北京」' }],
+        },
+      },
+    });
+    const label = wrapper.find('.tf-guide-label');
+    expect(label.attributes('text-anchor')).toBe('end');
+    expect(label.attributes('x')).toBe('707.32');
+  });
+
   it('畸形 spec 不渲染空壳（fail-open）', () => {
     const wrapper = mount(TeachingFigure, { props: { figure: { engine: 'svg', kind: 'compare', caption: null, spec: {} } } });
     expect(wrapper.find('svg').exists()).toBe(false);

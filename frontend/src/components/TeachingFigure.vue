@@ -14,7 +14,7 @@
         <!-- 参考线（追及点/相遇点/分界）：虚线 + 顶部标签 -->
         <g v-for="(g, gi) in guideRows" :key="`g${gi}`">
           <line class="tf-guide" :x1="g.x" :y1="28" :x2="g.x" :y2="axisY + spanBlock" />
-          <text v-if="g.label" class="tf-guide-label" :x="g.x" :y="18" text-anchor="middle">{{ g.label }}</text>
+          <text v-if="g.label" class="tf-guide-label" :x="g.x" :y="18" :text-anchor="g.anchor">{{ g.label }}</text>
         </g>
 
         <!-- 轴：位置线本体，右端箭头表示正方向 -->
@@ -88,7 +88,7 @@
             <text v-if="unit" class="tf-unit" x="10" :y="20">{{ `单位：${unit}` }}</text>
             <g v-for="(g, gi) in guideRows" :key="`zg${gi}`">
               <line class="tf-guide" :x1="g.x" :y1="28" :x2="g.x" :y2="axisY + spanBlock" />
-              <text v-if="g.label" class="tf-guide-label" :x="g.x" :y="18" text-anchor="middle">{{ g.label }}</text>
+              <text v-if="g.label" class="tf-guide-label" :x="g.x" :y="18" :text-anchor="g.anchor">{{ g.label }}</text>
             </g>
             <line class="tf-axis" :x1="padX" :y1="axisY" :x2="W - padX" :y2="axisY" />
             <polygon class="tf-axis-head" :points="`${W - padX},${axisY} ${W - padX - 10},${axisY - 5} ${W - padX - 10},${axisY + 5}`" />
@@ -227,9 +227,17 @@ const height = computed(() => axisY + 34 + spanBlock.value + 16);
 /**
  * 参考线只画有名字的那几条：没有标签的竖虚线在图上找不到指称对象，
  * 读者只能读成「凭空一条线」（2026-10-21 真实课文实测，模型给了 at:2500 / label:null）。
+ * 标签靠边时改用内侧对齐：居中会把长标签顶出画布（同一批实测 #11「最后写视图…北京」）。
  */
 const guideRows = computed(() =>
-  guides.value.filter((g) => !!g.label).map((g) => ({ x: toX(g.at), label: g.label })),
+  guides.value
+    .filter((g) => !!g.label)
+    .map((g) => {
+      const x = toX(g.at);
+      const half = (String(g.label).length * 12.5) / 2;
+      const anchor = x - half < 8 ? 'start' : x + half > W - 8 ? 'end' : 'middle';
+      return { x, label: g.label, anchor };
+    }),
 );
 const tickRows = computed(() =>
   (props.figure?.axis?.ticks || []).map((t) => {
