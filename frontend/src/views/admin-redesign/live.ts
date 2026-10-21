@@ -1406,10 +1406,20 @@ export interface LoadCurvePoint {
   lsb: number | null
 }
 
+export interface CalibrationDetailItem {
+  type: string
+  detail: string
+  sessionId?: string
+  taskId?: string
+  conceptKey?: string
+  happenedAt: string
+}
+
 export async function liveGetLearnerEvidence(userId: string, pathId?: string, includeTest?: boolean): Promise<{
   items: Record<string, unknown>[]
   domain: Record<string, unknown>[]
   loadCurve: LoadCurvePoint[]
+  calibrationDetails: CalibrationDetailItem[]
 }> {
   const res = await adminLearnerModelsApi.getEvidence(userId, {
     limit: 20,
@@ -1417,11 +1427,12 @@ export async function liveGetLearnerEvidence(userId: string, pathId?: string, in
     ...(includeTest ? { includeTest: true } : {}),
   })
   const body = res.data?.data ?? res.data ?? {}
-  if (Array.isArray(body)) return { items: body, domain: [], loadCurve: [] }
+  if (Array.isArray(body)) return { items: body, domain: [], loadCurve: [], calibrationDetails: [] as CalibrationDetailItem[] }
   const items = Array.isArray(body.items) ? body.items : (Array.isArray(body.evidence) ? body.evidence : [])
   const domain = Array.isArray(body.domain) ? body.domain : []
   const loadCurve = Array.isArray(body.loadCurve) ? body.loadCurve : []
-  return { items, domain, loadCurve }
+  const calibrationDetails = Array.isArray(body.calibrationDetails) ? body.calibrationDetails : []
+  return { items, domain, loadCurve, calibrationDetails }
 }
 
 /** 证据原始字段：后端 LearnerRecentEvidence（type/taskId/sessionId/conceptKeys/signal/score/happenedAt）+

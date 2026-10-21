@@ -742,6 +742,8 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: Request, res) => 
         endTime: teachingSession.endTime,
         duration: teachingSession.duration,
         status: teachingSession.status,
+        /** 课堂类型（tutor/review/extension）：座舱需与正课区分，复习/延伸课不结算任务 */
+        mode: teachingSession.mode,
         messages: teachingSession.messages,
         state: teachingSession.teachingState || {},
         knowledgePoints: teachingSession.knowledgeState,

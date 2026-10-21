@@ -62,6 +62,8 @@
         <span class="mk-badge" :class="`mk-badge--${heroStatusTone}`" :title="statusTitle">{{ heroStatusText }}</span>
         <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位） -->
         <span class="mk-badge mk-badge--info">{{ stageLabel(currentStage) }}</span>
+        <!-- 课堂类型 pill（2026-10-21）：正课/复习课/延伸课；后两者不结算任务 -->
+        <span v-if="classroomMode" class="mk-badge" :class="classroomModeBadge" :title="classroomModeTitle">{{ classroomModeText }}</span>
         <!-- 只读模式声明（原顶栏 .mk-status__meta 迁入，2026-10-11 走查）：真实会话控制台只读，
              这条提示得随身份区一起在，不能随顶栏撤掉 -->
         <span v-if="isRealMode" class="mk-badge mk-badge--muted" title="真实会话控制台只读：不可推进阶段、不可改会话状态">{{ modeText }}</span>
@@ -107,6 +109,28 @@
     <div v-if="realAdvisory" class="cp-advisory" :class="`cp-advisory--${realAdvisory.priority}`" role="note">
       <span class="mk-badge" :class="`mk-badge--${realAdvisory.priority === 'high' ? 'bad' : 'warn'}`">教学建议</span>
       <span class="cp-advisory__text"><template v-if="realAdvisory.title">{{ realAdvisory.title }}<template v-if="realAdvisory.text"> · </template></template>{{ realAdvisory.text }}</span>
+      <!-- 学员处置（2026-10-21）：v0 只留痕，座舱如实展示「保留/稍后再看/预览过」 -->
+      <span v-if="learnerAdvisoryResponse" class="mk-badge mk-badge--muted" :title="`学员处置记录时间：${learnerAdvisoryResponse.at || '未记录'}`">学员处置 · {{ learnerAdvisoryResponse.label }}</span>
+    </div>
+
+    <!-- 延伸学进行中（assisted 轨）：回合进度实时可见，结束后由下方「延伸学观测」接棒 -->
+    <div v-if="extensionRuntime" class="cp-advisory" role="note">
+      <span class="mk-badge mk-badge--info">延伸中</span>
+      <span class="cp-advisory__text">已进行 {{ extensionRuntime.turns }}/{{ extensionRuntime.maxTurns }} 回合 · 正课已达标，本任务暂不结算</span>
+    </div>
+
+    <!-- 延伸学观测（#124）：延伸段轮数/负荷/学到的概念；一期只观测，不产生路径调整建议 -->
+    <div v-if="extensionObservability" class="cp-advisory" role="note">
+      <span class="mk-badge mk-badge--info">延伸学观测</span>
+      <span class="cp-advisory__text">
+        {{ extensionObservability.turnCount }} 轮<template v-if="extensionObservability.sessionLss != null"> · LSS {{ scoreText(extensionObservability.sessionLss) }}</template><template v-if="extensionObservability.sessionLf != null"> · LF {{ scoreText(extensionObservability.sessionLf) }}</template><template v-if="extensionObservability.learnedConcepts.length"> · 已掌握 {{ extensionObservability.learnedConcepts.slice(0, 4).join('、') }}{{ extensionObservability.learnedConcepts.length > 4 ? ' 等' : '' }}</template>
+      </span>
+    </div>
+
+    <!-- 卡死归因（append-only）：最近一次非收敛判定的原因与回合，证据不再只活在日志里 -->
+    <div v-if="stuckAttribution" class="cp-advisory" role="note" :title="stuckAttribution.at ? `记录时间：${stuckAttribution.at}` : undefined">
+      <span class="mk-badge mk-badge--warn">无响应归因</span>
+      <span class="cp-advisory__text">共 {{ stuckAttribution.count }} 次<template v-if="stuckAttribution.turn"> · 第 {{ stuckAttribution.turn }} 回合</template><template v-if="stuckAttribution.reason"> · {{ stuckAttribution.reason }}</template></span>
     </div>
 
     <!-- ===== 课时健康读数（P1#7）：单课总结读数上提首屏，不再埋 Learn 页签深处；
@@ -744,8 +768,13 @@
               :available-models="liveApiConfig?.availableModels || []"
               :friction-saving="frictionSaving"
               :sim-model-saving="simModelSaving"
+              v-model:experiment-arm="experimentArm"
+              v-model:extension-probe="extensionProbe"
+              v-model:advisory-response="advisoryResponse"
+              :flags-saving="simFlagsSaving"
               @save-friction="saveFriction"
               @save-model="saveModel"
+              @save-flags="saveSimFlags"
             />
           </div>
         </section>
@@ -796,8 +825,13 @@
               :available-models="liveApiConfig?.availableModels || []"
               :friction-saving="frictionSaving"
               :sim-model-saving="simModelSaving"
+              v-model:experiment-arm="experimentArm"
+              v-model:extension-probe="extensionProbe"
+              v-model:advisory-response="advisoryResponse"
+              :flags-saving="simFlagsSaving"
               @save-friction="saveFriction"
               @save-model="saveModel"
+              @save-flags="saveSimFlags"
             />
           </div>
         </div>
@@ -966,7 +1000,7 @@ import { toast } from '@/utils/toast'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import { runHealthTone, statusText } from './statusText'
+import { runHealthTone, statusText, sessionModeText, sessionModeBadgeCls, sessionModeTitle } from './statusText'
 import { parseLogEntry, virtualLogPhaseZh } from './sessionLog'
 // 评分助手（evalScore）原供终局评估面板使用；面板已随裁判独立面移除（2026-09-27），本组件不再引用
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -1263,15 +1297,90 @@ function openLearnerDetail() {
   })
 }
 
-/** 真实会话的教学建议（advisory）：接口字段为松类型，仅取有效档位渲染 */
+/** 真实会话的教学建议（advisory）：接口字段为松类型，仅取有效档位渲染。
+ *  既有数据是结构化对象（ui.title / ui.body），旧注释假设的扁平 title/text 从未在生产里出现过，
+ *  结果建议条与「学员处置」徽章对真实会话恒不可达。两种形态都吃。 */
 const realAdvisory = computed(() => {
-  const a = (session.value as Record<string, unknown> | null)?.advisory as
-    | { priority?: string; title?: string; text?: string }
-    | null
-    | undefined
-  if (!a || !a.priority || a.priority === 'none') return null
-  if (!a.title && !a.text) return null
-  return a as { priority: string; title?: string; text?: string }
+  /* 真实控制台首屏不预载课时详情（teachingDetail 为空），建议在会话载荷的 teaching 下；
+     单课详情打开后再优先用该课自己的建议。 */
+  const raw = teachingDetail.value?.advisory
+    ?? asRecord(session.value?.teaching).advisory
+    ?? (session.value as Record<string, unknown> | null)?.advisory
+  let a: Record<string, unknown> = {}
+  if (typeof raw === 'string') { try { a = asRecord(JSON.parse(raw)) } catch { a = {} } } else a = asRecord(raw)
+  const ui = asRecord(a.ui)
+  const priority = String(a.priority || '')
+  const title = String(a.title || ui.title || '')
+  const text = String(a.text || ui.body || '')
+  if (!priority || priority === 'none') return null
+  if (!title && !text) return null
+  return { priority, ...(title ? { title } : {}), ...(text ? { text } : {}) }
+})
+/** 课堂类型（2026-10-21）：优先当前查看的课时，其次会话当前绑定课时，最后 VL 编排态。
+    复习课/延伸课不结算任务，类型与「为什么完成来源为空」必须在座舱首屏说清。 */
+const classroomMode = computed(() => {
+  const fromDetail = teachingDetail.value?.mode
+  if (typeof fromDetail === 'string' && fromDetail) return fromDetail
+  const teaching = asRecord(session.value?.teaching)
+  if (typeof teaching.mode === 'string' && teaching.mode) return teaching.mode
+  const t = asRecord(stageResults.value.teaching)
+  return typeof t.classroomMode === 'string' ? t.classroomMode : null
+})
+const classroomModeText = computed(() => sessionModeText(classroomMode.value))
+const classroomModeBadge = computed(() => sessionModeBadgeCls(classroomMode.value))
+const classroomModeTitle = computed(() => sessionModeTitle(classroomMode.value))
+
+/** 建议处置（v0 只留痕）：advisory.learnerResponse = 学员对建议的「保留/稍后再看/预览」 */
+const learnerAdvisoryResponse = computed(() => {
+  const raw = teachingDetail.value?.advisory
+    ?? asRecord(session.value?.teaching).advisory
+    ?? session.value?.advisory
+  let obj: Record<string, unknown> = {}
+  if (typeof raw === 'string') { try { obj = asRecord(JSON.parse(raw)) } catch { obj = {} } } else obj = asRecord(raw)
+  const r = asRecord(obj.learnerResponse)
+  const action = String(r.action || '')
+  if (!action) return null
+  const label: Record<string, string> = { keep: '保留原路径', later: '稍后再看', preview: '预览过调整' }
+  return { action, label: label[action] || action, at: String(r.at || '') }
+})
+
+/** 延伸学观测（#124）：只观测不进重排——延伸段学到的内容与负荷在此如实呈现 */
+const extensionObservability = computed(() => {
+  const candidates = [teachingDetail.value?.wrapup, asRecord(session.value?.teaching).wrapup]
+  for (const raw of candidates) {
+    if (!raw) continue
+    let obj: Record<string, unknown> = {}
+    if (typeof raw === 'string') { try { obj = asRecord(JSON.parse(raw)) } catch { obj = {} } } else obj = asRecord(raw)
+    const obs = asRecord(obj.extensionObservability)
+    if (!obs.kind) continue
+    return {
+      turnCount: Number(obs.turnCount || 0),
+      sessionLss: typeof obs.sessionLss === 'number' ? obs.sessionLss : null,
+      sessionLf: typeof obs.sessionLf === 'number' ? obs.sessionLf : null,
+      learnedConcepts: Array.isArray(obs.learnedConcepts) ? obs.learnedConcepts.map(String) : [],
+    }
+  }
+  return null
+})
+
+/** 延伸进行中（assisted 轨）：extensionRuntime 只活在编排态，收束后才有 extensionObservability */
+const extensionRuntime = computed(() => {
+  const r = asRecord(asRecord(stageResults.value.teaching).extensionRuntime)
+  if (r.active !== true) return null
+  return { turns: Number(r.turns || 0), maxTurns: Number(r.maxTurns || 0) }
+})
+
+/** 卡死归因（append-only）：最近一次非收敛判定的证据，供运营回看而不是只留日志 */
+const stuckAttribution = computed(() => {
+  const list = stageResults.value.stuckAttributions
+  if (!Array.isArray(list) || list.length === 0) return null
+  const last = asRecord(list[list.length - 1])
+  return {
+    count: list.length,
+    at: String(last.at || ''),
+    reason: String(last.reason || last.attribution || last.verdict || ''),
+    turn: Number(last.turn || 0),
+  }
 })
 const sidebarOpen = reactive({ run: true, logs: true, review: false, trace: false })
 function selectStageTab(st: StageKey) {
@@ -2246,6 +2355,12 @@ async function refresh() {
     if (['none', 'low', 'normal', 'high', 'stress_test'].includes(fb)) {
       frictionBudget.value = fb as typeof frictionBudget.value
     }
+    // 实验/采样开关（2026-10-21）：与驱动脚本写的是同一组 simulationConfig 字段
+    const arm = String(simCfg.experimentArm || '').toUpperCase()
+    experimentArm.value = arm === 'A' || arm === 'B' ? arm : ''
+    extensionProbe.value = simCfg.extensionProbe === true
+    const adv = String(simCfg.advisoryResponse || '')
+    advisoryResponse.value = ['keep', 'later', 'preview'].includes(adv) ? adv as typeof advisoryResponse.value : ''
     // 每课回合上限初始值：画像运行偏好（会话创建时写入 simulationConfig），驾驶舱可临时调
     const turnCap = Number(simCfg.turnCapPerLesson)
     if (Number.isFinite(turnCap) && turnCap >= 1 && turnCap <= 100) {
@@ -2292,7 +2407,8 @@ const EVIDENCE_TITLE_ZH: Record<string, string> = {
   'task:difficulty:adjustment': '难度调整',
   'session-knowledge-distilled': '知识点提炼',
   'dialogue-concepts-extracted': '对话概念抽取',
-  'anchor:result': '锚点结果'
+  'anchor:result': '锚点结果',
+  'churn:risk': '流失风险'
 }
 
 async function loadLogs() {
@@ -2422,6 +2538,9 @@ async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.
         id: firstText(payload.sessionId, teaching.teachingSessionId, target),
         messages: teaching.messages ?? asRecord(payload.conversations).learning,
         wrapup: teaching.wrapup ?? null,
+        // 课堂类型（2026-10-21）：复习/延伸课与正课在座舱里此前只差上下文，类型必须显式可见
+        mode: teaching.mode ?? null,
+        advisory: teaching.advisory ?? payload.advisory ?? null,
         checkpoints: Array.isArray(teaching.checkpoints) ? teaching.checkpoints : []
       }
       if (!isCurrentLesson) realLessonCache.set(target, normalized)
@@ -2456,6 +2575,11 @@ const frictionSaving = ref(false)
 // 会话级模型覆盖（#12）：空 = 用 api-config 默认路由；可选值来自 liveApiConfig.availableModels
 const simModel = ref('')
 const simModelSaving = ref(false)
+/* 实验/采样开关（2026-10-21）：与 frictionBudget/model 同属 simulationConfig，合并成一次保存 */
+const experimentArm = ref<'' | 'A' | 'B'>('')
+const extensionProbe = ref(false)
+const advisoryResponse = ref<'' | 'keep' | 'later' | 'preview'>('')
+const simFlagsSaving = ref(false)
 // 自动学习回合上限（前端可配，默认 40，不同课收束节奏不同；画像预算可设默认值）
 const learnAutoTurnCap = ref(40)
 
@@ -2496,6 +2620,32 @@ async function saveModel() {
     toast.error(`更新失败：${errMsg(e)}`)
   } finally {
     simModelSaving.value = false
+  }
+}
+
+/* 实验/采样开关一次保存（2026-10-21）：臂标签只做对照、探针每会话一次、处置只留痕，都不改默认行为 */
+async function saveSimFlags() {
+  if (!sessionId.value || isBlackbox.value || busy.value || simFlagsSaving.value) return
+  simFlagsSaving.value = true
+  const previous = {
+    arm: experimentArm.value,
+    probe: extensionProbe.value,
+    advisory: advisoryResponse.value,
+  }
+  try {
+    await adminVirtualLearnersApi.updateSessionSimulationConfig(sessionId.value, {
+      experimentArm: experimentArm.value || null,
+      extensionProbe: extensionProbe.value,
+      advisoryResponse: advisoryResponse.value || null,
+    })
+    toast.success(`实验设置已保存：臂 ${experimentArm.value || '默认'} · 延伸探针 ${extensionProbe.value ? '开' : '关'} · 建议处置 ${advisoryResponse.value || '不记录'}`)
+  } catch (e) {
+    experimentArm.value = previous.arm
+    extensionProbe.value = previous.probe
+    advisoryResponse.value = previous.advisory
+    toast.error(`更新失败：${errMsg(e)}`)
+  } finally {
+    simFlagsSaving.value = false
   }
 }
 

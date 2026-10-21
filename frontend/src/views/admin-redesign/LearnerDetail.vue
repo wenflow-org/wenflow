@@ -507,6 +507,20 @@
             最近 {{ evidence.length }} 条学习事件，其中
             {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%。
           </p>
+          <!-- 校准明细（2026-10-21）：判分前预测、逐概念复习 rating、难度调整此前只存在于
+               learner_evidence.payload，证据页只有一行泛化标题；这里给出人读摘要。 -->
+          <div v-if="calibrationDetails.length" class="ld-calib">
+            <span class="ld-calib__head" title="最近 30 条：检查点判分前预测 · 复习结果（FSRS rating） · 难度调整，来自判分时记录的校准证据">
+              校准明细 · 最近 {{ calibrationDetails.length }} 条
+            </span>
+            <ul class="ld-calib__list">
+              <li v-for="(c, i) in calibrationDetails" :key="i" class="ld-calib__item">
+                <span class="mk-badge mk-badge--sm" :class="calibBadgeCls(c.type)">{{ calibTypeText(c.type) }}</span>
+                <span class="ld-calib__text">{{ c.detail }}</span>
+                <span class="ld-calib__time" :title="c.happenedAt">{{ timeAgo(c.happenedAt) }}</span>
+              </li>
+            </ul>
+          </div>
           <!-- 明细常驻（2026-10-11 用户走查「折叠干嘛」）：监控窗改内滚后折叠失去职责——
                它挡住的正是视口内的滚动容器，结论行本就常驻其上；撤 details 直接渲染。
                P2：带 sessionId 的行可点下钻只读座舱（与教学会话 pane 同一 openSessionCockpit） -->
@@ -666,6 +680,15 @@
                   </strong>
                   <em>&nbsp;</em>
                 </div>
+                <!-- 建议归因可靠性（2026-10-21）：可证伪断言（replan_attribution）的命中率，
+                     此前只在 insight-calibration 服务里，管理端无读数 -->
+                <div class="ld-cal__hit">
+                  <span>建议归因命中率</span>
+                  <strong :class="calHitCls(insightReliability?.hitRate)">
+                    {{ insightReliability?.hitRate != null ? `${Math.round(insightReliability.hitRate * 100)}%` : '—' }}
+                  </strong>
+                  <em>n={{ insightReliability?.n ?? 0 }}{{ (insightReliability?.n ?? 0) < 5 ? ' · 样本不足' : '' }}</em>
+                </div>
               </div>
               <details class="ld-cal-details">
                 <summary class="mk-section__summary">校准分布与最近预测</summary>
@@ -761,7 +784,7 @@
                    既读不出可筛性、也让副行变成两件事的拼盘）：会话身份=主题+路径，阶段单列。
                    列序按「读一条会话的叙事」重排（2026-10-11）：身份 → 课程位置（阶段→进度，
                    两级位置相邻）→ 结果状态 → 过程量（互动）→ 产出（产物）→ 元信息（时间/ID） -->
-              <tr><th>会话</th><th>阶段</th><th>进度</th><th>状态</th><th>互动</th><th>产物</th><th>时间</th><th>会话 ID</th></tr>
+              <tr><th>会话</th><th>阶段</th><th>进度</th><th>状态</th><th>课堂</th><th>互动</th><th>产物</th><th>时间</th><th>会话 ID</th></tr>
             </thead>
             <tbody>
               <tr v-for="s in ldSessionRowsFiltered" :key="s.id" class="ld-pane-row" @click="openSessionCockpit(s.id)">
@@ -799,6 +822,9 @@
                     v-if="s.lowPart" class="mk-badge mk-badge--sm mk-badge--muted"
                     title="低参与：完成时用户消息不足 2 条，无真实学习参与证据"
                   >低参与</span>
+                </td>
+                <td>
+                  <span class="mk-badge" :class="sessionModeBadgeCls(s.mode)" :title="sessionModeTitle(s.mode)">{{ sessionModeText(s.mode) }}</span>
                 </td>
                 <td>
                   <div class="ld-ia" :title="ldInteractTitle(s)">
@@ -920,7 +946,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subPage, openSubPage, setSubPageLabel } from './store'
-import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
+import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow, type CalibrationDetailItem } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
 import { learnerMetric, type LearnerMetricKey } from '@/utils/learnerMetrics'
@@ -928,14 +954,17 @@ import { learnerMetric, type LearnerMetricKey } from '@/utils/learnerMetrics'
 // './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
 import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
 import { useTableSort } from './useTableSort'
-import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted } from '@/api/adminApi'
+import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, adminGoalConversationsApi, adminOpsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,
   sessionStatusBadgeCls,
   sessionProgressPct,
   sessionProgressText,
   sessionProgressTitle,
-  sessionProgressTone
+  sessionProgressTone,
+  sessionModeText,
+  sessionModeBadgeCls,
+  sessionModeTitle
 } from './statusText'
 import type { SessionProgress } from './statusText'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
@@ -1010,11 +1039,16 @@ interface EvidenceItem {
 const liveDetail = ref<Detail | null>(null)
 const rawDetail = ref<Record<string, unknown> | null>(null)
 const liveEvidence = ref<EvidenceItem[]>([])
+/** 校准/复习明细（2026-10-21）：检查点判分前预测、逐概念复习 rating、难度调整——**
+ *  此前只在 learner_evidence.payload，证据页只有一行泛化标题。 */
+const calibrationDetails = ref<CalibrationDetailItem[]>([])
 const memoryTraces = ref<MemoryTraceRow[]>([])
 /** 学习压力记录曲线：learning_metrics 历史（LSS/KTL/LF/LSB），来自 evidence 接口 loadCurve */
 const loadCurveRaw = ref<LoadCurvePoint[]>([])
 /** 预测校准（实证命中率 + 最近预测），异步加载失败为 null */
 const predictionCalib = ref<PredictionCalibration | null>(null)
+/** 建议归因可靠性（2026-10-21）：insight-calibration 的命中率，n<5 时 hitRate=null */
+const insightReliability = ref<{ n: number; hits: number; misses: number; hitRate: number | null } | null>(null)
 const recomputing = ref(false)
 
 /**
@@ -1208,9 +1242,11 @@ function resetDerivedState(id: string) {
   liveDetail.value = null
   rawDetail.value = null
   liveEvidence.value = []
+  calibrationDetails.value = []
   memoryTraces.value = []
   loadCurveRaw.value = []
   predictionCalib.value = null
+  insightReliability.value = null
   ldSessionRows.value = []
   ldGoalRows.value = []
   currentPathId.value = null
@@ -1231,6 +1267,8 @@ interface LdSessionRow {
   topic: string
   subText: string
   status: string
+  /** 课堂类型：tutor=正课 / review=复习课 / extension=延伸课（后两者不结算任务） */
+  mode: string
   startAgo: string
   /** 时间列 title：本地化绝对时刻（后端 ISO 是 UTC，直读会差时区） */
   startAbs: string
@@ -1501,6 +1539,7 @@ async function loadLdSessions(id: string, includeTest: boolean) {
         topic: String(s.topic || s.taskId || '未命名会话'),
         subText: `${String(s.subject || '—')} · ${msgCount} 条消息`,
         status,
+        mode: String(s.mode || 'tutor'),
         startAgo: timeAgo(String(s.startTime || '')),
         startAbs: s.startTime ? new Date(String(s.startTime)).toLocaleString() : '',
         skill: String(s.subject || s.taskType || '—'),
@@ -1606,7 +1645,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
     // 详情与证据并行（此前串行 await：两个独立接口白等一趟 RTT）
     const [raw, evidenceRes] = await Promise.all([
       withTimeout(liveGetLearnerDetail(id, pathId, includeTest), 12000) as Promise<Record<string, unknown>>,
-      liveGetLearnerEvidence(id, pathId, includeTest).catch(() => ({ items: [], domain: [], loadCurve: [] }))
+      liveGetLearnerEvidence(id, pathId, includeTest).catch(() => ({ items: [], domain: [], loadCurve: [], calibrationDetails: [] }))
     ])
     if (stale()) return
     // 画像/证据/概览多处 computeds 读 rawDetail（:1370-1382）——此前只在 resetDerivedState
@@ -1687,12 +1726,22 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
       return tb - ta
     })
     liveEvidence.value = merged
+    calibrationDetails.value = evidenceRes.calibrationDetails || []
     loadCurveRaw.value = evidenceRes.loadCurve || []
     // 校准/记忆痕迹：fire-and-forget 但必须带序号守卫，否则旧 id 的迟响应会写穿新详情
     void liveGetLearnerPredictions(id, includeTest).then((calib) => {
       if (stale()) return
       predictionCalib.value = calib
     })
+    void adminOpsApi.insightReliability(id, currentPathId.value || undefined)
+      .then((res) => {
+        if (stale()) return
+        insightReliability.value = res.data?.data ?? null
+      })
+      .catch(() => {
+        if (stale()) return
+        insightReliability.value = null
+      })
     void liveGetMemoryTraces({ userId: id, includeVirtual: includeTest })
       .then((rows) => {
         if (stale()) return
@@ -1950,6 +1999,19 @@ function shortId(id?: string): string {
 /** 是否为 goal/path 域证据（目标澄清/路径事件：置信度=过程完成度，不套学习成败语义） */
 function isDomainEvidence(type: string): boolean {
   return ['goal:understanding:updated', 'path:created', 'path:generated', 'path:adjusted', 'path:completed'].includes(type)
+}
+
+/* 校准明细（2026-10-21）：类型中文与徽章色；未知类型回落原文，不猜 */
+function calibTypeText(type: string): string {
+  if (type === 'checkpoint:result') return '检查点预测'
+  if (type === 'review:completed') return '复习结果'
+  if (type === 'task:difficulty:adjustment') return '难度调整'
+  return type
+}
+function calibBadgeCls(type: string): string {
+  if (type === 'checkpoint:result') return 'mk-badge--info'
+  if (type === 'review:completed') return 'mk-badge--ok'
+  return 'mk-badge--muted'
 }
 
 function kvRows(obj: Record<string, unknown> | null, labels: Record<string, string>) {
@@ -2742,6 +2804,13 @@ const snapshotHint = computed(() =>
 
 <style scoped>
 .ld { gap: 16px; }
+/* 校准明细（2026-10-21）：证据页里的一小块「预测 vs 实际 / 复习 rating / 难度调整」 */
+.ld-calib { display: grid; gap: 6px; margin: 10px 0 14px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 8px; background: var(--mk-surface-2); }
+.ld-calib__head { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); }
+.ld-calib__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ld-calib__item { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ld-calib__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-calib__time { flex: 0 0 auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 整页骨架（审核 #25）：段间距与真实 hero/statstrip/页签内容一致，避免加载完跳一次 */
 .ld-skel { display: grid; gap: 16px; }
 

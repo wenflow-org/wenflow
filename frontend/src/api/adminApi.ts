@@ -520,6 +520,8 @@ export const adminTeachingSessionsApi = {
     /** 按路径收窄（学习者详情页的路径作用域选择器）：teaching_sessions.learningPathId 单列直连 */
     pathId?: string;
     status?: string;
+    /** 课堂类型：tutor=正课 / review=复习课 / extension=延伸课（后两者不结算任务） */
+    mode?: 'tutor' | 'review' | 'extension';
     onlyWithAdvisory?: boolean;
     onlyMissingWrapup?: boolean;
     includeTest?: boolean;
@@ -1730,6 +1732,12 @@ export const adminVirtualLearnersApi = {
       frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
       model?: string | null;
       simulationClock?: { baseDate?: string; enabled?: boolean; autoAdvance?: boolean };
+      /** #85 双臂标签；null 清除 */
+      experimentArm?: 'A' | 'B' | null;
+      /** 延伸学探针（#124）；null 清除 */
+      extensionProbe?: boolean | null;
+      /** 建议处置采样；null 清除 */
+      advisoryResponse?: 'keep' | 'later' | 'preview' | null;
     }
   ) => {
     return adminAxios.put(`/admin/virtual-learners/sessions/${sessionId}/simulation-config`, data);
@@ -2427,3 +2435,58 @@ export const adminNotificationsApi = {
     return adminAxios.delete(`/admin/notifications/${encodeURIComponent(id)}`);
   },
 };
+
+/* ===== 运营可观测（2026-10-21）：批量吞吐 / 洞察可靠性 / 内容抽检 ===== */
+
+export interface ThroughputReportLike {
+  windowMinutes: number
+  minRpm: number
+  totalCalls: number
+  avgRpm: number
+  lowMinutes: number
+  longestLowRun: number
+  worstRpm: number
+  alert: boolean
+  alertReason: string | null
+}
+
+export interface ContentReviewItem {
+  messageId: number
+  sessionId: string
+  userId: string
+  content: string
+  label: { verdict: string; note?: string; labeledAt?: string } | null
+}
+
+export const adminOpsApi = {
+  throughput: async (params?: { window?: number; minRpm?: number }) => {
+    return adminAxios.get<{ success: boolean; data: ThroughputReportLike }>('/admin/ops/throughput', { params })
+  },
+  insightReliability: async (userId: string, pathId?: string) => {
+    return adminAxios.get<{ success: boolean; data: { n: number; hits: number; misses: number; hitRate: number | null } }>(
+      '/admin/ops/insight-reliability',
+      { params: { userId, ...(pathId ? { pathId } : {}) } }
+    )
+  },
+}
+
+export const adminContentReviewApi = {
+  list: async (params?: { days?: number; rate?: number; realOnly?: boolean; limit?: number }) => {
+    return adminAxios.get<{ success: boolean; data: {
+      windowDays: number
+      rate: number
+      sampled: number
+      labeled: number
+      coverage: number
+      incorrect: number
+      unsure: number
+      correct: number
+      errorRate: number | null
+      outsideSample: number
+      items: ContentReviewItem[]
+    } }>('/admin/content-review', { params })
+  },
+  label: async (payload: { messageId: number; verdict: 'correct' | 'incorrect' | 'unsure'; note?: string }) => {
+    return adminAxios.post('/admin/content-review/label', payload)
+  },
+}

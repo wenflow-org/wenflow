@@ -46,6 +46,32 @@
         </select>
         <span class="cp-run__budget-hint" title="模型在会话启动时已确定，中途修改不生效，需重跑或新建会话">重跑生效</span>
       </label>
+      <!-- 实验/采样开关（2026-10-21）：此前只存在于驱动脚本的 API 调用里，管理端无处可设。
+           三项都不改默认行为：臂标签只做对照，延伸探针每会话一次，建议处置只留痕。 -->
+      <label v-if="!isBlackbox" class="cp-run__budget">
+        实验臂
+        <select v-model="armValue" class="mk-filter__select" :disabled="flagsSaving" title="冻结考卷双臂协议（#85）：A=护栏前统计方式 / B=现行统计方式 / 默认=不加标签">
+          <option value="">默认</option>
+          <option value="A">A 臂</option>
+          <option value="B">B 臂</option>
+        </select>
+      </label>
+      <label v-if="!isBlackbox" class="cp-run__budget">
+        延伸探针
+        <input v-model="probeValue" type="checkbox" :disabled="flagsSaving" title="下一次正课完成时强制开一节延伸课（每会话一次），用于验证延伸学链路。默认关">
+      </label>
+      <label v-if="!isBlackbox" class="cp-run__budget">
+        建议处置
+        <select v-model="advValue" class="mk-filter__select" :disabled="flagsSaving" title="完成时带回重排建议时，按学员视角记录的处置动作（只留痕，不执行重排）">
+          <option value="">不记录</option>
+          <option value="keep">保留</option>
+          <option value="later">稍后再看</option>
+          <option value="preview">预览</option>
+        </select>
+      </label>
+      <button v-if="!isBlackbox" type="button" class="mk-btn mk-btn--sm" :disabled="flagsSaving" @click="emit('saveFlags')">
+        {{ flagsSaving ? '保存中…' : '保存实验设置' }}
+      </button>
       <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
     </div>
   </div>
@@ -76,13 +102,24 @@ const props = defineProps<{
   frictionSaving: boolean
   simModel: string
   simModelSaving: boolean
+  /** 实验臂（#85）：''=不加标签 */
+  experimentArm: '' | 'A' | 'B'
+  /** 延伸学探针（#124）：每会话一次强制开延伸课 */
+  extensionProbe: boolean
+  /** 建议处置采样：''=不记录 */
+  advisoryResponse: '' | 'keep' | 'later' | 'preview'
+  flagsSaving: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'saveFriction'): void
   (e: 'saveModel'): void
+  (e: 'saveFlags'): void
   (e: 'update:frictionBudget', v: 'none' | 'low' | 'normal' | 'high' | 'stress_test'): void
   (e: 'update:simModel', v: string): void
+  (e: 'update:experimentArm', v: '' | 'A' | 'B'): void
+  (e: 'update:extensionProbe', v: boolean): void
+  (e: 'update:advisoryResponse', v: '' | 'keep' | 'later' | 'preview'): void
 }>()
 
 /* v-model 双向（显式 computed 而非 defineModel：emit 类型收窄成非 undefined，宿主 ref<string> 直接可接） */
@@ -93,6 +130,18 @@ const frictionValue = computed({
 const simModelValue = computed({
   get: () => props.simModel,
   set: (v: string) => emit('update:simModel', v),
+})
+const armValue = computed({
+  get: () => props.experimentArm,
+  set: (v: '' | 'A' | 'B') => emit('update:experimentArm', v),
+})
+const probeValue = computed({
+  get: () => props.extensionProbe,
+  set: (v: boolean) => emit('update:extensionProbe', v),
+})
+const advValue = computed({
+  get: () => props.advisoryResponse,
+  set: (v: '' | 'keep' | 'later' | 'preview') => emit('update:advisoryResponse', v),
 })
 </script>
 

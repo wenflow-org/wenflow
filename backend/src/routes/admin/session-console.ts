@@ -109,6 +109,9 @@ function wrapupView(raw: string | null | undefined) {
     summary: wrapup.summary || null,
     sources: wrapup.sources || null,
     generatedAt: wrapup.generatedAt || null,
+    /* 延伸课观测（#124）：延伸段轮数/负荷/学到的概念只存在 wrapup 里，
+       此前被视图裁剪掉，座舱「延伸学观测」条对真实会话永远不可达。 */
+    extensionObservability: wrapup.extensionObservability || null,
   };
 }
 

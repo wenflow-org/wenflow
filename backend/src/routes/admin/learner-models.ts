@@ -1,4 +1,5 @@
 import express from 'express';
+import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
@@ -192,12 +193,64 @@ router.get('/:userId/evidence', async (req, res) => {
       // 压力趋势不可用（如用户无任何指标）时返回空数组，前端显示空态
     }
 
+    // 校准/复习明细（2026-10-21）：checkpoint:result 带判分前预测（predictedMastery/predictionSource），
+    // review:completed 带逐概念 rating——此前只在 learner_evidence.payload 里，管理端任何页面都读不到。
+    // 这里给一份人读摘要（不搬整包 payload），供证据页「校准明细」卡直接展示。
+    let calibrationDetails: Array<{
+      type: string;
+      detail: string;
+      sessionId?: string;
+      taskId?: string;
+      conceptKey?: string;
+      happenedAt: string;
+    }> = [];
+    try {
+      const rows = await prisma.learner_evidence.findMany({
+        where: {
+          userId: req.params.userId,
+          evidenceType: { in: ['checkpoint:result', 'review:completed', 'task:difficulty:adjustment'] },
+        },
+        orderBy: { occurredAt: 'desc' },
+        take: 30,
+        select: { evidenceType: true, payload: true, sessionId: true, taskId: true, occurredAt: true },
+      });
+      calibrationDetails = rows.map((row) => {
+        const payload = safeJsonParse<Record<string, any>>(row.payload) || {};
+        let detail = '';
+        if (row.evidenceType === 'checkpoint:result') {
+          const predicted = Number(payload.predictedMastery);
+          const source = String(payload.predictionSource || '');
+          const predictedText = Number.isFinite(predicted)
+            ? `预测 ${Math.round(predicted * 100)}%${source === 'kt-estimate' ? '（KT 估算）' : source === 'knowledge-state' ? '（知识状态）' : ''}`
+            : '无预测';
+          detail = `${predictedText} · 实际 ${payload.passed === true ? '通过' : '未通过'}${payload.detail ? `（${String(payload.detail)}）` : ''}`;
+        } else if (row.evidenceType === 'review:completed') {
+          const ratingZh: Record<string, string> = { again: '重来', hard: '困难', good: '良好', easy: '轻松' };
+          detail = `复习「${String(payload.conceptKey || '未命名概念')}」→ ${ratingZh[String(payload.rating)] || String(payload.rating || '—')}（掌握 ${Math.round(Number(payload.masteryScore ?? 0) * 100)}%）`;
+        } else {
+          const dirZh: Record<string, string> = { up: '升档', down: '降档', keep: '维持' };
+          detail = `难度 ${dirZh[String(payload.direction)] || String(payload.direction || '—')}：${payload.baseline ?? '—'} → ${payload.adjusted ?? '—'}${payload.applied === false ? '（未生效）' : ''}`;
+        }
+        return {
+          type: row.evidenceType,
+          detail,
+          sessionId: row.sessionId || undefined,
+          taskId: row.taskId || undefined,
+          conceptKey: typeof payload.conceptKey === 'string' ? payload.conceptKey : undefined,
+          happenedAt: row.occurredAt.toISOString(),
+        };
+      });
+    } catch {
+      calibrationDetails = [];
+    }
+
     return res.json({
       success: true,
       data: {
         items: teachingItems,
         domain: domainEvidence,
         loadCurve,
+        calibrationDetails,
       },
     });
   } catch (error: any) {

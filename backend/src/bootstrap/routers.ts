@@ -34,6 +34,8 @@ import adminAuditLogsRoutes from '../routes/admin/audit-logs';
 import adminLearnerModelsRoutes from '../routes/admin/learner-models';
 import adminMemoryTracesRoutes from '../routes/admin/memory-traces';
 import adminMemoryReviewRoutes from '../routes/admin/memory-review';
+import adminContentReviewRoutes from '../routes/admin/content-review';
+import adminOpsObservabilityRoutes from '../routes/admin/ops-observability';
 import adminAnnouncementsRoutes from '../routes/admin/announcements';
 import announcementsRoutes from '../routes/announcements';
 import adminVirtualLearnersRoutes from '../routes/admin/virtual-learners';
@@ -178,6 +180,10 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
   app.use('/api/admin/memory-traces', ...adminRouteMiddleware, adminMemoryTracesRoutes);
   app.use('/api/admin/memory-review', ...adminRouteMiddleware, adminMemoryReviewRoutes);
+  // 内容抽检（#121）：与 CLI 同表同键，管理端只做读写
+  app.use('/api/admin/content-review', ...adminRouteMiddleware, adminContentReviewRoutes);
+  // 运营可观测（2026-10-21）：批量吞吐 rpm / 洞察可靠性读侧
+  app.use('/api/admin/ops', ...adminRouteMiddleware, adminOpsObservabilityRoutes);
   app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
   app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
   // 平台预置（virtual-learners/presets.yaml）总览 + 一键加载：独立路由域（virtual-learners 正在拆分）

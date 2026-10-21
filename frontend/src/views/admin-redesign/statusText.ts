@@ -756,3 +756,29 @@ export function ipText(ip?: string | null): string {
   if (bare === '::1' || bare === '127.0.0.1' || bare === 'localhost') return '127.0.0.1（本机）'
   return bare
 }
+
+/* ===== 课堂类型（2026-10-21）：tutor / review / extension =====
+   复习课与延伸课不结算任务，此前在「教学会话」列表与学习者详情里与正课无法区分。
+   文案/徽章单源在这里，平台页与学习者详情页共用；未知值回落原文、不猜。 */
+export function sessionModeText(mode: string | null | undefined): string {
+  const m = String(mode || 'tutor')
+  if (m === 'tutor') return '正课'
+  if (m === 'review') return '复习课'
+  if (m === 'extension') return '延伸课'
+  return m
+}
+
+export function sessionModeBadgeCls(mode: string | null | undefined): string {
+  const m = String(mode || 'tutor')
+  if (m === 'review') return 'mk-badge--info'
+  if (m === 'extension') return 'mk-badge--ok'
+  return 'mk-badge--muted'
+}
+
+/** 课堂类型悬停长释：说清「为什么不结算、为什么完成来源为空」 */
+export function sessionModeTitle(mode: string | null | undefined): string {
+  const m = String(mode || 'tutor')
+  if (m === 'review') return '复习课：注入到期复习点，只完成复习流程，不结算任务（所以完成来源/完成方式通常为空）'
+  if (m === 'extension') return '延伸课：正课达标后基于同一任务继续陪学，只完成延伸流程，不结算任务（所以完成来源/完成方式通常为空）'
+  return '正课：正常课堂，完成后结算任务并产生完成来源/完成方式'
+}

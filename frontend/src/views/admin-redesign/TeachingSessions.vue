@@ -160,6 +160,15 @@
                 </select>
               </label>
               <label class="mk-adv__field">
+                <span class="mk-cell-sub">课堂</span>
+                <select v-model="modeFilter" class="mk-filter__select" aria-label="按课堂类型筛选">
+                  <option value="">全部课堂</option>
+                  <option value="tutor">正课</option>
+                  <option value="review">复习课</option>
+                  <option value="extension">延伸课</option>
+                </select>
+              </label>
+              <label class="mk-adv__field">
                 <span class="mk-cell-sub">开始时间</span>
                 <select v-model="dateFilter" class="mk-filter__select" aria-label="按开始时间筛选">
                   <option value="">全部时间</option>
@@ -207,6 +216,11 @@
                 :aria-sort="tsSortState('status')"
                 @click="toggleTsSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="!tsHiddenCols.has('mode')"
+                scope="col"
+                title="课堂类型：正课 / 复习课 / 延伸课。复习课与延伸课不结算任务，所以「完成来源 / 完成方式」对它们通常为空——这是设计如此，不是缺记录"
+              >课堂</th>
               <th
                 v-if="!isTableNarrow && !tsHiddenCols.has('track')"
                 scope="col"
@@ -302,6 +316,11 @@
                     class="mk-badge mk-badge--sm mk-badge--muted"
                     title="结束原因记为「手动结束」而不是「任务完成」：用户点「结束学习」，或后台自动结束长时间没有动静的会话，都会记这个原因。任务未必做完，进度列显示结束在哪一格"
                   >手动结束</span>
+                </div>
+              </td>
+              <td v-if="!tsHiddenCols.has('mode')">
+                <div class="ts-track ts-track--mode" :title="sessionModeTitle(r.mode)">
+                  <span class="mk-badge mk-badge--sm" :class="sessionModeBadgeCls(r.mode)">{{ sessionModeText(r.mode) }}</span>
                 </div>
               </td>
               <td v-if="!isTableNarrow && !tsHiddenCols.has('track')">
@@ -442,7 +461,7 @@ import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureTrackText, closureTrackBadgeCls, closureSourceText } from './statusText'
+import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureTrackText, closureTrackBadgeCls, closureSourceText, sessionModeText, sessionModeBadgeCls, sessionModeTitle } from './statusText'
 import type { SessionProgress } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -482,6 +501,8 @@ interface Row {
   topic: string
   subject: string
   taskType: string
+  /** 课堂类型：tutor=正课 / review=复习课 / extension=延伸课（后两者不结算任务） */
+  mode: string
   userName: string
   email: string
   /** 数据隔离标记（includeTest=true 时后端带回，供灰标） */
@@ -694,6 +715,10 @@ function trackCellTitle(r: Row): string {
   return `完成事件轨道：${trackDesc} · 通道：${closureSourceText(r.closure.completionSource)}（${r.closure.completionSource}）`
 }
 
+/* ===== 课堂类型列（2026-10-21）=====
+   复习课 / 延伸课不结算任务，列表原先与正课无法区分；类型读自 teaching_sessions.mode。
+   文案/徽章/悬停单源在 statusText.ts（学习者详情页共用）。 */
+
 function mapRow(s: Record<string, unknown>): Row {
   const wrapup = (s.wrapup as Record<string, unknown>) || null
   const summary = (wrapup?.summary as WrapupSummary) || null
@@ -732,6 +757,7 @@ function mapRow(s: Record<string, unknown>): Row {
     topic: String(s.topic || '未命名会话'),
     subject: String(s.subject || '—'),
     taskType: String(s.taskType || ''),
+    mode: String(s.mode || 'tutor'),
     userName: displayName(s),
     email: String(s.email || ''),
     isVirtualLearner: !!s.isVirtualLearner,
@@ -760,18 +786,20 @@ function mapRow(s: Record<string, unknown>): Row {
 const pill = ref('all')
 const keyword = ref('')
 const statusFilter = ref('')
+const modeFilter = ref('')
 const dateFilter = ref('')
 /* 筛选弹层（状态 / 时间两个下拉）：表前只留一行，放不进主栏的次级筛选收在这里。
    Esc 关闭走共享 useEscape（与 用户与学习者 同一外壳 .mk-adv*） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })
 /** 弹层里生效的筛选数：触发钮上标出来，收起来也不丢状态（0 = 不标） */
-const advCount = computed(() => (statusFilter.value ? 1 : 0) + (dateFilter.value ? 1 : 0))
+const advCount = computed(() => (statusFilter.value ? 1 : 0) + (modeFilter.value ? 1 : 0) + (dateFilter.value ? 1 : 0))
 
 /* P1-3 列显隐（公共组件 MkCols）：用户/状态/互动/进度/产物/关注 可隐藏，会话/详情固定 */
 const tsColDefs = [
   { key: 'user', label: '用户', title: '用户姓名 + 邮箱' },
   { key: 'status', label: '状态', title: '会话状态' },
+  { key: 'mode', label: '课堂', title: '课堂类型：正课 / 复习课 / 延伸课（后两者不结算任务）' },
   { key: 'track', label: '完成来源', title: '完成来源（真实 / 虚拟 / 未标记）与完成方式（课堂完成 / 虚拟辅助 / 虚拟黑盒 / 未记录）' },
   { key: 'interact', label: '时长 / 消息 / 知识点', title: '会话时长、往来消息条数与触及的知识点数' },
   { key: 'progress', label: '进度', title: '学习进度' },
@@ -871,6 +899,9 @@ const filtered = computed(() => {
   if (statusFilter.value) {
     list = list.filter((r) => r.status === statusFilter.value)
   }
+  if (modeFilter.value) {
+    list = list.filter((r) => (r.mode || 'tutor') === modeFilter.value)
+  }
   if (dateFilter.value === '7d' || dateFilter.value === '30d') {
     const cutoff = Date.now() - (dateFilter.value === '7d' ? 7 : 30) * 86400000
     list = list.filter((r) => {
@@ -884,12 +915,13 @@ const filtered = computed(() => {
   return sortTsRows(list)
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim() || onlyAdvisory.value)
+const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!statusFilter.value || !!modeFilter.value || !!dateFilter.value || !!keyword.value.trim() || onlyAdvisory.value)
 function clearFilters() {
   const hadOnlyAdvisory = onlyAdvisory.value
   pill.value = 'all'
   abnormalOnly.value = false
   statusFilter.value = ''
+  modeFilter.value = ''
   dateFilter.value = ''
   keyword.value = ''
   /* 「有建议」是服务端过滤参数：只改本地不生效，需强制重拉（绕过 TTL 缓存） */
@@ -930,6 +962,7 @@ useListQueryState(
         set: (v) => (statusFilter.value = v),
         allowed: statusOptions.map((o) => o.value)
       },
+      { key: 'mode', get: () => modeFilter.value, set: (v) => (modeFilter.value = v), allowed: ['tutor', 'review', 'extension'] },
       { key: 'date', get: () => dateFilter.value, set: (v) => (dateFilter.value = v) },
       { key: 'advisory', get: () => (onlyAdvisory.value ? '1' : ''), set: (v) => (onlyAdvisory.value = v === '1'), allowed: ['1'] }
     ]
@@ -940,7 +973,7 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, onlyAdvisory, includeTest], () => {
+watch([pill, statusFilter, modeFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, onlyAdvisory, includeTest], () => {
   page.value = 1
 })
 

@@ -109,17 +109,20 @@ export async function listTeachingSessionsDebug(params: {
   /** 按路径收窄（学习者详情页的路径作用域选择器）：teaching_sessions.learningPathId 单列直连，无需 join */
   pathId?: string;
   status?: string;
+  /** 课堂类型（tutor/review/extension）：复习课与延伸课不结算任务，列表需按类型可辨、可筛 */
+  mode?: string;
   onlyWithAdvisory: boolean;
   onlyMissingWrapup: boolean;
   includeTest: boolean;
   /** 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：只看虚拟学习者 + 测试账号 */
   testOnly?: boolean;
 }): Promise<unknown> {
-  const { page, limit, userId, pathId, status, onlyWithAdvisory, onlyMissingWrapup, includeTest, testOnly } = params;
+  const { page, limit, userId, pathId, status, mode, onlyWithAdvisory, onlyMissingWrapup, includeTest, testOnly } = params;
   const where: any = {
     ...(userId ? { userId } : {}),
     ...(pathId ? { learningPathId: pathId } : {}),
     ...(status ? { status } : {}),
+    ...(mode ? { mode } : {}),
     ...(onlyWithAdvisory ? { advisory: { not: null } } : {}),
     // wrapup 为 JSON 文本列：缺失 = 无记录或内容中不含 topicSummary
     ...(onlyMissingWrapup
@@ -150,6 +153,7 @@ export async function listTeachingSessionsDebug(params: {
         subject: true,
         topic: true,
         taskType: true,
+        mode: true,
         status: true,
         startTime: true,
         endTime: true,
@@ -195,6 +199,8 @@ export async function listTeachingSessionsDebug(params: {
       subject: session.subject,
       topic: session.topic,
       taskType: session.taskType,
+      /** 课堂类型：tutor=正课 / review=复习课 / extension=延伸课（后两者不结算任务） */
+      mode: session.mode,
       status: session.status,
       /** 收束原因：manual-end（用户主动结束）/ task-completed / learner-abandoned；老会话 null */
       endReason,

@@ -301,6 +301,37 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  it('真实模式：结构化教学建议（ui.title/body）与学员处置可见；延伸课显示观测条与类型徽章', async () => {
+    const payload = realTeachingPayload();
+    payload.data.teaching.mode = 'extension';
+    payload.data.teaching.advisory = {
+      shouldSuggest: true,
+      priority: 'high',
+      recommendation: 'resequence',
+      ui: { title: '建议先确认路径调整', body: '系统检测到关键概念仍不稳定，建议先确认后续安排。' },
+      learnerResponse: { action: 'later', at: '2026-10-21T10:49:38.658Z' },
+    };
+    payload.data.teaching.wrapup.extensionObservability = {
+      kind: 'extension', phase: 'observation', turnCount: 3, sessionLss: 6, sessionLf: 2.5, learnedConcepts: ['作用域'],
+    };
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+
+    expect(wrapper.find('.mk-hero').text()).toContain('延伸课');
+    const strips = wrapper.findAll('.cp-advisory');
+    const advisory = strips.find((s) => s.text().includes('教学建议'));
+    expect(advisory).toBeTruthy();
+    expect(advisory!.text()).toContain('建议先确认路径调整');
+    expect(advisory!.text()).toContain('学员处置 · 稍后再看');
+    const observability = strips.find((s) => s.text().includes('延伸学观测'));
+    expect(observability).toBeTruthy();
+    expect(observability!.text()).toContain('3 轮');
+    expect(observability!.text()).toContain('LSS 6.0');
+
+    wrapper.unmount();
+  });
+
   it('目标对话控制台：默认落 Goal 页签，不跟随下游流水线的 wrapup（2026-10-11 走查）', async () => {
     // 该学习者末课已完成且有总结 ⇒ 后端 goal 控制台 currentStage 报 'wrapup'（buildGoalConsole 按路径流水线算）；
     // 但本页主语是这条 Goal 对话，页签默认值必须按「本页对象自己的通道」取，否则点进来先看到那节课的终局总结。

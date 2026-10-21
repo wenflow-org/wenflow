@@ -1409,6 +1409,9 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     // 按路径收窄（学习者详情页的路径作用域选择器）：teaching_sessions.learningPathId 实测 248/248 非空
     const pathId = (req.query.pathId as string) || undefined;
     const status = (req.query.status as string) || undefined;
+    // 课堂类型筛选：tutor / review / extension（非法值忽略，不报错——列表筛选按容错处理）
+    const modeRaw = String(req.query.mode || '');
+    const mode = ['tutor', 'review', 'extension'].includes(modeRaw) ? modeRaw : undefined;
     const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';
     const onlyMissingWrapup = String(req.query.onlyMissingWrapup || '') === 'true';
     // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 buildRealUserWhere）；
@@ -1423,6 +1426,7 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
       userId,
       pathId,
       status,
+      mode,
       onlyWithAdvisory,
       onlyMissingWrapup,
       includeTest,

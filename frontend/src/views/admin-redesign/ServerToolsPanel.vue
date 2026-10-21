@@ -63,6 +63,56 @@
       </div>
     </section>
 
+    <!-- 批量吞吐（2026-10-21）：rpm 下限此前只在 CLI 审计里，跑批空转在后台看不出来。
+         口径与 scripts/audit-batch-throughput 同一纯函数（窗口内全部尝试，含失败）。 -->
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h4 class="mk-card__title">批量吞吐</h4>
+        <span class="mk-card__meta" title="rpm = 每分钟 LLM 尝试数（含失败，空转分钟计 0）。连续 5 分钟低于下限触发告警">最近 {{ throughput?.windowMinutes ?? 60 }} 分钟 · 下限 {{ throughput?.minRpm ?? 20 }} rpm</span>
+        <div class="mk-card__head-right">
+          <button type="button" class="mk-btn mk-btn--sm" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '刷新' }}</button>
+        </div>
+      </div>
+      <div v-if="throughputFailed" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">吞吐读取失败</span>
+      </div>
+      <div v-else class="st-kpis">
+        <div class="st-kpi"><span class="st-kpi__label">均值</span><b class="st-kpi__value">{{ throughput?.avgRpm ?? '—' }}</b><span class="st-kpi__hint">rpm</span></div>
+        <div class="st-kpi"><span class="st-kpi__label">最低</span><b class="st-kpi__value">{{ throughput?.worstRpm ?? '—' }}</b><span class="st-kpi__hint">单分钟 rpm</span></div>
+        <div class="st-kpi"><span class="st-kpi__label">低于下限</span><b class="st-kpi__value">{{ throughput?.lowMinutes ?? '—' }}</b><span class="st-kpi__hint">分钟</span></div>
+        <div class="st-kpi" :class="{ 'st-kpi--warn': throughput?.alert }"><span class="st-kpi__label">最长连续</span><b class="st-kpi__value">{{ throughput?.longestLowRun ?? '—' }}</b><span class="st-kpi__hint">分钟</span></div>
+      </div>
+      <p v-if="throughput?.alert" class="mk-field__hint st-alert" role="alert">⚠ {{ throughput.alertReason }}</p>
+      <p v-else-if="throughput" class="mk-field__hint">无持续低吞吐。</p>
+    </section>
+    <!-- 内容抽检（#121，2026-10-21）：CLI 闭环接到管理端；与 CLI 同表同键，标注后 CLI --metrics 立即可见。
+         挂点在运维工具而不是「记忆与复习」：后者已收成学习者详情内的单用户面板，抽检是跨会话的运营动作。 -->
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h4 class="mk-card__title">内容抽检</h4>
+        <span class="mk-card__meta" title="按确定性哈希从窗口内教师回合抽样。覆盖率=已标注/抽中，错误率=判错/已标注（未标注时为 n/a）">
+          近 7 天 · rate 5% · 抽中 {{ contentReview?.sampled ?? '—' }} / 已标注 {{ contentReview?.labeled ?? '—' }}<template v-if="contentReview"> · 覆盖率 {{ pctText(contentReview.coverage) }} · 错误率 {{ contentReview.errorRate == null ? 'n/a' : pctText(contentReview.errorRate) }}</template>
+        </span>
+        <div class="mk-card__head-right">
+          <button type="button" class="mk-btn mk-btn--sm" :disabled="contentLoading" @click="loadContentReview">{{ contentLoading ? '读取中…' : '重新抽样' }}</button>
+        </div>
+      </div>
+      <p v-if="contentFailed" class="mk-alert mk-alert--row" role="alert">内容抽检读取失败</p>
+      <div v-else-if="!contentReview?.items.length" class="mk-field__hint">本窗口没有抽中的教师回合（语料少或已过滤）。</div>
+      <div v-else class="st-cr">
+        <div v-for="item in contentReview.items" :key="item.messageId" class="st-cr__row">
+          <span class="st-cr__id mono" :title="`消息 ${item.messageId} · 会话 ${item.sessionId}`">#{{ item.messageId }}</span>
+          <span class="st-cr__text" :title="item.content">{{ item.content }}</span>
+          <span v-if="item.label" class="mk-badge mk-badge--sm" :class="item.label.verdict === 'incorrect' ? 'mk-badge--bad' : item.label.verdict === 'unsure' ? 'mk-badge--warn' : 'mk-badge--ok'">{{ verdictText(item.label.verdict) }}</span>
+          <span class="st-cr__actions">
+            <button type="button" class="mk-btn mk-btn--sm" :disabled="labelingId === item.messageId" @click="labelContent(item, 'correct')">正确</button>
+            <button type="button" class="mk-btn mk-btn--sm" :disabled="labelingId === item.messageId" @click="labelContent(item, 'incorrect')">判错</button>
+            <button type="button" class="mk-btn mk-btn--sm" :disabled="labelingId === item.messageId" @click="labelContent(item, 'unsure')">存疑</button>
+          </span>
+        </div>
+      </div>
+    </section>
+
     <!-- Outbox 死信 -->
     <section class="mk-card">
       <div class="mk-card__head">
@@ -155,7 +205,7 @@
 import { onMounted, ref } from 'vue'
 import { timeAgo, errMsg, shortId } from './live'
 import { askConfirm } from './useConfirm'
-import { adminDevtoolsApi } from '@/api/adminApi'
+import { adminDevtoolsApi, adminOpsApi, adminContentReviewApi, type ThroughputReportLike, type ContentReviewItem } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -327,7 +377,80 @@ function pretty(obj: unknown): string {
 }
 
 /* 死信懒加载：与页签同生共死（宿主 v-if 挂载本组件时才拉），故挂载即拉一次 */
-onMounted(() => { void loadDead() })
+/* 批量吞吐（2026-10-21）：窗口 60 分钟 / 下限 20 rpm，与 CLI 默认一致 */
+const throughput = ref<ThroughputReportLike | null>(null)
+const throughputLoading = ref(false)
+const throughputFailed = ref(false)
+async function loadThroughput() {
+  throughputLoading.value = true
+  throughputFailed.value = false
+  try {
+    const res = await adminOpsApi.throughput({ window: 60, minRpm: 20 })
+    throughput.value = res.data?.data ?? null
+  } catch {
+    throughputFailed.value = true
+  } finally {
+    throughputLoading.value = false
+  }
+}
+
+/* 内容抽检（#121）：抽样/标注与 CLI 同表同键；标注后重拉指标 */
+interface ContentReviewPayload {
+  windowDays: number
+  rate: number
+  sampled: number
+  labeled: number
+  coverage: number
+  incorrect: number
+  unsure: number
+  correct: number
+  errorRate: number | null
+  outsideSample: number
+  items: ContentReviewItem[]
+}
+const contentReview = ref<ContentReviewPayload | null>(null)
+const contentLoading = ref(false)
+const contentFailed = ref(false)
+const labelingId = ref<number | null>(null)
+async function loadContentReview() {
+  contentLoading.value = true
+  contentFailed.value = false
+  try {
+    const res = await adminContentReviewApi.list({ days: 7, rate: 0.05 })
+    contentReview.value = res.data?.data ?? null
+  } catch {
+    contentFailed.value = true
+  } finally {
+    contentLoading.value = false
+  }
+}
+async function labelContent(item: { messageId: number }, verdict: 'correct' | 'incorrect' | 'unsure') {
+  labelingId.value = item.messageId
+  try {
+    await adminContentReviewApi.label({ messageId: item.messageId, verdict })
+    toast.success(`消息 #${item.messageId} 已标注：${verdictText(verdict)}`)
+    await loadContentReview()
+  } catch (e) {
+    toast.error(`标注失败：${errMsg(e)}`)
+  } finally {
+    labelingId.value = null
+  }
+}
+function verdictText(verdict: string): string {
+  if (verdict === 'correct') return '正确'
+  if (verdict === 'incorrect') return '判错'
+  if (verdict === 'unsure') return '存疑'
+  return verdict
+}
+function pctText(v: number | null | undefined): string {
+  return v == null ? '—' : `${Math.round(Number(v) * 1000) / 10}%`
+}
+
+onMounted(() => {
+  void loadDead()
+  void loadThroughput()
+  void loadContentReview()
+})
 
 /** 宿主可调（刷新钮）；暴露 loadDead 供外部触发重拉 */
 defineExpose({ refresh, reload: loadDead })
@@ -407,4 +530,20 @@ defineExpose({ refresh, reload: loadDead })
   .dt-compare { grid-template-columns: 1fr; }
   .dt-compare__col + .dt-compare__col { border-left: none; border-top: 1px dashed var(--mk-line); }
 }
+/* 批量吞吐 KPI（2026-10-21）：四格读数；只有「最长连续」在告警时转 warn */
+.st-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 4px 0 8px; }
+.st-kpi { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 8px; background: var(--mk-surface-2); }
+.st-kpi--warn { border-color: var(--mk-amber); }
+.st-kpi__label { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.st-kpi__value { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.st-kpi__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.st-alert { color: var(--mk-amber); font-weight: 600; }
+/* 内容抽检行（2026-10-21）：id / 正文 / 已标注徽章 / 三个判对按钮 */
+.st-cr { display: grid; gap: 6px; padding: 4px 0 8px; }
+.st-cr__row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 8px; border-bottom: 1px dashed var(--mk-line); }
+.st-cr__row:last-child { border-bottom: none; }
+.st-cr__id { flex: 0 0 auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.st-cr__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-cr__actions { flex: 0 0 auto; display: inline-flex; gap: 4px; }
+@media (max-width: 900px) { .st-kpis { grid-template-columns: 1fr 1fr; } }
 </style>

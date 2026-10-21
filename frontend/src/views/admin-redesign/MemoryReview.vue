@@ -757,6 +757,7 @@ const REASON_ZH: Record<string, string> = {
 }
 const SOURCE_ZH: Record<string, string> = {
   derived: '概念派生',
+  'kt-estimate': 'KT 估算',
   'review-event': '复习事件',
   manual: '人工添加',
   consolidated: '归并合并'
