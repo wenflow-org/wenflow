@@ -1204,6 +1204,23 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             },
           };
           await ctx.updateTeachingStatePreservingControlFlags(sessionId, stuckLearningState);
+          // 归因留痕（append-only）：teaching 会被下一次 restart 整包重写，
+          // 只写 taskRuntime 的话当晚就会丢（实测 8 次非收敛只剩 endReason）。
+          try {
+            await ctx.appendStuckAttribution(sessionId, {
+              at: new Date().toISOString(),
+              ...attribution,
+            });
+          } catch (error: unknown) {
+            logger.warn('[simulation-coordinator] 卡死归因留痕失败（不影响收口）', {
+              sessionId,
+              error: asErrorLike(error).message
+            });
+          }
+          logger.warn('[simulation-coordinator] 卡死判定收课', {
+            sessionId,
+            ...attribution
+          });
           logs.push({
             timestamp: new Date().toISOString(),
             phase: 'closure-attribution',

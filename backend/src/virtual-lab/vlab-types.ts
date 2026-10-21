@@ -212,9 +212,29 @@ export interface TeachingState {
   [key: string]: unknown
 }
 
+/**
+ * 卡死探针的归因记录（append-only 留在 stageResults 根部）。
+ * 为什么不放 teaching 里：restart-learning 会整包重写 teaching（实测 8 次非收敛只留下
+ * `sessionArtifacts.endReason='non-convergence'`，归因全丢），根部键不会被 reset 清掉。
+ */
+export interface StuckClosureAttributionRecord {
+  at: string
+  taskId: string | null
+  taskTitle: string | null
+  turns: number
+  reason: string | null
+  masteryDelta: number | null
+  judgeFalseCount: number
+  trace: Array<{ turn: number; teacherReady: boolean; judgeFalse: boolean; mastery: number | null }>
+  lastClosureReason?: string | null
+  lastTeacherMessage?: string | null
+}
+
 /** 会话 stageResults JSON 全量（已知段强类型，其余透传） */
 export interface StageResults {
   blackbox?: BlackboxRunState
+  /** 卡死探针归因（append-only，最多保留最近 20 条；restart 不清） */
+  stuckAttributions?: StuckClosureAttributionRecord[]
   experiment?: {
     experimentId: string
     runId: string
