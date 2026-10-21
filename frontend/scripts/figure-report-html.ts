@@ -108,12 +108,13 @@ const REASON_LABEL: Record<string, string> = {
 const total = ITEMS.length;
 const byKind = countBy(ITEMS, (i) => i.figure?.kind || 'position-line');
 const byReason = countBy(ITEMS, (i) => i.source?.reason || 'none');
-const luye = ITEMS.filter((i) => String(i.user).includes('陆野'));
-const luyeKind = countBy(luye, (i) => i.figure?.kind || 'position-line');
-const luyeReason = countBy(luye, (i) => i.source?.reason || 'none');
+// 「真实课程产出」= 有触发源留痕的图（旧探针 fixture 没有 figureSource，不计入）
+const real = ITEMS.filter((i) => i.source);
+const realKind = countBy(real, (i) => i.figure?.kind || 'position-line');
+const realReason = countBy(real, (i) => i.source?.reason || 'none');
 const sessionCounts: Record<string, number> = {};
 const sessionKindCounts: Record<string, Record<string, number>> = {};
-luye.forEach((i) => {
+real.forEach((i) => {
   sessionCounts[i.sessionId] = (sessionCounts[i.sessionId] || 0) + 1;
   const kind = i.figure?.kind || 'position-line';
   sessionKindCounts[i.sessionId] = sessionKindCounts[i.sessionId] || {};
@@ -276,7 +277,7 @@ const body = `
     <p><b>结论</b></p>
     <ol>
       <li>图型目录是固定的 16 种，模型只交 spec，渲染由代码确定性完成——这是设计，不是模型只画得出这几种。</li>
-      <li>但真课里只出现了 4 种（位置线 10、对照 5、阶梯 4、闭环 1）；其中一课 ${maxSession} 张图、${maxSameKindInSession} 张全是位置线——会话上限 4 与同图型上限 3 都被突破。</li>
+      <li>但真实课程里图型集中在少数几种（${Object.entries(realKind).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${KIND_LABEL[k] || k} ${v}`).join('、')}）；其中一课最多 ${maxSession} 张、同一图型最多 ${maxSameKindInSession} 张——会话上限 4 与同图型上限 3 都曾被突破。</li>
       <li>原因是两道重复闸门（会话上限 4 张、同图型 3 张）的计数读的是回合内存快照，整场都没触发；现已改为按库里的侧表计数，并补一道同图型硬闸。</li>
       <li>渲染侧修了 10 处：越界、截半句、拆数字、复述、装饰色带、徽标压线、无标签参考线、靠边裁切、刻度重影、评审页掉样式。</li>
       <li>全量检测：${total} 张图 0 处越界、0 处文字重叠、0 处省略号截断。</li>
@@ -286,8 +287,8 @@ const body = `
   <h2>一、真实课数据</h2>
   <div class="kpi">
     <div><b>${total}</b><span>图库里的图（含旧探针数据）</span></div>
-    <div><b>${luye.length}</b><span>本轮真实课程产出（陆野 · 搜索竞态）</span></div>
-    <div><b>${Object.keys(byKind).length}</b><span>出现的图型数</span></div>
+    <div><b>${real.length}</b><span>真实课程产出（含夜间跑批）</span></div>
+    <div><b>${Object.keys(realKind).length}</b><span>真实课程用到的图型数</span></div>
     <div><b>${maxSession}</b><span>本轮单课最多图数（上限 4）</span></div>
   </div>
   <div class="card">
@@ -295,7 +296,7 @@ const body = `
     <table><thead><tr><th>图型</th><th class="num">张数</th></tr></thead><tbody>${statRows}</tbody></table>
     <h3>触发源分布</h3>
     <table><thead><tr><th>为什么调用（代码判据）</th><th class="num">张数</th></tr></thead><tbody>${reasonRows}</tbody></table>
-    <p class="note">陆野这节课：${Object.entries(luyeReason).map(([k, v]) => `${esc(REASON_LABEL[k] || k)} ${v}`).join('、')}。time-order 是这一轮新增的时机，在真实回合里确实触发（命中依据如「先发、发出、响应、返回」）。</p>
+    <p class="note">真实课程里的触发源：${Object.entries(realReason).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(REASON_LABEL[k] || k)} ${v}`).join('、')}。</p>
   </div>
 
   ${sampleCards}
@@ -311,7 +312,7 @@ const body = `
 
   <h2>三、重复闸门为什么失效</h2>
   <div class="card">
-    <p>证据：陆野这一轮共 ${luye.length} 张图（位置线 ${luyeKind['position-line'] || 0} 张），其中一课 <b>${maxSession} 张</b>、且 <b>${maxSameKindInSession} 张同型</b>——会话上限 4、同图型上限 3 都被突破，日志里「本会话图数已达上限」「同骨架」一次都没出现。而库里这个会话的侧表有 17 条消息、6 条带 figures——数据是齐的。</p>
+    <p>证据：真实课程共 ${real.length} 张图（位置线 ${realKind['position-line'] || 0} 张），其中一课最多 <b>${maxSession} 张</b>、同一图型 <b>${maxSameKindInSession} 张</b>——会话上限 4、同图型上限 3 都被突破，日志里「本会话图数已达上限」「同骨架」一次都没出现。库里这个会话的侧表有 17 条消息、6 条带 figures——数据是齐的。</p>
     <p>根因：闸门的计数参数是回合内存里的消息列表，那份快照看不到已落库的图，计数恒为 0，两道闸都形同虚设。</p>
     <p>修法：仓库新增 <span class="mono">countFiguresByKind(sessionId)</span>，直接读 <span class="mono">teaching_session_messages</span> 侧表逐条解析；引擎在会话上限之后再加一道同图型硬闸（默认 3，与旧规则同值），计数取自库。提示词里也补了一句：同一节课同一种图最多 3 张，第 4 次换形状或用文字。</p>
     <p class="note">可调项：TEACHING_FIGURE_MAX_PER_SESSION（默认 4）、TEACHING_FIGURE_MAX_PER_KIND（默认 3）。</p>
