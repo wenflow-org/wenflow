@@ -133,6 +133,29 @@ describe('TeachingFigure 多图型', () => {
     expect(wrapper.text()).toContain('追及点');
   });
 
+  it('相邻刻度标签叠在一起时下移一行（真实课文 40% / 45% 两个时刻）', () => {
+    const wrapper = mount(TeachingFigure, {
+      props: {
+        figure: {
+          ...positionLine,
+          axis: {
+            min: 0,
+            max: 100,
+            unit: null,
+            ticks: [
+              { at: 40, label: '第2趟上海发出' },
+              { at: 45, label: '第2趟上海返回' },
+            ],
+          },
+          marks: [],
+        },
+      },
+    });
+    const ys = wrapper.findAll('.tf-tick-label').map((t) => Number(t.attributes('y')));
+    expect(ys).toHaveLength(2);
+    expect(Math.abs(ys[0] - ys[1])).toBeGreaterThanOrEqual(16);
+  });
+
   it('靠边的参考线标签改用内侧对齐，不顶出画布', () => {
     const wrapper = mount(TeachingFigure, {
       props: {

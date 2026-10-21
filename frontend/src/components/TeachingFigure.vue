@@ -27,7 +27,7 @@
         <!-- 刻度 -->
         <g v-for="(t, ti) in tickRows" :key="`t${ti}`">
           <line class="tf-tick" :x1="t.x" :y1="axisY" :x2="t.x" :y2="axisY + 7" />
-          <text v-if="t.label" class="tf-tick-label" :x="t.x" :y="axisY + 23" text-anchor="middle">{{ t.label }}</text>
+          <text v-if="t.label" class="tf-tick-label" :x="t.x" :y="t.y" text-anchor="middle">{{ t.label }}</text>
         </g>
 
         <!-- 对象（人物/物/点）：圆点 + 朝向箭头 + 标签 -->
@@ -94,7 +94,7 @@
             <polygon class="tf-axis-head" :points="`${W - padX},${axisY} ${W - padX - 10},${axisY - 5} ${W - padX - 10},${axisY + 5}`" />
             <g v-for="(t, ti) in tickRows" :key="`zt${ti}`">
               <line class="tf-tick" :x1="t.x" :y1="axisY" :x2="t.x" :y2="axisY + 7" />
-              <text v-if="t.label" class="tf-tick-label" :x="t.x" :y="axisY + 23" text-anchor="middle">{{ t.label }}</text>
+              <text v-if="t.label" class="tf-tick-label" :x="t.x" :y="t.y" text-anchor="middle">{{ t.label }}</text>
             </g>
             <g v-for="(m, mi) in markRows" :key="`zm${mi}`">
               <circle class="tf-mark" :cx="m.x" :cy="axisY" r="5.5" />
@@ -221,7 +221,41 @@ const guides = computed(() => props.figure?.guides || []);
 const spans = computed(() => props.figure?.spans || []);
 
 /** 参考线占用的底部高度（区间标注逐行下移，避免与参考线交叠） */
-const spanBlock = computed(() => (spans.value.length ? spans.value.length * 36 + 30 : 0) + (props.figure?.group ? 46 : 0));
+/**
+ * 刻度标签行：同一行的相邻标签估算宽度重叠时，后来的下移一行。
+ * 真实课文实测：40% 与 45% 两个时刻各带一条六个字的中文标签，居中画会叠成一团黑字。
+ */
+const tickRows = computed(() => {
+  const ticks = props.figure?.axis?.ticks || [];
+  const marks = props.figure?.marks || [];
+  const rows: Array<{ x: number; label: string | null; y: number }> = [];
+  const rowRight = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
+  let maxRow = 0;
+  for (const t of ticks) {
+    const x = toX(t.at);
+    const label = t.label || null;
+    // 同一位置的对象标签已经写着同一句话时，刻度不再复述一遍——
+    // 否则「最低那天」会在线上下各出现一次（2026-10-21 目检 #17）。
+    const dup = label && marks.some((m) => Math.abs(toX(m.at) - x) < 1 && m.label === label);
+    if (!label || dup) {
+      rows.push({ x, label: dup ? null : label, y: axisY + 23 });
+      continue;
+    }
+    const half = (label.length * 12.5) / 2;
+    const fit = rowRight.findIndex((right) => x - half >= right + 4);
+    const row = fit === -1 ? rowRight.length - 1 : fit;
+    rowRight[row] = Math.max(rowRight[row], x + half);
+    maxRow = Math.max(maxRow, row);
+    rows.push({ x, label, y: axisY + 23 + row * 16 });
+  }
+  return rows;
+});
+/** 刻度标签多占的行高：下面的区间标注与画布高度都要跟着下移 */
+const tickExtra = computed(() => Math.max(0, ...tickRows.value.map((t) => t.y - (axisY + 23))));
+
+const spanBlock = computed(
+  () => tickExtra.value + (spans.value.length ? spans.value.length * 36 + 30 : 0) + (props.figure?.group ? 46 : 0),
+);
 const height = computed(() => axisY + 34 + spanBlock.value + 16);
 
 /**
@@ -239,18 +273,6 @@ const guideRows = computed(() =>
       return { x, label: g.label, anchor };
     }),
 );
-const tickRows = computed(() =>
-  (props.figure?.axis?.ticks || []).map((t) => {
-    const x = toX(t.at);
-    const label = t.label || null;
-    // 同一位置的对象标签已经写着同一句话时，刻度不再复述一遍——
-    // 否则「最低那天」会在线上下各出现一次（2026-10-21 目检 #17）。
-    const marks = props.figure?.marks || [];
-    const dup = label && marks.some((m) => Math.abs(toX(m.at) - x) < 1 && m.label === label);
-    return { x, label: dup ? null : label };
-  }),
-);
-
 /**
  * 对象标签行：贪心避让——同一行的相邻标签估算宽度重叠时，后来的上移一行。
  * （标签是教学信息，宁可分两行也不能叠在一起看不清。）
@@ -294,7 +316,7 @@ const spanRows = computed(() =>
     x2: toX(s.to),
     label: s.label,
     // 上移 18px：区间标注原来紧贴刻度标签（「第二道」与区间说明撞在同一行位置）
-    y: axisY + 64 + i * 36,
+    y: axisY + 64 + tickExtra.value + i * 36,
   }))
 );
 
