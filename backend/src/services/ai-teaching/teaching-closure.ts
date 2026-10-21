@@ -106,13 +106,15 @@ export function evaluateSessionClosable(input: {
    * 允许「教师刚提问、学生还没答」时收束。仅复习课（complete_review）使用：
    * 复习课是有界课（回合上限到点就收），教师的下一问本来就是被截断的那一问；
    * 不放行会让 complete_review 永远 409、降级 end_only 后丢失复习结果回写。
+   * 同一理由适用于待答检查点：到点收束时那道题本来就没机会作答，未答点按
+   * 「本次无观测」跳过（collectReviewOutcomes 只收集已判定的点），不能反过来卡住整课回写。
    */
   allowOpenQuestion?: boolean;
 }): SessionClosableDecision {
   if (input.endReason && ABNORMAL_END_REASONS.has(input.endReason)) return { closable: true };
 
   const state = input.teachingState || {};
-  if (state.pendingCheckpoint) {
+  if (state.pendingCheckpoint && !input.allowOpenQuestion) {
     return {
       closable: false,
       code: 'FINALIZATION_PENDING_CHECKPOINT',

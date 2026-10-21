@@ -46,14 +46,13 @@ describe('evaluateSessionClosable', () => {
     expect(decision.closable).toBe(true)
   })
 
-  it('allowOpenQuestion 不放行未答的检查点', () => {
+  it('allowOpenQuestion（复习课有界收束）→ 未答检查点也放行（未答点按无观测跳过）', () => {
     const decision = evaluateSessionClosable({
       messages: [{ role: 'assistant', content: '选一个吧' }],
       teachingState: { pendingCheckpoint: { id: 'cp-1' } },
       allowOpenQuestion: true,
     })
-    expect(decision.closable).toBe(false)
-    expect(decision.code).toBe('FINALIZATION_PENDING_CHECKPOINT')
+    expect(decision.closable).toBe(true)
   })
 
   it('问题之后已有学生回答 → 放行', () => {

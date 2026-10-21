@@ -14,7 +14,7 @@
  *
  * 注意：本文件不落库；持久化与读写由 MemoryTraceService 承担。
  */
-import { fsrs as createFsrsScheduler, createEmptyCard, Rating, State } from 'ts-fsrs';
+import { fsrs as createFsrsScheduler, createEmptyCard, Rating, State, S_MIN } from 'ts-fsrs';
 import type { Card } from 'ts-fsrs';
 
 /** FSRS 成绩码（与 ts-fsrs Rating 对齐：1=Again 2=Hard 3=Good 4=Easy） */
@@ -38,6 +38,13 @@ export interface FsrsMemoryState {
 export const FSRS_DEFAULT_RETENTION = 0.9;
 /** 首个学习周期的最小间隔（天）：保护睡眠巩固窗口（Rasch & Born 2013） */
 export const FSRS_MIN_FIRST_INTERVAL_DAYS = 1;
+/**
+ * 可持久化稳定性的下限（天，与 ts-fsrs S_MIN 同值）。
+ * 理由（2026-10-21 实测）：语义干扰惩罚（×0.85）会把 0.001 的稳定性压到 0.00085，
+ * 落库后下一次复习被 ts-fsrs 判为非法记忆状态（`Invalid memory state`），整条
+ * review:completed 事件重试到死信，FSRS 调度对那个概念永久停摆。持久化与读回都夹这道地板。
+ */
+export const FSRS_MIN_STABILITY = S_MIN;
 
 /**
  * 知识看板状态 → FSRS 成绩码（确定性映射，零 LLM；与 mapKnowledgeStatusToMastery 语义对齐）
@@ -133,7 +140,8 @@ function cardOf(state: FsrsMemoryState, now: Date): Card {
   const empty = createEmptyCard();
   return {
     due: empty.due,
-    stability: state.stability,
+    // 历史行可能因旧的干扰惩罚低于 S_MIN：读回时夹到地板，否则 ts-fsrs 直接判状态非法
+    stability: state.stability > 0 ? Math.max(FSRS_MIN_STABILITY, state.stability) : 0,
     difficulty: state.difficulty,
     elapsed_days: 0,
     scheduled_days: 0,
@@ -170,14 +178,14 @@ export function fsrsSchedule(
   const result = scheduler.next(card, now, grade);
 
   const stability = Number.isFinite(result.card.stability) && result.card.stability > 0
-    ? result.card.stability
+    ? Math.max(FSRS_MIN_STABILITY, result.card.stability)
     : 1;
   // 下次复习 = lastReview + stability 天（desired retention 下 stability 即"降到阈值的天数"）
   const intervalDays = Math.max(FSRS_MIN_FIRST_INTERVAL_DAYS, Math.round(stability));
 
   return {
     state: {
-      stability: result.card.stability,
+      stability,
       difficulty: result.card.difficulty,
       reps: result.card.reps,
       lapses: result.card.lapses,
