@@ -518,6 +518,9 @@ subtasks / milestones ─resolve───► conceptId ───┤
   再按名称回填 `milestones` 与 `subtasks` 的 canonical `conceptId`。
 - **FSRS**：排程状态（`memory_traces`）从零开始，新课堂按 FSRS-6 写入链重新生成；
   参数维持默认，校准待新样本（#104）。
+- **KT 估算痕迹**：`applyKtEstimate` 建痕或补空时写入初始 FSRS 状态与 `dueAt`
+  （stability = mastery×10 天、difficulty 5、reps/lapses 0）；`extractionCount` 仍为 0，
+  复习队列只收真正提取过的点；已排程的行不被覆盖。
 - **备份**：执行前写 `.tmp-batch/backups/vl-layer-<ts>.json`（含清空前的痕迹/证据/概念/边）。
 - **执行顺序**：`node backend/restart.mjs --stop` → 脚本 `--apply` → `node backend/restart.mjs`。
 - **首轮结果（2026-10-21）**：26 用户 / 48 路径；concepts 711、aliases 1266（含 555 个锚键）、

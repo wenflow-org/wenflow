@@ -653,15 +653,29 @@ class MemoryTraceService {
       if (existing) {
         const prev = existing.ktMasteryEma ?? existing.masteryScore;
         const ema = Number.isFinite(prev) ? ALPHA * mastery + (1 - ALPHA) * (prev as number) : mastery;
+        // KT 幽灵痕（extractionCount=0 且从未排程）补一次初始 FSRS 状态：
+        // 此前这类行 fsrsStability/dueAt 均为 null，既不在任何排程里、首次真实提取时
+        // 也只能回退 fsrsStateFromLegacy 代理。只补空值——已排程的痕迹一律不动，
+        // 不覆盖真实复习算出的间隔。
+        const isUnscheduledGhost = (Number(existing.extractionCount) || 0) === 0
+          && (existing.fsrsStability === null || existing.fsrsStability === undefined);
+        const ghostSeed = isUnscheduledGhost ? this.seedKtInitialSchedule(mastery, now) : null;
         await prisma.memory_traces.updateMany({
           where: { userId, conceptKey: key },
-          data: { ktMasteryEma: ema, ...(conceptId !== null ? { conceptId } : {}) },
+          data: {
+            ktMasteryEma: ema,
+            ...(conceptId !== null ? { conceptId } : {}),
+            ...(ghostSeed ?? {}),
+          },
         });
       } else {
         // 无痕迹也记录 EMA（独立于 ACT-R/FSRS 调度的知识状态通道）。
         // #59/#60 第 3 条：masteryScore 不再硬编码 0.3（会把「没学过」冒充成「学过一半」，
         // 并被 fragile 判定当成低分证据）——落 KT 估计值本身；extractionCount=0 仍如实标着
         // 「从未提取」，读侧据此把他当幽灵痕排除在掌握聚合外。
+        // 2026-10-21：幽灵痕同样写入初始 FSRS 状态与 dueAt（估算即排程基线），
+        // 但 extractionCount 保持 0——复习队列仍只收「真正提取过」的点。
+        const initialSchedule = this.seedKtInitialSchedule(mastery, now);
         await prisma.memory_traces.create({
           data: {
             id: `mt_${now.getTime()}_${Math.random().toString(36).slice(2, 10)}`,
@@ -674,10 +688,30 @@ class MemoryTraceService {
             extractionCount: 0,
             source: 'kt-estimate',
             pathId,
+            ...initialSchedule,
           },
         });
       }
     }
+  }
+
+  /**
+   * 为 KT 估算痕迹生成初始 FSRS 排程（纯确定性，无 LLM）：
+   * stability = mastery × 10 天（下限 1 天，fsrsStateFromLegacy 口径），difficulty 中性 5，
+   * reps/lapses 从 0 起；dueAt 走与 recordExtraction 相同的活跃窗口锚定。
+   */
+  private seedKtInitialSchedule(mastery: number, now: Date): {
+    fsrsStability: number; fsrsDifficulty: number; fsrsLapses: number; fsrsReps: number; dueAt: Date;
+  } {
+    const initial = fsrsStateFromLegacy(mastery, 0, now);
+    const rawDue = new Date(now.getTime() + initial.stability * DAY_MS);
+    return {
+      fsrsStability: initial.stability,
+      fsrsDifficulty: initial.difficulty,
+      fsrsLapses: initial.lapses,
+      fsrsReps: initial.reps,
+      dueAt: this.snapToActiveWindow(rawDue, now, false),
+    };
   }
 
   // 注：复习结果的 FSRS 写入自 2026-09-17 起是**单一写入者** = `ReviewCompletedConsumer`
