@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>课堂教学图图库</title>
+    <style>
+      body { margin: 0; padding: 20px; background: #f6f7f9; font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; color: #1f2430; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      .hint { font-size: 13px; color: #7b8494; margin-bottom: 16px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); gap: 16px; }
+      .item { background: #fff; border: 1px solid #e3e7ef; border-radius: 12px; padding: 14px; overflow: auto; }
+      .meta { font: 12px/1.7 ui-monospace, Consolas, monospace; color: #7b8494; margin-bottom: 8px; word-break: break-all; }
+      .meta b { color: #4a5568; font-weight: 600; }
+      .empty { color: #b42318; }
+      svg { display: block; max-width: 100%; height: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>课堂教学图图库</h1>
+    <div class="hint">这些是库里真实下发过的 spec，用产品同一个渲染器重画。数据来自 teaching_session_messages.payload（只存规格，不存像素）。</div>
+    <div id="app"></div>
+    <script type="module" src="/src/dev/figure-gallery.ts"></script>
+  </body>
+</html>
