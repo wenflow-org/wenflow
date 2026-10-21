@@ -9,6 +9,7 @@ const sessionsFindUnique = jest.fn()
 const messagesFindMany = jest.fn()
 const messagesFindUnique = jest.fn()
 const evidenceFindMany = jest.fn()
+const evidenceCount = jest.fn()
 const evidenceUpsert = jest.fn()
 
 const mockRouter = () => ({
@@ -30,7 +31,7 @@ jest.mock('../../config/database', () => ({
   default: {
     teaching_sessions: { findMany: sessionsFindMany, findUnique: sessionsFindUnique },
     teaching_session_messages: { findMany: messagesFindMany, findUnique: messagesFindUnique },
-    learner_evidence: { findMany: evidenceFindMany, upsert: evidenceUpsert }
+    learner_evidence: { findMany: evidenceFindMany, count: evidenceCount, upsert: evidenceUpsert }
   }
 }))
 
@@ -76,6 +77,7 @@ beforeEach(() => {
   sessionsFindMany.mockResolvedValue([])
   messagesFindMany.mockResolvedValue([])
   evidenceFindMany.mockResolvedValue([])
+  evidenceCount.mockResolvedValue(1)
 })
 
 describe('GET /', () => {
@@ -105,6 +107,9 @@ describe('GET /', () => {
     expect(res.body.data.items[1].label).toBeNull()
     expect(res.body.data.labeled).toBe(1)
     expect(res.body.data.errorRate).toBe(1)
+    // 标注节奏：今日计数 + 每日目标（运营 10 条/天）
+    expect(res.body.data.todayLabeled).toBe(1)
+    expect(res.body.data.dailyTarget).toBe(10)
     // 查询键与 CLI 一致：eventId=msg:<id>
     expect(evidenceFindMany.mock.calls[0][0].where.eventId.in).toEqual(['msg:11', 'msg:12'])
   })

@@ -87,6 +87,11 @@ async function main() {
   };
   process.on('SIGINT', () => { void stop('SIGINT').then(() => process.exit()); });
   process.on('SIGTERM', () => { void stop('SIGTERM').then(() => process.exit()); });
+  /* Windows 的 child.kill('SIGINT') 不会触发信号处理器；父脚本用 stdin 发 stop 才能优雅注销。 */
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => {
+    if (String(chunk).includes('stop')) void stop('stdin').then(() => process.exit());
+  });
 
   await post(cookie, 'batch-heartbeat');
   console.log(`[heartbeat] ${RUN_ID} 已开始（每 ${Math.round(INTERVAL / 1000)}s）`);

@@ -26,6 +26,9 @@ import {
 
 const router = express.Router();
 
+/** 每日标注目标：抽 5% 后 40 条上下，10 条/天约 4 天清空一批（运营节奏，不是硬门禁）。 */
+const CONTENT_REVIEW_DAILY_TARGET = 10;
+
 const messageEventId = (messageId: number | string) => `msg:${messageId}`;
 
 function clampInt(raw: unknown, fallback: number, min: number, max: number): number {
@@ -81,6 +84,17 @@ router.get('/', async (req, res) => {
       .filter((label): label is ContentReviewLabel => Boolean(label));
     const labelByMessage = new Map(labels.map((label) => [label.messageId, label]));
     const metrics = computeContentReviewMetrics({ sampledIds: ids, labels });
+    /* 今日标注量按全表算，而不是只数当前抽样里还在的标签：抽样窗口会随新会话滚动，
+       昨天标过的条目今天可能已滑出样本，只数样本内会让「今日进度」无故归零。 */
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayLabeled = await prisma.learner_evidence.count({
+      where: {
+        evidenceType: CONTENT_REVIEW_EVIDENCE_TYPE,
+        evidenceKey: CONTENT_REVIEW_EVIDENCE_KEY,
+        occurredAt: { gte: todayStart },
+      },
+    });
 
     res.json({
       success: true,
@@ -91,6 +105,8 @@ router.get('/', async (req, res) => {
         scannedSessions,
         realSessions,
         virtualSessions,
+        todayLabeled,
+        dailyTarget: CONTENT_REVIEW_DAILY_TARGET,
         ...metrics,
         items: sampled.map((turn) => ({
           messageId: turn.messageId,

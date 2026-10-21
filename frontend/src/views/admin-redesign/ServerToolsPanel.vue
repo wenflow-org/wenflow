@@ -92,7 +92,7 @@
       <div class="mk-card__head">
         <h4 class="mk-card__title">内容抽检</h4>
         <span class="mk-card__meta" title="按确定性哈希从窗口内教师回合抽样。覆盖率=已标注/抽中，错误率=判错/已标注（未标注时为 n/a）">
-          近 7 天 · rate 5% · 抽中 {{ contentReview?.sampled ?? '—' }} / 已标注 {{ contentReview?.labeled ?? '—' }}<template v-if="contentReview"> · 覆盖率 {{ pctText(contentReview.coverage) }} · 错误率 {{ contentReview.errorRate == null ? 'n/a' : pctText(contentReview.errorRate) }}</template>
+          近 7 天 · rate 5% · 抽中 {{ contentReview?.sampled ?? '—' }} / 已标注 {{ contentReview?.labeled ?? '—' }}<template v-if="contentReview"> · 覆盖率 {{ pctText(contentReview.coverage) }} · 错误率 {{ contentReview.errorRate == null ? 'n/a' : pctText(contentReview.errorRate) }} · 今日 {{ contentReview.todayLabeled ?? 0 }}/{{ contentReview.dailyTarget ?? 10 }}</template>
         </span>
         <div class="mk-card__head-right">
           <button type="button" class="mk-btn mk-btn--sm" :disabled="contentLoading" @click="loadContentReview">{{ contentLoading ? '读取中…' : '重新抽样' }}</button>
@@ -415,6 +415,8 @@ interface ContentReviewPayload {
   correct: number
   errorRate: number | null
   outsideSample: number
+  todayLabeled?: number
+  dailyTarget?: number
   items: ContentReviewItem[]
 }
 const contentReview = ref<ContentReviewPayload | null>(null)
