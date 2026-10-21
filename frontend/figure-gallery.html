@@ -18,13 +18,18 @@
       .ctx--teacher .ctx__text {
         display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
       }
+      .motive { background: #f7f5ff; border: 1px solid #e6e1fb; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; line-height: 1.6; }
+      .motive__row { display: flex; gap: 8px; }
+      .motive__label { flex: none; color: #6d5bd0; font-weight: 600; }
+      .motive__row + .motive__row { margin-top: 2px; }
+      .motive--empty { background: #f4f5f7; border-color: #e3e7ef; color: #7b8494; }
       .empty { color: #b42318; }
       svg { display: block; max-width: 100%; height: auto; }
     </style>
   </head>
   <body>
     <h1>课堂教学图图库</h1>
-    <div class="hint">这些是库里真实下发过的 spec，用产品同一个渲染器重画；每张上方带上它所处的那一轮上下文（紧邻的学生发言 + 老师这条回复，老师正文最多显示 6 行，悬停看全文）。数据来自 teaching_session_messages.payload（只存规格，不存像素）。</div>
+    <div class="hint">这些是库里真实下发过的 spec，用产品同一个渲染器重画；每张上方是它所处的那一轮（紧邻的学生发言 + 老师这条回复，老师正文最多显示 6 行，悬停看全文）。紫色块是出图动机：模型自己写的「为什么画」+ 编排层有没有给时机、因为什么给。</div>
     <div id="app"></div>
     <script type="module" src="/src/dev/figure-gallery.ts"></script>
   </body>

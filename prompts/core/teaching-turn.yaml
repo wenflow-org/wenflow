@@ -63,6 +63,7 @@ rules:
     - **figure 优先于 diagram**：mermaid 只画节点-边，画不出位置、重叠、靶盘与二维格子——用 mermaid 画这些等于把几何信息丢回文字
     - **说了必须有**：reply 里出现「这张表」「这张对照图」「下图」时，本轮必须真的输出对应字段；instruction 写明「必须出图」「先出图再问」时不得省略
     - **唯一例外**：instruction 注明本轮正要布置学生自己排出/画出该结构（答案泄漏）→ 不出图，直接布置练习，图留到学生完成后的下一轮
+    - 输出 `figure` 时**必须带 `why`**：一句话说清「这里为什么需要图、为什么用这个形状」。它只进复盘，不进 reply、不念给学生
   - knowledge.points 是"当前任务知识看板"，不是整条路径知识快照；应根据当前任务的 taskTitle、taskDescription、acceptanceCriteria、现有知识看板和最近对话动态生成；scenario.taskKnowledgeScope 或 scenario.taskProfile.learningObjectives 只当作边界提示，不是唯一可用名称
   - knowledge.points 最多输出 5 个，允许"单焦点主讲 + 多点看板"：必须有一个 currentPoint 作为当前主焦点，其余点只作为辅助、前置或待复习内容，不要并行展开多个主焦点
   - scenario.cognitiveFrame 视为当前任务的局部认知图景：currentCoreConcept / targetRelation 决定这轮真正要帮助学生建构什么，prerequisiteConcepts 决定何时该回补基础，neighboringConcepts 只用于轻量迁移提示，不要扩展成新主题
@@ -216,8 +217,8 @@ fields:
       若本轮正要布置"由学生自己画位置线"的练习，本轮**不要**画（答案泄漏）。
       `at` 用与题意一致的数值（米/格/秒都行，**同一图内同单位**；不必按真实比例，但先后与差值必须对）；
       标签写学科实指（甲/乙/小明/起点/追及点），不要写"物体 1"这类占位；reply 必须脱离图也成立。
-      结构 { "engine": "svg（缺省）", "kind": "position-line（缺省，v1 唯一图型）", "axis": { "min": 0, "max": 100, "unit": "米（可选）", "ticks": [{ "at": 0, "label": "起点（可选）" }] }, "marks": [{ "at": 20, "label": "甲（必填，≤16 字）", "dir": "right|left|none（朝向，静态点用 none）" }], "spans": [{ "from": 20, "to": 60, "label": "相距 40 米（≤24 字）" }], "guides": [{ "at": 80, "label": "追及点（可选）" }], "caption": "可选：图下方一句说明" }
-      约束：marks 1~6 个（必填，**至少一个**）；spans ≤3；guides ≤4；ticks ≤8；所有 `at/from/to` 必须是数字（不是"x 米"这类字符串）。
+      结构 { "engine": "svg（缺省）", "kind": "position-line（缺省，v1 唯一图型）", "axis": { "min": 0, "max": 100, "unit": "米（可选）", "ticks": [{ "at": 0, "label": "起点（可选）" }] }, "marks": [{ "at": 20, "label": "甲（必填，≤16 字）", "dir": "right|left|none（朝向，静态点用 none）" }], "spans": [{ "from": 20, "to": 60, "label": "相距 40 米（≤24 字）" }], "guides": [{ "at": 80, "label": "追及点（可选）" }], "why": "一句话说明这里为什么需要图、为什么用这个形状（≤40 字，只给复盘看，不进 reply）", "caption": "可选：图下方一句说明" }
+      约束：marks 1~6 个（必填，**至少一个**）；spans ≤3；guides ≤4；ticks ≤8；所有 `at/from/to` 必须是数字（不是"x 米"这类字符串）；**why 必填**——写的是「这段内容为什么不能只靠文字」，不是复述图里有什么。
 constraints:
   - 需要图示结构时**不要用字符画**（箭头/方框/`●`/`┌─┐` 这类 ASCII 示意）——结构类走 `diagram`、空间位置类走 `figure`（见 fields）
   - 不得要求学生依赖图片、视频、音频等非文本媒介**理解或完成任务**（但允许老师附一张由代码渲染的结构图/位置线图作辅助，见 rules 与 fields）

@@ -39,6 +39,11 @@ interface ChatMessage {
   role?: string;
   content?: string;
   figures?: Array<Record<string, unknown>>;
+  figureSource?: {
+    trigger?: string;
+    reason?: string | null;
+    kindHint?: string | null;
+  } | null;
 }
 
 function parsePayload(payload: string | undefined | null): ChatMessage {
@@ -83,6 +88,7 @@ function parsePayload(payload: string | undefined | null): ChatMessage {
         user: row.userName || row.userEmail,
         at: row.createdAt,
         figure,
+        source: msg.figureSource ?? null,
         context: {
           student: studentText.slice(0, 1200),
           teacher: String(msg.content || '').slice(0, 2000),

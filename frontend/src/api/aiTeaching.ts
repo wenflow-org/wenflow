@@ -41,6 +41,8 @@ export interface TeachingFigurePayload {
   guides?: Array<{ at: number; label?: string | null }>;
   /** 非 position-line 图型的规格 */
   spec?: Record<string, unknown>;
+  /** 模型自己给的一句话出图理由（只给复盘/图库看，不渲染给学生） */
+  why?: string | null;
   caption?: string | null;
 }
 

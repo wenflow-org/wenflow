@@ -886,6 +886,8 @@ const FIGURE_TICKS_MAX = 8;
 const FIGURE_LABEL_MAX = 16;
 const FIGURE_SPAN_LABEL_MAX = 24;
 const FIGURE_CAPTION_MAX = 200;
+/** 出图理由：一句话，按「为什么这里需要图 / 为什么用这个形状」写，超长截断 */
+const FIGURE_WHY_MAX = 60;
 const FIGURE_UNIT_MAX = 8;
 
 /** 图型白名单（2026-10-18 扩图型；flow 不在此列——节点-边类继续走 mermaid）。 */
@@ -1009,17 +1011,18 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
   const kind = kindRaw || 'position-line';
   if (!FIGURE_KINDS.has(kind) || !isFigureKindEnabled(kind)) return null;
   const caption = toFigureText(record.caption, FIGURE_CAPTION_MAX);
+  const why = toFigureText(record.why, FIGURE_WHY_MAX);
   const paletteRaw = typeof record.palette === 'string' ? record.palette.trim().toLowerCase() : '';
   const palette = FIGURE_PALETTES.has(paletteRaw) ? (paletteRaw as TeachingFigure['palette']) : null;
 
   if (kind === 'position-line') {
     const figure = normalizePositionLineFigure(record);
-    return figure ? { figure: { ...figure, caption, ...(palette ? { palette } : {}) } } : null;
+    return figure ? { figure: { ...figure, caption, ...(why ? { why } : {}), ...(palette ? { palette } : {}) } } : null;
   }
   const specRaw = record.spec && typeof record.spec === 'object' ? (record.spec as Record<string, unknown>) : record;
   const spec = normalizeFigureSpec(kind as TeachingFigureKind, specRaw);
   if (!spec) return null;
-  return { figure: { engine: 'svg', kind: kind as TeachingFigureKind, caption, spec, ...(palette ? { palette } : {}) } };
+  return { figure: { engine: 'svg', kind: kind as TeachingFigureKind, caption, ...(why ? { why } : {}), spec, ...(palette ? { palette } : {}) } };
 }
 
 /** 新图型灰度开关：`TEACHING_FIGURE_SPEC_DISABLED=1` 时只保留位置线（回滚用）。 */

@@ -118,6 +118,17 @@ export interface TeachingSessionMessage {
    * "把文字关系摆成一条位置线"，这类空间关系 mermaid 的节点-边表达不了。
    */
   figures?: TeachingFigure[];
+  /**
+   * 出图来源与动机（2026-10-21）：区分「模型自己判断要画」与「编排层给了出图时机」，
+   * 并记下编排层的判定理由。评审时靠它回答「这张图为什么出现」；
+   * 模型自己给的理由在 `figure.why`，两者互不替代。
+   */
+  figureSource?: {
+    trigger: 'model' | 'opportunity';
+    reason: 'ascii-structure' | 'position-description' | 'structure-content' | 'task-structure' | 'recap-cadence' | null;
+    /** 编排层建议的图型（模型可改） */
+    kindHint: string | null;
+  } | null;
 }
 
 /**
@@ -168,6 +179,8 @@ export interface TeachingFigure {
   guides?: Array<{ at: number; label: string | null }>;
   /** 其余图型的规格（kind≠'position-line' 时存在） */
   spec?: Record<string, unknown>;
+  /** 模型自己给的一句话出图理由（≤60 字，归一化保留）：为什么用这张图 / 为什么这个形状 */
+  why?: string | null;
   caption: string | null;
 }
 

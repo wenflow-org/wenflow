@@ -914,6 +914,13 @@ export async function processStudentMessage(
       });
     } else {
       assistantMessage.figures = [wanted];
+      // 出图来源留痕（2026-10-21）：评审要能回答「这张图为什么出现」。
+      // 模型自己给的理由在 figure.why；这里记的是编排层有没有给机会、因为什么给、建议了什么图型。
+      assistantMessage.figureSource = {
+        trigger: visualOpportunity ? 'opportunity' : 'model',
+        reason: visualOpportunity?.reason ?? null,
+        kindHint: visualOpportunity?.kindHint ?? null,
+      };
     }
   }
 

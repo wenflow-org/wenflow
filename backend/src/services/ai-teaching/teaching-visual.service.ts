@@ -224,6 +224,8 @@ export function detectAsciiStructure(text: string | null | undefined): boolean {
 export interface VisualOpportunity {
   suggested: true;
   reason: 'ascii-structure' | 'position-description' | 'structure-content' | 'task-structure' | 'recap-cadence';
+  /** 编排层建议的图型（模型可改）；只用于事后追溯「代码想让它画什么」 */
+  kindHint?: string | null;
   /** 给模型的**显式、正向**要求 */
   instruction: string;
 }
@@ -585,11 +587,13 @@ export function buildVisualOpportunity(
   const figureCapReached = figureCount >= resolveFigureMaxPerSession();
   const lastHasFigure = lastAssistantHasFigure(list);
   // 形状路由：按「任务标题 + 上一轮讲解」判这段内容该用哪种几何（靶盘/闭环/交集/二分/辐射/…）
-  const kindHintLine = figureKindHintLine(chooseFigureKind([taskHint, lastAssistant?.content].filter(Boolean).join('\n')));
+  const kindHint = chooseFigureKind([taskHint, lastAssistant?.content].filter(Boolean).join('\n'));
+  const kindHintLine = figureKindHintLine(kindHint);
   if (detectAsciiStructure(lastAssistant?.content)) {
     return {
       suggested: true,
       reason: 'ascii-structure',
+      kindHint: kindHint?.kind ?? null,
       instruction:
         '上一轮你用了箭头/方框/字符在 reply 里"画"结构——那说明这里本来就需要一张图，而且**别再用字符画**。'
         + '**先判断**：若本轮正要布置「由学习者自己排出/画出这个结构」的练习（答案泄漏，2026-09-24 实测），'
@@ -614,6 +618,7 @@ export function buildVisualOpportunity(
     return {
       suggested: true,
       reason: 'position-description',
+      kindHint: kindHint?.kind ?? null,
       instruction:
         '学生正在用文字描述**空间位置关系**（谁在前谁在后、朝哪走、隔多远）——把他说的话**摆成一条位置线**给他核验，'
         + '这是这类课的共同坐标系。**先判断**：若本轮正要布置「由学习者自己画/摆出这条位置线」的练习（答案泄漏），'
@@ -630,6 +635,7 @@ export function buildVisualOpportunity(
     return {
       suggested: true,
       reason: 'task-structure',
+      kindHint: kindHint?.kind ?? null,
       instruction:
         '当前这个任务本身就在处理一组**结构化关系**（归属/对应/对比/对账/分层这类）。'
         + '如果这轮的内容已经可以用一张图讲清，就在 reply 之后输出顶层块 `figure`；'
@@ -647,6 +653,7 @@ export function buildVisualOpportunity(
     return {
       suggested: true,
       reason: 'structure-content',
+      kindHint: kindHint?.kind ?? null,
       instruction:
         '上一轮你在讲一组**结构化关系**（对比/归类/对账/维度/映射这类）。把它摆成一张图，学生能比读段落更快看清关系。'
         + '**先判断**：若本轮正要布置「由学生自己填这张表/排这组关系」的练习（答案泄漏），本轮**不要**输出，'
@@ -668,6 +675,7 @@ export function buildVisualOpportunity(
     return {
       suggested: true,
       reason: 'recap-cadence',
+      kindHint: kindHint?.kind ?? null,
       instruction:
         `你和这位学生已经连着推进了 ${turnsSinceFigure} 个回合，中间没有出现过任何图。`
         + '这一轮在 reply 之后，把**到目前为止已经站住的那条关系链**收成一张图：'

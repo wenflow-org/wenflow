@@ -73,6 +73,28 @@ describe('teaching-turn figure 归一化（位置线）', () => {
     expect(teaching.figure.axis.max).toBeGreaterThan(90);
   });
 
+  it('出图理由 why：保留并去控制字符；超长截到 60 字；缺失则不写该键', async () => {
+    const withWhy = await runWithFigure({
+      kind: 'position-line',
+      marks: [{ at: 20, label: '甲', dir: 'right' }],
+      why: '  位置关系用线一眼可核，读数比文字快  ',
+    });
+    expect(withWhy.figure.why).toBe('位置关系用线一眼可核，读数比文字快');
+
+    const longWhy = await runWithFigure({
+      kind: 'position-line',
+      marks: [{ at: 20, label: '甲', dir: 'right' }],
+      why: '很'.repeat(80),
+    });
+    expect(longWhy.figure.why).toHaveLength(60);
+
+    const noWhy = await runWithFigure({
+      kind: 'position-line',
+      marks: [{ at: 20, label: '甲', dir: 'right' }],
+    });
+    expect(noWhy.figure).not.toHaveProperty('why');
+  });
+
   it('模型的 min/max 不得把取值挡在域外（域按并集扩）', async () => {
     const teaching = await runWithFigure({
       kind: 'position-line',
