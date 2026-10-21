@@ -15,11 +15,28 @@
 
 ## 二、运行步骤（每次改判分或教学规则后）
 
-1. 校验冻结集未变：`node backend/scripts/measurement-verify/frozen-exam-run.mjs --verify`（逐文件 sha256 + 基线复算；不符退出码 2）——有差异即作废本次对照。
-2. 用同一份判据脚本（版本号写进产物）对 A/B 两臂的**同一批课堂**各跑一遍；课堂清单与哈希一并记录。
-3. 聚合两臂的 `wrongAnswerPassed` 与四模式率，产出对照表（含样本量）；`frozen-exam-run.mjs --compare --arm-a <dir|file> --arm-b <dir|file>` 可直接出表与判定。
+1. 校验冻结集未变：`node backend/scripts/measurement-verify/frozen-exam-run.mjs --verify`（逐文件 sha256 + 基线复算；不符退出码 2）——有差异即作废本次对照。**`--compare` 已把它变成硬门禁：不带 `--verify-frozen` 直接拒跑。**
+2. 用同一份判据脚本（版本号写进产物）对 A/B 两臂的**同一批课堂**各跑一遍；课堂清单与哈希一并记录。每臂再写一份**条件清单 JSON**（见下）。
+3. 聚合两臂的 `wrongAnswerPassed` 与四模式率，产出对照表（含样本量）；`frozen-exam-run.mjs --compare --verify-frozen --arm-a <dir|file> --arm-b <dir|file> --arm-a-conditions a.json --arm-b-conditions b.json` 可直接出表与判定。
 4. 判定：F1-b（错答放行）在 B 臂相对 A 臂**下降 ≥10 个百分点**且样本量 ≥35/臂 → 通过；未达样本量只登记不裁决。
-5. 把对照表与脚本版本写进《平台测量质量报告》：首版 `doc/measurement/PLATFORM-MEASUREMENT-QUALITY-REPORT-2026-10-19.md`（2026-10-19 产出）。
+5. 把对照表、条件清单与脚本版本写进《平台测量质量报告》：首版 `doc/measurement/PLATFORM-MEASUREMENT-QUALITY-REPORT-2026-10-19.md`（2026-10-19 产出）。
+
+### 条件清单（2026-10-20 起必填）
+
+每臂一份 JSON，九个字段缺一不可；`topP` / `seed` 允许显式 `null`，但键必须存在（「没写」与「写了 null」是两种事实）。
+
+| 字段 | 约束 | 作用 |
+|---|---|---|
+| `modelSnapshot` | 非空字符串（如 `deepseek-v4.1-flash@2026-10-17`） | 锁定上游模型，防「同 id 静默换模型」 |
+| `promptHash` | 非空字符串（`sha256:...` 或等价的稳定 id） | 锁定提示词版本 |
+| `temperature` / `topP` / `maxTokens` / `seed` / `k` | 有限数；**两臂必须一致** | 防生成参数漂移；`k` 是重复次数 |
+| `coverage` | 0..1；两臂均 ≥0.95 且相差 ≤0.02 | 覆盖不完整时聚合不可信 |
+| `judgeVersion` | 非空字符串；**两臂必须一致** | 同一把尺子；写进产物 |
+
+拒绝条件（退出码 1）：`JUDGE_VERSION_MISMATCH`、`PARAM_MISMATCH`、`COVERAGE_BELOW_FLOOR`、`COVERAGE_GAP`、`NO_TREATMENT`（两臂 `modelSnapshot` 与 `promptHash` 完全相同 = 没有处理变量）。`modelSnapshot`/`promptHash` 允许两臂不同——它们就是被对照的变量，产物里会写明 `differing`。
+
+可直接复制的模板：`doc/measurement/condition-manifest.example.json`。跑对照前建议先执行
+`npm --prefix backend run measurement:check`（校验所有含 `condition` 的 JSON 与冻结集 manifest 结构）。
 
 ## 三、当前状态（2026-10-19 更新）
 

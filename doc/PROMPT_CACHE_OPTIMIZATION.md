@@ -1,6 +1,6 @@
 # Prompt 缓存优化设计
 
-> 📌 类型：活规范（缓存优化 SSOT；32k SSOT 回写已完成）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（缓存优化 SSOT；64k SSOT 回写已完成）｜最后核验：2026-10-20。索引见 [doc/README.md](./README.md)。
 
 - 发布：2026-09-28
 - 范围：平台 LLM 调用链的 prompt 缓存架构、标准通道实测缓存率、运维配置
@@ -144,13 +144,16 @@ prompt 中 ~44% 是必要新鲜内容（学员最新消息 + 课堂状态变更 
 | teaching-turn | 65.0% / 71.6% / 64.6% | 每节课轮 1 = 0%（任务级前缀不跨会话共享），轮 2 起即 87-98% |
 | 短 prompt 单发技能（adaptive-guidance-copy 等） | 0-15% | 无稳定前缀可缓存，属正常 |
 
-### 3.6 输出预算地板（32k）
+### 3.6 输出预算地板（64k）
 
-所有 skill 的 `maxTokens` 统一为 **32000**（prompts/skill.*.md frontmatter，2026-09-28 起，
-经 prompts:sync 发布）。背景：模型变体输出量可达旧预算（4000/8000）的 2-4 倍，低预算
-导致 finishReason=length 截断（path-reviewer@4000 2/2、material-collector@4000 等）。
-maxTokens 是上限不是目标——抬高不增加成本，只消除截断。判定截断：
+所有 skill 的 `maxTokens` 统一为 **64000**（`prompts/**/*.yaml` 与 `prompts/skill.*.md` frontmatter，
+2026-10-20 复核：62 处声明全部为 64000，经 prompts:sync 发布）。背景：模型变体输出量可达
+旧预算（4000/8000）的 2-4 倍，低预算导致 finishReason=length 截断（path-reviewer@4000 2/2、
+material-collector@4000 等）。maxTokens 是上限不是目标——抬高不增加成本，只消除截断。判定截断：
 `finishReason='length' 且 completionTokens=maxTokens`。
+
+> 注：模型注册表里的 `defaultMaxTokens`（现为 32768）是**路由缺省值**，只在各层都没声明
+> maxTokens 时兜底；skill 的生效预算以本条 64000 为准，两者不是同一口径。
 
 ### 3.7 实测成本（DeepSeek 官方价，人民币）
 

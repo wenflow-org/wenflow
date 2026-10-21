@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import apiConfigService from '../../services/apiConfig.service';
 import { getAPIGateway } from '../../gateway/api-gateway';
+import { resolveChatCompletionsUrl } from '../../gateway/api-gateway/chat-protocol-adapter';
 import { safeHttpRequest } from '../../utils/safe-http';
 import { z } from 'zod';
 import { isIP } from 'net';
@@ -300,10 +301,7 @@ router.post('/test-model', async (req, res) => {
       });
     }
 
-    const normalizedBase = resolvedUrl.replace(/\/$/, '');
-    const endpoint = normalizedBase.endsWith('/v1')
-      ? `${normalizedBase}/chat/completions`
-      : `${normalizedBase}/v1/chat/completions`;
+    const endpoint = resolveChatCompletionsUrl(resolvedUrl);
 
     const startedAt = Date.now();
     const response = await safeHttpRequest<any>(endpoint, {

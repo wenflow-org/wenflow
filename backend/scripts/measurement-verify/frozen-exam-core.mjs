@@ -412,3 +412,130 @@ export function decideF1b({ baseArm, variantArm, minDropPp = F1B_DEFAULTS.minDro
 function isPlainObject(v) {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }
+
+// ---------------------------------------------------------------------------
+// 对照条件清单（协议§二.2：产物必须写清 judgeVersion / 模型快照 / 生成参数 / 覆盖）
+// ---------------------------------------------------------------------------
+
+/**
+ * 每条臂的条件清单必填字段。缺任何一项都拒绝对照——「点估计 + 可选校验」无法证明
+ * 两次对照同条件（2026-10-17 的 1017 事故就是同 id 静默换模型）。
+ *
+ * - modelSnapshot / promptHash：**允许两臂不同**（它们就是被对照的变量）；
+ * - temperature/topP/maxTokens/seed/k：必须两臂一致；
+ * - coverage：判分覆盖率（已判/应收），两臂都必须 ≥ 下限（默认 0.95）；
+ * - judgeVersion：两臂必须一致，且写进产物。
+ */
+export const CONDITION_FIELDS = Object.freeze([
+  'modelSnapshot',
+  'promptHash',
+  'temperature',
+  'topP',
+  'maxTokens',
+  'seed',
+  'k',
+  'coverage',
+  'judgeVersion',
+]);
+
+/** 两臂必须一致的生成参数（modelSnapshot/promptHash 是处理变量，不在此列）。 */
+export const CONDITION_EQUALITY_FIELDS = Object.freeze([
+  'temperature',
+  'topP',
+  'maxTokens',
+  'seed',
+  'k',
+  'judgeVersion',
+]);
+
+const NON_EMPTY = (v) => typeof v === 'string' && v.trim().length > 0;
+const FINITE = (v) => typeof v === 'number' && Number.isFinite(v);
+
+/**
+ * 校验并规范化一条臂的条件清单。返回 `{...fields}`；结构问题抛 CONDITION_SHAPE。
+ * topP / seed 允许显式为 null（= 未设置 / 上游不支持），但**键必须存在**：
+ * 「没写」与「写了 null」是两种事实，不能靠缺省混为一谈。
+ */
+export function normalizeConditionManifest(raw, label = 'conditions') {
+  if (!isPlainObject(raw)) throw new FrozenExamError('CONDITION_SHAPE', `${label}: 必须是对象`);
+  const missing = CONDITION_FIELDS.filter((key) => !Object.prototype.hasOwnProperty.call(raw, key));
+  if (missing.length > 0) {
+    throw new FrozenExamError('CONDITION_SHAPE', `${label}: 缺少必填字段 ${missing.join(', ')}`);
+  }
+  if (!NON_EMPTY(raw.modelSnapshot)) throw new FrozenExamError('CONDITION_SHAPE', `${label}.modelSnapshot 必须是非空字符串`);
+  if (!NON_EMPTY(raw.promptHash)) throw new FrozenExamError('CONDITION_SHAPE', `${label}.promptHash 必须是非空字符串`);
+  if (!FINITE(raw.temperature) || raw.temperature < 0 || raw.temperature > 2) {
+    throw new FrozenExamError('CONDITION_SHAPE', `${label}.temperature 必须是 0..2 的有限数`);
+  }
+  if (raw.topP !== null && (!FINITE(raw.topP) || raw.topP <= 0 || raw.topP > 1)) {
+    throw new FrozenExamError('CONDITION_SHAPE', `${label}.topP 必须是 null 或 (0,1] 的有限数`);
+  }
+  if (!Number.isInteger(raw.maxTokens) || raw.maxTokens <= 0) {
+    throw new FrozenExamError('CONDITION_SHAPE', `${label}.maxTokens 必须是正整数`);
+  }
+  if (raw.seed !== null && !Number.isInteger(raw.seed)) {
+    throw new FrozenExamError('CONDITION_SHAPE', `${label}.seed 必须是 null 或整数`);
+  }
+  if (!Number.isInteger(raw.k) || raw.k <= 0) throw new FrozenExamError('CONDITION_SHAPE', `${label}.k 必须是正整数`);
+  if (!FINITE(raw.coverage) || raw.coverage < 0 || raw.coverage > 1) {
+    throw new FrozenExamError('CONDITION_SHAPE', `${label}.coverage 必须是 0..1 的有限数`);
+  }
+  if (!NON_EMPTY(raw.judgeVersion)) throw new FrozenExamError('CONDITION_SHAPE', `${label}.judgeVersion 必须是非空字符串`);
+  return {
+    modelSnapshot: raw.modelSnapshot.trim(),
+    promptHash: raw.promptHash.trim(),
+    temperature: raw.temperature,
+    topP: raw.topP,
+    maxTokens: raw.maxTokens,
+    seed: raw.seed,
+    k: raw.k,
+    coverage: raw.coverage,
+    judgeVersion: raw.judgeVersion.trim(),
+  };
+}
+
+/**
+ * 两臂条件是否可比。返回 `{ ok, problems:[{code, detail}], differing:[...], identical }`。
+ *
+ * 硬失败（ok=false）：
+ * - JUDGE_VERSION_MISMATCH：判分器换了，两臂不是同一把尺子；
+ * - PARAM_MISMATCH：temperature/topP/maxTokens/seed/k 不一致；
+ * - COVERAGE_BELOW_FLOOR：任一臂覆盖率低于下限（聚合不可信）；
+ * - COVERAGE_GAP：两臂覆盖率差超过容差；
+ * - NO_TREATMENT：modelSnapshot 与 promptHash 完全相同——没有处理变量，对照无法归因。
+ */
+export function compareConditionManifests(
+  a,
+  b,
+  { minCoverage = 0.95, maxCoverageGap = 0.02 } = {}
+) {
+  const problems = [];
+  for (const field of CONDITION_EQUALITY_FIELDS) {
+    if (a[field] !== b[field]) {
+      problems.push({
+        code: field === 'judgeVersion' ? 'JUDGE_VERSION_MISMATCH' : 'PARAM_MISMATCH',
+        detail: `${field}: A=${JSON.stringify(a[field])} / B=${JSON.stringify(b[field])}`,
+      });
+    }
+  }
+  for (const [label, cond] of [['A', a], ['B', b]]) {
+    if (cond.coverage < minCoverage) {
+      problems.push({
+        code: 'COVERAGE_BELOW_FLOOR',
+        detail: `${label} 臂覆盖率 ${cond.coverage} < ${minCoverage}（覆盖不完整，聚合不可信）`,
+      });
+    }
+  }
+  const gap = Math.abs(a.coverage - b.coverage);
+  if (gap > maxCoverageGap) {
+    problems.push({ code: 'COVERAGE_GAP', detail: `两臂覆盖率相差 ${roundTo(gap, 3)} > ${maxCoverageGap}` });
+  }
+  const differing = [];
+  if (a.modelSnapshot !== b.modelSnapshot) differing.push('modelSnapshot');
+  if (a.promptHash !== b.promptHash) differing.push('promptHash');
+  const identical = differing.length === 0;
+  if (identical) {
+    problems.push({ code: 'NO_TREATMENT', detail: '两臂 modelSnapshot 与 promptHash 完全相同，没有可归因的处理变量' });
+  }
+  return { ok: problems.length === 0, problems, differing, identical };
+}

@@ -15,9 +15,12 @@
  *       默认模式：校验 doc/measurement/frozen-exam-2026-10-18 的 manifest（逐文件 sha256 + 逐批/合计基线）；
  *       仓内目录不存在时回退旧本地位置 doc/local/frozen-eval-2026-10-18（兼容未同步的本地工作树/工具）。
  *   node backend/scripts/measurement-verify/frozen-exam-run.mjs --compare --arm-a <dir|file> --arm-b <dir|file> \
+ *        --verify-frozen --arm-a-conditions <a.json> --arm-b-conditions <b.json> \
  *        [--arm-a-filter <arm>] [--arm-b-filter <arm>] [--min-per-arm 35] [--min-drop-pp 10] \
- *        [--judge-version <v>] [--verify-frozen] [--allow-extra] [--skip-unknown] [--json] [--out <file>]
+ *        [--judge-version <v>] [--skip-unknown] [--json] [--out <file>]
  *       聚合两臂既有 verdict（{pid,arm,verdict.patterns} 逐条，或 {judged,wrong,patterns} 预聚合），按 F1-b 判定。
+ *       2026-10-20 起 --verify-frozen 与两臂条件清单为**硬门禁**（协议§二.1/§二.2）：
+ *       冻结集有变即作废；judgeVersion/生成参数必须一致，覆盖不足或两臂无处理变量一律拒绝。
  *   node backend/scripts/measurement-verify/frozen-exam-run.mjs --selftest
  *       纯函数/完整性校验自测（合成夹具，不读真实冻结集、不联网、零额度；CI 包装测试跑的就是它）。
  *   node backend/scripts/measurement-verify/frozen-exam-run.mjs --help
@@ -41,9 +44,11 @@ import {
   PRIMARY_PATTERN,
   aggregateArm,
   compareArms,
+  compareConditionManifests,
   computeBaseline,
   decideF1b,
   isVerdictShape,
+  normalizeConditionManifest,
   normalizeVerdictRecord,
   parseManifest,
   rateFraction,
@@ -66,8 +71,10 @@ const PATCHES = { ...F1B_DEFAULTS };
 const USAGE = [
   '用法：',
   '  frozen-exam-run.mjs --verify [--frozen-dir <dir>] [--json] [--allow-extra]',
-  '  frozen-exam-run.mjs --compare --arm-a <dir|file> --arm-b <dir|file> [--arm-a-filter <arm>] [--arm-b-filter <arm>]',
-  '      [--min-per-arm 35] [--min-drop-pp 10] [--judge-version <v>] [--verify-frozen] [--skip-unknown] [--json] [--out <file>]',
+  '  frozen-exam-run.mjs --compare --arm-a <dir|file> --arm-b <dir|file> --verify-frozen \\',
+  '      --arm-a-conditions <a.json> --arm-b-conditions <b.json> [--arm-a-filter <arm>] [--arm-b-filter <arm>]',
+  '      [--min-per-arm 35] [--min-drop-pp 10] [--judge-version <v>] [--skip-unknown] [--json] [--out <file>]',
+  '      --verify-frozen 与两份条件清单均为必填（协议§二.1/§二.2；条件清单缺字段即拒绝对照）',
   '  frozen-exam-run.mjs --selftest | --help',
   `协议：${PROTOCOL_REF}（F1-b：B 臂错答放行下降 ≥${PATCHES.minDropPp}pp 且样本量 ≥${PATCHES.minPerArm}/臂；未达样本量只登记不裁决）`,
 ].join('\n');
@@ -84,8 +91,12 @@ function parseArgs(argv) {
     armB: null,
     armAFilter: null,
     armBFilter: null,
+    armAConditions: null,
+    armBConditions: null,
     minPerArm: PATCHES.minPerArm,
     minDropPp: PATCHES.minDropPp,
+    minCoverage: 0.95,
+    maxCoverageGap: 0.02,
     judgeVersion: null,
     out: null,
     json: false,
@@ -99,10 +110,14 @@ function parseArgs(argv) {
     '--arm-b': (v) => (opts.armB = v),
     '--arm-a-filter': (v) => (opts.armAFilter = v),
     '--arm-b-filter': (v) => (opts.armBFilter = v),
+    '--arm-a-conditions': (v) => (opts.armAConditions = v),
+    '--arm-b-conditions': (v) => (opts.armBConditions = v),
     '--out': (v) => (opts.out = v),
     '--judge-version': (v) => (opts.judgeVersion = v),
     '--min-per-arm': (v) => (opts.minPerArm = parseThreshold(v, '--min-per-arm', PATCHES.minPerArm)),
     '--min-drop-pp': (v) => (opts.minDropPp = parseThreshold(v, '--min-drop-pp', PATCHES.minDropPp)),
+    '--min-coverage': (v) => (opts.minCoverage = parseFraction(v, '--min-coverage')),
+    '--max-coverage-gap': (v) => (opts.maxCoverageGap = parseFraction(v, '--max-coverage-gap')),
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -139,8 +154,24 @@ function parseArgs(argv) {
     throw new FrozenExamError('USAGE', `未知参数：${arg}`);
   }
   if (!opts.mode) opts.mode = '--verify';
-  if (opts.mode === '--compare' && (!opts.armA || !opts.armB)) {
-    throw new FrozenExamError('USAGE', '--compare 需要 --arm-a 与 --arm-b 各一个路径');
+  if (opts.mode === '--compare') {
+    if (!opts.armA || !opts.armB) {
+      throw new FrozenExamError('USAGE', '--compare 需要 --arm-a 与 --arm-b 各一个路径');
+    }
+    // 协议§二.1：有差异即作废本次对照——校验不是可选项，必须在对账前强制跑。
+    if (!opts.verifyFrozen) {
+      throw new FrozenExamError(
+        'USAGE',
+        '--compare 必须先校验冻结集：请加 --verify-frozen（协议§二.1；--allow-extra 只放宽新增文件，不放宽校验本身）',
+      );
+    }
+    // 协议§二.2：没有条件清单的对照无法证明「同条件」，一律拒绝。
+    if (!opts.armAConditions || !opts.armBConditions) {
+      throw new FrozenExamError(
+        'USAGE',
+        '--compare 需要 --arm-a-conditions 与 --arm-b-conditions（每臂一份 JSON，必填 modelSnapshot/promptHash/temperature/topP/maxTokens/seed/k/coverage/judgeVersion）',
+      );
+    }
   }
   return opts;
 }
@@ -153,6 +184,15 @@ function parseThreshold(value, flag, floor) {
   if (!Number.isFinite(n) || n <= 0) throw new FrozenExamError('USAGE', `${flag} 需要正数，收到 ${value}`);
   if (n < floor) {
     throw new FrozenExamError('USAGE', `${flag} 不得低于协议 F1-b 底线 ${floor}（只允许更严格；收到 ${value}）`);
+  }
+  return n;
+}
+
+/** 覆盖率阈值/容差：0..1 的有限小数。 */
+function parseFraction(value, flag) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 1) {
+    throw new FrozenExamError('USAGE', `${flag} 需要 0..1 的小数，收到 ${value}`);
   }
   return n;
 }
@@ -382,16 +422,33 @@ function runVerify(opts) {
 }
 
 function runCompare(opts) {
-  let verified = false;
-  if (opts.verifyFrozen) {
-    const manifest = readManifestFile(opts.frozenDir);
-    const check = verifyFrozenSet({ manifest, observed: fsObserved(opts.frozenDir), allowExtra: opts.allowExtra });
-    verified = check.ok;
-    if (!check.ok) {
-      console.log(renderVerifyReport(opts.frozenDir, check));
-      return EXIT.INTEGRITY;
-    }
+  // 硬门禁（协议§二.1）：parseArgs 已保证 --verify-frozen 存在；这里仍然复算，确保
+  // 「校验通过」不是调用方声称的，而是本次进程实测的。
+  const manifest = readManifestFile(opts.frozenDir);
+  const check = verifyFrozenSet({ manifest, observed: fsObserved(opts.frozenDir), allowExtra: opts.allowExtra });
+  if (!check.ok) {
+    console.log(renderVerifyReport(opts.frozenDir, check));
+    return EXIT.INTEGRITY;
   }
+  const conditionsA = normalizeConditionManifest(readJson(opts.armAConditions), 'A 臂条件清单');
+  const conditionsB = normalizeConditionManifest(readJson(opts.armBConditions), 'B 臂条件清单');
+  if (opts.judgeVersion && opts.judgeVersion !== conditionsA.judgeVersion) {
+    throw new FrozenExamError(
+      'USAGE',
+      `--judge-version ${opts.judgeVersion} 与 A 臂条件清单的 ${conditionsA.judgeVersion} 不一致`,
+    );
+  }
+  const judgeVersion = opts.judgeVersion || conditionsA.judgeVersion;
+  const conditionCheck = compareConditionManifests(conditionsA, conditionsB, {
+    minCoverage: opts.minCoverage,
+    maxCoverageGap: opts.maxCoverageGap,
+  });
+  if (!conditionCheck.ok) {
+    console.log('对照条件不成立，拒绝判定（协议§二.2）：');
+    for (const problem of conditionCheck.problems) console.log(`  · [${problem.code}] ${problem.detail}`);
+    return EXIT.USAGE;
+  }
+
   const a = loadArm(opts.armA, { filter: opts.armAFilter, label: 'A 臂', skipUnknown: opts.skipUnknown });
   const b = loadArm(opts.armB, { filter: opts.armBFilter, label: 'B 臂', skipUnknown: opts.skipUnknown });
   const comparison = compareArms(a.aggregate, b.aggregate);
@@ -403,14 +460,16 @@ function runCompare(opts) {
   });
 
   const notes = compareNotes(comparison, a, b);
+  const conditions = { a: conditionsA, b: conditionsB, differing: conditionCheck.differing, judgeVersion };
   if (opts.json) {
     console.log(
       JSON.stringify(
         {
           mode: 'compare',
           protocol: PROTOCOL_REF,
-          judgeVersion: opts.judgeVersion,
-          frozenVerified: verified,
+          judgeVersion,
+          frozenVerified: true,
+          conditions,
           f1b: decision,
           rows: comparison.rows,
           pairing: comparison.pairing,
@@ -425,7 +484,17 @@ function runCompare(opts) {
       ),
     );
   } else {
-    console.log(renderCompareReport({ a, b, comparison, decision, judgeVersion: opts.judgeVersion, verified }));
+    console.log(renderCompareReport({ a, b, comparison, decision, judgeVersion, verified: true }));
+    console.log(
+      `  条件清单：A ${conditionsA.modelSnapshot} / prompt ${conditionsA.promptHash}` +
+        ` ｜ B ${conditionsB.modelSnapshot} / prompt ${conditionsB.promptHash}` +
+        ` ｜ 判据 ${judgeVersion}`,
+    );
+    console.log(
+      `  生成参数：temperature=${conditionsA.temperature} topP=${conditionsA.topP} maxTokens=${conditionsA.maxTokens}` +
+        ` seed=${conditionsA.seed} k=${conditionsA.k} 覆盖 A=${conditionsA.coverage}/B=${conditionsB.coverage}`,
+    );
+    console.log(`  处理变量：${conditionCheck.differing.join(' + ')}`);
     if (a.skipped.length || b.skipped.length) {
       console.log(`  已跳过非 verdict json ${a.skipped.length + b.skipped.length} 个（--skip-unknown）`);
     }
@@ -434,7 +503,7 @@ function runCompare(opts) {
     fs.mkdirSync(path.dirname(path.resolve(opts.out)), { recursive: true });
     fs.writeFileSync(
       opts.out,
-      JSON.stringify({ mode: 'compare', protocol: PROTOCOL_REF, judgeVersion: opts.judgeVersion, f1b: decision, rows: comparison.rows, pairing: comparison.pairing, notes, arms: { a: a.aggregate, b: b.aggregate } }, null, 2),
+      JSON.stringify({ mode: 'compare', protocol: PROTOCOL_REF, judgeVersion, frozenVerified: true, conditions, f1b: decision, rows: comparison.rows, pairing: comparison.pairing, notes, arms: { a: a.aggregate, b: b.aggregate } }, null, 2),
       'utf8',
     );
     console.log(`对照结果已写出：${opts.out}`);
@@ -548,6 +617,57 @@ function runSelftest() {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 
+  // --- 对照条件清单（协议§二.2）---
+  const cond = (over = {}) => ({
+    modelSnapshot: 'deepseek-v4.1-flash@2026-10-17',
+    promptHash: 'sha256:aaa',
+    temperature: 0.7,
+    topP: null,
+    maxTokens: 64000,
+    seed: null,
+    k: 1,
+    coverage: 1,
+    judgeVersion: 'judge-v3',
+    ...over,
+  });
+
+  check('normalizeConditionManifest：缺字段/非法值拒绝，null 的 topP/seed 合法', () => {
+    const ok = normalizeConditionManifest(cond(), 'A');
+    assertEq(ok.topP, null, 'topP null 保留');
+    assertEq(ok.seed, null, 'seed null 保留');
+    const missing = cond();
+    delete missing.maxTokens;
+    assertThrows(() => normalizeConditionManifest(missing, 'A'), 'CONDITION_SHAPE', '缺 maxTokens');
+    assertThrows(() => normalizeConditionManifest(cond({ temperature: 3 }), 'A'), 'CONDITION_SHAPE', '温度越界');
+    assertThrows(() => normalizeConditionManifest(cond({ k: 0 }), 'A'), 'CONDITION_SHAPE', 'k 非正');
+    assertThrows(() => normalizeConditionManifest(cond({ coverage: 1.2 }), 'A'), 'CONDITION_SHAPE', '覆盖率越界');
+    assertThrows(() => normalizeConditionManifest([], 'A'), 'CONDITION_SHAPE', '非对象');
+  });
+
+  check('compareConditionManifests：只换 promptHash 是合法处理变量', () => {
+    const res = compareConditionManifests(cond(), cond({ promptHash: 'sha256:bbb' }));
+    assertEq(res.ok, true, 'ok');
+    assertEq(res.differing.join(','), 'promptHash', 'differing');
+  });
+
+  check('compareConditionManifests：judgeVersion / 生成参数不一致一律拒绝', () => {
+    const judge = compareConditionManifests(cond(), cond({ promptHash: 'b', judgeVersion: 'judge-v2' }));
+    assertEq(judge.ok, false, 'judge ok');
+    assertEq(judge.problems.map((p) => p.code).join(','), 'JUDGE_VERSION_MISMATCH', 'judge codes');
+    const param = compareConditionManifests(cond(), cond({ promptHash: 'b', temperature: 0.2 }));
+    assertEq(param.ok, false, 'param ok');
+    assertEq(param.problems.map((p) => p.code).join(','), 'PARAM_MISMATCH', 'param codes');
+  });
+
+  check('compareConditionManifests：覆盖不足 / 两臂无处理变量拒绝', () => {
+    const low = compareConditionManifests(cond({ coverage: 0.9 }), cond({ promptHash: 'b' }));
+    assertEq(low.ok, false, 'low ok');
+    assertEq(low.problems.some((p) => p.code === 'COVERAGE_BELOW_FLOOR'), true, 'low 含覆盖不足');
+    const same = compareConditionManifests(cond(), cond());
+    assertEq(same.ok, false, 'same ok');
+    assertEq(same.problems.map((p) => p.code).join(','), 'NO_TREATMENT', 'same codes');
+  });
+
   // --- 聚合与判定 ---
   check('normalizeVerdictRecord 拒绝缺模式的 verdict', () => {
     const rec = { pid: 'p1', arm: 'evig1', verdict: { patterns: { progressInflation: false, loopStuck: false } } };
@@ -645,11 +765,18 @@ function runSelftest() {
 
   check('parseArgs：模式互斥、缺值、未知参数都报 USAGE', () => {
     assertEq(parseArgs([]).mode, '--verify', '默认 verify');
-    assertEq(parseArgs(['--compare', '--arm-a', 'a', '--arm-b', 'b']).armB, 'b', '取值解析');
+    const full = ['--compare', '--verify-frozen', '--arm-a', 'a', '--arm-b', 'b', '--arm-a-conditions', 'ca.json', '--arm-b-conditions', 'cb.json'];
+    assertEq(parseArgs(full).armB, 'b', '取值解析');
     assertEq(parseArgs(['--min-per-arm', '40']).minPerArm, 40, '阈值可收紧');
     assertEq(parseArgs(['--min-drop-pp', '15']).minDropPp, 15, '差值阈值可收紧');
     assertThrows(() => parseArgs(['--verify', '--selftest']), 'USAGE', '模式互斥');
     assertThrows(() => parseArgs(['--compare', '--arm-a', 'a']), 'USAGE', '缺 arm-b');
+    assertThrows(() => parseArgs(full.filter((x) => x !== '--verify-frozen')), 'USAGE', '--compare 必须带 --verify-frozen');
+    assertThrows(
+      () => parseArgs(full.filter((x) => x !== '--arm-a-conditions' && x !== 'ca.json')),
+      'USAGE',
+      '--compare 必须带条件清单',
+    );
     assertThrows(() => parseArgs(['--frozen-dir']), 'USAGE', '缺取值');
     assertThrows(() => parseArgs(['--nope']), 'USAGE', '未知参数');
     assertThrows(() => parseArgs(['--min-per-arm', '0']), 'USAGE', '非正数');

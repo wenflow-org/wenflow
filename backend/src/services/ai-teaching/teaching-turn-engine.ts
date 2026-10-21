@@ -1289,54 +1289,6 @@ export async function processStudentMessage(
       checkpointResolution = { passed, understanding, judgedBy };
     }
 
-    await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
-      messages: persistedMessages,
-      messagesBaseCount: operationClaim.messagesBaseCount,
-      knowledgeState: mergedKnowledge,
-      teachingState,
-      taskId: session.taskId,
-      userId: session.userId,
-      markTaskInProgress: true,
-    });
-    committed = true;
-
-    // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合。
-    // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的
-    // conceptKey 是路径骨架 concept-N 占位时改挂检查点归属键（发出时带上的当前教学点概念；
-    // 无检查点回合退到当前教学点），真键原样，无归属可挂 → 丢弃（宁缺勿错挂）。
-    const misconceptions = teachingOutput.analysis?.misconceptions;
-    if (Array.isArray(misconceptions) && misconceptions.length > 0) {
-      const misconceptionAttribution = (submittedCheckpoint?.conceptKey
-        ? {
-            conceptName: submittedCheckpoint.conceptName ?? '',
-            conceptKey: submittedCheckpoint.conceptKey,
-            conceptSource: submittedCheckpoint.conceptSource ?? ('derived' as const),
-          }
-        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint));
-      void recordMisconceptions(session.userId, sessionId, misconceptions.map((m) => ({
-        conceptKey: rerouteMisconceptionConceptKey(m.conceptKey, misconceptionAttribution) || '',
-        hypothesis: m.hypothesis,
-        canonicalLabel: m.canonicalLabel ?? null,
-        confidence: m.confidence,
-        evidence: m.evidence,
-        status: m.status,
-      })).filter((m) => m.conceptKey && m.hypothesis));
-    }
-
-    // θ−d EMA：ktEstimate 跨会话滑动平均（α=0.2），best-effort 不阻断回合
-    // #94：kcId（模型从 scenario.taskKcs 回填的稳定键）随行透传——写入侧优先按它锚定概念身份，
-    // 未命中/缺失回落自由文本名（见 memory-trace.service resolveConceptIdSafe）。
-    const ktConceptMastery = teachingOutput.analysis?.ktEstimate?.conceptMastery;
-    if (Array.isArray(ktConceptMastery) && ktConceptMastery.length > 0) {
-      void memoryTraceService.applyKtEstimate(session.userId, ktConceptMastery.map((c) => ({
-        conceptKey: c.conceptKey,
-        ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
-        mastery: c.mastery,
-      })), session.learningPathId ?? null).catch((error) => {
-        logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
-      });
-    }
-
     const baseResult = {
     analysis: teachingOutput.analysis,
     aiResponse: teachingOutput.reply,
@@ -1377,6 +1329,68 @@ export async function processStudentMessage(
       checkpointResolution,
       revision: session.revision + 1,
     };
+
+    await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
+      messages: persistedMessages,
+      messagesBaseCount: operationClaim.messagesBaseCount,
+      knowledgeState: mergedKnowledge,
+      teachingState,
+      taskId: session.taskId,
+      userId: session.userId,
+      markTaskInProgress: true,
+      // 幂等结算与业务写入同事务（2026-10-21）：此前账本在路由里二次独立提交，
+      // 崩溃窗口内消息已落库而账本仍 processing，同 key 只能拿到 409。
+      ...(options.idempotencyKey
+        ? {
+            settlement: {
+              idempotencyKey: options.idempotencyKey,
+              result: options.settlementResult
+                ? options.settlementResult(baseResult as unknown as Record<string, any>)
+                : baseResult as unknown as Record<string, any>,
+              revision: baseResult.revision,
+            },
+          }
+        : {}),
+    });
+    committed = true;
+
+    // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合。
+    // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的
+    // conceptKey 是路径骨架 concept-N 占位时改挂检查点归属键（发出时带上的当前教学点概念；
+    // 无检查点回合退到当前教学点），真键原样，无归属可挂 → 丢弃（宁缺勿错挂）。
+    const misconceptions = teachingOutput.analysis?.misconceptions;
+    if (Array.isArray(misconceptions) && misconceptions.length > 0) {
+      const misconceptionAttribution = (submittedCheckpoint?.conceptKey
+        ? {
+            conceptName: submittedCheckpoint.conceptName ?? '',
+            conceptKey: submittedCheckpoint.conceptKey,
+            conceptSource: submittedCheckpoint.conceptSource ?? ('derived' as const),
+          }
+        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint));
+      void recordMisconceptions(session.userId, sessionId, misconceptions.map((m) => ({
+        conceptKey: rerouteMisconceptionConceptKey(m.conceptKey, misconceptionAttribution) || '',
+        hypothesis: m.hypothesis,
+        canonicalLabel: m.canonicalLabel ?? null,
+        confidence: m.confidence,
+        evidence: m.evidence,
+        status: m.status,
+      })).filter((m) => m.conceptKey && m.hypothesis));
+    }
+
+    // θ−d EMA：ktEstimate 跨会话滑动平均（α=0.2），best-effort 不阻断回合
+    // #94：kcId（模型从 scenario.taskKcs 回填的稳定键）随行透传——写入侧优先按它锚定概念身份，
+    // 未命中/缺失回落自由文本名（见 memory-trace.service resolveConceptIdSafe）。
+    const ktConceptMastery = teachingOutput.analysis?.ktEstimate?.conceptMastery;
+    if (Array.isArray(ktConceptMastery) && ktConceptMastery.length > 0) {
+      void memoryTraceService.applyKtEstimate(session.userId, ktConceptMastery.map((c) => ({
+        conceptKey: c.conceptKey,
+        ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
+        mastery: c.mastery,
+      })), session.learningPathId ?? null).catch((error) => {
+        logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
+      });
+    }
+
 
     return baseResult;
   } finally {

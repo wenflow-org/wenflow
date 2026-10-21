@@ -813,6 +813,8 @@ export const adminModelProvidersApi = {
     baseUrl: string;
     apiKeyEnv?: string;
     apiKey?: string;
+    /** null = 未声明（按端点来源推导） */
+    supportsSystemRole?: boolean | null;
   }) => adminAxios.post('/admin/model-providers', data),
 
   update: async (providerId: string, data: {
@@ -821,6 +823,8 @@ export const adminModelProvidersApi = {
     enabled?: boolean;
     baseUrl?: string;
     apiKey?: string;
+    /** null = 清除声明，回到按端点来源推导 */
+    supportsSystemRole?: boolean | null;
   }) => adminAxios.patch(`/admin/model-providers/${encodeURIComponent(providerId)}`, data),
 
   remove: async (providerId: string) => adminAxios.delete(`/admin/model-providers/${encodeURIComponent(providerId)}`),

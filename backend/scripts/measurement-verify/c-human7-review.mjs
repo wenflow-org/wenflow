@@ -5,6 +5,7 @@
 // 纪律：只打 3011；学生模型走 backend/.env 网关（不回显密钥）；DB 只读（验证另跑）。
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -55,9 +56,17 @@ async function login() {
   if (!cookie) throw new Error('登录失败');
 }
 async function api(method, urlPath, body, { timeoutMs = 300000 } = {}) {
+  // 2026-10-20 起教学写路由强制 Idempotency-Key：脚本内自动补
+  const writeRoute = /\/ai-teaching\/sessions\/[^/]+\/(messages|continue)$/.test(urlPath)
+    || /\/checkpoints\/[^/]+\/submit(\/stream)?$/.test(urlPath);
   const res = await fetch(BASE + urlPath, {
     method,
-    headers: { Cookie: cookie, Origin: 'http://localhost:5173', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+    headers: {
+      Cookie: cookie,
+      Origin: 'http://localhost:5173',
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(writeRoute ? { 'Idempotency-Key': `review-${randomUUID()}` } : {}),
+    },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(timeoutMs),
   });

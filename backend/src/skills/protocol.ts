@@ -74,6 +74,7 @@ export interface SkillExecutionRequest {
 }
 
 export interface SkillExecutionOptions {
+  /** 硬超时（毫秒）。此前只是摆设——executor 从不读取；2026-10-21 起真正生效。 */
   timeout?: number;
   cache?: boolean;
   priority?: 'high' | 'normal' | 'low';
@@ -81,6 +82,16 @@ export interface SkillExecutionOptions {
   contextEnvelope?: ContextEnvelopeV1;
   /** 取消信号：注入执行上下文，供底层 LLM 调用（callPrompt → gateway.execute）取消。 */
   abortSignal?: AbortSignal;
+  /**
+   * 人工审批通过标记。仅在 TOOL_APPROVAL_REQUIRED_SKILLS 命中该 skill 时被检查；
+   * 未命中审批名单时不读取。见 skills/tool-execution-hooks.ts。
+   */
+  approved?: boolean;
+  /**
+   * 结构化失败：handler 返回 `success:false` 时返回该结果而不是抛异常，
+   * 让调用方按业务语义降级。默认 false（保持既有抛错语义）。
+   */
+  allowStructuredFailure?: boolean;
 }
 
 // Skill 执行结果

@@ -115,6 +115,12 @@ export interface ProviderDefinition {
   endpointSource: 'inherit' | 'own';
   baseUrl?: string;
   apiKeyEnv?: string;
+  /**
+   * 上游是否接受原生 `role:'system'`（默认 true = 标准 OpenAI 语义）。
+   * 声明 false 的通道由网关把 system 折叠进首条 user（见 api-gateway/executor 的兼容层）。
+   * 这是**通道能力**，不是全局开关：同一平台可能同时接标准上游与会静默丢弃 system 的聚合网关。
+   */
+  supportsSystemRole?: boolean;
   models: ModelDefinition[];
 }
 
@@ -205,7 +211,8 @@ function buildEmbeddedFallback(): RegistrySnapshot {
     }
   ];
   const platform: ProviderDefinition = {
-    id: 'platform', name: '平台', enabled: true, recommended: true, endpointSource: 'inherit', models
+    // 内置兜底与文件默认一致：平台继承通道历史上是会静默丢弃 system 的聚合网关
+    id: 'platform', name: '平台', enabled: true, recommended: true, endpointSource: 'inherit', supportsSystemRole: false, models
   };
   return {
     models,
@@ -376,6 +383,7 @@ export function parseLlmProvidersConfig(raw: string): RegistrySnapshot {
       endpointSource: baseUrl ? 'own' : 'inherit',
       ...(baseUrl ? { baseUrl } : {}),
       ...(apiKeyEnv ? { apiKeyEnv } : {}),
+      ...(typeof p.supportsSystemRole === 'boolean' ? { supportsSystemRole: p.supportsSystemRole } : {}),
       models
     });
   }
@@ -545,6 +553,36 @@ export function supportsThinkingMode(modelId: string): boolean {
 export function supportsVision(modelId: string): boolean {
   const model = MODEL_MAP.get(String(modelId || '').trim());
   return model?.vision === true;
+}
+
+/**
+ * 纯能力判定（不读模块状态），便于矩阵测试：
+ * - 显式 `supportsSystemRole` 永远优先；
+ * - 未声明时按端点来源：`inherit`（平台通道）默认折叠，`own`（自带 baseUrl）默认保留 system；
+ * - 无 provider（未登记/用户自有模型）默认保留 system。
+ */
+export function providerAcceptsSystemRole(
+  provider: Pick<ProviderDefinition, 'endpointSource' | 'supportsSystemRole'> | null | undefined
+): boolean {
+  if (!provider) return true;
+  if (typeof provider.supportsSystemRole === 'boolean') return provider.supportsSystemRole;
+  return provider.endpointSource === 'own';
+}
+
+/**
+ * 供应商/通道路由是否接受原生 `role:'system'`（见 ProviderDefinition.supportsSystemRole）。
+ *
+ * 默认值按**端点来源**分：
+ * - `inherit`（沿用平台通道，历史上是会静默丢弃 system 的聚合网关）→ 默认 **false**（折叠）；
+ *   未显式声明的旧注册表/批跑配置因此保持 2026-09-22 事故后的安全行为；
+ * - `own`（供应商自带 baseUrl，标准 OpenAI 兼容）与未登记的 providerId
+ *   （用户自带模型、env 兜底、skill 覆盖）→ 默认 **true**（保留 system 角色）。
+ * 显式 `supportsSystemRole` 永远优先。
+ */
+export function providerSupportsSystemRole(providerId: string): boolean {
+  const id = String(providerId || '').trim();
+  if (!id) return true;
+  return providerAcceptsSystemRole(activeProviders.find((p) => p.id === id));
 }
 
 /**

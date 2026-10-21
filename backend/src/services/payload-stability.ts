@@ -53,6 +53,10 @@ export const PAYLOAD_STABILITY: Readonly<Record<string, PayloadStabilitySpec>> =
     stable: ['learner', 'openingMode'],
     note: '学习者摘要与开场模式跨回合稳定；任务上下文后置',
   },
+  'goal-conversation': {
+    stable: ['task'],
+    note: 'task 常量前置；conversationContext 是追加式历史，state/userInput 每轮重写后置',
+  },
   'learner-progress-report': {
     stable: ['signals', 'metrics'],
     note: '信号与指标为输入摘要；task 后置',
@@ -93,4 +97,19 @@ export function isFirstKeyStable(skillId: string, firstKey: string | undefined):
   if (!spec) return true; // 未声明的 skill 不参与护栏
   if (!firstKey) return false;
   return spec.stable.includes(firstKey);
+}
+
+/**
+ * 单条 payload 的**完整稳定段**是否按声明顺序出现在最前面（2026-10-20）。
+ *
+ * 首键检查只防「把易变键挪到第一位」；把稳定段里的第二、三个键挪走仍会漏过。
+ * 本函数要求 payload 的前 N 个键与声明逐一相等（N = 声明长度）。
+ *
+ * 遥测瘦身时拿不到完整键序——调用方应对瘦身行回退到 isFirstKeyStable（见门禁脚本）。
+ */
+export function isStablePrefix(skillId: string, keys: readonly string[]): boolean {
+  const spec = PAYLOAD_STABILITY[skillId];
+  if (!spec) return true;
+  if (!Array.isArray(keys) || keys.length < spec.stable.length) return false;
+  return spec.stable.every((key, index) => keys[index] === key);
 }

@@ -7,6 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { getGateway } from '../../gateway';
 import { APIRouter } from '../../gateway/api-gateway/router';
+import { resolveChatCompletionsUrl } from '../../gateway/api-gateway/chat-protocol-adapter';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { getAgentManifest, getAgentOfSkill, getCanonicalAgentId } from '../../services/agent-manifest.service';
 import {
@@ -430,10 +431,7 @@ router.post('/:name/model-probe', async (req: Request, res: Response) => {
     const effectiveEffort = thinkingMode === 'disabled' ? 'default' : reasoningEffort;
 
     // 4) 发流式请求（与 executor 同协议：stream + include_usage）
-    const endpointBase = route.endpoint.replace(/\/$/, '');
-    const endpoint = endpointBase.endsWith('/v1')
-      ? `${endpointBase}/chat/completions`
-      : `${endpointBase}/v1/chat/completions`;
+    const endpoint = resolveChatCompletionsUrl(route.endpoint);
 
     // 4.5) SSRF 防护（安全审计 M3，与运行时执行器同源）：探测目标必须通过 safe-http 地址校验
     // （拒绝私网/本机/链路本地/元数据地址，生产强制 HTTPS）。此前这里是全站唯一绕过 safe-http

@@ -274,6 +274,7 @@ interface ProviderView extends ProviderLike {
   keySource: 'db' | 'env' | 'none'
   keyHint: string | null
   status: 'ready' | 'unconfigured' | 'inherit' | 'disabled'
+  supportsSystemRole: boolean | null
   models: ModelLike[]
 }
 interface ProvidersView {

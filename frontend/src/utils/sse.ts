@@ -11,6 +11,8 @@ export interface StreamSseHandlers {
   /** 每个 SSE 事件回调（event 为 'delta' | 'final' | 'done' | 'error' | 'restart' 等） */
   onEvent: (event: string, data: any) => void;
   signal?: AbortSignal;
+  /** 额外请求头（如 Idempotency-Key）；认证头由本函数统一补齐 */
+  headers?: Record<string, string>;
   /** 空闲超时（ms）：超过该时长未收到任何字节（含注释心跳行）即中止并报错，防服务器挂起导致 typing 永久卡死；默认 60000 */
   idleTimeoutMs?: number;
 }
@@ -29,7 +31,8 @@ export async function streamSsePost(
   const idleTimeoutMs = handlers.idleTimeoutMs ?? 60_000;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json; charset=utf-8',
-    Accept: 'text/event-stream'
+    Accept: 'text/event-stream',
+    ...(handlers.headers || {}),
   };
   if (projectionToken) headers['X-Projection-Token'] = projectionToken;
 

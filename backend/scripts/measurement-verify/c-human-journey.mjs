@@ -10,6 +10,7 @@
 //       （此处自包含重写——两个源脚本均未导出，不能 import）。
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -99,11 +100,21 @@ async function gatewayChat(messages, { maxTokens = 1200, temperature = 0.7, time
 let cookie = '';
 async function api(method, urlPath, body, { retries = 4, timeoutMs = 300000, headers = {} } = {}) {
   let last = null;
+  // 2026-10-20 起教学写路由强制 Idempotency-Key：脚本内自动补，重试复用同一个 key
+  const writeRoute = /\/ai-teaching\/sessions\/[^/]+\/(messages|continue)$/.test(urlPath)
+    || /\/checkpoints\/[^/]+\/submit(\/stream)?$/.test(urlPath);
+  const idem = writeRoute ? `hum-${randomUUID()}` : null;
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(BASE + urlPath, {
         method,
-        headers: { Cookie: cookie, Origin: 'http://localhost:5173', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers },
+        headers: {
+          Cookie: cookie,
+          Origin: 'http://localhost:5173',
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(idem ? { 'Idempotency-Key': idem } : {}),
+          ...headers,
+        },
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(timeoutMs),
       });

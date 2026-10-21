@@ -62,7 +62,8 @@ describe('ProviderEditorDialog', () => {
       description: '',
       enabled: true,
       baseUrl: 'https://gw.acme.com/v1',
-      apiKey: 'sk-acme-123456'
+      apiKey: 'sk-acme-123456',
+      supportsSystemRole: null
     })
     expect(w.find('[role="dialog"]').exists()).toBe(false)
   })
@@ -94,6 +95,32 @@ describe('ProviderEditorDialog', () => {
     await btn(w, '保存').trigger('click')
     await flushPromises()
     expect(updateMock).toHaveBeenCalledWith('platform', expect.objectContaining({ name: '平台提供', enabled: true }))
+  })
+
+  it('system 角色：三态回填与回写（自动=null / 保留=true / 合并=false）', async () => {
+    const w = mount(ProviderEditorDialog, mountOptions)
+    w.vm.openWith({
+      id: 'acme-gateway', name: 'Acme 网关', description: null, enabled: true,
+      baseUrl: 'https://gw.acme.com/v1', keyHint: null, supportsSystemRole: false,
+    })
+    await flushPromises()
+    const select = w.find('select.mk-field__input')
+    expect((select.element as HTMLSelectElement).value).toBe('fold')
+
+    await select.setValue('keep')
+    updateMock.mockResolvedValue({ data: { success: true, warnings: [] } })
+    await btn(w, '保存').trigger('click')
+    await flushPromises()
+    expect(updateMock).toHaveBeenCalledWith('acme-gateway', expect.objectContaining({ supportsSystemRole: true }))
+
+    // 未声明 → 自动（null）
+    const w2 = mount(ProviderEditorDialog, mountOptions)
+    w2.vm.openWith({
+      id: 'acme-gateway', name: 'Acme 网关', description: null, enabled: true,
+      baseUrl: 'https://gw.acme.com/v1', keyHint: null, supportsSystemRole: null,
+    })
+    await flushPromises()
+    expect((w2.find('select.mk-field__input').element as HTMLSelectElement).value).toBe('auto')
   })
 })
 

@@ -132,6 +132,17 @@ export interface ProcessStudentMessageOptions {
    * 无学生新输入，不落库伪 user 消息，teaching-turn 仅凭历史 + session-resumed 事件自然接续。
    */
   kind?: 'message' | 'resume-continue';
+  /**
+   * 写路由的幂等键（2026-10-21）：传入后，回合提交与幂等账本 completed 在同一事务内落库，
+   * 消除「消息已提交、账本仍 processing」的崩溃窗口。仅 /messages、/continue 等
+   * 带 Idempotency-Key 的写路由传入；内部调用（检查点、虚拟学习者）可省略。
+   */
+  idempotencyKey?: string;
+  /**
+   * 幂等账本存什么：默认存回合原始载荷（/messages、/continue 由调用方重放时投影）；
+   * 检查点提交传入本函数，把载荷改写成检查点对外结果（{passed,feedback,revision}）。
+   */
+  settlementResult?: (base: Record<string, any>) => Record<string, any>;
 }
 
 export class AITeachingOrchestrator {
@@ -244,8 +255,9 @@ export class AITeachingOrchestrator {
     checkpointId: string,
     payload: CheckpointSubmitPayload,
     expectedRevision?: number,
+    idempotencyKey?: string,
   ): Promise<CheckpointSubmitResult> {
-    return submitCheckpointImpl(sessionId, checkpointId, payload, expectedRevision);
+    return submitCheckpointImpl(sessionId, checkpointId, payload, expectedRevision, idempotencyKey);
   }
 
   async judgeCheckpointSubmission(

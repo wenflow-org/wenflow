@@ -22,6 +22,8 @@ import {
   TEACHING_OPERATION_LEASE_MS,
   TEACHING_OPERATION_RENEW_MS,
 } from '../../virtual-lab/lease-protocol';
+import { completeTeachingOperation } from './TeachingMessageIdempotencyService';
+import { recordSessionEvent } from './session-events.service';
 
 /**
  * 课堂操作租约（P2）：原为 30 分钟且无心跳——进程重启/请求挂起会把这个会话锁死很久
@@ -143,24 +145,29 @@ export interface TeachingDiagram {
 }
 
 /**
- * 位置线图（2026-09-27 双通道重构 Scope B）：空间位置关系的确定性渲染载荷。
- * 数值域由 skill normalizeFigure 统一推导（保证覆盖所有取值），前端只做坐标映射——
+ * 教学图（确定性 SVG 渲染载荷）：位置线 / 二维网格 / 命中矩阵 / 对照 / 象限 / 多对多 / 棋盘。
+ * 规格由 skill normalizeFigure 逐字段裁剪（白名单 + 上限），前端只做坐标计算——
  * 渲染是纯函数，无生成、无乱码、无联网。
  */
 export interface TeachingFigure {
   /** 归一化后恒为 'svg' */
   engine: string;
-  /** 归一化后恒为 'position-line'（v1 唯一图型） */
+  /** 图型：position-line / grid / matrix / compare / quadrant / bipartite / board / bins / balance / ladder */
   kind: string;
-  axis: {
+  /** 学科调色板（服务端按 subject 盖章）：只影响色相与材质，不改变几何与语义 */
+  palette?: string;
+  /** position-line 专用（kind='position-line' 时存在） */
+  axis?: {
     min: number;
     max: number;
     unit: string | null;
     ticks: Array<{ at: number; label: string | null }>;
   };
-  marks: Array<{ at: number; label: string; dir: 'right' | 'left' | 'none' }>;
-  spans: Array<{ from: number; to: number; label: string }>;
-  guides: Array<{ at: number; label: string | null }>;
+  marks?: Array<{ at: number; label: string; dir: 'right' | 'left' | 'none' }>;
+  spans?: Array<{ from: number; to: number; label: string }>;
+  guides?: Array<{ at: number; label: string | null }>;
+  /** 其余图型的规格（kind≠'position-line' 时存在） */
+  spec?: Record<string, unknown>;
   caption: string | null;
 }
 
@@ -468,32 +475,56 @@ export class TeachingSessionRepository {
       teachingState: Record<string, any>;
     }
   ): Promise<TeachingSessionRecord> {
-    const updated = await prisma.teaching_sessions.updateMany({
-      where: {
-        id: sessionId,
-        status: 'initializing',
-        operationId,
-        operationKind: 'start'
-      },
-      data: {
-        status: 'active',
-        // 数据还债 B1（2026-10-08）：开场基线不再经 messages 大列中转（原先写列、
-        // 首回合惰性播种搬侧表）——直接落侧表，列保持 reserve 时的空数组不动。
-        knowledgeState: JSON.stringify(payload.knowledgeState),
-        teachingState: JSON.stringify(payload.teachingState),
-        operationId: null,
-        operationKind: null,
-        operationLeaseExpiresAt: null,
-        revision: { increment: 1 },
-        updatedAt: new Date()
+    // 原子化（2026-10-20）：状态转 active 与开场消息落侧表必须同事务——此前先更新行、
+    // 再 append 消息，后一步失败会留下「已开课但没有开场白」的半成品会话。
+    await withTransaction(async (tx) => {
+      const updated = await tx.teaching_sessions.updateMany({
+        where: {
+          id: sessionId,
+          status: 'initializing',
+          operationId,
+          operationKind: 'start'
+        },
+        data: {
+          status: 'active',
+          // 数据还债 B1（2026-10-08）：开场基线不再经 messages 大列中转（原先写列、
+          // 首回合惰性播种搬侧表）——直接落侧表，列保持 reserve 时的空数组不动。
+          knowledgeState: JSON.stringify(payload.knowledgeState),
+          teachingState: JSON.stringify(payload.teachingState),
+          operationId: null,
+          operationKind: null,
+          operationLeaseExpiresAt: null,
+          revision: { increment: 1 },
+          updatedAt: new Date()
+        }
+      });
+      if (updated.count !== 1) {
+        throw new TeachingSessionConflictError('课堂启动状态已变化，请重试', 'TEACHING_SESSION_STATE_CHANGED');
       }
-    });
-    if (updated.count !== 1) {
-      throw new TeachingSessionConflictError('课堂启动状态已变化，请重试', 'TEACHING_SESSION_STATE_CHANGED');
-    }
-    if (payload.messages.length > 0) {
-      await appendTeachingMessages(sessionId, payload.messages);
-    }
+      if (payload.messages.length > 0) {
+        await appendTeachingMessages(
+          sessionId,
+          payload.messages,
+          tx as unknown as TeachingMessageStoreClient
+        );
+      }
+
+      await recordSessionEvent({
+        sessionId,
+        kind: 'session.initialized',
+        actor: 'system',
+        status: 'ok',
+        revision: (await tx.teaching_sessions.findUnique({
+          where: { id: sessionId },
+          select: { revision: true },
+        }))?.revision ?? null,
+        payload: {
+          operationId,
+          openingMessages: payload.messages.length,
+          knowledgePoints: payload.knowledgeState.length,
+        },
+      }, tx as any);
+    }, { label: 'teaching.completeInitialization' });
 
     const session = await this.getById(sessionId);
     if (!session) throw new Error('会话不存在');
@@ -765,6 +796,16 @@ export class TeachingSessionRepository {
       userId?: string;
       markTaskInProgress?: boolean;
       allowedStatuses?: string[];
+      /**
+       * 幂等结算（2026-10-21）：与回合业务写入同事务把账本标 completed，
+       * 消除「commitTurnState 已提交、completeTeachingOperation 未落」的崩溃窗口。
+       * 由调用方提供对外的 result（重放时原样返回）。
+       */
+      settlement?: {
+        idempotencyKey: string;
+        result: Record<string, any>;
+        revision?: number | null;
+      } | null;
     }
   ): Promise<void> {
     await withTransaction(async (tx) => {
@@ -835,6 +876,30 @@ export class TeachingSessionRepository {
           }
         });
       }
+
+      // 幂等结算与业务同一事务：commitTurnState 与账本 completed 要么都落、要么都不落。
+      if (payload.settlement?.idempotencyKey) {
+        await completeTeachingOperation({
+          sessionId,
+          idempotencyKey: payload.settlement.idempotencyKey,
+          result: payload.settlement.result,
+          revision: payload.settlement.revision ?? null,
+        }, tx as unknown as import('./TeachingMessageIdempotencyService').TeachingOperationLedgerClient);
+      }
+
+      await recordSessionEvent({
+        sessionId,
+        kind: 'turn.committed',
+        actor: 'system',
+        status: 'ok',
+        revision: payload.settlement?.revision ?? null,
+        payload: {
+          messages: payload.messages.length,
+          knowledgePoints: payload.knowledgeState.length,
+          operationId,
+          idempotencyKey: payload.settlement?.idempotencyKey ?? null,
+        },
+      }, tx as any);
     });
   }
 
@@ -943,6 +1008,18 @@ export class TeachingSessionRepository {
     });
     if (updated.count !== 1) {
       throw new TeachingSessionConflictError('课堂状态已变化，请刷新后重试', 'TEACHING_SESSION_STATE_CHANGED');
+    }
+    const lifecycleKind = payload.status === 'paused'
+      ? 'session.paused'
+      : payload.status === 'completed' ? 'session.completed' : null;
+    if (lifecycleKind) {
+      await recordSessionEvent({
+        sessionId,
+        kind: lifecycleKind,
+        actor: 'user',
+        status: 'ok',
+        payload: { operationId, status: payload.status },
+      });
     }
   }
 
@@ -1463,6 +1540,19 @@ export class TeachingSessionRepository {
       if (completedOperation.count !== 1) {
         throw new FinalizationOperationError('课堂结束执行租约已失效', 'FINALIZATION_LEASE_LOST', 409, true, 'lease');
       }
+
+      await recordSessionEvent({
+        sessionId,
+        kind: 'session.completed',
+        actor: 'user',
+        status: 'ok',
+        payload: {
+          idempotencyKey,
+          wrapupSource: payload.wrapup ? (payload.wrapup as any).summarySource ?? null : null,
+          duration: payload.duration ?? null,
+          domainEvent: { type: event.type, id: event.id },
+        },
+      }, tx as any);
     });
   }
 

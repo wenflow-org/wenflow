@@ -66,6 +66,11 @@ export interface ProviderViewModel {
   keyHint: string | null;
   /** inherit = 端点与密钥在连接设置里；unconfigured = 自带端点但还没密钥 */
   status: 'ready' | 'unconfigured' | 'inherit' | 'disabled';
+  /**
+   * 上游是否接受原生 `role:'system'`。null = 未显式声明，按 endpointSource 推导
+   * （inherit 折叠、own 保留）。见 models.config.ts:providerAcceptsSystemRole。
+   */
+  supportsSystemRole: boolean | null;
   models: ModelViewModel[];
 }
 
@@ -105,6 +110,8 @@ export interface ProviderInput {
   apiKeyEnv?: string | null;
   /** 表单里填的明文密钥：落库密文；留空/不传 = 不改动已配置的密钥 */
   apiKey?: string | null;
+  /** true/false = 显式声明；null = 清除声明，回到按端点来源推导 */
+  supportsSystemRole?: boolean | null;
 }
 
 export interface ModelInput {
@@ -404,6 +411,7 @@ export async function buildProvidersView(): Promise<ProviderRegistryView> {
       keySource: summary.keySource,
       keyHint: summary.keyHint,
       status: !enabled ? 'disabled' : !baseUrl ? 'inherit' : summary.keySource === 'none' ? 'unconfigured' : 'ready',
+      supportsSystemRole: typeof raw.supportsSystemRole === 'boolean' ? raw.supportsSystemRole : null,
       models: Object.entries(modelsRaw).map(([modelId, m]) => toModelView(m ?? {}, modelId))
     });
   }
@@ -595,6 +603,7 @@ export async function createProvider(input: ProviderInput): Promise<EditOutcome 
     enabled: input.enabled !== false,
     baseUrl,
     apiKeyEnv,
+    ...(typeof input.supportsSystemRole === 'boolean' ? { supportsSystemRole: input.supportsSystemRole } : {}),
     models: {}
   };
   const warnings = saveRegistry(next, []);
@@ -620,6 +629,10 @@ export async function updateProvider(providerId: string, input: ProviderInput): 
     else delete target.description;
   }
   if (input.enabled !== undefined) target.enabled = input.enabled === true;
+  if (input.supportsSystemRole !== undefined) {
+    if (typeof input.supportsSystemRole === 'boolean') target.supportsSystemRole = input.supportsSystemRole;
+    else delete target.supportsSystemRole;
+  }
   if (input.baseUrl !== undefined) {
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     if (!baseUrl) throw new RegistryEditError('服务地址不能清空（要停用请用「启用」开关）。', 400, 'invalid');
