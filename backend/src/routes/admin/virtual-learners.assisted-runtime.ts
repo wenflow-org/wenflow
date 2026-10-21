@@ -978,14 +978,17 @@ router.post('/sessions/:sessionId/wrapup', async (req: Request, res) => {
 /**
  * 更新 session 的模拟配置 (目前主要是 frictionBudget)
  * PUT /api/admin/virtual-learners/sessions/:sessionId/simulation-config
- * body: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test', experimentArm?: 'A' | 'B' | null }
+ * body: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test', experimentArm?: 'A' | 'B' | null,
+ *         extensionProbe?: boolean, advisoryResponse?: 'keep' | 'later' | 'preview' | null }
  * experimentArm：冻结考卷双臂协议（#85）的会话级臂标签。A = 护栏前口径（关闭 #84 后续回合
  * 肯定语护栏），B/缺省 = 现行口径；null 清除标签。仅用于对照实验，不改变默认行为。
+ * extensionProbe：延伸学探针（2026-10-21）——每会话一次，在正课收束时强制开一节延伸课，
+ * 用于验证 #124 链路；null 关闭。advisoryResponse：收束带回重排建议时记账的处置动作（只留痕，不执行重排）。
  */
 router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const { frictionBudget, model, simulationClock, experimentArm } = req.body || {};
+    const { frictionBudget, model, simulationClock, experimentArm, extensionProbe, advisoryResponse } = req.body || {};
 
     if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
       return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
@@ -996,6 +999,13 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
     if (experimentArm !== undefined && experimentArm !== null
       && !['A', 'B'].includes(String(experimentArm).toUpperCase())) {
       return res.status(400).json({ success: false, error: 'experimentArm 只能是 A/B 或 null' });
+    }
+    if (extensionProbe !== undefined && extensionProbe !== null && typeof extensionProbe !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'extensionProbe 必须是布尔值' });
+    }
+    if (advisoryResponse !== undefined && advisoryResponse !== null
+      && !['keep', 'later', 'preview'].includes(String(advisoryResponse))) {
+      return res.status(400).json({ success: false, error: 'advisoryResponse 只能是 keep/later/preview 或 null' });
     }
     // 日期模拟时钟（配置项）：baseDate=起点（YYYY-MM-DD）、enabled=会话级开关覆盖。
     // dayIndex/history 属推进进度，由 advance-day 写，不在此接受。
@@ -1029,6 +1039,13 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
                   ? undefined
                   : String(experimentArm).trim().toUpperCase(),
               }
+            : {}),
+          // 延伸学探针 / 建议处置（2026-10-21）：null 清除；布尔/枚举写入
+          ...(extensionProbe !== undefined
+            ? { extensionProbe: extensionProbe === null ? undefined : extensionProbe }
+            : {}),
+          ...(advisoryResponse !== undefined
+            ? { advisoryResponse: advisoryResponse === null ? undefined : String(advisoryResponse) }
             : {}),
         },
         ...(simulationClock ? {

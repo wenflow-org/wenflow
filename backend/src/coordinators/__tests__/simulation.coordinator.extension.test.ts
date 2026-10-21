@@ -92,6 +92,7 @@ jest.mock('../../services/virtual-lab/simulated-day.service', () => ({
 
 import { SimulationOrchestrator } from '../simulation.coordinator'
 import { LEARN_EXTENSION_MAX_TURNS } from '../simulation.learn.steps'
+import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository'
 
 describe('#124 assisted 延伸学：正课收束 → 延伸课堂 → 结算', () => {
   let sessionRecord: Record<string, unknown> & { stageResults: string }
@@ -122,6 +123,9 @@ describe('#124 assisted 延伸学：正课收束 → 延伸课堂 → 结算', (
 
   const setLearningState = (learning: Record<string, unknown>) => {
     sessionRecord.stageResults = JSON.stringify({ teaching: learning })
+  }
+  const setStage = (stage: Record<string, unknown>) => {
+    sessionRecord.stageResults = JSON.stringify(stage)
   }
   const getLearningState = () => JSON.parse(sessionRecord.stageResults).teaching
 
@@ -351,5 +355,95 @@ describe('#124 assisted 延伸学：正课收束 → 延伸课堂 → 结算', (
     const logs = (result.logs || []).filter((entry) =>
       (entry.details?.output as Record<string, unknown> | undefined)?.action === 'extension-session-start-failed')
     expect(logs).toHaveLength(1)
+  })
+
+  // 2026-10-21：模型从不表达延伸意愿（5017/5017 false），功能没有样本可验证。
+  // extensionProbe 是显式探针：每会话第一次正课收束时强制开一节延伸课。
+  describe('extensionProbe / advisoryResponse 采样开关', () => {
+    const completedFeedback = {
+      selfReportedTaskDone: true,
+      wantsMoreHelp: false,
+      stopAsking: true,
+      remainingBlockers: [],
+      wantsExtension: false
+    }
+
+    const mockCompletion = () => {
+      mockExecuteSkill.mockResolvedValue({
+        reply: '好的，我明白了。',
+        learnerState: { readyForNextTask: true },
+        learnerFeedback: completedFeedback
+      })
+      mockProcessStudentMessage.mockResolvedValue({
+        revision: 2,
+        aiResponse: '这节课就到这儿。',
+        isCompletion: true,
+        autoEnded: false,
+        analysis: {},
+        knowledgePoints: [],
+        strategies: []
+      })
+    }
+
+    it('探针开启、模型未表达意愿 → 仍开延伸课并标记已用', async () => {
+      setStage({ teaching: buildLearningState(), simulationConfig: { extensionProbe: true } })
+      mockCompletion()
+
+      const result = await coordinator.executeLearningStep('simulation-1')
+      const learning = getLearningState()
+
+      expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: false }))
+      expect(mockStartSession).toHaveBeenCalledWith({ userId: 'user-1', taskId: 'task-1', mode: 'extension' })
+      expect(learning.extensionRuntime).toEqual(expect.objectContaining({ active: true, turns: 0 }))
+      expect(learning.extensionProbeUsed).toBe(true)
+      expect(mockCompleteTask).not.toHaveBeenCalled()
+      const startLog = (result.logs || []).find((entry) =>
+        (entry.details?.output as Record<string, unknown> | undefined)?.action === 'extension-session-start')
+      expect((startLog?.details?.output as Record<string, unknown>).probe).toBe(true)
+    })
+
+    it('探针每会话只用一次：已标记 used → 走正常收束', async () => {
+      setStage({
+        teaching: buildLearningState({ extensionProbeUsed: true }),
+        simulationConfig: { extensionProbe: true }
+      })
+      mockCompletion()
+
+      const result = await coordinator.executeLearningStep('simulation-1')
+
+      expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: true }))
+      expect(mockStartSession).not.toHaveBeenCalled()
+      expect(mockCompleteTask).toHaveBeenCalledTimes(1)
+    })
+
+    it('advisoryResponse 配置 + 收束带建议 → 按真人端点语义记账', async () => {
+      setStage({ teaching: buildLearningState(), simulationConfig: { advisoryResponse: 'later' } })
+      mockCompletion()
+      mockEndSession.mockResolvedValue({ revision: 3, advisory: { shouldSuggest: true } })
+      const recordSpy = jest.spyOn(teachingSessionRepository, 'recordAdvisoryResponse')
+        .mockResolvedValue({ status: 'ok' })
+
+      try {
+        await coordinator.executeLearningStep('simulation-1')
+        expect(recordSpy).toHaveBeenCalledWith('teaching-1', 'user-1', 'later')
+      } finally {
+        recordSpy.mockRestore()
+      }
+    })
+
+    it('未配置处置动作 → 不记建议响应', async () => {
+      setStage({ teaching: buildLearningState() })
+      mockCompletion()
+      mockEndSession.mockResolvedValue({ revision: 3, advisory: { shouldSuggest: true } })
+      const recordSpy = jest.spyOn(teachingSessionRepository, 'recordAdvisoryResponse')
+        .mockResolvedValue({ status: 'ok' })
+
+      try {
+        await coordinator.executeLearningStep('simulation-1')
+        expect(recordSpy).not.toHaveBeenCalled()
+      } finally {
+        recordSpy.mockRestore()
+      }
+    })
   })
 })

@@ -15,6 +15,7 @@ import prisma from '../config/database';
 import learningService from '../services/learning/learning.service';
 import { assertPathMutationSafe } from '../services/learning/path-mutation-safety';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingCoordinator';
+import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { executeSkill, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerEpistemicGroundingDefinition } from '../skills';
 import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-wrapup';
@@ -425,11 +426,18 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     await ctx.clearTeachingPauseMarker(sessionId);
 
     const stageResults: StageResults = parseStageResultsPayload(session.stageResults)
+    const simulationConfig = (stageResults.simulationConfig as Record<string, unknown> | undefined) || {}
     // 冻结考卷双臂协议（#85）：A 臂 = 护栏前口径（关闭 #84 后续回合肯定语护栏），B/缺省 = 现行口径。
     // 臂标签只影响对照实验，不改变任何默认行为。
-    const experimentArm = String(
-      (stageResults.simulationConfig as Record<string, unknown> | undefined)?.experimentArm || ''
-    ).toUpperCase()
+    const experimentArm = String(simulationConfig.experimentArm || '').toUpperCase()
+    // 延伸学探针（2026-10-21）：模拟器的 learnerFeedback.wantsExtension 实测 5017/5017 全为 false，
+    // assisted 轨的延伸课因此从未开出来（0 节）——功能有通路却没有任何样本可验证。
+    // 打开本开关后，本会话**第一次**正课收束时强制开一节延伸课（不论模型是否表达意愿），
+    // 用来验证链路与采样；默认关，不改变常规批跑语义。
+    const extensionProbe = simulationConfig.extensionProbe === true
+    // 建议处置采样（2026-10-21）：VL 产出的重排建议此前 learnerResponse 恒空（无处置通道）。
+    // 显式配置处置动作后，收束带回的建议走与真人同一端点的记账语义（只留痕，不执行重排）。
+    const advisoryResponse = String(simulationConfig.advisoryResponse || '').toLowerCase()
 
     const learningState = (stageResults.teaching || {}) as TeachingState;
     if (learningState.manualStop || session.status === 'failed' || session.status === 'abandoned') {
@@ -1340,11 +1348,34 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           );
           teachingRevision = endResult.revision;
 
+          // 建议处置采样（2026-10-21）：收束带回的重排建议会挂在本节课堂的 advisory 上，
+          // 真人侧由前端「保留/稍后再看/预览」调用同一 repository 方法记账；VL 此前没有通道，
+          // 336 条建议的 learnerResponse 全空。显式配置后才记录，只留痕、不触发重排执行。
+          if (['keep', 'later', 'preview'].includes(advisoryResponse) && endResult.advisory?.shouldSuggest === true) {
+            try {
+              await teachingSessionRepository.recordAdvisoryResponse(
+                teachingSessionId,
+                session.userId,
+                advisoryResponse as 'keep' | 'later' | 'preview'
+              );
+            } catch (error: unknown) {
+              logger.warn('[simulation-coordinator] 建议处置留痕失败（不影响收束）', {
+                sessionId,
+                teachingSessionId,
+                action: advisoryResponse,
+                error: asErrorLike(error).message || String(error)
+              });
+            }
+          }
+
           // 延伸学（#124 assisted 轨）：正课收束时学员明确表达过延伸意愿 → 本任务暂不结算，
           // 先另起一节 extension 课堂陪学一段（有界回合），跑满后再回到这里的结算链路。
           // 每个任务只尝试一次（sourceTaskId 兼作已延伸标记）；开课失败 fail-open，不阻塞任务结算。
+          // 2026-10-21：模型从不表达延伸意愿（5017/5017 false），加 extensionProbe —— 每会话一次强制开课。
           const extensionAlreadyForTask = learningState.extensionRuntime?.sourceTaskId === currentTask.id;
-          if (!extensionActive && !extensionAlreadyForTask && currentLearnerFeedback?.wantsExtension === true) {
+          const extensionProbePending = extensionProbe && learningState.extensionProbeUsed !== true;
+          const wantsExtensionForTask = currentLearnerFeedback?.wantsExtension === true;
+          if (!extensionActive && !extensionAlreadyForTask && (wantsExtensionForTask || extensionProbePending)) {
             try {
               const extensionSession = await aiTeachingOrchestrator.startSession({
                 userId: session.userId,
@@ -1357,6 +1388,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                 teachingSessionId: extensionSession.sessionId,
                 teachingRevision: extensionSession.revision,
                 latestLearnerFeedback: currentLearnerFeedback,
+                ...(extensionProbePending ? { extensionProbeUsed: true } : {}),
                 extensionRuntime: {
                   active: true,
                   sourceSessionId: teachingSessionId,
@@ -1395,7 +1427,10 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                     lessonSessionId: teachingSessionId,
                     extensionSessionId: extensionSession.sessionId,
                     maxTurns: LEARN_EXTENSION_MAX_TURNS,
-                    message: '学员表达延伸意愿，正课收束后进入延伸陪学（本任务暂不结算）',
+                    probe: extensionProbePending && !wantsExtensionForTask,
+                    message: extensionProbePending && !wantsExtensionForTask
+                      ? '延伸学探针：正课收束后强制进入延伸陪学（本任务暂不结算）'
+                      : '学员表达延伸意愿，正课收束后进入延伸陪学（本任务暂不结算）',
                   }
                 }
               });
