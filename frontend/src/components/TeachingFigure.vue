@@ -224,7 +224,13 @@ const spans = computed(() => props.figure?.spans || []);
 const spanBlock = computed(() => (spans.value.length ? spans.value.length * 36 + 30 : 0) + (props.figure?.group ? 46 : 0));
 const height = computed(() => axisY + 34 + spanBlock.value + 16);
 
-const guideRows = computed(() => guides.value.map((g) => ({ x: toX(g.at), label: g.label || null })));
+/**
+ * 参考线只画有名字的那几条：没有标签的竖虚线在图上找不到指称对象，
+ * 读者只能读成「凭空一条线」（2026-10-21 真实课文实测，模型给了 at:2500 / label:null）。
+ */
+const guideRows = computed(() =>
+  guides.value.filter((g) => !!g.label).map((g) => ({ x: toX(g.at), label: g.label })),
+);
 const tickRows = computed(() =>
   (props.figure?.axis?.ticks || []).map((t) => {
     const x = toX(t.at);

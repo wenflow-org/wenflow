@@ -10,7 +10,17 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import TeachingFigure from '../src/components/TeachingFigure.vue';
-import figureCss from '../src/components/TeachingFigure.vue?inline';
+
+/**
+ * 组件样式直接从 SFC 源文件取。
+ * 不能用 `?inline`：SSR 渲染出来的节点没有 scope 属性，`?inline` 在 vite-node 下也拿不到
+ * scoped 块，位置线图会整套掉样式（轴线变 stroke:none、标签变 16px 黑字）——2026-10-21 实测。
+ * 评审页只有这一个组件，按类名全局注入即可。
+ */
+const FIGURE_CSS = (() => {
+  const sfc = readFileSync(new URL('../src/components/TeachingFigure.vue', import.meta.url), 'utf8');
+  return [...sfc.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+})();
 
 interface GalleryItem {
   sessionId: string;
@@ -144,7 +154,7 @@ const html = `<!doctype html>
 <meta charset="utf-8">
 <title>课堂教学图图库</title>
 <style>${BASE_CSS}</style>
-<style>${figureCss}</style>
+<style>${FIGURE_CSS}</style>
 </head>
 <body>${body}</body></html>`;
 

@@ -119,6 +119,20 @@ describe('TeachingFigure 多图型', () => {
     });
   }
 
+  it('没有名字的参考线不画：图上不留没有指称对象的竖虚线', () => {
+    const wrapper = mount(TeachingFigure, {
+      props: {
+        figure: {
+          ...positionLine,
+          guides: [{ at: 80, label: '追及点' }, { at: 50, label: null }],
+        },
+      },
+    });
+    const guides = wrapper.findAll('line.tf-guide');
+    expect(guides).toHaveLength(1);
+    expect(wrapper.text()).toContain('追及点');
+  });
+
   it('畸形 spec 不渲染空壳（fail-open）', () => {
     const wrapper = mount(TeachingFigure, { props: { figure: { engine: 'svg', kind: 'compare', caption: null, spec: {} } } });
     expect(wrapper.find('svg').exists()).toBe(false);
