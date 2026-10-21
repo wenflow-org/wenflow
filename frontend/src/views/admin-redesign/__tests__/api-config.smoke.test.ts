@@ -12,7 +12,7 @@ import { dataSource } from '../store';
 import { liveApiConfig, registrationEnabled, registerIpQuotaEnabled } from '../live';
 import { confirmState, settleConfirm } from '../useConfirm';
 
-const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, getModelProvidersMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
+const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, getModelProvidersMock, getInfraModelsMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
   getCapabilitiesMock: vi.fn(),
   probeCapabilitiesMock: vi.fn(),
@@ -20,6 +20,7 @@ const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSetti
   getReliabilityMock: vi.fn(),
   getModelRegistryMock: vi.fn(),
   getModelProvidersMock: vi.fn(),
+  getInfraModelsMock: vi.fn(),
   testConnectionMock: vi.fn(),
   updateConfigMock: vi.fn(),
   resetConfigMock: vi.fn(),
@@ -77,6 +78,8 @@ vi.mock('@/api/adminApi', () => ({
   }),
   /* 供应商与模型编辑（BYOK，2026-10-18）：接入页的供应商面板与平台通道的连接表单都读它 */
   adminModelProvidersApi: apiObject({ get: getModelProvidersMock }),
+  /* 基础设施模型（embedding/rerank）：接入页的独立卡在挂载时读取 */
+  adminInfraModelsApi: apiObject({ get: getInfraModelsMock }),
   adminAgentsApi: apiObject(),
   adminAgentTopologyApi: apiObject(),
   adminApi: apiObject(),
@@ -138,6 +141,25 @@ function providersView(): Record<string, unknown> {
   }
 }
 
+function infraView(): Record<string, unknown> {
+  return {
+    required: true,
+    warnings: [],
+    embedding: {
+      kind: 'embedding', provider: 'bge', endpoint: 'https://gw.example/v1/embeddings',
+      model: 'BAAI/bge-m3', apiKeyEnv: 'EMBEDDING_API_KEY', timeoutMs: 20000,
+      batchSize: 32, dimensions: 1024, configured: true, configSource: 'env',
+      keySource: 'env', keyHint: '····test'
+    },
+    rerank: {
+      kind: 'rerank', provider: 'bge', endpoint: 'https://gw.example/v1/rerank',
+      model: 'BAAI/bge-reranker-v2-m3', apiKeyEnv: 'RERANK_API_KEY', timeoutMs: 20000,
+      batchSize: null, dimensions: null, configured: true, configSource: 'env',
+      keySource: 'inherit', keyHint: '····test'
+    }
+  }
+}
+
 function makeSnapshot(overrides: Partial<Record<'overall' | 'stale', string | boolean>> = {}) {
   return {
     overall: 'operational',
@@ -174,6 +196,8 @@ describe('ApiConfig P1 修复批', () => {
     getModelRegistryMock.mockReset();
     getModelProvidersMock.mockReset();
     getModelProvidersMock.mockResolvedValue({ data: { data: providersView() } });
+    getInfraModelsMock.mockReset();
+    getInfraModelsMock.mockResolvedValue({ data: { data: infraView() } });
     testConnectionMock.mockReset();
     updateConfigMock.mockReset();
     resetConfigMock.mockReset();
