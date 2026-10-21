@@ -225,7 +225,17 @@ const spanBlock = computed(() => (spans.value.length ? spans.value.length * 36 +
 const height = computed(() => axisY + 34 + spanBlock.value + 16);
 
 const guideRows = computed(() => guides.value.map((g) => ({ x: toX(g.at), label: g.label || null })));
-const tickRows = computed(() => (props.figure?.axis?.ticks || []).map((t) => ({ x: toX(t.at), label: t.label || null })));
+const tickRows = computed(() =>
+  (props.figure?.axis?.ticks || []).map((t) => {
+    const x = toX(t.at);
+    const label = t.label || null;
+    // 同一位置的对象标签已经写着同一句话时，刻度不再复述一遍——
+    // 否则「最低那天」会在线上下各出现一次（2026-10-21 目检 #17）。
+    const marks = props.figure?.marks || [];
+    const dup = label && marks.some((m) => Math.abs(toX(m.at) - x) < 1 && m.label === label);
+    return { x, label: dup ? null : label };
+  }),
+);
 
 /**
  * 对象标签行：贪心避让——同一行的相邻标签估算宽度重叠时，后来的上移一行。

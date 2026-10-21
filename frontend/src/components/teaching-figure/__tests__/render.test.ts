@@ -61,6 +61,23 @@ describe('教学图确定性渲染器', () => {
       .filter((line) => line.includes('汇报') || line.includes('个点') || line.includes('晃动'));
     expect(dividerLines.length).toBeGreaterThan(1);
     for (const line of dividerLines) expect(line.length).toBeLessThanOrEqual(14);
+    // 「0.5」必须完整落在同一行：切成「0 / .5」就成了两个数（2026-10-21 目检 #22）
+    expect(dividerLines.some((line) => line.includes('0.5'))).toBe(true);
+    for (const line of dividerLines) expect(line.startsWith('.')).toBe(false);
+  });
+
+  it('compare 条目：长句折成两行，不截成半句（目检 #6）', () => {
+    const svg = svgOf('compare', {
+      left: { head: '错误现状', items: ['this.list = res.data 根本不执行'] },
+      right: { head: '应有形状', items: ['先写入 this.list，视图立刻渲染一次', '再发现过期、把列表改回去'] },
+    });
+    const texts = Array.from(svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)).map((m) => m[1]);
+    const joined = texts.join('');
+    // 两句都要完整出现（省略号说明又被 fitText 截断了）
+    expect(joined).toContain('先写入 this.list');
+    expect(joined).toContain('渲染一次');
+    expect(joined).toContain('把列表改回去');
+    expect(joined).not.toContain('…');
   });
 
   it('compare / quadrant / bipartite / board 都出图并带学科标签', () => {

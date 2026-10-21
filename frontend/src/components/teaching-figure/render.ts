@@ -43,11 +43,37 @@ function est(text: unknown, size: number): number {
   return w;
 }
 
-/** 按字数硬换行（桥接框这类固定宽度的窄栏没有溢出空间，只能折行）。 */
+/** 按字数换行（桥接框这类固定宽度的窄栏没有溢出空间，只能折行）。 */
 function wrapChars(text: string, maxChars: number): string[] {
   const chars = Array.from(String(text ?? ''));
   const out: string[] = [];
-  for (let i = 0; i < chars.length; i += maxChars) out.push(chars.slice(i, i + maxChars).join(''));
+  let i = 0;
+  while (i < chars.length) {
+    if (chars.length - i <= maxChars) {
+      out.push(chars.slice(i).join(''));
+      break;
+    }
+    let end = i + maxChars;
+    // 不从 ASCII 词/数字中间切：「0.5」被切成「0 / .5」就变成两个数了
+    if (/[0-9A-Za-z._%]/.test(chars[end - 1]) && /[0-9A-Za-z._%]/.test(chars[end])) {
+      let back = end;
+      while (back > i && /[0-9A-Za-z._%]/.test(chars[back - 1])) back--;
+      if (back > i) end = back;
+    } else {
+      // 优先在空格处断行（回退不超过窗口的四成，免得末行只剩一两个字）
+      let space = -1;
+      for (let k = end; k > i + Math.max(1, Math.floor(maxChars * 0.6)); k--) {
+        if (chars[k - 1] === ' ') {
+          space = k - 1;
+          break;
+        }
+      }
+      if (space > i) end = space;
+    }
+    if (end <= i) end = i + maxChars;
+    out.push(chars.slice(i, end).join('').trim());
+    i = end;
+  }
   return out.length ? out : [''];
 }
 
@@ -204,14 +230,45 @@ function arrow(
 function wrapLines(str: unknown, maxW: number, size: number): string[] {
   const out: string[] = [];
   let cur = '';
+  /** 断行；若断点落在 ASCII 词/数字中间，把整个词挪到下一行 */
+  const flush = (next: string) => {
+    const isWord = (c: string) => /[0-9A-Za-z._%]/.test(c);
+    if (cur && isWord(cur[cur.length - 1]) && isWord(next)) {
+      let k = cur.length;
+      while (k > 0 && isWord(cur[k - 1])) k--;
+      if (k > 0) {
+        out.push(cur.slice(0, k).trimEnd());
+        cur = cur.slice(k);
+        return;
+      }
+    }
+    out.push(cur.trimEnd());
+    cur = '';
+  };
   for (const ch of String(str ?? '')) {
-    if (est(cur + ch, size) > maxW && cur) {
-      out.push(cur);
-      cur = ch === ' ' ? '' : ch;
+    if (cur && est(cur + ch, size) > maxW) {
+      flush(ch);
+      if (ch !== ' ' || cur) cur += ch;
     } else cur += ch;
   }
-  if (cur) out.push(cur);
+  if (cur.trim()) out.push(cur.trimEnd());
   return out;
+}
+
+/**
+ * 单行文本收进给定宽度：超宽就截断加省略号（用估宽而不是字数，CJK/ASCII 混排才准）。
+ * 用在**固定宽度容器**里（对账卡条目、阶梯步名这类框宽由布局决定的地方）：
+ * 宁可显示「输入「北京」，发出…」，也不让字捅出边框。
+ */
+function fitText(str: unknown, maxW: number, size: number): string {
+  const text = String(str ?? '');
+  if (est(text, size) <= maxW) return text;
+  let out = '';
+  for (const ch of text) {
+    if (est(out + ch + '…', size) > maxW) break;
+    out += ch;
+  }
+  return out ? out + '…' : text.slice(0, 1) + '…';
 }
 
 /* ---------------- 一、网格（二维排布，每格是内容） ---------------- */
@@ -678,8 +735,16 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
   const gap = 156;
   const padX = 16;
   const w = padX * 2 + colW * 2 + gap;
-  const itemH = 36;
+  // 条目允许两行：单行 fitText 会把「先写入 this.list，视图立刻渲染…」这类因果句
+  // 截成只剩前半句，读者拿不到后半句的动作（2026-10-21 目检 #6）。
+  const itemTextW = colW - 46;
   const rows = Math.max(left.items.length, right.items.length);
+  const itemLineCount = (side: any) =>
+    (Array.isArray(side?.items) ? side.items : []).reduce(
+      (max: number, it: unknown) => Math.max(max, Math.min(2, wrapLines(String(it ?? ''), itemTextW, T.fontBody).length)),
+      1,
+    );
+  const itemH = 36 + (Math.max(itemLineCount(left), itemLineCount(right)) - 1) * 16;
   const h = (title ? T.fontTitle + 20 : 0) + 54 + rows * itemH + 16 + (note ? 26 : 0);
   const TONES: Record<string, { color: string; soft: string; ink: string }> = {
     ok: { color: T.ok, soft: T.okSoft, ink: T.ok },
@@ -707,13 +772,19 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
     );
     // 焦点侧：顶部加一条强调轨（信号，不增加信息）
     if (isFocus) parts.push(`<rect x="${col.x + 10}" y="${headY - 3}" width="${colW - 20}" height="3" rx="1.5" fill="${col.color}"/>`);
-    parts.push(text(col.x + colW / 2, headY + 23, col.data.head, 't-key', 'middle', `fill="${col.ink}"`));
-    if (col.data.sub) parts.push(text(col.x + colW / 2, headY + 50, col.data.sub, 't-tiny'));
+    parts.push(text(col.x + colW / 2, headY + 23, fitText(col.data.head, colW - 24, T.fontKey), 't-key', 'middle', `fill="${col.ink}"`));
+    if (col.data.sub) parts.push(text(col.x + colW / 2, headY + 50, fitText(col.data.sub, colW - 24, T.fontMicro), 't-tiny'));
     col.data.items.forEach((it: string, i: number) => {
       const iy = headY + 60 + i * itemH;
+      const cy = iy + (itemH - 8) / 2;
       parts.push(rect(col.x + 8, iy, colW - 16, itemH - 8, { r: 7, fill: T.surface, stroke: T.line, sw: T.stroke }));
-      parts.push(`<circle cx="${col.x + 24}" cy="${iy + (itemH - 8) / 2}" r="3" fill="${col.color}"/>`);
-      parts.push(text(col.x + 36, iy + (itemH - 8) / 2 + 4.5, it, 't-label', 'start'));
+      parts.push(`<circle cx="${col.x + 24}" cy="${cy}" r="3" fill="${col.color}"/>`);
+      const raw = wrapLines(String(it ?? ''), itemTextW, T.fontBody);
+      const lines = raw.length <= 2 ? raw : [raw[0], fitText(raw.slice(1).join(''), itemTextW, T.fontBody)];
+      lines.forEach((line: string, li: number) => {
+        const y = cy + 4.5 + (li - (lines.length - 1) / 2) * 16;
+        parts.push(text(col.x + 36, y, line, 't-label', 'start'));
+      });
     });
   }
 
@@ -726,7 +797,14 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
     // 桥接框宽度由栏间距决定；文字必须按框宽换行，否则长句直接捅穿矩形（2026-10-21 走查 #16）
     const boxW = gap - 16;
     const maxDividerChars = Math.max(6, Math.floor((boxW - 16) / (T.fontMicro * 0.95)));
-    const lines = divider.split('\n').flatMap((line: string) => wrapChars(line, maxDividerChars));
+    // 均衡换行：先按框宽粗切，再按行数重排。否则 20 字的一句话会切成
+    //「…波动还 / 小」，末行只剩一个字（2026-10-21 目检 #22）。
+    const lines = String(divider).split('\n').flatMap((line: string) => {
+      const rough = wrapChars(line, maxDividerChars);
+      if (rough.length < 2) return rough;
+      const total = Array.from(line).length;
+      return wrapChars(line, Math.max(6, Math.ceil(total / rough.length)));
+    });
     const shown = lines.length > 4
       ? lines.slice(0, 4).map((l: string, i: number) => (i === 3 ? l.slice(0, -1) + '…' : l))
       : lines;
@@ -1194,8 +1272,16 @@ function renderBalance({ title, left, right, pivotLabel, note, focus }: any): Re
  * 与 matrix 的区别：不比较两维，只表达「先到哪、再到哪」——层级与进度的形状。
  */
 function renderLadder({ title, steps = [], note, focus }: any): RenderedFigure {
-  const stepW = 150;
-  const stepH = 62;
+  // 步名长度决定卡片宽度：此前固定 150px，九字以上直接捅出边框（外审实拍 #3/#4）。
+  // 超过两行的步名收到两行 + 省略号，卡片高度同步加一行。
+  const labelLines: string[][] = steps.map((step: any) => {
+    const lines = wrapLines(step.label, 200, T.fontKey);
+    if (lines.length <= 2) return lines;
+    return [lines[0], fitText(lines.slice(1).join(''), 200, T.fontKey)];
+  });
+  const widest = Math.max(0, ...labelLines.flat().map((line) => est(line, T.fontKey)));
+  const stepW = Math.min(240, Math.max(150, widest + 30));
+  const stepH = 62 + (labelLines.some((lines) => lines.length > 1) ? 20 : 0);
   const rise = 34;
   const padX = 20;
   const titleH = title ? T.fontTitle + 20 : 0;
@@ -1233,8 +1319,10 @@ function renderLadder({ title, steps = [], note, focus }: any): RenderedFigure {
       parts.push(text(x + stepW - 12, y + 22, '✓', 't-tiny', 'end', `fill="${T.ok}"`));
     }
     parts.push(text(x + 14, y + 22, `${i + 1}`, 't-tiny', 'start', `fill="${color}"`));
-    parts.push(text(x + 14, y + 42, step.label, state === 'todo' ? 't-label' : 't-key', 'start'));
-    if (step.sub) parts.push(text(x + stepW - 12, y + stepH - 10, step.sub, 't-tiny', 'end'));
+    labelLines[i].forEach((line, li) => {
+      parts.push(text(x + 14, y + 42 + li * 18, line, state === 'todo' ? 't-label' : 't-key', 'start'));
+    });
+    if (step.sub) parts.push(text(x + stepW - 12, y + stepH - 10, fitText(step.sub, stepW - 24, T.fontMicro), 't-tiny', 'end'));
     void filled;
   });
 
