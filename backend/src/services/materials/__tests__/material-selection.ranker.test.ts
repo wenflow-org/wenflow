@@ -83,7 +83,7 @@ describe('selectMaterialsRanked', () => {
   });
 
   it('打分成功 → 按决策分重排，词面最相关的资料被决策分压后', async () => {
-    const decideImpl = jest.fn(async (request: any) => {
+    const decideImpl = jest.fn(async (request: { state: string }) => {
       const state = String(request.state);
       const noul = state.includes('健康饮食') ? 0.92 : state.includes('摄影构图') ? 0.55 : 0.10;
       return { model: 'jev-1.14.0', answers: { relevance: { type: 'noul', noul } } };
@@ -99,7 +99,10 @@ describe('selectMaterialsRanked', () => {
     expect(result.selected.map((record) => record.id)).toEqual(['b-health', 'c-photo', 'a-loop']);
     expect(result.total).toBe(3);
     expect(decideImpl).toHaveBeenCalledTimes(3);
-    const firstCall = decideImpl.mock.calls[0][0] as any;
+    const firstCall = decideImpl.mock.calls[0][0] as unknown as {
+      model: string;
+      questions: Record<string, { type: string; instructions?: string }>;
+    };
     expect(firstCall.model).toBe('jev-1.14.0');
     expect(firstCall.questions.relevance.type).toBe('noul');
     expect(firstCall.questions.relevance.instructions).toContain('泛化词');
@@ -121,7 +124,7 @@ describe('selectMaterialsRanked', () => {
   });
 
   it('部分失败 → 有分的按分数排前，无分的保持词面相对序缀后', async () => {
-    const decideImpl = jest.fn(async (request: any) => {
+    const decideImpl = jest.fn(async (request: { state: string }) => {
       const state = String(request.state);
       if (state.includes('健康饮食')) return { model: 'jev-1.14.0', answers: { relevance: { type: 'noul', noul: 0.9 } } };
       throw new Error('boom');

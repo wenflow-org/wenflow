@@ -116,7 +116,7 @@ describe('summarizeMaterialUsage', () => {
       },
     ];
 
-    const usage = summarizeMaterialUsage(rows as any);
+    const usage = summarizeMaterialUsage(rows as unknown as Parameters<typeof summarizeMaterialUsage>[0]);
     const m1 = usage.get('m1');
     expect(m1).toBeDefined();
     expect(m1!.pathCount).toBe(2);

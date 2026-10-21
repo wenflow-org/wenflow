@@ -43,7 +43,7 @@ import {
   registerToolExecutionHook,
 } from '../tool-execution-hooks'
 
-const ok = (output: any = { ok: true }) => async () => ({
+const ok = (output: unknown = { ok: true }) => async () => ({
   success: true,
   output,
   duration: 1
@@ -167,7 +167,7 @@ describe('工具执行 hooks / 审批 / 结构化降级', () => {
   it('options.timeout 真正生效：超时抛 SKILL_TIMEOUT(504)', async () => {
     const slow = () => new Promise((resolve) => setTimeout(() => resolve({ success: true, output: {}, duration: 1 }), 200))
     await expect(
-      executeSkillHandler({ id: 'web-search' }, {}, slow as any, { timeout: 20 })
+      executeSkillHandler({ id: 'web-search' }, {}, slow as unknown as Parameters<typeof executeSkillHandler>[2], { timeout: 20 })
     ).rejects.toMatchObject({ code: 'SKILL_TIMEOUT', status: 504 })
   })
 })

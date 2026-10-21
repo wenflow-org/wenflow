@@ -60,7 +60,7 @@ interface Outcome {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function askOne(item: BenchItem): Promise<{ answers: Record<string, any> | null; ms: number; error: string | null }> {
+async function askOne(item: BenchItem): Promise<{ answers: Record<string, unknown> | null; ms: number; error: string | null }> {
   const started = Date.now();
   // score 题在官方数据里把 criteria 写成数组（第 i 项就是档位 i 的描述），
   // 而 SystemOne 上游要求 criteria 是「标签 → 描述」的映射；直接透传数组会被判 invalid_request，
@@ -82,7 +82,7 @@ async function askOne(item: BenchItem): Promise<{ answers: Record<string, any> |
     });
     const text = await res.text();
     if (!res.ok) return { answers: null, ms: Date.now() - started, error: `HTTP ${res.status}: ${text.slice(0, 120)}` };
-    const parsed = JSON.parse(text) as { answers?: Record<string, any> };
+    const parsed = JSON.parse(text) as { answers?: Record<string, unknown> };
     return { answers: parsed.answers ?? null, ms: Date.now() - started, error: null };
   } catch (error) {
     return { answers: null, ms: Date.now() - started, error: String((error as Error)?.message || error).slice(0, 120) };
@@ -90,10 +90,10 @@ async function askOne(item: BenchItem): Promise<{ answers: Record<string, any> |
 }
 
 /** 把一题的回答转成 (预测标签, 置信度)。 */
-function decide(item: BenchItem, answers: Record<string, any> | null): { pred: string | null; conf: number | null } {
-  const a = answers?.q;
+function decide(item: BenchItem, answers: Record<string, unknown> | null): { pred: string | null; conf: number | null } {
+  const a = answers?.q as { probabilities?: unknown; noul?: unknown; choice?: unknown } | undefined;
   if (!a) return { pred: null, conf: null };
-  const probs = (a.probabilities ?? {}) as Record<string, number>;
+  const probs = (a.probabilities && typeof a.probabilities === 'object' ? a.probabilities : {}) as Record<string, number>;
   const values = Object.values(probs).map(Number).filter((v) => Number.isFinite(v));
   const maxP = values.length ? Math.max(...values) : null;
   if (item.question.type === 'noul') {

@@ -39,7 +39,7 @@ describe('session events service', () => {
   });
 
   it('trimSessionEventPayload：循环引用降级为不可序列化标记', () => {
-    const cyclic: any = { name: 'loop' };
+    const cyclic: Record<string, unknown> = { name: 'loop' };
     cyclic.self = cyclic;
     expect(JSON.parse(trimSessionEventPayload(cyclic)!)).toEqual({ __unserializable: true });
   });

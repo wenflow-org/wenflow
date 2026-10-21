@@ -47,7 +47,13 @@ export interface SessionEventInput {
 /** 事务客户端最小面（与 withTransaction 的 TransactionClient 兼容） */
 export interface SessionEventClient {
   session_events: {
-    create(args: { data: any }): Promise<any>;
+    create(args: { data: Record<string, unknown> }): Promise<unknown>;
+    findMany?(args: {
+      where: Record<string, unknown>;
+      orderBy: { id: 'asc' | 'desc' };
+      take: number;
+      select: Record<string, boolean>;
+    }): Promise<SessionEventRow[]>;
   };
 }
 
@@ -81,7 +87,7 @@ export async function recordSessionEvent(input: SessionEventInput, db?: SessionE
   try {
     // 事务内必须用事务客户端：*不要*在 tx 缺该委托时回落到全局 prisma——
     // 那是另一条连接，会在 SQLite 下与该事务抢锁。缺表时直接跳过并告警（迁移未应用）。
-    const delegate = db ? db.session_events : (prisma as any).session_events;
+    const delegate = db ? db.session_events : (prisma as unknown as SessionEventClient).session_events;
     if (!delegate?.create) {
       logger.warn('[session-events] 目标表不可用，跳过写入（迁移未应用？）', {
         sessionId: input.sessionId,
@@ -116,7 +122,7 @@ export async function listSessionEvents(
   options: { limit?: number; sinceId?: number; kinds?: SessionEventKind[] } = {}
 ): Promise<SessionEventRow[]> {
   const limit = Math.min(Math.max(options.limit ?? 200, 1), 1000);
-  return (prisma as any).session_events.findMany({
+  return (prisma as unknown as SessionEventClient).session_events.findMany!({
     where: {
       sessionId,
       ...(options.sinceId ? { id: { gt: options.sinceId } } : {}),

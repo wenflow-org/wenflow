@@ -51,7 +51,7 @@ export type TeachingOperationReservation =
   | { kind: 'reserved' }
   | {
       kind: 'replay';
-      result: Record<string, any>;
+      result: Record<string, unknown>;
       revision: number | null;
       /**
        * 账本里记录的写操作类型（message / resume-continue / checkpoint:<id>）。
@@ -175,7 +175,10 @@ async function takeover(
 /** 幂等账本的写入面（真 prisma 与事务客户端同形）。 */
 export interface TeachingOperationLedgerClient {
   teaching_message_operations: {
-    updateMany(args: any): Promise<{ count: number }>;
+    updateMany(args: {
+      where: { sessionId: string; idempotencyKey: string; status: string };
+      data: Record<string, unknown>;
+    }): Promise<{ count: number }>;
   };
 }
 
@@ -188,7 +191,7 @@ export interface TeachingOperationLedgerClient {
 export async function completeTeachingOperation(input: {
   sessionId: string;
   idempotencyKey: string;
-  result: Record<string, any>;
+  result: Record<string, unknown>;
   revision: number | null;
 }, db?: TeachingOperationLedgerClient): Promise<void> {
   const client = db ?? (prisma as unknown as TeachingOperationLedgerClient);
@@ -220,7 +223,7 @@ export async function failTeachingOperation(input: {
   });
 }
 
-function parseResult(raw: string | null): Record<string, any> {
+function parseResult(raw: string | null): Record<string, unknown> {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);

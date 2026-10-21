@@ -40,7 +40,7 @@ describe('chat protocol adapter', () => {
 
   describe('applyThinkingPolicyToBody', () => {
     it('策略字段全部写入', () => {
-      const body: Record<string, any> = { max_tokens: 100 };
+      const body: Record<string, unknown> = { max_tokens: 100 };
       applyThinkingPolicyToBody(body, {
         thinking: { type: 'enabled' },
         reasoningEffort: 'high',
@@ -50,13 +50,13 @@ describe('chat protocol adapter', () => {
     });
 
     it('策略为空时不触碰已有字段（模型不支持思考）', () => {
-      const body: Record<string, any> = { max_tokens: 100, thinking: { type: 'disabled' } };
+      const body: Record<string, unknown> = { max_tokens: 100, thinking: { type: 'disabled' } };
       applyThinkingPolicyToBody(body, {});
       expect(body).toEqual({ max_tokens: 100, thinking: { type: 'disabled' } });
     });
 
     it('maxTokens 为 undefined 时不覆盖预算', () => {
-      const body: Record<string, any> = { max_tokens: 777 };
+      const body: Record<string, unknown> = { max_tokens: 777 };
       applyThinkingPolicyToBody(body, { thinking: { type: 'enabled' } });
       expect(body.max_tokens).toBe(777);
     });
@@ -69,11 +69,11 @@ describe('chat protocol adapter', () => {
     });
 
     it('非流式请求剥离 stream_options，流式请求保留', () => {
-      const nonStream = { model: 'm', stream_options: { include_usage: true } } as Record<string, any>;
+      const nonStream = { model: 'm', stream_options: { include_usage: true } } as Record<string, unknown>;
       stripStreamFields(nonStream);
       expect(nonStream.stream_options).toBeUndefined();
 
-      const stream = { model: 'm', stream: true, stream_options: { include_usage: true } } as Record<string, any>;
+      const stream = { model: 'm', stream: true, stream_options: { include_usage: true } } as Record<string, unknown>;
       stripStreamFields(stream);
       expect(stream.stream_options).toEqual({ include_usage: true });
     });

@@ -1,7 +1,7 @@
 const mockCallPrompt = jest.fn();
 
 jest.mock('../../../composers/prompt-composer', () => ({
-  callPrompt: (...args: any[]) => mockCallPrompt(...args),
+  callPrompt: (...args: unknown[]) => mockCallPrompt(...args),
 }));
 
 import { stageDesigner } from '../index';
