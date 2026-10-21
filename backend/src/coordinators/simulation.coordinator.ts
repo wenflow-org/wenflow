@@ -693,7 +693,6 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
             action.checkpointId,
             action.payload,
             params.teachingRevision,
-            undefined,
             { ...(params.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}) }
           )
         );

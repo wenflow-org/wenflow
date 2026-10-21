@@ -216,8 +216,7 @@ describe('#85 双臂：experimentArm 透传到教学回合', () => {
     await coordinator.executeLearningStep('simulation-1')
 
     expect(mockSubmitCheckpoint).toHaveBeenCalledTimes(1)
-    // 第 5 位是路由幂等键（提交链路新增），双臂开关在第 6 位
-    expect(mockSubmitCheckpoint.mock.calls[0][5]).toEqual({ failedConceptFollowupGuard: false })
+    expect(mockSubmitCheckpoint.mock.calls[0][4]).toEqual({ failedConceptFollowupGuard: false })
   })
 
   it('无臂标签 → 默认口径（不传开关）', async () => {
