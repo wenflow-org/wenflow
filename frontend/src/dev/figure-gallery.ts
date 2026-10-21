@@ -7,10 +7,19 @@ interface GalleryItem {
   user: string | null;
   at: string | number | null;
   figure: Record<string, unknown>;
+  context?: { student?: string; teacher?: string };
 }
 
 const res = await fetch('/figure-out/figures.json');
 const items = (await res.json()) as GalleryItem[];
+
+const textBlock = (label: string, text: string | undefined, cls: string) =>
+  text
+    ? h('div', { class: `ctx ctx--${cls}` }, [
+        h('span', { class: 'ctx__label' }, label),
+        h('span', { class: 'ctx__text', title: text }, text),
+      ])
+    : null;
 
 const card = (item: GalleryItem, i: number) =>
   h('div', { class: 'item' }, [
@@ -18,6 +27,8 @@ const card = (item: GalleryItem, i: number) =>
       h('b', String((item.figure as { kind?: string }).kind ?? '?')),
       ` · #${i + 1} · ${item.user ?? '—'} · ${item.topic ?? '—'}`,
     ]),
+    textBlock('学生', item.context?.student, 'student'),
+    textBlock('老师', item.context?.teacher, 'teacher'),
     h(TeachingFigure, { figure: item.figure as never }),
   ]);
 

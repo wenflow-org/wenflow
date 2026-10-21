@@ -11,13 +11,20 @@
       .item { background: #fff; border: 1px solid #e3e7ef; border-radius: 12px; padding: 14px; overflow: auto; }
       .meta { font: 12px/1.7 ui-monospace, Consolas, monospace; color: #7b8494; margin-bottom: 8px; word-break: break-all; }
       .meta b { color: #4a5568; font-weight: 600; }
+      .ctx { display: flex; gap: 8px; margin-bottom: 8px; font-size: 13px; line-height: 1.65; }
+      .ctx__label { flex: none; font-size: 11px; font-weight: 600; color: #7b8494; border: 1px solid #e3e7ef; border-radius: 4px; padding: 1px 5px; height: 18px; line-height: 16px; }
+      .ctx--student .ctx__text { color: #4a5568; }
+      .ctx__text { color: #1f2430; }
+      .ctx--teacher .ctx__text {
+        display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
+      }
       .empty { color: #b42318; }
       svg { display: block; max-width: 100%; height: auto; }
     </style>
   </head>
   <body>
     <h1>课堂教学图图库</h1>
-    <div class="hint">这些是库里真实下发过的 spec，用产品同一个渲染器重画。数据来自 teaching_session_messages.payload（只存规格，不存像素）。</div>
+    <div class="hint">这些是库里真实下发过的 spec，用产品同一个渲染器重画；每张上方带上它所处的那一轮上下文（紧邻的学生发言 + 老师这条回复，老师正文最多显示 6 行，悬停看全文）。数据来自 teaching_session_messages.payload（只存规格，不存像素）。</div>
     <div id="app"></div>
     <script type="module" src="/src/dev/figure-gallery.ts"></script>
   </body>
