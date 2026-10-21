@@ -319,7 +319,7 @@
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('mode')">
-                <div class="ts-track ts-track--mode" :title="sessionModeTitle(r.mode)">
+                <div class="ts-classroom" :title="sessionModeTitle(r.mode)">
                   <span class="mk-badge mk-badge--sm" :class="sessionModeBadgeCls(r.mode)">{{ sessionModeText(r.mode) }}</span>
                 </div>
               </td>

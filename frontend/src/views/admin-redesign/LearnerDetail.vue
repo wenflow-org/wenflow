@@ -1820,7 +1820,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
         pct: 0,
         taskDone: 0,
         taskTotal: 0,
-        concepts: { mastered: [], struggling: base.struggling, fragile: base.fragile },
+        concepts: { mastered: [], struggling: base.struggling || [], fragile: base.fragile || [] },
         sessions: [],
         snapshot: {
           version: base.confidence == null
@@ -2303,9 +2303,9 @@ const conceptBars = computed<ConceptBar[]>(() => {
   const c = d.value?.concepts
   if (!c) return []
   const fallback: ConceptBar[] = []
-  for (const label of c.mastered) fallback.push({ label, tone: 'ok', readiness: '可迁移', risk: '低', riskTone: 'ok', evidenceCount: 0 })
-  for (const label of c.fragile) fallback.push({ label, tone: 'warn', readiness: '待巩固', risk: '中', riskTone: 'warn', evidenceCount: 0 })
-  for (const label of c.struggling) fallback.push({ label, tone: 'bad', readiness: '不宜迁移', risk: '高', riskTone: 'bad', evidenceCount: 0 })
+  for (const label of c.mastered || []) fallback.push({ label, tone: 'ok', readiness: '可迁移', risk: '低', riskTone: 'ok', evidenceCount: 0 })
+  for (const label of c.fragile || []) fallback.push({ label, tone: 'warn', readiness: '待巩固', risk: '中', riskTone: 'warn', evidenceCount: 0 })
+  for (const label of c.struggling || []) fallback.push({ label, tone: 'bad', readiness: '不宜迁移', risk: '高', riskTone: 'bad', evidenceCount: 0 })
   return fallback
 })
 

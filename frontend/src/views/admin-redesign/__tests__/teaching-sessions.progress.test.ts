@@ -250,9 +250,9 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const row = wrapper.find('tbody tr');
     expect(row.find('.ts-prog--done').exists()).toBe(false);
-    // 第 9 列：会话/用户/状态/完成来源/完成方式/时长/消息/知识点/进度
-    // （2026-10-19 用户走查「拆成列」：原「轨道」「互动」两格各自拆开，进度从第 6 列右移到第 9 列）
-    expect(row.find('td:nth-child(9) .mk-na').text()).toBe('—');
+    // 第 10 列：会话/用户/状态/课堂/完成来源/完成方式/时长/消息/知识点/进度
+    // （2026-10-21 课堂列插在状态后，进度从第 9 列右移到第 10 列）
+    expect(row.find('td:nth-child(10) .mk-na').text()).toBe('—');
     wrapper.unmount();
   });
 

@@ -68,7 +68,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">批量吞吐</h4>
-        <span class="mk-card__meta" title="rpm = 每分钟 LLM 尝试数（含失败，空转分钟计 0）。连续 5 分钟低于下限触发告警">最近 {{ throughput?.windowMinutes ?? 60 }} 分钟 · 下限 {{ throughput?.minRpm ?? 20 }} rpm</span>
+        <span class="mk-card__meta" title="rpm = 每分钟 LLM 尝试数（含失败，空转分钟计 0）。下限只对运行中的批次生效：无批次时空闲不告警">最近 {{ throughput?.windowMinutes ?? 60 }} 分钟 · 下限 {{ throughput?.minRpm ?? 20 }} rpm<template v-if="throughput?.idle"> · 空闲</template></span>
         <div class="mk-card__head-right">
           <button type="button" class="mk-btn mk-btn--sm" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '刷新' }}</button>
         </div>
@@ -83,6 +83,7 @@
         <div class="st-kpi" :class="{ 'st-kpi--warn': throughput?.alert }"><span class="st-kpi__label">最长连续</span><b class="st-kpi__value">{{ throughput?.longestLowRun ?? '—' }}</b><span class="st-kpi__hint">分钟</span></div>
       </div>
       <p v-if="throughput?.alert" class="mk-field__hint st-alert" role="alert">⚠ {{ throughput.alertReason }}</p>
+      <p v-else-if="throughput?.idle" class="mk-field__hint">空闲：没有运行中的批次或虚拟学习者会话，rpm 仅供参考。</p>
       <p v-else-if="throughput" class="mk-field__hint">无持续低吞吐。</p>
     </section>
     <!-- 内容抽检（#121，2026-10-21）：CLI 闭环接到管理端；与 CLI 同表同键，标注后 CLI --metrics 立即可见。

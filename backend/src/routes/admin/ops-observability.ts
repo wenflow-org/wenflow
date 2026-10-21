@@ -8,7 +8,7 @@
  */
 import express from 'express';
 import prisma from '../../config/database';
-import { summarizeThroughput } from '../../services/ops/throughput';
+import { summarizeThroughput, applyThroughputActivity, ACTIVE_SESSION_STALE_MINUTES } from '../../services/ops/throughput';
 import { insightCalibrationService } from '../../services/learner/insight-calibration.service';
 
 const router = express.Router();
@@ -24,11 +24,25 @@ router.get('/throughput', async (req, res) => {
     const windowMinutes = clampInt(req.query.window, 60, 5, 1440);
     const minRpm = clampInt(req.query.minRpm, 20, 1, 10000);
     const since = new Date(Date.now() - windowMinutes * 60 * 1000);
-    const rows = await prisma.llm_execution_attempts.findMany({
-      where: { startedAt: { gte: since } },
-      select: { startedAt: true, success: true, errorCategory: true },
-    });
-    const report = summarizeThroughput(rows, { windowMinutes, minRpm });
+    const now = new Date();
+    const [rows, activeSessions, activeBatches, activeLeases] = await Promise.all([
+      prisma.llm_execution_attempts.findMany({
+        where: { startedAt: { gte: since } },
+        select: { startedAt: true, success: true, errorCategory: true },
+      }),
+      prisma.virtual_sessions.count({
+        where: {
+          status: 'running',
+          updatedAt: { gte: new Date(now.getTime() - ACTIVE_SESSION_STALE_MINUTES * 60_000) },
+        },
+      }),
+      prisma.virtual_batch_jobs.count({ where: { status: { in: ['running', 'pending'] } } }),
+      prisma.virtual_experiment_leases.count({ where: { expiresAt: { gt: now } } }),
+    ]);
+    const report = applyThroughputActivity(
+      summarizeThroughput(rows, { windowMinutes, minRpm }),
+      { activeSessions, activeBatches, activeLeases },
+    );
     res.json({ success: true, data: report });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error?.message || '吞吐审计失败' } });

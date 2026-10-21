@@ -14,13 +14,15 @@ import 'dotenv/config';
 import prisma from '../config/database';
 import {
   summarizeThroughput,
+  applyThroughputActivity,
+  ACTIVE_SESSION_STALE_MINUTES,
   type ThroughputAttempt,
   type ThroughputMinute,
   type ThroughputReport,
   LOW_RUN_ALERT_MINUTES,
 } from '../services/ops/throughput';
 
-export { summarizeThroughput, LOW_RUN_ALERT_MINUTES };
+export { summarizeThroughput, applyThroughputActivity, LOW_RUN_ALERT_MINUTES };
 export type { ThroughputAttempt, ThroughputMinute, ThroughputReport };
 
 
@@ -39,20 +41,35 @@ function parseArgs() {
 async function main(): Promise<void> {
   const args = parseArgs();
   const since = new Date(Date.now() - args.windowMinutes * 60_000);
-  const rows = await prisma.llm_execution_attempts.findMany({
-    where: { startedAt: { gte: since } },
-    select: { startedAt: true, success: true, errorCategory: true },
-  });
-  const report = summarizeThroughput(
-    rows.map((r) => ({ startedAt: r.startedAt, success: r.success, errorCategory: r.errorCategory ?? null })),
-    { windowMinutes: args.windowMinutes, minRpm: args.minRpm },
+  const now = new Date();
+  const [rows, activeSessions, activeBatches, activeLeases] = await Promise.all([
+    prisma.llm_execution_attempts.findMany({
+      where: { startedAt: { gte: since } },
+      select: { startedAt: true, success: true, errorCategory: true },
+    }),
+    prisma.virtual_sessions.count({
+      where: {
+        status: 'running',
+        updatedAt: { gte: new Date(now.getTime() - ACTIVE_SESSION_STALE_MINUTES * 60_000) },
+      },
+    }),
+    prisma.virtual_batch_jobs.count({ where: { status: { in: ['running', 'pending'] } } }),
+    prisma.virtual_experiment_leases.count({ where: { expiresAt: { gt: now } } }),
+  ]);
+  const report = applyThroughputActivity(
+    summarizeThroughput(
+      rows.map((r) => ({ startedAt: r.startedAt, success: r.success, errorCategory: r.errorCategory ?? null })),
+      { windowMinutes: args.windowMinutes, minRpm: args.minRpm },
+    ),
+    { activeSessions, activeBatches, activeLeases },
   );
   if (args.json) {
     console.log(JSON.stringify(report));
   } else {
     console.log(`吞吐窗口 ${report.windowMinutes} 分钟｜下限 ${report.minRpm} rpm`);
     console.log(`均值 ${report.avgRpm} rpm｜最低 ${report.worstRpm} rpm｜低于下限 ${report.lowMinutes} 分钟｜最长连续 ${report.longestLowRun} 分钟`);
-    if (report.alert) console.log(`⚠ ${report.alertReason}`);
+    if (report.idle) console.log('✓ 空闲：没有运行中的批次或虚拟学习者会话（rpm 仅供参考）');
+    else if (report.alert) console.log(`⚠ ${report.alertReason}`);
     else console.log('✓ 无持续低吞吐');
   }
   // 供调度器/CI 直接当告警信号：低吞吐时退出码 3（区别于脚本自身失败的 1）

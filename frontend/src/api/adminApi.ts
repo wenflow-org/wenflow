@@ -2448,6 +2448,11 @@ export interface ThroughputReportLike {
   worstRpm: number
   alert: boolean
   alertReason: string | null
+  /** 是否有运行中的批次/会话；false 时空闲不告警（rpm 仍展示） */
+  idle?: boolean
+  activeSessions?: number
+  activeBatches?: number
+  activeLeases?: number
 }
 
 export interface ContentReviewItem {

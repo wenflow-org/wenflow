@@ -114,3 +114,47 @@ export function summarizeThroughput(
       : null,
   };
 }
+
+/** 运行中会话的陈旧阈值：进程崩溃后 status 可能停在 running，超过窗口不再算活动信号 */
+export const ACTIVE_SESSION_STALE_MINUTES = 30;
+
+export interface ThroughputActivity {
+  /** 运行中的虚拟学习者会话数（批量跑批的主要信号） */
+  activeSessions: number;
+  /** 运行中/排队中的批量任务数（批次页写入；脚本跑批可能为 0） */
+  activeBatches: number;
+  /** 未过期实验租约数（实验编排信号） */
+  activeLeases: number;
+}
+
+export interface ScopedThroughputReport extends ThroughputReport {
+  activeSessions: number;
+  activeBatches: number;
+  activeLeases: number;
+  /** 没有运行中的批次/会话：rpm 仍展示，但不按下限告警（空闲不是故障） */
+  idle: boolean;
+}
+
+/**
+ * 纯函数：把「是否有批次在跑」并入吞吐结论。
+ * 20 rpm 下限只对跑批有意义；没有运行中的批次/会话时，真实用户的稀疏调用（管理端刷新、
+ * 单节课）也会连续低于下限，直接告警会变成常驻假红灯。
+ */
+export function applyThroughputActivity(
+  report: ThroughputReport,
+  activity: ThroughputActivity,
+): ScopedThroughputReport {
+  const activeSessions = Math.max(0, Math.floor(activity.activeSessions || 0));
+  const activeBatches = Math.max(0, Math.floor(activity.activeBatches || 0));
+  const activeLeases = Math.max(0, Math.floor(activity.activeLeases || 0));
+  const idle = activeSessions + activeBatches + activeLeases === 0;
+  return {
+    ...report,
+    activeSessions,
+    activeBatches,
+    activeLeases,
+    idle,
+    alert: idle ? false : report.alert,
+    alertReason: idle ? null : report.alertReason,
+  };
+}

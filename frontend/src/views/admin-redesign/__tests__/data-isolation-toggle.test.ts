@@ -206,7 +206,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await nextTick();
     expect(tsListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
     expect(scopePill(wrapper)).toBe('测试');
-    const tags = wrapper.findAll('.mk-badge--sm');
+    const tags = wrapper.findAll('.ts-tags .mk-badge--sm');
     expect(tags).toHaveLength(2);
     expect(tags[0].text()).toBe('虚拟');
     // 徽章文案已统一为 MkVariantBadge（原页私有「测试」→ 与 Users 一致的「测试账号」）

@@ -812,6 +812,22 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  it('虚拟会话延伸中：显示回合进度（extensionRuntime 活在编排态）', async () => {
+    const payload = virtualSessionPayload();
+    payload.data.stageResults.teaching.extensionRuntime = { active: true, turns: 2, maxTurns: 5 };
+    getVirtualSession.mockResolvedValue(payload);
+    getVirtualSessionLogs.mockResolvedValue({ data: { logs: [] } });
+
+    const wrapper = await mountCockpit('session', 'vs_1');
+
+    const strip = wrapper.findAll('.cp-advisory').find((s) => s.text().includes('延伸中'));
+    expect(strip).toBeTruthy();
+    expect(strip!.text()).toContain('已进行 2/5 回合');
+    expect(strip!.text()).toContain('本任务暂不结算');
+
+    wrapper.unmount();
+  });
+
   it('虚拟模式：黑盒会话黑盒区保留（终局评估/轨迹/放弃实验）+ 三流统一时间线', async () => {
     const payload = virtualSessionPayload();
     payload.data.status = 'completed';

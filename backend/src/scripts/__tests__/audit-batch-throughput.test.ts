@@ -1,4 +1,4 @@
-import { summarizeThroughput, LOW_RUN_ALERT_MINUTES, type ThroughputAttempt } from '../audit-batch-throughput';
+import { summarizeThroughput, applyThroughputActivity, LOW_RUN_ALERT_MINUTES, type ThroughputAttempt } from '../audit-batch-throughput';
 
 const NOW = new Date('2026-10-21T10:05:30.000Z');
 
@@ -55,5 +55,40 @@ describe('summarizeThroughput（批量吞吐审计）', () => {
     expect(byMinute.get('2026-10-21T10:05')).toBe(5);
     expect(byMinute.get('2026-10-21T10:04')).toBe(7);
     expect(byMinute.get('2026-10-21T10:03')).toBe(9);
+  });
+});
+
+describe('applyThroughputActivity（空闲不是低吞吐故障）', () => {
+  const lowReport = () => summarizeThroughput([], { windowMinutes: 60, minRpm: 20, now: NOW });
+
+  it('没有运行中的批次/会话/租约 → 空闲，保持 rpm 读数但不告警', () => {
+    const report = applyThroughputActivity(lowReport(), { activeSessions: 0, activeBatches: 0, activeLeases: 0 });
+    expect(report.idle).toBe(true);
+    expect(report.alert).toBe(false);
+    expect(report.alertReason).toBeNull();
+    // 读数不被改写：低吞吐事实仍在，只是不当作故障
+    expect(report.longestLowRun).toBe(60);
+    expect(report.avgRpm).toBe(0);
+  });
+
+  it('跑批会话在运行但零调用 → 不空闲，照常告警（卡住的批次不能被吞）', () => {
+    const report = applyThroughputActivity(lowReport(), { activeSessions: 2, activeBatches: 0, activeLeases: 0 });
+    expect(report.idle).toBe(false);
+    expect(report.alert).toBe(true);
+    expect(report.alertReason).toContain('连续 60 分钟低于 20 rpm');
+  });
+
+  it('批量任务或未过期租约也算运行信号', () => {
+    const byBatch = applyThroughputActivity(lowReport(), { activeSessions: 0, activeBatches: 1, activeLeases: 0 });
+    const byLease = applyThroughputActivity(lowReport(), { activeSessions: 0, activeBatches: 0, activeLeases: 1 });
+    expect(byBatch.idle).toBe(false);
+    expect(byLease.idle).toBe(false);
+  });
+
+  it('有批次且吞吐达标 → 不告警也不标空闲', () => {
+    const healthy = summarizeThroughput(at(0, 30), { windowMinutes: 5, minRpm: 20, now: NOW });
+    const report = applyThroughputActivity(healthy, { activeSessions: 1, activeBatches: 0, activeLeases: 0 });
+    expect(report.idle).toBe(false);
+    expect(report.alert).toBe(false);
   });
 });

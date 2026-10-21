@@ -92,6 +92,8 @@ vi.mock('@/api/adminApi', () => ({
   adminMemoryReviewApi: { detail: vi.fn().mockResolvedValue({ data: { data: null } }), recompute: vi.fn(), apply: vi.fn(), reject: vi.fn(), rollback: vi.fn() },
   // 必须给 resolved 值：loadDetail 对它 .then，undefined 会在 try 内同步抛 TypeError 炸掉后续 loadLdSessions
   getUserIncludingDeleted: vi.fn().mockResolvedValue({ data: { data: {} } }),
+  // 证据页新增的建议归因命中率读侧（2026-10-21）：同样必须有函数，否则同步 TypeError 落进详情 catch
+  adminOpsApi: { insightReliability: vi.fn().mockResolvedValue({ data: { data: null } }) },
 }));
 vi.mock('../statusText', () => ({
   statusText: (s: string) => s,
@@ -104,6 +106,10 @@ vi.mock('../statusText', () => ({
     p && p.totalTasks > 0 ? `任务 ${p.taskIndex}/${p.totalTasks}` : '—',
   sessionProgressTone: () => null,
   sessionProgressDone: (s: string) => s === 'completed' || s === 'succeeded',
+  // 2026-10-21 教学会话新增「课堂」列：文案/徽章/悬停三件套
+  sessionModeText: (m: string) => (m === 'review' ? '复习课' : m === 'extension' ? '延伸课' : '正课'),
+  sessionModeBadgeCls: () => '',
+  sessionModeTitle: () => '',
 }));
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn() }));
 vi.mock('@/utils/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
@@ -164,8 +170,9 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
       sessionRow('s4', null), // 无归因行不进档位，但留在「全部阶段」
     ]);
     // 列方言回归（2026-10-11 用户走查：阶段从身份副行拆成独立列；列序按叙事重排）
+    // 2026-10-21：状态后补「课堂」列（正课/复习课/延伸课）
     expect(w.findAll('#ld-panel-sessions thead th').map((t) => t.text())).toEqual([
-      '会话', '阶段', '进度', '状态', '互动', '产物', '时间', '会话 ID',
+      '会话', '阶段', '进度', '状态', '课堂', '互动', '产物', '时间', '会话 ID',
     ]);
     const chips = stageChips(w);
     expect(chips.length).toBe(3); // 全部阶段 + 里程碑1 + 里程碑2
