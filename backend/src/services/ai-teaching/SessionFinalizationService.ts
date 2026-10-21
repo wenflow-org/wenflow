@@ -110,8 +110,11 @@ export class SessionFinalizationService {
       messages: session.messages,
       teachingState: session.teachingState,
       endReason: input.endReason,
-      // 复习课有界收束：截断的正是教师下一问，允许带着未答问题收课（检查点门仍然生效）
-      allowOpenQuestion: input.action === 'complete_review',
+      // 复习课有界收束：截断的正是教师下一问，允许带着未答问题/未答检查点收课
+      //（未答复习点按「本次无观测」跳过，不写假数据）。
+      // end_only = 主动退出（结束学习，不计入完成）：退出通道不该被「先答题」挡住，
+      // 否则真人只能关页走 abandoned 豁免（2026-10-21）。
+      allowOpenQuestion: input.action === 'complete_review' || input.action === 'end_only',
     });
     if (!closable.closable) {
       const error = new Error(closable.message || '课堂还有未完成的问答');

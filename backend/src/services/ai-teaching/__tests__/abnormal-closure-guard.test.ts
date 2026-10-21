@@ -78,6 +78,8 @@ jest.mock('../ReplanAdvisoryService', () => ({
     applyAttribution: jest.fn(),
   },
   toAttributionRecall: jest.fn(),
+  // 与真实实现同口径：extension/review 不产建议，其余照常
+  shouldBuildReplanAdvisory: (mode: string | null | undefined) => mode !== 'extension' && mode !== 'review',
 }));
 jest.mock('../ReplanAttributionService', () => ({
   replanAttributionService: { attribute: jest.fn() },

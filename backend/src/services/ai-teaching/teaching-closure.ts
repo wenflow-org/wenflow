@@ -103,11 +103,12 @@ export function evaluateSessionClosable(input: {
   teachingState: Record<string, unknown> | null | undefined;
   endReason?: string | null;
   /**
-   * 允许「教师刚提问、学生还没答」时收束。仅复习课（complete_review）使用：
-   * 复习课是有界课（回合上限到点就收），教师的下一问本来就是被截断的那一问；
-   * 不放行会让 complete_review 永远 409、降级 end_only 后丢失复习结果回写。
-   * 同一理由适用于待答检查点：到点收束时那道题本来就没机会作答，未答点按
-   * 「本次无观测」跳过（collectReviewOutcomes 只收集已判定的点），不能反过来卡住整课回写。
+   * 允许「教师刚提问、学生还没答」时收束。用于两类非结算场景：
+   * - 复习课（complete_review）：有界课，回合上限到点就收，教师的下一问本来就是被截断的那一问；
+   *   待答检查点同理（未答点按「本次无观测」跳过，由 collectReviewOutcomes 只收集已判定点）。
+   * - 主动退出（end_only「结束学习，不计入完成」）：退出通道不该被「先答题」挡住，
+   *   否则真人只能关页走 abandoned 豁免。
+   * 结算（complete_task）不放行——那正是本门禁要守的假完成。
    */
   allowOpenQuestion?: boolean;
 }): SessionClosableDecision {
