@@ -121,6 +121,8 @@ model prompt_call_logs {
   routingContextHash  String?
   pathId              String?
   userId              String?
+  /// 教学/学习会话归因（真列；此前只能经 conversationId 间接反推）
+  sessionId           String?
   conversationId      String?
   pipelineRunId       String?
   pipelineStepIndex   Int?
@@ -144,6 +146,7 @@ model prompt_call_logs {
   @@index([pipelineRunId])
   @@index([pathId])
   @@index([userId])
+  @@index([sessionId, createdAt])
   @@index([traceId])
   @@index([parentExecutionId])
   @@index([finalLlmRequestId])
@@ -157,6 +160,8 @@ model llm_execution_attempts {
   rootExecutionId     String?
   traceId             String?
   userId              String?
+  /// 教学/学习会话归因（真列；此前只在 metadata.cacheAffinityKey 里间接出现）
+  sessionId           String?
   sourceEntry         String   @default("platform")
   promptAttemptNo     Int      @default(1)
   transportAttemptNo  Int
@@ -207,6 +212,7 @@ model llm_execution_attempts {
   @@index([providerId, resolvedModel, startedAt])
   @@index([rootExecutionId, startedAt])
   @@index([userId, startedAt])
+  @@index([sessionId, startedAt])
   @@index([errorCategory, startedAt])
   @@index([success, errorCategory, startedAt])
   @@index([userId, startedAt, success])
@@ -533,6 +539,8 @@ model teaching_sessions {
   users                   users     @relation(fields: [userId], references: [id], onDelete: Cascade)
   finalizationOperations  session_finalization_operations[]
   messageRows             teaching_session_messages[]
+  messageOperations       teaching_message_operations[]
+  sessionEvents           session_events[]
 
   @@index([userId, taskId, status])
   @@index([status, updatedAt])
@@ -558,6 +566,49 @@ model teaching_session_messages {
   teaching_sessions teaching_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, id])
+}
+
+/// 教学写操作幂等账本（2026-10-20）：/messages、/continue、checkpoint 提交共用。
+/// 与 session_finalization_operations 同形（key+requestHash+resultJson），但生命周期短：
+/// 成功结果保留供同 key 重放；失败/超时允许同 key 重试。requestHash 不同 = 同 key 复用于
+/// 不同请求，按 409 拒绝（而不是静默返回上一请求的结果）。
+model teaching_message_operations {
+  id             String   @id @default(uuid())
+  sessionId      String
+  idempotencyKey String
+  kind           String
+  requestHash    String
+  status         String   @default("processing")
+  resultJson     String?
+  revision       Int?
+  errorCode      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+  teaching_sessions teaching_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, idempotencyKey])
+  @@index([status, updatedAt])
+}
+
+/// 会话事件统一日志（2026-10-21）：开课/回合/暂停/恢复/检查点/收束/工具/错误。
+/// 旧写入（teachingState.classroomEventHistory、domain_event_outbox）保持不动：
+/// 前者是前端课堂事件源、后者是跨模块持久事件；本表是并列的「按会话可查询时间线」。
+/// id 用自增整数而非 uuid：同会话按 id 排序即写入顺序，无需应用层算 seq。
+model session_events {
+  id         Int      @id @default(autoincrement())
+  eventId    String   @unique @default(uuid())
+  sessionId  String
+  kind       String
+  actor      String?
+  status     String?
+  revision   Int?
+  payload    String?
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  teaching_sessions teaching_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, id])
+  @@index([kind, occurredAt])
 }
 
 model session_finalization_operations {

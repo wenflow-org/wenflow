@@ -56,6 +56,12 @@
     "prompts:core:check": "npm run runtime:validate && ts-node src/scripts/check-core-hash-parity.ts",
     "prompts:runtime-contract:check": "npm run runtime:validate && ts-node src/scripts/check-prompt-runtime-contract-metadata-parity.ts",
     "llm:calls:check": "ts-node src/scripts/check-llm-call-boundary.ts",
+    "test:live:plan": "ts-node scripts/test-live/llm-contract-smoke.ts",
+    "test:live": "ts-node scripts/test-live/llm-contract-smoke.ts --live",
+    "test:e2e:live": "node scripts/test-live/teaching-idempotency-e2e.mjs",
+    "test:contract": "jest --runInBand src/gateway/api-gateway/__tests__/wire-format.test.ts src/gateway/api-gateway/__tests__/system-fold.test.ts src/config/__tests__/provider-capability.test.ts src/routes/__tests__/ai-teaching.routes.test.ts src/services/ai-teaching/__tests__/message-idempotency.service.test.ts src/services/ai-teaching/__tests__/session-init-transaction.test.ts src/scripts/__tests__/frozen-exam-run.test.ts src/config/__tests__/capability-consumers.test.ts && ts-node scripts/test-live/llm-contract-smoke.ts && ts-node src/scripts/check-capability-consumers.ts",
+    "measurement:check": "node scripts/measurement-verify/measurement-check.mjs",
+    "measurement:selftest": "node scripts/measurement-verify/frozen-exam-run.mjs --selftest",
     "search:check": "ts-node src/scripts/check-web-search.ts",
     "fetch:check": "ts-node src/scripts/check-web-fetch.ts",
     "image:check": "ts-node src/scripts/check-text-to-image.ts",
@@ -99,7 +105,10 @@
     "jevbench:public": "ts-node src/scripts/eval-jevbench-public.ts",
     "calibration:audit": "ts-node src/scripts/audit-threshold-calibration.ts",
     "calibration:review": "ts-node --transpile-only src/scripts/audit-review-calibration.ts",
-    "measurement:frozen-exam": "node scripts/measurement-verify/frozen-exam-run.mjs"
+    "measurement:frozen-exam": "node scripts/measurement-verify/frozen-exam-run.mjs",
+    "capability:check": "ts-node src/scripts/check-capability-consumers.ts",
+    "test:e2e:long": "node scripts/test-live/teaching-longcourse-e2e.mjs"
+
   },
   "keywords": [
     "ai",

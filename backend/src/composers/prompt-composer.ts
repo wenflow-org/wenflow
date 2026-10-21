@@ -196,6 +196,7 @@ export async function callPrompt<TInput, TOutput>(
       durationMs: 0,
       pathId: context.pathId || requestContext.pathId || null,
       userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
       conversationId: context.conversationId || requestContext.conversationId || null,
       pipelineRunId: context.pipelineRunId || null,
       pipelineStepIndex: context.pipelineStepIndex ?? null,
@@ -289,6 +290,7 @@ export async function callPrompt<TInput, TOutput>(
       durationMs: 0,
        pathId,
       userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
        conversationId,
       pipelineRunId: context.pipelineRunId || null,
       pipelineStepIndex: context.pipelineStepIndex ?? null,
@@ -442,6 +444,9 @@ export async function callPrompt<TInput, TOutput>(
         request: {
           model: generationResolution.model,
           temperature: generationResolution.temperature,
+          // topP 已在 resolve-llm-call-params 按 runtime → skill → prompt → code → route 解析；
+          // 不透传等于「配置了但从不生效」。undefined 时 JSON 序列化自然省略，不改变默认行为。
+          top_p: generationResolution.topP,
           max_tokens: currentMaxTokens ?? generationResolution.maxTokens,
         },
       };
@@ -509,6 +514,7 @@ export async function callPrompt<TInput, TOutput>(
         durationMs: Date.now() - startTime,
          pathId,
         userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
          conversationId,
         pipelineRunId: context.pipelineRunId || null,
         pipelineStepIndex: context.pipelineStepIndex ?? null,
@@ -657,6 +663,7 @@ export async function callPrompt<TInput, TOutput>(
       tokenUsage: JSON.stringify(tokenUsage),
        pathId,
       userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
        conversationId,
       pipelineRunId: context.pipelineRunId || null,
       pipelineStepIndex: context.pipelineStepIndex ?? null,
@@ -707,6 +714,7 @@ export async function callPrompt<TInput, TOutput>(
     durationMs,
      pathId,
     userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
      conversationId,
     pipelineRunId: context.pipelineRunId || null,
     pipelineStepIndex: context.pipelineStepIndex ?? null,

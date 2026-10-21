@@ -9,6 +9,7 @@ import { randomUUID as uuidv4 } from 'crypto';
 import { getAPIGateway } from '../gateway/api-gateway';
 import apiConfigService from '../services/apiConfig.service';
 import { safeHttpRequest } from '../utils/safe-http';
+import { resolveChatCompletionsUrl } from '../gateway/api-gateway/chat-protocol-adapter';
 import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
 import { getRequestContext } from '../gateway/api-gateway/context';
 import { endpointsMatch } from '../utils/endpoint-identity';
@@ -298,7 +299,7 @@ router.post('/test', async (req, res, next) => {
         });
       }
 
-      const response = await safeHttpRequest<any>(`${normalizedEndpoint}/v1/chat/completions`, {
+      const response = await safeHttpRequest<any>(resolveChatCompletionsUrl(normalizedEndpoint), {
         method: 'POST',
         body: {
           model: resolvedModel,

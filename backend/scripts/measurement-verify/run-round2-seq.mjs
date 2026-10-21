@@ -94,12 +94,16 @@ const FORCE = args.includes('--force');
 // HTTP：429/5xx/池化403 退避 30s×3（同 R1 api()）
 async function api(ctx, method, urlPath, body, opts = {}) {
   const { timeout = 300000, idempotencyKey = null, retries = MAX_RETRIES } = opts;
+  // 2026-10-20 起教学写路由强制 Idempotency-Key：未显式传入时按请求自动生成（重试复用）
+  const writeRoute = /\/ai-teaching\/sessions\/[^/]+\/(messages|continue)$/.test(urlPath)
+    || /\/checkpoints\/[^/]+\/submit(\/stream)?$/.test(urlPath);
+  const effectiveIdempotencyKey = idempotencyKey || (writeRoute ? `run-${crypto.randomUUID()}` : null);
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const headers = { Cookie: ctx.cookie, Origin: ORIGIN };
       if (body !== undefined) headers['Content-Type'] = 'application/json';
-      if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+      if (effectiveIdempotencyKey) headers['Idempotency-Key'] = effectiveIdempotencyKey;
       const res = await fetch(BASE + urlPath, {
         method,
         headers,

@@ -3,21 +3,42 @@ import { streamSsePost } from '../utils/sse';
 import type { InteractionMeta } from '../composables/useInteractionMeta';
 
 /**
- * 位置线图载荷（2026-09-27 双通道重构 Scope B）：空间位置关系的确定性渲染。
- * 数值域由后端归一化保证覆盖全部取值；前端只做坐标映射（TeachingFigure.vue）。
+ * 回合写入幂等键（2026-10-20）。
+ *
+ * 服务端 `/messages`、`/continue`、checkpoint 提交要求 `Idempotency-Key`：同一次逻辑发送的
+ * 所有重试（流式→非流式回退、自动退避重试、刷新后手动重试）必须复用同一个 key，
+ * 否则丢响应后的重发会重复追加用户消息/重复扣费。
+ */
+export function createTeachingIdempotencyKey(scope: string): string {
+  const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  return `${scope}:${uuid}`;
+}
+
+/**
+ * 教学图载荷：确定性 SVG 渲染。
+ * `position-line` 用顶层 axis/marks/spans/guides（2026-09-27 既有契约）；
+ * 其余图型（grid/matrix/compare/quadrant/bipartite/board/bins/balance/ladder）用 `spec`，
+ * 字段由后端归一化逐项裁剪（白名单 + 上限），前端只负责坐标计算。
+ * `palette` 由服务端按学科盖章，只影响色相与材质。
  */
 export interface TeachingFigurePayload {
   engine: string;
   kind: string;
-  axis: {
+  /** 学科调色板；只影响观感，不改变几何与语义 */
+  palette?: 'indigo' | 'earth' | 'tech' | 'warm' | 'violet' | 'mono';
+  axis?: {
     min: number;
     max: number;
     unit?: string | null;
     ticks?: Array<{ at: number; label?: string | null }>;
   };
-  marks: Array<{ at: number; label: string; dir?: 'right' | 'left' | 'none' }>;
+  marks?: Array<{ at: number; label: string; dir?: 'right' | 'left' | 'none' }>;
   spans?: Array<{ from: number; to: number; label: string }>;
   guides?: Array<{ at: number; label?: string | null }>;
+  /** 非 position-line 图型的规格 */
+  spec?: Record<string, unknown>;
   caption?: string | null;
 }
 
@@ -425,12 +446,16 @@ export const aiTeachingAPI = {
     message: string,
     revision: number,
     meta?: InteractionMeta,
-    options?: { timeout?: number; signal?: AbortSignal }
+    options?: { timeout?: number; signal?: AbortSignal; idempotencyKey?: string }
   ): Promise<MessageResult> {
     const result = await api.post(
       `/ai-teaching/sessions/${sessionId}/messages`,
       { message, revision, ...(meta ? { meta } : {}) },
-      { timeout: options?.timeout ?? AI_REQUEST_TIMEOUT, ...(options?.signal ? { signal: options.signal } : {}) }
+      {
+        timeout: options?.timeout ?? AI_REQUEST_TIMEOUT,
+        ...(options?.signal ? { signal: options.signal } : {}),
+        headers: { 'Idempotency-Key': options?.idempotencyKey || createTeachingIdempotencyKey('msg') },
+      }
     );
     return result.data || result;
   },
@@ -446,7 +471,7 @@ export const aiTeachingAPI = {
     sessionId: string,
     message: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal },
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal; idempotencyKey?: string },
     meta?: InteractionMeta
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
@@ -464,6 +489,7 @@ export const aiTeachingAPI = {
         // 教学回合为 JSON 输出、final 前可以整段无字节（实测 2~3 分钟），60s 空闲默认会把
         // 慢回合误判成死连接并触发非流式重发（双倍回合）。放到 120s：上层 90s 停滞看门狗
         // 先出手（有可见的超时气泡、不重发），这里只兜真正的死连接。
+        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('msg') },
         idleTimeoutMs: 120_000,
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {
@@ -516,7 +542,7 @@ export const aiTeachingAPI = {
   async streamContinueSession(
     sessionId: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal }
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal; idempotencyKey?: string }
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
       let result: MessageResult | null = null;
@@ -530,6 +556,7 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/continue`, { revision }, {
         signal: handlers.signal,
+        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('cont') },
         idleTimeoutMs: 120_000,
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {
@@ -810,8 +837,15 @@ export const aiTeachingAPI = {
     return result.data || null;
   },
 
-  async submitCheckpoint(sessionId: string, checkpointId: string, payload: CheckpointSubmitPayload, revision: number): Promise<CheckpointSubmitResult> {
-    const result = await api.post(`/ai-teaching/sessions/${sessionId}/checkpoints/${checkpointId}/submit`, { ...payload, revision }, { timeout: AI_REQUEST_TIMEOUT });
+  async submitCheckpoint(sessionId: string, checkpointId: string, payload: CheckpointSubmitPayload, revision: number, idempotencyKey?: string): Promise<CheckpointSubmitResult> {
+    const result = await api.post(
+      `/ai-teaching/sessions/${sessionId}/checkpoints/${checkpointId}/submit`,
+      { ...payload, revision },
+      {
+        timeout: AI_REQUEST_TIMEOUT,
+        headers: { 'Idempotency-Key': idempotencyKey || createTeachingIdempotencyKey(`cp-${checkpointId}`) },
+      }
+    );
     return result.data || result;
   },
 
@@ -835,6 +869,7 @@ export const aiTeachingAPI = {
       onDelta?: (text: string) => void;
       onRestart?: () => void;
       signal?: AbortSignal;
+      idempotencyKey?: string;
     } = {}
   ): Promise<CheckpointSubmitResult> {
     return new Promise<CheckpointSubmitResult>((resolve, reject) => {
@@ -848,6 +883,7 @@ export const aiTeachingAPI = {
         {
           signal: handlers.signal,
           // 同 streamSendMessage：讲解回合 final 前可整段无字节，60s 默认会误杀慢回合
+          headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey(`cp-${checkpointId}`) },
           idleTimeoutMs: 120_000,
           onEvent: (event, data) => {
             if (event === 'judgement') {

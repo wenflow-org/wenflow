@@ -615,7 +615,7 @@ const END_WITHOUT_FINISH_LABEL = '结束学习（不计入完成）';
 
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
-import { aiTeachingAPI } from '@/api/aiTeaching';
+import { aiTeachingAPI, createTeachingIdempotencyKey } from '@/api/aiTeaching';
 import { readMaterialSection } from '@/api/materials';
 import AiContentNote from '@/components/AiContentNote.vue';
 import ImmersiveMenu from '@/components/ImmersiveMenu.vue';
@@ -1198,10 +1198,10 @@ watch(checkpoint, (now, prev) => {
    选前端留痕而非后端「先落用户消息」：回合同样是运营基线写入（messagesBaseCount + revision
    CAS），拆成两段写会破坏基线不变量，风险远大于收益。 */
 const INFLIGHT_KEY_PREFIX = 'wf.learn.inflight.';
-interface InflightMarker { text: string; revision: number; ts: number }
-function markInflight(sessionId: string, text: string, revision: number) {
+interface InflightMarker { text: string; revision: number; ts: number; key?: string }
+function markInflight(sessionId: string, text: string, revision: number, idempotencyKey: string) {
   try {
-    window.sessionStorage.setItem(INFLIGHT_KEY_PREFIX + sessionId, JSON.stringify({ text, revision, ts: Date.now() } satisfies InflightMarker));
+    window.sessionStorage.setItem(INFLIGHT_KEY_PREFIX + sessionId, JSON.stringify({ text, revision, ts: Date.now(), key: idempotencyKey } satisfies InflightMarker));
   } catch { /* 隐私模式/配额不足：留痕失败不阻断发送 */ }
 }
 function clearInflight(sessionId: string) {
@@ -1344,6 +1344,9 @@ async function boot() {
               clearInflight(s.sessionId);
             } else {
               lastUserText = inflight.text;
+              // 沿用刷新前的幂等键：服务端若已提交，重试只重放结果；未提交则正常重跑。
+              lastSendKey = inflight.key || null;
+              lastSendKeyText = inflight.text;
               pushMsg({ role: 'user', text: inflight.text, time: nowTime() });
               pushMsg({
                 role: 'ai',
@@ -1398,6 +1401,9 @@ async function boot() {
 
 /* ---------- 对话 ---------- */
 let lastUserText = '';
+/** 上一次逻辑发送的幂等键：手动「重试」同一文本时复用它（同 key = 服务端重放）。 */
+let lastSendKey: string | null = null;
+let lastSendKeyText = '';
 /** 流式发送中的 AbortController：离页/卸载时中止，触发后端 res close 止损上游生成 */
 let streamAbort: AbortController | null = null;
 /** 用户点了停止（或看门狗中止）：用于区分「主动取消」与「传输失败」，前者绝不回退/重试 */
@@ -1486,7 +1492,8 @@ async function sendDirect(text: string) {
 async function sendTurnOnce(
   text: string,
   meta: ReturnType<typeof interactionMeta.collect>,
-  onActivity: () => void
+  onActivity: () => void,
+  idempotencyKey: string
 ): Promise<Record<string, any>> {
   if (!session.value) throw Object.assign(new Error('会话不存在'), { cancelled: true });
   try {
@@ -1494,6 +1501,7 @@ async function sendTurnOnce(
     const streamCtrl = streamAbort;
     return await aiTeachingAPI.streamSendMessage(session.value.sessionId, text, session.value.revision, {
       signal: streamCtrl.signal,
+      idempotencyKey,
       onDelta: (delta) => {
         // 空文本 delta 不算可见进展：不建气泡、不喂看门狗（#111——若链路上出现空 delta，
         // 喂狗会让「90s 无可见进展即中止」的判定永远不触发，发送键就一直卡在停止生成）。
@@ -1533,18 +1541,24 @@ async function sendTurnOnce(
     return await aiTeachingAPI.sendMessage(session.value.sessionId, text, session.value.revision, meta, {
       timeout: SEND_FALLBACK_TIMEOUT_MS,
       signal: fallbackCtrl.signal,
+      idempotencyKey,
     }) as unknown as Record<string, any>;
   } finally {
     streamAbort = null;
   }
 }
 
-async function doSend(text: string, allowStaleRetry = true, skipUserPush = false) {
+async function doSend(text: string, allowStaleRetry = true, skipUserPush = false, retryKey?: string) {
   if (!session.value) return;
   lastUserText = text;
+  // 同一逻辑发送的所有重试共用一个幂等键（自动退避 / 流式→非流式回退 / 刷新后手动重试）。
+  // 丢失响应后的重发因此只会重放服务端已提交的结果，不会重复追加用户消息。
+  const sendKey = retryKey || createTeachingIdempotencyKey('msg');
+  lastSendKey = sendKey;
+  lastSendKeyText = text;
   if (!skipUserPush) pushMsg({ role: 'user', text, time: nowTime() });
   // 发送即留痕（未确认送达）：中途刷新时据此恢复气泡/给重发入口（见 markInflight 注释）
-  markInflight(session.value.sessionId, text, session.value.revision);
+  markInflight(session.value.sessionId, text, session.value.revision, sendKey);
   quickReplies.value = [];
   openingQuestion.value = '';
   confirmCheck.value = null;
@@ -1576,7 +1590,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
       };
       armWatchdog();
       try {
-        r = await sendTurnOnce(text, meta, armWatchdog);
+        r = await sendTurnOnce(text, meta, armWatchdog, sendKey);
       } catch (err) {
         if (turnTimedOut) throw Object.assign(new Error('回复超时'), { turnTimedOut: true });
         if (stopRequested || (err as { cancelled?: boolean })?.cancelled) throw err;
@@ -1726,7 +1740,7 @@ async function retryLast() {
   // 失败回合的用户气泡还留在列表里（过滤只清失败气泡）：重试复用它，不再追加第二条同样的「你」
   const last = msgs.value[msgs.value.length - 1];
   const reuseUserBubble = last?.role === 'user' && last.text === lastUserText;
-  await doSend(lastUserText, true, reuseUserBubble);
+  await doSend(lastUserText, true, reuseUserBubble, lastSendKeyText === lastUserText ? lastSendKey || undefined : undefined);
 }
 
 /* ---------- 结束 ---------- */
