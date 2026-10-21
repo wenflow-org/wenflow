@@ -669,9 +669,11 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
       } else {
         // 竖干 → 边界：这段就是一次网络往返
         parts.push(`<line x1="${trunkX}" y1="${cy}" x2="${entryX - 8}" y2="${cy}" stroke="${tone.color}" stroke-width="1.7"/>`);
-        // 跳数标在**边界上**：数一眼边界上的序号，就是这条路径跨了几次集群
+        // 跳数标在**边界上**：数一眼边界上的序号，就是这条路径跨了几次集群。
+        // 先垫一圈白底：边界线到徽标前就断开，读作「线上的一次跨集群」，而不是数字压着线。
         const bx = borderX;
         const hopNo = nodes.slice(0, i + 1).filter((n: any) => n.from !== 'prev').length;
+        parts.push(`<circle cx="${bx}" cy="${cy}" r="11.5" fill="${T.surface}"/>`);
         parts.push(`<circle cx="${bx}" cy="${cy}" r="8.5" fill="${T.surface}" stroke="${tone.color}" stroke-width="1.6"/>`);
         parts.push(text(bx, cy + 3.6, String(hopNo), 't-micro', 'middle', `fill="${tone.ink}"`));
         parts.push(`<polygon points="${entryX - 11},${cy - 4.6} ${entryX - 1},${cy} ${entryX - 11},${cy + 4.6}" fill="${tone.color}"/>`);
@@ -1418,11 +1420,9 @@ function renderCycle({ title, center, nodes = [], note }: any): RenderedFigure {
 
   for (const p of pts) {
     const tone = p.node.tone === 'warn' ? T.warn : p.node.tone === 'ok' ? T.ok : T.accent;
-    const soft = p.node.tone === 'warn' ? T.warnSoft : p.node.tone === 'ok' ? T.okSoft : T.accentSoft;
     const x = p.x - pillW / 2;
     const y = p.y - pillH / 2;
     parts.push(rect(x, y, pillW, pillH, { r: 11, fill: T.surface, stroke: tone, sw: T.strokeStrong, filter: sid }));
-    parts.push(`<rect x="${x + 1}" y="${y + 1}" width="5" height="${pillH - 2}" rx="2.5" fill="${soft}"/>`);
     if (isSlot(p.node.label, p.node.mask)) {
       parts.push(...slotRect(x + 14, y + 12, pillW - 28, pillH - 24));
       continue;
