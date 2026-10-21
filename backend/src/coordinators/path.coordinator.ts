@@ -11,8 +11,11 @@ import {
   buildUploadedMaterialPacksAsync,
   buildPackFromMaterial,
   buildPackFromMaterialAsync,
+  MAX_UPLOAD_MATERIAL_PACKS,
 } from '../services/materials/material-pack.builder';
-import { listMaterials, readMaterial } from '../services/materials/material-store';
+import { readMaterial, type MaterialRecord } from '../services/materials/material-store';
+import { materialRecordHasPhraseHit, selectMaterialsRanked } from '../services/materials/material-selection.service';
+import { applyMaterialRerankGate } from '../services/materials/material-rerank.service';
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
 import { patchPathsWithAsyncMaterials } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
@@ -372,13 +375,17 @@ class PathCoordinator {
    * 纯本地读盘（无网络/LLM），同步且**绝不抛错**；一份都没有时返回空数组（零影响）。
    * 开关：`MATERIAL_UPLOAD_INJECTION_DISABLED=1` 关闭。
    */
-  private async resolveUploadedMaterialPacks(userId: unknown): Promise<MaterialPackResult[]> {
+  private async resolveUploadedMaterialPacks(
+    userId: unknown,
+    records?: MaterialRecord[]
+  ): Promise<MaterialPackResult[]> {
     const id = typeof userId === 'string' ? userId.trim() : '';
     if (!id) return [];
     try {
+      const options = records ? { records } : {};
       return isSemanticMaterialPackEnabled()
-        ? await buildUploadedMaterialPacksAsync(id)
-        : buildUploadedMaterialPacks(id);
+        ? await buildUploadedMaterialPacksAsync(id, options)
+        : buildUploadedMaterialPacks(id, options);
     } catch (error) {
       logger.warn('[path-coordinator] 读取上传附件失败，已跳过（fail-open，不阻塞路径生成）', {
         error: error instanceof Error ? error.message : String(error),
@@ -652,20 +659,68 @@ class PathCoordinator {
     // 附件理解摘要（material-brief）惰性就绪：path 是长流程，值得等 brief（有预算上限）——
     // path-planning 拿到 brief 的 naturalDivisions/目录后才知道「这一堆怎么切分学习」。
     // fail-open：生成失败/超时的附件照常以 pack 进路径（brief=null），下次生成再补。
-    try {
-      const uploadUserId = typeof input.userId === 'string' ? input.userId.trim() : '';
-      if (uploadUserId) {
-        const uploadedRecords = listMaterials(uploadUserId).slice(0, 3);
-        await collectBriefsWithDeadline(uploadedRecords, 90_000);
-      }
-    } catch (error) {
-      logger.warn('[path-coordinator] 附件 brief 就绪失败（fail-open）', {
-        error: error instanceof Error ? error.message : String(error),
+    const uploadUserId = typeof input.userId === 'string' ? input.userId.trim() : '';
+    const materialSelectionQuery = [
+      (goalFinalPayload as any)?.understanding?.surface_goal,
+      (goalFinalPayload as any)?.understanding?.real_problem,
+      (visibleSummary as any)?.surfaceGoal,
+      (visibleSummary as any)?.realProblem,
+      (visibleSummary as any)?.confirmedProposal?.goal,
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .join(' ');
+    // 资料库选择：词面排序 + 决策模型重排（jev-1.14.0，AUC 0.908；未配置/失败退词面序）。
+    const uploadSelection = uploadUserId
+      ? await selectMaterialsRanked({
+          userId: uploadUserId,
+          query: materialSelectionQuery,
+          limit: MAX_UPLOAD_MATERIAL_PACKS,
+          includeWeb: false,
+        })
+      : {
+          selected: [] as MaterialRecord[],
+          omitted: [] as MaterialRecord[],
+          total: 0,
+          strategy: 'recent' as const,
+          hasPhraseHit: false,
+        };
+    // 注入 rerank 闸门（2026-10-21 评测：bge-reranker-v2-m3 误杀≤2% 时拦 57.1%；
+    // 阈值 MATERIAL_RERANK_GATE_MIN_SCORE 缺省 0.29；未配置/失败 fail-open 全放行）。
+    const rerankGate = await applyMaterialRerankGate({
+      query: materialSelectionQuery,
+      records: uploadSelection.selected,
+    });
+    const gatedSelected = rerankGate.kept;
+    // 2026-10-21 离线对比裁决（doc/local/RESOURCE-LIBRARY-OPT-2026-10-20/INJECTION-GATE-COMPARISON.md）：
+    // 片段闸门拿去过滤注入会误杀"学科相关但措辞无 4 字重叠"的真引用资料（60 条真实路径里 9/15），
+    // 故这里只记录不过滤——无片段命中的名单进日志供观测。
+    const noPhraseHit = gatedSelected.filter(
+      (record) => !materialRecordHasPhraseHit(materialSelectionQuery, record)
+    );
+    if (uploadUserId && uploadSelection.total > 0) {
+      logger.info('[path-coordinator] 资料库选择', {
+        total: uploadSelection.total,
+        selected: gatedSelected.map((record) => record.name),
+        omitted: uploadSelection.omitted.map((record) => record.name),
+        gateDropped: rerankGate.dropped.map((record) => record.name),
+        gateApplied: rerankGate.applied,
+        noPhraseHit: noPhraseHit.map((record) => record.name),
+        strategy: uploadSelection.strategy,
+        query: materialSelectionQuery.slice(0, 120),
       });
+      if (gatedSelected.length > 0) {
+        try {
+          await collectBriefsWithDeadline(gatedSelected, 90_000);
+        } catch (error) {
+          logger.warn('[path-coordinator] 附件 brief 就绪失败（fail-open）', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
 
     // 附件是主线：用户上传的资料优先进入路径（本地读盘，无网络、无 LLM）
-    const uploadedPacks = await this.resolveUploadedMaterialPacks(input.userId);
+    const uploadedPacks = await this.resolveUploadedMaterialPacks(input.userId, gatedSelected);
     const uploadedMaterialIds = new Set(
       uploadedPacks.map((pack) => pack.pack?.materialId).filter((id): id is string => !!id)
     );

@@ -23,6 +23,7 @@ import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapt
 
 import { logger } from '../../utils/logger';
 import { buildPromptFriendlyMaterials } from '../../services/materials/material-prompt-projection';
+import { assessMaterialRefCoverage } from '../../services/materials/material-ref-coverage.service';
 import { normalizeMaterialRefs } from '../../services/materials/material-refs';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
 
@@ -1056,6 +1057,22 @@ ${replan ? renderReplanSection(replan) : ''}
   const promptMaterials = buildPromptFriendlyMaterials(
     (input as any)?.metadata?.normalizedInput?.resources?.materials,
   );
+  // 引用覆盖度的相关性闸门用“路径诉求”而不是模型输出：资料是否该被引用，取决于目标
+  // 与资料本身的相关性；模型若跑题，不应该反过来为无关资料补引用。
+  const materialRelevanceText = [
+    String(input?.goal || ''),
+    confirmedLearningDirection,
+    confirmedFirstDeliverable,
+    observableResult,
+    acceptanceCheck,
+    ...confirmedStages.map((stage: any) => (
+      typeof stage === 'string' ? stage : stage?.title || stage?.name || ''
+    )),
+  ].filter(Boolean).join(' ');
+  const materialCoverageNodes = (milestones: any[]) => milestones.map((milestone: any, index: number) => ({
+    label: `里程碑 ${index + 1}「${normalizePromptString(milestone?.title) || '未命名'}」`,
+    refs: milestone?.materialRefs,
+  }));
   const result = await callPrompt<any, PathOutput>({
     agentId: 'skill:path-planning',
     defaultSystemPrompt: PATH_PLANNING_PROMPT,
@@ -1090,17 +1107,23 @@ ${replan ? renderReplanSection(replan) : ''}
         });
       }
       const estimatedHours = Math.round(conservation.totalAfter) || clampHours(pathData.estimatedHours);
-      // materialRefs 覆盖度观测（有资料却没引用 → 可观测，不阻断生成）
+      // 里程碑级 materialRefs 覆盖度（只观测）：路径层的任务引用由 stage-designer 产出，
+      // 这里零引用不等于整条路径没有资料引用，故不告警、不触发重试。
       if (promptMaterials?.length) {
         const milestones = Array.isArray(pathData.milestones) ? pathData.milestones : [];
-        const withRefs = milestones.filter((m: any) => Array.isArray(m?.materialRefs) && m.materialRefs.length > 0).length;
-        if (withRefs === 0) {
-          logger.warn('[path-planning] 有资料但没有任何里程碑给出可核对的 materialRefs（规则未被执行）', {
-            userId,
-            materials: promptMaterials.length,
-            milestones: milestones.length,
-          });
-        }
+        const coverage = assessMaterialRefCoverage({
+          materials: promptMaterials,
+          nodes: materialCoverageNodes(milestones),
+          text: materialRelevanceText,
+          scope: 'PATH',
+        });
+        logger.info('[path-planning] 里程碑 materialRefs 覆盖度', {
+          userId,
+          materials: promptMaterials.length,
+          milestones: milestones.length,
+          relevant: coverage.relevant,
+          covered: coverage.covered,
+        });
       }
       return {
         id: `path_${Date.now()}`,

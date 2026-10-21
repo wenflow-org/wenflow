@@ -597,6 +597,34 @@ export async function callPrompt<TInput, TOutput>(
       continue;
     }
 
+    // 软校验（质量要求）：不通过时带反馈重试；最后一次仍不通过则按当前输出继续。
+    // 与上面的硬契约分开：资料引用覆盖度这类“该有但缺失”不应让整条路径失败。
+    const softValidation = spec.softValidateParsedOutput
+      ? spec.softValidateParsedOutput(contractParsed, input)
+      : { valid: true as const };
+    if (!softValidation.valid) {
+      lastFailureReason = softValidation.failureReason || 'parsed output soft validation failed';
+      lastViolations = Array.isArray(softValidation.violations)
+        ? [...softValidation.violations]
+        : [lastFailureReason];
+      if (attempt < maxAttempts) {
+        attempts.push({
+          attempt, rawOutput: rawModelOutput, failureReason: lastFailureReason,
+          violations: lastViolations,
+          status: 'validation_failed', durationMs: Date.now() - attemptStartedAt,
+          llmRequestId: lastLlmRequestId || undefined,
+          transportAttemptCount: gatewayMetadata?.attemptCount
+        });
+        continue;
+      }
+      logger.warn('[callPrompt] 软校验最后一次仍未通过，按当前输出继续', {
+        agentId: spec.agentId,
+        attempt,
+        failureReason: lastFailureReason,
+        violations: lastViolations,
+      });
+    }
+
     // 用归一后的形态（contractParsed）而非原始 parsed：coerceParsedForContract 的语义是
     // "把等价变体收敛到契约形态"，落库/下游消费必须拿到收敛后的结果，否则会出现
     // "校验通过但落库仍是别名字段"的静默断链（2026-09-22 kc-mapper：kcIds/type 落库、下游读 linkedKCs/relation 读空）。

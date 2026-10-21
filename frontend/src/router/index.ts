@@ -157,6 +157,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '目标规划', requiresAuth: true }
   },
   {
+    path: '/library',
+    name: 'V2Library',
+    component: () => import('@/views/v2/V2Library.vue'),
+    meta: { title: '资料库', requiresAuth: true }
+  },
+  {
     path: '/docs',
     name: 'DeveloperDocs',
     component: () => import('@/views/DeveloperDocs.vue'),

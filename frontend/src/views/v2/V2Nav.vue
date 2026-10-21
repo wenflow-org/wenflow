@@ -59,6 +59,10 @@
               <History :size="15" :stroke-width="1.75" aria-hidden="true" />
               <span>学习历史</span>
             </router-link>
+            <router-link to="/library" role="menuitem" @click="menuOpen = false">
+              <Library :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span>资料库</span>
+            </router-link>
             <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
               <span class="v2nav__menu-theme-icon" aria-hidden="true">
                 <Sun v-if="isDark" :size="14" :stroke-width="2" />
@@ -97,7 +101,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Activity, ChevronLeft, History, House, Layers2, LogOut, MessageCircle, Moon, Sun, Trophy, UserRound, Waypoints } from 'lucide-vue-next';
+import { Activity, ChevronLeft, History, House, Layers2, Library, LogOut, MessageCircle, Moon, Sun, Trophy, UserRound, Waypoints } from 'lucide-vue-next';
 import { useUserStore } from '@/stores/user';
 import { toast } from '@/utils/toast';
 import { applyDocumentTheme, readTheme, writeTheme } from '@/utils/theme';
@@ -154,7 +158,7 @@ const showBack = computed(() => !onTabSection.value);
  * 正文 H1 保留为唯一页题。
  */
 const titleHidden = computed(
-  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map')
+  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map') || route.path.startsWith('/library')
 );
 const pageTitle = computed(() => {
   const t = route.meta?.title;

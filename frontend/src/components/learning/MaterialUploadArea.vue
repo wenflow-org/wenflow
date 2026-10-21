@@ -34,6 +34,14 @@
       >{{ showAll ? '收起' : `+${items.length - CHIP_LIMIT}` }}</button>
     </div>
 
+    <div v-if="items.length" class="mat-upload__meta">
+      <span v-if="library && library.uploadCount > PATH_LIMIT" class="mat-upload__note">
+        资料库共 {{ library.uploadCount }} 份。生成路径时按目标相关性选用 {{ PATH_LIMIT }} 份，其余保留。
+        <span v-if="library.quotaBytes > 0">已用 {{ formatMb(library.totalBytes) }} / {{ formatMb(library.quotaBytes) }}</span>
+      </span>
+      <router-link to="/library" class="mat-upload__manage">管理资料库</router-link>
+    </div>
+
     <p v-if="error" class="mat-upload__error">{{ error }}</p>
   </div>
 </template>
@@ -41,9 +49,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import {
-  listMaterials,
+  getMaterialLibrary,
   removeMaterial,
   uploadMaterial,
+  type MaterialLibraryStats,
   type UploadedMaterial,
 } from '@/api/materials';
 
@@ -59,9 +68,11 @@ import {
  */
 const ACCEPT = '.pdf,.docx,.pptx,.xlsx,.txt,.md,.markdown,.csv';
 const CHIP_LIMIT = 4;
+const PATH_LIMIT = 3;
 
 const inputRef = ref<HTMLInputElement | null>(null);
 const items = ref<UploadedMaterial[]>([]);
+const library = ref<MaterialLibraryStats | null>(null);
 const uploading = ref(false);
 const dragging = ref(false);
 const error = ref('');
@@ -99,9 +110,16 @@ function emitCount() {
   emit('change', items.value.length);
 }
 
+function formatMb(bytes: number): string {
+  return `${Math.round((Number(bytes || 0) / 1024 / 1024) * 10) / 10}MB`;
+}
+
 async function refresh() {
   try {
-    items.value = await listMaterials();
+    const data = await getMaterialLibrary();
+    // 上传区只列用户附件；联网入库资料由资料链/后台消费，不冒充“已上传”。
+    items.value = data.items.filter((item) => item.origin !== 'web');
+    library.value = data.library;
   } catch {
     // 首屏拉取失败不打扰用户（未登录/网络问题由上层页面处理）
   }
@@ -132,7 +150,7 @@ async function addFiles(files: File[]) {
   }
   uploading.value = false;
   showAll.value = false;
-  emitCount();
+  await refresh();
 }
 
 async function onPick(event: Event) {
@@ -146,11 +164,11 @@ async function onPick(event: Event) {
 async function remove(material: UploadedMaterial) {
   try {
     await removeMaterial(material.id);
-    items.value = items.value.filter((item) => item.id !== material.id);
+    await refresh();
   } catch (err) {
     error.value = (err as { message?: string })?.message || '删除失败，请重试';
+    emitCount();
   }
-  emitCount();
 }
 
 /** 供父组件读取当前已上传资料（后续「资料→路径」接线用）。 */
@@ -234,6 +252,33 @@ defineExpose({ refresh, openPicker, addFiles, items, dragging });
   color: var(--blue-deep);
   font-weight: 700;
   cursor: pointer;
+}
+
+.mat-upload__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--mk-fs-micro);
+  line-height: 1.5;
+}
+
+.mat-upload__note {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.mat-upload__manage {
+  color: var(--blue-deep);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.mat-upload__manage:hover {
+  text-decoration: underline;
 }
 
 .mat-upload__error {

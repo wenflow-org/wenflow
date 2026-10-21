@@ -3,7 +3,9 @@ const mockSave = jest.fn();
 const mockList = jest.fn();
 const mockRead = jest.fn();
 const mockDelete = jest.fn();
+const mockStats = jest.fn();
 const mockRecall = jest.fn();
+const mockUsage = jest.fn();
 const mockSemanticEnabled = jest.fn(() => true);
 
 jest.mock('../../services/materials/material-upload.service', () => ({
@@ -12,11 +14,16 @@ jest.mock('../../services/materials/material-upload.service', () => ({
   listMaterials: (...args: any[]) => mockList(...args),
   readMaterial: (...args: any[]) => mockRead(...args),
   deleteMaterial: (...args: any[]) => mockDelete(...args),
+  getMaterialLibraryStats: (...args: any[]) => mockStats(...args),
 }));
 jest.mock('../../services/materials/material-semantic.service', () => ({
   __esModule: true,
   isMaterialSemanticEnabled: () => mockSemanticEnabled(),
   recallMaterialChunks: (...args: any[]) => mockRecall(...args),
+}));
+jest.mock('../../services/materials/material-usage.service', () => ({
+  __esModule: true,
+  getMaterialUsageMap: (...args: any[]) => mockUsage(...args),
 }));
 jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), info: jest.fn() } }));
 
@@ -38,7 +45,7 @@ function createResponse() {
 }
 
 function createRequest(overrides: Record<string, unknown> = {}) {
-  return { user: { userId: 'user-1' }, params: {}, body: {}, ...overrides } as any;
+  return { user: { userId: 'user-1' }, params: {}, body: {}, query: {}, ...overrides } as any;
 }
 
 beforeEach(() => {
@@ -90,12 +97,44 @@ describe('POST /api/materials', () => {
 });
 
 describe('GET /api/materials', () => {
-  it('返回当前用户的资料列表', () => {
+  it('返回当前用户的资料列表 + 容量统计', async () => {
     mockList.mockReturnValue([{ id: 'm1' }]);
+    mockStats.mockReturnValue({ total: 1, uploadCount: 1, webCount: 0, totalBytes: 12, quotaBytes: 100 });
     const res = createResponse();
-    getRouteHandler('get', '/')(createRequest(), res);
+    await getRouteHandler('get', '/')(createRequest(), res);
     expect(mockList).toHaveBeenCalledWith('user-1');
-    expect(res.json).toHaveBeenCalledWith({ success: true, data: { items: [{ id: 'm1' }] } });
+    expect(mockStats).toHaveBeenCalledWith('user-1');
+    expect(mockUsage).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        items: [{ id: 'm1' }],
+        library: { total: 1, uploadCount: 1, webCount: 0, totalBytes: 12, quotaBytes: 100 },
+      },
+    });
+  });
+
+  it('?usage=1 → 投影每份资料的使用关系', async () => {
+    mockList.mockReturnValue([{ id: 'm1' }, { id: 'm2' }]);
+    mockStats.mockReturnValue({ total: 2, uploadCount: 2, webCount: 0, totalBytes: 24, quotaBytes: 100 });
+    mockUsage.mockResolvedValue(
+      new Map([
+        ['m1', { pathCount: 1, adoptedPathCount: 1, refCount: 2, paths: [{ pathId: 'p1', pathTitle: '路径一', adopted: true, refCount: 2, updatedAt: null }] }],
+      ])
+    );
+    const res = createResponse();
+    await getRouteHandler('get', '/')(createRequest({ query: { usage: '1' } }), res);
+    expect(mockUsage).toHaveBeenCalledWith('user-1');
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        items: [
+          expect.objectContaining({ id: 'm1', usage: expect.objectContaining({ pathCount: 1, refCount: 2 }) }),
+          expect.objectContaining({ id: 'm2', usage: null }),
+        ],
+        library: { total: 2, uploadCount: 2, webCount: 0, totalBytes: 24, quotaBytes: 100 },
+      },
+    });
   });
 });
 
