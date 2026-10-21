@@ -223,9 +223,13 @@ export function detectAsciiStructure(text: string | null | undefined): boolean {
 /** 本轮"结构图/配图时机"信号（喂给教学回合的**显式**输入，见 buildVisualOpportunity 注释）。 */
 export interface VisualOpportunity {
   suggested: true;
-  reason: 'ascii-structure' | 'position-description' | 'structure-content' | 'task-structure' | 'recap-cadence';
+  reason: 'ascii-structure' | 'position-description' | 'time-order' | 'structure-content' | 'task-structure' | 'recap-cadence';
   /** 编排层建议的图型（模型可改）；只用于事后追溯「代码想让它画什么」 */
   kindHint?: string | null;
+  /** 代码判据的一句话理由（如「两边差的不是条目，是请求要跳几跳」） */
+  ruleWhy?: string | null;
+  /** 命中的原文片段：证明「为什么这一轮被判为出图时机」，不是让模型自述 */
+  matched?: string[];
   /** 给模型的**显式、正向**要求 */
   instruction: string;
 }
@@ -315,6 +319,39 @@ export function detectPositionDescription(text: string | null | undefined): bool
 }
 
 /**
+ * 时间先后线索（2026-10-21 实跑补齐）：竞态/时序课的「位置线」其实是**时间轴**。
+ * 学生的描述里通常一个空间词都没有，只有「先发 / 后至 / 返回 / 覆盖」这类动词——
+ * 只认空间词的旧判据在这里永远打不响，最后只能靠 recap 兜底收图。
+ */
+const TIME_ORDER_LANGUAGE = /(先发|后至|先后|晚到|早到|返回|回来|响应|发出|发出去|发的时候|时间轴|毫秒|时序|并发|同时发出|覆盖|延迟|时刻|写回|过期|先到|后到)/g;
+
+/** 命中的原文片段（去重、限量）——用于事后回答「为什么这一轮被判为出图时机」。 */
+export function matchCues(text: string | null | undefined, pattern: RegExp): string[] {
+  const hits = String(text ?? '').match(pattern) || [];
+  return [...new Set(hits)].slice(0, 6);
+}
+
+export function matchPositionCues(text: string | null | undefined): string[] {
+  const hits = String(text ?? '').match(POSITION_LANGUAGE) || [];
+  const unique = [...new Set(hits)];
+  return unique.length >= 2 || hits.length >= 3 ? unique.slice(0, 6) : [];
+}
+
+export function matchTimeOrderCues(text: string | null | undefined): string[] {
+  const hits = String(text ?? '').match(TIME_ORDER_LANGUAGE) || [];
+  const unique = [...new Set(hits)];
+  return unique.length >= 2 || hits.length >= 3 ? unique.slice(0, 6) : [];
+}
+
+export function matchStructureCues(text: string | null | undefined): string[] {
+  return matchCues(text, STRUCTURE_CUE);
+}
+
+export function matchAsciiCues(text: string | null | undefined): string[] {
+  return matchCues(text, ASCII_STRUCTURE_CHARS);
+}
+
+/**
  * 视觉教具路由（2026-10-20）：把「该画成什么形状」从模型的自由发挥变成代码裁决。
  *
  * 为什么需要：提示词里给了十几种 kind，模型默认永远挑 grid（白框填字）——
@@ -362,11 +399,12 @@ const KIND_RULES: readonly KindRule[] = [
   { kind: 'compare', test: /(对比|对照|区别|差异|不同点)/, why: '两边对等对照' },
 ];
 
-export function chooseFigureKind(text: string | null | undefined): { kind: FigureKindHint; why: string } | null {
+export function chooseFigureKind(text: string | null | undefined): { kind: FigureKindHint; why: string; match: string } | null {
   const value = String(text ?? '');
   if (!value.trim()) return null;
   for (const rule of KIND_RULES) {
-    if (rule.test.test(value)) return { kind: rule.kind, why: rule.why };
+    const hit = value.match(rule.test);
+    if (hit) return { kind: rule.kind, why: rule.why, match: hit[0] };
   }
   return null;
 }
@@ -599,6 +637,8 @@ export function buildVisualOpportunity(
       suggested: true,
       reason: 'ascii-structure',
       kindHint: kindHint?.kind ?? null,
+      ruleWhy: '上一轮用箭头/方框字符在正文里画了结构',
+      matched: matchAsciiCues(lastAssistant?.content),
       instruction:
         '上一轮你用了箭头/方框/字符在 reply 里"画"结构——那说明这里本来就需要一张图，而且**别再用字符画**。'
         + '**先判断**：若本轮正要布置「由学习者自己排出/画出这个结构」的练习（答案泄漏，2026-09-24 实测），'
@@ -617,13 +657,16 @@ export function buildVisualOpportunity(
   // 学生上一轮在用文字描述位置关系（谁在前谁在后、朝哪走、隔多远）——那正是位置线该出场的时候。
   // 上一轮老师已摆过 / 本会话已达上限 → 不再触发（判据天然带节奏）。
   const lastUser = [...list].reverse().find((message) => message?.role === 'user');
-  if (detectPositionDescription(lastUser?.content)) {
+  const positionCues = matchPositionCues(lastUser?.content);
+  if (positionCues.length) {
     if (lastHasFigure) return null;
     if (figureCapReached) return null;
     return {
       suggested: true,
       reason: 'position-description',
-      kindHint: kindHint?.kind ?? null,
+      kindHint: 'position-line',
+      ruleWhy: '学生在用文字描述空间位置关系，外化成一条线让他核验',
+      matched: positionCues,
       instruction:
         '学生正在用文字描述**空间位置关系**（谁在前谁在后、朝哪走、隔多远）——把他说的话**摆成一条位置线**给他核验，'
         + '这是这类课的共同坐标系。**先判断**：若本轮正要布置「由学习者自己画/摆出这条位置线」的练习（答案泄漏），'
@@ -631,6 +674,26 @@ export function buildVisualOpportunity(
         + 'marks 写学生的对象与朝向、spans 写他提到的距离、guides 写追及点/相遇点这类参考位置），'
         + '**图内标签写学科实指**（甲/乙/小明/追及点）；caption 一句给学生看的话；**不要**改用 mermaid（节点-边画不出位置）。'
         + 'reply 里不必再复述位置关系。',
+    };
+  }
+  // 时间先后时机（2026-10-21 实跑补齐）：竞态/时序课里学生一个空间词都没有，只说「先发、后至、返回、覆盖」。
+  // 这类描述的学习对象同样是一条线——只是那条线是**时间轴**：marks 是事件发生的时刻，spans 是时长/窗口。
+  const timeCues = matchTimeOrderCues(lastUser?.content);
+  if (timeCues.length) {
+    if (lastHasFigure) return null;
+    if (figureCapReached) return null;
+    return {
+      suggested: true,
+      reason: 'time-order',
+      kindHint: 'position-line',
+      ruleWhy: '学生在描述事件的先后与返回顺序——学习对象是一条时间轴',
+      matched: timeCues,
+      instruction:
+        '学生刚在描述**事件在时间上的先后**（谁先发出、谁先返回、谁覆盖谁）。把这条时间关系摆成一条**时间轴**给他核验：'
+        + 'axis.unit 写时间单位（ms/秒），**至少三个时刻**（发出、返回、写回各算一个），marks 写事件名与方向，'
+        + 'spans 只表示**时长或窗口**（「A 从发出到返回 250ms」），**不要**用 spans 表示「幅度/差值/差距」这类数值差——'
+        + '那是另一种图（range-bar），画在时间轴上会被读成时间段。caption 一句给学生看的话。'
+        + '**先判断**：若本轮正要布置学生自己画这条时间线，则本轮不要出图，留到下一轮印证。',
     };
   }
   // 任务级时机（2026-10-18）：**当前任务的标题/描述本身就是结构化关系**——
@@ -641,6 +704,8 @@ export function buildVisualOpportunity(
       suggested: true,
       reason: 'task-structure',
       kindHint: kindHint?.kind ?? null,
+      ruleWhy: '当前任务本身就是一组结构化关系',
+      matched: [...matchStructureCues(taskHint), ...(kindHint?.match ? [kindHint.match] : [])].slice(0, 6),
       instruction:
         '当前这个任务本身就在处理一组**结构化关系**（归属/对应/对比/对账/分层这类）。'
         + '如果这轮的内容已经可以用一张图讲清，就在 reply 之后输出顶层块 `figure`；'
@@ -659,6 +724,11 @@ export function buildVisualOpportunity(
       suggested: true,
       reason: 'structure-content',
       kindHint: kindHint?.kind ?? null,
+      ruleWhy: '上一轮在讲一组结构化关系',
+      matched: [...matchStructureCues(lastAssistant?.content), ...(() => {
+        const hit = chooseFigureKind(lastAssistant?.content);
+        return hit ? [hit.match] : [];
+      })()].slice(0, 6),
       instruction:
         '上一轮你在讲一组**结构化关系**（对比/归类/对账/维度/映射这类）。把它摆成一张图，学生能比读段落更快看清关系。'
         + '**先判断**：若本轮正要布置「由学生自己填这张表/排这组关系」的练习（答案泄漏），本轮**不要**输出，'
@@ -681,6 +751,8 @@ export function buildVisualOpportunity(
       suggested: true,
       reason: 'recap-cadence',
       kindHint: kindHint?.kind ?? null,
+      ruleWhy: '连续多轮没有出过图，把已经站住的链收一张',
+      matched: [`连续 ${turnsSinceFigure} 个教师回合无图`],
       instruction:
         `你和这位学生已经连着推进了 ${turnsSinceFigure} 个回合，中间没有出现过任何图。`
         + '这一轮在 reply 之后，把**到目前为止已经站住的那条关系链**收成一张图：'

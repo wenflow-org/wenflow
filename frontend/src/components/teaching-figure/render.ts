@@ -1606,7 +1606,7 @@ function renderBullseye({ title, colLabels = [], rowLabels = [], cells = [], not
  * 横着画在日期轴上会被读成「周二到周六 = 0.7 个点」——量纲错位。这里让每组有独立轨道，
  * 共同的数值域只决定横向对齐，不冒充时间。
  */
-function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): RenderedFigure {
+function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): RenderedFigure | null {
   // 至少两条区间才有「并排比较」的意义；单条区间退回文字讲
   if (!Array.isArray(rows) || rows.length < 2) return null;
   const padX = 16;

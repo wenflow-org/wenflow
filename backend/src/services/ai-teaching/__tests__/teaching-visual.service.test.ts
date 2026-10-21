@@ -28,6 +28,8 @@ import {
   figureKindHintLine,
   stripDanglingFigureReferences,
   collectFigureNumbers,
+  matchPositionCues,
+  matchTimeOrderCues,
   collectReplyNumbers,
   figureNumbersFightReply,
 } from '../teaching-visual.service';
@@ -727,5 +729,34 @@ describe('图内数字 vs 正文数字（走查 #15：同一回合两套数）',
     expect(figureNumbersFightReply(figure, '新组最高 3.9%，最低 3.0%，晃了 0.9 个点')).toBe(false);
     expect(figureNumbersFightReply(figure, '先别急着改，想想要量什么')).toBe(false);
     expect(collectReplyNumbers('3.8% 到 3.1%').has('3.8')).toBe(true);
+  });
+});
+
+
+describe('出图动机留痕（2026-10-21：为什么调用，由代码回答）', () => {
+  it('时间先后线索：竞态类描述能被判为 time-order 时机，并带回命中片段', () => {
+    const messages = [
+      { role: 'user' as const, content: '我发现先发出的那个请求反而后返回，回来就把新结果覆盖了', timestamp: 't1' },
+    ] as TeachingSessionMessage[];
+    const opportunity = buildVisualOpportunity(messages, '搜索框竞态');
+    expect(opportunity?.reason).toBe('time-order');
+    expect(opportunity?.kindHint).toBe('position-line');
+    expect(opportunity?.ruleWhy).toContain('时间轴');
+    expect(opportunity?.matched?.some((c) => ['先发', '返回', '覆盖'].includes(c))).toBe(true);
+  });
+
+  it('空间词判据仍只认空间描述，不会把时间词算成位置描述', () => {
+    expect(matchPositionCues('甲在乙前面 20 米，两人都向东走')).toEqual(expect.arrayContaining(['前面', '向东']));
+    expect(matchPositionCues('先发出的请求后返回，结果被覆盖')).toEqual([]);
+    expect(matchTimeOrderCues('先发出的请求后返回，结果被覆盖').length).toBeGreaterThan(0);
+  });
+});
+
+describe('时间先后线索的词表覆盖（2026-10-21 实跑）', () => {
+  it('学生用「响应回来 / 发的时候」这类口语描述也能命中', () => {
+    const line = '左边要是重新数当前的输入，那旧响应回来时看到的“当前输入”是上海，它自己发的时候也是上海';
+    const cues = matchTimeOrderCues(line);
+    expect(cues.length).toBeGreaterThan(0);
+    expect(cues).toEqual(expect.arrayContaining(['响应', '回来', '发的时候']));
   });
 });

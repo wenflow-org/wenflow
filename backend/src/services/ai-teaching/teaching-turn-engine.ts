@@ -930,6 +930,8 @@ export async function processStudentMessage(
         trigger: visualOpportunity ? 'opportunity' : 'model',
         reason: visualOpportunity?.reason ?? null,
         kindHint: visualOpportunity?.kindHint ?? null,
+        ruleWhy: visualOpportunity?.ruleWhy ?? null,
+        matched: visualOpportunity?.matched ?? [],
       };
     }
   }

@@ -125,9 +125,13 @@ export interface TeachingSessionMessage {
    */
   figureSource?: {
     trigger: 'model' | 'opportunity';
-    reason: 'ascii-structure' | 'position-description' | 'structure-content' | 'task-structure' | 'recap-cadence' | null;
+    reason: 'ascii-structure' | 'position-description' | 'time-order' | 'structure-content' | 'task-structure' | 'recap-cadence' | null;
     /** 编排层建议的图型（模型可改） */
     kindHint: string | null;
+    /** 代码判据的一句话说明（谁让它画的） */
+    ruleWhy?: string | null;
+    /** 命中的原文片段（凭什么判它是出图时机） */
+    matched?: string[];
   } | null;
 }
 
