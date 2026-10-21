@@ -522,6 +522,9 @@ subtasks / milestones ─resolve───► conceptId ───┤
   （stability = mastery×10 天、difficulty 5、reps/lapses 0）；`extractionCount` 仍为 0，
   复习队列只收真正提取过的点；已排程的行不被覆盖。
 - **备份**：执行前写 `.tmp-batch/backups/vl-layer-<ts>.json`（含清空前的痕迹/证据/概念/边）。
+- **在跑工作守卫（2026-10-21）**：有未收束课堂（active/paused/finalizing，或 2 小时内的 timeout）
+  或 15 分钟内有更新的 running 仿真会话时，`--apply` 默认拒绝——清库会打断在途课堂、
+  让 worker 的写回落进已清空的痕迹。确需在跑批时重建：`--apply --force`（仍先备份）。
 - **执行顺序**：`node backend/restart.mjs --stop` → 脚本 `--apply` → `node backend/restart.mjs`。
 - **首轮结果（2026-10-21）**：26 用户 / 48 路径；concepts 711、aliases 1266（含 555 个锚键）、
   edges 1714；`milestones` 191/191、`subtasks` 1044/1044 挂靠；物化 528/528 未漏；

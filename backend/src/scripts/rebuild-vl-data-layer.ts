@@ -18,6 +18,11 @@
  *   npx ts-node --transpile-only src/scripts/rebuild-vl-data-layer.ts
  *   npx ts-node --transpile-only src/scripts/rebuild-vl-data-layer.ts --apply
  *   npx ts-node --transpile-only src/scripts/rebuild-vl-data-layer.ts --scope=all --apply
+ *   npx ts-node --transpile-only src/scripts/rebuild-vl-data-layer.ts --apply --force  # 有在跑课堂时强制
+ *
+ * 2026-10-21 稳定性护栏：有未收束课堂/在跑会话时默认拒绝 `--apply`——清库会打断正在进行的
+ * 课堂，并让后台 worker 的写回落到已清空的痕迹上（数据面自相矛盾）。真要在跑批时重建，
+ * 显式 `--force`（会先备份）。
  */
 import 'dotenv/config';
 import fs from 'node:fs';
@@ -27,16 +32,57 @@ import { parsePathPromptTemplate } from '../services/learning/learning.helpers';
 import { conceptRegistryService } from '../services/learner/concept-registry.service';
 import { conceptGraphService } from '../services/learner/concept-graph.service';
 
-interface Args { apply: boolean; scope: 'virtual' | 'all'; }
+interface Args { apply: boolean; scope: 'virtual' | 'all'; force: boolean; }
 
 function parseArgs(): Args {
-  const out: Args = { apply: false, scope: 'virtual' };
+  const out: Args = { apply: false, scope: 'virtual', force: false };
   for (const raw of process.argv.slice(2)) {
     const [k, v] = raw.replace(/^--/, '').split('=');
     if (k === 'apply') out.apply = true;
+    if (k === 'force') out.force = true;
     if (k === 'scope' && (v === 'virtual' || v === 'all')) out.scope = v;
   }
   return out;
+}
+
+/**
+ * 纯函数：把「在跑工作量」翻译成拒绝理由；没有在跑的工作 → null。
+ * 抽出来单独断言，避免守卫逻辑只在 CLI 里被间接覆盖。
+ */
+export function describeActiveWorkBlocker(counts: {
+  activeClassrooms: number;
+  runningSessions: number;
+}): string | null {
+  const classrooms = Math.max(0, Number(counts.activeClassrooms) || 0);
+  const sessions = Math.max(0, Number(counts.runningSessions) || 0);
+  if (classrooms === 0 && sessions === 0) return null;
+  return `检测到未收束课堂 ${classrooms} 节 / 在跑仿真会话 ${sessions} 个：清库会打断在途课堂。`
+    + '先收束或停止这些会话，确需强制重建请加 --force。';
+}
+
+async function assertNoActiveWork(userIds: string[], force: boolean): Promise<void> {
+  if (force) return;
+  // 只看「真的还在跑」的：active/paused/finalizing 一律算；timeout 是可恢复终态，
+  // 但几天前的 timeout 不应永久拦住重建——只认最近 2 小时内的（可能正在被续课）。
+  // 仿真会话的 running 是课间常态，只认最近 15 分钟内更新（= 车道确实在写）。
+  const classroomRecency = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const sessionRecency = new Date(Date.now() - 15 * 60 * 1000);
+  const [activeClassrooms, runningSessions] = await Promise.all([
+    prisma.teaching_sessions.count({
+      where: {
+        userId: { in: userIds },
+        OR: [
+          { status: { in: ['active', 'paused', 'finalizing'] } },
+          { status: 'timeout', updatedAt: { gte: classroomRecency } },
+        ],
+      },
+    }),
+    prisma.virtual_sessions.count({
+      where: { userId: { in: userIds }, status: 'running', updatedAt: { gte: sessionRecency } },
+    }),
+  ]);
+  const blocker = describeActiveWorkBlocker({ activeClassrooms, runningSessions });
+  if (blocker) throw new Error(blocker);
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -276,6 +322,8 @@ async function main(): Promise<void> {
     return;
   }
 
+  await assertNoActiveWork(userIds, args.force);
+
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupPath = path.resolve(process.cwd(), '..', '.tmp-batch', 'backups', `vl-layer-${stamp}.json`);
   await backup(userIds, backupPath);
@@ -296,11 +344,13 @@ async function main(): Promise<void> {
   console.log('[rebuild] 重建后存量：', JSON.stringify(after));
 }
 
-main()
-  .catch((error: unknown) => {
-    console.error('[rebuild] 失败：', error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect().catch(() => undefined);
-  });
+if (require.main === module) {
+  main()
+    .catch((error: unknown) => {
+      console.error('[rebuild] 失败：', error instanceof Error ? error.message : error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await prisma.$disconnect().catch(() => undefined);
+    });
+}
