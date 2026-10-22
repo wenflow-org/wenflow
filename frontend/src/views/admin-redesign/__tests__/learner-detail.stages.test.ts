@@ -146,9 +146,9 @@ async function mountLd(sessions: ReturnType<typeof sessionRow>[]) {
 describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
   /** 工具栏两组 chips 的选择器（2026-10-11 深设计：视角组与阶段组同排分域） */
   const stageChips = (w: ReturnType<typeof mount>) =>
-    w.findAll('.ld-filtbar__grp[aria-label="按阶段筛选会话"] .mk-pill');
+    w.findAll('.ld-filtbar__grp[aria-label="按阶段筛选课堂"] .mk-pill');
   const viewChips = (w: ReturnType<typeof mount>) =>
-    w.findAll('.ld-filtbar__grp[aria-label="会话视角"] .mk-pill');
+    w.findAll('.ld-filtbar__grp[aria-label="课堂视角"] .mk-pill');
 
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -165,7 +165,7 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
     ]);
     // 列方言回归（2026-10-11 用户走查：阶段从身份副行拆成独立列；列序按叙事重排）
     expect(w.findAll('#ld-panel-sessions thead th').map((t) => t.text())).toEqual([
-      '会话', '阶段', '进度', '状态', '互动', '产物', '时间', '会话 ID',
+      '课堂', '阶段', '进度', '状态', '互动', '产物', '时间', '课堂 ID',
     ]);
     const chips = stageChips(w);
     expect(chips.length).toBe(3); // 全部阶段 + 里程碑1 + 里程碑2
@@ -196,7 +196,7 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
 
   it('单阶段：不渲染阶段切换器（单档即全部）', async () => {
     const w = await mountLd([sessionRow('s1', 1), sessionRow('s2', 1)]);
-    expect(w.find('.ld-filtbar__grp[aria-label="按阶段筛选会话"]').exists()).toBe(false);
+    expect(w.find('.ld-filtbar__grp[aria-label="按阶段筛选课堂"]').exists()).toBe(false);
   });
 
   it('视角默认「有效」：隐藏废弃重试；头部读数给 有效/废弃 分档', async () => {
@@ -635,7 +635,7 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ pathId: 'lp2' }));
     const meta = w.find('#ld-panel-sessions .mk-card__meta');
     expect(meta.text()).toContain('路径 另一条路径');
-    expect(meta.attributes('title')).toContain('条教学会话（窗口上限）');
+    expect(meta.attributes('title')).toContain('节课堂（窗口上限）');
     expect(meta.attributes('title')).not.toContain('不是该学习者的「当前路径」');
     // 单条路径下串档告警不再出现（档位天然同源）
     expect(meta.attributes('title')).not.toContain('同序号里程碑会合到同一档');
@@ -735,7 +735,7 @@ describe('LearnerDetail 概览：最近目标对话 + 学习动态命名', () =>
     expect(titles).toContain('最近目标对话');
     expect(titles).not.toContain('最近动态');
     // 会话预览仍在（对象轴的另一张卡）
-    expect(titles).toContain('最近会话');
+    expect(titles).toContain('最近课堂');
   });
 
   it('目标对话跟随页级路径作用域，行点击进只读座舱', async () => {

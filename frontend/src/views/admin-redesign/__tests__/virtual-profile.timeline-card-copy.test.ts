@@ -26,7 +26,7 @@ describe('VirtualProfile · 学习日程卡文案', () => {
   it('没有会话时只留空态：不报 0 个会话、不解释口径', () => {
     const block = timelineBlock()
     expect(block).toContain('v-if="!timelineSessionOptions.length"')
-    expect(block).toContain('这个虚拟学习者还没有会话。运行一个故事后，这里会按天显示日程。')
+    expect(block).toContain('这个虚拟学习者还没有运行记录。跑一个故事后，这里会按天显示日程。')
     expect(block).not.toContain('该虚拟人')
     // 徽章与说明都挂在「有会话」分支上
     expect(block).toContain('<span v-if="timelineSessionOptions.length" class="mk-badge')
@@ -35,7 +35,7 @@ describe('VirtualProfile · 学习日程卡文案', () => {
 
   it('口径只说一句「按自然日汇总」，不再复述只读与开关默认值', () => {
     const block = timelineBlock()
-    expect(block).toContain('按自然日汇总所选会话的学习负担、学习状态、系统干预与难度调整。')
+    expect(block).toContain('按自然日汇总所选运行的学习负担、学习状态、系统干预与难度调整。')
     expect(block).not.toContain('日期模拟默认关闭')
     expect(block).not.toContain('（只读）')
   })

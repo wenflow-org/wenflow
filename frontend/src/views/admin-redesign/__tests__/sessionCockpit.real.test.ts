@@ -243,7 +243,7 @@ describe('SessionCockpit 双模式', () => {
     // 顶栏不渲染（2026-10-11 走查：真实会话的顶栏 ID/刷新与壳层+hero 重复）；
     // 只读声明与出口迁进 hero（模式 badge + 动作区「← 会话列表」）
     expect(wrapper.find('.cp-topbar').exists()).toBe(false);
-    expect(wrapper.text()).toContain('真实会话 · 只读监控');
+    expect(wrapper.text()).toContain('真实课堂 · 只读监控');
     // 2026-10-19 用户走查「刷新重复了吧」：hero 刷新钮撤，改由顶栏一颗驱动（watch liveRefreshSeq）
     const heroActions = wrapper.find('.mk-hero__actions');
     expect(heroActions.text()).toContain('会话列表');
@@ -296,7 +296,7 @@ describe('SessionCockpit 双模式', () => {
 
     // 只读提示（2026-10-04 批次五 P3#13：「只读监控」声明并入顶栏模式 chip 单源，
     // 控制台条不再对真实会话复读——断言同步新契约：全角间隔号形态）
-    expect(wrapper.text()).toContain('真实会话 · 只读监控');
+    expect(wrapper.text()).toContain('真实课堂 · 只读监控');
 
     wrapper.unmount();
   });

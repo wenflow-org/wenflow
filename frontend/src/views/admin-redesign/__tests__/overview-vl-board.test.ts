@@ -141,11 +141,11 @@ describe('总览 row3 第三卡：虚拟学习者看板', () => {
     const wrapper = await mountOverview();
 
     const text = vlCard(wrapper).text();
-    for (const label of ['学习者', '在跑会话', '自动驾驶并发', '无响应会话', '完成率', '系统失败率']) {
+    for (const label of ['学习者', '在跑运行', '自动驾驶并发', '无响应运行', '完成率', '系统失败率']) {
       expect(text).toContain(label);
     }
     expect(text).toContain('42'); // 学习者
-    expect(text).toContain('3'); // 在跑会话
+    expect(text).toContain('3'); // 在跑运行
     expect(text).toContain('2/10'); // 并发 used/limit
     expect(text).toContain('91%'); // 完成率取整
     // 2026-10-22 用户：卡底「今日调用 N 次 / 排队 N」这类解释性文案不要，已删

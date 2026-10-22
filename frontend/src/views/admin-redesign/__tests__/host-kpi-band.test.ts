@@ -101,7 +101,7 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     await settle();
     // 2026-10-17：分布带退役，完结率从带副文升独立 KPI 卡（两位小数 → 四舍五入）；状态计数迁回卡头 pills
     // P-49（#74）：停滞会话从分布带 hint 升为卡，排尾
-    expect(kpiLabels(w)).toEqual(['会话总数', '完结率', '参与用户', '近 7 天新增', '停滞会话']);
+    expect(kpiLabels(w)).toEqual(['目标对话数', '完结率', '参与用户', '近 7 天新增', '停滞目标对话']);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
     // 构成卡旧形态不复辟：状态计数只活在卡头 pills（10-02 撤双带判例不回退）
     expect(w.find('.mk-card .buckets').exists()).toBe(false);

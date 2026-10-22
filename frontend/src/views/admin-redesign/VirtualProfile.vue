@@ -233,7 +233,7 @@
                 <MkEmptyState
                   v-else
                   title="暂无学习状态读数"
-                  description="该画像的会话还没有按天汇总出学习状态读数，运行一次课程后即可读数。"
+                  description="该画像的运行还没有按天汇总出学习状态读数，运行一次课程后即可读数。"
                   compact
                 />
               </div>
@@ -311,7 +311,7 @@
             <MkEmptyState
               v-else
               title="暂无学习状态读数"
-              description="该画像的会话还没有按天汇总出学习状态读数。"
+              description="该画像的运行还没有按天汇总出学习状态读数。"
               compact
             />
           </div>
@@ -321,7 +321,7 @@
         <section v-if="activeTab === 'profile' && isLive" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">运行预算</h3>
-            <span class="mk-card__meta">新会话默认值</span>
+            <span class="mk-card__meta">新运行默认值</span>
           </div>
           <div class="vp-budget">
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.maxRetriesPerStep }">
@@ -334,7 +334,7 @@
               <span class="mk-field__label">{{ BUDGET_TOTAL_LABEL }}</span>
               <input v-model.number="budgetForm.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" @input="budgetDirty = true" />
               <span v-if="budgetErrors.maxRetriesTotal" class="mk-field__err">{{ budgetErrors.maxRetriesTotal }}</span>
-              <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防止无限跑下去。故事可单独覆盖</span>
+              <span class="mk-field__hint">单个运行累计 AI 调用（含重试）达到上限即终止，防止无限跑下去。故事可单独覆盖</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.turnCapPerLesson }">
               <span class="mk-field__label">每课回合上限</span>
@@ -351,7 +351,7 @@
                 <option value="high">高</option>
                 <option value="stress_test">压力测试</option>
               </select>
-              <span class="mk-field__hint">新会话的默认难度（可在座舱按会话临时调整）</span>
+              <span class="mk-field__hint">新运行的默认难度（可在座舱按运行临时调整）</span>
             </label>
           </div>
           <div class="mk-card__foot">
@@ -491,9 +491,9 @@
                   <input type="checkbox" :checked="allStoriesSelected" @change="toggleAllStories" aria-label="全选故事" />
                   <span>已选 {{ selectedStoryKeys.size }}</span>
                 </label>
-                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" title="为每个勾选的故事启动一次新的实验会话" @click="batchRunStories">批量运行</button>
-                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="对勾选故事的最新会话开启自动驾驶（不新建会话，已运行的自动跳过）" @click="batchAutopilotStories('start')">批量启动</button>
-                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="停止勾选故事最新会话的自动驾驶（学习进度保留）" @click="batchAutopilotStories('stop')">批量停止</button>
+                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" title="为每个勾选的故事启动一次新的实验运行" @click="batchRunStories">批量运行</button>
+                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="对勾选故事的最新运行开启自动驾驶（不新建运行，已运行的自动跳过）" @click="batchAutopilotStories('start')">批量启动</button>
+                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="停止勾选故事最新运行的自动驾驶（学习进度保留）" @click="batchAutopilotStories('stop')">批量停止</button>
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="storyBusy" title="删除勾选的故事（不可恢复）" @click="batchRemoveStories">批量删除</button>
               </template>
             </div>
@@ -550,7 +550,7 @@
                       role="button"
                       tabindex="0"
                       :aria-pressed="selectedStoryId === (s.id || String(i))"
-                      :title="s.latestRun?.sessionId ? '进入该故事最新会话座舱' : '选中该故事。尚无会话，可点击「运行」启动'"
+                      :title="s.latestRun?.sessionId ? '进入该故事最新运行座舱' : '选中该故事。尚无运行，可点击「运行」启动'"
                       @click="selectStory(s, i)"
                       @keydown.enter.prevent="selectStory(s, i)"
                       @keydown.space.prevent="selectStory(s, i)"
@@ -562,8 +562,8 @@
                   </div>
                   <p class="vp-story__outline" :title="s.outline">{{ s.outline || '暂无故事概述' }}</p>
                   <div class="vp-story__stats">
-                    <span v-if="(s.runCount || 0) > 0" class="vp-story__stats-item" title="共运行的会话次数">运行 {{ s.runCount }} 次</span>
-                    <span v-if="stageCountsText(s)" class="vp-story__stats-item" title="会话进度：目标对话 / 路径规划 / 教学回合 的累计会话数（0 段省略）">{{ stageCountsText(s) }}</span>
+                    <span v-if="(s.runCount || 0) > 0" class="vp-story__stats-item" title="共运行次数">运行 {{ s.runCount }} 次</span>
+                    <span v-if="stageCountsText(s)" class="vp-story__stats-item" title="运行进度：目标对话 / 路径规划 / 教学回合 的累计运行数（0 段省略）">{{ stageCountsText(s) }}</span>
                     <!-- 双轴状态：生命周期徽章（轴 A）+ 阶段条（轴 B）；与一级页同源组件 -->
                     <template v-if="s.latestRun?.sessionId">
                       <RunStateBadge :status="storyRunState(s)" :hint="`${formatRunResult(s.latestRun?.status || '')} · ${timeAgo(String(s.latestRun?.updatedAt || s.latestRun?.createdAt || ''))}`" :pulse="false" />
@@ -589,7 +589,7 @@
                   </details>
                 </div>
                 <div class="vp-story__ops">
-                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验会话（进入座舱）'" @click="runStory(s, i)">
+                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验运行（进入座舱）'" @click="runStory(s, i)">
                     {{ running ? '进行中…' : '▶ 运行' }}
                   </button>
                   <!-- 低频操作收进 ⋯ 菜单：卡片只留主操作「运行」 -->
@@ -607,9 +607,9 @@
                       <button type="button" class="mk-menu__item" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i, poolIndex(s, i)); closeMenu()">编辑</button>
                       <!-- 深链到真实教学对象（#73）：projection 由后端逐故事产出（真实 Goal/Path/Learn 绑定），
                            此前映射了却不渲染，页面没有「从故事跳到真实教学对象」的入口 -->
-                      <button v-if="s.projection?.formal?.goal" type="button" class="mk-menu__item" title="打开该故事最新会话绑定的真实目标对话（以该虚拟学习者身份浏览）" @click="openProjection(s.projection?.formal?.goal)">看真实目标对话</button>
-                      <button v-if="s.projection?.formal?.path" type="button" class="mk-menu__item" title="打开该故事最新会话绑定的真实学习路径" @click="openProjection(s.projection?.formal?.path)">看学习路径</button>
-                      <button v-if="s.projection?.formal?.learning" type="button" class="mk-menu__item" title="打开该故事最新会话绑定的真实学习任务" @click="openProjection(s.projection?.formal?.learning)">看学习任务</button>
+                      <button v-if="s.projection?.formal?.goal" type="button" class="mk-menu__item" title="打开该故事最新运行绑定的真实目标对话（以该虚拟学习者身份浏览）" @click="openProjection(s.projection?.formal?.goal)">看真实目标对话</button>
+                      <button v-if="s.projection?.formal?.path" type="button" class="mk-menu__item" title="打开该故事最新运行绑定的真实学习路径" @click="openProjection(s.projection?.formal?.path)">看学习路径</button>
+                      <button v-if="s.projection?.formal?.learning" type="button" class="mk-menu__item" title="打开该故事最新运行绑定的真实学习任务" @click="openProjection(s.projection?.formal?.learning)">看学习任务</button>
                       <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(poolIndex(s, i)); closeMenu()">删除</button>
                     </div>
                   </div>
@@ -623,20 +623,20 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">学习日程</h3>
             <!-- 计数只在有会话时出：0 个会话时下面已有空态说明，徽章再报一次 0 是重复 -->
-            <span v-if="timelineSessionOptions.length" class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 个会话</span>
+            <span v-if="timelineSessionOptions.length" class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 次运行</span>
           </div>
           <template v-if="!timelineSessionOptions.length">
             <p class="vp-timeline__empty">
-              这个虚拟学习者还没有会话。运行一个故事后，这里会按天显示日程。
+              这个虚拟学习者还没有运行记录。跑一个故事后，这里会按天显示日程。
             </p>
           </template>
           <template v-else>
             <!-- 说明只在有会话时出：没有会话就没有可按天看的读数，此时只留空态给下一步 -->
             <p class="vp-timeline__hint">
-              按自然日汇总所选会话的学习负担、学习状态、系统干预与难度调整。
+              按自然日汇总所选运行的学习负担、学习状态、系统干预与难度调整。
             </p>
             <label class="mk-field vp-timeline__picker">
-              <span class="mk-field__label">会话</span>
+              <span class="mk-field__label">运行</span>
               <select v-model="timelineSessionId" class="mk-field__select">
                 <option v-for="opt in timelineSessionOptions" :key="opt.sessionId" :value="opt.sessionId">{{ opt.label }}</option>
               </select>
@@ -647,13 +647,13 @@
 
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">会话流水 · {{ allRuns.length }}</h3>
+            <h3 class="mk-card__title">运行记录 · {{ allRuns.length }}</h3>
             <span class="mk-card__meta">按时间倒序</span>
             <!-- 截断披露（#96）：详情接口最多 200 条，本页只渲染最近 RUNS_TAB_WINDOW 条 -->
             <span
               v-if="runsTruncated"
               class="mk-card__meta"
-              :title="`会话记录较多，仅显示最近 ${RUNS_TAB_WINDOW} 次`"
+              :title="`运行记录较多，仅显示最近 ${RUNS_TAB_WINDOW} 次`"
             >显示最近 {{ RUNS_TAB_WINDOW }} 次</span>
           </div>
           <MkEmptyState v-if="!allRuns.length" :class="LINE_EMPTY" title="还没有运行记录" />
@@ -674,8 +674,8 @@
                   :show-task-text="false"
                 />
                 <div v-if="isLive && r.sessionId" class="vp-run-row__ops">
-                  <button type="button" class="mk-link" title="进入该会话的座舱：查看对话、推进/自动/暂停/终止等细粒度控制" @click="openSessionCockpit(r.sessionId)">打开座舱</button>
-                  <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" title="删除该会话（仅终态可删，不可恢复）" @click="removeSession(r.sessionId)">删除</button>
+                  <button type="button" class="mk-link" title="进入该次运行的座舱：查看对话、推进/自动/暂停/终止等细粒度控制" @click="openSessionCockpit(r.sessionId)">打开座舱</button>
+                  <button type="button" class="mk-link mk-link--danger" :disabled="sessionBusy" title="删除该次运行（仅终态可删，不可恢复）" @click="removeSession(r.sessionId)">删除</button>
                 </div>
               </div>
             </div>
@@ -744,7 +744,7 @@
           </label>
           <label class="mk-field">
             <span class="mk-field__label">触发事件</span>
-            <input v-model="editStoryForm.storyTriggerEvent" class="mk-field__input" placeholder="会话开始时描述给学习者的可见开场事件" />
+            <input v-model="editStoryForm.storyTriggerEvent" class="mk-field__input" placeholder="运行开始时描述给学习者的可见开场事件" />
           </label>
           <label class="mk-field">
             <span class="mk-field__label">可见开场</span>
@@ -941,7 +941,7 @@ import {
 } from './vlab'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板就地引用 ---------- */
-const BUDGET_TOTAL_LABEL = '会话 AI 调用上限'
+const BUDGET_TOTAL_LABEL = '单次运行 AI 调用上限'
 
 interface RunItem {
   time: string
@@ -1083,7 +1083,7 @@ async function batchRunStories() {
   // 属于高成本、难回滚的操作，先让用户确认数量与预算消耗，避免误点批量勾选
   const ok = await askConfirm({
     title: '批量运行故事',
-    message: `将为勾选的 ${targets.length} 个故事各创建一个真实 LLM 会话并自动运行，将消耗 AI 调用预算。确定继续？`,
+    message: `将为勾选的 ${targets.length} 个故事各创建一个真实 LLM 运行并自动运行，将消耗 AI 调用预算。确定继续？`,
     confirmText: '批量运行',
     danger: false
   })
@@ -1120,13 +1120,13 @@ async function batchAutopilotStories(action: 'start' | 'stop') {
   const withSession = targets.filter((t) => t.s.latestRun?.sessionId)
   const noSession = targets.length - withSession.length
   if (!withSession.length) {
-    toast.error(action === 'start' ? '勾选的故事都没有会话，请先「批量运行」创建会话' : '勾选的故事都没有会话，无需停止')
+    toast.error(action === 'start' ? '勾选的故事都没有运行，请先「批量运行」创建运行' : '勾选的故事都没有运行，无需停止')
     return
   }
   const verb = action === 'start' ? '启动自动驾驶' : '停止自动驾驶'
   const ok = await askConfirm({
     title: `批量${verb}`,
-    message: `将${action === 'start' ? '为' : '停止'}勾选的 ${withSession.length} 个故事的最新会话${action === 'start' ? '开启自动驾驶（自动完成路径全部任务），已运行的自动跳过' : '的自动驾驶，学习进度保留'}`,
+    message: `将${action === 'start' ? '为' : '停止'}勾选的 ${withSession.length} 个故事的最新运行${action === 'start' ? '开启自动驾驶（自动完成路径全部任务），已运行的自动跳过' : '的自动驾驶，学习进度保留'}`,
     confirmText: verb,
     danger: false
   })
@@ -1154,7 +1154,7 @@ async function batchAutopilotStories(action: 'start' | 'stop') {
   }
   storyBusy.value = false
   if (done > 0 || skipped > 0) {
-    toast.success(`已${verb} ${done} 个${skipped ? `（跳过 ${skipped}）` : ''}${noSession ? `（${noSession} 个无会话跳过）` : ''}${failed ? `，失败 ${failed}` : ''}`)
+    toast.success(`已${verb} ${done} 个${skipped ? `（跳过 ${skipped}）` : ''}${noSession ? `（${noSession} 个无运行跳过）` : ''}${failed ? `，失败 ${failed}` : ''}`)
     selectedStoryKeys.value = new Set()
     await loadDetail(id, true)
   }
@@ -1170,7 +1170,7 @@ async function batchRemoveStories() {
   if (!id || storyBusy.value) return
   const ok = await askConfirm({
     title: '批量删除故事',
-    message: `确认删除勾选的 ${targets.length} 个故事？\n仅删除故事本身；仍被学习会话引用的会被拒绝（需先删除对应会话）。该操作不可撤销。`,
+    message: `确认删除勾选的 ${targets.length} 个故事？\n仅删除故事本身；仍被运行记录引用的会被拒绝（需先删除对应运行）。该操作不可撤销。`,
     confirmText: '批量删除',
     busy: true
   })
@@ -1510,7 +1510,7 @@ async function saveStory() {
   if (totalRaw) {
     const v = Math.round(Number(totalRaw))
     if (!Number.isFinite(v) || v < 1 || v > 1000) {
-      storyBudgetErrors.value.maxRetriesTotal = '会话调用上限须为 1–1000 的整数（或留空继承角色级）'
+      storyBudgetErrors.value.maxRetriesTotal = '运行调用上限须为 1–1000 的整数（或留空继承角色级）'
       return
     }
     budget.maxRetriesTotal = v
@@ -2042,7 +2042,7 @@ async function removeStory(index: number) {
   if (!id || storyBusy.value) return
   const ok = await askConfirm({
     title: '删除故事',
-    message: `确认删除第 ${index + 1} 个故事？\n仅删除故事本身；仍被学习会话引用的会被拒绝（需先删除对应会话）。该操作不可撤销。`,
+    message: `确认删除第 ${index + 1} 个故事？\n仅删除故事本身；仍被运行记录引用的会被拒绝（需先删除对应运行）。该操作不可撤销。`,
     confirmText: '删除',
     busy: true
   })

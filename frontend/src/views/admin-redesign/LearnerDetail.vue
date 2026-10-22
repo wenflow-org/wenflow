@@ -140,7 +140,7 @@
         <!-- 最近会话（真实接口 userId 过滤）：填平原左栏下方空旷，行点击下钻只读座舱 -->
         <section class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">最近会话</h3>
+            <h3 class="mk-card__title">最近课堂</h3>
             <span class="mk-card__meta">
               <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
               <template v-else-if="ldSessError">加载失败</template>
@@ -151,7 +151,7 @@
           <!-- 审核 #23（2026-10-06）：原卡头 MkLoading + MkRowList :loading 同时出两个转圈——
                卡头文案保留为全卡唯一加载信号，列表 loading 撤；同时把空态挂起条件补上
                ldSessLoading，避免加载中先闪「暂无教学会话」 -->
-          <MkRowList :empty="!recentSessionRows.length && !ldSessLoading" :empty-text="discardedHiddenCount ? '暂无有效教学会话' : '暂无教学会话'" empty-hint="该学习者上课后，这里会出现会话列表。">
+          <MkRowList :empty="!recentSessionRows.length && !ldSessLoading" :empty-text="discardedHiddenCount ? '暂无有效课堂' : '暂无课堂'" empty-hint="该学习者上课后，这里会出现课堂记录。">
             <MkRow
               v-for="s in recentSessionRows"
               :key="s.id"
@@ -514,7 +514,7 @@
               :class="{ 'ld-ev--link': !!e.sessionId }"
               :role="e.sessionId ? 'button' : undefined"
               :tabindex="e.sessionId ? 0 : undefined"
-              :title="e.sessionId ? '打开该事件的会话座舱' : undefined"
+              :title="e.sessionId ? '打开该事件的只读详情' : undefined"
               @click="e.sessionId && openSessionCockpit(e.sessionId)"
               @keydown.enter="e.sessionId && openSessionCockpit(e.sessionId)"
               @keydown.space.prevent="e.sessionId && openSessionCockpit(e.sessionId)"
@@ -544,7 +544,7 @@
                   <span v-for="c in e.concepts.slice(0, 4)" :key="c" class="ld-chip">{{ c }}</span>
                 </span>
                 <span v-if="e.sessionId || e.taskId" class="ld-ev__src">
-                  {{ e.sessionId ? `会话 ${shortId(e.sessionId)}` : '' }}{{ e.sessionId && e.taskId ? ' · ' : '' }}{{ e.taskId ? `任务 ${shortId(e.taskId)}` : '' }}
+                  {{ e.sessionId ? `课堂 ${shortId(e.sessionId)}` : '' }}{{ e.sessionId && e.taskId ? ' · ' : '' }}{{ e.taskId ? `任务 ${shortId(e.taskId)}` : '' }}
                 </span>
               </div>
               <span class="ld-ev__time">{{ e.time }}</span>
@@ -729,14 +729,14 @@
         <!-- 工具栏：视角（有效/废弃重试/窗口全部）+ 阶段（>1 阶段才出）。视角默认「有效」——
              仿真驱动的 1 秒废弃重试是驱动产物，不是教学事件（与概览「最近会话」预览同一口径） -->
         <div v-if="!ldSessLoading && !ldSessError && ldSessionRows.length" class="ld-filtbar">
-          <div class="ld-filtbar__grp" role="group" aria-label="会话视角">
+          <div class="ld-filtbar__grp" role="group" aria-label="课堂视角">
             <button
               v-for="v in ldSessViews" :key="v.key" type="button" class="mk-pill"
               :class="{ 'mk-pill--active': ldSessView === v.key }" :aria-pressed="ldSessView === v.key"
               :title="v.title" @click="ldSessView = v.key"
             >{{ v.label }} · {{ v.count }}</button>
           </div>
-          <div v-if="ldStageChips.length > 1" class="ld-filtbar__grp" role="group" aria-label="按阶段筛选会话">
+          <div v-if="ldStageChips.length > 1" class="ld-filtbar__grp" role="group" aria-label="按阶段筛选课堂">
             <button
               type="button" class="mk-pill" :class="{ 'mk-pill--active': ldStageFilter === 'all' }"
               :aria-pressed="ldStageFilter === 'all'" @click="ldStageFilter = 'all'"
@@ -756,7 +756,7 @@
                    既读不出可筛性、也让副行变成两件事的拼盘）：会话身份=主题+路径，阶段单列。
                    列序按「读一条会话的叙事」重排（2026-10-11）：身份 → 课程位置（阶段→进度，
                    两级位置相邻）→ 结果状态 → 过程量（互动）→ 产出（产物）→ 元信息（时间/ID） -->
-              <tr><th>会话</th><th>阶段</th><th>进度</th><th>状态</th><th>互动</th><th>产物</th><th>时间</th><th>会话 ID</th></tr>
+              <tr><th>课堂</th><th>阶段</th><th>进度</th><th>状态</th><th>互动</th><th>产物</th><th>时间</th><th>课堂 ID</th></tr>
             </thead>
             <tbody>
               <tr v-for="s in ldSessionRowsFiltered" :key="s.id" class="ld-pane-row" @click="openSessionCockpit(s.id)">
@@ -964,7 +964,7 @@ const EVIDENCE_NONE_HINT = '学习事件累积后自动生成。'
 const LOAD_ZONE_LSS = 'LSS 学习压力（0-100，越高越累）'
 const LOAD_ZONE_LF = 'LF 疲劳度（0-100，≥60 警戒）'
 const LOAD_ZONE_LSB = 'LSB 状态平衡（训练负荷减疲劳，负值表示状态差）'
-const LOAD_NONE_HINT = '学习者完成会话/任务后，系统会记录每次的压力评估。'
+const LOAD_NONE_HINT = '学习者完成课堂/任务后，系统会记录每次的压力评估。'
 const DENSITY_LEGEND = '条长表示证据条数 · 颜色表示掌握风险（红 高 / 琥珀 中 / 绿 低）'
 const CALIB_META_TITLE = '预测与实际情况的吻合率（非学习者自评）'
 const GRAPH_TRUNCATED_NOTE = '仅显示部分概念，共'
@@ -1263,8 +1263,8 @@ const recentSessionRows = computed(() => activeSessionRows.value.slice(0, 5))
 const discardedHiddenCount = computed(() => ldSessionRows.value.length - activeSessionRows.value.length)
 const sessionPreviewMeta = computed(() => {
   const shown = recentSessionRows.value.length
-  if (discardedHiddenCount.value) return `最近 ${shown} 条有效 · 已隐藏废弃 ${discardedHiddenCount.value}`
-  return ldSessionRows.value.length > shown ? `最近 ${shown} 条 · 共 ${ldSessionRows.value.length}` : `最近 ${shown} 条`
+  if (discardedHiddenCount.value) return `最近 ${shown} 节有效 · 已隐藏废弃 ${discardedHiddenCount.value}`
+  return ldSessionRows.value.length > shown ? `最近 ${shown} 节 · 共 ${ldSessionRows.value.length}` : `最近 ${shown} 节`
 })
 /** statstrip「最近会话」格已随定位条撤除（2026-10-11）；有效/总数口径仍由预览 meta 承载 */
 /** 教学会话窗口上限（loadLdSessions 请求 limit 与此同源）：达上限时 meta 可见文案改
@@ -1281,9 +1281,9 @@ const ldSessView = ref<'active' | 'discarded' | 'all'>('active')
 /* 有效行复用概览「最近会话」的同一过滤（activeSessionRows，本文件下方定义） */
 const ldSessDiscardedRows = computed(() => ldSessionRows.value.filter((r) => r.status === 'discarded'))
 const ldSessViews = computed(() => [
-  { key: 'active' as const, label: '有效', count: activeSessionRows.value.length, title: '有教学内容的会话，含超时与失败的信号会话，不含重置作废的旧会话' },
-  { key: 'discarded' as const, label: '已废弃', count: ldSessDiscardedRows.value.length, title: '学习者点「重新开始」后作废的旧会话，时长按真实有效时长保留，仍属学习记录' },
-  { key: 'all' as const, label: '窗口全部', count: ldSessionRows.value.length, title: `最近 ${LD_SESSION_WINDOW} 条窗口内的全部会话（含已废弃）` }
+  { key: 'active' as const, label: '有效', count: activeSessionRows.value.length, title: '有教学内容的课堂，含超时与失败的信号记录，不含重置作废的旧课堂' },
+  { key: 'discarded' as const, label: '已废弃', count: ldSessDiscardedRows.value.length, title: '学习者点「重新开始」后作废的旧课堂，时长按真实有效时长保留，仍属学习记录' },
+  { key: 'all' as const, label: '窗口全部', count: ldSessionRows.value.length, title: `最近 ${LD_SESSION_WINDOW} 节窗口内的全部课堂（含已废弃）` }
 ])
 const ldSessViewRows = computed(() =>
   ldSessView.value === 'active'
@@ -1296,11 +1296,11 @@ const ldSessionMetaText = computed(() => {
   const all = ldSessionRows.value.length
   const scope = scopeNote.value.label
   if (!all) return scope
-  const win = all >= LD_SESSION_WINDOW ? `近 ${LD_SESSION_WINDOW} 条窗口` : `${all} 条`
+  const win = all >= LD_SESSION_WINDOW ? `近 ${LD_SESSION_WINDOW} 节窗口` : `${all} 节`
   return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length}`
 })
 const ldSessionMetaTitle = computed(() => {
-  const base = `该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）`
+  const base = `该学习者最近 ${LD_SESSION_WINDOW} 节课堂（窗口上限）`
   // 里程碑串档只在跨路径时存在：切到单条路径后档位天然同源，不必再告警
   return scopePathId.value
     ? base
@@ -1322,15 +1322,15 @@ const ldSessionRowsFiltered = computed(() => {
   return ldSessViewRows.value.filter((r) => r.msIndex === idx)
 })
 /* 空态分流：窗口空 / 当前视角空（提示切视角） / 视角内阶段筛选空 */
-const ldSessEmptyTitle = computed(() => (ldSessionRows.value.length ? '当前视角无会话' : '暂无教学会话'))
+const ldSessEmptyTitle = computed(() => (ldSessionRows.value.length ? '当前视角无课堂' : '暂无课堂'))
 const ldSessEmptyDesc = computed(() => {
   if (!ldSessionRows.value.length) return '该学习者还没有产生回合记录。'
   if (!ldSessViewRows.value.length) {
     return ldSessView.value === 'active'
-      ? `窗口内 ${ldSessDiscardedRows.value.length} 条均已被重置（学习者点「重新开始」后作废），切「已废弃」或「窗口全部」查看。`
-      : '当前视角内没有会话，换个视角看看。'
+      ? `窗口内 ${ldSessDiscardedRows.value.length} 节均已被重置（学习者点「重新开始」后作废），切「已废弃」或「窗口全部」查看。`
+      : '当前视角内没有课堂，换个视角看看。'
   }
-  return '当前阶段档位下没有会话，切回「全部阶段」。'
+  return '当前阶段档位下没有课堂，切回「全部阶段」。'
 })
 
 /* 产物列（总结 / 建议）——文案与档位照抄平台「教学会话」页，跨页同读法 */
@@ -1344,8 +1344,8 @@ function ldWrapupBadgeCls(r: LdSessionRow): string {
 }
 function ldWrapupTitle(r: LdSessionRow): string {
   if (r.wrapupTier === 'complete') return '收尾总结完整生成'
-  if (r.wrapupTier === 'pending') return '会话未到终态，总结尚未生成'
-  return r.wrapupDegraded ? '总结不完整' : '终态会话缺少收尾总结'
+  if (r.wrapupTier === 'pending') return '课堂未到终态，总结尚未生成'
+  return r.wrapupDegraded ? '总结不完整' : '终态课堂缺少收尾总结'
 }
 function ldAdvisoryBadgeCls(p: string): string {
   return p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info'
@@ -1492,7 +1492,7 @@ async function loadLdSessions(id: string, includeTest: boolean) {
       const terminal = ['completed', 'succeeded', 'failed', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(status)
       return {
         id: String(s.id),
-        topic: String(s.topic || s.taskId || '未命名会话'),
+        topic: String(s.topic || s.taskId || '未命名课堂'),
         subText: `${String(s.subject || '—')} · ${msgCount} 条消息`,
         status,
         startAgo: timeAgo(String(s.startTime || '')),
@@ -2002,9 +2002,9 @@ const historyRows = computed(() => {
   const h = (profile.value?.history || null) as Record<string, unknown> | null
   if (!h) return [] as { label: string; value: string }[]
   const rows = kvRows(h, {
-    totalSessions: '总会话数',
+    totalSessions: '总课堂数',
     totalMessages: '总消息数',
-    avgSessionDuration: '平均会话时长（分钟）'
+    avgSessionDuration: '平均课堂时长（分钟）'
   })
   const arr = (v: unknown) => (Array.isArray(v) ? v.map(String) : [])
   if (arr(h.topicsExplored).length) rows.push({ label: '探索主题', value: arr(h.topicsExplored).slice(0, 8).join('、') })

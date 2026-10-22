@@ -8,7 +8,7 @@
       <div class="mk-status" :class="`mk-status--${headerHealth}`">
         <span class="mk-status__dot" aria-hidden="true"></span>
         <button type="button" class="mk-back" @click="goBack">← {{ backLabel }}</button>
-        <strong class="mk-status__title">会话监控 <span class="cp-title__id mono">{{ shortId }}</span></strong>
+        <strong class="mk-status__title">只读监控 <span class="cp-title__id mono">{{ shortId }}</span></strong>
         <!-- 自动驾驶进行中的状态指示（停止按钮在控制台） -->
         <span v-if="autopilotRunning" class="mk-status__meta cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
         <span class="mk-status__sep"></span>
@@ -329,7 +329,7 @@
               </tbody>
             </table>
           </div>
-          <p v-else class="cp-none cp-turns-empty">该会话暂无已记录的对话回合。</p>
+          <p v-else class="cp-none cp-turns-empty">本节课堂暂无已记录的对话回合。</p>
         </section>
 
         <!-- 学习者资料（Goal 页，2026-10-12 四页拆分归位）：goal 阶段把学习者**携带的资料**（上传附件）
@@ -1000,7 +1000,7 @@ const CLASSROOM_EMPTY_TEXT = '该课堂暂未记录可展示消息。'
 const PATH_NOT_READY_TITLE = '路径尚未准备好启动教学'
 const BLACKBOX_CONTROL_BLOCK = '黑盒模式不提供手动操作'
 /** 终态下「推进」类动作的禁用原因（单步 / 自动两处共用，同文件复读由 R6 治理） */
-const TERMINAL_STEP_BLOCK = '会话已结束，不能继续推进'
+const TERMINAL_STEP_BLOCK = '课堂已结束，不能继续推进'
 const FRICTION_LABEL: Record<string, string> = { none: '无', low: '低', normal: '正常', high: '高', stress_test: '压力测试' }
 
 const sessionId = computed(() => subPage.value?.id || '')
@@ -1021,7 +1021,7 @@ const FROM_BACK_LABEL: Record<string, string> = { virtual: '画像', learner: '�
 const SCENE_BACK_LABEL: Record<string, string> = {
   'learning-paths': '路径列表',
   'goal-conversations': '目标对话',
-  'teaching-sessions': '会话列表'
+  'teaching-sessions': '教学会话列表'
 }
 const route = useRoute()
 const backLabel = computed(() => {
@@ -1030,7 +1030,7 @@ const backLabel = computed(() => {
   if (sessionProfileId.value) return '画像' // 从一级进三级 → 也回该会话所属画像
   if (isRealMode.value) {
     const page = typeof route?.params?.page === 'string' ? route.params.page : ''
-    return SCENE_BACK_LABEL[page] || '会话列表'
+    return SCENE_BACK_LABEL[page] || '教学会话列表'
   }
   return '虚拟学习者'
 })
@@ -1149,7 +1149,7 @@ const blackboxTraceCount = computed(() => {
 })
 /** 模式声明单源（2026-10-04 全站评审 P3#13）：真实会话 chip 吸收控制台「只读监控」条的语义，
     同屏只此一处；黑盒/辅助口径不变（黑盒控制台内另有专项声明条） */
-const modeText = computed(() => (isRealMode.value ? '真实会话 · 只读监控' : isBlackbox.value ? '黑盒模式' : '辅助模式'))
+const modeText = computed(() => (isRealMode.value ? '真实课堂 · 只读监控' : isBlackbox.value ? '黑盒模式' : '辅助模式'))
 const TERMINAL_SESSION_STATUSES = ['completed', 'failed', 'abandoned', 'timeout', 'finalization_failed', 'discarded', 'superseded']
 const isTerminal = computed(() => {
   const st = normalized(session.value?.status || runtime.value.status)
@@ -1182,14 +1182,14 @@ const statusTitle = computed(() =>
   !session.value
     ? '加载中…'
     : terminalStatus.value === 'created'
-      ? '会话未开始'
+      ? '课堂未开始'
       : isFailedTerminal.value
-        ? manualStopped.value ? '已手动停止' : teachingTimedOut.value ? '会话失败 · 授课超时' : '会话失败'
+        ? manualStopped.value ? '已手动停止' : teachingTimedOut.value ? '课堂失败 · 授课超时' : '课堂失败'
         : isTerminal.value
-          ? '会话已完成'
+          ? '课堂已完成'
           : isPaused.value
             ? '已暂停 · 自动推进已冻结（可继续或终止）'
-            : '会话进行中'
+            : '课堂进行中'
 )
 
 /* 双轴状态（与一/二级页同源）：生命周期合成态 + 阶段条输入。

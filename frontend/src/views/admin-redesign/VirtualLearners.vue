@@ -11,7 +11,7 @@
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="reclaimRef?.state.busy"
-          :title="'角标为超过回收阈值的无响应候选会话数（含豁免项）'"
+          :title="'角标为超过回收阈值的无响应候选运行数（含豁免项）'"
           @click="openReclaimModal()"
         >
           {{ reclaimRef?.state.busy ? '回收中…' : `回收无响应（${partition.stale}）` }}
@@ -193,14 +193,14 @@
               v-if="!isNarrow && !hiddenCols.has('story')"
               scope="col"
               class="mk-th--right mk-th--sortable"
-              title="故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次会话不重复计）"
+              title="故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次运行不重复计）"
               :aria-sort="vlSortState('story')"
               @click="toggleVlSort('story')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('story')">故事 / 路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               scope="col"
               class="mk-th--sortable"
-              title="当前活跃会话（运行 + 已暂停）逐条显示，无活跃会话时显示最近一次会话"
+              title="当前活跃运行（进行中 + 已暂停）逐条显示，无活跃运行时显示最近一次"
               :aria-sort="vlSortState('running')"
               @click="toggleVlSort('running')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -217,7 +217,7 @@
               :title="SESSIONS_COL_TITLE"
               :aria-sort="vlSortState('sessions')"
               @click="toggleVlSort('sessions')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('sessions')">会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('sessions')">运行<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               v-if="!isNarrow && !hiddenCols.has('failed')"
               scope="col"
@@ -248,7 +248,7 @@
           <tr v-for="s in paged" :key="s.id">
             <td v-if="isLive && !isNarrow && !hiddenCols.has('check')"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
-              <div class="vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 会话控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
+              <div class="vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 运行控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
                 <!-- 2026-10-15 用户拍板：撤本页私造的「身份哈希八色」头像，改与教学组同款共享原语
                      MkCellAvatar（虚拟学习者=紫）。头像在 .mk-cell-main 外（同 Skills / 教学组名称格结构）：
                      mk-cell-main strong 的 display:block 高特异性会压过 strong 上的 flex，头像留格内会跌回块流 -->
@@ -272,7 +272,7 @@
               <div class="vl-state-cell" :class="{ 'vl-state-cell--multi': activeRunsOf(s).length > 1 }">
                 <!-- 多活跃会话逐条渲染（2026-10-18）：一个学习者可同时跑多条路径，
                      运行在前、暂停在后；每条徽章可点进自己的座舱。
-                     无活跃会话时回落到最近一次会话的历史进度，并标「最近」，
+                     无活跃运行时回落到最近一次运行的历史进度，并标「最近」，
                      避免「进行中」列里的进度条被读成现在在跑。 -->
                 <template v-if="activeRunsOf(s).length">
                   <div v-for="(run, i) in activeRunsOf(s)" :key="run.sessionId" class="vl-runline">
@@ -294,7 +294,7 @@
                     <span
                       v-if="i === activeRunsOf(s).length - 1 && omittedRuns(s) > 0"
                       class="vl-runmore"
-                      :title="`另有 ${omittedRuns(s)} 条活跃会话未展开。逐条最多 ${ACTIVE_RUNS_LIMIT} 条，运行在前、暂停在后，各按最近写入倒序，进画像页看全部`"
+                      :title="`另有 ${omittedRuns(s)} 条活跃运行未展开。逐条最多 ${ACTIVE_RUNS_LIMIT} 条，运行在前、暂停在后，各按最近写入倒序，进画像页看全部`"
                     >+{{ omittedRuns(s) }}</span>
                   </div>
                 </template>
@@ -302,7 +302,7 @@
                 <span
                   v-else-if="activeCount(s) > 0"
                   class="vl-unlisted"
-                  :title="`有 ${activeCount(s)} 条活跃会话，但不在本次载入的会话明细里，进画像页查看`"
+                  :title="`有 ${activeCount(s)} 条活跃运行，但不在本次载入的运行明细里，进画像页查看`"
                 >活跃 {{ activeCount(s) }} 条 · 未展开</span>
                 <template v-else-if="s.stageProgress">
                   <div class="vl-runline vl-runline--history">
@@ -317,12 +317,12 @@
                     </span>
                   </div>
                 </template>
-                <span v-else class="mk-na" title="当前没有进行中的会话">空闲</span>
+                <span v-else class="mk-na" title="当前没有进行中的运行">空闲</span>
               </div>
             </td>
             <td v-if="showTaskColumn" class="mk-num">
               <!-- 任务数单列（2026-10-18）：与「进行中」列同一顺序、逐行对齐；
-                   无活跃会话时显示最近一次会话的任务数（弱化），多条会话不伪造合计 -->
+                   无活跃运行时显示最近一次运行的任务数（弱化），多条会话不伪造合计 -->
               <div class="vl-taskcell">
                 <span
                   v-for="run in activeRunsOf(s)"
@@ -336,7 +336,7 @@
                 <span
                   v-if="!activeRunsOf(s).length && activeCount(s) === 0 && s.stageProgress"
                   class="vl-tasknum vl-tasknum--history"
-                  title="最近一次会话（已结束）的任务完成数"
+                  title="最近一次运行（已结束）的任务完成数"
                 >
                   <template v-if="s.stageProgress.taskTotal > 0">{{ s.stageProgress.taskDone }}/{{ s.stageProgress.taskTotal }}</template>
                   <span v-else class="mk-na">—</span>
@@ -344,7 +344,7 @@
                 <span
                   v-if="!activeRunsOf(s).length && (activeCount(s) > 0 || !s.stageProgress)"
                   class="mk-na"
-                  :title="activeCount(s) > 0 ? '活跃会话不在本次载入的会话明细里，任务进度暂不可见' : undefined"
+                  :title="activeCount(s) > 0 ? '活跃运行不在本次载入的运行明细里，任务进度暂不可见' : undefined"
                 >—</span>
               </div>
             </td>
@@ -360,7 +360,7 @@
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('stalled')" class="mk-num">
               <span v-if="s.stalledCount > 0" class="vl-num--bad" :title="stalledCellTitle(s)">{{ s.stalledCount }}</span>
-              <span v-else class="mk-na" title="当前没有无响应会话">—</span>
+              <span v-else class="mk-na" title="当前没有无响应的运行">—</span>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('created')"><span class="mk-cell-sub" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</span></td>
             <td>
@@ -374,7 +374,7 @@
                   type="button"
                   class="mk-btn mk-btn--sm"
                   :class="{ 'vl-op--muted': s.storyCount === 0 }"
-                  :title="s.storyCount === 0 ? '需先生成故事才能运行' : '运行：启动一次新的实验会话（不影响已有会话）'"
+                  :title="s.storyCount === 0 ? '需先生成故事才能运行' : '启动一次新的实验运行（不影响已有运行）'"
                   @click.stop="openLaunch(s)"
                 ><Play :size="14" :stroke-width="1.75" /><span>{{ s.storyCount === 0 ? '需故事' : '运行' }}</span></button>
                 <div v-if="isLive" class="mk-menu">
@@ -383,11 +383,11 @@
                   <button type="button" class="mk-menu__btn" aria-label="更多操作（测试 / 来源卡 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：单步测试 / 查看来源卡 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
                     <!-- 低频诊断：用人设和故事直接跑一次 Prompt 对话（不创建用例、不影响正式会话） -->
-                    <button type="button" class="mk-menu__item" role="menuitem" title="单步测试：用该人设和故事直接跑一次 Prompt 对话，看输出的字段是否符合预期（不创建用例、不影响正式会话）" @click="openPromptTest(s)">单步测试</button>
+                    <button type="button" class="mk-menu__item" role="menuitem" title="单步测试：用该人设和故事直接跑一次 Prompt 对话，看输出的字段是否符合预期（不创建用例、不影响正式运行）" @click="openPromptTest(s)">单步测试</button>
                     <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录，卡 id 即本行 id -->
                     <button type="button" class="mk-menu__item" role="menuitem" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="menuOpenSourceCard(s)">查看来源卡</button>
                     <div class="mk-menu__sep" aria-hidden="true"></div>
-                    <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该虚拟学习者（其会话记录一并删除，不可恢复）" @click="menuRemove(s)">删除</button>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该虚拟学习者（其运行记录一并删除，不可恢复）" @click="menuRemove(s)">删除</button>
                   </div>
                 </div>
               </div>
@@ -485,17 +485,17 @@ const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
    调用与健康」页签的「虚拟学习者通道 / 出站速率」分组里。此前三处注释与速率卡的 title 都写着
    「模型与接入 → 虚拟学习者」页签——那个页签 2026-10-15 重组时就没了，照它找必然扑空。 */
 const VL_CHANNEL_LOCATION_TITLE = '上限与日期模拟在「模型与接入 · 调用与健康」的「虚拟学习者通道」'
-const CONCURRENCY_KPI_TITLE = '自动驾驶同时在跑的会话数占配额比。「已满」是资源占满（后续请求排队），不是故障。'
+const CONCURRENCY_KPI_TITLE = '自动驾驶同时在跑的运行数占配额比。「已满」是资源占满（后续请求排队），不是故障。'
 const RATE_KPI_TITLE = '在途为正在出站的调用数。上限是已保存的速率配置。'
 /* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
-const SESSIONS_COL_TITLE = '累计会话数（全部会话，含终态）'
-const FAILED_COL_TITLE = '已失败/已终止会话数（全量聚合）'
-const TASK_COL_TITLE = '进行中会话已完成的任务数 / 总任务数。多条活跃会话按行与「进行中」对齐，无活跃会话时显示最近一次会话'
+const SESSIONS_COL_TITLE = '累计运行数（全部运行，含终态）'
+const FAILED_COL_TITLE = '已失败/已终止运行数（全量聚合）'
+const TASK_COL_TITLE = '进行中运行已完成的任务数 / 总任务数。多条活跃运行按行与「进行中」对齐，无活跃运行时显示最近一次运行'
 /* 「已暂停不计入」必须点名是**哪一种**暂停：本页「已暂停」pill/徽章指的是自动驾驶被停
    （autopilot=stopped），而回收口径排除的是会话页「暂停」写下的 teaching.paused——后者暂停后
    无写入属预期、回收干跑清单也跳过它（VirtualLearnerReclaim 同用「管理员暂停」一词）。
    自动驾驶已暂停的会话仍在回收候选里，写成「已暂停的不计入」会与回收清单对不上。 */
-const STALLED_COL_TITLE = '运行中的会话超过回收阈值仍没有新写入的数量。可用「回收无响应」清理，管理员在会话页手动暂停的会话不计入'
+const STALLED_COL_TITLE = '运行中的运行超过回收阈值仍没有新写入的数量。可用「回收无响应」清理，管理员在运行页手动暂停的运行不计入'
 /** 逐条活跃会话的展示上限（与后端 deriveActiveRuns 的 ACTIVE_RUNS_LIMIT 同值：
     后端 services/virtual-lab/virtual-run-progress.ts）。改一处必须改另一处——余量文案要用它。 */
 const ACTIVE_RUNS_LIMIT = 3
@@ -586,7 +586,7 @@ function runStage(run: ActiveRun): string | null {
 }
 /** 每条活跃会话的徽章提示：说清是运行还是暂停，无响应的那条直接点明 */
 function runBadgeHint(run: ActiveRun): string {
-  const base = run.state === 'running' ? '该会话正在运行' : '该会话的自动驾驶已暂停'
+  const base = run.state === 'running' ? '该运行正在运行' : '该运行的自动驾驶已暂停'
   const stall = run.stalled ? ' · 超过回收阈值没有新写入（无响应）' : ''
   return `${base}${stall}`
 }
@@ -595,25 +595,25 @@ function runStageTitle(s: Sample, run: ActiveRun): string {
   const idx = activeRunsOf(s).findIndex((r) => r.sessionId === run.sessionId) + 1
   const total = activeRunsOf(s).length
   return total > 1
-    ? `第 ${idx} 条活跃会话的阶段进度（共 ${total} 条在列表内）`
-    : '这条活跃会话的阶段进度'
+    ? `第 ${idx} 条活跃运行的阶段进度（共 ${total} 条在列表内）`
+    : '这条活跃运行的阶段进度'
 }
 /** 任务格口径：任务数来自这条会话的已完成/总任务 */
 function taskRunTitle(run: ActiveRun): string {
-  if (run.taskTotal <= 0) return '这条会话还没有任务维度数据'
-  return `这条会话已完成 ${run.taskDone} / ${run.taskTotal} 个任务`
+  if (run.taskTotal <= 0) return '这条运行还没有任务维度数据'
+  return `这条运行已完成 ${run.taskDone} / ${run.taskTotal} 个任务`
 }
 /** 历史进度（无活跃会话）的条目标题：明确是最近一次、不是现在在跑 */
 function historicTitle(s: Sample): string {
   return s.pathCount > 1
-    ? `当前没有活跃会话，显示最近一次会话的阶段进度（该学习者共 ${s.pathCount} 条路径）`
-    : '当前没有活跃会话，显示最近一次会话的阶段进度'
+    ? `当前没有活跃运行，显示最近一次运行的阶段进度（该学习者共 ${s.pathCount} 条路径）`
+    : '当前没有活跃运行，显示最近一次运行的阶段进度'
 }
 /** 「无响应」单元格口径：条数 + 阈值 + 哪一种暂停不计入（与表头同一来源） */
 function stalledCellTitle(s: Sample): string {
   const t = reclaimThresholdText()
   const within = t ? `超过 ${t}` : '超过回收阈值'
-  return `${s.stalledCount} 条运行中会话${within}仍没有新写入。可用「回收无响应」清理，管理员在会话页手动暂停的会话不计入`
+  return `${s.stalledCount} 条进行中的运行${within}仍没有新写入。可用「回收无响应」清理，管理员在运行页手动暂停的运行不计入`
 }
 
 /** 「故事 / 路径」单元格 title：故事是复杂情景、路径是从情景里走出来的学习路线，
@@ -623,7 +623,7 @@ function storyPathTitle(s: Sample): string {
   if (s.pathCount === 0) return `故事池 ${s.storyCount} 条，还没有生成路径（开始运行后生成）`
   const base = `故事池 ${s.storyCount} 条，已生成路径 ${s.pathCount} 条`
   return s.pathCount > s.storyCount
-    ? `${base}。一个故事可衍生多条路径，同一路径的多次会话不重复计`
+    ? `${base}。一个故事可衍生多条路径，同一路径的多次运行不重复计`
     : base
 }
 
@@ -632,7 +632,7 @@ const keyword = ref('')
     合并数读不出「运营信号（人设被反复手动停）vs 工程信号（系统在坏）」的差别；
     分解放进既有 tooltip，不加列（宽表压力不动） */
 function failCellTitle(failed: number, abandoned: number): string {
-  if (failed <= 0 && abandoned <= 0) return '无失败/终止会话'
+  if (failed <= 0 && abandoned <= 0) return '无失败/终止运行'
   return `系统失败 ${failed} · 人为终止 ${abandoned}（合计 ${failed + abandoned}）`
 }
 /** 状态过滤（轴 A 生命周期）：'all' = 全部 / running / paused / queued / failed / created
@@ -647,12 +647,12 @@ const stateFilterOptions = computed(() => {
   const n = (v: number) => (failed ? '—' : v)
   return [
     { key: 'all', label: '全部', count: n(samples.value.length), hint: '' },
-    { key: 'running', label: '进行中', count: n(count((s) => s.runningCount > 0)), hint: '有进行中会话的学习者数（同一学习者可同时跑多条路径，行内逐条显示）' },
+    { key: 'running', label: '进行中', count: n(count((s) => s.runningCount > 0)), hint: '有进行中运行的学习者数（同一学习者可同时跑多条路径，行内逐条显示）' },
     // P1-3（2026-10-04 全站评审）：计数谓词与 filtered 的筛选谓词（runningCount===0 && pausedCount>0）同式，
     // 否则 pill「已暂停 2」点进去只筛出 1 条（同时在跑的学习者被计入却被筛掉）
-    { key: 'paused', label: '已暂停', count: n(count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)), hint: '当前无进行中会话、有暂停会话的学习者' },
+    { key: 'paused', label: '已暂停', count: n(count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)), hint: '当前无进行中运行、有暂停运行的学习者' },
     // P2（2026-10-02 人类可读性）：原名「需关注」读作当前异常，实为累计曾失败/被终止——正名 + 口径入 title
-    { key: 'failed', label: '曾失败', count: n(count((s) => s.failedCount > 0)), hint: '累计有失败或终止会话的虚拟学习者，非当前异常。该数为系统失败+人为终止的合计，分解见「失败」列悬浮说明' },
+    { key: 'failed', label: '曾失败', count: n(count((s) => s.failedCount > 0)), hint: '累计有失败或终止运行的虚拟学习者，非当前异常。该数为系统失败+人为终止的合计，分解见「失败」列悬浮说明' },
   ]
 })
 /** live 虚拟人域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
@@ -750,7 +750,7 @@ function openPromptTest(s: Sample) {
 async function removeSample(s: Sample) {
   const ok = await askConfirm({
     title: '删除虚拟学习者',
-    message: `确认删除虚拟学习者「${s.name}」？\n其会话记录将一并清理，该操作不可撤销。`,
+    message: `确认删除虚拟学习者「${s.name}」？\n其运行记录将一并清理，该操作不可撤销。`,
     confirmText: '删除',
     busy: true
   })
@@ -806,9 +806,9 @@ const VL_COL_DEFS = [
   /* 列菜单这一项与页头「批量操作」是做同一件事的两个入口：此处可回到隐藏态 */
   { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部批量启动全部故事、启动或停止自动驾驶、终止、清理无响应、删除' },
   { key: 'tendency', label: '长期倾向' },
-  { key: 'story', label: '故事 / 路径', title: '故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次会话不重复计）' },
+  { key: 'story', label: '故事 / 路径', title: '故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次运行不重复计）' },
   { key: 'task', label: '任务', title: TASK_COL_TITLE },
-  { key: 'sessions', label: '会话', title: SESSIONS_COL_TITLE },
+  { key: 'sessions', label: '运行', title: SESSIONS_COL_TITLE },
   { key: 'failed', label: '失败', title: FAILED_COL_TITLE },
   { key: 'stalled', label: '无响应', title: STALLED_COL_TITLE },
   { key: 'created', label: '创建' },

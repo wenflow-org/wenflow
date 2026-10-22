@@ -5,7 +5,7 @@
          轮询页不放刷新钮）；拉取失败走错误条重试钮（refreshNow 仍被错误态与宿主联动使用）。
          统计口径（2026-10-17 分布带退役后）：不再有整页统计带；观测读数住 KPI 卡
          （需关注 / 缺总结 / 有建议 / 完结率），筛选出口住卡头 chips，每个数只出现一次。 -->
-    <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 需关注识别与完课质量">
+    <MkPageHead v-if="!embedded" title="教学会话" sub="教学会话状态实时监视 · 需关注识别与完课质量">
       <template #actions>
         <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
         <DataScopeToggle v-model="includeTest" />
@@ -27,7 +27,7 @@
          理由是旧规则会让计数忽隐忽现（见 LearnerCenter.vue 卡头同判例注释）。
          故 pill 继续带计数、与上方 KPI 卡并存是拍板过的形态，不是复读事故；
          总览/编排图等处的「计数不重复」只约束**同类元素之间**，不跨 KPI 卡与筛选 pill。 -->
-    <section v-if="!embedded && rows.length" class="mk-kpi-grid" aria-label="会话运维关注量">
+    <section v-if="!embedded && rows.length" class="mk-kpi-grid" aria-label="教学会话运维关注量">
       <MkKpi
         label="需关注"
         :value="attentionCount"
@@ -38,7 +38,7 @@
         label="缺总结"
         :value="missingWrapupCount"
         :tone="missingWrapupCount ? 'warn' : ''"
-        title="仅统计已结束的会话，进行中的会话总结尚未生成，不计入"
+        title="仅统计已结束的课堂，进行中的课堂总结尚未生成，不计入"
       />
       <MkKpi
         label="有建议"
@@ -49,7 +49,7 @@
       <MkKpi
         label="完结率"
         :value="completionRate"
-        :title="`已完成会话占已加载会话的比例（窗口最多最近 ${LIST_LIMIT} 条），四舍五入到整数`"
+        :title="`已完成课堂占已加载课堂的比例（窗口最多最近 ${LIST_LIMIT} 条），四舍五入到整数`"
       />
       <!-- P-49（#74）：异常终态从「非空才出现的 chip」升为首屏卡（0 时不渲染，避免恒 0 占位） -->
       <MkKpi
@@ -107,7 +107,7 @@
               class="mk-pill"
               :class="{ 'mk-pill--active': onlyAdvisory }"
               :aria-pressed="onlyAdvisory"
-              title="只看含教学建议（完课调整 / 复习建议）的会话"
+              title="只看含教学建议（完课调整 / 复习建议）的课堂"
               @click="toggleOnlyAdvisory"
             >有建议<span class="mk-pill__count">{{ advisoryCount }}</span></button>
             <button
@@ -187,7 +187,7 @@
                 class="mk-th--sortable"
                 :aria-sort="tsSortState('topic')"
                 @click="toggleTsSort('topic')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('topic')">会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('topic')">课堂<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!tsHiddenCols.has('user')"
                 scope="col"
@@ -215,7 +215,7 @@
                 title="≥ 25 分钟标长时（信号，非故障）"
                 @click="toggleTsSort('interact')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!tsHiddenCols.has('interact')" scope="col" title="消息：会话内用户与平台的往来条数">消息</th>
+              <th v-if="!tsHiddenCols.has('interact')" scope="col" title="消息：课堂内用户与平台的往来条数">消息</th>
               <th v-if="!isTableMid && !tsHiddenCols.has('interact')" scope="col" title="窄窗口下不显示此列">知识点</th>
               <th v-if="!tsHiddenCols.has('progress')" scope="col" title="第几个/共几个是位置，不是完成数">进度</th>
               <th v-if="!tsHiddenCols.has('output')">产物</th>
@@ -333,7 +333,7 @@
                   <span class="ts-prog ts-prog--done" :title="progressTitle(r)">{{ sessionProgressText(r.progress, r.status) }}</span>
                 </template>
                 <template v-else-if="sessionProgressDone(r.status)">
-                  <span class="mk-na" title="这次会话没有任务维度数据">—</span>
+                  <span class="mk-na" title="这节课堂没有任务维度数据">—</span>
                 </template>
                 <template v-else-if="sessionProgressPct(r.progress) !== null">
                   <span class="ts-prog" :title="progressTitle(r)">
@@ -386,7 +386,7 @@
                     v-if="r.id"
                     type="button"
                     class="mk-btn mk-btn--sm"
-                    title="详情：只读会话座舱（这节课的对话、阶段进度与产物）"
+                    title="详情：只读详情（这节课的对话、阶段进度与产物）"
                     @click.stop="goConsole(r)"
                   >详情</button>
                 </div>
@@ -397,8 +397,8 @@
 
         <MkEmptyState
           v-else-if="!loadFailed"
-          :title="onlyAdvisory ? '「有建议」过滤下无会话' : rows.length ? '当前筛选无会话' : '暂无教学会话'"
-          :description="onlyAdvisory ? '没有含教学建议的会话，可清除筛选查看全部。' : rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。'"
+          :title="onlyAdvisory ? '「有建议」过滤下无课堂' : rows.length ? '当前筛选无课堂' : '暂无教学会话'"
+          :description="onlyAdvisory ? '没有含教学建议的课堂，可清除筛选查看全部。' : rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，课堂记录将自动出现在这里。'"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -441,7 +441,7 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 
 /* 文案单源（R6 复读单源化）：两个 KPI 卡的口径悬停释共用一份 */
-const KPI_LIST_SCOPE_TITLE = '统计当前列表中的会话'
+const KPI_LIST_SCOPE_TITLE = '统计当前列表中的课堂'
 import { Filter } from 'lucide-vue-next'
 import { toast } from '@/utils/toast'
 import { useEscape } from './useEscape'
@@ -573,10 +573,10 @@ async function toggleOnlyAdvisory() {
 /** 「共 N」口径 title（P1#4）：后端真返回 total 才可声称全量；
     「只看有建议」过滤生效时 total 是过滤口径，同样要说明 */
 const totalTitle = computed(() => {
-  if (onlyAdvisory.value) return `当前只显示有教学建议的会话，此处为符合条件的总数。列表最多显示最近 ${LIST_LIMIT} 条`
+  if (onlyAdvisory.value) return `当前只显示有教学建议的课堂，此处为符合条件的总数。列表最多显示最近 ${LIST_LIMIT} 条`
   return totalFromBackend.value
-    ? `总数为全部会话。分布条与列表最多显示最近 ${LIST_LIMIT} 条`
-    : `总数未知，此处为已加载的会话数（最多 ${LIST_LIMIT} 条）`
+    ? `总数为全部课堂。分布条与列表最多显示最近 ${LIST_LIMIT} 条`
+    : `总数未知，此处为已加载的课堂数（最多 ${LIST_LIMIT} 条）`
 })
 
 async function refreshNow() {
@@ -665,7 +665,7 @@ function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtua
    这里只在悬停说明里给出，避免同一件事三处复述。 */
 /** 完成方式列的悬停长释：从哪条通道写入 + 记在谁头上（附原始枚举值供排查） */
 function trackCellTitle(r: Row): string {
-  if (!r.closure) return '无完成记录：该会话任务尚未完成，或完成事件还未投影到观测表'
+  if (!r.closure) return '无完成记录：该课堂任务尚未完成，或完成事件还未投影到观测表'
   const trackDesc = r.closure.track === 'human'
     ? '真实学习者'
     : r.closure.track === 'virtual-learner'
@@ -711,7 +711,7 @@ function mapRow(s: Record<string, unknown>): Row {
     id: s.id ? String(s.id) : '',
     userId: String(s.userId || ''),
     /* 兜底不展示裸 cuid：主题回「未命名会话」；用户缺失降级邮箱前缀 → 「用户 ·尾4位」 */
-    topic: String(s.topic || '未命名会话'),
+    topic: String(s.topic || '未命名课堂'),
     subject: String(s.subject || '—'),
     taskType: String(s.taskType || ''),
     userName: displayName(s),
@@ -753,9 +753,9 @@ const advCount = computed(() => (statusFilter.value ? 1 : 0) + (dateFilter.value
 /* P1-3 列显隐（公共组件 MkCols）：用户/状态/互动/进度/产物/关注 可隐藏，会话/详情固定 */
 const tsColDefs = [
   { key: 'user', label: '用户', title: '用户姓名 + 邮箱' },
-  { key: 'status', label: '状态', title: '会话状态' },
+  { key: 'status', label: '状态', title: '课堂状态' },
   { key: 'track', label: '完成方式', title: '这条完成记录从哪条通道写入（课堂完成 / 学习 API / 虚拟辅助 / 虚拟黑盒 / 未记录）' },
-  { key: 'interact', label: '时长 / 消息 / 知识点', title: '会话时长、往来消息条数与触及的知识点数' },
+  { key: 'interact', label: '时长 / 消息 / 知识点', title: '课堂时长、往来消息条数与触及的知识点数' },
   { key: 'progress', label: '进度', title: '学习进度' },
   { key: 'output', label: '产物', title: '课后总结 / 建议' },
   { key: 'attention', label: '关注', title: '关注度' },

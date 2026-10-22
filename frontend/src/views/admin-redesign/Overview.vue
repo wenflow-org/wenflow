@@ -739,7 +739,7 @@ const vlTiles = computed<MkStatItem[]>(() => {
       title: '含测试账号'
     },
     {
-      label: '在跑会话',
+      label: '在跑运行',
       value: vlValue(String(s.running))
     },
     {
@@ -748,7 +748,7 @@ const vlTiles = computed<MkStatItem[]>(() => {
       tone: ready && c.used >= c.limit ? 'warn' : ''
     },
     {
-      label: '无响应会话',
+      label: '无响应运行',
       value: vlValue(String(r.staleCount)),
       tone: ready && r.staleCount > 0 ? 'warn' : ''
     },

@@ -175,10 +175,10 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     await nextTick();
     const row = rowByName(w, '徐国栋');
     expect(row.find('.vl-histmark').text()).toBe('最近');
-    expect(row.find('.vl-runline--history .vl-stage').attributes('title')).toContain('当前没有活跃会话');
+    expect(row.find('.vl-runline--history .vl-stage').attributes('title')).toContain('当前没有活跃运行');
     const hist = row.find('.vl-tasknum--history');
     expect(hist.text()).toBe('2/25');
-    expect(hist.attributes('title')).toContain('最近一次会话（已结束）');
+    expect(hist.attributes('title')).toContain('最近一次运行（已结束）');
     w.unmount();
   });
 
@@ -194,7 +194,7 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     await nextTick();
     const row = w.find('tbody tr');
     expect(row.find('.vl-unlisted').text()).toBe('活跃 2 条 · 未展开');
-    expect(row.find('.vl-unlisted').attributes('title')).toContain('不在本次载入的会话明细里');
+    expect(row.find('.vl-unlisted').attributes('title')).toContain('不在本次载入的运行明细里');
     expect(row.find('.vl-histmark').exists()).toBe(false);
     expect(row.findAll('.vl-tasknum')).toHaveLength(0);
     w.unmount();
@@ -207,7 +207,7 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     const th = w.findAll('thead th').find((t) => t.text().trim() === '无响应')!;
     const title = th.attributes('title')!;
     expect(title).toContain('30 分钟');
-    expect(title).toContain('管理员在会话页手动暂停的会话不计入');
+    expect(title).toContain('管理员在运行页手动暂停的运行不计入');
     expect(title).toContain('回收无响应');
     // 「已暂停的会话不计入」会与本页「已暂停」pill（自动驾驶已停）撞义：那类会话仍在回收候选里
     expect(title).not.toContain('已暂停的会话不计入');

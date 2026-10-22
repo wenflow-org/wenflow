@@ -280,7 +280,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
     const w = await mountGoals();
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['会话总数', '完结率', '参与用户', '近 7 天新增', '停滞会话']);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['目标对话数', '完结率', '参与用户', '近 7 天新增', '停滞目标对话']);
     expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40', '0%', '12', '8', '5']);
     // 状态数字只活在卡头 pills（2026-10-17 分布带退役后）；「全部」不显数（总数单源=分页器）
     const pill = (label: string) => w.findAll('.mk-pill').find((p) => p.text().startsWith(label))!;
@@ -299,15 +299,17 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(w.findAll('button').some((b) => b.text() === '控制台')).toBe(false);
   });
 
-  it('页头副题随 includeTest 切换如实：默认「仅真实用户口径」，切「含测试」后改为含虚拟与测试账号（2026-10-04 批次五族语统一，原「含模拟」）', async () => {
+  /* 2026-10-21 用户「右上角已经是真实了啊」+「其他地方也有这种文案」：页头副题不再复述视角，
+     视角只由 .ds-toggle 表达（2026-10-04 的「副题随开关改口径」判例据此退役） */
+  it('页头副题不随视角切换复述口径：真实/测试只由页头开关表达', async () => {
     const w = await mountGoals();
-    expect(w.text()).toContain('（仅真实用户）');
-    // .ds-toggle 是 DataScopeToggle 的稳定测试钩子（见组件注释）
+    const subText = () => w.find('.mk-pagehead__sub').text();
+    expect(subText()).toContain('与学习者澄清真实目标');
+    expect(subText()).not.toContain('仅真实用户');
     const toggle = w.find('.ds-toggle');
     expect(toggle.exists()).toBe(true);
     await toggle.findAll('button')[1].trigger('click'); // 含测试
     await nextTick();
-    expect(w.text()).toContain('含虚拟学习者与测试账号');
-    expect(w.text()).not.toContain('（仅真实用户）');
+    expect(subText()).not.toContain('含虚拟学习者与测试账号');
   });
 });

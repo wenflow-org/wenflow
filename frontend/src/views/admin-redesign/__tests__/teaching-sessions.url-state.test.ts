@@ -128,7 +128,7 @@ describe('TeachingSessions · 行内动作（O4 说明保留 + 2026-10-19 下线
     const btns = wrapper.findAll('button').filter((b) => ['链路', '详情'].includes(b.text()));
     expect(btns.some((b) => b.text() === '链路')).toBe(false);
     const detail = btns.find((b) => b.text() === '详情')!;
-    expect(detail.attributes('title')).toContain('只读会话座舱');
+    expect(detail.attributes('title')).toContain('只读详情');
     wrapper.unmount();
   });
 });

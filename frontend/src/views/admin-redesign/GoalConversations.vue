@@ -21,7 +21,7 @@
          于 2026-10-21 撤除，口径一律进 title -->
     <section class="mk-kpi-grid" aria-label="目标对话总量">
       <MkKpi
-        label="会话总数"
+        label="目标对话数"
         :value="stats?.total ?? '—'"
         :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
       />
@@ -41,7 +41,7 @@
       />
       <!-- P-49（#74）：停滞会话此前只活在分布带 hint 里；升为卡，0 是健康信号 -->
       <MkKpi
-        label="停滞会话"
+        label="停滞目标对话"
         :value="rows.length ? staleActiveCount : '—'"
         :tone="staleActiveCount ? 'warn' : ''"
         :title="`最近 ${LIST_LIMIT} 条窗口内，进行中且超过 ${STALLED_DAYS} 天未更新`"
@@ -188,7 +188,7 @@
                      单行 320px 只露出 ~24 字，两行档保留语义骨架（同虚拟学习者倾向列判例） -->
                 <div class="mk-cell-main">
                   <strong class="mk-cell-text--wrap" :title="r.summary">{{ r.summary }}</strong>
-                  <span class="mk-cell-sub mono" :title="`会话 ID ${r.id}`">{{ r.id }}</span>
+                  <span class="mk-cell-sub mono" :title="`目标对话 ID ${r.id}`">{{ r.id }}</span>
                 </div>
               </td>
               <td>
@@ -269,16 +269,16 @@
                      2026-10-15 用户拍板「链路做到折叠里面」，链路不再是高频，与另两项同为低频矫正操作。
                      右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
                 <div class="mk-actions">
-                  <button type="button" class="mk-btn mk-btn--sm" title="打开会话座舱（只读监控）" @click.stop="goConsole(r)">详情</button>
+                  <button type="button" class="mk-btn mk-btn--sm" title="打开只读详情" @click.stop="goConsole(r)">详情</button>
                   <div class="mk-menu">
                     <!-- aria-expanded 按行判定（2026-10-06 审核 #50）：此前绑全局 menuOpen，
                          菜单一开 15 个按钮同时报 expanded=true；role=menu/menuitem 兑现
                          aria-haspopup="menu" 的语义承诺 -->
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
                     <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" role="menuitem" title="查看该会话的执行链路（只读）" @click="goTrace(r)">链路</button>
-                      <button type="button" class="mk-menu__item" role="menuitem" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '对该会话重新生成学习路径'" @click="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuRemove(r)">删除会话</button>
+                      <button type="button" class="mk-menu__item" role="menuitem" title="查看该目标对话的执行链路（只读）" @click="goTrace(r)">链路</button>
+                      <button type="button" class="mk-menu__item" role="menuitem" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '对该目标对话重新生成学习路径'" @click="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
+                      <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuRemove(r)">删除目标对话</button>
                     </div>
                   </div>
                 </div>
@@ -448,7 +448,7 @@ const gcStatusPills = computed<Array<{ key: string; label: string; n: number | n
       key: 'cancelled',
       label: '已取消',
       n: s ? gcCancelledCount.value : null,
-      title: '含用户取消、失败中断与长时间无操作自动回收的会话'
+      title: '含用户取消、失败中断与长时间无操作自动回收的目标对话'
     }
   ]
 })
@@ -484,11 +484,11 @@ const pathPendingCount = computed(() => rows.value.filter(isPathPendingRow).leng
 /* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/澄清进度/约束条件/路径/创建时间 可隐藏，用户/操作固定 */
 const gcColDefs = [
   { key: 'summary', label: '目标摘要', title: '对话目标摘要' },
-  { key: 'status', label: '状态 / 阶段', title: '会话状态与所在阶段（合并列）：进行中出阶段词 + 过程条，终态/异常出结果词 + 过程条' },
+  { key: 'status', label: '状态 / 阶段', title: '目标对话状态与所在阶段（合并列）：进行中出阶段词 + 过程条，终态/异常出结果词 + 过程条' },
   { key: 'turns', label: '澄清进度', title: '学习者发言轮次（澄清深度）' },
   { key: 'constraints', label: '约束条件', title: '澄清中收集的可用时间 / 期限等约束' },
   { key: 'path', label: '路径', title: '路径是否已生成' },
-  { key: 'stageDate', label: '最近活动', title: '会话最近一次活动日（进行中=最后活动日，已完成=完成日，失败/取消=终态日）；悬停看完整阶段时间线' },
+  { key: 'stageDate', label: '最近活动', title: '目标对话最近一次活动日（进行中=最后活动日，已完成=完成日，失败/取消=终态日）；悬停看完整阶段时间线' },
   { key: 'created', label: '创建时间', title: '对话创建时间' },
 ] as const
 const gcHiddenCols = ref<Set<string>>(new Set())
@@ -543,7 +543,7 @@ watch(
       void router.replace({ query: q })
     } else {
       // 目标可能超出最近 LIST_LIMIT 条或已被删除：明示而非静默忽略
-      toast.warning(`未能定位该会话：可能不在最近 ${LIST_LIMIT} 条内，或已被删除`)
+      toast.warning(`未能定位该目标对话：可能不在最近 ${LIST_LIMIT} 条内，或已被删除`)
     }
   },
   { immediate: true }
@@ -595,8 +595,8 @@ function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtua
  *  列表里给一句解释，避免「会话莫名停下」；不新增后端字段，仅是文案。 */
 const statusHint = (s: string | null | undefined) => {
   const k = String(s || '').toLowerCase()
-  if (k === 'abandoned') return '会话已中止：因长时间无操作被自动回收，可在对应学习中重新发起'
-  if (k === 'failed') return '会话失败：可在会话座舱查看失败原因与日志'
+  if (k === 'abandoned') return '目标对话已中止：因长时间无操作被自动回收，可在对应学习中重新发起'
+  if (k === 'failed') return '目标对话失败：可在只读详情查看失败原因与日志'
   return ''
 }
 
@@ -847,7 +847,7 @@ async function regenerate(r: Row) {
   if (r.regenerating) return
   const ok = await askConfirm({
     title: '重建学习路径',
-    message: `确认为「${r.userName}」重新生成学习路径？\n将基于该会话重新生成路径，覆盖当前路径。`,
+    message: `确认为「${r.userName}」重新生成学习路径？\n将基于该目标对话重新生成路径，覆盖当前路径。`,
     confirmText: '重建路径',
     danger: false
   })
@@ -879,7 +879,7 @@ async function remove(r: Row) {
   try {
     await adminGoalConversationsApi.remove(r.id)
     rows.value = rows.value.filter((x) => x.id !== r.id)
-    toast.success('会话已删除')
+    toast.success('目标对话已删除')
     doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
