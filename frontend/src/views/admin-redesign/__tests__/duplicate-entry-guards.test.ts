@@ -124,4 +124,14 @@ describe('重复操作入口守卫', () => {
     expect(panel).not.toContain('PATH_STALL_HOURS')
     expect(panel).toContain("d.value?.status === 'failed'")
   })
+
+  it('座舱路径面板不再有第二颗刷新，危险动作只住 ⋯ 菜单', () => {
+    // 2026-10-22 用户「刷新应该不需要吧，已经有刷新了；下线路径位置不合适」：
+    // 刷新跟顶栏 liveRefreshSeq；下线/恢复收进菜单，平铺按钮退役。
+    const panel = read('PathJourneyPanel.vue')
+    expect(panel).not.toContain('刷新中…')
+    expect(panel).toContain('watch(liveRefreshSeq')
+    expect(panel).not.toContain('@click="toggleArchive"')
+    expect(panel).toContain('menuOpen = false; toggleArchive()')
+  })
 })

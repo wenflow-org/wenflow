@@ -21,19 +21,42 @@
       <MkSkeleton variant="cards" :count="4" :h="64" :cols="1" :radius="12" />
     </div>
     <template v-else>
-      <!-- 治理动作（原 hero actions 的真实能力子集：重试生成 / 下线·恢复 / 刷新；
-           「查看学习者」不搬——座舱页头已是该学习者）。changed 事件让宿主刷新路径状态 -->
+      <!-- 治理动作（2026-10-22 用户「下线路径属于比较危险操作？这个位置也不合适」）：
+           下线/恢复、重试生成都是低频且带后果的动作，收进右缘 ⋯ 菜单，不在内容区平铺；
+           刷新钮撤销——顶栏刷新已覆盖本面板（watch liveRefreshSeq），同屏不再出第二颗。 -->
       <div class="pjp-acts">
-        <button v-if="canRetry" type="button" class="mk-btn mk-btn--sm" :disabled="busy" :title="retryTitle" @click="retryGeneration">
-          重试生成
-        </button>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click="toggleArchive">
-          {{ d.status === 'archived' ? '恢复路径' : '下线路径' }}
-        </button>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="load(true)">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
         <span v-if="d.status !== 'active'" class="mk-badge" :class="statusBadge(d.status)">{{ statusText(d.status) }}</span>
+        <div class="mk-menu">
+          <button
+            type="button"
+            class="mk-menu__btn"
+            aria-label="路径操作"
+            aria-haspopup="menu"
+            :aria-expanded="menuOpen"
+            :disabled="busy"
+            @click="menuOpen = !menuOpen"
+          >⋯</button>
+          <div v-if="menuOpen" class="pjp-menu__scrim" @click="menuOpen = false"></div>
+          <div v-if="menuOpen" class="mk-menu__pop" role="menu" aria-label="路径操作" @click.stop>
+            <button
+              v-if="canRetry"
+              type="button"
+              class="mk-menu__item"
+              role="menuitem"
+              :title="retryTitle"
+              :disabled="busy"
+              @click="menuOpen = false; retryGeneration()"
+            >重试生成</button>
+            <button
+              type="button"
+              class="mk-menu__item"
+              :class="{ 'mk-menu__item--danger': d.status !== 'archived' }"
+              role="menuitem"
+              :disabled="busy"
+              @click="menuOpen = false; toggleArchive()"
+            >{{ d.status === 'archived' ? '恢复路径' : '下线路径' }}</button>
+          </div>
+        </div>
       </div>
 
       <!-- 阶段全展开（2026-10-18 用户走查：后台运营要「一眼看到信息」，不接受点开一个就把
@@ -134,12 +157,13 @@
  * 数据口径不变：全部来自 adminLearningContentApi.getPathDetail 的真实字段，
  * 原型有而接口没有的字段（验收点/关联产出/学习证据）不渲染，绝不硬造。
  * 动作口径：重试生成（只服务 failed 行，守卫自动判 core/stageDesign）、
- * 下线/恢复（恢复文案按状态分支，2026-10-06 审核 #55）、刷新。成功后 emit('changed')
- * 让宿主（座舱）重拉路径状态，页签 meta 与 stepper 不留旧值。
+ * 下线/恢复（恢复文案按状态分支，2026-10-06 审核 #55）。治理动作收在右缘 ⋯ 菜单；
+ * 刷新跟顶栏（watch liveRefreshSeq），本面板不再出第二颗刷新。
+ * 成功后 emit('changed') 让宿主（座舱）重拉路径状态，页签 meta 与 stepper 不留旧值。
  */
 import { computed, ref, watch } from 'vue'
 import { adminLearningContentApi } from '@/api/adminApi'
-import { timeAgo, errMsg, shortId } from './live'
+import { timeAgo, errMsg, shortId, liveRefreshSeq } from './live'
 import { subPage, setSubPageLabel } from './store'
 import { statusText, statusBadge, pathRetryTypeText } from './opsShared'
 /* 任务类型字典单源（F2-2）：与 TeachingSessions 同源，两页同批枚举不得各译一套 */
@@ -253,6 +277,16 @@ watch(
   },
   { immediate: true }
 )
+
+/* 顶栏刷新驱动本面板（2026-10-22 用户「刷新应该不需要吧，已经有刷新了」）：
+   页面级刷新已由座舱 watch(liveRefreshSeq) 接住，面板不再自带刷新钮，但要跟着同一次刷新生效。 */
+watch(liveRefreshSeq, () => {
+  if (props.pathId) void load(true)
+})
+
+/* 治理菜单（下线/恢复、重试生成）开合：遮罩点击与 Esc 关闭，动作执行后立即收起 */
+const menuOpen = ref(false)
+useEscape(() => menuOpen.value, () => { menuOpen.value = false })
 
 /* ===== 阶段/任务统计：各阶段头自带「N / M 任务」，总体 % 不再单算（2026-10-12 用户拍板撤） ===== */
 const doneTasks = (m: PathMilestone) => m.subtasks.filter((t) => t.status === 'completed').length
@@ -369,6 +403,8 @@ async function retryGeneration() {
 
 /* 动作行（原 hero actions 收敛成一行；弱化不与页签头抢层级） */
 .pjp-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 治理菜单遮罩：菜单开着时吃掉「点空白关菜单」的那一下，不落到下层任务行 */
+.pjp-menu__scrim { position: fixed; inset: 0; z-index: var(--mk-z-menu); }
 
 /* stagecard（原型 .stagecard：整卡描边、头浅底、体下沉任务行；2026-10-18 起常开不折叠） */
 .pd-stack { display: grid; gap: 12px; }

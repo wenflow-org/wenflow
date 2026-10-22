@@ -617,8 +617,19 @@ describe('SessionCockpit 双模式', () => {
     expect(pane.find('.pd-stage__caret').exists()).toBe(false);
     // 旧出口退役：stepper 的 Path 步点即唯一入口，不再有「打开路径详情页」按钮
     expect(pane.text()).not.toContain('打开路径详情页');
-    // 治理动作保留（真实能力：下线路径）
-    expect(pane.text()).toContain('下线路径');
+    // 治理动作保留，但收进右缘 ⋯ 菜单（2026-10-22 用户「这个位置不合适」）：
+    // 默认不露按钮；展开后才有「下线路径」，且没有第二颗刷新（顶栏刷新覆盖）
+    expect(pane.text()).not.toContain('下线路径');
+    expect(pane.text()).not.toContain('刷新');
+    await pane.find('.mk-menu__btn').trigger('click');
+    await flushPromises();
+    const menuItems = pane.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
+    expect(menuItems).toEqual(['下线路径']);
+    // 顶栏刷新同时驱动面板（面板不再自带刷新钮）
+    const detailCalls = getPathDetailMock.mock.calls.length;
+    liveRefreshSeq.value += 1;
+    await settle();
+    expect(getPathDetailMock.mock.calls.length).toBeGreaterThan(detailCalls);
 
     wrapper.unmount();
   });
