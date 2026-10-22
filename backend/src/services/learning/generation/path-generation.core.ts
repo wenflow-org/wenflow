@@ -11,7 +11,7 @@ import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { ownerContextOverride } from './owner-context';
 import { withTransaction } from '../../../utils/with-transaction';
-import { executeSkill } from '../../../skills';
+import { executeSkill, executeSkillWithResult } from '../../../skills';
 import { pathAgentDefinition } from '../../../skills/path-planning';
 import { pathReviewerDefinition } from '../../../skills/path-reviewer';
 import type { AgentInput } from '../../../agents/protocol';
@@ -829,7 +829,10 @@ async function generateLearningPathCore(data: GeneratePathData) {
     // 路径评审（CIDDP 五维度）：best-effort，不阻断路径生成
     let pathReview: any = null;
     try {
-      const reviewResult = await executeSkill(pathReviewerDefinition, {
+      // 契约：executeSkill 返回已解包 output（无 success/output 包装），此处必须走
+      // executeSkillWithResult 才能拿到评审成功标志；误检 executeSkill 的 success 会让
+      // 评审结论恒被丢弃、CIDDP 自动重规划永不生效（2026-10-22 审计 P1-1）。
+      const reviewResult = await executeSkillWithResult(pathReviewerDefinition, {
         pathPlan: {
           name: analysis.pathName,
           summary: analysis.summary,

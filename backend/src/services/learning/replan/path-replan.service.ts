@@ -319,16 +319,16 @@ async function redesignMilestoneTasks(
         ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
         : {})
     });
-    // 事务内重读模板并追加内容快照（写回时用）：避免循环共享旧 path 覆盖先前写入
+    // 事务内重读模板（写回基准）：多阶段重排循环共享循环外的旧 path，
+    // 若只在 contentSnapshot 存在时重读，后续阶段会拿第 0 阶段的陈旧 parsedTemplate
+    // 整包写回，覆盖前一阶段刚写的 stageDesigns/诊断 payload（2026-10-22 审计 P2）。
+    const txCurrentTemplate = parsePathPromptTemplate((await tx.learning_paths.findUnique({
+      where: { id: path.id },
+      select: { aiPromptTemplate: true },
+    }))?.aiPromptTemplate || null);
     const txParsed = contentSnapshot
-      ? appendReplanSnapshot(
-          parsePathPromptTemplate((await tx.learning_paths.findUnique({
-            where: { id: path.id },
-            select: { aiPromptTemplate: true },
-          }))?.aiPromptTemplate || null),
-          contentSnapshot,
-        )
-      : parsedTemplate;
+      ? appendReplanSnapshot(txCurrentTemplate, contentSnapshot)
+      : txCurrentTemplate;
     await tx.subtasks.deleteMany({
       where: {
         milestoneId: milestone.id,
@@ -430,7 +430,7 @@ async function redesignMilestoneTasks(
         aiPromptTemplate: JSON.stringify({
           ...txParsed,
           stageDesigns: {
-            ...(parsedTemplate?.stageDesigns && typeof parsedTemplate.stageDesigns === 'object' ? parsedTemplate.stageDesigns : {}),
+            ...(txParsed?.stageDesigns && typeof txParsed.stageDesigns === 'object' ? txParsed.stageDesigns : {}),
             [`stage-${milestone.stageNumber}`]: {
               inputPayload: stageDesignerInput,
               rawModelOutput: stageResult?._debug?.rawModelOutput || null,
@@ -455,7 +455,7 @@ async function redesignMilestoneTasks(
               }
             : {}),
           _generation: {
-            ...(parsedTemplate?._generation && typeof parsedTemplate._generation === 'object' ? parsedTemplate._generation : {}),
+            ...(txParsed?._generation && typeof txParsed._generation === 'object' ? txParsed._generation : {}),
             stageDesign: 'succeeded',
             lastError: null,
             triggerSource: data.triggerSource || 'api',

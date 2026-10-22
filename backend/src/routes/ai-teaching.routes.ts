@@ -1165,6 +1165,9 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit/stream', asyn
     requestHash: teachingOperationRequestHash(`checkpoint:${checkpointId}`, {
       selectedOptionIds: selectedOptionIds ?? null,
       answerText: answerText ?? null,
+      // 流式端点不支持 skip；固定写 false 与非流式普通作答的 hash 口径对齐。
+      // 此前流式缺该字段，同 key 从非流式切到流式重试会被判「同 key 不同请求」必 409。
+      skip: false,
       revision,
     }),
   });

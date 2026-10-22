@@ -540,11 +540,14 @@ class MemoryTraceService {
     // 老数据（dueAt 为 null）在下方按 FSRS 保留率跌破阈值惰性判定，而非 SQL 物化到期。
     const [materialized, legacy] = await Promise.all([
       prisma.memory_traces.findMany({
-        where: { userId, dueAt: { lte: now } },
+        // KT 幽灵痕（source=kt-estimate、extractionCount=0）即使已 seed dueAt，
+        // 也从未被真正提取过，不得进入复习队列（否则学习者会看到「没学过却该复习」）。
+        where: { userId, dueAt: { lte: now }, extractionCount: { gt: 0 } },
         orderBy: { dueAt: 'asc' },
       }),
       prisma.memory_traces.findMany({
-        where: { userId, dueAt: null },
+        // 同一道防线覆盖惰性判定分支：从未提取的 KT 幽灵痕不参与到期复习。
+        where: { userId, dueAt: null, extractionCount: { gt: 0 } },
         orderBy: { lastSeenAt: 'desc' },
       }),
     ]);
