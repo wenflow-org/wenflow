@@ -5,8 +5,9 @@
       <template #actions>
         <!-- 刷新状态独立于副文：副文只放事实段（运行全景/数据截至/最近活动），
              避免长句在页头副文盒内断词换行（视觉走查 2026-10-03）。
-             本页 10s 轮询，手动「刷新」钮与之重复（对齐执行日志/健康中心先例：轮询页不放刷新钮）
-             ——正常态只留节奏注记，熔断停止时注记本身变可点恢复钮（一键恢复不丢）。 -->
+             本页 10s 轮询，手动「刷新」钮与之重复（对齐执行日志/健康中心先例：轮询页不放刷新钮）。
+             正常态不显示任何刷新注记（2026-10-22 用户「这个提示不要」）；只有展示旧数据或
+             熔断停止时才出现（后者本身变可点恢复钮，一键恢复不丢）。 -->
         <button
           v-if="autoRefreshStopped"
           type="button"
@@ -15,11 +16,10 @@
           @click="refreshNow"
         >{{ liveRefreshing ? '恢复中…' : '自动刷新已停止 · 恢复刷新' }}</button>
         <span
-          v-else
-          class="ov-refresh-note"
-          :class="{ 'ov-refresh-note--warn': overviewStale }"
+          v-else-if="overviewStale"
+          class="ov-refresh-note ov-refresh-note--warn"
           role="status"
-        >{{ refreshNote }}</span>
+        >展示上次成功数据</span>
       </template>
     </MkPageHead>
 
@@ -490,10 +490,7 @@ const headSub = computed(() => {
   if (recency) parts.push(recency);
   return parts.join(' · ');
 });
-/** 刷新注记（熔断=可点恢复钮见模板；拉取失败展示旧数据=琥珀告警；正常=faint 一句） */
-const refreshNote = computed(() =>
-  overviewStale.value ? '展示上次成功数据' : '10s 自动刷新'
-);
+
 /* 恢复刷新（熔断注记点击）：成功即打点真实数据时刻并重启轮询 */
 function refreshNow() {
   void refreshOverviewTracked(true).then((ok) => {
