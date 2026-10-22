@@ -1205,7 +1205,12 @@ function toStringList(value: unknown, maxItems: number, maxLen: number): string[
   if (!Array.isArray(value)) return [];
   const out: string[] = [];
   for (const item of value) {
-    const text = toFigureLabel(item, maxLen);
+    // 模型常把条目写成 {"label": "…"}（bins/compare 示例就是对象形态）；
+    // 只认字符串会把整栏条目清空，导致整张图被归一化拒绝（2026-10-22 真课丢图）。
+    const raw = item && typeof item === 'object'
+      ? (item as Record<string, unknown>).label ?? (item as Record<string, unknown>).text ?? (item as Record<string, unknown>).value
+      : item;
+    const text = toFigureLabel(raw, maxLen);
     if (text) out.push(text);
     if (out.length >= maxItems) break;
   }
@@ -1708,15 +1713,18 @@ function normalizeCompareSide(value: unknown): Record<string, unknown> | null {
     if (!label) continue;
     const sub = toFigureText(node.sub, SPEC.subMax);
     const tone = normalizeTone(node.tone, ['ok', 'accent', 'warn', 'neutral']);
-    // from: "prev" 表示这一跳承接上一张卡（顺序链路：网关→服务→存储），默认从客户端直连。
-    // 跨集群次数只数「从客户端进集群」的那几条，所以顺序段不占边界序号。
+    // from: "prev" 表示这一跳承接上一张卡（顺序链路：网关→服务→存储）。
+    // 2026-10-22 起渲染器把**缺省**当作串联，只有显式 "client" 才是并联扇出——所以 client 必须保留下来，
+    // 否则模型想画扇出也没有办法表达。
     const fromPrev = node.from === 'prev' || node.from === true;
+    const fromClient = node.from === 'client';
     chain.push({
       label,
       ...(sub ? { sub } : {}),
       ...(tone ? { tone } : {}),
       ...(node.merged === true ? { merged: true } : {}),
       ...(fromPrev && chain.length ? { from: 'prev' } : {}),
+      ...(fromClient && chain.length ? { from: 'client' } : {}),
       ...(node.rtt === true ? { rtt: true } : {}),
     });
     if (chain.length >= 4) break;

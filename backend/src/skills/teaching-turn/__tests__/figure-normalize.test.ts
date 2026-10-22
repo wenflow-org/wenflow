@@ -817,3 +817,31 @@ describe('teaching-turn figure 归一化（range-bar，2026-10-21 外审 #4~#7�
     expect(noNumber.figure).toBeUndefined();
   });
 });
+
+describe('条目对象形态与显式并联（2026-10-22 真课丢图）', () => {
+  it('compare 条目写成 {label} 对象时照收，不再整栏清空导致丢图', async () => {
+    const out = await runWithFigure({
+      kind: 'compare',
+      left: { head: '一般过去', items: [{ label: '只锁定过去那一下' }, { text: '与现在断开' }] },
+      right: { head: '现在完成', items: [{ value: '结果延续到现在' }] },
+      divider: '有没有碰到 NOW',
+    });
+    expect(out.figure?.kind).toBe('compare');
+    expect(out.figure.spec.left.items).toEqual(['只锁定过去那一下', '与现在断开']);
+    expect(out.figure.spec.right.items).toEqual(['结果延续到现在']);
+  });
+
+  it('链路里显式的 from:"client" 要保留（渲染器缺省=串联后，扇出只能靠它表达）', async () => {
+    const out = await runWithFigure({
+      kind: 'compare',
+      left: {
+        head: '客户端并联',
+        client: '浏览器',
+        chain: [{ label: '请求一' }, { label: '请求二', from: 'client' }],
+      },
+      right: { head: '顺序链路', client: '浏览器', chain: [{ label: '请求' }, { label: '响应回来' }] },
+    });
+    expect(out.figure.spec.left.chain[1].from).toBe('client');
+    expect(out.figure.spec.right.chain[1].from).toBeUndefined();
+  });
+});
