@@ -187,6 +187,28 @@ export function findTaskInPath(milestones: SimulationMilestone[], taskId?: strin
   return null;
 }
 
+/**
+ * 会话任务指针与当前路径对账。
+ *
+ * 路径重排（尤其是课堂收束后按建议触发的后台重排）会替换/删除下游任务，
+ * 而虚拟会话仍可能拿着旧 currentTaskId；下一次开课就会撞「指定任务不存在」，
+ * 被跑批 harness 当成「路径未就绪」空等到超时。这里把「指针已失效」
+ * 从「路径还没生成」里拆出来，并给出新路径上第一个可运行任务。
+ */
+export function resolveStaleTaskRecovery(
+  milestones: SimulationMilestone[],
+  currentTaskId?: string | null
+): { stale: boolean; taskId: string | null } {
+  if (!currentTaskId) return { stale: false, taskId: null };
+  if (findTaskInPath(milestones, currentTaskId)) {
+    return { stale: false, taskId: currentTaskId };
+  }
+  const next = milestones
+    .flatMap((milestone) => milestone?.subtasks || [])
+    .find((task) => task.status !== 'completed');
+  return { stale: true, taskId: next?.id ?? null };
+}
+
 export function buildProgressAfterTaskCompletion(milestones: SimulationMilestone[], completedTaskId: string) {
   const flattenedTasks = milestones.flatMap((milestone: SimulationMilestone, milestoneIdx: number) =>
     (milestone?.subtasks || []).map((task: SimulationTask) => ({ milestone, milestoneIdx, task }))

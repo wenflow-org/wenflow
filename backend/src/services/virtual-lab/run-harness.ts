@@ -118,7 +118,7 @@ export interface HarnessArgs {
   advisoryResponse: 'keep' | 'later' | 'preview' | 'adopt' | null;
 }
 
-const RETRYABLE_HTTP = new Set([408, 425, 429, 502, 503, 504]);
+const RETRYABLE_HTTP = new Set([408, 425, 429, 502, 503, 504, 524]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -191,7 +191,11 @@ export function classifyAdvanceResponse(input: { httpStatus: number; body?: unkn
     return done('retryable', `教学回合模型抖动（可续跑，重试同一天）：${learningError.slice(0, 160)}`, { lessons: 0 });
   }
   if (data?.reverted === true) {
-    return done('day-not-started', '时钟未推进（当天未上课，模拟日未消耗）', { lessons: 0 });
+    return done(
+      'day-not-started',
+      `时钟未推进（当天未上课，模拟日未消耗）${learningError ? `：${learningError.slice(0, 200)}` : ''}`,
+      { lessons: 0 }
+    );
   }
   if (learning && learning.started === false) {
     return done('day-not-started', `当天未开课：${asString(learning.error) || '路径未就绪'}`, { lessons: 0 });

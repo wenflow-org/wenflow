@@ -21,6 +21,8 @@ describe('classifyAdvanceResponse（advance-day 处置分类）', () => {
     expect(limited.kind).toBe('retryable');
     expect(limited.httpStatus).toBe(429); // 供调用方做限流专属长退避
     expect(classifyAdvanceResponse({ httpStatus: 504, body: {} }).kind).toBe('retryable');
+    // 524 = Cloudflare 等网关的上游超时，属可重试，不是路径未就绪
+    expect(classifyAdvanceResponse({ httpStatus: 524, body: {} }).kind).toBe('retryable');
   });
 
   it('409 分两种语义：天数上限终止，租约忙可重试', () => {
@@ -64,6 +66,22 @@ describe('classifyAdvanceResponse（advance-day 处置分类）', () => {
       httpStatus: 200,
       body: { success: true, data: { simulatedDay: '2026-09-01', learning: { started: false, chunks: 0, error: '未就绪' } } },
     }).kind).toBe('day-not-started');
+  });
+
+  it('reverted 是 day-not-started，但 detail 必须带出真实 learning.error（不再只剩泛化文案）', () => {
+    const outcome = classifyAdvanceResponse({
+      httpStatus: 200,
+      body: {
+        success: true,
+        data: {
+          reverted: true,
+          simulatedDay: '2026-09-04',
+          learning: { started: false, chunks: 0, error: '指定任务不存在' },
+        },
+      },
+    });
+    expect(outcome.kind).toBe('day-not-started');
+    expect(outcome.detail).toContain('指定任务不存在');
   });
 
   it('会话终局：advance-day 报"已完成/已失败" → completed/failed（不再误判为 fatal 或 advanced）', () => {

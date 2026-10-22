@@ -41,6 +41,7 @@ import {
   parseStageResultsPayload,
   parseStoryContextFromStageResults,
   mergeLearnerState,
+  resolveStaleTaskRecovery,
 } from './simulation.helpers';
 import { decideControlledError } from '../skills/virtual-learner-shared/schemas';
 import { findMisconceptionFor } from '../config/misconception-corpus';
@@ -486,6 +487,104 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         taskRuntime,
         logs
       );
+    }
+
+    // 路径重排会替换/删除下游任务，而会话仍可能拿着旧 currentTaskId。
+    // 不先对账就会在 startLearningPhase 撞「指定任务不存在」，并被 harness 误判为路径未就绪。
+    const stalePointer = resolveStaleTaskRecovery(
+      milestones,
+      typeof learningState.currentTaskId === 'string' ? learningState.currentTaskId : null
+    );
+    if (stalePointer.stale) {
+      if (!stalePointer.taskId) {
+        await ctx.finalizePathCompletion(sessionId, logs);
+        return {
+          success: true,
+          isPathCompleted: true,
+          milestoneProgress: { completed: milestones.length, total: milestones.length },
+          logs
+        };
+      }
+      const recoveredTask = findTaskInPath(milestones, stalePointer.taskId);
+      logs.push({
+        timestamp: new Date().toISOString(),
+        phase: 'stage-transition',
+        details: {
+          output: {
+            reason: 'stale-current-task-after-replan',
+            previousTaskId: learningState.currentTaskId,
+            recoveredTaskId: stalePointer.taskId,
+            recoveredTask: recoveredTask?.task.title || null
+          }
+        }
+      });
+      const recoveredStart = await ctx.startLearningPhase(sessionId, { taskId: stalePointer.taskId });
+      if (!recoveredStart.success) {
+        return {
+          success: false,
+          logs,
+          error: recoveredStart.error || '路径重排后恢复下一学习任务失败'
+        };
+      }
+      return {
+        success: true,
+        taskCompleted: false,
+        currentTaskStopped: false,
+        milestoneProgress: {
+          currentMilestone: recoveredTask ? recoveredTask.milestoneIdx + 1 : null,
+          totalMilestones: milestones.length,
+          currentTask: recoveredTask?.task.title || null
+        },
+        logs
+      };
+    }
+
+    // 上一节课的失败态（abort/timeout/stale-revision）可能残留在 taskRuntime，
+    // 但 currentTaskId 已被推进到下一课。此时继续复用旧课堂只会反复撞同一错误，
+    // 应先清掉旧课堂绑定，再按新任务开课。
+    const runtimeTaskId = typeof taskRuntime.taskId === 'string' ? taskRuntime.taskId : null;
+    const runtimeStatus = String(taskRuntime.status || '');
+    if (
+      runtimeTaskId
+      && learningState.currentTaskId
+      && runtimeTaskId !== learningState.currentTaskId
+      && ['error', 'timeout'].includes(runtimeStatus)
+    ) {
+      const nextTask = findTaskInPath(milestones, learningState.currentTaskId);
+      if (nextTask) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'stage-transition',
+          details: {
+            output: {
+              reason: 'stale-task-runtime-after-failure',
+              previousTaskId: runtimeTaskId,
+              nextTaskId: learningState.currentTaskId,
+              nextTask: nextTask.task.title
+            }
+          }
+        });
+        await ctx.updateTeachingStatePreservingControlFlags(sessionId, {
+          ...learningState,
+          teachingSessionId: null,
+          taskRuntime: undefined,
+        });
+        const restarted = await ctx.startLearningPhase(sessionId, { taskId: learningState.currentTaskId });
+        if (!restarted.success) {
+          return { success: false, logs, error: restarted.error || '恢复下一学习任务失败' };
+        }
+        return {
+          success: true,
+          taskCompleted: false,
+          currentTaskStopped: false,
+          milestoneProgress: {
+            currentMilestone: nextTask.milestoneIdx + 1,
+            totalMilestones: milestones.length,
+            currentTask: nextTask.task.title
+          },
+          logs
+        };
+      }
     }
 
     if (
@@ -1369,23 +1468,38 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                     ? { fromStageNumber: targetStage }
                     : { stageNumber: targetStage })
                   : {};
-                const replanResult = await learningService.requestPathReplan({
-                  pathId: session.learningPathId,
-                  userId: session.userId,
-                  triggerSource: 'ai-teaching',
-                  reason: `虚拟学习者按建议调整后续阶段（${recommendation}）`,
-                  mode: recommendation === 'accelerate' ? 'compress' : 'overwrite',
-                  requireConfirmation: false,
-                  ...stageParams,
-                  evidence: { advisoryAction: recommendation, advisory }
-                });
-                // 与前端同口径：只有真正执行（未被转成待确认）才记 adopt。
-                if (replanResult?.status !== 'awaiting-confirmation' && replanResult?.enabled !== false) {
+                // 同一路径已有后台重排在跑时，再发一次只会撞 PATH_REPLAN_SNAPSHOT_CHANGED
+                // （跑批实测 4 次），并把正在学习的任务指针一起改乱。此时只记处置，
+                // 让在途重排覆盖这次建议；等它结束后的下一次收束再按新路径判断。
+                const activeReplan = await prisma.learning_paths.findUnique({
+                  where: { id: session.learningPathId },
+                  select: { activeGenerationRunId: true },
+                }).catch(() => null);
+                if (activeReplan?.activeGenerationRunId) {
                   await teachingSessionRepository.recordAdvisoryResponse(
                     teachingSessionId,
                     session.userId,
                     'adopt'
                   );
+                } else {
+                  const replanResult = await learningService.requestPathReplan({
+                    pathId: session.learningPathId,
+                    userId: session.userId,
+                    triggerSource: 'ai-teaching',
+                    reason: `虚拟学习者按建议调整后续阶段（${recommendation}）`,
+                    mode: recommendation === 'accelerate' ? 'compress' : 'overwrite',
+                    requireConfirmation: false,
+                    ...stageParams,
+                    evidence: { advisoryAction: recommendation, advisory }
+                  });
+                  // 与前端同口径：只有真正执行（未被转成待确认）才记 adopt。
+                  if (replanResult?.status !== 'awaiting-confirmation' && replanResult?.enabled !== false) {
+                    await teachingSessionRepository.recordAdvisoryResponse(
+                      teachingSessionId,
+                      session.userId,
+                      'adopt'
+                    );
+                  }
                 }
               }
             } catch (error: unknown) {
