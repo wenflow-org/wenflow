@@ -671,7 +671,7 @@ function mapRow(c: Record<string, unknown>): Row {
 /* 客户端排序：默认保持服务端顺序。窗口截断时（含测试口径触 LIST_LIMIT）排序与关键词
    只覆盖已加载窗口，属「窗口内排序」而非全量排序 —— 由 sortWindowTitle 在表头与卡头披露
    （2026-10-06 审核 #35：原注释「全量拉取 → 排序诚实」在截断口径下不成立） */
-const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows, sortKey: gcSortKey, reset: gcResetSort } = useTableSort<Row>({
+const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows, sortKey: gcSortKey, sortDir: gcSortDir, reset: gcResetSort } = useTableSort<Row>({
   accessors: {
     user: (r) => r.userName,
     status: (r) => r.stageIndex,
@@ -716,7 +716,9 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([keyword, statusFilter, noPathOnly], () => {
+watch([keyword, statusFilter, noPathOnly, gcSortKey, gcSortDir], () => {
+  // 排序/筛选变化必须回第 1 页（2026-10-22 走查：在第 2 页点排序仍停在第 2 页，
+  // 与教学组其余页不一致——它们都在 watch 里带 sortKey/sortDir）
   page.value = 1
 })
 

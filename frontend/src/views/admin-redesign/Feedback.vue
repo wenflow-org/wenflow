@@ -79,34 +79,35 @@
         </div>
 
         <div v-if="filtered.length" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap；
-             评论/节点/策略列由 fb- 局部 max-width 截断兜底（全文在 title） -->
-        <table class="mk-table">
+        <!-- 固定列宽（2026-10-22 与教学组三表同判例）：用户/评论两列在 auto 布局下按当页最长
+             内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。长评论仍由
+             fb- 局部 max-width 截断兜底（全文在 title） -->
+        <table class="mk-table mk-table--fixed fb-table">
           <thead>
             <tr>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable fb-c-user"
                 :aria-sort="fbSortState('user')"
                 @click="toggleFbSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 scope="col"
-                class="mk-th--right mk-th--sortable"
+                class="mk-th--right mk-th--sortable fb-c-rating"
                 :aria-sort="fbSortState('rating')"
                 @click="toggleFbSort('rating')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('rating')">评分<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>评论</th>
-              <th>节点</th>
-              <th>策略</th>
+              <th scope="col" class="fb-c-comment">评论</th>
+              <th scope="col" class="fb-c-node">节点</th>
+              <th scope="col" class="fb-c-strategy">策略</th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable fb-c-status"
                 :aria-sort="fbSortState('status')"
                 @click="toggleFbSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>时间</th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="fb-c-time">时间</th>
+              <th scope="col" class="mk-th--right fb-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -522,6 +523,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 固定列宽（2026-10-22 与教学组三表同判例）：用户/评论两列在 auto 布局下按当页最长
+   内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 校准，1200 无横滚。 */
+.fb-c-user { width: 170px; }
+.fb-c-rating { width: 76px; }
+.fb-c-comment { width: 220px; }
+.fb-c-node { width: 120px; }
+.fb-c-strategy { width: 60px; }
+.fb-c-status { width: 84px; }
+.fb-c-time { width: 80px; }
+.fb-c-act { width: 96px; }
+/* fixed 档列宽即契约：评论格 320px 上限会顶出本列，改成随列收缩 + 省略号 */
+.fb-table .fb-comment { max-width: 100%; }
+
 /* 嵌入模式（运营中心宿主 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .fb-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .fb-row { cursor: pointer; }

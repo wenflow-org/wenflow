@@ -167,10 +167,10 @@
         @action="retryLiveLogs"
       />
       <div v-else-if="logs.length" class="mk-table-scroll" :class="{ 'exec-table-refreshing': listRefreshing }">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
-             单元格 nowrap、列按内容自然分宽；长内容列（Skill/消息/模型）设 max-width 截断兜底，
-             勿让单列独吃宽度（列全开时容器横向滚动，见 .mk-table-scroll .exec-table min-width） -->
-        <table class="mk-table mk-table--click exec-table">
+        <!-- 固定列宽（2026-10-22 与教学组三表同判例）：Skill / Trace / 消息三列在 auto 布局下
+             按当页最长内容分宽（消息列 348→437px），翻页整表跳动；改 fixed + 逐列表头宽度，
+             余量按权重摊开。长内容列仍由 max-width 截断兜底；列全开时容器横向滚动，见 .mk-table-scroll -->
+        <table class="mk-table mk-table--click mk-table--fixed exec-table">
           <thead>
             <tr>
               <!-- 列序 = 原型 renderObserve 日志表：时间 | 级别 | Skill | Trace | 消息 | 耗时
@@ -179,21 +179,21 @@
               <th
                 v-if="!hiddenCols.has('time')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ex-c-time"
                 :aria-sort="logSortState('calledAt')"
                 @click="toggleLogSort('calledAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('calledAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('status')">级别</th>
-              <th v-if="!hiddenCols.has('kind')">类型</th>
-              <th v-if="!hiddenCols.has('agent')">Skill</th>
-              <th v-if="!hiddenCols.has('trace')" :title="TRACE_COL_TITLE">Trace</th>
-              <th v-if="!hiddenCols.has('msg')">消息</th>
-              <th v-if="!hiddenCols.has('model')">模型</th>
-              <th v-if="!hiddenCols.has('tokens')">输入 / 输出</th>
+              <th v-if="!hiddenCols.has('status')" scope="col" class="ex-c-level">级别</th>
+              <th v-if="!hiddenCols.has('kind')" scope="col" class="ex-c-kind">类型</th>
+              <th v-if="!hiddenCols.has('agent')" scope="col" class="ex-c-agent">Skill</th>
+              <th v-if="!hiddenCols.has('trace')" scope="col" class="ex-c-trace" :title="TRACE_COL_TITLE">Trace</th>
+              <th v-if="!hiddenCols.has('msg')" scope="col" class="ex-c-msg">消息</th>
+              <th v-if="!hiddenCols.has('model')" scope="col" class="ex-c-model">模型</th>
+              <th v-if="!hiddenCols.has('tokens')" scope="col" class="ex-c-tokens">输入 / 输出</th>
               <th
                 v-if="!hiddenCols.has('dur')"
                 scope="col"
-                class="right mk-th--sortable"
+                class="right mk-th--sortable ex-c-dur"
                 :aria-sort="logSortState('durationMs')"
                 @click="toggleLogSort('durationMs')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('durationMs')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -1328,6 +1328,28 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 </script>
 
 <style scoped>
+/* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：Skill / Trace / 消息
+   三列在 auto 布局下按当页最长内容分宽（消息列 348→437px），翻页跳动；fixed 后按表头定死。
+   宽度按 1280 现值校准并留余量：默认 6 列合计 ≤914，全列（列菜单打开类型/模型/输入输出）≤1138。 */
+.ex-c-time { width: 115px; }
+.ex-c-level { width: 68px; }
+.ex-c-kind { width: 70px; }
+.ex-c-agent { width: 160px; }
+.ex-c-trace { width: 120px; }
+.ex-c-msg { width: 240px; }
+.ex-c-model { width: 120px; }
+.ex-c-tokens { width: 100px; }
+.ex-c-dur { width: 68px; }
+/* fixed 档里行内 max-width（260/220px）会超出本列把内容顶到邻列：统一改成随单元格收缩，
+   由各自已有的省略号 + title 兜底（长 Skill 名 / 长错误码 / 长 Trace）。 */
+.exec-table .exec-stage,
+.exec-table .exec-model__name,
+.exec-table .exec-trace { max-width: 100%; }
+.exec-table .exec-cell { max-width: 100%; overflow: hidden; }
+.exec-table .exec-cell__sub > * { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.exec-table .exec-cell__line { max-width: 100%; overflow: hidden; }
+.exec-table .exec-tracecell { min-width: 0; max-width: 100%; overflow: hidden; }
+
 /* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
    （mk-primitives.css），本页不再私持拷贝。 */
 /* 日志页签体（审核 #122 补 role=tabpanel 的容器）：display:contents 保持原布局

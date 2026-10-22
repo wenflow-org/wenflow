@@ -176,30 +176,30 @@
            超宽由 .mk-table-scroll 横向滚动兜底（此前 fixed+colgroup 是本页私造的另一种表格语言）。
            不用 mk-table--click：整行点击已刻意退役（避免勾选误触），入口=名称格 vl-cell--click，
            整行 pointer 光标是对「点了没反应」的假承诺 -->
-      <table class="mk-table">
+      <table class="mk-table mk-table--fixed vl-table">
         <thead>
           <tr>
-            <th v-if="isLive && !isNarrow && !hiddenCols.has('check')" scope="col">
+            <th v-if="isLive && !isNarrow && !hiddenCols.has('check')" scope="col" class="vl-c-check">
               <input type="checkbox" aria-label="全选当前页" title="全选/清空当前页的虚拟学习者" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
             </th>
             <th
               scope="col"
-              class="mk-th--sortable"
+              class="mk-th--sortable vl-c-name"
               :aria-sort="vlSortState('name')"
               @click="toggleVlSort('name')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('name')">虚拟学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th v-if="!isNarrow && !hiddenCols.has('tendency')">长期倾向</th>
+            <th v-if="!isNarrow && !hiddenCols.has('tendency')" scope="col" class="vl-c-tendency">长期倾向</th>
             <th
               v-if="!isNarrow && !hiddenCols.has('story')"
               scope="col"
-              class="mk-th--right mk-th--sortable"
+              class="mk-th--right mk-th--sortable vl-c-story"
               title="故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次运行不重复计）"
               :aria-sort="vlSortState('story')"
               @click="toggleVlSort('story')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('story')">故事 / 路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               scope="col"
-              class="mk-th--sortable"
+              class="mk-th--sortable vl-c-running"
               title="当前活跃运行（进行中 + 已暂停）逐条显示，无活跃运行时显示最近一次"
               :aria-sort="vlSortState('running')"
               @click="toggleVlSort('running')"
@@ -207,13 +207,13 @@
             <th
               v-if="showTaskColumn"
               scope="col"
-              class="mk-th--right"
+              class="mk-th--right vl-c-task"
               :title="TASK_COL_TITLE"
             >任务</th>
             <th
               v-if="!isNarrow && !hiddenCols.has('sessions')"
               scope="col"
-              class="mk-th--right mk-th--sortable"
+              class="mk-th--right mk-th--sortable vl-c-runs"
               :title="SESSIONS_COL_TITLE"
               :aria-sort="vlSortState('sessions')"
               @click="toggleVlSort('sessions')"
@@ -221,7 +221,7 @@
             <th
               v-if="!isNarrow && !hiddenCols.has('failed')"
               scope="col"
-              class="mk-th--right mk-th--sortable"
+              class="mk-th--right mk-th--sortable vl-c-failed"
               :title="FAILED_COL_TITLE"
               :aria-sort="vlSortState('failed')"
               @click="toggleVlSort('failed')"
@@ -229,7 +229,7 @@
             <th
               v-if="!isNarrow && !hiddenCols.has('stalled')"
               scope="col"
-              class="mk-th--right mk-th--sortable"
+              class="mk-th--right mk-th--sortable vl-c-stalled"
               :title="stalledColTitle"
               :aria-sort="vlSortState('stalled')"
               @click="toggleVlSort('stalled')"
@@ -237,11 +237,11 @@
             <th
               v-if="!isNarrow && !hiddenCols.has('created')"
               scope="col"
-              class="mk-th--sortable"
+              class="mk-th--sortable vl-c-created"
               :aria-sort="vlSortState('created')"
               @click="toggleVlSort('created')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('created')">创建<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th>操作</th>
+            <th scope="col" class="vl-c-act">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -1114,6 +1114,28 @@ function openRun(sessionId: string) {
 </script>
 
 <style scoped>
+/* 固定列宽（2026-10-22 与教学组三表同判例）：虚拟学习者 / 长期倾向 / 进行中三列在
+   auto 布局下按当页最长内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
+   宽度按 1280 现值校准并留余量，1200 档无横滚。 */
+.vl-c-check { width: 36px; }
+.vl-c-name { width: 140px; }
+.vl-c-tendency { width: 140px; }
+/* ≤1279：进行中列的阶段条固定宽 172，列宽不能低于 210（内容区 178） */
+.vl-c-story { width: 84px; }
+.vl-c-running { width: 200px; }
+.vl-c-task { width: 48px; }
+.vl-c-runs { width: 46px; }
+.vl-c-failed { width: 46px; }
+.vl-c-stalled { width: 58px; }
+.vl-c-created { width: 70px; }
+.vl-c-act { width: 96px; }
+@media (max-width: 1279px) {
+  .vl-c-tendency { width: 130px; }
+  .vl-c-running { width: 210px; }
+}
+/* fixed 档列宽即契约：换行格的 220px min-width 会把短名顶出单元格 */
+.vl-table .mk-cell-text--wrap, .vl-table .mk-cell-main .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
+
 /* 操作列已换 .mk-btn--sm 文字钮（原型 .btn--sm 词汇），图标对齐微调：
    mk-btn 给 svg 的 6px 右距在本钮偏松，收到与文字同组的 4px */
 .mk-actions .mk-btn--sm svg { margin-right: 4px; }

@@ -84,44 +84,45 @@
         @action="retryLoad"
       />
       <div v-else-if="filtered.length" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽、余量摊给可收缩列；长邮箱/长昵称用 max-width 截断兜底 -->
-        <table class="mk-table mk-table--nowrap">
+        <!-- 固定列宽（2026-10-22 与教学组三表同判例）：自动布局下用户/邮箱两列按当页最长内容
+             分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
+             单元格 nowrap 不变，长邮箱/长昵称仍由 max-width 截断兜底 -->
+        <table class="mk-table mk-table--nowrap mk-table--fixed ul-table">
           <thead>
             <tr>
-              <th v-if="isLive && showCol('check')" scope="col">
+              <th v-if="isLive && showCol('check')" scope="col" class="u-c-check">
                 <input type="checkbox" aria-label="全选当前页" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
               </th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable u-c-user"
                 :aria-sort="userSortState('user')"
                 @click="toggleUserSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="showCol('email')" scope="col">邮箱</th>
-              <th v-if="showCol('role')" scope="col">角色</th>
+              <th v-if="showCol('email')" scope="col" class="u-c-email">邮箱</th>
+              <th v-if="showCol('role')" scope="col" class="u-c-role">角色</th>
               <th
                 v-if="showCol('paths')"
                 scope="col"
-                class="mk-th--right mk-th--sortable"
+                class="mk-th--right mk-th--sortable u-c-paths"
                 :aria-sort="userSortState('paths')"
                 @click="toggleUserSort('paths')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('paths')">路径 / 会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('created')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable u-c-created"
                 :aria-sort="userSortState('created')"
                 @click="toggleUserSort('created')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('created')">注册时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('lastlogin')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable u-c-lastlogin"
                 :aria-sort="userSortState('lastlogin')"
                 @click="toggleUserSort('lastlogin')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastlogin')">最后登录<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right u-c-act">操作</th>
             </tr>
           </thead>
         <tbody>
@@ -904,6 +905,16 @@ function clearFilters() {
 .ul-row--deleted .mk-cell-sub { color: var(--mk-muted); }
 
 /* ===== 行级设计（2026-09-26）：身份 chip / 等级色阶+升级条 / 登录新鲜度 ===== */
+/* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：用户/邮箱两列在
+   auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊开。 */
+.u-c-check { width: 36px; }
+.u-c-user { width: 250px; }
+.u-c-email { width: 190px; }
+.u-c-role { width: 96px; }
+.u-c-paths { width: 104px; }
+.u-c-created { width: 100px; }
+.u-c-lastlogin { width: 100px; }
+.u-c-act { width: 110px; }
 .ul-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .ul-user .mk-cell-main { min-width: 0; flex: 1; }
 .ul-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }

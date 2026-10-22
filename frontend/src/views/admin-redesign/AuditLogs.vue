@@ -174,31 +174,32 @@
          滚动体上，分页器随卡片吸底。与 ExecLogs.vue:157/356 同判例。 -->
     <template v-else-if="tab === 'operation' && logs.length">
       <div ref="scrollEl" :id="panelId" role="tabpanel" :aria-labelledby="tabId" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），列随 colVisible 增删、
-             按内容自然分宽；操作者/路径/IP 等长值由局部 max-width 截断兜底 -->
-        <table class="mk-table mk-table--click">
+        <!-- 固定列宽（2026-10-22 与教学组三表同判例）：动作 / 目标两列在 auto 布局下按当页最长
+             内容分宽（动作 262→303px、目标 171→100px），翻页整表跳动；改 fixed + 逐列表头宽度。
+             列随 colVisible 增删，固定宽度只作用于当前可见列，隐藏列不参与分配。 -->
+        <table class="mk-table mk-table--click mk-table--fixed al-table">
           <thead>
             <tr>
               <th
                 v-if="colVisible('time')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable al-c-time"
                 :aria-sort="alSortState('createdAt')"
                 @click="toggleAlSort('createdAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('createdAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="colVisible('admin')">操作者</th>
-              <th v-if="colVisible('action')">动作</th>
-              <th v-if="!noTargetTypes && colVisible('tt')" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
-              <th v-if="colVisible('target')">目标</th>
+              <th v-if="colVisible('admin')" scope="col" class="al-c-admin">操作者</th>
+              <th v-if="colVisible('action')" scope="col" class="al-c-action">动作</th>
+              <th v-if="!noTargetTypes && colVisible('tt')" scope="col" class="al-c-tt" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
+              <th v-if="colVisible('target')" scope="col" class="al-c-target">目标</th>
               <th
                 v-if="colVisible('result')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable al-c-result"
                 :aria-sort="alSortState('success')"
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="colVisible('ip')">IP</th>
-              <th class="mk-th--right" aria-hidden="true"></th>
+              <th v-if="colVisible('ip')" scope="col" class="al-c-ip">IP</th>
+              <th class="mk-th--right al-c-expand" aria-hidden="true"></th>
             </tr>
           </thead>
           <tbody>
@@ -234,9 +235,9 @@
                   </div>
                 </td>
                 <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt" :title="log.targetType || '当前记录未包含目标类型'">{{ targetTypeText(log.targetType) }}</td>
-                <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
+                <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''"><span class="al-ellipsis">{{ log.targetId ? shortId(log.targetId) : '—' }}</span></td>
                 <td v-if="colVisible('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
-                <td v-if="colVisible('ip')" class="log-ip mono" :title="log.ip || ''">{{ ipText(log.ip) }}</td>
+                <td v-if="colVisible('ip')" class="log-ip mono" :title="log.ip || ''"><span class="al-ellipsis">{{ ipText(log.ip) }}</span></td>
                 <td class="mk-th--right log-arrow" aria-hidden="true"><span class="log-arrow__i">▸</span></td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
@@ -279,26 +280,26 @@
     <!-- 登录审计列表：同操作审计，.mk-table-scroll / Pagination 为 .mk-card--fill 直接子元素 -->
     <template v-else-if="tab === 'login' && attempts.length">
       <div ref="scrollEl" :id="panelId" role="tabpanel" :aria-labelledby="tabId" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap -->
-        <table class="mk-table">
+        <!-- 固定列宽（同上判例）；登录尝试表列少、内容短，固定后翻页也不跳 -->
+        <table class="mk-table mk-table--fixed al-login-table">
           <thead>
             <tr>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable al-c-time"
                 :aria-sort="alSortState('createdAt')"
                 @click="toggleAlSort('createdAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('createdAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>用户名</th>
-              <th>IP</th>
+              <th scope="col" class="al-c-admin">用户名</th>
+              <th scope="col" class="al-c-ip">IP</th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable al-c-result"
                 :aria-sort="alSortState('success')"
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>原因</th>
-              <th class="mk-th--right al-act">操作</th>
+              <th scope="col" class="al-c-reason">原因</th>
+              <th scope="col" class="mk-th--right al-act al-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -310,7 +311,7 @@
             >
               <td class="log-time mono" :title="fmtFull(a.createdAt)">{{ fmtTime(a.createdAt) }}</td>
               <td class="log-admin" :title="a.username">{{ a.username || '—' }}</td>
-              <td class="log-ip mono" :title="a.ip || ''">{{ ipText(a.ip) }}</td>
+              <td class="log-ip mono" :title="a.ip || ''"><span class="al-ellipsis">{{ ipText(a.ip) }}</span></td>
               <td><span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span></td>
               <td class="log-reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</td>
               <td class="mk-th--right al-act">
@@ -904,6 +905,24 @@ function exportCurrentPage() {
 </script>
 
 <style scoped>
+/* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：动作/目标两列在
+   auto 布局下按当页最长内容分宽，翻页跳动；fixed 后按表头定死，余量按权重摊开。
+   宽度按 1280 现值校准并留余量，1200 档无横滚。 */
+.al-c-time { width: 115px; }
+.al-c-admin { width: 165px; }
+.al-c-action { width: 152px; }
+.al-c-tt { width: 122px; }
+.al-c-target { width: 114px; }
+.al-c-result { width: 70px; }
+.al-c-ip { width: 136px; }
+.al-c-expand { width: 34px; }
+.al-c-reason { width: 280px; }
+.al-c-act { width: 90px; }
+/* fixed 档列宽即契约：行内 max-width 会顶出单元格，改成随列收缩 + 省略号 */
+.al-table .log-target, .al-table .log-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* td 上的 text-overflow 在表格单元里不生效（2026-10-22 实测仍切字）：内层 span 承担截断 */
+.al-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* 本页无统计带（原型 renderAudit 页头下直接是列表卡，2026-10-02 撤） */
 
 /* ================= 视图切换（原型 .tabs 下划线页签） =================

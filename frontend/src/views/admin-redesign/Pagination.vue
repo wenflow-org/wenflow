@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-pagination">
+  <div ref="rootEl" class="mk-pagination">
     <!-- 信息行 = 原型 .pager__info 口径（newui pager()）：「共 N 条 · 第 P / T 页」恒显、
          muted 弱化色、tabular-nums，不再加粗当前页。showTotal 保留为兼容 prop（12 个页面在传），
          原「共 N 条」前缀开关已并入恒显口径。
@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { totalPagesOf } from './live'
 
 const props = withDefaults(
@@ -98,6 +98,26 @@ const emit = defineEmits<{
 }>()
 
 const totalPages = computed(() => totalPagesOf(props.total, props.pageSize))
+
+/* 翻页后列表回到顶部（2026-10-22 走查）：fill 卡内的 .mk-table-scroll 自带纵向滚动，
+   换页后仍停在上一次的 scrollTop（实测 400px 纹丝不动），用户落在新页中段。
+   两套滚动宿主要分别复位：表格内滚容器 + 外壳（.mshell__content）滚到卡头。 */
+const rootEl = ref<HTMLElement | null>(null)
+watch(
+  () => props.page,
+  () => {
+    const host = rootEl.value
+    if (!host) return
+    const scroller = host.closest('.mk-card')?.querySelector<HTMLElement>('.mk-table-scroll')
+    if (scroller) scroller.scrollTop = 0
+    const shell = host.closest<HTMLElement>('.mshell__content')
+    const card = host.closest<HTMLElement>('.mk-card')
+    if (shell && card && shell.scrollTop > 0) {
+      const top = card.getBoundingClientRect().top + shell.scrollTop - 12
+      shell.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+    }
+  }
+)
 
 /* 下拉选项 = 预设档位 ∪ 当前 pageSize（有序）。
    页面若把 pageSize 初始化成不在预设档里的值（如 OpsAchievements / Notifications 的 20），

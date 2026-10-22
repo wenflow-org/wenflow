@@ -16,7 +16,16 @@ const read = (file: string) => readFileSync(resolve(__dirname, '..', file), 'utf
 const PAGES = [
   { file: 'TeachingSessions.vue', prefix: 'ts-c-', minWidthCols: 10 },
   { file: 'GoalConversations.vue', prefix: 'gc-c-', minWidthCols: 8 },
-  { file: 'OpsContent.vue', prefix: 'oc-c-', minWidthCols: 7 }
+  { file: 'OpsContent.vue', prefix: 'oc-c-', minWidthCols: 7 },
+  { file: 'Users.vue', prefix: 'u-c-', minWidthCols: 7 },
+  { file: 'Skills.vue', prefix: 'sk-c-', minWidthCols: 10 },
+  { file: 'ExecLogs.vue', prefix: 'ex-c-', minWidthCols: 6 },
+  { file: 'AuditLogs.vue', prefix: 'al-c-', minWidthCols: 8 },
+  { file: 'MemoryReviewOverview.vue', prefix: 'mr-c-', minWidthCols: 7 },
+  { file: 'VirtualLearners.vue', prefix: 'vl-c-', minWidthCols: 9 },
+  { file: 'LearnerCenter.vue', prefix: 'lc-c-', minWidthCols: 7 },
+  { file: 'Feedback.vue', prefix: 'fb-c-', minWidthCols: 8 },
+  { file: 'OpsAchievements.vue', prefix: 'ach-c-', minWidthCols: 6 }
 ]
 
 describe('表格列宽稳定性', () => {
@@ -26,11 +35,15 @@ describe('表格列宽稳定性', () => {
       expect(src).toContain('mk-table--fixed')
       const widthCols = src.match(new RegExp(`\\.${prefix}[a-z-]+ \\{ width:`, 'g')) || []
       expect(widthCols.length).toBeGreaterThanOrEqual(minWidthCols)
-      // 每个 <th> 都必须带宽度类：漏一个该列就退回平分剩余，仍会被文本撑开
-      const ths = src.match(/<th\b[^>]*>/g) || []
-      expect(ths.length).toBeGreaterThanOrEqual(minWidthCols)
-      const missing = ths.filter((th) => !th.includes(prefix))
-      expect(missing).toEqual([])
+      // 固定表的每个 <th> 都必须带宽度类：漏一个该列就退回平分剩余，仍会被文本撑开。
+      // 按 </table> 切段，只检查挂了 mk-table--fixed 的表（同页可能还有弹层小表）。
+      const tables = src.split('</table>').filter((seg) => /<table\b[^>]*mk-table--fixed/.test(seg))
+      expect(tables.length).toBeGreaterThanOrEqual(1)
+      for (const seg of tables) {
+        const ths = seg.match(/<th\b[^>]*>/g) || []
+        expect(ths.length).toBeGreaterThanOrEqual(4)
+        expect(ths.filter((th) => !th.includes(prefix))).toEqual([])
+      }
     })
   }
 

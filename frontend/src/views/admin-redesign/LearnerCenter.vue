@@ -142,36 +142,37 @@
            表格，表格区内滚升入首屏，分页器保持卡尾吸底。 -->
       <div v-else class="lc-body">
 
-      <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-           列按内容自然分宽；长昵称/长任务由 mk-cell-main 上限与下方 max-width 截断兜底 -->
+      <!-- 固定列宽（2026-10-22 与教学组三表同判例）：学习者/当前进度/置信/风险四列在 auto 布局下
+           按当页最长内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
+           长昵称/长任务仍由 mk-cell-main 上限与下方 max-width 截断兜底 -->
       <div class="mk-table-scroll lc-tablewrap">
-      <table v-if="filtered.length" class="mk-table mk-table--nowrap">
+      <table v-if="filtered.length" class="mk-table mk-table--nowrap mk-table--fixed lc-table">
         <thead>
           <tr>
-            <th v-if="!lcHiddenCols.has('learner')">学习者</th>
-            <th v-if="!lcHiddenCols.has('progress')">当前进度</th>
-            <th v-if="!lcHiddenCols.has('trend')">趋势</th>
-            <th v-if="!lcHiddenCols.has('fatigue')">疲劳</th>
+            <th v-if="!lcHiddenCols.has('learner')" scope="col" class="lc-c-learner">学习者</th>
+            <th v-if="!lcHiddenCols.has('progress')" scope="col" class="lc-c-progress">当前进度</th>
+            <th v-if="!lcHiddenCols.has('trend')" scope="col" class="lc-c-trend">趋势</th>
+            <th v-if="!lcHiddenCols.has('fatigue')" scope="col" class="lc-c-fatigue">疲劳</th>
             <!-- 审核 #20（2026-10-06）：置信 / 更新接共享 useTableSort（Users.vue 同写法），
                  未点表头时保持默认序「风险优先 → 更新时间新→旧」（写进「操作」列表头 title） -->
             <th
               v-if="!lcHiddenCols.has('conf')"
               scope="col"
-              class="mk-th--sortable"
+              class="mk-th--sortable lc-c-conf"
               title="当前读数的置信度，低于 50% 记为低置信"
               :aria-sort="lcSortState('conf')"
               @click="toggleLcSort('conf')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th v-if="!lcHiddenCols.has('risk')">风险摘要</th>
+            <th v-if="!lcHiddenCols.has('risk')" scope="col" class="lc-c-risk">风险摘要</th>
             <th
               v-if="!lcHiddenCols.has('updated')"
               scope="col"
-              class="mk-th--sortable"
+              class="mk-th--sortable lc-c-updated"
               title="快照更新时间"
               :aria-sort="lcSortState('updated')"
               @click="toggleLcSort('updated')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th class="mk-th--right" title="默认排序：风险优先 → 更新时间新→旧">操作</th>
+            <th scope="col" class="mk-th--right lc-c-act" title="默认排序：风险优先 → 更新时间新→旧">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -215,7 +216,7 @@
               </span>
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
             </td>
-            <td v-if="!lcHiddenCols.has('risk')" class="risk-text" :class="{ 'mk-na': !r.risk }" :title="r.risk || ''">{{ r.risk || '—' }}</td>
+            <td v-if="!lcHiddenCols.has('risk')" class="lc-riskcell" :class="{ 'mk-na': !r.risk }" :title="r.risk || ''"><span class="risk-text">{{ r.risk || '—' }}</span></td>
             <td v-if="!lcHiddenCols.has('updated')">
               <span v-if="isUpdating(r.id)" class="lc-updated">重算中…</span>
               <span v-else-if="r.updated" class="mk-fresh" :class="freshTone(r.ts)" :title="r.ts ? new Date(r.ts).toLocaleString() : undefined">{{ r.updated }}</span>
@@ -753,7 +754,21 @@ async function recomputeAll() {
 .lc-trend__arrow { font-style: normal; }
 
 .progress-title { font-weight: 600; }
-.risk-text { color: var(--mk-amber); font-size: var(--mk-fs-micro); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.risk-text { display: block; color: var(--mk-amber); font-size: var(--mk-fs-micro); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 固定列宽（2026-10-22 与教学组三表同判例）：学习者/当前进度/置信/风险四列在 auto 布局下
+   按当页最长内容分宽（风险摘要曾把列撑到 180px 上限），翻页整表跳动；fixed 后按表头定死。
+   宽度按 1280 现值校准并留余量，1200 档无横滚。 */
+.lc-c-learner { width: 165px; }
+@media (max-width: 1279px) { .lc-c-learner { width: 115px; } }
+.lc-c-progress { width: 140px; }
+.lc-c-trend { width: 64px; }
+.lc-c-fatigue { width: 54px; }
+.lc-c-conf { width: 175px; }
+.lc-c-risk { width: 150px; }
+.lc-c-updated { width: 84px; }
+.lc-c-act { width: 125px; }
+/* fixed 档里列宽即契约：换行格 min-width 会把短内容顶出单元格 */
+.lc-table .mk-cell-text--wrap, .lc-table .mk-cell-main .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
 /* 更新列：相对时间不换行（"4 分钟前"拆行问题） */
 .lc-updated { white-space: nowrap; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .conf { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }

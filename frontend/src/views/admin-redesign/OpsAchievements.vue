@@ -65,27 +65,28 @@
       </div>
       <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap；
-             成就/用户双行单元格由 mk-cell-main 全局 max-width 截断兜底 -->
-        <table class="mk-table mk-table--nowrap">
+        <!-- 固定列宽（2026-10-22 与教学组三表同判例）：成就/用户两列在 auto 布局下按当页最长
+             名称分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。双行单元格由
+             mk-cell-main 全局 max-width 截断兜底 -->
+        <table class="mk-table mk-table--nowrap mk-table--fixed ach-table">
           <thead>
             <tr>
-              <th>成就</th>
-              <th>用户</th>
-              <th>类型</th>
+              <th scope="col" class="ach-c-title">成就</th>
+              <th scope="col" class="ach-c-user">用户</th>
+              <th scope="col" class="ach-c-type">类型</th>
               <th
                 scope="col"
-                class="mk-th--right mk-th--sortable"
+                class="mk-th--right mk-th--sortable ach-c-xp"
                 :aria-sort="achSortState('xpReward')"
                 @click="toggleAchSort('xpReward')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAchSort('xpReward')">XP<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ach-c-earned"
                 :aria-sort="achSortState('earnedAt')"
                 @click="toggleAchSort('earnedAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAchSort('earnedAt')">解锁时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right ach-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -524,6 +525,15 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 固定列宽（2026-10-22 与教学组三表同判例）：成就/用户两列在 auto 布局下按当页最长
+   名称分宽，翻页跳动；fixed 后按表头定死，余量按权重摊开。 */
+.ach-c-title { width: 170px; }
+.ach-c-user { width: 240px; }
+.ach-c-type { width: 120px; }
+.ach-c-xp { width: 90px; }
+.ach-c-earned { width: 140px; }
+.ach-c-act { width: 140px; }
+
 /* 嵌入模式（运营中心宿主 flex 列内）：根挂 .mk-page--fill（模板）与反馈/公告/通知三页签同形——
    记录卡 .mk-card--fill 由此拿到确定高度，「卡片内滚动区接管纵向滚动、Pagination 吸底」契约生效。
    overflow-y 保留 auto：成就定义页签是普通卡（非 fill），内容超出时仍需根级可滚（对齐宿主 .oh-body 判例）。 */

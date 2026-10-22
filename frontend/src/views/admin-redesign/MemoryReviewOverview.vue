@@ -93,37 +93,37 @@
           action-text="显示全部"
           @action="mrPill = 'all'"
         />
-        <table v-else class="mk-table mk-table--click">
+        <table v-else class="mk-table mk-table--click mk-table--fixed mr-table">
           <!-- 列集（2026-10-17 二次调整）：相邻列各画一条比例条会读成一排「重叠的条」，
                重要读数一律给独立列——待复习只留数字（颜色表达压力），记忆强度单独一列带条，
                最近复习与需关注也各自成列，不再把两项塞进同一格上下叠放。 -->
           <thead>
             <tr>
-              <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('name')"
+              <th scope="col" class="mk-th--sortable mr-c-user" :aria-sort="userSortState('name')"
                 title="点列头排序：按学习者名称（中文拼音序）"
                 @click="toggleUserSort('name')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('name')">学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('traces')"
+              <th scope="col" class="mk-num mk-th--sortable mr-c-traces" :aria-sort="userSortState('traces')"
                 title="该用户全部记忆记录数（跨学习路径）。点列头排序：降序 = 痕迹最多的在前"
                 @click="toggleUserSort('traces')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('traces')">记忆痕迹<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('due')"
+              <th scope="col" class="mk-num mk-th--sortable mr-c-due" :aria-sort="userSortState('due')"
                 title="点列头排序：降序 = 待复习最多的在前（默认）"
                 @click="toggleUserSort('due')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('due')">待复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('weak')"
+              <th scope="col" class="mk-th--sortable mr-c-weak" :aria-sort="userSortState('weak')"
                 title="强度跌破 40% 的痕迹数，以及待人工确认的归并候选。点列头排序：降序 = 薄弱痕迹最多的在前"
                 @click="toggleUserSort('weak')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('strength')"
+              <th scope="col" class="mk-num mk-th--sortable mr-c-strength" :aria-sort="userSortState('strength')"
                 title="有复习记录的痕迹的平均记忆强度，从未复习的用户没有读数（恒排末尾）。点列头排序：升序 = 平均强度最弱的在前"
                 @click="toggleUserSort('strength')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('strength')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('lastReviewed')"
+              <th scope="col" class="mk-th--sortable mr-c-last" :aria-sort="userSortState('lastReviewed')"
                 title="点列头排序：升序 = 最久没复习的在前（从未复习的恒排末尾）"
                 @click="toggleUserSort('lastReviewed')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastReviewed')">最近复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right mr-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -569,6 +569,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 固定列宽（2026-10-22 与教学组三表同判例）：学习者列在 auto 布局下按当页最长姓名分宽，
+   翻页整表跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。 */
+.mr-c-user { width: 230px; }
+.mr-c-traces { width: 96px; }
+.mr-c-due { width: 84px; }
+.mr-c-weak { width: 84px; }
+.mr-c-strength { width: 150px; }
+.mr-c-last { width: 100px; }
+.mr-c-act { width: 140px; }
+
 .mr { display: flex; flex-direction: column; }
 
 /* ===== 用户列表（2026-09-28：表头回归——行列表没有表头，右侧裸数字无从解读）===== */

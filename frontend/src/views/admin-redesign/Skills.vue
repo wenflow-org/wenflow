@@ -230,10 +230,10 @@
       <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
       <div class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
-             单元格 nowrap、列按内容自然分宽；Skill 名/副行两行都设 max-width 截断兜底，
-             防长名单列独吃宽度（上限引用 --mk-cell-main-max token） -->
-        <table v-if="filtered.length" class="mk-table mk-table--click sk-table">
+        <!-- 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：自动布局下
+             Skill / 归属 / 路由模型三列按当页最长名称分宽，翻页整表跳动；改 fixed + 逐列
+             表头宽度，余量按权重摊开。长名称仍由 --mk-cell-main-max 截断兜底 -->
+        <table v-if="filtered.length" class="mk-table mk-table--click mk-table--fixed sk-table">
           <!-- P1① 列结构对齐原型 renderSkillHub 1662-1706 的 8 列：
                Skill / 归属 Agent / 版本 / 路由模型 / 24h 调用 / P95 / 通过率 / 完成度。
                数据来源核查见脚本「路由 · 版本元数据」小节；P95 接口缺失 → 恒「—」且默认隐藏。
@@ -242,14 +242,14 @@
             <tr>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable sk-c-skill"
                 :aria-sort="sortState('skill')"
                 @click="toggleSort('skill')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('skill')">Skill<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('agent')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable sk-c-agent"
                 :aria-sort="sortState('agent')"
                 @click="toggleSort('agent')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('agent')">归属 Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -257,7 +257,7 @@
               <th
                 v-if="showCol('version')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable sk-c-version"
                 :aria-sort="sortState('version')"
                 @click="toggleSort('version')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('version')">版本<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -265,7 +265,7 @@
               <th
                 v-if="showCol('routing')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable sk-c-routing"
                 :aria-sort="sortState('routing')"
                 @click="toggleSort('routing')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('routing')" title="该 Skill 生效的模型，未单独配置时使用平台默认">路由模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -273,17 +273,17 @@
               <th
                 v-if="showCol('calls')"
                 scope="col"
-                class="mk-th--right mk-th--sortable"
+                class="mk-th--right mk-th--sortable sk-c-calls"
                 :aria-sort="sortState('calls')"
                 @click="toggleSort('calls')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('calls')" title="统计窗口内调用次数（随「统计窗口」下拉切换，默认近 7 天）">调用<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- P95 占位：后端仅日志聚合提供 p50/p99，无技能级 P95；不编造数字。
                    整列恒「—」无信息量（评审 P3）→ 默认隐藏，「列」菜单可手动开启 -->
-              <th v-if="showCol('p95')" scope="col" class="mk-th--right" title="暂无单 Skill 的 P95 耗时数据，该列默认隐藏，可在「列」菜单开启">P95</th>
+              <th v-if="showCol('p95')" scope="col" class="mk-th--right sk-c-p95" title="暂无单 Skill 的 P95 耗时数据，该列默认隐藏，可在「列」菜单开启">P95</th>
               <th
                 v-if="showCol('rate')"
                 scope="col"
-                class="mk-th--right mk-th--sortable"
+                class="mk-th--right mk-th--sortable sk-c-rate"
                 :aria-sort="sortState('rate')"
                 @click="toggleSort('rate')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="RATE_THRESHOLD_NOTE">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -291,25 +291,25 @@
               <th
                 v-if="showCol('status')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable sk-c-status"
                 :aria-sort="sortState('status')"
                 @click="toggleSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('status')" title="完成度：草稿 → 已上线">完成度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('cat')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable sk-c-cat"
                 :aria-sort="sortState('cat')"
                 @click="toggleSort('cat')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('cat')">类别<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('last')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable sk-c-last"
                 :aria-sort="sortState('last')"
                 @click="toggleSort('last')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('last')">最近调用<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right sk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -1339,7 +1339,21 @@ const fallbackPolicyTitle = computed(() => {
    （2026-10-02 视觉核对实测主行截成 4 字）——给内容格兜底宽度 */
 .sk-cell { display: flex; align-items: center; gap: 10px; min-width: 200px; }
 /* 原型 .tbl：自动布局 + 单元格 nowrap（列按内容自然分宽，不再 colgroup 定宽） */
-.sk-table td { white-space: nowrap; }
+/* 固定列宽（2026-10-22）：Skill/归属/路由模型三列在 auto 布局下按当页最长名称分宽，
+   翻页跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。 */
+.sk-c-skill { width: 220px; }
+.sk-c-agent { width: 140px; }
+.sk-c-version { width: 80px; }
+.sk-c-routing { width: 170px; }
+.sk-c-calls { width: 52px; }
+.sk-c-p95 { width: 56px; }
+.sk-c-rate { width: 70px; }
+.sk-c-status { width: 84px; }
+.sk-c-cat { width: 70px; }
+.sk-c-last { width: 90px; }
+.sk-c-act { width: 100px; }
+.sk-table td { white-space: nowrap; }/* fixed 档列宽即契约：200px 兜底会把 Skill 名顶出单元格 */
+.sk-table .sk-cell { min-width: 0; }
 /* 中文名主行（正文重色）；副行 = description（原型 .sub），缺失回落 skill id（等宽）。
    截断上限统一引用 token（--mk-cell-main-max）：自动布局下防长 Skill 名/长副行独吃列宽 */
 .sk-name-main {
