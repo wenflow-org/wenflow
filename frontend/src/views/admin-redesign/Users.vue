@@ -176,14 +176,6 @@
                     <button v-if="u.deleted" type="button" class="mk-menu__item" :disabled="u.busy" @click="menuRestore(u)">恢复</button>
                     <template v-else>
                       <button type="button" class="mk-menu__item" :disabled="u.busy" @click="menuEdit(u)">编辑</button>
-                      <button
-                        v-if="!isSelf(u) && !isNonRealAccount(u)"
-                        type="button"
-                        class="mk-menu__item"
-                        :class="{ 'mk-menu__item--danger': u.admin }"
-                        :disabled="u.busy"
-                        @click="menuRole(u)"
-                      >{{ u.admin ? '降为用户' : '设为管理员' }}</button>
                       <template v-if="!isSelf(u)">
                         <div class="mk-menu__sep"></div>
                         <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="u.busy" @click="menuDelete(u)">删除</button>
@@ -281,7 +273,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, liveSetUsersIncludeTest, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { liveUsers, liveCreateUser, liveDeleteUser, liveUsersTotal, liveSetUsersIncludeTest, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -573,10 +565,6 @@ function menuEdit(u: UserRow) {
   closeMenu()
   openEdit(u)
 }
-function menuRole(u: UserRow) {
-  closeMenu()
-  void toggleRole(u)
-}
 function menuDelete(u: UserRow) {
   closeMenu()
   void removeUser(u)
@@ -754,29 +742,6 @@ function exportSelected() {
   a.click()
   URL.revokeObjectURL(a.href)
   toast.success(`已导出 ${rows.length} 个用户`)
-}
-
-async function toggleRole(u: UserRow) {
-  const targetAdmin = !u.admin
-  const verb = targetAdmin ? '设为管理员' : '降为普通用户'
-  const ok = await askConfirm({
-    title: `${verb}「${u.name}」`,
-    message: targetAdmin
-      ? `确认将「${u.name}」设为管理员？该用户将获得全部管理权限。`
-      : `确认将「${u.name}」降为普通用户？将失去管理后台访问权限。`,
-    confirmText: verb,
-    danger: !targetAdmin
-  })
-  if (!ok) return
-  u.busy = true
-  try {
-    await liveSetUserRole(u.id, targetAdmin)
-    toast.success(`「${u.name}」已${targetAdmin ? '设为管理员' : '降为用户'}`)
-  } catch (e) {
-    toast.error(`操作失败：${errMsg(e)}`)
-  } finally {
-    u.busy = false
-  }
 }
 
 async function removeUser(u: UserRow) {
