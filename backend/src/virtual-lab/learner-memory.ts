@@ -237,24 +237,32 @@ async function resolveConceptIds(userId: string, names: unknown[]): Promise<Map<
   ));
   const out = new Map<string, string>();
   if (unique.length === 0) return out;
-  const rows = await prisma.memory_traces.findMany({
-    where: {
-      userId,
-      conceptId: { not: null },
-      OR: [
-        { label: { in: unique } },
-        { conceptKey: { in: unique } },
-      ],
-    },
-    select: { label: true, conceptKey: true, conceptId: true },
-  });
-  for (const row of rows) {
-    const conceptId = typeof row.conceptId === 'string' ? row.conceptId : '';
-    if (!conceptId) continue;
-    for (const key of [row.label, row.conceptKey]) {
-      const name = typeof key === 'string' ? key.trim() : '';
-      if (name && unique.includes(name)) out.set(name, conceptId);
+  try {
+    const rows = await prisma.memory_traces.findMany({
+      where: {
+        userId,
+        conceptId: { not: null },
+        OR: [
+          { label: { in: unique } },
+          { conceptKey: { in: unique } },
+        ],
+      },
+      select: { label: true, conceptKey: true, conceptId: true },
+    });
+    for (const row of rows) {
+      const conceptId = typeof row.conceptId === 'string' ? row.conceptId : '';
+      if (!conceptId) continue;
+      for (const key of [row.label, row.conceptKey]) {
+        const name = typeof key === 'string' ? key.trim() : '';
+        if (name && unique.includes(name)) out.set(name, conceptId);
+      }
     }
+  } catch (error) {
+    // kcId 回填是增强项：解析失败不应阻断概念名单本身的写回。
+    logger.warn('[vlab-memory] kcId 解析失败，保留概念名写回', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
   return out;
 }
