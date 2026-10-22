@@ -1813,6 +1813,16 @@ export async function liveGetVirtualDetail(id: string): Promise<Record<string, u
 }
 
 /* ================= API 配置 ================= */
+/** chat 连通性测试不适用于向量/重排序模型（上游回 Model does not exist，#131） */
+export const NON_CHAT_MODEL_PATTERN = /embedding|rerank|bge-/i
+
+/** 连通性测试默认模型：配置默认对话模型 → 第一个非嵌入/重排序模型 → 清单首个 */
+export function pickChatTestModel(models: string[], preferred?: string): string {
+  const list = (models || []).filter((m) => typeof m === 'string' && m.trim())
+  if (preferred && list.includes(preferred)) return preferred
+  const chatCandidate = list.find((m) => !NON_CHAT_MODEL_PATTERN.test(m))
+  return chatCandidate || list[0] || ''
+}
 export interface LiveApiConfig {
   apiUrl: string
   apiKeyConfigured: boolean

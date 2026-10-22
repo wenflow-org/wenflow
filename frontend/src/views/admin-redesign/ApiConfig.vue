@@ -640,6 +640,7 @@ import VirtualLabLoadSettings from './VirtualLabLoadSettings.vue'
 import {
   liveApiConfig as cfg,
   liveFetchModels,
+  pickChatTestModel,
   liveSaveApiConfig,
   liveRunModelTest,
   liveSaveNetworkPolicy,
@@ -1447,8 +1448,11 @@ const saving = ref(false)
 const testModel = ref('')
 const testResult = ref<{ ok: boolean; text: string; latency?: string; usage?: string } | null>(null)
 
+// #131：默认值不能落向量/重排序模型（chat 测试必假失败）；优先配置里的默认对话模型
 watch(models, (ms) => {
-  if (ms.length && !ms.includes(testModel.value)) testModel.value = ms[0]
+  if (ms.length && !ms.includes(testModel.value)) {
+    testModel.value = pickChatTestModel(ms, form.defaultModel)
+  }
 }, { immediate: true })
 
 async function fetchModels() {

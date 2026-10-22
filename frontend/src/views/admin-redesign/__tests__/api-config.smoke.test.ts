@@ -9,7 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ApiConfig from '../ApiConfig.vue';
 import { dataSource } from '../store';
-import { liveApiConfig, registrationEnabled, registerIpQuotaEnabled } from '../live';
+import { liveApiConfig, registrationEnabled, registerIpQuotaEnabled, pickChatTestModel } from '../live';
 import { confirmState, settleConfirm } from '../useConfirm';
 
 const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, getModelProvidersMock, getInfraModelsMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
@@ -764,5 +764,23 @@ describe('ApiConfig P1 修复批', () => {
     // 虚拟学习者容量已迁到独立页签，路由页不再挂它的设置块
     expect(wrapper.find('#ac-panel-routing .vl-settings').exists()).toBe(false);
     wrapper.unmount();
+  });
+});
+
+describe('pickChatTestModel（#131 连通性测试默认模型）', () => {
+  const upstreamList = [
+    'BAAI/bge-large-en-v1.5',
+    'BAAI/bge-reranker-v2-m3',
+    'agnes-3.0-flash',
+    'deepseek-v4.1-flash',
+  ];
+
+  it('配置默认对话模型在清单里 → 直接选中它', () => {
+    expect(pickChatTestModel(upstreamList, 'deepseek-v4.1-flash')).toBe('deepseek-v4.1-flash');
+  });
+
+  it('默认模型不在/为空 → 退到第一个非嵌入/重排序模型，不再选 BAAI 向量模型', () => {
+    expect(pickChatTestModel(upstreamList, 'not-in-list')).toBe('agnes-3.0-flash');
+    expect(pickChatTestModel(upstreamList)).toBe('agnes-3.0-flash');
   });
 });
