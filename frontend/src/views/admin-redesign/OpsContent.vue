@@ -103,57 +103,55 @@
         @action="reload(true)"
       />
       <div v-else-if="filtered.length" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长标题/长主题由 .mk-cell-main/.mk-cell-text 的 max-width 截断兜底
-             （同 GoalConversations 判例）。此前 fixed+colgroup 是为压制超长主题列，截断类已兜住。
-             2026-10-06 审核 #56：td nowrap 收敛全局修饰类 .mk-table--nowrap（同批 5 页已挂），
-             本页私有 .oc-list td 拷贝与容器钩子 oc-list 随撤 -->
-        <table class="mk-table mk-table--click mk-table--nowrap">
+        <!-- 固定列宽（2026-10-22 与教学会话/目标对话同判例）：自动布局下路径/用户两列按当页
+             最长文本分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
+             单元格 nowrap 仍走全局 .mk-table--nowrap，长标题/主题由 .mk-cell-main/.mk-cell-text 截断 -->
+        <table class="mk-table mk-table--click mk-table--nowrap mk-table--fixed oc-table">
           <thead>
             <tr>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-path"
                 :aria-sort="ocSortState('path')"
                 @click="toggleOcSort('path')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('path')">路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('user')">用户</th>
+              <th v-if="!hiddenCols.has('user')" scope="col" class="oc-c-user">用户</th>
               <th
                 v-if="!hiddenCols.has('status')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-status"
                 :aria-sort="ocSortState('status')"
                 @click="toggleOcSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('difficulty')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-difficulty"
                 :aria-sort="ocSortState('difficulty')"
                 @click="toggleOcSort('difficulty')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('difficulty')">难度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('hours')"
                 scope="col"
-                class="mk-th--sortable mk-th--right"
+                class="mk-th--sortable mk-th--right oc-c-hours"
                 :aria-sort="ocSortState('hours')"
                 @click="toggleOcSort('hours')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('hours')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('progress')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-progress"
                 :aria-sort="ocSortState('progress')"
                 @click="toggleOcSort('progress')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('progress')">进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('updated')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-updated"
                 :aria-sort="ocSortState('updated')"
                 @click="toggleOcSort('updated')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right oc-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -778,12 +776,24 @@ defineExpose({ reload: () => void reload(true) })
 .oc-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 里程碑计数直出（#54）：百分比旁的达成量，等宽数字、不抢主值 */
 .oc-progress__count { font-variant-numeric: tabular-nums; }
+/* 固定列宽（2026-10-22 与教学会话/目标对话同判例）：auto 布局下路径/用户两列按当页最长
+   文本分宽，翻页整表跳动；fixed 后列宽由表头定死，余量按权重摊到各列。 */
+.oc-table .oc-c-path { width: 170px; }
+.oc-table .oc-c-user { width: 166px; }
+.oc-table .oc-c-status { width: 90px; }
+.oc-table .oc-c-difficulty { width: 64px; }
+.oc-table .oc-c-hours { width: 72px; }
+.oc-table .oc-c-progress { width: 146px; }
+.oc-table .oc-c-updated { width: 104px; }
+.oc-table .oc-c-act { width: 94px; }
+/* fixed 档里列宽即契约：进度条的 120px 最小宽会把内容顶出单元格，归零后由 flex 吸收 */
+.oc-table .oc-progress { min-width: 0; }
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */
 .oc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .oc-user .mk-cell-main { min-width: 0; flex: 1; }
 /* 行点击已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
 /* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文。
-   自动布局下列宽随内容，必须给显式截断上限（截断上限由共享 .mk-cell-text 承担） */
+   fixed 布局下列宽由表头定死，文本仍必须有显式截断上限（由共享 .mk-cell-text 承担） */
 /* 主题列已退役（P2-6 2026-10-04：91% 行与路径列同文）——subject≠title 时作路径列副行，
    截断走共享 .mk-cell-sub（oc-subject 私有复制此前已退役） */
 

@@ -129,15 +129,16 @@
           @action="load(true)"
         />
         <div v-else-if="filtered.length" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长摘要/长邮箱由 .mk-cell-text / .mk-cell-main 的 max-width 截断兜底 -->
-        <table class="mk-table mk-table--click mk-table--nowrap">
+        <!-- 固定列宽（2026-10-22 与教学会话同判例）：自动布局下摘要/用户两列按当页最长文本分宽，
+             翻页整表跳动（摘要 303↔325、用户 241↔219）；改 fixed + 逐列表头宽度，余量按权重摊开。
+             长摘要/长邮箱仍由 .mk-cell-text / .mk-cell-main 的截断兜底 -->
+        <table class="mk-table mk-table--click mk-table--nowrap mk-table--fixed gc-table">
           <thead>
             <tr>
-              <th v-if="showCol('summary')">目标摘要</th>
+              <th v-if="showCol('summary')" scope="col" class="gc-c-summary">目标摘要</th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable gc-c-user"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('user')"
                 @click="toggleGcSort('user')"
@@ -145,7 +146,7 @@
               <th
                 v-if="showCol('status')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable gc-c-status"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('status')"
                 @click="toggleGcSort('status')"
@@ -153,17 +154,17 @@
               <th
                 v-if="showCol('turns')"
                 scope="col"
-                class="mk-th--sortable mk-th--right"
+                class="mk-th--sortable mk-th--right gc-c-turns"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('turns')"
                 @click="toggleGcSort('turns')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="showCol('constraints')">约束条件</th>
-              <th v-if="showCol('path')">路径</th>
+              <th v-if="showCol('constraints')" scope="col" class="gc-c-constraints">约束条件</th>
+              <th v-if="showCol('path')" scope="col" class="gc-c-path">路径</th>
               <th
                 v-if="showCol('stageDate')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable gc-c-stage-date"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('stageDate')"
                 @click="toggleGcSort('stageDate')"
@@ -171,12 +172,12 @@
               <th
                 v-if="showCol('created')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable gc-c-created"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('created')"
                 @click="toggleGcSort('created')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('created')">创建时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right gc-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -903,9 +904,25 @@ onMounted(() => {
    OpsHub(oh-host) / ApiConfig(ac-host) 仍在用，别照抄删除。 */
 .gc-host > .mk-status { flex: none; }/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
 /* 行点击/焦点态已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
-/* 用户格 min-width：本表为自动布局（无 colgroup），补「澄清进度/约束条件」两列后
-   该列会被内容多的列挤到 ~90px（2026-10-02 视觉核对实测），名字/邮箱全截断——
-   给内容格兜底宽度，压缩由可换行的摘要/约束列吸收 */
+/* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：摘要/用户两列
+   在 auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊到各列。
+   宽度取 1280 下的现值再留一点余量，保证 1200 档不出横滚。 */
+.gc-c-summary { width: 240px; }
+.gc-c-user { width: 175px; }
+.gc-c-status { width: 128px; }
+.gc-c-turns { width: 72px; }
+.gc-c-constraints { width: 150px; }
+.gc-c-path { width: 88px; }
+.gc-c-stage-date { width: 84px; }
+.gc-c-created { width: 84px; }
+.gc-c-act { width: 96px; }
+/* fixed 档里列宽即契约：行内 min-width 会把内容顶出单元格，统一归零由截断兜底 */
+.gc-table .gc-user { min-width: 0; }
+.gc-table .gc-stage-cell { min-width: 0; }
+.gc-table .gc-c-summary .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
+/* 用户格布局：列宽由 fixed 表头契约决定（.gc-c-user），行内不再设 min-width——
+   2026-10-22 之前给过 200/176px 兜底，是为自动布局下防被长摘要挤扁；fixed 后
+   min-width 只会把内容顶出单元格，已由上方 .gc-table .gc-user 归零 */
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }
 /* 分布条已退役（2026-10-17）：原页面级分布带连同 .gc-distband 类一起下线，
    卡头状态 pills 与「未生成路径」快筛并列；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
@@ -918,7 +935,7 @@ onMounted(() => {
      与 --mk-line 同一用途成对令牌（亮 #e6ebf4 / 暗 #36373c 由 tokens 切换） */
   background: var(--mk-line);
 }.gc-stage-cell__dot.is-on { background: var(--mk-blue); }.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }/* gc-stage-cell__tl→.mk-cell-sub、gc-summary→.mk-cell-text（2026-10-03 方言收敛，截断/灰阶由原语承担） *//* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
-.gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
+.gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
    长摘要 .mk-cell-text 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：裸 `.mk-table td { white-space: nowrap }` 收敛为全局修饰类
    .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝。 */

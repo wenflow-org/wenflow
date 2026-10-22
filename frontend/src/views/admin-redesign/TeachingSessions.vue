@@ -177,57 +177,59 @@
 
       <MockSkeletonTable v-if="refreshing && !rows.length" :cols="9" />
       <div v-else class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长内容由 .ts-summary(.mk-cell-sub) / .mk-cell-main 的 max-width 截断兜底 -->
-        <table v-if="filtered.length" class="mk-table mk-table--click mk-table--nowrap">
+        <!-- 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：自动布局下课堂/用户
+             两列按当页最长内容分宽，翻页就跳；改 fixed + 逐列表头宽度，课堂列吸收余量。
+             单元格 nowrap 不变，长内容仍由 .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底。 -->
+        <table v-if="filtered.length" class="mk-table mk-table--click mk-table--nowrap mk-table--fixed ts-table">
           <thead>
             <tr>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-c-topic"
                 :aria-sort="tsSortState('topic')"
                 @click="toggleTsSort('topic')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('topic')">课堂<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!tsHiddenCols.has('user')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-c-user"
                 :aria-sort="tsSortState('user')"
                 @click="toggleTsSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!tsHiddenCols.has('status')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-c-status"
                 :aria-sort="tsSortState('status')"
                 @click="toggleTsSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!isTableNarrow && !tsHiddenCols.has('track')"
                 scope="col"
+                class="ts-c-track"
                 title="虚拟辅助 / 虚拟黑盒 = 虚拟学习者完成"
               >完成方式</th>
               <th
                 v-if="!tsHiddenCols.has('interact')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-c-dur"
                 :aria-sort="tsSortState('interact')"
                 title="≥ 25 分钟标长时（信号，非故障）"
                 @click="toggleTsSort('interact')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!tsHiddenCols.has('interact')" scope="col" title="消息：课堂内用户与平台的往来条数">消息</th>
-              <th v-if="!isTableMid && !tsHiddenCols.has('interact')" scope="col" title="窄窗口下不显示此列">知识点</th>
-              <th v-if="!tsHiddenCols.has('progress')" scope="col" title="第几个/共几个是位置，不是完成数">进度</th>
-              <th v-if="!tsHiddenCols.has('output')">产物</th>
-              <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')">关注</th>
+              <th v-if="!tsHiddenCols.has('interact')" scope="col" class="ts-c-msg" title="消息：课堂内用户与平台的往来条数">消息</th>
+              <th v-if="!isTableMid && !tsHiddenCols.has('interact')" scope="col" class="ts-c-kp" title="窄窗口下不显示此列">知识点</th>
+              <th v-if="!tsHiddenCols.has('progress')" scope="col" class="ts-c-prog" title="第几个/共几个是位置，不是完成数">进度</th>
+              <th v-if="!tsHiddenCols.has('output')" scope="col" class="ts-c-out">产物</th>
+              <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')" scope="col" class="ts-c-att">关注</th>
               <th
                 v-if="!isTableCompact && !tsHiddenCols.has('start')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-c-start"
                 :aria-sort="tsSortState('start')"
                 @click="toggleTsSort('start')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('start')">开始时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right ts-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -346,14 +348,17 @@
               <td v-if="!tsHiddenCols.has('output')">
                 <!-- 建议徽章可读（评审 §5）：行内直出建议标题（首行预览），title 挂完整建议文本。
                      「有总结」且 wrapupDegraded（summary-only / fallback 兜底来源）时 badge 文案
-                     改「降级总结」+ title 说明（2026-10-06 审核 #40：该标记此前算出无消费） -->
-                <span class="mk-badge" :class="wrapupBadge(r)" :title="wrapupTitle(r)">{{ wrapupText(r) }}</span>
-                <span
-                  v-if="r.hasAdvisory"
-                  class="mk-badge ts-adv-badge"
-                  :class="advisoryBadge(r.advisory?.priority)"
-                  :title="r.advisory ? `${r.advisory.title || '教学建议'}：${r.advisory.text}` : '教学建议'"
-                ><span class="ts-adv-badge__txt">{{ r.advisory?.title || '建议' }}</span></span>
+                     改「降级总结」+ title 说明（2026-10-06 审核 #40：该标记此前算出无消费）。
+                     固定列宽后两枚徽章在窄档会超出本列：外层 flex-wrap 换行，不裁不挤邻列。 -->
+                <div class="ts-out">
+                  <span class="mk-badge" :class="wrapupBadge(r)" :title="wrapupTitle(r)">{{ wrapupText(r) }}</span>
+                  <span
+                    v-if="r.hasAdvisory"
+                    class="mk-badge ts-adv-badge"
+                    :class="advisoryBadge(r.advisory?.priority)"
+                    :title="r.advisory ? `${r.advisory.title || '教学建议'}：${r.advisory.text}` : '教学建议'"
+                  ><span class="ts-adv-badge__txt">{{ r.advisory?.title || '建议' }}</span></span>
+                </div>
               </td>
               <td v-if="!isTableNarrow && !tsHiddenCols.has('attention')">
                 <span
@@ -1077,12 +1082,49 @@ defineExpose({ refreshNow })
 /* 行首关注度色条已撤（2026-10-03 用户拍板：与「关注」列同源冗余、语义不可发现）；
    关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }
+/* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：auto 布局下
+   课堂/用户两列按当页最长内容分宽（课堂 135→340px、用户 169→256px），翻页整表跳动。
+   fixed 档下按表头宽度定死，余量按各列宽度权重摊开；断点与 isTableCompact/Narrow/Mid
+   的列显隐对齐，隐藏列的宽度不参与分配。 */
+.ts-c-user { width: 174px; }
+.ts-c-status { width: 104px; }
+.ts-c-track { width: 88px; }
+.ts-c-dur { width: 78px; }
+.ts-c-msg { width: 72px; }
+.ts-c-kp { width: 66px; }
+.ts-c-prog { width: 110px; }
+.ts-c-out { width: 190px; }
+.ts-c-att { width: 54px; }
+.ts-c-start { width: 92px; }
+.ts-c-act { width: 96px; }
+/* 课堂列宽度随断点给基准值，余量由 fixed 布局按各列宽度权重摊开（不再是单列吃掉全部余量，
+   否则 1920 下课堂列 ~480px、右侧留大片空白）；断点与列显隐对齐：
+   ≤1439 八列 / 1440-1499 九列 / 1500-1699 十一列 / ≥1700 十二列。 */
+.ts-c-topic { width: 150px; }
+/* 1200 档（125% 缩放的 1440 屏）也要无横滚：八列合计须 ≤914，短列同步收一点 */
+@media (max-width: 1279px) {
+  .ts-c-topic { width: 120px; }
+  .ts-c-user { width: 150px; }
+  .ts-c-status { width: 98px; }
+  .ts-c-dur { width: 74px; }
+  .ts-c-msg { width: 68px; }
+  .ts-c-prog { width: 104px; }
+  .ts-c-out { width: 188px; }
+  .ts-c-act { width: 90px; }
+}
+@media (min-width: 1440px) { .ts-c-topic { width: 190px; } }
+@media (min-width: 1500px) { .ts-c-topic { width: 140px; } }
+@media (min-width: 1700px) { .ts-c-topic { width: 200px; } }
+/* 课堂列吸收余量后可能远超 .mk-cell-main 的 300/360 上限，让文本跟着列宽走（否则右侧留空白） */
+.ts-c-topic .mk-cell-main strong, .ts-row td:first-child .mk-cell-sub { max-width: 100%; }
+/* 固定列内不允许内容越界挤压邻列（徽章/按钮按内容裁切，悬停 title 仍在） */
+.ts-table td { overflow: hidden; }
 /* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 */
 .ts-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .ts-user .mk-cell-main { min-width: 0; flex: 1; }
 /* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
-.ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
+.ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝 *//* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 /* 互动列（批B）：时长主值+副行。副行 messageCount/知识点 nowrap 撑到 109px 溢出 70px 单元格、
@@ -1119,7 +1161,9 @@ defineExpose({ refreshNow })
    套上 68px 会把「低参与 + 手动结束」撑到 ~150px，把状态列拉宽又没换来任何对齐。 */
 .ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 118px; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
    badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
-.ts-adv-badge { margin-left: 4px; max-width: 96px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
+/* 产物格：两枚徽章在固定列宽内换行（不再靠 margin-left 贴前一枚） */
+.ts-out { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ts-adv-badge { max-width: 96px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
 .ts-error { margin: 0 16px 10px; }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
    4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
