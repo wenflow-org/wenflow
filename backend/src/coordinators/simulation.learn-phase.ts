@@ -1471,11 +1471,22 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                 // 同一路径已有后台重排在跑时，再发一次只会撞 PATH_REPLAN_SNAPSHOT_CHANGED
                 // （跑批实测 4 次），并把正在学习的任务指针一起改乱。此时只记处置，
                 // 让在途重排覆盖这次建议；等它结束后的下一次收束再按新路径判断。
-                const activeReplan = await prisma.learning_paths.findUnique({
-                  where: { id: session.learningPathId },
-                  select: { activeGenerationRunId: true },
+                //
+                // 注意不能看 learning_paths.activeGenerationRunId：它在成功收尾时不会清空，
+                // 跑批实测三条路径都残留着已 succeeded 的 run，导致 adopt 全被跳过、
+                // replanReason 恒 null。以运行表中真正 queued/processing 且租约未过期的行为准。
+                const activeReplan = await prisma.path_generation_runs.findFirst({
+                  where: {
+                    learningPathId: session.learningPathId,
+                    status: { in: ['queued', 'processing'] },
+                    OR: [
+                      { leaseExpiresAt: null },
+                      { leaseExpiresAt: { gt: new Date() } },
+                    ],
+                  },
+                  select: { id: true },
                 }).catch(() => null);
-                if (activeReplan?.activeGenerationRunId) {
+                if (activeReplan) {
                   await teachingSessionRepository.recordAdvisoryResponse(
                     teachingSessionId,
                     session.userId,
