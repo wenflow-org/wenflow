@@ -18,7 +18,7 @@ import { useRoute, useRouter, type LocationQuery } from 'vue-router'
  * vizcheck/logocheck/pe-finalverify 及宽集（menutest/goalprobe/ev_p/…），
  * 这些账号在「仅真实」列表里仍混入且行内无徽章。
  */
-const TEST_ACCOUNT_PREFIXES = [
+export const TEST_ACCOUNT_PREFIXES = [
   'e2e_', 'audit_probe_', 'uxaudit_', 'ui_check', 'motion_review', 'qa_audit_',
   'shotsnap', 'verify_real_user', 'vcheck', 'vqa_audit', 'align_', 'qa_delete_test_',
   'uitest', 'uxtest', 'ui_audit_', 'audit_', 'eval', 'simb_', 'vqa_', 'vizcheck',

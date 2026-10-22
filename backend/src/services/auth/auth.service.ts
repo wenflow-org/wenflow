@@ -168,6 +168,16 @@ class AuthService {
       // 测试/审计账号（qa_audit_/e2e_/@test.local 等命名约定）不允许登录用户侧：
       // 与 admin 侧真实账号口径同源识别（utils/test-account.ts），返回与凭据错误一致的 401，防枚举。
       if (!user || !isValidPassword || isTestAccount) {
+        // 2026-10-22（机械过滤审计 P2）：名单拒绝与密码错误对外同码（防枚举），但服务端
+        // 日志必须区分——否则「管理员重置了测试账号密码、登录仍 401」会被当密码错排查
+        // （#117 两例 + 2026-10-22 t8ux 实测）。不落密码。
+        if (user && isTestAccount && isValidPassword) {
+          logger.warn('[auth] 登录被测试账号名单拒绝（非密码错误）', {
+            userId: user.id,
+            email: user.email,
+            name: String(user.name || '').slice(0, 64),
+          });
+        }
         throw new InvalidCredentialsError();
       }
 

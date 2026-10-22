@@ -37,7 +37,7 @@ interface Config {
  * 路径/评估/收尾链技能按 skill_model_configs 绑定走 ds（好 key、质量锚定——path 生成
  * 质量锚定整条学习路径）。
  */
-const LEARN_DIALOGUE_SKILLS = new Set([
+export const LEARN_DIALOGUE_SKILLS = new Set([
   'teaching-turn',
   'virtual-learner-learn-turn-simulator',
   'virtual-learner-epistemic-grounding',
