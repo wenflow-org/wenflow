@@ -150,7 +150,7 @@
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('status')"
                 @click="toggleGcSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态 / 阶段<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('turns')"
                 scope="col"
@@ -212,25 +212,15 @@
                 </div>
               </td>
               <td v-if="showCol('status')">
-                <!-- 2026-10-15 用户拍板：状态与阶段合并为一列（两列编码同一件事——都源自
-                     status/stage 两个字段且阶段序号已含终态折算；拆两列时 active 行状态恒「—」、
-                     终态行词又与阶段重复，纯噪声）。合并后一列读完：
-                       进行中 → 阶段词（澄清中/方案确认中…）+ 四点过程条
-                       终态/异常 → 结果词（已完成/失败/已取消/已放弃）+ 过程条
-                     即：状态列只在说得出阶段说不出的话（终止方式）时压过阶段词。 -->
-                <div class="gc-stage-cell" :title="statusHint(r.status)">
-                  <div class="gc-stage-cell__head">
-                    <template v-if="showsStatusBadge(r.status)">
-                      <span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span>
-                    </template>
-                    <template v-else>
-                      <span class="mk-badge" :class="stageBadgeCls(r.stage)">{{ stageText(r.stage) || '—' }}</span>
-                    </template>
-                    <span v-if="r.timeline" class="gc-stage-cell__dots" :title="stageDotsTitle(r)" aria-label="阶段进度">
-                      <i v-for="d in GOAL_STAGE_TOTAL" :key="d" class="gc-stage-cell__dot" :class="{ 'is-on': d <= r.stageIndex + 1 }"></i>
-                    </span>
-                  </div>
-                </div>
+                <!-- 2026-10-22 用户「目标对话怎么会有阶段这一说？不应是完成未完成吗」：
+                     状态列只回答完成没有——进行中 / 已完成 / 已取消 / 失败 / 已放弃。
+                     四步过程点条退役；进行中的细阶段（正在了解情况 / 方案待确认 /
+                     等待生成路径）收进悬停说明，不再作为徽章词或列名上屏。 -->
+                <span
+                  class="mk-badge"
+                  :class="isOngoingStatus(r.status) ? 'mk-badge--info' : statusBadge(r.status)"
+                  :title="statusCellTitle(r)"
+                >{{ isOngoingStatus(r.status) ? '进行中' : statusLabel(r.status) }}</span>
               </td>
               <td v-if="showCol('turns')" class="mk-num">
                 <!-- 原型「澄清进度」列 = meter turns/targetTurns；本系统无目标轮次分母，
@@ -331,7 +321,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, stageTimeline, monthDayText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
+import { stageProgressIndex, stageTimelineText, stageTimeline, monthDayText, GOAL_STAGE_TOTAL, statusText } from './statusText'
 import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -480,7 +470,7 @@ const pathPendingCount = computed(() => rows.value.filter(isPathPendingRow).leng
 /* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/澄清进度/约束条件/路径/创建时间 可隐藏，用户/操作固定 */
 const gcColDefs = [
   { key: 'summary', label: '目标摘要', title: '对话目标摘要' },
-  { key: 'status', label: '状态 / 阶段', title: '目标对话状态与所在阶段（合并列）：进行中出阶段词 + 过程条，终态/异常出结果词 + 过程条' },
+  { key: 'status', label: '状态', title: '目标对话状态：进行中 / 已完成 / 已取消 / 失败 / 已放弃' },
   { key: 'turns', label: '澄清进度', title: '学习者发言轮次（澄清深度）' },
   { key: 'constraints', label: '约束条件', title: '澄清中收集的可用时间 / 期限等约束' },
   { key: 'path', label: '路径', title: '路径是否已生成' },
@@ -601,11 +591,24 @@ const statusHint = (s: string | null | undefined) => {
     故留「—」把进度让给阶段列；终态（已完成/已取消）与异常终止（失败/已放弃）阶段列表达不了，才单独成徽章。
     黑名单（仅列进行中族）而非白名单：将来新增的终态/异常状态自动出词，不会静默丢信息。 */
 const ONGOING_STATUS = new Set(['active', 'in_progress', 'inprogress', 'running'])
-const showsStatusBadge = (s: string | null | undefined) => !ONGOING_STATUS.has(String(s || '').toLowerCase())
+const isOngoingStatus = (s: string | null | undefined) => ONGOING_STATUS.has(String(s || '').toLowerCase())
 
-/** 阶段过程点条工具提示（人话）：当前第 n/total 步（创建→澄清→方案→完成） */
-function stageDotsTitle(r: Row): string {
-  return `${stageText(r.stage) || '—'} · 第 ${r.stageIndex + 1}/${GOAL_STAGE_TOTAL} 步（${GOAL_STAGE_STEP_LABELS.join('→')}）`
+/** 进行中行的细阶段（动作词，2026-10-22）：只进悬停说明，不占列宽/徽章 */
+const ONGOING_STAGE_HINT: Record<string, string> = {
+  initial: '尚未开始澄清',
+  understanding: '正在了解你的情况',
+  clarifying: '正在了解你的情况',
+  proposing: '方案待学习者确认',
+  proposal: '方案待学习者确认',
+  planning: '正在生成学习方案',
+  ready: '方案已确认，等待生成路径'
+}
+
+/** 状态格悬停说明：进行中给阶段动作 + 第几步；终态给终止原因 */
+function statusCellTitle(r: Row): string {
+  if (!isOngoingStatus(r.status)) return statusHint(r.status)
+  const hint = ONGOING_STAGE_HINT[String(r.stage || '').toLowerCase()] || '进行中'
+  return `${hint} · 第 ${r.stageIndex + 1}/${GOAL_STAGE_TOTAL} 步`
 }
 
 /** 目标摘要：description 优先，其次 collectedData 里的 goal 字段 */
@@ -911,7 +914,7 @@ onMounted(() => {
    宽度取 1280 下的现值再留一点余量，保证 1200 档不出横滚。 */
 .gc-c-summary { width: 240px; }
 .gc-c-user { width: 175px; }
-.gc-c-status { width: 128px; }
+.gc-c-status { width: 100px; }
 .gc-c-turns { width: 72px; }
 .gc-c-constraints { width: 150px; }
 .gc-c-path { width: 88px; }
@@ -920,7 +923,6 @@ onMounted(() => {
 .gc-c-act { width: 96px; }
 /* fixed 档里列宽即契约：行内 min-width 会把内容顶出单元格，统一归零由截断兜底 */
 .gc-table .gc-user { min-width: 0; }
-.gc-table .gc-stage-cell { min-width: 0; }
 .gc-table .gc-c-summary .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
 /* 用户格布局：列宽由 fixed 表头契约决定（.gc-c-user），行内不再设 min-width——
    2026-10-22 之前给过 200/176px 兜底，是为自动布局下防被长摘要挤扁；fixed 后
@@ -928,15 +930,7 @@ onMounted(() => {
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }
 /* 分布条已退役（2026-10-17）：原页面级分布带连同 .gc-distband 类一起下线，
    卡头状态 pills 与「未生成路径」快筛并列；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
-.gc-user .mk-cell-main { min-width: 0; flex: 1; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
-.gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }.gc-stage-cell__dots { display: inline-flex; gap: 3px; }.gc-stage-cell__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--mk-radius-pill);
-  /* 未点亮色走 --mk-line（2026-10-06 审核 #47）：原私持字面量 #e2e8f2 是全仓唯一，
-     与 --mk-line 同一用途成对令牌（亮 #e6ebf4 / 暗 #36373c 由 tokens 切换） */
-  background: var(--mk-line);
-}.gc-stage-cell__dot.is-on { background: var(--mk-blue); }.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }/* gc-stage-cell__tl→.mk-cell-sub、gc-summary→.mk-cell-text（2026-10-03 方言收敛，截断/灰阶由原语承担） *//* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
+.gc-user .mk-cell-main { min-width: 0; flex: 1; }/* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
 .gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
    长摘要 .mk-cell-text 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：裸 `.mk-table td { white-space: nowrap }` 收敛为全局修饰类
@@ -949,7 +943,6 @@ onMounted(() => {
 @media (max-width: 1599px) {
   .mk-table th, .mk-table td { padding-inline: 12px; }
   .gc-user { min-width: 176px; }
-  .gc-stage-cell { min-width: 120px; }
   .mk-cell-main .mk-cell-text--wrap { min-width: 180px; }
 }
 
