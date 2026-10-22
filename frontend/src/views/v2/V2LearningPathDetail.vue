@@ -22,6 +22,13 @@
       </div>
 
       <template v-else-if="path">
+        <!-- 已下线：内容治理下架。列表已不返回，旧链接/书签直达时明确表态并禁掉开课 -->
+        <section v-if="pathOffline" class="genbar card genbar--muted">
+          <div class="genbar__text">
+            <strong>该学习路径已下线</strong>
+            <p>管理员已将其下架，暂不可继续学习。如需恢复请联系管理员。</p>
+          </div>
+        </section>
         <!-- 生成中/失败横幅 -->
         <section v-if="lifecycle && lifecycle.phase !== 'ready'" class="genbar card" :class="`genbar--${lifecycleFailed ? 'failed' : 'working'}`">
           <template v-if="lifecycleFailed">
@@ -853,7 +860,10 @@ watch(
 const lifecycleFailed = computed(() => lifecycle.value && (lifecycle.value.status === 'failed' || lifecycle.value.status === 'stale'));
 /** 生成中（phase 未到 ready）：阶段/课程尚未备好，hero 指标与横幅口径需对齐（EG24） */
 const lifecyclePreparing = computed(() => !!lifecycle.value && lifecycle.value.phase !== 'ready');
-const canLearn = computed(() => !lifecycle.value || lifecycle.value.phase === 'ready');
+/* 已下线：管理员在内容治理里下架了这条路径。学习端列表已不再返回，
+   但旧链接/书签仍可能直达详情，这里明确表态并禁掉开课（后端也会拒绝）。 */
+const pathOffline = computed(() => path.value?.status === 'archived');
+const canLearn = computed(() => !pathOffline.value && (!lifecycle.value || lifecycle.value.phase === 'ready'));
 
 // ---- 重排回退（R8 选项 B：调整前安排自动留存，一键回退） ----
 const rollbackAvailable = ref(false);
@@ -1620,11 +1630,13 @@ watch(sceneProblemBackground, () => { bgExpanded.value = false; });
 
 /* ---------- 展示辅助 ---------- */
 const badgeText = computed(() => {
+  if (pathOffline.value) return '已下线';
   if (lifecycle.value && lifecycle.value.phase !== 'ready') return lifecycleFailed.value ? '需要处理' : '生成中';
   if (allDone.value) return '已完成';
   return '进行中';
 });
 const badgeCls = computed(() => {
+  if (pathOffline.value) return 'badge--muted';
   if (lifecycle.value && lifecycle.value.phase !== 'ready') return lifecycleFailed.value ? 'badge--red' : 'badge--cyan';
   if (allDone.value) return 'badge--green';
   return 'badge--blue';
@@ -1712,6 +1724,7 @@ onBeforeUnmount(() => {
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
 .badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
 .badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.badge--muted { color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent); }
 
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 26px 28px; align-items: center; }
 .hero__tags { display: flex; align-items: center; gap: 10px; }
@@ -1999,6 +2012,7 @@ onBeforeUnmount(() => {
   padding: 16px 20px;
 }
 .genbar--failed { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
+.genbar--muted { border-color: var(--line); }
 .genbar__text { flex: 1; }
 .genbar__text strong { font-size: 14px; }
 .genbar__text p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }

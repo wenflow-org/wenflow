@@ -314,6 +314,16 @@ export function getPathLearningAccessState(
   })();
 
   if (pathStatus !== 'active') {
+    // 已下线是管理员的治理动作，必须在这里短路：此前 archived 会掉进下面的
+    // 「generationStatus 齐全 + enrichment succeeded」分支，反而返回可学。
+    if (pathStatus === 'archived') {
+      return {
+        generationStatus,
+        canStartLearning: false,
+        learningBlockedReason: '该学习路径已下线，暂不可继续学习。'
+      };
+    }
+
     if (pathStatus === 'generating') {
       return {
         generationStatus,
@@ -710,7 +720,8 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
 export async function getUserLearningPaths(userId: string) {
   try {
     const paths = await prisma.learning_paths.findMany({
-      where: { userId },
+      // 已下线（archived）是内容治理状态：从学习端列表隐去，管理员在后台「已下线」里仍可见可恢复
+      where: { userId, status: { not: 'archived' } },
       include: {
         activeGenerationRun: true,
         milestones: {
@@ -887,8 +898,9 @@ export async function getLearningStats(userId: string) {
     const totalPaths = await prisma.learning_paths.count({
       where: {
         userId,
+        // 与 getUserLearningPaths 同口径：已下线路径不再计入学习端读数
         status: {
-          not: 'failed'
+          notIn: ['failed', 'archived']
         }
       }
     });
