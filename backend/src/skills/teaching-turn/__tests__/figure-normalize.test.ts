@@ -845,3 +845,17 @@ describe('条目对象形态与显式并联（2026-10-22 真课丢图）', () =>
     expect(out.figure.spec.right.chain[1].from).toBeUndefined();
   });
 });
+
+describe('对照栏头过长不再丢整张图（2026-10-22 晚实测）', () => {
+  it('19–26 字的栏头照收；超长截到 26 字而不是整侧作废', async () => {
+    const out = await runWithFigure({
+      kind: 'compare',
+      left: { head: '一般过去时：只锁定过去那一下，与现在断开', items: ['I lost my key.'] },
+      right: { head: '现在完成时：动作发生在过去但结果一路延续到现在并影响此刻', items: ['I have lost my key.'] },
+      divider: '有没有碰到 NOW',
+    });
+    expect(out.figure?.kind).toBe('compare');
+    expect(out.figure.spec.left.head).toBe('一般过去时：只锁定过去那一下，与现在断开');
+    expect(Array.from(out.figure.spec.right.head as string).length).toBe(26);
+  });
+});

@@ -1702,7 +1702,10 @@ function normalizeMatrixSpec(raw: Record<string, unknown>): Record<string, unkno
 function normalizeCompareSide(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object') return null;
   const side = value as Record<string, unknown>;
-  const head = toFigureLabel(side.head, SPEC.labelMax);
+  // 对照栏头常是一句结论（「一般过去时：只锁定过去那一下」），比通用标签长。
+  // 超过 18 字就丢掉整侧 → 整张图被拒（2026-10-22 晚 30 分钟丢了 9 张 compare），
+  // 所以栏头放宽到 26 字并允许截断——栏头是必需信息，宁短勿缺。
+  const head = toFigureLabel(side.head, 26) ?? toFigureText(side.head, 26);
   if (!head) return null;
   const items = toStringList(side.items, SPEC.itemsMax, SPEC.itemTextMax);
   const chain: Array<Record<string, unknown>> = [];
