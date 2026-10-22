@@ -131,7 +131,8 @@
           <MkLoading v-if="refreshing" inline text="加载中…" />
           <MkCols
             :col-defs="tsColDefs"
-            storage-key="wf_teaching_hidden_cols"
+            storage-key="wf_teaching_hidden_cols_v2"
+            :default-hidden="TS_DEFAULT_HIDDEN"
             v-model:hidden="tsHiddenCols"
           />
           <div class="mk-adv">
@@ -210,15 +211,15 @@
                 title="虚拟辅助 / 虚拟黑盒 = 虚拟学习者完成"
               >完成方式</th>
               <th
-                v-if="!tsHiddenCols.has('interact')"
+                v-if="!tsHiddenCols.has('duration')"
                 scope="col"
                 class="mk-th--sortable ts-c-dur"
                 :aria-sort="tsSortState('interact')"
                 title="≥ 25 分钟标长时（信号，非故障）"
                 @click="toggleTsSort('interact')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!tsHiddenCols.has('interact')" scope="col" class="ts-c-msg" title="消息：课堂内用户与平台的往来条数">消息</th>
-              <th v-if="!isTableMid && !tsHiddenCols.has('interact')" scope="col" class="ts-c-kp" title="窄窗口下不显示此列">知识点</th>
+              <th v-if="!tsHiddenCols.has('messages')" scope="col" class="ts-c-msg" title="消息：课堂内用户与平台的往来条数">消息</th>
+              <th v-if="!isTableMid && !tsHiddenCols.has('knowledge')" scope="col" class="ts-c-kp" title="窄窗口下不显示此列">知识点</th>
               <th v-if="!tsHiddenCols.has('progress')" scope="col" class="ts-c-prog" title="第几个/共几个是位置，不是完成数">进度</th>
               <th v-if="!tsHiddenCols.has('output')" scope="col" class="ts-c-out">产物</th>
               <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')" scope="col" class="ts-c-att">关注</th>
@@ -303,7 +304,7 @@
                   <span v-else class="mk-na">—</span>
                 </div>
               </td>
-              <td v-if="!tsHiddenCols.has('interact')">
+              <td v-if="!tsHiddenCols.has('duration')">
                 <div class="ts-ia ts-ia--dur" :title="interactTitle(r)">
                   <!-- 原来的「互动」一格叠了时长 + 消息数 + 知识点三件事（2026-10-19 用户走查
                        「互动 时间又代表什么，拆成列」）：拆成三列。时长仍带档位 tone
@@ -311,10 +312,10 @@
                   <b class="ts-ia__dur" :class="{ 'ts-ia__dur--long': r.duration >= IDLE_LONG_MINUTES }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
                 </div>
               </td>
-              <td v-if="!tsHiddenCols.has('interact')">
+              <td v-if="!tsHiddenCols.has('messages')">
                 <div class="ts-ia ts-ia--msg" :title="interactTitle(r)">{{ r.messageCount }} 条</div>
               </td>
-              <td v-if="!isTableMid && !tsHiddenCols.has('interact')">
+              <td v-if="!isTableMid && !tsHiddenCols.has('knowledge')">
                 <div class="ts-ia ts-ia--kp" :title="interactTitle(r)">
                   <span v-if="r.knowledgePointCount">{{ r.knowledgePointCount }} 个</span>
                   <span v-else class="mk-na">—</span>
@@ -748,18 +749,27 @@ useEscape(() => advOpen.value, () => { advOpen.value = false })
 /** 弹层里生效的筛选数：触发钮上标出来，收起来也不丢状态（0 = 不标） */
 const advCount = computed(() => (statusFilter.value ? 1 : 0) + (dateFilter.value ? 1 : 0))
 
-/* P1-3 列显隐（公共组件 MkCols）：用户/状态/互动/进度/产物/关注 可隐藏，会话/详情固定 */
+/* P1-3 列显隐（公共组件 MkCols）：除课堂/操作外都可隐藏。
+   2026-10-22 用户「信息噪点太多了需要优化，可能要拿掉一些列」：默认只留
+   课堂 / 用户 / 状态 / 时长 / 进度 / 产物 / 开始时间 / 操作 八列——
+   · 完成方式：真实视角绝大多数行是「—」，逐条通道在详情/座舱里看；
+   · 消息、知识点：条数读数与「时长 + 进度」重复，且「N 个」本身不可行动；
+   · 关注：高/中/低三档在真实数据里近乎恒定，页头「需关注」KPI 与 chips 已承担分诊。
+   四项都留在「列」菜单里可随时打开（升存储键 v2，旧本地配置不覆盖新默认）。 */
+const TS_DEFAULT_HIDDEN = ['track', 'messages', 'knowledge', 'attention'] as const
 const tsColDefs = [
   { key: 'user', label: '用户', title: '用户姓名 + 邮箱' },
   { key: 'status', label: '状态', title: '课堂状态' },
   { key: 'track', label: '完成方式', title: '这条完成记录从哪条通道写入（课堂完成 / 学习 API / 虚拟辅助 / 虚拟黑盒 / 未记录）' },
-  { key: 'interact', label: '时长 / 消息 / 知识点', title: '课堂时长、往来消息条数与触及的知识点数' },
+  { key: 'duration', label: '时长', title: '课堂时长，≥25 分钟按长时标注（信号，非故障）' },
+  { key: 'messages', label: '消息', title: '课堂内用户与平台的往来条数' },
+  { key: 'knowledge', label: '知识点', title: '本节课堂触及的知识点数' },
   { key: 'progress', label: '进度', title: '学习进度' },
   { key: 'output', label: '产物', title: '课后总结 / 建议' },
   { key: 'attention', label: '关注', title: '关注度' },
   { key: 'start', label: '开始时间', title: '会话开始的时刻，行内显示相对时间，完整时刻按本地时区给出' },
 ] as const
-const tsHiddenCols = ref<Set<string>>(new Set())
+const tsHiddenCols = ref<Set<string>>(new Set<string>(TS_DEFAULT_HIDDEN))
 /* 宽度分三档（auto 布局会把缺口全压给带 ellipsis 的身份列，只能靠减列）：
    · <1440（isTableCompact）：「会话」在 1280 只剩 113px、用户 89px，默认收起需求最小、
      信息含量也最低的「开始时间 / 关注」（96+58px）。该阈值沿用 2026-10 的判例
@@ -1103,7 +1113,7 @@ defineExpose({ refreshNow })
 .ts-c-topic { width: 150px; }
 /* 1200 档（125% 缩放的 1440 屏）也要无横滚：八列合计须 ≤914，短列同步收一点 */
 @media (max-width: 1279px) {
-  .ts-c-topic { width: 120px; }
+  .ts-c-topic { width: 160px; }
   .ts-c-user { width: 150px; }
   .ts-c-status { width: 98px; }
   .ts-c-dur { width: 74px; }
@@ -1112,8 +1122,11 @@ defineExpose({ refreshNow })
   .ts-c-out { width: 188px; }
   .ts-c-act { width: 90px; }
 }
-@media (min-width: 1440px) { .ts-c-topic { width: 190px; } }
-@media (min-width: 1500px) { .ts-c-topic { width: 140px; } }
+/* 1280 起默认只显示 7–8 列（完成方式/消息/知识点/关注已默认收起）：
+   课堂列可以吃更多宽度，不再沿用 11–12 列时的 150/190 基准 */
+@media (min-width: 1280px) { .ts-c-topic { width: 240px; } }
+@media (min-width: 1440px) { .ts-c-topic { width: 240px; } }
+@media (min-width: 1500px) { .ts-c-topic { width: 200px; } }
 @media (min-width: 1700px) { .ts-c-topic { width: 200px; } }
 /* 课堂列吸收余量后可能远超 .mk-cell-main 的 300/360 上限，让文本跟着列宽走（否则右侧留空白） */
 .ts-c-topic .mk-cell-main strong, .ts-row td:first-child .mk-cell-sub { max-width: 100%; }
