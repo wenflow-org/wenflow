@@ -1,8 +1,8 @@
 import express from 'express';
-import prisma from '../../config/database';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
+import { findCalibrationEvidence } from '../../services/admin/learner-models.repo';
 import learningStateService from '../../services/learning/learning-state.service';
 import { dayKeyOf } from '../../services/time/day-boundary';
 import { checkIsAdmin } from '../../services/admin-access.service';
@@ -205,15 +205,7 @@ router.get('/:userId/evidence', async (req, res) => {
       happenedAt: string;
     }> = [];
     try {
-      const rows = await prisma.learner_evidence.findMany({
-        where: {
-          userId: req.params.userId,
-          evidenceType: { in: ['checkpoint:result', 'review:completed', 'task:difficulty:adjustment'] },
-        },
-        orderBy: { occurredAt: 'desc' },
-        take: 30,
-        select: { evidenceType: true, payload: true, sessionId: true, taskId: true, occurredAt: true },
-      });
+      const rows = await findCalibrationEvidence(req.params.userId);
       calibrationDetails = rows.map((row) => {
         const payload = safeJsonParse<Record<string, any>>(row.payload) || {};
         let detail = '';

@@ -228,6 +228,8 @@ export interface GoalPathRequest {
    * 缺失（真实用户/旧会话）⇒ undefined，生成行为与今天完全一致。
    */
   responseTriage?: ResponseTriage | null;
+  /** goal 层置信度评分（goal-conversation skill 产出；仅透传，供 path-planning 参考） */
+  confidenceScores?: any;
   systemPromptOverrides?: {
     pathAgent?: string;
   };
@@ -838,7 +840,7 @@ class PathCoordinator {
         timePerDay: availableTime,
         structuredData: input.structuredData || null,
         confirmedProposal: config.normalizedInput.includeConfirmedProposal ? input.visibleSummary?.confirmedProposal || null : null,
-        confidenceScores: null,
+        confidenceScores: input.confidenceScores ?? null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],
         normalizedInput: framedNormalizedInput,
         goalFinalPayload: {

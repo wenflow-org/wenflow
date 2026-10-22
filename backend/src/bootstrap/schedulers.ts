@@ -19,6 +19,7 @@ import { reviewCompletedConsumer } from '../services/learner/ReviewCompletedCons
 import { autopilotService } from '../virtual-lab/autopilot.service';
 import { startBatchExperimentScheduler } from '../services/virtual-lab/batch-experiment.service';
 import { startSimulatedDayScheduler } from '../services/virtual-lab/simulated-day-scheduler';
+import { startDeadlinePaceScheduler } from '../services/learner/deadline-pace-scheduler';
 import { auditCleanupService } from '../services/audit-cleanup.service';
 import { logRetentionService } from '../services/log-retention.service';
 import { virtualSessionReclaimService } from '../virtual-lab/session-reclaim.service';
@@ -36,6 +37,8 @@ export function startMaintenanceSchedulers(lifecycle: ApplicationLifecycle): voi
   startBatchExperimentScheduler(lifecycle);
   // 日期模拟自动推进（默认关；仅对 simulationClock.autoAdvance=true 的非终态会话生效）
   startSimulatedDayScheduler();
+  // deadline 落后评估（不访问状态页的学习者也要被判落后；只评估+去重通知，不自动重排）
+  startDeadlinePaceScheduler();
 }
 
 /**

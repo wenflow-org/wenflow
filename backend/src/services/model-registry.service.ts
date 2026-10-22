@@ -248,7 +248,7 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     description: model.description
   }));
 
-  // 运行时有效链:executor 只允许主模型 + 1 跳 fallback(MAX_MODEL_CANDIDATES),
+  // 运行时有效链:executor 只允许主模型 + 最多 2 跳 fallback(MAX_MODEL_CANDIDATES),
   // 声明链更长也只生效前 N 个候选——展示层必须与运行时一致,避免「看着 3 层保险实际 1 层」
   const runtimeMaxCandidates = MAX_MODEL_CANDIDATES;
   const fallbackChains = models

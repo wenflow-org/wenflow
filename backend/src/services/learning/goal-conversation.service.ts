@@ -1260,6 +1260,8 @@ async continueConversation(
       ...(goalHandoffFields ? { goalHandoffFields: goalHandoffFields.fields } : {}),
       // goal skill 产出的结构化画像透传（learner.identity/learning_context 等），供 path-planning scenario 判定
       structuredData: (data as any)?.structuredData || null,
+      // goal skill 置信度评分：此前 goal 侧存了但 path 侧恒 null（审计 P2 契约断裂）
+      confidenceScores: goalExt.confidenceScores ?? (data as any)?.confidenceScores ?? null,
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
       // 虚拟学习者负荷画像（会话创建时写入 collectedData）；真实用户缺失 → null，

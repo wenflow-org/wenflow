@@ -7,8 +7,12 @@
  *   建议归因/状态评审的可证伪断言命中率（insight-calibration 单源，n<5 时 hitRate=null）。
  */
 import express from 'express';
-import prisma from '../../config/database';
-import { summarizeThroughput, applyThroughputActivity, ACTIVE_SESSION_STALE_MINUTES, BATCH_HEARTBEAT_STALE_MINUTES } from '../../services/ops/throughput';
+import { summarizeThroughput, applyThroughputActivity, BATCH_HEARTBEAT_STALE_MINUTES } from '../../services/ops/throughput';
+import {
+  loadThroughputSnapshot,
+  markBatchHeartbeat,
+  stopBatchHeartbeat,
+} from '../../services/ops/ops-observability.repo';
 import { insightCalibrationService } from '../../services/learner/insight-calibration.service';
 
 const router = express.Router();
@@ -25,25 +29,7 @@ router.get('/throughput', async (req, res) => {
     const minRpm = clampInt(req.query.minRpm, 20, 1, 10000);
     const since = new Date(Date.now() - windowMinutes * 60 * 1000);
     const now = new Date();
-    const [rows, activeSessions, activeBatches, activeLeases] = await Promise.all([
-      prisma.llm_execution_attempts.findMany({
-        where: { startedAt: { gte: since } },
-        select: { startedAt: true, success: true, errorCategory: true },
-      }),
-      prisma.virtual_sessions.count({
-        where: {
-          status: 'running',
-          updatedAt: { gte: new Date(now.getTime() - ACTIVE_SESSION_STALE_MINUTES * 60_000) },
-        },
-      }),
-      prisma.virtual_batch_jobs.count({
-        where: {
-          status: { in: ['running', 'pending'] },
-          updatedAt: { gte: new Date(now.getTime() - BATCH_HEARTBEAT_STALE_MINUTES * 60_000) },
-        },
-      }),
-      prisma.virtual_experiment_leases.count({ where: { expiresAt: { gt: now } } }),
-    ]);
+    const [rows, activeSessions, activeBatches, activeLeases] = await loadThroughputSnapshot(since, now);
     const report = applyThroughputActivity(
       summarizeThroughput(rows, { windowMinutes, minRpm }),
       { activeSessions, activeBatches, activeLeases },
@@ -63,11 +49,7 @@ router.post('/batch-heartbeat', async (req, res) => {
       return res.status(400).json({ success: false, error: { message: 'runId 必填且不超过 120 字符' } });
     }
     const id = `hb:${runId}`;
-    await prisma.virtual_batch_jobs.upsert({
-      where: { id },
-      create: { id, kind: 'throughput-heartbeat', status: 'running', note: 'ops throughput heartbeat' },
-      update: { status: 'running', completedAt: null, error: null },
-    });
+    await markBatchHeartbeat(id);
     res.json({
       success: true,
       data: { id, runId, staleAfterMinutes: BATCH_HEARTBEAT_STALE_MINUTES },
@@ -83,11 +65,8 @@ router.post('/batch-heartbeat/stop', async (req, res) => {
     if (!runId || runId.length > 120) {
       return res.status(400).json({ success: false, error: { message: 'runId 必填且不超过 120 字符' } });
     }
-    const result = await prisma.virtual_batch_jobs.updateMany({
-      where: { id: `hb:${runId}`, status: 'running' },
-      data: { status: 'done', completedAt: new Date() },
-    });
-    res.json({ success: true, data: { runId, stopped: result.count } });
+    const stopped = await stopBatchHeartbeat(`hb:${runId}`);
+    res.json({ success: true, data: { runId, stopped } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error?.message || '心跳停止失败' } });
   }

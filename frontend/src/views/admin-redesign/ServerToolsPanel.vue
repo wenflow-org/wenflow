@@ -333,6 +333,27 @@ async function requeueAll() {
     toast.success(`已重新投递 ${data?.requeued ?? 0} 条事件`)
     void loadDead()
   } catch (e) {
+    const code = (e as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code
+    if (code === 'OUTBOX_DEAD_LETTER_ROOT_CAUSE') {
+      const force = await askConfirm({
+        title: '存在已知根因的投递失败事件',
+        message: '这些投递失败的事件带有已知毒丸根因（如非法 FSRS 状态），直接重放会再次投递失败。确认根因已修复后，仍要强制重放吗？',
+        confirmText: '强制重放',
+        danger: true,
+      })
+      if (force) {
+        try {
+          const forced = await adminDevtoolsApi.requeueOutboxDead(undefined, true)
+          const data = forced.data?.data ?? forced.data
+          toast.success(`已强制重放 ${data?.requeued ?? 0} 条事件`)
+          void loadDead()
+          return
+        } catch (forceError) {
+          toast.error(`强制重放失败：${errMsg(forceError)}`)
+          return
+        }
+      }
+    }
     toast.error(`重放失败：${errMsg(e)}`)
   } finally {
     requeueBusy.value = false

@@ -21,6 +21,7 @@ import { dayKeyOf, startOfDay, dayDiffInDays, addDaysToDayKey, DAY_BOUNDARY_DAY_
 // 取代旧「按课 EWMA」。读侧权威：每行 learning_metrics 的 lss 列是**该节瞬时压力**（内容驱动、
 // 非 EWMA），按日求和即可重放。详见 learning-load.pmc.ts。
 import { replayDailyPmc } from './learning-load-pmc.service';
+import { classifyLoad } from './learning-load-verdict';
 
 // EWMA 配置（半衰期按日更新折算：h = ln(0.5)/ln(λ)）
 export const EWMA_CONFIG = {
@@ -1545,87 +1546,6 @@ export class LearningStateService {
   }
 
   /**
-   * 生成干预决策
-   */
-  generateIntervention(
-    metrics: LearningStateMetrics,
-    dialogueAnalysis: DialogueAnalysis,
-    consecutiveErrors: number = 0
-  ): InterventionDecision | null {
-    const { lss, lsb, lf } = metrics;
-    const { understanding, emotionalState, confusionPoints } = dialogueAnalysis;
-
-    // 决策逻辑
-    let intervention: InterventionDecision | null = null;
-
-    // 高压力 + 负面情绪 → 简化内容
-    if (lss > 7 && emotionalState === 'frustrated') {
-      intervention = {
-        type: 'simplification',
-        priority: 9,
-        content: '看起来这个内容对你有点难，让我们换一个更简单的角度来理解...',
-        reasoning: '高压力且沮丧，需要降低难度',
-      };
-    }
-    // 理解度低 → 解释
-    else if (understanding < 0.4) {
-      intervention = {
-        type: 'explanation',
-        priority: 8,
-        content: '让我用另一种方式来解释这个概念...',
-        reasoning: '理解度低，需要重新解释',
-      };
-    }
-    // 困惑点 → 示例
-    else if (confusionPoints.length > 0) {
-      intervention = {
-        type: 'example',
-        priority: 7,
-        content: `关于${confusionPoints[0]}，让我们看一个具体的例子...`,
-        reasoning: '学生有具体困惑点',
-      };
-    }
-    // 连续错误 → 提示
-    else if (consecutiveErrors >= 2) {
-      intervention = {
-        type: 'hint',
-        priority: 6,
-        content: '这里有个小提示：注意观察...',
-        reasoning: '连续错误，需要引导',
-      };
-    }
-    // 高疲劳 → 休息建议
-    else if (lf > 7) {
-      intervention = {
-        type: 'break',
-        priority: 8,
-        content: '你已经学习了很久，建议休息一下再继续...',
-        reasoning: '疲劳度高，需要休息',
-      };
-    }
-    // 状态好 + 理解度高 → 挑战
-    else if (lsb > 3 && understanding > 0.8) {
-      intervention = {
-        type: 'challenge',
-        priority: 5,
-        content: '很好！让我们尝试一个更有挑战性的问题...',
-        reasoning: '状态好，可以挑战',
-      };
-    }
-    // 正面情绪 → 鼓励
-    else if (emotionalState === 'positive') {
-      intervention = {
-        type: 'encouragement',
-        priority: 3,
-        content: '做得不错！继续保持...',
-        reasoning: '正面反馈，巩固信心',
-      };
-    }
-
-    return intervention;
-  }
-
-  /**
    * 生成学习建议
    */
   generateSuggestion(metrics: LearningStateMetrics): {
@@ -2006,26 +1926,27 @@ export class LearningStateService {
         return warnings; // 数据不足，不产生预警
       }
 
-      // 1. 检查连续高疲劳（LF > 70 连续3天）
-      const recentLF = validTrends.slice(-3);
-      if (recentLF.length >= 3 && recentLF.every(t => t.lf > 70)) {
+      // 1. 连续高疲劳：用 PMC 相对量（ACWR/form），不再用绝对 LF>70。
+      //    绝对阈值在日负荷口径下会把「习惯每天 3 课」的已适应学习者永久误报。
+      const recentVerdicts = validTrends.slice(-3).map((t) => classifyLoad({ ktl: t.ktl, lf: t.lf }));
+      if (recentVerdicts.length >= 3 && recentVerdicts.every((v) => v.fatigueRisk === 'high')) {
         warnings.push({
           type: 'fatigue',
           level: 'critical',
           title: '学习疲劳预警',
-          message: `你的疲劳度（LF）已连续 ${recentLF.length} 天超过 70。这表明你可能过度学习。`,
+          message: '你最近连续 3 天的急性负荷明显高于适应基座（ACWR ≥ 1.5），疲劳正在累积。',
           suggestion: '建议暂停学习1-2天，做一些轻松的事情恢复精力，后续降低学习强度。'
         });
       }
 
-      // 2. 检查LSB持续为负
-      const recentLSB = validTrends.slice(-3);
-      if (recentLSB.length >= 2 && recentLSB.every(t => t.lsb < 0)) {
+      // 2. 检查负荷失衡（form<0 且适应基座已成熟；冷启动爬升期不算）
+      const recentVerdictsForLsb = validTrends.slice(-3).map((t) => classifyLoad({ ktl: t.ktl, lf: t.lf }));
+      if (recentVerdictsForLsb.length >= 2 && recentVerdictsForLsb.slice(-2).every((v) => v.imbalanced)) {
         warnings.push({
           type: 'lsb_negative',
           level: 'warning',
           title: '学习状态预警',
-          message: `你的学习状态值（LSB）已连续 ${recentLSB.length} 次为负，说明疲劳已超过知识积累能力。`,
+          message: '你的疲劳已连续超过知识积累（form = KTL − LF 为负），当前处于负荷失衡。',
           suggestion: '建议调整学习计划，减少每日学习量或选择更简单的任务。'
         });
       }
@@ -2048,15 +1969,16 @@ export class LearningStateService {
         }
       }
 
-      // 4. 检查过度学习（KTL很高但LSB很低）
+      // 4. 负荷爬升提醒（相对量）：ACWR 进入中/高档但尚未连续高疲劳。
       const current = validTrends[validTrends.length - 1];
-      if (current && current.ktl > 60 && current.lsb < 10) {
+      const currentVerdict = current ? classifyLoad({ ktl: current.ktl, lf: current.lf }) : null;
+      if (currentVerdict && currentVerdict.ramping && currentVerdict.fatigueRisk !== 'high') {
         warnings.push({
           type: 'overstudy',
           level: 'info',
           title: '学习平衡提醒',
-          message: `你已掌握较多知识（KTL = ${current.ktl.toFixed(1)}），但当前状态不佳（LSB = ${current.lsb.toFixed(1)}）。`,
-          suggestion: '知识积累很好，但疲劳度较高。建议今天做轻松的复习，不要学习新内容。'
+          message: `你的急性负荷比（ACWR）为 ${currentVerdict.acwr?.toFixed(2) ?? '—'}，近期负荷涨得比适应基座快。`,
+          suggestion: '知识积累仍在继续，但建议先稳住节奏，避免连续加量。'
         });
       }
 

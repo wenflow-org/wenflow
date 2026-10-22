@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import prisma from '../../config/database';
 import { withTransaction } from '../../utils/with-transaction';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
@@ -1447,6 +1447,56 @@ export class TeachingSessionRepository {
       if (!updatedSession) throw new Error('会话不存在');
       return mapRecordHydrated(updatedSession, { lazy: true });
     });
+  }
+
+  /**
+   * 直调 completeTask 后的台账补记（VL assisted/blackbox 共用）。
+   *
+   * 背景（2026-10-22 审计 P1-3）：VL 链先/后直接调 learningService.completeTask，
+   * 不经过 SessionFinalizationService 的 complete_task 分支，导致任务已 completed
+   * 但课堂台账 taskCompletion 永久停在 not_started（DB 593/597）。
+   *
+   * 这里复用正式台账的 claim/lease/completeFinalizationStep：
+   * - 不重复执行 completeTask（任务已完成）；
+   * - 写一条 action=complete_task 的 completed operation，台账与课堂终态一致；
+   * - 幂等键按来源固定，重复调用只会命中 completed。
+   */
+  async recordDirectTaskCompletion(
+    sessionId: string,
+    userId: string,
+    source: string,
+    expectedRevision?: number
+  ): Promise<'completed' | 'processing'> {
+    const session = await prisma.teaching_sessions.findUnique({
+      where: { id: sessionId },
+      select: { id: true, userId: true, revision: true, status: true, wrapup: true },
+    });
+    if (!session) throw new Error('会话不存在');
+    if (session.userId !== userId) {
+      throw new TeachingSessionConflictError('无权操作该课堂', 'TEACHING_SESSION_FORBIDDEN');
+    }
+    if (session.status !== 'completed' || !session.wrapup) {
+      throw new TeachingSessionConflictError('课堂尚未完成收束，无法补记任务结算', 'FINALIZATION_SESSION_NOT_CLOSED');
+    }
+
+    const operationKey = `direct-task-completion:${source}`;
+    const requestJson = JSON.stringify({ action: 'complete_task', source, mode: 'direct-task-completion' });
+    const requestHash = createHash('sha256').update(requestJson).digest('hex');
+    const claim = await this.claimFinalization(
+      sessionId,
+      'complete_task',
+      operationKey,
+      requestHash,
+      requestJson,
+      expectedRevision ?? session.revision
+    );
+    if (claim.status === 'claimed') {
+      await this.completeFinalizationStep(sessionId, operationKey, claim.leaseOwner, 'complete_task', {
+        taskCompletion: { status: 'completed', alreadyCompleted: true, source },
+      });
+      return 'completed';
+    }
+    return claim.status;
   }
 
   async completeWithEvent(

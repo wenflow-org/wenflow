@@ -3,6 +3,7 @@ import prisma from '../../config/database';
 import { loadTeachingMessages } from '../ai-teaching/teaching-session-message-store';
 import { logger } from '../../utils/logger';
 import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
+import { dayKeyOf } from '../time/day-boundary';
 
 export type FeedbackStatus = 'new' | 'triaged' | 'resolved' | 'dismissed';
 export type DifficultyFit = 'too_easy' | 'appropriate' | 'too_hard';
@@ -433,7 +434,7 @@ export class FeedbackCollectionService {
     const byDay = new Map<string, { sum: number; count: number }>();
 
     for (const feedback of feedbacks) {
-      const day = feedback.createdAt.toISOString().split('T')[0];
+      const day = dayKeyOf(feedback.createdAt);
       const current = byDay.get(day) || { sum: 0, count: 0 };
       current.sum += feedback.rating;
       current.count += 1;

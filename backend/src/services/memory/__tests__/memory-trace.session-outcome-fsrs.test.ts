@@ -76,7 +76,7 @@ describe('recordSessionOutcome：有证据项写原生 FSRS 四元组（P1-10）
     expect(args.update).toHaveProperty('dueAt')
   })
 
-  it('learning + progress>0 → grade=Again，同样写原生四元组', async () => {
+  it('learning + progress>0 → grade=Hard，同样写原生四元组', async () => {
     mockFindUnique.mockResolvedValue(null)
     mockUpsert.mockResolvedValue({})
 

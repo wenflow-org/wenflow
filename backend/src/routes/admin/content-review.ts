@@ -11,53 +11,32 @@
  * 管理端只做参数校验与读写，不重写一套口径。
  */
 import express from 'express';
-import prisma from '../../config/database';
 import {
-  CONTENT_REVIEW_EVIDENCE_KEY,
-  CONTENT_REVIEW_EVIDENCE_TYPE,
   CONTENT_VERDICTS,
-  collectSampledTurns,
   computeContentReviewMetrics,
   parseContentReviewLabel,
   serializeContentReviewLabel,
   type ContentReviewLabel,
   type ContentVerdict,
 } from '../../services/ai-teaching/content-correctness';
+import {
+  countTodayContentReviewLabels,
+  findContentReviewLabels,
+  findTeachingMessage,
+  findTeachingSessionBrief,
+  loadSampledContentTurns,
+  upsertContentReviewLabel,
+} from '../../services/admin/content-review.repo';
 
 const router = express.Router();
 
 /** 每日标注目标：抽 5% 后 40 条上下，10 条/天约 4 天清空一批（运营节奏，不是硬门禁）。 */
 const CONTENT_REVIEW_DAILY_TARGET = 10;
 
-const messageEventId = (messageId: number | string) => `msg:${messageId}`;
-
 function clampInt(raw: unknown, fallback: number, min: number, max: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(n)));
-}
-
-async function loadSample(params: { days: number; rate: number; realOnly: boolean; limit: number }) {
-  const since = new Date(Date.now() - params.days * 86400000);
-  const sessions = await prisma.teaching_sessions.findMany({
-    where: { createdAt: { gte: since } },
-    select: { id: true, userId: true, taskId: true, users: { select: { isVirtualLearner: true } } },
-    orderBy: { createdAt: 'desc' },
-    take: 400,
-  });
-  return collectSampledTurns({
-    sessions,
-    loadMessages: (sessionId) =>
-      prisma.teaching_session_messages.findMany({
-        where: { sessionId },
-        orderBy: { id: 'asc' },
-        select: { id: true, payload: true },
-      }),
-    sampleRate: params.rate,
-    limit: params.limit,
-    perSessionCap: 6,
-    realOnly: params.realOnly,
-  });
 }
 
 router.get('/', async (req, res) => {
@@ -68,17 +47,9 @@ router.get('/', async (req, res) => {
     const realOnly = String(req.query.realOnly || '') === '1' || String(req.query.realOnly || '') === 'true';
     const limit = clampInt(req.query.limit, 40, 1, 200);
 
-    const { sampled, scannedSessions, realSessions, virtualSessions } = await loadSample({ days, rate, realOnly, limit });
+    const { sampled, scannedSessions, realSessions, virtualSessions } = await loadSampledContentTurns({ days, rate, realOnly, limit });
     const ids = sampled.map((turn) => turn.messageId);
-    const rows = ids.length
-      ? await prisma.learner_evidence.findMany({
-          where: {
-            evidenceType: CONTENT_REVIEW_EVIDENCE_TYPE,
-            eventId: { in: ids.map((id) => messageEventId(id)) },
-          },
-          select: { eventId: true, payload: true },
-        })
-      : [];
+    const rows = await findContentReviewLabels(ids);
     const labels = rows
       .map((row) => parseContentReviewLabel(row.payload))
       .filter((label): label is ContentReviewLabel => Boolean(label));
@@ -88,13 +59,7 @@ router.get('/', async (req, res) => {
        昨天标过的条目今天可能已滑出样本，只数样本内会让「今日进度」无故归零。 */
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const todayLabeled = await prisma.learner_evidence.count({
-      where: {
-        evidenceType: CONTENT_REVIEW_EVIDENCE_TYPE,
-        evidenceKey: CONTENT_REVIEW_EVIDENCE_KEY,
-        occurredAt: { gte: todayStart },
-      },
-    });
+    const todayLabeled = await countTodayContentReviewLabels(todayStart);
 
     res.json({
       success: true,
@@ -133,10 +98,7 @@ router.post('/label', async (req, res) => {
     if (!CONTENT_VERDICTS.includes(verdict)) {
       return res.status(400).json({ success: false, error: { message: `verdict 必须是 ${CONTENT_VERDICTS.join(' | ')}` } });
     }
-    const row = await prisma.teaching_session_messages.findUnique({
-      where: { id: messageId },
-      select: { id: true, sessionId: true, payload: true },
-    });
+    const row = await findTeachingMessage(messageId);
     if (!row) {
       return res.status(404).json({ success: false, error: { message: '消息不存在（只抽侧表 teaching_session_messages）' } });
     }
@@ -152,10 +114,7 @@ router.post('/label', async (req, res) => {
     if (role && !['assistant', 'ai', 'teacher'].includes(role)) {
       return res.status(400).json({ success: false, error: { message: '只允许标注教师回合（assistant）' } });
     }
-    const session = await prisma.teaching_sessions.findUnique({
-      where: { id: row.sessionId },
-      select: { userId: true, taskId: true, learningPathId: true },
-    });
+    const session = await findTeachingSessionBrief(row.sessionId);
     if (!session) {
       return res.status(404).json({ success: false, error: { message: '消息所属会话不存在' } });
     }
@@ -166,25 +125,11 @@ router.post('/label', async (req, res) => {
       reviewerUserId: String(req.user?.userId || 'admin'),
       labeledAt: new Date().toISOString(),
     };
-    await prisma.learner_evidence.upsert({
-      where: { eventId_evidenceKey: { eventId: messageEventId(messageId), evidenceKey: CONTENT_REVIEW_EVIDENCE_KEY } },
-      create: {
-        id: `ev_content_${messageId}`,
-        eventId: messageEventId(messageId),
-        evidenceKey: CONTENT_REVIEW_EVIDENCE_KEY,
-        userId: session.userId,
-        pathId: session.learningPathId ?? null,
-        taskId: session.taskId,
-        sessionId: row.sessionId,
-        evidenceType: CONTENT_REVIEW_EVIDENCE_TYPE,
-        payload: serializeContentReviewLabel(label),
-        confidence: 1,
-        occurredAt: new Date(),
-      },
-      update: {
-        payload: serializeContentReviewLabel(label),
-        occurredAt: new Date(),
-      },
+    await upsertContentReviewLabel({
+      messageId,
+      session,
+      sessionId: row.sessionId,
+      payload: serializeContentReviewLabel(label),
     });
     res.json({ success: true, data: { label } });
   } catch (error: any) {

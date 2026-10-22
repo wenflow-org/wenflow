@@ -14,6 +14,7 @@
 import { prisma } from '../../config/database';
 import { computeDormancy, CHURN_SIGNAL_CAVEAT } from './churn-signals';
 import { logger } from '../../utils/logger';
+import { dayKeyOf } from '../time/day-boundary';
 
 const DEDUPE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const CHURN_EVIDENCE_TYPE = 'churn:risk';
@@ -72,7 +73,7 @@ export async function recordChurnRiskAtFinalize(params: {
       data: {
         id: `lev_churn_${params.sessionId}_${atMs}`,
         eventId: `churn:${params.userId}:${atMs}`,
-        evidenceKey: `churn:risk:${params.userId}:${new Date(atMs).toISOString().slice(0, 10)}`,
+        evidenceKey: `churn:risk:${params.userId}:${dayKeyOf(new Date(atMs))}`,
         userId: params.userId,
         sessionId: params.sessionId,
         evidenceType: CHURN_EVIDENCE_TYPE,

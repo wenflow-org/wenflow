@@ -172,10 +172,35 @@ export class DurableOutboxWorker {
             lastError: error instanceof Error ? error.message : String(error)
           }
         });
-        logger.warn('持久事件消费失败', { eventId: record.id, eventType: record.eventType, attemptCount, dead });
+        if (dead) {
+          // 死信是运维必须介入的终态：用 error 级别，便于日志告警规则直接命中。
+          logger.error('[outbox] 持久事件进入死信，需人工处理', {
+            eventId: record.id,
+            eventType: record.eventType,
+            userId: record.userId,
+            attemptCount,
+            lastError: error instanceof Error ? error.message : String(error),
+          });
+        } else {
+          logger.warn('持久事件消费失败', { eventId: record.id, eventType: record.eventType, attemptCount, dead });
+        }
       }
     }
   }
+}
+
+/**
+ * 死信根因分类（重放闸门）：已知「重放只会再烧 8 次」的毒丸，必须先修数据/代码。
+ * 目前覆盖 FSRS 非法状态（Invalid memory state / difficulty / stability 越界）。
+ */
+export function classifyDeadLetterRootCause(lastError: string | null | undefined): string | null {
+  const message = typeof lastError === 'string' ? lastError.trim() : '';
+  if (!message) return null;
+  if (/invalid memory state/i.test(message)) return 'INVALID_FSRS_STATE';
+  if (/(difficulty|stability)/i.test(message) && /(out of range|invalid|must be|非法|越界)/i.test(message)) {
+    return 'INVALID_FSRS_STATE';
+  }
+  return null;
 }
 
 /**
@@ -184,7 +209,7 @@ export class DurableOutboxWorker {
  */
 export async function getDeadOutboxSummary() {
   const deadCount = await prisma.domain_event_outbox.count({ where: { status: 'dead' } });
-  const items = await prisma.domain_event_outbox.findMany({
+  const rows = await prisma.domain_event_outbox.findMany({
     where: { status: 'dead' },
     orderBy: [{ occurredAt: 'asc' }],
     take: 50,
@@ -198,6 +223,14 @@ export async function getDeadOutboxSummary() {
       occurredAt: true
     }
   });
+  const items = rows.map((row) => {
+    const rootCause = classifyDeadLetterRootCause(row.lastError);
+    return {
+      ...row,
+      rootCause,
+      blocked: rootCause !== null,
+    };
+  });
   return { deadCount, items };
 }
 
@@ -205,12 +238,36 @@ export async function getDeadOutboxSummary() {
  * 死信重置：dead → pending，清零尝试计数并清技术门（availableAt=now）。
  * 背景：dead 是无出口终态（worker 不会再拾取），此前没有任何管理手段把
  * 修复后的死信重新入队。运维修复根因后调用本函数重放。
+ *
+ * 根因闸门（2026-10-22 审计 P1-5）：若死信带已知毒丸根因（如非法 FSRS 状态），
+ * 默认拒绝重放（否则再烧 8 次回死信）；运维确认根因已修复后用 force=true 放行。
+ *
  * #106②：`scheduledAt`（业务排期）刻意不清——排期是业务约束，不由运维重放解除；
  * 且死信只可能产生于「已被拾取过 8 次」的行，其排期早已到点，当前行为不受影响。
- * @param eventType 可选按事件类型过滤（如 'lesson:completed'）；缺省重置全部死信
- * @returns 重置的事件数
  */
-export async function requeueDeadOutboxEvents(eventType?: string): Promise<number> {
+export async function requeueDeadOutboxEvents(
+  eventType?: string,
+  options: { force?: boolean } = {}
+): Promise<number> {
+  if (!options.force) {
+    const blocked = await prisma.domain_event_outbox.findMany({
+      where: {
+        status: 'dead',
+        ...(eventType ? { eventType } : {}),
+        lastError: { not: null },
+      },
+      select: { id: true, lastError: true },
+    });
+    const poisoned = blocked.filter((row) => classifyDeadLetterRootCause(row.lastError) !== null);
+    if (poisoned.length > 0) {
+      const error = new Error(
+        `存在 ${poisoned.length} 条已知根因死信（如非法 FSRS 状态），重放会再次进入死信；先修复根因，或确认后使用 force=true`
+      );
+      (error as Error & { code?: string }).code = 'OUTBOX_DEAD_LETTER_ROOT_CAUSE';
+      throw error;
+    }
+  }
+
   const result = await prisma.domain_event_outbox.updateMany({
     where: {
       status: 'dead',
@@ -225,7 +282,7 @@ export async function requeueDeadOutboxEvents(eventType?: string): Promise<numbe
     }
   });
   if (result.count > 0) {
-    logger.info('[outbox] 死信已重新入队', { requeued: result.count, eventType: eventType || 'all' });
+    logger.info('[outbox] 死信已重新入队', { requeued: result.count, eventType: eventType || 'all', force: options.force === true });
   }
   return result.count;
 }

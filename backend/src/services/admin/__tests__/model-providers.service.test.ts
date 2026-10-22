@@ -233,7 +233,7 @@ describe('模型', () => {
       'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'maxOutputTokens', 'fallbacks'
     ]);
     expect(entry.fallbacks).toEqual(['m-chat', 'custom/cm-1', 'm-reason']);
-    expect(result.warnings.join(' ')).toContain('运行时最多用到第 1 条');
+    expect(result.warnings.join(' ')).toContain('运行时最多用到第 2 条');
     expect(result.warnings.join(' ')).toContain('属于别的供应商');
   });
 

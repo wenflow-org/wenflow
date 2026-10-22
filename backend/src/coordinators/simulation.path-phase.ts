@@ -163,6 +163,8 @@ export function buildGoalPathRequest(
     sourceConversationId: session.goalConversationId as string,
     source: 'goal',
     rawGoal: pathRawGoal.rawGoal,
+    // VL 的 goal 对话同样落 confidenceScores；透传保持与真人链同口径（缺失即 null）
+    confidenceScores: (collectedData.confidenceScores as any) ?? null,
     learnerLoadProfile: learnerLoadProfile.availableTime || learnerLoadProfile.loadTolerance ? learnerLoadProfile : null,
     visibleSummary: buildGoalPathVisibleSummary({
       understanding: understandingForSummary,

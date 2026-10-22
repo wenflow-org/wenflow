@@ -109,6 +109,19 @@ export function resolveReplanTaskRatio(mode?: string | null, advisoryAction?: st
   return Number.isFinite(ratio) && ratio > 0 ? ratio : REPLAN_TASK_RATIO_DEFAULT;
 }
 
+/**
+ * 兼容老客户端：只传 `evidence.advisory`（完整建议对象）而不传 `advisoryAction` 时，
+ * 从 `recommendation` 派生动作。否则 accelerate 建议会被当等量重排（审计 P2 33:0）。
+ */
+export function resolveAdvisoryAction(evidence?: Record<string, any> | null): string | undefined {
+  const explicit = typeof evidence?.advisoryAction === 'string' ? evidence.advisoryAction.trim() : '';
+  if (explicit) return explicit;
+  const recommendation = typeof evidence?.advisory?.recommendation === 'string'
+    ? evidence.advisory.recommendation.trim()
+    : '';
+  return recommendation || undefined;
+}
+
 /** 建立/拆解/诊断类任务在压缩时优先让位；交付/应用/收口类是骨干。 */
 const FLEXIBLE_TASK_TYPES = new Set(['acquire', 'deconstruct', 'diagnose']);
 
@@ -204,7 +217,7 @@ async function redesignMilestoneTasks(
   // 保留的已完成任务耗时（不算进新任务预算；下方 stageNewHours 汇总时也用同一个值）
   const completedMinutes = completedTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
   // 重排规模锚：系数 → 任务数（见文件头说明）。无学时锚时不注入，保持旧行为。
-  const replanRatio = resolveReplanTaskRatio(data.mode, (data.evidence as any)?.advisoryAction);
+  const replanRatio = resolveReplanTaskRatio(data.mode, resolveAdvisoryAction(data.evidence));
   const sourceHints = (normalizedInput as any)?.planningHints || null;
   const targetTaskCount = buildReplanTaskCount({
     estimatedHours: milestone.estimatedHours,

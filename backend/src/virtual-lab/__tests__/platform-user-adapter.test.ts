@@ -225,6 +225,24 @@ describe('PlatformUserAdapter', () => {
     expect(result.diagnostic?.task).toEqual(expect.objectContaining({ alreadyCompleted: true }))
   })
 
+  it('带 teachingSessionId/teachingRevision 完成任务时，透传给接口用于补记台账（P1-3）', async () => {
+    const request = jest.fn().mockResolvedValue({
+      data: { success: true, data: { task: { id: 'task-1', status: 'completed' } } }
+    })
+    const adapter = new PlatformUserAdapter({
+      credentialProvider: async () => ({ kind: 'bearer', token: 'user-token' }),
+      transport: { request } as PlatformHttpTransport
+    })
+
+    await adapter.completeTask('task-1', 'teaching-1', 12)
+
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST',
+      url: '/learning/tasks/task-1/complete',
+      data: { teachingSessionId: 'teaching-1', teachingRevision: 12 },
+    }))
+  })
+
   it('Goal 和 Path 的非终态 Observation 都公开放弃动作', async () => {
     const requests = jest.fn()
       .mockResolvedValueOnce({

@@ -9,11 +9,17 @@ const mockLearningService = {
   getLearningPath: jest.fn(),
   completeTask: jest.fn(),
 };
+const mockRecordDirectTaskCompletion = jest.fn();
 
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
 jest.mock('../../services/learning/learning.service', () => ({
   __esModule: true,
   default: mockLearningService,
+}));
+jest.mock('../../services/ai-teaching/TeachingSessionRepository', () => ({
+  teachingSessionRepository: {
+    recordDirectTaskCompletion: (...args: unknown[]) => mockRecordDirectTaskCompletion(...args),
+  },
 }));
 jest.mock('../../middleware/auth.middleware', () => ({
   authMiddleware: (_req: unknown, _res: unknown, next: () => void) => next(),
@@ -152,5 +158,30 @@ describe('#105 任务结算通道按调用方身份分流（completionSource）'
       expect(payload.userId).toBe(item.userId);
       expect(`${item.label} 实际=${payload.completionSource}`).toBe(`${item.label} 实际=${item.expected}`);
     }
+  });
+
+  it('带 teachingSessionId 时补记 VL 课堂 finalization 台账（P1-3）', async () => {
+    mockRecordDirectTaskCompletion.mockResolvedValue('completed');
+    const handler = getPostHandler('/tasks/:taskId/complete');
+    const res = createResponse();
+    const next = jest.fn();
+
+    await handler({
+      headers: { 'x-caller-agent': 'virtual-learner-lab' },
+      user: {
+        userId: 'user-vl',
+        projection: { grantSource: 'synthetic', capabilities: ['task:write'], virtualSessionId: 'vs-1' },
+      },
+      params: { taskId: 'task-vl' },
+      body: { teachingSessionId: 'teaching-vl', teachingRevision: 12 },
+    }, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(mockRecordDirectTaskCompletion).toHaveBeenCalledWith(
+      'teaching-vl',
+      'user-vl',
+      'vl-blackbox',
+      12
+    );
   });
 });

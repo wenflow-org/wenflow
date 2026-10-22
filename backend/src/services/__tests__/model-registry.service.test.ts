@@ -95,7 +95,7 @@ describe('model-registry.service（只读总览）', () => {
     expect(main.fallbacks).toEqual([])
     // 2026-10-18 上游下线 V4/V4-Pro 后平台目录不再声明模型级 fallbacks；有效链为空
     expect(overview.fallbackChains).toEqual([])
-    expect(overview.runtime).toEqual({ maxModelCandidates: 2, fallbackSwapsModelOnly: true })
+    expect(overview.runtime).toEqual({ maxModelCandidates: 3, fallbackSwapsModelOnly: true })
   })
 
   it('暴露当前冷却中的部署', async () => {

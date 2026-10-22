@@ -17,6 +17,7 @@ import {
   type PersistedPathGenerationRun,
 } from '../path-generation-status';
 import { getActiveGenerationRun } from '../generation/run-lifecycle';
+import { dayKeyOf } from '../../time/day-boundary';
 import {
   buildSceneSummaryFromFraming,
   getSceneFramingNormalizedInput,
@@ -922,7 +923,7 @@ export async function getLearningStats(userId: string) {
     const hydrated = sessions.map((s) => ({ ...s, messages: messagesById.get(s.id) ?? s.messages }));
     const totalMinutes = hydrated.reduce((sum, session) => sum + normalizeSessionDurationMinutes(session), 0);
     const activeLearningDays = new Set(
-      sessions.map((session) => session.startTime.toISOString().split('T')[0])
+      sessions.map((session) => dayKeyOf(session.startTime))
     ).size;
     const avgDailyMinutes = activeLearningDays > 0
       ? Number((totalMinutes / activeLearningDays).toFixed(1))

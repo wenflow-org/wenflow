@@ -483,11 +483,20 @@ export class PlatformUserAdapter {
     }
   }
 
-  async completeTask(taskId: string): Promise<PlatformInteractionResult> {
+  async completeTask(
+    taskId: string,
+    teachingSessionId?: string | null,
+    teachingRevision?: number | null
+  ): Promise<PlatformInteractionResult> {
     const response = await this.transport.request<any>({
       method: 'POST',
       url: `/learning/tasks/${encodeURIComponent(taskId)}/complete`,
-      data: {},
+      data: teachingSessionId
+        ? {
+            teachingSessionId,
+            ...(Number.isInteger(teachingRevision) ? { teachingRevision } : {}),
+          }
+        : {},
       headers: await this.headers()
     })
     return {

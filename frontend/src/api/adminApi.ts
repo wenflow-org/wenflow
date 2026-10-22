@@ -943,7 +943,9 @@ export type HealthCenterItemId =
   | 'w2-registration'
   | 'w3-wiring'
   | 'override-record'
-  | 'runtime-prompt';
+  | 'runtime-prompt'
+  | 'runtime-degradation'
+  | 'runtime-outbox-dead';
 
 /** 基准元数据：谁是真源（DRIFT_BASELINE_SURVEY §4.1） */
 export type HealthCenterBase =
@@ -2397,9 +2399,9 @@ export const adminDevtoolsApi = {
     );
   },
 
-  /** 死信重放（eventType 可选；缺省全部） */
-  requeueOutboxDead: async (eventType?: string) => {
-    return adminAxios.post('/admin/devtools/outbox/requeue-dead', { eventType });
+  /** 死信重放（eventType 可选；缺省全部；force 用于确认根因已修复后放行毒丸） */
+  requeueOutboxDead: async (eventType?: string, force?: boolean) => {
+    return adminAxios.post('/admin/devtools/outbox/requeue-dead', { eventType, ...(force ? { force: true } : {}) });
   },
 };
 

@@ -11,6 +11,7 @@ import {
   listMilestonesWithTaskIds,
 } from '../services/learning/learning-routes.repo';
 import learningService from '../services/learning/learning.service';
+import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessionRepository';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middleware';
 import { logger } from '../utils/logger';
@@ -297,7 +298,10 @@ const createPathSchema = z.object({
 const completeTaskSchema = z.object({
   actualMinutes: z.number().optional(),
   subjectiveDifficulty: z.number().min(1).max(10).optional(),
-  notes: z.string().optional()
+  notes: z.string().optional(),
+  // VL blackbox 通道：任务完成后补记课堂 finalization 台账（P1-3）。
+  teachingSessionId: z.string().min(1).optional(),
+  teachingRevision: z.number().int().nonnegative().optional(),
 });
 
 const replanPathSchema = z.object({
@@ -1335,6 +1339,17 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
       notes: data.notes,
       completionSource: resolveTaskCompletionSource(req),
     });
+
+    // P1-3：blackbox VL 先 endTeaching(end_only) 再走本端点结算任务；
+    // 带上 teachingSessionId 时补记 complete_task 台账（不重复结算任务）。
+    if (data.teachingSessionId) {
+      await teachingSessionRepository.recordDirectTaskCompletion(
+        data.teachingSessionId,
+        userId,
+        resolveTaskCompletionSource(req),
+        data.teachingRevision
+      );
+    }
 
     res.json({
       success: true,
