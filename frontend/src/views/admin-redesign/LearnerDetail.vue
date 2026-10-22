@@ -27,7 +27,8 @@
       <template #pills>
         <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
         <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
-        <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案 {{ snapshotLabel }}</span>
+        <!-- 「档案 置信 100%」会读成两个并列词；snapshotLabel 已以「置信」开头，直接拼成「档案置信」 -->
+        <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案{{ snapshotLabel }}</span>
       </template>
       <template #actions>
         <button v-if="linkedVirtualProfile" type="button" class="mk-btn" title="同一账号的仿真档案视图（故事池 / 运行 / 运行预算）" @click="openVirtualProfile">

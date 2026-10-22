@@ -2623,11 +2623,20 @@ const RUN_FILTERS = [
   { key: '', label: '全部' },
   { key: 'active', label: '进行中' },
   { key: 'done', label: '已完成' },
-  { key: 'failed', label: '失败' },
+  /* 2026-10-23 走查：原来第四格叫「失败」且只收 tone=bad——「已放弃 / 已暂停 / 超时」
+     这些终态既不在进行中也不在已完成，于是出现「全部 1、其余 0」的读不通。
+     改「未完成」＝除进行中与已完成以外的全部终态；具体状态词看行内徽章。 */
+  { key: 'unfinished', label: '未完成' },
 ] as const
 const runsFilter = ref('')
 function isRunActive(r: RunItem): boolean {
   return r.result === 'running' || r.result === 'created'
+}
+function isRunDone(r: RunItem): boolean {
+  return r.tone === 'ok' || r.result === 'completed'
+}
+function isRunUnfinished(r: RunItem): boolean {
+  return !isRunActive(r) && !isRunDone(r)
 }
 const runFilterOptions = computed(() =>
   RUN_FILTERS.map((f) => ({
@@ -2638,16 +2647,16 @@ const runFilterOptions = computed(() =>
       : f.key === 'active'
         ? allRuns.value.filter(isRunActive).length
         : f.key === 'done'
-          ? allRuns.value.filter((r) => r.tone === 'ok' || r.result === 'completed').length
-          : allRuns.value.filter((r) => r.tone === 'bad').length,
+          ? allRuns.value.filter(isRunDone).length
+          : allRuns.value.filter(isRunUnfinished).length,
   }))
 )
 /** 时间倒序 + 筛选（与 runFilterOptions 同口径） */
 const runRows = computed<RunItem[]>(() => {
   const rows = allRuns.value.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
   if (runsFilter.value === 'active') return rows.filter(isRunActive)
-  if (runsFilter.value === 'done') return rows.filter((r) => r.tone === 'ok' || r.result === 'completed')
-  if (runsFilter.value === 'failed') return rows.filter((r) => r.tone === 'bad')
+  if (runsFilter.value === 'done') return rows.filter(isRunDone)
+  if (runsFilter.value === 'unfinished') return rows.filter(isRunUnfinished)
   return rows
 })
 /** 会话流水行内时刻 HH:mm（完整日期见日期分组头） */
