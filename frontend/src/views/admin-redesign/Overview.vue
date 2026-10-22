@@ -249,7 +249,6 @@
             <button type="button" class="mk-link" @click="retryVlBoard">重试</button>
           </p>
           <MkLoading v-else-if="vlBoardState === 'loading'" inline text="统计加载中…" />
-          <p v-else class="ov-vl__state">{{ vlFootText }}</p>
         </div>
       </div>
     </div>
@@ -783,14 +782,6 @@ const vlTiles = computed<MkStatItem[]>(() => {
         : '暂无会话，失败率没有分母'
     }
   ]
-})
-/** 卡底一行：当日与排队两个随时间变的读数（并发满不满要看得见，排队只在非零时出现） */
-const vlFootText = computed(() => {
-  const r = runStats.value
-  const c = vlConcurrency.value
-  const parts = [`今日调用 ${r.todayCalls} 次`]
-  if (c.queued > 0) parts.push(`排队 ${c.queued}`)
-  return parts.join(' · ')
 })
 /** 失败重试：live 层 retryLiveVirtualStats 只重拉统计域，列表域失败时统计仍会立刻回到失败态，
     所以必须一并重拉列表（loadLiveData 会重跑失败过的域，成功的域走 TTL 缓存不重复请求） */
