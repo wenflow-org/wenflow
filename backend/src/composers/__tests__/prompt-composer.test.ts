@@ -83,6 +83,7 @@ describe('callPrompt runtime overrides', () => {
       model: 'frozen-model',
       max_tokens: 321,
       temperature: 0.15,
+      response_format: { type: 'json_object' },
       stream: true
     }, { skillId: 'test' }, expect.objectContaining({
       userId: 'admin-original',

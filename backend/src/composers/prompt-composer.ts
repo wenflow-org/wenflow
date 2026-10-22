@@ -450,10 +450,10 @@ export async function callPrompt<TInput, TOutput>(
           max_tokens: currentMaxTokens ?? generationResolution.maxTokens,
         },
       };
-      // 结构化输出（2026-10-02）：仅 json 媒介技能附 response_format（解码层强制 JSON）。
-      // markdown/text 媒介绝不附（会把自由文本技能摁成 JSON）；'none' 不附，行为不变。
-      const responseFormat = generationResolution.responseFormat === 'json_object'
-        && promptContract?.output?.media === 'json'
+      // 结构化输出：json 媒介技能固定附 response_format（解码层强制 JSON）。
+      // 平台已确认两个主力渠道中 DeepSeek 的 json_object 生效、Agnes 至少不报错；
+      // 不再提供“关闭”开关——关掉只会让 json 技能退回吐散文。markdown/text 媒介仍绝不附。
+      const responseFormat = promptContract?.output?.media === 'json'
         ? { type: 'json_object' as const }
         : undefined;
       response = await gateway.execute({

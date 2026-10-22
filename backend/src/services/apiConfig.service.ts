@@ -21,8 +21,6 @@ export interface APIConfig {
   defaultThinkingMode?: string;
   /** 平台默认思考强度：default | high | max */
   defaultReasoningEffort?: string;
-  /** 平台默认结构化输出：none（默认，行为不变）| json_object（json 媒介技能解码层强制 JSON） */
-  defaultResponseFormat?: string;
   reasoningEndpoint?: string;
   lightEndpoint?: string;
   chatModels?: string[];
@@ -41,7 +39,6 @@ const defaultConfig: APIConfig = {
   defaultMaxTokens: 2048,
   defaultThinkingMode: 'default',
   defaultReasoningEffort: 'default',
-  defaultResponseFormat: 'none',
   reasoningEndpoint: undefined,
   lightEndpoint: undefined,
   chatModels: [],
@@ -79,7 +76,6 @@ class APIConfigService {
           defaultMaxTokens: dbConfig.defaultMaxTokens ?? defaultConfig.defaultMaxTokens,
           defaultThinkingMode: dbConfig.defaultThinkingMode || defaultConfig.defaultThinkingMode,
           defaultReasoningEffort: dbConfig.defaultReasoningEffort || defaultConfig.defaultReasoningEffort,
-          defaultResponseFormat: dbConfig.defaultResponseFormat === 'json_object' ? 'json_object' : 'none',
           reasoningEndpoint: dbConfig.reasoningEndpoint || undefined,
           lightEndpoint: dbConfig.lightEndpoint || undefined,
           chatModels: dbConfig.chatModels ? JSON.parse(dbConfig.chatModels) : [],
@@ -120,7 +116,6 @@ class APIConfigService {
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
           defaultThinkingMode: mergedConfig.defaultThinkingMode || 'default',
           defaultReasoningEffort: mergedConfig.defaultReasoningEffort || 'default',
-          defaultResponseFormat: (mergedConfig.defaultResponseFormat || 'none').trim().toLowerCase() === 'json_object' ? 'json_object' : 'none',
           reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
           lightEndpoint: mergedConfig.lightEndpoint || null,
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
@@ -140,7 +135,6 @@ class APIConfigService {
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
           defaultThinkingMode: mergedConfig.defaultThinkingMode || 'default',
           defaultReasoningEffort: mergedConfig.defaultReasoningEffort || 'default',
-          defaultResponseFormat: (mergedConfig.defaultResponseFormat || 'none').trim().toLowerCase() === 'json_object' ? 'json_object' : 'none',
           reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
           lightEndpoint: mergedConfig.lightEndpoint || null,
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,

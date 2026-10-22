@@ -419,7 +419,6 @@ describe('ApiConfig P1 修复批', () => {
       defaultEvaluationModel: 'model-b',
       defaultThinkingMode: 'default',
       defaultReasoningEffort: 'default',
-      defaultResponseFormat: 'none',
       connectionStatus: 'connected',
       lastCheckedAt: '2026-08-13T09:00:00.000Z',
       networkPolicy: { adminAccessMode: 'private', adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
@@ -558,7 +557,6 @@ describe('ApiConfig P1 修复批', () => {
       defaultEvaluationModel: 'model-b',
       defaultThinkingMode: 'default' as const,
       defaultReasoningEffort: 'default' as const,
-      defaultResponseFormat: 'none' as const,
       connectionStatus: 'connected',
       lastCheckedAt: '2026-08-13T09:00:00.000Z',
       networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
@@ -693,7 +691,6 @@ describe('ApiConfig P1 修复批', () => {
       defaultEvaluationModel: 'model-a',
       defaultThinkingMode: 'default' as const,
       defaultReasoningEffort: 'default' as const,
-      defaultResponseFormat: 'none' as const,
       connectionStatus: 'connected',
       lastCheckedAt: '2026-08-13T09:00:00.000Z',
       networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }

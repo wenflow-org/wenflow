@@ -26,8 +26,6 @@ interface Config {
   reasoningEffort?: 'default' | 'low' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
-  /** 通道级结构化输出默认（user-provider 继承 platform 通道设置；skill paramOverrides 仍可覆盖） */
-  responseFormat?: 'none' | 'json_object';
   privateNetworkPolicy: ResolvedRoute['privateNetworkPolicy'];
 }
 
@@ -68,16 +66,11 @@ function parseSkillParamOverrides(raw: unknown): ResolvedRoute['skillParamOverri
   const temperature = num(b.temperature);
   const topP = num(b.topP);
   const maxTokens = num(b.maxTokens);
-  // 'json_object' = 强制 JSON；'none' = 显式关掉通道默认（null 语义不适用，字符串枚举）
-  const responseFormat = typeof b.responseFormat === 'string' && ['json_object', 'none'].includes(b.responseFormat.trim().toLowerCase())
-    ? b.responseFormat.trim().toLowerCase()
-    : undefined;
-  if (temperature === undefined && topP === undefined && maxTokens === undefined && responseFormat === undefined) return null;
+  if (temperature === undefined && topP === undefined && maxTokens === undefined) return null;
   return {
     ...(temperature !== undefined ? { temperature } : {}),
     ...(topP !== undefined ? { topP } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
-    ...(responseFormat !== undefined ? { responseFormat } : {}),
   };
 }
 
@@ -398,17 +391,15 @@ export class APIRouter {
         return null;
       }
 
-      // user-provider 与平台同渠道时继承其思考模式/强度/结构化输出默认
+      // user-provider 与平台同渠道时继承其思考模式/强度默认
       // （此前硬编码 'default' → 上游预思考开启，path-gen 类长任务被烧慢超时）
-      let responseFormat: 'none' | 'json_object' = 'none';
       let thinkingMode: 'default' | 'enabled' | 'disabled' = 'default';
       let reasoningEffort: 'default' | 'low' | 'high' | 'max' = 'default';
       try {
         const plat = await systemPrisma.platform_api_configs.findUnique({
           where: { id: 'platform' },
-          select: { defaultResponseFormat: true, defaultThinkingMode: true, defaultReasoningEffort: true }
+          select: { defaultThinkingMode: true, defaultReasoningEffort: true }
         });
-        responseFormat = this.normalizeResponseFormat(plat?.defaultResponseFormat);
         thinkingMode = this.normalizeThinkingMode(plat?.defaultThinkingMode || 'default');
         reasoningEffort = this.normalizeReasoningEffort(plat?.defaultReasoningEffort || 'default');
       } catch { /* 读不到按默认 */ }
@@ -428,7 +419,6 @@ export class APIRouter {
         reasoningEffort,
         temperature: 0.7,
         maxTokens: 2000,
-        responseFormat,
         // 用户自有 provider：开发者自选端点（内网/外网都可以），跟随管理员网络策略
         // （allowPrivateNetwork / privateNetworkHosts 白名单），不再写死 public-only。
         // 2026-10-08 拍板：模拟真实情景——开发者自己决定走什么网络。
@@ -532,7 +522,6 @@ export class APIRouter {
         vision: supportsVision(platformModel),
         thinkingMode: this.normalizeThinkingMode(config.defaultThinkingMode || 'default'),
         reasoningEffort: this.normalizeReasoningEffort(config.defaultReasoningEffort || 'default'),
-        responseFormat: this.normalizeResponseFormat(config.defaultResponseFormat),
         temperature: config.defaultTemperature ?? 0.7,
         maxTokens: config.defaultMaxTokens ?? 2000,
         privateNetworkPolicy: 'runtime',
@@ -558,16 +547,11 @@ export class APIRouter {
       vision: supportsVision(fallbackModel),
       thinkingMode: 'default',
       reasoningEffort: 'default',
-      responseFormat: 'none',
       temperature: 0.7,
       maxTokens: 2000,
       privateNetworkPolicy: 'runtime',
       providerType: 'openai-compatible',
       source: 'env-fallback'
     };
-  }
-
-  private normalizeResponseFormat(value?: string | null): 'none' | 'json_object' {
-    return (value || '').trim().toLowerCase() === 'json_object' ? 'json_object' : 'none';
   }
 }

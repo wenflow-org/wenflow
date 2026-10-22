@@ -238,23 +238,6 @@
               </label>
             </div>
 
-            <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
-                 需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
-            <div class="ac-sec__title">结构化输出<span class="ac-sec__hint" title="对输出 JSON 的 Skill 由上游强制 JSON，防「自然停止但吐散文」类失败">对输出 JSON 的 Skill 强制 JSON</span></div>
-            <!-- 与上方「思考模式 / 思考强度」同宽（同列里同类控件两种宽度是偶然差异，不是层级） -->
-            <div class="ac-row ac-row--2">
-              <label class="mk-field">
-                <span class="mk-field__label">输出格式</span>
-                <select
-                  class="mk-field__select"
-                  :value="form.defaultResponseFormat"
-                  @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
-                >
-                  <option value="none">关闭（默认行为）</option>
-                  <option value="json_object">JSON 对象</option>
-                </select>
-              </label>
-            </div>
           </div>
         </div>
       </div>
@@ -976,8 +959,7 @@ const form = reactive({
   defaultReasoningModel: '',
   defaultEvaluationModel: '',
   defaultThinkingMode: 'default' as 'default' | 'enabled' | 'disabled',
-  defaultReasoningEffort: 'default' as 'default' | 'low' | 'high' | 'max',
-  defaultResponseFormat: 'none' as 'none' | 'json_object'
+  defaultReasoningEffort: 'default' as 'default' | 'low' | 'high' | 'max'
 })
 const policy = reactive({
   adminAccessMode: 'private' as 'loopback' | 'private' | 'any',
@@ -1215,7 +1197,6 @@ function applyLiveConfig() {
   form.defaultEvaluationModel = cfg.value.defaultEvaluationModel
   form.defaultThinkingMode = cfg.value.defaultThinkingMode || 'default'
   form.defaultReasoningEffort = cfg.value.defaultReasoningEffort || 'default'
-  form.defaultResponseFormat = cfg.value.defaultResponseFormat === 'json_object' ? 'json_object' : 'none'
   fetchedModels.value = [...cfg.value.availableModels]
   fetchedModelsEndpoint.value = cfg.value.apiUrl
   keySet.value = cfg.value.apiKeyConfigured
@@ -1554,8 +1535,7 @@ async function saveGroups(groups: string[]) {
         defaultReasoningModel: form.defaultReasoningModel,
         defaultEvaluationModel: form.defaultEvaluationModel,
         defaultThinkingMode: form.defaultThinkingMode,
-        defaultReasoningEffort: form.defaultReasoningEffort,
-        defaultResponseFormat: form.defaultResponseFormat
+        defaultReasoningEffort: form.defaultReasoningEffort
       } as Parameters<typeof liveSaveApiConfig>[0])
     }
     if (set.has('policy')) {
