@@ -1311,7 +1311,6 @@ useEscape(
   overflow: hidden; overflow-wrap: anywhere;
 }
 .skd-vrow__desc { flex: 1; min-width: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.skd-vrow__desc--strong { color: var(--mk-ink); font-weight: 600; }
 .skd-vrow__type { flex: none; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 
 /* ===== 协议：回合状态机 steps（原型 .steps/.step，index.html 434-439） ===== */
@@ -1341,11 +1340,6 @@ useEscape(
   font-size: var(--mk-fs-micro);
 }
 .skd-rankrow:last-child { border-bottom: 0; }
-.skd-meterrow { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; }
-.skd-meterrow__label { flex: none; min-width: 72px; }
-.skd-meterrow__val { flex: none; width: 44px; text-align: right; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.skd-meter { flex: 1; min-width: 60px; height: 6px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; }
-.skd-meter i { display: block; height: 100%; background: var(--mk-blue); }
 
 /* ===== 工程：依赖 chips（原型 .chips，index.html 2368） ===== */
 .skd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1364,12 +1358,9 @@ useEscape(
   max-height: 300px;
   overflow-y: auto;
 }
-.skd-code--tall { max-height: 320px; }
 
 /* ===== 试跑 ===== */
 .skd-ta { width: 100%; }
-.skd-ta-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.skd-error { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-red); font-weight: 600; }
 
 /* ===== 版本 / 字段路由表格（原型 .tbl 包壳） ===== */
 .skd-tablewrap { overflow-x: auto; }
@@ -1416,16 +1407,7 @@ useEscape(
    执行链路 / 样例输出两卡未跑时显统一占位灰块（不再各自成句复读）。
    注：本类是「96px 虚线占位块」复刻件（与 .mk-empty--line 的一行式空态不同事实），
    若产品确认保留，需在 ADMIN_VISUAL_LAYER_SPEC §6 词汇表登记。 */
-.skd-tbd {
-  min-height: 96px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-}
+
 
 /* ===== Prompt 弹层（原型 modal--wide；面板宽走 .mk-modal__panel--wide 原语） ===== */
 .skd-pm__body { display: grid; gap: 14px; }

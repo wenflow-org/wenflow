@@ -711,21 +711,6 @@ function goConfig() {
 }
 .ac-mcp__formrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ac-mcp__formrow--three { grid-template-columns: 1fr 1fr 1fr; }
-/* MCP 服务提示：说明工具是运行时发现的，避免误以为要逐个登记 */
-.ac-mcp__hint {
-  margin: -6px 0 0;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.65;
-  color: var(--mk-faint);
-}
-.ac-mcp__hint code {
-  font-family: var(--mk-mono);
-  font-size: var(--mk-fs-micro);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  padding: 1px 4px;
-  border-radius: 4px;
-}
 
 /* MCP 卡片作为容器：行按「卡片自身宽度」重排，而非视口宽度
    （并栏时卡片可能远窄于视口，视口断点不触发） */
@@ -781,6 +766,5 @@ function goConfig() {
 html[data-theme='dark'] {
   .ac-error { background: rgba(248, 113, 113, 0.1); }
   /* .ac-mcp__dot.is-off 不再重写：基础规则已走 var(--mk-faint)，暗色下自动取 #7a7e85 */
-  .ac-mcp__hint code { background: var(--mk-surface-3); color: var(--mk-muted, #afb1b6); }
 }
 </style>

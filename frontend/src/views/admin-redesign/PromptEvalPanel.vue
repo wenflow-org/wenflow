@@ -1595,7 +1595,6 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
 .pe-running { flex: none; }
 /* 筛选/工具栏行收进单卡容器：与页签体之间以发丝线分层（原型 .toolbar border-bottom） */
 .pe-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--mk-line); }
-.pe-filter__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); margin-left: auto; }
 /* 主操作贴右缘（原由说明行的 margin-left:auto 顺带推开；说明行删后按钮会挤在筛选器旁） */
 .pe-filter__action { margin-left: auto; }
 
@@ -1642,20 +1641,6 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
   border-radius: 6px;
 }
 
-/* 用例表单：白话引导 + 分步区块 */
-.pe-guide {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-  background: color-mix(in srgb, var(--mk-purple) 7%, transparent); /* 原 135deg 靛蓝渐变已退役（材质一律平面），取最近语义色 --mk-purple 平铺 */
-  border: 1px solid color-mix(in srgb, var(--mk-purple) 25%, transparent);
-  border-radius: var(--mk-radius-xl);
-  padding: 8px 12px;
-  margin-bottom: 4px;
-}
-.pe-guide__title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-purple); }
-.pe-guide__steps { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 /* .mk-field__opt（字段标签内的「（可选）」次级提示）已提升为全局，见 shared.css */
 
 /* ===== 宿主 fill 内滚（2026-10-04 折入 Skills 页签）：原独立页整页滚，折入 .mk-card--fill
@@ -1741,7 +1726,6 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
   user-select: none;
 }
 .pe-adv summary:hover { color: var(--mk-purple); }
-.pe-adv__hint { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
 
 /* 模拟对话轨迹 */
 .pe-transcript { display: grid; gap: 6px; margin-top: 6px; }

@@ -3237,13 +3237,6 @@ async function quietReload(id: string) {
   font-weight: 700;
   color: var(--mk-ink);
 }
-/* 记忆保持曲线（Q2/Q8）：说明 + 概念图例（与曲线同序取色）+ ECharts */
-.vp-memory__curve-hint {
-  margin: 0 0 10px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  line-height: 1.6;
-}
 .vp-memory__curve-legend {
   display: flex;
   flex-wrap: wrap;

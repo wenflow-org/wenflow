@@ -1627,7 +1627,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-step__stage:hover { background: var(--mk-graph-stage-hover-bg); }
 .dfg-step__count { flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .dfg-step__body { padding: 8px 12px 10px; display: grid; gap: 7px; }
-.dfg-step__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+
 .dfg-step__rows { display: grid; gap: 7px; }
 .dfg-step__row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .dfg-step__rowlabel {

@@ -349,7 +349,6 @@ onMounted(load)
 .infra-embedded__head .mk-link { margin-left: auto; }
 .infra-card--embedded .infra-alert { margin: 0; }
 .infra-card--embedded .infra-grid { padding: 0; }
-.infra-card--embedded .infra-hint { margin: 0; }
 .infra-alert { margin: 12px 16px 0; }
 .infra-alert__line { display: block; }
 .infra-grid {
@@ -381,7 +380,6 @@ onMounted(load)
 .infra-test.is-ok { color: var(--mk-green); }
 .infra-test.is-bad { color: var(--mk-red); }
 .infra-test__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.infra-hint { margin: 0 16px 14px; font-size: var(--mk-fs-micro); line-height: 1.65; color: var(--mk-faint); }
 .infra-formrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .infra-check { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 @container (max-width: 420px) {

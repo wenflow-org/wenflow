@@ -709,7 +709,6 @@ watch(() => props.skillId, () => {
 /* 卡体：与「模型与接入」的 .ac-body 同解剖（16px 内衬 + 14px 栅格），段与段之间靠发丝线分开 */
 .sdp-body { display: grid; gap: 16px; padding: 4px 16px 16px; }
 .sdp-sec__title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
-.sdp-sec__hint { font-size: var(--mk-fs-micro); font-weight: 500; color: var(--mk-faint); }
 
 /* 生效值：一段只读摘要，和下面的编辑区用发丝线分开 */
 .sdp-summary {
@@ -746,13 +745,13 @@ watch(() => props.skillId, () => {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-md);
   background: transparent;
   text-align: left;
   cursor: pointer;
 }
 .sdp-nav__item:hover { background: color-mix(in srgb, var(--mk-ink) 4%, transparent); }
-.sdp-nav__item.is-on { background: var(--mk-surface); border-color: var(--mk-line); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+.sdp-nav__item.is-on { background: var(--mk-surface); border-color: var(--mk-line); box-shadow: var(--mk-shadow-sm); }
 .sdp-nav__name { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
 .sdp-nav__item.is-on .sdp-nav__name { color: var(--mk-blue); }
 .sdp-nav__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -769,7 +768,6 @@ watch(() => props.skillId, () => {
 }
 .sdp-panel__head h4 { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .sdp-panel__state { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
-.sdp-panel__hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 模型测试：左控制 / 右结果。结果列用发丝线分隔，不再套一层卡 */
 .sdp-test-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; align-items: start; }
@@ -920,7 +918,6 @@ watch(() => props.skillId, () => {
   .sdp-chip { font-size: var(--mk-fs-body); padding: 4px 12px; }
   .sdp-body { gap: 18px; padding: 6px 20px 20px; }
   .sdp-sec__title { font-size: var(--mk-fs-emphasis); }
-  .sdp-sec__hint { font-size: var(--mk-fs-body); }
   .sdp-field > span { font-size: var(--mk-fs-body); }
   .sdp-pane .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
   .sdp-form__msg { font-size: var(--mk-fs-body); }

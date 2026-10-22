@@ -1105,7 +1105,7 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
   font-size: var(--mk-fs-micro); font-weight: 600;
   border: 1px solid transparent; white-space: nowrap;
 }
-.pill--warn { color: var(--mk-amber); background: var(--mk-amber-bg); }
+
 .pill__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
 /* ---- 闭环条（原型 .loop）---- */

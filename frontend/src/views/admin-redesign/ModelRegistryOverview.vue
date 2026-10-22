@@ -414,14 +414,6 @@ defineExpose({ refresh })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-/* 卡首一句「这张表决定什么」（2026-10-16 用户走查）：比正文轻一档、比表尾注重一档，
-   读者扫一眼卡头就知道限额是真在生效的东西，不是摆设。 */
-.ac-mr-lead {
-  margin: 8px 14px 0;
-  color: var(--mk-ink);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.65;
-}
 /* 上游未登记折叠：默认收起（只在排查「某模型为什么用不了」时展开） */
 .ac-mr-upstream { margin: 4px 0 0; }
 .ac-mr-upstream__body {

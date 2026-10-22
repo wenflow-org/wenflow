@@ -835,7 +835,6 @@ watch(() => props.stage, () => void loadStage());
    同一问题见「core 联动」标题：--mk-blue 在 surface-2 上 4.56，一并提亮到 7.44 留余量 */
 html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
 html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
-.frt__notice { font-weight: 600; }
 .frt__toolbar-hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 /* ========== core 联动提示条（M3） ========== */
@@ -1016,7 +1015,6 @@ html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
 
 @media (min-width: 2000px) {
   .frt__toolbar-hint { font-size: var(--mk-fs-micro); }
-  .frt__notice { font-size: var(--mk-fs-micro); padding: 11px 14px; }
   .frt__legend-title { font-size: var(--mk-fs-micro); }
   .frt__legend-loading { font-size: var(--mk-fs-micro); }
   .frt__legend-en { font-size: var(--mk-fs-micro); }
@@ -1035,7 +1033,6 @@ html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
 
 @media (min-width: 2800px) {
   .frt__toolbar-hint { font-size: var(--mk-fs-micro); }
-  .frt__notice { font-size: var(--mk-fs-micro); padding: 13px 17px; }
   .frt__legend-title { font-size: var(--mk-fs-micro); }
   .frt__legend-loading { font-size: var(--mk-fs-micro); }
   .frt__legend-en { font-size: var(--mk-fs-micro); }

@@ -1541,7 +1541,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
   border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0;
   background: var(--mk-surface);
 }
-.exec-detail__links { display: inline-flex; gap: 12px; }
+
 /* 展开区摘要行：次要列完整值(类型/模型/输入输出/错误码)，与 trace 行同层级 */
 .exec-detail__meta {
   display: flex;
