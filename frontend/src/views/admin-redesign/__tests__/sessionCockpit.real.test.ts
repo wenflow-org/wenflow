@@ -256,22 +256,35 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('1/2 里程碑');
     expect(wrapper.text()).toContain('学习者发言 1');
 
-    // 时间线日志卡（真实模式由 payload.timeline 承载，会话总结已生成在尾部）
+    // 时间线日志卡（真实模式由 payload.timeline 承载）：
+    // 2026-10-22 起聊天消息折叠为一条读数行（全文在左侧页签），路径/证据/总结事件仍逐条
     const logText = wrapper.find('.cp-logs').text();
     expect(logText).toContain('学习路径已生成');
     expect(logText).toContain('会话总结已生成');
+    expect(logText).toContain('查看全文');
+    expect(logText).not.toContain('我想学 Python');
 
     // wrapup 字段卡 + 来源徽章（模型生成）
     expect(wrapper.text()).toContain('主题摘要');
     expect(wrapper.text()).toContain('围绕函数作用域展开');
     expect(wrapper.text()).toContain('模型生成');
 
-    // 会话数据包（2026-10-18）：主列只留一行读数，整包 JSON 收进弹层（点开才序列化）
+    // 折叠行点按跳左侧页签（第二条 = 课堂折叠行；默认页签是目标对话，课堂面板此时不存在）
+    const jumps = wrapper.findAll('.cp-log__jump');
+    expect(jumps).toHaveLength(2);
+    expect(wrapper.find('#cp-tabpanel-learning').exists()).toBe(false);
+    await jumps[1].trigger('click');
+    await flushPromises();
+    expect(wrapper.find('#cp-tabpanel-learning').exists()).toBe(true);
+
+    // 会话数据包（2026-10-18）：主列只留一行读数，整包 JSON 收进弹层（点开才序列化）；
+    // 2026-10-22 起读数只报时间线条数，消息/阶段/任务数在页签卡头与阶段瓦片已有
     const pkg = wrapper.find('.cp-raw');
     expect(pkg.exists()).toBe(true);
     expect(pkg.text()).toContain('会话数据包');
-    expect(pkg.text()).toContain('教学会话');
-    expect(pkg.text()).toContain('Python 入门学习路径');
+    expect(pkg.text()).toContain('5 条时间线');
+    expect(pkg.text()).not.toContain('教学会话');
+    expect(pkg.text()).not.toContain('Python 入门学习路径');
     expect(pkg.find('pre').exists()).toBe(false);
     const openRawBtn = pkg.findAll('button').find((b) => b.text() === '查看原始数据')!;
     await openRawBtn.trigger('click');
@@ -863,8 +876,8 @@ describe('SessionCockpit 双模式', () => {
     const pkg = wrapper.find('.cp-raw');
     // 折叠态：页面上没有 JSON 直排（pre），只有一行读数与两个动作
     expect(pkg.find('pre').exists()).toBe(false);
-    expect(pkg.text()).toContain('教学会话');
-    expect(pkg.text()).toContain('条消息');
+    expect(pkg.text()).toContain('条时间线');
+    expect(pkg.text()).not.toContain('条消息');
     expect(pkg.findAll('button').map((b) => b.text())).toEqual(['查看原始数据', '复制 JSON']);
 
     // 打开弹层：完整载荷（无 4000 截断）+ 字符总数

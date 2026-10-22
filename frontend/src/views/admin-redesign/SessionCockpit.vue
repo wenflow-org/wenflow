@@ -823,7 +823,15 @@
                   <div v-for="(l, i) in filteredLogs" :key="i" class="cp-log" :class="{ 'cp-log--error': l.view.isError }">
                     <span class="cp-log__time">{{ l.time }}</span>
                     <span v-if="l.view.phase" class="cp-log__phase" :class="{ 'cp-log__phase--error': l.view.isError }">{{ l.view.phase }}</span>
-                    <span class="cp-log__text">{{ l.view.text }}</span>
+                    <!-- 折叠行（2026-10-22）：对话全文在左侧页签，这里只报条数并直接跳过去 -->
+                    <button
+                      v-if="l.jumpTab"
+                      type="button"
+                      class="cp-log__jump"
+                      :title="`打开「${l.jumpTab === 'goal' ? '目标对话' : '课堂'}」页签查看全文`"
+                      @click="selectStageTab(l.jumpTab)"
+                    >{{ l.view.text }}</button>
+                    <span v-else class="cp-log__text">{{ l.view.text }}</span>
                     <span v-if="l.view.durationText" class="cp-log__dur">{{ l.view.durationText }}</span>
                     <details v-if="l.view.rawJson" class="cp-log__raw"><summary>原文</summary><pre>{{ l.view.rawJson }}</pre></details>
                   </div>
@@ -2295,9 +2303,34 @@ async function loadLogs() {
   if (!id) return
   try {
     if (isRealMode.value) {
+      /* 2026-10-22 用户「日志和左侧会不会重复」：目标对话/课堂的逐条消息在左侧页签有全文，
+         日志逐条再截断复读一遍没有增量信息。这里把「聊天消息」折叠成每阶段一条读数行，
+         点按跳到对应页签；路径/证据与课堂里程碑类事件（总结已生成、课堂开始等）仍逐条列。
+         判据用标题前缀而不是 kind：teaching 里既有聊天行也有「会话总结已生成」这种事件。 */
+      const isChatMessage = (t: { kind?: string; title?: string }) =>
+        (t.kind === 'goal' || t.kind === 'teaching') && /^(学习者|教师|平台目标|Goal)/.test(String(t.title || ''))
+      const chatTabOf = (kind?: string): 'goal' | 'learning' => (kind === 'goal' ? 'goal' : 'learning')
+      const collapsed = new Set<'goal' | 'learning'>()
       // 稳定 id：下标 id 在时间线窗口滑动后错位（appendLogs 按 id 去重，旧 id 抢占新内容 → 丢行/串行），
       // 改用 时间+类型+标题/详情前缀 组合，内容不变则 id 稳定
-      const items = timelineEntries.value.map((t) => {
+      const items: Array<Record<string, unknown>> = []
+      for (const t of timelineEntries.value) {
+        if (isChatMessage(t)) {
+          const tab = chatTabOf(t.kind)
+          if (collapsed.has(tab)) continue
+          collapsed.add(tab)
+          /* 不给条数：日志数的是时间线里的消息片段，左侧页签数的是会话消息（且课堂只显示选中课），
+             两个数字同屏会互相打架——这里只留「去哪看全文」。 */
+          items.push({
+            id: `chat-group|${tab}|${t.time || ''}`,
+            createdAt: t.time || '',
+            timestamp: t.time || '',
+            phase: t.kind,
+            message: '查看全文',
+            jumpTab: tab
+          })
+          continue
+        }
         /* 证据条目标题是后端 evidenceType 原文（如 checkpoint:result）：先过中文词表再展示，
            原枚举留在「原文」JSON 里（R5：主视觉位不直出内部标识；2026-10-06 审核 #51）。
            detail（后端正文摘要）此前只塞进 details.text 而 summaryText 优先吃顶层 message，
@@ -2310,15 +2343,18 @@ async function loadLogs() {
         if (typeof t.raw === 'string' && t.raw) {
           try { payload = JSON.parse(t.raw) } catch { payload = t.raw }
         }
-        return {
+        items.push({
           id: `${t.time || ''}|${t.kind || ''}|${String(t.title || '').slice(0, 60)}|${String(t.detail || '').slice(0, 40)}`,
           createdAt: t.time || '',
           timestamp: t.time || '',
           phase: t.kind,
           message: detail ? `${title} · ${detail}` : title,
           details: detail || payload ? { ...(detail ? { text: detail } : {}), ...(payload ? { payload } : {}) } : undefined
-        }
-      })
+        })
+      }
+      /* 真实模式的日志由 timeline 整体推导，不是增量流：先清空再落位，
+         否则折叠行的条数变化（11 → 12 条）会和新 id 一起被追加成两行。 */
+      resetLogs()
       appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => {
         const view = parseLogEntry(l)
         return {
@@ -2326,7 +2362,9 @@ async function loadLogs() {
           // 虚拟会话日志字段是 timestamp（非 createdAt）；兼容两者
           time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
           text: view.text || view.phase,
-          view: { ...view, phase: timelineKindLabel(String(l.phase)) }
+          // 折叠行没有可排查的载荷：别挂一个只有合成字段的「原文」
+          view: { ...view, phase: timelineKindLabel(String(l.phase)), ...(l.jumpTab ? { rawJson: '' } : {}) },
+          jumpTab: l.jumpTab as 'goal' | 'learning' | undefined
         }
       }))
       logsFailed.value = false
@@ -2865,43 +2903,13 @@ useEscape(() => rawOpen.value, () => closeRaw())
 const rawJsonFull = computed(() => (rawOpen.value ? JSON.stringify(session.value, null, 2) : '') || '')
 const rawJsonLength = computed(() => rawJsonFull.value.length)
 
-/** 数据包读数：只取载荷里确实存在的字段，缺就跳过（不拿 0 冒充「没有」） */
+/** 数据包读数：只报「只有这里能读到」的事实。
+ *  消息数 / 阶段数 / 任务数在页签卡头与阶段瓦片已有，同屏复述等于读两遍
+ *  （2026-10-22 用户「还有数据包」；卡头不复述判例）。 */
 const packageFacts = computed(() => {
-  const s = session.value as {
-    teaching?: { messages?: unknown[] }
-    goal?: { messages?: unknown[]; messageCount?: unknown }
-    conversations?: { goal?: { messages?: unknown[] } }
-    path?: { title?: unknown; totalMilestones?: unknown; totalTasks?: unknown; milestones?: Array<{ tasks?: unknown[]; subtasks?: unknown[] }> }
-    timeline?: unknown[]
-    logs?: unknown[]
-  } | null
+  const s = session.value as { timeline?: unknown[] } | null
   if (!s) return '加载中…'
-  const parts: string[] = []
-  parts.push(isRealMode.value ? (realKind.value === 'goal' ? '目标对话' : '教学会话') : '虚拟会话')
-  const teachMsgs = Array.isArray(s.teaching?.messages) ? s.teaching.messages.length : null
-  const goalMsgs = Array.isArray(s.goal?.messages)
-    ? s.goal.messages.length
-    : Array.isArray(s.conversations?.goal?.messages) ? s.conversations.goal.messages.length : null
-  const msgCount = teachMsgs ?? (typeof s.goal?.messageCount === 'number' ? s.goal.messageCount : goalMsgs)
-  if (msgCount !== null && msgCount !== undefined) parts.push(`${msgCount} 条消息`)
-  const p = s.path
-  if (p && typeof p === 'object') {
-    const stages = typeof p.totalMilestones === 'number'
-      ? p.totalMilestones
-      : Array.isArray(p.milestones) ? p.milestones.length : null
-    const tasks = typeof p.totalTasks === 'number'
-      ? p.totalTasks
-      : Array.isArray(p.milestones)
-        ? p.milestones.reduce((n: number, m: { tasks?: unknown[]; subtasks?: unknown[] }) => n + (Array.isArray(m?.tasks) ? m.tasks.length : Array.isArray(m?.subtasks) ? m.subtasks.length : 0), 0)
-        : null
-    if (stages !== null) {
-      const title = typeof p.title === 'string' && p.title ? `「${p.title}」` : ''
-      parts.push(`路径${title} · ${stages} 个阶段${tasks !== null ? ` / ${tasks} 个任务` : ''}`)
-    }
-  }
-  if (Array.isArray(s.timeline)) parts.push(`${s.timeline.length} 条时间线`)
-  if (Array.isArray(s.logs)) parts.push(`${s.logs.length} 条日志`)
-  return parts.join(' · ')
+  return Array.isArray(s.timeline) ? `${s.timeline.length} 条时间线` : '完整会话数据'
 })
 
 async function copyRawJson() {
@@ -3275,6 +3283,14 @@ async function copyRawJson() {
 .cp-log__phase--error { background: var(--mk-red-fill, var(--mk-red)); color: var(--mk-on-fill); }
 .cp-log__text { color: var(--mk-muted); word-break: break-all; min-width: 0; flex: 1 1 auto; }
 .cp-log--error .cp-log__text { color: var(--mk-red); font-weight: 600; }
+/* 折叠行：同一行文字位置的可点读数（跳左侧页签），与正文同字号，下划线表明可点 */
+.cp-log__jump {
+  min-width: 0; flex: 1 1 auto; padding: 0; border: 0; background: none;
+  font: inherit; color: var(--mk-accent-deep); text-align: left; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.cp-log__jump:hover { color: var(--mk-blue); }
+.cp-log__jump:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; border-radius: var(--mk-radius-xs); }
 .cp-log__dur { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cp-log__raw { font-size: var(--mk-fs-micro); flex-basis: 100%; }
 .cp-log__raw summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; user-select: none; }
