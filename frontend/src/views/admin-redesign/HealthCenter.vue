@@ -202,7 +202,7 @@
                          「执行前自动备份、结果写入审计日志」的保障说明也从 confirm 弹窗上移到按钮 title。 -->
                     <span v-if="item.severity !== 'ok' && item.fixHint" class="hc-check__fixhint" :title="item.fixHint">{{ item.fixHint }}</span>
                     <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="mk-btn mk-btn--sm" title="执行前自动备份，结果写入审计日志可回溯" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
-                    <button v-else-if="item.action === 'manual' && item.severity !== 'ok'" type="button" class="mk-btn mk-btn--sm" @click="jump(item.id)">查看 →</button>
+                    <button v-else-if="item.action === 'manual' && item.severity !== 'ok' && canJumpAway(item.id)" type="button" class="mk-btn mk-btn--sm" @click="jump(item.id)">查看 →</button>
                   </span>
                   <div v-if="detailOpen(item.id) && item.detail.length" class="hc-check__detail">
                     <p v-for="(d, i) in visibleDetail(item)" :key="i">{{ d }}</p>
@@ -682,6 +682,18 @@ function goDrift(kind: keyof HealthDriftSummary) {
     其余（W1/W2/W3 对账族等）**留在本页**：它们的检查行就在本页健康检查区，
     展开明细并滚过去即可——原兜底指向 /admin/skills?tab=health，那是本页被抽出前的宿主，
     2026-09-29 抽出后那条路径只会绕一圈回到本页（Skills 侧还会把退役 tab 改投回来）。 */
+/** 只有真正跨页的 manual 项才给「查看 →」；其余项的 jump 只是展开本行明细，
+    与点击行主体同一动作，不再重复一个按钮 */
+const EXTERNAL_JUMP_IDS = new Set([
+  'field-routing',
+  'field-routing-contract',
+  'fields-sync',
+  'orchestration-steps',
+  'yaml-crosscheck',
+  'params-consistency'
+])
+const canJumpAway = (id: string) => EXTERNAL_JUMP_IDS.has(id)
+
 function jump(id: HealthCenterItemId) {
   if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=drift')
   // 编排步骤解析（2026-10-12 从编排图页告警条搬进健康中心）：原页级告警的落点在此复现——

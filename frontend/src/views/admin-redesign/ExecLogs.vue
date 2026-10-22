@@ -263,13 +263,6 @@
                     <div class="tline__payload-meta">
                       <!-- 展开区同款口径：短 Trace 显示 + title 全值（不裸奔整条 UUID） -->
                       <span class="mono" :title="log.traceId">trace {{ shortTrace(log.traceId) }}</span>
-                      <span class="exec-detail__links">
-                        <button type="button" class="mk-btn mk-btn--ghost mk-btn--sm" @click.stop="showTrace(log.traceId)">
-                          <Waypoints :size="15" :stroke-width="1.75" />
-                          查看完整调用链路
-                        </button>
-                        <button v-if="log.sessionId" type="button" class="mk-btn mk-btn--sm" @click.stop="showTrace(undefined, log.sessionId)">按会话归组查看</button>
-                      </span>
                     </div>
                     <!-- 摘要行：表格弱化列的完整值（类型/模型/输入输出），展开即看全不丢信息 -->
                     <div class="exec-detail__meta mono">
@@ -375,7 +368,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Copy, Waypoints, Filter } from 'lucide-vue-next'
+import { Copy, Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { useTablistKeyboard } from '@/composables/useTablistKeyboard'

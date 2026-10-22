@@ -79,8 +79,7 @@
               <td><span class="ac-pi__last">{{ p.last }}</span></td>
               <td class="ac-pi__actions">
                 <div class="mk-actions">
-                  <button v-if="p.actionId" type="button" class="mk-btn mk-btn--sm" @click="openSkillDrawer(p.actionId)">详情 / 配置</button>
-                  <button v-else type="button" class="mk-btn mk-btn--sm" @click="goConfig">配置</button>
+                  <button v-if="!p.actionId" type="button" class="mk-btn mk-btn--sm" @click="goConfig">配置</button>
                   <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
                 </div>
               </td>
@@ -270,6 +269,7 @@ interface PluginRow {
   fallback: string
   primary: string
   members: PluginMemberRow[]
+  /** 首个已配置成员：仅用于决定操作列给「配置」还是留空（成员列已是详情入口） */
   actionId: string | null
   hasStats: boolean
   stateText: string

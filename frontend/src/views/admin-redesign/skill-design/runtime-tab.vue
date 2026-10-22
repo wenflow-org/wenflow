@@ -273,9 +273,6 @@
         <p v-if="rtMsg" class="sdp-form__msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
         <button type="button" class="mk-btn mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
         <button type="button" class="mk-btn" :disabled="rtSaving" @click="loadRuntime">刷新</button>
-        <button type="button" class="mk-btn mk-btn--primary" :disabled="rtSaving" @click="saveRuntime">
-          {{ rtSaving ? '保存中…' : '保存配置' }}
-        </button>
       </div>
     </section>
 

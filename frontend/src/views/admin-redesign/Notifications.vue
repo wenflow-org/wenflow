@@ -145,7 +145,7 @@
         icon="◌"
         min
         title="还没有通知"
-        action-text="发送第一条通知"
+        :action-text="embedded ? '' : '发送第一条通知'"
         @action="openSend"
       />
       <Pagination

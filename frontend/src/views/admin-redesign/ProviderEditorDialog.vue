@@ -50,8 +50,8 @@
               />
             </label>
 
-            <label class="mk-field">
-              <span class="mk-field__label">{{ isCreate ? 'API Key' : 'API Key（留空 = 沿用已配置）' }}</span>
+            <label v-if="isCreate" class="mk-field">
+              <span class="mk-field__label">API Key</span>
               <input
                 v-model="form.apiKey"
                 class="mk-field__input"
@@ -72,7 +72,7 @@
             </select>
           </label>
 
-          <label class="mk-field mk-field--switch">
+          <label v-if="isCreate" class="mk-field mk-field--switch">
             <input v-model="form.enabled" type="checkbox" />
             <span>{{ enabledLabel }}</span>
           </label>

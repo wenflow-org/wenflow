@@ -597,8 +597,8 @@
     </div>
     </template>
 
-    <!-- 保存条（四个配置 tab 共享；脏位跨 tab 不丢） -->
-    <div v-if="dirty.size > 0" class="ac-save">
+    <!-- 保存条（四个配置 tab 共享；脏位跨 tab 不丢）：单组脏时用该分区的保存钮，多组才出整页保存 -->
+    <div v-if="dirty.size > 1" class="ac-save">
       <span class="ac-save__dot"></span>
       <span>{{ dirtyGroups.join(' + ') }} · {{ dirty.size }} 组未保存变更</span>
       <button type="button" class="mk-link" :disabled="saving" @click="discardAll">放弃</button>

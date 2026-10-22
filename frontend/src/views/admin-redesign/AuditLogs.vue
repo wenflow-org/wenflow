@@ -48,14 +48,10 @@
                可见提示，空态/低条数被读成「从未发生过」（实测操作审计默认 3 条、
                登录审计直接空态；改「全部」后 87474 / 3927）。此 chip 常驻显示当前生效
                档位（值随 select 单源联动），点击即展开同一弹层改范围。 -->
-          <button
-            type="button"
+          <span
             class="mk-pill al-range"
             :class="{ 'mk-pill--active': timeRange !== 'today' }"
-            :aria-expanded="advOpen"
-            :title="`当前生效时间范围：${timeRangeLabels[timeRange]}（点击展开筛选修改）`"
-            @click="advOpen = !advOpen"
-          ><span class="al-range__k">时间范围</span> <b class="al-range__v">{{ timeRangeLabels[timeRange] }}</b></button>
+          ><span class="al-range__k">时间范围</span> <b class="al-range__v">{{ timeRangeLabels[timeRange] }}</b></span>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 失败 TOP 下钻的常驻状态（审核 #152）：弹层关闭后仍可见可退；徽章计数含 failedOnly，
                点击 = 退出下钻（与弹层内已激活 chip 同义） -->

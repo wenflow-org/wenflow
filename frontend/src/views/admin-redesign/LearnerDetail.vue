@@ -412,9 +412,6 @@
         icon="◌"
         title="暂无认知画像数据"
         description="重算快照后自动生成，画像/派生洞察等卡将随快照一起更新。"
-        action-text="重算快照"
-        :action-busy="recomputing"
-        @action="recompute"
       />
     </div>
 

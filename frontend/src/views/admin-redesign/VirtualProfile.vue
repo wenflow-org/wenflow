@@ -94,7 +94,6 @@
             <button type="button" class="mk-menu__item" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="closeMenu(); goSourceCard()">查看来源卡</button>
             <!-- 跨页入口（#74）：该虚拟学习者绑定的真实账号 / 记忆与复习；userId 缺失时隐藏 -->
             <div v-if="d.userId" class="mk-menu__sep" aria-hidden="true"></div>
-            <button v-if="d.userId" type="button" class="mk-menu__item" title="查看该虚拟学习者绑定的学习者详情（学习模型 / 证据 / 图谱）" @click="closeMenu(); goRealLearner()">学习详情</button>
             <button v-if="d.userId" type="button" class="mk-menu__item" title="进入记忆与复习页：归并凭据 / 回滚 / 到期明细（仅真实账号）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
           </div>
         </div>

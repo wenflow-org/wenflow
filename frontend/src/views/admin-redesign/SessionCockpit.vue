@@ -163,8 +163,8 @@
               每课回合上限
               <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="本屏临时值，超出 1–100 时按 1 或 100 处理" aria-label="每课回合上限" @change="learnAutoTurnCap = clampLearnAutoTurnCap()" />
             </label>
-            <!-- 进行中重开本课（失败后的「重试」由生命周期区统一承载，不重复） -->
-            <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重开本课</button>
+            <!-- 进行中重开本课（失败后的「重试」由生命周期区统一承载，不重复；失败终态也不再给） -->
+            <button v-if="!isInterruptedTerminal" type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重开本课</button>
           </template>
         </template>
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'wrapup'">
@@ -667,7 +667,6 @@
               <div class="cp-aside-state cp-aside-state--ok">
                 <strong>路径方案已生成</strong>
                 <p>包含 {{ pathMilestonesView.length }} 个里程碑 · {{ learnLessons.length || '—' }} 节课。</p>
-                <button type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="selectStageTab('path')">查看路径 →</button>
               </div>
             </template>
             <template v-else-if="pathGenerationInProgress">
@@ -684,8 +683,6 @@
                 <p>{{ goalConverged
                   ? '目标澄清已完成，可生成学习路径方案。'
                   : '继续「推进一步」或「自动推进目标」，澄清完成后自动进入路径生成。' }}</p>
-                <button v-if="!advancePathDisabled" type="button" class="cp-btn cp-btn--sm" @click="act('advancePath')">生成路径</button>
-                <button v-else type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="act('auto')">自动推进目标</button>
               </div>
             </template>
           </div>

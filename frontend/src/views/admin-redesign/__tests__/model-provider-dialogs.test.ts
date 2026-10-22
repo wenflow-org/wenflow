@@ -92,8 +92,8 @@ describe('ProviderEditorDialog', () => {
     await flushPromises()
     expect(w.text()).not.toContain('服务地址')
     expect(w.find('input[type="password"]').exists()).toBe(false)
-    // 名称与启用位仍可改
-    expect(w.text()).toContain('参与路由')
+    // 名称仍可改；启用位只在创建时出现（编辑态由供应商行内开关承担，不再给第二个入口）
+    expect(w.text()).not.toContain('参与路由')
     updateMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()

@@ -376,16 +376,19 @@ describe('ApiConfig P1 修复批', () => {
     const urlInput = wrapper.find('input[placeholder="https://api.example.com/v1"]');
     await urlInput.setValue('https://new.example.com/v1');
     await nextTick();
-    expect(wrapper.find('.ac-save').text()).toContain('连接 · 1 组未保存变更');
+    // 单组脏：不出现整页保存条（分区保存钮即唯一入口）
+    expect(wrapper.find('.ac-save').exists()).toBe(false);
     // 分段保存：只在该段有脏位时出现（连接段出现，路由段不出现）
     expect(wrapper.text()).toContain('保存连接');
     expect(wrapper.text()).not.toContain('保存生成参数');
     // 修改安全策略（点「仅白名单」）→ 策略组追加（拆 tab 后策略在「安全与访问」tab；
-    // 底部保存条在四个配置 tab 常驻，跨 tab 不丢脏位）
+    // 两组脏时底部保存条才出现（跨 tab 汇总；单组用该分区的保存钮）
     await gotoTab(wrapper, '安全与访问');
     const policyButtons = wrapper.findAll('.ac-policy__item .mk-seg__item');
     await policyButtons.find((b) => b.text() === '仅白名单')!.trigger('click');
     await nextTick();
+    // 两组脏：整页保存条出现，跨 tab 汇总
+    // 两组脏：整页保存条出现
     expect(wrapper.find('.ac-save').text()).toContain('连接 + 策略 · 2 组未保存变更');
     expect(wrapper.text()).toContain('保存策略');
     wrapper.unmount();

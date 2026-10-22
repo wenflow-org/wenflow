@@ -142,7 +142,7 @@
         icon="◌"
         :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
         :description="isFiltered ? '放宽筛选条件试试。' : ''"
-        :action-text="isFiltered ? '清除筛选' : '新建公告'"
+        :action-text="isFiltered ? '清除筛选' : embedded ? '' : '新建公告'"
         min
         @action="isFiltered ? clearFilters() : openCreate()"
       />

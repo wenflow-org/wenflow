@@ -150,7 +150,6 @@
     <section v-if="livePublished.length" class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">生效中公告</h4>
-        <button type="button" class="mk-link" @click="goAnnouncements">全部公告 →</button>
       </div>
       <div class="ow-ann-list">
         <button v-for="a in livePublished" :key="a.id" type="button" class="ow-ann" @click="goAnnouncements">

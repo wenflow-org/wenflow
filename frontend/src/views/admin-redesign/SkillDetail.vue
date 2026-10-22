@@ -148,81 +148,8 @@
           <ProtocolTab :skill-id="skillId" :reload-tick="coreReloadTick" @published="onPublished" />
         </div>
 
-        <!-- ========== 试跑（原型 trial：样例输入 textarea + 执行链路 vrow + 输出 code + 试跑对比 ranklist） ========== -->
+        <!-- ========== 试跑（原型 trial：样例输入 + 执行链路 + 输出 + 对比；唯一的输入/运行入口在 TrialTab） ========== -->
         <div v-if="designTabShown('trial')" v-show="tab === 'trial'" class="skd-bloc">
-          <div class="skd-grid">
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">样例输入</h3>
-                <span class="mk-card__meta">JSON · 可编辑</span>
-              </div>
-              <div class="skd-pad">
-                <textarea v-model="trialInput" class="mk-input mono skd-ta" rows="7" spellcheck="false" aria-label="样例输入" placeholder="{}" @input="trialInputDirty = true"></textarea>
-                <div class="skd-ta-foot">
-                  <!-- P3-23（设计评审）：「尚未试跑」全页签只在此脚注说一次（含入口指引） -->
-                  <span class="mk-card__note">
-                    <template v-if="trialResult">上次试跑 {{ trialResult.success ? '成功' : '失败' }}<template v-if="trialResult.duration != null"> · {{ fmtMs(trialResult.duration) }}</template></template>
-                    <template v-else>尚未试跑——输入 JSON 点「试跑」后，输出与执行链路在此展示</template>
-                  </span>
-                  <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="trialRunning" @click="runTrial">
-                    {{ trialRunning ? '运行中…' : '试跑' }}
-                  </button>
-                </div>
-                <p v-if="trialError" class="skd-error">{{ trialError }}</p>
-              </div>
-            </section>
-            <!-- 执行链路：原型 renderSkillDetail 2332-2335（vrow：OK/ERR pill + 步骤名 + ms）；
-                 真实试跑仅回最终输出（testSkill → output/success/duration），无逐步链路 → 空态注明 -->
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">执行链路</h3>
-                <span class="mk-card__meta">{{ trialSteps.length ? `${trialSteps.length} 步` : '—' }}</span>
-              </div>
-              <div class="skd-pad skd-rows">
-                <div v-for="(s, i) in trialSteps" :key="`${s.label}-${i}`" class="skd-vrow">
-                  <span class="mk-badge" :class="s.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ s.ok ? 'OK' : 'ERR' }}</span>
-                  <span class="skd-vrow__desc skd-vrow__desc--strong" :title="s.label">{{ s.label }}</span>
-                  <span class="mono skd-vrow__type">{{ s.ms != null ? `${s.ms} ms` : '—' }}</span>
-                </div>
-                <!-- P3-23：未跑态显统一占位灰块（成句的「尚未试跑」已收敛到样例输入卡脚注）；
-                     跑过但无逐步链路的说明保留（与占位态不同事实） -->
-                <div v-if="!trialSteps.length" class="skd-tbd" :title="trialResult ? '本次试跑仅返回最终输出' : '尚未试跑'">{{ trialResult ? '本次试跑仅返回最终输出，暂无逐步明细。' : '—' }}</div>
-              </div>
-            </section>
-          </div>
-          <div class="skd-grid">
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">样例输出</h3>
-                <span v-if="trialResult" class="mk-badge" :class="trialResult.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ trialResult.success ? '成功' : '失败' }}</span>
-              </div>
-              <div class="skd-pad">
-                <!-- P3-23：未跑态显统一占位灰块（成句的「尚无试跑结果」已收敛到样例输入卡脚注） -->
-                <pre v-if="trialOutputText" class="skd-code skd-code--tall">{{ trialOutputText }}</pre>
-                <div v-else class="skd-tbd" :title="trialResult ? '本次试跑未返回输出' : '尚未试跑'">—</div>
-              </div>
-            </section>
-            <!-- 试跑对比：原型 renderSkillDetail 2338-2341（meterrow 维度分）；有评分才渲染 -->
-            <section v-if="trialDims.length" class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">试跑对比</h3>
-              </div>
-              <div class="skd-pad">
-                <div class="skd-ranklist">
-                  <div v-for="d in trialDims" :key="d.label" class="skd-rankrow">
-                    <div class="skd-meterrow">
-                      <span class="skd-meterrow__label">{{ d.label }}</span>
-                      <span class="skd-meter"><i :style="{ width: `${d.pct}%` }"></i></span>
-                      <span class="mono skd-meterrow__val">{{ d.pct }}%</span>
-                    </div>
-                  </div>
-                </div>
-                <!-- #130：原「试跑在隔离沙箱执行，不写入生产数据」与实现相反——testSkill 走真实 handler，
-                     写 agent_call_logs / prompt_call_logs，并计入本页调用次数/成功率/最近调用 -->
-                <p class="mk-card__note">试跑为真实执行，会计入本页调用统计。失败的试跑同样产生一条失败记录。</p>
-              </div>
-            </section>
-          </div>
           <!-- 设计页「试跑」内容（表达试跑编辑器 + 当前生效 Prompt 参照 + 最近调用） -->
           <TrialTab
             :skill-id="skillId"
@@ -435,7 +362,7 @@
       <div v-if="pmOpen" ref="pmMaskRef" class="mk-modal">
         <div ref="pmPanelRef" class="mk-modal__panel mk-modal__panel--wide skd-pm" role="dialog" aria-modal="true" aria-label="编辑 Prompt">
           <div class="mk-modal__head">
-            <h2 class="mk-modal__title">编辑 Prompt · {{ view.name }}</h2>
+            <h2 class="mk-modal__title">编辑 Prompt · {{ view?.name }}</h2>
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closePromptModal">✕</button>
           </div>
           <div class="mk-modal__body skd-pm__body">
@@ -510,7 +437,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace, type TraceSpan } from './store'
-import { liveSkillProfiles, liveExtraProfiles, errMsg, liveSkillStatsRange } from './live'
+import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange } from './live'
 /* P2-15（设计评审）：版本状态走共享字典（与设计页 versions-tab 同域同词：ARCHIVED→已归档），
    删本页本地 versionStatusText（只映射 ACTIVE/DRAFT，ARCHIVED 直出英文） */
 import { categoryText, errorCategoryText, versionStatusText } from './statusText'
@@ -537,7 +464,7 @@ import { toast } from '@/utils/toast'
 /* 设计页能力平铺（2026-10-15 用户拍板：独立设计页退役，内容就地铺进本页）——
    6 个 tab 正文是自包含子组件（各自 scoped 样式），直接挂到本页各页签只读区块下方。
    各子组件的脏态经 @dirty 上报，离开守卫见文件尾（原 SkillDesignPage 的守卫整套迁入）。 */
-import { coreEditorState, buildTrialInputFromContract, type TrialInputDecl } from './skill-design/sdp-shared'
+import { coreEditorState, type TrialInputDecl } from './skill-design/sdp-shared'
 import ProtocolTab from './skill-design/protocol-tab.vue'
 import TrialTab from './skill-design/trial-tab.vue'
 import VersionsTab from './skill-design/versions-tab.vue'
@@ -1165,11 +1092,6 @@ async function load(force = false) {
         const res = await adminPromptWorkbenchApi.getCore(id)
         if (!guard(true)) return
         coreSnap.value = (res.data?.core ?? null) as CoreSnap | null
-        // #15：宿主「样例输入」卡与设计区块 trial-tab 同口径——按输入契约生成默认载荷，
-        // 不再拿一个与契约无关的 `input` 键去撞 INVALID_INPUT。用户已改过则不覆盖。
-        if (!trialInputDirty.value) {
-          trialInput.value = buildTrialInputFromContract(coreSnap.value?.inputs as TrialInputDecl[])
-        }
       } catch {
         if (guard(true)) coreSnap.value = null
       }
@@ -1229,96 +1151,6 @@ function recentRowTitle(s: TraceSpan): string {
   return parts.join('\n')
 }
 
-/* ===== 试跑（试跑页签；adminSkillsApi.testSkill 与设计页 trial-tab 同一接口） ===== */
-const trialInput = ref('{}')
-/** #15：用户改过样例输入后，契约异步返回时不再覆盖其编辑 */
-const trialInputDirty = ref(false)
-const trialRunning = ref(false)
-/** steps/dimensions/scores 为原型「执行链路 / 试跑对比」防御式读取字段；当前 testSkill 只回最终输出 → 均空 */
-const trialResult = ref<{
-  success?: boolean
-  duration?: number
-  cached?: boolean
-  output?: unknown
-  data?: unknown
-  steps?: unknown
-  dimensions?: unknown
-  scores?: unknown
-} | null>(null)
-const trialError = ref('')
-const trialOutputText = computed(() => {
-  if (!trialResult.value) return ''
-  const payload = trialResult.value.output ?? trialResult.value.data ?? trialResult.value
-  return typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2)
-})
-/** 执行链路（原型 vrow：OK/ERR pill + 步骤名 + ms，index.html 2332-2335）：真实试跑无逐步链路 → [] */
-interface TrialStep { label: string; ms?: number; ok: boolean }
-const trialSteps = computed<TrialStep[]>(() => {
-  const raw = (trialResult.value as Record<string, unknown> | null)?.steps
-  if (!Array.isArray(raw)) return []
-  return raw
-    .map((s): TrialStep => {
-      const o = (s || {}) as Record<string, unknown>
-      const msRaw = o.ms ?? o.durationMs
-      return {
-        label: String(o.name ?? o.t ?? o.step ?? o.title ?? ''),
-        ms: msRaw == null ? undefined : Number(msRaw),
-        ok: o.ok !== false && o.success !== false && o.status !== 'error' && o.error == null
-      }
-    })
-    .filter((s) => !!s.label)
-})
-/** 试跑对比维度分（原型 meterrow，index.html 2338-2341）：有评分才渲染，无则整卡省略 */
-interface TrialDim { label: string; pct: number }
-const trialDims = computed<TrialDim[]>(() => {
-  const raw = (trialResult.value as Record<string, unknown> | null)?.dimensions ?? (trialResult.value as Record<string, unknown> | null)?.scores
-  const out: TrialDim[] = []
-  const push = (label: string, num: number) => {
-    if (label && Number.isFinite(num)) out.push({ label, pct: Math.round(num <= 1 ? num * 100 : num) })
-  }
-  if (Array.isArray(raw)) {
-    for (const d of raw) {
-      const o = (d || {}) as Record<string, unknown>
-      push(String(o.name ?? o.label ?? o.dimension ?? ''), Number(o.score ?? o.value ?? o.pct))
-    }
-  } else if (raw && typeof raw === 'object') {
-    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) push(k, Number(v))
-  }
-  return out
-})
-function resetTrial() {
-  trialRunning.value = false
-  trialResult.value = null
-  trialError.value = ''
-  // #15：切 Skill 时样例输入一并复位（清掉脏标记，等新技能的 core 契约到达后再派生）
-  trialInput.value = '{}'
-  trialInputDirty.value = false
-}
-async function runTrial() {
-  const id = skillId.value
-  if (!id || trialRunning.value) return
-  let payload: unknown
-  try {
-    payload = JSON.parse(trialInput.value || '{}')
-  } catch (e) {
-    trialError.value = `输入 JSON 不合法：${errMsg(e)}`
-    return
-  }
-  trialRunning.value = true
-  trialError.value = ''
-  try {
-    const res = await adminSkillsApi.testSkill(id, payload)
-    if (id !== skillId.value) return
-    trialResult.value = res.data?.data ?? res.data ?? null
-  } catch (e) {
-    if (id !== skillId.value) return
-    trialResult.value = null
-    trialError.value = `试跑失败：${errMsg(e)}`
-  } finally {
-    if (id === skillId.value) trialRunning.value = false
-  }
-}
-
 /* 模型配置 / 模型测试的状态与动作 2026-10-19 迁出本页：
    宿主原本自己维护一份 rtForm/probeForm 并渲染同名的两张卡，与设计区块 RuntimeTab 构成
    同一份 skill_model_configs 的两个独立编辑器（各存各的、互不可见）。现由 RuntimeTab 单点承载，
@@ -1348,7 +1180,6 @@ watch(
     // 深链保持：URL 明确带合法 ?tab= 时尊重它，否则回落运行时（健康+证据先于配置）
     tab.value = readTabFromQuery()
     visited.add(tab.value)
-    resetTrial()
     if (id) void load()
   },
   { immediate: true }
