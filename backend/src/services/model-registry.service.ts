@@ -94,6 +94,12 @@ export interface ModelRegistryOverview {
   }>;
   runtime: { maxModelCandidates: number; fallbackSwapsModelOnly: boolean };
   cooldowns: CooldownSnapshot[];
+  /** D12（2026-10-22）：近 1 小时上游限流与当前冷却读数，供「调用与健康」一眼判断是否在挨 429 */
+  rateLimit: {
+    windowMinutes: number;
+    count429: number;
+    coolingDown: number;
+  };
   /** 配置漂移 / 待清理项 */
   warnings: string[];
   /** ACTIVE prompt 上仍残留的、已废弃的 model 副本数量（见 §4.9） */
@@ -307,6 +313,28 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     );
   }
 
+  /* D12（2026-10-22 拍板 B）：把「最近是否在挨上游 429」变成可读的运营读数。
+     两处来源与页面语义一致：429 计数看调用日志（按 HTTP 状态码），冷却数看部署健康快照。
+     读日志失败不影响总览本身（该接口是只读诊断面），失败时按 0 展示并在 warnings 说明。 */
+  const rateWindowMinutes = 60;
+  let count429 = 0;
+  try {
+    const callLogs = (systemPrisma as unknown as {
+      agent_call_logs?: { count: (args: unknown) => Promise<number> };
+    }).agent_call_logs;
+    count429 = callLogs
+      ? await callLogs.count({
+          where: {
+            calledAt: { gte: new Date(Date.now() - rateWindowMinutes * 60_000) },
+            statusCode: 429
+          }
+        })
+      : 0;
+  } catch {
+    warnings.push('近 1 小时 429 计数读取失败，当前显示 0，不代表没有限流。');
+  }
+  const cooldowns = listCoolingDowns();
+
   return {
     generatedAt: new Date().toISOString(),
     providers,
@@ -332,7 +360,12 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     },
     fallbackChains,
     runtime,
-    cooldowns: listCoolingDowns(),
+    cooldowns,
+    rateLimit: {
+      windowMinutes: rateWindowMinutes,
+      count429,
+      coolingDown: cooldowns.length
+    },
     warnings,
     deprecatedPromptModelCount
   };

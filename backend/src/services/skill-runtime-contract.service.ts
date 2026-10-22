@@ -127,11 +127,28 @@ export function __clearMetadataSkillIdSniffForTests(): void {
   metadataSkillIdSniff = null;
 }
 
+/**
+ * 原生聚合列归一：agent_call_logs.calledAt 在 SQLite 里是 INTEGER（epoch 毫秒），
+ * $queryRaw 会把它读成 BigInt，而 `new Date(bigint)` 直接抛 TypeError
+ * （读路径表现为 `/api/admin/skills` 500「Cannot convert a BigInt value to a number」）。
+ */
+function coerceCalledAt(value: unknown): Date | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'bigint') return new Date(Number(value));
+  if (typeof value === 'number') return new Date(value);
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 async function resolveMetadataFallbackRows(
   since: Date | null
-): Promise<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | null }>> {
+): Promise<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | number | bigint | null }>> {
   if (!(await hasNonPrefixedMetadataSkillId())) return [];
-  return prisma.$queryRaw<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | null }>>`
+  return prisma.$queryRaw<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | number | bigint | null }>>`
     SELECT "agentId",
            CASE WHEN "metadata" IS NOT NULL AND json_valid("metadata")
                 THEN json_extract("metadata", '$.skillId') END AS "skillId",
@@ -230,7 +247,7 @@ export async function getUnifiedSkillStats(
       _count: { _all: true },
     }),
     /* ① 前缀行聚合：agentId IN（skill:xxx…）精确命中，走 agentId 索引，不读 metadata 大列 */
-    prisma.$queryRaw<Array<{ agentId: string; success: number | boolean; n: number | bigint; durSum: number | bigint | null; lastAt: Date | string | null }>>`
+    prisma.$queryRaw<Array<{ agentId: string; success: number | boolean; n: number | bigint; durSum: number | bigint | null; lastAt: Date | string | number | bigint | null }>>`
       SELECT "agentId",
              "success",
              COUNT(*) AS "n",
@@ -298,7 +315,7 @@ export async function getUnifiedSkillStats(
     const n = Number(group.n) || 0;
     const durSum = Number(group.durSum) || 0;
     const successFlag = group.success === true || group.success === 1;
-    const lastAt = group.lastAt ? new Date(group.lastAt) : null;
+    const lastAt = coerceCalledAt(group.lastAt);
     const current = agentAgg.get(short) || {
       total: 0,
       success: 0,
@@ -320,7 +337,7 @@ export async function getUnifiedSkillStats(
     const short = raw.replace(/^skill:/, '');
     if (!shortIds.includes(short)) continue;
     if (promptBacked.has(short)) continue;
-    bumpAgg(short, log.success === true || Number(log.success) === 1, Number(log.durationMs) || 0, log.calledAt ? new Date(log.calledAt) : null);
+    bumpAgg(short, log.success === true || Number(log.success) === 1, Number(log.durationMs) || 0, coerceCalledAt(log.calledAt));
   }
 
   for (const [short, stats] of agentAgg.entries()) {

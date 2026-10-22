@@ -513,7 +513,12 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
       detail: contractParity.results
         .filter((r) => r.status !== 'in-sync')
         .slice(0, 20)
-        .map((r) => `${r.agentId} status=${r.status}${r.detail ? `：${r.detail}` : ''}`),
+        .map((r) => `${r.agentId} status=${r.status}${r.detail ? `：${r.detail}` : ''}`)
+        // D2（2026-10-22 拍板 A）：差异行可能来自 admin 手工编辑（覆盖行），契约同步会跳过它们；
+        // 不加说明时这类红点会永久存在，且页面看不出「为什么修了还在」。
+        .concat(contractParity.hasErrors
+          ? ['若差异行是 admin 手工编辑的覆盖行，契约同步会跳过它，需人工确认后再处理。']
+          : []),
       cause: '契约文件（manifest）与数据库登记的契约元数据不一致：缺失或非法即判定失败，不回退默认值',
       action: 'manual',
       fixHint: '需开发处理：定位差异后执行契约同步（DB 从 manifest 收敛），或经 w4 一键修复的数据库同步后复查',

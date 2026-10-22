@@ -136,6 +136,42 @@ describe('skill-runtime-contract.service', () => {
     expect(String(aggCall?.[0]?.join('?'))).not.toContain('json_extract')
   })
 
+  it('聚合行 lastAt 是 SQLite 整数毫秒（BigInt）时按时间戳归一，不抛 BigInt 转换错误', async () => {
+    mockPromptGroupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    // 真实库：agent_call_logs.calledAt 全表以 INTEGER 存储，$queryRaw 返回 BigInt
+    aggRows = [
+      { agentId: 'skill:teaching-turn', success: 1, n: 3n, durSum: 300n, lastAt: 1792574025470n },
+      { agentId: 'skill:teaching-turn', success: 0, n: 1n, durSum: 50n, lastAt: 1792574025000n },
+    ]
+
+    const map = await getUnifiedSkillStats(['teaching-turn'], 'all')
+    const stats = map.get('teaching-turn')
+
+    expect(stats).toEqual(
+      expect.objectContaining({
+        callCount: 4,
+        successCount: 3,
+        failureCount: 1,
+        source: 'agent_call_logs',
+      })
+    )
+    expect(stats?.lastCalledAt?.toISOString()).toBe(new Date(1792574025470).toISOString())
+  })
+
+  it('metadata 兜底行的 calledAt 为 BigInt 时同样归一', async () => {
+    mockPromptGroupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    sniffHit = true
+    fallbackRows = [
+      { agentId: 'path-agent', skillId: 'skill:path-planning', success: 1, durationMs: 500, calledAt: 1792574025470n },
+    ]
+
+    const map = await getUnifiedSkillStats(['path-planning'], '7d')
+    const stats = map.get('path-planning')
+
+    expect(stats?.callCount).toBe(1)
+    expect(stats?.lastCalledAt?.toISOString()).toBe(new Date(1792574025470).toISOString())
+  })
+
   it('metadata 兜底：仅当嗅探命中（非前缀行存在顶层 skillId）才执行兜底扫描', async () => {
     mockPromptGroupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([])
     sniffHit = true

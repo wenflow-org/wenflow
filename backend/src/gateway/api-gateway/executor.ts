@@ -684,6 +684,19 @@ export class APIExecutor {
               }
             );
           }
+          if (!String(state.content || '').trim()) {
+            // D3（2026-10-22 拍板 A）：流式 200 但一个内容增量都没有（实测 99.4s、completion_tokens=0）
+            // 不能当成功返回——下游会拿到空 userVisible，用户体感是「等了很久没回复」。
+            // 归为 TRUNCATED_EMPTY_OUTPUT：走既有重试链，并在重试时关闭思考
+            // （reasoning 吃掉输出预算是最常见成因）；失败文案带 finish_reason 与用量便于排查。
+            throw new GatewayExecutionError(
+              `API returned empty stream content (no assistant text) from ${requestUrl}. finish_reason=${state.finishReason || 'unknown'}, completion_tokens=${state.usage?.completion_tokens ?? 0}. Body preview: ${this.truncate(fullText, 300)}`,
+              {
+                category: 'protocol', code: 'TRUNCATED_EMPTY_OUTPUT', statusCode,
+                requestUrl, contentType, retryable: true
+              }
+            );
+          }
           parsedResponse = {
             id: state.id || 'stream',
             model: state.model || String(requestBody.model || route.model),

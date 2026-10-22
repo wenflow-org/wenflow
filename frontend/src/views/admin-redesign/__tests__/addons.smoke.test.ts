@@ -88,9 +88,10 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
-  it('按用户可见能力分组：四张插件卡，成员 Skill id 可见，且有关闭后的行为说明', async () => {
+  it('能力表：一行一组，成员 Skill id 可见；降级行为只在行悬停里，页面上不再有解释条', async () => {
     const wrapper = await mountLive();
-    expect(wrapper.findAll('.ac-pi')).toHaveLength(4);
+    const rows = wrapper.findAll('.ac-pi-table tbody tr');
+    expect(rows).toHaveLength(4);
     const text = wrapper.text();
     for (const name of ['联网', '决策', '生图', 'MCP 工具调用']) {
       expect(text).toContain(name);
@@ -98,20 +99,26 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     for (const id of ['web-search', 'web-fetch', 'material-collector', 'decision-gate', 'text-to-image', 'mcp-tool']) {
       expect(text).toContain(id);
     }
-    expect(text).toContain('关闭后');
-    expect(text).toContain('停用插件 ≠ 停用流程');
+    // 2026-10-21 重设计：原「关闭后」段落与「停用插件 ≠ 停用流程」说明条撤出正文，降级行为进行悬停
+    expect(text).not.toContain('关闭后');
+    expect(text).not.toContain('停用插件 ≠ 停用流程');
+    expect(rows[0].attributes('title')).toContain('停用后：');
     wrapper.unmount();
   });
 
-  it('路由状态只说「有没有单独配置」：已配置与继承默认同卡可见', async () => {
+  it('路由状态只说「有没有单独配置」：组级徽章给结论，成员悬停给逐条状态', async () => {
     configsMock.mockResolvedValue({
       data: { data: { configs: [{ skillId: 'web-search', displayName: '网页搜索' }] } }
     });
     const wrapper = await mountLive();
-    const webCard = wrapper.findAll('.ac-pi').find((card) => card.text().includes('联网'));
-    expect(webCard).toBeTruthy();
-    expect(webCard!.text()).toContain('已单独配置');
-    expect(webCard!.text()).toContain('继承默认');
+    const webRow = wrapper.findAll('.ac-pi-table tbody tr').find((r) => r.text().includes('联网'));
+    expect(webRow).toBeTruthy();
+    expect(webRow!.text()).toContain('已单独配置');
+    // 未单独配置的成员不再逐条挂徽章（与组级重复），状态进 chip 悬停
+    const members = webRow!.findAll('.ac-pi__member');
+    expect(members.map((m) => m.find('.ac-pi__member-id').text())).toEqual(['web-search', 'web-fetch', 'material-collector']);
+    expect(members[0].attributes('title')).toContain('单独配置的模型路由');
+    expect(members[1].attributes('title')).toContain('平台默认路由');
     wrapper.unmount();
   });
 
@@ -120,19 +127,19 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
       data: { data: { configs: [{ skillId: 'web-search', displayName: '网页搜索', enabled: false }] } }
     });
     const wrapper = await mountLive();
-    const webCard = wrapper.findAll('.ac-pi').find((card) => card.text().includes('联网'));
-    expect(webCard).toBeTruthy();
-    expect(webCard!.text()).toContain('自定义路由停用');
-    expect(webCard!.text()).not.toContain('能力已关闭');
+    const webRow = wrapper.findAll('.ac-pi-table tbody tr').find((r) => r.text().includes('联网'));
+    expect(webRow).toBeTruthy();
+    expect(webRow!.text()).toContain('路由停用');
+    expect(webRow!.text()).not.toContain('能力已关闭');
     wrapper.unmount();
   });
 
-  it('MCP 成员同时显示服务可用性，不与路由状态混成一个词', async () => {
+  it('MCP 组同时显示服务可用性与模型路由，两个维度不混成一个词', async () => {
     const wrapper = await mountLive();
-    const mcpCard = wrapper.findAll('.ac-pi').find((card) => card.text().includes('MCP 工具调用'));
-    expect(mcpCard).toBeTruthy();
-    expect(mcpCard!.text()).toContain('已单独配置');
-    expect(mcpCard!.text()).toContain('3 个服务可用');
+    const mcpRow = wrapper.findAll('.ac-pi-table tbody tr').find((r) => r.text().includes('MCP 工具调用'));
+    expect(mcpRow).toBeTruthy();
+    expect(mcpRow!.text()).toContain('已单独配置');
+    expect(mcpRow!.text()).toContain('3 个服务启用');
     wrapper.unmount();
   });
 });

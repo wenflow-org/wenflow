@@ -2,12 +2,14 @@ export {}
 
 const platformFindFirst = jest.fn()
 const agentPromptsCount = jest.fn()
+const agentCallCount = jest.fn()
 
 jest.mock('../../config/system-database', () => ({
   __esModule: true,
   default: {
     platform_api_configs: { findFirst: platformFindFirst },
-    agent_prompts: { count: agentPromptsCount }
+    agent_prompts: { count: agentPromptsCount },
+    agent_call_logs: { count: agentCallCount }
   }
 }))
 
@@ -29,6 +31,17 @@ describe('model-registry.service（只读总览）', () => {
     resetDeploymentHealth()
     platformFindFirst.mockResolvedValue({ ...BASE_PLATFORM })
     agentPromptsCount.mockResolvedValue(0)
+    agentCallCount.mockResolvedValue(0)
+  })
+
+  it('D12：近 1 小时 429 计数与当前冷却数进入总览', async () => {
+    agentCallCount.mockResolvedValue(7)
+    markCoolingDown('deepseek::https://api.example.com/v1::deepseek-v4.1-flash', 60_000)
+    const overview = await getModelRegistryOverview()
+    expect(agentCallCount).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ statusCode: 429 })
+    }))
+    expect(overview.rateLimit).toEqual({ windowMinutes: 60, count429: 7, coolingDown: 1 })
   })
 
   it('别名默认来自代码注册表，并给出默认选中项', async () => {

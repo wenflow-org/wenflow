@@ -4,7 +4,11 @@
        成员是运行时 Skill；停用插件不改变主流程结构，缺的那一步走各卡标注的降级路径。
        旧深链 ?tab=addons / /admin/addons / /admin/external-capabilities 由路由改投到本页。 -->
   <div class="mk-page">
-    <MkPageHead title="插件" sub="可选能力与 MCP 服务。停用任一插件都不阻断主流程，按各卡标注的降级路径继续">
+    <MkPageHead
+      title="插件"
+      sub="可选能力与 MCP 服务"
+      hint="停用任一插件都不阻断主流程，按各卡标注的降级路径继续"
+    >
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="loading || mcpLoading" @click="refreshAll">
           {{ loading || mcpLoading ? '刷新中…' : '刷新' }}
@@ -16,78 +20,74 @@
          506px 容器，并栏不可行；审核 #157 删除恒 false 的 sideBySide 死分支与不可达 CSS） -->
     <div class="ac-cards">
 
-    <!-- 运行边界：把用户拍板的「启停不影响流程」写在页面上，避免把插件开关读成流程开关 -->
-    <div class="mk-card ac-note">
-      <div class="ac-note__title">停用插件 ≠ 停用流程</div>
-      <div class="ac-note__text">
-        目标对话、路径生成、课堂仍按原步骤推进。缺的那一步走每张卡标注的降级路径。
-        启停由服务端配置控制，本页展示当前生效的模型路由与实际可用状态。
-      </div>
-    </div>
-
-    <!-- ① 插件 -->
+    <!-- ① 插件（2026-10-21 重设计：四张等高卡 → 一张能力表）。
+         原设计每组一张卡，卡头「已单独配置」与每个成员的「已单独配置」重复、卡尾再压一段
+         「关闭后」说明与「最近 从未」，四张卡几乎一样高且信息密度低。
+         现在一行一组：能力 / 成员 / 模型路由 / 最近调用 / 操作；降级行为收进行悬停。 -->
     <div class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">插件</h3>
-        <span class="mk-card__meta">按用户可见能力分组。成员为运行时 Skill</span>
+        <span class="mk-card__meta">{{ pluginRows.length }} 组 · {{ pluginMemberCount }} 个 Skill</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
         <span class="mk-alert__msg">插件配置加载失败，以下状态为占位，无法反映真实路由。</span>
         <button type="button" class="mk-alert__btn" @click="loadConfigs">重试</button>
       </div>
       <MkLoading v-if="loading" min text="插件配置加载中…" />
-      <div v-else class="ac-pi-grid">
-        <article v-for="p in pluginRows" :key="p.id" class="ac-pi">
-          <div class="ac-pi__head">
-            <div class="ac-pi__id">
-              <span class="ac-pi__glyph" aria-hidden="true">{{ p.glyph }}</span>
-              <div class="ac-pi__names">
-                <strong>{{ p.name }}</strong>
-                <span class="ac-pi__desc">{{ p.description }}</span>
-              </div>
-            </div>
-            <span class="mk-badge ac-pi__state" :class="p.stateClass" :title="pluginStateTitle(p)">{{ p.stateText }}</span>
-          </div>
-
-          <div class="ac-pi__members">
-            <button
-              v-for="m in p.members"
-              :key="m.id"
-              type="button"
-              class="ac-pi__member"
-              :title="`打开 ${m.name} 的详情 / 配置`"
-              @click="openSkillDrawer(m.id)"
-            >
-              <span class="ac-pi__member-main">
-                <span class="ac-pi__member-name">{{ m.name }}</span>
-                <span class="mono ac-pi__member-id">{{ m.id }}</span>
-              </span>
-              <span class="ac-pi__member-badges">
-                <span class="mk-badge ac-pi__member-state" :class="m.stateClass" :title="routeTitle(m.stateText)">{{ m.stateText }}</span>
-                <span
-                  v-if="m.availability"
-                  class="mk-badge ac-pi__member-state"
-                  :class="m.availability.stateClass"
-                  title="MCP 服务列表中启用的服务数。停用的服务不会被调用"
-                >{{ m.availability.text }}</span>
-              </span>
-            </button>
-          </div>
-
-          <div class="ac-pi__fallback">
-            <span class="ac-pi__fallback-label">关闭后</span>
-            <span class="ac-pi__fallback-text">{{ p.fallback }}</span>
-          </div>
-
-          <div class="ac-pi__foot">
-            <span class="ac-pi__last">最近 {{ p.last }}</span>
-            <div class="mk-actions">
-              <button v-if="p.actionId" type="button" class="mk-btn mk-btn--sm" @click="openSkillDrawer(p.actionId)">详情 / 配置</button>
-              <button v-else type="button" class="mk-btn mk-btn--sm" @click="goConfig">配置 →</button>
-              <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
-            </div>
-          </div>
-        </article>
+      <div v-else class="mk-table-scroll">
+        <table class="mk-table ac-pi-table">
+          <thead>
+            <tr>
+              <th scope="col">能力</th>
+              <th scope="col">成员 Skill</th>
+              <th scope="col">模型路由</th>
+              <th scope="col">最近调用</th>
+              <th scope="col" class="mk-th--right">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in pluginRows" :key="p.id" :title="pluginRowTitle(p)">
+              <td>
+                <div class="ac-pi__id">
+                  <span class="ac-pi__glyph" aria-hidden="true">{{ p.glyph }}</span>
+                  <div class="mk-cell-main">
+                    <strong>{{ p.name }}</strong>
+                    <span class="mk-cell-sub">{{ p.description }}</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="ac-pi__members">
+                  <button
+                    v-for="m in p.members"
+                    :key="m.id"
+                    type="button"
+                    class="ac-pi__member"
+                    :title="m.routeTitle"
+                    @click="openSkillDrawer(m.id)"
+                  >
+                    <span>{{ m.name }}</span>
+                    <span class="ac-pi__member-id mono">{{ m.id }}</span>
+                  </button>
+                </div>
+              </td>
+              <td>
+                <div class="ac-pi__state-cell">
+                  <span class="mk-badge mk-badge--sm" :class="p.stateClass">{{ p.stateText }}</span>
+                  <span v-if="p.availability" class="ac-pi__availability">{{ p.availability.text }}</span>
+                </div>
+              </td>
+              <td><span class="ac-pi__last">{{ p.last }}</span></td>
+              <td class="ac-pi__actions">
+                <div class="mk-actions">
+                  <button v-if="p.actionId" type="button" class="mk-btn mk-btn--sm" @click="openSkillDrawer(p.actionId)">详情 / 配置</button>
+                  <button v-else type="button" class="mk-btn mk-btn--sm" @click="goConfig">配置</button>
+                  <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -262,8 +262,8 @@ interface PluginMemberRow {
   hasConfig: boolean
   stateText: string
   stateClass: string
-  /** MCP 成员额外展示服务可用性；其余成员没有独立可读的 provider 状态 */
-  availability: { text: string; stateClass: string } | null
+  /** 成员 chip 的悬停说明（路由状态人话版）；卡面不再逐条挂徽章 */
+  routeTitle: string
 }
 
 interface PluginRow {
@@ -278,6 +278,8 @@ interface PluginRow {
   hasStats: boolean
   stateText: string
   stateClass: string
+  /** MCP 组额外展示服务可用性（与模型路由是两个维度，分开写） */
+  availability: { text: string; stateClass: string } | null
   last: string
 }
 
@@ -305,15 +307,9 @@ function routeTitle(text: string): string {
   }
 }
 
-function pluginStateTitle(p: PluginRow): string {
-  if (p.id === 'mcp') return p.stateText
-  switch (p.stateText) {
-    case '已单独配置': return '该组至少一条 Skill 使用单独配置的模型路由。这不代表能力开关'
-    case '继承默认': return '该组 Skill 均使用平台默认路由。能力仍可用'
-    case '路由停用': return '该组 Skill 均不使用自定义模型路由。回落到平台默认后能力仍可用'
-    case '配置未读取': return '配置状态未知。请先重试加载'
-    default: return p.stateText
-  }
+/** 整行悬停：这一组停用后的行为（原「关闭后」段落，2026-10-21 收进悬停） */
+function pluginRowTitle(p: PluginRow): string {
+  return `停用后：${p.fallback}`
 }
 
 /** 环境变量占位符（${ENV_VAR} 未替换）判定：直出原文会误导为真实地址，统一显示「未配置」 */
@@ -371,20 +367,18 @@ function buildPluginRows(
         hasConfig: route.hasConfig,
         stateText: route.text,
         stateClass: route.stateClass,
-        availability: group.id === 'mcp' ? mcpAvailability : null,
+        routeTitle: routeTitle(route.text),
       }
     })
     const configured = members.filter((member) => member.hasConfig)
     const hasActiveRoute = configured.some((member) => member.stateText === '已单独配置')
-    const state = group.id === 'mcp'
-      ? mcpAvailability
-      : configsFailed.value
-        ? { text: '配置未读取', stateClass: 'mk-badge--warn' }
-        : hasActiveRoute
-          ? { text: '已单独配置', stateClass: 'mk-badge--ok' }
-          : configured.length
-            ? { text: '路由停用', stateClass: 'mk-badge--warn' }
-            : { text: '继承默认', stateClass: 'mk-badge--muted' }
+    const state = configsFailed.value
+      ? { text: '配置未读取', stateClass: 'mk-badge--warn' }
+      : hasActiveRoute
+        ? { text: '已单独配置', stateClass: 'mk-badge--ok' }
+        : configured.length
+          ? { text: '路由停用', stateClass: 'mk-badge--warn' }
+          : { text: '继承默认', stateClass: 'mk-badge--muted' }
     const last = members
       .map((member) => liveSkillStatsMap.value?.[member.id]?.lastAt)
       .find((value) => value && value !== '从未') || '从未'
@@ -400,6 +394,7 @@ function buildPluginRows(
       hasStats: members.some((member) => (liveSkillStatsMap.value?.[member.id]?.calls ?? 0) > 0),
       stateText: state.text,
       stateClass: state.stateClass,
+      availability: group.id === 'mcp' ? mcpAvailability : null,
       last,
     }
   })
@@ -433,7 +428,9 @@ const mcpAvailability = computed(() => {
   if (!mcpTools.value.length) return { text: '未登记服务', stateClass: 'mk-badge--muted' }
   const enabled = mcpTools.value.filter((tool) => tool.enabled).length
   if (!enabled) return { text: '服务全部停用', stateClass: 'mk-badge--warn' }
-  return { text: `${enabled} 个服务可用`, stateClass: 'mk-badge--ok' }
+  /* 这里只数「启用」的服务，不代表可达：服务可以 enabled 但连接测试失败
+     （实测 file-reader 路径无效仍显示「1 个服务可用」）。可达性看 MCP 服务表里每行的「测试」。 */
+  return { text: `${enabled} 个服务启用`, stateClass: 'mk-badge--ok' }
 })
 
 /** 运行时统计变化时随重算（最近调用 / 日志入口） */
@@ -441,6 +438,8 @@ const pluginRows = computed(() => {
   void liveSkillStatsMap.value
   return buildPluginRows(PLUGIN_GROUPS, mcpAvailability.value)
 })
+/** 卡头读数：几组能力、几个运行时 Skill（2026-10-21 重设计后卡头只放数据） */
+const pluginMemberCount = computed(() => pluginRows.value.reduce((n, p) => n + p.members.length, 0))
 
 async function loadMcpTools() {
   mcpLoading.value = true
@@ -631,38 +630,13 @@ function goConfig() {
    与成本分析 / 健康中心同款），不再需要宿主 flex 列里的内滚容器。 */
 .mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 
-/* 运行边界条：只解释「停用插件 ≠ 停用流程」，不承载操作 */
-.ac-note {
-  display: grid;
-  gap: 3px;
-  padding: 12px 16px;
-  border-left: 3px solid var(--mk-blue);
-}
-.ac-note__title { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.ac-note__text { font-size: var(--mk-fs-micro); line-height: 1.65; color: var(--mk-muted); }
-
-/* 插件卡片栅格：按用户可见能力分组（联网 / 决策 / 生图 / MCP），卡内成员是运行时 Skill。
-   窄容器由 auto-fit 自动落单列；成员行再按卡片自身宽度决定是否堆叠。 */
-.ac-pi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-  padding: 4px 16px 16px;
-}
-.ac-pi {
-  display: grid;
-  /* 第 3 行吃剩余高度：成员少的卡把「关闭后」压到页脚上方，四张卡的页脚同一基线 */
-  grid-template-rows: auto auto 1fr auto;
-  gap: 10px;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-  container-type: inline-size;
-}
-.ac-pi__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.ac-pi__id { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+/* 插件能力表（2026-10-21 重设计）：一行一组能力，替代原来的四张等高卡。
+   成员不再逐条挂「已单独配置」徽章（与组级徽章重复），路由状态收在成员 chip 的悬停里。 */
+.ac-pi-table { width: 100%; }
+.ac-pi-table th { white-space: nowrap; }
+.ac-pi-table td { vertical-align: middle; }
+.ac-pi-table tbody tr:hover { background: var(--mk-hover-surface); }
+.ac-pi__id { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ac-pi__glyph {
   flex: none;
   display: grid;
@@ -675,58 +649,26 @@ function goConfig() {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
-.ac-pi__names { display: grid; gap: 2px; min-width: 0; }
-.ac-pi__names strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
-.ac-pi__desc { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
-.ac-pi__state { flex: none; }
-
-.ac-pi__members { display: grid; gap: 4px; }
+.ac-pi__members { display: flex; flex-wrap: wrap; gap: 6px; }
 .ac-pi__member {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--mk-surface-3);
-  color: inherit;
+  padding: 3px 9px;
+  border: 1px solid var(--mk-line);
+  border-radius: 999px;
+  background: var(--mk-surface-2);
+  color: var(--mk-ink);
   font: inherit;
-  text-align: left;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
   cursor: pointer;
-}
-.ac-pi__member:hover { background: var(--mk-hover-surface); }
-.ac-pi__member-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.ac-pi__member-name { flex: none; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); }
-.ac-pi__member-id {
-  min-width: 0;
-  color: var(--mk-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ac-pi__member-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; min-width: 0; }
-
-.ac-pi__fallback {
-  display: grid;
-  align-self: end;
-  gap: 3px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--mk-surface-2);
-}
-.ac-pi__fallback-label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
-.ac-pi__fallback-text { font-size: var(--mk-fs-micro); line-height: 1.55; color: var(--mk-muted); }
-
-.ac-pi__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ac-pi__member:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
+.ac-pi__member-id { color: var(--mk-faint); font-weight: 400; }
+.ac-pi__state-cell { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ac-pi__availability { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
 .ac-pi__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
-
-/* 极窄卡：成员行改为上下两行，徽标不再和 Skill 名抢宽度 */
-@container (max-width: 340px) {
-  .ac-pi__member { grid-template-columns: minmax(0, 1fr); }
-  .ac-pi__member-badges { justify-content: flex-start; }
-}
+.ac-pi__actions { text-align: right; }
+.ac-pi__actions .mk-actions { justify-content: flex-end; }
 
 /* 两卡容器：堆叠单列全宽（并栏分支 2026-09-29 实测溢出后退役，审核 #157 清掉不可达规则） */
 .ac-cards {

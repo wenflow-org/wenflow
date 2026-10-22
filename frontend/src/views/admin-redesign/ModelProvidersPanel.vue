@@ -96,14 +96,40 @@
         </div>
         <p v-if="selected.description && selected.id !== 'platform'" class="mpp-detail__desc">{{ selected.description }}</p>
 
-        <!-- 平台通道（endpointSource=inherit，注册表里没有自己的 baseUrl）：服务地址与密钥
-             归连接设置（宿主注入），沿用既有的脏位保存 -->
-        <div v-if="selected.id === 'platform'" class="mpp-block">
-          <div class="mpp-block__head">
-            <span class="mpp-sec">连接</span>
+        <!-- 平台通道（endpointSource=inherit）：二级页签把「模型 / 连接 / 基础设施 / 生成参数」
+             收进同一详情；宿主仍通过插槽注入连接表单、基础设施与生成默认，面板本身不持业务状态。 -->
+        <template v-if="selected.id === 'platform'">
+          <div class="mpp-tabs">
+            <MkSubTabs id-base="mpp" :tabs="platformTabs" v-model="platformTab" />
           </div>
-          <slot name="platform-detail" />
-        </div>
+          <div
+            v-show="platformTab === 'conn'"
+            id="mpp-panel-conn"
+            class="mpp-tabpanel"
+            role="tabpanel"
+            aria-labelledby="mpp-tab-conn"
+          >
+            <slot name="platform-detail" />
+          </div>
+          <div
+            v-show="platformTab === 'infra'"
+            id="mpp-panel-infra"
+            class="mpp-tabpanel"
+            role="tabpanel"
+            aria-labelledby="mpp-tab-infra"
+          >
+            <slot name="platform-infra" />
+          </div>
+          <div
+            v-show="platformTab === 'generation'"
+            id="mpp-panel-generation"
+            class="mpp-tabpanel"
+            role="tabpanel"
+            aria-labelledby="mpp-tab-generation"
+          >
+            <slot name="platform-generation" />
+          </div>
+        </template>
 
         <template v-else>
           <div class="mpp-block">
@@ -148,7 +174,13 @@
           </div>
         </template>
 
-        <div class="mpp-block mpp-models">
+        <div
+          v-show="selected.id !== 'platform' || platformTab === 'models'"
+          class="mpp-block mpp-models"
+          :role="selected.id === 'platform' ? 'tabpanel' : undefined"
+          :id="selected.id === 'platform' ? 'mpp-panel-models' : undefined"
+          :aria-labelledby="selected.id === 'platform' ? 'mpp-tab-models' : undefined"
+        >
           <div class="mpp-models__head">
             <span class="mpp-sec">模型<span class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
             <span class="mpp-models__acts">
@@ -251,10 +283,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import ProviderEditorDialog, { type ProviderLike } from './ProviderEditorDialog.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
@@ -326,12 +359,23 @@ const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
 const registry = computed(() => view.value?.registry ?? null)
 const selected = computed(() => providers.value.find((p) => p.id === selectedId.value) ?? null)
+/** 平台详情的二级页签：全局的基础设施与生成默认都收在这里；自定义供应商保持线性详情 */
+const platformTab = ref('models')
+const platformTabs = computed(() => [
+  { key: 'models', label: '模型', count: selected.value?.models.length ?? 0 },
+  { key: 'conn', label: '连接' },
+  { key: 'infra', label: '基础设施' },
+  { key: 'generation', label: '生成参数' }
+])
+watch(selectedId, () => { platformTab.value = 'models' })
 
+/* 2026-10-21 用户「不要了」：卡头 meta 只留可写/只读这个会改变操作的结论，
+   数据来源（来自模型目录文件）与生效方式进 title */
 const registryMeta = computed(() => {
   const r = view.value?.registry
-  if (!r) return '来自模型目录文件'
-  if (r.readOnly) return '只读 · 来自模型目录文件'
-  return '改动即时生效 · 来自模型目录文件'
+  if (!r) return ''
+  if (r.readOnly) return '只读'
+  return '改动即时生效'
 })
 const registryPathTitle = computed(() => {
   const r = view.value?.registry
@@ -675,6 +719,18 @@ defineExpose({ refresh })
 }
 .mpp-add { width: 100%; margin-top: 10px; }
 .mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
+/* 二级页签贴顶：详情自身是滚动容器，切页签后标题与操作不用滚回去找 */
+.mpp-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 -16px 10px;
+  padding: 0 16px;
+  background: var(--mk-surface);
+}
+.mpp-tabpanel { min-width: 0; }
+.mpp-tabpanel > .mpp-block:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.mpp-detail > .mpp-models[role="tabpanel"] { margin-top: 0; padding-top: 0; border-top: 0; }
 
 /* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
 .mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }

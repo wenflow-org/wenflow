@@ -274,7 +274,7 @@
         <section v-if="activeTab === 'profile'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">能力维度评分</h3>
-            <span class="mk-card__meta">画像接口的数值化维度</span>
+            
           </div>
           <div class="vp-cardbody">
             <div v-if="abilityDimensions.length" class="lsm">
@@ -323,7 +323,7 @@
         <section v-if="activeTab === 'profile' && isLive" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">运行预算</h3>
-            <span class="mk-card__meta">新会话默认值 · 座舱可临时覆盖</span>
+            <span class="mk-card__meta">新会话默认值</span>
           </div>
           <div class="vp-budget">
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.maxRetriesPerStep }">
@@ -466,7 +466,7 @@
             <div v-if="memoryCompleted.length" class="vp-memory__group">
               <div class="vp-memory__group-head">
                 <h4 class="vp-memory__group-title">最近完成的事</h4>
-                <span class="mk-card__meta">成果物 · 新故事生成时会延续这些</span>
+                <span class="mk-card__meta">成果物</span>
               </div>
               <div class="vp-memory__completed">
                 <div v-for="(c, ci) in memoryCompleted" :key="c.taskId || `mc-${ci}`" class="vp-memory__completed-item">
@@ -2147,7 +2147,15 @@ const lifeHandlers: Partial<Record<VsControlKey, () => void>> = {
   retry: retrySession,
   cockpit: goCockpit
 }
-const lifeControls = computed(() => vlabControlsFor(lifeState.value).filter((c) => lifeHandlers[c.key]))
+/** 最近一条活动会话的阶段：pause 只在教学阶段可用（后端对其余阶段 409），
+ *  画像层也从同一处取值，避免与座舱给出不同的可用操作 */
+const lifeStage = computed(() => {
+  const live = allRuns.value.find((r) => r.result === 'running' || r.result === 'created')
+  return (live || allRuns.value[0])?.stage || null
+})
+const lifeControls = computed(() =>
+  vlabControlsFor(lifeState.value, { stage: lifeStage.value }).filter((c) => lifeHandlers[c.key])
+)
 function runLifeAction(c: VsControlDef) {
   const fn = lifeHandlers[c.key]
   if (!fn) return

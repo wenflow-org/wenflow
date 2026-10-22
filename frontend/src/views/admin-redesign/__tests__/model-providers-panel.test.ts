@@ -150,6 +150,38 @@ describe('ModelProvidersPanel', () => {
     expect(w.text()).toContain('2 个')
   })
 
+  it('平台详情是二级页签：模型 / 连接 / 基础设施 / 生成参数；自定义供应商没有全局页签', async () => {
+    const w = mount(ModelProvidersPanel, {
+      props: {},
+      global: { stubs: { teleport: true } },
+      slots: {
+        'platform-infra': '<div class="infra-slot">基础设施内容</div>',
+        'platform-generation': '<div class="gen-slot">生成参数内容</div>'
+      }
+    })
+    await flushPromises()
+    await nextTick()
+    const tabs = w.findAll('.mpp-tabs .mk-subtab').map((t) => t.text().trim())
+    expect(tabs).toEqual(['模型2', '连接', '基础设施', '生成参数'])
+    expect(w.find('#mpp-panel-models').attributes('style') || '').not.toContain('display: none')
+    expect(w.find('#mpp-panel-conn').attributes('style')).toContain('display: none')
+    expect(w.find('#mpp-panel-infra').attributes('style')).toContain('display: none')
+    expect(w.find('#mpp-panel-generation').attributes('style')).toContain('display: none')
+
+    const infraTab = w.findAll('.mpp-tabs .mk-subtab').find((t) => t.text().includes('基础设施'))!
+    await infraTab.trigger('click')
+    expect(infraTab.attributes('aria-selected')).toBe('true')
+    expect(w.find('#mpp-panel-infra').attributes('style') || '').not.toContain('display: none')
+    expect(w.find('#mpp-panel-models').attributes('style')).toContain('display: none')
+    expect(w.find('.infra-slot').text()).toContain('基础设施内容')
+
+    const acme = w.findAll('.mpp-item').find((i) => i.text().includes('Acme 网关'))!
+    await acme.trigger('click')
+    await flushPromises()
+    expect(w.findAll('.mpp-tabs')).toHaveLength(0)
+    expect(w.find('.mpp-models').attributes('style') || '').not.toContain('display: none')
+  })
+
   it('自带端点的供应商：详情显示服务地址、密钥三件套（掩码 + 显示切换 + 留空沿用）与模型清单', async () => {
     const w = await mountPanel()
     await pick(w, 'Acme 网关')

@@ -453,6 +453,8 @@ const includeTest = computed({
   set: (v) => liveSetIncludeVirtual(v)
 })
 watch(includeTest, (v) => {
+  // D10：测试视角不提供角色/活跃 pill，切过去时若停在旧筛选上会立刻变成空列表。
+  if (v && pill.value !== 'all' && pill.value !== 'deleted') pill.value = 'all'
   // 切换失败不静默：用户以为已切到全量/仅真实口径，实际列表还是旧口径
   if (isLive.value && pill.value !== 'deleted') {
     liveSetUsersIncludeTest(v).catch((e) => toast.error(`切换数据范围失败：${errMsg(e)}`))
@@ -514,6 +516,21 @@ const pills = computed<Array<{ id: string; label: string; count: number | string
      出 3 行——同一控件两套分母（计数取 realActive、筛选取全量行）。现两者都走真实域，
      title 明写口径：含测试档下列表本身含虚拟/测试行，但角色/活跃 pill 不把它们算作「用户」。 */
   const pillDomainTitle = '仅统计真实账号（不含虚拟学习者 / 测试账号）'
+  /* D10（2026-10-22 拍板 A）：测试视角下列表含虚拟/测试账号，但角色/活跃三枚 pill 恒定按
+     真实域计数，永远是 0、点开还是空列表——不给一条走不通的入口，只留「全部 / 已删除」。 */
+  if (includeTest.value) {
+    return [
+      { id: 'all', label: '全部', count: active.length },
+      {
+        id: 'deleted',
+        label: '已删除',
+        count: deletedUsers.value.length
+          ? (deletedUsers.value.length >= DELETED_WINDOW ? `${DELETED_WINDOW}+` : deletedUsers.value.length)
+          : null,
+        title: `最多保留最近 ${DELETED_WINDOW} 条已删除账号记录。超过时计数显示「${DELETED_WINDOW}+」`
+      }
+    ]
+  }
   return [
     { id: 'all', label: '全部', count: active.length },
     { id: 'admin', label: '管理员', count: realActive.filter((u) => u.isAdmin).length, title: pillDomainTitle },

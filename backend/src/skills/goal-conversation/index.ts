@@ -1118,24 +1118,35 @@ export async function goalConversationAgentHandler(
 
     if (promptResult.success && promptResult.output) {
       const result = promptResult.output;
+      /* #132（2026-10-22 走查）：历史失败 48 次都是 `internal` 缺失后读 `.ext` 抛
+         `Cannot read properties of undefined`。normalizeOutput 本应恒返回 internal，
+         缺失说明输出来自别的路径。这里把「数据形态坏了」说清（带可用键名），
+         不做静默兜底——先让失败可定位，再决定修复点。 */
+      const internal = result.internal as GoalConversationInternal | undefined;
+      if (!internal?.core || !internal?.ext?.goalConversation) {
+        throw new Error(
+          `[goal-conversation] 结构化输出缺少 internal.core / internal.ext.goalConversation`
+          + `（success=true，可用键：${Object.keys(result || {}).join(',') || '无'}）`
+        );
+      }
       return {
         success: true,
         userVisible: result.userVisible,
-        internal: result.internal,
+        internal,
         runtimeEnvelope: promptResult.runtimeEnvelope || buildGoalRuntimeEnvelope(result, {
           contract: runtimeContract,
           status: 'succeeded',
         }),
         renderHints: {
           component: 'goal-conversation',
-          quickReplies: result.internal.ext.goalConversation.quickReplies || [],
+          quickReplies: internal.ext.goalConversation.quickReplies || [],
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'skill:goal-conversation',
           agentName: '目标对话 Skill',
           agentType: 'custom',
-          confidence: result.internal.core.confidence,
+          confidence: internal.core.confidence,
           generatedAt: new Date().toISOString(),
         },
         debug: {

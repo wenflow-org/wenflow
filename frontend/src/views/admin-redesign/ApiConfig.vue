@@ -30,7 +30,8 @@
          · 接入与模型 = 原「接入与验证」（连接 / 模型清单 / 连通性验证）+ 原「模型总览」（注册表只读）
            两张卡本就在互相指路（模型清单空态句写「平台实际在用模型见『模型总览』tab」），
            合成一页后「拉取 → 看注册表解析结果」是一条动线。
-         · 路由与调用 = 原「模型路由」（对话/推理/评估默认路由 + 默认思考）+ 原「调用与健康」
+         · 接入与模型 = 供应商/模型 + 基础设施模型 + 默认生成参数（思考 / 结构化输出）+ 别名映射；
+         · 调用与健康 = 调用策略 + 调用健康
            （调用参数 / 降级守卫 / 能力健康）+ 注册表的路由两分区（默认路由解析结果 / 别名映射）
            + 原「虚拟学习者」页签的压测参数卡——全属「调用怎么走、上游容量多少、挂了怎么办」。
          · 安全与访问（4 张策略卡）、外挂能力（能力目录）自成域，原样保留。
@@ -45,7 +46,7 @@
       @update:model-value="onTabChange"
     />
 
-    <!-- ===== Tab1-4：接入与验证 / 模型路由 / 调用与健康 / 安全与访问（2026-09-29 由单一大 tab 拆分，每 tab 一张语义卡；分段保存按钮随卡） ===== -->
+    <!-- ===== Tab1-4：接入与模型 / 调用与健康 / 虚拟学习者 / 安全与访问（2026-09-29 由单一大 tab 拆分，每 tab 一张语义卡；分段保存按钮随卡） ===== -->
     <template v-if="isConfigTab">
     <template v-if="tab === 'access'">
     <!-- 2026-10-05 满屏重排：mk-narrow 限宽列在宽屏下「一张卡悬着」（用户实测批注）。
@@ -117,7 +118,7 @@
                     <span class="mk-field__label">测试模型</span>
                     <select class="mk-field__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
                       <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
-                      <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+                      <option v-for="m in models" :key="m" :value="m" :title="modelTestHint(m)">{{ modelTestLabel(m) }}</option>
                     </select>
                   </label>
                   <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
@@ -135,142 +136,110 @@
             </div>
           </div>
         </template>
-          <!-- 上游模型（2026-10-21 用户走查「不需要注释型文案」）：只报已拉取/已添加的读数，
-               逐条添加的清单由面板渲染；未保存状态留在徽章 title 里。 -->
-          <template #models-meta>
-            <p class="ac-models-meta ac-models__line">
-              <span class="ac-models-meta__title">上游模型</span>
-              <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">拉取失败，请检查服务地址与密钥</span>
-              <span v-else-if="models.length">{{ upstreamSummary }}</span>
-              <span v-else>尚未拉取</span>
-              <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn" title="本次拉取仅在「保存连接」后生效">未保存</span>
-            </p>
-          </template>
+        <!-- 上游模型（2026-10-21 用户走查「不需要注释型文案」）：只报已拉取/已添加的读数，
+             逐条添加的清单由面板渲染；未保存状态留在徽章 title 里。 -->
+        <template #models-meta>
+          <p class="ac-models-meta ac-models__line">
+            <span class="ac-models-meta__title">上游模型</span>
+            <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">拉取失败，请检查服务地址与密钥</span>
+            <span v-else-if="models.length">{{ upstreamSummary }}</span>
+            <span v-else>尚未拉取</span>
+            <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn" title="本次拉取仅在「保存连接」后生效">未保存</span>
+          </p>
+        </template>
+        <!-- 基础设施模型：embedding/rerank 是平台必需配置，不是插件；嵌进平台详情，不再单独占一张卡。 -->
+        <template #platform-infra>
+          <InfraModelsPanel embedded />
+        </template>
+        <!-- 默认生成参数：Skill 未覆盖时仍会继承的思考 / 结构化输出；别名映射表是查证用的只读参考。 -->
+        <template #platform-generation>
+          <div class="ac-gen-panel">
+            <div v-if="dirty.has('route')" class="ac-gen-panel__bar">
+              <button type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存生成参数' }}</button>
+            </div>
+            <!-- 能力健康内联提示（原 ranklist 下 statusbar，2026-10-05 重设计移到区块前：域级状态先于配置项）：
+                 取真实降级守卫 / 能力健康，均无异常则整条省略（不硬造） -->
+            <div v-if="routeWarnText" class="ac-route-warn" role="status">
+              <span class="ac-route-warn__dot"></span>
+              <span>{{ routeWarnText }}</span>
+            </div>
+            <!-- 2026-10-21 用户走查：平台模型已按 Skill 配置，默认路由三行退役；
+                 本块只保留 Skill 未覆盖时仍会继承的生成默认（思考 / 结构化输出）。 -->
+            <div class="ac-cols">
+              <div class="ac-cols__main">
+                <!-- 默认思考：平台级默认（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖）。
+                     2026-10-14：原「启用思考」开关与「思考模式」下拉是**同一个字段的两个控件**——
+                     开关只是 `defaultThinkingMode !== 'disabled'` 的派生态（关闭 ⇔ 下拉的「关闭」档），
+                     且它表达不了「强制开启」，勾上只能落到「跟随模型默认」，是有损视图。
+                     同屏一处事实两个控件，还带来「强度灰了、模式没灰」的不一致。现只留真字段那一个控件。 -->
+                <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认，可在 Skill 详情页「运行时」覆盖</span></div>
+                <div class="ac-row ac-row--2 ac-think">
+                  <label class="mk-field">
+                    <span class="mk-field__label">思考模式</span>
+                    <select
+                      class="mk-field__select"
+                      :value="form.defaultThinkingMode"
+                      @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="default">跟随模型默认</option>
+                      <option value="enabled">强制开启</option>
+                      <option value="disabled">关闭</option>
+                    </select>
+                  </label>
+                  <label class="mk-field">
+                    <span class="mk-field__label">思考强度</span>
+                    <select
+                      class="mk-field__select"
+                      :disabled="!thinkingOn"
+                      :value="form.defaultReasoningEffort"
+                      @change="setEffort(($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="default">跟随模型默认</option>
+                      <option value="low">低（low）</option>
+                      <option value="high">高（high）</option>
+                      <option value="max">最高（max）</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="ac-cols__side">
+                <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
+                     需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
+                <div class="ac-sec__title">结构化输出<span class="ac-sec__hint" title="对输出 JSON 的 Skill 由上游强制 JSON，防「自然停止但吐散文」类失败">对输出 JSON 的 Skill 强制 JSON</span></div>
+                <!-- 与左侧「思考模式 / 思考强度」同宽（同列里同类控件两种宽度是偶然差异，不是层级） -->
+                <div class="ac-row ac-row--2">
+                  <label class="mk-field">
+                    <span class="mk-field__label">输出格式</span>
+                    <select
+                      class="mk-field__select"
+                      :value="form.defaultResponseFormat"
+                      @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
+                    >
+                      <option value="none">关闭（默认行为）</option>
+                      <option value="json_object">JSON 对象</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <!-- 注册表切片（2026-10-15 用户重组）：只剩「别名映射」一片，默认收起成折叠条——
+                 它是查证用的参考表（chat / reasoning / light 各指向哪个模型），不是每次进页都要读的
+                 运行态。 -->
+            <details class="ac-fold">
+              <summary class="ac-fold__bar">
+                <span class="ac-fold__title">内置别名映射表</span>
+                <span class="ac-fold__hint">逻辑别名（chat / reasoning / light 等）实际指向的候选模型与默认选中项 · 只读</span>
+                <span class="ac-fold__mark" aria-hidden="true"></span>
+              </summary>
+              <ModelRegistryOverview ref="registryRef" class="ac-registry ac-registry--aliases" :parts="['aliases']" @defaults="registryDefaults = $event" />
+            </details>
+          </div>
+        </template>
       </ModelProvidersPanel>
-
-      <!-- 基础设施模型（2026-10-20）：embedding/rerank 是平台必需配置，不是插件。
-           与供应商/模型同域，但独立卡：它们不参与对话路由，缺失时消费方 fail-open。 -->
-      <InfraModelsPanel />
-
     </div>
     </template>
     <template v-else-if="tab === 'routing'">
     <div class="ac-tab-body" id="ac-panel-routing" role="tabpanel" aria-labelledby="ac-tab-routing">
-<section class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">模型路由</h3>
-        <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button>
-      </div>
-      <div class="ac-body">
-        <!-- 能力健康内联提示（原 ranklist 下 statusbar，2026-10-05 重设计移到区块前：域级状态先于配置项）：
-             取真实降级守卫 / 能力健康，均无异常则整条省略（不硬造） -->
-        <div v-if="routeWarnText" class="ac-route-warn" role="status">
-          <span class="ac-route-warn__dot"></span>
-          <span>{{ routeWarnText }}</span>
-        </div>
-        <!-- 2026-10-05 满屏重排：去 mk-narrow 限宽，卡内左右双列（左=默认路由，右=生成参数），
-             双列家族与「调用与健康」页签同款 ac-cols；≤1100px 回落单列 -->
-        <div class="ac-cols">
-          <div class="ac-cols__main">
-            <!-- 默认路由：三行「角色行」（2026-10-05 重设计）——原只读 ranklist 概览与下方三列输入
-                 是同屏两份回声（概览读的就是同一组 form 值），合并为一行 = 角色 + 输入 + 状态徽标；
-                 徽标随输入实时翻转（已配置 ⇄ 未配置），编辑动作得到即时确认。
-                 原型第四行「降级备用」本页无独立配置字段，不虚构该行。 -->
-            <div class="ac-sec__title">默认路由<span class="ac-sec__hint">可填具体模型 id、「provider/模型名」形式，或逻辑别名（chat / reasoning / light）</span></div>
-            <div class="ac-route" role="list" aria-label="默认路由角色">
-              <!-- 「所配即所得」（2026-10-15 用户重组）：每行输入框下就地展示平台解析结果
-                   （实际生效 / 来源 / 降级备用）——原「默认路由（解析结果）」表在页尾、与输入相隔整屏，
-                   展示的是同一份事实；行内展示后该表退役 -->
-              <label v-for="r in routeRoles" :key="r.key" class="ac-route__row ac-route__row--stack" role="listitem">
-                <span class="ac-route__inline">
-                  <span class="ac-route__label">{{ r.role }}</span>
-                  <MkModelPicker
-                    :model-value="r.value"
-                    :options="routePickerOptions"
-                    :tier="r.tier"
-                    :title="r.title"
-                    placeholder="模型 id 或别名"
-                    @update:model-value="r.set($event)"
-                  />
-                  <span class="mk-badge" :class="r.value ? 'mk-badge--ok' : 'mk-badge--muted'">{{ r.value ? '已配置' : '未配置' }}</span>
-                </span>
-                <span
-                  class="ac-route__resolve mono"
-                  :class="{ 'ac-route__resolve--none': !resolveLineOf(r.key) }"
-                  :title="resolveLineOf(r.key) ? `平台当前解析（只读）：${resolveLineOf(r.key)}` : '平台尚未下发该档解析结果'"
-                >↳ {{ resolveLineOf(r.key) ?? '解析结果待注册表加载' }}</span>
-              </label>
-            </div>
-          </div>
-          <div class="ac-cols__side">
-            <!-- 默认思考：平台级默认（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖）。
-                 2026-10-14：原「启用思考」开关与「思考模式」下拉是**同一个字段的两个控件**——
-                 开关只是 `defaultThinkingMode !== 'disabled'` 的派生态（关闭 ⇔ 下拉的「关闭」档），
-                 且它表达不了「强制开启」，勾上只能落到「跟随模型默认」，是有损视图。
-                 同屏一处事实两个控件，还带来「强度灰了、模式没灰」的不一致。现只留真字段那一个控件。 -->
-            <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认，可在 Skill 详情页「运行时」覆盖</span></div>
-            <div class="ac-row ac-row--2 ac-think">
-              <label class="mk-field">
-                <span class="mk-field__label">思考模式</span>
-                <select
-                  class="mk-field__select"
-                  :value="form.defaultThinkingMode"
-                  @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="default">跟随模型默认</option>
-                  <option value="enabled">强制开启</option>
-                  <option value="disabled">关闭</option>
-                </select>
-              </label>
-              <label class="mk-field">
-                <span class="mk-field__label">思考强度</span>
-                <select
-                  class="mk-field__select"
-                  :disabled="!thinkingOn"
-                  :value="form.defaultReasoningEffort"
-                  @change="setEffort(($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="default">跟随模型默认</option>
-                  <option value="low">低（low）</option>
-                  <option value="high">高（high）</option>
-                  <option value="max">最高（max）</option>
-                </select>
-              </label>
-            </div>
-
-            <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
-                 需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
-            <div class="ac-sec__title">结构化输出<span class="ac-sec__hint" title="对输出 JSON 的 Skill 由上游强制 JSON，防「自然停止但吐散文」类失败">对输出 JSON 的 Skill 强制 JSON</span></div>
-            <!-- 与上方「思考模式 / 思考强度」同宽（同列里同类控件两种宽度是偶然差异，不是层级） -->
-            <div class="ac-row ac-row--2">
-              <label class="mk-field">
-                <span class="mk-field__label">输出格式</span>
-                <select
-                  class="mk-field__select"
-                  :value="form.defaultResponseFormat"
-                  @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
-                >
-                  <option value="none">关闭（默认行为）</option>
-                  <option value="json_object">JSON 对象</option>
-                </select>
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- 注册表切片（2026-10-15 用户重组）：只剩「别名映射」一片，默认收起成折叠条——
-           它是查证用的参考表（chat / reasoning / light 各指向哪个模型），不是每次进页都要读的
-           运行态；展开才拉出表格。默认路由的「配置值 → 实际使用」已在三条角色行内就地展示。 -->
-      <details class="ac-fold">
-        <summary class="ac-fold__bar">
-          <span class="ac-fold__title">内置别名映射表</span>
-          <span class="ac-fold__hint">逻辑别名（chat / reasoning / light 等）实际指向的候选模型与默认选中项 · 只读</span>
-          <span class="ac-fold__mark" aria-hidden="true"></span>
-        </summary>
-        <ModelRegistryOverview class="ac-registry ac-registry--routing" :parts="['aliases']" @aliases="aliasOptions = $event" @defaults="registryDefaults = $event" />
-      </details>
-
-    </section>
       <!-- ===== 调用策略（2026-10-20 重新设计）=====
            原「AI 调用与健康」是一张 954px 的大卡，把四类东西叠在一起：请求重试、上游容量、
            虚拟学习者模拟、探针与健康。四者的读者与变更频率都不同（策略一次定、容量按负载调、
@@ -408,6 +377,10 @@
               <span v-else-if="health">尚未探测</span>
             </span>
           </div>
+          <!-- D12：限流读数放在能力健康之前——先回答「现在是不是在挨 429」，再看单项能力 -->
+          <div v-if="rateLimitReadout" class="ac-rel__note" :class="{ 'ac-rel__error': rateLimitReadout.count429 > 0 }" role="status">
+            近 1 小时上游限流（429）{{ rateLimitReadout.count429 }} 次 · 冷却中模型 {{ rateLimitReadout.coolingDown }} 个
+          </div>
           <!-- 失败态必须优先于旧快照可见（2026-10-14 #18） -->
           <div v-if="healthFailed" class="ac-rel__note ac-rel__error" role="alert">
             上次探测失败{{ healthFailText ? `：${healthFailText}` : '，结果不可用' }}
@@ -438,7 +411,7 @@
     <div class="ac-tab-body" id="ac-panel-virtual" role="tabpanel" aria-labelledby="ac-tab-virtual">
       <!-- ===== 虚拟学习者运行配置（2026-10-21 独立页签）=====
            速率、并发、日期模拟同属「虚拟学习者能跑多少、跑到哪天」；
-           此前挂在「路由与调用」里与调用参数混读，现独立成页签。 -->
+           此前挂在「调用与健康」里与调用参数混读，现独立成页签。 -->
       <section v-if="isLive" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">运行配置</h3>
@@ -671,23 +644,15 @@ import {
   updateRegisterIpQuotaSetting
 } from './live'
 import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi, adminApiConfigApi, adminVirtualLearnersApi } from '@/api/adminApi'
-import { useModelCatalog } from '@/composables/useModelCatalog'
-
-// 模型目录候选（File-as-Truth llm-providers.json）：与通道拉取清单合并进路由 datalist；
-// 目录加载失败静默降级（候选只剩通道拉取值 + 别名，输入框仍可自由填写）
-const { pickerOptions, load: loadModelCatalog, extraIds } = useModelCatalog()
-loadModelCatalog()
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
-import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import { toast } from '@/utils/toast'
 
-/* ---------- 宿主：接入与模型 · 路由与调用 · 安全与访问 ----------
-   ?tab=model|overview 双向同步；只读 ModelRegistryOverview 按分区切片嵌两个页签
-   （接入：供应商/能力限额/冷却/配置提示；路由：默认路由解析结果/别名映射）。
+/* ---------- 宿主：接入与模型 · 调用与健康 · 虚拟学习者 · 安全与访问 ----------
+   ?tab=model|overview 双向同步；只读 ModelRegistryOverview 的别名切片挂在接入页的默认生成参数卡里。
    2026-10-19 用户拍板「外挂能力」从本宿主拆回独立页（/admin/addons，侧栏 Skill 组）：
    原来那个页签与它的角标计数、刷新分支一并撤除；旧深链 ?tab=addons 由路由改投。 */
 const AC_TABS = ['access', 'routing', 'virtual', 'security'] as const
@@ -714,11 +679,11 @@ const isConfigTab = computed(() => ['access', 'routing', 'virtual', 'security'].
 const route = useRoute()
 const router = useRouter()
 /** 页签定义（CM1：收敛到 MkSubTabs）。
-    2026-10-19 三页签 → 2026-10-21 四页签：虚拟学习者配置从「路由与调用」独立成页签
+    2026-10-19 三页签 → 2026-10-21 四页签：虚拟学习者配置从「调用与健康」独立成页签
     （用户：「虚拟学习者的配置，先独立一个tab在模型与接入里面」）。 */
 const acTabs = computed(() => [
   { key: 'access', label: '接入与模型' },
-  { key: 'routing', label: '路由与调用' },
+  { key: 'routing', label: '调用与健康' },
   { key: 'virtual', label: '虚拟学习者' },
   { key: 'security', label: '安全与访问' },
 ])
@@ -729,64 +694,30 @@ function onTabChange(key: string) {
 const providersRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
 /** 已登记模型 id（面板回传）：上游清单的关系句与折叠共用这一次计算 */
 const registeredModelIds = ref<string[]>([])
-
-/** 逻辑别名候选（来自后端只读总览，避免前端硬编码与注册表漂移）。
-    不再进页即拉：与总览 tab 的 getModelRegistry 是同一份接口，重复请求；
-    改由 ModelRegistryOverview 挂载后经 @aliases 回传：接入与路由两个切片各自回传一次，
-    谁先挂载谁填（同一份接口数据，不额外请求） */
-const aliasOptions = ref<string[]>([])
-
-/** 路由解析结果（2026-10-15「所配即所得」）：由 ModelRegistryOverview 经 @defaults 回传，
-    在三条角色行下就地展示「实际生效 / 来源 / 降级备用」——原「默认路由（解析结果）」表退役。
-    两处实例的切片不同但同一份 getModelRegistry，谁先挂载谁填。 */
-interface RegistryDefaults {
-  defaults: {
-    defaultModelConfigured?: string | null
-    defaultModelResolved?: string | null
-    defaultModelSource?: 'alias' | 'concrete' | 'unset'
-    defaultReasoningModelConfigured?: string | null
-    defaultReasoningModelResolved?: string | null
-    defaultReasoningModelSource?: 'alias' | 'concrete' | 'unset'
-    defaultEvaluationModelConfigured?: string | null
-    defaultEvaluationModelResolved?: string | null
-    defaultEvaluationModelSource?: 'alias' | 'concrete' | 'unset'
+/* D12（2026-10-22 拍板 B）：近 1 小时 429 / 冷却模型读数。
+   数据来自只读的 model-registry 总览（429 计数取 agent_call_logs，冷却取部署健康快照），
+   只在「调用与健康」页签加载，不额外增加接入页的首屏请求。 */
+const rateLimitReadout = ref<{ windowMinutes: number; count429: number; coolingDown: number } | null>(null)
+async function loadRateLimitReadout() {
+  try {
+    const res = await adminApiConfigApi.getModelRegistry()
+    rateLimitReadout.value = (res as { data?: { data?: { rateLimit?: typeof rateLimitReadout.value } } })?.data?.data?.rateLimit ?? null
+  } catch {
+    rateLimitReadout.value = null
   }
+}
+watch(tab, (t) => {
+  if (t === 'routing' && isLive.value) void loadRateLimitReadout()
+}, { immediate: true })
+
+/** 注册表读数（只读总览回传）：上游清单与「已添加」的对照只用 models 这一段。
+    与总览 tab 的 getModelRegistry 是同一份接口，不重复请求。 */
+interface RegistryDefaults {
   models: Array<{ id: string; providerId: string; fallbacks: string[] }>
-  runtime?: { maxModelCandidates: number }
 }
 const registryDefaults = ref<RegistryDefaults | null>(null)
-
-/** 角色行 → 解析结果字段名（key 与 routeRoles 同源：chat / reasoning / evaluation） */
-const RESOLVE_FIELD: Record<string, { resolved: keyof RegistryDefaults['defaults']; source: keyof RegistryDefaults['defaults'] }> = {
-  chat: { resolved: 'defaultModelResolved', source: 'defaultModelSource' },
-  reasoning: { resolved: 'defaultReasoningModelResolved', source: 'defaultReasoningModelSource' },
-  evaluation: { resolved: 'defaultEvaluationModelResolved', source: 'defaultEvaluationModelSource' },
-}
-
-/** 行内解析提示：「实际生效: X · 来源 别名/具体模型/未设置 · 降级备用: A → B」（未设置/未解析不硬造） */
-function resolveLineOf(roleKey: string): string | null {
-  const d = registryDefaults.value
-  const field = RESOLVE_FIELD[roleKey]
-  if (!d || !field) return null
-  const resolved = d.defaults[field.resolved]
-  if (!resolved || typeof resolved !== 'string') return null
-  const parts = [`实际生效: ${resolved}`]
-  const source = d.defaults[field.source]
-  const sourceText = source === 'alias' ? '别名' : source === 'concrete' ? '具体模型' : source === 'unset' ? '未设置' : ''
-  if (sourceText) parts.push(`来源: ${sourceText}`)
-  const chain = resolveFallbackChain(resolved)
-  parts.push(chain.length ? `降级备用: ${chain.join(' → ')}` : '降级备用: 无')
-  return parts.join(' · ')
-}
-
-/** 解析后模型的降级链（与注册表同一截断口径：运行时最多主模型 + 1 个备用） */
-function resolveFallbackChain(resolved: string): string[] {
-  const d = registryDefaults.value
-  if (!d) return []
-  const maxCandidates = d.runtime?.maxModelCandidates ?? 2
-  const model = d.models.find((m) => m.id === resolved)
-  return (model?.fallbacks ?? []).slice(0, Math.max(0, maxCandidates - 1))
-}
+/** 别名映射切片：供应商面板改完注册表后在同一页签内就地重取，避免读旧表 */
+const registryRef = ref<{ refresh?: (force?: boolean) => Promise<void> | void } | null>(null)
 watch(
   () => route?.query?.tab,
   (t) => {
@@ -1009,10 +940,10 @@ function markDirty(group: string) {
   dirty.value = new Set([...dirty.value, group])
 }
 
-/** 脏位分域标注：5 组 → 保存条列出具体未保存组（连接/路由/策略/可靠性/探测） */
+/** 脏位分域标注：5 组 → 保存条列出具体未保存组（连接/生成参数/策略/可靠性/探测） */
 const DIRTY_GROUP_LABELS: Record<string, string> = {
   conn: '连接',
-  route: '路由',
+  route: '生成参数',
   policy: '策略',
   reliability: '可靠性',
   probe: '探测'
@@ -1275,8 +1206,6 @@ onBeforeUnmount(() => {
 })
 
 const models = computed(() => fetchedModels.value)
-/** 通道拉取到、但不在模型目录里的 id（历史保存值/通道私有模型），仍保留在候选里 */
-const extraFetchedModels = computed(() => extraIds(models.value))
 
 /**
  * 上游清单 ↔ 平台登记表的对齐（2026-10-16 用户走查）：连接卡只说关系（上游几个、对上几个），
@@ -1295,13 +1224,12 @@ const upstreamSplit = computed(() => splitUpstreamByRegistry(models.value, regis
 const upstreamReady = computed(() => registeredIds.value !== null)
 
 /**
- * 供应商面板改过注册表（增删改或改密钥）：路由页那份别名/解析回传是上一次读数的快照，
- * 先作废——路由页的 ModelRegistryOverview 下次挂载会自己重取并回传，不留过期候选。
- * 接入页自己的登记 id 由面板当场回传，不受影响。
+ * 供应商面板改过注册表（增删改或改密钥）：别名映射与上游对照都是上一次读数的快照，
+ * 先作废并就地重取，避免同一页签里读到旧表。接入页自己的登记 id 由面板当场回传。
  */
 function onProvidersChanged() {
   registryDefaults.value = null
-  aliasOptions.value = []
+  void registryRef.value?.refresh?.(true)
 }
 
 /** 上游清单与登记表的读数（空串 = 无清单可谈，模板走空态分支）：只报数字，不写解释句 */
@@ -1344,51 +1272,8 @@ function setEffort(v: string) {
   }
 }
 
-/* 2026-10-04 状态条退役：原「就绪」判定 ready（仅 statusTone 消费）随状态条删除，零引用一并清理。
-   2026-10-14 页首 KPI 带撤除：routeCount 原本还喂「默认路由 N/3」那块 KpiKpi 与其 title，
-   撤带后零引用，一并删除——路由就绪度由下方三行逐条徽标承担（不再有一个汇总数字复读）。 */
-/* 默认路由的候选（2026-10-20 走查）：目录模型（按供应商分组）+ 逻辑别名 + 通道拉取但未登记的 id。
-   别名与未登记 id 各自成组，选中后仍按注册表解析——候选列表只回答「能填什么」，不承诺解析结果。 */
-const routePickerOptions = computed<MkModelOption[]>(() => {
-  const out: MkModelOption[] = pickerOptions.value.map((o) => ({ ...o }))
-  for (const a of aliasOptions.value) {
-    if (!a || out.some((o) => o.value === a)) continue
-    out.push({ value: a, label: '按注册表成员解析', group: '逻辑别名' })
-  }
-  for (const m of extraFetchedModels.value) {
-    if (!m || out.some((o) => o.value === m)) continue
-    out.push({ value: m, label: '上游已返回、尚未登记', group: '通道拉取' })
-  }
-  return out
-})
-/* 默认路由三角色行（2026-10-05 重设计：原 routeOverview 只读概览与三列输入是同屏回声，
-   合并为一行 = 角色 + 输入 + 状态徽标；value 直读 form，徽标随输入实时翻转）。 */
-const routeRoles = computed(() => [
-  {
-    key: 'chat',
-    role: '对话默认',
-    tier: 'chat',
-    value: form.defaultModel,
-    title: '可填逻辑别名（chat / reasoning / light），或从已拉取清单中选择',
-    set: (v: string) => { form.defaultModel = v; markDirty('route') },
-  },
-  {
-    key: 'reasoning',
-    role: '推理默认',
-    tier: 'reasoning',
-    value: form.defaultReasoningModel,
-    title: '填别名 reasoning 时会自动选用支持思考的模型',
-    set: (v: string) => { form.defaultReasoningModel = v; markDirty('route') },
-  },
-  {
-    key: 'evaluation',
-    role: '评估默认',
-    tier: 'chat',
-    value: form.defaultEvaluationModel,
-    title: '同样支持逻辑别名',
-    set: (v: string) => { form.defaultEvaluationModel = v; markDirty('route') },
-  },
-])
+/* 2026-10-21 用户走查：平台模型按 Skill 配置，默认路由三行退役（含解析读数与「未登记」警示）。
+   本卡只保留 Skill 未覆盖时仍会继承的思考 / 结构化输出默认。 */
 /* 降级内联提示（原型 index.html:1812 statusbar）：与页面能力健康卡同源（health 快照），
    只列异常/不可用项；无异常或无快照时整条省略（不硬造）。 */
 const routeWarnText = computed(() => {
@@ -1466,8 +1351,29 @@ const saving = ref(false)
 const testModel = ref('')
 const testResult = ref<{ ok: boolean; text: string; latency?: string; usage?: string } | null>(null)
 
+/** 测试模型默认选中项：优先配置里的默认对话模型，其次第一个非嵌入/重排序模型。
+ *  不能直接取 ms[0]——上游清单是按字母排的，首个是 `BAAI/bge-large-en-v1.5`（向量模型），
+ *  用 chat 端点测它只会回「Model does not exist. Please check it carefully.」，
+ *  看着像配置写错了（2026-10-22 走查实测）。 */
+const NON_CHAT_MODEL_PATTERN = /embedding|rerank|bge-/i
+/** D7（2026-10-22 拍板 B）：非对话模型仍留在下拉里（可验证「它确实不能 chat」），
+    但选项文案必须自带提示，避免运营误选后把预期失败读成配置错误。 */
+const RERANK_MODEL_PATTERN = /rerank/i
+function modelTestLabel(m: string): string {
+  if (!NON_CHAT_MODEL_PATTERN.test(m)) return m
+  return `${m}（${RERANK_MODEL_PATTERN.test(m) ? '重排' : '向量'}模型 · chat 测试不适用）`
+}
+function modelTestHint(m: string): string {
+  return NON_CHAT_MODEL_PATTERN.test(m)
+    ? '该模型不是对话模型，连通性测试会失败；失败是预期结果，不代表配置错误'
+    : '用该模型发一次真实的最小对话请求'
+}
 watch(models, (ms) => {
-  if (ms.length && !ms.includes(testModel.value)) testModel.value = ms[0]
+  if (!ms.length) return
+  if (testModel.value && ms.includes(testModel.value)) return
+  const configured = form.defaultModel && ms.includes(form.defaultModel) ? form.defaultModel : ''
+  const chatLike = ms.find((m) => !NON_CHAT_MODEL_PATTERN.test(m))
+  testModel.value = configured || chatLike || ms[0]
 }, { immediate: true })
 
 async function fetchModels() {
@@ -1485,6 +1391,7 @@ async function fetchModels() {
     toast.info(list.length ? `已获取 ${list.length} 个模型，记得保存` : '连接成功，但服务未返回模型列表')
   } catch (e) {
     connectionStatus.value = 'failed'
+    connCheckedAt.value = new Date().toISOString()
     fetchError.value = errMsg(e)
     toast.error(`连接失败：${errMsg(e)}`)
   } finally {
@@ -1539,20 +1446,29 @@ async function saveGroups(groups: string[]) {
     // 分域保存:连接与路由各自独立提交(后端 PUT 为 partial 合并语义),
     // 修复「保存路由顺带落盘改了一半的连接」的范围错位
     if (set.has('conn')) {
-      const payload: { apiUrl: string; apiKey: string; availableModels?: string[] } = {
+      const payload: {
+        apiUrl: string
+        apiKey: string
+        availableModels?: string[]
+        connectionStatus?: string
+        lastCheckedAt?: string
+      } = {
         apiUrl: form.apiUrl,
         apiKey: form.apiKey
       }
       // 仅当模型清单来自「当前服务地址」的拉取时才携带,
       // 防止换地址后把上一个服务商的列表挂到新地址(applyLiveConfig 的回显同理按 savedApiUrl 归属)
       if (fetchedModelsEndpoint.value === form.apiUrl.trim()) payload.availableModels = fetchedModels.value
+      // 拉取/测试是连接状态的真实来源；随连接域一起落盘，刷新后徽章时间不再回退到旧值
+      if (connCheckedAt.value) {
+        payload.connectionStatus = connectionStatus.value
+        payload.lastCheckedAt = connCheckedAt.value
+      }
       await liveSaveApiConfig(payload as Parameters<typeof liveSaveApiConfig>[0])
     }
     if (set.has('route')) {
+      // 模型按 Skill 配置：本页只保存生成默认，不再写平台三档模型字段（partial 合并保留库中原值）
       await liveSaveApiConfig({
-        defaultModel: form.defaultModel,
-        defaultReasoningModel: form.defaultReasoningModel,
-        defaultEvaluationModel: form.defaultEvaluationModel,
         defaultThinkingMode: form.defaultThinkingMode,
         defaultReasoningEffort: form.defaultReasoningEffort,
         defaultResponseFormat: form.defaultResponseFormat
@@ -1599,14 +1515,14 @@ function saveAll() {
 }
 
 /* 重置为默认配置（#13）：后端 POST /admin/api-config/reset 能力早已存在却无前端入口。
-   重置会删除已保存配置行（服务地址 / 密钥 / 模型路由 / 调用参数全回默认）——高风险不可撤销，
+   重置会删除已保存配置行（服务地址 / 密钥 / 默认生成参数 / 调用参数全回默认）——高风险不可撤销，
    故走二次确认；成功后强制重拉 live 配置（绕过 TTL）+ 可靠性/探针 + 健康快照，并清空脏位。 */
 const resetting = ref(false)
 async function resetConfig() {
   if (resetting.value) return
   const ok = await askConfirm({
     title: '重置为默认配置',
-    message: '将清空已保存的服务地址、API Key、模型路由与调用参数，恢复出厂默认。此操作不可撤销。',
+    message: '将清空已保存的服务地址、API Key、默认生成参数与调用参数，恢复出厂默认。此操作不可撤销。',
     confirmText: '确认重置'
   })
   if (!ok) return
@@ -1743,16 +1659,17 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-conn-body { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 /* 2026-10-20 用户走查「下方大量空白」：接入页签改成满高工作台——供应商卡吃掉页签剩余高度，
    列表与详情各自内滚。窄屏（≤900）仍回落到页面滚动，卡片按内容高度。 */
-.ac-conn-body { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
-.ac-conn-body > .mpp { flex: 1 1 auto; min-height: 0; }
+.ac-conn-body { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; overflow-x: hidden; }
+/* 短视口（如 1280×720）下基础设施卡按内容占高后，供应商卡会被压到不足 100px，
+   详情区只剩一条内滚缝。给供应商卡保底高度，整页签改为滚动，而不是把可用区压扁。 */
+.ac-conn-body > .mpp { flex: 1 1 auto; min-height: 420px; }
 @media (max-width: 900px) {
   .ac-conn-body { display: grid; overflow-y: auto; }
-  .ac-conn-body > .mpp { flex: none; }
+  .ac-conn-body > .mpp { flex: none; min-height: 0; }
 }
-/* 路由与调用页签内的注册表切片（别名映射）：外层页签已承担网格与滚动节奏，
-   这里让分区直接成为父网格的子项（display: contents 去掉自身的 .ac-tab-body 盒子），
-   与上方「出站速率」「虚拟学习者通道」同一条 12px 节奏堆叠，不出现内外双滚动容器。 */
-.ac-registry--routing { display: contents; }
+/* 接入页「默认生成参数」卡内的注册表切片（别名映射）：外层是 details，
+   这里让分区直接成为 details 的子项，不出现内外双滚动容器。 */
+.ac-registry--aliases { display: contents; }
 .ac-sec-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
 .ac-sec-head { grid-column: 1 / -1; }
 /* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
@@ -1951,33 +1868,6 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 异常档连边框一起上色：胶囊是右列唯一的结论载体，只靠一个 8px 点区分不够 */
 .ac-hpill.is-degraded { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); }
 .ac-hpill.is-unavailable { border-color: color-mix(in srgb, var(--mk-red) 42%, var(--mk-line)); }
-/* 默认路由角色行（2026-10-05 重设计：原 ranklist 概览 + 三列输入合并为行式
-   label | input | badge；ac-body 已有 14px 栅格，此处不用再加外距） */
-.ac-route { display: grid; gap: 8px; }
-.ac-route__row {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-.ac-route__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
-/* 角色行「所配即所得」（2026-10-15 用户重组）：输入行 + 其下的解析结果行（↳ 实际生效 / 来源 /
-   降级备用）。两行同一 label 内堆叠，解析结果用等宽字 + 弱色，读作输入的「回显」而非另一个字段。 */
-.ac-route__row--stack { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-.ac-route__inline {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-.ac-route__resolve {
-  padding-left: 74px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  /* 允许折行：模型 ID 变长后单行会截掉「降级备用」这一段（2026-10-20 走查） */
-  overflow-wrap: anywhere;
-}
-.ac-route__resolve--none { color: var(--mk-faint); }
 /* 内置别名映射表：默认收起的折叠条（查证用参考表，不必每次进页都占屏） */
 .ac-fold { display: block; }
 .ac-fold__bar {
@@ -2049,10 +1939,13 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-probe__interval .mk-field__input { width: 72px; text-align: center; }
 .ac-probe__unit { font-style: normal; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
+/* 平台详情「生成参数」页签：不再套卡壳，内部按块节奏堆叠 */
+.ac-gen-panel { display: grid; gap: 14px; min-width: 0; }
+.ac-gen-panel__bar { display: flex; justify-content: flex-end; }
 /* 调用参数 + 能力健康：两列（左参数右健康，2026-10-05 修复——注释/1100px 收合断点/
    移动端摘边距规则都证明双列是设计意图，基础 grid-template-columns 却在历史改动中丢失，
    实际一直堆叠渲染，健康表被参数组压到折叠线下）；分隔线沿用卡内原 dashed 方言。
-   「模型路由」页签同款复用（左=默认路由，右=生成参数），两列各自立栅同节奏 */
+   默认生成参数同款复用（左=默认思考，右=结构化输出），两列各自立栅同节奏 */
 .ac-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 .ac-cols__main, .ac-cols__side { display: grid; gap: 12px; align-content: start; min-width: 0; padding: 0; }
 .ac-cols__side { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
@@ -2152,8 +2045,6 @@ async function saveQuota(enabled: boolean, quota: number) {
      仍强行并排，服务地址输入框被 180px 下限撑破、压掉 API Key（审计 P1 2.2） */
   .ac-row--2 { grid-template-columns: 1fr; }
   .ac-group__fields, .ac-groups--3 { grid-template-columns: 1fr; }
-  .ac-route__inline { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 8px; }
-  .ac-route__resolve { padding-left: 64px; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */

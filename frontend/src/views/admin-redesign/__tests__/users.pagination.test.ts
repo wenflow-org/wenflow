@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import Users from '../Users.vue';
-import { liveUsers } from '../live';
+import { liveUsers, liveIncludeVirtual } from '../live';
 
 const { apiObject } = vi.hoisted(() => ({
   apiObject: (): Record<string, unknown> =>
@@ -47,6 +47,7 @@ vi.mock('../live', async () => {
     liveSetIncludeVirtual: vi.fn((v: boolean) => {
       liveIncludeVirtual.value = v;
     }),
+    liveSetUsersIncludeTest: vi.fn(async () => {}),
     liveLoading: ref(false),
     liveFailures: ref<Record<string, string>>({}),
     registrationEnabled: ref<boolean | null>(null),
@@ -267,5 +268,21 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
     // 行内徽章仍如实显「管理员」（那是行的事实）；pill 的是「真实域有几个管理员」，title 已披露口径
     expect(await badgeOf(w, '管理员')).toBe('1');
     expect(pillOf(w, '管理员').attributes('title')).toContain('仅统计真实账号');
+  });
+
+  /** D10（2026-10-22 拍板 A）：测试视角下角色/活跃 pill 恒 0、点开是空列表，
+   *  不再给这条走不通的入口；只保留「全部 / 已删除」。 */
+  it('测试视角：不渲染管理员/普通用户/近 7 天活跃 pill', async () => {
+    liveIncludeVirtual.value = true;
+    const w = await mountUsers();
+    await nextTick();
+    const labels = w.findAll('.mk-pill').map((p) => p.text());
+    expect(labels.some((t) => t.includes('全部'))).toBe(true);
+    expect(labels.some((t) => t.includes('已删除'))).toBe(true);
+    expect(labels.some((t) => t.includes('管理员'))).toBe(false);
+    expect(labels.some((t) => t.includes('普通用户'))).toBe(false);
+    expect(labels.some((t) => t.includes('近 7 天活跃'))).toBe(false);
+    w.unmount();
+    liveIncludeVirtual.value = false;
   });
 });

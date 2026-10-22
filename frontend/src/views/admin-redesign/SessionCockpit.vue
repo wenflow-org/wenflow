@@ -518,7 +518,7 @@
           <div v-if="wrapupLessonRows.length" class="cp-wrapup-sums">
             <div class="cp-wrapup-sums__head">
               <span class="cp-wrapup-sums__title">单课总结</span>
-              <span class="cp-wrapup-sums__meta">{{ wrapupLessonRows.length }} 节已完成<template v-if="!hasWrapup"> · 终局总结在全部课程完成后生成</template></span>
+              <span class="cp-wrapup-sums__meta">{{ wrapupLessonRows.length }} 节已完成</span>
             </div>
             <div v-for="l in wrapupLessonRows" :key="l.taskId" class="cp-wrapup-sum">
               <button
@@ -675,7 +675,7 @@
               <div class="cp-aside-state cp-aside-state--busy">
                 <span class="cp-aside-state__spin" aria-hidden="true"></span>
                 <strong>正在生成路径方案…</strong>
-                <p>里程碑与课程树生成中，稍后自动刷新。也可前往路径页签查看进度。</p>
+                <p>里程碑与课程树生成中，稍后自动刷新。</p>
               </div>
             </template>
             <template v-else>
@@ -755,7 +755,6 @@
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'wrapup'" class="mk-card">
           <div class="mk-card__head">
             <h4 class="mk-card__title">总结状态 <span class="cp-aside-dot" :class="hasWrapup ? 'is-ok' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ hasWrapup ? '详情见「学习总结」' : '学习完成后生成' }}</span>
           </div>
           <div class="cp-aside-body">
             <div class="cp-aside-state" :class="hasWrapup ? 'cp-aside-state--ok' : 'cp-aside-state--empty'">
@@ -932,7 +931,7 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeRaw">✕</button>
           </div>
           <div class="mk-modal__body">
-            <p class="cp-rawview__note">接口返回的完整会话数据，供排查使用。日常监控看四个阶段页签即可。</p>
+            <p class="cp-rawview__note">接口返回的完整会话数据</p>
             <pre class="cp-rawview__pre">{{ rawJsonFull }}</pre>
           </div>
           <div class="mk-modal__foot">
@@ -1152,12 +1151,15 @@ const blackboxTraceCount = computed(() => {
 /** 模式声明单源（2026-10-04 全站评审 P3#13）：真实会话 chip 吸收控制台「只读监控」条的语义，
     同屏只此一处；黑盒/辅助口径不变（黑盒控制台内另有专项声明条） */
 const modeText = computed(() => (isRealMode.value ? '真实会话 · 只读监控' : isBlackbox.value ? '黑盒模式' : '辅助模式'))
+const TERMINAL_SESSION_STATUSES = ['completed', 'failed', 'abandoned', 'timeout', 'finalization_failed', 'discarded', 'superseded']
 const isTerminal = computed(() => {
   const st = normalized(session.value?.status || runtime.value.status)
-  return ['completed', 'failed', 'abandoned'].includes(st)
+  return TERMINAL_SESSION_STATUSES.includes(st)
 })
 const terminalStatus = computed(() => normalized(session.value?.status || runtime.value.status))
 const isFailedTerminal = computed(() => ['failed', 'abandoned'].includes(terminalStatus.value))
+/** 当前阶段未正常收束的终态：阶段条不能把终止点标成「已完成」（超时/废弃/被替代同属终止） */
+const isInterruptedTerminal = computed(() => ['failed', 'abandoned', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(terminalStatus.value))
 /** 黑盒 rerun 仅终态可跑（后端 409：只有终态黑盒实验可按原输入重跑），按钮禁用前置同一口径（报告 #37） */
 const blackboxRerunTitle = computed(() => isTerminal.value
   ? '按原输入重跑本实验：生成一个新会话，运行配置保持不变'
@@ -1559,6 +1561,10 @@ const pathEmptyHint = computed(() => {
   return goalConverged.value ? '尚无路径。' : '尚无路径：目标未确认。'
 })
 
+/** 后端原始阶段（teaching/goal/path/summary）：生命周期控件按它收窄能力，
+ *  不能用下面归一后的 currentStage（那里 teaching→learning） */
+const rawStage = computed(() => String(runtime.value.currentStage || session.value?.currentStage || '').toLowerCase())
+
 const currentStage = computed(() => {
   const raw = String(runtime.value.currentStage || session.value?.currentStage || 'goal').toLowerCase()
   // 后端枚举是 teaching，前端统一用 learning；兼容旧日志里的 learn/teach 别名
@@ -1796,7 +1802,7 @@ const resetLearningBlockReason = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
   if (isBlackbox.value) return BLACKBOX_CONTROL_BLOCK
-  if (isTerminal.value && !isFailedTerminal.value) return '会话已完成，不能重启教学'
+  if (isTerminal.value && !isFailedTerminal.value) return '会话已结束，不能重启教学'
   return ''
 })
 const canRestartFromFailedLearn = computed(() => isFailedTerminal.value && hasRunnablePathTask.value)
@@ -1842,7 +1848,7 @@ const {
   stageProgress, stageMiniStatus, learnProgressText
 } = useCockpitStages({
   currentStage, bindings, stageStatus, stageResults,
-  isTerminal, isFailedTerminal, hasWrapup,
+  isTerminal, isInterruptedTerminal, hasWrapup,
   goalConversationMessages, pathStatusPath, pathMilestonesView, learnLessons
 })
 
@@ -1906,7 +1912,9 @@ function stepState(st: StageKey): 'done' | 'active' | 'idle' {
 }
 function stepMeta(st: StageKey) {
   if (stageDone(st)) return stageProgress(st) || '已完成'
-  if (stageActive(st)) return '进行中'
+  // D8（2026-10-22 拍板 A）：终态会话的当前阶段不能继续写「进行中」——
+  // 已放弃/失败的会话停在 Path 时读起来像还在跑；勾与色不变，只改副标。
+  if (stageActive(st)) return isTerminal.value ? '中断' : '进行中'
   return '待进入'
 }
 const stageDoneCount = computed(() => stageFlow.reduce((n, st) => n + (stageDone(st as StageKey) ? 1 : 0), 0))
@@ -2566,7 +2574,7 @@ const lifeHandlersCockpit: Partial<Record<VsControlKey, () => void>> = {
   delete: () => { void removeSession() }
 }
 const lifeControlsCockpit = computed(() =>
-  vlabControlsFor(lifeStateCockpit.value).filter((c) => lifeHandlersCockpit[c.key])
+  vlabControlsFor(lifeStateCockpit.value, { stage: rawStage.value }).filter((c) => lifeHandlersCockpit[c.key])
 )
 /** 统一操作入口：需确认的操作（stop/retry）先过模型文案确认，再执行 */
 function runCockpitAction(c: VsControlDef) {
@@ -2627,6 +2635,17 @@ async function act(kind: string) {
         title: '按评审意见重规划',
         message: '将按当前评审意见重新规划路径方案，替换现有方案（目标上下文保留）。\n确认？',
         confirmText: '重新规划',
+        danger: false
+      })
+      if (!ok) return
+    }
+    /* D9（2026-10-22 拍板 A）：自动驾驶会一直跑到路径完成或触发成本护栏，
+       单会话可能持续消耗大量 AI 调用；启动前先把终点、回合上限与预算口径说清。 */
+    if (kind === 'autopilotStart') {
+      const ok = await askConfirm({
+        title: '启动自动驾驶',
+        message: `将以「路径全部完成」为终点持续运行，不会逐课停下等你确认。\n每课回合上限 ${clampLearnAutoTurnCap()}；会话配置了成本护栏时达到上限会自动停止，未配置则可能持续产生较多 AI 调用。\n运行期间可随时停止，学习进度与对话保留。`,
+        confirmText: '启动自动驾驶',
         danger: false
       })
       if (!ok) return

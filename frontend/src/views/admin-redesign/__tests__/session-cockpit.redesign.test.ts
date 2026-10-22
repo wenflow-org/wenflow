@@ -43,6 +43,8 @@ const { stableVirtualApi, apiObject } = vi.hoisted(() => {
     restartVirtualLearning: vi.fn(),
     executeBlackboxVirtualAction: vi.fn(),
     rerunBlackboxVirtualSession: vi.fn(),
+    autopilotStart: vi.fn(),
+    autopilotStop: vi.fn(),
     getVirtualSessionSimulationClock: vi.fn()
   };
   const apiObject = (): Record<string, unknown> =>
@@ -288,6 +290,67 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     const assisted = await mountCockpit('session', 'vs_1');
     expect(assisted.findAll('.cp-console__actions button').map((b) => b.text())).not.toContain('终止实验');
     assisted.unmount();
+  });
+
+  it.each(['timeout', 'finalization_failed', 'discarded', 'superseded'])(
+    '异常终态 %s 也按终态处理：当前阶段写「中断」，自动驾驶按钮禁用（D8 扩展）',
+    async (status) => {
+      const payload = virtualLearningPayload();
+      payload.data.status = status;
+      payload.data.currentStage = 'path';
+      payload.data.runtime.status = status;
+      payload.data.runtime.currentStage = 'path';
+      payload.data.stageResults.path = {};
+      payload.data.runtime.stageStatus.path = { learningPathId: 'lp_v1', generated: true };
+      stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
+      const w = await mountCockpit('session', 'vs_1');
+      const steps = w.findAll('.cp-stp');
+      expect(steps[1].classes()).toContain('cp-stp--active');
+      expect(steps[1].find('.cp-stp__meta').text()).toBe('中断');
+      const ap = w.findAll('button').find((b) => b.text() === '自动驾驶');
+      expect(ap, '终态会话不再提供可点的自动驾驶').toBeTruthy();
+      expect(ap!.attributes('disabled')).toBeDefined();
+      w.unmount();
+    }
+  );
+
+  it('已放弃会话停在 Path：当前阶段副标为「中断」，不再写「进行中」（D8）', async () => {
+    const payload = virtualLearningPayload();
+    payload.data.status = 'abandoned';
+    payload.data.currentStage = 'path';
+    payload.data.runtime.status = 'abandoned';
+    payload.data.runtime.currentStage = 'path';
+    payload.data.stageResults.path = {};
+    payload.data.runtime.stageStatus.path = { learningPathId: 'lp_v1', generated: true };
+    stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
+    const w = await mountCockpit('session', 'vs_1');
+    const steps = w.findAll('.cp-stp');
+    expect(steps[1].classes()).toContain('cp-stp--active');
+    expect(steps[1].find('.cp-stp__meta').text()).toBe('中断');
+    w.unmount();
+  });
+
+  it('自动驾驶启动前二次确认：说清终点/回合上限/预算，取消则不调用后端（D9）', async () => {
+    stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
+    const w = await mountCockpit('session', 'vs_1');
+    const btn = w.findAll('.cp-console__actions button').find((b) => b.text() === '自动驾驶')!;
+    expect(btn).toBeTruthy();
+    await btn.trigger('click');
+    await settle();
+    expect(confirmState.open).toBe(true);
+    expect(confirmState.title).toBe('启动自动驾驶');
+    expect(confirmState.message).toContain('路径全部完成');
+    expect(confirmState.message).toContain('成本护栏');
+    expect(stableVirtualApi.autopilotStart).not.toHaveBeenCalled();
+    settleConfirm(false);
+    await settle();
+    expect(stableVirtualApi.autopilotStart).not.toHaveBeenCalled();
+    await btn.trigger('click');
+    await settle();
+    settleConfirm(true);
+    await settle();
+    expect(stableVirtualApi.autopilotStart).toHaveBeenCalledWith('vs_1', { maxTurns: expect.any(Number) });
+    w.unmount();
   });
 
   it('「每课回合上限」写明是本屏临时覆盖（2026-10-19 运营走查：title 原写「按 1 或 100 保存」，实际刷新即回到画像默认值）', async () => {

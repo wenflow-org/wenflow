@@ -18,7 +18,8 @@ export function useCockpitStages(deps: {
   stageStatus: ComputedRef<Record<string, Record<string, unknown>>>
   stageResults: ComputedRef<Record<string, unknown>>
   isTerminal: ComputedRef<boolean>
-  isFailedTerminal: ComputedRef<boolean>
+  /** 当前阶段没有正常收束（失败/放弃/超时/废弃/被替代）：不能把当前阶段标成完成 */
+  isInterruptedTerminal: ComputedRef<boolean>
   hasWrapup: ComputedRef<boolean>
   goalConversationMessages: ComputedRef<Array<{ role: string; content: string }>>
   pathStatusPath: ComputedRef<Record<string, unknown>>
@@ -27,7 +28,7 @@ export function useCockpitStages(deps: {
 }) {
   const {
     currentStage, bindings, stageStatus, stageResults,
-    isTerminal, isFailedTerminal, hasWrapup,
+    isTerminal, isInterruptedTerminal, hasWrapup,
     goalConversationMessages, pathStatusPath, pathMilestonesView, learnLessons
   } = deps
 
@@ -50,8 +51,8 @@ export function useCockpitStages(deps: {
 
     // Wrapup 不是会话终态的同义词：只有确实写出总结时才算完成。
     if (st === 'wrapup') return hasWrapup.value
-    // 失败终态只确认失败点以前的阶段；当前失败阶段不能伪装成完成。
-    if (isFailedTerminal.value && idx === cur) return false
+    // 失败/放弃/超时等终止只确认终止点以前的阶段；当前未收束阶段不能伪装成完成。
+    if (isInterruptedTerminal.value && idx === cur) return false
     if (isTerminal.value && idx <= cur) return true
     if (idx < cur) return true
     // 同阶段但已有下游证据时，也标完成（如 learning 时 Goal/Path 已完成）

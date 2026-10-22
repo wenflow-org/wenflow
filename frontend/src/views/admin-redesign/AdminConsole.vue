@@ -68,7 +68,7 @@ function asyncPage(loader: () => Promise<any>) {
           h('div', { class: 'mk-alert mk-alert--row' }, [
             h('div', { class: 'mk-alert__msg' }, [
               h('strong', { style: 'margin-right: 8px' }, '页面加载失败'),
-              h('span', '资源加载失败（可能是网络异常或平台刚更新）'),
+              h('span', '页面依赖模块加载失败（可能是网络异常、开发态依赖缓存过期，或平台刚更新）'),
             ]),
             h('div', { class: 'mk-alert__act' }, [
               h('button', { type: 'button', class: 'mk-btn mk-btn--sm', onClick: () => window.location.reload() }, '刷新页面'),
