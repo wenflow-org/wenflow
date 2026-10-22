@@ -660,9 +660,12 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
     parts.push(rect(clientX, firstCy - clientH / 2, clientW, clientH, { r: 7, fill: T.surface, stroke: T.lineStrong, sw: T.stroke }));
     parts.push(text(clientX + clientW / 2, firstCy + 4, client, 't-tiny', 'middle'));
 
-    // 每一跳从客户端出发穿过边界：第 1 跳直连，第 2 跳起走左侧竖干再横进
+    // 每一跳从客户端出发穿过边界：第 1 跳直连，第 2 跳起走左侧竖干再横进。
+    // 缺省即串联（2026-10-22）：真课 10 张链路图 47 跳**没有一跳**写 from，
+    // 结果每跳都从客户端并联射出，「响应回来」也画成往外发。要并联扇出必须显式写 from:'client'。
+    const isSerial = (node: any, i: number) => i > 0 && (node?.from === 'prev' || node?.from == null);
     const trunkX = clientX + clientW + 8;
-    const directIdx = nodes.map((n: any, i: number) => (n.from === 'prev' ? -1 : i)).filter((i: number) => i >= 0);
+    const directIdx = nodes.map((n: any, i: number) => (isSerial(n, i) ? -1 : i)).filter((i: number) => i >= 0);
     const lastDirect = directIdx.length ? directIdx[directIdx.length - 1] : 0;
     const lastCy = stackTop + layout.offsets[lastDirect] + (layout.heights[lastDirect] || 60) / 2;
     if (directIdx.length > 1) {
@@ -674,7 +677,7 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
       const cy = ny + nh / 2;
       const nodeTone = COMPARE_TONES[node.tone] || tone;
       const entryX = borderX + nodePad;
-      if (node.from === 'prev') {
+      if (isSerial(node, i)) {
         // 顺序链路：从上一张卡底下拉一条竖箭头下来，**不跨边界、不占跳数**
         const prev = i - 1;
         const prevBottom = stackTop + layout.offsets[prev] + (layout.heights[prev] || 60);
@@ -687,7 +690,7 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
         // 跳数标在**边界上**：数一眼边界上的序号，就是这条路径跨了几次集群。
         // 先垫一圈白底：边界线到徽标前就断开，读作「线上的一次跨集群」，而不是数字压着线。
         const bx = borderX;
-        const hopNo = nodes.slice(0, i + 1).filter((n: any) => n.from !== 'prev').length;
+        const hopNo = nodes.slice(0, i + 1).filter((n: any, k: number) => !isSerial(n, k)).length;
         parts.push(`<circle cx="${bx}" cy="${cy}" r="11.5" fill="${T.surface}"/>`);
         parts.push(`<circle cx="${bx}" cy="${cy}" r="8.5" fill="${T.surface}" stroke="${tone.color}" stroke-width="1.6"/>`);
         parts.push(text(bx, cy + 3.6, String(hopNo), 't-micro', 'middle', `fill="${tone.ink}"`));

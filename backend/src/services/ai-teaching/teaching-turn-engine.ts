@@ -74,7 +74,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitTeachingFigure, countTeachingFigures, resolveFigureMaxPerSession, resolveFigureMaxPerKind, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -227,11 +227,19 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
   return buildDeterministicOpening(context);
 }
 
-/** 同图型封顶：判据取自库（侧表），不用回合内存快照——上限闸门此前正因为内存快照而失效。 */
-async function kindCapReached(sessionId: string, kind: unknown): Promise<boolean> {
+/**
+ * 出图闸门的库侧快照：会话总数、该图型数、已落库的图。
+ * 判据必须取自库（侧表），不用回合内存快照——2026-10-22 复核 744 张图，
+ * 会话上限 4 与同骨架去重两道闸门在真课里一次都没触发（单课最多 12 张）。
+ */
+async function figureGateSnapshot(sessionId: string, kind: unknown) {
   const key = String(kind || 'position-line');
-  const counts = await teachingSessionRepository.countFiguresByKind(sessionId);
-  return (counts[key] || 0) >= resolveFigureMaxPerKind();
+  const figures = await teachingSessionRepository.listFigures(sessionId);
+  const kindCount = figures.reduce(
+    (n, figure) => n + (String((figure as { kind?: string })?.kind || 'position-line') === key ? 1 : 0),
+    0,
+  );
+  return { figures, total: figures.length, kindCount, kindCap: figureKindCap(key) };
 }
 
 export async function processStudentMessage(
@@ -898,6 +906,8 @@ export async function processStudentMessage(
       // 只影响观感，不改变任何几何与语义。模型自己给了合法 palette 则以它为准。
       palette: teachingOutput.figure.palette || paletteOfSubject(session.subject),
     };
+    // 库侧快照只在这条出图分支里取：会话上限、同图型配额、同骨架去重共用一次查询
+    const figureGate = await figureGateSnapshot(sessionId, wanted.kind);
     if (detectExerciseLeakInReply(teachingOutput.reply)) {
       logger.info('[AITeaching] 本轮回复布置了由学生自己画的练习，跳过位置线图（防答案泄漏）', {
         sessionId,
@@ -913,24 +923,27 @@ export async function processStudentMessage(
         figureNumbers: collectFigureNumbers(wanted).slice(0, 8),
         replyNumbers: [...collectReplyNumbers(teachingOutput.reply)].slice(0, 8),
       });
-    } else if (countTeachingFigures(updatedMessages) >= resolveFigureMaxPerSession()) {
+    } else if (figureGate.total >= resolveFigureMaxPerSession()) {
       // 会话配额是**硬闸**（2026-10-19）：提示词里的"上限"只是建议，模型仍会每轮出图——
       // 实跑地理课一节课出了 12 张同类图，读起来就是"老师每轮都在摆同一张表"。
       logger.info('[AITeaching] 本会话图数已达上限，跳过本轮图', {
         sessionId,
         taskId: session.taskId,
         kind: wanted.kind,
-        count: countTeachingFigures(updatedMessages),
+        count: figureGate.total,
       });
-    } else if (await kindCapReached(sessionId, wanted.kind)) {
+    } else if (figureGate.kindCount >= figureGate.kindCap) {
       // 总量闸门之外再按图型封顶（2026-10-21 真课）：同一节课 10 张位置线，
       // 其中几张只是换了标签——学生看到的是「老师反复摆同一张图」。
+      // 2026-10-22：配额按证据等级分配（A 4 / B 4 / C 3 / D 2），见 doc/DIAGRAM_PEDAGOGY_RESEARCH.md
       logger.info('[AITeaching] 本会话该图型已达上限，跳过本轮图', {
         sessionId,
         taskId: session.taskId,
         kind: wanted.kind,
+        count: figureGate.kindCount,
+        cap: figureGate.kindCap,
       });
-    } else if (!shouldEmitTeachingFigure(updatedMessages, wanted)) {
+    } else if (!shouldEmitFigureAmong(figureGate.figures, wanted)) {
       // 与上一轮同一张图（学生只改了措辞）→ 不再重摆；下方悬空引用清理会把"见下图"一并剥掉
       logger.info('[AITeaching] 本会话已有同骨架的图（只改了措辞/条目），跳过重复渲染', {
         sessionId,

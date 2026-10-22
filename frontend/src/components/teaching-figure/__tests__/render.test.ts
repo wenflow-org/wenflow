@@ -360,7 +360,7 @@ describe('compare 链路形态（客户端 → 集群边界 → 节点）', () =
         client: '客户端',
         chain: [
           { label: '共识一：协调集群', sub: '定路由、选主', tone: 'warn' },
-          { label: '共识二：存储节点', sub: '写日志与数据', tone: 'warn' },
+          { label: '共识二：存储节点', sub: '写日志与数据', tone: 'warn', from: 'client' },
         ],
         items: ['两份结论必须互相迁就'],
       },
@@ -466,5 +466,32 @@ describe('range-bar（数值区间并排，2026-10-21）', () => {
 
   it('不足两行返回 null（fail-open）', () => {
     expect(renderSpecFigure('range-bar', { rows: [{ label: '新组', from: 1, to: 2 }] })).toBeNull();
+  });
+});
+
+describe('compare 链路：缺省 from 即串联（2026-10-22 真课 47 跳全缺 from）', () => {
+  const render = (chain: any[]) =>
+    renderSpecFigure('compare', {
+      left: { head: '外置协调', client: '客户端', chain },
+      right: { head: '内置共识', items: ['省一次往返'] },
+      divider: '差的就是边界',
+    })!;
+
+  const hopBadges = (svg: string) =>
+    [...svg.matchAll(/class="t-micro"[^>]*>([^<]*)</g)].map((m) => m[1]);
+
+  it('第二跳不写 from → 从上一张卡竖向连下来，只占一次边界跳数', () => {
+    const svg = render([{ label: '请求发出' }, { label: '响应回来' }]).svg;
+    expect(hopBadges(svg)).toEqual(['1']);
+  });
+
+  it('显式 from:"client" 才并联扇出，两跳各占一个边界序号', () => {
+    const svg = render([{ label: '请求发出' }, { label: '响应回来', from: 'client' }]).svg;
+    expect(hopBadges(svg)).toEqual(['1', '2']);
+  });
+
+  it('显式 from:"prev" 与缺省等价（旧写法仍然有效）', () => {
+    const svg = render([{ label: '请求发出' }, { label: '响应回来', from: 'prev' }]).svg;
+    expect(hopBadges(svg)).toEqual(['1']);
   });
 });

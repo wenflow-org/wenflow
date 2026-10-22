@@ -596,6 +596,26 @@ export class TeachingSessionRepository {
     return counts;
   }
 
+  /**
+   * 本会话已落库的图（原样返回 spec）。
+   *
+   * 会话上限与会话级去重也必须读这里，理由同上：回合内存里的消息快照在真课里与库不一致，
+   * 2026-10-22 复核 744 张图发现会话上限 4 一次未触发（单课最多 12 张）。
+   */
+  async listFigures(sessionId: string): Promise<TeachingFigure[]> {
+    const rows = await prisma.teaching_session_messages.findMany({
+      where: { sessionId },
+      select: { payload: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const figures: TeachingFigure[] = [];
+    for (const row of rows) {
+      const message = parseJsonSafe<TeachingSessionMessage | null>(row.payload, null);
+      if (Array.isArray(message?.figures)) figures.push(...message.figures);
+    }
+    return figures;
+  }
+
   async assertOwnership(sessionId: string, userId: string): Promise<TeachingSessionRecord> {
     const session = await this.getById(sessionId);
     if (!session) {

@@ -283,7 +283,7 @@ const FIGURE_KIND_GUIDE = [
   '- matrix：二维命中矩阵（✓有/—无/叠=重复堆砌/≡两边同一项）。{"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":1,"tone":"hit|miss|dup|key"}],"legend":[{"text":"✓ 已写到","fill":"#e6f4f1"}]}',
   '- range-bar：**多组数值区间并排**（新组/旧组的波动范围、上下限、从哪到哪）。{"unit":"%","rows":[{"label":"新组四天","from":3.1,"to":3.8,"tone":"accent"},{"label":"旧组四天","from":2.9,"to":3.6,"tone":"neutral"}],"marks":[{"at":0.5,"label":"汇报的均值差"}],"note":"…"}——**数值区间不要塞进 position-line**：一根时间轴画不出带宽，把「幅度」横着放会被读成日期跨度。',
   '- compare：两条分支并排对照（**对等**的两边）。卡片形态：{"left":{"head":"…","sub":"…","items":["…"]},"right":{"head":"…","items":["…"]},"divider":"…","leftTone":"neutral","rightTone":"accent"}',
-  '- **compare 的链路形态（架构/请求路径类对比必须用它，2026-10-20 实跑）**：当差别是「几跳」「几次跨集群往返」时，不要只给两栏条目——把每侧的请求链路写进 chain，渲染器会画出客户端、集群边界与穿过边界的箭头，**箭头数就是跳数**。{"left":{"head":"外置协调","badge":"2 套集群 · 2 次独立共识","badgeTone":"warn","client":"客户端","chain":[{"label":"共识 ①：ZooKeeper 集群","sub":"定路由、选主","tone":"warn"},{"label":"共识 ②：业务存储节点","sub":"写日志与数据","tone":"warn"}],"items":["两份结论必须互相迁就"]},"right":{"head":"内置共识","badge":"单一系统 · 1 次共识","badgeTone":"ok","client":"客户端","chain":[{"label":"业务进程内置 Raft 状态机","sub":"元数据与数据落同一条日志","merged":true,"tone":"ok"}],"items":["省掉一次跨集群往返"]}}。**顺序段与往返**：若请求是一段接一段（网关→订单→库存，都在同一个集群内），第二张卡起写 `"from":"prev"`——它承接上一张卡、不占边界序号；第一张卡才跨集群。要强调「发出去还要等回话」，给该节点 `"rtt":true`，箭头上会出现反向箭头。**铁律**：①链上必须至少两层实体（客户端 → 组件 → 组件），不许把两边各写成三行文字；②「省掉/差异」只能体现在链的条数与 merged 节点上，不要靠中间悬浮一句话；③badge 是这一栏的结论，贴在栏头，不要写进正文；④同一进程内的请求/响应链（前端回调、网关→服务）给每一侧 `boundaryLabel`（如「组件异步边界」），否则边界会显示成「集群边界」。',
+  '- **compare 的链路形态（架构/请求路径类对比必须用它，2026-10-20 实跑）**：当差别是「几跳」「几次跨集群往返」时，不要只给两栏条目——把每侧的请求链路写进 chain，渲染器会画出客户端、集群边界与穿过边界的箭头，**箭头数就是跳数**。{"left":{"head":"外置协调","badge":"2 套集群 · 2 次独立共识","badgeTone":"warn","client":"客户端","chain":[{"label":"共识 ①：ZooKeeper 集群","sub":"定路由、选主","tone":"warn"},{"label":"共识 ②：业务存储节点","sub":"写日志与数据","tone":"warn"}],"items":["两份结论必须互相迁就"]},"right":{"head":"内置共识","badge":"单一系统 · 1 次共识","badgeTone":"ok","client":"客户端","chain":[{"label":"业务进程内置 Raft 状态机","sub":"元数据与数据落同一条日志","merged":true,"tone":"ok"}],"items":["省掉一次跨集群往返"]}}。**顺序段与往返**：若请求是一段接一段（网关→订单→库存，都在同一个集群内），**第二张卡起默认就是串联**（渲染器把缺省的 `from` 当作上一张卡，2026-10-22 起）；只有真正的并行扇出（一个请求同时打到多个节点）才写 `"from":"client"`。第一张卡才跨集群。要强调「发出去还要等回话」，给该节点 `"rtt":true`，箭头上会出现反向箭头。**铁律**：①链上必须至少两层实体（客户端 → 组件 → 组件），不许把两边各写成三行文字；②「省掉/差异」只能体现在链的条数与 merged 节点上，不要靠中间悬浮一句话；③badge 是这一栏的结论，贴在栏头，不要写进正文；④同一进程内的请求/响应链（前端回调、网关→服务）给每一侧 `boundaryLabel`（如「组件异步边界」），否则边界会显示成「集群边界」。',
   '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',
   '- ladder：**层级/先后/进度**（先到哪、再到哪）。{"steps":[{"label":"定角度","state":"done"},{"label":"落材料","state":"done"},{"label":"扣设问","state":"current"},{"label":"排层次","state":"todo"}]}',
   '- quadrant：2×2（四格顺序：左上、右上、左下、右下）。{"colLabels":["左","右"],"rowLabels":[{"label":"上","sub":"…"},{"label":"下"}],"cells":[{"title":"…","body":["…"],"tone":"ok|warn|neutral"}]}',
@@ -462,6 +462,46 @@ export function resolveFigureMaxPerKind(value = process.env.TEACHING_FIGURE_MAX_
   return parsed;
 }
 
+/**
+ * 图型的证据等级（见 doc/DIAGRAM_PEDAGOGY_RESEARCH.md §五）。
+ *
+ * 为什么按等级分配配额：2026-10-22 的 744 张图里，top3（对照/阶梯/归类）占 72.3%，
+ * 而其中阶梯与归类没有任何图型级教学实证；数轴/位置线是唯一 A 级。配额不是"少画"，
+ * 是让有证据的形状先用满、没证据的形状每节课最多摆两次。
+ */
+export const FIGURE_KIND_EVIDENCE: Record<string, 'A' | 'B' | 'C' | 'D'> = {
+  'position-line': 'A',
+  matrix: 'B',
+  grid: 'B',
+  tree: 'B',
+  compare: 'C',
+  venn: 'C',
+  cycle: 'C',
+  ladder: 'D',
+  bins: 'D',
+  balance: 'D',
+  bipartite: 'D',
+  'range-bar': 'D',
+  quadrant: 'D',
+  bullseye: 'D',
+  board: 'D',
+};
+
+/** 等级 → 每会话同图型上限。A 放宽到 4，D 收紧到 2。 */
+const FIGURE_KIND_CAP_BY_GRADE: Record<'A' | 'B' | 'C' | 'D', number> = { A: 4, B: 4, C: 3, D: 2 };
+
+/**
+ * 某图型在本会话的上限。环境变量显式设置时以它为准（统一覆盖所有图型），
+ * 否则按证据等级分配——这是唯一一处"理论落进配额"的地方。
+ */
+export function figureKindCap(kind: unknown, override = process.env.TEACHING_FIGURE_MAX_PER_KIND): number {
+  if (override && String(override).trim() !== '') return resolveFigureMaxPerKind(override);
+  const key = String(kind || 'position-line');
+  const grade = FIGURE_KIND_EVIDENCE[key] || 'D';
+  return FIGURE_KIND_CAP_BY_GRADE[grade];
+}
+
+
 /** 上一轮老师已经摆过位置线 → 本轮不再重复摆（判据天然带节奏）。 */
 function lastAssistantHasFigure(messages: TeachingSessionMessage[]): boolean {
   const lastAssistant = [...messages].reverse().find((message) => message?.role === 'assistant');
@@ -562,15 +602,6 @@ function similarShape(a: unknown, b: unknown): boolean {
 
 /** 同一图型每会话最多三张：近义改写由相似度拦，剩下的名额留给真正换轴的那一张。 */
 const FIGURE_MAX_PER_KIND = 3;
-function countFiguresOfKind(messages: TeachingSessionMessage[], kind: string): number {
-  let n = 0;
-  for (const message of messages) {
-    for (const figure of Array.isArray(message?.figures) ? message.figures : []) {
-      if (String((figure as { kind?: string })?.kind || '') === kind) n += 1;
-    }
-  }
-  return n;
-}
 
 /** 本课已经用过的图型（「收一张」时做软提示，不强制换形状）。 */
 function usedFigureKinds(messages: TeachingSessionMessage[]): string[] {
@@ -583,28 +614,42 @@ function usedFigureKinds(messages: TeachingSessionMessage[]): string[] {
   return [...kinds];
 }
 
+/**
+ * 会话级去重：入参是**已落库的图**（库侧表），不是回合内存快照。
+ * 2026-10-22 复核：内存版这道闸门在 744 张图里一次没触发，而同会话相似度 0.60 的图照旧渲染。
+ */
+export function shouldEmitFigureAmong(existingFigures: unknown[] | null | undefined, figure: unknown): boolean {
+  if (!figure) return false;
+  const list = Array.isArray(existingFigures) ? existingFigures : [];
+  const previous = list.length ? list[list.length - 1] : null;
+  if (previous && figureSignature(previous) === figureSignature(figure)) return false;
+  // 同类数量上限
+  const kind = String((figure as { kind?: string })?.kind || '');
+  if (kind) {
+    const sameKind = list.filter((item) => String((item as { kind?: string })?.kind || '') === kind).length;
+    if (sameKind >= FIGURE_MAX_PER_KIND) return false;
+  }
+  // 全会话骨架去重：换个说法重画的（精确不等但高度相似）也拦
+  const shape = shapeSignature(figure);
+  if (shape) {
+    for (const item of list) {
+      if (shapeSignature(item) === shape) return false;
+      if (similarShape(item, figure)) return false;
+    }
+  }
+  return true;
+}
+
 export function shouldEmitTeachingFigure(  messages: TeachingSessionMessage[] | null | undefined,
   figure: unknown,
 ): boolean {
   if (!figure) return false;
   const list = Array.isArray(messages) ? messages : [];
-  const lastAssistant = [...list].reverse().find((message) => message?.role === 'assistant');
-  const previous = Array.isArray(lastAssistant?.figures) ? lastAssistant.figures[lastAssistant.figures.length - 1] : null;
-  if (previous && figureSignature(previous) === figureSignature(figure)) return false;
-  // 同类数量上限
-  const kind = String((figure as { kind?: string })?.kind || '');
-  if (kind && countFiguresOfKind(list, kind) >= FIGURE_MAX_PER_KIND) return false;
-  // 全会话骨架去重：换个说法重画的（精确不等但高度相似）也拦
-  const shape = shapeSignature(figure);
-  if (shape) {
-    for (const message of list) {
-      for (const existing of Array.isArray(message?.figures) ? message.figures : []) {
-        if (shapeSignature(existing) === shape) return false;
-        if (similarShape(existing, figure)) return false;
-      }
-    }
+  const figures: unknown[] = [];
+  for (const message of list) {
+    if (Array.isArray(message?.figures)) figures.push(...message.figures);
   }
-  return true;
+  return shouldEmitFigureAmong(figures, figure);
 }
 
 /** 上一轮已经出过任何视觉产物（figure 或 mermaid diagram）——模型做过选择了，本轮不再反复提示。 */

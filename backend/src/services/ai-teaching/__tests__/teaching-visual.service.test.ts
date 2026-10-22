@@ -24,6 +24,9 @@ import {
   resolveTeachingVisualMaxPerTask,
   resolveTeachingVisualSpec,
   shouldEmitTeachingFigure,
+  shouldEmitFigureAmong,
+  figureKindCap,
+  FIGURE_KIND_EVIDENCE,
   chooseFigureKind,
   figureKindHintLine,
   stripDanglingFigureReferences,
@@ -780,5 +783,47 @@ describe('时间先后线索的词表覆盖（2026-10-21 实跑）', () => {
     const cues = matchTimeOrderCues(line);
     expect(cues.length).toBeGreaterThan(0);
     expect(cues).toEqual(expect.arrayContaining(['响应', '回来', '发的时候']));
+  });
+});
+
+describe('会话级闸门改读库侧表 + 图型配额按证据等级（2026-10-22）', () => {
+  const fig = (kind: string, label: string) => ({
+    kind,
+    spec: { left: { head: label, items: [label] }, right: { head: label + '2', items: [label + '2'] } },
+  });
+
+  it('已落库的同骨架图会被拦下（相似度阈值不再是摆设）', () => {
+    const existing = [fig('compare', '把属性删掉')];
+    expect(shouldEmitFigureAmong(existing, fig('compare', '把属性删掉'))).toBe(false);
+  });
+
+  it('换了一套结构的图照出', () => {
+    const existing = [fig('compare', '把属性删掉')];
+    const next = { kind: 'compare', spec: { left: { head: '外置协调', chain: [{ label: '共识一' }] }, right: { head: '内置共识', chain: [{ label: '状态机' }] } } };
+    expect(shouldEmitFigureAmong(existing, next)).toBe(true);
+  });
+
+  it('同图型已满 3 张 → 不再出（内存旧实现里这条也失效过）', () => {
+    const existing = [fig('bins', '甲'), fig('bins', '乙'), fig('bins', '丙')];
+    expect(shouldEmitFigureAmong(existing, fig('bins', '丁'))).toBe(false);
+  });
+
+  it('配额按证据等级分配：位置线 4、对照 3、阶梯 2', () => {
+    expect(figureKindCap('position-line', '')).toBe(4);
+    expect(figureKindCap('matrix', '')).toBe(4);
+    expect(figureKindCap('compare', '')).toBe(3);
+    expect(figureKindCap('ladder', '')).toBe(2);
+    expect(figureKindCap('balance', '')).toBe(2);
+  });
+
+  it('环境变量显式设置时统一覆盖（回归：运维仍能一键收紧）', () => {
+    expect(figureKindCap('position-line', '1')).toBe(1);
+    expect(figureKindCap('ladder', '5')).toBe(5);
+  });
+
+  it('证据等级表覆盖全部图型，未知图型按 D 处理', () => {
+    expect(FIGURE_KIND_EVIDENCE['position-line']).toBe('A');
+    expect(FIGURE_KIND_EVIDENCE.ladder).toBe('D');
+    expect(figureKindCap('未注册图型', '')).toBe(2);
   });
 });
