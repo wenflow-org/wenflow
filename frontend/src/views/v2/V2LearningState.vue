@@ -499,6 +499,7 @@ import request from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { metricsAPI } from '@/api/metrics';
 import { learningAPI } from '@/api/learning';
+import { aiTeachingAPI } from '@/api/aiTeaching';
 import { adjustmentModeBlockReason, replanModeForRecommendation, type PathAdjustmentPolicyLike } from '@/utils/replanSignal';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -1110,6 +1111,7 @@ interface DecisionCard {
   at: string | null;
   pathId?: string | null;
   pathTitle?: string | null;
+  sessionId?: string | null;
   recommendation?: string | null;
   body?: string;
   options?: DecisionOption[];
@@ -1223,6 +1225,10 @@ async function confirmAdjust(card: DecisionCard) {
       evidence: { advisoryAction: card.recommendation || 'reinforce', advisory: card.advisory || null }
     });
     toast.success(`已调整「${card.pathTitle || '当前路径'}」的${advisory.scope === 'downstream_path' ? '后续阶段' : '下一阶段'}`);
+    // P1-7：真执行也回写处置埋点，漏斗才不只看到「保留/稍后/预览」。
+    if (card.sessionId) {
+      void aiTeachingAPI.recordAdvisoryResponse(card.sessionId, 'adopt').catch(() => { /* 埋点失败静默 */ });
+    }
     // 卡头双按钮的回执行（原型 wf-advisory__done）：确认成功后就地留一行，不只靠 toast 一闪而过
     advisoryDone.value = `已采用建议：「${card.pathTitle || '当前路径'}」的后续阶段已调整，已完成内容保留不变。`;
     dismissDecision(card);

@@ -568,14 +568,14 @@ export class TeachingSessionRepository {
   }
 
   /**
-   * 调整建议处置埋点：记录学习者对「保留 / 稍后再看 / 预览」的轻动作。
+   * 调整建议处置埋点：记录学习者对「保留 / 稍后再看 / 预览 / 已采用」的动作。
    * 只追加 advisory.learnerResponse，不改任何执行语义（真调整动作走 replan 链）。
-   * 审计口径：建议生成后是「没处置 / 保留 / 推迟 / 预览过 / 真执行」，此前只可见最后一项。
+   * 审计口径：建议生成后是「没处置 / 保留 / 推迟 / 预览过 / 真执行」，此前只可见前四项。
    */
   async recordAdvisoryResponse(
     sessionId: string,
     userId: string,
-    action: 'keep' | 'later' | 'preview'
+    action: 'keep' | 'later' | 'preview' | 'adopt'
   ): Promise<{ status: 'ok' | 'not_found' | 'no_advisory'; advisory?: Record<string, any> }> {
     const session = await this.getById(sessionId);
     if (!session || session.userId !== userId) {

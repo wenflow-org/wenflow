@@ -679,10 +679,10 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
-  /** 调整建议处置埋点（保留/稍后再看/预览）：只记账不执行，见后端 advisory-response 端点 */
+  /** 调整建议处置埋点（保留/稍后再看/预览/已采用）：只记账不执行，见后端 advisory-response 端点 */
   async recordAdvisoryResponse(
     sessionId: string,
-    action: 'keep' | 'later' | 'preview'
+    action: 'keep' | 'later' | 'preview' | 'adopt'
   ): Promise<void> {
     await api.post(`/ai-teaching/sessions/${sessionId}/advisory-response`, { action });
   },

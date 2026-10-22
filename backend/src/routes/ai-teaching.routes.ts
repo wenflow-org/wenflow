@@ -819,7 +819,7 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
 
     const { sessionId } = req.params;
     const action = String(req.body?.action || '');
-    if (!['keep', 'later', 'preview'].includes(action)) {
+    if (!['keep', 'later', 'preview', 'adopt'].includes(action)) {
       return res.status(400).json({
         success: false,
         error: { message: '无效的建议处置动作', code: 'INVALID_ADVISORY_ACTION' },
@@ -829,7 +829,7 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
     const result = await teachingSessionRepository.recordAdvisoryResponse(
       sessionId,
       userId,
-      action as 'keep' | 'later' | 'preview'
+      action as 'keep' | 'later' | 'preview' | 'adopt'
     );
     if (result.status === 'not_found') {
       return res.status(404).json({
