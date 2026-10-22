@@ -8,7 +8,7 @@
  * 只锁「已确认删除的入口」，不断言实现细节；每条都写明保留的是哪个入口。
  */
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const read = (file: string) => readFileSync(resolve(__dirname, '..', file), 'utf8')
@@ -80,6 +80,20 @@ describe('重复操作入口守卫', () => {
     expect(read('OpsHub.vue')).not.toContain('全部公告 →')
     expect(read('Announcements.vue')).toContain("embedded ? '' : '新建公告'")
     expect(read('Notifications.vue')).toContain("embedded ? '' : '发送第一条通知'")
+  })
+
+  it('带页级「真实/测试」开关的列表页不再逐行挂身份徽章', () => {
+    // 2026-10-21 用户「右上角已经切换了，这里就不需要了」：开关已表达身份域，
+    // 逐行复述「测试账号 / 虚拟」等于把视角名再说一遍。身份信号留在头像 tone 上。
+    const files = readdirSync(resolve(__dirname, '..')).filter((f) => f.endsWith('.vue'))
+    const scopePages = files.filter((f) => read(f).includes('<DataScopeToggle'))
+    expect(scopePages.length).toBeGreaterThanOrEqual(8)
+    for (const f of scopePages) {
+      const src = read(f)
+      expect(src, f).not.toContain('MkVariantBadge')
+      expect(src, f).not.toContain('mk-badge--virtual')
+      expect(src, f).not.toContain('mk-badge--test')
+    }
   })
 
   it('健康中心：「查看 →」只给真正跨页的检查项', () => {

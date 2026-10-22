@@ -199,14 +199,6 @@
                     <strong v-else>{{ p.user?.name || '—' }}</strong>
                     <span class="mk-cell-sub">{{ p.user?.email || '' }}</span>
                   </div>
-                  <!-- 身份徽章与姓名同一行（2026-10-19 用户走查「这怎么是起了一行」）：
-                       原先 .oc-tags 是用户格之外的独立块，测试视角下每一行都会多出一行
-                       「虚拟 / 测试账号」，表格被拉高；改为与 Users · GoalConversations 同形，
-                       徽章右对齐挂在行内（邮箱过长由 .mk-cell-sub 省略号兜底）。 -->
-                  <div class="oc-tags">
-                    <MkVariantBadge v-if="p.user?.isVirtualLearner" kind="virtual" />
-                    <MkVariantBadge v-else-if="p.isTestAccount" kind="test" />
-                  </div>
                 </div>
               </td>
               <td v-if="!hiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(p.status)">{{ statusText(p.status) }}</span></td>
@@ -309,7 +301,6 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge, isPathStalled, pathRetryTypeText, PATH_STALL_HOURS } from './opsShared'
@@ -787,8 +778,6 @@ defineExpose({ reload: () => void reload(true) })
 .oc-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 里程碑计数直出（#54）：百分比旁的达成量，等宽数字、不抢主值 */
 .oc-progress__count { font-variant-numeric: tabular-nums; }
-/* 虚拟/测试行内标记（对齐同页 conversations/teaching 行样式） */
-.oc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */
 .oc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .oc-user .mk-cell-main { min-width: 0; flex: 1; }

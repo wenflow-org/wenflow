@@ -142,7 +142,6 @@
                     <strong>{{ row.name || '未命名' }}</strong>
                     <span class="mk-cell-sub">{{ shortId(row.userId) }}</span>
                   </div>
-                  <MkVariantBadge v-if="row.isVirtualLearner" kind="virtual" />
                 </div>
               </td>
               <td class="mk-num" :title="`该用户共 ${row.traces} 条记忆记录，跨学习路径`">{{ row.traces }}</td>
@@ -205,7 +204,6 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import { useTableSort } from './useTableSort'

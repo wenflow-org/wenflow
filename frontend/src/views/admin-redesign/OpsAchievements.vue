@@ -103,7 +103,6 @@
                 <div class="mk-cell-main">
                   <strong>
                     {{ r.user?.name || '—' }}
-                    <span v-if="r.user?.isVirtualLearner" class="mk-badge mk-badge--virtual">虚拟</span>
                   </strong>
                   <span class="mk-cell-sub">{{ r.user?.email || r.userId }}</span>
                 </div>

@@ -249,7 +249,7 @@
               </td>
               <td v-if="!tsHiddenCols.has('user')">
                 <!-- 用户格对齐全站判例（2026-10-08：六个同格页均 MkCellAvatar，本页是遗漏）：
-                     头像 + 主副行 + 右侧身份徽章，同 Users.ul-user / GoalConversations.gc-user -->
+                     头像 + 主副行，同 Users.ul-user / GoalConversations.gc-user -->
                 <div class="ts-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
                   <div class="mk-cell-main">
@@ -263,12 +263,6 @@
                     >{{ r.userName }}</button>
                     <span v-if="r.email" class="mk-cell-sub">{{ r.email }}</span>
                     <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
-                  </div>
-                  <div class="ts-tags">
-                    <!-- 2026-10-21 用户「已经是测试了，就不要再显示了」：视角已互斥（真实 = 只看真实用户 /
-                         测试 = 只看虚拟学习者与测试账号），测试视角里逐行再挂一枚「测试账号」等于复述视角名。
-                         虚拟徽章保留：测试视角里混着这两类，它区分的是同一视角内的子类。 -->
-                    <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
                   </div>
                 </div>
               </td>
@@ -436,7 +430,6 @@ import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 
@@ -652,7 +645,7 @@ function openLearner(userId: string) {
   const id = String(userId || '')
   if (id) openSubPage('learner', id)
 }
-/** 头像 tone（同 GoalConversations 判例；语义与 MkVariantBadge 一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
+/** 头像 tone（同 GoalConversations 判例；与全站身份色一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
 function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtual' | 'test' | 'default' {
   return r.isVirtualLearner ? 'virtual' : r.isTestAccount ? 'test' : 'default'
 }
@@ -1084,10 +1077,10 @@ defineExpose({ refreshNow })
 /* 行首关注度色条已撤（2026-10-03 用户拍板：与「关注」列同源冗余、语义不可发现）；
    关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }
-/* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 + 右侧身份徽章 */
+/* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 */
 .ts-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.ts-user .mk-cell-main { min-width: 0; flex: 1; }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；随头像判例收进用户格右侧） */
-.ts-tags { display: flex; gap: 6px; margin-left: auto; flex: none; }/* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
+.ts-user .mk-cell-main { min-width: 0; flex: 1; }
+/* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。

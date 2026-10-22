@@ -2,8 +2,9 @@
  * 数据隔离（A3）前端切换测试：TeachingSessions / GoalConversations / Users 三页
  * - 默认「仅真实」：列表请求带 includeTest=false（不含虚拟/测试行）
  * - 切换「含测试」（2026-10-04 批次五族语统一，DataScopeToggle label 原「含模拟」；P3#26）：
- *   按 includeTest=true 重拉，虚拟/测试行显式灰标（虚拟 / 测试 徽章）
- * - Users：切换触发 liveSetUsersIncludeTest，虚拟行带「虚拟」灰标
+ *   按 includeTest=true 重拉；2026-10-21 起逐行不再挂「虚拟 / 测试」变体徽章——
+ *   视角开关已表达身份域，复述视角名即噪声（Users/GoalConversations/TeachingSessions 同判例）
+ * - Users：切换触发 liveSetUsersIncludeTest
  */
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -206,11 +207,9 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await nextTick();
     expect(tsListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
     expect(scopePill(wrapper)).toBe('测试');
-    // 2026-10-21 用户「已经是测试了，就不要再显示了」：视角已是测试，逐行不再挂「测试账号」徽章；
-    // 虚拟徽章保留（测试视角混着虚拟学习者与测试账号，它区分同一视角内的子类）
-    const tags = wrapper.findAll('.mk-badge--sm');
-    expect(tags).toHaveLength(1);
-    expect(tags[0].text()).toBe('虚拟');
+    // 2026-10-21 用户「已经是测试了，就不要再显示了」：视角互斥后，逐行不再挂任何身份变体徽章
+    expect(wrapper.findAll('.mk-badge--sm')).toHaveLength(0);
+    expect(wrapper.find('.ts-tags').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('测试账号');
     wrapper.unmount();
   });
@@ -248,9 +247,9 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     await nextTick();
     expect(gcListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
     expect(scopePill(wrapper)).toBe('测试');
-    const tag = wrapper.find('.mk-badge--virtual');
-    expect(tag.exists()).toBe(true);
-    expect(tag.text()).toBe('虚拟');
+    // 2026-10-21 用户「右上角已经切换到虚拟了，这里就不需要了」：视角已表达身份域，逐行不再挂徽章
+    expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('测试账号');
     wrapper.unmount();
   });
 });

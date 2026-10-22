@@ -144,8 +144,9 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const pathCell = w.findAll('tbody td')[0];
     expect(pathCell.text()).toContain('这是一段很长的学习目标描述');
 
-    // 虚拟行标记
-    expect(w.find('.oc-tags .mk-badge--virtual').exists()).toBe(true);
+    // 虚拟行不再挂逐行徽章（右上角视角开关已表达身份域）；头像 tone 仍按身份着色
+    expect(w.find('.oc-tags').exists()).toBe(false);
+    expect(w.find('.mk-badge--virtual').exists()).toBe(false);
 
     w.unmount();
   });

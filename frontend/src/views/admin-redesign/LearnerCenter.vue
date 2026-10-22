@@ -186,11 +186,6 @@
                   <strong :title="r.name">{{ r.name }}</strong>
                   <span class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
                 </div>
-                <!-- 身份标记与「用户」页一致（审核 #11）：虚拟学习者出「虚拟」（紫，MkVariantBadge kind=virtual），
-                     仅审计/测试账号才出「测试」——此前后端 isTestAccountUser 对 /^virtual_/ 恒真，
-                     虚拟学习者被渲染成「测试账号」，两页同一账号标签互相矛盾 -->
-                <MkVariantBadge v-if="isVirtualRow(r)" kind="virtual" />
-                <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('progress')">
@@ -312,7 +307,6 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { useTableSort } from './useTableSort'

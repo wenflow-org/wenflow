@@ -208,10 +208,6 @@
                     >{{ r.userName }}</button>
                     <span class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
                   </div>
-                  <div class="gc-tags">
-                    <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
-                    <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
-                  </div>
                 </div>
               </td>
               <td v-if="showCol('status')">
@@ -349,7 +345,6 @@ import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 
@@ -586,7 +581,7 @@ const statusLabel = (s: string) => statusText(s) || '—'
 const statusBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : s === 'cancelled' ? 'mk-badge--bad' : 'mk-badge--muted'
 
-/** 头像 tone（列表行与抽屉头共用；语义与 MkVariantBadge 一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
+/** 头像 tone（列表行与抽屉头共用；与全站身份色一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
 function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtual' | 'test' | 'default' {
   return r.isVirtualLearner ? 'virtual' : r.isTestAccount ? 'test' : 'default'
 }
@@ -907,14 +902,14 @@ onMounted(() => {
    KPI 带 / 分布带 / 列表卡，全树 .mk-page--fill 计数 0）。同形规则在 People(pp-host) /
    OpsHub(oh-host) / ApiConfig(ac-host) 仍在用，别照抄删除。 */
 .gc-host > .mk-status { flex: none; }/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
-/* 行点击/焦点态已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） *//* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
+/* 行点击/焦点态已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
 /* 用户格 min-width：本表为自动布局（无 colgroup），补「澄清进度/约束条件」两列后
    该列会被内容多的列挤到 ~90px（2026-10-02 视觉核对实测），名字/邮箱全截断——
    给内容格兜底宽度，压缩由可换行的摘要/约束列吸收 */
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }
 /* 分布条已退役（2026-10-17）：原页面级分布带连同 .gc-distband 类一起下线，
    卡头状态 pills 与「未生成路径」快筛并列；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
-.gc-user .mk-cell-main { min-width: 0; flex: 1; }.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
+.gc-user .mk-cell-main { min-width: 0; flex: 1; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }.gc-stage-cell__dots { display: inline-flex; gap: 3px; }.gc-stage-cell__dot {
   width: 6px;
   height: 6px;
