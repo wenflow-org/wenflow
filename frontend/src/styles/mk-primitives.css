@@ -213,6 +213,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
 /* 状态条 meta 语义着色（成功率红/琥珀等；Orchestrator 曾页面私有，全局化） */
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 .mk-status__meta--warn { color: var(--mk-amber, #d97706); font-weight: 700; }
+.mk-status__meta--ok { color: var(--mk-green, #16a34a); font-weight: 700; }
 /* 状态条内的「筛选生效中」徽章 + 清除按钮（原 ExecLogs 页内私有，收敛为全局：
    结构上它们是 .mk-status 的组成部分，任何带筛选的页头都会需要）。 */
 .mk-status__filter {

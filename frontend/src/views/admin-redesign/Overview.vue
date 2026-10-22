@@ -91,21 +91,20 @@
           v-if="todayFailed > 0"
           type="button"
           class="mk-status__meta-link"
-          :class="health.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
-          :title="`今日 ${todayFailed} 次真实用户调用失败，点此按「失败 · 今天」查看执行日志`"
+          :class="health.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"          :title="`今日 ${todayFailed} 次真实用户调用失败，点此按「失败 · 今天」查看执行日志`"
           @click="investigateTodayFailures"
         >调用 · 今日失败 {{ todayFailed }} 次</button>
         <button
           type="button"
           class="mk-status__meta-link"
-          :class="healthTone === 'bad' ? 'mk-status__meta--bad' : healthTone === 'warn' ? 'mk-status__meta--warn' : ''"
+          :class="healthTone === 'bad' ? 'mk-status__meta--bad' : healthTone === 'warn' ? 'mk-status__meta--warn' : healthTone === 'ok' ? 'mk-status__meta--ok' : ''"
           :title="healthTitle"
           @click="healthChipClick"
         >健康 · {{ healthText }}</button>
         <button
           type="button"
           class="mk-status__meta-link"
-          :class="simTone === 'bad' ? 'mk-status__meta--bad' : simTone === 'warn' ? 'mk-status__meta--warn' : ''"
+          :class="simTone === 'bad' ? 'mk-status__meta--bad' : simTone === 'warn' ? 'mk-status__meta--warn' : simTone === 'ok' ? 'mk-status__meta--ok' : ''"
           :title="simTitle"
           @click="jump('virtual-learners')"
         >仿真 · {{ simHeadline }}</button>
@@ -705,7 +704,7 @@ const simHeadline = computed(() => {
   const r = runStats.value
   if (!r.totalSessions && !r.todayCalls) return '仿真空闲'
   if (r.systemFailureRate >= 20) return `需要关注：系统失败率 ${r.systemFailureRate}%`
-  return '仿真运行平稳'
+  return '运行平稳'
 })
 const simTitle = computed(() => {
   const parts: string[] = ['虚拟学习者 / 仿真运行情况（仅统计虚拟学习者与测试账号）']
