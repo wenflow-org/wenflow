@@ -222,10 +222,10 @@
         <div class="ov-card__body">
           <div class="ranklist">
             <div v-for="t in todoItems" :key="t.key" class="rankrow rankrow--todo">
-              <!-- 主行 + 口径副行（拆分见 todoItems）：长句不再一行堆满 -->
+              <!-- 只留主句：口径副行（健康中心 · 全量检查清单 / 按最近 200 条调用统计）
+                   2026-10-22 用户「不要这种」已删，完整口径仍在 title -->
               <div class="todo-main">
                 <span class="todo-text" :title="t.text">{{ t.main }}</span>
-                <span v-if="t.note" class="todo-note">{{ t.note }}</span>
               </div>
               <!-- 动作默认文字链态（评审 2026-10-10）：整排同款胶囊按钮是视觉噪声，
                    降为蓝字轻链、悬浮再起底色 -->
@@ -963,11 +963,11 @@ const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls
     都按注册表裸 id 取数——直接透传前缀会让子视图全线 404/400/500、指标恒 0（FN8）。 */
 const skillIdOf = (agentId: string) => String(agentId || '').replace(/^(?:skill|agent):/, '')
 
-interface TodoItem { key: string; text: string; main: string; note: string; tone: Tone; actLabel: string; action: () => void }
-/** 拆末尾括号口径：「甲 采样窗口 1 次失败（近 7 天 · 200 条采样）」→ main/note */
-function splitTodoNote(text: string): { main: string; note: string } {
+interface TodoItem { key: string; text: string; main: string; tone: Tone; actLabel: string; action: () => void }
+/** 去掉末尾括号口径（完整句仍进 title）：可见行只留动作本身 */
+function splitTodoMain(text: string): string {
   const m = text.match(/^(.*?)\s*[（(]([^（）()]+)[）)]\s*$/)
-  return m ? { main: m[1], note: m[2] } : { main: text, note: '' }
+  return m ? m[1] : text
 }
 const todoItems = computed<TodoItem[]>(() => {
   const items: TodoItem[] = [];
@@ -979,9 +979,8 @@ const todoItems = computed<TodoItem[]>(() => {
     const label = hc.error > 0 ? '异常' : '需关注';
     items.push({
       key: 'health',
-      text: `健康检查 ${n} 项${label}（健康中心 · 全量检查清单）`,
+      text: `健康检查 ${n} 项${label}`,
       main: `健康检查 ${n} 项${label}`,
-      note: '健康中心 · 全量检查清单',
       tone: (hc.error > 0 ? 'bad' : 'warn') as Tone,
       actLabel: '健康中心',
       action: () => jump('health-center'),
@@ -991,7 +990,7 @@ const todoItems = computed<TodoItem[]>(() => {
     items.push({
       key: `a-${a.agentId}-${a.text}`,
       text: a.text,
-      ...splitTodoNote(a.text),
+      main: splitTodoMain(a.text),
       tone: a.tone,
       actLabel: '去排查',
       action: () => investigateAgent(a.agentId),
@@ -999,7 +998,7 @@ const todoItems = computed<TodoItem[]>(() => {
   }
   const w = wrapupIssue.value;
   if (w) {
-    items.push({ key: 'wrapup', text: w.text, ...splitTodoNote(w.text), tone: w.tone as Tone, actLabel: '教学会话', action: () => jump('teaching-sessions') });
+    items.push({ key: 'wrapup', text: w.text, main: splitTodoMain(w.text), tone: w.tone as Tone, actLabel: '教学会话', action: () => jump('teaching-sessions') });
   }
   return items;
 });
@@ -1318,14 +1317,13 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 .rankrow__failed--zero { color: var(--mk-faint); font-weight: 500; }
 /* 列头「失败」用独立类：不挂 .rankrow__failed 以免吃红字规则（表头保持中性 faint） */
 .rankrow__col-failed { width: 44px; text-align: right; color: var(--mk-faint); font-weight: 600; }
-/* 待处理事项行（密度优化 2026-10-03）：主句 + 口径副行两行堆叠，动作钮跨两行右对齐 */
+/* 待处理事项行：单行主句，动作钮右对齐（口径副行 2026-10-22 已删） */
 .rankrow--todo { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 12px; }
 .todo-main { display: grid; gap: 1px; min-width: 0; }
 .todo-text {
   font-size: var(--mk-fs-micro); color: var(--mk-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.todo-note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 待办动作文字链（评审 2026-10-10）：默认轻链，悬浮再起操作底色——
    替代整排同款「去排查 →」胶囊的视觉噪声 */
 .todo-act {
