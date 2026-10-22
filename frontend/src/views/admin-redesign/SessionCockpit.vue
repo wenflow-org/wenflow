@@ -256,7 +256,12 @@
         <section v-if="!isBlackbox && activeTab === 'path'" role="tabpanel" :id="`cp-tabpanel-path`" :aria-labelledby="`cp-tab-path`" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">关联学习路径</h3>
-            <span class="mk-card__meta">{{ pathDetailMeta || '等待路径生成' }}</span>
+            <!-- 右组：meta + 面板治理动作（⋯）的落点。动作逻辑留在面板里，位置收到卡头右缘，
+                 不在内容区另起一行——否则只剩一颗 ⋯ 会让卡头与首个阶段之间出现整条空白。 -->
+            <span class="cp-path-head-right">
+              <span class="mk-card__meta">{{ pathDetailMeta || '等待路径生成' }}</span>
+              <span v-if="hasPath && pathId" class="cp-path-acts" data-path-acts></span>
+            </span>
           </div>
           <div class="cp-cardbody">
             <MkSkeleton v-if="!session" variant="rows" :count="2" :h="40" :radius="8" />
@@ -3016,6 +3021,9 @@ async function copyRawJson() {
 .cp-hero__id { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); }
 /* 卡体（mk-card 头下内容衬距；mk 原语无 .mk-card__body，用本页局部类） */
 .cp-cardbody { padding: 12px 14px 16px; }
+/* 路径卡头右组：meta 与面板治理动作同排；面板 Teleport 进来的 ⋯ 就落在这里 */
+.cp-path-head-right { display: inline-flex; align-items: center; gap: 8px; }
+.cp-path-acts { display: inline-flex; align-items: center; }
 
 /* .cp-loop 一族 2026-10-19 随「教学闭环定位」卡下线（用户走查「这不重复吗」→ 拍板删卡）：
    它前四环读的是本卡下方 stepper 的同一对 stageDone/stageActive，只换了套更长的阶段名

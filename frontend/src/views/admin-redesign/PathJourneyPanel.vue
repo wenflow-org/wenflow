@@ -22,9 +22,11 @@
     </div>
     <template v-else>
       <!-- 治理动作（2026-10-22 用户「下线路径属于比较危险操作？这个位置也不合适」）：
-           下线/恢复、重试生成都是低频且带后果的动作，收进右缘 ⋯ 菜单，不在内容区平铺；
-           刷新钮撤销——顶栏刷新已覆盖本面板（watch liveRefreshSeq），同屏不再出第二颗。 -->
-      <div class="pjp-acts">
+           下线/恢复、重试生成都是低频且带后果的动作，收进 ⋯ 菜单；刷新钮撤销——顶栏刷新
+           已覆盖本面板（watch liveRefreshSeq），同屏不再出第二颗。
+           动作位置收到卡头右缘（SessionCockpit 的 data-path-acts 落点），不占内容区一行。 -->
+      <Teleport to="[data-path-acts]">
+        <div class="pjp-acts">
         <span v-if="d.status !== 'active'" class="mk-badge" :class="statusBadge(d.status)">{{ statusText(d.status) }}</span>
         <div class="mk-menu">
           <button
@@ -57,7 +59,8 @@
             >{{ d.status === 'archived' ? '恢复路径' : '下线路径' }}</button>
           </div>
         </div>
-      </div>
+        </div>
+      </Teleport>
 
       <!-- 阶段全展开（2026-10-18 用户走查：后台运营要「一眼看到信息」，不接受点开一个就把
            别的阶段收起）。原单开手风琴退役：阶段头只作分区标题、不再可点；所有阶段的说明与
@@ -402,7 +405,7 @@ async function retryGeneration() {
 .pd-skel { display: grid; gap: 14px; }
 
 /* 动作行（原 hero actions 收敛成一行；弱化不与页签头抢层级） */
-.pjp-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pjp-acts { display: inline-flex; align-items: center; gap: 8px; }
 /* 治理菜单遮罩：菜单开着时吃掉「点空白关菜单」的那一下，不落到下层任务行 */
 .pjp-menu__scrim { position: fixed; inset: 0; z-index: var(--mk-z-menu); }
 
