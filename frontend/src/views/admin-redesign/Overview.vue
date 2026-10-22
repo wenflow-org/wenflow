@@ -210,7 +210,7 @@
         </div>
       </div>
 
-      <div class="mk-card">
+      <div class="mk-card ov-card--todo">
         <div class="mk-card__head">
           <span class="mk-card__title">待处理事项</span>
           <!-- 口径副文（#4）：动作来自 200 条日志采样窗口的 Top 失败，与状态条的「今日失败」不同源；
@@ -1260,7 +1260,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 }
 .ov-vl__strip :deep(.mk-stat) {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding: 10px 0;
@@ -1292,6 +1292,11 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 /* 轨道必须钳在容器宽（minmax(0,1fr)）：grid auto 列按 max-content 定尺，
    长 skill 名会把行撑出卡片右缘（1280 实测溢出 28px），行内 ellipsis 也永不生效 */
 .ranklist { display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
+/* 待处理事项：与左卡等高时把 4 行均分卡高，避免底部堆一块空白 */
+.mk-card.ov-card--todo { display: flex; flex-direction: column; }
+.ov-card--todo .ov-card__body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ov-card--todo .ranklist { flex: 1; display: flex; flex-direction: column; gap: 0; }
+.ov-card--todo .rankrow--todo { flex: 1; }
 .rankrow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--mk-line); }
 .rankrow:last-child { border-bottom: 0; }
 /* 列头行（评审 2026-10-10）：调用/失败拆列后补表头，列语义一眼可读。
