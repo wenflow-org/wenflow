@@ -877,7 +877,10 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 }
 .mk-filter__input,
 .mk-filter__select {
-  padding: 7px 11px;
+  /* 上下内衬 5px（原 7px）：32 - 2×(5+1) = 20 ≥ 14px 字号 × 1.4 行高（19.6）。
+     7px 时内容盒只剩 16px，比行盒矮 3.6px，Chrome 对 select 的原生文本渲染会
+     裁掉字形下缘——2026-10-22 用户截图「筛选里面的字体显示不全」即此。 */
+  padding: 5px 11px;
   border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
