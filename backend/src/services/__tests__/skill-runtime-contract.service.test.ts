@@ -171,6 +171,42 @@ describe('skill-runtime-contract.service', () => {
     expect(sqls.some((s: string) => s.includes('json_extract'))).toBe(false)
   })
 
+  it('聚合行 lastAt 为 SQLite 整数（BigInt）时不抛错（#127）', async () => {
+    mockPromptGroupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    aggRows = [
+      { agentId: 'skill:label-generator', success: 1, n: 2, durSum: 240, lastAt: 1792574025470n },
+    ]
+
+    const map = await getUnifiedSkillStats(['label-generator'], '7d')
+
+    expect(map.get('label-generator')).toEqual(
+      expect.objectContaining({
+        callCount: 2,
+        successCount: 2,
+        lastCalledAt: new Date(1792574025470),
+        source: 'agent_call_logs',
+      })
+    )
+  })
+
+  it('metadata 兜底行 calledAt 为 BigInt 时同样归一（#127）', async () => {
+    mockPromptGroupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    sniffHit = true
+    fallbackRows = [
+      { agentId: 'path-agent', skillId: 'skill:path-planning', success: 1, durationMs: 500, calledAt: 1792574025470n },
+    ]
+
+    const map = await getUnifiedSkillStats(['path-planning'], '7d')
+
+    expect(map.get('path-planning')).toEqual(
+      expect.objectContaining({
+        callCount: 1,
+        successCount: 1,
+        lastCalledAt: new Date(1792574025470),
+      })
+    )
+  })
+
   it('merges route + ACTIVE prompt into effective LLM request', async () => {
     mockSkillConfigGet.mockResolvedValue({
       enabled: true,

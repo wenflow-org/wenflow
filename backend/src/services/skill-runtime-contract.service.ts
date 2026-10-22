@@ -15,6 +15,20 @@ import skillModelConfigService from './skillModelConfig.service';
 
 export type SkillStatsRange = '24h' | '7d' | '30d' | 'all';
 
+/**
+ * `agent_call_logs.calledAt` 在 SQLite 是整数列（epoch ms），`$queryRaw` 的
+ * MAX/直选结果会以 BigInt 回来，`new Date(BigInt)` 直接抛
+ * `Cannot convert a BigInt value to a number`（#127：Skill 目录 500）。
+ * 这里统一归一 Date | number | bigint | string | null。
+ */
+function coerceCalledAt(value: Date | number | bigint | string | null | undefined): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const numeric = typeof value === 'bigint' ? Number(value) : value;
+  const date = new Date(numeric as number | string);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export interface UnifiedSkillStats {
   skillId: string;
   canonicalId: string;
@@ -298,7 +312,7 @@ export async function getUnifiedSkillStats(
     const n = Number(group.n) || 0;
     const durSum = Number(group.durSum) || 0;
     const successFlag = group.success === true || group.success === 1;
-    const lastAt = group.lastAt ? new Date(group.lastAt) : null;
+    const lastAt = coerceCalledAt(group.lastAt);
     const current = agentAgg.get(short) || {
       total: 0,
       success: 0,
@@ -320,7 +334,7 @@ export async function getUnifiedSkillStats(
     const short = raw.replace(/^skill:/, '');
     if (!shortIds.includes(short)) continue;
     if (promptBacked.has(short)) continue;
-    bumpAgg(short, log.success === true || Number(log.success) === 1, Number(log.durationMs) || 0, log.calledAt ? new Date(log.calledAt) : null);
+    bumpAgg(short, log.success === true || Number(log.success) === 1, Number(log.durationMs) || 0, coerceCalledAt(log.calledAt));
   }
 
   for (const [short, stats] of agentAgg.entries()) {
