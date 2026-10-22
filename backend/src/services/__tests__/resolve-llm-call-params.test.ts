@@ -162,3 +162,13 @@ describe('hoistLlmParamsFromContext', () => {
   })
 })
 
+describe('maxAttempts（skill 级重试覆盖）', () => {
+  it('skill paramOverrides.maxAttempts 透传并夹到 1..5', () => {
+    expect(resolveLlmGenerationParams({ skillOverrides: { maxAttempts: 4 } }).maxAttempts).toBe(4)
+    expect(resolveLlmGenerationParams({ skillOverrides: { maxAttempts: 9 } }).maxAttempts).toBe(5)
+    expect(resolveLlmGenerationParams({ skillOverrides: { maxAttempts: 1 } }).maxAttempts).toBe(1)
+    expect(resolveLlmGenerationParams({ skillOverrides: { maxAttempts: 1.5 } }).maxAttempts).toBeUndefined()
+    expect(resolveLlmGenerationParams({}).maxAttempts).toBeUndefined()
+  })
+})
+

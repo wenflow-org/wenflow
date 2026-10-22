@@ -55,7 +55,7 @@ function hasValidScheme(endpoint: string): boolean {
 
 const GHOST_PREFIX = 'skill:'; // 前缀行=展示名，运行时按裸 skillId 读取，写它无效
 
-/** 参数覆盖校验：{temperature:0..2, topP:0..1, maxTokens:256..131072}，null=清空 */
+/** 参数覆盖校验：{temperature:0..2, topP:0..1, maxTokens:256..131072, maxAttempts:1..5}，null=清空 */
 function validateParamOverrides(raw: unknown):
   { ok: true; value: Record<string, number> | null } | { ok: false; error: string } {
   if (raw === null) return { ok: true, value: null };
@@ -76,6 +76,11 @@ function validateParamOverrides(raw: unknown):
     const v = Number(b.maxTokens);
     if (!Number.isInteger(v) || v < 256 || v > 131072) return { ok: false, error: 'maxTokens 须是 256 到 131072 的整数' };
     out.maxTokens = v;
+  }
+  if (b.maxAttempts !== undefined && b.maxAttempts !== null) {
+    const v = Number(b.maxAttempts);
+    if (!Number.isInteger(v) || v < 1 || v > 5) return { ok: false, error: 'maxAttempts 须是 1 到 5 的整数' };
+    out.maxAttempts = v;
   }
   return { ok: true, value: out };
 }

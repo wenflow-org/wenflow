@@ -140,6 +140,15 @@
                   <input v-if="paramMax.mode === 'override'" v-model.number="paramMax.value" type="number" min="256" max="131072" step="1000" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="maxTokens 覆盖值" />
                   <span v-else class="sdp-param__inherit">继承</span>
                 </div>
+                <div class="sdp-param">
+                  <span class="sdp-param__label">maxAttempts<span class="sdp-param__range">1–5</span></span>
+                  <select v-model="paramAttempts.mode" class="mk-input" :disabled="!rtForm.enabled">
+                    <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
+                    <option value="override">覆盖</option>
+                  </select>
+                  <input v-if="paramAttempts.mode === 'override'" v-model.number="paramAttempts.value" type="number" min="1" max="5" step="1" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="maxAttempts 覆盖值" />
+                  <span v-else class="sdp-param__inherit">继承</span>
+                </div>
               </div>
             </div>
 
@@ -314,6 +323,7 @@ interface ParamField { mode: ParamMode; value: number | null }
 const paramT = ref<ParamField>({ mode: 'inherit', value: null })
 const paramTopP = ref<ParamField>({ mode: 'inherit', value: null })
 const paramMax = ref<ParamField>({ mode: 'inherit', value: null })
+const paramAttempts = ref<ParamField>({ mode: 'inherit', value: null })
 // 加载时该 skill 是否已有覆盖（决定保存时是发对象、发 null 清空、还是不发）
 const hadParamOverrides = ref(false)
 // ── 兜底链（fallbackChain）：[]=显式无链；未动过则不发送（继承 registry 默认链）──
@@ -469,6 +479,7 @@ function resetRtForm() {
   paramT.value = { mode: 'inherit', value: null }
   paramTopP.value = { mode: 'inherit', value: null }
   paramMax.value = { mode: 'inherit', value: null }
+  paramAttempts.value = { mode: 'inherit', value: null }
   hadParamOverrides.value = false
   fallbackChain.value = []
   fallbackTouched.value = false
@@ -509,6 +520,7 @@ async function loadRuntime() {
     paramT.value = po.temperature != null ? { mode: 'override', value: po.temperature } : { mode: 'inherit', value: null }
     paramTopP.value = po.topP != null ? { mode: 'override', value: po.topP } : { mode: 'inherit', value: null }
     paramMax.value = po.maxTokens != null ? { mode: 'override', value: po.maxTokens } : { mode: 'inherit', value: null }
+    paramAttempts.value = po.maxAttempts != null ? { mode: 'override', value: po.maxAttempts } : { mode: 'inherit', value: null }
     // 兜底链：JSON 原文 → string[]（未配置=registry 默认链）
     let fc: string[] = []
     if (raw?.fallbackChain) { try { fc = (JSON.parse(raw.fallbackChain) || []).filter((x: unknown) => typeof x === 'string') } catch { fc = [] } }
@@ -554,11 +566,18 @@ async function saveRuntime() {
     const tVal = overrideNum('temperature', paramT.value.mode, paramT.value.value)
     const topPVal = overrideNum('topP', paramTopP.value.mode, paramTopP.value.value)
     const maxVal = overrideNum('maxTokens', paramMax.value.mode, paramMax.value.value)
+    const attemptsVal = overrideNum('maxAttempts', paramAttempts.value.mode, paramAttempts.value.value)
+    if (!invalid && attemptsVal != null && (!Number.isInteger(attemptsVal) || attemptsVal < 1 || attemptsVal > 5)) {
+      rtErr.value = true
+      rtMsg.value = 'maxAttempts 须是 1 到 5 的整数。'
+      return
+    }
     if (invalid) return
     const overrides: Record<string, number> = {}
     if (tVal != null) overrides.temperature = tVal
     if (topPVal != null) overrides.topP = topPVal
     if (maxVal != null) overrides.maxTokens = maxVal
+    if (attemptsVal != null) overrides.maxAttempts = attemptsVal
     const payload: Record<string, unknown> = {
       tier: rtForm.value.tier,
       model: rtForm.value.model || undefined,
@@ -631,6 +650,7 @@ function formSnapshot(): string {
     t: paramT.value,
     tp: paramTopP.value,
     mx: paramMax.value,
+    at: paramAttempts.value,
     fc: fallbackChain.value
   })
 }
@@ -641,7 +661,7 @@ function reportDirty() {
   emit('dirty', { dirty, label: '运行时配置' })
 }
 watch(
-  [rtForm, logicalRetryMode, customLogicalRetries, paramT, paramTopP, paramMax, fallbackChain],
+  [rtForm, logicalRetryMode, customLogicalRetries, paramT, paramTopP, paramMax, paramAttempts, fallbackChain],
   reportDirty,
   { deep: true }
 )

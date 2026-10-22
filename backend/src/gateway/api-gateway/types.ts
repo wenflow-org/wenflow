@@ -63,6 +63,8 @@ export interface ResolvedRoute {
     temperature?: number | null;
     topP?: number | null;
     maxTokens?: number | null;
+    /** 单次 prompt 调用的最大尝试次数（含首次）；1..5，受平台逻辑重试预算再夹一次 */
+    maxAttempts?: number | null;
   } | null;
   /** skill 级兜底链（skill_model_configs.fallbackChain 解析值；null=用 registry 默认链）。 */
   skillFallbackChain?: string[] | null;

@@ -66,11 +66,18 @@ function parseSkillParamOverrides(raw: unknown): ResolvedRoute['skillParamOverri
   const temperature = num(b.temperature);
   const topP = num(b.topP);
   const maxTokens = num(b.maxTokens);
-  if (temperature === undefined && topP === undefined && maxTokens === undefined) return null;
+  const maxAttempts = typeof b.maxAttempts === 'number'
+    && Number.isInteger(b.maxAttempts)
+    && b.maxAttempts >= 1
+    && b.maxAttempts <= 5
+    ? b.maxAttempts
+    : undefined;
+  if (temperature === undefined && topP === undefined && maxTokens === undefined && maxAttempts === undefined) return null;
   return {
     ...(temperature !== undefined ? { temperature } : {}),
     ...(topP !== undefined ? { topP } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
+    ...(maxAttempts !== undefined ? { maxAttempts } : {}),
   };
 }
 

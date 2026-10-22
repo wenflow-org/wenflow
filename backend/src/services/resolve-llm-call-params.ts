@@ -32,6 +32,8 @@ export interface LlmGenerationParams {
   temperature?: number;
   topP?: number;
   maxTokens?: number;
+  /** 单次 prompt 调用的最大尝试次数（含首次）；缺省由 skill 的 retryStrategy/code 默认决定 */
+  maxAttempts?: number;
 }
 
 export interface LlmCallParamsResolution extends LlmGenerationParams {
@@ -62,6 +64,7 @@ export interface ResolveLlmGenerationParamsInput {
     temperature?: number | null;
     topP?: number | null;
     maxTokens?: number | null;
+    maxAttempts?: number | null;
   } | null;
   /** ACTIVE agent_prompts 行（或等价结构；topP 该表暂无列，恒空） */
   promptConfig?: {
@@ -89,6 +92,7 @@ export interface ResolveLlmGenerationParamsInput {
       temperature?: number | null;
       topP?: number | null;
       maxTokens?: number | null;
+      maxAttempts?: number | null;
     } | null;
   } | null;
 }
@@ -218,6 +222,9 @@ export function resolveLlmGenerationParams(
     temperature: temperature.value,
     topP: topP.value,
     maxTokens: maxTokens.value,
+    ...(typeof skillOverride?.maxAttempts === 'number' && Number.isInteger(skillOverride.maxAttempts)
+      ? { maxAttempts: Math.min(5, Math.max(1, skillOverride.maxAttempts)) }
+      : {}),
     sources: {
       model: model.source,
       temperature: temperature.source,
