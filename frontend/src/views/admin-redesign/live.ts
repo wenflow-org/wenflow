@@ -934,8 +934,8 @@ export function buildOverviewHead(input: {
   const warnByRate = todayCalls >= 20 && todaySuccessRate < 90
   const warnByFailures = todayFailed > 0 && todayFailed >= 3
   const badByRate = todaySuccessRate < 80 && todayFailed >= 3
-  // bad 与「仅成功率告警」两个分支结论同文案：单源一份（R6 复读单源化）
-  const rateAttentionHeadline = `需要关注：今日成功率 ${todaySuccessRate}%`
+  // 结论行只写状态词，不带读数（2026-10-22 用户：标题就是「需要关注」，其他内容放明细行）
+  const rateAttentionHeadline = '需要关注'
   const rateAttentionSubline = `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
   if (todayCalls === 0) {
     if (todayOnlySimulated) {
@@ -968,7 +968,7 @@ export function buildOverviewHead(input: {
     return {
       tone: 'warn',
       score: todaySuccessRate,
-      headline: `需要关注：今日失败 ${todayFailed} 次`,
+      headline: '需要关注',
       subline: `今日 ${todayCalls} 次调用 · 成功率 ${todaySuccessRate}%。`
     }
   }
@@ -1109,7 +1109,10 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
          家法与 OpsContent「hint = 一短句可见口径」一致，卡面不再同时出现两个不同量纲的数。
          「N 个 Skill 近 24h 有调用」从「进行中对话」卡迁来（2026-10-14 KPI 审计）：它是
          平台活跃面的事实，挂在本卡（平台用量）才算同域。 */
-      hint: '只统计真实用户 · 今日截至现在（非全日）',
+      /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：副行里的视角复述
+         （「只统计真实用户」）撤掉——右上角真实/测试开关已表达；留「非全日」这条
+         会改变读数理解的完整性说明 */
+      hint: '',
       note: [
         todayCallsAll > todayCalls ? `若含虚拟与测试共 ${fmt(todayCallsAll)} 次` : '',
         `${fmt(Number(agents.activeAgents24h || 0))} 个 Skill 近 24h 有调用`,
@@ -1119,14 +1122,14 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       label: TERMS.healthScore,
       value: todayCalls > 0 ? `${todaySuccessRate}%` : '—',
       foot: todayFailed > 0 ? `失败 ${todayFailed}` : todayOnlySimulated ? '今日无真实调用' : '无失败',
-      hint: '失败数 / 调用数 · 只统计真实用户',
+      hint: '',
     },
     {
       label: '用户活跃',
       value: fmt(activeUsers),
       trend: activeTrend,
       foot: `今日新增 ${fmt(Number(users.newToday || 0))} · ${baseNote(!!activeTrend)}`,
-      hint: '今日有学习会话的用户 · 只计真实用户',
+      hint: '',
       note: `总用户 ${users.total ?? 0}`,
     },
     {
@@ -1140,7 +1143,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       label: '目标对话',
       value: fmt(Number(conv.active || 0) + Number(conv.completed || 0) + Number(conv.cancelled || 0)),
       foot: `累计完成 ${fmt(Number(conv.completed || 0))} 个`,
-      hint: '累计总量 · 含进行中 / 已完成 / 已取消',
+      hint: '',
     },
   ]
 
@@ -1866,6 +1869,9 @@ export async function liveSaveApiConfig(data: {
   defaultThinkingMode?: 'default' | 'enabled' | 'disabled'
   defaultReasoningEffort?: 'default' | 'low' | 'high' | 'max'
   defaultResponseFormat?: 'none' | 'json_object'
+  /** 连接域随保存一起落盘：拉取/测试的成功或失败结果，避免刷新后回退到旧徽章 */
+  connectionStatus?: string
+  lastCheckedAt?: string
 }): Promise<void> {
   await adminApiConfigApi.updateConfig(data)
   await fetchLiveApiConfig()

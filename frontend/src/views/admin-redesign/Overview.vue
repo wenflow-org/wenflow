@@ -82,10 +82,19 @@
           >{{ statusAction.label }}</button>
         </div>
       </div>
-      <!-- 明细行 = 纯「通道状态」（健康/仿真），不带动作项——去冗余（2026-10-03 用户反馈
+      <!-- 明细行 = 通道状态（调用/健康/仿真），不带动作项——去冗余（2026-10-03 用户反馈
            「同一批异常出现 3 次」）：agent 失败/总结事项是「要做的事」，全数归底部待处理卡
-           （那有按钮），事件流保有原始逐条；横幅只回答「各通道现在什么状态」 -->
+           （那有按钮），事件流保有原始逐条；横幅只回答「各通道现在什么状态」。
+           2026-10-22 用户：标题只写「需要关注」，今日失败数下移到这里，与「健康 · 1 项异常」同级。 -->
       <div class="ov-row ov-subs">
+        <button
+          v-if="todayFailed > 0"
+          type="button"
+          class="mk-status__meta-link"
+          :class="health.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
+          :title="`今日 ${todayFailed} 次真实用户调用失败，点此按「失败 · 今天」查看执行日志`"
+          @click="investigateTodayFailures"
+        >调用 · 今日失败 {{ todayFailed }} 次</button>
         <button
           type="button"
           class="mk-status__meta-link"
@@ -637,11 +646,18 @@ function healthChipClick() {
   jump('health-center');
 }
 
+/** 今日失败数：读同屏「今日成功率」KPI 的 foot（唯一已发布读数），不另造一份计数 */
+const todayFailed = computed(() => {
+  const foot = data.value?.kpis?.find((k) => k.label === '今日成功率')?.foot || ''
+  const m = /失败\s*(\d+)/.exec(foot)
+  return m ? Number(m[1]) : 0
+})
+
 /** 结论行右端动作：按结论自己的口径派生。
     此前硬编码「查看健康中心」——结论写「需要关注：今日失败 17 次」时，右端按钮却把人
     送到系统检查清单（14 项系统检查），在那里找不到这 17 条失败（2026-10-13 运营走查 O3）。
-    讲调用（今日失败 / 今日成功率）→ 去执行日志按「失败 + 今天」排查；其余（运行平稳 /
-    空闲 / 统计未就绪）→ 维持健康中心入口。健康项本身在明细行「健康 · N 项异常」另有链接。 */
+    「需要关注」（今日失败 / 今日成功率两类触发）→ 去执行日志按「失败 + 今天」排查；
+    其余（运行平稳 / 空闲 / 统计未就绪）→ 维持健康中心入口。健康项本身在明细行另有链接。 */
 const statusAction = computed(() => {
   if (statusActionOf(health.value?.headline || '') === 'investigate-today') {
     return {

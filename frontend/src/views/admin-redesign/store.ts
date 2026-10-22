@@ -162,10 +162,10 @@ export function investigateTodayFailures() {
 }
 
 /** 总览状态条结论行的动作归属（纯函数，便于单测）：
-    结论讲调用（今日失败 / 今日成功率）→ 去执行日志排查；其余（运行平稳 / 空闲 / 未就绪）
-    → 健康中心入口。此前动作硬编码健康中心，与「今日失败 17 次」的结论不同源（走查 O3）。 */
+    结论讲调用（「需要关注」/旧文案里的今日失败、今日成功率）→ 去执行日志排查；
+    其余（运行平稳 / 空闲 / 未就绪）→ 健康中心入口。 */
 export function statusActionOf(headline: string): 'investigate-today' | 'health' {
-  return /今日失败|今日成功率/.test(headline || '') ? 'investigate-today' : 'health'
+  return /需要关注|今日失败|今日成功率/.test(headline || '') ? 'investigate-today' : 'health'
 }
 
 /** 任意位置点 Trace → 执行日志页的 Trace tab（预填该链路） */
