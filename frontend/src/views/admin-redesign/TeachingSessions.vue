@@ -457,6 +457,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
+import { isDegradedWrapup } from './cockpitWrapup'
 import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
@@ -734,11 +735,8 @@ function mapRow(s: Record<string, unknown>): Row {
     : null
   const advisoryRelevant = !!advisory && rawAdvisory?.shouldSuggest !== false && !['none', ''].includes(advisory.priority)
   const wrapupStatus = wrapup?.status === 'complete' ? 'complete' : 'missing'
-  const wrapupSources = (wrapup?.sources as Record<string, string>) || {}
   const rawPracticeAdvice = String(summary?.practiceAdvice || '')
-  const wrapupDegraded = wrapup?.status === 'summary-only'
-    || String(wrapupSources.summary || '').includes('fallback')
-    || /重新开始本节|重新完成一次完整的学习/.test(rawPracticeAdvice)
+  const wrapupDegraded = isDegradedWrapup(wrapup, rawPracticeAdvice)
   const attention: Row['attention'] =
     s.status === 'failed' || s.status === 'timeout' || (s.status === 'completed' && wrapupStatus === 'missing')
       ? 'high'

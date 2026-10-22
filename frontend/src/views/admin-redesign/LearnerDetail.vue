@@ -946,6 +946,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subPage, openSubPage, setSubPageLabel } from './store'
+import { isDegradedWrapup } from './cockpitWrapup'
 import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow, type CalibrationDetailItem } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
@@ -1519,7 +1520,6 @@ async function loadLdSessions(id: string, includeTest: boolean) {
          wrapup.status/sources → 总结档；advisory.ui/{shouldSuggest,priority} → 有效建议 */
       const wrapup = (s.wrapup || null) as Record<string, unknown> | null
       const summary = (wrapup?.summary || null) as Record<string, unknown> | null
-      const sources = (wrapup?.sources || {}) as Record<string, string>
       const rawAdvisory = (s.advisory || null) as Record<string, unknown> | null
       const advUi = (rawAdvisory?.ui || {}) as Record<string, unknown>
       const advisory = rawAdvisory
@@ -1552,9 +1552,7 @@ async function loadLdSessions(id: string, includeTest: boolean) {
         kpCount: Number(s.knowledgePointCount || 0),
         progress,
         wrapupTier: wrapup?.status === 'complete' ? 'complete' : terminal ? 'missing' : 'pending',
-        wrapupDegraded: wrapup?.status === 'summary-only'
-          || String(sources.summary || '').includes('fallback')
-          || /重新开始本节|重新完成一次完整的学习/.test(String(summary?.practiceAdvice || '')),
+        wrapupDegraded: isDegradedWrapup(wrapup, summary?.practiceAdvice),
         advisory: advisoryRelevant ? advisory : null,
         lowPart: (status === 'completed' || status === 'succeeded') && msgCount < 2
       }
