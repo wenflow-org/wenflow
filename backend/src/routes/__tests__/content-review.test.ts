@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 路由测试桩按 Express 动态分发，handler 签名无需精确 */
 // 内容抽检路由测试：抽样读侧 / 标注写侧（与 CLI 同表同键）/ 参数校验
 export {}
 

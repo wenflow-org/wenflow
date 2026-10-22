@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 测试桩动态访问私有方法，形状随实现演进 */
 /**
  * ProfileAggregator 回归用例。
  *

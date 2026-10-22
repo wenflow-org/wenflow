@@ -35,8 +35,8 @@ router.get('/throughput', async (req, res) => {
       { activeSessions, activeBatches, activeLeases },
     );
     res.json({ success: true, data: report });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error?.message || '吞吐审计失败' } });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: { message: error instanceof Error ? error.message : '吞吐审计失败' } });
   }
 });
 
@@ -54,8 +54,8 @@ router.post('/batch-heartbeat', async (req, res) => {
       success: true,
       data: { id, runId, staleAfterMinutes: BATCH_HEARTBEAT_STALE_MINUTES },
     });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error?.message || '心跳写入失败' } });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: { message: error instanceof Error ? error.message : '心跳写入失败' } });
   }
 });
 
@@ -67,8 +67,8 @@ router.post('/batch-heartbeat/stop', async (req, res) => {
     }
     const stopped = await stopBatchHeartbeat(`hb:${runId}`);
     res.json({ success: true, data: { runId, stopped } });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error?.message || '心跳停止失败' } });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: { message: error instanceof Error ? error.message : '心跳停止失败' } });
   }
 });
 
@@ -81,8 +81,8 @@ router.get('/insight-reliability', async (req, res) => {
     const pathId = typeof req.query.pathId === 'string' && req.query.pathId ? req.query.pathId : null;
     const reliability = await insightCalibrationService.getReliability(userId, pathId);
     res.json({ success: true, data: reliability });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error?.message || '读取洞察可靠性失败' } });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: { message: error instanceof Error ? error.message : '读取洞察可靠性失败' } });
   }
 });
 

@@ -19,7 +19,7 @@ function hasFlag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
 
-function parseJson(raw: unknown): Record<string, any> {
+function parseJson(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== 'string') return {};
   try {
     const parsed = JSON.parse(raw);

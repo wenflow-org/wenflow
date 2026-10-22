@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 测试桩覆写私有方法，避免把实现细节搬进类型 */
 /**
  * P2 回归（2026-10-22 审计）：/state/warnings 的疲劳/失衡判据必须用 PMC 相对量。
  *

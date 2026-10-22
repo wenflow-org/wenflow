@@ -82,8 +82,8 @@ router.get('/', async (req, res) => {
         })),
       },
     });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error?.message || '内容抽检读取失败' } });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: { message: error instanceof Error ? error.message : '内容抽检读取失败' } });
   }
 });
 
@@ -132,8 +132,8 @@ router.post('/label', async (req, res) => {
       payload: serializeContentReviewLabel(label),
     });
     res.json({ success: true, data: { label } });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error?.message || '标注失败' } });
+  } catch (error: unknown) {
+    res.status(500).json({ success: false, error: { message: error instanceof Error ? error.message : '标注失败' } });
   }
 });
 

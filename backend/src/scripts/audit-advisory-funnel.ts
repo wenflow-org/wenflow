@@ -12,11 +12,16 @@
 import 'dotenv/config';
 import prisma from '../config/database';
 
-function parseJson(raw: unknown): Record<string, any> | null {
+interface AdvisoryLike {
+  shouldSuggest?: boolean;
+  learnerResponse?: { action?: string };
+}
+
+function parseJson(raw: unknown): AdvisoryLike | null {
   if (!raw || typeof raw !== 'string') return null;
   try {
     const value = JSON.parse(raw);
-    return value && typeof value === 'object' ? value : null;
+    return value && typeof value === 'object' ? value as AdvisoryLike : null;
   } catch {
     return null;
   }

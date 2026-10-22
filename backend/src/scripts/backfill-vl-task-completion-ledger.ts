@@ -32,9 +32,9 @@ function hasFlag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
 
-function parseTemplate(raw: unknown): Record<string, any> {
+function parseTemplate(raw: unknown): Record<string, unknown> {
   if (!raw) return {};
-  if (typeof raw === 'object') return raw as Record<string, any>;
+  if (typeof raw === 'object') return raw as Record<string, unknown>;
   if (typeof raw !== 'string') return {};
   try {
     const parsed = JSON.parse(raw);

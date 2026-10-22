@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 路由测试桩按 Express 动态分发，handler 签名无需精确 */
 // 运营可观测读侧路由测试：吞吐口径 / 空闲判定 / 参数夹取 / 洞察可靠性入参
 export {}
 

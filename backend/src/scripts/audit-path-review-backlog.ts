@@ -9,11 +9,11 @@
 import 'dotenv/config';
 import prisma from '../config/database';
 
-function parseJson(raw: unknown): Record<string, any> | null {
+function parseJson(raw: unknown): { pathReview?: unknown } | null {
   if (!raw || typeof raw !== 'string') return null;
   try {
     const value = JSON.parse(raw);
-    return value && typeof value === 'object' ? value : null;
+    return value && typeof value === 'object' ? value as { pathReview?: unknown } : null;
   } catch {
     return null;
   }
