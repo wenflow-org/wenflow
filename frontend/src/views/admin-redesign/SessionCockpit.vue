@@ -289,7 +289,8 @@
             <template v-else>
               <article v-for="(message, index) in goalConversationMessages" :key="`goal-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
                 <span>{{ message.role === 'assistant' ? '平台目标' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
-                <p>{{ message.content }}</p>
+                <!-- 模型输出是 markdown（代码围栏/行内代码/粗体）：按产品同一套 markdown-it + DOMPurify 渲染 -->
+                <div class="cp-transcript__content" v-html="renderAiMessageHtml(message.content)"></div>
               </article>
               <MkEmptyState
                 v-if="!goalConversationMessages.length"
@@ -421,30 +422,32 @@
               <template v-if="learnConversationMessages.length">
                 <article v-for="(message, index) in learnConversationMessages" :key="`learn-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
                   <span>{{ message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
-                  <p>{{ message.content }}</p>
+                  <div class="cp-transcript__content" v-html="renderAiMessageHtml(message.content)"></div>
                 </article>
               </template>
               <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">教学记录获取失败 <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button></p>
               <p v-else-if="!viewedLesson" class="cp-none">尚未选择课程。</p>
               <p v-else-if="!learnConversationMessages.length" class="cp-none">{{ learnEmptyHint }}</p>
-              <!-- 检查点：题目/作答/判分（2026-10-13 走查「教学会话看不到检查点题目」）。检查点走结构化
-                   通道（pendingCheckpoint → checkpointAnswer），题目**不进聊天逐字稿**，故单独渲染；
-                   否则只看到老师反复喊「接下来出检查题」而看不到题本身。 -->
-              <div v-if="lessonCheckpoints.length" class="cp-checkpoints">
+              <!-- 检查点：题目/作答/判分（2026-10-13 走查「教学会话看不到检查点题目」）。
+                   2026-10-22 用户「检查点又在下面了」：答错重答会在 history 追加同 checkpointId
+                   的新行（后端用来计重答次数），逐行渲染会让同一道题看起来重复；这里按 id 归并，
+                   保留最新一次裁决并标尝试次数。 -->
+              <div v-if="checkpointGroups.length" class="cp-checkpoints">
                 <div class="cp-checkpoints__head">
                   <span class="cp-checkpoints__title">检查点</span>
                   <span
                     class="cp-checkpoints__meta"
-                  >{{ lessonCheckpoints.length }} 次作答</span>
+                  >{{ checkpointGroups.length }} 个 · {{ lessonCheckpoints.length }} 次作答</span>
                 </div>
-                <div v-for="(cp, i) in lessonCheckpoints" :key="`cp-${i}`" class="cp-checkpoint">
-                  <p class="cp-checkpoint__q">{{ cp.question || cp.title || '（无题干）' }}</p>
+                <div v-for="(g, i) in checkpointGroups" :key="`cp-${i}`" class="cp-checkpoint">
+                  <p class="cp-checkpoint__q">{{ g.cp.question || g.cp.title || '（无题干）' }}</p>
                   <div class="cp-checkpoint__meta">
-                    <span class="mk-badge" :class="cp.passed === true ? 'mk-badge--ok' : cp.passed === false ? 'mk-badge--warn' : 'mk-badge--muted'">{{ cp.passed === true ? '通过' : cp.passed === false ? '未通过' : '未判分' }}</span>
-                    <span class="cp-checkpoint__tag">{{ checkpointTypeLabel(cp.type) }}</span>
-                    <span v-if="cp.judgedBy" class="cp-checkpoint__tag">判分 {{ cp.judgedBy }}</span>
-                    <span v-if="cp.understanding != null" class="cp-checkpoint__tag" title="AI 对本次作答的理解度估计">理解度 {{ Math.round(cp.understanding * 100) }}%</span>
-                    <span v-if="cp.conceptName" class="cp-checkpoint__concept">{{ cp.conceptName }}</span>
+                    <span class="mk-badge" :class="g.cp.passed === true ? 'mk-badge--ok' : g.cp.passed === false ? 'mk-badge--warn' : 'mk-badge--muted'">{{ g.cp.passed === true ? '通过' : g.cp.passed === false ? '未通过' : '未判分' }}</span>
+                    <span v-if="g.attempts > 1" class="cp-checkpoint__tag">尝试 {{ g.attempts }} 次</span>
+                    <span class="cp-checkpoint__tag">{{ checkpointTypeLabel(g.cp.type) }}</span>
+                    <span v-if="g.cp.judgedBy" class="cp-checkpoint__tag">判分 {{ g.cp.judgedBy }}</span>
+                    <span v-if="g.cp.understanding != null" class="cp-checkpoint__tag" title="AI 对本次作答的理解度估计">理解度 {{ Math.round(g.cp.understanding * 100) }}%</span>
+                    <span v-if="g.cp.conceptName" class="cp-checkpoint__concept">{{ g.cp.conceptName }}</span>
                   </div>
                 </div>
               </div>
@@ -971,6 +974,7 @@ import {
 } from './vlab-controls'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
+import { renderAiMessageHtml } from '@/utils/sanitize'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -1383,6 +1387,23 @@ const lessonCheckpoints = computed<CockpitCheckpoint[]>(() => {
   if (Array.isArray(direct)) return direct as CockpitCheckpoint[]
   const hist = asRecord(teachingDetail.value?.state).checkpointHistory
   return Array.isArray(hist) ? (hist as CockpitCheckpoint[]) : []
+})
+/** 检查点按 checkpointId 归并（2026-10-22 用户「检查点又在下面了」）：
+ *  答错重答会在 checkpointHistory 追加同 id 的新行（后端据此算重答次数），
+ *  逐行渲染会让同一道题看起来出现了两次。保留最新一次裁决 + 尝试次数。 */
+const checkpointGroups = computed<Array<{ cp: CockpitCheckpoint; attempts: number }>>(() => {
+  const map = new Map<string, { cp: CockpitCheckpoint; attempts: number }>()
+  for (const cp of lessonCheckpoints.value) {
+    const key = cp.checkpointId || `${cp.title || ''}|${cp.question || ''}|${cp.type || ''}`
+    const hit = map.get(key)
+    if (hit) {
+      hit.cp = cp
+      hit.attempts += 1
+    } else {
+      map.set(key, { cp, attempts: 1 })
+    }
+  }
+  return [...map.values()]
 })
 const CHECKPOINT_TYPE_LABEL: Record<string, string> = {
   short_answer: '简答', single_choice: '单选', multiple_choice: '多选', choice: '选择', true_false: '判断'
@@ -3338,7 +3359,24 @@ async function copyRawJson() {
 .cp-transcript__message.is-teacher { border-left-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .cp-transcript__message.is-learner { border-left-color: var(--mk-teal); background: rgba(45, 212, 191, 0.1); }
 .cp-transcript__message span { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); }
-.cp-transcript__message p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+/* 消息正文按 markdown 渲染（2026-10-22 用户「md没渲染」）：产品同一套 markdown-it + DOMPurify，
+   这里只补紧凑排版（控制台字号小、气泡内高度有限），不引入产品端的 16px github 版式。 */
+.cp-transcript__content { font-size: var(--mk-fs-micro); line-height: 1.6; color: inherit; word-break: break-word; min-width: 0; }
+.cp-transcript__content :deep(p) { margin: 0 0 6px; }
+.cp-transcript__content :deep(p:last-child) { margin-bottom: 0; }
+.cp-transcript__content :deep(pre) {
+  margin: 6px 0; padding: 8px 10px; overflow-x: auto;
+  background: var(--mk-surface); border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm);
+}
+.cp-transcript__content :deep(pre code) { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: pre; }
+.cp-transcript__content :deep(code) { font-family: var(--mk-mono); font-size: 0.95em; }
+.cp-transcript__content :deep(:not(pre) > code) {
+  padding: 1px 4px; border-radius: var(--mk-radius-xs);
+  background: color-mix(in srgb, var(--mk-ink) 8%, transparent);
+}
+.cp-transcript__content :deep(strong) { font-weight: 700; }
+.cp-transcript__content :deep(ul), .cp-transcript__content :deep(ol) { margin: 4px 0; padding-left: 18px; }
+.cp-transcript__content :deep(a) { color: var(--mk-blue); text-decoration: underline; }
 
 /* 检查点（题目不走聊天逐字稿，单独渲染；2026-10-13 走查 lesson 13） */
 .cp-checkpoints {
@@ -3894,7 +3932,7 @@ async function copyRawJson() {
   .cp-log__dur { font-size: var(--mk-fs-micro); }
   .cp-transcript summary { font-size: var(--mk-fs-micro); }
   .cp-transcript__message span { font-size: var(--mk-fs-micro); }
-  .cp-transcript__message p { font-size: var(--mk-fs-micro); }
+  .cp-transcript__content { font-size: var(--mk-fs-micro); }
   .cp-review__badge { font-size: var(--mk-fs-micro); }
   .cp-review__meta { font-size: var(--mk-fs-micro); }
   .cp-review__reaction { font-size: var(--mk-fs-micro); }
@@ -3944,7 +3982,7 @@ async function copyRawJson() {
   .cp-log__dur { font-size: var(--mk-fs-micro); }
   .cp-transcript summary { font-size: var(--mk-fs-micro); }
   .cp-transcript__message span { font-size: var(--mk-fs-micro); }
-  .cp-transcript__message p { font-size: var(--mk-fs-micro); }
+  .cp-transcript__content { font-size: var(--mk-fs-micro); }
   .cp-review__badge { font-size: var(--mk-fs-micro); }
   .cp-review__meta { font-size: var(--mk-fs-micro); }
   .cp-review__reaction { font-size: var(--mk-fs-micro); }

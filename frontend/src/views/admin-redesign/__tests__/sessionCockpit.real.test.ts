@@ -872,6 +872,47 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  it('课堂转录按 markdown 渲染（用户「md没渲染」）：代码围栏出 pre，不露 ``` 原文', async () => {
+    const payload = realTeachingPayload();
+    const md = '看这段：\n\n```ts\ntype MyPick<T, K extends keyof T> = { [P in K]: T[P] }\n```\n\n边界在调用处。';
+    payload.data.conversations.learning.messages = [{ role: 'assistant', content: md, time: '2026-08-12T14:00:05.000Z' }];
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await nextTick();
+
+    const pre = wrapper.find('.cp-transcript__content pre code');
+    expect(pre.exists()).toBe(true);
+    expect(pre.text()).toContain('type MyPick<T, K extends keyof T>');
+    expect(wrapper.find('.cp-transcript__content').text()).not.toContain('```');
+
+    wrapper.unmount();
+  });
+
+  it('同一检查点重答（同 checkpointId）归并为一行，标尝试次数', async () => {
+    const payload = realTeachingPayload();
+    payload.data.teaching.checkpoints.push({
+      checkpointId: 'cp_1', type: 'short_answer',
+      question: '针对「完成5道错题重做」这条建议，它预设的动机状态是什么？',
+      passed: true, judgedBy: 'code', understanding: 0.9, conceptName: '识别隐含动机假设'
+    });
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await nextTick();
+
+    expect(wrapper.findAll('.cp-checkpoint')).toHaveLength(1);
+    const block = wrapper.find('.cp-checkpoints');
+    expect(block.text()).toContain('1 个 · 2 次作答');
+    expect(block.text()).toContain('尝试 2 次');
+    // 展示最新一次裁决
+    expect(block.text()).toContain('通过');
+
+    wrapper.unmount();
+  });
+
   /** 2026-10-18 用户走查「原始会话数据偏源码开发」：主列不再内联整包 JSON，
    *  改为一行数据包读数；完整载荷点「查看原始数据」进弹层，复制拿到的必须是完整串。 */
   it('会话数据包：主列只出读数，原始 JSON 进弹层且复制为完整载荷', async () => {
