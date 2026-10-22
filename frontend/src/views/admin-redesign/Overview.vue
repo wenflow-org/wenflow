@@ -1273,8 +1273,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 .ov-vl__strip :deep(.mk-stat:nth-child(odd)) { padding-right: 14px; }
 .ov-vl__strip :deep(.mk-stat:first-child) { padding-left: 0; }
 .ov-vl__strip :deep(.mk-stat__label) { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.ov-vl__strip :deep(.mk-stat__value) { font-size: var(--mk-fs-emphasis); white-space: nowrap; }
-.ov-vl__strip :deep(.mk-stat:first-child .mk-stat__value) { font-size: 22px; }
+.ov-vl__strip :deep(.mk-stat__value) { font-size: 18px; white-space: nowrap; }
 /* 4K：卡宽 ≈1100，两列会让标签与数值隔 500px；改三列两行，仍保持键值行形态 */
 @media (min-width: 3300px) {
   .ov-vl__strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
