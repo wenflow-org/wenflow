@@ -5,7 +5,7 @@
 > 需要时以 doc/ 根目录现行文档与代码为准。
 > **登记门禁（2026-09-28 起）**：新文档入库三件套 = 白名单 + 本表登记 + 状态头；实现与「不做」声明相悖须同提交改文档。
 
-## 总索引（doc/ 根 39 篇 · 全覆盖 · 2026-10-16）
+## 总索引（doc/ 根 40 篇 · 全覆盖 · 2026-10-22）
 
 > 每篇文档头部有状态行（📌 类型｜最后核验）。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
 
@@ -34,6 +34,7 @@
 | UPGRADE_DIRECTION_20Q.md | 治理台账 | Q12/Q18 分级串位已修正；「向量/embedding/材料库」过期全局声明已回收 |
 | NON_FUNCTIONAL_GOVERNANCE_PLAN.md | 治理计划 | ⚠️ 状态基线 2026-07-17 |
 | EDUCATIONAL_THEORY_MAP.md | 参考资料 | 理论地图（文献已核实） |
+| DIAGRAM_PEDAGOGY_RESEARCH.md | 参考资料 | 教学图证据分级（A–D）与 15 图型实证盘点 |
 | ADMIN_TERMINOLOGY_AUDIT.md | 活规范 | 术语 SSOT（不可归档） |
 | ADMIN_OPERATIONS_MANUAL.md | 活规范 | 管理端运营操作手册（路由 → 职责、指标口径、动作名、SOP + YAML 速查） |
 | ADMIN_VISUAL_LAYER_SPEC.md | 活规范 | ⛔ 禁归档（守卫硬引用）｜v4 已接设计体系包，令牌层/圆角/阴影/材质收口完毕 |
@@ -74,6 +75,9 @@
 - [`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)
   - 教育理论地图（理念宪法）：教学/心理/神经科学/LLM 理论 × 落点索引
   - 全部文献经联网核实（含 DOI/arXiv 链接）；prompt 规则与指标设计的理论依据引用源
+- [`DIAGRAM_PEDAGOGY_RESEARCH.md`](./DIAGRAM_PEDAGOGY_RESEARCH.md)
+  - 教学图的理论依据与证据分级（A/B/C/D）：表征效应、知觉推断、冗余与专家反转、评审方法
+  - 15 个图型逐一标注图型级实证等级；含 2023–2025 新研究与本仓库 744 张图的实测数据（分列）
 - [`ADMIN_TERMINOLOGY_AUDIT.md`](./ADMIN_TERMINOLOGY_AUDIT.md)
   - Admin 运营台术语治理单源依据：术语族、禁用叫法与守卫规则
   - `frontend/src/views/admin-redesign/terms.ts`、`statusText.ts` 与术语守卫测试均以本文为准
