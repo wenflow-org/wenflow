@@ -11,7 +11,6 @@
       class="mk-pill"
       :class="{ 'mk-pill--active': !modelValue }"
       :aria-pressed="!modelValue"
-      title="真实视角：只看真实用户的账号与数据（不含虚拟学习者 / 测试账号）"
       @click="emit('update:modelValue', false)"
     >
       真实
@@ -21,7 +20,6 @@
       class="mk-pill"
       :class="{ 'mk-pill--active': modelValue }"
       :aria-pressed="modelValue"
-      title="测试视角：只看虚拟学习者与测试账号（真实用户不出现）"
       @click="emit('update:modelValue', true)"
     >
       测试

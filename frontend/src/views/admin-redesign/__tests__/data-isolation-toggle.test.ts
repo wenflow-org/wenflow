@@ -206,11 +206,12 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await nextTick();
     expect(tsListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
     expect(scopePill(wrapper)).toBe('测试');
+    // 2026-10-21 用户「已经是测试了，就不要再显示了」：视角已是测试，逐行不再挂「测试账号」徽章；
+    // 虚拟徽章保留（测试视角混着虚拟学习者与测试账号，它区分同一视角内的子类）
     const tags = wrapper.findAll('.mk-badge--sm');
-    expect(tags).toHaveLength(2);
+    expect(tags).toHaveLength(1);
     expect(tags[0].text()).toBe('虚拟');
-    // 徽章文案已统一为 MkVariantBadge（原页私有「测试」→ 与 Users 一致的「测试账号」）
-    expect(tags[1].text()).toBe('测试账号');
+    expect(wrapper.text()).not.toContain('测试账号');
     wrapper.unmount();
   });
 });
@@ -255,7 +256,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
 });
 
 describe('Users 数据隔离切换（A3）', () => {
-  it('默认「仅真实」：无虚拟灰标；切换后触发 liveSetUsersIncludeTest(true) 且虚拟行带「虚拟」灰标', async () => {
+  it('默认「仅真实」：无虚拟灰标；切换后触发 liveSetUsersIncludeTest(true)，但逐行也不再挂变体徽章', async () => {
     // 默认口径：后端已排除虚拟/测试账号（仅真实行）
     liveUsers.value = [
       {
@@ -303,9 +304,11 @@ describe('Users 数据隔离切换（A3）', () => {
     ];
     await nextTick();
     expect(wrapper.text()).toContain('测试/虚拟 1');
-    const virtualTag = wrapper.find('.mk-badge--virtual');
-    expect(virtualTag.exists()).toBe(true);
-    expect(virtualTag.text()).toBe('虚拟');
+    // 2026-10-22 用户「右上角已经是测试了，这里就不要有了」：口径开关已表达视角，
+    // 逐行不再挂「虚拟 / 测试账号」徽章
+    expect(wrapper.text()).toContain('虚拟小王');
+    expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('测试账号');
     wrapper.unmount();
   });
 });

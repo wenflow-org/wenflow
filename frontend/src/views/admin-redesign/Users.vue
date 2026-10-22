@@ -152,8 +152,6 @@
                     class="mk-badge mk-badge--sm mk-badge--self"
                     title="你正在使用的账号"
                   >当前账号</span>
-                  <MkVariantBadge v-else-if="isVirtualAccount(u)" kind="virtual" />
-                  <MkVariantBadge v-else-if="isNonRealAccount(u)" kind="test" />
                 </div>
               </div>
             </td>
@@ -293,7 +291,6 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
