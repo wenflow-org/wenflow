@@ -2961,8 +2961,15 @@ const snapshotHint = computed(() =>
 .ld-scope__label { font-size: 12px; color: var(--mk-faint); }
 /* 路径名 +「（学习中）· 当前」经常超过 340px；原生 select 不会自动省略，
    340 封顶会把末字和箭头一起切掉（Windows 显示缩放不改变 CSS 布局，不是成因）。
-   放宽到 480 并允许窄屏回落整行。 */
-.ld-scope__select { max-width: min(480px, 100%); }
+   放宽到 480 并允许窄屏回落整行。
+   纵向：共享档 height:32 + 上下 7px 内衬后内容区只剩 16px，而行高 1.4≈20px，
+   中文字形底部会被切；本控件压缩上下内衬并收紧行高，保持 32px 外观高度。 */
+.ld-scope__select {
+  max-width: min(480px, 100%);
+  padding-top: 4px;
+  padding-bottom: 4px;
+  line-height: 1.2;
+}
 .ld-scope__hint { font-size: 12px; color: var(--mk-faint); padding-left: 10px; border-left: 1px solid var(--mk-line); }
 /* 表格不做全出血：末行底边此前贴死卡底（实测仅剩 1px 边框），补 12px 收尾（同卡头下节奏） */
 #ld-panel-sessions .mk-table-scroll,
