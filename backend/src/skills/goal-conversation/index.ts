@@ -69,6 +69,45 @@ export interface GoalConversationInternal {
   };
 }
 
+/**
+ * #132 兜底：promptResult.output 理论上恒由 normalizeOutput 产出（必带 internal），
+ * 但执行日志里实测 48 次 internal 为 undefined（另一条 success/降级产物直通了输出）。
+ * renderHints/metadata 不能因为缺 internal 再抛一次 internal 错。
+ */
+export function goalInternalQuickReplies(internal: GoalConversationInternal | null | undefined): QuickReply[] {
+  const quickReplies = internal?.ext?.goalConversation?.quickReplies;
+  return Array.isArray(quickReplies) ? quickReplies : [];
+}
+
+export function goalInternalConfidence(internal: GoalConversationInternal | null | undefined): number {
+  const confidence = internal?.core?.confidence;
+  return typeof confidence === 'number' && Number.isFinite(confidence) ? confidence : 0.2;
+}
+
+/** #132：降级/异形 success 产物缺 internal 时，用输出顶层字段拼最小合法 internal */
+export function minimalGoalInternalFromOutput(output: {
+  stage?: string;
+  confidence?: number;
+  state?: { understanding?: any };
+  nextQuestions?: unknown;
+  quickReplies?: unknown;
+}): GoalConversationInternal {
+  const validStages = ['understanding', 'proposing', 'ready', 'completed'];
+  const stage = (validStages.includes(String(output?.stage)) ? output?.stage : 'understanding') as GoalConversationInternal['core']['stage'];
+  const confidence = typeof output?.confidence === 'number' && Number.isFinite(output.confidence) ? output.confidence : 0.2;
+  return {
+    core: { conversationId: null, stage, confidence, isCompleted: stage === 'completed' },
+    ext: {
+      goalConversation: {
+        understanding: output?.state?.understanding ?? {},
+        nextQuestions: Array.isArray(output?.nextQuestions) ? output.nextQuestions : [],
+        quickReplies: Array.isArray(output?.quickReplies) ? output.quickReplies : [],
+        collected: {},
+      },
+    },
+  };
+}
+
 export interface GoalConversationAgentResult {
   userVisible: string;
   internal: GoalConversationInternal;
@@ -1118,24 +1157,28 @@ export async function goalConversationAgentHandler(
 
     if (promptResult.success && promptResult.output) {
       const result = promptResult.output;
+      // #132：异形 success 产物（降级路径直通 output）缺 internal 时拼最小合法值，
+      // 不让 renderHints/metadata 再抛一次、也不让外层 `!result.internal` 判失败。
+      const internal = result.internal
+        ?? minimalGoalInternalFromOutput(result as unknown as Parameters<typeof minimalGoalInternalFromOutput>[0]);
       return {
         success: true,
         userVisible: result.userVisible,
-        internal: result.internal,
+        internal,
         runtimeEnvelope: promptResult.runtimeEnvelope || buildGoalRuntimeEnvelope(result, {
           contract: runtimeContract,
           status: 'succeeded',
         }),
         renderHints: {
           component: 'goal-conversation',
-          quickReplies: result.internal.ext.goalConversation.quickReplies || [],
+          quickReplies: goalInternalQuickReplies(internal),
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'skill:goal-conversation',
           agentName: '目标对话 Skill',
           agentType: 'custom',
-          confidence: result.internal.core.confidence,
+          confidence: goalInternalConfidence(internal),
           generatedAt: new Date().toISOString(),
         },
         debug: {
@@ -1189,14 +1232,14 @@ export async function goalConversationAgentHandler(
         }),
         renderHints: {
           component: 'goal-conversation',
-          quickReplies: observedResult.internal.ext.goalConversation.quickReplies || [],
+          quickReplies: goalInternalQuickReplies(observedResult.internal),
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'skill:goal-conversation',
           agentName: '目标对话 Skill',
           agentType: 'custom',
-          confidence: observedResult.internal.core.confidence,
+          confidence: goalInternalConfidence(observedResult.internal),
           generatedAt: new Date().toISOString(),
         },
         debug: {
