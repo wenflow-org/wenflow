@@ -293,12 +293,16 @@ function renderGrid({ title, cells = [], rows, cols, rowLabels = [], colLabels =
 
   let maxText = 0;
   for (const c of cells) maxText = Math.max(maxText, est(c.text ?? '', T.fontBody));
-  const cw = Math.max(56, Math.ceil(maxText) + 26);
   const ch = 40;
-  const colW = () => Math.max(56, Math.round(cw));
+  /** 列宽要同时容下格内文字与列标题；标题再长也有上限，超出走省略号（否则两列标题会压在一起） */
+  const colWArr = Array.from({ length: cols }, (_: unknown, c: number) => {
+    const lab = colLabels[c] ? Math.min(Math.ceil(est(colLabels[c], T.fontSmall)) + 14, 200) : 0;
+    return Math.max(56, Math.ceil(maxText) + 26, lab);
+  });
+  const colWAt = (c: number) => colWArr[c] ?? colWArr[0] ?? 56;
   const colX = (c: number) => {
     let x = 0;
-    for (let i = 0; i < c; i++) x += colW();
+    for (let i = 0; i < c; i++) x += colWAt(i);
     return x;
   };
   const colsTotalW = colX(cols);
@@ -318,10 +322,17 @@ function renderGrid({ title, cells = [], rows, cols, rowLabels = [], colLabels =
   const focusCol = Number.isInteger(focus?.col) ? focus.col : null;
 
   colLabels.forEach((lab: string, c: number) => {
-    const cwi = colW();
+    const cwi = colWAt(c);
     const isFocus = focusCol === c;
     parts.push(
-      text(ox + colX(c) + cwi / 2, 12 + titleH + 19, lab, isFocus ? 't-key' : 't-small', 'middle', isFocus ? `fill="${T.accentInk}"` : ''),
+      text(
+        ox + colX(c) + cwi / 2,
+        12 + titleH + 19,
+        fitText(lab, cwi - 8, T.fontSmall),
+        isFocus ? 't-key' : 't-small',
+        'middle',
+        isFocus ? `fill="${T.accentInk}"` : '',
+      ),
     );
   });
   rowLabels.forEach((lab: string, r: number) => {
@@ -334,7 +345,7 @@ function renderGrid({ title, cells = [], rows, cols, rowLabels = [], colLabels =
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const cell: any = map.get(`${r},${c}`);
-      const cwi = colW();
+      const cwi = colWAt(c);
       const x = ox + colX(c);
       const y = oy + r * ch;
       const isFocus = (focusRow !== null && focusRow === r) || (focusCol !== null && focusCol === c);
@@ -968,7 +979,7 @@ function renderQuadrant({ title, colLabels = [], rowLabels = [], cells = [], not
 
   const parts: string[] = [...titleBlock(title)];
   const xs = [padL + 8, padL + 8 + cw + gapX];
-  colLabels.forEach((lab: string, c: number) => parts.push(text(xs[c] + cw / 2, titleH + 50, lab, 't-small')));
+  colLabels.forEach((lab: string, c: number) => parts.push(text(xs[c] + cw / 2, titleH + 50, fitText(lab, cw - 8, T.fontSmall), 't-small')));
   rowLabels.forEach((lab: any, r: number) => {
     parts.push(text(padL, titleH + top + r * (chh + gapY) + chh / 2 - 2, lab.label, 't-key', 'end'));
     if (lab.sub) parts.push(text(padL, titleH + top + r * (chh + gapY) + chh / 2 + 15, lab.sub, 't-tiny', 'end'));
@@ -1004,7 +1015,12 @@ function renderQuadrant({ title, colLabels = [], rowLabels = [], cells = [], not
 
 function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], focus }: any): RenderedFigure {
   const labelW = Math.max(...rowLabels.map((l: string) => est(l, 12))) + 22;
-  const cw = 94;
+  /** 列宽先看清列标题要多少（8 字以上按 94px 就装不下），再夹在 94–190 之间 */
+  const cwLabel = colLabels.reduce(
+    (m: number, l: string) => Math.max(m, Math.ceil(Math.max(...String(l).split('\n').map((x: string) => est(x, T.fontSmall)))) + 14),
+    0,
+  );
+  const cw = Math.max(94, Math.min(190, cwLabel));
   const ch = 36;
   const headH = 42;
 
@@ -1055,7 +1071,7 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
     const isFocus = focusCol === c;
     lines.forEach((l: string, i: number) =>
       parts.push(
-        text(cx, oy + 18 + i * 14, l, isFocus ? 't-key' : 't-small', 'middle', isFocus ? `fill="${T.accentInk}"` : ''),
+        text(cx, oy + 18 + i * 14, fitText(l, cw - 6, T.fontSmall), isFocus ? 't-key' : 't-small', 'middle', isFocus ? `fill="${T.accentInk}"` : ''),
       ),
     );
   });
@@ -1691,7 +1707,9 @@ function renderBullseye({ title, colLabels = [], rowLabels = [], cells = [], not
 
   const parts: string[] = [...titleBlock(title, pad)];
   const xs = [padL, padL + cellW + gapX];
-  colLabels.forEach((lab: string, c: number) => parts.push(text(xs[c] + cellW / 2, titleH + 30, lab, 't-key')));
+  colLabels.forEach((lab: string, c: number) =>
+    parts.push(text(xs[c] + cellW / 2, titleH + 30, fitText(lab, cellW - 10, T.fontKey), 't-key')),
+  );
   rowLabels.forEach((lab: any, r: number) => {
     const y = top + r * (cellH + gapY) + cellH / 2;
     parts.push(text(padL - 18, y - 2, lab?.label ?? String(lab), 't-key', 'end'));

@@ -32,6 +32,39 @@ describe('教学图确定性渲染器', () => {
     expect(svg).toContain('待你回答');
   });
 
+  it('grid 列标题参与列宽：长标题把画布撑开，不被压成一条', () => {
+    const cells = [
+      { r: 0, c: 0, text: '会' },
+      { r: 0, c: 1, text: '会' },
+    ];
+    const short = renderSpecFigure('grid', { rows: 1, cols: 2, colLabels: ['甲', '乙'], cells });
+    const long = renderSpecFigure('grid', { rows: 1, cols: 2, colLabels: ['外层 id(a) vs id(b)', '是否波及 a'], cells });
+    expect(long!.width).toBeGreaterThan(short!.width);
+    expect(long!.svg).toContain('外层 id(a) vs id(b)');
+  });
+
+  it('grid 列标题超长改省略号：不出界、也不与邻列压住', () => {
+    const huge = '这是一条非常非常非常长的列标题用来测试截断逻辑是否生效';
+    const out = renderSpecFigure('grid', { rows: 1, cols: 1, colLabels: [huge], cells: [{ r: 0, c: 0, text: '会' }] });
+    expect(out!.svg).toContain('…');
+    expect(out!.svg).not.toContain(huge);
+  });
+
+  it('matrix 列宽跟着列标题走：9 字标题整句保留，不被截成「…」', () => {
+    const svg = svgOf('matrix', {
+      rowLabels: ['甲', '乙'],
+      colLabels: ['问的是动作还是时长', '呈现超出记录强度'],
+      cells: [
+        { r: 0, c: 0, tone: 'hit' },
+        { r: 0, c: 1, tone: 'hit' },
+        { r: 1, c: 0, tone: 'miss' },
+        { r: 1, c: 1, tone: 'dup' },
+      ],
+    });
+    expect(svg).toContain('问的是动作还是时长');
+    expect(svg).toContain('呈现超出记录强度');
+  });
+
   it('matrix：命中/漏/堆砌四种符号都画出来', () => {
     const svg = svgOf('matrix', {
       rowLabels: ['要点一', '要点二'],

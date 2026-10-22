@@ -22,6 +22,22 @@ const FIGURE_CSS = (() => {
 const VISUAL_SRC = read('../../backend/src/services/ai-teaching/teaching-visual.service.ts');
 const YAML = read('../../prompts/core/teaching-turn.yaml');
 const ITEMS = JSON.parse(read('../figure-out/figures.json')) as GalleryItem[];
+/** 今晚传统学科压测的统计（outputs/e2e/tonight-stats.mjs 生成；没有就留空） */
+const TONIGHT = (() => {
+  try {
+    return JSON.parse(read('../figure-out/tonight-stats.json'));
+  } catch {
+    return null;
+  }
+})();
+/** 几何审计结果（figure-geometry-audit.ts 渲染 + 浏览器实测；没有就留空） */
+const AUDIT = (() => {
+  try {
+    return JSON.parse(read('../figure-out/geometry-audit.json'));
+  } catch {
+    return null;
+  }
+})();
 
 interface GalleryItem {
   sessionId: string;
@@ -198,11 +214,39 @@ const FIXES = [
   ['靠边参考线标签被裁', '「最后写视图：屏幕停在「北京」」右半截没了', '按估算宽度贴边时改内侧对齐（start/end）'],
   ['相邻刻度标签重影', '40% 与 45% 两条六字标签叠成一团', '按宽度贪心分行，区间标注与画布高度同步下移'],
   ['评审页位置线掉样式', '轴线 stroke:none、字号退回 16px（SSR 无 scope 属性、?inline 取不到 scoped 块）', '生成器直接读 SFC 的 style 注入'],
+  ['对照栏标题连成一行', '左右两个标题 + 分隔说明挤在同一行，读不出从属', '标题与副标题两行，分隔说明独占一行'],
+  ['阶梯子标题溢出行高', '子标题两行时压到下一步', '子标题两行 + 步高 62→68px'],
+  ['归类说明句末行只剩两三字', '「…只认主活动 / 落科」', '说明句按卡片内宽做均衡折行（balancedWrap）'],
+  ['区间条说明出界、数值标压线', '长说明单行捅出卡边；终点数值与端线重叠', '说明按宽折行、数值标签按剩余宽度翻到内侧'],
+  ['位置线端部标签压住「单位」', '左上「单位：分钟」与首个参考线标签同高相切', '两者重叠时参考线标签下移到 y=38'],
+  ['网格列标题互相压住', '3 列网格两个长列标题重叠 39%（几何审计实测）', '列宽把列标题一并算进去（上限 200px），超长走省略号'],
 ];
 
 const fixRows = FIXES.map(
   ([a, b, c], i) => `<tr><td class="num">${i + 1}</td><td>${esc(a)}</td><td>${esc(b)}</td><td>${esc(c)}</td></tr>`,
 ).join('');
+
+const TONIGHT_LABEL: Record<string, string> = {
+  linxiaoman: '林小满 · 高中英语时态',
+  zhouzimo: '周子墨 · 大一内存引用',
+  zhouzixuan: '周子轩 · 初二光合呼吸',
+};
+const tonightBlock = TONIGHT
+  ? `<h3>今晚传统学科压测（修复后 23:34 起）</h3>
+    <p>新增 3 位虚拟学习者，覆盖此前没压过的传统学科：${Object.values(TONIGHT_LABEL).map(esc).join('、')}。</p>
+    <table>
+      <thead><tr><th>读数</th><th class="num">值</th></tr></thead>
+      <tbody>
+        <tr><td>本次会话产出的图</td><td class="num">${TONIGHT.figures}</td></tr>
+        <tr><td>单课最多图数（上限 4）</td><td class="num">${TONIGHT.maxPerSession}</td></tr>
+        <tr><td>会话上限触发次数</td><td class="num">${TONIGHT.gates.sessionCap}</td></tr>
+        <tr><td>同图型配额触发次数</td><td class="num">${TONIGHT.gates.kindCap}</td></tr>
+        <tr><td>同骨架去重触发次数</td><td class="num">${TONIGHT.gates.sameShape}</td></tr>
+        <tr><td>归一化拒绝（丢图）</td><td class="num">${TONIGHT.gates.normalizationRejected}</td></tr>
+      </tbody>
+    </table>
+    <p class="note">图型分布：${Object.entries(TONIGHT.byKind || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(KIND_LABEL[k] || k)} ${v}`).join('、') || '—'}。</p>`
+  : '';
 
 const contextRow = (label: string, text: string | undefined, cls: string) =>
   text
@@ -271,17 +315,18 @@ pre { margin: 8px 0; padding: 12px 14px; background: #f8f9fb; border: 1px solid 
 const body = `
 <div class="page">
   <h1>教学图这一轮：渲染收紧、闸门修好、提示词现状</h1>
-  <p class="meta">2026-10-21 · 分支 feat/teaching-figures · 版本 ${esc(version)}（未推送） · 数据来源：主库 teaching_session_messages 真实下发记录</p>
+  <p class="meta">2026-10-21 至 2026-10-23 · 分支 feat/teaching-figures · 版本 ${esc(version)}（未推送） · 数据来源：主库 teaching_session_messages 真实下发记录</p>
 
   <div class="lead">
     <p><b>结论</b></p>
     <ol>
       <li>图型目录是固定的 16 种，模型只交 spec，渲染由代码确定性完成——这是设计，不是模型只画得出这几种。</li>
       <li>但真实课程里图型集中在少数几种（${Object.entries(realKind).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${KIND_LABEL[k] || k} ${v}`).join('、')}）；其中一课最多 ${maxSession} 张、同一图型最多 ${maxSameKindInSession} 张——会话上限 4 与同图型上限 3 都曾被突破。</li>
-      <li>原因是两道重复闸门（会话上限 4 张、同图型 3 张）的计数读的是回合内存快照，整场都没触发；现已改为按库里的侧表计数，并补一道同图型硬闸。</li>
-      <li>渲染侧修了 15 处：越界、截半句、拆数字、复述、装饰色带、徽标压线、无标签参考线、靠边裁切、刻度重影、评审页掉样式；夜间跑批扩到 537 张后又修了 5 类——对照标题两行、阶梯子标题两行与行距、归类说明句按内宽均衡折行、区间条说明折行与数值标签防出界、位置线端部标签与「单位」标签避让。</li>
-      <li>全量检测（${total} 张，2026-10-22 收工）：0 处越界、0 处文字重叠；省略号 5 处逐条比对 spec，都是模型原文自带的「……」，不是渲染截断。</li>
+      <li>两道重复闸门（会话上限 4 张、同骨架去重）的计数读的是回合内存快照，744 张图里一次没触发；现已改为读库侧表，并按图型证据等级分配配额（A 4 / B 4 / C 3 / D 2）。</li>
+      <li>渲染侧修了 ${FIXES.length} 处：越界、截半句、拆数字、复述、装饰色带、徽标压线、无标签参考线、靠边裁切、刻度重影、评审页掉样式；夜间跑批扩到 537 张后又修了 5 类——对照标题两行、阶梯子标题两行与行距、归类说明句按内宽均衡折行、区间条说明折行与数值标签防出界、位置线端部标签与「单位」标签避让；今晚几何审计又抓出 1 类——网格长列标题互相压住。</li>
+      <li>几何审计（${AUDIT ? AUDIT.uniqueRendered : total} 张去重后逐张量文字 bbox，容差 1px）：越出画布 ${AUDIT ? AUDIT.outsideRows : '—'} 处、文字互相压住 ${AUDIT ? AUDIT.overlapRows : '—'} 处、省略号 ${AUDIT ? AUDIT.ellipsisRows : '—'} 处——省略号逐条比对 spec，都是模型原文自带的「……」，不是渲染截断。</li>
       <li>夜间跑批暴露一处与图无关的链路缺陷：模拟学习者三次把整个 JSON 再序列化成字符串，被判定成 missing reply（韩磊那张卡）。解析器已加「解一层字符串」的容错，单测覆盖，重启后同一条卡越过了原先的失败步数。</li>
+      <li>理论侧落成 <span class="mono">doc/DIAGRAM_PEDAGOGY_RESEARCH.md</span>（证据分级 A–D）：被实验支持的是「换表征改变推理成本」，不是「图降低认知负荷」；有效成分是几何承载关系 + 图后的关系性任务。15 个图型逐一标注图型级实证，D 级不得对外声称有效。</li>
     </ol>
   </div>
 
@@ -290,7 +335,7 @@ const body = `
     <div><b>${total}</b><span>图库里的图（含旧探针数据）</span></div>
     <div><b>${real.length}</b><span>真实课程产出（含夜间跑批）</span></div>
     <div><b>${Object.keys(realKind).length}</b><span>真实课程用到的图型数</span></div>
-    <div><b>${maxSession}</b><span>本轮单课最多图数（上限 4）</span></div>
+    <div><b>${maxSession}</b><span>修复前单课最多图数（上限 4，已超）</span></div>
   </div>
   <div class="card">
     <h3>图型分布</h3>
@@ -308,15 +353,19 @@ const body = `
       <thead><tr><th class="num">#</th><th>现象</th><th>证据</th><th>修法（全部确定性约束）</th></tr></thead>
       <tbody>${fixRows}</tbody>
     </table>
-    <p class="note">检查口径：逐张比较文字 bbox 与画布/所在卡片矩形，再两两比对文字 bbox 求交叠面积；省略号用 SVG 文本内容扫描。检测脚本与修复都在前端渲染器与位置线模板里，不依赖模型配合。</p>
+    <p class="note">检查口径：<span class="mono">scripts/figure-geometry-audit.ts</span> 把图库全部 SSR 成一张静态页，在真实浏览器里逐张取每个 &lt;text&gt; 的 client rect，换算回画布坐标后①比画布边界（容差 1px，吸收亚像素舍入）②两两求交叠面积，交集 ≥ 较小文本框 25% 记为压住；省略号直接扫文本内容。修复都在前端渲染器与位置线模板里，不依赖模型配合。</p>
   </div>
 
-  <h2>三、重复闸门为什么失效</h2>
+  <h2>三、重复闸门与图型配额（2026-10-22 晚落地）</h2>
   <div class="card">
-    <p>证据：真实课程共 ${real.length} 张图（位置线 ${realKind['position-line'] || 0} 张），其中一课最多 <b>${maxSession} 张</b>、同一图型 <b>${maxSameKindInSession} 张</b>——会话上限 4、同图型上限 3 都被突破，日志里「本会话图数已达上限」「同骨架」一次都没出现。库里这个会话的侧表有 17 条消息、6 条带 figures——数据是齐的。</p>
-    <p>根因：闸门的计数参数是回合内存里的消息列表，那份快照看不到已落库的图，计数恒为 0，两道闸都形同虚设。</p>
-    <p>修法：仓库新增 <span class="mono">countFiguresByKind(sessionId)</span>，直接读 <span class="mono">teaching_session_messages</span> 侧表逐条解析；引擎在会话上限之后再加一道同图型硬闸（默认 3，与旧规则同值），计数取自库。提示词里也补了一句：同一节课同一种图最多 3 张，第 4 次换形状或用文字。</p>
-    <p class="note">可调项：TEACHING_FIGURE_MAX_PER_SESSION（默认 4）、TEACHING_FIGURE_MAX_PER_KIND（默认 3）。</p>
+    <p><b>失效证据</b>：修复前那批 744 张图里，会话上限 4 与同骨架去重都读回合内存快照，日志 <b>0 次触发</b>；单课最多 ${maxSession} 张，同一会话相似度 0.55/0.60 的图仍被渲染。数据本身是齐的——侧表每条消息都带 figures。</p>
+    <p><b>改法</b>：新增 <span class="mono">listFigures(sessionId)</span> 读侧表；会话上限、同图型配额、同骨架去重共用一次库侧快照。同骨架判据仍是 bigram Jaccard，但对象换成已落库的 spec。</p>
+    <p><b>图型配额按证据等级</b>：A 4 / B 4 / C 3 / D 2——依据 <span class="mono">doc/DIAGRAM_PEDAGOGY_RESEARCH.md §五</span>（position-line A；matrix/grid/tree B；compare/venn/cycle C；其余 D）。<span class="mono">TEACHING_FIGURE_MAX_PER_KIND</span> 仍可一键统一覆盖。</p>
+    <p><b>链路缺省串联</b>：compare.chain 第二跳起省略 <span class="mono">from</span> 即画成串联，并行扇出必须显式 <span class="mono">from:"client"</span>（归一化会保留该字段）。真课 47 跳全缺 from、「响应回来」被画成往外发的问题不再复现。</p>
+    <p><b>归一化容错</b>：条目接受 <span class="mono">{label|text|value}</span> 对象；对照栏头放宽到 26 字并允许截断——此前 19–26 字的结论句会让整张图作废（实测 30 分钟丢 9 张）。</p>
+    ${tonightBlock}
+    <p class="note">残留失衡（如实记）：今晚 60 张里对照 36 张（60%）——闸门限住了「一课几张、一种几张」，限不住「模型偏爱哪种」。对照属 C 级、单课配额 3，正好能占满一课的 3/4。下一步有两条路（把 C 级配额降到 2／在提示词里对「本课已用过对照」降权），本轮没动，因为改完需要再跑一轮真课才算数。</p>
+    <p class="note">可调项：TEACHING_FIGURE_MAX_PER_SESSION（默认 4）、TEACHING_FIGURE_MAX_PER_KIND（显式设置时统一覆盖证据等级配额）。</p>
   </div>
 
   <h2>四、当前版本提示词</h2>
@@ -341,7 +390,7 @@ const body = `
 2. 极值点当区间：marks &lt; 3、无刻度、≥1 个区间、且 ≥2 个标签含「最高/最低/最大/最小」→ 拒绝
 3. 图内数字与正文对账：两边各 ≥2 个数字且零交集 → 判定图文打架，本轮不出图
 4. 防答案泄漏：本轮回复布置了「由学生自己画/排」的练习 → 不出图
-5. 重复闸门：同骨架（bigram Jaccard ≥ 0.45）不重摆；会话 ≤4 张；同图型 ≤3 张（按库计数）
+5. 重复闸门：同骨架（bigram Jaccard ≥ 0.45）不重摆；会话 ≤4 张；同图型按证据等级 4/4/3/2（A/B/C/D，按库计数）
 6. 留痕：figureSource = { trigger, reason, kindHint, ruleWhy, matched[] }，随消息落库，评审页直接展示</pre>
 
   <h2>五、外部评审的三条主张：核验与处置</h2>
@@ -380,8 +429,9 @@ const body = `
 
   <h2>六、复现与文件</h2>
   <div class="card">
-    <p>评审页（图库，36 张，含出图动机）：<span class="mono">outputs/teaching-figures-review.html</span></p>
+    <p>评审页（图库，${total} 张，含出图动机）：<span class="mono">outputs/teaching-figures-review.html</span></p>
     <p>本报告：<span class="mono">outputs/teaching-figures-report-20261021.html</span></p>
+    <p>理论依据：<span class="mono">doc/DIAGRAM_PEDAGOGY_RESEARCH.md</span>（证据分级与「不能声称」清单）。</p>
     <p>生成命令（frontend 目录）：</p>
     <pre>node node_modules/vite-node/vite-node.mjs scripts/figure-review-html.ts   # 图库
 node node_modules/vite-node/vite-node.mjs scripts/figure-report-html.ts   # 本报告
