@@ -397,18 +397,28 @@ const overviewCards = computed<OverviewCard[]>(() => {
   const val = (v: number) => (na ? '—' : v)
   const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
   const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : text)
+  /* 待审队列已并入此卡（2026-10-22 用户「合并了」）：需人工看的不是只有 ambiguous，
+     同义概念待确认 + 模糊候选 + 散键清理建议才是完整的「人审待办」。口径取
+     fragmentation.pendingReview；后端旧版没这个字段时退回 ambiguous，不静默归零。 */
+  const reviewQueue = totals.value.fragmentation?.pendingReview
   return [
     { label: '用户', value: val(t.users), hint: numHint(''), tone: numTone(''), title: '全部有记忆记录的用户数。是否含虚拟学习者随页头开关' },
     /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：来源/机制说明（跨全部学习路径、
        归并候选·不自动执行、模型给出的同义概念候选）撤出卡面，只留定义与包含关系 */
     { label: '记忆痕迹', value: val(t.traces), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },
     { label: '当前到期', value: val(t.due), hint: numHint(t.traces ? '' : '暂无痕迹'), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
-    { label: '需人工看', value: val(t.ambiguous), tone: numTone(t.ambiguous > 0 ? 'warn' : ''), title: '像但不确定的归并候选，需人工确认，不会自动执行' },
+    {
+      label: '需人工看',
+      value: val(reviewQueue ?? t.ambiguous),
+      tone: numTone((reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
+      title: '需人工处理的归并待办：同义概念待确认、模糊候选与散键清理建议，不会自动执行'
+    },
     { label: '待归并建议', value: val(t.proposed), tone: numTone(''), title: `模型给出的同义概念候选，其中 ${t.autoApplicable} 条可自动执行（「可自动」指系统有把握且名称足够相似）。执行后保留备份，可回滚。已执行 ${t.applied} 条，已删除 ${t.deleted} 条` }
   ];
 });
 
-/* 碎片率 KPI 行（R7 outlet 域契约 D）：后端未部署（字段整体缺失）→ '—' +「指标未取到」 */
+/* 碎片率 KPI 行（R7 outlet 域契约 D）：后端未部署（字段整体缺失）→ '—' +「指标未取到」。
+   2026-10-22 起只留两卡：「待审队列」并入「需人工看」，不再同维度说两遍。 */
 const fragmentationCards = computed<OverviewCard[]>(() => {
   const frag = totals.value.fragmentation
   const failed = !!error.value
@@ -420,7 +430,6 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
     failed ? '取数失败' : pending ? '取数中…' : missing ? '指标未取到' : ''
   const ratio = frag?.duplicateLabelRatio
   const unattached = frag?.unattachedKeys
-  const pendingReview = frag?.pendingReview
   return [
     {
       label: '措辞重复率',
@@ -435,19 +444,11 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
       hint: stateHint(!frag || unattached == null),
       tone: numTone(!na && unattached != null && unattached > 0 ? 'warn' : ''),
       title: '自由填写的、未关联到标准概念的概念标识数量——无法自动收拢，只能通过归并 / 清理建议逐条治理'
-    },
-    {
-      label: '待审队列',
-      value: na || pendingReview == null ? '—' : pendingReview,
-      /* 旧 hint 明写包含关系（含「需人工看」）；2026-10-21 起包含关系只在 title 里给 */
-      hint: stateHint(!frag || pendingReview == null),
-      tone: numTone(!na && pendingReview != null && pendingReview > 0 ? 'warn' : ''),
-      title: '不会自动执行'
     }
   ];
 });
 
-/** 页头 KPI 单带（2026-10-12 用户走查「怎么双 kpi」）：量值五卡 + 治理碎片三卡合成一条，
+/** 页头 KPI 单带（2026-10-12 用户走查「怎么双 kpi」）：量值五卡 + 治理碎片两卡合成一条，
     不再两段栅格——1920 下两段卡宽不一致（5 卡 ~310px vs 3 卡 ~530px），读作两套 KPI。
     两域取数语义各自保留：fragmentation 缺失仍由 fragmentationCards 出 '—' +「指标未取到」 */
 const headKpiCards = computed<OverviewCard[]>(() => [...overviewCards.value, ...fragmentationCards.value])

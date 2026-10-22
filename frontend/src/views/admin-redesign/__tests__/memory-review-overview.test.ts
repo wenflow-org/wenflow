@@ -106,36 +106,42 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
   });
 
   /** 2026-10-12 用户走查「怎么双 kpi」：量值五卡 + 碎片率三卡两段栅格并为一条单带 */
-  it('页头 KPI 并为单带：一条栅格 8 卡（5 量值 + 3 治理碎片），不再两段', async () => {
+  it('页头 KPI 并为单带：一条栅格 7 卡（5 量值 + 2 治理碎片），不再两段', async () => {
     const w = await mountWithRows(ROWS);
     const grids = w.findAll('.mk-kpi-grid');
     expect(grids).toHaveLength(1);
     const labels = grids[0].findAll('.mk-kpi__label').map((x) => x.text());
-    expect(labels).toEqual(['用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议', '措辞重复率', '未挂靠散键', '待审队列']);
+    expect(labels).toEqual(['用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议', '措辞重复率', '未挂靠散键']);
   });
 
-  /** 2026-10-14 走查：待审队列 = 人审档归并建议 + ambiguous + 散键清理建议（后端 memory-review.ts:64-68），
-   *  「需人工看」就是中间那个加数——另两项为 0 时两卡必然同数，并排 7 与 7 读作两个矛盾口径。
-   *  断言：和卡 hint 明写包含关系、title 声明不是另一个口径（改 hint 文案不得静默退回）。 */
-  it('待审队列与「需人工看」同数时，卡面只留值，title 只声明不会自动执行', async () => {
+  /** 2026-10-22 用户「合并了」：待审队列 = 人审档归并建议 + ambiguous + 散键清理建议
+   *  （后端 memory-review.ts:64-68），与「需人工看」是同口径的加总+加数，并排两张卡
+   *  会被读成两个矛盾读数 → 合并进「需人工看」，值取 pendingReview。 */
+  it('需人工看 = 人审待办总数（含归并建议 + 模糊候选 + 散键清理），不再单列待审队列卡', async () => {
     const w = await mountWithRows(ROWS, {
-      ambiguous: 7,
-      fragmentation: { duplicateLabelRatio: 0, unattachedKeys: 0, pendingReview: 7 },
+      ambiguous: 2,
+      fragmentation: { duplicateLabelRatio: 0, unattachedKeys: 0, pendingReview: 5 },
     });
     const byLabel = (label: string) =>
-      w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)!;
-    expect(byLabel('需人工看').find('.mk-kpi__num').text()).toBe('7');
-    const queue = byLabel('待审队列');
-    expect(queue.find('.mk-kpi__num').text()).toBe('7');
-    expect(queue.find('.mk-kpi__hint').exists()).toBe(false);
-    expect(queue.attributes('title')).toContain('不会自动执行');
-    expect(queue.attributes('title')).not.toContain('已含在此数内');
+      w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label);
+    const card = byLabel('需人工看')!;
+    expect(card.find('.mk-kpi__num').text()).toBe('5');
+    expect(card.attributes('title')).toContain('同义概念待确认');
+    expect(card.attributes('title')).toContain('散键清理');
+    expect(card.attributes('title')).toContain('不会自动执行');
+    expect(byLabel('待审队列')).toBeUndefined();
   });
 
   /** 2026-10-17 重设计：19 位有痕迹的用户里 17 位从未复习，旧的四列（需人工看/薄弱/强度/
    *  最近复习）成片「—」，0 到期还各画一条空轨。
    *  二次调整：相邻两列各画一条比例条会读成一排重叠的条——待复习只留数字，
    *  记忆强度单独一列带条，需关注与最近复习各自成列。 */
+  it('后端没有 fragmentation.pendingReview 时，需人工看退回 ambiguous，不归零', async () => {
+    const w = await mountWithRows(ROWS, { ambiguous: 4, fragmentation: null });
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工看')!;
+    expect(card.find('.mk-kpi__num').text()).toBe('4');
+  });
+
   it('列集拆为七列：待复习只出数字、全表仅强度一条比例条、无关注项显示「无」', async () => {
     overview.mockResolvedValue({
       data: { data: {
