@@ -83,15 +83,8 @@
                 <span class="sdp-panel__state mono">{{ rtForm.model || '继承 Agent / 平台默认' }}</span>
               </header>
               <div class="sdp-form__grid">
-                <label class="sdp-field">
-                  <span>模型层级</span>
-                  <select v-model="rtForm.tier" class="mk-input" :disabled="!rtForm.enabled">
-                    <option value="chat">chat</option>
-                    <option value="reasoning">reasoning</option>
-                  </select>
-                </label>
-                <label class="sdp-field">
-                  <span>模型<em>不选则继承 Agent / 平台默认</em></span>
+                <label class="sdp-field sdp-field--wide">
+                  <span>模型</span>
                   <MkModelPicker
                     :model-value="rtForm.model"
                     :options="pickerOptions"
@@ -885,6 +878,7 @@ watch(() => props.skillId, () => {
   .sdp-form__grid { grid-template-columns: 1fr; }
 }
 .sdp-field { display: grid; gap: 5px; min-width: 0; align-content: start; }
+.sdp-field--wide { grid-column: 1 / -1; }
 .sdp-field > span { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 .sdp-field > span em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
 .sdp-model-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }

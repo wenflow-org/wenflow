@@ -108,10 +108,9 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     w.unmount()
   })
 
-  it('选到 reasoning 模型时层级同步切换', async () => {
+  it('选到 reasoning 模型时层级自动带出（不再单独选模型层级）', async () => {
     const w = await mountTab()
-    const tierSelect = w.find('.sdp-form__grid select') as ReturnType<typeof w.find>
-    expect((tierSelect.element as HTMLSelectElement).value).toBe('chat')
+    expect(w.text()).not.toContain('模型层级')
 
     await openPicker(w, '.sdp-form__grid .mk-mp .mk-mp__control')
     const acme = w.findAll('.mk-mp__opt').find((o) => o.find('.mk-mp__id').text() === 'acme-vision')
@@ -119,7 +118,10 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     await acme!.trigger('click')
     await flushPromises()
 
-    expect((tierSelect.element as HTMLSelectElement).value).toBe('reasoning')
+    expect(w.find('.sdp-model-meta').text()).toContain('reasoning')
+    // 层级随模型切到 reasoning 后，备用链只剩同层级候选（acme 自己是主模型被排除）
+    await openPicker(w, '.sdp-fallback .mk-mp__control')
+    expect(optionIds(w)).toEqual([])
     w.unmount()
   })
 
