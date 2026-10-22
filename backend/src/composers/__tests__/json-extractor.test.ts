@@ -50,6 +50,20 @@ describe('extractJsonObject 容错链（2026-08-30 加入）', () => {
     expect(result.extractedJson).toBeNull();
   });
 
+  // 2026-10-22 夜间跑批：模拟学习者模型两次把整个对象再序列化成字符串
+  it('双重编码的 JSON（整段被包成字符串）解一层后照常取值', () => {
+    const inner = { reply: '好，这组题我按平时习惯计时做。', emotion: 'neutral', learnerState: { phaseFocus: 'practice' } };
+    const raw = JSON.stringify(JSON.stringify(inner));
+    const result = extractJsonObject(raw);
+    expect(result.parsed).toEqual(inner);
+    expect(result.parsed.reply).toBe(inner.reply);
+  });
+
+  it('双重编码只解到对象为止，普通字符串保持原样', () => {
+    const result = extractJsonObject(JSON.stringify('一个普通字符串'));
+    expect(result.parsed).toBe('一个普通字符串');
+  });
+
   it('空输入返回 null', () => {
     expect(extractJsonObject('').parsed).toBeNull();
     expect(extractJsonObject('  ').parsed).toBeNull();
