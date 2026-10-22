@@ -107,7 +107,7 @@
                 class="mk-th--right mk-th--sortable u-c-paths"
                 :aria-sort="userSortState('paths')"
                 @click="toggleUserSort('paths')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('paths')">路径 / 会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('paths')">路径 / 课堂<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('created')"
                 scope="col"
@@ -163,7 +163,7 @@
             <td v-if="showCol('paths')" class="mk-num">
               <!-- 原型列语言：数字列就是 mono 文本，不加自造可视化（双段条退役，计数进悬停）。
                    P2：0 值统一 mk-na 弱化（此前只有会话 0 弱化，路径 0 却实心黑，双标） -->
-              <span class="ul-ps" :title="`路径 ${u.paths} 条 · 会话 ${u.sessions} 次`"><b :class="{ 'mk-na': !u.paths }">{{ u.paths }}</b><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b></span>
+              <span class="ul-ps" :title="`路径 ${u.paths} 条 · 课堂 ${u.sessions} 节`"><b :class="{ 'mk-na': !u.paths }">{{ u.paths }}</b><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b></span>
             </td>
             <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
             <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
@@ -460,7 +460,7 @@ const ulColDefs = [
   { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部导出 CSV / 批量删除' },
   { key: 'email', label: '邮箱', title: '登录邮箱' },
   { key: 'role', label: '角色', title: '管理员 / 用户' },
-  { key: 'paths', label: '路径 / 会话', title: '学习路径数 / 会话数' },
+  { key: 'paths', label: '路径 / 课堂', title: '学习路径数 / 教学课堂节数' },
   { key: 'created', label: '注册时间', title: '账号创建时间' },
   { key: 'lastlogin', label: '最后登录', title: '最近登录时间' },
 ] as const
@@ -722,7 +722,7 @@ function exportSelected() {
     if (/^[=+\-@]/.test(s)) s = `'${s}`
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
-  const header = ['姓名', '邮箱', '角色', '等级/XP', '路径/会话', '注册时间', '最后登录', '类型']
+  const header = ['姓名', '邮箱', '角色', '等级/XP', '路径/课堂', '注册时间', '最后登录', '类型']
   const lines = rows.map((u) =>
     [
       esc(u.name),
@@ -887,7 +887,7 @@ function clearFilters() {
 /* pill 组维度分隔（角色/活跃 | 生命周期「已删除」）：细竖线，弱于 pill 边界。
    类名走页面前缀 ul-（design:check 规则 1：mk- 前缀属全局原语，页面 scoped 内禁定义）。 */
 .ul-pills__sep { width: 1px; align-self: stretch; margin: 7px 6px 7px 2px; background: color-mix(in srgb, currentColor 18%, transparent); }
-/* 路径/会话数字列（原型列语言：mono 文本） */
+/* 路径/课堂数字列（原型列语言：mono 文本） */
 .ul-ps { font-variant-numeric: tabular-nums; }
 .ul-ps b { font-weight: 600; }
 .ul-ps i { font-style: normal; color: var(--mk-faint); margin: 0 2px; }

@@ -202,13 +202,14 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
 
     const ths = w.findAll('thead th').map((t) => t.text());
-    expect(ths).toContain('难度');
-    expect(ths).toContain('时长');
+    // 2026-10-22 默认收起难度（真实数据多为未知、不改变运营动作）；列名补全为「预计时长」
+    expect(ths).not.toContain('难度');
+    expect(ths).toContain('预计时长');
     expect(ths).not.toContain('主题');
     /* 教学组列序统一（2026-10-16）：主体列（路径）→ 用户 → 状态 → 属性/过程（难度、时长、进度）→ 时间（更新）→ 操作。
        原断言是「难度紧跟路径列、用户之前（路径自身属性成组）」，与同组其它页的
        「主体 → 用户 → 状态 → 过程」不一致，也违背 2026-10-03 的「主体列恒在首、用户列随后」。 */
-    expect(ths.slice(0, 6)).toEqual(['路径', '用户', '状态', '难度', '时长', '进度']);
+    expect(ths.slice(0, 6)).toEqual(['路径', '用户', '状态', '预计时长', '进度', '最近活动']);
     expect(ths.at(-1)).toBe('操作');
 
     // 路径列副行 = 主题（仅 subject≠title 时；P2-6）+ 短 ID，不夹带难度/时长
@@ -218,7 +219,12 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(subs[1]).toContain('lp_d1');
     expect(subs[3]).toContain('lp_d2');
 
-    // 难度三态：枚举归一为中文、英文 unknown 与自述整句都收敛为「未知」
+    // 难度默认收起：从「列」菜单打开后再验证三态归一
+    const colsBtn = w.findAll('button').find((b) => b.text() === '列')!;
+    if (!w.find('.mk-cols__menu').exists()) await colsBtn.trigger('click');
+    const diffItem = w.findAll('.mk-cols__item').find((l) => l.text().includes('难度'))!;
+    await diffItem.find('input').setValue(true);
+    await nextTick();
     expect(w.findAll('.oc-diff').map((e) => e.text())).toEqual(['进阶', '未知', '未知']);
     // 未知态把原因/原文放进 title，不把半句自述当难度展示
     const diffTitles = w.findAll('.oc-diff').map((e) => e.attributes('title') || '');
@@ -228,7 +234,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 时长：有值带 ~，无值给 —
     expect(w.findAll('td.mk-num').map((e) => e.text())).toEqual(['~21h', '—', '~9h']);
     // 数字列右对齐（表头 mk-th--right + 单元格 mk-num）
-    expect(w.findAll('thead th').some((t) => t.text().includes('时长') && t.classes().includes('mk-th--right'))).toBe(true);
+    expect(w.findAll('thead th').some((t) => t.text() === '预计时长' && t.classes().includes('mk-th--right'))).toBe(true);
 
     w.unmount();
   });

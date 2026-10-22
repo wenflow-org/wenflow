@@ -165,7 +165,7 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
     ]);
     // 列方言回归（2026-10-11 用户走查：阶段从身份副行拆成独立列；列序按叙事重排）
     expect(w.findAll('#ld-panel-sessions thead th').map((t) => t.text())).toEqual([
-      '课堂', '阶段', '进度', '状态', '互动', '产物', '时间', '课堂 ID',
+      '课堂', '阶段', '进度', '状态', '互动', '课后总结', '时间', '课堂 ID',
     ]);
     const chips = stageChips(w);
     expect(chips.length).toBe(3); // 全部阶段 + 里程碑1 + 里程碑2

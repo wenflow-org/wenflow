@@ -106,8 +106,8 @@
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
             <MkCols
               :col-defs="gcColDefsFiltered"
-              storage-key="wf_goal_hidden_cols"
-              :default-hidden="['constraints']"
+              storage-key="wf_goal_hidden_cols_v2"
+              :default-hidden="GC_DEFAULT_HIDDEN"
               v-model:hidden="gcHiddenCols"
             />
             <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
@@ -158,7 +158,7 @@
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('turns')"
                 @click="toggleGcSort('turns')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清轮次<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="showCol('constraints')" scope="col" class="gc-c-constraints">约束条件</th>
               <th v-if="showCol('path')" scope="col" class="gc-c-path">路径</th>
               <th
@@ -467,17 +467,22 @@ const isPathPendingRow = (r: Row) => r.status === 'active' && !r.hasPath
 /** pill 命中数（2026-10-11 统一判例：筛选 pill 一律显命中数；按当前已加载窗口计） */
 const pathPendingCount = computed(() => rows.value.filter(isPathPendingRow).length)
 
-/* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/澄清进度/约束条件/路径/创建时间 可隐藏，用户/操作固定 */
+/* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/澄清轮次/约束条件/路径/最近活动/创建时间 可隐藏，用户/操作固定。
+   2026-10-22 默认只留 6 列（目标摘要/用户/状态/澄清轮次/路径/最近活动/操作）：
+   · 创建时间：与「最近活动」同为时间轴，分诊只看最近活动；
+   · 约束条件：真实数据稀疏（~35% 有值），逐条约束在详情里看。
+   两项仍可在「列」菜单打开；存储键升 v2，旧本地配置不覆盖新默认。 */
+const GC_DEFAULT_HIDDEN = ['constraints', 'created'] as const
 const gcColDefs = [
   { key: 'summary', label: '目标摘要', title: '对话目标摘要' },
   { key: 'status', label: '状态', title: '目标对话状态：进行中 / 已完成 / 已取消 / 失败 / 已放弃' },
-  { key: 'turns', label: '澄清进度', title: '学习者发言轮次（澄清深度）' },
+  { key: 'turns', label: '澄清轮次', title: '学习者在目标澄清里的发言轮次（不是完成度）' },
   { key: 'constraints', label: '约束条件', title: '澄清中收集的可用时间 / 期限等约束' },
   { key: 'path', label: '路径', title: '路径是否已生成' },
   { key: 'stageDate', label: '最近活动', title: '目标对话最近一次活动日（进行中=最后活动日，已完成=完成日，失败/取消=终态日）；悬停看完整阶段时间线' },
   { key: 'created', label: '创建时间', title: '对话创建时间' },
 ] as const
-const gcHiddenCols = ref<Set<string>>(new Set())
+const gcHiddenCols = ref<Set<string>>(new Set<string>(GC_DEFAULT_HIDDEN))
 
 /* 窄档列降级（UI 方案 §1 LAYOUT-3）：8 列 nowrap 表（2026-10-15 状态+阶段合并后少一列）
    在 1440 容器级仍有横滚，操作列易被挤出。

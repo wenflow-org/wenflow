@@ -100,9 +100,15 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
        原先把「最近活动」紧跟状态列（当状态伴侣），与同组其它页「时间列在过程之后」不一致；
        现移到路径列之后、创建时间之前，两列时间收在表尾。约束条件默认隐藏（MkCols），不进可见表头。 */
     const ths = wrapper.findAll('thead th').map((t) => t.text());
-    expect(ths.slice(0, 6)).toEqual(['目标摘要', '用户', '状态', '澄清进度', '路径', '最近活动']);
-    expect(ths.at(-2)).toBe('创建时间');
+    expect(ths.slice(0, 6)).toEqual(['目标摘要', '用户', '状态', '澄清轮次', '路径', '最近活动']);
     expect(ths.at(-1)).toBe('操作');
+    // 2026-10-22 默认收起创建时间与约束条件（列菜单仍可开）
+    expect(ths).not.toContain('创建时间');
+    const colsBtn = wrapper.findAll('button').find((b) => b.text() === '列')!;
+    await colsBtn.trigger('click');
+    const menu = wrapper.findAll('.mk-cols__item').map((x) => x.text());
+    expect(menu).toContain('创建时间');
+    expect(menu).toContain('约束条件');
     // 四步过程点条退役（2026-10-22）
     expect(wrapper.find('.gc-stage-cell__dot').exists()).toBe(false);
     wrapper.unmount();

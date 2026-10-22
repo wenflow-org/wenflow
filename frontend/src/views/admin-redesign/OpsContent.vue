@@ -80,7 +80,8 @@
           <MkLoading v-if="loading" inline text="加载中…" />
           <MkCols
             :col-defs="colDefs"
-            storage-key="wf_paths_hidden_cols"
+            storage-key="wf_paths_hidden_cols_v2"
+            :default-hidden="PATH_DEFAULT_HIDDEN"
             v-model:hidden="hiddenCols"
           />
           <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
@@ -136,7 +137,7 @@
                 class="mk-th--sortable mk-th--right oc-c-hours"
                 :aria-sort="ocSortState('hours')"
                 @click="toggleOcSort('hours')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('hours')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('hours')">预计时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('progress')"
                 scope="col"
@@ -150,7 +151,7 @@
                 class="mk-th--sortable oc-c-updated"
                 :aria-sort="ocSortState('updated')"
                 @click="toggleOcSort('updated')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('updated')">最近活动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-th--right oc-c-act">操作</th>
             </tr>
           </thead>
@@ -340,11 +341,15 @@ const colDefs = [
   { key: 'user', label: '用户', title: '所属用户' },
   { key: 'status', label: '状态', title: '路径状态' },
   { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶），无法判断时为未知' },
-  { key: 'hours', label: '时长', title: '预计学习时长（约数，带 ~ 表示近似）' },
+  { key: 'hours', label: '预计时长', title: '预计学习时长（约数，带 ~ 表示近似）' },
   { key: 'progress', label: '进度', title: '里程碑完成进度' },
-  { key: 'updated', label: '更新时间', title: '最近更新' }
+  { key: 'updated', label: '最近活动', title: '路径最近一次活动（生成、推进或状态变化）' }
 ] as const
-const hiddenCols = ref<Set<string>>(new Set())
+/* 2026-10-22 默认收起「难度」：它由目标对话的水平自述归一而来，真实数据里多为「未知」，
+   且不改变运营动作（路径是否生成成功、进度如何才是要看的）。仍在「列」菜单可开；
+   存储键升 v2，旧本地配置不覆盖新默认。 */
+const PATH_DEFAULT_HIDDEN = ['difficulty'] as const
+const hiddenCols = ref<Set<string>>(new Set<string>(PATH_DEFAULT_HIDDEN))
 
 /* 状态条四态计数遗留口径：byStatus 仍供贴表分布条分段/图例（2026-10-04 状态条退役后
    dashTone 随条删除——失败抬红由分布条红段单源承载） */
@@ -782,7 +787,7 @@ defineExpose({ reload: () => void reload(true) })
 .oc-table .oc-c-user { width: 166px; }
 .oc-table .oc-c-status { width: 90px; }
 .oc-table .oc-c-difficulty { width: 64px; }
-.oc-table .oc-c-hours { width: 72px; }
+.oc-table .oc-c-hours { width: 84px; }
 .oc-table .oc-c-progress { width: 146px; }
 .oc-table .oc-c-updated { width: 104px; }
 .oc-table .oc-c-act { width: 94px; }

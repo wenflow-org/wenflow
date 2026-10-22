@@ -221,7 +221,7 @@
               <th v-if="!tsHiddenCols.has('messages')" scope="col" class="ts-c-msg" title="消息：课堂内用户与平台的往来条数">消息</th>
               <th v-if="!isTableMid && !tsHiddenCols.has('knowledge')" scope="col" class="ts-c-kp" title="窄窗口下不显示此列">知识点</th>
               <th v-if="!tsHiddenCols.has('progress')" scope="col" class="ts-c-prog" title="第几个/共几个是位置，不是完成数">进度</th>
-              <th v-if="!tsHiddenCols.has('output')" scope="col" class="ts-c-out">产物</th>
+              <th v-if="!tsHiddenCols.has('output')" scope="col" class="ts-c-out">课后总结</th>
               <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')" scope="col" class="ts-c-att">关注</th>
               <th
                 v-if="!isTableCompact && !tsHiddenCols.has('start')"
@@ -765,7 +765,7 @@ const tsColDefs = [
   { key: 'messages', label: '消息', title: '课堂内用户与平台的往来条数' },
   { key: 'knowledge', label: '知识点', title: '本节课堂触及的知识点数' },
   { key: 'progress', label: '进度', title: '学习进度' },
-  { key: 'output', label: '产物', title: '课后总结 / 建议' },
+  { key: 'output', label: '课后总结', title: '课后总结质量（有总结 / 降级总结 / 缺总结）与教学建议' },
   { key: 'attention', label: '关注', title: '关注度' },
   { key: 'start', label: '开始时间', title: '会话开始的时刻，行内显示相对时间，完整时刻按本地时区给出' },
 ] as const

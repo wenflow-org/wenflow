@@ -162,7 +162,7 @@
               title="当前读数的置信度，低于 50% 记为低置信"
               :aria-sort="lcSortState('conf')"
               @click="toggleLcSort('conf')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th v-if="!lcHiddenCols.has('risk')" scope="col" class="lc-c-risk">风险摘要</th>
             <th
               v-if="!lcHiddenCols.has('updated')"
@@ -171,7 +171,7 @@
               title="快照更新时间"
               :aria-sort="lcSortState('updated')"
               @click="toggleLcSort('updated')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">档案更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th scope="col" class="mk-th--right lc-c-act" title="默认排序：风险优先 → 更新时间新→旧">操作</th>
           </tr>
         </thead>
@@ -355,9 +355,9 @@ const lcColDefs = [
   { key: 'progress', label: '当前进度', title: '当前任务 + 路径' },
   { key: 'trend', label: '趋势', title: '近况趋势' },
   { key: 'fatigue', label: '疲劳', title: '疲劳度' },
-  { key: 'conf', label: '置信', title: '当前读数置信度' },
+  { key: 'conf', label: '置信度', title: '当前读数有多可信，低于 50% 记为低置信' },
   { key: 'risk', label: '风险摘要', title: '风险原因' },
-  { key: 'updated', label: '更新', title: '快照更新时间' },
+  { key: 'updated', label: '档案更新', title: '学习者档案快照的更新时间，不是学习活动时间' },
 ] as const
 /* 审核 #12（2026-10-06）：风险摘要列不再默认隐藏——它是 KPI「需关注」的判据之一
    （isRisk 含 !!r.risk），默认收起会让「需关注」筛出的行在可见列里全像正常值，看不出被抓原因。
