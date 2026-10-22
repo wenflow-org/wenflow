@@ -213,11 +213,9 @@
       <div class="mk-card">
         <div class="mk-card__head">
           <span class="mk-card__title">待处理事项</span>
-          <!-- 口径副文（#4）：动作来自 200 条日志采样窗口的 Top 失败，与状态条的「今日失败」不同源。
-               不写「取前 2」（评审 2026-10-10）：句尾数字与右侧计数徽章连读成「两个 2」，
-               条数语义由徽章独占，口径只说排序规则 -->
+          <!-- 口径副文（#4）：动作来自 200 条日志采样窗口的 Top 失败，与状态条的「今日失败」不同源；
+               只写在 title，不占可见行。卡头不挂条数徽章（2026-10-22 用户「右上角的 4 不要」）。 -->
           <span class="mk-card__meta" title="动作来自 200 条日志采样窗口的 Top 失败，按失败数排序。与状态条的「今日失败」不同源">近 7 天</span>
-          <span v-if="todoItems.length" class="pill pill--warn"><span class="pill__dot"></span>{{ todoItems.length }}</span>
         </div>
         <div class="ov-card__body">
           <div class="ranklist">
