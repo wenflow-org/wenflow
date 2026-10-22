@@ -25,6 +25,7 @@ function build(over: Partial<Record<keyof Deps, ComputedRef<unknown>>> = {}) {
     stageResults: computed(() => ({}) as Record<string, unknown>),
     isTerminal: computed(() => false),
     isFailedTerminal: computed(() => false),
+    isInterruptedTerminal: computed(() => false),
     hasWrapup: computed(() => false),
     goalConversationMessages: computed(() => [] as Array<{ role: string; content: string }>),
     pathStatusPath: computed(() => ({}) as Record<string, unknown>),
@@ -129,6 +130,25 @@ describe('useCockpitStages 终态语义', () => {
     expect(s.stageDone('path')).toBe(false);
     expect(s.stageDone('learning')).toBe(false);
   });
+
+  /* #135：timeout/finalization_failed/discarded/superseded 同为中断终态——
+     isFailedTerminal 只覆盖 failed/abandoned，其余终止态此前会把当前阶段打勾。 */
+  it.each(['timeout', 'finalization_failed', 'discarded', 'superseded'] as const)(
+    '%s 停在当前阶段：当前阶段不判完成',
+    (via) => {
+      const s = build({
+        currentStage: computed(() => 'learning'),
+        isTerminal: computed(() => true),
+        isFailedTerminal: computed(() => false),
+        isInterruptedTerminal: computed(() => true)
+      });
+      void via;
+
+      expect(s.stageDone('learning')).toBe(false);
+      // 已走过的阶段仍判完成（不误伤）
+      expect(s.stageDone('goal')).toBe(true);
+    }
+  );
 });
 
 /**

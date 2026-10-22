@@ -1188,12 +1188,18 @@ const blackboxTraceCount = computed(() => {
 /** 模式声明单源（2026-10-04 全站评审 P3#13）：真实会话 chip 吸收控制台「只读监控」条的语义，
     同屏只此一处；黑盒/辅助口径不变（黑盒控制台内另有专项声明条） */
 const modeText = computed(() => (isRealMode.value ? '真实会话 · 只读监控' : isBlackbox.value ? '黑盒模式' : '辅助模式'))
+/** 终态全集（#135）：与教学会话列表页同口径——timeout/finalization_failed/discarded/superseded
+ *  也是终态，不能再按「进行中」轮询/给操作按钮。 */
+const TERMINAL_STATUSES = ['completed', 'failed', 'abandoned', 'timeout', 'finalization_failed', 'discarded', 'superseded']
+/** 中断类终态：阶段条当前阶段不能算完成（#135）；completed 不在此列 */
+const INTERRUPTED_TERMINAL_STATUSES = ['failed', 'abandoned', 'timeout', 'finalization_failed', 'discarded', 'superseded']
 const isTerminal = computed(() => {
   const st = normalized(session.value?.status || runtime.value.status)
-  return ['completed', 'failed', 'abandoned'].includes(st)
+  return TERMINAL_STATUSES.includes(st)
 })
 const terminalStatus = computed(() => normalized(session.value?.status || runtime.value.status))
 const isFailedTerminal = computed(() => ['failed', 'abandoned'].includes(terminalStatus.value))
+const isInterruptedTerminal = computed(() => INTERRUPTED_TERMINAL_STATUSES.includes(terminalStatus.value))
 /** 黑盒 rerun 仅终态可跑（后端 409：只有终态黑盒实验可按原输入重跑），按钮禁用前置同一口径（报告 #37） */
 const blackboxRerunTitle = computed(() => isTerminal.value
   ? '按原输入重跑本实验：生成一个新会话，运行配置保持不变'
@@ -1220,11 +1226,13 @@ const statusTitle = computed(() =>
       ? '会话未开始'
       : isFailedTerminal.value
         ? manualStopped.value ? '已手动停止' : teachingTimedOut.value ? '会话失败 · 授课超时' : '会话失败'
-        : isTerminal.value
-          ? '会话已完成'
-          : isPaused.value
-            ? '已暂停 · 自动推进已冻结（可继续或终止）'
-            : '会话进行中'
+        : isInterruptedTerminal.value
+          ? '会话中断'
+          : isTerminal.value
+            ? '会话已完成'
+            : isPaused.value
+              ? '已暂停 · 自动推进已冻结（可继续或终止）'
+              : '会话进行中'
 )
 
 /* 双轴状态（与一/二级页同源）：生命周期合成态 + 阶段条输入。
@@ -1961,7 +1969,7 @@ const {
   stageProgress, stageMiniStatus, learnProgressText
 } = useCockpitStages({
   currentStage, bindings, stageStatus, stageResults,
-  isTerminal, isFailedTerminal, hasWrapup,
+  isTerminal, isFailedTerminal, isInterruptedTerminal, hasWrapup,
   goalConversationMessages, pathStatusPath, pathMilestonesView, learnLessons
 })
 
