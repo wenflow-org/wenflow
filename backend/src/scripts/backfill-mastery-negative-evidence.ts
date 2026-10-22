@@ -138,7 +138,7 @@ export function planSession(row: SessionRow): SessionBackfillPlan | null {
 }
 
 function main(): void {
-  // node:sqlite 属 Node 22 实验 API（本仓 @types/node 20.x 未声明），CI 的 Node 20 没有该内建模块。
+  // node:sqlite 属 Node 22 实验 API（本仓 @types/node 20.x 未声明），低版本 Node 没有该内建模块。
   // 懒加载：模块级 require 会让任何 import 本文件的测试在 CI 直接套件失败。
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
   const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: any };

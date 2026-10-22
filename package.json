@@ -62,7 +62,7 @@
   "author": "Jinl2l3",
   "license": "MIT",
   "engines": {
-    "node": ">=20.17.0"
+    "node": ">=22.23.4"
   },
   "devDependencies": {
     "playwright": "^1.58.2"

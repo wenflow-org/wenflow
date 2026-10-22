@@ -15,7 +15,7 @@ English Version | [中文版](README.md)
 > Demo only, not for production use, and all accounts and data are periodically purged. Do not store important information.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D20.17.0-green.svg)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.23.4-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
 📋 **[Changelog](CHANGELOG.md)** · Monthly feature updates
@@ -137,7 +137,7 @@ Beyond the learner app there is a full operations and observability console (`/a
 
 ## Quick Start in 3 Minutes
 
-Requirements: **Node.js >= 20.17.0**; Windows (PowerShell 5.1+), Linux, or macOS; on Linux/macOS you can also run `./docker-start.sh` to use Docker.
+Requirements: **Node.js >= 22.23.4**; Windows (PowerShell 5.1+), Linux, or macOS; on Linux/macOS you can also run `./docker-start.sh` to use Docker.
 
 ```bash
 # 1) Clone

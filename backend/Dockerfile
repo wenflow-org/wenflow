@@ -1,4 +1,4 @@
-FROM node:20-slim AS builder
+FROM node:22.23.4-slim AS builder
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
@@ -23,7 +23,7 @@ COPY prompts/ ./prompts/
 COPY virtual-learners/ ./virtual-learners/
 
 
-FROM node:20-slim AS runtime
+FROM node:22.23.4-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 
