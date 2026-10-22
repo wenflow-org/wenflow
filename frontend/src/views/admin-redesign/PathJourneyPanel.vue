@@ -2,7 +2,7 @@
   <!-- ===== 路径内容面板（嵌在会话座舱 Path 页签内） =====
        2026-10-12 用户拍板：路径不再有独立详情页（?view=path 退役为深链适配层），
        路径内容统一长在座舱的阶段页签里。本组件 = 原 PathDetail.vue 的内容体
-       （阶段全展开的分区 + 任务弹层 + 治理动作），去 hero / 学习者下钻（座舱本身就是
+       （阶段全展开的分区 + 治理动作），去 hero / 学习者下钻（座舱本身就是
        该学习者的上下文）；「总体进度」「技术细节」随拍板一并撤（同日走查），
        类名沿用 pd- 域。 -->
   <div class="pjp">
@@ -96,13 +96,14 @@
                 <span v-if="m.estimatedHours" class="pd-stage__hours" title="预计时长为估算值">预计 ~{{ m.estimatedHours }}h</span>
               </div>
             </div>
-            <button
+            <!-- 2026-10-22 用户「先去掉，我觉得没用」：任务详情弹层退役——
+                 它展示的状态/类型/时长与行内重复，唯一新字段「认知负荷」不值得开一层弹窗；
+                 行不再是按钮，回归纯展示（与阶段分区标题同口径）。 -->
+            <div
               v-for="t in m.subtasks"
               :key="t.id"
-              type="button"
               class="pd-task"
               :class="{ 'pd-task--done': t.status === 'completed', 'pd-task--active': t.status === 'in_progress' }"
-              @click="openTask(m, t)"
             >
               <span class="pd-task__box" aria-hidden="true">✓</span>
               <span class="pd-task__main">
@@ -110,47 +111,13 @@
                 <span class="pd-task__sub" :title="taskSubTitle(t)">{{ taskSub(t) }}</span>
               </span>
               <span class="mk-badge" :class="taskBadge(t.status)">{{ taskText(t.status) }}</span>
-            </button>
+            </div>
             <!-- .pd-none 仅作既有单测钩子保留（样式由共享 .mk-empty--line 承担，审核 #76） -->
             <p v-if="!m.subtasks.length" class="mk-empty mk-empty--line pd-none">该阶段暂无任务</p>
           </div>
         </section>
       </div>
     </template>
-
-    <!-- 任务详情弹层（原型 openTaskDetail 三段式；验收点等原型字段后端未返回，不硬造） -->
-    <Teleport to="body">
-      <div v-if="taskRef" ref="maskRef" class="mk-modal">
-        <div ref="panelRef" class="mk-modal__panel pd-tk" role="dialog" aria-modal="true" aria-label="任务详情">
-          <div class="mk-modal__head">
-            <div class="pd-tk__head">
-              <span class="pd-tk__num" aria-hidden="true">{{ taskRef.stage.stageNumber || 1 }}</span>
-              <div class="pd-tk__meta">
-                <h2 class="mk-modal__title">{{ taskRef.task.title }}</h2>
-                <span class="pd-tk__sub">{{ taskRef.stage.title }}</span>
-              </div>
-            </div>
-            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeTask">✕</button>
-          </div>
-          <div class="mk-modal__body">
-            <div class="pd-tk__row">
-              <span class="mk-badge" :class="taskBadge(taskRef.task.status)">{{ taskText(taskRef.task.status) }}</span>
-              <span class="pd-tk__grow"></span>
-              <span class="pd-tk__note mono" :title="taskRef.task.id">{{ shortId(taskRef.task.id, 8, 4) }}</span>
-            </div>
-            <div class="mk-facts">
-              <div><span>任务类型</span><strong :title="taskSubTitle(taskRef.task)">{{ taskTypeText(taskRef.task.taskType) }}</strong></div>
-              <div><span>预计用时</span><strong class="mono">{{ taskRef.task.estimatedMinutes }} 分钟</strong></div>
-              <div v-if="cognitiveText(taskRef.task.cognitiveLoad)"><span>认知负荷</span><strong>{{ cognitiveText(taskRef.task.cognitiveLoad) }}</strong></div>
-              <div v-if="taskRef.task.completedAt"><span>完成时间</span><strong>{{ timeAgo(taskRef.task.completedAt) }}</strong></div>
-            </div>
-          </div>
-          <div class="mk-modal__foot">
-            <button type="button" class="mk-btn" @click="closeTask">关闭</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -166,7 +133,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import { adminLearningContentApi } from '@/api/adminApi'
-import { timeAgo, errMsg, shortId, liveRefreshSeq } from './live'
+import { errMsg, liveRefreshSeq } from './live'
 import { subPage, setSubPageLabel } from './store'
 import { statusText, statusBadge, pathRetryTypeText } from './opsShared'
 /* 任务类型字典单源（F2-2）：与 TeachingSessions 同源，两页同批枚举不得各译一套 */
@@ -174,7 +141,6 @@ import { taskTypeText, taskTypeTitle } from './statusText'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
-import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
 
@@ -222,14 +188,6 @@ const stages = computed<PathMilestone[]>(() =>
   (d.value?.milestones ?? []).map((m) => ({ ...m, subtasks: Array.isArray(m.subtasks) ? m.subtasks : [] }))
 )
 
-/* 任务详情弹层状态（声明在 watch 之前：watch 带 immediate，setup 期同步调用 closeTask） */
-const taskRef = ref<{ stage: PathMilestone; task: PathSubtask } | null>(null)
-const maskRef = ref<HTMLElement | null>(null)
-const panelRef = ref<HTMLElement | null>(null)
-function closeTask() {
-  taskRef.value = null
-}
-
 /* 加载序号：刷新/换路径时旧响应丢弃（判例 UserDetail last-wins 守卫） */
 let loadSeq = 0
 
@@ -275,7 +233,6 @@ watch(
     loadSeq += 1
     d.value = null
     loadError.value = ''
-    closeTask()
     if (pid) void load()
   },
   { immediate: true }
@@ -307,18 +264,8 @@ const milestoneBadge = (s: string) =>
 const taskText = (s: string) => ({ completed: '已完成', in_progress: '进行中', todo: '未开始' }[s] || s)
 const taskBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'in_progress' ? 'mk-badge--info' : 'mk-badge--muted'
-const cognitiveText = (c?: string | null) => ({ low: '低', medium: '中', high: '高' }[String(c || '')] || String(c || ''))
 const taskSub = (t: PathSubtask) => `${taskTypeText(t.taskType)} · ${t.estimatedMinutes} 分钟`
 const taskSubTitle = (t: PathSubtask) => taskTypeTitle(t.taskType)
-
-/* ===== 任务详情弹层（开合行为四件套：Esc/遮罩/焦点陷阱/滚动锁） ===== */
-useOverlay(computed(() => !!taskRef.value), panelRef)
-useMaskClose(maskRef, () => closeTask())
-useEscape(() => !!taskRef.value, () => closeTask())
-
-function openTask(stage: PathMilestone, task: PathSubtask) {
-  taskRef.value = { stage, task }
-}
 
 /* ===== 治理动作（真实能力：下线 / 恢复 / 重试生成；成功后通知宿主刷新路径状态） ===== */
 async function toggleArchive() {
@@ -470,10 +417,6 @@ async function retryGeneration() {
   font: inherit;
   color: inherit;
   text-align: left;
-  cursor: pointer;
-}
-@media (hover: hover) {
-  .pd-task:hover { border-color: color-mix(in srgb, var(--mk-blue) 34%, var(--mk-line)); }
 }
 .pd-task__box {
   width: 18px; height: 18px; flex: none; margin-top: 1px;
@@ -488,20 +431,6 @@ async function retryGeneration() {
 .pd-task__title { font-size: var(--mk-fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pd-task__sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 /* .pd-none 仅作单测钩子保留（样式由共享 .mk-empty--line 承担，审核 #76） */
-
-/* 任务详情弹层（原型 .ovl__ 三段式内容物；外壳走共享 .mk-modal 原语） */
-.pd-tk__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.pd-tk__num {
-  width: 24px; height: 24px; border-radius: 999px; flex: none;
-  display: grid; place-items: center;
-  font-size: var(--mk-fs-micro); font-weight: 700;
-  background: var(--mk-blue); color: var(--mk-on-fill, #ffffff);
-}
-.pd-tk__meta { display: grid; gap: 2px; min-width: 0; }
-.pd-tk__sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.pd-tk__row { display: flex; align-items: center; gap: 8px; }
-.pd-tk__grow { flex: 1; }
-.pd-tk__note { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 /* ===== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ===== */
 @media (min-width: 2000px) {

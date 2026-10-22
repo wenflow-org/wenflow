@@ -134,4 +134,13 @@ describe('重复操作入口守卫', () => {
     expect(panel).not.toContain('@click="toggleArchive"')
     expect(panel).toContain('menuOpen = false; toggleArchive()')
   })
+
+  it('路径面板任务行不再开任务详情弹层（内容与行内重复）', () => {
+    // 2026-10-22 用户「点击后的二级弹窗是做什么的，意义是」→「先去掉，我觉得没用」：
+    // 弹层只多一个认知负荷，其余状态/类型/时长在行内已有，还露内部任务 id。
+    const panel = read('PathJourneyPanel.vue')
+    expect(panel).not.toContain('openTask')
+    expect(panel).not.toContain('pd-tk')
+    expect(panel).not.toContain('aria-label="任务详情"')
+  })
 })
