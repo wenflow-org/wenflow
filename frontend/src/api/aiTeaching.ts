@@ -471,7 +471,7 @@ export const aiTeachingAPI = {
     sessionId: string,
     message: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal; idempotencyKey?: string },
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string },
     meta?: InteractionMeta
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
@@ -486,11 +486,13 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, {
         signal: handlers.signal,
+        onActivity: handlers.onActivity,
         // 教学回合为 JSON 输出、final 前可以整段无字节（实测 2~3 分钟），60s 空闲默认会把
-        // 慢回合误判成死连接并触发非流式重发（双倍回合）。放到 120s：上层 90s 停滞看门狗
-        // 先出手（有可见的超时气泡、不重发），这里只兜真正的死连接。
-        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('msg') },
+        // 慢回合误判成死连接并触发非流式重发（双倍回合）。放到 120s：服务端 15s 心跳注释行
+        // 会持续喂狗（sse.ts onActivity），此处只兜「连心跳都断了」的真死连接；上层看门狗
+        // 收到心跳也续命，总闸（上层 5min）负责最终止损。
         idleTimeoutMs: 120_000,
+        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('msg') },
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {
             receivedAnything = true;
@@ -542,7 +544,7 @@ export const aiTeachingAPI = {
   async streamContinueSession(
     sessionId: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal; idempotencyKey?: string }
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string }
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
       let result: MessageResult | null = null;
@@ -556,6 +558,7 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/continue`, { revision }, {
         signal: handlers.signal,
+        onActivity: handlers.onActivity,
         headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('cont') },
         idleTimeoutMs: 120_000,
         onEvent: (event, data) => {

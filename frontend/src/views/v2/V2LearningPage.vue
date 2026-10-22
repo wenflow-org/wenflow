@@ -1410,8 +1410,12 @@ let streamAbort: AbortController | null = null;
 let stopRequested = false;
 /** 本轮被停滞看门狗判死：展示「超时」而不是普通的「失败」 */
 let turnTimedOut = false;
-/** 停滞判死阈值：流式与回退阶段都算，收到任意 delta/restart 会重置 */
+/** 停滞判死阈值：流式与回退阶段都算，收到任意 delta/restart/心跳会重置（#128：心跳续命后，
+ *  JSON 输出的健康慢回合不再被 90s 误杀；真正无任何传输活动的死流仍在 90s 出局） */
 const SEND_STALL_TIMEOUT_MS = 90_000;
+/** 单次尝试总闸：心跳只证明传输活着、不证明有进展。若任务在服务端永挂（心跳持续、无 final），
+ *  总闸保证 UI 最终给出超时出口而不是无限等待 */
+const SEND_TOTAL_TIMEOUT_MS = 300_000;
 /** 自动重发次数（仅传输层/5xx/429） */
 const SEND_MAX_AUTO_RETRIES = 2;
 /** 流失败后的非流式回退超时：旧实现沿用 300s，停止键在中止不了它，等于把卡死延长到 5 分钟 */
@@ -1502,6 +1506,8 @@ async function sendTurnOnce(
     return await aiTeachingAPI.streamSendMessage(session.value.sessionId, text, session.value.revision, {
       signal: streamCtrl.signal,
       idempotencyKey,
+      // 服务端心跳注释行也喂看门狗：JSON 输出的健康慢回合（无 delta 但连接活着）不再被误杀
+      onActivity: () => onActivity(),
       onDelta: (delta) => {
         // 空文本 delta 不算可见进展：不建气泡、不喂看门狗（#111——若链路上出现空 delta，
         // 喂狗会让「90s 无可见进展即中止」的判定永远不触发，发送键就一直卡在停止生成）。
@@ -1576,8 +1582,9 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
         await new Promise((resolve) => window.setTimeout(resolve, attempt === 1 ? 800 : 2000));
         if (stopRequested || !session.value) return;
       }
-      // 停滞看门狗：流式与回退阶段都算——收到任意 delta/restart 会重置。
-      // 90s 无任何进展即中止，避免 typing 永久为 true（#111/#113）。
+      // 停滞看门狗：流式与回退阶段都算——收到任意 delta/restart/心跳注释行会重置。
+      // 90s 无任何传输活动即中止，避免 typing 永久为 true（#111/#113）；心跳续命后
+      // 健康慢回合不再被误杀（#128），永挂任务由下方总闸兜底。
       let watchdog = 0;
       const armWatchdog = () => {
         if (watchdog) window.clearTimeout(watchdog);
@@ -1589,6 +1596,12 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
         }, SEND_STALL_TIMEOUT_MS);
       };
       armWatchdog();
+      const deadline = window.setTimeout(() => {
+        turnTimedOut = true;
+        stopRequested = true;
+        streamAbort?.abort();
+        streamAbort = null;
+      }, SEND_TOTAL_TIMEOUT_MS);
       try {
         r = await sendTurnOnce(text, meta, armWatchdog, sendKey);
       } catch (err) {
@@ -1605,6 +1618,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
         throw err;
       } finally {
         if (watchdog) window.clearTimeout(watchdog);
+        window.clearTimeout(deadline);
       }
       break;
     }

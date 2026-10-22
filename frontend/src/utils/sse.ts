@@ -15,7 +15,14 @@ export interface StreamSseHandlers {
   headers?: Record<string, string>;
   /** 空闲超时（ms）：超过该时长未收到任何字节（含注释心跳行）即中止并报错，防服务器挂起导致 typing 永久卡死；默认 60000 */
   idleTimeoutMs?: number;
+  /** 传输层活动回调：服务端心跳注释行（`: hb`）到达时触发——事件解析看不到注释行，
+   *  上层停滞看门狗据此区分「连接健康但模型仍在生成」与「真停滞」（#128/#129） */
+  onActivity?: () => void;
 }
+
+/** 连接阶段超时：响应头到达前的等待上限。请求被网络黑洞吞掉时 fetch 永不返回，
+ *  此前空闲计时在拿到响应头后才启动——goal 首条消息曾因此挂 25 分钟无任何反馈（#129）。 */
+const CONNECT_TIMEOUT_MS = 30_000;
 
 /**
  * POST 并消费 SSE 响应。
@@ -53,6 +60,13 @@ export async function streamSsePost(
   });
 
   let response: Response;
+  // 连接阶段看门狗：响应头到达前 fetch 可能被网络黑洞吞掉而永不返回（#129 实测挂 25 分钟），
+  // 空闲计时此时尚未启动，必须有独立的连接超时兜底
+  let connectTimedOut = false;
+  const connectTimer = setTimeout(() => {
+    connectTimedOut = true;
+    controller.abort();
+  }, CONNECT_TIMEOUT_MS);
   try {
     response = await send();
     // access token（30m）过期时，axios 通道会静默 refresh，SSE 通道此前直接踢回登录页——
@@ -62,9 +76,12 @@ export async function streamSsePost(
       if (refreshed) response = await send();
     }
   } catch (error) {
+    if (connectTimedOut) throw Object.assign(new Error('连接超时，请重试'), { transport: true });
     // 调用方主动 abort（离页/卸载止损）：单独标记 cancelled，避免被误判为传输层失败而重发
     if (isAbort(error, handlers.signal)) throw markCancelled(error);
     throw error;
+  } finally {
+    clearTimeout(connectTimer);
   }
 
   if (!response.ok) {
@@ -137,7 +154,11 @@ export async function streamSsePost(
       }
       return;
     }
-    if (line.startsWith(':')) return;
+    if (line.startsWith(':')) {
+      // 心跳注释行：不进事件分发，但算传输层活动（喂上层停滞看门狗）
+      handlers.onActivity?.();
+      return;
+    }
     const colonIndex = line.indexOf(':');
     const field = colonIndex === -1 ? line : line.slice(0, colonIndex);
     const value = colonIndex === -1 ? '' : line.slice(colonIndex + 1).replace(/^ /, '');

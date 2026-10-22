@@ -375,6 +375,20 @@ const writeSseEvent = (res: any, event: string, data: unknown) => {
 };
 
 /**
+ * SSE 心跳：LLM 长生成期间（teaching-turn 为 JSON 输出，final 前可整段无字节，实测 2~3 分钟）
+ * 每 15s 写一条注释行。SSE 注释对事件解析不可见，但任何字节都会喂客户端传输层空闲计时
+ * 与上层停滞看门狗（#128：健康慢回合此前在 90s 被看门狗整段误杀，CALLER_ABORTED）。
+ */
+const SSE_HEARTBEAT_INTERVAL_MS = 15_000;
+const startSseHeartbeat = (res: any) => {
+  const timer = setInterval(() => {
+    if (!res || res.destroyed || res.writableEnded) return;
+    res.write(': hb\n\n');
+  }, SSE_HEARTBEAT_INTERVAL_MS);
+  return () => clearInterval(timer);
+};
+
+/**
  * 是否随消息响应下发 prompt 调试信封（`promptDebug` / `peerDebug`，含完整 systemPrompt）。
  *
  * 默认**关**（18 号报告衍生观察项）：`/messages` 面向学习者，而 `promptDebug` 里是 ~18k 的教学提示词；
@@ -487,6 +501,7 @@ const handleStreamingMessage = async (
   };
   // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
   setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
+  const stopHeartbeat = startSseHeartbeat(res);
 
   try {
     const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision, interactionMeta, idempotencyKey });
@@ -514,6 +529,7 @@ const handleStreamingMessage = async (
     const { status, code, message: errorMessage } = resolveTeachingError(error, '处理消息失败');
     writeSseEvent(res, 'error', { status, code, message: errorMessage });
   } finally {
+    stopHeartbeat();
     if (!res.destroyed && !res.writableEnded) res.end();
   }
 };
@@ -550,6 +566,7 @@ const handleStreamingSession = async (
   };
   // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
   setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
+  const stopHeartbeat = startSseHeartbeat(res);
 
   try {
     if (prelude) await prelude((event, data) => writeSseEvent(res, event, data));
@@ -560,6 +577,7 @@ const handleStreamingSession = async (
     const { status, code, message: errorMessage } = resolveTeachingError(error, '处理失败');
     writeSseEvent(res, 'error', { status, code, message: errorMessage });
   } finally {
+    stopHeartbeat();
     if (!res.destroyed && !res.writableEnded) res.end();
   }
 };
