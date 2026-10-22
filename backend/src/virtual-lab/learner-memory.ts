@@ -228,6 +228,38 @@ export function deriveCuratedSelfState(
 }
 
 /**
+ * 概念名 → 稳定 kcId（来自 memory_traces.conceptId）。只取已注册概念；
+ * 找不到的概念不造 id，保留文本名兼容旧数据。
+ */
+async function resolveConceptIds(userId: string, names: unknown[]): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(
+    names.map((name) => String(name).trim()).filter(Boolean)
+  ));
+  const out = new Map<string, string>();
+  if (unique.length === 0) return out;
+  const rows = await prisma.memory_traces.findMany({
+    where: {
+      userId,
+      conceptId: { not: null },
+      OR: [
+        { label: { in: unique } },
+        { conceptKey: { in: unique } },
+      ],
+    },
+    select: { label: true, conceptKey: true, conceptId: true },
+  });
+  for (const row of rows) {
+    const conceptId = typeof row.conceptId === 'string' ? row.conceptId : '';
+    if (!conceptId) continue;
+    for (const key of [row.label, row.conceptKey]) {
+      const name = typeof key === 'string' ? key.trim() : '';
+      if (name && unique.includes(name)) out.set(name, conceptId);
+    }
+  }
+  return out;
+}
+
+/**
  * 课后回写画像概念：掌握 → knownConcepts，仍在学/需复习 → struggleConcepts。
  * 记忆来源优先级：
  * ① curator 输出全量名单（curatedConcepts，LLM 提炼）
@@ -311,14 +343,33 @@ export async function writeProfileConceptsAfterLesson(
     // 逐项比较（不能只比长度：跨表去重可能等长替换，如 ['a','b'] → ['b','c']）
     const sameList = (a: unknown[], b: unknown[]) =>
       a.length === b.length && a.every((value, index) => value === b[index]);
-    if (sameList(knownConcepts, existingKnown) && sameList(struggleConcepts, existingStruggle)) {
+
+    /* #94：durable 修法是按 kcId 键控。已知概念名不变时也补写稳定 id，
+       让后续消费者不必再靠自由文本对概念身份。只写 profile JSON，不动前端形状。 */
+    const idByConcept = await resolveConceptIds(userId, [...knownConcepts, ...struggleConcepts]);
+    const existingKnownIds = Array.isArray(profileData.knownConceptIds) ? profileData.knownConceptIds : [];
+    const existingStruggleIds = Array.isArray(profileData.struggleConceptIds) ? profileData.struggleConceptIds : [];
+    const idsOf = (names: unknown[]) => Array.from(new Set(
+      names
+        .map((name) => idByConcept.get(String(name).trim()))
+        .filter((id): id is string => Boolean(id))
+    ));
+    const knownConceptIds = Array.from(new Set([...existingKnownIds, ...idsOf(knownConcepts)]));
+    const struggleConceptIds = Array.from(new Set([...existingStruggleIds, ...idsOf(struggleConcepts)]));
+
+    if (
+      sameList(knownConcepts, existingKnown)
+      && sameList(struggleConcepts, existingStruggle)
+      && sameList(knownConceptIds, existingKnownIds)
+      && sameList(struggleConceptIds, existingStruggleIds)
+    ) {
       return;
     }
 
     await prisma.virtual_learner_profiles.update({
       where: { userId },
       data: {
-        profile: JSON.stringify({ ...profileData, knownConcepts, struggleConcepts }),
+        profile: JSON.stringify({ ...profileData, knownConcepts, struggleConcepts, knownConceptIds, struggleConceptIds }),
         knownConcepts: JSON.stringify(knownConcepts),
         struggleConcepts: JSON.stringify(struggleConcepts),
         updatedAt: new Date(),
@@ -328,6 +379,8 @@ export async function writeProfileConceptsAfterLesson(
       userId,
       known: knownConcepts.length,
       struggle: struggleConcepts.length,
+      knownIds: knownConceptIds.length,
+      struggleIds: struggleConceptIds.length,
     });
   } catch (error) {
     logger.warn('[vlab-memory] 画像概念回写失败', {

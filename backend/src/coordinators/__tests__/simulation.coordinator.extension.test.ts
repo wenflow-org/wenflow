@@ -394,7 +394,10 @@ describe('#124 assisted 延伸学：正课收束 → 延伸课堂 → 结算', (
 
       expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: false }))
       expect(mockStartSession).toHaveBeenCalledWith({ userId: 'user-1', taskId: 'task-1', mode: 'extension' })
-      expect(learning.extensionRuntime).toEqual(expect.objectContaining({ active: true, turns: 0 }))
+      expect(learning.extensionRuntime).toEqual(expect.objectContaining({ active: true, turns: 0, extensionSessionId: 'ext-1' }))
+      expect(learning.teachingSessionHistory).toEqual(expect.arrayContaining([
+        expect.objectContaining({ teachingSessionId: 'ext-1', taskId: 'task-1', status: 'extension' })
+      ]))
       expect(learning.extensionProbeUsed).toBe(true)
       expect(mockCompleteTask).not.toHaveBeenCalled()
       const startLog = (result.logs || []).find((entry) =>

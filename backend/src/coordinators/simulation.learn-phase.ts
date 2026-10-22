@@ -1391,12 +1391,23 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                 ...(extensionProbePending ? { extensionProbeUsed: true } : {}),
                 extensionRuntime: {
                   active: true,
+                  extensionSessionId: extensionSession.sessionId,
                   sourceSessionId: teachingSessionId,
                   sourceTaskId: currentTask.id,
                   turns: 0,
                   maxTurns: LEARN_EXTENSION_MAX_TURNS,
                   startedAt: extensionStartedAt,
                 },
+                teachingSessionHistory: [
+                  ...(Array.isArray(learningState.teachingSessionHistory) ? learningState.teachingSessionHistory : []),
+                  {
+                    teachingSessionId: extensionSession.sessionId,
+                    taskId: currentTask.id,
+                    taskTitle: currentTask.title,
+                    status: 'extension',
+                    startedAt: extensionStartedAt,
+                  },
+                ],
                 taskRuntime: {
                   ...taskRuntime,
                   status: 'extension_running',

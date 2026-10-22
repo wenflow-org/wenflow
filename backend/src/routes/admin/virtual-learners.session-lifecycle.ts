@@ -804,9 +804,22 @@ router.get('/sessions/:sessionId', async (req: Request, res) => {
        「从该课开始学习」。这里与真实会话同源补算（同一 mapper，形状不分叉）。 */
     if (session.learningPathId) {
       const teaching = (stageResults.teaching = stageResults.teaching || {});
-      teaching.teachingSessionHistory = teachingSessionHistoryOf(
+      const pathHistory = teachingSessionHistoryOf(
         await findTeachingSessionsByPathId(session.learningPathId)
       );
+      /* 路径清单按 startTime 取最近 20 条；延伸课的业务时间落在模拟日，可能被挤出。
+         把 stageResults 里已登记的课堂（延伸课开课时写入）并回来，按 id 去重。 */
+      const persistedHistory = Array.isArray(teaching.teachingSessionHistory)
+        ? teaching.teachingSessionHistory
+        : [];
+      const seen = new Set(pathHistory.map((entry) => entry.teachingSessionId));
+      teaching.teachingSessionHistory = [
+        ...pathHistory,
+        ...persistedHistory.filter((entry) => {
+          const id = typeof entry?.teachingSessionId === 'string' ? entry.teachingSessionId : '';
+          return id && !seen.has(id);
+        }),
+      ];
     }
 
     let teachingSession: Awaited<ReturnType<typeof teachingSessionRepository.getById>> | null = null;
