@@ -145,7 +145,6 @@
         icon="◌"
         min
         title="还没有通知"
-        description="发送全员或定向通知后，用户端会收到站内信。"
         action-text="发送第一条通知"
         @action="openSend"
       />

@@ -302,9 +302,9 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     const body = document.body.textContent || '';
     expect(body).toContain('平台生产 · 角色卡');
     expect(body).toContain('生产入库');
-    // 库语境的步骤说清「建卡 + 备好第一个故事」，且落点是到虚拟学习者起跑（不再推去画像页生成故事）
-    expect(body).toContain('生产入库（建卡 + 备好第一个故事）');
-    expect(body).toContain('到虚拟学习者起跑');
+    // 2026-10-22 用户裁定：四步流程说明（逐条复述表单与按钮）整块撤除
+    expect(body).not.toContain('生产入库（建卡 + 备好第一个故事）');
+    expect(body).not.toContain('到虚拟学习者起跑');
     bodyButton('取消')?.dispatchEvent(new Event('click'));
     await flushPromises();
     w.unmount();

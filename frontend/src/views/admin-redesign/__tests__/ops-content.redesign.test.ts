@@ -318,7 +318,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 重试/下线收进折叠菜单，不再并排出钮
     const failRow = w.findAll('tbody tr').find((r) => r.text().includes('路径lp_fail'))!;
     expect(failRow.find('.mk-actions .mk-btn').text()).toBe('详情');
-    expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toContain('重试生成');
+    expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toBeUndefined();
     expect(failRow.find('.mk-actions .mk-btn--primary').exists()).toBe(false);
     await failRow.find('.mk-menu__btn').trigger('click');
     await nextTick();
@@ -329,7 +329,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.find('.mk-status').exists()).toBe(false);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
     const failPill = w.findAll('.mk-pill').find((p) => p.text().startsWith('生成失败'))!;
-    expect(failPill.attributes('title')).toContain('重试生成');
+    expect(failPill.attributes('title')).toBe('生成失败：1 条');
 
     w.unmount();
   });

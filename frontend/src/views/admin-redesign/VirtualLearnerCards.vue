@@ -6,7 +6,11 @@
          2026-10-06 二级页化（用户不喜欢抽屉设计）：点卡=卡详情二级页（?view=card&id=<profileId>）、
          导入=卡导入二级页（?view=card-import），本页两个 mk-drawer 全退役，走 SkillDetail/PathDetail
          家族的标准二级页机制（detailComponents 全局渲染，跨 scene 可用）。 -->
-    <MkPageHead v-if="!embedded" title="学习者卡库" sub="账号、档案与故事池合为一张卡，导入或由平台生成即可使用">
+    <MkPageHead
+      v-if="!embedded"
+      title="学习者卡库"
+      sub="可复用的学习者身份卡"
+    >
       <template #actions>
         <!-- 预置「一键加载」：页面级动作，2026-10-20 从「预置卡」KPI 卡面挪到页头右组
              （KPI 卡只放 label + 值 + 一句口径，不放控件；按钮也不该把整张卡面撑成一个宽条）。
@@ -49,8 +53,8 @@
         :hintTone="presetHintTone"
         :title="presetCardTitle"
       />
-      <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡。「导出卡库」仅导出这部分" />
-      <MkKpi label="已创建实例" :value="summary?.derived ?? '—'" hint="已从身份卡创建虚拟学习者" title="已经创建出虚拟学习者的身份卡数量。创建不消耗身份卡——同一张卡可反复创建出多个虚拟学习者" />
+      <MkKpi label="自建卡" :value="summary?.custom ?? '—'" title="卡文档导入与后台/AI 创建的卡。「导出卡库」仅导出这部分" />
+      <MkKpi label="已创建实例" :value="summary?.derived ?? '—'" title="已经创建出虚拟学习者的身份卡数量。创建不消耗身份卡——同一张卡可反复创建出多个虚拟学习者" />
     </section>
 
     <!-- 卡墙：全部卡的可视清单（搜名称/Key/目标/标签/邮箱）；点卡 = 卡详情二级页 -->
@@ -359,11 +363,11 @@ const presetHint = computed(() => {
   const s = presetSummary.value
   if (!s) return '平台预置（需一键加载）'
   if (s.rolledBack) return `定义回退 ${s.rolledBack} 张 · 需人工确认`
-  return '平台预置定义 / 已加载卡数'
+  return ''
 })
 /** 预置卡 title：静态说明 + 当期计数（原计数读数的落点） */
 const presetCardTitle = computed(() => {
-  const base = '平台预置角色，随仓库内的预置定义发布。不随启动自动同步，要用「一键加载」写入卡库。加载只新建缺的卡、按版本更新已有卡的定义，故事与记忆保留，卡不会被删。不含在「导出卡库」内'
+  const base = '加载只新建缺卡并按版本更新已有卡，不删除卡'
   const s = presetSummary.value
   if (!s) return base
   const parts = [`定义 ${s.definitions} 条`, `已加载 ${s.loaded}`]

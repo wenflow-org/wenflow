@@ -63,7 +63,6 @@
           v-if="d.userId"
           type="button"
           class="mk-btn mk-btn--sm"
-          title="同一账号的学习视图：学习模型 / 证据 / 图谱 / 教学会话 / 记忆复习"
           @click="goRealLearner()"
         >学习详情 →</button>
         <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
@@ -184,7 +183,6 @@
           <section class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">教学闭环定位</h3>
-              <span class="mk-card__meta">该画像当前正处于闭环的哪一环</span>
             </div>
             <div class="vp-cardbody">
               <div class="loop" role="list" aria-label="教学闭环定位">
@@ -368,7 +366,7 @@
         <section v-if="activeTab === 'memory'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
-            <span class="mk-card__meta" :title="`记忆强度为当前保留率。${allStoriesScope.title}`">课后沉淀</span>
+            <span class="mk-card__meta">课后沉淀</span>
             <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
@@ -441,9 +439,6 @@
                 <h4 class="vp-memory__group-title">记忆保持曲线</h4>
                 <span class="mk-card__meta">横轴为距上次复习天数 · 纵轴为预计还记得的比例</span>
               </div>
-              <p class="vp-memory__curve-hint">
-                下次复习会优先安排这些点：保留越低越优先。
-              </p>
               <div class="vp-memory__curve-legend">
                 <span
                   v-for="(item, i) in memoryChartLegend"
@@ -516,7 +511,6 @@
           <MkEmptyState
             v-else-if="isLive && !stories.length"
             title="故事池为空"
-            description="故事产生学习需求；点击「生成故事」由 AI 根据画像与倾向产出开场故事。"
             compact
           />
           <!-- 卡内列表筛选后 0 行 / 空列表：一行式内联空态（MkEmptyState + --line 修饰），
@@ -654,7 +648,7 @@
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">会话流水 · {{ allRuns.length }}</h3>
-            <span class="mk-card__meta" :title="`与「故事池」互补，那里按故事看，这里按会话发生时间看。${allStoriesScope.title}`">按时间倒序</span>
+            <span class="mk-card__meta">按时间倒序</span>
             <!-- 截断披露（#96）：详情接口最多 200 条，本页只渲染最近 RUNS_TAB_WINDOW 条 -->
             <span
               v-if="runsTruncated"
@@ -918,7 +912,7 @@ import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { memoryReviewUrl } from './learner-profile'
 import { LEARNER_METRICS, LEARNER_METRIC_CODES } from '@/utils/learnerMetrics'
-import { loadCaliber, panelScopeNote } from './opsShared'
+import { loadCaliber } from './opsShared'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -2478,11 +2472,6 @@ const lsmRows = computed<LsmRow[]>(() => {
 
 /** 四读数出处（单次会话运行时快照）：与「学习者详情」页的学习者级聚合态不同源，数值天然不同 */
 const loadCaliberNote = computed(() => loadCaliber('session-snapshot', learnerMetricsAt.value))
-
-/** 作用域标注：本页的「路径」轴是**故事**（每条 story 是这个角色的一条独立学习线）。
- *  故事池按故事、运行流水与记忆池跨全部故事、学习状态读数取单次会话——同一屏三种作用域，
- *  词汇与长释单点在 opsShared.ts 的 panelScopeNote()。 */
-const allStoriesScope = computed(() => panelScopeNote('all-stories'))
 
 /** 能力维度评分（原型 portrait pane 的 ranklist/meterrow index.html:2416-2421；原型 VL_DIMENSIONS 为假数据）。
     画像接口只有身份/偏好枚举（知识水平、性格基线、personalityTraits），无数值化维度 → 恒为空数组渲染空态（红线）。 */

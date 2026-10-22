@@ -31,7 +31,7 @@
         </div>
         <DataScopeToggle v-if="isLive" v-model="includeTest" />
         <!-- 导出报表（原型 pagehead 动作位真实化）：当前窗口三张明细表合一个 CSV，客户端生成 -->
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="!summary || summaryEmpty" title="导出当前窗口的 Skill 明细 / 用户排行 / 模型排行（CSV）" @click="exportCsv">
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="!summary || summaryEmpty" title="导出 CSV" @click="exportCsv">
           导出报表
         </button>
         <!-- 刷新必须同时重拉金额卡：此前只调 load()（summary/趋势/三表），
@@ -87,7 +87,7 @@
         min
         icon="◌"
         title="这个时间窗暂无 LLM 调用"
-        :description="`近 ${days} 天${includeTest ? '（含测试）' : ''}没有任何调用记录，产生调用后这里展示 Token 用量、趋势与排行。`"
+        :description="`近 ${days} 天${includeTest ? '（含测试）' : ''}没有任何调用记录。`"
         :action-text="days !== 90 ? '看近 90 天' : ''"
         @action="days = 90"
       />
@@ -131,19 +131,32 @@
           :title="perCallHint"
         />
         <MkKpi
+          label="已定价调用"
+          :value="loadFailed ? '—' : summary ? `${costPricedCalls} 次` : '—'"
+          :tone="loadFailed ? 'muted' : ''"
+        />
+        <MkKpi
           label="总 Token"
           :value="loadFailed ? '—' : summary ? fmtTokens(summary.totals.tokens) : '—'"
           :tone="loadFailed ? 'muted' : ''"
-          :hint="loadFailed ? '数据加载失败，Token 用量暂不可用' : tokenSplitHint"
+          :hint="loadFailed ? '数据加载失败，Token 用量暂不可用' : ''"
           :title="loadFailed
             ? '数据加载失败：Token 用量不可用'
-            : `输入 ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · 输出 ${summary ? fmtTokens(summary.totals.completionTokens) : '—'} · 两者相加即总量。调用次数见「单次调用均值」卡`"
+            : `输入 ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · 输出 ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`"
         />
         <MkKpi
           label="失败调用"
           :value="loadFailed ? '—' : failedCallsText"
           :tone="loadFailed ? 'muted' : failedCalls > 0 ? 'bad' : ''"
-          :hint="loadFailed ? '数据加载失败，失败数未知' : failedRateHint"
+          :hint="loadFailed ? '数据加载失败，失败数未知' : ''"
+          :title="failedHint"
+        />
+        <!-- 2026-10-21 用户「如果次数很重要，就加一个 kpi 面板」同一判据：失败率不再当副行，
+             与失败数拆成两张卡（同源同窗口，title 互指） -->
+        <MkKpi
+          label="失败率"
+          :value="loadFailed ? '—' : failedPct"
+          :tone="loadFailed ? 'muted' : failedCalls > 0 ? 'bad' : ''"
           :title="failedHint"
         />
       </section>
@@ -156,7 +169,7 @@
         <div class="mk-card__head">
           <!-- 卡头 = 原型形态（title + 单位 sub）；口径细节收 title 悬停，右侧只留跨页跳转。
                P1#25：「接口未提供金额」暴露实现细节 → 「暂无分日金额」（原因留 title） -->
-          <div class="tc-card-head__main" title="金额按本地自然日汇总，含重试后仍失败的调用。趋势图暂无分日金额，仅展示 Token 量">
+          <div class="tc-card-head__main" title="暂无分日金额，仅展示 Token 量">
             <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
             <span class="mk-card__meta">单位：Token</span>
           </div>
@@ -210,12 +223,12 @@
            Token 三列把横向空间填成数据（用户的「要么补列填满、要么别让列间空 500px」）。 -->
       <section class="mk-card tc-card tc-card--skill">
         <div class="mk-card__head">
-          <h3 class="mk-card__title" :title="SKILL_COST_TIP">{{ SKILL_COST_TITLE }}</h3>
+          <h3 class="mk-card__title">{{ SKILL_COST_TITLE }}</h3>
           <div class="mk-card__head-right">
             <span class="mk-card__meta">{{ bySkill.length }} 个 Skill</span>
             <!-- 未配置单价是可执行的配置缺口，用徽章单列（原做法挤在读数行里，会让「N 个」被读成缺价数） -->
-            <span v-if="skillAllUnpriced" class="mk-badge mk-badge--muted" title="这些 Skill 的模型都没配单价，成本列显示「—」，不计入成本合计">均未配置单价</span>
-            <span v-else-if="skillUnpriced > 0" class="mk-badge mk-badge--muted" :title="`其中 ${skillUnpriced} 个 Skill 的模型未配单价，成本列显示「—」，不计入成本合计`">{{ skillUnpriced }} 个未配置单价</span>
+            <span v-if="skillAllUnpriced" class="mk-badge mk-badge--muted" title="这些 Skill 均未配置单价">均未配置单价</span>
+            <span v-else-if="skillUnpriced > 0" class="mk-badge mk-badge--muted" :title="`其中 ${skillUnpriced} 个 Skill 未配置单价`">{{ skillUnpriced }} 个未配置单价</span>
             <button
               v-if="bySkill.length > skillLimit"
               type="button"
@@ -325,7 +338,6 @@ import { toast } from '@/utils/toast'
 /* 文案单源（R6 复读单源化）：卡标题与成本表的 aria-label 共用一份 */
 const SKILL_COST_TITLE = '按 Skill 成本明细'
 /* 成本与占比的算法只在悬停里说一次（2026-10-19 用户走查：不要注释型文案，卡面不摆公式） */
-const SKILL_COST_TIP = '成本＝已定价调用的金额合计（美元）。占比按金额算，没有已定价金额时改按 Token 算。未配置单价的模型不计入成本合计，成本列显示「—」。'
 
 interface Summary {
   days: number
@@ -504,12 +516,10 @@ function skillSharePct(r: SkillCostRow): string {
 }
 function skillRowTitle(r: SkillCostRow): string {
   // 成本原因随占位一起离开行内（行内只留 —），故 title 必须把原因说全，否则信息净丢
-  const cost = hasCost(r)
-    ? `成本 ≈ $${fmtCostUsd(r.usd as number)}`
-    : (r.callsMissingPricing ?? 0) > 0
-      ? `成本：单价未配置（${r.callsMissingPricing} 次调用未计入金额）`
-      : '成本：无已定价调用'
-  return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 均次 ${perCallTokens(r)} · ${cost}`
+  if (hasCost(r)) return ''
+  return (r.callsMissingPricing ?? 0) > 0
+    ? `成本：单价未配置（${r.callsMissingPricing} 次调用未计入金额）`
+    : '成本：无已定价调用'
 }
 
 /* 成本卡副行（长版，收进 KPI 卡 title 悬停）：数值本身只给结论。
@@ -532,8 +542,9 @@ const costHint = computed(() => {
     : `${window} · 尚未配置单价，暂不展示金额`
 })
 
-/* KPI 副行（2026-10-19 用户走查「不需要注释型文案」）：不再写「仅已定价调用 / 按…折算」
-   这类定义句，只放当前窗口的数据或状态；定义留在卡 title 悬停。 */
+/* KPI 副行（2026-10-19 起两轮收紧，2026-10-21 用户「如果次数很重要，就加一个 kpi 面板」）：
+   卡面不再出现任何数值副行——已定价调用次数升为独立卡，均值与成本各自只报一个数。
+   副行只剩取不到数/待补单价这类状态与动作。 */
 const costHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value) return '金额统计失败'
@@ -543,25 +554,15 @@ const costHintShort = computed(() => {
     // 补价入口可点：这是动作提示，不是口径解释
     return `待补 ${n} 个模型单价 · 查看配置`
   }
-  return `${costPricedCalls.value} 次已定价调用`
+  return ''
 })
 const perCallHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value || costPerCall.value === null) return '无已定价调用'
-  return `均摊到 ${costPricedCalls.value} 次`
+  return ''
 })
-/** 总 Token 副行：输入/输出拆分是数据，不再复述「相加即总量」 */
-const tokenSplitHint = computed(() => {
-  const t = summary.value?.totals
-  return t ? `输入 ${fmtTokens(t.promptTokens)} · 输出 ${fmtTokens(t.completionTokens)}` : ''
-})
-/** 失败调用副行：失败率是数据；全成功时给状态，不再写「重试后仍失败 / 全部调用」 */
-const failedRateHint = computed(() => {
-  const t = summary.value?.totals
-  if (!t || !t.calls) return `近 ${days.value} 天无调用`
-  if (!t.failed) return '全部调用成功'
-  return `失败率 ${failedPct.value}`
-})
+/* 2026-10-21：输入/输出拆分与失败率都不再走副行——拆分在 title 与明细表列里，
+   失败率升独立卡；副行只留给加载失败态。 */
 
 /* 导出报表（原型 pagehead 动作位真实化）：当前窗口三张明细表合一个 CSV，客户端从
    已加载数据生成；BOM 头保证 Excel 打开中文不乱码；未定价成本如实写「单价未配置」 */

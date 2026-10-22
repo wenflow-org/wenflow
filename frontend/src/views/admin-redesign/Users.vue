@@ -90,7 +90,7 @@
           <thead>
             <tr>
               <th v-if="isLive && showCol('check')" scope="col">
-                <input type="checkbox" aria-label="全选当前页" title="全选/清空当前页的账号" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
+                <input type="checkbox" aria-label="全选当前页" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
               </th>
               <th
                 scope="col"
@@ -150,7 +150,7 @@
                   <span
                     v-else-if="isSelf(u)"
                     class="mk-badge mk-badge--sm mk-badge--self"
-                    title="你正在使用的账号：为避免把自己锁在门外，这一行不提供删除与降为用户的动作"
+                    title="你正在使用的账号"
                   >当前账号</span>
                   <MkVariantBadge v-else-if="isVirtualAccount(u)" kind="virtual" />
                   <MkVariantBadge v-else-if="isNonRealAccount(u)" kind="test" />

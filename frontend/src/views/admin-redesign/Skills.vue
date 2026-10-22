@@ -36,7 +36,6 @@
         label="已上线"
         :value="recLoading ? '…' : recError ? '?' : liveCount"
         :tone="!recLoading && !recError && liveCount === 0 ? 'bad' : ''"
-        hint="提示词已生效"
         :title="recLoading
           ? '完成度对账加载中，已上线计数暂不可用'
           : recError
@@ -49,15 +48,11 @@
         label="成功率"
         :value="rangeRefreshing ? '…' : (overallRateText ?? '—')"
         :tone="overallRateTone"
-        hint="成功 / 全部调用"
-        :title="`窗口内成功率 = ${RATE_MEANING}。${
-          totalCalls ? `本次分母：成功 ${okCalls} / 共 ${totalCalls} 次 · ${rangeLabel}。` : `本窗口无调用 · ${rangeLabel}。`
-        }${RATE_THRESHOLD_NOTE}`"
+        :title="`统计窗口：${rangeLabel}${RATE_THRESHOLD_NOTE ? `。${RATE_THRESHOLD_NOTE}` : ''}`"
       />
       <MkKpi
         label="平均耗时"
         :value="rangeRefreshing ? '…' : avgLatencyText"
-        :hint="`成功调用 · ${rangeLabel}`"
         :title="`统计窗口：${rangeLabel}。成功调用按调用量加权`"
       />
       <MkKpi v-if="idleCount > 0" label="空闲" :value="idleCount" title="窗口内无调用的 Skill 数。空闲是正常状态，不是故障" />
@@ -67,7 +62,6 @@
         label="需关注 Skill"
         :value="errorCount"
         tone="bad"
-        hint="成功率低于 90%"
         title="成功率红档（<90%）的 Skill 数，与「仅看需关注」筛选同一谓词"
       />
     </section>
@@ -82,21 +76,19 @@
       <MkKpi
         label="承载模型"
         :value="routeModelCount"
-        hint="去重模型"
         :title="routeModelTitle"
       />
       <MkKpi
         label="已路由 Skill"
         :value="routedSkillCount"
-        hint="有生效模型路由"
         title="在模型覆盖里有生效路由的 Skill 数。与同屏「承载模型」「主模型覆盖」同源，未加载覆盖数据时显 —"
       />
       <!-- 2026-10-19 用户走查「hint 在报读数」：原副行是模型名（另一件事的当前值），
-           改成口径短语；模型名与覆盖数都在 title 长释里（primaryCoverageTitle） -->
+           改成口径短语；模型名与覆盖数都在 title 长释里（primaryCoverageTitle）。
+           2026-10-21：口径短语也不再常驻卡面，统一进 title -->
       <MkKpi
         label="主模型覆盖"
         :value="primaryCoverageText"
-        hint="覆盖 Skill 数最多的模型"
         :title="primaryCoverageTitle"
       />
       <!-- 降级策略（原硬编码 value="自动" 删）：真实口径 = 自定义兜底链计数；无自定义链时
@@ -130,7 +122,6 @@
       <MkKpi
         label="启用用例"
         :value="pePanel?.kpiView?.enabledCaseCount ?? '…'"
-        hint="启用中的用例 / 全部用例"
         :title="`启用中的评估用例数。停用用例仍保留但不参与批量评测${pePanel?.kpiView?.disabledCaseCount != null ? ` · 当前停用 ${pePanel?.kpiView?.disabledCaseCount} 个` : ''}`"
       />
       <MkKpi
@@ -295,7 +286,7 @@
                 class="mk-th--right mk-th--sortable"
                 :aria-sort="sortState('rate')"
                 @click="toggleSort('rate')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="`窗口内成功率（= ${RATE_MEANING}）。${RATE_THRESHOLD_NOTE}`">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="RATE_THRESHOLD_NOTE">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 完成度 = 对账 completion status（draft → live）；原列名「状态」与行首健康点双语义 → 更名 -->
               <th
                 v-if="showCol('status')"
@@ -723,7 +714,7 @@ const agentOptions = computed<AgentOption[]>(() => {
 })
 
 /** 成功率含义短句（KPI 卡与列头 title 共用本页单源，避免「= 成功调用 / 总调用」逐字复读两套） */
-const RATE_MEANING = '成功调用 / 总调用'
+
 
 /** 成功率单元格 title：比例 + 全站统一阈值披露；无分母说明兜底口径（不按 0% 计） */
 function rowRateTitle(s: { calls: number; errors: number }): string {
@@ -871,7 +862,6 @@ const errorCount = computed(() => cards.value.filter((c) => c.health === 'error'
 /* ===== Skill 运营概览（sk-dash：窗口内聚合 + 结论 + KPI） ===== */
 const totalCalls = computed(() => cards.value.reduce((a, c) => a + c.calls, 0))
 const totalErrors = computed(() => cards.value.reduce((a, c) => a + c.errors, 0))
-const okCalls = computed(() => Math.max(0, totalCalls.value - totalErrors.value))
 /** 口径提示：Skill 运行页不含插件（MCP + 能力 Skill），而健康中心/对账的登记总数含它们——避免「31/28/3」三处数字无从解释 */
 const skillCountHint = computed(
   () => (EXTRA_CAPABILITY_SKILLS.length

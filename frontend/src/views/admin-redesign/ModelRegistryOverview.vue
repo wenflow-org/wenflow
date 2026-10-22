@@ -59,17 +59,10 @@
         <section v-if="shows('providers')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型供应商与能力限额</h3>
-            <span class="mk-card__meta" title="模型目录来自配置文件，改动后自动生效，此处只读。降级时只更换模型，连接地址与密钥不变">
-              只读 · 来自配置文件
+            <span class="mk-card__meta">
+              只读
             </span>
           </div>
-          <!-- 这张卡决定什么（2026-10-16 用户走查：「下面那个卡片是设计意义是什么」）。
-               原卡头只写「只读 · 来自配置文件」，读者拿不到「所以呢」——限额到底是摆设还是真在生效。
-               一句说清它的三类作用，长了反而没人读。 -->
-          <p class="ac-mr-lead">
-            平台会路由的模型只有下面登记的这些。档位决定走对话还是推理通道，限额决定单次输出长度、思考参数与并发，
-            降级时只在模型之间切换，连接地址与密钥不动。
-          </p>
           <p v-if="data.registry?.source === 'embedded-fallback'" class="ac-mr-note">
             未读到配置文件，当前为内置默认目录：{{ data.registry?.path }}
           </p>
@@ -285,7 +278,7 @@ interface ModelRegistryOverviewData {
 }
 
 /* 分区裁剪（2026-10-14 用户拍板；2026-10-15 合并后收敛为两片）：宿主按域挂本组件的切片——
-   「别名映射」是路由域事实，归「路由与调用」页签；「providers」= 供应商与能力限额合并块，
+   「别名映射」是路由域事实，归「调用与健康」页签；「providers」= 供应商与能力限额合并块，
    留「接入与模型」。切片只裁剪渲染范围，数据仍是一次 getModelRegistry。 */
 type MrPart = 'aliases' | 'providers'
 /* 默认值就地写死（不能引用本地常量：defineProps 会被提升到 setup 之外，编译器会拦下） */

@@ -40,7 +40,7 @@
             />
             <button v-if="query" type="button" class="dfg-search__clear" title="清除" @click="clearQuery">✕</button>
           </div>
-          <label class="dfg-switch" title="显示流转中被隐藏的字段（对外不可见，含内部字段与累积字段）">
+          <label class="dfg-switch">
             <input type="checkbox" v-model="showHidden" />
             <span>隐藏字段</span>
           </label>
@@ -168,7 +168,6 @@
               <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
             <div class="dfg-step__body">
-              <p class="dfg-step__note">上游字段在此重命名后分发给内部 Skill</p>
               <div class="dfg-chips" :data-gate-anchor="step.agentId">
                 <button
                   v-for="c in stepShown(step, 'out')"

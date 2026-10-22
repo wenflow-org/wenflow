@@ -80,47 +80,35 @@ describe('读数出处（口径透明化）', () => {
   });
 });
 
-describe('面板作用域标注（一屏混多种作用域，各块自述 + 页级开关可切）', () => {
-  it('当前路径：带上路径名，并说清其它路径不在这里 + 当前路径怎么选', () => {
+describe('面板作用域标注（只出短标，不挂解释句）', () => {
+  it('当前路径：只给短标', () => {
     const note = panelScopeNote('current-path', { pathTitle: '幼儿园指南五大领域归位速通' });
     expect(note.label).toBe('当前路径');
-    expect(note.title).toContain('幼儿园指南五大领域归位速通');
-    expect(note.title).toContain('其它路径不在这里');
-    expect(note.title).toContain('最近有更新');
+    expect(note.title).toBe('');
   });
 
-  it('当前路径：无路径名时不渲染空括号', () => {
-    const note = panelScopeNote('current-path', { pathTitle: '' });
-    expect(note.title).not.toContain('（）');
-  });
-
-  it('跨全部路径：明说含已归档/失败（非 active 路径不可见是既有事实）', () => {
+  it('跨全部路径：只给短标', () => {
     const note = panelScopeNote('all-paths');
     expect(note.label).toBe('跨全部路径');
-    expect(note.title).toContain('已归档');
-    expect(note.title).toContain('全部');
+    expect(note.title).toBe('');
   });
 
-  it('跨全部故事：虚拟学习者页的对应轴是故事，措辞不串用「路径」', () => {
+  it('跨全部故事：与路径轴分开命名，不串用', () => {
     const note = panelScopeNote('all-stories');
     expect(note.label).toBe('跨全部故事');
-    expect(note.title).toContain('故事');
-    expect(note.title).not.toContain('路径');
+    expect(note.label).not.toContain('路径');
+    expect(note.title).toBe('');
   });
 
-  it('所选路径：标签带路径名，且明说它不是「当前路径」（页级开关可切到非当前路径）', () => {
+  it('所选路径：标签带路径名并截断，不另挂解释', () => {
     const note = panelScopeNote('path', { pathTitle: '产业园选址题材料提点与分类作答' });
     expect(note.label).toBe('路径 产业园选址题材料提点与分…');
-    expect(note.title).toContain('所选路径');
-    expect(note.title).toContain('产业园选址题材料提点与分类作答');
-    expect(note.title).toContain('不是该学习者的「当前路径」');
+    expect(note.title).toBe('');
   });
 
-  it('所选路径：名字很短不截断，无名字时不留空标签也不留空括号', () => {
+  it('所选路径：名字很短不截断，无名字时不留空标签', () => {
     expect(panelScopeNote('path', { pathTitle: '线代' }).label).toBe('路径 线代');
-    const blank = panelScopeNote('path', { pathTitle: '' });
-    expect(blank.label).toBe('路径 —');
-    expect(blank.title).not.toContain('（）');
+    expect(panelScopeNote('path', { pathTitle: '' }).label).toBe('路径 —');
   });
 
   it('五种作用域标签互不相同（同屏并排时可直接分辨）', () => {

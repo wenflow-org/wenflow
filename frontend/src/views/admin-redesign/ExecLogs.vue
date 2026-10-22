@@ -15,7 +15,7 @@
     </MkPageHead>
     <!-- KPI 卡带（2026-10-04 状态条退役）：成功率/耗时分位读数自页头状态条迁入（页头与单卡容器之间），
          保持原「无日志不显数值」语义（v-if="logs.length"）；成功率着色沿用原 statusTone 的 ok/bad 语义，
-         耗时卡 hint 注明口径（仅成功日志），样本回退时如实标注「样本估算」。
+         耗时卡卡面不挂说明，口径与样本回退只在 title（2026-10-21 用户「不要」）。
          B22/F8-1：成功率与表格同窗口同源（live.ts 页面查询单源），hint 披露取值来源，
          查询在途/失败时显示「—」而不是 0 -->
     <section v-if="logs.length" class="mk-kpi-grid">
@@ -30,8 +30,7 @@
         label="失败调用"
         :value="failedCount === null ? '—' : failedCount"
         :tone="failedCount ? 'bad' : ''"
-        hint="当前时间窗 · 按失败调用计"
-        :title="`失败数来自后端窗口 stats（与状态 pill 同源）。类别 Top 取当前页可见行，不是全窗口分布${topErrorCategory ? ` · 当前页最多：${topErrorCategory}` : ''}${failedCount === 0 ? ' · 本窗口无失败调用' : ''}`"
+        :title="`类别 Top 取当前页可见行，不是全窗口分布${topErrorCategory ? ` · 当前页最多：${topErrorCategory}` : ''}${failedCount === 0 ? ' · 本窗口无失败调用' : ''}`"
       />
     </section>
 
@@ -1093,7 +1092,7 @@ const emptyDesc = computed(() =>
     ? `完整值为 ${traceMiss.value}：可能已超出日志保留期，或复制的 ID 不完整。`
     : isFiltered.value
       ? '当前筛选组合下没有命中的日志。清除筛选并放宽时间范围（全部）通常就能看到数据。'
-      : '有真实调用发生后，这里按时间倒序展示每条执行 / 网关日志。'
+      : ''
 )
 /** 空态逃生动作：清全部筛选 + 时间范围放宽到「全部」——窄时间窗/筛选态无日志时的最小代价出口 */
 function clearFilterToAll() {
@@ -1128,11 +1127,10 @@ const successRate = computed(() => {
   const ok = logs.value.filter((l) => l.status === 'ok').length
   return Math.round((ok / logs.value.length) * 100)
 })
-/** 成功率读数行：只放这个数是什么范围（全窗口 / 样本 / 加载中）。
-    2026-10-18 用户走查「这类文案」：原 hint「按本页记录估算」是讲取数过程的装配自述，
-    压成「样本估算」两个字的范围标签，怎么估的整句收进 title。 */
+/** 成功率读数行：只留三态与「样本估算」这类会改变读数可信度的话；
+    「按当前筛选范围统计」这种复述筛选状态的句子于 2026-10-21 撤除（筛选就在卡头） */
 const successHint = computed(() =>
-  statsReady.value ? '按当前筛选范围统计' : statsPending.value || !logs.value.length ? '读数加载中' : '样本估算'
+  statsReady.value || !statsPending.value ? '' : '读数加载中'
 )
 /** 成功率卡 title：阈值 + 回退样本时的取数说明（悬停可得，不占读数行） */
 const successKpiTitle = computed(() =>
@@ -1161,12 +1159,12 @@ function percentileOf(durations: number[], q: number): string {
   const idx = Math.min(arr.length - 1, Math.max(0, Math.round((arr.length - 1) * q)))
   return fmtMs(arr[idx])
 }
-/* P50/P99 回退到当前页样本估算时如实标注（后端 stats 未带分位，30 行样本非全量口径） */
+/* P50/P99 回退到当前页样本估算：后端 stats 未带分位时按当前页样本算，说明只在 title */
 const latencySampled = computed(
   () => !(liveStats.value?.latencyPercentiles?.p50 != null) && logs.value.some((l) => l.status === 'ok')
 )
-/* 耗时分位卡读数行（2026-10-04 状态条退役迁入）：口径「仅成功日志」；回退样本时标「样本估算」 */
-const latencyHint = computed(() => (latencySampled.value ? '仅成功日志 · 样本估算' : '仅成功日志'))
+/* 耗时分位卡读数行：卡面不再写口径（2026-10-21） */
+const latencyHint = computed(() => '')
 /** 耗时分位卡 title：范围 + 回退样本时的取数说明（悬停可得，不占读数行） */
 const latencyKpiTitle = computed(() =>
   `仅统计成功日志${latencySampled.value ? '。统计接口未返回分位，本次按当前页样本估算' : ''}`

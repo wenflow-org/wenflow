@@ -266,7 +266,7 @@
                 </tr>
                 <tr v-if="!selected.models.length">
                   <td colspan="4" class="mpp-empty">
-                    {{ selected.enabled ? '还没有模型，点「添加模型」或从上游清单逐条添加。' : '这个供应商当前停用，模型不参与路由。' }}
+                    {{ selected.enabled ? '还没有模型' : '这个供应商当前停用，模型不参与路由。' }}
                   </td>
                 </tr>
               </tbody>
@@ -382,7 +382,6 @@ const registryPathTitle = computed(() => {
   if (!r) return ''
   const parts = [`目录文件：${r.path}`]
   if (r.lastError) parts.push(`最近更新失败：${r.lastError}`)
-  else parts.push('改动由服务端校验后写入并立即生效')
   return parts.join('\n')
 })
 

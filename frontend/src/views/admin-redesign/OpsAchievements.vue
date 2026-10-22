@@ -133,7 +133,7 @@
         :title="isRecordsFiltered ? '没有符合筛选条件的解锁记录' : '还没有解锁记录'"
         :description="isRecordsFiltered
           ? '当前搜索/筛选条件下无匹配记录，可清除筛选查看全部。'
-          : '用户完成任务、连续学习、达成里程碑后自动解锁，也可在「成就定义」手动发放。'"
+          : ''"
         min
         :action-text="isRecordsFiltered ? '清除筛选' : ''"
         @action="clearRecordsFilters"

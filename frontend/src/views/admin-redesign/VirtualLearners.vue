@@ -46,7 +46,7 @@
           label="完成率"
           :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
-          :hint="statsKpiHint(completionHint)"
+          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : statsState === 'loading' ? '统计加载中…' : ''"
           :title="statsState === 'error' ? STATS_RETRY_TITLE : completionTitle"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
@@ -62,7 +62,7 @@
           label="系统失败率"
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : failureRateTone(runStats.systemFailureRate, runStats.failed)"
-          :hint="statsKpiHint(failureHint)"
+          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : statsState === 'loading' ? '统计加载中…' : ''"
           :title="statsState === 'error' ? STATS_RETRY_TITLE : failureTitle"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
@@ -71,7 +71,7 @@
           label="并发"
           :value="statsKpiValue(concurrencyText)"
           :tone="concurrencyTone"
-          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : '同时运行 / 配额上限'"
+          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : ''"
           :title="statsState === 'error' ? STATS_RETRY_TITLE : `${CONCURRENCY_KPI_TITLE}${VL_CHANNEL_LOCATION_TITLE}`"
           :clickable="true"
           @click="openVlChannelSettings"
@@ -79,7 +79,7 @@
         <MkKpi
           label="今日调用"
           :value="statsKpiValue(String(runStats.todayCalls ?? 0))"
-          :hint="statsKpiHint('只统计虚拟与测试账号')"
+          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : ''"
           title="今日虚拟学习者与测试账号的调用次数"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
@@ -98,15 +98,15 @@
           label="无响应候选"
           :value="statsState === 'error' ? '—' : liveVirtualStaleCount"
           :tone="statsState !== 'error' && liveVirtualStaleCount ? 'warn' : ''"
-          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : '超过回收阈值无写入'"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : '后端 staleCount（全量聚合）的无响应会话数。可用「回收无响应」操作处理'"
+          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : ''"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : '可用「回收无响应」处理'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
       </section>
     </div>
 
-    <!-- 压测参数卡（速率上限 / 最高并发 / 日期模拟）已迁往「模型与接入 · 路由与调用」页签的
+    <!-- 压测参数卡（速率上限 / 最高并发 / 日期模拟）已迁往「模型与接入 · 调用与健康」页签的
          「虚拟学习者通道 / 出站速率」分组（2026-10-13）：最高并发属上游容量治理，与其余接入
          设置同处管理（两条 RPM 上限本就挨着——平台全局管真实用户、VL 通道单独计量）；
          本页只保留并发 / 速率两个只读 KPI，点它们可直接到那处设置。
@@ -200,7 +200,7 @@
             <th
               scope="col"
               class="mk-th--sortable"
-              title="当前活跃会话（运行 + 已暂停）逐条显示。同一学习者可同时跑多条路径，无活跃会话时显示最近一次会话"
+              title="当前活跃会话（运行 + 已暂停）逐条显示，无活跃会话时显示最近一次会话"
               :aria-sort="vlSortState('running')"
               @click="toggleVlSort('running')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -482,9 +482,9 @@ import type { VirtualLearnerRow as Sample, BatchTask, ActiveRun } from './virtua
 const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
 const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
 /* 容量治理去向（2026-10-19 运营走查）：并发上限 / VL 专属 RPM / 日期模拟都在「模型与接入 ·
-   路由与调用」页签的「虚拟学习者通道 / 出站速率」分组里。此前三处注释与速率卡的 title 都写着
+   调用与健康」页签的「虚拟学习者通道 / 出站速率」分组里。此前三处注释与速率卡的 title 都写着
    「模型与接入 → 虚拟学习者」页签——那个页签 2026-10-15 重组时就没了，照它找必然扑空。 */
-const VL_CHANNEL_LOCATION_TITLE = '上限与日期模拟在「模型与接入 · 路由与调用」的「虚拟学习者通道」'
+const VL_CHANNEL_LOCATION_TITLE = '上限与日期模拟在「模型与接入 · 调用与健康」的「虚拟学习者通道」'
 const CONCURRENCY_KPI_TITLE = '自动驾驶同时在跑的会话数占配额比。「已满」是资源占满（后续请求排队），不是故障。'
 const RATE_KPI_TITLE = '在途为正在出站的调用数。上限是已保存的速率配置。'
 /* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
@@ -870,7 +870,7 @@ const concurrencyTone = computed<'ok' | 'warn' | 'bad'>(() => {
 })
 
 /* 虚拟学习者专属出站速率（RPM）：仅保留只读运行态读数——「速率」KPI 读 inFlight/queued 与已保存上限；
-   速率上限 / 最高并发 / 日期模拟的写控件已迁往「模型与接入 · 路由与调用」的「虚拟学习者通道」分组（2026-10-13）。 */
+   速率上限 / 最高并发 / 日期模拟的写控件已迁往「模型与接入 · 调用与健康」的「虚拟学习者通道」分组（2026-10-13）。 */
 const vlRpm = reactive({ inFlight: 0, queued: 0, rpm: 0 })
 /** 已保存的 RPM 上限：速率卡「上限」分母只认服务端已保存值（写入已在设置页，本页只读展示） */
 const vlRpmSavedLimit = ref(0)
@@ -964,12 +964,7 @@ function statsKpiPct(rate: number | null | undefined): string {
   const v = rate ?? 0
   return v > 0 && v < 1 ? '<1%' : `${Math.round(v)}%`
 }
-/** 三态 hint：error 档给出动作出口 */
-function statsKpiHint(ready: string): string {
-  if (statsState.value === 'loading') return '统计加载中…'
-  if (statsState.value === 'error') return STATS_UNAVAILABLE_HINT
-  return ready
-}
+/** 三态 hint：2026-10-21 起卡面副行只留取数状态（加载中 / 不可用），不再写口径说明 */
 /** 点卡片重试（live 层 retryLiveVirtualStats）；非错误态点击是空操作。
     列表域失败也会把 statsState 置 error，故重试要同时重拉列表——否则只重试 stats
     而列表仍是失败态，KPI 会立刻回到 error，用户读作「点了没用」。 */
@@ -1001,7 +996,7 @@ const concurrencyText = computed(() => {
 /** 速率文案（P1#20）：值与口径分栏——比值「在途 / 上限」进 value、单位与「已保存值」口径进 hint。
     原写法把「在途 N · 上限 X/分」整串塞进 value，183px 卡宽下必换行成两行，把整排 KPI
     拉伸到 180px（连带 220px 的 KPI 带吃掉列表卡高度，裸评审 2026-10-03）；拆开后各占一行。
-    上限读已保存值（vlRpmSavedLimit），本页无写控件（改配置在「模型与接入 · 路由与调用」的「虚拟学习者通道」分组） */
+    上限读已保存值（vlRpmSavedLimit），本页无写控件（改配置在「模型与接入 · 调用与健康」的「虚拟学习者通道」分组） */
 const rateValue = computed(() => {
   // #59：设置未加载时不把初始 0 断言成「0 / 不限」，显式「不可用」
   if (vlRpmLoadFailed.value) return '不可用'
@@ -1010,7 +1005,8 @@ const rateValue = computed(() => {
 })
 const rateHint = computed(() => {
   if (vlRpmLoadFailed.value) return '设置未加载 · 点击重试'
-  return '在途调用数 / 每分钟上限，上限读已保存配置'
+  // 2026-10-21：去掉「上限读已保存配置」这类来源说明，只留比例式口径
+  return ''
 })
 
 /** 「今日调用」卡 hint（2026-10-05 口径纠偏）：只报口径不复述数字。原 hint「平均耗时」
@@ -1023,15 +1019,6 @@ const sessionAvgHuman = computed(() => {
   if (ms >= 3600000) return `${Math.round(ms / 3600000)} 小时`
   if (ms >= 60000) return `${Math.round(ms / 60000)} 分钟`
   return `${Math.round(ms / 1000)} 秒`
-})
-const completionHint = computed(() => {
-  // 「全部」是分母＝全部会话数，而本页表格与页脚计数的是虚拟学习者行数——
-  // 两个数字同屏且都不写口径，读者会把「全部 10」当成学习者总数（走查：与页脚
-  // 「共 N 条」、侧栏徽标打架）。分母带上「会话」二字，口径落到明面。
-  // 2026-10-18 用户走查「这类文案」：读数行只留会话口径的读数。
-  // 「活动会话」同属会话口径（2026-10-04 从退役状态条迁入本卡）保留；
-  // 「会话均长」是时长读数、单位不同，与完成率并列会被读成同一分母体系，移入 title。
-  return '已完成 / 全部会话 · 活动会话另计'
 })
 /** 完成率卡 title：比值口径 + 移出读数行的会话均长 */
 /* 2026-10-19 用户走查「hint 在报读数」：原副行「已完成 N / 全部会话 M · 活动会话 K」是读数，
@@ -1048,7 +1035,6 @@ const completionTitle = computed(() => {
     「系统失败 8 · 人为终止 28 · 已完成 0 · 共 36 场」四项分解当读数报在卡面；
     读数的两处历史歧义（① 比值与数值位大字重复；② 0 完成时两项凑满 100% 被读成
     「失败率 100%」）一并解决——分解式（8+28+0=36 自明）与「失败合计」改为随长释进 title。 */
-const failureHint = computed(() => '系统失败 / 全部会话 · 人为终止另计')
 /** 系统失败率卡 title：四项分解 + 跨页同源声明 + 阈值披露 */
 const failureTitle = computed(() => {
   const s = runStats.value

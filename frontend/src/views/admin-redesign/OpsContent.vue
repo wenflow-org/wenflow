@@ -2,34 +2,33 @@
   <div :class="embedded ? 'mk-page--fill oc-embedded' : 'mk-page mk-page--fill'">
     <!-- 页头（mk-pagehead 标准形态，2026-10-03 用户拍板全站统一）：标题+口径副文+口径开关。
          2026-10-04 页头状态条退役：总量读数迁 MkKpi 卡带，失败抬红归贴表分布条红段 -->
-    <MkPageHead v-if="!embedded" title="学习路径" sub="由目标澄清生成的阶段式路径与推进状态">
+    <MkPageHead v-if="!embedded" title="学习路径" sub="阶段式学习路径与推进状态">
       <template #actions>
         <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
         <DataScopeToggle v-model="includeTest" />
       </template>
     </MkPageHead>
     <!-- 路径总量 KPI（2026-10-04 状态条退役：原状态条「共 N 条 · 里程碑 · 任务」读数迁入 MkKpi 卡带；
-         生成失败抬红由卡内贴表分布条红段单源承载，不再重复着色） -->
+         生成失败抬红由卡头状态 pill 与行内徽标承载，不再重复着色）。
+         2026-10-21 用户「不要这种注释型解释文案，kpi面板都要改一下这类文案」：四张卡的 hint 全部撤掉——
+         它们讲的都是数据从哪来、挂在哪、下一步去哪个入口（含虚拟与测试、跨全部已生成路径、
+         挂在里程碑下、可在列表重试生成），不是读数本身。口径改为只在 title 里给。 -->
     <section v-if="!embedded" class="mk-kpi-grid" aria-label="路径总量">
-      <!-- hint = 一短句可见口径（全站家法，TokenCost 判例）；长解释收 title 悬停 -->
       <MkKpi
         label="路径总数"
         :value="stats?.total ?? '—'"
-        :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户'"
         :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
       />
-      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" hint="跨全部已生成路径" title="已生成路径的里程碑总数" />
+      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" title="已生成路径的里程碑总数" />
       <!-- 2026-10-16 KPI 审计补完：label 原为「任务」，而本页其它文案（删除确认）说的是「子任务」，
            同一个东西两个叫法。按页面内部多数用法统一为「子任务」。 -->
-      <MkKpi label="子任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的子任务总数" />
+      <MkKpi label="子任务" :value="stats?.totalTasks ?? '—'" title="已生成路径的子任务总数" />
       <!-- P-49（#74）：生成失败路径此前只在分布条红段；0 时不占位 -->
       <MkKpi
         v-if="byStatus('failed') > 0"
         label="生成失败"
         :value="byStatus('failed')"
         tone="bad"
-        hint="可在列表重试生成"
-        title="status=failed 的路径数（与分布条红段同源）。点分布条红段可下钻"
       />
     </section>
 
@@ -65,7 +64,7 @@
               class="mk-pill"
               :class="{ 'mk-pill--active': stalledOnly }"
               :aria-pressed="stalledOnly"
-              title="进行中且超过 24 小时无更新（生成链停滞，可「重试生成」补齐）"
+              title="进行中且超过 24 小时无更新"
               @click="stalledOnly = !stalledOnly"
             >停滞<span class="mk-pill__count">{{ stalledCount }}</span></button>
           </div>
@@ -240,7 +239,6 @@
                   <button
                     type="button"
                     class="mk-btn mk-btn--sm"
-                    :title="p.status === 'failed' ? '该路径生成失败，可在 ⋯ 菜单「重试生成」' : undefined"
                     @click.stop="openPath(p)"
                   >详情</button>
                   <div class="mk-menu">
@@ -271,7 +269,7 @@
         v-else
         icon="◌"
         :title="isFiltered ? '当前筛选无匹配' : '没有学习路径'"
-        :description="isFiltered ? '放宽筛选条件试试。' : '用户的目标对话生成路径后，会出现在这里。'"
+        :description="isFiltered ? '放宽筛选条件试试。' : ''"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -404,7 +402,7 @@ const ocStatusPills = computed<Array<{ key: string; name: string; n: number | nu
       name: e.name,
       n: ready ? e.n : null,
       title: e.key === 'failed'
-        ? `生成失败：${e.n} 条 · 行内「重试生成」可就地重发（详情页同入口）`
+        ? `生成失败：${e.n} 条`
         : e.key === 'other'
           ? `枚举外状态合计 ${e.n} 条`
           : `${e.name}：${e.n} 条`

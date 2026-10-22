@@ -22,7 +22,7 @@
               <div v-if="canDelete" class="mk-menu">
                 <button type="button" class="mk-menu__btn" aria-label="账户操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
                 <div v-if="openMenu === 'account'" class="mk-menu__pop" :style="popStyle" @click.stop>
-                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
+                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留" @click="menuDelete">删除账户…</button>
                 </div>
               </div>
             </div>

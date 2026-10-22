@@ -322,7 +322,6 @@
                   v-if="a.success && a.username"
                   type="button"
                   class="mk-link"
-                  title="在「会话安全」页查看该用户当前的登录会话（设备/状态/强制下线）"
                   @click="goSessions(a.username)"
                 >查看会话 →</button>
                 <span v-else class="mk-na">—</span>

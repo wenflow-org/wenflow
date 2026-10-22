@@ -353,18 +353,17 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
-  it('「每课回合上限」写明是本屏临时覆盖（2026-10-19 运营走查：title 原写「按 1 或 100 保存」，实际刷新即回到画像默认值）', async () => {
+  it('「每课回合上限」只声明本屏临时值与越界处理（不再解释机制、不再指路画像）', async () => {
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
     await w.findAll('.cp-stp')[2].trigger('click'); // Learn 页签（回合上限只在这一页出现）
     await settle();
     const cap = w.find('.cp-turn-cap');
     expect(cap.exists()).toBe(true);
-    // 输入框：不许再出现「保存」；必须说明是临时值 + 长期值在哪
     expect(cap.attributes('title')).not.toContain('保存');
-    expect(cap.attributes('title')).toContain('本屏是临时值');
-    expect(cap.attributes('title')).toContain('运行预算');
-    expect(w.find('.cp-turn-cap-label').attributes('title')).toContain('画像「运行预算 · 每课回合上限」');
+    expect(cap.attributes('title')).toContain('本屏临时值');
+    expect(cap.attributes('title')).not.toContain('运行预算');
+    expect(w.find('.cp-turn-cap-label').attributes('title')).toContain('只作用于接下来这一次推进');
     w.unmount();
   });
 
@@ -482,9 +481,9 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(rows[1].find('.mk-badge').text()).toBe('虚拟学习者');
     expect(rows[2].find('.mk-badge').text()).toBe('教师');
     expect(w.text()).toContain('3 条对话 · 目标与课堂两段');
-    // 合并规则 hover 可得（卡头 title），不再占读数行
+    // 2026-10-22 用户裁定：装配自述句整类撤除，卡头也不再挂合并规则
     const meta = w.findAll('.mk-card__meta').find((m) => m.text().includes('目标与课堂两段'))!;
-    expect(meta.attributes('title')).toContain('按发生顺序合并展示');
+    expect(meta.attributes('title')).toBeUndefined();
 
     w.unmount();
   });

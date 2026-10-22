@@ -635,7 +635,8 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ pathId: 'lp2' }));
     const meta = w.find('#ld-panel-sessions .mk-card__meta');
     expect(meta.text()).toContain('路径 另一条路径');
-    expect(meta.attributes('title')).toContain('不是该学习者的「当前路径」');
+    expect(meta.attributes('title')).toContain('条教学会话（窗口上限）');
+    expect(meta.attributes('title')).not.toContain('不是该学习者的「当前路径」');
     // 单条路径下串档告警不再出现（档位天然同源）
     expect(meta.attributes('title')).not.toContain('同序号里程碑会合到同一档');
   });
@@ -672,7 +673,7 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     }
   });
 
-  it('记忆块不随开关走：标注恒为跨全部路径，并给出结构性原因', async () => {
+  it('记忆块不随开关走：标注恒为跨全部路径，不再挂解释句', async () => {
     routeQuery.tab = 'memory';
     // 卡体 v-if="memoryPaneRows.length"：无痕迹时整卡不渲染
     getMemoryTraces.mockResolvedValue([
@@ -688,10 +689,8 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     await flushPromises();
     const meta = w.find('#ld-panel-memory .mk-card__meta');
     expect(meta.text()).toContain('跨全部路径');
-    /* title 里的人话化（2026-10-14 文案批）：库表元组 (userId, conceptKey) 已换成
-       「一个概念只保留一条记忆痕迹」，但要保留的语义是「按路径切会漏掉」这条结构性原因 */
-    expect(meta.attributes('title')).toContain('一个概念只保留一条记忆痕迹');
-    expect(meta.attributes('title')).toContain('按路径切会漏掉');
+    // 2026-10-22 用户裁定：作用域由短标表达，卡头不再挂长释
+    expect(meta.attributes('title')).toBeUndefined();
   });
 
   it('图谱不吃自带的路径轨（作用域已由页级接管，避免一屏两个同义控件）', async () => {

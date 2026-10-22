@@ -7,12 +7,6 @@
         <span class="frt__toolbar-hint">编辑 prompts/orchestration/{{ stage }}.yaml（字段路由以这份文件为准）</span>
       </div>
     </div>
-    <!-- 原型 .note--info：入口说明（不再自搓虚线蓝框）。审核 #111：按钮实为工具条最左侧（非右上角），
-         文案改「本面板顶部」与 DriftAuditPanel 同口径，避免指路与实际位置相反 -->
-    <p class="note note--info frt__notice">
-      修改字段路由请使用本面板顶部的「编排文件」按钮，保存后新建行即时生效，已有行修改后点「{{ TERMS.syncToDb }}」
-    </p>
-
     <!-- core 联动提示条（M3 轻量：当前 stage 各 skill 的 fields-sync 状态角标） -->
     <div v-if="skillSyncs.length" class="note frt-syncbar">
       <span class="frt-syncbar__title">core 联动</span>
@@ -37,7 +31,7 @@
         </template>
         <span v-else class="frt-syncbar__count">未核对</span>
       </button>
-      <span class="frt-syncbar__hint">该字段未登记 core 声明 / 未登记路由 → 去 Skill 详情页补全（字段路由 tab）</span>
+      <span class="frt-syncbar__hint">该字段未登记 core 声明 / 未登记路由</span>
     </div>
     <div v-else-if="skillSyncLoading" class="note frt-syncbar frt-syncbar--muted">
       <span class="frt-syncbar__title">core 联动</span>

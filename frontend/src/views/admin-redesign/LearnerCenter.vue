@@ -37,12 +37,13 @@
       />
       <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
            常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
-      <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳高 / 有风险摘要" />
+      <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" />
+      <!-- 2026-10-21 用户「去掉；如果需要下方加字，那就说明这个卡片的标题起得不对」：
+           卡名自带人群（学习者），阈值 50% 归 title 与「置信」列表头 -->
       <MkKpi
-        label="低置信"
+        label="低置信学习者"
         :value="lowConfCount"
         :tone="lowConfCount ? 'warn' : ''"
-        :hint="lowConfHint"
         :title="lowConfTitle"
       />
       <MkKpi
@@ -56,21 +57,18 @@
         label="疲劳高"
         :value="fatigueHighCount"
         :tone="fatigueHighCount ? 'warn' : ''"
-        hint="需要安排恢复"
-        title="fatigue=高 的学习者数（需关注卡把它和其它异常合并计数）"
+        title="疲劳度为「高」的学习者数"
       />
       <MkKpi
         label="趋势下降"
         :value="trendDownCount"
         :tone="trendDownCount ? 'warn' : ''"
-        hint="学习状态走弱"
-        title="trend=down 的学习者数（需关注卡把它和其它异常合并计数）"
+        title="趋势为「下降」的学习者数"
       />
       <MkKpi
         label="数据覆盖率"
         :value="confCoverageText"
         :tone="confCoverageText === '—' ? 'muted' : ''"
-        hint="有学习任务且产出置信度的学习者 / 全部学习者"
         :title="`有学习任务且产出置信度的学习者占比。无任务行不计入置信度分布与均值。本次 ${confRows.length} / ${rows.length} 位`"
       />
     </section>
@@ -454,11 +452,9 @@ const learnerTotalText = computed(() => {
 })
 /** 「学习者账号」KPI 口径 hint（2026-10-15 KPI 审计）：随页头「真实/测试」互斥视角变化——
     真实视角绝不提虚拟/测试账号（否则读者以为数里混了假账号）；两视角都含未开始学习的账号。 */
-const learnerKpiHint = computed(() =>
-  includeTest.value
-    ? `仅测试视角：虚拟学习者与测试账号 · 含未开始学习的账号`
-    : `仅真实用户 · 含未开始学习的账号`
-)
+/* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：副行只留「含未开始学习的账号」这条
+   会改变读数含义的范围说明；视角（真实 / 测试）由右上角开关表达，不再复述 */
+const learnerKpiHint = ''
 const rows = computed<Row[]>(() =>
   liveLearners.value.map((m) => ({
     id: m.userId,
@@ -516,17 +512,8 @@ const watchCount = computed(() => rows.value.filter(isWatch).length)
    有学习任务（r.task）才有有效置信度，与表格置信列的「—」口径一致 */
 const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence != null))
 /** 低置信 KPI 与均值同一口径（有任务的快照）：无任务行在表里置信列本显「—」，
-    计入会与均值对不上。2026-10-17 分布带退役后，「另 M 位无学习任务未计入」的说明
-    由「学习者账号」KPI 的 hint（含未开始学习的账号）与均值 hint 的基数共同承担。 */
+    计入会与均值对不上。2026-10-21 起这层口径只在卡 title 里说明（卡面不挂副行）。 */
 const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
-/** 低置信 hint 带基数（与平均置信度同判例：数字要能对上分母）。
-    2026-10-18：口径压成一行——原句 27 字在卡片宽度里折成两行，把整排读数卡撑到
-    115px；阈值、口径与基数都不变，只压措辞（「有任务」= 表格置信列出读数的条件）。 */
-/* 卡面副行只留口径（2026-10-19 用户走查「hint 在报读数」）：原句尾「共 N 位」与本卡读数
-   同值复读（低置信数就是它），样本量进 title 长释 */
-const lowConfHint = computed(() =>
-  confRows.value.length ? '低于 50% 的有学习任务的学习者' : '暂无有学习任务的学习者'
-)
 const lowConfTitle = computed(() =>
   confRows.value.length
     ? `置信度低于 50% 的有学习任务学习者数 · 纳入计算的学习者共 ${confRows.value.length} 位`
@@ -543,9 +530,10 @@ const trendDownCount = computed(() => rows.value.filter((r) => r.trend === 'down
 const confCoverageText = computed(() =>
   rows.value.length ? `${Math.round((confRows.value.length / rows.value.length) * 100)}%` : '—'
 )
-/** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁 */
+/** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁。
+    2026-10-21：这句取数算法不再常驻卡面，只在没有样本时给一句原因；算法进 title */
 const avgConfHint = computed(() =>
-  confRows.value.length ? '按有学习任务且产出置信度的学习者取平均' : '暂无有学习任务的学习者'
+  confRows.value.length ? '' : '暂无有学习任务的学习者'
 )
 const avgConfTitle = computed(() =>
   confRows.value.length
@@ -643,7 +631,7 @@ watch([pill, keyword, lcSortKey, lcSortDir], () => {
 /** 趋势纯文案（箭头由模板的 .lc-trend__arrow 图标渲染，文本再带箭头会「↗ ↗ 上升」双重箭头） */
 const trendText = (t: string) => (t === 'up' ? '上升' : t === 'down' ? '下降' : '稳定')
 const trendTitle = (r: Row) =>
-  `近况趋势：${trendText(r.trend)}${r.trend === 'down' ? '（需关注）' : r.trend === 'up' ? '（学习状态向好）' : '（状态平稳）'}。趋势基于近期学习表现，详细曲线见详情页`
+  `近况趋势：${trendText(r.trend)}${r.trend === 'down' ? '（需关注）' : r.trend === 'up' ? '（学习状态向好）' : '（状态平稳）'}`
 const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中' ? 'mk-badge--warn' : 'mk-badge--ok')
 
 /* 重算 */

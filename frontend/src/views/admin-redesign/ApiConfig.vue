@@ -172,7 +172,7 @@
                      开关只是 `defaultThinkingMode !== 'disabled'` 的派生态（关闭 ⇔ 下拉的「关闭」档），
                      且它表达不了「强制开启」，勾上只能落到「跟随模型默认」，是有损视图。
                      同屏一处事实两个控件，还带来「强度灰了、模式没灰」的不一致。现只留真字段那一个控件。 -->
-                <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认，可在 Skill 详情页「运行时」覆盖</span></div>
+                <div class="ac-sec__title">默认思考</div>
                 <div class="ac-row ac-row--2 ac-think">
                   <label class="mk-field">
                     <span class="mk-field__label">思考模式</span>
@@ -205,7 +205,7 @@
               <div class="ac-cols__side">
                 <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
                      需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
-                <div class="ac-sec__title">结构化输出<span class="ac-sec__hint" title="对输出 JSON 的 Skill 由上游强制 JSON，防「自然停止但吐散文」类失败">对输出 JSON 的 Skill 强制 JSON</span></div>
+                <div class="ac-sec__title">结构化输出<span class="ac-sec__hint">对输出 JSON 的 Skill 强制 JSON</span></div>
                 <!-- 与左侧「思考模式 / 思考强度」同宽（同列里同类控件两种宽度是偶然差异，不是层级） -->
                 <div class="ac-row ac-row--2">
                   <label class="mk-field">
@@ -275,7 +275,6 @@
                   <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" :max="limMax('maxLogicalRetries', 5)" class="mk-field__input ac-field--num" @input="markDirty('reliability')" />
                 </label>
               </div>
-              <span class="ac-group__hint">降级条件：1 + 传输重试 ＜ 上游最大尝试。降级只按模型自带的备用链换模型</span>
             </div>
             <div class="ac-group">
               <div class="ac-group__title">退避与超时</div>
@@ -307,7 +306,6 @@
                   <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input ac-field--num" @input="markDirty('reliability')" />
                 </label>
               </div>
-              <span class="ac-group__hint">真实用户与平台自身的出站上限，与虚拟学习者分开计量</span>
             </div>
           </div>
         </div>
@@ -415,7 +413,6 @@
       <section v-if="isLive" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">运行配置</h3>
-          <span class="mk-card__meta">独立计量，不占真实用户额度</span>
         </div>
         <div class="ac-body">
           <div class="ac-group">
@@ -496,7 +493,6 @@
               </span>
             </span>
           </div>
-          <span class="ac-policy__hint">保存后立即生效（优先级高于环境变量）。</span>
           <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">公网开放 · 入口无访问限制</span>
           <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
             <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
@@ -533,7 +529,6 @@
               仅白名单
             </button>
           </div>
-          <span class="ac-policy__hint">仅白名单时：只有「允许的 Host / IP」里列出的地址可被服务端访问（防 SSRF）。</span>
           <label v-if="!policy.allowPrivateNetwork" class="mk-field">
             <span class="mk-field__label">允许的 Host / IP（每行一个）</span>
             <textarea
@@ -1365,8 +1360,8 @@ function modelTestLabel(m: string): string {
 }
 function modelTestHint(m: string): string {
   return NON_CHAT_MODEL_PATTERN.test(m)
-    ? '该模型不是对话模型，连通性测试会失败；失败是预期结果，不代表配置错误'
-    : '用该模型发一次真实的最小对话请求'
+    ? '该模型不是对话模型，连通性测试失败属预期结果，不代表配置错误'
+    : ''
 }
 watch(models, (ms) => {
   if (!ms.length) return

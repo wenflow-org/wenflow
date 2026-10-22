@@ -62,7 +62,6 @@
         <MkKpi
           label="检查异常"
           :value="healthAbnormal"
-          hint="按健康检查清单逐项判定"
           :tone="healthAbnormal > 0 ? 'warn' : 'ok'"
           clickable
           :title="healthAbnormalTitle"
@@ -74,7 +73,6 @@
         <MkKpi
           :label="TERMS.driftContractQualified"
           :value="driftActionable"
-          hint="文件与线上 / 编译产物两类可行动不一致"
           :tone="driftActionable > 0 ? 'warn' : 'ok'"
           clickable
           :title="driftCardTitle"
@@ -83,7 +81,6 @@
         <MkKpi
           :label="TERMS.reconcile + '异常'"
           :value="reconAbnormal"
-          hint="按登记册逐项比对"
           :tone="reconAbnormal > 0 ? 'warn' : 'ok'"
           clickable
           :title="reconCardTitleWithTotal"
@@ -94,7 +91,6 @@
         <MkKpi
           label="完成度未达标"
           :value="global.abnormalSkills"
-          hint="已上线 / 登记总数"
           :tone="global.abnormalSkills > 0 ? 'warn' : 'ok'"
           clickable
           :title="completionCardTitle"
@@ -297,7 +293,7 @@ const completionLive = computed(() => displayReport.value?.completion?.live || 0
     阈值/口径在 title 披露——live 为完成度最高档，登记总数含插件 */
 const completionCardTitle = computed(() => {
   const total = reconciliation.value.total
-  return `未完成上线的技能 ${global.value.abnormalSkills} 个（0 即全部上线），已上线 ${completionLive.value}/${total}（含插件）`
+  return `未完成上线的技能 ${global.value.abnormalSkills} 个，已上线 ${completionLive.value}/${total}（含插件）`
 })
 
 /** 概要卡 tooltip：解释口径，避免红色数字误读 */
@@ -320,7 +316,7 @@ const reconCardTitle = computed(() => {
   // 2026-10-07 F6-3：未计入本卡的两类如实披露并指路——它们在「对账」页签内没有可定位的行/pill，
   // 各自的可定位项住在健康检查页签的对应行，不并入本卡以免「KPI 亮 N 而筛选 0 行」
   const excluded: string[] = []
-  if (r.zombieActive > 0) excluded.push(`失效生效版本 ${r.zombieActive}（该技能已不在平台注册档案中，不计入完成度统计）`)
+  if (r.zombieActive > 0) excluded.push(`失效生效版本 ${r.zombieActive}（不计入完成度统计）`)
   if (r.unwired > 0) excluded.push(`接线不一致 ${r.unwired}（见健康检查「接线一致性核查 W3」一行）`)
   const exclNote = excluded.length ? `。另有未计入本卡：${excluded.join('、')}` : ''
   const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效生效版本，与健康检查「生效版本检查」是同一批数据，不重复计数）` : ''
@@ -328,7 +324,7 @@ const reconCardTitle = computed(() => {
   return parts.join(' · ') + exclNote + note + scope
 })
 const skillCountTitle = computed(
-  () => `登记总数 ${global.value.total} = Skill 运行 ${global.value.total - extraCapabilityCount} 个 + 插件 ${extraCapabilityCount} 个（来源：平台提示词配置）`,
+  () => `登记总数 ${global.value.total} 含插件 ${extraCapabilityCount} 个（Skill 运行页不含）`,
 )
 /** 页头注记（2026-10-04 状态条退役）：「更新于 X」自状态条并入——加载期「检测中…」、
     有报告带更新时间、报告未就绪维持「60s 自动检测」；报告覆盖口径（skillCountTitle）挂注记 title。

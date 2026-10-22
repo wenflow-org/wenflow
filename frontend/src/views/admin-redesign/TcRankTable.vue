@@ -164,9 +164,9 @@ function costDesc(r: RankRow): string {
   return '无已定价调用'
 }
 function costTitle(r: RankRow): string {
-  if (hasCost(r)) return `已定价 ${r.pricedCalls ?? 0} 次调用金额合计（USD）`
+  if (hasCost(r)) return ''
   if ((r.callsMissingPricing ?? 0) > 0) return `${r.callsMissingPricing} 次调用未配置模型单价，不计入金额`
-  return '本行无已定价调用'
+  return ''
 }
 
 function rowTitle(r: RankRow): string {

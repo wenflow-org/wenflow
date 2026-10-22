@@ -22,6 +22,7 @@
     "copy:check": "node scripts/check-ui-copy.mjs",
     "copy:list": "node scripts/check-ui-copy.mjs --list",
     "copy:baseline": "node scripts/check-ui-copy.mjs --update",
+    "copy:dump": "node scripts/dump-ui-copy.mjs",
     "mobile:spec": "node scripts/check-mobile-spec.mjs",
     "format": "prettier --write src/"
   },

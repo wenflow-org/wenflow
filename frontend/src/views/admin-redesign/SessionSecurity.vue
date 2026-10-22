@@ -247,7 +247,6 @@
     <MkEmptyState
       v-else
       :title="statusFilter ? '当前筛选无会话' : '暂无会话记录'"
-      description="管理员登录后会话会显示在这里，可随时强制下线"
       :action-text="statusFilter ? '清除筛选' : ''"
       @action="statusFilter = ''"
     >

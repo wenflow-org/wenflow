@@ -7,7 +7,6 @@
     <MkPageHead
       title="插件"
       sub="可选能力与 MCP 服务"
-      hint="停用任一插件都不阻断主流程，按各卡标注的降级路径继续"
     >
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="loading || mcpLoading" @click="refreshAll">
@@ -146,7 +145,7 @@
         :tone="mcpFailed ? 'error' : 'neutral'"
         :icon="mcpFailed ? '!' : ''"
         :title="mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务'"
-        :description="mcpFailed ? '无法从后端拉取 MCP 服务列表。' : 'MCP 服务在此登记，供「MCP 工具调用」插件使用。停用或删除只影响调用它的能力，不阻断主流程。'"
+        :description="mcpFailed ? '无法从后端拉取 MCP 服务列表。' : ''"
         :action-text="mcpFailed ? '重试' : ''"
         action-busy-text="重试中…"
         :action-busy="mcpLoading"
@@ -211,9 +210,6 @@
             />
             <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
           </label>
-          <p v-if="toolForm.transport === 'mcp'" class="ac-mcp__hint">
-            工具由服务端动态发现，保存后可在列表中「发现工具」查看。
-          </p>
           <label class="mk-field">
             <span class="mk-field__label">描述（可选）</span>
             <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2" placeholder="这个工具做什么"></textarea>

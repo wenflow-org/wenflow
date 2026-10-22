@@ -7,10 +7,10 @@
       <span class="mk-status__sep"></span>
       <!-- 三态合计口径：此前全量 no-prompt 时只显示「同步 0 / 待编译发布 0」，
            与「核心文件 N」对不上，用户以为数据没加载 -->
-      <span class="mk-status__meta" :title="coreCountTitle">核心文件 {{ cores.length }}</span>
-      <span class="mk-status__meta pw-ok" :title="`已同步：编译产物与核心文件一致（${syncedCount} 个）`">同步 {{ syncedCount }}</span>
-      <span class="mk-status__meta pw-warn" :title="`待编译发布：核心文件有改动但未重新编译（${pendingCount} 个）`">待编译发布 {{ pendingCount }}</span>
-      <span v-if="noPromptCount" class="mk-status__meta pw-na" :title="`无 Prompt：尚未创建核心文件，不参与编译（${noPromptCount} 个）`">无 Prompt {{ noPromptCount }}</span>
+      <span class="mk-status__meta">核心文件 {{ cores.length }}</span>
+      <span class="mk-status__meta pw-ok">同步 {{ syncedCount }}</span>
+      <span class="mk-status__meta pw-warn">待编译发布 {{ pendingCount }}</span>
+      <span v-if="noPromptCount" class="mk-status__meta pw-na">无 Prompt {{ noPromptCount }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="loading" @click="loadList">
           <MkLoading v-if="loading" inline text="刷新中…" /><span v-else>刷新</span>
@@ -21,7 +21,6 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">核心文件</h3>
-        <span class="mk-card__meta">改提示词与发布在 Skill 详情页「协议」页签。新建 Skill 为开发操作，需由开发人员创建</span>
       </div>
       <!-- 刷新失败但已有清单（2026-10-06 审核 #139）：保留已渲染表格，行内 alert 说明数据可能过期 + 重试入口；
            无数据（首载失败）时才由下方 MkEmptyState 走整页错误态（口径同 MemoryReview / DayTimeline） -->
@@ -130,10 +129,6 @@ const syncedCount = computed(() => countBy('synced'));
 const pendingCount = computed(() => countBy('pending-compile'));
 const noPromptCount = computed(() => countBy('no-prompt'));
 
-/** 三态合计口径：已同步 + 待编译发布 + 无 Prompt = 核心文件总数（statusBar title） */
-const coreCountTitle = computed(() =>
-  `三态合计：已同步 ${syncedCount.value} + 待编译发布 ${pendingCount.value} + 无 Prompt ${noPromptCount.value} = 核心文件 ${cores.value.length}`
-);
 
 function countBy(status: string) {
   return cores.value.filter((c) => c.status === status).length;

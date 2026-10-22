@@ -141,7 +141,7 @@
         v-else
         icon="◌"
         :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
-        :description="isFiltered ? '放宽筛选条件试试。' : '维护通知、功能发布、政策变更都会在这里汇总。'"
+        :description="isFiltered ? '放宽筛选条件试试。' : ''"
         :action-text="isFiltered ? '清除筛选' : '新建公告'"
         min
         @action="isFiltered ? clearFilters() : openCreate()"
@@ -158,7 +158,7 @@
     <!-- 新建 / 编辑公告 -->
     <Teleport to="body">
     <div v-if="createOpen" ref="maskRef" class="mk-modal">
-      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="新建公告">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="editingId ? '编辑公告' : '新建公告'">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ editingId ? '编辑公告' : '新建公告' }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeCreate">✕</button>

@@ -159,9 +159,9 @@
           <template v-else>
             <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">推进一步</button>
             <button type="button" class="cp-btn cp-btn--primary" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">自动推进本课</button>
-            <label class="cp-turn-cap-label" title="每课自动推进的回合上限：「自动推进本课」与「自动驾驶」共用，复杂课程可调高到 100。这里是本屏的临时覆盖，长期默认值在画像「运行预算 · 每课回合上限」">
+            <label class="cp-turn-cap-label" title="本屏临时值，只作用于接下来这一次推进">
               每课回合上限
-              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="每课自动推进的最大对话轮数（自动推进本课与自动驾驶共用）。本屏是临时值，只作用于接下来这一次推进。刷新或换页会回到画像「运行预算」的默认值。输入超出 1–100 时按 1 或 100 处理" aria-label="每课回合上限" @change="learnAutoTurnCap = clampLearnAutoTurnCap()" />
+              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="本屏临时值，超出 1–100 时按 1 或 100 处理" aria-label="每课回合上限" @change="learnAutoTurnCap = clampLearnAutoTurnCap()" />
             </label>
             <!-- 进行中重开本课（失败后的「重试」由生命周期区统一承载，不重复） -->
             <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重开本课</button>
@@ -291,7 +291,7 @@
                 compact
                 icon="◌"
                 title="尚未产生目标对话"
-                description="目标澄清尚未开始，可在控制台用「推进一步」或「自动推进目标」启动。"
+                description="目标澄清尚未开始。"
               />
             </template>
           </div>
@@ -430,7 +430,6 @@
                   <span class="cp-checkpoints__title">检查点</span>
                   <span
                     class="cp-checkpoints__meta"
-                    title="题目与作答走结构化通道，不写入聊天逐字稿，所以在转录之外单独列出"
                   >{{ lessonCheckpoints.length }} 次作答</span>
                 </div>
                 <div v-for="(cp, i) in lessonCheckpoints" :key="`cp-${i}`" class="cp-checkpoint">
@@ -991,7 +990,7 @@ import PathJourneyPanel from './PathJourneyPanel.vue'
 import { useCockpitAutopilot, autopilotDriverLine } from './cockpitAutopilot'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
-const WRAPUP_READY_NOTE = '完整总结（学习目标 / 评估 / 知识掌握）见「学习总结」卡。'
+const WRAPUP_READY_NOTE = ''
 const WRAPUP_FINAL_NOTE = '全部课程完成后，可在控制台生成终局总结（学习目标、评估、知识掌握）。'
 const WRAPUP_NOT_STARTED_NOTE = '尚未开始学习，生成路径并启动教学后这里会展示进度。'
 const REFEREE_TRACE_LABEL = '裁判诊断 ·'
@@ -1098,7 +1097,7 @@ const healthStrip = computed(() => {
 })
 const healthStripTitle = computed(() => {
   const w = lessonWrapup.value
-  return `当前课时的总结读数（单课，非全会话汇总）。LSS 为学习压力评分，KTL 为知识训练负荷，困惑点为本课主要混淆点${w?.degraded ? '。本课为降级总结（未完整结束）' : ''}`
+  return `当前课时的总结读数（单课，非全会话汇总）${w?.degraded ? '。本课为降级总结（未完整结束）' : ''}`
 })
 const hasLessonWrapup = computed(() => !!lessonWrapup.value && (!!lessonWrapup.value.topicSummary || !!lessonWrapup.value.knowledgeSummary))
 const selectedTeachingSessionId = ref('')
@@ -1989,11 +1988,7 @@ const turnMeta = computed(() => {
     : `${turnRows.value.length} 条对话 · 本课课堂转录`
 })
 /** 虚拟会话的回合构成（只挂在卡头 title）：本会话一个会话即完整旅程 */
-const turnMetaTitle = computed(() =>
-  !isRealMode.value && turnRows.value.length
-    ? '本目标对话与课堂转录按发生顺序合并展示。真实会话只取当前阶段那一段'
-    : ''
-)
+const turnMetaTitle = computed(() => '')
 
 /* 知识状态更新（真实掌握度）：真实会话 = teaching.knowledgeState（后端 knowledgePointStates）；
    虚拟会话 = 当前课课时总结 knowledgeItems。无数据整卡不渲染，不硬造 ±Δ（后端无增量字段） */
@@ -2164,12 +2159,7 @@ const knowledgeSourceLabel = computed(() => {
   const topic = firstText(realTeachingBlock.value.topic)
   return topic ? `最近一节课堂 · ${topic}` : '知识点掌握度 · 会话知识状态'
 })
-const knowledgeSourceTitle = computed(() => {
-  if (!isRealMode.value) return '取自当前课时的总结知识点清单'
-  const topic = firstText(realTeachingBlock.value.topic)
-  const id = firstText(realTeachingBlock.value.teachingSessionId)
-  return topic ? `取自本路径最近一节课堂（${topic}${id ? `，${id}` : ''}）的知识状态列` : '取自本路径最近一节课堂的知识状态列'
-})
+const knowledgeSourceTitle = computed(() => '')
 
 
 /** 总结页单课总结行（2026-10-12 二次拍板「总结就单独总结，不再和课程混在一起」）：
@@ -2644,7 +2634,7 @@ async function act(kind: string) {
     if (kind === 'autopilotStart') {
       const ok = await askConfirm({
         title: '启动自动驾驶',
-        message: `将以「路径全部完成」为终点持续运行，不会逐课停下等你确认。\n每课回合上限 ${clampLearnAutoTurnCap()}；会话配置了成本护栏时达到上限会自动停止，未配置则可能持续产生较多 AI 调用。\n运行期间可随时停止，学习进度与对话保留。`,
+        message: `将以「路径全部完成」为终点持续运行，不会逐课停下等你确认。\n每课回合上限 ${clampLearnAutoTurnCap()}。会话配置了成本护栏时达到上限会自动停止，未配置则可能持续产生较多 AI 调用。\n运行期间可随时停止，学习进度与对话保留。`,
         confirmText: '启动自动驾驶',
         danger: false
       })

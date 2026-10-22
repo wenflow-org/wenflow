@@ -17,30 +17,26 @@
          10-02 撤双带退役的是「状态数字 KPI」（四桶与构成带同数字复读）——本卡带只放总量/参与用户/
          近 7 天新增三个与分布带零重叠的指标，状态构成仍以分布带为唯一来源（计数全页只出现一次：
          总数升 KPI 卡后分布带副文不再复读「共 N 条」）。
-         hint = 一短句可见口径（全站家法，TokenCost 判例）；长解释收 title 悬停 -->
+         hint 只留比例式分母（「已完成 / 会话总数」）；视角复述与取数算法（按用户去重 / 按创建日）
+         于 2026-10-21 撤除，口径一律进 title -->
     <section class="mk-kpi-grid" aria-label="目标对话总量">
       <MkKpi
         label="会话总数"
         :value="stats?.total ?? '—'"
-        :hint="includeTest ? '仅虚拟学习者与测试账号' : '仅真实用户'"
         :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
       />
       <MkKpi
         label="完结率"
         :value="completionRatePct"
-        hint="已完成 / 会话总数"
-        title="已完成的目标对话占全部目标对话的比例，四舍五入到整数"
       />
       <MkKpi
         label="参与用户"
         :value="stats?.distinctUsers ?? '—'"
-        hint="按用户去重"
         title="至少发起过一次目标对话的用户数"
       />
       <MkKpi
         label="近 7 天新增"
         :value="recentCreated7d ?? '—'"
-        hint="按创建日"
         title="最近 7 天创建的目标对话数（按创建日期统计）"
       />
       <!-- P-49（#74）：停滞会话此前只活在分布带 hint 里；升为卡，0 是健康信号 -->
@@ -48,8 +44,7 @@
         label="停滞会话"
         :value="rows.length ? staleActiveCount : '—'"
         :tone="staleActiveCount ? 'warn' : ''"
-        hint="进行中 · 超过 7 天未更新"
-        :title="`按最近 ${LIST_LIMIT} 条列表窗口统计（非全量）。进行中、超过 ${STALLED_DAYS} 天未更新的会话数`"
+        :title="`最近 ${LIST_LIMIT} 条窗口内，进行中且超过 ${STALLED_DAYS} 天未更新`"
       />
     </section>
     <!-- stats 三态（P1#6）：失败显错误条 + 重试（原错误桶随构成带退役，2026-10-04 晚贴表分布条） -->
@@ -63,7 +58,6 @@
     <MkEmptyState
       v-if="!rows.length && !loading && !loadError"
       title="暂无目标对话"
-      description="学习者发起目标对话后自动呈现。"
     />
 
     <template v-else>
@@ -829,12 +823,9 @@ function openLearner(userId: string) {
 }
 const { goTrace, goConsole } = useSessionDrill(closeDetail)
 
-/** 页头副题随 includeTest 切换如实（评审 §口径）：默认仅真实，切「含测试」后不得再声称仅真实用户口径 */
-const gcScopeSub = computed(() =>
-  includeTest.value
-    ? '与学习者澄清真实目标 · 约束条件与澄清轮次（含虚拟学习者与测试账号）'
-    : '与学习者澄清真实目标 · 约束条件与澄清轮次（仅真实用户）'
-)
+/** 页头副题只说这一页管什么；当前视角由右上角真实/测试开关表达，副文不再复述
+ *  （2026-10-21 用户「右上角已经是真实了啊」同一判例：界面不重复控件状态） */
+const gcScopeSub = '与学习者澄清真实目标 · 约束条件与澄清轮次'
 
 /** 路径格 → 会话座舱的 Path 阶段页签（2026-10-12 拍板：路径不再有独立详情页）。
  *  行本身就是目标对话（r.id），直接开座舱并落 Path 页签，无需 id 反查。

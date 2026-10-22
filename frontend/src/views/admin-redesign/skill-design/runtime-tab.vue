@@ -28,7 +28,7 @@
         >{{ rtSaving ? '保存中…' : '保存配置' }}</button>
       </div>
       <!-- 口径一条放卡头正下方（卡头只放标题/现状/动作；规则不复述） -->
-      <p class="mk-card__note">未覆盖的项继承 Agent 与平台默认，这里只写给这个 Skill 的差异。Prompt 里声明了 model 时，本页模型不参与。</p>
+      <p class="mk-card__note">Prompt 里声明了 model 时，本页模型不参与。</p>
 
       <div class="sdp-body">
         <div v-if="rtLoadFailed" class="sdp-error">运行时配置加载失败，已重置为默认值。<button type="button" class="mk-link" @click="loadRuntime">重试</button></div>
@@ -80,7 +80,7 @@
             <section v-show="runtimeSection === 'model'" id="sdp-panel-model" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-model">
               <header class="sdp-panel__head">
                 <h4>模型</h4>
-                <span class="sdp-panel__state mono">{{ rtForm.model || '继承 Agent / 平台默认' }}</span>
+                <span class="sdp-panel__state mono">{{ rtForm.model || '未指定' }}</span>
               </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field sdp-field--wide">
@@ -244,7 +244,6 @@
                     </button>
                     <span v-if="probeError" class="sdp-form__msg is-err">{{ probeError }}</span>
                   </div>
-                  <p class="sdp-panel__hint">用线上生效 Prompt 直发上游，探测不保存配置。</p>
                 </div>
 
                 <div class="sdp-test-result">
@@ -470,7 +469,7 @@ const primaryMetaText = computed(() => {
   return [o.providerName, o.tier, caps, price].filter(Boolean).join(' · ')
 })
 const fallbackHint = computed(() => {
-  if (primaryOption.value) return '候选只含同供应商、同层级的模型'
+  if (primaryOption.value) return ''
   if (fallbackChain.value.length) return '主模型为空，候选按层级列出'
   return '留空继承平台默认备用模型'
 })

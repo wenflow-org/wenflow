@@ -9,7 +9,6 @@
     <MkPageHead
       title="记忆与复习观测"
       sub="遗忘曲线调度 · 到期积压、课内温故与概念归并审计"
-      hint="到期积压 · 课内温故 · 概念归并审计。归并默认只记录建议，不改动数据"
     >
       <template #actions>
         <!-- 口径开关收在页头（2026-10-04 整组统一为 DataScopeToggle：学习组六页同一位、同一状态）。
@@ -385,7 +384,8 @@ const dueCardTitle = computed(() => {
 interface OverviewCard {
   label: string
   value: string | number
-  hint: string
+  /** 副行可缺省：2026-10-21 起只有定义/包含关系类口径上屏，来源与机制说明进 title */
+  hint?: string
   title: string
   tone?: 'ok' | 'warn' | 'bad' | 'muted' | ''
 }
@@ -400,11 +400,13 @@ const overviewCards = computed<OverviewCard[]>(() => {
   const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
   const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : text)
   return [
-    { label: '用户', value: val(t.users), hint: numHint('有记忆痕迹'), tone: numTone(''), title: '全部有记忆记录的用户数。是否含虚拟学习者随页头开关' },
-    { label: '记忆痕迹', value: val(t.traces), hint: numHint('跨全部学习路径'), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },
-    { label: '当前到期', value: val(t.due), hint: numHint(t.traces ? '到期未复习 / 全部记录' : '暂无痕迹'), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
-    { label: '需人工看', value: val(t.ambiguous), hint: numHint('归并候选 · 不自动执行'), tone: numTone(t.ambiguous > 0 ? 'warn' : ''), title: '像但不确定的归并候选，需人工确认，不会自动执行' },
-    { label: '待归并建议', value: val(t.proposed), hint: numHint('模型给出的同义概念候选'), tone: numTone(''), title: `模型给出的同义概念候选，其中 ${t.autoApplicable} 条可自动执行（「可自动」指系统有把握且名称足够相似）。执行后保留备份，可回滚。已执行 ${t.applied} 条，已删除 ${t.deleted} 条` }
+    { label: '用户', value: val(t.users), hint: numHint(''), tone: numTone(''), title: '全部有记忆记录的用户数。是否含虚拟学习者随页头开关' },
+    /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：来源/机制说明（跨全部学习路径、
+       归并候选·不自动执行、模型给出的同义概念候选）撤出卡面，只留定义与包含关系 */
+    { label: '记忆痕迹', value: val(t.traces), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },
+    { label: '当前到期', value: val(t.due), hint: numHint(t.traces ? '' : '暂无痕迹'), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
+    { label: '需人工看', value: val(t.ambiguous), tone: numTone(t.ambiguous > 0 ? 'warn' : ''), title: '像但不确定的归并候选，需人工确认，不会自动执行' },
+    { label: '待归并建议', value: val(t.proposed), tone: numTone(''), title: `模型给出的同义概念候选，其中 ${t.autoApplicable} 条可自动执行（「可自动」指系统有把握且名称足够相似）。执行后保留备份，可回滚。已执行 ${t.applied} 条，已删除 ${t.deleted} 条` }
   ];
 });
 
@@ -414,40 +416,35 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
   const failed = !!error.value
   const pending = kpiPending.value
   const na = failed || pending
-  const metricMissing = !frag
   const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
-  const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : metricMissing ? '指标未取到' : text)
+  /* 副行只留取数状态（2026-10-21）：口径与包含关系全部进 title */
+  const stateHint = (missing: boolean) =>
+    failed ? '取数失败' : pending ? '取数中…' : missing ? '指标未取到' : ''
   const ratio = frag?.duplicateLabelRatio
   const unattached = frag?.unattachedKeys
   const pendingReview = frag?.pendingReview
-  /* 「需人工看」这一项（totals.ambiguous）既是同带上的独立一卡，又是 pendingReview 求和公式里的加数
-     （后端 memory-review.ts:64-68：review 档归并建议 + ambiguous + 散键清理建议）——
-     它非 0 而另两项为 0 时，两卡必然同数。 */
-  const ambiguous = totals.value.ambiguous
   return [
     {
       label: '措辞重复率',
       value: na || ratio == null ? '—' : `${Math.round(ratio * 100)}%`,
-      hint: numHint('措辞重复的痕迹占比'),
+      hint: stateHint(!frag || ratio == null),
       tone: numTone(!na && ratio != null && ratio >= 0.2 ? 'warn' : ''),
       title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎，达到 20% 时标为需关注。虚拟学习者是否计入随所处视角变化'
     },
     {
       label: '未挂靠散键',
       value: na || unattached == null ? '—' : unattached,
-      hint: numHint('未关联到标准概念的键'),
+      hint: stateHint(!frag || unattached == null),
       tone: numTone(!na && unattached != null && unattached > 0 ? 'warn' : ''),
       title: '自由填写的、未关联到标准概念的概念标识数量——无法自动收拢，只能通过归并 / 清理建议逐条治理'
     },
     {
       label: '待审队列',
       value: na || pendingReview == null ? '—' : pendingReview,
-      /* hint 明写包含关系（2026-10-14 走查）：旧 hint「人审队列中的建议数」不给任何线索，
-         而本卡是「人审档归并建议 + **需人工看** + 散键清理建议」之和 —— 带上那枚独立卡
-         「需人工看」就在和里，另两项为 0 时两卡同数，7 与 7 并排读作矛盾数字。 */
-      hint: numHint(pendingReview != null && ambiguous > 0 ? `含需人工看 ${ambiguous}` : '人审队列中的建议数'),
+      /* 旧 hint 明写包含关系（含「需人工看」）；2026-10-21 起包含关系只在 title 里给 */
+      hint: stateHint(!frag || pendingReview == null),
       tone: numTone(!na && pendingReview != null && pendingReview > 0 ? 'warn' : ''),
-      title: '待审队列深度：归并建议、需人工看与散键清理建议之和（「需人工看」已含在此数内）。不会自动执行'
+      title: '不会自动执行'
     }
   ];
 });

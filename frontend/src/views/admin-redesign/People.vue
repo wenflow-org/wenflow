@@ -63,7 +63,7 @@ const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(n
    （后端总数在 liveUsersTotal，超上限截断时 title 注明）。
    走查 F1-1（2026-10-07）：判据统一收口到 learner-profile.ts 单点——本页 KPI 与
    下方 Users 列表 pill 计数同一口径。 */
-type PpKpiTile = { label: string; value: number; hint: string; tone: '' | 'ok' | 'warn' | 'bad'; title: string }
+type PpKpiTile = { label: string; value: number; hint?: string; tone: '' | 'ok' | 'warn' | 'bad'; title: string }
 /** 近 7 天活跃：lastLoginAt 在 7 天内（7 天窗口是运营常态读数，原 30 分钟窗口恒 0 无区分度） */
 const active7dOf = (rows: Array<{ lastLoginAt: string | null }>) =>
   rows.filter((u) => !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 7 * 86400000).length
@@ -87,24 +87,23 @@ const ppKpi = computed<PpKpiTile[]>(() => {
         // （仿真会话数 ≥1 的虚拟学习者账号）。标签补「账号」二字，与右侧两张账号卡同一量纲。
         label: '运行中仿真账号',
         value: runningSims.value,
-        hint: '仿真会话 ≥ 1',
         tone: '',
-        title: '仿真会话数 ≥ 1 的虚拟学习者账号（随虚拟学习者数据刷新）',
+        title: '仿真会话数 ≥ 1 的虚拟学习者账号',
       },
       {
         label: '虚拟学习者',
         value: virtualRows.length,
-        hint: '模拟数据账号',
         tone: '',
-        title: `${scope}。系统生成的模拟学习账号`,
+        title: scope,
       },
       {
         label: '测试账号',
         value: testRows.length,
         // 2026-10-14（KPI 审计）：原 hint「默认统计不含，切「测试」后计入」在测试视角自相矛盾——
-        // 这张卡本来就只在切到「测试」后才渲染，等于叫用户做一件已经做完的事。改为只描述账号类别；
-        // 「默认统计不含」那句说明留在「真实用户」卡（真实视角）的 title 里。
-        hint: '用于测试与审计的账号',
+        // 这张卡本来就只在切到「测试」后才渲染，等于叫用户做一件已经做完的事。
+        // 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：这类解释账号用途/取数依据的副行
+        // 一律撤（「用于测试与审计的账号」「按最后登录日 · 仅测试账号」「排除虚拟与测试账号」等），
+        // 卡片只留 label + 读数，口径进 title。
         tone: '',
         title: scope,
       },
@@ -116,9 +115,8 @@ const ppKpi = computed<PpKpiTile[]>(() => {
         // ——标签说测试、数字含虚拟。取值收到测试账号本身，与左侧那张卡同集合。
         label: '测试账号活跃',
         value: active7dOf(testRows),
-        hint: '按最后登录日 · 仅测试账号',
         tone: '',
-        title: `${scope}。只统计测试账号（不含虚拟学习者）中最近 7 天内登录过的`,
+        title: `${scope}。只统计测试账号`,
       },
     ]
   }
@@ -126,30 +124,26 @@ const ppKpi = computed<PpKpiTile[]>(() => {
     {
       label: '真实用户',
       value: realRows.length,
-      hint: '排除虚拟与测试账号',
       tone: '',
-      title: `${scope}。在「测试」视角下计入虚拟 / 测试账号${realRows.length ? `。其中管理员 ${admins}` : ''}`,
+      title: `${scope}${realRows.length ? ` · 管理员 ${admins}` : ''}`,
     },
     {
       label: '近 7 天活跃',
       value: active7dOf(realRows),
-      hint: '按最后登录日',
       tone: '',
-      title: `${scope}。仅统计真实用户（不含虚拟 / 测试账号）`,
+      title: scope,
     },
     {
       label: '近 7 日新增',
       value: realRows.filter((u) => !!u.createdAt && Date.now() - new Date(u.createdAt).getTime() < 7 * 86400000).length,
-      hint: '按注册日',
       tone: '',
-      title: `${scope}。仅统计当前显示的账号（列表上限 1000 条）`,
+      title: `${scope}。仅统计当前显示的账号`,
     },
     {
       label: '从未登录',
       value: realRows.filter((u) => !u.lastLoginAt).length,
-      hint: '无登录记录',
       tone: '',
-      title: `${scope}。仅统计当前显示的账号；用于发现注册后搁置的账号`,
+      title: `${scope}。仅统计当前显示的账号`,
     },
   ]
 })

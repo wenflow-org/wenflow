@@ -65,7 +65,6 @@
       </header>
       <div class="sdp-prompt__facts">
         <span>生效版本 <b class="mono">v{{ effectivePrompt?.prompt?.version ?? '—' }}</b></span>
-        <span>源文本直出（编译层已退役）</span>
       </div>
       <p v-if="inspectError" class="sdp-none sdp-bad-text">Prompt 检视加载失败。<button type="button" class="mk-link" @click="loadInspect">重试</button></p>
       <pre class="sdp-prompt__code">{{ effectivePrompt?.prompt?.systemPrompt || (inspectError ? '加载失败，请重试' : '暂无内容') }}</pre>
@@ -79,7 +78,6 @@
   <section class="sdp-block">
     <header class="sdp-block__head">
       <h4>最近调用</h4>
-      <span class="sdp-block__meta">重跑：用真实输入复现 · 看 Trace：查该条链路现场</span>
     </header>
     <div v-if="recentLogs.length" class="sdp-logs">
       <div

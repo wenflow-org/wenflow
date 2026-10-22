@@ -223,7 +223,6 @@
               </div>
             </section>
           </div>
-          <p class="mk-card__note">试跑会真实执行该 Skill。完整诊断在本页签的设计区块内。</p>
           <!-- 设计页「试跑」内容（表达试跑编辑器 + 当前生效 Prompt 参照 + 最近调用） -->
           <TrialTab
             :skill-id="skillId"
@@ -275,9 +274,6 @@
                 </div>
                 <p v-else class="mk-empty--line">暂无 Prompt 版本记录。</p>
               </div>
-            </div>
-            <div class="mk-card__foot">
-              <span class="mk-card__meta">版本 diff 对比与 core 回滚在本页签的版本管理内</span>
             </div>
           </section>
           <!-- 设计页「版本」内容（在线变体 A/B + 核心文件版本回滚 + Prompt 版本 diff） -->
@@ -425,7 +421,7 @@
               </div>
             </div>
             <div class="skd-pad">
-              <p class="mk-card__note">字段路由决定 Skill 与上下游 Agent 之间传递的结构化字段。标注「内部」的字段不进入用户可见回复。</p>
+              <p class="mk-card__note">标注「内部」的字段不进入用户可见回复。</p>
             </div>
           </section>
           <!-- 设计页「字段路由」内容（字段影响范围血缘 + 加字段向导） -->
@@ -455,7 +451,7 @@
             <label class="skd-field">
               <span>变更说明</span>
               <input v-model="pmNote" class="mk-input" placeholder="例如：优化诊断追问策略" />
-              <em class="skd-hint">Prompt 内容以源文件为准：此处供查看与起草，草稿保存与发布在本页「协议」页签完成。</em>
+              <em class="skd-hint">Prompt 内容以源文件为准。</em>
             </label>
           </div>
           <div class="mk-modal__foot">

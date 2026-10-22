@@ -177,7 +177,7 @@
             <div v-if="!searchHits.length" class="mshell__search-empty">
               <p class="mshell__search-empty-title">没有匹配的页面</p>
               <p class="mshell__search-empty-hint">
-                搜索只覆盖页面名称。找人 / 路径 / 调用记录请用下面的入口直接搜：
+                搜索只覆盖页面名称。
               </p>
               <button
                 v-for="f in searchFallbacks"
@@ -543,7 +543,7 @@ function badgeTitle(item: MockSceneDef): string {
   const count = badgeOf(item)
   if (!count) return ''
   if (alarmNavBadges.has(item.id)) {
-    return `近 7 天执行失败 ${count} 次（近 200 条日志内统计，进入执行日志页后自动平息）`
+    return `近 7 天执行失败 ${count} 次（近 200 条日志内统计）`
   }
   return `${BADGE_MEANING[item.id] || item.label}：${count}`
 }

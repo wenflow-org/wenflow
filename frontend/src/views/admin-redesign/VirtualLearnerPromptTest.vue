@@ -10,7 +10,7 @@
       </div>
       <div class="mk-modal__body">
         <p class="mk-alert mk-alert--info">
-          用「{{ testTarget.name }}」的人设和故事直接跑一次对话，检查助手输出的字段。不创建用例、不影响正式会话。
+          不创建用例、不影响正式会话。
         </p>
         <!-- 配置行 -->
         <div class="pt-config">

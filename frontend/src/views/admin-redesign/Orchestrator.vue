@@ -817,7 +817,7 @@ const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + sta
     目录档案数（不含插件）。三数不必相等，问「平台共多少 Skill」先确认口径。 */
 const skillKpiTitle = computed(
   () =>
-    `编排图内挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）。治理卡「Skill 定义」与侧栏徽章的统计范围不同，数值不必相等`
+    `编排图内挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）`
 )
 /* 页级「未解析」读数（原告警条用）已随告警迁健康中心（检查项 orchestration-steps）删除；
    行级读数曾挂在「阶段交接明细」表的徽章上（unresolvedOf/哈希漂移），该表 2026-10-13 整体删除。 */

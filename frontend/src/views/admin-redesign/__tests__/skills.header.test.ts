@@ -125,10 +125,11 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     const w = await mountSkills()
     // 成功率 76.7%（100+50 调用，30+5 失败 → 115/150，1 位小数精度）
     // 2026-10-19 用户走查「KPI hint 在报读数」：副行只留口径短语，分子分母进 title 长释
+    // 2026-10-22：卡面与悬停都不再复述公式/分母，只留窗口与着色阈值
     const rate = kpiOf(w, '成功率')!
     expect(rate.find('.mk-kpi__num').text()).toBe('76.7%')
-    expect(rate.find('.mk-kpi__hint').text()).toBe('成功 / 全部调用')
-    expect(rate.attributes('title')).toContain('成功 115 / 共 150 次')
+    expect(rate.find('.mk-kpi__hint').exists()).toBe(false)
+    expect(rate.attributes('title')).not.toContain('成功 115')
     expect(rate.attributes('title')).toContain('低于 90% 标红')
     expect(rate.attributes('title')).toContain('低于 97% 标黄')
     // 空闲（skill:c 0 调用）/ 平均耗时卡在

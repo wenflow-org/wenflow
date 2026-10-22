@@ -5,7 +5,6 @@
         基础设施模型
         <span class="mk-badge mk-badge--info">平台必需</span>
       </h3>
-      <span class="mk-card__meta">向量化与重排是资料语义层的底座，不随插件启停</span>
       <button type="button" class="mk-link" :disabled="loading" @click="load">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
@@ -80,10 +79,6 @@
           </div>
         </article>
       </div>
-
-      <p class="infra-hint">
-        缺失时语义召回退回结构化或余弦路径，主流程不中断。模型总览会把这两项列为平台必需缺口。
-      </p>
     </template>
 
     <Teleport to="body">

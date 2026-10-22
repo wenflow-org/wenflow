@@ -24,7 +24,7 @@
         <strong class="mr-panels__title">记忆调度与治理</strong>
         <span
           class="mr-panels__meta"
-          title="到期 = 到该复习而未复习。同族重复 = 含义相同、措辞不同的记录。从未提取 = 从未被安排复习过。有强度数据 = 带完整记忆模型参数的记录，其中旧记录按掌握度回退估算。到期占比 ≥20% 或 ≥5 条时标为需关注"
+          title="到期占比 ≥20% 或 ≥5 条时标为需关注"
         >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有强度数据 {{ detail.summary.withFsrsState }}</span>
         <button
           type="button"
@@ -40,7 +40,7 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">课内温故计划</h3>
-          <span class="mk-card__meta" title="负担单位按学习者状态动态校准。排队中 = 尚未排进本节队列的到期记录">本节该接几个 · 按负担预算排队</span>
+          <span class="mk-card__meta">本节该接几个 · 按负担预算排队</span>
         </div>
 
         <!-- 温故计划整块按 detail.reviewPlan 有无渲染：reviewPlan=null 时原来只剩一个裸标题 -->
@@ -183,10 +183,6 @@
 
           <h4 class="mr__h4">
             归并建议（将别名并入主概念）
-            <span class="mr__sub-inline">
-              默认只勾选可自动执行的。
-              执行后保留备份，可回滚。
-            </span>
           </h4>
           <div v-if="detail.audit.proposals.length" class="mk-table-scroll">
           <table class="mk-table">

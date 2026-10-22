@@ -169,7 +169,7 @@
           v-else
           compact
           :title="data.routings.length ? '无匹配行' : '该 skill 暂无产出行'"
-          :description="data.routings.length ? '试试调整搜索关键词或角色过滤。' : '该 skill 无编排路由声明。可用「加字段」补全，或先到编排文件声明产出字段。'"
+          :description="data.routings.length ? '试试调整搜索关键词或角色过滤。' : '该 skill 无编排路由声明。'"
           :action-text="emptyActionText"
           @action="onEmptyAction"
         />

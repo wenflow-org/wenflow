@@ -91,7 +91,7 @@
           v-if="todayFailed > 0"
           type="button"
           class="mk-status__meta-link"
-          :class="health.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"          :title="`今日 ${todayFailed} 次真实用户调用失败，点此按「失败 · 今天」查看执行日志`"
+          :class="health.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
           @click="investigateTodayFailures"
         >调用 · 今日失败 {{ todayFailed }} 次</button>
         <button
@@ -146,14 +146,13 @@
                   v-if="s.ringFailed"
                   type="button"
                   class="mk-badge mk-badge--sm mk-badge--warn loop__fail"
-                  title="该阶段读数获取失败 · 点击重试"
                   @click.stop="retryLoopExtras"
                 >重试</button>
                 <button
                   v-if="s.failN"
                   type="button"
                   class="mk-badge mk-badge--sm mk-badge--bad loop__fail"
-                  title="该阶段生成失败的路径总数 · 点击只看失败路径"
+                  title="生成失败的路径数"
                   @click.stop="jumpToFailedPaths"
                 >失败 {{ s.failN }}</button>
               </span>
@@ -188,7 +187,6 @@
               v-for="(s, i) in data.topSkills"
               :key="s.agentId"
               class="rankrow rankrow--link"
-              :title="`${skillIdOf(s.agentId)}：${s.calls} 次调用 · ${s.failed} 次失败`"
               role="button"
               tabindex="0"
               @click="openSubPage('skill', skillIdOf(s.agentId))"
@@ -215,7 +213,7 @@
           <span class="mk-card__title">待处理事项</span>
           <!-- 口径副文（#4）：动作来自 200 条日志采样窗口的 Top 失败，与状态条的「今日失败」不同源；
                只写在 title，不占可见行。卡头不挂条数徽章（2026-10-22 用户「右上角的 4 不要」）。 -->
-          <span class="mk-card__meta" title="动作来自 200 条日志采样窗口的 Top 失败，按失败数排序。与状态条的「今日失败」不同源">近 7 天</span>
+          <span class="mk-card__meta">近 7 天</span>
         </div>
         <div class="ov-card__body">
           <div class="ranklist">
@@ -342,7 +340,7 @@ import {
   recentActivityText, type LiveOverviewFull
 } from './live';
 import OvBars from './OvBars.vue';
-import { closureSourceText, closureTrackText } from './statusText';
+import { closureTrackText } from './statusText';
 import { adminDashboardApi, adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkPageHead from '@/components/mk/MkPageHead.vue';
 import MkKpi from '@/components/mk/MkKpi.vue';
@@ -351,7 +349,7 @@ import type { MkStatItem } from '@/components/mk/MkStatStrip.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import { useSafePolling } from '@/composables/useSafePolling';
-import { failureRateTone, FAILURE_RATE_THRESHOLD_NOTE } from './rate-utils'
+import { failureRateTone } from './rate-utils'
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -387,7 +385,7 @@ type LoopExtraState = 'loading' | 'ready' | 'failed';
 const teachState = ref<LoopExtraState>('loading');
 const memState = ref<LoopExtraState>('loading');
 /** P2 异常→动作闭环：五环各接深链（跳目标页 scene），点击行为与 title 同步披露 */
-interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string; scene: string; failN?: number; ringFailed?: boolean }
+interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title?: string; scene: string; failN?: number; ringFailed?: boolean }
 const loopStages = computed<LoopStage[]>(() => {
   const d = data.value;
   const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
@@ -404,7 +402,6 @@ const loopStages = computed<LoopStage[]>(() => {
       name: '路径规划', meta: '生成阶段化学习路径',
       val: `${d?.loop.pathsActive ?? 0} 进行中`, tone: pathsFailed > 0 ? 'alert' : 'done',
       failN: pathsFailed > 0 ? pathsFailed : undefined,
-      title: `进行中路径 ${d?.loop.pathsActive ?? 0} · 失败 ${pathsFailed}`,
       scene: 'learning-paths',
     },
     {
@@ -561,14 +558,8 @@ const closureKpi = computed(() => {
   const unmarkedLabel = closureTrackText('legacy')
   const hintParts = [`真实 ${human}`, `虚拟 ${virtual}`]
   if (unmarked > 0) hintParts.push(`${unmarkedLabel} ${unmarked}`)
-  const sourceParts = Object.entries(s.bySource)
-    .sort((a, b) => b[1] - a[1])
-    .map(([key, n]) => `${closureSourceText(key)} ${n}`)
   const titleParts = [
-    `完成事件统一观测（#105）：任务完成事件按轨道分列——真实 ${human} · 虚拟学习者 ${virtual}${unmarked > 0 ? ` · ${unmarkedLabel} ${unmarked}` : ''}。`,
-    unmarked > 0 ? `${unmarkedLabel}为 2026-10-18 前没有轨道标记的历史完成记录，不回填、不猜。` : '',
-    sourceParts.length ? `通道构成：${sourceParts.join(' · ')}。` : '',
-    '本卡含虚拟学习者与测试账号，与上方真实口径 KPI 不同源；读数以已投影收束事件为准。',
+    '本卡含虚拟学习者与测试账号，与上方真实口径 KPI 不同源。',
   ].filter(Boolean)
   return {
     label: '完课量',
@@ -656,7 +647,6 @@ const statusAction = computed(() => {
   if (statusActionOf(health.value?.headline || '') === 'investigate-today') {
     return {
       label: '去排查',
-      title: '打开执行日志（级别 = 失败 · 今天），看这批失败调用',
       run: investigateTodayFailures
     }
   }
@@ -703,20 +693,8 @@ const simHeadline = computed(() => {
 })
 const simTitle = computed(() => {
   const parts: string[] = ['虚拟学习者 / 仿真运行情况（仅统计虚拟学习者与测试账号）']
-  if (liveVirtualStatsError.value) {
-    parts.push(`统计加载失败：${liveVirtualStatsError.value}`, '进入「虚拟学习者」页可重试')
-  } else if (!liveVirtualStatsLoaded.value) {
-    parts.push('统计加载中…')
-  } else {
-    const r = runStats.value
-    parts.push(
-      `总会话 ${r.totalSessions}`,
-      `已完成 ${r.completed}`,
-      `系统失败 ${r.failed}`,
-      `人为终止 ${r.abandoned}`,
-      `进行中 ${r.running}`
-    )
-  }
+  if (liveVirtualStatsError.value) parts.push(`统计加载失败：${liveVirtualStatsError.value}`)
+  else if (!liveVirtualStatsLoaded.value) parts.push('统计加载中…')
   return parts.join(' · ')
 })
 
@@ -758,38 +736,31 @@ const vlTiles = computed<MkStatItem[]>(() => {
     {
       label: '学习者',
       value: vlValue(String(r.profileCount)),
-      title: '虚拟学习者档案总数（含测试账号）'
+      title: '含测试账号'
     },
     {
       label: '在跑会话',
-      value: vlValue(String(s.running)),
-      title: '状态为运行中、尚未进入终态的仿真会话数'
+      value: vlValue(String(s.running))
     },
     {
       label: '自动驾驶并发',
       value: vlValue(`${c.used}/${c.limit}`),
-      tone: ready && c.used >= c.limit ? 'warn' : '',
-      // 「运行中」是 running 的禁用私译（术语单源守卫）：这里是并发占用量，改用「在跑」表述
-      title: `自动驾驶全局并发：当前 ${c.used} 个在跑，配额上限 ${c.limit} 个`
+      tone: ready && c.used >= c.limit ? 'warn' : ''
     },
     {
       label: '无响应会话',
       value: vlValue(String(r.staleCount)),
-      tone: ready && r.staleCount > 0 ? 'warn' : '',
-      title: '运行中超过回收阈值仍没有新写入的会话数，可在虚拟学习者页回收'
+      tone: ready && r.staleCount > 0 ? 'warn' : ''
     },
     {
       label: '完成率',
-      value: vlValue(hasSessions ? vlPct(r.completionRate) : '—'),
-      title: hasSessions ? `已完成会话 / 全部会话（全部 ${r.totalSessions} 条）` : '暂无会话，完成率没有分母'
+      value: vlValue(hasSessions ? vlPct(r.completionRate) : '—')
     },
     {
       label: '系统失败率',
       value: vlValue(hasSessions ? vlPct(r.systemFailureRate) : '—'),
       tone: ready && hasSessions && failTone !== 'muted' ? failTone : '',
-      title: hasSessions
-        ? `系统与上游失败 / 全部会话。管理员手动停止等人为终止单独统计，占 ${vlPct(r.humanTerminatedRate)}。${FAILURE_RATE_THRESHOLD_NOTE}`
-        : '暂无会话，失败率没有分母'
+      title: '人为终止不计入'
     }
   ]
 })

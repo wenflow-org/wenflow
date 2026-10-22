@@ -10,8 +10,6 @@
           新建字段请直接编辑编排文件，保存后立即生效（已有行修改见「不一致报告」）。
         </p>
         <p class="fdp__guide-file"><span class="mono">prompts/orchestration/{{ stage }}.yaml</span></p>
-        <p class="fdp__guide-text">入口：<strong>「字段路由」页顶部「编排文件」按钮</strong>，在文本框中按现有结构追加
-          <code class="mono">fields:</code> / <code class="mono">routings:</code> 条目后点击「{{ TERMS.saveToFile }}」。</p>
       </div>
     </details>
 

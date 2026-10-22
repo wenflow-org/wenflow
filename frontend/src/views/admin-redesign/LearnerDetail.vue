@@ -59,7 +59,6 @@
         class="mk-filter__select ld-scope__select"
         :value="scopePathId"
         :disabled="pathOptionsLoading || !pathOptions.length"
-        :title="scopeNote.title"
         @change="scopePathId = ($event.target as HTMLSelectElement).value"
       >
         <option v-if="!pathOptionsLoading && !pathOptions.length" value="" disabled>该学习者暂无学习路径</option>
@@ -69,10 +68,6 @@
       </select>
       <!-- 路径选项加载态走共享原语（select 内放不下组件），转圈挂在其后：select 不被挤位 -->
       <MkLoading v-if="pathOptionsLoading" inline min />
-      <span
-        class="ld-scope__hint"
-        title="「记忆与复习」不随此处切换：每个概念只保留一条记忆痕迹（记在最后写入的那条路径上），按路径切会漏掉在别的路径学过的概念。「行为基线与互动」按账号整体统计，不含路径概念。跨全部路径的教学会话在平台「教学会话」页。"
-      >概念掌握 · 证据 · 图谱 · 教学会话 随此切换，记忆与行为基线不变</span>
     </div>
 
     <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
@@ -117,7 +112,7 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">概念掌握</h3>
-            <span class="mk-card__meta" :title="scopeNote.title">{{ conceptBars.length }} 个概念 · {{ scopeNote.label }}</span>
+            <span class="mk-card__meta">{{ conceptBars.length }} 个概念 · {{ scopeNote.label }}</span>
           </div>
           <!-- T2 硬约束 2：结论行常驻（数字全部由现有 conceptBars 的 tone 派生，未新增判断） -->
           <p v-if="conceptBars.length" class="mk-section__conclusion">
@@ -436,7 +431,7 @@
           <h3 class="mk-card__title">全局信号与背景</h3>
           <!-- 口径纠错：原 title 写「跨全部学习路径汇总」，实测数据源是当前路径的会话与学习证据
                （sessions/learner_evidence 均按 pathId 过滤）+ 该学习者全部记忆痕迹，不是跨全部路径 -->
-          <span class="mk-card__meta" :title="`${scopeNote.title}\n掌握情况为概念掌握规模`">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
+          <span class="mk-card__meta">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
         </div>
         <div class="ld-sigbody">
           <div class="ld-sig-sec">
@@ -698,7 +693,7 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">知识图谱</h3>
-          <span v-if="graphMeta" class="mk-card__meta" :title="scopeNote.title">
+          <span v-if="graphMeta" class="mk-card__meta">
             <template v-if="graphMeta.truncated">{{ GRAPH_TRUNCATED_NOTE }} {{ graphMeta.totalConcepts }} 个 · </template>
             {{ scopeNote.label }}
           </span>
@@ -831,7 +826,7 @@
       <section v-if="memoryPaneRows.length" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">{{ MEMORY_PANE_TITLE }}</h3>
-          <span class="mk-card__meta" :title="memMetaTitle">{{ memMetaText }}</span>
+          <span class="mk-card__meta">{{ memMetaText }}</span>
         </div>
         <!-- 视角（按复习状态分档）：把「待复习」这一档单独拎出来看，是这张表唯一的可动作子集。
              操作列已撤（2026-10-11）：后端无单点复习接口，每行按钮都是同一个学习者级深链、
@@ -1305,12 +1300,11 @@ const ldSessionMetaText = computed(() => {
   return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length}`
 })
 const ldSessionMetaTitle = computed(() => {
-  const base =
-    `${scopeNote.value.title}\n该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）。有效表示有教学内容，已废弃表示学习者重新开始后作废的旧会话。`
+  const base = `该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）`
   // 里程碑串档只在跨路径时存在：切到单条路径后档位天然同源，不必再告警
   return scopePathId.value
     ? base
-    : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档（「路径范围」选单条路径即无此串档）。`
+    : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档。`
 })
 
 /* ---------- 阶段切换器（用户诉求「切换学习者不同阶段」）----------
@@ -2663,12 +2657,6 @@ const memMetaText = computed(() => {
      与页内「路径范围」无关，读错会漏掉在另一条路径学过的概念。 */
   return `${base} · ${allPathsScope.value.label}`
 })
-const memMetaTitle = computed(() => {
-  const overdue = memoryPaneRows.value.filter((r) => r.overdue).length
-  return `记忆强度即可提取率（现在能想起来的概率）。待复习为已到复习期（${overdue} 条）。稳固≥80% 且未到期。未初始化为尚无记忆痕迹。` +
-    `\n本块与「路径范围」无关，按学习者聚合：` +
-    `一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。`
-})
 
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
 const trendBadge = computed(() => (d.value?.trend === 'up' ? 'mk-badge--ok' : d.value?.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))
@@ -2970,7 +2958,6 @@ const snapshotHint = computed(() =>
   padding-bottom: 4px;
   line-height: 1.2;
 }
-.ld-scope__hint { font-size: 12px; color: var(--mk-faint); padding-left: 10px; border-left: 1px solid var(--mk-line); }
 /* 表格不做全出血：末行底边此前贴死卡底（实测仅剩 1px 边框），补 12px 收尾（同卡头下节奏） */
 #ld-panel-sessions .mk-table-scroll,
 #ld-panel-memory .mk-table-scroll { padding-bottom: 12px; }
