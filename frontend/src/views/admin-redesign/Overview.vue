@@ -39,12 +39,14 @@
         @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
       />
       <!-- 完课量（#105 读侧接入，2026-10-19）：收束事件统一观测的按轨拆分，
-           点卡进教学会话页看逐条轨道/通道。与上方四卡不同源（含虚拟/测试），
-           卡自身以 hint 的「真实 / 虚拟 / 未标记」分解消灭同屏不同源。 -->
+           点卡进教学会话页看逐条轨道/通道。与上方四卡不同源（含虚拟/测试）。
+           2026-10-21 用户「五个就一个有，也不要了，直接把这个做到上面」：五卡里只有本卡
+           带副行，整排被抬高一档——分解移到数值行内（valueNote），副行只留给取数三态。 -->
       <MkKpi
         clickable
         :label="closureKpi.label"
         :value="closureKpi.value"
+        :value-note="closureKpi.note"
         :hint="closureKpi.hint"
         :hint-tone="closureKpi.hintTone"
         :title="closureKpi.title"
@@ -159,7 +161,9 @@
       <div class="mk-card">
         <div class="mk-card__head">
           <span class="mk-card__title">Skill 调用量 Top 5</span>
-          <span class="mk-card__meta">近 7 天 · 仅真实账号（含管理员发起的仿真任务）</span>
+          <!-- 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：卡头 meta 只留时间窗，
+               账号口径（仅真实账号 / 含管理员发起的仿真任务）进 title -->
+          <span class="mk-card__meta" title="仅真实账号（含管理员发起的仿真任务）">近 7 天</span>
         </div>
         <div class="ov-card__body">
           <div class="ranklist">
@@ -204,7 +208,7 @@
           <!-- 口径副文（#4）：动作来自 200 条日志采样窗口的 Top 失败，与状态条的「今日失败」不同源。
                不写「取前 2」（评审 2026-10-10）：句尾数字与右侧计数徽章连读成「两个 2」，
                条数语义由徽章独占，口径只说排序规则 -->
-          <span class="mk-card__meta">近 7 天 · 按失败数排序</span>
+          <span class="mk-card__meta" title="动作来自 200 条日志采样窗口的 Top 失败，按失败数排序。与状态条的「今日失败」不同源">近 7 天</span>
           <span v-if="todoItems.length" class="pill pill--warn"><span class="pill__dot"></span>{{ todoItems.length }}</span>
         </div>
         <div class="ov-card__body">
@@ -234,7 +238,6 @@
       <div class="mk-card ov-card--vl">
         <div class="mk-card__head">
           <span class="mk-card__title">虚拟学习者</span>
-          <span class="mk-card__meta">仅虚拟学习者与测试账号</span>
           <span class="mk-card__head-right">
             <button type="button" class="mk-btn mk-btn--sm" @click="jump('virtual-learners')">进入 →</button>
           </span>
@@ -256,7 +259,7 @@
       <div class="mk-card ov-card--chart">
         <div class="mk-card__head">
           <span class="mk-card__title">近 7 天活跃学习者</span>
-          <span class="mk-card__meta">单位：人 · 每日活跃</span>
+          <span class="mk-card__meta">单位：人</span>
           <span class="mk-card__head-right">
             <button type="button" class="mk-btn mk-btn--sm" @click="jump('people')">用户与学习者 →</button>
           </span>
@@ -543,6 +546,7 @@ const closureKpi = computed(() => {
     return {
       label: '完课量',
       value: '—',
+      note: '',
       hint: closureState.value === 'error' ? '读数加载失败' : '读数加载中…',
       hintTone: (closureState.value === 'error' ? 'warn' : '') as '' | 'warn',
       title: '完课量：收束事件的统一观测（#105）——任务完成按真实 / 虚拟学习者拆分',
@@ -567,7 +571,9 @@ const closureKpi = computed(() => {
   return {
     label: '完课量',
     value: `${s.total}`,
-    hint: hintParts.join(' · '),
+    /* 分解挂在数值行内，不再单独占一行（2026-10-21） */
+    note: hintParts.join(' · '),
+    hint: '',
     hintTone: '' as const,
     title: titleParts.join(''),
   }
@@ -1243,22 +1249,40 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 .ov-card--vl .ov-card__body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
 .ov-vl__strip {
   flex: 1; min-height: 0;
-  /* 六格固定列数：共享原语是 auto-fit minmax(150px,1fr)，卡宽随视口在 1900/2560 两档
-     分别落到 3 列与 5 列——6 格会变成 5+1（半行吊着一格）。本卡自定列数：
-     常规三列（两行整齐）；4K 档改六列一行铺满——4K 下卡宽 ≈1100，三列会让每格 370px
-     而读数仍贴左，正是「看着空」的成因。六列阈值按卡宽反推：视口 3300 − 侧栏 280 − 内衬
-     ≈ 卡宽 990，六列每格 ≈165px（标签不挤）。
-     注意：本卡根节点就是 .mk-stat-strip--grid（类名由父组件透传），故列数写在 .ov-vl__strip 上；
-     写成 `.ov-vl__strip :deep(.mk-stat-strip--grid)` 会去匹配「后代的同名前缀元素」而失效。 */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  row-gap: 14px;
+  /* 2026-10-22 用户「布局重新设计」：六格 3×2 大字块在同排三卡里显得空，
+     改为两列键值行（标签左 / 数值右），三行把卡高自然填满。
+     数据仍是同一组六项，三态与 title 口径不变；共享原语的 3 列 auto-fit 不再适用，
+     列数写在本卡根节点上。 */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(44px, 1fr);
+  column-gap: 18px;
+  row-gap: 0;
 }
-.ov-vl__strip :deep(.mk-stat) { align-content: center; }
+.ov-vl__strip :deep(.mk-stat) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-right: 0;
+  border-bottom: 1px solid var(--mk-line);
+}
+/* 末行两格不留底边；奇偶列用一条竖线分开 */
+.ov-vl__strip :deep(.mk-stat:nth-last-child(-n + 2)) { border-bottom: 0; }
+.ov-vl__strip :deep(.mk-stat:nth-child(even)) { border-left: 1px solid var(--mk-line); padding-left: 14px; }
+.ov-vl__strip :deep(.mk-stat:nth-child(odd)) { padding-right: 14px; }
 .ov-vl__strip :deep(.mk-stat:first-child) { padding-left: 0; }
-/* 末列去分隔线与右内衬：原语只对 :last-child 去掉，三/六列下第 3 格会留一条悬空竖线 */
-.ov-vl__strip :deep(.mk-stat:nth-child(3n)) { border-right: 0; padding-right: 0; }
+.ov-vl__strip :deep(.mk-stat__label) { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ov-vl__strip :deep(.mk-stat__value) { font-size: var(--mk-fs-emphasis); white-space: nowrap; }
+.ov-vl__strip :deep(.mk-stat:first-child .mk-stat__value) { font-size: 22px; }
+/* 4K：卡宽 ≈1100，两列会让标签与数值隔 500px；改三列两行，仍保持键值行形态 */
 @media (min-width: 3300px) {
-  .ov-vl__strip { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .ov-vl__strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ov-vl__strip :deep(.mk-stat:nth-child(even)) { border-left: 0; padding-left: 0; }
+  .ov-vl__strip :deep(.mk-stat:nth-child(3n + 2)),
+  .ov-vl__strip :deep(.mk-stat:nth-child(3n)) { border-left: 1px solid var(--mk-line); padding-left: 14px; }
+  .ov-vl__strip :deep(.mk-stat:nth-last-child(-n + 2)) { border-bottom: 1px solid var(--mk-line); }
+  .ov-vl__strip :deep(.mk-stat:nth-child(n + 4)) { border-bottom: 0; }
 }
 /* 卡底一行状态：加载中/失败/当日读数三态同占位，不因状态不同让卡高抖动 */
 .ov-vl__state {
