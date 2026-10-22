@@ -371,7 +371,10 @@ const topSub = computed(() => {
     if (parentPage && parentPage !== topTitle.value) return parentPage
     return currentScene.value?.group ?? ''
   }
-  return currentScene.value?.group ?? ''
+  /* L1：副行＝分组；分组名与页面同名时留空（2026-10-23 走查：虚拟学习者页出现过
+     「虚拟学习者 / 虚拟学习者」的头——同详情页「沈奕航 / 沈奕航」同一条判例） */
+  const group = currentScene.value?.group ?? ''
+  return group === currentScene.value?.label ? '' : group
 })
 
 const searchHits = computed(() => {

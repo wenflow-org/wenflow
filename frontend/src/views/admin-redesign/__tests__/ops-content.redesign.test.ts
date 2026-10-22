@@ -212,12 +212,12 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(ths.slice(0, 6)).toEqual(['路径', '用户', '状态', '预计时长', '进度', '最近活动']);
     expect(ths.at(-1)).toBe('操作');
 
-    // 路径列副行 = 主题（仅 subject≠title 时；P2-6）+ 短 ID，不夹带难度/时长
+    // 路径列副行 = 主题（仅 subject≠title 时；P2-6），不夹带难度/时长；
+    // 2026-10-23 走查后内部短 ID 也撤了（截断后不可读、也不可复制）
     const subs = w.findAll('tbody tr td:first-child .mk-cell-sub').map((s) => s.text());
     expect(subs.every((s) => !/入门|进阶|高阶|~?\d+h/.test(s))).toBe(true);
     expect(subs[0]).toContain('这是一段很长的学习目标描述');
-    expect(subs[1]).toContain('lp_d1');
-    expect(subs[3]).toContain('lp_d2');
+    expect(subs.join(' ')).not.toContain('lp_');
 
     // 难度默认收起：从「列」菜单打开后再验证三态归一
     const colsBtn = w.findAll('button').find((b) => b.text() === '列')!;

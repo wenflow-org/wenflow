@@ -25,7 +25,8 @@
          现在一行一组：能力 / 成员 / 模型路由 / 最近调用 / 操作；降级行为收进行悬停。 -->
     <div class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">插件</h3>
+        <!-- 2026-10-23 走查：卡头不复述页名（「插件」页里再挂一枚「插件」标题） -->
+        <h3 class="mk-card__title">可选能力</h3>
         <span class="mk-card__meta">{{ pluginRows.length }} 组 · {{ pluginMemberCount }} 个 Skill</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">

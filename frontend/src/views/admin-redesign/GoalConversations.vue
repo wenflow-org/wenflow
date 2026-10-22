@@ -184,12 +184,13 @@
             <tr v-for="r in paged" :key="r.id" tabindex="0" @click="openDetail(r)" @keydown.enter.self.prevent="openDetail(r)">
               <td v-if="showCol('summary')">
                 <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID。
+                     2026-10-23 走查：会话 ID 副行撤除——它是内部键，本页搜索也不匹配 ID，
+                     截图里逐行 `gc_1792…` 只增噪点；ID 只在排障时从日志取用。
                      列序统一（2026-10-03）：主体列恒在首（同 TS 会话/OC 路径/MR 学习者），用户列随后。
                      摘要改两行档 .mk-cell-text--wrap（2026-10-03 用户反馈「截断到看不清含义」）：
                      单行 320px 只露出 ~24 字，两行档保留语义骨架（同虚拟学习者倾向列判例） -->
                 <div class="mk-cell-main">
                   <strong class="mk-cell-text--wrap" :title="r.summary">{{ r.summary }}</strong>
-                  <span class="mk-cell-sub mono" :title="`目标对话 ID ${r.id}`">{{ r.id }}</span>
                 </div>
               </td>
               <td>

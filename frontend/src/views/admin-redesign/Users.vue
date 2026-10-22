@@ -136,12 +136,14 @@
                 <MkCellAvatar :name="u.name" :tone="avaTone(u)" />
                 <div class="mk-cell-main">
                   <strong :title="u.name">{{ u.name }}</strong>
-                  <!-- 原型 celluser meta 模式：等级 · N 条路径（XP 细节进悬停）。
+                  <!-- 原型 celluser meta 模式：等级（XP 细节进悬停）。
+                       2026-10-23 走查：路径条数不再在副行复述——同一读数已在「路径 / 课堂」列
+                       给全且可排序，副行只说等级。
                        等级词汇单点（learner-profile.ts）：统一「L2 · 进阶」并存格式 -->
                   <span
                     class="mk-cell-sub"
                     :title="u.xp === 0 ? '尚无经验值' : `${u.xp} XP · 距 L${levelFromXp(u.xp) + 1} 还需 ${xpToNext(u.xp)}`"
-                  >{{ levelBadgeZh(u.xp, u.currentLevel) }} · {{ u.paths }} 条路径</span>
+                  >{{ levelBadgeZh(u.xp, u.currentLevel) }}</span>
                 </div>
                 <div class="ul-tags">
                   <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>

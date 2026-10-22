@@ -140,7 +140,9 @@
                   <MkCellAvatar :name="row.name" :tone="row.isVirtualLearner ? 'virtual' : 'default'" />
                   <div class="mk-cell-main">
                     <strong>{{ row.name || '未命名' }}</strong>
-                    <span class="mk-cell-sub">{{ shortId(row.userId) }}</span>
+                    <!-- 2026-10-23 走查：副行原为截断的内部 userId（user_9f559a6…abf073），
+                         既不可读也不能检索；改与其它列表同口径显示邮箱，无邮箱才退回短 id -->
+                    <span class="mk-cell-sub" :title="row.email || row.userId">{{ row.email || shortId(row.userId) }}</span>
                   </div>
                 </div>
               </td>

@@ -124,7 +124,7 @@
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
-          <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱 / ID" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱" title="也支持按会话 ID 搜索" />
           <!-- 口径切换/刷新加载反馈（2026-10-06 审核 F2-3）：列表接口实测可滞后数秒，
                此前全程无加载提示；这里给一处文字化「正在加载」（MkLoading 共享原语，
                含 role=status）。常驻卡头，切换口径时位置不跳。 -->

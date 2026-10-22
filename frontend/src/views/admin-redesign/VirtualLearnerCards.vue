@@ -86,7 +86,9 @@
           </div>
         </div>
         <div class="mk-card__head-right">
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 卡号 / 目标 / 标签" />
+          <!-- 占位符收短到框内可完整显示（2026-10-23 走查：原 4 项在 200px 框里被切成
+               「搜索名称 / 卡号 / 目标 /」的悬空斜杠）；未显示的字段进 title，搜索仍在用 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 卡号 / 目标" title="也支持按标签 / 邮箱搜索" />
         </div>
       </div>
 

@@ -163,7 +163,8 @@
                   <!-- P2-6（2026-10-04 全站评审）：独立「主题」列退役——91% 行与路径列同文
                        （库内 885/951），改作路径副行且仅当 subject≠title 渲染（28/312 行有真增量） -->
                   <span v-if="p.subject && p.subject !== p.title" class="mk-cell-sub" :title="p.subject">{{ p.subject }}</span>
-                  <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }}</span>
+                  <!-- 2026-10-23 走查：内部路径 ID（lp_1792…）副行撤除——截断后既不可复制也不可读，
+                       本页搜索虽支持 ID，但 ID 的真实来源是日志，不在列表里认。 -->
                 </div>
               </td>
               <td v-if="!hiddenCols.has('user')">
@@ -273,7 +274,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { timeAgo, errMsg, shortId, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { timeAgo, errMsg, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkPageHead from '@/components/mk/MkPageHead.vue'

@@ -357,8 +357,8 @@
         icon="◌"
         :title="emptyTitle"
         :description="emptyDesc"
-        :action-text="isFiltered ? '清除筛选，放宽到全部时间' : ''"
-        @action="clearFilterToAll"
+        :action-text="emptyActionText"
+        @action="emptyAction"
       />
       <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
       </div>
@@ -1085,8 +1085,20 @@ const emptyDesc = computed(() =>
     ? `完整值为 ${traceMiss.value}：可能已超出日志保留期，或复制的 ID 不完整。`
     : isFiltered.value
       ? '当前筛选组合下没有命中的日志。清除筛选并放宽时间范围（全部）通常就能看到数据。'
-      : ''
+      : timeRange.value === 'today'
+        ? '今天还没有执行记录。'
+        : ''
 )
+/** 空态动作：有筛选 → 清筛选并放宽到全部；默认「今天」为空 → 直接切到近 7 天。
+    侧栏失败角标统计的是近 7 天（近 200 条样本），若只给「暂无日志」会被读成角标与页面打架 */
+const emptyActionText = computed(() =>
+  isFiltered.value ? '清除筛选，放宽到全部时间' : timeRange.value === 'today' ? '查看近 7 天' : ''
+)
+function emptyAction() {
+  if (isFiltered.value) return clearFilterToAll()
+  timeRange.value = 'week'
+  onTimeRangeChange()
+}
 /** 空态逃生动作：清全部筛选 + 时间范围放宽到「全部」——窄时间窗/筛选态无日志时的最小代价出口 */
 function clearFilterToAll() {
   testFilter.value = ''
