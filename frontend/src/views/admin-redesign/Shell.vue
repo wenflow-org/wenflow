@@ -823,11 +823,7 @@ watch(
 .mshell__item-badge--alarm {
   background: var(--mk-red-bg-strong);
   color: var(--mk-red-strong);
-  animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
-}
-@keyframes mshell-alarm-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-red-fill) 32%, transparent); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-red-fill) 0%, transparent); }
+  /* 2026-10-22 用户：不要闪烁特效；告警只靠红底/红字表达 */
 }
 
 /* 左侧底部：收起/展开导航一行（原型 .side__foot = 单个 nav__item）。
