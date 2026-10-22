@@ -15,7 +15,8 @@ export function buildLessonWrapup(detail: Record<string, unknown> | null) {
   const evidence = (w.evidence || {}) as Record<string, unknown>
   const progress = (w.progress || {}) as Record<string, unknown>
   const learner = (w.learner || {}) as Record<string, unknown>
-  const knowledgeItems = Array.isArray(summary.knowledgeItems) ? summary.knowledgeItems as Array<{ name: string; status: string; progress: number; evidence: string }> : []
+  // evidenceUnverified：wrapup skill 找不到回链证据时给该点打的标记（#134——此前全库零读取方）
+  const knowledgeItems = Array.isArray(summary.knowledgeItems) ? summary.knowledgeItems as Array<{ name: string; status: string; progress: number; evidence: string; evidenceUnverified?: boolean }> : []
   const confusionPoints = Array.isArray(evidence.topConfusionPoints) ? evidence.topConfusionPoints as string[] : []
   const highlights = (summary.evaluationHighlights || {}) as Record<string, unknown>
   const emotions = (evidence.emotionalSignals || {}) as Record<string, unknown>

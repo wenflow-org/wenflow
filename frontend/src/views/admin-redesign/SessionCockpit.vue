@@ -594,6 +594,8 @@
                       <div v-for="k in lessonWrapup.knowledgeItems" :key="k.name" class="cp-lesson-wrapup__kp">
                         <span class="cp-lesson-wrapup__kp-name">{{ k.name }}</span>
                         <span class="cp-lesson-wrapup__kp-status" :class="`is-${k.status}`">{{ { mastered: '已掌握', learning: '学习中', review: '待复习' }[k.status] || k.status }}</span>
+                        <!-- #134：wrapup skill 未找到回链证据时打的标记，首次有读取方（此前全库零消费） -->
+                        <span v-if="k.evidenceUnverified" class="cp-lesson-wrapup__kp-unverified" title="收束时未找到该点的课内回链证据，掌握结论未经核实">证据未核实</span>
                         <!-- 单值进度条走共享原语 .mk-minibar（原 .cp-lesson-wrapup__kp-bar 是它的逐字重写：
                              同 6px / 999px / --mk-minibar-bg，只是没挂原语类） -->
                         <span class="mk-minibar"><i class="mk-minibar__fill" data-tone="ok" :style="{ width: (k.progress || 0) + '%' }"></i></span>
@@ -3727,6 +3729,13 @@ async function copyRawJson() {
 .cp-lesson-wrapup__kp-status.is-mastered { background: var(--mk-green-bg); color: var(--mk-green); }
 .cp-lesson-wrapup__kp-status.is-learning { background: var(--mk-blue-bg); color: var(--mk-blue); }
 .cp-lesson-wrapup__kp-status.is-review { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.cp-lesson-wrapup__kp-unverified {
+  font-size: var(--mk-fs-micro);
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--mk-surface-2);
+  color: var(--mk-faint);
+}
 /* 进度条本体已走 .mk-minibar（尺寸/轨道/填充/暗色都在原语里），此处不再重写 */
 
 /* 评估 */
