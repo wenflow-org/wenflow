@@ -3,7 +3,6 @@ import express from 'express';
 import { z } from 'zod';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import {
-  findGoalConversationForPathSummary,
   findOwnedLearningPathById,
   findLearningPathById,
   findLearningPathWithMilestones,
@@ -15,11 +14,15 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middleware';
 import { logger } from '../utils/logger';
 import pathOrchestrator from '../coordinators/path.coordinator';
-import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
-import { resolveLearnerLoadProfileFromCollectedData } from '../services/learning/learner-load-profile';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 import { openSessionClearanceService } from '../services/learning/open-session-clearance.service';
 import { applyPathStructuralEdit, type PathStructuralEditInput } from '../services/learning/path-structural-edit.service';
+import {
+  buildGoalPathRequestFromConversation,
+  buildStoredGoalPathRequest,
+  extractStoredSourceConversationId,
+  parsePromptTemplate,
+} from '../services/learning/path-regeneration.service';
 import { conceptGraphService } from '../services/learner/concept-graph.service';
 import { setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 
@@ -104,133 +107,6 @@ const stripPathGenerationInternals = (path: any) => {
     }
   }
   return safePath;
-};
-
-const extractStoredSourceConversationId = (aiPromptTemplate?: string | null): string | undefined => {
-  if (!aiPromptTemplate) return undefined;
-
-  try {
-    const parsed = JSON.parse(aiPromptTemplate);
-    const handoffInputId = typeof parsed?.goalFinalPayload?.sourceConversationId === 'string'
-      ? parsed.goalFinalPayload.sourceConversationId
-      : null;
-    if (handoffInputId) return handoffInputId;
-
-    const normalizedInputId = typeof parsed?.normalizedInput?.sourceConversationId === 'string'
-      ? parsed.normalizedInput.sourceConversationId
-      : null;
-    if (normalizedInputId) return normalizedInputId;
-
-    const generationStatusId = typeof parsed?.generationStatus?.sourceConversationId === 'string'
-      ? parsed.generationStatus.sourceConversationId
-      : null;
-    if (generationStatusId) return generationStatusId;
-
-    const directId = typeof parsed?.sourceConversationId === 'string'
-      ? parsed.sourceConversationId
-      : null;
-    if (directId) return directId;
-  } catch {
-    // Ignore malformed historical prompt templates.
-  }
-
-  return undefined;
-};
-
-const parsePromptTemplate = (aiPromptTemplate?: string | null): Record<string, any> | null => {
-  if (!aiPromptTemplate) return null;
-  try {
-    const parsed = JSON.parse(aiPromptTemplate);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-};
-
-const buildStoredGoalPathRequest = (path: {
-  id: string;
-  userId: string;
-  description?: string | null;
-  aiPromptTemplate?: string | null;
-}, adjustments?: string | null) => {
-  const parsed = parsePromptTemplate(path.aiPromptTemplate);
-  const goalFinalPayload = parsed?.goalFinalPayload && typeof parsed.goalFinalPayload === 'object'
-    ? parsed.goalFinalPayload
-    : null;
-
-  if (!goalFinalPayload) {
-    return null;
-  }
-
-  return {
-    userId: path.userId,
-    source: 'goal' as const,
-    mode: 'generate' as const,
-    sourceConversationId: typeof goalFinalPayload.sourceConversationId === 'string' ? goalFinalPayload.sourceConversationId : undefined,
-    existingPathId: path.id,
-    rawGoal: typeof goalFinalPayload.rawGoal === 'string' && goalFinalPayload.rawGoal.trim()
-      ? goalFinalPayload.rawGoal
-      : (path.description || ''),
-    adjustments: typeof adjustments === 'string' && adjustments.trim() ? adjustments.trim() : null,
-    visibleSummary: goalFinalPayload.visibleSummary || null,
-    conversationHistory: Array.isArray(goalFinalPayload.conversationHistory) ? goalFinalPayload.conversationHistory : [],
-    finalUserVisible: typeof goalFinalPayload.finalUserVisible === 'string' ? goalFinalPayload.finalUserVisible : undefined,
-    prerequisiteCheckResults: Array.isArray(goalFinalPayload.prerequisiteCheckResults)
-      ? goalFinalPayload.prerequisiteCheckResults
-      : null,
-    goalHandoffFields: goalFinalPayload.goalHandoffFields && typeof goalFinalPayload.goalHandoffFields === 'object'
-      ? goalFinalPayload.goalHandoffFields
-      : undefined,
-  };
-};
-
-const buildGoalPathRequestFromConversation = async (path: {
-  id: string;
-  userId: string;
-  description?: string | null;
-  aiPromptTemplate?: string | null;
-}) => {
-  const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
-  const conversation = await findGoalConversationForPathSummary(sourceConversationId, path.id, path.userId);
-
-  if (!conversation) {
-    return null;
-  }
-
-  let collectedData: Record<string, any> = {};
-  try {
-    collectedData = JSON.parse(conversation.collectedData || '{}');
-  } catch {
-    collectedData = {};
-  }
-
-  const messages = Array.isArray(collectedData.messages) ? collectedData.messages : [];
-
-  return {
-    userId: conversation.userId,
-    source: 'goal' as const,
-    mode: 'generate' as const,
-    sourceConversationId: conversation.id,
-    existingPathId: path.id,
-    rawGoal: conversation.description || path.description || '',
-    visibleSummary: buildGoalPathVisibleSummary({
-      understanding: collectedData.understanding || {},
-      confirmedProposal: collectedData.confirmedProposal || null,
-      collected: collectedData.collected || {},
-    }),
-    conversationHistory: messages
-      .map((message: any) => ({
-        role: message?.role === 'user' ? 'user' : 'assistant',
-        content: typeof message?.content === 'string' ? message.content : ''
-      }))
-      .filter((message: { role: string; content: string }) => message.content),
-    finalUserVisible: typeof collectedData.finalUserVisible === 'string' ? collectedData.finalUserVisible : undefined,
-    structuredData: (collectedData as any)?.structuredData || null,
-    learnerLoadProfile: resolveLearnerLoadProfileFromCollectedData(collectedData),
-    prerequisiteCheckResults: Array.isArray(collectedData.understanding?.prerequisiteCheckResults)
-      ? collectedData.understanding.prerequisiteCheckResults
-      : null,
-  };
 };
 
 // 所有学习路由都需要认证

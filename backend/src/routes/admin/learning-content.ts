@@ -22,6 +22,8 @@ import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/
 import { logger } from '../../utils/logger';
 import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
+import { regeneratePathCoreFromStoredGoal } from '../../services/learning/path-regeneration.service';
+import { isPathMutationConflictError } from '../../services/learning/path-mutation-safety';
 
 const router = express.Router();
 
@@ -188,7 +190,25 @@ router.post('/paths/:id/retry-generation', async (req: Request, res: Response) =
 
     const session = await findLatestVirtualSessionForPath(path.id);
     if (!session) {
-      return res.status(409).json({ success: false, error: { message: '该路径没有关联的虚拟学习会话，无法重试生成', status: 409 } });
+      /* 真实学习者的路径没有虚拟会话（2026-10-22 修复）：退回学员端「重新生成」同一条链路——
+         目标画像回灌的 core 重建，避免后台冒出一个点了必然 409 的按钮。
+         只对真正失败的路径开放；生成中/已完成等状态仍按原口径拒绝。 */
+      if (path.status !== 'failed') {
+        return res.status(409).json({ success: false, error: { message: '该路径没有关联的虚拟学习会话，无法重试生成', status: 409 } });
+      }
+      try {
+        const run = await regeneratePathCoreFromStoredGoal(path);
+        setAuditAction(res, 'learning-content.retry-generation', { targetType: 'learning-path', targetId: path.id });
+        setAuditAfter(res, { pathId: path.id, title: path.title, retryType: 'core', runId: run.runId, mode: run.mode, success: true });
+        return res.json({ success: true, data: { success: true, retryType: 'core', runId: run.runId, mode: run.mode } });
+      } catch (fallbackError: any) {
+        const conflict = isPathMutationConflictError(fallbackError);
+        logger.warn('[admin-learning-content] 无虚拟会话，回退主结构重建失败', { pathId: path.id, error: fallbackError?.message });
+        return res.status(conflict ? 409 : 500).json({
+          success: false,
+          error: { message: fallbackError?.message || '重试路径生成失败', status: conflict ? 409 : 500 }
+        });
+      }
     }
 
     const result = await simulationCoordinator.runLeasedExclusive(session.id, async (assertLeaseOwned) => {
