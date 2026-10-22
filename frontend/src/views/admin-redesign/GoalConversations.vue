@@ -181,7 +181,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" tabindex="0" @click="goConsole(r)" @keydown.enter.self.prevent="goConsole(r)">
+            <tr v-for="r in paged" :key="r.id" tabindex="0" @click="openDetail(r)" @keydown.enter.self.prevent="openDetail(r)">
               <td v-if="showCol('summary')">
                 <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID。
                      列序统一（2026-10-03）：主体列恒在首（同 TS 会话/OC 路径/MR 学习者），用户列随后。
@@ -237,9 +237,10 @@
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="showCol('path')">
-                <!-- 原型 open-path 习惯：生成过的路径成跳转（2026-10-12 起落会话座舱 Path 页签）；后端未回 pathId 时回落徽章 -->
-                <button v-if="r.pathId" type="button" class="mk-btn mk-btn--sm" title="查看该目标的学习路径" @click.stop="openPathPage(r)">查看路径</button>
-                <span v-else-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
+                <!-- 2026-10-22 用户「查看路径和详细重复了」：两者都开 session-real 会话座舱，
+                     只是一个落 Path 页签、一个落默认页签。列只回答「路径有没有生成」，
+                     下钻统一走操作列「详情」，座舱内再切页签（TeachingSessions 同形态）。 -->
+                <span v-if="r.pathId || r.hasPath" class="mk-badge mk-badge--info" title="学习路径已生成">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="showCol('stageDate')">
@@ -256,7 +257,7 @@
                      2026-10-15 用户拍板「链路做到折叠里面」，链路不再是高频，与另两项同为低频矫正操作。
                      右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
                 <div class="mk-actions">
-                  <button type="button" class="mk-btn mk-btn--sm" title="打开只读详情" @click.stop="goConsole(r)">详情</button>
+                  <button type="button" class="mk-btn mk-btn--sm" title="打开只读详情" @click.stop="openDetail(r)">详情</button>
                   <div class="mk-menu">
                     <!-- aria-expanded 按行判定（2026-10-06 审核 #50）：此前绑全局 menuOpen，
                          菜单一开 15 个按钮同时报 expanded=true；role=menu/menuitem 兑现
@@ -298,12 +299,12 @@
 </template>
 
 <script lang="ts">
-/* G3a（2026-10-10）：列表态快照必须活过组件卸载——行点击「查看路径」进 PathDetail 二级页时
+/* G3a（2026-10-10）：列表态快照必须活过组件卸载——进会话座舱（行点击或操作列「详情」）时
    AdminConsole 互斥卸载本组件（<component :is> 无 KeepAlive，OpsContent.vue #39 同款场景），
    <script setup> 作用域的变量随实例销毁，故快照放模块级（本 <script> 块每模块只执行一次），
    才能跨「下钻 → 返回」存活。
    为什么不走 openSubPage 的 from：from.view 必须是 SubPageView 二级页类型，目标对话是
-   一级列表页没有合法值可填。consume-once：只服务「路径格下钻 → 返回列表」一个场景，
+   一级列表页没有合法值可填。consume-once：只服务「进详情 → 返回列表」一个场景，
    不落 localStorage（防跨会话残留旧筛选）；下钻后经侧栏去别的场景再回来的窄边角
    会消费一次旧快照，与 OpsContent 先例同口径，可接受。 */
 interface GcSavedListState {
@@ -833,20 +834,18 @@ const { goTrace, goConsole } = useSessionDrill(closeDetail)
  *  （2026-10-21 用户「右上角已经是真实了啊」同一判例：界面不重复控件状态） */
 const gcScopeSub = '与学习者澄清真实目标 · 约束条件与澄清轮次'
 
-/** 路径格 → 会话座舱的 Path 阶段页签（2026-10-12 拍板：路径不再有独立详情页）。
- *  行本身就是目标对话（r.id），直接开座舱并落 Path 页签，无需 id 反查。
+/** 进会话座舱（行点击 / 操作列「详情」共用；路径与对话同一座舱的不同页签）。
  *  G3a（2026-10-10）：目标对话是一级列表页，from.view 无合法 SubPageView 可填，
  *  改走列表态快照（判例 OpsContent.vue #39）：出站前存 page/筛选，返回重挂载时
  *  一次性读回——此前返回直接落「第 1 页 + 无筛选」的初值列表，翻页/筛选全丢。 */
-function openPathPage(r: Row) {
-  if (!r.pathId) return
+function openDetail(r: Row) {
   gcSavedListState = {
     page: page.value,
     keyword: keyword.value,
     statusFilter: statusFilter.value,
     noPathOnly: noPathOnly.value,
   }
-  openSubPage('session-real', r.id, { stage: 'path' })
+  goConsole(r)
 }
 
 async function regenerate(r: Row) {

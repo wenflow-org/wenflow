@@ -101,4 +101,15 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain('canJumpAway(item.id)')
     expect(src).toContain("'orchestration-steps',")
   })
+
+  it('目标对话：路径列只报生成状态，下钻只有「详情」一个入口', () => {
+    // 2026-10-22 用户「查看路径和详细重复了」：两者都开 session-real 座舱，
+    // 差别只是落 Path 页签还是默认页签。保留「详情」（座舱内切页签），路径列回到状态徽章。
+    const src = read('GoalConversations.vue')
+    expect(src).not.toMatch(/查看路径</)
+    expect(src).not.toContain('openPathPage')
+    expect(src).not.toContain("stage: 'path'")
+    expect(src).toContain('@click.stop="openDetail(r)"')
+    expect(src).toContain('@click="openDetail(r)"')
+  })
 })

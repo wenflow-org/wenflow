@@ -299,6 +299,16 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(w.findAll('button').some((b) => b.text() === '控制台')).toBe(false);
   });
 
+  /* 2026-10-22 用户「目标对话的查看路径，和详细，重复了」：两个按钮都开 session-real 座舱，
+     只是一个落 Path 页签、一个落默认页签。路径列改纯状态，下钻只留「详情」。 */
+  it('路径列只回答有没有生成：不再有与「详情」重复的「查看路径」按钮', async () => {
+    const w = await mountGoals();
+    expect(w.findAll('button').some((b) => b.text() === '查看路径')).toBe(false);
+    const rows = w.findAll('tbody tr');
+    expect(rows[1].text()).toContain('已生成');
+    expect(rows[0].text()).toContain('—');
+  });
+
   /* 2026-10-21 用户「右上角已经是真实了啊」+「其他地方也有这种文案」：页头副题不再复述视角，
      视角只由 .ds-toggle 表达（2026-10-04 的「副题随开关改口径」判例据此退役） */
   it('页头副题不随视角切换复述口径：真实/测试只由页头开关表达', async () => {
