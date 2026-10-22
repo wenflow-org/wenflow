@@ -151,8 +151,7 @@
           <tr>
             <th v-if="!lcHiddenCols.has('learner')" scope="col" class="lc-c-learner">学习者</th>
             <th v-if="!lcHiddenCols.has('progress')" scope="col" class="lc-c-progress">当前进度</th>
-            <th v-if="!lcHiddenCols.has('trend')" scope="col" class="lc-c-trend">趋势</th>
-            <th v-if="!lcHiddenCols.has('fatigue')" scope="col" class="lc-c-fatigue">疲劳</th>
+            <th v-if="!lcHiddenCols.has('status')" scope="col" class="lc-c-status" title="近况趋势 + 疲劳度">趋势 / 疲劳</th>
             <!-- 审核 #20（2026-10-06）：置信 / 更新接共享 useTableSort（Users.vue 同写法），
                  未点表头时保持默认序「风险优先 → 更新时间新→旧」（写进「操作」列表头 title） -->
             <th
@@ -197,13 +196,15 @@
                 <span class="mk-cell-sub" :title="r.path || '尚未开始学习'">{{ r.path || '尚未开始学习' }}</span>
               </div>
             </td>
-            <td v-if="!lcHiddenCols.has('trend')">
-              <span class="lc-trend" :class="`lc-trend--${r.trend}`" :title="trendTitle(r)">
-                <i class="lc-trend__arrow" aria-hidden="true">{{ r.trend === 'up' ? '↗' : r.trend === 'down' ? '↘' : '→' }}</i>
-                {{ trendText(r.trend) }}
-              </span>
+            <td v-if="!lcHiddenCols.has('status')">
+              <div class="lc-status">
+                <span class="lc-trend" :class="`lc-trend--${r.trend}`" :title="trendTitle(r)">
+                  <i class="lc-trend__arrow" aria-hidden="true">{{ r.trend === 'up' ? '↗' : r.trend === 'down' ? '↘' : '→' }}</i>
+                  {{ trendText(r.trend) }}
+                </span>
+                <span class="mk-badge" :class="fatigueBadge(r.fatigue)" :title="`疲劳度：${r.fatigue}`">{{ r.fatigue }}</span>
+              </div>
             </td>
-            <td v-if="!lcHiddenCols.has('fatigue')"><span class="mk-badge" :class="fatigueBadge(r.fatigue)">{{ r.fatigue }}</span></td>
             <td v-if="!lcHiddenCols.has('conf')" class="mk-num lc-conf-cell">
               <span
                 v-if="r.confidence != null && r.task"
@@ -211,7 +212,6 @@
                 :class="{ 'conf--low': evidenceLowConfidence(r.confidence) }"
                 :title="`置信度 ${Math.round(r.confidence * 100)}%。低于 50% 表示证据不足`"
               >
-                <span class="mk-minibar lc-conf__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="evidenceLowConfidence(r.confidence) ? 'warn' : undefined" :style="{ width: Math.round(r.confidence * 100) + '%' }"></i></span>
                 <span class="mono">{{ Math.round(r.confidence * 100) }}%</span><em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
               </span>
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
@@ -349,12 +349,13 @@ watch(includeTest, (v) => {
   }
 })
 
-/* P1-3 列显隐（公共组件 MkCols）：学习者/进度/趋势/疲劳/置信/风险/更新 可隐藏，操作固定 */
+/* P1-3 列显隐（公共组件 MkCols）：学习者/进度/状态/置信/风险/更新 可隐藏，操作固定
+   2026-10-22 用户「信息密度比较高」：趋势与疲劳合并为一列（同为一行内读的「当前状态」，
+   两列各只占一句短词）。旧存储键里的 trend/fatigue 已无对应列，不影响合并列显隐。 */
 const lcColDefs = [
   { key: 'learner', label: '学习者', title: '姓名 + 邮箱' },
   { key: 'progress', label: '当前进度', title: '当前任务 + 路径' },
-  { key: 'trend', label: '趋势', title: '近况趋势' },
-  { key: 'fatigue', label: '疲劳', title: '疲劳度' },
+  { key: 'status', label: '趋势 / 疲劳', title: '近况趋势 + 疲劳度' },
   { key: 'conf', label: '置信度', title: '当前读数有多可信，低于 50% 记为低置信' },
   { key: 'risk', label: '风险摘要', title: '风险原因' },
   { key: 'updated', label: '档案更新', title: '学习者档案快照的更新时间，不是学习活动时间' },
@@ -752,6 +753,8 @@ async function recomputeAll() {
 .lc-trend--down { color: var(--mk-red); }
 .lc-trend--flat { color: var(--mk-muted); }
 .lc-trend__arrow { font-style: normal; }
+/* 趋势与疲劳同格（2026-10-22 合并列）：趋势在前、疲劳徽章贴后，读作一句状态 */
+.lc-status { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 
 .progress-title { font-weight: 600; }
 .risk-text { display: block; color: var(--mk-amber); font-size: var(--mk-fs-micro); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -761,9 +764,8 @@ async function recomputeAll() {
 .lc-c-learner { width: 165px; }
 @media (max-width: 1279px) { .lc-c-learner { width: 115px; } }
 .lc-c-progress { width: 140px; }
-.lc-c-trend { width: 64px; }
-.lc-c-fatigue { width: 54px; }
-.lc-c-conf { width: 175px; }
+.lc-c-status { width: 118px; }
+.lc-c-conf { width: 112px; }
 .lc-c-risk { width: 150px; }
 .lc-c-updated { width: 84px; }
 .lc-c-act { width: 125px; }
@@ -774,12 +776,9 @@ async function recomputeAll() {
 .conf { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
 .conf__lack { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .conf--low { color: var(--mk-amber); }
-.lc-conf__bar { width: 56px; flex-shrink: 0; }
-/* 置信格左对齐（2026-10-15 用户走查「百分比条不一样长」）：td.mk-num 的 text-align:right
-   让整组 inline-flex 随内容宽右对齐——「100%」比「60%」宽、低置信行还多一枚「证据不足」
-   徽章，于是每行的条起点/终点左右横跳（真机实测同列条起点差 69px），轨道虽恒 56px、
-   填充比例也对，但看起来「不一样长」。左对齐后所有轨道占据同一 x 区间，长度才可比；
-   表头本就左对齐（th 无 mk-th--right），格与头随之同侧。 */
+/* 置信格左对齐：百分比 + 「证据不足」徽章左缘起排，各行读数同起点；
+   原 56px 迷你条已撤（2026-10-22 用户「信息密度比较高」）——数值本身已带两位有效数字，
+   条只重复了同一读数一次，且低置信行多了徽章把条推来推去。 */
 .lc-conf-cell { text-align: left; }
 
 @media (min-width: 2000px) {
