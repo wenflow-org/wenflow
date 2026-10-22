@@ -123,6 +123,23 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     w.unmount()
   })
 
+  it('分节导航：默认「模型」，可切到「请求与容错」，面板互斥', async () => {
+    const w = await mountTab()
+    const nav = w.findAll('.sdp-nav__item')
+    expect(nav.map((n) => n.find('.sdp-nav__name').text())).toEqual(['模型', '生成参数', '请求与容错', '模型测试'])
+    expect(nav[0].classes()).toContain('is-on')
+    expect(nav[0].find('.sdp-nav__meta').text()).toContain('deepseek-v4.1-flash')
+    expect(w.find('#sdp-panel-model').attributes('style') || '').not.toContain('display: none')
+    expect(w.find('#sdp-panel-request').attributes('style') || '').toContain('display: none')
+
+    await nav[2].trigger('click')
+    await w.vm.$nextTick()
+    expect(nav[2].classes()).toContain('is-on')
+    expect(w.find('#sdp-panel-model').attributes('style') || '').toContain('display: none')
+    expect(w.find('#sdp-panel-request').attributes('style') || '').not.toContain('display: none')
+    w.unmount()
+  })
+
   it('备用链只列同供应商、同层级，并排除主模型', async () => {
     const w = await mountTab()
     await openPicker(w, '.sdp-fallback .mk-mp__control')
