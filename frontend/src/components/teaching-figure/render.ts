@@ -71,6 +71,8 @@ function wrapChars(text: string, maxChars: number): string[] {
       if (space > i) end = space;
     }
     if (end <= i) end = i + maxChars;
+    // 行首不留收尾标点：把「，；。：、）」这类字符拉回上一行（CJK 排版的避头点）
+    while (end < chars.length && /[，。；：、）」』”！？…]/.test(chars[end])) end += 1;
     out.push(chars.slice(i, end).join('').trim());
     i = end;
   }
@@ -253,6 +255,17 @@ function wrapLines(str: unknown, maxW: number, size: number): string[] {
   }
   if (cur.trim()) out.push(cur.trimEnd());
   return out;
+}
+
+/**
+ * 按行数均分的折行：先按宽度粗切，再按行数重排。
+ * 否则一行 note 会切成「…只认主活动 / 落科」——末行只剩两三个字（2026-10-22 夜间跑批实测）。
+ */
+function balancedWrap(str: unknown, maxW: number, size: number): string[] {
+  const lines = wrapLines(str, maxW, size);
+  if (lines.length < 2) return lines;
+  const total = Array.from(String(str ?? '')).length;
+  return wrapChars(String(str ?? ''), Math.max(6, Math.ceil(total / lines.length)));
 }
 
 /**
@@ -739,17 +752,24 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
   const gap = 156;
   const padX = 16;
   const w = padX * 2 + colW * 2 + gap;
-  // 条目允许两行：单行 fitText 会把「先写入 this.list，视图立刻渲染…」这类因果句
-  // 截成只剩前半句，读者拿不到后半句的动作（2026-10-21 目检 #6）。
+  // 条目允许三行：两行时 19 字的因果句仍会被截掉最后一个动作（2026-10-22 夜间跑批 #269）
   const itemTextW = colW - 46;
   const rows = Math.max(left.items.length, right.items.length);
   const itemLineCount = (side: any) =>
     (Array.isArray(side?.items) ? side.items : []).reduce(
-      (max: number, it: unknown) => Math.max(max, Math.min(2, wrapLines(String(it ?? ''), itemTextW, T.fontBody).length)),
+      (max: number, it: unknown) => Math.max(max, Math.min(3, wrapLines(String(it ?? ''), itemTextW, T.fontBody).length)),
       1,
     );
   const itemH = 36 + (Math.max(itemLineCount(left), itemLineCount(right)) - 1) * 16;
-  const h = (title ? T.fontTitle + 20 : 0) + 54 + rows * itemH + 16 + (note ? 26 : 0);
+  // 标题与副标题也允许两行：19 字的标题单行会被截成「…先做前…」，正好丢掉结论（夜间跑批 #269）
+  const wrapMax = (str: unknown, maxW: number, size: number, maxLines: number) => {
+    const raw = wrapLines(str, maxW, size);
+    if (raw.length <= maxLines) return raw;
+    return [...raw.slice(0, maxLines - 1), fitText(raw.slice(maxLines - 1).join(''), maxW, size)];
+  };
+  const headLinesOf = (side: any) => wrapMax(side?.head ?? '', colW - 24, T.fontKey, 2);
+  const subLinesOf = (side: any) => (side?.sub ? wrapMax(side.sub, colW - 24, T.fontMicro, 2) : []);
+  const headH = 36 + (Math.max(headLinesOf(left).length, headLinesOf(right).length) - 1) * 18;
   const TONES: Record<string, { color: string; soft: string; ink: string }> = {
     ok: { color: T.ok, soft: T.okSoft, ink: T.ok },
     accent: { color: T.accent, soft: T.accentSoft, ink: T.accentInk },
@@ -765,6 +785,10 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
   }
 
   const headY = y + 8;
+  const subLineCount = Math.max(subLinesOf(left).length, subLinesOf(right).length);
+  const subBlock = subLineCount ? 14 + (subLineCount - 1) * 14 : 0;
+  const bodyTop = headY + headH + 10 + subBlock;
+  const h = bodyTop + rows * itemH + 16 + (note ? 26 : 0);
   const cols = [
     { x: padX, ...(TONES[leftTone] || TONES.ok), data: left, tone: leftTone },
     { x: padX + colW + gap, ...(TONES[rightTone] || TONES.accent), data: right, tone: rightTone },
@@ -772,19 +796,25 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
   for (const col of cols) {
     const isFocus = focus === (col === cols[0] ? 'left' : 'right');
     parts.push(
-      rect(col.x, headY, colW, 36, { r: 9, fill: col.soft, stroke: col.color, sw: isFocus ? T.strokeStrong : 1.3 }),
+      rect(col.x, headY, colW, headH, { r: 9, fill: col.soft, stroke: col.color, sw: isFocus ? T.strokeStrong : 1.3 }),
     );
     // 焦点侧：顶部加一条强调轨（信号，不增加信息）
     if (isFocus) parts.push(`<rect x="${col.x + 10}" y="${headY - 3}" width="${colW - 20}" height="3" rx="1.5" fill="${col.color}"/>`);
-    parts.push(text(col.x + colW / 2, headY + 23, fitText(col.data.head, colW - 24, T.fontKey), 't-key', 'middle', `fill="${col.ink}"`));
-    if (col.data.sub) parts.push(text(col.x + colW / 2, headY + 50, fitText(col.data.sub, colW - 24, T.fontMicro), 't-tiny'));
+    const heads = headLinesOf(col.data);
+    heads.forEach((line: string, li: number) => {
+      const ly = headY + 23 + (li - (heads.length - 1) / 2) * 18;
+      parts.push(text(col.x + colW / 2, ly, line, 't-key', 'middle', `fill="${col.ink}"`));
+    });
+    subLinesOf(col.data).forEach((line: string, li: number) => {
+      parts.push(text(col.x + colW / 2, headY + headH + 14 + li * 14, line, 't-tiny'));
+    });
     col.data.items.forEach((it: string, i: number) => {
-      const iy = headY + 60 + i * itemH;
+      const iy = bodyTop + i * itemH;
       const cy = iy + (itemH - 8) / 2;
       parts.push(rect(col.x + 8, iy, colW - 16, itemH - 8, { r: 7, fill: T.surface, stroke: T.line, sw: T.stroke }));
       parts.push(`<circle cx="${col.x + 24}" cy="${cy}" r="3" fill="${col.color}"/>`);
       const raw = wrapLines(String(it ?? ''), itemTextW, T.fontBody);
-      const lines = raw.length <= 2 ? raw : [raw[0], fitText(raw.slice(1).join(''), itemTextW, T.fontBody)];
+      const lines = raw.length <= 3 ? raw : [...raw.slice(0, 2), fitText(raw.slice(2).join(''), itemTextW, T.fontBody)];
       lines.forEach((line: string, li: number) => {
         const y = cy + 4.5 + (li - (lines.length - 1) / 2) * 16;
         parts.push(text(col.x + 36, y, line, 't-label', 'start'));
@@ -794,7 +824,7 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
 
   if (divider) {
     const cx = padX + colW + gap / 2;
-    const cy = headY + 40 + (rows * itemH) / 2;
+    const cy = bodyTop + (rows * itemH) / 2 - 4;
     parts.push(
       `<line x1="${cx}" y1="${headY + 4}" x2="${cx}" y2="${h - (note ? 32 : 8)}" stroke="${T.line}" stroke-dasharray="5 5"/>`,
     );
@@ -1111,8 +1141,11 @@ function renderBins({ title, bins = [], note, focus }: any): RenderedFigure {
   const maxItems = Math.max(1, ...bins.map((b: any) => (b.items || []).length));
   const bodyH = maxItems * (chipH + chipGap) + 14;
   const titleH = title ? T.fontTitle + 20 : 0;
-  const noteLines = note ? wrapLines(note, bins.length * (binW + binGap) + padX, T.fontSmall) : [];
-  const w = Math.ceil(padX * 2 + bins.length * binW + (bins.length - 1) * binGap);
+  // note 的可用宽度是画布减去两侧内衬；此前用「分箱宽 + 单侧内衬」，末行会捅出右边界
+  const binsW = bins.length * binW + (bins.length - 1) * binGap;
+  const noteLines = note ? balancedWrap(note, binsW, T.fontSmall) : [];
+  const noteW = noteLines.length ? Math.max(...noteLines.map((l: string) => est(l, T.fontSmall))) : 0;
+  const w = Math.ceil(Math.max(padX * 2 + binsW, noteW + padX * 2));
   const h = titleH + headH + bodyH + (noteLines.length ? noteLines.length * 18 + 12 : 0) + 8;
 
   const parts: string[] = [...titleBlock(title, padX)];
@@ -1285,7 +1318,17 @@ function renderLadder({ title, steps = [], note, focus }: any): RenderedFigure {
   });
   const widest = Math.max(0, ...labelLines.flat().map((line) => est(line, T.fontKey)));
   const stepW = Math.min(240, Math.max(150, widest + 30));
-  const stepH = 62 + (labelLines.some((lines) => lines.length > 1) ? 20 : 0);
+  // 子标题单行时会被截断（「卡在______，手当时没有下一个动作…」），允许两行并按行数加高。
+  // 底高 68 而不是 62：62 时步名与子标题的基线只差 10px，两行 bbox 会压在一起（夜间跑批 #58/#503）。
+  const subLines: string[][] = steps.map((step: any) => {
+    if (!step.sub) return [];
+    const lines = wrapLines(step.sub, stepW - 24, T.fontMicro);
+    if (lines.length <= 2) return lines;
+    return [lines[0], fitText(lines.slice(1).join(''), stepW - 24, T.fontMicro)];
+  });
+  const labelWrap = labelLines.some((lines) => lines.length > 1);
+  const extraSub = Math.max(0, ...subLines.map((lines) => lines.length - 1));
+  const stepH = 68 + (labelWrap ? 22 : 0) + extraSub * 14;
   const rise = 34;
   const padX = 20;
   const titleH = title ? T.fontTitle + 20 : 0;
@@ -1326,7 +1369,10 @@ function renderLadder({ title, steps = [], note, focus }: any): RenderedFigure {
     labelLines[i].forEach((line, li) => {
       parts.push(text(x + 14, y + 42 + li * 18, line, state === 'todo' ? 't-label' : 't-key', 'start'));
     });
-    if (step.sub) parts.push(text(x + stepW - 12, y + stepH - 10, fitText(step.sub, stepW - 24, T.fontMicro), 't-tiny', 'end'));
+    subLines[i].forEach((line, li) => {
+      const sy = y + stepH - 10 - (subLines[i].length - 1 - li) * 14;
+      parts.push(text(x + stepW - 12, sy, line, 't-tiny', 'end'));
+    });
     void filled;
   });
 
@@ -1710,7 +1756,9 @@ function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): Rend
   const plotW = w - plotX - padX - 8;
   const bodyH = rows.length * rowH;
   const axisY = top + bodyH + 10;
-  const noteH = note ? 26 : 0;
+  // note 以前是单行直排：长句直接穿出右边界（2026-10-22 夜间跑批实测 24px）
+  const noteLines = note ? balancedWrap(note, w - padX * 2, T.fontSmall) : [];
+  const noteH = noteLines.length ? noteLines.length * 18 + 8 : 0;
   const h = axisY + 24 + noteH;
 
   const values = rows.flatMap((r: any) => [Number(r.from), Number(r.to)]).concat(marks.map((m: any) => Number(m.at)));
@@ -1741,13 +1789,16 @@ function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): Rend
     const x2 = xOf(Number(row.to));
     parts.push(text(padX, y + bandH + 6, row.label, 't-label', 'start'));
     parts.push(rect(x1, y + 4, Math.max(6, x2 - x1), bandH, { r: bandH / 2, fill: tone.fill, stroke: tone.stroke, sw: 1.2 }));
-    // 端点数值贴在两端的条内/条外：短条时挪到条右侧，避免两个数字叠在一起
+    // 端点数值贴在两端的条内/条外：短条时挪到条外，右侧放不下就翻到左侧，避免压出画布
     const spanW = x2 - x1;
     const valueText = `${fmt(row.from)}${unit || ''} – ${fmt(row.to)}${unit || ''}`;
-    if (spanW >= est(valueText, T.fontMicro) + 12) {
+    const valueW = est(valueText, T.fontMicro);
+    if (spanW >= valueW + 12) {
       parts.push(text((x1 + x2) / 2, y + 4 + bandH / 2 + 4, valueText, 't-tiny', 'middle'));
-    } else {
+    } else if (x2 + 8 + valueW <= w - padX) {
       parts.push(text(x2 + 8, y + 4 + bandH / 2 + 4, valueText, 't-tiny', 'start'));
+    } else {
+      parts.push(text(Math.max(padX + labelW - 8, x1 - 8), y + 4 + bandH / 2 + 4, valueText, 't-tiny', 'end'));
     }
   });
 
@@ -1763,7 +1814,9 @@ function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): Rend
     if (mark.label) parts.push(text(x, top - 4, mark.label, 't-tiny', 'middle', `fill="${T.accentInk}"`));
   });
 
-  if (note) parts.push(text(padX, h - 8, note, 't-small', 'start'));
+  noteLines.forEach((ln: string, i: number) => {
+    parts.push(text(padX, axisY + 24 + 10 + i * 18, ln, 't-small', 'start'));
+  });
   return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };
 }
 

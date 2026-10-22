@@ -13,8 +13,8 @@
 
         <!-- 参考线（追及点/相遇点/分界）：虚线 + 顶部标签 -->
         <g v-for="(g, gi) in guideRows" :key="`g${gi}`">
-          <line class="tf-guide" :x1="g.x" :y1="28" :x2="g.x" :y2="axisY + spanBlock" />
-          <text v-if="g.label" class="tf-guide-label" :x="g.x" :y="18" :text-anchor="g.anchor">{{ g.label }}</text>
+          <line class="tf-guide" :x1="g.x" :y1="g.labelY + 10" :x2="g.x" :y2="axisY + spanBlock" />
+          <text v-if="g.label" class="tf-guide-label" :x="g.x" :y="g.labelY" :text-anchor="g.anchor">{{ g.label }}</text>
         </g>
 
         <!-- 轴：位置线本体，右端箭头表示正方向 -->
@@ -50,7 +50,7 @@
               "
             />
           </g>
-          <text class="tf-mark-label" :x="m.x" :y="m.labelY" text-anchor="middle">{{ m.label }}</text>
+          <text class="tf-mark-label" :x="m.labelX" :y="m.labelY" text-anchor="middle">{{ m.label }}</text>
         </g>
 
         <!-- 区间标注（距离/差）：端线 + 尺寸线 + 标签 -->
@@ -87,7 +87,7 @@
           <svg :viewBox="`0 0 ${W} ${height}`" :width="W" :height="height" role="img" :aria-label="ariaLabel" :style="tfVars">
             <text v-if="unit" class="tf-unit" x="10" :y="20">{{ `单位：${unit}` }}</text>
             <g v-for="(g, gi) in guideRows" :key="`zg${gi}`">
-              <line class="tf-guide" :x1="g.x" :y1="28" :x2="g.x" :y2="axisY + spanBlock" />
+              <line class="tf-guide" :x1="g.x" :y1="g.labelY + 10" :x2="g.x" :y2="axisY + spanBlock" />
               <text v-if="g.label" class="tf-guide-label" :x="g.x" :y="18" :text-anchor="g.anchor">{{ g.label }}</text>
             </g>
             <line class="tf-axis" :x1="padX" :y1="axisY" :x2="W - padX" :y2="axisY" />
@@ -115,7 +115,7 @@
                   "
                 />
               </g>
-              <text class="tf-mark-label" :x="m.x" :y="m.labelY" text-anchor="middle">{{ m.label }}</text>
+              <text class="tf-mark-label" :x="m.labelX" :y="m.labelY" text-anchor="middle">{{ m.label }}</text>
             </g>
             <g v-for="(s, si) in spanRows" :key="`zs${si}`">
               <line class="tf-span-end" :x1="s.x1" :y1="s.y - 7" :x2="s.x1" :y2="s.y + 7" />
@@ -263,6 +263,11 @@ const height = computed(() => axisY + 34 + spanBlock.value + 16);
  * 读者只能读成「凭空一条线」（2026-10-21 真实课文实测，模型给了 at:2500 / label:null）。
  * 标签靠边时改用内侧对齐：居中会把长标签顶出画布（同一批实测 #11「最后写视图…北京」）。
  */
+/**
+ * 单位标签占住左上角；左端的参考线标签必须下移一行，否则「单位：相对位置」与「起点」叠在一起
+ * （2026-10-22 夜间跑批 #216：两行 bbox 重叠 26×13）。
+ */
+const unitRight = computed(() => (unit.value ? 10 + String(`单位：${unit.value}`).length * 12.5 : 0));
 const guideRows = computed(() =>
   guides.value
     .filter((g) => !!g.label)
@@ -270,7 +275,9 @@ const guideRows = computed(() =>
       const x = toX(g.at);
       const half = (String(g.label).length * 12.5) / 2;
       const anchor = x - half < 8 ? 'start' : x + half > W - 8 ? 'end' : 'middle';
-      return { x, label: g.label, anchor };
+      // 标签左缘落在单位标签的横向范围内 → 让到单位下面一行
+      const labelY = unit.value && x - half < unitRight.value + 6 ? 38 : 18;
+      return { x, label: g.label, anchor, labelY };
     }),
 );
 /**
@@ -279,7 +286,7 @@ const guideRows = computed(() =>
  */
 const markRows = computed(() => {
   const marks = props.figure?.marks || [];
-  const rows: Array<{ x: number; label: string; dir: 'right' | 'left' | 'none'; labelY: number }> = [];
+  const rows: Array<{ x: number; label: string; dir: 'right' | 'left' | 'none'; labelY: number; labelX: number }> = [];
   // 三行足够（marks ≤ 6，且后端已按 at 升序去重）；行内右边界用于判断重叠
   const rowRight = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
   for (const mark of marks) {
@@ -288,7 +295,9 @@ const markRows = computed(() => {
     const rowIndex = rowRight.findIndex((right) => x - halfWidth >= right);
     const row = rowIndex === -1 ? rowRight.length - 1 : rowIndex;
     rowRight[row] = x + halfWidth;
-    rows.push({ x, label: mark.label, dir: mark.dir || 'none', labelY: axisY - 26 - row * 24 });
+    // 轴端点的标签居中后会探出画布（#202 左边被裁 4px）：把文字中心收回画布内，圆点仍钉在原位
+    const labelX = Math.min(Math.max(x, 8 + halfWidth - 7), W - 8 - halfWidth + 7);
+    rows.push({ x, label: mark.label, dir: mark.dir || 'none', labelY: axisY - 26 - row * 24, labelX });
   }
   return rows;
 });

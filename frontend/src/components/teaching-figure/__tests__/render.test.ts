@@ -211,8 +211,8 @@ describe('教学图确定性渲染器', () => {
     });
     expect(svg).toContain('读懂例题');
     expect(svg).toContain('换条件重做');
-    // 三级台阶：x 递增、y 递减
-    const boxes = [...svg.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="150" height="62"/g)].map((m) => ({
+    // 三级台阶：x 递增、y 递减（底高 68：62 会让步名与子标题的 bbox 相压）
+    const boxes = [...svg.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="150" height="68"/g)].map((m) => ({
       x: Number(m[1]),
       y: Number(m[2]),
     }));
