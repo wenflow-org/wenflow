@@ -1349,17 +1349,47 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           teachingRevision = endResult.revision;
 
           // 建议处置采样（2026-10-21）：收束带回的重排建议会挂在本节课堂的 advisory 上，
-          // 真人侧由前端「保留/稍后再看/预览」调用同一 repository 方法记账；VL 此前没有通道，
-          // 336 条建议的 learnerResponse 全空。显式配置后才记录，只留痕、不触发重排执行。
-          if (['keep', 'later', 'preview'].includes(advisoryResponse) && endResult.advisory?.shouldSuggest === true) {
+          // 真人侧由前端「保留/稍后再看/预览/已采用」调用同一 repository 方法记账；VL 此前没有通道，
+          // 336 条建议的 learnerResponse 全空。显式配置后才记录；keep/later/preview 只留痕，
+          // adopt 走与真人相同的 replan 成功后才记账（否则执行档永远是 0，无法评估漏斗）。
+          if (endResult.advisory?.shouldSuggest === true && advisoryResponse) {
             try {
-              await teachingSessionRepository.recordAdvisoryResponse(
-                teachingSessionId,
-                session.userId,
-                advisoryResponse as 'keep' | 'later' | 'preview'
-              );
+              if (['keep', 'later', 'preview'].includes(advisoryResponse)) {
+                await teachingSessionRepository.recordAdvisoryResponse(
+                  teachingSessionId,
+                  session.userId,
+                  advisoryResponse as 'keep' | 'later' | 'preview'
+                );
+              } else if (advisoryResponse === 'adopt') {
+                const advisory = endResult.advisory as Record<string, any>;
+                const recommendation = String(advisory.recommendation || 'reinforce');
+                const targetStage = Number(advisory.targetStageNumber);
+                const stageParams = Number.isFinite(targetStage) && targetStage > 0
+                  ? (advisory.scope === 'downstream_path'
+                    ? { fromStageNumber: targetStage }
+                    : { stageNumber: targetStage })
+                  : {};
+                const replanResult = await learningService.requestPathReplan({
+                  pathId: session.learningPathId,
+                  userId: session.userId,
+                  triggerSource: 'ai-teaching',
+                  reason: `虚拟学习者按建议调整后续阶段（${recommendation}）`,
+                  mode: recommendation === 'accelerate' ? 'compress' : 'overwrite',
+                  requireConfirmation: false,
+                  ...stageParams,
+                  evidence: { advisoryAction: recommendation, advisory }
+                });
+                // 与前端同口径：只有真正执行（未被转成待确认）才记 adopt。
+                if (replanResult?.status !== 'awaiting-confirmation' && replanResult?.enabled !== false) {
+                  await teachingSessionRepository.recordAdvisoryResponse(
+                    teachingSessionId,
+                    session.userId,
+                    'adopt'
+                  );
+                }
+              }
             } catch (error: unknown) {
-              logger.warn('[simulation-coordinator] 建议处置留痕失败（不影响收束）', {
+              logger.warn('[simulation-coordinator] 建议处置留痕/执行失败（不影响收束）', {
                 sessionId,
                 teachingSessionId,
                 action: advisoryResponse,

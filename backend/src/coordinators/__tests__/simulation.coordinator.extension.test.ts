@@ -16,6 +16,7 @@ const mockVirtualSessionFindUnique = jest.fn()
 const mockVirtualSessionUpdate = jest.fn()
 const mockLearningPathFindUnique = jest.fn()
 const mockCompleteTask = jest.fn()
+const mockRequestPathReplan = jest.fn()
 const mockExecuteSkill = jest.fn()
 const mockProcessStudentMessage = jest.fn()
 const mockEndSession = jest.fn()
@@ -55,7 +56,7 @@ jest.mock('../../config/database', () => ({
 jest.mock('../../services/learning/goal-conversation.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../../services/learning/learning.service', () => ({
   __esModule: true,
-  default: { completeTask: mockCompleteTask }
+  default: { completeTask: mockCompleteTask, requestPathReplan: mockRequestPathReplan }
 }))
 jest.mock('../path.coordinator', () => ({ __esModule: true, default: {} }))
 jest.mock('../../services/ai-teaching/AITeachingCoordinator', () => ({
@@ -429,6 +430,33 @@ describe('#124 assisted 延伸学：正课收束 → 延伸课堂 → 结算', (
       try {
         await coordinator.executeLearningStep('simulation-1')
         expect(recordSpy).toHaveBeenCalledWith('teaching-1', 'user-1', 'later')
+      } finally {
+        recordSpy.mockRestore()
+      }
+    })
+
+    it('adopt 臂 → 先真实 replan，成功后才记 adopt', async () => {
+      setStage({ teaching: buildLearningState(), simulationConfig: { advisoryResponse: 'adopt' } })
+      mockCompletion()
+      mockEndSession.mockResolvedValue({
+        revision: 3,
+        advisory: { shouldSuggest: true, recommendation: 'reinforce', scope: 'next_milestone', targetStageNumber: 2 }
+      })
+      mockRequestPathReplan.mockResolvedValue({ status: 'completed', enabled: true })
+      const recordSpy = jest.spyOn(teachingSessionRepository, 'recordAdvisoryResponse')
+        .mockResolvedValue({ status: 'ok' })
+
+      try {
+        await coordinator.executeLearningStep('simulation-1')
+        expect(mockRequestPathReplan).toHaveBeenCalledWith(expect.objectContaining({
+          pathId: 'path-1',
+          userId: 'user-1',
+          triggerSource: 'ai-teaching',
+          mode: 'overwrite',
+          stageNumber: 2,
+          requireConfirmation: false,
+        }))
+        expect(recordSpy).toHaveBeenCalledWith('teaching-1', 'user-1', 'adopt')
       } finally {
         recordSpy.mockRestore()
       }

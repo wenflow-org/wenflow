@@ -979,7 +979,7 @@ router.post('/sessions/:sessionId/wrapup', async (req: Request, res) => {
  * 更新 session 的模拟配置 (目前主要是 frictionBudget)
  * PUT /api/admin/virtual-learners/sessions/:sessionId/simulation-config
  * body: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test', experimentArm?: 'A' | 'B' | null,
- *         extensionProbe?: boolean, advisoryResponse?: 'keep' | 'later' | 'preview' | null }
+ *         extensionProbe?: boolean, advisoryResponse?: 'keep' | 'later' | 'preview' | 'adopt' | null }
  * experimentArm：冻结考卷双臂协议（#85）的会话级臂标签。A = 护栏前口径（关闭 #84 后续回合
  * 肯定语护栏），B/缺省 = 现行口径；null 清除标签。仅用于对照实验，不改变默认行为。
  * extensionProbe：延伸学探针（2026-10-21）——每会话一次，在正课收束时强制开一节延伸课，
@@ -1004,8 +1004,8 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
       return res.status(400).json({ success: false, error: 'extensionProbe 必须是布尔值' });
     }
     if (advisoryResponse !== undefined && advisoryResponse !== null
-      && !['keep', 'later', 'preview'].includes(String(advisoryResponse))) {
-      return res.status(400).json({ success: false, error: 'advisoryResponse 只能是 keep/later/preview 或 null' });
+      && !['keep', 'later', 'preview', 'adopt'].includes(String(advisoryResponse))) {
+      return res.status(400).json({ success: false, error: 'advisoryResponse 只能是 keep/later/preview/adopt 或 null' });
     }
     // 日期模拟时钟（配置项）：baseDate=起点（YYYY-MM-DD）、enabled=会话级开关覆盖。
     // dayIndex/history 属推进进度，由 advance-day 写，不在此接受。

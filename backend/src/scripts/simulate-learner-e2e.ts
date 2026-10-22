@@ -439,6 +439,7 @@ async function main(): Promise<void> {
     const baseDate = new Date(Date.now() - args.baseDaysAgo * 86_400_000).toISOString().slice(0, 10);
     const clock = await makeApi(args.baseUrl, 'PUT', `/api/admin/virtual-learners/sessions/${sessionId}/simulation-config`, {
       simulationClock: { enabled: true, baseDate, autoAdvance: false },
+      ...(args.advisoryResponse ? { advisoryResponse: args.advisoryResponse } : {}),
     });
     if (clock.status !== 200) {
       addFinding(state, 'clock-config-failed', `http=${clock.status} ${JSON.stringify(clock.body?.error ?? '')}`.slice(0, 200));

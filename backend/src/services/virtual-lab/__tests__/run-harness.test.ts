@@ -262,6 +262,12 @@ describe('parseHarnessArgs', () => {
     expect(args.adminPassword).toBeNull();
   });
 
+  it('--advisory-response 只接受四种处置臂', () => {
+    expect(parseHarnessArgs(['--advisory-response=adopt'], {}).advisoryResponse).toBe('adopt');
+    expect(parseHarnessArgs([], {}).advisoryResponse).toBeNull();
+    expect(() => parseHarnessArgs(['--advisory-response=confirm'], {})).toThrow(/advisory-response/);
+  });
+
   it('凭据兜底：E2E_* 优先，其次 .env 的 INIT_ADMIN_*', () => {
     const initWith = parseHarnessArgs([], { INIT_ADMIN_NAME: 'root2', INIT_ADMIN_PASSWORD: 'p2' });
     expect(initWith.adminName).toBe('root2');

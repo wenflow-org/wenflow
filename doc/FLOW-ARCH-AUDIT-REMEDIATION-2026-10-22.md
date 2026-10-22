@@ -30,6 +30,7 @@
 落地：
 - `TeachingSessionRepository.recordAdvisoryResponse` 与 `/api/ai-teaching/sessions/:sessionId/advisory-response` 接受 `adopt`。
 - 完课卡 `LearningEvaluationPage` 在 replan 真正执行成功后回写 `adopt`；学习状态页 `V2LearningState.confirmAdjust` 同样回写（决策卡新增 `sessionId` 透传）。
+- 虚拟学习者 assisted 轨新增 `--advisory-response=adopt`：收束后调用真实 replan，成功才记 `adopt`；keep/later/preview 仍只留痕。用于小样本链路验证，不替代真实学习者行为。
 - 历史 3 次重排不反推 `adopt`：没有可靠的建议-重排一一对应关系，伪造会把观测数据变成假账。运营口径同时看 `explicitAdopt` 与 `replanExecuted`。
 - 复核命令：
 
@@ -39,6 +40,19 @@ DATABASE_URL='file:D:/wenflow/wenflow/backend/prisma/dev.db' \
 SYSTEM_DATABASE_URL='file:D:/wenflow/wenflow/backend/prisma/system.db' \
 npx ts-node src/scripts/audit-advisory-funnel.ts
 ```
+
+评估所需数据量（比例估计，95% 置信区间）：
+
+| 目标精度 | 50% 附近所需建议数 | 20% 附近所需建议数 |
+|---|---|---|
+| ±10% | 97 | 62 |
+| ±7.5% | 171 | 110 |
+| ±5% | 385 | 246 |
+| ±3% | 1068 | 683 |
+
+若从“建议生成”倒推：现有漏斗建议触发率约 45%（362 条建议 / 约 800 节完成课），要拿到 100 个处置样本，按 20% 采用率需要约 500 条建议、约 1100 节课；按 30% 采用率约需 334 条建议、约 740 节课。若还要按 `reinforce/resequence/accelerate` 分臂比较，每臂至少需要几十到上百个采用样本，建议按每臂 100 个处置样本排批。两组比例比较（80% 功效）参考：20% vs 40% 每臂约 81 个采用样本，20% vs 30% 每臂约 292 个。
+
+小样本实测（2026-10-22，独立 dev.db）：创建 1 个丢弃式虚拟学习者，跑 3 节完成课（2 个模拟日 + 续跑 1 日），生成 0 条建议；这说明单学习者 1–2 天不足以评估建议分布，只能验证链路不报错，不能估计采用率。该学习者已通过管理端级联删除（3 个 teaching session、1 条 path），未留在业务数据中。
 
 ## 3. 历史 pathReview：不回填，仅登记缺口
 

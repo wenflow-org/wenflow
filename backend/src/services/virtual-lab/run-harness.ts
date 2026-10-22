@@ -114,6 +114,8 @@ export interface HarnessArgs {
   keep: boolean;
   statePath: string | null;
   resumeSessionId: string | null;
+  /** 建议处置采样臂：keep/later/preview 只留痕，adopt 走真实 replan 并在成功后记执行档 */
+  advisoryResponse: 'keep' | 'later' | 'preview' | 'adopt' | null;
 }
 
 const RETRYABLE_HTTP = new Set([408, 425, 429, 502, 503, 504]);
@@ -357,6 +359,7 @@ export function parseHarnessArgs(argv: string[], env: Record<string, string | un
     keep: false,
     statePath: null,
     resumeSessionId: null,
+    advisoryResponse: null,
   };
 
   const numberArg = (name: string, value: string, min: number, max: number): number => {
@@ -382,6 +385,14 @@ export function parseHarnessArgs(argv: string[], env: Record<string, string | un
       case 'ready-timeout-ms': args.readyTimeoutMs = numberArg('--ready-timeout-ms', value, 0, 6 * 3600_000); break;
       case 'state': args.statePath = value.trim() || null; break;
       case 'session': args.resumeSessionId = value.trim() || null; break;
+      case 'advisory-response': {
+        const action = value.trim().toLowerCase();
+        if (!['keep', 'later', 'preview', 'adopt'].includes(action)) {
+          throw new Error('--advisory-response 只能是 keep/later/preview/adopt');
+        }
+        args.advisoryResponse = action as HarnessArgs['advisoryResponse'];
+        break;
+      }
       case 'admin-name': args.adminName = value.trim() || args.adminName; break;
       case 'admin-password': throw new Error('请用环境变量 E2E_ADMIN_PASSWORD 传密码，不要放进命令行');
       case 'keep': break; // 开关形式（--keep）已在上面的分支处理
