@@ -133,7 +133,7 @@
  * 路径内容面板（会话座舱 Path 页签的内容体，2026-10-12 自 PathDetail.vue 移植）。
  * 数据口径不变：全部来自 adminLearningContentApi.getPathDetail 的真实字段，
  * 原型有而接口没有的字段（验收点/关联产出/学习证据）不渲染，绝不硬造。
- * 动作口径：重试生成（failed/停滞 active 的运营救援，守卫自动判 core/stageDesign）、
+ * 动作口径：重试生成（只服务 failed 行，守卫自动判 core/stageDesign）、
  * 下线/恢复（恢复文案按状态分支，2026-10-06 审核 #55）、刷新。成功后 emit('changed')
  * 让宿主（座舱）重拉路径状态，页签 meta 与 stepper 不留旧值。
  */
@@ -141,7 +141,7 @@ import { computed, ref, watch } from 'vue'
 import { adminLearningContentApi } from '@/api/adminApi'
 import { timeAgo, errMsg, shortId } from './live'
 import { subPage, setSubPageLabel } from './store'
-import { statusText, statusBadge, isPathStalled, pathRetryTypeText, PATH_STALL_HOURS } from './opsShared'
+import { statusText, statusBadge, pathRetryTypeText } from './opsShared'
 /* 任务类型字典单源（F2-2）：与 TeachingSessions 同源，两页同批枚举不得各译一套 */
 import { taskTypeText, taskTypeTitle } from './statusText'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -324,19 +324,11 @@ function restoreMessage(status: string, title: string): string {
   return `确认恢复「${title}」？恢复后用户端立即可见并继续学习该路径。`
 }
 
-/* ===== 重试生成（failed / 停滞 active 的运营救援；与列表页 OpsContent 同一后端口子） ===== */
-const canRetry = computed(() => {
-  const v = d.value
-  if (!v) return false
-  // 停滞判据走真墙钟「最近活动」（后端派生 lastActivityAt，缺失回落 updatedAt）：
-  // 虚拟路径的 updatedAt 是模拟钟写的未来日期，会永远判「不停滞」（同列表页 OpsContent 口径）
-  return v.status === 'failed' || isPathStalled(v.status, v.lastActivityAt || v.updatedAt || '')
-})
-const retryTitle = computed(() => {
-  const v = d.value
-  if (v?.status === 'failed') return '该路径生成失败：系统会自动选择重建路径或补齐课程'
-  return `长时间无更新超过 ${PATH_STALL_HOURS}h：通常是生成中途停止，可补齐课程`
-})
+/* ===== 重试生成（只服务 failed 行；与列表页 OpsContent 同口径）=====
+   2026-10-22 对齐：原先对「24h 无更新」的 active 路径也开放，但重试只认虚拟会话，
+   真实路径点了必 409；停滞信号已在列表页退役，这里同步收窄。 */
+const canRetry = computed(() => d.value?.status === 'failed')
+const retryTitle = computed(() => '该路径生成失败：系统会自动选择重建路径或补齐课程')
 async function retryGeneration() {
   const v = d.value
   if (!v || busy.value || !props.pathId) return

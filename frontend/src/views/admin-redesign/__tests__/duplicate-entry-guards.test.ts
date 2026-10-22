@@ -112,4 +112,16 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain('@click.stop="openDetail(r)"')
     expect(src).toContain('@click="openDetail(r)"')
   })
+
+  it('路径治理：重试生成只服务 failed 行（停滞信号已退役）', () => {
+    // 2026-10-22 用户「停滞有必要放在这吗」→「对齐吧」：列表页与座舱 Path 页签同一判据，
+    // 「24h 无更新」不是生成状态且真实路径重试必 409，两处都收窄到 failed。
+    const list = read('OpsContent.vue')
+    expect(list).not.toContain('stalledOnly')
+    expect(list).not.toContain('isPathStalled')
+    const panel = read('PathJourneyPanel.vue')
+    expect(panel).not.toContain('isPathStalled')
+    expect(panel).not.toContain('PATH_STALL_HOURS')
+    expect(panel).toContain("d.value?.status === 'failed'")
+  })
 })
