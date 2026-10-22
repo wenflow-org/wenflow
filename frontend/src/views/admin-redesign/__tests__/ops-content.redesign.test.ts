@@ -24,7 +24,6 @@ const mkPath = (id: string, over: Record<string, unknown> = {}) => ({
   completedMilestones: 1,
   aiGenerated: true,
   createdAt: '2026-09-01T00:00:00Z',
-  // 基线行 = fresh（非停滞）：停滞标记是 2026-10-10 新增语义，用近期时间避免基线行误标
   updatedAt: new Date().toISOString(),
   deadline: null,
   user: { id: 'u1', name: '张三', email: 'zs@wenflow.local', isVirtualLearner: false },
@@ -114,9 +113,10 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 独立页同样无 KPI 卡（2026-10-02 用户拍板：状态条已单源承载 总数/里程碑/任务/已下线）
     expect(w.find('.mk-kpi').exists()).toBe(false);
 
-    // 状态筛选 = 卡头 pills（2026-10-17 分布带退役后迁回）；「停滞」是复合口径快筛，与状态叠加为 AND
+    // 状态筛选 = 卡头 pills（2026-10-17 分布带退役后迁回）；
+    // 「停滞」快筛 2026-10-22 退役（判据是活跃时钟不是生成状态，真实路径的救援动作无效）
     const headPills = w.findAll('.mk-card__head .mk-filter .mk-pill').map((p) => p.text());
-    expect(headPills.some((t) => t.includes('停滞'))).toBe(true);
+    expect(headPills.some((t) => t.includes('停滞'))).toBe(false);
     for (const statusWord of ['全部', '学习中', '已完成', '生成失败', '已下线']) {
       expect(headPills.some((t) => t.includes(statusWord))).toBe(true);
     }
@@ -341,15 +341,18 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     w.unmount();
   });
 
-  /** 生成停滞（2026-10-10 跑批实锤）：active 且 updatedAt 超 24h → 「停滞」warn 标记 + 「重试生成」入口；
-   *  fresh 行不标（真实用户数日不学属正常，只提示不强判死）。
-   *  2026-10-15 用户拍板：「重试生成」自操作列收进 ⋯ 折叠菜单。 */
-  it('生成停滞：active 超 24h 无更新 → 「停滞」标记 + ⋯ 菜单「重试生成」；fresh 行不标', async () => {
+  /** 停滞信号 2026-10-22 退役（用户「停滞有必要放在这吗」）：判据是活跃时钟不是生成状态，
+   *  真实用户数日不学即命中，且其「重试生成」只对虚拟会话可用。救援入口只留给真正的 failed 行。 */
+  it('停滞信号退役：active 超 24h 不再标记、菜单无「重试生成」；failed 行仍有', async () => {
     listMock.mockResolvedValue({
       data: {
         data: {
-          paths: [mkPath('lp_fresh'), mkPath('lp_stall', { updatedAt: '2026-09-01T00:00:00Z' })],
-          pagination: { total: 2, page: 1, limit: 100 },
+          paths: [
+            mkPath('lp_fresh'),
+            mkPath('lp_stall', { updatedAt: '2026-09-01T00:00:00Z' }),
+            mkPath('lp_failed', { status: 'failed', updatedAt: '2026-09-01T00:00:00Z' }),
+          ],
+          pagination: { total: 3, page: 1, limit: 100 },
         },
       },
     });
@@ -357,16 +360,16 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await flushPromises();
     await nextTick();
     const trs = w.findAll('tbody tr');
-    expect(trs[0].find('.mk-badge--warn').exists()).toBe(false);
-    expect(trs[1].find('.mk-badge--warn').text()).toBe('停滞');
-    expect(trs[1].find('.mk-badge--warn').attributes('title')).toContain('重试生成');
-    // 停滞行 ⋯ 菜单内出「重试生成」；fresh 行菜单内无此入口
+    expect(trs[1].find('.mk-badge--warn').exists()).toBe(false);
+    expect(w.text()).not.toContain('停滞');
+    // 陈旧 active 行菜单内无「重试生成」；failed 行才是救援对象
     await trs[1].find('.mk-menu__btn').trigger('click');
     await nextTick();
-    expect(trs[1].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).toContain('重试生成');
-    await trs[0].find('.mk-menu__btn').trigger('click');
+    expect(trs[1].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).not.toContain('重试生成');
+    await trs[1].find('.mk-menu__btn').trigger('click');
+    await trs[2].find('.mk-menu__btn').trigger('click');
     await nextTick();
-    expect(trs[0].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).not.toContain('重试生成');
+    expect(trs[2].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).toContain('重试生成');
     w.unmount();
   });
 

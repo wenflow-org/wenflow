@@ -43,9 +43,9 @@
         <div class="mk-filter">
           <!-- 状态筛选（2026-10-17 从退役分布带迁回）：四枚举 + 枚举外的「其它」档；
                计数取 stats 全平台 byStatus，stats 未落定时不渲染计数徽章（不把未知读成 0）。
-               「停滞」是分布条表达不了的**复合口径快筛**——进行中 ∧ 超 24h 无更新，
-               该被拎出来的那批（与「生成失败」同为运营救援对象，行内带同名徽标、⋯ 菜单可
-               就地「重试生成」）。两者叠加为 AND；再点已选中的状态即取消 -->
+               2026-10-22 用户「停滞有必要放在这吗」后退役：停滞判据是「active 且 24h 无写入」，
+               真实用户数日不学即命中，且其救援动作只对虚拟会话可用；最近活动列本就按时间排序，
+               同题不再用一枚会承诺错动作的标签表达。 -->
           <div class="mk-pills" role="group" aria-label="状态筛选">
             <button
               v-for="p in ocStatusPills"
@@ -57,16 +57,6 @@
               :title="p.title"
               @click="selectStatus(p.key)"
             >{{ p.name }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
-          </div>
-          <div class="mk-pills" role="group" aria-label="路径快筛">
-            <button
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': stalledOnly }"
-              :aria-pressed="stalledOnly"
-              title="进行中且超过 24 小时无更新"
-              @click="stalledOnly = !stalledOnly"
-            >停滞<span class="mk-pill__count">{{ stalledCount }}</span></button>
           </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
@@ -216,11 +206,8 @@
                   <span class="oc-progress__count mk-cell-sub">{{ p.completedMilestones }}/{{ p.totalMilestones }}</span>
                 </div>
               </td>
-              <td v-if="!hiddenCols.has('updated')" :title="stallTitle(p)">
+              <td v-if="!hiddenCols.has('updated')" :title="`完整时间 ${fmtDate(activityAt(p))}`">
                 <span class="mk-cell-sub mono">{{ timeAgo(activityAt(p)) }}</span>
-                <!-- 停滞标记（2026-10-10 跑批实锤：active 且长时间无更新=生成链停滞，可「重试生成」补齐；
-                     真实用户数日不学属正常，只提示不强判死，amber=需关注可行动） -->
-                <span v-if="isStalled(p)" class="mk-badge mk-badge--warn mk-badge--sm" title="长时间无更新，可「重试生成」补齐课程任务">停滞</span>
               </td>
               <td>
                 <!-- 操作列（2026-10-15 用户拍板）：行内只留高频「详情」，其余（重试生成/下线恢复/删除）
@@ -235,9 +222,10 @@
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === p.id" @click.stop="toggleMenu(p.id)">⋯</button>
                     <div v-if="openMenu === p.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                      <!-- 失败行 / 停滞 active：就地重发（守卫自动判 core/stageDesign） -->
+                      <!-- 只有失败行需要重发（守卫自动判 core/stageDesign）；
+                           2026-10-22 起不再对「24h 无更新」的 active 行开放重试——真实路径没有虚拟会话，点了必 409 -->
                       <button
-                        v-if="p.status === 'failed' || isStalled(p)"
+                        v-if="p.status === 'failed'"
                         type="button"
                         class="mk-menu__item"
                         role="menuitem"
@@ -302,7 +290,7 @@ import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
-import { statusText, statusBadge, isPathStalled, pathRetryTypeText, PATH_STALL_HOURS } from './opsShared'
+import { statusText, statusBadge, pathRetryTypeText } from './opsShared'
 import { isTestAccountUser, useListQueryState } from './learner-profile'
 
 /** 嵌入模式：作为「目标对话」页内「学习路径」tab 渲染（隐藏页面壳与状态条，筛选/表格/抽屉保留）；
@@ -323,9 +311,6 @@ const loadError = ref('')
 const keyword = ref('')
 /** 状态筛选（'' 退役，哨兵 'all' 与 useListQueryState 的 pill 约定一致） */
 const statusFilter = ref('all')
-/** 复合快筛「停滞」（进行中 ∧ 超阈值无更新）：与 statusFilter 叠加为 AND；再点取消。
-    计数按本页已加载窗口（同 GoalConversations「未生成路径」，不显服务端全量口径以免两数打架） */
-const stalledOnly = ref(false)
 /* 口径整组统一（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
 const includeTest = computed({
   get: () => liveIncludeVirtual.value,
@@ -443,18 +428,14 @@ const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return sortOcRows(rows.value.filter((p) => {
     if (statusFilter.value !== 'all' && !pathStatusMatch(p.status, statusFilter.value)) return false
-    if (stalledOnly.value && !isStalled(p)) return false
     if (!k) return true
     return `${p.title} ${p.user?.name || ''} ${p.user?.email || ''} ${p.subject || ''}`.toLowerCase().includes(k)
   }))
 })
-/** 「停滞」快筛命中数（按当前已加载窗口；判据与行内「停滞」徽标同一 isStalled） */
-const stalledCount = computed(() => rows.value.filter((p) => isStalled(p)).length)
-const isFiltered = computed(() => !!keyword.value.trim() || statusFilter.value !== 'all' || stalledOnly.value)
+const isFiltered = computed(() => !!keyword.value.trim() || statusFilter.value !== 'all')
 function clearFilters() {
   keyword.value = ''
   statusFilter.value = 'all'
-  stalledOnly.value = false
 }
 /* 筛选 / 页码 ↔ URL query（2026-10-13 运营走查 O2）：本页原为「只读 URL 不回写」（写入权在
    发起方）——手动筛选在刷新 / 分享 / 收藏里全部丢失。改为双向同步（缺省值不写 URL，所以
@@ -465,15 +446,13 @@ function clearFilters() {
 useListQueryState(
   {
     pill: statusFilter, keyword, page, pageSize,
-    allowedPills: ['all', 'active', 'completed', 'failed', 'archived'],
-    /* 「停滞」快筛也进 URL（1=开），刷新/分享/返回可还原（与 pill 同一组合式单点） */
-    extra: [{ key: 'stalled', get: () => (stalledOnly.value ? '1' : ''), set: (v) => { stalledOnly.value = v === '1' }, allowed: ['1'] }]
+    allowedPills: ['all', 'active', 'completed', 'failed', 'archived']
   },
   { pill: 'status' }
 )
 /* 回第 1 页只监听筛选输入与排序（TeachingSessions 判例）：监听 filtered 会让数据回填
    （重挂载恢复列表态后的装载）也把页码打回第 1 页。越界收敛由 Pagination 自带 watcher 兜底。 */
-watch([keyword, statusFilter, stalledOnly, ocSortKey, ocSortDir], () => {
+watch([keyword, statusFilter, ocSortKey, ocSortDir], () => {
   page.value = 1
 })
 /* 出站下钻不再存快照：筛选/页码已住进 URL（上方 useListQueryState），
@@ -664,20 +643,7 @@ async function remove(p: PathRow) {
   }
 }
 
-/* 生成停滞（active 且「最近活动」超 PATH_STALL_HOURS）：提醒可「重试生成」补齐。
-   判据用真墙钟最近活动（同「更新」列口径）：虚拟路径的 updatedAt 是模拟钟未来值，会永远判「不停滞」。 */
-function isStalled(p: PathRow) {
-  const at = activityAt(p)
-  return at ? isPathStalled(p.status, at) : false
-}
-function stallTitle(p: PathRow) {
-  const full = `完整时间 ${fmtDate(activityAt(p))}`
-  return isStalled(p)
-    ? `${full}。超过 ${PATH_STALL_HOURS} 小时无更新，可「重试生成」补齐`
-    : full
-}
-
-/* 重试路径生成（failed / 停滞 active 的运营救援）：后端按 learningPathId 找最新虚拟会话
+/* 重试路径生成（只服务失败行）：后端按 learningPathId 找最新虚拟会话
    代发 retry-path-generation，守卫自动判 core=重建主结构 / stageDesign=补齐阶段任务；
    拒绝时 HTTP 200 + success:false，原因透传 toast（家法：修复类确认显式 danger:false） */
 async function retryGeneration(p: PathRow) {
@@ -697,7 +663,7 @@ async function retryGeneration(p: PathRow) {
       toast.success(`已提交重试（${pathRetryTypeText(body.data.retryType)}）`)
       doneConfirm()
       /* G6（2026-10-10）：必须 force——reload() 非 force 时 60s TTL 内直接短路 return，
-         重试提交后列表纹丝不动（行还挂在「停滞/失败」上，用户以为点了没生效） */
+         重试提交后列表纹丝不动（行还挂在「生成失败」上，用户以为点了没生效） */
       void reload(true)
       void loadStats()
     } else {
