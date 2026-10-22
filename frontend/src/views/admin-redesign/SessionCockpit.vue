@@ -2726,7 +2726,9 @@ const lifeHandlersCockpit: Partial<Record<VsControlKey, () => void>> = {
   delete: () => { void removeSession() }
 }
 const lifeControlsCockpit = computed(() =>
-  vlabControlsFor(lifeStateCockpit.value).filter((c) => lifeHandlersCockpit[c.key])
+  vlabControlsFor(lifeStateCockpit.value, {
+    stage: typeof session.value?.currentStage === 'string' ? session.value.currentStage : undefined
+  }).filter((c) => lifeHandlersCockpit[c.key])
 )
 /** 统一操作入口：需确认的操作（stop/retry）先过模型文案确认，再执行 */
 function runCockpitAction(c: VsControlDef) {

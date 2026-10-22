@@ -2048,7 +2048,9 @@ async function finalizeManualStopIfNeeded(
   if (teaching?.manualStop !== true) return null;
   const status = String(session.status);
   if (status === 'completed' || status === 'failed' || status === 'abandoned') return null;
-  await ctx.updateSessionStatus(sessionId, 'abandoned', 'teaching').catch(() => {});
+  // #130：不写死 currentStage——goal/path 阶段终止时保留真实阶段，
+  // 否则阶段条会把未发生的 Path 凭空标完成、learnStarted 等派生读数跟着失真。
+  await ctx.updateSessionStatus(sessionId, 'abandoned').catch(() => {});
   await ctx.addSessionLog(sessionId, {
     timestamp: new Date().toISOString(),
     phase: 'error',
@@ -2323,8 +2325,9 @@ export async function emergencyStopLearning(ctx: SimulationOrchestrator, session
     });
 
     // 人为终止统一记 abandoned（拍板 2026-08-21）：failed 只留给系统/上游失败，
-    // 避免管理员主动停止污染失败率口径。abandoned 仍可经「重启学习」恢复
-    await ctx.updateSessionStatus(sessionId, 'abandoned', 'teaching');
+    // 避免管理员主动停止污染失败率口径。abandoned 仍可经「重启学习」恢复。
+    // #130：保留真实 currentStage，不写死 teaching（否则 goal/path 终止会被阶段条标成已进课堂）。
+    await ctx.updateSessionStatus(sessionId, 'abandoned');
 
     await ctx.addSessionLog(sessionId, {
       timestamp: new Date().toISOString(),

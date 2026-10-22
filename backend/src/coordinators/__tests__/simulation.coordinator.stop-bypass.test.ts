@@ -145,4 +145,15 @@ describe('SimulationOrchestrator requestStopLearning（旁路紧急停止）', (
     expect(result).toEqual({ success: true })
     expect(sessionRecord.status).toBe('abandoned')
   })
+
+  it('goal 阶段终止：currentStage 保持 goal，不被写死成 teaching（#130）', async () => {
+    sessionRecord = buildSession({ currentStage: 'goal' })
+    mockLeaseCreate.mockResolvedValue({})
+
+    const result = await coordinator.requestStopLearning('simulation-1', 'admin-stop')
+
+    expect(result).toEqual({ success: true })
+    expect(sessionRecord.status).toBe('abandoned')
+    expect(sessionRecord.currentStage).toBe('goal')
+  })
 })

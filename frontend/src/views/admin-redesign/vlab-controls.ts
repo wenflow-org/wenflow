@@ -149,9 +149,19 @@ const CONTROLS_BY_STATE: Record<VsLifecycleState, VsControlKey[]> = {
   completed: ['delete', 'cockpit']
 }
 
-/** 按状态取可用操作定义（页面渲染唯一入口） */
-export function vlabControlsFor(state: VsLifecycleState): VsControlDef[] {
-  return (CONTROLS_BY_STATE[state] || []).map((k) => VS_CONTROL_DEFS[k])
+/** 按状态取可用操作定义（页面渲染唯一入口）
+ *
+ *  #130：pause 只有 learn 自动循环消费，goal/path 写进去是静默 no-op（后端明确 409）。
+ *  传了 stage 时把 pause 收窄到教学阶段；不传 stage 的调用点保持旧行为（不收窄）。 */
+export function vlabControlsFor(
+  state: VsLifecycleState,
+  options: { stage?: string | null } = {}
+): VsControlDef[] {
+  const keys = (CONTROLS_BY_STATE[state] || []).filter((k) => {
+    if (k !== 'pause' || options.stage === undefined) return true
+    return ['teaching', 'learn', 'teach'].includes(String(options.stage || ''))
+  })
+  return keys.map((k) => VS_CONTROL_DEFS[k])
 }
 
 /** 从会话字段推导生命周期状态（前端统一口径；paused 由 teaching.paused 派生）
