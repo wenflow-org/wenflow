@@ -355,6 +355,8 @@ export interface TeachingTurnOutput {
      * 回合级知识状态估计（θ−d 路由信号）：conceptMastery + 任务难度 + 建议。
      * conceptMastery 项的 kcId 与 knowledge.points 同概念一致（同一稳定键，见
      * TeachingTurnKnowledgePoint）；写入侧据此锚定概念身份（名字漂移不再分叉）。
+     * evidence 只能写学生言行（原话摘录/白描转述），禁止模型自我叙述——叙述会被
+     * normalizeKtEstimate 的黑名单丢弃（2026-10-22，见 KT_MODEL_NARRATION_RE）。
      */
     ktEstimate?: {
       conceptMastery?: Array<{ conceptKey: string; kcId?: string; mastery: number; evidence?: string }>;
@@ -1282,6 +1284,33 @@ export function isVerbatimEvidence(evidence: unknown, learnerMessage: unknown): 
   return haystack.includes(quote);
 }
 
+/**
+ * ktEstimate.conceptMastery[].evidence 的**模型自述护栏**（2026-10-22，T8 边界集实测 T8B-11）。
+ *
+ * 证据窗随 memory_traces.ktEvidence 落库后是检查器/审计的核对材料，但实测出现模型把
+ * **自己的估计过程**写进 evidence（「本轮尚未作答，依据历史稳定掌握记录保守估计」——
+ * 通篇没有学生言行，是模型在解释自己为何这么估）。与误解台账 2026-09-23 同轨迹：
+ * 提示词早已要求「学生原话依据」，仍被偶发无视 → 升级确定性兜底。
+ *
+ * 与 isVerbatimEvidence 的刻意差异：掌握度窗口允许**转述**（T8 实测多数合法证据是白描
+ * 转述而非逐字引用，逐字核对会误杀），黑名单只杀「说话人不是学生」的自述条目——命中
+ * 即丢弃 evidence（mastery 保留：θ−d 路由信号另有累积依据；列语义「无证据 = 不落」）。
+ */
+const KT_MODEL_NARRATION_RE = /(尚未作答|尚未回答|没有作答|未作答|保守估计|依据历史|根据历史|历史掌握|掌握记录|系统记录|课堂记录|无充分证据|历史稳定|依据稳定)/;
+
+export function sanitizeKtEvidence(evidence: unknown): string | undefined {
+  if (typeof evidence !== 'string') return undefined;
+  const t = evidence.trim().slice(0, 200);
+  if (!t) return undefined;
+  if (KT_MODEL_NARRATION_RE.test(t)) {
+    logger.warn('[TeachingTurnAgent] ktEstimate evidence 疑似模型自述（黑名单命中），已丢弃', {
+      sample: t.slice(0, 60),
+    });
+    return undefined;
+  }
+  return t;
+}
+
 /** 归一化结构化误解台账（G-R-R Phase 1）：过滤缺证据项 + **evidence 逐字核对**，置信度收敛到 0|25|50|75|100 五档 */
 function normalizeMisconceptions(value: any, learnerMessage = ''): { misconceptions?: NonNullable<TeachingTurnOutput['analysis']['misconceptions']> } {
   if (!Array.isArray(value) || value.length === 0) return {};
@@ -1348,6 +1377,7 @@ function normalizeConfirmCheck(value: any): { confirmCheck?: NonNullable<Teachin
  * 归一化回合级知识状态估计（θ−d 路由信号）：数值钳制、推荐值白名单、kcId 透传。
  * kcId 是**稳定身份键**（可选）：原样保留（去空白/限长），不做任何按名字推断的补写——
  * 模型没回填就没有，写入侧回落自由文本名（见 memory-trace.service resolveConceptIdSafe）。
+ * evidence 走 KT_MODEL_NARRATION_RE 黑名单（见 sanitizeKtEvidence）。
  */
 function normalizeKtEstimate(value: any): { ktEstimate?: NonNullable<TeachingTurnOutput['analysis']['ktEstimate']> } {
   if (!value || typeof value !== 'object') return {};
@@ -1355,12 +1385,15 @@ function normalizeKtEstimate(value: any): { ktEstimate?: NonNullable<TeachingTur
     ? value.conceptMastery
         .filter((item: any) => item && typeof item?.conceptKey === 'string' && item.conceptKey.trim())
         .slice(0, 5)
-        .map((item: any) => ({
-          conceptKey: String(item.conceptKey).trim().slice(0, 120),
-          ...(normalizeKcId(item.kcId) ? { kcId: normalizeKcId(item.kcId)! } : {}),
-          mastery: Number.isFinite(Number(item.mastery)) ? Math.max(0, Math.min(1, Number(item.mastery))) : 0.5,
-          evidence: typeof item.evidence === 'string' ? item.evidence.trim().slice(0, 200) : undefined,
-        }))
+        .map((item: any) => {
+          const evidence = sanitizeKtEvidence(item.evidence);
+          return {
+            conceptKey: String(item.conceptKey).trim().slice(0, 120),
+            ...(normalizeKcId(item.kcId) ? { kcId: normalizeKcId(item.kcId)! } : {}),
+            mastery: Number.isFinite(Number(item.mastery)) ? Math.max(0, Math.min(1, Number(item.mastery))) : 0.5,
+            ...(evidence ? { evidence } : {}),
+          };
+        })
     : undefined;
   const result: NonNullable<TeachingTurnOutput['analysis']['ktEstimate']> = {};
   if (conceptMastery && conceptMastery.length > 0) result.conceptMastery = conceptMastery;
