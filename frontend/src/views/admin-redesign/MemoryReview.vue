@@ -67,7 +67,7 @@
                 </td>
                 <td>{{ reasonText(item.reason) }}</td>
                 <td class="mk-num">{{ item.load }}</td>
-                <td class="mr__sub">{{ item.loadFactors.join('、') || '—' }}</td>
+                <td class="mr__sub">{{ loadFactorText(item.loadFactors) }}</td>
                 <td>
                   <!-- 来源路径可点（2026-10-12 走查「记忆与复习的跳转」）：记忆的出处此前是死文本，
                        openSubPage('path') 走适配层反查会话进路径座舱；from 带上所属学习者详情，
@@ -759,6 +759,18 @@ const SOURCE_ZH: Record<string, string> = {
 }
 const reasonText = (r?: string | null) => (r ? REASON_ZH[r] || r : '—')
 const sourceText = (s?: string | null) => (s ? SOURCE_ZH[s] || s : '—')
+/* 负担因子码（review-plan / concept-load 的内部键）→ 运营词：
+   2026-10-23 走查「负担因子列在写 granularity:compound」——枚举码不得直出界面。 */
+const LOAD_FACTOR_ZH: Record<string, string> = {
+  'granularity:long': '表述过长',
+  'granularity:compound': '复合概念',
+  'type:process': '过程型',
+  'llm:cluster': '技能簇',
+  'llm:procedural': '过程型',
+  'llm:hard': '难度高'
+}
+const loadFactorText = (factors: string[] | undefined) =>
+  (factors || []).map((f) => LOAD_FACTOR_ZH[f] || f).join('、') || '—'
 
 /** 日期时间格式化（#66）：与最近复习列同参（zh-CN 24 小时制带分组），
  *  避免同屏两处时间格式不同（执行时间列原用无参 toLocaleString，随浏览器 locale 变） */

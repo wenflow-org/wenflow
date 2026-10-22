@@ -716,11 +716,17 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">教学会话</h3>
-          <!-- 头部读数=窗口口径 + 有效/废弃分档（原「最近 20 条（窗口上限）」只有截断值，
-               读不出窗口里哪些是真实教学事件；口径与定义进 title） -->
-          <span class="mk-card__meta" :title="ldSessionMetaTitle">
+          <!-- 2026-10-23 走查：卡头原来写「N 节 · 有效 N · 废弃 N」，与下一条工具栏的三枚
+               pills（有效 / 已废弃 / 窗口全部）是同一组计数读了两遍——读数归 pills，
+               卡头只保留加载中/失败的即时状态。 -->
+          <span v-if="ldSessLoading || ldSessError" class="mk-card__meta">
             <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
-            <template v-else>{{ ldSessError ? '加载失败' : ldSessionMetaText }}</template>
+            <template v-else>加载失败</template>
+          </span>
+          <!-- 读数归 pills；卡头只留作用域（会话列表随页级路径范围收窄，必须自明）
+               + 触及窗口上限时的截断披露 -->
+          <span v-else class="mk-card__meta" :title="ldSessionMetaTitle">
+            {{ scopeNote.label }}<template v-if="ldSessionRows.length >= LD_SESSION_WINDOW"> · 近 {{ LD_SESSION_WINDOW }} 节窗口</template>
           </span>
         </div>
         <!-- 工具栏：视角（有效/废弃重试/窗口全部）+ 阶段（>1 阶段才出）。视角默认「有效」——
@@ -1289,16 +1295,10 @@ const ldSessViewRows = computed(() =>
       ? ldSessDiscardedRows.value
       : ldSessionRows.value
 )
-const ldSessionMetaText = computed(() => {
-  const all = ldSessionRows.value.length
-  const scope = scopeNote.value.label
-  if (!all) return scope
-  const win = all >= LD_SESSION_WINDOW ? `近 ${LD_SESSION_WINDOW} 节窗口` : `${all} 节`
-  return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length}`
-})
+/* 卡头读数已撤（见模板 2026-10-23 注）：计数由工具栏 pills 单点承载；title 仍是窗口口径，
+   跨路径时补里程碑串档告警，单条路径下档位天然同源不再告警。 */
 const ldSessionMetaTitle = computed(() => {
   const base = `该学习者最近 ${LD_SESSION_WINDOW} 节课堂（窗口上限）`
-  // 里程碑串档只在跨路径时存在：切到单条路径后档位天然同源，不必再告警
   return scopePathId.value
     ? base
     : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档。`
@@ -2146,13 +2146,14 @@ const controlFlags = computed(() => {
   ]
 })
 
-/** 卡头一行：账本规模（三档信号在「概念信号」组、反复困惑在第三组各有实体，不再复读进卡头） */
+/** 卡头一行：账本规模（三档信号在「概念信号」组、反复困惑在第三组各有实体，不再复读进卡头）。
+    量与概览同口径同词（「N 个概念」）——同一页两处计数单位不再一个「项」一个「个」。 */
 const sigHeadMeta = computed<string | null>(() => {
   const gb = (knowledgeMemory.value as Record<string, unknown> | null)?.globalBackground
   if (!gb || typeof gb !== 'object') return null
   const o = gb as Record<string, unknown>
   const ledger = Array.isArray(o.conceptLedger) ? o.conceptLedger.length : 0
-  return ledger ? `概念掌握 ${ledger} 项` : null
+  return ledger ? `${ledger} 个概念` : null
 })
 
 /** 信号三档原始数组（globalSignals 三组概念名） */
@@ -2646,14 +2647,10 @@ const memoryRowsFiltered = computed(() => {
   const base = memView.value === 'all' ? memorySortedRows.value : memorySortedRows.value.filter((r) => r.stateKey === memView.value)
   return sortMemRows([...base])
 })
-/** 卡头读数：状态分档（剔除全零档），口径写进 title */
-const memMetaText = computed(() => {
-  const parts = memViews.value.filter((v) => v.key !== 'all').map((v) => `${v.label} ${v.count}`)
-  const base = parts.length ? parts.join(' · ') : `共 ${memoryPaneRows.value.length} 点`
-  /* 作用域标注保留（2026-10-17 拍板）：它不是页级开关的复读——记忆块按用户级、跨全部路径，
-     与页内「路径范围」无关，读错会漏掉在另一条路径学过的概念。 */
-  return `${base} · ${allPathsScope.value.label}`
-})
+/** 卡头不再报状态分档（2026-10-23 走查：同一组计数已由工具栏 pills 承担，卡头复读一遍）；
+    只留作用域标注——它不是页级开关的复读：记忆块按用户级、跨全部路径，与页内「路径范围」
+    无关，读错会漏掉在另一条路径学过的概念。 */
+const memMetaText = computed(() => allPathsScope.value.label)
 
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
 const trendBadge = computed(() => (d.value?.trend === 'up' ? 'mk-badge--ok' : d.value?.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))

@@ -271,8 +271,9 @@
 
       <div class="sdp-form__footer">
         <p v-if="rtMsg" class="sdp-form__msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
+        <!-- 2026-10-23 走查：卡内「刷新」与页头「刷新」同屏两颗、各刷一半（页头刷新会经
+             refreshTick 触发本组件重拉）——撤卡内这颗，页头刷新即全量来源。 -->
         <button type="button" class="mk-btn mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
-        <button type="button" class="mk-btn" :disabled="rtSaving" @click="loadRuntime">刷新</button>
       </div>
     </section>
 

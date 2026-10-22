@@ -72,9 +72,9 @@
         <span v-if="learner" class="mk-badge mk-badge--muted cp-hero__learner" :title="learnerTitle('会话所属学习者')">
           学习者 {{ learnerText }}
         </span>
-        <!-- 会话 ID meta：主标题已让位给会话主题，原始 ID 降为副行 mono 小字（title 带全量 ID；
-             原始 ID 留在 URL 与日志） -->
-        <span class="cp-hero__id mono" :title="`会话 ID：${sessionId}`">{{ shortId }}</span>
+        <!-- 会话 ID meta：主标题已让位给会话主题；2026-10-23 走查把截断裸 ID 也从 pills 行撤下
+             （「…4d2-7ac8d952403d」紧贴学习者徽章，读成身份的一部分）。完整 ID 在 URL、
+             会话数据包与复制 JSON 里，排障取用不受影响。 -->
       </template>
       <template #actions>
         <!-- 真实会话（只读，无生命周期控制）只留确定性出口。刷新收归顶栏一颗

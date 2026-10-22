@@ -163,8 +163,8 @@
     </div><!-- /oh-body -->
     </template>
 
-    <!-- ===== Tab2: 反馈（Feedback embedded） ===== -->
-    <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" @status="onFeedbackStatus" />
+    <!-- ===== Tab2: 反馈（Feedback embedded；真实/测试视角吃页级 wbScope，别再放第二枚开关） ===== -->
+    <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded :include-test="wbScope" @count="onDomainCount('feedback', $event)" @status="onFeedbackStatus" />
     <!-- ===== Tab3: 成就（OpsAchievements embedded） ===== -->
     <OpsAchievements v-else-if="tab === 'achievements'" id="oh-panel-achievements" role="tabpanel" aria-labelledby="oh-tab-achievements" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
     <!-- ===== Tab4: 公告（Announcements embedded） =====

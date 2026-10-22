@@ -206,7 +206,10 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
       sessionRow('s3', 1, 'discarded'),
     ]);
     expect(viewChips(w).map((c) => c.text())).toEqual(['有效 · 1', '已废弃 · 2', '窗口全部 · 3']);
-    expect(w.find('.mk-card__meta').text()).toContain('有效 1 · 废弃 2');
+    // 2026-10-23 走查：分档计数只在 pills 上，卡头只留作用域（不再复读 有效/废弃）
+    const meta = w.find('#ld-panel-sessions .mk-card__meta').text();
+    expect(meta).toContain('当前路径');
+    expect(meta).not.toContain('有效');
     const rows = w.findAll('tbody .ld-pane-row');
     expect(rows.length).toBe(1);
     expect(rows[0].text()).toContain('s1');
@@ -376,10 +379,11 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
       trace({ conceptKey: 'k-b', label: '乙', retrievability: 1, dueAt: new Date(Date.now() + day).toISOString(), extractionCount: 4 }),
       trace({ conceptKey: 'k-c', label: '丙', retrievability: null, dueAt: null, extractionCount: 0, lastSeenAt: null }),
     ]);
+    // 2026-10-23：状态分档由 pills 承载，卡头只留作用域标注
     const meta = w.find('#ld-panel-memory .mk-card__meta');
-    expect(meta.text()).toContain('待复习 1');
-    expect(meta.text()).toContain('稳固 1');
-    expect(meta.text()).toContain('未初始化 1');
+    expect(meta.text()).toContain('跨全部路径');
+    const chips = w.findAll('.ld-filtbar[aria-label="按复习状态筛选"] .mk-pill').map((c) => c.text());
+    expect(chips).toEqual(['全部 · 3', '待复习 · 1', '稳固 · 1', '未初始化 · 1']);
     expect(w.find('#ld-panel-memory tbody tr').text()).toContain('15 次 · 最近');
   });
 

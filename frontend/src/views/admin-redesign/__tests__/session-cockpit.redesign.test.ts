@@ -223,10 +223,8 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(w.find('.mk-hero__avatar').text()).toBe('S');
     // 主标题 = 会话主题（teaching.topic）：截断裸 ID 不再做 24px/700 主标题（2026-10-04 全站评审 P2-7）
     expect(w.find('.mk-hero__title').text()).toBe('函数');
-    // 会话 ID 降为 pills 行 meta（mono 小字，title 带全量 ID）
-    const idMeta = w.find('.cp-hero__id');
-    expect(idMeta.text()).toBe('ts_re_1');
-    expect(idMeta.attributes('title')).toBe('会话 ID：ts_re_1');
+    // 2026-10-23 走查：截断会话 ID 也从 pills 行撤下（完整 ID 在 URL / 数据包 / 日志里）
+    expect(w.find('.cp-hero__id').exists()).toBe(false);
     const sub = w.find('.mk-hero__sub').text();
     expect(sub).toContain('Python 入门');
     expect(sub).toContain('开始于');

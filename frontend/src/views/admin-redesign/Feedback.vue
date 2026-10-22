@@ -64,9 +64,9 @@
                 仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
               </button>
             </div>
-            <!-- 真实/测试互斥视角（2026-10-10 拍板方言；2026-10-15 反馈列表接入——
-                 后端默认口径改为仅真实，测试视角显式切换，与运营待办/内容管理同判据） -->
-            <DataScopeToggle v-model="includeTest" />
+            <!-- 真实/测试互斥视角由宿主运营中心的页级开关统一承载（2026-10-23 走查：
+                 卡内开关与页级开关同屏并列、却只各管一半——页级动 KPI、卡内动列表）。
+                 这里不再放第二枚开关，视图随 :include-test 联动。 -->
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
           <span class="mk-card__head-right">
@@ -247,14 +247,15 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
 /** 嵌入模式：作为运营中心「反馈」tab 渲染（仅去掉外层状态条；宿主承载域计数）。
-    count 事件：反馈总数上报（宿主「反馈 N」徽章） */
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+    count 事件：反馈总数上报（宿主「反馈 N」徽章）。
+    includeTest：真实/测试视角由宿主页级开关下发（v-model:include-test），
+    列表数据范围与宿主 KPI 同源，不再各用一份本地状态。 */
+const props = withDefaults(defineProps<{ embedded?: boolean; includeTest?: boolean }>(), { embedded: false, includeTest: false })
 const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'status', status: string): void }>()
 
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
@@ -304,10 +305,12 @@ watch(total, (n) => {
 const keyword = ref('')
 const statusFilter = ref('')
 const lowOnly = ref(false)
-/* 真实/测试互斥视角（2026-10-10 拍板方言）：默认真实——后端列表口径同步改为仅真实，
-   测试视角显式切换（与运营待办/内容管理同判据）；切换强制重拉（绕过页缓存） */
-const includeTest = ref(false)
-watch(includeTest, () => {
+/* 真实/测试互斥视角（2026-10-10 拍板方言）：默认真实——后端列表口径同步改为仅真实。
+   2026-10-23 起由宿主页级开关下发（见 props），本组件不再保留第二份本地状态；
+   切换仍强制重拉（绕过页缓存）。 */
+const scopeProp = computed(() => props.includeTest ?? false)
+const includeTest = computed(() => scopeProp.value)
+watch(scopeProp, () => {
   void load(true)
 })
 const detail = ref<Detail | null>(null)

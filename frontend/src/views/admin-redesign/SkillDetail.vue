@@ -263,7 +263,7 @@
           </section>
         </div>
 
-        <!-- ========== 工程（原型 engineering：工程信息 kv + 依赖与发布 chips/feed） ========== -->
+        <!-- ========== 工程（原型 engineering：工程信息 kv；依赖与发布见下方 EngineeringTab） ========== -->
         <div v-if="designTabShown('engineering')" v-show="tab === 'engineering'" class="skd-bloc">
           <div class="skd-grid">
             <section class="mk-card">
@@ -280,23 +280,10 @@
                 </div>
               </div>
             </section>
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">依赖与发布</h3>
-                <span class="mk-card__meta">{{ coreDeps.length ? `${coreDeps.length} 项上游依赖` : '无依赖声明' }}</span>
-              </div>
-              <div class="skd-pad skd-stack">
-                <!-- 原型 renderSkillDetail 2367-2371（chips + feed）：依赖取 core YAML inputs 的 skill:/sandbox: 引用 -->
-                <div v-if="coreDeps.length" class="skd-chips">
-                  <span v-for="d in coreDeps" :key="d" class="mk-badge mk-badge--muted mono" :title="d">{{ d }}</span>
-                </div>
-                <p v-else class="mk-empty--line" title="core YAML 未声明 inputs 的 skill:/sandbox: 引用">该 Skill 未声明输入依赖。</p>
-                <!-- 四段发布流（草稿/评审/灰度/回滚）后端无阶段状态接口 → 空态；本系统发布链见设计页「协议」页签 -->
-                <p class="mk-card__note" title="草稿 / 评审 / 灰度 / 回滚状态暂未提供">发布链：保存并编译 → 发布（暂无草稿 / 评审 / 灰度阶段状态）。</p>
-              </div>
-            </section>
           </div>
-          <!-- 设计页「工程」内容（基础信息 + 依赖与发布 + 运行时契约 + 协议视图 + Skill 规则总览） -->
+          <!-- 设计页「工程」内容（基础信息 + 依赖与发布 + 运行时契约 + 协议视图 + Skill 规则总览）。
+               2026-10-23 走查：顶部原本还有一张「依赖与发布」卡，与 EngineeringTab 里的同名区块
+               同源同内容，同一页签出现两遍；卡片版撤除，依赖 chips / 发布链只留 EngineeringTab 一处。 -->
           <EngineeringTab v-if="overviewItem" :skill-id="skillId" :overview="overviewItem" />
         </div>
 
@@ -974,20 +961,8 @@ const coreTerminations = computed<string[]>(() => {
   const c = coreSnap.value
   return c ? toStringList(c.termination ?? c.terminations ?? c.limits) : []
 })
-/** 上游依赖（原型 chips，index.html 2368）：core.inputs 的 skill:/sandbox: 引用即依赖边。
-    #132：原正则 `([^.\s]+)` 在首个「.」截断，7 条 sandbox:teaching.* 被截成同一条
-    「sandbox:teaching」、去重后只剩 1 条（与真实依赖清单双错）→ 取完整 ref（到空白为止）。 */
-const coreDeps = computed<string[]>(() => {
-  const out: string[] = []
-  for (const i of coreSnap.value?.inputs || []) {
-    const ref = String(i?.ref || '').trim()
-    const m = /^(skill|sandbox):(\S+)/.exec(ref)
-    if (!m) continue
-    const label = `${m[1]}:${m[2]}`
-    if (!out.includes(label)) out.push(label)
-  }
-  return out
-})
+/* 上游依赖（原型 chips，index.html 2368）现由 EngineeringTab 单点渲染；
+   2026-10-23 撤掉本页重复的卡片版后，这里不再自己算一份。 */
 
 /* ===== 总加载（各域独立容错：单域失败不拖垮整页，页签内给出局部错误态） ===== */
 let loadSeq = 0
@@ -1288,7 +1263,6 @@ useEscape(
 .skd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .skd-grid > .mk-card { box-shadow: none; }
 .skd-pad { padding: 12px 16px; display: grid; gap: 10px; align-content: start; }
-.skd-stack { display: grid; gap: 12px; }
 
 /* ===== 协议：vrow 契约行（原型 protoRow：mono 名 + 方向 pill + 描述 + 类型 + 必填 pill） ===== */
 .skd-rows { display: grid; gap: 0; }
@@ -1342,7 +1316,6 @@ useEscape(
 .skd-rankrow:last-child { border-bottom: 0; }
 
 /* ===== 工程：依赖 chips（原型 .chips，index.html 2368） ===== */
-.skd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ===== 代码井（原型 .code：深底 mono 块；System Prompt / 试跑输出 / 探测预览共用） ===== */
 .skd-code {

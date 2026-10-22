@@ -71,7 +71,7 @@
       <div class="cd-pad cd-sec">
         <p v-if="d.background" class="cd-bg">{{ d.background }}</p>
         <div v-if="d.personaFacts.length" class="mk-facts mk-facts--rows">
-          <div v-for="f in d.personaFacts" :key="f.label"><span>{{ f.label }}</span><strong>{{ f.value }}</strong></div>
+          <div v-for="f in d.personaFacts" :key="f.label"><span>{{ f.label }}</span><strong>{{ personaValue(f.label, f.value) }}</strong></div>
         </div>
         <p v-if="!d.background && !d.personaFacts.length" class="mk-empty--line">这张卡没有人设字段（可能是批次运行产物，仅有账号与目标）。</p>
       </div>
@@ -235,6 +235,18 @@ function sourceTitle(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
 function levelText(level: string): string {
   const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
   return map[level] || level || '—'
+}
+/** 人设字段的枚举值 → 运营词（后端原样下发 reading / necessity / minimal / high；
+    2026-10-23 走查「卡片详情人设表在写英文码」，同页等级/预算都已中文化，这里补齐） */
+const PERSONA_ENUM_ZH: Record<string, Record<string, string>> = {
+  学习风格: { reading: '阅读型', video: '视频型', practice: '实践型', project: '项目型', quiz: '测验型', study: '系统学习', mixed: '混合型' },
+  动机类型: { necessity: '必要型', interest: '兴趣型', curiosity: '好奇型', 'external-pressure': '外部压力', career: '职业目标', achievement: '成就型', 'problem-solving': '问题驱动' },
+  可用时间: { minimal: '碎片时间', moderate: '适中', abundant: '充裕', short: '短', long: '长' },
+  技术熟练度: { high: '高', medium: '中', low: '低' },
+  认知风格: { intuitive: '直觉型', logical: '逻辑型', visual: '视觉型', practical: '实践型', mixed: '混合型' }
+}
+function personaValue(label: string, value: string): string {
+  return PERSONA_ENUM_ZH[label]?.[value] || value
 }
 function budgetLabel(k: string): string {
   const map: Record<string, string> = { dailyMinutes: '每日', horizonDays: '周期(天)', expectedHours: '预期(时)', weeklyHours: '每周(时)' }

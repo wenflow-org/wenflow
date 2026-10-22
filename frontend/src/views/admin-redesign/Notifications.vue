@@ -333,9 +333,11 @@ const readRate = computed(() => (total.value > 0 ? Math.round((readCount.value /
    页头基调只在加载失败时降级为 bad（原实现按 unreadTotal>0 给 warn，属误报）。 */
 const statusTone = computed(() => (failed.value ? 'mk-status--bad' : 'mk-status--ok'))
 
-const kindText = (k: string) => ({ system: '系统', announcement: '公告', achievement: '成就' }[k] || k)
+/* kind 词表：后端 deadline-notify.service 新增的 'deadline' 此前未映射，列表直出英文
+   （2026-10-23 走查截图为证）→ 补「截止提醒」；未知 kind 仍回落原文。 */
+const kindText = (k: string) => ({ system: '系统', announcement: '公告', achievement: '成就', deadline: '截止提醒' }[k] || k)
 const kindBadge = (k: string) =>
-  k === 'announcement' ? 'mk-badge--warn' : k === 'achievement' ? 'mk-badge--ok' : 'mk-badge--info'
+  k === 'announcement' || k === 'deadline' ? 'mk-badge--warn' : k === 'achievement' ? 'mk-badge--ok' : 'mk-badge--info'
 
 function fmtDate(iso?: string): string {
   if (!iso) return '—'

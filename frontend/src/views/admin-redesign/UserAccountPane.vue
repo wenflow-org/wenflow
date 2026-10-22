@@ -11,7 +11,9 @@
           <!-- 账号轴的状态与账户操作归「账户信息」卡头（2026-10-08 重做）：沿用全站卡头语法，
                标题吃剩余宽度、尾部元素贴右（「头内成组」规则）。 -->
           <div class="mk-card__head">
-            <h3 class="mk-card__title">账户与许可</h3>
+            <!-- 2026-10-23 走查：标题原为「账户与许可」，页签叫「账号与许可」——同屏两个词；
+                 统一跟页签用「账号」（本卡字段也叫「账号类型」「账号操作」） -->
+            <h3 class="mk-card__title">账号与许可</h3>
             <div class="mk-card__head-right">
               <span class="mk-badge" :class="isDeleted ? 'mk-badge--deleted' : 'mk-badge--ok'">
                 {{ isDeleted ? '已删除' : '正常' }}
@@ -20,9 +22,9 @@
                 {{ restoring ? '恢复中…' : '恢复用户' }}
               </button>
               <div v-if="canDelete" class="mk-menu">
-                <button type="button" class="mk-menu__btn" aria-label="账户操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
+                <button type="button" class="mk-menu__btn" aria-label="账号操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
                 <div v-if="openMenu === 'account'" class="mk-menu__pop" :style="popStyle" @click.stop>
-                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留" @click="menuDelete">删除账户…</button>
+                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留" @click="menuDelete">删除账号…</button>
                 </div>
               </div>
             </div>

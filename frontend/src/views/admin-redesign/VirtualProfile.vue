@@ -247,7 +247,8 @@
               <span v-for="t in d.traits" :key="t" class="vp-trait">{{ t }}</span>
             </div>
             <div class="vp-goal">
-              <span>长期倾向（可选）</span>
+              <!-- 「可选」是创建表单的语言，不是读者要的限定：画像页只看值本身（2026-10-23） -->
+              <span title="影响模拟行为与学习需求">长期倾向</span>
               <strong>{{ goalText || '由故事产生当次学习需求' }}</strong>
             </div>
           </div>
