@@ -436,7 +436,8 @@ const body = `
     <pre>node node_modules/vite-node/vite-node.mjs scripts/figure-review-html.ts   # 图库
 node node_modules/vite-node/vite-node.mjs scripts/figure-report-html.ts   # 本报告
 cd ../backend &amp;&amp; FIGURE_DB=D:/test/wenflow/backend/prisma/dev.db npx ts-node --transpile-only scripts/export-figures.ts</pre>
-    <p>测试：后端 68 条（出图服务 66 + 图型计数 2）、前端 44 条（渲染器 24 + 组件 20）。</p>
+    <p>测试（2026-10-23 收工）：前端全量 1609 条全绿（渲染器 31 条，含今晚新增 3 条列宽用例）；后端全量 5543 通过 / 2 失败，失败集中在 <span class="mono">health-center.service.test.ts</span> 的 w4-corehash（读本机 system.db 的提示词版本号，被夜间跑批写脏，与图无关，停后端后单独复跑仍失败）。</p>
+    <p>今晚脚本：<span class="mono">outputs/e2e/tonight-cases.mjs</span>（3 条故事线）、<span class="mono">tonight-runner.mjs</span>（2 工人）、<span class="mono">tonight-stats.mjs</span>（图型分布与闸门计数）、<span class="mono">tonight-stop.mjs</span>（收工停 autopilot）。</p>
     <p class="note">数据说明：本轮真课的后端是从图分支起的 3005，但 Prisma 解析到主树 dev.db，所以会话数据落在主库；autopilot 在第 13 步被「进程重启」中断（两个后端共用一个库时探活互相干扰），图已全部落库并导出。</p>
   </div>
 </div>`;
