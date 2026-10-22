@@ -292,7 +292,10 @@ class MemoryTraceService {
     // #109：路径骨架 concept-N 不是概念身份——不 upsert 痕迹、不建概念。
     // 本守卫同时覆盖 recordSessionOutcome（它经由本方法落痕）；改挂/丢弃由调用方
     // （teaching-turn-engine ktEstimate 分流）负责，这里只做最后一道防线。
-    if (isPlaceholderConceptKey(conceptKey)) return;
+    if (isPlaceholderConceptKey(conceptKey)) {
+      logger.warn('[memory-trace] 占位概念键被最后一道防线丢弃（不建痕/不建概念）', { site: 'upsertTrace', conceptKey });
+      return;
+    }
     const masteryScore = clamp01(input.masteryScore);
     const stability = ALLOWED_STABILITY.includes(input.stability as MemoryStability)
       ? (input.stability as MemoryStability)
@@ -430,7 +433,10 @@ class MemoryTraceService {
     for (const item of items) {
       if (!item?.name || !String(item.name).trim()) continue;
       // #109：占位键连证据行也不落（证据的 conceptKey 会被下游当作概念身份回源）。
-      if (isPlaceholderConceptKey(normalizeConceptKey(item.name))) continue;
+      if (isPlaceholderConceptKey(normalizeConceptKey(item.name))) {
+        logger.warn('[memory-trace] 占位概念键被丢弃（不落证据行）', { site: 'recordSessionOutcome', conceptKey: String(item.name).slice(0, 60) });
+        continue;
+      }
       const conceptKey = String(item.name).trim();
       const { masteryScore, stability } = mapKnowledgeStatusToMastery(item.status, item.progress, calibrationBias);
       // 证据门：有证据 → 原生 FSRS 排程；无证据 → 不传 grade（走 recordExtraction 既有无 grade 路径）
@@ -648,7 +654,10 @@ class MemoryTraceService {
       const key = normalizeConceptKey(item.conceptKey);
       if (!key) continue;
       // #109：占位键既不建痕也不建概念（模型把路径骨架序号回填进 ktEstimate 的历史缺口）。
-      if (isPlaceholderConceptKey(key)) continue;
+      if (isPlaceholderConceptKey(key)) {
+        logger.warn('[memory-trace] 占位概念键被丢弃（ktEstimate 不建痕/不建概念）', { site: 'applyKtEstimate', conceptKey: key });
+        continue;
+      }
       const mastery = Number.isFinite(item.mastery) ? Math.max(0, Math.min(1, item.mastery)) : null;
       if (mastery === null) continue;
       // #133（2026-10-22）：模型自报证据窗随 EMA 落库（此前在 engine 已被丢弃，检查器

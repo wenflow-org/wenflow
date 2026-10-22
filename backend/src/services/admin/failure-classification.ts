@@ -46,12 +46,13 @@ export function classifyFailureCategory(row: {
   return 'internal';
 }
 
-/** 限流信号条件（classifyFailureCategory 的 rate_limit 分支镜像） */
+/** 限流信号条件（classifyFailureCategory 的 rate_limit 分支镜像；throttl 与纯函数同源，2026-10-22 补齐） */
 const RATE_LIMIT_CONDITION = {
   OR: [
     { errorCode: { contains: 'RATE' } },
     { errorCode: { contains: '429' } },
     { error: { contains: 'rate limit' } },
+    { error: { contains: 'throttl' } },
   ],
 };
 

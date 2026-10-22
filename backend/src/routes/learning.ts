@@ -403,6 +403,7 @@ router.patch('/goals/:goalId', async (req, res, next) => {
 
     // G2：status 白名单校验（与 learning.service updateLearningGoal 的类型枚举一致）
     if (body.status !== undefined && !GOAL_STATUS_WHITELIST.includes(body.status)) {
+      logger.warn('[learning] goal status 白名单拒绝', { userId, goalId, status: String(body.status).slice(0, 32) });
       return res.status(400).json({
         success: false,
         error: { message: 'status 无效，仅支持 active/paused/completed/archived' }

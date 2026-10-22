@@ -230,6 +230,11 @@ function sanitizeInteractionMeta(raw: unknown): InteractionMetaRecord | undefine
 const requireIdempotencyKey = (value: unknown): string => {
   const key = typeof value === 'string' ? value.trim() : '';
   if (!key || key.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(key)) {
+    // 2026-10-22（机械过滤审计 A 类）：格式拒绝补日志（旧客户端带中文/#/超长的 key 一眼可见）。
+    logger.warn('[ai-teaching] Idempotency-Key 格式拒绝', {
+      reason: !key ? 'missing' : key.length > 128 ? 'too_long' : 'invalid_chars',
+      sample: typeof value === 'string' ? value.slice(0, 32) : typeof value,
+    });
     const error = new Error('缺少有效的 Idempotency-Key');
     (error as any).code = 'FINALIZATION_IDEMPOTENCY_KEY_REQUIRED';
     throw error;
