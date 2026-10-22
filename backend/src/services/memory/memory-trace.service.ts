@@ -635,7 +635,7 @@ class MemoryTraceService {
    */
   async applyKtEstimate(
     userId: string,
-    items: Array<{ conceptKey: string; kcId?: string | null; mastery: number }>,
+    items: Array<{ conceptKey: string; kcId?: string | null; mastery: number; evidence?: string | null }>,
     pathId: string | null = null,
   ): Promise<void> {
     if (!items || items.length === 0) return;
@@ -648,6 +648,11 @@ class MemoryTraceService {
       if (isPlaceholderConceptKey(key)) continue;
       const mastery = Number.isFinite(item.mastery) ? Math.max(0, Math.min(1, item.mastery)) : null;
       if (mastery === null) continue;
+      // #133（2026-10-22）：模型自报证据窗随 EMA 落库（此前在 engine 已被丢弃，检查器
+      // 只能拿二手转述核对）。与 ktMasteryEma 同口径=只留最新一次估计的证据，不累积历史。
+      const evidence = typeof item.evidence === 'string' && item.evidence.trim()
+        ? item.evidence.trim().slice(0, 200)
+        : null;
       const conceptId = await resolveConceptIdSafe(userId, key, pathId, item.kcId ?? null);
       const existing = await this.getTrace(userId, key);
       if (existing) {
@@ -665,6 +670,7 @@ class MemoryTraceService {
           data: {
             ktMasteryEma: ema,
             ...(conceptId !== null ? { conceptId } : {}),
+            ktEvidence: evidence,
             ...(ghostSeed ?? {}),
           },
         });
@@ -685,6 +691,7 @@ class MemoryTraceService {
             masteryScore: mastery,
             stability: 'unknown',
             ktMasteryEma: mastery,
+            ktEvidence: evidence,
             extractionCount: 0,
             source: 'kt-estimate',
             pathId,

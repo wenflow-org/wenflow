@@ -799,6 +799,10 @@ model memory_traces {
   fsrsLapses      Int?      // FSRS-6 累计失误次数（Review/Relearning 态再判 Again 时 +1）：null = 未初始化。注：short-term 关闭下不改变调度，只作计数（卡壳率/leech/E4）
   fsrsReps        Int?      // FSRS-6 累计复习次数（**只计 FSRS 调度过的复习**，≠ extractionCount）：null = 未初始化
   ktMasteryEma    Float?    // θ−d 知识状态 EMA（LLM ktEstimate 的跨会话滑动平均，α=0.2；null = 未初始化）
+  // 模型对该估计自报的证据窗（≤200 字，teaching-turn 已截断）。2026-10-22（#133）起随 EMA 落库——
+  // 此前在 engine 组装 ktItems 时被丢弃，事后检查/审计只能拿二手转述核。
+  // null = 旧数据或模型未报。只随最新一次估计覆盖，不累积历史。
+  ktEvidence      String?
   pathId          String?   // 来源路径（写入时从会话带入）：温故解释"这是你在《X》里学过的"、按路径看待办
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

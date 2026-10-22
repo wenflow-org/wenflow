@@ -1414,6 +1414,9 @@ export async function processStudentMessage(
           conceptKey,
           ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
           mastery: c.mastery,
+          // #133（2026-10-22）：模型自报证据窗（skill 侧已截 200 字）随行透传落
+          // memory_traces.ktEvidence——此前在此被丢弃，事后检查器只能拿二手转述核对。
+          ...(typeof c.evidence === 'string' && c.evidence.trim() ? { evidence: c.evidence.trim() } : {}),
         }];
       });
       if (ktItems.length > 0) {
