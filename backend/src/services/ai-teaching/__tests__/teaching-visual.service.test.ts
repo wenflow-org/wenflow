@@ -526,7 +526,7 @@ describe('教学配图时机（S1：老师用字符画结构）', () => {
     const opportunity = buildVisualOpportunity([assistant('先说说你的想法。')], '把答案逐条归位到自然/社会经济两大角度');
     expect(opportunity).not.toBeNull();
     expect(opportunity!.reason).toBe('task-structure');
-    expect(opportunity!.instruction).toContain('grid');
+    expect(opportunity!.instruction).toContain('出图前先过三关');
   });
 
   it('上一轮已出过 mermaid → 不再追问；任务不像结构关系 → 不出信号', () => {
