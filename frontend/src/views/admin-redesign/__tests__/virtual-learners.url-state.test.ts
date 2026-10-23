@@ -10,6 +10,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import VirtualLearners from '../VirtualLearners.vue';
+import { liveVirtuals } from '../live';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -92,24 +93,42 @@ describe('VirtualLearners · 筛选 ↔ URL', () => {
     wrapper.unmount();
   });
 
-  it('深链 ?pill=paused 落位：该 pill 高亮（刷新 / 收藏还原）', async () => {
-    const { wrapper } = await mountVl('/admin/virtual-learners?pill=paused');
-    expect(pill(wrapper, '已暂停').classes()).toContain('mk-pill--active');
+  it('深链 ?pill=stalled 落位：该 pill 高亮（刷新 / 收藏还原）', async () => {
+    const { wrapper } = await mountVl('/admin/virtual-learners?pill=stalled');
+    expect(pill(wrapper, '停滞').classes()).toContain('mk-pill--active');
     expect(pill(wrapper, '全部').classes()).not.toContain('mk-pill--active');
     wrapper.unmount();
   });
 
-  it('点「曾失败」→ URL 带上 pill=failed（可分享）', async () => {
+  it('异常列「只看有异常」：本地开关，不占用 pill，筛掉没有失败/无响应的行', async () => {
+    // 空列表会走 MkEmptyState（无表格），先铺两行：一行有异常、一行干净
+    const row = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
+      id, name, goal: 'g', storyCount: 1, pathCount: 0, sessions: 1,
+      runningCount: 0, pausedCount: 0, failedCount: 0, abandonedCount: 0, stalledCount: 0,
+      runningSessionIds: [], currentStage: null, stageProgress: null,
+      createdAt: '2026-10-01T00:00:00Z', ...extra
+    });
+    (liveVirtuals as { value: unknown[] }).value = [row('a', '有异常', { failedCount: 2 }), row('b', '干净的')];
     const { wrapper, router } = await mountVl('/admin/virtual-learners');
-    await pill(wrapper, '曾失败').trigger('click');
+    const filter = wrapper.find('.vl-th-filter');
+    expect(filter.exists()).toBe(true);
+    expect(filter.attributes('aria-pressed')).toBe('false');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2);
+    await filter.trigger('click');
     await flushPromises();
-    expect(router.currentRoute.value.query.pill).toBe('failed');
-    expect(pill(wrapper, '曾失败').classes()).toContain('mk-pill--active');
+    expect(wrapper.find('.vl-th-filter').classes()).toContain('vl-th-filter--on');
+    expect(wrapper.find('.vl-th-filter').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1);
+    expect(wrapper.text()).toContain('有异常');
+    expect(wrapper.text()).not.toContain('干净的');
+    // 不是 pill：URL 不写筛选，刷新后回到「全部」
+    expect(router.currentRoute.value.query.pill).toBeUndefined();
     wrapper.unmount();
+    (liveVirtuals as { value: unknown[] }).value = [];
   });
 
   it('点回「全部」→ URL 删掉 pill（缺省值不留在地址栏）', async () => {
-    const { wrapper, router } = await mountVl('/admin/virtual-learners?pill=failed');
+    const { wrapper, router } = await mountVl('/admin/virtual-learners?pill=stalled');
     await pill(wrapper, '全部').trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.query.pill).toBeUndefined();

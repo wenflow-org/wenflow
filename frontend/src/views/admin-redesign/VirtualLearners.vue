@@ -6,30 +6,52 @@
          并进完成率卡 hint（同一会话漏斗）；「已截断」警示并进卡头 meta（与行数同格就近）。 -->
     <MkPageHead title="虚拟学习者" sub="用合成画像批量压测教学闭环与 Skill 稳定性">
       <template #actions>
-        <button
-          v-if="partition.stale > 0"
-          type="button"
-          class="mk-btn mk-btn--sm"
-          :disabled="reclaimRef?.state.busy"
-          :title="'角标为超过回收阈值的无响应候选运行数（含豁免项）'"
-          @click="openReclaimModal()"
-        >
-          {{ reclaimRef?.state.busy ? '回收中…' : `回收无响应（${partition.stale}）` }}
-        </button>
-        <button type="button" class="mk-btn mk-btn--sm" title="清理旧账号：按建号时间批量删除旧虚拟学习者（进行中与保留名单自动豁免，先预览再执行）" @click="cleanupRef?.open()">清理旧账号</button>
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="新建虚拟学习者" @click="openCreate">新建</button>
-        <button type="button" class="mk-btn mk-btn--sm" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="openBatchCreate">批量新建</button>
-        <!-- 批量入口（2026-10-19 运营走查「批量能力默认不存在」）：选择框列按 2026-10-18 拍板
-             默认隐藏，而批量条又要选中才浮现——两个默认叠加，新来的运营在首屏看不到任何批量
-             动作，会以为只能一个个点。这里给一枚页头入口，点了就打开选择框列（写的是 MkCols
-             同一个存储键，仍算用户的列偏好）；列已可见时它自己让位。 -->
-        <button
-          v-if="isLive && !isNarrow && hiddenCols.has('check')"
-          type="button"
-          class="mk-btn mk-btn--sm"
-          title="显示选择框列：逐行勾选后可批量启动全部故事、启动或停止自动驾驶、终止、清理无响应、删除"
-          @click="revealCheckColumn"
-        >批量操作</button>
+        <!-- 2026-10-21 逻辑重整：页头只留「新建」与「维护」两枚入口。
+             回收无响应 / 清理旧账号都是批量清理、低频、不可逆 → 收进维护菜单，
+             无响应候选数挂在触发钮上，信号不丢；批量新建进新建菜单；
+             「批量操作」只是打开勾选列，退回收纳它的「列」菜单（列设置就该在列菜单里）。 -->
+        <div class="vl-headmenu">
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm"
+            aria-haspopup="menu"
+            :aria-expanded="headMenu === 'maint'"
+            :title="partition.stale > 0 ? `维护：清理旧账号、回收 ${partition.stale} 条无响应会话` : '维护：清理旧账号'"
+            @click="toggleHeadMenu('maint')"
+          >维护<span v-if="partition.stale > 0" class="vl-headmenu__badge">{{ partition.stale }}</span></button>
+          <div v-if="headMenu === 'maint'" class="mk-menu__pop vl-headmenu__pop" role="menu" aria-label="维护">
+            <button
+              type="button"
+              class="mk-menu__item"
+              role="menuitem"
+              :disabled="partition.stale === 0"
+              title="回收超过阈值没有新写入的会话（先预览再执行）"
+              @click="openReclaimFromMenu"
+            >回收无响应（{{ partition.stale }}）</button>
+            <button
+              type="button"
+              class="mk-menu__item"
+              role="menuitem"
+              title="清理旧账号：按建号时间批量删除旧虚拟学习者（进行中与保留名单自动豁免，先预览再执行）"
+              @click="openCleanupFromMenu"
+            >清理旧账号</button>
+          </div>
+        </div>
+        <div class="vl-headmenu">
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm mk-btn--primary"
+            aria-haspopup="menu"
+            :aria-expanded="headMenu === 'create'"
+            title="新建虚拟学习者"
+            @click="toggleHeadMenu('create')"
+          >新建</button>
+          <div v-if="headMenu === 'create'" class="mk-menu__pop vl-headmenu__pop" role="menu" aria-label="新建">
+            <button type="button" class="mk-menu__item" role="menuitem" title="新建一个人：填写人设后生成身份与故事" @click="createOne">新建一个人</button>
+            <button type="button" class="mk-menu__item" role="menuitem" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="createBatch">批量新建</button>
+          </div>
+        </div>
+        <div v-if="headMenu" class="vl-headmenu__mask" aria-hidden="true" @click="headMenu = ''"></div>
       </template>
     </MkPageHead>
 
@@ -116,9 +138,8 @@
          资产输入归「学习者卡库」；旧 /admin/batch-experiments 深链重定向到本页） -->
     <!-- 正在运行：列出有活跃会话的虚拟学习者（折叠：默认前 8 个，展开看全部）；批量生成也在此显示 -->
     <VirtualLearnerRunningBar
-      v-if="(runningSamples.length || pausedSamples.length || batchTask?.active) && isLive"
+      v-if="(runningSamples.length || batchTask?.active) && isLive"
       :running-samples="runningSamples"
-      :paused-samples="pausedSamples"
       :task="batchTask"
       @toggle-detail="batchCreateRef?.toggleDetail()"
       @retry="batchCreateRef?.retry()"
@@ -222,7 +243,14 @@
               :title="ABNORMAL_COL_TITLE"
               :aria-sort="vlSortState('abnormal')"
               @click="toggleVlSort('abnormal')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('abnormal')">异常<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('abnormal')">异常<span class="mk-th__caret" aria-hidden="true"></span></button><button
+              type="button"
+              class="vl-th-filter"
+              :class="{ 'vl-th-filter--on': onlyAbnormal }"
+              :aria-pressed="onlyAbnormal"
+              title="只看有异常的学习者（有失败运行或无响应运行）。2026-10-21 从「曾失败」pill 迁来：那是历史累计，不是当下状态"
+              @click.stop="onlyAbnormal = !onlyAbnormal"
+            ><Filter :size="13" :stroke-width="1.75" /></button></th>
             <th
               v-if="!isNarrow && !isCompact && !hiddenCols.has('created')"
               scope="col"
@@ -292,23 +320,34 @@
                      （原 mk-icon-btn--text 是图标钮套文字的混搭）。
                      2026-10-12 外部批评采纳（操作密度）：低频诊断「测试」收进 ⋯ 菜单，
                      与「行内 ⋯ 菜单：低频/危险操作收进菜单，避免与高频操作平铺」的原语判例一致 -->
+                <!-- 2026-10-21 逻辑重整：行内只留「这个状态下的下一步」——
+                     运行中→暂停、停滞(暂停)→继续、停滞(无响应)→终止、已停止→运行。
+                     不必先分辨「运行」和「单步测试」差在哪；没故事时真禁用，不再改字冒充。 -->
                 <button
                   v-if="isLive"
                   type="button"
                   class="mk-btn mk-btn--sm"
-                  :class="{ 'vl-op--muted': s.storyCount === 0 }"
-                  :title="s.storyCount === 0 ? '需先生成故事才能运行' : '启动一次新的实验运行（不影响已有运行）'"
-                  @click.stop="openLaunch(s)"
-                ><Play :size="14" :stroke-width="1.75" /><span>{{ s.storyCount === 0 ? '需故事' : '运行' }}</span></button>
+                  :class="{ 'mk-btn--danger-ghost': rowActionOf(s).key === 'terminate' }"
+                  :disabled="rowActionOf(s).disabled || busyId === s.id"
+                  :title="rowActionOf(s).title"
+                  @click.stop="onRowAction(s)"
+                >
+                  <Square v-if="rowActionOf(s).key === 'terminate'" :size="13" :stroke-width="1.75" />
+                  <Pause v-else-if="rowActionOf(s).key === 'pause'" :size="14" :stroke-width="1.75" />
+                  <Play v-else :size="14" :stroke-width="1.75" />
+                  <span>{{ busyId === s.id ? '处理中…' : rowActionOf(s).label }}</span>
+                </button>
                 <div v-if="isLive" class="mk-menu">
                   <!-- aria-expanded 按行判定（同审核 #168 判例）：menuOpen 是全局布尔，任一行开
                        菜单其余行都报 expanded=true；openMenu 才是「本行是否开」 -->
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作（测试 / 来源卡 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：单步测试 / 查看来源卡 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作（单步测试 / 在卡库中查看 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：单步测试 / 在卡库中查看 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
                     <!-- 低频诊断：用人设和故事直接跑一次 Prompt 对话（不创建用例、不影响正式会话） -->
+                    <!-- 调试：只跑一次 Prompt，不建会话、不动正式数据 -->
                     <button type="button" class="mk-menu__item" role="menuitem" title="单步测试：用该人设和故事直接跑一次 Prompt 对话，看输出的字段是否符合预期（不创建用例、不影响正式运行）" @click="openPromptTest(s)">单步测试</button>
-                    <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录，卡 id 即本行 id -->
-                    <button type="button" class="mk-menu__item" role="menuitem" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="menuOpenSourceCard(s)">查看来源卡</button>
+                    <div class="mk-menu__sep" aria-hidden="true"></div>
+                    <!-- 导航（双向互链，卡与本人是同一条档案记录，卡 id 即本行 id） -->
+                    <button type="button" class="mk-menu__item" role="menuitem" title="在卡库中查看：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="menuOpenSourceCard(s)">在卡库中查看</button>
                     <div class="mk-menu__sep" aria-hidden="true"></div>
                     <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该虚拟学习者（其运行记录一并删除，不可恢复）" @click="menuRemove(s)">删除</button>
                   </div>
@@ -368,12 +407,13 @@
 
 <script setup lang="ts">
 import { computed, ref, reactive, watch, nextTick, onUnmounted } from 'vue'
-import { Play } from 'lucide-vue-next'
+import { Filter, Pause, Play, Square } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useRowMenu } from './useRowMenu'
+import { pauseAutopilotOf, resumeAutopilotOf, terminateRunsOf } from './virtualRunControl'
 import { useIsNarrow } from './useIsNarrow'
 import { useSafePolling } from '@/composables/useSafePolling'
 import { failureRateTone, FAILURE_RATE_THRESHOLD_NOTE } from './rate-utils'
@@ -467,6 +507,81 @@ function activeRunsOf(s: Sample): ActiveRun[] {
   }
   return []
 }
+/** 行主操作：永远是这个状态下的下一步，而不是固定的「运行」 */
+type RowAction = { key: 'launch' | 'pause' | 'resume' | 'terminate'; label: string; title: string; disabled: boolean }
+
+function rowActionOf(s: Sample): RowAction {
+  const phase = runPhaseOf(s)
+  const running = Number(s.runningCount) || 0
+  const paused = Number(s.pausedCount) || 0
+  const stalled = Number(s.stalledCount) || 0
+  if (phase === 'running') {
+    return { key: 'pause', label: '暂停', title: '暂停自动驾驶，进度与对话保留，可随时继续', disabled: false }
+  }
+  if (phase === 'stalled') {
+    if (paused > 0 && stalled === 0) {
+      return { key: 'resume', label: '继续', title: '重新开启自动驾驶，从上次的进度继续', disabled: false }
+    }
+    const n = stalled > 0 ? stalled : running
+    return {
+      key: 'terminate',
+      label: '终止',
+      title: `${n} 条会话超过回收阈值没有新写入，终止后标记为已放弃（数据保留，不可撤销）`,
+      disabled: false
+    }
+  }
+  const noStory = Number(s.storyCount) === 0
+  return {
+    key: 'launch',
+    label: '运行',
+    title: noStory ? '还没有故事，先到画像页生成故事' : '选一个故事启动一次新的运行',
+    disabled: noStory
+  }
+}
+
+async function onRowAction(s: Sample) {
+  const action = rowActionOf(s)
+  if (action.disabled || busyId.value === s.id) return
+  if (action.key === 'launch') {
+    openLaunch(s)
+    return
+  }
+  if (action.key === 'terminate') {
+    const ok = await askConfirm({
+      title: '终止会话',
+      message: `「${s.name}」现在的运行都没有在推进。
+终止后这些会话标记为「已放弃」，数据保留，不可撤销。确认终止？`,
+      confirmText: '终止',
+      danger: true
+    })
+    if (!ok) return
+  }
+  busyId.value = s.id
+  try {
+    const result =
+      action.key === 'pause' ? await pauseAutopilotOf(s.id)
+        : action.key === 'resume' ? await resumeAutopilotOf(s.id)
+          : await terminateRunsOf(s.id)
+    if (action.key === 'terminate') {
+      if (result.failed) toast.error('终止失败，请稍后重试')
+      else toast.success(`已终止「${s.name}」的未结束会话`)
+    } else if (result.done) {
+      toast.success(
+        action.key === 'pause'
+          ? `已暂停「${s.name}」的 ${result.done} 个会话（进度保留）`
+          : `已继续「${s.name}」的 ${result.done} 个会话`
+      )
+    } else if (result.failed) {
+      toast.error(`${action.key === 'pause' ? '暂停' : '继续'}失败，请稍后重试`)
+    } else {
+      toast.info(action.key === 'pause' ? '没有可暂停的会话' : '没有可继续的会话')
+    }
+    if (result.done || result.failed) void loadLiveData()
+  } finally {
+    busyId.value = null
+  }
+}
+
 /** 三档状态：在跑 / 没有推进 / 没在跑。只回答这一个问题，阶段与任务不进列表 */
 type RunPhase = 'running' | 'stalled' | 'stopped'
 
@@ -545,21 +660,19 @@ function failCellTitle(failed: number, abandoned: number): string {
 /** 状态过滤（轴 A 生命周期）：'all' = 全部 / running / paused / queued / failed / created
     （哨兵用 'all' 与 useListQueryState 的 pill 约定一致；URL 承载见下方 useListQueryState） */
 const stateFilter = ref('all')
+/** 异常列的「只看有异常」开关（原「曾失败」pill，2026-10-21 迁到列头） */
+const onlyAbnormal = ref(false)
 /** 状态过滤 chips 计数（与 samples 联动）；hint 进 title（P2 2026-10-02：口径随名披露）。
     2026-10-04 状态条退役后由卡头工具栏 chips 消费（该计数唯一来源） */
 const stateFilterOptions = computed(() => {
-  const count = (pred: (s: Sample) => boolean) => samples.value.filter(pred).length
-  // 列表失败时计数不可信（samples 为空 → 全 0，读作「一条都没有」）；显示 '—' 而非 0
   const failed = statsState.value === 'error'
   const n = (v: number) => (failed ? '—' : v)
+  const byPhase = (p: RunPhase) => samples.value.filter((s) => runPhaseOf(s) === p).length
   return [
     { key: 'all', label: '全部', count: n(samples.value.length), hint: '' },
-    { key: 'running', label: '进行中', count: n(count((s) => s.runningCount > 0)), hint: '有在跑会话的学习者数（同一学习者可同时跑多条路径，状态列只出运行中或停滞）' },
-    // P1-3（2026-10-04 全站评审）：计数谓词与 filtered 的筛选谓词（runningCount===0 && pausedCount>0）同式，
-    // 否则 pill「已暂停 2」点进去只筛出 1 条（同时在跑的学习者被计入却被筛掉）
-    { key: 'paused', label: '已暂停', count: n(count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)), hint: '当前无进行中运行、有暂停运行的学习者' },
-    // P2（2026-10-02 人类可读性）：原名「需关注」读作当前异常，实为累计曾失败/被终止——正名 + 口径入 title
-    { key: 'failed', label: '曾失败', count: n(count((s) => s.failedCount > 0)), hint: '累计有失败或终止运行的虚拟学习者，非当前异常。该数为系统失败+人为终止的合计，分解见「失败」列悬浮说明' },
+    { key: 'running', label: '运行中', count: n(byPhase('running')), hint: '有会话在推进，部分卡住仍算在跑' },
+    { key: 'stalled', label: '停滞', count: n(byPhase('stalled')), hint: '没有在推进：自动驾驶已暂停，或会话超时没有新写入' },
+    { key: 'stopped', label: '已停止', count: n(byPhase('stopped')), hint: '当前没有运行中的会话，跑完、放弃、失败或还没跑过' },
   ]
 })
 /** live 虚拟人域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
@@ -589,18 +702,18 @@ const filtered = computed(() => {
   const q = keyword.value.trim().toLowerCase()
   let list = samples.value
   if (q) list = list.filter((s) => `${s.name} ${s.goal} ${s.id}`.toLowerCase().includes(q))
+  /* 与状态列同源：pill 与「运行状态」列都走 runPhaseOf，不另写一套谓词 */
   const sf = stateFilter.value
-  if (sf === 'running') list = list.filter((s) => s.runningCount > 0)
-  else if (sf === 'paused') list = list.filter((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)
-  else if (sf === 'failed') list = list.filter((s) => s.failedCount > 0)
-  // queued：预留（服务端排队实现后接入）
+  if (sf === 'running' || sf === 'stalled' || sf === 'stopped') list = list.filter((s) => runPhaseOf(s) === sf)
+  if (onlyAbnormal.value) list = list.filter((s) => s.failedCount > 0 || s.stalledCount > 0)
   return sortVlRows(list)
 })
 
-const isFiltered = computed(() => !!keyword.value.trim() || stateFilter.value !== 'all')
+const isFiltered = computed(() => !!keyword.value.trim() || stateFilter.value !== 'all' || onlyAbnormal.value)
 function clearFilters() {
   keyword.value = ''
   stateFilter.value = 'all'
+  onlyAbnormal.value = false
 }
 
 /* 长列表分批渲染：每批 15 行 */
@@ -622,7 +735,7 @@ useListQueryState({
   keyword,
   page,
   pageSize,
-  allowedPills: ['all', 'running', 'paused', 'failed']
+  allowedPills: ['all', 'running', 'stalled', 'stopped']
 })
 
 const paged = computed(() => {
@@ -635,6 +748,28 @@ watch([keyword, stateFilter], () => {
 
 /* ===== 拆分子组件引用与父侧触发入口（弹窗状态在子组件内，父页面只发指令） ===== */
 const createRef = ref<InstanceType<typeof VirtualLearnerCreate> | null>(null)
+/** 页头两枚菜单（维护 / 新建）互斥展开；点遮罩关闭 */
+const headMenu = ref<'' | 'maint' | 'create'>('')
+function toggleHeadMenu(key: 'maint' | 'create') {
+  headMenu.value = headMenu.value === key ? '' : key
+}
+function createOne() {
+  headMenu.value = ''
+  openCreate()
+}
+function createBatch() {
+  headMenu.value = ''
+  openBatchCreate()
+}
+function openCleanupFromMenu() {
+  headMenu.value = ''
+  cleanupRef.value?.open()
+}
+function openReclaimFromMenu() {
+  headMenu.value = ''
+  openReclaimModal()
+}
+
 const launchRef = ref<InstanceType<typeof VirtualLearnerLaunch> | null>(null)
 const reclaimRef = ref<InstanceType<typeof VirtualLearnerReclaim> | null>(null)
 const cleanupRef = ref<InstanceType<typeof VirtualLearnerCleanup> | null>(null)
@@ -707,10 +842,10 @@ const router = useRouter()
    身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显
    （行详情进画像页，信息不丢）。
    2026-10-18：勾选列进 colDefs 并默认隐藏（用户「多选还是不要先显示」，与 People 同判例）
-   2026-10-19：默认隐藏保留，但页头补「批量操作」入口（revealCheckColumn）——唯一入口
-   只剩列菜单时，首屏看不到任何批量动作（运营走查原话「批量能力默认不存在」）。 */
+   2026-10-19：默认隐藏保留，页头曾补「批量操作」按钮兜底；
+   2026-10-21 逻辑重整：该按钮退回列菜单——它本质是列设置，页头只留新建与维护。 */
 const VL_COL_DEFS = [
-  /* 列菜单这一项与页头「批量操作」是做同一件事的两个入口：此处可回到隐藏态 */
+  /* 批量操作的唯一入口（2026-10-21 起页头不再放按钮）：此处打开/关闭勾选列 */
   { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部批量启动全部故事、启动或停止自动驾驶、终止、清理无响应、删除' },
   { key: 'tendency', label: '长期倾向' },
   { key: 'story', label: '故事 / 路径', title: '故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次运行不重复计）' },
@@ -802,8 +937,6 @@ onUnmounted(() => vlRpmPolling.stop())
 
 /** 当前有活跃会话的虚拟学习者（"正在运行"条直接列名） */
 const runningSamples = computed(() => samples.value.filter((s) => s.runningCount > 0))
-/** 已暂停自动驾驶的虚拟人：无进行中会话，但有暂停会话（autopilot=stopped） */
-const pausedSamples = computed(() => samples.value.filter((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0))
 
 /* ===== A2 生命周期分区：全量聚合口径（后端 sessionStats/staleCount）。
    2026-10-04 页头状态条退役后：stale 供页头「回收卡死」钮、活动会话（running+created）
@@ -952,11 +1085,6 @@ const selected = ref<string[]>([])
 
 /** 页头「批量操作」：把选择框列打开（写 MkCols 同一个 hiddenCols，onWatch 会落 localStorage，
     所以这是一次持久的列偏好变更，不是临时态） */
-function revealCheckColumn() {
-  const next = new Set(hiddenCols.value)
-  next.delete('check')
-  hiddenCols.value = next
-}
 
 /** 并发/速率 KPI 的点击：失败态优先重试（hint 写着「点击重试」），否则去容量治理那处设置。
     两个读数合用一个入口——它们本就是同一组配置的两个面，运营看到读数时正是要改上限的时候。 */
@@ -1032,8 +1160,6 @@ function onBatchReclaim(ids: string[]) {
 /* 操作列已换 .mk-btn--sm 文字钮（原型 .btn--sm 词汇），图标对齐微调：
    mk-btn 给 svg 的 6px 右距在本钮偏松，收到与文字同组的 4px */
 .mk-actions .mk-btn--sm svg { margin-right: 4px; }
-/* 无故事的「运行」弱化档（原 mk-link--muted 是链接词汇，误用在按钮上） */
-.vl-op--muted { color: var(--mk-muted); }
 /* 窄屏表格：列被压扁时靠 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式）。
    2026-10-21 列收敛后可见列从 10 → 7（窄档 5），min-width 跟着从 860 降到 720：
    1080 档内容区 794px，860 会多出一条 66px 的横滚。 */
@@ -1097,6 +1223,38 @@ function onBatchReclaim(ids: string[]) {
   .vl-kpi :deep(.mk-kpi-grid) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* 卡面给一层次级表面，与下方工作区剥离；暗色档由 token 自带，不新增阴影、不改共享原语 */
+/* 页头两枚下拉（维护 / 新建）：触发钮 + 与工具条同一套弹层。
+   遮罩用 fixed 铺满视口接外点，层级压在弹层下一档（--mk-z-menu 是 60） */
+/* 异常列表头的「只看有异常」开关：24px 方形点击区，开着时蓝描边 */
+.vl-th-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 6px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--mk-radius-xs);
+  background: transparent;
+  color: var(--mk-muted);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.vl-th-filter:hover { background: var(--mk-surface-2); color: var(--mk-ink); }
+.vl-th-filter--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
+.vl-headmenu { position: relative; display: inline-flex; }
+.vl-headmenu__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); }
+.vl-headmenu__pop { z-index: calc(var(--mk-z-menu) + 1); top: calc(100% + 6px); }
+.vl-headmenu__badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--mk-amber-bg);
+  color: var(--mk-amber);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+}
 .vl-kpi :deep(.mk-kpi) {
   background: var(--mk-surface-2);
 }

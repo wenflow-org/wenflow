@@ -23,12 +23,8 @@
       aria-label="按阶段查看运行中的虚拟学习者"
       @select="toggleStage"
     />
-    <!-- 已暂停：autopilot 已停（会话保留），灰色 chip 点击进画像页（超 4 个截断，进列表「已暂停」筛选看全量） -->
-    <button v-for="s in visiblePausedChips" :key="`p-${s.id}`" type="button" class="vl-running__chip vl-running__chip--paused" :title="`${s.pausedCount} 个会话已暂停自动驾驶（进度保留）`" @click="openSubPage('virtual', s.id)">
-      <span class="vl-running__dot" aria-hidden="true"></span>
-      {{ s.name }} · 已暂停{{ s.pausedCount > 1 ? ` ${s.pausedCount}` : '' }}
-    </button>
-    <span v-if="pausedSamples.length > PAUSED_CHIPS_LIMIT" class="vl-running__overflow" title="更多已暂停学习者请用列表中的「已暂停」筛选查看">+{{ pausedSamples.length - PAUSED_CHIPS_LIMIT }} 已暂停</span>
+    <!-- 2026-10-21：已暂停 chip 退役——它把「谁停着」又列了一遍，列表状态列已经回答；
+         这条只保留阶段分布（跑到哪个阶段是列里读不到的）与批量生成进度。 -->
     <!-- 实例 chip：少量实例全量平铺；聚合模式展示选中阶段的实例（点击跳会话座舱） -->
     <div v-if="activeChips.length" class="vl-running__chips">
       <button v-for="s in activeChips" :key="s.id" type="button" class="vl-running__chip" :title="chipTitle(s)" @click="openRunningSession(s)">
@@ -61,7 +57,6 @@ import type { BatchTask, VirtualLearnerRow as Sample } from './virtualLearnersTy
 
 const props = defineProps<{
   runningSamples: Sample[]
-  pausedSamples: Sample[]
   task: BatchTask | null
 }>()
 const emit = defineEmits<{
@@ -89,7 +84,6 @@ const batchPct = computed(() => {
 
 /* ===== 阶段聚合（2026-10-05 用户拍板）===== */
 const FEW_LIMIT = 4
-const PAUSED_CHIPS_LIMIT = 4
 /* 阶段序 = 教学流水线；色板用家族语义 token（Goal 紫 / Path 绿 / Learn 蓝 / Wrapup 琥珀），
    与编排图跨阶段/终点强调色同源（--mk-graph-accent-purple-ink 系），不私造色值 */
 const STAGE_ORDER = ['Goal', 'Path', 'Learn', 'Wrapup'] as const
@@ -119,7 +113,7 @@ function stageKeyOf(s: Sample): string {
   const key = stageKey(s.currentStage)
   return (STAGE_ORDER as readonly string[]).includes(key) ? key : 'Other'
 }
-const fewMode = computed(() => props.runningSamples.length + props.pausedSamples.length <= FEW_LIMIT)
+const fewMode = computed(() => props.runningSamples.length <= FEW_LIMIT)
 const stageBins = computed(() => {
   const counts = new Map<string, number>()
   for (const s of props.runningSamples) counts.set(stageKeyOf(s), (counts.get(stageKeyOf(s)) || 0) + 1)
@@ -145,7 +139,6 @@ const activeChips = computed(() => {
 function chipTitle(s: Sample): string {
   return `${s.runningCount} 个会话进行中`
 }
-const visiblePausedChips = computed(() => props.pausedSamples.slice(0, PAUSED_CHIPS_LIMIT))
 
 /** 「进行中」列点击直达会话座舱（画像页入口保持：行点击/画像按钮） */
 function openRunningSession(s: Sample) {
@@ -176,11 +169,6 @@ function openRunningSession(s: Sample) {
 .vl-running__band { flex: 1 1 260px; min-width: 0; }
 /* 实例 chip 行（少量全量 / 选中阶段展开）：折行铺开，永不横滚 */
 .vl-running__chips { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
-.vl-running__overflow {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  white-space: nowrap;
-}
 .vl-running__label {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -236,9 +224,6 @@ function openRunningSession(s: Sample) {
 .vl-running__chip--batch { border-color: color-mix(in srgb, var(--mk-blue) 40%, transparent); color: var(--mk-blue); }
 .vl-running__chip--batch .vl-running__dot { background: var(--mk-blue); box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-blue) 50%, transparent); animation: vl-pulse 1.6s infinite; }
 /* 已暂停自动驾驶：灰色静态（无脉冲），点击进画像页 */
-.vl-running__chip--paused { border-color: color-mix(in srgb, var(--mk-faint-soft) 45%, transparent); color: var(--mk-muted); }
-.vl-running__chip--paused .vl-running__dot { background: var(--mk-faint-soft); box-shadow: none; animation: none; }
-.vl-running__chip--paused:hover { background: color-mix(in srgb, var(--mk-faint-soft) 12%, transparent); }
 .vl-running__chip--batch.is-running { border-color: color-mix(in srgb, var(--mk-blue) 45%, transparent); }
 .vl-running__chip--batch.is-done { border-color: color-mix(in srgb, var(--mk-green) 40%, transparent); color: var(--mk-green); }
 .vl-running__chip--batch.is-done .vl-running__dot { background: var(--mk-green); animation: none; }

@@ -12,6 +12,7 @@ import VirtualLearners from '../VirtualLearners.vue';
 import { liveVirtuals, liveVirtualRunStats } from '../live';
 import { openSubPage } from '../store';
 import type { VirtualLearnerRow } from '../virtualLearnersTypes';
+import { adminVirtualLearnersApi } from '@/api/adminApi';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -67,6 +68,8 @@ vi.mock('@/api/adminApi', () => ({
     startVirtualSession: vi.fn(async () => ({ data: { data: { id: 's' } } })),
     startBlackboxVirtualSession: vi.fn(async () => ({ data: { data: { id: 's' } } })),
     terminateVirtualSessions: vi.fn(async () => ({ data: {} })),
+    autopilotStart: vi.fn(async () => ({ data: {} })),
+    autopilotStop: vi.fn(async () => ({ data: {} })),
     reclaimStaleVirtualSessions: vi.fn(async () => ({ data: {} }))
   }
 }));
@@ -211,6 +214,47 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     expect(row.find('.vl-runline').exists()).toBe(false);
     expect(row.find('.vl-histline').exists()).toBe(false);
     expect(row.find('.rs-bar').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('行主操作随状态走：运行中→暂停、停滞(暂停)→继续、停滞(无响应)→终止、已停止→运行', async () => {
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const actionOf = (name: string) => rowByName(w, name).find('.mk-actions > .mk-btn');
+    expect(actionOf('在跑的人').text()).toBe('暂停');
+    expect(actionOf('暂停的人').text()).toBe('继续');
+    expect(actionOf('停滞的人').text()).toBe('终止');
+    expect(actionOf('停过的人').text()).toBe('运行');
+    // 终止是破坏性：走红描边档，不与「运行」同色
+    expect(actionOf('停滞的人').classes()).toContain('mk-btn--danger-ghost');
+    expect(actionOf('停过的人').classes()).not.toContain('mk-btn--danger-ghost');
+    w.unmount();
+  });
+
+  it('没有故事时「运行」真禁用，不再改字冒充可点', async () => {
+    liveVirtuals.value = [baseRow({ id: 'p-nostory', name: '没故事的人', storyCount: 0, sessions: 0 })] as unknown as typeof liveVirtuals.value;
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const btn = rowByName(w, '没故事的人').find('.mk-actions > .mk-btn');
+    expect(btn.text()).toBe('运行');
+    expect(btn.attributes('disabled')).toBeDefined();
+    expect(btn.attributes('title')).toContain('还没有故事');
+    w.unmount();
+  });
+
+  it('暂停走自动驾驶开关：只停最新会话，不终止会话', async () => {
+    vi.mocked(adminVirtualLearnersApi.getVirtualLearnerStories).mockResolvedValueOnce({
+      data: { data: { stories: [{ id: 'st-1', title: '故事一', latestRun: { sessionId: 'sess-9', status: 'running' } }] } }
+    } as never);
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    await rowByName(w, '在跑的人').find('.mk-actions > .mk-btn').trigger('click');
+    await flushPromises();
+    expect(adminVirtualLearnersApi.autopilotStop).toHaveBeenCalledWith('sess-9');
+    expect(adminVirtualLearnersApi.terminateVirtualSessions).not.toHaveBeenCalled();
     w.unmount();
   });
 

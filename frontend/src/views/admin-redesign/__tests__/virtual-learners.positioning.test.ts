@@ -83,14 +83,15 @@ describe('虚拟学习者定位（D1）', () => {
     await nextTick();
     // 2026-10-04 页头状态条整体退役（教学会话同款判例）：复读的「共 N 人」随条删除
     expect(wrapper.find('.mk-status').exists()).toBe(false);
-    // 分区筛选计数（画像口径；P2「需关注」已正名「曾失败」，口径=累计失败）→ 卡头工具栏 chips
+    // 筛选 chips 与「运行状态」列同源（2026-10-21 逻辑重整：三档对齐，「曾失败」迁到异常列）
     // 按卡定位到列表卡：页内另有压测参数卡头（2026-10-08 加了标题），取「第一个 .mk-card__head」会取错
     const head = wrapper.find('.mk-card--fill .mk-card__head');
     const countOf = (label: string) =>
       head.findAll('.mk-pill').find((p) => p.text().replace(/\s/g, '').startsWith(label))?.find('.mk-pill__count').text();
-    expect(countOf('进行中')).toBe('0');
-    expect(countOf('已暂停')).toBe('0');
-    expect(countOf('曾失败')).toBe('0');
+    expect(countOf('运行中')).toBe('0');
+    expect(countOf('停滞')).toBe('0');
+    expect(countOf('已停止')).toBe('0');
+    expect(wrapper.text()).not.toContain('曾失败');
     expect(wrapper.text()).not.toContain('创建中');
     wrapper.unmount();
   });
