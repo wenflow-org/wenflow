@@ -121,6 +121,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
    *  会被读成两个矛盾读数 → 合并进「需人工看」，值取 pendingReview。 */
   it('需人工看 = 人审待办总数（含归并建议 + 模糊候选 + 散键清理），不再单列待审队列卡', async () => {
     const w = await mountWithRows(ROWS, {
+      usersWithAudit: 2,
       ambiguous: 2,
       fragmentation: { duplicateLabelRatio: 0, unattachedKeys: 0, pendingReview: 5 },
     });
@@ -138,8 +139,18 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
    *  最近复习）成片「—」，0 到期还各画一条空轨。
    *  二次调整：相邻两列各画一条比例条会读成一排重叠的条——待复习只留数字，
    *  记忆强度单独一列带条，需关注与最近复习各自成列。 */
+  it('全部用户都没跑过归并观察 → 需人工看显示「—」+「尚未观察」，不把没观察写成 0', async () => {
+    // 2026-10-23 用户「为什么包括测试的也是很多0」：测试视角 26 位用户、55 条痕迹，
+    // 但归并审计投影一条都没有——0 是「没算过」，不是「很干净」
+    const w = await mountWithRows(ROWS, { usersWithAudit: 0, ambiguous: 0 });
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工看')!;
+    expect(card.find('.mk-kpi__num').text()).toBe('—');
+    expect(card.find('.mk-kpi__hint').text()).toBe('尚未观察');
+    expect(card.attributes('title')).toContain('还没跑过归并观察');
+  });
+
   it('后端没有 fragmentation.pendingReview 时，需人工看退回 ambiguous，不归零', async () => {
-    const w = await mountWithRows(ROWS, { ambiguous: 4, fragmentation: null });
+    const w = await mountWithRows(ROWS, { usersWithAudit: 1, ambiguous: 4, fragmentation: null });
     const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工看')!;
     expect(card.find('.mk-kpi__num').text()).toBe('4');
   });
@@ -177,7 +188,8 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(trs[1].findAll('td')[3].text()).toContain('薄弱 3');
     expect(trs[1].findAll('td')[3].text()).toContain('人工看 2');
     // 归并候选 / 散键：逐用户读数（原来只住在 KPI 的数字）
-    expect(trs[0].findAll('td')[4].text()).toBe('0');
+    // 没跑过归并观察 ≠ 0 候选：两者必须分开
+    expect(trs[0].findAll('td')[4].text()).toBe('未观察');
     expect(trs[1].findAll('td')[4].text()).toBe('2');
     expect(trs[0].findAll('td')[5].text()).toBe('0');
     expect(trs[1].findAll('td')[5].text()).toBe('3');

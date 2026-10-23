@@ -116,11 +116,11 @@
                 @click="toggleUserSort('weak')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable mr-c-prop" :aria-sort="userSortState('proposed')"
-                :title="`模型给出的同义归并候选数（确认后执行，可回滚）。当前视角合计 ${totals.proposed} 条，其中 ${totals.autoApplicable} 条可自动执行。点列头排序：降序 = 候选最多的在前`"
+                :title="`模型给出的同义归并候选数（确认后执行，可回滚）。没跑过归并观察的用户显示「未观察」（点行内「重新观察」生成）。当前视角合计 ${totals.proposed} 条，其中 ${totals.autoApplicable} 条可自动执行。点列头排序：降序 = 候选最多的在前`"
                 @click="toggleUserSort('proposed')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('proposed')">归并候选<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable mr-c-scatter" :aria-sort="userSortState('scatter')"
-                :title="`自由填写、未关联到标准概念的记忆标识数（只能逐条治理）。当前视角合计 ${totals.fragmentation?.unattachedKeys ?? 0} 条。点列头排序：降序 = 散键最多的在前`"
+                :title="`自由填写、未关联到标准概念的记忆标识数，只能逐条治理。该列直接按记忆痕迹统计，不需要先跑观察。当前视角合计 ${totals.fragmentation?.unattachedKeys ?? 0} 条。点列头排序：降序 = 散键最多的在前`"
                 @click="toggleUserSort('scatter')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('scatter')">散键<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable mr-c-strength" :aria-sort="userSortState('strength')"
@@ -166,8 +166,10 @@
                 </div>
                 <span v-else class="mr__none" title="没有强度跌破 40% 的痕迹，也没有待人工确认的归并候选">无</span>
               </td>
-              <td class="mk-num" :title="row.proposed ? `${row.proposed} 条同义归并候选待确认` : '没有待确认的归并候选'">
-                <span :class="{ 'mr__none': !row.proposed }">{{ row.proposed }}</span>
+              <td class="mk-num" :title="row.audit === null ? '该用户还没跑过归并观察——点「重新观察」生成候选' : row.proposed ? `${row.proposed} 条同义归并候选待确认` : '观察过，没有待确认的归并候选'">
+                <!-- 0 与「没观察」必须分开：审计投影是按用户跑观察才有的 -->
+                <span v-if="row.audit === null" class="mr__none">未观察</span>
+                <span v-else :class="{ 'mr__none': !row.proposed }">{{ row.proposed }}</span>
               </td>
               <td class="mk-num" :title="row.scatter ? `${row.scatter} 个概念标识未挂靠到标准概念` : '没有未挂靠的散键'">
                 <span :class="{ 'mr__none': !row.scatter }">{{ row.scatter }}</span>
@@ -423,6 +425,10 @@ const overviewCards = computed<OverviewCard[]>(() => {
      同义概念待确认 + 模糊候选 + 散键清理建议才是完整的「人审待办」。口径取
      fragmentation.pendingReview；后端旧版没这个字段时退回 ambiguous，不静默归零。 */
   const reviewQueue = totals.value.fragmentation?.pendingReview
+  /* 归并审计是「按用户跑观察」才有的投影：一条都没有时，需人工看/归并候选的 0 不是
+     「观察过、很干净」，而是「还没观察」。两者必须分开显示（2026-10-23 用户
+     「为什么包括测试的也是很多0」——26 位测试用户、55 条痕迹，审计读数全是 0）。 */
+  const noAudit = (t.usersWithAudit ?? 0) === 0
   return [
     { label: '用户', value: val(t.users), hint: numHint(''), tone: numTone(''), title: '全部有记忆记录的用户数。是否含虚拟学习者随页头开关' },
     /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：来源/机制说明（跨全部学习路径、
@@ -431,9 +437,12 @@ const overviewCards = computed<OverviewCard[]>(() => {
     { label: '当前到期', value: val(t.due), hint: numHint(t.traces ? '' : '暂无痕迹'), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
     {
       label: '需人工看',
-      value: val(reviewQueue ?? t.ambiguous),
-      tone: numTone((reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
-      title: '需人工处理的归并待办：同义概念待确认、模糊候选与散键清理建议，不会自动执行'
+      value: noAudit ? '—' : val(reviewQueue ?? t.ambiguous),
+      hint: numHint(noAudit ? '尚未观察' : ''),
+      tone: numTone(!noAudit && (reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
+      title: noAudit
+        ? '所有用户都还没跑过归并观察，暂无归并待办可算——在行上点「重新观察」生成'
+        : '需人工处理的归并待办：同义概念待确认、模糊候选与散键清理建议，不会自动执行'
     },
     /* 2026-10-23：待归并建议 / 未挂靠散键不再占 KPI 卡——两项都能落到「哪位学习者」，
        改由列表的「归并候选」「散键」两列承载（合计进列头 title），页头只留列表无法表达的读数 */
