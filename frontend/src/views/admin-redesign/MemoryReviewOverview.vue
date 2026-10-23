@@ -12,7 +12,8 @@
     >
       <template #actions>
         <!-- 口径开关收在页头（2026-10-04 整组统一为 DataScopeToggle：学习组六页同一位、同一状态）。
-             它切换的是整页口径：含虚拟学习者时，用户 / 痕迹 / 到期与归并队列一并纳入仿真账号 -->
+             它切换的是整页口径：切到「测试」时，用户 / 痕迹 / 到期与归并队列只纳入测试/审计账号
+             （2026-10-21 拍板：虚拟学习者归虚拟学习者域，不进教学口径） -->
         <DataScopeToggle v-model="includeVirtual" />
       </template>
     </MkPageHead>
@@ -406,7 +407,7 @@ const overviewCards = computed<OverviewCard[]>(() => {
      「为什么包括测试的也是很多0」——26 位测试用户、55 条痕迹，审计读数全是 0）。 */
   const noAudit = (t.usersWithAudit ?? 0) === 0
   return [
-    { label: '用户', value: val(t.users), hint: numHint(''), tone: numTone(''), title: '全部有记忆记录的用户数。是否含虚拟学习者随页头开关' },
+    { label: '用户', value: val(t.users), hint: numHint(''), tone: numTone(''), title: '全部有记忆记录的用户数。是否含测试账号随页头开关' },
     /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：来源/机制说明（跨全部学习路径、
        归并候选·不自动执行、模型给出的同义概念候选）撤出卡面，只留定义与包含关系 */
     { label: '记忆痕迹', value: val(t.traces), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },
@@ -443,7 +444,7 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
       value: na || ratio == null ? '—' : `${Math.round(ratio * 100)}%`,
       hint: stateHint(!frag || ratio == null),
       tone: numTone(!na && ratio != null && ratio >= 0.2 ? 'warn' : ''),
-      title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎，达到 20% 时标为需关注。虚拟学习者是否计入随所处视角变化'
+      title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎，达到 20% 时标为需关注。是否含测试账号随当前视角变化'
     },
   ];
 });
@@ -488,6 +489,9 @@ async function loadOverview() {
       offset: (userPage.value - 1) * userPageSize.value,
       includeVirtual: includeVirtual.value,
       testOnly: includeVirtual.value || undefined,
+      // 2026-10-21 用户拍板：教学组剔除虚拟学习者——「测试」只含测试/审计账号；
+      // 虚拟学习者的记忆在虚拟学习者详情「记忆池」/「学习详情 →」的记忆页签里看
+      qaOnly: includeVirtual.value || undefined,
       sort: userSortKey.value,
       order: userSortDir.value
     })

@@ -11,10 +11,10 @@
       <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '共 ' + liveUsersTotal + ' 人，当前显示前 ' + users.length + ' 人' : '共 ' + liveUsersTotal + ' 人') : undefined">
         共 {{ isLive && liveUsersTotal > users.length ? liveUsersTotal + ' 人 · 当前显示 ' + users.length : users.length }} 人
       </span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅统计真实用户（不含虚拟 / 测试账号）">
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅统计真实用户（不含测试账号）">
         真实 {{ realUsers }}
       </span>
-      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="含虚拟学习者与测试账号">测试/虚拟 {{ users.length - realUsers }}</span>
+      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="含测试 / 审计账号">测试账号 {{ users.length - realUsers }}</span>
       <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 近 7 天活跃 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
         近 7 天活跃 {{ activeToday }}
       </span>

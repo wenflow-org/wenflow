@@ -25,8 +25,12 @@
     <!-- 详情页头（newui/admin hero 形态，MkDetailHero）：返回钮在壳层顶栏，页内不重复 -->
     <MkDetailHero :avatar="d.name.charAt(0)" :title="d.name" :sub="d.email">
       <template #pills>
-        <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
-        <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
+        <!-- 稀疏详情（虚拟学习者常态：无路径/无概念/无课堂）不展示趋势与疲劳：
+             这两项在没有学习数据时是默认值（稳定 / 低），画出来等于把「没数据」说成读数 -->
+        <template v-if="!sparseAccount">
+          <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
+          <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
+        </template>
         <!-- 「档案 置信 100%」会读成两个并列词；snapshotLabel 已以「置信」开头，直接拼成「档案置信」 -->
         <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案{{ snapshotLabel }}</span>
       </template>
@@ -1557,6 +1561,10 @@ async function loadLdGoals(id: string, includeTest: boolean) {
   }
 }
 
+/** 稀疏详情：虚拟学习者常见（没有路径/概念/课堂），此时 hero 不展示由默认值派生的读数。
+    非虚拟账号走的是下面的错误/账号页兜底，不会到这一步。 */
+const sparseAccount = ref(false)
+
 async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {}) {
   if (!id) return
   const seq = ++detailLoadSeq
@@ -1566,6 +1574,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
   if (!opts.soft) resetDerivedState(id)
   lastLoadedId = id
   detailError.value = false
+  sparseAccount.value = false
   // 深链保持：URL 明确带 ?tab= 时尊重它，否则回落总览。
   // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
   //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
@@ -1588,12 +1597,18 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
   // includeTest，虚拟账号的 traces/evidence 被全局口径拒成空（普查表「暂无记忆数据」与调度
   // 面板 46 条同屏矛盾，实测证据端点直接 404「需显式包含」）。
   let accountIsTest = !!base?.isVirtualLearner || /^virtual_/.test(id)
+  let accountIsVirtual = !!base?.isVirtualLearner
+  let accountName = ''
   let userRow: Record<string, unknown> | null = null
   try {
     const rec = await getUserIncludingDeleted(id)
     if (stale()) return
     userRow = (rec?.data?.data ?? rec?.data ?? null) as Record<string, unknown> | null
-    if (userRow && (userRow as Record<string, unknown>).isVirtualLearner === true) accountIsTest = true
+    if (userRow && (userRow as Record<string, unknown>).isVirtualLearner === true) {
+      accountIsTest = true
+      accountIsVirtual = true
+    }
+    accountName = String((userRow as Record<string, unknown> | null)?.name || '')
   } catch { /* 用户记录失败按入口旗标走（原行为），详情照常 */ }
   // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
   const includeTest = subPage.value?.includeTest || accountIsTest
@@ -1637,9 +1652,15 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
     // 「该用户不存在或已被删除」错误态；且软删用户需在此恢复（列表域不含软删行），
     // 故该页签不置页级错误，避免挡住恢复入口。
     if (tab.value !== 'account' && !base && !model.userName && !totalTasks) {
-      // 账号轴入口（用户与学习者）且无任何学习侧数据（虚拟/测试账号常态）：落「账号与许可」
-      // ——UserAccountPane 自取用户记录、自带错误态与软删恢复入口（原 ?view=user 默认落点语义）
-      if (subPage.value?.view === 'user') {
+      /* 虚拟学习者例外（2026-10-21）：它没有快照 userName、也可能还没生成路径（totalTasks=0），
+         但账号记录确实存在且是有名有姓的仿真身份。既然教学组已不再列虚拟账号（列表兜底 base
+         永远取不到），跨页入口「学习详情 →」只能靠账号记录认出它——否则整页报「详情加载失败」，
+         而它其实只是「还没有学习数据」。下方各卡照常落空态。 */
+      if (accountIsVirtual) {
+        // 继续按稀疏详情渲染（name 由账号记录兜底，见 liveDetail）
+      } else if (subPage.value?.view === 'user') {
+        // 账号轴入口（用户与学习者）且无任何学习侧数据（测试账号常态）：落「账号与许可」
+        // ——UserAccountPane 自取用户记录、自带错误态与软删恢复入口（原 ?view=user 默认落点语义）
         tab.value = 'account'
       } else {
         detailError.value = true
@@ -1697,9 +1718,10 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
         if (stale()) return
         memoryTraces.value = []
       })
+    sparseAccount.value = accountIsVirtual && !totalTasks && !String(currentPath.pathTitle || model.pathTitle || '') && conceptStates.length === 0
     liveDetail.value = {
-      name: base?.name || String(model.userName || id),
-      email: base?.email || '',
+      name: base?.name || String(model.userName || accountName || id),
+      email: base?.email || String((userRow as Record<string, unknown> | null)?.email || ''),
       trend: base?.trend || 'flat',
       fatigue: base?.fatigue || '低',
       path: String((currentPath.pathTitle as string) || model.pathTitle || '尚未开始学习'),

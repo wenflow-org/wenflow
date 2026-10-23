@@ -1252,9 +1252,13 @@ const LIVE_LIST_FULL_LIMIT = 1000
  * includeTest=true 时显式包含全量并带回行标记
  */
 async function fetchLiveUsers(includeTest = false): Promise<void> {
-  // 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：includeTest 档同时带 testOnly，
-  // 后端只回虚拟 + 测试账号；真实档不带任何参数（后端默认排除）
-  const res = await adminUsersApi.getUsers({ limit: LIVE_LIST_FULL_LIMIT, ...(includeTest ? { includeTest: true, testOnly: true } : {}) })
+  // 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：includeTest 档同时带 testOnly+qaOnly，
+  // 后端只回测试/审计账号（2026-10-21 用户拍板：虚拟学习者不进账号页——它归虚拟学习者域）；
+  // 真实档不带任何参数（后端默认排除）
+  const res = await adminUsersApi.getUsers({
+    limit: LIVE_LIST_FULL_LIMIT,
+    ...(includeTest ? { includeTest: true, testOnly: true, qaOnly: true } : {}),
+  })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.users || body.items || []
   liveUsersTotal.value = Number(body.pagination?.total || items.length)
@@ -1348,8 +1352,12 @@ function mapFatigue(f?: string): string {
 }
 
 async function fetchLiveLearners(includeTest = false): Promise<void> {
-  // 测试视角带 testOnly：后端只回虚拟 + 测试账号（互斥视角，见 DataScopeToggle）
-  const res = await adminLearnerModelsApi.list({ limit: 2000, ...(includeTest ? { includeTest: true, testOnly: true } : { excludeTest: true }) })
+  // 测试视角带 testOnly+qaOnly：后端只回测试/审计账号（互斥视角，见 DataScopeToggle）；
+  // 虚拟学习者不进教学组（2026-10-21 拍板）——它的学习数据在虚拟学习者详情「学习详情 →」里看
+  const res = await adminLearnerModelsApi.list({
+    limit: 2000,
+    ...(includeTest ? { includeTest: true, testOnly: true, qaOnly: true } : { excludeTest: true }),
+  })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
   // P1#16 数据层：接住分页 total（此前被丢弃，KPI 只能显示「已加载 N」）

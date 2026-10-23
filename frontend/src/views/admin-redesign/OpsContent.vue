@@ -11,13 +11,13 @@
     <!-- 路径总量 KPI（2026-10-04 状态条退役：原状态条「共 N 条 · 里程碑 · 任务」读数迁入 MkKpi 卡带；
          生成失败抬红由卡头状态 pill 与行内徽标承载，不再重复着色）。
          2026-10-21 用户「不要这种注释型解释文案，kpi面板都要改一下这类文案」：四张卡的 hint 全部撤掉——
-         它们讲的都是数据从哪来、挂在哪、下一步去哪个入口（含虚拟与测试、跨全部已生成路径、
+         它们讲的都是数据从哪来、挂在哪、下一步去哪个入口（含测试账号、跨全部已生成路径、
          挂在里程碑下、可在列表重试生成），不是读数本身。口径改为只在 title 里给。 -->
     <section v-if="!embedded" class="mk-kpi-grid" aria-label="路径总量">
       <MkKpi
         label="路径总数"
         :value="stats?.total ?? '—'"
-        :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
+        :title="includeTest ? '只统计测试账号' : '只统计真实用户'"
       />
       <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" title="已生成路径的里程碑总数" />
       <!-- 2026-10-16 KPI 审计补完：label 原为「任务」，而本页其它文案（删除确认）说的是「子任务」，
@@ -537,8 +537,10 @@ async function reload(force = false) {
       page: 1,
       limit: 1000,
       includeTest: includeTest.value || undefined,
-      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的路径
+      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回测试/审计账号的路径
+      // （2026-10-21 用户拍板：教学组剔除虚拟学习者——虚拟学习者的路径归虚拟学习者域）
       testOnly: includeTest.value || undefined,
+      qaOnly: includeTest.value || undefined,
     })
     // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
     if (seq !== listReqSeq) return
@@ -567,8 +569,8 @@ async function reload(force = false) {
 async function loadStats() {
   const seq = ++statsReqSeq
   try {
-    // 口径与列表同一判据：/stats 收 includeTest + testOnly（否则 KPI/里程碑/分布条与列表不同视角）
-    const res = await adminLearningContentApi.getStats(includeTest.value, includeTest.value)
+    // 口径与列表同一判据：/stats 收 includeTest + testOnly + qaOnly（否则 KPI/里程碑/分布条与列表不同视角）
+    const res = await adminLearningContentApi.getStats(includeTest.value, includeTest.value, includeTest.value)
     if (seq !== statsReqSeq) return
     stats.value = res.data?.data ?? res.data
   } catch {

@@ -33,7 +33,7 @@ import {
   type FragmentationMetrics,
 } from '../../services/admin/memory-review.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
-import { findTestAccountUserIds } from '../../utils/test-account';
+import { findQaAccountIds, findTestAccountUserIds } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 import { normalizeConceptKey } from '../../services/memory/memory-trace.service';
 import { reviewPlanService } from '../../services/memory/review-plan.service';
@@ -170,8 +170,12 @@ router.get('/', async (req, res) => {
 
     let baseWhere: Record<string, unknown>;
     if (testOnly) {
-      // 正向 in 清单（虚拟 + 测试），与真实视角的 notIn 互为镜像；判据同源 findTestAccountUserIds
-      const testUserIds = await findTestAccountUserIds();
+      // 正向 in 清单，与真实视角的 notIn 互为镜像；判据同源 findTestAccountUserIds。
+      // qaOnly=true 时只含测试/审计账号（2026-10-21 教学组剔除虚拟学习者：
+      // 虚拟学习者的记忆归虚拟学习者域 / 学习者详情的记忆页签）。
+      const testUserIds = String(req.query.qaOnly || '') === 'true'
+        ? await findQaAccountIds()
+        : await findTestAccountUserIds();
       baseWhere = testUserIds.length > 0 ? { userId: { in: testUserIds } } : { userId: { in: ['__none__'] } };
     } else {
       /* 真实视角 = 排除虚拟学习者 + 测试/审计账号（2026-10-23 运营走查）：

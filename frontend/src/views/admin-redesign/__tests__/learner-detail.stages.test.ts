@@ -807,3 +807,42 @@ describe('LearnerDetail 概览：最近目标对话 + 学习动态命名', () =>
     }
   });
 });
+
+/* 2026-10-21 教学组剔除虚拟学习者后，「学习详情 →」是唯一进虚拟账号学习档案的入口：
+   列表兜底（liveLearners）永远取不到它，快照也可能没有 userName / 路径（totalTasks=0）。
+   此前这种「稀疏详情」直接落「详情加载失败」，把「还没有学习数据」说成加载错误。 */
+describe('LearnerDetail 稀疏虚拟账号：不报加载失败，读数不造假', () => {
+  it('没有路径/课堂的虚拟账号：按账号记录渲染，hero 不展示默认的趋势/疲劳', async () => {
+    const { getUserIncludingDeleted } = await import('@/api/adminApi');
+    const userMock = getUserIncludingDeleted as unknown as ReturnType<typeof vi.fn>;
+    const origUser = userMock.getMockImplementation();
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    const original = subPage.value;
+    subPage.value = { view: 'learner', id: 'virtual_sparse', includeTest: true };
+    routeQuery.tab = 'overview';
+    userMock.mockResolvedValue({
+      data: { data: { id: 'virtual_sparse', name: '孙浩', email: 'virtual_sparse@test.local', isVirtualLearner: true } },
+    });
+    detailMock.mockResolvedValue({
+      model: { knowledgeMemory: { currentPath: { progress: {} }, globalSignals: {} } },
+    });
+    try {
+      const w = await mountLd([]);
+      const text = w.text();
+      expect(text).not.toContain('详情加载失败');
+      // 名字/邮箱由账号记录兜底（不再是裸 id）
+      expect(text).toContain('孙浩');
+      expect(text).toContain('virtual_sparse@test.local');
+      // 没有学习数据 → 不画「趋势：稳定 / 疲劳：低」（那是默认值，不是读数）
+      expect(w.text()).not.toContain('趋势：');
+      expect(w.text()).not.toContain('疲劳：');
+      w.unmount();
+    } finally {
+      subPage.value = original;
+      if (origUser) userMock.mockImplementation(origUser);
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+});

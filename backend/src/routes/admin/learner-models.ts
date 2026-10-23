@@ -42,6 +42,8 @@ router.get('/', async (req, res) => {
       riskOnly: req.query.riskOnly === 'true',
       excludeTest,
       testOnly: String(req.query.testOnly || '') === 'true',
+      // 教学组「测试」视角只含测试/审计账号（2026-10-21 剔除虚拟学习者）
+      qaOnly: String(req.query.qaOnly || '') === 'true',
       page: req.query.page ? Number(req.query.page) : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
     });

@@ -205,7 +205,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await findBtn(wrapper, '测试').trigger('click');
     await flushPromises();
     await nextTick();
-    expect(tsListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
+    expect(tsListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true, qaOnly: true });
     expect(scopePill(wrapper)).toBe('测试');
     // 2026-10-21 用户「已经是测试了，就不要再显示了」：视角互斥后，逐行不再挂任何身份变体徽章
     expect(wrapper.findAll('.mk-badge--sm')).toHaveLength(0);
@@ -245,7 +245,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     await findBtn(wrapper, '测试').trigger('click');
     await flushPromises();
     await nextTick();
-    expect(gcListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
+    expect(gcListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true, qaOnly: true });
     expect(scopePill(wrapper)).toBe('测试');
     // 2026-10-21 用户「右上角已经切换到虚拟了，这里就不需要了」：视角已表达身份域，逐行不再挂徽章
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
@@ -283,15 +283,15 @@ describe('Users 数据隔离切换（A3）', () => {
     await flushPromises();
     await nextTick();
     expect(liveSetUsersIncludeTest).toHaveBeenCalledWith(true);
-    // 切换后全量口径：后端返回虚拟/测试行 → 虚拟行带「虚拟」灰标
+    // 切换后测试口径：后端只回测试/审计账号（2026-10-21 拍板剔除虚拟学习者）
     liveUsers.value = [
       ...liveUsers.value,
       {
-        id: 'virtual_1',
-        name: '虚拟小王',
-        email: 'virtual_1@test.local',
+        id: 'qa_1',
+        name: '走查账号甲',
+        email: 'wfprobe1@wenflow.local',
         isAdmin: false,
-        isVirtualLearner: true,
+        isVirtualLearner: false,
         isTestAccount: true,
         xp: 0,
         currentLevel: 'L1',
@@ -302,12 +302,11 @@ describe('Users 数据隔离切换（A3）', () => {
       }
     ];
     await nextTick();
-    expect(wrapper.text()).toContain('测试/虚拟 1');
+    expect(wrapper.text()).toContain('测试账号 1');
+    expect(wrapper.text()).toContain('走查账号甲');
     // 2026-10-22 用户「右上角已经是测试了，这里就不要有了」：口径开关已表达视角，
-    // 逐行不再挂「虚拟 / 测试账号」徽章
-    expect(wrapper.text()).toContain('虚拟小王');
+    // 逐行不再挂「虚拟 / 测试账号」徽章（口径里那行 meta 不算行内徽章）
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('测试账号');
     wrapper.unmount();
   });
 });

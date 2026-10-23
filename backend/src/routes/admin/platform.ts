@@ -1416,6 +1416,8 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     // testOnly=true（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看虚拟 + 测试账号
     const includeTest = String(req.query.includeTest || '') === 'true';
     const testOnly = String(req.query.testOnly || '') === 'true';
+    // qaOnly=true：测试视角只含测试/审计账号（2026-10-21 教学组剔除虚拟学习者）
+    const qaOnly = String(req.query.qaOnly || '') === 'true';
 
     const data = await listTeachingSessionsDebug({
       page,
@@ -1427,6 +1429,7 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
       onlyMissingWrapup,
       includeTest,
       testOnly,
+      qaOnly,
     });
 
     res.json({

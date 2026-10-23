@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
-import { buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { buildQaUserWhere, buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
 export interface LearnerSnapshotRefreshInput {
@@ -98,6 +98,8 @@ export class LearnerSnapshotRefreshService {
     excludeTest?: boolean;
     includeTest?: boolean;
     testOnly?: boolean;
+    /** 测试视角只含测试/审计账号（2026-10-21 教学组剔除虚拟学习者） */
+    qaOnly?: boolean;
     page?: number;
     limit?: number;
   }) {
@@ -114,7 +116,9 @@ export class LearnerSnapshotRefreshService {
     const excludeTest = params?.includeTest ? false : (params?.excludeTest ?? true);
     const userWhere = {
       ...(params?.testOnly
-        ? await buildTestUserWhere({ deletedAt: null })
+        ? (params?.qaOnly
+            ? await buildQaUserWhere({ deletedAt: null })
+            : await buildTestUserWhere({ deletedAt: null }))
         : excludeTest
           ? await buildRealUserWhere({ deletedAt: null })
           : { deletedAt: null }),

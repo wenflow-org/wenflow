@@ -25,7 +25,7 @@ import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../../utils/logger';
-import { buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { buildQaUserWhere, buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
 
 const router = express.Router();
 
@@ -83,8 +83,11 @@ router.get('/', async (req, res, next) => {
     // testOnly=true（2026-10-10 用户拍板：口径开关改「真实/测试」互斥视角）→ 只看虚拟 + 测试账号
     const includeTest = String(req.query.includeTest || '') === 'true';
     const testOnly = String(req.query.testOnly || '') === 'true';
+    // qaOnly=true：测试视角只含测试/审计账号（2026-10-21 用户拍板「教学组彻底剔除虚拟」）。
+    // 虚拟学习者是无凭据的仿真身份，本页的角色/登录列对它无意义，且它已有虚拟学习者域与自己的详情。
+    const qaOnly = String(req.query.qaOnly || '') === 'true';
     if (testOnly && status !== 'deleted') {
-      Object.assign(where, await buildTestUserWhere());
+      Object.assign(where, qaOnly ? await buildQaUserWhere() : await buildTestUserWhere());
     } else if (!includeTest && status !== 'deleted') {
       // 判据用 isTestAccountUser 取 id 排除，不用 Prisma startsWith：SQLite 的 LIKE 会把
       // 前缀里的 `_` 当通配符，`e2e_` 会连 `e2e.` 开头的真实账号一起滤掉（2026-10-09 修）。

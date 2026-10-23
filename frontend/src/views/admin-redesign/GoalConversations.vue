@@ -23,7 +23,7 @@
       <MkKpi
         label="目标对话数"
         :value="stats?.total ?? '—'"
-        :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
+        :title="includeTest ? '只统计测试账号' : '只统计真实用户'"
       />
       <MkKpi
         label="完结率"
@@ -282,7 +282,7 @@
           v-else
           icon="◌"
           :title="keyword || statusFilter || noPathOnly ? '当前筛选无匹配' : '暂无目标对话'"
-          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : (includeTest ? '当前范围（虚拟学习者与测试账号）暂无目标对话。' : '当前只显示真实用户，切「测试」可查看虚拟 / 测试账号的对话。')"
+          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : (includeTest ? '当前范围（测试账号）暂无目标对话。' : '当前只显示真实用户，切「测试」可查看测试账号的对话。')"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -763,11 +763,13 @@ async function load(force = false) {
   loadError.value = ''
   try {
     // 首屏主体是会话列表：只 await 列表接口，页面就绪时间不再被 stats 拖住；
-    // 测试视角（2026-10-10「真实/测试」互斥视角）带 testOnly 只回虚拟 + 测试账号的对话
+    // 测试视角（2026-10-10「真实/测试」互斥视角）带 testOnly+qaOnly 只回测试/审计账号的对话
+    // （2026-10-21 用户拍板：教学组剔除虚拟学习者，虚拟学习者的目标对话归虚拟学习者域）
     const listRes = await adminGoalConversationsApi.list({
       limit: LIST_LIMIT,
       includeTest: includeTest.value,
       testOnly: includeTest.value || undefined,
+      qaOnly: includeTest.value || undefined,
     })
     const body = listRes.data?.data ?? listRes.data ?? {}
     rows.value = ((body.conversations as Record<string, unknown>[]) || []).map(mapRow)
@@ -791,7 +793,7 @@ async function load(force = false) {
   /* stats 非阻塞后台拉取：到达后回填 KPI 面板（总量/参与用户/近 7 日新增）与状态分布带。
      三态（P1#6）：失败时置 statsError（错误条 + 重试，KPI 卡显「—」），
      绝不回滚列表、不阻塞首屏；代际不符（已发起新一轮 load）的迟到响应直接丢弃 */
-  void adminGoalConversationsApi.getStats(includeTest.value, includeTest.value)
+  void adminGoalConversationsApi.getStats(includeTest.value, includeTest.value, includeTest.value)
     .then((statsRes) => {
       if (seq !== statsReqSeq) return
       const s = statsRes?.data?.data ?? statsRes?.data
@@ -897,7 +899,8 @@ async function remove(r: Row) {
 watch(isLive, () => {
   void load()
 })
-/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉，绕过 TTL 缓存） */
+/* 数据隔离切换：仅真实 ↔ 测试账号（切换后立即按新口径重拉，绕过 TTL 缓存）。
+   2026-10-21 拍板：教学组剔除虚拟学习者，虚拟学习者的目标对话在虚拟学习者域看 */
 watch(includeTest, () => {
   void load(true)
 })

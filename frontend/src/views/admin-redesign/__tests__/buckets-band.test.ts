@@ -14,7 +14,7 @@ import { nextTick } from 'vue';
 import TeachingSessions from '../TeachingSessions.vue';
 import OpsContent from '../OpsContent.vue';
 import People from '../People.vue';
-import { liveUsers, liveUsersTotal, liveIncludeVirtual, liveVirtuals } from '../live';
+import { liveUsers, liveUsersTotal, liveIncludeVirtual } from '../live';
 
 const { tsList, pathStats, lcApi, tsApi, apiObject } = vi.hoisted(() => {
   const apiObject = (): Record<string, unknown> =>
@@ -178,24 +178,21 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(tiles[1].find('.mk-kpi__hint').exists()).toBe(false);
     w.unmount();
 
-    // 含测试口径 → 四卡：「真实用户」在测试视角结构性恒 0，换虚拟域「运行中仿真账号」
+    /* 含测试口径（2026-10-21 拍板：教学组剔除虚拟学习者）→ 四卡与真实档同构，
+       集合 = 测试/审计账号。夹具按后端新口径只回 u4（测试乙，从未登录）。 */
     liveIncludeVirtual.value = true;
-    liveVirtuals.value = [{ runningCount: 1 }] as unknown as typeof liveVirtuals.value;
+    liveUsers.value = [liveUsers.value[3]];
+    liveUsersTotal.value = 1;
     const w2 = mount(People, { global: { plugins: [router] } });
     await settle();
     await nextTick();
     const tiles2 = w2.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles2.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['运行中仿真账号', '虚拟学习者', '测试账号', '测试账号活跃']);
-    /* 2026-10-16 KPI 审计补完：活跃卡取值收到「测试账号」域（此前按虚拟+测试全体算，
-       出现「活跃 50 > 测试账号 48」这种自相矛盾）。夹具里 u4（测试乙）从未登录，故活跃为 0，
-       u3（虚拟甲）虽活跃但不计入本卡。 */
-    expect(tiles2.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '1', '0']);
-    expect(tiles2[3].attributes('title')).toContain('只统计测试账号');
-    expect(tiles2[1].attributes('title')).toContain('当前显示 4 个账号');
+    expect(tiles2.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['测试账号', '近 7 天活跃', '近 7 日新增', '从未登录']);
+    expect(tiles2.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '0', '0', '1']);
+    expect(tiles2[0].attributes('title')).toContain('当前显示 1 个账号');
     w2.unmount();
 
     liveIncludeVirtual.value = false;
     liveUsers.value = [];
-    liveVirtuals.value = [];
   });
 });

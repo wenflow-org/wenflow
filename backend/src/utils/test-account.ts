@@ -210,3 +210,36 @@ export async function buildTestUserWhere(
     ...(extra || {}),
   };
 }
+
+/** 测试账号（有凭据的 QA / 审计账号）id 清单：**不含虚拟学习者**。
+ *  虚拟学习者是无凭据的仿真身份，归「虚拟学习者」域；教学组六页的「测试」视角
+ *  只放 QA 账号（2026-10-21 用户拍板「教学组彻底剔除虚拟」）。 */
+export async function findQaAccountIds(): Promise<string[]> {
+  const rows = await prisma.users.findMany({
+    select: { id: true, email: true, name: true, isVirtualLearner: true },
+  });
+  return rows
+    .filter((row) => !row.isVirtualLearner && isTestAccountUser(row))
+    .map((row) => row.id);
+}
+
+/**
+ * 教学组「测试」视角 where：只看测试/审计账号，虚拟学习者不在内。
+ *
+ * 与 buildTestUserWhere（虚拟 ∪ 测试）的差别只有这一条：虚拟学习者的教与学归
+ * 虚拟学习者域（列表 / 详情控制台 / 会话座舱），不再混进教学口径——否则同一个
+ * 虚拟学习者有两个入口、两个详情（用户与学习者点进去是账号+学习档案，
+ * 虚拟学习者点进去是仿真控制台），且「测试」一词同时指 QA 数据与产品仿真流量。
+ *
+ * 空集时必须落到空列表（in: []），不能退化成「不加条件」——那会把全部账号放回来。
+ */
+export async function buildQaUserWhere(
+  extra?: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const ids = await findQaAccountIds();
+  return {
+    isVirtualLearner: false,
+    id: { in: ids.length ? ids : ['__no_qa_account__'] },
+    ...(extra || {}),
+  };
+}

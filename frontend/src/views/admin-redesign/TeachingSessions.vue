@@ -517,8 +517,10 @@ async function fetchRows(force = false): Promise<boolean> {
     const res = await adminTeachingSessionsApi.list({
       limit: LIST_LIMIT,
       includeTest: includeTest.value,
-      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的会话
+      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回测试/审计账号的会话
+      // （2026-10-21 用户拍板：教学组剔除虚拟学习者——虚拟会话在会话座舱 / 虚拟学习者域看）
       testOnly: includeTest.value || undefined,
+      qaOnly: includeTest.value || undefined,
       ...(onlyAdvisory.value ? { onlyWithAdvisory: true } : {})
     })
     // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
@@ -603,7 +605,7 @@ watch(
 /* 数据隔离切换代际号：只由最新一次切换收尾 refreshing（快速连切时旧一笔不得提前撤下骨架） */
 let scopeSwitchSeq = 0
 watch(includeTest, () => {
-  /* 数据隔离切换：仅真实 ↔ 含虚拟/测试。
+  /* 数据隔离切换：仅真实 ↔ 测试账号（2026-10-21 起虚拟学习者不进本页口径）。
      2026-10-06 审核 F2-3：此前只重拉不清行 —— 列表接口实测滞后数秒，滞后期间开关/KPI 已翻到
      新口径而表格仍是旧口径行，全程无加载反馈（骨架短路条件 refreshing && !rows.length 恒不成立）。
      改为切换即清行再按新口径重拉（判例：GoalConversations 的 pendingForce 语义）：

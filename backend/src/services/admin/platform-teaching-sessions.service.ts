@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { isTestAccountUser } from '../../utils/test-account';
-import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
+import { buildQaUserWhere, buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
 import { deriveTeachingSessionProgress } from '../teaching-session-progress.service';
 import { parseClosureObservation, type ClosureObservation } from '../learning/closure-observability';
 
@@ -114,8 +114,10 @@ export async function listTeachingSessionsDebug(params: {
   includeTest: boolean;
   /** 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：只看虚拟学习者 + 测试账号 */
   testOnly?: boolean;
+  /** 测试视角只含测试/审计账号（2026-10-21「教学组彻底剔除虚拟」：虚拟学习者的课堂归虚拟学习者域） */
+  qaOnly?: boolean;
 }): Promise<unknown> {
-  const { page, limit, userId, pathId, status, onlyWithAdvisory, onlyMissingWrapup, includeTest, testOnly } = params;
+  const { page, limit, userId, pathId, status, onlyWithAdvisory, onlyMissingWrapup, includeTest, testOnly, qaOnly } = params;
   const where: any = {
     ...(userId ? { userId } : {}),
     ...(pathId ? { learningPathId: pathId } : {}),
@@ -126,7 +128,7 @@ export async function listTeachingSessionsDebug(params: {
       ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }
       : {}),
     ...(testOnly
-      ? { users: await buildTestUserWhere() }
+      ? { users: qaOnly ? await buildQaUserWhere() : await buildTestUserWhere() }
       : includeTest
         ? {}
         : { users: await buildRealUserWhere() }),

@@ -303,7 +303,14 @@ export const adminUsersApi = {
   /**
    * 获取用户列表
    */
-  getUsers: async (params?: { page?: number; limit?: number; search?: string; role?: string; status?: string; includeTest?: boolean }) => {
+  getUsers: async (params?: {
+    page?: number; limit?: number; search?: string; role?: string; status?: string;
+    includeTest?: boolean;
+    /** 测试视角（真实/测试互斥）：只回非真实账号 */
+    testOnly?: boolean;
+    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
+    qaOnly?: boolean;
+  }) => {
     return adminAxios.get('/admin/users', { params });
   },
 
@@ -380,6 +387,10 @@ export const adminLearnerModelsApi = {
     riskOnly?: boolean;
     excludeTest?: boolean;
     includeTest?: boolean;
+    /** 测试视角（真实/测试互斥）：只回非真实账号 */
+    testOnly?: boolean;
+    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
+    qaOnly?: boolean;
     page?: number;
     limit?: number;
   }) => {
@@ -437,7 +448,15 @@ export const adminMemoryTracesApi = {
 export const adminMemoryReviewApi = {
   /** 跨用户总览。sort/order = 服务端排序（name / traces / due / weak / strength / lastReviewed），
    *  在切片之前生效（分页列表只在当前页排会误导）。 */
-  overview: async (params?: { limit?: number; offset?: number; includeVirtual?: boolean; testOnly?: boolean; sort?: string; order?: 'asc' | 'desc' }) => {
+  overview: async (params?: {
+    limit?: number; offset?: number;
+    includeVirtual?: boolean;
+    /** 测试视角（真实/测试互斥）：只回非真实账号 */
+    testOnly?: boolean;
+    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
+    qaOnly?: boolean;
+    sort?: string; order?: 'asc' | 'desc';
+  }) => {
     return adminAxios.get('/admin/memory-review', { params });
   },
   /**
@@ -523,8 +542,10 @@ export const adminTeachingSessionsApi = {
     onlyWithAdvisory?: boolean;
     onlyMissingWrapup?: boolean;
     includeTest?: boolean;
-    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的会话 */
+    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只回非真实账号的会话 */
     testOnly?: boolean;
+    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
+    qaOnly?: boolean;
   }) => {
     return adminAxios.get('/admin/teaching-sessions', { params });
   }
@@ -1194,7 +1215,14 @@ export const adminTokenCostApi = {
  * Goal 会话管理（目标对话 → 路径生成源头）
  */
 export const adminGoalConversationsApi = {
-  list: async (params?: { page?: number; limit?: number; status?: string; userId?: string; includeTest?: boolean; testOnly?: boolean }) => {
+  list: async (params?: {
+    page?: number; limit?: number; status?: string; userId?: string;
+    includeTest?: boolean;
+    /** 测试视角（真实/测试互斥）：只回非真实账号 */
+    testOnly?: boolean;
+    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
+    qaOnly?: boolean;
+  }) => {
     return adminAxios.get('/admin/goal-conversations', { params });
   },
   getDetail: async (id: string) => {
@@ -1207,8 +1235,10 @@ export const adminGoalConversationsApi = {
     // LLM 上游调用（Path 重生成）：放宽到 AI 请求超时
     return adminAxios.post(`/admin/goal-conversations/${encodeURIComponent(id)}/regenerate-path`, undefined, { timeout: AI_REQUEST_TIMEOUT });
   },
-  getStats: async (includeTest?: boolean, testOnly?: boolean) => {
-    return adminAxios.get('/admin/goal-conversations/stats/overview', { params: { includeTest, testOnly: testOnly || undefined } });
+  getStats: async (includeTest?: boolean, testOnly?: boolean, qaOnly?: boolean) => {
+    return adminAxios.get('/admin/goal-conversations/stats/overview', {
+      params: { includeTest, testOnly: testOnly || undefined, qaOnly: qaOnly || undefined },
+    });
   }
 };
 
@@ -2337,8 +2367,10 @@ export const adminLearningContentApi = {
     /** 按学习者收窄（学习者详情页的路径作用域选择器要列出「这个人名下的路径」） */
     userId?: string;
     includeTest?: boolean;
-    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的路径 */
+    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只回非真实账号的路径 */
     testOnly?: boolean;
+    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
+    qaOnly?: boolean;
   }) => {
     return adminAxios.get<{ success: boolean; data: { paths: LearningPathRow[]; pagination: { total: number; page: number; limit: number } } }>(
       '/admin/learning-content/paths',
@@ -2364,9 +2396,9 @@ export const adminLearningContentApi = {
   deletePath: async (id: string) => {
     return adminAxios.delete(`/admin/learning-content/paths/${encodeURIComponent(id)}`);
   },
-  getStats: async (includeTest?: boolean, testOnly?: boolean) => {
+  getStats: async (includeTest?: boolean, testOnly?: boolean, qaOnly?: boolean) => {
     return adminAxios.get<{ success: boolean; data: LearningContentStats }>('/admin/learning-content/stats', {
-      params: { includeTest, testOnly: testOnly || undefined },
+      params: { includeTest, testOnly: testOnly || undefined, qaOnly: qaOnly || undefined },
     });
   },
 };
