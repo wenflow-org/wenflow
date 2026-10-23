@@ -1496,6 +1496,10 @@ export async function liveGetLearnerPredictions(userId: string, includeTest?: bo
 /** 一条活跃会话（virtual-learners 列表 activeRuns 项；与后端 virtual-run-progress 同形） */
 export interface LiveVirtualRun {
   sessionId: string
+  /** 这条运行在做哪条学习路径（null = 还没产出路径的目标阶段运行） */
+  pathId?: string | null
+  /** 路径标题（后端一次查好；缺省时前端回落到「目标阶段」） */
+  pathTitle?: string | null
   state: 'running' | 'paused'
   currentStage: string | null
   goalReady: boolean
@@ -1505,6 +1509,21 @@ export interface LiveVirtualRun {
   taskTotal: number
   /** 超过回收阈值无写入（与「无响应」列同源；暂停会话恒 false） */
   stalled: boolean
+}
+
+/** 无活跃运行时的历史摘要（按学习路径归并，每条路径只取最近一次） */
+export interface LiveVirtualRecentRun {
+  sessionId: string
+  pathId: string | null
+  pathTitle?: string | null
+  status: string | null
+  currentStage: string | null
+  updatedAt: string | null
+  goalReady: boolean
+  pathReady: boolean
+  learnStarted: boolean
+  taskDone: number
+  taskTotal: number
 }
 
 export interface LiveVirtual {
@@ -1547,6 +1566,10 @@ export interface LiveVirtual {
   activeRuns?: LiveVirtualRun[]
   /** 活跃会话全量数（含样本窗口外未展开的余量） */
   activeRunTotal?: number
+  /** 无活跃运行时的历史摘要：按学习路径归并，每条路径最近一次运行（2026-10-21） */
+  recentRuns?: LiveVirtualRecentRun[]
+  /** 历史摘要涉及的路径/阶段组总数（> recentRuns.length 时前端出「+N」） */
+  recentRunTotal?: number
   /** 最近一个运行中会话的阶段（无运行中会话时回退最近会话阶段） */
   currentStage: string | null
   createdAt: string
@@ -1756,6 +1779,8 @@ async function fetchLiveVirtuals(): Promise<void> {
       activeRuns: Array.isArray(p.activeRuns)
         ? (p.activeRuns as LiveVirtualRun[]).map((r) => ({
             sessionId: String(r.sessionId),
+            pathId: r.pathId ? String(r.pathId) : null,
+            pathTitle: r.pathTitle ? String(r.pathTitle) : null,
             state: r.state === 'paused' ? 'paused' : 'running',
             currentStage: r.currentStage ? String(r.currentStage) : null,
             goalReady: !!r.goalReady,
@@ -1767,6 +1792,23 @@ async function fetchLiveVirtuals(): Promise<void> {
           }))
         : [],
       activeRunTotal: Number(p.activeRunTotal ?? 0),
+      /* 历史摘要：按路径归并（旧后端不返回时留空，前端回落到单条 stageProgress） */
+      recentRuns: Array.isArray(p.recentRuns)
+        ? (p.recentRuns as LiveVirtualRecentRun[]).map((r) => ({
+            sessionId: String(r.sessionId),
+            pathId: r.pathId ? String(r.pathId) : null,
+            pathTitle: r.pathTitle ? String(r.pathTitle) : null,
+            status: r.status ? String(r.status) : null,
+            currentStage: r.currentStage ? String(r.currentStage) : null,
+            updatedAt: r.updatedAt ? String(r.updatedAt) : null,
+            goalReady: !!r.goalReady,
+            pathReady: !!r.pathReady,
+            learnStarted: !!r.learnStarted,
+            taskDone: Number(r.taskDone) || 0,
+            taskTotal: Number(r.taskTotal) || 0,
+          }))
+        : [],
+      recentRunTotal: Number(p.recentRunTotal ?? 0),
       raw: p
     }
   })

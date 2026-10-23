@@ -271,6 +271,14 @@
                       clickable
                       @click.stop="openRun(run.sessionId)"
                     />
+                    <!-- 同一学习者可能同时跑多条路径：标签后带上路径名，否则两条运行长得一样 -->
+                    <button
+                      v-if="run.pathTitle"
+                      type="button"
+                      class="vl-runtitle"
+                      :title="run.pathTitle"
+                      @click.stop="openRun(run.sessionId)"
+                    >{{ run.pathTitle }}</button>
                     <span class="vl-stage" :title="runStageTitle(s, run)">
                       <RunStageBar
                         :stage="runStage(run)"
@@ -293,20 +301,29 @@
                   class="vl-unlisted"
                   :title="`有 ${activeCount(s)} 条活跃运行，但不在本次载入的运行明细里，进画像页查看`"
                 >活跃 {{ activeCount(s) }} 条 · 未展开</span>
-                <template v-else-if="s.stageProgress">
-                  <div class="vl-runline vl-runline--history">
-                    <span class="vl-histmark">最近</span>
-                    <span class="vl-stage" :title="historicTitle(s)">
-                      <RunStageBar
-                        :stage="stageBarStage(s)"
-                        :status="null"
-                        :task-progress="s.stageProgress.learnStarted && s.stageProgress.taskTotal > 0 ? { done: s.stageProgress.taskDone, total: s.stageProgress.taskTotal } : null"
-                        show-task-text
-                      />
-                    </span>
+                <!-- 历史（无活跃运行）：按学习路径一行（2026-10-21 用户「一个学习者可能多个目标路径」）。
+                     每条路径只显示最近一次运行，多节课/重跑折叠在画像页；终态用词写出来（已放弃/已完成），
+                     不再给历史行画「进行中」的阶段条——那会把已经结束的运行画得像在跑。 -->
+                <template v-else-if="historyRunsOf(s).length">
+                  <span class="vl-histmark">最近</span>
+                  <div class="vl-histlines">
+                    <div class="vl-histline" v-for="r in historyRunsOf(s)" :key="r.sessionId">
+                      <button
+                        type="button"
+                        class="vl-histtitle"
+                        :title="historyRunTitle(r)"
+                        @click.stop="r.sessionId && openRun(r.sessionId)"
+                      >{{ r.pathTitle || '目标阶段' }}</button>
+                      <span class="vl-histmeta">{{ historyRunMeta(r) }}</span>
+                    </div>
+                    <span
+                      v-if="historyTotalOf(s) > historyRunsOf(s).length"
+                      class="vl-histmore"
+                      :title="`该学习者共有 ${historyTotalOf(s)} 条路径/阶段的历史运行，列表每条只显示最近一次`"
+                    >+{{ historyTotalOf(s) - historyRunsOf(s).length }} 条路径</span>
                   </div>
                 </template>
-                <span v-else class="mk-na" title="当前没有进行中的运行">空闲</span>
+                <span v-else class="mk-na" title="这个学习者还没有运行过">未运行</span>
               </div>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('sessions')" class="mk-num">{{ s.sessions }}</td>
@@ -439,7 +456,8 @@ import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import VirtualLearnerBatchCreate from './VirtualLearnerBatchCreate.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
-import type { VirtualLearnerRow as Sample, BatchTask, ActiveRun } from './virtualLearnersTypes'
+import type { VirtualLearnerRow as Sample, BatchTask, ActiveRun, RecentRun } from './virtualLearnersTypes'
+import { statusText } from './statusText'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
@@ -480,6 +498,9 @@ const samples = computed<Sample[]>(() =>
     /* 逐条活跃会话（2026-10-18）：多路径同时运行时按行展开，不再只画第一条 */
     activeRuns: Array.isArray(v.activeRuns) ? v.activeRuns : [],
     activeRunTotal: Number(v.activeRunTotal ?? 0),
+    /* 历史摘要按路径归并（2026-10-21）：没有活跃运行时按「每条路径一行」渲染最近一次运行 */
+    recentRuns: Array.isArray(v.recentRuns) ? v.recentRuns : [],
+    recentRunTotal: Number(v.recentRunTotal ?? 0),
     createdAt: String(v.createdAt || ''),
     created: timeAgo(v.createdAt),
     tags: Array.isArray(v.tags) ? v.tags : []
@@ -498,9 +519,6 @@ function stageOfProgress(
     if (p.goalReady) return 'goal'
   }
   return fallback
-}
-function stageBarStage(s: Sample): string | null {
-  return stageOfProgress(s.stageProgress, s.currentStage)
 }
 
 /* ---------- 「进行中」列：多活跃会话逐条渲染（2026-10-18） ---------- */
@@ -555,11 +573,51 @@ function runStageTitle(s: Sample, run: ActiveRun): string {
     ? `第 ${idx} 条活跃运行的阶段进度（共 ${total} 条在列表内）`
     : '这条活跃运行的阶段进度'
 }
-/** 历史进度（无活跃会话）的条目标题：明确是最近一次、不是现在在跑 */
-function historicTitle(s: Sample): string {
-  return s.pathCount > 1
-    ? `当前没有活跃运行，显示最近一次运行的阶段进度（该学习者共 ${s.pathCount} 条路径）`
-    : '当前没有活跃运行，显示最近一次运行的阶段进度'
+/* ---------- 历史运行（无活跃运行）：按学习路径归并 ---------- */
+/** 每条路径一行：优先用后端归并好的 recentRuns；旧缓存没有时用单条 stageProgress 合成一行 */
+function historyRunsOf(s: Sample): RecentRun[] {
+  if (s.recentRuns?.length) return s.recentRuns
+  if (!s.stageProgress) return []
+  return [{
+    sessionId: '',
+    pathId: null,
+    pathTitle: null,
+    status: null,
+    currentStage: s.currentStage,
+    updatedAt: null,
+    ...s.stageProgress
+  }]
+}
+function historyTotalOf(s: Sample): number {
+  return Math.max(Number(s.recentRunTotal) || 0, historyRunsOf(s).length)
+}
+/** 历史行说到哪一步：用词而不是彩点——已结束的运行不该再画「进行中」 */
+function stageWordOf(r: { goalReady: boolean; pathReady: boolean; learnStarted: boolean; currentStage: string | null }): string {
+  if (r.learnStarted) return '学习'
+  if (r.pathReady) return '路径'
+  if (r.goalReady) return '目标'
+  const st = String(r.currentStage || '')
+  if (st === 'teaching' || st === 'learn') return '学习'
+  if (st === 'path') return '路径'
+  return '目标'
+}
+/** 历史行摘要：到哪一步 + 任务数 + 终态（已放弃/已完成） */
+function historyRunMeta(r: RecentRun): string {
+  const stage = stageWordOf(r)
+  const tasks = r.learnStarted && r.taskTotal > 0 ? ` ${r.taskDone}/${r.taskTotal}` : ''
+  const st = String(r.status || '')
+  const terminal = st && st !== 'running' ? ` · ${statusText(st)}` : ''
+  return `${stage}${tasks}${terminal}`
+}
+/** 历史行 title：路径 + 任务 + 最近写入时间（点击行为由路径名本身是按钮承载，不再写说明书） */
+function historyRunTitle(r: RecentRun): string {
+  const parts = [r.pathTitle || '目标阶段']
+  if (r.learnStarted && r.taskTotal > 0) parts.push(`任务 ${r.taskDone}/${r.taskTotal}`)
+  if (r.updatedAt) {
+    const d = new Date(r.updatedAt)
+    if (!Number.isNaN(d.getTime())) parts.push(`最近写入 ${d.toLocaleString('zh-CN', { hour12: false })}`)
+  }
+  return parts.join(' · ')
 }
 /* 「已暂停不计入」必须点名是**哪一种**暂停：本页「已暂停」pill/徽章指的是自动驾驶被停
    （autopilot=stopped），而回收口径排除的是会话页「暂停」写下的 teaching.paused——后者暂停后
@@ -1096,7 +1154,29 @@ function openRun(sessionId: string) {
 /* 多活跃会话（2026-10-18）：逐条一行，徽章 + 阶段条；行高 24 与右侧「任务」列逐行对齐 */
 .vl-state-cell--multi { display: grid; gap: 2px; justify-items: start; }
 .vl-runline { display: flex; align-items: center; gap: 6px; min-height: 24px; min-width: 0; }
-.vl-runline--history { gap: 4px; }
+/* 历史行组（2026-10-21）：一条路径一行；行内只说「到哪一步 + 任务 + 终态」，
+   不再给已结束的运行画阶段条（会把「已放弃」画成「进行中」） */
+.vl-histlines { display: grid; gap: 1px; min-width: 0; }
+.vl-histline { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.vl-histtitle {
+  border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer;
+  max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted);
+  text-align: left;
+}
+.vl-histtitle:hover { color: var(--mk-blue); text-decoration: underline; }
+.vl-histmeta {
+  font-size: var(--mk-fs-micro); color: var(--mk-faint);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.vl-histmore { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 活跃运行行里的路径名：与徽章并列，截断保留可点区 */
+.vl-runtitle {
+  border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer;
+  max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted);
+}
+.vl-runtitle:hover { color: var(--mk-blue); text-decoration: underline; }
 /* 历史进度标记：无活跃会话时这条 bar 不是「现在在跑」 */
 .vl-histmark {
   font-size: var(--mk-fs-micro);

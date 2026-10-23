@@ -716,8 +716,10 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // 一个故事可衍生多条路径：路径数大于故事数不是数据错，title 必须交代设计语义
     expect(cell.attributes('title')).toContain('已生成路径 5 条');
     expect(cell.attributes('title')).toContain('一个故事可衍生多条路径');
-    // 阶段条只对应一条会话（多路径时点明总量），避免把「1 条路径在跑」读成「只有 1 条路径」
-    expect(w.find('.vl-stage').attributes('title')).toContain('共 5 条路径');
+    // 历史行按路径给：没有 recentRuns 的旧数据合成一行，说清到哪一步与任务数（不再画阶段条）
+    const line = w.find('.vl-histline');
+    expect(line.exists()).toBe(true);
+    expect(line.find('.vl-histmeta').text()).toContain('学习 1/25');
     w.unmount();
   });
 });

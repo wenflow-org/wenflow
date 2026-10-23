@@ -103,9 +103,9 @@ const multiRow = baseRow({
   pausedSessionIds: ['s-paused'],
   activeRunTotal: 4,
   activeRuns: [
-    { sessionId: 's-run-new', state: 'running', currentStage: 'learn', goalReady: true, pathReady: true, learnStarted: true, taskDone: 2, taskTotal: 25, stalled: false },
-    { sessionId: 's-run-old', state: 'running', currentStage: 'path', goalReady: true, pathReady: false, learnStarted: false, taskDone: 0, taskTotal: 0, stalled: true },
-    { sessionId: 's-paused', state: 'paused', currentStage: 'learn', goalReady: true, pathReady: true, learnStarted: true, taskDone: 1, taskTotal: 8, stalled: false }
+    { sessionId: 's-run-new', pathId: 'p1', pathTitle: '函数与导数', state: 'running', currentStage: 'learn', goalReady: true, pathReady: true, learnStarted: true, taskDone: 2, taskTotal: 25, stalled: false },
+    { sessionId: 's-run-old', pathId: 'p2', pathTitle: '立体几何', state: 'running', currentStage: 'path', goalReady: true, pathReady: false, learnStarted: false, taskDone: 0, taskTotal: 0, stalled: true },
+    { sessionId: 's-paused', pathId: 'p1', pathTitle: '函数与导数', state: 'paused', currentStage: 'learn', goalReady: true, pathReady: true, learnStarted: true, taskDone: 1, taskTotal: 8, stalled: false }
   ]
 });
 
@@ -138,6 +138,8 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     const badges = row.findAll('.vl-runline .rs-badge');
     expect(badges[0].attributes('title')).toContain('正在运行');
     expect(badges[2].attributes('title')).toContain('已暂停');
+    // 同一学习者多条路径：每条运行带路径名，否则两行长得一样分不出在跑哪条
+    expect(row.findAll('.vl-runline .vl-runtitle').map((t) => t.text())).toEqual(['函数与导数', '立体几何', '函数与导数']);
     // 全量 4 条，列表逐条取 3 条 → +1 且与最后一条同行（不额外占行）
     expect(row.find('.vl-runmore').text()).toBe('+1');
     expect(row.findAll('.vl-runline')).toHaveLength(3);
@@ -167,15 +169,47 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     w.unmount();
   });
 
-  it('无活跃会话时显示最近一次并标「最近」，任务列同步弱化显示', async () => {
+  it('无活跃会话时显示「最近」并按路径给历史行：用词说清到哪一步 + 任务数', async () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
     const row = rowByName(w, '徐国栋');
     expect(row.find('.vl-histmark').text()).toBe('最近');
-    expect(row.find('.vl-runline--history .vl-stage').attributes('title')).toContain('当前没有活跃运行');
-    // 历史行同样把任务数贴在条尾（读作「最近一次跑到 2/25」）
-    expect(row.find('.vl-runline--history .rs-bar__task').text()).toBe('任务 2/25');
+    // 旧缓存没有 recentRuns 时用单条 stageProgress 合成一行（路径名缺省写「目标阶段」）
+    const lines = row.findAll('.vl-histline');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].find('.vl-histtitle').text()).toBe('目标阶段');
+    expect(lines[0].find('.vl-histmeta').text()).toContain('学习 2/25');
+    // 已结束的运行不再画阶段条（那是「进行中」的语汇）
+    expect(row.find('.vl-stage').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('多目标/多路径：每条路径一行显示最近一次运行，终态写成词，多出的用「+N 条路径」披露', async () => {
+    liveVirtuals.value = [baseRow({
+      name: '多路径',
+      pathCount: 3,
+      recentRunTotal: 3,
+      recentRuns: [
+        { sessionId: 'r-a', pathId: 'path-A', pathTitle: '函数与导数', status: 'completed', currentStage: 'learn', updatedAt: '2026-10-20T00:00:00Z', goalReady: true, pathReady: true, learnStarted: true, taskDone: 20, taskTotal: 20 },
+        { sessionId: 'r-b', pathId: 'path-B', pathTitle: '立体几何', status: 'abandoned', currentStage: 'teaching', updatedAt: '2026-10-19T00:00:00Z', goalReady: true, pathReady: true, learnStarted: true, taskDone: 3, taskTotal: 18 },
+      ],
+    })] as unknown as typeof liveVirtuals.value;
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const row = rowByName(w, '多路径');
+    const lines = row.findAll('.vl-histline');
+    expect(lines).toHaveLength(2);
+    expect(lines.map((l) => l.find('.vl-histtitle').text())).toEqual(['函数与导数', '立体几何']);
+    // 终态用词而不是彩点：已完成 / 已放弃
+    expect(lines[0].find('.vl-histmeta').text()).toContain('已完成');
+    expect(lines[1].find('.vl-histmeta').text()).toContain('已放弃');
+    // 3 条路径只展开 2 条 → 余量明说
+    expect(row.find('.vl-histmore').text()).toBe('+1 条路径');
+    // 点路径名进该条运行的座舱（不是一律第一条）
+    await lines[1].find('.vl-histtitle').trigger('click');
+    expect(openSubPage).toHaveBeenCalledWith('session', 'r-b');
     w.unmount();
   });
 

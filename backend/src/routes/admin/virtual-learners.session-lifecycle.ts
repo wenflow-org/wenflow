@@ -12,8 +12,8 @@ import type { goal_conversations } from '../../services/prisma-client-types';
 import { randomUUID as uuidv4 } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-import { findProfileById, findProfileDetail, findProfileForProjectionToken, updateProfileFields, updateUserName, createVirtualLearnerUser, createVirtualLearnerProfile, listProfilesWithSessionSamples, countProfiles, groupPathCountsByProfile } from '../../services/virtual-lab/virtual-learner-profile.repo';
-import { deriveActiveRuns, deriveRunProgress } from '../../services/virtual-lab/virtual-run-progress';
+import { findProfileById, findProfileDetail, findProfileForProjectionToken, updateProfileFields, updateUserName, createVirtualLearnerUser, createVirtualLearnerProfile, listProfilesWithSessionSamples, countProfiles, groupPathCountsByProfile, findLearningPathTitles } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { deriveActiveRuns, deriveRecentRuns, deriveRunProgress } from '../../services/virtual-lab/virtual-run-progress';
 import { findSessionWithProfileAndUser, findGoalConversationById, getSessionStatusAggregates, getPerProfileStatusAggregates, findStaleSessionsByProfiles, findStaleSessionCandidates, findStaleSessionsForStats, findRunningSessionsByProfiles, findRunningSessionsForStats, findTerminalSessions, countTodayVirtualAgentCalls } from '../../services/virtual-lab/virtual-session.repo';
 import { hydrateSessionLogsField as hydrateVirtualSessionLogsField } from '../../services/virtual-lab/virtual-session-log-store';
 import { logger } from '../../utils/logger';
@@ -298,6 +298,18 @@ router.get('/', async (req: Request, res) => {
       pathCountByProfile.set(row.virtualProfileId, (pathCountByProfile.get(row.virtualProfileId) ?? 0) + 1);
     }
     
+    /* 「进行中」列按路径归并后要写路径名：一个学习者可能有多条目标/路径，光有 id 读不出差异。
+       一次查全页涉及的路径标题（活跃 + 历史都算），避免逐行查询。 */
+    const involvedPathIds = new Set<string>();
+    for (const p of profiles) {
+      for (const s of (Array.isArray(p.sessions) ? p.sessions : []) as Array<{ learningPathId?: string | null }>) {
+        if (s.learningPathId) involvedPathIds.add(String(s.learningPathId));
+      }
+    }
+    const pathTitleById = new Map<string, string>(
+      (await findLearningPathTitles([...involvedPathIds])).map((r) => [r.id, r.title])
+    );
+
     const formattedProfiles = profiles.map(p => {
       const profileData = JSON.parse(p.profile || '{}');
       const storyPool = Array.isArray(profileData?.storyPool) ? profileData.storyPool : [];
@@ -322,7 +334,17 @@ router.get('/', async (req: Request, res) => {
       /* 多活跃会话（2026-10-18 用户走查）：一个学习者可同时跑多条路径，列表不再只画第一条。
          运行在前、暂停在后；逐条标记是否无响应。activeRunTotal 用全量聚合数，
          与 activeRuns.length 的差即样本窗口外未展开的条数。 */
-      const activeRuns = deriveActiveRuns(sessionSample, stalledSessionIds);
+      const activeRuns = deriveActiveRuns(sessionSample, stalledSessionIds).map((r) => ({
+        ...r,
+        pathTitle: r.pathId ? pathTitleById.get(r.pathId) ?? null : null,
+      }));
+      /* 历史摘要按学习路径归并：没有活跃运行时，前端按「每条路径一行」显示最近一次运行；
+         按会话取一条会把多路径学习者画成单线（见 deriveRecentRuns 注释）。 */
+      const recent = deriveRecentRuns(sessionSample);
+      const recentRuns = recent.runs.map((r) => ({
+        ...r,
+        pathTitle: r.pathId ? pathTitleById.get(r.pathId) ?? null : null,
+      }));
       const activeRunTotal = (runningByProfile.get(p.id) ?? 0) + (pausedByProfile.get(p.id) ?? 0);
       // 日期模拟进度（只读）：优先会话时钟，其次画像级；供列表「模拟进度」列
       let simulation: { enabled: boolean; dayIndex: number; baseDate: string | null; autoAdvance: boolean } | null = null;
@@ -387,6 +409,9 @@ router.get('/', async (req: Request, res) => {
         /* 逐条活跃会话：前端「进行中」列按行渲染多路径；无活跃行时为空数组 */
         activeRuns,
         activeRunTotal,
+        /* 无活跃运行时的历史摘要：按学习路径归并，每条路径只取最近一次运行 */
+        recentRuns,
+        recentRunTotal: recent.total,
       };
     });
 
