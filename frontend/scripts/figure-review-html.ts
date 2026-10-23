@@ -137,13 +137,17 @@ const HINT =
   '这些是库里真实下发过的 spec，用产品同一个渲染器重画；每张上方是它所处的那一轮（紧邻的学生发言 + 老师这条回复，老师正文最多显示 6 行）。'
   + '紫色块是出图动机：谁触发的、命中哪段原文、建议什么图型；模型自述另起一行。';
 
-const items = JSON.parse(readFileSync(new URL('../figure-out/figures.json', import.meta.url), 'utf8')) as GalleryItem[];
+const esc = (x: unknown) => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const SRC = process.env.REVIEW_SRC || 'figures.json';
+const items = JSON.parse(readFileSync(new URL(`../figure-out/${SRC}`, import.meta.url), 'utf8')) as GalleryItem[];
+const TITLE = process.env.REVIEW_TITLE || '课堂教学图图库';
+const HINT_TEXT = process.env.REVIEW_HINT || HINT;
 
 const root = {
   render: () =>
     h('div', {}, [
-      h('h1', {}, '课堂教学图图库'),
-      h('div', { class: 'hint' }, HINT),
+      h('h1', {}, TITLE),
+      h('div', { class: 'hint' }, HINT_TEXT),
       h('div', { class: 'grid' }, items.map(card)),
     ]),
 };
@@ -152,15 +156,17 @@ const body = await renderToString(createSSRApp(root));
 const html = `<!doctype html>
 <html lang="zh-CN"><head>
 <meta charset="utf-8">
-<title>课堂教学图图库</title>
+<title>${esc(TITLE)}</title>
 <style>${BASE_CSS}</style>
 <style>${FIGURE_CSS}</style>
 </head>
 <body>${body}</body></html>`;
 
-const targets = [
-  new URL('../../outputs/teaching-figures-review.html', import.meta.url),
-  new URL('../figure-out/review.html', import.meta.url),
-];
+const targets = process.env.REVIEW_OUT
+  ? [new URL(`../../outputs/${process.env.REVIEW_OUT}`, import.meta.url)]
+  : [
+      new URL('../../outputs/teaching-figures-review.html', import.meta.url),
+      new URL('../figure-out/review.html', import.meta.url),
+    ];
 for (const path of targets) writeFileSync(path, html, 'utf8');
 console.log(`wrote ${items.length} figures, ${Math.round(html.length / 1024)}KB`);

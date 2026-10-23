@@ -15,6 +15,7 @@ import TeachingFigure from '../src/components/TeachingFigure.vue';
 
 const SRC = process.argv[2] || new URL('../figure-out/figures.json', import.meta.url).pathname.replace(/^\/(\w:)/, '$1');
 const OUT_DIR = new URL('../figure-out/', import.meta.url).pathname.replace(/^\/(\w:)/, '$1');
+const OUT_NAME = process.argv[3] || 'geometry-audit';
 
 const FIGURE_CSS = (() => {
   const sfc = readFileSync(new URL('../src/components/TeachingFigure.vue', import.meta.url), 'utf8');
@@ -57,9 +58,9 @@ ${FIGURE_CSS}
 </style></head><body>${rendered.join('\n')}</body></html>`;
 
 mkdirSync(OUT_DIR, { recursive: true });
-writeFileSync(OUT_DIR + 'geometry-audit.html', page, 'utf8');
+writeFileSync(OUT_DIR + `${OUT_NAME}.html`, page, 'utf8');
 writeFileSync(
-  OUT_DIR + 'geometry-audit-items.json',
+  OUT_DIR + `${OUT_NAME}-items.json`,
   JSON.stringify(
     unique.map((it, i) => ({ i, kind: it.figure?.kind || 'position-line', title: it.figure?.title || null, user: it.user, sessionId: it.sessionId })),
     null,
@@ -67,7 +68,7 @@ writeFileSync(
   ),
   'utf8',
 );
-console.log(`rendered ${unique.length} unique figures (from ${items.length}) → ${OUT_DIR}geometry-audit.html`);
+console.log(`rendered ${unique.length} unique figures (from ${items.length}) → ${OUT_DIR}${OUT_NAME}.html`);
 
 /* 页面里跑的测量脚本（在 ZCode 内置浏览器里 evaluate 这一段）：
 
