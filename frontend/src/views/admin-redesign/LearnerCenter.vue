@@ -52,19 +52,9 @@
         :hint="avgConfHint"
         :title="avgConfTitle"
       />
-      <!-- P-49（#74）：疲劳高 / 趋势下降原先被合并进「需关注」，看不到各自规模 -->
-      <MkKpi
-        label="疲劳高"
-        :value="fatigueHighCount"
-        :tone="fatigueHighCount ? 'warn' : ''"
-        title="疲劳度为「高」的学习者数"
-      />
-      <MkKpi
-        label="趋势下降"
-        :value="trendDownCount"
-        :tone="trendDownCount ? 'warn' : ''"
-        title="趋势为「下降」的学习者数"
-      />
+      <!-- 2026-10-23 用户「按你推荐走」：疲劳高 / 趋势下降两卡撤除——它们是「需关注」的
+           构成项、常态为 0，单列只会把一整排读数摊成七张；需要看单项规模时用「风险摘要」
+           列与「观察」pill。数据覆盖率保留：它限定平均置信度代表谁。 -->
       <MkKpi
         label="数据覆盖率"
         :value="confCoverageText"
@@ -520,9 +510,8 @@ const avgConfText = computed(() => {
   const avg = confRows.value.reduce((s, r) => s + (r.confidence ?? 0), 0) / confRows.value.length
   return Math.round(avg * 100) + '%'
 })
-/* P-49（#74）：拆出被「需关注」合并的两个信号 + 置信度覆盖率 */
-const fatigueHighCount = computed(() => rows.value.filter((r) => r.fatigue === '高').length)
-const trendDownCount = computed(() => rows.value.filter((r) => r.trend === 'down').length)
+/* 2026-10-23：疲劳高 / 趋势下降两个派生计数随卡片撤除（同上注释）——它们仍参与
+   isRisk 与「需关注」判定，只是不再单独占一张读数卡。 */
 const confCoverageText = computed(() =>
   rows.value.length ? `${Math.round((confRows.value.length / rows.value.length) * 100)}%` : '—'
 )
