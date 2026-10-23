@@ -317,8 +317,9 @@
           </div>
         </section>
 
-        <!-- 运行预算：画像级持久配置（LLM 重试 + 回合上限 + 默认难度）；新会话创建时作为初始值，座舱可临时覆盖 -->
-        <section v-if="activeTab === 'profile' && isLive" class="mk-card">
+        <!-- 运行预算：画像级持久配置（LLM 重试 + 回合上限 + 默认难度）；新会话创建时作为初始值，座舱可临时覆盖。
+             2026-10-21：从「画像」页签独立成「预算」页签——配置回答"下次跑用什么默认值"，不是这个人是谁。 -->
+        <section v-if="activeTab === 'budget' && isLive" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">运行预算</h3>
             <span class="mk-card__meta">新运行默认值</span>
@@ -1216,7 +1217,7 @@ const fallbackNotice = ref(false)
 
 /* 分页：概览（原型默认 pane，renderVLearnerDetail t 默认 "overview"）在前，
    故事池是主工作区，记忆池/画像/运行/日程各归其页 */
-type ProfileTab = 'overview' | 'stories' | 'runs' | 'timeline' | 'profile' | 'memory'
+type ProfileTab = 'overview' | 'stories' | 'runs' | 'timeline' | 'profile' | 'memory' | 'budget'
 const activeTab = ref<ProfileTab>('overview')
 
 const storyFilter = ref('')
@@ -2275,7 +2276,10 @@ const tabs = computed(() => {
     { key: 'timeline', label: '日程', count: timelineSessionOptions.value.length },
     // 角标与卡头同口径（#76）：表内实际渲染的概念行数，而不是四桶合计（上限 42 对不上 8）
     { key: 'memory', label: '记忆池', count: memoryPoolRows.value.length },
-    { key: 'profile', label: '画像' }
+    { key: 'profile', label: '画像' },
+    /* 运行预算（2026-10-21 用户「不放在画像里面，单独开一个 tab」）：配置是"下次跑用什么默认值"，
+       与画像（这个人是谁）不是一件事。已下线虚拟学习者没有可跑的会话，不显示该页签。 */
+    ...(isLive.value ? [{ key: 'budget' as const, label: '预算' }] : [])
   ]
   return list
 })
