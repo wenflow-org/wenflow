@@ -157,10 +157,10 @@
               v-if="!lcHiddenCols.has('updated')"
               scope="col"
               class="mk-th--sortable lc-c-updated"
-              title="快照更新时间"
+              title="学习证据最后一次变化的时间（课堂 / 目标对话 / 任务完成等），不是快照重算时间"
               :aria-sort="lcSortState('updated')"
               @click="toggleLcSort('updated')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">档案更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">数据更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th scope="col" class="mk-th--right lc-c-act" title="默认排序：风险优先 → 更新时间新→旧">操作</th>
           </tr>
         </thead>
@@ -211,7 +211,7 @@
             <td v-if="!lcHiddenCols.has('risk')" class="lc-riskcell" :class="{ 'mk-na': !r.risk }" :title="r.risk || ''"><span class="risk-text">{{ r.risk || '—' }}</span></td>
             <td v-if="!lcHiddenCols.has('updated')">
               <span v-if="isUpdating(r.id)" class="lc-updated">重算中…</span>
-              <span v-else-if="r.updated" class="mk-fresh" :class="freshTone(r.ts)" :title="r.ts ? new Date(r.ts).toLocaleString() : undefined">{{ r.updated }}</span>
+              <span v-else-if="r.updated" class="mk-fresh" :class="freshTone(r.ts)" :title="updatedCellTitle(r)">{{ r.updated }}</span>
               <span v-else class="mk-na">—</span>
             </td>
             <td>
@@ -319,6 +319,8 @@ interface Row {
   fatigue: '低' | '中' | '高'
   risk: string
   updated: string
+  /** 快照重建时刻（悬停披露，与「数据更新」区分开） */
+  recomputedAt?: string
   confidence?: number
   /** 更新时间戳（用于排序） */
   ts?: number
@@ -350,7 +352,7 @@ const lcColDefs = [
   { key: 'status', label: '趋势 / 疲劳', title: '近况趋势 + 疲劳度' },
   { key: 'conf', label: '置信度', title: '当前读数有多可信，低于 50% 记为低置信' },
   { key: 'risk', label: '风险摘要', title: '风险原因' },
-  { key: 'updated', label: '档案更新', title: '学习者档案快照的更新时间，不是学习活动时间' },
+  { key: 'updated', label: '数据更新', title: '学习证据最后一次变化的时间，不是快照重算时间' },
 ] as const
 /* 审核 #12（2026-10-06）：风险摘要列不再默认隐藏——它是 KPI「需关注」的判据之一
    （isRisk 含 !!r.risk），默认收起会让「需关注」筛出的行在可见列里全像正常值，看不出被抓原因。
@@ -362,6 +364,14 @@ const lcHiddenCols = ref<Set<string>>(new Set())
 function freshTone(ts?: number): string {
   if (!ts) return 'mk-fresh--never'
   return Date.now() - ts < 24 * 3600000 ? 'mk-fresh--fresh' : ''
+}
+/** 数据更新格悬停：先说「哪一刻的数据」，再说「档案什么时候重算过」——
+    两者此前混成一个读数，批重建把全表刷成同一分钟（2026-10-23） */
+function updatedCellTitle(r: Row): string | undefined {
+  const parts: string[] = []
+  if (r.ts) parts.push(`数据截至 ${new Date(r.ts).toLocaleString()}`)
+  if (r.recomputedAt) parts.push(`档案重算 ${new Date(r.recomputedAt).toLocaleString()}`)
+  return parts.length ? parts.join('；') : undefined
 }
 function openDetail(r: Row) {
   /* 落点页签：本列表读的是趋势 / 疲劳 / 置信 / 风险摘要，同口径内容在详情的「证据」页签
@@ -444,7 +454,13 @@ const learnerTotalText = computed(() => {
    会改变读数含义的范围说明；视角（真实 / 测试）由右上角开关表达，不再复述 */
 const learnerKpiHint = ''
 const rows = computed<Row[]>(() =>
-  liveLearners.value.map((m) => ({
+  liveLearners.value.map((m) => {
+    /* 数据更新列读「学习证据最后变化」而非快照重建时刻：一次列表请求会把过期投影整批重建，
+       用 generatedAt 会让全表显示同一分钟（2026-10-23 用户「怎么都是 37 分钟呢」）。
+       dataUpdatedAt 三态：有值＝数据截至那一刻；null＝没有学习证据（显示「—」）；
+       undefined＝旧后端还没这个字段（回退旧读数，等后端一起升级）。 */
+    const dataAt = m.dataUpdatedAt === undefined ? m.generatedAt : m.dataUpdatedAt
+    return {
     id: m.userId,
     name: m.name,
     email: m.email,
@@ -461,11 +477,13 @@ const rows = computed<Row[]>(() =>
         : m.fragile.length
           ? `「${m.fragile[0]}」等 ${m.fragile.length} 个概念待巩固`
           : '',
-    updated: timeAgo(m.generatedAt),
+    updated: dataAt ? timeAgo(dataAt) : '',
     confidence: m.confidence,
-    ts: m.generatedAt ? new Date(m.generatedAt).getTime() : undefined,
+    ts: dataAt ? new Date(dataAt).getTime() : undefined,
+    recomputedAt: m.generatedAt || '',
     pathId: m.pathId
-  }))
+    }
+  })
 )
 
 /** 虚拟学习者识别（审核 #11）：优先用后端回传的 isVirtualLearner（users 表真列，与

@@ -1324,7 +1324,10 @@ export interface LiveLearner {
   fatigue: string
   /** 快照置信度；缺省为 undefined（「无快照/证据不足」）而非 0——0 是「真测得 0 分」，两者必须可区分 */
   confidence: number | undefined
+  /** 快照重建时刻（排查用） */
   generatedAt: string
+  /** 学习证据最后变化的时刻（课堂/目标/任务等）；未开始学习为 null */
+  dataUpdatedAt?: string | null
   struggling: string[]
   fragile: string[]
 }
@@ -1366,6 +1369,8 @@ async function fetchLiveLearners(includeTest = false): Promise<void> {
     fatigue: mapFatigue(m.fatigueRisk as string),
     confidence: m.confidence == null ? undefined : Number(m.confidence),
     generatedAt: String(m.generatedAt || ''),
+    /* 三态：字符串＝有证据；null＝后端明确说没有；undefined＝旧后端没有该字段（前端回退 generatedAt） */
+    dataUpdatedAt: m.dataUpdatedAt === undefined ? undefined : (m.dataUpdatedAt ? String(m.dataUpdatedAt) : null),
     struggling: (m.strugglingConcepts as string[]) || [],
     fragile: (m.fragileConcepts as string[]) || []
   }))

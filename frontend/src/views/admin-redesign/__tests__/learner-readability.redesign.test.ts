@@ -161,6 +161,34 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     w.unmount();
   });
 
+  it('数据更新列读学习证据时间，不读快照重算时间（批重建曾把全表刷成同一分钟）', async () => {
+    // 2026-10-23 用户「怎么都是 37 分钟呢」：generatedAt 是列表请求整批重建的快照时间，
+    // 用它当列会让所有学习者同屏同值；列读 dataUpdatedAt（freshness.basedOn 最新一条）
+    const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString();
+    const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString();
+    const sameBatchBuild = '2026-10-23T02:12:27.000Z';
+    liveLearners.value = [
+      learner({ userId: 'a', name: '甲', currentTask: '任务A', generatedAt: sameBatchBuild, dataUpdatedAt: twoDaysAgo }),
+      learner({ userId: 'b', name: '乙', currentTask: '任务B', generatedAt: sameBatchBuild, dataUpdatedAt: tenDaysAgo }),
+      learner({ userId: 'c', name: '丙', currentTask: '', generatedAt: sameBatchBuild, dataUpdatedAt: null }),
+    ];
+    const w = mount(LearnerCenter);
+    await settle();
+    const heads = w.findAll('th').map((t) => t.text());
+    expect(heads).toContain('数据更新');
+    expect(heads).not.toContain('档案更新');
+    // 甲 2 天、乙 10 天，各不相同；丙无学习数据 → 「—」，不拿重建时间冒充
+    const cellsText = w.findAll('tbody tr').map((r) => r.findAll('td').at(-2)!.text())
+    expect(cellsText[0]).toContain('2 天前')
+    expect(cellsText[1]).toContain('10 天前')
+    expect(cellsText[2]).toBe('—')
+    const tip = w.findAll('tbody tr').at(0)!.findAll('td').at(-2)!.find('.mk-fresh').attributes('title') || ''
+    expect(tip).toContain('数据截至')
+    expect(tip).toContain('档案重算')
+    w.unmount()
+    liveLearners.value = []
+  });
+
   it('风险摘要带量级「X 等 2 个概念掌握薄弱」；平均置信度基数进 title 长释', async () => {
     // 审核 #12：风险摘要列不再默认隐藏（默认集变更同时升键 v2→v3）；本用例播种「全列显示」
     // 的列偏好，仍锁行内量级文案的渲染契约

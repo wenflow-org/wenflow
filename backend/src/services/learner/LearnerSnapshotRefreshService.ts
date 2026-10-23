@@ -226,6 +226,18 @@ export class LearnerSnapshotRefreshService {
       if (!snapshot) {
         throw new Error(`学习者快照构建失败: ${user.id}`);
       }
+      /* 数据截至（2026-10-23 用户「怎么都是 37 分钟呢」）：
+         generatedAt 是**本次快照重建**的时刻——列表页一次请求就会把过期投影整批重建，
+         于是全表显示同一分钟，读起来像所有人都在同一刻学习过。运营要的是学习证据最后
+         变化的时刻，取自 freshness.basedOn 里最新的那条；一条证据都没有（未开始学习）
+         给 null，前端显示「—」，不拿重建时间冒充。 */
+      const basedOnTimes = Object.values(snapshot.freshness?.basedOn || {})
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .map((value) => new Date(value).getTime())
+        .filter((time) => Number.isFinite(time));
+      const dataUpdatedAt = basedOnTimes.length > 0
+        ? new Date(Math.max(...basedOnTimes)).toISOString()
+        : null;
       return {
         userId: user.id,
         userName: user.name,
@@ -236,7 +248,9 @@ export class LearnerSnapshotRefreshService {
         isTestAccount: isTestAccountUser(user),
         pathId: path?.id || null,
         pathTitle: path?.title || null,
+        /** 快照重建时刻（排查用；列表的「数据更新」列读 dataUpdatedAt） */
         generatedAt: snapshot.freshness.generatedAt,
+        dataUpdatedAt,
         confidence: snapshot.freshness.confidence,
         recentTrend: snapshot.dynamicState.recentTrend,
         fatigueRisk: snapshot.dynamicState.fatigueRisk,

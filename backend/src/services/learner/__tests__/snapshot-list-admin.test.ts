@@ -146,3 +146,60 @@ describe('listForAdmin excludeTest（风险队列剔除测试账号）', () => {
     expect(data.items[0].isTestAccount).toBe(true);
   });
 });
+
+/**
+ * 数据更新列（2026-10-23 用户「怎么都是 37 分钟呢」）：
+ * generatedAt 是快照重建时刻，列表一次请求会整批重建 → 全表同值；
+ * 列改读 freshness.basedOn 里最新的证据时间，无证据回 null。
+ */
+describe('listForAdmin dataUpdatedAt（学习证据最后变化时刻）', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  /* 每个用例用独立 userId：服务实例有 5 分钟快照缓存（键含 userId），
+     复用 real1 会读到前面用例缓存下来的无 basedOn 快照 */
+  const withBasedOn = (basedOn: Record<string, string | undefined>, userId = 'u-dau-1') => {
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+    usersFindMany.mockResolvedValue([baseUser({ id: userId })]);
+    usersCount.mockResolvedValue(1);
+    projectionsFindMany.mockResolvedValue([]);
+    projectionsFindUnique.mockResolvedValue(null);
+    projectionsUpsert.mockResolvedValue({});
+    learnerSnapshotService.getSnapshot.mockResolvedValue({
+      ...baseSnapshot,
+      freshness: { ...baseSnapshot.freshness, basedOn },
+    });
+  };
+
+  it('取 basedOn 里最新的一条（不是 generatedAt）', async () => {
+    withBasedOn({
+      latestGoalConversationAt: '2026-10-19T17:45:18.351Z',
+      latestTeachingSessionAt: '2026-10-21T08:03:00.000Z',
+      latestTaskCompletionAt: '2026-10-20T18:33:26.134Z',
+    });
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: true });
+    expect(data.items[0].dataUpdatedAt).toBe('2026-10-21T08:03:00.000Z');
+    // 重建时刻仍随行返回（排查用，前端只在悬停里披露）
+    expect(typeof data.items[0].generatedAt).toBe('string');
+  });
+
+  it('一条证据都没有（未开始学习）→ null，不拿重建时间冒充', async () => {
+    withBasedOn({}, 'u-dau-2');
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: true });
+    expect(data.items[0].dataUpdatedAt).toBeNull();
+  });
+
+  it('basedOn 缺字段（老快照）→ null，不抛错', async () => {
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+    usersFindMany.mockResolvedValue([baseUser({ id: 'u-dau-3' })]);
+    usersCount.mockResolvedValue(1);
+    projectionsFindMany.mockResolvedValue([]);
+    projectionsFindUnique.mockResolvedValue(null);
+    projectionsUpsert.mockResolvedValue({});
+    learnerSnapshotService.getSnapshot.mockResolvedValue({
+      ...baseSnapshot,
+      freshness: { generatedAt: baseSnapshot.freshness.generatedAt, confidence: 0.6 },
+    });
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: true });
+    expect(data.items[0].dataUpdatedAt).toBeNull();
+  });
+});
