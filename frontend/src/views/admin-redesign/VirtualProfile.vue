@@ -209,7 +209,7 @@
                 <dt>主测场景</dt>
                 <dd :title="topScene ? `出现最频繁的运行场景：${topScene}` : '该画像还没有运行记录'">{{ topScene || '—' }}</dd>
                 <dt>运行信息</dt>
-                <dd class="mono">{{ runInfoText }}</dd>
+                <dd>{{ runInfoText }}</dd>
               </dl>
             </section>
 
@@ -2830,7 +2830,7 @@ async function quietReload(id: string) {
 .loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
-.loop__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.loop__no { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }

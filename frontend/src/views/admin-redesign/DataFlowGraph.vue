@@ -207,7 +207,8 @@
               >{{ step.kind === 'service' ? '代码服务' : '跨阶段引用' }}</span>
               <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已注册，但没有声明任何字段的产出与输入，未接入数据流转">无字段路由</span>
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
-              <span v-if="step.fromStage" class="dfg-step__stage mono" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</span>
+              <!-- 阶段名是中文，等宽只留给 agentId 这类机器串 -->
+              <span v-if="step.fromStage" class="dfg-step__stage" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</span>
               <span v-if="step.role" class="dfg-step__role">{{ step.role }}</span>
               <template v-if="step.kind === 'orphan'">
                 <span class="dfg-step__agent mono">{{ step.agentId }}</span>

@@ -458,8 +458,12 @@
 /* ========================================
    原生控件基座：未显式声明 color 的 <button> 在浅色下取 UA buttontext（纯黑），
    深底不可读；统一继承父级文字色（组件仍可自行覆盖）。
+   字体同理：浏览器给 button/input/select/textarea 默认 `font: 400 13.33px Arial`，
+   不写 font-family 的地方会冒出第三套字体（2026-10-23 用户「全站字体检查」：
+   编排图节点名、Skill 设计页左侧页签、图谱分段钮、toast 关闭钮都中了这一条）。
    ======================================== */
 button { color: inherit; }
+button, input, select, textarea, optgroup { font-family: inherit; }
 html.dark { color-scheme: dark; }
 
 /* ========================================

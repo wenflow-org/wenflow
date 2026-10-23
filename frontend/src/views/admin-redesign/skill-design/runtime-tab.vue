@@ -41,14 +41,14 @@
             <span class="sdp-summary__hint">只读 · 当前实际生效</span>
           </div>
           <div class="sdp-chips">
-            <span class="sdp-chip">超时 <b class="mono">{{ rtForm.requestTimeoutMs ? Math.round(rtForm.requestTimeoutMs / 1000) + 's' : '继承' }}</b></span>
-            <span class="sdp-chip">逻辑重试 <b class="mono">{{ effectiveLogicalRetries }}</b> 次</span>
-            <span class="sdp-chip">思考 <b class="mono">{{ thinkingLabel }}</b></span>
-            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('temperature')}`">T=<b class="mono">{{ generationParams?.temperature ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('temperature') }}</em></span>
-            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('topP')}`">topP=<b class="mono">{{ generationParams?.topP ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('topP') }}</em></span>
-            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('maxTokens')}`">Max=<b class="mono">{{ generationParams?.maxTokens ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('maxTokens') }}</em></span>
+            <span class="sdp-chip">超时 <b>{{ rtForm.requestTimeoutMs ? Math.round(rtForm.requestTimeoutMs / 1000) + 's' : '继承' }}</b></span>
+            <span class="sdp-chip">逻辑重试 <b>{{ effectiveLogicalRetries }}</b> 次</span>
+            <span class="sdp-chip">思考 <b>{{ thinkingLabel }}</b></span>
+            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('temperature')}`">T=<b>{{ generationParams?.temperature ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('temperature') }}</em></span>
+            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('topP')}`">topP=<b>{{ generationParams?.topP ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('topP') }}</em></span>
+            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('maxTokens')}`">Max=<b>{{ generationParams?.maxTokens ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('maxTokens') }}</em></span>
             <span class="sdp-chip" :title="generationParams?.model ? `模型来源：${sourceLabel('model')}` : '按路由表选中，随路由变化'">
-              模型 <b class="mono">{{ generationParams?.model || '继承路由模型' }}</b>
+              模型 <b>{{ generationParams?.model || '继承路由模型' }}</b>
               <em v-if="generationParams?.model" class="sdp-chip__src">{{ sourceLabel('model') }}</em>
             </span>
           </div>
@@ -80,7 +80,7 @@
             <section v-show="runtimeSection === 'model'" id="sdp-panel-model" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-model">
               <header class="sdp-panel__head">
                 <h4>模型</h4>
-                <span class="sdp-panel__state mono">{{ rtForm.model || '未指定' }}</span>
+                <span class="sdp-panel__state">{{ rtForm.model || '未指定' }}</span>
               </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field sdp-field--wide">
@@ -96,7 +96,7 @@
                     @pick="onModelPicked"
                   />
                   <!-- 选中项的能力与价格就地核对（Azure Foundry 的部署行形态）：不必再回接入页查 -->
-                  <span v-if="primaryMetaText" class="sdp-model-meta mono">{{ primaryMetaText }}</span>
+                  <span v-if="primaryMetaText" class="sdp-model-meta">{{ primaryMetaText }}</span>
                 </label>
               </div>
             </section>
@@ -247,7 +247,7 @@
                 </div>
 
                 <div class="sdp-test-result">
-                  <p v-if="probeResult?.resolved" class="sdp-probe__resolved mono">
+                  <p v-if="probeResult?.resolved" class="sdp-probe__resolved">
                     生效：{{ probeResult.resolved.model }} · {{ probeResult.resolved.thinkingMode }} / {{ probeResult.resolved.reasoningEffort }}
                   </p>
                   <div v-if="probeResult" class="sdp-probe" :class="probeResult.jsonOk === 'ok' ? 'is-ok' : 'is-bad'">
@@ -802,7 +802,7 @@ watch(() => props.skillId, () => {
   font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
-.sdp-chip b { color: var(--mk-ink); font-weight: 600; }
+.sdp-chip b { color: var(--mk-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .sdp-chip__src { font-style: normal; font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-left: 2px; }
 .sdp-chip--ok { background: var(--mk-green-bg, #e8f5ec); color: var(--mk-green, #20704a); }
 .sdp-chip--danger { background: var(--mk-red-bg, #fdecec); color: var(--mk-red, #b3372f); }

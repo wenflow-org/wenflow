@@ -2851,7 +2851,7 @@ onBeforeUnmount(() => {
   color: #d6e4ff;
   border-radius: var(--mk-radius-lg);
   padding: 12px 14px;
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-family: var(--mk-mono);
   font-size: 12.5px; line-height: 1.6;
   overflow-x: auto;
 }
@@ -2976,7 +2976,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-lg);
   padding: 10px 12px;
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  /* 学生答题写的是自然语言，跟全站正文；等宽只给代码/ID */
+  font-family: var(--mk-sans);
   font-size: 13px;
   resize: none; outline: none;
   background: var(--surface);
@@ -3324,7 +3325,7 @@ onBeforeUnmount(() => {
   background: var(--code-bg);
   color: var(--code-fg);
   border-radius: 4px; padding: 10px 12px; /* 圆角阶梯：代码块 = 内芯档 */
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mk-mono);
   font-size: 12.5px; line-height: 1.7;
   overflow-x: auto; white-space: pre; tab-size: 2;
 }

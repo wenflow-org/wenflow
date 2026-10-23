@@ -340,7 +340,7 @@
               <td v-if="showCol('routing')"><span class="sk-model" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
               <!-- 调用/P95/成功率三格挂 mk-num（2026-10-15 用户走查）：表头 mk-th--right 右对齐，
                    值格此前无 mk-num 左对齐，头与值各站一边；mk-num 同时补齐 mono/tabular 方言 -->
-              <td v-if="showCol('calls')" class="mk-num"><span class="mono">{{ s.calls }}</span></td>
+              <td v-if="showCol('calls')" class="mk-num">{{ s.calls }}</td>
               <td v-if="showCol('p95')" class="mk-num"><span class="mk-na" title="暂无单 Skill 的 P95 耗时数据">—</span></td>
               <td v-if="showCol('rate')" class="mk-num">
                 <!-- 2026-10-15 用户拍板：成功率列只留百分比，比例条撤（数字+条双元素读作装饰噪音；
@@ -454,9 +454,10 @@
             <!-- 原型行 data-action="open-skill"：行点击与表格视图同落点（Skill 详情页） -->
             <tr v-for="s in routedRows" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.name} 详情`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
               <td><strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong></td>
-              <td><span class="mono sk-routing__sub" :title="s.agentId || '工具类'">{{ agentLabelOf(s) }}</span></td>
-              <td><span class="mono" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
-              <td><span class="mono sk-routing__sub" :title="fallbackTitleOf(s.id)">{{ fallbackOf(s.id) }}</span></td>
+              <!-- Agent 归属、备用模型都是中文口径词（路径 Agent / 无备用模型…），不走等宽 -->
+              <td><span class="sk-routing__sub" :title="s.agentId || '工具类'">{{ agentLabelOf(s) }}</span></td>
+              <td><span :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
+              <td><span class="sk-routing__sub" :title="fallbackTitleOf(s.id)">{{ fallbackOf(s.id) }}</span></td>
               <td>
                 <span v-if="completionBadgeOf(s.id)" class="mk-badge" :class="completionBadgeOf(s.id)!.cls" :title="completionBadgeOf(s.id)!.title">{{ completionBadgeOf(s.id)!.text }}</span>
                 <span v-else-if="recLoading" class="mk-na" :title="REC_LOADING_TITLE">…</span>

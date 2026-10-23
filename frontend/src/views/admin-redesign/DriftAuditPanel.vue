@@ -39,11 +39,11 @@
       />
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
-          <span class="mono mk-badge mk-badge--warn fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
+          <span class="mk-badge mk-badge--warn fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
           <span class="mono fdp__drift-key">{{ d.key }}</span>
           <span class="fdp__drift-field">{{ d.field }}</span>
-          <span class="mono fdp__drift-val fdp__drift-val--seed">声明={{ stringify(d.seedValue) }}</span>
-          <span class="mono fdp__drift-val fdp__drift-val--db">数据库={{ stringify(d.dbValue) }}</span>
+          <span class="fdp__drift-val fdp__drift-val--seed">声明=<span class="mono">{{ stringify(d.seedValue) }}</span></span>
+          <span class="fdp__drift-val fdp__drift-val--db">数据库=<span class="mono">{{ stringify(d.dbValue) }}</span></span>
         </li>
       </ul>
       <p v-if="drift.totalDriftCount > drift.items.length" class="mk-card__note">（共 {{ drift.totalDriftCount }} 项，当前筛选显示 {{ drift.items.length }}）</p>

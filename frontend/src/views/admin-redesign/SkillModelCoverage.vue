@@ -102,10 +102,11 @@
                   {{ s.source === 'platform-default' ? '平台默认(未配置)' : s.source === 'skill-channel' ? '独立通道' : '仅技能模型' }}
                 </span>
               </td>
-              <td class="mono"><span class="skc__model"><span class="skc__model-id">{{ s.model || '未配置' }}</span><span v-if="s.model" class="mk-badge mk-badge--muted">{{ s.tier }}</span></span></td>
+              <!-- 模型/参数/备用链三格的值可能是中文（未配置 / 平台默认），走正文；对齐靠 tabular-nums -->
+              <td><span class="skc__model"><span class="skc__model-id">{{ s.model || '未配置' }}</span><span v-if="s.model" class="mk-badge mk-badge--muted">{{ s.tier }}</span></span></td>
               <!-- 2026-10-18：整串 JSON 挤在单元格里属开发向；表内只给项数，原文进 title -->
-              <td class="mono skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ overrideText(s.paramOverrides) }}</td>
-              <td class="mono skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '平台默认' }}</td>
+              <td class="skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ overrideText(s.paramOverrides) }}</td>
+              <td class="skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '平台默认' }}</td>
             </tr>
           </tbody>
         </table>

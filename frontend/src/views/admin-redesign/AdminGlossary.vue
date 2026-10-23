@@ -51,7 +51,8 @@
           <h4 class="mg__section-title">状态：完成度五档</h4>
           <div class="mg__grid">
             <div v-for="m in filteredCompletion" :key="m.status" class="mg__term">
-              <span class="mg__term-name">{{ m.label }}<span class="mg__term-en mono">{{ m.status }}</span></span>
+              <!-- 状态是中文词（已生效 / 未使用），不走等宽 -->
+              <span class="mg__term-name">{{ m.label }}<span class="mg__term-en">{{ m.status }}</span></span>
               <span class="mg__term-def">{{ m.hint }}</span>
             </div>
           </div>

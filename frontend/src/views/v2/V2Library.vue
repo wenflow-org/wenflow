@@ -904,7 +904,8 @@ onMounted(load);
 .lib-preview__text {
   margin: 0;
   color: var(--ink);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 资料正文预览是阅读文本，跟全站无衬线；等宽只留给代码/ID（2026-10-23 全站字体检查） */
+  font-family: var(--mk-sans);
   font-size: 12.5px;
   line-height: 1.75;
   white-space: pre-wrap;
