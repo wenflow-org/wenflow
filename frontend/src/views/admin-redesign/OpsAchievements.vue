@@ -32,7 +32,7 @@
           </div>
           <span class="ac-card__desc">{{ d.description }}</span>
           <span class="ac-card__cond" :title="reqTitle(d.requirement)">
-            条件：<template v-if="d.requirement.type === 'ktl_level'"><RouterLink class="ac-card__term" :to="glossaryTermLink('KTL')">KTL</RouterLink> 达到 {{ d.requirement.value }}</template><template v-else>{{ reqText(d.requirement) }}</template>
+            条件：<template v-if="d.requirement.type === 'mastered_concepts'"><RouterLink class="ac-card__term" :to="glossaryTermLink('已掌握知识点')">已掌握知识点</RouterLink> {{ d.requirement.value }} 个</template><template v-else>{{ reqText(d.requirement) }}</template>
           </span>
           <div class="ac-card__foot">
             <span class="ac-card__unlocked">已解锁 <b class="mono">{{ d.unlockCount }}</b> 人</span>
@@ -266,7 +266,7 @@ const reqText = (r: AchievementDef['requirement']) => {
   if (t === 'task_count') return `完成 ${r.value} 个任务`
   if (t === 'streak_days') return `连续学习 ${r.value} 天`
   if (t === 'path_completion') return `完成 ${r.value} 条路径`
-  if (t === 'ktl_level') return `KTL 达到 ${r.value}`
+  if (t === 'mastered_concepts') return `掌握 ${r.value} 个知识点`
   return `自定义条件`
 }
 /** 术语 → 术语表深链：?q= 由 AdminGlossary 读取并预填搜索，让成就卡里的裸缩写可点可查
@@ -274,9 +274,9 @@ const reqText = (r: AchievementDef['requirement']) => {
 function glossaryTermLink(term: string) {
   return { path: '/admin/glossary', query: { q: term } }
 }
-/** 条件列的补充说明：展开未在本行显示的术语（KTL 等），避免裸缩写无处可查 */
+/** 条件列的补充说明：展开本行未显示的判定口径（掌握度阈值等） */
 const reqTitle = (r: AchievementDef['requirement']) => {
-  if (r.type === 'ktl_level') return `KTL（Knowledge Tracing Level，知识掌握水平）达到 ${r.value}`
+  if (r.type === 'mastered_concepts') return `记忆痕迹中掌握度 ≥ 80% 且真实提取过的知识点达到 ${r.value} 个`
   if (r.type === 'task_count') return `累计完成 ${r.value} 个学习任务`
   if (r.type === 'streak_days') return `连续学习天数达到 ${r.value} 天`
   if (r.type === 'path_completion') return `完成 ${r.value} 条学习路径`

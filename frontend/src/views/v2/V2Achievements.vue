@@ -84,7 +84,7 @@
 
             <span class="ach-card__icon" :class="iconCls(a)" aria-hidden="true"><component :is="achIconOf(a)" /></span>
             <strong class="ach-card__name">{{ a.name }}</strong>
-            <p class="ach-card__desc">{{ descText(a) }}</p>
+            <p class="ach-card__desc">{{ a.description }}</p>
             <span class="ach-card__state" :class="{ 'ach-card__state--on': a.unlocked }">
               {{ stateText(a) }}<span v-if="a.unlocked && formatDate(a.earnedAt)" class="ach-card__date"> · {{ formatDate(a.earnedAt) }}</span>
             </span>
@@ -228,11 +228,6 @@ function fmtNum(n: number): string {
 function progressPct(a: Achievement) {
   const p = progressOf(a);
   return p.percentage ?? (p.total ? Math.round((p.current / p.total) * 100) : 0);
-}
-
-/* 服务端成就条件含内部缩写 KTL（知识掌握度），直出前补全中文释义 */
-function descText(a: Achievement): string {
-  return String(a.description || '').replace(/KTL/g, '知识掌握度（KTL）');
 }
 
 const visible = computed(() => {
