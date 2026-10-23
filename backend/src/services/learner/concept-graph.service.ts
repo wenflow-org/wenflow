@@ -19,6 +19,7 @@
  */
 import prisma from '../../config/database';
 import { conceptRegistryService } from './concept-registry.service';
+import { kcAnchorKey } from './kc-anchor';
 
 export const RELATION_PREREQUISITE = 'prerequisite';
 export const RELATION_PART_OF = 'part_of';
@@ -102,6 +103,13 @@ export interface ConceptGraphDeps {
    * 可选依赖：缺省时节点不带 practice（旧测试 fake 与调用方零改动）。
    */
   listPracticeAnchors?(conceptIds: string[]): Promise<PracticeAnchor[]>;
+  /**
+   * KC 稳定键预登记（#94 计划侧写入）：把 `kc:<pathId>:<kcId>` 挂到该 KC 的 canonical 身份上。
+   * 痕迹侧（memory-trace.resolveConceptIdSafe）按同一锚键解析；计划生成时先登记，
+   * 首条痕迹无论用什么措辞都能命中，不再依赖「首条痕迹恰好用标准名」的偶然。
+   * 可选依赖：缺省不登记（旧测试 fake 零改动）。
+   */
+  registerKcAnchor?(data: { userId: string; pathId: string; kcId: string; conceptId: string }): Promise<void>;
 }
 
 const defaultDeps: ConceptGraphDeps = {
@@ -111,6 +119,14 @@ const defaultDeps: ConceptGraphDeps = {
       level: options?.level ?? 'kc',
       originPathId: options?.originPathId ?? null,
     }),
+  registerKcAnchor: async ({ userId, pathId, kcId, conceptId }) => {
+    await conceptRegistryService.registerAlias({
+      userId, conceptId,
+      aliasRaw: kcAnchorKey(kcId, pathId),
+      source: 'write_time',
+      confidence: 1,
+    });
+  },
   upsertEdge: async (data) => {
     // 用户级边（#92）：Prisma 复合唯一键含可空列 pathId，where 里不接受 null
     // （Argument `pathId` must not be null），所以走 findFirst + create/update。
@@ -372,6 +388,15 @@ export class ConceptGraphService {
         if (!childName) continue;
         const child = await resolveCached(childName, 'kc');
         if (!child) { result.skipped += 1; continue; }
+        // #94：计划侧先登记 kcId 稳定键，痕迹侧按同一锚键解析（best-effort，不影响边物化）
+        const kcId = str(kc?.kcId);
+        if (kcId && this.deps.registerKcAnchor) {
+          try {
+            await this.deps.registerKcAnchor({ userId, pathId, kcId, conceptId: child });
+          } catch {
+            // 锚登记失败只影响“首次痕迹的措辞依赖”，不阻断图物化
+          }
+        }
         await this.deps.upsertEdge({
           id: newId(), userId,
           fromConceptId: child, toConceptId: parent,

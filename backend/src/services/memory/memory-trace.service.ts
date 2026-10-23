@@ -12,6 +12,7 @@ import { logger } from '../../utils/logger';
 import { findTestAccountUserIds } from '../../utils/test-account';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { conceptRegistryService } from '../learner/concept-registry.service';
+import { kcAnchorKey } from '../learner/kc-anchor';
 import {
   reviewIntervalDays,
   clamp01,
@@ -59,13 +60,8 @@ import {
  * 纪律：锚定与登记都是 best-effort（失败只告警、不阻断写入，更不改回落语义）；
  * 没有 kcId 时**一次额外的表访问都不发生**（旧行为零开销）。
  */
-/** kcId 锚键：`kc:<pathId>:<kcId>`（无 pathId 时 `kc:<kcId>`）——path 前缀不可省：kcId 是路径内局部序号 */
-export function kcAnchorKey(kcId: unknown, pathId?: string | null): string {
-  const id = typeof kcId === 'string' ? kcId.trim() : '';
-  if (!id) return '';
-  const path = typeof pathId === 'string' ? pathId.trim() : '';
-  return path ? `kc:${path}:${id}` : `kc:${id}`;
-}
+/** kcId 锚键实现已上移到 concept-registry（计划侧与痕迹侧共用同一命名空间）；此处保留导出以兼容既有引用。 */
+export { kcAnchorKey };
 
 export async function resolveConceptIdSafe(
   userId: string,
