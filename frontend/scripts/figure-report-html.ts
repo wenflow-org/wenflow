@@ -30,6 +30,14 @@ const TONIGHT = (() => {
     return null;
   }
 })();
+/** 第二轮（2026-10-23 白天）压测统计 */
+const DAY3 = (() => {
+  try {
+    return JSON.parse(read('../figure-out/day3-stats.json'));
+  } catch {
+    return null;
+  }
+})();
 /** 几何审计结果（figure-geometry-audit.ts 渲染 + 浏览器实测；没有就留空） */
 const AUDIT = (() => {
   try {
@@ -248,6 +256,25 @@ const tonightBlock = TONIGHT
     <p class="note">图型分布：${Object.entries(TONIGHT.byKind || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(KIND_LABEL[k] || k)} ${v}`).join('、') || '—'}。</p>`
   : '';
 
+const DAY3_LABEL = '苏晴 · 初三数学解法流程、陈屿 · 高一物理平抛分解、何嘉 · 初二历史因果链';
+const day3Block = DAY3
+  ? `<h3>第二轮压测：专门挑「不该用对照」的学科</h3>
+    <p>为了分清「对照占 60%」是内容驱动还是模型偏好，换了三份天然不是左右对照的内容：${esc(DAY3_LABEL)}。闸门一字未改。</p>
+    <table>
+      <thead><tr><th>读数</th><th class="num">第一轮（10-22 夜）</th><th class="num">第二轮（10-23 日）</th></tr></thead>
+      <tbody>
+        <tr><td>产出图数 / 出过图的会话</td><td class="num">${TONIGHT ? `${TONIGHT.figures} / ${TONIGHT.sessionsTouched}` : '—'}</td><td class="num">${DAY3.figures} / ${DAY3.sessionsTouched}</td></tr>
+        <tr><td>单课最多图数（上限 4）</td><td class="num">${TONIGHT ? TONIGHT.maxPerSession : '—'}</td><td class="num">${DAY3.maxPerSession}</td></tr>
+        <tr><td>对照占比</td><td class="num">${TONIGHT ? `${Math.round(((TONIGHT.byKind?.compare || 0) / TONIGHT.figures) * 100)}%` : '—'}</td><td class="num">${DAY3.compareShare}%</td></tr>
+        <tr><td>会话上限触发</td><td class="num">${TONIGHT ? TONIGHT.gates.sessionCap : '—'}</td><td class="num">${DAY3.gates.sessionCap}</td></tr>
+        <tr><td>同骨架去重触发</td><td class="num">${TONIGHT ? TONIGHT.gates.sameShape : '—'}</td><td class="num">${DAY3.gates.sameShape}</td></tr>
+        <tr><td>归一化拒绝</td><td class="num">${TONIGHT ? TONIGHT.gates.normalizationRejected : '—'}</td><td class="num">${DAY3.gates.normalizationRejected}</td></tr>
+      </tbody>
+    </table>
+    <p class="note">第二轮图型分布：${Object.entries(DAY3.byKind || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(KIND_LABEL[k] || k)} ${v}`).join('、')}。陈屿那条线在路径生成阶段失败（<span class="mono">PATH_GENERATION_FAILED: response does not contain valid JSON object</span>，模型没吐出合法 JSON），一个教学回合都没进入，所以只有两位学习者出图。</p>
+    <p class="note">结论：换成明确不该对照的内容后，对照从 60% 降到 47%，仍是最大一类——<b>既有内容原因，也有模型的图型偏好</b>。单课上限两轮都恰好卡在 4，说明它确实是活跃约束，而不是写在纸上没人碰的常量。</p>`
+  : '';
+
 const contextRow = (label: string, text: string | undefined, cls: string) =>
   text
     ? `<div class="ctx ctx--${cls}"><span class="ctx__label">${label}</span><span class="ctx__text" title="${esc(text)}">${esc(text)}</span></div>`
@@ -364,7 +391,9 @@ const body = `
     <p><b>链路缺省串联</b>：compare.chain 第二跳起省略 <span class="mono">from</span> 即画成串联，并行扇出必须显式 <span class="mono">from:"client"</span>（归一化会保留该字段）。真课 47 跳全缺 from、「响应回来」被画成往外发的问题不再复现。</p>
     <p><b>归一化容错</b>：条目接受 <span class="mono">{label|text|value}</span> 对象；对照栏头放宽到 26 字并允许截断——此前 19–26 字的结论句会让整张图作废（实测 30 分钟丢 9 张）。</p>
     ${tonightBlock}
-    <p class="note">残留失衡（如实记）：今晚 60 张里对照 36 张（60%）——闸门限住了「一课几张、一种几张」，限不住「模型偏爱哪种」。对照属 C 级、单课配额 3，正好能占满一课的 3/4。下一步有两条路（把 C 级配额降到 2／在提示词里对「本课已用过对照」降权），本轮没动，因为改完需要再跑一轮真课才算数。</p>
+    ${day3Block}
+    <p class="note">残留失衡（如实记）：闸门限住了「一课几张、一种几张」，限不住「模型偏爱哪种」。对照属 C 级、单课配额 3，正好能占满一课的 3/4；两轮压测（60% → 47%）说明这既是内容原因也是模型偏好。下一步两条路——把 C 级配额降到 2（全部 306 个历史会话里有 49 个正好用满 3 张对照，是真实杠杆），或在提示词里对「本课已用过对照」降权；两条都还没跑验证，先留着。</p>
+    <p class="note">关于「单课 4 张」：常量 2026-09-27 随位置线通道写死，没有研究依据，作用是节奏护栏（一节 12~18 个老师回合，每 7~8 个回合一张图）。实测模型平均每课想放 4.5 张（第一轮 60 张接受 + 53 次被拦），所以 4 是活跃约束；改它只需 <span class="mono">TEACHING_FIGURE_MAX_PER_SESSION</span>。</p>
     <p class="note">可调项：TEACHING_FIGURE_MAX_PER_SESSION（默认 4）、TEACHING_FIGURE_MAX_PER_KIND（显式设置时统一覆盖证据等级配额）。</p>
   </div>
 
