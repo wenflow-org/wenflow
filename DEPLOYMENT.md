@@ -158,6 +158,7 @@ AI_MODEL=deepseek-v4.1-flash
 AI_MODEL_REASONING=deepseek-v4.1-flash
 
 INIT_ADMIN_NAME=admin
+# 必须 ≥12 位且含大小写字母和数字；下面这行是**会被启动校验拒绝**的反例，请自行生成强口令
 INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 ```
 
@@ -292,11 +293,13 @@ Copy-Item frontend/.env.example frontend/.env
 
 ```env
 INIT_ADMIN_NAME=admin
+# 必须 ≥12 位且含大小写字母和数字；下面这行是**会被启动校验拒绝**的反例，请自行生成强口令
 INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 ```
 
 说明：
 - 如果数据库里已存在管理员，会自动跳过
+- 首次启动会校验密码强度：少于 12 位、缺少大小写字母或数字、或使用文档示例口令都会导致启动失败
 - 建议首次登录后立即修改密码
 
 详见 [`admin-guide.md`](admin-guide.md)。

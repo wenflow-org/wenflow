@@ -13,6 +13,7 @@
           <label class="mk-field">
             <span class="mk-field__label">用户 ID</span>
             <input v-model="advance.userId" class="mk-field__input mono" placeholder="留空 = 当前管理员" />
+            <span class="mk-field__hint">填内部用户 ID（user_…）；用户名不会匹配</span>
           </label>
           <!-- 天数校验（F6-4）：越界/空值显式报错并拦截，不再静默 clamp（判例
                VirtualLearnerBatchCreate 审核 #58「填 999 显 999 实建 20」）。原实现
