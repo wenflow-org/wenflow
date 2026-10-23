@@ -647,6 +647,22 @@ export function shouldEmitFigureAmong(existingFigures: unknown[] | null | undefi
 }
 
 /**
+ * 本轮结尾是不是在追问学生（用户 2026-10-23 硬指令：「只在讲解的时候出图」）。
+ *
+ * 判据取最后一句：以问号收尾 = 这一轮的落点是「你来答」，图若同屏出现，
+ * 等于把刚问出去的那一问连同答案一起摆在学生面前。讲解轮（讲完就停）照常可以出图。
+ */
+export function endsWithQuestion(reply: string | null | undefined): boolean {
+  const lines = String(reply ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return false;
+  const last = lines[lines.length - 1].replace(/[」"”』）)\s]+$/, '');
+  return /[？?]$/.test(last);
+}
+
+/**
  * 课中图不挂结论注（2026-10-23 用户硬指令：课中图严禁渲染总结性 note / caption）。
  *
  * 图下那行注在实测里几乎只做一件事：把老师刚问、或学生还没自己说出口的结论写全。

@@ -74,7 +74,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, endsWithQuestion, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -924,6 +924,14 @@ export async function processStudentMessage(
         kind: wanted.kind,
         figureNumbers: collectFigureNumbers(wanted).slice(0, 8),
         replyNumbers: [...collectReplyNumbers(teachingOutput.reply)].slice(0, 8),
+      });
+    } else if (endsWithQuestion(teachingOutput.reply)) {
+      // 「只在讲解的时候出图」（用户 2026-10-23）：这一轮最后一句是问句 = 等学生答，
+      // 图同屏就会替他把答案摆出来。等学生答完、下一轮讲解时再画。
+      logger.info('[AITeaching] 本轮以追问收尾（讲解未落定），跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
       });
     } else if (teachingOutput.control?.checkpoint) {
       // 出题回合不出图（2026-10-23 第五批外审：14 张里 5 张的判词是「老师这一轮让学生自己产出，

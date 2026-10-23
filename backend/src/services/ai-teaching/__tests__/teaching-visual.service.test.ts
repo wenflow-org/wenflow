@@ -15,7 +15,7 @@ import {
   detectPositionDescription,
   detectStructuralCue,
   detectExerciseLeakInReply,
-  stripFigureNoteWhenAsking,
+  stripInLessonAnnotations, endsWithQuestion,
   generateTeachingVisual,
   hasDanglingFigureReference,
   hasIdenticalVisualPrompt,
@@ -103,22 +103,24 @@ describe('「图只是复述正文」判据（2026-10-23 外审：86% 判多余�
   });
 });
 
-describe('图型提示：领域线索优先于泛化的「对比」（2026-10-23 视觉评审）', () => {
-  it('变量名/指向 → bipartite，而不是对照卡片', () => {
+describe('图型提示：只给有专属几何的图型（2026-10-23 用户：文字装框不是图）', () => {
+  it('变量名/指向 → bipartite', () => {
     const hit = chooseFigureKind('学生问：b = a 之后改 b[0]，变量名指向的到底是不是同一个对象？');
     expect(hit?.kind).toBe('bipartite');
   });
-  it('两个方向/同一时刻 → grid', () => {
-    const hit = chooseFigureKind('同一时刻水平方向走了几米，竖直方向落了多高？');
-    expect(hit?.kind).toBe('grid');
+  it('平抛/两个方向 → cartesian-plot（以前会落成 grid 表格）', () => {
+    expect(chooseFigureKind('同一时刻水平方向走了几米，竖直方向落了多高？')?.kind).toBe('cartesian-plot');
+    expect(chooseFigureKind('平抛的轨迹到底长什么样？')?.kind).toBe('cartesian-plot');
   });
-  it('泛化对比 → grid（判断点做行），不再默认 compare', () => {
-    const hit = chooseFigureKind('这两种写法有什么区别？');
-    expect(hit?.kind).toBe('grid');
+  it('泛化「对比/区别」不再落任何图型（没有专属几何就不出图）', () => {
+    expect(chooseFigureKind('这两种写法有什么区别？')).toBeNull();
+    expect(chooseFigureKind('两种方案的请求路径：跨集群往返几次？')).toBeNull();
   });
-  it('架构链路仍走 compare', () => {
-    const hit = chooseFigureKind('两种方案的请求路径：跨集群往返几次？');
-    expect(hit?.kind).toBe('compare');
+  it('提示句不再让人退回 grid/compare', () => {
+    const line = figureKindHintLine({ kind: 'bipartite', why: '名字与对象是两列' });
+    expect(line).not.toContain('grid');
+    expect(line).not.toContain('compare');
+    expect(line).toContain('不要拿表格充当图');
   });
 });
 
@@ -570,19 +572,39 @@ describe('防答案泄漏硬闸门（detectExerciseLeakInReply，2026-09-24 配�
   });
 });
 
-describe('提问回合撤图底注（stripFigureNoteWhenAsking，2026-10-23 第 6 批外审）', () => {
-  const figure = { kind: 'grid', spec: { rows: 1, cols: 1, note: '竖直一栏完全相同，水平一栏才随速度变' } };
-
-  it('正文在提问、图带结论注 → 只删注，几何保留', () => {
-    const out = stripFigureNoteWhenAsking(figure, '你觉得初速度变大后，竖直方向的节奏变没变？');
-    expect(out.spec).not.toHaveProperty('note');
-    expect(out.kind).toBe('grid');
+describe('课中图不挂结论注（stripInLessonAnnotations，2026-10-23 用户硬指令）', () => {
+  it('note 与 caption 一律去掉，几何原样保留', () => {
+    const figure = {
+      kind: 'cartesian-plot',
+      caption: '两个球同时落地',
+      spec: { x: { min: 0, max: 3 }, y: { min: 0, max: 1 }, note: '竖直方向完全相同，水平方向才随速度变', series: [{ name: 'a', points: [[0, 1], [1, 0]] }] },
+    };
+    const out = stripInLessonAnnotations(figure) as any;
+    expect(out.caption).toBeUndefined();
+    expect(out.spec.note).toBeUndefined();
+    expect(out.spec.series).toHaveLength(1);
+    expect(out.kind).toBe('cartesian-plot');
   });
 
-  it('正文没提问 / 图本来没有注 → 原样返回', () => {
-    expect(stripFigureNoteWhenAsking(figure, '竖直方向不受影响。')).toEqual(figure);
-    const bare = { kind: 'grid', spec: { rows: 1, cols: 1 } };
-    expect(stripFigureNoteWhenAsking(bare, '对不对？')).toEqual(bare);
+  it('本来没有注的图原样返回', () => {
+    const bare = { kind: 'venn', spec: { left: { head: '甲' } } };
+    expect(stripInLessonAnnotations(bare)).toEqual(bare);
+  });
+});
+
+describe('只在讲解时出图：以追问收尾的回合不出图（endsWithQuestion）', () => {
+  it('最后一句是问号 → 判真', () => {
+    expect(endsWithQuestion('两个球的落地时间都是 0.4 s。那飞得远的球，在空中停得更久吗？')).toBe(true);
+    expect(endsWithQuestion('为什么？')).toBe(true);
+    expect(endsWithQuestion('你先说说，哪一列决定落地时间？\n')).toBe(true);
+  });
+
+  it('讲解落定 / 没有正文 → 判假', () => {
+    expect(endsWithQuestion('两个球的落地时间都是 0.4 s，水平位移差一倍。')).toBe(false);
+    expect(endsWithQuestion('')).toBe(false);
+    expect(endsWithQuestion(null)).toBe(false);
+    // 问号在中间、结尾是结论：属于讲解轮，可以出图
+    expect(endsWithQuestion('你可能会问，时间为什么一样？因为竖直方向只由高度决定。')).toBe(false);
   });
 });
 
@@ -677,13 +699,13 @@ describe('视觉教具路由（2026-10-20：形状由内容裁决，不靠模型
     expect(chooseFigureKind('幼儿园五大领域，一个总概念长出的子领域')?.kind).toBe('tree');
   });
 
-  it('权衡 / 层级 / 归类 / 对账 / 对照：按语义落到各自的形状', () => {
+  it('权衡 / 对账 仍按语义落形状；层级与归类改用正文（图型已退役）', () => {
     expect(chooseFigureKind('这是取舍，要看哪边更重')?.kind).toBe('balance');
-    expect(chooseFigureKind('先过后一个门槛，再逐级往上')?.kind).toBe('ladder');
-    expect(chooseFigureKind('把这个概念归位，分到三类里')?.kind).toBe('bins');
     expect(chooseFigureKind('逐条核一核对账，看哪一格漏了')?.kind).toBe('matrix');
-    // 2026-10-23：泛化对比改引导二维表（两栏文字对照是最大废图来源）
-    expect(chooseFigureKind('对比两种写法的区别')?.kind).toBe('grid');
+    // 2026-10-23 用户拍板：阶梯/分栏/对照表都是「文字装框」，不再出图
+    expect(chooseFigureKind('先过后一个门槛，再逐级往上')).toBeNull();
+    expect(chooseFigureKind('把这个概念归位，分到三类里')).toBeNull();
+    expect(chooseFigureKind('对比两种写法的区别')).toBeNull();
   });
 
   it('没有结构线索 / 空文本 → 不路由（沿用原指南，不硬塞形状）', () => {
@@ -750,14 +772,15 @@ describe('节奏兜底已停用（2026-10-23 视觉评审：凑出来的图全�
   });
 });
 
-describe('形状路由：架构/请求链路 → compare 的链路形态', () => {
-  it('讲架构选型与跨集群往返时，提示句要求走 compare 链路形态', () => {
+describe('形状路由：架构/请求链路不再出对照图（compare 已退役）', () => {
+  it('讲架构选型时不再路由到 compare——这类内容用正文讲', () => {
+    const hit = chooseFigureKind('架构选型：为什么自研 Raft 而不是继续用 ZooKeeper，要跨集群往返几次？');
+    expect(hit).toBeNull();
     const opportunity = buildVisualOpportunity(
       [{ role: 'assistant', content: '外置 ZooKeeper 要跨集群再往返一次，自研 Raft 把共识内置进业务进程。', timestamp: '2026-10-20T00:00:00.000Z' }] as unknown as TeachingSessionMessage[],
       '架构选型：为什么自研 Raft 而不是继续用 ZooKeeper',
     );
-    expect(opportunity?.instruction).toContain('kind=compare');
-    expect(opportunity?.instruction).toContain('链路形态');
+    expect(opportunity?.instruction || '').not.toContain('kind=compare');
   });
 });
 
