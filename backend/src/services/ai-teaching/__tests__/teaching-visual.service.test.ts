@@ -26,6 +26,7 @@ import {
   shouldEmitTeachingFigure,
   shouldEmitFigureAmong,
   figureKindCap,
+  figureRestatesReply,
   FIGURE_KIND_EVIDENCE,
   chooseFigureKind,
   figureKindHintLine,
@@ -79,6 +80,26 @@ afterEach(() => {
   delete process.env.TEACHING_VISUAL_MAX_PER_SESSION;
   delete process.env.TEACHING_VISUAL_MAX_PER_TASK;
   delete process.env.TEACHING_DIAGRAM_DISABLED;
+});
+
+describe('「图只是复述正文」判据（2026-10-23 外审：86% 判多余）', () => {
+  const reply = '改 b 会带动 a，因为两个名字指向同一个对象；改成 a[:] 时外层是新盒子，改外层不影响 a。';
+  it('整图措辞都在正文里 → 判复述', () => {
+    const fig = { kind: 'grid', spec: { rows: 1, cols: 2, cells: [{ r: 0, c: 0, text: '两个名字指向同一个对象' }, { r: 0, c: 1, text: '改外层不影响 a' }] } };
+    expect(figureRestatesReply(fig, reply)).toBe(true);
+  });
+  it('图里有正文没有的数字 → 不算复述（新数据）', () => {
+    const fig = { kind: 'grid', spec: { rows: 1, cols: 2, cells: [{ r: 0, c: 0, text: 't≈0.30 s' }, { r: 0, c: 1, text: '水平位移' }] } };
+    expect(figureRestatesReply(fig, reply)).toBe(false);
+  });
+  it('有连线/节点 → 几何本身是新增信息，不算复述', () => {
+    const fig = { kind: 'bipartite', spec: { left: { nodes: [{ id: 'a', label: 'a' }] }, right: { nodes: [{ id: 'o', label: '对象' }] }, edges: [{ from: 'a', to: 'o' }] } };
+    expect(figureRestatesReply(fig, reply)).toBe(false);
+  });
+  it('措辞明显不同 → 不算复述', () => {
+    const fig = { kind: 'grid', spec: { rows: 1, cols: 2, cells: [{ r: 0, c: 0, text: '外层新容器、内层共享' }, { r: 0, c: 1, text: '切片只复制第一层' }] } };
+    expect(figureRestatesReply(fig, '这一段在讲别的事情，和拷贝关系不大。')).toBe(false);
+  });
 });
 
 describe('图型提示：领域线索优先于泛化的「对比」（2026-10-23 视觉评审）', () => {

@@ -643,6 +643,62 @@ export function shouldEmitFigureAmong(existingFigures: unknown[] | null | undefi
   return true;
 }
 
+/**
+ * 「图只是把老师这段话抄进框里」判定（2026-10-23 外部视觉评审：86% 的图被判多余）。
+ *
+ * 判据（确定性，不看模型自述）：
+ *  - 有连线/汇合结构（chain / nodes / edges / tree 分支 / cycle 节点）→ 不算复述，几何本身是新增信息；
+ *  - 图里出现正文没有的数字 → 不算复述（新数据）；
+ *  - 否则按二元组（bigram）比：图的措辞有 ≥65% 已经在正文里出现过 → 判为复述。
+ * 短标签（二元组 < 12）不判，避免误伤。
+ */
+export function figureRestatesReply(figure: unknown, reply: string | null | undefined): boolean {
+  const spec = (figure as { spec?: unknown })?.spec ?? figure;
+  if (!spec || typeof spec !== 'object') return false;
+  const text = String(reply ?? '');
+  if (!text.trim()) return false;
+
+  const hasEdges = (() => {
+    const record = spec as Record<string, unknown>;
+    const arr = (v: unknown) => Array.isArray(v) && v.length >= 1;
+    const sides = [record.left, record.right].filter((v) => v && typeof v === 'object') as Record<string, unknown>[];
+    return (
+      arr(record.edges) ||
+      arr(record.nodes) ||
+      arr(record.branches) ||
+      sides.some((side) => arr(side?.chain))
+    );
+  })();
+  if (hasEdges) return false;
+
+  const strings: string[] = [];
+  const walk = (v: unknown, depth = 0) => {
+    if (depth > 6 || v == null) return;
+    if (typeof v === 'string') strings.push(v);
+    else if (Array.isArray(v)) v.forEach((x) => walk(x, depth + 1));
+    else if (typeof v === 'object') Object.values(v as Record<string, unknown>).forEach((x) => walk(x, depth + 1));
+  };
+  walk(spec);
+  const figureText = strings.join(' ');
+  const figureNumbers = figureText.match(/\d+(?:\.\d+)?/g) || [];
+  const replyNumbers = new Set(text.match(/\d+(?:\.\d+)?/g) || []);
+  if (figureNumbers.some((n) => !replyNumbers.has(n))) return false;
+
+  const bigrams = (value: string) => {
+    const clean = value.replace(/[\s　-〿＀-￯]/g, '');
+    const set = new Set<string>();
+    for (let i = 0; i < clean.length - 1; i += 1) set.add(clean.slice(i, i + 2));
+    return set;
+  };
+  const fig = bigrams(figureText);
+  if (fig.size < 12) return false;
+  const rep = bigrams(text);
+  let novel = 0;
+  for (const g of fig) if (!rep.has(g)) novel += 1;
+  const novelty = novel / fig.size;
+  return novelty < 0.35;
+}
+
 export function shouldEmitTeachingFigure(  messages: TeachingSessionMessage[] | null | undefined,
   figure: unknown,
 ): boolean {
