@@ -251,7 +251,8 @@
                 <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td v-if="showCol('created')"><span class="mk-cell-sub mono" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
+              <!-- 相对时间是人话（「3 天前」），走正文无衬线；等宽只留给 id/代码类机器串 -->
+              <td v-if="showCol('created')"><span class="mk-cell-sub" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
               <td>
                 <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）。
                      行内只留高频项「详情」；低频项（链路 / 重建路径 / 删除会话）一律收 ⋯ 菜单——

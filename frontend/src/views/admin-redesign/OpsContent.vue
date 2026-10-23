@@ -208,7 +208,7 @@
                 </div>
               </td>
               <td v-if="!hiddenCols.has('updated')" :title="`完整时间 ${fmtDate(activityAt(p))}`">
-                <span class="mk-cell-sub mono">{{ timeAgo(activityAt(p)) }}</span>
+                <span class="mk-cell-sub">{{ timeAgo(activityAt(p)) }}</span>
               </td>
               <td>
                 <!-- 操作列（2026-10-15 用户拍板）：行内只留高频「详情」，其余（重试生成/下线恢复/删除）

@@ -892,7 +892,8 @@ defineExpose({ refresh })
 .hc-fixlog__item { flex: none; font-weight: 700; color: var(--mk-ink); }
 .hc-fixlog__meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted); }
 .hc-check__detail { grid-column: 1 / -1; padding: 0 0 10px 18px; display: grid; gap: 4px; }
-.hc-check__detail p { margin: 0; font-family: var(--mk-mono); font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); overflow-wrap: anywhere; }
+/* 检查明细是中文说明 + 数值混排，走正文无衬线（等宽只给 id/代码类机器串） */
+.hc-check__detail p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); overflow-wrap: anywhere; }
 .hc-check__detail-more { color: var(--mk-amber) !important; }
 
 /* 漂移块样式（.hc-drift*）2026-10-14 随「漂移」页签删卡删除——漂移项现在就是检查行本身 */

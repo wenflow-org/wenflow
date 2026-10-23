@@ -354,7 +354,7 @@
                 <!-- 原型末数据列「时间」.sub mono 形态：相对时间 + title 绝对时间（Users 判例）。
                      悬停给本地化绝对时刻（2026-10-06 审核 #38）：原样直出后端 ISO（UTC 带 Z），
                      跨时区读不出真实时刻 -->
-                <span class="mk-cell-sub mono" :title="startAbsTitle(r)">{{ r.startAt || '—' }}</span>
+                <span class="mk-cell-sub" :title="startAbsTitle(r)">{{ r.startAt || '—' }}</span>
               </td>
               <td>
                 <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）；

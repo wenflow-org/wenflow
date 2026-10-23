@@ -99,11 +99,12 @@
           <div class="ac-mcp__main" :title="`${t.name}（${t.id}）`">
             <strong>{{ t.name }}</strong>
           </div>
-          <span class="ac-mcp__type mono">
+          <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
+          <span class="ac-mcp__type">
             <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
             <template v-else>{{ mcpTypeText(t.type) }}</template>
           </span>
-          <span class="ac-mcp__endpoint mono" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
+          <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
           <span class="mk-badge" :class="t.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ t.enabled ? '启用' : '停用' }}</span>
           <div class="mk-actions">
             <button

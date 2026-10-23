@@ -1144,7 +1144,8 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 .loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
-.loop__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 阶段号是人话标签（「阶段 1」），不与等宽字体混排 */
+.loop__no { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
@@ -1200,7 +1201,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 .feedrow--link:hover { background: var(--mk-btn-hover-bg); }
 .feedrow__time {
   width: 62px; flex: none; color: var(--mk-faint);
-  font-size: var(--mk-fs-micro); font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
   font-variant-numeric: tabular-nums;
 }
 .feedrow__grow { min-width: 0; display: grid; gap: 2px; align-content: start; }
@@ -1281,7 +1282,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 .rankrow--head { padding: 0 0 6px; border-bottom: 0; }
 .rankrow--head .rankrow__grow { color: var(--mk-faint); }
 .rankrow--head .rankrow__val--col { color: var(--mk-faint); font-weight: 600; }
-.rankrow__idx { width: 20px; flex: none; font-family: var(--mk-mono); color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.rankrow__idx { width: 20px; flex: none; color: var(--mk-faint); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
 .rankrow__grow {
   flex: 1; min-width: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

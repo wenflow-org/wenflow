@@ -284,7 +284,8 @@ function rowTitle(r: RankRow): string {
   font-style: normal;
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
-  font-family: var(--mk-mono);
+  /* 副行是「输入 7.1M · 输出 201.0K」这类中文标签 + 数字，走正文；对齐交给 tabular-nums */
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -295,9 +296,8 @@ function rowTitle(r: RankRow): string {
 }
 
 
-/* 数字 */
+/* 数字：对齐靠 tabular-nums，字体跟正文（等宽只给 id / 代码） */
 .tc-num {
-  font-family: var(--mk-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--mk-ink);

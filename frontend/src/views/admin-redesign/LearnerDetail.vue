@@ -813,7 +813,8 @@
                     :title="advisoryOpsTitle(s.advisory)"
                   ><span class="ld-adv__txt">{{ advisoryOpsText(s.advisory) }}</span></span>
                 </td>
-                <td class="ld-mono ld-sub" :title="s.startAbs || undefined">{{ s.startAgo }}</td>
+                <!-- 开始时间是相对人话（「3 天前」）→ 无衬线；下一列短 ID 才是等宽 -->
+                <td class="ld-sub" :title="s.startAbs || undefined">{{ s.startAgo }}</td>
                 <td class="ld-mono ld-sub" :title="s.id">{{ shortId(s.id) }}</td>
               </tr>
             </tbody>
@@ -2859,7 +2860,7 @@ const snapshotHint = computed(() =>
 .ld-session__main { flex: 1; display: grid; min-width: 0; }
 .ld-session__main strong { font-size: var(--mk-fs-micro); font-weight: 600; }
 .ld-session__main span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.ld-session__time { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
+.ld-session__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 
 /* 建议行动卡 */
 .ld-actions { padding: 14px 16px; display: grid; gap: 9px; }
@@ -3179,14 +3180,13 @@ const snapshotHint = computed(() =>
 .ld-ev__confbar.is-warn::after { background: var(--mk-amber); }
 .ld-ev__confbar.is-info::after { background: var(--mk-blue); }
 .ld-ev__conf em { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* 来源行：会话/任务短 ID */
+/* 来源行：会话/任务短 ID + 中文标签混排，走正文无衬线（等宽只给纯 id 串） */
 .ld-ev__src {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
-  font-family: var(--mk-mono);
   opacity: 0.85;
 }
-.ld-ev__time { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; margin-top: 3px; }
+.ld-ev__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; margin-top: 3px; }
 
 /* ---------- 证据页两栏布局：左时间线（主） / 右曲线·建议·密度（侧） ---------- */
 .ld-ev-grid {
@@ -3271,7 +3271,7 @@ const snapshotHint = computed(() =>
 .ld-cal__recent { display: grid; gap: 0; border-top: 1px dashed var(--mk-line); padding-top: 8px; }
 .ld-cal__row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: var(--mk-fs-micro); border-bottom: 1px solid var(--mk-line); }
 .ld-cal__row:last-child { border-bottom: none; }
-.ld-cal__task { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-ink); font-family: var(--mk-mono); cursor: help; }
+.ld-cal__task { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-ink); cursor: help; }
 .ld-cal__risk { color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ld-cal__outcome { font-size: var(--mk-fs-micro); font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
 .ld-cal__outcome.is-smooth { color: var(--mk-green); background: var(--mk-green-bg); }

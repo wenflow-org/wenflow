@@ -223,7 +223,7 @@
                      5 行折行），可换行才不至于把整表顶出横向滚动。 -->
                 <td v-if="colVisible('action')" :title="log.action">
                   <div class="log-act-line">
-                    <span v-if="methodOf(log)" class="log-path mono" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
+                    <span v-if="methodOf(log)" class="log-path" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
                     <span v-else class="log-action">{{ actionText(log.action) }}</span>
                     <span v-if="methodOf(log)" class="log-act-method">
                       <span class="log-action-sep" aria-hidden="true">·</span>
@@ -234,7 +234,7 @@
                 <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt" :title="log.targetType || '当前记录未包含目标类型'">{{ targetTypeText(log.targetType) }}</td>
                 <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''"><span class="al-ellipsis">{{ log.targetId ? shortId(log.targetId) : '—' }}</span></td>
                 <td v-if="colVisible('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
-                <td v-if="colVisible('ip')" class="log-ip mono" :title="log.ip || ''"><span class="al-ellipsis">{{ ipText(log.ip) }}</span></td>
+                <td v-if="colVisible('ip')" class="log-ip" :title="log.ip || ''"><span class="al-ellipsis">{{ ipText(log.ip) }}</span></td>
                 <td class="mk-th--right log-arrow" aria-hidden="true"><span class="log-arrow__i">▸</span></td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
@@ -308,7 +308,7 @@
             >
               <td class="log-time mono" :title="fmtFull(a.createdAt)">{{ fmtTime(a.createdAt) }}</td>
               <td class="log-admin" :title="a.username">{{ a.username || '—' }}</td>
-              <td class="log-ip mono" :title="a.ip || ''"><span class="al-ellipsis">{{ ipText(a.ip) }}</span></td>
+              <td class="log-ip" :title="a.ip || ''"><span class="al-ellipsis">{{ ipText(a.ip) }}</span></td>
               <td><span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span></td>
               <td class="log-reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</td>
               <td class="mk-th--right al-act">

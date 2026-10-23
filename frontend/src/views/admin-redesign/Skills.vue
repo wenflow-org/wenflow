@@ -336,7 +336,8 @@
                 <span v-else class="mk-na">工具类</span>
               </td>
               <td v-if="showCol('version')"><span class="mono">{{ versionOf(s.id) }}</span></td>
-              <td v-if="showCol('routing')"><span class="mono sk-model" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
+              <!-- 路由口径是中文词（「平台默认」），不走等宽；版本号仍是机器串 -->
+              <td v-if="showCol('routing')"><span class="sk-model" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
               <!-- 调用/P95/成功率三格挂 mk-num（2026-10-15 用户走查）：表头 mk-th--right 右对齐，
                    值格此前无 mk-num 左对齐，头与值各站一边；mk-num 同时补齐 mono/tabular 方言 -->
               <td v-if="showCol('calls')" class="mk-num"><span class="mono">{{ s.calls }}</span></td>

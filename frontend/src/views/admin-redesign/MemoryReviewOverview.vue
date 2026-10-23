@@ -182,7 +182,7 @@
                 <span v-else class="mk-na" title="该用户的痕迹都还没有记忆强度数据">—</span>
               </td>
               <td :title="row.lastReviewedAt ? fullTime(row.lastReviewedAt) : '有记忆痕迹，但还没有复习过'">
-                <span v-if="row.lastReviewedAt" class="mk-cell-sub mono">{{ timeAgo(row.lastReviewedAt) }}</span>
+                <span v-if="row.lastReviewedAt" class="mk-cell-sub">{{ timeAgo(row.lastReviewedAt) }}</span>
                 <span v-else class="mr__none">未复习</span>
               </td>
               <td>

@@ -252,7 +252,8 @@
                       :title="testResults[m.id].text"
                     >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
                   </td>
-                  <td class="mono mpp-price" :class="{ 'mpp-price--missing': priceMissing(m) }" :title="priceTitle(m)">{{ priceText(m) }}</td>
+                  <!-- 价格是「入 / 出」中文标签 + 数字，走正文 + 等宽数字对齐 -->
+                  <td class="mpp-price" :class="{ 'mpp-price--missing': priceMissing(m) }" :title="priceTitle(m)">{{ priceText(m) }}</td>
                   <td>
                     <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
                     <span v-else class="mk-badge mk-badge--ok">● 健康</span>

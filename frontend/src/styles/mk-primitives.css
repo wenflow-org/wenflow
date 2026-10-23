@@ -695,9 +695,11 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 
 .mk-cell-main { display: grid; gap: 1px; min-width: 0; }
 .mk-cell-main strong { display: block; max-width: var(--mk-cell-main-max); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mk-cell-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 数字列：不换行、右对齐、不被挤压（固定列宽规范） */
-.mk-num { font-family: var(--mk-mono); font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
+.mk-cell-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 数字列：不换行、右对齐、不被挤压（固定列宽规范）。
+   字体跟页面正文走——数字对齐由 tabular-nums 保证，不需要第二套等宽字体；
+   等宽只留给 id / 代码 / HTTP 方法这类机器串（2026-10-23 用户走查「整那么多不一样字体」）。 */
+.mk-num { font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
 /* 数字列表头必须显式右对齐：.mk-table th 的 text-align:left（特异性 0,1,1）压过 .mk-num（0,1,0），
    否则表头靠左、数字靠右各站一边——全站所有 <th class="mk-num"> 都受影响。 */
 .mk-table th.mk-num { text-align: right; }

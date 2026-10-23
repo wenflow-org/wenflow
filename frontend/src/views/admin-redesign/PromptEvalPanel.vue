@@ -470,7 +470,7 @@
                       <span class="mk-badge" :class="res.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ res.passed ? '通过' : '未通过' }}</span>
                       <!-- 失败用例就近跳转（评审「失败用例无『去改 Prompt』链路」）：openCaseSkill 同口径剥 skill: 前缀进 Skill 详情 -->
                       <button v-if="!res.passed && runDetail?.agentId" type="button" class="mk-link" title="打开该用例对应的 Skill 详情（改 Prompt 前先看上下文）" @click="goCaseSkill(runDetail.agentId)">查看该 Skill</button>
-                      <span class="pe-result-row__meta mono">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
+                      <span class="pe-result-row__meta">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
                     </div>
                     <div v-if="!res.passed" class="pe-result-row__checks">
                       <span v-for="(v, k) in res.checks" :key="k" class="pe-check" :class="v ? 'pe-check--ok' : 'pe-check--fail'">{{ v ? '✓' : '✗' }} {{ checkLabel(String(k)) }}</span>
@@ -1613,7 +1613,7 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
 .pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .pe-persona-missing { margin-left: 6px; }
 .pe-result { display: grid; gap: 3px; justify-items: start; }
-.pe-result strong { font-size: var(--mk-fs-body); font-family: var(--mk-mono); }
+.pe-result strong { font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; }
 .pe-result span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .pe-result__bar { display: block; width: 64px; }
 .pe-result--ok .pe-result__bar i { background: var(--mk-green); }
