@@ -100,6 +100,11 @@ function seedView(extra?: Partial<{ readOnly: boolean; providers: Array<Record<s
   getMock.mockResolvedValue({ data: { data: view } })
 }
 
+/** 模型行（排除「对话 / 推理」功能分组行） */
+function modelRows(wrapper: Awaited<ReturnType<typeof mountPanel>>) {
+  return wrapper.findAll('.mpp-table tbody tr').filter((r) => !r.classes('mpp-group'))
+}
+
 async function mountPanel(props: Record<string, unknown> = {}) {
   const wrapper = mount(ModelProvidersPanel, { props, global: { stubs: { teleport: true } } })
   await flushPromises()
@@ -213,12 +218,40 @@ describe('ModelProvidersPanel', () => {
     expect(keyInput.attributes('placeholder')).toBe('已配置 ····9xQv，留空 = 沿用')
     await btn(w, '显示')!.trigger('click')
     expect(w.find('.mpp-endpoint__key input').attributes('type')).toBe('text')
-    // 模型表：只留 模型 / 单价 / 状态 / 操作 四列（平台限制与备用链收进编辑弹层的高级设置）
-    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '单价', '状态', ''])
-    const rows = w.findAll('.mpp-table tbody tr')
+    // 模型表：模型 / 功能 / 单价 / 状态 / 操作（用途分组行 + 能力标签见下一条用例）
+    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '功能', '单价', '状态', ''])
+    const rows = modelRows(w)
     expect(rows).toHaveLength(2)
     expect(rows[0].text()).toContain('acme-chat')
     expect(rows[1].text()).toContain('acme-chat-2')
+  })
+
+  it('按功能区分：按用途分组（对话 / 推理），能力（思考 / 推理强度 / 读图）单独成列', async () => {
+    const platform = providerView({ id: 'platform', name: '平台', models: [
+      { id: 'chat-plain' },
+      { id: 'chat-read' },
+      { id: 'think-fast', tier: 'reasoning' }
+    ] })
+    platform.models = (platform.models as Array<Record<string, unknown>>).map((m) => {
+      if (m.id === 'chat-read') return { ...m, vision: true }
+      if (m.id === 'think-fast') return { ...m, supportsThinking: true, supportsReasoningEffort: true }
+      return m
+    })
+    seedView({ providers: [platform] })
+    const w = await mountPanel()
+    const groups = w.findAll('.mpp-group')
+    // 两个用途各一段，组头写清功能与条数（空组不渲染）
+    expect(groups.map((g) => g.find('.mpp-group__name').text())).toEqual(['对话', '推理'])
+    expect(groups.map((g) => g.find('.mpp-group__count').text())).toEqual(['2 个', '1 个'])
+    expect(groups[0].text()).toContain('常规教学、工具调用与高频 Skill')
+
+    const rows = modelRows(w)
+    const fn = (i: number) => rows[i].find('.mpp-fn').text()
+    expect(fn(0)).toBe('基础对话')
+    expect(fn(1)).toBe('读图')
+    expect(fn(2)).toBe('思考推理强度')
+    // 能力标签有可读文本，不只靠颜色
+    expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['读图'])
   })
 
   it('启用开关即时保存：点开关就调写接口并采纳回吐的新视图', async () => {
@@ -318,7 +351,7 @@ describe('ModelProvidersPanel', () => {
     })
     const w = await mountPanel()
     await pick(w, 'Acme 网关')
-    const rows = w.findAll('.mpp-table tbody tr')
+    const rows = modelRows(w)
     expect(rows[0].text()).toContain('冷却中')
     expect(rows[1].text()).toContain('健康')
   })

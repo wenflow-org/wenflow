@@ -80,6 +80,8 @@ export interface ModelViewModel {
   tier: 'chat' | 'reasoning';
   supportsThinking: boolean;
   supportsReasoningEffort: boolean;
+  /** 声明可接收图片输入（见 models.config.ts ModelDefinition.vision） */
+  vision: boolean;
   maxOutputTokens: number | null;
   defaultMaxTokens: number | null;
   reasoningReserveTokens: number | null;
@@ -120,6 +122,7 @@ export interface ModelInput {
   tier?: string;
   supportsThinking?: boolean;
   supportsReasoningEffort?: boolean;
+  vision?: boolean;
   maxOutputTokens?: number | null;
   defaultMaxTokens?: number | null;
   reasoningReserveTokens?: number | null;
@@ -377,6 +380,7 @@ function toModelView(raw: Record<string, unknown>, id: string): ModelViewModel {
     tier: raw.tier === 'reasoning' ? 'reasoning' : 'chat',
     supportsThinking: raw.supportsThinking === true,
     supportsReasoningEffort: raw.supportsReasoningEffort === true,
+    vision: raw.vision === true,
     maxOutputTokens: typeof raw.maxOutputTokens === 'number' ? raw.maxOutputTokens : null,
     defaultMaxTokens: typeof raw.defaultMaxTokens === 'number' ? raw.defaultMaxTokens : null,
     reasoningReserveTokens: typeof raw.reasoningReserveTokens === 'number' ? raw.reasoningReserveTokens : null,
@@ -514,7 +518,7 @@ function checkFallbacks(providerId: string, fallbacks: string[], root: Root): st
 
 /** 模型条目的规范字段顺序（写回文件的可读性靠它，而不是靠碰巧的插入顺序） */
 const MODEL_KEY_ORDER = [
-  'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'maxOutputTokens', 'defaultMaxTokens',
+  'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'vision', 'maxOutputTokens', 'defaultMaxTokens',
   'reasoningReserveTokens', 'maxParallelRequests', 'fallbacks', 'pricing', 'description'
 ];
 
@@ -533,6 +537,8 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
   }
   if (input.supportsThinking !== undefined) merged.supportsThinking = input.supportsThinking === true;
   if (input.supportsReasoningEffort !== undefined) merged.supportsReasoningEffort = input.supportsReasoningEffort === true;
+  // 图片理解是独立能力：不勾就显式写 false（上游不支持时运行时会拒图，不是静默丢图）
+  if (input.vision !== undefined) merged.vision = input.vision === true;
   if (merged.supportsReasoningEffort === true && merged.supportsThinking !== true) {
     throw new RegistryEditError('勾了「支持推理强度」就必须同时支持思考模式（上游字段依赖该能力）。', 400, 'invalid');
   }

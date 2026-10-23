@@ -80,6 +80,10 @@
                   <input v-model="form.supportsReasoningEffort" type="checkbox" />
                   <span>支持推理强度</span>
                 </label>
+                <label class="mk-field mk-field--switch">
+                  <input v-model="form.vision" type="checkbox" />
+                  <span>接受图片输入</span>
+                </label>
               </div>
 
               <h5 class="med-sub">调用限制</h5>
@@ -137,6 +141,7 @@ export interface ModelLike {
   tier: 'chat' | 'reasoning'
   supportsThinking: boolean
   supportsReasoningEffort: boolean
+  vision: boolean
   maxOutputTokens: number | null
   defaultMaxTokens: number | null
   reasoningReserveTokens: number | null
@@ -163,6 +168,7 @@ const form = reactive({
   label: '',
   tier: 'chat' as 'chat' | 'reasoning',
   supportsThinking: false,
+  vision: false,
   supportsReasoningEffort: false,
   maxOutputTokens: null as number | null,
   defaultMaxTokens: null as number | null,
@@ -200,6 +206,7 @@ function openWith(target: { providerId: string; model: ModelLike | null; presetI
   form.label = m?.label ?? preset
   form.tier = m?.tier ?? 'chat'
   form.supportsThinking = m?.supportsThinking ?? false
+  form.vision = m?.vision ?? false
   form.supportsReasoningEffort = m?.supportsReasoningEffort ?? false
   form.maxOutputTokens = m?.maxOutputTokens ?? null
   form.defaultMaxTokens = m?.defaultMaxTokens ?? null
@@ -244,6 +251,7 @@ async function submit(): Promise<void> {
       label: form.label.trim(),
       tier: form.tier,
       supportsThinking: form.supportsThinking,
+      vision: form.vision,
       supportsReasoningEffort: form.supportsReasoningEffort,
       maxOutputTokens: numOrNull(form.maxOutputTokens),
       defaultMaxTokens: numOrNull(form.defaultMaxTokens),

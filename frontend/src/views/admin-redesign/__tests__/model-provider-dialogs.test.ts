@@ -186,7 +186,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({
       providerId: 'acme-gateway',
       model: {
-        id: 'acme-chat', label: 'acme-chat', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false,
+        id: 'acme-chat', label: 'acme-chat', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false, vision: false,
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
         fallbacks: [], pricing: null, description: null
       }
@@ -220,7 +220,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({
       providerId: 'platform',
       model: {
-        id: 'm-priced', label: 'm-priced', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false,
+        id: 'm-priced', label: 'm-priced', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false, vision: false,
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
         fallbacks: [], pricing: { inputPer1M: 0.3, cachedInputPer1M: 0.006, outputPer1M: 1.2 }, description: null
       }
@@ -244,7 +244,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({
       providerId: 'acme-gateway',
       model: {
-        id: 'acme-chat', label: 'Acme Chat', tier: 'chat', supportsThinking: true, supportsReasoningEffort: false,
+        id: 'acme-chat', label: 'Acme Chat', tier: 'chat', supportsThinking: true, supportsReasoningEffort: false, vision: false,
         maxOutputTokens: 65536, defaultMaxTokens: 4096, reasoningReserveTokens: null, maxParallelRequests: 8,
         fallbacks: [], pricing: { inputPer1M: 0.3 }, description: '主用'
       }

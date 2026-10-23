@@ -232,18 +232,30 @@
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense mpp-table">
               <colgroup>
-                <col style="width: 50%" /><col style="width: 22%" /><col style="width: 14%" /><col style="width: 14%" />
+                <col style="width: 38%" /><col style="width: 20%" /><col style="width: 18%" /><col style="width: 12%" /><col style="width: 12%" />
               </colgroup>
               <thead>
                 <tr>
                   <th>模型</th>
+                  <th>功能</th>
                   <th>单价</th>
                   <th>状态</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="m in selected.models" :key="m.id">
+                <!-- 按用途分组（2026-10-21 用户「按功能区分一下」）：同一张表里用分组行切段，
+                     不拆多张表——列宽与对齐保持一处。组内再按能力标「功能」列，运营一眼看得出
+                     哪个模型能思考、能调推理强度、能读图。 -->
+                <template v-for="g in modelGroups" :key="g.tier">
+                  <tr class="mpp-group">
+                    <td colspan="5">
+                      <span class="mpp-group__name">{{ g.label }}</span>
+                      <span class="mpp-group__count">{{ g.models.length }} 个</span>
+                      <span class="mpp-group__hint">{{ g.hint }}</span>
+                    </td>
+                  </tr>
+                  <tr v-for="m in g.models" :key="m.id">
                   <td class="mpp-model">
                     <span class="mono mpp-model__id">{{ m.id }}</span>
                     <span v-if="m.label && m.label !== m.id" class="mpp-desc" :title="m.label">{{ m.label }}</span>
@@ -253,6 +265,10 @@
                       :class="{ 'mpp-rowtest--bad': !testResults[m.id].ok }"
                       :title="testResults[m.id].text"
                     >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
+                  </td>
+                  <td class="mpp-fn">
+                    <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
+                    <span v-if="!functionTags(m).length" class="mpp-fn__none">基础对话</span>
                   </td>
                   <!-- 价格是「入 / 出」中文标签 + 数字，走正文 + 等宽数字对齐 -->
                   <td class="mpp-price" :class="{ 'mpp-price--missing': priceMissing(m) }" :title="priceTitle(m)">{{ priceText(m) }}</td>
@@ -266,9 +282,10 @@
                     <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
                     <button type="button" class="mk-link mk-link--danger" :disabled="busy || registry?.readOnly" @click="removeModel(m)">删除</button>
                   </td>
-                </tr>
+                  </tr>
+                </template>
                 <tr v-if="!selected.models.length">
-                  <td colspan="4" class="mpp-empty">
+                  <td colspan="5" class="mpp-empty">
                     {{ selected.enabled ? '还没有模型' : '这个供应商当前停用，模型不参与路由。' }}
                   </td>
                 </tr>
@@ -444,6 +461,25 @@ function priceText(m: ModelLike): string {
   if (priceMissing(m)) return '未配置'
   const p = m.pricing!
   return `入 ${p.inputPer1M ?? '—'} / 出 ${p.outputPer1M ?? '—'}`
+}
+const MODEL_GROUPS = [
+  { tier: 'chat' as const, label: '对话', hint: '常规教学、工具调用与高频 Skill' },
+  { tier: 'reasoning' as const, label: '推理', hint: '长思考与复杂判断' }
+]
+/** 按用途（对话 / 推理）分组；空组不渲染，单组时也保留组头——它就是这个模型的功能归属 */
+const modelGroups = computed(() => {
+  const models = selected.value?.models ?? []
+  return MODEL_GROUPS
+    .map((g) => ({ ...g, models: models.filter((m) => m.tier === g.tier) }))
+    .filter((g) => g.models.length > 0)
+})
+/** 模型能力标签：功能列只列「有没有」，用途由分组行表达，不在此复述 */
+function functionTags(m: ModelLike): string[] {
+  const tags: string[] = []
+  if (m.supportsThinking) tags.push('思考')
+  if (m.supportsReasoningEffort) tags.push('推理强度')
+  if (m.vision) tags.push('读图')
+  return tags
 }
 function priceTitle(m: ModelLike): string {
   const p = m.pricing
@@ -869,6 +905,25 @@ defineExpose({ refresh })
 .mpp-price { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
 /* 未配单价是能直接修的配置缺口：用警示色把「单价未知」从限额副行里拎出来，别读成普通弱字 */
 .mpp-price--missing { color: var(--mk-amber); }
+/* 功能分组行：一张表里切段（对话 / 推理），组内不再复述用途 */
+.mpp-group td {
+  padding: 6px 10px;
+  background: var(--mk-surface-2);
+  border-top: 1px solid var(--mk-line);
+}
+.mpp-group__name { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
+.mpp-group__count { margin-left: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.mpp-group__hint { margin-left: 10px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 功能列：能力标签；「基础对话」是缺省态，弱化成正文色不抢眼。
+   标签允许换行——窄档功能列只有百来像素，nowrap 会把整表宽度顶出去。 */
+.mpp-fn { white-space: normal; min-width: 88px; }
+.mpp-fn__chip {
+  display: inline-block; margin-right: 4px; margin-bottom: 2px; padding: 1px 7px;
+  border-radius: 999px; background: var(--mk-blue-bg);
+  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
+  white-space: nowrap;
+}
+.mpp-fn__none { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .mpp-rowacts { display: flex; gap: 8px; white-space: nowrap; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 </style>

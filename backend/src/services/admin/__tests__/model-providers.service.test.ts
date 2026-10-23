@@ -245,6 +245,21 @@ describe('模型', () => {
     await expectEditError(() => addModel('custom', { id: 'cm-3', tier: 'chat', supportsReasoningEffort: true }), 400, '必须同时支持思考模式');
   });
 
+  it('图片理解是独立能力：随模型写入、改回 false 也落盘，视图按布尔回读', async () => {
+    await addModel('custom', { id: 'cm-vision', label: 'CM Vision', tier: 'chat', vision: true });
+    expect(readFile().providers.custom.models['cm-vision'].vision).toBe(true);
+    // 字段顺序按 MODEL_KEY_ORDER：vision 紧跟能力开关，排在限额之前
+    expect(Object.keys(readFile().providers.custom.models['cm-vision'])).toEqual(['label', 'tier', 'vision']);
+
+    await updateModel('custom', 'cm-vision', { vision: false });
+    expect(readFile().providers.custom.models['cm-vision'].vision).toBe(false);
+
+    const view = await buildProvidersView();
+    const model = view.providers.find((p) => p.id === 'custom')!.models.find((m) => m.id === 'cm-vision')!;
+    expect(model.vision).toBe(false);
+    expect(view.providers.find((p) => p.id === PLATFORM_PROVIDER_ID)!.models.every((m) => m.vision === false)).toBe(true);
+  });
+
   it('改模型：不允许改名、不允许档位乱填、限额必须正数', async () => {
     await addModel('custom', { id: 'cm-1', tier: 'chat' });
     await expectEditError(() => updateModel('custom', 'cm-1', { id: 'cm-2' }), 400, '不支持改名');
