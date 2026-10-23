@@ -67,8 +67,19 @@ export function recordDegradation(fault: Omit<DegradationTelemetry, 'at'>): Degr
     mitigationApplied: record.mitigationApplied,
     rootCauseMessage: record.rootCauseMessage,
   });
-  persistDegradationEvent(record);
+  if (!isTestRuntime()) persistDegradationEvent(record);
   return record;
+}
+
+/**
+ * 测试运行时不落库（2026-10-23 走查实证）：
+ * 套件会用 mock 抛 `db down` / `boom` 触发降级分支，但 `recordDegradation` 写的是
+ * **真实 dev.db**（jest 未隔离 DATABASE_URL）——跑完全量测试后健康中心会出现
+ * 「运行时降级事件」幽灵异常，新部署运营者会被误导。内存计数与结构化日志照常保留，
+ * 供测试断言；只有持久化被跳过。与 material-quality-gate 的 JEST_WORKER_ID 双保险同口径。
+ */
+function isTestRuntime(): boolean {
+  return process.env.NODE_ENV === 'test' || Boolean(process.env.JEST_WORKER_ID);
 }
 
 // ── 落库（2026-10-08 止血挖掘模式②：观测易失 → 持久化）─────────────────────────
