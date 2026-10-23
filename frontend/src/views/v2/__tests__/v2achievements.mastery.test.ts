@@ -1,6 +1,6 @@
 /**
- * V2Achievements（P3-4：成就条件 KTL 内部缩写直出）回归测试：
- * 服务端描述中的 KTL 直出前补全中文释义「知识掌握度（KTL）」。
+ * V2Achievements 掌握类成就口径回归测试：
+ * 条件描述直接展示已掌握知识点数，不再把 KTL（训练负荷）包装成掌握水平。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -40,29 +40,25 @@ async function mountAch(descriptions: string[]) {
   return w;
 }
 
-describe('V2Achievements 成就条件 KTL 中文释义（P3-4）', () => {
+describe('V2Achievements 掌握类成就口径', () => {
   beforeEach(() => {
     // 组件 setup 读 userStore（XP 口径），裸驱动需 active pinia
     setActivePinia(createPinia());
     getMock.mockReset();
   });
 
-  it('KTL 缩写直出前补全中文释义', async () => {
-    const w = await mountAch(['KTL达到5.0']);
-    expect(w.text()).toContain('知识掌握度（KTL）');
-  });
-
-  it('多档 KTL 条件全部替换（5.0/7.0/9.0）', async () => {
-    const w = await mountAch(['KTL达到5.0', 'KTL达到7.0', 'KTL达到9.0']);
+  it('直接展示已掌握知识点数，不再出现 KTL', async () => {
+    const w = await mountAch(['掌握 3 个知识点', '掌握 5 个知识点', '掌握 10 个知识点']);
     const texts = w.findAll('.ach-card__desc').map((n) => n.text());
     expect(texts).toEqual([
-      '知识掌握度（KTL）达到5.0',
-      '知识掌握度（KTL）达到7.0',
-      '知识掌握度（KTL）达到9.0'
+      '掌握 3 个知识点',
+      '掌握 5 个知识点',
+      '掌握 10 个知识点'
     ]);
+    expect(w.text()).not.toContain('KTL');
   });
 
-  it('非 KTL 描述原样展示', async () => {
+  it('非掌握类描述原样展示', async () => {
     const w = await mountAch(['连续学习 7 天']);
     expect(w.text()).toContain('连续学习 7 天');
   });
@@ -78,7 +74,7 @@ describe('V2Achievements 经验值口径（与账号页同源）', () => {
     // 一条已解锁成就（+10）；账号另有任务完成奖励 50 → user.xp = 60
     getMock.mockResolvedValue({
       success: true,
-      data: [{ ...achievement('KTL达到5.0'), unlocked: true, xpReward: 10 }]
+      data: [{ ...achievement('掌握 3 个知识点'), unlocked: true, xpReward: 10 }]
     });
     const w = mount(V2Achievements);
     await flushPromises();

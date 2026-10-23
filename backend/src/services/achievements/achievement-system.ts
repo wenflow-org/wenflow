@@ -9,7 +9,7 @@ export interface AchievementDefinition {
   icon?: string;
   xpReward: number;
   requirement: {
-    type: 'task_count' | 'streak_days' | 'path_completion' | 'ktl_level' | 'custom';
+    type: 'task_count' | 'streak_days' | 'path_completion' | 'mastered_concepts' | 'custom';
     value: number | string;
     condition?: (stats: any) => boolean;
   };
@@ -124,37 +124,40 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
   },
 
   // ===== 知识掌握成就 =====
+  // 2026-10-23：阈值从 KTL 改为「已掌握知识点数」。KTL 是知识训练负荷（高=负荷重），
+  // 与成就想要的「掌握水平（高=好）」语义相反；改用 memory_traces 的掌握证据计数。
+  // id 保留 ktl_* 只为兼容既有解锁记录与外部引用，不再表示 KTL。
   {
     id: 'ktl_5',
     type: 'mastery',
     name: '知识小成',
-    description: 'KTL达到5.0',
+    description: '掌握 3 个知识点',
     xpReward: 100,
     requirement: {
-      type: 'ktl_level',
-      value: 5.0
+      type: 'mastered_concepts',
+      value: 3
     }
   },
   {
     id: 'ktl_7',
     type: 'mastery',
     name: '知识大成',
-    description: 'KTL达到7.0',
+    description: '掌握 5 个知识点',
     xpReward: 300,
     requirement: {
-      type: 'ktl_level',
-      value: 7.0
+      type: 'mastered_concepts',
+      value: 5
     }
   },
   {
     id: 'ktl_9',
     type: 'mastery',
     name: '知识宗师',
-    description: 'KTL达到9.0',
+    description: '掌握 10 个知识点',
     xpReward: 1000,
     requirement: {
-      type: 'ktl_level',
-      value: 9.0
+      type: 'mastered_concepts',
+      value: 10
     }
   },
 
@@ -195,7 +198,7 @@ export class AchievementSystem {
     currentStreak: number;
     completedPaths: number;
     totalPaths: number;
-    ktl: number;
+    masteredConcepts: number;
     weekCompletionRate?: number;
     timeEfficiency?: number;
   }): AchievementDefinition[] {
@@ -229,8 +232,8 @@ export class AchievementSystem {
       case 'path_completion':
         return stats.completedPaths >= requirement.value;
 
-      case 'ktl_level':
-        return stats.ktl >= requirement.value;
+      case 'mastered_concepts':
+        return (stats.masteredConcepts ?? 0) >= requirement.value;
 
       case 'custom':
         return requirement.condition?.(stats) || false;
@@ -267,8 +270,8 @@ export class AchievementSystem {
         total = requirement.value as number;
         break;
 
-      case 'ktl_level':
-        current = stats.ktl || 0;
+      case 'mastered_concepts':
+        current = stats.masteredConcepts || 0;
         total = requirement.value as number;
         break;
 

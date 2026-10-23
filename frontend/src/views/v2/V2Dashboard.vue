@@ -891,18 +891,17 @@ const nearestAchievement = computed(() => {
   if (!locked.length) return null;
   const nearest = locked.sort((a, b) => (b.progress?.percentage ?? 0) - (a.progress?.percentage ?? 0))[0];
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString());
-  /* P3-38（设计评审）：「KTL达到7.0（4.6/7）」目标与进度无缝拼接，读作两个互相矛盾的 KTL 值——
+  /* P3-38（设计评审）：「掌握 5 个知识点（4/5）」目标与进度无缝拼接，读作两个互相矛盾的数字——
      补衔接词分家：「目标 <描述> · 进度 c/t」（description 缺失时只说进度） */
   const prog = `${fmt(nearest.progress?.current ?? 0)}/${fmt(nearest.progress?.total ?? 1)}`;
   return {
     iconUrl: typeof nearest.icon === 'string' && nearest.icon.startsWith('http') ? nearest.icon : '',
     name: nearest.name,
     achieved: (nearest.progress?.current ?? 0) >= (nearest.progress?.total ?? 1),
-    // 走查 2026-10-08 #75：服务端成就条件含内部缩写 KTL，直出会与成就页
-    // 「知识掌握度（KTL）」（V2Achievements.descText）口径不一致且本页无处可查。
-    // 这里做同样的展开，两页文案对齐。
+    // 成就条件由服务端提供可直接展示的中文描述；掌握类自 2026-10-23 起为知识点数，
+    // 不再含 KTL 缩写，无需在前端二次展开。
     hint: nearest.description
-      ? `目标 ${String(nearest.description).replace(/KTL/g, '知识掌握度')} · 进度 ${prog}`
+      ? `目标 ${nearest.description} · 进度 ${prog}`
       : `进度 ${prog}`
   };
 });
