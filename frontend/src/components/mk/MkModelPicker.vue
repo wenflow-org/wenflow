@@ -63,7 +63,7 @@
             </span>
             <span class="mk-mp__meta">
               <span class="mk-mp__tags">
-                <span v-if="row.opt.tier" class="mk-badge mk-badge--muted">{{ row.opt.tier }}</span>
+                <span v-if="row.opt.tier" class="mk-badge mk-badge--muted">{{ tierText(row.opt.tier) }}</span>
                 <span v-if="row.opt.thinking" class="mk-badge mk-badge--muted" title="支持思考模式">思考</span>
                 <span v-if="row.opt.reasoning" class="mk-badge mk-badge--muted" title="支持推理强度">强度</span>
                 <span v-if="row.opt.vision" class="mk-badge mk-badge--muted" title="支持图片输入">视觉</span>
@@ -200,6 +200,12 @@ function priceText(o: MkModelOption): string {
   const hasOut = typeof o.priceOut === 'number'
   if (!hasIn && !hasOut) return ''
   return `入 ${hasIn ? o.priceIn : '—'} / 出 ${hasOut ? o.priceOut : '—'}`
+}
+
+/** 层级是后端枚举码（chat / reasoning），上屏走中文；未知值原样保留，避免硬造词 */
+const TIER_TEXT: Record<string, string> = { chat: '对话', reasoning: '推理' }
+function tierText(t?: string): string {
+  return t ? TIER_TEXT[t] ?? t : ''
 }
 
 /** 过滤后的候选（继承行不参与过滤，始终置顶） */
