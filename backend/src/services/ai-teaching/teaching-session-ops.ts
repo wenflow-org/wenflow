@@ -634,7 +634,10 @@ export async function applyTimeoutWrapupFallback(sessionId: string): Promise<voi
         // 零证据抑制（全量测试报告 #6）：0 条学员消息的会话（实测 T4/T5 msgs=1/users=0）不写
         // 「学习记录」——这类记录纯占学员评估页展示位、无任何学习证据；终态清理照常做，
         // 状态机行为（timeout + 清 pending 检查点）不变。
-        ...(hasLearnerEvidence ? { wrapup: JSON.stringify(wrapup) } : {}),
+        // 时长与 wrapup 同批落列：超时路径从不写 duration 列（timeoutIfIdle/timeoutIfPaused 只改
+        // status/endTime），列表页读列就会在「停在 x/y」旁边显示「—」——有学员证据时把按消息
+        // 时间戳算出的活跃时长一并写列，别只留在 wrapup.duration 里。
+        ...(hasLearnerEvidence ? { wrapup: JSON.stringify(wrapup), duration: durationMinutes } : {}),
         ...(() => {
           // 终态清理：移除待处理检查点，避免详情接口残留
           const state = session.teachingState && typeof session.teachingState === 'object'

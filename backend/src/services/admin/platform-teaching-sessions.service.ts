@@ -200,7 +200,9 @@ export async function listTeachingSessionsDebug(params: {
       endReason,
       startTime: session.startTime,
       endTime: session.endTime,
-      duration: session.duration,
+      /* 历史超时会话的 duration 列是空的（超时收尾此前只把活跃时长写进 wrapup.duration），
+         列上留空会让「停在 x/y」旁边显示「—」。列优先，缺了再取兜底总结里的同口径读数。 */
+      duration: session.duration || (typeof wrapup?.duration === 'number' ? wrapup.duration : 0),
       messageCount: facts?.userCount ?? 0,
       knowledgePointCount: Array.isArray(knowledgePoints) ? knowledgePoints.length : 0,
       progress: progressById.get(session.id) || null,
