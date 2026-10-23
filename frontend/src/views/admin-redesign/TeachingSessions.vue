@@ -201,9 +201,10 @@
                 v-if="!tsHiddenCols.has('status')"
                 scope="col"
                 class="mk-th--sortable ts-c-status"
+                title="生命周期终态 + 本次会话停在任务 x/y（x/y 是位置，不是完成数）"
                 :aria-sort="tsSortState('status')"
                 @click="toggleTsSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态 / 进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!isTableNarrow && !tsHiddenCols.has('track')"
                 scope="col"
@@ -220,7 +221,6 @@
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!tsHiddenCols.has('messages')" scope="col" class="ts-c-msg" title="消息：课堂内用户与平台的往来条数">消息</th>
               <th v-if="!isTableMid && !tsHiddenCols.has('knowledge')" scope="col" class="ts-c-kp" title="窄窗口下不显示此列">知识点</th>
-              <th v-if="!tsHiddenCols.has('progress')" scope="col" class="ts-c-prog" title="第几个/共几个是位置，不是完成数">进度</th>
               <th v-if="!tsHiddenCols.has('output')" scope="col" class="ts-c-out">课后总结</th>
               <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')" scope="col" class="ts-c-att">关注</th>
               <th
@@ -272,6 +272,11 @@
               <td v-if="!tsHiddenCols.has('status')">
                 <div class="ts-status">
                   <span class="mk-badge ts-status__main" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
+                  <!-- 2026-10-23 用户「已完成和进度是一样的吧，应该保留一个就行」：
+                       生命周期终态与任务位置并成一列。位置只写「停在 x/y」，不再用「结束于/中断于」
+                       复述左侧徽章已经说过的结果；x/y 是位置，不是完成数（表头 title 已说明）。 -->
+                  <span v-if="progressStopText(r)" class="ts-prog" :title="progressTitle(r)">{{ progressStopText(r) }}</span>
+                  <span v-else class="mk-na" title="这节课堂没有任务维度数据">—</span>
                   <!-- 低参与标注（拍板 #1，显示口径）：completed 但用户消息 <2 条（与零证据门同阈值）。
                        状态机语义不动——会话确实终态结束；运营口径单独标注，避免「完成」被读成「真实参与过」。 -->
                   <span
@@ -320,31 +325,6 @@
                   <span v-if="r.knowledgePointCount">{{ r.knowledgePointCount }} 个</span>
                   <span v-else class="mk-na">—</span>
                 </div>
-              </td>
-              <td v-if="!tsHiddenCols.has('progress')">
-                <!-- 终态完成：只出「结束于 x/y」，不出进度条（不再说「已完成」——那是状态列的词，
-                     也容易读成任务做到了最后一格；实际 11 条 completed 里 10 条停在半途）。
-                     守卫用「有任务维度」而非「有 progress 对象」：totalTasks=0 时文本回落到 —
-                     却会挂在绿色分数样式里，成了绿色破折号（读起来像「第 0 格也算完成」） -->
-                <template v-if="sessionProgressDone(r.status) && sessionProgressPct(r.progress) !== null">
-                  <span class="ts-prog ts-prog--done" :title="progressTitle(r)">{{ sessionProgressText(r.progress, r.status) }}</span>
-                </template>
-                <template v-else-if="sessionProgressDone(r.status)">
-                  <span class="mk-na" title="这节课堂没有任务维度数据">—</span>
-                </template>
-                <template v-else-if="sessionProgressPct(r.progress) !== null">
-                  <span class="ts-prog" :title="progressTitle(r)">
-                    <span class="ts-prog__num">{{ sessionProgressText(r.progress, r.status) }}</span>
-                    <span class="mk-minibar ts-prog__bar">
-                      <i
-                        class="mk-minibar__fill"
-                        :data-tone="sessionProgressTone(r.status)"
-                        :style="{ width: (sessionProgressPct(r.progress) ?? 0) + '%' }"
-                      ></i>
-                    </span>
-                  </span>
-                </template>
-                <span v-else class="mk-na">—</span>
               </td>
               <td v-if="!tsHiddenCols.has('output')">
                 <!-- 建议徽章可读（评审 §5）：行内直出建议标题（首行预览），title 挂完整建议文本。
@@ -423,7 +403,7 @@ import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText } from './statusText'
+import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText } from './statusText'
 import type { SessionProgress } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -759,7 +739,7 @@ const advCount = computed(() => (statusFilter.value ? 1 : 0) + (dateFilter.value
 const TS_DEFAULT_HIDDEN = ['track', 'messages', 'knowledge', 'attention'] as const
 const tsColDefs = [
   { key: 'user', label: '用户', title: '用户姓名 + 邮箱' },
-  { key: 'status', label: '状态', title: '课堂状态' },
+  { key: 'status', label: '状态 / 进度', title: '生命周期终态 + 本次会话停在第几个任务（x/y 是位置，不是完成数）' },
   { key: 'track', label: '完成方式', title: '这条完成记录从哪条通道写入（课堂完成 / 学习 API / 虚拟辅助 / 虚拟黑盒 / 未记录）' },
   { key: 'duration', label: '时长', title: '课堂时长，≥25 分钟按长时标注（信号，非故障）' },
   { key: 'messages', label: '消息', title: '课堂内用户与平台的往来条数' },
@@ -1071,8 +1051,16 @@ function interactTitle(r: Row): string | undefined {
  *  「任务 1/4」容易被读成「4 个里做完了 1 个」。 */
 function progressTitle(r: Row): string {
   // 措辞单源在 statusText.sessionProgressTitle：taskIndex=0（结束时还没定位到具体任务）
-  // 不能 clamp 成「第 1 个」——同一行的可见文本写的是「结束于 0/4」，两处互相打脸
+  // 不能 clamp 成「第 1 个」——同一行的可见文本写的是「停在 0/4」，两处互相打脸
   return sessionProgressTitle(r.progress, { withMilestone: true })
+}
+/** 状态 / 进度合并列的定位短语：只说停在哪一格；结果（完成/中断/超时）由左侧徽章承担，
+    不再用「结束于 / 中断于」把同一件事说两遍（2026-10-23 用户走查）。 */
+function progressStopText(r: Row): string {
+  const p = r.progress
+  if (!p || !Number.isFinite(p.totalTasks) || p.totalTasks <= 0) return ''
+  const pos = `${Math.min(Math.max(p.taskIndex, 0), p.totalTasks)}/${p.totalTasks}`
+  return `停在 ${pos}`
 }
 
 /* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → refreshNow） */
@@ -1097,12 +1085,11 @@ defineExpose({ refreshNow })
    fixed 档下按表头宽度定死，余量按各列宽度权重摊开；断点与 isTableCompact/Narrow/Mid
    的列显隐对齐，隐藏列的宽度不参与分配。 */
 .ts-c-user { width: 174px; }
-.ts-c-status { width: 104px; }
+.ts-c-status { width: 204px; }
 .ts-c-track { width: 88px; }
 .ts-c-dur { width: 78px; }
 .ts-c-msg { width: 72px; }
 .ts-c-kp { width: 66px; }
-.ts-c-prog { width: 110px; }
 .ts-c-out { width: 190px; }
 .ts-c-att { width: 54px; }
 .ts-c-start { width: 92px; }
@@ -1115,10 +1102,9 @@ defineExpose({ refreshNow })
 @media (max-width: 1279px) {
   .ts-c-topic { width: 160px; }
   .ts-c-user { width: 150px; }
-  .ts-c-status { width: 98px; }
+  .ts-c-status { width: 190px; }
   .ts-c-dur { width: 74px; }
   .ts-c-msg { width: 68px; }
-  .ts-c-prog { width: 104px; }
   .ts-c-out { width: 188px; }
   .ts-c-act { width: 90px; }
 }
@@ -1150,15 +1136,9 @@ defineExpose({ refreshNow })
 .ts-ia { display: grid; gap: 2px; justify-items: start; max-width: 100%; min-width: 0; overflow: hidden; }.ts-ia > * { min-width: 0; max-width: 100%; }/* 时长格：容器别再裁主值（2026-10-21 用户「时长被截断」：td 81px / 内容盒 49px /「27 分钟」53px，
    被 overflow:hidden 切掉 4px）。.ts-ia 的 min-width:0 + overflow:hidden 本是给副行省略号用的，
    主值只有 4~6 个字，让回 max-content，auto 布局才会按字宽给这列留位 */
-.ts-ia--dur { overflow: visible; }.ts-ia--dur > .ts-ia__dur { min-width: max-content; max-width: none; white-space: nowrap; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--long { color: var(--mk-amber); }.ts-prog { display: grid; gap: 4px; max-width: 96px; }.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }.ts-prog__bar { width: 88px; height: 5px; }/* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
-.ts-prog--done {
-  display: inline-flex;
-  align-items: center;
-  color: var(--mk-green);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  white-space: nowrap;
-}/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
+.ts-ia--dur { overflow: visible; }.ts-ia--dur > .ts-ia__dur { min-width: max-content; max-width: none; white-space: nowrap; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--long { color: var(--mk-amber); }/* 状态 / 进度合并列（2026-10-23）：位置短语只占一行原地文字，不再配迷你条；
+   结果由左侧徽章着色（完成绿 / 超时红 / 暂停琥珀），条与文字同说一件事。 */
+.ts-prog { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
    选中态（筛选生效中）由模板守卫——abnormalOnly 时不再加本类，让位给 .mk-pill--active 的蓝 */
 /* 分布带已退役（2026-10-17）：原页面级 .ts-distband 与类名一并下线，状态筛选在卡头 chips
    与「筛选」下拉；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
@@ -1172,7 +1152,7 @@ defineExpose({ refreshNow })
    68px = 4 字 × micro 档 + 徽章内边距，容得下最长档。
    只给主状态徽章（.ts-status__main）：标注徽章（低参与 / 手动结束）是内容宽，
    套上 68px 会把「低参与 + 手动结束」撑到 ~150px，把状态列拉宽又没换来任何对齐。 */
-.ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 118px; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
+.ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
    badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
 /* 产物格：两枚徽章在固定列宽内换行（不再靠 margin-left 贴前一枚） */
 .ts-out { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }

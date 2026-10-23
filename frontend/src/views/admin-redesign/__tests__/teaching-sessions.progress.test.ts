@@ -106,14 +106,14 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     const rows = wrapper.findAll('tbody tr');
     expect(rows[0].find('.ts-status').text()).toContain('已完成');
     expect(rows[0].find('.ts-status').text()).toContain('手动结束');
-    expect(rows[0].text()).toContain('结束于 1/4');
+    expect(rows[0].text()).toContain('停在 1/4');
     // 徽章 title 不把 manual-end 一律说成用户动作：后台收束悬挂会话也写同一个原因
     const badge = rows[0].findAll('.ts-status .mk-badge--sm').find((b) => b.text() === '手动结束');
     const t = badge!.attributes('title') || '';
     expect(t).toContain('任务未必做完');
     expect(t).not.toContain('用户主动结束');
     expect(rows[1].find('.ts-status').text()).not.toContain('手动结束');
-    expect(rows[1].text()).toContain('结束于 4/4');
+    expect(rows[1].text()).toContain('停在 4/4');
     expect(rows[2].find('.ts-status').text()).not.toContain('手动结束');
     wrapper.unmount();
   });
@@ -149,7 +149,7 @@ afterEach(() => {
 });
 
 describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）', () => {
-  it('live：已完成会话 → 进度列显「结束于 x/y」（不渲染进度条），title 保留历史进度', async () => {
+  it('live：已完成会话 → 状态/进度列显「停在 x/y」（不渲染进度条），title 保留历史进度', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -165,19 +165,19 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     });
     const wrapper = await mountLive();
     const headers = wrapper.findAll('th').map((th) => th.text());
-    expect(headers).toContain('进度');
+    expect(headers).toContain('状态 / 进度');
     const row = wrapper.find('tbody tr');
-    const prog = row.find('.ts-prog--done');
+    const prog = row.find('.ts-prog');
     expect(prog.exists()).toBe(true);
-    // 2026-10-18：终态不再说「已完成」（状态列已表达生命周期），进度列只回答结束在哪一格
-    expect(prog.text()).toBe('结束于 2/5');
+    // 2026-10-23：生命周期由徽章表达，位置只说「停在 x/y」，不复述结果
+    expect(prog.text()).toBe('停在 2/5');
     expect(row.find('.mk-minibar').exists()).toBe(false);
     expect(row.text()).not.toContain('任务 2/5');
     expect(prog.attributes('title')).toContain('阶段 2/4 · 第 2 个任务（共 5 个）');
     wrapper.unmount();
   });
 
-  it('live：失败/超时中断态 → 「中断于 任务 x/y」+ 条档 bad', async () => {
+  it('live：失败/超时中断态 → 状态徽章 + 「停在 x/y」', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -197,13 +197,16 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     });
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
-    expect(rows[0].text()).toContain('中断于 3/4');
-    expect(rows[0].find('.mk-minibar__fill').attributes('data-tone')).toBe('bad');
-    expect(rows[1].text()).toContain('中断于 1/2');
+    expect(rows[0].text()).toContain('失败');
+    expect(rows[0].text()).toContain('停在 3/4');
+    expect(rows[1].text()).toContain('超时');
+    expect(rows[1].text()).toContain('停在 1/2');
+    // 合并后不再有进度条：结果着色只由状态徽章承担
+    expect(rows[0].find('.mk-minibar').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it('live：P2 中断进度条颜色统一——「已被替代」与失败/超时同为 bad 红条（此前为蓝条）', async () => {
+  it('live：「已被替代」与失败/超时同为异常终态（徽章 tone 由共享字典给出）', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -219,8 +222,9 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     });
     const wrapper = await mountLive();
     const row = wrapper.find('tbody tr');
-    expect(row.text()).toContain('中断于 2/4');
-    expect(row.find('.mk-minibar__fill').attributes('data-tone')).toBe('bad');
+    expect(row.text()).toContain('已被替代');
+    expect(row.text()).toContain('停在 2/4');
+    expect(row.find('.ts-status__main').classes()).toContain('mk-badge--warn');
     wrapper.unmount();
   });
 
@@ -250,8 +254,8 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const row = wrapper.find('tbody tr');
     expect(row.find('.ts-prog--done').exists()).toBe(false);
-    // 第 5 列：课堂/用户/状态/时长/进度（2026-10-22 默认隐藏完成方式、消息、知识点、关注）
-    expect(row.find('td:nth-child(5) .mk-na').text()).toBe('—');
+    // 合并列内仍是「—」守卫（不再有独立的进度格）
+    expect(row.find('.ts-status .mk-na').text()).toBe('—');
     wrapper.unmount();
   });
 
@@ -265,8 +269,8 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
       }
     });
     const wrapper = await mountLive();
-    const prog = wrapper.find('tbody tr').find('.ts-prog--done');
-    expect(prog.text()).toBe('结束于 0/4');
+    const prog = wrapper.find('tbody tr').find('.ts-prog');
+    expect(prog.text()).toBe('停在 0/4');
     const title = prog.attributes('title') || '';
     expect(title).toContain('未进入具体任务（共 4 个）');
     expect(title).not.toContain('第 1 个任务');
