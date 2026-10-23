@@ -97,6 +97,10 @@ describe('MemoryReview 面板（学习者详情页签内）', () => {
     const audit = cardOf('概念归并审计');
     expect(audit.find('.mk-card__meta').exists()).toBe(false);
     expect(audit.text()).toContain('尚未观察过这个用户的记忆归并');
+    // 2026-10-23 用户「有什么意义吗下面表格都有了」：顶部摘要条整条撤除，重新观察并入审计卡头
+    expect(w.find('.mr-panels__bar').exists()).toBe(false);
+    expect(w.text()).not.toContain('有强度数据');
+    expect(audit.findAll('.mk-card__head button').map((b) => b.text())).toContain('重新观察');
     expect(w.text()).not.toContain('点「重新观察」跑一次');
     expect(w.text()).not.toContain('按负担预算排队');
     w.unmount();

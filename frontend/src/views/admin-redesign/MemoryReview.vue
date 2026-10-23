@@ -18,23 +18,9 @@
 
     <template v-else>
 
-      <!-- 面板栏：调度口径摘要 + 重新观察（原独立页状态条的两件事；返回/复制深链随页退役——
-           深链即学习者详情 URL，返回交给页签） -->
-      <div class="mr-panels__bar">
-        <strong class="mr-panels__title">记忆调度与治理</strong>
-        <span
-          class="mr-panels__meta"
-          title="到期占比 ≥20% 或 ≥5 条时标为需关注"
-        >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有强度数据 {{ detail.summary.withFsrsState }}</span>
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm"
-          :disabled="recomputing"
-          title="重新跑一次该用户的记忆复盘，结果实时刷新"
-          @click="recompute"
-        >{{ recomputing ? '观察中…' : '重新观察' }}</button>
-      </div>
-
+      <!-- 2026-10-23 用户「有什么意义吗下面表格都有了」：原面板栏「记忆调度与治理 + 痕迹/到期/
+           同族重复/从未提取/有强度数据」整条撤除——五个数全由下面各卡的表格/空态表达，栏名又与
+           页签名「记忆调度」重复。唯一有动作价值的「重新观察」并入概念归并审计卡头（结果就长在那张卡里）。 -->
       <div class="mr__detail mr__detail--embed">
       <!-- 1. 课内温故计划：本节该接几个 + 每个记忆点的负担与来源 -->
       <section class="mk-card">
@@ -106,6 +92,14 @@
           <!-- 来源（任务书 B：每条建议可见来源——同组建议同源，来源挂在卡头不逐行复读）。
                未观察状态不放卡头（2026-10-23 用户「这几种文案」）：改为卡内一行空态，卡头只报来源 -->
           <span v-if="detail.audit" class="mk-card__meta">来源：概念归并观察（{{ detail.audit.mode === 'apply' ? '自动执行' : '观察' }}模式）· {{ timeAgo(detail.audit.generatedAt) }}</span>
+          <!-- 重新观察：原面板栏唯一有动作价值的一项，跟着它产出的建议走（未观察时也是这张卡的动作） -->
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :disabled="recomputing"
+            title="重新跑一次该用户的记忆复盘，结果实时刷新"
+            @click="recompute"
+          >{{ recomputing ? '观察中…' : '重新观察' }}</button>
           <!-- 已执行历史入口（R7 任务书 B：mode=apply 审计一个入口可见）：默认展开保持既有可达性，
                可收起给三组建议让出主视觉；aria-expanded 供读屏 -->
           <button
@@ -1129,10 +1123,7 @@ async function recompute() {
 .mr-panels > *,
 .mr__detail > * { min-width: 0; }
 
-/* 面板栏：调度口径摘要 + 重新观察（原独立页状态条收敛为一行） */
-.mr-panels__bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.mr-panels__title { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
-.mr-panels__meta { flex: 1 1 auto; min-width: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow-wrap: anywhere; }
+/* 面板栏样式已随「记忆调度与治理」条撤除（2026-10-23）：重新观察并入概念归并审计卡头 */
 .mr-panels__empty { margin: 0; }
 
 /* 卡内小节标题（归并审计卡里的三段子列表）：左右 16px 与卡头对齐 */
