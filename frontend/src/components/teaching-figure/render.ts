@@ -1843,6 +1843,241 @@ function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): Rend
   return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };
 }
 
+/* ---------------- 二维坐标图 ---------------- */
+
+const CURVE_SAMPLES = 48;
+
+function fmtNum(v: number): string {
+  if (!Number.isFinite(v)) return '';
+  const r = Math.round(v * 1000) / 1000;
+  return String(Number.isInteger(r) ? r : r.toFixed(2).replace(/\.?0+$/, ''));
+}
+
+/**
+ * cartesian-plot：真正的二维坐标图（2026-10-23）。
+ *
+ * 学生要看的是「两条曲线在同一时刻处在同一高度」这种**只有空间能表达**的关系——
+ * 横轴 x、纵轴 y、曲线、等时刻辅助线。模型只给轴域、表达式/数据点、辅助线与箭头，
+ * 采样与排版全部由这里确定性完成（同一份 spec 永远画出同一张图）。
+ */
+function renderCartesianPlot({ title, x, y, series = [], guides = [], vectors = [], marks = [] }: any): RenderedFigure | null {
+  if (!x || !y || !(Number(x.max) > Number(x.min)) || !(Number(y.max) > Number(y.min))) return null;
+  if (!Array.isArray(series) || !series.length) return null;
+
+  const TONE: Record<string, string> = { accent: T.accent, ok: T.ok, warn: T.warn, neutral: T.muted };
+  const padL = 62;
+  // 右侧留出辅助线标签栏（写在画布外侧，绝不压在数据上）；宽度按最长标签动态给
+  const padR = Math.max(
+    24,
+    Math.min(
+      130,
+      14 + Math.max(0, ...(Array.isArray(guides) ? guides.map((g: any) => (g.label ? est(g.label, T.fontMicro) : 0)) : [])),
+    ),
+  );
+  const padB = 44;
+  const titleH = title ? T.fontTitle + 18 : 0;
+  const plotW = 560;
+  const plotH = 250;
+  const w = padL + plotW + padR;
+  // 图例按宽度换行：条目多时（曲线 + 频闪点）一行放不下，不能压到绘图区上
+  const legendRowH = 17;
+  const legendRows = (() => {
+    if (series.length <= 1) return 0;
+    let rows = 1;
+    let used = 0;
+    for (const s of series) {
+      const need = 13 + est(s.name, T.fontSmall) + 18;
+      if (used + need > plotW) {
+        rows += 1;
+        used = 0;
+      }
+      used += need;
+    }
+    return rows;
+  })();
+  const legendH = legendRows * legendRowH;
+  const legendY = titleH + 12;
+  const top = titleH + legendH + 20;
+  const axisY = top + plotH;
+  const h = axisY + padB;
+
+  const x0 = Number(x.min);
+  const x1 = Number(x.max);
+  const y0 = Number(y.min);
+  const y1 = Number(y.max);
+  const px = (v: number) => padL + ((v - x0) / (x1 - x0)) * plotW;
+  const py = (v: number) => axisY - ((v - y0) / (y1 - y0)) * plotH;
+
+  const parts: string[] = [...titleBlock(title, 16)];
+
+  // 图例：颜色与曲线一一对应；单系列不占版面（标题已说明）
+  if (series.length > 1) {
+    let lx = padL;
+    let ly = legendY;
+    series.forEach((s: any) => {
+      const need = 13 + est(s.name, T.fontSmall) + 18;
+      if (lx + need > padL + plotW) {
+        lx = padL;
+        ly += legendRowH;
+      }
+      const tone = TONE[s.tone] || T.accent;
+      parts.push(`<circle cx="${lx + 4}" cy="${ly - 4}" r="4" fill="${tone}"/>`);
+      parts.push(text(lx + 13, ly, s.name, 't-small', 'start'));
+      lx += need;
+    });
+  }
+
+  // 刻度网格（只画模型给了的刻度，缺省不脑补，避免把等距当结论）
+  const xTicks: number[] = Array.isArray(x.ticks) ? x.ticks : [];
+  const yTicks: number[] = Array.isArray(y.ticks) ? y.ticks : [];
+  let lastXLabel = Number.NEGATIVE_INFINITY;
+  for (const t of xTicks) {
+    const gx = px(Number(t));
+    parts.push(`<line x1="${gx}" y1="${top}" x2="${gx}" y2="${axisY}" stroke="${T.line}" stroke-width="0.8" opacity="0.55"/>`);
+    if (gx - lastXLabel < 34) continue;
+    lastXLabel = gx;
+    parts.push(text(gx, axisY + 16, fmtNum(Number(t)), 't-tiny', 'middle'));
+  }
+  // 刻度太密时不印数字（只留网格线）：0.6 / 0.75 / 0.8 挤在一处会压字
+  let lastYLabel = Number.NEGATIVE_INFINITY;
+  for (const t of yTicks) {
+    const gy = py(Number(t));
+    parts.push(`<line x1="${padL}" y1="${gy}" x2="${padL + plotW}" y2="${gy}" stroke="${T.line}" stroke-width="0.8" opacity="0.55"/>`);
+    if (Math.abs(gy - lastYLabel) < 15) continue;
+    lastYLabel = gy;
+    parts.push(text(padL - 8, gy + 3.5, fmtNum(Number(t)), 't-tiny', 'end'));
+  }
+
+  // 坐标轴
+  parts.push(`<line x1="${padL}" y1="${top}" x2="${padL}" y2="${axisY}" stroke="${T.lineStrong}" stroke-width="1.5"/>`);
+  parts.push(`<line x1="${padL}" y1="${axisY}" x2="${padL + plotW}" y2="${axisY}" stroke="${T.lineStrong}" stroke-width="1.5"/>`);
+  if (x.label) parts.push(text(padL + plotW, axisY + 32, x.label, 't-tiny', 'end'));
+  if (y.label) parts.push(text(padL - 46, top - 6, y.label, 't-tiny', 'start'));
+
+  // 裁剪区：曲线越界不画到画布外（不靠猜域，直接裁）
+  const clipId = `tfx-clip-${uid}`;
+  parts.push(`<defs><clipPath id="${clipId}"><rect x="${padL}" y="${top}" width="${plotW}" height="${plotH}"/></clipPath></defs>`);
+
+  const drawSeries = (s: any): string[] => {
+    const tone = TONE[s.tone] || T.accent;
+    const out: string[] = [];
+    let pts: Array<[number, number]> = [];
+    if (s.form === 'parabola') {
+      const a = Number(s.a);
+      const b = Number(s.b);
+      const c = Number(s.c);
+      for (let i = 0; i <= CURVE_SAMPLES; i += 1) {
+        const vx = x0 + ((x1 - x0) * i) / CURVE_SAMPLES;
+        pts.push([vx, a * vx * vx + b * vx + c]);
+      }
+    } else if (s.form === 'linear') {
+      const k = Number(s.k);
+      const b = Number(s.b);
+      pts = [
+        [x0, k * x0 + b],
+        [x1, k * x1 + b],
+      ];
+    } else {
+      pts = (Array.isArray(s.points) ? s.points : []).map((p: any) => [Number(p[0]), Number(p[1])] as [number, number]);
+    }
+    if (!pts.length) return out;
+    // 只画落在轴域里的点：曲线冲出轴域时断成多段，不把坐标画到画布外
+    const inRange = (v: number, lo: number, hi: number) => v >= lo - 1e-9 && v <= hi + 1e-9;
+    const visible = pts.filter(([vx, vy]) => inRange(vx, x0, x1) && inRange(vy, y0, y1));
+    if (s.form === 'scatter') {
+      for (const [vx, vy] of visible) out.push(`<circle cx="${px(vx)}" cy="${py(vy)}" r="4" fill="${tone}"/>`);
+      return out;
+    }
+    // 连续可见点切成段（中间越界就断开，避免一条直线横穿画布）
+    const segments: Array<Array<[number, number]>> = [];
+    let run: Array<[number, number]> = [];
+    for (const p of pts) {
+      if (inRange(p[0], x0, x1) && inRange(p[1], y0, y1)) run.push(p);
+      else {
+        if (run.length > 1) segments.push(run);
+        run = [];
+      }
+    }
+    if (run.length > 1) segments.push(run);
+    for (const seg of segments) {
+      const d = seg.map(([vx, vy], i) => `${i === 0 ? 'M' : 'L'}${px(vx).toFixed(1)} ${py(vy).toFixed(1)}`).join(' ');
+      out.push(`<path d="${d}" fill="none" stroke="${tone}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`);
+    }
+    // 频闪点：等时刻采样点用实心点标出来——「每一拍都在同一高度」靠点对齐才看得见
+    if (s.dots) {
+      for (const [vx, vy] of visible) {
+        out.push(`<circle cx="${px(vx)}" cy="${py(vy)}" r="3.6" fill="${tone}" stroke="${T.surface}" stroke-width="1.2"/>`);
+      }
+    }
+    // 频闪点属于同一条曲线：同色实心点，不另立图例
+    if (Array.isArray(s.dotPoints)) {
+      for (const raw of s.dotPoints) {
+        const vx = Number(raw[0]);
+        const vy = Number(raw[1]);
+        if (!Number.isFinite(vx) || !Number.isFinite(vy)) continue;
+        if (vx < x0 || vx > x1 || vy < y0 || vy > y1) continue;
+        out.push(`<circle cx="${px(vx)}" cy="${py(vy)}" r="3.8" fill="${tone}" stroke="${T.surface}" stroke-width="1.2"/>`);
+      }
+    }
+    return out;
+  };
+
+  parts.push(`<g clip-path="url(#${clipId})">`);
+  for (const s of series) parts.push(...drawSeries(s));
+  parts.push('</g>');
+
+  // 等时刻辅助线：横向虚线 + 右侧时刻标签（就是「同一时刻两球同高」的证据）。
+  // 若同一高度已经有带标签的落点标注，虚线不再重复印字（两个标签贴在一起会压字）。
+  const markLabelYs = (Array.isArray(marks) ? marks : [])
+    .filter((m: any) => m?.label)
+    .map((m: any) => py(Number(m.at[1])));
+  for (const g of guides) {
+    if (g.axis === 'y') {
+      const gy = py(Number(g.at));
+      parts.push(`<line x1="${padL}" y1="${gy}" x2="${padL + plotW}" y2="${gy}" stroke="${T.muted}" stroke-width="1" stroke-dasharray="5 4" opacity="0.75"/>`);
+      const duplicated = markLabelYs.some((my) => Math.abs(my - gy) < 8);
+      if (g.label && !duplicated) parts.push(text(padL + plotW + 6, gy + 3.5, g.label, 't-tiny', 'start'));
+    } else {
+      const gx = px(Number(g.at));
+      parts.push(`<line x1="${gx}" y1="${top}" x2="${gx}" y2="${axisY}" stroke="${T.muted}" stroke-width="1" stroke-dasharray="5 4" opacity="0.75"/>`);
+      if (g.label) parts.push(text(gx + 3, top + 11, g.label, 't-tiny', 'start'));
+    }
+  }
+
+  // 点上的矢量箭头：初速度、落地速度这类分量，箭头长度即大小
+  const vectorLabelY: number[] = [];
+  for (const v of vectors) {
+    const [vx, vy] = v.at as [number, number];
+    const tx = px(vx + Number(v.dx));
+    const ty = py(vy + Number(v.dy));
+    parts.push(arrow(px(vx), py(vy), tx, ty, { color: T.lineStrong, sw: 1.8 }));
+    if (v.label) {
+      // 同一处起笔的多个箭头（两个初速度）标签会叠在一起：挨得太近就往下让一行
+      let ly = ty - 5;
+      while (vectorLabelY.some((prev) => Math.abs(prev - ly) < 12)) ly += 14;
+      vectorLabelY.push(ly);
+      parts.push(text(tx + 4, ly, v.label, 't-tiny', 'start'));
+    }
+  }
+
+  // 关键点标注（落点等）：实心点 + 标签。
+  // 点在轴上时标签要抬到点上方——贴轴下方会与刻度数字打架（2026-10-23 首张样例实拍）。
+  for (const m of marks) {
+    const [mx, my] = m.at as [number, number];
+    const tone = TONE[m.tone] || T.ink;
+    const cx = px(mx);
+    const cy = py(my);
+    parts.push(`<circle cx="${cx}" cy="${cy}" r="4.2" fill="${tone}" stroke="${T.surface}" stroke-width="1.4"/>`);
+    const labelW = est(m.label, T.fontMicro);
+    const anchor = cx + 8 + labelW <= padL + plotW ? 'start' : 'end';
+    const lx = anchor === 'start' ? cx + 8 : cx - 8;
+    const nearAxis = cy > axisY - 26;
+    parts.push(text(lx, nearAxis ? cy - 9 : cy + 16, m.label, 't-tiny', anchor, `fill="${tone}"`));
+  }
+
+  return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };
+}
+
 /* ---------------- 分派 ---------------- */
 
 /**
@@ -1890,6 +2125,8 @@ export function renderSpecFigure(
         return renderBullseye(spec);
       case 'range-bar':
         return renderRangeBar(spec);
+      case 'cartesian-plot':
+        return renderCartesianPlot(spec);
       default:
         return null;
     }

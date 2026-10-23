@@ -530,7 +530,8 @@ export type TeachingFigureKind =
   | 'tree'
   | 'venn'
   | 'bullseye'
-  | 'range-bar';
+  | 'range-bar'
+  | 'cartesian-plot';
 
 export interface TeachingFigure {
   /** 渲染引擎；归一化后恒为 'svg'（其他值整块丢弃，见 normalizeFigure） */
@@ -915,7 +916,17 @@ const FIGURE_KINDS: ReadonlySet<string> = new Set([
   // 2026-10-21：区间条（range-bar）。多组「从 A 到 B」的波动/范围并排比较——
   // 挤在一维位置线上必然把 ΔY 画成 ΔX（走查 #4~#7/#13~#15 的根因），给它自己的轨道。
   'range-bar',
+  // 2026-10-23：二维科学坐标图（cartesian-plot）。函数曲线/平抛轨迹/实验数据点——
+  // 手机里那节平抛课该出的「频闪等时轨迹」就是它，此前系统只能拿 grid 表格硬塞。
+  'cartesian-plot',
 ]);
+
+/**
+ * 已退役图型：仍留在类型与渲染器里（历史消息还要能显示），但**新的出图一律拒绝**。
+ * 用户 2026-10-23 判定这四种「从视觉传达上根本不是图」：grid 是网格表、compare 是双栏列表、
+ * bins 是分栏列表、ladder 是台阶列表——都只是在给句子加圆角边框。
+ */
+const RETIRED_FIGURE_KINDS: ReadonlySet<string> = new Set(['grid', 'compare', 'bins', 'ladder']);
 
 /** 调色板白名单：由服务端按学科盖章，模型不给也行。 */
 const FIGURE_PALETTES: ReadonlySet<string> = new Set(['indigo', 'earth', 'tech', 'warm', 'violet', 'mono']);
@@ -1040,6 +1051,13 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
   const kindRaw = typeof record.kind === 'string' ? record.kind.trim().toLowerCase() : '';
   const kind = kindRaw || 'position-line';
   if (!FIGURE_KINDS.has(kind) || !isFigureKindEnabled(kind)) return null;
+  // 文字装框类图型退役（用户 2026-10-23：「这不叫图，叫制表信息」）。
+  // grid/compare/bins/ladder 的本质是「带边框的排版文字」，学生读的是框里的句子，
+  // 不是几何；这类内容用正文 Markdown 表格更清楚，也不该占掉一节课的出图名额。
+  if (RETIRED_FIGURE_KINDS.has(kind)) {
+    logger.warn('[teaching-figure] 图型已退役（文字装框类），本轮不出图', { kind });
+    return null;
+  }
   const caption = toFigureText(record.caption, FIGURE_CAPTION_MAX);
   const why = toFigureText(record.why, FIGURE_WHY_MAX);
   const paletteRaw = typeof record.palette === 'string' ? record.palette.trim().toLowerCase() : '';
@@ -1249,24 +1267,16 @@ function normalizeDash(value: unknown): string | null {
 
 function normalizeFigureSpec(kind: TeachingFigureKind, raw: Record<string, unknown>): Record<string, unknown> | null {
   switch (kind) {
-    case 'grid':
-      return normalizeGridSpec(raw);
     case 'matrix':
       return normalizeMatrixSpec(raw);
-    case 'compare':
-      return normalizeCompareSpec(raw);
     case 'quadrant':
       return normalizeQuadrantSpec(raw);
     case 'bipartite':
       return normalizeBipartiteSpec(raw);
     case 'board':
       return normalizeBoardSpec(raw);
-    case 'bins':
-      return normalizeBinsSpec(raw);
     case 'balance':
       return normalizeBalanceSpec(raw);
-    case 'ladder':
-      return normalizeLadderSpec(raw);
     case 'cycle':
       return normalizeCycleSpec(raw);
     case 'tree':
@@ -1277,6 +1287,8 @@ function normalizeFigureSpec(kind: TeachingFigureKind, raw: Record<string, unkno
       return normalizeBullseyeSpec(raw);
     case 'range-bar':
       return normalizeRangeBarSpec(raw);
+    case 'cartesian-plot':
+      return normalizeCartesianPlotSpec(raw);
     default:
       return null;
   }
@@ -1312,42 +1324,6 @@ function normalizeSide(value: unknown, allowed: readonly string[]): string | nul
   return allowed.includes(side) ? side : null;
 }
 
-/**
- * bins：把条目**放进容器**（所属关系）。要求 2~4 个箱子、每箱 1~8 条，
- * 且至少有一箱装东西——空箱子不构成信息。
- */
-function normalizeBinsSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
-  const rawBins = Array.isArray(raw.bins) ? raw.bins : [];
-  if (rawBins.length < 2 || rawBins.length > 4) return null;
-  const bins: Array<Record<string, unknown>> = [];
-  for (const item of rawBins) {
-    if (!item || typeof item !== 'object') continue;
-    const bin = item as Record<string, unknown>;
-    const label = toFigureLabel(bin.label, SPEC.labelMax);
-    if (!label) continue;
-    const items: Array<Record<string, unknown>> = [];
-    for (const rawItem of Array.isArray(bin.items) ? bin.items : []) {
-      const text = typeof rawItem === 'string' ? toFigureLabel(rawItem, SPEC.itemTextMax) : toFigureLabel((rawItem as Record<string, unknown>)?.label, SPEC.itemTextMax);
-      if (!text) continue;
-      const mark = typeof rawItem === 'object' ? toFigureLabel((rawItem as Record<string, unknown>)?.mark, SPEC.cellMarkMax) : null;
-      items.push({ label: text, ...(mark ? { mark } : {}) });
-      if (items.length >= SPEC.itemsMax) break;
-    }
-    const tone = normalizeTone(bin.tone, ['accent', 'ok', 'warn']);
-    bins.push({ label, items, ...(tone ? { tone } : {}) });
-  }
-  if (bins.length < 2) return null;
-  if (!bins.some((bin) => (bin.items as unknown[]).length)) return null;
-  const title = toFigureText(raw.title, SPEC.titleMax);
-  const note = toFigureText(raw.note, SPEC.noteMax);
-  const focusBin = toBoundedInt(raw.focus, 0, bins.length - 1);
-  return {
-    bins,
-    ...(focusBin !== null ? { focus: focusBin } : {}),
-    ...(title ? { title } : {}),
-    ...(note ? { note } : {}),
-  };
-}
 
 /** balance：两边各自的分量（weight 由代码换算成倾角，模型只给数）。 */
 function normalizeBalanceSide(value: unknown): Record<string, unknown> | null {
@@ -1435,26 +1411,153 @@ function normalizeRangeBarSpec(raw: Record<string, unknown>): Record<string, unk
   };
 }
 
-function normalizeLadderSpec(raw: Record<string, unknown>): Record<string, unknown> | null {  const steps: Array<Record<string, unknown>> = [];
-  for (const item of Array.isArray(raw.steps) ? raw.steps : []) {
+/**
+ * cartesian-plot：二维科学坐标图（2026-10-23）。
+ *
+ * 为什么必须补这个图型：平抛课被画成 5 张文字表格、光合曲线被画成网格——
+ * 因为渲染器里没有「横轴 x、纵轴 y、曲线、等时刻辅助线」这套东西，模型只能把公式塞进格子。
+ * 这里不追求通用绘图库，只收课堂上真正需要的四样：曲线（折线/抛物线/一次函数/散点）、
+ * 等值辅助线、点上的矢量箭头、落点标注。
+ *
+ * 约束（与其它图型一致：宁缺毋滥）：
+ * - 轴必须有确定区间（min<max）；刻度由代码生成，模型只给「希望在哪里标」，越界即丢；
+ * - 系列最多 3 条、每条最多 1 个表达式或 40 个点——课堂图不是数据面板；
+ * - 表达式用 a/b/c（抛物线 y=ax²+bx+c）或 k/b（一次函数）承载，由渲染器按轴域采样，
+ *   模型不必（也不许）自己列几十个点，否则它就会开始编数。
+ */
+function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const axisOf = (value: unknown, labelMax: number) => {
+    if (!value || typeof value !== 'object') return null;
+    const axis = value as Record<string, unknown>;
+    const min = toFiniteNumber(axis.min);
+    const max = toFiniteNumber(axis.max);
+    if (min === null || max === null || !(max > min)) return null;
+    const label = toFigureText(axis.label, labelMax);
+    const ticksRaw = Array.isArray(axis.ticks) ? axis.ticks : [];
+    const ticks = ticksRaw
+      .map((t) => toFiniteNumber(t))
+      .filter((t): t is number => t !== null && t >= min && t <= max)
+      .filter((t, i, arr) => arr.indexOf(t) === i)
+      .sort((a, b) => a - b)
+      .slice(0, 8);
+    return { min, max, ...(label ? { label } : {}), ...(ticks.length ? { ticks } : {}) };
+  };
+  const x = axisOf(raw.x, SPEC.labelMax);
+  const y = axisOf(raw.y, SPEC.labelMax);
+  if (!x || !y) return null;
+
+  const series: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.series) ? raw.series : []) {
     if (!item || typeof item !== 'object') continue;
-    const step = item as Record<string, unknown>;
-    const label = toFigureLabel(step.label, SPEC.labelMax);
-    if (!label) continue;
-    const sub = toFigureText(step.sub, SPEC.subMax);
-    const state = normalizeTone(step.state, ['done', 'current', 'todo']);
-    steps.push({ label, ...(sub ? { sub } : {}), ...(state ? { state } : {}) });
-    if (steps.length >= 6) break;
+    const s = item as Record<string, unknown>;
+    const name = toFigureLabel(s.name, SPEC.labelMax);
+    if (!name) continue;
+    const tone = normalizeTone(s.tone, ['accent', 'ok', 'warn', 'neutral']) || undefined;
+    const formRaw = typeof s.form === 'string' ? s.form.trim().toLowerCase() : '';
+    const out: Record<string, unknown> = { name, form: formRaw === 'scatter' ? 'scatter' : formRaw === 'parabola' ? 'parabola' : formRaw === 'linear' ? 'linear' : 'points' };
+    if (out.form === 'parabola') {
+      const a = toFiniteNumber(s.a);
+      const b = toFiniteNumber(s.b);
+      const c = toFiniteNumber(s.c);
+      if (a === null || b === null || c === null || a === 0) continue;
+      out.a = a;
+      out.b = b;
+      out.c = c;
+    } else if (out.form === 'linear') {
+      const k = toFiniteNumber(s.k);
+      const b = toFiniteNumber(s.b);
+      if (k === null || b === null) continue;
+      out.k = k;
+      out.b = b;
+    } else {
+      const points: Array<[number, number]> = [];
+      for (const p of Array.isArray(s.points) ? s.points : []) {
+        if (!Array.isArray(p) || p.length < 2) continue;
+        const px = toFiniteNumber(p[0]);
+        const py = toFiniteNumber(p[1]);
+        if (px === null || py === null) continue;
+        points.push([px, py]);
+        if (points.length >= 40) break;
+      }
+      const minPoints = out.form === 'scatter' ? 1 : 2;
+      if (points.length < minPoints) continue;
+      out.points = points;
+      if (s.dots === true) out.dots = true;
+    }
+    // 频闪点：曲线用 form=parabola/linear 表达，等时刻位置另给 dotPoints——
+    // 这样「曲线 + 每一拍的点」仍是**同一个系列**（同一颜色、一条图例），
+    // 不会让学生以为点和线是两回事（外审 2026-10-23：两条同名系列色几乎一样，分不清）。
+    if (Array.isArray(s.dotPoints) && s.dotPoints.length) {
+      const dots: Array<[number, number]> = [];
+      for (const p of s.dotPoints) {
+        if (!Array.isArray(p) || p.length < 2) continue;
+        const dx = toFiniteNumber(p[0]);
+        const dy = toFiniteNumber(p[1]);
+        if (dx === null || dy === null) continue;
+        dots.push([dx, dy]);
+        if (dots.length >= 24) break;
+      }
+      if (dots.length) out.dotPoints = dots;
+    }
+    if (tone) out.tone = tone;
+    series.push(out);
+    if (series.length >= 3) break;
   }
-  if (steps.length < 2) return null;
+  if (!series.length) return null;
+
+  const guides: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.guides) ? raw.guides : []) {
+    if (!item || typeof item !== 'object') continue;
+    const g = item as Record<string, unknown>;
+    const axis = g.axis === 'x' ? 'x' : g.axis === 'y' ? 'y' : null;
+    const at = toFiniteNumber(g.at);
+    const bounds = axis === 'x' ? x : axis === 'y' ? y : null;
+    if (!axis || at === null || !bounds || at < bounds.min || at > bounds.max) continue;
+    const label = toFigureLabel(g.label, SPEC.subMax);
+    guides.push({ axis, at, ...(label ? { label } : {}) });
+    if (guides.length >= 6) break;
+  }
+
+  const vectors: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.vectors) ? raw.vectors : []) {
+    if (!item || typeof item !== 'object') continue;
+    const v = item as Record<string, unknown>;
+    const at = Array.isArray(v.at) ? v.at : null;
+    const px = at ? toFiniteNumber(at[0]) : null;
+    const py = at ? toFiniteNumber(at[1]) : null;
+    const dx = toFiniteNumber(v.dx);
+    const dy = toFiniteNumber(v.dy);
+    if (px === null || py === null || dx === null || dy === null) continue;
+    if (dx === 0 && dy === 0) continue;
+    const label = toFigureLabel(v.label, SPEC.subMax);
+    vectors.push({ at: [px, py], dx, dy, ...(label ? { label } : {}) });
+    if (vectors.length >= 6) break;
+  }
+
+  // 落点/关键点标注：只标老师这一轮真的要学生看的那一两个点，多了就是贴纸。
+  const marks: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.marks) ? raw.marks : []) {
+    if (!item || typeof item !== 'object') continue;
+    const m = item as Record<string, unknown>;
+    const at = Array.isArray(m.at) ? m.at : null;
+    const px = at ? toFiniteNumber(at[0]) : null;
+    const py = at ? toFiniteNumber(at[1]) : null;
+    const label = toFigureLabel(m.label, SPEC.subMax);
+    if (px === null || py === null || !label) continue;
+    const tone = normalizeTone(m.tone, ['accent', 'ok', 'warn', 'neutral']);
+    marks.push({ at: [px, py], label, ...(tone ? { tone } : {}) });
+    if (marks.length >= 4) break;
+  }
+
   const title = toFigureText(raw.title, SPEC.titleMax);
-  const note = toFigureText(raw.note, SPEC.noteMax);
-  const focus = toBoundedInt(raw.focus, 0, steps.length - 1);
   return {
-    steps,
-    ...(focus !== null ? { focus } : {}),
+    x,
+    y,
+    series,
+    ...(guides.length ? { guides } : {}),
+    ...(vectors.length ? { vectors } : {}),
+    ...(marks.length ? { marks } : {}),
     ...(title ? { title } : {}),
-    ...(note ? { note } : {}),
   };
 }
 
@@ -1611,88 +1714,6 @@ function normalizeBullseyeSpec(raw: Record<string, unknown>): Record<string, unk
   };
 }
 
-/** grid：二维排布，每格是内容（不是"等待填写的空表"——那类属于输入控件，不是图）。 */
-function normalizeGridSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
-  const rows = toBoundedInt(raw.rows, 1, SPEC.rowsMax);
-  const cols = toBoundedInt(raw.cols, 1, SPEC.colsMax);
-  if (!rows || !cols) return null;
-  const rowLabels = toStringListFixed(raw.rowLabels, rows, SPEC.labelMax);
-  const colLabels = toStringListFixed(raw.colLabels, cols, SPEC.labelMax);
-  const cells: Array<Record<string, unknown>> = [];
-  let filled = 0;
-  for (const item of Array.isArray(raw.cells) ? raw.cells : []) {
-    if (!item || typeof item !== 'object') continue;
-    const cell = item as Record<string, unknown>;
-    const r = toBoundedInt(cell.r, 0, rows - 1);
-    const c = toBoundedInt(cell.c, 0, cols - 1);
-    if (r === null || c === null) continue;
-    const out: Record<string, unknown> = { r, c };
-    const text = toFigureLabel(cell.text, SPEC.cellTextMax);
-    if (text) {
-      out.text = text;
-      filled += 1;
-    }
-    if (cell.mask === true) out.mask = true;
-    if (cell.ghost === true) out.ghost = true;
-    const hl = normalizeTone(cell.hl, ['accent', 'warn', 'ok']);
-    if (hl) out.hl = hl;
-    const mark = toFigureLabel(cell.mark, SPEC.cellMarkMax);
-    if (mark) out.mark = mark;
-    // 什么内容都没有的格子不保留：渲染层会为它画一个空框，纯噪音。
-    if (!out.text && !out.mask && !out.ghost && !out.mark) continue;
-    cells.push(out);
-    if (cells.length >= rows * cols) break;
-  }
-  // 两行内容完全相同 = 表格没有信息量（2026-10-23 外审：h=5 / h=20 两行一样，还标错行名）。
-  if (rows >= 2) {
-    const rowText = (r: number) =>
-      cells
-        .filter((c) => c.r === r)
-        .map((c) => String(c.text ?? c.mark ?? (c.mask ? '?' : '')))
-        .join('|');
-    const seen = new Set<string>();
-    for (let r = 0; r < rows; r += 1) {
-      const key = rowText(r);
-      if (!key.trim()) continue;
-      if (seen.has(key)) return null;
-      seen.add(key);
-    }
-  }
-  // 全空网格 = 一张等待填写的表格图片——用户 2026-10-17 判定"填表做成图片没有意义"，整块丢弃。
-  if (filled < 2) return null;
-  // 「把句子塞进格子」不是图，是制表信息（用户 2026-10-23 原话）。
-  // 网格只在承载**可比较的读数**时才是几何：同一列里放两个数值，学生能一眼看出大小/相等/变化。
-  // 实测第 6 批 4 张 grid 里 3 张一个数字都没有（"同一高度下落 / 落点近 / 与 h 无关"），全是文字被排成了表。
-  const numericCells = cells.filter((c) => /\d/.test(String(c.text ?? ''))).length;
-  const proseCells = cells.filter((c) => {
-    const t = String(c.text ?? '');
-    // 带数字的格子（"h = 45 m；v₀y = 0"）是读数或公式，不算散文；不带数字又过长/带句读的才是句子
-    return !/\d/.test(t) && (t.length > 10 || /[，。、；]/.test(t));
-  }).length;
-  if (numericCells < 2 || numericCells * 2 < filled || proseCells > 0) return null;
-  // 行标签就是这一行的内容（左侧写"落高 0.45 m"、第一列又写"0.45 m"）= 同一信息写两遍，纯占版面。
-  // 2026-10-23 外审 #3/#5 两例。与其整张丢，不如撤掉重复的行标签，行身份仍由第一格承担。
-  const flat = (s: string) => s.replace(/[\s，,。.：:（）()]/g, '');
-  const dupRows = rowLabels.filter((lab, r) => {
-    const key = lab ? flat(lab) : '';
-    if (!key) return false;
-    return cells.some((c) => c.r === r && flat(String(c.text ?? '')).includes(key));
-  }).length;
-  const keepRowLabels = rowLabels.length > 0 && (rows < 2 || dupRows * 2 < rows);
-  const title = toFigureText(raw.title, SPEC.titleMax);
-  const note = toFigureText(raw.note, SPEC.noteMax);
-  const focus = normalizeFocus(raw.focus, ['row', 'col'], { rows, cols });
-  return {
-    rows,
-    cols,
-    cells,
-    ...(keepRowLabels ? { rowLabels } : {}),
-    ...(colLabels.length ? { colLabels } : {}),
-    ...(focus ? { focus } : {}),
-    ...(title ? { title } : {}),
-    ...(note ? { note } : {}),
-  };
-}
 
 const MATRIX_TONES = ['hit', 'miss', 'dup', 'key'] as const;
 
@@ -1738,99 +1759,7 @@ function normalizeMatrixSpec(raw: Record<string, unknown>): Record<string, unkno
   };
 }
 
-/**
- * compare 的一侧。两种形态：
- * - 卡片形态（历史）：head + items（若干条对照点）；
- * - **链路形态**（2026-10-20 实跑教训：两栏文字卡里学生看不出架构差异）：
- *   head + chain（客户端 → 组件 → 组件，**箭头数就是跳数**）+ 可选的 items（痛点/收口）。
- *   chain 一旦给出，items 允许为空——跳数本身就是这张图的信息，不再靠条目凑版面。
- *   merged:true 的节点表示「两件事并进同一条日志/同一个状态机」，渲染成节点内的合一徽标。
- */
-function normalizeCompareSide(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object') return null;
-  const side = value as Record<string, unknown>;
-  // 对照栏头常是一句结论（「一般过去时：只锁定过去那一下」），比通用标签长。
-  // 超过 18 字就丢掉整侧 → 整张图被拒（2026-10-22 晚 30 分钟丢了 9 张 compare），
-  // 所以栏头放宽到 26 字并允许截断——栏头是必需信息，宁短勿缺。
-  const head = toFigureLabel(side.head, 26) ?? toFigureText(side.head, 26);
-  if (!head) return null;
-  const items = toStringList(side.items, SPEC.itemsMax, SPEC.itemTextMax);
-  const chain: Array<Record<string, unknown>> = [];
-  for (const rawNode of Array.isArray(side.chain) ? side.chain : []) {
-    if (!rawNode || typeof rawNode !== 'object') continue;
-    const node = rawNode as Record<string, unknown>;
-    const label = toFigureLabel(node.label, SPEC.labelMax);
-    if (!label) continue;
-    const sub = toFigureText(node.sub, SPEC.subMax);
-    const tone = normalizeTone(node.tone, ['ok', 'accent', 'warn', 'neutral']);
-    // from: "prev" 表示这一跳承接上一张卡（顺序链路：网关→服务→存储）。
-    // 2026-10-22 起渲染器把**缺省**当作串联，只有显式 "client" 才是并联扇出——所以 client 必须保留下来，
-    // 否则模型想画扇出也没有办法表达。
-    const fromPrev = node.from === 'prev' || node.from === true;
-    const fromClient = node.from === 'client';
-    chain.push({
-      label,
-      ...(sub ? { sub } : {}),
-      ...(tone ? { tone } : {}),
-      ...(node.merged === true ? { merged: true } : {}),
-      ...(fromPrev && chain.length ? { from: 'prev' } : {}),
-      ...(fromClient && chain.length ? { from: 'client' } : {}),
-      ...(node.rtt === true ? { rtt: true } : {}),
-    });
-    if (chain.length >= 4) break;
-  }
-  if (!items.length && !chain.length) return null;
-  const sub = toFigureText(side.sub, SPEC.subMax);
-  // 侧栏结论徽标（「2 套集群 · 2 次独立共识」这类）：它必须贴在这一栏上，
-  // 不能像旧版那样悬浮在两栏中间——位置本身在回答「这句结论说的是哪一边」。
-  const badge = toFigureLabel(side.badge, 24);
-  const badgeTone = normalizeTone(side.badgeTone, ['ok', 'accent', 'warn', 'neutral']);
-  const client = toFigureLabel(side.client, 12);
-  // 边界叫什么由内容决定：架构对比是「集群边界」，前端请求/响应链更像「组件异步边界」。
-  // 不给就用旧默认值，既有架构图的观感不变（2026-10-21 外部评审 #3）。
-  const boundaryLabel = toFigureLabel(side.boundaryLabel, 10);
-  return {
-    head,
-    items,
-    ...(sub ? { sub } : {}),
-    ...(client ? { client } : {}),
-    ...(badge ? { badge } : {}),
-    ...(badgeTone ? { badgeTone } : {}),
-    ...(boundaryLabel ? { boundaryLabel } : {}),
-    ...(chain.length ? { chain } : {}),
-  };
-}
 
-/** compare：两条分支并排对照（左/右各一个头 + 若干条目）。 */
-function normalizeCompareSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
-  const left = normalizeCompareSide(raw.left);
-  const right = normalizeCompareSide(raw.right);
-  if (!left || !right) return null;
-  // 纯两栏文字不画（2026-10-23 外部视觉评审：送审图里 compare 的 usefulness/geometry 最低，
-  // 两栏条目等于把句子装进框）。对照必须至少带一条链路，几何才有东西可承载。
-  const hasChain = [left, right].some(
-    (side) => Array.isArray((side as Record<string, unknown>).chain) && ((side as Record<string, unknown>).chain as unknown[]).length > 0,
-  );
-  if (!hasChain) return null;
-  const title = toFigureText(raw.title, SPEC.titleMax);
-  const note = toFigureText(raw.note, SPEC.noteMax);
-  const divider = toFigureText(raw.divider, 24);
-  // 默认左右分色（2026-10-21 走查 #1/#2）：对照图里左栏常是「反例/受限情况」，
-  // 两侧都刷成 ok 绿会让学习者误读成「两种都行」。默认左中性、右强调；模型可显式给 warn。
-  const leftTone = normalizeTone(raw.leftTone, ['ok', 'accent', 'neutral', 'warn']) || 'neutral';
-  const rightTone = normalizeTone(raw.rightTone, ['ok', 'accent', 'neutral', 'warn']) || 'accent';
-  const focus = normalizeFocus(raw.focus, ['side']);
-  return {
-    left,
-    right,
-    leftTone,
-    rightTone,
-    ...(divider ? { divider } : {}),
-    ...(focus?.side ? { focus: focus.side } : {}),
-    ...(title ? { title } : {}),
-    ...(note ? { note } : {}),
-  };
-}
 
 /** quadrant：2×2，四格各自有标题（顺序：左上、右上、左下、右下）。 */
 function normalizeQuadrantSpec(raw: Record<string, unknown>): Record<string, unknown> | null {

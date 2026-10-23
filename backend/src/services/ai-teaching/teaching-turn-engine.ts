@@ -74,7 +74,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripFigureNoteWhenAsking, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -900,9 +900,8 @@ export async function processStudentMessage(
   // 位置线图（2026-09-27 双通道重构 Scope B，同一条防答案泄漏硬闸）：
   // 追及/相遇题里"学生自己画位置线"正是练习本体——本轮布置了这类练习就不能给图，给了等于把答案摆出来。
   if (teachingOutput.figure) {
-    // 正文在提问时撤掉图底注：注里常写着"这一栏不变、那一栏随速度变"这种结论，
-    // 而正文刚把同一个问题抛给学生（第 6 批外审 12 张里 4 张的泄漏都由注引起）。
-    const deReviewed = stripFigureNoteWhenAsking(teachingOutput.figure, teachingOutput.reply);
+    // 课中图不挂结论注（用户 2026-10-23 硬指令）：caption / note 在实测里几乎只在替学生答题。
+    const deReviewed = stripInLessonAnnotations(teachingOutput.figure);
     const wanted = {
       ...deReviewed,
       // 学科调色板在这里盖章（模型不参与）：同一份 spec 换个学科就是另一套色相/材质，

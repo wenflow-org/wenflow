@@ -47,30 +47,6 @@ async function runWithFigure(raw: any): Promise<any> {
   return (output.internal?.ext as any)?.teaching;
 }
 
-describe('网格列标题对齐（2026-10-23 外审：缺一个表头会让后面的标题整体左移）', () => {
-  it('列标题少于列数时补空串：第二个标题仍落在第二列', async () => {
-    const out = await runWithFigure({
-      kind: 'grid',
-      rows: 2,
-      cols: 3,
-      colLabels: ['外层 id(a) vs id(b)', '是否波及 a'],
-      cells: [{ r: 0, c: 0, text: '3 m/s' }, { r: 0, c: 1, text: '6 m/s' }, { r: 0, c: 2, text: '0.4 s' }],
-    });
-    expect(out.figure?.kind).toBe('grid');
-    expect(out.figure.spec.colLabels).toEqual(['外层 id(a) vs id(b)', '是否波及 a', '']);
-  });
-
-  it('行标题少于行数时同样补齐', async () => {
-    const out = await runWithFigure({
-      kind: 'grid',
-      rows: 2,
-      cols: 1,
-      rowLabels: ['第一行'],
-      cells: [{ r: 0, c: 0, text: '45 m' }, { r: 1, c: 0, text: '3 s' }],
-    });
-    expect(out.figure.spec.rowLabels).toEqual(['第一行', '']);
-  });
-});
 
 describe('teaching-turn figure 归一化（位置线）', () => {
   beforeEach(() => mockCallPrompt.mockReset());
@@ -220,62 +196,7 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     ).toBeUndefined();
   });
 
-  it('grid：全空网格丢弃（填表不是图）；有内容的保留', async () => {
-    const blank = await runWithFigure({ kind: 'grid', spec: { rows: 2, cols: 2, cells: [] } });
-    expect(blank.figure).toBeUndefined();
 
-    const partly = await runWithFigure({
-      kind: 'grid',
-      spec: {
-        rows: 2,
-        cols: 2,
-        rowLabels: ['甲', '乙'],
-        colLabels: ['位置', '方向'],
-        cells: [
-          { r: 0, c: 0, text: '45 m', hl: 'accent' },
-          { r: 0, c: 1, text: '3 s' },
-          { r: 1, c: 0, mask: true },
-          { r: 1, c: 1, text: '这个格子里的字太长了超过了二十六个字的上限因此这一条应当被丢掉' },
-        ],
-      },
-    });
-    expect(partly.figure.kind).toBe('grid');
-    expect(partly.figure.spec.cells).toEqual([
-      { r: 0, c: 0, text: '45 m', hl: 'accent' },
-      { r: 0, c: 1, text: '3 s' },
-      { r: 1, c: 0, mask: true },
-    ]);
-  });
-
-  it('compare：左右都要有标题与条目；tone 非法回落默认（左中性/右强调）', async () => {
-    const ok = await runWithFigure({
-      kind: 'compare',
-      spec: {
-        left: { head: '行为主义', items: ['看结果', '给反馈'], chain: [{ label: '看结果' }] },
-        right: { head: '建构主义', items: ['看过程'] },
-        leftTone: 'rainbow',
-      },
-    });
-    expect(ok.figure.spec.left.items).toEqual(['看结果', '给反馈']);
-    // 左栏常放反例：默认不再刷成「通过绿」，给中性；右栏留强调色
-    expect(ok.figure.spec.leftTone).toBe('neutral');
-    expect(ok.figure.spec.rightTone).toBe('accent');
-
-    const warn = await runWithFigure({
-      kind: 'compare',
-      spec: {
-        left: { head: '反例', items: ['x'], chain: [{ label: 'x' }] },
-        right: { head: '正解', items: ['y'] },
-        leftTone: 'warn',
-        divider: '汇报的差值是 0.5 个点，比同组自身晃动还小，这句话故意写得很长用来验证截断',
-      },
-    });
-    expect(warn.figure.spec.leftTone).toBe('warn');
-    expect(warn.figure.spec.divider).toHaveLength(24);
-
-    const bad = await runWithFigure({ kind: 'compare', spec: { left: { head: '左', items: [] }, right: { head: '右', items: ['x'] } } });
-    expect(bad.figure).toBeUndefined();
-  });
 
   it('位置线：时间轴上不许用跨度标「幅度/差值」（跨量纲混画）', async () => {
     const bad = await runWithFigure({
@@ -344,46 +265,6 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     expect(bad.figure).toBeUndefined();
   });
 
-  it('grid：纯文字表格整张丢弃（用户 2026-10-23「这不叫图，叫制表信息」）', async () => {
-    const prose = await runWithFigure({
-      kind: 'grid',
-      spec: {
-        rows: 2,
-        cols: 3,
-        rowLabels: ['竖直方向', '水平方向'],
-        colLabels: ['初速度小', '中等', '初速度大'],
-        cells: [
-          { r: 0, c: 0, text: '同一高度下落' },
-          { r: 0, c: 1, text: '同一高度下落' },
-          { r: 0, c: 2, text: '同一高度下落' },
-          { r: 1, c: 0, text: '落点近' },
-          { r: 1, c: 1, text: '落点中' },
-          { r: 1, c: 2, text: '落点远' },
-        ],
-      },
-    });
-    expect(prose.figure).toBeUndefined();
-
-    // 同一张表换成可比较的读数 → 保留
-    const numeric = await runWithFigure({
-      kind: 'grid',
-      spec: {
-        rows: 2,
-        cols: 3,
-        rowLabels: ['竖直位移', '水平位移'],
-        colLabels: ['3 m/s', '4 m/s', '6 m/s'],
-        cells: [
-          { r: 0, c: 0, text: '45 m' },
-          { r: 0, c: 1, text: '45 m' },
-          { r: 0, c: 2, text: '45 m' },
-          { r: 1, c: 0, text: '9.0 m' },
-          { r: 1, c: 1, text: '12.0 m' },
-          { r: 1, c: 2, text: '18.0 m' },
-        ],
-      },
-    });
-    expect(numeric.figure.kind).toBe('grid');
-  });
 
   it('bipartite：只保留两端存在的连线；没有连线即丢弃', async () => {
     const ok = await runWithFigure({
@@ -432,25 +313,6 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     expect(bad.figure.spec.right.nodes).toEqual([{ id: 'x', label: 'x' }]);
   });
 
-  it('grid：行标签把该行内容复写一遍时撤掉标签（外审 #3/#5：同一信息占两列）', async () => {
-    const ok = await runWithFigure({
-      kind: 'grid',
-      spec: {
-        rows: 2,
-        cols: 2,
-        rowLabels: ['落高 0.45 m', '落高 1.25 m'],
-        colLabels: ['落高', '共用时间'],
-        cells: [
-          { r: 0, c: 0, text: '落高 0.45 m' },
-          { r: 0, c: 1, text: '0.30 s' },
-          { r: 1, c: 0, text: '1.25 m' },
-          { r: 1, c: 1, text: '0.50 s' },
-        ],
-      },
-    });
-    expect(ok.figure.spec.rowLabels).toBeUndefined();
-    expect(ok.figure.spec.cells).toHaveLength(4);
-  });
 
   it('board：坐标越界/非法棋子键丢弃；棋子不足两个即丢弃', async () => {
     const ok = await runWithFigure({
@@ -475,38 +337,6 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     expect(bad.figure).toBeUndefined();
   });
 
-  it('bins：2~4 个箱子、至少一箱有内容；空箱丢弃、focus 越界丢弃', async () => {
-    const ok = await runWithFigure({
-      kind: 'bins',
-      spec: {
-        title: '把证据分到三个箱子里',
-        bins: [
-          { label: '能直接采信', items: [{ label: '同一口径复现' }, { label: '样本够大', mark: '强' }], tone: 'ok' },
-          { label: '只能参考', items: ['个案经验'] },
-          { label: '不能用', items: [] },
-        ],
-        focus: 1,
-      },
-    });
-    expect(ok.figure.spec.bins).toHaveLength(3);
-    expect(ok.figure.spec.bins[0].items).toEqual([
-      { label: '同一口径复现' },
-      { label: '样本够大', mark: '强' },
-    ]);
-    expect(ok.figure.spec.focus).toBe(1);
-
-    // 只有一个箱子 / 全空 → 丢弃
-    expect((await runWithFigure({ kind: 'bins', spec: { bins: [{ label: '甲', items: ['a'] }] } })).figure).toBeUndefined();
-    expect(
-      (await runWithFigure({ kind: 'bins', spec: { bins: [{ label: '甲', items: [] }, { label: '乙', items: [] }] } })).figure,
-    ).toBeUndefined();
-    // 越界 focus 被丢，图本身仍保留
-    const over = await runWithFigure({
-      kind: 'bins',
-      spec: { bins: [{ label: '甲', items: ['a'] }, { label: '乙', items: [] }], focus: 9 },
-    });
-    expect(over.figure.spec.focus).toBeUndefined();
-  });
 
   it('balance：两侧都要有标题与条目；weight 越界丢弃、focus 只认 side', async () => {
     const ok = await runWithFigure({
@@ -542,33 +372,6 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     expect(loose.figure.spec.focus).toBeUndefined();
   });
 
-  it('ladder：2~6 级；state 非法即丢该字段，steps 不足两级整块丢弃', async () => {
-    const ok = await runWithFigure({
-      kind: 'ladder',
-      spec: {
-        title: '从读懂到能改',
-        steps: [
-          { label: '读懂例题', state: 'done', sub: '第 1 课时' },
-          { label: '自己走一遍', state: 'CURRENT' },
-          { label: '换条件重做', state: 'rainbow' },
-        ],
-        focus: 2,
-      },
-    });
-    expect(ok.figure.spec.steps).toEqual([
-      { label: '读懂例题', sub: '第 1 课时', state: 'done' },
-      { label: '自己走一遍', state: 'current' },
-      { label: '换条件重做' },
-    ]);
-    expect(ok.figure.spec.focus).toBe(2);
-
-    expect((await runWithFigure({ kind: 'ladder', spec: { steps: [{ label: '只有一级' }] } })).figure).toBeUndefined();
-    const capped = await runWithFigure({
-      kind: 'ladder',
-      spec: { steps: Array.from({ length: 9 }, (_, i) => ({ label: `第 ${i + 1} 级` })) },
-    });
-    expect(capped.figure.spec.steps).toHaveLength(6);
-  });
 
   it('cycle：3~6 个节点；"?" 归一成留白槽；不足三个节点整块丢弃', async () => {
     const ok = await runWithFigure({
@@ -659,59 +462,45 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     expect(three.figure).toBeUndefined();
   });
 
-  it('palette：白名单内保留，非法值不上图；focus 行/列越界丢弃', async () => {
+  it('palette：白名单内保留，非法值不上图；focus 越界丢弃', async () => {
     const earth = await runWithFigure({
-      kind: 'ladder',
+      kind: 'quadrant',
       palette: ' Earth ',
-      spec: { steps: [{ label: '第一级' }, { label: '第二级' }] },
+      spec: {
+        colLabels: ['效度高', '效度低'],
+        rowLabels: [{ label: '信度高' }],
+        cells: [{ title: '高信高效' }, { title: '高信低效' }, { title: '低信高效' }, { title: '低信低效' }],
+      },
     });
     expect(earth.figure.palette).toBe('earth');
 
     const neon = await runWithFigure({
-      kind: 'ladder',
+      kind: 'quadrant',
       palette: 'neon',
-      spec: { steps: [{ label: '第一级' }, { label: '第二级' }] },
+      spec: {
+        colLabels: ['效度高', '效度低'],
+        rowLabels: [{ label: '信度高' }],
+        cells: [{ title: '高信高效' }, { title: '高信低效' }, { title: '低信高效' }, { title: '低信低效' }],
+      },
     });
     expect(neon.figure.palette).toBeUndefined();
 
     const focusOk = await runWithFigure({
-      kind: 'grid',
-      spec: {
-        rows: 2,
-        cols: 2,
-        cells: [
-          { r: 0, c: 0, text: '3 m/s' },
-          { r: 1, c: 1, text: '0.4 s' },
-        ],
-        focus: { row: 1, col: 1 },
-      },
+      kind: 'venn',
+      spec: { left: { head: '甲', items: ['x'] }, right: { head: '乙', items: ['y'] } },
     });
-    expect(focusOk.figure.spec.focus).toEqual({ row: 1, col: 1 });
-
-    const focusBad = await runWithFigure({
-      kind: 'grid',
-      spec: {
-        rows: 2,
-        cols: 2,
-        cells: [
-          { r: 0, c: 0, text: '3 m/s' },
-          { r: 1, c: 1, text: '0.4 s' },
-        ],
-        focus: { row: 9, col: 9, side: 'left' },
-      },
-    });
-    expect(focusBad.figure.spec.focus).toBeUndefined();
+    expect(focusOk.figure.spec.focus).toBeUndefined();
   });
 
   it('未知图型整块丢弃；spec 与顶层字段两种写法都接受', async () => {
     expect((await runWithFigure({ kind: 'pie-chart', spec: { rows: 1, cols: 1 } })).figure).toBeUndefined();
 
     const topLevel = await runWithFigure({
-      kind: 'compare',
-      left: { head: '左', items: ['a'], chain: [{ label: 'a' }] },
+      kind: 'venn',
+      left: { head: '左', items: ['a'] },
       right: { head: '右', items: ['b'] },
     });
-    expect(topLevel.figure.kind).toBe('compare');
+    expect(topLevel.figure.kind).toBe('venn');
   });
 
   it('kill switch：TEACHING_FIGURE_SPEC_DISABLED=1 时只保留位置线', async () => {
@@ -719,7 +508,7 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     process.env.TEACHING_FIGURE_SPEC_DISABLED = '1';
     try {
       const specFigure = await runWithFigure({
-        kind: 'compare',
+        kind: 'venn',
         spec: { left: { head: '左', items: ['a'] }, right: { head: '右', items: ['b'] } },
       });
       expect(specFigure.figure).toBeUndefined();
@@ -732,119 +521,7 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
   });
 });
 
-describe('compare 链路形态（架构/请求路径对比）', () => {
-  it('只给 chain 不给 items 也成立：跳数是信息本身，不靠条目凑版面', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      spec: {
-        left: {
-          head: '外置协调',
-          badge: '2 套集群 · 2 次独立共识',
-          badgeTone: 'warn',
-          client: '客户端',
-          chain: [
-            { label: '共识一：协调集群', sub: '定路由、选主', tone: 'warn' },
-            { label: '共识二：存储节点', sub: '写日志与数据', tone: 'warn' },
-          ],
-        },
-        right: {
-          head: '内置共识',
-          badge: '单一系统 · 1 次共识',
-          badgeTone: 'ok',
-          chain: [{ label: '业务进程内置状态机', sub: '两件事落同一条日志', merged: true, tone: 'ok' }],
-        },
-      },
-    });
-    expect(out.figure.kind).toBe('compare');
-    expect(out.figure.spec.left.chain).toHaveLength(2);
-    expect(out.figure.spec.right.chain[0].merged).toBe(true);
-    expect(out.figure.spec.left.badge).toBe('2 套集群 · 2 次独立共识');
-    expect(out.figure.spec.right.badgeTone).toBe('ok');
-    expect(out.figure.spec.left.client).toBe('客户端');
-    // items 允许为空（旧契约要求必须有条目，链路形态下不成立）
-    expect(out.figure.spec.left.items).toEqual([]);
-  });
 
-  it('boundaryLabel：随内容传（组件异步边界），不给则保持默认（渲染器回落集群边界）', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      spec: {
-        left: { head: '错误现状', boundaryLabel: '组件异步边界', chain: [{ label: '请求发出' }] },
-        right: { head: '应有形状', chain: [{ label: '带号请求' }] },
-      },
-    });
-    expect(out.figure.spec.left.boundaryLabel).toBe('组件异步边界');
-    expect(out.figure.spec.right.boundaryLabel).toBeUndefined();
-
-    const tooLong = await runWithFigure({
-      kind: 'compare',
-      spec: {
-        left: { head: '左', boundaryLabel: '这是一个非常非常长的边界说明文字', chain: [{ label: '一跳' }] },
-        right: { head: '右', chain: [{ label: '一跳' }] },
-      },
-    });
-    expect(String(tooLong.figure.spec.left.boundaryLabel).length).toBeLessThanOrEqual(10);
-  });
-
-  it('链节点缺 label 丢弃；全部无效且无 items → 整块丢弃', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      spec: {
-        left: { head: '左', chain: [{ sub: '没有标签' }, { label: '有效一跳' }] },
-        right: { head: '右', items: ['有条目'] },
-      },
-    });
-    expect(out.figure.spec.left.chain).toHaveLength(1);
-    expect(out.figure.spec.left.chain[0].label).toBe('有效一跳');
-
-    const bad = await runWithFigure({ kind: 'compare', spec: { left: { head: '左', chain: [] }, right: { head: '右' } } });
-    expect(bad.figure).toBeUndefined();
-  });
-
-  it('链长上限 4 跳（再多就不是「对比几条路径」而是画布线图了）', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      spec: {
-        left: { head: '左', chain: Array.from({ length: 7 }, (_, i) => ({ label: `第${i + 1}跳` })) },
-        right: { head: '右', chain: [{ label: '一跳' }] },
-      },
-    });
-    expect(out.figure.spec.left.chain).toHaveLength(4);
-  });
-});
-
-describe('compare 链路形态：顺序段与往返', () => {
-  it('from:"prev" 承接上一张卡；第一个节点不能承接（回落成客户端直连）', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      spec: {
-        left: {
-          head: '分开部署',
-          chain: [
-            { label: '网关', from: 'prev' },
-            { label: '订单服务', from: 'prev' },
-          ],
-        },
-        right: { head: '同进程', chain: [{ label: '单模块' }] },
-      },
-    });
-    // 第一个节点的 from 无意义，必须被丢掉，否则渲染层找不到「上一张卡」
-    expect(out.figure.spec.left.chain[0].from).toBeUndefined();
-    expect(out.figure.spec.left.chain[1].from).toBe('prev');
-  });
-
-  it('rtt:true 保留（表示这一跳要等回话，不是单向投递）', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      spec: {
-        left: { head: '左', chain: [{ label: '网关', rtt: true }] },
-        right: { head: '右', chain: [{ label: '单模块' }] },
-      },
-    });
-    expect(out.figure.spec.left.chain[0].rtt).toBe(true);
-    expect(out.figure.spec.right.chain[0].rtt).toBeUndefined();
-  });
-});
 
 describe('位置线：group（归类括号）与 spans（跨度）分工', () => {
   const run = async (extra: Record<string, unknown>) => runWithFigure({
@@ -933,98 +610,81 @@ describe('teaching-turn figure 归一化（range-bar，2026-10-21 外审 #4~#7�
   });
 });
 
-describe('条目对象形态与显式并联（2026-10-22 真课丢图）', () => {
-  it('compare 条目写成 {label} 对象时照收，不再整栏清空导致丢图', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      left: { head: '一般过去', items: [{ label: '只锁定过去那一下' }, { text: '与现在断开' }], chain: [{ label: '过去' }] },
-      right: { head: '现在完成', items: [{ value: '结果延续到现在' }] },
-      divider: '有没有碰到 NOW',
+describe('退役图型（用户 2026-10-23：「这不叫图，叫制表信息」）', () => {
+  it('grid / compare / bins / ladder 一律拒绝，即使 spec 完全合法', async () => {
+    const grid = await runWithFigure({
+      kind: 'grid',
+      spec: { rows: 1, cols: 2, cells: [{ r: 0, c: 0, text: '3 m/s' }, { r: 0, c: 1, text: '6 m/s' }] },
     });
-    expect(out.figure?.kind).toBe('compare');
-    expect(out.figure.spec.left.items).toEqual(['只锁定过去那一下', '与现在断开']);
-    expect(out.figure.spec.right.items).toEqual(['结果延续到现在']);
-  });
+    expect(grid.figure).toBeUndefined();
 
-  it('链路里显式的 from:"client" 要保留（渲染器缺省=串联后，扇出只能靠它表达）', async () => {
-    const out = await runWithFigure({
+    const compare = await runWithFigure({
       kind: 'compare',
-      left: {
-        head: '客户端并联',
-        client: '浏览器',
-        chain: [{ label: '请求一' }, { label: '请求二', from: 'client' }],
+      spec: { left: { head: '左', chain: [{ label: 'a' }] }, right: { head: '右', chain: [{ label: 'b' }] } },
+    });
+    expect(compare.figure).toBeUndefined();
+
+    const bins = await runWithFigure({ kind: 'bins', spec: { bins: [{ head: '甲', items: ['x'] }, { head: '乙', items: ['y'] }] } });
+    expect(bins.figure).toBeUndefined();
+
+    const ladder = await runWithFigure({ kind: 'ladder', spec: { steps: [{ label: '一级' }, { label: '二级' }] } });
+    expect(ladder.figure).toBeUndefined();
+  });
+});
+
+describe('cartesian-plot：二维坐标图（2026-10-23 平抛课实测）', () => {
+  const base = {
+    x: { label: '水平距离 / m', min: 0, max: 3, ticks: [0, 1, 2, 3] },
+    y: { label: '高度 / m', min: 0, max: 1, ticks: [0, 0.5, 1] },
+  };
+
+  it('抛物线 + 频闪点 + 等时刻辅助线：保留并原样带出', async () => {
+    const ok = await runWithFigure({
+      kind: 'cartesian-plot',
+      spec: {
+        ...base,
+        title: '平抛频闪：3 m/s vs 6 m/s',
+        series: [
+          { name: '3 m/s', form: 'parabola', a: -0.55, b: 0, c: 1, tone: 'ok' },
+          { name: '6 m/s', form: 'parabola', a: -0.55, b: 0, c: 1, tone: 'accent', dots: true },
+        ],
+        guides: [{ axis: 'y', at: 0.8, label: 't=0.4 s' }],
+        vectors: [{ at: [0, 1], dx: 0.6, dy: 0, label: 'v₀' }],
+        marks: [{ at: [3, 0], label: '落地', tone: 'accent' }],
       },
-      right: { head: '顺序链路', client: '浏览器', chain: [{ label: '请求' }, { label: '响应回来' }] },
     });
-    expect(out.figure.spec.left.chain[1].from).toBe('client');
-    expect(out.figure.spec.right.chain[1].from).toBeUndefined();
-  });
-});
-
-describe('网格两行内容完全相同 → 整张丢弃（2026-10-23 外审：h=5/h=20 两行一样）', () => {
-  it('重复行被拒', async () => {
-    const out = await runWithFigure({
-      kind: 'grid',
-      rows: 2,
-      cols: 2,
-      rowLabels: ['h=5', 'h=20'],
-      cells: [
-        { r: 0, c: 0, text: '5 = 5t²' },
-        { r: 0, c: 1, text: 't = 1 秒' },
-        { r: 1, c: 0, text: '5 = 5t²' },
-        { r: 1, c: 1, text: 't = 1 秒' },
-      ],
-    });
-    expect(out.figure).toBeUndefined();
-  });
-  it('两行不同照出', async () => {
-    const out = await runWithFigure({
-      kind: 'grid',
-      rows: 2,
-      cols: 2,
-      cells: [
-        { r: 0, c: 0, text: '5 = 5t²' },
-        { r: 0, c: 1, text: 't = 1 秒' },
-        { r: 1, c: 0, text: '20 = 5t²' },
-        { r: 1, c: 1, text: 't = 2 秒' },
-      ],
-    });
-    expect(out.figure?.kind).toBe('grid');
-  });
-});
-
-describe('纯两栏文字对照不再出图（2026-10-23 外部视觉评审）', () => {
-  it('没有链路的两栏对照整块丢弃', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      left: { head: 'b = a', items: ['改 b 会带动 a'] },
-      right: { head: 'b = a[:]', items: ['改外层不影响 a'] },
-      divider: '外层是否新盒子',
-    });
-    expect(out.figure).toBeUndefined();
+    expect(ok.figure.kind).toBe('cartesian-plot');
+    expect(ok.figure.spec.series).toHaveLength(2);
+    expect(ok.figure.spec.series[1].form).toBe('parabola');
+    expect(ok.figure.spec.guides).toEqual([{ axis: 'y', at: 0.8, label: 't=0.4 s' }]);
+    expect(ok.figure.spec.vectors).toHaveLength(1);
+    expect(ok.figure.spec.marks).toHaveLength(1);
   });
 
-  it('至少一侧带链路时照出', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      left: { head: '外置协调', client: '客户端', chain: [{ label: 'ZooKeeper' }, { label: '业务库' }] },
-      right: { head: '内置共识', client: '客户端', chain: [{ label: 'Raft 状态机', merged: true }] },
+  it('轴区间缺失/反向、系列为空 → 整张丢弃；越界辅助线与点不画', async () => {
+    expect((await runWithFigure({ kind: 'cartesian-plot', spec: { ...base, x: { min: 3, max: 0 }, series: [{ name: 'a', points: [[0, 1], [1, 2]] }] } })).figure).toBeUndefined();
+    expect((await runWithFigure({ kind: 'cartesian-plot', spec: { ...base, series: [] } })).figure).toBeUndefined();
+    const bad = await runWithFigure({
+      kind: 'cartesian-plot',
+      spec: { ...base, series: [{ name: 'a', points: [[0, 1], [1, 2]] }], guides: [{ axis: 'y', at: 9, label: '越界' }] },
     });
-    expect(out.figure?.kind).toBe('compare');
-    expect(out.figure.spec.left.chain).toHaveLength(2);
+    expect(bad.figure.spec.guides).toBeUndefined();
   });
-});
 
-describe('对照栏头过长不再丢整张图（2026-10-22 晚实测）', () => {
-  it('19–26 字的栏头照收；超长截到 26 字而不是整侧作废', async () => {
-    const out = await runWithFigure({
-      kind: 'compare',
-      left: { head: '一般过去时：只锁定过去那一下，与现在断开', items: ['I lost my key.'], chain: [{ label: '过去' }] },
-      right: { head: '现在完成时：动作发生在过去但结果一路延续到现在并影响此刻', items: ['I have lost my key.'] },
-      divider: '有没有碰到 NOW',
+  it('抛物线缺系数 / 散点无点 → 该系列丢弃；全丢则整张作废', async () => {
+    const one = await runWithFigure({
+      kind: 'cartesian-plot',
+      spec: {
+        ...base,
+        series: [
+          { name: '坏', form: 'parabola' },
+          { name: '好', points: [[0, 1], [1, 0.6]] },
+        ],
+      },
     });
-    expect(out.figure?.kind).toBe('compare');
-    expect(out.figure.spec.left.head).toBe('一般过去时：只锁定过去那一下，与现在断开');
-    expect(Array.from(out.figure.spec.right.head as string).length).toBe(26);
+    expect(one.figure.spec.series).toHaveLength(1);
+
+    const none = await runWithFigure({ kind: 'cartesian-plot', spec: { ...base, series: [{ name: '坏', form: 'scatter' }] } });
+    expect(none.figure).toBeUndefined();
   });
 });

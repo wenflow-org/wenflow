@@ -380,6 +380,10 @@ export function matchAsciiCues(text: string | null | undefined): string[] {
  * 「一条建议服务两个目标」本该画二分连线，结果画成打勾矩阵。
  * 这里只做**建议**（写进本轮输入），真正的白名单与字段校验仍在 teaching-turn。
  */
+/**
+ * 能给出图型建议的只有「有专属几何」的那几种（2026-10-23 用户硬指令）。
+ * grid/compare/bins/ladder 已退役：它们是带边框的排版文字，不是图；matrix 也只在对账场景保留。
+ */
 export type FigureKindHint =
   | 'bullseye'
   | 'cycle'
@@ -387,12 +391,9 @@ export type FigureKindHint =
   | 'venn'
   | 'tree'
   | 'balance'
-  | 'ladder'
-  | 'bins'
   | 'matrix'
-  | 'compare'
-  | 'grid'
-  | 'range-bar';
+  | 'range-bar'
+  | 'cartesian-plot';
 
 interface KindRule {
   kind: FigureKindHint;
@@ -411,20 +412,16 @@ const KIND_RULES: readonly KindRule[] = [
   { kind: 'bipartite', test: /(多对多|一对多|同时服务|同时满足|连线|映射|一一对应|对应关系|配对|交叉关系)/, why: '一条对应多条，交叉连线本身是信息' },
   { kind: 'tree', test: /(五大领域|分类体系|子领域|子类|派生|词根|上位|下位|包含关系|长成|分为几大类|三层结构)/, why: '一个上位概念长出一层下位，是派生不是并列' },
   { kind: 'balance', test: /(取舍|权衡|哪边更重|压得住|孰轻孰重|代价|成本与收益|两难|牺牲)/, why: '两边各自的分量，靠倾斜方向表达' },
-  { kind: 'ladder', test: /(门槛|阶梯|逐级|先从.{0,12}再到|一级一级|递进)/, why: '先后与层级，位置本身就是信息' },
-  { kind: 'bins', test: /(归类|归位|分到|放进|哪一堆|三类|四类|两类各)/, why: '条目要放进容器，表达属于关系' },
   { kind: 'matrix', test: /(对账|命中|漏了|漏掉|堆砌|逐条核|一格一格|核对表)/, why: '逐条对账要看哪一格对上了' },
   // 数值区间必须有自己的轨道（2026-10-21 走查 #4~#7）：位置线一根轴画不出带宽，
   // 模型会把「波动幅度」横着画到日期上，读起来就是「周二到周六 = 0.7 个点」。
   { kind: 'range-bar', test: /(波动(区间|范围|带)|区间(对比|比较)|上下限|幅度范围|取值范围|高低区间|从.{0,6}到.{0,6}的(区间|范围))/, why: '每组是一段数值区间，并排看长度，不能压在时间轴上' },
-  { kind: 'compare', test: /(架构|选型|链路|请求路径|来回|往返|跳数|跨集群|集群边界|协调服务|内置还是外置|省掉一次|多一次)/, why: '两边差的不是文字条目，是请求要穿过几层网络边界——走 compare 的链路形态，箭头数就是跳数' },
+  // 二维坐标图（2026-10-23）：平抛/斜抛/函数图像/实验曲线——学生要看见的关系只存在于二维空间，
+  // 表格永远画不出来（用户：「这不叫图，叫制表信息」）。
+  { kind: 'cartesian-plot', test: /(平抛|斜抛|抛体|自由落体|抛物线|轨迹|函数图像|二次函数|一次函数|曲线(变化|关系)|成正比|成反比|斜率|截距)/, why: '关系写在横纵两轴上：两条曲线在同一时刻的比较只能靠坐标图看见' },
+  { kind: 'cartesian-plot', test: /(水平方向|竖直方向|分运动|合运动|速度分解|速度合成)/, why: '两个方向就是两条轴上的分量，画坐标图（等时刻辅助线 + 速度箭头）' },
   // 引用/指向类内容：名字→对象是二分连线，边就是「指向」，两栏文字会把这层信息丢掉。
   { kind: 'bipartite', test: /(变量名|指向|引用|同一个对象|浅拷贝|深拷贝|内存|栈|堆|别名|改它会不会影响)/, why: '名字与对象是两列，边表示指向；同一个对象要有多条边汇入' },
-  // 同一组时刻/取值上的两个方向或两组数据：网格的列是方向、行是时刻。
-  { kind: 'grid', test: /(水平方向|竖直方向|两个方向|分运动|合运动|同一时刻|每秒|时刻.{0,6}位移|随时间的?变化)/, why: '同一组时刻上的两列数据，行是时刻、列是方向，表本身就是分解' },
-  // 2026-10-23 视觉评审：模型把「对比/区别」一律画成两栏文字卡片（最大废图来源）。
-  // 改为引导二维表：两边在同一组判断点上逐项比，行列本身是几何；没有共同判断点就不画。
-  { kind: 'grid', test: /(对比|对照|区别|差异|不同点|两种写法|两种做法)/, why: '两边要在同一组判断点上逐项比：把判断点做成行、两边做成列，二维表才承载关系' },
 ];
 
 export function chooseFigureKind(text: string | null | undefined): { kind: FigureKindHint; why: string; match: string } | null {
@@ -441,7 +438,7 @@ export function chooseFigureKind(text: string | null | undefined): { kind: Figur
 export function figureKindHintLine(kind: { kind: FigureKindHint; why: string } | null): string {
   if (!kind) return '';
   return `\n本轮判断：这段内容的关系是「${kind.why}」——**优先用 kind=${kind.kind}**；`
-    + `只有确实不适合时才退回 grid/compare，并说明理由。`;
+    + `确实没有专属几何就不要出图（本轮改用正文表格或直接讲），不要拿表格充当图。`;
 }
 
 
@@ -650,23 +647,18 @@ export function shouldEmitFigureAmong(existingFigures: unknown[] | null | undefi
 }
 
 /**
- * 本轮正文在提问时，撤掉图下的结论注。
+ * 课中图不挂结论注（2026-10-23 用户硬指令：课中图严禁渲染总结性 note / caption）。
  *
- * 2026-10-23 第 5/6 批外审里，好几张"泄题"都不是画错了，而是图底注把答案写全了：
- * 「竖直一栏完全相同，水平一栏才随速度变」「两个名字汇到同一个外层方框」——
- * 老师刚让学生自己说这句，注先替他答了。图的几何本身没问题，删注即可。
+ * 图下那行注在实测里几乎只做一件事：把老师刚问、或学生还没自己说出口的结论写全。
+ * 第 6 批外审 12 张里 4 张的「泄题」都由注引发（「竖直一栏完全相同，水平一栏才随速度变」）。
+ * 因此不再按条件判断——课中图统一不带 caption / note，结论交给老师这轮的话去说。
  */
-export function stripFigureNoteWhenAsking<T extends { spec?: unknown }>(
-  figure: T,
-  reply: string | null | undefined,
-): T {
-  const text = String(reply ?? '');
-  if (!/[？?]/.test(text)) return figure;
+export function stripInLessonAnnotations<T extends { spec?: unknown }>(figure: T): T {
   const spec = figure?.spec;
-  if (!spec || typeof spec !== 'object' || typeof (spec as { note?: unknown }).note !== 'string') return figure;
-  if (!(spec as { note?: string }).note) return figure;
-  const { note: _dropped, ...rest } = spec as Record<string, unknown>;
-  return { ...figure, spec: rest };
+  const rest = spec && typeof spec === 'object' ? { ...(spec as Record<string, unknown>) } : null;
+  if (rest) delete rest.note;
+  const { caption: _caption, ...withoutCaption } = figure as Record<string, unknown>;
+  return { ...(withoutCaption as T), ...(rest ? { spec: rest } : {}) };
 }
 
 /**

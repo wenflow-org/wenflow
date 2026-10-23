@@ -549,3 +549,42 @@ describe('compare 链路：缺省 from 即串联（2026-10-22 真课 47 跳全�
     expect(hopBadges(svg)).toEqual(['1']);
   });
 });
+
+describe('cartesian-plot（2026-10-23：平抛该画频闪轨迹，不是表格）', () => {
+  const base = {
+    x: { label: '水平距离 / m', min: 0, max: 3, ticks: [0, 1, 2, 3] },
+    y: { label: '高度 / m', min: 0, max: 1, ticks: [0, 0.5, 1] },
+  };
+
+  it('两条抛物线 + 频闪点 + 等时刻虚线：都画出来，且全在画布内', () => {
+    const out = renderSpecFigure('cartesian-plot', {
+      ...base,
+      title: '平抛频闪：3 m/s vs 6 m/s',
+      series: [
+        { name: '3 m/s', form: 'parabola', a: -0.55, b: 0, c: 1, tone: 'ok' },
+        { name: '6 m/s', form: 'parabola', a: -0.55, b: 0, c: 1, tone: 'accent', dots: true },
+      ],
+      guides: [{ axis: 'y', at: 0.8, label: 't = 0.4 s' }],
+      marks: [{ at: [3, 0], label: '落地', tone: 'accent' }],
+    });
+    expect(out).not.toBeNull();
+    const svg = out!.svg;
+    expect(svg).toContain('平抛频闪');
+    expect(svg).toContain('t = 0.4 s');
+    expect(svg).toContain('落地');
+    // 两条曲线 + 频闪点：至少有 2 条 path 与若干 circle
+    expect(svg.match(/<path/g)!.length).toBeGreaterThanOrEqual(2);
+    expect(svg.match(/<circle/g)!.length).toBeGreaterThanOrEqual(4);
+    // 所有坐标不越界（裁剪在前端就生效，不靠浏览器兜底）
+    for (const m of svg.matchAll(/(?:cx|cy|x1|x2|y1|y2)="(-?\d+(?:\.\d+)?)"/g)) {
+      const v = Number(m[1]);
+      expect(v).toBeGreaterThanOrEqual(-1);
+      expect(v).toBeLessThanOrEqual(Math.max(out!.width, out!.height) + 1);
+    }
+  });
+
+  it('缺轴/无系列 → null（fail-open）', () => {
+    expect(renderSpecFigure('cartesian-plot', { x: { min: 0, max: 1 }, y: { min: 0, max: 1 } })).toBeNull();
+    expect(renderSpecFigure('cartesian-plot', { series: [] })).toBeNull();
+  });
+});
