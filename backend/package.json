@@ -166,6 +166,8 @@
     "typescript": "^5.3.3"
   },
   "overrides": {
-    "tar": ">=7.5.21"
+    "tar": ">=7.5.21",
+    "follow-redirects": "^1.16.1",
+    "ip-address": "^10.7.4"
   }
 }
