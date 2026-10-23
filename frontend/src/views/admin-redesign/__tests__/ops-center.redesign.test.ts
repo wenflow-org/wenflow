@@ -40,7 +40,7 @@ vi.mock('@/api/adminApi', async (importOriginal) => {
 })
 vi.mock('../live', async () => {
   const { ref } = await import('vue')
-  return { timeAgo: () => 'x', liveAnnouncements: ref([]), liveFailures: ref({}), errMsg: (e: unknown) => String(e), shortId: (s: string) => s }
+  return { timeAgo: () => 'x', liveAnnouncements: ref([]), liveFailures: ref({}), liveRefreshSeq: ref(0), errMsg: (e: unknown) => String(e), shortId: (s: string) => s }
 })
 vi.mock('../store', () => ({ intent: {} }))
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }))
@@ -49,6 +49,7 @@ vi.mock('@/utils/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } })
 import ServerToolsPanel from '../ServerToolsPanel.vue'
 import DataExportPanel from '../DataExportPanel.vue'
 import OpsHub from '../OpsHub.vue'
+import { liveRefreshSeq } from '../live'
 
 async function mountWithRouter(component: unknown, route = '/admin/ops-hub') {
   const router = createRouter({
@@ -132,16 +133,21 @@ describe('运营中心宿主：系统工具三页签在位', () => {
     w.unmount()
   })
 
-  it('数据导出页签的刷新钮服务页级读数带（表单页零读数，但读数带在每个页签都在）', async () => {
+  it('页头不再有独立刷新钮；顶栏广播仍刷新页级读数带（导出页签一并生效）', async () => {
     // 2026-10-18 用户拍板：四张待办读数卡升到页签栏之上，8 个页签都可见（含 export 表单页）。
-    // 于是「export 不渲染刷新钮」的旧判据作废——页级读数带随时可刷，失败时这枚钮就是它的重试出口。
+    // 2026-10-23 用户「已经有刷新，为什么还有独立刷新」：这枚页头钮撤除，
+    // 刷新入口收敛到顶栏 —— 广播（liveRefreshSeq）必须同样能重拉读数带，否则等于丢掉重试出口。
     const w = await mountWithRouter(OpsHub, '/admin/ops-hub?tab=export')
     const headBtns = w.findAll('.mk-pagehead__actions > button')
-    expect(headBtns.length, '导出页签仍渲染刷新钮（服务页级读数带）').toBe(1)
-    expect(headBtns[0].text()).toContain('刷新')
+    expect(headBtns.some((b) => b.text().includes('刷新')), '页头不再有第二颗刷新钮').toBe(false)
     // 读数带在导出页签也渲染：四张卡，且位于页签栏之前（页级、非页签体内）
     expect(w.findAll('.oh-metrics .mk-kpi')).toHaveLength(4)
     expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
+
+    const before = apiObject.adminLearningContentApi.getStats.mock.calls.length
+    liveRefreshSeq.value += 1
+    await flushPromises()
+    expect(apiObject.adminLearningContentApi.getStats.mock.calls.length).toBeGreaterThan(before)
     w.unmount()
   })
 })

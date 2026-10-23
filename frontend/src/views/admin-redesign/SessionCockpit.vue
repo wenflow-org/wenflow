@@ -45,11 +45,7 @@
           </span>
           <span class="cp-budget__num">{{ budgetUsage.used }}/{{ budgetUsage.unlimited ? '不限' : budgetUsage.limit }}</span>
         </span>
-        <span class="mk-status__actions">
-          <button type="button" class="mk-status__action" :disabled="busy" @click="refresh">
-            {{ busy ? '刷新中…' : '刷新' }}
-          </button>
-        </span>
+        <!-- 2026-10-23：刷新统一跟顶栏（本页 watch(liveRefreshSeq) → refresh），状态条不再出第二颗 -->
       </div>
     </header>
 

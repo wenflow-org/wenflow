@@ -229,7 +229,7 @@ import DataScopeToggle from './DataScopeToggle.vue'
 import { askConfirm } from './useConfirm'
 import { openSubPage, LEARNER_DETAIL_LANDING } from './store'
 import { toast } from '@/utils/toast'
-import { errMsg, shortId, timeAgo, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { errMsg, shortId, timeAgo, liveIncludeVirtual, liveSetIncludeVirtual, liveRefreshSeq } from './live'
 
 interface AuditUserSummary {
   mode: string
@@ -514,10 +514,13 @@ async function loadOverview() {
   }
 }
 
-/** 页头刷新：概览（分布带退役后只剩这一路取数） */
+/** 概览（分布带退役后只剩这一路取数） */
 async function refreshAll() {
   await loadOverview()
 }
+
+/* 顶栏刷新广播：本页数据（概览 + 碎片率）不在 live 域里，靠这条把顶栏那颗接过来 */
+watch(liveRefreshSeq, () => { void refreshAll() })
 
 /** 行内「重新观察」进行中标记：只转该行按钮文案，不锁整页 */
 const recomputingId = ref('')

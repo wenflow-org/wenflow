@@ -18,11 +18,7 @@
         <span v-if="modelLabel" class="mk-badge mk-badge--muted mono" :title="'生效模型（来自模型配置或线上生效 Prompt 声明）'">{{ modelLabel }}</span>
         <span v-if="promptVersionText" class="mk-badge mk-badge--info">线上生效 {{ promptVersionText }}</span>
       </template>
-      <template #actions>
-        <button type="button" class="mk-btn" :disabled="loading" @click="load(true)">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
-      </template>
+      <!-- 2026-10-23：详情各域跟随顶栏刷新广播（liveRefreshSeq → load(true)），hero 不再出刷新钮 -->
     </MkDetailHero>
 
     <!-- 页签卡（原型：单张卡内 subtabs + subpane）。
@@ -424,7 +420,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace, type TraceSpan } from './store'
-import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange } from './live'
+import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange, liveRefreshSeq } from './live'
 /* P2-15（设计评审）：版本状态走共享字典（与设计页 versions-tab 同域同词：ARCHIVED→已归档），
    删本页本地 versionStatusText（只映射 ACTIVE/DRAFT，ARCHIVED 直出英文） */
 import { categoryText, errorCategoryText, versionStatusText } from './statusText'
@@ -649,6 +645,8 @@ function onPageBeforeUnload(e: BeforeUnloadEvent) {
 onMounted(() => {
   window.addEventListener('beforeunload', onPageBeforeUnload)
 })
+/* 顶栏刷新：与旧 hero 刷新钮同一入口（各域强制重拉） */
+watch(liveRefreshSeq, () => { void load(true) })
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onPageBeforeUnload)
   /* #F3（原设计页判例）：coreEditorState 是模块级单例——卸载时显式复位，避免下次进入

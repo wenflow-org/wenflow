@@ -34,12 +34,8 @@
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!summary || summaryEmpty" title="导出 CSV" @click="exportCsv">
           导出报表
         </button>
-        <!-- 刷新必须同时重拉金额卡：此前只调 load()（summary/趋势/三表），
-             「调用成本 / 单次调用均值」不在其列——金额卡一旦落到「加载失败」，
-             用刷新永远恢复不了，只有切窗口 pill 能救。 -->
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refreshAll">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
+        <!-- 2026-10-23：刷新走顶栏广播（liveRefreshSeq → refreshAll，summary/趋势/三表一起重拉），
+             页头不再出第二颗；金额卡恢复同样由它兜住 -->
       </template>
     </MkPageHead>
 
@@ -323,7 +319,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isLive, intent, tokenCostCacheKey, tokenCostFilters } from './store'
-import { errMsg, isPageCacheFresh, markPageFetched } from './live'
+import { errMsg, isPageCacheFresh, markPageFetched, liveRefreshSeq } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
@@ -712,10 +708,12 @@ watch([days, includeTest], () => {
 
 
 
-/** 页头「刷新」：主数据（含金额字段，审核 #110 已并入同一响应）强制重拉。 */
+/** 顶栏刷新广播：主数据（含金额字段，审核 #110 已并入同一响应）强制重拉。
+    2026-10-23 页头独立刷新钮撤除，只留这一入口。 */
 function refreshAll() {
   void load(true)
 }
+watch(liveRefreshSeq, () => { refreshAll() })
 
 async function load(force = false) {
   const key = tokenCostCacheKey()

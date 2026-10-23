@@ -22,6 +22,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { nextTick } from 'vue';
 import TokenCost from '../TokenCost.vue';
+import { liveRefreshSeq } from '../live';
 import TcRankTable from '../TcRankTable.vue';
 import OvBars from '../OvBars.vue';
 
@@ -245,8 +246,8 @@ describe('成本页 · 失败三态（#72 P-47）', () => {
     expect(w.find('.tc-error').exists()).toBe(false);
 
     vi.mocked(adminTokenCostApi.getSummary).mockRejectedValueOnce(new Error('network down'));
-    const refresh = w.findAll('button').find((b) => b.text() === '刷新')!;
-    await refresh.trigger('click');
+    // 2026-10-23 页头刷新钮撤除：顶栏刷新经 liveRefreshSeq 广播到本页（同一入口）
+    liveRefreshSeq.value += 1;
     await flushPromises();
     await nextTick();
 

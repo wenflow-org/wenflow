@@ -16,7 +16,7 @@ vi.mock('@/api/adminApi', () => ({
 }))
 vi.mock('../live', async () => {
   const { ref } = await import('vue')
-  return { timeAgo: () => 'x', liveAnnouncements: ref([]), liveFailures: ref({}) }
+  return { timeAgo: () => 'x', liveAnnouncements: ref([]), liveFailures: ref({}), liveRefreshSeq: ref(0) }
 })
 vi.mock('../store', () => ({ intent: {} }))
 

@@ -9,11 +9,8 @@
         <span class="oh-scope" title="事件投递失败与草稿公告不随视角变化">
           <DataScopeToggle v-model="wbScope" />
         </span>
-        <!-- 刷新钮在所有页签都在：页级读数带在 8 个页签都可见（含 export 表单页），
-             待办域始终有可刷的东西；失败时它是读数带的重试出口，故文案随读数带的失败态走 -->
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshActive">
-          {{ refreshing ? '刷新中…' : (wbHasError ? '重试' : '刷新') }}
-        </button>
+        <!-- 2026-10-23：刷新跟顶栏（liveRefreshSeq → refreshActive，含当前页签面板与失败态的读数带重试），
+             页头不再出第二颗 -->
       </template>
     </MkPageHead>
 
@@ -22,9 +19,12 @@
          页签里，成了「页签内才有、页签名还与本块同名」的错位；升为页级 = 页级概览 + 页签内工作台，
          页签体内的清单只留行动（事项 + 类别 + 去处理），数字不再讲两遍。
          失败必须显式落地：取不到 ≠ 没事（原实现把失败写成 0，页面伪装成「全部已清零」） -->
-    <p v-if="wbHasError" class="mk-alert" role="alert">
-      待办数据加载失败，对应计数不可信：{{ wbErrorText }}
-    </p>
+    <!-- 失败态的重试出口不放页头（顶栏已有刷新，页头第二颗钮重复）：失败时本行就地给重试
+         2026-10-23，与记忆与复习总览的失败条同一形态 -->
+    <div v-if="wbHasError" class="mk-alert mk-alert--row" role="alert">
+      <span class="mk-alert__msg">待办数据加载失败，对应计数不可信：{{ wbErrorText }}</span>
+      <button type="button" class="mk-alert__btn" :disabled="refreshing" @click="refreshActive">{{ refreshing ? '重试中…' : '重试' }}</button>
+    </div>
     <!-- 首屏加载态：待办请求在途且尚无 stats 时渲染骨架，不落定 0 值读数 -->
     <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="1" />
     <section v-else class="mk-kpi-grid oh-metrics" aria-label="运营待办读数">
@@ -217,7 +217,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { timeAgo, liveAnnouncements, liveFailures, errMsg } from './live'
+import { timeAgo, liveAnnouncements, liveFailures, errMsg, liveRefreshSeq } from './live'
 import { intent } from './store'
 import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
 import { announcementCounts, segmentPct, PATH_STATUS_TEXT } from './opsShared'
@@ -269,6 +269,9 @@ const notifRef = ref<{ reload?: () => void; openSend?: () => void } | null>(null
 const toolsRef = ref<{ refresh?: () => void } | null>(null)
 const securityRef = ref<{ refresh?: () => void } | null>(null)
 const refreshing = ref(false)
+/* 顶栏刷新广播：与旧页头刷新钮同一入口（当前页签面板 + 待办读数带） */
+watch(liveRefreshSeq, () => { void refreshActive() })
+
 async function refreshActive() {
   if (refreshing.value) return
   refreshing.value = true

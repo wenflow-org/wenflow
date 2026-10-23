@@ -11,11 +11,8 @@
       <span class="mk-status__meta pw-ok">同步 {{ syncedCount }}</span>
       <span class="mk-status__meta pw-warn">待编译发布 {{ pendingCount }}</span>
       <span v-if="noPromptCount" class="mk-status__meta pw-na">无 Prompt {{ noPromptCount }}</span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="loadList">
-          <MkLoading v-if="loading" inline text="刷新中…" /><span v-else>刷新</span>
-        </button>
-      </span>
+      <!-- 2026-10-23：顶栏已有刷新（liveRefreshSeq → loadList），状态条不再重复一颗；
+           取数失败时行内 alert 与空态仍带「重试」 -->
     </div>
 
     <section class="mk-card">
@@ -92,12 +89,11 @@
 
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>()
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { adminPromptWorkbenchApi } from '@/api/adminApi';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
-import MkLoading from '@/components/mk/MkLoading.vue';
-import { errMsg } from './live'
+import { errMsg, liveRefreshSeq } from './live'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
@@ -181,6 +177,8 @@ async function loadList() {
 onMounted(async () => {
   await loadList();
 });
+/* 顶栏刷新广播：与旧状态条刷新钮同一入口（嵌入编排图时编排页已订阅，重复触发只是多拉一次，幂等） */
+watch(liveRefreshSeq, () => { void loadList() });
 </script>
 
 <style scoped>

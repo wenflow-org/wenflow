@@ -18,7 +18,7 @@
       <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
         只读
       </button>
-      <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refresh(true)">刷新</button>
+      <!-- 2026-10-23：与页头「刷新注册表」是同一动作（refresh(true)），同屏只留页头那一颗 -->
     </div>
 
     <div v-if="actionError" class="mk-alert mk-alert--row mpp-alert" role="alert">

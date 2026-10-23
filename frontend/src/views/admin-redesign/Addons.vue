@@ -4,16 +4,12 @@
        成员是运行时 Skill；停用插件不改变主流程结构，缺的那一步走各卡标注的降级路径。
        旧深链 ?tab=addons / /admin/addons / /admin/external-capabilities 由路由改投到本页。 -->
   <div class="mk-page">
+    <!-- 2026-10-23 用户「已经有刷新，为什么还有独立刷新」：本页数据（能力配置 / MCP 服务）
+         跟随顶栏刷新广播 liveRefreshSeq，页头不再出第二颗刷新钮。 -->
     <MkPageHead
       title="插件"
       sub="可选能力与 MCP 服务"
-    >
-      <template #actions>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading || mcpLoading" @click="refreshAll">
-          {{ loading || mcpLoading ? '刷新中…' : '刷新' }}
-        </button>
-      </template>
-    </MkPageHead>
+    />
 
     <!-- ① 插件 + ② MCP 服务：堆叠单列全宽（2026-09-29 实测半宽卡内能力表 874px 溢出
          506px 容器，并栏不可行；审核 #157 删除恒 false 的 sideBySide 死分支与不可达 CSS） -->
@@ -229,7 +225,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { dataSource, openSkillDrawer, investigateAgent, liveSkillStatsMap } from './store'
-import { errMsg } from './live'
+import { errMsg, liveRefreshSeq } from './live'
 import { adminSkillsApi, adminMcpApi } from '@/api/adminApi'
 import { PLUGIN_GROUPS, type PluginGroup } from './capabilityCatalog'
 import { useEscape } from './useEscape'
@@ -471,8 +467,9 @@ watch(
   { immediate: true }
 )
 
-/** 独立页（2026-10-19）：数据源切换时自动重拉（上面那个 watch 的 immediate 首拉同款）；
-    页头「刷新」按钮走 refreshAll。 */
+/** 独立页（2026-10-19）：数据源切换时自动重拉（上面那个 watch 的 immediate 首拉同款）。
+    顶栏刷新经 liveRefreshSeq 广播到本页，页头不再有独立刷新钮（2026-10-23 全站收口）。 */
+watch(liveRefreshSeq, () => { void refreshAll() })
 defineExpose({ refresh: refreshAll })
 
 /* ---------- MCP 服务弹窗 ---------- */

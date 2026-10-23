@@ -1,6 +1,6 @@
 /**
  * Addons 插件页冒烟：
- * 1. 独立页页头（插件 + 刷新钮）
+ * 1. 独立页页头（插件），刷新走顶栏广播、不再有第二颗刷新钮
  * 2. 按用户可见能力分组：联网 / 决策 / 生图 / MCP，成员 Skill id 可见
  * 3. 路由状态只说「有没有单独配置」，`enabled=false` 不写成「能力已关闭」
  * 4. live 模式：后端配置 + MCP 工具列表渲染
@@ -10,6 +10,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import Addons from '../Addons.vue';
 import { dataSource } from '../store';
+import { liveRefreshSeq } from '../live';
 
 const { configsMock, mcpListMock, listMcpToolsMock } = vi.hoisted(() => ({
   configsMock: vi.fn(),
@@ -78,13 +79,19 @@ afterEach(() => {
 });
 
 describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () => {
-  it('独立页形态：自带页头（插件 + 刷新钮），根节点是页面容器', async () => {
+  it('独立页形态：页头只有标题，刷新跟着顶栏广播走（2026-10-23 全站收口）', async () => {
     const wrapper = await mountLive();
     expect(wrapper.find('.mk-page').exists()).toBe(true);
     const head = wrapper.find('.mk-pagehead');
     expect(head.exists()).toBe(true);
     expect(head.text()).toContain('插件');
-    expect(wrapper.findAll('button').some((b) => b.text().includes('刷新'))).toBe(true);
+    // 站内已有顶栏刷新，页头不再出第二颗钮（用户「已经有刷新，为什么还有独立刷新」）
+    expect(head.findAll('button')).toHaveLength(0);
+    // 顶栏刷新 = liveRefreshSeq 广播 → 本页与旧页头刷新钮同一入口重拉
+    const calls = configsMock.mock.calls.length;
+    liveRefreshSeq.value += 1;
+    await flushPromises();
+    expect(configsMock.mock.calls.length).toBeGreaterThan(calls);
     wrapper.unmount();
   });
 

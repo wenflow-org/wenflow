@@ -344,10 +344,10 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(pills.join('|')).toContain('gpt-5.2')
     expect(pills.join('|')).toContain('线上生效 v2')
 
-    // 动作 = 真实能力（2026-10-15 设计页平铺进本页后，hero 只剩「刷新」——
-    // 原「打开设计页 →」跳转钮随独立页退役撤除，设计能力已在本页各页签就地铺开）
+    // 动作 = 真实能力（2026-10-23 用户「已经有刷新，为什么还有独立刷新」：hero 最后一颗
+    // 刷新钮也撤除，各域跟随顶栏 liveRefreshSeq 广播；hero 动作区不再留按钮）
     const actions = w.findAll('.mk-hero__actions button').map((b) => b.text())
-    expect(actions).toEqual(['刷新'])
+    expect(actions).toEqual([])
 
     w.unmount()
   })

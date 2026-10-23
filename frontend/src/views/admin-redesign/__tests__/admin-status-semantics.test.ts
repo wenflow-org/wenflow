@@ -40,6 +40,7 @@ vi.mock('../live', async () => {
   return {
     liveAnnouncements: ref([]),
     liveFailures: ref({}),
+    liveRefreshSeq: ref(0),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
     shortId: (s: string) => s,
@@ -100,9 +101,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
       expect(row.text()).toContain('加载失败')
       expect(row.text()).not.toContain('已清零')
     }
-    // 重试入口（页头动作区，newui/admin pagehead 形态）——直接子钮才是刷新/重试，
-    // 视角开关注在页头动作区的 span 里，其内部分段钮不算（2026-10-18 开关随读数带迁入页头）
-    expect(w.find('.mk-pagehead__actions > button').text()).toContain('重试')
+    // 重试入口在失败条上（2026-10-23 页头第二颗刷新钮撤除：顶栏已有刷新，失败态就地重试）
+    expect(w.find('.mk-alert--row .mk-alert__btn').text()).toContain('重试')
 
     w.unmount()
   })
@@ -156,9 +156,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 位置：读数带在页签面板之外、页签栏之前（页级，不是某个页签体内的内容）
     expect(w.find('.oh-metrics').element.closest('[role="tabpanel"]')).toBeNull()
     expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
-    // 口径开关随读数带走（不再留在某个页签的卡头里），刷新钮也在（读数带有远端读数）
+    // 口径开关随读数带走（不再留在某个页签的卡头里）；刷新不再在页头另出一颗（走顶栏）
     expect(w.find('.mk-pagehead__actions').text()).toContain('真实')
-    expect(w.find('.mk-pagehead__actions > button').text()).toContain('刷新')
+    expect(w.findAll('.mk-pagehead__actions > button').some((b) => b.text().includes('刷新'))).toBe(false)
     w.unmount()
   })
 

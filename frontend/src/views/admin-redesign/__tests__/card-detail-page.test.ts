@@ -44,7 +44,10 @@ vi.mock('@/api/adminApi', () => ({
 }));
 
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
-vi.mock('../live', () => ({ errMsg: (e: unknown) => String(e) }));
+vi.mock('../live', async () => {
+  const { ref } = await import('vue');
+  return { liveRefreshSeq: ref(0), errMsg: (e: unknown) => String(e) };
+});
 
 import CardDetailPage from '../CardDetailPage.vue';
 

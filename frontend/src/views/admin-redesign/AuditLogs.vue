@@ -7,10 +7,7 @@
       <template #actions>
         <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!rows.length" @click="exportCurrentPage">导出本页</button>
-        <!-- 刷新 = 重取当前页（保留页码与列表，不闪骨架）；筛选/排序变更才回第 1 页（审核 #153） -->
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refreshPage">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
+        <!-- 2026-10-23：重取当前页跟随顶栏刷新广播（refreshPage 保留页码与列表），页头不再出第二颗 -->
       </template>
     </MkPageHead>
 
@@ -365,7 +362,7 @@ import { KeyRound, Lock, Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
-import { errMsg, shortId } from './live'
+import { errMsg, shortId, liveRefreshSeq } from './live'
 import { prettyPayload } from './payload-format'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import Pagination from './Pagination.vue'
@@ -770,6 +767,9 @@ async function refreshPage() {
 watch([alSortKey, alSortDir], () => {
   void applyFilters()
 })
+
+/* 顶栏刷新：重取当前页（与旧页头钮同一语义，保留页码与列表） */
+watch(liveRefreshSeq, () => { void refreshPage() })
 
 const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'today' || failedOnly.value)
 function clearFilters() {

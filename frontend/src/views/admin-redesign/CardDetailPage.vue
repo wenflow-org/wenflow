@@ -11,7 +11,7 @@
         <span v-if="d.tags.length > 4" class="mk-badge mk-badge--muted" :title="d.tags.join(' · ')">+{{ d.tags.length - 4 }}</span>
       </template>
       <template #actions>
-        <button type="button" class="mk-btn" :disabled="loading" @click="load">{{ loading ? '刷新中…' : '刷新' }}</button>
+        <!-- 2026-10-23：本页数据跟随顶栏刷新广播（liveRefreshSeq），hero 不再出独立刷新钮 -->
         <!-- 「从这张卡造一个」的落点（2026-10-18 用户走查：卡库侧只有卡头勾选框，读作没有流程）：
              身份卡可反复创建、不消耗卡本身，故本页主操作是创建，切画像降为次按钮。
              文案 2026-10-19 与卡墙同批统一：原「派生虚拟学习者」是本页独有的说法。 -->
@@ -125,21 +125,31 @@
       <MkSkeleton variant="identity" />
       <MkSkeleton variant="rows" :count="3" />
     </div>
-    <MkEmptyState v-else tone="error" title="卡不存在或已删除" description="卡墙数据可能已刷新，返回卡库重试。">
-      <button type="button" class="mk-btn" @click="closeSubPage()">返回卡墙</button>
+    <MkEmptyState
+      v-else
+      tone="error"
+      title="卡不存在或已删除"
+      description="卡墙数据可能已刷新，返回卡库重试。"
+      action-text="重试"
+      :action-busy="loading"
+      action-busy-text="重试中…"
+      @action="load()"
+    >
+      <!-- 顶栏刷新已覆盖本页，但详情取数失败时页内仍要有一个就地重试（失败不得只能离开） -->
+      <button type="button" class="mk-btn mk-btn--ghost" @click="closeSubPage()">返回卡墙</button>
     </MkEmptyState>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import { errMsg } from './live'
+import { errMsg, liveRefreshSeq } from './live'
 import { toast } from '@/utils/toast'
 import { shortHashTag } from '@/utils/shortHash'
 
@@ -275,6 +285,8 @@ function onDerived() {
 }
 
 onMounted(load)
+/* 顶栏刷新：与旧 hero 刷新钮同一入口 */
+watch(liveRefreshSeq, () => { void load() })
 </script>
 
 <style scoped>
