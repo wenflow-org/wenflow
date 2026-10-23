@@ -65,6 +65,27 @@ describe('教学图确定性渲染器', () => {
     expect(svg).toContain('呈现超出记录强度');
   });
 
+  it('tree：分支框与根源框不再相撞（旧布局两分支时压进根框 13px）', () => {
+    const svg = svgOf('tree', {
+      root: { label: 'outer[:] 之后' },
+      branches: [
+        { label: '外层：新盒子', items: ['复制出来了'] },
+        { label: '内层：同一对象', items: ['还是同一个对象'] },
+      ],
+    });
+    const rects = [...svg.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="(\d+)"/g)].map((m) => ({
+      x: Number(m[1]), y: Number(m[2]), w: Number(m[3]), h: Number(m[4]), rx: Number(m[5]),
+    }));
+    const root = rects.find((r) => r.rx === 12);
+    const branches = rects.filter((r) => r.rx === 10);
+    expect(root).toBeTruthy();
+    expect(branches.length).toBe(2);
+    for (const b of branches) {
+      const gap = b.x > root!.x ? b.x - (root!.x + root!.w) : root!.x - (b.x + b.w);
+      expect(gap).toBeGreaterThanOrEqual(8);
+    }
+  });
+
   it('matrix：命中/漏/堆砌四种符号都画出来', () => {
     const svg = svgOf('matrix', {
       rowLabels: ['要点一', '要点二'],

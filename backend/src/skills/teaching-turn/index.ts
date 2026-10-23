@@ -965,7 +965,9 @@ function toFigureText(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
   // 有意匹配控制字符区间替换为空格（文本清洗用途），非残留控制码
   // eslint-disable-next-line no-control-regex
-  const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
+  const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  // 超长必须留痕：直接 slice 会印出「I had dinner, then wat」这种半截句（2026-10-23 外部视觉评审实拍）
+  if (text.length > max) return text.slice(0, Math.max(1, max - 1)) + '…';
   return text || null;
 }
 
@@ -1215,6 +1217,17 @@ function toStringList(value: unknown, maxItems: number, maxLen: number): string[
     if (out.length >= maxItems) break;
   }
   return out;
+}
+
+/**
+ * 定长标签列表：按声明的列数/行数补空串。
+ * 不能直接用 toStringList —— 它会丢掉缺失项，导致后面的标签整体左移
+ * （2026-10-23 外部视觉评审实拍：3 列表格只给 2 个列标题，第二个标题落到了第一列上）。
+ */
+function toStringListFixed(value: unknown, count: number, maxLen: number): string[] {
+  const filled = toStringList(value, count, maxLen);
+  while (filled.length < count) filled.push('');
+  return filled;
 }
 
 function normalizeTone(value: unknown, allowed: readonly string[]): string | null {
@@ -1603,8 +1616,8 @@ function normalizeGridSpec(raw: Record<string, unknown>): Record<string, unknown
   const rows = toBoundedInt(raw.rows, 1, SPEC.rowsMax);
   const cols = toBoundedInt(raw.cols, 1, SPEC.colsMax);
   if (!rows || !cols) return null;
-  const rowLabels = toStringList(raw.rowLabels, rows, SPEC.labelMax);
-  const colLabels = toStringList(raw.colLabels, cols, SPEC.labelMax);
+  const rowLabels = toStringListFixed(raw.rowLabels, rows, SPEC.labelMax);
+  const colLabels = toStringListFixed(raw.colLabels, cols, SPEC.labelMax);
   const cells: Array<Record<string, unknown>> = [];
   let filled = 0;
   for (const item of Array.isArray(raw.cells) ? raw.cells : []) {
@@ -1759,6 +1772,12 @@ function normalizeCompareSpec(raw: Record<string, unknown>): Record<string, unkn
   const left = normalizeCompareSide(raw.left);
   const right = normalizeCompareSide(raw.right);
   if (!left || !right) return null;
+  // 纯两栏文字不画（2026-10-23 外部视觉评审：送审图里 compare 的 usefulness/geometry 最低，
+  // 两栏条目等于把句子装进框）。对照必须至少带一条链路，几何才有东西可承载。
+  const hasChain = [left, right].some(
+    (side) => Array.isArray((side as Record<string, unknown>).chain) && ((side as Record<string, unknown>).chain as unknown[]).length > 0,
+  );
+  if (!hasChain) return null;
   const title = toFigureText(raw.title, SPEC.titleMax);
   const note = toFigureText(raw.note, SPEC.noteMax);
   const divider = toFigureText(raw.divider, 24);

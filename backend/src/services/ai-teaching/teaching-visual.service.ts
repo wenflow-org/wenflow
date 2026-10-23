@@ -156,6 +156,13 @@ const EXERCISE_LEAK_PATTERNS: RegExp[] = [
   /在(纸上|草稿上)[^。！？\n]{0,24}(排|画|摆)(一|成|出|个)/,
   /(你|先|来|动手|自己)(排|画|摆)一(排|遍|下|个)/,
   /横着排(一|一遍)/,
+  // 2026-10-23 外部视觉评审：送审三张泄漏率 100%，都是「老师让学生产出 → 图里已有现成答案」。
+  // 下面只拦「具体交付物」指令（填表/补全/写一句/贴结果），普通的苏格拉底追问不在此列。
+  /(填|补全|补齐)(一下|这|那张|表|表格|格子|空|完)/,
+  /(贴出|贴一下|贴上来|写出结果|写出完整|写完整|写一句|用一句话)/,
+  /(跑一遍|跑一下|跑三行|运行一下)[^。！？\n]{0,14}(结果|打印|输出|贴)/,
+  /(先|你)[^。！？\n]{0,4}(自己)?(写|填|答|做|跑)[^。！？\n]{0,8}(再|然后|之后|给我看)/,
+  /(捏成|写成|凑成)[^。！？\n]{0,12}(完整|解释句|一句话|整句)/,
 ];
 
 export function detectExerciseLeakInReply(reply: string | null | undefined): boolean {
@@ -277,12 +284,19 @@ export function paletteOfSubject(subject?: string | null): 'indigo' | 'earth' | 
  */
 const FIGURE_KIND_GUIDE = [
   '（系统提示里若是旧版"v1 唯一图型 position-line"，以本轮为准：下列 kind 代码已支持并会逐字段校验。）',
+  '**出图前先过三关（缺一不出）**：① 实体关——节点/标签必须是学科实体（真实代码、方程各项、数值与单位、时间点/事件、对象/要素），'
+  + '出现「第一步/自查/缺X/重写/评分/口诀/批改」这类元认知或评语，整张作废；② 几何关——关系必须由位置/数值/区间/连线/包含读出来'
+  + '（谁比谁大、谁指向谁、谁在谁里面），两栏文字也能说清就不画；③ 留白关——本轮让学生产出 X（句子/步骤/分类/判断）时，'
+  + '图里不得出现完整的 X，只给 "?" 或空槽。',
   '若确实该出图，按关系选 kind（最多 8 行/6 列、8 个条目；标签用学科实指，≤18 字）：',
   '- bins：**归属/分类**（这些条目各归哪一堆）。{"bins":[{"label":"自然条件","tone":"ok","items":["水源","地形"]},{"label":"社会经济条件","items":["交通"]}],"note":"…"}——条目画在容器**里面**，表达「属于」，比两列并排更贴切。',
   '- grid：二维排布、每格是内容（比较表）。{"rows":2,"cols":3,"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":0,"text":"…","hl":"accent|warn|ok"}],"note":"…"}——**已有内容**的表才画，等待学生填写的空表不画（那是练习控件）。',
   '- matrix：二维命中矩阵（✓有/—无/叠=重复堆砌/≡两边同一项）。{"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":1,"tone":"hit|miss|dup|key"}],"legend":[{"text":"✓ 已写到","fill":"#e6f4f1"}]}',
   '- range-bar：**多组数值区间并排**（新组/旧组的波动范围、上下限、从哪到哪）。{"unit":"%","rows":[{"label":"新组四天","from":3.1,"to":3.8,"tone":"accent"},{"label":"旧组四天","from":2.9,"to":3.6,"tone":"neutral"}],"marks":[{"at":0.5,"label":"汇报的均值差"}],"note":"…"}——**数值区间不要塞进 position-line**：一根时间轴画不出带宽，把「幅度」横着放会被读成日期跨度。',
-  '- compare：两条分支并排对照（**对等**的两边）。卡片形态：{"left":{"head":"…","sub":"…","items":["…"]},"right":{"head":"…","items":["…"]},"divider":"…","leftTone":"neutral","rightTone":"accent"}',
+  '- **想用 compare 但两侧只是句子**：改成 grid（判断点做行、两边做列）；没有共同判断点就不要画（2026-10-23 起纯两栏会被丢弃）。',
+  '- **变量名/引用/拷贝**：用 bipartite，左列变量名、右列内存对象，edges 表示指向；`b = a` 是两条边汇到同一个对象节点，`a[:]` 是外层两个节点、内层同一节点。',
+  '- **同一组时刻上的两个方向/两组数**：用 grid，行是时刻、列是方向，格子写数值；不要用两根时间轴或两栏条目。',
+  '- compare：两条分支并排对照（**对等**的两边），**必须至少一侧带 chain**（纯两栏条目会被代码丢弃，2026-10-23 起）。卡片形态：{"left":{"head":"…","sub":"…","items":["…"]},"right":{"head":"…","items":["…"]},"divider":"…","leftTone":"neutral","rightTone":"accent"}',
   '- **compare 的链路形态（架构/请求路径类对比必须用它，2026-10-20 实跑）**：当差别是「几跳」「几次跨集群往返」时，不要只给两栏条目——把每侧的请求链路写进 chain，渲染器会画出客户端、集群边界与穿过边界的箭头，**箭头数就是跳数**。{"left":{"head":"外置协调","badge":"2 套集群 · 2 次独立共识","badgeTone":"warn","client":"客户端","chain":[{"label":"共识 ①：ZooKeeper 集群","sub":"定路由、选主","tone":"warn"},{"label":"共识 ②：业务存储节点","sub":"写日志与数据","tone":"warn"}],"items":["两份结论必须互相迁就"]},"right":{"head":"内置共识","badge":"单一系统 · 1 次共识","badgeTone":"ok","client":"客户端","chain":[{"label":"业务进程内置 Raft 状态机","sub":"元数据与数据落同一条日志","merged":true,"tone":"ok"}],"items":["省掉一次跨集群往返"]}}。**顺序段与往返**：若请求是一段接一段（网关→订单→库存，都在同一个集群内），**第二张卡起默认就是串联**（渲染器把缺省的 `from` 当作上一张卡，2026-10-22 起）；只有真正的并行扇出（一个请求同时打到多个节点）才写 `"from":"client"`。第一张卡才跨集群。要强调「发出去还要等回话」，给该节点 `"rtt":true`，箭头上会出现反向箭头。**铁律**：①链上必须至少两层实体（客户端 → 组件 → 组件），不许把两边各写成三行文字；②「省掉/差异」只能体现在链的条数与 merged 节点上，不要靠中间悬浮一句话；③badge 是这一栏的结论，贴在栏头，不要写进正文；④同一进程内的请求/响应链（前端回调、网关→服务）给每一侧 `boundaryLabel`（如「组件异步边界」），否则边界会显示成「集群边界」。',
   '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',
   '- ladder：**层级/先后/进度**（先到哪、再到哪）。{"steps":[{"label":"定角度","state":"done"},{"label":"落材料","state":"done"},{"label":"扣设问","state":"current"},{"label":"排层次","state":"todo"}]}',
@@ -371,6 +385,7 @@ export type FigureKindHint =
   | 'bins'
   | 'matrix'
   | 'compare'
+  | 'grid'
   | 'range-bar';
 
 interface KindRule {
@@ -397,7 +412,13 @@ const KIND_RULES: readonly KindRule[] = [
   // 模型会把「波动幅度」横着画到日期上，读起来就是「周二到周六 = 0.7 个点」。
   { kind: 'range-bar', test: /(波动(区间|范围|带)|区间(对比|比较)|上下限|幅度范围|取值范围|高低区间|从.{0,6}到.{0,6}的(区间|范围))/, why: '每组是一段数值区间，并排看长度，不能压在时间轴上' },
   { kind: 'compare', test: /(架构|选型|链路|请求路径|来回|往返|跳数|跨集群|集群边界|协调服务|内置还是外置|省掉一次|多一次)/, why: '两边差的不是文字条目，是请求要穿过几层网络边界——走 compare 的链路形态，箭头数就是跳数' },
-  { kind: 'compare', test: /(对比|对照|区别|差异|不同点)/, why: '两边对等对照' },
+  // 引用/指向类内容：名字→对象是二分连线，边就是「指向」，两栏文字会把这层信息丢掉。
+  { kind: 'bipartite', test: /(变量名|指向|引用|同一个对象|浅拷贝|深拷贝|内存|栈|堆|别名|改它会不会影响)/, why: '名字与对象是两列，边表示指向；同一个对象要有多条边汇入' },
+  // 同一组时刻/取值上的两个方向或两组数据：网格的列是方向、行是时刻。
+  { kind: 'grid', test: /(水平方向|竖直方向|两个方向|分运动|合运动|同一时刻|每秒|时刻.{0,6}位移|随时间的?变化)/, why: '同一组时刻上的两列数据，行是时刻、列是方向，表本身就是分解' },
+  // 2026-10-23 视觉评审：模型把「对比/区别」一律画成两栏文字卡片（最大废图来源）。
+  // 改为引导二维表：两边在同一组判断点上逐项比，行列本身是几何；没有共同判断点就不画。
+  { kind: 'grid', test: /(对比|对照|区别|差异|不同点|两种写法|两种做法)/, why: '两边要在同一组判断点上逐项比：把判断点做成行、两边做成列，二维表才承载关系' },
 ];
 
 export function chooseFigureKind(text: string | null | undefined): { kind: FigureKindHint; why: string; match: string } | null {
@@ -419,13 +440,6 @@ export function figureKindHintLine(kind: { kind: FigureKindHint; why: string } |
 
 
 const DEFAULT_FIGURE_MAX_PER_SESSION = 4;
-
-/**
- * 节奏兜底阈值：连续多少个老师回合没有出图就必须收一张。
- * 取 6 是因为苏格拉底课一节通常 12~18 个老师回合 —— 6 保证至少出 1~2 张，
- * 又不至于每三四轮就打断追问节奏；与 per-session 上限（默认 4）配合，不会铺满。
- */
-const FIGURE_RECAP_TURNS = 6;
 
 export function resolveFigureMaxPerSession(value = process.env.TEACHING_FIGURE_MAX_PER_SESSION): number {
   if (!value || String(value).trim() === '') return DEFAULT_FIGURE_MAX_PER_SESSION;
@@ -603,17 +617,6 @@ function similarShape(a: unknown, b: unknown): boolean {
 /** 同一图型每会话最多三张：近义改写由相似度拦，剩下的名额留给真正换轴的那一张。 */
 const FIGURE_MAX_PER_KIND = 3;
 
-/** 本课已经用过的图型（「收一张」时做软提示，不强制换形状）。 */
-function usedFigureKinds(messages: TeachingSessionMessage[]): string[] {
-  const kinds = new Set<string>();
-  for (const message of messages) {
-    for (const figure of Array.isArray(message?.figures) ? message.figures : []) {
-      kinds.add(String((figure as { kind?: string })?.kind || 'position-line'));
-    }
-  }
-  return [...kinds];
-}
-
 /**
  * 会话级去重：入参是**已落库的图**（库侧表），不是回合内存快照。
  * 2026-10-22 复核：内存版这道闸门在 744 张图里一次没触发，而同会话相似度 0.60 的图照旧渲染。
@@ -661,23 +664,6 @@ function lastAssistantHasVisual(messages: TeachingSessionMessage[]): boolean {
       (Array.isArray(lastAssistant.diagrams) && lastAssistant.diagrams.length),
   );
 }
-
-/**
- * 距离上一张图已经推进了多少个老师回合（从未出图 = 全部老师回合数）。
- * 用于「节奏兜底」：词表判据只能覆盖它认识的词汇，苏格拉底式的短回合课
- * （2026-10-20 实跑：「任期定标 + 多数派交集」整节 15 回合 0 图）永远等不到词表命中。
- */
-function assistantTurnsSinceLastFigure(messages: TeachingSessionMessage[]): number {
-  let turns = 0;
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (message?.role !== 'assistant') continue;
-    if (Array.isArray(message.figures) && message.figures.length) return turns;
-    turns += 1;
-  }
-  return turns;
-}
-
 
 /**
  * 算本轮的"结构图时机"（**代码裁决**，2026-09-23 建、2026-09-27 双通道重构）。
@@ -816,37 +802,10 @@ export function buildVisualOpportunity(
         + FIGURE_KIND_GUIDE,
     };
   }
-  // 节奏兜底（2026-10-20 实跑教训）：词表只认它认识的词。苏格拉底课的回合很短、
-  // 每轮都在追问，结构词一次也凑不齐 —— 整节 15 回合 0 图，学生手里只剩一段段听过就散的话。
-  // 所以给一条与内容词表无关的兜底：连续 N 个老师回合没出过图，就要求把「到目前站住的那条链」收成一张图。
-  // 只收「已讲过的东西」不含新内容，因此不受答案泄漏约束；总量仍由每会话上限兜底。
-  const turnsSinceFigure = assistantTurnsSinceLastFigure(list);
-  if (!lastHasFigure && !figureCapReached && turnsSinceFigure >= FIGURE_RECAP_TURNS) {
-    // 收一张时顺手报一下「本课已经用过哪些形状」：不强制换，只在更贴切时提醒——
-    // 否则 recap 时模型会条件反射再画一张位置线（2026-10-21 真课：20 张里 10 张位置线）。
-    const used = usedFigureKinds(list);
-    const varietyLine = used.length
-      ? `\n本课已经用过这些图型：${used.join('、')}。如果这轮要说清的关系用**另一种还没用过的形状**更贴切，就换一种；`
-        + '不合适就照旧，不要为了换形状硬凑。'
-      : '';
-    return {
-      suggested: true,
-      reason: 'recap-cadence',
-      kindHint: kindHint?.kind ?? null,
-      ruleWhy: '连续多轮没有出过图，把已经站住的链收一张',
-      matched: [`连续 ${turnsSinceFigure} 个教师回合无图`],
-      instruction:
-        `你和这位学生已经连着推进了 ${turnsSinceFigure} 个回合，中间没有出现过任何图。`
-        + '这一轮在 reply 之后，把**到目前为止已经站住的那条关系链**收成一张图：'
-        + '图里只放学生已经自己说对的东西和你在上面补硬的约束，**不要放进新内容**，也不要在图里提问。'
-        + '即使这轮你还想继续追问，也先出图再问——这一轮不出图，学生这次课结束时手里什么都没有。'
-        + '**唯一例外**：这一轮你正要让学生脱稿复述/自己排出这条链（答出来就是他自己的证据）→ 本轮不出图，'
-        + '但学生答完的下一轮必须把链收成图，不能再往后拖。'
-        + varietyLine
-        + kindHintLine + '\n'
-        + FIGURE_KIND_GUIDE,
-    };
-  }
+  // 2026-10-23 停用「连续 N 轮无图强制补一张」（recap-cadence）：
+  // 外部视觉评审逐张看下来，凑出来的图基本都是把老师的批改话/做题口诀画成卡片，
+  // 学生学的是学科内容，图上却是「缺绳 vs 重写」。图只应出现在有学科关系可画、
+  // 且画得比文字更省力的时刻；没有就不出。
   return null;
 }
 

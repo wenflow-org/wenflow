@@ -47,6 +47,31 @@ async function runWithFigure(raw: any): Promise<any> {
   return (output.internal?.ext as any)?.teaching;
 }
 
+describe('网格列标题对齐（2026-10-23 外审：缺一个表头会让后面的标题整体左移）', () => {
+  it('列标题少于列数时补空串：第二个标题仍落在第二列', async () => {
+    const out = await runWithFigure({
+      kind: 'grid',
+      rows: 2,
+      cols: 3,
+      colLabels: ['外层 id(a) vs id(b)', '是否波及 a'],
+      cells: [{ r: 0, c: 0, text: '相同' }, { r: 0, c: 1, text: '相同' }, { r: 0, c: 2, text: '会' }],
+    });
+    expect(out.figure?.kind).toBe('grid');
+    expect(out.figure.spec.colLabels).toEqual(['外层 id(a) vs id(b)', '是否波及 a', '']);
+  });
+
+  it('行标题少于行数时同样补齐', async () => {
+    const out = await runWithFigure({
+      kind: 'grid',
+      rows: 2,
+      cols: 1,
+      rowLabels: ['第一行'],
+      cells: [{ r: 0, c: 0, text: '甲' }, { r: 1, c: 0, text: '乙' }],
+    });
+    expect(out.figure.spec.rowLabels).toEqual(['第一行', '']);
+  });
+});
+
 describe('teaching-turn figure 归一化（位置线）', () => {
   beforeEach(() => mockCallPrompt.mockReset());
 
@@ -226,7 +251,7 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     const ok = await runWithFigure({
       kind: 'compare',
       spec: {
-        left: { head: '行为主义', items: ['看结果', '给反馈'] },
+        left: { head: '行为主义', items: ['看结果', '给反馈'], chain: [{ label: '看结果' }] },
         right: { head: '建构主义', items: ['看过程'] },
         leftTone: 'rainbow',
       },
@@ -239,7 +264,7 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     const warn = await runWithFigure({
       kind: 'compare',
       spec: {
-        left: { head: '反例', items: ['x'] },
+        left: { head: '反例', items: ['x'], chain: [{ label: 'x' }] },
         right: { head: '正解', items: ['y'] },
         leftTone: 'warn',
         divider: '汇报的差值是 0.5 个点，比同组自身晃动还小，这句话故意写得很长用来验证截断',
@@ -593,7 +618,7 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
 
     const topLevel = await runWithFigure({
       kind: 'compare',
-      left: { head: '左', items: ['a'] },
+      left: { head: '左', items: ['a'], chain: [{ label: 'a' }] },
       right: { head: '右', items: ['b'] },
     });
     expect(topLevel.figure.kind).toBe('compare');
@@ -822,7 +847,7 @@ describe('条目对象形态与显式并联（2026-10-22 真课丢图）', () =>
   it('compare 条目写成 {label} 对象时照收，不再整栏清空导致丢图', async () => {
     const out = await runWithFigure({
       kind: 'compare',
-      left: { head: '一般过去', items: [{ label: '只锁定过去那一下' }, { text: '与现在断开' }] },
+      left: { head: '一般过去', items: [{ label: '只锁定过去那一下' }, { text: '与现在断开' }], chain: [{ label: '过去' }] },
       right: { head: '现在完成', items: [{ value: '结果延续到现在' }] },
       divider: '有没有碰到 NOW',
     });
@@ -846,11 +871,33 @@ describe('条目对象形态与显式并联（2026-10-22 真课丢图）', () =>
   });
 });
 
+describe('纯两栏文字对照不再出图（2026-10-23 外部视觉评审）', () => {
+  it('没有链路的两栏对照整块丢弃', async () => {
+    const out = await runWithFigure({
+      kind: 'compare',
+      left: { head: 'b = a', items: ['改 b 会带动 a'] },
+      right: { head: 'b = a[:]', items: ['改外层不影响 a'] },
+      divider: '外层是否新盒子',
+    });
+    expect(out.figure).toBeUndefined();
+  });
+
+  it('至少一侧带链路时照出', async () => {
+    const out = await runWithFigure({
+      kind: 'compare',
+      left: { head: '外置协调', client: '客户端', chain: [{ label: 'ZooKeeper' }, { label: '业务库' }] },
+      right: { head: '内置共识', client: '客户端', chain: [{ label: 'Raft 状态机', merged: true }] },
+    });
+    expect(out.figure?.kind).toBe('compare');
+    expect(out.figure.spec.left.chain).toHaveLength(2);
+  });
+});
+
 describe('对照栏头过长不再丢整张图（2026-10-22 晚实测）', () => {
   it('19–26 字的栏头照收；超长截到 26 字而不是整侧作废', async () => {
     const out = await runWithFigure({
       kind: 'compare',
-      left: { head: '一般过去时：只锁定过去那一下，与现在断开', items: ['I lost my key.'] },
+      left: { head: '一般过去时：只锁定过去那一下，与现在断开', items: ['I lost my key.'], chain: [{ label: '过去' }] },
       right: { head: '现在完成时：动作发生在过去但结果一路延续到现在并影响此刻', items: ['I have lost my key.'] },
       divider: '有没有碰到 NOW',
     });

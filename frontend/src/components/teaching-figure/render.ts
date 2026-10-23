@@ -1536,7 +1536,9 @@ function renderTree({ title, root, branches = [], note }: any): RenderedFigure {
   const rootW = Math.max(140, est(root?.label, T.fontKey) + 34);
   const rootH = 54;
   const n = Math.max(2, branches.length);
-  const R = Math.max(150, Math.ceil((branchW + 34) / (2 * Math.sin(Math.PI / n))));
+  // 半径必须同时让开根源框与分支框的一半再加间隙：旧公式只按分支宽算，
+  // 两个分支时会和根源框相撞（rootW=140/branchW=186 时压 13px，2026-10-23 外审实拍）。
+  const R = Math.max(150, Math.ceil(rootW / 2 + branchW / 2 + 26));
   const pad = 26;
   const titleH = title ? T.fontTitle + 20 : 0;
   const itemLineH = 15;

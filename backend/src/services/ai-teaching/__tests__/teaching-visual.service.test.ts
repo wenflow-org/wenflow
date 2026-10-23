@@ -81,6 +81,45 @@ afterEach(() => {
   delete process.env.TEACHING_DIAGRAM_DISABLED;
 });
 
+describe('图型提示：领域线索优先于泛化的「对比」（2026-10-23 视觉评审）', () => {
+  it('变量名/指向 → bipartite，而不是对照卡片', () => {
+    const hit = chooseFigureKind('学生问：b = a 之后改 b[0]，变量名指向的到底是不是同一个对象？');
+    expect(hit?.kind).toBe('bipartite');
+  });
+  it('两个方向/同一时刻 → grid', () => {
+    const hit = chooseFigureKind('同一时刻水平方向走了几米，竖直方向落了多高？');
+    expect(hit?.kind).toBe('grid');
+  });
+  it('泛化对比 → grid（判断点做行），不再默认 compare', () => {
+    const hit = chooseFigureKind('这两种写法有什么区别？');
+    expect(hit?.kind).toBe('grid');
+  });
+  it('架构链路仍走 compare', () => {
+    const hit = chooseFigureKind('两种方案的请求路径：跨集群往返几次？');
+    expect(hit?.kind).toBe('compare');
+  });
+});
+
+describe('练习泄漏判据：具体交付物指令（2026-10-23 视觉评审三张全泄漏）', () => {
+  const leaky = [
+    '现在要你办一件事：把这三句捏成一个完整解释句，写完自己查一遍。',
+    '先跑三行，把你的结果贴出，再一起填表。',
+    '请补全表格的第二行。',
+    '你自己用一句话回答：a 和 b 是不是同一个对象？',
+  ];
+  const fine = [
+    '你说说，为什么改 b 会影响到 a？',
+    '这一步你觉得问题出在哪？',
+    '如果换成 a[:] 呢，会一样吗？',
+  ];
+  it('命中交付物指令', () => {
+    for (const text of leaky) expect(detectExerciseLeakInReply(text)).toBe(true);
+  });
+  it('普通苏格拉底追问不误伤', () => {
+    for (const text of fine) expect(detectExerciseLeakInReply(text)).toBe(false);
+  });
+});
+
 describe('teaching-visual 服务', () => {
   it('正常：文字描述 → 一张图（prompt 可回溯 + caption 保留 + provider 留痕）', async () => {
     const image = await generateTeachingVisual({ request, messages: [], deps: { generate: okGenerate } });
@@ -595,7 +634,8 @@ describe('视觉教具路由（2026-10-20：形状由内容裁决，不靠模型
     expect(chooseFigureKind('先过后一个门槛，再逐级往上')?.kind).toBe('ladder');
     expect(chooseFigureKind('把这个概念归位，分到三类里')?.kind).toBe('bins');
     expect(chooseFigureKind('逐条核一核对账，看哪一格漏了')?.kind).toBe('matrix');
-    expect(chooseFigureKind('对比两种写法的区别')?.kind).toBe('compare');
+    // 2026-10-23：泛化对比改引导二维表（两栏文字对照是最大废图来源）
+    expect(chooseFigureKind('对比两种写法的区别')?.kind).toBe('grid');
   });
 
   it('没有结构线索 / 空文本 → 不路由（沿用原指南，不硬塞形状）', () => {
@@ -638,7 +678,7 @@ describe('路由已接进本轮输入（不是只写了个纯函数）', () => {
   });
 });
 
-describe('节奏兜底：长回合苏格拉底课至少收一张图（2026-10-20 实跑）', () => {
+describe('节奏兜底已停用（2026-10-23 视觉评审：凑出来的图全是批改话术）', () => {
   const turn = (role: 'assistant' | 'user', content: string, figures?: unknown[]) => ({
     role,
     content,
@@ -646,46 +686,19 @@ describe('节奏兜底：长回合苏格拉底课至少收一张图（2026-10-20
     ...(figures ? { figures } : {}),
   } as unknown as TeachingSessionMessage);
 
-  // 真实语料：这节 15 回合 0 图，词表里一个结构词都没命中（交集/覆盖/复用/两处都不在表里）
   const qa: TeachingSessionMessage[] = [];
   for (let i = 0; i < 7; i += 1) {
     qa.push(turn('assistant', `你说得对，再往前走一步：想一想它凭什么是这样？第 ${i} 问。`));
     qa.push(turn('user', `因为它本来就该这样。第 ${i} 答。`));
   }
 
-  it('连续 6 个老师回合没出图 → 给一次「把已站住的链收成一张图」的机会', () => {
-    const opportunity = buildVisualOpportunity(qa, '把日志比对接回共识层');
-    expect(opportunity?.suggested).toBe(true);
-    expect(opportunity?.reason).toBe('recap-cadence');
-    expect(opportunity?.instruction).toContain('收成一张图');
-    expect(opportunity?.instruction).toContain('不要放进新内容');
+  it('连续多轮无图不再强制出图（没有学科关系可画就不画）', () => {
+    expect(buildVisualOpportunity(qa, '把日志比对接回共识层')).toBeNull();
   });
 
-  it('本课已用过某图型时，收一张的提示里报出来（软提醒，不强制换）', () => {
+  it('本课已出过图也不因「隔了 6 轮」再触发', () => {
     const withFigure = [turn('assistant', '先把这条时间线收一下。', [{ kind: 'position-line' }]), ...qa];
-    const opportunity = buildVisualOpportunity(withFigure, '把日志比对接回共识层');
-    expect(opportunity?.reason).toBe('recap-cadence');
-    expect(opportunity?.instruction).toContain('本课已经用过这些图型');
-    expect(opportunity?.instruction).toContain('position-line');
-    expect(opportunity?.instruction).toContain('不要为了换形状硬凑');
-  });
-
-  it('不足 6 个回合 → 不打扰（保持追问节奏）', () => {
-    const short = qa.slice(-4);
-    expect(buildVisualOpportunity(short, '把日志比对接回共识层')).toBeNull();
-  });
-
-  it('上一轮刚出过图 → 不触发节奏兜底', () => {
-    const withFigure = [...qa, turn('assistant', '这轮收个尾。', [{ kind: 'venn' }])];
     expect(buildVisualOpportunity(withFigure, '把日志比对接回共识层')).toBeNull();
-  });
-
-  it('本会话图已到上限 → 不触发（总量仍由上限兜底）', () => {
-    const capped: TeachingSessionMessage[] = [
-      turn('assistant', '四张图摆完了。', [{ kind: 'venn' }, { kind: 'grid' }, { kind: 'compare' }, { kind: 'tree' }]),
-      ...qa,
-    ];
-    expect(buildVisualOpportunity(capped, '把日志比对接回共识层')).toBeNull();
   });
 });
 
