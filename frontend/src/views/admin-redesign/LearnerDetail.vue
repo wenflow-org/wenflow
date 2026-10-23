@@ -484,8 +484,9 @@
             <!-- 教学域 items 接口侧 limit=20，learner_evidence 域事件全量并入（见 loadDetail 合并处）
                  ——渲染条数=响应条数，口径写「教学域仅近 20 条」防「共 N 条」误读（2026-10-11 走查修正：
                  域合并后「仅最近 20 条」已失实） -->
-            <!-- 卡头 meta 只留图形编码图例——条数/低置信计数归结论行（2026-10-11 用户走查：两处复读） -->
-            <span class="mk-card__meta">{{ EVIDENCE_LEGEND }}</span>
+            <!-- 卡头 meta 只留图形编码图例——条数/低置信计数归结论行（2026-10-11 用户走查：两处复读）。
+                 2026-10-23 用户「这文案为什么还在」：图例本身也是在复述图形怎么读，整句撤除——
+                 圆点色阶与信号档同名（可迁移/待巩固/证据不足），横条长度由行尾读数兜住。 -->
           </div>
           <!-- T2 硬约束 2「结论与细节分层」：结论行常驻可见，明细折叠。
                结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。
@@ -618,7 +619,7 @@
           <section v-if="conceptStats.length" class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">概念证据密度</h3>
-              <span class="mk-card__meta">{{ DENSITY_LEGEND }}</span>
+              <!-- 2026-10-23 用户「这文案为什么还在」：条长/颜色的读法由图本身与行尾「N 条」表达，卡头不再写图例 -->
             </div>
             <div class="ld-bars ld-bars--dense">
               <div v-for="c in conceptStats" :key="c.label" class="ld-bar" :class="{ 'ld-bar--empty': c.count === 0 }">
@@ -966,13 +967,11 @@ const isDark = useIsDark()
 const CONCEPT_NONE_HINT = '重算快照后自动生成。'
 const PRIOR_EMPTY_LABEL = '初始默认值 · 暂无学习记录'
 const PRIOR_EMPTY_TITLE = '该账号尚无学习记录，以下展示的是初始默认值，会随学习记录积累更新，不是实测结论'
-const EVIDENCE_LEGEND = '圆点颜色表示信号，横条长度表示置信'
 const EVIDENCE_NONE_HINT = '学习事件累积后自动生成。'
 const LOAD_ZONE_LSS = 'LSS 学习压力（0-100，越高越累）'
 const LOAD_ZONE_LF = 'LF 疲劳度（0-100，≥60 警戒）'
 const LOAD_ZONE_LSB = 'LSB 状态平衡（训练负荷减疲劳，负值表示状态差）'
 const LOAD_NONE_HINT = '学习者完成课堂/任务后，系统会记录每次的压力评估。'
-const DENSITY_LEGEND = '条长表示证据条数 · 颜色表示掌握风险（红 高 / 琥珀 中 / 绿 低）'
 const CALIB_META_TITLE = '预测与实际情况的吻合率（非学习者自评）'
 const GRAPH_TRUNCATED_NOTE = '仅显示部分概念，共'
 const MEMORY_PANE_TITLE = '记忆与复习'
