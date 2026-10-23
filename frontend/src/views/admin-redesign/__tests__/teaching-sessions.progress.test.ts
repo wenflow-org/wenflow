@@ -341,14 +341,23 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('卡头「有建议」开关可点穿：服务端 onlyWithAdvisory 过滤 toggle（再点取消）；建议徽章行内预览 + title 全文', async () => {
+  it('卡头「有建议」开关可点穿：服务端 onlyWithAdvisory 过滤 toggle（再点取消）；建议徽章读运营口径', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
         data: {
           items: [
             makeItem('a', {
-              advisory: { shouldSuggest: true, priority: 'high', ui: { title: '建议加强练习', body: '多做错题' } }
+              advisory: {
+                shouldSuggest: true,
+                priority: 'high',
+                recommendation: 'reinforce',
+                scope: 'downstream_path',
+                reasonCodes: ['prerequisite_gaps'],
+                rationale: '继续按原路径推进的成本偏高，建议先经过人工确认。',
+                // 学员端文案（admin 页不得原样上屏）
+                ui: { title: '建议先确认路径调整', body: '该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。' }
+              }
             }),
             makeItem('b', { status: 'active' })
           ]
@@ -359,10 +368,17 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const link = wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill');
     expect(link.text()).toBe('有建议1');
     expect(link.attributes('aria-pressed')).toBe('false');
-    // 建议徽章：行内直出建议标题（首行预览），title 挂完整建议文本
+    // 徽章 = 运营视角状态（待确认），不是学员端「建议先确认路径调整」原句
     const adv = wrapper.find('.ts-adv-badge');
-    expect(adv.text()).toBe('建议加强练习');
-    expect(adv.attributes('title')).toContain('建议加强练习：多做错题');
+    expect(adv.text()).toBe('待确认调整');
+    expect(adv.classes()).toContain('mk-badge--bad');
+    const title = adv.attributes('title') || '';
+    expect(title).toContain('高优先级');
+    expect(title).toContain('影响后续路径');
+    expect(title).toContain('触发原因：前置缺口');
+    expect(title).toContain('建议动作：先补强再推进');
+    expect(title).toContain('处置：未处置');
+    expect(title).not.toContain('不会覆盖你已完成的内容');
     // 点击 → 服务端过滤（onlyWithAdvisory: true），再点 → 取消（参数收敛）
     await link.trigger('click');
     await flushPromises();
@@ -372,6 +388,37 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     await flushPromises();
     const lastArg = listMock.mock.calls[listMock.mock.calls.length - 1][0];
     expect(lastArg.onlyWithAdvisory).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('建议已被学习者「保持原计划」→ 徽章退为中性与已决态，title 记处置动作', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('a', {
+              advisory: {
+                shouldSuggest: true,
+                priority: 'high',
+                recommendation: 'reinforce',
+                scope: 'downstream_path',
+                reasonCodes: ['prerequisite_gaps'],
+                rationale: '继续按原路径推进的成本偏高。',
+                learnerResponse: { action: 'keep', at: '2026-10-21T10:00:00.000Z' },
+                ui: { title: '建议先确认路径调整', body: '不会覆盖你已完成的内容。' }
+              }
+            })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const adv = wrapper.find('.ts-adv-badge');
+    expect(adv.text()).toBe('已保持计划');
+    expect(adv.classes()).toContain('mk-badge--muted');
+    expect(adv.classes()).not.toContain('mk-badge--bad');
+    expect(adv.attributes('title')).toContain('处置：学员选择保持原计划');
     wrapper.unmount();
   });
 

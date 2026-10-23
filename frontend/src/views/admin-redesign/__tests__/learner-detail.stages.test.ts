@@ -93,18 +93,23 @@ vi.mock('@/api/adminApi', () => ({
   // 必须给 resolved 值：loadDetail 对它 .then，undefined 会在 try 内同步抛 TypeError 炸掉后续 loadLdSessions
   getUserIncludingDeleted: vi.fn().mockResolvedValue({ data: { data: {} } }),
 }));
-vi.mock('../statusText', () => ({
-  statusText: (s: string) => s,
-  // C10 上收后教学 pane 徽章走 sessionStatusBadgeCls；本 mock 只需可调用返回空串（断言不涉及配色）
-  sessionStatusBadgeCls: () => '',
-  // 2026-10-11 深设计：进度列复用共享 statusText.sessionProgress* 四件套
-  sessionProgressPct: (p: { taskIndex: number; totalTasks: number } | null) =>
-    p && p.totalTasks > 0 ? Math.round((p.taskIndex / p.totalTasks) * 100) : null,
-  sessionProgressText: (p: { taskIndex: number; totalTasks: number } | null) =>
-    p && p.totalTasks > 0 ? `任务 ${p.taskIndex}/${p.totalTasks}` : '—',
-  sessionProgressTone: () => null,
-  sessionProgressDone: (s: string) => s === 'completed' || s === 'succeeded',
-}));
+vi.mock('../statusText', async () => {
+  // 建议徽章读运营口径（2026-10-22）：用真实实现，别在 mock 里另写一份文案
+  const actual = await vi.importActual<typeof import('../statusText')>('../statusText')
+  return {
+    ...actual,
+    statusText: (s: string) => s,
+    // C10 上收后教学 pane 徽章走 sessionStatusBadgeCls；本 mock 只需可调用返回空串（断言不涉及配色）
+    sessionStatusBadgeCls: () => '',
+    // 2026-10-11 深设计：进度列复用共享 statusText.sessionProgress* 四件套
+    sessionProgressPct: (p: { taskIndex: number; totalTasks: number } | null) =>
+      p && p.totalTasks > 0 ? Math.round((p.taskIndex / p.totalTasks) * 100) : null,
+    sessionProgressText: (p: { taskIndex: number; totalTasks: number } | null) =>
+      p && p.totalTasks > 0 ? `任务 ${p.taskIndex}/${p.totalTasks}` : '—',
+    sessionProgressTone: () => null,
+    sessionProgressDone: (s: string) => s === 'completed' || s === 'succeeded',
+  }
+});
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn() }));
 vi.mock('@/utils/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
@@ -279,7 +284,9 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
     const rows = w.findAll('tbody .ld-pane-row');
     expect(rows[0].text()).toContain('知识 3 点');
     expect(rows[0].text()).toContain('有总结');
-    expect(rows[0].text()).toContain('建议重排');
+    // 建议徽章走运营口径（2026-10-22）：不搬学员端标题「建议重排」，只报处置状态
+    expect(rows[0].text()).toContain('待确认调整');
+    expect(rows[0].text()).not.toContain('建议重排');
     expect(rows[1].text()).toContain('降级总结');
   });
 });

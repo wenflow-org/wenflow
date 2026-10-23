@@ -2,6 +2,12 @@
  * Admin 统一状态/阶段/类别本地化字典
  * 后端枚举（snake_case / camelCase / 英文）→ 中文展示
  */
+import {
+  getReplanPriorityText,
+  getReplanRecommendationText,
+  getReplanReasonCodeLabels,
+  getReplanScopeText,
+} from '@/utils/replanSignal'
 
 const STATUS_TEXT: Record<string, string> = {
   completed: '已完成',
@@ -755,4 +761,50 @@ export function ipText(ip?: string | null): string {
   const bare = v.replace(/^::ffff:/i, '')
   if (bare === '::1' || bare === '127.0.0.1' || bare === 'localhost') return '127.0.0.1（本机）'
   return bare
+}
+
+/* ---------- 路径调整建议：运营视角读法 ----------
+   后端 advisory.ui.{title,body} 是发给学习者的文案（「建议先确认路径调整」「不会覆盖你已完成
+   的内容」），直接搬进运营列表就变成对着学习者说话的句子。运营关心的是另三件事：这条建议处
+   置到哪一步、因为什么触发、影响多大范围——学员端的建议标题只留作兜底。 */
+export interface OpsAdvisoryLike {
+  priority?: string | null
+  recommendation?: string | null
+  scope?: string | null
+  reasonCodes?: string[] | null
+  rationale?: string | null
+  learnerResponse?: { action?: string | null; at?: string | null } | null
+  ui?: { title?: string | null; body?: string | null } | null
+}
+
+const ADVISORY_RESPONSE_LABEL: Record<string, string> = {
+  keep: '学员选择保持原计划',
+  later: '学员选择稍后再看',
+  preview: '学员已查看建议、未确认',
+}
+
+/** 行内徽章：只在「仍需人看」与「学习者已决定保持原计划」两态之间分叉 */
+export function advisoryOpsText(a: OpsAdvisoryLike | null | undefined): string {
+  return a?.learnerResponse?.action === 'keep' ? '已保持计划' : '待确认调整'
+}
+
+export function advisoryOpsBadgeCls(a: OpsAdvisoryLike | null | undefined): string {
+  if (a?.learnerResponse?.action === 'keep') return 'mk-badge--muted'
+  return a?.priority === 'high' ? 'mk-badge--bad' : a?.priority === 'medium' ? 'mk-badge--warn' : 'mk-badge--info'
+}
+
+/** 悬停：优先级 · 影响范围 · 触发原因 · 建议动作 · 处置 —— 学员端长句退到末尾当证据 */
+export function advisoryOpsTitle(a: OpsAdvisoryLike | null | undefined): string {
+  if (!a) return '路径调整建议'
+  const parts: string[] = [
+    getReplanPriorityText(a.priority as never),
+    getReplanScopeText(a.scope as never),
+  ]
+  const reasons = getReplanReasonCodeLabels(Array.isArray(a.reasonCodes) ? a.reasonCodes.map(String) : [])
+  if (reasons.length) parts.push(`触发原因：${reasons.join('、')}`)
+  if (a.recommendation) parts.push(`建议动作：${getReplanRecommendationText(a.recommendation as never)}`)
+  const response = a.learnerResponse?.action ? ADVISORY_RESPONSE_LABEL[a.learnerResponse.action] : ''
+  parts.push(`处置：${response || '未处置'}`)
+  const detail = a.rationale || a.ui?.body || ''
+  return detail ? `${parts.join(' · ')}。${detail}` : parts.join(' · ')
 }

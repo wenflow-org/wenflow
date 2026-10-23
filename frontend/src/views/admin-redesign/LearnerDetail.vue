@@ -808,9 +808,9 @@
                 <td>
                   <span class="mk-badge" :class="ldWrapupBadgeCls(s)" :title="ldWrapupTitle(s)">{{ ldWrapupText(s) }}</span>
                   <span
-                    v-if="s.advisory" class="mk-badge ld-adv" :class="ldAdvisoryBadgeCls(s.advisory.priority)"
-                    :title="`${s.advisory.title || '教学建议'}：${s.advisory.text}`"
-                  ><span class="ld-adv__txt">{{ s.advisory.title || '建议' }}</span></span>
+                    v-if="s.advisory" class="mk-badge ld-adv" :class="advisoryOpsBadgeCls(s.advisory)"
+                    :title="advisoryOpsTitle(s.advisory)"
+                  ><span class="ld-adv__txt">{{ advisoryOpsText(s.advisory) }}</span></span>
                 </td>
                 <td class="ld-mono ld-sub" :title="s.startAbs || undefined">{{ s.startAgo }}</td>
                 <td class="ld-mono ld-sub" :title="s.id">{{ shortId(s.id) }}</td>
@@ -934,9 +934,12 @@ import {
   sessionProgressPct,
   sessionProgressText,
   sessionProgressTitle,
-  sessionProgressTone
+  sessionProgressTone,
+  advisoryOpsText,
+  advisoryOpsTitle,
+  advisoryOpsBadgeCls
 } from './statusText'
-import type { SessionProgress } from './statusText'
+import type { SessionProgress, OpsAdvisoryLike } from './statusText'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -1254,7 +1257,7 @@ interface LdSessionRow {
   wrapupTier: 'complete' | 'missing' | 'pending'
   wrapupDegraded: boolean
   /** 重规划建议（后端 ReplanAdvisory 降维，平台页同款；无有效建议为 null） */
-  advisory: { title: string; text: string; priority: string } | null
+  advisory: OpsAdvisoryLike | null
   /** 低参与标注（completed 且用户消息 <2：与平台页拍板 #1、零证据门同阈值） */
   lowPart: boolean
 }
@@ -1344,9 +1347,6 @@ function ldWrapupTitle(r: LdSessionRow): string {
   if (r.wrapupTier === 'complete') return '收尾总结完整生成'
   if (r.wrapupTier === 'pending') return '课堂未到终态，总结尚未生成'
   return r.wrapupDegraded ? '总结不完整' : '终态课堂缺少收尾总结'
-}
-function ldAdvisoryBadgeCls(p: string): string {
-  return p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info'
 }
 /* 互动列 title：长时是信号注记而非故障（与平台页同一 25 分钟阈值）。
    后端 duration 的单位是**分钟**（computeEffectiveDurationMinutes），不是秒——
@@ -1475,12 +1475,15 @@ async function loadLdSessions(id: string, includeTest: boolean) {
       const summary = (wrapup?.summary || null) as Record<string, unknown> | null
       const sources = (wrapup?.sources || {}) as Record<string, string>
       const rawAdvisory = (s.advisory || null) as Record<string, unknown> | null
-      const advUi = (rawAdvisory?.ui || {}) as Record<string, unknown>
       const advisory = rawAdvisory
         ? {
-            title: String(advUi.title || ''),
-            text: String(advUi.body || rawAdvisory.rationale || ''),
-            priority: String(rawAdvisory.priority || '')
+            priority: String(rawAdvisory.priority || ''),
+            recommendation: String(rawAdvisory.recommendation || ''),
+            scope: String(rawAdvisory.scope || ''),
+            reasonCodes: Array.isArray(rawAdvisory.reasonCodes) ? rawAdvisory.reasonCodes.map(String) : [],
+            rationale: String(rawAdvisory.rationale || ''),
+            learnerResponse: (rawAdvisory.learnerResponse as OpsAdvisoryLike['learnerResponse']) || null,
+            ui: (rawAdvisory.ui as OpsAdvisoryLike['ui']) || null
           }
         : null
       const advisoryRelevant = !!advisory && rawAdvisory?.shouldSuggest !== false && !['none', ''].includes(advisory.priority)

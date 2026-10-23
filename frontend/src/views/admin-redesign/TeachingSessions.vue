@@ -327,18 +327,20 @@
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('output')">
-                <!-- 建议徽章可读（评审 §5）：行内直出建议标题（首行预览），title 挂完整建议文本。
-                     「有总结」且 wrapupDegraded（summary-only / fallback 兜底来源）时 badge 文案
-                     改「降级总结」+ title 说明（2026-10-06 审核 #40：该标记此前算出无消费）。
+                <!-- 产物徽章（评审 §5）：「有总结」且 wrapupDegraded（summary-only / fallback 兜底来源）
+                     时文案改「降级总结」+ title 说明（2026-10-06 审核 #40）。
+                     建议徽章读运营口径（2026-10-22 用户走查「这个页面看的视角是运营者」）：
+                     后端 advisory.ui.* 是写给学习者的（「建议先确认路径调整」），运营要看的是
+                     处置状态 + 触发原因 + 影响范围，见 statusText.advisoryOps*。
                      固定列宽后两枚徽章在窄档会超出本列：外层 flex-wrap 换行，不裁不挤邻列。 -->
                 <div class="ts-out">
                   <span class="mk-badge" :class="wrapupBadge(r)" :title="wrapupTitle(r)">{{ wrapupText(r) }}</span>
                   <span
                     v-if="r.hasAdvisory"
                     class="mk-badge ts-adv-badge"
-                    :class="advisoryBadge(r.advisory?.priority)"
-                    :title="r.advisory ? `${r.advisory.title || '教学建议'}：${r.advisory.text}` : '教学建议'"
-                  ><span class="ts-adv-badge__txt">{{ r.advisory?.title || '建议' }}</span></span>
+                    :class="advisoryOpsBadgeCls(r.advisory)"
+                    :title="advisoryOpsTitle(r.advisory)"
+                  ><span class="ts-adv-badge__txt">{{ advisoryOpsText(r.advisory) }}</span></span>
                 </div>
               </td>
               <td v-if="!isTableNarrow && !tsHiddenCols.has('attention')">
@@ -403,8 +405,8 @@ import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText } from './statusText'
-import type { SessionProgress } from './statusText'
+import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, advisoryOpsText, advisoryOpsTitle, advisoryOpsBadgeCls } from './statusText'
+import type { SessionProgress, OpsAdvisoryLike } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -463,7 +465,7 @@ interface Row {
   wrapup: WrapupSummary | null
   /** 降级总结：超时/收束失败兜底（summary-only/*-fallback），练习建议是学习者向占位，后台不原样展示 */
   wrapupDegraded: boolean
-  advisory: { title: string; text: string; priority: string } | null
+  advisory: OpsAdvisoryLike | null
   progress: SessionProgress | null
   /** #105 收束观测（后端统一口径）：该会话任务完成事件的轨道/通道；null = 无收束记录 */
   closure: { track: string; completionSource: string } | null
@@ -658,14 +660,19 @@ function trackCellTitle(r: Row): string {
 function mapRow(s: Record<string, unknown>): Row {
   const wrapup = (s.wrapup as Record<string, unknown>) || null
   const summary = (wrapup?.summary as WrapupSummary) || null
-  /* 后端 ReplanAdvisory：{shouldSuggest, priority, recommendation, scope, rationale, reasonCodes, ui:{title,body,options}} */
+  /* 后端 ReplanAdvisory：{shouldSuggest, priority, recommendation, scope, rationale, reasonCodes,
+     learnerResponse:{action,at}, ui:{title,body,options}}；ui.* 是学员端文案，这里只留运营要用的
+     字段（处置态/原因/范围），措辞由 statusText.advisoryOps* 单点给出 */
   const rawAdvisory = (s.advisory as Record<string, unknown>) || null
-  const advisoryUi = rawAdvisory ? (rawAdvisory.ui as Record<string, unknown>) || {} : {}
   const advisory = rawAdvisory
     ? {
-        title: String(advisoryUi.title || ''),
-        text: String(advisoryUi.body || rawAdvisory.rationale || ''),
-        priority: String(rawAdvisory.priority || '')
+        priority: String(rawAdvisory.priority || ''),
+        recommendation: String(rawAdvisory.recommendation || ''),
+        scope: String(rawAdvisory.scope || ''),
+        reasonCodes: Array.isArray(rawAdvisory.reasonCodes) ? rawAdvisory.reasonCodes.map(String) : [],
+        rationale: String(rawAdvisory.rationale || ''),
+        learnerResponse: (rawAdvisory.learnerResponse as OpsAdvisoryLike['learnerResponse']) || null,
+        ui: (rawAdvisory.ui as OpsAdvisoryLike['ui']) || null
       }
     : null
   const advisoryRelevant = !!advisory && rawAdvisory?.shouldSuggest !== false && !['none', ''].includes(advisory.priority)
@@ -1017,7 +1024,6 @@ const { goConsole } = useSessionDrill(closeDetail)
 /* 状态映射统一走共享字典（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
 /* 状态徽章已上收共享单源 statusText.sessionStatusBadgeCls（收尾批 C10，import 别名 statusBadge——语义逐值等价迁移） */
 /* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
-const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
 /* 任务类型字典已上收共享单源 statusText.ts（F2-2：路径详情同批枚举不再各自维护一份） */
 /* 时长格式化。后端 duration 的单位是**分钟**（computeEffectiveDurationMinutes = ms/60000），
    不是秒——原先按秒解释，3 分钟的课在列表里显示成「3 秒」（2026-10-20 跑数时发现）。
