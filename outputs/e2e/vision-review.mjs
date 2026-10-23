@@ -45,7 +45,7 @@ async function judge(it, imgB64) {
   const body = {
     model: MODEL,
     temperature: 0,
-    max_tokens: 1000,
+    max_tokens: 1400,
     messages: [
       { role: 'system', content: SYSTEM },
       {
@@ -65,7 +65,13 @@ async function judge(it, imgB64) {
       body: JSON.stringify(body),
     });
     const text = await res.text();
-    if (!res.ok) return { error: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+    if (!res.ok) {
+      if (res.status === 429 && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 8000 * (attempt + 1)));
+        continue;
+      }
+      return { error: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+    }
     try {
       const env = JSON.parse(text);
       content = env.choices?.[0]?.message?.content || '';
@@ -78,11 +84,26 @@ async function judge(it, imgB64) {
     await new Promise((r) => setTimeout(r, 700));
   }
   const m = content.match(/\{[\s\S]*\}/);
-  if (!m) return { error: `no json: ${content.slice(0, 160)}`, raw: content };
+  const candidate = m ? m[0] : content.trim();
+  const repair = (value) => {
+    let out = value.trim();
+    if (!out.startsWith('{')) return out;
+    // 截断时补齐未闭合的字符串与括号（模型常在 max_tokens 处断掉）
+    const quotes = out.split('"').length - 1;
+    if (quotes % 2 === 1) out += '"';
+    const opens = (out.match(/\{/g) || []).length;
+    const closes = (out.match(/\}/g) || []).length;
+    out += '}'.repeat(Math.max(0, opens - closes));
+    return out;
+  };
   try {
-    return JSON.parse(m[0]);
+    return JSON.parse(candidate);
   } catch {
-    return { error: `bad json: ${m[0].slice(0, 160)}`, raw: content };
+    try {
+      return JSON.parse(repair(candidate));
+    } catch {
+      return { error: `bad json: ${candidate.slice(0, 160)}`, raw: content };
+    }
   }
 }
 
@@ -104,7 +125,7 @@ for (let i = 0; i < items.length; i++) {
   });
   const tag = verdict.verdict || verdict.error || '?';
   console.log(`[${i + 1}/${items.length}] ${items[i].user} ${items[i].figure?.kind || 'position-line'} → ${tag}`);
-  await new Promise((r) => setTimeout(r, 400));
+  await new Promise((r) => setTimeout(r, 1200));
 }
 
 const ok = results.filter((r) => !r.error);

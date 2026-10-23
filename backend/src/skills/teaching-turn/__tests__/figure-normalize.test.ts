@@ -871,6 +871,38 @@ describe('条目对象形态与显式并联（2026-10-22 真课丢图）', () =>
   });
 });
 
+describe('网格两行内容完全相同 → 整张丢弃（2026-10-23 外审：h=5/h=20 两行一样）', () => {
+  it('重复行被拒', async () => {
+    const out = await runWithFigure({
+      kind: 'grid',
+      rows: 2,
+      cols: 2,
+      rowLabels: ['h=5', 'h=20'],
+      cells: [
+        { r: 0, c: 0, text: '5 = 5t²' },
+        { r: 0, c: 1, text: 't = 1 秒' },
+        { r: 1, c: 0, text: '5 = 5t²' },
+        { r: 1, c: 1, text: 't = 1 秒' },
+      ],
+    });
+    expect(out.figure).toBeUndefined();
+  });
+  it('两行不同照出', async () => {
+    const out = await runWithFigure({
+      kind: 'grid',
+      rows: 2,
+      cols: 2,
+      cells: [
+        { r: 0, c: 0, text: '5 = 5t²' },
+        { r: 0, c: 1, text: 't = 1 秒' },
+        { r: 1, c: 0, text: '20 = 5t²' },
+        { r: 1, c: 1, text: 't = 2 秒' },
+      ],
+    });
+    expect(out.figure?.kind).toBe('grid');
+  });
+});
+
 describe('纯两栏文字对照不再出图（2026-10-23 外部视觉评审）', () => {
   it('没有链路的两栏对照整块丢弃', async () => {
     const out = await runWithFigure({

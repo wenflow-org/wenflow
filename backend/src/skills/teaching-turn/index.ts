@@ -1643,6 +1643,21 @@ function normalizeGridSpec(raw: Record<string, unknown>): Record<string, unknown
     cells.push(out);
     if (cells.length >= rows * cols) break;
   }
+  // 两行内容完全相同 = 表格没有信息量（2026-10-23 外审：h=5 / h=20 两行一样，还标错行名）。
+  if (rows >= 2) {
+    const rowText = (r: number) =>
+      cells
+        .filter((c) => c.r === r)
+        .map((c) => String(c.text ?? c.mark ?? (c.mask ? '?' : '')))
+        .join('|');
+    const seen = new Set<string>();
+    for (let r = 0; r < rows; r += 1) {
+      const key = rowText(r);
+      if (!key.trim()) continue;
+      if (seen.has(key)) return null;
+      seen.add(key);
+    }
+  }
   // 全空网格 = 一张等待填写的表格图片——用户 2026-10-17 判定"填表做成图片没有意义"，整块丢弃。
   if (filled < 2) return null;
   const title = toFigureText(raw.title, SPEC.titleMax);
