@@ -270,6 +270,8 @@ export interface WrapupArtifact {
     ktl: number;
     lf: number;
     lsb: number;
+    /** PMC 基座是否成熟（false = 冷启动爬升期，LSB<0 不按「失衡」展示） */
+    mature?: boolean;
   } | null;
   duration?: number;
   summarySource?: 'model' | 'fallback';

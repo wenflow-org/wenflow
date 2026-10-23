@@ -30,6 +30,7 @@ import { computeEffectiveDurationMinutes, pickPeerStrategy } from './teaching-se
 import { requireTeachingRevision } from './teaching-turn-shared';
 import { processStudentMessage } from './teaching-turn-engine';
 import learningStateService from '../learning/learning-state.service';
+import { classifyLoad } from '../learning/learning-load-verdict';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import type { ProcessStudentMessageOptions } from './AITeachingCoordinator';
 
@@ -105,6 +106,7 @@ async function withPmcLongTermState(
       ktl: pmcState.ktl,
       lf: pmcState.lf,
       lsb: pmcState.lsb,
+      mature: classifyLoad({ ktl: pmcState.ktl, lf: pmcState.lf }).mature,
       timestamp: pmcState.timestamp,
     },
   };
