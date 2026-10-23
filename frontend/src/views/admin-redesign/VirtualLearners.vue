@@ -322,7 +322,7 @@
                      与「行内 ⋯ 菜单：低频/危险操作收进菜单，避免与高频操作平铺」的原语判例一致 -->
                 <!-- 2026-10-21 逻辑重整：行内只留「这个状态下的下一步」——
                      运行中→暂停、停滞(暂停)→继续、停滞(无响应)→终止、已停止→运行。
-                     不必先分辨「运行」和「单步测试」差在哪；没故事时真禁用，不再改字冒充。 -->
+                     不必先分辨「运行」和「提示词试跑」差在哪；没故事时真禁用，不再改字冒充。 -->
                 <button
                   v-if="isLive"
                   type="button"
@@ -340,7 +340,7 @@
                 <div v-if="isLive" class="mk-menu">
                   <!-- aria-expanded 按行判定（同审核 #168 判例）：menuOpen 是全局布尔，任一行开
                        菜单其余行都报 expanded=true；openMenu 才是「本行是否开」 -->
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作（单步测试 / 在卡库中查看 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：单步测试 / 在卡库中查看 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作（再跑一次 / 提示词试跑 / 查看来源卡 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：再跑一次 / 提示词试跑 / 查看来源卡 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
                     <!-- 低频诊断：用人设和故事直接跑一次 Prompt 对话（不创建用例、不影响正式会话） -->
                     <!-- 主按钮是「暂停/继续/终止」时，新开一次运行只能从这里进（否则暂停过的学习者再也开不了新运行） -->
@@ -349,14 +349,14 @@
                       type="button"
                       class="mk-menu__item"
                       role="menuitem"
-                      title="新开一次运行：选一个故事再启动一条会话（不影响已有的运行）"
+                      title="再跑一次：选一个故事，另开一条新会话从头跑（与「继续」不同——继续是接着现有会话往下推，已有运行不受影响）"
                       @click="openLaunch(s)"
-                    >新开一次运行</button>
+                    >再跑一次</button>
                     <!-- 调试：只跑一次 Prompt，不建会话、不动正式数据 -->
-                    <button type="button" class="mk-menu__item" role="menuitem" title="单步测试：用该人设和故事直接跑一次 Prompt 对话，看输出的字段是否符合预期（不创建用例、不影响正式运行）" @click="openPromptTest(s)">单步测试</button>
+                    <button type="button" class="mk-menu__item" role="menuitem" title="提示词试跑：用人设和故事试跑一轮 Prompt，检查模型输出的字段对不对。不建会话、不影响正式运行（和座舱里的「推进」不是一回事）" @click="openPromptTest(s)">提示词试跑</button>
                     <div class="mk-menu__sep" aria-hidden="true"></div>
                     <!-- 导航（双向互链，卡与本人是同一条档案记录，卡 id 即本行 id） -->
-                    <button type="button" class="mk-menu__item" role="menuitem" title="在卡库中查看：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="menuOpenSourceCard(s)">在卡库中查看</button>
+                    <button type="button" class="mk-menu__item" role="menuitem" title="查看来源卡：这条虚拟学习者背后的那张卡——人设、故事池、已备故事都在卡上。卡是静态模板，配成学习者之后才会跑" @click="menuOpenSourceCard(s)">查看来源卡</button>
                     <div class="mk-menu__sep" aria-hidden="true"></div>
                     <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该虚拟学习者（其运行记录一并删除，不可恢复）" @click="menuRemove(s)">删除</button>
                   </div>

@@ -693,26 +693,26 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     await row.find('.mk-menu__btn').trigger('click');
     await nextTick();
     const itemOf = (text: string) => row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === text);
-    expect(itemOf('单步测试'), '菜单缺少单步测试入口').toBeTruthy();
-    expect(itemOf('在卡库中查看'), '列表行缺少进卡库的入口').toBeTruthy();
+    expect(itemOf('提示词试跑'), '菜单缺少提示词试跑入口').toBeTruthy();
+    expect(itemOf('查看来源卡'), '列表行缺少进卡库的入口').toBeTruthy();
     expect(itemOf('删除')).toBeTruthy();
-    // 主按钮就是「运行」时，菜单里不再重复一条「新开一次运行」
-    expect(itemOf('新开一次运行')).toBeFalsy();
-    // 单步测试：点击后关菜单 + 弹出 Prompt 测试面板（Teleport 到 body）
-    await itemOf('单步测试')!.trigger('click');
+    // 主按钮就是「运行」时，菜单里不再重复一条「再跑一次」
+    expect(itemOf('再跑一次')).toBeFalsy();
+    // 提示词试跑：点击后关菜单 + 弹出 Prompt 试跑面板（Teleport 到 body）
+    await itemOf('提示词试跑')!.trigger('click');
     await nextTick();
     const titles = [...document.body.querySelectorAll('.mk-modal__title')].map((el) => el.textContent || '');
-    expect(titles.some((t) => t.includes('单步测试')), '单步测试未弹出面板').toBe(true);
+    expect(titles.some((t) => t.includes('提示词试跑')), '提示词试跑未弹出面板').toBe(true);
     expect(row.find('.mk-menu__pop').exists()).toBe(false);
-    // 在卡库中查看仍走原行为（卡库 id 即本表行 id，同一条档案记录；列表是一级页 → 无需 from）
+    // 查看来源卡仍走原行为（卡库 id 即本表行 id，同一条档案记录；列表是一级页 → 无需 from）
     await row.find('.mk-menu__btn').trigger('click');
     await nextTick();
-    await row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '在卡库中查看')!.trigger('click');
+    await row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '查看来源卡')!.trigger('click');
     expect(openSubPageMock).toHaveBeenCalledWith('card', 'vl-7');
     w.unmount();
   });
 
-  it('正在跑的行：主按钮是暂停，菜单里保留「新开一次运行」的入口', async () => {
+  it('正在跑的行：主按钮是暂停，菜单里保留「再跑一次」的入口', async () => {
     liveVirtuals.value = [makeVirtual(1, { runningCount: 1, runningSessionIds: ['r-1'] })];
     const w = await mountPage();
     const row = w.find('.mk-card--fill tbody tr');
@@ -721,8 +721,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     await nextTick();
     const items = row.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
     // 暂停过的学习者如果没有这个入口，就再也开不了新运行
-    expect(items).toContain('新开一次运行');
-    expect(items).toContain('单步测试');
+    expect(items).toContain('再跑一次');
+    expect(items).toContain('提示词试跑');
     expect(items).toContain('删除');
     w.unmount();
   });

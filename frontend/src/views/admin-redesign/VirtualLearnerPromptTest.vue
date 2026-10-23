@@ -3,9 +3,9 @@
   <Teleport v-if="render" to="body">
   <!-- 关闭统一走 useMaskClose（按下+松开判定，防拖拽误关）；@click.self 双路径残留已清（2026-09-26 对齐） -->
   <div v-if="testTarget" ref="testMaskRef" class="mk-modal">
-    <div ref="testPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="单步 Prompt 测试">
+    <div ref="testPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="提示词试跑">
       <div class="mk-modal__head">
-        <h3 class="mk-modal__title">单步测试 · {{ testTarget.name }}</h3>
+        <h3 class="mk-modal__title">提示词试跑 · {{ testTarget.name }}</h3>
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="closePromptTest">✕</button>
       </div>
       <div class="mk-modal__body">
