@@ -143,6 +143,9 @@ function summarize(target, results, dims, labels, flags, flagLabels, weights) {
   const scored = results.filter((r) => r.aggregate);
   const n = scored.length;
   const passed = scored.filter((r) => r.aggregate.verdict === 'pass').length;
+  // 硬失败 flag（未答收口/总结失真/错答放行/编造）会把 pass 率压得很低；
+  // softPass 只看均分 ≥0.70，用来区分「系统性收口缺陷」与「整体质量差」。
+  const softPassed = scored.filter((r) => Number.isFinite(r.aggregate.overall) && r.aggregate.overall >= 0.70).length;
   const dimensions = {};
   for (const key of dims) {
     const xs = scored.map((r) => r.aggregate.dimensions[key]).filter((v) => Number.isFinite(v));
@@ -185,6 +188,8 @@ function summarize(target, results, dims, labels, flags, flagLabels, weights) {
     pass: passed,
     passRate: pct(passed, n),
     passCi: wilson(passed, n),
+    softPass: softPassed,
+    softPassRate: pct(softPassed, n),
     overall: round3(mean(scored.map((r) => r.aggregate.overall))),
     overallCi: round3(ci95(scored.map((r) => r.aggregate.overall))),
     dimensions,
@@ -208,6 +213,7 @@ function renderReport(target, summary, judgeVersion, cases) {
   lines.push(`- judgeVersion：\`${judgeVersion}\``);
   lines.push(`- 样本：${summary.n}（虚拟 ${summary.byScope.virtual?.n ?? 0} / 真实 ${summary.byScope.real?.n ?? 0}），无效 ${summary.invalid}`);
   lines.push(`- 结论：pass ${summary.pass}/${summary.n} = **${summary.passRate ?? 'n/a'}**（95% CI ${summary.passCi[0]}–${summary.passCi[1]}）｜均分 **${summary.overall ?? 'n/a'}**`);
+  lines.push(`- 软通过（均分 ≥0.70，不看硬失败 flag）：${summary.softPass}/${summary.n} = ${summary.softPassRate ?? 'n/a'}`);
   lines.push('');
   lines.push('## 维度均分', '', '| 维度 | 均分 | 95% CI | 权重 |', '|---|---:|---|---:|');
   for (const [key, d] of Object.entries(summary.dimensions)) {
@@ -353,7 +359,7 @@ async function main() {
     writeFileSync(join(OUT, `${target}-verdicts.jsonl`), results.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
     writeFileSync(join(OUT, `${target}-summary.json`), JSON.stringify(summary, null, 2), 'utf8');
     writeFileSync(join(OUT, `report-${target}.md`), renderReport(target, summary, judgeVersion, cases), 'utf8');
-    console.log(`[done] ${target}｜n=${summary.n}｜pass=${summary.passRate}｜overall=${summary.overall}｜calls=${summary.calls.calls} fail=${summary.calls.failures}`);
+    console.log(`[done] ${target}｜n=${summary.n}｜pass=${summary.passRate}｜soft=${summary.softPassRate}｜overall=${summary.overall}｜calls=${summary.calls.calls} fail=${summary.calls.failures}`);
     console.log(`[out] ${OUT}`);
   }
   if (DRY) console.log('[dry-run] 未调用模型、未写盘');
