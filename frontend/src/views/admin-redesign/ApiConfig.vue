@@ -395,7 +395,7 @@
               :title="capPillTitle(c)"
             >
               <span class="ac-hpill__dot" aria-hidden="true"></span>
-              <span class="ac-hpill__id mono">{{ c.id }}</span>
+              <span class="ac-hpill__name" :title="`能力标识：${c.id}`">{{ skillDisplayName(c.id) }}</span>
               <span class="ac-hpill__state">{{ capStateText(c.status) }}</span>
             </span>
           </div>
@@ -632,6 +632,7 @@ import {
   errMsg,
   liveFailures,
   loadLiveData,
+  skillDisplayName,
   registrationEnabled,
   registerIpQuotaEnabled,
   registerIpDailyQuota,
@@ -1854,7 +1855,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   white-space: nowrap;
 }
 .ac-hpill__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.ac-hpill__id { color: var(--mk-ink); }
+.ac-hpill__name { color: var(--mk-ink); }
 .ac-hpill__state { color: var(--mk-muted); }
 .ac-hpill.is-operational .ac-hpill__dot { background: var(--mk-green); }
 .ac-hpill.is-degraded .ac-hpill__dot { background: var(--mk-amber); }
