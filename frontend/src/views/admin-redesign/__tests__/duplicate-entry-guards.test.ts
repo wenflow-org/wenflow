@@ -82,17 +82,15 @@ describe('重复操作入口守卫', () => {
     expect(read('Notifications.vue')).toContain("embedded ? '' : '发送第一条通知'")
   })
 
-  it('带页级「真实/测试」开关的列表页不再逐行挂身份徽章', () => {
-    // 2026-10-21 用户「右上角已经切换了，这里就不需要了」：开关已表达身份域，
-    // 逐行复述「测试账号 / 虚拟」等于把视角名再说一遍。身份信号留在头像 tone 上。
+  it('口径开关退役：没有页面再引用 DataScopeToggle，也没有虚拟身份徽章', () => {
+    /* 2026-10-21 用户拍板「没有测试，测试只是备注」：
+       真实/测试 视角开关整体退役（虚拟学习者归自己的域），列表页不再有身份视角控件；
+       账号页只对测试/审计账号给一枚「测试」备注，不再有虚拟学习者行。 */
     const files = readdirSync(resolve(__dirname, '..')).filter((f) => f.endsWith('.vue'))
-    const scopePages = files.filter((f) => read(f).includes('<DataScopeToggle'))
-    expect(scopePages.length).toBeGreaterThanOrEqual(8)
-    for (const f of scopePages) {
-      const src = read(f)
-      expect(src, f).not.toContain('MkVariantBadge')
-      expect(src, f).not.toContain('mk-badge--virtual')
-      expect(src, f).not.toContain('mk-badge--test')
+    const stillUsing = files.filter((f) => read(f).includes('DataScopeToggle'))
+    expect(stillUsing).toEqual([])
+    for (const f of files) {
+      expect(read(f), f).not.toContain('mk-badge--virtual')
     }
   })
 

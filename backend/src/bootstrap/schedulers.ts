@@ -186,7 +186,7 @@ export function runAdminPageColdWarmup(): void {
       ]);
       await warmSkillListStatsCache();
       await warmExecLogsStatsCache();
-      await learnerSnapshotRefreshService.listForAdmin({ excludeTest: true, limit: 500 });
+      await learnerSnapshotRefreshService.listForAdmin({ limit: 500 });
       logger.info('管理端页面冷读预热完成');
     });
   }, 30_000);

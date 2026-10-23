@@ -11,10 +11,6 @@
       <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '共 ' + liveUsersTotal + ' 人，当前显示前 ' + users.length + ' 人' : '共 ' + liveUsersTotal + ' 人') : undefined">
         共 {{ isLive && liveUsersTotal > users.length ? liveUsersTotal + ' 人 · 当前显示 ' + users.length : users.length }} 人
       </span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅统计真实用户（不含测试账号）">
-        真实 {{ realUsers }}
-      </span>
-      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="含测试 / 审计账号">测试账号 {{ users.length - realUsers }}</span>
       <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 近 7 天活跃 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
         近 7 天活跃 {{ activeToday }}
       </span>
@@ -129,7 +125,7 @@
           <!-- 行点击进用户详情；键盘等价：tabindex + Enter 触发（对齐 gc-row/oc-row 判例），
                行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
           <!-- 口径透传：测试视角下点虚拟/测试账号，详情接口需按全量口径查询，否则 404（与行点击/详情钮同参） -->
-          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id, includeTest ? { includeTest: true } : undefined)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id, includeTest ? { includeTest: true } : undefined)">
+          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id)">
             <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="ul-user">
@@ -147,6 +143,12 @@
                 </div>
                 <div class="ul-tags">
                   <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
+                  <!-- 2026-10-21 用户拍板「测试只是备注」：不做视角，也不用筛选，行内一枚备注即可 -->
+                  <span
+                    v-else-if="isNonRealAccount(u) && !isVirtualAccount(u)"
+                    class="mk-badge mk-badge--sm mk-badge--test"
+                    title="用于测试与审计的账号"
+                  >测试</span>
                   <!-- 自己那一行（2026-10-19 用户走查「这不就重复了吗」）：原文案「当前管理员」
                        与身份列的「管理员」徽章读作同一个角色标签，实际标的是「这一行是你正在用的
                        账号」（该行 ⋯ 菜单刻意不给「降为用户 / 删除」）。改说账号，不再复述角色 -->
@@ -172,7 +174,7 @@
             <td>
               <div class="mk-actions">
                 <!-- 原型操作列：文字「详情」描边小钮（.btn--sm 形态），行级管理动作留在 ⋯ 菜单 -->
-                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openSubPage('user', u.id, includeTest ? { includeTest: true } : undefined)">详情</button>
+                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openSubPage('user', u.id)">详情</button>
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === u.id" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -276,7 +278,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveUsers, liveCreateUser, liveDeleteUser, liveUsersTotal, liveSetUsersIncludeTest, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { liveUsers, liveCreateUser, liveDeleteUser, liveUsersTotal, refreshLiveUsers, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData } from './live'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -341,7 +343,6 @@ const isSelf = (u: UserRow) => !!currentAdmin.value.id && u.id === currentAdmin.
     builtin_*@preset.local —— payload 标了 isVirtualLearner=true）——含测试档下这类行既进
     「普通用户」筛选、又能勾选进批量删除/导出（F1-1）。标记优先、正则兜底的口径见该文件。 */
 const isVirtualAccount = isVirtualLearnerAccount
-const isRealAccount = isRealAccountUser
 /** 非真实账号（虚拟学习者 ∪ 测试/审计）：不参与管理员提升与批量删除（无意义且有风险） */
 const isNonRealAccount = (u: UserRow) => !isRealAccountUser(u)
 
@@ -351,7 +352,7 @@ interface UserRow {
   email: string
   admin: boolean
   online: boolean
-  /** 数据隔离标记（includeTest=true 时后端带回，供灰标） */
+  /** 测试/审计备注标记（后端按 isTestAccountUser 判定，行内展示「测试」） */
   isVirtualLearner?: boolean
   isTestAccount?: boolean
   createdAt: string
@@ -438,20 +439,8 @@ const users = computed<UserRow[]>(() => {
 const pill = ref('all')
 const keyword = ref('')
 
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；口径整组统一（2026-10-04 用户拍板）——
-   get/set 走 live.ts 共享态（页头 DataScopeToggle 同源），本页 watch 只负责按新口径重拉并灰标 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
-watch(includeTest, (v) => {
-  // D10：测试视角不提供角色/活跃 pill，切过去时若停在旧筛选上会立刻变成空列表。
-  if (v && pill.value !== 'all' && pill.value !== 'deleted') pill.value = 'all'
-  // 切换失败不静默：用户以为已切到全量/仅真实口径，实际列表还是旧口径
-  if (isLive.value && pill.value !== 'deleted') {
-    liveSetUsersIncludeTest(v).catch((e) => toast.error(`切换数据范围失败：${errMsg(e)}`))
-  }
-})
+/* 视角开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+   列表 = 全部非虚拟账号；测试/审计账号照常列出，行内以「测试」备注标识。 */
 
 /* D3 表格增强：列显隐（公共组件 MkCols 接管：菜单 + localStorage 持久化；列可隐藏，用户/操作列固定）。
    默认列集对齐原型 .tbl（用户/邮箱/角色/路径会话/最后登录/操作）：「选择框」「注册时间」默认隐藏
@@ -480,8 +469,6 @@ const showCol = (key: string) =>
   !(isMedium.value && MEDIUM_HIDDEN_COLS.has(key)) &&
   !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 
-/** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐——列表已全量加载，仅超上限时截断） */
-const realUsers = computed(() => users.value.filter((u) => !u.deleted && isRealAccount(u)).length)
 
 /** live 用户域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(
@@ -497,41 +484,16 @@ defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
    「已删除」为独立数据源，切过去才拉取，未加载时不显示计数。 */
 const pills = computed<Array<{ id: string; label: string; count: number | string | null; title?: string }>>(() => {
   const active = liveUsers.value
-  /* 审核 #8（2026-10-06）：「普通用户」用真实域口径（排除虚拟/测试），与同面板 KPI
-     「真实用户」（hint 明写不含虚拟/测试）保持同一口径。
-     走查 F1-1（2026-10-07）：该口径原先只靠命名约定正则，漏掉卡库/预置库的虚拟学习者
-     （vl-*@cards.local / builtin_*@preset.local，含测试档实测 10 行）→ pill 比同屏 KPI 多 10、
-     这些行还能被筛出来勾进批量删除。改走 learner-profile.ts 单点（payload 标记优先）。 */
-  const realActive = active.filter(isRealAccount)
-  /* 三枚角色/活跃 pill 一律真实域，且**计数与筛选同谓词**（2026-10-11 走查实测）：
-     含测试档下「管理员」badge 0 而点开出现 1 行测试管理员、「近 7 天活跃」badge 0 而点开
-     出 3 行——同一控件两套分母（计数取 realActive、筛选取全量行）。现两者都走真实域，
-     title 明写口径：含测试档下列表本身含虚拟/测试行，但角色/活跃 pill 不把它们算作「用户」。 */
-  const pillDomainTitle = '仅统计真实账号（不含虚拟学习者 / 测试账号）'
-  /* D10（2026-10-22 拍板 A）：测试视角下列表含虚拟/测试账号，但角色/活跃三枚 pill 恒定按
-     真实域计数，永远是 0、点开还是空列表——不给一条走不通的入口，只留「全部 / 已删除」。 */
-  if (includeTest.value) {
-    return [
-      { id: 'all', label: '全部', count: active.length },
-      {
-        id: 'deleted',
-        label: '已删除',
-        count: deletedUsers.value.length
-          ? (deletedUsers.value.length >= DELETED_WINDOW ? `${DELETED_WINDOW}+` : deletedUsers.value.length)
-          : null,
-        title: `最多保留最近 ${DELETED_WINDOW} 条已删除账号记录。超过时计数显示「${DELETED_WINDOW}+」`
-      }
-    ]
-  }
+  /* 列表即全部非虚拟账号（后端已排除虚拟学习者），计数与筛选同一谓词、无第二套分母。 */
   return [
     { id: 'all', label: '全部', count: active.length },
-    { id: 'admin', label: '管理员', count: realActive.filter((u) => u.isAdmin).length, title: pillDomainTitle },
-    { id: 'user', label: '普通用户', count: realActive.filter((u) => !u.isAdmin).length, title: pillDomainTitle },
+    { id: 'admin', label: '管理员', count: active.filter((u) => u.isAdmin).length },
+    { id: 'user', label: '普通用户', count: active.filter((u) => !u.isAdmin).length },
     {
       id: 'online',
       label: '近 7 天活跃',
-      count: realActive.filter((u) => recentLogin(u.lastLoginAt)).length,
-      title: `近 7 天内有登录。${pillDomainTitle}`
+      count: active.filter((u) => recentLogin(u.lastLoginAt)).length,
+      title: '近 7 天内有登录'
     },
     /* 审核 #14（2026-10-06）：已删除列表取自单次 limit 窗口，超过窗口时计数会小于真实值——
        到顶显示「50+」并在 title 标注截断，界面不再把窗口当全量。 */
@@ -734,7 +696,7 @@ function exportSelected() {
       `${u.paths} / ${u.sessions}`,
       esc(u.createdAt || ''),
       esc(u.lastLogin || ''),
-      u.deleted ? '已删除' : isVirtualAccount(u) ? '虚拟' : isNonRealAccount(u) ? '测试' : '真实',
+      u.deleted ? '已删除' : isVirtualAccount(u) ? '虚拟学习者' : isNonRealAccount(u) ? '测试' : '普通',
     ].join(',')
   )
   const csv = '\uFEFF' + [header.join(','), ...lines].join('\r\n')
@@ -786,7 +748,7 @@ async function restoreUserRow(u: UserRow) {
     // （pill 的 watch 只在切到 deleted 时拉取，切回 all 不重拉）——与 liveDeleteUser 的
     // 对称清理成对；重拉失败不静默，如实告知需手动刷新
     if (isLive.value) {
-      await liveSetUsersIncludeTest(includeTest.value).catch(() => {
+      await refreshLiveUsers().catch(() => {
         toast.error('用户已恢复，但列表刷新失败，请手动刷新')
       })
     }
@@ -816,14 +778,11 @@ const { toggle: toggleUserSort, sortState: userSortState, sortRows: sortUserRows
 const filtered = computed(() =>
   sortUserRows(users.value.filter((u) => {
     if (pill.value === 'deleted' && !u.deleted) return false
-    /* 角色 / 活跃三枚 pill 与计数同一真实域口径（2026-10-11 走查：计数取 realActive 而筛选
-       只看该轴，含测试档下 badge 与结果打架）。 */
-    if (pill.value === 'admin' && (!u.admin || !isRealAccount(u))) return false
-    // 审核 #8（2026-10-06）+ 走查 F1-1（2026-10-07）：与 pill 计数同一真实域口径——「普通用户」
-    // 不含虚拟/测试账号；判据走 learner-profile.ts 单点（payload 标记 ∪ 命名约定），
-    // 否则含测试档下 vl-*/builtin_* 形态的虚拟学习者会被筛出来（badge=虚拟却可勾选）
-    if (pill.value === 'user' && (u.admin || !isRealAccount(u))) return false
-    if (pill.value === 'online' && (!u.online || !isRealAccount(u))) return false
+    /* 2026-10-21：列表已是全部非虚拟账号，角色/活跃 pill 只看该轴本身，不再叠加身份域
+       （否则计数含测试账号、筛选又把它滤掉，同屏两套分母）。 */
+    if (pill.value === 'admin' && !u.admin) return false
+    if (pill.value === 'user' && u.admin) return false
+    if (pill.value === 'online' && !u.online) return false
     const q = keyword.value.trim().toLowerCase()
     if (q && !`${u.name} ${u.email} ${u.id}`.toLowerCase().includes(q)) return false
     return true

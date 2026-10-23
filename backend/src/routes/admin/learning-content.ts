@@ -20,7 +20,7 @@ import {
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { logger } from '../../utils/logger';
-import { buildQaUserWhere, buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
+import { buildNonVirtualUserWhere } from '../../utils/test-account';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
 import { regeneratePathCoreFromStoredGoal } from '../../services/learning/path-regeneration.service';
 import { isPathMutationConflictError } from '../../services/learning/path-mutation-safety';
@@ -60,15 +60,9 @@ router.get('/paths', async (req: Request, res: Response) => {
         { users: { name: { contains: keyword } } },
       ];
     }
-    // 内容治理默认仅真实用户；includeTest=1 时含虚拟/测试；
-    // testOnly=1（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看非真实账号；
-    // qaOnly=1 时只含测试/审计账号（2026-10-21「教学组彻底剔除虚拟」：虚拟学习者的
-    // 路径归虚拟学习者域，不再混进教学口径）
-    if (String(req.query.testOnly || '') === 'true') {
-      where.users = String(req.query.qaOnly || '') === 'true'
-        ? await buildQaUserWhere()
-        : await buildTestUserWhere();
-    } else if (!includeTest) where.users = await buildRealUserWhere();
+    // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试/审计账号只是行内备注）；
+    // includeTest=1 是按 id 直查虚拟账号路径的逃生口（学习者详情），不是页面视角
+    if (!includeTest) where.users = await buildNonVirtualUserWhere();
 
     const [paths, total] = await Promise.all([
       findLearningPathsForAdmin(where, skip, limit),
@@ -260,14 +254,9 @@ router.get('/stats', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    // 口径与 /paths 同一判据：默认仅真实用户；includeTest=true 时含虚拟/测试账号；
-    // qaOnly=true 时测试视角只含测试/审计账号
+    // 口径与 /paths 同一判据：默认全部非虚拟账号；includeTest=true 时含虚拟学习者
     const includeTest = String(req.query.includeTest || '') === 'true';
-    const [total, byStatus, bySubject, totalMilestones, totalTasks] = await getLearningContentStats(
-      includeTest,
-      String(req.query.testOnly || '') === 'true',
-      String(req.query.qaOnly || '') === 'true'
-    );
+    const [total, byStatus, bySubject, totalMilestones, totalTasks] = await getLearningContentStats(includeTest);
 
     res.json({
       success: true,

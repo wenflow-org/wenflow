@@ -151,7 +151,28 @@ export async function findTestAccountUserIds(): Promise<string[]> {
   return rows.filter((row) => row.isVirtualLearner || isTestAccountUser(row)).map((row) => row.id);
 }
 
-/** 真实（非虚拟、非测试/审计）账号 id 清单，供「按用户聚合」的统计口径复用。 */
+/**
+ * 管理端默认口径（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+ * 只排除虚拟学习者（它有自己的域），其余账号一律照常计入——测试/审计账号
+ * 只是行内的「测试」备注，不再是一个视角，也不从统计里剔除。
+ *
+ * 为什么不是「排除虚拟 + 测试」：那是旧的三分模型（真实 / 虚拟 / 测试），
+ * 教学组六页曾各挂一枚「真实 / 测试」开关；用户拍板后开关全撤，
+ * 口径只剩一件事：虚拟学习者的数据归虚拟学习者域，其余都在教学口径里。
+ */
+export async function buildNonVirtualUserWhere(
+  extra?: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return { isVirtualLearner: false, ...(extra || {}) };
+}
+
+/** 非虚拟账号 id 清单（虚拟学习者之外的全部账号），供按用户聚合的统计口径复用。 */
+export async function findNonVirtualUserIds(): Promise<string[]> {
+  const rows = await prisma.users.findMany({ select: { id: true, isVirtualLearner: true } });
+  return rows.filter((row) => !row.isVirtualLearner).map((row) => row.id);
+}
+
+/** 真实（非虚拟、非测试/审计）账号 id 清单——历史口径，新代码请用 findNonVirtualUserIds。 */
 export async function findRealUserIds(): Promise<string[]> {
   const rows = await prisma.users.findMany({
     select: { id: true, email: true, name: true, isVirtualLearner: true },

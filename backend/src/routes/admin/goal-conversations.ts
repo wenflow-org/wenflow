@@ -13,7 +13,7 @@ import {
   countDistinctGoalConversationUsers,
 } from '../../services/admin/goal-conversation-admin.repo';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
-import { buildQaUserWhere, buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { buildNonVirtualUserWhere, isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
@@ -23,7 +23,8 @@ const router = express.Router();
  * 判据取 isTestAccountUser（buildRealUserWhere 内部），不交给 Prisma startsWith——
  * SQLite 的 LIKE 不转义 `_`，前缀 `e2e_` 会连 `e2e.` 开头的真实账号一起滤掉。
  */
-const resolveStatsUserWhere = () => buildRealUserWhere({ deletedAt: null });
+/** 默认口径：全部非虚拟账号（测试/审计账号只是行内备注，不再单列视角） */
+const resolveStatsUserWhere = () => buildNonVirtualUserWhere({ deletedAt: null });
 
 /**
  * 获取所有目标对话列表（分页）
@@ -51,14 +52,9 @@ router.get('/', async (req: any, res) => {
       where.userId = userId;
     }
 
-    // testOnly=true（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看非真实账号。
-    // qaOnly=true 时「测试」只含测试/审计账号（2026-10-21「教学组彻底剔除虚拟」）：
-    // 虚拟学习者的目标对话归虚拟学习者域，不再混进教学口径。
-    if (String(req.query.testOnly || '') === 'true') {
-      where.users = String(req.query.qaOnly || '') === 'true'
-        ? await buildQaUserWhere()
-        : await buildTestUserWhere();
-    } else if (!includeTest) {
+    /* 默认口径 = 全部非虚拟账号；includeTest=true 是**按 id 直查**（学习者详情打开虚拟账号的
+       目标对话）用的逃生口，不是页面视角。虚拟学习者不进本页列表。 */
+    if (!includeTest) {
       where.users = await resolveStatsUserWhere();
     }
 
@@ -238,9 +234,7 @@ router.get('/stats/overview', async (req: any, res) => {
     // 口径随列表「真实/测试」开关联动：默认仅真实用户；测试视角（testOnly）只看虚拟 + 测试账号
     // （与 GET / 的分支同一判据，否则分布条/完成率与列表不同源）
     const includeTest = String(req.query.includeTest || '') === 'true';
-    const userWhere = String(req.query.testOnly || '') === 'true'
-      ? (String(req.query.qaOnly || '') === 'true' ? await buildQaUserWhere() : await buildTestUserWhere())
-      : includeTest ? {} : await resolveStatsUserWhere();
+    const userWhere = includeTest ? {} : await resolveStatsUserWhere();
     const [[total, active, completed, cancelled], distinctUsers] = await Promise.all([
       getGoalConversationStatusCounts(userWhere),
       countDistinctGoalConversationUsers(userWhere)

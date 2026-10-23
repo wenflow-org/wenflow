@@ -31,7 +31,6 @@ import {
   type PricingStatus,
 } from '../../services/cost/call-cost-aggregation';
 import {
-  resolveRealUserIds,
   aggregateWindow,
   aggregateTokenGroups,
   listUsersBasicInfo,
@@ -179,9 +178,12 @@ export function warmTokenCostCache(): Promise<TokenDataResult> {
  * - aggregateWindow：总量一次 + 每个本地日一个小窗（calledAt 索引），一次扫出 调用/失败/token；
  * JS 侧只做装配（组级合计经 accumulateCost(rowCount) 累加，语义与逐行一致，见该函数注释）。
  */
-async function loadTokenData(days: number, includeTest: boolean) {
+async function loadTokenData(days: number, _includeTest: boolean) {
   const since = new Date(Date.now() - days * 86400000);
-  const realUserIds = includeTest ? null : await resolveRealUserIds();
+  /* 2026-10-21 用户拍板「撤开关，全部混在一起」：仿真跑课花的是真钱，成本页不再按
+     账号类型切口径——realUserIds 恒为 null（不过滤），虚拟学习者的消耗也在总额里，
+     按用户排行用紫色头像/虚拟徽章标出。参数保留只为旧调用兼容。 */
+  const realUserIds: string[] | null = null;
   const sinceMs = since.getTime();
 
   // 日标签按**应用时区本地日**（day-boundary），与学习侧日界/前端 localDateKey 同口径；

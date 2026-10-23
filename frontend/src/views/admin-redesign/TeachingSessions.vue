@@ -7,8 +7,8 @@
          （需关注 / 缺总结 / 有建议 / 完结率），筛选出口住卡头 chips，每个数只出现一次。 -->
     <MkPageHead v-if="!embedded" title="教学会话" sub="教学会话状态实时监视 · 需关注识别与完课质量">
       <template #actions>
-        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
-        <DataScopeToggle v-model="includeTest" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             列表 = 全部非虚拟账号；虚拟会话在虚拟学习者 / 会话座舱看 -->
       </template>
     </MkPageHead>
     <!-- 页头状态条整体退役（2026-10-04 用户拍板：教学组已有统计带，顶部这条复读）——
@@ -267,6 +267,8 @@
                     <span v-if="r.email" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
                     <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
                   </div>
+                  <!-- 2026-10-21「测试只是备注」：不做视角，行内一枚备注即可 -->
+                  <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('status')">
@@ -404,13 +406,12 @@ import { dataSource, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
-import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { timeAgo, isPageCacheFresh, markPageFetched, shortId } from './live'
 import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, advisoryOpsText, advisoryOpsTitle, advisoryOpsBadgeCls } from './statusText'
 import type { SessionProgress, OpsAdvisoryLike } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
@@ -446,7 +447,7 @@ interface Row {
   taskType: string
   userName: string
   email: string
-  /** 数据隔离标记（includeTest=true 时后端带回，供灰标） */
+  /** 测试/审计备注标记（行内「测试」） */
   isVirtualLearner: boolean
   isTestAccount: boolean
   status: string
@@ -474,13 +475,6 @@ interface Row {
 const rows = ref<Row[]>([])
 const refreshing = ref(false)
 const loadFailed = ref(false)
-
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；口径整组统一（2026-10-04 用户拍板）——
-   get/set 走 live.ts 共享态（页头 DataScopeToggle 同源），本页 watch 只负责按新口径重拉 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
 
 /* 列表拉取上限：文案与实现共用同一常量，避免再次漂移
    （此前文案写「最近 100 条」而实现是 limit: 1000 —— 审计 附 A #9） */
@@ -516,11 +510,6 @@ async function fetchRows(force = false): Promise<boolean> {
   try {
     const res = await adminTeachingSessionsApi.list({
       limit: LIST_LIMIT,
-      includeTest: includeTest.value,
-      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回测试/审计账号的会话
-      // （2026-10-21 用户拍板：教学组剔除虚拟学习者——虚拟会话在会话座舱 / 虚拟学习者域看）
-      testOnly: includeTest.value || undefined,
-      qaOnly: includeTest.value || undefined,
       ...(onlyAdvisory.value ? { onlyWithAdvisory: true } : {})
     })
     // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
@@ -601,24 +590,6 @@ watch(
   },
   { immediate: true }
 )
-
-/* 数据隔离切换代际号：只由最新一次切换收尾 refreshing（快速连切时旧一笔不得提前撤下骨架） */
-let scopeSwitchSeq = 0
-watch(includeTest, () => {
-  /* 数据隔离切换：仅真实 ↔ 测试账号（2026-10-21 起虚拟学习者不进本页口径）。
-     2026-10-06 审核 F2-3：此前只重拉不清行 —— 列表接口实测滞后数秒，滞后期间开关/KPI 已翻到
-     新口径而表格仍是旧口径行，全程无加载反馈（骨架短路条件 refreshing && !rows.length 恒不成立）。
-     改为切换即清行再按新口径重拉（判例：GoalConversations 的 pendingForce 语义）：
-     清后首载骨架（KPI 占位 + 表骨架）立即接管，KPI 与列表读数不再打架。 */
-  const seq = ++scopeSwitchSeq
-  rows.value = []
-  listTotal.value = 0
-  totalFromBackend.value = false
-  refreshing.value = true
-  void fetchRows(true).finally(() => {
-    if (seq === scopeSwitchSeq) refreshing.value = false
-  })
-})
 
 /** 用户名兜底：userName → 邮箱前缀 → 「用户 ·尾4位」（不把裸 cuid 显示给运营） */
 function displayName(s: Record<string, unknown>): string {
@@ -918,7 +889,7 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, onlyAdvisory, includeTest], () => {
+watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, onlyAdvisory], () => {
   page.value = 1
 })
 
@@ -1131,6 +1102,7 @@ defineExpose({ refreshNow })
 .ts-table td { overflow: hidden; }
 /* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 */
 .ts-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.ts-user > .mk-badge { flex: none; }
 .ts-user .mk-cell-main { min-width: 0; flex: 1; }
 /* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */

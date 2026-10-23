@@ -8,9 +8,8 @@
       sub="管理用户账号、角色与登录状态"
     >
       <template #actions>
-        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态）；
-             数据域重拉由内嵌 Users 的 watch 承担 -->
-        <DataScopeToggle :model-value="liveIncludeVirtual" @update:model-value="liveSetIncludeVirtual" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             列表 = 全部非虚拟账号，测试/审计账号行内备注；虚拟学习者归自己的域 -->
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="usersRef?.openCreate?.()">新建用户</button>
       </template>
     </MkPageHead>
@@ -40,10 +39,8 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import Users from './Users.vue'
-import { liveUsers, liveUsersTotal, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { isRealAccountUser } from './learner-profile'
+import { liveUsers, liveUsersTotal } from './live'
 
 const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
 
@@ -68,52 +65,30 @@ type PpKpiTile = { label: string; value: number; hint?: string; tone: '' | 'ok' 
 /** 近 7 天活跃：lastLoginAt 在 7 天内（7 天窗口是运营常态读数，原 30 分钟窗口恒 0 无区分度） */
 const active7dOf = (rows: Array<{ lastLoginAt: string | null }>) =>
   rows.filter((u) => !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 7 * 86400000).length
+/* 账号 KPI 单套（2026-10-21 用户拍板「没有测试，测试只是备注」）：集合 = 全部非虚拟账号。
+   测试/审计账号照常计入，行内以「测试」备注标识；虚拟学习者不在本页（它有自己的域）。 */
 const ppKpi = computed<PpKpiTile[]>(() => {
   const rows = liveUsers.value
   if (!rows.length) return []
   const scope = `当前显示 ${rows.length} 个账号 · 全部共 ${liveUsersTotal.value} 个`
-  if (liveIncludeVirtual.value) {
-    return [
-      { label: '测试账号', value: rows.length, tone: '', title: scope },
-      { label: '近 7 天活跃', value: active7dOf(rows), tone: '', title: scope },
-      {
-        label: '近 7 日新增',
-        value: rows.filter((u) => !!u.createdAt && Date.now() - new Date(u.createdAt).getTime() < 7 * 86400000).length,
-        tone: '',
-        title: `${scope}。按创建时间`,
-      },
-      {
-        label: '从未登录',
-        value: rows.filter((u) => !u.lastLoginAt).length,
-        tone: '',
-        title: `${scope}。按最后登录判断`,
-      },
-    ]
-  }
-  const realRows = rows.filter(isRealAccountUser)
-  const admins = realRows.filter((u) => u.isAdmin).length
+  const admins = rows.filter((u) => u.isAdmin).length
   return [
     {
-      label: '真实用户',
-      value: realRows.length,
+      label: '账号',
+      value: rows.length,
       tone: '',
-      title: `${scope}${realRows.length ? ` · 管理员 ${admins}` : ''}`,
+      title: `${scope}${rows.length ? ` · 管理员 ${admins}` : ''}`,
     },
-    {
-      label: '近 7 天活跃',
-      value: active7dOf(realRows),
-      tone: '',
-      title: scope,
-    },
+    { label: '近 7 天活跃', value: active7dOf(rows), tone: '', title: scope },
     {
       label: '近 7 日新增',
-      value: realRows.filter((u) => !!u.createdAt && Date.now() - new Date(u.createdAt).getTime() < 7 * 86400000).length,
+      value: rows.filter((u) => !!u.createdAt && Date.now() - new Date(u.createdAt).getTime() < 7 * 86400000).length,
       tone: '',
       title: `${scope}。按创建时间`,
     },
     {
       label: '从未登录',
-      value: realRows.filter((u) => !u.lastLoginAt).length,
+      value: rows.filter((u) => !u.lastLoginAt).length,
       tone: '',
       title: `${scope}。按最后登录判断`,
     },

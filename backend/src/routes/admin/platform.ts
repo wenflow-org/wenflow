@@ -1411,13 +1411,9 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     const status = (req.query.status as string) || undefined;
     const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';
     const onlyMissingWrapup = String(req.query.onlyMissingWrapup || '') === 'true';
-    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 buildRealUserWhere）；
-    // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）；
-    // testOnly=true（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看虚拟 + 测试账号
+    // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注，没有「真实/测试」视角）；
+    // includeTest=true 是学习者详情按 id 直查虚拟账号会话的逃生口
     const includeTest = String(req.query.includeTest || '') === 'true';
-    const testOnly = String(req.query.testOnly || '') === 'true';
-    // qaOnly=true：测试视角只含测试/审计账号（2026-10-21 教学组剔除虚拟学习者）
-    const qaOnly = String(req.query.qaOnly || '') === 'true';
 
     const data = await listTeachingSessionsDebug({
       page,
@@ -1428,8 +1424,6 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
       onlyWithAdvisory,
       onlyMissingWrapup,
       includeTest,
-      testOnly,
-      qaOnly,
     });
 
     res.json({

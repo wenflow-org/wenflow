@@ -157,7 +157,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(w.find('.oh-metrics').element.closest('[role="tabpanel"]')).toBeNull()
     expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
     // 口径开关随读数带走（不再留在某个页签的卡头里）；刷新不再在页头另出一颗（走顶栏）
-    expect(w.find('.mk-pagehead__actions').text()).toContain('真实')
+    // 口径开关已退役（2026-10-21）：页头动作区不再有 真实/测试 控件
+    expect(w.find('.mk-pagehead__actions').text()).not.toContain('真实')
     expect(w.findAll('.mk-pagehead__actions > button').some((b) => b.text().includes('刷新'))).toBe(false)
     w.unmount()
   })

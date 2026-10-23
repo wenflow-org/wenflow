@@ -311,15 +311,12 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
 
   /* 2026-10-21 用户「右上角已经是真实了啊」+「其他地方也有这种文案」：页头副题不再复述视角，
      视角只由 .ds-toggle 表达（2026-10-04 的「副题随开关改口径」判例据此退役） */
-  it('页头副题不随视角切换复述口径：真实/测试只由页头开关表达', async () => {
+  it('页头副题不复述口径；口径开关已退役（2026-10-21「没有测试，测试只是备注」）', async () => {
     const w = await mountGoals();
     const subText = () => w.find('.mk-pagehead__sub').text();
     expect(subText()).toContain('与学习者澄清真实目标');
     expect(subText()).not.toContain('仅真实用户');
-    const toggle = w.find('.ds-toggle');
-    expect(toggle.exists()).toBe(true);
-    await toggle.findAll('button')[1].trigger('click'); // 含测试
-    await nextTick();
-    expect(subText()).not.toContain('含虚拟学习者与测试账号');
+    expect(subText()).not.toContain('测试账号');
+    expect(w.find('.ds-toggle').exists()).toBe(false);
   });
 });

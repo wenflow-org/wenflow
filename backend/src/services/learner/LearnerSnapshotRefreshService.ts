@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
-import { buildQaUserWhere, buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { buildNonVirtualUserWhere, isTestAccountUser } from '../../utils/test-account';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
 export interface LearnerSnapshotRefreshInput {
@@ -95,11 +95,8 @@ export class LearnerSnapshotRefreshService {
     pathId?: string;
     staleOnly?: boolean;
     riskOnly?: boolean;
-    excludeTest?: boolean;
+    /** 按 id 直查虚拟账号时置 true（学习者详情），不是页面视角 */
     includeTest?: boolean;
-    testOnly?: boolean;
-    /** 测试视角只含测试/审计账号（2026-10-21 教学组剔除虚拟学习者） */
-    qaOnly?: boolean;
     page?: number;
     limit?: number;
   }) {
@@ -110,18 +107,12 @@ export class LearnerSnapshotRefreshService {
     const limit = Math.max(1, Math.min(2000, Number(params?.limit || 20)));
 
     // 软删用户不进入管理端快照列表（列表与总数口径一致）。
-    // 默认排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）；
-    // includeTest=true 时显式包含（管理需要查看虚拟数据，不删数据只改默认视图）；
-    // testOnly=true（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看虚拟 + 测试账号。
-    const excludeTest = params?.includeTest ? false : (params?.excludeTest ?? true);
+    // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注）；
+    // includeTest=true 是按 id 直查虚拟账号（学习者详情），不删数据只改默认视图。
     const userWhere = {
-      ...(params?.testOnly
-        ? (params?.qaOnly
-            ? await buildQaUserWhere({ deletedAt: null })
-            : await buildTestUserWhere({ deletedAt: null }))
-        : excludeTest
-          ? await buildRealUserWhere({ deletedAt: null })
-          : { deletedAt: null }),
+      ...(params?.includeTest
+        ? { deletedAt: null }
+        : await buildNonVirtualUserWhere({ deletedAt: null })),
       ...(params?.userId ? { id: params.userId } : {}),
     };
     const total = await prisma.users.count({ where: userWhere });

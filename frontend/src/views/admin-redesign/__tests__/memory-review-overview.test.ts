@@ -36,7 +36,6 @@ vi.mock('vue-router', () => ({
 }));
 
 import MemoryReviewOverview from '../MemoryReviewOverview.vue';
-import { liveSetIncludeVirtual } from '../live';
 
 const ROWS = Array.from({ length: 7 }, (_, i) => ({ id: `t${i}`, userId: 'u1' }));
 
@@ -77,17 +76,6 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     // 动作列次序对齐学习状态列表：详情在前、重算类动作在后
     const labels = w.findAll('tbody .mk-actions button').map((b) => b.text());
     expect(labels.indexOf('详情')).toBeLessThan(labels.indexOf('重新观察'));
-  });
-
-  it('测试视角下仍透传 includeTest（与落点页签同在一份 opts）', async () => {
-    liveSetIncludeVirtual(true);
-    try {
-      const w = await mountWithRows(ROWS);
-      await w.find('tbody tr').trigger('click');
-      expect(openSubPage).toHaveBeenCalledWith('learner', 'u1', { tab: 'memory', includeTest: true });
-    } finally {
-      liveSetIncludeVirtual(false);
-    }
   });
 
   /** P1#13：KPI「当前到期」阈值化（占痕迹 ≥20% 或人均 ≥5），阈值写进 title */

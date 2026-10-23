@@ -1,6 +1,7 @@
 /**
- * LearnerSnapshotRefreshService.listForAdmin excludeTest 测试
- * （ADMIN_DEEP_LEARNER_AUDIT P1：风险队列剔除测试/虚拟账号，后端 where 排除）
+ * LearnerSnapshotRefreshService.listForAdmin 口径测试
+ * （2026-10-21 用户拍板「没有测试，测试只是备注」：默认只排除虚拟学习者，
+ *  测试/审计账号照常计入并以行内备注标识；includeTest 是按 id 直查虚拟账号的逃生口）
  */
 export {}
 
@@ -61,27 +62,10 @@ function stubFreshProjections() {
   projectionsUpsert.mockResolvedValue({});
 }
 
-describe('listForAdmin excludeTest（风险队列剔除测试账号）', () => {
+describe('listForAdmin 口径（只排除虚拟学习者）', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('excludeTest=true：users.findMany/count where 含 isVirtualLearner:false 与 id 排除式', async () => {
-    usersFindMany.mockResolvedValue([baseUser({ id: 'real1' })]);
-    usersCount.mockResolvedValue(1);
-    projectionsFindMany.mockResolvedValue([]);
-    stubFreshProjections();
-
-    await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: true });
-
-    const where = usersFindMany.mock.calls[0][0].where;
-    expect(where.deletedAt).toBeNull();
-    expect(where.isVirtualLearner).toBe(false);
-    // 2026-10-09：不再是 SQL LIKE 前缀（SQLite 会把 `_` 当通配符），改为按 id 排除
-    expect(where.id).toEqual({ notIn: expect.any(Array) });
-    expect(where.NOT).toBeUndefined();
-    expect(usersCount.mock.calls[0][0].where).toEqual(where);
-  });
-
-  it('未传参数：默认排除测试/虚拟账号（默认视图只给真实用户看）', async () => {
+  it('默认：where 只有 isVirtualLearner:false + 软删（测试账号不再被 id 排除）', async () => {
     usersFindMany.mockResolvedValue([baseUser({ id: 'real1' })]);
     usersCount.mockResolvedValue(1);
     projectionsFindMany.mockResolvedValue([]);
@@ -92,7 +76,7 @@ describe('listForAdmin excludeTest（风险队列剔除测试账号）', () => {
     const where = usersFindMany.mock.calls[0][0].where;
     expect(where.deletedAt).toBeNull();
     expect(where.isVirtualLearner).toBe(false);
-    expect(where.id).toEqual({ notIn: expect.any(Array) });
+    expect(where.id).toBeUndefined();
     expect(usersCount.mock.calls[0][0].where).toEqual(where);
   });
 
@@ -110,39 +94,26 @@ describe('listForAdmin excludeTest（风险队列剔除测试账号）', () => {
     expect(where).not.toHaveProperty('id');
   });
 
-  it('excludeTest=false：显式不过滤（向后兼容显式声明）', async () => {
-    usersFindMany.mockResolvedValue([baseUser({ id: 'real1' })]);
-    usersCount.mockResolvedValue(1);
-    projectionsFindMany.mockResolvedValue([]);
-    stubFreshProjections();
-
-    await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: false });
-
-    const where = usersFindMany.mock.calls[0][0].where;
-    expect(where).not.toHaveProperty('isVirtualLearner');
-    expect(where).not.toHaveProperty('id');
-  });
-
   it('列表项带 isTestAccount 标记（真实用户 false）', async () => {
     usersFindMany.mockResolvedValue([baseUser({ id: 'real1' })]);
     usersCount.mockResolvedValue(1);
     projectionsFindMany.mockResolvedValue([]);
     stubFreshProjections();
 
-    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: true });
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
     expect(data.total).toBe(1);
     expect(data.items[0].isTestAccount).toBe(false);
   });
 
-  it('excludeTest=false 时测试账号按命名约定标记 isTestAccount=true（供前端灰标签）', async () => {
+  it('测试账号按命名约定标记 isTestAccount=true（供行内「测试」备注）', async () => {
     usersFindMany.mockResolvedValue([
-      baseUser({ id: 'virtual_abc', name: 'E2E_ms0fz3yx', email: 'virtual_93e4c032@test.local' }),
+      baseUser({ id: 'u-qa', name: 'E2E_ms0fz3yx', email: 'e2e_ms0fz3yx@example.com' }),
     ]);
     usersCount.mockResolvedValue(1);
     projectionsFindMany.mockResolvedValue([]);
     stubFreshProjections();
 
-    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: false });
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
     expect(data.items[0].isTestAccount).toBe(true);
   });
 });

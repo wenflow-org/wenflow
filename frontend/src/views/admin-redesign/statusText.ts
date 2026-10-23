@@ -358,7 +358,7 @@ export function closureTrackText(track: string | null | undefined): string {
   return CLOSURE_TRACK_TEXT[key] || '未知'
 }
 
-/** 轨道徽章色板：真实=蓝 / 虚拟=紫（与 MkVariantBadge 同源）/ 未标记与未知=中性灰 */
+/** 轨道徽章色板：真实=蓝 / 虚拟=紫 / 未标记与未知=中性灰 */
 export function closureTrackBadgeCls(track: string | null | undefined): string {
   const key = String(track || '')
   return key === 'human' ? 'mk-badge--info' : key === 'virtual-learner' ? 'mk-badge--virtual' : 'mk-badge--muted'

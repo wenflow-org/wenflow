@@ -60,7 +60,6 @@
         <div class="mk-card__head-right">
           <MkFilterSearch v-model="recordSearch" placeholder="搜索姓名 / 邮箱" @keydown.enter="reloadRecordsFromFirstPage" />
           <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecordsFromFirstPage">查询</button>
-          <DataScopeToggle :model-value="achIncludeTest" @update:model-value="onAchRescope" />
         </div>
       </div>
       <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
@@ -214,7 +213,6 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import AchIcon from './AchIcon.vue'
@@ -325,8 +323,6 @@ const recordSearch = ref('')
    改词后点下一页，就会以「未查询过的新词 + 第 N 页」发请求——跳过了新结果的第一页，
    还可能落在越界页显示空列表（2026-10-08 走查确认）。 */
 const committedSearch = ref('')
-const achIncludeTest = ref(false)
-
 /* 服务端排序：白名单 earnedAt / xpReward，默认解锁时间倒序；变更回第 1 页重查。 */
 const {
   sortKey: achSortKey,
@@ -339,12 +335,6 @@ const {
   defaultDir: 'desc',
   storageKey: 'wf_achievements_records_sort'
 })
-/** 数据范围切换（仅真实/含模拟）→ 立即按新范围重拉 */
-function onAchRescope(v: boolean) {
-  achIncludeTest.value = v
-  reloadRecordsFromFirstPage()
-}
-
 /* 排序变更：回第 1 页重查（与筛选同义） */
 watch([achSortKey, achSortDir], () => {
   recordPage.value = 1
@@ -370,7 +360,7 @@ async function reloadRecords() {
       page: recordPage.value,
       limit: pageSize.value,
       ...search,
-      includeTest: achIncludeTest.value || undefined,
+
       sort: (achSortKey.value || undefined) as 'earnedAt' | 'xpReward',
       order: achSortDir.value,
     } as Parameters<typeof adminAchievementsApi.getRecords>[0])
@@ -387,7 +377,7 @@ async function reloadRecords() {
 
 /** 记录页签是否处于筛选态（搜索词 / 含测试账号口径）——按已生效的搜索词判断，
     输入框里未提交的草稿不算筛选态 */
-const isRecordsFiltered = computed(() => !!committedSearch.value || achIncludeTest.value)
+const isRecordsFiltered = computed(() => !!committedSearch.value)
 /** 筛选提交（回车 / 查询 / 清空 / 换页大小）：提交当前搜索词并回第 1 页重查
     （页码停在越界页会显示空列表） */
 function reloadRecordsFromFirstPage() {
@@ -398,7 +388,6 @@ function reloadRecordsFromFirstPage() {
 /** 清除记录筛选（搜索 + 数据范围），回第 1 页重查 */
 function clearRecordsFilters() {
   recordSearch.value = ''
-  achIncludeTest.value = false
   reloadRecordsFromFirstPage()
 }
 /* 每页条数变化：回第 1 页重查（此前只传 :page-size 不监听 @update:pageSize，

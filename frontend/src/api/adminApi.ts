@@ -306,10 +306,7 @@ export const adminUsersApi = {
   getUsers: async (params?: {
     page?: number; limit?: number; search?: string; role?: string; status?: string;
     includeTest?: boolean;
-    /** 测试视角（真实/测试互斥）：只回非真实账号 */
-    testOnly?: boolean;
-    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
-    qaOnly?: boolean;
+    /** 保留参数（口径开关已退役，2026-10-21）：默认 = 全部非虚拟账号 */
   }) => {
     return adminAxios.get('/admin/users', { params });
   },
@@ -387,10 +384,7 @@ export const adminLearnerModelsApi = {
     riskOnly?: boolean;
     excludeTest?: boolean;
     includeTest?: boolean;
-    /** 测试视角（真实/测试互斥）：只回非真实账号 */
-    testOnly?: boolean;
-    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
-    qaOnly?: boolean;
+    /** 保留参数（口径开关已退役，2026-10-21）：默认 = 全部非虚拟账号 */
     page?: number;
     limit?: number;
   }) => {
@@ -432,7 +426,7 @@ export const adminMemoryTracesApi = {
     userId?: string;
     limit?: number;
     includeVirtual?: boolean;
-    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只看虚拟学习者 + 测试/审计账号 */
+    /** 保留参数（口径开关已退役，2026-10-21）：只看非虚拟账号 */
     testOnly?: boolean;
   }) => {
     return adminAxios.get('/admin/memory-traces', { params });
@@ -451,10 +445,7 @@ export const adminMemoryReviewApi = {
   overview: async (params?: {
     limit?: number; offset?: number;
     includeVirtual?: boolean;
-    /** 测试视角（真实/测试互斥）：只回非真实账号 */
-    testOnly?: boolean;
-    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
-    qaOnly?: boolean;
+    /** 保留参数（口径开关已退役，2026-10-21）：默认 = 全部非虚拟账号 */
     sort?: string; order?: 'asc' | 'desc';
   }) => {
     return adminAxios.get('/admin/memory-review', { params });
@@ -542,9 +533,8 @@ export const adminTeachingSessionsApi = {
     onlyWithAdvisory?: boolean;
     onlyMissingWrapup?: boolean;
     includeTest?: boolean;
-    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只回非真实账号的会话 */
+    /** 保留参数（口径开关已退役）：默认全部非虚拟账号 */
     testOnly?: boolean;
-    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
     qaOnly?: boolean;
   }) => {
     return adminAxios.get('/admin/teaching-sessions', { params });
@@ -1153,9 +1143,8 @@ export const adminFeedbackApi = {
     status?: 'new' | 'triaged' | 'resolved' | 'dismissed';
     userId?: string;
     taskId?: string;
-    /** 用户域视角（2026-10-10「真实/测试」互斥拍板）：默认真实；testOnly=true 只看虚拟学习者与测试账号 */
+    /** includeTest=true 是按 id 直查虚拟账号的逃生口（不是页面视角）；默认全部非虚拟账号 */
     includeTest?: boolean;
-    testOnly?: boolean;
   }) => {
     return adminAxios.get('/admin/feedback', { params });
   },
@@ -1218,10 +1207,7 @@ export const adminGoalConversationsApi = {
   list: async (params?: {
     page?: number; limit?: number; status?: string; userId?: string;
     includeTest?: boolean;
-    /** 测试视角（真实/测试互斥）：只回非真实账号 */
-    testOnly?: boolean;
-    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
-    qaOnly?: boolean;
+    /** 保留参数（口径开关已退役，2026-10-21）：默认 = 全部非虚拟账号 */
   }) => {
     return adminAxios.get('/admin/goal-conversations', { params });
   },
@@ -2367,9 +2353,8 @@ export const adminLearningContentApi = {
     /** 按学习者收窄（学习者详情页的路径作用域选择器要列出「这个人名下的路径」） */
     userId?: string;
     includeTest?: boolean;
-    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只回非真实账号的路径 */
+    /** 保留参数（口径开关已退役）：默认全部非虚拟账号 */
     testOnly?: boolean;
-    /** 测试视角只含测试/审计账号（教学组剔除虚拟学习者，2026-10-21） */
     qaOnly?: boolean;
   }) => {
     return adminAxios.get<{ success: boolean; data: { paths: LearningPathRow[]; pagination: { total: number; page: number; limit: number } } }>(

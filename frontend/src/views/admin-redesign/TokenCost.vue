@@ -8,14 +8,13 @@
     <MkPageHead
       title="成本分析"
       sub="按模型、Skill 与时间维度追踪模型调用成本"
-      :hint="`近 ${days} 天 · ${includeTest ? '含虚拟与测试' : '仅真实用户'}`"
+      :hint="`近 ${days} 天 · 全部账号`"
     >
       <template #actions>
-        <!-- 时间窗口 + 数据视角（2026-10-16 用户走查「这个地方不应该这么设计」）：
+        <!-- 时间窗口（2026-10-16 用户走查「这个地方不应该这么设计」）：
              原为独立一张通栏描边筛选条——1300px 宽只放 337px 控件，读作一张空卡，
-             且全站仅此一处用「自己的卡装筛选」。收进页头动作区：窗口 pill 在前、
-             数据视角开关随后，与学习组各页 DataScopeToggle 同一位。切换不依赖已加载
-             数据，失败态下仍能降档重试（F8-3 语义保留）。 -->
+             且全站仅此一处用「自己的卡装筛选」。现已收进页头动作区；
+             数据视角开关于 2026-10-21 退役（成本统计全部账号，仿真花费也在总额里）。 -->
         <div class="mk-pills tc-pagehead-pills" role="group" aria-label="时间窗口">
           <button
             v-for="p in rangePills"
@@ -29,10 +28,6 @@
             {{ p.label }}
           </button>
         </div>
-        <!-- 本页非真实档仍含虚拟学习者（仿真跑课也花钱，成本必须看得见），
-             档位名随之为「虚拟与测试」——教学组六页的「测试」只含测试/审计账号，
-             同名不同义会更糟（2026-10-21 教学组剔除虚拟时同步改本页档名） -->
-        <DataScopeToggle v-if="isLive" v-model="includeTest" test-label="虚拟与测试" />
         <!-- 导出报表（原型 pagehead 动作位真实化）：当前窗口三张明细表合一个 CSV，客户端生成 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!summary || summaryEmpty" title="导出 CSV" @click="exportCsv">
           导出报表
@@ -86,7 +81,7 @@
         min
         icon="◌"
         title="这个时间窗暂无 LLM 调用"
-        :description="`近 ${days} 天${includeTest ? '（含虚拟与测试）' : ''}没有任何调用记录。`"
+        :description="`近 ${days} 天没有任何调用记录。`"
         :action-text="days !== 90 ? '看近 90 天' : ''"
         @action="days = 90"
       />
@@ -321,10 +316,9 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { isLive, intent, tokenCostCacheKey, tokenCostFilters } from './store'
+import { intent, tokenCostCacheKey, tokenCostFilters } from './store'
 import { errMsg, isPageCacheFresh, markPageFetched, liveRefreshSeq } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
-import DataScopeToggle from './DataScopeToggle.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import OvBars from './OvBars.vue'
 import TcRankTable, { type RankRow } from './TcRankTable.vue'
@@ -340,7 +334,6 @@ const SKILL_COST_TITLE = '按 Skill 成本明细'
 
 interface Summary {
   days: number
-  includeTest: boolean
   totals: {
     tokens: number; promptTokens: number; completionTokens: number; calls: number; failed: number
     /* 成本桶（审核 #110：与 summary 同响应下发，不再单发一次请求；后端 totals 原样携带） */
@@ -353,10 +346,6 @@ interface Summary {
 const days = computed({
   get: () => tokenCostFilters.days,
   set: (v: number) => { tokenCostFilters.days = v }
-})
-const includeTest = computed({
-  get: () => tokenCostFilters.includeTest,
-  set: (v: boolean) => { tokenCostFilters.includeTest = v }
 })
 const loading = ref(false)
 const loadFailed = ref(false)
@@ -407,9 +396,8 @@ const byUserSource = ref('')
 
 /** by-user 参数装配：q 仅在有关键词时带出（避免空串污染后端过滤） */
 function fetchByUser() {
-  const params: { days?: number; includeTest?: boolean; limit?: number; q?: string } = {
+  const params: { days?: number; limit?: number; q?: string } = {
     days: days.value,
-    includeTest: includeTest.value,
     limit: userFetchLimit,
   }
   const q = userQuery.value.trim()
@@ -579,7 +567,7 @@ function exportCsv() {
   const costSharePct = (usd: number | null | undefined) =>
     skillCostTotal.value > 0 && typeof usd === 'number' ? ((usd / skillCostTotal.value) * 100).toFixed(1) : '—'
   const lines: string[] = [
-    `成本分析 · 近 ${days.value} 天 · ${includeTest.value ? '含虚拟与测试' : '仅真实用户'} · 导出于 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
+    `成本分析 · 近 ${days.value} 天 · 全部账号 · 导出于 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
     '',
     '[按 Skill 成本明细]',
     'Skill,调用,Token,输入,输出,成本USD,Token占比%,成本占比%',
@@ -657,7 +645,7 @@ const failedCallsText = computed(() =>
 )
 /* 长释（title）：失败计数、总调用与占比的完整句子；卡面副行只放失败率这一条数据 */
 const failedHint = computed(() => {
-  const win = `近 ${days.value} 天${includeTest.value ? '（含虚拟与测试）' : ''}`
+  const win = `近 ${days.value} 天`
   const base = failedCalls.value > 0
     ? `${win}内失败 ${failedCalls.value} / 共 ${totalCalls.value} 次（重试后仍失败才计入），占总调用 ${failedPct.value}`
     : `${win}内共 ${totalCalls.value} 次调用，没有重试后仍失败的调用`
@@ -686,7 +674,7 @@ const loadedKey = ref<string | null>(null)
     审核 #110：金额字段已并入 load() 的同一 summary 响应，原独立的 loadCostSummary/costSeq 删除。 */
 let loadSeq = 0
 
-watch([days, includeTest], () => {
+watch([days], () => {
   const key = tokenCostCacheKey()
   // 切窗：清旧窗口数据进骨架态（loading 由 load 置真）——保证 pills 高亮与卡片数值同一响应驱动
   if (loadedKey.value && loadedKey.value !== key) {
@@ -731,7 +719,7 @@ async function load(force = false) {
   clearSlowTimer()
   slowTimer = setTimeout(() => { slowLoad.value = true }, SLOW_LOAD_HINT_MS)
   try {
-    const params = { days: days.value, includeTest: includeTest.value }
+    const params = { days: days.value }
     const [sumRes, skillRes, userRes, modelRes] = await Promise.all([
       adminTokenCostApi.getSummary(params),
       adminTokenCostApi.getBySkill(params),

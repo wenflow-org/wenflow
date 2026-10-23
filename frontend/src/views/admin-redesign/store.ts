@@ -307,8 +307,8 @@ export const overviewHealth = computed(() => {
    金额条（ExecLogs 成本 tab）与成本聚合卡（TokenCost）共用同一份筛选，
    修复「金额条硬编码 7 天、下方可切 30/90 天」的口径漂移；缓存 key 携带
    筛选参数，修复「切换时间窗 60s 内仍显示旧窗口数据」。 */
-export const tokenCostFilters = reactive({ days: 7, includeTest: false })
+export const tokenCostFilters = reactive({ days: 7 })
 
 export function tokenCostCacheKey(): string {
-  return `token-cost:${tokenCostFilters.days}:${tokenCostFilters.includeTest ? 'all' : 'noTest'}`
+  return `token-cost:${tokenCostFilters.days}`
 }

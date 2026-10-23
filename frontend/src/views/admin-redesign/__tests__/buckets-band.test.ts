@@ -14,7 +14,7 @@ import { nextTick } from 'vue';
 import TeachingSessions from '../TeachingSessions.vue';
 import OpsContent from '../OpsContent.vue';
 import People from '../People.vue';
-import { liveUsers, liveUsersTotal, liveIncludeVirtual } from '../live';
+import { liveUsers, liveUsersTotal } from '../live';
 
 const { tsList, pathStats, lcApi, tsApi, apiObject } = vi.hoisted(() => {
   const apiObject = (): Record<string, unknown> =>
@@ -77,11 +77,6 @@ async function settle() {
   await flushPromises();
   await nextTick();
   await flushPromises();
-}
-
-/** 桶标签序列（构成带只此一处计数，顺序即视觉顺序） */
-function bucketLabels(w: ReturnType<typeof mount>): string[] {
-  return w.findAll('.buckets .bucket .bucket__l').filter((el) => !el.classes().includes('bucket__foot')).map((el) => el.text().trim());
 }
 
 describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
@@ -148,51 +143,30 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     w.unmount();
   });
 
-  it('用户与学习者：默认「仅真实」KPI 两卡（真实/近 7 天活跃，管理员并入 hint）；含测试后四卡（运行中仿真/虚拟/测试/测试账号活跃）', async () => {
+  it('用户与学习者：单一套 KPI（账号 / 活跃 / 新增 / 从未登录），全部非虚拟账号同一口径', async () => {
     const { router, ready } = mockRouter('/admin/people');
     await ready;
-    liveIncludeVirtual.value = false;
     const w = mount(People, { global: { plugins: [router] } });
     await settle();
-    // 空数据不出空带
+    // 空数据不出构成带
     expect(w.find('.buckets').exists()).toBe(false);
-    // 播种 live 域（加载后注入，避免 boot 拉取覆盖）；u2/u3 近 7 天内登录过
+    /* 2026-10-21 拍板「没有测试，测试只是备注」：列表 = 全部非虚拟账号，
+       测试账号照常计入 KPI；虚拟学习者由后端排除，不进本页。 */
     liveUsers.value = [
       { id: 'u1', name: '管理员', email: 'a@x.com', isAdmin: true, isVirtualLearner: false, isTestAccount: false, xp: 0, currentLevel: 'L1', lastLoginAt: null, createdAt: '2026-10-01T00:00:00Z', paths: 0, sessions: 0 },
       { id: 'u2', name: '真实用户', email: 'b@x.com', isAdmin: false, isVirtualLearner: false, isTestAccount: false, xp: 10, currentLevel: 'L1', lastLoginAt: new Date().toISOString(), createdAt: '2026-10-01T00:00:00Z', paths: 1, sessions: 1 },
-      { id: 'u3', name: '虚拟甲', email: 'v@x.com', isAdmin: false, isVirtualLearner: true, isTestAccount: true, xp: 5, currentLevel: 'L1', lastLoginAt: new Date().toISOString(), createdAt: '2026-10-01T00:00:00Z', paths: 0, sessions: 0 },
-      { id: 'u4', name: '测试乙', email: 't@x.com', isAdmin: false, isVirtualLearner: false, isTestAccount: true, xp: 0, currentLevel: 'L1', lastLoginAt: null, createdAt: '2026-10-01T00:00:00Z', paths: 0, sessions: 0 }
+      { id: 'u4', name: '测试乙', email: 'vcheck_abc@wenflow.local', isAdmin: false, isVirtualLearner: false, isTestAccount: true, xp: 0, currentLevel: 'L1', lastLoginAt: null, createdAt: '2026-10-01T00:00:00Z', paths: 0, sessions: 0 }
     ];
-    liveUsersTotal.value = 4;
+    liveUsersTotal.value = 3;
     await nextTick();
-    // D18：默认「仅真实」口径下虚拟 / 测试结构性为 0，是死档 → 单桶假构成撤，改 KPI 面板承载
-    expect(bucketLabels(w)).toEqual([]);
-    // 2026-10-11 换读数：管理员卡退役并入真实卡 hint；30 分钟在线（恒 0 死读数）→ 近 7 天活跃
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['真实用户', '近 7 天活跃', '近 7 日新增', '从未登录']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['2', '1', '0', '1']);
-    // 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：视角复述与取数依据
-    // （排除虚拟与测试账号 / 按最后登录日）撤出卡面，口径与管理计数只在 title 里
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['账号', '近 7 天活跃', '近 7 日新增', '从未登录']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['3', '1', '0', '2']);
     expect(tiles[0].find('.mk-kpi__hint').exists()).toBe(false);
     expect(tiles[0].attributes('title')).toContain('管理员 1');
-    expect(tiles[1].find('.mk-kpi__hint').exists()).toBe(false);
+    // 页头不再有口径开关
+    expect(w.find('.ds-toggle').exists()).toBe(false);
     w.unmount();
-
-    /* 含测试口径（2026-10-21 拍板：教学组剔除虚拟学习者）→ 四卡与真实档同构，
-       集合 = 测试/审计账号。夹具按后端新口径只回 u4（测试乙，从未登录）。 */
-    liveIncludeVirtual.value = true;
-    liveUsers.value = [liveUsers.value[3]];
-    liveUsersTotal.value = 1;
-    const w2 = mount(People, { global: { plugins: [router] } });
-    await settle();
-    await nextTick();
-    const tiles2 = w2.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles2.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['测试账号', '近 7 天活跃', '近 7 日新增', '从未登录']);
-    expect(tiles2.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '0', '0', '1']);
-    expect(tiles2[0].attributes('title')).toContain('当前显示 1 个账号');
-    w2.unmount();
-
-    liveIncludeVirtual.value = false;
     liveUsers.value = [];
   });
 });

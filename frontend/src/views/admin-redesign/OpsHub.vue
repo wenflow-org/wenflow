@@ -6,9 +6,6 @@
       <template #actions>
         <!-- 视角开关随页级读数带走（2026-10-18）：读数带在任何页签都在（见下），它管的就是那几个数
              ——留在「运营待办」卡头会变成「数在页级、开关在某个页签里」。口径开关收页头同学习组六页判例。 -->
-        <span class="oh-scope" title="事件投递失败与草稿公告不随视角变化">
-          <DataScopeToggle v-model="wbScope" />
-        </span>
         <!-- 2026-10-23：刷新跟顶栏（liveRefreshSeq → refreshActive，含当前页签面板与失败态的读数带重试），
              页头不再出第二颗 -->
       </template>
@@ -163,8 +160,8 @@
     </div><!-- /oh-body -->
     </template>
 
-    <!-- ===== Tab2: 反馈（Feedback embedded；真实/测试视角吃页级 wbScope，别再放第二枚开关） ===== -->
-    <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded :include-test="wbScope" @count="onDomainCount('feedback', $event)" @status="onFeedbackStatus" />
+    <!-- ===== Tab2: 反馈（Feedback embedded；口径开关已退役，默认全部非虚拟账号） ===== -->
+    <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" @status="onFeedbackStatus" />
     <!-- ===== Tab3: 成就（OpsAchievements embedded） ===== -->
     <OpsAchievements v-else-if="tab === 'achievements'" id="oh-panel-achievements" role="tabpanel" aria-labelledby="oh-tab-achievements" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
     <!-- ===== Tab4: 公告（Announcements embedded） =====
@@ -231,7 +228,6 @@ import SessionSecurity from './SessionSecurity.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkStageband from '@/components/mk/MkStageband.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
 /* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知 · 运维工具 · 数据导出 · 会话安全 =====
@@ -378,9 +374,8 @@ watch(
 )
 
 /* ===== 运营待办：反馈待处理 / 失败路径 / 死信 / 草稿公告 ===== */
-/* 真实/测试互斥视角（2026-10-10 拍板方言）：false=真实用户；true=虚拟学习者与测试账号。
-   反馈与失败路径按此视角计数；事件投递（outbox 死信）与草稿公告是系统全域，不随视角变化 */
-const wbScope = ref(false)
+/* 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+   反馈与失败路径按全部非虚拟账号计数；事件投递（outbox 死信）与草稿公告是系统全域。 */
 const wbPendingFeedback = ref(0)
 const wbFailedPaths = ref(0)
 const wbDeadLetters = ref(0)
@@ -398,10 +393,10 @@ async function loadWorkbench() {
   wbLoading.value = true
   const errors: Record<string, string> = {}
   const [feedbackR, statsR, deadR] = await Promise.allSettled([
-    // 待处理反馈：后端 status=new 计数（与 Feedback 页口径一致）；按真实/测试视角过滤
-    adminFeedbackApi.list({ limit: 1, status: 'new', includeTest: wbScope.value || undefined, testOnly: wbScope.value || undefined }),
-    // 失败路径：学习内容 stats（与内容管理页口径一致）；按真实/测试视角过滤
-    adminLearningContentApi.getStats(wbScope.value || undefined, wbScope.value || undefined),
+    // 待处理反馈：后端 status=new 计数（与 Feedback 页口径一致）
+    adminFeedbackApi.list({ limit: 1, status: 'new' }),
+    // 失败路径：学习内容 stats（与内容管理页口径一致）
+    adminLearningContentApi.getStats(),
     // outbox 死信：系统工具页同源（返回 {deadCount, items}）；系统全域，无视角
     adminDevtoolsApi.getOutboxDead(),
   ])
@@ -605,10 +600,6 @@ function goAnnouncements() {
 onMounted(() => {
   void loadWorkbench()
 })
-/* 切换真实/测试视角 → 按新视角重拉（事件投递与草稿公告全域不变，仍随请求刷新无妨） */
-watch(wbScope, () => {
-  void loadWorkbench()
-})
 </script>
 
 <style scoped>
@@ -649,8 +640,6 @@ watch(wbScope, () => {
 .oh-tabbar .mk-btn { margin-left: auto; }
 /* 待办卡头左组（卡头成组判例）：标题+结论成组吃 flex，视角切换贴右 */
 .oh-wb-head { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.oh-scope { flex: none; }
-
 /* ================= 运营工作台（待办清单 + 状态面板，区别于 Dashboard 统计卡） ================= */
 /* 状态面板：路径 / 公告并列（行式计数 + 比例条，非 KPI 卡） */
 .ow-panels {

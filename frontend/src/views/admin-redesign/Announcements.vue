@@ -173,7 +173,7 @@
           <label class="mk-field">
             <span class="mk-field__label">级别</span>
             <!-- 三选一分组：role=group + aria-label，每个按钮带 aria-pressed（读屏可知当前级别；
-                 选中态不再只靠颜色与描边表达，与 DataScopeToggle / Feedback 状态 pill 同判例） -->
+                 选中态不再只靠颜色与描边表达，与 Feedback 状态 pill 同判例） -->
             <div class="an-severity" role="group" aria-label="公告级别">
               <button
                 v-for="s in severities"

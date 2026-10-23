@@ -8,8 +8,8 @@
       :sub="gcScopeSub"
     >
       <template #actions>
-        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
-        <DataScopeToggle v-model="includeTest" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             列表 = 全部非虚拟账号，测试账号行内备注，虚拟学习者的目标对话在虚拟学习者域看 -->
       </template>
     </MkPageHead>
 
@@ -23,7 +23,7 @@
       <MkKpi
         label="目标对话数"
         :value="stats?.total ?? '—'"
-        :title="includeTest ? '只统计测试账号' : '只统计真实用户'"
+        title="不含虚拟学习者"
       />
       <MkKpi
         label="完结率"
@@ -210,6 +210,8 @@
                     >{{ r.userName }}</button>
                     <span class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
                   </div>
+                  <!-- 2026-10-21「测试只是备注」：不做视角，行内一枚备注即可 -->
+                  <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                 </div>
               </td>
               <td v-if="showCol('status')">
@@ -282,7 +284,7 @@
           v-else
           icon="◌"
           :title="keyword || statusFilter || noPathOnly ? '当前筛选无匹配' : '暂无目标对话'"
-          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : (includeTest ? '当前范围（测试账号）暂无目标对话。' : '当前只显示真实用户，切「测试」可查看测试账号的对话。')"
+          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : '暂无目标对话。'"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -323,7 +325,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
-import { errMsg, timeAgo, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { stageProgressIndex, stageTimelineText, stageTimeline, monthDayText, GOAL_STAGE_TOTAL, statusText } from './statusText'
 import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
@@ -336,7 +338,6 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
-import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import { adminGoalConversationsApi } from '@/api/adminApi'
@@ -542,13 +543,6 @@ watch(
   },
   { immediate: true }
 )
-
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；口径整组统一（2026-10-04 用户拍板）——
-   get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
 
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
@@ -763,14 +757,8 @@ async function load(force = false) {
   loadError.value = ''
   try {
     // 首屏主体是会话列表：只 await 列表接口，页面就绪时间不再被 stats 拖住；
-    // 测试视角（2026-10-10「真实/测试」互斥视角）带 testOnly+qaOnly 只回测试/审计账号的对话
-    // （2026-10-21 用户拍板：教学组剔除虚拟学习者，虚拟学习者的目标对话归虚拟学习者域）
-    const listRes = await adminGoalConversationsApi.list({
-      limit: LIST_LIMIT,
-      includeTest: includeTest.value,
-      testOnly: includeTest.value || undefined,
-      qaOnly: includeTest.value || undefined,
-    })
+    // 默认口径 = 全部非虚拟账号（2026-10-21 拍板：虚拟学习者的对话归虚拟学习者域）
+    const listRes = await adminGoalConversationsApi.list({ limit: LIST_LIMIT })
     const body = listRes.data?.data ?? listRes.data ?? {}
     rows.value = ((body.conversations as Record<string, unknown>[]) || []).map(mapRow)
     listTotal.value = Number(body.pagination?.total ?? rows.value.length)
@@ -793,7 +781,7 @@ async function load(force = false) {
   /* stats 非阻塞后台拉取：到达后回填 KPI 面板（总量/参与用户/近 7 日新增）与状态分布带。
      三态（P1#6）：失败时置 statsError（错误条 + 重试，KPI 卡显「—」），
      绝不回滚列表、不阻塞首屏；代际不符（已发起新一轮 load）的迟到响应直接丢弃 */
-  void adminGoalConversationsApi.getStats(includeTest.value, includeTest.value, includeTest.value)
+  void adminGoalConversationsApi.getStats()
     .then((statsRes) => {
       if (seq !== statsReqSeq) return
       const s = statsRes?.data?.data ?? statsRes?.data
@@ -899,11 +887,6 @@ async function remove(r: Row) {
 watch(isLive, () => {
   void load()
 })
-/* 数据隔离切换：仅真实 ↔ 测试账号（切换后立即按新口径重拉，绕过 TTL 缓存）。
-   2026-10-21 拍板：教学组剔除虚拟学习者，虚拟学习者的目标对话在虚拟学习者域看 */
-watch(includeTest, () => {
-  void load(true)
-})
 onMounted(() => {
   if (isLive.value) void load()
 })
@@ -939,7 +922,8 @@ onMounted(() => {
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }
 /* 分布条已退役（2026-10-17）：原页面级分布带连同 .gc-distband 类一起下线，
    卡头状态 pills 与「未生成路径」快筛并列；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
-.gc-user .mk-cell-main { min-width: 0; flex: 1; }/* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
+.gc-user .mk-cell-main { min-width: 0; flex: 1; }
+.gc-user > .mk-badge { flex: none; }/* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
 .gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
    长摘要 .mk-cell-text 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：裸 `.mk-table td { white-space: nowrap }` 收敛为全局修饰类

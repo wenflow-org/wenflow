@@ -6,8 +6,8 @@
          静态贴顶 + 表格区内滚，首行 530px 入首屏。 -->
     <MkPageHead title="学习状态" sub="学习者学习状态分布与风险跟踪">
       <template #actions>
-        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
-        <DataScopeToggle v-model="includeTest" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             列表 = 全部非虚拟账号；虚拟学习者的学习数据只在虚拟学习者域看 -->
       </template>
     </MkPageHead>
     <!-- 后端学习者域窗口截断口径（2026-10-04 解锁 50→500；2026-10-10 窗口 500→2000，
@@ -176,6 +176,8 @@
                   <strong :title="r.name">{{ r.name }}</strong>
                   <span class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
                 </div>
+                <!-- 2026-10-21「测试只是备注」：测试账号照常计入，行内一枚备注即可 -->
+                <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('progress')">
@@ -288,12 +290,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { openSubPage, isLive, LEARNER_DETAIL_LANDING } from './store'
-import { liveLearners, liveLearnersTotal, liveRecomputeLearner, liveSetLearnersIncludeTest, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { liveLearners, liveLearnersTotal, liveRecomputeLearner, refreshLiveLearners, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
 import { evidenceLowConfidence } from './evidence'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -330,18 +331,6 @@ interface Row {
 
 const pill = ref<'all' | 'risk' | 'watch' | 'stale'>('all')
 const keyword = ref('')
-/* 整组统一口径（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（localStorage 持久化、跨页保持）；
-   本页 watch 只负责按新口径重拉学习者域 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
-watch(includeTest, (v) => {
-  // 切换失败不静默：用户以为已切到全量/仅真实口径，实际列表还是旧口径
-  if (isLive.value) {
-    liveSetLearnersIncludeTest(v).catch((e) => toast.error(`切换数据范围失败：${errMsg(e)}`))
-  }
-})
 
 /* P1-3 列显隐（公共组件 MkCols）：学习者/进度/状态/置信/风险/更新 可隐藏，操作固定
    2026-10-22 用户「信息密度比较高」：趋势与疲劳合并为一列（同为一行内读的「当前状态」，
@@ -377,7 +366,7 @@ function openDetail(r: Row) {
   /* 落点页签：本列表读的是趋势 / 疲劳 / 置信 / 风险摘要，同口径内容在详情的「证据」页签
      （判据与常量单点在 store 的 LEARNER_DETAIL_LANDING）——不再一律落「概览」，
      2026-10-18 用户走查。干预弹窗里的「查看学习详情」是泛化措辞，仍落概览。 */
-  openSubPage('learner', r.id, { tab: LEARNER_DETAIL_LANDING.learnerState, ...(includeTest.value ? { includeTest: true } : {}) })
+  openSubPage('learner', r.id, { tab: LEARNER_DETAIL_LANDING.learnerState })
 }
 
 /* —— C2 干预动线：风险学习者 → 查看会话 / 发送站内提醒 —— */
@@ -403,7 +392,7 @@ function openIntervene(r: Row) {
 }
 function goInterveneSession(r: Row) {
   intervene.value = null
-  openSubPage('learner', r.id, includeTest.value ? { includeTest: true } : undefined)
+  openSubPage('learner', r.id)
 }
 function goInterveneLogs() {
   intervene.value = null
@@ -712,9 +701,9 @@ async function recomputeAll() {
         recomputeProgress.value++
       }
     }
-    // 循环结束统一刷新一次（带当前「含模拟」口径，保持列表范围一致）
+    // 循环结束统一刷新一次（与列表同口径）
     try {
-      await liveSetLearnersIncludeTest(includeTest.value)
+      await refreshLiveLearners()
     } catch {
       toast.error('重算完成，但列表刷新失败，请手动刷新')
     }
@@ -747,6 +736,7 @@ async function recomputeAll() {
 .lc-tablewrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 学习者单元格（原型 celluser：头像 + 主行/副行 + 身份徽章，Users.vue ul-user 同款判例） */
 .lc-celluser { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.lc-celluser > .mk-badge { flex: none; }
 .lc-celluser .mk-cell-main { min-width: 0; flex: 1; }
 .lc-celluser .mk-cell-sub { max-width: 230px; }
 .lc-task .mk-cell-sub { max-width: 240px; }

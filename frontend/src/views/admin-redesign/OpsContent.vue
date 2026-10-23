@@ -4,8 +4,8 @@
          2026-10-04 页头状态条退役：总量读数迁 MkKpi 卡带，失败抬红归贴表分布条红段 -->
     <MkPageHead v-if="!embedded" title="学习路径" sub="阶段式学习路径与推进状态">
       <template #actions>
-        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
-        <DataScopeToggle v-model="includeTest" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             列表 = 全部非虚拟账号；虚拟学习者的路径归虚拟学习者域 -->
       </template>
     </MkPageHead>
     <!-- 路径总量 KPI（2026-10-04 状态条退役：原状态条「共 N 条 · 里程碑 · 任务」读数迁入 MkKpi 卡带；
@@ -17,7 +17,7 @@
       <MkKpi
         label="路径总数"
         :value="stats?.total ?? '—'"
-        :title="includeTest ? '只统计测试账号' : '只统计真实用户'"
+        title="不含虚拟学习者"
       />
       <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" title="已生成路径的里程碑总数" />
       <!-- 2026-10-16 KPI 审计补完：label 原为「任务」，而本页其它文案（删除确认）说的是「子任务」，
@@ -189,6 +189,8 @@
                     <strong v-else>{{ p.user?.name || '—' }}</strong>
                     <span class="mk-cell-sub" :title="p.user?.email || ''">{{ p.user?.email || '' }}</span>
                   </div>
+                  <!-- 2026-10-21「测试只是备注」：测试账号照常计入，行内一枚备注即可 -->
+                  <span v-if="p.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                 </div>
               </td>
               <td v-if="!hiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(p.status)">{{ statusText(p.status) }}</span></td>
@@ -274,7 +276,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { timeAgo, errMsg, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { timeAgo, errMsg, isPageCacheFresh, markPageFetched } from './live'
 import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -290,7 +292,6 @@ import Pagination from './Pagination.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge, pathRetryTypeText } from './opsShared'
 import { isTestAccountUser, useListQueryState } from './learner-profile'
 
@@ -312,11 +313,6 @@ const loadError = ref('')
 const keyword = ref('')
 /** 状态筛选（'' 退役，哨兵 'all' 与 useListQueryState 的 pill 约定一致） */
 const statusFilter = ref('all')
-/* 口径整组统一（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
 const stats = ref<LearningContentStats | null>(null)
 
 /* 列显隐（与同页其他列表一致）：路径/操作固定，其余可隐藏 */
@@ -536,11 +532,6 @@ async function reload(force = false) {
     const res = await adminLearningContentApi.listPaths({
       page: 1,
       limit: 1000,
-      includeTest: includeTest.value || undefined,
-      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回测试/审计账号的路径
-      // （2026-10-21 用户拍板：教学组剔除虚拟学习者——虚拟学习者的路径归虚拟学习者域）
-      testOnly: includeTest.value || undefined,
-      qaOnly: includeTest.value || undefined,
     })
     // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
     if (seq !== listReqSeq) return
@@ -569,8 +560,8 @@ async function reload(force = false) {
 async function loadStats() {
   const seq = ++statsReqSeq
   try {
-    // 口径与列表同一判据：/stats 收 includeTest + testOnly + qaOnly（否则 KPI/里程碑/分布条与列表不同视角）
-    const res = await adminLearningContentApi.getStats(includeTest.value, includeTest.value, includeTest.value)
+    // 口径与列表同一判据（否则 KPI/里程碑/分布条与列表不同视角）
+    const res = await adminLearningContentApi.getStats()
     if (seq !== statsReqSeq) return
     stats.value = res.data?.data ?? res.data
   } catch {
@@ -717,21 +708,6 @@ onMounted(() => {
   void reload()
   void loadStats()
 })
-/* 数据隔离切换：仅真实 ↔ 含虚拟/测试。
-   2026-10-06 审核 F2-3：此前切换只发起重拉、不动旧数据 —— 实测 /paths 响应可滞后 3.5-10s，
-   滞后期间「含测试」已选中、KPI/分布条已按新口径刷新，而表格仍是旧口径的行与分页读数
-   （「路径总数 1021」对「共 341 条」），三处读数互相打架且全程无任何加载提示。
-   改为切换即清列表与统计读数（清后 rows 为空 → 走骨架，两处读数不会同屏打架），再按新口径
-   重拉；页码回第 1 页（新口径是新结果集，避免停在旧口径才有的页码上）。 */
-watch(includeTest, () => {
-  rows.value = []
-  total.value = 0
-  stats.value = null
-  page.value = 1
-  void reload(true)
-  void loadStats()
-})
-
 /* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → 强制重拉：包装 force，TTL 内点击仍生效） */
 defineExpose({ reload: () => void reload(true) })
 </script>
@@ -764,6 +740,7 @@ defineExpose({ reload: () => void reload(true) })
 .oc-table .oc-progress { min-width: 0; }
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */
 .oc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.oc-user > .mk-badge { flex: none; }
 .oc-user .mk-cell-main { min-width: 0; flex: 1; }
 /* 行点击已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
 /* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文。

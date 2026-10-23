@@ -30,20 +30,16 @@ router.get('/', async (req, res) => {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
-    // 默认排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）；
-    // includeTest=true 时显式包含（管理需要可查虚拟数据，只改默认视图不删数据）
+    // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注，不再单列视角）；
+    // includeTest=true 是按 id 直查虚拟账号的逃生口（学习者详情），只改默认视图不删数据
     const includeTest = String(req.query.includeTest || '') === 'true';
-    const excludeTest = includeTest ? false : String(req.query.excludeTest || '') !== 'false';
 
     const data = await learnerSnapshotRefreshService.listForAdmin({
       userId: req.query.userId as string | undefined,
       pathId: req.query.pathId as string | undefined,
       staleOnly: req.query.staleOnly === 'true',
       riskOnly: req.query.riskOnly === 'true',
-      excludeTest,
-      testOnly: String(req.query.testOnly || '') === 'true',
-      // 教学组「测试」视角只含测试/审计账号（2026-10-21 剔除虚拟学习者）
-      qaOnly: String(req.query.qaOnly || '') === 'true',
+      includeTest,
       page: req.query.page ? Number(req.query.page) : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
     });

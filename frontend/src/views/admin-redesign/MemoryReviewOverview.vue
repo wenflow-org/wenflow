@@ -11,10 +11,8 @@
       sub="遗忘曲线调度 · 到期积压、课内温故与概念归并审计"
     >
       <template #actions>
-        <!-- 口径开关收在页头（2026-10-04 整组统一为 DataScopeToggle：学习组六页同一位、同一状态）。
-             它切换的是整页口径：切到「测试」时，用户 / 痕迹 / 到期与归并队列只纳入测试/审计账号
-             （2026-10-21 拍板：虚拟学习者归虚拟学习者域，不进教学口径） -->
-        <DataScopeToggle v-model="includeVirtual" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             用户 / 痕迹 / 到期与归并队列统计全部非虚拟账号，测试账号行内备注 -->
       </template>
     </MkPageHead>
     <!-- 页头 KPI 带（2026-09-28）：页级绝对值只在这里出现一次；口径说明进各卡 title。
@@ -153,6 +151,8 @@
                          既不可读也不能检索；改与其它列表同口径显示邮箱，无邮箱才退回短 id -->
                     <span class="mk-cell-sub" :title="row.email || row.userId">{{ row.email || shortId(row.userId) }}</span>
                   </div>
+                  <!-- 2026-10-21「测试只是备注」：测试账号照常计入，行内一枚备注即可 -->
+                  <span v-if="row.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                 </div>
               </td>
               <td class="mk-num" :title="`该用户共 ${row.traces} 条记忆记录，跨学习路径`">{{ row.traces }}</td>
@@ -226,11 +226,10 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import { useTableSort } from './useTableSort'
-import DataScopeToggle from './DataScopeToggle.vue'
 import { askConfirm } from './useConfirm'
 import { openSubPage, LEARNER_DETAIL_LANDING } from './store'
 import { toast } from '@/utils/toast'
-import { errMsg, shortId, timeAgo, liveIncludeVirtual, liveSetIncludeVirtual, liveRefreshSeq } from './live'
+import { errMsg, shortId, timeAgo, liveRefreshSeq } from './live'
 
 interface AuditUserSummary {
   mode: string
@@ -249,6 +248,8 @@ interface OverviewRow {
   name: string | null
   email: string | null
   isVirtualLearner: boolean
+  /** 行内「测试」备注（2026-10-21 拍板：测试账号照常计入，只加备注） */
+  isTestAccount?: boolean
   traces: number
   due: number
   audit: AuditUserSummary | null
@@ -296,14 +297,6 @@ watch([userSortKey, userSortDir], () => {
   else void loadOverview()
 })
 
-const includeVirtual = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
-watch(includeVirtual, () => {
-  userPage.value = 1
-  void refreshAll()
-})
 const rows = ref<OverviewRow[]>([])
 /* 用户列表服务端分页（审核 #41）：页码驱动 offset，totals.users 作分页 total */
 const userPage = ref(1)
@@ -487,11 +480,7 @@ async function loadOverview() {
     const res = await adminMemoryReviewApi.overview({
       limit: userPageSize.value,
       offset: (userPage.value - 1) * userPageSize.value,
-      includeVirtual: includeVirtual.value,
-      testOnly: includeVirtual.value || undefined,
-      // 2026-10-21 用户拍板：教学组剔除虚拟学习者——「测试」只含测试/审计账号；
-      // 虚拟学习者的记忆在虚拟学习者详情「记忆池」/「学习详情 →」的记忆页签里看
-      qaOnly: includeVirtual.value || undefined,
+      // 默认口径 = 全部非虚拟账号（后端单点）；虚拟学习者的记忆在虚拟学习者详情里看
       sort: userSortKey.value,
       order: userSortDir.value
     })
@@ -563,7 +552,7 @@ const router = useRouter()
  *  落点常量单点在 store 的 LEARNER_DETAIL_LANDING；「记忆调度」页签是治理动作面，
  *  仍只由旧深链 ?userId= 与详情内切换进入。 */
 function openLearner(userId: string) {
-  openSubPage('learner', userId, { tab: LEARNER_DETAIL_LANDING.memoryReview, ...(includeVirtual.value ? { includeTest: true } : {}) })
+  openSubPage('learner', userId, { tab: LEARNER_DETAIL_LANDING.memoryReview })
 }
 
 onMounted(async () => {
@@ -596,6 +585,7 @@ onMounted(async () => {
 
 /* ===== 用户列表（2026-09-28：表头回归——行列表没有表头，右侧裸数字无从解读）===== */
 .mr__user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.mr__user > .mk-badge { flex: none; }
 .mr__user .mk-cell-main { min-width: 0; flex: 1; }
 
 /* 待复习：只出数字，颜色表达压力（0=弱化 / 琥珀=提醒 / 红=重压）；占比口径进 title */

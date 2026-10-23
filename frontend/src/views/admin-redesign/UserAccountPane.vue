@@ -423,7 +423,7 @@ async function loadDetail() {
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* 账号类型（2026-10-11 深设计）：这一页的主语标签——数据隔离/排查先要知道看的是谁。
-   口径与列表徽章（MkVariantBadge 判例）、live.ts 的 isVirtualLearner/isTestAccount 一致 */
+   口径与列表身份徽章（虚拟 / 测试两类备注）、live.ts 的 isVirtualLearner/isTestAccount 一致 */
 const acctType = computed(() => {
   const base = liveUsers.value.find((u) => u.id === uid.value)
   if (!base) return '—'

@@ -1247,18 +1247,10 @@ export const liveUsersTotal = ref(0)
  *  规模真超出时再评估改为服务端分页。 */
 const LIVE_LIST_FULL_LIMIT = 1000
 
-/**
- * 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，后端单点 utils/test-account.ts）；
- * includeTest=true 时显式包含全量并带回行标记
- */
-async function fetchLiveUsers(includeTest = false): Promise<void> {
-  // 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：includeTest 档同时带 testOnly+qaOnly，
-  // 后端只回测试/审计账号（2026-10-21 用户拍板：虚拟学习者不进账号页——它归虚拟学习者域）；
-  // 真实档不带任何参数（后端默认排除）
-  const res = await adminUsersApi.getUsers({
-    limit: LIVE_LIST_FULL_LIMIT,
-    ...(includeTest ? { includeTest: true, testOnly: true, qaOnly: true } : {}),
-  })
+/** 账号列表 = 全部非虚拟账号（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+ *  虚拟学习者归自己的域不进本页；测试/审计账号照常列出、行内带备注，不再有视角开关。 */
+async function fetchLiveUsers(): Promise<void> {
+  const res = await adminUsersApi.getUsers({ limit: LIVE_LIST_FULL_LIMIT })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.users || body.items || []
   liveUsersTotal.value = Number(body.pagination?.total || items.length)
@@ -1278,9 +1270,14 @@ async function fetchLiveUsers(includeTest = false): Promise<void> {
   }))
 }
 
-/** 用户列表数据隔离切换：切换「含虚拟/测试」后重拉列表（默认仅真实由 loadLiveData 兜底） */
-export async function liveSetUsersIncludeTest(includeTest: boolean): Promise<void> {
-  await fetchLiveUsers(includeTest)
+/** 账号域重拉（口径切换退役后只剩显式刷新：创建/恢复/删除后用） */
+export async function refreshLiveUsers(): Promise<void> {
+  await fetchLiveUsers()
+}
+
+/** 学习者域重拉（批量重算后用） */
+export async function refreshLiveLearners(): Promise<void> {
+  await fetchLiveLearners()
 }
 
 export async function liveCreateUser(data: { name: string; email: string; password: string; admin: boolean }): Promise<void> {
@@ -1351,13 +1348,10 @@ function mapFatigue(f?: string): string {
   return f === 'high' ? '高' : f === 'medium' ? '中' : '低'
 }
 
-async function fetchLiveLearners(includeTest = false): Promise<void> {
-  // 测试视角带 testOnly+qaOnly：后端只回测试/审计账号（互斥视角，见 DataScopeToggle）；
-  // 虚拟学习者不进教学组（2026-10-21 拍板）——它的学习数据在虚拟学习者详情「学习详情 →」里看
-  const res = await adminLearnerModelsApi.list({
-    limit: 2000,
-    ...(includeTest ? { includeTest: true, testOnly: true, qaOnly: true } : { excludeTest: true }),
-  })
+async function fetchLiveLearners(): Promise<void> {
+  // 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注，不再单列视角）；
+  // 虚拟学习者不进教学组——它的学习数据在虚拟学习者详情「学习详情 →」里看
+  const res = await adminLearnerModelsApi.list({ limit: 2000 })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
   // P1#16 数据层：接住分页 total（此前被丢弃，KPI 只能显示「已加载 N」）
@@ -1382,10 +1376,6 @@ async function fetchLiveLearners(includeTest = false): Promise<void> {
     struggling: (m.strugglingConcepts as string[]) || [],
     fragile: (m.fragileConcepts as string[]) || []
   }))
-}
-
-export async function liveSetLearnersIncludeTest(includeTest: boolean): Promise<void> {
-  await fetchLiveLearners(includeTest)
 }
 
 export async function liveRecomputeLearner(userId: string, pathId?: string): Promise<void> {
@@ -2327,24 +2317,9 @@ export function clearPageCache(domain?: string): void {
   else Object.keys(pageFetchAt).forEach((k) => delete pageFetchAt[k])
 }
 
-/** 教学组统一数据口径开关（2026-10-04 用户拍板：撤页头刷新钮，整组统一「是否包含虚拟」）：
- *  是否包含虚拟学习者/测试账号——整组一个状态、localStorage 持久化跨页保持；
- *  六页页头挂同一 DataScopeToggle。切换即清全部页面 TTL 缓存：本页 watch 强制重拉，
- *  跨页导航后的首拉也按新口径（缓存键不带口径，只能整体失效）。 */
-export const liveIncludeVirtual = ref<boolean>((() => {
-  try { return localStorage.getItem('wf_include_virtual') === '1' } catch { return false }
-})())
-export function liveSetIncludeVirtual(v: boolean): void {
-  if (liveIncludeVirtual.value === v) return
-  liveIncludeVirtual.value = v
-  try { localStorage.setItem('wf_include_virtual', v ? '1' : '0') } catch { /* 隐私模式下仅内存态 */ }
-  clearPageCache()
-  /* 口径变了，域级缓存同样作废：users/learners 的 boot 拉取结果按旧口径缓存（liveFetchAt），
-     只清页面级 TTL 的话域级 ready 判定仍过关 → 切「测试」后跨页导航不触发重拉，
-     页头显示新口径而表格停留在旧口径数据。spans/skills 等域与本口径无关，不动。 */
-  delete liveFetchAt.users
-  delete liveFetchAt.learners
-}
+/* 2026-10-21 用户拍板「没有测试，测试只是备注」：教学组六页的「真实 / 测试」视角开关退役，
+   口径只剩一条——虚拟学习者归自己的域，其余账号一律照常计入。旧的 localStorage 键
+   wf_include_virtual 不再读写，留着也不会影响任何页面。 */
 /** 各域「已有数据」判定：null 型 ref 以非 null 为准，数组型以非空为准（空列表视为未就绪，下次重拉） */
 const liveDomainReady: Record<string, () => boolean> = {
   spans: () => liveSpans.value !== null,
@@ -2387,8 +2362,8 @@ export async function loadLiveData(force = false) {
     spans: async () => { liveSpans.value = await fetchLiveSpans() },
     skills: async () => { liveSkillStatsMap.value = await fetchLiveSkills() },
     overview: async () => { liveOverview.value = await fetchLiveOverview() },
-    users: () => fetchLiveUsers(liveIncludeVirtual.value),
-    learners: () => fetchLiveLearners(liveIncludeVirtual.value),
+    users: () => fetchLiveUsers(),
+    learners: () => fetchLiveLearners(),
     virtuals: fetchLiveVirtuals,
     apiConfig: fetchLiveApiConfig,
     topology: () => fetchLiveTopology(force),

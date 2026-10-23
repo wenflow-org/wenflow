@@ -788,6 +788,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-badge--info { background: var(--mk-badge-info-bg); color: var(--mk-badge-info-fg, var(--mk-blue)); }
 /* 紧凑变体：行内小标签（10.5px / 1px 8px），替代各页面散落的 gc-tag/ts-tag/ul-tag */
 .mk-badge--sm { font-size: var(--mk-fs-micro); padding: 1px 8px; letter-spacing: 0.03em; }
+/* 测试/审计账号备注：amber + 虚线（与虚拟学习者的 slate 灰区分；2026-10-21
+   「测试只是备注」——它是身份备注，不是告警，故独立成类而不复用 --warn） */
+.mk-badge--test { background: var(--mk-amber-bg); color: var(--mk-amber); border: 1px dashed rgba(180, 83, 9, 0.45); }
 /* 虚拟学习者标记：slate 灰 + 虚线边框（与测试 amber 区分） */
 .mk-badge--virtual { background: var(--mk-badge-virtual-bg); color: var(--mk-badge-virtual-fg); border: 1px dashed var(--mk-badge-virtual-line); }
 /* 管理员自身标记：蓝色实心 */

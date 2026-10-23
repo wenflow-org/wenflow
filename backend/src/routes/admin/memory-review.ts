@@ -33,7 +33,7 @@ import {
   type FragmentationMetrics,
 } from '../../services/admin/memory-review.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
-import { findQaAccountIds, findTestAccountUserIds } from '../../utils/test-account';
+import { isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 import { normalizeConceptKey } from '../../services/memory/memory-trace.service';
 import { reviewPlanService } from '../../services/memory/review-plan.service';
@@ -157,9 +157,8 @@ router.get('/', async (req, res) => {
        totals 仍按全量 ranked 聚合，翻页不改总量口径。 */
     const rawOffset = req.query.offset ? Number(req.query.offset) : 0;
     const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0) : 0;
-    const includeVirtual = String(req.query.includeVirtual || '') === 'true';
-    // 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：只看虚拟学习者 + 测试/审计账号
-    const testOnly = String(req.query.testOnly || '') === 'true';
+    // 默认口径 = 全部非虚拟账号（2026-10-21 拍板：测试/审计账号只是行内备注，不再单列视角；
+    // 用户明确「照常计入，只加备注」）。includeVirtual 是按 id 直查虚拟账号的逃生口（旧口径）。
     /* 排序键（2026-10-18 用户走查「跨用户总览 5 列缺排序」）：默认 due（原型口径）。
        weak / strength / lastReviewed 的读数在本页切片之后才算出，要按它们排序得先对全量用户
        做一次痕迹聚合——只在被请求时加载，默认翻页不多查一遍库。 */
@@ -169,26 +168,14 @@ router.get('/', async (req, res) => {
     const now = simulatedNowOr();
 
     let baseWhere: Record<string, unknown>;
-    if (testOnly) {
-      // 正向 in 清单，与真实视角的 notIn 互为镜像；判据同源 findTestAccountUserIds。
-      // qaOnly=true 时只含测试/审计账号（2026-10-21 教学组剔除虚拟学习者：
-      // 虚拟学习者的记忆归虚拟学习者域 / 学习者详情的记忆页签）。
-      const testUserIds = String(req.query.qaOnly || '') === 'true'
-        ? await findQaAccountIds()
-        : await findTestAccountUserIds();
-      baseWhere = testUserIds.length > 0 ? { userId: { in: testUserIds } } : { userId: { in: ['__none__'] } };
+    if (String(req.query.includeVirtual || '') === 'true') {
+      // 按 id 直查虚拟账号（学习者详情的记忆侧逃生口，不删数据只改默认视图）
+      baseWhere = {};
     } else {
-      /* 真实视角 = 排除虚拟学习者 + 测试/审计账号（2026-10-23 运营走查）：
-         此前只剔除虚拟学习者 id，e2e_/vcheck_ 这类人工测试账号仍留在「真实」里——
-         本机 30 位有记忆痕迹的用户中 26 位是测试账号，读数与列表都不可信。
-         includeVirtual 只放开虚拟学习者（旧口径），测试账号始终不进真实视角。 */
-      const testIds = await findTestAccountUserIds();
-      let excluded = testIds;
-      if (includeVirtual) {
-        const virtualIds = new Set((await listVirtualLearnerIds()).map((row) => row.id));
-        excluded = testIds.filter((id) => !virtualIds.has(id));
-      }
-      baseWhere = excluded.length > 0 ? { userId: { notIn: excluded } } : {};
+      /* 默认 = 全部非虚拟账号。测试/审计账号照常计入（2026-10-21 用户拍板「照常计入，只加备注」），
+         这里只把虚拟学习者挡在外面——它们的记忆在虚拟学习者详情「记忆池」与学习详情里看。 */
+      const virtualIds = (await listVirtualLearnerIds()).map((row) => row.id);
+      baseWhere = virtualIds.length > 0 ? { userId: { notIn: virtualIds } } : {};
     }
     const [traceCounts, dueCounts, audits, mergeRecords, unattachedCounts] = await Promise.all([
       groupTraceCountsByUser(baseWhere),
@@ -383,6 +370,10 @@ router.get('/', async (req, res) => {
             name: userById.get(row.userId)?.name ?? null,
             email: userById.get(row.userId)?.email ?? null,
             isVirtualLearner: !!userById.get(row.userId)?.isVirtualLearner,
+            // 行内「测试」备注（2026-10-21 拍板：测试账号照常计入，只加备注）
+            isTestAccount: userById.get(row.userId)
+              ? isTestAccountUser(userById.get(row.userId) as Record<string, unknown>)
+              : false,
             // #67：memory 投影快照（无行 = 该用户还没有复习完成事件，不硬造 0）
             projection: (() => {
               const projection = projectionByUser.get(row.userId);

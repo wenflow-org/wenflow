@@ -336,7 +336,7 @@ import {
   liveVirtualRunStats, liveVirtualStatsError, liveVirtualStatsLoaded, liveVirtualStatsLoading,
   liveVirtualSessionStats, liveAutopilotConcurrency, liveFailures,
   retryLiveVirtualStats, loadLiveData,
-  liveIncludeVirtual, skillDisplayName,
+  skillDisplayName,
   recentActivityText, type LiveOverviewFull
 } from './live';
 import OvBars from './OvBars.vue';
@@ -457,22 +457,19 @@ async function loadLoopExtras() {
   teachState.value = 'loading';
   memState.value = 'loading';
   try {
-    // 口径随全站「含测试」开关（D12）：此前写死仅真实口径拉取，开关开着时同指标相差约 35 倍
-    // 口径随全站「真实/测试」视角联动（D12 判例）：测试视角下到期待办只数虚拟/测试账号
-    const r = await adminMemoryReviewApi.overview({ limit: 1, includeVirtual: liveIncludeVirtual.value, testOnly: liveIncludeVirtual.value || undefined });
+    // 与记忆与复习页同口径（2026-10-21 起：全部非虚拟账号）
+    const r = await adminMemoryReviewApi.overview({ limit: 1 });
     memDue.value = Number(r.data?.data?.totals?.due ?? 0);
     memState.value = 'ready';
   } catch { memState.value = 'failed'; /* 不阻塞页面：环上呈现可重试的失败态 */ }
   try {
-    const r = await adminTeachingSessionsApi.list({ limit: 1, includeTest: liveIncludeVirtual.value });
+    const r = await adminTeachingSessionsApi.list({ limit: 1 });
     teachTotal.value = Number(r.data?.data?.total ?? 0);
     teachState.value = 'ready';
   } catch { teachState.value = 'failed'; /* 同上 */ }
 }
 /** 失败环手动重试（走查 F1-3）：失败不再只能靠切口径或刷整页恢复 */
 function retryLoopExtras() { void loadLoopExtras(); }
-/* 口径切换（全站「含测试」开关）后重拉闭环条两个进页口径，避免与已切口径的其他页同指标不同源 */
-watch(liveIncludeVirtual, () => { void loadLoopExtras() });
 
 /* 页头副文（原型 pageTitle p）：数据截至 + 刷新语义（P2 文案纠偏）。
    - 「数据截至」只绑定真实拉到数据的时刻（不再拿挂载时刻冒充；未拉到前不渲染该段）；

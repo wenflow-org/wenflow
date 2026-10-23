@@ -122,9 +122,8 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 2026-10-04 用户拍板：页头状态条整体退役——需关注 / 缺总结与焦点 chips 同源同数、
     // 异常与分布条「异常终态」段同源同数（同一数字不两处渲染）；总数与窗口截断口径并进卡头 meta
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
-    // 口径不在卡头复读（2026-10-19 用户走查「这个小文案不要」）：口径状态的唯一展示点
-    // 是页头那颗真实/测试开关
-    expect(w.find('.ds-toggle .mk-pill--active').text()).toBe('真实');
+    // 口径开关已退役（2026-10-21「没有测试，测试只是备注」）：页头不再有视角控件
+    expect(w.find('.ds-toggle').exists()).toBe(false);
     // 本用例 0 行未触上限：连截断 meta 都不渲染（触限时才有「共 N 条 · 当前显示最近 1000 条」，
     // 那是分页器没有的事实；未触限时窗口=全量，无需再报一遍）
     expect(w.find('.mk-card--fill .mk-card__meta').exists()).toBe(false);

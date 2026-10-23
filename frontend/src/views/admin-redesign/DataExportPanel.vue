@@ -43,7 +43,7 @@
       <!-- 文案与实现同口径（#157）：后端 users 导出已接 REAL_USER_WHERE（排虚拟学习者 +
            e2e_/shotsnap/@test.local 等测试账号前缀/域名），脚注承诺与实现一致。
            本页导出表单不提供 includeTest 开关（后端接口保留该参数供深链/脚本用）。 -->
-      <li>用户导出默认排除虚拟学习者与测试账号。</li>
+      <li>用户导出默认排除虚拟学习者，测试/审计账号照常导出（类型列标注）。</li>
       <li>导出为只读操作，不含敏感字段。</li>
     </ul>
   </div>
@@ -65,7 +65,7 @@ interface ExportDef {
 }
 
 const exportDefs: ExportDef[] = [
-  { key: 'users', label: '用户', desc: '全部真实用户：ID / 姓名 / 邮箱 / 角色 / XP / 等级 / 注册与登录时间' },
+  { key: 'users', label: '用户', desc: '全部账号（不含虚拟学习者）：ID / 姓名 / 邮箱 / 角色 / XP / 等级 / 注册与登录时间' },
   { key: 'teaching-sessions', label: '教学会话', desc: '会话：学科 / 主题 / 任务类型 / 模式 / 状态 / 时长 / 起止时间' },
   { key: 'feedback', label: '用户反馈', desc: '反馈：评分 / 难度 / 评论 / 处理状态 / 时间' },
   { key: 'goal-conversations', label: '目标对话', desc: '目标澄清：状态 / 阶段 / 描述 / 创建与更新时间' },

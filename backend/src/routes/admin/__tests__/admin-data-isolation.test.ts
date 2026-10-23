@@ -1,7 +1,8 @@
 /**
- * 数据隔离（A3）后端测试：教学会话 / 目标对话 / 用户三个列表端点
- * - 默认「仅真实」：排除虚拟学习者与测试/审计账号（单点 utils/test-account.ts 的 REAL_USER_WHERE）
- * - includeTest=true：显式包含全量，响应带回 isVirtualLearner / isTestAccount 行标记
+ * 数据隔离后端测试：教学会话 / 目标对话 / 用户三个列表端点
+ * （2026-10-21 用户拍板「没有测试，测试只是备注」）
+ * - 默认口径：只排除虚拟学习者（它们归自己的域）；测试/审计账号照常计入，行内带备注标记
+ * - includeTest=true：按 id 直查虚拟账号的逃生口（学习者详情），不附加用户过滤
  * - users 已删除视图（status=deleted）不应用过滤（回收站需展示全量账号以恢复）
  */
 
@@ -120,7 +121,7 @@ describe('数据隔离（A3）：教学会话列表 GET /teaching-sessions', () 
     ...over,
   });
 
-  it('默认（无 includeTest）：按 REAL_USER_WHERE 过滤用户关系，响应带回行标记', async () => {
+  it('默认（无 includeTest）：只排除虚拟学习者，测试账号照常计入，响应带回行标记', async () => {
     const handler = getRouteHandler(platformRouter, '/teaching-sessions', 'get');
     tsCount.mockResolvedValue(1);
     tsFindMany.mockResolvedValue([sessionRow()]);
@@ -129,7 +130,8 @@ describe('数据隔离（A3）：教学会话列表 GET /teaching-sessions', () 
     const where = tsFindMany.mock.calls[0][0].where;
     expect(where.users).toBeDefined();
     expect(where.users.isVirtualLearner).toBe(false);
-    expect(where.users.id).toEqual({ notIn: expect.any(Array) });
+    // 测试/审计账号不再被 id 排除（2026-10-21：它们是普通账号，只是行内备注）
+    expect(where.users.id).toBeUndefined();
     const countWhere = tsCount.mock.calls[0][0].where;
     expect(countWhere.users.isVirtualLearner).toBe(false);
 
@@ -174,7 +176,7 @@ describe('数据隔离（A3）：目标对话列表 GET /goal-conversations', ()
     ...over,
   });
 
-  it('默认（无 includeTest）：按 STATS_USER_WHERE 过滤用户关系', async () => {
+  it('默认（无 includeTest）：只排除虚拟学习者（软删也排除）', async () => {
     const handler = getRouteHandler(goalConversationsRouter, '/', 'get');
     gcFindMany.mockResolvedValue([convRow()]);
     await run(handler, { query: {} });
@@ -183,7 +185,7 @@ describe('数据隔离（A3）：目标对话列表 GET /goal-conversations', ()
     expect(where.users).toBeDefined();
     expect(where.users.isVirtualLearner).toBe(false);
     expect(where.users.deletedAt).toBeNull();
-    expect(where.users.id).toEqual({ notIn: expect.any(Array) });
+    expect(where.users.id).toBeUndefined();
     expect(gcCount.mock.calls[0][0].where.users).toBeDefined();
   });
 
@@ -220,33 +222,28 @@ describe('数据隔离（A3）：用户列表 GET /users', () => {
     ...over,
   });
 
-  it('默认（无 includeTest）：where 含 isVirtualLearner:false 与 id 排除式，响应带回 isTestAccount 标记', async () => {
+  it('默认：列表只排除虚拟学习者；测试账号照常列出并带回 isTestAccount 备注标记', async () => {
     const handler = getRouteHandler(usersRouter, '/', 'get');
     usersFindMany.mockResolvedValue([userRow()]);
     const res = await run(handler, { query: { limit: '50' } });
 
     const where = usersFindMany.mock.calls[0][0].where;
     expect(where.isVirtualLearner).toBe(false);
-    // 2026-10-09：真实用户口径改为「按 id 排除」（SQLite 的 LIKE 会把前缀里的 `_` 当通配符，
-    // `startsWith('e2e_')` 曾把 `e2e.del@…` 这类真实账号一起滤掉）
-    expect(where.id).toEqual({ notIn: expect.any(Array) });
+    // 不再有 id notIn（测试/审计账号是普通账号，2026-10-21 拍板）
+    expect(where.id).toBeUndefined();
     expect(usersCount.mock.calls[0][0].where.isVirtualLearner).toBe(false);
 
     expect(res.body.data.users[0].isTestAccount).toBe(false);
   });
 
-  it('includeTest=true：不加过滤，虚拟/测试账号显式可见并带回标记', async () => {
+  it('账号页没有视角参数：includeTest 也不再放虚拟学习者进来（它归自己的域）', async () => {
     const handler = getRouteHandler(usersRouter, '/', 'get');
-    usersFindMany.mockResolvedValue([
-      userRow({ id: 'virtual_1', name: '虚拟', email: 'virtual_1@test.local', isVirtualLearner: true }),
-    ]);
-    const res = await run(handler, { query: { limit: '50', includeTest: 'true' } });
+    usersFindMany.mockResolvedValue([userRow()]);
+    await run(handler, { query: { limit: '50', includeTest: 'true' } });
 
     const where = usersFindMany.mock.calls[0][0].where;
-    expect(where.isVirtualLearner).toBeUndefined();
+    expect(where.isVirtualLearner).toBe(false);
     expect(where.id).toBeUndefined();
-    expect(res.body.data.users[0].isVirtualLearner).toBe(true);
-    expect(res.body.data.users[0].isTestAccount).toBe(true);
   });
 
   it('status=deleted（回收站）：即使无 includeTest 也不加过滤（恢复入口需全量账号）', async () => {
