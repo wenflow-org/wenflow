@@ -217,8 +217,9 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     }));
     const w = mount(MemoryReviewOverview);
     await flushPromises();
-    // 默认口径：待复习从多到少
-    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('待复习从多到少');
+    // 2026-10-23 用户「这种文案，不要」：卡头不再复述排序/分页机制，排序状态只由列头表达
+    expect(w.find('.mk-card__head-right').exists()).toBe(false);
+    expect(w.find('.mk-card__meta').exists()).toBe(false);
 
     // 记忆痕迹：首击降序
     const tracesTh = w.findAll('thead th').find((t) => t.text() === '记忆痕迹')!;
@@ -226,7 +227,6 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await flushPromises();
     const call = overview.mock.calls.at(-1)![0];
     expect(call).toMatchObject({ sort: 'traces', order: 'desc' });
-    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('记忆痕迹从多到少');
     expect(tracesTh.attributes('aria-sort')).toBe('descending');
 
     // 记忆强度：首击升序（最弱的在前）
@@ -234,7 +234,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await strengthTh.find('.mk-th__btn').trigger('click');
     await flushPromises();
     expect(overview.mock.calls.at(-1)![0]).toMatchObject({ sort: 'strength', order: 'asc' });
-    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('记忆强度从弱到强');
+    expect(strengthTh.attributes('aria-sort')).toBe('ascending');
 
     // 最近复习：首击也升序——运营口径是「最久没复习的在前」（与待复习「最多的在前」同一条习惯：
     // 最该关注的排头），而不是「最近复习过的在前」
@@ -242,12 +242,12 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await reviewedTh.find('.mk-th__btn').trigger('click');
     await flushPromises();
     expect(overview.mock.calls.at(-1)![0]).toMatchObject({ sort: 'lastReviewed', order: 'asc' });
-    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('最近复习从久到近');
+    expect(reviewedTh.attributes('aria-sort')).toBe('ascending');
     // 列头本身可点（整格热区，与 .mk-th--sortable 的光标承诺一致）：点 padding 区域也生效
     await reviewedTh.trigger('click');
     await flushPromises();
     expect(overview.mock.calls.at(-1)![0]).toMatchObject({ sort: 'lastReviewed', order: 'desc' });
-    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('最近复习从近到久');
+    expect(reviewedTh.attributes('aria-sort')).toBe('descending');
   });
 
   it('复习状态快筛：有待复习 / 未复习 / 需关注 计数按当前页，点击后行集收敛，可一键显示全部', async () => {
@@ -278,7 +278,6 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await nextTick();
     expect(w.findAll('tbody tr')).toHaveLength(1);
     expect(w.find('tbody').text()).toContain('小红');
-    expect(w.find('.mk-card__meta').text()).toContain('已筛 1 位');
 
     await pill('需关注').trigger('click');
     await nextTick();
@@ -305,7 +304,9 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await w2.findAll('.mk-pill').find((p) => p.text().startsWith('有待复习'))!.trigger('click');
     await nextTick();
     expect(w2.findAll('tbody tr')).toHaveLength(0);
-    expect(w2.find('.mk-empty').text()).toContain('当前页没有符合条件的学习者');
+    expect(w2.find('.mk-empty').text()).toContain('没有符合条件的学习者');
+    // 空态不再解释「筛选只作用于当前页」这类机制，只给出口
+    expect(w2.find('.mk-empty').text()).not.toContain('快速筛选只作用于当前页');
     await w2.find('.mk-empty__action').trigger('click');
     await nextTick();
     expect(w2.findAll('tbody tr')).toHaveLength(2);

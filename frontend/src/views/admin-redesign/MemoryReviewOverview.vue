@@ -62,9 +62,10 @@
             >{{ p.label }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
           </div>
         </div>
-        <div class="mk-card__head-right">
-          <span class="mk-card__meta" :title="`按「${userSortText}」排序（在全部用户里排好再分页，不是只排当前页），每页显示的行数可调。快速筛选只作用于当前页${mrPill === 'all' ? '' : '，已筛 ' + visibleRows.length + ' 位'}`">第 {{ userPage }} 页 · 每页 {{ userPageSize }} 位 · {{ userSortText }}<template v-if="mrPill !== 'all'"> · 已筛 {{ visibleRows.length }} 位</template></span>
-        </div>
+        <!-- 2026-10-23 用户「这种文案，不要」：卡头 meta 原样复述分页/排序/筛选的作用机制
+             （「在全部用户里排好再分页，不是只排当前页」「快速筛选只作用于当前页」），
+             既不是读数也不是可操作信息。页码与每页条数由底部 Pagination 自明，排序由列头
+             caret 表达——这里整块撤掉，不再另写一行说明。 -->
       </div>
       <!-- 取数失败不得渲染成「暂无数据」（R2）：有旧行时保留旧行并给带重试的 .mk-alert -->
       <div v-if="error && rows.length" class="mk-alert mk-alert--row" role="alert">
@@ -85,11 +86,10 @@
       <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="还没有用户产生记忆记录。学习者开始学习并完成概念提取后，这里会按待复习量从多到少列出用户。" />
       <!-- 用户列表（行点击跳学习者详情，EG1：回车不劫持行内按钮） -->
       <div v-else class="mk-table-scroll">
-        <!-- 快筛筛空：筛选作用于当前页，空 ≠ 全库没有 -->
+        <!-- 快筛筛空：给一个回「全部」的出口即可，不再解释筛选作用域 -->
         <MkEmptyState
           v-if="!visibleRows.length"
-          title="当前页没有符合条件的学习者"
-          description="快速筛选只作用于当前页。"
+          title="没有符合条件的学习者"
           action-text="显示全部"
           @action="mrPill = 'all'"
         />
@@ -288,30 +288,6 @@ const {
   // 姓名/强度/最近复习首击升序（名字正序、最弱的在前、最久没复习的在前——「最该关注的在前」
   // 在时间列上的写法就是最久没复习的排头），其余首击降序（最多的在前）
   defaultDirOf: { name: 'asc', strength: 'asc', lastReviewed: 'asc' }
-})
-const USER_SORT_LABEL: Record<string, string> = {
-  name: '学习者名称',
-  traces: '记忆痕迹',
-  due: '待复习',
-  weak: '需关注',
-  proposed: '归并候选',
-  scatter: '散键',
-  strength: '记忆强度',
-  lastReviewed: '最近复习'
-}
-/** 实际生效的排序以响应回显为准（参数非法时后端回落默认，界面不得把默认序说成用户选的） */
-const appliedUserSort = ref<{ key: string; order: 'asc' | 'desc' }>({ key: 'due', order: 'desc' })
-const userSortText = computed(() => {
-  const { key, order } = appliedUserSort.value
-  const label = USER_SORT_LABEL[key] ?? key
-  const dirText = key === 'name'
-    ? (order === 'asc' ? '正序' : '倒序')
-    : key === 'due' || key === 'traces' || key === 'weak' || key === 'proposed' || key === 'scatter'
-      ? (order === 'asc' ? '从少到多' : '从多到少')
-      : key === 'strength'
-        ? (order === 'asc' ? '从弱到强' : '从强到弱')
-        : (order === 'asc' ? '从久到近' : '从近到久')
-  return `${label}${dirText}`
 })
 watch([userSortKey, userSortDir], () => {
   // 排序变了从第 1 页看（否则停在旧页会读作「排序没生效」）
@@ -529,9 +505,6 @@ async function loadOverview() {
       return
     }
     totals.value = { ...totals.value, ...(body.totals || {}) }
-    if (body.sort && typeof body.sort.key === 'string') {
-      appliedUserSort.value = { key: body.sort.key, order: body.sort.order === 'asc' ? 'asc' : 'desc' }
-    }
     overviewReady.value = true
   } catch (e) {
     if (seq !== overviewSeq) return
