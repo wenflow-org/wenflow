@@ -215,14 +215,9 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     const lines = row.findAll('.vl-histline');
     expect(lines).toHaveLength(2);
     expect(lines.map((l) => l.find('.vl-histtitle').text())).toEqual(['函数与导数', '立体几何']);
-    // 终态是彩色徽章（不是埋在灰字里的词）：已完成=绿、已放弃=警示
-    const badges = lines.map((l) => l.find('.mk-badge'))
-    expect(badges[0].text()).toBe('已完成')
-    expect(badges[0].classes()).toContain('mk-badge--ok')
-    expect(badges[1].text()).toBe('已放弃')
-    expect(badges[1].classes()).toContain('mk-badge--warn')
-    // 元信息只留阶段与任务数，不再复述终态
-    expect(lines[1].find('.vl-histmeta').text()).not.toContain('已放弃')
+    // 终态用词而不是彩点：已完成 / 已放弃
+    expect(lines[0].find('.vl-histmeta').text()).toContain('已完成');
+    expect(lines[1].find('.vl-histmeta').text()).toContain('已放弃');
     // 3 条路径只展开 2 条 → 余量明说
     expect(row.find('.vl-histmore').text()).toBe('+1 条路径');
     // 点路径名进该条运行的座舱（不是一律第一条）
@@ -292,91 +287,3 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     w.unmount()
   });
 });
-
-/**
- * 2026-10-21 外部评审（信息密度 / 对齐 / 状态标识 / 看板分层）的可见契约。
- * 评审点的是「看得见的行为」，所以这里断言的是 DOM 语义，不是 CSS 数值；
- * 行高与灰度在浏览器实测（1440 / 1080），不把像素写进单测。
- */
-describe('虚拟学习者：评审后的密度与状态标识', () => {
-  const idleRow = baseRow({
-    id: 'p3-idle-uuid-0001',
-    name: '空闲者',
-    sessions: 0,
-    runningCount: 0,
-    pausedCount: 0,
-    stageProgress: null,
-    recentRuns: [],
-    recentRunTotal: 0
-  })
-
-  beforeEach(() => {
-    liveVirtuals.value = [multiRow, historyRow, idleRow] as unknown as typeof liveVirtuals.value
-  })
-
-  it('首列同行：头像 + 姓名 + 短 ID 在一个 .mk-cell-main 里，完整 UUID 只在悬停气泡', async () => {
-    const w = mount(VirtualLearners)
-    await flushPromises()
-    await nextTick()
-    const row = rowByName(w, '徐国栋')
-    const cell = row.find('.vl-cell')
-    expect(cell.find('.mk-ava').exists()).toBe(true)
-    const main = cell.find('.mk-cell-main')
-    expect(main.find('strong').text()).toBe('徐国栋')
-    const sub = main.find('.mk-cell-sub')
-    // 可见文本是截断后的短 ID，完整 UUID 走 title（评审要求「长 ID 弱化为悬浮气泡」）
-    expect(sub.text()).toBe('p2')
-    expect(sub.attributes('title')).toContain('p2')
-    // 姓名与短 ID 都在同一个容器里（不是上下两行），这是「紧凑同行」的结构前提
-    expect(main.element.children).toHaveLength(2)
-    w.unmount()
-  })
-
-  it('没跑过的学习者：状态是灰徽章「未运行」，不是裸文字', async () => {
-    const w = mount(VirtualLearners)
-    await flushPromises()
-    await nextTick()
-    const row = rowByName(w, '空闲者')
-    const badge = row.findAll('.mk-badge').find((b) => b.text() === '未运行')!
-    expect(badge.exists()).toBe(true)
-    expect(badge.text()).toBe('未运行')
-    expect(badge.classes()).toContain('mk-badge--muted')
-    expect(badge.attributes('title')).toBeTruthy()
-    w.unmount()
-  })
-
-  it('终态徽章的色阶：已完成=ok、已放弃=warn、失败=bad', async () => {
-    liveVirtuals.value = [baseRow({
-      name: '三态',
-      recentRunTotal: 3,
-      recentRuns: [
-        { sessionId: 'r1', pathId: 'a', pathTitle: 'A', status: 'completed', currentStage: 'learn', updatedAt: '2026-10-20T00:00:00Z', goalReady: true, pathReady: true, learnStarted: true, taskDone: 1, taskTotal: 1 },
-        { sessionId: 'r2', pathId: 'b', pathTitle: 'B', status: 'abandoned', currentStage: 'learn', updatedAt: '2026-10-19T00:00:00Z', goalReady: true, pathReady: true, learnStarted: true, taskDone: 1, taskTotal: 9 },
-        { sessionId: 'r3', pathId: 'c', pathTitle: 'C', status: 'failed', currentStage: 'learn', updatedAt: '2026-10-18T00:00:00Z', goalReady: true, pathReady: true, learnStarted: false, taskDone: 0, taskTotal: 0 }
-      ]
-    })] as unknown as typeof liveVirtuals.value
-    const w = mount(VirtualLearners)
-    await flushPromises()
-    await nextTick()
-    const badges = rowByName(w, '三态').findAll('.vl-histline .mk-badge')
-    expect(badges.map((b) => b.text())).toEqual(['已完成', '已放弃', '失败'])
-    expect(badges.map((b) => b.classes().find((c) => c.startsWith('mk-badge--') && c !== 'mk-badge--sm'))).toEqual([
-      'mk-badge--ok', 'mk-badge--warn', 'mk-badge--bad'
-    ])
-    w.unmount()
-  })
-
-  it('页头动作区：新建仍是唯一主按钮，且排在最后（评审「维持高亮主导地位」）', async () => {
-    const w = mount(VirtualLearners)
-    await flushPromises()
-    await nextTick()
-    const actions = w.find('.mk-pagehead__actions')
-    const buttons = actions.findAll('button').map((b) => ({ text: b.text().trim(), primary: b.classes().includes('mk-btn--primary') }))
-    const primaries = buttons.filter((b) => b.primary)
-    expect(primaries).toHaveLength(1)
-    expect(primaries[0].text).toBe('新建')
-    // 主按钮压在同组末尾：右缘是动作区的落点，「清理旧账号」这类次级动作在它左侧
-    expect(buttons[buttons.length - 1].text).toBe('新建')
-    w.unmount()
-  })
-})

@@ -16,8 +16,8 @@
         >
           {{ reclaimRef?.state.busy ? '回收中…' : `回收无响应（${partition.stale}）` }}
         </button>
-        <!-- 操作顺序（2026-10-21 外部评审）：低频/破坏性动作在左，主操作「新建」收在最右作为锚点 -->
         <button type="button" class="mk-btn mk-btn--sm" title="清理旧账号：按建号时间批量删除旧虚拟学习者（进行中与保留名单自动豁免，先预览再执行）" @click="cleanupRef?.open()">清理旧账号</button>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="新建虚拟学习者" @click="openCreate">新建</button>
         <button type="button" class="mk-btn mk-btn--sm" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="openBatchCreate">批量新建</button>
         <!-- 批量入口（2026-10-19 运营走查「批量能力默认不存在」）：选择框列按 2026-10-18 拍板
              默认隐藏，而批量条又要选中才浮现——两个默认叠加，新来的运营在首屏看不到任何批量
@@ -30,7 +30,6 @@
           title="显示选择框列：逐行勾选后可批量启动全部故事、启动或停止自动驾驶、终止、清理无响应、删除"
           @click="revealCheckColumn"
         >批量操作</button>
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="新建虚拟学习者" @click="openCreate">新建</button>
       </template>
     </MkPageHead>
 
@@ -303,7 +302,7 @@
                   :title="`有 ${activeCount(s)} 条活跃运行，但不在本次载入的运行明细里，进画像页查看`"
                 >活跃 {{ activeCount(s) }} 条 · 未展开</span>
                 <!-- 历史（无活跃运行）：按学习路径一行（2026-10-21 用户「一个学习者可能多个目标路径」）。
-                     每条路径只显示最近一次运行，多节课/重跑折叠在画像页；终态用彩色徽章写出来（已放弃/已完成/失败），
+                     每条路径只显示最近一次运行，多节课/重跑折叠在画像页；终态用词写出来（已放弃/已完成），
                      不再给历史行画「进行中」的阶段条——那会把已经结束的运行画得像在跑。 -->
                 <template v-else-if="historyRunsOf(s).length">
                   <span class="vl-histmark">最近</span>
@@ -316,11 +315,6 @@
                         @click.stop="r.sessionId && openRun(r.sessionId)"
                       >{{ r.pathTitle || '目标阶段' }}</button>
                       <span class="vl-histmeta">{{ historyRunMeta(r) }}</span>
-                      <span
-                        v-if="historyBadgeOf(r)"
-                        class="mk-badge mk-badge--sm"
-                        :class="historyBadgeOf(r)!.cls"
-                      >{{ historyBadgeOf(r)!.label }}</span>
                     </div>
                     <span
                       v-if="historyTotalOf(s) > historyRunsOf(s).length"
@@ -329,11 +323,7 @@
                     >+{{ historyTotalOf(s) - historyRunsOf(s).length }} 条路径</span>
                   </div>
                 </template>
-                <span
-                  v-else
-                  class="mk-badge mk-badge--muted mk-badge--sm"
-                  title="这个学习者还没有运行过"
-                >未运行</span>
+                <span v-else class="mk-na" title="这个学习者还没有运行过">未运行</span>
               </div>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('sessions')" class="mk-num">{{ s.sessions }}</td>
@@ -611,29 +601,13 @@ function stageWordOf(r: { goalReady: boolean; pathReady: boolean; learnStarted: 
   if (st === 'path') return '路径'
   return '目标'
 }
-/** 历史行摘要：到哪一步 + 任务数（终态单独用徽章，颜色直觉比一串灰字快） */
+/** 历史行摘要：到哪一步 + 任务数 + 终态（已放弃/已完成） */
 function historyRunMeta(r: RecentRun): string {
   const stage = stageWordOf(r)
   const tasks = r.learnStarted && r.taskTotal > 0 ? ` ${r.taskDone}/${r.taskTotal}` : ''
-  return `${stage}${tasks}`
-}
-/** 历史行终态徽章：已完成绿 / 已放弃琥珀 / 失败红 / 其余弱灰 */
-const HISTORY_BADGE_CLS: Record<string, string> = {
-  completed: 'mk-badge--ok',
-  succeeded: 'mk-badge--ok',
-  success: 'mk-badge--ok',
-  abandoned: 'mk-badge--warn',
-  cancelled: 'mk-badge--warn',
-  failed: 'mk-badge--bad',
-  timeout: 'mk-badge--bad',
-}
-
-function historyBadgeOf(r: RecentRun): { label: string; cls: string } | null {
-  const st = String(r.status || '').toLowerCase()
-  if (!st || st === 'running') return null
-  const label = statusText(st)
-  if (!label) return null
-  return { label, cls: HISTORY_BADGE_CLS[st] ?? 'mk-badge--muted' }
+  const st = String(r.status || '')
+  const terminal = st && st !== 'running' ? ` · ${statusText(st)}` : ''
+  return `${stage}${tasks}${terminal}`
 }
 /** 历史行 title：路径 + 任务 + 最近写入时间（点击行为由路径名本身是按钮承载，不再写说明书） */
 function historyRunTitle(r: RecentRun): string {
@@ -1175,19 +1149,11 @@ function openRun(sessionId: string) {
 .mk-table-scroll .mk-table { min-width: 720px; }
 /* 名称格 flex 基座：头像 + mk-cell-main（强/副行截断由原语承担，2026-10-03 方言收敛） */
 .vl-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
-/* 首列压成一行（2026-10-21 外部评审「消除纵向无效占用」）：头像 + 姓名 + 短 ID 同行；
-   完整 UUID 留在 ID 的 title 里，悬停可看。行高因此从 67px 降到 ~44px。 */
-.vl-cell .mk-cell-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.vl-cell .mk-cell-main strong { display: inline; margin: 0; min-width: 0; }
-.vl-cell .mk-cell-main .mk-cell-sub { display: inline; margin: 0; color: var(--mk-muted); }
-/* 密度（外部评审「批量并发压测下单屏监控更多用例」）：单元格上下内衬 10→6 */
-.vl-table th, .vl-table td { padding-block: 6px; }
-.vl-table td { vertical-align: middle; }
 /* 状态列：进行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义）；gap+wrap 归并为一处定义 */
-.vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 22px; }
+.vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 26px; }
 /* 多活跃会话（2026-10-18）：逐条一行，徽章 + 阶段条；行高 24 与右侧「任务」列逐行对齐 */
 .vl-state-cell--multi { display: grid; gap: 2px; justify-items: start; }
-.vl-runline { display: flex; align-items: center; gap: 6px; min-height: 22px; min-width: 0; }
+.vl-runline { display: flex; align-items: center; gap: 6px; min-height: 24px; min-width: 0; }
 /* 历史行组（2026-10-21）：一条路径一行；行内只说「到哪一步 + 任务 + 终态」，
    不再给已结束的运行画阶段条（会把「已放弃」画成「进行中」） */
 .vl-histlines { display: grid; gap: 1px; min-width: 0; }
@@ -1195,18 +1161,15 @@ function openRun(sessionId: string) {
 .vl-histtitle {
   border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer;
   max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink);
+  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted);
   text-align: left;
 }
 .vl-histtitle:hover { color: var(--mk-blue); text-decoration: underline; }
 .vl-histmeta {
-  font-size: var(--mk-fs-micro); color: var(--mk-muted);
+  font-size: var(--mk-fs-micro); color: var(--mk-faint);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.vl-histmore { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-/* 表格内所有弱化文字统一加深一档（外部评审：UUID / 「目标阶段」这类描述在读数据时看不清） */
-.vl-table .mk-cell-sub,
-.vl-table .mk-na { color: var(--mk-muted); }
+.vl-histmore { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 活跃运行行里的路径名：与徽章并列，截断保留可点区 */
 .vl-runtitle {
   border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer;
@@ -1261,17 +1224,12 @@ function openRun(sessionId: string) {
 /* 运行指标带：KPI 独占整行（共享 .mk-kpi-grid + MkKpi，卡自带面/描边，外层不套盒子）；
    读写分块判例不变：写控制（速率上限/日期模拟）不进数字栅格，收进下方「压测参数」页签卡。
    卡内进度条 2026-10-16 按用户要求退役（见脚本侧同名注记），本处不再挂 minibar。 */
-.vl-kpi :deep(.mk-kpi) {
-  /* 外部评审「与下方工作区在视觉层面剥离」：共享 MkKpi 白面在浅色页面底上几乎融进背景，
-     这里只在本页给一层次级表面（暗色档由 token 自带），不新增阴影、不改共享原语。 */
-  background: var(--mk-surface-2);
-}
 .vl-kpi {
   display: grid;
   gap: 8px;
   flex: none;
 }
-/* 六张卡成组（外部评审把这一排当「监控看板」）：
+/* 六张卡成组（2026-10-21 外部评审里唯一保留的一项「看板」意见）：
    共享 .mk-kpi-grid 是 flex-wrap + 180px 基准，1440 内容宽 1135 时正好只放得下 5 张，
    第 6 张被 flex-grow 拉成整条宽卡、看着像另一块区域。这里按卡数定列，行永远铺匀。 */
 @media (min-width: 1360px) {
@@ -1282,6 +1240,10 @@ function openRun(sessionId: string) {
 }
 @media (max-width: 1023.98px) {
   .vl-kpi :deep(.mk-kpi-grid) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* 卡面给一层次级表面，与下方工作区剥离；暗色档由 token 自带，不新增阴影、不改共享原语 */
+.vl-kpi :deep(.mk-kpi) {
+  background: var(--mk-surface-2);
 }
 /* 压测参数卡的 .vl-settings/.vl-rpm 样式已随卡片迁往 VirtualLabLoadSettings.vue（2026-10-13） */
 /* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
