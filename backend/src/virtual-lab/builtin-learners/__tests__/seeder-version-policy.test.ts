@@ -9,6 +9,7 @@ import prisma from '../../../config/database';
 import {
   classifyPresetVersion,
   ensureBuiltinVirtualLearners,
+  isRunnablePreset,
   type EnsureBuiltinLearnersResult,
 } from '../seeder';
 import { loadBuiltinLearnerPresets } from '../loader';
@@ -76,6 +77,13 @@ describe('classifyPresetVersion（版本关系判据）', () => {
     expect(classifyPresetVersion(2, 3)).toBe('definition-ahead');
     expect(classifyPresetVersion(3, 3)).toBe('same');
     expect(classifyPresetVersion(4, 3)).toBe('instance-ahead');
+  });
+});
+
+describe('out_of_scope 闸门语义（#91 决策）', () => {
+  it('out_of_scope 不 seed、不跑（定义侧标记，不进实例层）', () => {
+    expect(isRunnablePreset({ scope: 'in_scope' })).toBe(true);
+    expect(isRunnablePreset({ scope: 'out_of_scope' })).toBe(false);
   });
 });
 
