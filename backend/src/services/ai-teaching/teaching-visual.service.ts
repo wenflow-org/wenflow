@@ -297,8 +297,8 @@ const FIGURE_KIND_GUIDE = [
   '若确实该出图，按关系选 kind（最多 8 行/6 列、8 个条目；标签用学科实指，≤18 字）：',
   '- matrix：二维命中矩阵（✓有/—无/叠=重复堆砌/≡两边同一项）。{"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":1,"tone":"hit|miss|dup|key"}],"legend":[{"text":"✓ 已写到","fill":"#e6f4f1"}]}',
   '- range-bar：**多组数值区间并排**（新组/旧组的波动范围、上下限、从哪到哪）。{"unit":"%","rows":[{"label":"新组四天","from":3.1,"to":3.8,"tone":"accent"},{"label":"旧组四天","from":2.9,"to":3.6,"tone":"neutral"}],"marks":[{"at":0.5,"label":"汇报的均值差"}],"note":"…"}——**数值区间不要塞进 position-line**：一根时间轴画不出带宽，把「幅度」横着放会被读成日期跨度。',
-  '- cartesian-plot：**二维坐标图**（函数曲线/平抛轨迹/实验数据）。{"x":{"label":"水平位移 / m","min":0,"max":2.6,"ticks":[0,0.6,1.2,1.8,2.4]},"y":{"label":"高度 / m","min":0,"max":0.85,"ticks":[0,0.4,0.8]},"series":[{"name":"3 m/s","form":"parabola","a":-0.5556,"b":0,"c":0.8,"tone":"ok","dotPoints":[[0.3,0.75],[0.6,0.6],[0.9,0.35],[1.2,0]]}],"guides":[{"axis":"y","at":0.75,"label":"t=0.1s · 0.75m"}],"vectors":[{"at":[0,0.8],"dx":0.6,"dy":0,"label":"v₀"}],"marks":[{"at":[1.2,0],"label":"落点 1.2 m"}]}——**同一时刻两个球在不在同一高度**，只能靠这张图看见；form 可用 points/parabola(a,b,c)/linear(k,b)/scatter，dotPoints 是等时间隔的位置点（频闪），属于同一条曲线，**不要另开一条散点系列**；数值必须是真实量纲。',
-  '- **变量名/引用/拷贝**：用 bipartite，左列变量名、右列内存对象，edges 表示指向；`b = a` 是两条边汇到同一个对象节点，`a[:]` 是外层两个节点、内层同一节点。',
+  '- cartesian-plot：**二维坐标图**（函数曲线/平抛轨迹/实验数据）。{"x":{"label":"水平位移 / m","min":0,"max":2.6,"ticks":[0,0.6,1.2,1.8,2.4]},"y":{"label":"高度 / m","min":0,"max":0.85,"ticks":[0,0.4,0.8]},"series":[{"name":"3 m/s","form":"parabola","a":-0.5556,"b":0,"c":0.8,"tone":"ok","dotPoints":[[0.3,0.75],[0.6,0.6],[0.9,0.35],[1.2,0]]}],"guides":[{"axis":"y","at":0.75,"label":"t=0.1s · 0.75m"}],"vectors":[{"at":[0,0.8],"dx":0.6,"dy":0,"label":"v₀"}],"marks":[{"at":[1.2,0],"label":"落点 1.2 m"}]}——**同一时刻两个球在不在同一高度**，只能靠这张图看见；form 可用 points/parabola(a,b,c)/linear(k,b)/scatter，dotPoints 是等时间隔的位置点（频闪），属于同一条曲线，**不要另开一条散点系列**；**要表达「面积」时给 `areas`**：{"areas":[{"from":0,"to":4,"series":"速度","label":"位移 = 面积"}]}（v-t 图下面积=位移、供需曲线围出的剩余都靠它）；图例里写到的每条曲线都必须真的画出来；数值必须是真实量纲。',
+  '- **变量名/引用/拷贝**：用 bipartite，左列变量名、右列内存对象，edges 表示指向；`b = a` 是两条边汇到同一个对象节点，`a[:]` 是外层两个节点、内层同一节点。**同一张图上不要同时画「改之前」和「改之后」两个状态**（外审：学生会以为 b 同时指向两个对象）——只画当前状态，或把前后两组分开并列并各自标头。',
   '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',
   '- quadrant：2×2（四格顺序：左上、右上、左下、右下）。{"colLabels":["左","右"],"rowLabels":[{"label":"上","sub":"…"},{"label":"下"}],"cells":[{"title":"…","body":["…"],"tone":"ok|warn|neutral"}]}',
   '- bipartite：左右两列 + 连线（多对多映射）。{"left":{"head":"…","nodes":[{"id":"a","label":"…"}]},"right":{"head":"…","nodes":[{"id":"x","label":"…"}]},"edges":[{"from":"a","to":"x"}]}——一条建议挂两个目标就是两条线；**次要/附带的连接加 "dash":"4 3"（虚线）**，渲染器会自动补图例，别把主次写成同一根实线。',
@@ -402,6 +402,7 @@ interface KindRule {
 const KIND_RULES: readonly KindRule[] = [
   { kind: 'bullseye', test: /(信度|效度|稳不稳|准不准|打偏|靶心|误差分布|系统性偏差|每次都一致|忽高忽低)/, why: '稳不准是两个几何量，点聚不聚、偏不偏要一眼看出来' },
   { kind: 'cycle', test: /(闭环|回到起点|每一轮|迭代|循环|反馈回路|下一段.{0,6}前提|前置条件|一轮结束)/, why: '走完要回到起点，是环不是列' },
+  { kind: 'cycle', test: /(相互推动|彼此推动|正反馈|负反馈|恶性循环|良性循环|越.{0,8}越|反过来又|又会加强|循环往复|环环相扣|互为因果)/, why: '不是单线因果，走一圈回来又加强自己——是环不是链' },
   { kind: 'venn', test: /(易混|分不清|分不开|重叠|边界|两边都算|交集|既有.{0,6}又有|既.{0,4}又)/, why: '要看出重叠与各自独有，并排两栏会把重叠吃掉' },
   { kind: 'bipartite', test: /(多对多|一对多|同时服务|同时满足|连线|映射|一一对应|对应关系|配对|交叉关系)/, why: '一条对应多条，交叉连线本身是信息' },
   { kind: 'tree', test: /(五大领域|分类体系|子领域|子类|派生|词根|上位|下位|包含关系|长成|分为几大类|三层结构)/, why: '一个上位概念长出一层下位，是派生不是并列' },
@@ -414,6 +415,11 @@ const KIND_RULES: readonly KindRule[] = [
   // 表格永远画不出来（用户：「这不叫图，叫制表信息」）。
   { kind: 'cartesian-plot', test: /(平抛|斜抛|抛体|自由落体|抛物线|轨迹|函数图像|二次函数|一次函数|曲线(变化|关系)|成正比|成反比|斜率|截距)/, why: '关系写在横纵两轴上：两条曲线在同一时刻的比较只能靠坐标图看见' },
   { kind: 'cartesian-plot', test: /(水平方向|竖直方向|分运动|合运动|速度分解|速度合成)/, why: '两个方向就是两条轴上的分量，画坐标图（等时刻辅助线 + 速度箭头）' },
+  // 2026-10-23 广度扫测（12 学科案例）：模型不是不会画，是这些学科的说法根本没触发图型线索。
+  // 各科「曲线/图像/交点/变化趋势」的统一说法都在这里收口——它们的学习对象都是一张坐标图。
+  { kind: 'cartesian-plot', test: /(图像|图线|曲线|坐标图|坐标系|斜率|截距|交点|顶点|开口|对称轴|增减性|单调|极值|最大值|最小值)/, why: '关系写在横纵两轴上：函数图像、实验曲线、两条线的交点' },
+  { kind: 'cartesian-plot', test: /(先升后(降|平|落)|先降后升|随.{0,10}(增大|增加|升高|变大|增强).{0,10}(减小|下降|降低|变慢|不变|趋于)|成正比|成反比|饱和点|补偿点|阈值|平衡点|等当点|突跃)/, why: '随自变量变化的趋势，只能靠曲线看见拐点与平台' },
+  { kind: 'cartesian-plot', test: /(滴定|光合(速率|作用)|呼吸速率|酶(活性|促)|人口(增长|自然增长)|出生率|死亡率|供给|需求|均衡价格|气温|降水|浓度.{0,6}变化)/, why: '学科里的经典曲线：随一个量变化，另一个量怎么走' },
   // 引用/指向类内容：名字→对象是二分连线，边就是「指向」，两栏文字会把这层信息丢掉。
   { kind: 'bipartite', test: /(变量名|指向|引用|同一个对象|浅拷贝|深拷贝|内存|栈|堆|别名|改它会不会影响)/, why: '名字与对象是两列，边表示指向；同一个对象要有多条边汇入' },
 ];
@@ -641,19 +647,55 @@ export function shouldEmitFigureAmong(existingFigures: unknown[] | null | undefi
 }
 
 /**
- * 本轮结尾是不是在追问学生（用户 2026-10-23 硬指令：「只在讲解的时候出图」）。
+ * 本轮最后一句是在追问学生吗（2026-10-23 用户：「只在讲解的时候出图」）。
  *
- * 判据取最后一句：以问号收尾 = 这一轮的落点是「你来答」，图若同屏出现，
- * 等于把刚问出去的那一问连同答案一起摆在学生面前。讲解轮（讲完就停）照常可以出图。
+ * 注意：**追问不构成不出图的理由**——「讲清结构 → 看图 → 追问为什么」本来就是教学常态，
+ * 一刀切会把绝大多数讲解轮挡掉（广度扫测 12 例里 8 例因此为 0 图）。
+ * 真正该拦的是「图把这个追问的答案画出来了」，判据见 shouldWithholdFigureForQuestion。
  */
 export function endsWithQuestion(reply: string | null | undefined): boolean {
+  // 模型的问句常常跟着一句收尾指令（「用你自己的话说说看。」），只看最后一行会漏判。
+  // 取最后两行，任一行带问号即视为以追问收束。
+  const lines = String(reply ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-2);
+  return lines.some((line) => /[？?]\s*$/.test(line) || /[？?]/.test(line.slice(-40)));
+}
+
+function lastSentence(reply: string | null | undefined): string {
   const lines = String(reply ?? '')
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
-  if (!lines.length) return false;
-  const last = lines[lines.length - 1].replace(/[」"”』）)\s]+$/, '');
-  return /[？?]$/.test(last);
+  return lines.length ? lines[lines.length - 1] : '';
+}
+
+/**
+ * 追问轮出图前最后一道判断：图里是不是已经把这一问的答案写出来了。
+ *
+ * 判据（确定性）：追问句里出现「数值」或「问的是哪个量」，而图里的标签/格子里带着同一个量或同一个数
+ * → 这张图会把答案递到学生手里，本轮不出（留到学生答完后的印证轮）。
+ * 只画结构、不写结论的图（只给轴、曲线形状、时刻虚线）照常出。
+ */
+export function shouldWithholdFigureForQuestion(
+  figure: unknown,
+  reply: string | null | undefined,
+): boolean {
+  if (!endsWithQuestion(reply)) return false;
+  const question = lastSentence(reply);
+  // 「读图题」：让学生从图上读出/指出某个值或位置。此刻图若同屏，等于把答案递过去。
+  // 这类问法在广度扫测里是泄题的主要来源（交点在哪两个数 / 口子最宽是哪一段 / 净光合是多少）。
+  const readOff = /(读出|指出|指着|看图|图上|看图说|哪两个|哪一段|哪个位置|在哪里|是多少|多少|等于几|填|补全)/;
+  if (!readOff.test(question)) return false;
+  const spec = ((figure as { spec?: unknown })?.spec ?? figure) as Record<string, unknown> | null;
+  if (!spec || typeof spec !== 'object') return false;
+  // 空图不拦（没有可读的东西）；有任何图元就拦——图元本身就是学生要读的那个答案。
+  const hasContent = ['series', 'cells', 'nodes', 'edges', 'branches', 'marks', 'guides', 'steps', 'items']
+    .some((key) => Array.isArray(spec[key]) && (spec[key] as unknown[]).length > 0)
+    || ['left', 'right', 'root', 'center'].some((key) => spec[key] && typeof spec[key] === 'object');
+  return hasContent;
 }
 
 /**
@@ -775,7 +817,8 @@ export function buildVisualOpportunity(
   const figureCapReached = figureCount >= resolveFigureMaxPerSession();
   const lastHasFigure = lastAssistantHasFigure(list);
   // 形状路由：按「任务标题 + 上一轮讲解」判这段内容该用哪种几何（靶盘/闭环/交集/二分/辐射/…）
-  const kindHint = chooseFigureKind([taskHint, lastAssistant?.content].filter(Boolean).join('\n'));
+  // 任务标题优先：它决定这节课要处理哪种关系；上一轮讲解只作补充，避免正文里的普通名词（需求/市场）抢先路由。
+  const kindHint = chooseFigureKind(taskHint) ?? chooseFigureKind(lastAssistant?.content);
   const kindHintLine = figureKindHintLine(kindHint);
   if (detectAsciiStructure(lastAssistant?.content)) {
     return {
@@ -852,10 +895,11 @@ export function buildVisualOpportunity(
       ruleWhy: '当前任务本身就是一组结构化关系',
       matched: [...matchStructureCues(taskHint), ...(kindHint?.match ? [kindHint.match] : [])].slice(0, 6),
       instruction:
-        '当前这个任务本身就在处理一组**结构化关系**（归属/对应/对比/对账/分层这类）。'
-        + '如果这轮的内容已经可以用一张图讲清，就在 reply 之后输出顶层块 `figure`；'
-        + '**先判断**：若本轮正要布置「由学生自己填这张表/排这组关系」的练习（答案泄漏），本轮**不要**输出，'
-        + '留到学生完成后的下一轮印证；若确实是流程/时序，用 `diagram`（mermaid）。'
+        '本轮已由编排层判定为**出图时机**（当前任务本身就在处理一组结构化关系）。'
+        + '**默认必须输出一张图**（reply 之后输出顶层块 `figure`）；只有两种情况可以不出：'
+        + '① 本轮正要布置「由学生自己填这张表/排这组关系/画这条曲线」的练习（答案泄漏）→ 留到学生完成后的下一轮；'
+        + '② 这段内容里确实没有任何空间、数值、区间或指向关系（纯定义、纯术语辨析）→ 直接讲，且**不要拿表格凑数**。'
+        + '若确实是纯流程/时序/层级且没有专属几何，用 `diagram`（mermaid）。'
         + kindHintLine + '\n'
         + FIGURE_KIND_GUIDE,
     };
@@ -876,8 +920,8 @@ export function buildVisualOpportunity(
       })()].slice(0, 6),
       instruction:
         '上一轮你在讲一组**结构化关系**（对比/归类/对账/维度/映射这类）。把它摆成一张图，学生能比读段落更快看清关系。'
-        + '**先判断**：若本轮正要布置「由学生自己填这张表/排这组关系」的练习（答案泄漏），本轮**不要**输出，'
-        + '留到学生完成后的下一轮印证；若关系是纯流程/层级/时序，用 `diagram`（mermaid）而不是 figure；'
+        + '**默认出图**；唯有本轮正要布置「由学生自己填这张表/排这组关系」的练习（答案泄漏）时才跳过，留到下一轮；'
+        + '若关系确实是纯流程/层级/时序且没有专属几何，用 `diagram`（mermaid）而不是 figure；'
         + '若用一维先后就能说清（谁在前、隔多远），用 position-line。'
         + '**反向要求（2026-10-20 实跑教训）**：如果你这一轮是在**复述/收束学生刚说的内容、把它归成结构**'
         + '（出现「对，就是…」「这两层是…」「这部分拆成…」这类收束语），那就**必须**出图——'

@@ -1845,6 +1845,9 @@ function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): Rend
 
 /* ---------------- 二维坐标图 ---------------- */
 
+/** 文字白描边（paint-order）：标签压在曲线/虚线上时仍可读，比挪位置确定。 */
+const halo = (surface: string) => `paint-order="stroke" stroke="${surface}" stroke-width="3" stroke-linejoin="round"`;
+
 const CURVE_SAMPLES = 48;
 
 function fmtNum(v: number): string {
@@ -1860,7 +1863,7 @@ function fmtNum(v: number): string {
  * 横轴 x、纵轴 y、曲线、等时刻辅助线。模型只给轴域、表达式/数据点、辅助线与箭头，
  * 采样与排版全部由这里确定性完成（同一份 spec 永远画出同一张图）。
  */
-function renderCartesianPlot({ title, x, y, series = [], guides = [], vectors = [], marks = [] }: any): RenderedFigure | null {
+function renderCartesianPlot({ title, x, y, series = [], guides = [], areas = [], vectors = [], marks = [] }: any): RenderedFigure | null {
   if (!x || !y || !(Number(x.max) > Number(x.min)) || !(Number(y.max) > Number(y.min))) return null;
   if (!Array.isArray(series) || !series.length) return null;
 
@@ -2022,7 +2025,68 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], vectors = 
     return out;
   };
 
+  // 面积先画（垫在曲线下面）：v-t 图里的位移、曲线围出的剩余，本身就是答案
+  // 在 [lo, hi] 区间内按曲线取样：表达式类曲线两端各取一次/均匀取点，
+  // 不能用「整段定义域的两个端点再筛」——轴域比面积区间宽时会被筛成一个点（2026-10-23 实拍：面积没画出来）
+  const sampleCurveInRange = (s: any, lo: number, hi: number): Array<[number, number]> => {
+    if (!s) return [];
+    const a0 = Math.max(lo, x0);
+    const a1 = Math.min(hi, x1);
+    if (!(a1 > a0)) return [];
+    if (s.form === 'parabola') {
+      const a = Number(s.a);
+      const b = Number(s.b);
+      const c = Number(s.c);
+      const n = 24;
+      return Array.from({ length: n + 1 }, (_, i) => {
+        const vx = a0 + ((a1 - a0) * i) / n;
+        return [vx, a * vx * vx + b * vx + c] as [number, number];
+      });
+    }
+    if (s.form === 'linear') {
+      const k = Number(s.k);
+      const b = Number(s.b);
+      return [[a0, k * a0 + b], [a1, k * a1 + b]];
+    }
+    return (Array.isArray(s.points) ? s.points : [])
+      .map((p: any) => [Number(p[0]), Number(p[1])] as [number, number])
+      .filter(([vx]) => vx >= a0 - 1e-9 && vx <= a1 + 1e-9);
+  };
+  const curveOf = (name: string) => series.find((s: any) => s.name === name) || series[0];
+
   parts.push(`<g clip-path="url(#${clipId})">`);
+  for (const area of Array.isArray(areas) ? areas : []) {
+    const curve = curveOf(area.series);
+    const pts = sampleCurveInRange(curve, Number(area.from), Number(area.to));
+    if (pts.length < 2) continue;
+    const baseY = area.baseline != null ? py(Number(area.baseline)) : axisY;
+    const tone = TONE[area.tone] || T.accent;
+    const top = pts.map(([vx, vy]) => `${px(vx).toFixed(1)} ${py(vy).toFixed(1)}`).join(' L');
+    const d = `M${px(pts[0][0]).toFixed(1)} ${baseY} L${top} L${px(pts[pts.length - 1][0]).toFixed(1)} ${baseY} Z`;
+    parts.push(`<path d="${d}" fill="${tone}" fill-opacity="0.14" stroke="none"/>`);
+    parts.push(`<line x1="${px(pts[0][0]).toFixed(1)}" y1="${baseY}" x2="${px(pts[0][0]).toFixed(1)}" y2="${py(pts[0][1]).toFixed(1)}" stroke="${tone}" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>`);
+    parts.push(`<line x1="${px(pts[pts.length - 1][0]).toFixed(1)}" y1="${baseY}" x2="${px(pts[pts.length - 1][0]).toFixed(1)}" y2="${py(pts[pts.length - 1][1]).toFixed(1)}" stroke="${tone}" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>`);
+    if (area.label) {
+      // 标签放在面积的几何中心（按区间中点取曲线高度，再取与基线的中点），
+      // 不按采样点序号取——两点直线上序号 1/3 会落到右端（2026-10-23 实拍）
+      const midX = (Number(area.from) + Number(area.to)) / 2;
+      let curveY = pts[0][1];
+      for (let i = 1; i < pts.length; i += 1) {
+        const [x1p, y1p] = pts[i];
+        const [x0p, y0p] = pts[i - 1];
+        if (midX >= x0p && midX <= x1p) {
+          const t = x1p === x0p ? 0 : (midX - x0p) / (x1p - x0p);
+          curveY = y0p + (y1p - y0p) * t;
+          break;
+        }
+      }
+      const cx = px(midX);
+      const cyMid = (py(curveY) + baseY) / 2;
+      const labelW = est(area.label, T.fontMicro);
+      const anchor = cx + labelW / 2 > padL + plotW ? 'end' : 'middle';
+      parts.push(text(anchor === 'end' ? cx - 4 : cx, cyMid + 4, area.label, 't-tiny', anchor, `${halo(T.surface)} fill="${tone}"`));
+    }
+  }
   for (const s of series) parts.push(...drawSeries(s));
   parts.push('</g>');
 
@@ -2036,11 +2100,11 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], vectors = 
       const gy = py(Number(g.at));
       parts.push(`<line x1="${padL}" y1="${gy}" x2="${padL + plotW}" y2="${gy}" stroke="${T.muted}" stroke-width="1" stroke-dasharray="5 4" opacity="0.75"/>`);
       const duplicated = markLabelYs.some((my) => Math.abs(my - gy) < 8);
-      if (g.label && !duplicated) parts.push(text(padL + plotW + 6, gy + 3.5, g.label, 't-tiny', 'start'));
+      if (g.label && !duplicated) parts.push(text(padL + plotW + 6, gy + 3.5, g.label, 't-tiny', 'start', halo(T.surface)));
     } else {
       const gx = px(Number(g.at));
       parts.push(`<line x1="${gx}" y1="${top}" x2="${gx}" y2="${axisY}" stroke="${T.muted}" stroke-width="1" stroke-dasharray="5 4" opacity="0.75"/>`);
-      if (g.label) parts.push(text(gx + 3, top + 11, g.label, 't-tiny', 'start'));
+      if (g.label) parts.push(text(gx + 3, axisY - 8, g.label, 't-tiny', 'start', halo(T.surface)));
     }
   }
 
@@ -2056,7 +2120,7 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], vectors = 
       let ly = ty - 5;
       while (vectorLabelY.some((prev) => Math.abs(prev - ly) < 12)) ly += 14;
       vectorLabelY.push(ly);
-      parts.push(text(tx + 4, ly, v.label, 't-tiny', 'start'));
+      parts.push(text(tx + 4, ly, v.label, 't-tiny', 'start', halo(T.surface)));
     }
   }
 
@@ -2072,7 +2136,7 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], vectors = 
     const anchor = cx + 8 + labelW <= padL + plotW ? 'start' : 'end';
     const lx = anchor === 'start' ? cx + 8 : cx - 8;
     const nearAxis = cy > axisY - 26;
-    parts.push(text(lx, nearAxis ? cy - 9 : cy + 16, m.label, 't-tiny', anchor, `fill="${tone}"`));
+    parts.push(text(lx, nearAxis ? cy - 9 : cy + 16, m.label, 't-tiny', anchor, `${halo(T.surface)} fill="${tone}"`));
   }
 
   return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };

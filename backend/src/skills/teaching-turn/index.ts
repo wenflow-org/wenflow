@@ -1073,6 +1073,21 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
   return { figure: { engine: 'svg', kind: kind as TeachingFigureKind, caption, ...(why ? { why } : {}), spec, ...(palette ? { palette } : {}) } };
 }
 
+/**
+ * 出图归一化的对外入口（探针/离线评测用）。
+ *
+ * 与线上同一条路径：白名单 → 图型开关 → 退役图型拒绝 → 各图型字段校验。
+ * 探针必须走它，否则「模型给图了」和「这张图真的能下发」是两件事。
+ */
+export function normalizeTeachingFigureForProbe(raw: unknown): { figure: TeachingFigure | null; reason: string } {
+  if (!raw || typeof raw !== 'object') return { figure: null, reason: 'no-figure' };
+  const kind = String((raw as Record<string, unknown>).kind ?? '');
+  const before = RETIRED_FIGURE_KINDS.has(kind) ? 'retired-kind' : null;
+  const result = normalizeFigure(raw);
+  if (!result) return { figure: null, reason: before ?? 'rejected-by-normalizer' };
+  return { figure: result.figure, reason: 'ok' };
+}
+
 /** 新图型灰度开关：`TEACHING_FIGURE_SPEC_DISABLED=1` 时只保留位置线（回滚用）。 */
 function isFigureKindEnabled(kind: string): boolean {
   if (kind === 'position-line') return true;
@@ -1450,10 +1465,25 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
   for (const item of Array.isArray(raw.series) ? raw.series : []) {
     if (!item || typeof item !== 'object') continue;
     const s = item as Record<string, unknown>;
-    const name = toFigureLabel(s.name, SPEC.labelMax);
+    // 系列名是图例，不是几何标签：放宽到 26 字并按 … 截断，而不是整条系列作废。
+    // 2026-10-23 广度扫测：滴定曲线的系列名写成了「0.1 mol/L HCl 用 0.1 mol/L NaOH 滴定」(35 字)，
+    // 18 字上限把整张图判死，学生什么都没看到。
+    const name = toFigureText(s.name, 26);
     if (!name) continue;
     const tone = normalizeTone(s.tone, ['accent', 'ok', 'warn', 'neutral']) || undefined;
     const formRaw = typeof s.form === 'string' ? s.form.trim().toLowerCase() : '';
+    // 频闪点先解析：既可能是附加在曲线上的点，也可能是曲线本身的采样点（只有它没 points 时）
+    const dotPointsEarly: Array<[number, number]> = [];
+    if (Array.isArray(s.dotPoints)) {
+      for (const raw of s.dotPoints) {
+        if (!Array.isArray(raw) || raw.length < 2) continue;
+        const dx = toFiniteNumber(raw[0]);
+        const dy = toFiniteNumber(raw[1]);
+        if (dx === null || dy === null) continue;
+        dotPointsEarly.push([dx, dy]);
+        if (dotPointsEarly.length >= 24) break;
+      }
+    }
     const out: Record<string, unknown> = { name, form: formRaw === 'scatter' ? 'scatter' : formRaw === 'parabola' ? 'parabola' : formRaw === 'linear' ? 'linear' : 'points' };
     if (out.form === 'parabola') {
       const a = toFiniteNumber(s.a);
@@ -1478,6 +1508,11 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
         if (px === null || py === null) continue;
         points.push([px, py]);
         if (points.length >= 40) break;
+      }
+      // 只给 dotPoints、没给 points 的曲线：把 dotPoints 当作曲线顶点（并保留为频闪点）。
+      // 2026-10-23 广度扫测：滴定曲线把 15 个采样点全写进 dotPoints，模型被整条判死后学生看不到图。
+      if (!points.length && dotPointsEarly.length) {
+        for (const raw of dotPointsEarly) points.push(raw);
       }
       const minPoints = out.form === 'scatter' ? 1 : 2;
       if (points.length < minPoints) continue;
@@ -1549,12 +1584,40 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
     if (marks.length >= 4) break;
   }
 
+  // 面积：v-t 图下的位移、需求/供给曲线围出的剩余、函数与 x 轴围成的面积——
+  // 这类「面积就是答案」的课没有阴影就只剩一条线（广度扫测 #3 判词：学生要看见的是面积）。
+  const areas: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.areas) ? raw.areas : []) {
+    if (!item || typeof item !== 'object') continue;
+    const a = item as Record<string, unknown>;
+    const from = toFiniteNumber(a.from);
+    const to = toFiniteNumber(a.to);
+    if (from === null || to === null || from === to) continue;
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    if (hi <= x.min || lo >= x.max) continue;
+    const seriesName = toFigureText(a.series, SPEC.labelMax);
+    const base = toFiniteNumber(a.baseline);
+    const label = toFigureLabel(a.label, SPEC.subMax);
+    const tone = normalizeTone(a.tone, ['accent', 'ok', 'warn', 'neutral']);
+    areas.push({
+      from: Math.max(lo, x.min),
+      to: Math.min(hi, x.max),
+      ...(seriesName ? { series: seriesName } : {}),
+      ...(base !== null ? { baseline: base } : {}),
+      ...(label ? { label } : {}),
+      ...(tone ? { tone } : {}),
+    });
+    if (areas.length >= 3) break;
+  }
+
   const title = toFigureText(raw.title, SPEC.titleMax);
   return {
     x,
     y,
     series,
     ...(guides.length ? { guides } : {}),
+    ...(areas.length ? { areas } : {}),
     ...(vectors.length ? { vectors } : {}),
     ...(marks.length ? { marks } : {}),
     ...(title ? { title } : {}),

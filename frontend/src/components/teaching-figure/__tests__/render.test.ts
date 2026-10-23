@@ -588,3 +588,18 @@ describe('cartesian-plot（2026-10-23：平抛该画频闪轨迹，不是表格�
     expect(renderSpecFigure('cartesian-plot', { series: [] })).toBeNull();
   });
 });
+
+describe('cartesian-plot 面积（2026-10-23 广度扫测：v-t 图下面积=位移）', () => {
+  it('areas 画出阴影并保留标签；线性曲线按区间取样，不是整段定义域', () => {
+    const out = renderSpecFigure('cartesian-plot', {
+      x: { label: '时间 / s', min: 0, max: 6, ticks: [0, 2, 4, 6] },
+      y: { label: '速度', min: 0, max: 5, ticks: [0, 5] },
+      series: [{ name: '速度', form: 'linear', k: 0.8, b: 0 }],
+      areas: [{ from: 0, to: 4, series: '速度', label: '位移 = 面积' }],
+    });
+    expect(out).not.toBeNull();
+    expect(out!.svg).toContain('位移 = 面积');
+    // 青色/主题强调色的半透明填充
+    expect(out!.svg).toMatch(/fill-opacity="0\.14"/);
+  });
+});

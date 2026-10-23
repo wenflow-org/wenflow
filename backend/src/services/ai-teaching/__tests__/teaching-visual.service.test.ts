@@ -15,7 +15,7 @@ import {
   detectPositionDescription,
   detectStructuralCue,
   detectExerciseLeakInReply,
-  stripInLessonAnnotations, endsWithQuestion,
+  stripInLessonAnnotations, endsWithQuestion, shouldWithholdFigureForQuestion,
   generateTeachingVisual,
   hasDanglingFigureReference,
   hasIdenticalVisualPrompt,
@@ -592,19 +592,34 @@ describe('课中图不挂结论注（stripInLessonAnnotations，2026-10-23 用�
   });
 });
 
-describe('只在讲解时出图：以追问收尾的回合不出图（endsWithQuestion）', () => {
-  it('最后一句是问号 → 判真', () => {
-    expect(endsWithQuestion('两个球的落地时间都是 0.4 s。那飞得远的球，在空中停得更久吗？')).toBe(true);
-    expect(endsWithQuestion('为什么？')).toBe(true);
-    expect(endsWithQuestion('你先说说，哪一列决定落地时间？\n')).toBe(true);
+describe('读图题不出图：追问句的答案已经在图上（2026-10-23 广度扫测 4/4 拦中）', () => {
+  const figure = {
+    kind: 'cartesian-plot',
+    spec: {
+      x: { min: 0, max: 4, ticks: [0, 2, 4] },
+      y: { min: 0, max: 5, ticks: [0, 5] },
+      series: [{ name: '速度', form: 'linear', k: 1, b: 0 }],
+      marks: [{ at: [2, 2], label: '交点' }],
+    },
+  };
+
+  it('让学生读图/指出答案 → 本轮不出图', () => {
+    expect(shouldWithholdFigureForQuestion(figure, '现在请你指着图告诉我：曲线和 x 轴交在哪两个数上？')).toBe(true);
+    expect(shouldWithholdFigureForQuestion(figure, '你对着图跟我说一句：这道口子最宽的地方落在时间轴的哪一段？')).toBe(true);
   });
 
-  it('讲解落定 / 没有正文 → 判假', () => {
+  it('问「为什么」的追问照常出图（图是结构，不是答案）', () => {
+    expect(shouldWithholdFigureForQuestion(figure, '两条曲线弯得差那么多，为什么每一刻它们都在同一高度？')).toBe(false);
+  });
+
+  it('没有正文 / 空图 → 不拦', () => {
+    expect(shouldWithholdFigureForQuestion(figure, '')).toBe(false);
+    expect(shouldWithholdFigureForQuestion({ kind: 'venn', spec: {} }, '它在图的哪里？')).toBe(false);
+  });
+
+  it('问句后面跟一句收尾指令，仍算追问', () => {
+    expect(endsWithQuestion('在光补偿点那一刻，净光合是多少？\n用你自己的话说一句就行。')).toBe(true);
     expect(endsWithQuestion('两个球的落地时间都是 0.4 s，水平位移差一倍。')).toBe(false);
-    expect(endsWithQuestion('')).toBe(false);
-    expect(endsWithQuestion(null)).toBe(false);
-    // 问号在中间、结尾是结论：属于讲解轮，可以出图
-    expect(endsWithQuestion('你可能会问，时间为什么一样？因为竖直方向只由高度决定。')).toBe(false);
   });
 });
 
