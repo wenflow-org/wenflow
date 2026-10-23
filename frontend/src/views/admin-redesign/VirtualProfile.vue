@@ -216,7 +216,7 @@
             <section class="mk-card">
               <div class="mk-card__head">
                 <h3 class="mk-card__title">学习状态读数</h3>
-                <span class="mk-card__meta" :title="loadCaliberNote.title">{{ LEARNER_METRIC_CODES }} · {{ loadCaliberNote.label }}</span>
+                <span class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
               </div>
               <div class="vp-cardbody">
                 <div v-if="lsmRows.length" class="lsm">
@@ -295,7 +295,7 @@
         <section v-if="activeTab === 'profile'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">学习状态读数</h3>
-            <span class="mk-card__meta" :title="loadCaliberNote.title">{{ LEARNER_METRIC_CODES }} · {{ loadCaliberNote.label }}</span>
+            <span class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
           </div>
           <div class="vp-cardbody">
             <div v-if="lsmRows.length" class="lsm">
@@ -624,6 +624,20 @@
             <h3 class="mk-card__title">学习日程</h3>
             <!-- 计数只在有会话时出：0 个会话时下面已有空态说明，徽章再报一次 0 是重复 -->
             <span v-if="timelineSessionOptions.length" class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 次运行</span>
+            <!-- 2026-10-21：选运行从「整行 label + 全宽下拉」收进卡头右组（用户走查「标的地方重新做一下」）。
+                 只有一次运行时不出下拉，直接把那次的标签写成 meta（下拉里只有一个选项没有意义）。 -->
+            <div v-if="timelineSessionOptions.length" class="mk-card__head-right">
+              <select
+                v-if="timelineSessionOptions.length > 1"
+                v-model="timelineSessionId"
+                class="mk-field__select vp-timeline__select"
+                aria-label="选择要看的运行"
+                title="切换运行：日程按会话分别记录，换一条就是另一份日程"
+              >
+                <option v-for="opt in timelineSessionOptions" :key="opt.sessionId" :value="opt.sessionId">{{ opt.label }}</option>
+              </select>
+              <span v-else class="mk-card__meta">{{ timelineSessionOptions[0].label }}</span>
+            </div>
           </div>
           <template v-if="!timelineSessionOptions.length">
             <p class="vp-timeline__empty">
@@ -635,12 +649,6 @@
             <p class="vp-timeline__hint">
               按自然日汇总所选运行的学习负担、学习状态、系统干预与难度调整。
             </p>
-            <label class="mk-field vp-timeline__picker">
-              <span class="mk-field__label">运行</span>
-              <select v-model="timelineSessionId" class="mk-field__select">
-                <option v-for="opt in timelineSessionOptions" :key="opt.sessionId" :value="opt.sessionId">{{ opt.label }}</option>
-              </select>
-            </label>
             <DayTimeline v-if="timelineSessionId" :session-id="timelineSessionId" :from="0" :to="29" readonly />
           </template>
         </section>
@@ -911,7 +919,7 @@ import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { memoryReviewUrl } from './learner-profile'
-import { LEARNER_METRICS, LEARNER_METRIC_CODES } from '@/utils/learnerMetrics'
+import { LEARNER_METRICS } from '@/utils/learnerMetrics'
 import { loadCaliber } from './opsShared'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -2727,6 +2735,9 @@ async function quietReload(id: string) {
 </script>
 
 <style scoped>
+/* 学习日程卡头的运行下拉：卡头右组里的紧凑选择器，不铺满整行 */
+.vp-timeline__select { width: 300px; max-width: 100%; }
+
 /* 故事编辑弹窗：宽面板 + 问题知识分区（P2-2）；宽度随全站 .mk-modal__panel--wide token */
 .vp-pk {
   display: grid;
