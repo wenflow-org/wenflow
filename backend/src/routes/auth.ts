@@ -339,13 +339,37 @@ router.post('/logout', async (req, res) => {
 });
 
 // 刷新令牌：验证 refresh token，签发新的 access + refresh token pair（rotation）
+/**
+ * #116 掉登录排查埋点：刷新失败时记录**可定位信息**，不记录任何令牌值。
+ * - hasRefreshCookie：请求里到底有没有 refresh cookie（区分「没带」与「带了但无效」）；
+ * - cookieNames：只记名字，便于发现代理/域名把 cookie 吃掉或改名；
+ * - origin / forwardedProto / ua / ip：区分跨域、HTTPS 终止与多实例来源。
+ */
+function refreshDiagnostics(req: any): Record<string, unknown> {
+  const raw = String(req?.headers?.cookie || '');
+  const names = raw.split(';').map((part: string) => part.split('=')[0].trim()).filter(Boolean);
+  return {
+    hasRefreshCookie: Boolean(resolveRefreshToken(req)),
+    cookieNames: names,
+    origin: req?.headers?.origin || null,
+    forwardedProto: req?.headers?.['x-forwarded-proto'] || null,
+    userAgent: String(req?.headers?.['user-agent'] || '').slice(0, 120) || null,
+    ip: req?.ip || null,
+  };
+}
+
+function logRefreshFailure(req: any, reason: string, extra: Record<string, unknown> = {}): void {
+  logger.warn('[auth.refresh] 刷新失败', { reason, ...refreshDiagnostics(req), ...extra });
+}
+
 router.post('/refresh', async (req, res, next) => {
   try {
     const refreshTokenCookie = resolveRefreshToken(req);
     if (!refreshTokenCookie) {
+      logRefreshFailure(req, 'cookie_missing');
       return res.status(401).json({
         success: false,
-        error: { message: '未提供刷新令牌' }
+        error: { message: '未提供刷新令牌', code: 'REFRESH_COOKIE_MISSING' }
       });
     }
 
@@ -356,17 +380,23 @@ router.post('/refresh', async (req, res, next) => {
     const userRecord = await authService.findRefreshSessionUser(payload.userId);
 
     if (!userRecord || userRecord.deletedAt) {
+      logRefreshFailure(req, 'user_invalid', { userId: payload.userId });
       return res.status(401).json({
         success: false,
-        error: { message: '会话已失效，请重新登录' }
+        error: { message: '会话已失效，请重新登录', code: 'REFRESH_USER_INVALID' }
       });
     }
 
     if (typeof payload.tokenVersion === 'number'
       && (userRecord.tokenVersion ?? 0) !== payload.tokenVersion) {
+      logRefreshFailure(req, 'token_version_mismatch', {
+        userId: userRecord.id,
+        tokenVersion: payload.tokenVersion,
+        currentVersion: userRecord.tokenVersion ?? 0,
+      });
       return res.status(401).json({
         success: false,
-        error: { message: '会话已失效，请重新登录' }
+        error: { message: '会话已失效，请重新登录', code: 'REFRESH_TOKEN_VERSION_MISMATCH' }
       });
     }
 
@@ -386,6 +416,10 @@ router.post('/refresh', async (req, res, next) => {
       tokenVersion: userRecord.tokenVersion ?? 0
     });
     if (rotation === 'concurrent') {
+      logger.info('[auth.refresh] 并发轮换落败方按成功返回（不写 Cookie）', {
+        userId: userRecord.id,
+        ...refreshDiagnostics(req),
+      });
       return res.status(200).json({
         success: true,
         data: { message: '令牌已刷新' }
@@ -394,6 +428,7 @@ router.post('/refresh', async (req, res, next) => {
     // 其余非 rotated 一律拒绝并清 Cookie，
     // 不给「已轮换/未登记的旧令牌」继续换新的机会
     if (rotation !== 'rotated') {
+      logRefreshFailure(req, `rotation_${rotation}`, { userId: userRecord.id });
       clearAuthCookie(res, 'user');
       clearRefreshCookie(res);
       return res.status(401).json({
@@ -401,7 +436,9 @@ router.post('/refresh', async (req, res, next) => {
         error: {
           message: rotation === 'reuse-detected'
             ? '检测到会话异常，请重新登录'
-            : '会话已失效，请重新登录'
+            : '会话已失效，请重新登录',
+          code: rotation === 'reuse-detected' ? 'REFRESH_REUSE_DETECTED' : 'REFRESH_ROTATION_REJECTED',
+          rotation,
         }
       });
     }
@@ -416,15 +453,17 @@ router.post('/refresh', async (req, res, next) => {
     });
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
+      logRefreshFailure(req, 'token_expired', { expiredAt: error.expiredAt || null });
       return res.status(401).json({
         success: false,
-        error: { message: '刷新令牌已过期，请重新登录' }
+        error: { message: '刷新令牌已过期，请重新登录', code: 'REFRESH_TOKEN_EXPIRED' }
       });
     }
     if (error.name === 'JsonWebTokenError') {
+      logRefreshFailure(req, 'token_invalid', { error: String(error.message || '').slice(0, 120) });
       return res.status(401).json({
         success: false,
-        error: { message: '无效的刷新令牌' }
+        error: { message: '无效的刷新令牌', code: 'REFRESH_TOKEN_INVALID' }
       });
     }
     logger.error('刷新令牌失败:', error);
