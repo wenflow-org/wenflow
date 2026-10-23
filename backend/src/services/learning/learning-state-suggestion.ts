@@ -104,32 +104,32 @@ export function buildDisplaySuggestion(metrics: LearningStateDisplayMetrics): Le
     mainAction = '继续当前学习节奏，保持稳定';
   }
 
-  // 3. 知识增长建议（基于KTL）
+  // 3. 长期训练负荷建议（KTL 是负荷，高=负荷重，不解读为掌握水平）
   let growthAdvice: { status: string; message: string };
   if (!verdict.mature) {
     growthAdvice = {
       status: 'info',
-      message: '知识负荷仍在积累，暂不评估掌握趋势'
+      message: '长期负荷仍在积累，暂不评估负荷趋势'
     };
   } else if (ktl >= 70) {
     growthAdvice = {
-      status: 'success',
-      message: '知识掌握优秀，继续保持'
+      status: 'warning',
+      message: '长期训练负荷较高，注意休息与巩固'
     };
   } else if (ktl >= 50) {
     growthAdvice = {
       status: 'normal',
-      message: '知识正常增长，持续学习'
+      message: '长期训练负荷中等，保持当前节奏'
     };
   } else if (ktl >= 30) {
     growthAdvice = {
       status: 'info',
-      message: '知识增长缓慢，需要加强复习和实践'
+      message: '长期训练负荷较低，可适当增加学习量'
     };
   } else {
     growthAdvice = {
-      status: 'warning',
-      message: '知识积累较少，建议增加学习投入'
+      status: 'info',
+      message: '长期训练负荷很低，建议逐步增加学习投入'
     };
   }
 

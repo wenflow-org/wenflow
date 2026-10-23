@@ -100,7 +100,7 @@ import {
 import { REFRESH_ROTATION_CONCURRENCY_WINDOW_MS } from '../services/auth/user-session.service';
 
 export const SCIENTIFIC_CONSTANTS: ScientificConstant[] = [
-  // ---------- 状态量：掌握趋势 KTL（慢） ----------
+  // ---------- 状态量：训练负荷 KTL（慢） ----------
   {
     key: 'state.ktl.lambda',
     value: 0.95,

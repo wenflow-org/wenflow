@@ -73,4 +73,11 @@ describe('buildDisplaySuggestion：冷启动不误报严重疲劳', () => {
     expect(suggestion.categories.state.message).toContain('急性负荷');
     expect(suggestion.categories.duration.message).not.toContain('精力充沛');
   });
+
+  it('高 KTL 只按训练负荷解读，不再说「知识掌握优秀」', () => {
+    const suggestion = buildDisplaySuggestion({ lss: 20, ktl: 80, lf: 20, lsb: 60 });
+
+    expect(suggestion.categories.growth.message).toContain('训练负荷');
+    expect(suggestion.categories.growth.message).not.toContain('掌握');
+  });
 });

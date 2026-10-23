@@ -34,7 +34,7 @@
           <section class="card band">
             <div class="band__head">
               <div class="band__title">
-                <strong>掌握趋势 · 疲劳度 · 整体状态</strong>
+                <strong>训练负荷 · 疲劳度 · 整体状态</strong>
                 <!-- 空态不报「近 N 天」：无数据时没有跨度可言，写「近 10 天」会先承诺一张不存在的图 -->
                 <span v-if="hasAnyLoad" class="band__meta">{{ drawnSpanLabel }}</span>
               </div>
@@ -52,7 +52,7 @@
             <div class="band__body">
             <!-- 空态（无任何学习状态数据）：不渲染「当前状态四项」与图例——它们是为一张还没画出来的图
                  准备的注脚，先摆出来只会让人以为下面有图（2026-10-15 走查）。空态只留一块说明。
-                 当前状态四项（原体检卡 vitals：整体状态主指标 + 学习压力/掌握趋势/疲劳程度）：
+                 当前状态四项（原体检卡 vitals：整体状态主指标 + 学习压力/训练负荷/疲劳程度）：
                  原型该屏只认三张 KPI 卡（连续天数/本周分钟/已掌握知识点），这四项不删、
                  降级为趋势卡内的状态 meta 行——图里画的就是这四个指标，放这里口径自洽 -->
             <div v-if="hasAnyLoad" class="vitals vitals--meta">
@@ -77,7 +77,7 @@
                  2026-10-08 走查：两条阈值线原本在图内右侧浮着文字（自带 surface 底「压住曲线」），
                  窄屏下那段文字正好压在最陡的一段曲线上 —— 文字移到图例，图内只留虚线本体） -->
             <div v-if="hasAnyLoad" class="ff-legend">
-              <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
+              <span><i class="ff-dot ff-dot--fitness"></i>训练负荷</span>
               <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度</span>
               <span><i class="ff-dot ff-dot--lsb"></i>整体状态</span>
               <span v-if="zoneLines.length" class="ff-legend__zone">
@@ -104,7 +104,7 @@
                 </svg>
               </span>
               <strong>学习状态正在积累中</strong>
-              <p>完成第一个学习任务后开始记录。连续学习约 3 天，这里会出现你的掌握趋势、疲劳度与整体状态曲线。</p>
+              <p>完成第一个学习任务后开始记录。连续学习约 3 天，这里会出现你的训练负荷、疲劳度与整体状态曲线。</p>
               <router-link to="/learning-paths" class="chart__empty-cta">去开始学习</router-link>
             </div>
             <template v-else>
@@ -471,10 +471,10 @@
             </div>
             <div class="band__body">
             <ul class="legend">
-              <li><b class="dot dot--blue"></b>掌握趋势：长期学习积累的掌握水平，变化平缓</li>
+              <li><b class="dot dot--blue"></b>训练负荷：长期学习压力的累积，越高说明负荷越重，变化平缓</li>
               <li><b class="dot dot--purple"></b>疲劳度：近期学习压力的累积，变化较快</li>
-              <li><b class="dot dot--green"></b>整体状态＝掌握 − 疲劳：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
-              <li><b class="dot dot--amber"></b>保持规律学习让掌握趋势稳步上升。疲劳偏高时安排休息，避免长期处于低状态区</li>
+              <li><b class="dot dot--green"></b>整体状态＝训练负荷 − 疲劳：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
+              <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
             </ul>
             </div><!-- /band__body -->
           </section>
@@ -528,7 +528,7 @@ const reviewOpen = ref(false);
 const metricOptions: Array<{ key: MetricKey; label: string }> = [
   { key: 'lsb', label: '整体状态' },
   { key: 'lss', label: '学习压力' },
-  { key: 'ktl', label: '掌握趋势' },
+  { key: 'ktl', label: '训练负荷' },
   { key: 'lf', label: '疲劳程度' }
 ];
 
@@ -594,7 +594,7 @@ interface Zone {
 interface TrendPoint {
   date: string;
   label: string;
-  ktl: number | null;   // 掌握趋势
+  ktl: number | null;   // 长期训练负荷
   lf: number | null;    // 疲劳
   lsb: number | null;   // 整体状态 = KTL − LF
   mature?: boolean;     // 该日 PMC 基座是否成熟（未成熟时不做疲劳分区）
@@ -789,7 +789,7 @@ const zoneLines = computed(() => {
 /** 读屏出口：SVG 本体 aria-hidden，纵轴口径写进容器的 aria-label（原型 1965） */
 const trendAriaLabel = computed(
   () =>
-    `近 ${activeSeries.value.length} 天的掌握趋势、疲劳度与整体状态曲线，柱为当日学习时长，纵轴标注状态阈值 40 精力充沛 / 20 最优训练区`
+    `近 ${activeSeries.value.length} 天的训练负荷、疲劳度与整体状态曲线，柱为当日学习时长，纵轴标注状态阈值 40 精力充沛 / 20 最优训练区`
 );
 
 /** 单线路径：跳过 null 断点（无数据日不连线） */
@@ -1530,7 +1530,7 @@ function loadGuidance() {
 
 /* ---------- 状态四项 meta（原体检卡 vitals 的去向） ----------
    原型该屏只认三张 KPI 卡（连续天数 / 本周分钟 / 已掌握知识点），原 1.25fr+3×1fr 的体检卡撤掉：
-   整体状态 / 学习压力 / 掌握趋势 / 疲劳程度不删，降级成趋势卡内的单行状态条（卡内 meta）——
+   整体状态 / 学习压力 / 训练负荷 / 疲劳程度不删，降级成趋势卡内的单行状态条（卡内 meta）——
    图里画的就是这四个指标，放这张卡里口径自洽；分档胶囊与失败态沿用原 .metric__note 语言。 */
 .vitals--meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;

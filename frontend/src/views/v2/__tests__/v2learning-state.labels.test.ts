@@ -1,6 +1,6 @@
 /**
  * V2LearningState（P3-3：学习状态英文内部指标词直出）回归测试：
- * 指标卡/图例/区间说明必须为中文标签（掌握趋势/疲劳度/整体状态），不出现 fitness/fatigue/form 英文直出。
+ * 指标卡/图例/区间说明必须为中文标签（训练负荷/疲劳度/整体状态），不出现 fitness/fatigue/form 英文直出。
  * 口径：后端 /state/trends 权威数据（LSS/KTL/LF/LSB，与指标卡同源），前端不再自算。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -68,21 +68,22 @@ describe('V2LearningState 中文指标标签（P3-3）', () => {
     getMock.mockReset();
   });
 
-  it('体检卡四项全中文标签：整体状态/学习压力/掌握趋势/疲劳程度', async () => {
+  it('体检卡四项全中文标签：整体状态/学习压力/训练负荷/疲劳程度', async () => {
     const w = await mountState();
     const labels = [
       w.find('.vitals__main small').text(),
       ...w.findAll('.vitals__sub small').map((n) => n.text())
     ];
-    expect(labels).toEqual(['整体状态', '学习压力', '掌握趋势', '疲劳程度']);
+    expect(labels).toEqual(['整体状态', '学习压力', '训练负荷', '疲劳程度']);
   });
 
-  it('图例中文：掌握趋势 / 疲劳度 / 整体状态（掌握 − 疲劳）', async () => {
+  it('图例中文：训练负荷 / 疲劳度 / 整体状态（训练负荷 − 疲劳）', async () => {
     const w = await mountState();
     const legend = w.find('.ff-legend');
-    expect(legend.text()).toContain('掌握趋势');
+    expect(legend.text()).toContain('训练负荷');
     expect(legend.text()).toContain('疲劳度');
     expect(legend.text()).toContain('整体状态');
+    expect(legend.text()).not.toContain('掌握趋势');
   });
 
   it('有数据时状态图例为「状态」中文（非 form）', async () => {
