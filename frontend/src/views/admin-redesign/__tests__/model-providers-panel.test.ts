@@ -210,6 +210,8 @@ describe('ModelProvidersPanel', () => {
       }
     })
     const acmeSwitch = w.findAll('.mpp-item')[1].find('.mk-switch')
+    // 2026-10-23 UI 审查：开关只有 aria-checked、没有可访问名，读屏只念「开关」
+    expect(acmeSwitch.attributes('aria-label')).toBe('启用供应商 Acme 网关')
     await acmeSwitch.trigger('click')
     await flushPromises()
     expect(updateMock).toHaveBeenCalledWith('acme-gateway', { enabled: false })

@@ -244,7 +244,7 @@
             >
               <td>
                 <div class="mk-cell-main">
-                  <strong>{{ r.topic }}</strong>
+                  <strong :title="r.topic">{{ r.topic }}</strong>
                   <!-- 副行并档（2026-10-06 审核 #39）：原「学科·任务类型」与「总结摘要」两行
                        合成一条（全文仍留 title），会话列三行并回两行，行高向全站 66px 档收敛 -->
                   <span class="mk-cell-sub" :class="{ 'ts-summary': tsSubNote(r) }" :title="sessionSubTitle(r)">{{ sessionSubText(r) }}</span>
@@ -264,7 +264,7 @@
                       @click.stop="openLearner(r.userId)"
                       @keydown.enter.stop.prevent="openLearner(r.userId)"
                     >{{ r.userName }}</button>
-                    <span v-if="r.email" class="mk-cell-sub">{{ r.email }}</span>
+                    <span v-if="r.email" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
                     <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
                   </div>
                 </div>

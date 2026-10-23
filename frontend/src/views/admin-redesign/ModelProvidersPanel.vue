@@ -65,6 +65,7 @@
           <MkSwitch
             :model-value="p.enabled"
             :disabled="busy"
+            :aria-label="`启用供应商 ${p.name}`"
             @update:model-value="(v: boolean) => toggleEnabled(p, v)"
           />
         </div>

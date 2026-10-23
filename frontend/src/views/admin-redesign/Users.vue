@@ -913,7 +913,9 @@ function clearFilters() {
 .u-c-user { width: 250px; }
 .u-c-email { width: 190px; }
 .u-c-role { width: 96px; }
-.u-c-paths { width: 104px; }
+/* 390 档 fixed 表按比例摊薄列宽，「路径 / 课堂」+ 右缘 caret（绝对定位 -12px）会贴到内衬里；
+   112 = 文字 75 + 左右内衬 32 + 余量，窄屏保整词与箭头。 */
+.u-c-paths { width: 112px; min-width: 112px; }
 .u-c-created { width: 100px; }
 .u-c-lastlogin { width: 100px; }
 .u-c-act { width: 110px; }

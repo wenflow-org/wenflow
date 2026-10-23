@@ -105,7 +105,7 @@
                   <strong>
                     {{ r.user?.name || '—' }}
                   </strong>
-                  <span class="mk-cell-sub">{{ r.user?.email || r.userId }}</span>
+                  <span class="mk-cell-sub" :title="r.user?.email || r.userId">{{ r.user?.email || r.userId }}</span>
                 </div>
               </td>
               <td><span class="mk-badge" :class="typeBadge(r.type)">{{ typeText(r.type) }}</span></td>
@@ -184,7 +184,7 @@
                 @click="grantUserId = u.id"
               >
                 <strong>{{ u.name || u.email }}</strong>
-                <span class="mk-cell-sub">{{ u.email }}</span>
+                <span class="mk-cell-sub" :title="u.email">{{ u.email }}</span>
               </button>
             </div>
             <p v-else-if="grantSearched" class="ac-none">没有匹配用户</p>

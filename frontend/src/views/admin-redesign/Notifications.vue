@@ -95,14 +95,14 @@
             <tr v-for="n in visibleItems" :key="n.id" :class="{ 'nt-row--unread': !n.isRead }">
               <td>
                 <div class="mk-cell-main">
-                  <strong>{{ n.title }}</strong>
+                  <strong :title="n.title">{{ n.title }}</strong>
                   <span class="mk-cell-sub" :title="n.body || ''">{{ n.body || '—' }}</span>
                 </div>
               </td>
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ n.user?.name || '—' }}</strong>
-                  <span class="mk-cell-sub">{{ n.user?.email || n.userId }}</span>
+                  <span class="mk-cell-sub" :title="n.user?.email || n.userId">{{ n.user?.email || n.userId }}</span>
                 </div>
               </td>
               <td><span class="mk-badge" :class="kindBadge(n.kind)">{{ kindText(n.kind) }}</span></td>
@@ -219,7 +219,7 @@
                   @click="targetId = u.id"
                 >
                   <strong>{{ u.name || u.email }}</strong>
-                  <span class="mk-cell-sub">{{ u.email }}</span>
+                  <span class="mk-cell-sub" :title="u.email">{{ u.email }}</span>
                 </button>
               </div>
               <p v-else-if="targetSearched" class="nt-none">没有匹配用户</p>

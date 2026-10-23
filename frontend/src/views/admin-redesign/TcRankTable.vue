@@ -251,7 +251,7 @@ function rowTitle(r: RankRow): string {
   padding-left: 14px;
 }
 
-/* 排名徽章 */
+/* 名次文字：暗色 --mk-faint 在 surface-3 上仅 3.97:1，升到 --mk-muted */
 .tc-rank__no {
   display: inline-flex;
   align-items: center;
@@ -262,11 +262,12 @@ function rowTitle(r: RankRow): string {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   font-style: normal;
-  color: var(--mk-faint);
+  color: var(--mk-muted);
   background: var(--mk-surface-3);
   font-variant-numeric: tabular-nums;
 }
-.tc-rank__no--top { background: var(--mk-blue-bg); color: var(--mk-blue); }
+/* 前三名徽章：文字用 accent-deep（暗色 #7aa2ff），--mk-blue 在暗色浅蓝底上仅 3.96:1 */
+.tc-rank__no--top { background: var(--mk-blue-bg); color: var(--mk-accent-deep); }
 
 /* 名称列 */
 .tc-c--name { display: flex; align-items: center; gap: 9px; }

@@ -93,7 +93,7 @@
           <tr v-for="r in paged" :key="r.id">
             <td>
               <div class="mk-cell-main">
-                <strong>{{ r.title }}</strong>
+                <strong :title="r.title">{{ r.title }}</strong>
                 <span class="mk-cell-sub an-body" :title="r.body">{{ r.body }}</span>
               </div>
             </td>

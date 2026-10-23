@@ -9,7 +9,7 @@
 
     <!-- 吸顶工具条：搜索 + 分类（计数跟随过滤，与原抽屉同口径） -->
     <div class="mg__toolbar">
-      <input v-model="keyword" type="search" class="mk-input mg__search" placeholder="搜索术语 / 英文标识 / 定义" />
+      <input v-model="keyword" type="search" class="mk-input mg__search" placeholder="搜索术语 / 英文标识 / 定义" aria-label="搜索术语 / 英文标识 / 定义" />
       <div class="mk-pills">
         <button
           v-for="c in categories"
@@ -314,7 +314,8 @@ onMounted(() => {
 .mg__term-name { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .mg__term-en { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
 .mg__term-def { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-.mg__term-where { font-style: normal; color: var(--mk-blue); }
+/* 出处 chip 在浅蓝底上：--mk-blue 只有 4.39:1，改 accent-deep（亮色 5.68 / 暗色自动翻转） */
+.mg__term-where { font-style: normal; color: var(--mk-accent-deep); }
 .mg__empty { margin: 4px 0 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .mg__global-empty {
   margin: 32px 0;

@@ -187,7 +187,7 @@
                       @keydown.enter.stop.prevent="openLearnerOf(p)"
                     >{{ p.user?.name || '—' }}</button>
                     <strong v-else>{{ p.user?.name || '—' }}</strong>
-                    <span class="mk-cell-sub">{{ p.user?.email || '' }}</span>
+                    <span class="mk-cell-sub" :title="p.user?.email || ''">{{ p.user?.email || '' }}</span>
                   </div>
                 </div>
               </td>
