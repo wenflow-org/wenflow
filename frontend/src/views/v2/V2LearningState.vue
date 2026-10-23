@@ -532,10 +532,13 @@ const metricOptions: Array<{ key: MetricKey; label: string }> = [
   { key: 'lf', label: '疲劳程度' }
 ];
 
-function toneOf(key: MetricKey, v: number): { tone: string; color: string; note: string } {
+function toneOf(key: MetricKey, v: number, mature?: boolean): { tone: string; color: string; note: string } {
   if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: 'var(--muted)', note: '积累中' };
   if (key === 'lsb') {
-    // LSB = KTL - LF（-100 ~ +100），分档对齐后端 <0/<20/<40/≥40 与状态分档文案
+    // 后端 mature=false：PMC 冷启动爬升期（KTL 基座未成熟）form<0 属正常，
+    // 不能按「严重疲劳」展示——与 /state/warnings、建议引擎同判据。
+    if (mature === false) return { tone: 'blue', color: 'var(--blue-deep)', note: '积累中' };
+    // LSB = KTL - LF（-100 ~ +100），分档对齐后端相对量判据与状态分档文案
     if (v < 0) return { tone: 'red', color: 'var(--red-ink)', note: '严重疲劳，优先休息' };
     if (v >= 40) return { tone: 'green', color: 'var(--green-ink)', note: '精力充沛' };
     if (v >= 20) return { tone: 'blue', color: 'var(--blue-deep)', note: '最优训练区' };
@@ -566,7 +569,7 @@ const metricCards = computed(() =>
       return { ...m, value: '—', unit: m.key === 'lsb' ? '' : '分', tone: 'red', color: 'var(--red-ink)', note: '读取失败' };
     }
     const v = current.value?.[m.key];
-    const t = toneOf(m.key, v);
+    const t = toneOf(m.key, v, current.value?.mature);
     return { ...m, value: v ?? '—', unit: m.key === 'lsb' ? '' : '分', ...t };
   })
 );
@@ -594,6 +597,7 @@ interface TrendPoint {
   ktl: number | null;   // 掌握趋势
   lf: number | null;    // 疲劳
   lsb: number | null;   // 整体状态 = KTL − LF
+  mature?: boolean;     // 该日 PMC 基座是否成熟（未成熟时不做疲劳分区）
   minutes: number;      // 当日时长（仅展示背景柱，不参与状态计算）
   zone: Zone | null;
   x: number;
@@ -606,11 +610,12 @@ interface TrendPoint {
 }
 
 const dailyLoad = ref<Array<{ date: string; minutes: number }>>([]);
-const stateTrends = ref<Array<{ date: string; ktl: number | null; lf: number | null; lsb: number | null }>>([]);
+const stateTrends = ref<Array<{ date: string; ktl: number | null; lf: number | null; lsb: number | null; mature?: boolean }>>([]);
 
 /** 分区基于 LSB（对齐 learning-state.service：LSB = KTL − LF，0-100） */
-function zoneOfLsb(lsb: number | null): Zone | null {
+function zoneOfLsb(lsb: number | null, mature?: boolean): Zone | null {
   if (lsb === null) return null;
+  if (mature === false) return { cls: 'optimal', label: '积累中' };
   if (lsb >= 40) return { cls: 'fresh', label: '精力充沛' };
   if (lsb >= 20) return { cls: 'optimal', label: '最优训练区' };
   if (lsb >= 0) return { cls: 'risk', label: '需要休息' };
@@ -653,8 +658,9 @@ const series = computed<Array<Omit<TrendPoint, 'x' | 'ky' | 'ly' | 'sy' | 'bx' |
       ktl: t?.ktl ?? null,
       lf: t?.lf ?? null,
       lsb,
+      mature: t?.mature,
       minutes: loadMap.get(key) ?? 0,
-      zone: zoneOfLsb(lsb)
+      zone: zoneOfLsb(lsb, t?.mature)
     });
   }
   return days;
@@ -1046,14 +1052,15 @@ async function loadTrends() {
     // 权威口径：后端 /state/trends（LSS/KTL/LF/LSB，与指标卡同源），替代前端自算 EWMA
     const trendRes = await request.get('/state/trends', { params: { days: range.value, range: 'recent' } });
     if (seq !== trendSeq) return;
-    const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }> }>(trendRes);
+    const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null; mature?: boolean }> }>(trendRes);
     stateTrends.value = (trendData?.trends || []).map((t) => ({
       // 后端回的是本地零点 Date 的 ISO 序列化（UTC），必须按本地时区还原，
       // 否则 UTC+8 会整体前移一天（与 V2LearningHistory 同一口径问题）
       date: localDateKeyFromIso(String(t.date)),
       ktl: typeof t.ktl === 'number' ? t.ktl : null,
       lf: typeof t.lf === 'number' ? t.lf : null,
-      lsb: typeof t.lsb === 'number' ? t.lsb : null
+      lsb: typeof t.lsb === 'number' ? t.lsb : null,
+      mature: typeof t.mature === 'boolean' ? t.mature : undefined
     }));
     trendError.value = false;
   } catch {
