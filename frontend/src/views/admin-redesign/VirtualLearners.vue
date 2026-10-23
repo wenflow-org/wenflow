@@ -200,7 +200,7 @@
             <th
               scope="col"
               class="mk-th--sortable vl-c-running"
-              title="当前活跃运行（进行中 + 已暂停）逐条显示，无活跃运行时显示最近一次"
+              title="这个学习者现在在做什么、做到哪一步。有活跃运行时逐条列出（含路径名与阶段，运行/已暂停分别标注），没有活跃运行时按学习路径列出各自最近一次运行与终态"
               :aria-sort="vlSortState('running')"
               @click="toggleVlSort('running')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>

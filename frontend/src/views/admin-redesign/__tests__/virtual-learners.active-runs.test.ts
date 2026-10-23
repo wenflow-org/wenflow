@@ -128,6 +128,19 @@ beforeEach(() => {
 });
 
 describe('虚拟学习者：多活跃会话与任务列', () => {
+  it('列头口径=「现在在做什么、做到哪一步」：活跃则逐条，空闲则按路径给最近一次', async () => {
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const th = w.findAll('thead th').find((t) => t.text().trim() === '进行中')!;
+    const title = th.attributes('title')!;
+    // 口径必须跟着 2026-10-21 的按路径归并更新：旧文案只说「无活跃时显示最近一次」，已不成立
+    expect(title).toContain('现在在做什么');
+    expect(title).toContain('按学习路径');
+    expect(title).not.toContain('无活跃运行时显示最近一次');
+    w.unmount();
+  });
+
   it('同一学习者三条活跃会话逐条渲染，超过上限给 +N', async () => {
     const w = mount(VirtualLearners);
     await flushPromises();
