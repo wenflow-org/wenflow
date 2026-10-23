@@ -258,7 +258,13 @@
               <span v-else class="mk-na">—</span>
             </td>
             <td>
-              <div class="vl-state-cell" :class="{ 'vl-state-cell--multi': activeRunsOf(s).length > 1 }">
+              <div
+                class="vl-state-cell"
+                :class="{
+                  'vl-state-cell--multi': activeRunsOf(s).length > 1,
+                  'vl-state-cell--hist': !activeRunsOf(s).length && historyRunsOf(s).length > 0,
+                }"
+              >
                 <!-- 多活跃会话逐条渲染（2026-10-18）：一个学习者可同时跑多条路径，
                      运行在前、暂停在后；每条徽章可点进自己的座舱。
                      无活跃运行时回落到最近一次运行的历史进度，并标「最近」，
@@ -302,12 +308,14 @@
                   :title="`有 ${activeCount(s)} 条活跃运行，但不在本次载入的运行明细里，进画像页查看`"
                 >活跃 {{ activeCount(s) }} 条 · 未展开</span>
                 <!-- 历史（无活跃运行）：按学习路径一行（2026-10-21 用户「一个学习者可能多个目标路径」）。
-                     每条路径只显示最近一次运行，多节课/重跑折叠在画像页；终态用词写出来（已放弃/已完成），
-                     不再给历史行画「进行中」的阶段条——那会把已经结束的运行画得像在跑。 -->
+                     2026-10-21 晚重构（用户「不要当前这个样子」）：一行四槽——状态点 / 路径 / 阶段·任务 / 终态。
+                     终态从灰色副文里拆出来，用语义色写在最右，多路径时逐行成一条竖线；
+                     「最近」退成组标题，不再和路径名挤在同一行。历史行仍不画阶段条（那是「在跑」的语汇）。 -->
                 <template v-else-if="historyRunsOf(s).length">
-                  <span class="vl-histmark">最近</span>
+                  <span class="vl-histmark" title="没有在跑的运行，下面是各条学习路径最近一次运行的结果">最近</span>
                   <div class="vl-histlines">
                     <div class="vl-histline" v-for="r in historyRunsOf(s)" :key="r.sessionId">
+                      <i class="vl-histdot" :class="`vl-histdot--${historyStateOf(r)}`" aria-hidden="true"></i>
                       <button
                         type="button"
                         class="vl-histtitle"
@@ -315,6 +323,11 @@
                         @click.stop="r.sessionId && openRun(r.sessionId)"
                       >{{ r.pathTitle || '目标阶段' }}</button>
                       <span class="vl-histmeta">{{ historyRunMeta(r) }}</span>
+                      <span
+                        v-if="historyEndLabel(r)"
+                        class="vl-histend"
+                        :class="`vl-histend--${historyStateOf(r)}`"
+                      >{{ historyEndLabel(r) }}</span>
                     </div>
                     <span
                       v-if="historyTotalOf(s) > historyRunsOf(s).length"
@@ -602,12 +615,32 @@ function stageWordOf(r: { goalReady: boolean; pathReady: boolean; learnStarted: 
   return '目标'
 }
 /** 历史行摘要：到哪一步 + 任务数 + 终态（已放弃/已完成） */
+const HISTORY_STATE: Record<string, 'ok' | 'warn' | 'bad' | 'muted'> = {
+  completed: 'ok',
+  succeeded: 'ok',
+  success: 'ok',
+  abandoned: 'warn',
+  cancelled: 'warn',
+  failed: 'bad',
+  timeout: 'bad',
+}
+
+/** 终态 → 语义档：点的颜色与右侧终态词同源，扫一列就能看出哪条停了、哪条挂了 */
+function historyStateOf(r: RecentRun): 'ok' | 'warn' | 'bad' | 'muted' {
+  return HISTORY_STATE[String(r.status || '').toLowerCase()] ?? 'muted'
+}
+
+/** 右侧终态词；没结束（running）或后端给了个不认识的码时不出词 */
+function historyEndLabel(r: RecentRun): string {
+  const st = String(r.status || '').toLowerCase()
+  if (!st || st === 'running') return ''
+  return statusText(st)
+}
+
 function historyRunMeta(r: RecentRun): string {
   const stage = stageWordOf(r)
-  const tasks = r.learnStarted && r.taskTotal > 0 ? ` ${r.taskDone}/${r.taskTotal}` : ''
-  const st = String(r.status || '')
-  const terminal = st && st !== 'running' ? ` · ${statusText(st)}` : ''
-  return `${stage}${tasks}${terminal}`
+  if (!r.learnStarted || r.taskTotal <= 0) return stage
+  return `${stage} · 任务 ${r.taskDone}/${r.taskTotal}`
 }
 /** 历史行 title：路径 + 任务 + 最近写入时间（点击行为由路径名本身是按钮承载，不再写说明书） */
 function historyRunTitle(r: RecentRun): string {
@@ -1122,18 +1155,22 @@ function openRun(sessionId: string) {
    auto 布局下按当页最长内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
    宽度按 1280 现值校准并留余量，1200 档无横滚。 */
 .vl-c-check { width: 36px; }
-.vl-c-name { width: 140px; }
-.vl-c-tendency { width: 140px; }
+.vl-c-name { width: 124px; }
+.vl-c-tendency { width: 168px; }
 /* ≤1279：进行中列的阶段条固定宽 172，列宽不能低于 210（内容区 178） */
-.vl-c-story { width: 84px; }
-.vl-c-running { width: 200px; }
+.vl-c-story { width: 68px; }
+/* 进行中是本表的信息主列（2026-10-21 重构后一行四槽：点 / 路径 / 阶段·任务 / 终态），
+   200 只够放「最近 + 路径」，给到 240 让「阶段 · 任务 X/Y」不被截成「学习 · 任...」 */
+.vl-c-running { width: 240px; }
 .vl-c-runs { width: 72px; }
 /* 异常列要同时容下「失败 N」「无响应 N」两枚标签 */
 .vl-c-abnormal { width: 132px; }
 .vl-c-created { width: 70px; }
 .vl-c-act { width: 96px; }
 @media (max-width: 1279px) {
-  .vl-c-running { width: 200px; }
+  /* 进行中是本表的信息主列（2026-10-21 重构后一行四槽：点 / 路径 / 阶段·任务 / 终态），
+   200 只够放「最近 + 路径」，给到 240 让「阶段 · 任务 X/Y」不被截成「学习 · 任...」 */
+.vl-c-running { width: 240px; }
 }
 /* fixed 档列宽即契约：换行格的 220px min-width 会把短名顶出单元格 */
 .vl-table .mk-cell-text--wrap, .vl-table .mk-cell-main .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
@@ -1156,20 +1193,39 @@ function openRun(sessionId: string) {
 .vl-runline { display: flex; align-items: center; gap: 6px; min-height: 24px; min-width: 0; }
 /* 历史行组（2026-10-21）：一条路径一行；行内只说「到哪一步 + 任务 + 终态」，
    不再给已结束的运行画阶段条（会把「已放弃」画成「进行中」） */
-.vl-histlines { display: grid; gap: 1px; min-width: 0; }
-.vl-histline { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.vl-state-cell--hist { display: grid; gap: 5px; align-content: center; justify-items: stretch; min-width: 0; }
+.vl-histlines { display: grid; gap: 4px; min-width: 0; }
+/* 四槽：状态点 / 路径 / 阶段·任务 / 终态。路径列给固定上限，副文起点在多行之间对齐；
+   终态贴右缘，多条路径时自上而下连成一条竖线。 */
+.vl-histline {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 96px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.vl-histdot { width: 7px; height: 7px; border-radius: 50%; background: var(--mk-faint-soft); }
+.vl-histdot--ok { background: var(--mk-green); }
+.vl-histdot--warn { background: var(--mk-amber); }
+.vl-histdot--bad { background: var(--mk-red); }
 .vl-histtitle {
-  border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer;
-  max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted);
+  border: 0; background: transparent; padding: 0; cursor: pointer;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: inherit; font-weight: 600; color: var(--mk-ink);
   text-align: left;
 }
 .vl-histtitle:hover { color: var(--mk-blue); text-decoration: underline; }
 .vl-histmeta {
-  font-size: var(--mk-fs-micro); color: var(--mk-faint);
+  font-size: var(--mk-fs-micro); color: var(--mk-muted);
   font-variant-numeric: tabular-nums; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
-.vl-histmore { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.vl-histend { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
+.vl-histend--ok { color: var(--mk-green); }
+.vl-histend--warn { color: var(--mk-amber); }
+.vl-histend--bad { color: var(--mk-red); }
+.vl-histend--muted { color: var(--mk-muted); }
+.vl-histmore { font-size: var(--mk-fs-micro); color: var(--mk-muted); padding-left: 15px; }
 /* 活跃运行行里的路径名：与徽章并列，截断保留可点区 */
 .vl-runtitle {
   border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer;
@@ -1181,10 +1237,9 @@ function openRun(sessionId: string) {
 .vl-histmark {
   font-size: var(--mk-fs-micro);
   font-weight: 600;
-  color: var(--mk-faint-soft);
-  background: var(--mk-surface-2);
-  border-radius: var(--mk-radius-xs);
-  padding: 0 4px;
+  color: var(--mk-faint);
+  letter-spacing: 0.04em;
+  line-height: 1.3;
   white-space: nowrap;
 }
 /* 聚合有活跃会话、样本里拿不到详情时的如实提示 */

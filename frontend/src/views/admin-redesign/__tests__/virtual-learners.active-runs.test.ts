@@ -192,9 +192,12 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     const lines = row.findAll('.vl-histline');
     expect(lines).toHaveLength(1);
     expect(lines[0].find('.vl-histtitle').text()).toBe('目标阶段');
-    expect(lines[0].find('.vl-histmeta').text()).toContain('学习 2/25');
+    expect(lines[0].find('.vl-histmeta').text()).toContain('任务 2/25');
     // 已结束的运行不再画阶段条（那是「进行中」的语汇）
     expect(row.find('.vl-stage').exists()).toBe(false);
+    // 四槽：状态点/路径/阶段·任务恒在；这条旧缓存没有 status，右槽不出词（不冒领「已结束」）
+    expect(lines[0].find('.vl-histdot').exists()).toBe(true);
+    expect(lines[0].find('.vl-histend').exists()).toBe(false);
     w.unmount();
   });
 
@@ -215,9 +218,14 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     const lines = row.findAll('.vl-histline');
     expect(lines).toHaveLength(2);
     expect(lines.map((l) => l.find('.vl-histtitle').text())).toEqual(['函数与导数', '立体几何']);
-    // 终态用词而不是彩点：已完成 / 已放弃
-    expect(lines[0].find('.vl-histmeta').text()).toContain('已完成');
-    expect(lines[1].find('.vl-histmeta').text()).toContain('已放弃');
+    // 2026-10-21 晚重构：终态从灰色副文拆到右槽，带自己的语义色；状态点同色，副文不再复述终态
+    expect(lines[0].find('.vl-histend').text()).toBe('已完成');
+    expect(lines[0].find('.vl-histend').classes()).toContain('vl-histend--ok');
+    expect(lines[0].find('.vl-histdot').classes()).toContain('vl-histdot--ok');
+    expect(lines[1].find('.vl-histend').text()).toBe('已放弃');
+    expect(lines[1].find('.vl-histend').classes()).toContain('vl-histend--warn');
+    expect(lines[1].find('.vl-histdot').classes()).toContain('vl-histdot--warn');
+    expect(lines[1].find('.vl-histmeta').text()).not.toContain('已放弃');
     // 3 条路径只展开 2 条 → 余量明说
     expect(row.find('.vl-histmore').text()).toBe('+1 条路径');
     // 点路径名进该条运行的座舱（不是一律第一条）

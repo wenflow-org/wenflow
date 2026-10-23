@@ -719,7 +719,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // 历史行按路径给：没有 recentRuns 的旧数据合成一行，说清到哪一步与任务数（不再画阶段条）
     const line = w.find('.vl-histline');
     expect(line.exists()).toBe(true);
-    expect(line.find('.vl-histmeta').text()).toContain('学习 1/25');
+    expect(line.find('.vl-histmeta').text()).toContain('任务 1/25');
     w.unmount();
   });
 });
