@@ -570,13 +570,6 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(reclaimMock).toHaveBeenNthCalledWith(2, { dryRun: false });
   });
 
-  it('「进行中」列点击直达会话座舱（openSubPage session）', async () => {
-    liveVirtuals.value = [makeVirtual(1, { runningCount: 1, runningSessionIds: ['run-1'], currentStage: 'goal' })];
-    const w = await mountPage();
-    await w.find('.rs-badge').trigger('click');
-    expect(openSubPageMock).toHaveBeenCalledWith('session', 'run-1');
-  });
-
   it('B8-F4-2 干跑清单同源同数：候选数=角标口径，豁免项逐条列出（不再「按钮 35 / 弹窗 0」）', async () => {
     // 页头角标读 staleCount（= 超阈值卡死候选，排除暂停）；干跑返回同一批候选：可回收 0 + 豁免 2
     liveVirtualSessionStats.value = { created: 0, running: 2, failed: 0, abandoned: 0, completed: 0, total: 2 };
@@ -700,7 +693,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     w.unmount();
   });
 
-  it('故事 / 路径列：两个数并置，多路径学习者的阶段条只交代最近一次会话', async () => {
+  it('故事 / 路径列：两个数并置，状态列只回答在不在跑（明细不进列表）', async () => {
     liveVirtuals.value = [
       makeVirtual(1, {
         storyCount: 2,
@@ -716,10 +709,9 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // 一个故事可衍生多条路径：路径数大于故事数不是数据错，title 必须交代设计语义
     expect(cell.attributes('title')).toContain('已生成路径 5 条');
     expect(cell.attributes('title')).toContain('一个故事可衍生多条路径');
-    // 历史行按路径给：没有 recentRuns 的旧数据合成一行，说清到哪一步与任务数（不再画阶段条）
-    const line = w.find('.vl-histline');
-    expect(line.exists()).toBe(true);
-    expect(line.find('.vl-histmeta').text()).toContain('任务 1/25');
+    // 2026-10-21 晚：状态列不再逐条展开运行，只出「运行中 / 停滞 / 已停止」
+    expect(w.find('.vl-histline').exists()).toBe(false);
+    expect(w.find('.vl-state-cell').text()).toBe('已停止');
     w.unmount();
   });
 });
