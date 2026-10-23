@@ -334,6 +334,8 @@
                 >
                   <Square v-if="rowActionOf(s).key === 'terminate'" :size="13" :stroke-width="1.75" />
                   <Pause v-else-if="rowActionOf(s).key === 'pause'" :size="14" :stroke-width="1.75" />
+                  <!-- 继续是「接着跑」，用带圈的播放与「运行」（从没跑过、新开一条）区分 -->
+                  <CirclePlay v-else-if="rowActionOf(s).key === 'resume'" :size="14" :stroke-width="1.75" />
                   <Play v-else :size="14" :stroke-width="1.75" />
                   <span>{{ busyId === s.id ? '处理中…' : rowActionOf(s).label }}</span>
                 </button>
@@ -416,7 +418,7 @@
 
 <script setup lang="ts">
 import { computed, ref, reactive, watch, nextTick, onUnmounted } from 'vue'
-import { Filter, Pause, Play, Square } from 'lucide-vue-next'
+import { CirclePlay, Filter, Pause, Play, Square } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, refreshLiveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats } from './live'

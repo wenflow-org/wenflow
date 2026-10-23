@@ -228,6 +228,10 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     expect(actionOf('暂停的人').text()).toBe('继续');
     expect(actionOf('停滞的人').text()).toBe('终止');
     expect(actionOf('停过的人').text()).toBe('运行');
+    // 图标也要能区分：「运行」是裸三角（新开一条），「继续」是带圈播放（接着跑）
+    expect(actionOf('停过的人').find('svg').classes()).toContain('lucide-play');
+    expect(actionOf('暂停的人').find('svg').classes()).toContain('lucide-circle-play');
+    expect(actionOf('在跑的人').find('svg').classes()).toContain('lucide-pause');
     // 终止是破坏性：走红描边档，不与「运行」同色
     expect(actionOf('停滞的人').classes()).toContain('mk-btn--danger-ghost');
     expect(actionOf('停过的人').classes()).not.toContain('mk-btn--danger-ghost');
