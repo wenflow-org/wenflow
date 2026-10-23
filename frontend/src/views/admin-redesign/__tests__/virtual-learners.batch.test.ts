@@ -128,6 +128,7 @@ async function mountPage() {
 /** 默认隐藏专测用：清掉本地记录，走 MkCols 首访 defaultHidden 路径 */
 async function mountPageFreshCols() {
   localStorage.removeItem('wf_vl_hidden_cols_v2');
+  localStorage.removeItem('wf_vl_hidden_cols_v3');
   const w = mount(VirtualLearners);
   await flushPromises();
   await nextTick();
@@ -425,7 +426,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // 列已出，入口自己让位（避免「按钮点了没反应」的第二次点击）
     expect(w.findAll('button').map((b) => b.text())).not.toContain('批量操作');
     // 写的是 MkCols 同一个存储键：算用户的持久列偏好，不是临时态
-    expect(JSON.parse(localStorage.getItem('wf_vl_hidden_cols_v2') || '[]')).not.toContain('check');
+    expect(JSON.parse(localStorage.getItem('wf_vl_hidden_cols_v3') || '[]')).not.toContain('check');
   });
 
   it('并发/速率 KPI 可点直达容量设置，指引不再指向已撤的页签名', async () => {
@@ -617,19 +618,24 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     w.unmount();
   });
 
-  it('卡死/失败会话分列标注（卡死/失败列红数字）', async () => {
+  it('异常列：失败与无响应合并成一格，各自带词、零值不出声', async () => {
     liveVirtuals.value = [makeVirtual(1, { stalledCount: 1, failedCount: 2 })];
     const w = await mountPage();
-    // 卡死列：数字直出（2026-10-03 方言收敛，徽章「卡死 N」复读列头已退役），>0 标红
-    const stalled = w.findAll('tbody .vl-num--bad').filter((el) => !el.classes().includes('vl-faillink'));
-    expect(stalled.length).toBe(1);
-    expect(stalled[0].text()).toBe('1');
-    // 失败列：纯数字（可点击进画像页）
-    const failCell = w.findAll('tbody tr td').find((td) => (td.text() || '').trim() === '2');
-    expect(failCell).toBeTruthy();
-    expect(w.find('.vl-faillink.vl-num--bad').exists()).toBe(true);
+    // 两类信号在同一格，但各自带词（不再靠列头猜哪个数字是什么）
+    const cell = w.find('tbody .vl-abnormal');
+    expect(cell.exists()).toBe(true);
+    expect(cell.find('.vl-abn--fail').text()).toBe('失败 2');
+    expect(cell.find('.vl-abn--stall').text()).toBe('无响应 1');
+    // 排序/口径进 title：失败含已终止，无响应按当前阈值
+    expect(cell.find('.vl-abn--stall').attributes('title')).toContain('仍没有新写入');
     // 进行中列只表达生命周期/阶段，不混入失败/卡死徽章
     expect(w.find('.vl-state-cell .mk-badge--bad').exists()).toBe(false);
+
+    // 都为零：整格一个「—」，不再是一排 0
+    liveVirtuals.value = [makeVirtual(2, { stalledCount: 0, failedCount: 0 })];
+    const w2 = await mountPage();
+    expect(w2.find('tbody .vl-abnormal .mk-na').text()).toBe('—');
+    expect(w2.findAll('tbody .vl-abn')).toHaveLength(0);
   });
 
   it('「新建」触发新建弹窗（批量实验已下线，列表页「新建/批量新建」是唯一创建入口）', async () => {
