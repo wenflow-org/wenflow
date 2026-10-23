@@ -144,7 +144,7 @@ import { toast } from '@/utils/toast'
 import { shortHashTag } from '@/utils/shortHash'
 
 /* 文案单源（R6 复读单源化）：hero 副文与来源徽章悬停释共用一份 */
-const PRESET_SYNC_NOTE = '平台预置角色（随版本自动同步）'
+const PRESET_SYNC_NOTE = '平台预置角色（卡库内「一键加载」同步）'
 
 interface CardDetail {
   profileId: string

@@ -324,7 +324,7 @@ export function checkPresetInstances(
         'I-version-stale',
         'info',
         preset.presetKey,
-        `实例版本 ${version} 落后定义 ${preset.presetVersion}（重启后同步刷新；运行时产物会保留）`,
+        `实例版本 ${version} 落后定义 ${preset.presetVersion}（经「一键加载」/显式入口后刷新；运行时产物会保留）`,
       ));
     }
 

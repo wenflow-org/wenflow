@@ -135,4 +135,58 @@ describe('syncOnePreset 版本分支（经 ensureBuiltinVirtualLearners 端到�
     expect(result.updated).toEqual([]);
     expect(updates).toHaveLength(0);
   });
+
+  it('同版但实例缺预算 → 只回填预算，记入 updated（不动其他字段）', async () => {
+    const { client, updates } = fakeClient(
+      baselineRows({
+        presetKey: target.presetKey,
+        presetVersion: target.presetVersion,
+        profile: JSON.stringify({ nameHint: target.personaSeed.nameHint }),
+      }),
+    );
+    const result = await ensureBuiltinVirtualLearners(client);
+
+    expect(result.updated).toEqual([target.presetKey]);
+    expect(updates).toHaveLength(1);
+    const profile = JSON.parse(String(updates[0].data.profile));
+    expect(profile.simulationBudget).toBeDefined();
+    expect(profile.nameHint).toBe(target.personaSeed.nameHint);
+  });
+
+  it('历史行 presetVersion=null → 按 0 走升级，补齐定义字段', async () => {
+    const { client, updates } = fakeClient(
+      baselineRows({ presetKey: target.presetKey, presetVersion: null }),
+    );
+    const result = await ensureBuiltinVirtualLearners(client);
+
+    expect(result.updated).toEqual([target.presetKey]);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].data.presetVersion).toBe(target.presetVersion);
+  });
+
+  it('升级时保留运行时产物：追加故事/记忆/已完成事项不被定义覆盖', async () => {
+    const runtimeStory = { id: 'story_runtime_1', title: '运行时追加的故事' };
+    const { client, updates } = fakeClient(
+      baselineRows({
+        presetKey: target.presetKey,
+        presetVersion: target.presetVersion - 1,
+        profile: JSON.stringify({
+          knownConcepts: ['运行时已知概念'],
+          struggleConcepts: ['运行时薄弱概念'],
+          recentCompleted: ['task-runtime-1'],
+          runtimePrefs: { pacing: 'fast' },
+          storyPool: [runtimeStory],
+          simulationBudget: { ...(target.budget ?? {}) },
+        }),
+      }),
+    );
+    await ensureBuiltinVirtualLearners(client);
+
+    const merged = JSON.parse(String(updates[0].data.profile));
+    expect(merged.recentCompleted).toEqual(['task-runtime-1']);
+    expect(merged.runtimePrefs).toEqual({ pacing: 'fast' });
+    expect(merged.storyPool.map((story: { id?: string }) => story.id)).toContain('story_runtime_1');
+    expect(merged.knownConcepts).toEqual(expect.arrayContaining(['运行时已知概念']));
+    expect(merged.struggleConcepts).toEqual(expect.arrayContaining(['运行时薄弱概念']));
+  });
 });
