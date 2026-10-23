@@ -105,7 +105,7 @@ describe('虚拟学习者定位（D1）', () => {
        用户走查「KPI hint 在报读数」后再往下沉一级——读数进 title 长释，副行留口径短语 */
     expect(wrapper.find('.mk-status').exists()).toBe(false);
     const completion = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === '完成率');
-    expect(completion!.find('.mk-kpi__hint').text()).toContain('已完成 / 全部会话');
+    expect(completion!.find('.mk-kpi__hint').exists()).toBe(false);
     expect(completion!.attributes('title')).toContain('活动会话 3');
     wrapper.unmount();
   });

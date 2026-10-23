@@ -188,7 +188,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     /* 会话口径：活动 = running 2 + created 3 → 完成率卡。2026-10-19 用户走查「KPI hint
        在报读数」后读数下沉：副行只留口径短语，活动会话数住 title 长释（同一会话漏斗） */
     const completion = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完成率');
-    expect(completion!.find('.mk-kpi__hint').text()).toContain('已完成 / 全部会话');
+    expect(completion!.find('.mk-kpi__hint').exists()).toBe(false);
     expect(completion!.attributes('title')).toContain('活动会话 5');
     // 画像口径分区筛选计数（P2：「需关注」已正名「曾失败」，口径=累计失败）→ 卡头工具栏 chips
     // 按卡定位到列表卡（.mk-card--fill）：页内还有压测参数等其它卡头，取「第一个 .mk-card__head」会取错
@@ -279,7 +279,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // getVirtualLabSettings 回执：limit=200 / inFlight=3
     // 2026-10-03：值与口径分栏——整串「在途 3 · 上限 200/分」在卡宽内必换行，把整排 KPI 拉伸到 180px
     expect(card.find('.mk-kpi__num').text()).toBe('3 / 200/分');
-    expect(card.find('.mk-kpi__hint').text()).toContain('每分钟上限');
+    expect(card.find('.mk-kpi__hint').exists()).toBe(false);
   });
 
   it('P1#20 创建列：相对时间配绝对时间 title', async () => {
@@ -327,7 +327,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
        2026-10-08 走查 #3：分母由裸「全部」改为「全部会话」——同一张卡上方是会话口径、
        下方表格是学习者口径（行数 = 虚拟学习者），裸「全部」会被读成同一个分母。 */
     const failure = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率');
-    expect(failure!.find('.mk-kpi__hint').text()).toBe('系统失败 / 全部会话 · 人为终止另计');
+    expect(failure!.find('.mk-kpi__hint').exists()).toBe(false);
     const failureTitle = failure!.attributes('title') || '';
     expect(failureTitle).toContain('系统失败 3');
     expect(failureTitle).toContain('人为终止 1');
@@ -441,7 +441,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(rate.classes()).toContain('mk-kpi--clickable');
     // 去向写全新位置；「模型与接入 → 虚拟学习者」页签 2026-10-15 就撤了
     expect(concurrency.attributes('title')).toContain('虚拟学习者通道');
-    expect(rate.attributes('title')).toContain('路由与调用');
+    expect(rate.attributes('title')).toContain('调用与健康');
     expect(rate.attributes('title')).not.toContain('虚拟学习者」页签');
   });
 

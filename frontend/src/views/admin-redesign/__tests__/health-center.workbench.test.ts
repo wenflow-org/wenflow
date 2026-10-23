@@ -133,21 +133,23 @@ describe('健康中心（G1）', () => {
     const cards = wrapper.findAll('.mk-kpi');
     expect(cards.length).toBe(4);
     const title = (i: number) => cards[i].attributes('title') || '';
+    /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：方法说明型副行
+       （按健康检查清单逐项判定 / 按登记册逐项比对）已撤，卡面只留 label + 读数 */
     expect(cards[0].text()).toContain('4');                              // 检查异常（value=异常数）
-    expect(cards[0].find('.mk-kpi__hint').text()).toBe('按健康检查清单逐项判定');
+    expect(cards[0].find('.mk-kpi__hint').exists()).toBe(false);
     expect(title(0)).toContain('健康检查共 13 项');                        // 总数进长释
     expect(cards[1].text()).toContain('3');                              // 漂移需处理：契约 1 + W4 2
     /* 2026-10-16 KPI 审计补完：标签原先只有「不一致」没有宾语（谁跟谁不一致？），
        改用术语表的限定词；两类条数（原副行「契约 N + 哈希 M」的人话版）进长释。 */
     expect(cards[1].text()).toContain('文件与线上不一致');
-    expect(cards[1].find('.mk-kpi__hint').text()).toBe('文件与线上 / 编译产物两类可行动不一致');
+    expect(cards[1].find('.mk-kpi__hint').exists()).toBe(false);
     expect(title(1)).toContain('文件与线上 1 条、编译产物 2 条');
     expect(cards[1].text()).not.toContain('契约');
     expect(cards[2].text()).toContain('3');                              // 对账异常：登记缺项 1 + 无生效版本 2 + 失效注册 0
-    expect(cards[2].find('.mk-kpi__hint').text()).toBe('按登记册逐项比对');
+    expect(cards[2].find('.mk-kpi__hint').exists()).toBe(false);
     expect(title(2)).toContain('登记总数 8 项');
     expect(cards[3].text()).toContain('2');                              // 完成度未达标
-    expect(cards[3].find('.mk-kpi__hint').text()).toBe('已上线 / 登记总数');
+    expect(cards[3].find('.mk-kpi__hint').exists()).toBe(false);
     expect(title(3)).toContain('已上线 2/8');                             // 达成数进长释
     // 2026-10-06 审核 #102：本卡 hint 的「共 N 个技能」与相邻对账卡 hint「登记 N 项」同值同屏
     // 复读且两种叫法，已撤（登记总数单源住在页头注记 title 与对账卡 title）。
@@ -226,10 +228,10 @@ describe('健康中心（G1）', () => {
     expect(wrapper.find('.stageband').exists()).toBe(false);
     expect(wrapper.find('.hc-fold').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('完成度分布');
-    // 信息没净丢：完成度的结论在页首 KPI hint（已上线 N/N），逐条明细在下方对账表
+    // 信息没净丢：完成度的结论在页首 KPI（读数）与卡 title（已上线 N/N），逐条明细在下方对账表
     const kpi = wrapper.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text().includes('完成度未达标'));
     expect(kpi?.exists()).toBe(true);
-    expect(kpi!.find('.mk-kpi__hint').text()).toContain('已上线');
+    expect(kpi!.attributes('title')).toContain('已上线');
     expect(wrapper.find('#hc-panel-recon .sk-rec').exists()).toBe(true);
     wrapper.unmount();
   });

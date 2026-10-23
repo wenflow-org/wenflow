@@ -80,9 +80,9 @@ function pill(wrapper: ReturnType<typeof mount>, label: string) {
 
 describe('VirtualLearners · 筛选 ↔ URL', () => {
   /* 2026-10-19 运营走查：容量治理（并发上限 / VL 专属 RPM / 日期模拟）在「模型与接入 ·
-     路由与调用」的「虚拟学习者通道」分组里，两个读数卡就是入口——运营看到读数时正是要改
+     调用与健康」的「虚拟学习者通道」分组里，两个读数卡就是入口——运营看到读数时正是要改
      上限的时候；此前这两张只读卡与那句写错页签名的指引一起，让人以为本页改不了。 */
-  it('并发 / 速率 KPI 点击 → 跳「模型与接入 · 路由与调用」页签', async () => {
+  it('并发 / 速率 KPI 点击 → 跳「模型与接入 · 调用与健康」页签', async () => {
     const { wrapper, router } = await mountVl('/admin/virtual-learners');
     const kpi = (label: string) => wrapper.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text().trim() === label)!;
     await kpi('并发').trigger('click');

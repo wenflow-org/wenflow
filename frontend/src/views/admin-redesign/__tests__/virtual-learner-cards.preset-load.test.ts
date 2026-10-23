@@ -92,15 +92,14 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
 
     const btn = loadButton(w);
     expect(btn, '预置区缺少「一键加载」按钮').toBeTruthy();
-    const hint = w.findAll('.mk-kpi')[0].find('.mk-kpi__hint').text();
-    expect(hint).toBe('平台预置定义 / 已加载卡数');
+    // 2026-10-21 用户「不要了」：有数据时预置卡不再挂口径副行，计数只在读数位
+    expect(w.findAll('.mk-kpi')[0].find('.mk-kpi__hint').exists()).toBe(false);
     expect(w.findAll('.mk-kpi')[0].attributes('title')).toContain('定义 9 条');
     const title = w.findAll('.mk-kpi')[0].attributes('title') || '';
     expect(title).toContain('已加载 5');
     expect(title).toContain('待加载 4');
-    // 口径不再是「自动同步」：副行（口径短语）与长释里都不许出现这句旧口径
-    expect(hint).not.toContain('自动同步');
-    expect(title).not.toContain('口径不再是自动同步');
+    // 旧口径「随版本自动同步」不再出现在卡面副行（副行已撤）；title 里的
+    // 「不随启动自动同步」是正确行为说明，保留
     w.unmount();
   });
 
