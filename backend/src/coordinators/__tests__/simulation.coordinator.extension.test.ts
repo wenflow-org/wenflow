@@ -45,6 +45,11 @@ jest.mock('../../config/database', () => ({
     learning_paths: {
       findUnique: mockLearningPathFindUnique
     },
+    // adopt 臂发起 replan 前会查「同一路径是否已有在途重排」（4048ac62 起不再看
+    // learning_paths.activeGenerationRunId）；空结果表示没有在途运行，应直接发重排。
+    path_generation_runs: {
+      findFirst: jest.fn(async () => null)
+    },
     teaching_sessions: {
       findFirst: jest.fn(async () => null)
     },
