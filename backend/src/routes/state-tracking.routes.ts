@@ -45,6 +45,8 @@ router.get('/current', async (req: any, res) => {
         lf: currentState.lf,
         lsb: currentState.lsb,
         updatedAt: currentState.updatedAt,
+        mature: currentState.mature,
+        verdict: currentState.verdict,
         suggestion
       }
     });

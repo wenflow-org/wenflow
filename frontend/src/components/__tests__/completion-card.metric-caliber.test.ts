@@ -50,6 +50,7 @@ function card(w: ReturnType<typeof mountCard>, key: string) {
     if (label.startsWith(key)) {
       return {
         label,
+        value: b.find('.metric-value').text(),
         level: b.find('.metric-badge').text(),
         tone: Array.from(b.classes()).find((c) => c.startsWith('metric-card--'))?.replace('metric-card--', '') || '',
         desc: b.find('.metric-desc').text(),
@@ -84,5 +85,17 @@ describe('长期状态四维：KTL = 训练负荷（高=坏）', () => {
     expect(sess, '应含会话级 KTL 卡').toBeTruthy();
     expect(sess!.tone).toBe('good');
     expect(sess!.level).toBe('高');
+  });
+
+  it('长期四维展示统一到 0-100 刻度（与学习状态页一致），冷启动 LSB 显「积累中」', () => {
+    const w = mountCard(wrapup({
+      stateUpdate: { ktl: 0.12, lsb: -0.6, lf: 0.72, lss: 2.4, mature: false } as never,
+    }));
+
+    expect(card(w, 'KTL')!.value).toBe('1.2');
+    expect(card(w, '学习疲劳')!.value).toBe('7.2');
+    expect(card(w, '学习压力')!.value).toBe('24.0');
+    expect(card(w, '整体状态')!.value).toBe('-6.0');
+    expect(card(w, '整体状态')!.level).toBe('积累中');
   });
 });

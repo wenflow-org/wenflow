@@ -29,6 +29,8 @@ import { cloneKnowledgePoints } from './teaching-knowledge-state';
 import { computeEffectiveDurationMinutes, pickPeerStrategy } from './teaching-session-views';
 import { requireTeachingRevision } from './teaching-turn-shared';
 import { processStudentMessage } from './teaching-turn-engine';
+import learningStateService from '../learning/learning-state.service';
+import { classifyLoad } from '../learning/learning-load-verdict';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import type { ProcessStudentMessageOptions } from './AITeachingCoordinator';
 
@@ -79,6 +81,37 @@ export async function getSessionHistory(userId: string): Promise<Array<{
   }));
 }
 
+/**
+ * 长期学习状态统一读 PMC 权威口径（与 /state/current、/state/trends 同源）。
+ *
+ * `wrapup.stateUpdate` 是结课时写入侧冻结的旧「按课 EWMA」快照：PMC 改造后它会与
+ * 学习状态页并排矛盾（2026-10-23 走查实测：反馈页 KTL 8.6 / LSB 6.2 vs
+ * 状态页 KTL 1.2 / LSB -6）。评估页走 `/sessions/:id/detail`、任务评估走
+ * `/tasks/:taskId/evaluation/latest`，两条返回路径都必须经过这里。
+ * wrapup 其余字段（总结/知识点/建议）保持冻结不变。
+ */
+async function withPmcLongTermState(
+  wrapup: any,
+  userId: string,
+  asOf: Date | null,
+): Promise<any> {
+  if (!wrapup || !asOf) return wrapup;
+  const pmcState = await learningStateService.getCurrentState(userId, { asOf });
+  if (!pmcState) return wrapup;
+  return {
+    ...wrapup,
+    stateUpdate: {
+      ...(wrapup.stateUpdate ?? {}),
+      lss: pmcState.lss,
+      ktl: pmcState.ktl,
+      lf: pmcState.lf,
+      lsb: pmcState.lsb,
+      mature: classifyLoad({ ktl: pmcState.ktl, lf: pmcState.lf }).mature,
+      timestamp: pmcState.timestamp,
+    },
+  };
+}
+
 export async function getSessionDetail(sessionId: string, userId: string): Promise<{
   id: string;
   subject: string;
@@ -113,7 +146,7 @@ export async function getSessionDetail(sessionId: string, userId: string): Promi
     messages: session.messages,
     state: stripCheckpointAnswerKeys(session.teachingState || {}),
     knowledgePoints: session.knowledgeState,
-    wrapup: session.wrapup,
+    wrapup: await withPmcLongTermState(session.wrapup, userId, session.endTime),
     advisory: (session.advisory as ReplanAdvisory | null) || null,
     // 答案键剔除后再给客户端：它只用于服务端代码裁决（审计 §7 P1-1）
     pendingCheckpoint: stripCheckpointAnswerKeys({ pendingCheckpoint: getPendingCheckpoint(session.teachingState) }).pendingCheckpoint ?? null,
@@ -535,6 +568,11 @@ export async function getLatestTaskEvaluation(taskId: string, userId: string): P
     return null;
   }
 
+  // 长期学习状态必须读 PMC 权威口径（与 /state/current、/state/trends 同源）。
+  // wrapup.stateUpdate 是结课时写入侧冻结的旧「按课 EWMA」快照：PMC 改造后它会与
+  // 学习状态页并排矛盾（实测反馈页 KTL 8.6 / LSB 6.2 vs 状态页 KTL 1.2 / LSB -6）。
+  const wrapup = await withPmcLongTermState(target.wrapup, userId, target.endTime);
+
   return {
     sessionId: target.id,
     subject: target.subject,
@@ -544,7 +582,7 @@ export async function getLatestTaskEvaluation(taskId: string, userId: string): P
     duration: target.duration || 0,
     messageCount: target.messages.filter((message) => message.role === 'user').length,
     knowledgePoints: target.knowledgeState,
-    wrapup: target.wrapup,
+    wrapup,
     advisory: (target.advisory as ReplanAdvisory | null) || null,
   };
 }

@@ -22,6 +22,7 @@ import { dayKeyOf, startOfDay, dayDiffInDays, addDaysToDayKey, DAY_BOUNDARY_DAY_
 // 非 EWMA），按日求和即可重放。详见 learning-load.pmc.ts。
 import { replayDailyPmc } from './learning-load-pmc.service';
 import { classifyLoad } from './learning-load-verdict';
+import { buildDisplaySuggestion, type LearningStateDisplaySuggestion } from './learning-state-suggestion';
 
 // EWMA 配置（半衰期按日更新折算：h = ln(0.5)/ln(λ)）
 export const EWMA_CONFIG = {
@@ -72,6 +73,21 @@ export interface LearningStateDisplayMetrics {
   lf: number;  // Learning Fatigue (0-100, short-term EWMA)
   lsb: number; // Learning State Balance = KTL - LF (-100 to +100)
   updatedAt?: string;
+  /**
+   * 适应基座是否成熟（PMC 口径下 KTL 达相对量判据下限）。
+   * 未成熟时 form<0 是冷启动爬升的正常现象，**不能**按「严重疲劳」展示/建议——
+   * 前端与建议引擎据此把绝对 LSB 分档降级为「积累中」。
+   */
+  mature?: boolean;
+  /** 相对量负荷判据（与 /state/warnings 同源），供消费方避免各自写绝对阈值 */
+  verdict?: {
+    form: number;
+    acwr: number | null;
+    fatigueRisk: 'low' | 'medium' | 'high';
+    pacing: 'slow' | 'moderate' | 'fast';
+    imbalanced: boolean;
+    mature: boolean;
+  };
 }
 
 export interface LearningStateTrendPoint {
@@ -80,6 +96,8 @@ export interface LearningStateTrendPoint {
   ktl: number | null;
   lf: number | null;
   lsb: number | null;
+  /** 该日 PMC 基座是否成熟（与 current 的 mature 同判据） */
+  mature?: boolean;
 }
 
 export interface LearningStateTrendWindow {
@@ -1294,6 +1312,72 @@ export class LearningStateService {
   }
 
   /**
+   * PMC 逐日状态（趋势图专用）。
+   *
+   * `/state/current` 已改为 PMC 派生，但 `/state/trends` 此前仍直接读落库行的
+   * ktl/lf/lsb（旧「按课 EWMA」值），于是同一屏出现两套口径（实测 current LSB=-6.12
+   * 与趋势点 LSB=63.7 并排）。这里按**同一重放**产出逐日 PMC 值，供趋势图与当前卡对齐。
+   *
+   * 与 `derivePmcState` 共用 `buildCommittedMetricWhere(..., includeSynthetic=true)`：
+   * 合成占位行需要参与（否则只有占位行的冷启动用户会读成「无状态」），
+   * 去重交给 `replayDailyPmc` 内的 `dedupeLessonRows`。
+   */
+  private async derivePmcDailySeries(
+    userId: string,
+    asOf: Date
+  ): Promise<Map<string, { ktl: number; lf: number; lsb: number; mature: boolean }>> {
+    const rows = (await prisma.learning_metrics.findMany({
+      where: this.buildCommittedMetricWhere(userId, undefined, undefined, asOf, undefined, true),
+      select: { lss: true, ktl: true, lf: true, calculatedAt: true, sourceKey: true, taskId: true },
+      orderBy: { calculatedAt: 'asc' },
+    })) ?? [];
+    if (rows.length === 0) return new Map();
+
+    const series = replayDailyPmc(
+      rows.map((r) => ({
+        calculatedAt: r.calculatedAt,
+        lss: this.normalizeTenScale(r.lss),
+        ktl: r.ktl,
+        lf: r.lf,
+        sourceKey: r.sourceKey,
+        taskId: r.taskId,
+      })),
+      { until: asOf },
+    );
+
+    const byDay = new Map<string, { ktl: number; lf: number; lsb: number; mature: boolean }>();
+    series.daily.forEach((day, index) => {
+      const point = series.pmc[index];
+      if (!point) return;
+      const round = (value: number) => Math.round(value * 1000) / 1000;
+      const ktl = round(point.ktl);
+      const lf = round(point.lf);
+      const lsb = round(point.lsb);
+      byDay.set(day.dayKey, {
+        ktl,
+        lf,
+        lsb,
+        mature: classifyLoad({ ktl, lf }).mature,
+      });
+    });
+    return byDay;
+  }
+
+  /** 内部 PMC 点 → display 0-100（与 toDisplayMetrics 同换算/同 clamp） */
+  private pmcPointToDisplay(point: { ktl: number; lf: number; lsb: number }): {
+    ktl: number;
+    lf: number;
+    lsb: number;
+  } {
+    const round = (value: number) => Number((value * 10).toFixed(2));
+    return {
+      ktl: Math.min(100, Math.max(0, round(point.ktl))),
+      lf: Math.min(100, Math.max(0, round(point.lf))),
+      lsb: Math.min(100, Math.max(-100, round(point.lsb))),
+    };
+  }
+
+  /**
    * 学习者级状态 = **PMC 日负荷模型**（跨路径统一）。
    *
    * 与旧实现（按路径 max + 当日课量疲劳加成）的区别：PMC 口径下**负荷就是负荷、与路径无关**，
@@ -1624,12 +1708,23 @@ export class LearningStateService {
       if (!metrics) return null;
       const displayMetrics = this.toDisplayMetrics(metrics);
       if (!this.hasUsableDisplayMetrics(displayMetrics)) return null;
+      // 相对量判据与 /state/warnings 同源：未成熟的适应基座不做「严重疲劳」判定。
+      const verdict = classifyLoad({ ktl: metrics.ktl, lf: metrics.lf });
       return {
         lss: displayMetrics.lss,
         ktl: displayMetrics.ktl,
         lf: displayMetrics.lf,
         lsb: displayMetrics.lsb,
         updatedAt: metrics.timestamp.toISOString(),
+        mature: verdict.mature,
+        verdict: {
+          form: verdict.form,
+          acwr: verdict.acwr,
+          fatigueRisk: verdict.fatigueRisk,
+          pacing: verdict.pacing,
+          imbalanced: verdict.imbalanced,
+          mature: verdict.mature,
+        },
       };
     } catch (error) {
       logger.error('获取当前学习状态失败:', error);
@@ -1690,6 +1785,12 @@ export class LearningStateService {
       const actualDays = Math.max(1, Math.floor((windowEnd.getTime() - startDate.getTime()) / DAY_BOUNDARY_DAY_MS) + 1);
       const currentState = await this.getCurrentState(userId);
       const latestMetricBeforeWindow = await this.getLatestCommittedMetricBefore(userId, startDate);
+      // 趋势与 /state/current 必须同口径（PMC 逐日重放）。asOf 取窗口末日 **末刻**，
+      // 否则 `calculatedAt <= startOfDay` 会把末日当天的课排除在重放之外。
+      const pmcByDay = await this.derivePmcDailySeries(
+        userId,
+        new Date(windowEnd.getTime() + DAY_BOUNDARY_DAY_MS - 1)
+      );
 
       const metricsByDay = new Map<string, typeof metrics>();
       for (const metric of metrics) {
@@ -1708,10 +1809,25 @@ export class LearningStateService {
         const currentDate = new Date(startOfDay(new Date(startDate.getTime() + i * DAY_BOUNDARY_DAY_MS)).getTime() + 12 * 3600 * 1000);
         const key = dayKeyOf(currentDate);
         const dayMetrics = metricsByDay.get(key) || [];
+        const pmcPoint = pmcByDay.get(key);
+        const pmcDisplay = pmcPoint ? this.pmcPointToDisplay(pmcPoint) : null;
 
         if (dayMetrics.length === 0) {
-          if (!lastKnownMetric) {
+          if (!pmcPoint && !lastKnownMetric) {
             trends.push({ date: new Date(currentDate), lss: null, ktl: null, lf: null, lsb: null });
+            continue;
+          }
+
+          if (!lastKnownMetric) {
+            // 窗口前无历史、但 PMC 已从窗口内首日重放出来：仍按 PMC 给值（lss 无当日课，留空）。
+            trends.push({
+              date: new Date(currentDate),
+              lss: null,
+              ktl: pmcDisplay?.ktl ?? null,
+              lf: pmcDisplay?.lf ?? null,
+              lsb: pmcDisplay?.lsb ?? null,
+              mature: pmcPoint?.mature,
+            });
             continue;
           }
 
@@ -1719,12 +1835,17 @@ export class LearningStateService {
             ? currentState
             : this.restoreMetrics(lastKnownMetric, currentDate);
           const displayMetric = this.toDisplayMetrics(restoredMetric);
+          // 日负荷/疲劳/平衡统一读 PMC；LSS 保持原「最近一节课自然衰减」语义（瞬时压力的展示值）。
           trends.push({
             date: new Date(currentDate),
             lss: displayMetric.lss,
-            ktl: displayMetric.ktl,
-            lf: displayMetric.lf,
-            lsb: displayMetric.lsb,
+            ktl: pmcDisplay?.ktl ?? displayMetric.ktl,
+            lf: pmcDisplay?.lf ?? displayMetric.lf,
+            lsb: pmcDisplay?.lsb ?? displayMetric.lsb,
+            mature: pmcPoint?.mature ?? classifyLoad({
+              ktl: Number(restoredMetric.ktl),
+              lf: Number(restoredMetric.lf),
+            }).mature,
           });
           continue;
         }
@@ -1744,9 +1865,12 @@ export class LearningStateService {
         trends.push({
           date: new Date(currentDate),
           lss: avgLss,
-          ktl: lastMetric?.ktl ?? null,
-          lf: lastMetric?.lf ?? null,
-          lsb: lastMetric?.lsb ?? null,
+          ktl: pmcDisplay?.ktl ?? lastMetric?.ktl ?? null,
+          lf: pmcDisplay?.lf ?? lastMetric?.lf ?? null,
+          lsb: pmcDisplay?.lsb ?? lastMetric?.lsb ?? null,
+          mature: pmcPoint?.mature ?? (lastMetric
+            ? classifyLoad({ ktl: Number(lastMetric.ktl) / 10, lf: Number(lastMetric.lf) / 10 }).mature
+            : undefined),
         });
       }
 
@@ -1769,143 +1893,10 @@ export class LearningStateService {
 
   /**
    * 生成学习建议（显示层 4 分类：压力/状态/知识增长/时长）
+   * 纯逻辑已抽到 learning-state-suggestion.ts（服务文件受 layering 棘轮约束）。
    */
-  generateDisplaySuggestion(metrics: LearningStateDisplayMetrics): {
-    level: 'critical' | 'warning' | 'normal' | 'optimal';
-    message: string;
-    action: string;
-    categories: {
-      pressure: { status: string; message: string };
-      state: { status: string; message: string };
-      growth: { status: string; message: string };
-      duration: { status: string; message: string };
-    };
-  } {
-    const { lsb, lss, ktl, lf } = metrics;
-
-    // 1. 压力建议（基于LSS）
-    let pressureAdvice: { status: string; message: string };
-    if (lss > 80) {
-      pressureAdvice = {
-        status: 'danger',
-        message: '压力极大，建议暂停学习，休息放松'
-      };
-    } else if (lss > 70) {
-      pressureAdvice = {
-        status: 'warning',
-        message: '压力较大，明天降低难度或减少学习时间'
-      };
-    } else if (lss >= 50) {
-      pressureAdvice = {
-        status: 'normal',
-        message: '压力正常，继续保持'
-      };
-    } else if (lss >= 30) {
-      pressureAdvice = {
-        status: 'info',
-        message: '压力较小，可适当增加挑战'
-      };
-    } else {
-      pressureAdvice = {
-        status: 'success',
-        message: '强度太低，建议增加学习任务量'
-      };
-    }
-
-    // 2. 状态建议（基于LSB）
-    let stateAdvice: { status: string; message: string };
-    let level: 'critical' | 'warning' | 'normal' | 'optimal';
-    let mainMessage: string;
-    let mainAction: string;
-
-    if (lsb < 0) {
-      level = 'critical';
-      stateAdvice = {
-        status: 'danger',
-        message: '疲劳状态，建议强制休息1-2天'
-      };
-      mainMessage = '过度疲劳，建议强制休息';
-      mainAction = '停止所有新任务，复习旧知识或休息1-2天';
-    } else if (lsb < 20) {
-      level = 'warning';
-      stateAdvice = {
-        status: 'warning',
-        message: '状态一般，注意休息，可做轻松复习'
-      };
-      mainMessage = '疲劳较高，建议降低难度';
-      mainAction = '选择简单任务，观看视频教程，避免高强度学习';
-    } else if (lsb < 40) {
-      level = 'normal';
-      stateAdvice = {
-        status: 'normal',
-        message: '正常学习状态，继续当前节奏'
-      };
-      mainMessage = '正常学习状态';
-      mainAction = '继续当前学习节奏，保持稳定';
-    } else {
-      level = 'optimal';
-      stateAdvice = {
-        status: 'success',
-        message: '高效状态，可挑战高难度任务'
-      };
-      mainMessage = '学习状态极佳';
-      mainAction = '尝试项目实践，深入研究，挑战自己';
-    }
-
-    // 3. 知识增长建议（基于KTL）
-    let growthAdvice: { status: string; message: string };
-    if (ktl >= 70) {
-      growthAdvice = {
-        status: 'success',
-        message: '知识掌握优秀，继续保持'
-      };
-    } else if (ktl >= 50) {
-      growthAdvice = {
-        status: 'normal',
-        message: '知识正常增长，持续学习'
-      };
-    } else if (ktl >= 30) {
-      growthAdvice = {
-        status: 'info',
-        message: '知识增长缓慢，需要加强复习和实践'
-      };
-    } else {
-      growthAdvice = {
-        status: 'warning',
-        message: '知识积累较少，建议增加学习投入'
-      };
-    }
-
-    // 4. 时长建议（基于LF，LF高说明近期学习多）
-    let durationAdvice: { status: string; message: string };
-    if (lf > 70) {
-      durationAdvice = {
-        status: 'warning',
-        message: '近期学习强度高，注意劳逸结合'
-      };
-    } else if (lf >= 40) {
-      durationAdvice = {
-        status: 'normal',
-        message: '学习时长合理，注意适当休息'
-      };
-    } else {
-      durationAdvice = {
-        status: 'success',
-        message: '精力充沛，可以适当增加学习时间'
-      };
-    }
-
-    return {
-      level,
-      message: mainMessage,
-      action: mainAction,
-      categories: {
-        pressure: pressureAdvice,
-        state: stateAdvice,
-        growth: growthAdvice,
-        duration: durationAdvice
-      }
-    };
+  generateDisplaySuggestion(metrics: LearningStateDisplayMetrics): LearningStateDisplaySuggestion {
+    return buildDisplaySuggestion(metrics);
   }
 
   /**
