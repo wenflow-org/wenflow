@@ -163,6 +163,7 @@ const EXERCISE_LEAK_PATTERNS: RegExp[] = [
   /(跑一遍|跑一下|跑三行|运行一下)[^。！？\n]{0,14}(结果|打印|输出|贴)/,
   /(先|你)[^。！？\n]{0,4}(自己)?(写|填|答|做|跑)[^。！？\n]{0,8}(再|然后|之后|给我看)/,
   /(捏成|写成|凑成)[^。！？\n]{0,12}(完整|解释句|一句话|整句)/,
+  /(你自己|你来说|自己先|先自己|你先)[^。！？\n]{0,10}(回答|推一推|推一下|推推|算一算|写|说)/,
 ];
 
 export function detectExerciseLeakInReply(reply: string | null | undefined): boolean {
