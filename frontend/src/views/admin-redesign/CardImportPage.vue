@@ -52,7 +52,7 @@
             {{ importing ? '导入中…' : '导入' }}
           </button>
           <span class="ci-format">识别格式：{{ formatHint }}</span>
-          <span v-if="imported" class="mk-link ci-back" role="button" tabindex="0" @click="closeSubPage()">导入完成 · 返回卡墙 →</span>
+          <button v-if="imported" type="button" class="mk-link ci-back" @click="closeSubPage()">导入完成 · 返回卡墙 →</button>
         </div>
       </div>
     </section>

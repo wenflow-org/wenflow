@@ -233,6 +233,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import { onTabRowKeydown } from '@/utils/rovingTablist'
 
 /** 阶段工作区子面板：总览（五阶段全貌，缺省）+ 阶段内两枚子视图（字段路由 / 治理）。
      沙盘契约 2026-10-05 下线（内容被 总览列脚 + 字段旅程 + 字段路由 三处覆盖，
@@ -252,24 +253,8 @@ const paneLabel = computed(() => {
   return SUB_PANES.find((p) => p.id === pane.value)?.label ?? '字段旅程'
 })
 /* 页签键盘契约（审核 #97）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换并移动焦点，
-   兑现 role=tablist/role=tab 的 ARIA tabs 语义。两级页签行（一级=总览+阶段、二级=阶段内子视图）
-   共用一份实现：按各自行内 role=tab 的 DOM 顺序走，选中项由 activate 回调落到状态上。 */
-function onTabRowKeydown(e: KeyboardEvent, activate: (index: number) => void) {
-  const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
-  if (!keys.includes(e.key)) return
-  const row = e.currentTarget as HTMLElement
-  const btns = Array.from(row.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-  const cur = btns.findIndex((b) => b === document.activeElement)
-  if (cur < 0 || !btns.length) return
-  e.preventDefault()
-  const n = btns.length
-  const next = e.key === 'ArrowRight' ? (cur + 1) % n
-    : e.key === 'ArrowLeft' ? (cur - 1 + n) % n
-      : e.key === 'Home' ? 0 : n - 1
-  activate(next)
-  // 切换后焦点跟随新页签（ARIA tabs 惯例）；等 tabindex 更新后再聚焦
-  void nextTick(() => btns[next]?.focus())
-}
+   兑现 role=tablist/role=tab 的 ARIA tabs 语义。实现已抽到 @/utils/rovingTablist，
+   一级（总览+阶段）、二级（阶段内子视图）与其它页面的页签行共用同一份。 */
 function onTopTabKeydown(e: KeyboardEvent) {
   onTabRowKeydown(e, (i) => {
     if (i === 0) goOverview()

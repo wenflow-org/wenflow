@@ -880,7 +880,13 @@ async function refreshRollbackAvailability() {
 
 async function confirmRollback() {
   if (rollingBack.value) return;
-  if (!window.confirm('回退到最近一次调整前的安排？已开始的课堂进度不会被倒退，重排后新增的任务会被移除。')) return;
+  // 与全站一致：走设计内的确认弹层（焦点管理/Esc/busy 防重），不用原生 window.confirm
+  const ok = await askConfirm({
+    title: '回退本次调整',
+    message: '回退到最近一次调整前的安排？已开始的课堂进度不会被倒退，重排后新增的任务会被移除。',
+    confirmText: '回退'
+  });
+  if (!ok) return;
   rollingBack.value = true;
   try {
     const r = await learningAPI.rollbackPathReplan(pathId.value);

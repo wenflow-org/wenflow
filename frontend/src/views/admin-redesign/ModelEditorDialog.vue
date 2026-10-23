@@ -4,8 +4,8 @@
        备用链（必须是真实存在的模型）、单价。前端先拦一遍，后端再拦一次并回吐人话原因。
        「模型 ID」只在新增时可填：它是路由与被引用配置的键，改名等于换模型（后端也会拒）。 -->
   <Teleport v-if="open" to="body">
-    <div class="mk-modal">
-      <div class="mk-modal__panel mk-modal__panel--wide med-modal" role="dialog" aria-label="模型设置">
+    <div ref="maskRef" class="mk-modal">
+      <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide med-modal" role="dialog" aria-label="模型设置">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ isCreate ? '添加模型' : `模型设置 · ${form.id}` }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -128,6 +128,8 @@
 import { computed, reactive, ref } from 'vue'
 import { adminModelProvidersApi } from '@/api/adminApi'
 import { errMsg } from './live'
+import { useEscape } from './useEscape'
+import { useMaskClose, useOverlay } from './useOverlay'
 
 export interface ModelLike {
   id: string
@@ -152,6 +154,8 @@ const busy = ref(false)
 const error = ref('')
 const isCreate = ref(true)
 const providerId = ref('')
+const maskRef = ref<HTMLElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
 const pickedFallbacks = ref<string[]>([])
 
 const form = reactive({
@@ -213,6 +217,10 @@ function close(): void {
   if (busy.value) return
   open.value = false
 }
+
+useEscape(() => open.value, close)
+useOverlay(open, panelRef)
+useMaskClose(maskRef, close)
 
 /** 空字符串/NaN 一律当「没填」：清空输入框要能表达「删除这个限额」，而不是塞 0（会被后端拒） */
 function numOrNull(value: number | null): number | null {

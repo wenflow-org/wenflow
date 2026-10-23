@@ -58,7 +58,7 @@
              一屏只展开一段，避免长表单把所有字段摊成一条竖线；导航上的副文就是各段
              当前生效值，切段前也能看到全貌。≤900px 导航折成横向可滚动条。 -->
         <div class="sdp-shell">
-          <nav class="sdp-nav" role="tablist" aria-label="运行时配置分节">
+          <nav class="sdp-nav" role="tablist" aria-label="运行时配置分节" @keydown="onNavKeydown">
             <button
               v-for="item in runtimeNav"
               :key="item.key"
@@ -69,6 +69,7 @@
               :class="{ 'is-on': runtimeSection === item.key }"
               :aria-selected="runtimeSection === item.key"
               :aria-controls="`sdp-panel-${item.key}`"
+              :tabindex="runtimeSection === item.key ? 0 : -1"
               @click="runtimeSection = item.key"
             >
               <span class="sdp-nav__name">{{ item.label }}</span>
@@ -292,6 +293,7 @@ import { errText, fmtMs, callParamSourceLabel } from './sdp-shared'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
+import { onTabRowKeydown } from '@/utils/rovingTablist'
 
 // 模型目录候选（File-as-Truth llm-providers.json）：模型与备用模型共用一个可选择器；
 // 加载失败静默降级为空目录（仍可按输入提交别名 / 注册表外 id，不影响保存）
@@ -381,6 +383,14 @@ const probeResult = ref<ProbeResult | null>(null)
    一屏只展开一段，副文直接写各段当前生效值，切段前也能看到全貌。 */
 type RuntimeSection = 'model' | 'params' | 'request' | 'test'
 const runtimeSection = ref<RuntimeSection>('model')
+/** 分节页签：方向键在行内切换并移动焦点（role=tablist 的键盘契约） */
+function onNavKeydown(e: KeyboardEvent): void {
+  onTabRowKeydown(e, (i) => {
+    const item = runtimeNav.value[i]
+    if (item) runtimeSection.value = item.key
+  })
+}
+
 const runtimeNav = computed<Array<{ key: RuntimeSection; label: string; meta: string }>>(() => [
   {
     key: 'model',

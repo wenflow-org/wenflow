@@ -86,6 +86,31 @@ describe('ProviderEditorDialog', () => {
     expect(w.find('[role="dialog"]').exists()).toBe(true)
   })
 
+  it('弹层打开：面板带 aria-modal、锁背景滚动；Esc 关闭并把焦点还回触发按钮', async () => {
+    // 同文件前面的用例可能留下开着未卸载的弹层（body 仍锁滚动），这里先归零再断言
+    document.body.style.overflow = ''
+    const trigger = document.createElement('button')
+    trigger.textContent = '打开供应商设置'
+    document.body.appendChild(trigger)
+    trigger.focus()
+
+    const w = mount(ProviderEditorDialog, mountOptions)
+    w.vm.openWith(null)
+    await flushPromises()
+
+    const panel = w.find('[role="dialog"]')
+    expect(panel.attributes('aria-modal')).toBe('true')
+    expect(document.body.style.overflow).toBe('hidden')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(w.find('[role="dialog"]').exists()).toBe(false)
+    expect(document.body.style.overflow).toBe('')
+    expect(document.activeElement).toBe(trigger)
+    trigger.remove()
+    w.unmount()
+  })
+
   it('平台提供：不显示服务地址与密钥字段（那两项归连接设置）', async () => {
     const w = mount(ProviderEditorDialog, mountOptions)
     w.vm.openWith({ id: 'platform', name: '平台提供', description: null, enabled: true, baseUrl: null, keyHint: null })

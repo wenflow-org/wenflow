@@ -150,6 +150,28 @@ describe('ModelProvidersPanel', () => {
     expect(w.text()).toContain('2 个')
   })
 
+  it('供应商列表按 tab 语义走 roving tabindex：只有选中项占 Tab 位，方向键/Home/End 移动选中', async () => {
+    const w = await mountPanel()
+    const tabs = () => w.findAll('.mpp-item')
+    expect(tabs().map((t) => t.attributes('tabindex'))).toEqual(['0', '-1'])
+
+    await w.find('.mpp-list').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(w.find('.mpp-item--on').text()).toContain('Acme 网关')
+    expect(tabs().map((t) => t.attributes('tabindex'))).toEqual(['-1', '0'])
+
+    // 末尾再按下越界回到第一项（循环），Home 直接回第一项
+    await w.find('.mpp-list').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(w.find('.mpp-item--on').text()).toContain('平台')
+    await w.find('.mpp-list').trigger('keydown', { key: 'End' })
+    await flushPromises()
+    expect(w.find('.mpp-item--on').text()).toContain('Acme 网关')
+    await w.find('.mpp-list').trigger('keydown', { key: 'Home' })
+    await flushPromises()
+    expect(w.find('.mpp-item--on').text()).toContain('平台')
+  })
+
   it('平台详情是二级页签：模型 / 连接 / 基础设施 / 生成参数；自定义供应商没有全局页签', async () => {
     const w = mount(ModelProvidersPanel, {
       props: {},

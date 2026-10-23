@@ -44,7 +44,7 @@
 
     <div v-else class="mpp-body">
       <!-- 左：供应商列表（平铺一份清单，平台通道在最前；不再按来历分组） -->
-      <aside class="mpp-list" role="tablist" aria-label="模型供应商">
+      <aside class="mpp-list" role="tablist" aria-label="模型供应商" @keydown="onTablistKeydown">
         <div
           v-for="p in orderedProviders"
           :key="p.id"
@@ -52,7 +52,8 @@
           :class="{ 'mpp-item--on': p.id === selectedId }"
           role="tab"
           :aria-selected="p.id === selectedId"
-          tabindex="0"
+          :data-provider="p.id"
+          :tabindex="p.id === selectedId ? 0 : -1"
           @click="select(p.id)"
           @keydown.enter.prevent="select(p.id)"
           @keydown.space.prevent="select(p.id)"
@@ -285,7 +286,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -450,6 +451,25 @@ function priceTitle(m: ModelLike): string {
   const cached = p!.cachedInputPer1M != null ? ` / 缓存 ${p!.cachedInputPer1M}` : ''
   return `单价 入 ${p!.inputPer1M ?? '—'}${cached} / 出 ${p!.outputPer1M ?? '—'}（USD / 1M tokens，只影响成本分析）`
 }
+/** 列表是一组 role=tab：按 WAI-ARIA 走 roving tabindex + 方向键，避免 N 个供应商占 N 个 Tab 位 */
+function onTablistKeydown(e: KeyboardEvent): void {
+  const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  const items = orderedProviders.value
+  if (!items.length) return
+  e.preventDefault()
+  const cur = items.findIndex((p) => p.id === selectedId.value)
+  const next = e.key === 'Home' ? 0
+    : e.key === 'End' ? items.length - 1
+      : e.key === 'ArrowDown' ? (cur < 0 ? 0 : (cur + 1) % items.length)
+        : (cur < 0 ? items.length - 1 : (cur - 1 + items.length) % items.length)
+  select(items[next].id)
+  nextTick(() => {
+    const host = e.currentTarget as HTMLElement | null
+    host?.querySelector<HTMLElement>(`[data-provider="${items[next].id}"]`)?.focus()
+  })
+}
+
 function select(id: string): void {
   selectedId.value = id
   keyDraft.value = ''
