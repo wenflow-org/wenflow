@@ -58,10 +58,13 @@ function buildAgentNameMap(): Record<string, string> {
 const agentNameMap = buildAgentNameMap();
 
 export function agentDisplayName(agentId: string): string {
-  const known = agentNameMap[agentId];
+  /* 调用日志里的 skillId 前缀不统一（同库实测既有 `skill:teaching-turn` 也有裸
+     `teaching-turn`），而 manifest 的键一律带 `skill:`。两种都试一次，否则成本页会对
+     一半 Skill 印内部 id（2026-10-23 运营视角走查）。 */
+  const bare = agentId.replace(/^skill:/, '');
+  const known = agentNameMap[agentId] || agentNameMap[`skill:${bare}`];
   if (known) return known;
-  if (agentId.startsWith('skill:')) return agentId.slice(6);
-  return agentId;
+  return bare;
 }
 
 /** 解析天数参数：默认 7，限 1-90 */

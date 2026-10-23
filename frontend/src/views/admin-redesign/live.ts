@@ -787,6 +787,16 @@ export interface LiveSkillProfile {
 export const liveSkillProfiles = ref<LiveSkillProfile[]>([])
 /** 外挂能力 Skill 档案（主目录排除，但抽屉/外挂页需要名称等基本信息） */
 export const liveExtraProfiles = ref<LiveSkillProfile[]>([])
+/** Skill id → 目录里的中文显示名（2026-10-23 运营视角：总览/成本页此前直接印
+    teaching-turn、virtual-learner-goal-dialogue-simulator 这类内部 id）。
+    目录未加载或未登记时回落 id 本身——宁可见旧读法，也不留空白。 */
+export function skillDisplayName(idOrAgentId: string): string {
+  const key = String(idOrAgentId || '').replace(/^(?:skill|agent):/, '')
+  if (!key) return ''
+  const hit = liveSkillProfiles.value.find((p) => p.id === key)
+    || liveExtraProfiles.value.find((p) => p.id === key)
+  return hit?.name && hit.name !== key ? hit.name : key
+}
 /** Skill 目录统计时间窗口（默认 7d，历史失败不永久红点） */
 export const liveSkillStatsRange = ref<'all' | '24h' | '7d' | '30d'>('7d')
 

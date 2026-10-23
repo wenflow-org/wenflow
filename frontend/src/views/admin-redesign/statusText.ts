@@ -560,7 +560,15 @@ const METHOD_PATH_ACTION_RULES: Array<{ method: string; re: RegExp; name: string
   { method: 'PUT', re: /\/virtual-learners\/[^/]+$/, name: '更新虚拟画像' },
   { method: 'PATCH', re: /\/virtual-learners\/[^/]+$/, name: '更新虚拟画像' },
   { method: 'DELETE', re: /\/announcements\/[^/]+$/, name: '删除公告' },
-  { method: 'PUT', re: /\/announcements\/[^/]+$/, name: '更新公告' }
+  { method: 'PUT', re: /\/announcements\/[^/]+$/, name: '更新公告' },
+  /* 管理侧写入（2026-10-23 运营视角）：这几类老审计行的 action 存的是原始
+     `METHOD /api/admin/...`，动作列此前直接印接口路径（/api/admin/api-config · PUT）。
+     频次来自本机审计库实测：字段路由、Prompt 字段、Skill 试跑、模型接入保存。 */
+  { method: 'PUT', re: /\/api-config$/, name: '修改模型接入配置' },
+  { method: 'PATCH', re: /\/field-routings\/routings\//, name: '修改字段路由' },
+  { method: 'PATCH', re: /\/prompt-lab\/core\//, name: '修改 Prompt 字段' },
+  { method: 'POST', re: /\/skills\/[^/]+\/test$/, name: '测试 Skill' },
+  { method: 'POST', re: /\/api-config\/test(-model)?$/, name: '测试模型连通性' }
 ]
 
 export function pathActionText(path: string | null | undefined, method?: string | null): string {

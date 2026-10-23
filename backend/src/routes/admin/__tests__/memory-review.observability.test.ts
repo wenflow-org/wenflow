@@ -164,9 +164,16 @@ describe('权限', () => {
 })
 
 describe('总览', () => {
-  it('按痕迹倒序 + 到期口径 + 审计汇总 + 排除虚拟学习者 + 碎片率口径', async () => {
+  it('按痕迹倒序 + 到期口径 + 审计汇总 + 真实视角排除虚拟学习者与测试账号 + 碎片率口径', async () => {
     usersFindMany
-      .mockResolvedValueOnce([{ id: 'virtual-1' }])
+      // 第 1 次：测试账号扫描（真实视角的 notIn 清单；虚拟学习者也在其中）
+      .mockResolvedValueOnce([
+        { id: 'virtual-1', name: '虚拟甲', email: 'virtual_a@test.local', isVirtualLearner: true },
+        { id: 'test-1', name: 'e2e_long_1', email: 'e2e_long_1@wenflow.local', isVirtualLearner: false },
+        { id: 'u1', name: '小明', email: 'a@b.c', isVirtualLearner: false },
+        { id: 'u2', name: '小红', email: 'd@e.f', isVirtualLearner: false },
+      ])
+      // 第 2 次：展示行
       .mockResolvedValueOnce([
         { id: 'u1', name: '小明', email: 'a@b.c', isVirtualLearner: false },
         { id: 'u2', name: '小红', email: 'd@e.f', isVirtualLearner: false },
@@ -201,8 +208,8 @@ describe('总览', () => {
     const dueCall = tracesGroupBy.mock.calls[1][0]
     expect(dueCall.where.extractionCount).toEqual({ gt: 0 })
     expect(dueCall.where.dueAt.lte).toBeInstanceOf(Date)
-    // 默认排除虚拟学习者
-    expect(tracesGroupBy.mock.calls[0][0].where.userId).toEqual({ notIn: ['virtual-1'] })
+    // 真实视角排除清单＝虚拟学习者 + 测试账号（判据同源 findTestAccountUserIds）
+    expect(tracesGroupBy.mock.calls[0][0].where.userId).toEqual({ notIn: ['virtual-1', 'test-1'] })
   })
 })
 

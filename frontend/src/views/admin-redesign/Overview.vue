@@ -194,7 +194,7 @@
               @keydown.space.self.prevent="openSubPage('skill', skillIdOf(s.agentId))"
             >
               <span class="rankrow__idx">{{ i + 1 }}</span>
-              <span class="rankrow__grow mono">{{ skillIdOf(s.agentId) }}</span>
+              <span class="rankrow__grow" :title="skillIdOf(s.agentId)">{{ skillDisplayName(s.agentId) }}</span>
               <!-- 占比条（mk-minibar 共享原语）：名次数字只给序，条给「梯队差距」一眼可读；
                    无金银铜——排序徽章是装饰不编码信息 -->
               <span class="mk-minibar rankrow__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: topBarPct(Number(s.calls)) }"></i></span>
@@ -336,7 +336,7 @@ import {
   liveVirtualRunStats, liveVirtualStatsError, liveVirtualStatsLoaded, liveVirtualStatsLoading,
   liveVirtualSessionStats, liveAutopilotConcurrency, liveFailures,
   retryLiveVirtualStats, loadLiveData,
-  liveIncludeVirtual,
+  liveIncludeVirtual, skillDisplayName,
   recentActivityText, type LiveOverviewFull
 } from './live';
 import OvBars from './OvBars.vue';
@@ -870,20 +870,24 @@ const feedRows = computed<FeedView[]>(() => {
     const last = out[out.length - 1];
     // 「执行失败：来源（类别）」解析：捕获 1=来源、2=类别（feedRows 折叠与 desc 兜底共用此口径）
     const m = /^执行失败：(.+)（(.+)）$/.exec(f.text);
+    /* 来源名走目录里的中文名（2026-10-23 运营视角）：live.ts 的原文是内部 Skill id，
+       运营读不出 goal-conversation 是什么；括注里的类别保持原样 */
+    const text = m ? `执行失败：${skillDisplayName(f.agentId || m[1])}（${m[2]}）` : f.text;
     if (f.tone === 'bad' && m && last && last.tone === 'bad' && last.count > 0 && last.text.startsWith('执行失败：') && last.desc.startsWith('Skill · ')) {
       // 同构坏消息追加来源（desc 形如「Skill · a、b」）；首条 desc 的单名改组名
       last.count += 1;
       // 来源名：agentId 优先；缺源时 live.ts 在标题里写「未知节点」占位，该占位不进来源清单
-      const name = f.agentId || (m[1] !== '未知节点' ? m[1] : '');
+      const rawName = f.agentId || (m[1] !== '未知节点' ? m[1] : '');
+      const name = rawName ? skillDisplayName(rawName) : '';
       if (name && !last.desc.includes(name)) last.desc = `${last.desc}、${name}`;
       continue;
     }
-    out.push({ time: f.time, text: f.text, desc: feedDesc(f), tone: f.tone, errorCategory: f.errorCategory, count: 1 });
+    out.push({ time: f.time, text, desc: feedDesc(f), tone: f.tone, errorCategory: f.errorCategory, count: 1 });
   }
   return out.slice(0, 12);
 });
 function feedDesc(f: BriefData['feed'][number]): string {
-  if (f.agentId) return `Skill · ${f.agentId}`
+  if (f.agentId) return `Skill · ${skillDisplayName(f.agentId)}`
   // 失败类别不再回填副行（2026-10-04 全站评审 P3）：标题括注「（调用方中止）」已把类别说了一次，
   // 副行「失败类别 · 调用方中止」属同屏双写——类别只在标题出现一次；副行回退可点提示
   return ''
@@ -956,10 +960,12 @@ const todoItems = computed<TodoItem[]>(() => {
     });
   }
   for (const a of effectiveActions.value) {
+    // 事项标题里带内部 Skill id（live.ts 原文 `${agentId} 近 7 天失败…`）：换成目录中文名
+    const text = a.agentId ? a.text.replace(a.agentId, skillDisplayName(a.agentId)) : a.text
     items.push({
       key: `a-${a.agentId}-${a.text}`,
-      text: a.text,
-      main: splitTodoMain(a.text),
+      text,
+      main: splitTodoMain(text),
       tone: a.tone,
       actLabel: '去排查',
       action: () => investigateAgent(a.agentId),

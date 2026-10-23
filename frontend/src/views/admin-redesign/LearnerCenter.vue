@@ -192,7 +192,9 @@
                   <i class="lc-trend__arrow" aria-hidden="true">{{ r.trend === 'up' ? '↗' : r.trend === 'down' ? '↘' : '→' }}</i>
                   {{ trendText(r.trend) }}
                 </span>
-                <span class="mk-badge" :class="fatigueBadge(r.fatigue)" :title="`疲劳度：${r.fatigue}`">{{ r.fatigue }}</span>
+                <!-- 2026-10-23 运营视角：「稳定 低」两个词并排，读者不知道「低」是什么——
+                     给疲劳加回标签，与学习者详情同读法「疲劳：低」 -->
+                <span class="mk-badge" :class="fatigueBadge(r.fatigue)" :title="`疲劳度：${r.fatigue}（高 / 中 / 低）`">疲劳：{{ r.fatigue }}</span>
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('conf')" class="mk-num lc-conf-cell">
@@ -753,7 +755,7 @@ async function recomputeAll() {
 .lc-c-learner { width: 165px; }
 @media (max-width: 1279px) { .lc-c-learner { width: 115px; } }
 .lc-c-progress { width: 140px; }
-.lc-c-status { width: 118px; }
+.lc-c-status { width: 132px; }
 .lc-c-conf { width: 112px; }
 .lc-c-risk { width: 150px; }
 .lc-c-updated { width: 84px; }

@@ -88,17 +88,20 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
-  it('能力表：一行一组，成员 Skill id 可见；降级行为只在行悬停里，页面上不再有解释条', async () => {
+  it('能力表：一行一组，成员 Skill 显示中文名、内部 id 进悬停；降级行为只在行悬停里', async () => {
     const wrapper = await mountLive();
     const rows = wrapper.findAll('.ac-pi-table tbody tr');
     expect(rows).toHaveLength(4);
     const text = wrapper.text();
-    for (const name of ['联网', '决策', '生图', 'MCP 工具调用']) {
+    for (const name of ['联网', '决策', '生图', 'MCP 工具调用', '网页搜索', '网页抓取']) {
       expect(text).toContain(name);
     }
+    // 2026-10-23 运营视角：chip 上不再并排印内部 id（读作「网页搜索web-search」），id 退到悬停
+    const memberTitles = wrapper.findAll('.ac-pi__member').map((m) => m.attributes('title') || '').join(' | ');
     for (const id of ['web-search', 'web-fetch', 'material-collector', 'decision-gate', 'text-to-image', 'mcp-tool']) {
-      expect(text).toContain(id);
+      expect(memberTitles).toContain(id);
     }
+    expect(text).not.toContain('web-search');
     // 2026-10-21 重设计：原「关闭后」段落与「停用插件 ≠ 停用流程」说明条撤出正文，降级行为进行悬停
     expect(text).not.toContain('关闭后');
     expect(text).not.toContain('停用插件 ≠ 停用流程');
@@ -116,7 +119,8 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(webRow!.text()).toContain('已单独配置');
     // 未单独配置的成员不再逐条挂徽章（与组级重复），状态进 chip 悬停
     const members = webRow!.findAll('.ac-pi__member');
-    expect(members.map((m) => m.find('.ac-pi__member-id').text())).toEqual(['web-search', 'web-fetch', 'material-collector']);
+    expect(members.map((m) => m.text())).toEqual(['网页搜索', '网页抓取', '资料采集']);
+    expect(members[0].attributes('title')).toContain('web-search');
     expect(members[0].attributes('title')).toContain('单独配置的模型路由');
     expect(members[1].attributes('title')).toContain('平台默认路由');
     wrapper.unmount();

@@ -140,6 +140,14 @@ describe('pathActionText（HTTP path → 中文动作，兜底老审计行）', 
     expect(pathActionText('/api/admin/virtual-learners/sessions/s1', 'DELETE')).toBe('删除虚拟会话');
   });
 
+  it('管理侧写入的老审计行不再印接口路径（2026-10-23 运营视角）', () => {
+    expect(pathActionText('/api/admin/api-config', 'PUT')).toBe('修改模型接入配置');
+    expect(pathActionText('/api/admin/field-routings/routings/skill%3Ateaching-turn/control.shouldTriggerPeer', 'PATCH')).toBe('修改字段路由');
+    expect(pathActionText('/api/admin/prompt-lab/core/session-wrapup/field/summary.topicSummary', 'PATCH')).toBe('修改 Prompt 字段');
+    expect(pathActionText('/api/admin/skills/stage-designer/test', 'POST')).toBe('测试 Skill');
+    expect(pathActionText('/api/admin/api-config/test-model', 'POST')).toBe('测试模型连通性');
+  });
+
   it('未命中返回空串（调用方再回退原始 path）', () => {
     expect(pathActionText('/api/admin/whatever')).toBe('');
     expect(pathActionText(null)).toBe('');

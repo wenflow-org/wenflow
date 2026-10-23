@@ -96,6 +96,13 @@ describe('agentDisplayName（manifest 名称映射）', () => {
     expect(agentDisplayName('skill:unknown-skill')).toBe('unknown-skill');
   });
 
+  it('裸 skillId 也能命中 manifest（调用日志前缀不统一）', () => {
+    // 同库既有 `skill:teaching-turn` 也有裸 `teaching-turn`，两者必须同显中文名
+    const withPrefix = agentDisplayName('skill:teaching-turn');
+    expect(agentDisplayName('teaching-turn')).toBe(withPrefix);
+    expect(withPrefix).not.toBe('teaching-turn');
+  });
+
   it('未知 id 原样返回', () => {
     expect(agentDisplayName('random-id')).toBe('random-id');
   });

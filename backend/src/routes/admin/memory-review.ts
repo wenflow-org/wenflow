@@ -172,10 +172,17 @@ router.get('/', async (req, res) => {
       const testUserIds = await findTestAccountUserIds();
       baseWhere = testUserIds.length > 0 ? { userId: { in: testUserIds } } : { userId: { in: ['__none__'] } };
     } else {
-      const virtualIds = includeVirtual
-        ? []
-        : (await listVirtualLearnerIds()).map((row) => row.id);
-      baseWhere = virtualIds.length > 0 ? { userId: { notIn: virtualIds } } : {};
+      /* 真实视角 = 排除虚拟学习者 + 测试/审计账号（2026-10-23 运营走查）：
+         此前只剔除虚拟学习者 id，e2e_/vcheck_ 这类人工测试账号仍留在「真实」里——
+         本机 30 位有记忆痕迹的用户中 26 位是测试账号，读数与列表都不可信。
+         includeVirtual 只放开虚拟学习者（旧口径），测试账号始终不进真实视角。 */
+      const testIds = await findTestAccountUserIds();
+      let excluded = testIds;
+      if (includeVirtual) {
+        const virtualIds = new Set((await listVirtualLearnerIds()).map((row) => row.id));
+        excluded = testIds.filter((id) => !virtualIds.has(id));
+      }
+      baseWhere = excluded.length > 0 ? { userId: { notIn: excluded } } : {};
     }
     const [traceCounts, dueCounts, audits, mergeRecords, unattachedCounts] = await Promise.all([
       groupTraceCountsByUser(baseWhere),

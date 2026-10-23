@@ -951,27 +951,30 @@ const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
    命中模板句时改显行内已有的增量信息（时长优先，缺时长用开始时间；两者皆缺撤副行不硬凑）。
    后端模板句不动，title 保留降级总结原文供排查。 */
 const ABNORMAL_SUMMARY_MARK = '本次会话未正常结束'
+/* 会话列副行：只报运营扫表要的两件事——学科 · 任务类型，异常态用时长/开始时间替代。
+   课后总结（wrapup.summary.topicSummary）是写给学习者的长句（「本节课围绕…」「为你保留了
+   基础总结」），截断到 300px 后既读不全又占行高，2026-10-23 运营视角走查后只留 title 全文。 */
 const tsSubNote = (r: Row): { text: string; title?: string } | null => {
   const summary = String(r.wrapup?.topicSummary || '')
-  if (!summary) return null
-  if (!ABNORMAL_STATUSES.has(r.status) || !summary.includes(ABNORMAL_SUMMARY_MARK)) {
-    return { text: summary, title: summary }
-  }
+  if (!ABNORMAL_STATUSES.has(r.status) || !summary.includes(ABNORMAL_SUMMARY_MARK)) return null
   if (r.duration > 0) return { text: `时长 ${fmtDuration(r.duration)}`, title: '异常会话：此处显示会话时长' }
   if (r.startAt) return { text: `开始于 ${r.startAt}`, title: '异常会话：此处显示开始时间' }
   return null
 }
 
-/** 会话列副行文案（#39 行高并档）：学科 · 任务类型 [+ 总结摘要/异常替代]，全文进 title */
+/** 会话列副行文案（#39 行高并档）：学科 · 任务类型 [+ 异常态替代] */
 function sessionSubText(r: Row): string {
   const base = `${r.subject} · ${taskTypeText(r.taskType)}`
   const note = tsSubNote(r)
   return note ? `${base} · ${note.text}` : base
 }
-/** 会话列副行 title：任务类型原文与摘要全文合并披露（各自长文都保留） */
+/** 会话列副行 title：任务类型原文 + 课后总结全文（副行不再承载学员向长句，全文退到悬停） */
 function sessionSubTitle(r: Row): string | undefined {
-  const parts = [taskTypeTitle(r.taskType), tsSubNote(r)?.title].filter(Boolean)
-  return parts.length ? parts.join('；') : undefined
+  const summary = String(r.wrapup?.topicSummary || '')
+  const parts = [taskTypeTitle(r.taskType), tsSubNote(r)?.title]
+  if (summary && !tsSubNote(r)) parts.push(`课后总结：${summary}`)
+  const kept = parts.filter(Boolean)
+  return kept.length ? kept.join('；') : undefined
 }
 
 /* 异常堆积告警（原页头状态条 mk-status--bad 的同一判据，2026-10-04 状态条退役后迁往

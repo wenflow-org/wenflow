@@ -63,11 +63,10 @@
                     :key="m.id"
                     type="button"
                     class="ac-pi__member"
-                    :title="m.routeTitle"
+                    :title="`${m.name}（${m.id}）：${m.routeTitle}`"
                     @click="openSkillDrawer(m.id)"
                   >
                     <span>{{ m.name }}</span>
-                    <span class="ac-pi__member-id mono">{{ m.id }}</span>
                   </button>
                 </div>
               </td>
@@ -101,9 +100,8 @@
       <div class="ac-mcp" v-if="mcpTools.length">
         <div v-for="t in mcpTools" :key="t.id" class="ac-mcp__row">
           <span class="ac-mcp__dot" :class="t.enabled ? 'is-on' : 'is-off'"></span>
-          <div class="ac-mcp__main">
+          <div class="ac-mcp__main" :title="`${t.name}（${t.id}）`">
             <strong>{{ t.name }}</strong>
-            <span class="ac-mcp__id mono">{{ t.id }}</span>
           </div>
           <span class="ac-mcp__type mono">
             <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
@@ -312,7 +310,10 @@ function pluginRowTitle(p: PluginRow): string {
 /** 环境变量占位符（${ENV_VAR} 未替换）判定：直出原文会误导为真实地址，统一显示「未配置」 */
 const ENV_PLACEHOLDER = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/
 function endpointLabel(endpoint: string): string {
-  return ENV_PLACEHOLDER.test(endpoint) ? '未配置' : endpoint || '—'
+  if (ENV_PLACEHOLDER.test(endpoint)) return '未配置'
+  // 「local」是 MCP 服务的内部取值（本机进程），运营读不出它是什么
+  if (endpoint === 'local') return '本机进程'
+  return endpoint || '—'
 }
 function endpointTitle(endpoint: string): string {
   return ENV_PLACEHOLDER.test(endpoint)
@@ -660,7 +661,7 @@ function goConfig() {
   white-space: nowrap;
 }
 .ac-pi__member:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
-.ac-pi__member-id { color: var(--mk-faint); font-weight: 400; }
+
 .ac-pi__state-cell { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .ac-pi__availability { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
 .ac-pi__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
@@ -697,7 +698,6 @@ function goConfig() {
 .ac-mcp__dot.is-off { background: var(--mk-faint); }
 .ac-mcp__main { display: grid; gap: 1px; min-width: 0; }
 .ac-mcp__main strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ac-mcp__id { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .ac-mcp__type { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .ac-mcp__test { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
@@ -745,22 +745,19 @@ function goConfig() {
   .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 12px 18px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-body); }
-  .ac-mcp__id { font-size: var(--mk-fs-micro); }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
+    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 14px 22px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-micro); }
-  .ac-mcp__id { font-size: var(--mk-fs-micro); }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
+    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .mono { font-size: var(--mk-fs-body); }
   .ac-mcp__row { padding: 16px 26px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-emphasis); }
-  .ac-mcp__id { font-size: var(--mk-fs-micro); }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-body); }
+    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：外挂能力 ================= */
