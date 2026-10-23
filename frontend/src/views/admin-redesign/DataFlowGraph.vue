@@ -1499,7 +1499,11 @@ function stepHue(step: FlowStep): string {
 .dfg-pipe.is-dimmed { opacity: 1; }
 /* 缩放读数（工具栏右端）：定宽 + 等宽数字，比例变化时按钮与左邻元素不跳 */
 .dfg-zoom__val { min-width: 56px; font-variant-numeric: tabular-nums; }
-.dfg-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; }
+.dfg-edges {
+  position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3;
+  /* 同 .orch-odg-svg：别让 main.css 的全局 max-width:100% 把连线层按容器宽度等比缩放 */
+  max-width: none;
+}
 
 .dfg-edges path.is-hot { stroke-dasharray: 5 4; animation: dfg-flow 0.7s linear infinite; }
 @keyframes dfg-flow { to { stroke-dashoffset: -9; } }

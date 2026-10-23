@@ -87,8 +87,8 @@
           <div v-for="(s, i) in stages" :key="s.id" class="orch-odg-col">
             <header class="orch-odg-colhead">
               <span class="orch-odg-no">{{ i + 1 }}</span>
-              <span class="orch-odg-colname">{{ s.name }}</span>
-              <span class="orch-odg-agent mono">{{ s.agentId }}</span>
+              <span class="orch-odg-colname" :title="s.name">{{ s.name }}</span>
+              <span class="orch-odg-agent mono" :title="s.agentId">{{ s.agentId }}</span>
             </header>
             <div class="orch-odg-body">
               <button
@@ -571,6 +571,8 @@ function contractOf(id: string): StageFieldContract {
 
 /** 画布重算：列位置量出后画三次贝塞尔连线（仅箭头；字段明细不在边上渲染，
      见总览卡头注释——边标签曾压住相邻列节点文字，2026-10-04 撤） */
+/** 画布重算：列位置量出后画连线（仅箭头；字段明细不在边上渲染，
+     见总览卡头注释——边标签曾压住相邻列节点文字，2026-10-04 撤） */
 function layoutOrch() {
   const svg = odgSvgEl.value
   const canvas = odgCanvasEl.value
@@ -586,15 +588,28 @@ function layoutOrch() {
   svg.setAttribute('height', String(H))
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
   let out = '<defs><marker id="orchOdgArrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z"/></marker></defs>'
+  /* 锚点 = 阶段头（.orch-odg-colhead）的垂直中线，不再取整列的垂直中点（2026-10-21 用户
+     「线的位置不对 错位」）：列高随 Skill 条数从 148px 到 852px 不等，取列中点会让箭头落在
+     卡片之间的空白里（实测终点停在 2.2 与 2.3 之间、5.5 那一行），看起来既没接上游也没进下游。
+     阶段头是所有列在同一 y 起排的（同 flex 行），锚到它 → 四条线全水平，读作「阶段 1→2→3→4→5」。
+     坐标仍取 offset*（自有 px，不随 zoom 变），阶段头高度用 offsetHeight。 */
   for (let i = 0; i < cols.length - 1; i++) {
     const a = cols[i]
     const b = cols[i + 1]
+    const ha = a.querySelector<HTMLElement>('.orch-odg-colhead')
+    const hb = b.querySelector<HTMLElement>('.orch-odg-colhead')
     const x1 = a.offsetLeft + a.offsetWidth + 2
-    const y1 = a.offsetTop + Math.round(a.offsetHeight / 2)
+    const y1 = a.offsetTop + Math.round((ha ? ha.offsetHeight : a.offsetHeight) / 2)
     const x2 = b.offsetLeft - 6
-    const y2 = b.offsetTop + Math.round(b.offsetHeight / 2)
-    const dx = Math.max(26, Math.round((x2 - x1) / 2))
-    out += `<path class="orch-odg-edge" d="M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}" marker-end="url(#orchOdgArrow)"/>`
+    const y2 = b.offsetTop + Math.round((hb ? hb.offsetHeight : b.offsetHeight) / 2)
+    // 两端同高（阶段头对齐）时画直线；万一将来列头不同高，仍用贝塞尔，避免折角
+    const d = Math.abs(y2 - y1) < 1
+      ? `M${x1} ${y1} L${x2} ${y2}`
+      : (() => {
+        const dx = Math.max(26, Math.round((x2 - x1) / 2))
+        return `M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`
+      })()
+    out += `<path class="orch-odg-edge" d="${d}" marker-end="url(#orchOdgArrow)"/>`
   }
   svg.innerHTML = out
 }
@@ -954,7 +969,14 @@ html[data-theme='dark'] {
   flex: none; margin: auto;
   width: 100%;
 }
-.orch-odg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.orch-odg-svg {
+  position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible;
+  /* 覆盖 main.css 里 img/svg/video/canvas 的全局 max-width:100%（2026-10-21 用户「线的位置
+     不对 错位」的真因）：窄档画布容器只有 770px 宽，而连线 SVG 的语言宽是 1172（= 五列最小宽），
+     max-width 把整张 SVG 等比缩到 65.7% 并按 preserveAspectRatio 垂直居中 → 4 条线整体上移、
+     端点落在卡片之间的空白里。画布本来就靠滚动区承接溢出，SVG 不该被容器夹窄。 */
+  max-width: none;
+}
 .orch-odg-edge { fill: none; stroke: var(--mk-blue, #2f6ae0); stroke-width: 1.6; opacity: 0.85; }
 .orch-odg-svg marker path { fill: var(--mk-blue, #2f6ae0); }
 /* 列宽地板必须显式：flex 项默认 min-width:auto 的内容地板会被列脚 nowrap 的 outs 长串
@@ -974,8 +996,16 @@ html[data-theme='dark'] {
   color: var(--mk-accent-deep, #1f57cc);
   font-size: var(--mk-fs-micro, 12px); font-weight: 700;
 }
-.orch-odg-colname { font-weight: 700; font-size: var(--mk-fs-micro, 12px); color: var(--mk-ink); }
-.orch-odg-agent { margin-left: auto; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
+/* 阶段头必须单行：1440/1080 档 196px 列宽下 agent id 会折成第二行（实测头高 39→59），
+   各列头高不一致 → 连线锚点高低不齐。名称固定、agent id 吃剩余宽度并省略（hover 看全量）。 */
+.orch-odg-colname {
+  font-weight: 700; font-size: var(--mk-fs-micro, 12px); color: var(--mk-ink);
+  flex: 0 0 auto; white-space: nowrap;
+}
+.orch-odg-agent {
+  margin-left: auto; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .orch-odg-body { display: flex; flex-direction: column; gap: 6px; }
 .orch-odg-node {
   display: grid; gap: 1px; width: 100%; padding: 8px 10px; text-align: left;
