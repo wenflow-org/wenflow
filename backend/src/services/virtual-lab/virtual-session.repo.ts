@@ -172,7 +172,24 @@ export function findStaleSessionsForStats(staleBefore: Date) {
   });
 }
 
-/** 运行中口径细分（识别 autopilot=stopped 的「已暂停」） */
+/** 在跑/暂停/停滞判定的输入（2026-10-21）：非终态会话 + autopilot 状态 + 心跳。
+    不再按 status='running' 取——新会话在 goal/path 阶段是 created，却可能正被自动驾驶推进 */
+export function findLiveSessionsByProfiles(profileIds: string[]) {
+  return prisma.virtual_sessions.findMany({
+    where: { virtualProfileId: { in: profileIds }, status: { in: ['created', 'running'] } },
+    select: { id: true, virtualProfileId: true, status: true, stageResults: true, updatedAt: true }
+  });
+}
+
+/** 全量非终态会话（/stats 与列表同口径：running 由 autopilot 状态推导） */
+export function findLiveSessionsAll() {
+  return prisma.virtual_sessions.findMany({
+    where: { status: { in: ['created', 'running'] } },
+    select: { id: true, status: true, stageResults: true, updatedAt: true }
+  });
+}
+
+/** 运行中口径细分（识别 autopilot=stopped 的「已暂停」）——2026-10-21 起仅存量引用，列表改用 live 会话分类 */
 export function findRunningSessionsByProfiles(profileIds: string[]) {
   return prisma.virtual_sessions.findMany({
     where: { virtualProfileId: { in: profileIds }, status: 'running' },

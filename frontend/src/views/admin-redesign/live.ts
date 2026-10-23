@@ -1694,6 +1694,18 @@ export function retryLiveVirtualStats(): Promise<void> {
   return loadLiveVirtualStats()
 }
 
+/**
+ * 只刷新「虚拟学习者」域（2026-10-21）：行内运行/暂停/继续/终止之后要立刻看到状态变化，
+ * 而 loadLiveData 在首屏加载期间会整体跳过（liveLoading 守卫），单域刷新不受这条影响。
+ */
+export async function refreshLiveVirtuals(): Promise<void> {
+  try {
+    await fetchLiveVirtuals()
+  } catch {
+    /* 单域刷新失败不打断交互：列表下一次全量刷新会补上 */
+  }
+}
+
 async function fetchLiveVirtuals(): Promise<void> {
   const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: LIVE_LIST_FULL_LIMIT })
   const body = res.data?.data ?? res.data ?? {}

@@ -343,6 +343,15 @@
                   <button type="button" class="mk-menu__btn" aria-label="更多操作（单步测试 / 在卡库中查看 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：单步测试 / 在卡库中查看 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
                     <!-- 低频诊断：用人设和故事直接跑一次 Prompt 对话（不创建用例、不影响正式会话） -->
+                    <!-- 主按钮是「暂停/继续/终止」时，新开一次运行只能从这里进（否则暂停过的学习者再也开不了新运行） -->
+                    <button
+                      v-if="rowActionOf(s).key !== 'launch' && s.storyCount > 0"
+                      type="button"
+                      class="mk-menu__item"
+                      role="menuitem"
+                      title="新开一次运行：选一个故事再启动一条会话（不影响已有的运行）"
+                      @click="openLaunch(s)"
+                    >新开一次运行</button>
                     <!-- 调试：只跑一次 Prompt，不建会话、不动正式数据 -->
                     <button type="button" class="mk-menu__item" role="menuitem" title="单步测试：用该人设和故事直接跑一次 Prompt 对话，看输出的字段是否符合预期（不创建用例、不影响正式运行）" @click="openPromptTest(s)">单步测试</button>
                     <div class="mk-menu__sep" aria-hidden="true"></div>
@@ -410,7 +419,7 @@ import { computed, ref, reactive, watch, nextTick, onUnmounted } from 'vue'
 import { Filter, Pause, Play, Square } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { openSubPage, intent, isLive } from './store'
-import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats } from './live'
+import { liveVirtuals, refreshLiveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useRowMenu } from './useRowMenu'
 import { pauseAutopilotOf, resumeAutopilotOf, terminateRunsOf } from './virtualRunControl'
@@ -437,7 +446,7 @@ import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import VirtualLearnerBatchCreate from './VirtualLearnerBatchCreate.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
-import type { VirtualLearnerRow as Sample, BatchTask, ActiveRun } from './virtualLearnersTypes'
+import type { VirtualLearnerRow as Sample, BatchTask } from './virtualLearnersTypes'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
@@ -483,30 +492,6 @@ const samples = computed<Sample[]>(() =>
   }))
 )
 
-/* ---------- 「运行状态」列：三档判定用的活跃会话明细 ---------- */
-function activeRunsOf(s: Sample): ActiveRun[] {
-  if (s.activeRuns?.length) return s.activeRuns
-  /* 兼容旧缓存/滚动升级中的旧后端：没有 activeRuns 时用原来的单条口径还原一条，
-     避免徽章与阶段条一起消失（旧行为是 runningCount>0 就画一条）。 */
-  if (s.runningCount > 0 || (s.pausedCount ?? 0) > 0) {
-    const state: 'running' | 'paused' = s.runningCount > 0 ? 'running' : 'paused'
-    const sessionId = state === 'running' ? s.runningSessionIds[0] : s.pausedSessionIds?.[0]
-    if (sessionId) {
-      return [{
-        sessionId,
-        state,
-        currentStage: s.currentStage,
-        goalReady: !!s.stageProgress?.goalReady,
-        pathReady: !!s.stageProgress?.pathReady,
-        learnStarted: !!s.stageProgress?.learnStarted,
-        taskDone: Number(s.stageProgress?.taskDone) || 0,
-        taskTotal: Number(s.stageProgress?.taskTotal) || 0,
-        stalled: false,
-      }]
-    }
-  }
-  return []
-}
 /** 行主操作：永远是这个状态下的下一步，而不是固定的「运行」 */
 type RowAction = { key: 'launch' | 'pause' | 'resume' | 'terminate'; label: string; title: string; disabled: boolean }
 
@@ -576,7 +561,7 @@ async function onRowAction(s: Sample) {
     } else {
       toast.info(action.key === 'pause' ? '没有可暂停的会话' : '没有可继续的会话')
     }
-    if (result.done || result.failed) void loadLiveData()
+    if (result.done || result.failed) void refreshLiveVirtuals()
   } finally {
     busyId.value = null
   }
@@ -586,16 +571,11 @@ async function onRowAction(s: Sample) {
 type RunPhase = 'running' | 'stalled' | 'stopped'
 
 function runPhaseOf(s: Sample): RunPhase {
-  const running = Number(s.runningCount) || 0
-  const paused = Number(s.pausedCount) || 0
-  const stalled = Number(s.stalledCount) || 0
-  if (running > 0) {
-    /* 有明细以明细为准：全部超时才叫停滞，部分卡住仍算在跑 */
-    const runs = activeRunsOf(s)
-    if (runs.length) return runs.some((r) => r.state === 'running' && !r.stalled) ? 'running' : 'stalled'
-    return stalled >= running ? 'stalled' : 'running'
-  }
-  return paused > 0 || stalled > 0 ? 'stalled' : 'stopped'
+  /* 2026-10-21 口径统一：后端已按 autopilot 状态分好类（runningCount 只含在推进的会话，
+     停滞单独计数），前端不再自己拿 activeRuns 二次判断——两处判断就是两套口径。 */
+  if ((Number(s.runningCount) || 0) > 0) return 'running'
+  if ((Number(s.pausedCount) || 0) > 0 || (Number(s.stalledCount) || 0) > 0) return 'stalled'
+  return 'stopped'
 }
 
 function runPhaseLabel(s: Sample): string {

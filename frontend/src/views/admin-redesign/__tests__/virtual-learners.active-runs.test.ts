@@ -44,6 +44,7 @@ vi.mock('../live', async () => {
     liveCreateVirtual: vi.fn(async () => 'vl-new'),
     liveDeleteVirtual: vi.fn(async () => {}),
     loadLiveData: vi.fn(async () => {}),
+    refreshLiveVirtuals: vi.fn(async () => {}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => String(e),
     shortId: (id: string) => id.slice(0, 8),
@@ -102,7 +103,8 @@ function baseRow(overrides: Partial<VirtualLearnerRow>): VirtualLearnerRow {
 const runningRow = baseRow({
   id: 'p-run',
   name: '在跑的人',
-  runningCount: 2,
+  /* 2026-10-21 口径统一：runningCount 只含在推进的会话，卡住的单独进 stalledCount */
+  runningCount: 1,
   stalledCount: 1,
   runningSessionIds: ['s-new', 's-old'],
   activeRuns: [
@@ -115,7 +117,7 @@ const runningRow = baseRow({
 const stalledRow = baseRow({
   id: 'p-stall',
   name: '停滞的人',
-  runningCount: 1,
+  runningCount: 0,
   stalledCount: 1,
   runningSessionIds: [],
   activeRuns: [
@@ -167,7 +169,7 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     w.unmount();
   });
 
-  it('五档输入落到三档：部分卡住仍运行中，全部卡住/暂停 = 停滞，跑完/没跑过 = 已停止', async () => {
+  it('五档输入落到三档：后端计数即真值——有在推进=运行中，只有卡住/暂停=停滞', async () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
@@ -191,9 +193,9 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    expect(stateOf(w, '在跑的人').attributes('title')).toContain('2 条会话正在运行');
+    expect(stateOf(w, '在跑的人').attributes('title')).toContain('1 条会话正在运行');
     const stall = stateOf(w, '停滞的人').attributes('title')!;
-    expect(stall).toContain('超过回收阈值没有新写入');
+    expect(stall).toContain('超过回收阈值');
     expect(stateOf(w, '暂停的人').attributes('title')).toContain('自动驾驶已暂停');
     expect(stateOf(w, '停过的人').attributes('title')).toContain('当前没有运行中的会话');
     expect(stateOf(w, '没跑过的人').attributes('title')).toBe('还没有运行过');

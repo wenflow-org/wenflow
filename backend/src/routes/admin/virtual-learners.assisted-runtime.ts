@@ -376,7 +376,15 @@ router.post('/:id/start-blackbox-session', async (req: Request, res) => {
       blackboxOperatorId: req.user.userId
     });
     if (!session) return res.status(404).json({ success: false, error: '虚拟用户不存在' });
-    res.json({ success: true, data: session });
+    /* 与 assisted 同口径（2026-10-21）：「运行」= 建会话 + 立刻开跑 */
+    let autopilot: 'started' | 'queued' | 'failed' = 'failed';
+    try {
+      const started = await autopilotService.start(session.id, { target: 'final' });
+      autopilot = started.queued ? 'queued' : 'started';
+    } catch (error) {
+      logger.warn('黑盒会话已创建，但自动驾驶启动失败', { sessionId: session.id, error: (error as Error)?.message });
+    }
+    res.json({ success: true, data: { ...session, autopilot } });
   } catch (error) {
     const status = Number(error?.status) || 500;
     if (status >= 500) logger.error('启动黑盒模拟会话失败:', error);

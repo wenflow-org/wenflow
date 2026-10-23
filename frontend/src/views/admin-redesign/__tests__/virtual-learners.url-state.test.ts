@@ -32,6 +32,7 @@ vi.mock('../live', async () => {
     liveCreateVirtual: vi.fn(async () => 'vl-new'),
     liveDeleteVirtual: vi.fn(async () => {}),
     loadLiveData: vi.fn(async () => {}),
+    refreshLiveVirtuals: vi.fn(async () => {}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => String(e),
     shortId: (id: string) => id.slice(0, 8),

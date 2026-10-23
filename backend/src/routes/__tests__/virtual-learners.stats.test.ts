@@ -76,13 +76,13 @@ describe('GET /stats（虚拟实验运行统计）', () => {
     ]).mockResolvedValueOnce([
       { createdAt: new Date('2026-08-01T00:00:00.000Z'), updatedAt: new Date('2026-08-01T02:00:00.000Z') },
       { createdAt: new Date('2026-08-02T00:00:00.000Z'), updatedAt: new Date('2026-08-02T00:30:00.000Z') }
-    /* F20 口径对齐（2026-10-15）：第 3 次 findMany = 运行中细分；4 条 running 里 1 条
-       autopilot=stopped → running 扣为 3、paused=1（与列表逐画像 runningCount 同式） */
+    /* 2026-10-21 口径统一：第 3 次 findMany = 全部非终态会话（created + running），
+       running/paused 由 autopilot 状态判定——r1/r4 在跑、r2 已暂停、r3 从未开跑 */
     ]).mockResolvedValueOnce([
-      { id: 'r1', stageResults: '{}' },
-      { id: 'r2', stageResults: '{"autopilot":{"status":"stopped"}}' },
-      { id: 'r3', stageResults: null },
-      { id: 'r4', stageResults: '{}' }
+      { id: 'r1', status: 'running', stageResults: '{"autopilot":{"status":"running"}}', updatedAt: new Date() },
+      { id: 'r2', status: 'running', stageResults: '{"autopilot":{"status":"stopped"}}', updatedAt: new Date() },
+      { id: 'r3', status: 'created', stageResults: null, updatedAt: new Date() },
+      { id: 'r4', status: 'created', stageResults: '{"autopilot":{"status":"running"}}', updatedAt: new Date() }
     ])
 
     const handler = getGetHandler('/stats')
@@ -99,7 +99,7 @@ describe('GET /stats（虚拟实验运行统计）', () => {
       where: expect.objectContaining({ status: { in: ['completed', 'failed', 'abandoned'] } })
     }))
     expect(mockSessionsFindMany).toHaveBeenNthCalledWith(3, expect.objectContaining({
-      where: expect.objectContaining({ status: 'running' })
+      where: expect.objectContaining({ status: { in: ['created', 'running'] } })
     }))
     expect(mockUsersFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ OR: expect.any(Array) }) }))
     expect(mockAgentCallLogsCount).toHaveBeenCalledWith(expect.objectContaining({
@@ -111,7 +111,8 @@ describe('GET /stats（虚拟实验运行统计）', () => {
         profileCount: 10,
         totalSessions: 10,
         created: 2,
-        running: 3,
+        // r1/r4 在跑（含 status=created 的那条），r2 暂停，r3 没开跑
+        running: 2,
         paused: 1,
         failed: 3,
         abandoned: 1,
