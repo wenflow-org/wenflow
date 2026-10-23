@@ -1660,6 +1660,15 @@ function normalizeGridSpec(raw: Record<string, unknown>): Record<string, unknown
   }
   // 全空网格 = 一张等待填写的表格图片——用户 2026-10-17 判定"填表做成图片没有意义"，整块丢弃。
   if (filled < 2) return null;
+  // 行标签就是这一行的内容（左侧写"落高 0.45 m"、第一列又写"0.45 m"）= 同一信息写两遍，纯占版面。
+  // 2026-10-23 外审 #3/#5 两例。与其整张丢，不如撤掉重复的行标签，行身份仍由第一格承担。
+  const flat = (s: string) => s.replace(/[\s，,。.：:（）()]/g, '');
+  const dupRows = rowLabels.filter((lab, r) => {
+    const key = lab ? flat(lab) : '';
+    if (!key) return false;
+    return cells.some((c) => c.r === r && flat(String(c.text ?? '')).includes(key));
+  }).length;
+  const keepRowLabels = rowLabels.length > 0 && (rows < 2 || dupRows * 2 < rows);
   const title = toFigureText(raw.title, SPEC.titleMax);
   const note = toFigureText(raw.note, SPEC.noteMax);
   const focus = normalizeFocus(raw.focus, ['row', 'col'], { rows, cols });
@@ -1667,7 +1676,7 @@ function normalizeGridSpec(raw: Record<string, unknown>): Record<string, unknown
     rows,
     cols,
     cells,
-    ...(rowLabels.length ? { rowLabels } : {}),
+    ...(keepRowLabels ? { rowLabels } : {}),
     ...(colLabels.length ? { colLabels } : {}),
     ...(focus ? { focus } : {}),
     ...(title ? { title } : {}),
@@ -1909,6 +1918,21 @@ function normalizeBipartiteSpec(raw: Record<string, unknown>): Record<string, un
     if (edges.length >= SPEC.edgesMax) break;
   }
   if (!edges.length) return null;
+  // 没有任何连线的节点是孤岛：外审 #7/#8/#13/#14 四张二分图里，右列内层列表全悬着，
+  // 学生最该看到的"两个槽位共用同一个内层"一条线都没画。连线才是这类图的信息，孤岛一律剪掉；
+  // 剪完某一侧空了就没有对照关系，整张作废。
+  const used = new Set<string>();
+  for (const e of edges) {
+    used.add(String(e.from));
+    used.add(String(e.to));
+  }
+  const pruneSide = (side: Record<string, unknown>) =>
+    (side.nodes as Array<Record<string, unknown>>).filter((n) => used.has(String(n.id)));
+  const leftKept = pruneSide(left);
+  const rightKept = pruneSide(right);
+  if (!leftKept.length || !rightKept.length) return null;
+  left.nodes = leftKept;
+  right.nodes = rightKept;
   const title = toFigureText(raw.title, SPEC.titleMax);
   const note = toFigureText(raw.note, SPEC.noteMax);
   const width = toBoundedInt(raw.width, 520, 720) || 640;

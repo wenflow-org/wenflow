@@ -74,7 +74,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripFigureNoteWhenAsking, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -900,11 +900,14 @@ export async function processStudentMessage(
   // 位置线图（2026-09-27 双通道重构 Scope B，同一条防答案泄漏硬闸）：
   // 追及/相遇题里"学生自己画位置线"正是练习本体——本轮布置了这类练习就不能给图，给了等于把答案摆出来。
   if (teachingOutput.figure) {
+    // 正文在提问时撤掉图底注：注里常写着"这一栏不变、那一栏随速度变"这种结论，
+    // 而正文刚把同一个问题抛给学生（第 6 批外审 12 张里 4 张的泄漏都由注引起）。
+    const deReviewed = stripFigureNoteWhenAsking(teachingOutput.figure, teachingOutput.reply);
     const wanted = {
-      ...teachingOutput.figure,
+      ...deReviewed,
       // 学科调色板在这里盖章（模型不参与）：同一份 spec 换个学科就是另一套色相/材质，
       // 只影响观感，不改变任何几何与语义。模型自己给了合法 palette 则以它为准。
-      palette: teachingOutput.figure.palette || paletteOfSubject(session.subject),
+      palette: deReviewed.palette || paletteOfSubject(session.subject),
     };
     // 库侧快照只在这条出图分支里取：会话上限、同图型配额、同骨架去重共用一次查询
     const figureGate = await figureGateSnapshot(sessionId, wanted.kind);
@@ -922,6 +925,15 @@ export async function processStudentMessage(
         kind: wanted.kind,
         figureNumbers: collectFigureNumbers(wanted).slice(0, 8),
         replyNumbers: [...collectReplyNumbers(teachingOutput.reply)].slice(0, 8),
+      });
+    } else if (teachingOutput.control?.checkpoint) {
+      // 出题回合不出图（2026-10-23 第五批外审：14 张里 5 张的判词是「老师这一轮让学生自己产出，
+      // 图里已经把答案给出」）。文案层拦不住——模型会在追问句之外顺手把结论画好；
+      // 而「本轮发了检查点」是确定性信号：这一刻学生该动手，不该看见成品图。
+      logger.info('[AITeaching] 本轮发了检查点（学生要自己产出），跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
       });
     } else if (figureRestatesReply(wanted, teachingOutput.reply)) {
       // 「图只是把这段回复抄进框里」不再出图（2026-10-23 外部视觉评审：86% 被判多余）。

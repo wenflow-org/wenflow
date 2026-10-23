@@ -15,6 +15,7 @@ import {
   detectPositionDescription,
   detectStructuralCue,
   detectExerciseLeakInReply,
+  stripFigureNoteWhenAsking,
   generateTeachingVisual,
   hasDanglingFigureReference,
   hasIdenticalVisualPrompt,
@@ -556,6 +557,32 @@ describe('防答案泄漏硬闸门（detectExerciseLeakInReply，2026-09-24 配�
     expect(detectExerciseLeakInReply('这就是整件事的根子——没人记它什么时候从"整袋"变成了"半袋"。')).toBe(false);
     expect(detectExerciseLeakInReply('')).toBe(false);
     expect(detectExerciseLeakInReply(null)).toBe(false);
+  });
+
+  it('让学生整理成品再交（2026-10-23 第五批外审 #4 原句）→ 判真', () => {
+    expect(detectExerciseLeakInReply(
+      '你可以把 0.45 m 和 1.25 m 那两行整理成一张能直接贴进报告的小表。',
+    )).toBe(true);
+    expect(detectExerciseLeakInReply('把这张表贴进报告，明天交。')).toBe(true);
+    expect(detectExerciseLeakInReply('你自己先列一张表，再给我看。')).toBe(true);
+    // 不是布置交付物的普通说法不该误伤
+    expect(detectExerciseLeakInReply('下面这张表是我整理的，你看看哪里对不上。')).toBe(false);
+  });
+});
+
+describe('提问回合撤图底注（stripFigureNoteWhenAsking，2026-10-23 第 6 批外审）', () => {
+  const figure = { kind: 'grid', spec: { rows: 1, cols: 1, note: '竖直一栏完全相同，水平一栏才随速度变' } };
+
+  it('正文在提问、图带结论注 → 只删注，几何保留', () => {
+    const out = stripFigureNoteWhenAsking(figure, '你觉得初速度变大后，竖直方向的节奏变没变？');
+    expect(out.spec).not.toHaveProperty('note');
+    expect(out.kind).toBe('grid');
+  });
+
+  it('正文没提问 / 图本来没有注 → 原样返回', () => {
+    expect(stripFigureNoteWhenAsking(figure, '竖直方向不受影响。')).toEqual(figure);
+    const bare = { kind: 'grid', spec: { rows: 1, cols: 1 } };
+    expect(stripFigureNoteWhenAsking(bare, '对不对？')).toEqual(bare);
   });
 });
 

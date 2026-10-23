@@ -362,6 +362,55 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     expect(bad.figure).toBeUndefined();
   });
 
+  it('bipartite：没有连线的孤岛节点剪掉（外审 #7/#13：内层列表悬空，最该见的共用关系没画）', async () => {
+    const ok = await runWithFigure({
+      kind: 'bipartite',
+      spec: {
+        left: { nodes: [{ id: 'a', label: 'a' }, { id: 'b', label: 'b' }] },
+        right: {
+          nodes: [
+            { id: 'outer', label: '外层列表' },
+            { id: 'inner1', label: '内层 [1,2]' },
+            { id: 'inner2', label: '内层 [3]' },
+          ],
+        },
+        edges: [{ from: 'a', to: 'outer' }, { from: 'b', to: 'outer' }],
+      },
+    });
+    expect(ok.figure.spec.right.nodes).toEqual([{ id: 'outer', label: '外层列表' }]);
+
+    // 剪完一侧为空 = 没有对照关系，整张作废
+    const bad = await runWithFigure({
+      kind: 'bipartite',
+      spec: {
+        left: { nodes: [{ id: 'a', label: 'a' }] },
+        right: { nodes: [{ id: 'x', label: 'x' }, { id: 'y', label: 'y' }] },
+        edges: [{ from: 'a', to: 'x' }],
+      },
+    });
+    expect(bad.figure.spec.right.nodes).toEqual([{ id: 'x', label: 'x' }]);
+  });
+
+  it('grid：行标签把该行内容复写一遍时撤掉标签（外审 #3/#5：同一信息占两列）', async () => {
+    const ok = await runWithFigure({
+      kind: 'grid',
+      spec: {
+        rows: 2,
+        cols: 2,
+        rowLabels: ['落高 0.45 m', '落高 1.25 m'],
+        colLabels: ['落高', '共用时间'],
+        cells: [
+          { r: 0, c: 0, text: '落高 0.45 m' },
+          { r: 0, c: 1, text: '0.30 s' },
+          { r: 1, c: 0, text: '1.25 m' },
+          { r: 1, c: 1, text: '0.50 s' },
+        ],
+      },
+    });
+    expect(ok.figure.spec.rowLabels).toBeUndefined();
+    expect(ok.figure.spec.cells).toHaveLength(4);
+  });
+
   it('board：坐标越界/非法棋子键丢弃；棋子不足两个即丢弃', async () => {
     const ok = await runWithFigure({
       kind: 'board',

@@ -164,6 +164,11 @@ const EXERCISE_LEAK_PATTERNS: RegExp[] = [
   /(先|你)[^。！？\n]{0,4}(自己)?(写|填|答|做|跑)[^。！？\n]{0,8}(再|然后|之后|给我看)/,
   /(捏成|写成|凑成)[^。！？\n]{0,12}(完整|解释句|一句话|整句)/,
   /(你自己|你来说|自己先|先自己|你先)[^。！？\n]{0,10}(回答|推一推|推一下|推推|算一算|写|说)/,
+  // 2026-10-23 第五批外审 #4：老师「可以把 0.45 m 和 1.25 m 那两行整理成一张能直接贴进报告的小表」
+  // → 图把整理好的成品连数值一起给出。凡是让学生「整理成表再贴/交」这类交付物指令，与本轮图同屏即泄题。
+  /(整理|排|列|做|制)成[^。！？\n]{0,12}(表|小表|表格|清单)[^。！？\n]{0,16}(贴|交|放进|写进|附)/,
+  /(贴|写|放)(进|到)(报告|作业|笔记)/,
+  /(自己|你)(先)?(画|列|整理|排)[^。！？\n]{0,10}(表|图|清单)[^。！？\n]{0,10}(再|然后|之后|给|交)/,
 ];
 
 export function detectExerciseLeakInReply(reply: string | null | undefined): boolean {
@@ -642,6 +647,26 @@ export function shouldEmitFigureAmong(existingFigures: unknown[] | null | undefi
     }
   }
   return true;
+}
+
+/**
+ * 本轮正文在提问时，撤掉图下的结论注。
+ *
+ * 2026-10-23 第 5/6 批外审里，好几张"泄题"都不是画错了，而是图底注把答案写全了：
+ * 「竖直一栏完全相同，水平一栏才随速度变」「两个名字汇到同一个外层方框」——
+ * 老师刚让学生自己说这句，注先替他答了。图的几何本身没问题，删注即可。
+ */
+export function stripFigureNoteWhenAsking<T extends { spec?: unknown }>(
+  figure: T,
+  reply: string | null | undefined,
+): T {
+  const text = String(reply ?? '');
+  if (!/[？?]/.test(text)) return figure;
+  const spec = figure?.spec;
+  if (!spec || typeof spec !== 'object' || typeof (spec as { note?: unknown }).note !== 'string') return figure;
+  if (!(spec as { note?: string }).note) return figure;
+  const { note: _dropped, ...rest } = spec as Record<string, unknown>;
+  return { ...figure, spec: rest };
 }
 
 /**
