@@ -105,7 +105,9 @@ function retentionOf(trace: {
 }
 
 /* ---------- 跨用户总览：排序键与「薄弱/平均强度/最近复习」聚合 ---------- */
-const OVERVIEW_SORT_KEYS = ['name', 'traces', 'due', 'weak', 'strength', 'lastReviewed'] as const;
+/* 2026-10-23：归并候选 / 散键 两个读数从 KPI 卡下沉到列表列，排序也走服务端
+   （客户端排只会排当前页，判例见 useTableSort 头注）。 */
+const OVERVIEW_SORT_KEYS = ['name', 'traces', 'due', 'weak', 'proposed', 'scatter', 'strength', 'lastReviewed'] as const;
 type OverviewSortKey = (typeof OVERVIEW_SORT_KEYS)[number];
 function isOverviewSortKey(v: unknown): v is OverviewSortKey {
   return typeof v === 'string' && (OVERVIEW_SORT_KEYS as readonly string[]).includes(v);
@@ -245,7 +247,13 @@ router.get('/', async (req, res) => {
     const needsAggSort = sortKey === 'weak' || sortKey === 'strength' || sortKey === 'lastReviewed';
     const allTraceRows = needsAggSort ? await findTracesForStrengthAgg(allRankedIds) : null;
     const sortAggByUser = allTraceRows ? strengthAggByUser(allTraceRows) : null;
-    const sortValueOf = (row: { userId: string; traces: number; due: number }): string | number | Date | null => {
+    const sortValueOf = (row: {
+      userId: string;
+      traces: number;
+      due: number;
+      audit: { proposed: number } | null;
+      unattachedScatterKeys: number;
+    }): string | number | Date | null => {
       switch (sortKey) {
         case 'name':
           return String(sortNameById?.get(row.userId)?.name || '').trim();
@@ -253,6 +261,10 @@ router.get('/', async (req, res) => {
           return row.traces;
         case 'due':
           return row.due;
+        case 'proposed':
+          return row.audit?.proposed ?? 0;
+        case 'scatter':
+          return row.unattachedScatterKeys ?? 0;
         case 'weak':
           return sortAggByUser?.get(row.userId)?.weak ?? 0;
         case 'strength': {

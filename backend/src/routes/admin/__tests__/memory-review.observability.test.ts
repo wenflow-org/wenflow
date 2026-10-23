@@ -268,6 +268,30 @@ describe('总览排序（2026-10-18：跨用户 5 列缺排序）', () => {
     expect(usersFindMany).toHaveBeenCalledTimes(2)
   })
 
+  it('归并候选 / 散键也可排序（2026-10-23 从 KPI 下沉到列）', async () => {
+    queueBase()
+    usersFindMany.mockResolvedValue([])
+    tracesGroupBy.mockResolvedValueOnce([
+      { userId: 'u1', _count: { _all: 5 } },
+      { userId: 'u2', _count: { _all: 5 } },
+    ])
+    // u2 提案更多；u1 散键更多
+    projectionsFindMany.mockResolvedValue([
+      { userId: 'u1', payload: JSON.stringify(auditPayload), generatedAt: new Date() },
+      {
+        userId: 'u2',
+        payload: JSON.stringify({ ...auditPayload, stats: { ...auditPayload.stats, proposed: 9 } }),
+        generatedAt: new Date(),
+      },
+    ])
+    const byProposed = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'proposed', order: 'desc' } })
+    expect(byProposed.body.data.users.map((r: any) => r.userId)).toEqual(['u2', 'u1'])
+    expect(byProposed.body.data.sort).toEqual({ key: 'proposed', order: 'desc' })
+
+    const byScatter = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'scatter', order: 'desc' } })
+    expect(byScatter.body.data.sort).toEqual({ key: 'scatter', order: 'desc' })
+  })
+
   it('lastReviewed 降序：按最近复习时间排，从未复习的（null）恒在末尾', async () => {
     queueBase()
     usersFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([

@@ -106,12 +106,14 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
   });
 
   /** 2026-10-12 用户走查「怎么双 kpi」：量值五卡 + 碎片率三卡两段栅格并为一条单带 */
-  it('页头 KPI 并为单带：一条栅格 7 卡（5 量值 + 2 治理碎片），不再两段', async () => {
+  it('页头 KPI 并为单带：7→5 卡（归并候选 / 散键下沉到列表列）', async () => {
     const w = await mountWithRows(ROWS);
     const grids = w.findAll('.mk-kpi-grid');
     expect(grids).toHaveLength(1);
     const labels = grids[0].findAll('.mk-kpi__label').map((x) => x.text());
-    expect(labels).toEqual(['用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议', '措辞重复率', '未挂靠散键']);
+    /* 2026-10-23 用户「列的信息就很少，但是 kpi 信息很多」：待归并建议 / 未挂靠散键
+       都能落到具体学习者，改由列表「归并候选」「散键」两列承载；页头只留列表表达不了的读数 */
+    expect(labels).toEqual(['用户', '记忆痕迹', '当前到期', '需人工看', '措辞重复率']);
   });
 
   /** 2026-10-22 用户「合并了」：待审队列 = 人审档归并建议 + ambiguous + 散键清理建议
@@ -142,16 +144,16 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(card.find('.mk-kpi__num').text()).toBe('4');
   });
 
-  it('列集拆为七列：待复习只出数字、全表仅强度一条比例条、无关注项显示「无」', async () => {
+  it('列集九列：待复习只出数字、归并候选/散键落到行上、全表仅强度一条比例条', async () => {
     overview.mockResolvedValue({
       data: { data: {
-        totals: { users: 2, traces: 14, due: 6, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 2, applied: 0, deleted: 0 },
+        totals: { users: 2, traces: 14, due: 6, usersWithAudit: 1, proposed: 2, autoApplicable: 0, ambiguous: 2, applied: 0, deleted: 0, fragmentation: { duplicateLabelRatio: 0.1, unattachedKeys: 3 } },
         users: [
-          { userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 4, due: 0, audit: null, weak: 0, avgStrength: null, lastReviewedAt: null },
+          { userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 4, due: 0, audit: null, weak: 0, avgStrength: null, lastReviewedAt: null, unattachedScatterKeys: 0 },
           {
             userId: 'u2', name: '小红', email: null, isVirtualLearner: false, traces: 10, due: 6,
             audit: { mode: 'review', generatedAt: new Date().toISOString(), candidates: 4, proposed: 2, autoApplicable: 0, ambiguous: 2, drops: 0, applied: 0, deleted: 0 },
-            weak: 3, avgStrength: 0.52, lastReviewedAt: new Date().toISOString(),
+            weak: 3, avgStrength: 0.52, lastReviewedAt: new Date().toISOString(), unattachedScatterKeys: 3,
           },
         ],
       } },
@@ -159,7 +161,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     const w = mount(MemoryReviewOverview);
     await flushPromises();
 
-    expect(w.findAll('thead th').map((t) => t.text())).toEqual(['学习者', '记忆痕迹', '待复习', '需关注', '记忆强度', '最近复习', '操作']);
+    expect(w.findAll('thead th').map((t) => t.text())).toEqual(['学习者', '记忆痕迹', '待复习', '需关注', '归并候选', '散键', '记忆强度', '最近复习', '操作']);
 
     const trs = w.findAll('tbody tr');
     expect(trs).toHaveLength(2);
@@ -169,13 +171,22 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     // 全表只有记忆强度列那一条
     expect(trs[0].findAll('.mk-minibar')).toHaveLength(0);
     expect(trs[1].findAll('.mk-minibar')).toHaveLength(1);
-    expect(trs[1].findAll('td')[4].find('.mr__strength-pct').text()).toBe('52%');
+    expect(trs[1].findAll('td')[6].find('.mr__strength-pct').text()).toBe('52%');
     // 需关注列：无事项出「无」，有事项出两枚徽章
     expect(trs[0].findAll('td')[3].text()).toBe('无');
     expect(trs[1].findAll('td')[3].text()).toContain('薄弱 3');
     expect(trs[1].findAll('td')[3].text()).toContain('人工看 2');
+    // 归并候选 / 散键：逐用户读数（原来只住在 KPI 的数字）
+    expect(trs[0].findAll('td')[4].text()).toBe('0');
+    expect(trs[1].findAll('td')[4].text()).toBe('2');
+    expect(trs[0].findAll('td')[5].text()).toBe('0');
+    expect(trs[1].findAll('td')[5].text()).toBe('3');
+    // 页级合计不退场：进列头 title
+    const ths = w.findAll('thead th');
+    expect(ths[4].attributes('title')).toContain('当前视角合计 2 条');
+    expect(ths[5].attributes('title')).toContain('当前视角合计 3 条');
     // 最近复习列独立：从未复习只出状态词
-    expect(trs[0].findAll('td')[5].text()).toBe('未复习');
+    expect(trs[0].findAll('td')[7].text()).toBe('未复习');
     w.unmount();
   });
 

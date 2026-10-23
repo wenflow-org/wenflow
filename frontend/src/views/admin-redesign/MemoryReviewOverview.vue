@@ -115,6 +115,14 @@
                 title="强度跌破 40% 的痕迹数，以及待人工确认的归并候选。点列头排序：降序 = 薄弱痕迹最多的在前"
                 @click="toggleUserSort('weak')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-num mk-th--sortable mr-c-prop" :aria-sort="userSortState('proposed')"
+                :title="`模型给出的同义归并候选数（确认后执行，可回滚）。当前视角合计 ${totals.proposed} 条，其中 ${totals.autoApplicable} 条可自动执行。点列头排序：降序 = 候选最多的在前`"
+                @click="toggleUserSort('proposed')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('proposed')">归并候选<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-num mk-th--sortable mr-c-scatter" :aria-sort="userSortState('scatter')"
+                :title="`自由填写、未关联到标准概念的记忆标识数（只能逐条治理）。当前视角合计 ${totals.fragmentation?.unattachedKeys ?? 0} 条。点列头排序：降序 = 散键最多的在前`"
+                @click="toggleUserSort('scatter')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('scatter')">散键<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable mr-c-strength" :aria-sort="userSortState('strength')"
                 title="有复习记录的痕迹的平均记忆强度，从未复习的用户没有读数（恒排末尾）。点列头排序：升序 = 平均强度最弱的在前"
                 @click="toggleUserSort('strength')"
@@ -157,6 +165,12 @@
                   <span v-if="row.audit?.ambiguous" class="mk-badge mk-badge--sm mk-badge--warn" :title="`${row.audit.ambiguous} 条归并候选需人工确认，不会自动执行`">人工看 {{ row.audit.ambiguous }}</span>
                 </div>
                 <span v-else class="mr__none" title="没有强度跌破 40% 的痕迹，也没有待人工确认的归并候选">无</span>
+              </td>
+              <td class="mk-num" :title="row.proposed ? `${row.proposed} 条同义归并候选待确认` : '没有待确认的归并候选'">
+                <span :class="{ 'mr__none': !row.proposed }">{{ row.proposed }}</span>
+              </td>
+              <td class="mk-num" :title="row.scatter ? `${row.scatter} 个概念标识未挂靠到标准概念` : '没有未挂靠的散键'">
+                <span :class="{ 'mr__none': !row.scatter }">{{ row.scatter }}</span>
               </td>
               <td class="mk-num">
                 <span v-if="row.avgStrength != null" class="mr__strength" title="有强度痕迹的平均记忆强度">
@@ -241,6 +255,10 @@ interface OverviewRow {
   weak: number
   avgStrength: number | null
   lastReviewedAt: string | null
+  /** 模型给出的同义归并候选数（audit.proposed；没跑过归并观察的用户为 0） */
+  proposed: number
+  /** 未挂靠到标准概念的记忆标识数（散键） */
+  scatter: number
 }
 
 /** 碎片率指标（R7 outlet 域契约 D）。字段缺失 → KPI 显 '—'（不把缺失当 0）。 */
@@ -262,7 +280,7 @@ const {
   sortKey: userSortKey,
   sortDir: userSortDir
 } = useTableSort({
-  keys: ['name', 'traces', 'due', 'weak', 'strength', 'lastReviewed'],
+  keys: ['name', 'traces', 'due', 'weak', 'proposed', 'scatter', 'strength', 'lastReviewed'],
   defaultKey: 'due',
   defaultDir: 'desc',
   // 姓名/强度/最近复习首击升序（名字正序、最弱的在前、最久没复习的在前——「最该关注的在前」
@@ -274,6 +292,8 @@ const USER_SORT_LABEL: Record<string, string> = {
   traces: '记忆痕迹',
   due: '待复习',
   weak: '需关注',
+  proposed: '归并候选',
+  scatter: '散键',
   strength: '记忆强度',
   lastReviewed: '最近复习'
 }
@@ -284,7 +304,7 @@ const userSortText = computed(() => {
   const label = USER_SORT_LABEL[key] ?? key
   const dirText = key === 'name'
     ? (order === 'asc' ? '正序' : '倒序')
-    : key === 'due' || key === 'traces' || key === 'weak'
+    : key === 'due' || key === 'traces' || key === 'weak' || key === 'proposed' || key === 'scatter'
       ? (order === 'asc' ? '从少到多' : '从多到少')
       : key === 'strength'
         ? (order === 'asc' ? '从弱到强' : '从强到弱')
@@ -415,7 +435,8 @@ const overviewCards = computed<OverviewCard[]>(() => {
       tone: numTone((reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
       title: '需人工处理的归并待办：同义概念待确认、模糊候选与散键清理建议，不会自动执行'
     },
-    { label: '待归并建议', value: val(t.proposed), tone: numTone(''), title: `模型给出的同义概念候选，其中 ${t.autoApplicable} 条可自动执行（「可自动」指系统有把握且名称足够相似）。执行后保留备份，可回滚。已执行 ${t.applied} 条，已删除 ${t.deleted} 条` }
+    /* 2026-10-23：待归并建议 / 未挂靠散键不再占 KPI 卡——两项都能落到「哪位学习者」，
+       改由列表的「归并候选」「散键」两列承载（合计进列头 title），页头只留列表无法表达的读数 */
   ];
 });
 
@@ -431,7 +452,6 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
   const stateHint = (missing: boolean) =>
     failed ? '取数失败' : pending ? '取数中…' : missing ? '指标未取到' : ''
   const ratio = frag?.duplicateLabelRatio
-  const unattached = frag?.unattachedKeys
   return [
     {
       label: '措辞重复率',
@@ -440,13 +460,6 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
       tone: numTone(!na && ratio != null && ratio >= 0.2 ? 'warn' : ''),
       title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎，达到 20% 时标为需关注。虚拟学习者是否计入随所处视角变化'
     },
-    {
-      label: '未挂靠散键',
-      value: na || unattached == null ? '—' : unattached,
-      hint: stateHint(!frag || unattached == null),
-      tone: numTone(!na && unattached != null && unattached > 0 ? 'warn' : ''),
-      title: '自由填写的、未关联到标准概念的概念标识数量——无法自动收拢，只能通过归并 / 清理建议逐条治理'
-    }
   ];
 });
 
@@ -495,7 +508,13 @@ async function loadOverview() {
     })
     if (seq !== overviewSeq) return
     const body = res.data?.data ?? res.data ?? {}
-    rows.value = Array.isArray(body.users) ? body.users : []
+    /* 2026-10-23 用户「列的信息就很少，但是 kpi 信息很多」：把原来只住在 KPI 的两项
+       （待归并建议 / 未挂靠散键）搬到行上——它们本来就有逐用户读数，只是没接出来。 */
+    rows.value = (Array.isArray(body.users) ? body.users : []).map((u: Record<string, any>) => ({
+      ...u,
+      proposed: Number(u.audit?.proposed ?? 0),
+      scatter: Number(u.unattachedScatterKeys ?? 0)
+    }))
     if (!rows.value.length && userPage.value > 1) {
       userPage.value = 1
       return
@@ -578,6 +597,8 @@ onMounted(async () => {
 .mr-c-traces { width: 96px; }
 .mr-c-due { width: 84px; }
 .mr-c-weak { width: 84px; }
+.mr-c-prop { width: 92px; }
+.mr-c-scatter { width: 76px; }
 .mr-c-strength { width: 150px; }
 .mr-c-last { width: 100px; }
 .mr-c-act { width: 140px; }
