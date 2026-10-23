@@ -1660,6 +1660,16 @@ function normalizeGridSpec(raw: Record<string, unknown>): Record<string, unknown
   }
   // 全空网格 = 一张等待填写的表格图片——用户 2026-10-17 判定"填表做成图片没有意义"，整块丢弃。
   if (filled < 2) return null;
+  // 「把句子塞进格子」不是图，是制表信息（用户 2026-10-23 原话）。
+  // 网格只在承载**可比较的读数**时才是几何：同一列里放两个数值，学生能一眼看出大小/相等/变化。
+  // 实测第 6 批 4 张 grid 里 3 张一个数字都没有（"同一高度下落 / 落点近 / 与 h 无关"），全是文字被排成了表。
+  const numericCells = cells.filter((c) => /\d/.test(String(c.text ?? ''))).length;
+  const proseCells = cells.filter((c) => {
+    const t = String(c.text ?? '');
+    // 带数字的格子（"h = 45 m；v₀y = 0"）是读数或公式，不算散文；不带数字又过长/带句读的才是句子
+    return !/\d/.test(t) && (t.length > 10 || /[，。、；]/.test(t));
+  }).length;
+  if (numericCells < 2 || numericCells * 2 < filled || proseCells > 0) return null;
   // 行标签就是这一行的内容（左侧写"落高 0.45 m"、第一列又写"0.45 m"）= 同一信息写两遍，纯占版面。
   // 2026-10-23 外审 #3/#5 两例。与其整张丢，不如撤掉重复的行标签，行身份仍由第一格承担。
   const flat = (s: string) => s.replace(/[\s，,。.：:（）()]/g, '');

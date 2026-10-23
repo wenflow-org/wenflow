@@ -54,7 +54,7 @@ describe('网格列标题对齐（2026-10-23 外审：缺一个表头会让后�
       rows: 2,
       cols: 3,
       colLabels: ['外层 id(a) vs id(b)', '是否波及 a'],
-      cells: [{ r: 0, c: 0, text: '相同' }, { r: 0, c: 1, text: '相同' }, { r: 0, c: 2, text: '会' }],
+      cells: [{ r: 0, c: 0, text: '3 m/s' }, { r: 0, c: 1, text: '6 m/s' }, { r: 0, c: 2, text: '0.4 s' }],
     });
     expect(out.figure?.kind).toBe('grid');
     expect(out.figure.spec.colLabels).toEqual(['外层 id(a) vs id(b)', '是否波及 a', '']);
@@ -66,7 +66,7 @@ describe('网格列标题对齐（2026-10-23 外审：缺一个表头会让后�
       rows: 2,
       cols: 1,
       rowLabels: ['第一行'],
-      cells: [{ r: 0, c: 0, text: '甲' }, { r: 1, c: 0, text: '乙' }],
+      cells: [{ r: 0, c: 0, text: '45 m' }, { r: 1, c: 0, text: '3 s' }],
     });
     expect(out.figure.spec.rowLabels).toEqual(['第一行', '']);
   });
@@ -232,8 +232,8 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
         rowLabels: ['甲', '乙'],
         colLabels: ['位置', '方向'],
         cells: [
-          { r: 0, c: 0, text: '前面', hl: 'accent' },
-          { r: 0, c: 1, text: '向右' },
+          { r: 0, c: 0, text: '45 m', hl: 'accent' },
+          { r: 0, c: 1, text: '3 s' },
           { r: 1, c: 0, mask: true },
           { r: 1, c: 1, text: '这个格子里的字太长了超过了二十六个字的上限因此这一条应当被丢掉' },
         ],
@@ -241,8 +241,8 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     });
     expect(partly.figure.kind).toBe('grid');
     expect(partly.figure.spec.cells).toEqual([
-      { r: 0, c: 0, text: '前面', hl: 'accent' },
-      { r: 0, c: 1, text: '向右' },
+      { r: 0, c: 0, text: '45 m', hl: 'accent' },
+      { r: 0, c: 1, text: '3 s' },
       { r: 1, c: 0, mask: true },
     ]);
   });
@@ -342,6 +342,47 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
 
     const bad = await runWithFigure({ kind: 'quadrant', spec: { cells: cells.slice(0, 3) } });
     expect(bad.figure).toBeUndefined();
+  });
+
+  it('grid：纯文字表格整张丢弃（用户 2026-10-23「这不叫图，叫制表信息」）', async () => {
+    const prose = await runWithFigure({
+      kind: 'grid',
+      spec: {
+        rows: 2,
+        cols: 3,
+        rowLabels: ['竖直方向', '水平方向'],
+        colLabels: ['初速度小', '中等', '初速度大'],
+        cells: [
+          { r: 0, c: 0, text: '同一高度下落' },
+          { r: 0, c: 1, text: '同一高度下落' },
+          { r: 0, c: 2, text: '同一高度下落' },
+          { r: 1, c: 0, text: '落点近' },
+          { r: 1, c: 1, text: '落点中' },
+          { r: 1, c: 2, text: '落点远' },
+        ],
+      },
+    });
+    expect(prose.figure).toBeUndefined();
+
+    // 同一张表换成可比较的读数 → 保留
+    const numeric = await runWithFigure({
+      kind: 'grid',
+      spec: {
+        rows: 2,
+        cols: 3,
+        rowLabels: ['竖直位移', '水平位移'],
+        colLabels: ['3 m/s', '4 m/s', '6 m/s'],
+        cells: [
+          { r: 0, c: 0, text: '45 m' },
+          { r: 0, c: 1, text: '45 m' },
+          { r: 0, c: 2, text: '45 m' },
+          { r: 1, c: 0, text: '9.0 m' },
+          { r: 1, c: 1, text: '12.0 m' },
+          { r: 1, c: 2, text: '18.0 m' },
+        ],
+      },
+    });
+    expect(numeric.figure.kind).toBe('grid');
   });
 
   it('bipartite：只保留两端存在的连线；没有连线即丢弃', async () => {
@@ -639,8 +680,8 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
         rows: 2,
         cols: 2,
         cells: [
-          { r: 0, c: 0, text: '甲' },
-          { r: 1, c: 1, text: '乙' },
+          { r: 0, c: 0, text: '3 m/s' },
+          { r: 1, c: 1, text: '0.4 s' },
         ],
         focus: { row: 1, col: 1 },
       },
@@ -653,8 +694,8 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
         rows: 2,
         cols: 2,
         cells: [
-          { r: 0, c: 0, text: '甲' },
-          { r: 1, c: 1, text: '乙' },
+          { r: 0, c: 0, text: '3 m/s' },
+          { r: 1, c: 1, text: '0.4 s' },
         ],
         focus: { row: 9, col: 9, side: 'left' },
       },
