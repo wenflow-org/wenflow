@@ -86,6 +86,13 @@ export interface ModelRegistryOverview {
     defaultEvaluationModelResolved: string | null;
     defaultEvaluationModelSource: 'alias' | 'concrete' | 'unset';
   };
+  /** 运行时实际默认（2026-10-24）：平台没配时可能落 env，界面需要说清来源 */
+  runtimeDefaults: {
+    model: string | null;
+    source: 'ui' | 'env' | 'none';
+    reasoningModel: string | null;
+    reasoningSource: 'ui' | 'env' | 'none';
+  };
   fallbackChains: Array<{
     model: string;
     fallbacks: string[];
@@ -357,6 +364,15 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       defaultEvaluationModelConfigured: evaluationModel,
       defaultEvaluationModelResolved: evaluationSelection?.model ?? evaluationModel,
       defaultEvaluationModelSource: evaluationModel ? (evaluationSelection ? 'alias' : 'concrete') : 'unset'
+    },
+    /* 运行时真正用的默认（2026-10-24）：台面上的 defaults 只报「平台配了什么」（unset 就是没配），
+       但运行时还会落 env AI_MODEL / AI_MODEL_REASONING。来源必须能被界面说清，否则
+       「没配默认为什么还有模型」只能靠猜。 */
+    runtimeDefaults: {
+      model: chatSelection?.model ?? defaultModel ?? ((process.env.AI_MODEL || '').trim() || null),
+      source: defaultModel ? 'ui' : ((process.env.AI_MODEL || '').trim() ? 'env' : 'none'),
+      reasoningModel: reasoningSelection?.model ?? reasoningModel ?? ((process.env.AI_MODEL_REASONING || '').trim() || null),
+      reasoningSource: reasoningModel ? 'ui' : ((process.env.AI_MODEL_REASONING || '').trim() ? 'env' : 'none')
     },
     fallbackChains,
     runtime,

@@ -248,6 +248,26 @@ router.post('/bulk-apply', async (req, res) => {
     const endpoint = typeof body.endpoint === 'string' ? normalizeEndpointIdentity(body.endpoint) : '';
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null;
+    /* 2026-10-24：清空模型覆盖（改为跟随平台默认）。与套用模型/通道互斥——
+       同一请求里既清空又设置只会让结果取决于字段顺序，明确拒绝。 */
+    const clearModel = body.clearModel === true;
+    if (clearModel) {
+      const conflicting = [
+        model ? 'model' : '',
+        endpoint ? 'endpoint' : '',
+        apiKey ? 'apiKey' : '',
+        body.paramOverrides !== undefined ? 'paramOverrides' : '',
+        body.fallbackChain !== undefined ? 'fallbackChain' : '',
+        body.tier !== undefined ? 'tier' : '',
+        body.thinkingMode !== undefined ? 'thinkingMode' : '',
+      ].filter(Boolean);
+      if (conflicting.length) {
+        return res.status(400).json({
+          success: false,
+          error: `清空模型覆盖不能同时修改 ${conflicting.join('、')}，请分开提交`,
+        });
+      }
+    }
     if (endpoint) {
       if (!hasValidScheme(endpoint)) {
         return res.status(400).json({ success: false, error: 'endpoint 必须带 http/https scheme' });
@@ -288,7 +308,11 @@ router.post('/bulk-apply', async (req, res) => {
     const after: any[] = [];
     for (const skillId of skillIds) {
       try {
-        const input: any = pickEditableConfig({ ...body, skillIdChecked: true });
+        // 只清模型：其余字段（thinking/超时/覆盖参数/备用链/独立通道）保持原样，
+        // 否则「跟随平台默认」会顺手抹掉行为差异配置。
+        const input: any = clearModel
+          ? { model: null }
+          : pickEditableConfig({ ...body, skillIdChecked: true });
         if (paramOverridesValue !== undefined) input.paramOverrides = paramOverridesValue;
         if (fallbackChainValue !== undefined) input.fallbackChain = fallbackChainValue;
         const saved = await skillModelConfigService.upsert(skillId, input);
@@ -312,7 +336,11 @@ router.post('/bulk-apply', async (req, res) => {
         results,
         warnings: visionWarnings,
       },
-      message: failed.length ? '部分技能套用失败，详见 results' : '批量套用完成',
+      message: failed.length
+        ? '部分技能套用失败，详见 results'
+        : clearModel
+          ? '已清空模型覆盖，改为跟随平台默认'
+          : '批量套用完成',
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

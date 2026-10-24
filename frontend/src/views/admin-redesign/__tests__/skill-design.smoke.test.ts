@@ -427,7 +427,8 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(chips.text()).toContain('逻辑重试');
     // 来源词人话化：后端枚举码不得直接露给运营（挂映射前这里渲染的是 active-prompt）
     expect(chips.text()).toContain('Prompt 文件声明');
-    expect(chips.text()).toContain('路由表');
+    // 2026-10-24：模型来源不再笼统写「路由表」——技能自己配了就叫技能配置，留空才是平台默认
+    expect(chips.text()).toContain('技能配置');
     expect(chips.text()).toContain('未设');   // topP 的 source = none
     expect(chips.text()).not.toContain('active-prompt');
     expect(chips.text()).not.toContain('route-fallback');

@@ -47,9 +47,9 @@
             <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('temperature')}`">T=<b>{{ generationParams?.temperature ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('temperature') }}</em></span>
             <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('topP')}`">topP=<b>{{ generationParams?.topP ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('topP') }}</em></span>
             <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('maxTokens')}`">Max=<b>{{ generationParams?.maxTokens ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('maxTokens') }}</em></span>
-            <span class="sdp-chip" :title="generationParams?.model ? `模型来源：${sourceLabel('model')}` : '按路由表选中，随路由变化'">
+            <span class="sdp-chip" :title="generationParams?.model ? `模型来源：${modelOriginLabel}` : '按路由表选中，随路由变化'">
               模型 <b>{{ generationParams?.model || '继承路由模型' }}</b>
-              <em v-if="generationParams?.model" class="sdp-chip__src">{{ sourceLabel('model') }}</em>
+              <em v-if="generationParams?.model" class="sdp-chip__src">{{ modelOriginLabel }}</em>
             </span>
           </div>
         </div>
@@ -358,6 +358,9 @@ const thinkingLabel = computed(() =>
   rtForm.value.thinkingMode === 'enabled' ? '开启' : rtForm.value.thinkingMode === 'disabled' ? '关闭' : '继承/默认'
 )
 const sourceLabel = (k: string) => callParamSourceLabel(generationParams.value?.sources?.[k])
+/** 模型来源（2026-10-24）：route-fallback 只说「路由表」，看不出是技能覆盖还是平台默认。
+ *  运行时契约：独立配置关掉 / 模型留空 → 继承平台默认。 */
+const modelOriginLabel = computed(() => (rtForm.value.enabled && rtForm.value.model ? '技能配置' : '平台默认'))
 
 /* ---------- 模型测试（model-probe；与 probeChannel 通道探测是两件事） ---------- */
 interface ProbeForm {

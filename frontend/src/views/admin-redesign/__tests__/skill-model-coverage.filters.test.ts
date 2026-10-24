@@ -20,11 +20,12 @@ const ROWS = [
 ]
 
 const getSkillModelCoverage = vi.fn(async () => ({ data: { data: { skills: ROWS } } }))
+const bulkApplyMock = vi.fn(async (_payload: { skillIds: string[]; clearModel?: boolean; endpoint?: string }) => ({ data: { data: { applied: 0, failed: 0, results: [] } } }))
 
 vi.mock('@/api/adminApi', () => ({
   adminSkillsApi: {
     getSkillModelCoverage: (...args: unknown[]) => getSkillModelCoverage(...(args as [])),
-    bulkApplySkillModelConfig: vi.fn(async () => ({ data: { data: { applied: 0, failed: 0, results: [] } } }))
+    bulkApplySkillModelConfig: (...args: Parameters<typeof bulkApplyMock>) => bulkApplyMock(...args)
   },
   adminApiConfigApi: {
     getModelCatalog: vi.fn(async () => ({ data: { data: { models: [] } } }))
@@ -32,8 +33,10 @@ vi.mock('@/api/adminApi', () => ({
 }))
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }))
 
-async function mountCoverage() {
-  const w = mount(SkillModelCoverage)
+async function mountCoverage(props: Record<string, unknown> = {}) {
+  const w = mount(SkillModelCoverage, {
+    props: { platformDefaultModel: 'deepseek-v4.1-flash', platformDefaultReasoningModel: 'deepseek-v4.1-flash', ...props }
+  })
   await flushPromises()
   await flushPromises()
   return w
@@ -51,11 +54,11 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     vi.clearAllMocks()
   })
 
-  it('计数取全量口径：平台默认 / 仅技能模型 / 独立通道 / 有备用模型', async () => {
+  it('计数取全量口径：继承平台默认 / 技能覆盖 / 独立通道 / 有备用模型', async () => {
     const w = await mountCoverage()
     expect(pill(w, '全部')?.text()).toBe('全部4')
-    expect(pill(w, '平台默认')?.text()).toBe('平台默认2')
-    expect(pill(w, '仅技能模型')?.text()).toBe('仅技能模型1')
+    expect(pill(w, '继承平台默认')?.text()).toBe('继承平台默认2')
+    expect(pill(w, '技能覆盖')?.text()).toBe('技能覆盖1')
     expect(pill(w, '独立通道')?.text()).toBe('独立通道1')
     expect(pill(w, '自定义备用模型')?.text()).toBe('自定义备用模型2')
     expect(skillIds(w)).toHaveLength(4)
@@ -67,7 +70,7 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     await pill(w, '独立通道')!.trigger('click')
     expect(skillIds(w)).toEqual(['session-wrapup'])
     expect(w.find('.mk-card__meta').text()).toContain('命中 1 / 共 4')
-    expect(pill(w, '平台默认')?.text()).toBe('平台默认2')
+    expect(pill(w, '继承平台默认')?.text()).toBe('继承平台默认2')
 
     // 叠加搜索：独立通道 ∧ 命中关键字
     await w.find('.mk-filter__input').setValue('agnes')
@@ -111,15 +114,39 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
 
   it('model 单元格只给模型名：chat 档不挂内部枚举，推理档才带中文徽标', async () => {
     const w = await mountCoverage()
-    const cells = w.findAll('.skc__model')
-    const chatCell = cells.find((c) => c.text().includes('deepseek-v4.1-flash'))!
+    const rowOf = (id: string) => w.findAll('tbody tr').find((r) => r.text().includes(id))!
+    const chatCell = rowOf('teaching-turn').find('.skc__model')
     // 2026-10-24 用户「还 chat 上了，没有这种了」：tier 是档位字段，不是模型名后缀
     expect(chatCell.text()).not.toContain('chat')
     expect(chatCell.find('.mk-badge').exists()).toBe(false)
     // 推理档仍要给提示（未配模型时它决定走哪条平台默认链），且用中文
-    const reasoning = cells.filter((c) => c.text().includes('推理'))
-    expect(reasoning).toHaveLength(1)
-    expect(reasoning[0].text()).toContain('未配置')
+    expect(rowOf('path-planner').find('.skc__model').text()).toContain('推理')
+    w.unmount()
+  })
+
+  it('未配模型的技能显示继承到的平台默认并标「继承」（默认不物化成覆盖）', async () => {
+    const w = await mountCoverage({ platformDefaultModel: 'agnes-3.0-flash', platformDefaultReasoningModel: 'deepseek-v4.1-flash' })
+    const cells = w.findAll('.skc__model')
+    const inherited = cells.filter((c) => c.text().includes('继承'))
+    // stage-designer（chat）与 path-planner（reasoning）两行都是继承
+    expect(inherited).toHaveLength(2)
+    expect(inherited[0].text()).toContain('agnes-3.0-flash')
+    // 推理档继承平台推理默认，而不是对话默认
+    expect(inherited[1].text()).toContain('deepseek-v4.1-flash')
+    w.unmount()
+  })
+
+  it('「跟随平台默认」只发 clearModel，不重复写模型/通道', async () => {
+    const w = await mountCoverage()
+    await w.find('thead input[type="checkbox"]').setValue(true)
+    const btn = w.findAll('button').find((b) => b.text() === '跟随平台默认')
+    expect(btn, '批量区应有「跟随平台默认」').toBeTruthy()
+    await btn!.trigger('click')
+    await flushPromises()
+    const payload = bulkApplyMock.mock.calls[0]?.[0] as { skillIds: string[]; clearModel?: boolean; endpoint?: string }
+    expect(payload.clearModel).toBe(true)
+    expect(payload.skillIds).toHaveLength(4)
+    expect(payload.endpoint).toBeUndefined()
     w.unmount()
   })
 })

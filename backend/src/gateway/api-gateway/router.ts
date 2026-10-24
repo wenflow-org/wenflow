@@ -160,6 +160,18 @@ export class APIRouter {
     return selectModelForAlias(model, { overrides: aliasOverrides, requireThinking: true })?.model ?? model;
   }
 
+  /** 推理档技能未单独配模型时的继承值：平台推理默认 → 基础路由模型。
+   *  平台没有配推理默认就保持原来的继承结果，不拿 env 值悄悄改写基础路由。 */
+  private resolveSkillReasoningDefault(
+    platformRecord: { defaultReasoningModel?: string | null } | null,
+    aliasOverrides: Record<string, string[]> | null,
+    inheritedModel: string
+  ): string {
+    const configured = (platformRecord?.defaultReasoningModel || '').trim();
+    if (!configured) return inheritedModel;
+    return this.resolveReasoningModel(configured, aliasOverrides);
+  }
+
   /** platform_api_configs 的别名覆盖（此前为只回显的死字段，现作为别名映射的动态来源）。 */
   private platformAliasOverrides(config: {
     chatModels?: string | null;
@@ -281,13 +293,20 @@ export class APIRouter {
       const platformRecord = await this.getPlatformConfigRecord();
       const overrides = platformRecord ? this.platformAliasOverrides(platformRecord) : null;
       const userModelWins = inheritedUserEndpoint && LEARN_DIALOGUE_SKILLS.has(skillId);
+      // 2026-10-24：推理档此前只在「技能自己写了模型」时生效，未写模型就退回对话默认，
+      // 平台的 defaultReasoningModel 在运行时没有任何消费者。现补上继承分支：
+      // tier=reasoning 且未单独配模型 → 用平台推理默认；平台没配推理默认（或读不到平台行）
+      // 时仍沿用基础路由，不凭空改模型。
+      const reasoningInherited = !config.model && isReasoning && !userModelWins
+        ? this.resolveSkillReasoningDefault(platformRecord, overrides, inheritedRoute.model)
+        : inheritedRoute.model;
       const model = userModelWins
         ? inheritedRoute.model
         : config.model
           ? (isReasoning
             ? this.resolveReasoningModel(config.model, overrides)
             : this.resolveModel(config.model, overrides))
-          : inheritedRoute.model;
+          : reasoningInherited;
 
       return {
         ...inheritedRoute,

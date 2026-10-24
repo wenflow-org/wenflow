@@ -265,6 +265,13 @@ interface ModelRegistryOverviewData {
     defaultEvaluationModelResolved?: string | null
     defaultEvaluationModelSource?: 'alias' | 'concrete' | 'unset'
   }
+  /** 运行时实际默认（含 env 兜底来源）；defaults 只报平台行上配了什么 */
+  runtimeDefaults?: {
+    model: string | null
+    source: 'ui' | 'env' | 'none'
+    reasoningModel: string | null
+    reasoningSource: 'ui' | 'env' | 'none'
+  }
   fallbackChains: Array<{
     model: string
     fallbacks: string[]
@@ -294,7 +301,7 @@ const emit = defineEmits<{
   aliases: [aliases: string[]]
   /** 路由解析结果回传宿主（2026-10-15「所配即所得」）：宿主在三条角色行下展示
    *  「实际生效 / 来源 / 降级备用」，原解析结果表退役 */
-  defaults: [payload: { defaults: ModelRegistryOverviewData['defaults']; models: ModelRegistryOverviewData['models']; runtime?: ModelRegistryOverviewData['runtime'] }]
+  defaults: [payload: { defaults: ModelRegistryOverviewData['defaults']; models: ModelRegistryOverviewData['models']; runtime?: ModelRegistryOverviewData['runtime']; runtimeDefaults?: ModelRegistryOverviewData['runtimeDefaults'] }]
 }>()
 
 const data = ref<ModelRegistryOverviewData | null>(null)
@@ -383,7 +390,12 @@ async function refresh(force = false): Promise<void> {
     emit('aliases', (data.value?.aliases ?? []).map((a) => a.alias).filter(Boolean))
     // 路由解析结果回传宿主（「所配即所得」行内展示；即使只渲染 aliases 切片也照发——数据同源）
     if (data.value) {
-      emit('defaults', { defaults: data.value.defaults, models: data.value.models, runtime: data.value.runtime })
+      emit('defaults', {
+        defaults: data.value.defaults,
+        models: data.value.models,
+        runtime: data.value.runtime,
+        runtimeDefaults: data.value.runtimeDefaults
+      })
     }
   } catch (error: unknown) {
     failed.value = true

@@ -21,6 +21,14 @@
 
 > **2026-09-24 对账**：上述三个缺口已全部闭环（能力注册表 + 预算分离 = P0；maxTokens 语义 = P0；降级/冷却 = P1）。本节保留为写作时的动机记录。
 
+> **2026-10-24 现状补记（默认模型不再物化）**
+> - 平台默认模型只认 `platform_api_configs.defaultModel`（推理档 `defaultReasoningModel`）；文件 `defaults` 只做展示/校验，运行时不再读。
+> - `env` 的 `AI_MODEL` / `AI_MODEL_REASONING` 只在平台行未配时兜底；`GET /admin/model-registry` 新增 `runtimeDefaults`，明确给出实际默认值与来源（`ui` / `env` / `none`）。
+> - `seed-skill-model-configs` 不再写 `model`：默认就是 `model IS NULL`（继承平台默认），seed 只保留 thinking 等行为差异。注意：已有库里的历史覆盖行不会自动清空，需用「批量模型配置 → 跟随平台默认」清。
+> - `tier=reasoning` 且未配模型 → 继承 `defaultReasoningModel`（此前平台推理默认在运行时没有消费者）。
+> - `POST /admin/skill-model-configs/bulk-apply` 新增 `{ clearModel: true }`：只清 `model`，通道/思考/参数/备用链保持不变。
+> - 仍未收敛：`agent_model_configs` 仍在表内但不在解析链上；`user_agent_model_configs` 无管理界面；文件 `aliases` 与 DB `chatModels/reasoningModels/lightModels` 双源（DB 覆盖文件，但 UI 无入口）。
+
 ---
 
 ## 1. 为什么是「以模型为中心」

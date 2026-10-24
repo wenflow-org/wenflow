@@ -166,6 +166,15 @@
             <div v-if="dirty.has('route')" class="ac-gen-panel__bar">
               <button type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存生成参数' }}</button>
             </div>
+            <!-- 平台默认模型（2026-10-24）：这是「模型中心」真正决定默认的地方，但此前没有任何可见控件，
+                 平台上没配时运行时又落 env，运营看不到「现在默认是什么、从哪来」。只读披露，不可在此改
+                 （改模型归供应商/模型清单，按 Skill 改模型归 Skill 运行时）。 -->
+            <p v-if="runtimeDefaultInfo" class="ac-gen-default">
+              <span class="ac-gen-default__label">平台默认模型</span>
+              <b class="mono">{{ runtimeDefaultInfo.model || '—' }}</b>
+              <span class="mk-badge" :class="runtimeDefaultInfo.source === '环境变量' ? 'mk-badge--warn' : 'mk-badge--muted'">{{ runtimeDefaultInfo.source }}</span>
+              <span class="ac-gen-default__hint">未单独配置模型的 Skill 继承它</span>
+            </p>
             <!-- 能力健康内联提示（原 ranklist 下 statusbar，2026-10-05 重设计移到区块前：域级状态先于配置项）：
                  取真实降级守卫 / 能力健康，均无异常则整条省略（不硬造） -->
             <div v-if="routeWarnText" class="ac-route-warn" role="status">
@@ -732,8 +741,22 @@ watch(tab, (t) => {
     与总览 tab 的 getModelRegistry 是同一份接口，不重复请求。 */
 interface RegistryDefaults {
   models: Array<{ id: string; providerId: string; fallbacks: string[] }>
+  /** 运行时实际默认与来源（2026-10-24）：平台没配时可能来自 env 兜底，界面必须能说清 */
+  runtimeDefaults?: {
+    model: string | null
+    source: 'ui' | 'env' | 'none'
+    reasoningModel: string | null
+    reasoningSource: 'ui' | 'env' | 'none'
+  }
 }
 const registryDefaults = ref<RegistryDefaults | null>(null)
+/** 运行时默认模型（只读）：平台配了 → 界面配置；平台没配、运行时落 env → 环境变量 */
+const runtimeDefaultInfo = computed(() => {
+  const r = registryDefaults.value?.runtimeDefaults
+  if (!r) return null
+  const source = r.source === 'ui' ? '界面配置' : r.source === 'env' ? '环境变量' : '未配置'
+  return { model: r.model, source }
+})
 /** 别名映射切片：供应商面板改完注册表后在同一页签内就地重取，避免读旧表 */
 const registryRef = ref<{ refresh?: (force?: boolean) => Promise<void> | void } | null>(null)
 watch(
@@ -1968,6 +1991,20 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 平台详情「生成参数」页签：不再套卡壳，内部按块节奏堆叠 */
 .ac-gen-panel { display: grid; gap: 14px; min-width: 0; }
 .ac-gen-panel__bar { display: flex; justify-content: flex-end; }
+/* 平台默认模型（只读披露）：一行说完「当前值 / 来源 / 谁继承」 */
+.ac-gen-default {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+  font-size: var(--mk-fs-micro);
+}
+.ac-gen-default__label { color: var(--mk-muted); }
+.ac-gen-default__hint { color: var(--mk-faint); }
 /* 调用参数 + 能力健康：两列（左参数右健康，2026-10-05 修复——注释/1100px 收合断点/
    移动端摘边距规则都证明双列是设计意图，基础 grid-template-columns 却在历史改动中丢失，
    实际一直堆叠渲染，健康表被参数组压到折叠线下）；分隔线沿用卡内原 dashed 方言。

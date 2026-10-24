@@ -419,6 +419,8 @@
               :fallback-info="fallbackBySkill"
               :rec-loading="recLoading"
               :rec-error="recError"
+              :platform-default-model="registryDefaultModel"
+              :platform-default-reasoning-model="registryDefaultReasoningModel"
               @applied="refreshCoverage"
               @open-skill="openSkillFromBulk"
             />

@@ -99,6 +99,36 @@ describe('model-registry.service（只读总览）', () => {
     expect(overview.defaults.defaultModelResolved).toBe('deepseek-v4.1-flash')
   })
 
+  /* 2026-10-24：平台没配默认时运行时落到 env，界面必须说清来源，不能只显示「未配置」。 */
+  it('runtimeDefaults 区分界面配置 / env 兜底 / 未配置', async () => {
+    const ui = await getModelRegistryOverview()
+    expect(ui.runtimeDefaults).toMatchObject({ source: 'ui', model: 'deepseek-v4.1-flash' })
+
+    const prevModel = process.env.AI_MODEL
+    const prevReasoning = process.env.AI_MODEL_REASONING
+    platformFindFirst.mockResolvedValue({ ...BASE_PLATFORM, defaultModel: null, defaultReasoningModel: null })
+    process.env.AI_MODEL = 'agnes-3.0-flash'
+    process.env.AI_MODEL_REASONING = 'agnes-3.0-flash'
+    try {
+      const fromEnv = await getModelRegistryOverview()
+      expect(fromEnv.runtimeDefaults).toEqual({
+        model: 'agnes-3.0-flash',
+        source: 'env',
+        reasoningModel: 'agnes-3.0-flash',
+        reasoningSource: 'env'
+      })
+      delete process.env.AI_MODEL
+      delete process.env.AI_MODEL_REASONING
+      const none = await getModelRegistryOverview()
+      expect(none.runtimeDefaults).toEqual({ model: null, source: 'none', reasoningModel: null, reasoningSource: 'none' })
+    } finally {
+      if (prevModel === undefined) delete process.env.AI_MODEL
+      else process.env.AI_MODEL = prevModel
+      if (prevReasoning === undefined) delete process.env.AI_MODEL_REASONING
+      else process.env.AI_MODEL_REASONING = prevReasoning
+    }
+  })
+
   it('模型清单含能力、限额与降级链', async () => {
     const overview = await getModelRegistryOverview()
     const main = overview.models.find((model) => model.id === 'deepseek-v4.1-flash')!

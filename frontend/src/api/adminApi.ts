@@ -1336,12 +1336,14 @@ export const adminSkillsApi = {
   /** 批量套用同一份通道/模型/参数/兜底配置到多个 skill */
   bulkApplySkillModelConfig: async (data: {
     skillIds: string[];
-    endpoint: string;
-    apiKey: string;
+    endpoint?: string;
+    apiKey?: string;
     model?: string;
     tier?: string;
     paramOverrides?: Record<string, number> | null;
     fallbackChain?: string[] | null;
+    /** 只清空模型覆盖（改为跟随平台默认），其余字段保持不变；与套用字段互斥 */
+    clearModel?: boolean;
   }) => {
     return adminAxios.post('/admin/skill-model-configs/bulk-apply', data);
   },
