@@ -15,7 +15,8 @@
         <button type="button" class="mk-badge skd-badge-btn" :class="healthBadge.cls" :title="healthBadge.title" @click="goRuntimeTab">{{ healthBadge.text }}</button>
         <!-- 类别人话（Skills.vue:194 同字段判例）：裸枚举 teaching → 「教学」，title 保留原值备查 -->
         <span class="mk-badge mk-badge--muted" :title="`类别：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</span>
-        <span v-if="modelLabel" class="mk-badge mk-badge--muted mono" :title="'生效模型（来自模型配置或线上生效 Prompt 声明）'">{{ modelLabel }}</span>
+        <!-- 2026-10-24 用户「还是重复部分」：生效模型只在运行时「生效值」里出现一次（带来源），
+             hero 不再重复一枚模型徽标——同一页同一事实两处读数。 -->
         <span v-if="promptVersionText" class="mk-badge mk-badge--info">线上生效 {{ promptVersionText }}</span>
       </template>
       <!-- 2026-10-23：详情各域跟随顶栏刷新广播（liveRefreshSeq → load(true)），hero 不再出刷新钮 -->
@@ -732,10 +733,11 @@ const stat = computed(() =>
 const STAT_RANGE_LABELS: Record<string, string> = { '7d': '近 7 天', '24h': '近 24 小时', '30d': '近 30 天', all: '全部时间' }
 const statsRangeLabel = computed(() => STAT_RANGE_LABELS[liveSkillStatsRange.value] || '近 7 天')
 /** 头部健康徽章三分态（与 Skills.vue 同口径）：异常 / 空闲（0 调用）/ 健康；
-    文案带窗口词，且徽标可点 → 运行时页签（健康+证据先于配置） */
+    2026-10-24 用户「还是重复部分」：运行时 KPI 已给失败数与窗口，hero 只报状态词，
+    次数与窗口放 title（既不复读，也不让「N 次失败」失去窗口口径）；徽标可点 → 运行时页签 */
 const healthBadge = computed<{ cls: string; text: string; title: string }>(() => {
   if (stat.value.errors > 0) {
-    return { cls: 'mk-badge--bad', text: `${statsRangeLabel.value} · ${stat.value.errors} 次失败`, title: `${statsRangeLabel.value}窗口内存在失败调用` }
+    return { cls: 'mk-badge--bad', text: '异常', title: `${statsRangeLabel.value}窗口内 ${stat.value.errors} 次失败（数字见运行时指标）` }
   }
   if (stat.value.calls === 0) {
     return { cls: 'mk-badge--muted', text: '空闲', title: `${statsRangeLabel.value}窗口内无调用（从未调用不等于健康）` }
@@ -766,15 +768,7 @@ const systemPromptCap = computed(() => systemPromptText.value.slice(0, PROMPT_CA
 const promptLen = computed(() => systemPromptText.value.length)
 const promptTruncated = computed(() => promptLen.value > PROMPT_CAP)
 
-/* ===== 生效模型（hero pill + 运行时） ===== */
-/** 没有具体模型名时的兜底：tier 是内部枚举（chat/reasoning），不裸印给运营 */
-const TIER_LABEL: Record<string, string> = { chat: '对话档', reasoning: '推理档' }
-const modelLabel = computed(() => {
-  const cfg = meta.value?.modelConfig || {}
-  const llm = cfg.llmRequest || {}
-  const tier = cfg.tier ? TIER_LABEL[String(cfg.tier)] : ''
-  return String(llm.model || cfg.model || tier || '') || ''
-})
+/* ===== 生效模型（运行时「生效值」单点展示；hero 不再重复徽标） ===== */
 
 /* ===== 统计口径（运行时页签说明行）：指标数值来自 liveSkillStatsMap（随 Skill 列表「统计窗口」切换），
    此前照抄 meta.stats.range 造成「口径写全量、数字是 7 天窗口」的失真 → 说明对齐真实窗口 ===== */
@@ -787,7 +781,8 @@ const STATS_SOURCE_TEXT: Record<string, string> = {
 }
 const statsNote = computed(() => {
   const src = STATS_SOURCE_TEXT[String(meta.value?.stats?.source || '')] || 'Skill 执行日志'
-  return `${src} · ${statsRangeLabel.value}（与 Skill 列表「统计窗口」一致）`
+  // 窗口词已由 KPI 卡头右侧显示，这里只报来源，不重复窗口与「与列表一致」的解释
+  return src
 })
 
 /* ===== 指标（运行时页签 KPI 卡；0 与未知分开；阈值/精度走 rate-utils 单点） ===== */

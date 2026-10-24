@@ -327,7 +327,7 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
 })
 
 describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
-  it('hero：S 头像 + 英文 canonical id + 中文别名/归属·类别副文 + 健康/类别/模型/版本 pills + 真实动作', async () => {
+  it('hero：S 头像 + 英文 canonical id + 中文别名/归属·类别副文 + 健康/类别/版本 pills + 真实动作', async () => {
     const w = mountDetail()
     await settle()
 
@@ -341,7 +341,8 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text())
     expect(pills[0]).toBe('健康') // 窗口内 100 调用 0 失败
     expect(pills[1]).toBe('教学')
-    expect(pills.join('|')).toContain('gpt-5.2')
+    // 2026-10-24 用户「还是重复部分」：生效模型只在运行时「生效值」里出现一次，hero 不再重复
+    expect(pills.join('|')).not.toContain('gpt-5.2')
     expect(pills.join('|')).toContain('线上生效 v2')
 
     // 动作 = 真实能力（2026-10-23 用户「已经有刷新，为什么还有独立刷新」：hero 最后一颗

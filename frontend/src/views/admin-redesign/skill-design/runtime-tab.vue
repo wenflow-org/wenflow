@@ -16,7 +16,7 @@
         <MkSwitch
           v-model="rtForm.enabled"
           label="独立配置"
-          :state-text="rtForm.enabled ? '生效中' : '继承上层'"
+          :state-text="rtForm.enabled ? '生效中' : '已关闭'"
           class="sdp-head__switch"
         />
         <button
@@ -27,8 +27,8 @@
           @click="saveRuntime"
         >{{ rtSaving ? '保存中…' : '保存配置' }}</button>
       </div>
-      <!-- 口径一条放卡头正下方（卡头只放标题/现状/动作；规则不复述） -->
-      <p class="mk-card__note">Prompt 里声明了 model 时，本页模型不参与。</p>
+      <!-- 卡头只保留标题/开关/保存；旧「Prompt 里声明了 model 时，本页模型不参与」已删：
+           与运行时契约相反（route 优先于 prompt.model），且生效值胶囊已直接给出结果与来源。 -->
 
       <div class="sdp-body">
         <div v-if="rtLoadFailed" class="sdp-error">运行时配置加载失败，已重置为默认值。<button type="button" class="mk-link" @click="loadRuntime">重试</button></div>
@@ -81,16 +81,16 @@
             <section v-show="runtimeSection === 'model'" id="sdp-panel-model" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-model">
               <header class="sdp-panel__head">
                 <h4>模型</h4>
-                <span class="sdp-panel__state">{{ rtForm.model || '未指定' }}</span>
               </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field sdp-field--wide">
-                  <span>模型</span>
+                  <!-- 不再写「模型」字段标签：分节名与面板标题都是「模型」，第三遍纯复读 -->
                   <MkModelPicker
+                    aria-label="模型"
                     :model-value="rtForm.model"
                     :options="pickerOptions"
                     allow-inherit
-                    inherit-label="继承 Agent / 平台默认"
+                    inherit-label="跟随平台默认"
                     :tier="rtForm.tier"
                     :disabled="!rtForm.enabled"
                     @update:model-value="rtForm.model = $event"
@@ -414,7 +414,8 @@ const runtimeNav = computed<Array<{ key: RuntimeSection; label: string; meta: st
   {
     key: 'model',
     label: '模型',
-    meta: rtForm.value.enabled ? (rtForm.value.model || '继承 Agent / 平台') : '继承上层'
+    // 面板里的选择器已给出完整取值；导航副文只报「用的是哪个」，不再复述开关状态
+    meta: rtForm.value.enabled && rtForm.value.model ? rtForm.value.model : '平台默认'
   },
   {
     key: 'params',
@@ -669,7 +670,7 @@ async function resetRuntime() {
   if (rtSaving.value) return
   const ok = await askConfirm({
     title: '恢复默认配置',
-    message: '确定恢复该 Skill 的默认模型配置吗？\n独立配置将被删除，恢复为继承上层 / 平台默认。',
+    message: '确定恢复该 Skill 的默认模型配置吗？\n独立配置将被删除，改为跟随平台默认。',
     confirmText: '恢复默认'
   })
   if (!ok) return
@@ -678,7 +679,7 @@ async function resetRuntime() {
   try {
     await adminSkillsApi.deleteSkillModelConfig(props.skillId)
     rtErr.value = false
-    rtMsg.value = '已恢复默认（继承上层 / 平台）'
+    rtMsg.value = '已恢复默认（跟随平台默认）'
     await loadRuntime()
   } catch (e) {
     rtErr.value = true
