@@ -34,7 +34,7 @@ import {
   checkpointForMessageResult,
   getPendingCheckpoint,
   inheritTeachingState,
-  isDuplicateCheckpointQuestion,
+  isDuplicateCheckpointQuestion, normalizeCheckpointWithTelemetry,
   recordAnchorProbeResult,
   recordCheckpointAttemptEvidence,
   recordCheckpointResultEvidence,
@@ -1116,14 +1116,14 @@ export async function processStudentMessage(
     if (pendingBeforeTurn && checkpointCandidate?.question) {
       const changedQuestion = normalizeForKeywordMatch(pendingBeforeTurn.question) !== normalizeForKeywordMatch(checkpointCandidate.question);
       if (changedQuestion && !isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate)) {
-        teachingState.pendingCheckpoint = {
+        teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
           ...pendingBeforeTurn,
           question: checkpointCandidate.question,
           ...(checkpointCandidate.options ? { options: checkpointCandidate.options } : {}),
           ...(checkpointCandidate.correctOptionIds ? { correctOptionIds: checkpointCandidate.correctOptionIds } : {}),
           ...(checkpointCandidate.expectedKeywords ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
           ...(checkpointCandidate.hint ? { hint: checkpointCandidate.hint } : {}),
-        };
+        }, pendingBeforeTurn.type);
       }
     }
     // 同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺陷②）：候选题面与本会话**已出过**的题面
@@ -1167,7 +1167,7 @@ export async function processStudentMessage(
         ? null
         : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint)
           ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name);
-      teachingState.pendingCheckpoint = {
+      teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
         id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: checkpointCandidate.type,
         title: checkpointTitle,
@@ -1199,7 +1199,7 @@ export async function processStudentMessage(
                 : {}),
             }
           : {}),
-      };
+      }, checkpointCandidate.type);
       teachingState.lastCheckpointTurn = updatedMessages.length;
     }
 

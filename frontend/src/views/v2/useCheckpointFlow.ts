@@ -140,8 +140,18 @@ export function useCheckpointFlow(
       return;
     }
     const payload: Record<string, any> = {};
-    if (checkpoint.value.options?.length) payload.selectedOptionIds = selectedOptions.value;
-    else payload.answerText = answerText.value;
+    const options = Array.isArray(checkpoint.value.options) ? checkpoint.value.options : [];
+    if (options.length) {
+      payload.selectedOptionIds = selectedOptions.value;
+      // 兼容旧后端：short_answer 却带选项时后端只认 answerText；补上选中项文本，
+      // 至少不会因空 answerText 抛“缺少作答内容”。新后端会按形状归一成选择题。
+      if (checkpoint.value.type === 'short_answer') {
+        const byId = new Map(options.map((o: any) => [String(o?.id ?? ''), String(o?.text ?? '')]));
+        payload.answerText = selectedOptions.value.map((id) => byId.get(id) || id).join('；');
+      }
+    } else {
+      payload.answerText = answerText.value;
+    }
     // 记住提交时的会话对象：提交含一次教学回合（可达数十秒），期间用户可能「重新开始」
     // 换了新会话——settle 后旧 revision 不得回写到新会话（restart 有等待循环，这里兜底）
     const sessionAtSubmit = session.value;

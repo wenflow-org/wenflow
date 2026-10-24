@@ -21,6 +21,7 @@ import {
   CheckpointSubmitResult,
   getPendingCheckpoint,
   judgeCheckpointAnswer,
+  normalizeCheckpointShape,
   recordCheckpointAttemptEvidence,
   stripCheckpointAnswerKeys,
 } from './teaching-checkpoint';
@@ -54,6 +55,36 @@ export function buildCheckpointSubmitResult(turn: {
     ...(hint ? { hint } : {}),
     revision: turn.revision,
   };
+}
+
+/**
+ * 检查点提交 → 落库学生消息文本。
+ *
+ * 形状先归一再分派：LLM 可能把带 options 的题标成 short_answer，前端按选项渲染并只提交
+ * selectedOptionIds；若死守 type='short_answer' 要求 answerText，就会抛“缺少作答内容”。
+ * 归一后 short_answer+options 按选择题处理，单/多选由答案键数量决定。
+ */
+export function resolveCheckpointAnswer(
+  checkpoint: TeachingCheckpoint,
+  payload: Pick<CheckpointSubmitPayload, 'selectedOptionIds' | 'answerText'>,
+): string {
+  const normalized = normalizeCheckpointShape(checkpoint);
+  if (normalized.type === 'short_answer') {
+    const answer = payload.answerText?.trim() || '';
+    if (!answer) throw new Error('缺少作答内容');
+    return answer;
+  }
+
+  const selectedOptionIds = Array.from(new Set(payload.selectedOptionIds || []));
+  const options = Array.isArray(normalized.options) ? normalized.options : [];
+  const selectedOptions = selectedOptionIds.map((optionId) => options.find((option) => option.id === optionId));
+  if (selectedOptions.length === 0 || selectedOptions.some((option) => !option)) {
+    throw new Error('提交的选项无效');
+  }
+  if (normalized.type === 'single_choice' && selectedOptions.length !== 1) {
+    throw new Error('单选题只能提交一个选项');
+  }
+  return selectedOptions.map((option) => `${option!.id}. ${option!.text}`).join('；');
 }
 
 export async function getSessionHistory(userId: string): Promise<Array<{
@@ -238,24 +269,7 @@ export async function submitCheckpoint(
       return skippedResult;
     }
 
-    let answer: string;
-    if (checkpoint.type === 'short_answer') {
-      answer = payload.answerText?.trim() || '';
-      if (!answer) {
-        throw new Error('缺少作答内容');
-      }
-    } else {
-      const selectedOptionIds = Array.from(new Set(payload.selectedOptionIds || []));
-      const options = Array.isArray(checkpoint.options) ? checkpoint.options : [];
-      const selectedOptions = selectedOptionIds.map((optionId) => options.find((option) => option.id === optionId));
-      if (selectedOptions.length === 0 || selectedOptions.some((option) => !option)) {
-        throw new Error('提交的选项无效');
-      }
-      if (checkpoint.type === 'single_choice' && selectedOptions.length !== 1) {
-        throw new Error('单选题只能提交一个选项');
-      }
-      answer = selectedOptions.map((option) => `${option!.id}. ${option!.text}`).join('；');
-    }
+    const answer = resolveCheckpointAnswer(checkpoint, payload);
 
     const turn = await processStudentMessage(
       sessionId,

@@ -109,10 +109,55 @@ export function shouldEmitCheckpoint(
   return true;
 }
 
+/**
+ * 检查点形状归一：LLM 偶发把「带选项的单选题」标成 short_answer，同时给出
+ * options + correctOptionIds + expectedKeywords。前端按“有选项”渲染成选择题并只提交
+ * selectedOptionIds，后端若仍按 short_answer 走关键词判分，就会拿空 answerText 判错并抛
+ * “缺少作答内容”，形成只能跳过、无法通过的检查点。
+ *
+ * 归一规则（只改类型，不丢答案键，方便事后审计）：
+ * - short_answer + options → 按答案键数量归一为 single_choice / multi_choice；
+ * - 其余形状原样返回。
+ */
+export function normalizeCheckpointShape<T extends Pick<TeachingCheckpoint, 'type' | 'options' | 'correctOptionIds'>>(
+  checkpoint: T,
+): T {
+  if (checkpoint.type !== 'short_answer') return checkpoint;
+  const options = Array.isArray(checkpoint.options) ? checkpoint.options : [];
+  if (options.length === 0) return checkpoint;
+  const keySize = Array.isArray(checkpoint.correctOptionIds)
+    ? checkpoint.correctOptionIds.filter((id) => typeof id === 'string' && id.trim()).length
+    : 0;
+  return {
+    ...checkpoint,
+    type: keySize > 1 ? 'multi_choice' : 'single_choice',
+  } as T;
+}
+
 export function getPendingCheckpoint(teachingState: Record<string, any> | null | undefined): TeachingCheckpoint | null {
-  return teachingState?.pendingCheckpoint
+  const raw = teachingState?.pendingCheckpoint
     || parseSessionArtifacts(teachingState).pendingCheckpoint
     || null;
+  return raw ? normalizeCheckpointShape(raw as TeachingCheckpoint) : null;
+}
+
+/** 归一混合形状并记录一次降级事实（供出题入口使用；纯读路径保持静默）。 */
+export function normalizeCheckpointWithTelemetry<T extends Pick<TeachingCheckpoint, 'type' | 'options' | 'correctOptionIds'>>(
+  checkpoint: T,
+  declaredType: string,
+): T {
+  const normalized = normalizeCheckpointShape(checkpoint);
+  if (normalized.type !== declaredType) {
+    recordDegradation({
+      source: 'ai-teaching/teaching-turn-checkpoint',
+      faultCategory: 'SCHEMA_VIOLATION',
+      severity: 'P2_DEGRADED',
+      impactedDimensions: ['checkpoint.type'],
+      mitigationApplied: 'normalize-short-answer-with-options-to-choice',
+      rootCauseMessage: `checkpoint declared ${declaredType} but carried ${checkpoint.options?.length ?? 0} options; normalized to ${normalized.type}`,
+    });
+  }
+  return normalized;
 }
 
 /**
@@ -296,11 +341,13 @@ const normalizeForMatch = normalizeForKeywordMatch;
  * - 这仍是**弱独立**：题目与答案键都由 LLM 产出，独立的是"评判学习者"这一步。
  */
 export function judgeCheckpointAnswer(
-  checkpoint: Pick<TeachingCheckpoint, 'type' | 'correctOptionIds' | 'expectedKeywords'>,
+  checkpoint: Pick<TeachingCheckpoint, 'type' | 'options' | 'correctOptionIds' | 'expectedKeywords'>,
   submission: { selectedOptionIds?: string[]; answerText?: string },
 ): CheckpointCodeJudgement | null {
-  if (checkpoint.type === 'single_choice' || checkpoint.type === 'multi_choice') {
-    const key = normalizeIdSet(checkpoint.correctOptionIds);
+  // 防御性归一：即使调用方拿到的是未归一的存量/原始对象，也按实际形状判分。
+  const normalized = normalizeCheckpointShape(checkpoint);
+  if (normalized.type === 'single_choice' || normalized.type === 'multi_choice') {
+    const key = normalizeIdSet(normalized.correctOptionIds);
     if (key.size === 0) return null;
     const chosen = normalizeIdSet(submission?.selectedOptionIds);
     const passed = chosen.size === key.size && Array.from(chosen).every((id) => key.has(id));
@@ -309,7 +356,7 @@ export function judgeCheckpointAnswer(
       .filter((id): id is string => typeof id === 'string')
       .map((id) => id.trim())
       .filter(Boolean)));
-    const keyText = original(checkpoint.correctOptionIds).join('/');
+    const keyText = original(normalized.correctOptionIds).join('/');
     const chosenText = original(submission?.selectedOptionIds).join('/') || '空';
     return {
       judgedBy: 'code',
@@ -325,7 +372,7 @@ export function judgeCheckpointAnswer(
   // 概念全对的作答 15/15 判负——「手动」直接出现在题干（照抄题干即可命中，无判别力）、
   // 「再做」要求逐字复述（学生说「还得再复制一份/重填一遍」永远对不上）。生成契约已同步要求
   // 同义写法用「|」合并、不得用题干词当要点（见 prompts/core/teaching-turn.yaml）。
-  const groups = (checkpoint.expectedKeywords || [])
+  const groups = (normalized.expectedKeywords || [])
     .map((raw) => String(raw ?? '')
       .split(/[|｜]/)
       .map(normalizeForMatch)
