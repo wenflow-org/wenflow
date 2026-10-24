@@ -26,7 +26,19 @@
           <span v-if="goalText" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">{{ goalText }}</span>
           <!-- 质量徽章已随裁判独立面移除（2026-09-27）：VL 页面不再展示裁判/保真分 -->
         </div>
-        <!-- 头部只留身份信息（状态 + 属性 pill）；tab 级操作在下方操作台，账号级操作在 tabs 行右端 ⋯ -->
+        <!-- 跨页入口（2026-10-24 用户「为什么不设计到右上角」）：页面级动作归页头右缘，
+             与 LearnerDetail 的「虚拟档案 →」对称——那边也是 MkDetailHero 的 #actions。
+             默认档按钮（hero 位不用 sm，判例 2026-10-20）。 -->
+        <div v-if="d.userId" class="mk-entity__actions">
+          <button
+            type="button"
+            class="mk-btn"
+            title="同一账号的学习视图：概念 / 证据 / 图谱 / 教学会话"
+            @click="goRealLearner()"
+          >学习详情 →</button>
+        </div>
+        <!-- 头部只留身份信息（状态 + 属性 pill）与页面级入口；tab 级操作在下方操作台，
+             账号级低频操作在 tabs 行右端 ⋯ -->
       </div>
     </header>
 
@@ -53,18 +65,9 @@
     <div class="vp-tabsrow">
       <!-- 二级页签（原型 subtabs 下划线式，同 LearnerDetail/UserDetail）：角标保留「数量即 tab 角标」决策 -->
       <MkSubTabs v-model="activeTab" :tabs="tabs" />
-      <!-- 右组（2026-10-20 用户走查「按钮位置调整」）：跨页入口与 ⋯ 同一组贴右缘。
-           此前按钮跟在页签后面单飞——离页签 12px、离右缘 600px+，读起来像页签级控件；
-           它和 ⋯ 一样是页面级动作，归右组后才有统一的「页签左 / 动作右」轴。
-           提到可见位的原因不变（原只在 ⋯ 菜单里，两页互不相通的心智问题一半来自此）：
-           同一实体两个 ID，这里是仿真档案视图，跳过去是学习视图 -->
+      <!-- 右组只留账号级 ⋯（2026-10-24）：跨页入口已上移到页头右缘——页签行里的
+           按钮读起来像页签级控件，而它是页面级动作 -->
       <div class="vp-tabsrow__actions">
-        <button
-          v-if="d.userId"
-          type="button"
-          class="mk-btn mk-btn--sm"
-          @click="goRealLearner()"
-        >学习详情 →</button>
         <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
           <button
             type="button"
@@ -291,31 +294,8 @@
           </div>
         </section>
 
-        <!-- 学习状态读数（同概览 pane 的 lsm 卡，index.html 2422） -->
-        <section v-if="activeTab === 'profile'" class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">学习状态读数</h3>
-            <span class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
-          </div>
-          <div class="vp-cardbody">
-            <div v-if="lsmRows.length" class="lsm">
-              <div v-for="row in lsmRows" :key="row.label" class="lsm__row">
-                <span class="lsm__label">{{ row.label }}</span>
-                <span class="lsm__track"><i :data-tone="row.tone" :style="{ width: row.pct + '%' }"></i></span>
-                <span class="lsm__end">
-                  <span class="lsm__val">{{ row.value }}</span>
-                  <span class="mk-badge" :class="row.refCls" :title="row.refTitle">{{ row.ref }}</span>
-                </span>
-              </div>
-            </div>
-            <MkEmptyState
-              v-else
-              title="暂无学习状态读数"
-              description="该画像的运行还没有按天汇总出学习状态读数。"
-              compact
-            />
-          </div>
-        </section>
+        <!-- 学习状态读数不再在画像页签重复一份（2026-10-24）：概览页签已渲染同一张卡
+             （同 lsmRows / 同口径 meta），两处同屏只差一格滚动，属于原型照搬留下的复读。 -->
 
         <!-- 运行预算：画像级持久配置（LLM 重试 + 回合上限 + 默认难度）；新会话创建时作为初始值，座舱可临时覆盖。
              2026-10-21：从「画像」页签独立成「预算」页签——配置回答"下次跑用什么默认值"，不是这个人是谁。 -->
@@ -2806,7 +2786,7 @@ async function quietReload(id: string) {
 
 /* tabs 行右端常驻账号级 ⋯ 操作（页签本体是共享 MkSubTabs 下划线式） */
 .vp-tabsrow { display: flex; align-items: center; gap: 12px; }
-/* 右组：学习详情 → 与 ⋯ 同贴右缘；fill 模式（isLive=false）下 ⋯ 不渲染时按钮也照样贴右 */
+/* 右组：账号级 ⋯ 贴右缘（跨页入口在页头右缘，2026-10-24 上移） */
 .vp-tabsrow__actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .vp-tabsrow__ops { margin-left: 0; }
 /* 内联空态已改用共享 .mk-empty--line（审核 2026-10-06 低 [97]）：原 .vp-none 私有基类删除 */
