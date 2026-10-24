@@ -109,8 +109,12 @@
                   {{ s.source === 'platform-default' ? '平台默认(未配置)' : s.source === 'skill-channel' ? '独立通道' : '仅技能模型' }}
                 </span>
               </td>
-              <!-- 模型/参数/备用链三格的值可能是中文（未配置 / 平台默认），走正文；对齐靠 tabular-nums -->
-              <td><span class="skc__model"><span class="skc__model-id">{{ s.model || '未配置' }}</span><span v-if="s.model" class="mk-badge mk-badge--muted">{{ s.tier }}</span></span></td>
+              <!-- 模型/参数/备用链三格的值可能是中文（未配置 / 平台默认），走正文；对齐靠 tabular-nums。
+                   2026-10-24 用户「还 chat 上了，没有这种了」：tier 是技能自己的档位字段，
+                   不是模型名的一部分；对话档是全站默认，挂在模型后面只会被读成
+                   「deepseek-v4.1-flash chat」这种不存在的模型名。只保留有用的推理档提示
+                   （未配模型时它决定走哪条平台默认链）。 -->
+              <td><span class="skc__model"><span class="skc__model-id">{{ s.model || '未配置' }}</span><span v-if="s.tier === 'reasoning'" class="mk-badge mk-badge--muted" title="推理档：长思考与复杂判断。未配模型时走平台推理默认模型">推理</span></span></td>
               <!-- 2026-10-18：整串 JSON 挤在单元格里属开发向；表内只给项数，原文进 title -->
               <td class="skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ overrideText(s.paramOverrides) }}</td>
               <td class="skc__wrap" :title="props.fallbackInfo[s.skillId]?.title || (s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined)">{{ props.fallbackInfo[s.skillId]?.text || (s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '平台默认') }}</td>

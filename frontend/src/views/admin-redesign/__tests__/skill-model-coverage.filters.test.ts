@@ -109,11 +109,17 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     w.unmount()
   })
 
-  it('model 单元格带层级徽标（按能力核对）', async () => {
+  it('model 单元格只给模型名：chat 档不挂内部枚举，推理档才带中文徽标', async () => {
     const w = await mountCoverage()
-    const modelCell = w.findAll('tbody tr')[1].find('.skc__model')
-    expect(modelCell.text()).toContain('deepseek-v4.1-flash')
-    expect(modelCell.text()).toContain('chat')
+    const cells = w.findAll('.skc__model')
+    const chatCell = cells.find((c) => c.text().includes('deepseek-v4.1-flash'))!
+    // 2026-10-24 用户「还 chat 上了，没有这种了」：tier 是档位字段，不是模型名后缀
+    expect(chatCell.text()).not.toContain('chat')
+    expect(chatCell.find('.mk-badge').exists()).toBe(false)
+    // 推理档仍要给提示（未配模型时它决定走哪条平台默认链），且用中文
+    const reasoning = cells.filter((c) => c.text().includes('推理'))
+    expect(reasoning).toHaveLength(1)
+    expect(reasoning[0].text()).toContain('未配置')
     w.unmount()
   })
 })

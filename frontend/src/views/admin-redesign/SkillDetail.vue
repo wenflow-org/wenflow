@@ -767,10 +767,13 @@ const promptLen = computed(() => systemPromptText.value.length)
 const promptTruncated = computed(() => promptLen.value > PROMPT_CAP)
 
 /* ===== 生效模型（hero pill + 运行时） ===== */
+/** 没有具体模型名时的兜底：tier 是内部枚举（chat/reasoning），不裸印给运营 */
+const TIER_LABEL: Record<string, string> = { chat: '对话档', reasoning: '推理档' }
 const modelLabel = computed(() => {
   const cfg = meta.value?.modelConfig || {}
   const llm = cfg.llmRequest || {}
-  return String(llm.model || cfg.model || (cfg.tier ? `档位 ${String(cfg.tier)}` : '')) || ''
+  const tier = cfg.tier ? TIER_LABEL[String(cfg.tier)] : ''
+  return String(llm.model || cfg.model || tier || '') || ''
 })
 
 /* ===== 统计口径（运行时页签说明行）：指标数值来自 liveSkillStatsMap（随 Skill 列表「统计窗口」切换），
