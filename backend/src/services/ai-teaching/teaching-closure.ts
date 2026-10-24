@@ -157,3 +157,78 @@ export function evaluateSessionClosable(input: {
 
   return { closable: true };
 }
+
+/**
+ * 收口审计（2026-10-24，离线评审基线：85% 课堂未答收口）：
+ * end_only/复习课允许带着未答问题收束，但**必须留下可读的「待验证」事实**，
+ * 不能把「会话结束」写成「任务完成/学员已掌握」。审计随 wrapup 落库，
+ * 供前端、后续课堂与离线评审消费；不改任何收束判定。
+ */
+export interface ClosureAudit {
+  openQuestion: boolean;
+  code: SessionClosableCode | null;
+  question: string | null;
+  /** 回合内收口被延迟过几次（到顶后放行是 liveness 兜底） */
+  deferredTimes: number;
+}
+
+/** 最后一条教师问题：从末尾向前找 assistant 消息中含问号的句子；遇到 user 消息即停。 */
+export function lastTeacherQuestion(messages: Array<{ role?: string; content?: string }> | null | undefined): string | null {
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const message = list[i];
+    if (message?.role === 'user') break;
+    if (message?.role !== 'assistant') continue;
+    const text = String(message.content || '').trim();
+    if (!detectTrailingQuestion(text)) continue;
+    const sentences = text.split(/(?<=[。！？!?])/).map((s) => s.trim()).filter(Boolean);
+    const hit = [...sentences].reverse().find((sentence) => detectTrailingQuestion(sentence));
+    const question = (hit || text).replace(/\s+/g, ' ').trim();
+    return question.length > 240 ? question.slice(0, 240) + '…' : question;
+  }
+  return null;
+}
+
+/**
+ * 生成收口审计。判定口径与结算门禁**同源**（allowOpenQuestion=false）：
+ * 若门禁认为尚有未闭合问答，则记录 openQuestion；异常终态（放弃/超时）不算缺陷。
+ */
+export function buildClosureAudit(input: {
+  messages: Array<{ role?: string; content?: string }> | null | undefined;
+  teachingState: Record<string, unknown> | null | undefined;
+  endReason?: string | null;
+}): ClosureAudit {
+  const deferredTimes = Number((input.teachingState as { completionDeferrals?: unknown } | null)?.completionDeferrals) || 0;
+  const decision = evaluateSessionClosable({
+    messages: input.messages,
+    teachingState: input.teachingState,
+    endReason: input.endReason,
+    allowOpenQuestion: false,
+  });
+  if (decision.closable) {
+    return { openQuestion: false, code: null, question: null, deferredTimes };
+  }
+  return {
+    openQuestion: true,
+    code: decision.code ?? null,
+    question: lastTeacherQuestion(input.messages),
+    deferredTimes,
+  };
+}
+
+/**
+ * 把「待验证」确定性写进总结的 actionPlan（去重、置顶）。
+ * 不依赖模型是否诚实：即使 LLM 总结漏掉未答问题，这里也一定留痕。
+ */
+export function appendClosureFollowUp<T extends Record<string, unknown> | null | undefined>(
+  summary: T,
+  audit: ClosureAudit,
+): T {
+  if (!audit.openQuestion) return summary;
+  const source = (summary || {}) as Record<string, unknown>;
+  const note = `待验证：${audit.question || '最后提出的问题尚未得到学员回答'}`;
+  const plan = Array.isArray(source.actionPlan)
+    ? source.actionPlan.filter((item) => !String(item || '').startsWith('待验证'))
+    : [];
+  return { ...source, actionPlan: [note, ...plan] } as unknown as T;
+}

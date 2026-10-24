@@ -6,7 +6,7 @@
  * 决策由 ds4.1 做（默认 deepseek-v4.1-flash），K 次独立判读取中位数/多数。
  */
 import {
-  clip, jparse, hasVerbatimQuote, validateIssues, weightedScore, majority,
+  clip, jparse, hasVerbatimQuote, pickEvenly, validateIssues, weightedScore, majority,
 } from './lib.mjs';
 
 export const DIMENSIONS = [
@@ -52,13 +52,13 @@ export function selectClassroomCases(db, {
        AND s.createdAt >= ?${scopeSql}${emailSql}
      ORDER BY s.createdAt DESC`).all(...[since, ...(emailLike ? [emailLike] : [])]);
   const wanted = ids ? new Set(ids) : null;
+  const candidates = wanted ? rows.filter((row) => wanted.has(row.sid)) : rows;
+  // 等距抽样：窗口内跨波次取，避免只评最近一批（时间排序已保证覆盖从新到旧）
   const cases = [];
-  for (const row of rows) {
-    if (wanted && !wanted.has(row.sid)) continue;
+  for (const row of pickEvenly(candidates, limit)) {
     const built = buildClassroomCase(db, row);
     if (!built || built.msgCount < minMsgs) continue;
     cases.push(built);
-    if (cases.length >= limit) break;
   }
   return cases;
 }
@@ -151,6 +151,13 @@ export function buildClassroomCase(db, row) {
     : '（无）';
   const wrapup = jparse(row.wrapup, null);
   const wrapupBlock = wrapup ? clip(JSON.stringify(wrapup), 2400) : '（无结课总结）';
+  // 收口事实（2026-10-24）：end_only ≠ 任务完成；openQuestion 由服务端确定性审计写入。
+  const closure = wrapup?.closureAudit || null;
+  const finalizationAction = wrapup?.finalizationAction || null;
+  const closureBlock = `【收口事实】finalizationAction=${finalizationAction ?? '?'}`
+    + `｜openQuestion=${closure?.openQuestion ? 'true' : 'false'}`
+    + `${closure?.code ? `｜code=${closure.code}` : ''}`
+    + `${closure?.question ? `｜未答问题：${clip(closure.question, 200)}` : ''}`;
   const block = [
     `课题：${row.topic || '(无)'}｜学科：${row.subject || '(无)'}｜模式：${row.mode || '?'}`,
     `课堂时长：${row.duration ?? '?'} 分钟｜消息 ${msgs.length} 条`,
@@ -158,6 +165,7 @@ export function buildClassroomCase(db, row) {
     `【知识点最终掌握状态】\n${kpBlock}`,
     checkpointBlock(db, row.sid, row.teachingState),
     `【结课总结（wrapup）】\n${wrapupBlock}`,
+    closureBlock,
     `【课堂对话节选（首4+均匀中段+末10，逐条截断）】\n${sampleTranscript(msgs)}`,
   ].filter(Boolean).join('\n\n');
   return {
@@ -197,9 +205,14 @@ const RUBRIC = `你是独立的教学质量评审员，评的是「老师教得�
 1. 证据优先：只根据给定记录判断；不确定的维度给 0.5，不确定的 flag 给 false。
 2. 检查点真值优先：明细「选项集合不一致（正确 X，作答 Y）」而结果 passed → wrongAnswerPassed；
    明细「与答案键一致」的 passed 检查点，不得仅凭学员自由文本与任务口径的差异判错答放行。
-3. 每个判 true 的 flag 必须给至少 1 条逐字引文（从记录里原样复制 ≤120 字，不要改写）；
+3. 收口语义（2026-10-24）：`finalizationAction=end_only` 表示学员主动结束、**没有结算任务**，
+   不得把「会话结束」当作「任务完成」宣称。若 `openQuestion=true` 且 actionPlan 含「待验证」，
+   这是诚实收口，`unclosedComplete` 判 false；若 openQuestion=true 但总结仍称「已完成/已掌握/
+   学员已答」，按 `summaryMismatch` 处理。只有 finalizationAction=complete_task/complete_review
+   或 wrapup 明确宣称任务达标、而末问未答时，才判 `unclosedComplete=true`。
+4. 每个判 true 的 flag 必须给至少 1 条逐字引文（从记录里原样复制 ≤120 字，不要改写）；
    给不出引文的 flag 会被系统降级为 false。
-4. issues 最多 5 条，必须引用具体原话或检查点行，并给出可执行改进建议；不要写空泛评语。
+5. issues 最多 5 条，必须引用具体原话或检查点行，并给出可执行改进建议；不要写空泛评语。
 
 输出严格 JSON（不要 markdown 代码块、不要表外字段）：
 {

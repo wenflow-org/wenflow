@@ -1,4 +1,4 @@
-import { evaluateSessionClosable } from '../teaching-closure'
+import { appendClosureFollowUp, buildClosureAudit, evaluateSessionClosable } from '../teaching-closure'
 
 /**
  * #51 P-25：endSession 前机械门禁。放弃/异常终态豁免；检查点到顶后允许带错收束。
@@ -86,5 +86,63 @@ describe('evaluateSessionClosable', () => {
         teachingState: { pendingCheckpoint: { id: 'cp-1' } },
       }).closable).toBe(true)
     }
+  })
+})
+
+// 2026-10-24 离线评审基线（85% 课堂未答收口）：end_only 可以放开收束，但必须留下
+// 「待验证」事实，不能把会话结束读成任务完成。
+describe('buildClosureAudit / appendClosureFollowUp', () => {
+  const openMessages = [
+    { role: 'user', content: '我做完了' },
+    { role: 'assistant', content: '算得不错。那这一步为什么要先乘？' },
+  ]
+
+  it('末问未答 → openQuestion=true，记录原因码与原问题', () => {
+    const audit = buildClosureAudit({ messages: openMessages, teachingState: { completionDeferrals: 2 } })
+    expect(audit.openQuestion).toBe(true)
+    expect(audit.code).toBe('FINALIZATION_OPEN_QUESTION')
+    expect(audit.question).toContain('为什么要先乘')
+    expect(audit.deferredTimes).toBe(2)
+  })
+
+  it('学生已答 → openQuestion=false', () => {
+    const audit = buildClosureAudit({
+      messages: [
+        { role: 'assistant', content: '那这一步为什么要先乘？' },
+        { role: 'user', content: '因为有括号' },
+      ],
+      teachingState: {},
+    })
+    expect(audit.openQuestion).toBe(false)
+    expect(audit.question).toBeNull()
+  })
+
+  it('未答检查点 → 原因码为 FINALIZATION_PENDING_CHECKPOINT', () => {
+    const audit = buildClosureAudit({
+      messages: [{ role: 'assistant', content: '开始吧' }],
+      teachingState: { pendingCheckpoint: { id: 'cp-1' } },
+    })
+    expect(audit.openQuestion).toBe(true)
+    expect(audit.code).toBe('FINALIZATION_PENDING_CHECKPOINT')
+  })
+
+  it('异常终态不算未答收口缺陷', () => {
+    const audit = buildClosureAudit({
+      messages: openMessages,
+      teachingState: {},
+      endReason: 'learner-abandoned',
+    })
+    expect(audit.openQuestion).toBe(false)
+  })
+
+  it('appendClosureFollowUp 把待验证置顶且可重复调用不重复', () => {
+    const audit = buildClosureAudit({ messages: openMessages, teachingState: {} })
+    const summary = { actionPlan: ['继续练习', '待验证：旧项'], topicSummary: 'x' }
+    const once = appendClosureFollowUp(summary, audit)
+    const twice = appendClosureFollowUp(once, audit)
+    expect(once.actionPlan[0]).toContain('待验证：')
+    expect(once.actionPlan[0]).toContain('为什么要先乘')
+    expect(once.actionPlan.filter((item) => String(item).startsWith('待验证：'))).toHaveLength(1)
+    expect(twice.actionPlan).toEqual(once.actionPlan)
   })
 })

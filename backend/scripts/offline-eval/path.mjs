@@ -6,7 +6,7 @@
  * 决策由 ds4.1 做（默认 deepseek-v4.1-flash），K 次取中位数/多数。
  */
 import {
-  clip, jparse, hasVerbatimQuote, validateIssues, weightedScore, majority,
+  clip, jparse, hasVerbatimQuote, pickEvenly, validateIssues, weightedScore, majority,
 } from './lib.mjs';
 
 export const DIMENSIONS = [
@@ -48,13 +48,12 @@ export function selectPathCases(db, {
        AND p.createdAt >= ?${scopeSql}${emailSql}
      ORDER BY p.createdAt DESC`).all(...[since, ...(emailLike ? [emailLike] : [])]);
   const wanted = ids ? new Set(ids) : null;
+  const candidates = wanted ? rows.filter((row) => wanted.has(row.pid)) : rows;
   const cases = [];
-  for (const row of rows) {
-    if (wanted && !wanted.has(row.pid)) continue;
+  for (const row of pickEvenly(candidates, limit)) {
     const built = buildPathCase(db, row);
     if (!built || built.taskCount < minTasks) continue;
     cases.push(built);
-    if (cases.length >= limit) break;
   }
   return cases;
 }
@@ -109,8 +108,13 @@ export function buildPathCase(db, row) {
   ].filter(Boolean);
 
   const totalMinutes = tasks.reduce((sum, t) => sum + (Number(t.estimatedMinutes) || 0), 0);
-  const budget = template?.budgetConservation?.target ?? row.estimatedHours ?? null;
-  const budgetMinutes = budget ? Number(budget) * 60 : null;
+  const conservation = template?.budgetConservation || {};
+  const targetHours = Number(conservation.target) || null;
+  const plannedAfterHours = Number(conservation.after) || null;
+  const deliveredHours = row.estimatedHours ? Number(row.estimatedHours) : null;
+  // 计划口径以「守恒后 after」为准（target 是守恒前容量，拿它比任务量会把已声明的缩水误判成缺陷）。
+  const budgetHours = plannedAfterHours ?? targetHours ?? deliveredHours ?? null;
+  const budgetMinutes = budgetHours ? budgetHours * 60 : null;
   const ratio = budgetMinutes && budgetMinutes > 0 ? totalMinutes / budgetMinutes : null;
   const acCovered = tasks.filter((t) => String(t.acceptanceCriteria || '').trim()).length;
   const titleCounts = new Map();
@@ -125,7 +129,10 @@ export function buildPathCase(db, row) {
 
   const metrics = [
     `里程碑 ${milestones.length}｜任务 ${tasks.length}｜总预计 ${totalMinutes} 分钟`,
-    budgetMinutes ? `预算 ${Math.round(budgetMinutes)} 分钟（${budget} 小时）｜实际/预算比 ${ratio !== null ? ratio.toFixed(2) : '?'}` : '预算：未记录',
+    budgetMinutes
+      ? `预算口径：守恒前 target=${targetHours ?? '?'}h｜守恒后 after=${plannedAfterHours ?? '?'}h｜路径 estimatedHours=${deliveredHours ?? '?'}h`
+        + `｜实际/计划比 ${ratio !== null ? ratio.toFixed(2) : '?'}（分母=after，缺省回退 target/estimatedHours）`
+      : '预算：未记录',
     `有验收标准的任务 ${acCovered}/${tasks.length}`,
     kc ? `KC 组 ${kc.groups}｜KC ${kc.kcs}｜任务-KC 链接 ${kc.links}（覆盖任务 ${kcCoveredTasks}/${tasks.length}）｜图节点 ${kc.nodes}｜前置边 ${kc.edges}` : 'KC 标注：缺失',
     duplicates.length ? `重复标题 ${duplicates.length} 组：${duplicates.map(([k, n]) => `${k}×${n}`).join('、')}` : '重复标题：无',
@@ -175,7 +182,18 @@ export function buildPathCase(db, row) {
     taskCount: tasks.length,
     milestoneCount: milestones.length,
     createdAt: row.createdAt,
-    metrics: { totalMinutes, budgetMinutes, ratio, acCovered, taskCount: tasks.length, duplicates: duplicates.length, kcCoveredTasks },
+    metrics: {
+      totalMinutes,
+      targetMinutes: targetHours ? targetHours * 60 : null,
+      afterMinutes: plannedAfterHours ? plannedAfterHours * 60 : null,
+      deliveredMinutes: deliveredHours ? deliveredHours * 60 : null,
+      budgetMinutes,
+      ratio,
+      acCovered,
+      taskCount: tasks.length,
+      duplicates: duplicates.length,
+      kcCoveredTasks,
+    },
     block,
   };
 }
@@ -200,6 +218,9 @@ const RUBRIC = `你是独立的学习路径质量评审员。评审对象是一�
 
 判定纪律：
 1. 以「结构事实」为准，不要自行重算课时；但可以指出事实之间的不一致。
+   课时口径：`after` 是守恒后的计划（真正要交付的量），`target` 是守恒前容量；
+   判 `budgetMismatch` 应看「实际/计划比」（分母=after），不要拿 target 当分母——
+   已声明的缩水不是缺陷。只有 after 与任务量明显不符、且没有交付说明时才判真。
 2. 只根据给定记录判断；不确定的维度给 0.5，不确定的 flag 给 false。
 3. 每个判 true 的 flag 必须给至少 1 条逐字引文（从记录里原样复制 ≤120 字）；给不出引文的会被降级为 false。
 4. 每个低分维度（<0.6）至少给 1 条 issue，引用具体阶段/任务编号或原话。

@@ -20,8 +20,9 @@ import { enqueueDomainEvent } from '../../events/outbox.repository';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { classifyFinalizationError } from './FinalizationErrors';
-import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
+import { hasReliableSessionEvaluation, getSessionFinalizationState, mergeFinalTeachingState } from './SessionFinalizationPolicy';
 import { getPendingCheckpoint, recordCheckpointAttemptEvidence } from './teaching-checkpoint';
+import { appendClosureFollowUp, buildClosureAudit } from './teaching-closure';
 import {
   aggregateSessionEvaluationFromMessages,
   buildSessionEvaluationShadow,
@@ -918,13 +919,27 @@ export async function endSession(
       avgCognitiveLevel: lastAnalyzedMessage?.analysis?.cognitiveLevel || 'understand',
       duration: durationMinutes,
     };
+    // 收口审计（2026-10-24）：end_only/复习课可以带着未答问题收束，但必须把「待验证」写进
+    // wrapup，避免把「会话结束」读成「任务完成/学员已掌握」。不改变任何收束判定。
+    const closureAudit = buildClosureAudit({
+      messages: session.messages,
+      teachingState: session.teachingState,
+      endReason: sessionArtifacts.endReason || endReason,
+    });
+    const finalizationAction = getSessionFinalizationState(session.teachingState)?.lastAction ?? null;
     const persistedWrapup = {
       ...wrapupArtifact,
+      summary: closureAudit.openQuestion
+        ? appendClosureFollowUp(wrapupArtifact.summary, closureAudit)
+        : wrapupArtifact.summary,
       duration: durationMinutes,
       stateUpdate: finalState,
       summarySource: wrapupResult.summarySource,
       evaluationSource: wrapupResult.evaluationSource,
       runtimeEnvelope: wrapupRuntimeEnvelope,
+      // 收口事实（离线评审/前端据此区分「诚实收口」与「假完成」）
+      finalizationAction,
+      ...(closureAudit.openQuestion ? { closureAudit } : {}),
       // 影子双写：确定性聚合 vs LLM，仅供比对，不被任何消费方读取
       shadowDeterministic,
       // 延伸学一期（#124）：只观测——延伸段学了什么、有多重（负荷/回合），

@@ -51,7 +51,9 @@
 
 **硬失败**：`wrongAnswerPassed`、`fabricatedContent`、`unclosedComplete`、`summaryMismatch` 任一为 true；否则均分 < 0.70 判 fail。`loopStuck` 只影响分数与 issue。
 
-案例块注入：本课任务（标题/说明/验收标准）、路径目标、知识点最终状态、检查点 ground truth（题面/判分来源/结果/所选/明细）、结课总结、对话节选（首 4 + 均匀中段 + 末 10）。检查点真值优先于学员自由文本——沿用 v4.1 的判例，避免「所选与更窄检查点问题不一致」被误判为错答放行。
+案例块注入：本课任务（标题/说明/验收标准）、路径目标、知识点最终状态、检查点 ground truth（题面/判分来源/结果/所选/明细）、结课总结、**收口事实**（`finalizationAction` / `closureAudit.openQuestion` / 未答问题）、对话节选（首 4 + 均匀中段 + 末 10）。检查点真值优先于学员自由文本——沿用 v4.1 的判例，避免「所选与更窄检查点问题不一致」被误判为错答放行。
+
+收口语义（2026-10-24 起）：`finalizationAction=end_only` 表示学员主动结束、没有结算任务，不得把「会话结束」当作「任务完成」宣称；若 `openQuestion=true` 且 actionPlan 含「待验证」，视为诚实收口，`unclosedComplete` 判 false。只有 `complete_task/complete_review` 或总结明确宣称达标、而末问未答时才判 true。
 
 ## 四、路径 rubric
 
@@ -68,7 +70,7 @@
 
 五个二元问题：`domainViolation`（越界承诺）、`prerequisiteGap`（前置缺失/顺序错误）、`budgetMismatch`（课时与预算明显不符）、`placeholderTask`（占位/空泛任务）、`duplicateTask`（任务重复）。`domainViolation` / `prerequisiteGap` 为硬失败，其余进入均分与 issue。
 
-案例块额外注入**代码统计的结构事实**（任务数、总分钟、预算比、验收标准覆盖、KC 覆盖、重复标题），要求模型以事实为准，不许自行重算。
+案例块额外注入**代码统计的结构事实**（任务数、总分钟、预算比、验收标准覆盖、KC 覆盖、重复标题），要求模型以事实为准，不许自行重算。课时比的分母优先用 `budgetConservation.after`（守恒后计划）；`target` 是守恒前容量，用它做分母会把已声明的缩水误判成缺陷。
 
 ## 五、采样与运行
 
@@ -92,7 +94,7 @@ node backend/scripts/offline-eval/run.mjs --target=all --limit=20 --days=30 --k=
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `--target` | `all` | `classroom` / `path` / `all` |
-| `--limit` | 20 | 每个目标的样本上限 |
+| `--limit` | 20 | 每个目标的样本上限（窗口内按时间等距抽样，避免只评最近一批） |
 | `--days` | 30 | 只取最近 N 天创建的数据 |
 | `--k` | 3 | 每案例独立判读次数 |
 | `--conc` | 4 | 并发案例数（每案例内部 K 次并发） |

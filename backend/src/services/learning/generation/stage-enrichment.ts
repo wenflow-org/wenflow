@@ -21,6 +21,7 @@ import {
   reconcileDeliveryConservation,
 } from './path-fill-note';
 import { auditStageBudget } from './stage-budget-invariant';
+import { auditPathStructure, reorderTasksForPrerequisites } from './path-structure-audit';
 import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
@@ -820,6 +821,25 @@ async function enrichLearningPathWithAndersonInner(
     });
     }
 
+    // 同阶段前置重排（2026-10-24，路径结构审计：144 条缺口可在阶段内修复）：
+    // 只把「同阶段内排在后继之后的前置任务」按稳定拓扑前移；跨阶段依赖不在此动。
+    // 原地 splice，保证 stageDesignRawOutputs 与 DB 创建顺序一致。
+    if (kcAnnotation) {
+      let reorderedEdges = 0;
+      for (const stageOutput of stageDesignOutputs) {
+        const ordered = reorderTasksForPrerequisites(
+          stageOutput.subtasks as Array<{ title?: unknown }>,
+          kcAnnotation as unknown as Parameters<typeof reorderTasksForPrerequisites>[1],
+        );
+        if (!ordered.changed) continue;
+        stageOutput.subtasks.splice(0, stageOutput.subtasks.length, ...ordered.tasks);
+        reorderedEdges += ordered.reorderedEdges;
+      }
+      if (reorderedEdges > 0) {
+        logger.info('[stage-enrichment] 同阶段前置任务已重排', { pathId, reorderedEdges });
+      }
+    }
+
     // 任务级资料引用收集（key = subtaskId；写进模板 JSON，不新增表列）
     const materialRefsByTask: Record<string, any[]> = {};
     // 任务级迷思预判收集（key = subtaskId；同 sidecar 模式，2026-09-26 课前注入）
@@ -1142,6 +1162,33 @@ async function enrichLearningPathWithAndersonInner(
         });
       }
 
+      // 结构确定性审计（2026-10-24）：前置缺口 / 重复任务 / 课时偏差。只记录不重排，
+      // 写入 aiPromptTemplate.pathAudit 供离线评审与后续生成修复消费。
+      const structureAudit = kcAnnotation
+        ? auditPathStructure({
+            kcAnnotation: kcAnnotation as unknown as Parameters<typeof auditPathStructure>[0]['kcAnnotation'],
+            tasks: learningPath.milestones.flatMap((milestone) => {
+              const subtasks = stageDesignOutputs.find((item) => item.milestoneId === milestone.id)?.subtasks || [];
+              return (subtasks as Array<{ title?: string; description?: string }>).map((task, index) => ({
+                title: String(task?.title || ''),
+                description: String(task?.description || ''),
+                stageNumber: milestone.stageNumber,
+                order: index,
+              }));
+            }),
+            totalMinutes: pathTotalMinutes,
+            afterHours: Number((parsedTemplate as any)?.budgetConservation?.after) || null,
+            delivery: (reconciledConservation as { delivery?: string } | null)?.delivery ?? null,
+          })
+        : null;
+      if (structureAudit && structureAudit.issues.length > 0) {
+        logger.warn('[stage-enrichment] 路径结构审计发现问题（只记录，不重排）', {
+          pathId: learningPath.id,
+          issues: structureAudit.issues.slice(0, 8).map((issue) => issue.kind),
+          stats: structureAudit.stats,
+        });
+      }
+
       await tx.learning_paths.update({
         where: { id: learningPath.id },
         data: {
@@ -1154,6 +1201,7 @@ async function enrichLearningPathWithAndersonInner(
             ...(capacityOverload ? { capacityOverload } : {}),
             ...(reconciledConservation ? { budgetConservation: reconciledConservation } : {}),
             ...(stageBudgetAudit.ok ? {} : { stageBudgetAudit: stageBudgetAudit.violations }),
+            ...(structureAudit && structureAudit.issues.length > 0 ? { pathAudit: structureAudit } : {}),
             ...(Object.keys(materialRefsByTask).length
               ? {
                   materialRefs: {
