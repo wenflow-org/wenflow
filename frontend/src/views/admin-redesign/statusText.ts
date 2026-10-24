@@ -503,7 +503,9 @@ const ACTION_TEXT: Record<string, string> = {
   'virtual-session-auto-learning': '虚拟会话自动学习',
   'virtual-session-run-full': '虚拟会话全量运行',
   'virtual-session-blackbox-action': '虚拟会话黑盒操作',
-  'projection-access-token': '生成投影访问令牌'
+  'projection-access-token': '生成投影访问令牌',
+  // 2026-10-24 审计走查：插件开关此前落成英文键 plugin-toggle，动作列直接印出来
+  'plugin-toggle': '启停插件'
 }
 
 /**
@@ -525,6 +527,11 @@ const PATH_ACTION_RULES: Array<[RegExp, string]> = [
   [/\/virtual-learners\/[^/]+\/draft-profile$/, '生成虚拟人设画像'],
   [/\/virtual-learners\/[^/]+\/stories\/[^/]+$/, '编辑虚拟故事'],
   [/\/virtual-learners\/[^/]+\/projection-token$/, '生成虚拟投影令牌'],
+  // 2026-10-24 审计走查：卡库的四种批量操作此前落成原始 /api/... 路径
+  [/\/virtual-learners\/cards\/clone$/, '卡派生虚拟学习者'],
+  [/\/virtual-learners\/cards\/validate$/, '校验学习者卡'],
+  [/\/virtual-learners\/cards\/import$/, '导入学习者卡'],
+  [/\/virtual-learners\/cards\/export$/, '导出学习者卡'],
   [/\/virtual-learners\/batch-delete$/, '批量删除虚拟学习者'],
   [/\/virtual-learners\/batch-create$/, '批量创建虚拟学习者'],
   // 虚拟学习者 · 会话
@@ -592,7 +599,9 @@ const TARGET_TEXT: Record<string, string> = {
   announcement: '公告',
   session: '会话',
   'virtual-learner': '虚拟学习者',
-  'virtual-session': '虚拟会话'
+  'virtual-session': '虚拟会话',
+  // 2026-10-24：插件启停写审计后，目标类型此前回退成英文 plugin
+  plugin: '插件'
 }
 
 export function targetTypeText(s: string | null | undefined): string {

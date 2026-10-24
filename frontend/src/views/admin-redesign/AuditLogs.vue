@@ -414,11 +414,20 @@ function methodOf(log: AuditLogRow): string {
   return /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/.test(m) ? m : ''
 }
 
-/** 动作列展示（P2-16）：语义名优先；老数据（action 存原始串）按 path 兜底映射；都没有才回退原始 path */
+/**
+ * 动作列展示（P2-16）：语义名优先；老数据（action 存原始串）按 path 兜底映射。
+ * 2026-10-24 用户走查：规则没覆盖的接口会把 `/api/admin/...` 整条印在列表里（如卡库 clone）。
+ * 仍未命中的接口统一显示「管理操作」——完整方法与路径留在单元格悬停和展开区的请求原文里，
+ * 列表不承担接口文档的职责。
+ */
+const RAW_ACTION_FALLBACK = '管理操作'
 function actionLabelOf(log: AuditLogRow): string {
   const mapped = actionText(log.action)
   if (mapped !== log.action) return mapped
-  return pathActionText(log.path, log.method) || log.path || mapped
+  const byPath = pathActionText(log.path, log.method)
+  if (byPath) return byPath
+  const raw = `${log.action || ''} ${log.path || ''}`
+  return /\/api\//.test(raw) || String(log.action || '').startsWith('/') ? RAW_ACTION_FALLBACK : log.action || log.path || mapped
 }
 
 /* —— 动作快筛（2026-10-05 重设计）：当前页动作聚合 → keyword 下钻 ——
@@ -677,7 +686,9 @@ function failureLabel(action: string): string {
   const methodMatch = action.match(/^([A-Z]+)\s/)
   const method = methodMatch ? methodMatch[1] : ''
   const path = action.replace(/^[A-Z]+ /, '')
-  return pathActionText(path, method) || action
+  const byPath = pathActionText(path, method)
+  if (byPath) return byPath
+  return /\/api\//.test(path) || path.startsWith('/') ? RAW_ACTION_FALLBACK : action
 }
 
 /** 下钻关键词：老数据 action 是 `METHOD /path`（含真实 id，统计侧已归一化为 :id），

@@ -59,7 +59,8 @@ describe('AdminConsole 页面注册表', () => {
       虚拟实验: ['virtual-learners', 'virtual-learner-cards'],
       // 「外挂能力」2026-10-19 从 api-config 宿主拆回独立页并归入本组（用户拍板）
       Skill: ['orchestrator', 'skills', 'addons'],
-      观测: ['execution-logs', 'token-cost', 'audit-logs'],
+      // 2026-10-24 用户「重新排一下序」：两份日志相邻，成本分析接在后面
+      观测: ['execution-logs', 'audit-logs', 'token-cost'],
       系统: ['health-center', 'api-config'],
       运营: ['ops-hub']
     });

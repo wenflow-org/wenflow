@@ -124,6 +124,10 @@ describe('actionText（审计动作）', () => {
   it('未知动作回退原文', () => {
     expect(actionText('mystery-action')).toBe('mystery-action');
   });
+
+  it('插件启停写入的英文动作键有中文名（2026-10-24）', () => {
+    expect(actionText('plugin-toggle')).toBe('启停插件');
+  });
 });
 
 describe('pathActionText（HTTP path → 中文动作，兜底老审计行）', () => {
@@ -148,6 +152,12 @@ describe('pathActionText（HTTP path → 中文动作，兜底老审计行）', 
     expect(pathActionText('/api/admin/api-config/test-model', 'POST')).toBe('测试模型连通性');
   });
 
+  it('卡库批量操作不再印原始路径（2026-10-24 审计走查）', () => {
+    expect(pathActionText('/api/admin/virtual-learners/cards/clone', 'POST')).toBe('卡派生虚拟学习者');
+    expect(pathActionText('/api/admin/virtual-learners/cards/validate', 'POST')).toBe('校验学习者卡');
+    expect(pathActionText('/api/admin/virtual-learners/cards/import', 'POST')).toBe('导入学习者卡');
+  });
+
   it('未命中返回空串（调用方再回退原始 path）', () => {
     expect(pathActionText('/api/admin/whatever')).toBe('');
     expect(pathActionText(null)).toBe('');
@@ -160,6 +170,7 @@ describe('targetTypeText（审计目标类型）', () => {
     expect(targetTypeText('session')).toBe('会话');
     expect(targetTypeText('virtual-learner')).toBe('虚拟学习者');
     expect(targetTypeText('virtual-session')).toBe('虚拟会话');
+    expect(targetTypeText('plugin')).toBe('插件');
   });
 
   it('空值 → —', () => {
