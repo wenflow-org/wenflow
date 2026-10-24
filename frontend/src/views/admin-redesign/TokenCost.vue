@@ -296,7 +296,7 @@
               </button>
             </div>
           </div>
-          <TcRankTable v-if="byUser.length" :items="userRows" variant="user" :total-tokens="totalTokens" />
+          <TcRankTable v-if="byUser.length" :items="userRows" variant="user" :total-tokens="totalTokens" clickable @select="goUserLogs" />
           <p v-else class="mk-card__note">{{ userQuery ? `没有匹配「${userQuery}」的用户` : '暂无数据。' }}</p>
         </section>
 
@@ -305,7 +305,7 @@
             <h3 class="mk-card__title">模型用量排行</h3>
             <span class="mk-card__meta">{{ byModel.length }} 个</span>
           </div>
-          <TcRankTable v-if="byModel.length" :items="byModel" variant="model" :total-tokens="totalTokens" />
+          <TcRankTable v-if="byModel.length" :items="byModel" variant="model" :total-tokens="totalTokens" clickable @select="goModelLogs" />
           <p v-else class="mk-card__note">暂无数据。</p>
         </section>
       </div>
@@ -316,6 +316,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { intent, tokenCostCacheKey, tokenCostFilters } from './store'
 import { errMsg, isPageCacheFresh, markPageFetched, liveRefreshSeq } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
@@ -346,6 +347,32 @@ interface Summary {
 const days = computed({
   get: () => tokenCostFilters.days,
   set: (v: number) => { tokenCostFilters.days = v }
+})
+
+/* 时间窗口 URL 化（2026-10-24）：此前窗口只存在 store，刷新/分享/返回都回默认 7 天；
+   执行日志转投过来的旧链接也带着筛选条件。只同步 days（三表共用），默认 7 不写 URL。 */
+const route = useRoute()
+const router = useRouter()
+const COST_DAYS = [7, 30, 90] as const
+function readDaysFromQuery(v: unknown): number | null {
+  const n = Number(v)
+  return (COST_DAYS as readonly number[]).includes(n) ? n : null
+}
+const qDays = readDaysFromQuery(route.query.days)
+if (qDays) days.value = qDays
+watch(
+  () => route.query.days,
+  (v) => {
+    const n = readDaysFromQuery(v)
+    if (n && n !== days.value) days.value = n
+  }
+)
+watch(days, (d) => {
+  const q = { ...route.query }
+  if (d === 7) delete q.days
+  else q.days = String(d)
+  if (String(q.tab || '') === 'cost') delete q.tab
+  void router.replace({ query: q })
 })
 const loading = ref(false)
 const loadFailed = ref(false)
@@ -610,6 +637,20 @@ function goExecLogs(agentFilter = '') {
   intent.timeRange = ''
   intent.scene = 'execution-logs'
 }
+/** 成本下钻（2026-10-24）：用户/模型榜整行可点 → 执行日志按关键词 + 同窗口筛调用。
+    执行日志关键词搜 input/output/error，用户 id 与模型名通常出现在调用载荷里；
+    窗口按成本页天数映射到执行日志的时间档。 */
+function goLogsByKeyword(keyword: string) {
+  const range = days.value === 30 ? 'month' : days.value === 90 ? 'all' : 'week'
+  void router.push({ path: '/admin/execution-logs', query: { q: keyword, range } })
+}
+function goUserLogs(r: RankRow) {
+  goLogsByKeyword(String(r.email || r.name || r.key || ''))
+}
+function goModelLogs(r: RankRow) {
+  goLogsByKeyword(String(r.key || r.display || ''))
+}
+
 /** Skill 明细行点击：key 可能带 skill: 前缀（注册表口径），执行日志行内 agent 是裸名 */
 function goSkillLogs(r: SkillCostRow) {
   goExecLogs(String(r.key || '').replace(/^skill:/, ''))

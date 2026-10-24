@@ -312,7 +312,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { openSubPage } from './store';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
@@ -561,7 +561,6 @@ interface SkillSyncBadge {
   title: string;
 }
 
-const router = useRouter();
 const skillSyncs = ref<SkillSyncBadge[]>([]);
 const skillSyncLoading = ref(false);
 
@@ -615,8 +614,10 @@ async function loadSkillSyncs() {
 }
 
 function goSkill(skillId: string) {
-  // 2026-10-15：设计页平铺进 Skill 详情页，落点 ?view=skill&id=，页签键 skdTab=routing
-  void router.push({ path: '/admin/skills', query: { view: 'skill', id: skillId, skdTab: 'routing' } });
+  // 2026-10-24：同场景二级页（openSubPage）而不是换场景 router.push——
+  // 从编排图字段路由进入时，关闭详情应回到编排图原阶段/子页签，而不是落在 Skill 列表。
+  // 详情页签由宿主 URL 同步写成独立键 skdTab，不碰编排图的 ?tab=。
+  openSubPage('skill', skillId, { tab: 'routing' });
 }
 
 // ============ 编排文件编辑（单源化批次 C） ============

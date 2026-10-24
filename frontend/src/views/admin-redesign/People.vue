@@ -77,7 +77,9 @@ const ppKpi = computed<PpKpiTile[]>(() => {
       label: '账号',
       value: rows.length,
       tone: '',
-      title: `${scope}${rows.length ? ` · 管理员 ${admins}` : ''}`,
+      // 与「学习状态 · 学习者账号」「记忆与复习 · 有记忆痕迹的用户」同源不同名：这里按账号全集，
+      // 另外两页分别按“有快照 / 有记忆痕迹”的自然子集（2026-10-24 口径互注）
+      title: `${scope}${rows.length ? ` · 管理员 ${admins}` : ''}。执行虚拟学习者不在本页（见「虚拟实验」组）`,
     },
     { label: '近 7 天活跃', value: active7dOf(rows), tone: '', title: scope },
     {

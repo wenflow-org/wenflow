@@ -304,28 +304,12 @@
   </div>
 </template>
 
-<script lang="ts">
-/* G3a（2026-10-10）：列表态快照必须活过组件卸载——进会话座舱（行点击或操作列「详情」）时
-   AdminConsole 互斥卸载本组件（<component :is> 无 KeepAlive，OpsContent.vue #39 同款场景），
-   <script setup> 作用域的变量随实例销毁，故快照放模块级（本 <script> 块每模块只执行一次），
-   才能跨「下钻 → 返回」存活。
-   为什么不走 openSubPage 的 from：from.view 必须是 SubPageView 二级页类型，目标对话是
-   一级列表页没有合法值可填。consume-once：只服务「进详情 → 返回列表」一个场景，
-   不落 localStorage（防跨会话残留旧筛选）；下钻后经侧栏去别的场景再回来的窄边角
-   会消费一次旧快照，与 OpsContent 先例同口径，可接受。 */
-interface GcSavedListState {
-  page: number
-  keyword: string
-  statusFilter: string
-  noPathOnly: boolean
-}
-let gcSavedListState: GcSavedListState | null = null
-</script>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
+import { useListQueryState } from './learner-profile'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { stageProgressIndex, stageTimelineText, stageTimeline, monthDayText, GOAL_STAGE_TOTAL, statusText } from './statusText'
@@ -453,20 +437,12 @@ const completionRatePct = computed(() => {
   const n = Number(s.completionRate)
   return Number.isFinite(n) ? `${Math.round(n)}%` : '—'
 })
-/* G3a（2026-10-10）：挂载时一次性读回「路径格下钻前」存下的列表态（consume-once，
-   存储见文件顶 <script> 块）；未下钻过的普通进入读回 null，一切走初值 */
-function takeSavedListState(): GcSavedListState | null {
-  const s = gcSavedListState
-  gcSavedListState = null
-  return s
-}
-const restoredListState = takeSavedListState()
-const keyword = ref(restoredListState?.keyword || '')
-const statusFilter = ref(restoredListState?.statusFilter || '')
+const keyword = ref('')
+const statusFilter = ref('')
 /* 「未生成路径」快筛（2026-10-08）：进行中且尚未生成学习路径的运营卡点会话。
    与分布条状态筛选叠加为 AND；再点取消。不显计数——分布条计数是服务端全量口径
    （stats），本快筛只能按已加载窗口算，同屏两个口径会数字打架（同 TS 页教训） */
-const noPathOnly = ref(restoredListState?.noPathOnly || false)
+const noPathOnly = ref(false)
 /** 「未生成路径」谓词：hasPath 与路径列「—」同口径（均由后端 learningPathId 推导）；
     已完成桶口径 = 已生成学习路径，故「未生成」只拦进行中，两处口径呼应不矛盾 */
 const isPathPendingRow = (r: Row) => r.status === 'active' && !r.hasPath
@@ -485,7 +461,7 @@ const gcColDefs = [
   { key: 'turns', label: '澄清轮次', title: '学习者在目标澄清里的发言轮次（不是完成度）' },
   { key: 'constraints', label: '约束条件', title: '澄清中收集的可用时间 / 期限等约束' },
   { key: 'path', label: '路径', title: '路径是否已生成' },
-  { key: 'stageDate', label: '最近活动', title: '目标对话最近一次活动日（进行中=最后活动日，已完成=完成日，失败/取消=终态日）；悬停看完整阶段时间线' },
+  { key: 'stageDate', label: '最近活动', title: '目标对话最近一次活动日：进行中取最后活动日，已完成取完成日，失败或取消取终态日。完整阶段时间线见行内展开' },
   { key: 'created', label: '创建时间', title: '对话创建时间' },
 ] as const
 const gcHiddenCols = ref<Set<string>>(new Set<string>(GC_DEFAULT_HIDDEN))
@@ -715,10 +691,33 @@ function clearFilters() {
    列表为客户端全量数据（limit:LIST_LIMIT 拉取后本地筛选），按页切片。
    回第 1 页只监听筛选输入（G3b，2026-10-10，对齐 TeachingSessions/OpsContent 判例）：
    此前监听 filtered 结果——删除行/口径切换回填数据也会把页码拽回第 1 页；
-   且快照恢复的页码会被「重挂载后 rows 回填」触发的 filtered watch 打回初值，
-   G3a 的 page 恢复就永远无效。越界收敛由 Pagination 自带 watcher 兜底 */
-const page = ref(restoredListState?.page || 1)
+   页码恢复交给 URL（下方 useListQueryState），不再依赖组件内快照。
+   越界收敛由 Pagination 自带 watcher 兜底 */
+const page = ref(1)
 const pageSize = ref(15)
+/* 列表态 URL 化（2026-10-24）：此前用模块级快照，刷新/分享即回初值。
+   参数名：status / q / page / size / noPath；缺省值不写 URL。 */
+/* helper 的中性档约定是 'all'，本页内部用空串表示「全部」（'' 才能绕过过滤分支）：
+   用可写计算属性做两侧映射，URL 仍写 pill=all 时归一成空串 */
+const gcPillFilter = computed({
+  get: () => statusFilter.value || 'all',
+  set: (v: string) => { statusFilter.value = v === 'all' ? '' : v },
+})
+useListQueryState(
+  {
+    pill: gcPillFilter,
+    keyword,
+    page,
+    pageSize,
+    allowedPills: ['all', 'active', 'completed', 'cancelled'],
+    extra: [{
+      key: 'noPath',
+      get: () => (noPathOnly.value ? '1' : ''),
+      set: (v) => { noPathOnly.value = v === '1' },
+    }],
+  },
+  { pill: 'status' }
+)
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
@@ -829,16 +828,9 @@ const { goTrace, goConsole } = useSessionDrill(closeDetail)
 const gcScopeSub = '与学习者澄清真实目标 · 约束条件与澄清轮次'
 
 /** 进会话座舱（行点击 / 操作列「详情」共用；路径与对话同一座舱的不同页签）。
- *  G3a（2026-10-10）：目标对话是一级列表页，from.view 无合法 SubPageView 可填，
- *  改走列表态快照（判例 OpsContent.vue #39）：出站前存 page/筛选，返回重挂载时
- *  一次性读回——此前返回直接落「第 1 页 + 无筛选」的初值列表，翻页/筛选全丢。 */
+ *  2026-10-24：列表态（页码 / 关键词 / 状态 / 未生成路径）改由 URL 承载，
+ *  不再用模块级一次性快照——返回、刷新、复制链接都能复原。 */
 function openDetail(r: Row) {
-  gcSavedListState = {
-    page: page.value,
-    keyword: keyword.value,
-    statusFilter: statusFilter.value,
-    noPathOnly: noPathOnly.value,
-  }
   goConsole(r)
 }
 

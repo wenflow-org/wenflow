@@ -456,7 +456,7 @@ const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
 /* 容量治理去向（2026-10-19 运营走查）：并发上限 / VL 专属 RPM / 日期模拟都在「模型与接入 ·
    调用与健康」页签的「虚拟学习者通道 / 出站速率」分组里。此前三处注释与速率卡的 title 都写着
    「模型与接入 → 虚拟学习者」页签——那个页签 2026-10-15 重组时就没了，照它找必然扑空。 */
-const VL_CHANNEL_LOCATION_TITLE = '上限与日期模拟在「模型与接入 · 调用与健康」的「虚拟学习者通道」'
+const VL_CHANNEL_LOCATION_TITLE = '上限与日期模拟在「模型与接入 · 虚拟学习者」页签'
 const CONCURRENCY_KPI_TITLE = '自动驾驶同时在跑的运行数占配额比。「已满」是资源占满（后续请求排队），不是故障。'
 const RATE_KPI_TITLE = '在途为正在出站的调用数。上限是已保存的速率配置。'
 /* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
@@ -1076,7 +1076,9 @@ function openVlChannelSettings() {
     if (vlRpmLoadFailed.value) void loadVlRpm()
     return
   }
-  void router.push({ path: '/admin/api-config', query: { tab: 'routing' } })
+  // 2026-10-24 修死链：VRPM / 日期模拟 2026-10-21 已迁到「虚拟学习者」页签，
+  // 旧 tab=routing 会落到调用策略/调用健康，目标控件不在屏上。
+  void router.push({ path: '/admin/api-config', query: { tab: 'virtual' } })
 }
 /* 表头全选 = 当前页全选（2026-10-11 用户拍板，与用户页同规则：跨页全量勾选对批量
    终止/删除太易误伤）。再点一次只清当前页；跨页仍可手动逐个勾（selected 保留）。 */

@@ -47,9 +47,10 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain('v-if="dirtyNow"')
   })
 
-  it('接入页：单组脏不出整页保存条（多组才出）', () => {
+  it('接入页：单组脏且保存钮在本页签时不出整页保存条（切走 / 多组才出）', () => {
     const src = read('ApiConfig.vue')
-    expect(src).toContain('v-if="dirty.size > 1" class="ac-save"')
+    expect(src).toContain('v-if="showSaveBar" class="ac-save"')
+    expect(src).toContain('const showSaveBar = computed')
   })
 
   it('供应商设置弹窗不再重复行内的启用开关与密钥输入（仅创建时出现）', () => {

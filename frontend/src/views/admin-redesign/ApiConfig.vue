@@ -15,7 +15,16 @@
              （外挂能力 2026-10-19 拆出独立页时带走它自己的刷新钮，这里不再有第三个分支） -->
         <!-- 重置为默认（#13）：后端 POST /admin/api-config/reset 此前无前端入口。高风险不可撤销，
              二次确认在 resetConfig 内；三个配置 tab 常驻，与「分组保存」并列但语义是整页级 -->
-        <button v-if="isConfigTab" type="button" class="mk-btn mk-btn--sm" :disabled="resetting" @click="resetConfig">{{ resetting ? '重置中…' : '重置为默认' }}</button>
+        <!-- 2026-10-24：重置只作用于接入配置域（后端 api-config/reset），此前在四个页签都显示，
+             会被读成「重置当前屏」。收回到接入与模型页签，名字写清范围。 -->
+        <button
+          v-if="tab === 'access'"
+          type="button"
+          class="mk-btn mk-btn--sm"
+          :disabled="resetting"
+          title="把接入与模型配置恢复为默认值（不影响调用策略、虚拟学习者通道、安全与访问）"
+          @click="resetConfig"
+        >{{ resetting ? '重置中…' : '重置接入配置' }}</button>
       </template>
     </MkPageHead>
     <!-- 页首 KPI 带已撤（2026-10-14 用户拍板「模型与接入的 kpi 也不要了」）：原两处带
@@ -597,8 +606,10 @@
     </div>
     </template>
 
-    <!-- 保存条（四个配置 tab 共享；脏位跨 tab 不丢）：单组脏时用该分区的保存钮，多组才出整页保存 -->
-    <div v-if="dirty.size > 1" class="ac-save">
+    <!-- 保存条（四个配置 tab 共享；脏位跨 tab 不丢）：多组脏恒出；单组脏仅当该组的
+         分段保存钮不在当前页签时出（2026-10-24）——此前单组切走页签后没有任何保存入口，
+         而留在本页签时由分区保存钮承担，避免同屏两颗保存钮。 -->
+    <div v-if="showSaveBar" class="ac-save">
       <span class="ac-save__dot"></span>
       <span>{{ dirtyGroups.join(' + ') }} · {{ dirty.size }} 组未保存变更</span>
       <button type="button" class="mk-link" :disabled="saving" @click="discardAll">放弃</button>
@@ -945,6 +956,14 @@ const DIRTY_GROUP_LABELS: Record<string, string> = {
   probe: '探测'
 }
 const dirtyGroups = computed(() => [...dirty.value].map((g) => DIRTY_GROUP_LABELS[g] || g))
+/** 脏组所属页签：单组脏时判断它的分段保存钮是否就在当前屏（在则不重复出底部保存条） */
+const DIRTY_GROUP_TAB: Record<string, AcTab> = {
+  conn: 'access', route: 'access', reliability: 'routing', policy: 'security', probe: 'routing'
+}
+const showSaveBar = computed(() =>
+  dirty.value.size > 1
+  || (dirty.value.size === 1 && [...dirty.value].some((g) => DIRTY_GROUP_TAB[g] !== tab.value))
+)
 
 function splitLines(s: string): string[] {
   return s.split('\n').map((x) => x.trim()).filter(Boolean)

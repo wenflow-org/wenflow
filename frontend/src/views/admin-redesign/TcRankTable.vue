@@ -17,8 +17,13 @@
       v-for="(r, i) in items"
       :key="r.key"
       class="tc-table__row"
-      role="row"
-      :title="rowTitle(r)"
+      :class="{ 'tc-table__row--clickable': clickable }"
+      :role="clickable ? 'button' : 'row'"
+      :tabindex="clickable ? 0 : undefined"
+      :title="clickable ? `${rowTitle(r)}。点击到执行日志查该维度调用` : rowTitle(r)"
+      @click="clickable && emit('select', r)"
+      @keydown.enter="clickable && emit('select', r)"
+      @keydown.space.prevent="clickable && emit('select', r)"
     >
       <!-- 排名徽章：1/2/3 实心蓝（前三），其余中性 -->
       <span class="tc-c tc-c--rk" role="cell">
@@ -105,9 +110,12 @@ const props = withDefaults(
         本组件不再提供 skill 档——审核 #132 删除无消费者的死分支） */
     variant: 'user' | 'model'
     totalTokens: number
+    /** 整行可点：到执行日志按该用户 / 模型筛调用明细（2026-10-24 成本下钻对称） */
+    clickable?: boolean
   }>(),
-  { totalTokens: 0 }
+  { totalTokens: 0, clickable: false }
 )
+const emit = defineEmits<{ select: [row: RankRow] }>()
 
 const nameLabel = computed(() => (props.variant === 'user' ? '用户' : '模型'))
 
@@ -229,6 +237,8 @@ function rowTitle(r: RankRow): string {
   transition: background 0.12s;
 }
 .tc-table__row:last-child { border-bottom: none; }
+.tc-table__row--clickable { cursor: pointer; }
+.tc-table__row--clickable:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .tc-table__row:hover { background: var(--mk-table-row-hover-bg); }
 
 .tc-c { min-width: 0; }

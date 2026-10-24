@@ -445,10 +445,10 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(rate.element.tagName).toBe('BUTTON');
     expect(concurrency.classes()).toContain('mk-kpi--clickable');
     expect(rate.classes()).toContain('mk-kpi--clickable');
-    // 去向写全新位置；「模型与接入 → 虚拟学习者」页签 2026-10-15 就撤了
-    expect(concurrency.attributes('title')).toContain('虚拟学习者通道');
-    expect(rate.attributes('title')).toContain('调用与健康');
-    expect(rate.attributes('title')).not.toContain('虚拟学习者」页签');
+    // 去向：容量治理 2026-10-21 迁到「模型与接入 · 虚拟学习者」页签（2026-10-24 修死链）
+    expect(concurrency.attributes('title')).toContain('虚拟学习者');
+    expect(rate.attributes('title')).toContain('虚拟学习者');
+    expect(rate.attributes('title')).not.toContain('调用与健康');
   });
 
   it('复选框勾选后出现批量条：已选数量 + 取消选择', async () => {

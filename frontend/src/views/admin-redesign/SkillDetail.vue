@@ -489,20 +489,25 @@ function normalizeSkdTab(t: unknown): string {
   const key = TAB_ALIASES[t] || t
   return TAB_KEYS.has(key) ? key : DEFAULT_TAB
 }
-/** 读：优先本页自己的 skdTab；旧深链（?tab=versions 等，宿主列表键 run/model-routing/prompt-eval
-    与本页键不相交）仍兼容读取，不破坏既有分享/刷新链接 */
+/* 2026-10-24 修键冲突：编排图用 ?tab=routing 表示「字段路由」子视图，本页也有同键页签。
+   此前无 skdTab 时无条件回退读 ?tab=，从编排图点进详情会误落「字段路由」。
+   现在只兼容宿主列表/旧链的历史键，且显式排除 routing。 */
+const LEGACY_TAB_KEYS = new Set(['runtime', 'protocol', 'trial', 'versions', 'engineering', 'fields'])
+/** 读：优先本页自己的 skdTab；旧深链（?tab=versions 等）仍兼容，但不读 routing */
 function readTabFromQuery(): string {
   const q = tabRoute?.query
   const own = q?.skdTab
   if (typeof own === 'string') return normalizeSkdTab(own)
-  return normalizeSkdTab(q?.tab)
+  const legacy = q?.tab
+  if (typeof legacy === 'string' && LEGACY_TAB_KEYS.has(legacy)) return normalizeSkdTab(legacy)
+  return DEFAULT_TAB
 }
 /** 写回键（#133）：URL 上已有「本页页签键」的 ?tab= 时属旧深链，继续写回同一键（向后兼容）；
     否则一律写本页独立键 skdTab，绝不动宿主列表的 run/model-routing/prompt-eval */
 function useLegacyTabKey(): boolean {
   const t = tabRoute?.query?.tab
-  // 旧别名（fields）同样视为本页键：写回继续落在 ?tab=，不另起 skdTab 双键
-  return typeof t === 'string' && TAB_KEYS.has(TAB_ALIASES[t] || t)
+  // 旧别名（fields）同样视为本页键；routing 归编排图，不认领（见上）
+  return typeof t === 'string' && LEGACY_TAB_KEYS.has(t)
 }
 // URL → tab（深链/刷新/前进后退；route 可能缺位——二级页可被无路由宿主挂载，防御式读取）
 watch(

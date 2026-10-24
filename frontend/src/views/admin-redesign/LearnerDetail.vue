@@ -721,7 +721,8 @@
     <div v-else-if="tab === 'sessions'" class="ld-tabpage" id="ld-panel-sessions" role="tabpanel" aria-labelledby="ld-tab-sessions">
       <section class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">教学会话</h3>
+          <!-- 与侧栏「教学会话」同名不同量：这里只看本账号最近 20 节（默认有效），量在全量列表 -->
+          <h3 class="mk-card__title" title="本账号最近 20 节课堂（默认只看有效课堂）。平台全量课堂见侧栏「教学会话」">教学会话</h3>
           <!-- 2026-10-23 走查：卡头原来写「N 节 · 有效 N · 废弃 N」，与下一条工具栏的三枚
                pills（有效 / 已废弃 / 窗口全部）是同一组计数读了两遍——读数归 pills，
                卡头只保留加载中/失败的即时状态。 -->
@@ -835,7 +836,8 @@
     <div v-else-if="tab === 'memory'" class="ld-tabpage" id="ld-panel-memory" role="tabpanel" aria-labelledby="ld-tab-memory">
       <section v-if="memoryPaneRows.length" class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">{{ MEMORY_PANE_TITLE }}</h3>
+          <!-- 与侧栏「记忆与复习」同名不同粒度：这里按概念逐项做 FSRS 普查，那边按用户汇总待复习量 -->
+          <h3 class="mk-card__title" :title="`${MEMORY_PANE_TITLE}：本账号按概念逐项做的 FSRS 普查。平台按用户汇总待复习量见侧栏「记忆与复习」`">{{ MEMORY_PANE_TITLE }}</h3>
           <span class="mk-card__meta">{{ memMetaText }}</span>
         </div>
         <!-- 视角（按复习状态分档）：把「待复习」这一档单独拎出来看，是这张表唯一的可动作子集。
@@ -1579,11 +1581,13 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
   // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
   //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
   const urlTab = typeof tabRoute.query.tab === 'string' ? tabRoute.query.tab.trim() : ''
-  // 落点来源：?tab=（列表条目带进来的落点页签，或读者自己切过的页签）> 概览。
-  // 2026-10-11 曾统一为「概览」（列表行已展示账号事实，点详情的动机是看学习侧）；
-  // 2026-10-18 用户走查改为按列表主题落点（学习状态→证据、记忆与复习→记忆与复习），
-  // 由列表页在打开二级页时带 ?tab=（映射单点在 store 的 LEARNER_DETAIL_LANDING）。
-  tab.value = urlTab ? normalizeLdTab(urlTab) : 'overview'
+  // 落点来源：?tab=（列表条目带进来的落点页签，或读者自己切过的页签）> 轴默认。
+  // 2026-10-11 曾统一为「概览」；2026-10-18 改为按列表主题落点（学习状态→证据、
+  // 记忆与复习→记忆与复习），由列表页带 ?tab=（映射单点在 store 的 LEARNER_DETAIL_LANDING）。
+  // 2026-10-24：账号轴（view=user，从「用户与学习者」进）默认落「账号与许可」——
+  // 注册表一直这么写，但实现只对空账号才切，有学习数据的账号会落到概览，账号编辑要再切页签。
+  const axisDefault: LdTab = subPage.value?.view === 'user' ? 'account' : 'overview'
+  tab.value = urlTab ? normalizeLdTab(urlTab) : axisDefault
   const base = liveLearners.value.find((l) => l.userId === id)
   // 路径作用域：取页级开关的值（'' = 全部路径 → 不传 pathId，后端走 global 聚合）。
   // 开关的默认值在「换学习者」watch 里置为该学习者的当前路径（= 本改动前的行为）。

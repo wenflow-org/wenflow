@@ -322,8 +322,15 @@ watch(
          不让详情挂载后再补一笔 replace——两笔导航互相竞态时，补参数那笔会把 view/id 冲掉，
          二级页被自己的 URL 同步当场关掉。离开 learner 详情时顺手清掉它，避免列表 URL 上
          留一个无主 tab（skills 宿主的 ?tab= 不受影响：只在 curView=learner 时清）。 */
-      if (sp.tab) q.tab = sp.tab
-      else if (curView === 'learner') delete q.tab
+      /* Skill 详情的页签用独立键 skdTab：?tab= 归宿主列表（Skills/Orchestrator），
+         两边共用会互相覆盖（2026-10-24 层级收口）。 */
+      if (sp.tab) {
+        if (sp.view === 'skill') q.skdTab = sp.tab
+        else q.tab = sp.tab
+      } else {
+        if (curView === 'learner') delete q.tab
+        if (sp.view === 'skill') delete q.skdTab
+      }
       if (curView !== sp.view || curId !== sp.id || (sp.includeTest ? route.query.includeTest !== 'true' : route.query.includeTest != null)) {
         void router.push({ query: q })
       }
@@ -337,8 +344,9 @@ watch(
         delete q.id
         delete q.includeTest
         delete q.stage
-        // 落点页签是详情自己的参数，随详情一起收（判据同上：只清 learner 写的那一个）
+        // 落点页签是详情自己的参数，随详情一起收（learner 用 ?tab=，skill 用 ?skdTab=）
         if (curView === 'learner') delete q.tab
+        if (curView === 'skill') delete q.skdTab
         void router.replace({ query: q })
       }
     }

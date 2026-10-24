@@ -135,7 +135,13 @@
             <span class="hc-fixlog__time">{{ f.time }}</span>
             <span class="hc-fixlog__item">{{ f.label }}</span>
             <span class="hc-fixlog__meta" :title="f.backupDir ? `备份目录：${f.backupDir}` : '本次修复没有产生备份目录'">备份 {{ f.backupShort }}</span>
-            <span v-if="f.auditId" class="hc-fixlog__meta" :title="`审计日志 ID：${f.auditId}`">审计 #{{ f.auditId }}</span>
+            <button
+              v-if="f.auditId"
+              type="button"
+              class="mk-link hc-fixlog__meta"
+              :title="`在审计日志里查这条修复记录（ID：${f.auditId}）`"
+              @click="goAuditFix(f.auditId)"
+            >审计 #{{ f.auditId }}</button>
           </div>
         </div>
       </section>
@@ -663,13 +669,14 @@ function extractSkillId(id: HealthCenterItemId): string | null {
   }
   return null
 }
-/** Skill 工作台深链：能定位到具体 skill 就带上 ?skill=。
-    注意：目标页 PromptWorkbench.vue（/admin/skill-workbench）目前【未】消费该参数
-    （纯核心文件清单页，无 route.query 读取），本次只把参数带上、不改目标页，
-    待其支持后深链即自动生效（落点为列表页首行定位的预留约定）。 */
+/** Skill 详情深链（2026-10-24）：目标改到可见场景 /admin/skills 的二级页。
+    原目标是隐藏场景 skill-workbench，且 ?skill= 无人消费——点进去既定位不到技能，
+    也没有侧栏高亮/面包屑。能定位到具体 skill 时落「协议」页签（发布/哈希相关）。 */
 function workbenchPath(id: HealthCenterItemId): string {
   const skillId = extractSkillId(id)
-  return skillId ? `/admin/skill-workbench?skill=${encodeURIComponent(skillId)}` : '/admin/skill-workbench'
+  return skillId
+    ? `/admin/skills?view=skill&id=${encodeURIComponent(skillId)}&skdTab=protocol`
+    : '/admin/skills'
 }
 function goDrift(kind: keyof HealthDriftSummary) {
   if (kind === 'contract') void router.push('/admin/orchestrator?tab=drift')
@@ -694,8 +701,14 @@ const EXTERNAL_JUMP_IDS = new Set([
 ])
 const canJumpAway = (id: string) => EXTERNAL_JUMP_IDS.has(id)
 
+/** 最近修复 → 审计日志：按 ID 关键词直达（审计页已支持 ?q= 筛选，2026-10-24） */
+function goAuditFix(auditId: string) {
+  void router.push({ path: '/admin/audit-logs', query: { q: auditId } })
+}
+
 function jump(id: HealthCenterItemId) {
-  if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=drift')
+  // 2026-10-24：字段路由/字段同步属于「字段路由表」，不是治理/漂移面板（drift→governance 会落错）
+  if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=routing')
   // 编排步骤解析（2026-10-12 从编排图页告警条搬进健康中心）：原页级告警的落点在此复现——
   // 编排图「字段旅程」面板里红「未解析」徽章即名单（切面板后按阶段 chips 逐段核对）
   else if (id === 'orchestration-steps') void router.push('/admin/orchestrator?tab=journey')

@@ -634,6 +634,8 @@ async function fetchPage(nextPage: number): Promise<number> {
 
 async function goPage(p: number) {
   if (p < 1 || p === page.value) return
+  page.value = p
+  syncFiltersToRoute()
   await fetchPage(p)
   /* 翻页替换列表后滚动回顶部：滚真正的滚动体（.mk-table-scroll），而非 window——
      本页是 .mk-page--fill 应用式布局，window 不滚，滚的是卡片内表格区。
@@ -704,6 +706,7 @@ async function applyFilters() {
   loadError.value = ''
   loading.value = true
   page.value = 1
+  syncFiltersToRoute()
   logs.value = []
   attempts.value = []
   openId.value = ''
@@ -786,6 +789,50 @@ const { views: savedViews, save: saveViewToStore, remove: removeView } = useSave
 
 const TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all'] as const
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
+
+/* ===== 筛选 / 页码 ↔ URL（2026-10-24）=====
+   此前只有 ?tab=login 入 URL，关键词/时间/失败下钻/页码切场景或返回即复位；
+   与执行日志（全量筛选入 URL）同级不同规则。键：q / range / failed / action / page / size，
+   缺省值不写（today / 无关键词 / 第 1 页 / 30 条）。 */
+const AUDIT_FILTER_KEYS = ['q', 'range', 'failed', 'action', 'page', 'size'] as const
+const AUDIT_SIZES = [15, 30, 50, 100] as const
+function readFiltersFromRoute() {
+  keyword.value = typeof route.query.q === 'string' ? route.query.q : ''
+  const r = typeof route.query.range === 'string' ? route.query.range : ''
+  timeRange.value = (TIME_RANGES as readonly string[]).includes(r) ? (r as typeof timeRange.value) : 'today'
+  failedOnly.value = route.query.failed === '1'
+  failedAction.value = typeof route.query.action === 'string' ? route.query.action : ''
+  const p = Number(route.query.page)
+  page.value = Number.isInteger(p) && p > 0 ? p : 1
+  const sz = Number(route.query.size)
+  pageSize.value = (AUDIT_SIZES as readonly number[]).includes(sz) ? sz : 30
+}
+function auditFilterSig(): string {
+  return [keyword.value.trim(), timeRange.value, failedOnly.value ? '1' : '', failedAction.value, page.value, pageSize.value].join('|')
+}
+function syncFiltersToRoute() {
+  const q = { ...route.query }
+  for (const k of AUDIT_FILTER_KEYS) delete q[k]
+  if (keyword.value.trim()) q.q = keyword.value.trim()
+  if (timeRange.value !== 'today') q.range = timeRange.value
+  if (failedOnly.value) q.failed = '1'
+  if (failedAction.value) q.action = failedAction.value
+  if (page.value > 1) q.page = String(page.value)
+  if (pageSize.value !== 30) q.size = String(pageSize.value)
+  void router.replace({ query: q })
+}
+/* 外部改动（返回/前进/手改地址）才重查：本页写回的同值改动不触发第二笔请求 */
+watch(
+  () => AUDIT_FILTER_KEYS.map((k) => route.query[k]).join('|'),
+  () => {
+    const before = auditFilterSig()
+    readFiltersFromRoute()
+    if (auditFilterSig() !== before) {
+      void fetchPage(page.value)
+      void fetchStats()
+    }
+  }
+)
 
 /** 空态副文案（B14/F6-2）：未筛选时补一句时间范围口径——默认「今天」下清空只说明
     今天无记录，不等于历史从未发生（会话安全页跳登录审计最易误读）。
@@ -883,6 +930,7 @@ function fmtFull(iso?: string | null): string {
 /* 登录审计时间与操作审计同用 fmtTime（两者实现逐字符相同，P3 合并；均始终带日期） */
 
 onMounted(() => {
+  readFiltersFromRoute()
   void applyFilters()
 })
 

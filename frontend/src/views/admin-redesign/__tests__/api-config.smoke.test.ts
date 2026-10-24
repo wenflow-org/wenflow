@@ -659,10 +659,10 @@ describe('ApiConfig P1 修复批', () => {
   });
 
   /* #13：后端 POST /admin/api-config/reset 能力早已存在却无前端入口——补「重置为默认」入口 + 二次确认 */
-  it('#13：配置 tab 有「重置为默认」入口，确认后调用 reset API；取消则不调用', async () => {
+  it('#13：接入页有「重置接入配置」入口（范围写明），确认后调用 reset API；取消则不调用', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    const btn = wrapper.findAll('button').find((b) => b.text() === '重置为默认');
+    const btn = wrapper.findAll('button').find((b) => b.text() === '重置接入配置');
     expect(btn, '配置 tab 页头应有重置入口').toBeTruthy();
 
     // 取消 → 不触发

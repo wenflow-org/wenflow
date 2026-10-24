@@ -230,6 +230,7 @@ import Pagination from './Pagination.vue'
 import { useTableSort } from './useTableSort'
 import { askConfirm } from './useConfirm'
 import { openSubPage, LEARNER_DETAIL_LANDING } from './store'
+import { useListQueryState } from './learner-profile'
 import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo, liveRefreshSeq } from './live'
 
@@ -320,6 +321,17 @@ watch(userPageSize, () => {
    切筛选回第 1 页：否则在第 2 页勾选后看到的只是第 2 页命中的行。 */
 type MrPill = 'all' | 'due' | 'unreviewed' | 'attention'
 const mrPill = ref<MrPill>('all')
+/* 返回态 URL 化（2026-10-24）：此前页码/筛选只在内存，从详情返回必回第 1 页。
+   pill 的计数仍是当前页口径（服务端未接筛选参数），卡头已注明。 */
+useListQueryState(
+  {
+    pill: mrPill,
+    page: userPage,
+    pageSize: userPageSize,
+    allowedPills: ['all', 'due', 'unreviewed', 'attention'],
+  },
+  { pill: 'mr' }
+)
 watch(mrPill, () => {
   if (userPage.value !== 1) userPage.value = 1
 })
@@ -402,7 +414,7 @@ const overviewCards = computed<OverviewCard[]>(() => {
      「为什么包括测试的也是很多0」——26 位测试用户、55 条痕迹，审计读数全是 0）。 */
   const noAudit = (t.usersWithAudit ?? 0) === 0
   return [
-    { label: '用户', value: val(t.users), hint: numHint(''), tone: numTone(''), title: '全部有记忆记录的用户数。是否含测试账号随页头开关' },
+    { label: '有记忆痕迹的用户', value: val(t.users), hint: numHint(''), tone: numTone(''), title: '有记忆记录的账号数。是账号集的自然子集——没有学习痕迹的账号不在此列（账号全集见「用户与学习者」）' },
     /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：来源/机制说明（跨全部学习路径、
        归并候选·不自动执行、模型给出的同义概念候选）撤出卡面，只留定义与包含关系 */
     { label: '记忆痕迹', value: val(t.traces), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },

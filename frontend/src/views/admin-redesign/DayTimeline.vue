@@ -214,9 +214,10 @@ const props = withDefaults(defineProps<{
 })
 
 const router = useRouter()
-/** 空态出口（R6D）：跳到「启用日期模拟」开关所在的压测参数卡（模型与接入 → 调用与健康），路由与页签参数均为既有契约 */
+/** 空态出口（R6D）：跳到「启用日期模拟」开关所在的压测参数卡（模型与接入 → 虚拟学习者）。
+ *  2026-10-24 修死链：该卡已从「调用与健康」迁到「虚拟学习者」页签。 */
 function goSimSettings() {
-  void router.push({ path: '/admin/api-config', query: { tab: 'routing' } })
+  void router.push({ path: '/admin/api-config', query: { tab: 'virtual' } })
 }
 
 /** 分页窗口：默认窗口只有 30 天，长会话更早的历史按 30 天一档翻页回看；load() 沿用这组 from/to 拉取参数 */

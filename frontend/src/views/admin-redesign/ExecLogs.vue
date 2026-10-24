@@ -10,6 +10,10 @@
         <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用。
              审核 #123：该按钮在 Trace 页签下也可见可点，但导出的日志行在 Trace 页签根本不在 DOM
              （表格在 logs 页签体内）——「本页」指向不明；限 logs 页签显示，文案细化「导出日志本页」 -->
+        <!-- 观测组互链（2026-10-24）：失败排查常要接着看成本与管理员操作；
+             此前组内三页零互链，必须回侧栏重进。 -->
+        <button type="button" class="mk-btn mk-btn--sm" title="看同一时间窗口的成本与用量（按 Skill / 用户 / 模型）" @click="goCost">成本分析 →</button>
+        <button type="button" class="mk-btn mk-btn--sm" title="看管理员操作与登录审计留痕" @click="goAudit">审计日志 →</button>
         <button v-if="elTab === 'logs'" type="button" class="mk-btn mk-btn--sm" :disabled="!logs.length" @click="exportJson">导出日志本页</button>
       </template>
     </MkPageHead>
@@ -417,6 +421,16 @@ watch(
   },
   { immediate: true }
 )
+/** 观测组互链：执行日志 → 成本分析（窗口近似映射）/ 审计日志 */
+function goCost() {
+  const range = String(route.query.range || '')
+  const days = range === 'month' ? 30 : range === 'all' ? 90 : 7
+  void router.push({ path: '/admin/token-cost', query: { days: String(days) } })
+}
+function goAudit() {
+  void router.push('/admin/audit-logs')
+}
+
 /** 切 tab（同步 ?tab= URL，深链/刷新可寻址） */
 function switchElTab(t: ElTab) {
   elTab.value = t
