@@ -49,40 +49,44 @@
          常驻条整条成为纯复读；跨页签定位由页签栏本身承担。历史：P2（2026-10-04）曾按账号轴隐藏、
          2026-10-05 收敛共享 MkStatStrip、2026-10-11 上午重设计为四格可点条，同日整体撤除 -->
 
-    <!-- 路径作用域（页级开关）：一个学习者可并存多条路径，原先页面焊死在「当前路径」上——
-         读者既看不见还有别的路径、也切不过去（只有图谱一处自带路径轨）。现升为页级，
-         驱动「概念掌握 / 证据 / 当前进度 / 图谱 / 教学会话」；记忆与行为基线不随它走（见 title）。
+    <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
+         形态换 MkSubTabs（newui/admin 下划线式，替换胶囊 mk-pill）。
+
+         路径作用域（页级开关）挂在本行右端（2026-10-24 用户「这个切换位置换一下」）：
+         它和页签同属「看哪一块」的导航层，单独占一行会在 hero 与页签之间多出一条空带；
+         窄屏放不下时整组换行并右对齐。一个学习者可并存多条路径，原先页面焊死在「当前路径」上——
+         读者既看不见还有别的路径、也切不过去（只有图谱一处自带路径轨）。本开关驱动
+         「概念掌握 / 证据 / 当前进度 / 图谱 / 教学会话」；记忆与行为基线不随它走（见 title）。
 
          不提供「全部路径」档：学习者模型快照**没有跨路径聚合口径**——不传 pathId 时后端自动回落到
          「该学习者 status=active 且 updatedAt 最新的那条」（LearnerKnowledgeMemoryService.build 的
          path 解析：`input.learningPathId ? findUnique : findFirst(active, updatedAt desc)`），是回落不是求和。
          给一个做不出区别的档位等于假动作，故只做「选哪一条」。 -->
-    <div class="ld-scope" role="group" aria-label="路径范围">
-      <label class="ld-scope__label" for="ld-scope-path">路径范围</label>
-      <select
-        id="ld-scope-path"
-        class="mk-filter__select ld-scope__select"
-        :value="scopePathId"
-        :disabled="pathOptionsLoading || !pathOptions.length"
-        @change="scopePathId = ($event.target as HTMLSelectElement).value"
-      >
-        <option v-if="!pathOptionsLoading && !pathOptions.length" value="" disabled>该学习者暂无学习路径</option>
-        <option v-for="p in pathOptions" :key="p.id" :value="p.id">
-          {{ p.title }}（{{ pathStatusText(p.status) }}）{{ p.id === learnerCurrentPathId ? ' · 当前' : '' }}
-        </option>
-      </select>
-      <!-- 路径选项加载态走共享原语（select 内放不下组件），转圈挂在其后：select 不被挤位 -->
-      <MkLoading v-if="pathOptionsLoading" inline min />
+    <div class="ld-tabbar">
+      <MkSubTabs
+        :tabs="tabs.map((t) => ({ key: t.id, label: t.label }))"
+        :model-value="tab"
+        id-base="ld"
+        @update:model-value="switchTab"
+      />
+      <div class="ld-scope" role="group" aria-label="路径范围">
+        <label class="ld-scope__label" for="ld-scope-path">路径范围</label>
+        <select
+          id="ld-scope-path"
+          class="mk-filter__select ld-scope__select"
+          :value="scopePathId"
+          :disabled="pathOptionsLoading || !pathOptions.length"
+          @change="scopePathId = ($event.target as HTMLSelectElement).value"
+        >
+          <option v-if="!pathOptionsLoading && !pathOptions.length" value="" disabled>该学习者暂无学习路径</option>
+          <option v-for="p in pathOptions" :key="p.id" :value="p.id">
+            {{ p.title }}（{{ pathStatusText(p.status) }}）{{ p.id === learnerCurrentPathId ? ' · 当前' : '' }}
+          </option>
+        </select>
+        <!-- 路径选项加载态走共享原语（select 内放不下组件），转圈挂在其后：select 不被挤位 -->
+        <MkLoading v-if="pathOptionsLoading" inline min />
+      </div>
     </div>
-
-    <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
-         形态换 MkSubTabs（newui/admin 下划线式，替换胶囊 mk-pill） -->
-    <MkSubTabs
-      :tabs="tabs.map((t) => ({ key: t.id, label: t.label }))"
-      :model-value="tab"
-      id-base="ld"
-      @update:model-value="switchTab"
-    />
 
     <!-- ============ 总览：进度 + 概念掌握图形 + 活跃 + 会话 + 建议行动 ============ -->
     <div v-if="tab === 'overview'" class="ld-grid" id="ld-panel-overview" role="tabpanel" aria-labelledby="ld-tab-overview">
@@ -2967,17 +2971,23 @@ const snapshotHint = computed(() =>
    下内边距不可省：实测 0 间距时胶囊底边与表头上边线贴合（用户走查「和下面重叠了」），
    给 12px 与区块节奏一致 */
 .ld-filtbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 12px 16px; }
-/* 路径范围（页级作用域开关）：夹在 hero 与页签栏之间的一行，形态沿用筛选条方言
-   （mk-filter__select + 竖分隔 + 灰字 hint），不新造控件样式 */
-.ld-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 4px 0 10px; }
+/* 页签 + 路径作用域同一行（2026-10-24 用户「这个切换位置换一下」）。
+   页签 flex 撑满，下划线从页签一直画到作用域左侧；作用域靠右、与页签垂直居中。
+   窄屏放不下时作用域整组换行并右对齐（不压缩 select 到不可读）。 */
+.ld-tabbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.ld-tabbar :deep(.mk-subtabs) { flex: 1 1 auto; min-width: 0; }
+.ld-scope {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+  margin-left: auto;
+}
 .ld-scope__label { font-size: 12px; color: var(--mk-faint); }
 /* 路径名 +「（学习中）· 当前」经常超过 340px；原生 select 不会自动省略，
    340 封顶会把末字和箭头一起切掉（Windows 显示缩放不改变 CSS 布局，不是成因）。
-   放宽到 480 并允许窄屏回落整行。
+   与页签同排后收紧到 360，给 8 个页签留出不下折的宽度；窄屏回落整行。
    纵向：共享档 height:32 + 上下 7px 内衬后内容区只剩 16px，而行高 1.4≈20px，
    中文字形底部会被切；本控件压缩上下内衬并收紧行高，保持 32px 外观高度。 */
 .ld-scope__select {
-  max-width: min(480px, 100%);
+  max-width: min(360px, 100%);
   padding-top: 4px;
   padding-bottom: 4px;
   line-height: 1.2;
