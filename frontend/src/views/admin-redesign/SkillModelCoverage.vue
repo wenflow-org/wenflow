@@ -4,7 +4,7 @@
     <!-- 原型 .card__head（title + sub）：卡头统一走 mk-card 词表 -->
     <div class="mk-card__head">
       <div>
-        <h3 class="mk-card__title">Skill × 模型 × 参数 × 备用模型</h3>
+        <h3 class="mk-card__title">Skill 模型路由</h3>
         <span class="mk-card__meta">
           <template v-if="isFiltered">命中 {{ visibleRows.length }} / 共 {{ rows.length }} 个技能</template>
           <template v-else>共 {{ rows.length }} 个技能</template>
@@ -91,12 +91,17 @@
                 :aria-sort="covSortState('fallback')"
                 @click="toggleCovSort('fallback')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('fallback')" title="按备用模型链条数排序">备用模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 完成度：原只读路由表独有列，合并后保留在同一行（不参与排序，属上下文状态） -->
+              <th scope="col" title="上线完成度：草稿 → 已上线（来自完成度一致性核查）">完成度</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="s in visibleRows" :key="s.skillId">
               <td><input v-model="selected" type="checkbox" :value="s.skillId" :aria-label="`选择技能 ${s.skillId}`" /></td>
-              <td class="mono"><button type="button" class="mk-link skc__name" @click="emit('open-skill', s.skillId)">{{ s.skillId }}</button></td>
+              <td>
+                <button type="button" class="mk-link skc__name" :title="s.skillId" @click="emit('open-skill', s.skillId)">{{ props.skillNames[s.skillId] || s.skillId }}</button>
+                <span class="skc__agent" :title="props.agentLabels[s.skillId] || 'Skill 目录中无归属信息'">{{ props.agentLabels[s.skillId] || '—' }}</span>
+              </td>
               <td>
                 <span class="mk-badge" :class="s.source === 'platform-default' ? 'mk-badge--muted' : 'mk-badge--ok'">
                   {{ s.source === 'platform-default' ? '平台默认(未配置)' : s.source === 'skill-channel' ? '独立通道' : '仅技能模型' }}
@@ -106,7 +111,18 @@
               <td><span class="skc__model"><span class="skc__model-id">{{ s.model || '未配置' }}</span><span v-if="s.model" class="mk-badge mk-badge--muted">{{ s.tier }}</span></span></td>
               <!-- 2026-10-18：整串 JSON 挤在单元格里属开发向；表内只给项数，原文进 title -->
               <td class="skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ overrideText(s.paramOverrides) }}</td>
-              <td class="skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '平台默认' }}</td>
+              <td class="skc__wrap" :title="props.fallbackInfo[s.skillId]?.title || (s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined)">{{ props.fallbackInfo[s.skillId]?.text || (s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '平台默认') }}</td>
+              <td>
+                <span
+                  v-if="props.completion[s.skillId]"
+                  class="mk-badge"
+                  :class="props.completion[s.skillId].cls"
+                  :title="props.completion[s.skillId].title"
+                >{{ props.completion[s.skillId].text }}</span>
+                <span v-else-if="props.recLoading" class="mk-na" title="完成度核查加载中">…</span>
+                <span v-else-if="props.recError" class="mk-na" :title="`完成度核查加载失败：${props.recError}`">状态未知</span>
+                <span v-else class="mk-na" :title="NOT_IN_RECON_TITLE">—</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -153,9 +169,33 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { askConfirm } from './useConfirm'
 import { useTableSort } from './useTableSort'
 
-/** 套用成功 → 通知宿主 Skills.vue 重拉 coverageById（#93：否则上方路由表两列与四张 KPI
-    仍用挂载时的旧值，与下方矩阵同屏互相打架）；行内 Skill 名 → 打开该 Skill 运行时页签 */
+/** 套用成功 → 通知宿主 Skills.vue 重拉 coverageById（#93：否则页头四张 KPI
+    仍用挂载时的旧值，与矩阵同屏互相打架）；行内 Skill 名 → 打开该 Skill 运行时页签。
+    2026-10-24 起宿主把原只读路由表的上下文（归属 Agent / 完成度 / 平台默认兜底链解析）
+    作为映射传入，两张表合成一张。 */
 const emit = defineEmits<{ (e: 'applied'): void; (e: 'open-skill', skillId: string): void }>()
+
+const props = withDefaults(defineProps<{
+  /** skillId → 展示名（宿主从 Skill 目录映射；缺省回落到 skillId） */
+  skillNames?: Record<string, string>
+  /** skillId → 归属 Agent 文案（宿主从 Skill 目录映射） */
+  agentLabels?: Record<string, string>
+  /** skillId → 完成度徽章（无记录即不在对账范围） */
+  completion?: Record<string, { text: string; cls: string; title: string }>
+  /** skillId → 备用模型列文案与长释（含平台默认链解析；缺省回落到覆盖数据自身） */
+  fallbackInfo?: Record<string, { text: string; title: string }>
+  recLoading?: boolean
+  recError?: string
+}>(), {
+  skillNames: () => ({}),
+  agentLabels: () => ({}),
+  completion: () => ({}),
+  fallbackInfo: () => ({}),
+  recLoading: false,
+  recError: '',
+})
+
+const NOT_IN_RECON_TITLE = '一致性核查清单中没有此 Skill（不是故障）'
 
 const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
@@ -217,7 +257,8 @@ const visibleRows = computed(() => {
     if (sourceFilter.value !== 'all' && r.source !== sourceFilter.value) return false
     if (onlyFallback.value && !(r.fallbackChain && r.fallbackChain.length)) return false
     if (!q) return true
-    return [r.skillId, r.model, r.endpoint].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))
+    // 展示名也能搜到；id / 模型 / endpoint 保持原口径
+    return [props.skillNames[r.skillId], r.skillId, r.model, r.endpoint].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))
   })
 })
 const loading = ref(false)
@@ -302,7 +343,7 @@ async function applyBulk() {
       ? `已套用 ${applied} 个，失败 ${failed.length} 个：${failed.map(f => `${f.skillId}（${f.error}）`).join('；')}`
       : `已套用 ${applied} 个，全部成功`
     await load()
-    // 通知宿主重拉 coverage（#93）：上方路由表与四张 KPI 同屏跟随
+    // 通知宿主重拉 coverage（#93）：页头四张 KPI 同屏跟随
     emit('applied')
   } catch (e) {
     bulkErr.value = true
@@ -334,15 +375,21 @@ onMounted(load)
 /* 筛选行：pills 与动作同一节奏 */
 .skc__filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .skc__name { font-family: inherit; text-align: left; }
+/* 归属 Agent：Skill 名下副行（原只读路由表的列，合并后不另占一列） */
+.skc__agent { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.4; }
 .skc__model { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .skc__model-id { overflow-wrap: break-word; }
-/* model 列给下限：表格 auto 布局在卡片里会把这一列压到 20px，模型 ID 被拆成一字一行 */
+/* model 列给下限：表格 auto 布局在卡片里会把这一列压到 20px，模型 ID 被拆成一字一行。
+   2026-10-24 合并后加了两列：下限从 220 收到 160，连同 wrap 列收窄，避免 1280 下必须横滚 */
 .skc__table th:nth-child(4),
-.skc__table td:nth-child(4) { min-width: 220px; }
+.skc__table td:nth-child(4) { min-width: 160px; }
+/* 完成度列：徽章宽度固定，不需要参与伸展 */
+.skc__table th:nth-child(7),
+.skc__table td:nth-child(7) { width: 84px; }
 .skc__apply { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .skc__apply .mk-input { max-width: 280px; }
 .skc__apply .is-err { border-color: var(--mk-red); }
 /* 原型 .tbl td.wrap：长文本列（参数覆盖 / 备用模型链）换行不截断 */
 .skc__table th.skc__wrap,
-.skc__table td.skc__wrap { white-space: normal; overflow-wrap: anywhere; min-width: 220px; max-width: 320px; }
+.skc__table td.skc__wrap { white-space: normal; overflow-wrap: anywhere; min-width: 140px; max-width: 240px; }
 </style>

@@ -405,89 +405,22 @@
     </div>
     </template>
 
-    <!-- ===== Tab2: 模型路由（原型 renderSkillHub 1665-1681 routing 分支） =====
-         原型结构：4 metricCard（承载模型 / 已路由 Skill / 主模型覆盖 / 降级策略）
-         + 「Skill 模型路由」小节头 + 5 列表（Skill / 归属 Agent / 路由模型 / 备用模型 / 状态）。
-         覆盖矩阵（SkillModelCoverage）保留为增强，置于原型结构之下。 -->
-    <div v-if="tab === 'model-routing'" class="mk-card mk-card--fill sk-routing">
-      <div class="sk-routing__head">
-        <span class="mk-card__title">Skill 模型路由</span>
-      </div>
-
-      <div class="sk-routing__scroll">
-        <table v-if="cards.length" class="mk-table mk-table--click sk-table">
-          <thead>
-            <tr>
-              <th
-                scope="col"
-                class="mk-th--sortable"
-                :aria-sort="routingSortState('skill')"
-                @click="toggleRoutingSort('skill')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('skill')">Skill<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                scope="col"
-                class="mk-th--sortable"
-                :aria-sort="routingSortState('agent')"
-                @click="toggleRoutingSort('agent')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('agent')">归属 Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                scope="col"
-                class="mk-th--sortable"
-                :aria-sort="routingSortState('routing')"
-                @click="toggleRoutingSort('routing')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('routing')">路由模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                scope="col"
-                class="mk-th--sortable"
-                :aria-sort="routingSortState('fallback')"
-                @click="toggleRoutingSort('fallback')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('fallback')" title="按自定义备用链条数排序，没有自定义链条的排在前面">备用模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                scope="col"
-                class="mk-th--sortable"
-                :aria-sort="routingSortState('status')"
-                @click="toggleRoutingSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('status')" title="按上线进度排序：草稿 → 已上线">完成度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- 原型行 data-action="open-skill"：行点击与表格视图同落点（Skill 详情页） -->
-            <tr v-for="s in routedRows" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.name} 详情`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
-              <td><strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong></td>
-              <!-- Agent 归属、备用模型都是中文口径词（路径 Agent / 无备用模型…），不走等宽 -->
-              <td><span class="sk-routing__sub" :title="s.agentId || '工具类'">{{ agentLabelOf(s) }}</span></td>
-              <td><span :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
-              <td><span class="sk-routing__sub" :title="fallbackTitleOf(s.id)">{{ fallbackOf(s.id) }}</span></td>
-              <td>
-                <span v-if="completionBadgeOf(s.id)" class="mk-badge" :class="completionBadgeOf(s.id)!.cls" :title="completionBadgeOf(s.id)!.title">{{ completionBadgeOf(s.id)!.text }}</span>
-                <span v-else-if="recLoading" class="mk-na" :title="REC_LOADING_TITLE">…</span>
-                <!-- 三态对齐 run 表（Skills.vue:238）：对账加载失败 ≠「对账报告中无此 Skill」，
-                     此前失败与无数据同显「—」，把故障说成正常无数据 -->
-                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`上线状态加载失败：${recError}`">状态未知</span>
-                <span v-else class="mk-na" :title="REC_NOT_IN_SCOPE_TITLE">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <!-- live 目录三态：加载失败（tone=error + 重试）与真空目录分开，不再用一句「暂无 Skill」吞掉故障 -->
-        <MkEmptyState
-          v-if="skillsError && !cards.length"
-          tone="error"
-          :title="SKILLS_LOAD_FAIL_TITLE"
-          :description="skillsError"
-          action-text="重试"
-          @action="retrySkills"
-        />
-        <MkEmptyState v-else title="暂无 Skill" description="主目录没有可路由的 Skill。" />
-
-        <!-- 覆盖矩阵（技能 × 通道 × 参数 × 兜底）：原型无此块，作为增强保留在原型结构之下。
-             套用成功后 emit applied → 本页重拉 coverageById，避免同屏「路由模型/备用模型」两列
-             与四张 KPI 停留在旧值、与下方矩阵互相打架（#93） -->
-        <div class="sk-routing__matrix">
-          <SkillModelCoverage @applied="refreshCoverage" @open-skill="openDesign" />
-        </div>
-      </div>
-    </div>
+    <!-- ===== Tab2: 模型路由 =====
+         2026-10-24 用户「这个设计重复了吧」：原结构是「Skill 模型路由」只读表 + 下方
+         覆盖矩阵两张表，同一批 Skill、同一组模型/备用模型信息出现两次，还是卡中卡。
+         现只保留覆盖矩阵（筛选、排序、批量套用、下钻都在它身上），并把原只读表独有的
+         归属 Agent / 完成度 / 平台默认兜底链解析并进同一行。 -->
+    <SkillModelCoverage
+      v-if="tab === 'model-routing'"
+      :skill-names="skillNamesBySkill"
+      :agent-labels="agentLabelsBySkill"
+      :completion="completionBySkill"
+      :fallback-info="fallbackBySkill"
+      :rec-loading="recLoading"
+      :rec-error="recError"
+      @applied="refreshCoverage"
+      @open-skill="openDesign"
+    />
 
     <!-- ===== Tab3: Prompt 评估（原 /admin/prompt-eval 独立场景，2026-10-04 折入；旧 URL 走
          router 重定向 ?tab=cases|runs → ?peTab=）。内层 评估用例/评估历史 页签寻址用 ?peTab=
@@ -823,26 +756,26 @@ const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetS
 /** 当前是否仍在默认序（失败数降序）：非默认时工具条出「恢复默认序」按钮 */
 const isDefaultSort = computed(() => sortKey.value === 'errors' && sortDir.value === 'desc')
 
-/* 模型路由表排序（2026-10-17 用户走查「有的列没有排序」）：数据同样来自注册表全量，
-   客户端排序诚实。备用模型按「自定义链条数」排（0 = 全部走平台默认），比按文案排
-   更能把配了兜底的 Skill 聚到一起；未加载覆盖数据时返回 null（排末尾）。 */
-const { sortState: routingSortState, toggle: toggleRoutingSort, sortRows: sortRoutingRows } = useTableSort<SkillRow>({
-  accessors: {
-    skill: (s) => s.name || s.id,
-    agent: (s) => s.agentName || s.agentId || '工具类',
-    routing: (s) => routingOf(s.id),
-    fallback: (s) => fallbackChainLengthOf(s.id),
-    status: (s) => completionRank(s.id)
-  },
-  storageKey: 'wf_skills_routing_sort'
+/* 覆盖矩阵复用运行表的路由上下文（2026-10-24 合并两张重复表）：
+   归属 Agent、完成度、备用链解析都从这里取，矩阵不再另查一份。
+   computed 惰性求值，函数声明可后置（fallbackOf / completionBadgeOf 在下方定义）。 */
+const agentLabelsBySkill = computed<Record<string, string>>(() =>
+  Object.fromEntries(cards.value.map((s) => [s.id, agentLabelOf(s)]))
+)
+const skillNamesBySkill = computed<Record<string, string>>(() =>
+  Object.fromEntries(cards.value.map((s) => [s.id, s.name || s.id]))
+)
+const completionBySkill = computed<Record<string, { text: string; cls: string; title: string }>>(() => {
+  const out: Record<string, { text: string; cls: string; title: string }> = {}
+  for (const s of cards.value) {
+    const badge = completionBadgeOf(s.id)
+    if (badge) out[s.id] = badge
+  }
+  return out
 })
-const routedRows = computed(() => sortRoutingRows(cards.value))
-function fallbackChainLengthOf(skillId: string): number | null {
-  if (!coverageReady.value) return null
-  const row = coverageById.value.get(skillId)
-  if (!row) return null
-  return row.fallbackChain?.length ?? 0
-}
+const fallbackBySkill = computed<Record<string, { text: string; title: string }>>(() =>
+  Object.fromEntries(cards.value.map((s) => [s.id, { text: fallbackOf(s.id), title: fallbackTitleOf(s.id) }]))
+)
 
 const filtered = computed(() => {
   let list = cards.value
@@ -1436,16 +1369,7 @@ const fallbackPolicyTitle = computed(() => {
 }
 
 /* 工具条「归属 Agent」label（原型 toolbar 1667）：12px 重字，与下拉同排 */
-
-/* ===== 模型路由页签（原型 renderSkillHub 1665-1681 routing 分支）=====
-   KPI 栅格 + 小节头固定在上，路由表与覆盖矩阵共用下方滚动区 */
-/* flex-wrap：F7-5 起表头副文携带 registry 默认链解析结果，窄屏允许换行不截断。
-   2026-10-14：KPI 带外移后 __top 包装退役，小节头自己承担卡内上内边距 */
-.sk-routing__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 14px 16px 0; }
-.sk-routing__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; }
-.sk-routing__sub { color: var(--mk-muted); }
-/* 覆盖矩阵（增强块）与原型路由表分隔 */
-.sk-routing__matrix { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--mk-line); }
+/* 模型路由页签 2026-10-24 起只有覆盖矩阵一张卡，原路由表/矩阵的嵌套与分界样式退役 */
 
 /* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17，3600 ≈×1.3） */
 @media (min-width: 2000px) {

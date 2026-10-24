@@ -30,7 +30,14 @@ vi.mock('@/api/adminApi', () => ({
   adminAuthApi: apiObject(),
   adminSkillsApi: apiObject({
     getReconciliation: getReconciliationMock,
-    getSkills: vi.fn(async () => ({ data: { data: { skills: [] } } }))
+    getSkills: vi.fn(async () => ({ data: { data: { skills: [] } } })),
+    // 模型路由页签只剩覆盖矩阵一张表：给两行数据让它渲染出表头
+    getSkillModelCoverage: vi.fn(async () => ({
+      data: { data: { skills: [
+        { skillId: 'skill:a', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', source: 'skill-model-only', paramOverrides: null, fallbackChain: null },
+        { skillId: 'skill:c', endpoint: null, model: null, tier: 'chat', source: 'platform-default', paramOverrides: null, fallbackChain: null }
+      ] } }
+    }))
   }),
   adminMcpApi: apiObject(),
   adminGlossaryApi: apiObject(),
@@ -243,9 +250,8 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
-  it('运行表补齐版本 / 路由模型 / 最近调用排序；模型路由表五列全部可排', async () => {
+  it('运行表补齐版本 / 路由模型 / 最近调用排序；模型路由页签只有一张表', async () => {
     localStorage.removeItem('wf_skills_sort')
-    localStorage.removeItem('wf_skills_routing_sort')
     const w = await mountSkills()
     const runSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
     expect(runSortable).toEqual(expect.arrayContaining(['版本', '路由模型', '最近调用']))
@@ -257,8 +263,12 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     const routingTab = w.findAll('.tabs .tab').find((t) => t.text() === '模型路由')
     await routingTab!.trigger('click')
     await flushPromises()
+    // 2026-10-24 去重：原「只读路由表 + 覆盖矩阵」两张表合成一张，只剩覆盖矩阵
+    expect(w.findAll('table')).toHaveLength(1)
     const routingSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
-    expect(routingSortable).toEqual(expect.arrayContaining(['Skill', '归属 Agent', '路由模型', '备用模型', '完成度']))
+    expect(routingSortable).toEqual(expect.arrayContaining(['Skill', '路由来源', 'model', '参数覆盖', '备用模型']))
+    const headers = w.findAll('th').map((t) => t.text())
+    expect(headers).toEqual(expect.arrayContaining(['完成度']))
     w.unmount()
   })
 
