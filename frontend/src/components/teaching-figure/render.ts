@@ -2273,7 +2273,14 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
     const b = positionsPreview.get(String(e.to));
     return a && b && !(b.row > a.row && b.row === a.row + 1);
   });
-  const w = Math.max(560, Math.min(980, maxRowW + padX * 2 + laneGap + (hasLaneEdges ? 86 : 0)));
+  // 每条回环边一条独立车道：三条因果线挤同一个 x 上时标签必然叠字（2026-10-23 历史概念图实拍）
+  const laneEdgeCount = edges.filter((e: any) => {
+    const a = positionsPreview.get(String(e.from));
+    const b = positionsPreview.get(String(e.to));
+    return a !== undefined && b !== undefined && !(b === a + 1);
+  }).length;
+  const laneSpace = hasLaneEdges ? Math.max(86, 26 + laneEdgeCount * 16) : 0;
+  const w = Math.max(560, Math.min(1040, maxRowW + padX * 2 + laneGap + laneSpace));
 
   const positions = new Map<string, { x: number; y: number; w: number; h: number }>();
   let y = titleH + 10;
@@ -2333,7 +2340,7 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
       putLabel((x1 + x2) / 2, y1 + (y2 - y1) * 0.7, e.label, 'middle', tone);
     } else {
       // 跨层/同层/回环：一律走右侧车道，避免从中间那排节点身上穿过去
-      const laneX = w - 22 - (lane % 3) * 10;
+      const laneX = w - 20 - lane * 14;
       lane += 1;
       const ay = a.y + a.h / 2;
       const by = b.y + b.h / 2;
