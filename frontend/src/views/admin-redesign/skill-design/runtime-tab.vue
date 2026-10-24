@@ -126,6 +126,9 @@
                   </select>
                 </label>
               </div>
+              <!-- 能力冲突提示（2026-10-24）：模型支不支持思考/强度由注册表声明，网关按能力裁剪；
+                   裁剪是静默的，所以必须在配置处说明「写了也不会发」。模型不在目录时不猜、不提示。 -->
+              <p v-if="rtForm.enabled && thinkingNotice" class="sdp-cap-note" role="status">{{ thinkingNotice }}</p>
 
               <div class="sdp-subhead">
                 <span>参数覆盖</span>
@@ -289,7 +292,7 @@
 import { computed, ref, watch } from 'vue'
 import { adminPlatformSettingsApi, adminSkillsApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
-import { errText, fmtMs, callParamSourceLabel } from './sdp-shared'
+import { errText, fmtMs, callParamSourceLabel, thinkingCapabilityNotice, type ThinkingCapability } from './sdp-shared'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
@@ -361,6 +364,19 @@ const sourceLabel = (k: string) => callParamSourceLabel(generationParams.value?.
 /** 模型来源（2026-10-24）：route-fallback 只说「路由表」，看不出是技能覆盖还是平台默认。
  *  运行时契约：独立配置关掉 / 模型留空 → 继承平台默认。 */
 const modelOriginLabel = computed(() => (rtForm.value.enabled && rtForm.value.model ? '技能配置' : '平台默认'))
+/** 生效模型的能力声明（注册表）：选中模型优先；继承时用侧栏解析出的生效模型查目录 */
+const effectiveModelCap = computed<ThinkingCapability | null>(() => {
+  const id = String(rtForm.value.enabled && rtForm.value.model ? rtForm.value.model : generationParams.value?.model || '')
+  if (!id) return null
+  const opt = pickerOptions.value.find((o) => o.value === id)
+  return opt ? { thinking: opt.thinking, reasoning: opt.reasoning } : null
+})
+const thinkingNotice = computed(() =>
+  thinkingCapabilityNotice(
+    { thinkingMode: rtForm.value.thinkingMode, reasoningEffort: rtForm.value.reasoningEffort },
+    effectiveModelCap.value
+  )
+)
 
 /* ---------- 模型测试（model-probe；与 probeChannel 通道探测是两件事） ---------- */
 interface ProbeForm {
@@ -924,6 +940,15 @@ watch(() => props.skillId, () => {
   background: var(--mk-red-bg);
   border: 1px solid rgba(220, 38, 38, 0.3);
   color: var(--mk-red);
+  font-size: var(--mk-fs-micro);
+}
+/* 能力冲突提示：不是错误（配置可保存、换模型后即生效），用琥珀预警色 */
+.sdp-cap-note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-amber-bg, rgba(217, 119, 6, 0.12));
+  color: var(--mk-amber);
   font-size: var(--mk-fs-micro);
 }
 
