@@ -38,6 +38,7 @@ import {
   parsePathPromptTemplate,
   parsePathSummary,
   parseTaskLearningObjectives,
+  buildConceptMap,
   resolveMilestoneConcept,
   resolveNormalizedInputSnapshot,
   resolvePersistedNormalizedInput,
@@ -96,9 +97,11 @@ export function buildPathProcessDetail(path: any) {
       ...resolvedMilestoneConcept,
     };
   });
+  // 概念 Map 建一次供全部任务复用（旧口径每任务重建整张 Map）
+  const taskConceptMap = buildConceptMap(cognitiveDesign);
   const taskProfiles = (path.milestones || []).flatMap((milestone: any) =>
     (milestone.subtasks || []).map((task: any) => ({
-      ...resolveTaskConcept(task.linkedConceptId || task.coreConcept, cognitiveDesign, task.linkedConceptName || task.coreConcept),
+      ...resolveTaskConcept(task.linkedConceptId || task.coreConcept, cognitiveDesign, task.linkedConceptName || task.coreConcept, taskConceptMap),
       taskId: task.id,
       milestoneId: milestone.id,
       milestoneTitle: milestone.title || milestone.goal || null,

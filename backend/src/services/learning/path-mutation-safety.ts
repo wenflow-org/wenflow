@@ -128,6 +128,14 @@ export async function claimPathReplanRangeSnapshot(
   snapshot: PathReplanRangeSnapshot,
   now = new Date()
 ): Promise<void> {
+  // 里程碑数硬帽（常规重排 2-8 个）：防误传整条路径的超大快照把事务拖成超长串行查询
+  const MAX_CLAIM_MILESTONES = 16;
+  if (snapshot.milestones.length > MAX_CLAIM_MILESTONES) {
+    throw new PathMutationConflictError(
+      `单次调整最多覆盖 ${MAX_CLAIM_MILESTONES} 个阶段`,
+      'PATH_REPLAN_SCOPE_TOO_LARGE'
+    );
+  }
   for (const entry of snapshot.milestones) {
     if (entry.milestoneStatus === 'completed') {
       throw new PathMutationConflictError(
@@ -304,13 +312,14 @@ export async function assertPathMutationSafe(
 
   if (openSessions.length > 0) {
     const taskIds = [...new Set(openSessions.map((s: any) => s.taskId))];
-    const tasks = taskIds.length > 0
+    // 命名说明：不可叫 tasks——外层已用同名变量装"路径下全部任务"，遮蔽会埋维护坑
+    const taskTitleRows = taskIds.length > 0
       ? await tx.subtasks.findMany({
           where: { id: { in: taskIds } },
           select: { id: true, title: true }
         })
       : [];
-    const taskTitleById = new Map(tasks.map((t: any) => [t.id, t.title]));
+    const taskTitleById = new Map(taskTitleRows.map((t: any) => [t.id, t.title]));
     throw new PathMutationConflictError(
       '学习路径仍有未结束的课堂，请先结束课堂后再调整',
       'PATH_MUTATION_HAS_OPEN_SESSION',

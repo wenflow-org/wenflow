@@ -61,25 +61,34 @@ describe('session-budget 会话预算解析（教多少 vs 花多少）', () => 
 describe('computeLearnProgressSignature 无进展看门狗指纹', () => {
   it('同一状态指纹稳定', () => {
     const sr = { teaching: { knowledgeState: [{ status: 'mastered' }, { status: 'learning' }] } };
-    const a = computeLearnProgressSignature(sr, { completedTasks: 2, currentTaskId: 't3' });
-    const b = computeLearnProgressSignature(sr, { completedTasks: 2, currentTaskId: 't3' });
+    const a = computeLearnProgressSignature(sr, { completedTasks: 2 });
+    const b = computeLearnProgressSignature(sr, { completedTasks: 2 });
     expect(a).toBe(b);
   });
 
   it('任务推进或知识状态变化时指纹改变（即判定有净进展）', () => {
     const done = computeLearnProgressSignature(
       { teaching: { knowledgeState: [{ status: 'mastered' }] } },
-      { completedTasks: 2, currentTaskId: 't3' }
+      { completedTasks: 2 }
     );
     const nextTask = computeLearnProgressSignature(
       { teaching: { knowledgeState: [{ status: 'mastered' }] } },
-      { completedTasks: 3, currentTaskId: 't4' }
+      { completedTasks: 3 }
     );
     const moreMastered = computeLearnProgressSignature(
       { teaching: { knowledgeState: [{ status: 'mastered' }, { status: 'mastered' }] } },
-      { completedTasks: 2, currentTaskId: 't3' }
+      { completedTasks: 2 }
     );
     expect(nextTask).not.toBe(done);
     expect(moreMastered).not.toBe(done);
+  });
+
+  it('任务间打转（A,B,A,B 零完成、零知识增量）指纹不变——看门狗必须能抓到这种死循环', () => {
+    // 2026-10-24 回归：旧指纹含 currentTaskId，打转时每片指纹都不同，看门狗永不触发
+    const atA = { teaching: { knowledgeState: [{ status: 'learning' }] } };
+    const atB = { teaching: { knowledgeState: [{ status: 'learning' }] } };
+    const chunk1 = computeLearnProgressSignature(atA, { completedTasks: 1 });
+    const chunk2 = computeLearnProgressSignature(atB, { completedTasks: 1 });
+    expect(chunk2).toBe(chunk1);
   });
 });

@@ -143,6 +143,20 @@ interface LearningStateMetricPersistOptions {
   synthetic?: boolean;
 }
 
+/**
+ * PMC 读侧预取行（includeSynthetic=true 口径，即 derivePmcState / derivePmcDailySeries 的取数口径）。
+ * 供 getStateTrendWindow / getAggregatedState 一次取回后多路复用，替代同数据的多次全量 findMany。
+ */
+interface PmcPreloadedMetricRow {
+  lss: number | null;
+  ktl: number | null;
+  lf: number | null;
+  calculatedAt: Date;
+  sourceKey: string | null;
+  taskId: string | null;
+  pathId: string | null;
+}
+
 export interface DisplayMetricCommitInput {
   /** display 刻度（0-100）：必须由 internalTenToDisplay / asDisplayHundred 产出。
    *  品牌类型会让"直接把 0-10 值或未经归一的原始值塞进来"在编译期失败——
@@ -375,10 +389,9 @@ export class LearningStateService {
   /**
    * 自然衰减用的"过了几天"。
    *
-   * 口径统一到 **UTC 日界**（2026-09-16 起）：每日温故配额（ReviewQuotaService）、当日课量
-   * （getAggregatedState.dayLoad）、日期模拟（resolveDayWindow）都用 UTC 日，只有衰减此前用
-   * 本地日 —— 于是 UTC+8 下"用规范 asOf（UTC 日末）读当天的课"会白多衰减一天。
-   * 现在四个口径一致；顺带一个好处：UTC 没有夏令时，日差恒为整数（本地日界在 DST 切换日会错半天）。
+   * 历史（2026-09-16）：衰减此前用本地日，与每日温故配额、当日课量、日期模拟的 UTC 日口径
+   * 不一致——UTC+8 下"用规范 asOf（UTC 日末）读当天的课"会白多衰减一天。
+   * 现状：日界统一走 day-boundary（应用时区本地日），四个口径一致（下方 :384 注释为现行口径）。
    */
   private getNaturalDayDiff(from: Date, to: Date): number {
     // 日界统一走 day-boundary（应用时区本地日）：与当日课量 / 温故配额 / 日期模拟 / 趋势分桶同口径
@@ -829,15 +842,30 @@ export class LearningStateService {
   }
 
   async getLatestCommittedMetricBefore(userId: string, before: Date): Promise<LearningStateMetrics | null> {
+    // 快路径（2026-10-24）：DB 级取 before 之前最新一条已提交指标。旧实现无条件
+    // listCommittedSnapshots 全量拉取用户历史行，再从尾部（升序列）倒着找第一条，历史越长越贵。
+    const rows = await prisma.learning_metrics.findMany({
+      where: {
+        ...this.buildCommittedMetricWhere(userId),
+        calculatedAt: { lt: before },
+      },
+      orderBy: { calculatedAt: 'desc' },
+      take: 1,
+      select: { lss: true, ktl: true, lf: true, lsb: true, calculatedAt: true, pathId: true },
+    });
+    if (rows.length > 0) {
+      const snapshot = this.metricRecordToSnapshot(rows[0]);
+      if (snapshot) return snapshot.metrics;
+    }
+    // 快路径未命中（无已提交行 / 最新行读取自检失败）→ 回落旧路径，保留
+    // listCommittedSnapshots 的 session-wrapup 兜底（历史未迁移数据）语义
     const snapshots = await this.listCommittedSnapshots(userId);
-
     for (let index = snapshots.length - 1; index >= 0; index -= 1) {
       const snapshot = snapshots[index];
       if (snapshot.calculatedAt.getTime() < before.getTime()) {
         return snapshot.metrics;
       }
     }
-
     return null;
   }
 
@@ -1242,9 +1270,11 @@ export class LearningStateService {
    */
   async getCurrentState(
     userId: string,
-    options: { pathId?: string | null; asOf?: Date } = {}
+    options: { pathId?: string | null; asOf?: Date } = {},
+    /** 预取的 PMC 源行（getStateTrendWindow / getAggregatedState 一次取回后多路复用；缺省自行查库） */
+    preloadedPmcRows?: PmcPreloadedMetricRow[]
   ): Promise<LearningStateMetrics | null> {
-    const pmc = await this.derivePmcState(userId, options);
+    const pmc = await this.derivePmcState(userId, options, preloadedPmcRows);
     if (pmc) return pmc;
     // 无已提交行时的兜底：沿用旧读取（wrapup.stateUpdate），保证冷启动/异常态不倒退
     return this.getPreviousMetrics(userId, options);
@@ -1263,18 +1293,25 @@ export class LearningStateService {
    */
   private async derivePmcState(
     userId: string,
-    options: { pathId?: string | null; asOf?: Date } = {}
+    options: { pathId?: string | null; asOf?: Date } = {},
+    /** 预取的 PMC 源行；调用方保证覆盖到 asOf，此处按 asOf 与 pathId 在内存分区 */
+    preloadedPmcRows?: PmcPreloadedMetricRow[]
   ): Promise<LearningStateMetrics | null> {
     // 行过滤与 until 必须**同一时间基准**（2026-10-17 修）：此前行查询用原始 options.asOf（可能
     // undefined ⇒ 不过滤），而 until 用 `options.asOf ?? simulatedNowOr()`，于是 calculatedAt 落在
     // 未来的残留行会**进序列**（贡献当日负荷）却不受 until 影响 —— 实测把一户 LSS 抬到 8.57（真值 1.97）。
     // 写侧早已统一 simulatedNowOr（见文件顶部"时钟域"注释），读侧同口径。
     const asOf = options.asOf ?? simulatedNowOr();
-    const rows = await prisma.learning_metrics.findMany({
-      where: this.buildCommittedMetricWhere(userId, undefined, undefined, asOf, options.pathId, true),
-      select: { lss: true, ktl: true, lf: true, calculatedAt: true, sourceKey: true, taskId: true },
-      orderBy: { calculatedAt: 'asc' },
-    });
+    // replayDailyPmc 不自行剔除晚于 until 的行（它们的日键会把序列延伸到未来），预取行必须在此分区
+    const rows = preloadedPmcRows
+      ? preloadedPmcRows.filter((row) =>
+          row.calculatedAt.getTime() <= asOf.getTime()
+          && (options.pathId === undefined || row.pathId === options.pathId))
+      : await prisma.learning_metrics.findMany({
+          where: this.buildCommittedMetricWhere(userId, undefined, undefined, asOf, options.pathId, true),
+          select: { lss: true, ktl: true, lf: true, calculatedAt: true, sourceKey: true, taskId: true },
+          orderBy: { calculatedAt: 'asc' },
+        });
     if (rows.length === 0) return null;
     // 读取漏斗（保留量纲防线）：lss 是单节瞬时压力，应 0-10 —— 异刻度脏值**可见化 + 归一**，
     // 不让 0-100 的脏值把当日负荷顶高（ktl/lf/lsb 允许 >10，那是"量"不是"区间"，不告警）。
@@ -1324,13 +1361,17 @@ export class LearningStateService {
    */
   private async derivePmcDailySeries(
     userId: string,
-    asOf: Date
+    asOf: Date,
+    /** 预取的 PMC 源行（含合成占位行）；按 asOf 在内存分区 */
+    preloadedPmcRows?: PmcPreloadedMetricRow[]
   ): Promise<Map<string, { ktl: number; lf: number; lsb: number; mature: boolean }>> {
-    const rows = (await prisma.learning_metrics.findMany({
-      where: this.buildCommittedMetricWhere(userId, undefined, undefined, asOf, undefined, true),
-      select: { lss: true, ktl: true, lf: true, calculatedAt: true, sourceKey: true, taskId: true },
-      orderBy: { calculatedAt: 'asc' },
-    })) ?? [];
+    const rows = (preloadedPmcRows
+      ? preloadedPmcRows.filter((row) => row.calculatedAt.getTime() <= asOf.getTime())
+      : await prisma.learning_metrics.findMany({
+          where: this.buildCommittedMetricWhere(userId, undefined, undefined, asOf, undefined, true),
+          select: { lss: true, ktl: true, lf: true, calculatedAt: true, sourceKey: true, taskId: true },
+          orderBy: { calculatedAt: 'asc' },
+        })) ?? [];
     if (rows.length === 0) return new Map();
 
     const series = replayDailyPmc(
@@ -1395,8 +1436,16 @@ export class LearningStateService {
     const snapshots = await this.listCommittedSnapshots(userId, undefined, undefined, asOf);
     if (snapshots.length === 0) return null;
 
+    // PMC 源行一次取回（含合成占位行），全局与每条路径的 derivePmcState 共用：
+    // 旧口径是 2+P 次独立全量 findMany + P 次完整重放（P = 路径数），预取后只剩内存分区。
+    const pmcRows = await prisma.learning_metrics.findMany({
+      where: this.buildCommittedMetricWhere(userId, undefined, undefined, asOf, undefined, true),
+      select: { lss: true, ktl: true, lf: true, calculatedAt: true, sourceKey: true, taskId: true, pathId: true },
+      orderBy: { calculatedAt: 'asc' },
+    });
+
     // 全局 PMC（跨全部路径的逐日负荷序列）
-    const globalMetrics = (await this.derivePmcState(userId, { asOf })) ?? null;
+    const globalMetrics = (await this.derivePmcState(userId, { asOf }, pmcRows)) ?? null;
     if (!globalMetrics) return null;
 
     // 每条路径的 PMC 分解（供路径级/课内判断；不再做跨路径 max）
@@ -1404,7 +1453,7 @@ export class LearningStateService {
     const perPath = (
       await Promise.all(
         pathIds.map(async (pathId) => {
-          const m = await this.derivePmcState(userId, { pathId, asOf });
+          const m = await this.derivePmcState(userId, { pathId, asOf }, pmcRows);
           if (!m) return null;
           const last = snapshots.filter((s) => s.pathId === pathId).pop();
           return { pathId, metrics: m, calculatedAt: last?.calculatedAt ?? asOf };
@@ -1415,7 +1464,8 @@ export class LearningStateService {
     // 活跃窗口：超窗（久未活动）的路径不算"当前总负担"的一部分。perPath 仍完整返回供审计。
     // 旧实现"窗口内为空则回退全部路径"是为了给 max 聚合兜底；PMC 的全局量是跨路径日负荷、
     // 不再依赖 perPath，故按字面给"窗口内路径"（全闲置 = 空，更诚实）。
-    const windowStart = new Date(asOf.getTime() - AGGREGATION_ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    // 固定毫秒窗口在应用时区（Asia/Shanghai，固定偏移无 DST）下与日历日窗口逐毫秒等价。
+    const windowStart = new Date(asOf.getTime() - AGGREGATION_ACTIVE_WINDOW_DAYS * DAY_BOUNDARY_DAY_MS);
     const activePathIds = perPath
       .filter((entry) => entry.calculatedAt >= windowStart)
       .map((entry) => entry.pathId);
@@ -1434,8 +1484,9 @@ export class LearningStateService {
   }
 
   /**
-   * 当日（UTC 日）课量：完成的课节数 + 累计学习时长。
-   * 用 UTC 日与每日温故配额（ReviewQuotaService）保持一致口径，避免跨时区口径漂移。
+   * 当日课量：完成的课节数 + 累计学习时长。
+   * 日界走 day-boundary（应用时区本地日，startOfDay 同源），与每日温故配额 / 自然衰减 /
+   * 趋势分桶保持一致口径，避免跨时区口径漂移。
    */
   private async resolveDayLoad(userId: string, asOf: Date): Promise<{ lessons: number; minutes: number }> {
     const dayStart = startOfDay(asOf);
@@ -1501,9 +1552,10 @@ export class LearningStateService {
     const committedRows = await prisma.learning_metrics.findMany({
       where: {
         ...this.buildCommittedMetricWhere(userId),
-        OR: sessions.map((session) => ({
-          metadata: { contains: `"sessionId":"${session.id}"` },
-        })),
+        // 会话已提交指标的 sourceKey 恒为 `session-wrapup:<sessionId>`（prepareSessionScoreCommit
+        // 是唯一写入点），走唯一索引精确命中。旧口径对每个会话拼一条 metadata LIKE（≤120 个），
+        // SQLite 下对每行做全文子串匹配，索引完全用不上。
+        sourceKey: { in: requestedIds.map((sessionId) => `session-wrapup:${sessionId}`) },
       },
       orderBy: { calculatedAt: 'asc' },
       select: {
@@ -1783,13 +1835,33 @@ export class LearningStateService {
       }, today.getTime());
       const windowEnd = latestMetricMs > today.getTime() ? startOfDay(new Date(latestMetricMs)) : today;
       const actualDays = Math.max(1, Math.floor((windowEnd.getTime() - startDate.getTime()) / DAY_BOUNDARY_DAY_MS) + 1);
-      const currentState = await this.getCurrentState(userId);
+      // 热路径合并（2026-10-24）：旧实现在这里对同一份「用户全部已提交指标行」做 3 次独立
+      // findMany（getCurrentState 的 derivePmcState、derivePmcDailySeries、以及
+      // getLatestCommittedMetricBefore 的全量 listCommittedSnapshots），每次各自全量拉取 +
+      // 重放。现在一次取回 ≤ max(windowEnd, now) 的全部行（含合成占位行，与 PMC 读侧口径
+      // 一致），在内存按 asOf 分区给「当前状态」与「逐日序列」共用；逐日重放本身 O(天数)，便宜。
+      // latestMetricBeforeWindow 走 getLatestCommittedMetricBefore 的 DB 级 take-1 快路径。
+      const nowForWindow = simulatedNowOr();
+      const preloadedPmcRows = await prisma.learning_metrics.findMany({
+        where: this.buildCommittedMetricWhere(
+          userId,
+          undefined,
+          undefined,
+          new Date(Math.max(windowEnd.getTime(), nowForWindow.getTime())),
+          undefined,
+          true,
+        ),
+        select: { lss: true, ktl: true, lf: true, calculatedAt: true, sourceKey: true, taskId: true, pathId: true },
+        orderBy: { calculatedAt: 'asc' },
+      });
+      const currentState = await this.getCurrentState(userId, {}, preloadedPmcRows);
       const latestMetricBeforeWindow = await this.getLatestCommittedMetricBefore(userId, startDate);
       // 趋势与 /state/current 必须同口径（PMC 逐日重放）。asOf 取窗口末日 **末刻**，
       // 否则 `calculatedAt <= startOfDay` 会把末日当天的课排除在重放之外。
       const pmcByDay = await this.derivePmcDailySeries(
         userId,
-        new Date(windowEnd.getTime() + DAY_BOUNDARY_DAY_MS - 1)
+        new Date(windowEnd.getTime() + DAY_BOUNDARY_DAY_MS - 1),
+        preloadedPmcRows
       );
 
       const metricsByDay = new Map<string, typeof metrics>();
@@ -1930,9 +2002,8 @@ export class LearningStateService {
         });
       }
 
-      // 2. 检查负荷失衡（form<0 且适应基座已成熟；冷启动爬升期不算）
-      const recentVerdictsForLsb = validTrends.slice(-3).map((t) => classifyLoad({ ktl: t.ktl, lf: t.lf }));
-      if (recentVerdictsForLsb.length >= 2 && recentVerdictsForLsb.slice(-2).every((v) => v.imbalanced)) {
+      // 2. 检查负荷失衡（form<0 且适应基座已成熟；冷启动爬升期不算）——与上一条共用同一组 verdict
+      if (recentVerdicts.length >= 2 && recentVerdicts.slice(-2).every((v) => v.imbalanced)) {
         warnings.push({
           type: 'lsb_negative',
           level: 'warning',

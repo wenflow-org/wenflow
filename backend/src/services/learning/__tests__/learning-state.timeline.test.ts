@@ -84,11 +84,9 @@ describe('LearningStateService session timeline', () => {
     expect(mockPrisma.learning_metrics.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         userId: 'user-1',
-        OR: [
-          { metadata: { contains: '"sessionId":"teach-1"' } },
-          { metadata: { contains: '"sessionId":"teach-2"' } },
-          { metadata: { contains: '"sessionId":"teach-3"' } }
-        ]
+        // 2026-10-24：会话已提交指标按 sourceKey 唯一索引精确命中（session-wrapup:<id>），
+        // 取代旧口径的逐会话 metadata LIKE
+        sourceKey: { in: ['session-wrapup:teach-1', 'session-wrapup:teach-2', 'session-wrapup:teach-3', 'session-wrapup:foreign-session'] }
       })
     }))
     expect(result).toHaveLength(3)

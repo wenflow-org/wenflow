@@ -48,6 +48,7 @@ import { conceptRegistryService } from '../../learner/concept-registry.service';
 import { conceptGraphService } from '../../learner/concept-graph.service';
 import { normalizeConceptKey } from '../../memory/concept-key';
 import {
+  buildConceptMap,
   generateDisplayLabel,
   getSceneFramingNormalizedInput,
   normalizePathTaskType,
@@ -838,6 +839,9 @@ async function enrichLearningPathWithAndersonInner(
     // 概念身份预解析（canonical，best-effort）：**必须在事务外**——SQLite 下事务持有写锁，
     // 事务内再写 concepts/aliases 会撞锁。设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4
     //
+    // 概念 Map 建一次，供本函数全部 resolveTaskConcept 调用复用（旧口径每任务重建整张 Map）
+    const taskConceptMap = buildConceptMap(pathCognitiveDesign);
+    //
     // 键必须与写入侧一致：写入用的是 `resolveTaskConcept(...).linkedConceptName`（命中认知设计时
     // 取**设计里的概念名**，非原始 linkedConcept 文本），故这里复用同一个解析函数取同一个值。
     // （首版误用原始文本做键 → 实测子任务 6/0 全部落空。）
@@ -850,7 +854,7 @@ async function enrichLearningPathWithAndersonInner(
         .flatMap((s) => s.subtasks)
         .map((t: any) => {
           const linked = typeof t?.linkedConcept === 'string' ? t.linkedConcept : null;
-          const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked);
+          const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked, taskConceptMap);
           return resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null;
         })
         .filter((name): name is string => !!name && !!name.trim());
@@ -917,6 +921,7 @@ async function enrichLearningPathWithAndersonInner(
             typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
             pathCognitiveDesign,
             typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
+            taskConceptMap,
           );
           const displayLabel = generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
             || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);

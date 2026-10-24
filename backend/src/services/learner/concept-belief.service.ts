@@ -146,6 +146,9 @@ function parseJsonSafe<T>(raw: string | null | undefined): T | null {
   }
 }
 
+/** applyObservations 乐观锁重试上限（并发写同一 (userId, pathId) 时重读重放的次数） */
+const APPLY_OBSERVATIONS_MAX_ATTEMPTS = 3;
+
 class ConceptBeliefService {
   async getBeliefs(userId: string, pathId?: string | null): Promise<ConceptBeliefsPayload | null> {
     const row = await prisma.learner_projections.findUnique({
@@ -158,6 +161,11 @@ class ConceptBeliefService {
   /**
    * 用一批观测更新信念并落库；无观测时原样返回现有信念。
    * 新概念用 pL0 初始化。
+   *
+   * 并发口径（2026-10-24 修）：整包 payload 的读-改-写此前无任何并发保护——同一
+   * (userId, pathId) 的两个并发会话各自读旧包、各自整包写回，后写者覆盖前写者的全部
+   * 概念更新（version 自增但从不校验，是装饰性的）。现在按 version 做乐观锁：
+   * 条件更新不命中（version 已被并发方推进）则重读最新包重放本批观测，至多 3 次。
    */
   async applyObservations(
     userId: string,
@@ -166,57 +174,80 @@ class ConceptBeliefService {
     options: { params?: BktParams } = {},
   ): Promise<ConceptBeliefsPayload | null> {
     const params = options.params ?? DEFAULT_BKT_PARAMS;
-    const current = await this.getBeliefs(userId, pathId);
-    const beliefs: Record<string, ConceptBelief> = { ...(current?.beliefs ?? {}) };
     const now = new Date().toISOString();
+    const projectionKey = beliefProjectionKey(userId, pathId);
 
-    for (const observation of observations) {
-      const conceptKey = String(observation?.conceptKey || '').trim();
-      if (!conceptKey) continue;
-      // 按概念难度分档：观测可自带参数（由调用方按 LLM 判定的难度档位解析），否则用批次参数
-      const conceptParams = observation.params ?? params;
-      const prev = beliefs[conceptKey]?.pKnowL ?? conceptParams.pL0;
-      const nextTier = observation.tier ?? beliefs[conceptKey]?.tier;
-      beliefs[conceptKey] = {
-        pKnowL: updateBelief(prev, observation.observed === true, conceptParams),
-        observations: (beliefs[conceptKey]?.observations ?? 0) + 1,
-        lastObservedAt: now,
-        ...(nextTier ? { tier: nextTier } : {}),
-      };
-    }
-
-    const payload: ConceptBeliefsPayload = {
-      schemaVersion: 'learner-concept-beliefs-v1',
-      generatedAt: now,
-      pathId: pathId ?? null,
-      params,
-      beliefs,
-    };
-
-    try {
-      await prisma.learner_projections.upsert({
-        where: { projectionKey: beliefProjectionKey(userId, pathId) },
-        create: {
-          id: `lcb_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-          projectionKey: beliefProjectionKey(userId, pathId),
-          userId,
-          scope: 'beliefs',
-          pathId: pathId ?? null,
-          version: 1,
-          payload: JSON.stringify(payload),
-          generatedAt: new Date(now),
-        },
-        update: {
-          version: { increment: 1 },
-          payload: JSON.stringify(payload),
-          generatedAt: new Date(now),
-        },
+    for (let attempt = 0; attempt < APPLY_OBSERVATIONS_MAX_ATTEMPTS; attempt += 1) {
+      const currentRow = await prisma.learner_projections.findUnique({
+        where: { projectionKey },
+        select: { payload: true, version: true },
       });
-    } catch (error: any) {
-      logger.warn('[concept-belief] 落库失败（不影响主流程）', { userId, pathId, error: error?.message || String(error) });
+      const current = parseJsonSafe<ConceptBeliefsPayload>(currentRow?.payload);
+      const beliefs: Record<string, ConceptBelief> = { ...(current?.beliefs ?? {}) };
+
+      for (const observation of observations) {
+        const conceptKey = String(observation?.conceptKey || '').trim();
+        if (!conceptKey) continue;
+        // 按概念难度分档：观测可自带参数（由调用方按 LLM 判定的难度档位解析），否则用批次参数
+        const conceptParams = observation.params ?? params;
+        const prev = beliefs[conceptKey]?.pKnowL ?? conceptParams.pL0;
+        const nextTier = observation.tier ?? beliefs[conceptKey]?.tier;
+        beliefs[conceptKey] = {
+          pKnowL: updateBelief(prev, observation.observed === true, conceptParams),
+          observations: (beliefs[conceptKey]?.observations ?? 0) + 1,
+          lastObservedAt: now,
+          ...(nextTier ? { tier: nextTier } : {}),
+        };
+      }
+
+      const payload: ConceptBeliefsPayload = {
+        schemaVersion: 'learner-concept-beliefs-v1',
+        generatedAt: now,
+        pathId: pathId ?? null,
+        params,
+        beliefs,
+      };
+
+      try {
+        if (!currentRow) {
+          // 首建：并发首建撞 projectionKey 唯一约束 → 重读重放
+          await prisma.learner_projections.create({
+            data: {
+              id: `lcb_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              projectionKey,
+              userId,
+              scope: 'beliefs',
+              pathId: pathId ?? null,
+              version: 1,
+              payload: JSON.stringify(payload),
+              generatedAt: new Date(now),
+            },
+          });
+          return payload;
+        }
+        // 乐观锁写回：version 不匹配（并发方已推进）时 count=0 → 重读重放
+        const updated = await prisma.learner_projections.updateMany({
+          where: { projectionKey, version: currentRow.version },
+          data: {
+            version: { increment: 1 },
+            payload: JSON.stringify(payload),
+            generatedAt: new Date(now),
+          },
+        });
+        if (updated.count === 1) return payload;
+      } catch (error: any) {
+        if (error?.code === 'P2002') continue; // 并发首建冲突：重读重放
+        logger.warn('[concept-belief] 落库失败（不影响主流程）', { userId, pathId, error: error?.message || String(error) });
+        return payload;
+      }
     }
 
-    return payload;
+    logger.warn('[concept-belief] 乐观锁重试耗尽，本批写入放弃（下次观测会重放）', {
+      userId,
+      pathId,
+      attempts: APPLY_OBSERVATIONS_MAX_ATTEMPTS,
+    });
+    return null;
   }
 }
 

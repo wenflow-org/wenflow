@@ -1,6 +1,6 @@
 {
   "lineBudget": 1000,
-  "note": "单个非测试 .ts 文件 > lineBudget 行必须登记且只许缩短；--update 只允许收缩（#76）",
+  "note": "单个非测试 .ts 文件 > lineBudget 行必须登记且只许缩短；--update 只允许收缩（#76）。2026-10-24 算法修复批次 --update --allow-grow 放行 5 文件增长（ConceptConsolidatorService/LearnerKnowledgeMemoryService/learning-state.service/path-planning-hints/stage-enrichment）：难度降档死代码与度量口径修复、快照嵌套扫描倒排化、趋势窗口预取合并、limitingFactor 量纲修正、SQL 收敛——增长为修复代码与口径注释，未夹带无关逻辑，拆分留待后续重构。",
   "oversize": {
     "src/routes/admin/platform.ts": 1458,
     "src/routes/admin/prompt-ops.ts": 1878,
@@ -13,13 +13,13 @@
     "src/services/ai-teaching/TeachingSessionRepository.ts": 1756,
     "src/services/ai-teaching/teaching-session-lifecycle.ts": 1305,
     "src/services/ai-teaching/teaching-turn-engine.ts": 1437,
-    "src/services/learner/ConceptConsolidatorService.ts": 2447,
-    "src/services/learner/LearnerKnowledgeMemoryService.ts": 1136,
+    "src/services/learner/ConceptConsolidatorService.ts": 2461,
+    "src/services/learner/LearnerKnowledgeMemoryService.ts": 1222,
     "src/services/learning/generation/path-generation.core.ts": 1155,
-    "src/services/learning/generation/stage-enrichment.ts": 1435,
+    "src/services/learning/generation/stage-enrichment.ts": 1440,
     "src/services/learning/goal-conversation.service.ts": 1697,
-    "src/services/learning/learning-state.service.ts": 1987,
-    "src/services/learning/path-planning-hints.ts": 1019,
+    "src/services/learning/learning-state.service.ts": 2058,
+    "src/services/learning/path-planning-hints.ts": 1034,
     "src/services/learning/replan/path-replan.service.ts": 1183,
     "src/services/skill-registry/skill-scaffold.service.ts": 1161,
     "src/services/virtual-lab/card-import.service.ts": 1107

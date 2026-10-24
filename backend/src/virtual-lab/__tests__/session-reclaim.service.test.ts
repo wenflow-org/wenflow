@@ -23,7 +23,8 @@ const mockLogDeleteMany = jest.fn()
 
 const mockDatabase: any = {
   virtual_sessions: { findMany: mockFindMany, update: mockUpdate },
-  virtual_experiment_leases: { findFirst: mockFindFirst },
+  // 2026-10-24：租约改为批查 findMany（旧口径逐会话 findFirst）
+  virtual_experiment_leases: { findMany: mockFindFirst },
   admin_audit_logs: { create: mockAuditCreate },
   // 日志子表：默认侧表已有行（跳过播种），裁剪扫描返回空
   virtual_session_logs: {
@@ -56,7 +57,7 @@ describe('VirtualSessionReclaimService', () => {
 
   it('running 超 24h 且无活跃租约的会话标记 failed 并写审计（不删除数据）', async () => {
     mockFindMany.mockResolvedValue([staleSession()])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     mockUpdate.mockResolvedValue({})
     mockAuditCreate.mockResolvedValue({})
     const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
@@ -101,7 +102,7 @@ describe('VirtualSessionReclaimService', () => {
 
   it('created 超阈值会话同样回收', async () => {
     mockFindMany.mockResolvedValue([staleSession({ id: 'vs-created', status: 'created', currentStage: 'goal' })])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
 
     const result = await service.runReclaimOnce({ now: NOW })
@@ -122,7 +123,7 @@ describe('VirtualSessionReclaimService', () => {
       { timestamp: '2026-07-30T09:55:00.000Z', phase: 'error', details: { error: 'API request canceled' } }
     ])
     mockFindMany.mockResolvedValue([staleSession({ id: 'vs-error-tail', logs: errorTailLogs })])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
 
     const result = await service.runReclaimOnce({ now: NOW })
@@ -141,7 +142,7 @@ describe('VirtualSessionReclaimService', () => {
 
   it('有活跃租约的会话跳过（不误回收正在执行的会话）', async () => {
     mockFindMany.mockResolvedValue([staleSession()])
-    mockFindFirst.mockResolvedValue({ id: 'lease-1' })
+    mockFindFirst.mockResolvedValue([{ sessionId: 'vs-stale' }])
     const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
 
     const result = await service.runReclaimOnce({ now: NOW })
@@ -169,7 +170,7 @@ describe('VirtualSessionReclaimService', () => {
 
   it('dryRun 只报告不落地（干跑确认清单）', async () => {
     mockFindMany.mockResolvedValue([staleSession()])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
 
     const result = await service.runReclaimOnce({ dryRun: true, now: NOW })
@@ -189,7 +190,7 @@ describe('VirtualSessionReclaimService', () => {
 
   it('短周期收敛：阈值取 fastThresholdMs、reason=stale-session-short（审计可区分）', async () => {
     mockFindMany.mockResolvedValue([staleSession()])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     mockUpdate.mockResolvedValue({})
     mockAuditCreate.mockResolvedValue({})
     const fastMs = 30 * 60 * 1000
@@ -222,7 +223,7 @@ describe('VirtualSessionReclaimService', () => {
     mockFindMany.mockResolvedValue([
       staleSession({ stageResults: JSON.stringify({ autopilot: { status: 'running' } }) })
     ])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     const service = new VirtualSessionReclaimService({
       database: mockDatabase,
       thresholdMs: 24 * 60 * 60 * 1000,
@@ -243,7 +244,7 @@ describe('VirtualSessionReclaimService', () => {
 
   it('回收中途进入 draining 时停止后续处理', async () => {
     mockFindMany.mockResolvedValue([staleSession({ id: 'vs-1' }), staleSession({ id: 'vs-2' })])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     let drained = false
     const service = new VirtualSessionReclaimService({
       database: mockDatabase,
@@ -267,7 +268,7 @@ describe('VirtualSessionReclaimService', () => {
     mockFindMany.mockResolvedValue([
       staleSession({ id: 'vs-held', stageResults: JSON.stringify({ hold: { by: 'batch-sprint', reason: 'path-only' } }) })
     ])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
 
     const result = await service.runReclaimOnce({ now: NOW })
@@ -289,9 +290,9 @@ describe('VirtualSessionReclaimService', () => {
       staleSession({ id: 'vs-autopilot', stageResults: JSON.stringify({ autopilot: { status: 'running' } }) }),
       staleSession({ id: 'vs-reclaimable', stageResults: '{}' })
     ])
-    // 租约查询只对 vs-lease 命中（其余返回 null）
-    mockFindFirst.mockImplementation(async (args: { where: { sessionId: string } }) =>
-      args.where.sessionId === 'vs-lease' ? { sessionId: 'vs-lease' } : null)
+    // 租约批查只对 vs-lease 命中（其余不在返回列表里）
+    mockFindFirst.mockImplementation(async (args: { where: { sessionId: { in: string[] } } }) =>
+      (args.where.sessionId?.in ?? []).includes('vs-lease') ? [{ sessionId: 'vs-lease' }] : [])
     mockUpdate.mockResolvedValue({})
     mockAuditCreate.mockResolvedValue({})
     const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
@@ -321,7 +322,7 @@ describe('VirtualSessionReclaimService', () => {
     mockFindMany.mockResolvedValue([
       staleSession({ id: 'vs-held-expired', stageResults: JSON.stringify({ hold: { by: 'x', until: expired } }) })
     ])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     mockUpdate.mockResolvedValue({})
     mockAuditCreate.mockResolvedValue({})
     const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
@@ -341,7 +342,7 @@ describe('VirtualSessionReclaimService', () => {
       // 写于 09:30（floor 之后）→ 存活代际可能是作者 → 保护
       staleSession({ id: 'vs-post-floor', updatedAt: new Date('2026-08-15T09:30:00.000Z') })
     ])
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockResolvedValue([])
     mockUpdate.mockResolvedValue({})
     mockAuditCreate.mockResolvedValue({})
     const service = new VirtualSessionReclaimService({
