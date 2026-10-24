@@ -1159,7 +1159,12 @@ const blackboxTraceCount = computed(() => {
 })
 /** 模式声明单源（2026-10-04 全站评审 P3#13）：真实会话 chip 吸收控制台「只读监控」条的语义，
     同屏只此一处；黑盒/辅助口径不变（黑盒控制台内另有专项声明条） */
-const modeText = computed(() => (isRealMode.value ? '真实课堂 · 只读监控' : isBlackbox.value ? '黑盒模式' : '辅助模式'))
+/* 真实模式有两种对象：教学课堂（teaching）与目标澄清对话（goal）。
+   此前一律写「真实课堂」，目标对话进来也被叫成课堂（2026-10-24 层级审计）。
+   kind 由后端载荷给出：未加载时先按课堂文案，加载后立即纠正。 */
+const modeText = computed(() => (isRealMode.value
+  ? (realKind.value === 'goal' ? '真实目标对话 · 只读监控' : '真实课堂 · 只读监控')
+  : isBlackbox.value ? '黑盒模式' : '辅助模式'))
 const TERMINAL_SESSION_STATUSES = ['completed', 'failed', 'abandoned', 'timeout', 'finalization_failed', 'discarded', 'superseded']
 const isTerminal = computed(() => {
   const st = normalized(session.value?.status || runtime.value.status)
@@ -2252,6 +2257,8 @@ async function refresh() {
       clockTick.value = Date.now()
       const kind = String((session.value as Record<string, unknown>)?.kind || '')
       realKind.value = kind === 'goal' ? 'goal' : 'teaching'
+      /* 面包屑对象名（2026-10-24）：深链进来此前只有裸会话 id，看不出是课堂还是目标对话 */
+      if (!subPage.value?.label) setSubPageLabel(kind === 'goal' ? '目标对话' : '真实课堂')
       timelineEntries.value = Array.isArray((session.value as Record<string, unknown>)?.timeline)
         ? (session.value as { timeline: Array<{ time: string; kind: string; title: string; detail: string }> }).timeline
         : []

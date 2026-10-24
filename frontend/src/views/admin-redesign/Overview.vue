@@ -3,6 +3,15 @@
     <!-- 页头（原型 pageTitle）：面包屑管「我在哪」，页头管「这页是什么 + 主操作」 -->
     <MkPageHead title="平台总览" :sub="headSub">
       <template #actions>
+        <!-- 运营入口（2026-10-24 层级审计）：总览是登录落点，但运营域只在侧栏一组里；
+             待处理反馈/草稿公告/失败事件都要先想到去运营中心。这里给一个常驻出口，
+             读的是本页已有的失败/闭环事实，不新增取数。 -->
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm"
+          title="运营待办、反馈、公告与系统运维"
+          @click="goOpsHub"
+        >运营中心</button>
         <!-- 刷新状态独立于副文：副文只放事实段（运行全景/数据截至/最近活动），
              避免长句在页头副文盒内断词换行（视觉走查 2026-10-03）。
              本页 10s 轮询，手动「刷新」钮与之重复（对齐执行日志/健康中心先例：轮询页不放刷新钮）。
@@ -29,14 +38,14 @@
          卡面不再同屏出现两个不同量纲的数（趋势口径 = 昨日同时刻窗口，后端 overview/stats 基线字段）。 -->
     <div class="mk-kpi-grid">
       <MkKpi
-        v-for="(k, i) in kpiCards"
-        :key="k.label"
+        v-for="k in kpiCards"
+        :key="k.key || k.label"
         clickable
         :label="k.label"
         :value="k.value"
         :hint="k.hint"
         :title="kpiTitle(k)"
-        @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
+        @click="jumpToKpi(k)"
       />
       <!-- 完课量（#105 读侧接入，2026-10-19）：收束事件统一观测的按轨拆分，
            点卡进教学会话页看逐条轨道/通道。与上方四卡不同源（含虚拟/测试）。
@@ -502,9 +511,9 @@ function refreshNow() {
    activeTodayBaseline），不再与昨日全日直接比——旧趋势 foot 因「今日进行中 vs 昨日全日」
    失真下线（凌晨 ▼-97% 实证），等的就是这个口径。口径注释（全量含虚拟/测试、总用户）
    退到悬停 tooltip（hint），foot 只留 超时/失败/新增 与基线说明。 */
-interface KpiCard { label: string; value: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }
+interface KpiCard { key?: string; label: string; value: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }
 const kpiCards = computed<KpiCard[]>(() =>
-  (data.value?.kpis ?? []).map((k) => ({ label: k.label, value: k.value, foot: k.foot, hint: k.hint, note: k.note, trend: k.trend }))
+  (data.value?.kpis ?? []).map((k) => ({ key: k.key, label: k.label, value: k.value, foot: k.foot, hint: k.hint, note: k.note, trend: k.trend }))
 );
 
 /* ===== 完课量（#105 读侧接入，2026-10-19）=====
@@ -557,6 +566,9 @@ const closureKpi = computed(() => {
   if (unmarked > 0) hintParts.push(`${unmarkedLabel} ${unmarked}`)
   const titleParts = [
     '本卡含虚拟学习者与测试账号，与上方真实口径 KPI 不同源。',
+    /* 目标页口径（2026-10-24 审计）：教学会话默认只列非虚拟账号，点进去的数会小于本卡；
+       先在这里说清，避免把差额读成丢数据。虚拟轨道到「虚拟学习者」核对。 */
+    '「教学会话」列表只列非虚拟账号的课堂，虚拟学习者的完成量在「虚拟学习者」里核对。',
   ].filter(Boolean)
   return {
     label: '完课量',
@@ -628,10 +640,12 @@ function healthChipClick() {
   jump('health-center');
 }
 
-/** 今日失败数：读同屏「今日成功率」KPI 的 foot（唯一已发布读数），不另造一份计数 */
+/** 今日失败数：读同屏「今日成功率」KPI 的 foot（唯一已发布读数），不另造一份计数。
+    按稳定 key 取，展示名改文案不会让这里静默变 0（旧夹具无 key 时按标签兜底）。 */
 const todayFailed = computed(() => {
-  const foot = data.value?.kpis?.find((k) => k.label === '今日成功率')?.foot || ''
-  const m = /失败\s*(\d+)/.exec(foot)
+  const kpi = data.value?.kpis?.find((k) => k.key === 'todaySuccessRate')
+    ?? data.value?.kpis?.find((k) => k.label === '今日成功率')
+  const m = /失败\s*(\d+)/.exec(kpi?.foot || '')
   return m ? Number(m[1]) : 0
 })
 
@@ -801,13 +815,30 @@ async function retryOverview() {
 
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤）
 const hideTestAccounts = overviewHideTest
-// KPI 目标：今日调用 / 今日成功率 / 用户活跃 / 进行中对话（纯真实口径 4 卡）
-const kpiTargets: Array<{ scene: string; tab?: string }> = [
-  { scene: 'execution-logs' },
-  { scene: 'execution-logs' },
-  { scene: 'people' },
-  { scene: 'goal-conversations' }
-]
+/* KPI 目标：按稳定 key 匹配——只按展示名或数组下标都会在改文案/调顺序时静默跳错页。
+   「今日」卡同时带上时间窗，「今日成功率」再带失败筛：卡面读的是今日失败 N 次，
+   落地页要同口径，不能在今日全部调用里让人自己翻（2026-10-24 层级审计）。 */
+type KpiJump = { scene: string; tab?: string; statusFilter?: string; timeRange?: string }
+const KPI_TARGETS: Record<string, KpiJump> = {
+  todayCalls: { scene: 'execution-logs', timeRange: 'today' },
+  todaySuccessRate: { scene: 'execution-logs', statusFilter: 'err', timeRange: 'today' },
+  activeUsers: { scene: 'people' },
+  goalConversations: { scene: 'goal-conversations' }
+}
+/** 旧夹具/旧缓存可能没有 key：按展示名兜底，仍不退回数组下标 */
+const KPI_TARGET_BY_LABEL: Record<string, KpiJump> = {
+  今日调用: KPI_TARGETS.todayCalls,
+  今日成功率: KPI_TARGETS.todaySuccessRate,
+  用户活跃: KPI_TARGETS.activeUsers,
+  目标对话: KPI_TARGETS.goalConversations
+}
+function jumpToKpi(k: KpiCard) {
+  const t = (k.key ? KPI_TARGETS[k.key] : undefined) ?? KPI_TARGET_BY_LABEL[k.label] ?? { scene: 'execution-logs' }
+  jump(t.scene, t.tab, { statusFilter: t.statusFilter, timeRange: t.timeRange })
+}
+function goOpsHub() {
+  jump('ops-hub')
+}
 
 /* KPI 卡面副行 = 口径短语（随数据来，live.ts kpis.hint）；数值类（趋势 / 分解 / 对照 / foot）
    全部下沉到本 tooltip 长释——副行说「这个数怎么算」，tooltip 说「这一窗具体是多少」。
@@ -818,12 +849,17 @@ function kpiTitle(k: KpiCard): string {
   /* foot 里的 baseNote（「较昨日同时刻」/「昨日同时刻无对照」）在有趋势数字时与 trend 重复，
      只在无趋势（无对照）时才由 foot 单独承载这条说明 */
   const foot = k.trend ? k.foot.replace(/(?:^| · )较昨日同时刻$/, '') : k.foot
-  return [k.hint, k.note, trend, foot].filter(Boolean).join(' · ')
+  /* 双语义（2026-10-24 层级审计）：本卡是「调用成功率」，健康中心是系统检查清单；
+     两处都带健康字样，不点明会被当成同一指标。 */
+  const scope = k.key === 'todaySuccessRate' || k.label === '今日成功率'
+    ? '本卡按当日调用统计，与健康中心的系统检查清单不是同一指标'
+    : ''
+  return [k.hint, k.note, trend, foot, scope].filter(Boolean).join(' · ')
 }
-function jump(scene: string, tab?: string) {
+function jump(scene: string, tab?: string, filters?: { statusFilter?: string; timeRange?: string }) {
   if (!scene) return
   intent.agentFilter = ''
-  intent.statusFilter = ''
+  intent.statusFilter = filters?.statusFilter || ''
   intent.traceId = ''
   // 审核 #2（2026-10-06）：补清会话深链字段——上一次 drill-in 留下的 sessionId 会让
   // 执行日志页 immediate watch 命中即切「会话模式」并提示「会话 … 未找到」；
@@ -831,7 +867,7 @@ function jump(scene: string, tab?: string) {
   intent.sessionId = ''
   intent.traceFocus = false
   intent.errorCategory = ''
-  intent.timeRange = ''
+  intent.timeRange = filters?.timeRange || ''
   intent.tab = tab || ''
   intent.scene = scene
 }

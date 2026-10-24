@@ -328,6 +328,10 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.find('#cp-tabpanel-wrapup').exists()).toBe(false);
     const selected = wrapper.find('.cp-stp[aria-selected="true"]');
     expect(selected.attributes('id')).toBe('cp-tab-goal');
+    // 对象标识（2026-10-24）：目标对话不能再被叫成「真实课堂」；面包屑同步补可读名
+    expect(wrapper.text()).toContain('真实目标对话 · 只读监控');
+    expect(wrapper.text()).not.toContain('真实课堂 · 只读监控');
+    expect(subPage.value?.label).toBe('目标对话');
 
     wrapper.unmount();
   });

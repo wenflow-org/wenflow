@@ -1,7 +1,7 @@
 <template>
   <div class="mk-page mk-page--fill ac-host">
     <!-- 页头（newui/admin pagehead）：页名 + 各 tab 的主操作上移（2026-10-04 状态条退役：页头只剩页名与主操作） -->
-    <MkPageHead title="模型与接入" sub="管理模型供应商、基础设施模型、Skill 路由与后台访问安全策略">
+    <MkPageHead title="模型与接入" :sub="headSub">
       <template #actions>
         <!-- 本页唯一主操作升 primary（2026-10-04 全站评审 P3#37：此前 sm 次要形态，
              动作权重与视觉权重倒挂）；sm 档保留，与页头动作位其余刷新钮同高 -->
@@ -681,6 +681,17 @@ const TAB_ALIAS: Record<string, AcTab> = {
   'virtual-learners': 'virtual',
 }
 const tab = ref<AcTab>('access')
+/* 页头副文随页签说明「这页能改什么、什么只是读数」：调用与健康把配置（调用策略/降级守卫）
+   和观测（能力健康、429/冷却、路由解析）放在同一页签，不点明会让人以为读数也能保存
+   （2026-10-24 层级审计）。 */
+const headSub = computed(() => {
+  switch (tab.value) {
+    case 'routing': return '调用策略保存后生效。能力健康、429/冷却与路由解析是只读读数'
+    case 'virtual': return '虚拟学习者的出站上限与日期模拟，与平台调用策略分开保存'
+    case 'security': return '后台访问来源、注册与配额策略'
+    default: return '管理模型供应商、基础设施模型与默认生成参数'
+  }
+})
 /** 底部保存条挂载的 tab（脏位跨 tab 不丢）：四个配置页签都可写 */
 const isConfigTab = computed(() => ['access', 'routing', 'virtual', 'security'].includes(tab.value))
 const route = useRoute()

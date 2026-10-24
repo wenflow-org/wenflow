@@ -8,7 +8,7 @@
          仍走 refresh(true)，登记在案（2026-10-04 批次五）。
          2026-10-04 状态条退役：「更新于 X」自状态条并入本注记（一行说清轮询节奏 + 报告新鲜度），
          title 带报告覆盖口径（skillCountTitle：登记总数 = Skill 运行 + 外挂能力）。 -->
-    <MkPageHead title="健康中心" sub="服务可用性与依赖链路一致性检查">
+    <MkPageHead title="健康中心" sub="服务可用性与依赖链路一致性检查（总览的「今日成功率」按调用统计，不是本页检查项）">
       <template #actions>
         <span class="hc-refresh-note" role="status" :title="refreshNoteTitle">{{ refreshNote }}</span>
       </template>

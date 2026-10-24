@@ -849,12 +849,15 @@ async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
 }
 
 /* ================= 总览 ================= */
+/** KPI 稳定键：展示名/顺序可变，跳转与跨卡取数按身份匹配（2026-10-24 审计） */
+export type KpiKey = 'todayCalls' | 'todaySuccessRate' | 'activeUsers' | 'goalConversations'
 export interface LiveOverviewFull {
   tone: 'ok' | 'warn' | 'bad' | 'muted'
   score: number | null
   headline: string
   subline: string
-  kpis: { label: string; value: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }[]
+  /* key = 稳定标识（跳转目标按它匹配，不按可改的展示名/数组下标） */
+  kpis: { key: KpiKey; label: string; value: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }[]
   wrapup: {
     sampleSize: number
     summaryModel: number
@@ -1110,6 +1113,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   const activeTrend = trendOf(activeUsers, Number(users.activeTodayBaseline || 0))
   const kpis = [
     {
+      key: 'todayCalls' as const,
       label: '今日调用',
       value: fmt(todayCalls),
       trend: callsTrend,
@@ -1129,12 +1133,14 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       ].filter(Boolean).join(' · '),
     },
     {
+      key: 'todaySuccessRate' as const,
       label: TERMS.healthScore,
       value: todayCalls > 0 ? `${todaySuccessRate}%` : '—',
       foot: todayFailed > 0 ? `失败 ${todayFailed}` : todayOnlySimulated ? '今日无真实调用' : '无失败',
       hint: '',
     },
     {
+      key: 'activeUsers' as const,
       label: '用户活跃',
       value: fmt(activeUsers),
       trend: activeTrend,
@@ -1150,6 +1156,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       // 同源同数（都取 conv.active），同屏复读三处（KPI 值 + 闭环环 + 该环 title）。
       // 闭环卡是本页招牌块，把「进行中」留给它单源承载；本卡改读会话总量这个 KPI 级读数，
       // 与另三张（今日调用/成功率/用户活跃）同为「总量」量纲，不再是闭环的一个子读数。
+      key: 'goalConversations' as const,
       label: '目标对话',
       value: fmt(Number(conv.active || 0) + Number(conv.completed || 0) + Number(conv.cancelled || 0)),
       foot: `累计完成 ${fmt(Number(conv.completed || 0))} 个`,

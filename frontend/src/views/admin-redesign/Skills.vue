@@ -599,7 +599,7 @@ const headSub = computed(() =>
     ? 'Skill 的模型路由与降级策略'
     : tab.value === 'prompt-eval'
       ? '提示词质量评测 · 用例集与历史运行'
-      : 'Skill 目录、版本与提示词管理'
+      : 'Skill 目录、版本与提示词管理（全量注册，含未上线与停用）'
 )
 /* 跨页深链：intent.tab 指向退役 tab（旧调用方还在传 health/drift/recon）也改投独立页 */
 watch(
