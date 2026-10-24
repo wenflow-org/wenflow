@@ -731,6 +731,11 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
+  /**
+   * @param onProgress 每次拿到服务端结算状态时回调（首个响应 + 每轮轮询）。结算链
+   *   （自动关课 → wrapup LLM → 任务结算）实测量级可达数十秒到数分钟，调用方需要
+   *   据此展示阶段进度，而不是只拿一个长时间静默的 Promise（#115 复测：60s 零反馈）。
+   */
   async finalizeSessionReliably(
     sessionId: string,
     payload: {
@@ -739,7 +744,8 @@ export const aiTeachingAPI = {
       actualMinutes?: number;
       subjectiveDifficulty?: number;
       reason?: 'manual-end' | 'learner-abandoned' | 'task-completed';
-    }
+    },
+    onProgress?: (result: FinalizationResult) => void
   ): Promise<FinalizationResult> {
     let result: FinalizationResult;
     try {
@@ -770,11 +776,17 @@ export const aiTeachingAPI = {
        走到这里时窗口只剩 60s 旧值，于是「服务端 6 分钟后成功、前端 1 分钟就报尚未完成」。
        窗口放到 11 分钟（8min wrapup + 90s 归因 + 落库余量）。 */
     const deadline = Date.now() + 660_000;
+    const reportProgress = (state: FinalizationResult) => {
+      // 进度回调只服务于展示，不能反过来打断结算（回调里抛错就吞掉继续轮询）
+      try { onProgress?.(state); } catch { /* ignore */ }
+    };
     const pollUntilSettled = async (initial: FinalizationResult): Promise<FinalizationResult> => {
       let current = initial;
+      reportProgress(current);
       while (current.status === 'processing' && Date.now() < deadline) {
         await wait(current.pollAfterMs || 1500);
         current = await this.getFinalization(sessionId);
+        reportProgress(current);
       }
       return current;
     };

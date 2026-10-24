@@ -161,4 +161,57 @@ describe('aiTeachingAPI.finalizeSessionReliably 幂等键', () => {
     expect(get).toHaveBeenCalledTimes(1)
     expect(result.finalization?.taskCompletion).toBe('completed')
   })
+
+  // #115：结算轮询此前封在 API 内部，页面只拿到一个数十秒静默的 Promise。
+  it('onProgress 按轮询节奏回传处理中→完成，供页面展示阶段进度', async () => {
+    post.mockResolvedValueOnce({
+      data: { status: 'processing', pollAfterMs: 1, revision: 5 },
+    })
+    get.mockResolvedValueOnce({
+      data: {
+        status: 'processing',
+        pollAfterMs: 1,
+        revision: 5,
+        session: { status: 'completed' },
+        finalization: { taskCompletion: 'processing' },
+      },
+    })
+    get.mockResolvedValueOnce({
+      data: {
+        status: 'completed',
+        revision: 5,
+        session: { status: 'completed' },
+        finalization: { taskCompletion: 'completed' },
+      },
+    })
+
+    const seen: string[] = []
+    const result = await aiTeachingAPI.finalizeSessionReliably('sess-6', {
+      action: 'complete_task',
+      revision: 4,
+    }, (state) => {
+      seen.push(String(state.finalization?.taskCompletion || state.status))
+    })
+
+    expect(result.finalization?.taskCompletion).toBe('completed')
+    expect(seen).toEqual(['processing', 'processing', 'completed'])
+  })
+
+  it('onProgress 抛错不影响结算结果', async () => {
+    post.mockResolvedValueOnce({
+      data: {
+        status: 'completed',
+        revision: 5,
+        session: { status: 'completed' },
+        finalization: { taskCompletion: 'completed' },
+      },
+    })
+
+    const result = await aiTeachingAPI.finalizeSessionReliably('sess-7', {
+      action: 'complete_task',
+      revision: 4,
+    }, () => { throw new Error('progress boom') })
+
+    expect(result.finalization?.taskCompletion).toBe('completed')
+  })
 })
