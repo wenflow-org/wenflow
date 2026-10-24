@@ -7,7 +7,7 @@
     <div ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide med-modal" role="dialog" aria-label="模型设置">
         <div class="mk-modal__head">
-          <h3 class="mk-modal__title">{{ isCreate ? '添加模型' : `模型设置 · ${form.id}` }}</h3>
+          <h3 class="mk-modal__title">{{ title }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
         </div>
 
@@ -159,6 +159,8 @@ const busy = ref(false)
 const error = ref('')
 const isCreate = ref(true)
 const providerId = ref('')
+/** 批量勾选后的第几个（拉取浮窗 → 逐个配置）；单条新增时为空，标题不显示进度 */
+const stepInfo = ref<{ index: number; total: number } | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 const pickedFallbacks = ref<string[]>([])
@@ -188,6 +190,11 @@ const availableFallbacks = computed(() => {
 
 const MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/
 const canSubmit = computed(() => (isCreate.value ? MODEL_ID_PATTERN.test(form.id.trim()) : true))
+/** 标题：批量队列显示 2/5，让用户知道还有几个要配；编辑态不带队列进度 */
+const title = computed(() => {
+  if (!isCreate.value) return `模型设置 · ${form.id}`
+  return stepInfo.value ? `添加模型 · ${stepInfo.value.index}/${stepInfo.value.total}` : '添加模型'
+})
 /**
  * 勾了强度没勾思考：就地拦在保存这一步，并给出原因。
  * 不改成「取消思考时自动把强度也清掉」——那样会替用户改一个他没碰过的字段，而 Vue 对
@@ -196,9 +203,10 @@ const canSubmit = computed(() => (isCreate.value ? MODEL_ID_PATTERN.test(form.id
  */
 const effortWithoutThinking = computed(() => form.supportsReasoningEffort && !form.supportsThinking)
 
-function openWith(target: { providerId: string; model: ModelLike | null; presetId?: string }): void {
+function openWith(target: { providerId: string; model: ModelLike | null; presetId?: string; step?: { index: number; total: number } }): void {
   isCreate.value = !target.model
   providerId.value = target.providerId
+  stepInfo.value = target.model ? null : (target.step ?? null)
   error.value = ''
   const m = target.model
   const preset = target.presetId ?? ''

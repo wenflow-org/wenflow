@@ -719,7 +719,7 @@ function onTabChange(key: string) {
   switchTab(key as AcTab)
 }
 /** 供应商面板（BYOK）：页头「刷新注册表」与写后重取都走它的 refresh */
-const providersRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
+const providersRef = ref<{ refresh?: (force?: boolean) => void; openHostPull?: () => void } | null>(null)
 /** 已登记模型 id（面板回传）：上游清单的关系句与折叠共用这一次计算 */
 const registeredModelIds = ref<string[]>([])
 /* D12（2026-10-22 拍板 B）：近 1 小时 429 / 冷却模型读数。
@@ -1442,6 +1442,11 @@ async function fetchModels() {
     fetchError.value = ''
     markDirty('conn')
     toast.info(list.length ? `已获取 ${list.length} 个模型，记得保存` : '连接成功，但服务未返回模型列表')
+    // 拉到的清单直接进入勾选浮窗（2026-10-24 用户「拉取作为浮窗」）：先等 upstream 传进面板
+    if (list.length) {
+      await nextTick()
+      providersRef.value?.openHostPull?.()
+    }
   } catch (e) {
     connectionStatus.value = 'failed'
     connCheckedAt.value = new Date().toISOString()

@@ -294,28 +294,58 @@ describe('ModelProvidersPanel', () => {
     expect(rowBtn('测试').attributes('disabled')).toBeUndefined()
   })
 
-  it('获取模型列表 → 逐条添加：一行一个模型，点「添加」带着模型 id 打开编辑弹层', async () => {
+  it('获取模型列表 → 浮窗勾选：不再铺内联清单，勾选后带模型 id 打开编辑弹层', async () => {
     const w = await mountPanel()
     await pick(w, 'Acme 网关')
     pullMock.mockResolvedValue({ data: { data: { models: ['acme-chat', 'acme-chat-2', 'acme-pro'] } } })
     await btn(w, '获取模型列表')!.trigger('click')
     await flushPromises()
-    const fetch = w.find('.mpp-fetch')
-    expect(fetch.text()).toContain('上游模型 3 个')
-    const rows = fetch.findAll('.mpp-fetch__row')
+    expect(w.find('.mpp-fetch').exists()).toBe(false)
+    const dialog = w.find('.pmd')
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.text()).toContain('已拉取 3 个')
+    const rows = dialog.findAll('.pmd-row')
     expect(rows).toHaveLength(3)
-    // 已登记的只显「已添加」，不再给添加按钮
+    // 已登记的只读「已添加」，勾选框禁用
     const registered = rows.find((r) => r.text().includes('acme-chat') && !r.text().includes('acme-chat-2'))!
     expect(registered.text()).toContain('已添加')
-    expect(registered.find('button').exists()).toBe(false)
-    // 未登记的逐条添加：id 预填进编辑弹层，基础信息由用户确认后保存
+    expect(registered.find('input').attributes('disabled')).toBeDefined()
+    // 未登记的勾选后点「配置」，模型 id 预填进编辑弹层
     const target = rows.find((r) => r.text().includes('acme-pro'))!
-    await target.find('button').trigger('click')
+    await target.find('input').setValue(true)
     await flushPromises()
-    // 占位符随已下线模型归一（deepseek-v4-flash → v4.1-flash）
+    const liveDialog = w.find('.pmd')
+    const confirm = liveDialog.findAll('button').find((b) => b.text().includes('配置选中的 1 个'))!
+    await confirm.trigger('click')
+    await flushPromises()
+    expect(w.find('.pmd').exists()).toBe(false)
     const idInput = w.find('.med-modal input[placeholder="deepseek-v4.1-flash"]')
     expect(idInput.exists()).toBe(true)
     expect((idInput.element as HTMLInputElement).value).toBe('acme-pro')
+  })
+
+  it('勾选多个后逐个配置：保存一个自动进下一个，标题带进度', async () => {
+    const w = await mountPanel({ upstream: ['mimo-v2.5-flash', 'step-3.5-flash'] })
+    ;(w.vm as unknown as { openPull: () => void }).openPull()
+    await nextTick()
+    const boxes = w.findAll('.pmd-sec .pmd-row input')
+    await boxes[0].setValue(true)
+    await nextTick()
+    await w.findAll('.pmd-sec .pmd-row input')[1].setValue(true)
+    await nextTick()
+    await w.findAll('.pmd .mk-modal__foot .mk-btn--primary')[0].trigger('click')
+    await nextTick()
+    const title = () => w.find('.med-modal .mk-modal__title').text()
+    const idValue = () => (w.find('.med-modal input[placeholder="deepseek-v4.1-flash"]').element as HTMLInputElement).value
+    expect(title()).toBe('添加模型 · 1/2')
+    expect(idValue()).toBe('mimo-v2.5-flash')
+    addModelMock.mockResolvedValue({ data: { data: {}, warnings: [] } })
+    await w.find('.med-modal .mk-modal__foot .mk-btn--primary').trigger('click')
+    await flushPromises()
+    await nextTick()
+    expect(title()).toBe('添加模型 · 2/2')
+    expect(idValue()).toBe('step-3.5-flash')
+    expect(addModelMock).toHaveBeenCalledTimes(1)
   })
 
   it('删除供应商要二次确认；确认后调删除接口', async () => {
@@ -356,24 +386,31 @@ describe('ModelProvidersPanel', () => {
     expect(rows[1].text()).toContain('健康')
   })
 
-  it('平台通道的上游清单同样逐条列出（不铺胶囊、不做批量登记）', async () => {
+  it('平台通道的拉取结果进浮窗勾选（不在详情里铺清单）', async () => {
     const w = await mountPanel({ upstream: ['deepseek-v4-flash', 'mystery-1', 'mystery-2'] })
-    const rows = w.findAll('.mpp-fetch__row')
+    expect(w.find('.mpp-fetch').exists()).toBe(false)
+    expect(w.find('.pmd').exists()).toBe(false)
+    ;(w.vm as unknown as { openPull: () => void }).openPull()
+    await nextTick()
+    const rows = w.findAll('.pmd-row')
     expect(rows).toHaveLength(3)
     expect(rows[0].text()).toContain('已添加')
-    expect(rows[1].text()).toContain('添加')
+    expect(rows[1].text()).not.toContain('已添加')
+    expect(rows[1].find('input').attributes('disabled')).toBeUndefined()
     expect(w.find('.mpp-chip').exists()).toBe(false)
   })
 
-  it('上游按用途分流：向量/生图/决策不提供「添加」，改去对应配置', async () => {
+  it('上游按用途分流：浮窗里向量/生图/决策不提供勾选，改去对应配置', async () => {
     const w = await mountPanel({
       upstream: ['deepseek-v4-flash', 'BAAI/bge-m3', 'agnes-image-2.5-flash', 'jev-latest', 'agnes-video-2.5']
     })
-    const chatRows = w.findAll('.mpp-fetch__list .mpp-fetch__row')
+    ;(w.vm as unknown as { openPull: () => void }).openPull()
+    await nextTick()
+    const chatRows = w.findAll('.pmd-sec:not(.pmd-sec--other) .pmd-row')
     expect(chatRows).toHaveLength(1)
     expect(chatRows[0].text()).toContain('deepseek-v4-flash')
 
-    const otherRows = w.findAll('.mpp-fetch__other .mpp-fetch__row')
+    const otherRows = w.findAll('.pmd-row--other')
     expect(otherRows).toHaveLength(4)
     const rowText = (needle: string) => otherRows.find((r) => r.text().includes(needle))!
     expect(rowText('BAAI/bge-m3').text()).toContain('向量')

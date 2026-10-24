@@ -188,6 +188,11 @@
                  自定义供应商没有模型页签，保留计数。 -->
             <span class="mpp-sec">模型<span v-if="selected.id !== 'platform'" class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
             <span class="mpp-models__acts">
+              <!-- 拉取结果收进浮窗（2026-10-24）：清单不在详情里铺开，勾选后再逐个配置。
+                   拉取过一次就保留入口，关掉浮窗还能回来再选。 -->
+              <button v-if="pullableCount" type="button" class="mk-link" @click="openPull">
+                选择要添加的（{{ pullableCount }}）
+              </button>
               <button
                 v-if="selected.endpointSource === 'own'"
                 type="button"
@@ -195,69 +200,15 @@
                 :disabled="pulling || !selected.keyHint"
                 :title="selected.keyHint ? undefined : '先保存密钥'"
                 @click="pullModels(selected)"
-              >{{ pulling ? '拉取中…' : '获取模型列表' }}</button>
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: null })">＋ 添加模型</button>
+              >{{ pulling ? '拉取中…' : pulled.length ? '重新拉取' : '获取模型列表' }}</button>
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openManualAdd">＋ 添加模型</button>
             </span>
           </div>
 
           <slot v-if="selected.id === 'platform'" name="models-meta" />
 
-          <!-- 上游模型按用途分流（2026-10-24 用户「思考平台模型分几种」）：
-               只有对话模型能登记进 LLM 目录；向量/重排去「基础设施」，生图/决策去「插件」。
-               上游 /models 把多模态混在一张清单里，逐条「添加」会把向量模型写成对话模型。 -->
-          <div v-if="fetchableModels.length" class="mpp-fetch">
-            <div v-if="selected.id !== 'platform' || fetchableModels.length > 8" class="mpp-fetch__head">
-              <span v-if="selected.id !== 'platform'">上游模型 <b>{{ fetchableChat.length }}</b> 个</span>
-              <input
-                v-if="fetchableModels.length > 8"
-                v-model="modelFilter"
-                class="mk-field__input mpp-fetch__filter"
-                placeholder="筛选模型"
-                aria-label="筛选上游模型"
-              />
-            </div>
-            <div class="mpp-fetch__body">
-              <section class="mpp-fetch__list">
-                <div class="mpp-fetch__group">对话候选 <b>{{ filteredChat.length }}</b></div>
-                <div class="mpp-fetch__rows">
-                  <div v-for="name in filteredChat" :key="name" class="mpp-fetch__row">
-                    <span class="mono mpp-fetch__id" :title="name">{{ name }}</span>
-                    <span v-if="registeredIds.has(name)" class="mk-badge mk-badge--muted">已添加</span>
-                    <button
-                      v-else
-                      type="button"
-                      class="mk-link"
-                      :disabled="busy || registry?.readOnly"
-                      @click="openAddModel(name)"
-                    >添加</button>
-                  </div>
-                  <p v-if="!filteredChat.length" class="mpp-fetch__empty">没有匹配的对话模型</p>
-                </div>
-              </section>
-              <section v-if="filteredOther.length" class="mpp-fetch__other">
-                <div class="mpp-fetch__group">其他用途 <b>{{ filteredOther.length }}</b></div>
-                <div class="mpp-fetch__rows">
-                  <div v-for="name in filteredOther" :key="name" class="mpp-fetch__row">
-                    <span class="mono mpp-fetch__id" :title="name">{{ name }}</span>
-                    <span class="mk-badge mk-badge--muted">{{ kindLabelOf(name) }}</span>
-                    <button
-                      v-if="modelTargetOf(modelKindOf(name)) === 'infra'"
-                      type="button"
-                      class="mk-link"
-                      @click="platformTab = 'infra'"
-                    >基础设施配置</button>
-                    <button
-                      v-else-if="modelTargetOf(modelKindOf(name)) === 'plugins'"
-                      type="button"
-                      class="mk-link"
-                      @click="goPluginConfig"
-                    >插件配置</button>
-                    <span v-else class="mpp-fetch__na">暂未接入</span>
-                  </div>
-                </div>
-              </section>
-            </div>
-          </div>
+          <!-- 上游清单不再铺在详情里（2026-10-24 用户「拉取作为浮窗」）：拉取只拿到清单，
+               勾选与用途分流都在 PullModelsDialog 里做——详情区只留已登记模型这张表。 -->
 
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense mpp-table">
@@ -327,6 +278,14 @@
       <MkEmptyState v-else compact title="还没有供应商。用左栏底部的「添加供应商」建一个。" />
     </div>
 
+    <PullModelsDialog
+      ref="pullDialog"
+      :provider-name="selected?.name ?? ''"
+      :models="fetchableModels"
+      :registered="[...registeredIds]"
+      @confirm="startConfigure"
+      @navigate="onPullNavigate"
+    />
     <ProviderEditorDialog ref="providerEditor" @saved="onProviderSaved" />
     <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" />
   </section>
@@ -342,7 +301,8 @@ import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import ProviderEditorDialog, { type ProviderLike } from './ProviderEditorDialog.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
-import { MODEL_KIND_LABEL, MODEL_KIND_ORDER, modelKindOf, modelTargetOf } from './platformModelKind'
+import PullModelsDialog from './PullModelsDialog.vue'
+import { modelKindOf } from './platformModelKind'
 import { askConfirm } from './useConfirm'
 import { errMsg } from './live'
 
@@ -402,11 +362,14 @@ const pulling = ref(false)
 /** 单模型测试结果（按模型 id 落在行内，不再用卡上方一条全局结果条） */
 const testResults = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
 const pulled = ref<string[]>([])
-const modelFilter = ref('')
 const router = useRouter()
 
 const providerEditor = ref<InstanceType<typeof ProviderEditorDialog> | null>(null)
 const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
+const pullDialog = ref<InstanceType<typeof PullModelsDialog> | null>(null)
+/** 勾选后逐个配置的待办队列（保存一个进下一个；数量用于弹层标题 2/5） */
+const configureQueue = ref<string[]>([])
+const configureTotal = ref(0)
 
 const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
@@ -450,27 +413,11 @@ const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m
 const fetchableModels = computed(() =>
   selected.value?.endpointSource === 'inherit' ? props.upstream : pulled.value
 )
-/** 只有对话模型能进 LLM 目录；其余按用途指向基础设施 / 插件 */
-const fetchableChat = computed(() => fetchableModels.value.filter((name) => modelKindOf(name) === 'chat'))
-const matchedQuery = (name: string) => {
-  const q = modelFilter.value.trim().toLowerCase()
-  return !q || name.toLowerCase().includes(q)
-}
-const filteredChat = computed(() => fetchableChat.value.filter(matchedQuery))
-const filteredOther = computed(() =>
-  fetchableModels.value
-    .filter((name) => modelKindOf(name) !== 'chat' && matchedQuery(name))
-    .sort((a, b) => {
-      const diff = MODEL_KIND_ORDER.indexOf(modelKindOf(a)) - MODEL_KIND_ORDER.indexOf(modelKindOf(b))
-      return diff || a.localeCompare(b)
-    })
+/** 还能登记进模型清单的对话模型数：拉取结果里已添加的不再计入 */
+const pullableCount = computed(() =>
+  fetchableModels.value.filter((name) => modelKindOf(name) === 'chat' && !registeredIds.value.has(name)).length
 )
-const kindLabelOf = (name: string) => MODEL_KIND_LABEL[modelKindOf(name)]
 
-/** 生图 / 决策的配置在插件页（provider 密钥与入口），不在这张 LLM 模型表里 */
-function goPluginConfig(): void {
-  void router.push('/admin/addons')
-}
 const fallbackOptions = computed(() =>
   providers.value.flatMap((p) => p.models.map((m) => `${p.id}/${m.id}`))
 )
@@ -562,7 +509,8 @@ function select(id: string): void {
   keyVisible.value = false
   testResults.value = {}
   pulled.value = []
-  modelFilter.value = ''
+  configureQueue.value = []
+  configureTotal.value = 0
 }
 
 /** 选中项被删/首次加载后归位：优先平台通道，其次第一个 */
@@ -707,8 +655,11 @@ async function removeModel(m: ModelLike): Promise<void> {
 function onProviderSaved(payload: { providerId: string; warnings: string[] }): void {
   void reloadAfterDialog(payload.providerId, payload.warnings)
 }
-function onModelSaved(payload: { modelId: string; warnings: string[] }): void {
-  void reloadAfterDialog(null, payload.warnings)
+async function onModelSaved(payload: { modelId: string; warnings: string[] }): Promise<void> {
+  const fromQueue = configureQueue.value.length > 0
+  if (fromQueue) configureQueue.value = configureQueue.value.filter((id) => id !== payload.modelId)
+  await reloadAfterDialog(null, payload.warnings)
+  if (fromQueue) openNextConfigure()
 }
 
 /**
@@ -744,7 +695,8 @@ async function pullModels(p: ProviderView): Promise<void> {
   try {
     const res = await adminModelProvidersApi.pullModels(p.id)
     pulled.value = (res?.data?.data?.models ?? []) as string[]
-    modelFilter.value = ''
+    if (pulled.value.length) openPull()
+    else actionError.value = '供应商返回了空清单：确认这个服务地址是否提供 /models'
   } catch (e) {
     actionError.value = errMsg(e)
   } finally {
@@ -752,17 +704,66 @@ async function pullModels(p: ProviderView): Promise<void> {
   }
 }
 
-/** 上游清单逐条添加：把模型 id 带进编辑弹层，基础信息由用户确认后保存 */
-function openAddModel(name: string): void {
+/** 打开拉取结果浮窗：清单只用于勾选，不再在详情里铺开 */
+function openPull(): void {
   if (!selected.value) return
-  modelEditor.value?.openWith({ providerId: selected.value.id, model: null, presetId: name })
+  if (!fetchableModels.value.length) {
+    actionError.value = '还没有拉取到模型。先确认服务地址与密钥，再重新拉取。'
+    return
+  }
+  pullDialog.value?.openWith()
+}
+
+/** 宿主（页头「连接并拉取」）拉到平台清单后直接弹浮窗；顺便把选中项归位到平台通道 */
+function openHostPull(): void {
+  if (selectedId.value !== 'platform') select('platform')
+  openPull()
+}
+
+/** 手动新增：清掉勾选队列，避免保存后误跳到上一个批次的下一个模型 */
+function openManualAdd(): void {
+  if (!selected.value) return
+  configureQueue.value = []
+  configureTotal.value = 0
+  modelEditor.value?.openWith({ providerId: selected.value.id, model: null })
+}
+
+/** 浮窗确认：按勾选顺序逐个打开模型设置，保存一个自动进下一个 */
+function startConfigure(ids: string[]): void {
+  if (!selected.value || !ids.length) return
+  configureQueue.value = [...ids]
+  configureTotal.value = ids.length
+  openNextConfigure()
+}
+
+function openNextConfigure(): void {
+  const id = configureQueue.value[0]
+  if (!id || !selected.value) {
+    configureQueue.value = []
+    configureTotal.value = 0
+    return
+  }
+  const step = configureTotal.value > 1
+    ? { index: configureTotal.value - configureQueue.value.length + 1, total: configureTotal.value }
+    : undefined
+  modelEditor.value?.openWith({ providerId: selected.value.id, model: null, presetId: id, step })
+}
+
+/** 非对话模型的去向：基础设施在平台详情页签里，生图/决策在插件页 */
+function onPullNavigate(target: 'infra' | 'plugins'): void {
+  if (target === 'plugins') {
+    void router.push('/admin/addons')
+    return
+  }
+  if (selectedId.value !== 'platform') select('platform')
+  platformTab.value = 'infra'
 }
 
 onMounted(() => {
   void refresh()
 })
 
-defineExpose({ refresh })
+defineExpose({ refresh, openPull, openHostPull })
 </script>
 
 <style scoped>
@@ -901,65 +902,7 @@ defineExpose({ refresh })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-/* 上游模型清单：一条一行，逐条添加；超过 8 条给筛选框（31 个模型靠肉眼找太慢） */
-.mpp-fetch {
-  margin-bottom: 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-lg);
-}
-.mpp-fetch__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--mk-line);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
-.mpp-fetch__head b { color: var(--mk-ink); }
-.mpp-fetch__filter { width: 180px; margin-left: auto; }
-/* 两栏并排：左边对话候选（可添加），右边其他用途（去对应配置）。
-   上游 40 个模型里大半不是对话模型，堆成一条清单会把「哪些能加」埋掉。 */
-.mpp-fetch__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.mpp-fetch__list, .mpp-fetch__other { display: flex; flex-direction: column; min-width: 0; }
-.mpp-fetch__other { border-left: 1px solid var(--mk-line); }
-.mpp-fetch__rows { display: grid; max-height: 300px; overflow-y: auto; }
-/* 用途分组行：对话候选 / 其他用途。其他用途不给「添加」，改为去对应配置或「暂未接入」 */
-.mpp-fetch__group {
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--mk-line);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-}
-.mpp-fetch__group b { color: var(--mk-ink); }
-.mpp-fetch__other .mk-link { margin-left: auto; }
-.mpp-fetch__na { margin-left: auto; color: var(--mk-faint); white-space: nowrap; }
-@media (max-width: 900px) {
-  .mpp-fetch__body { grid-template-columns: minmax(0, 1fr); }
-  .mpp-fetch__other { border-left: 0; border-top: 1px solid var(--mk-line); }
-}
-.mpp-fetch__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  /* 2026-10-24：两栏行高统一 40px（原左栏 mk-link 有 4px 内衬、右栏徽章没有，
-     分隔线错位）；行高由 min-height 承担，padding-block 归零。 */
-  min-height: 40px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--mk-line);
-  font-size: var(--mk-fs-micro);
-}
-/* 行内链接回到行文本档，不再用按钮内衬撑高行 */
-.mpp-fetch__row .mk-link {
-  padding: 0;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.5;
-}
-.mpp-fetch__row:last-child { border-bottom: 0; }
-.mpp-fetch__id { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mpp-fetch__empty { margin: 0; padding: 10px 12px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 上游清单已移入 PullModelsDialog（2026-10-24 用户「拉取作为浮窗」），详情区只留已登记模型表 */
 .mpp-table { width: 100%; }
 .mpp-label {
   margin-left: 6px;
