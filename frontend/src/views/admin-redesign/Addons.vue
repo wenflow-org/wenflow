@@ -28,7 +28,7 @@
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
         <span class="mk-alert__msg">插件配置加载失败，以下状态为占位，无法反映真实路由。</span>
-        <button type="button" class="mk-alert__btn" @click="loadConfigs">重试</button>
+        <button type="button" class="mk-alert__btn" @click="loadPluginConfigs">重试</button>
       </div>
       <MkLoading v-if="loading" min text="插件配置加载中…" />
       <!-- 2026-10-24 用户「插件就是配置启用，这设计的太丑了」：撤掉表格与成员路由徽标，
@@ -60,7 +60,7 @@
               :title="`停用后：${p.fallback}`"
               @update:model-value="togglePlugin(p.id, $event)"
             />
-            <button type="button" class="mk-btn mk-btn--sm" @click="openGroupConfig(p)">配置</button>
+            <button type="button" class="mk-btn mk-btn--sm" @click="openConfig(p)">{{ p.id === 'mcp' ? '管理服务' : '配置' }}</button>
             <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
           </div>
         </div>
@@ -202,39 +202,61 @@
     </div>
     </Teleport>
 
-    <!-- 插件配置（2026-10-24）：只改成员 Skill 的模型绑定；思考/参数/备用链仍回完整运行时。
-         列表页保持一行一个插件，模型细节只在这里出现。 -->
+    <!-- 插件服务配置（2026-10-24 用户「联网是配置模型吗」）：
+         联网 = 搜索/抓取 provider 的密钥与入口；决策 = 判定模型端点；生图 = 生图端点与模型。
+         这里不碰 Skill 的 LLM 模型绑定（那在 Skill 运行时的模型面板里）。 -->
     <Teleport to="body">
-      <div v-if="groupOpen" ref="groupMaskRef" class="mk-modal">
-        <div ref="groupPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="插件配置">
+      <div v-if="configOpen" ref="configMaskRef" class="mk-modal">
+        <div ref="configPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="插件服务配置">
           <div class="mk-modal__head">
-            <h3 class="mk-modal__title">{{ groupTarget?.name }} · 配置</h3>
-            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeGroupConfig">✕</button>
+            <h3 class="mk-modal__title">{{ configTarget?.label }} · 服务配置</h3>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
           </div>
           <div class="mk-modal__body">
-            <p class="ac-group-hint">只改模型绑定。思考、参数覆盖与备用链在「完整运行时」里配置。</p>
-            <div class="ac-group-row" v-for="m in groupTarget?.members ?? []" :key="m.id">
-              <div class="ac-group-row__name">
-                <strong>{{ m.name }}</strong>
-                <span class="mono">{{ m.id }}</span>
-              </div>
-              <MkModelPicker
-                :aria-label="`${m.name} 的模型`"
-                :model-value="draftModels[m.id] ?? ''"
-                :options="pickerOptions"
-                allow-inherit
-                inherit-label="跟随平台默认"
-                :tier="draftTiers[m.id] ?? 'chat'"
-                @update:model-value="draftModels[m.id] = $event"
-                @pick="(opt) => onDraftPicked(m.id, opt)"
-              />
-              <button type="button" class="mk-link ac-group-row__full" @click="openFullRuntime(m.id)">完整运行时</button>
+            <p class="ac-config-intro">{{ configTarget?.description }}</p>
+            <div class="ac-config-chain" v-for="channel in configTarget?.channels ?? []" :key="channel.id">
+              <span class="ac-config-chain__label">{{ channel.label }}</span>
+              <span class="ac-config-chain__order">{{ channel.order.map(providerLabelOf).join(' → ') || '—' }}</span>
+              <span class="ac-config-chain__note">按服务端配置顺序降级</span>
             </div>
+            <section class="ac-config-provider" v-for="provider in configTarget?.providers ?? []" :key="provider.id">
+              <header class="ac-config-provider__head">
+                <div class="ac-config-provider__title">
+                  <strong>{{ provider.label }}</strong>
+                  <span>{{ provider.description }}</span>
+                </div>
+                <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
+                  {{ provider.configured ? '已配置' : '缺少密钥' }}
+                </span>
+              </header>
+              <div class="ac-config-fields">
+                <label class="mk-field" v-for="field in provider.fields" :key="field.key">
+                  <span class="mk-field__label">{{ field.label }}</span>
+                  <input
+                    v-model="draft[provider.id][field.key]"
+                    class="mk-field__input"
+                    :type="field.type"
+                    :placeholder="field.placeholder"
+                    :autocomplete="field.secret ? 'new-password' : 'off'"
+                  />
+                  <span class="mk-field__hint">{{ field.hint }}</span>
+                </label>
+              </div>
+              <div class="ac-config-provider__foot">
+                <span v-if="clearKeys[provider.id]" class="ac-config-provider__warn">保存后清除界面里保存的密钥，回落服务端环境变量</span>
+                <button
+                  v-if="provider.keySource === 'db' || clearKeys[provider.id]"
+                  type="button"
+                  class="mk-link"
+                  @click="toggleClearKey(provider.id)"
+                >{{ clearKeys[provider.id] ? '取消清除' : '清除界面密钥' }}</button>
+              </div>
+            </section>
           </div>
           <div class="mk-modal__foot">
-            <button type="button" class="mk-btn" @click="closeGroupConfig">取消</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="groupSaving" @click="saveGroupConfig">
-              {{ groupSaving ? '保存中…' : '保存' }}
+            <button type="button" class="mk-btn" @click="closeConfig">取消</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="configSaving" @click="saveConfig">
+              {{ configSaving ? '保存中…' : '保存' }}
             </button>
           </div>
         </div>
@@ -245,11 +267,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { dataSource, openSkillDrawer, investigateAgent, liveSkillStatsMap } from './store'
+import { dataSource, investigateAgent, liveSkillStatsMap } from './store'
 import { errMsg, liveRefreshSeq } from './live'
-import { adminSkillsApi, adminMcpApi, adminPluginsApi } from '@/api/adminApi'
-import { useModelCatalog } from '@/composables/useModelCatalog'
-import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
+import { adminMcpApi, adminPluginsApi } from '@/api/adminApi'
 import { PLUGIN_GROUPS, type PluginGroup } from './capabilityCatalog'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -261,14 +281,10 @@ import MkSwitch from '@/components/mk/MkSwitch.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { toast } from '@/utils/toast'
 
-/* 模型目录（模型路由快配的候选）：与 Skill 运行时同一份 File-as-Truth 清单 */
-const { pickerOptions, load: loadModelCatalog } = useModelCatalog()
-loadModelCatalog()
-
 /* 独立页（2026-10-19）：原 embedded prop 与 count 上报是给「模型与接入」宿主页签用的，
-   页签撤除后一并删除——页头刷新直接调两个加载器。 */
+   页签撤除后一并删除——页头刷新直接调三个加载器。 */
 async function refreshAll() {
-  await Promise.all([loadConfigs(), loadMcpTools(), loadPluginStates()])
+  await Promise.all([loadPluginConfigs(), loadMcpTools(), loadPluginStates()])
 }
 
 /* ---------- ① 插件（能力 bundle → 运行时 Skill） ---------- */
@@ -315,27 +331,54 @@ const MCP_TYPE_TEXT: Record<string, string> = {
 }
 const mcpTypeText = (t: string) => MCP_TYPE_TEXT[t] || t
 
-const configMap = ref<Record<string, Record<string, unknown>>>({})
+/* ---------- 插件外部服务配置（联网 / 决策 / 生图） ---------- */
+interface PluginProviderField {
+  key: string
+  label: string
+  type: 'text' | 'password'
+  value: string
+  placeholder: string
+  hint: string
+  secret: boolean
+}
+interface PluginProvider {
+  id: string
+  label: string
+  description: string
+  configured: boolean
+  keySource: 'db' | 'env' | 'none'
+  keyHint: string | null
+  fields: PluginProviderField[]
+}
+interface PluginConfig {
+  id: string
+  label: string
+  description: string
+  channels: Array<{ id: string; label: string; description: string; order: string[] }>
+  providers: PluginProvider[]
+}
+
+const providerConfigs = ref<Record<string, PluginConfig>>({})
 const loading = ref(false)
-/** 能力配置拉取失败：保留现有表格并展示错误条，避免整表降级为「待配置」 */
+/** 服务配置拉取失败：保留现有列表并展示错误条，避免把未知状态读成「未配置」 */
 const configsFailed = ref(false)
 
-async function loadConfigs() {
+async function loadPluginConfigs() {
   loading.value = true
   configsFailed.value = false
   try {
-    const res = await adminSkillsApi.getSkillModelConfigs()
-    const body = res.data?.data ?? res.data ?? []
-    const items = Array.isArray(body) ? body : body.items || body.configs || []
-    const map: Record<string, Record<string, unknown>> = {}
-    for (const c of items as Record<string, unknown>[]) {
-      const skillId = String(c.skillId || c.id || '')
-      if (skillId) map[skillId] = c
+    const res = await adminPluginsApi.getConfig()
+    const list = res.data?.data?.plugins
+    const map: Record<string, PluginConfig> = {}
+    if (Array.isArray(list)) {
+      for (const plugin of list as PluginConfig[]) {
+        if (plugin?.id) map[plugin.id] = plugin
+      }
     }
-    configMap.value = map
+    providerConfigs.value = map
   } catch (e) {
     configsFailed.value = true
-    toast.error(`配置加载失败：${errMsg(e)}`)
+    toast.error(`插件服务配置加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
   }
@@ -435,7 +478,7 @@ async function loadMcpTools() {
 watch(
   () => [dataSource.value],
   () => {
-    void loadConfigs()
+    void loadPluginConfigs()
     void loadMcpTools()
     void loadPluginStates()
   },
@@ -494,85 +537,92 @@ async function togglePlugin(id: string, enabled: boolean) {
   }
 }
 
-/* ---------- 插件配置（成员模型的批量编辑） ---------- */
-const groupOpen = ref(false)
-const groupTarget = ref<PluginRow | null>(null)
-const groupSaving = ref(false)
-/** 成员模型草稿：memberId → model（'' = 跟随平台默认）/ tier */
-const draftModels = ref<Record<string, string>>({})
-const draftTiers = ref<Record<string, 'chat' | 'reasoning'>>({})
-const groupMaskRef = ref<HTMLElement | null>(null)
-const groupPanelRef = ref<HTMLElement | null>(null)
-useEscape(() => groupOpen.value, () => closeGroupConfig())
-useOverlay(computed(() => groupOpen.value), groupPanelRef)
-useMaskClose(groupMaskRef, () => closeGroupConfig())
+/* ---------- 插件服务配置（联网 / 决策 / 生图的 provider 密钥、入口与模型） ---------- */
+const configOpen = ref(false)
+const configTarget = ref<PluginConfig | null>(null)
+const configSaving = ref(false)
+/** providerId → fieldKey → 草稿值。密钥字段留空 = 不修改 */
+const draft = ref<Record<string, Record<string, string>>>({})
+/** providerId → 是否清除已存密钥 */
+const clearKeys = ref<Record<string, boolean>>({})
+const configMaskRef = ref<HTMLElement | null>(null)
+const configPanelRef = ref<HTMLElement | null>(null)
+useEscape(() => configOpen.value, () => closeConfig())
+useOverlay(computed(() => configOpen.value), configPanelRef)
+useMaskClose(configMaskRef, () => closeConfig())
 
-function openGroupConfig(group: PluginRow) {
-  groupTarget.value = group
-  const models: Record<string, string> = {}
-  const tiers: Record<string, 'chat' | 'reasoning'> = {}
-  for (const member of group.members) {
-    const cfg = configMap.value[member.id]
-    models[member.id] = typeof cfg?.model === 'string' ? cfg.model : ''
-    tiers[member.id] = cfg?.tier === 'reasoning' ? 'reasoning' : 'chat'
-  }
-  draftModels.value = models
-  draftTiers.value = tiers
-  groupOpen.value = true
-}
-
-function closeGroupConfig() {
-  groupOpen.value = false
-  groupTarget.value = null
-}
-
-/** 选模型时把层级一起带出（reasoning 模型写 tier=reasoning，与 Skill 运行时同规则） */
-function onDraftPicked(memberId: string, opt: MkModelOption | null) {
-  if (opt?.tier === 'chat' || opt?.tier === 'reasoning') draftTiers.value[memberId] = opt.tier
-}
-
-async function saveGroupConfig() {
-  const group = groupTarget.value
-  if (!group || groupSaving.value) return
-  // 只提交真正改过的成员；「无配置行 + 跟随平台默认」是空操作（upsert 会新建默认行，反而改掉思考默认）
-  const changes = group.members.filter((member) => {
-    const cfg = configMap.value[member.id]
-    const before = typeof cfg?.model === 'string' ? cfg.model : ''
-    const after = (draftModels.value[member.id] ?? '').trim()
-    if (before === after) return false
-    if (!after && !cfg) return false
-    return true
-  })
-  if (!changes.length) {
-    closeGroupConfig()
+function openConfig(group: PluginRow) {
+  // MCP 不是 provider 链：服务登记就在本页下方，滚过去即可
+  if (group.id === 'mcp') {
+    document.querySelector('.ac-mcp-card')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
     return
   }
-  groupSaving.value = true
-  const failed: string[] = []
-  try {
-    for (const member of changes) {
-      try {
-        await adminSkillsApi.updateSkillModelConfig(member.id, {
-          model: (draftModels.value[member.id] ?? '').trim() || null,
-          tier: draftTiers.value[member.id] ?? 'chat',
-        })
-      } catch {
-        failed.push(member.name)
-      }
-    }
-    await loadConfigs()
-    if (failed.length) toast.error(`已保存 ${changes.length - failed.length} 个，失败：${failed.join('、')}`)
-    else toast.success(`${group.name} 的模型路由已保存`)
-    closeGroupConfig()
-  } finally {
-    groupSaving.value = false
+  const cfg = providerConfigs.value[group.id]
+  if (!cfg) {
+    toast.error('服务配置尚未加载，请刷新后重试')
+    return
   }
+  configTarget.value = cfg
+  const next: Record<string, Record<string, string>> = {}
+  for (const provider of cfg.providers) {
+    next[provider.id] = {}
+    for (const field of provider.fields) {
+      if (!field.secret) next[provider.id][field.key] = field.value
+    }
+  }
+  draft.value = next
+  clearKeys.value = {}
+  configOpen.value = true
 }
 
-/** 完整运行时：思考/参数覆盖/备用链仍在那张表单里，插件页不重复造一套 */
-function openFullRuntime(skillId: string) {
-  closeGroupConfig()
-  openSkillDrawer(skillId)
+function closeConfig() {
+  configOpen.value = false
+  configTarget.value = null
+  clearKeys.value = {}
+}
+
+function toggleClearKey(providerId: string) {
+  clearKeys.value = { ...clearKeys.value, [providerId]: !clearKeys.value[providerId] }
+}
+
+function providerLabelOf(providerId: string): string {
+  return configTarget.value?.providers.find((p) => p.id === providerId)?.label || providerId
+}
+
+async function saveConfig() {
+  const cfg = configTarget.value
+  if (!cfg || configSaving.value) return
+  const providers: Record<string, Record<string, string | null> & { clearKey?: boolean }> = {}
+  for (const provider of cfg.providers) {
+    const patch: Record<string, string | null> & { clearKey?: boolean } = {}
+    for (const field of provider.fields) {
+      const now = (draft.value[provider.id]?.[field.key] ?? '').trim()
+      if (field.secret) {
+        if (now) patch[field.key] = now
+      } else if (now !== field.value) {
+        // 空串 = 删除界面覆盖，回落服务端环境变量
+        patch[field.key] = now
+      }
+    }
+    if (clearKeys.value[provider.id]) patch.clearKey = true
+    if (Object.keys(patch).length) providers[provider.id] = patch
+  }
+  if (!Object.keys(providers).length) {
+    closeConfig()
+    return
+  }
+  configSaving.value = true
+  try {
+    const res = await adminPluginsApi.saveConfig(cfg.id, providers)
+    const saved = res.data?.data?.plugin as PluginConfig | undefined
+    if (saved?.id) providerConfigs.value = { ...providerConfigs.value, [saved.id]: saved }
+    toast.success(`${cfg.label}服务配置已保存`)
+    closeConfig()
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    configSaving.value = false
+  }
 }
 
 function openToolCreate() {
@@ -752,25 +802,42 @@ function goLogs(skillId: string) {
 .ac-plugin.is-off .ac-plugin__main,
 .ac-plugin.is-off .ac-plugin__glyph { opacity: 0.55; }
 
-/* 配置弹窗：成员一行，名字 + 模型选择 + 完整运行时入口 */
-.ac-group-hint { margin: 0 0 12px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.ac-group-row {
-  display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(220px, 1.4fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--mk-line);
+/* 服务配置弹窗：先给通道降级顺序，再逐 provider 填密钥/入口/模型 */
+.ac-config-intro { margin: 0 0 12px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-config-chain {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: var(--mk-fs-micro);
 }
-.ac-group-row:last-child { border-bottom: none; }
-.ac-group-row__name { display: grid; gap: 2px; min-width: 0; }
-.ac-group-row__name strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); }
-.ac-group-row__name .mono { color: var(--mk-faint); }
-.ac-group-row__full { font-size: var(--mk-fs-micro); white-space: nowrap; }
+.ac-config-chain__label { font-weight: 600; color: var(--mk-ink); }
+.ac-config-chain__order { font-family: var(--mk-mono); color: var(--mk-ink); }
+.ac-config-chain__note { color: var(--mk-faint); }
+.ac-config-provider {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+}
+.ac-config-provider__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ac-config-provider__title { display: grid; gap: 2px; }
+.ac-config-provider__title strong { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
+.ac-config-provider__title span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-config-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 14px;
+  margin-top: 10px;
+}
+.ac-config-provider__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.ac-config-provider__foot .mk-link { font-size: var(--mk-fs-micro); }
+.ac-config-provider__warn { margin-right: auto; font-size: var(--mk-fs-micro); color: var(--mk-amber); }
 @media (max-width: 720px) {
   .ac-plugin { grid-template-columns: 32px minmax(0, 1fr); }
   .ac-plugin__actions { grid-column: 1 / -1; justify-content: flex-end; }
-  .ac-group-row { grid-template-columns: 1fr; }
 }
 
 /* 两卡容器：堆叠单列全宽（并栏分支 2026-09-29 实测溢出后退役，审核 #157 清掉不可达规则） */

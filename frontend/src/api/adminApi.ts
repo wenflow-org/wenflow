@@ -1289,6 +1289,20 @@ export const adminPluginsApi = {
   },
   setEnabled: async (pluginId: string, enabled: boolean) => {
     return adminAxios.put(`/admin/plugins/${encodeURIComponent(pluginId)}`, { enabled });
+  },
+  /**
+   * 插件外部服务配置（2026-10-24「联网是配置模型吗」）：
+   * 联网 = 搜索 / 抓取 provider；决策 = 判定模型端点；生图 = 生图端点与模型。
+   * 与 Skill 的 LLM 模型绑定无关。
+   */
+  getConfig: async () => {
+    return adminAxios.get('/admin/plugins/config');
+  },
+  saveConfig: async (
+    pluginId: string,
+    providers: Record<string, Record<string, string | null> & { clearKey?: boolean }>
+  ) => {
+    return adminAxios.put(`/admin/plugins/config/${encodeURIComponent(pluginId)}`, { providers });
   }
 };
 

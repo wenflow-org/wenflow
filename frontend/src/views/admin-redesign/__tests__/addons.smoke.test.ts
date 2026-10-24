@@ -3,23 +3,22 @@
  * 1. 独立页页头（插件），刷新走顶栏广播、不再有第二颗刷新钮
  * 2. 一行一个插件：名称、成员 Skill、开关与配置入口
  * 3. 开关直接落库（adminPluginsApi.setEnabled），停用只压信息层
- * 4. 配置弹窗只改成员模型，且只提交真正改过的成员
+ * 4. 「配置」打开的是外部服务 provider（密钥 / 入口 / 模型），不是 Skill 的 LLM 模型
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import Addons from '../Addons.vue';
-import MkModelPicker from '@/components/mk/MkModelPicker.vue';
 import { dataSource } from '../store';
 import { liveRefreshSeq } from '../live';
 
-const { configsMock, mcpListMock, listMcpToolsMock, updateConfigMock, pluginListMock, pluginSetMock } = vi.hoisted(() => ({
-  configsMock: vi.fn(),
+const { mcpListMock, listMcpToolsMock, pluginListMock, pluginSetMock, pluginConfigMock, pluginSaveMock } = vi.hoisted(() => ({
   mcpListMock: vi.fn(),
   listMcpToolsMock: vi.fn(),
-  updateConfigMock: vi.fn(),
   pluginListMock: vi.fn(),
-  pluginSetMock: vi.fn()
+  pluginSetMock: vi.fn(),
+  pluginConfigMock: vi.fn(),
+  pluginSaveMock: vi.fn()
 }));
 
 function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
@@ -33,15 +32,59 @@ function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
 }
 
 vi.mock('@/api/adminApi', () => ({
-  adminSkillsApi: apiObject({ getSkillModelConfigs: configsMock, updateSkillModelConfig: updateConfigMock }),
   adminMcpApi: apiObject({ list: mcpListMock, listMcpTools: listMcpToolsMock }),
-  adminPluginsApi: apiObject({ list: pluginListMock, setEnabled: pluginSetMock }),
+  adminPluginsApi: apiObject({
+    list: pluginListMock,
+    setEnabled: pluginSetMock,
+    getConfig: pluginConfigMock,
+    saveConfig: pluginSaveMock
+  }),
   adminApiConfigApi: apiObject({ getModelCatalog: vi.fn(async () => ({ data: { data: { models: [] } } })) })
 }));
 
+function webConfig() {
+  return {
+    id: 'web',
+    label: '联网',
+    description: '搜索负责找到网页，抓取负责读回正文。',
+    channels: [
+      { id: 'search', label: '搜索', description: '', order: ['tinyfish', 'tavily'] },
+      { id: 'fetch', label: '抓取', description: '', order: ['tinyfish', 'tavily'] }
+    ],
+    providers: [
+      {
+        id: 'tinyfish',
+        label: 'TinyFish',
+        description: '搜索与抓取都有免费额度',
+        configured: true,
+        keySource: 'env',
+        keyHint: '····abcd',
+        fields: [
+          { key: 'searchEndpoint', label: '搜索地址', type: 'text', value: '', placeholder: 'https://api.search.tinyfish.ai', hint: '环境变量 SEARCH_API_URL', secret: false },
+          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', value: '', placeholder: 'https://api.fetch.tinyfish.ai', hint: '环境变量 FETCH_API_URL', secret: false },
+          { key: 'apiKey', label: '密钥', type: 'password', value: '', placeholder: '已配置 ····abcd', hint: '留空表示不修改', secret: true }
+        ]
+      },
+      {
+        id: 'tavily',
+        label: 'Tavily',
+        description: '同一把密钥同时用于搜索与抓取',
+        configured: false,
+        keySource: 'none',
+        keyHint: null,
+        fields: [
+          { key: 'searchEndpoint', label: '搜索地址', type: 'text', value: '', placeholder: 'https://api.tavily.com/search', hint: '环境变量 TAVILY_API_URL', secret: false },
+          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', value: '', placeholder: 'https://api.tavily.com/extract', hint: '环境变量 TAVILY_EXTRACT_URL', secret: false },
+          { key: 'apiKey', label: '密钥', type: 'password', value: '', placeholder: '未配置', hint: '留空表示不修改', secret: true }
+        ]
+      }
+    ]
+  };
+}
+
 async function mountLive() {
   dataSource.value = 'live';
-  const wrapper = mount(Addons, { global: { stubs: { teleport: true } } });
+  const wrapper = mount(Addons, { global: { stubs: { teleport: true } }, attachTo: document.body });
   await flushPromises();
   await nextTick();
   await flushPromises();
@@ -49,32 +92,34 @@ async function mountLive() {
 }
 
 beforeEach(() => {
-  configsMock.mockReset();
   mcpListMock.mockReset();
   listMcpToolsMock.mockReset();
-  updateConfigMock.mockReset();
   pluginListMock.mockReset();
   pluginSetMock.mockReset();
+  pluginConfigMock.mockReset();
+  pluginSaveMock.mockReset();
   pluginListMock.mockResolvedValue({
     data: { data: { states: { web: true, decision: true, image: true, mcp: true }, groups: [] } }
   });
   pluginSetMock.mockResolvedValue({
     data: { data: { states: { web: false, decision: true, image: true, mcp: true } } }
   });
-  updateConfigMock.mockResolvedValue({ data: { data: {} } });
-  listMcpToolsMock.mockResolvedValue({
-    data: { data: { tools: [{ name: 'tavily_search' }, { name: 'tavily_map' }] } }
-  });
-  configsMock.mockResolvedValue({
+  pluginConfigMock.mockResolvedValue({
     data: {
       data: {
-        configs: [
-          { skillId: 'mcp-tool', displayName: 'MCP 工具调用', model: 'deepseek-v4-flash' },
-          { skillId: 'text-to-image', displayName: '生图', model: 'flux' },
-          { skillId: 'web-search', displayName: '网页搜索', model: 'deepseek-v4-flash' }
+        plugins: [
+          webConfig(),
+          { id: 'decision', label: '决策', description: '结构化判定', channels: [], providers: [] },
+          { id: 'image', label: '生图', description: '文生图', channels: [], providers: [] }
         ]
       }
     }
+  });
+  pluginSaveMock.mockImplementation(async (pluginId: string) => ({
+    data: { data: { plugin: { ...webConfig(), id: pluginId } } }
+  }));
+  listMcpToolsMock.mockResolvedValue({
+    data: { data: { tools: [{ name: 'tavily_search' }, { name: 'tavily_map' }] } }
   });
   mcpListMock.mockResolvedValue({
     data: {
@@ -104,10 +149,10 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     // 站内已有顶栏刷新，页头不再出第二颗钮（用户「已经有刷新，为什么还有独立刷新」）
     expect(head.findAll('button')).toHaveLength(0);
     // 顶栏刷新 = liveRefreshSeq 广播 → 本页与旧页头刷新钮同一入口重拉
-    const calls = configsMock.mock.calls.length;
+    const calls = pluginConfigMock.mock.calls.length;
     liveRefreshSeq.value += 1;
     await flushPromises();
-    expect(configsMock.mock.calls.length).toBeGreaterThan(calls);
+    expect(pluginConfigMock.mock.calls.length).toBeGreaterThan(calls);
     wrapper.unmount();
   });
 
@@ -148,25 +193,54 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
-  it('成员配置弹窗：只改模型，保存时只提交真正改过的成员', async () => {
+  it('配置弹窗：联网展示搜索/抓取 provider 的密钥与入口，不再是模型选择', async () => {
     const wrapper = await mountLive();
     const webRow = wrapper.findAll('.ac-plugin')[0];
     await webRow.find('.mk-btn').trigger('click');
     await flushPromises();
-    const dialog = wrapper.find('[role="dialog"][aria-label="插件配置"]');
+    const dialog = wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
     expect(dialog.exists()).toBe(true);
-    expect(dialog.text()).toContain('联网 · 配置');
-    expect(dialog.findAll('.ac-group-row')).toHaveLength(3);
-    expect(dialog.text()).toContain('网页搜索');
+    expect(dialog.text()).toContain('联网 · 服务配置');
+    expect(dialog.text()).toContain('TinyFish');
+    expect(dialog.text()).toContain('Tavily');
+    expect(dialog.text()).toContain('搜索');
+    expect(dialog.text()).toContain('抓取');
+    expect(dialog.text()).toContain('密钥');
+    expect(dialog.findAll('.ac-config-provider')).toHaveLength(2);
+    // 这是外部服务配置，不是 Skill 的 LLM 模型绑定
+    expect(dialog.text()).not.toContain('跟随平台默认');
+    expect(dialog.text()).not.toContain('完整运行时');
+    wrapper.unmount();
+  });
 
-    const pickers = dialog.findAllComponents(MkModelPicker);
-    expect(pickers).toHaveLength(3);
-    pickers[0].vm.$emit('update:modelValue', 'gpt-5.2');
-    await nextTick();
+  it('服务配置保存只提交改过的 provider 字段（密钥留空不覆盖）', async () => {
+    const wrapper = await mountLive();
+    await wrapper.findAll('.ac-plugin')[0].find('.mk-btn').trigger('click');
+    await flushPromises();
+    const dialog = wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
+    const tavily = dialog.findAll('.ac-config-provider').find((p) => p.text().includes('Tavily'));
+    expect(tavily).toBeTruthy();
+    const inputs = tavily!.findAll('input');
+    // 搜索地址 / 抓取地址 / 密钥
+    expect(inputs).toHaveLength(3);
+    await inputs[2].setValue('tvly-new-key');
     await dialog.findAll('button').find((b) => b.text() === '保存')!.trigger('click');
     await flushPromises();
-    expect(updateConfigMock).toHaveBeenCalledTimes(1);
-    expect(updateConfigMock).toHaveBeenCalledWith('web-search', { model: 'gpt-5.2', tier: 'chat' });
+    expect(pluginSaveMock).toHaveBeenCalledTimes(1);
+    expect(pluginSaveMock).toHaveBeenCalledWith('web', { tavily: { apiKey: 'tvly-new-key' } });
+    wrapper.unmount();
+  });
+
+  it('MCP 行不套 provider 配置：按钮是「管理服务」，滚到本页服务登记', async () => {
+    const scrollSpy = vi.fn();
+    Element.prototype.scrollIntoView = scrollSpy;
+    const wrapper = await mountLive();
+    const mcpRow = wrapper.findAll('.ac-plugin').find((r) => r.text().includes('MCP 工具调用'));
+    const btn = mcpRow!.findAll('button').find((b) => b.text() === '管理服务');
+    expect(btn).toBeTruthy();
+    await btn!.trigger('click');
+    expect(scrollSpy).toHaveBeenCalled();
+    expect(wrapper.find('[aria-label="插件服务配置"]').exists()).toBe(false);
     wrapper.unmount();
   });
 
