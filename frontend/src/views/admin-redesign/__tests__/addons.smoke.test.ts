@@ -12,10 +12,11 @@ import Addons from '../Addons.vue';
 import { dataSource } from '../store';
 import { liveRefreshSeq } from '../live';
 
-const { configsMock, mcpListMock, listMcpToolsMock } = vi.hoisted(() => ({
+const { configsMock, mcpListMock, listMcpToolsMock, updateConfigMock } = vi.hoisted(() => ({
   configsMock: vi.fn(),
   mcpListMock: vi.fn(),
-  listMcpToolsMock: vi.fn()
+  listMcpToolsMock: vi.fn(),
+  updateConfigMock: vi.fn()
 }));
 
 function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
@@ -29,13 +30,14 @@ function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
 }
 
 vi.mock('@/api/adminApi', () => ({
-  adminSkillsApi: apiObject({ getSkillModelConfigs: configsMock }),
-  adminMcpApi: apiObject({ list: mcpListMock, listMcpTools: listMcpToolsMock })
+  adminSkillsApi: apiObject({ getSkillModelConfigs: configsMock, updateSkillModelConfig: updateConfigMock }),
+  adminMcpApi: apiObject({ list: mcpListMock, listMcpTools: listMcpToolsMock }),
+  adminApiConfigApi: apiObject({ getModelCatalog: vi.fn(async () => ({ data: { data: { models: [] } } })) })
 }));
 
 async function mountLive() {
   dataSource.value = 'live';
-  const wrapper = mount(Addons);
+  const wrapper = mount(Addons, { global: { stubs: { teleport: true } } });
   await flushPromises();
   await nextTick();
   await flushPromises();
@@ -116,20 +118,22 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
-  it('路由状态只说「有没有单独配置」：组级徽章给结论，成员悬停给逐条状态', async () => {
+  it('路由状态落到成员行：已配置的成员给实际模型，未配置的显示跟随平台默认', async () => {
     configsMock.mockResolvedValue({
-      data: { data: { configs: [{ skillId: 'web-search', displayName: '网页搜索' }] } }
+      data: { data: { configs: [{ skillId: 'web-search', displayName: '网页搜索', model: 'deepseek-v4.1-flash' }] } }
     });
     const wrapper = await mountLive();
     const webRow = wrapper.findAll('.ac-pi-table tbody tr').find((r) => r.text().includes('联网'));
     expect(webRow).toBeTruthy();
-    expect(webRow!.text()).toContain('已单独配置');
-    // 未单独配置的成员不再逐条挂徽章（与组级重复），状态进 chip 悬停
+    // 组级「已单独配置」徽标撤除后，状态与动作同处：每个成员自己带路由标签 + 配置入口
+    expect(webRow!.text()).toContain('deepseek-v4.1-flash');
+    expect(webRow!.text()).toContain('跟随平台默认');
     const members = webRow!.findAll('.ac-pi__member');
     expect(members.map((m) => m.text())).toEqual(['网页搜索', '网页抓取', '资料采集']);
     expect(members[0].attributes('title')).toContain('web-search');
-    expect(members[0].attributes('title')).toContain('单独配置的模型路由');
+    expect(members[0].attributes('title')).toContain('deepseek-v4.1-flash');
     expect(members[1].attributes('title')).toContain('平台默认路由');
+    expect(webRow!.findAll('.ac-pi__cfg')).toHaveLength(3);
     wrapper.unmount();
   });
 
@@ -145,12 +149,31 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
+  it('成员「配置」打开模型路由快配，保存走单 Skill 接口（只改模型与层级）', async () => {
+    updateConfigMock.mockResolvedValue({ data: { data: {} } });
+    const wrapper = await mountLive();
+    const webRow = wrapper.findAll('.ac-pi-table tbody tr').find((r) => r.text().includes('联网'));
+    const cfg = webRow!.findAll('.ac-pi__cfg')[0];
+    expect(cfg.attributes('aria-label')).toContain('网页搜索');
+    await cfg.trigger('click');
+    await flushPromises();
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.text()).toContain('配置模型路由');
+    // 当前配置的模型回填（web-search = deepseek-v4-flash）
+    expect(dialog.text()).toContain('deepseek-v4-flash');
+    await dialog.findAll('button').find((b) => b.text() === '保存')!.trigger('click');
+    await flushPromises();
+    expect(updateConfigMock).toHaveBeenCalledWith('web-search', { model: 'deepseek-v4-flash', tier: 'chat' });
+    wrapper.unmount();
+  });
+
   it('MCP 组同时显示服务可用性与模型路由，两个维度不混成一个词', async () => {
     const wrapper = await mountLive();
     const mcpRow = wrapper.findAll('.ac-pi-table tbody tr').find((r) => r.text().includes('MCP 工具调用'));
     expect(mcpRow).toBeTruthy();
-    expect(mcpRow!.text()).toContain('已单独配置');
-    expect(mcpRow!.text()).toContain('3 个服务启用');
+    expect(mcpRow!.text()).toContain('deepseek-v4-flash'); // 成员路由
+    expect(mcpRow!.text()).toContain('3 个服务启用');      // 服务可用性
     wrapper.unmount();
   });
 });

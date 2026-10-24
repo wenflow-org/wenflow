@@ -35,8 +35,7 @@
           <thead>
             <tr>
               <th scope="col">能力</th>
-              <th scope="col">成员 Skill</th>
-              <th scope="col">模型路由</th>
+              <th scope="col">成员与模型路由</th>
               <th scope="col">最近调用</th>
               <th scope="col" class="mk-th--right">操作</th>
             </tr>
@@ -52,30 +51,27 @@
                   </div>
                 </div>
               </td>
+              <!-- 2026-10-24 用户「为什么不能 ui 配置」：组级「已单独配置」把多个成员混成一个结论，
+                   而且配好之后操作列连入口都没有。改成逐成员一行：名字（进 Skill 详情）+ 当前路由 + 就地「配置」。 -->
               <td>
                 <div class="ac-pi__members">
-                  <button
-                    v-for="m in p.members"
-                    :key="m.id"
-                    type="button"
-                    class="ac-pi__member"
-                    :title="`${m.name}（${m.id}）：${m.routeTitle}`"
-                    @click="openSkillDrawer(m.id)"
-                  >
-                    <span>{{ m.name }}</span>
-                  </button>
-                </div>
-              </td>
-              <td>
-                <div class="ac-pi__state-cell">
-                  <span class="mk-badge mk-badge--sm" :class="p.stateClass">{{ p.stateText }}</span>
-                  <span v-if="p.availability" class="ac-pi__availability">{{ p.availability.text }}</span>
+                  <div v-for="m in p.members" :key="m.id" class="ac-pi__member-row">
+                    <button
+                      type="button"
+                      class="ac-pi__member"
+                      :title="`${m.name}（${m.id}）：${m.routeTitle}`"
+                      @click="openSkillDrawer(m.id)"
+                    ><span>{{ m.name }}</span></button>
+                    <span class="mk-badge mk-badge--sm ac-pi__route" :class="m.stateClass" :title="m.routeTitle">{{ m.routeLabel }}</span>
+                    <button type="button" class="mk-link ac-pi__cfg" :aria-label="`配置 ${m.name} 的模型路由`" @click="openRouteConfig(m)">配置</button>
+                  </div>
+                  <!-- MCP 组的服务可用性是另一个维度（模型路由之外），跟在成员后面单独说 -->
+                  <span v-if="p.availability" class="ac-pi__availability" :class="p.availability.stateClass">{{ p.availability.text }}</span>
                 </div>
               </td>
               <td><span class="ac-pi__last">{{ p.last }}</span></td>
               <td class="ac-pi__actions">
                 <div class="mk-actions">
-                  <button v-if="!p.actionId" type="button" class="mk-btn mk-btn--sm" @click="goConfig">配置</button>
                   <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
                 </div>
               </td>
@@ -219,15 +215,53 @@
       </div>
     </div>
     </Teleport>
+
+    <!-- 模型路由快配（2026-10-24）：插件页只改「这个 Skill 用哪个模型」，
+         思考/参数/备用链仍回 Skill 运行时的完整表单，避免在这里长出第二套编辑器。 -->
+    <Teleport to="body">
+      <div v-if="routeOpen" ref="routeMaskRef" class="mk-modal">
+        <div ref="routePanelRef" class="mk-modal__panel" role="dialog" aria-label="配置模型路由">
+          <div class="mk-modal__head">
+            <h3 class="mk-modal__title">配置模型路由</h3>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeRouteConfig">✕</button>
+          </div>
+          <div class="mk-modal__body">
+            <p class="ac-route-target">{{ routeTarget?.name }}<span class="mono">{{ routeTarget?.id }}</span></p>
+            <label class="mk-field">
+              <span class="mk-field__label">模型</span>
+              <MkModelPicker
+                aria-label="模型"
+                :model-value="routeModel"
+                :options="pickerOptions"
+                allow-inherit
+                inherit-label="跟随平台默认"
+                :tier="routeTier"
+                @update:model-value="routeModel = $event"
+                @pick="onRouteModelPicked"
+              />
+              <span class="mk-field__hint">只改模型绑定。思考、参数覆盖与备用链在 Skill 运行时里配置。</span>
+            </label>
+          </div>
+          <div class="mk-modal__foot">
+            <button type="button" class="mk-link ac-route-full" @click="openFullRuntime">打开完整运行时</button>
+            <button type="button" class="mk-btn" @click="closeRouteConfig">取消</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="routeSaving" @click="saveRouteConfig">
+              {{ routeSaving ? '保存中…' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { dataSource, openSkillDrawer, investigateAgent, liveSkillStatsMap } from './store'
 import { errMsg, liveRefreshSeq } from './live'
 import { adminSkillsApi, adminMcpApi } from '@/api/adminApi'
+import { useModelCatalog } from '@/composables/useModelCatalog'
+import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import { PLUGIN_GROUPS, type PluginGroup } from './capabilityCatalog'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -238,7 +272,9 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { toast } from '@/utils/toast'
 
-const router = useRouter()
+/* 模型目录（模型路由快配的候选）：与 Skill 运行时同一份 File-as-Truth 清单 */
+const { pickerOptions, load: loadModelCatalog } = useModelCatalog()
+loadModelCatalog()
 
 /* 独立页（2026-10-19）：原 embedded prop 与 count 上报是给「模型与接入」宿主页签用的，
    页签撤除后一并删除——页头刷新直接调两个加载器。 */
@@ -251,10 +287,13 @@ interface PluginMemberRow {
   id: string
   name: string
   hasConfig: boolean
-  stateText: string
+  /** 状态徽标的短文案：实际模型 id / 跟随平台默认 / 路由停用 */
+  routeLabel: string
   stateClass: string
-  /** 成员 chip 的悬停说明（路由状态人话版）；卡面不再逐条挂徽章 */
+  /** 成员 chip 的悬停说明（路由状态人话版） */
   routeTitle: string
+  /** 已配置的模型（null = 跟随平台默认） */
+  model: string | null
 }
 
 interface PluginRow {
@@ -265,11 +304,7 @@ interface PluginRow {
   fallback: string
   primary: string
   members: PluginMemberRow[]
-  /** 首个已配置成员：仅用于决定操作列给「配置」还是留空（成员列已是详情入口） */
-  actionId: string | null
   hasStats: boolean
-  stateText: string
-  stateClass: string
   /** MCP 组额外展示服务可用性（与模型路由是两个维度，分开写） */
   availability: { text: string; stateClass: string } | null
   last: string
@@ -280,18 +315,38 @@ interface PluginRow {
  * - skill_model_configs 无行 → 继承平台默认路由，能力仍可用；
  * - 有行且 enabled=false → 不用这条自定义路由，回落到平台默认，不是「能力已关闭」。
  * 页面不把两者写成「启用/停用」，避免一个假开关。
+ * 2026-10-24：组级徽标撤掉后，状态落到每个成员自己身上，并给出实际模型名。
  */
-function routeState(id: string): { hasConfig: boolean; text: string; stateClass: string } {
-  if (configsFailed.value) return { hasConfig: false, text: '配置未读取', stateClass: 'mk-badge--warn' }
+function routeState(id: string): {
+  hasConfig: boolean
+  text: string
+  stateClass: string
+  label: string
+  model: string | null
+} {
+  if (configsFailed.value) {
+    return { hasConfig: false, text: '配置未读取', stateClass: 'mk-badge--warn', label: '状态未知', model: null }
+  }
   const c = configMap.value[id]
-  if (!c) return { hasConfig: false, text: '继承默认', stateClass: 'mk-badge--muted' }
-  if (c.enabled === false) return { hasConfig: true, text: '自定义路由停用', stateClass: 'mk-badge--warn' }
-  return { hasConfig: true, text: '已单独配置', stateClass: 'mk-badge--ok' }
+  if (!c) {
+    return { hasConfig: false, text: '继承默认', stateClass: 'mk-badge--muted', label: '跟随平台默认', model: null }
+  }
+  if (c.enabled === false) {
+    return { hasConfig: true, text: '自定义路由停用', stateClass: 'mk-badge--warn', label: '路由停用', model: null }
+  }
+  const model = typeof c.model === 'string' && c.model.trim() ? c.model.trim() : ''
+  return {
+    hasConfig: true,
+    text: '已单独配置',
+    stateClass: 'mk-badge--ok',
+    label: model || '跟随平台默认',
+    model: model || null,
+  }
 }
 
-function routeTitle(text: string): string {
+function routeTitle(text: string, model: string | null): string {
   switch (text) {
-    case '已单独配置': return '该 Skill 使用单独配置的模型路由'
+    case '已单独配置': return model ? `该 Skill 使用单独配置的模型：${model}` : '该 Skill 有独立配置行，模型跟随平台默认'
     case '继承默认': return '未单独配置，使用平台默认路由。能力仍可用'
     case '自定义路由停用': return '不使用该 Skill 的自定义模型路由。回落到平台默认后能力仍可用'
     case '配置未读取': return '配置接口未返回，当前状态未知'
@@ -360,20 +415,12 @@ function buildPluginRows(
         id: member.id,
         name: member.name,
         hasConfig: route.hasConfig,
-        stateText: route.text,
+        routeLabel: route.label,
         stateClass: route.stateClass,
-        routeTitle: routeTitle(route.text),
+        routeTitle: routeTitle(route.text, route.model),
+        model: route.model,
       }
     })
-    const configured = members.filter((member) => member.hasConfig)
-    const hasActiveRoute = configured.some((member) => member.stateText === '已单独配置')
-    const state = configsFailed.value
-      ? { text: '配置未读取', stateClass: 'mk-badge--warn' }
-      : hasActiveRoute
-        ? { text: '已单独配置', stateClass: 'mk-badge--ok' }
-        : configured.length
-          ? { text: '路由停用', stateClass: 'mk-badge--warn' }
-          : { text: '继承默认', stateClass: 'mk-badge--muted' }
     const last = members
       .map((member) => liveSkillStatsMap.value?.[member.id]?.lastAt)
       .find((value) => value && value !== '从未') || '从未'
@@ -385,10 +432,7 @@ function buildPluginRows(
       fallback: group.fallback,
       primary: group.primary,
       members,
-      actionId: configured[0]?.id ?? null,
       hasStats: members.some((member) => (liveSkillStatsMap.value?.[member.id]?.calls ?? 0) > 0),
-      stateText: state.text,
-      stateClass: state.stateClass,
       availability: group.id === 'mcp' ? mcpAvailability : null,
       last,
     }
@@ -484,6 +528,69 @@ const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => toolOpen.value), panelRef)
 useMaskClose(maskRef, () => { toolOpen.value = false })
+
+/* ---------- 模型路由快配（插件页就地改模型绑定） ---------- */
+const routeOpen = ref(false)
+const routeTarget = ref<PluginMemberRow | null>(null)
+const routeModel = ref('')
+const routeTier = ref<'chat' | 'reasoning'>('chat')
+const routeSaving = ref(false)
+const routeMaskRef = ref<HTMLElement | null>(null)
+const routePanelRef = ref<HTMLElement | null>(null)
+useEscape(() => routeOpen.value, () => closeRouteConfig())
+useOverlay(computed(() => routeOpen.value), routePanelRef)
+useMaskClose(routeMaskRef, () => closeRouteConfig())
+
+function openRouteConfig(member: PluginMemberRow) {
+  const cfg = configMap.value[member.id]
+  routeTarget.value = member
+  routeModel.value = typeof cfg?.model === 'string' ? cfg.model : ''
+  routeTier.value = cfg?.tier === 'reasoning' ? 'reasoning' : 'chat'
+  routeOpen.value = true
+}
+
+function closeRouteConfig() {
+  routeOpen.value = false
+  routeTarget.value = null
+}
+
+/** 选模型时把层级一起带出（reasoning 模型写 tier=reasoning，与 Skill 运行时同规则） */
+function onRouteModelPicked(opt: MkModelOption | null) {
+  if (opt?.tier === 'chat' || opt?.tier === 'reasoning') routeTier.value = opt.tier
+}
+
+async function saveRouteConfig() {
+  const target = routeTarget.value
+  if (!target || routeSaving.value) return
+  const model = routeModel.value.trim()
+  // 没有配置行 + 选择跟随平台默认 = 什么都没改。若照常 upsert 会新建一行
+  // （thinkingMode 默认 default，反而覆盖平台默认的 disabled），这里直接当作无操作。
+  if (!model && !configMap.value[target.id]) {
+    closeRouteConfig()
+    return
+  }
+  routeSaving.value = true
+  try {
+    await adminSkillsApi.updateSkillModelConfig(target.id, {
+      model: model || null,
+      tier: routeTier.value,
+    })
+    toast.success(`${target.name} 的模型路由已保存`)
+    closeRouteConfig()
+    await loadConfigs()
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    routeSaving.value = false
+  }
+}
+
+/** 完整运行时：思考/参数覆盖/备用链仍在那张表单里，插件页不重复造一套 */
+function openFullRuntime() {
+  const id = routeTarget.value?.id
+  closeRouteConfig()
+  if (id) openSkillDrawer(id)
+}
 
 function openToolCreate() {
   toolEditingId.value = ''
@@ -612,11 +719,6 @@ async function discoverTools(t: McpTool) {
 function goLogs(skillId: string) {
   investigateAgent(skillId)
 }
-function goConfig() {
-  // 本页常以 ?tab=addons 嵌入宿主；push 同路径不带 query 不会重置 tab，显式指定落到「接入与验证」。
-  // 用宿主白名单键 connection（旧键 model 已由 ApiConfig 的 TAB_ALIAS 兼容，但新代码直接用有效键）。
-  void router.push({ path: '/admin/api-config', query: { tab: 'connection' } })
-}
 
 /* toast */
 </script>
@@ -645,7 +747,18 @@ function goConfig() {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
-.ac-pi__members { display: flex; flex-wrap: wrap; gap: 6px; }
+.ac-pi__members { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+/* 逐成员一行：名字（进详情）+ 当前路由 + 就地配置 */
+.ac-pi__member-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ac-pi__route {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
+}
+.ac-pi__cfg { font-size: var(--mk-fs-micro); }
 .ac-pi__member {
   padding: 3px 9px;
   border: 1px solid var(--mk-line);
@@ -660,7 +773,6 @@ function goConfig() {
 }
 .ac-pi__member:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
 
-.ac-pi__state-cell { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .ac-pi__availability { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
 .ac-pi__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .ac-pi__actions { text-align: right; }
@@ -737,6 +849,17 @@ function goConfig() {
 @media (max-width: 800px) {
   .ac-mcp__formrow { grid-template-columns: 1fr; }
 }
+
+/* 模型路由快配弹窗：成员身份 + 只读提示；左下「打开完整运行时」与右侧取消/保存同排 */
+.ac-route-target {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+}
+.ac-route-target .mono { font-weight: 400; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.ac-route-full { margin-right: auto; align-self: center; }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
