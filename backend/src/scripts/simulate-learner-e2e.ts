@@ -48,7 +48,7 @@ const NOT_READY_POLL_MS = 30_000;
  * 连续"可重试"的总时长预算。不能按次数：会话租约 TTL 为 10 分钟，一次被杀掉的
  * `advance-day` 会留下未过期的租约，后续请求持续 409「会话忙」——必须能等过 TTL。
  */
-const RETRY_BUDGET_MS = 20 * 60_000;
+const RETRY_BUDGET_MS = 90 * 60_000;
 /** 被限流（429）时的等待：限流窗口通常按分钟计，用固定较长等待而非指数短退避 */
 const RATE_LIMIT_WAIT_MS = 60_000;
 /**
@@ -56,8 +56,8 @@ const RATE_LIMIT_WAIT_MS = 60_000;
  * 与 `advance-day` 的「未就绪」不同：失败是确定态，不能无限等；重试仍失败即立即上报失败。
  */
 const MAX_PATH_GENERATION_RETRIES = 2;
-/** 单次 HTTP 请求上限：`advance-day runTasks` 会同步跑完当天课程，实测可达 ~5 分钟 */
-const REQUEST_TIMEOUT_MS = 30 * 60_000;
+/** 单次 HTTP 请求上限：`advance-day runTasks` 会同步跑完当天课程；ds4.1 + 上游限流下单日实测 11–35 分钟 */
+const REQUEST_TIMEOUT_MS = 60 * 60_000;
 const ORIGIN = 'http://localhost:5173';
 
 /**
@@ -149,7 +149,12 @@ async function api(method: string, urlPath: string, body?: unknown): Promise<Api
     try { parsed = asRecord(await response.json()); } catch { parsed = null; }
     return { status: response.status, body: parsed };
   } catch (error) {
-    log(`  (网络异常：${(error as { code?: string; message?: string }).code || (error as Error).message})`);
+    // AbortSignal.timeout 的 DOMException 是 TimeoutError(code=23)，是客户端掐的，
+    // 不是网络断——按「客户端超时」报，避免误导向"后端重启"。
+    const label = (error as { name?: string }).name === 'TimeoutError'
+      ? `客户端请求超时（${Math.round(REQUEST_TIMEOUT_MS / 60_000)} 分钟）`
+      : String((error as { code?: string }).code || (error as Error).message);
+    log(`  (请求异常：${label})`);
     return { status: 0, body: null };
   }
 }
