@@ -97,13 +97,18 @@ node backend/scripts/offline-eval/run.mjs --target=all --limit=20 --days=30 --k=
 | `--limit` | 20 | 每个目标的样本上限（窗口内按时间等距抽样，避免只评最近一批） |
 | `--days` | 30 | 只取最近 N 天创建的数据 |
 | `--k` | 3 | 每案例独立判读次数 |
-| `--conc` | 4 | 并发案例数（每案例内部 K 次并发） |
+| `--conc` | 4 | 并发案例数（同案例 K 次判读串行，实际在途 ≤ conc） |
+| `--rpm` | 10 | 全局请求速率上限（每分钟请求开始数，含重试）；也可用 `OFFLINE_EVAL_RPM` |
 | `--scope` | all | `virtual` / `real` / `all` |
 | `--email-like` | — | 只取匹配邮箱的账号（如 `builtin_%`） |
 | `--ids` | — | 指定 ID 清单文件（每行一个） |
 | `--min-msgs` / `--min-tasks` | 6 / 3 | 课堂/路径的最小声量门槛 |
 | `--model` | ds4.1 | 决策模型（换模型会改变 judgeVersion） |
 | `--dry-run` | — | 只抽样打印，不调用模型 |
+
+速率控制：默认 **10 RPM**（每分钟最多 10 次请求开始，重试同样计数），
+由进程内滑动窗口闸门统一控制；同案例 K 次判读串行，`--conc` 是案例级并发上限。
+上游对突发并发敏感时优先降 `--rpm`，而不是无限拉长 `--conc`。
 
 环境变量（`.env` 在 gitignore 内；`.env.example` 只有占位符）：
 
