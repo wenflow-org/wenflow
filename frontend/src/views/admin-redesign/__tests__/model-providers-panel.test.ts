@@ -177,36 +177,27 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mpp-item--on').text()).toContain('平台')
   })
 
-  it('平台详情是二级页签：模型 / 连接 / 基础设施 / 生成参数；自定义供应商没有全局页签', async () => {
-    const w = mount(ModelProvidersPanel, {
-      props: {},
-      global: { stubs: { teleport: true } },
-      slots: {
-        'platform-infra': '<div class="infra-slot">基础设施内容</div>',
-        'platform-generation': '<div class="gen-slot">生成参数内容</div>'
-      }
-    })
-    await flushPromises()
-    await nextTick()
-    const tabs = w.findAll('.mpp-tabs .mk-subtab').map((t) => t.text().trim())
-    expect(tabs).toEqual(['模型2', '连接', '基础设施', '生成参数'])
-    expect(w.find('#mpp-panel-models').attributes('style') || '').not.toContain('display: none')
-    expect(w.find('#mpp-panel-conn').attributes('style')).toContain('display: none')
-    expect(w.find('#mpp-panel-infra').attributes('style')).toContain('display: none')
-    expect(w.find('#mpp-panel-generation').attributes('style')).toContain('display: none')
+  it('平台详情只有模型一页：设置交给宿主弹窗，自定义供应商仍走注册表编辑', async () => {
+    const w = await mountPanel()
+    // 平台默认选中：没有二级页签，模型表直接可见
+    expect(w.findAll('.mpp-tabs')).toHaveLength(0)
+    expect(w.find('.mpp-models').exists()).toBe(true)
+    expect(w.text()).not.toContain('基础设施')
+    expect(w.text()).not.toContain('生成参数')
 
-    const infraTab = w.findAll('.mpp-tabs .mk-subtab').find((t) => t.text().includes('基础设施'))!
-    await infraTab.trigger('click')
-    expect(infraTab.attributes('aria-selected')).toBe('true')
-    expect(w.find('#mpp-panel-infra').attributes('style') || '').not.toContain('display: none')
-    expect(w.find('#mpp-panel-models').attributes('style')).toContain('display: none')
-    expect(w.find('.infra-slot').text()).toContain('基础设施内容')
+    // 「设置」→ 通知宿主打开平台设置弹窗（连接段）
+    const settings = w.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置')!
+    await settings.trigger('click')
+    expect(w.emitted('open-platform-settings')?.[0]).toEqual(['conn'])
 
+    // 自定义供应商：设置仍打开注册表编辑弹层，不发射宿主事件
     const acme = w.findAll('.mpp-item').find((i) => i.text().includes('Acme 网关'))!
     await acme.trigger('click')
     await flushPromises()
-    expect(w.findAll('.mpp-tabs')).toHaveLength(0)
-    expect(w.find('.mpp-models').attributes('style') || '').not.toContain('display: none')
+    await w.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置')!.trigger('click')
+    await flushPromises()
+    expect(w.find('[aria-label="供应商设置"]').exists()).toBe(true)
+    expect(w.emitted('open-platform-settings')).toHaveLength(1)
   })
 
   it('自带端点的供应商：详情显示服务地址、密钥三件套（掩码 + 显示切换 + 留空沿用）与模型清单', async () => {
@@ -420,5 +411,9 @@ describe('ModelProvidersPanel', () => {
     expect(rowText('jev-latest').text()).toContain('决策')
     expect(rowText('agnes-video-2.5').text()).toContain('暂未接入')
     expect(rowText('agnes-video-2.5').find('button').exists()).toBe(false)
+
+    // 基础设施配置 → 通知宿主打开平台设置并滚到基础设施段
+    await rowText('BAAI/bge-m3').find('button').trigger('click')
+    expect(w.emitted('open-platform-settings')?.[0]).toEqual(['infra'])
   })
 })

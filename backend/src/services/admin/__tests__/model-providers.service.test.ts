@@ -260,6 +260,49 @@ describe('模型', () => {
     expect(view.providers.find((p) => p.id === PLATFORM_PROVIDER_ID)!.models.every((m) => m.vision === false)).toBe(true);
   });
 
+  it('模型级生成参数：写入、视图回读、default/清空即删除', async () => {
+    await addModel('custom', {
+      id: 'cm-gen',
+      label: 'CM Gen',
+      tier: 'chat',
+      defaultThinkingMode: 'disabled',
+      defaultReasoningEffort: 'max',
+      defaultResponseFormat: 'json_object'
+    });
+    const entry = readFile().providers.custom.models['cm-gen'];
+    expect(Object.keys(entry)).toEqual(['label', 'tier', 'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat']);
+    expect(entry.defaultThinkingMode).toBe('disabled');
+
+    let view = await buildProvidersView();
+    let model = view.providers.find((p) => p.id === 'custom')!.models.find((m) => m.id === 'cm-gen')!;
+    expect(model.defaultThinkingMode).toBe('disabled');
+    expect(model.defaultReasoningEffort).toBe('max');
+    expect(model.defaultResponseFormat).toBe('json_object');
+
+    // 选「跟随平台默认」/ 清空 → 从文件删掉，视图回到 null
+    await updateModel('custom', 'cm-gen', {
+      defaultThinkingMode: 'default',
+      defaultReasoningEffort: null,
+      defaultResponseFormat: 'default'
+    });
+    const after = readFile().providers.custom.models['cm-gen'];
+    expect(after.defaultThinkingMode).toBeUndefined();
+    expect(after.defaultReasoningEffort).toBeUndefined();
+    expect(after.defaultResponseFormat).toBeUndefined();
+    view = await buildProvidersView();
+    model = view.providers.find((p) => p.id === 'custom')!.models.find((m) => m.id === 'cm-gen')!;
+    expect(model.defaultThinkingMode).toBeNull();
+    expect(model.defaultReasoningEffort).toBeNull();
+    expect(model.defaultResponseFormat).toBeNull();
+
+    // 非法枚举被拒
+    await expectEditError(
+      () => updateModel('custom', 'cm-gen', { defaultThinkingMode: 'on' }),
+      400,
+      '思考模式只能是'
+    );
+  });
+
   it('改模型：不允许改名、不允许档位乱填、限额必须正数', async () => {
     await addModel('custom', { id: 'cm-1', tier: 'chat' });
     await expectEditError(() => updateModel('custom', 'cm-1', { id: 'cm-2' }), 400, '不支持改名');

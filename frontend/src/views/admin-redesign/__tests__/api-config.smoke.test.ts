@@ -186,6 +186,15 @@ async function mountApiConfig() {
   return wrapper;
 }
 
+/** 平台设置浮窗（2026-10-24）：连接 / 基础设施 / 平台默认从二级页签收进「设置」。 */
+async function openPlatformSettings(wrapper: Awaited<ReturnType<typeof mountApiConfig>>) {
+  const btn = wrapper.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置');
+  expect(btn, '平台详情应有「设置」').toBeTruthy();
+  await btn!.trigger('click');
+  await nextTick();
+  await flushPromises();
+}
+
 describe('ApiConfig P1 修复批', () => {
   beforeEach(() => {
     getConfigMock.mockReset();
@@ -372,6 +381,7 @@ describe('ApiConfig P1 修复批', () => {
   it('脏位分域标注：连接 + 策略 分别列出', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     // 修改服务地址 → 连接组
     const urlInput = wrapper.find('input[placeholder="https://api.example.com/v1"]');
     await urlInput.setValue('https://new.example.com/v1');
@@ -439,6 +449,7 @@ describe('ApiConfig P1 修复批', () => {
       networkPolicy: { adminAccessMode: 'private', adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
     };
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     // 护栏（判例 buckets-band.test.ts）：页头状态条整块下线，「上次探测」复读随之消失
     expect(wrapper.find('.mk-status').exists()).toBe(false);
     /* 2026-10-14 用户拍板撤掉页首 KPI 带：原来那三块（密钥 / 模型清单 / 默认路由）是把卡里
@@ -458,6 +469,7 @@ describe('ApiConfig P1 修复批', () => {
   it('接入与模型 = 供应商两栏面板：左列表平铺一份清单 + 右详情（2026-10-19 去分区）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     // 默认页签即「接入与模型」：供应商面板随默认分支一起挂载（原独立页签需点击才挂）
     expect(wrapper.findAll('.ac-tabs .mk-subtab').some((b) => b.text().includes('模型总览'))).toBe(false);
     const tab = wrapper.findAll('.ac-tabs .mk-subtab').find((b) => b.text().includes('接入与模型'));
@@ -475,12 +487,12 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.text()).not.toContain('自行接入');
     const items = wrapper.findAll('.mpp-item__name').map((el) => el.text());
     expect(items).toEqual(['平台', 'Acme 网关']);
-    // 默认选中平台通道：它的详情里嵌着连接表单（服务地址 / API Key / 连通性验证）
-    expect(wrapper.find('.ac-conn').exists()).toBe(true);
-    // 2026-10-21 BYOK 重做：端点、密钥、模型三步本身就是顺序，连接块不再挂说明句
-    expect(wrapper.text()).not.toContain('平台通道的服务地址与密钥在这里配置');
+    // 平台详情只有模型一页；连接表单在「设置」浮窗里（2026-10-24）
+    expect(wrapper.find('.ac-conn').exists()).toBe(false);
+    expect(wrapper.find('.ac-ps').exists()).toBe(true);
+    expect(wrapper.find('.ac-ps input[placeholder="https://api.example.com/v1"]').exists()).toBe(true);
     expect(wrapper.find('.mpp-models .ac-models-meta').exists()).toBe(true);
-    expect(wrapper.find('.ac-conn .ac-models-meta').exists()).toBe(false);
+    expect(wrapper.find('.ac-ps .ac-models-meta').exists()).toBe(false);
     // 平台通道没有自带端点：模型清单只给增改，不给「获取模型列表」（那是自带端点才有的动作）；
     // 连通性验证在连接表单里（上面那段「运行测试」），不在下面再挂第二枚检测钮
     const acts = wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text());
@@ -513,8 +525,9 @@ describe('ApiConfig P1 修复批', () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     await flushPromises();
-    // 接入页：供应商编辑面板 + 默认生成参数卡（别名映射默认收起）
+    // 接入页：供应商编辑面板 + 设置浮窗（默认生成参数与别名映射在其中）
     expect(wrapper.find('.mpp').exists()).toBe(true);
+    await openPlatformSettings(wrapper);
     expect(wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text())).toContain('＋ 添加模型');
     expect(wrapper.findAll('.ac-registry')).toHaveLength(1);
     expect(wrapper.find('.ac-registry--aliases').text()).toContain('别名映射');
@@ -557,6 +570,7 @@ describe('ApiConfig P1 修复批', () => {
     // ① 已保存清单（liveApiConfig 播种）：下拉直接可用，无未保存提示
     liveApiConfig.value = savedCfg;
     const saved = await mountApiConfig();
+    await openPlatformSettings(saved);
     expect((saved.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(false);
     expect(saved.findAll('.ac-test__model select option').map((o) => o.text())).toEqual(['model-a', 'model-b']);
     expect(saved.text()).not.toContain('本次拉取未保存');
@@ -577,6 +591,7 @@ describe('ApiConfig P1 修复批', () => {
     });
 
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     expect((wrapper.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(true);
 
     const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('连接并拉取'))!;
@@ -626,6 +641,7 @@ describe('ApiConfig P1 修复批', () => {
       networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
     };
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     const select = wrapper.find('.ac-test__model select').element as HTMLSelectElement;
     expect(select.value).toBe('deepseek-v4.1-flash');
     // D7（2026-10-22 拍板 B）：非对话模型保留在下拉里，但必须自带「不适用」标注。
@@ -653,6 +669,7 @@ describe('ApiConfig P1 修复批', () => {
       networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
     };
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     const select = wrapper.find('.ac-test__model select').element as HTMLSelectElement;
     expect(select.value).toBe('agnes-3.0-flash');
     wrapper.unmount();
@@ -748,6 +765,7 @@ describe('ApiConfig P1 修复批', () => {
     liveApiConfig.value = baseCfg;
     const wrapper = await mountApiConfig();
     await flushPromises();
+    await openPlatformSettings(wrapper);
     expect(confirmState.open).toBe(false);
 
     // 改动默认思考 → 出现分段保存入口
@@ -786,6 +804,7 @@ describe('ApiConfig P1 修复批', () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     await flushPromises();
+    await openPlatformSettings(wrapper);
     expect(wrapper.find('.ac-route').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('对话默认');
     expect(wrapper.text()).not.toContain('推理默认');

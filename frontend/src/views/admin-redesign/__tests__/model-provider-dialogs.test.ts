@@ -164,7 +164,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
     await w.find('input[placeholder="deepseek-v4.1-flash"]').setValue('acme-chat')
-    await w.find('select.mk-field__select').setValue('reasoning')
+    await w.find('.med-adv-body select.mk-field__select').setValue('reasoning')
     await w.find('input[placeholder="131072"]').setValue('65536')
 
     addModelMock.mockResolvedValue({ data: { success: true, warnings: ['备用链写了 2 条…'] } })
@@ -262,6 +262,27 @@ describe('ModelEditorDialog', () => {
       defaultMaxTokens: 4096,
       pricing: { inputPer1M: 0.3 },
       description: '主用'
+    }))
+  })
+
+  it('生成参数：默认跟随平台，显式选择后随模型提交', async () => {
+    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-gen' })
+    await flushPromises()
+    const selects = w.findAll('.med-gen select')
+    expect(selects).toHaveLength(3)
+    expect(selects.map((s) => (s.element as HTMLSelectElement).value)).toEqual(['default', 'default', 'default'])
+
+    await selects[0].setValue('disabled')
+    await selects[1].setValue('max')
+    await selects[2].setValue('json_object')
+    addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
+    await btn(w, '保存').trigger('click')
+    await flushPromises()
+    expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({
+      defaultThinkingMode: 'disabled',
+      defaultReasoningEffort: 'max',
+      defaultResponseFormat: 'json_object'
     }))
   })
 

@@ -101,6 +101,14 @@ export interface ModelDefinition {
    */
   pricing?: ModelPricing;
   description?: string;
+  /**
+   * 模型级生成默认（2026-10-24 用户拍板）：模型编辑里可单独设思考模式/强度/输出格式。
+   * 'default' = 跟随平台默认（platform_api_configs 的同名字段）；显式值覆盖平台默认。
+   * 运行时优先级：Skill 显式配置 > 模型默认 > 平台默认。
+   */
+  defaultThinkingMode?: 'default' | 'enabled' | 'disabled';
+  defaultReasoningEffort?: 'default' | 'low' | 'high' | 'max';
+  defaultResponseFormat?: 'default' | 'none' | 'json_object';
 }
 
 /** llm-providers.json 的 provider 条目（含未 enabled 的示例条目，供总览/前端展示全貌）。 */
@@ -302,6 +310,17 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
   const b = raw as Record<string, unknown>;
   const tier = b.tier === 'reasoning' ? 'reasoning' : b.tier === 'chat' ? 'chat' : null;
   if (!tier) throw new Error(`llm-providers.json：${where} 的 tier 必须是 chat 或 reasoning`);
+  const asEnum = <T extends string>(value: unknown, allowed: readonly T[], field: string): T | undefined => {
+    if (value == null) return undefined;
+    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    if (!allowed.includes(normalized as T)) {
+      throw new Error(`llm-providers.json：${where} 的 ${field} 只能是 ${allowed.join(' / ')}，实际 ${JSON.stringify(value)}`);
+    }
+    return normalized as T;
+  };
+  const defaultThinkingMode = asEnum(b.defaultThinkingMode, ['default', 'enabled', 'disabled'] as const, 'defaultThinkingMode');
+  const defaultReasoningEffort = asEnum(b.defaultReasoningEffort, ['default', 'low', 'high', 'max'] as const, 'defaultReasoningEffort');
+  const defaultResponseFormat = asEnum(b.defaultResponseFormat, ['default', 'none', 'json_object'] as const, 'defaultResponseFormat');
   const def: ModelDefinition = {
     id: modelId,
     label: typeof b.label === 'string' && b.label.trim() ? b.label.trim() : modelId,
@@ -319,7 +338,10 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
     ...(b.maxParallelRequests != null ? { maxParallelRequests: asNumber(b.maxParallelRequests, 'maxParallelRequests', where) } : {}),
     ...(Array.isArray(b.fallbacks) ? { fallbacks: b.fallbacks.map((x) => String(x).trim()).filter(Boolean) } : {}),
     ...(b.pricing != null ? { pricing: asPricing(b.pricing, where) } : {}),
-    ...(typeof b.description === 'string' && b.description.trim() ? { description: b.description.trim() } : {})
+    ...(typeof b.description === 'string' && b.description.trim() ? { description: b.description.trim() } : {}),
+    ...(defaultThinkingMode ? { defaultThinkingMode } : {}),
+    ...(defaultReasoningEffort ? { defaultReasoningEffort } : {}),
+    ...(defaultResponseFormat ? { defaultResponseFormat } : {})
   };
   if (def.supportsReasoningEffort === true && def.supportsThinking !== true) {
     throw new Error(`llm-providers.json：${where} 声明了 supportsReasoningEffort 但未开 supportsThinking（矛盾）`);
@@ -631,6 +653,29 @@ export function getModelDefinition(modelId: string): ModelDefinition | undefined
 /** 调用方未声明输出预算时的模型级缺省值；未配置返回 null。 */
 export function getModelDefaultMaxTokens(modelId: string): number | null {
   return MODEL_MAP.get(modelId)?.defaultMaxTokens ?? null;
+}
+
+/**
+ * 模型级生成默认（思考模式 / 强度 / 输出格式）。
+ * 未配置或值为 'default' 的字段返回 undefined，交给平台默认；运行时优先级见 ModelDefinition 注释。
+ */
+export function getModelGenerationDefaults(modelId: string): {
+  thinkingMode?: 'enabled' | 'disabled';
+  reasoningEffort?: 'low' | 'high' | 'max';
+  responseFormat?: 'none' | 'json_object';
+} {
+  const def = MODEL_MAP.get(modelId);
+  return {
+    ...(def?.defaultThinkingMode && def.defaultThinkingMode !== 'default'
+      ? { thinkingMode: def.defaultThinkingMode }
+      : {}),
+    ...(def?.defaultReasoningEffort && def.defaultReasoningEffort !== 'default'
+      ? { reasoningEffort: def.defaultReasoningEffort }
+      : {}),
+    ...(def?.defaultResponseFormat && def.defaultResponseFormat !== 'default'
+      ? { responseFormat: def.defaultResponseFormat }
+      : {})
+  };
 }
 
 /** 开启思考时为推理预留的额外 token 预算（与输出预算分离）；未配置返回 0。 */

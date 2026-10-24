@@ -6,7 +6,7 @@ import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.s
 import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
 import { endpointsMatch } from '../../utils/endpoint-identity';
 import { selectModelForAlias } from './model-alias';
-import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision } from '../../config/models.config';
+import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision, getModelGenerationDefaults } from '../../config/models.config';
 import { resolveProviderApiKey } from '../../services/provider-secrets.service';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
@@ -307,6 +307,15 @@ export class APIRouter {
             ? this.resolveReasoningModel(config.model, overrides)
             : this.resolveModel(config.model, overrides))
           : reasoningInherited;
+      // 生成参数优先级（2026-10-24）：Skill 显式配置 > 最终模型的模型默认 > 平台默认。
+      // 平台默认这里直接读平台行，不再用 inheritedRoute——后者可能带着「平台默认模型」的
+      // 模型级默认，技能换过模型时会张冠李戴。
+      const modelDefaults = getModelGenerationDefaults(model);
+      const platformThinking = platformRecord ? (platformRecord.defaultThinkingMode || 'default') : inheritedRoute.thinkingMode;
+      const platformEffort = platformRecord ? (platformRecord.defaultReasoningEffort || 'default') : inheritedRoute.reasoningEffort;
+      const platformResponse = platformRecord
+        ? this.normalizeResponseFormat(platformRecord.defaultResponseFormat)
+        : inheritedRoute.responseFormat;
 
       return {
         ...inheritedRoute,
@@ -320,8 +329,11 @@ export class APIRouter {
         // 标记 skill 级是否显式指定了模型（供 resolve-llm-call-params 决定优先级）；
         // 用户自有端点上学习对话链的模型由用户的 chatModel 决定，skill 绑定未生效 → 不标 explicit
         modelExplicit: Boolean(config.model) && !userModelWins,
-        thinkingMode: this.normalizeThinkingMode(config.thinkingMode || inheritedRoute.thinkingMode),
-        reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || inheritedRoute.reasoningEffort),
+        thinkingMode: this.normalizeThinkingMode(config.thinkingMode || modelDefaults.thinkingMode || platformThinking),
+        reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || modelDefaults.reasoningEffort || platformEffort),
+        responseFormat: modelDefaults.responseFormat
+          ? this.normalizeResponseFormat(modelDefaults.responseFormat)
+          : platformResponse,
         // 2026-09-28 配置体系优化：skill 级参数覆盖（paramOverrides JSON）与兜底链
         // （fallbackChain JSON）经路由透传；temperature/maxTokens 列本身仍是 deprecated 占位。
         // 上层字段级优先级见 services/resolve-llm-call-params.ts 头注释。
@@ -478,6 +490,9 @@ export class APIRouter {
         chatModels: true,
         reasoningModels: true,
         lightModels: true,
+        defaultThinkingMode: true,
+        defaultReasoningEffort: true,
+        defaultResponseFormat: true,
       }
     });
   }
@@ -543,15 +558,18 @@ export class APIRouter {
       }
 
       const platformModel = this.resolveModel(config.defaultModel, this.platformAliasOverrides(config));
+      // 模型级生成默认优先于平台默认（2026-10-24）：模型编辑里显式设过就用它，
+      // 未设（'default'/缺省）仍走平台 defaultThinkingMode / defaultReasoningEffort / defaultResponseFormat。
+      const modelDefaults = getModelGenerationDefaults(platformModel);
       return {
         providerId: 'platform',
         endpoint: config.apiUrl || this.resolveBaseEndpoint(),
         apiKey: this.resolvePlatformApiKey(config, config.apiUrl || this.resolveBaseEndpoint()),
         model: platformModel,
         vision: supportsVision(platformModel),
-        thinkingMode: this.normalizeThinkingMode(config.defaultThinkingMode || 'default'),
-        reasoningEffort: this.normalizeReasoningEffort(config.defaultReasoningEffort || 'default'),
-        responseFormat: this.normalizeResponseFormat(config.defaultResponseFormat),
+        thinkingMode: this.normalizeThinkingMode(modelDefaults.thinkingMode || config.defaultThinkingMode || 'default'),
+        reasoningEffort: this.normalizeReasoningEffort(modelDefaults.reasoningEffort || config.defaultReasoningEffort || 'default'),
+        responseFormat: this.normalizeResponseFormat(modelDefaults.responseFormat ?? config.defaultResponseFormat),
         temperature: config.defaultTemperature ?? 0.7,
         maxTokens: config.defaultMaxTokens ?? 2000,
         privateNetworkPolicy: 'runtime',

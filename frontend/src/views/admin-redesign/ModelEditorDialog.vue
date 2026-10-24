@@ -64,6 +64,46 @@
             </div>
           </section>
 
+          <!-- 生成参数（2026-10-24 用户拍板「每个模型各自一套」）：原来只有平台级默认，
+               现在每个模型可单独覆盖；「跟随平台默认」= 不写模型字段。 -->
+          <section class="med-sec med-gen">
+            <div class="med-sec__head">
+              <h4 class="med-sec__title">生成参数</h4>
+              <span class="med-sec__hint">不单独设置时跟随平台默认</span>
+            </div>
+            <div class="med-price">
+              <label class="mk-field">
+                <span class="mk-field__label">思考模式</span>
+                <select v-model="form.defaultThinkingMode" class="mk-field__select">
+                  <option value="default">跟随平台默认</option>
+                  <option value="enabled">强制开启</option>
+                  <option value="disabled">关闭</option>
+                </select>
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">思考强度</span>
+                <select
+                  v-model="form.defaultReasoningEffort"
+                  class="mk-field__select"
+                  :disabled="form.defaultThinkingMode === 'disabled'"
+                >
+                  <option value="default">跟随平台默认</option>
+                  <option value="low">低（low）</option>
+                  <option value="high">高（high）</option>
+                  <option value="max">最高（max）</option>
+                </select>
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">输出格式</span>
+                <select v-model="form.defaultResponseFormat" class="mk-field__select">
+                  <option value="default">跟随平台默认</option>
+                  <option value="none">关闭</option>
+                  <option value="json_object">JSON 对象</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
           <details class="med-advanced">
             <summary>
               高级设置
@@ -208,6 +248,10 @@ export interface ModelLike {
   supportsThinking: boolean
   supportsReasoningEffort: boolean
   vision: boolean
+  /** 模型级生成默认（2026-10-24）；null/缺省 = 跟随平台默认 */
+  defaultThinkingMode?: 'enabled' | 'disabled' | null
+  defaultReasoningEffort?: 'low' | 'high' | 'max' | null
+  defaultResponseFormat?: 'none' | 'json_object' | null
   maxOutputTokens: number | null
   defaultMaxTokens: number | null
   reasoningReserveTokens: number | null
@@ -241,6 +285,9 @@ const form = reactive({
   supportsThinking: false,
   vision: false,
   supportsReasoningEffort: false,
+  defaultThinkingMode: 'default' as 'default' | 'enabled' | 'disabled',
+  defaultReasoningEffort: 'default' as 'default' | 'low' | 'high' | 'max',
+  defaultResponseFormat: 'default' as 'default' | 'none' | 'json_object',
   maxOutputTokens: null as number | null,
   defaultMaxTokens: null as number | null,
   reasoningReserveTokens: null as number | null,
@@ -313,6 +360,9 @@ function openWith(target: { providerId: string; model: ModelLike | null; presetI
   form.supportsThinking = m?.supportsThinking ?? false
   form.vision = m?.vision ?? false
   form.supportsReasoningEffort = m?.supportsReasoningEffort ?? false
+  form.defaultThinkingMode = m?.defaultThinkingMode ?? 'default'
+  form.defaultReasoningEffort = m?.defaultReasoningEffort ?? 'default'
+  form.defaultResponseFormat = m?.defaultResponseFormat ?? 'default'
   form.maxOutputTokens = m?.maxOutputTokens ?? null
   form.defaultMaxTokens = m?.defaultMaxTokens ?? null
   form.reasoningReserveTokens = m?.reasoningReserveTokens ?? null
@@ -360,6 +410,10 @@ async function submit(): Promise<void> {
       supportsThinking: form.supportsThinking,
       vision: form.vision,
       supportsReasoningEffort: form.supportsReasoningEffort,
+      // 'default' → null：后端删掉模型字段，运行时跟随平台默认
+      defaultThinkingMode: form.defaultThinkingMode === 'default' ? null : form.defaultThinkingMode,
+      defaultReasoningEffort: form.defaultReasoningEffort === 'default' ? null : form.defaultReasoningEffort,
+      defaultResponseFormat: form.defaultResponseFormat === 'default' ? null : form.defaultResponseFormat,
       maxOutputTokens: numOrNull(form.maxOutputTokens),
       defaultMaxTokens: numOrNull(form.defaultMaxTokens),
       reasoningReserveTokens: numOrNull(form.reasoningReserveTokens),

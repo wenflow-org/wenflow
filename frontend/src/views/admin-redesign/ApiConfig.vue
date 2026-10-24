@@ -75,76 +75,8 @@
         :upstream="models"
         @changed="onProvidersChanged"
         @registered="registeredModelIds = $event"
+        @open-platform-settings="openPlatformSettings"
       >
-        <!-- 平台通道 = 那条端点沿用连接设置的供应商：服务地址与密钥仍归 platform_api_configs
-             （连接设置），走既有的脏位保存（本页脚保存条），不混进「即时保存」的注册表编辑。
-             表单嵌在供应商详情里，读者看到的是「这一个供应商怎么连」。 -->
-        <template #platform-detail>
-          <div class="ac-conn">
-            <div class="ac-conn__bar">
-              <!-- connBadge 附「N 前」（P1#32 子集）：连接状态是上次拉取/探测落库的结果，
-                   无时间的「连接正常」会把陈旧快照读成实时健康，误导熔断判断 -->
-              <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
-              <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
-            </div>
-            <!-- 左右双列（2026-10-15 用户重组）：左=填地址/密钥，右=连通性验证——
-                 「填完地址 → 顺手在右边点测试」一条动线；右列在窄屏（≤1100）回落整行 -->
-            <div class="ac-body ac-conn2">
-              <div class="ac-conn2__col">
-                <label class="mk-field">
-                  <span class="mk-field__label">服务地址</span>
-                  <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
-                </label>
-                <label class="mk-field">
-                  <span class="mk-field__label">API Key</span>
-                  <span class="ac-key-wrap">
-                    <span class="ac-key-input-row">
-                      <input
-                        class="mk-field__input"
-                        :type="keyVisible ? 'text' : 'password'"
-                        v-model="form.apiKey"
-                        autocomplete="new-password"
-                        :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
-                        @input="markDirty('conn')"
-                      />
-                      <button
-                        v-if="keySet || form.apiKey"
-                        type="button"
-                        class="ac-key-toggle"
-                        :title="keyVisible ? '隐藏' : '显示'"
-                        @click="keyVisible = !keyVisible"
-                      ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
-                        <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
-                    </span>
-                    <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
-                  </span>
-                </label>
-              </div>
-              <div class="ac-conn2__col ac-conn2__col--test">
-                <span class="ac-sec__title">连通性验证</span>
-                <div class="ac-test">
-                  <label class="mk-field ac-test__model">
-                    <span class="mk-field__label">测试模型</span>
-                    <select class="mk-field__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
-                      <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
-                      <option v-for="m in models" :key="m" :value="m" :title="modelTestHint(m)">{{ modelTestLabel(m) }}</option>
-                    </select>
-                  </label>
-                  <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
-                    <MkLoading v-if="testing" inline text="测试中…" />
-                    <span v-else>运行测试</span>
-                  </button>
-                  <span v-if="testResult" class="ac-test__result">
-                    <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
-                    <span class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
-                    <!-- 回文/错误原文全值进 title（审核 #162）：视觉仍单行截断，但运营可悬停核对模型真实输出 -->
-                    <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }" :title="testResult.text">「{{ testResult.text }}」</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
         <!-- 上游模型（2026-10-21 用户走查「不需要注释型文案」）：只报已拉取/已添加的读数，
              逐条添加的清单由面板渲染；未保存状态留在徽章 title 里。 -->
         <template #models-meta>
@@ -156,104 +88,175 @@
             <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn" title="本次拉取仅在「保存连接」后生效">未保存</span>
           </p>
         </template>
-        <!-- 基础设施模型：embedding/rerank 是平台必需配置，不是插件；嵌进平台详情，不再单独占一张卡。 -->
-        <template #platform-infra>
-          <InfraModelsPanel embedded />
-        </template>
-        <!-- 默认生成参数：Skill 未覆盖时仍会继承的思考 / 结构化输出；别名映射表是查证用的只读参考。 -->
-        <template #platform-generation>
-          <div class="ac-gen-panel">
-            <div v-if="dirty.has('route')" class="ac-gen-panel__bar">
-              <button type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存生成参数' }}</button>
-            </div>
-            <!-- 平台默认模型（2026-10-24）：这是「模型中心」真正决定默认的地方，但此前没有任何可见控件，
-                 平台上没配时运行时又落 env，运营看不到「现在默认是什么、从哪来」。只读披露，不可在此改
-                 （改模型归供应商/模型清单，按 Skill 改模型归 Skill 运行时）。 -->
-            <p v-if="runtimeDefaultInfo" class="ac-gen-default">
-              <span class="ac-gen-default__label">平台默认模型</span>
-              <b class="mono">{{ runtimeDefaultInfo.model || '—' }}</b>
-              <span class="mk-badge" :class="runtimeDefaultInfo.source === '环境变量' ? 'mk-badge--warn' : 'mk-badge--muted'">{{ runtimeDefaultInfo.source }}</span>
-              <span class="ac-gen-default__hint">未单独配置模型的 Skill 继承它</span>
-            </p>
-            <!-- 能力健康内联提示（原 ranklist 下 statusbar，2026-10-05 重设计移到区块前：域级状态先于配置项）：
-                 取真实降级守卫 / 能力健康，均无异常则整条省略（不硬造） -->
-            <div v-if="routeWarnText" class="ac-route-warn" role="status">
-              <span class="ac-route-warn__dot"></span>
-              <span>{{ routeWarnText }}</span>
-            </div>
-            <!-- 2026-10-21 用户走查：平台模型已按 Skill 配置，默认路由三行退役；
-                 本块只保留 Skill 未覆盖时仍会继承的生成默认（思考 / 结构化输出）。 -->
-            <div class="ac-cols">
-              <div class="ac-cols__main">
-                <!-- 默认思考：平台级默认（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖）。
-                     2026-10-14：原「启用思考」开关与「思考模式」下拉是**同一个字段的两个控件**——
-                     开关只是 `defaultThinkingMode !== 'disabled'` 的派生态（关闭 ⇔ 下拉的「关闭」档），
-                     且它表达不了「强制开启」，勾上只能落到「跟随模型默认」，是有损视图。
-                     同屏一处事实两个控件，还带来「强度灰了、模式没灰」的不一致。现只留真字段那一个控件。 -->
-                <div class="ac-sec__title">默认思考</div>
-                <div class="ac-row ac-row--2 ac-think">
-                  <label class="mk-field">
-                    <span class="mk-field__label">思考模式</span>
-                    <select
-                      class="mk-field__select"
-                      :value="form.defaultThinkingMode"
-                      @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
-                    >
-                      <option value="default">跟随模型默认</option>
-                      <option value="enabled">强制开启</option>
-                      <option value="disabled">关闭</option>
-                    </select>
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">思考强度</span>
-                    <select
-                      class="mk-field__select"
-                      :disabled="!thinkingOn"
-                      :value="form.defaultReasoningEffort"
-                      @change="setEffort(($event.target as HTMLSelectElement).value)"
-                    >
-                      <option value="default">跟随模型默认</option>
-                      <option value="low">低（low）</option>
-                      <option value="high">高（high）</option>
-                      <option value="max">最高（max）</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
-              <div class="ac-cols__side">
-                <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
-                     需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
-                <div class="ac-sec__title">结构化输出<span class="ac-sec__hint">对输出 JSON 的 Skill 强制 JSON</span></div>
-                <!-- 与左侧「思考模式 / 思考强度」同宽（同列里同类控件两种宽度是偶然差异，不是层级） -->
-                <div class="ac-row ac-row--2">
-                  <label class="mk-field">
-                    <span class="mk-field__label">输出格式</span>
-                    <select
-                      class="mk-field__select"
-                      :value="form.defaultResponseFormat"
-                      @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
-                    >
-                      <option value="none">关闭（默认行为）</option>
-                      <option value="json_object">JSON 对象</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
-            </div>
-            <!-- 注册表切片（2026-10-15 用户重组）：只剩「别名映射」一片，默认收起成折叠条——
-                 它是查证用的参考表（chat / reasoning / light 各指向哪个模型），不是每次进页都要读的
-                 运行态。 -->
-            <details class="ac-fold">
-              <summary class="ac-fold__bar">
-                <span class="ac-fold__title">内置别名映射表</span>
-                <span class="ac-fold__hint">逻辑别名（chat / reasoning / light 等）实际指向的候选模型与默认选中项 · 只读</span>
-                <span class="ac-fold__mark" aria-hidden="true"></span>
-              </summary>
-              <ModelRegistryOverview ref="registryRef" class="ac-registry ac-registry--aliases" :parts="['aliases']" @defaults="registryDefaults = $event" />
-            </details>
-          </div>
-        </template>
       </ModelProvidersPanel>
+
+      <!-- 平台设置（2026-10-24 用户拍板）：平台详情只保留模型一页，
+           连接 / 基础设施 / 平台默认生成参数收进这个浮窗；每个模型的生成参数在模型编辑里。 -->
+      <Teleport to="body">
+        <div v-if="platformSettingsOpen" ref="platformSettingsMask" class="mk-modal">
+          <div ref="platformSettingsPanel" class="mk-modal__panel ac-ps" role="dialog" aria-modal="true" aria-label="平台设置">
+            <div class="mk-modal__head">
+              <div class="ac-ps__title">
+                <h3 class="mk-modal__title">平台设置</h3>
+                <span class="ac-ps__sub">连接、基础设施与平台默认生成参数</span>
+              </div>
+              <button type="button" class="mk-modal__close" aria-label="关闭" @click="closePlatformSettings">✕</button>
+            </div>
+            <div class="mk-modal__body">
+              <section id="ac-ps-conn" class="ac-ps__sec">
+                <div class="ac-ps__head">
+                  <h4 class="ac-ps__sec-title">连接</h4>
+                  <span class="ac-ps__hint">服务地址、密钥与连通性验证</span>
+                  <span class="ac-ps__acts">
+                    <!-- connBadge 附「N 前」：连接状态是上次拉取/探测落库的结果，不是实时健康 -->
+                    <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
+                    <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
+                  </span>
+                </div>
+                <div class="ac-body ac-conn2">
+                  <div class="ac-conn2__col">
+                    <label class="mk-field">
+                      <span class="mk-field__label">服务地址</span>
+                      <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
+                    </label>
+                    <label class="mk-field">
+                      <span class="mk-field__label">API Key</span>
+                      <span class="ac-key-wrap">
+                        <span class="ac-key-input-row">
+                          <input
+                            class="mk-field__input"
+                            :type="keyVisible ? 'text' : 'password'"
+                            v-model="form.apiKey"
+                            autocomplete="new-password"
+                            :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
+                            @input="markDirty('conn')"
+                          />
+                          <button
+                            v-if="keySet || form.apiKey"
+                            type="button"
+                            class="ac-key-toggle"
+                            :title="keyVisible ? '隐藏' : '显示'"
+                            @click="keyVisible = !keyVisible"
+                          ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
+                            <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
+                        </span>
+                        <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
+                      </span>
+                    </label>
+                  </div>
+                  <div class="ac-conn2__col ac-conn2__col--test">
+                    <span class="ac-sec__title">连通性验证</span>
+                    <div class="ac-test">
+                      <label class="mk-field ac-test__model">
+                        <span class="mk-field__label">测试模型</span>
+                        <select class="mk-field__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
+                          <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
+                          <option v-for="m in models" :key="m" :value="m" :title="modelTestHint(m)">{{ modelTestLabel(m) }}</option>
+                        </select>
+                      </label>
+                      <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
+                        <MkLoading v-if="testing" inline text="测试中…" />
+                        <span v-else>运行测试</span>
+                      </button>
+                      <span v-if="testResult" class="ac-test__result">
+                        <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
+                        <span class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
+                        <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }" :title="testResult.text">「{{ testResult.text }}」</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section id="ac-ps-infra" class="ac-ps__sec">
+                <!-- InfraModelsPanel embedded 自带「基础设施模型 / 平台必需 / 刷新」头，
+                     这里不再加第二层标题（2026-10-24 走查避免复读）。 -->
+                <InfraModelsPanel embedded />
+              </section>
+
+              <section class="ac-ps__sec">
+                <div class="ac-ps__head">
+                  <h4 class="ac-ps__sec-title">平台默认生成参数</h4>
+                  <span class="ac-ps__hint">模型未单独设置时继承这里的值</span>
+                  <span class="ac-ps__acts">
+                    <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存生成参数' }}</button>
+                  </span>
+                </div>
+                <p v-if="runtimeDefaultInfo" class="ac-gen-default">
+                  <span class="ac-gen-default__label">平台默认模型</span>
+                  <b class="mono">{{ runtimeDefaultInfo.model || '—' }}</b>
+                  <span class="mk-badge" :class="runtimeDefaultInfo.source === '环境变量' ? 'mk-badge--warn' : 'mk-badge--muted'">{{ runtimeDefaultInfo.source }}</span>
+                  <span class="ac-gen-default__hint">未单独配置模型的 Skill 继承它</span>
+                </p>
+                <div v-if="routeWarnText" class="ac-route-warn" role="status">
+                  <span class="ac-route-warn__dot"></span>
+                  <span>{{ routeWarnText }}</span>
+                </div>
+                <div class="ac-cols">
+                  <div class="ac-cols__main">
+                    <div class="ac-sec__title">默认思考</div>
+                    <div class="ac-row ac-row--2 ac-think">
+                      <label class="mk-field">
+                        <span class="mk-field__label">思考模式</span>
+                        <select
+                          class="mk-field__select"
+                          :value="form.defaultThinkingMode"
+                          @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
+                        >
+                          <option value="default">跟随模型默认</option>
+                          <option value="enabled">强制开启</option>
+                          <option value="disabled">关闭</option>
+                        </select>
+                      </label>
+                      <label class="mk-field">
+                        <span class="mk-field__label">思考强度</span>
+                        <select
+                          class="mk-field__select"
+                          :disabled="!thinkingOn"
+                          :value="form.defaultReasoningEffort"
+                          @change="setEffort(($event.target as HTMLSelectElement).value)"
+                        >
+                          <option value="default">跟随模型默认</option>
+                          <option value="low">低（low）</option>
+                          <option value="high">高（high）</option>
+                          <option value="max">最高（max）</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="ac-cols__side">
+                    <div class="ac-sec__title">结构化输出<span class="ac-sec__hint">对输出 JSON 的 Skill 强制 JSON</span></div>
+                    <div class="ac-row ac-row--2">
+                      <label class="mk-field">
+                        <span class="mk-field__label">输出格式</span>
+                        <select
+                          class="mk-field__select"
+                          :value="form.defaultResponseFormat"
+                          @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
+                        >
+                          <option value="none">关闭（默认行为）</option>
+                          <option value="json_object">JSON 对象</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <details class="ac-fold">
+                  <summary class="ac-fold__bar">
+                    <span class="ac-fold__title">内置别名映射表</span>
+                    <span class="ac-fold__hint">逻辑别名（chat / reasoning / light 等）实际指向的候选模型与默认选中项 · 只读</span>
+                    <span class="ac-fold__mark" aria-hidden="true"></span>
+                  </summary>
+                  <ModelRegistryOverview ref="registryRef" class="ac-registry ac-registry--aliases" :parts="['aliases']" @defaults="registryDefaults = $event" />
+                </details>
+              </section>
+            </div>
+            <div class="mk-modal__foot">
+              <button type="button" class="mk-btn" @click="closePlatformSettings">关闭</button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </div>
     </template>
     <template v-else-if="tab === 'routing'">
@@ -643,6 +646,8 @@ import InfraModelsPanel from './InfraModelsPanel.vue'
 import { splitUpstreamByRegistry } from './modelNameMatch'
 import { modelKindOf } from './platformModelKind'
 import VirtualLabLoadSettings from './VirtualLabLoadSettings.vue'
+import { useEscape } from './useEscape'
+import { useMaskClose, useOverlay } from './useOverlay'
 import {
   liveApiConfig as cfg,
   liveFetchModels,
@@ -722,6 +727,28 @@ function onTabChange(key: string) {
 const providersRef = ref<{ refresh?: (force?: boolean) => void; openHostPull?: () => void } | null>(null)
 /** 已登记模型 id（面板回传）：上游清单的关系句与折叠共用这一次计算 */
 const registeredModelIds = ref<string[]>([])
+/* 平台设置浮窗（2026-10-24）：连接 / 基础设施 / 平台默认生成参数。
+   平台详情只留模型一页，这三块从二级页签收进弹窗；每个模型的生成参数在模型编辑里。 */
+const platformSettingsOpen = ref(false)
+const platformSettingsMask = ref<HTMLElement | null>(null)
+const platformSettingsPanel = ref<HTMLElement | null>(null)
+function openPlatformSettings(target: 'conn' | 'infra' = 'conn') {
+  platformSettingsOpen.value = true
+  if (target === 'infra') {
+    void nextTick(() => document.getElementById('ac-ps-infra')?.scrollIntoView({ block: 'start' }))
+  }
+}
+function closePlatformSettings() {
+  platformSettingsOpen.value = false
+}
+useEscape(() => platformSettingsOpen.value, closePlatformSettings)
+useOverlay(platformSettingsOpen, platformSettingsPanel)
+useMaskClose(platformSettingsMask, closePlatformSettings)
+// 切走接入页时关闭浮窗：它挂在接入 tab 内，v-if 卸掉后若状态仍为 true，
+// 回来会重新弹出，且 overlays 的滚动锁无人释放。
+watch(tab, (next) => {
+  if (next !== 'access') platformSettingsOpen.value = false
+})
 /* D12（2026-10-22 拍板 B）：近 1 小时 429 / 冷却模型读数。
    数据来自只读的 model-registry 总览（429 计数取 agent_call_logs，冷却取部署健康快照），
    只在「调用与健康」页签加载，不额外增加接入页的首屏请求。 */
@@ -1734,7 +1761,6 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
 /* 平台通道那条详情的连接块（2026-10-18 从独立「连接」卡搬进供应商详情）：外层卡头没了，
    状态徽标与「保存连接」收进一条细条，右侧一句说明这段表单管什么。 */
-.ac-conn__bar { display: flex; align-items: center; gap: 10px; padding: 0 0 4px; flex-wrap: wrap; }
 /* 槽位已在供应商详情的内衬里：连接块自身的 .ac-body 不再补一层 16px 边 */
 .ac-conn .ac-body { padding: 0; }
 
@@ -1998,8 +2024,6 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-probe__unit { font-style: normal; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 /* 平台详情「生成参数」页签：不再套卡壳，内部按块节奏堆叠 */
-.ac-gen-panel { display: grid; gap: 14px; min-width: 0; }
-.ac-gen-panel__bar { display: flex; justify-content: flex-end; }
 /* 平台默认模型（只读披露）：一行说完「当前值 / 来源 / 谁继承」 */
 .ac-gen-default {
   display: flex;
@@ -2174,6 +2198,17 @@ async function saveQuota(enabled: boolean, quota: number) {
   .ac-rel__note { font-size: var(--mk-fs-body); }
   .ac-save { padding: 15px 18px 15px 24px; }
 }
+
+/* ================= 平台设置浮窗（2026-10-24）：连接 / 基础设施 / 平台默认 ================= */
+.ac-ps.mk-modal__panel { width: min(980px, 96vw); max-width: none; }
+.ac-ps__title { display: grid; gap: 2px; min-width: 0; }
+.ac-ps__sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.ac-ps__sec { padding: 18px 0; border-top: 1px solid var(--mk-line); }
+.ac-ps__sec:first-child { padding-top: 0; border-top: 0; }
+.ac-ps__head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 12px; }
+.ac-ps__sec-title { margin: 0; color: var(--mk-ink); font-size: var(--mk-fs-body); font-weight: 700; }
+.ac-ps__hint { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.ac-ps__acts { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
 
 /* ================= 暗色模式（D1 补完）：模型与接入 ================= */
 html[data-theme='dark'] {

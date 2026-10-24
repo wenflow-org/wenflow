@@ -82,6 +82,10 @@ export interface ModelViewModel {
   supportsReasoningEffort: boolean;
   /** 声明可接收图片输入（见 models.config.ts ModelDefinition.vision） */
   vision: boolean;
+  /** 模型级生成默认；null = 跟随平台默认（2026-10-24） */
+  defaultThinkingMode: 'enabled' | 'disabled' | null;
+  defaultReasoningEffort: 'low' | 'high' | 'max' | null;
+  defaultResponseFormat: 'none' | 'json_object' | null;
   maxOutputTokens: number | null;
   defaultMaxTokens: number | null;
   reasoningReserveTokens: number | null;
@@ -123,6 +127,10 @@ export interface ModelInput {
   supportsThinking?: boolean;
   supportsReasoningEffort?: boolean;
   vision?: boolean;
+  /** 'default' / null = 清除模型覆盖，跟随平台默认 */
+  defaultThinkingMode?: string | null;
+  defaultReasoningEffort?: string | null;
+  defaultResponseFormat?: string | null;
   maxOutputTokens?: number | null;
   defaultMaxTokens?: number | null;
   reasoningReserveTokens?: number | null;
@@ -381,6 +389,15 @@ function toModelView(raw: Record<string, unknown>, id: string): ModelViewModel {
     supportsThinking: raw.supportsThinking === true,
     supportsReasoningEffort: raw.supportsReasoningEffort === true,
     vision: raw.vision === true,
+    defaultThinkingMode: raw.defaultThinkingMode === 'enabled' || raw.defaultThinkingMode === 'disabled'
+      ? raw.defaultThinkingMode
+      : null,
+    defaultReasoningEffort: raw.defaultReasoningEffort === 'low' || raw.defaultReasoningEffort === 'high' || raw.defaultReasoningEffort === 'max'
+      ? raw.defaultReasoningEffort
+      : null,
+    defaultResponseFormat: raw.defaultResponseFormat === 'none' || raw.defaultResponseFormat === 'json_object'
+      ? raw.defaultResponseFormat
+      : null,
     maxOutputTokens: typeof raw.maxOutputTokens === 'number' ? raw.maxOutputTokens : null,
     defaultMaxTokens: typeof raw.defaultMaxTokens === 'number' ? raw.defaultMaxTokens : null,
     reasoningReserveTokens: typeof raw.reasoningReserveTokens === 'number' ? raw.reasoningReserveTokens : null,
@@ -518,7 +535,9 @@ function checkFallbacks(providerId: string, fallbacks: string[], root: Root): st
 
 /** 模型条目的规范字段顺序（写回文件的可读性靠它，而不是靠碰巧的插入顺序） */
 const MODEL_KEY_ORDER = [
-  'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'vision', 'maxOutputTokens', 'defaultMaxTokens',
+  'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'vision',
+  'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat',
+  'maxOutputTokens', 'defaultMaxTokens',
   'reasoningReserveTokens', 'maxParallelRequests', 'fallbacks', 'pricing', 'description'
 ];
 
@@ -541,6 +560,24 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
   if (input.vision !== undefined) merged.vision = input.vision === true;
   if (merged.supportsReasoningEffort === true && merged.supportsThinking !== true) {
     throw new RegistryEditError('勾了「支持推理强度」就必须同时支持思考模式（上游字段依赖该能力）。', 400, 'invalid');
+  }
+  // 模型级生成默认（2026-10-24）：'default' / 空 = 删除覆盖，跟随平台默认
+  const enumFields: Array<[keyof ModelInput, string, readonly string[]]> = [
+    ['defaultThinkingMode', '思考模式', ['default', 'enabled', 'disabled']],
+    ['defaultReasoningEffort', '思考强度', ['default', 'low', 'high', 'max']],
+    ['defaultResponseFormat', '输出格式', ['default', 'none', 'json_object']]
+  ];
+  for (const [key, label, allowed] of enumFields) {
+    if (input[key] === undefined) continue;
+    const raw = typeof input[key] === 'string' ? String(input[key]).trim().toLowerCase() : '';
+    if (!raw || raw === 'default') {
+      delete merged[key as string];
+      continue;
+    }
+    if (!allowed.includes(raw)) {
+      throw new RegistryEditError(`${label}只能是 ${allowed.join(' / ')}。`, 400, 'invalid');
+    }
+    merged[key as string] = raw;
   }
   const numFields: Array<[keyof ModelInput, string]> = [
     ['maxOutputTokens', '输出上限'],
