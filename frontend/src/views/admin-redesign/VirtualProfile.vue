@@ -10,7 +10,9 @@
   </div>
   <div v-else-if="d" class="mk-page vp">
     <header class="mk-entity mk-entity--flat">
-      <button type="button" class="mk-back" @click="closeSubPage">← 虚拟学习者</button>
+      <!-- 返回入口只在壳层顶栏（面包屑 🡐 / 返回上一级）：页内再放一颗「← 虚拟学习者」
+           会与顶栏并排成两个同义返回（2026-10-24 用户「这类返回是不是重复了」）。
+           LearnerDetail 早已按同一判例去掉页内返回。 -->
       <div class="mk-entity__main">
         <!-- 2026-10-15 用户拍板：撤「身份哈希八色」头像，改随全站语义——虚拟学习者=紫
              （原语自带 mk-entity__avatar--learner，与列表 MkCellAvatar tone=virtual 同一语义色） -->
@@ -946,7 +948,6 @@
   </div>
 
   <div v-else class="mk-page">
-    <button type="button" class="mk-back" @click="closeSubPage">← 虚拟学习者</button>
     <MkLoading text="正在拉取真实画像…" />
   </div>
 </template>
@@ -1042,7 +1043,7 @@ export function buildMemoryRetentionChartOption(
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { statusText } from './statusText'
-import { subPage, closeSubPage, openSubPage, setSubPageLabel, isLive } from './store'
+import { subPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
