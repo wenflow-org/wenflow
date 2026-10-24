@@ -187,10 +187,12 @@
                       @keydown.enter.stop.prevent="openLearnerOf(p)"
                     >{{ p.user?.name || '—' }}</button>
                     <strong v-else>{{ p.user?.name || '—' }}</strong>
-                    <span class="mk-cell-sub" :title="p.user?.email || ''">{{ p.user?.email || '' }}</span>
+                    <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                    <span class="mk-cell-subline">
+                      <span class="mk-cell-sub" :title="p.user?.email || ''">{{ p.user?.email || '' }}</span>
+                      <span v-if="p.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                    </span>
                   </div>
-                  <!-- 2026-10-21「测试只是备注」：测试账号照常计入，行内一枚备注即可 -->
-                  <span v-if="p.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                 </div>
               </td>
               <td v-if="!hiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(p.status)">{{ statusText(p.status) }}</span></td>
@@ -740,7 +742,6 @@ defineExpose({ reload: () => void reload(true) })
 .oc-table .oc-progress { min-width: 0; }
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */
 .oc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.oc-user > .mk-badge { flex: none; }
 .oc-user .mk-cell-main { min-width: 0; flex: 1; }
 /* 行点击已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
 /* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文。

@@ -264,11 +264,13 @@
                       @click.stop="openLearner(r.userId)"
                       @keydown.enter.stop.prevent="openLearner(r.userId)"
                     >{{ r.userName }}</button>
-                    <span v-if="r.email" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
-                    <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
+                    <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                    <span class="mk-cell-subline">
+                      <span v-if="r.email" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
+                      <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
+                      <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                    </span>
                   </div>
-                  <!-- 2026-10-21「测试只是备注」：不做视角，行内一枚备注即可 -->
-                  <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('status')">
@@ -1102,7 +1104,6 @@ defineExpose({ refreshNow })
 .ts-table td { overflow: hidden; }
 /* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 */
 .ts-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.ts-user > .mk-badge { flex: none; }
 .ts-user .mk-cell-main { min-width: 0; flex: 1; }
 /* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */

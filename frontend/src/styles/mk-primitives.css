@@ -693,9 +693,15 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-table-scroll { overflow-x: auto; }
 .mk-table-scroll .mk-table th { position: sticky; top: 0; z-index: 1; }
 
-.mk-cell-main { display: grid; gap: 1px; min-width: 0; }
+.mk-cell-main { display: grid; gap: 1px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .mk-cell-main strong { display: block; max-width: var(--mk-cell-main-max); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mk-cell-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 副行 = 次级标识（邮箱 / 短 id）+ 行内备注（如「测试」）。
+   备注放副行而不放姓名行：窄身份列里它会吃掉 50px 姓名宽度（2026-10-24 用户走查
+   「几个页面的 pill 都把字体压住了」的修法）。 */
+.mk-cell-subline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mk-cell-subline > .mk-cell-sub { min-width: 0; }
+.mk-cell-subline > .mk-badge { flex: none; }
 /* 数字列：不换行、右对齐、不被挤压（固定列宽规范）。
    字体跟页面正文走——数字对齐由 tabular-nums 保证，不需要第二套等宽字体；
    等宽只留给 id / 代码 / HTTP 方法这类机器串（2026-10-23 用户走查「整那么多不一样字体」）。 */
@@ -1048,7 +1054,12 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-link--muted { opacity: 0.55; }
 /* 表格用户格里的姓名 → 学习者详情（2026-10-18）：继承单元格排版，hover 才上色。
    整列姓名都染蓝会被读成「操作列」，所以常态保持正文色（spec §4：hover 只许变色/底/边）。 */
+/* 2026-10-24 用户走查「几个页面的 pill 都把字体压住了」：姓名是 <button> 时没有截断规则，
+   长名（e2e_long_…）按 max-content 撑出格子，后面的「测试」备注徽章叠在字上。
+   容器改 minmax(0,1fr) + 按钮自身 block/100%/ellipsis，与 .mk-cell-main strong 同契约。 */
 .mk-user-link {
+  display: block;
+  max-width: 100%;
   border: 0;
   background: transparent;
   padding: 0;
@@ -1057,6 +1068,9 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   color: inherit;
   text-align: left;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .mk-user-link:hover { color: var(--mk-blue); }
 /* 图标按钮：操作列高频操作改为 SVG 图标 + tooltip，节省列宽 */

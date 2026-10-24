@@ -208,10 +208,12 @@
                       @click.stop="openLearner(r.userId)"
                       @keydown.enter.stop.prevent="openLearner(r.userId)"
                     >{{ r.userName }}</button>
-                    <span class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
+                    <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                    <span class="mk-cell-subline">
+                      <span class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
+                      <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                    </span>
                   </div>
-                  <!-- 2026-10-21「测试只是备注」：不做视角，行内一枚备注即可 -->
-                  <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                 </div>
               </td>
               <td v-if="showCol('status')">

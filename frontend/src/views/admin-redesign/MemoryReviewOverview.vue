@@ -149,10 +149,12 @@
                     <strong>{{ row.name || '未命名' }}</strong>
                     <!-- 2026-10-23 走查：副行原为截断的内部 userId（user_9f559a6…abf073），
                          既不可读也不能检索；改与其它列表同口径显示邮箱，无邮箱才退回短 id -->
-                    <span class="mk-cell-sub" :title="row.email || row.userId">{{ row.email || shortId(row.userId) }}</span>
+                    <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                    <span class="mk-cell-subline">
+                      <span class="mk-cell-sub" :title="row.email || row.userId">{{ row.email || shortId(row.userId) }}</span>
+                      <span v-if="row.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                    </span>
                   </div>
-                  <!-- 2026-10-21「测试只是备注」：测试账号照常计入，行内一枚备注即可 -->
-                  <span v-if="row.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                 </div>
               </td>
               <td class="mk-num" :title="`该用户共 ${row.traces} 条记忆记录，跨学习路径`">{{ row.traces }}</td>
@@ -585,7 +587,6 @@ onMounted(async () => {
 
 /* ===== 用户列表（2026-09-28：表头回归——行列表没有表头，右侧裸数字无从解读）===== */
 .mr__user { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.mr__user > .mk-badge { flex: none; }
 .mr__user .mk-cell-main { min-width: 0; flex: 1; }
 
 /* 待复习：只出数字，颜色表达压力（0=弱化 / 琥珀=提醒 / 红=重压）；占比口径进 title */

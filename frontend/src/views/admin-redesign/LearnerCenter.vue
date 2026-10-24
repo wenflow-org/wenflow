@@ -174,10 +174,12 @@
                 <MkCellAvatar :name="r.name" :tone="isVirtualRow(r) ? 'virtual' : r.isTestAccount ? 'test' : 'default'" />
                 <div class="mk-cell-main">
                   <strong :title="r.name">{{ r.name }}</strong>
-                  <span class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
+                  <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                  <span class="mk-cell-subline">
+                    <span class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
+                    <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                  </span>
                 </div>
-                <!-- 2026-10-21「测试只是备注」：测试账号照常计入，行内一枚备注即可 -->
-                <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('progress')">
@@ -736,7 +738,6 @@ async function recomputeAll() {
 .lc-tablewrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 学习者单元格（原型 celluser：头像 + 主行/副行 + 身份徽章，Users.vue ul-user 同款判例） */
 .lc-celluser { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.lc-celluser > .mk-badge { flex: none; }
 .lc-celluser .mk-cell-main { min-width: 0; flex: 1; }
 .lc-celluser .mk-cell-sub { max-width: 230px; }
 .lc-task .mk-cell-sub { max-width: 240px; }
