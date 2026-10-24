@@ -8,6 +8,9 @@
  *   node backend/scripts/offline-eval/run.mjs --target=path --limit=20 --days=30 --k=3
  *   node backend/scripts/offline-eval/run.mjs --target=all --limit=10 --dry-run
  *
+ * 速率：默认 10 RPM（--rpm=10 / OFFLINE_EVAL_RPM=10），每次请求开始（含重试）占一个名额。
+ * 并发：--conc=4，同案例 K 次判读串行，实际在途 ≤ conc。
+ *
  * 环境变量（只从环境读取，禁止写进源码）：
  *   OFFLINE_EVAL_API_URL  默认 https://newapi.wenflow.org/v1/chat/completions
  *   OFFLINE_EVAL_API_KEY  必填
@@ -16,7 +19,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
-  argNum, chat, ci95, clip, DEFAULT_DB, ensureDir, extractJson, getChatStats,
+  argNum, chat, ci95, clip, configureRateLimit, DEFAULT_DB, ensureDir, extractJson, getChatStats,
   hasVerbatimQuote, loadEnvFile, makeJudgeVersion as buildJudgeVersion, mapPool, mean, openDb, pct,
   printCaseProgress, REPO_ROOT, resetChatStats, round3, scoreBand, weightedScore,
 } from './lib.mjs';
@@ -45,6 +48,7 @@ const LIMIT = argNum(args, 'limit', 20);
 const DAYS = argNum(args, 'days', 30);
 const K = Math.max(1, argNum(args, 'k', 3));
 const CONC = Math.max(1, argNum(args, 'conc', 4));
+const RPM = Math.max(1, argNum(args, 'rpm', Number(process.env.OFFLINE_EVAL_RPM) || 10));
 const TEMPERATURE = Number(args.temp ?? 0.2);
 const MODEL = String(args.model || process.env.OFFLINE_EVAL_MODEL || 'deepseek-v4.1-flash');
 const DB = resolve(String(args.db || DEFAULT_DB));
@@ -94,7 +98,11 @@ async function runTarget(target, cases, buildPrompt, validate, aggregate) {
   const results = [];
   let done = 0;
   await mapPool(cases, CONC, async (c) => {
-    const resolved = await Promise.all(Array.from({ length: K }, () => judgeOnce(buildPrompt(c.block), validate, c.block)));
+    const resolved = [];
+    // K 次判读逐次串行：把并发上限收敛到 CONC，配合全局 RPM 闸门避免同案例突发。
+    for (let k = 0; k < K; k++) {
+      resolved.push(await judgeOnce(buildPrompt(c.block), validate, c.block));
+    }
     const aggregateResult = aggregate(resolved);
     const row = {
       kind: target,
@@ -319,10 +327,11 @@ function selftest() {
 async function main() {
   if (SELFTEST) { selftest(); return; }
   if (!['classroom', 'path', 'all'].includes(TARGET)) throw new Error(`--target 只能是 classroom/path/all（收到 ${TARGET}）`);
+  configureRateLimit(RPM);
   const db = openDb(DB);
   const ids = readIds();
   const targets = TARGET === 'all' ? ['classroom', 'path'] : [TARGET];
-  console.log(`[offline-eval] target=${TARGET} limit=${LIMIT} days=${DAYS} k=${K} model=${MODEL}`);
+  console.log(`[offline-eval] target=${TARGET} limit=${LIMIT} days=${DAYS} k=${K} conc=${CONC} rpm=${RPM} model=${MODEL}`);
   console.log(`[db] ${DB}`);
 
   const payloads = {};

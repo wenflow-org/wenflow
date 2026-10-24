@@ -80,9 +80,37 @@ export const norm = (s) => String(s || '')
   .replace(/[“”]/g, '"')
   .replace(/[‘’]/g, "'");
 
-let CHAT_STATS = { calls: 0, failures: 0, retries: 0 };
-export function resetChatStats() { CHAT_STATS = { calls: 0, failures: 0, retries: 0 }; }
+let CHAT_STATS = { calls: 0, failures: 0, retries: 0, rateWaits: 0 };
+export function resetChatStats() { CHAT_STATS = { calls: 0, failures: 0, retries: 0, rateWaits: 0 }; }
 export function getChatStats() { return { ...CHAT_STATS }; }
+
+/**
+ * 全局请求速率闸门：默认 10 RPM（每分钟最多 10 次「请求开始」）。
+ * 上游对突发并发敏感，限制的是开始时刻而不是在途数；每一次重试也占用一个名额。
+ * 单线程事件循环下 filter+push 无 await，天然原子。
+ */
+const RATE = { rpm: 10, starts: [] };
+export function configureRateLimit(rpm) {
+  const n = Number(rpm);
+  RATE.rpm = Number.isFinite(n) && n > 0 ? n : 0;
+  RATE.starts = [];
+}
+export function getRateLimit() { return RATE.rpm; }
+
+async function acquireRateSlot() {
+  if (!RATE.rpm) return;
+  for (;;) {
+    const now = Date.now();
+    while (RATE.starts.length && now - RATE.starts[0] >= 60000) RATE.starts.shift();
+    if (RATE.starts.length < RATE.rpm) {
+      RATE.starts.push(now);
+      return;
+    }
+    const waitMs = 60000 - (now - RATE.starts[0]) + 50;
+    CHAT_STATS.rateWaits += 1;
+    await sleep(waitMs);
+  }
+}
 
 function endpoint() {
   return process.env.OFFLINE_EVAL_API_URL || process.env.WENFLOW_AUDIT_API || DEFAULT_API;
@@ -104,8 +132,10 @@ export async function chat(messages, options = {}) {
   } = options;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    let timer = null;
     try {
+      await acquireRateSlot();
+      timer = setTimeout(() => ac.abort(), timeoutMs);
       CHAT_STATS.calls += 1;
       const r = await fetch(endpoint(), {
         method: 'POST',
@@ -189,6 +219,26 @@ export const pct = (n, d) => (d > 0 ? Number((n / d).toFixed(3)) : null);
 export function round3(v) { return v === null || v === undefined ? null : Math.round(v * 1000) / 1000; }
 
 export function ensureDir(dir) { mkdirSync(dir, { recursive: true }); }
+
+/**
+ * 等距抽样：按输入顺序（调用方按时间排序）均匀取 limit 条，避免「只取最近一批」
+ * 导致样本全来自同一波次/同一学习者。确定性、可复现。
+ */
+export function pickEvenly(items, limit) {
+  if (limit <= 0 || items.length === 0) return [];
+  if (items.length <= limit) return items;
+  if (limit === 1) return [items[Math.floor((items.length - 1) / 2)]];
+  const out = [];
+  const seen = new Set();
+  const step = (items.length - 1) / (limit - 1);
+  for (let i = 0; i < limit; i++) {
+    const index = Math.round(i * step);
+    if (seen.has(index)) continue;
+    seen.add(index);
+    out.push(items[index]);
+  }
+  return out;
+}
 
 export function scoreBand(score) {
   if (score === null || score === undefined) return 'n/a';

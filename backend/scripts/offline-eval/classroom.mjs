@@ -205,11 +205,11 @@ const RUBRIC = `你是独立的教学质量评审员，评的是「老师教得�
 1. 证据优先：只根据给定记录判断；不确定的维度给 0.5，不确定的 flag 给 false。
 2. 检查点真值优先：明细「选项集合不一致（正确 X，作答 Y）」而结果 passed → wrongAnswerPassed；
    明细「与答案键一致」的 passed 检查点，不得仅凭学员自由文本与任务口径的差异判错答放行。
-3. 收口语义（2026-10-24）：`finalizationAction=end_only` 表示学员主动结束、**没有结算任务**，
-   不得把「会话结束」当作「任务完成」宣称。若 `openQuestion=true` 且 actionPlan 含「待验证」，
-   这是诚实收口，`unclosedComplete` 判 false；若 openQuestion=true 但总结仍称「已完成/已掌握/
-   学员已答」，按 `summaryMismatch` 处理。只有 finalizationAction=complete_task/complete_review
-   或 wrapup 明确宣称任务达标、而末问未答时，才判 `unclosedComplete=true`。
+3. 收口语义（2026-10-24）：「finalizationAction=end_only」表示学员主动结束、**没有结算任务**，
+   不得把「会话结束」当作「任务完成」宣称。若「openQuestion=true」且 actionPlan 含「待验证」，
+   这是诚实收口，「unclosedComplete」判 false；若 openQuestion=true 但总结仍称「已完成/已掌握/
+   学员已答」，按「summaryMismatch」处理。只有 finalizationAction=complete_task/complete_review
+   或 wrapup 明确宣称任务达标、而末问未答时，才判「unclosedComplete=true」。
 4. 每个判 true 的 flag 必须给至少 1 条逐字引文（从记录里原样复制 ≤120 字，不要改写）；
    给不出引文的 flag 会被系统降级为 false。
 5. issues 最多 5 条，必须引用具体原话或检查点行，并给出可执行改进建议；不要写空泛评语。
