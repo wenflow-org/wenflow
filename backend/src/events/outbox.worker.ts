@@ -2,8 +2,11 @@ import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { DurableEventConsumerRegistry } from './consumer-registry';
 import { mapOutboxRecord } from './outbox.repository';
+import { setOutboxWakeListener } from './outbox-wake';
 
-const POLL_INTERVAL_MS = 1000;
+/** 兜底轮询区间（架构优化批 #5）：空闲指数退避 1s→30s；入队唤醒/有产出时复位到下限 */
+const POLL_MIN_MS = 1000;
+const POLL_MAX_MS = 30_000;
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 8;
 
@@ -30,6 +33,8 @@ export class DurableOutboxWorker {
   private running = false;
   private stopping = false;
   private inFlight: Promise<void> | null = null;
+  private nextDelayMs = POLL_MIN_MS;
+  private lastTickProductive = false;
   private readonly owner = process.env.INSTANCE_ID || `outbox-${process.pid}`;
 
   constructor(private readonly registry: DurableEventConsumerRegistry) {}
@@ -37,18 +42,35 @@ export class DurableOutboxWorker {
   start(): void {
     if (this.timer) return;
     this.stopping = false;
-    this.timer = setInterval(() => void this.runTickSafely(), POLL_INTERVAL_MS);
-    this.timer.unref?.();
-    void this.runTickSafely();
+    this.nextDelayMs = POLL_MIN_MS;
+    // 入队侧唤醒（outbox-wake）：tick 已在跑则跳过本轮（互斥闸兜底），并把退避复位到下限
+    setOutboxWakeListener(() => {
+      this.nextDelayMs = POLL_MIN_MS;
+      void this.runTickSafely();
+    });
+    // 首轮同步启动（保持旧行为：start 后立即消费一次，不等第一个间隔）
+    void this.runTickSafely().finally(() => this.scheduleNext());
   }
 
   async stop(): Promise<void> {
     this.stopping = true;
-    if (this.timer) clearInterval(this.timer);
+    setOutboxWakeListener(null);
+    if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     await this.inFlight;
   }
 
+  /** 自适应调度：空闲翻倍（封顶 POLL_MAX_MS），有产出（claimed>0）复位到下限 */
+  private scheduleNext(): void {
+    if (this.stopping) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.runTickSafely().finally(() => this.scheduleNext());
+    }, this.nextDelayMs);
+    this.timer.unref?.();
+  }
+
+  /** 供测试/运维直接驱动一轮 */
   async runOnce(): Promise<void> {
     await this.tick();
   }
@@ -72,6 +94,12 @@ export class DurableOutboxWorker {
     } finally {
       this.inFlight = null;
       this.running = false;
+      // 自适应退避：本轮拾取到事件 → 复位下限（队列可能还有）；空转 → 翻倍封顶 30s。
+      // 唤醒路径（outbox-wake）也会把 nextDelayMs 拍回下限——即使唤醒先于事务提交扑空，
+      // 兜底 tick 仍在 1s 内到达（与旧固定轮询同量级）。
+      this.nextDelayMs = this.lastTickProductive
+        ? POLL_MIN_MS
+        : Math.min(POLL_MAX_MS, this.nextDelayMs * 2);
     }
   }
 
@@ -93,6 +121,7 @@ export class DurableOutboxWorker {
   private async processBatch(): Promise<void> {
     const now = new Date();
     const staleLock = new Date(now.getTime() - LOCK_TIMEOUT_MS);
+    this.lastTickProductive = false;
     const records = await prisma.domain_event_outbox.findMany({
       where: {
         availableAt: { lte: now },
@@ -139,6 +168,7 @@ export class DurableOutboxWorker {
         data: { status: 'processing', lockedAt: now, lockOwner: this.owner }
       });
       if (claimed.count !== 1) continue;
+      this.lastTickProductive = true;
 
       try {
         await this.registry.dispatch(mapOutboxRecord(record));

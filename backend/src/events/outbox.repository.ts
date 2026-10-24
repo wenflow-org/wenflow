@@ -1,4 +1,5 @@
 import type { DurableDomainEvent } from './contracts';
+import { notifyOutboxActivity } from './outbox-wake';
 
 /**
  * #106②（2026-10-19）：outbox 时间字段拆列。
@@ -41,6 +42,9 @@ export async function enqueueDomainEvent(tx: any, event: DurableDomainEvent): Pr
       occurredAt: event.occurredAt
     }
   });
+  // 唤醒 worker（架构优化批 #5）：防抖窗口吸收事务提交延迟，见 outbox-wake.ts 时序声明。
+  // 事务回滚时是虚唤（worker 空转一轮后继续退避），无副作用。
+  notifyOutboxActivity();
 }
 
 export function mapOutboxRecord(record: any): DurableDomainEvent {

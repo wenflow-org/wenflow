@@ -354,3 +354,6 @@ WenFlow-Design-System*
 
 # 本地跑批/实验产物（日志、状态 JSON、备份）
 outputs/
+
+# 单实例锁文件（架构优化批 #3：backend/.runtime/）
+backend/.runtime/

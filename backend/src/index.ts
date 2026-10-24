@@ -24,6 +24,7 @@ import { autopilotService } from './virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from './virtual-lab/session-reclaim.service';
 import { stopBatchExperimentScheduler } from './services/virtual-lab/batch-experiment.service';
 import { bootstrapEnvironment } from './bootstrap/env';
+import { acquireInstanceLock, InstanceConflictError, type InstanceLockHandle } from './utils/instance-lock';
 import { createHttpApp, registerErrorHandlers } from './bootstrap/http-app';
 import { registerRoutes } from './bootstrap/routers';
 import { initializeGateway, purgeRetiredSkills, syncCapabilityProbeSettings } from './bootstrap/gateway';
@@ -65,6 +66,7 @@ let outboxWorker: DurableOutboxWorker | null = null;
 let httpServer: Server | null = null;
 let gateway: EduClawGateway | null = null;
 let stopEnrichmentRetry: (() => void) | null = null;
+let instanceLock: InstanceLockHandle | null = null;
 
 function assertStartupActive() {
   if (lifecycle.isDraining()) throw new Error('服务已进入关闭流程，终止后续启动');
@@ -74,6 +76,10 @@ function assertStartupActive() {
 export async function startServer() {
   try {
     assertStartupActive();
+    // 单实例断言（架构优化批 #3）：SQLite 单写者 + 进程内限流/调度/互斥全假设单实例，
+    // 换端口起第二个进程共享同一主库会造成限流失效与数据竞争 → 以主库路径为键持锁拒起。
+    // 冲突时给出在跑实例的 PID/端口；豁免通道 WENFLOW_ALLOW_MULTI_INSTANCE=1（仅调试）。
+    instanceLock = acquireInstanceLock(process.env.DATABASE_URL || '', { port: PORT });
     logger.info('Connecting to main and System databases...');
     await Promise.all([prisma.$connect(), systemPrisma.$connect()]);
     assertStartupActive();
@@ -131,6 +137,12 @@ export async function startServer() {
     logger.info(`📚 API Documentation: http://localhost:${PORT}/api`);
     logger.info(`🤖 EduClaw Gateway: Agent-Driven Architecture`);
   } catch (error) {
+    if (error instanceof InstanceConflictError) {
+      // 单实例冲突：直接失败退出，不走 shutdown（未持有任何运行时资源；锁也不在本进程手里）
+      logger.error('❌ 单实例断言失败，拒绝启动', { conflict: error.conflict, message: error.message });
+      process.exitCode = 1;
+      throw error;
+    }
     logger.error('Failed to start server:', error);
     await shutdown('startup_failure');
     throw error;
@@ -161,6 +173,8 @@ export async function shutdown(signal: string) {
     gateway,
     databases: [systemPrisma, prisma]
   }, shutdownDeadlineMs);
+  instanceLock?.release();
+  instanceLock = null;
   logger.info('Server shutdown completed', report);
   return report;
 }
