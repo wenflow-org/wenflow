@@ -641,6 +641,7 @@ import ModelRegistryOverview from './ModelRegistryOverview.vue'
 import ModelProvidersPanel from './ModelProvidersPanel.vue'
 import InfraModelsPanel from './InfraModelsPanel.vue'
 import { splitUpstreamByRegistry } from './modelNameMatch'
+import { modelKindOf } from './platformModelKind'
 import VirtualLabLoadSettings from './VirtualLabLoadSettings.vue'
 import {
   liveApiConfig as cfg,
@@ -1281,13 +1282,16 @@ function onProvidersChanged() {
   void registryRef.value?.refresh?.(true)
 }
 
-/** 上游清单与登记表的读数（空串 = 无清单可谈，模板走空态分支）：只报数字，不写解释句 */
+/** 上游清单与登记表的读数（空串 = 无清单可谈，模板走空态分支）：只报数字，不写解释句。
+    2026-10-24「平台模型分几种」：上游清单是多模态混排，先报其中的对话候选数——
+    向量 / 重排 / 生图 / 决策不登记进 LLM 目录。 */
 const upstreamSummary = computed(() => {
   const total = models.value.length
   if (!total) return ''
-  if (!upstreamReady.value) return `已拉取 ${total} 个`
+  const chat = models.value.filter((id) => modelKindOf(id) === 'chat').length
+  if (!upstreamReady.value) return `已拉取 ${total} 个 · 对话候选 ${chat} 个`
   const matched = upstreamSplit.value.registered.length
-  return `已拉取 ${total} 个 · ${matched} 个已添加`
+  return `已拉取 ${total} 个 · 对话候选 ${chat} 个 · ${matched} 个已添加`
 })
 
 /**

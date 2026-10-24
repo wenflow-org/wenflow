@@ -200,11 +200,12 @@
 
           <slot v-if="selected.id === 'platform'" name="models-meta" />
 
-          <!-- 上游模型：一条一行，逐条添加（2026-10-21 用户走查：不做批量「按对话档登记」，
-               每个模型自己配置基础信息）。平台通道的清单由连接设置拉取，自带端点由本页拉取。 -->
+          <!-- 上游模型按用途分流（2026-10-24 用户「思考平台模型分几种」）：
+               只有对话模型能登记进 LLM 目录；向量/重排去「基础设施」，生图/决策去「插件」。
+               上游 /models 把多模态混在一张清单里，逐条「添加」会把向量模型写成对话模型。 -->
           <div v-if="fetchableModels.length" class="mpp-fetch">
             <div v-if="selected.id !== 'platform' || fetchableModels.length > 8" class="mpp-fetch__head">
-              <span v-if="selected.id !== 'platform'">上游模型 <b>{{ fetchableModels.length }}</b> 个</span>
+              <span v-if="selected.id !== 'platform'">上游模型 <b>{{ fetchableChat.length }}</b> 个</span>
               <input
                 v-if="fetchableModels.length > 8"
                 v-model="modelFilter"
@@ -213,19 +214,46 @@
                 aria-label="筛选上游模型"
               />
             </div>
-            <div class="mpp-fetch__list">
-              <div v-for="name in filteredFetched" :key="name" class="mpp-fetch__row">
-                <span class="mono mpp-fetch__id" :title="name">{{ name }}</span>
-                <span v-if="registeredIds.has(name)" class="mk-badge mk-badge--muted">已添加</span>
-                <button
-                  v-else
-                  type="button"
-                  class="mk-link"
-                  :disabled="busy || registry?.readOnly"
-                  @click="openAddModel(name)"
-                >添加</button>
-              </div>
-              <p v-if="!filteredFetched.length" class="mpp-fetch__empty">没有匹配的模型</p>
+            <div class="mpp-fetch__body">
+              <section class="mpp-fetch__list">
+                <div class="mpp-fetch__group">对话候选 <b>{{ filteredChat.length }}</b></div>
+                <div class="mpp-fetch__rows">
+                  <div v-for="name in filteredChat" :key="name" class="mpp-fetch__row">
+                    <span class="mono mpp-fetch__id" :title="name">{{ name }}</span>
+                    <span v-if="registeredIds.has(name)" class="mk-badge mk-badge--muted">已添加</span>
+                    <button
+                      v-else
+                      type="button"
+                      class="mk-link"
+                      :disabled="busy || registry?.readOnly"
+                      @click="openAddModel(name)"
+                    >添加</button>
+                  </div>
+                  <p v-if="!filteredChat.length" class="mpp-fetch__empty">没有匹配的对话模型</p>
+                </div>
+              </section>
+              <section v-if="filteredOther.length" class="mpp-fetch__other">
+                <div class="mpp-fetch__group">其他用途 <b>{{ filteredOther.length }}</b></div>
+                <div class="mpp-fetch__rows">
+                  <div v-for="name in filteredOther" :key="name" class="mpp-fetch__row">
+                    <span class="mono mpp-fetch__id" :title="name">{{ name }}</span>
+                    <span class="mk-badge mk-badge--muted">{{ kindLabelOf(name) }}</span>
+                    <button
+                      v-if="modelTargetOf(modelKindOf(name)) === 'infra'"
+                      type="button"
+                      class="mk-link"
+                      @click="platformTab = 'infra'"
+                    >基础设施配置</button>
+                    <button
+                      v-else-if="modelTargetOf(modelKindOf(name)) === 'plugins'"
+                      type="button"
+                      class="mk-link"
+                      @click="goPluginConfig"
+                    >插件配置</button>
+                    <span v-else class="mpp-fetch__na">暂未接入</span>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
 
@@ -304,6 +332,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -311,6 +340,7 @@ import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import ProviderEditorDialog, { type ProviderLike } from './ProviderEditorDialog.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
+import { MODEL_KIND_LABEL, MODEL_KIND_ORDER, modelKindOf, modelTargetOf } from './platformModelKind'
 import { askConfirm } from './useConfirm'
 import { errMsg } from './live'
 
@@ -371,6 +401,7 @@ const pulling = ref(false)
 const testResults = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
 const pulled = ref<string[]>([])
 const modelFilter = ref('')
+const router = useRouter()
 
 const providerEditor = ref<InstanceType<typeof ProviderEditorDialog> | null>(null)
 const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
@@ -417,10 +448,27 @@ const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m
 const fetchableModels = computed(() =>
   selected.value?.endpointSource === 'inherit' ? props.upstream : pulled.value
 )
-const filteredFetched = computed(() => {
+/** 只有对话模型能进 LLM 目录；其余按用途指向基础设施 / 插件 */
+const fetchableChat = computed(() => fetchableModels.value.filter((name) => modelKindOf(name) === 'chat'))
+const matchedQuery = (name: string) => {
   const q = modelFilter.value.trim().toLowerCase()
-  return q ? fetchableModels.value.filter((n) => n.toLowerCase().includes(q)) : fetchableModels.value
-})
+  return !q || name.toLowerCase().includes(q)
+}
+const filteredChat = computed(() => fetchableChat.value.filter(matchedQuery))
+const filteredOther = computed(() =>
+  fetchableModels.value
+    .filter((name) => modelKindOf(name) !== 'chat' && matchedQuery(name))
+    .sort((a, b) => {
+      const diff = MODEL_KIND_ORDER.indexOf(modelKindOf(a)) - MODEL_KIND_ORDER.indexOf(modelKindOf(b))
+      return diff || a.localeCompare(b)
+    })
+)
+const kindLabelOf = (name: string) => MODEL_KIND_LABEL[modelKindOf(name)]
+
+/** 生图 / 决策的配置在插件页（provider 密钥与入口），不在这张 LLM 模型表里 */
+function goPluginConfig(): void {
+  void router.push('/admin/addons')
+}
 const fallbackOptions = computed(() =>
   providers.value.flatMap((p) => p.models.map((m) => `${p.id}/${m.id}`))
 )
@@ -868,7 +916,28 @@ defineExpose({ refresh })
 }
 .mpp-fetch__head b { color: var(--mk-ink); }
 .mpp-fetch__filter { width: 180px; margin-left: auto; }
-.mpp-fetch__list { display: grid; max-height: 188px; overflow-y: auto; }
+/* 两栏并排：左边对话候选（可添加），右边其他用途（去对应配置）。
+   上游 40 个模型里大半不是对话模型，堆成一条清单会把「哪些能加」埋掉。 */
+.mpp-fetch__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.mpp-fetch__list, .mpp-fetch__other { display: flex; flex-direction: column; min-width: 0; }
+.mpp-fetch__other { border-left: 1px solid var(--mk-line); }
+.mpp-fetch__rows { display: grid; max-height: 300px; overflow-y: auto; }
+/* 用途分组行：对话候选 / 其他用途。其他用途不给「添加」，改为去对应配置或「暂未接入」 */
+.mpp-fetch__group {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--mk-line);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+}
+.mpp-fetch__group b { color: var(--mk-ink); }
+.mpp-fetch__other .mk-link { margin-left: auto; }
+.mpp-fetch__na { margin-left: auto; color: var(--mk-faint); white-space: nowrap; }
+@media (max-width: 900px) {
+  .mpp-fetch__body { grid-template-columns: minmax(0, 1fr); }
+  .mpp-fetch__other { border-left: 0; border-top: 1px solid var(--mk-line); }
+}
 .mpp-fetch__row {
   display: flex;
   align-items: center;

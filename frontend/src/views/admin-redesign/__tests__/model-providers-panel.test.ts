@@ -364,4 +364,24 @@ describe('ModelProvidersPanel', () => {
     expect(rows[1].text()).toContain('添加')
     expect(w.find('.mpp-chip').exists()).toBe(false)
   })
+
+  it('上游按用途分流：向量/生图/决策不提供「添加」，改去对应配置', async () => {
+    const w = await mountPanel({
+      upstream: ['deepseek-v4-flash', 'BAAI/bge-m3', 'agnes-image-2.5-flash', 'jev-latest', 'agnes-video-2.5']
+    })
+    const chatRows = w.findAll('.mpp-fetch__list .mpp-fetch__row')
+    expect(chatRows).toHaveLength(1)
+    expect(chatRows[0].text()).toContain('deepseek-v4-flash')
+
+    const otherRows = w.findAll('.mpp-fetch__other .mpp-fetch__row')
+    expect(otherRows).toHaveLength(4)
+    const rowText = (needle: string) => otherRows.find((r) => r.text().includes(needle))!
+    expect(rowText('BAAI/bge-m3').text()).toContain('向量')
+    expect(rowText('BAAI/bge-m3').find('button').text()).toBe('基础设施配置')
+    expect(rowText('agnes-image-2.5-flash').text()).toContain('生图')
+    expect(rowText('agnes-image-2.5-flash').find('button').text()).toBe('插件配置')
+    expect(rowText('jev-latest').text()).toContain('决策')
+    expect(rowText('agnes-video-2.5').text()).toContain('暂未接入')
+    expect(rowText('agnes-video-2.5').find('button').exists()).toBe(false)
+  })
 })
