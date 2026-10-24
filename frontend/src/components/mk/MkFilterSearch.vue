@@ -1,5 +1,5 @@
 <template>
-  <span class="mk-search">
+  <span class="mk-search" :class="{ 'mk-search--filled': !!modelValue }">
     <input
       v-bind="$attrs"
       class="mk-filter__input"

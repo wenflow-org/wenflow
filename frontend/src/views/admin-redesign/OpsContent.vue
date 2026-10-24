@@ -188,8 +188,9 @@
                     >{{ p.user?.name || '—' }}</button>
                     <strong v-else>{{ p.user?.name || '—' }}</strong>
                     <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
-                    <span class="mk-cell-subline">
-                      <span class="mk-cell-sub" :title="p.user?.email || ''">{{ p.user?.email || '' }}</span>
+                    <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不再复读 -->
+                    <span v-if="emailSubline(p.user?.email, p.user?.name) || p.isTestAccount" class="mk-cell-subline">
+                      <span v-if="emailSubline(p.user?.email, p.user?.name)" class="mk-cell-sub" :title="p.user?.email || ''">{{ p.user?.email || '' }}</span>
                       <span v-if="p.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                     </span>
                   </div>
@@ -293,6 +294,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import { emailSubline } from '@/components/mk/avatarName'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import { statusText, statusBadge, pathRetryTypeText } from './opsShared'
 import { isTestAccountUser, useListQueryState } from './learner-profile'
@@ -730,14 +732,16 @@ defineExpose({ reload: () => void reload(true) })
 .oc-progress__count { font-variant-numeric: tabular-nums; }
 /* 固定列宽（2026-10-22 与教学会话/目标对话同判例）：auto 布局下路径/用户两列按当页最长
    文本分宽，翻页整表跳动；fixed 后列宽由表头定死，余量按权重摊到各列。 */
-.oc-table .oc-c-path { width: 170px; }
-.oc-table .oc-c-user { width: 166px; }
-.oc-table .oc-c-status { width: 90px; }
-.oc-table .oc-c-difficulty { width: 64px; }
-.oc-table .oc-c-hours { width: 84px; }
-.oc-table .oc-c-progress { width: 146px; }
-.oc-table .oc-c-updated { width: 104px; }
-.oc-table .oc-c-act { width: 94px; }
+/* 2026-10-24 视觉修复：状态/最近活动这类短列此前吃掉 90/104px，路径主列只剩 170px
+   被省略号截断；把富余宽度让回路径列，总宽不变（fixed 表不新增横滚）。 */
+.oc-table .oc-c-path { width: 260px; }
+.oc-table .oc-c-user { width: 150px; }
+.oc-table .oc-c-status { width: 72px; }
+.oc-table .oc-c-difficulty { width: 60px; }
+.oc-table .oc-c-hours { width: 78px; }
+.oc-table .oc-c-progress { width: 130px; }
+.oc-table .oc-c-updated { width: 84px; }
+.oc-table .oc-c-act { width: 90px; }
 /* fixed 档里列宽即契约：进度条的 120px 最小宽会把内容顶出单元格，归零后由 flex 吸收 */
 .oc-table .oc-progress { min-width: 0; }
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */

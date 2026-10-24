@@ -1124,19 +1124,20 @@ function onBatchReclaim(ids: string[]) {
    auto 布局下按当页最长内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
    宽度按 1280 现值校准并留余量，1200 档无横滚。 */
 .vl-c-check { width: 36px; }
-.vl-c-name { width: 140px; }
-.vl-c-tendency { width: 140px; }
+.vl-c-name { width: 160px; }
+/* 长期倾向是自由文本、需要两行语义骨架；2026-10-24 把运行状态列的富余宽度让回这里 */
+.vl-c-tendency { width: 240px; }
 .vl-c-story { width: 84px; }
-/* 运行状态只出一个「点 + 词」，200 足够（2026-10-21 晚回退到原宽） */
-.vl-c-running { width: 200px; }
+/* 运行状态只出一个「点 + 词」，按内容收缩到 ~90px（原 200px 让中段空出大片白） */
+.vl-c-running { width: 84px; }
 .vl-c-runs { width: 72px; }
 /* 异常列要同时容下「失败 N」「无响应 N」两枚标签 */
-.vl-c-abnormal { width: 132px; }
+.vl-c-abnormal { width: 124px; }
 .vl-c-created { width: 70px; }
 .vl-c-act { width: 96px; }
 @media (max-width: 1279px) {
-  /* 运行状态只出一个「点 + 词」，200 足够（2026-10-21 晚回退到原宽） */
-.vl-c-running { width: 200px; }
+  /* 窄档同宽：状态列内容不变，不随断点回宽 */
+  .vl-c-running { width: 84px; }
 }
 /* fixed 档列宽即契约：换行格的 220px min-width 会把短名顶出单元格 */
 .vl-table .mk-cell-text--wrap, .vl-table .mk-cell-main .mk-cell-text--wrap { min-width: 0; max-width: 100%; }

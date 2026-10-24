@@ -300,7 +300,8 @@
               </td>
               <td v-if="showCol('agent')">
                 <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId">{{ s.agentName || s.agentId }}</span>
-                <span v-else class="mk-na">工具类</span>
+                <!-- 无归属不用裸文本「工具类」：与同列有归属的胶囊同构，弱化灰徽标（2026-10-24） -->
+                <span v-else class="mk-badge mk-badge--sm mk-badge--muted" title="没有归属的顶层 Agent">未归属</span>
               </td>
               <td v-if="showCol('version')"><span class="mono">{{ versionOf(s.id) }}</span></td>
               <!-- 路由口径是中文词（「平台默认」），不走等宽；版本号仍是机器串 -->

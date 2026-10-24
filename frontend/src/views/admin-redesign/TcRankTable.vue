@@ -10,7 +10,8 @@
       <!-- 成本列（审核 #112）：接口 RankEntry 已带成本桶，此前 user/model 排行未渲染，与页头
            「按模型、Skill 与时间维度追踪模型调用成本」承诺不符 -->
       <span class="tc-c tc-c--cost" role="columnheader">成本</span>
-      <span class="tc-c tc-c--share" role="columnheader">占比</span>
+      <!-- 排行表占比 = Token 占比（成本另有独立列），与导出 CSV 的 Token占比% 对齐 -->
+      <span class="tc-c tc-c--share" role="columnheader" title="Token 用量占比（金额占比在成本列单独统计）">Token 占比</span>
     </div>
 
     <div
@@ -229,6 +230,10 @@ function rowTitle(r: RankRow): string {
   letter-spacing: 0.05em;
   color: var(--mk-faint);
 }
+/* 表头右缘对齐数值右缘：占比表头与行内 40px 数字槽同列右对齐；
+   成本列同理（否则表头文字与金额各站一边） */
+.tc-table__head .tc-c--share { text-align: right; padding-left: 14px; }
+.tc-table__head .tc-c--cost { text-align: right; }
 
 /* 行（分隔线/hover 走 mk-table 同套 token，与原型 .tbl tbody 行语言一致） */
 .tc-table__row {

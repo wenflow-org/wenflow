@@ -209,8 +209,9 @@
                       @keydown.enter.stop.prevent="openLearner(r.userId)"
                     >{{ r.userName }}</button>
                     <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
-                    <span class="mk-cell-subline">
-                      <span class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
+                    <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不再复读 -->
+                    <span v-if="emailSubline(r.userEmail, r.userName) || r.isTestAccount" class="mk-cell-subline">
+                      <span v-if="emailSubline(r.userEmail, r.userName)" class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
                       <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                     </span>
                   </div>
@@ -326,6 +327,7 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import { emailSubline } from '@/components/mk/avatarName'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 
@@ -898,22 +900,24 @@ onMounted(() => {
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：摘要/用户两列
    在 auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊到各列。
    宽度取 1280 下的现值再留一点余量，保证 1200 档不出横滚。 */
-.gc-c-summary { width: 240px; }
-.gc-c-user { width: 175px; }
-.gc-c-status { width: 100px; }
-.gc-c-turns { width: 72px; }
-.gc-c-constraints { width: 150px; }
-.gc-c-path { width: 88px; }
-.gc-c-stage-date { width: 84px; }
-.gc-c-created { width: 84px; }
-.gc-c-act { width: 96px; }
+/* 2026-10-24 视觉修复：状态（100）/创建时间（84）让出的宽度归目标摘要主列，
+   摘要两行档不再在 240px 里只露出语义碎片。 */
+.gc-c-summary { width: 330px; }
+.gc-c-user { width: 160px; }
+.gc-c-status { width: 84px; }
+.gc-c-turns { width: 68px; }
+.gc-c-constraints { width: 140px; }
+.gc-c-path { width: 82px; }
+.gc-c-stage-date { width: 78px; }
+.gc-c-created { width: 72px; }
+.gc-c-act { width: 90px; }
 /* fixed 档里列宽即契约：行内 min-width 会把内容顶出单元格，统一归零由截断兜底 */
 .gc-table .gc-user { min-width: 0; }
 .gc-table .gc-c-summary .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
 /* 用户格布局：列宽由 fixed 表头契约决定（.gc-c-user），行内不再设 min-width——
    2026-10-22 之前给过 200/176px 兜底，是为自动布局下防被长摘要挤扁；fixed 后
    min-width 只会把内容顶出单元格，已由上方 .gc-table .gc-user 归零 */
-.gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }
+.gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 /* 分布条已退役（2026-10-17）：原页面级分布带连同 .gc-distband 类一起下线，
    卡头状态 pills 与「未生成路径」快筛并列；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
 .gc-user .mk-cell-main { min-width: 0; flex: 1; }
@@ -929,8 +933,9 @@ onMounted(() => {
    状态/阶段合并列含四点过程条（4×6px + gap ≈ 45px）保留：min-width 120px 已容得下点条 */
 @media (max-width: 1599px) {
   .mk-table th, .mk-table td { padding-inline: 12px; }
-  .gc-user { min-width: 176px; }
-  .mk-cell-main .mk-cell-text--wrap { min-width: 180px; }
+  /* fixed 表里列宽即契约（.gc-c-user），行内再设 min-width 会把内容顶出单元格 */
+  .gc-user { min-width: 0; }
+  .mk-cell-main .mk-cell-text--wrap { min-width: 0; }
 }
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */

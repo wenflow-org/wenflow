@@ -194,13 +194,14 @@ export function mapLogsToSpans(items: RawLog[], opts: { preserveOrder?: boolean 
       agent,
       stage: (log.agentName || log.agentId || '未知节点').replace(/^skill:/, ''),
       ts: ts || undefined,
-      title: errText ? errText.slice(0, 40) : '执行完成',
+      /* 2026-10-24：摘要不再在数据层硬切 40 字——展示层负责 ellipsis，title 需要全量文本 */
+      title: errText || '执行完成',
       startMs: Math.max(0, ts - (byTrace.get(traceId) || ts)),
       durationMs: Number(log.durationMs || 0),
       status: mapStatus(log.status),
       /* P1 语义修复：detail 不再塞 timeAgo(createdAt) 相对时间（消息列/瀑布「摘要」显示相对时间属语义错位，
          时间语义收敛到时间列）；改为错误摘要，无错误时留空（展开区/标题已承载其余信息） */
-      detail: errText ? errText.slice(0, 60) : '',
+      detail: errText,
       payload: errText || undefined,
       execLayer: log.executionLayer,
       model: log.model,

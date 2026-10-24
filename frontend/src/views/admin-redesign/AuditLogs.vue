@@ -215,20 +215,26 @@
                 <td v-if="colVisible('admin')" class="log-admin" :title="log.adminName || log.adminId || ''">
                   {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
                 </td>
-                <!-- 动作格两段式（2026-10-18 用户走查「很突兀，不整齐」）：名字靠左、方法徽章贴格右缘。
-                     此前三者同行内联，名字长短不同就把徽章推来推去——实测同列徽章左缘散布 125px。
-                     拆独立「方法」列可解，但 1280/1440 内容区已无余量，加列即出横向滚动（实测 +81/+12px）；
-                     改用格内两端对齐：徽章落在同一 x（chip 定宽后左右缘都齐），且列宽与改动前一致。
-                     flex-wrap 保留换行能力——1280 档动作列仅 189px，名字+徽章本就放不下（原版该档已有
-                     5 行折行），可换行才不至于把整表顶出横向滚动。 -->
+                <!-- 动作格两段式（2026-10-24 视觉修复）：方法徽章紧贴动作名（8px）。
+                     2026-10-18 曾用两端对齐把徽章固定到格右缘，实测读成「名字」与「方法」
+                     两段无关信息（徽章与动作名之间隔出整格空白）；改回同行紧贴，
+                     flex-wrap 保留 1280 窄档的换行能力。 -->
                 <td v-if="colVisible('action')" :title="log.action">
                   <div class="log-act-line">
                     <span v-if="methodOf(log)" class="log-path" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
                     <span v-else class="log-action">{{ actionText(log.action) }}</span>
+                    <!-- 方法徽章紧贴动作名（2026-10-24）：原两端对齐把徽章推到格右缘，
+                         名字与方法读成两段无关信息。 -->
                     <span v-if="methodOf(log)" class="log-act-method">
                       <span class="log-action-sep" aria-hidden="true">·</span>
                       <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
                     </span>
+                  </div>
+                  <!-- 可区分字段（2026-10-24）：同秒同动作的重复写入此前整行完全一致；
+                       HTTP 状态码与耗时给出行内差异，展开区仍有完整请求原文。 -->
+                  <div v-if="log.statusCode || log.durationMs != null" class="log-act-meta mono">
+                    <span v-if="log.statusCode">HTTP {{ log.statusCode }}</span>
+                    <span v-if="log.durationMs != null">{{ fmtMs(log.durationMs) }}</span>
                   </div>
                 </td>
                 <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt" :title="log.targetType || '当前记录未包含目标类型'">{{ targetTypeText(log.targetType) }}</td>
@@ -1031,8 +1037,11 @@ function exportCurrentPage() {
 /* 动作格两段：名字靠左、方法徽章贴格右缘——徽章位置不再随名字长短漂移（两端对齐把
    名字与徽章之间多出的宽度吃掉）。flex-wrap 保留换行：1280 档动作列仅 189px，
    名字+徽章本就放不下（原版该档已有 5 行折行），能换行才不至于把整表顶出横向滚动。 */
-.log-act-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 10px; row-gap: 2px; }
+/* 方法徽章紧贴动作名（8–10px），不再两端对齐把徽章推到格右缘（2026-10-24） */
+.log-act-line { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 2px; }
 .log-act-method { display: inline-flex; align-items: center; flex: none; }
+/* 动作格第二行：状态码/耗时是行内可区分字段，弱化小字 */
+.log-act-meta { display: flex; align-items: center; gap: 8px; margin-top: 1px; color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
 .log-method {
   display: inline-block;
   font-family: var(--mk-mono);
@@ -1075,7 +1084,7 @@ function exportCurrentPage() {
   overflow: hidden;
   text-overflow: ellipsis;
   /* 上限只为让「一条超长路径」不把动作列撑开（auto 布局按 max-content 定列宽）；
-     徽章位置由 .log-act-line 的两端对齐决定，不靠这里的宽度。 */
+     方法徽章紧跟在本行文本之后，不靠这里的宽度定位。 */
   max-width: 200px;
   min-width: 0;
   vertical-align: middle;

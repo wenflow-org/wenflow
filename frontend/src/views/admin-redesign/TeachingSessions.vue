@@ -265,9 +265,11 @@
                       @keydown.enter.stop.prevent="openLearner(r.userId)"
                     >{{ r.userName }}</button>
                     <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
-                    <span class="mk-cell-subline">
-                      <span v-if="r.email" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
-                      <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
+                    <!-- 副行去重（2026-10-24 视觉修复）：邮箱 local part 与姓名同值时跳过；
+                         主行已是纯 ID 时不再用 shortId 复读同一标识 -->
+                    <span v-if="emailSubline(r.email, r.userName) || (r.userId && !isIdentifierLike(r.userName)) || r.isTestAccount" class="mk-cell-subline">
+                      <span v-if="emailSubline(r.email, r.userName)" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
+                      <span v-else-if="r.userId && !isIdentifierLike(r.userName)" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
                       <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                     </span>
                   </div>
@@ -422,6 +424,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import { emailSubline, isIdentifierLike } from '@/components/mk/avatarName'
 import MkKpi from '@/components/mk/MkKpi.vue'
 
 /* 文案单源（R6 复读单源化）：两个 KPI 卡的口径悬停释共用一份 */
@@ -932,7 +935,9 @@ const ABNORMAL_SUMMARY_MARK = '本次会话未正常结束'
 const tsSubNote = (r: Row): { text: string; title?: string } | null => {
   const summary = String(r.wrapup?.topicSummary || '')
   if (!ABNORMAL_STATUSES.has(r.status) || !summary.includes(ABNORMAL_SUMMARY_MARK)) return null
-  if (r.duration > 0) return { text: `时长 ${fmtDuration(r.duration)}`, title: '异常会话：此处显示会话时长' }
+  /* 2026-10-24：异常行副行不再复述「时长 N」——右侧已有独立时长列，同值同屏两遍；
+     只有没有时长读数时才退回开始时间（那是时长列给不出的信息）。 */
+  if (r.duration > 0) return null
   if (r.startAt) return { text: `开始于 ${r.startAt}`, title: '异常会话：此处显示开始时间' }
   return null
 }
@@ -1068,36 +1073,38 @@ defineExpose({ refreshNow })
    课堂/用户两列按当页最长内容分宽（课堂 135→340px、用户 169→256px），翻页整表跳动。
    fixed 档下按表头宽度定死，余量按各列宽度权重摊开；断点与 isTableCompact/Narrow/Mid
    的列显隐对齐，隐藏列的宽度不参与分配。 */
-.ts-c-user { width: 174px; }
-.ts-c-status { width: 204px; }
-.ts-c-track { width: 88px; }
-.ts-c-dur { width: 78px; }
-.ts-c-msg { width: 72px; }
-.ts-c-kp { width: 66px; }
-.ts-c-out { width: 190px; }
-.ts-c-att { width: 54px; }
-.ts-c-start { width: 92px; }
-.ts-c-act { width: 96px; }
+/* 2026-10-24 视觉修复：状态（204）/课后总结（190）/开始时间（92）在多数行是短内容，
+   富余宽度让给课堂主列；状态列仍够放下「已完成 + 停在 x/y」一行。 */
+.ts-c-user { width: 150px; }
+.ts-c-status { width: 150px; }
+.ts-c-track { width: 84px; }
+.ts-c-dur { width: 74px; }
+.ts-c-msg { width: 66px; }
+.ts-c-kp { width: 62px; }
+.ts-c-out { width: 150px; }
+.ts-c-att { width: 50px; }
+.ts-c-start { width: 80px; }
+.ts-c-act { width: 90px; }
 /* 课堂列宽度随断点给基准值，余量由 fixed 布局按各列宽度权重摊开（不再是单列吃掉全部余量，
    否则 1920 下课堂列 ~480px、右侧留大片空白）；断点与列显隐对齐：
    ≤1439 八列 / 1440-1499 九列 / 1500-1699 十一列 / ≥1700 十二列。 */
-.ts-c-topic { width: 150px; }
+.ts-c-topic { width: 190px; }
 /* 1200 档（125% 缩放的 1440 屏）也要无横滚：八列合计须 ≤914，短列同步收一点 */
 @media (max-width: 1279px) {
-  .ts-c-topic { width: 160px; }
-  .ts-c-user { width: 150px; }
-  .ts-c-status { width: 190px; }
-  .ts-c-dur { width: 74px; }
-  .ts-c-msg { width: 68px; }
-  .ts-c-out { width: 188px; }
-  .ts-c-act { width: 90px; }
+  .ts-c-topic { width: 260px; }
+  .ts-c-user { width: 140px; }
+  .ts-c-status { width: 150px; }
+  .ts-c-dur { width: 72px; }
+  .ts-c-msg { width: 64px; }
+  .ts-c-out { width: 150px; }
+  .ts-c-act { width: 88px; }
 }
 /* 1280 起默认只显示 7–8 列（完成方式/消息/知识点/关注已默认收起）：
-   课堂列可以吃更多宽度，不再沿用 11–12 列时的 150/190 基准 */
-@media (min-width: 1280px) { .ts-c-topic { width: 240px; } }
-@media (min-width: 1440px) { .ts-c-topic { width: 240px; } }
-@media (min-width: 1500px) { .ts-c-topic { width: 200px; } }
-@media (min-width: 1700px) { .ts-c-topic { width: 200px; } }
+   课堂列是主标识列，优先吃足宽度；状态/总结/开始时间等短列让位。 */
+@media (min-width: 1280px) { .ts-c-topic { width: 330px; } }
+@media (min-width: 1440px) { .ts-c-topic { width: 330px; } }
+@media (min-width: 1500px) { .ts-c-topic { width: 300px; } }
+@media (min-width: 1700px) { .ts-c-topic { width: 300px; } }
 /* 课堂列吸收余量后可能远超 .mk-cell-main 的 300/360 上限，让文本跟着列宽走（否则右侧留空白） */
 .ts-c-topic .mk-cell-main strong, .ts-row td:first-child .mk-cell-sub { max-width: 100%; }
 /* 固定列内不允许内容越界挤压邻列（徽章/按钮按内容裁切，悬停 title 仍在） */

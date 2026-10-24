@@ -457,11 +457,15 @@ const wbErrorText = computed(() =>
     2026-10-06 审核 #173：原句逐项复述数字，与下方四张指标卡 + 行动行构成「同一组四项讲三遍」。
     改为总括句（项数 + 排序 + 直达承诺），逐项数字只留指标卡一处。 */
 const todoConclusion = computed(() => {
-  const pending = todoItems.value.filter((t) => t.count > 0 && !t.failed).length
+  const pendingItems = todoItems.value.filter((t) => t.count > 0 && !t.failed)
+  const pending = pendingItems.length
+  const total = pendingItems.reduce((n, t) => n + t.count, 0)
   /* 有域失败时不得断言「全部已清零」：失败域的计数未被更新，清零结论不可信 */
-  if (wbHasError.value) return pending ? `${pending} 项待处理。另有部分待办加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
+  if (wbHasError.value) return pending ? `${pending} 类 · ${total} 件待处理。另有部分待办加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
   if (!pending) return '运营待办全部已清零'
-  return `${pending} 项待处理`
+  /* 2026-10-24：结论同时给「几类」与「几件」——原「N 项待处理」在跨域清单里分不清是类还是条。
+     保留「N 项待处理」前缀以维持既有文案契约，括号内补类/件口径。 */
+  return `${pending} 项待处理（${pending} 类 · ${total} 件）`
 })
 const TODO_SEV_RANK = { bad: 0, warn: 1, muted: 2 } as const
 /** 页级读数卡的短脚注（4-6 字，同其余页级 KPI 带的口径写法——长句口径住行内 title） */
@@ -534,7 +538,8 @@ const pathCards = computed(() => {
   const failedN = s.failed || 0
   return [
     { label: PATH_STATUS_TEXT.active, value: String(s.active || 0), tone: (s.active || 0) > 0 ? ('ok' as const) : '' },
-    { label: PATH_STATUS_TEXT.completed, value: String(s.completed || 0), tone: '' },
+    // 已完成用 info 蓝：与上方构成条 pathSegments 的 completed tone 一致（2026-10-24）
+    { label: PATH_STATUS_TEXT.completed, value: String(s.completed || 0), tone: 'info' as const },
     { label: PATH_STATUS_TEXT.failed, value: String(failedN), tone: failedN > 0 ? ('bad' as const) : '' },
     { label: PATH_STATUS_TEXT.archived, value: String(s.archived || 0), tone: '' },
   ]

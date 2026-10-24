@@ -30,7 +30,10 @@
         :tone="card.tone"
         :title="card.title"
         :aria-busy="kpiPending || undefined"
-      />
+      >
+        <!-- 已观察人数（2026-10-24 复核）：放在卡底小字，不占 hint（hint 的空态口径被测试锁定） -->
+        <span v-if="card.observed" class="mr-kpi-observed">{{ card.observed }}</span>
+      </MkKpi>
     </section>
 
     <!-- 到期时间轴分布带已退役（2026-10-17 用户走查「记忆与复习也不要了」）：
@@ -150,8 +153,10 @@
                     <!-- 2026-10-23 走查：副行原为截断的内部 userId（user_9f559a6…abf073），
                          既不可读也不能检索；改与其它列表同口径显示邮箱，无邮箱才退回短 id -->
                     <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
-                    <span class="mk-cell-subline">
-                      <span class="mk-cell-sub" :title="row.email || row.userId">{{ row.email || shortId(row.userId) }}</span>
+                    <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时跳过；无邮箱才退回短 id -->
+                    <span v-if="emailSubline(row.email, row.name) || !row.email || row.isTestAccount" class="mk-cell-subline">
+                      <span v-if="emailSubline(row.email, row.name)" class="mk-cell-sub" :title="row.email || undefined">{{ row.email }}</span>
+                      <span v-else-if="!row.email" class="mk-cell-sub mono" :title="row.userId">{{ shortId(row.userId) }}</span>
                       <span v-if="row.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                     </span>
                   </div>
@@ -225,6 +230,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import { emailSubline } from '@/components/mk/avatarName'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import { useTableSort } from './useTableSort'
@@ -394,6 +400,8 @@ interface OverviewCard {
   hint?: string
   title: string
   tone?: 'ok' | 'warn' | 'bad' | 'muted' | ''
+  /** 卡底小字：列表无法表达的覆盖度读数（如「已观察 3/28 人」） */
+  observed?: string
 }
 
 /** 页级绝对值单一来源；失败/未落定一律 '—'（R2 + B5-F3-2），不静默归零 */
@@ -422,11 +430,14 @@ const overviewCards = computed<OverviewCard[]>(() => {
     {
       label: '需人工看',
       value: noAudit ? '—' : val(reviewQueue ?? t.ambiguous),
+      /* 2026-10-24 复核：已观察人数必须在卡面可见，不只藏在 title；
+         这也是列表里「未观察」行的同口径分母。 */
       hint: numHint(noAudit ? '尚未观察' : ''),
+      observed: na ? undefined : `已观察 ${t.usersWithAudit ?? 0}/${t.users} 人`,
       tone: numTone(!noAudit && (reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
       title: noAudit
         ? '所有用户都还没跑过归并观察，暂无归并待办可算——在行上点「重新观察」生成'
-        : '需人工处理的归并待办：同义概念待确认、模糊候选与散键清理建议，不会自动执行'
+        : `需人工处理的归并待办：同义概念待确认、模糊候选与散键清理建议，不会自动执行。已观察 ${t.usersWithAudit ?? 0}/${t.users} 人`
     },
     /* 2026-10-23：待归并建议 / 未挂靠散键不再占 KPI 卡——两项都能落到「哪位学习者」，
        改由列表的「归并候选」「散键」两列承载（合计进列头 title），页头只留列表无法表达的读数 */
@@ -583,6 +594,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* KPI 卡底覆盖度小字（已观察 N/M 人）：不进 hint，避免与空态口径争同一行 */
+.mr-kpi-observed { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 固定列宽（2026-10-22 与教学组三表同判例）：学习者列在 auto 布局下按当页最长姓名分宽，
    翻页整表跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。 */
 .mr-c-user { width: 230px; }

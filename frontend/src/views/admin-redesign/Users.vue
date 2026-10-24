@@ -126,12 +126,12 @@
                行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
           <!-- 口径透传：测试视角下点虚拟/测试账号，详情接口需按全量口径查询，否则 404（与行点击/详情钮同参） -->
           <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id)">
-            <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
+            <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u)" :aria-label="`选择 ${userName(u)}`" @click.stop /></td>
             <td>
               <div class="ul-user">
-                <MkCellAvatar :name="u.name" :tone="avaTone(u)" />
+                <MkCellAvatar :name="userName(u)" :tone="avaTone(u)" />
                 <div class="mk-cell-main">
-                  <strong :title="u.name">{{ u.name }}</strong>
+                  <strong :title="userName(u)">{{ userName(u) }}</strong>
                   <!-- 原型 celluser meta 模式：等级（XP 细节进悬停）。
                        2026-10-23 走查：路径条数不再在副行复述——同一读数已在「路径 / 课堂」列
                        给全且可排序，副行只说等级。
@@ -288,6 +288,7 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import { displayNameOf } from '@/components/mk/avatarName'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -304,6 +305,10 @@ function avaTone(u: UlUserLite): 'default' | 'virtual' | 'test' | 'muted' {
   // 身份判据单点（learner-profile.ts）：payload 标记 ∪ 命名约定，与 KPI / 构成带同口径
   if (isRealAccountUser(u)) return 'default'
   return isVirtualLearnerAccount(u) ? 'virtual' : 'test'
+}
+/** 昵称与头像共用同一清洗/降级结果（avatarName.ts）：乱码字符剔除后空 → 邮箱前缀 → 「用」 */
+function userName(u: UlUserLite): string {
+  return displayNameOf(u.name, u.email)
 }
 /** 升级进度：等级公式 floor(sqrt(xp/100))+1 → 当前级下限 100·(n-1)²，下一级门槛 100·n² */
 function xpProgress(xp: number): { pct: number; toNext: number } {
@@ -379,7 +384,9 @@ const deletedLoading = ref(false)
 function mapDeletedRow(u: Record<string, unknown>): UserRow {
   return {
     id: String(u.id),
-    name: String(u.name || u.email || u.id),
+    /* 入库即清洗（2026-10-24）：表格、排序、CSV、删除/恢复确认、编辑表单共用同一份
+       可渲染昵称，避免头像已降级而弹窗仍显示乱码。 */
+    name: displayNameOf(u.name, u.email),
     email: String(u.email || ''),
     admin: !!u.isAdmin,
     online: false,
@@ -419,7 +426,7 @@ const users = computed<UserRow[]>(() => {
   if (pill.value === 'deleted') return deletedUsers.value
   return liveUsers.value.map((u) => ({
     id: u.id,
-    name: u.name,
+    name: displayNameOf(u.name, u.email),
     email: u.email,
     admin: u.isAdmin,
     online: recentLogin(u.lastLoginAt),

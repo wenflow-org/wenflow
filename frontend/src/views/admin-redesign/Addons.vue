@@ -47,9 +47,7 @@
               <span class="ac-plugin__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
             </div>
             <span class="ac-plugin__desc">{{ p.description }}</span>
-            <span class="ac-plugin__members">
-              {{ p.members.map((m) => m.name).join(' · ') }}<template v-if="p.availability"> · {{ p.availability.text }}</template>
-            </span>
+            <span v-if="membersText(p)" class="ac-plugin__members">{{ membersText(p) }}</span>
           </div>
           <div class="ac-plugin__actions">
             <MkSwitch
@@ -83,10 +81,11 @@
           </div>
           <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
           <span class="ac-mcp__type">
+            类型 ·
             <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
             <template v-else>{{ mcpTypeText(t.type) }}</template>
           </span>
-          <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
+          <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">入口 · {{ endpointLabel(t.endpoint) }}</span>
           <span class="mk-badge" :class="t.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ t.enabled ? '启用' : '停用' }}</span>
           <div class="mk-actions">
             <button
@@ -324,6 +323,14 @@ function endpointTitle(endpoint: string): string {
   return ENV_PLACEHOLDER.test(endpoint)
     ? `环境变量 ${endpoint} 未替换（未在服务端配置），该工具当前不可用`
     : endpoint
+}
+/** 成员行去重（2026-10-24）：成员名与组名相同时不再逐字复述，
+    只保留可用性短语（如「2 个服务可用」）；两者都没有时整行不渲染。 */
+function membersText(p: PluginRow): string {
+  const names = p.members.map((m) => m.name).filter((n) => !!n && n !== p.name)
+  const parts: string[] = [...names]
+  if (p.availability) parts.push(p.availability.text)
+  return parts.join(' · ')
 }
 /** MCP 工具类型枚举 → 中文（下拉与表格同一套，避免同屏中英两套） */
 const MCP_TYPE_TEXT: Record<string, string> = {
@@ -797,7 +804,18 @@ function goLogs(skillId: string) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ac-plugin__actions { display: flex; align-items: center; gap: 12px; }
+/* 开关独立固定列（2026-10-24）：有无「日志」都不移动开关竖轴；
+   按钮列右对齐，日志位即使为空也保留 32px 槽位。 */
+.ac-plugin__actions {
+  display: grid;
+  /* 固定总宽 + 固定列：开关的 x 与按钮文案长短无关（「配置」/「管理服务」同轴） */
+  width: 224px;
+  grid-template-columns: 72px 96px 32px;
+  align-items: center;
+  justify-items: end;
+  gap: 12px;
+}
+.ac-plugin__actions > .mk-switch { justify-self: start; }
 /* 停用只压信息层，开关与按钮保持清晰可点 */
 .ac-plugin.is-off .ac-plugin__main,
 .ac-plugin.is-off .ac-plugin__glyph { opacity: 0.55; }
@@ -837,7 +855,13 @@ function goLogs(skillId: string) {
 .ac-config-provider__warn { margin-right: auto; font-size: var(--mk-fs-micro); color: var(--mk-amber); }
 @media (max-width: 720px) {
   .ac-plugin { grid-template-columns: 32px minmax(0, 1fr); }
-  .ac-plugin__actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .ac-plugin__actions {
+    grid-column: 1 / -1;
+    display: flex;
+    width: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 
 /* 两卡容器：堆叠单列全宽（并栏分支 2026-09-29 实测溢出后退役，审核 #157 清掉不可达规则） */
@@ -858,7 +882,11 @@ function goLogs(skillId: string) {
 .ac-mcp { display: grid; }
 .ac-mcp__row {
   display: grid;
-  grid-template-columns: 10px 1.2fr 90px 1fr auto auto;
+  /* 2026-10-24：类型/入口按内容收（max-content 上限），富余空间只留在末尾动作列，
+     消除 585–662px 的空白中段；动作列右对齐。 */
+  /* 名称吃掉剩余宽度，类型/入口/状态/动作全部 max-content 靠右成组；
+     不再让某个具名列被余量拉成 500px+ 的空列。 */
+  grid-template-columns: 10px minmax(0, 1fr) max-content max-content max-content max-content;
   gap: 12px;
   align-items: center;
   padding: 10px 16px;
@@ -870,7 +898,11 @@ function goLogs(skillId: string) {
 .ac-mcp__dot.is-off { background: var(--mk-faint); }
 .ac-mcp__main { display: grid; gap: 1px; min-width: 0; }
 .ac-mcp__main strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ac-mcp__type { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-mcp__type { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+/* 状态徽标与动作组同处右缘：徽标列吃 1fr 并右对齐，把空白留在类型/入口与动作之间，
+   消除某个具名列被拉成 585–662px 空列（2026-10-24 复核）。 */
+.ac-mcp__row > .mk-badge { justify-self: end; }
+.ac-mcp__row > .mk-actions { justify-self: end; }
 .ac-mcp__test { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
 .ac-mcp__test.is-bad { color: var(--mk-red); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
@@ -878,6 +910,8 @@ function goLogs(skillId: string) {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   min-width: 0;
+  /* max-content 列必须给上限：超长 endpoint 否则会把整行顶出卡片 */
+  max-width: 240px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

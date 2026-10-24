@@ -8,7 +8,13 @@
          仍走 refresh(true)，登记在案（2026-10-04 批次五）。
          2026-10-04 状态条退役：「更新于 X」自状态条并入本注记（一行说清轮询节奏 + 报告新鲜度），
          title 带报告覆盖口径（skillCountTitle：登记总数 = Skill 运行 + 外挂能力）。 -->
-    <MkPageHead title="健康中心" sub="服务可用性与依赖链路一致性检查（总览的「今日成功率」按调用统计，不是本页检查项）">
+    <!-- 副标题保持单行（2026-10-24 复核）：与总览「今日成功率」的口径区分收进标题悬停，
+         不再让括注在 1440 断成孤行「项)」 -->
+    <MkPageHead
+      title="健康中心"
+      sub="服务可用性与依赖链路一致性检查"
+      hint="总览的「今日成功率」按调用统计，不是本页检查项"
+    >
       <template #actions>
         <span class="hc-refresh-note" role="status" :title="refreshNoteTitle">{{ refreshNote }}</span>
       </template>
@@ -60,7 +66,7 @@
         <MkKpi
           label="检查异常"
           :value="healthAbnormal"
-          :tone="healthAbnormal > 0 ? 'warn' : 'ok'"
+          :tone="healthAbnormalTone"
           clickable
           :title="healthAbnormalTitle"
           @click="kpiGo('health')"
@@ -159,7 +165,7 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">检查明细</h3>
           <!-- CP2：总数单源住在概要 KPI 的 hint，卡头不再复读「N 项」；此处只留异常徽章 -->
-          <span class="mk-badge" :class="healthAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '无异常' }}</span>
+          <span class="mk-badge" :class="`mk-badge--${healthAbnormalTone}`">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '无异常' }}</span>
         </div>
         <div class="hc-checks">
             <!-- 报告为空守卫（审核 #104）：items=[] 时卡体只剩卡头一行「无异常」，读不出是真没问题
@@ -186,16 +192,20 @@
               </summary>
               <div class="hc-checks">
                 <div v-for="item in group.items" :id="`hc-check-${item.id}`" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
+                  <!-- 三列（2026-10-24）：主列 | 计数+语义 | 固定动作列。此前动作列是 auto 宽，
+                       各行按钮/fixHint 长短不同，计数与语义徽标被推着左右跳。 -->
                   <button type="button" class="hc-check__row" :aria-expanded="detailOpen(item.id)" @click="toggleDetail(item.id)">
                     <span class="hc-check__dot" :class="`hc-check__dot--${item.severity}`"></span>
                     <span class="hc-check__main">
                       <strong>{{ item.label }}</strong>
                       <span>{{ item.cause }}</span>
                     </span>
-                    <span class="hc-check__num" :title="countTitle(item)">{{ item.count }}</span>
-                    <span class="hc-check__sem" :title="semHint(item.semantics)">{{ semanticsLabel(item.semantics) }}</span>
                     <span v-if="item.detail.length" class="hc-check__caret">{{ detailOpen(item.id) ? '▾' : '▸' }}</span>
                   </button>
+                  <span class="hc-check__metrics">
+                    <span class="hc-check__num" :title="countTitle(item)">{{ item.count }}</span>
+                    <span class="hc-check__sem" :class="{ 'hc-check__sem--neutral': item.severity === 'ok' || !item.count }" :title="semHint(item.semantics)">{{ semanticsText(item) }}</span>
+                  </span>
                   <span v-if="driftJumpLabel(item.id) || item.severity !== 'ok'" class="hc-check__actions">
                     <!-- 漂移项的跨页入口（2026-10-14）：原「漂移」页签撤除后，它独有的跳转落回本行；
                          契约漂移那行本就有「查看 →」（jump 到编排图漂移面板），故只补 W4 与运行时两项。
@@ -437,6 +447,14 @@ const reconciliation = computed<HealthReconciliationSummary>(
     },
 )
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
+/** 异常档位与 KPI / 卡头徽标共用：error→bad 红，warn→warn 琥珀，全正常→ok。
+    2026-10-24 修复：KPI 此前固定 warn、卡头固定 bad，同一读数两套颜色。 */
+const healthAbnormalTone = computed<'ok' | 'warn' | 'bad'>(() => {
+  const items = displayReport.value?.health.items || []
+  if (items.some((i) => i.severity === 'error')) return 'bad'
+  if (items.some((i) => i.severity === 'warn')) return 'warn'
+  return 'ok'
+})
 /** 检查异常卡悬停：口径 + 本次总数（2026-10-19 用户走查「KPI hint 在报读数」——总数从副行
     下沉到本长释，副行只留口径短语。CP2/CP9 的「值不在 title 复读」仍成立：这里是分母不是值） */
 const healthAbnormalTitle = computed(() => {
@@ -618,6 +636,13 @@ function semHint(semantics: HealthCenterItem['semantics']): string {
    本地 map 键值逐字重复——删本地拷贝直接引用，词表回单源 */
 function semanticsLabel(semantics: HealthCenterItem['semantics']) {
   return SEMANTICS_META.find((m) => m.id === semantics)?.label || semantics
+}
+/** 行内语义词（2026-10-24）：正常项 / 零计数不再挂「偏差 / 不一致」这类异常词，
+    改为中性描述，避免正常行自带告警语义。 */
+function semanticsText(item: HealthCenterItem): string {
+  if (item.severity === 'ok') return '正常'
+  if (!item.count) return '无异常'
+  return semanticsLabel(item.semantics)
 }
 
 async function refresh(force = false, throwOnError = false) {
@@ -854,9 +879,21 @@ defineExpose({ refresh })
 .hc-group > .hc-checks > .hc-check:last-child { border-bottom: 0; }
 
 /* 健康检查行 */
-.hc-check { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 0 16px; border-bottom: 1px solid var(--mk-line); }
+/* 三列固定骨架：主列 | 计数+语义 | 动作列。动作列宽度固定后，所有行的计数/语义
+   与动作钮都落在同一竖线上，不再随行内文案长短跳动。 */
+.hc-check {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px 172px;
+  gap: 0 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--mk-line);
+}
+/* 子行左缩进 16px：父组名（组头）在子行标题左侧，层级一眼可读 */
+/* 32→48：32 时子行标题与父组名几乎同 x（实测 331 vs 332），层级读不出来 */
+.hc-group > .hc-checks > .hc-check { padding-left: 48px; }
 .hc-check:last-child { border-bottom: none; }
 .hc-check__row { display: flex; align-items: center; gap: 10px; padding: 10px 0; min-width: 0; background: none; border: 0; font: inherit; text-align: left; cursor: pointer; }
+.hc-check__metrics { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 .hc-check__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .hc-check__dot--ok { background: var(--mk-green); }
 .hc-check__dot--warn { background: var(--mk-amber); }
@@ -867,13 +904,16 @@ defineExpose({ refresh })
 .hc-check__main span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .hc-check__num { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); min-width: 30px; text-align: right; }
 .hc-check__sem { font-size: var(--mk-fs-micro); color: var(--mk-muted); background: var(--mk-line); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
-.hc-check__caret { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.hc-check__actions { display: flex; align-items: center; gap: 8px; }
+/* 正常 / 零计数用中性底，不继承异常语义的着色 */
+.hc-check__sem--neutral { background: var(--mk-surface-3); color: var(--mk-faint); }
+.hc-check__caret { color: var(--mk-faint); font-size: var(--mk-fs-micro); flex: none; }
+.hc-check__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 8px; min-width: 0; }
 /* fixHint 常驻（P1#28）：修复钮旁的一句话说明。原 `max-width:300px + 单行省略` 走查实测
    只显示 46%（44/96px 被裁）；改 360 宽 + 最多两行（line-clamp 判例同 MkStatStrip），
    title 仍兜全文。行是 align-items:center，两行时按钮居中，不影响动作列对齐。 */
 .hc-check__fixhint {
-  max-width: 360px;
+  max-width: 100%;
+  min-width: 0;
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   display: -webkit-box;

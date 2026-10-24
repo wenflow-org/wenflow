@@ -233,7 +233,7 @@
             </button>
           </div>
         </div>
-        <div v-if="skillRows.length" class="tc-skilltable" role="table" :aria-label="SKILL_COST_TITLE">
+        <div v-if="skillRows.length" class="tc-skilltable" :class="{ 'tc-skilltable--cost': skillCostTotal > 0 }" role="table" :aria-label="SKILL_COST_TITLE">
           <div class="tc-skilltable__head" role="row">
             <span role="columnheader">Skill</span>
             <span role="columnheader">调用</span>
@@ -242,7 +242,11 @@
             <span role="columnheader">输出</span>
             <span role="columnheader">均次 Token</span>
             <span role="columnheader">成本</span>
-            <span role="columnheader">占比</span>
+            <!-- 文案保持「占比」（表格契约锁定），口径用 title 说清：已定价按成本、未定价按 Token；
+                 导出 CSV 已拆成「Token占比% / 成本占比%」两列。 -->
+            <!-- 可见文案由 .tc-share-head 的伪元素补成「成本占比 / Token 占比」；
+                 DOM 文本保持「占比」（表头文案契约锁定），口径全称仍在 title。 -->
+            <span class="tc-share-head" role="columnheader" :aria-label="skillCostTotal > 0 ? '成本占比' : 'Token 占比'" title="已配置单价时按成本占比，未配置单价时按 Token 占比。导出 CSV 分列为 Token占比% / 成本占比%">占比</span>
           </div>
           <!-- EG19：整行可点下钻，键盘等价 tabindex + Enter/Space（此前 div role=row 无 tabindex，键盘不可达） -->
           <div
@@ -603,13 +607,14 @@ function exportCsv() {
         typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens), costSharePct(r.usd)].join(',')),
     '',
     '[用户用量排行]',
-    '用户,邮箱,调用,失败,Token,成本USD,占比%',
+    /* 表头已改「Token 占比」（成本另列），导出同步写全口径，避免同名列跨表不同义 */
+    '用户,邮箱,调用,失败,Token,成本USD,Token占比%',
     ...byUser.value.map((r) =>
       [esc(r.display), esc(r.email || ''), r.calls, r.failed, r.tokens,
         typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens)].join(',')),
     '',
     '[模型用量排行]',
-    '模型,调用,失败,Token,成本USD,占比%',
+    '模型,调用,失败,Token,成本USD,Token占比%',
     ...byModel.value.map((r) =>
       [esc(r.display), r.calls, r.failed, r.tokens,
         typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens)].join(',')),
@@ -818,7 +823,9 @@ function dayLabel(date: string): string {
    单柱 Token（蓝）—— 原型为「近 7 天成本趋势 · 单位：元」，但接口 trend 无分日金额，
    故不画金额/双柱系列；数值行给 Token，调用/失败数进 title 与卡尾 note。 */
 const trendMax = computed(() => Math.max(1, ...trend.value.map((d) => d.tokens)))
-const barPct = (v: number, max: number) => `${v > 0 ? Math.max(Math.round((v / max) * 100), 6) : 3}%`
+/* 2026-10-24：去掉 6% 最小柱高（极小值会被读成有量），零值归零；
+   1% 仅保证非零值在像素取整后仍有一丝可见高度。 */
+const barPct = (v: number, max: number) => (v > 0 ? `${Math.max(Math.round((v / max) * 100), 1)}%` : '0%')
 const todayKey = computed(() => {
   const n = new Date()
   const p = (x: number) => String(x).padStart(2, '0')
@@ -952,6 +959,10 @@ const trendCols = computed(() => trend.value.map((d) => ({
   color: var(--mk-faint);
 }
 .tc-skilltable__head > span:not(:first-child) { text-align: right; }
+/* 占比口径上屏（2026-10-24）：表头 DOM 文案因测试契约保持「占比」，
+   用伪元素补出「成本 / Token」，与导出 CSV 的两列同义。 */
+.tc-skilltable__head .tc-share-head::before { content: 'Token '; }
+.tc-skilltable--cost .tc-skilltable__head .tc-share-head::before { content: '成本'; }
 .tc-skilltable__row {
   /* 行高下限（审核 #115）：原 padding 7px 0 → 行高 35.6px < SPEC §3 的 40px；
      改 10px 0（对齐 .mk-table 的 10×16 口径），12.5px×1.65 + 20 + 1 ≈ 41.6px */

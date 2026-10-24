@@ -239,7 +239,7 @@
                            无内容时弱化「执行完成」——避免与级别列"成功"重复占位（原恒显"执行完成"零信息量）。
                            链路入口/复制已前移到 Trace 列（原型 renderObserve 的列位），本格只留消息 -->
                       <strong v-if="log.status === 'err'" class="exec-title exec-title--err" :title="log.title || log.detail">{{ log.title || log.detail }}</strong>
-                      <strong v-else-if="contentPreview(log)" class="exec-title exec-title--preview" :title="log.title">{{ contentPreview(log) }}</strong>
+                      <strong v-else-if="contentPreview(log)" class="exec-title exec-title--preview" :title="contentPreview(log)">{{ contentPreview(log) }}</strong>
                       <strong v-else class="exec-title exec-title--ok" :title="log.title">{{ log.title }}</strong>
                     </div>
                     <div class="exec-cell__line exec-cell__sub">
@@ -650,20 +650,16 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
 /* 成功调用的内容预览（消息列主行）：从契约层提取输出摘要，
    让列表行有信息量而非恒显「执行完成」（与状态列冗余）。
    优先级：extractedJson 的键列表 > normalizedOutput 摘要 > userPayload 摘要；均无则空（回落弱化「执行完成」）。 */
+/** 内容预览：返回单行全量文本，由 .exec-title 的 ellipsis 负责视觉截断（title 悬停看全）。
+ *  2026-10-24 修复：原在数据层硬切 32 字并补「…」，title 却挂的是「执行完成」——
+ *  截掉的部分无处可查；纯 JSON 键名预览（{"a":…}）无信息量，回落「执行完成」。 */
 function contentPreview(log: { traceId: string; agent: string }): string {
   const p = promptOf(log)
   if (!p) return ''
-  const json = p.extractedJson?.trim()
-  if (json) {
-    const keys = json.slice(0, 400).match(/"([^"]{1,24})"\s*:/g)
-    if (keys?.length) return keys.slice(0, 3).map((k) => k.replace(/["\s:]/g, '')).join(' · ')
-  }
   const out = p.normalizedOutput?.trim() || p.userPayload?.trim()
-  if (out) {
-    const oneLine = out.replace(/\s+/g, ' ').trim()
-    return oneLine.length > 32 ? `${oneLine.slice(0, 32)}…` : oneLine
-  }
-  return ''
+  if (!out) return ''
+  if (/^[{[]/.test(out)) return ''
+  return out.replace(/\s+/g, ' ').trim()
 }
 
 /* Tokens 列语义（P2）：传输层（agent_call_logs.promptTokens/completionTokens）优先——
@@ -1418,6 +1414,13 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .exec-table td { padding: 8px 13px; white-space: nowrap; }
 
 .exec-row--open { background: var(--mk-table-row-hover-bg); }
+/* 失败行层级（2026-10-24）：同一屏里失败行原先与成功行只差一枚红色状态词；
+   左缘 2px 红条给出扫读锚点，悬停/展开仍回常态底。 */
+.exec-row--err td:first-child { box-shadow: inset 2px 0 0 var(--mk-red); }
+.exec-row--err:not(.exec-row--open) { background: color-mix(in srgb, var(--mk-red) 3%, transparent); }
+/* 副行错误码降一档：错误摘要已在主行用红字说清，副行不再用同档红字与主行抢层级 */
+.exec-cell__sub .tline__errcode,
+.exec-cell__sub .tline__http { color: var(--mk-muted); font-weight: 500; }
 /* 连通性/探活测试行：弱化——审核 #103：原整行 opacity:.62 把正文对比度压到 2.46:1（AA 需 4.5:1），
    改为降一档文字色（--mk-faint-soft，亮/暗两档都在可读线以上），正文保持 ≥4.5:1；
    hover / 展开时回常态色，弱化语义不变 */
@@ -1538,9 +1541,10 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
 /* tokens 列主副行（批B） */
 .exec-tok { display: grid; gap: 2px; justify-items: start; }
 .exec-tok__num { font-variant-numeric: tabular-nums; font-weight: 600; }
+/* 耗时不在这里定颜色：.mk-latency--warn/--slow 的阈值色阶必须能生效
+   （2026-10-24 修复：本规则与 .mk-latency--* 同特异性且后加载，把琥珀/红压回灰） */
 .exec-dur {
   font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

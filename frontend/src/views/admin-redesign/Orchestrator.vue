@@ -108,9 +108,13 @@
             </div>
             <footer class="orch-odg-foot">
               <!-- 字段契约三态：未加载显「…」（不按 0 渲染——加载完成前「入 0」与「真无必填」不可分辨；
-                   部分阶段确无必填入参，加载后「入 0」属实） -->
-              <span class="orch-odg-chip orch-odg-chip--in" :title="contractOf(s.id).loaded ? contractTitle('in', contractOf(s.id).ins.length) : '字段契约加载中…'">入 {{ contractOf(s.id).loaded ? contractOf(s.id).ins.length : '…' }}</span>
-              <span class="orch-odg-chip orch-odg-chip--out" :title="contractOf(s.id).loaded ? contractTitle('out', contractOf(s.id).outs.length) : '字段契约加载中…'">出 {{ contractOf(s.id).loaded ? contractOf(s.id).outs.length : '…' }}</span>
+                   部分阶段确无必填入参，加载后「入 0」属实）。
+                   2026-10-24：计数单独一行，字段名另占一行并允许两行——不再用 nowrap+ellipsis
+                   把唯一字段信息裁成一条。 -->
+              <div class="orch-odg-counts">
+                <span class="orch-odg-chip orch-odg-chip--in" :title="contractOf(s.id).loaded ? contractTitle('in', contractOf(s.id).ins.length) : '字段契约加载中…'">入 {{ contractOf(s.id).loaded ? contractOf(s.id).ins.length : '…' }}</span>
+                <span class="orch-odg-chip orch-odg-chip--out" :title="contractOf(s.id).loaded ? contractTitle('out', contractOf(s.id).outs.length) : '字段契约加载中…'">出 {{ contractOf(s.id).loaded ? contractOf(s.id).outs.length : '…' }}</span>
+              </div>
               <span class="orch-odg-fields" :title="contractOf(s.id).outs.join(' · ')">{{ contractOf(s.id).outs.slice(0, 4).join(' · ') }}<template v-if="contractOf(s.id).outs.length > 4">…</template></span>
             </footer>
           </div>
@@ -952,10 +956,13 @@ html[data-theme='dark'] {
   flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px; cursor: grab;
   display: flex; align-items: flex-start;
 }
+/* 2026-10-24：画布纵向拉伸到滚动区高度，五列才能等高（原先各列按 Skill 条数自然高，
+   列脚上下错位）。同特异性后置覆盖，保持上方居中契约的源码形态。 */
+.orch-odg-scroll { align-items: stretch; }
 .orch-odg-scroll.is-panning,
 .orch-odg-scroll.is-panning .orch-odg-node { cursor: grabbing; }
 .orch-odg-canvas {
-  position: relative; display: flex; align-items: flex-start; gap: 100px;
+  position: relative; display: flex; align-items: stretch; gap: 100px;
   /* 2026-10-13 宽屏舒展：原「width: max-content + margin-inline: auto」在 4K 上五列只占
      ~1560（卡宽实测 3440 视觉 px），两侧各空约 700px。改为撑满滚动区，富余宽度由
      .orch-odg-col 的 flex-grow 摊给各列，节点与字段行随之变宽、更好读。
@@ -969,6 +976,8 @@ html[data-theme='dark'] {
   flex: none; margin: auto;
   width: 100%;
 }
+/* 只保留水平居中：纵向 auto 边距会吃掉 stretch，列高回到内容高（等高列脚见下） */
+.orch-odg-canvas { margin: 0 auto; }
 .orch-odg-svg {
   position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible;
   /* 覆盖 main.css 里 img/svg/video/canvas 的全局 max-width:100%（2026-10-21 用户「线的位置
@@ -1006,7 +1015,7 @@ html[data-theme='dark'] {
   margin-left: auto; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
   flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.orch-odg-body { display: flex; flex-direction: column; gap: 6px; }
+.orch-odg-body { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; }
 .orch-odg-node {
   display: grid; gap: 1px; width: 100%; padding: 8px 10px; text-align: left;
   border: 1px solid var(--mk-line, #e6ebf4); border-radius: var(--mk-radius-lg, 10px);
@@ -1024,7 +1033,13 @@ html[data-theme='dark'] {
   overflow-wrap: anywhere;
 }
 /* 审核 #117：.orch-odg-nodemeta 规则随节点内重复 agentId 一起删（列头已承接，类无消费者） */
-.orch-odg-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
+/* 列脚压到统一列底：margin-top:auto + 计数/字段分两行，字段名允许两行（不再 nowrap 硬切） */
+.orch-odg-foot {
+  margin-top: auto;
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+  padding-top: 2px;
+}
+.orch-odg-counts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .orch-odg-chip {
   font-size: var(--mk-fs-micro, 12px); padding: 1px 6px;
   border-radius: var(--mk-radius-sm, 6px);
@@ -1035,7 +1050,10 @@ html[data-theme='dark'] {
    绿系 chip 字色改绿深档，让「蓝=入参/交互、绿=产出」在字色层也成立 */
 .orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-green, #15803d); }
 .orch-odg-fields {
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+  /* 字段名是列脚唯一的信息，允许折两行；超长才省略，完整值仍在 title */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
   font-family: var(--mk-mono, Consolas, monospace);
   font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
 }

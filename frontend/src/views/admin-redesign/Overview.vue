@@ -74,10 +74,10 @@
           百分比 basis 对不确定宽度解析失败，行高按单行 48px 定死、第二行溢出被裁
           （2026-10-03 实测 gridTemplateRows 该行 48px / scrollHeight 87px）。
           块序对齐原型 1353-1398：pagehead → KPI 栅格 → statusbar → 教学闭环卡。 -->
-    <div class="mk-status ov-status--stack" :class="`mk-status--${data.tone}`">
+    <div class="mk-status ov-status--stack" :class="`mk-status--${statusTone}`">
       <div class="ov-row">
         <span class="mk-status__dot"></span>
-        <span class="mk-status__title">{{ health.headline }}</span>
+        <span class="mk-status__title">{{ statusHeadline }}</span>
         <!-- 结论行的 __sep 已撤（明细项搬到第二行后，分隔线右侧无内容可分隔——
              裸评审 2026-10-03 实测为悬空 1×13px 竖线残留） -->
         <!-- subline（今日调用/失败）与 KPI 前两卡完全重复，不进状态条——
@@ -161,8 +161,8 @@
                   v-if="s.failN"
                   type="button"
                   class="mk-badge mk-badge--sm mk-badge--bad loop__fail"
-                  title="生成失败的路径数"
-                  @click.stop="jumpToFailedPaths"
+                  :title="s.failScene === 'teaching-sessions' ? '评估失败次数' : '生成失败的路径数'"
+                  @click.stop="s.failScene ? jump(s.failScene) : jumpToFailedPaths()"
                 >失败 {{ s.failN }}</button>
               </span>
             </div>
@@ -230,6 +230,9 @@
               <!-- 只留主句：口径副行（健康中心 · 全量检查清单 / 按最近 200 条调用统计）
                    2026-10-22 用户「不要这种」已删，完整口径仍在 title -->
               <div class="todo-main">
+                <!-- 待办行首复用状态条 bad/warn 圆点（2026-10-24 视觉修复）：
+                     此前一行异常只靠文字，扫读时读不出「这条和状态条同一档告警」 -->
+                <span class="todo-dot" :class="`todo-dot--${t.tone === 'bad' ? 'bad' : t.tone === 'warn' ? 'warn' : 'muted'}`" aria-hidden="true"></span>
                 <span class="todo-text" :title="t.text">{{ t.main }}</span>
               </div>
               <!-- 动作默认文字链态（评审 2026-10-10）：整排同款胶囊按钮是视觉噪声，
@@ -311,7 +314,7 @@
               <span class="feedrow__time">{{ f.time }}</span>
               <div class="feedrow__grow">
                 <span class="t">{{ f.text }}</span>
-                <span class="d">{{ f.desc }}</span>
+                <span v-if="showFeedDesc(f)" class="d">{{ f.desc }}</span>
               </div>
             </div>
           </div>
@@ -394,7 +397,7 @@ type LoopExtraState = 'loading' | 'ready' | 'failed';
 const teachState = ref<LoopExtraState>('loading');
 const memState = ref<LoopExtraState>('loading');
 /** P2 异常→动作闭环：五环各接深链（跳目标页 scene），点击行为与 title 同步披露 */
-interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title?: string; scene: string; failN?: number; ringFailed?: boolean }
+interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title?: string; scene: string; failN?: number; ringFailed?: boolean; failScene?: string }
 const loopStages = computed<LoopStage[]>(() => {
   const d = data.value;
   const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
@@ -431,7 +434,13 @@ const loopStages = computed<LoopStage[]>(() => {
       // 口径（#3）：evalOk 是「最近 sampleSize 条 wrapup 日志」里的成功条数（结构上 ≤ sampleSize），
       // 与另外四环的全量口径不同源——数值必须带分母，否则与「320 待办 / 208 累计」并排会被读成漏斗塌陷
       name: '课后评估', meta: '产出与掌握度评估',
-      val: `${evalOk}/${d?.wrapup.sampleSize ?? 0} 次完成`, tone: 'done',
+      val: `${evalOk}/${d?.wrapup.sampleSize ?? 0} 次完成`,
+      // 视觉修复 2026-10-24：评估失败数 > 0 时阶段卡必须与「路径规划」同档转 alert，
+      // 不能继续绿框（同屏「失败 N」+ 绿色阶段卡会被读成互相矛盾）
+      tone: (d?.wrapup.evaluationFailed ?? 0) > 0 ? 'alert' : 'done',
+      failN: (d?.wrapup.evaluationFailed ?? 0) > 0 ? (d?.wrapup.evaluationFailed ?? 0) : undefined,
+      // 评估失败落在教学会话（不是路径失败）：失败徽章必须带自己的落点
+      failScene: 'teaching-sessions',
       title: `最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结中 ${evalOk} 次评估完成 · 失败 ${d?.wrapup.evaluationFailed ?? 0}`,
       scene: 'teaching-sessions',
     },
@@ -709,6 +718,35 @@ const simTitle = computed(() => {
   return parts.join(' · ')
 })
 
+/* 状态条结论取色 = 最差子项（调用结论 / 健康检查 / 仿真 / 今日失败）。
+   视觉修复 2026-10-24：此前结论色只跟调用成功率走，明细行却把 healthCheck 的
+   「1 项异常」染红——同一状态条绿点 + 红字互相矛盾。muted 只在所有子项都无读数时保留。 */
+const statusTone = computed<Tone>(() => {
+  const rank: Record<Tone, number> = { muted: 0, ok: 1, warn: 2, bad: 3 }
+  const tones: Tone[] = [health.value.tone]
+  if (healthState.value === 'ready' && healthCheck.value && (healthCheck.value.error > 0 || healthCheck.value.warn > 0)) {
+    tones.push(healthTone.value)
+  }
+  // 仿真「加载中 / 空闲」是 muted，不参与降级；只有已就绪且判定出 warn/bad 才计入
+  if (simTone.value !== 'muted') tones.push(simTone.value)
+  if (todayFailed.value > 0) tones.push('warn')
+  return tones.reduce<Tone>((worst, t) => (rank[t] > rank[worst] ? t : worst), 'muted')
+})
+/** 结论文案：健康清单有异常/需关注时把数量并入结论，避免「系统空闲」或「运行平稳」
+    与明细行的红/琥珀读数读成互相矛盾；结论本身已是「需要关注」时不重复追加。 */
+const statusHeadline = computed(() => {
+  const base = health.value.headline
+  if (!base || base.includes('需要关注')) return base
+  const hc = healthCheck.value
+  const reasons: string[] = []
+  if (healthState.value === 'ready' && hc) {
+    if (hc.error > 0) reasons.push(`${hc.error} 项异常`)
+    else if (hc.warn > 0) reasons.push(`${hc.warn} 项需关注`)
+  }
+  if (simTone.value === 'bad' && liveVirtualStatsLoaded.value) reasons.push('仿真需关注')
+  return reasons.length ? `${base}（${reasons.join(' · ')}）` : base
+})
+
 /* ===================== row3 第三卡：虚拟学习者看板 =====================
    与状态条的「仿真 ·」读数同源（live.ts 的 virtuals 域与运行统计域），本页 boot 时就已拉取。
    三态判定刻意与虚拟学习者页同一套（VirtualLearners.vue 的 statsState）：列表域失败必须并入，
@@ -924,6 +962,13 @@ function feedDesc(f: BriefData['feed'][number]): string {
   // 失败类别不再回填副行（2026-10-04 全站评审 P3）：标题括注「（调用方中止）」已把类别说了一次，
   // 副行「失败类别 · 调用方中止」属同屏双写——类别只在标题出现一次；副行回退可点提示
   return ''
+}
+/** 事件副行是否还有增量：标题（如「执行失败：路径规划（…）」）已经写出 Skill 名时，
+ *  副行「Skill · 路径规划」是逐字复读，不渲染；折叠成多条来源时（「a、b」）仍保留。 */
+function showFeedDesc(f: { text: string; desc: string }): boolean {
+  if (!f.desc) return false
+  const source = f.desc.replace(/^Skill · /, '').trim()
+  return !source || !f.text.includes(source)
 }
 function feedJump(f: { tone: string; errorCategory?: string }) {
   if (f.tone !== 'bad' && f.tone !== 'warn') return
@@ -1333,8 +1378,14 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 .rankrow__col-failed { width: 44px; text-align: right; color: var(--mk-faint); font-weight: 600; }
 /* 待处理事项行：单行主句，动作钮右对齐（口径副行 2026-10-22 已删） */
 .rankrow--todo { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 12px; }
-.todo-main { display: grid; gap: 1px; min-width: 0; }
+.todo-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* 待办行首状态点：与状态条 __dot 同色词汇（bad 红 / warn 琥珀 / 其余灰），
+   只为让「这一条属哪一档」与明细行一眼同源，不新增色值 */
+.todo-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--mk-faint); }
+.todo-dot--bad { background: var(--mk-red); }
+.todo-dot--warn { background: var(--mk-amber); }
 .todo-text {
+  min-width: 0;
   font-size: var(--mk-fs-micro); color: var(--mk-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }

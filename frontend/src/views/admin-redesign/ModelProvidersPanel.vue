@@ -184,7 +184,9 @@
           :aria-labelledby="selected.id === 'platform' ? 'mpp-tab-models' : undefined"
         >
           <div class="mpp-models__head">
-            <span class="mpp-sec">模型<span class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
+            <!-- 平台详情的页签已带「模型 N」，这里不再复读「模型 N 个」；
+                 自定义供应商没有模型页签，保留计数。 -->
+            <span class="mpp-sec">模型<span v-if="selected.id !== 'platform'" class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
             <span class="mpp-models__acts">
               <button
                 v-if="selected.endpointSource === 'own'"
@@ -942,9 +944,18 @@ defineExpose({ refresh })
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 5px 12px;
+  /* 2026-10-24：两栏行高统一 40px（原左栏 mk-link 有 4px 内衬、右栏徽章没有，
+     分隔线错位）；行高由 min-height 承担，padding-block 归零。 */
+  min-height: 40px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--mk-line);
   font-size: var(--mk-fs-micro);
+}
+/* 行内链接回到行文本档，不再用按钮内衬撑高行 */
+.mpp-fetch__row .mk-link {
+  padding: 0;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.5;
 }
 .mpp-fetch__row:last-child { border-bottom: 0; }
 .mpp-fetch__id { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

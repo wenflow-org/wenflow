@@ -176,8 +176,9 @@
                 <div class="mk-cell-main">
                   <strong :title="r.name">{{ r.name }}</strong>
                   <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
-                  <span class="mk-cell-subline">
-                    <span class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
+                  <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不复读；无副行内容时整行不占位 -->
+                  <span v-if="emailSubline(r.email, r.name) || r.isTestAccount" class="mk-cell-subline">
+                    <span v-if="emailSubline(r.email, r.name)" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
                     <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
                   </span>
                 </div>
@@ -304,6 +305,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import { emailSubline } from '@/components/mk/avatarName'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { useTableSort } from './useTableSort'
@@ -740,8 +742,9 @@ async function recomputeAll() {
 /* 学习者单元格（原型 celluser：头像 + 主行/副行 + 身份徽章，Users.vue ul-user 同款判例） */
 .lc-celluser { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .lc-celluser .mk-cell-main { min-width: 0; flex: 1; }
-.lc-celluser .mk-cell-sub { max-width: 230px; }
-.lc-task .mk-cell-sub { max-width: 240px; }
+/* 固定列宽下单元格自身就是截断边界，行内 max-width 再收一档只会更早截断 */
+.lc-celluser .mk-cell-sub { max-width: 100%; }
+.lc-task .mk-cell-sub { max-width: 100%; }
 /* 原型 .tbl td：nowrap（表自动布局判例见 Users.vue；长内容由上方 max-width 截断兜底）。
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class）。 */
 /* （原页头计数锚点 .mk-status__meta-link 的暗色覆盖随死状态条删除；
@@ -757,19 +760,41 @@ async function recomputeAll() {
 /* 趋势与疲劳同格（2026-10-22 合并列）：趋势在前、疲劳徽章贴后，读作一句状态 */
 .lc-status { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 
-.progress-title { font-weight: 600; }
-.risk-text { display: block; color: var(--mk-amber); font-size: var(--mk-fs-micro); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 主任务与风险摘要都是「一眼要读完」的句子：两行截断（title 仍有全文），
+   不再用单行 nowrap 把语义切成半句（2026-10-24 复核）。 */
+.lc-table .lc-task .progress-title {
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.risk-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--mk-amber);
+  font-size: var(--mk-fs-micro);
+  max-width: 100%;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 /* 固定列宽（2026-10-22 与教学组三表同判例）：学习者/当前进度/置信/风险四列在 auto 布局下
    按当页最长内容分宽（风险摘要曾把列撑到 180px 上限），翻页整表跳动；fixed 后按表头定死。
    宽度按 1280 现值校准并留余量，1200 档无横滚。 */
-.lc-c-learner { width: 165px; }
+/* 2026-10-24 视觉修复：趋势/置信/更新三列在多数行是短读数，把宽度让给学习者、当前进度
+   与风险摘要（风险文案此前 150px 内被 ellipsis 截成半句）；总宽基本不变避免 1280 横滚。 */
+.lc-c-learner { width: 170px; }
 @media (max-width: 1279px) { .lc-c-learner { width: 115px; } }
-.lc-c-progress { width: 140px; }
-.lc-c-status { width: 132px; }
-.lc-c-conf { width: 112px; }
-.lc-c-risk { width: 150px; }
-.lc-c-updated { width: 84px; }
-.lc-c-act { width: 125px; }
+.lc-c-progress { width: 205px; }
+.lc-c-status { width: 112px; }
+.lc-c-conf { width: 88px; }
+.lc-c-risk { width: 220px; }
+.lc-c-updated { width: 72px; }
+.lc-c-act { width: 108px; }
 /* fixed 档里列宽即契约：换行格 min-width 会把短内容顶出单元格 */
 .lc-table .mk-cell-text--wrap, .lc-table .mk-cell-main .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
 /* 更新列：相对时间不换行（"4 分钟前"拆行问题） */

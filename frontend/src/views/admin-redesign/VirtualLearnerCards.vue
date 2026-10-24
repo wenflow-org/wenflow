@@ -156,17 +156,19 @@
             <strong class="vlc-card__name" :title="cardName(c)">{{ cardName(c) }}</strong>
             <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
           </header>
-          <div class="vlc-card__key">{{ c.cardKey || '（无卡号）' }}</div>
+          <div v-if="showCardKey(c)" class="vlc-card__key">{{ c.cardKey }}</div>
           <p class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
           <div v-if="c.tags.length" class="vlc-card__tags">
             <!-- 2026-10-12 外部批评采纳：hash 指纹（46 字符）原样整串铺满卡宽、被 CSS 腰斩且
-                 无处看全值——显示截为 hash: + 前 8 位（够核对），完整值进 title；其余标签原样 -->
-            <span v-for="t in c.tags.slice(0, 3)" :key="t" class="mk-badge mk-badge--muted" :title="t">{{ tagText(t) }}</span>
+                 无处看全值——显示截为 hash: + 前 8 位（够核对），完整值进 title；其余标签原样。
+                 2026-10-24：版本标签移出标签流（见卡尾固定槽）。 -->
+            <span v-for="t in wallTags(c)" :key="t" class="mk-badge mk-badge--muted" :title="t">{{ tagText(t) }}</span>
             <span v-if="c.tags.length > 3" class="vlc-card__more" :title="c.tags.join(' · ')">+{{ c.tags.length - 3 }}</span>
           </div>
           <footer class="vlc-card__foot">
             <span class="vlc-card__level" :title="`知识水平：${c.knowledgeLevel}`">{{ levelText(c.knowledgeLevel) }}</span>
+            <span v-if="versionTagOf(c)" class="vlc-card__version" :title="`版本 ${versionTagOf(c)}`">{{ versionTagOf(c) }}</span>
             <span class="vlc-card__acts">
               <!-- 单卡创建入口（2026-10-18 用户走查「从卡库想创建一个虚拟学习者，为什么没有流程」）：
                    此前只有卡头那个无标签勾选框能到创建面板，运营读作「没有流程」。卡内放一枚动作，
@@ -467,6 +469,25 @@ function levelText(level: string): string {
     2026-10-14 #16：抽到 @/utils/shortHash 单源，卡详情 hero 同口径复用。 */
 const tagText = shortHashTag
 
+/* ===== 卡面去重与版本槽位（2026-10-24 视觉修复） =====
+   版本标签（v4 这类）原先混在 flex-wrap 的标签流里，换行后落在 hash 徽标旁，位置随卡宽漂移。
+   现把它提到卡尾固定槽位，标签流只放内容标签。 */
+const VERSION_TAG_RE = /^v\d+(?:\.\d+)*$/i
+function versionTagOf(c: CardWallEntry): string {
+  return c.tags.find((t) => VERSION_TAG_RE.test(t)) || ''
+}
+function wallTags(c: CardWallEntry): string[] {
+  return c.tags.filter((t) => !VERSION_TAG_RE.test(t)).slice(0, 3)
+}
+/** 卡号与内部 profileId 相同、或整面墙都是同一个卡号时，卡号行没有区分度，不渲染 */
+function showCardKey(c: CardWallEntry): boolean {
+  const key = (c.cardKey || '').trim()
+  if (!key) return false
+  if (key === c.profileId || key === c.userId) return false
+  const wall = cards.value
+  return !(wall.length > 1 && wall.every((x) => (x.cardKey || '').trim() === key))
+}
+
 /* ===== 选角 → 创建虚拟学习者（2026-10-16 卡=身份模板，卡库即身份池） ===== */
 /** 待创建的身份卡 id（卡墙勾选框 v-model） */
 const selected = ref<string[]>([])
@@ -668,6 +689,20 @@ onMounted(() => {
   margin-top: 2px;
 }
 .vlc-card__level { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 版本徽标固定槽位（2026-10-24）：紧贴知识水平、独立不换行，不再随标签流换行漂移；
+   margin-right:auto 把动作组压回右缘 */
+.vlc-card__version {
+  flex: none;
+  margin-right: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--mk-surface-3);
+  color: var(--mk-muted);
+  font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+}
 /* 页脚动作组：创建学习者（低频但此前无处可寻）与详情并排，右对齐 */
 .vlc-card__acts { display: inline-flex; align-items: center; gap: 10px; }
 .vlc-card__derive { font-size: var(--mk-fs-micro); font-weight: 700; }
