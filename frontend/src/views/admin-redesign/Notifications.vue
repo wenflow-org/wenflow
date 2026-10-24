@@ -378,7 +378,8 @@ async function reload() {
     items.value = (body.items || []).map((n: NotifRow) => ({ ...n, busy: false }))
     total.value = body.pagination?.total ?? items.value.length
     unreadTotal.value = body.unreadTotal ?? 0
-    emit('count', total.value)
+    // 角标只报未读（待办量），总数在卡头/分页器自报
+    emit('count', unreadTotal.value)
   } catch (e) {
     failed.value = true
     toast.error(`加载失败：${errMsg(e)}`)

@@ -203,8 +203,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useTableSort } from './useTableSort'
 import { timeAgo, errMsg } from './live'
 import { adminAchievementsApi, adminUsersApi, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
@@ -223,11 +223,33 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
-const achTab = ref<'defs' | 'records'>('defs')
-function switchAchTab(t: 'defs' | 'records') {
+/** 页签可寻址（2026-10-24）：宿主已占 ?tab=，子视图用 ?sub=defs|records。
+    「解锁记录」常被运维链接直指（如「谁拿了成就」），此前只能落到定义页再手点。
+    无 router 上下文（单测/独立挂载）时降级为纯组件内状态。 */
+const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.$router
+const achRoute = hasRouterCtx ? useRoute() : null
+const achRouter = hasRouterCtx ? useRouter() : null
+
+const achTab = ref<'defs' | 'records'>(achRoute?.query.sub === 'records' ? 'records' : 'defs')
+function applyAchTab(t: 'defs' | 'records') {
+  if (achTab.value === t) return
   achTab.value = t
   if (t === 'records' && !records.value.length && !recordsLoading.value) void reloadRecords()
 }
+/** URL 与页签双向：点击写 ?sub=（defs 为默认值，删键保持地址干净）；浏览器后退由 watcher 回放 */
+function switchAchTab(t: 'defs' | 'records') {
+  applyAchTab(t)
+  if (!achRoute || !achRouter) return
+  const cur = typeof achRoute.query.sub === 'string' ? achRoute.query.sub : ''
+  if (cur === (t === 'records' ? 'records' : '')) return
+  const query = { ...achRoute.query }
+  if (t === 'records') query.sub = 'records'
+  else delete query.sub
+  void achRouter.push({ query })
+}
+watch(() => achRoute?.query.sub, (v) => {
+  applyAchTab(v === 'records' ? 'records' : 'defs')
+})
 
 /* 页签键盘契约（审核 #167）：roving tabindex + 左右方向键循环切换并移动焦点 */
 const ACH_TABS = ['defs', 'records'] as const
@@ -510,6 +532,7 @@ defineExpose({ refresh: () => { void loadDefs(); void reloadRecords() } })
 
 onMounted(() => {
   void loadDefs()
+  if (achTab.value === 'records') void reloadRecords()
 })
 </script>
 

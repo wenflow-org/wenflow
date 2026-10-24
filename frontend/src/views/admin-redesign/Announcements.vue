@@ -221,7 +221,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, getCurrentInstance, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { intent } from './store'
 import {
   liveAnnouncements,
@@ -266,10 +267,6 @@ interface Row {
 
 
 const rows = computed<Row[]>(() => liveAnnouncements.value)
-/* 宿主域计数徽章（embedded 才消费）：公告数就绪/变化即上报 */
-watch(liveAnnouncements, (list) => {
-  emit('count', list.length)
-}, { immediate: true })
 
 /* live 拉取失败态：liveFailures 由 store 的 loadLiveData 填充（announcements 域失败时置位） */
 const liveFailed = ref(false)
@@ -278,7 +275,10 @@ const liveRetrying = ref(false)
 /* 客户端筛选：关键词 + 级别 + 状态（与学习者域列表页同形态） */
 const keyword = ref('')
 const severityFilter = ref('')
-const statusFilter = ref('')
+/* 深链预筛（2026-10-24）：运营待办「草稿公告 →」带 ?status=draft；无 router 上下文时降级为无筛选 */
+const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.$router
+const announceRoute = hasRouterCtx ? useRoute() : null
+const statusFilter = ref(announceRoute && typeof announceRoute.query.status === 'string' ? String(announceRoute.query.status) : '')
 
 /* 客户端排序：公告全量已在 live 层（拉全量 + 客户端分页），排序诚实。
    级别/状态按语义档位排（非字典序）；发布/过期按时间戳，空值由 useTableSort 恒排末尾。
@@ -373,6 +373,11 @@ const activeCount = computed(
   () => rows.value.filter((r) => r.status === 'published' && (!r.expiresAt || new Date(r.expiresAt).getTime() > Date.now())).length
 )
 const draftCount = computed(() => rows.value.filter((r) => r.status === 'draft').length)
+/** 宿主域计数徽章（embedded 才消费）：只报草稿数——角标位被读作待办量，
+    全部公告数在列表卡头自报。与运营待办的「草稿公告」同源。 */
+watch([draftCount, liveAnnouncements], () => {
+  emit('count', draftCount.value)
+}, { immediate: true })
 const archivedCount = computed(() => rows.value.filter((r) => r.status === 'archived').length)
 
 /* 操作 */

@@ -54,6 +54,7 @@ import { ref } from 'vue'
 import { errMsg } from './live'
 import { adminAxios } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
+import { askConfirm } from './useConfirm'
 
 /* 数据导出（原「系统工具」页 Tab2 整体迁入，2026-10-16）：多表 CSV 快照导出。
    各列表页有就地导出（导出本页/选中项），这里是「一次勾多张表打包拿快照」的唯一入口。 */
@@ -115,6 +116,20 @@ async function doExport(key: string) {
     与实时变的「已选 N 项」提示不一致（chips 现已随 exporting 禁用，快照是第二道保险）。 */
 async function runExport() {
   const keys = [...exportSel.value]
+  if (!keys.length) return
+  /* 导出口径写进确认框：勾选多表时用户未必记得「日志按行数、业务表固定 2 万条」的差异，
+     且导出文件含邮箱/IP 等个人数据，落盘前明确范围与用途。 */
+  const labels = keys.map((k) => exportDefs.find((d) => d.key === k)?.label || k)
+  const logKeys = keys.filter((k) => LOG_EXPORT_KEYS.has(k))
+  const ranges: string[] = []
+  if (logKeys.length) ranges.push(`日志类最近 ${logLimit.value} 行`)
+  if (keys.length > logKeys.length) ranges.push('业务表最近 20000 条')
+  const ok = await askConfirm({
+    title: '确认导出',
+    message: `将导出 ${labels.join('、')}（共 ${keys.length} 项，${ranges.join('，')}）。文件含账号联系方式与操作日志，请按数据安全规范保存。`,
+    confirmText: '开始导出',
+  })
+  if (!ok) return
   for (const key of keys) {
     if (exporting.value !== '') return
     await doExport(key)

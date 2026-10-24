@@ -41,14 +41,17 @@
          各视图计数以角标随页签呈现，形态同共享 MkSubTabs 的 count 角标） -->
     <div class="tabs" role="tablist" aria-label="运营中心视图切换" @keydown="onTabKeydown">
       <button type="button" class="tab" role="tab" id="oh-tab-todo" :ref="(el) => setTabRef(el, 0)" :tabindex="tab === 'todo' ? 0 : -1" aria-controls="oh-panel-todo" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span v-if="domainCount.feedback !== null" class="tab__count">{{ domainCount.feedback }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span v-if="domainCount.achievements !== null" class="tab__count" title="含虚拟学习者">{{ domainCount.achievements }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span v-if="domainCount.feedback !== null && domainCount.feedback >= 0" class="tab__count" title="待处理反馈数（可操作量）">{{ domainCount.feedback }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就</button>
       <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span v-if="announcePillCount !== ''" class="tab__count" :title="announcePillTitle">{{ announcePillCount }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span v-if="domainCount.inapp !== null" class="tab__count">{{ domainCount.inapp }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span v-if="domainCount.inapp !== null && domainCount.inapp >= 0" class="tab__count" title="未读通知数（可操作量）">{{ domainCount.inapp }}</span></button>
+      <!-- 域分界（2026-10-24）：左四是内容运营，右三是系统运维。两组动作的后果不同
+           （改文案 vs 重放事件/导数据/踢会话），用一条竖线把「谁来处理」分开。 -->
+      <span class="tabs__sep" aria-hidden="true"></span>
       <!-- 系统工具三页签（2026-10-16 由退役的「系统工具」场景整体迁入：运维工具/数据导出/会话安全） -->
-      <button type="button" class="tab" role="tab" id="oh-tab-tools" :ref="(el) => setTabRef(el, 5)" :tabindex="tab === 'tools' ? 0 : -1" aria-controls="oh-panel-tools" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-export" :ref="(el) => setTabRef(el, 6)" :tabindex="tab === 'export' ? 0 : -1" aria-controls="oh-panel-export" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-security" :ref="(el) => setTabRef(el, 7)" :tabindex="tab === 'security' ? 0 : -1" aria-controls="oh-panel-security" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span v-if="domainCount.security !== null" class="tab__count">{{ domainCount.security }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-tools" :ref="(el) => setTabRef(el, 5)" :tabindex="tab === 'tools' ? 0 : -1" aria-controls="oh-panel-tools" :aria-selected="tab === 'tools'" title="系统运维：失败事件重放与运维工具" @click="switchTab('tools')">运维工具</button>
+      <button type="button" class="tab" role="tab" id="oh-tab-export" :ref="(el) => setTabRef(el, 6)" :tabindex="tab === 'export' ? 0 : -1" aria-controls="oh-panel-export" :aria-selected="tab === 'export'" title="系统运维：全量数据导出" @click="switchTab('export')">数据导出</button>
+      <button type="button" class="tab" role="tab" id="oh-tab-security" :ref="(el) => setTabRef(el, 7)" :tabindex="tab === 'security' ? 0 : -1" aria-controls="oh-panel-security" :aria-selected="tab === 'security'" title="系统运维：在线会话与强制下线" @click="switchTab('security')">会话安全<span v-if="domainCount.security !== null && domainCount.security >= 0" class="tab__count" title="活跃会话数（可操作量）">{{ domainCount.security }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运营待办（原运营中心全量内容） ===== -->
@@ -281,7 +284,8 @@ async function refreshActive() {
     /* 页级读数带在 8 个页签都可见（2026-10-18），所以待办域始终可刷：
        todo / export 无本页签面板，直接刷读数带；其它页签在刷本面板之后再补一次待办域
        ——失败态下页头钮是「重试」，点它必须真的重拉读数带，不能刷成别的面板。 */
-    if (tab.value === 'todo' || tab.value === 'export' || wbHasError.value) await loadWorkbench()
+    /* 页级读数带常驻 8 个页签，任何页签刷新都要重拉它（2026-10-24 修「切走页签后读数带陈旧」） */
+    await loadWorkbench()
   } finally {
     refreshing.value = false
   }
@@ -300,9 +304,16 @@ watch(
 /** 切页签 + 写 URL。F5-3 审核：intent 直达必须与点页签同构——URL 才是可刷新/可复制/
     可后退的权威；原先 intent 路径只改 tab.value 不写 URL，地址栏停在 ?tab=todo
     （页面与地址栏脱节，刷新/复制链接回落「运营待办」）。单测可无 router 挂载，故访问保持可选 */
+/** 目标页签的 URL query：离开成就页签时清掉子页签键，避免残留 ?tab=feedback&sub=records */
+function queryFor(t: OhTab): Record<string, string | (string | null)[]> {
+  const q: Record<string, string | (string | null)[]> = { ...route?.query, tab: t }
+  if (t !== 'achievements') delete q.sub
+  return q
+}
 function switchTab(t: OhTab) {
   tab.value = t
-  if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+  // push：注释承诺「可后退」——从待办切到反馈后，后退应回待办而不是离开运营中心（2026-10-24）
+  if (route && router && route.query.tab !== t) void router.push({ query: queryFor(t) })
 }
 /** 同场景内的直达：切 tab 且把目的地视图的预筛一并写进 URL（单次 replace）。tab 取显式
     目标值——不用 route.query.tab，它此刻可能仍是旧值，会把 tab 写回去（F5-3 竞态根因）。 */
@@ -310,7 +321,7 @@ function openTabWith(t: OhTab, extra: Record<string, string>) {
   tab.value = t
   if (!route || !router) return
   const changed = route.query.tab !== t || Object.entries(extra).some(([k, v]) => route.query[k] !== v)
-  if (changed) void router.replace({ query: { ...route.query, ...extra, tab: t } })
+  if (changed) void router.push({ query: { ...queryFor(t), ...extra } })
 }
 /** 反馈筛选（?status=）→ URL：由宿主统一写（Feedback 上报筛选值），tab 取本层权威的
     tab.value——子组件自己写会用旧 route.query.tab 覆盖在途的 ?tab= replace（F5-3 竞态）。
@@ -498,13 +509,14 @@ const announcePillCount = computed(() => {
      「待访问」在中文里更像「有东西等我访问」，恰好读反——它只说计数还没拉。 */
   if (annFailed.value) return ''
   const embedded = domainCount.value.announce
-  if (embedded !== null && embedded > 0) return embedded
-  return ann.value.rows
+  /* 0 是「确认没有草稿」，不能因为 0 就回退成公告总数（2026-10-24：角标只报待办量） */
+  if (embedded !== null) return embedded
+  return ann.value.draft
 })
-/** 公告角标悬停说明：失败与未加载分开口径（数字态不给 title，避免复读） */
+/** 公告角标悬停说明：只报草稿（可操作量），全部公告数在公告页内自报 */
 const announcePillTitle = computed(() => {
   if (annFailed.value) return '公告列表加载失败，计数不可信，此处显示为占位'
-  return undefined
+  return '草稿公告数（可操作量）。全部公告数见公告页'
 })
 
 /* 状态面板：路径四态 + 公告三态（比例条 + 行式计数） */
@@ -590,10 +602,13 @@ function goContent() {
   }
   intent.scene = 'learning-paths'
 }
-/** 公告管理（运营中心 · 公告 tab） */
+/** 草稿公告 → 本页「公告」页签并预筛草稿（2026-10-24）：此前只设 intent 不切 tab，
+    点「去处理」停在运营待办；预筛进 URL，刷新/复制链接可复原。 */
 function goAnnouncements() {
   intent.tab = 'announce'
+  intent.statusFilter = 'draft'
   intent.scene = 'ops-hub'
+  openTabWith('announce', { status: 'draft' })
 }
 
 /* 默认进入即拉取待办聚合（公告计数由 live 层加载） */
@@ -606,6 +621,14 @@ onMounted(() => {
 /* ================= 宿主布局（tab 宿主：运营待办内滚；嵌入子页占满剩余高度） ================= */
 /* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
    （含 __count 角标，mk-primitives.css），本页不再私持拷贝。 */
+/* 内容运营 / 系统运维的域分界：竖线与页签底线同色，高度对齐文字行高 */
+.tabs__sep {
+  align-self: center;
+  width: 1px;
+  height: 14px;
+  margin: 0 8px;
+  background: var(--mk-line);
+}
 /* 待办 tab：内容在宿主 flex 列内独立滚动（页头/页签固定） */
 .oh-body {
   flex: 1 1 auto;

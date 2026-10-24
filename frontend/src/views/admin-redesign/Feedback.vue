@@ -298,9 +298,10 @@ const total = ref(0)
 const pendingCount = ref(0)
 const recent30 = ref<number | null>(null)
 
-/** 宿主域计数徽章（embedded 才消费）：总数就绪/变化即上报 */
-watch(total, (n) => {
-  emit('count', n)
+/** 宿主域计数徽章（embedded 才消费）：只报「待处理」——角标位天然被读作待办量，
+    此前报总数（含已解决/已忽略），与运营待办的「待处理反馈」不同源。 */
+watch([pendingCount, total], ([pending]) => {
+  emit('count', pending)
 }, { immediate: true })
 const keyword = ref('')
 const statusFilter = ref('')
