@@ -180,7 +180,7 @@ material-collector@4000 等）。maxTokens 是上限不是目标——抬高不�
 | 配置 | 位置 | 说明 |
 |---|---|---|
 | `AI_CACHE_SESSION_HEADER` | backend/.env | 设为通道要求的会话头名即启用亲和注入；删除或留空即关闭，无其他行为变化 |
-| skill 级路由（key/endpoint/model/参数/兜底） | admin → Skill 与提示词 → 模型路由 tab | 21 个链路技能统一（标准 key + deepseek-v4.1-flash）；覆盖率矩阵看「未配置=平台默认」高亮，批量套用带审计 |
+| skill 级路由（key/endpoint/model/参数/兜底） | admin → Skill 与提示词 → 页头「批量模型配置」（单技能在详情「运行时」） | 21 个链路技能统一（标准 key + deepseek-v4.1-flash）；覆盖率矩阵看「未配置=平台默认」高亮，批量套用带审计 |
 
 skill_model_configs 是运行时绑定层：路由（endpoint/key）、模型（tier/model/thinking/effort）、
 参数覆盖（paramOverrides：temperature/topP/maxTokens，逐字段继承/覆盖）、兜底链（fallbackChain，

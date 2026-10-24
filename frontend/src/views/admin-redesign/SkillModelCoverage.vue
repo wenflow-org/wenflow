@@ -1,10 +1,12 @@
 <template>
-  <!-- Skill × 模型 × 参数 × 备用模型 覆盖矩阵（2026-10-19：原「兜底」与同表列头「备用模型」同义不同词） -->
-  <div class="mk-card skc">
-    <!-- 原型 .card__head（title + sub）：卡头统一走 mk-card 词表 -->
-    <div class="mk-card__head">
+  <!-- Skill × 模型 × 参数 × 备用模型 覆盖矩阵（2026-10-19：原「兜底」与同表列头「备用模型」同义不同词）。
+       embedded：宿主（Skills.vue 的「批量模型配置」弹窗）已经给了面板与内衬，
+       这里不再套第二层卡壳，也不重复弹窗标题。 -->
+  <div :class="['skc', embedded ? 'skc--embedded' : 'mk-card']">
+    <!-- 原型 .card__head（title + sub）：独立成卡时走 mk-card 词表；嵌入时只留计数与搜索 -->
+    <div class="mk-card__head" :class="{ 'skc__head--flat': embedded }">
       <div>
-        <h3 class="mk-card__title">Skill 模型路由</h3>
+        <h3 v-if="!embedded" class="mk-card__title">Skill 模型路由</h3>
         <span class="mk-card__meta">
           <template v-if="isFiltered">命中 {{ visibleRows.length }} / 共 {{ rows.length }} 个技能</template>
           <template v-else>共 {{ rows.length }} 个技能</template>
@@ -176,6 +178,8 @@ import { useTableSort } from './useTableSort'
 const emit = defineEmits<{ (e: 'applied'): void; (e: 'open-skill', skillId: string): void }>()
 
 const props = withDefaults(defineProps<{
+  /** 嵌在宿主面板里（Skills.vue 的批量模型配置弹窗）：不渲染 mk-card 卡壳与自己的标题 */
+  embedded?: boolean
   /** skillId → 展示名（宿主从 Skill 目录映射；缺省回落到 skillId） */
   skillNames?: Record<string, string>
   /** skillId → 归属 Agent 文案（宿主从 Skill 目录映射） */
@@ -187,6 +191,7 @@ const props = withDefaults(defineProps<{
   recLoading?: boolean
   recError?: string
 }>(), {
+  embedded: false,
   skillNames: () => ({}),
   agentLabels: () => ({}),
   completion: () => ({}),
@@ -359,6 +364,11 @@ onMounted(load)
 <style scoped>
 /* 卡体：与 mk-card__head 的 16px 内边距同档 */
 .skc { display: grid; }
+/* 嵌入宿主面板（2026-10-24）：「批量模型配置」弹窗已给标题与内衬，这里不再套卡壳，
+   卡头只留计数与搜索，正文不再二次缩进 */
+.skc--embedded { min-width: 0; gap: 0; }
+.skc--embedded .skc__head--flat { padding: 0; border-bottom: 0; }
+.skc--embedded .skc__body { padding: 0; }
 .skc__body { display: grid; gap: var(--mk-space-3); padding: var(--mk-space-4); }
 /* 原型 .note：说明行（surface-2 底 + muted 小字） */
 .note {

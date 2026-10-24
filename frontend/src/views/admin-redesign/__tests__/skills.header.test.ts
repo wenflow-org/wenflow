@@ -102,7 +102,7 @@ async function mountSkills(live?: { profiles?: unknown[]; stats?: Record<string,
   } else {
     injectLiveData()
   }
-  const wrapper = mount(Skills, { global: { plugins: [router] } })
+  const wrapper = mount(Skills, { global: { plugins: [router], stubs: { teleport: true } } })
   await flushPromises()
   return wrapper
 }
@@ -250,7 +250,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
-  it('运行表补齐版本 / 路由模型 / 最近调用排序；模型路由页签只有一张表', async () => {
+  it('运行表补齐版本 / 路由模型 / 最近调用排序；批量模型配置弹窗只有一张表', async () => {
     localStorage.removeItem('wf_skills_sort')
     const w = await mountSkills()
     const runSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
@@ -260,14 +260,17 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     await versionTh!.find('button').trigger('click')
     expect(versionTh!.attributes('aria-sort')).toBe('descending')
 
-    const routingTab = w.findAll('.tabs .tab').find((t) => t.text() === '模型路由')
-    await routingTab!.trigger('click')
+    // 2026-10-24：原「模型路由」页签收进页头弹窗；弹窗内原「只读路由表 + 覆盖矩阵」
+    // 两张表已合成一张，只剩覆盖矩阵
+    const bulkBtn = w.findAll('.mk-pagehead__actions button').find((b) => b.text() === '批量模型配置')
+    await bulkBtn!.trigger('click')
     await flushPromises()
-    // 2026-10-24 去重：原「只读路由表 + 覆盖矩阵」两张表合成一张，只剩覆盖矩阵
-    expect(w.findAll('table')).toHaveLength(1)
-    const routingSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
+    const dialog = w.find('[role="dialog"]')
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.findAll('table')).toHaveLength(1)
+    const routingSortable = dialog.findAll('th.mk-th--sortable').map((t) => t.text())
     expect(routingSortable).toEqual(expect.arrayContaining(['Skill', '路由来源', 'model', '参数覆盖', '备用模型']))
-    const headers = w.findAll('th').map((t) => t.text())
+    const headers = dialog.findAll('th').map((t) => t.text())
     expect(headers).toEqual(expect.arrayContaining(['完成度']))
     w.unmount()
   })

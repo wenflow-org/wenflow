@@ -3,10 +3,12 @@
     <!-- 页头（newui/admin pagehead）：页名对齐原型（Skill 与提示词）+ 随 tab 切换的口径副文。
          2026-10-04 页头状态条退役：运行读数迁下方 MkKpi 卡带（仅 run 页签渲染）；
          「失败节点」不再单列——卡头「仅看需关注」pill 已带同源计数并承载筛选。
-         唯一页级动作 = Prompt 评估页签的「批量跑评估」（原 /admin/prompt-eval 页头动作随
-         场景下线上移至此，经面板 defineExpose 驱动）；run/模型路由页签仍无页级动作 -->
+         页级动作：Prompt 评估页签 = 「批量跑评估」（经面板 defineExpose 驱动）；
+         运行页签 = 「批量模型配置」（跨 Skill 对照/批量套用，2026-10-24 由独立的
+         「模型路由」页签收进弹窗——单技能配置在详情「运行时」里，本页只留跨技能工具） -->
     <MkPageHead title="Skill 与提示词" :sub="headSub">
       <template #actions>
+        <button v-if="tab === 'run'" type="button" class="mk-btn" @click="openBulk">批量模型配置</button>
         <!-- running：批量/试跑期间互斥禁用，防止并发多批真实 LLM 调用重复烧 token -->
         <button
           v-if="tab === 'prompt-eval'"
@@ -66,44 +68,8 @@
       />
     </section>
 
-    <!-- 模型路由页签的读数带（2026-10-14 用户评审：这 4 张此前塞在路由表所在的同一张卡里
-         （.sk-routing__top），读数与明细挤一个卡壳、还吃掉表格首屏——归位到页面级读数槽位，
-         与「Skill 运行」的读数带同一条槽位：页头之下、页签栏之上，明细卡只留小节头与表体。
-         前 3 张从 skills 列表 + coverage 派生（去重模型数 / 已路由 Skill 数 / 主模型覆盖占比）；
-         降级策略另读只读的 /admin/model-registry（llm-providers.json 的 fallbacks + 默认路由
-         解析），把「registry 默认」解析成实际链，拉不到显 — 不编造） -->
-    <section v-if="tab === 'model-routing'" class="mk-kpi-grid" aria-label="Skill 模型路由统计">
-      <MkKpi
-        label="承载模型"
-        :value="routeModelCount"
-        :title="routeModelTitle"
-      />
-      <MkKpi
-        label="已路由 Skill"
-        :value="routedSkillCount"
-        title="在模型覆盖里有生效路由的 Skill 数。与同屏「承载模型」「主模型覆盖」同源，未加载覆盖数据时显 —"
-      />
-      <!-- 2026-10-19 用户走查「hint 在报读数」：原副行是模型名（另一件事的当前值），
-           改成口径短语；模型名与覆盖数都在 title 长释里（primaryCoverageTitle）。
-           2026-10-21：口径短语也不再常驻卡面，统一进 title -->
-      <MkKpi
-        label="主模型覆盖"
-        :value="primaryCoverageText"
-        :title="primaryCoverageTitle"
-      />
-      <!-- 降级策略（原硬编码 value="自动" 删）：真实口径 = 自定义兜底链计数；无自定义链时
-           给出 registry 默认链的解析结果（F7-5：空数组=「无（空链）」，不再只回无信息的
-           「registry 默认」）。registry 未加载显 —，不伪装 -->
-      <MkKpi
-        label="降级策略"
-        :value="fallbackPolicyText"
-        :title="fallbackPolicyTitle"
-      />
-    </section>
-
-
     <!-- Prompt 评估页签的读数带（2026-10-15 用户走查「KPI 卡片位置不对」）：此前由面板
-         自己渲染（在页签栏之下），同一条槽位切页签就换位置；现与 run/模型路由同槽位。
+         自己渲染（在页签栏之下），同一条槽位切页签就换位置；现与 run 同槽位。
          面板为异步组件，chunk 未就绪时按 live 三态纪律显「…」，不落定 0。 -->
     <section v-if="tab === 'prompt-eval'" class="mk-kpi-grid" aria-label="Prompt 评估统计">
       <MkKpi
@@ -134,9 +100,10 @@
 
     <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签）：
-         Skill 运行 / 模型路由 / Prompt 评估。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
+         Skill 运行 / Prompt 评估。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
          三者本就是同一份报表的三刀，合一后独立成 /admin/health-center，侧栏落在「系统」组。
-         Prompt 评估 2026-10-04 由独立场景 /admin/prompt-eval 折入（内层用例/历史页签用 ?peTab=） -->
+         Prompt 评估 2026-10-04 由独立场景 /admin/prompt-eval 折入（内层用例/历史页签用 ?peTab=）。
+         模型路由 2026-10-24 退役：与 Skill 详情「运行时」重复，改为页头「批量模型配置」弹窗。 -->
     <div class="tabs skills-tabs" role="tablist" aria-label="Skill 视图切换" @keydown="onTabKeydown">
       <button
         v-for="(t, i) in SKILLS_TABS"
@@ -148,7 +115,7 @@
         :aria-selected="tab === t"
         :tabindex="tab === t ? 0 : -1"
         @click="switchTab(t)"
-      >{{ t === 'run' ? 'Skill 运行' : t === 'model-routing' ? '模型路由' : 'Prompt 评估' }}</button>
+      >{{ t === 'run' ? 'Skill 运行' : 'Prompt 评估' }}</button>
     </div>
     <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
     <template v-if="tab === 'run'">
@@ -405,27 +372,60 @@
     </div>
     </template>
 
-    <!-- ===== Tab2: 模型路由 =====
-         2026-10-24 用户「这个设计重复了吧」：原结构是「Skill 模型路由」只读表 + 下方
-         覆盖矩阵两张表，同一批 Skill、同一组模型/备用模型信息出现两次，还是卡中卡。
-         现只保留覆盖矩阵（筛选、排序、批量套用、下钻都在它身上），并把原只读表独有的
-         归属 Agent / 完成度 / 平台默认兜底链解析并进同一行。 -->
-    <SkillModelCoverage
-      v-if="tab === 'model-routing'"
-      :skill-names="skillNamesBySkill"
-      :agent-labels="agentLabelsBySkill"
-      :completion="completionBySkill"
-      :fallback-info="fallbackBySkill"
-      :rec-loading="recLoading"
-      :rec-error="recError"
-      @applied="refreshCoverage"
-      @open-skill="openDesign"
-    />
-
-    <!-- ===== Tab3: Prompt 评估（原 /admin/prompt-eval 独立场景，2026-10-04 折入；旧 URL 走
+    <!-- ===== Prompt 评估（原 /admin/prompt-eval 独立场景，2026-10-04 折入；旧 URL 走
          router 重定向 ?tab=cases|runs → ?peTab=）。内层 评估用例/评估历史 页签寻址用 ?peTab=
          （宿主 ?tab= 归本页页签所有，不共键）；主操作「批量跑评估」在宿主页头（pePanel ref 驱动） -->
     <PromptEvalPanel v-else-if="tab === 'prompt-eval'" ref="pePanel" />
+
+    <!-- ===== 批量模型配置（2026-10-24 用户「这个页面和 Skill 内部运行时重复了」）=====
+         跨 Skill 的对照表与批量套用不属于「点开某一个 Skill」的流程，但也不该再占一个
+         一级页签：同一份模型/参数/备用链在详情「运行时」里已经能逐项改。收进页头弹窗，
+         页签只留运行与评估；旧 ?tab=model-routing 深链由路由监听打开本弹窗。 -->
+    <Teleport to="body">
+      <div v-if="bulkOpen" ref="bulkMaskRef" class="mk-modal">
+        <div
+          ref="bulkPanelRef"
+          class="mk-modal__panel skills-bulk"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="skills-bulk-title"
+        >
+          <div class="mk-modal__head">
+            <h3 id="skills-bulk-title" class="mk-modal__title">批量模型配置</h3>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="bulkOpen = false">✕</button>
+          </div>
+          <div class="mk-modal__body">
+            <p class="skills-bulk__intro">跨 Skill 对照生效模型与备用模型，或把同一份接入配置套用到多个 Skill。单个 Skill 的模型与参数在它自己的「运行时」页签里修改。</p>
+            <!-- 读数带（原「模型路由」页签的页面级读数槽位）：前 3 张从 skills 列表 +
+                 coverage 派生（去重模型数 / 已路由 Skill 数 / 主模型覆盖占比）；降级策略另读
+                 只读的 /admin/model-registry，把「registry 默认」解析成实际链，拉不到显 — 不编造 -->
+            <section class="mk-kpi-grid" aria-label="Skill 模型路由统计">
+              <MkKpi label="承载模型" :value="routeModelCount" :title="routeModelTitle" />
+              <MkKpi
+                label="已路由 Skill"
+                :value="routedSkillCount"
+                title="在模型覆盖里有生效路由的 Skill 数。与同屏「承载模型」「主模型覆盖」同源，未加载覆盖数据时显 —"
+              />
+              <MkKpi label="主模型覆盖" :value="primaryCoverageText" :title="primaryCoverageTitle" />
+              <!-- 降级策略：真实口径 = 自定义兜底链计数；无自定义链时给出 registry 默认链的
+                   解析结果（F7-5：空数组=「无（空链）」）。registry 未加载显 —，不伪装 -->
+              <MkKpi label="降级策略" :value="fallbackPolicyText" :title="fallbackPolicyTitle" />
+            </section>
+            <SkillModelCoverage
+              embedded
+              :skill-names="skillNamesBySkill"
+              :agent-labels="agentLabelsBySkill"
+              :completion="completionBySkill"
+              :fallback-info="fallbackBySkill"
+              :rec-loading="recLoading"
+              :rec-error="recError"
+              @applied="refreshCoverage"
+              @open-skill="openSkillFromBulk"
+            />
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -433,6 +433,7 @@
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
+import { useMaskClose, useOverlay } from './useOverlay'
 import { useRoute, useRouter } from 'vue-router'
 import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
 import { skillStatOf, isLive, intent, investigateAgent, openSubPage } from './store'
@@ -454,11 +455,10 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import SkillModelCoverage from './SkillModelCoverage.vue'
 import { adminSkillsApi, adminApiConfigApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
-/* ================= 宿主：Skill 运行 · 模型路由 · Prompt 评估（原 5 tab，健康中心 2026-09-29
-   独立成页；Prompt 评估 2026-10-04 由 /admin/prompt-eval 场景折入，Skill 组侧栏 3→2） =================
-   健康中心由独立场景折入本宿主 tab（侧栏 15→14 项）；?tab= 双向同步，深链/刷新/前进后退可寻址；
-   唯一 tab 控件 = 本行页签（健康中心内不再嵌套 pills，R1）。 */
-const SKILLS_TABS = ['run', 'model-routing', 'prompt-eval'] as const
+/* ================= 宿主：Skill 运行 · Prompt 评估（模型路由不再单独占页签：
+   2026-10-24 用户「这个页面和 Skill 内部的运行时重复了」——路由是 Skill 的属性，
+   单技能配置在详情「运行时」里改，跨 Skill 对照与批量套用收进页头「批量模型配置」弹窗） ================= */
+const SKILLS_TABS = ['run', 'prompt-eval'] as const
 type SkillsTab = (typeof SKILLS_TABS)[number]
 
 /* 对账三态与空态文案单源：表格视图与原型卡视图各渲染一份（R6 复读单源化） */
@@ -501,6 +501,22 @@ function openDesign(id: string) {
 
 /** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页；只认现役 tab，其余回落 run */
 const RETIRED_TABS = new Set(['health', 'drift', 'recon'])
+/** 旧「模型路由」页签 → 页头弹窗（旧书签/旧文档链接不失效） */
+const LEGACY_ROUTING_TAB = 'model-routing'
+const bulkOpen = ref(false)
+const bulkPanelRef = ref<HTMLElement | null>(null)
+const bulkMaskRef = ref<HTMLElement | null>(null)
+useEscape(() => bulkOpen.value, () => { bulkOpen.value = false })
+useOverlay(computed(() => bulkOpen.value), bulkPanelRef)
+useMaskClose(bulkMaskRef, () => { bulkOpen.value = false })
+function openBulk() {
+  bulkOpen.value = true
+}
+/** 弹窗里点 Skill 名 → 关掉弹窗再进详情（覆盖层不叠在子页之上；落点是同一个详情页） */
+function openSkillFromBulk(id: string) {
+  bulkOpen.value = false
+  openDesign(id)
+}
 const toHealthCenter = (extra: Record<string, string> = {}) =>
   void router.replace({ path: '/admin/health-center', query: extra })
 
@@ -511,6 +527,13 @@ watch(
       // 老书签 / 旧文档链接：/admin/skills?tab=health → /admin/health-center（?recon=/?diff= 等定位参数一并带走）
       const { tab: _drop, ...rest } = route.query as Record<string, string>
       toHealthCenter(rest)
+      return
+    }
+    // 旧「模型路由」页签：落到运行列表并打开页头弹窗，地址收敛为 ?tab=run
+    if (t === LEGACY_ROUTING_TAB) {
+      tab.value = 'run'
+      openBulk()
+      if (route && router) void router.replace({ query: { ...route.query, tab: 'run' } })
       return
     }
     const v = typeof t === 'string' && (SKILLS_TABS as readonly string[]).includes(t) ? (t as SkillsTab) : null
@@ -525,14 +548,12 @@ function switchTab(t: SkillsTab) {
 }
 /* 页签 ARIA 契约（#75）：roving tabindex + 方向键/Home/End（此前只有 role 与点击） */
 const { setTabRef, onTabKeydown } = useTablistKeyboard(SKILLS_TABS, tab, switchTab)
-/* 页头副文（原型 1698）：随 tab 切换口径——运行=目录/版本/提示词，模型路由=路由与降级策略，
+/* 页头副文（原型 1698）：随 tab 切换口径——运行=目录/版本/提示词，
    Prompt 评估=用例集与历史运行（沿原独立页副文） */
 const headSub = computed(() =>
-  tab.value === 'model-routing'
-    ? 'Skill 的模型路由与降级策略'
-    : tab.value === 'prompt-eval'
-      ? '提示词质量评测 · 用例集与历史运行'
-      : 'Skill 目录、版本与提示词管理（全量注册，含未上线与停用）'
+  tab.value === 'prompt-eval'
+    ? '提示词质量评测 · 用例集与历史运行'
+    : 'Skill 目录、版本与提示词管理（全量注册，含未上线与停用）'
 )
 /* 跨页深链：intent.tab 指向退役 tab（旧调用方还在传 health/drift/recon）也改投独立页 */
 watch(
@@ -918,14 +939,12 @@ onMounted(() => {
   // live 层未透出这两组字段，本页按原型列结构自取（只读数据源，不改 live.ts）
   void refreshSkillMeta()
   void refreshCoverage()
-  // registry 兜底链（/admin/model-registry）：只在模型路由页签需要，进入该页签才拉（懒加载）
-  if (tab.value === 'model-routing') void refreshRegistry()
 })
 
-/* 切到模型路由页签时懒加载 registry（deep-link 进入由 onMounted 覆盖）；
-   拉取失败（registryReady 仍 false）时下次切回该页签自动重试 */
-watch(tab, (t) => {
-  if (t === 'model-routing' && !registryReady.value) void refreshRegistry()
+/* 弹窗里的「备用模型」列依赖 registry 兜底链（/admin/model-registry）：懒加载，
+   打开时才拉；拉取失败（registryReady 仍 false）时下次打开自动重试 */
+watch(bulkOpen, (open) => {
+  if (open && !registryReady.value) void refreshRegistry()
 })
 
 /** 完成度五档色标（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐） */
@@ -1163,7 +1182,7 @@ function agentLabelOf(s: { agentId: string; agentName?: string }): string {
   return s.agentName || s.agentId || '工具类'
 }
 
-/* ---- 路由页签 4 metricCard 派生（前 3 张来自 cards + coverage；降级策略另用 registry 解析） ---- */
+/* ---- 批量模型配置弹窗的 4 张读数（原「模型路由」页签 KPI 带）---- */
 /** 有生效路由标签的 Skill（含「平台默认」桶）；未加载 coverage 时为空 */
 const routingLabels = computed(() =>
   coverageReady.value
@@ -1261,11 +1280,16 @@ const fallbackPolicyTitle = computed(() => {
 </script>
 
 <style scoped>
-/* ================= 宿主布局（tab 宿主：运行 tab 内滚；模型路由 tab 自管） ================= */
+/* ================= 宿主布局（tab 宿主：运行 tab 内滚；评估面板自管） ================= */
 /* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
    （mk-primitives.css），本页不再私持拷贝。 */
 
 /* 列表视图（行可点：cursor/行内焦点环由共享 .mk-table--click 提供，不再私持拷贝） */
+/* 批量模型配置弹窗（2026-10-24）：对照表 + 套用表单列多，走宽档面板；
+   body 允许内部横滚，不让宽表把面板撑破 */
+.skills-bulk { width: min(var(--mk-modal-w-wide-xxl, 1160px), 100%); }
+.skills-bulk .mk-modal__body { min-width: 0; }
+.skills-bulk__intro { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 统计刷新失败条：卡内位置 + 不参与 fill 伸缩 */
 .sk-live-err { flex: none; margin: 10px 16px 0; }
 /* #107：默认排序口径说明（与「清除筛选」同排的弱化小字） */
@@ -1369,7 +1393,6 @@ const fallbackPolicyTitle = computed(() => {
 }
 
 /* 工具条「归属 Agent」label（原型 toolbar 1667）：12px 重字，与下拉同排 */
-/* 模型路由页签 2026-10-24 起只有覆盖矩阵一张卡，原路由表/矩阵的嵌套与分界样式退役 */
 
 /* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17，3600 ≈×1.3） */
 @media (min-width: 2000px) {

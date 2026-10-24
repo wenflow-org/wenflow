@@ -9,7 +9,7 @@
     <span class="mk-alert__msg">{{ runningInfo || '评估运行中…' }}</span>
   </div>
   <!-- KPI 带 2026-10-15 迁回宿主读数槽位（用户走查「位置不对」）：宿主 Skills 的槽位是
-       「页头之下、页签栏之上」（Skill 运行 / 模型路由两条带都在那），本带此前留在面板根片段里
+       「页头之下、页签栏之上」（Skill 运行 / Prompt 评估两条带都在那），本带此前留在面板根片段里
        即落在页签栏之下——同页签切一下读数带就换位置。现由宿主 v-if="tab==='prompt-eval'" 渲染，
        数据经 defineExpose 的 kpiView 供出（与 runBatch 同法）。 -->
 
