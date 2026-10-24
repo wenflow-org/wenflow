@@ -65,9 +65,9 @@ export const authAPI = {
 
   // 认证API
   // 忘记密码 / 重置密码
-  async forgotPassword(name: string): Promise<unknown> {
+  async forgotPassword(name: string): Promise<{ message?: string; mailDeliveryAvailable?: boolean }> {
     const response = await api.post('/auth/forgot-password', { name });
-    return unwrapAuthPayload<unknown>(response);
+    return unwrapAuthPayload<{ message?: string; mailDeliveryAvailable?: boolean }>(response) || {};
   },
 
   async resetPassword(token: string, newPassword: string): Promise<unknown> {

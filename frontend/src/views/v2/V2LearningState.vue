@@ -272,7 +272,7 @@
 
             <!-- 主次双按钮（原型 wf-advisory__actions）：采用建议 = primary 蓝渐变，保持原计划 = ghost。
                  调整策略禁用 replan 时「采用建议」禁用并在下方给原因 -->
-            <div class="advisory__actions">
+            <div v-if="hasKpiData && hasAdvisoryAction" class="advisory__actions">
               <button
                 type="button"
                 class="adv-btn adv-btn--primary"
@@ -282,7 +282,7 @@
               >采用建议</button>
               <button type="button" class="adv-btn adv-btn--ghost" :disabled="replanBusy" @click="keepSuggestion">保持原计划</button>
             </div>
-            <p v-if="adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，「采用建议」暂不可用。</p>
+            <p v-if="hasKpiData && hasAdvisoryAction && adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，「采用建议」暂不可用。</p>
             <!-- 回执行（原型 wf-advisory__done）：采用 / 保持成功后就地播报，不靠 toast 一次性带过 -->
             <p v-if="advisoryDone" class="advisory__done" role="status">{{ advisoryDone }}</p>
 
@@ -1359,6 +1359,12 @@ const guideActions = computed(() => {
     })
     .slice(0, 1);
 });
+
+/** 有可执行的待确认调整或今日动作时才显示主次按钮；
+    空态下按钮点了没有落点，只会让用户怀疑“点了没反应”。 */
+const hasAdvisoryAction = computed(() =>
+  pendingAdjust.value.length > 0 || guideActions.value.length > 0
+);
 
 /* 预警行（skill 模式下追加展示） */
 const warningRows = computed(() =>

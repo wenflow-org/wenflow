@@ -91,6 +91,11 @@ describe('V2LearningState 中文指标标签（P3-3）', () => {
     expect(w.find('.ff-legend').text()).toContain('状态');
   });
 
+  it('没有可执行建议时不渲染「采用建议 / 保持原计划」按钮', async () => {
+    const w = await mountState([{ startTime: new Date().toISOString(), durationMinutes: 30 }]);
+    expect(w.find('.advisory__actions').exists()).toBe(false);
+  });
+
   it('三档阈值口径收进指标说明（精力充沛/最优训练区/需要休息）——ff-zones 行已删（2026-09-27 降噪）', async () => {
     const w = await mountState([{ startTime: new Date().toISOString(), durationMinutes: 30 }]);
     const legend = w.find('.legend');

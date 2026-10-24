@@ -678,7 +678,7 @@ function resetToEntry() {
     「恢复失败，点这里重试」按钮承接，不重复弹 */
 function resumeFromRoute(cid: string) {
   void live.resumeById(cid).then((ok) => {
-    if (!ok && !live.hasSession()) toast.error('原会话未能恢复，已为你开启新对话');
+    if (!ok && !live.hasSession()) toast.error('原会话未能恢复，请从最近会话重试或开始新规划');
   });
 }
 

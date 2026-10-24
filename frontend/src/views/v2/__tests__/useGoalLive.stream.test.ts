@@ -88,6 +88,34 @@ describe('useGoalLive 流式渐进渲染', () => {
     expect(live.messages.some((m) => m.role === 'ai' && m.content === '官方回复')).toBe(true);
   });
 
+  it('恢复信封缺少 conversationId 时仍沿用请求的会话 id，避免下一条消息新建会话', async () => {
+    apiMock.streamStartGoalConversation.mockClear();
+    apiMock.streamReplyGoalConversation.mockClear();
+    apiMock.getGoalConversation.mockResolvedValueOnce(makeEnvelope({
+      internal: {
+        core: { stage: 'understanding', confidence: 0.5, isCompleted: false },
+        ext: { goalConversation: { understanding: {}, quickReplies: [] } }
+      }
+    }));
+    const live = useGoalLive();
+    live.reset();
+
+    await expect(live.resumeById('gc_old')).resolves.toBe(true);
+    expect(live.conversationId).toBe('gc_old');
+
+    apiMock.streamReplyGoalConversation.mockResolvedValueOnce(makeEnvelope({
+      internal: {
+        core: { conversationId: 'gc_old', stage: 'understanding', confidence: 0.5, isCompleted: false },
+        ext: { goalConversation: { understanding: {}, quickReplies: [] } }
+      }
+    }));
+    await live.send('继续');
+    expect(apiMock.streamReplyGoalConversation).toHaveBeenCalledWith(
+      'gc_old', '继续', expect.anything(), expect.anything()
+    );
+    expect(apiMock.streamStartGoalConversation).not.toHaveBeenCalled();
+  });
+
   it('恢复最近会话遇到 404 时暴露归属/失效状态，供入口页安全移除旧链接', async () => {
     apiMock.getGoalConversation.mockRejectedValueOnce({ status: 404, message: '对话会话不存在' });
     const live = useGoalLive();

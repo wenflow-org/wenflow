@@ -74,6 +74,11 @@
         <p v-if="!kpiLoading && kpi.streak === 0" class="profile-kpis__note">
           当天新开始的任务在产生有效学习时长后，才计入连续天数与掌握进度。
         </p>
+        <!-- 「—」不能既表示 0 又表示没加载出来：失败时给明确说明与重试入口 -->
+        <p v-if="!kpiLoading && kpiFailed" class="profile-kpis__note profile-kpis__note--warn" role="status">
+          部分统计暂时不可用。
+          <button type="button" class="profile-kpis__retry" @click="loadKpis">重试</button>
+        </p>
 
         <!-- 快捷入口列表卡（原型 wf-list 同构） -->
         <section class="uc-card">
@@ -133,8 +138,11 @@ const userStore = useUserStore()
 const kpi = ref<{ streak?: number; achievements?: number; mastery?: number }>({})
 /** 三源全部 settle 前显示骨架（失败也算 settle，仍落「—」） */
 const kpiLoading = ref(true)
+/** 任一统计源失败：给「暂时不可用 + 重试」，避免「—」被读成 0 */
+const kpiFailed = ref(false)
 
 async function loadKpis() {
+  kpiFailed.value = false
   try {
     try {
       const res = await request.get('/users/me/sessions', { params: { limit: 500 } })
@@ -146,17 +154,17 @@ async function loadKpis() {
         minutesByDate.set(key, (minutesByDate.get(key) ?? 0) + (typeof s.durationMinutes === 'number' ? s.durationMinutes : 0))
       }
       kpi.value.streak = computeStreakDays(minutesByDate)
-    } catch { /* 静默：KPI 缺数好过卡报错 */ }
+    } catch { kpiFailed.value = true }
     try {
       const res = await request.get('/achievements/all')
       const items = unwrapArray<{ unlocked?: boolean }>(res)
       kpi.value.achievements = items.filter((a) => a.unlocked).length
-    } catch { /* 静默：KPI 缺数好过卡报错 */ }
+    } catch { kpiFailed.value = true }
     try {
       const graph = (await learningAPI.getConceptGraph()) as { nodes?: Array<{ stability?: string | null }> } | null
       const nodes = Array.isArray(graph?.nodes) ? graph!.nodes! : []
       kpi.value.mastery = nodes.filter((n) => n.stability === 'stable').length
-    } catch { /* 静默 */ }
+    } catch { kpiFailed.value = true }
   } finally {
     kpiLoading.value = false
   }
@@ -376,6 +384,17 @@ async function handleSaveName() {
   font-size: 12px;
   line-height: 1.6;
   color: var(--faint);
+}
+.profile-kpis__note--warn { color: var(--amber-ink, var(--ink)); }
+.profile-kpis__retry {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue-deep);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* 骨架态：保高与出数态一致（避免出数时卡片跳动），骨架撑满卡宽 */

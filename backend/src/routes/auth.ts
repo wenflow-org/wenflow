@@ -23,6 +23,7 @@ import {
   IpRegisterQuotaExceededError,
   DEFAULT_IP_DAILY_QUOTA,
 } from '../services/auth/register-quota.service';
+import { isPasswordResetMailDeliveryAvailable } from '../services/auth/password-reset-mailer';
 
 const router = express.Router();
 
@@ -520,7 +521,9 @@ router.post('/forgot-password', forgotPasswordLimiter, async (req, res, next) =>
     res.status(200).json({
       success: true,
       data: {
-        message: '如果该用户名存在，重置链接已发送（当前开发环境请在后端日志中查看）'
+        message: '如果该用户名存在，重置链接已发送（当前开发环境请在后端日志中查看）',
+        // 让前端区分“真的发了邮件”与“只生成了链接”；console provider 下不能承诺收信。
+        mailDeliveryAvailable: isPasswordResetMailDeliveryAvailable(),
       }
     });
   } catch (error: any) {
