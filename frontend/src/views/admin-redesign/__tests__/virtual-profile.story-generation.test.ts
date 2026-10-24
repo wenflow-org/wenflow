@@ -12,6 +12,7 @@ import { defineComponent, nextTick } from 'vue'
 const h = vi.hoisted(() => ({
   stories: [] as Record<string, unknown>[],
   draft: vi.fn(async () => ({ data: {} })),
+  projectionToken: vi.fn(async () => ({ data: { data: { token: 'pt_test' } } })),
 }))
 
 const { apiObject } = vi.hoisted(() => ({
@@ -44,7 +45,10 @@ vi.mock('../live', async () => {
   }
 })
 vi.mock('@/api/adminApi', () => ({
-  adminVirtualLearnersApi: apiObject({ draftVirtualLearnerStories: h.draft }),
+  adminVirtualLearnersApi: apiObject({
+    draftVirtualLearnerStories: h.draft,
+    createProjectionToken: h.projectionToken,
+  }),
   adminLearnerModelsApi: apiObject({}),
 }))
 
@@ -105,6 +109,7 @@ beforeEach(() => {
       storyOutline: '二模理综又没做完。',
       status: 'completed',
       misdiagnosis: '以为是熟练度不够，其实是用时策略问题。',
+      projection: { formal: { goal: '/learning/goal?gc=1', path: '/learning/path?lp=1', learning: '/learning/task?t=1' } },
     },
     { storyId: 's2', storyTitle: '化学实验题的陷阱', status: 'pending' },
   ]
@@ -183,6 +188,48 @@ describe('故事池列表', () => {
     expect(dialog.exists()).toBe(true)
     expect(dialog.text()).toContain('易误诊')
     expect(dialog.text()).toContain('用时策略问题')
+    w.unmount()
+  })
+})
+
+describe('故事菜单 → 真实前台（2026-10-24 用户「对应的功能无法运行」）', () => {
+  async function clickProjectionItem() {
+    const w = await mountStories()
+    await w.findAll('.vp-story .mk-menu__btn')[0].trigger('click')
+    await nextTick()
+    const item = w.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '看真实目标对话')!
+    await item.trigger('click')
+    return w
+  }
+
+  it('先同步开窗再取 token，成功后导航（避免 await 后弹窗被拦截）', async () => {
+    const fakeWin = {
+      opener: null as unknown,
+      document: { title: '', body: { textContent: '' } },
+      location: { replace: vi.fn() },
+      close: vi.fn(),
+    }
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(fakeWin as unknown as Window)
+    h.projectionToken.mockClear()
+    const w = await clickProjectionItem()
+    // window.open 必须在 await 之前调用，否则浏览器不认作用户手势
+    expect(openSpy).toHaveBeenCalledWith('', '_blank')
+    await flushPromises()
+    expect(h.projectionToken).toHaveBeenCalledWith('p1', { scope: 'dashboard' })
+    expect(fakeWin.opener).toBeNull()
+    expect(fakeWin.location.replace).toHaveBeenCalledWith('/learning/goal?gc=1')
+    openSpy.mockRestore()
+    w.unmount()
+  })
+
+  it('开窗被拦截 → 直接提示，不再签发 token', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    h.projectionToken.mockClear()
+    ;(toast.error as unknown as ReturnType<typeof vi.fn>).mockClear()
+    const w = await clickProjectionItem()
+    expect(h.projectionToken).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('拦截'))
+    openSpy.mockRestore()
     w.unmount()
   })
 })

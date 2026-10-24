@@ -2451,6 +2451,21 @@ const projectionOpening = ref(false)
 async function openProjection(url?: string | null) {
   const id = subPage.value?.id
   if (!id || !url || projectionOpening.value) return
+  /* 先同步占位开窗，再取 token（2026-10-24 用户「对应的功能无法运行」）：
+     window.open 放在 await 之后会丢掉用户手势，被浏览器当弹窗拦截——点了菜单没反应。
+     空白窗先给占位文案，签发成功后再导航；失败时关掉，不留白页。 */
+  const win = window.open('', '_blank')
+  if (!win) {
+    toast.error('浏览器拦截了新标签页，请允许本站打开新窗口后重试')
+    return
+  }
+  try {
+    win.opener = null
+    win.document.title = '正在打开真实前台…'
+    win.document.body.textContent = '正在验证访问凭据…'
+  } catch {
+    /* 新窗口同源，理论上可写；个别浏览器限制时不影响后续导航 */
+  }
   projectionOpening.value = true
   try {
     const res = await adminVirtualLearnersApi.createProjectionToken(id, { scope: 'dashboard' })
@@ -2459,8 +2474,9 @@ async function openProjection(url?: string | null) {
     if (!token) throw new Error('未能取得前台访问凭据')
     setProjectionToken(token, { profileId: id, source: 'virtual-profile-story' })
     recordProjectionTokenExpiry({ token, expiresAt: Date.now() + PROJECTION_TOKEN_TTL_MS })
-    window.open(url, '_blank', 'noopener')
+    win.location.replace(url)
   } catch (e) {
+    win.close()
     toast.error(`打开真实前台失败：${errMsg(e)}`)
   } finally {
     projectionOpening.value = false

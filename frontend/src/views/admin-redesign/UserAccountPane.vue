@@ -249,6 +249,21 @@ async function openDebugStation() {
   if (!id || grantStatus.value !== 'active' || !projectionGrant.value?.id) return
   // 打开前先校验并清掉过期残留：本地不留已被服务端拒收的旧 token（本次会重新签发）
   purgeExpiredProjectionToken()
+  /* 先同步占位开窗再签发 token：window.open 在 await 之后会丢掉用户手势而被弹窗拦截。
+     失败时关掉空白窗并回传错误，不留白页。 */
+  const win = window.open('', '_blank')
+  if (!win) {
+    grantMessage.value = '打开失败：浏览器拦截了新标签页，请允许本站弹窗后重试'
+    grantMsgTone.value = 'error'
+    return
+  }
+  try {
+    win.opener = null
+    win.document.title = '正在打开调试站…'
+    win.document.body.textContent = '正在验证协助许可…'
+  } catch {
+    /* 同源窗口正常可写；受限浏览器忽略占位文案 */
+  }
   grantOpening.value = true
   try {
     const response = await adminUsersApi.createProjectionTokenFromGrant(projectionGrant.value.id, {
@@ -273,8 +288,9 @@ async function openDebugStation() {
     // 与 token 同步落过期时刻：先有 token 后有期限，避免出现无法清理的孤儿 token
     localStorage.setItem(PROJECTION_TOKEN_EXPIRES_KEY, String(expiresAt))
     projectionTokenExpiresAt.value = expiresAt
-    window.open('/admin/console', '_blank')
+    win.location.replace('/admin/console')
   } catch (e) {
+    win.close()
     grantMessage.value = `打开失败：${errMsg(e)}`
     grantMsgTone.value = 'error'
   } finally {
