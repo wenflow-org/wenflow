@@ -126,34 +126,10 @@
     </div>
 
     <!-- 统一操作台：按钮不再散落（头部/卡头/卡片三处），按两类固定槽位集中
-         左「主动作」每个 tab 一个高频动作 | 右「视图筛选」当前 tab 的过滤器；
+         左「视图筛选」当前 tab 的过滤器 | 右「主动作」每个 tab 一个高频动作
+         （2026-10-24 用户「筛选在左，操作生成在右」：筛选先定范围、动作再执行，符合阅读顺序）；
          账号级低频操作在 tabs 行右端 ⋯。整行仅在有内容时渲染，无内容的 tab 不占位 -->
     <div v-if="isLive && hasToolbar" class="vp-toolbar">
-      <template v-if="activeTab === 'stories'">
-        <button
-          type="button"
-          class="mk-status__action"
-          :class="{ 'mk-status__action--primary': !displayStories.length }"
-          :disabled="genBusy"
-          title="AI 生成故事：可选样本类型、生成方向与数量，生成后直接进入故事池"
-          @click="openGenerate"
-        >
-          {{ genBusy ? `生成中 ${genProgress.done}/${genProgress.total}…` : '生成故事' }}
-        </button>
-      </template>
-      <button
-        v-else-if="activeTab === 'memory'"
-        type="button"
-        class="mk-status__action"
-        :disabled="memoryLoading"
-        title="重新读取记忆池数据"
-        @click="loadMemory(true)"
-      >
-        <MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template>
-      </button>
-
-      <span class="vp-toolbar__spacer" aria-hidden="true"></span>
-
       <!-- 视图筛选：当前 tab 的过滤器（故事池生命周期 / 运行流水状态） -->
       <div v-if="activeTab === 'stories' && displayStories.length" class="vp-filters">
         <button
@@ -179,6 +155,31 @@
           {{ opt.label }} <span class="vp-filter-count">{{ opt.count }}</span>
         </button>
       </div>
+
+      <span class="vp-toolbar__spacer" aria-hidden="true"></span>
+
+      <template v-if="activeTab === 'stories'">
+        <button
+          type="button"
+          class="mk-status__action"
+          :class="{ 'mk-status__action--primary': !displayStories.length }"
+          :disabled="genBusy"
+          title="AI 生成故事：可选样本类型、生成方向与数量，生成后直接进入故事池"
+          @click="openGenerate"
+        >
+          {{ genBusy ? `生成中 ${genProgress.done}/${genProgress.total}…` : '生成故事' }}
+        </button>
+      </template>
+      <button
+        v-else-if="activeTab === 'memory'"
+        type="button"
+        class="mk-status__action"
+        :disabled="memoryLoading"
+        title="重新读取记忆池数据"
+        @click="loadMemory(true)"
+      >
+        <MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template>
+      </button>
     </div>
 
     <div class="vp-body">

@@ -112,6 +112,16 @@ beforeEach(() => {
 })
 
 describe('生成故事弹窗', () => {
+  it('操作台顺序：视图筛选在左，生成动作在右（2026-10-24 用户）', async () => {
+    const w = await mountStories()
+    const kids = [...w.find('.vp-toolbar').element.children]
+    const filterIdx = kids.findIndex((el) => el.classList.contains('vp-filters'))
+    const genIdx = kids.findIndex((el) => el.textContent?.includes('生成故事'))
+    expect(filterIdx).toBeGreaterThanOrEqual(0)
+    expect(genIdx).toBeGreaterThan(filterIdx)
+    w.unmount()
+  })
+
   it('默认「通用 / 1 个」，可切传统学生、填方向、选 2 个后依次生成', async () => {
     const w = await mountStories()
     await buttonByText(w, '生成故事').trigger('click')
