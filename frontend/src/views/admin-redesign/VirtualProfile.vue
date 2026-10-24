@@ -654,7 +654,14 @@
               <div class="vp-run-day__label">{{ g.title }}</div>
               <div v-for="(r, i) in g.runs" :key="r.sessionId || `${r.stage}-${r.time}-${i}`" class="vp-run-row">
                 <span class="vp-run-row__time mono">{{ runHm(r.createdAt) }}</span>
-                <span class="vp-run-row__story" :title="r.storyTitle || '未关联故事'">{{ r.storyTitle || '未关联故事' }}</span>
+                <div class="vp-run-row__main">
+                  <span class="vp-run-row__story" :title="r.storyTitle || '未关联故事'">{{ r.storyTitle || '未关联故事' }}</span>
+                  <span
+                    v-if="runReadings(r)"
+                    class="vp-run-row__meta mono"
+                    :title="runReadingsTitle(r)"
+                  >{{ runReadings(r) }}</span>
+                </div>
                 <RunStateBadge :status="r.result" :hint="`${formatRunResult(r.result)}${r.pathId ? ' · 关联学习路径' : ''}`" :pulse="false" />
                 <RunStageBar
                   :stage="r.stage"
@@ -944,6 +951,15 @@ interface RunItem {
   storyId?: string | null
   storyTitle?: string | null
   pathId?: string | null
+  /** 这次跑到了哪（2026-10-24 用户「虚拟性这边是不是该加上一部分」）：
+      运行行只给阶段条与终态看不出进度，这三个读数详情接口本来就带。 */
+  taskDone?: number
+  taskTotal?: number
+  rounds?: number
+  /** 从开始到最后一次活动（毫秒）；没有 updatedAt 时缺省 */
+  durationMs?: number
+  /** 当前任务标题（仅进行中的运行有） */
+  currentTask?: string | null
 }
 
 interface Detail {
@@ -1746,7 +1762,16 @@ async function loadDetail(id?: string, quiet = false) {
           sessionId: String(s.id || s.sessionId || ''),
           storyId: storyMeta.storyId,
           storyTitle: storyMeta.title,
-          pathId
+          pathId,
+          taskDone: Number(s.completedTasks ?? 0),
+          taskTotal: Number(s.totalTasks ?? 0),
+          rounds: Number(s.roundCount ?? 0),
+          durationMs: (() => {
+            const from = Date.parse(String(s.createdAt || s.startedAt || ''))
+            const to = Date.parse(String(s.updatedAt || ''))
+            return Number.isFinite(from) && Number.isFinite(to) && to >= from ? to - from : undefined
+          })(),
+          currentTask: s.currentTaskTitle ? String(s.currentTaskTitle) : null
         }
       }),
       aiProfile: [
@@ -2652,6 +2677,35 @@ const runRows = computed<RunItem[]>(() => {
   return rows
 })
 /** 会话流水行内时刻 HH:mm（完整日期见日期分组头） */
+/** 运行时长：秒 / 分 / 小时三档（278 分 46 秒 读不出是 4 小时 39 分） */
+function fmtRunDuration(ms?: number): string {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return ''
+  if (ms < 60000) return `${Math.max(1, Math.round(ms / 1000))} 秒`
+  const totalMin = Math.round(ms / 60000)
+  if (totalMin < 60) return `${totalMin} 分`
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return m ? `${h} 小时 ${m} 分` : `${h} 小时`
+}
+
+/** 运行结果读数（任务 / 回合 / 时长）：空值不占位，全空返回 '' 让模板不渲染第二行 */
+function runReadings(r: RunItem): string {
+  const parts: string[] = []
+  if (r.taskTotal && r.taskTotal > 0) parts.push(`任务 ${r.taskDone ?? 0}/${r.taskTotal}`)
+  if (r.rounds && r.rounds > 0) parts.push(`${r.rounds} 回合`)
+  const dur = fmtRunDuration(r.durationMs)
+  if (dur) parts.push(dur)
+  return parts.join(' · ')
+}
+
+/** 读数悬停补充：当前任务（进行中）/ 完整时长口径 */
+function runReadingsTitle(r: RunItem): string {
+  const lines = [runReadings(r)]
+  if (r.currentTask) lines.push(`当前任务：${r.currentTask}`)
+  lines.push('时长 = 从开始到最后一次活动')
+  return lines.filter(Boolean).join(String.fromCharCode(10))
+}
+
 function runHm(iso?: string): string {
   const d = iso ? new Date(iso) : null
   if (!d || Number.isNaN(d.getTime())) return '--:--'
@@ -3112,6 +3166,15 @@ async function quietReload(id: string) {
 }
 .vp-run-row:hover { border-color: rgba(47, 106, 224, 0.35); }
 .vp-run-row__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
+/* 运行行主列：标题 + 结果读数两行（任务 / 回合 / 时长），窄屏由 ellipsis 兜住 */
+.vp-run-row__main { display: grid; gap: 2px; min-width: 0; }
+.vp-run-row__meta {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .vp-run-row__story {
   font-size: var(--mk-fs-micro);
   font-weight: 600;
