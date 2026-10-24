@@ -5,6 +5,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ProviderEditorDialog from '../ProviderEditorDialog.vue'
 import ModelEditorDialog from '../ModelEditorDialog.vue'
 
@@ -261,6 +262,50 @@ describe('ModelEditorDialog', () => {
       defaultMaxTokens: 4096,
       pricing: { inputPer1M: 0.3 },
       description: '主用'
+    }))
+  })
+
+  it('显示名称默认跟随模型 ID，手改后不再覆盖', async () => {
+    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-one' })
+    await flushPromises()
+    const id = w.find('input[placeholder="deepseek-v4.1-flash"]')
+    const label = w.find('input[placeholder="默认跟随模型 ID"]')
+    expect((label.element as HTMLInputElement).value).toBe('m-one')
+
+    const labelValue = () => (w.find('input[placeholder="默认跟随模型 ID"]').element as HTMLInputElement).value
+    await id.setValue('m-two')
+    await nextTick()
+    expect(labelValue()).toBe('m-two')
+
+    await label.setValue('自定义名称')
+    await id.setValue('m-three')
+    await nextTick()
+    expect(labelValue()).toBe('自定义名称')
+  })
+
+  it('备用模型：勾选顺序即尝试顺序，可单条移除', async () => {
+    const w = mount(ModelEditorDialog, {
+      props: { fallbackOptions: ['platform/m-chat', 'platform/m-backup', 'platform/m-third'] },
+      ...mountOptions
+    })
+    w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-main' })
+    await flushPromises()
+    const rows = w.findAll('.med-fb__row')
+    await rows[1].find('input').setValue(true)
+    await rows[2].find('input').setValue(true)
+    expect(w.findAll('.med-fb__chip .med-fb__name').map((e) => e.text())).toEqual(['platform/m-backup', 'platform/m-third'])
+    expect(w.findAll('.med-fb__order').map((e) => e.text())).toEqual(['1', '2'])
+
+    await w.findAll('.med-fb__remove')[0].trigger('click')
+    expect(w.findAll('.med-fb__chip .med-fb__name').map((e) => e.text())).toEqual(['platform/m-third'])
+    expect(w.findAll('.med-fb__order').map((e) => e.text())).toEqual(['1'])
+
+    addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
+    await btn(w, '保存').trigger('click')
+    await flushPromises()
+    expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({
+      fallbacks: ['platform/m-third']
     }))
   })
 })
