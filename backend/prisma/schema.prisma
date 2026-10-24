@@ -336,6 +336,11 @@ model learning_metrics {
   lsb          Float?   @default(0)
   depth_score  Float?   @default(0)
   metadata     String?
+  // 2026-10-24 架构优化批 2a：committed/synthetic/version 从 metadata JSON 文本 LIKE
+  // 拆为实列（读路径绕开索引的全文子串匹配；迁移已按 json_extract 回填存量行）
+  committed     Boolean @default(false)
+  synthetic     Boolean @default(false)
+  metricVersion String?
   recordedAt   DateTime @default(now())
   calculatedAt DateTime @default(now())
   ktlCurrent   Float?   @default(0)
@@ -349,6 +354,32 @@ model learning_metrics {
   users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, calculatedAt])
+  @@index([userId, committed, calculatedAt])
+}
+
+// PMC 滚动 checkpoint（架构优化批 2b，2026-10-24）：当前状态读取此前每次从用户第一行
+// 全量重放，成本随历史线性涨。每满 30 个日历日落一次「该日收盘态」，读取时从最新
+// checkpoint 续放。纯读侧缓存：无外键（users 删除后的孤儿行无害，仅多占一行）、
+// metricVersion 不匹配时种子作废回退全量重放（口径升级自愈）。
+model learning_pmc_checkpoints {
+  id              String   @id @default(uuid())
+  userId          String
+  /// '' = 全局序列（v1 只做全局 scope；预留路径 scope 扩展位）
+  scope           String
+  /// checkpoint 覆盖到的最后一天（应用时区日键 YYYY-MM-DD）——该日**收盘态**
+  dayKey          String
+  ktl             Float
+  lf              Float
+  /// 截至 dayKey 的最后一节课（供 LSS 自然衰减续算；无课时为 null）
+  latestLessonLss Float?
+  latestLessonAt  DateTime?
+  /// 种子适用的指标口径（state-v2）；口径升级时旧 checkpoint 失效跳过
+  metricVersion   String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, scope, dayKey])
+  @@index([userId, scope, dayKey])
 }
 
 model learning_paths {
