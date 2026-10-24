@@ -1,11 +1,11 @@
 /**
- * 卡库 ↔ 虚拟学习者 双向互链（2026-10-07）：
+ * 卡库 → 虚拟学习者 的来源回指（2026-10-07，2026-10-24 收窄为单向）：
  * 卡与虚拟学习者是同一条档案记录（卡库 id = virtual_learner_profiles 主键），
- * 因此「配置的谁」（卡详情）与「运行的谁」（画像页）必须能互相到达，且返回要落在
- * 来的那一层——返回一律走既有「面包屑 = subPage.from」机制，不自造返回钮：
+ * 返回要落在来的那一层——走既有「面包屑 = subPage.from」机制，不自造返回钮：
  *  - 画像页 ⋯「查看来源卡」→ openSubPage('card', pid, from=virtual)
- *  - 卡详情「到虚拟学习者」→ openSubPage('virtual', pid, from=card)（见 card-detail-page.test.ts）
  *  - 列表行 ⋯「查看来源卡」→ openSubPage('card', 行 id)（列表是一级页，无 from）
+ * 卡详情 → 画像的运行视图入口已撤（2026-10-24 用户「卡不是静态的吗」）：卡库只做静态模板，
+ * 运行/记忆属于创建出来的实例，入口在「虚拟学习者」。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, shallowMount } from '@vue/test-utils';

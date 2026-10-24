@@ -1,7 +1,8 @@
 <template>
   <!-- 卡详情二级页（2026-10-06 抽屉退役：用户不喜欢抽屉设计，按 SkillDetail/PathDetail 家族判例
-       改标准二级页 ?view=card&id=<profileId>）。卡=账号拍板不变：本页是卡的全字段可视面，
-       「运行与记忆」= openSubPage('virtual', profileId) 切到画像二级页（同一实体的运行态）。 -->
+       改标准二级页 ?view=card&id=<profileId>）。卡=身份模板：本页只呈现静态卡片内容与
+       「创建虚拟学习者」；运行 / 记忆属于创建出来的实例，不在卡库开运行入口
+       （2026-10-24 用户「卡不是静态的吗」）。 -->
   <div v-if="d" class="mk-page cd">
     <MkDetailHero :avatar="d.name.slice(0, 1)" :title="d.name" :sub="heroSubText">
       <template #pills>
@@ -48,16 +49,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">概览</h3>
-        <div class="cd-head__right">
-          <!-- 同一实体的另一个视图（运行 / 日程 / 记忆池 / 预算），不占 hero 主操作位 -->
-          <button
-            type="button"
-            class="mk-link"
-            title="以虚拟学习者视角查看同一实体的运行、日程、记忆池与预算，可从那里启动实验"
-            @click="goRuntime"
-          >运行与记忆 →</button>
-          <span class="mk-card__meta mono">{{ d.cardKey || '（无卡号）' }}</span>
-        </div>
+        <span class="mk-card__meta mono">{{ d.cardKey || '（无卡号）' }}</span>
       </div>
       <div class="cd-pad">
         <div class="mk-facts mk-facts--rows">
@@ -218,15 +210,6 @@ async function load() {
   }
 }
 
-/** 运行与记忆视图：openSubPage('virtual', profileId) 切到画像二级页（同一实体的运行态）；
-    带 from 使画像页面包屑拼出「学习者卡 / 画像名」并可点面包屑回本卡（双向互链）。
-    from.label 用视图名而非卡名——卡与画像同一实体同名，用卡名会拼出「郑凯 / 郑凯」 */
-function goRuntime() {
-  const pid = d.value?.profileId
-  if (!pid) return
-  openSubPage('virtual', pid, { from: { view: 'card', id: pid, label: '学习者卡' } })
-}
-
 /** 回派生来源的身份卡（本卡是实例时才有入口；label 用视图名，避免「同名卡 / 同名卡」） */
 function goTemplate(profileId: string) {
   openSubPage('card', profileId, { from: { view: 'card', id: profileId, label: '身份卡' } })
@@ -301,8 +284,6 @@ watch(liveRefreshSeq, () => { void load() })
 
 <style scoped>
 .cd-pad { padding: 16px; }
-/* 概览卡头右组：运行与记忆入口 + 卡号，卡头 space-between 下保持靠右成组 */
-.cd-head__right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .cd-sec { display: grid; gap: 10px; }
 .cd-bg { margin: 0; font-size: var(--mk-fs-body); line-height: 1.6; color: var(--mk-ink); white-space: pre-wrap; }
 .cd-story { display: grid; gap: 6px; min-width: 0; padding: 12px 14px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface-2); }
