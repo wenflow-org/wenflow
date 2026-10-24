@@ -220,26 +220,45 @@ const detailComponent = computed(() => (subPage.value ? detailComponents[subPage
 // 详情组件 key（回归 R3）：id + includeTest 二元化，includeTest 深链变化也强制重建详情组件
 const pageKey = computed(() => (subPage.value ? `${subPage.value.id}:${subPage.value.includeTest ? 1 : 0}` : undefined));
 /* 面包屑：二级页优先显示中文名/短标识（label），未设置时回退 ID 截断；title 始终给全 ID。
-   三级页（会话座舱由画像打开）拼出「二级 / 三级」，否则进详情后会丢掉二级名。 */
+   2026-10-24：from 支持 parent 链（二级 → 三级 → 四级），逐层拼出完整路径；
+   超过 3 段时保留最近 3 段并用「…」占位，避免顶栏被长链撑爆。 */
+const CRUMB_MAX_DEPTH = 3
 function crumbPart(label?: string, id?: string): string {
   const text = label || id || ''
   if (text.length <= 12) return text
   return `${text.slice(0, 8)}…${text.slice(-4)}`
 }
-const crumbLabel = computed(() => {
+/** 从当前 subPage 往上取完整链路（最外层在前） */
+function crumbChain(): string[] {
   const sp = subPage.value
-  if (!sp) return ''
-  const current = crumbPart(sp.label, sp.id)
-  const parent = sp.from ? crumbPart(sp.from.label, sp.from.id) : ''
-  return parent ? `${parent} / ${current}` : current
+  if (!sp) return []
+  const chain: string[] = [crumbPart(sp.label, sp.id)]
+  let from = sp.from
+  while (from) {
+    chain.unshift(crumbPart(from.label, from.id))
+    from = from.parent
+  }
+  return chain
+}
+const crumbLabel = computed(() => {
+  const chain = crumbChain()
+  if (!chain.length) return ''
+  if (chain.length > CRUMB_MAX_DEPTH) {
+    return ['…', ...chain.slice(chain.length - CRUMB_MAX_DEPTH)].join(' / ')
+  }
+  return chain.join(' / ')
 })
 const crumbTitle = computed(() => {
   const sp = subPage.value
   if (!sp) return ''
-  const parent = sp.from ? (sp.from.label || sp.from.id) : ''
   // label 回填后tooltip也应显示中文名（除名，避免裸 UUID）；深链瞬间 label 未到，回退 id
-  const current = sp.label ? `${sp.label}` : sp.id
-  return parent ? `${parent} / ${current}` : current
+  const chain: string[] = [sp.label || sp.id]
+  let from = sp.from
+  while (from) {
+    chain.unshift(from.label || from.id)
+    from = from.parent
+  }
+  return chain.join(' / ')
 })
 
 /* —— 真路由化：scene ↔ URL /admin/:page 双向同步 —— */

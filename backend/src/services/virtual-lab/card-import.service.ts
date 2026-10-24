@@ -522,18 +522,24 @@ export function buildCardWallEntries(
   });
 }
 
-/** 卡墙索引聚合（GET /cards/index 数据源）：卡列表 + 预置/自建分计 */
+/** 卡墙索引聚合（GET /cards/index 数据源）：身份卡列表 + 预置/自建分计。
+ *
+ *  2026-10-24 层级收口：卡库＝身份池，只列**未派生的身份卡**；由卡克隆出来的实例
+ *  归「虚拟学习者」列表（它们本来就是可运行的实例，不是模板）。此前两者混在一面墙，
+ *  运营要在同一页用「只看身份池」筛选才能收窄，卡库与虚拟学习者两个一级入口因此重叠。
+ *  `summary.derived` 仍是实例数（被墙排除的那部分），供 KPI 披露「池子已经派生过几次」。 */
 export async function getCardWallIndex() {
   const rows = await findProfilesForCardWall();
-  const cards = buildCardWallEntries(rows);
+  const all = buildCardWallEntries(rows);
+  const cards = all.filter((c) => !c.derivedFrom);
   return {
     cards,
     summary: {
       total: cards.length,
       builtin: cards.filter((c) => c.preset).length,
       custom: cards.filter((c) => !c.preset).length,
-      /** 已派生实例（带 derivedFrom 的卡）：卡库=身份池，此数说明池里有多少条已派生出虚拟学习者 */
-      derived: cards.filter((c) => c.derivedFrom).length,
+      /** 已派生实例数（不在这面墙上，点 KPI 去虚拟学习者列表看） */
+      derived: all.length - cards.length,
     },
   };
 }

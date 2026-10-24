@@ -112,11 +112,12 @@ describe('虚拟学习者定位（D1）', () => {
     wrapper.unmount();
   });
 
-  it('manifest 导航中虚拟学习者组收敛为两个职责页（运行态 + 卡库；批量实验 2026-10-04 下线）', () => {
+  it('manifest 导航中虚拟实验组收敛为两个职责页（实例 + 身份池；批量实验 2026-10-04 下线）', () => {
     const scene = MOCK_SCENES.find((s) => s.id === 'virtual-learners');
     expect(scene).toBeDefined();
-    expect(scene!.group).toBe('虚拟学习者');
-    const groupIds = MOCK_SCENES.filter((s) => s.group === '虚拟学习者').map((s) => s.id);
+    // 2026-10-24 组名与首项解耦：组＝虚拟实验，避免侧栏两行「虚拟学习者」
+    expect(scene!.group).toBe('虚拟实验');
+    const groupIds = MOCK_SCENES.filter((s) => s.group === '虚拟实验').map((s) => s.id);
     expect(groupIds).toEqual(['virtual-learners', 'virtual-learner-cards']);
     expect(MOCK_SCENES.find((s) => s.id === 'batch-experiments')).toBeUndefined();
   });

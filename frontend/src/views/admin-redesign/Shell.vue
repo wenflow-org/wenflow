@@ -366,7 +366,8 @@ const topTitle = computed(() => {
 const topSub = computed(() => {
   if (props.crumb) {
     const parts = props.crumb.split(' / ')
-    if (parts.length > 1) return parts[0] || ''
+    // 深层链会以「…」占位（AdminConsole CRUMB_MAX_DEPTH）：副行取第一个真实段
+    if (parts.length > 1) return parts.find((p) => p && p !== '…') || ''
     const parentPage = currentScene.value?.label ?? ''
     if (parentPage && parentPage !== topTitle.value) return parentPage
     return currentScene.value?.group ?? ''

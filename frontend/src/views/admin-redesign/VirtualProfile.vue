@@ -29,8 +29,21 @@
         <!-- 跨页入口（2026-10-24 用户「为什么不设计到右上角」）：页面级动作归页头右缘，
              与 LearnerDetail 的「虚拟档案 →」对称——那边也是 MkDetailHero 的 #actions。
              默认档按钮（hero 位不用 sm，判例 2026-10-20）。 -->
-        <div v-if="d.userId" class="mk-entity__actions">
+        <div class="mk-entity__actions">
+          <!-- 页面级主操作（2026-10-24 层级收口）：此前启动入口只在「故事池」的故事行里，
+               从学习详情反跳进来的人没有下一步。这里复用列表的启动弹窗（选故事 → 建会话并开跑）。 -->
           <button
+            v-if="isLive"
+            type="button"
+            class="mk-btn mk-btn--primary"
+            :disabled="!displayStories.length"
+            :title="displayStories.length
+              ? '启动一次新的实验运行：选一个故事，建会话并立刻开跑（不影响已有 session）'
+              : '先生成故事才能运行：到「故事池」生成或导入故事'"
+            @click="openLaunch()"
+          >运行</button>
+          <button
+            v-if="d.userId"
             type="button"
             class="mk-btn"
             title="同一账号的学习视图：概念 / 证据 / 图谱 / 教学会话"
@@ -91,13 +104,20 @@
             >{{ c.label }}</button>
             <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
             <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
-            <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录。带 from 使卡页
-                 面包屑拼出「画像 / 卡」并支持点面包屑回本页（子页返回机制，不自造返回钮） -->
+            <!-- 双向互链（卡库 ↔ 虚拟学习者）：带 from 使卡页面包屑拼出「画像 / 卡」并支持
+                 点面包屑回本页（子页返回机制，不自造返回钮）。派生实例打开 derivedFrom 原卡。 -->
             <div class="mk-menu__sep" aria-hidden="true"></div>
-            <button type="button" class="mk-menu__item" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="closeMenu(); goSourceCard()">查看来源卡</button>
-            <!-- 跨页入口（#74）：该虚拟学习者绑定的真实账号 / 记忆与复习；userId 缺失时隐藏 -->
+            <button
+              type="button"
+              class="mk-menu__item"
+              :title="d.sourceCard
+                ? `查看来源卡：本档案由身份卡「${d.sourceCard.name}」克隆而来，打开原卡（人设 / 故事池）`
+                : '查看身份卡：本档案自己就是一张身份卡（人设 / 故事池 / 已备故事）'"
+              @click="closeMenu(); goSourceCard()"
+            >{{ d.sourceCard ? '查看来源卡' : '查看身份卡' }}</button>
+            <!-- 账号级入口（#74）：打开学习详情的「记忆与复习」页签；来源记忆保留，可返回画像 -->
             <div v-if="d.userId" class="mk-menu__sep" aria-hidden="true"></div>
-            <button v-if="d.userId" type="button" class="mk-menu__item" title="进入记忆与复习页：归并凭据 / 回滚 / 到期明细（仅真实账号）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
+            <button v-if="d.userId" type="button" class="mk-menu__item" title="打开该账号的学习详情 · 记忆与复习页签：到期与记忆强度明细（画像这页只列本档案的记忆痕迹）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
           </div>
         </div>
       </div>
@@ -376,7 +396,17 @@
         <section v-if="activeTab === 'memory'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
-            <span class="mk-card__meta">课后沉淀</span>
+            <div class="mk-card__head-right">
+              <span class="mk-card__meta">课后沉淀</span>
+              <!-- 账号级记忆与复习（2026-10-24）：本页只列本档案的记忆痕迹，跨路径明细在账号详情 -->
+              <button
+                v-if="d.userId"
+                type="button"
+                class="mk-link"
+                title="打开该账号的学习详情 · 记忆与复习：含跨路径概念与到期明细。两处统计方式不同，数字可能不一致"
+                @click="goMemoryReview()"
+              >账号级记忆与复习 →</button>
+            </div>
             <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
@@ -440,7 +470,7 @@
             <!-- 口径披露（#76）：表内只渲染有记忆痕迹的概念（后端按保留率排序截断到 8 条），
                  与卡头「共 N 条」的四桶合计不同源时，这里写明差别 -->
             <p v-if="memoryPoolRows.length && memoryCount > memoryPoolRows.length" class="vp-memory__pool-note">
-              仅展示有记忆痕迹的最近 {{ memoryPoolRows.length }} 个概念（按当前保留率排序），总数见卡头。
+              仅展示有记忆痕迹的最近 {{ memoryPoolRows.length }} 个概念（按当前保留率排序），总数见卡头。账号级完整明细（跨路径 / 归并建议）见「记忆与复习」。
             </p>
 
             <!-- 记忆保持曲线（Q2/Q8）：到期 / 已掌握概念的保留率随天数衰减 -->
@@ -831,6 +861,10 @@
       </div>
     </div>
     </Teleport>
+
+    <!-- 页面级「运行」：复用列表的启动弹窗（选故事 → 建会话并立刻开跑），
+         解决「从学习详情反跳进画像后找不到下一步」；启动后回刷本页读数 -->
+    <VirtualLearnerLaunch ref="launchRef" @started="onLaunched" />
   </div>
 
   <div v-else class="mk-page">
@@ -929,13 +963,11 @@ export function buildMemoryRetentionChartOption(
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
 import { statusText } from './statusText'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
-import { memoryReviewUrl } from './learner-profile'
 import { LEARNER_METRICS } from '@/utils/learnerMetrics'
 import { loadCaliber } from './opsShared'
 import { useEscape } from './useEscape'
@@ -952,6 +984,7 @@ import {
 } from './vlab-controls'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
+import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -1000,6 +1033,9 @@ interface Detail {
   notes: string
   /** 绑定的真实账号 userId（#74：跨页进真实学习者详情 / 记忆与复习的深链契约） */
   userId: string
+  /** 派生来源（profile.derivedFrom）：本档案是从哪张身份卡克隆出来的。
+      非空 → 「查看来源卡」打开源卡；空 → 本档案自己就是身份卡。 */
+  sourceCard?: { id: string; name: string } | null
   traits: string[]
   runs: RunItem[]
   /** 详情接口返回的原始会话条数（上限 200）：runs 只取最近 RUNS_TAB_WINDOW 条，
@@ -1765,6 +1801,12 @@ async function loadDetail(id?: string, quiet = false) {
       notes: String(raw.notes || ''),
       // 绑定的真实账号（#74）：详情接口返回 ...profile（含 userId），此前未读取 → 无跨页入口
       userId: String(raw.userId || p.userId || ''),
+      // 派生来源：克隆实例的 profile.derivedFrom 指向身份池里的原卡（2026-10-24 层级收口）
+      sourceCard: (() => {
+        const d = (p.derivedFrom || null) as Record<string, unknown> | null
+        const srcId = d?.profileId ? String(d.profileId) : ''
+        return srcId ? { id: srcId, name: String(d?.name || '身份卡') } : null
+      })(),
       traits: Object.entries(traitsRaw).slice(0, 5).map(([k, v]) => `${k}: ${String(v)}`),
       // 原始会话条数（截断披露口径，[96]）：runs 只映射窗口内前 RUNS_TAB_WINDOW 条
       runsTotal: sessions.length,
@@ -2251,7 +2293,23 @@ function goCockpit() {
 }
 
 /* ===== 跨页入口（#73/#74）===== */
-const tabRouter = useRouter()
+
+/** 页面级「运行」：复用列表的启动弹窗（选择故事 / 模式 / 对抗预算） */
+const launchRef = ref<InstanceType<typeof VirtualLearnerLaunch> | null>(null)
+function openLaunch() {
+  const cur = subPage.value
+  if (!cur || !d.value) return
+  if (!displayStories.value.length) {
+    // 按钮本身已禁用；保留兜底：没有故事时把用户送到能生成故事的地方
+    activeTab.value = 'stories'
+    return
+  }
+  launchRef.value?.open({ id: cur.id, name: d.value.name, storyCount: displayStories.value.length })
+}
+/** 启动成功 → 回刷本页（新会话要立刻出现在「运行」与概览；列表由弹窗自身刷新） */
+function onLaunched() {
+  void loadDetail(subPage.value?.id, true)
+}
 
 /** 从故事跳到真实教学对象（#73）：projection 深链由后端逐故事产出。
     目标是用户侧路由（/goal-conversation、/learning-path、/learn），需要以该虚拟学习者身份
@@ -2284,22 +2342,36 @@ function goRealLearner() {
   if (uid) {
     openSubPage('learner', uid, {
       includeTest: true,
-      from: cur ? { view: cur.view, id: cur.id, label: cur.label } : undefined
+      // 同一实体的另一种视图（画像 ↔ 学习详情）：from.label 用视图名，避免面包屑「孙浩 / 孙浩」
+      from: cur ? { view: cur.view, id: cur.id, label: '画像' } : undefined
     })
   }
 }
 
-/** 记忆与复习（#74）：跨页深链（契约见 learner-profile.ts memoryReviewUrl，参数名 userId） */
+/** 账号级记忆与复习（#74 / 2026-10-24 层级收口）：
+ *  此前 router.push 到 /admin/learner-state，导航整页切走——面包屑与来源全丢，且落点是
+ *  tab=memory-ops（记忆调度），菜单却写「记忆与复习」。改为 openSubPage：保留来源，
+ *  返回回到画像；落点与菜单同名（memory = 记忆与复习）。 */
 function goMemoryReview() {
   const uid = d.value?.userId
-  if (uid) void tabRouter.push(memoryReviewUrl(uid))
+  const cur = subPage.value
+  if (uid) {
+    openSubPage('learner', uid, {
+      includeTest: true,
+      tab: 'memory',
+      from: cur ? { view: cur.view, id: cur.id, label: '画像' } : undefined
+    })
+  }
 }
 
-/** 来源卡（双向互链）：卡库那张卡就是本页档案行，卡 id 即 subPage.id；带 from 供面包屑回跳。
-    from.label 用视图名而非人名——卡与画像同一实体同名，用人名会拼出「郑凯 / 郑凯」 */
+/** 来源卡（双向互链）：派生实例打开 derivedFrom 指向的原卡；身份卡本身打开自己的卡详情。
+ *  2026-10-24：此前一律用 subPage.id——克隆实例会打开「自己的卡」，要再点一层才到原卡，
+ *  与菜单文案「查看来源卡」不符。from.label 用视图名而非人名（否则拼出「郑凯 / 郑凯」）。 */
 function goSourceCard() {
-  const pid = subPage.value?.id
-  if (pid) openSubPage('card', pid, { from: { view: 'virtual', id: pid, label: '画像' } })
+  const cur = subPage.value
+  if (!cur) return
+  const cardId = d.value?.sourceCard?.id || cur.id
+  openSubPage('card', cardId, { from: { view: cur.view, id: cur.id, label: '画像' } })
 }
 
 const tabs = computed(() => {

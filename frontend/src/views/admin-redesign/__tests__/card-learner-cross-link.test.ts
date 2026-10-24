@@ -48,6 +48,7 @@ vi.mock('../store', async () => {
 
 import VirtualProfile from '../VirtualProfile.vue';
 import { subPage } from '../store';
+import { liveGetVirtualDetail } from '../live';
 
 async function mountProfile() {
   const w = shallowMount(VirtualProfile);
@@ -63,14 +64,14 @@ describe('画像页 → 来源卡（双向互链）', () => {
     subPage.value = { view: 'virtual', id: 'p1', label: '高一学生小陈' };
   });
 
-  it('⋯ 菜单有「查看来源卡」，点击带 from 指向本画像（返回靠面包屑回跳）', async () => {
+  it('身份卡本身：菜单叫「查看身份卡」，点击带 from 指向本画像（返回靠面包屑回跳）', async () => {
     const w = await mountProfile();
     expect(w.text()).toContain('高一学生小陈');
     const trigger = w.find('.vp-tabsrow__ops .mk-menu__btn');
     expect(trigger.exists()).toBe(true);
     await trigger.trigger('click');
     await nextTick();
-    const item = w.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().includes('查看来源卡'));
+    const item = w.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().includes('查看身份卡'));
     expect(item, '画像页缺少回卡库的入口').toBeTruthy();
     await item!.trigger('click');
     expect(openSubPageMock).toHaveBeenCalledWith('card', 'p1', {
@@ -80,14 +81,36 @@ describe('画像页 → 来源卡（双向互链）', () => {
     w.unmount();
   });
 
-  it('「查看来源卡」不依赖绑定账号（userId 缺失时仍在菜单里，与 #74 两条账号入口不同档）', async () => {
+  it('派生实例：菜单叫「查看来源卡」，打开 derivedFrom 的原卡而不是自己的卡', async () => {
+    vi.mocked(liveGetVirtualDetail).mockResolvedValueOnce({
+      profile: {
+        id: 'p1',
+        nickname: '实例小陈',
+        knowledgeLevel: 'beginner',
+        derivedFrom: { profileId: 'card-9', name: '源卡小陈' }
+      },
+      sessions: []
+    } as never);
+    const w = await mountProfile();
+    await w.find('.vp-tabsrow__ops .mk-menu__btn').trigger('click');
+    await nextTick();
+    const item = w.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().includes('查看来源卡'));
+    expect(item).toBeTruthy();
+    await item!.trigger('click');
+    expect(openSubPageMock).toHaveBeenCalledWith('card', 'card-9', {
+      from: { view: 'virtual', id: 'p1', label: '画像' }
+    });
+    w.unmount();
+  });
+
+  it('卡入口不依赖绑定账号（userId 缺失时仍在菜单里，与两条账号入口不同档）', async () => {
     const w = await mountProfile();
     // 详情 mock 未给 userId → 两条账号级入口隐藏
     expect(w.text()).not.toContain('查真实学习者详情');
     await w.find('.vp-tabsrow__ops .mk-menu__btn').trigger('click');
     await nextTick();
     const labels = w.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
-    expect(labels.some((t) => t.includes('查看来源卡'))).toBe(true);
+    expect(labels.some((t) => t.includes('查看身份卡'))).toBe(true);
     w.unmount();
   });
 });

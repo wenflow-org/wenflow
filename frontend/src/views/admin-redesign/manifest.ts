@@ -78,9 +78,11 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 「记忆与复习」2026-10-12 一度随独立页退役，同日恢复跨用户总览（按待复习量排序的用户
   // 列表 + 到期时间轴）；单用户明细在学习者详情「记忆与复习 / 记忆调度」页签
   { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆', icon: History },
-  // 虚拟学习者组：运行态（虚拟学习者）+ 配置态（学习者卡库）；「批量实验」2026-10-04 下线
-  { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟', icon: FlaskConical },
-  { id: 'virtual-learner-cards', label: '学习者卡库', group: '虚拟学习者', glyph: '卡', icon: IdCard },
+  // 虚拟实验组：实例（虚拟学习者）+ 身份池（学习者卡库）；「批量实验」2026-10-04 下线。
+  // 2026-10-24 层级收口：组名不再与首项同名——此前侧栏连续两行「虚拟学习者」，
+  // 分组读作页面的复读；「虚拟实验」覆盖实例与身份池两个一级入口。
+  { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟实验', glyph: '拟', icon: FlaskConical },
+  { id: 'virtual-learner-cards', label: '学习者卡库', group: '虚拟实验', glyph: '卡', icon: IdCard },
   // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组）。
   // 「Prompt 评估」2026-10-04 折入 skills 宿主「Prompt 评估」页签，本组收敛为 2 项
   // （orchestrator · skills）；旧 URL /admin/prompt-eval 在 router 重定向。

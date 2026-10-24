@@ -67,6 +67,9 @@ import type { LaunchStory } from './virtualLearnersTypes'
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
 withDefaults(defineProps<{ render?: boolean }>(), { render: true })
 
+/* 启动成功事件：列表行自己会刷新；画像页要据此回刷详情读数（2026-10-24 页头「运行」） */
+const emit = defineEmits<{ started: [session: Record<string, unknown>] }>()
+
 /** 启动目标（父页面行内「运行」按钮传入；只依赖 id/name/storyCount） */
 interface LaunchTarget {
   id: string
@@ -166,6 +169,7 @@ async function startLaunch() {
     } else {
       toast.success(`已开始运行「${storyTitle}」`)
     }
+    emit('started', session)
     void refreshLiveVirtuals()
   } catch (e) {
     toast.error(`启动失败：${errMsg(e)}`)

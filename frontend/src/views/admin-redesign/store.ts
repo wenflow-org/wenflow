@@ -251,6 +251,9 @@ export interface SubPageFrom {
   label?: string
   stage?: SubPageStage
   tab?: SubPageTab
+  /** 来源链（2026-10-24）：二级 → 三级 → 四级逐层记住上一跳。
+   *  此前只存一层，从画像进座舱再进真实课堂会话时，返回与面包屑都会丢掉画像/列表。 */
+  parent?: SubPageFrom
 }
 
 export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom } | null>(null)
@@ -264,7 +267,14 @@ export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?
      原先只对 session/session-real 生效，于是「学习者详情 → 路径详情」返回时 from 被
      静默丢弃，直接落回一级列表，原详情与页签上下文全丢（2026-10-08 走查确认）。 */
   if (opts?.from) {
-    subPage.value = { ...base, from: opts.from }
+    /* 叠链：仅当 from 描述的就是「当前页」时，才把当前页的来源挂成 parent。
+       例：列表 → 画像（from=列表）→ 学习详情（from=画像, parent=列表）→ 座舱（三级链）。
+       传的是祖先页（如 PathDetail 把 learner 的 from 原样带下去）时不叠——否则同一条来源
+       会被复制成 parent，返回键会多退一层。 */
+    const cur = subPage.value
+    const fromIsCurrent = !!cur && opts.from.view === cur.view && opts.from.id === cur.id
+    const prev = fromIsCurrent ? cur?.from : null
+    subPage.value = { ...base, from: prev ? { ...opts.from, parent: prev } : opts.from }
   } else {
     subPage.value = base
   }
@@ -276,14 +286,15 @@ export function setSubPageLabel(label: string) {
 }
 
 export function closeSubPage() {
-  // 有来源记忆（从二级进三级）→ 返回来源页；否则回一级列表
+  // 有来源记忆（从二级进三级）→ 返回来源页；来源本身还有 parent 时继续保留链路（逐层回退）
   if (subPage.value?.from) {
-    const { view, id, label, stage, tab } = subPage.value.from
+    const { view, id, label, stage, tab, parent } = subPage.value.from
     subPage.value = {
       view, id,
       ...(label ? { label } : {}),
       ...(stage ? { stage } : {}),
-      ...(tab ? { tab } : {})
+      ...(tab ? { tab } : {}),
+      ...(parent ? { from: parent } : {})
     }
   } else {
     subPage.value = null

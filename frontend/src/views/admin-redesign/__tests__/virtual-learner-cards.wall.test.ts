@@ -19,6 +19,7 @@ const { openSubPageMock, cardsIndexMock, liveCreateVirtualMock, draftStoriesMock
   cardsCloneMock: vi.fn(),
 }));
 
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('../store', async () => {
   const { ref } = await import('vue');
   return {
@@ -110,12 +111,12 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     (toast.error as unknown as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it('KPI 三卡（预置卡/自建卡/已派生实例；卡总数 2026-10-14 并入卡墙卡头）+ 卡墙渲染全部卡与来源徽章', async () => {
+  it('KPI 三卡（预置卡/自建卡/已派生实例；卡总数 2026-10-14 并入卡墙卡头）+ 卡墙渲染身份卡与来源徽章', async () => {
     const w = await mountPage();
     const labels = w.findAll('.mk-kpi .mk-kpi__label').map((x) => x.text());
     // 卡总数不再立卡：它恒等于下方卡墙行数，卡头「共 N 张」已自报（计数单源在列表）
-    // 「已创建实例」2026-10-16 立卡（2026-10-19 随动作文案统一改名）：卡=身份模板后，池里有多少条已创建出虚拟学习者，列表说不出来
-    expect(labels).toEqual(['预置卡', '自建卡', '已创建实例']);
+    // 「已派生实例」2026-10-24 改名并转为入口：实例不在卡墙上，点它去虚拟学习者列表
+    expect(labels).toEqual(['预置卡', '自建卡', '已派生实例']);
     expect(w.find('.mk-card__meta').text()).toContain('共 2 张');
     const wall = w.findAll('.vlc-card');
     expect(wall).toHaveLength(2);
@@ -124,47 +125,40 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     expect(wall[1].text()).toContain('预置');
   });
 
-  it('身份池快筛（只看还没创建过的身份卡）与实例来源标记', async () => {
+  it('派生实例不进卡墙（卡库＝身份池），只剩身份卡', async () => {
     cardsIndexMock.mockImplementation(async () => ({
       data: {
         data: {
           cards: [
             { profileId: 'p1', userId: 'u1', cardKey: 'w6-math-01', name: '高一学生小陈', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null, derivedFrom: null },
-            { profileId: 'p2', userId: 'u2', cardKey: 'vl-abc', name: '高一学生小陈', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null, derivedFrom: '高一学生小陈' },
+            { profileId: 'p2', userId: 'u2', cardKey: 'vl-abc', name: '高一学生小陈的实例', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null, derivedFrom: '高一学生小陈' },
           ],
-          summary: { total: 2, builtin: 0, custom: 2, derived: 1 },
+          summary: { total: 1, builtin: 0, custom: 2, derived: 1 },
         },
       },
     }));
     const w = await mountPage();
-    // 实例在卡面带来源行（不分标记的话身份池与实例混成一锅）
-    expect(w.findAll('.vlc-card__derived')).toHaveLength(1);
-    expect(w.find('.vlc-card__derived').text()).toContain('源自 高一学生小陈');
-    expect(w.find('.mk-kpi').text()).toBeTruthy();
-    // 快筛收窄到还没创建过的身份卡
-    const pill = w.findAll('.mk-pill').find((p) => p.text().includes('只看身份池'))!;
-    expect(pill.text()).toContain('1');
-    await pill.trigger('click');
-    expect(w.findAll('.vlc-card')).toHaveLength(1);
-    expect(w.find('.vlc-card__derived').exists()).toBe(false);
+    const wall = w.findAll('.vlc-card');
+    expect(wall).toHaveLength(1);
+    expect(wall[0].text()).toContain('高一学生小陈');
+    expect(wall[0].text()).not.toContain('实例');
+    expect(w.findAll('.mk-pill').some((p) => p.text().includes('只看身份池'))).toBe(false);
     w.unmount();
   });
 
-  it('身份池已被派空（快筛后 0 行）：空态说清是快筛收窄，不说成卡库空', async () => {
+  it('身份池已被派空：空态指向虚拟学习者，不说成卡库空', async () => {
     cardsIndexMock.mockImplementation(async () => ({
       data: {
         data: {
-          cards: [
-            { profileId: 'p2', userId: 'u2', cardKey: 'vl-abc', name: '已派生', goal: 'x', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: null, email: null, derivedFrom: '某身份卡' },
-          ],
-          summary: { total: 1, builtin: 0, custom: 1, derived: 1 },
+          cards: [],
+          summary: { total: 0, builtin: 0, custom: 1, derived: 1 },
         },
       },
     }));
     const w = await mountPage();
-    await w.findAll('.mk-pill').find((p) => p.text().includes('只看身份池'))!.trigger('click');
     expect(w.findAll('.vlc-card')).toHaveLength(0);
-    expect(w.text()).toContain('身份池里的卡都已创建出虚拟学习者');
+    expect(w.text()).toContain('身份池已派空');
+    expect(w.text()).toContain('去虚拟学习者');
     expect(w.text()).not.toContain('卡库还是空的');
     w.unmount();
   });
