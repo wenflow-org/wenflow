@@ -1,7 +1,7 @@
 <template>
   <!-- 卡详情二级页（2026-10-06 抽屉退役：用户不喜欢抽屉设计，按 SkillDetail/PathDetail 家族判例
        改标准二级页 ?view=card&id=<profileId>）。卡=账号拍板不变：本页是卡的全字段可视面，
-       「到虚拟学习者」= openSubPage('virtual', profileId) 切到画像二级页（看运行态）。 -->
+       「运行与记忆」= openSubPage('virtual', profileId) 切到画像二级页（同一实体的运行态）。 -->
   <div v-if="d" class="mk-page cd">
     <MkDetailHero :avatar="d.name.slice(0, 1)" :title="d.name" :sub="heroSubText">
       <template #pills>
@@ -13,9 +13,10 @@
       <template #actions>
         <!-- 2026-10-23：本页数据跟随顶栏刷新广播（liveRefreshSeq），hero 不再出独立刷新钮 -->
         <!-- 「从这张卡造一个」的落点（2026-10-18 用户走查：卡库侧只有卡头勾选框，读作没有流程）：
-             身份卡可反复创建、不消耗卡本身，故本页主操作是创建，切画像降为次按钮。
-             文案 2026-10-19 与卡墙同批统一：原「派生虚拟学习者」是本页独有的说法。 -->
-        <button type="button" class="mk-btn" @click="goLearner">到虚拟学习者 →</button>
+             身份卡可反复创建、不消耗卡本身，故本页主操作是创建。
+             2026-10-24 用户「右侧两个按钮，感觉很怪」：原来「到虚拟学习者 →」与创建并列，
+             两个按钮都在说虚拟学习者，一个是导航、一个是动作，读不出主次。
+             改法：hero 只留创建；同一实体的运行/记忆视图降为「概览」卡头文字入口。 -->
         <button
           type="button"
           class="mk-btn mk-btn--primary"
@@ -47,7 +48,16 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">概览</h3>
-        <span class="mk-card__meta mono">{{ d.cardKey || '（无卡号）' }}</span>
+        <div class="cd-head__right">
+          <!-- 同一实体的另一个视图（运行 / 日程 / 记忆池 / 预算），不占 hero 主操作位 -->
+          <button
+            type="button"
+            class="mk-link"
+            title="以虚拟学习者视角查看同一实体的运行、日程、记忆池与预算，可从那里启动实验"
+            @click="goRuntime"
+          >运行与记忆 →</button>
+          <span class="mk-card__meta mono">{{ d.cardKey || '（无卡号）' }}</span>
+        </div>
       </div>
       <div class="cd-pad">
         <div class="mk-facts mk-facts--rows">
@@ -208,10 +218,10 @@ async function load() {
   }
 }
 
-/** 「到虚拟学习者」：切画像二级页（id=profileId，findProfileDetail 按 profile 主键查）；
+/** 运行与记忆视图：openSubPage('virtual', profileId) 切到画像二级页（同一实体的运行态）；
     带 from 使画像页面包屑拼出「学习者卡 / 画像名」并可点面包屑回本卡（双向互链）。
     from.label 用视图名而非卡名——卡与画像同一实体同名，用卡名会拼出「郑凯 / 郑凯」 */
-function goLearner() {
+function goRuntime() {
   const pid = d.value?.profileId
   if (!pid) return
   openSubPage('virtual', pid, { from: { view: 'card', id: pid, label: '学习者卡' } })
@@ -291,6 +301,8 @@ watch(liveRefreshSeq, () => { void load() })
 
 <style scoped>
 .cd-pad { padding: 16px; }
+/* 概览卡头右组：运行与记忆入口 + 卡号，卡头 space-between 下保持靠右成组 */
+.cd-head__right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .cd-sec { display: grid; gap: 10px; }
 .cd-bg { margin: 0; font-size: var(--mk-fs-body); line-height: 1.6; color: var(--mk-ink); white-space: pre-wrap; }
 .cd-story { display: grid; gap: 6px; min-width: 0; padding: 12px 14px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface-2); }

@@ -1,6 +1,6 @@
 /**
  * 卡详情二级页（2026-10-06 抽屉退役）：?view=card&id=<profileId> 标准二级页，
- * 全字段可视（概览事实/人设/故事池/资料/标签备注），「到虚拟学习者」切画像二级页。
+ * 全字段可视（概览事实/人设/故事池/资料/标签备注），「运行与记忆」切画像二级页。
  */
 import { describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -80,9 +80,9 @@ describe('CardDetailPage（卡详情二级页）', () => {
 
     const act = w.findAll('button').find((b) => b.text().includes('创建虚拟学习者'))!;
     expect(act, 'hero 缺创建主操作').toBeTruthy();
-    // 主操作是它，切画像降为次按钮
+    // 主操作是它；「运行与记忆」已降为概览卡头文字入口，不在 hero 抢位（2026-10-24）
     expect(act.classes()).toContain('mk-btn--primary');
-    expect(w.findAll('button').find((b) => b.text().includes('到虚拟学习者'))!.classes()).not.toContain('mk-btn--primary');
+    expect(w.find('.mk-hero__actions').text()).not.toContain('运行与记忆');
 
     await act.trigger('click');
     await flushPromises();
@@ -92,10 +92,11 @@ describe('CardDetailPage（卡详情二级页）', () => {
     w.unmount();
   });
 
-  it('「到虚拟学习者」= openSubPage virtual + profileId 且带 from=本卡（双向互链，返回落回卡详情）', async () => {
+  it('「运行与记忆」= openSubPage virtual + profileId 且带 from=本卡（双向互链，返回落回卡详情）', async () => {
     const w = mount(CardDetailPage);
     await flushPromises();
-    const go = w.findAll('button').find((b) => b.text().includes('到虚拟学习者'))!;
+    const go = w.findAll('button').find((b) => b.text().includes('运行与记忆'))!;
+    expect(go, '概览卡头缺运行与记忆入口').toBeTruthy();
     await go.trigger('click');
     expect(openSubPageMock).toHaveBeenCalledWith('virtual', 'p1', {
       // from.label 用视图名：卡与画像同一实体同名，用卡名会拼出「郑凯 / 郑凯」
