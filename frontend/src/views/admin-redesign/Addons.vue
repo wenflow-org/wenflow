@@ -23,6 +23,7 @@
       <div class="mk-card__head">
         <!-- 2026-10-23 走查：卡头不复述页名（「插件」页里再挂一枚「插件」标题） -->
         <h3 class="mk-card__title">可选能力</h3>
+        <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn" title="启停状态未读取，开关暂时按默认启用在显示">启停状态未读取</span>
         <span class="mk-card__meta">{{ pluginRows.length }} 组 · {{ pluginMemberCount }} 个 Skill</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
@@ -30,54 +31,39 @@
         <button type="button" class="mk-alert__btn" @click="loadConfigs">重试</button>
       </div>
       <MkLoading v-if="loading" min text="插件配置加载中…" />
-      <div v-else class="mk-table-scroll">
-        <table class="mk-table ac-pi-table">
-          <thead>
-            <tr>
-              <th scope="col">能力</th>
-              <th scope="col">成员与模型路由</th>
-              <th scope="col">最近调用</th>
-              <th scope="col" class="mk-th--right">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in pluginRows" :key="p.id" :title="pluginRowTitle(p)">
-              <td>
-                <div class="ac-pi__id">
-                  <span class="ac-pi__glyph" aria-hidden="true">{{ p.glyph }}</span>
-                  <div class="mk-cell-main">
-                    <strong>{{ p.name }}</strong>
-                    <span class="mk-cell-sub">{{ p.description }}</span>
-                  </div>
-                </div>
-              </td>
-              <!-- 2026-10-24 用户「为什么不能 ui 配置」：组级「已单独配置」把多个成员混成一个结论，
-                   而且配好之后操作列连入口都没有。改成逐成员一行：名字（进 Skill 详情）+ 当前路由 + 就地「配置」。 -->
-              <td>
-                <div class="ac-pi__members">
-                  <div v-for="m in p.members" :key="m.id" class="ac-pi__member-row">
-                    <button
-                      type="button"
-                      class="ac-pi__member"
-                      :title="`${m.name}（${m.id}）：${m.routeTitle}`"
-                      @click="openSkillDrawer(m.id)"
-                    ><span>{{ m.name }}</span></button>
-                    <span class="mk-badge mk-badge--sm ac-pi__route" :class="m.stateClass" :title="m.routeTitle">{{ m.routeLabel }}</span>
-                    <button type="button" class="mk-link ac-pi__cfg" :aria-label="`配置 ${m.name} 的模型路由`" @click="openRouteConfig(m)">配置</button>
-                  </div>
-                  <!-- MCP 组的服务可用性是另一个维度（模型路由之外），跟在成员后面单独说 -->
-                  <span v-if="p.availability" class="ac-pi__availability" :class="p.availability.stateClass">{{ p.availability.text }}</span>
-                </div>
-              </td>
-              <td><span class="ac-pi__last">{{ p.last }}</span></td>
-              <td class="ac-pi__actions">
-                <div class="mk-actions">
-                  <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 2026-10-24 用户「插件就是配置启用，这设计的太丑了」：撤掉表格与成员路由徽标，
+           一行一个插件：身份/说明/成员一条线，右侧只有开关与配置。模型细节收进配置弹窗。 -->
+      <div v-else class="ac-plugins">
+        <div
+          v-for="p in pluginRows"
+          :key="p.id"
+          class="ac-plugin"
+          :class="{ 'is-off': !pluginEnabled(p.id) }"
+        >
+          <span class="ac-plugin__glyph" aria-hidden="true">{{ p.glyph }}</span>
+          <div class="ac-plugin__main">
+            <div class="ac-plugin__title">
+              <strong>{{ p.name }}</strong>
+              <span class="ac-plugin__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
+            </div>
+            <span class="ac-plugin__desc">{{ p.description }}</span>
+            <span class="ac-plugin__members">
+              {{ p.members.map((m) => m.name).join(' · ') }}<template v-if="p.availability"> · {{ p.availability.text }}</template>
+            </span>
+          </div>
+          <div class="ac-plugin__actions">
+            <MkSwitch
+              :model-value="pluginEnabled(p.id)"
+              :state-text="pluginEnabled(p.id) ? '启用' : '停用'"
+              :busy="pluginBusy === p.id"
+              :aria-label="`${p.name}插件开关`"
+              :title="`停用后：${p.fallback}`"
+              @update:model-value="togglePlugin(p.id, $event)"
+            />
+            <button type="button" class="mk-btn mk-btn--sm" @click="openGroupConfig(p)">配置</button>
+            <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -216,37 +202,39 @@
     </div>
     </Teleport>
 
-    <!-- 模型路由快配（2026-10-24）：插件页只改「这个 Skill 用哪个模型」，
-         思考/参数/备用链仍回 Skill 运行时的完整表单，避免在这里长出第二套编辑器。 -->
+    <!-- 插件配置（2026-10-24）：只改成员 Skill 的模型绑定；思考/参数/备用链仍回完整运行时。
+         列表页保持一行一个插件，模型细节只在这里出现。 -->
     <Teleport to="body">
-      <div v-if="routeOpen" ref="routeMaskRef" class="mk-modal">
-        <div ref="routePanelRef" class="mk-modal__panel" role="dialog" aria-label="配置模型路由">
+      <div v-if="groupOpen" ref="groupMaskRef" class="mk-modal">
+        <div ref="groupPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="插件配置">
           <div class="mk-modal__head">
-            <h3 class="mk-modal__title">配置模型路由</h3>
-            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeRouteConfig">✕</button>
+            <h3 class="mk-modal__title">{{ groupTarget?.name }} · 配置</h3>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeGroupConfig">✕</button>
           </div>
           <div class="mk-modal__body">
-            <p class="ac-route-target">{{ routeTarget?.name }}<span class="mono">{{ routeTarget?.id }}</span></p>
-            <label class="mk-field">
-              <span class="mk-field__label">模型</span>
+            <p class="ac-group-hint">只改模型绑定。思考、参数覆盖与备用链在「完整运行时」里配置。</p>
+            <div class="ac-group-row" v-for="m in groupTarget?.members ?? []" :key="m.id">
+              <div class="ac-group-row__name">
+                <strong>{{ m.name }}</strong>
+                <span class="mono">{{ m.id }}</span>
+              </div>
               <MkModelPicker
-                aria-label="模型"
-                :model-value="routeModel"
+                :aria-label="`${m.name} 的模型`"
+                :model-value="draftModels[m.id] ?? ''"
                 :options="pickerOptions"
                 allow-inherit
                 inherit-label="跟随平台默认"
-                :tier="routeTier"
-                @update:model-value="routeModel = $event"
-                @pick="onRouteModelPicked"
+                :tier="draftTiers[m.id] ?? 'chat'"
+                @update:model-value="draftModels[m.id] = $event"
+                @pick="(opt) => onDraftPicked(m.id, opt)"
               />
-              <span class="mk-field__hint">只改模型绑定。思考、参数覆盖与备用链在 Skill 运行时里配置。</span>
-            </label>
+              <button type="button" class="mk-link ac-group-row__full" @click="openFullRuntime(m.id)">完整运行时</button>
+            </div>
           </div>
           <div class="mk-modal__foot">
-            <button type="button" class="mk-link ac-route-full" @click="openFullRuntime">打开完整运行时</button>
-            <button type="button" class="mk-btn" @click="closeRouteConfig">取消</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="routeSaving" @click="saveRouteConfig">
-              {{ routeSaving ? '保存中…' : '保存' }}
+            <button type="button" class="mk-btn" @click="closeGroupConfig">取消</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="groupSaving" @click="saveGroupConfig">
+              {{ groupSaving ? '保存中…' : '保存' }}
             </button>
           </div>
         </div>
@@ -259,7 +247,7 @@
 import { computed, ref, watch } from 'vue'
 import { dataSource, openSkillDrawer, investigateAgent, liveSkillStatsMap } from './store'
 import { errMsg, liveRefreshSeq } from './live'
-import { adminSkillsApi, adminMcpApi } from '@/api/adminApi'
+import { adminSkillsApi, adminMcpApi, adminPluginsApi } from '@/api/adminApi'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import { PLUGIN_GROUPS, type PluginGroup } from './capabilityCatalog'
@@ -269,6 +257,7 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSwitch from '@/components/mk/MkSwitch.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { toast } from '@/utils/toast'
 
@@ -279,21 +268,13 @@ loadModelCatalog()
 /* 独立页（2026-10-19）：原 embedded prop 与 count 上报是给「模型与接入」宿主页签用的，
    页签撤除后一并删除——页头刷新直接调两个加载器。 */
 async function refreshAll() {
-  await Promise.all([loadConfigs(), loadMcpTools()])
+  await Promise.all([loadConfigs(), loadMcpTools(), loadPluginStates()])
 }
 
 /* ---------- ① 插件（能力 bundle → 运行时 Skill） ---------- */
 interface PluginMemberRow {
   id: string
   name: string
-  hasConfig: boolean
-  /** 状态徽标的短文案：实际模型 id / 跟随平台默认 / 路由停用 */
-  routeLabel: string
-  stateClass: string
-  /** 成员 chip 的悬停说明（路由状态人话版） */
-  routeTitle: string
-  /** 已配置的模型（null = 跟随平台默认） */
-  model: string | null
 }
 
 interface PluginRow {
@@ -311,53 +292,9 @@ interface PluginRow {
 }
 
 /**
- * 路由状态只说「这条 Skill 有没有单独配置」：
- * - skill_model_configs 无行 → 继承平台默认路由，能力仍可用；
- * - 有行且 enabled=false → 不用这条自定义路由，回落到平台默认，不是「能力已关闭」。
- * 页面不把两者写成「启用/停用」，避免一个假开关。
- * 2026-10-24：组级徽标撤掉后，状态落到每个成员自己身上，并给出实际模型名。
+ * 2026-10-24：列表页只回答「这个插件开没开」，模型路由细节收进「配置」弹窗。
+ * 这里不再把「有没有配置行」翻译成组级徽标——那是把成员状态混成一个结论。
  */
-function routeState(id: string): {
-  hasConfig: boolean
-  text: string
-  stateClass: string
-  label: string
-  model: string | null
-} {
-  if (configsFailed.value) {
-    return { hasConfig: false, text: '配置未读取', stateClass: 'mk-badge--warn', label: '状态未知', model: null }
-  }
-  const c = configMap.value[id]
-  if (!c) {
-    return { hasConfig: false, text: '继承默认', stateClass: 'mk-badge--muted', label: '跟随平台默认', model: null }
-  }
-  if (c.enabled === false) {
-    return { hasConfig: true, text: '自定义路由停用', stateClass: 'mk-badge--warn', label: '路由停用', model: null }
-  }
-  const model = typeof c.model === 'string' && c.model.trim() ? c.model.trim() : ''
-  return {
-    hasConfig: true,
-    text: '已单独配置',
-    stateClass: 'mk-badge--ok',
-    label: model || '跟随平台默认',
-    model: model || null,
-  }
-}
-
-function routeTitle(text: string, model: string | null): string {
-  switch (text) {
-    case '已单独配置': return model ? `该 Skill 使用单独配置的模型：${model}` : '该 Skill 有独立配置行，模型跟随平台默认'
-    case '继承默认': return '未单独配置，使用平台默认路由。能力仍可用'
-    case '自定义路由停用': return '不使用该 Skill 的自定义模型路由。回落到平台默认后能力仍可用'
-    case '配置未读取': return '配置接口未返回，当前状态未知'
-    default: return text
-  }
-}
-
-/** 整行悬停：这一组停用后的行为（原「关闭后」段落，2026-10-21 收进悬停） */
-function pluginRowTitle(p: PluginRow): string {
-  return `停用后：${p.fallback}`
-}
 
 /** 环境变量占位符（${ENV_VAR} 未替换）判定：直出原文会误导为真实地址，统一显示「未配置」 */
 const ENV_PLACEHOLDER = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/
@@ -409,18 +346,10 @@ function buildPluginRows(
   mcpAvailability: { text: string; stateClass: string },
 ): PluginRow[] {
   return groups.map((group) => {
-    const members: PluginMemberRow[] = group.members.map((member) => {
-      const route = routeState(member.id)
-      return {
-        id: member.id,
-        name: member.name,
-        hasConfig: route.hasConfig,
-        routeLabel: route.label,
-        stateClass: route.stateClass,
-        routeTitle: routeTitle(route.text, route.model),
-        model: route.model,
-      }
-    })
+    const members: PluginMemberRow[] = group.members.map((member) => ({
+      id: member.id,
+      name: member.name,
+    }))
     const last = members
       .map((member) => liveSkillStatsMap.value?.[member.id]?.lastAt)
       .find((value) => value && value !== '从未') || '从未'
@@ -508,6 +437,7 @@ watch(
   () => {
     void loadConfigs()
     void loadMcpTools()
+    void loadPluginStates()
   },
   { immediate: true }
 )
@@ -529,67 +459,120 @@ const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => toolOpen.value), panelRef)
 useMaskClose(maskRef, () => { toolOpen.value = false })
 
-/* ---------- 模型路由快配（插件页就地改模型绑定） ---------- */
-const routeOpen = ref(false)
-const routeTarget = ref<PluginMemberRow | null>(null)
-const routeModel = ref('')
-const routeTier = ref<'chat' | 'reasoning'>('chat')
-const routeSaving = ref(false)
-const routeMaskRef = ref<HTMLElement | null>(null)
-const routePanelRef = ref<HTMLElement | null>(null)
-useEscape(() => routeOpen.value, () => closeRouteConfig())
-useOverlay(computed(() => routeOpen.value), routePanelRef)
-useMaskClose(routeMaskRef, () => closeRouteConfig())
+/* ---------- 插件启停（2026-10-24） ---------- */
+const pluginStates = ref<Record<string, boolean>>({ web: true, decision: true, image: true, mcp: true })
+const pluginStateFailed = ref(false)
+/** 在途的插件 id：开关自己 busy，避免连点 */
+const pluginBusy = ref('')
+const pluginEnabled = (id: string) => pluginStates.value[id] !== false
 
-function openRouteConfig(member: PluginMemberRow) {
-  const cfg = configMap.value[member.id]
-  routeTarget.value = member
-  routeModel.value = typeof cfg?.model === 'string' ? cfg.model : ''
-  routeTier.value = cfg?.tier === 'reasoning' ? 'reasoning' : 'chat'
-  routeOpen.value = true
-}
-
-function closeRouteConfig() {
-  routeOpen.value = false
-  routeTarget.value = null
-}
-
-/** 选模型时把层级一起带出（reasoning 模型写 tier=reasoning，与 Skill 运行时同规则） */
-function onRouteModelPicked(opt: MkModelOption | null) {
-  if (opt?.tier === 'chat' || opt?.tier === 'reasoning') routeTier.value = opt.tier
-}
-
-async function saveRouteConfig() {
-  const target = routeTarget.value
-  if (!target || routeSaving.value) return
-  const model = routeModel.value.trim()
-  // 没有配置行 + 选择跟随平台默认 = 什么都没改。若照常 upsert 会新建一行
-  // （thinkingMode 默认 default，反而覆盖平台默认的 disabled），这里直接当作无操作。
-  if (!model && !configMap.value[target.id]) {
-    closeRouteConfig()
-    return
-  }
-  routeSaving.value = true
+async function loadPluginStates() {
   try {
-    await adminSkillsApi.updateSkillModelConfig(target.id, {
-      model: model || null,
-      tier: routeTier.value,
-    })
-    toast.success(`${target.name} 的模型路由已保存`)
-    closeRouteConfig()
-    await loadConfigs()
+    const res = await adminPluginsApi.list()
+    const states = res.data?.data?.states
+    if (states && typeof states === 'object') pluginStates.value = { ...pluginStates.value, ...states }
+    pluginStateFailed.value = false
+  } catch (e) {
+    pluginStateFailed.value = true
+    toast.error(`插件启停状态加载失败：${errMsg(e)}`)
+  }
+}
+
+async function togglePlugin(id: string, enabled: boolean) {
+  if (pluginBusy.value) return
+  pluginBusy.value = id
+  try {
+    const res = await adminPluginsApi.setEnabled(id, enabled)
+    const states = res.data?.data?.states
+    if (states && typeof states === 'object') pluginStates.value = { ...pluginStates.value, ...states }
+    else pluginStates.value = { ...pluginStates.value, [id]: enabled }
+    toast.success(enabled ? '插件已启用' : '插件已停用')
   } catch (e) {
     toast.error(`保存失败：${errMsg(e)}`)
   } finally {
-    routeSaving.value = false
+    pluginBusy.value = ''
+  }
+}
+
+/* ---------- 插件配置（成员模型的批量编辑） ---------- */
+const groupOpen = ref(false)
+const groupTarget = ref<PluginRow | null>(null)
+const groupSaving = ref(false)
+/** 成员模型草稿：memberId → model（'' = 跟随平台默认）/ tier */
+const draftModels = ref<Record<string, string>>({})
+const draftTiers = ref<Record<string, 'chat' | 'reasoning'>>({})
+const groupMaskRef = ref<HTMLElement | null>(null)
+const groupPanelRef = ref<HTMLElement | null>(null)
+useEscape(() => groupOpen.value, () => closeGroupConfig())
+useOverlay(computed(() => groupOpen.value), groupPanelRef)
+useMaskClose(groupMaskRef, () => closeGroupConfig())
+
+function openGroupConfig(group: PluginRow) {
+  groupTarget.value = group
+  const models: Record<string, string> = {}
+  const tiers: Record<string, 'chat' | 'reasoning'> = {}
+  for (const member of group.members) {
+    const cfg = configMap.value[member.id]
+    models[member.id] = typeof cfg?.model === 'string' ? cfg.model : ''
+    tiers[member.id] = cfg?.tier === 'reasoning' ? 'reasoning' : 'chat'
+  }
+  draftModels.value = models
+  draftTiers.value = tiers
+  groupOpen.value = true
+}
+
+function closeGroupConfig() {
+  groupOpen.value = false
+  groupTarget.value = null
+}
+
+/** 选模型时把层级一起带出（reasoning 模型写 tier=reasoning，与 Skill 运行时同规则） */
+function onDraftPicked(memberId: string, opt: MkModelOption | null) {
+  if (opt?.tier === 'chat' || opt?.tier === 'reasoning') draftTiers.value[memberId] = opt.tier
+}
+
+async function saveGroupConfig() {
+  const group = groupTarget.value
+  if (!group || groupSaving.value) return
+  // 只提交真正改过的成员；「无配置行 + 跟随平台默认」是空操作（upsert 会新建默认行，反而改掉思考默认）
+  const changes = group.members.filter((member) => {
+    const cfg = configMap.value[member.id]
+    const before = typeof cfg?.model === 'string' ? cfg.model : ''
+    const after = (draftModels.value[member.id] ?? '').trim()
+    if (before === after) return false
+    if (!after && !cfg) return false
+    return true
+  })
+  if (!changes.length) {
+    closeGroupConfig()
+    return
+  }
+  groupSaving.value = true
+  const failed: string[] = []
+  try {
+    for (const member of changes) {
+      try {
+        await adminSkillsApi.updateSkillModelConfig(member.id, {
+          model: (draftModels.value[member.id] ?? '').trim() || null,
+          tier: draftTiers.value[member.id] ?? 'chat',
+        })
+      } catch {
+        failed.push(member.name)
+      }
+    }
+    await loadConfigs()
+    if (failed.length) toast.error(`已保存 ${changes.length - failed.length} 个，失败：${failed.join('、')}`)
+    else toast.success(`${group.name} 的模型路由已保存`)
+    closeGroupConfig()
+  } finally {
+    groupSaving.value = false
   }
 }
 
 /** 完整运行时：思考/参数覆盖/备用链仍在那张表单里，插件页不重复造一套 */
-function openFullRuntime() {
-  const id = routeTarget.value?.id
-  closeRouteConfig()
-  if (id) openSkillDrawer(id)
+function openFullRuntime(skillId: string) {
+  closeGroupConfig()
+  openSkillDrawer(skillId)
 }
 
 function openToolCreate() {
@@ -728,55 +711,67 @@ function goLogs(skillId: string) {
    与成本分析 / 健康中心同款），不再需要宿主 flex 列里的内滚容器。 */
 .mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 
-/* 插件能力表（2026-10-21 重设计）：一行一组能力，替代原来的四张等高卡。
-   成员不再逐条挂「已单独配置」徽章（与组级徽章重复），路由状态收在成员 chip 的悬停里。 */
-.ac-pi-table { width: 100%; }
-.ac-pi-table th { white-space: nowrap; }
-.ac-pi-table td { vertical-align: middle; }
-.ac-pi-table tbody tr:hover { background: var(--mk-hover-surface); }
-.ac-pi__id { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.ac-pi__glyph {
+/* 插件列表（2026-10-24 用户「插件就是配置启用，这设计的太丑了」）：
+   一行一个插件，左侧身份与说明、右侧开关与配置。表格式铺开把「开没开」埋进了徽标列。 */
+.ac-plugins { display: grid; }
+.ac-plugin {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.ac-plugin:last-child { border-bottom: none; }
+.ac-plugin__glyph {
   flex: none;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--mk-radius-md);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
-.ac-pi__members { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-/* 逐成员一行：名字（进详情）+ 当前路由 + 就地配置 */
-.ac-pi__member-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.ac-pi__route {
-  max-width: 240px;
+.ac-plugin__main { display: grid; gap: 3px; min-width: 0; }
+.ac-plugin__title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.ac-plugin__title strong { font-size: var(--mk-fs-body); font-weight: 650; color: var(--mk-ink); }
+.ac-plugin__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.ac-plugin__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-plugin__members {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--mk-mono);
-  font-size: var(--mk-fs-micro);
 }
-.ac-pi__cfg { font-size: var(--mk-fs-micro); }
-.ac-pi__member {
-  padding: 3px 9px;
-  border: 1px solid var(--mk-line);
-  border-radius: 999px;
-  background: var(--mk-surface-2);
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.ac-pi__member:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
+.ac-plugin__actions { display: flex; align-items: center; gap: 12px; }
+/* 停用只压信息层，开关与按钮保持清晰可点 */
+.ac-plugin.is-off .ac-plugin__main,
+.ac-plugin.is-off .ac-plugin__glyph { opacity: 0.55; }
 
-.ac-pi__availability { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
-.ac-pi__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
-.ac-pi__actions { text-align: right; }
-.ac-pi__actions .mk-actions { justify-content: flex-end; }
+/* 配置弹窗：成员一行，名字 + 模型选择 + 完整运行时入口 */
+.ac-group-hint { margin: 0 0 12px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-group-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(220px, 1.4fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--mk-line);
+}
+.ac-group-row:last-child { border-bottom: none; }
+.ac-group-row__name { display: grid; gap: 2px; min-width: 0; }
+.ac-group-row__name strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); }
+.ac-group-row__name .mono { color: var(--mk-faint); }
+.ac-group-row__full { font-size: var(--mk-fs-micro); white-space: nowrap; }
+@media (max-width: 720px) {
+  .ac-plugin { grid-template-columns: 32px minmax(0, 1fr); }
+  .ac-plugin__actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .ac-group-row { grid-template-columns: 1fr; }
+}
 
 /* 两卡容器：堆叠单列全宽（并栏分支 2026-09-29 实测溢出后退役，审核 #157 清掉不可达规则） */
 .ac-cards {
@@ -849,17 +844,6 @@ function goLogs(skillId: string) {
 @media (max-width: 800px) {
   .ac-mcp__formrow { grid-template-columns: 1fr; }
 }
-
-/* 模型路由快配弹窗：成员身份 + 只读提示；左下「打开完整运行时」与右侧取消/保存同排 */
-.ac-route-target {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0;
-  font-weight: 600;
-}
-.ac-route-target .mono { font-weight: 400; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.ac-route-full { margin-right: auto; align-self: center; }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {

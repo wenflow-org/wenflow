@@ -1280,6 +1280,19 @@ export const adminMcpApi = {
 };
 
 /**
+ * 插件启停（2026-10-24）：插件 = 能力 bundle，停用后成员 Skill 在统一分发点被拦截。
+ * 状态落 platform_settings.pluginStates；缺省全启用。
+ */
+export const adminPluginsApi = {
+  list: async () => {
+    return adminAxios.get('/admin/plugins');
+  },
+  setEnabled: async (pluginId: string, enabled: boolean) => {
+    return adminAxios.put(`/admin/plugins/${encodeURIComponent(pluginId)}`, { enabled });
+  }
+};
+
+/**
  * Agent Prompt 管理 API - 版本管理
  */
 export const adminAgentPromptsApi = {
