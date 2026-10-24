@@ -1504,7 +1504,12 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/${id}/projection-token`, data || {});
   },
 
-  draftVirtualLearnerStories: async (id: string, data?: { /** 样本类型：'student' 生成传统学生故事 */ sampleType?: string }) => {
+  draftVirtualLearnerStories: async (id: string, data?: {
+    /** 样本类型：'student' 生成传统学生故事 */
+    sampleType?: string;
+    /** 生成方向（可选）：具体学科 / 考试节点 / 情境，后端转成 scenario-designer 约束 */
+    direction?: string;
+  }) => {
     // LLM 上游调用（scenario-designer skill）：放宽到 AI 请求超时
     return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`, data || {}, { timeout: AI_REQUEST_TIMEOUT });
   },

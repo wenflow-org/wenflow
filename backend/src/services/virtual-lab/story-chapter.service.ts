@@ -81,6 +81,20 @@ export async function buildLearnerStoryHints(userId: string, opts: { limit?: num
   }
 }
 
+/** 生成方向输入上限：防止把整段提示词/文档塞进故事约束（超长截断而不是整单拒绝）。 */
+export const STORY_DIRECTION_MAX = 120
+
+/**
+ * 用户指定「生成方向」→ scenario-designer 的一条约束（可选）。
+ * 空串/非字符串/纯空白返回 []，路由侧无需再判空；超长截断。
+ */
+export function buildStoryDirectionHints(direction: unknown): string[] {
+  if (typeof direction !== 'string') return []
+  const text = direction.trim().slice(0, STORY_DIRECTION_MAX)
+  if (!text) return []
+  return [`本次生成方向（用户指定，必须落到具体学科、考试节点或情境，不要改写成泛泛主题）：${text}`]
+}
+
 function parseProfilePool(profile: { profile: string | null }): {
   profileData: Record<string, unknown>;
   pool: StoryPoolEntry[];

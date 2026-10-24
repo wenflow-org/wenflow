@@ -132,31 +132,12 @@
           type="button"
           class="mk-status__action"
           :class="{ 'mk-status__action--primary': !displayStories.length }"
-          :disabled="storyBusy"
-          :title="storySampleType === 'student'
-            ? '生成传统学生故事（考试节点/课纲压力/作业情境/家长同伴环境）'
-            : '用 AI 生成新的故事脚本（基于该虚拟人画像与指定领域），生成后可运行'"
-          @click="generateStory"
+          :disabled="genBusy"
+          title="AI 生成故事：可选样本类型、生成方向与数量，生成后直接进入故事池"
+          @click="openGenerate"
         >
-          {{ storyBusy ? '生成中…' : '生成故事' }}
+          {{ genBusy ? `生成中 ${genProgress.done}/${genProgress.total}…` : '生成故事' }}
         </button>
-        <div class="vp-sample-pills" role="radiogroup" aria-label="故事样本类型">
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': storySampleType === 'general' }"
-            :aria-pressed="storySampleType === 'general'"
-            @click="storySampleType = 'general'"
-          >通用</button>
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': storySampleType === 'student' }"
-            title="生成传统学生故事：考试节点/课纲压力/作业情境/家长与同伴环境"
-            :aria-pressed="storySampleType === 'student'"
-            @click="storySampleType = 'student'"
-          >传统学生</button>
-        </div>
       </template>
       <button
         v-else-if="activeTab === 'memory'"
@@ -529,7 +510,7 @@
               <template v-if="isLive && displayStories.length">
                 <label class="vp-story-select-all" :title="allStoriesSelected ? '取消全选' : '全选所有故事'">
                   <input type="checkbox" :checked="allStoriesSelected" @change="toggleAllStories" aria-label="全选故事" />
-                  <span>已选 {{ selectedStoryKeys.size }}</span>
+                  <span>{{ selectedStoryKeys.size ? `已选 ${selectedStoryKeys.size}` : '全选' }}</span>
                 </label>
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" title="为每个勾选的故事启动一次新的实验运行" @click="batchRunStories">批量运行</button>
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="对勾选故事的最新运行开启自动驾驶（不新建运行，已运行的自动跳过）" @click="batchAutopilotStories('start')">批量启动</button>
@@ -582,7 +563,6 @@
                     @change="toggleStorySelect(s, i)"
                   />
                 </label>
-                <span class="vp-story__radio" aria-hidden="true"></span>
                 <div class="vp-story__main">
                   <div class="vp-story__meta">
                     <strong
@@ -595,8 +575,8 @@
                       @keydown.enter.prevent="selectStory(s, i)"
                       @keydown.space.prevent="selectStory(s, i)"
                     >{{ s.title }}</strong>
-                    <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
-                      {{ storyStatusLabel(s) }}
+                    <span class="mk-badge" :class="storyStatusMeta(s).cls">
+                      {{ storyStatusMeta(s).text }}
                     </span>
                     <span v-if="storyBudgetBadge(s)" class="vp-story__budget-badge" :title="'故事级预算：' + storyBudgetBadge(s) + '。留空字段继承角色级'">预算自定义</span>
                   </div>
@@ -614,19 +594,8 @@
                         :show-task-text="false"
                       />
                     </template>
-                    <span v-else class="vp-story__latest">未运行</span>
+                    <span v-else class="vp-story__latest">尚未运行</span>
                   </div>
-                  <!-- 高级诊断（#73）：scenario-designer 的隐藏字段此前解析了却不渲染（死管道） -->
-                  <details v-if="hasStoryDiagnostics(s)" class="vp-story__diag">
-                    <summary>高级诊断</summary>
-                    <div class="vp-story__diag-body">
-                      <p v-if="s.misdiagnosis"><b>易误诊</b>{{ s.misdiagnosis }}</p>
-                      <p v-if="s.hiddenDetails?.length"><b>隐藏细节</b>{{ s.hiddenDetails.join(' · ') }}</p>
-                      <p v-if="s.behaviorHooks?.length"><b>行为钩子</b>{{ s.behaviorHooks.join(' · ') }}</p>
-                      <pre v-if="s.goalSeed && Object.keys(s.goalSeed).length">{{ JSON.stringify(s.goalSeed, null, 1) }}</pre>
-                      <pre v-if="s.disclosurePlan && Object.keys(s.disclosurePlan).length">{{ JSON.stringify(s.disclosurePlan, null, 1) }}</pre>
-                    </div>
-                  </details>
                 </div>
                 <div class="vp-story__ops">
                   <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验运行（进入座舱）'" @click="runStory(s, i)">
@@ -640,11 +609,14 @@
                       aria-label="更多故事操作"
                       aria-haspopup="menu"
                       :aria-expanded="openMenu === `story-${storyKey(s, i)}`"
-                      title="编辑 / 删除故事"
+                      title="编辑 / 诊断 / 删除故事"
                       @click.stop="toggleMenu(`story-${storyKey(s, i)}`)"
                     >⋯</button>
                     <div v-if="openMenu === `story-${storyKey(s, i)}`" class="mk-menu__pop" :style="popStyle" @click.stop>
                       <button type="button" class="mk-menu__item" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i, poolIndex(s, i)); closeMenu()">编辑</button>
+                      <!-- 场景诊断（#73）：scenario-designer 的隐藏字段此前直接铺在行内（含原始 JSON），
+                           每行都多一块噪声；收进弹窗，列表只留标题/概述/运行态 -->
+                      <button v-if="hasStoryDiagnostics(s)" type="button" class="mk-menu__item" title="查看场景设计诊断：易误诊、隐藏细节、行为钩子、目标种子与披露计划" @click="openStoryDiag(s); closeMenu()">场景诊断</button>
                       <!-- 深链到真实教学对象（#73）：projection 由后端逐故事产出（真实 Goal/Path/Learn 绑定），
                            此前映射了却不渲染，页面没有「从故事跳到真实教学对象」的入口 -->
                       <button v-if="s.projection?.formal?.goal" type="button" class="mk-menu__item" title="打开该故事最新运行绑定的真实目标对话（以该虚拟学习者身份浏览）" @click="openProjection(s.projection?.formal?.goal)">看真实目标对话</button>
@@ -857,6 +829,112 @@
           <button type="button" class="mk-btn mk-btn--primary" :disabled="storySaving" @click="saveStory">
             {{ storySaving ? '保存中…' : '保存故事' }}
           </button>
+        </div>
+      </div>
+    </div>
+    </Teleport>
+
+    <!-- 生成故事（2026-10-24 用户「生成故事做的太简单」）：样本 / 方向 / 数量收进一个面板。
+         此前只有工具栏一颗按钮 + 两个样本 pill，方向与数量都不可选，生成结果差异只能靠重试。 -->
+    <Teleport to="body">
+    <div v-if="genOpen" ref="genMaskRef" class="mk-modal">
+      <div ref="genPanelRef" class="mk-modal__panel" role="dialog" aria-label="生成故事">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">生成故事</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" :disabled="genBusy" @click="genOpen = false">✕</button>
+        </div>
+        <div class="mk-modal__body">
+          <p class="vp-gen__intro">基于「{{ d?.name }}」的画像、最近运行与学习记忆生成。生成后直接进入故事池，可立即运行。</p>
+
+          <div class="vp-gen__group" role="radiogroup" aria-label="故事样本">
+            <span class="mk-field__label">故事样本</span>
+            <div class="vp-gen__cards">
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="genForm.sampleType === 'general'"
+                class="vp-gen__card"
+                :class="{ 'is-active': genForm.sampleType === 'general' }"
+                @click="genForm.sampleType = 'general'"
+              >
+                <strong>通用</strong>
+                <span>按画像自由生成，工作、生活、学习情境都可能出现</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="genForm.sampleType === 'student'"
+                class="vp-gen__card"
+                :class="{ 'is-active': genForm.sampleType === 'student' }"
+                @click="genForm.sampleType = 'student'"
+              >
+                <strong>传统学生</strong>
+                <span>考试节点、课纲内容、作业情境、家长与同伴压力</span>
+              </button>
+            </div>
+          </div>
+
+          <label class="mk-field">
+            <span class="mk-field__label">生成方向（可选）</span>
+            <input
+              v-model="genForm.direction"
+              class="mk-field__input"
+              maxlength="120"
+              placeholder="例如：化学实验误差分析、期末前一周的复习取舍"
+            />
+            <span class="mk-field__hint">写具体学科、考试节点或情境。留空则由画像与学习记忆自由发挥。{{ genForm.direction.length }}/120</span>
+          </label>
+
+          <div class="vp-gen__group" role="radiogroup" aria-label="生成数量">
+            <span class="mk-field__label">生成数量</span>
+            <div class="mk-seg">
+              <button
+                v-for="n in GEN_COUNTS"
+                :key="n"
+                type="button"
+                role="radio"
+                :aria-checked="genForm.count === n"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': genForm.count === n }"
+                @click="genForm.count = n"
+              >{{ n }} 个</button>
+            </div>
+            <span class="mk-field__hint">多个故事依次生成，耗时随数量增加，每个故事单独计一次 AI 调用。</span>
+          </div>
+        </div>
+        <div class="mk-modal__foot">
+          <button type="button" class="mk-btn" :disabled="genBusy" @click="genOpen = false">取消</button>
+          <button type="button" class="mk-btn mk-btn--primary" :disabled="genBusy" @click="submitGenerate">
+            {{ genBusy ? `生成中 ${genProgress.done}/${genProgress.total}…` : '开始生成' }}
+          </button>
+        </div>
+      </div>
+    </div>
+    </Teleport>
+
+    <!-- 场景诊断（#73）：从故事行内折叠区迁出。列表每行都挂一块「高级诊断 + 原始 JSON」，
+         一条故事占三四行高，读起来像调试面板；诊断属于低频深看，收进弹窗。 -->
+    <Teleport to="body">
+    <div v-if="diagStoryOpen" ref="diagMaskRef" class="mk-modal">
+      <div ref="diagPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="场景诊断">
+        <div class="mk-modal__head">
+          <h3 class="mk-modal__title">场景诊断 · {{ diagStory?.title || '故事' }}</h3>
+          <button type="button" class="mk-modal__close" aria-label="关闭" @click="diagStoryOpen = false">✕</button>
+        </div>
+        <div class="mk-modal__body">
+          <div v-if="diagStory" class="vp-diag">
+            <p v-if="diagStory.misdiagnosis"><b>易误诊</b>{{ diagStory.misdiagnosis }}</p>
+            <p v-if="diagStory.hiddenDetails?.length"><b>隐藏细节</b>{{ diagStory.hiddenDetails.join(' · ') }}</p>
+            <p v-if="diagStory.behaviorHooks?.length"><b>行为钩子</b>{{ diagStory.behaviorHooks.join(' · ') }}</p>
+            <details v-if="hasDiagRaw(diagStory)" class="vp-diag__raw">
+              <summary>目标种子与披露计划（原始结构）</summary>
+              <pre v-if="diagStory.goalSeed && Object.keys(diagStory.goalSeed).length">{{ JSON.stringify(diagStory.goalSeed, null, 2) }}</pre>
+              <pre v-if="diagStory.disclosurePlan && Object.keys(diagStory.disclosurePlan).length">{{ JSON.stringify(diagStory.disclosurePlan, null, 2) }}</pre>
+            </details>
+          </div>
+        </div>
+        <div class="mk-modal__foot">
+          <button type="button" class="mk-btn" @click="diagStoryOpen = false">关闭</button>
         </div>
       </div>
     </div>
@@ -2080,46 +2158,99 @@ async function saveProfile() {
 watch(editOpen, (v) => v && openEdit())
 
 /* 故事池 */
-/** 故事样本类型：general=自由生成 / student=传统学生（考试节点/课纲压力/作业情境） */
-const storySampleType = ref<'general' | 'student'>('general')
-async function generateStory() {
-  const id = subPage.value?.id
-  if (!id || storyBusy.value) return
-  storyBusy.value = true
+/* 生成故事（2026-10-24 用户「生成故事做的太简单」）：样本 / 方向 / 数量三档。
+   数量用「依次调用」实现——后端一次只产 1 个故事；每次调用都会把已有故事池带给
+   scenario-designer，后者据此避开重复，所以连续多次比一次生成多个更容易拉开差异。 */
+const GEN_COUNTS = [1, 2, 3] as const
+interface GenForm { sampleType: 'general' | 'student'; count: number; direction: string }
+const genOpen = ref(false)
+const genBusy = ref(false)
+const genProgress = ref({ done: 0, total: 1 })
+const genForm = ref<GenForm>({ sampleType: 'general', count: 1, direction: '' })
+useEscape(() => genOpen.value, () => { if (!genBusy.value) genOpen.value = false })
+const genPanelRef = ref<HTMLElement | null>(null)
+const genMaskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => genOpen.value), genPanelRef)
+useMaskClose(genMaskRef, () => { if (!genBusy.value) genOpen.value = false })
+function openGenerate() {
+  if (!subPage.value?.id || genBusy.value) return
+  genOpen.value = true
+}
+function draftBody(form: GenForm): { sampleType?: string; direction?: string } | undefined {
+  const body: { sampleType?: string; direction?: string } = {}
+  if (form.sampleType === 'student') body.sampleType = 'student'
+  const direction = form.direction.trim()
+  if (direction) body.direction = direction
+  return Object.keys(body).length ? body : undefined
+}
+/** 生成 1 个：画像缺字段（旧样本）时先 AI 补全再重试一次，与旧的单发逻辑同承诺 */
+async function draftOne(id: string, form: GenForm) {
+  const body = draftBody(form)
   try {
-    await adminVirtualLearnersApi.draftVirtualLearnerStories(id, storySampleType.value === 'student' ? { sampleType: 'student' } : undefined)
-    await loadDetail(id, true)
-    toast.success('新故事已生成')
+    await adminVirtualLearnersApi.draftVirtualLearnerStories(id, body)
   } catch (e) {
     const msg = errMsg(e)
-    // 画像字段不完整（旧样本缺 learningStyle 等）：先 AI 补全画像再重试一次
-    if (msg.includes('personaSeed') || msg.includes('SCENARIO_OUTPUT_INVALID')) {
-      try {
-        toast.info('画像不完整，正在 AI 补全后重试…')
-        const base = liveVirtuals.value.find((v) => v.id === id)
-        const g = await adminVirtualLearnersApi.generatePersona({
-          ...(storySampleType.value === 'student' ? { sampleType: 'student' } : {}),
-          existingPersonaSeed: {
-            name: base?.name,
-            learningGoal: base?.goal,
-            notes: base?.story
-          }
-        })
-        const d = g.data?.data ?? g.data ?? {}
-        const seed = (d.personaSeed || d) as Record<string, unknown>
-        await adminVirtualLearnersApi.updateVirtualLearner(id, { profile: { ...seed } })
-        await adminVirtualLearnersApi.draftVirtualLearnerStories(id, storySampleType.value === 'student' ? { sampleType: 'student' } : undefined)
-        await loadDetail(id, true)
-        toast.success('画像已补全，新故事已生成')
-      } catch (e2) {
-        toast.error(`生成失败：${errMsg(e2)}`)
+    if (!(msg.includes('personaSeed') || msg.includes('SCENARIO_OUTPUT_INVALID'))) throw e
+    toast.info('画像不完整，正在 AI 补全后重试…')
+    const base = liveVirtuals.value.find((v) => v.id === id)
+    const g = await adminVirtualLearnersApi.generatePersona({
+      ...(form.sampleType === 'student' ? { sampleType: 'student' } : {}),
+      existingPersonaSeed: {
+        name: base?.name,
+        learningGoal: base?.goal,
+        notes: base?.story
       }
+    })
+    const d = g.data?.data ?? g.data ?? {}
+    const seed = (d.personaSeed || d) as Record<string, unknown>
+    await adminVirtualLearnersApi.updateVirtualLearner(id, { profile: { ...seed } })
+    await adminVirtualLearnersApi.draftVirtualLearnerStories(id, body)
+  }
+}
+async function submitGenerate() {
+  const id = subPage.value?.id
+  if (!id || genBusy.value) return
+  const total = genForm.value.count
+  genBusy.value = true
+  genProgress.value = { done: 0, total }
+  let made = 0
+  try {
+    for (let i = 0; i < total; i++) {
+      await draftOne(id, genForm.value)
+      made += 1
+      genProgress.value = { done: made, total }
+    }
+    await loadDetail(id, true)
+    genOpen.value = false
+    toast.success(total > 1 ? `已生成 ${made} 个故事` : '新故事已生成')
+  } catch (e) {
+    const msg = errMsg(e)
+    if (made > 0) {
+      await loadDetail(id, true)
+      genOpen.value = false
+      toast.error(`已生成 ${made} 个，第 ${made + 1} 个失败：${msg}`)
     } else {
       toast.error(`生成失败：${msg}`)
     }
   } finally {
-    storyBusy.value = false
+    genBusy.value = false
   }
+}
+
+/* 场景诊断弹窗（原故事行内 <details> 迁出） */
+const diagStory = ref<StoryItem | null>(null)
+const diagStoryOpen = ref(false)
+useEscape(() => diagStoryOpen.value, () => { diagStoryOpen.value = false })
+const diagPanelRef = ref<HTMLElement | null>(null)
+const diagMaskRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => diagStoryOpen.value), diagPanelRef)
+useMaskClose(diagMaskRef, () => { diagStoryOpen.value = false })
+function openStoryDiag(s: StoryItem) {
+  diagStory.value = s
+  diagStoryOpen.value = true
+}
+function hasDiagRaw(s: StoryItem): boolean {
+  return !!(s.goalSeed && Object.keys(s.goalSeed).length || s.disclosurePlan && Object.keys(s.disclosurePlan).length)
 }
 
 async function removeStory(index: number) {
@@ -2688,10 +2819,17 @@ watch(
 /** 行徽章只表达故事生命周期（就绪/草稿），不再兼职「已选」——
     「已选」只属于卡头勾选计数（selectedStoryKeys）；行选中态由 .is-selected
     的行底 + 单选点表达，避免同屏同名不同义（走查 F4-3）。 */
-function storyStatusLabel(s: StoryItem): string {
-  if (s.status === 'ready') return '就绪'
-  if (s.status === 'draft' || !s.status) return '草稿'
-  return s.status
+/** 故事生命周期 → 中文 + 徽章档位（后端原样回 completed/pending/draft，
+    此前直接透出英文，和「草稿」混在一列）。未知值兜底草稿，不裸透内部枚举。 */
+function storyStatusMeta(s: StoryItem): { text: string; cls: string } {
+  switch (String(s.status || '')) {
+    case 'ready': return { text: '就绪', cls: 'mk-badge--ok' }
+    case 'pending': return { text: '待运行', cls: 'mk-badge--info' }
+    case 'active': return { text: '进行中', cls: 'mk-badge--info' }
+    case 'completed': return { text: '已完成', cls: 'mk-badge--ok' }
+    case 'failed': return { text: '生成失败', cls: 'mk-badge--bad' }
+    default: return { text: '草稿', cls: 'mk-badge--muted' }
+  }
 }
 
 /** 阶段会话数摘要：只显示有数的段（「路径 0 · 教学 0」是零值噪声，无会话阶段不占位） */
@@ -3122,10 +3260,6 @@ async function quietReload(id: string) {
   gap: 12px;
   flex-wrap: wrap;
 }
-.vp-sample-pills {
-  display: inline-flex;
-  gap: 4px;
-}
 /* ===== 故事池：列表（选中 → 运行目标；展开 → 详情区） ===== */
 .vp-stories { display: grid; gap: 8px; padding: 12px; }
 /* 故事池状态过滤 chips（操作台「视图筛选」槽；对齐一级页 vl-filters） */
@@ -3153,22 +3287,11 @@ async function quietReload(id: string) {
   min-width: 0;
   transition: background 0.12s ease;
 }
-/* 行悬停中性底（原型 .tbl tbody tr:hover 词汇），选中才上蓝 */
+/* 行悬停中性底（原型 .tbl tbody tr:hover 词汇），选中才上蓝。
+   选中态此前还画了一个 radio 圈，与左侧批量 checkbox 并排成「两个圆」；
+   单选用标题可点 + 行底色表达，圆点撤除（2026-10-24 用户「故事池设计得太乱」）。 */
 .vp-story__row:hover { background: var(--mk-surface-2); }
 .vp-story.is-selected .vp-story__row { background: var(--mk-blue-bg); }
-.vp-story__radio {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  border: 2px solid var(--mk-line);
-  background: var(--mk-surface);
-  transition: border-color 0.14s ease;
-}
-.vp-story.is-selected .vp-story__radio {
-  border-color: var(--mk-blue);
-  background: radial-gradient(circle, var(--mk-blue) 0 4.5px, var(--mk-surface) 5px);
-}
 /* 多选 checkbox（对齐一级页批量操作） */
 .vp-story__checkbox {
   width: 16px;
@@ -3261,14 +3384,14 @@ async function quietReload(id: string) {
 /* 统计项图标已撤（2026-10-14 用户质询「怎么会有 emoji」）：原 --runs/--stages 两个修饰类只为挂
    时钟 / 折线 emoji 前缀，而文案本身已写明「运行 N 次」与「会话进度」，前缀纯装饰。管理端不用
    emoji（判例 AchIcon：2026-09-14 摘除后端成就图标那批）；修饰类随之从模板摘掉，不留空类。 */
-/* 最近结果占位（仅「未运行」文案在用；is-ok/is-bad/is-warn/is-running/is-none 等修饰类
-   从未在模板里绑定，属死 CSS 已删） */
+/* 最近结果占位：与运行次数/阶段计数同属统计行，不再 margin-left:auto 甩到最右
+   （此前「未运行」浮在运行按钮旁，和左侧统计脱节）。 */
 .vp-story__latest {
   font-size: var(--mk-fs-micro);
-  font-weight: 700;
+  font-weight: 600;
+  color: var(--mk-faint);
   white-space: nowrap;
   flex-shrink: 0;
-  margin-left: auto;
 }
 /* 行内操作 */
 .vp-story__ops {
@@ -3328,38 +3451,75 @@ async function quietReload(id: string) {
 /* 降级提示条已改用共享 .mk-alert--row（审核 2026-10-06 低 [97]）：原 .vp-fallback
    私有实现（含硬编码 rgba 边框）删除 */
 
-/* ===== 故事高级诊断折叠区（#73）：隐藏字段的折叠展示 ===== */
-.vp-story__diag {
+/* ===== 生成故事弹窗（样本 / 方向 / 数量） ===== */
+.vp-gen__intro {
+  margin: 0;
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
+  line-height: 1.6;
 }
-.vp-story__diag > summary {
+.vp-gen__group { display: grid; gap: 8px; }
+.vp-gen__cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.vp-gen__card {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface);
+  color: var(--mk-ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.vp-gen__card:hover { border-color: var(--mk-blue); }
+.vp-gen__card:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
+.vp-gen__card.is-active {
+  border-color: var(--mk-blue);
+  background: var(--mk-blue-bg);
+}
+.vp-gen__card strong { font-size: var(--mk-fs-body); }
+.vp-gen__card span {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  line-height: 1.5;
+}
+@media (max-width: 560px) {
+  .vp-gen__cards { grid-template-columns: 1fr; }
+}
+
+/* ===== 场景诊断弹窗（原故事行内折叠区迁出） ===== */
+.vp-diag {
+  display: grid;
+  gap: 8px;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  line-height: 1.6;
+}
+.vp-diag p { margin: 0; }
+.vp-diag b { margin-right: 6px; color: var(--mk-ink); }
+.vp-diag__raw > summary {
   cursor: pointer;
   color: var(--mk-faint);
   font-weight: 600;
   width: fit-content;
 }
-.vp-story__diag-body {
-  display: grid;
-  gap: 4px;
-  margin-top: 6px;
+.vp-diag__raw pre {
+  margin: 6px 0 0;
   padding: 8px 10px;
   border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-}
-.vp-story__diag-body p { margin: 0; line-height: 1.5; }
-.vp-story__diag-body b { margin-right: 6px; color: var(--mk-ink); }
-.vp-story__diag-body pre {
-  margin: 0;
-  padding: 6px 8px;
   border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-3);
+  background: var(--mk-surface-2);
   font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro);
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 180px;
+  max-height: 220px;
   overflow: auto;
 }
 

@@ -14,7 +14,7 @@ import { logger } from '../../utils/logger';
 import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
 import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-learner-scenario-designer';
 import { executeSkill } from '../../skills';
-import { buildLearnerStoryHints } from '../../services/virtual-lab/story-chapter.service';
+import { buildLearnerStoryHints, buildStoryDirectionHints } from '../../services/virtual-lab/story-chapter.service';
 import { attachMaterialsToLearner } from '../../services/virtual-lab/card-import.service';
 import { parseJson, normalizeStoryPoolData, ensureProfileStoryPool, isSameStory } from '../../virtual-lab/session-factory';
 import type { VirtualSessionRow } from '../../virtual-lab/vlab-types';
@@ -254,11 +254,13 @@ router.post('/:id/draft-stories', async (req: Request, res) => {
     // 跨故事记忆：注入该虚拟学习者最近完成的事项（成果物），让新故事可以延续"他做过什么"
     const learnerMemoryHints = await buildLearnerMemoryStoryHints(profile);
     // 显式样本类型：'student' 时注入传统学生故事指令（考试节点/课纲压力/作业情境/家长同伴环境）
-    const { sampleType } = req.body || {};
+    const { sampleType, direction } = req.body || {};
     const studentHints = sampleType === 'student'
       ? ['本次明确生成传统学生样本的故事：sourceType 取 study 或 goalType 取 exam_prep，必须写清考试节点与时间压力（月考/期中/期末/模考/倒计时）、课纲既定的学习内容、老师布置的作业情境、家长与老师的期望、同学比较环境；pressurePoints/behaviorHooks 写学生真实卡点（如"很努力但方法不对""一到考试就发挥失常""假期计划崩塌"）。']
       : [];
-    const storyHints = [...recentScenarioHints, ...learnerMemoryHints, ...studentHints];
+    // 生成方向（可选，前端弹窗填写）：用户指定的学科/情境优先于自由发挥，但仍受画像约束
+    const directionHints = buildStoryDirectionHints(direction);
+    const storyHints = [...recentScenarioHints, ...learnerMemoryHints, ...studentHints, ...directionHints];
 
     logger.info('[admin-generate-stories] 开始生成故事', {
       virtualProfileId: id,
