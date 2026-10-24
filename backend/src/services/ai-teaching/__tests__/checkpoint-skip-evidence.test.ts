@@ -51,7 +51,7 @@ jest.mock('../TeachingSessionRepository', () => {
   }
 })
 
-import { submitCheckpoint } from '../teaching-session-ops'
+import { resolveCheckpointAnswer, submitCheckpoint } from '../teaching-session-ops'
 
 const CHECKPOINT = {
   id: 'cp-1',
@@ -90,6 +90,38 @@ beforeEach(() => {
   mockCommitTurnState.mockResolvedValue(undefined)
   mockRecordCheckpointAttemptEvidence.mockResolvedValue(undefined)
 })
+
+describe('resolveCheckpointAnswer：混合形状不再走空简答', () => {
+  it('short_answer 带选项时按选项生成作答文本', () => {
+    const mixed = {
+      id: 'cp-mixed',
+      title: '理解检查',
+      type: 'short_answer' as const,
+      question: 'I am ______ on the server specs',
+      options: [
+        { id: 'A', text: 'waiting for' },
+        { id: 'B', text: 'waiting on' },
+      ],
+      correctOptionIds: ['B'],
+      expectedKeywords: ['resolve', 'request'],
+      allowSkip: true,
+    };
+    expect(resolveCheckpointAnswer(mixed, { selectedOptionIds: ['B'] })).toBe('B. waiting on');
+  });
+
+  it('真正无选项的简答仍要求 answerText', () => {
+    const short = {
+      id: 'cp-short',
+      title: '理解检查',
+      type: 'short_answer' as const,
+      question: '说说你的理解',
+      expectedKeywords: ['要点'],
+      allowSkip: true,
+    };
+    expect(() => resolveCheckpointAnswer(short, {})).toThrow('缺少作答内容');
+    expect(resolveCheckpointAnswer(short, { answerText: '我的理解' })).toBe('我的理解');
+  });
+});
 
 describe('skip 路径 H1 留痕', () => {
   it('skip=true 提交成功：清 pending、留历史、并落 checkpoint:attempt(skipped)', async () => {
