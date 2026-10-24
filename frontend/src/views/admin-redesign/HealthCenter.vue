@@ -54,10 +54,8 @@
            2026-10-02 语义统一（P1#30）：四卡 value 全部对齐「需处理数」（0 = 好，绿色），
            总数 / 达成数下沉 hint——修复此前「对账卡 value=登记总数 8 也被着成警示琥珀」的
            语义倒挂（MkKpi tone 只挂真正异常卡）。 -->
-      <!-- P-49（#74）：四卡各自为政，缺一句能收口的结论。四域「需处理数」之和为 0 即整体健康。 -->
-      <p class="hc-headline" :class="pendingTotal > 0 ? 'hc-headline--warn' : 'hc-headline--ok'" role="status">
-        {{ pendingTotal > 0 ? `待处理合计 ${pendingTotal} 项` : '四域均无待处理项' }}
-      </p>
+      <!-- P-49（#74）曾在此加一行「待处理合计 N 项」收口结论；2026-10-24 用户「不要这个提示，
+           多余」撤除：四张 KPI 已各自给出需处理数，合计再念一遍是复读。 -->
       <div class="hc-summary">
         <MkKpi
           label="检查异常"
@@ -439,10 +437,6 @@ const reconciliation = computed<HealthReconciliationSummary>(
     },
 )
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
-/** P-49（#74）：四域「需处理数」合计，作为首屏收口结论（0 = 整体健康） */
-const pendingTotal = computed(
-  () => healthAbnormal.value + driftActionable.value + reconAbnormal.value + (global.value?.abnormalSkills ?? 0)
-)
 /** 检查异常卡悬停：口径 + 本次总数（2026-10-19 用户走查「KPI hint 在报读数」——总数从副行
     下沉到本长释，副行只留口径短语。CP2/CP9 的「值不在 title 复读」仍成立：这里是分母不是值） */
 const healthAbnormalTitle = computed(() => {
@@ -812,14 +806,6 @@ defineExpose({ refresh })
    gap 归 16（与 .mk-kpi-grid 同口径）；margin-bottom 撤除（2026-10-03）：块间距归
    .mk-page 的 --mk-stack-gap——原先 14px margin 叠加页 gap 16 产生 30px 双重间距 */
 .hc-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--mk-space-4); }
-/* 四域收口结论（#74）：一行字，不占 KPI 卡位 */
-.hc-headline {
-  margin: 0 0 var(--mk-space-3);
-  font-size: var(--mk-fs-body);
-  font-weight: 700;
-}
-.hc-headline--ok { color: var(--mk-green, #15803d); }
-.hc-headline--warn { color: var(--mk-amber, #b45309); }
 /* 页签内容容器（审核 #78：role=tabpanel）：原 <template> 不产生 DOM，卡片直接是 .mk-page 的
    grid 子项吃页面 gap；包一层 div 后需自持同款堆叠节拍与 min-width:0，避免卡间距塌陷/横向溢出 */
 .hc-panel { display: grid; gap: var(--mk-stack-gap); align-content: start; min-width: 0; }
