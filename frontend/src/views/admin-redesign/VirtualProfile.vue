@@ -185,6 +185,8 @@
           <section class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">教学闭环定位</h3>
+              <!-- 零运行画像：五环全绿会读成「都已完成」，这里明说还没开始 -->
+              <span v-if="!allRuns.length" class="mk-card__meta">尚未运行</span>
             </div>
             <div class="vp-cardbody">
               <div class="loop" role="list" aria-label="教学闭环定位">
@@ -211,15 +213,42 @@
                 <dd>{{ d.archetype || '—' }}</dd>
                 <dt>主测场景</dt>
                 <dd :title="topScene ? `出现最频繁的运行场景：${topScene}` : '该画像还没有运行记录'">{{ topScene || '—' }}</dd>
-                <dt>运行信息</dt>
-                <dd>{{ runInfoText }}</dd>
               </dl>
+            </section>
+
+            <!-- 最近一次运行：概览层回答「上次跑到哪」，读数与运行页签同源同文案
+                 （运行次数在页头状态条，此处不再复读） -->
+            <section class="mk-card">
+              <div class="mk-card__head">
+                <h3 class="mk-card__title">最近运行</h3>
+                <span v-if="latestRun" class="mk-card__meta">{{ latestRun.time }}</span>
+              </div>
+              <div class="vp-cardbody">
+                <div v-if="latestRun" class="vp-lastrun">
+                  <div class="vp-lastrun__row">
+                    <span class="vp-lastrun__story" :title="latestRun.storyTitle || '未关联故事'">{{ latestRun.storyTitle || '未关联故事' }}</span>
+                    <RunStateBadge :status="latestRun.result" :hint="formatRunResult(latestRun.result)" :pulse="false" />
+                  </div>
+                  <span
+                    v-if="runReadings(latestRun)"
+                    class="vp-lastrun__meta mono"
+                    :title="runReadingsTitle(latestRun)"
+                  >{{ runReadings(latestRun) }}</span>
+                  <span v-if="latestRun.currentTask" class="vp-lastrun__task" :title="latestRun.currentTask">{{ latestRun.currentTask }}</span>
+                </div>
+                <MkEmptyState
+                  v-else
+                  title="暂无运行记录"
+                  description="到「故事池」选一个故事运行一次，这里会显示最近一次的任务进度、回合与时长。"
+                  compact
+                />
+              </div>
             </section>
 
             <section class="mk-card">
               <div class="mk-card__head">
                 <h3 class="mk-card__title">学习状态读数</h3>
-                <span class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
+                <span v-if="lsmRows.length" class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
               </div>
               <div class="vp-cardbody">
                 <div v-if="lsmRows.length" class="lsm">
@@ -235,7 +264,7 @@
                 <MkEmptyState
                   v-else
                   title="暂无学习状态读数"
-                  description="该画像的运行还没有按天汇总出学习状态读数，运行一次课程后即可读数。"
+                  :description="lessonEmptyDesc"
                   compact
                 />
               </div>
@@ -2369,12 +2398,12 @@ const sceneStats = computed(() => {
 /** 主测场景：出现最频繁的运行场景（无运行 → 空串，模板显示 —） */
 const topScene = computed(() => sceneStats.value[0]?.name || '')
 
-/** 画像设定「运行信息」：运行次数 + 最近一次运行距现在（来源 Detail.runs；无运行 → 明确文案） */
-const runInfoText = computed(() => {
+/** 最近一次运行（按 createdAt 倒序，与运行页签同口径）：概览「最近运行」卡用。
+    运行次数在页头状态条，本卡只回答「上次跑到哪、跑成什么样」。 */
+const latestRun = computed<RunItem | null>(() => {
   const runs = allRuns.value
-  if (!runs.length) return '暂无运行记录'
-  const latestIso = runs.reduce((acc, r) => (String(r.createdAt || '') > acc ? String(r.createdAt || '') : acc), '')
-  return latestIso ? `${runs.length} 次运行 · 最近 ${timeAgo(latestIso)}` : `${runs.length} 次运行`
+  if (!runs.length) return null
+  return runs.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0] || null
 })
 
 /** 当前状态徽章语气：VS_STATE_META.tone（muted/warn/ok/bad）→ mk-badge 修饰类（均已全局定义） */
@@ -2414,7 +2443,7 @@ const statItems = computed(() => {
 /** 教学闭环定位（原型 loopStrip index.html:1708-1722，五环）。
     原型读数是平台级「今日吞吐」；本页只有该画像的数据 → 用故事池 counts 与记忆池 counts 真实汇总，
     缺失源（记忆池未加载）显示 —，不套用原型数字。 */
-interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string }
+interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert' | 'idle'; title: string }
 const loopStages = computed<LoopStage[]>(() => {
   const sum = (pick: (s: StoryItem) => number | undefined) => stories.value.reduce((n, s) => n + (pick(s) || 0), 0)
   const goalTotal = sum((s) => s.goalCount)
@@ -2439,8 +2468,13 @@ const loopStages = computed<LoopStage[]>(() => {
           : stage.includes('memor') || stage.includes('review')
             ? 4
             : -1
-  const toneOf = (i: number): LoopStage['tone'] =>
-    i === 4 && (due ?? 0) > 0 ? 'alert' : i === currentIdx ? 'active' : 'done'
+  const toneOf = (i: number): LoopStage['tone'] => {
+    if (i === 4 && (due ?? 0) > 0) return 'alert'
+    // 零运行：五环都还没走过。此前全部落 done（绿边），读起来像「闭环已完成」——
+    // 改为只有入口环 active、其余虚线待办，明确「从这里开始」。
+    if (!allRuns.value.length) return i === 0 ? 'active' : 'idle'
+    return i === currentIdx ? 'active' : 'done'
+  }
   return [
     { name: '目标对话', meta: '澄清真实目标与约束', val: `${goalTotal} 会话`, tone: toneOf(0), title: `来源：故事池目标会话合计 ${goalTotal}` },
     { name: '路径规划', meta: '生成阶段化学习路径', val: `${pathTotal} 路径`, tone: toneOf(1), title: `来源：故事池路径合计 ${pathTotal}` },
@@ -2466,6 +2500,13 @@ const learnerMetricsAt = ref<string | null>(null)
 const lsmRows = computed<LsmRow[]>(() => {
   const m = learnerMetrics.value
   if (!m) return []
+  // 全 0 = 该账号还没有学习活动，不是「压力 0 / 疲劳 0」。四条全 0 时按无读数处理，
+  // 否则零运行画像会挂出四根 0.0 的条，读起来像真的取样过。
+  const hasSignal = LEARNER_METRICS.some((def) => {
+    const v = m[def.key]
+    return typeof v === 'number' && Number.isFinite(v) && v !== 0
+  })
+  if (!hasSignal) return []
   const width = (v: number) => Math.min(100, Math.round((v / 10) * 100))
   const rows: LsmRow[] = []
   for (const def of LEARNER_METRICS) {
@@ -2489,6 +2530,13 @@ const lsmRows = computed<LsmRow[]>(() => {
 
 /** 四读数出处（单次会话运行时快照）：与「学习者详情」页的学习者级聚合态不同源，数值天然不同 */
 const loadCaliberNote = computed(() => loadCaliber('session-snapshot', learnerMetricsAt.value))
+
+/** 四读数空态文案：没跑过 vs 跑过但还没取样，是两种成因 */
+const lessonEmptyDesc = computed(() =>
+  allRuns.value.length
+    ? '还没有取得该账号的单次会话取样；跑完一次课程后即可读数。'
+    : '该画像还没有运行过课程；跑一次后才会产生学习状态取样。'
+)
 
 /** 能力维度评分（原型 portrait pane 的 ranklist/meterrow index.html:2416-2421；原型 VL_DIMENSIONS 为假数据）。
     画像接口只有身份/偏好枚举（知识水平、性格基线、personalityTraits），无数值化维度 → 恒为空数组渲染空态（红线）。 */
@@ -2879,10 +2927,28 @@ async function quietReload(id: string) {
 .loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
+/* 零运行：待办环用虚线，与「已完成」的绿边区分开 */
+.loop__step--idle { border-style: dashed; }
 .loop__no { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
+
+/* 概览「最近运行」：故事 + 终态徽章一行，读数第二行（文案与运行页签同源） */
+.vp-lastrun { display: grid; gap: 6px; min-width: 0; }
+.vp-lastrun__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.vp-lastrun__story {
+  min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-weight: 600; color: var(--mk-ink);
+}
+.vp-lastrun__row > .rs-badge { flex: none; }
+.vp-lastrun__meta,
+.vp-lastrun__task {
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: var(--mk-fs-micro);
+}
+.vp-lastrun__meta { color: var(--mk-muted); }
+.vp-lastrun__task { color: var(--mk-faint); }
 
 /* 学习状态读数 lsm（原型 learningState index.html:1723-1737）：label / 轨 / 值+参考 三列 */
 .lsm { display: grid; gap: 12px; }
