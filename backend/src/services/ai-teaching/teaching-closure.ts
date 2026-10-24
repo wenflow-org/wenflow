@@ -30,6 +30,48 @@ export function detectTrailingQuestion(reply: string): boolean {
   return /[？?]/.test(String(reply || ''));
 }
 
+/**
+ * 「请提交/请回答」类未闭合请求：没有问号，但老师在等学员交付。
+ * 离线评审实测的漏网形态：「请更新后的 8 行标签发给我做最后确认。」
+ * 「现在请回答下面的快速题，确认……」——旧判据只认问号，收口审计判成已闭合。
+ *
+ * 只扫末两句，并排除课后建议/下一节预告，避免把「课后建议：整理成记录」
+ * 这类正常收尾误判为未闭合。
+ */
+const OPEN_REQUEST_PATTERNS: RegExp[] = [
+  /(发给我|发我|告诉我|回复我|回答我|提交给我|贴给我|念给我|说给我)/,
+  /(把|将)[^。！？!?\n]{0,60}(写出来|写下来|列出来|算出来|填好|更新|发给我|发我|告诉我|提交)/,
+  /(请|现在|接下来|然后)[^。！？!?\n]{0,30}(回答|复述|写出|写下|列出|说出|算出|填好|更新|修改|重做|完成)[^。！？!?\n]{0,40}(发|告诉|给我看|确认|检查|核对)/,
+];
+const CLOSING_ADVICE_PATTERN = /(课后建议|课后作业|课后可以|下课后|下一节|下次课|下次遇到|有余力|建议你课后)/;
+
+function tailSentences(reply: string, count = 2): string[] {
+  return String(reply || '')
+    .split(/(?<=[。！？!?\n])/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(-count);
+}
+
+export function detectOpenRequest(reply: string): boolean {
+  const tail = tailSentences(reply).join('');
+  if (!tail || CLOSING_ADVICE_PATTERN.test(tail)) return false;
+  return OPEN_REQUEST_PATTERNS.some((pattern) => pattern.test(tail));
+}
+
+function lastOpenRequestSentence(reply: string): string | null {
+  const sentences = String(reply || '')
+    .split(/(?<=[。！？!?\n])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (let i = sentences.length - 1; i >= 0; i -= 1) {
+    const sentence = sentences[i];
+    if (CLOSING_ADVICE_PATTERN.test(sentence)) return null;
+    if (OPEN_REQUEST_PATTERNS.some((pattern) => pattern.test(sentence))) return sentence;
+  }
+  return null;
+}
+
 export interface ClosureGateInput {
   /** 本回合老师的回复文本（teachingOutput.reply） */
   reply: string;
@@ -127,11 +169,13 @@ export function evaluateSessionClosable(input: {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message?.role === 'user') break;
-    if (message?.role === 'assistant' && !input.allowOpenQuestion && detectTrailingQuestion(String(message.content || ''))) {
+    const content = String(message?.content || '');
+    if (message?.role === 'assistant' && !input.allowOpenQuestion
+      && (detectTrailingQuestion(content) || detectOpenRequest(content))) {
       return {
         closable: false,
         code: 'FINALIZATION_OPEN_QUESTION',
-        message: '老师刚提了一个问题，先回答再结束课堂',
+        message: '老师刚提了一个问题或请学员提交结果，先完成再结束课堂',
       };
     }
   }
@@ -172,7 +216,7 @@ export interface ClosureAudit {
   deferredTimes: number;
 }
 
-/** 最后一条教师问题：从末尾向前找 assistant 消息中含问号的句子；遇到 user 消息即停。 */
+/** 最后一条教师问题/提交请求：从末尾向前找 assistant 消息；遇到 user 消息即停。 */
 export function lastTeacherQuestion(messages: Array<{ role?: string; content?: string }> | null | undefined): string | null {
   const list = Array.isArray(messages) ? messages : [];
   for (let i = list.length - 1; i >= 0; i -= 1) {
@@ -180,9 +224,11 @@ export function lastTeacherQuestion(messages: Array<{ role?: string; content?: s
     if (message?.role === 'user') break;
     if (message?.role !== 'assistant') continue;
     const text = String(message.content || '').trim();
-    if (!detectTrailingQuestion(text)) continue;
+    if (!detectTrailingQuestion(text) && !detectOpenRequest(text)) continue;
     const sentences = text.split(/(?<=[。！？!?])/).map((s) => s.trim()).filter(Boolean);
-    const hit = [...sentences].reverse().find((sentence) => detectTrailingQuestion(sentence));
+    const hit = detectTrailingQuestion(text)
+      ? [...sentences].reverse().find((sentence) => detectTrailingQuestion(sentence))
+      : lastOpenRequestSentence(text);
     const question = (hit || text).replace(/\s+/g, ' ').trim();
     return question.length > 240 ? question.slice(0, 240) + '…' : question;
   }
