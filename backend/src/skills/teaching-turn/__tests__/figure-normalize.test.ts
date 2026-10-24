@@ -688,3 +688,46 @@ describe('cartesian-plot：二维坐标图（2026-10-23 平抛课实测）', () 
     expect(none.figure).toBeUndefined();
   });
 });
+
+describe('concept-map：概念结构图（2026-10-23 用户定调：要概念可视化，不是出题）', () => {
+  it('节点 + 带名字的边保留；没有关系名的边丢弃；孤岛节点剪掉', async () => {
+    const ok = await runWithFigure({
+      kind: 'concept-map',
+      spec: {
+        title: '光合作用：两个阶段怎么接上',
+        nodes: [
+          { id: 'light', label: '光反应', sub: '类囊体膜', tone: 'accent', layer: 0 },
+          { id: 'atp', label: 'ATP / NADPH', sub: '能量与还原力', layer: 1 },
+          { id: 'dark', label: '暗反应', sub: '叶绿体基质', layer: 2 },
+          { id: 'ghost', label: '孤岛概念' },
+        ],
+        edges: [
+          { from: 'light', to: 'atp', label: '产生' },
+          { from: 'atp', to: 'dark', label: '供给' },
+          { from: 'light', to: 'dark' },
+        ],
+      },
+    });
+    expect(ok.figure.kind).toBe('concept-map');
+    expect(ok.figure.spec.nodes.map((n: any) => n.id)).toEqual(['light', 'atp', 'dark']);
+    expect(ok.figure.spec.edges).toHaveLength(2);
+
+    const noEdges = await runWithFigure({ kind: 'concept-map', spec: { nodes: [{ id: 'a', label: '甲' }, { id: 'b', label: '乙' }] } });
+    expect(noEdges.figure).toBeUndefined();
+  });
+
+  it('边端点不存在 / 自环 → 丢弃；只剩一条边仍成立', async () => {
+    const one = await runWithFigure({
+      kind: 'concept-map',
+      spec: {
+        nodes: [{ id: 'a', label: '甲' }, { id: 'b', label: '乙' }],
+        edges: [
+          { from: 'a', to: 'b', label: '导致' },
+          { from: 'a', to: 'a', label: '自环' },
+          { from: 'a', to: 'zzz', label: '悬空' },
+        ],
+      },
+    });
+    expect(one.figure.spec.edges).toEqual([{ from: 'a', to: 'b', label: '导致' }]);
+  });
+});

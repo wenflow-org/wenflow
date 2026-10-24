@@ -603,3 +603,35 @@ describe('cartesian-plot 面积（2026-10-23 广度扫测：v-t 图下面积=位
     expect(out!.svg).toMatch(/fill-opacity="0\.14"/);
   });
 });
+
+describe('concept-map（2026-10-23：概念与知识可视化，不是出题）', () => {
+  it('节点、关系名、takeaway 都画出来；自动分层后不越界', () => {
+    const out = renderSpecFigure('concept-map', {
+      title: '光合作用：两个阶段怎么接上',
+      nodes: [
+        { id: 'light', label: '光反应', sub: '类囊体膜', tone: 'accent' },
+        { id: 'atp', label: 'ATP / NADPH', sub: '能量与还原力' },
+        { id: 'dark', label: '暗反应', sub: '叶绿体基质' },
+      ],
+      edges: [
+        { from: 'light', to: 'atp', label: '产生' },
+        { from: 'atp', to: 'dark', label: '供给' },
+      ],
+      takeaway: '光反应造能量，暗反应用能量把 CO₂ 变成糖',
+    });
+    expect(out).not.toBeNull();
+    const svg = out!.svg;
+    expect(svg).toContain('光反应');
+    expect(svg).toContain('供给');
+    expect(svg).toContain('光反应造能量');
+    for (const m of svg.matchAll(/(?:cx|cy|x1|x2|y1|y2|x|y)="(-?\d+(?:\.\d+)?)"/g)) {
+      const v = Number(m[1]);
+      expect(v).toBeGreaterThanOrEqual(-1);
+      expect(v).toBeLessThanOrEqual(Math.max(out!.width, out!.height) + 1);
+    }
+  });
+
+  it('没有边 → null', () => {
+    expect(renderSpecFigure('concept-map', { nodes: [{ id: 'a', label: '甲' }], edges: [] })).toBeNull();
+  });
+});

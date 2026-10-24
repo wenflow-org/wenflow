@@ -2142,6 +2142,227 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], areas = []
   return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };
 }
 
+/* ---------------- 概念图 ---------------- */
+
+/**
+ * concept-map：把**概念结构**摆出来（2026-10-23 用户定调：要概念可视化，不是出题）。
+ *
+ * 与 bipartite/tree 的差别在语义：节点是概念要素（概念/过程/量/条件），
+ * 边是**带名字的关系**（产生/供给/构成/导致/对照）。版面按最长路径自动分层（上→下），
+ * 边标签压在连线上并带白描边；孤岛节点后端已剪掉。
+ */
+function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): RenderedFigure | null {
+  if (!Array.isArray(nodes) || nodes.length < 2 || !Array.isArray(edges) || !edges.length) return null;
+  const byId = new Map<string, any>(nodes.map((n: any) => [String(n.id), n]));
+
+  // 分层：显式 layer 优先，否则按最长路径（有环时退回已算出的最大值，不追求完美）
+  const depth = new Map<string, number>();
+  const resolveDepth = (id: string, guard = 0): number => {
+    const node = byId.get(id);
+    if (node && Number.isInteger(node.layer)) return Math.max(0, Math.min(3, Number(node.layer)));
+    if (depth.has(id)) return depth.get(id)!;
+    if (guard > 12) return 0;
+    const parents = edges.filter((e: any) => String(e.to) === id && byId.has(String(e.from)));
+    const d = parents.length ? Math.max(...parents.map((e: any) => resolveDepth(String(e.from), guard + 1))) + 1 : 0;
+    depth.set(id, d);
+    return d;
+  };
+  nodes.forEach((n: any) => resolveDepth(String(n.id)));
+  const maxDepth = Math.max(...nodes.map((n: any) => depth.get(String(n.id)) ?? 0));
+  const layers: any[][] = Array.from({ length: maxDepth + 1 }, () => []);
+  nodes.forEach((n: any) => layers[depth.get(String(n.id)) ?? 0].push(n));
+
+  // 每层最多 4 个一排，超了就折到下一排——环形概念图（5~8 个节点同层）靠这一条才不叠字
+  const MAX_PER_ROW = 4;
+  const rows: Array<{ nodes: any[]; depth: number }> = [];
+  layers.forEach((layer, d) => {
+    for (let i = 0; i < layer.length; i += MAX_PER_ROW) {
+      rows.push({ nodes: layer.slice(i, i + MAX_PER_ROW), depth: d });
+    }
+  });
+
+  const TONE: Record<string, string> = { accent: T.accent, ok: T.ok, warn: T.warn, neutral: T.muted };
+  const padX = 18;
+  const laneGap = 30;
+
+  // 环状知识（每个要素既被推动又推动下一个：工业革命、水循环、反馈回路）走环形布局。
+  // 分层的树状版面会把「循环」读成「先后」，恰好是这类概念最容易被误解的地方。
+  const inDeg = new Map<string, number>();
+  const outDeg = new Map<string, number>();
+  nodes.forEach((n: any) => { inDeg.set(String(n.id), 0); outDeg.set(String(n.id), 0); });
+  edges.forEach((e: any) => {
+    if (!byId.has(String(e.from)) || !byId.has(String(e.to))) return;
+    outDeg.set(String(e.from), (outDeg.get(String(e.from)) || 0) + 1);
+    inDeg.set(String(e.to), (inDeg.get(String(e.to)) || 0) + 1);
+  });
+  const cyclic = nodes.every((n: any) => (inDeg.get(String(n.id)) || 0) >= 1 && (outDeg.get(String(n.id)) || 0) >= 1);
+
+  if (cyclic && nodes.length >= 3) {
+    const titleH = title ? T.fontTitle + 18 : 0;
+    const boxH = (n: any) => (n.sub ? 48 : 38);
+    const boxW = (n: any) => Math.min(190, Math.max(112, Math.max(est(n.label, T.fontKey) + 22, est(n.sub ?? '', T.fontMicro) + 18)));
+    const maxW = Math.max(...nodes.map(boxW));
+    const maxH = Math.max(...nodes.map(boxH));
+    const r = Math.max(118, Math.round(maxW * 0.92));
+    const w = Math.max(560, Math.round(2 * r + maxW + padX * 2 + 40));
+    const cx0 = w / 2;
+    const cy0 = titleH + 20 + r + maxH / 2;
+    const takeawayLinesR = takeaway ? balancedWrap(takeaway, w - padX * 2, T.fontSmall) : [];
+    const h = cy0 + r + maxH / 2 + 22 + (takeawayLinesR.length ? 12 + takeawayLinesR.length * 18 : 0);
+    const parts: string[] = [...titleBlock(title, padX)];
+    const pos = new Map<string, { x: number; y: number; w: number; h: number; cx: number; cy: number }>();
+    nodes.forEach((n: any, i: number) => {
+      const angle = -Math.PI / 2 + (i * 2 * Math.PI) / nodes.length;
+      const nx = cx0 + r * Math.cos(angle);
+      const ny = cy0 + r * Math.sin(angle);
+      pos.set(String(n.id), { x: nx - boxW(n) / 2, y: ny - boxH(n) / 2, w: boxW(n), h: boxH(n), cx: nx, cy: ny });
+    });
+    const labels: string[] = [];
+    for (const e of edges) {
+      const a = pos.get(String(e.from));
+      const b = pos.get(String(e.to));
+      if (!a || !b) continue;
+      const tone = TONE[e.tone] || T.lineStrong;
+      // 控制点从圆心往两边连线中点外侧推：弧线向外鼓，读起来是「绕一圈」
+      const mx = (a.cx + b.cx) / 2;
+      const my = (a.cy + b.cy) / 2;
+      const dx = mx - cx0;
+      const dy = my - cy0;
+      const len = Math.hypot(dx, dy) || 1;
+      const bulge = 34;
+      const ctrlX = mx + (dx / len) * bulge;
+      const ctrlY = my + (dy / len) * bulge;
+      // 缩短到盒子边缘，避免箭头戳进节点
+      const shrink = 0.82;
+      const sx = a.cx + (ctrlX - a.cx) * 0.18;
+      const sy = a.cy + (ctrlY - a.cy) * 0.18;
+      const tx = b.cx - (ctrlX - b.cx) * (1 - shrink) * 1.2;
+      const ty = b.cy - (ctrlY - b.cy) * (1 - shrink) * 1.2;
+      parts.push(`<path d="M${sx} ${sy} Q${ctrlX} ${ctrlY} ${tx} ${ty}" fill="none" stroke="${tone}" stroke-width="1.6"${e.dash ? ' stroke-dasharray="5 4"' : ''}/>`);
+      parts.push(`<path d="M${tx} ${ty} l-7 -3.4 l1.6 7.4 Z" fill="${tone}"/>`);
+      const lx = mx + (dx / len) * (bulge + 12);
+      const ly = my + (dy / len) * (bulge + 12);
+      labels.push(text(lx, ly, e.label, 't-tiny', 'middle', `paint-order="stroke" stroke="${T.surface}" stroke-width="3" stroke-linejoin="round" fill="${tone}"`));
+    }
+    parts.push(...labels);
+    for (const n of nodes) {
+      const q = pos.get(String(n.id))!;
+      const tone = TONE[n.tone];
+      parts.push(rect(q.x, q.y, q.w, q.h, { r: 9, fill: T.surface, stroke: tone || T.line, sw: tone ? 1.6 : 1.1 }));
+      parts.push(text(q.cx, n.sub ? q.y + 20 : q.y + q.h / 2 + 5, n.label, 't-key', 'middle'));
+      if (n.sub) parts.push(text(q.cx, q.y + 36, n.sub, 't-tiny', 'middle'));
+    }
+    takeawayLinesR.forEach((line: string, i: number) => {
+      parts.push(text(padX, h - 14 - (takeawayLinesR.length - 1 - i) * 18, line, 't-small', 'start'));
+    });
+    return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };
+  }
+
+  const titleH = title ? T.fontTitle + 18 : 0;
+  const gapY = 56;
+  const boxH = (n: any) => (n.sub ? 48 : 38);
+  const boxW = (n: any) => Math.min(190, Math.max(112, Math.max(est(n.label, T.fontKey) + 22, est(n.sub ?? '', T.fontMicro) + 18)));
+  const rowIndexOf = new Map<string, number>();
+  rows.forEach((row, ri) => row.nodes.forEach((n: any) => rowIndexOf.set(String(n.id), ri)));
+  const positionsPreview = rowIndexOf;
+  const rowW = (row: any[]) => row.reduce((sum, n: any) => sum + boxW(n) + 14, -14);
+  const maxRowW = Math.max(...rows.map((r) => rowW(r.nodes)));
+  // 有跨层/回环边时，右侧要留出车道 + 标签的位置，否则标签会被画布切掉（2026-10-23 实拍）
+  const hasLaneEdges = edges.some((e: any) => {
+    const a = positionsPreview.get(String(e.from));
+    const b = positionsPreview.get(String(e.to));
+    return a && b && !(b.row > a.row && b.row === a.row + 1);
+  });
+  const w = Math.max(560, Math.min(980, maxRowW + padX * 2 + laneGap + (hasLaneEdges ? 86 : 0)));
+
+  const positions = new Map<string, { x: number; y: number; w: number; h: number }>();
+  let y = titleH + 10;
+  let lastDepth = -1;
+  for (const row of rows) {
+    if (lastDepth >= 0 && row.depth !== lastDepth) y += 14; // 层与层之间多留一点，边才有地方走
+    lastDepth = row.depth;
+    const rw = rowW(row.nodes);
+    let x = Math.max(padX, (w - laneGap - rw) / 2);
+    for (const n of row.nodes) {
+      const bw = boxW(n);
+      positions.set(String(n.id), { x, y, w: bw, h: boxH(n) });
+      x += bw + 14;
+    }
+    y += Math.max(...row.nodes.map(boxH)) + gapY;
+  }
+  const contentBottom = y - gapY;
+  const takeawayLines = takeaway ? balancedWrap(takeaway, w - padX * 2, T.fontSmall) : [];
+  const h = contentBottom + (takeawayLines.length ? 12 + takeawayLines.length * 18 : 0) + 14;
+
+  const parts: string[] = [...titleBlock(title, padX)];
+
+  const nodeRects = [...positions.values()];
+  const labelRects: Array<{ x: number; y: number; w: number; h: number }> = [];
+  const freeSpot = (cx: number, cy: number, wd: number) => {
+    const r = { x: cx - wd / 2, y: cy - 8, w: wd, h: 13 };
+    const hit = (o: { x: number; y: number; w: number; h: number }) =>
+      r.x < o.x + o.w && r.x + r.w > o.x && r.y < o.y + o.h && r.y + r.h > o.y;
+    return !nodeRects.some(hit) && !labelRects.some(hit);
+  };
+  const putLabel = (cx: number, cy: number, label: string, anchor: 'start' | 'middle' | 'end', tone: string) => {
+    const wd = est(label, T.fontMicro);
+    const bx = anchor === 'middle' ? cx : anchor === 'start' ? cx + wd / 2 : cx - wd / 2;
+    let ly = cy;
+    for (let i = 0; i < 10 && !freeSpot(bx, ly, wd); i += 1) ly += 13;
+    labelRects.push({ x: bx - wd / 2, y: ly - 8, w: wd, h: 13 });
+    parts.push(text(cx, ly, label, 't-tiny', anchor, `paint-order="stroke" stroke="${T.surface}" stroke-width="3" stroke-linejoin="round" fill="${tone}"`));
+  };
+
+  let lane = 0;
+  for (const e of edges) {
+    const a = positions.get(String(e.from));
+    const b = positions.get(String(e.to));
+    if (!a || !b) continue;
+    const tone = TONE[e.tone] || T.lineStrong;
+    const da = depth.get(String(e.from)) ?? 0;
+    const db = depth.get(String(e.to)) ?? 0;
+    const directlyBelow = b.y >= a.y + a.h + 6 && db === da + 1;
+    if (directlyBelow) {
+      const x1 = a.x + a.w / 2;
+      const y1 = a.y + a.h;
+      const x2 = b.x + b.w / 2;
+      const y2 = b.y;
+      const midY = (y1 + y2) / 2;
+      parts.push(`<path d="M${x1} ${y1} C${x1} ${midY} ${x2} ${midY} ${x2} ${y2 - 2}" fill="none" stroke="${tone}" stroke-width="1.5"${e.dash ? ' stroke-dasharray="5 4"' : ''}/>`);
+      parts.push(`<path d="M${x2 - 4} ${y2 - 6} L${x2} ${y2 - 1} L${x2 + 4} ${y2 - 6} Z" fill="${tone}"/>`);
+      putLabel((x1 + x2) / 2, y1 + (y2 - y1) * 0.7, e.label, 'middle', tone);
+    } else {
+      // 跨层/同层/回环：一律走右侧车道，避免从中间那排节点身上穿过去
+      const laneX = w - 22 - (lane % 3) * 10;
+      lane += 1;
+      const ay = a.y + a.h / 2;
+      const by = b.y + b.h / 2;
+      const rightA = a.x + a.w;
+      const rightB = b.x + b.w;
+      parts.push(`<path d="M${rightA} ${ay} L${laneX} ${ay} L${laneX} ${by} L${rightB + 2} ${by}" fill="none" stroke="${tone}" stroke-width="1.5"${e.dash ? ' stroke-dasharray="5 4"' : ''}/>`);
+      parts.push(`<path d="M${rightB + 9} ${by - 4} L${rightB + 2} ${by} L${rightB + 9} ${by + 4} Z" fill="${tone}"/>`);
+      putLabel(laneX - 4, (ay + by) / 2, e.label, 'end', tone);
+    }
+  }
+
+  // 节点最后画（压在连线之上），保证标签永远可读
+  for (const n of nodes) {
+    const pos = positions.get(String(n.id));
+    if (!pos) continue;
+    const tone = TONE[n.tone];
+    parts.push(rect(pos.x, pos.y, pos.w, pos.h, { r: 9, fill: T.surface, stroke: tone || T.line, sw: tone ? 1.6 : 1.1 }));
+    const cx = pos.x + pos.w / 2;
+    parts.push(text(cx, n.sub ? pos.y + 20 : pos.y + pos.h / 2 + 5, n.label, 't-key', 'middle'));
+    if (n.sub) parts.push(text(cx, pos.y + 36, n.sub, 't-tiny', 'middle'));
+  }
+
+  takeawayLines.forEach((line: string, i: number) => {
+    parts.push(text(padX, contentBottom + 16 + i * 18, line, 't-small', 'start'));
+  });
+
+  return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };
+}
+
 /* ---------------- 分派 ---------------- */
 
 /**
@@ -2191,6 +2412,8 @@ export function renderSpecFigure(
         return renderRangeBar(spec);
       case 'cartesian-plot':
         return renderCartesianPlot(spec);
+      case 'concept-map':
+        return renderConceptMap(spec);
       default:
         return null;
     }

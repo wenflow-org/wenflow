@@ -531,7 +531,8 @@ export type TeachingFigureKind =
   | 'venn'
   | 'bullseye'
   | 'range-bar'
-  | 'cartesian-plot';
+  | 'cartesian-plot'
+  | 'concept-map';
 
 export interface TeachingFigure {
   /** 渲染引擎；归一化后恒为 'svg'（其他值整块丢弃，见 normalizeFigure） */
@@ -919,6 +920,9 @@ const FIGURE_KINDS: ReadonlySet<string> = new Set([
   // 2026-10-23：二维科学坐标图（cartesian-plot）。函数曲线/平抛轨迹/实验数据点——
   // 手机里那节平抛课该出的「频闪等时轨迹」就是它，此前系统只能拿 grid 表格硬塞。
   'cartesian-plot',
+  // 2026-10-23 晚：概念图（concept-map）。用户点破方向：要的不是「讲完一处配一张答案图」，
+  // 而是把**概念本身**摆出来——要素有哪些、彼此是什么关系、从哪来、导致什么。
+  'concept-map',
 ]);
 
 /**
@@ -1304,6 +1308,8 @@ function normalizeFigureSpec(kind: TeachingFigureKind, raw: Record<string, unkno
       return normalizeRangeBarSpec(raw);
     case 'cartesian-plot':
       return normalizeCartesianPlotSpec(raw);
+    case 'concept-map':
+      return normalizeConceptMapSpec(raw);
     default:
       return null;
   }
@@ -1423,6 +1429,70 @@ function normalizeRangeBarSpec(raw: Record<string, unknown>): Record<string, unk
     ...(unit ? { unit } : {}),
     ...(title ? { title } : {}),
     ...(note ? { note } : {}),
+  };
+}
+
+/**
+ * concept-map：概念图（2026-10-23 用户定调：要概念可视化，不是出题）。
+ *
+ * 与其它图型的区别：节点不是「这一轮提到的对象」，而是**知识结构里的概念要素**
+ * （概念/过程/量/条件），边不是「指向」，而是**有名字的关系**（产生/供给/构成/依赖/导致/对比）。
+ * 学生看图是在建立知识结构，不是在核对某个答案。
+ *
+ * 约束：
+ * - 节点 2~10 个、边 1~14 条；边必须两端都在节点里（悬空边丢弃）；
+ * - 每条边**必须有关系名**（≤10 字）——没有名字的线只是连线，不是知识；
+ * - 允许 layer（0~3）指定层级，缺省由渲染器按最长路径自动分层。
+ */
+function normalizeConceptMapSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const nodes: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+  for (const item of Array.isArray(raw.nodes) ? raw.nodes : []) {
+    if (!item || typeof item !== 'object') continue;
+    const node = item as Record<string, unknown>;
+    const id = toFigureLabel(node.id, 24);
+    const label = toFigureLabel(node.label, SPEC.labelMax);
+    if (!id || !label || seen.has(id)) continue;
+    seen.add(id);
+    const sub = toFigureText(node.sub, SPEC.subMax);
+    const tone = normalizeTone(node.tone, ['accent', 'ok', 'warn', 'neutral']);
+    const layer = toBoundedInt(node.layer, 0, 3);
+    nodes.push({ id, label, ...(sub ? { sub } : {}), ...(tone ? { tone } : {}), ...(layer !== null ? { layer } : {}) });
+    if (nodes.length >= 10) break;
+  }
+  if (nodes.length < 2) return null;
+
+  const edges: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.edges) ? raw.edges : []) {
+    if (!item || typeof item !== 'object') continue;
+    const edge = item as Record<string, unknown>;
+    const from = toFigureLabel(edge.from, 24);
+    const to = toFigureLabel(edge.to, 24);
+    const label = toFigureLabel(edge.label, 10);
+    if (!from || !to || !label || from === to || !seen.has(from) || !seen.has(to)) continue;
+    const tone = normalizeTone(edge.tone, ['accent', 'ok', 'warn', 'neutral']);
+    const dash = normalizeDash(edge.dash);
+    edges.push({ from, to, label, ...(tone ? { tone } : {}), ...(dash ? { dash } : {}) });
+    if (edges.length >= 14) break;
+  }
+  if (!edges.length) return null;
+
+  // 没有任何边连到的节点是孤岛：概念图里它既不属于结构也不解释什么，剪掉。
+  const used = new Set<string>();
+  for (const e of edges) {
+    used.add(String(e.from));
+    used.add(String(e.to));
+  }
+  const kept = nodes.filter((n) => used.has(String(n.id)));
+  if (kept.length < 2) return null;
+
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const readout = toFigureText(raw.takeaway, SPEC.noteMax);
+  return {
+    nodes: kept,
+    edges,
+    ...(title ? { title } : {}),
+    ...(readout ? { takeaway: readout } : {}),
   };
 }
 
