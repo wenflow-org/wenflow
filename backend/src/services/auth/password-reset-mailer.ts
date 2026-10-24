@@ -42,6 +42,11 @@ export class ConsoleMailProvider implements MailProvider {
   }
 }
 
+/** 当前部署是否真的能把重置邮件发到用户邮箱（console provider 只会写日志）。 */
+export function isPasswordResetMailDeliveryAvailable(): boolean {
+  return (process.env.PASSWORD_RESET_MAIL_PROVIDER || 'console') !== 'console';
+}
+
 export function getPasswordResetMailProvider(): MailProvider {
   const providerId = process.env.PASSWORD_RESET_MAIL_PROVIDER || 'console';
   switch (providerId) {

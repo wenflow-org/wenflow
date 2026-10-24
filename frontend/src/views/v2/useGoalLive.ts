@@ -570,7 +570,13 @@ async function resumeById(cid: string): Promise<boolean> {
   sending.value = true;
   try {
     const env = await getGoalConversation(cid);
-    if (gen === generation) resumeErrorStatus.value = null;
+    if (gen === generation) {
+      resumeErrorStatus.value = null;
+      // 恢复请求的会话 id 是权威：即使服务端信封暂时缺少 internal.core.conversationId，
+      // 也必须沿用 cid。否则恢复后下一条消息会走 start 分支，新建一个 gc_xxx 会话。
+      conversationId.value = cid;
+      setGoalConversationCid(cid);
+    }
     applyEnvelope(env, { replaceMessages: true }, gen);
     if (gen === generation && messages.value.length === 0) {
       const cached = getGoalConversationMsgs();

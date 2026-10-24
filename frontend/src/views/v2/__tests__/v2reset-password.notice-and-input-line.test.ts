@@ -33,13 +33,19 @@ function ruleAfter(source: string, selector: string): string {
 }
 
 describe('忘记密码页 · 提交回执点明取回渠道', () => {
-  it('回执写明发往注册邮箱并提示查收（含垃圾邮件箱）', () => {
-    expect(sfc).toMatch(/若该账号存在，重置链接已发送到注册邮箱，请查收（含垃圾邮件箱）。/);
+  it('回执按邮件通道能力给文案：未配置发送时不再承诺收信', () => {
+    expect(sfc).toContain('result.mailDeliveryAvailable === true');
+    expect(sfc).toContain('当前环境未配置邮件发送，请联系管理员重置密码。');
+  });
+
+  it('提交前也提前说明 @wenflow.local 与当前邮件通道不可用', () => {
+    expect(sfc).toContain('@wenflow.local 邮箱无法接收邮件');
+    expect(sfc).toContain('当前环境未配置邮件发送');
   });
 
   it('保留「若该账号存在」前置条件，不因点明渠道而变成账号枚举', () => {
-    const notice = /notice\.value\s*=\s*'([^']+)'/.exec(sfc)?.[1] ?? '';
-    expect(notice.startsWith('若该账号存在')).toBe(true);
+    expect(sfc).toContain("'若该账号存在，重置链接会发送到注册邮箱，请查收（含垃圾邮件箱）。'");
+    expect(sfc).toContain("'若该账号存在，系统会生成重置链接；当前环境未配置邮件发送，请联系管理员重置密码。'");
   });
 });
 

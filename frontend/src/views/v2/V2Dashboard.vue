@@ -49,7 +49,7 @@
         v-else-if="loadError"
         tone="error"
         title="学习台加载失败"
-        description="网络似乎不太稳定，检查连接后可以重试。"
+        :description="loadErrorDescription"
         action-text="重试"
         @action="loadAll"
       />
@@ -415,6 +415,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
+import { describeRequestError } from '@/utils/httpError';
 import { computeStreakDays } from './streak';
 import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
@@ -512,6 +513,8 @@ const reviewFooterHint = computed(() => {
 });
 const todaySchedule = ref<Record<string, any> | null>(null);
 const loadError = ref(false);
+/** 整页失败原因：429 明说限流并给等待秒数，不再一律写成“网络不稳定” */
+const loadErrorDescription = ref('网络似乎不太稳定，检查连接后可以重试。');
 /** 各数据源失败标记：区块级降级提示（不整页失败，也不伪装成空态） */
 const sourceFailed = ref<Record<string, boolean>>({
   budget: false,
@@ -552,6 +555,7 @@ async function loadAll() {
     loadError.value = false;
     sourceFailed.value = { budget: false, review: false, week: false };
   }
+  loadErrorDescription.value = '网络似乎不太稳定，检查连接后可以重试。';
   const { start: winStart, end: winEnd } = sessionWindowDates();
   const fastGroup = await Promise.allSettled([
     learningAPI.getStats(),
@@ -566,6 +570,12 @@ async function loadAll() {
   // 有快照时保留旧内容静默失败（不闪错误态，下一次进入再重试）
   if (fastGroup.every((r) => r.status === 'rejected')) {
     if (!snap) {
+      // 取第一个失败原因：429 显示「请求过于频繁 + Retry-After」，5xx 显示服务不可用，
+      // 只有真正的传输层错误才保留“网络不稳定”的措辞。
+      const firstRejected = fastGroup.find(
+        (r): r is PromiseRejectedResult => r.status === 'rejected'
+      );
+      loadErrorDescription.value = describeRequestError(firstRejected?.reason);
       loading.value = false;
       loadError.value = true;
     }

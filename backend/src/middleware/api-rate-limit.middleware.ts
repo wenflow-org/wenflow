@@ -6,6 +6,50 @@ type RateLimitOptions = {
   message?: string;
 };
 
+type RateLimitRequestLike = { method: string; path: string };
+
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const OPERATIONAL_PATHS = new Set(['/health', '/livez', '/readyz']);
+
+/** 读请求与写请求分开计额度：读接口打满时不能顺手把发言/提交也锁死。 */
+export function isWriteRequest(method: string): boolean {
+  return WRITE_METHODS.has(method.toUpperCase());
+}
+
+export function shouldSkipGlobalApiLimit(req: RateLimitRequestLike): boolean {
+  return (
+    req.method.toUpperCase() === 'OPTIONS'
+    || isWriteRequest(req.method)
+    || req.path.startsWith('/admin/')
+    || OPERATIONAL_PATHS.has(req.path)
+  );
+}
+
+export function shouldSkipWriteApiLimit(req: RateLimitRequestLike): boolean {
+  return (
+    req.method.toUpperCase() === 'OPTIONS'
+    || !isWriteRequest(req.method)
+    || req.path.startsWith('/admin/')
+    || OPERATIONAL_PATHS.has(req.path)
+  );
+}
+
+/**
+ * 读额度：15 分钟 6000 次（旧全局限流 1200 次的 5 倍）。
+ * 单页首屏约 7-20 个只读请求，6000 足够覆盖正常浏览与课堂恢复；
+ * 写请求不占这份额度（见 writeApiLimiter）。
+ */
+export const GLOBAL_API_RATE_LIMIT = {
+  windowMs: 15 * 60 * 1000,
+  max: 6000,
+} as const;
+
+/** 写额度：15 分钟 1200 次，与旧全局上限持平，但不再被读请求消耗。 */
+export const WRITE_API_RATE_LIMIT = {
+  windowMs: 15 * 60 * 1000,
+  max: 1200,
+} as const;
+
 function buildRateLimitMessage(message?: string) {
   return {
     success: false,
@@ -32,12 +76,23 @@ export function createApiRateLimiter(options: RateLimitOptions) {
  * 导致整页「控制台数据加载失败」。admin API 由 adminApiLimiter 单独管理。
  */
 export const globalApiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1200,
+  ...GLOBAL_API_RATE_LIMIT,
   message: buildRateLimitMessage('请求过于频繁，请稍后重试'),
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path.startsWith('/admin/'),
+  skip: shouldSkipGlobalApiLimit,
+});
+
+/**
+ * 写请求专属限流：与读额度分离，避免学习台/课堂恢复的只读流量把发言、提交、
+ * 结束课堂等写操作一起打满。admin 与健康检查同样不占用户写额度。
+ */
+export const writeApiLimiter = rateLimit({
+  ...WRITE_API_RATE_LIMIT,
+  message: buildRateLimitMessage('操作过于频繁，请稍后重试'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: shouldSkipWriteApiLimit,
 });
 
 /**
