@@ -217,3 +217,59 @@ describe('collectedData 承载读取与模式归一化', () => {
     expect(normalizeResponseTriageEnforcementMode('weird')).toBe('advisory');
   });
 });
+
+/**
+ * 问题结构轴（2026-10-25 方向改造，静默推断）：coupling/stakes 从已有文本确定性识别，
+ * 与 recurrence 合成三条件测试调制 learning_path 置信度；禁止向用户追问（纯推断，无新增交互）。
+ */
+describe('问题结构轴：coupling/stakes 静默推断 + 三条件测试', () => {
+  it('排班型：recurring + stakes 高（排班失误流失客户）→ 置信 high + 轴落库', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'capability',
+      recurrence: 'recurring',
+      real_problem: '排班失误导致周末高峰顾客流失，人手不够',
+    });
+    expect(r.mode).toBe('learning_path');
+    expect(r.confidence).toBe('high');
+    expect(r.stakes).toBe('high');
+    expect(r.reasons.some((x) => x.includes('三条件测试'))).toBe(true);
+  });
+
+  it('时好时坏型：耦合词命中 → coupling=high，单独不抬 confidence（1/3 命中）', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'capability',
+      real_problem: '门店客流时好时坏，分不清是天气还是促销的影响',
+    });
+    expect(r.coupling).toBe('high');
+    expect(r.mode).toBe('learning_path');
+    // 1/3 命中：不升不降
+    expect(r.confidence).toBe('medium');
+  });
+
+  it('一次性低耦合低代价：三条件 0/3 → 置信降档 + reasons 标注路径可能过重', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'capability',
+      real_problem: '想把这个视频剪辑导出的格式设置对',
+    });
+    expect(r.coupling).toBe('low');
+    expect(r.stakes).toBe('low');
+    expect(r.confidence).toBe('low');
+    expect(r.reasons.some((x) => x.includes('一次性解答场景'))).toBe(true);
+  });
+
+  it('无文本字段 → 轴不输出（undefined），行为与旧版一致', () => {
+    const r = triageGoalResponse({ primary_block_type: 'capability' });
+    expect(r.coupling).toBeUndefined();
+    expect(r.stakes).toBeUndefined();
+    expect(r.mode).toBe('learning_path');
+  });
+
+  it('非 learning_path 模式不应用三条件（emotional_support 原样）', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'emotion_relationship',
+      real_problem: '排班失误顾客流失后不敢再改排班，压力大',
+    });
+    expect(r.mode).not.toBe('learning_path');
+    expect(r.reasons.some((x) => x.includes('三条件测试'))).toBe(false);
+  });
+});

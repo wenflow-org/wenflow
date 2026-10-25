@@ -61,10 +61,21 @@ export const RESPONSE_TRIAGE_MODES = [
 export type ResponseTriageMode = (typeof RESPONSE_TRIAGE_MODES)[number];
 export type ResponseTriageConfidence = 'low' | 'medium' | 'high';
 
+/** 问题结构轴（2026-10-25 方向改造，静默推断——禁止向用户追问，从已有文本字段确定性识别）：
+ *  - coupling（多变量耦合度）：高=输入条件多变/多因素互相影响/时好时坏分不清原因（单次抄答案失效的判据之一）
+ *  - stakes（试错代价）：high=搞错一次有明显业务/金钱/机会损失（需要看得懂推理链才敢拍板的判据之一）
+ *  与 recurrence 合成「三条件测试」：≥2 条成立时单次解答失效、值得学习路径（20 场景框架）。
+ */
+export type ProblemCoupling = 'low' | 'medium' | 'high';
+export type ProblemStakes = 'low' | 'high';
+
 export interface ResponseTriage {
   mode: ResponseTriageMode;
   reasons: string[];
   confidence: ResponseTriageConfidence;
+  /** 静默推断的问题结构轴（缺证据时不输出，消费者须容忍 undefined） */
+  coupling?: ProblemCoupling;
+  stakes?: ProblemStakes;
 }
 
 /** `goal_conversations.collectedData` 中承载分诊结论的顶层键。 */
@@ -163,6 +174,68 @@ function downgrade(confidence: ResponseTriageConfidence): ResponseTriageConfiden
   return CONFIDENCE_ORDER[Math.max(0, index - 1)];
 }
 
+/** coupling 高精度词：多变/多因素/互相影响/时好时坏/分不清原因（宁可漏判不误报）。 */
+const COUPLING_HIGH_PATTERN =
+  /(时好时坏|忽好忽坏|一会儿.{0,8}一会儿|有时.{0,12}有时|不稳定|时准时不准|多个因素|多种因素|互相影响|相互影响|分不清.{0,10}(原因|哪个)|搞不清.{0,10}(原因|哪个)|又.{0,10}又.{0,10}(怕|担心|不行|不准)|连锁)/;
+/** coupling 中置信词：明确的两个以上变量并置（如「受活动和天气影响」）。 */
+const COUPLING_MEDIUM_PATTERN =
+  /(.{2,12}(以及|和|与|跟).{2,12})?(天气|活动|季节|促销|假期|节假日).{0,16}(天气|活动|季节|促销|假期|节假日|影响|变量)/;
+
+/** stakes 高精度词：搞错/白干一次有明确损失。 */
+const STAKES_HIGH_PATTERN =
+  /(流失|亏|赔|损失|白费|白搭|报废|砸了|搞砸|耽误|错过|客诉|投诉|退货|退单|事故|罚款|丢(了)?(客户|单|工作|机会)|没等就走了|排错|排班失误|不敢.{0,8}(改|调|动)|风险)/;
+
+/**
+ * 静默推断 coupling（从 realProblem/evidence/painPoints 的自由文本，确定性、可解释）。
+ * 命中高精度词 → high；仅中置信词 → medium；有文本但都不命中 → low；完全无文本 → null（不输出）。
+ */
+export function inferCoupling(texts: Array<string | null | undefined>): ProblemCoupling | null {
+  const joined = texts.filter((t): t is string => !!t && t.trim().length > 0).join('\n');
+  if (!joined) return null;
+  if (COUPLING_HIGH_PATTERN.test(joined)) return 'high';
+  if (COUPLING_MEDIUM_PATTERN.test(joined)) return 'medium';
+  return 'low';
+}
+
+/** 静默推断 stakes：命中高精度词 → high；有文本不命中 → low；无文本 → null。 */
+export function inferStakes(texts: Array<string | null | undefined>): ProblemStakes | null {
+  const joined = texts.filter((t): t is string => !!t && t.trim().length > 0).join('\n');
+  if (!joined) return null;
+  return STAKES_HIGH_PATTERN.test(joined) ? 'high' : 'low';
+}
+
+/**
+ * 三条件测试（20 场景框架）：recurrence=recurring / coupling≥medium / stakes=high，
+ * 命中 ≥2 → 单次解答大概率失效，学习路径成立；命中 ≤1 且 capability 型 → 一次性解答场景，
+ * 路径可能过重（confidence 降档 + reasons 标注；真正的「即时解答」路由目的地是产品决策，未落地前只降置信不开新 mode）。
+ */
+function applyProblemStructureAxes(
+  base: ResponseTriage,
+  recurrence: string | null,
+  coupling: ProblemCoupling | null,
+  stakes: ProblemStakes | null
+): ResponseTriage {
+  if (base.mode !== 'learning_path') return base;
+  const hits = [
+    recurrence === 'recurring',
+    coupling === 'medium' || coupling === 'high',
+    stakes === 'high',
+  ].filter(Boolean).length;
+  const axes: Record<string, unknown> = {};
+  if (coupling) axes.coupling = coupling;
+  if (stakes) axes.stakes = stakes;
+  const reasons = [...base.reasons];
+  let confidence = base.confidence;
+  if (hits >= 2) {
+    if (confidence !== 'high') confidence = 'high';
+    reasons.push(`三条件测试命中 ${hits}/3（复现×耦合×代价）→ 单次解答失效，学习路径成立`);
+  } else if (hits === 0 && coupling === 'low' && stakes === 'low') {
+    confidence = downgrade(confidence);
+    reasons.push('三条件测试 0/3（低复现×低耦合×低代价）→ 更像一次性解答场景，学习路径可能过重');
+  }
+  return { ...base, ...axes, confidence, reasons };
+}
+
 /** 统一在末尾应用「urgency 极高 + 存在硬约束 → 降一档」。 */
 function finalize(
   base: ResponseTriage,
@@ -241,7 +314,16 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     urgency,
     constraints,
   });
-  return applySupportNeed(base, supportNeed);
+  const withSupport = applySupportNeed(base, supportNeed);
+  // 问题结构轴（静默推断，禁止向用户追问）：与 recurrence 合成三条件测试，
+  // 只调制 learning_path 的置信度与 reasons；轴值随结论落 collectedData 供后续路由消费。
+  const axisTexts = [realProblem, evidence, ...painPoints];
+  return applyProblemStructureAxes(
+    withSupport,
+    recurrence,
+    inferCoupling(axisTexts),
+    inferStakes(axisTexts)
+  );
 }
 
 interface BlockTypeContext {
@@ -414,5 +496,11 @@ export function resolveResponseTriageFromCollectedData(
   const reasons = Array.isArray(candidate.reasons)
     ? candidate.reasons.filter((item): item is string => typeof item === 'string')
     : [];
-  return { mode: mode as ResponseTriageMode, confidence: normalizedConfidence, reasons };
+  // 问题结构轴（2026-10-25）：容忍读回——非法/缺失不输出，消费者须容忍 undefined
+  const coupling = candidate.coupling;
+  const stakes = candidate.stakes;
+  const axes: Pick<ResponseTriage, 'coupling' | 'stakes'> = {};
+  if (coupling === 'low' || coupling === 'medium' || coupling === 'high') axes.coupling = coupling;
+  if (stakes === 'low' || stakes === 'high') axes.stakes = stakes;
+  return { mode: mode as ResponseTriageMode, confidence: normalizedConfidence, reasons, ...axes };
 }
