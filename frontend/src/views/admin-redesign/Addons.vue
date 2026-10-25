@@ -212,18 +212,20 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
           </div>
           <div class="mk-modal__body">
-            <p class="ac-config-intro">{{ configTarget?.description }}</p>
-            <div class="ac-config-chain" v-for="channel in configTarget?.channels ?? []" :key="channel.id">
-              <span class="ac-config-chain__label">{{ channel.label }}</span>
-              <span class="ac-config-chain__order">{{ channel.order.map(providerLabelOf).join(' → ') || '—' }}</span>
-              <span class="ac-config-chain__note">按服务端配置顺序降级</span>
-            </div>
+            <!-- 2026-10-25 用户「不要这种解释型文案」：简介句、「按服务端配置顺序降级」注记、
+                 每个 provider 的说明句、字段下方的环境变量/密钥提示全部撤除。
+                 弹窗只留可操作的东西：降级顺序（数据）+ provider + 字段 + 状态。 -->
+            <!-- 降级顺序只在真有多个候选时才出现：决策/生图各只有一个 provider，
+                 这一行会把同一名字在下面的卡头再写一遍（实测「阿里云 MaaS | 阿里云 MaaS」） -->
+            <template v-if="hasFallbackOrder">
+              <div class="ac-config-chain" v-for="channel in configTarget?.channels ?? []" :key="channel.id">
+                <span class="ac-config-chain__label">{{ channel.label }}</span>
+                <span class="ac-config-chain__order">{{ channel.order.map(providerLabelOf).join(' → ') || '—' }}</span>
+              </div>
+            </template>
             <section class="ac-config-provider" v-for="provider in configTarget?.providers ?? []" :key="provider.id">
               <header class="ac-config-provider__head">
-                <div class="ac-config-provider__title">
-                  <strong>{{ provider.label }}</strong>
-                  <span>{{ provider.description }}</span>
-                </div>
+                <strong class="ac-config-provider__name">{{ provider.label }}</strong>
                 <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
                   {{ provider.configured ? '已配置' : '缺少密钥' }}
                 </span>
@@ -238,13 +240,10 @@
                     :placeholder="field.placeholder"
                     :autocomplete="field.secret ? 'new-password' : 'off'"
                   />
-                  <span class="mk-field__hint">{{ field.hint }}</span>
                 </label>
               </div>
-              <div class="ac-config-provider__foot">
-                <span v-if="clearKeys[provider.id]" class="ac-config-provider__warn">保存后清除界面里保存的密钥，回落服务端环境变量</span>
+              <div v-if="provider.keySource === 'db' || clearKeys[provider.id]" class="ac-config-provider__foot">
                 <button
-                  v-if="provider.keySource === 'db' || clearKeys[provider.id]"
                   type="button"
                   class="mk-link"
                   @click="toggleClearKey(provider.id)"
@@ -345,13 +344,11 @@ interface PluginProviderField {
   type: 'text' | 'password'
   value: string
   placeholder: string
-  hint: string
   secret: boolean
 }
 interface PluginProvider {
   id: string
   label: string
-  description: string
   configured: boolean
   keySource: 'db' | 'env' | 'none'
   keyHint: string | null
@@ -360,8 +357,7 @@ interface PluginProvider {
 interface PluginConfig {
   id: string
   label: string
-  description: string
-  channels: Array<{ id: string; label: string; description: string; order: string[] }>
+  channels: Array<{ id: string; label: string; order: string[] }>
   providers: PluginProvider[]
 }
 
@@ -595,6 +591,10 @@ function toggleClearKey(providerId: string) {
 function providerLabelOf(providerId: string): string {
   return configTarget.value?.providers.find((p) => p.id === providerId)?.label || providerId
 }
+/** 降级顺序行只在真有先后之分时才有信息量：单候选（决策/生图）与 provider 卡头重复 */
+const hasFallbackOrder = computed(() =>
+  (configTarget.value?.channels ?? []).some((channel) => channel.order.length > 1),
+)
 
 async function saveConfig() {
   const cfg = configTarget.value
@@ -820,8 +820,9 @@ function goLogs(skillId: string) {
 .ac-plugin.is-off .ac-plugin__main,
 .ac-plugin.is-off .ac-plugin__glyph { opacity: 0.55; }
 
-/* 服务配置弹窗：先给通道降级顺序，再逐 provider 填密钥/入口/模型 */
-.ac-config-intro { margin: 0 0 12px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 服务配置弹窗：先给通道降级顺序，再逐 provider 填密钥/入口/模型。
+   2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤，
+   只剩顺序/字段/状态三样可操作的东西。 */
 .ac-config-chain {
   display: flex;
   align-items: baseline;
@@ -832,7 +833,6 @@ function goLogs(skillId: string) {
 }
 .ac-config-chain__label { font-weight: 600; color: var(--mk-ink); }
 .ac-config-chain__order { font-family: var(--mk-mono); color: var(--mk-ink); }
-.ac-config-chain__note { color: var(--mk-faint); }
 .ac-config-provider {
   margin-top: 14px;
   padding: 12px 14px;
@@ -840,10 +840,8 @@ function goLogs(skillId: string) {
   border-radius: var(--mk-radius-md);
   background: var(--mk-surface-2);
 }
-.ac-config-provider__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.ac-config-provider__title { display: grid; gap: 2px; }
-.ac-config-provider__title strong { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.ac-config-provider__title span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-config-provider__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ac-config-provider__name { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
 .ac-config-fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -852,7 +850,6 @@ function goLogs(skillId: string) {
 }
 .ac-config-provider__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .ac-config-provider__foot .mk-link { font-size: var(--mk-fs-micro); }
-.ac-config-provider__warn { margin-right: auto; font-size: var(--mk-fs-micro); color: var(--mk-amber); }
 @media (max-width: 720px) {
   .ac-plugin { grid-template-columns: 32px minmax(0, 1fr); }
   .ac-plugin__actions {

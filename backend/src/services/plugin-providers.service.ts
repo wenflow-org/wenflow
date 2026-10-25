@@ -50,14 +50,12 @@ export interface PluginProviderFieldView {
   value: string;
   /** 当前生效值（密钥只给掩码提示） */
   placeholder: string;
-  hint: string;
   secret: boolean;
 }
 
 export interface PluginProviderView {
   id: string;
   label: string;
-  description: string;
   configured: boolean;
   keySource: 'db' | 'env' | 'none';
   keyHint: string | null;
@@ -67,7 +65,6 @@ export interface PluginProviderView {
 export interface PluginChannelView {
   id: string;
   label: string;
-  description: string;
   /** 当前生效的 provider 顺序（环境变量优先，缺省用目录默认） */
   order: string[];
 }
@@ -75,7 +72,6 @@ export interface PluginChannelView {
 export interface PluginConfigView {
   id: PluginConfigId;
   label: string;
-  description: string;
   channels: PluginChannelView[];
   providers: PluginProviderView[];
 }
@@ -257,11 +253,9 @@ async function viewOf(plugin: PluginConfigDef): Promise<PluginConfigView> {
   return {
     id: plugin.id,
     label: plugin.label,
-    description: plugin.description,
     channels: plugin.channels.map((channel) => ({
       id: channel.id,
       label: channel.label,
-      description: channel.description,
       order: resolveOrder(plugin, channel.orderEnv, channel.defaultOrder),
     })),
     providers: plugin.providers.map((provider) => {
@@ -269,7 +263,6 @@ async function viewOf(plugin: PluginConfigDef): Promise<PluginConfigView> {
       return {
         id: provider.id,
         label: provider.label,
-        description: provider.description,
         configured: isConfigured(plugin.id, provider),
         keySource: cached?.keySource ?? 'none',
         keyHint: cached?.keyHint ?? null,
@@ -285,7 +278,6 @@ async function viewOf(plugin: PluginConfigDef): Promise<PluginConfigView> {
                 ? `默认 ${field.fallback}`
                 : '未配置'
             : effectiveField(plugin.id, provider, field),
-          hint: field.hint || (field.env.length ? `环境变量 ${field.env.join(' / ')}` : ''),
           secret: Boolean(field.secret),
         })),
       };

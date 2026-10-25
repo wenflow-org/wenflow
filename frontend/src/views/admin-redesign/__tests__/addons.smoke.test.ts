@@ -46,36 +46,33 @@ function webConfig() {
   return {
     id: 'web',
     label: '联网',
-    description: '搜索负责找到网页，抓取负责读回正文。',
     channels: [
-      { id: 'search', label: '搜索', description: '', order: ['tinyfish', 'tavily'] },
-      { id: 'fetch', label: '抓取', description: '', order: ['tinyfish', 'tavily'] }
+      { id: 'search', label: '搜索', order: ['tinyfish', 'tavily'] },
+      { id: 'fetch', label: '抓取', order: ['tinyfish', 'tavily'] }
     ],
     providers: [
       {
         id: 'tinyfish',
         label: 'TinyFish',
-        description: '搜索与抓取都有免费额度',
         configured: true,
         keySource: 'env',
         keyHint: '····abcd',
         fields: [
-          { key: 'searchEndpoint', label: '搜索地址', type: 'text', value: '', placeholder: 'https://api.search.tinyfish.ai', hint: '环境变量 SEARCH_API_URL', secret: false },
-          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', value: '', placeholder: 'https://api.fetch.tinyfish.ai', hint: '环境变量 FETCH_API_URL', secret: false },
-          { key: 'apiKey', label: '密钥', type: 'password', value: '', placeholder: '已配置 ····abcd', hint: '留空表示不修改', secret: true }
+          { key: 'searchEndpoint', label: '搜索地址', type: 'text', value: '', placeholder: 'https://api.search.tinyfish.ai', secret: false },
+          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', value: '', placeholder: 'https://api.fetch.tinyfish.ai', secret: false },
+          { key: 'apiKey', label: '密钥', type: 'password', value: '', placeholder: '已配置 ····abcd', secret: true }
         ]
       },
       {
         id: 'tavily',
         label: 'Tavily',
-        description: '同一把密钥同时用于搜索与抓取',
         configured: false,
         keySource: 'none',
         keyHint: null,
         fields: [
-          { key: 'searchEndpoint', label: '搜索地址', type: 'text', value: '', placeholder: 'https://api.tavily.com/search', hint: '环境变量 TAVILY_API_URL', secret: false },
-          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', value: '', placeholder: 'https://api.tavily.com/extract', hint: '环境变量 TAVILY_EXTRACT_URL', secret: false },
-          { key: 'apiKey', label: '密钥', type: 'password', value: '', placeholder: '未配置', hint: '留空表示不修改', secret: true }
+          { key: 'searchEndpoint', label: '搜索地址', type: 'text', value: '', placeholder: 'https://api.tavily.com/search', secret: false },
+          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', value: '', placeholder: 'https://api.tavily.com/extract', secret: false },
+          { key: 'apiKey', label: '密钥', type: 'password', value: '', placeholder: '未配置', secret: true }
         ]
       }
     ]
@@ -109,8 +106,8 @@ beforeEach(() => {
       data: {
         plugins: [
           webConfig(),
-          { id: 'decision', label: '决策', description: '结构化判定', channels: [], providers: [] },
-          { id: 'image', label: '生图', description: '文生图', channels: [], providers: [] }
+          { id: 'decision', label: '决策', channels: [], providers: [] },
+          { id: 'image', label: '生图', channels: [], providers: [] }
         ]
       }
     }
