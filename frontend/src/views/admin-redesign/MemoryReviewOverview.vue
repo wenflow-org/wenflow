@@ -30,10 +30,7 @@
         :tone="card.tone"
         :title="card.title"
         :aria-busy="kpiPending || undefined"
-      >
-        <!-- 已观察人数（2026-10-24 复核）：放在卡底小字，不占 hint（hint 的空态口径被测试锁定） -->
-        <span v-if="card.observed" class="mr-kpi-observed">{{ card.observed }}</span>
-      </MkKpi>
+      />
     </section>
 
     <!-- 到期时间轴分布带已退役（2026-10-17 用户走查「记忆与复习也不要了」）：
@@ -400,8 +397,6 @@ interface OverviewCard {
   hint?: string
   title: string
   tone?: 'ok' | 'warn' | 'bad' | 'muted' | ''
-  /** 卡底小字：列表无法表达的覆盖度读数（如「已观察 3/28 人」） */
-  observed?: string
 }
 
 /** 页级绝对值单一来源；失败/未落定一律 '—'（R2 + B5-F3-2），不静默归零 */
@@ -426,14 +421,13 @@ const overviewCards = computed<OverviewCard[]>(() => {
     /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：来源/机制说明（跨全部学习路径、
        归并候选·不自动执行、模型给出的同义概念候选）撤出卡面，只留定义与包含关系 */
     { label: '记忆痕迹', value: val(t.traces), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },
-    { label: '当前到期', value: val(t.due), hint: numHint(t.traces ? '' : '暂无痕迹'), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
+    { label: '当前到期', value: val(t.due), hint: numHint(''), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
     {
       label: '需人工看',
       value: noAudit ? '—' : val(reviewQueue ?? t.ambiguous),
-      /* 2026-10-24 复核：已观察人数必须在卡面可见，不只藏在 title；
-         这也是列表里「未观察」行的同口径分母。 */
-      hint: numHint(noAudit ? '尚未观察' : ''),
-      observed: na ? undefined : `已观察 ${t.usersWithAudit ?? 0}/${t.users} 人`,
+      /* 2026-10-24 用户「文案去掉」：卡面不再留「尚未观察 / 已观察 X/Y 人」两句副行；
+         「没观察过」仍用「—」区分于 0，覆盖度与原因都留在 title 里。 */
+      hint: numHint(''),
       tone: numTone(!noAudit && (reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
       title: noAudit
         ? '所有用户都还没跑过归并观察，暂无归并待办可算——在行上点「重新观察」生成'
@@ -594,8 +588,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* KPI 卡底覆盖度小字（已观察 N/M 人）：不进 hint，避免与空态口径争同一行 */
-.mr-kpi-observed { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 固定列宽（2026-10-22 与教学组三表同判例）：学习者列在 auto 布局下按当页最长姓名分宽，
    翻页整表跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。 */
 .mr-c-user { width: 230px; }

@@ -127,14 +127,26 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
    *  最近复习）成片「—」，0 到期还各画一条空轨。
    *  二次调整：相邻两列各画一条比例条会读成一排重叠的条——待复习只留数字，
    *  记忆强度单独一列带条，需关注与最近复习各自成列。 */
-  it('全部用户都没跑过归并观察 → 需人工看显示「—」+「尚未观察」，不把没观察写成 0', async () => {
+  it('全部用户都没跑过归并观察 → 需人工看显示「—」，不把没观察写成 0', async () => {
     // 2026-10-23 用户「为什么包括测试的也是很多0」：测试视角 26 位用户、55 条痕迹，
-    // 但归并审计投影一条都没有——0 是「没算过」，不是「很干净」
+    // 但归并审计投影一条都没有——0 是「没算过」，不是「很干净」。
+    // 2026-10-24 用户「文案去掉」：卡面不再挂「尚未观察 / 已观察 X/Y 人」副行，
+    // 「没观察过」仍靠「—」与 0 区分，原因收进 title。
     const w = await mountWithRows(ROWS, { usersWithAudit: 0, ambiguous: 0 });
     const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工看')!;
     expect(card.find('.mk-kpi__num').text()).toBe('—');
-    expect(card.find('.mk-kpi__hint').text()).toBe('尚未观察');
+    expect(card.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(card.text()).not.toContain('尚未观察');
+    expect(card.text()).not.toContain('已观察');
     expect(card.attributes('title')).toContain('还没跑过归并观察');
+  });
+
+  it('无痕迹时「当前到期」只留 0，不再挂「暂无痕迹」副行', async () => {
+    const w = await mountWithRows(ROWS, { traces: 0, due: 0 });
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '当前到期')!;
+    expect(card.find('.mk-kpi__num').text()).toBe('0');
+    expect(card.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(card.text()).not.toContain('暂无痕迹');
   });
 
   it('后端没有 fragmentation.pendingReview 时，需人工看退回 ambiguous，不归零', async () => {
