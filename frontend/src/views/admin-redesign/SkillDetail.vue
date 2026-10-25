@@ -8,7 +8,7 @@
     <!-- 身份以**英文 canonical id** 为主（用户拍板 2026-10-14：中文名只是别名，且代码注册表与声明源
          实测 17/34 不同名，拿中文当身份会认错技能——如当时显示的「学习路径规划」并不是声明源里的名字）；
          中文名降为副行别名，只出现一次。 -->
-    <MkDetailHero avatar="S" :title="view.id" :sub="heroSub">
+    <MkDetailHero avatar="S" :title="view.id" :sub="heroSub" :desc="heroDesc">
       <template #pills>
         <!-- 健康徽标：带窗口词（「N 次失败」不带窗口会被读成全量，评审「窗口冒充全量」）且可点
              → 运行时页签（健康+证据先于配置，评审「结论埋深」） -->
@@ -672,11 +672,11 @@ const skillId = computed(() => (subPage.value?.view === 'skill' ? subPage.value.
 /** 类别权威源（#138）：live 技能列表接口（与 Skills 列表同源）优先——同一技能在两个接口返回
     不同枚举（live category='generation' / workbench meta category='teaching'），此前静默合成
     导致同页不同加载时刻显示两种类别。现显式披露来源，避免无解释的跳变。 */
-interface SkillIdentity { id: string; name: string; category: string; categorySource: string; agentId: string; agentName: string }
+interface SkillIdentity { id: string; name: string; category: string; categorySource: string; agentId: string; agentName: string; description: string }
 /** workbench meta 松散契约（后端字段可选并持续新增；按已知键读取，不硬造展示） */
 interface WorkbenchMeta {
   parentAgent?: { id?: string; name?: string }
-  skill?: { id?: string; name?: string; category?: string }
+  skill?: { id?: string; name?: string; category?: string; description?: string }
   modelConfig?: { model?: string; tier?: string; llmRequest?: { model?: string; source?: string } }
   /** stats.source 枚举 = 后端 UnifiedSkillStats.source（skill-runtime-contract.service.ts:27）；
       'none' 由 skills.ts:975 在无统计行时落为字面量（truthy，非「未返回」） */
@@ -702,7 +702,9 @@ const view = computed<SkillIdentity | null>(() => {
       // #138：类别权威源 = live 技能列表（与 Skills 列表同源），显式披露
       categorySource: '技能列表 /admin/skills',
       agentId: lp.agentId || '',
-      agentName: lp.agentName || String(meta.value?.parentAgent?.name || '')
+      agentName: lp.agentName || String(meta.value?.parentAgent?.name || ''),
+      // 功能简介只来自 workbench-meta（live 档案不带 description）：meta 未回来时为空，不编造
+      description: String(meta.value?.skill?.description || '')
     }
   }
   const m = meta.value
@@ -713,7 +715,8 @@ const view = computed<SkillIdentity | null>(() => {
       category: m.skill?.category || '—',
       categorySource: 'workbench-meta（备用：已上线档案未就绪）',
       agentId: m.parentAgent?.id || '',
-      agentName: m.parentAgent?.name || m.parentAgent?.id || ''
+      agentName: m.parentAgent?.name || m.parentAgent?.id || '',
+      description: String(m.skill?.description || '')
     }
   }
   return null
@@ -727,8 +730,13 @@ const heroSub = computed(() => {
   const who = v.agentName || v.agentId || '—'
   // 类别走人话（Skills.vue 同字段判例）：裸枚举 teaching → 「教学」
   // 中文名是**别名**（标题已是英文 canonical id），故排在副行首位、不再进标题与面包屑
-  return `${v.name} · ${who} · ${categoryText(v.category)}`
+  // 别名与 id 相同时（目录未登记中文名）不重复占位（2026-10-25 英文为主）
+  const alias = v.name && v.name !== v.id ? v.name : ''
+  return [alias, who, categoryText(v.category)].filter(Boolean).join(' · ')
 })
+/** 功能简介（2026-10-25 用户「这个功能简介，可以做到详情页里面」）：列表副行只留身份，
+    这句「这个 Skill 做什么」搬进详情 hero。空则不渲染（不占一行空白）。 */
+const heroDesc = computed(() => String(view.value?.description || '').trim())
 
 /* ===== hero pills ===== */
 const stat = computed(() =>

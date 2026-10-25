@@ -334,9 +334,10 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     const main = row.find('.sk-name-main')
     expect(main.text()).toBe('goal-conversation')
     expect(main.classes()).toContain('sk-name-main--id')
-    // 别名与 description 都在副行（description 来自 meta 端点，此处未 mock → 只有别名）
-    expect(row.find('.sk-sub').text()).toContain('目标对话 Skill')
-    // 悬停给全：id + 别名
+    // 副行只留身份（中文别名）——功能简介已搬进详情 hero（同日「这个功能简介，可以做到详情页里面」）
+    expect(row.find('.sk-sub').text()).toBe('目标对话 Skill')
+    expect(row.find('.sk-sub').text()).not.toContain('与学习者多轮对话')
+    // 悬停给全：id + 别名（description 也在，来自 meta 端点）
     expect(main.attributes('title')).toContain('goal-conversation')
     expect(main.attributes('title')).toContain('目标对话 Skill')
     // 行可访问名用 id（不是中文别名）

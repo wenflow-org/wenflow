@@ -116,7 +116,7 @@ metaMock.mockResolvedValue({
   data: {
     data: {
       parentAgent: { id: 'teaching-agent', name: '教学 Agent' },
-      skill: { id: 'skill-a', name: '教学回合', category: 'teaching' },
+      skill: { id: 'skill-a', name: '教学回合', category: 'teaching', description: '按教学回合推进课堂，产出讲解与追问' },
       modelConfig: { model: 'gpt-5.2', tier: 'chat', llmRequest: { model: 'gpt-5.2', source: 'active-prompt' } },
       stats: { source: 'agent_call_logs', range: 'all' }
     }
@@ -337,6 +337,10 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.find('.mk-hero__title').text()).toBe('skill-a')
     // 类别人话（categoryText）：裸枚举 teaching → 「教学」
     expect(w.find('.mk-hero__sub').text()).toBe('教学回合 · 教学 Agent · 教学')
+    // 功能简介（2026-10-25 用户「这个功能简介，可以做到详情页里面」）：从列表副行搬进 hero，
+    // 独立一行、不被截断；sub 只留身份标签
+    expect(w.find('.mk-hero__desc').text()).toBe('按教学回合推进课堂，产出讲解与追问')
+    expect(w.find('.mk-hero__sub').text()).not.toContain('按教学回合推进课堂')
 
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text())
     expect(pills[0]).toBe('健康') // 窗口内 100 调用 0 失败

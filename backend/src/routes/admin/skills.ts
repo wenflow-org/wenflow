@@ -167,6 +167,18 @@ function getSkillRuntimeStatsCached(skillNames: string[], range: SkillStatsRange
   return computation;
 }
 
+/** Skill 功能简介的单一来源：代码注册表 `definition.description`（= /admin/skills 列表那一句）。
+ *  manifest 里的 description 是另一份人工摘要（与 prompts/skills.yaml 对齐），实测两者对同一
+ *  Skill 措辞不同（goal-conversation：注册表「…并收敛到第一版学习方向」vs manifest「…收集学习目标」），
+ *  列表与详情各印一句等于同一实体两套说法。注册表未注册（外挂能力 / scaffold 期）时才回落 manifest。 */
+function registrySkillDescription(skillName: string): string {
+  try {
+    return String(getGateway().getSkill(skillName)?.definition?.description || '');
+  } catch {
+    return '';
+  }
+}
+
 /** 启动预热（schedulers 装配调用）：把技能目录页默认窗口的统计重算移出用户路径。
  *  7d 是前端默认窗口、all 是可选长窗——两者共用同一覆盖索引，冷首触合计 ~1s（后台付费一次）。 */
 export async function warmSkillListStatsCache(): Promise<void> {
@@ -915,7 +927,7 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         skill: {
           id: canonicalId,
           name: manifest.name,
-          description: manifest.description,
+          description: registrySkillDescription(shortSkillId) || manifest.description,
           category: manifest.category,
           aliases: manifest.aliases || [],
           ioContractVersion: manifest.ioContractVersion,

@@ -1069,22 +1069,20 @@ async function refreshCoverage(): Promise<void> {
   }
 }
 
-/** Skill 描述（服务端目录返回的 description）：副行第二项 */
+/** Skill 描述（服务端目录返回的 description）：只用于搜索匹配与悬停全文。
+    2026-10-25 用户「这个功能简介，可以做到详情页里面」：可见副行不再印它——
+    列表一行只回答「这是谁」，简介搬进详情 hero 的 :desc（长句在表格里必被截断）。 */
 function descOf(skillId: string): string {
   return skillMetaById.value.get(skillId)?.description || ''
 }
-/** 副行：中文别名（displayName）在前、description 在后，两者都空则不渲染。
-    2026-10-25 用户「以英文为主」：主行改为 canonical id，中文名降为副行首项（与详情页 hero 同口径）；
-    别名与 id 相同（目录未登记中文名）时不重复占位。 */
+/** 副行 = 中文别名（displayName）。别名与 id 相同（目录未登记中文名）或为空则不渲染。
+    2026-10-25 用户「以英文为主」：主行是 canonical id，中文名降为副行（与详情页 hero 同口径）；
+    同日「功能简介搬到详情页」：副行只留身份，不再拼 description。 */
 function sublineOf(s: { id: string; name?: string }): string {
   const alias = (s.name || '').trim()
-  const desc = descOf(s.id)
-  const parts: string[] = []
-  if (alias && alias !== s.id) parts.push(alias)
-  if (desc) parts.push(desc)
-  return parts.join(' · ')
+  return alias && alias !== s.id ? alias : ''
 }
-/** 名称格悬停全文：id + 中文别名 + description（主行只放 id，别名与描述靠这里看全） */
+/** 名称格悬停全文：id + 中文别名 + description。可见副行只留别名，简介靠这里与详情页看全 */
 function nameTitleOf(s: { id: string; name?: string }): string {
   const alias = (s.name || '').trim()
   const desc = descOf(s.id)
