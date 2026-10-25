@@ -240,13 +240,18 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     w.unmount();
   });
 
-  it('长散键标签（hash:…）显示截为 hash: + 前 8 位，完整值进 title；短标签原样；+N 列全量', async () => {
+  it('卡面只留运营看得懂的「场景 / 目标」：preset:/hash:/版本等内部标记不上墙', async () => {
     const HASH = 'hash:f6c06c0a45c595c1572dc3106721f65b0593f16b8';
     cardsIndexMock.mockImplementation(async () => ({
       data: {
         data: {
           cards: [
-            { profileId: 'p9', userId: 'u9', cardKey: 'builtin', name: '孙浩', goal: '理综提分', opening: null, knowledgeLevel: 'beginner', tags: ['preset:gaokao-science', 'v4', HASH, 'extra'], preset: true, sourceKind: null, email: null },
+            {
+              profileId: 'p9', userId: 'u9', cardKey: 'builtin', name: '孙浩', goal: '理综提分',
+              opening: null, knowledgeLevel: 'beginner',
+              tags: ['preset:gaokao-science', 'v4', HASH, 'study', 'exam_prep', 'in_scope'],
+              preset: true, sourceKind: null, email: null,
+            },
           ],
           summary: { total: 1, builtin: 1, custom: 0 },
         },
@@ -254,15 +259,30 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     }));
     const w = await mountPage();
     const chips = w.findAll('.vlc-card__tags .mk-badge');
-    const hashChip = chips.find((c) => c.text().startsWith('hash:'))!;
-    // 2026-10-12 外部批评采纳：整串 46 字符原样铺满卡宽被 CSS 腰斩 → 显示前 8 位 hex
-    expect(hashChip.text()).toBe('hash:f6c06c0a…');
-    expect(hashChip.attributes('title')).toBe(HASH);
-    // 短标签原样显示，但 title 也给（悬停可看全，任何标签都有出处）
-    const preset = chips.find((c) => c.text().startsWith('preset:'))!;
-    expect(preset.text()).toBe('preset:gaokao-science');
-    expect(preset.attributes('title')).toBe('preset:gaokao-science');
-    expect(w.find('.vlc-card__more').text()).toBe('+1');
+    // 2026-10-24 用户「preset:… 是无意义信息，要加就换点数据」：枚举转中文，内部标记全部撤掉
+    expect(chips.map((c) => c.text())).toEqual(['学习', '考试备战']);
+    expect(chips[0].attributes('title')).toBe('场景类型：学习');
+    expect(chips[1].attributes('title')).toBe('目标类型：考试备战');
+    expect(w.find('.vlc-card__tags').text()).not.toContain('preset:');
+    expect(w.find('.vlc-card__tags').text()).not.toContain('hash:');
+    expect(w.find('.vlc-card__more').exists()).toBe(false);
+    expect(w.find('.vlc-card__version').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('自定义卡的未知标签按原样显示，最多两枚，不编造数据', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            { profileId: 'p10', userId: 'u10', cardKey: 'w6-x', name: '小周', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: ['数学', '高一', '人教版'], preset: false, sourceKind: 'web', email: null },
+          ],
+          summary: { total: 1, builtin: 0, custom: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    expect(w.findAll('.vlc-card__tags .mk-badge').map((c) => c.text())).toEqual(['数学', '高一']);
     w.unmount();
   });
 

@@ -159,16 +159,13 @@
           <div v-if="showCardKey(c)" class="vlc-card__key">{{ c.cardKey }}</div>
           <p class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
-          <div v-if="c.tags.length" class="vlc-card__tags">
-            <!-- 2026-10-12 外部批评采纳：hash 指纹（46 字符）原样整串铺满卡宽、被 CSS 腰斩且
-                 无处看全值——显示截为 hash: + 前 8 位（够核对），完整值进 title；其余标签原样。
-                 2026-10-24：版本标签移出标签流（见卡尾固定槽）。 -->
-            <span v-for="t in wallTags(c)" :key="t" class="mk-badge mk-badge--muted" :title="t">{{ tagText(t) }}</span>
-            <span v-if="c.tags.length > 3" class="vlc-card__more" :title="c.tags.join(' · ')">+{{ c.tags.length - 3 }}</span>
+          <div v-if="wallTags(c).length" class="vlc-card__tags">
+            <!-- 运营视角只留「场景 / 目标」两个中文短标签（2026-10-24 用户「preset:… 是无意义信息，
+                 要加就换点数据」）：preset: / hash: / builtin / vN / in_scope 都是内部标记，不上卡面。 -->
+            <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted" :title="t.title">{{ t.text }}</span>
           </div>
           <footer class="vlc-card__foot">
             <span class="vlc-card__level" :title="`知识水平：${c.knowledgeLevel}`">{{ levelText(c.knowledgeLevel) }}</span>
-            <span v-if="versionTagOf(c)" class="vlc-card__version" :title="`版本 ${versionTagOf(c)}`">{{ versionTagOf(c) }}</span>
             <span class="vlc-card__acts">
               <!-- 单卡创建入口（2026-10-18 用户走查「从卡库想创建一个虚拟学习者，为什么没有流程」）：
                    此前只有卡头那个无标签勾选框能到创建面板，运营读作「没有流程」。卡内放一枚动作，
@@ -237,7 +234,6 @@ import { openSubPage } from './store'
 import { errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
-import { shortHashTag } from '@/utils/shortHash'
 
 /** 一行式内联空态修饰（筛选后 0 行的卡内列表场景）。
     用常量而非模板里的字面类串：design:check 规则 4 的检测正则匹配任何含独立
@@ -284,7 +280,13 @@ const filtered = computed(() => {
   return cards.value.filter((c) => {
     if (c.derivedFrom) return false
     if (!kw) return true
-    return [c.name, c.cardKey, c.goal, c.opening, c.email, ...c.tags]
+    // 搜索只认卡面能看见的标签（场景 / 目标的中文名 + 自定义卡的原样标签）；
+    // preset: / hash: 这些内部标记不上墙，也就不该在搜索里命中（2026-10-24）
+    return [
+      c.name, c.cardKey, c.goal, c.opening, c.email,
+      ...wallTags(c).map((t) => t.text),
+      ...c.tags.filter((t) => !INTERNAL_TAG_RE.test(t))
+    ]
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(kw))
   })
@@ -464,20 +466,45 @@ function levelText(level: string): string {
   return map[level] || level || '—'
 }
 
-/** 标签显示文本（2026-10-12 外部批评采纳）：hash 散键指纹整串 46 字符，卡内既不折行也无处
-    看全值（CSS 腰斩）。显示取 `hash:` + 前 8 位十六进制（够核对），完整值走 title。
-    2026-10-14 #16：抽到 @/utils/shortHash 单源，卡详情 hero 同口径复用。 */
-const tagText = shortHashTag
-
-/* ===== 卡面去重与版本槽位（2026-10-24 视觉修复） =====
-   版本标签（v4 这类）原先混在 flex-wrap 的标签流里，换行后落在 hash 徽标旁，位置随卡宽漂移。
-   现把它提到卡尾固定槽位，标签流只放内容标签。 */
-const VERSION_TAG_RE = /^v\d+(?:\.\d+)*$/i
-function versionTagOf(c: CardWallEntry): string {
-  return c.tags.find((t) => VERSION_TAG_RE.test(t)) || ''
+/**
+ * 卡面标签（2026-10-24 用户「preset:… 是无意义信息，要加就换点数据」）：
+ * 预置卡 tags 里的 sourceType / goalType 是英文枚举，转成运营看得懂的中文短标签；
+ * preset: / hash: / builtin / vN / in_scope 属于内部标记，一律不上卡面。
+ * 自定义卡上的其它标签按原样显示（最多两枚），不编造没有的数据。
+ */
+const SOURCE_TAG_LABELS: Record<string, string> = {
+  study: '学习',
+  work: '工作',
+  life: '生活',
+  self_management: '自我管理'
 }
-function wallTags(c: CardWallEntry): string[] {
-  return c.tags.filter((t) => !VERSION_TAG_RE.test(t)).slice(0, 3)
+const GOAL_TAG_LABELS: Record<string, string> = {
+  exam_prep: '考试备战',
+  foundation_building: '打基础',
+  project_based: '项目实战',
+  problem_driven: '问题驱动',
+  interest_exploration: '兴趣探索'
+}
+const INTERNAL_TAG_RE = /^(?:preset:|hash:|builtin$|in_scope$|out_of_scope$|v\d+(?:\.\d+)*$|w\d+$)/i
+interface WallTag {
+  text: string
+  title: string
+}
+function wallTags(c: CardWallEntry): WallTag[] {
+  const out: WallTag[] = []
+  for (const tag of c.tags) {
+    if (INTERNAL_TAG_RE.test(tag)) continue
+    const source = SOURCE_TAG_LABELS[tag]
+    const goal = GOAL_TAG_LABELS[tag]
+    const item: WallTag = source
+      ? { text: source, title: `场景类型：${source}` }
+      : goal
+        ? { text: goal, title: `目标类型：${goal}` }
+        : { text: tag, title: tag }
+    if (!out.some((x) => x.text === item.text)) out.push(item)
+    if (out.length === 2) break
+  }
+  return out
 }
 /** 卡号与内部 profileId 相同、或整面墙都是同一个卡号时，卡号行没有区分度，不渲染 */
 function showCardKey(c: CardWallEntry): boolean {
@@ -662,7 +689,6 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vlc-card__more { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 勾选框：卡整体是 role=button，勾选框是它内部唯一的交互子控件，故撑到可点面积（≥24px 触控基准） */
 .vlc-card__pick {
   flex: none;
@@ -689,20 +715,6 @@ onMounted(() => {
   margin-top: 2px;
 }
 .vlc-card__level { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-/* 版本徽标固定槽位（2026-10-24）：紧贴知识水平、独立不换行，不再随标签流换行漂移；
-   margin-right:auto 把动作组压回右缘 */
-.vlc-card__version {
-  flex: none;
-  margin-right: auto;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--mk-surface-3);
-  color: var(--mk-muted);
-  font-family: var(--mk-mono);
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  white-space: nowrap;
-}
 /* 页脚动作组：创建学习者（低频但此前无处可寻）与详情并排，右对齐 */
 .vlc-card__acts { display: inline-flex; align-items: center; gap: 10px; }
 .vlc-card__derive { font-size: var(--mk-fs-micro); font-weight: 700; }
