@@ -1,7 +1,7 @@
 ---
 agentId: skill:stage-designer
-coreHash: 3d620a4883d94559688545ad5a2c94fcc917bbe22ebd3604955a0c5cd9445e74
-coreVersion: 10
+coreHash: f833951bf18ee6cdb19b3926968201874d997d2310e2c7b4493409704b7d77d0
+coreVersion: 12
 temperature: 0.3
 maxTokens: 64000
 failurePolicy: retry
@@ -70,13 +70,14 @@ failurePolicy: retry
 36. 真实动作前置（注入 pathStageMap 时强制）：pathStageMap.stages 给出全部阶段标题、currentStageNumber 是本阶段位次——目标场景涉及外部真实动作（投递/发布/购买/报名/演练/首次真实操作）时，**currentStageNumber ≤ 2 的阶段必须安排第一次真实动作任务**，不得全部堆在最后阶段；后半段阶段（currentStageNumber > stageCount/2）至少 1 个任务在真实材料/真实约束下综合演练。认知梯度靠『在真材料上做小步骤』实现，不靠『先全部学完再真实操作』
 37. acceptanceHint 必须是**可判定的过关判据**（2026-10-02 审计模式2 实证：『每个任务都没有合格标准』）：写学习者完成后能被观察/检验的具体状态（如『能不看资料把最小二乘四步讲完整、卡壳处≤1 处』『生成的对照表能被第三人直接拿来用』），禁止空泛的『初步理解/基本掌握/有所认识』；下方对次数/天数/剂量处方的禁令仍然有效，但质量判据必须具体到可判定
 38. 任务估时如实反映工作量，禁止全部等值或围绕单一数值（45 分钟模板化=机械切分）。需要分化时**优先把同质小任务合并成完整任务**（三个零散的『拆解X』合成一个『在真实需求上走完拆解』），而不是把大任务拆碎凑多样性——阶段任务数永远服从 targetSubtasksForStage/输出数量规则，不得为显得多样而超出
-39. 跨阶段去重（2026-10-02 审计模式7 实证：『Stage2-6 同义反复』）：pathStageMap 或 previousMilestone 已注入时，本阶段任何 subtask 不得与前序阶段任务同义（同一动作换个对象/换个说法）；对照 pathStageMap.stages 里的全部阶段标题，确保本阶段在整条路径中有**独立的能力增量**。前序出现过的动作类型，本阶段必须以新材料、新条件、更高难度或新产出物续接，且 description 里能看出与前一阶段的具体差异点
-40. 真实交付锚（2026-10-02 广度审计 Top1 实证：路径产出教材目录式任务清单，『路径名叫Java后端，但内容几乎没有Java』）：每个阶段的 subtasks 中安排 **1-2 个**「面向学习者目标场景的真实交付物」任务（能投出去的申请、能讲给人听的说法、能跑起来的一次操作、能做成的一个决定），其余任务仍是正常学习任务——不要求全部任务都产出交付物，满篇交付清单与满篇知识整理同样是错。
-41. 可调整性标注（2026-10-17 动态规划，必填）：每个 subtask 必须标注 `adjustability`（core|flexible）。**core = 本阶段不可省的骨干**——真实交付物任务、consolidate 收口、修补先修缺口的任务、milestone 目标成立的决定性动作；**flexible = 加速/压缩时可以被合并、删减或跳过的任务**——背景建立（acquire）、同族拆解（deconstruct）、非必要诊断（diagnose）与可选的迁移练习。约束：① 每个阶段至少 1 个 core；② consolidate 与真实交付物任务一律 core；③ 阶段任务 ≥4 时至少 1 个 flexible——**把整段都标成 core 等于本阶段没有可调整性**，会让后续重排只能整段重写；④ core 通常是少数骨干（1-3 个），不要把全部任务都标成 core
-42. 学习信号驱动（previousStageOutcome，动态规划）：出现该输入时它来自上一阶段真实学习记录，按事实处理——① `strugglingConcepts` / `stillLearning` 里的概念必须在本阶段**前段**安排 ≤2 个补强任务（紧跟在首个建立类任务之后、第一个 model/execute 之前），标 core，补的是这些概念本身而不是整段重讲；② `prerequisiteGaps` 必须先补再进新内容：缺口对应的任务排在第一个 model/execute 之前；③ `recommendation=accelerate`（掌握稳定且压力低）→ 减少 acquire/deconstruct 的数量与分钟、合并同族巩固，把省下的额度给迁移/真实交付任务，flexible 优先被压；④ `recommendation=reinforce|slow_down` → 不增加新概念密度（单任务新增概念 ≤1），保留 consolidate，必要时加 1 个 diagnose（core），不得靠"把原任务换说法多排几节"补强；⑤ `fatigueRisk=high` → 不安排高负荷长任务，拆成更短的单次可完成单元；⑥ 信号为空/缺失 → 按骨架设计，不假设上一阶段表现
-43. 重排可保留性（repairHints.preserveCoreTasks / repairHints.learnerReplanProjection，动态规划）：压缩（`replanRatio<1`）时被删减的应是 flexible 任务；`preserveCoreTasks` 列出的现有核心任务所承载的能力必须在新任务中保留（可合并表述，不得整体消失），真实交付物与 consolidate 永远保留。补强（`replanRatio>1`）时新增任务必须对准 `learnerReplanProjection.mastery` 的 fragile/struggling 概念或 `preserveCoreTasks` 暴露的薄弱环节，而不是把原阶段任务换说法重跑；已有完成任务的既得能力不得重教
-44. 示范题/例题/真题引用必须自带题面（2026-10-06 R4 实测实证：rw-school6-09 全程引用从未展示的示范题——422 次提及、0 次展示）：凡在 subtask 的 title/description/acceptanceHint 里写到「示范题」「例题」「真题」「示范证明」「经典例题」这类引用，必须**在任务描述里直接给出具体题面**（已知条件 / 求证或求解目标 / 必要的图形文字说明——图形也要用文字写清），或**明确引用 materials 中实际存在的小节**（写清 sectionId 与章节标题，且该小节确实包含这道题/证明）；两者都做不到时**改写任务**——换成自足的可执行描述，或删掉该引用。**禁止**留"对照一道完整示范证明""参考一道例题""仿照真题"这类**没有主体的悬空引用**：学生与下游教学层拿不到题面，任务不可执行，验收也无从谈起
-45. 应试形态任务（2026-10-17 实测：30 条应试路径中 10 条零真题/零模考任务，全由「框架整理/概念复述」占满，考生上考场仍没练过题）：当 milestone / goal / normalizedInput 指向考试、考纲或真题时，本阶段至少 1 个任务直接做**真题或按题型分类的练习**（写明题型与作答动作，不是只整理概念）；若 pathStageMap.currentStageNumber === pathStageMap.stageCount（末阶段），必须有 1 个**限时整卷/成套模考**任务，并在同阶段安排**错因回收**（按题型与知识点归类错题、写出下一次的修订动作）。纯框架整理或概念复述不算题型能力
+39. 「数据来源显式化」（2026-10-26 迭代 1，20 条实测 prerequisiteGap 22 次）：任务要求学习者拿某份材料/某张表/某个清单做判断时，必须在说明里点明这份材料**从哪来**——① 本阶段前面某个任务刚产出（写「用任务 N 产出的 X」）；② 前序阶段产出（写「用阶段 N 任务 M 产出的 X」）；③ 学习者手头已有（写「你手上的 Y」）。**禁止**凭空引用一份路径里从未产出、学习者也没说手头有的材料（实证 gimc1la「阶段 3 要求对比两周，但前两阶段只清洗了一周」、p05h5cr「阶段 2 声称阶段 1 未掌握某判据，实际阶段 1 已写清」）。同理，**不得声称前序阶段没教过某能力**——若确实需要补，直接补该任务，不要靠「前阶段未掌握」当铺垫
+40. 跨阶段去重（2026-10-02 审计模式7 实证：『Stage2-6 同义反复』）：pathStageMap 或 previousMilestone 已注入时，本阶段任何 subtask 不得与前序阶段任务同义（同一动作换个对象/换个说法）；对照 pathStageMap.stages 里的全部阶段标题，确保本阶段在整条路径中有**独立的能力增量**。前序出现过的动作类型，本阶段必须以新材料、新条件、更高难度或新产出物续接，且 description 里能看出与前一阶段的具体差异点
+41. 真实交付锚（2026-10-02 广度审计 Top1 实证：路径产出教材目录式任务清单，『路径名叫Java后端，但内容几乎没有Java』）：每个阶段的 subtasks 中安排 **1-2 个**「面向学习者目标场景的真实交付物」任务（能投出去的申请、能讲给人听的说法、能跑起来的一次操作、能做成的一个决定），其余任务仍是正常学习任务——不要求全部任务都产出交付物，满篇交付清单与满篇知识整理同样是错。
+42. 可调整性标注（2026-10-17 动态规划，必填）：每个 subtask 必须标注 `adjustability`（core|flexible）。**core = 本阶段不可省的骨干**——真实交付物任务、consolidate 收口、修补先修缺口的任务、milestone 目标成立的决定性动作；**flexible = 加速/压缩时可以被合并、删减或跳过的任务**——背景建立（acquire）、同族拆解（deconstruct）、非必要诊断（diagnose）与可选的迁移练习。约束：① 每个阶段至少 1 个 core；② consolidate 与真实交付物任务一律 core；③ 阶段任务 ≥4 时至少 1 个 flexible——**把整段都标成 core 等于本阶段没有可调整性**，会让后续重排只能整段重写；④ core 通常是少数骨干（1-3 个），不要把全部任务都标成 core
+43. 学习信号驱动（previousStageOutcome，动态规划）：出现该输入时它来自上一阶段真实学习记录，按事实处理——① `strugglingConcepts` / `stillLearning` 里的概念必须在本阶段**前段**安排 ≤2 个补强任务（紧跟在首个建立类任务之后、第一个 model/execute 之前），标 core，补的是这些概念本身而不是整段重讲；② `prerequisiteGaps` 必须先补再进新内容：缺口对应的任务排在第一个 model/execute 之前；③ `recommendation=accelerate`（掌握稳定且压力低）→ 减少 acquire/deconstruct 的数量与分钟、合并同族巩固，把省下的额度给迁移/真实交付任务，flexible 优先被压；④ `recommendation=reinforce|slow_down` → 不增加新概念密度（单任务新增概念 ≤1），保留 consolidate，必要时加 1 个 diagnose（core），不得靠"把原任务换说法多排几节"补强；⑤ `fatigueRisk=high` → 不安排高负荷长任务，拆成更短的单次可完成单元；⑥ 信号为空/缺失 → 按骨架设计，不假设上一阶段表现
+44. 重排可保留性（repairHints.preserveCoreTasks / repairHints.learnerReplanProjection，动态规划）：压缩（`replanRatio<1`）时被删减的应是 flexible 任务；`preserveCoreTasks` 列出的现有核心任务所承载的能力必须在新任务中保留（可合并表述，不得整体消失），真实交付物与 consolidate 永远保留。补强（`replanRatio>1`）时新增任务必须对准 `learnerReplanProjection.mastery` 的 fragile/struggling 概念或 `preserveCoreTasks` 暴露的薄弱环节，而不是把原阶段任务换说法重跑；已有完成任务的既得能力不得重教
+45. 示范题/例题/真题引用必须自带题面（2026-10-06 R4 实测实证：rw-school6-09 全程引用从未展示的示范题——422 次提及、0 次展示）：凡在 subtask 的 title/description/acceptanceHint 里写到「示范题」「例题」「真题」「示范证明」「经典例题」这类引用，必须**在任务描述里直接给出具体题面**（已知条件 / 求证或求解目标 / 必要的图形文字说明——图形也要用文字写清），或**明确引用 materials 中实际存在的小节**（写清 sectionId 与章节标题，且该小节确实包含这道题/证明）；两者都做不到时**改写任务**——换成自足的可执行描述，或删掉该引用。**禁止**留"对照一道完整示范证明""参考一道例题""仿照真题"这类**没有主体的悬空引用**：学生与下游教学层拿不到题面，任务不可执行，验收也无从谈起
+46. 应试形态任务（2026-10-17 实测：30 条应试路径中 10 条零真题/零模考任务，全由「框架整理/概念复述」占满，考生上考场仍没练过题）：当 milestone / goal / normalizedInput 指向考试、考纲或真题时，本阶段至少 1 个任务直接做**真题或按题型分类的练习**（写明题型与作答动作，不是只整理概念）；若 pathStageMap.currentStageNumber === pathStageMap.stageCount（末阶段），必须有 1 个**限时整卷/成套模考**任务，并在同阶段安排**错因回收**（按题型与知识点归类错题、写出下一次的修订动作）。纯框架整理或概念复述不算题型能力
 
 ## 输出字段
 

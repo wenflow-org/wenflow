@@ -950,7 +950,10 @@ async function enrichLearningPathWithAndersonInner(
         // 阶段估时回写：以本阶段任务分钟汇总为准（ceil 到整小时），供各处展示与路径汇总使用
         const stageTotalMinutes = (stageTasks as Array<{ estimatedMinutes?: number }>)
           .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
-        const stageNormalizedHours = stageTasks.length > 0 ? Math.max(1, Math.ceil(stageTotalMinutes / 60)) : null;
+        // 2026-10-26 迭代 1：ceil 改保留一位小数（见下方 stageHours 同源修复说明）
+        const stageNormalizedHours = stageTasks.length > 0
+          ? Math.max(1, Math.round((stageTotalMinutes / 60) * 10) / 10)
+          : null;
 
         for (let j = 0; j < stageTasks.length; j++) {
           const taskData = stageTasks[j];
@@ -1041,7 +1044,13 @@ async function enrichLearningPathWithAndersonInner(
         const stageTotalMinutes = (stageTasks as Array<{ estimatedMinutes?: number }>)
           .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
         pathTotalMinutes += stageTotalMinutes;
-        const stageHours = stageTasks.length > 0 ? Math.max(1, Math.ceil(stageTotalMinutes / 60)) : null;
+        // 阶段学时回写（2026-10-26 迭代 1）：此前用 Math.ceil 向上取整，N 个阶段各取整一次，
+        // 累积误差让「路径标称」永远比「任务实排」高 5–13%（20 条实测：中位比值 0.90，
+        // eng-syntax 最差 0.61——标 10h 实排 6.1h）。改为保留一位小数（≥1 小时下限不变），
+        // 标称与实排同口径；展示层如需整数由前端格式化，不在数据层制造偏差。
+        const stageHours = stageTasks.length > 0
+          ? Math.max(1, Math.round((stageTotalMinutes / 60) * 10) / 10)
+          : null;
         stageHoursForAudit.push({
           stageNumber: milestone.stageNumber,
           title: milestone.title ?? null,
