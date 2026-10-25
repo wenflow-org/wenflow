@@ -1,4 +1,4 @@
-import { inferMaxWeeksFromTimeHorizon, derivePlanningHints, derivePlannedOutline, buildFramedNormalizedInput } from '../path-planning-hints';
+import { inferMaxWeeksFromTimeHorizon, derivePlanningHints, derivePlannedOutline, buildFramedNormalizedInput, clampStageMinutesToBudget } from '../path-planning-hints';
 import { paceSignalRangeConfig } from '../../../config/pedagogy.config';
 
 /**
@@ -511,5 +511,48 @@ describe('derivePlanningHints：承诺为顶（cadence 总量不被「按每日�
     );
     // cadence 推出 12h 但模型自报 16h（>12×1.25）→ 不钳制，16h 生效（既有语义保持）
     expect(hints.targetTotalHours).toBe(16);
+  });
+});
+
+/**
+ * 阶段分钟预算确定性夹（2026-10-25 承诺二次违约修复）。
+ * 实证 uqcit3l：hints 全对（总量 2h / 每阶段 0.7h / 每任务 20 分钟 / 区间 9-30），
+ * 模型仍排出 80+60+113=253 分钟 ≈ 承诺 120 分钟的 2.1 倍。
+ */
+describe('clampStageMinutesToBudget：阶段总量超预算时确定性压缩', () => {
+  it('未超预算 → 原样返回（零行为变化）', () => {
+    const tasks = [{ estimatedMinutes: 20 }, { estimatedMinutes: 25 }];
+    expect(clampStageMinutesToBudget(tasks, 60, { minMinutes: 9, maxMinutes: 30 })).toBe(tasks);
+  });
+
+  it('uqcit3l 场景：80+60+113 的阶段被压到预算内（45 = 36×1.25）', () => {
+    const tasks = [
+      { estimatedMinutes: 80, title: 'a' },
+      { estimatedMinutes: 60, title: 'b' },
+      { estimatedMinutes: 113, title: 'c' },
+    ];
+    const out = clampStageMinutesToBudget(tasks, 45, { minMinutes: 9, maxMinutes: 30 });
+    const total = out.reduce((s, t) => s + Number(t.estimatedMinutes), 0);
+    expect(total).toBeLessThanOrEqual(45);
+    expect(out.length).toBeGreaterThanOrEqual(1);
+    // 每任务不低于下限、不高于上界
+    for (const t of out) {
+      expect(t.estimatedMinutes).toBeGreaterThanOrEqual(9);
+      expect(t.estimatedMinutes).toBeLessThanOrEqual(30);
+    }
+  });
+
+  it('任务数过多压不动时从尾部截断（宁少勿撑破承诺）', () => {
+    const tasks = Array.from({ length: 6 }, (_, i) => ({ estimatedMinutes: 30, title: `t${i}` }));
+    const out = clampStageMinutesToBudget(tasks, 40, { minMinutes: 10, maxMinutes: 30 });
+    expect(out.reduce((s, t) => s + Number(t.estimatedMinutes), 0)).toBeLessThanOrEqual(40);
+    expect(out.length).toBeLessThan(tasks.length);
+    expect(out.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('预算无效（null/0/负数）→ 原样返回', () => {
+    const tasks = [{ estimatedMinutes: 80 }];
+    expect(clampStageMinutesToBudget(tasks, null)).toBe(tasks);
+    expect(clampStageMinutesToBudget(tasks, 0)).toBe(tasks);
   });
 });

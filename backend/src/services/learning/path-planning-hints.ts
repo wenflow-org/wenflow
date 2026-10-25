@@ -359,6 +359,52 @@ export function clampStageTasksToHints<T extends { estimatedMinutes?: number }>(
 }
 
 /**
+ * 阶段任务分钟总量的确定性夹（2026-10-25 方向改造 / 承诺二次违约修复）。
+ *
+ * 实证（uqcit3l）：hints 完全正确（targetTotalHours=2、targetHoursPerMilestone=0.7、
+ * targetMinutesPerTask=20、subtaskMinutesRange=[9,30]），但 stage-designer 仍排出
+ * 80/60/113 分钟三阶段共 253 分钟 ≈ 承诺 120 分钟的 2.1 倍——模型无视锚，
+ * 而既有 clampStageTasksToHints 只夹「单任务上界」与「任务数上界」，不夹阶段总量。
+ *
+ * 语义：阶段总量超过 `stageMinutesBudget` 时，按比例压每个任务的分钟（保持相对权重），
+ * 但不低于 minMinutes（保底可执行），且不高于单任务上界；压不动（任务数太多导致
+ * 每任务已到下界仍超）时截断尾部任务——宁可少给（可逆，用户能加），不撑破承诺。
+ * 只治注水方向；未超预算时原样返回（零行为变化）。
+ */
+export function clampStageMinutesToBudget<T extends { estimatedMinutes?: number }>(
+  tasks: T[],
+  stageMinutesBudget: number | null | undefined,
+  bounds?: { minMinutes?: number; maxMinutes?: number } | null,
+): T[] {
+  if (!Array.isArray(tasks) || tasks.length === 0) return tasks;
+  const budget = Number(stageMinutesBudget);
+  if (!Number.isFinite(budget) || budget <= 0) return tasks;
+  const minutesOf = (task: T): number => {
+    const value = Number(task?.estimatedMinutes);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  };
+  const total = tasks.reduce((sum, task) => sum + minutesOf(task), 0);
+  if (total <= budget) return tasks;
+  const minMinutes = Math.max(5, Number(bounds?.minMinutes) || 5);
+  const maxMinutes = Number(bounds?.maxMinutes) > 0 ? Number(bounds.maxMinutes) : Number.POSITIVE_INFINITY;
+  const scale = budget / total;
+  const scaled = tasks.map((task) => {
+    const raw = minutesOf(task);
+    if (raw <= 0) return task;
+    const next = Math.round(Math.min(maxMinutes, Math.max(minMinutes, raw * scale)));
+    return { ...task, estimatedMinutes: next };
+  });
+  // 逐任务下界保底会让总量仍超预算 → 从尾部截断（保留前置任务与交付/判断任务，
+  // 尾部通常是收束类，删掉损失最小；至少保留 1 个）。
+  let kept = scaled;
+  const sumOf = (list: T[]): number => list.reduce((sum, task) => sum + minutesOf(task), 0);
+  while (kept.length > 1 && sumOf(kept) > budget) {
+    kept = kept.slice(0, -1);
+  }
+  return kept;
+}
+
+/**
  * 把任意已算好的 hints 收到「一节课」量级（只收上界，不拍死数字；区间不塌成单点）。
  * 两个调用方：① Goal 层 triage 判定（derivePlanningHints 内）；② Path 层自检后，
  * 给 stage-designer 用的 hints（path 产出 ≤1 小时 ⇒ 任务数/分钟一并收紧，否则学时仍会被

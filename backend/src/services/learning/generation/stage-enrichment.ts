@@ -13,7 +13,12 @@ import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
-import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
+import {
+  clampHintsToOneSitting,
+  clampStageMinutesToBudget,
+  clampStageTasksToHints,
+  ONE_SITTING_MAX_HOURS,
+} from '../path-planning-hints';
 import {
   appendDescriptionNote,
   buildPathFillNote,
@@ -352,9 +357,17 @@ async function enrichLearningPathWithAndersonInner(
         || Number(baseHints.subtaskMinutesRange?.[1])
         || 60;
       const cap = Number(baseHints.subtasksPerStageRange?.[1]) || 14;
+      const stageAnchorMinutes = Math.round(stageHours * 60);
+      // 阶段分钟上界（2026-10-25 方向改造：uqcit3l 实证承诺为顶把 target 压到 2h 后，
+      // 阶段锚 0.6h/36 分钟仍被 max(2,...) 抬成 2 个任务 × 30 分钟 = 60 分钟（1.67×），
+      // 四阶段累计 227 分钟 vs 计划 132 分钟，承诺在 stageDesign 层二次违约）。
+      // 传给 stage-designer 一个显式上限：本阶段任务分钟总和不得超过阶段锚的 1.25 倍
+      // （超出部分说明该阶段装不下，应减任务/缩分钟，而不是把承诺撑破）。
+      const stageMinutesBudget = Math.max(20, Math.round(stageAnchorMinutes * 1.25));
       return {
         ...baseHints,
-        targetSubtasksForStage: Math.max(2, Math.min(cap, Math.round((stageHours * 60) / anchorMinutes))),
+        targetSubtasksForStage: Math.max(2, Math.min(cap, Math.round(stageAnchorMinutes / anchorMinutes))),
+        stageMinutesBudget,
       };
     };
 
@@ -545,6 +558,31 @@ async function enrichLearningPathWithAndersonInner(
         }
       }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
+      // 阶段分钟预算确定性夹（2026-10-25 承诺二次违约修复）：模型对 hints 的分钟锚
+      // 遵从率低（实证 uqcit3l：hints 全对——总量 2h/阶段 0.7h/每任务 20 分钟/区间 9-30，
+      // 模型仍排出 80+60+113=253 分钟 ≈ 承诺 2.1 倍）。提示词规则之外再加一道代码夹，
+      // 在所有补课/置换之后、落库之前执行；只治注水方向，未超预算零变化。
+      const stageBudgetMinutes = Number((stageHints as any)?.stageMinutesBudget);
+      if (Number.isFinite(stageBudgetMinutes) && stageBudgetMinutes > 0) {
+        const beforeMinutes = stageTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+        const clampedTasks = clampStageMinutesToBudget(stageTasks, stageBudgetMinutes, {
+          minMinutes: Number((stageHints as any)?.subtaskMinutesRange?.[0]) || 5,
+          maxMinutes: Number((stageHints as any)?.subtaskMinutesRange?.[1]) || 30,
+        });
+        const afterMinutes = clampedTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+        if (afterMinutes !== beforeMinutes || clampedTasks.length !== stageTasks.length) {
+          logger.warn('[stage-budget-clamp] 阶段分钟超承诺预算，已确定性压缩', {
+            pathId: learningPath.id,
+            stageNumber: milestone.stageNumber,
+            budgetMinutes: stageBudgetMinutes,
+            beforeMinutes,
+            afterMinutes,
+            tasksBefore: stageTasks.length,
+            tasksAfter: clampedTasks.length,
+          });
+        }
+        stageTasks = clampedTasks;
+      }
       // 引用覆盖守卫（2026-10-17）：有资料却零引用 = 本阶段任务没有长在资料上
       //（20 goal 复核实证：cpa/mbsr 末阶段）。缺口可见化之后**定向补课**（#119 优化项 1，2026-10-19）：
       // 在路径级闸（每路径最多 1 次调用）下再调一次 stage-designer，只收「带引用且 sectionId
