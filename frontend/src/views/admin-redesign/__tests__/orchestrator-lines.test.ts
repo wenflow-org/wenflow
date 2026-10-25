@@ -23,9 +23,10 @@ describe('编排图连线', () => {
     expect(OrchestratorSource).not.toContain('a.offsetTop + Math.round(a.offsetHeight / 2)')
   })
 
-  it('两端同高时画直线（阶段头对齐 → 四条线水平），不同高才退贝塞尔', () => {
-    expect(OrchestratorSource).toContain('`M${x1} ${y1} L${x2} ${y2}`')
-    expect(OrchestratorSource).toContain("Math.abs(y2 - y1) < 1")
+  it('连线是曲线而不是横杠（2026-10-24 用户「箭头之前是曲线，更好看」）', () => {
+    // 同高也走三次贝塞尔：P1 抬 bow，P2 回到终点高度 → 末端切线水平，箭头水平入卡
+    expect(OrchestratorSource).not.toMatch(/orch-odg-edge[\s\S]{0,80}`M\$\{x1\} \$\{y1\} L\$\{x2\} \$\{y2\}`/)
+    expect(OrchestratorSource).toContain('`M${x1} ${y1} C${x1 + dx} ${y1 - bow} ${x2 - dx} ${y2} ${x2} ${y2}`')
   })
 
   it('阶段头单行：名称不折、agent id 省略，避免各列头高不一致把锚点拉斜', () => {

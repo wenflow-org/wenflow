@@ -595,8 +595,9 @@ function layoutOrch() {
   /* 锚点 = 阶段头（.orch-odg-colhead）的垂直中线，不再取整列的垂直中点（2026-10-21 用户
      「线的位置不对 错位」）：列高随 Skill 条数从 148px 到 852px 不等，取列中点会让箭头落在
      卡片之间的空白里（实测终点停在 2.2 与 2.3 之间、5.5 那一行），看起来既没接上游也没进下游。
-     阶段头是所有列在同一 y 起排的（同 flex 行），锚到它 → 四条线全水平，读作「阶段 1→2→3→4→5」。
-     坐标仍取 offset*（自有 px，不随 zoom 变），阶段头高度用 offsetHeight。 */
+     阶段头是所有列在同一 y 起排的（同 flex 行），锚到它 → 四条线起点终点同高，
+     读作「阶段 1→2→3→4→5」。坐标仍取 offset*（自有 px，不随 zoom 变），
+     阶段头高度用 offsetHeight。 */
   for (let i = 0; i < cols.length - 1; i++) {
     const a = cols[i]
     const b = cols[i + 1]
@@ -606,13 +607,13 @@ function layoutOrch() {
     const y1 = a.offsetTop + Math.round((ha ? ha.offsetHeight : a.offsetHeight) / 2)
     const x2 = b.offsetLeft - 6
     const y2 = b.offsetTop + Math.round((hb ? hb.offsetHeight : b.offsetHeight) / 2)
-    // 两端同高（阶段头对齐）时画直线；万一将来列头不同高，仍用贝塞尔，避免折角
-    const d = Math.abs(y2 - y1) < 1
-      ? `M${x1} ${y1} L${x2} ${y2}`
-      : (() => {
-        const dx = Math.max(26, Math.round((x2 - x1) / 2))
-        return `M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`
-      })()
+    /* 画弧线而不是直线（2026-10-24 用户「箭头之前我记得是曲线啊，更好看」）：
+       两个端点在阶段头中线、同高时直线只是「一条横杠」，曲线让「阶段 1→2→3→4→5」
+       读作一条流动的接力线。控制点 P1 抬 bow、P2 落回终点高度 → 末端切线水平，
+       箭头head仍水平扎进下一阶段，不会歪着戳卡片。 */
+    const dx = Math.max(26, Math.round((x2 - x1) / 2))
+    const bow = Math.max(8, Math.min(18, Math.round((x2 - x1) * 0.2)))
+    const d = `M${x1} ${y1} C${x1 + dx} ${y1 - bow} ${x2 - dx} ${y2} ${x2} ${y2}`
     out += `<path class="orch-odg-edge" d="${d}" marker-end="url(#orchOdgArrow)"/>`
   }
   svg.innerHTML = out
