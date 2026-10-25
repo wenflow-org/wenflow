@@ -228,7 +228,9 @@
               <MkKpi label="平均耗时" :value="stat.calls ? fmtMs(stat.avgMs) : '—'" />
             </section>
           </div>
-          <p v-if="statsNote" class="mk-card__note">统计来源：{{ statsNote }}</p>
+          <!-- 「统计来源：Skill 执行日志」说明行 2026-10-25 撤除（用户「文案去掉」）：
+               这行只是把指标从哪张日志表聚合出来的实现细节报给运营，KPI 卡头已有窗口词；
+               来源字段仍在「工程」页签的工程信息里可查（排查口径时才需要）。 -->
           <!-- 运行时限制 / 模型配置 / 模型测试三张卡 2026-10-19 从本页删除：
                它们与下方 RuntimeTab（设计区块）渲染的是同一套配置的第二份可编辑副本
                （同一份 skill_model_configs、两个独立表单各自保存），页面上同题两遍，

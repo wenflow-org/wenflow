@@ -546,7 +546,9 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(cards.length).toBe(4)
     const values = cards.map((v) => v.find('.mk-kpi__num').text())
     expect(values).toEqual(['100', '0', '100%', '2.2s'])
-    expect(w.text()).toContain('统计来源')
+    // 2026-10-25 用户「文案去掉」：指标下方的「统计来源：Skill 执行日志」说明行已撤；
+    // 来源字段只在「工程」页签的工程信息里保留（排查口径时才看）
+    expect(w.find('.skd-metric-band + .mk-card__note').exists()).toBe(false)
     // 统计口径对齐真实窗口（liveSkillStatsMap 默认近 7 天）：不再照抄 meta.stats 的「全量」
     expect(w.text()).toContain('近 7 天')
 

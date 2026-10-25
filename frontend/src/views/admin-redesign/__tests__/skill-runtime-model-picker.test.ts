@@ -125,20 +125,19 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     w.unmount()
   })
 
-  it('分节导航：默认「模型」，可切到「请求与容错」，面板互斥', async () => {
+  it('四段同页铺开、不分 tab：模型 / 生成参数 / 请求与容错 / 模型测试同时可见', async () => {
     const w = await mountTab()
-    const nav = w.findAll('.sdp-nav__item')
-    expect(nav.map((n) => n.find('.sdp-nav__name').text())).toEqual(['模型', '生成参数', '请求与容错', '模型测试'])
-    expect(nav[0].classes()).toContain('is-on')
-    expect(nav[0].find('.sdp-nav__meta').text()).toContain('deepseek-v4.1-flash')
-    expect(w.find('#sdp-panel-model').attributes('style') || '').not.toContain('display: none')
-    expect(w.find('#sdp-panel-request').attributes('style') || '').toContain('display: none')
-
-    await nav[2].trigger('click')
-    await w.vm.$nextTick()
-    expect(nav[2].classes()).toContain('is-on')
-    expect(w.find('#sdp-panel-model').attributes('style') || '').toContain('display: none')
-    expect(w.find('#sdp-panel-request').attributes('style') || '').not.toContain('display: none')
+    // 2026-10-25 用户「作为一个页面，不分 tab」：左分节导航退役，四段按顺序纵向铺开
+    expect(w.find('.sdp-nav').exists()).toBe(false)
+    const panels = w.findAll('.sdp-sections > .sdp-panel')
+    expect(panels.map((p) => p.find('h4').text())).toEqual(['模型', '生成参数', '请求与容错', '模型测试'])
+    // 全部常驻：没有任何一段被 v-show 藏起来
+    for (const p of panels) {
+      expect(p.attributes('style') || '').not.toContain('display: none')
+    }
+    // 段头右侧仍报该段当前值（原导航副文的信息不丢）
+    expect(w.find('#sdp-panel-params .sdp-panel__state').text()).toContain('T=')
+    expect(w.find('#sdp-panel-request .sdp-panel__state').text()).toContain('重试')
     w.unmount()
   })
 

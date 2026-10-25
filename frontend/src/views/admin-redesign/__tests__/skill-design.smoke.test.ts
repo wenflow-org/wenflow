@@ -429,7 +429,9 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(order.text()).toContain('平台默认');
 
     // 真实值仍取自配置而非硬编码：mock requestTimeoutMs=30000 / T=0.4
-    expect(wrapper.find('.sdp-nav').text()).toContain('30s');
+    // 2026-10-25 用户「作为一个页面，不分 tab」：左导航退役，各段当前值读段头
+    expect(wrapper.find('.sdp-nav').exists()).toBe(false);
+    expect(wrapper.find('#sdp-panel-request .sdp-panel__state').text()).toContain('30s');
     const paramsHead = wrapper.find('#sdp-panel-params .sdp-panel__state');
     expect(paramsHead.text()).toContain('T=0.4');
     // 来源词人话化：后端枚举码不得直接露给运营（挂映射前这里渲染的是 active-prompt）

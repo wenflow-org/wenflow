@@ -45,58 +45,39 @@
           <span class="sdp-order__chain">本 Skill 设置 → Prompt 文件声明 → 代码默认 → 平台默认</span>
         </p>
 
-        <!-- 与「模型与接入」的供应商详情同解剖：左分节导航 / 右当前分节。
-             一屏只展开一段，避免长表单把所有字段摊成一条竖线；导航上的副文就是各段
-             当前生效值，切段前也能看到全貌。≤900px 导航折成横向可滚动条。 -->
-        <div class="sdp-shell">
-          <nav class="sdp-nav" role="tablist" aria-label="运行时配置分节" @keydown="onNavKeydown">
-            <button
-              v-for="item in runtimeNav"
-              :key="item.key"
-              type="button"
-              role="tab"
-              :id="`sdp-nav-${item.key}`"
-              class="sdp-nav__item"
-              :class="{ 'is-on': runtimeSection === item.key }"
-              :aria-selected="runtimeSection === item.key"
-              :aria-controls="`sdp-panel-${item.key}`"
-              :tabindex="runtimeSection === item.key ? 0 : -1"
-              @click="runtimeSection = item.key"
-            >
-              <span class="sdp-nav__name">{{ item.label }}</span>
-              <span class="sdp-nav__meta">{{ item.meta }}</span>
-            </button>
-          </nav>
+        <!-- 一页纵向铺开（2026-10-25 用户「作为一个页面，不分 tab」）：
+             原左分节导航 / 右当前分节要来回点才能看全「这个 Skill 到底怎么配的」，
+             且导航副文与分节页头报的是同一批当前值（复读）。现四段顺序铺开、各带小标题，
+             滚动即全貌；每段页头右侧仍报该段当前值（切段前也能看到全貌的那点信息不丢）。 -->
+        <div class="sdp-sections">
+          <section id="sdp-panel-model" class="sdp-panel">
+          <header class="sdp-panel__head">
+            <h4>模型</h4>
+          </header>
+            <div class="sdp-form__grid">
+              <label class="sdp-field sdp-field--wide">
+                <!-- 不再写「模型」字段标签：分节名与面板标题都是「模型」，第三遍纯复读 -->
+                <MkModelPicker
+                  aria-label="模型"
+                  :model-value="rtForm.model"
+                  :options="pickerOptions"
+                  allow-inherit
+                  inherit-label="跟随平台默认"
+                  :tier="rtForm.tier"
+                  :disabled="!rtForm.enabled"
+                  @update:model-value="rtForm.model = $event"
+                  @pick="onModelPicked"
+                />
+                <!-- 选中项的能力与价格就地核对（Azure Foundry 的部署行形态）：不必再回接入页查 -->
+                <span v-if="!inheritingModel && primaryMetaText" class="sdp-model-meta">{{ primaryMetaText }}</span>
+                <!-- 跟随平台默认时，把「实际在跑哪个模型」写出来：否则这一屏只有「平台默认」一个词，
+                     运营无法确认线上究竟是 deepseek 还是别的 -->
+                <span v-else-if="inheritedModelText" class="sdp-model-meta">{{ inheritedModelText }}</span>
+              </label>
+            </div>
+          </section>
 
-          <div class="sdp-detail">
-            <section v-show="runtimeSection === 'model'" id="sdp-panel-model" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-model">
-              <header class="sdp-panel__head">
-                <h4>模型</h4>
-              </header>
-              <div class="sdp-form__grid">
-                <label class="sdp-field sdp-field--wide">
-                  <!-- 不再写「模型」字段标签：分节名与面板标题都是「模型」，第三遍纯复读 -->
-                  <MkModelPicker
-                    aria-label="模型"
-                    :model-value="rtForm.model"
-                    :options="pickerOptions"
-                    allow-inherit
-                    inherit-label="跟随平台默认"
-                    :tier="rtForm.tier"
-                    :disabled="!rtForm.enabled"
-                    @update:model-value="rtForm.model = $event"
-                    @pick="onModelPicked"
-                  />
-                  <!-- 选中项的能力与价格就地核对（Azure Foundry 的部署行形态）：不必再回接入页查 -->
-                  <span v-if="!inheritingModel && primaryMetaText" class="sdp-model-meta">{{ primaryMetaText }}</span>
-                  <!-- 跟随平台默认时，把「实际在跑哪个模型」写出来：否则这一屏只有「平台默认」一个词，
-                       运营无法确认线上究竟是 deepseek 还是别的 -->
-                  <span v-else-if="inheritedModelText" class="sdp-model-meta">{{ inheritedModelText }}</span>
-                </label>
-              </div>
-            </section>
-
-            <section v-show="runtimeSection === 'params'" id="sdp-panel-params" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-params">
+            <section id="sdp-panel-params" class="sdp-panel">
               <header class="sdp-panel__head">
                 <h4>生成参数</h4>
                 <span class="sdp-panel__state">{{ thinkingLabel }} · T={{ generationParams?.temperature ?? '继承' }}<template v-if="generationParams?.temperature != null">（{{ sourceLabel('temperature') }}）</template></span>
@@ -168,7 +149,7 @@
               </div>
             </section>
 
-            <section v-show="runtimeSection === 'request'" id="sdp-panel-request" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-request">
+            <section id="sdp-panel-request" class="sdp-panel">
               <header class="sdp-panel__head">
                 <h4>请求与容错</h4>
                 <span class="sdp-panel__state">超时 {{ rtForm.requestTimeoutMs ? Math.round(rtForm.requestTimeoutMs / 1000) + 's' : '继承' }} · 重试 {{ effectiveLogicalRetries }} 次</span>
@@ -219,7 +200,7 @@
               </div>
             </section>
 
-            <section v-show="runtimeSection === 'test'" id="sdp-panel-test" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-test">
+            <section id="sdp-panel-test" class="sdp-panel">
               <header class="sdp-panel__head">
                 <h4>模型测试</h4>
                 <span class="sdp-panel__state">直发上游，不留记录</span>
@@ -272,7 +253,6 @@
                 </div>
               </div>
             </section>
-          </div>
         </div>
       </div>
 
@@ -299,7 +279,6 @@ import { errText, fmtMs, callParamSourceLabel, thinkingCapabilityNotice, type Th
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
-import { onTabRowKeydown } from '@/utils/rovingTablist'
 
 // 模型目录候选（File-as-Truth llm-providers.json）：模型与备用模型共用一个可选择器；
 // 加载失败静默降级为空目录（仍可按输入提交别名 / 注册表外 id，不影响保存）
@@ -420,41 +399,6 @@ const probeRunning = ref(false)
 const probeError = ref('')
 const probeResult = ref<ProbeResult | null>(null)
 
-/* 分节导航（与「模型与接入」供应商详情的左列表/右详情同解剖）：
-   一屏只展开一段，副文直接写各段当前生效值，切段前也能看到全貌。 */
-type RuntimeSection = 'model' | 'params' | 'request' | 'test'
-const runtimeSection = ref<RuntimeSection>('model')
-/** 分节页签：方向键在行内切换并移动焦点（role=tablist 的键盘契约） */
-function onNavKeydown(e: KeyboardEvent): void {
-  onTabRowKeydown(e, (i) => {
-    const item = runtimeNav.value[i]
-    if (item) runtimeSection.value = item.key
-  })
-}
-
-const runtimeNav = computed<Array<{ key: RuntimeSection; label: string; meta: string }>>(() => [
-  {
-    key: 'model',
-    label: '模型',
-    // 面板里的选择器已给出完整取值；导航副文只报「用的是哪个」，不再复述开关状态
-    meta: rtForm.value.enabled && rtForm.value.model ? rtForm.value.model : '平台默认'
-  },
-  {
-    key: 'params',
-    label: '生成参数',
-    meta: `T=${generationParams.value?.temperature ?? '继承'} · ${thinkingLabel.value}`
-  },
-  {
-    key: 'request',
-    label: '请求与容错',
-    meta: `重试 ${effectiveLogicalRetries.value} 次 · 超时 ${rtForm.value.requestTimeoutMs ? Math.round(rtForm.value.requestTimeoutMs / 1000) + 's' : '继承'}`
-  },
-  {
-    key: 'test',
-    label: '模型测试',
-    meta: probeResult.value ? `已探测 ${fmtMs(probeResult.value.durationMs ?? 0)}` : '直发上游'
-  }
-])
 /** 「跟随配置」档位回显（读当前生效配置，不与探测参数混为一谈） */
 const cfgEffortLabel = computed(() =>
   rtForm.value.reasoningEffort === 'default' ? '继承/默认' : rtForm.value.reasoningEffort
@@ -789,49 +733,18 @@ watch(() => props.skillId, () => {
 .sdp-order__k { font-weight: 700; color: var(--mk-ink); }
 .sdp-order__chain { color: var(--mk-muted); }
 
-/* 左分节导航 / 右当前分节：与「模型与接入」供应商详情的列表 + 详情同解剖 */
-.sdp-shell {
-  display: grid;
-  grid-template-columns: 210px minmax(0, 1fr);
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  overflow: hidden;
-  background: var(--mk-surface);
-}
-.sdp-nav {
-  display: grid;
-  align-content: start;
-  gap: 2px;
-  padding: 8px;
-  background: var(--mk-surface-2);
-  border-right: 1px solid var(--mk-line);
-}
-.sdp-nav__item {
-  display: grid;
-  gap: 3px;
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid transparent;
-  border-radius: var(--mk-radius-md);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-.sdp-nav__item:hover { background: color-mix(in srgb, var(--mk-ink) 4%, transparent); }
-.sdp-nav__item.is-on { background: var(--mk-surface); border-color: var(--mk-line); box-shadow: var(--mk-shadow-sm); }
-.sdp-nav__name { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.sdp-nav__item.is-on .sdp-nav__name { color: var(--mk-blue); }
-.sdp-nav__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sdp-detail { min-width: 0; padding: 16px; }
+/* 一页纵向铺开（2026-10-25）：四段按「模型 → 生成参数 → 请求与容错 → 模型测试」顺序排列，
+   段间用发丝线分隔；不再有左导航，所以也不需要 shell/detail 的两栏容器。 */
+.sdp-sections { display: grid; gap: 0; }
 .sdp-panel { display: grid; gap: 14px; align-content: start; }
+/* 段与段之间一条发丝线；首段不画（否则与取值顺序那行的下边框叠两条） */
+.sdp-panel + .sdp-panel { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--mk-line); }
 .sdp-panel__head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--mk-line);
 }
 .sdp-panel__head h4 { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .sdp-panel__state { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
@@ -844,16 +757,6 @@ watch(() => props.skillId, () => {
 @container (max-width: 760px) {
   .sdp-test-grid { grid-template-columns: minmax(0, 1fr); }
   .sdp-test-result { padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px solid var(--mk-line); }
-}
-/* 按卡片自身宽度回落（容器查询）：侧栏展开时视口仍宽，但卡片只剩 850px */
-@container (max-width: 900px) {
-  .sdp-shell { grid-template-columns: minmax(0, 1fr); }
-  .sdp-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-flow: row;
-    border-right: 0;
-    border-bottom: 1px solid var(--mk-line);
-  }
 }
 
 .sdp-chip {
