@@ -16,7 +16,6 @@ import { validateCards as validateCardDocument, importCards as importCardDocumen
 import { sendVirtualSessionError } from './virtual-session-http';
 import type { VirtualSessionRow } from '../../virtual-lab/vlab-types';
 import { createSessionForProfile, parseJson } from '../../virtual-lab/session-factory';
-import { batchJobService } from '../../virtual-lab/batch-job.service';
 import { regenerateWrapup } from '../../services/ai-teaching/teaching-wrapup-regen';
 import { parseLearningProgress, parseStageResults } from './virtual-learners.projections';
 import { parseSimulationLimit, runAssistedSessionMutation } from './virtual-learners.assisted-shared';
@@ -455,68 +454,6 @@ router.post('/batch-delete', async (req: Request, res) => {
   } catch (error) {
     logger.error('批量删除虚拟学习者失败:', error);
     res.status(500).json({ success: false, error: error?.message || '批量删除失败' });
-  }
-});
-
-/**
- * 批量新建虚拟学习者（服务端队列）：
- * 同步创建学习者（秒回 batchId），后台逐个生成身份 + 故事，前端轮询进度。
- * POST /api/admin/virtual-learners/batch-create
- * body: { rows: [{ name, storyCount }], cohort?, note? }
- */
-router.post('/batch-create', async (req: Request, res) => {
-  try {
-    const rows = Array.isArray(req.body?.rows) ? (req.body.rows as Array<{ name?: string; storyCount?: number }>) : [];
-    if (!rows.length) {
-      return res.status(400).json({ success: false, error: 'rows 至少提供一行' });
-    }
-    if (rows.length > 50) {
-      return res.status(400).json({ success: false, error: '单批最多 50 人，请分批操作' });
-    }
-    const result = await batchJobService.submit({
-      rows: rows.map((r) => ({ name: String(r?.name || '').trim(), storyCount: Math.round(Number(r?.storyCount)) || 0 })),
-      cohort: typeof req.body?.cohort === 'string' ? req.body.cohort : undefined,
-      note: typeof req.body?.note === 'string' ? req.body.note : undefined,
-      createdBy: req.user?.userId ?? null,
-    });
-    res.json({ success: true, data: result });
-  } catch (error) {
-    logger.error('批量新建失败:', error);
-    res.status(500).json({ success: false, error: (error as Error).message || '批量新建失败' });
-  }
-});
-
-/**
- * 批量任务进度
- * GET /api/admin/virtual-learners/batch-create/:batchId
- */
-router.get('/batch-create/:batchId', async (req: Request, res) => {
-  try {
-    const job = await batchJobService.getJob(req.params.batchId);
-    if (!job) {
-      return res.status(404).json({ success: false, error: '批量任务不存在' });
-    }
-    res.json({ success: true, data: job });
-  } catch (error) {
-    logger.error('查询批量任务失败:', error);
-    res.status(500).json({ success: false, error: (error as Error).message || '查询批量任务失败' });
-  }
-});
-
-/**
- * 批量任务重试失败项
- * POST /api/admin/virtual-learners/batch-create/:batchId/retry
- */
-router.post('/batch-create/:batchId/retry', async (req: Request, res) => {
-  try {
-    const ok = await batchJobService.retry(req.params.batchId);
-    if (!ok) {
-      return res.status(404).json({ success: false, error: '批量任务不存在或没有失败项' });
-    }
-    res.json({ success: true, data: { retried: true } });
-  } catch (error) {
-    logger.error('批量任务重试失败:', error);
-    res.status(500).json({ success: false, error: (error as Error).message || '批量任务重试失败' });
   }
 });
 

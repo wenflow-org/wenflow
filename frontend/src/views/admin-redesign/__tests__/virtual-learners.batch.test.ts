@@ -62,6 +62,10 @@ vi.mock('../store', async () => {
   };
 });
 
+/* 页头「从卡库派生」走 vue-router（本页不再自己建号，见 2026-10-25 口径） */
+const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: pushMock }) }));
+
 const { terminateMock, reclaimMock, openSubPageMock } = vi.hoisted(() => ({
   terminateMock: vi.fn(async () => ({ data: { data: { dryRun: false, terminated: 2, skippedTerminal: 1 } } })),
   /* 干跑响应形状用 Record<string, unknown> 放宽：B8-F4-2 后新增 scanned/skippedSessions/batchLimit，
@@ -171,6 +175,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     reclaimMock.mockReset();
     reclaimMock.mockImplementation(async () => ({ data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [] } } }));
     openSubPageMock.mockClear();
+    pushMock.mockClear();
   });
 
   it('状态条已退役：分区筛选计数迁卡头 chips + 活动会话进完成率 hint + 已截断提示保留', async () => {
@@ -640,46 +645,28 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w2.findAll('tbody .vl-abn')).toHaveLength(0);
   });
 
-  it('「新建」触发新建弹窗（批量实验已下线，列表页「新建/批量新建」是唯一创建入口）', async () => {
+  it('页头主操作是「从卡库派生」：本页不再有建号入口（2026-10-25「不播种、都派生」）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    const createBtn = w.findAll('button').find((b) => b.text() === '新建')!;
-    await createBtn.trigger('click');
-    await nextTick();
-    // 2026-10-21：新建变成菜单（新建一个人 / 批量新建），主按钮不再直接开表单
-    const items = w.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
-    expect(items).toContain('新建一个人');
-    expect(items).toContain('批量新建');
-    await w.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '新建一个人')!.trigger('click');
-    await nextTick();
-    await nextTick();
-    expect(document.body.textContent).toContain('新建虚拟学习者');
+    // 建号只在卡库：列表页没有「新建 / 批量新建」菜单，也没有新建弹窗
+    expect(w.findAll('button').map((b) => b.text())).not.toContain('新建');
+    expect(w.text()).not.toContain('新建一个人');
+    expect(w.text()).not.toContain('批量新建');
+    const deriveBtn = w.findAll('button').find((b) => b.text() === '从卡库派生')!;
+    expect(deriveBtn, '页头缺少派生入口').toBeTruthy();
+    await deriveBtn.trigger('click');
+    expect(pushMock).toHaveBeenCalledWith('/admin/virtual-learner-cards');
     w.unmount();
   });
 
-  it('「新建」仍是 learners 语境：提交后跳画像页（与卡库「平台生产」同表单、落点不同）', async () => {
-    liveVirtuals.value = [makeVirtual(1)];
+  it('空态：没有派生实例时指向卡库（不再说「新建后生成故事」）', async () => {
+    liveVirtuals.value = [];
     const w = await mountPage();
-    await w.findAll('button').find((b) => b.text() === '新建')!.trigger('click');
-    await nextTick();
-    await w.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '新建一个人')!.trigger('click');
-    await nextTick();
-    await nextTick();
-    // 弹窗走 Teleport 到 body：字段与按钮都在 document.body 上操作
-    const setField = (sel: string, value: string) => {
-      const el = document.body.querySelector(sel) as HTMLInputElement | HTMLTextAreaElement;
-      el.value = value;
-      el.dispatchEvent(new Event('input'));
-    };
-    expect(document.body.textContent).toContain('新建虚拟学习者');
-    setField('.mk-modal__panel input.mk-field__input', '考研二战的小李');
-    setField('.mk-modal__panel textarea.mk-field__textarea', '二战考研，逻辑还行但总在数学上丢分，晚上效率低。');
-    await nextTick();
-    const submit = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === '创建虚拟学习者') as HTMLButtonElement;
-    submit.dispatchEvent(new Event('click'));
-    await flushPromises();
-    // learners 语境维护原行为：建完跳画像页去生成故事（库语境才留在卡库）
-    expect(openSubPageMock).toHaveBeenCalledWith('virtual', 'vl-new');
+    const empty = w.find('.mk-empty');
+    expect(empty.exists()).toBe(true);
+    expect(empty.text()).toContain('还没有派生过虚拟学习者');
+    expect(empty.text()).toContain('卡库');
+    expect(empty.text()).not.toContain('新建虚拟学习者');
     w.unmount();
   });
 

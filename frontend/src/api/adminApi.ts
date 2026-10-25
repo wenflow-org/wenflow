@@ -1767,16 +1767,8 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/wrapup`);
   },
 
-  /* ===== 批量新建（服务端队列） ===== */
-  batchCreateLearners: async (data: { rows: Array<{ name: string; storyCount: number }>; cohort?: string; note?: string }) => {
-    return adminAxios.post('/admin/virtual-learners/batch-create', data);
-  },
-  batchCreateJob: async (batchId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/batch-create/${batchId}`);
-  },
-  batchCreateRetry: async (batchId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/batch-create/${batchId}/retry`);
-  },
+  /* 批量新建（服务端队列）2026-10-25 退役：建号只在卡库（导入卡 / 平台生产 / 预置一键加载），
+     虚拟学习者页只做「选角 → 派生」（cardsClone）。端点与组件同步删除，不留死接口。 */
 
   updateSessionSimulationConfig: async (
     sessionId: string,

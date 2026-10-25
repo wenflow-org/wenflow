@@ -291,12 +291,13 @@ describe('adminAuditMiddleware', () => {
     });
   });
 
-  it('低频接口也映射为语义动作（投影令牌 / 开始学习 / 自动驾驶停止 / 批量创建）', () => {
+  it('低频接口也映射为语义动作（投影令牌 / 开始学习 / 自动驾驶停止 / 卡派生）', () => {
     const cases: Array<[string, string, string]> = [
       ['POST', '/api/admin/virtual-learners/p1/projection-token', 'virtual-projection-token'],
       ['POST', '/api/admin/virtual-learners/sessions/s1/start-learning', 'virtual-session-start-learning'],
       ['POST', '/api/admin/virtual-learners/sessions/s1/autopilot/stop', 'virtual-session-autopilot-stop'],
-      ['POST', '/api/admin/virtual-learners/batch-create', 'virtual-batch-create'],
+      // 批量新建端点 2026-10-25 退役（建号只在卡库），改由卡派生覆盖「批量建实例」这条动作
+      ['POST', '/api/admin/virtual-learners/cards/clone', 'virtual-card-clone'],
     ];
     for (const [method, originalUrl, action] of cases) {
       create.mockClear();

@@ -494,7 +494,7 @@ const ACTION_TEXT: Record<string, string> = {
   'skill-author-draft': ACT_SKILL_AUTHOR_DRAFT,
   'achievement-grant': '授予成就',
   // 低频虚拟学习者/配置类接口（P2-16 补齐）
-  'virtual-batch-create': '批量创建虚拟学习者',
+  'virtual-card-clone': '卡派生虚拟学习者',
   'virtual-draft-profile': '生成虚拟人设画像',
   'virtual-projection-token': '生成虚拟投影令牌',
   'virtual-session-start-learning': '开始虚拟会话学习',
@@ -533,7 +533,6 @@ const PATH_ACTION_RULES: Array<[RegExp, string]> = [
   [/\/virtual-learners\/cards\/import$/, '导入学习者卡'],
   [/\/virtual-learners\/cards\/export$/, '导出学习者卡'],
   [/\/virtual-learners\/batch-delete$/, '批量删除虚拟学习者'],
-  [/\/virtual-learners\/batch-create$/, '批量创建虚拟学习者'],
   // 虚拟学习者 · 会话
   [/\/virtual-learners\/sessions\/reclaim-stale$/, '回收无响应会话'],
   [/\/virtual-learners\/sessions\/terminate$/, '批量终止虚拟会话'],

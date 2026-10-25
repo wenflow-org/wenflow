@@ -79,6 +79,9 @@ const ACTION_RULES: ActionRule[] = [
   { method: 'PUT', pattern: /^\/api\/admin\/virtual-learners\/[^/]+$/, action: 'virtual-update', targetType: 'virtual-learner' },
   { method: 'DELETE', pattern: /^\/api\/admin\/virtual-learners\/[^/]+$/, action: 'virtual-delete', targetType: 'virtual-learner' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/batch-delete$/, action: 'virtual-batch-delete', targetType: 'virtual-learner' },
+  // 2026-10-25「不播种、都派生」后，卡派生成为建实例的主入口：给它一个语义动作名，
+  // 否则审计动作列只能显示原始 HTTP 串（批量新建端点已退役）。
+  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/cards\/clone$/, action: 'virtual-card-clone', targetType: 'virtual-learner' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/draft-stories$/, action: 'virtual-story-generate', targetType: 'virtual-learner' },
   { method: 'PUT', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/stories\/[^/]+$/, action: 'virtual-story-update', targetType: 'virtual-learner' },
   { method: 'DELETE', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/stories\/[^/]+$/, action: 'virtual-story-delete', targetType: 'virtual-learner' },
@@ -102,7 +105,6 @@ const ACTION_RULES: ActionRule[] = [
   { method: 'POST', pattern: /^\/api\/admin\/skill-author\/draft$/, action: 'skill-author-draft' },
   { method: 'POST', pattern: /^\/api\/admin\/achievements\/grant$/, action: 'achievement-grant', targetType: 'user' },
   // 低频但会在审计里出现的虚拟学习者/配置类接口：补齐语义名，避免动作列显示原始 HTTP 串
-  { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/batch-create$/, action: 'virtual-batch-create', targetType: 'virtual-learner' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/draft-profile$/, action: 'virtual-draft-profile', targetType: 'virtual-learner' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/[^/]+\/projection-token$/, action: 'virtual-projection-token', targetType: 'virtual-learner' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/start-learning$/, action: 'virtual-session-start-learning', targetType: 'virtual-session' },

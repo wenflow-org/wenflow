@@ -14,7 +14,9 @@
       <template #actions>
         <!-- 预置「一键加载」：页面级动作，2026-10-20 从「预置卡」KPI 卡面挪到页头右组
              （KPI 卡只放 label + 值 + 一句口径，不放控件；按钮也不该把整张卡面撑成一个宽条）。
-             预置不是「随版本自动同步」，而是「定义随代码进仓、实例需一键加载」。 -->
+             预置不是「随版本自动同步」，而是「定义随代码进仓、卡需一键加载」——
+             加载只把预置身份卡放进卡库（身份池），不会建出虚拟学习者实例：
+             实例一律由「选角 → 创建虚拟学习者」派生（2026-10-25 用户「不播种，都派生」）。 -->
         <button
           type="button"
           class="mk-btn mk-btn--sm"
@@ -46,7 +48,7 @@
          这个数只作披露，点击去实例列表。 -->
     <section class="mk-kpi-grid" aria-label="卡库构成">
       <!-- 预置卡读数（#91 的加载入口 2026-10-20 移到页头右组）。启动同步 2026-10-09 已摘除
-           （空白项目零 VL 起步），实例仍需显式加载一次；卡面只报数与口径。 -->
+           （空白项目零 VL 起步），卡需显式加载一次；卡面只报数与口径。 -->
       <MkKpi
         label="预置卡"
         :value="summary?.builtin ?? '—'"
@@ -211,8 +213,8 @@
       >创建虚拟学习者</button>
     </div>
 
-    <!-- 平台生产（同一份表单的 library 语境）：建卡入库 + 备好第一个故事，完成后回刷本页 -->
-    <VirtualLearnerCreate ref="produceRef" context="library" @produced="onProduced" />
+    <!-- 平台生产：建卡入库 + 备好第一个故事，完成后回刷本页（本页是建号的唯一入卡口） -->
+    <VirtualLearnerCreate ref="produceRef" @produced="onProduced" />
     <!-- 从卡创建虚拟学习者（身份池主操作） -->
     <CardDeriveDialog ref="deriveRef" @created="onDerived" />
   </div>
@@ -382,7 +384,7 @@ const presetCardTitle = computed(() => {
 const presetHintTone = computed<'warn' | ''>(() => ((presetSummary.value?.rolledBack ?? 0) > 0 ? 'warn' : ''))
 const presetLoadTitle = computed(() => {
   const s = presetSummary.value
-  const base = '从仓库预置定义加载平台预置到卡库：新建缺的卡，按版本更新已有卡的定义，故事与记忆保留，卡不会被删'
+  const base = '从仓库预置定义把平台预置身份卡加载进卡库：新建缺的卡，按版本更新已有卡的定义，故事与记忆保留，卡不会被删。只入身份池，不会建出虚拟学习者——实例要在卡上点「创建虚拟学习者」派生'
   if (!s) return base
   return `${base}（当前 定义 ${s.definitions} 条 / 已加载 ${s.loaded}）`
 })
@@ -430,7 +432,7 @@ function openImport() {
 }
 
 /* ===== 平台生产（卡库的第二个入卡口）=====
-   表单复用 VirtualLearnerCreate 的 library 语境；生产 = 建卡入库 + 备好第一个故事。
+   生产 = 建卡入库 + 备好第一个故事（建号入口只在卡库，虚拟学习者页只做派生）。
    子组件在建卡后与故事落库后各回调一次（故事决定卡墙的「开场白」），这里只负责回刷。 */
 const produceRef = ref<InstanceType<typeof VirtualLearnerCreate> | null>(null)
 

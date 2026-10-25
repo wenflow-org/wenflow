@@ -1,6 +1,6 @@
 /**
  * 虚拟学习者列表页（VirtualLearners）拆分后的共享类型：
- * 父页面与子组件（RunningBar / BatchCreate / Launch …）通过本文件对齐数据结构，
+ * 父页面与子组件（RunningBar / Launch …）通过本文件对齐数据结构，
  * 避免同一形状在多个组件里各写一份而漂移。仅类型，无运行时状态。
  */
 
@@ -117,27 +117,4 @@ export interface ReclaimPreviewItem {
 /** 干跑清单里被豁免（本轮不回收）的候选，skipReason 与后端保护链一一对应（B8-F4-2） */
 export interface ReclaimSkippedItem extends ReclaimPreviewItem {
   skipReason: 'live-generation' | 'active-lease' | 'held' | 'paused' | 'active-autopilot' | string
-}
-
-/** 批量创建后台任务（服务端队列，前端轮询推进） */
-export interface BatchTask {
-  active: boolean
-  status: 'creating' | 'running' | 'done' | 'error'
-  /** 后端任务 id（服务端队列） */
-  batchId: string
-  total: number
-  created: number
-  totalStories: number
-  storiesDone: number
-  /** 剩余待生成身份的人数 */
-  personaLeft: number
-  /** 每人的队列：{ profileId, name, storyCount, needsPersona }（前端不再驱动，保留类型兼容） */
-  queue: Array<{ profileId: string; name: string; storyCount: number; needsPersona: boolean }>
-  /** 失败项（重试用） */
-  failed: Array<{ profileId: string; name: string; storyCount: number; needsPersona: boolean }>
-  error: string
-  /** 当前处理索引 */
-  currentIdx: number
-  /** 详情行是否展开 */
-  expanded: boolean
 }

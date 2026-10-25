@@ -1,15 +1,23 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 页头（newui/admin pagehead）：页名 + 主操作（新建/批量新建/回收）。
+    <!-- 页头（newui/admin pagehead）：页名 + 主操作（派生 / 维护）。
          2026-10-04 页头状态条整体退役（教学会话页 c4ade91b 同款判例）：复读的「共 N 人」删
          （卡头行数已有）；生命周期筛选迁卡头工具栏 chips（该计数唯一来源）；「活动会话」
          并进完成率卡 hint（同一会话漏斗）；「已截断」警示并进卡头 meta（与行数同格就近）。 -->
     <MkPageHead title="虚拟学习者" sub="用合成画像批量压测教学闭环与 Skill 稳定性">
       <template #actions>
-        <!-- 2026-10-21 逻辑重整：页头只留「新建」与「维护」两枚入口。
-             回收无响应 / 清理旧账号都是批量清理、低频、不可逆 → 收进维护菜单，
-             无响应候选数挂在触发钮上，信号不丢；批量新建进新建菜单；
-             「批量操作」只是打开勾选列，退回收纳它的「列」菜单（列设置就该在列菜单里）。 -->
+        <!-- 2026-10-25 口径收口（用户「不播种，都派生」）：本页不再直接建号。
+             身份一律在卡库里生产（导入卡 / 平台生产 / 预置一键加载），本页只负责把身份卡派生成
+             实例并运行 → 主操作从「新建一个人 / 批量新建」菜单换成「从卡库派生」一跳；
+             成员范围也随之下沉到后端：只列派生实例，身份池里的模板卡不在此页。
+             维护菜单不变：回收无响应 / 清理旧账号都是批量清理、低频、不可逆，收在菜单里，
+             无响应候选数挂在触发钮上，信号不丢。 -->
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm mk-btn--primary"
+          title="虚拟学习者都从卡库的身份卡派生：去卡库选角（可多选），创建后回本页运行"
+          @click="goCardLibrary"
+        >从卡库派生</button>
         <div class="vl-headmenu">
           <button
             type="button"
@@ -35,20 +43,6 @@
               title="清理旧账号：按建号时间批量删除旧虚拟学习者（进行中与保留名单自动豁免，先预览再执行）"
               @click="openCleanupFromMenu"
             >清理旧账号</button>
-          </div>
-        </div>
-        <div class="vl-headmenu">
-          <button
-            type="button"
-            class="mk-btn mk-btn--sm mk-btn--primary"
-            aria-haspopup="menu"
-            :aria-expanded="headMenu === 'create'"
-            title="新建虚拟学习者"
-            @click="toggleHeadMenu('create')"
-          >新建</button>
-          <div v-if="headMenu === 'create'" class="mk-menu__pop vl-headmenu__pop" role="menu" aria-label="新建">
-            <button type="button" class="mk-menu__item" role="menuitem" title="新建一个人：填写人设后生成身份与故事" @click="createOne">新建一个人</button>
-            <button type="button" class="mk-menu__item" role="menuitem" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="createBatch">批量新建</button>
           </div>
         </div>
         <div v-if="headMenu" class="vl-headmenu__mask" aria-hidden="true" @click="headMenu = ''"></div>
@@ -136,14 +130,10 @@
 
     <!-- 学习者列表（「批量实验」2026-10-04 下线：批量发起与运行监控统一收在本页，
          资产输入归「学习者卡库」；旧 /admin/batch-experiments 深链重定向到本页） -->
-    <!-- 正在运行：列出有活跃会话的虚拟学习者（折叠：默认前 8 个，展开看全部）；批量生成也在此显示 -->
+    <!-- 正在运行：列出有活跃会话的虚拟学习者（折叠：默认前 8 个，展开看全部） -->
     <VirtualLearnerRunningBar
-      v-if="(runningSamples.length || batchTask?.active) && isLive"
+      v-if="runningSamples.length && isLive"
       :running-samples="runningSamples"
-      :task="batchTask"
-      @toggle-detail="batchCreateRef?.toggleDetail()"
-      @retry="batchCreateRef?.retry()"
-      @dismiss="batchCreateRef?.dismiss()"
     />
 
     <!-- 日期模拟已并入上方「实验环境」条（2026-10-05 重排）：域级实验控制（模拟日期推进
@@ -382,12 +372,12 @@
       <MkEmptyState
         v-else
         min
-        :title="samples.length ? '当前筛选无虚拟学习者' : '暂无虚拟学习者'"
+        :title="samples.length ? '当前筛选无虚拟学习者' : '还没有派生过虚拟学习者'"
         :description="samples.length
           ? '当前筛选条件下没有匹配的虚拟学习者；可换关键词或清除筛选后重试。'
-          : '新建虚拟学习者后，在画像页生成故事即可运行。'"
-        :action-text="isFiltered && samples.length ? '清除筛选' : ''"
-        @action="clearFilters"
+          : '虚拟学习者都从卡库的身份卡派生。先去卡库选一张卡（或导入/生产一张），创建后就会出现在这里。'"
+        :action-text="isFiltered && samples.length ? '清除筛选' : '去卡库派生'"
+        @action="isFiltered && samples.length ? clearFilters() : goCardLibrary()"
       />
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination
@@ -408,18 +398,18 @@
       @reclaim="onBatchReclaim"
     />
 
-    <!-- 一键回收 / 清理旧账号 / 新建 / 启动 / 批量新建 / 单步测试：拆分为独立子组件（各自 Teleport 到 body）。 -->
+    <!-- 一键回收 / 清理旧账号 / 启动 / 单步测试：拆分为独立子组件（各自 Teleport 到 body）。
+         2026-10-25：「新建 / 批量新建」两个弹窗随「不播种、都派生」一起退役——建号只在卡库
+         （导入卡 / 平台生产 / 预置一键加载 + 选角派生），本页不再有第二条创建路径。 -->
     <VirtualLearnerReclaim ref="reclaimRef" @done="onReclaimDone" />
     <VirtualLearnerCleanup ref="cleanupRef" :samples="samples" @done="onReclaimDone" />
-    <VirtualLearnerCreate ref="createRef" />
     <VirtualLearnerLaunch ref="launchRef" />
-    <VirtualLearnerBatchCreate ref="batchCreateRef" />
     <VirtualLearnerPromptTest ref="promptRef" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, watch, nextTick, onUnmounted } from 'vue'
+import { computed, ref, reactive, watch, onUnmounted } from 'vue'
 import { CirclePlay, Filter, Pause, Play, Square } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { openSubPage, intent, isLive } from './store'
@@ -445,12 +435,10 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import VirtualLearnerRunningBar from './VirtualLearnerRunningBar.vue'
 import VirtualLearnerReclaim from './VirtualLearnerReclaim.vue'
 import VirtualLearnerCleanup from './VirtualLearnerCleanup.vue'
-import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
 import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
-import VirtualLearnerBatchCreate from './VirtualLearnerBatchCreate.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
-import type { VirtualLearnerRow as Sample, BatchTask } from './virtualLearnersTypes'
+import type { VirtualLearnerRow as Sample } from './virtualLearnersTypes'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
@@ -731,19 +719,10 @@ watch([keyword, stateFilter], () => {
 })
 
 /* ===== 拆分子组件引用与父侧触发入口（弹窗状态在子组件内，父页面只发指令） ===== */
-const createRef = ref<InstanceType<typeof VirtualLearnerCreate> | null>(null)
-/** 页头两枚菜单（维护 / 新建）互斥展开；点遮罩关闭 */
-const headMenu = ref<'' | 'maint' | 'create'>('')
-function toggleHeadMenu(key: 'maint' | 'create') {
+/** 页头维护菜单展开态；点遮罩关闭 */
+const headMenu = ref<'' | 'maint'>('')
+function toggleHeadMenu(key: 'maint') {
   headMenu.value = headMenu.value === key ? '' : key
-}
-function createOne() {
-  headMenu.value = ''
-  openCreate()
-}
-function createBatch() {
-  headMenu.value = ''
-  openBatchCreate()
 }
 function openCleanupFromMenu() {
   headMenu.value = ''
@@ -757,14 +736,8 @@ function openReclaimFromMenu() {
 const launchRef = ref<InstanceType<typeof VirtualLearnerLaunch> | null>(null)
 const reclaimRef = ref<InstanceType<typeof VirtualLearnerReclaim> | null>(null)
 const cleanupRef = ref<InstanceType<typeof VirtualLearnerCleanup> | null>(null)
-const batchCreateRef = ref<InstanceType<typeof VirtualLearnerBatchCreate> | null>(null)
 const promptRef = ref<InstanceType<typeof VirtualLearnerPromptTest> | null>(null)
 
-/** 批量创建后台任务（子组件 reactive 对象）→ 顶部「正在运行」条展示 */
-const batchTask = computed<BatchTask | null>(() => batchCreateRef.value?.task ?? null)
-
-function openCreate() { createRef.value?.open() }
-function openBatchCreate() { batchCreateRef.value?.open() }
 function openReclaimModal() { void reclaimRef.value?.open() }
 function onReclaimDone() { selected.value = [] }
 function openLaunch(s: Sample) { void launchRef.value?.open(s) }
@@ -822,6 +795,11 @@ const isNarrow = useIsNarrow()
 const isCompact = useIsNarrow(1279)
 const router = useRouter()
 
+/** 派生入口：身份卡在卡库（选角 → 创建），本页只运行实例（2026-10-25「不播种、都派生」） */
+function goCardLibrary() {
+  void router.push('/admin/virtual-learner-cards')
+}
+
 /* 列显隐（2026-10-05 卡头统一补「列」按钮）：次要列可勾选；名称/运行状态/操作是
    身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显
    （行详情进画像页，信息不丢）。
@@ -851,14 +829,13 @@ function reclaimThresholdText(): string {
   return `${mins} 分钟`
 }
 
-/* ===== intent 快捷动作：直达并打开新建弹窗（子组件挂载后触发，保持深链行为） ===== */
+/* ===== intent 快捷动作：直达建号入口（2026-10-25 起建号只在卡库，快捷动作改为跳卡库） ===== */
 watch(
   () => intent.quickAction,
-  async (a) => {
+  (a) => {
     if (a === 'create-virtual') {
       intent.quickAction = ''
-      await nextTick()
-      createRef.value?.open()
+      goCardLibrary()
     }
   },
   { immediate: true }
