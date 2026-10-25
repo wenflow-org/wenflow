@@ -125,9 +125,11 @@
       </div>
       <MkEmptyState
         v-else-if="failed"
+        min
         icon="!"
         title="通知加载失败"
         tone="error"
+        description="无法加载通知列表，请稍后重试。"
         action-text="重试"
         @action="reload"
       />
@@ -145,6 +147,7 @@
         icon="◌"
         min
         title="还没有通知"
+        description="系统通知与管理员发送的消息都会出现在这里。"
         :action-text="embedded ? '' : '发送第一条通知'"
         @action="openSend"
       />

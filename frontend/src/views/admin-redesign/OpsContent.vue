@@ -85,6 +85,7 @@
       <MockSkeletonTable v-if="loading && !rows.length" :cols="7" />
       <MkEmptyState
         v-else-if="failed"
+        min
         tone="error"
         title="路径列表加载失败"
         :description="loadError"
@@ -252,9 +253,10 @@
       <MkLoading v-else-if="loading" />
       <MkEmptyState
         v-else
+        min
         icon="◌"
         :title="isFiltered ? '当前筛选无匹配' : '没有学习路径'"
-        :description="isFiltered ? '放宽筛选条件试试。' : ''"
+        :description="isFiltered ? '放宽筛选条件试试。' : '还没有生成过学习路径。学习者确认学习目标后，路径会自动生成并出现在这里。'"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />

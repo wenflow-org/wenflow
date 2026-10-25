@@ -72,6 +72,7 @@
       <MockSkeletonTable v-if="liveLoading && !users.length || (deletedLoading && !users.length)" :cols="7" />
       <MkEmptyState
         v-else-if="loadFailed"
+        min
         tone="error"
         icon="◌"
         title="数据加载失败"
@@ -195,8 +196,10 @@
       </table>
       </div>
 
+      <!-- 整页空态（筛选无匹配 / 无真实用户）：min 吃掉卡内剩余高度并居中（2026-10-24 全站空态收齐） -->
       <MkEmptyState
         v-else
+        min
         icon="◌"
         :title="isFiltered ? '当前筛选无用户' : '暂无真实用户'"
         :description="isFiltered ? '放宽筛选条件试试。' : '用户注册后将自动出现在这里。'"

@@ -33,6 +33,7 @@
          下方卡内行内 alert 并保留表格，与同单元 DayTimeline「操作失败不顶掉已渲染内容」同口径） -->
     <MkEmptyState
       v-if="loadError && !sessions.length"
+      min
       icon="◌"
       tone="error"
       title="会话列表加载失败"
@@ -246,7 +247,9 @@
          MkEmptyState 的 icon 属性只吃字符，SVG 走 #icon 具名插槽（组件注释里的既定分工） -->
     <MkEmptyState
       v-else
+      min
       :title="statusFilter ? '当前筛选无会话' : '暂无会话记录'"
+      :description="statusFilter ? '当前状态下没有会话，可清除筛选查看全部。' : '还没有管理员登录会话记录。有人登录后台后，会话会按活跃状态列在这里。'"
       :action-text="statusFilter ? '清除筛选' : ''"
       @action="statusFilter = ''"
     >

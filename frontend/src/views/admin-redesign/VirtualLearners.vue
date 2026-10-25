@@ -372,6 +372,7 @@
 
       <MkEmptyState
         v-else-if="loadFailed"
+        min
         tone="error"
         title="虚拟学习者加载失败"
         description="暂时无法加载虚拟学习者列表。"
@@ -380,6 +381,7 @@
       />
       <MkEmptyState
         v-else
+        min
         :title="samples.length ? '当前筛选无虚拟学习者' : '暂无虚拟学习者'"
         :description="samples.length
           ? '当前筛选条件下没有匹配的虚拟学习者；可换关键词或清除筛选后重试。'

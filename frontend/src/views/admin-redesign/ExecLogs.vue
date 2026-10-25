@@ -165,6 +165,7 @@
       <!-- 错误态走 MkEmptyState tone="error"（role=alert + 红系图标 + 重试按钮），不再手拼 mk-alert 横幅 -->
       <MkEmptyState
         v-else-if="liveLogsError && !logs.length"
+        min
         icon="◌"
         tone="error"
         title="日志加载失败"
@@ -1372,6 +1373,10 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 /* 日志页签体（审核 #122 补 role=tabpanel 的容器）：display:contents 保持原布局
    （其子元素仍是 .mk-card--fill 的 flex 子项，与嵌入态 TraceWaterfall 根节点同法） */
 .exec-tabpanel { display: contents; }
+/* display:contents 的包装器不影响布局，但**选择器仍按 DOM 结构匹配**——共享规则
+   `.mk-card--fill > .mk-empty--min` 匹配不到这一层，空态会退回视口常量（实测比卡高多 47px、
+   盒底越出卡片被 overflow:clip 裁掉）。按同一口径在本页补一条（2026-10-24 全站空态收齐）。 */
+.exec-tabpanel > .mk-empty--min { flex: 1; min-height: 0; }
 
 /* 状态条筛选徽章 / 清除按钮已随 2026-10-04 状态条退役删除，本页不再保留其字号覆写（全局类定义见 shared.css） */
 

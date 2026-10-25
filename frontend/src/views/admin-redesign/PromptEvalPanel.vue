@@ -142,6 +142,7 @@
       </div>
       <MkEmptyState
         v-else-if="casesFailed"
+        min
         tone="error"
         icon="!"
         title="评估用例加载失败"
@@ -154,6 +155,7 @@
         icon="◌"
         min
         title="还没有评估用例"
+        description="用例决定评估跑什么。新建一条后即可批量跑评估并对比通过率。"
         action-text="新建用例"
         @action="openCreate"
       />
@@ -250,6 +252,7 @@
       </div>
       <MkEmptyState
         v-else-if="runsFailed"
+        min
         tone="error"
         icon="!"
         title="评估历史加载失败"
@@ -262,6 +265,7 @@
         icon="◌"
         min
         title="还没有评估记录"
+        description="跑过一次评估后，这里会按时间列出每轮的通过率与逐例结果。"
         action-text="去评估用例"
         @action="switchTab('cases')"
       />
@@ -495,7 +499,7 @@
                   </div>
                 </div>
               </section>
-              <MkEmptyState v-else compact title="无结果明细" />
+              <MkEmptyState v-else compact title="无结果明细" description="这一例没有留下逐项输出，可能是在旧版本上跑的。" />
             </template>
             <!-- P2-1（2026-09-27 走查）：详情拉取失败时抽屉正文此前整块空白、无重试入口
                  （toast 转瞬即逝，用户只能关掉抽屉再点一次「详情」）。补 tone=error 空态，
@@ -577,7 +581,7 @@
                 </table>
               </div>
             </template>
-            <MkEmptyState v-else compact title="无可对比的用例明细" />
+            <MkEmptyState v-else compact title="无可对比的用例明细" description="两次评估没有共同用例，换两条有交集的记录再比。" />
           </div>
           <footer class="mk-drawer__foot">
             <button type="button" class="mk-btn" @click="closeCompare">关闭</button>
@@ -1644,7 +1648,11 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
    后由面板接管纵向滚动——fill 卡只给「直接子」.mk-table-scroll 授权内滚，pe-panel 不是
    直接子，须自补同一套 flex:1 + min-height:0 + overflow-y（判例 .orch-handoff .mk-table-scroll）。
    KPI 带/页签/筛选行钉在卡顶，仅页签体滚 ===== */
-.pe > .pe-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pe > .pe-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+/* 面板内整页空态：吃掉页签体剩余高度并居中（2026-10-24 全站空态收齐）。
+   面板是内滚容器、不是卡片直子，共享的 .mk-card--fill > .mk-empty--min 匹配不到，
+   不补这条，空态会退回视口常量、在被裁的内滚区里露出一截滚动条。 */
+.pe-panel > .mk-empty--min { flex: 1; min-height: 0; }
 
 /* ===== 页签（主视图切换走全局 .tabs/.tab 原语；弹窗内学生输入方式走共享 MkSubTabs）。
    2026-10-06 审核收口：删除 .pe-tabs/.pe-tab 全仓最后一份 scoped 拷贝（与 mk-primitives.css

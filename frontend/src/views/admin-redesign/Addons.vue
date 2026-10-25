@@ -121,7 +121,7 @@
         :tone="mcpFailed ? 'error' : 'neutral'"
         :icon="mcpFailed ? '!' : ''"
         :title="mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务'"
-        :description="mcpFailed ? '无法从后端拉取 MCP 服务列表。' : ''"
+        :description="mcpFailed ? '无法从后端拉取 MCP 服务列表。' : '还没有接入任何 MCP 服务。接入后这里会列出可用工具与连接状态。'"
         :action-text="mcpFailed ? '重试' : ''"
         action-busy-text="重试中…"
         :action-busy="mcpLoading"

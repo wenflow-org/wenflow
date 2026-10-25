@@ -119,6 +119,7 @@
            不再与中性空态同款 -->
       <MkEmptyState
         v-else-if="loadFailed"
+        min
         tone="error"
         icon="◌"
         title="学习者快照加载失败"
@@ -135,8 +136,9 @@
 
       <!-- 固定列宽（2026-10-22 与教学组三表同判例）：学习者/当前进度/置信/风险四列在 auto 布局下
            按当页最长内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
-           长昵称/长任务仍由 mk-cell-main 上限与下方 max-width 截断兜底 -->
-      <div class="mk-table-scroll lc-tablewrap">
+           长昵称/长任务仍由 mk-cell-main 上限与下方 max-width 截断兜底。
+           0 行不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃满卡高，把空态顶到卡底 -->
+      <div v-if="filtered.length" class="mk-table-scroll lc-tablewrap">
       <table v-if="filtered.length" class="mk-table mk-table--nowrap mk-table--fixed lc-table">
         <thead>
           <tr>
@@ -232,15 +234,16 @@
           </tr>
         </tbody>
       </table>
+      </div>
 
         <MkEmptyState
           v-else
+          min
           :title="isFiltered ? '没有匹配的学习者' : '暂无学习者快照'"
           :description="isFiltered ? '当前搜索 / 筛选条件没有命中任何学习者，可清除筛选或换个关键词。' : '学习者产生学习行为后，状态将自动生成。'"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
-      </div>
       </div>
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片；lc-body 外 = 卡尾吸底恒可见 -->
       <Pagination
@@ -738,6 +741,9 @@ async function recomputeAll() {
    观测栏（置信度分段条）2026-10-05 随「分段条在上」移出卡到页面级（lc-analytics 随撤，
    页面级间距由 .mk-page 的 --mk-stack-gap 统一供）；逐人条形排行与竖向直方图整层退役。 */
 .lc-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* lc-body 里的整页空态：吃掉表区剩余高度并居中（同共享的 .mk-card--fill > .mk-empty--min 口径；
+   本页空态挂 lc-body 而非卡片直下，故需补一条，2026-10-24 全站空态收齐） */
+.lc-body > .mk-empty--min { flex: 1; min-height: 0; }
 .lc-tablewrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 学习者单元格（原型 celluser：头像 + 主行/副行 + 身份徽章，Users.vue ul-user 同款判例） */
 .lc-celluser { display: flex; align-items: center; gap: 9px; min-width: 0; }

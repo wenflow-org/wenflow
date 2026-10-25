@@ -189,8 +189,10 @@
 
       <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="9" />
       <template v-else>
-      <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
-      <div class="mk-table-scroll">
+      <!-- 列表视图：列对齐 + 排序，问题浮顶。
+           0 行时不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃掉整卡高度，
+           把下面的空态顶到卡底（实测文案上方 608px 空白）。 -->
+      <div v-if="filtered.length" class="mk-table-scroll">
         <!-- 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：自动布局下
              Skill / 归属 / 路由模型三列按当页最长名称分宽，翻页整表跳动；改 fixed + 逐列
              表头宽度，余量按权重摊开。长名称仍由 --mk-cell-main-max 截断兜底 -->
@@ -322,8 +324,10 @@
         </table>
       </div>
 
+      <!-- 整页空态（加载失败 / 筛选无匹配）：min 吃掉卡内剩余高度并居中 -->
       <MkEmptyState
         v-if="skillsError && !cards.length"
+        min
         :title="SKILLS_LOAD_FAIL_TITLE"
         :description="skillsError"
         action-text="重试"
@@ -331,8 +335,9 @@
       />
       <MkEmptyState
         v-else-if="!filtered.length"
+        min
         :title="onlyAttention ? '没有需关注的 Skill' : keyword ? '当前筛选无 Skill' : '暂无运行数据'"
-        :description="onlyAttention ? '当前窗口内没有成功率低于 90% 的 Skill。' : keyword ? '换个关键词试试。' : ''"
+        :description="onlyAttention ? '当前窗口内没有成功率低于 90% 的 Skill。' : keyword ? '换个关键词试试。' : '注册表里还没有可运行的 Skill。'"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />

@@ -87,16 +87,11 @@
           min → 空态吃掉卡内剩余高度并在其中居中（.mk-card--fill > .mk-empty--min 共享口径），
           不再「文案贴顶 + 下方六百像素空白」 -->
       <MkEmptyState v-else-if="!loading && !rows.length" min title="暂无记忆痕迹数据" description="还没有用户产生记忆记录。学习者开始学习并完成概念提取后，这里会按待复习量从多到少列出用户。" />
-      <!-- 用户列表（行点击跳学习者详情，EG1：回车不劫持行内按钮） -->
-      <div v-else class="mk-table-scroll">
-        <!-- 快筛筛空：给一个回「全部」的出口即可，不再解释筛选作用域 -->
-        <MkEmptyState
-          v-if="!visibleRows.length"
-          title="没有符合条件的学习者"
-          action-text="显示全部"
-          @action="mrPill = 'all'"
-        />
-        <table v-else class="mk-table mk-table--click mk-table--fixed mr-table">
+      <!-- 用户列表（行点击跳学习者详情，EG1：回车不劫持行内按钮）。
+           0 行不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃满卡高，
+           空态在容器内只能贴顶；改挂卡级 + min，与上面「整页无数据」同一形态。 -->
+      <div v-else-if="visibleRows.length" class="mk-table-scroll">
+        <table class="mk-table mk-table--click mk-table--fixed mr-table">
           <!-- 列集（2026-10-17 二次调整）：相邻列各画一条比例条会读成一排「重叠的条」，
                重要读数一律给独立列——待复习只留数字（颜色表达压力），记忆强度单独一列带条，
                最近复习与需关注也各自成列，不再把两项塞进同一格上下叠放。 -->
@@ -212,6 +207,15 @@
           </tbody>
         </table>
       </div>
+      <!-- 快筛筛空：给一个回「全部」的出口即可，不再解释筛选作用域 -->
+      <MkEmptyState
+        v-else
+        min
+        title="没有符合条件的学习者"
+        description="当前快筛下没有学习者，其余人可能在别的档里。"
+        action-text="显示全部"
+        @action="mrPill = 'all'"
+      />
       <!-- 服务端分页（审核 #41）：total=后端全量有痕迹用户数（totals.users）；v-model:pageSize 接住条数变更。
            0 行不渲染（2026-10-24 用户「空数据的时候页面很奇怪」）：此前空数据页挂着
            「共 0 条 · 第 1 / 1 页」+ 每页条数下拉，指着一个没有任何行的列表翻页。

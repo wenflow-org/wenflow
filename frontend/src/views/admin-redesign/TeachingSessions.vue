@@ -186,7 +186,9 @@
       </div>
 
       <MockSkeletonTable v-if="refreshing && !rows.length" :cols="9" />
-      <div v-else class="mk-table-scroll">
+      <!-- 0 行不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃满卡高，把空态顶到卡底
+           （实测文案上方 603px 空白）；空态改挂卡级 + min，吃掉卡内剩余高度并居中 -->
+      <div v-else-if="filtered.length" class="mk-table-scroll">
         <!-- 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：自动布局下课堂/用户
              两列按当页最长内容分宽，翻页就跳；改 fixed + 逐列表头宽度，课堂列吸收余量。
              单元格 nowrap 不变，长内容仍由 .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底。 -->
@@ -402,15 +404,15 @@
             </tr>
           </tbody>
         </table>
-
-        <MkEmptyState
-          v-else-if="!loadFailed"
-          :title="onlyAdvisory ? '「有建议」过滤下无课堂' : rows.length ? '当前筛选无课堂' : '暂无教学会话'"
-          :description="onlyAdvisory ? '没有含教学建议的课堂，可清除筛选查看全部。' : rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，课堂记录将自动出现在这里。'"
-          :action-text="isFiltered ? '清除筛选' : ''"
-          @action="clearFilters"
-        />
       </div>
+      <MkEmptyState
+        v-else-if="!loadFailed"
+        min
+        :title="onlyAdvisory ? '「有建议」过滤下无课堂' : rows.length ? '当前筛选无课堂' : '暂无教学会话'"
+        :description="onlyAdvisory ? '没有含教学建议的课堂，可清除筛选查看全部。' : rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，课堂记录将自动出现在这里。'"
+        :action-text="isFiltered ? '清除筛选' : ''"
+        @action="clearFilters"
+      />
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination
         v-if="filtered.length"

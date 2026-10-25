@@ -535,6 +535,7 @@
           <MkEmptyState
             v-else-if="isLive && !stories.length"
             title="故事池为空"
+            description="还没有为这个虚拟学习者生成故事。生成故事后，故事会按状态列在这里并用于驱动学习。"
             compact
           />
           <!-- 卡内列表筛选后 0 行 / 空列表：一行式内联空态（MkEmptyState + --line 修饰），

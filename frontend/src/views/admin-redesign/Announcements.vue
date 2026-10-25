@@ -126,6 +126,7 @@
 
       <MkEmptyState
         v-else-if="liveFailed"
+        min
         tone="error"
         icon="!"
         title="公告加载失败"
@@ -141,7 +142,7 @@
         v-else
         icon="◌"
         :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
-        :description="isFiltered ? '放宽筛选条件试试。' : ''"
+        :description="isFiltered ? '放宽筛选条件试试。' : '还没有发布过公告。发布一条后，这里会按发布时间从新到旧列出。'"
         :action-text="isFiltered ? '清除筛选' : embedded ? '' : '新建公告'"
         min
         @action="isFiltered ? clearFilters() : openCreate()"
@@ -612,9 +613,10 @@ function expiresLabel(iso: string): string {
    （.mk-card--fill 直接子元素），不再用 calc(100dvh - Npx) 撑列表区（T1 硬约束：min-height 撑屏禁令）。
    overflow:hidden 与 Feedback.vue .fb-embedded 同口径：空态带 --mk-empty-min-h 时由宿主裁切而非撑破页面 */
 .an-embedded { flex: 1 1 auto; min-height: 0; overflow: hidden; }
-/* 空态贴顶（2026-10-21 用户「太靠下了，新建公告」）：fill 卡自身已占满高度，
-   空态再按视口居中会把文案与动作压到卡中部；改为从卡头下方开始排 */
-.mk-card--fill > .mk-empty--min { min-height: 0; place-content: start center; padding-top: 32px; }
+/* 空态居中由共享口径承担（.mk-card--fill > .mk-empty--min { flex:1; min-height:0 } + 全局
+   place-content:center）。2026-10-21 曾按用户「太靠下了」在本页覆写成贴顶（start center）——
+   2026-10-24 全站空态收齐时实测该覆写在本页嵌入 ops-hub 后变成「文案贴顶 + 卡底 545px 空白」，
+   与全站统一形态冲突，故撤除；本页的「新建公告」动作在页签头，不依赖空态内的按钮位置。 */
 /* 原型 .tbl td：nowrap（长内容由全局 mk-cell-main max-width 截断兜底）；
    标题列例外（原型 td.wrap）：双行 cell-main + 正文两行预览需要换行 */
 .an-list .mk-table td { white-space: nowrap; }

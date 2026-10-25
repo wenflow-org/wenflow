@@ -730,14 +730,17 @@ onMounted(() => {
 /* 状态面板：构成条（MkStageband）+ 行式计数 */
 .ow-state { padding: 8px 14px 12px; display: grid; gap: 10px; }
 /* 无数据时的占位：保留比例条的高度位，但不画空灰条（避免「像坏图」）。
-   8px = MkStageband size="sm" 的轨道高度，占位与实条同高才不跳。 */
+   8px = MkStageband size="sm" 的轨道高度，占位与实条同高才不跳。
+   2026-10-24 走查修正：原 height:8px + line-height:1 把 13px 的「暂无公告 / 暂无学习路径」
+   压进 8px 盒里（文字上下各溢出 3px、与邻行叠字）。改 min-height 保高度位、line-height 放开，
+   文字自带一行高，占位语义不变。 */
 .ow-state__empty {
-  height: 8px;
+  min-height: 8px;
   display: flex;
   align-items: center;
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
-  line-height: 1;
+  line-height: 1.4;
 }
 /* 区块级失败走共享 .mk-alert；只清掉它在状态区里的外边距 */
 .ow-state__error { margin: 0; }
