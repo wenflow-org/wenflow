@@ -52,7 +52,7 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'path'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => true),
+      isInterruptedTerminal: computed(() => true),
       learnLessons: computed(() => untouchedLessons(6))
     });
 
@@ -65,11 +65,11 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'path'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => true)
+      isInterruptedTerminal: computed(() => true)
     });
 
     expect(s.stageDone('goal')).toBe(true);
-    // 终止点所在阶段由 isFailedTerminal 拦住，不伪装成完成
+    // 终止点所在阶段由 isInterruptedTerminal 拦住，不伪装成完成
     expect(s.stageDone('path')).toBe(false);
   });
 
@@ -77,7 +77,7 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'learning'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => true)
+      isInterruptedTerminal: computed(() => true)
     });
 
     expect(s.stageDone('learning')).toBe(false);
@@ -89,7 +89,7 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'learning'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => false)
+      isInterruptedTerminal: computed(() => false)
     });
 
     expect(s.stageDone('learning')).toBe(true);
@@ -124,7 +124,7 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'goal'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => true)
+      isInterruptedTerminal: computed(() => true)
     });
 
     expect(s.stageDone('path')).toBe(false);

@@ -9,12 +9,10 @@
     <MkPageHead
       title="记忆与复习观测"
       sub="遗忘曲线调度 · 到期积压、课内温故与概念归并审计"
-      hint="到期积压 · 课内温故 · 概念归并审计。归并默认只记录建议，不改动数据"
     >
       <template #actions>
-        <!-- 口径开关收在页头（2026-10-04 整组统一为 DataScopeToggle：学习组六页同一位、同一状态）。
-             它切换的是整页口径：含虚拟学习者时，用户 / 痕迹 / 到期与归并队列一并纳入仿真账号 -->
-        <DataScopeToggle v-model="includeVirtual" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             用户 / 痕迹 / 到期与归并队列统计全部非虚拟账号，测试账号行内备注 -->
       </template>
     </MkPageHead>
     <!-- 页头 KPI 带（2026-09-28）：页级绝对值只在这里出现一次；口径说明进各卡 title。
@@ -32,7 +30,10 @@
         :tone="card.tone"
         :title="card.title"
         :aria-busy="kpiPending || undefined"
-      />
+      >
+        <!-- 已观察人数（2026-10-24 复核）：放在卡底小字，不占 hint（hint 的空态口径被测试锁定） -->
+        <span v-if="card.observed" class="mr-kpi-observed">{{ card.observed }}</span>
+      </MkKpi>
     </section>
 
     <!-- 到期时间轴分布带已退役（2026-10-17 用户走查「记忆与复习也不要了」）：
@@ -63,9 +64,10 @@
             >{{ p.label }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
           </div>
         </div>
-        <div class="mk-card__head-right">
-          <span class="mk-card__meta" :title="`按「${userSortText}」排序（在全部用户里排好再分页，不是只排当前页），每页显示的行数可调。快速筛选只作用于当前页${mrPill === 'all' ? '' : '，已筛 ' + visibleRows.length + ' 位'}`">第 {{ userPage }} 页 · 每页 {{ userPageSize }} 位 · {{ userSortText }}<template v-if="mrPill !== 'all'"> · 已筛 {{ visibleRows.length }} 位</template></span>
-        </div>
+        <!-- 2026-10-23 用户「这种文案，不要」：卡头 meta 原样复述分页/排序/筛选的作用机制
+             （「在全部用户里排好再分页，不是只排当前页」「快速筛选只作用于当前页」），
+             既不是读数也不是可操作信息。页码与每页条数由底部 Pagination 自明，排序由列头
+             caret 表达——这里整块撤掉，不再另写一行说明。 -->
       </div>
       <!-- 取数失败不得渲染成「暂无数据」（R2）：有旧行时保留旧行并给带重试的 .mk-alert -->
       <div v-if="error && rows.length" class="mk-alert mk-alert--row" role="alert">
@@ -86,45 +88,52 @@
       <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="还没有用户产生记忆记录。学习者开始学习并完成概念提取后，这里会按待复习量从多到少列出用户。" />
       <!-- 用户列表（行点击跳学习者详情，EG1：回车不劫持行内按钮） -->
       <div v-else class="mk-table-scroll">
-        <!-- 快筛筛空：筛选作用于当前页，空 ≠ 全库没有 -->
+        <!-- 快筛筛空：给一个回「全部」的出口即可，不再解释筛选作用域 -->
         <MkEmptyState
           v-if="!visibleRows.length"
-          title="当前页没有符合条件的学习者"
-          description="快速筛选只作用于当前页。"
+          title="没有符合条件的学习者"
           action-text="显示全部"
           @action="mrPill = 'all'"
         />
-        <table v-else class="mk-table mk-table--click">
+        <table v-else class="mk-table mk-table--click mk-table--fixed mr-table">
           <!-- 列集（2026-10-17 二次调整）：相邻列各画一条比例条会读成一排「重叠的条」，
                重要读数一律给独立列——待复习只留数字（颜色表达压力），记忆强度单独一列带条，
                最近复习与需关注也各自成列，不再把两项塞进同一格上下叠放。 -->
           <thead>
             <tr>
-              <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('name')"
+              <th scope="col" class="mk-th--sortable mr-c-user" :aria-sort="userSortState('name')"
                 title="点列头排序：按学习者名称（中文拼音序）"
                 @click="toggleUserSort('name')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('name')">学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('traces')"
+              <th scope="col" class="mk-num mk-th--sortable mr-c-traces" :aria-sort="userSortState('traces')"
                 title="该用户全部记忆记录数（跨学习路径）。点列头排序：降序 = 痕迹最多的在前"
                 @click="toggleUserSort('traces')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('traces')">记忆痕迹<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('due')"
+              <th scope="col" class="mk-num mk-th--sortable mr-c-due" :aria-sort="userSortState('due')"
                 title="点列头排序：降序 = 待复习最多的在前（默认）"
                 @click="toggleUserSort('due')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('due')">待复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('weak')"
+              <th scope="col" class="mk-th--sortable mr-c-weak" :aria-sort="userSortState('weak')"
                 title="强度跌破 40% 的痕迹数，以及待人工确认的归并候选。点列头排序：降序 = 薄弱痕迹最多的在前"
                 @click="toggleUserSort('weak')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('strength')"
+              <th scope="col" class="mk-num mk-th--sortable mr-c-prop" :aria-sort="userSortState('proposed')"
+                :title="`模型给出的同义归并候选数（确认后执行，可回滚）。没跑过归并观察的用户显示「未观察」（点行内「重新观察」生成）。当前视角合计 ${totals.proposed} 条，其中 ${totals.autoApplicable} 条可自动执行。点列头排序：降序 = 候选最多的在前`"
+                @click="toggleUserSort('proposed')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('proposed')">归并候选<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-num mk-th--sortable mr-c-scatter" :aria-sort="userSortState('scatter')"
+                :title="`自由填写、未关联到标准概念的记忆标识数，只能逐条治理。该列直接按记忆痕迹统计，不需要先跑观察。当前视角合计 ${totals.fragmentation?.unattachedKeys ?? 0} 条。点列头排序：降序 = 散键最多的在前`"
+                @click="toggleUserSort('scatter')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('scatter')">散键<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-num mk-th--sortable mr-c-strength" :aria-sort="userSortState('strength')"
                 title="有复习记录的痕迹的平均记忆强度，从未复习的用户没有读数（恒排末尾）。点列头排序：升序 = 平均强度最弱的在前"
                 @click="toggleUserSort('strength')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('strength')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('lastReviewed')"
+              <th scope="col" class="mk-th--sortable mr-c-last" :aria-sort="userSortState('lastReviewed')"
                 title="点列头排序：升序 = 最久没复习的在前（从未复习的恒排末尾）"
                 @click="toggleUserSort('lastReviewed')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastReviewed')">最近复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right mr-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -141,9 +150,16 @@
                   <MkCellAvatar :name="row.name" :tone="row.isVirtualLearner ? 'virtual' : 'default'" />
                   <div class="mk-cell-main">
                     <strong>{{ row.name || '未命名' }}</strong>
-                    <span class="mk-cell-sub">{{ shortId(row.userId) }}</span>
+                    <!-- 2026-10-23 走查：副行原为截断的内部 userId（user_9f559a6…abf073），
+                         既不可读也不能检索；改与其它列表同口径显示邮箱，无邮箱才退回短 id -->
+                    <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                    <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时跳过；无邮箱才退回短 id -->
+                    <span v-if="emailSubline(row.email, row.name) || !row.email || row.isTestAccount" class="mk-cell-subline">
+                      <span v-if="emailSubline(row.email, row.name)" class="mk-cell-sub" :title="row.email || undefined">{{ row.email }}</span>
+                      <span v-else-if="!row.email" class="mk-cell-sub mono" :title="row.userId">{{ shortId(row.userId) }}</span>
+                      <span v-if="row.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                    </span>
                   </div>
-                  <MkVariantBadge v-if="row.isVirtualLearner" kind="virtual" />
                 </div>
               </td>
               <td class="mk-num" :title="`该用户共 ${row.traces} 条记忆记录，跨学习路径`">{{ row.traces }}</td>
@@ -158,6 +174,14 @@
                 </div>
                 <span v-else class="mr__none" title="没有强度跌破 40% 的痕迹，也没有待人工确认的归并候选">无</span>
               </td>
+              <td class="mk-num" :title="row.audit === null ? '该用户还没跑过归并观察——点「重新观察」生成候选' : row.proposed ? `${row.proposed} 条同义归并候选待确认` : '观察过，没有待确认的归并候选'">
+                <!-- 0 与「没观察」必须分开：审计投影是按用户跑观察才有的 -->
+                <span v-if="row.audit === null" class="mr__none">未观察</span>
+                <span v-else :class="{ 'mr__none': !row.proposed }">{{ row.proposed }}</span>
+              </td>
+              <td class="mk-num" :title="row.scatter ? `${row.scatter} 个概念标识未挂靠到标准概念` : '没有未挂靠的散键'">
+                <span :class="{ 'mr__none': !row.scatter }">{{ row.scatter }}</span>
+              </td>
               <td class="mk-num">
                 <span v-if="row.avgStrength != null" class="mr__strength" title="有强度痕迹的平均记忆强度">
                   <span class="mk-minibar mr__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: strengthPct(row) + '%' }"></i></span>
@@ -166,7 +190,7 @@
                 <span v-else class="mk-na" title="该用户的痕迹都还没有记忆强度数据">—</span>
               </td>
               <td :title="row.lastReviewedAt ? fullTime(row.lastReviewedAt) : '有记忆痕迹，但还没有复习过'">
-                <span v-if="row.lastReviewedAt" class="mk-cell-sub mono">{{ timeAgo(row.lastReviewedAt) }}</span>
+                <span v-if="row.lastReviewedAt" class="mk-cell-sub">{{ timeAgo(row.lastReviewedAt) }}</span>
                 <span v-else class="mr__none">未复习</span>
               </td>
               <td>
@@ -206,15 +230,15 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import { emailSubline } from '@/components/mk/avatarName'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import { useTableSort } from './useTableSort'
-import DataScopeToggle from './DataScopeToggle.vue'
 import { askConfirm } from './useConfirm'
 import { openSubPage, LEARNER_DETAIL_LANDING } from './store'
+import { useListQueryState } from './learner-profile'
 import { toast } from '@/utils/toast'
-import { errMsg, shortId, timeAgo, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { errMsg, shortId, timeAgo, liveRefreshSeq } from './live'
 
 interface AuditUserSummary {
   mode: string
@@ -233,6 +257,8 @@ interface OverviewRow {
   name: string | null
   email: string | null
   isVirtualLearner: boolean
+  /** 行内「测试」备注（2026-10-21 拍板：测试账号照常计入，只加备注） */
+  isTestAccount?: boolean
   traces: number
   due: number
   audit: AuditUserSummary | null
@@ -242,6 +268,10 @@ interface OverviewRow {
   weak: number
   avgStrength: number | null
   lastReviewedAt: string | null
+  /** 模型给出的同义归并候选数（audit.proposed；没跑过归并观察的用户为 0） */
+  proposed: number
+  /** 未挂靠到标准概念的记忆标识数（散键） */
+  scatter: number
 }
 
 /** 碎片率指标（R7 outlet 域契约 D）。字段缺失 → KPI 显 '—'（不把缺失当 0）。 */
@@ -263,34 +293,12 @@ const {
   sortKey: userSortKey,
   sortDir: userSortDir
 } = useTableSort({
-  keys: ['name', 'traces', 'due', 'weak', 'strength', 'lastReviewed'],
+  keys: ['name', 'traces', 'due', 'weak', 'proposed', 'scatter', 'strength', 'lastReviewed'],
   defaultKey: 'due',
   defaultDir: 'desc',
   // 姓名/强度/最近复习首击升序（名字正序、最弱的在前、最久没复习的在前——「最该关注的在前」
   // 在时间列上的写法就是最久没复习的排头），其余首击降序（最多的在前）
   defaultDirOf: { name: 'asc', strength: 'asc', lastReviewed: 'asc' }
-})
-const USER_SORT_LABEL: Record<string, string> = {
-  name: '学习者名称',
-  traces: '记忆痕迹',
-  due: '待复习',
-  weak: '需关注',
-  strength: '记忆强度',
-  lastReviewed: '最近复习'
-}
-/** 实际生效的排序以响应回显为准（参数非法时后端回落默认，界面不得把默认序说成用户选的） */
-const appliedUserSort = ref<{ key: string; order: 'asc' | 'desc' }>({ key: 'due', order: 'desc' })
-const userSortText = computed(() => {
-  const { key, order } = appliedUserSort.value
-  const label = USER_SORT_LABEL[key] ?? key
-  const dirText = key === 'name'
-    ? (order === 'asc' ? '正序' : '倒序')
-    : key === 'due' || key === 'traces' || key === 'weak'
-      ? (order === 'asc' ? '从少到多' : '从多到少')
-      : key === 'strength'
-        ? (order === 'asc' ? '从弱到强' : '从强到弱')
-        : (order === 'asc' ? '从久到近' : '从近到久')
-  return `${label}${dirText}`
 })
 watch([userSortKey, userSortDir], () => {
   // 排序变了从第 1 页看（否则停在旧页会读作「排序没生效」）
@@ -298,14 +306,6 @@ watch([userSortKey, userSortDir], () => {
   else void loadOverview()
 })
 
-const includeVirtual = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
-watch(includeVirtual, () => {
-  userPage.value = 1
-  void refreshAll()
-})
 const rows = ref<OverviewRow[]>([])
 /* 用户列表服务端分页（审核 #41）：页码驱动 offset，totals.users 作分页 total */
 const userPage = ref(1)
@@ -327,6 +327,17 @@ watch(userPageSize, () => {
    切筛选回第 1 页：否则在第 2 页勾选后看到的只是第 2 页命中的行。 */
 type MrPill = 'all' | 'due' | 'unreviewed' | 'attention'
 const mrPill = ref<MrPill>('all')
+/* 返回态 URL 化（2026-10-24）：此前页码/筛选只在内存，从详情返回必回第 1 页。
+   pill 的计数仍是当前页口径（服务端未接筛选参数），卡头已注明。 */
+useListQueryState(
+  {
+    pill: mrPill,
+    page: userPage,
+    pageSize: userPageSize,
+    allowedPills: ['all', 'due', 'unreviewed', 'attention'],
+  },
+  { pill: 'mr' }
+)
 watch(mrPill, () => {
   if (userPage.value !== 1) userPage.value = 1
 })
@@ -385,9 +396,12 @@ const dueCardTitle = computed(() => {
 interface OverviewCard {
   label: string
   value: string | number
-  hint: string
+  /** 副行可缺省：2026-10-21 起只有定义/包含关系类口径上屏，来源与机制说明进 title */
+  hint?: string
   title: string
   tone?: 'ok' | 'warn' | 'bad' | 'muted' | ''
+  /** 卡底小字：列表无法表达的覆盖度读数（如「已观察 3/28 人」） */
+  observed?: string
 }
 
 /** 页级绝对值单一来源；失败/未落定一律 '—'（R2 + B5-F3-2），不静默归零 */
@@ -399,60 +413,61 @@ const overviewCards = computed<OverviewCard[]>(() => {
   const val = (v: number) => (na ? '—' : v)
   const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
   const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : text)
+  /* 待审队列已并入此卡（2026-10-22 用户「合并了」）：需人工看的不是只有 ambiguous，
+     同义概念待确认 + 模糊候选 + 散键清理建议才是完整的「人审待办」。口径取
+     fragmentation.pendingReview；后端旧版没这个字段时退回 ambiguous，不静默归零。 */
+  const reviewQueue = totals.value.fragmentation?.pendingReview
+  /* 归并审计是「按用户跑观察」才有的投影：一条都没有时，需人工看/归并候选的 0 不是
+     「观察过、很干净」，而是「还没观察」。两者必须分开显示（2026-10-23 用户
+     「为什么包括测试的也是很多0」——26 位测试用户、55 条痕迹，审计读数全是 0）。 */
+  const noAudit = (t.usersWithAudit ?? 0) === 0
   return [
-    { label: '用户', value: val(t.users), hint: numHint('有记忆痕迹'), tone: numTone(''), title: '全部有记忆记录的用户数。是否含虚拟学习者随页头开关' },
-    { label: '记忆痕迹', value: val(t.traces), hint: numHint('跨全部学习路径'), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },
-    { label: '当前到期', value: val(t.due), hint: numHint(t.traces ? '到期未复习 / 全部记录' : '暂无痕迹'), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
-    { label: '需人工看', value: val(t.ambiguous), hint: numHint('归并候选 · 不自动执行'), tone: numTone(t.ambiguous > 0 ? 'warn' : ''), title: '像但不确定的归并候选，需人工确认，不会自动执行' },
-    { label: '待归并建议', value: val(t.proposed), hint: numHint('模型给出的同义概念候选'), tone: numTone(''), title: `模型给出的同义概念候选，其中 ${t.autoApplicable} 条可自动执行（「可自动」指系统有把握且名称足够相似）。执行后保留备份，可回滚。已执行 ${t.applied} 条，已删除 ${t.deleted} 条` }
+    { label: '有记忆痕迹的用户', value: val(t.users), hint: numHint(''), tone: numTone(''), title: '有记忆记录的账号数。是账号集的自然子集——没有学习痕迹的账号不在此列（账号全集见「用户与学习者」）' },
+    /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：来源/机制说明（跨全部学习路径、
+       归并候选·不自动执行、模型给出的同义概念候选）撤出卡面，只留定义与包含关系 */
+    { label: '记忆痕迹', value: val(t.traces), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },
+    { label: '当前到期', value: val(t.due), hint: numHint(t.traces ? '' : '暂无痕迹'), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
+    {
+      label: '需人工看',
+      value: noAudit ? '—' : val(reviewQueue ?? t.ambiguous),
+      /* 2026-10-24 复核：已观察人数必须在卡面可见，不只藏在 title；
+         这也是列表里「未观察」行的同口径分母。 */
+      hint: numHint(noAudit ? '尚未观察' : ''),
+      observed: na ? undefined : `已观察 ${t.usersWithAudit ?? 0}/${t.users} 人`,
+      tone: numTone(!noAudit && (reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
+      title: noAudit
+        ? '所有用户都还没跑过归并观察，暂无归并待办可算——在行上点「重新观察」生成'
+        : `需人工处理的归并待办：同义概念待确认、模糊候选与散键清理建议，不会自动执行。已观察 ${t.usersWithAudit ?? 0}/${t.users} 人`
+    },
+    /* 2026-10-23：待归并建议 / 未挂靠散键不再占 KPI 卡——两项都能落到「哪位学习者」，
+       改由列表的「归并候选」「散键」两列承载（合计进列头 title），页头只留列表无法表达的读数 */
   ];
 });
 
-/* 碎片率 KPI 行（R7 outlet 域契约 D）：后端未部署（字段整体缺失）→ '—' +「指标未取到」 */
+/* 碎片率 KPI 行（R7 outlet 域契约 D）：后端未部署（字段整体缺失）→ '—' +「指标未取到」。
+   2026-10-22 起只留两卡：「待审队列」并入「需人工看」，不再同维度说两遍。 */
 const fragmentationCards = computed<OverviewCard[]>(() => {
   const frag = totals.value.fragmentation
   const failed = !!error.value
   const pending = kpiPending.value
   const na = failed || pending
-  const metricMissing = !frag
   const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
-  const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : metricMissing ? '指标未取到' : text)
+  /* 副行只留取数状态（2026-10-21）：口径与包含关系全部进 title */
+  const stateHint = (missing: boolean) =>
+    failed ? '取数失败' : pending ? '取数中…' : missing ? '指标未取到' : ''
   const ratio = frag?.duplicateLabelRatio
-  const unattached = frag?.unattachedKeys
-  const pendingReview = frag?.pendingReview
-  /* 「需人工看」这一项（totals.ambiguous）既是同带上的独立一卡，又是 pendingReview 求和公式里的加数
-     （后端 memory-review.ts:64-68：review 档归并建议 + ambiguous + 散键清理建议）——
-     它非 0 而另两项为 0 时，两卡必然同数。 */
-  const ambiguous = totals.value.ambiguous
   return [
     {
       label: '措辞重复率',
       value: na || ratio == null ? '—' : `${Math.round(ratio * 100)}%`,
-      hint: numHint('措辞重复的痕迹占比'),
+      hint: stateHint(!frag || ratio == null),
       tone: numTone(!na && ratio != null && ratio >= 0.2 ? 'warn' : ''),
-      title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎，达到 20% 时标为需关注。虚拟学习者是否计入随所处视角变化'
+      title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎，达到 20% 时标为需关注。是否含测试账号随当前视角变化'
     },
-    {
-      label: '未挂靠散键',
-      value: na || unattached == null ? '—' : unattached,
-      hint: numHint('未关联到标准概念的键'),
-      tone: numTone(!na && unattached != null && unattached > 0 ? 'warn' : ''),
-      title: '自由填写的、未关联到标准概念的概念标识数量——无法自动收拢，只能通过归并 / 清理建议逐条治理'
-    },
-    {
-      label: '待审队列',
-      value: na || pendingReview == null ? '—' : pendingReview,
-      /* hint 明写包含关系（2026-10-14 走查）：旧 hint「人审队列中的建议数」不给任何线索，
-         而本卡是「人审档归并建议 + **需人工看** + 散键清理建议」之和 —— 带上那枚独立卡
-         「需人工看」就在和里，另两项为 0 时两卡同数，7 与 7 并排读作矛盾数字。 */
-      hint: numHint(pendingReview != null && ambiguous > 0 ? `含需人工看 ${ambiguous}` : '人审队列中的建议数'),
-      tone: numTone(!na && pendingReview != null && pendingReview > 0 ? 'warn' : ''),
-      title: '待审队列深度：归并建议、需人工看与散键清理建议之和（「需人工看」已含在此数内）。不会自动执行'
-    }
   ];
 });
 
-/** 页头 KPI 单带（2026-10-12 用户走查「怎么双 kpi」）：量值五卡 + 治理碎片三卡合成一条，
+/** 页头 KPI 单带（2026-10-12 用户走查「怎么双 kpi」）：量值五卡 + 治理碎片两卡合成一条，
     不再两段栅格——1920 下两段卡宽不一致（5 卡 ~310px vs 3 卡 ~530px），读作两套 KPI。
     两域取数语义各自保留：fragmentation 缺失仍由 fragmentationCards 出 '—' +「指标未取到」 */
 const headKpiCards = computed<OverviewCard[]>(() => [...overviewCards.value, ...fragmentationCards.value])
@@ -490,22 +505,24 @@ async function loadOverview() {
     const res = await adminMemoryReviewApi.overview({
       limit: userPageSize.value,
       offset: (userPage.value - 1) * userPageSize.value,
-      includeVirtual: includeVirtual.value,
-      testOnly: includeVirtual.value || undefined,
+      // 默认口径 = 全部非虚拟账号（后端单点）；虚拟学习者的记忆在虚拟学习者详情里看
       sort: userSortKey.value,
       order: userSortDir.value
     })
     if (seq !== overviewSeq) return
     const body = res.data?.data ?? res.data ?? {}
-    rows.value = Array.isArray(body.users) ? body.users : []
+    /* 2026-10-23 用户「列的信息就很少，但是 kpi 信息很多」：把原来只住在 KPI 的两项
+       （待归并建议 / 未挂靠散键）搬到行上——它们本来就有逐用户读数，只是没接出来。 */
+    rows.value = (Array.isArray(body.users) ? body.users : []).map((u: Record<string, any>) => ({
+      ...u,
+      proposed: Number(u.audit?.proposed ?? 0),
+      scatter: Number(u.unattachedScatterKeys ?? 0)
+    }))
     if (!rows.value.length && userPage.value > 1) {
       userPage.value = 1
       return
     }
     totals.value = { ...totals.value, ...(body.totals || {}) }
-    if (body.sort && typeof body.sort.key === 'string') {
-      appliedUserSort.value = { key: body.sort.key, order: body.sort.order === 'asc' ? 'asc' : 'desc' }
-    }
     overviewReady.value = true
   } catch (e) {
     if (seq !== overviewSeq) return
@@ -515,10 +532,13 @@ async function loadOverview() {
   }
 }
 
-/** 页头刷新：概览（分布带退役后只剩这一路取数） */
+/** 概览（分布带退役后只剩这一路取数） */
 async function refreshAll() {
   await loadOverview()
 }
+
+/* 顶栏刷新广播：本页数据（概览 + 碎片率）不在 live 域里，靠这条把顶栏那颗接过来 */
+watch(liveRefreshSeq, () => { void refreshAll() })
 
 /** 行内「重新观察」进行中标记：只转该行按钮文案，不锁整页 */
 const recomputingId = ref('')
@@ -557,7 +577,7 @@ const router = useRouter()
  *  落点常量单点在 store 的 LEARNER_DETAIL_LANDING；「记忆调度」页签是治理动作面，
  *  仍只由旧深链 ?userId= 与详情内切换进入。 */
 function openLearner(userId: string) {
-  openSubPage('learner', userId, { tab: LEARNER_DETAIL_LANDING.memoryReview, ...(includeVirtual.value ? { includeTest: true } : {}) })
+  openSubPage('learner', userId, { tab: LEARNER_DETAIL_LANDING.memoryReview })
 }
 
 onMounted(async () => {
@@ -574,6 +594,20 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* KPI 卡底覆盖度小字（已观察 N/M 人）：不进 hint，避免与空态口径争同一行 */
+.mr-kpi-observed { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 固定列宽（2026-10-22 与教学组三表同判例）：学习者列在 auto 布局下按当页最长姓名分宽，
+   翻页整表跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。 */
+.mr-c-user { width: 230px; }
+.mr-c-traces { width: 96px; }
+.mr-c-due { width: 84px; }
+.mr-c-weak { width: 84px; }
+.mr-c-prop { width: 92px; }
+.mr-c-scatter { width: 76px; }
+.mr-c-strength { width: 150px; }
+.mr-c-last { width: 100px; }
+.mr-c-act { width: 140px; }
+
 .mr { display: flex; flex-direction: column; }
 
 /* ===== 用户列表（2026-09-28：表头回归——行列表没有表头，右侧裸数字无从解读）===== */

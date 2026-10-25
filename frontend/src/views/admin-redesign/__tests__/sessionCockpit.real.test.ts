@@ -243,7 +243,7 @@ describe('SessionCockpit 双模式', () => {
     // 顶栏不渲染（2026-10-11 走查：真实会话的顶栏 ID/刷新与壳层+hero 重复）；
     // 只读声明与出口迁进 hero（模式 badge + 动作区「← 会话列表」）
     expect(wrapper.find('.cp-topbar').exists()).toBe(false);
-    expect(wrapper.text()).toContain('真实会话 · 只读监控');
+    expect(wrapper.text()).toContain('真实课堂 · 只读监控');
     // 2026-10-19 用户走查「刷新重复了吧」：hero 刷新钮撤，改由顶栏一颗驱动（watch liveRefreshSeq）
     const heroActions = wrapper.find('.mk-hero__actions');
     expect(heroActions.text()).toContain('会话列表');
@@ -256,22 +256,35 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('1/2 里程碑');
     expect(wrapper.text()).toContain('学习者发言 1');
 
-    // 时间线日志卡（真实模式由 payload.timeline 承载，会话总结已生成在尾部）
+    // 时间线日志卡（真实模式由 payload.timeline 承载）：
+    // 2026-10-22 起聊天消息折叠为一条读数行（全文在左侧页签），路径/证据/总结事件仍逐条
     const logText = wrapper.find('.cp-logs').text();
     expect(logText).toContain('学习路径已生成');
     expect(logText).toContain('会话总结已生成');
+    expect(logText).toContain('查看全文');
+    expect(logText).not.toContain('我想学 Python');
 
     // wrapup 字段卡 + 来源徽章（模型生成）
     expect(wrapper.text()).toContain('主题摘要');
     expect(wrapper.text()).toContain('围绕函数作用域展开');
     expect(wrapper.text()).toContain('模型生成');
 
-    // 会话数据包（2026-10-18）：主列只留一行读数，整包 JSON 收进弹层（点开才序列化）
+    // 折叠行点按跳左侧页签（第二条 = 课堂折叠行；默认页签是目标对话，课堂面板此时不存在）
+    const jumps = wrapper.findAll('.cp-log__jump');
+    expect(jumps).toHaveLength(2);
+    expect(wrapper.find('#cp-tabpanel-learning').exists()).toBe(false);
+    await jumps[1].trigger('click');
+    await flushPromises();
+    expect(wrapper.find('#cp-tabpanel-learning').exists()).toBe(true);
+
+    // 会话数据包（2026-10-18）：主列只留一行读数，整包 JSON 收进弹层（点开才序列化）；
+    // 2026-10-22 起读数只报时间线条数，消息/阶段/任务数在页签卡头与阶段瓦片已有
     const pkg = wrapper.find('.cp-raw');
     expect(pkg.exists()).toBe(true);
     expect(pkg.text()).toContain('会话数据包');
-    expect(pkg.text()).toContain('教学会话');
-    expect(pkg.text()).toContain('Python 入门学习路径');
+    expect(pkg.text()).toContain('5 条时间线');
+    expect(pkg.text()).not.toContain('教学会话');
+    expect(pkg.text()).not.toContain('Python 入门学习路径');
     expect(pkg.find('pre').exists()).toBe(false);
     const openRawBtn = pkg.findAll('button').find((b) => b.text() === '查看原始数据')!;
     await openRawBtn.trigger('click');
@@ -296,7 +309,7 @@ describe('SessionCockpit 双模式', () => {
 
     // 只读提示（2026-10-04 批次五 P3#13：「只读监控」声明并入顶栏模式 chip 单源，
     // 控制台条不再对真实会话复读——断言同步新契约：全角间隔号形态）
-    expect(wrapper.text()).toContain('真实会话 · 只读监控');
+    expect(wrapper.text()).toContain('真实课堂 · 只读监控');
 
     wrapper.unmount();
   });
@@ -346,6 +359,10 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.find('#cp-tabpanel-wrapup').exists()).toBe(false);
     const selected = wrapper.find('.cp-stp[aria-selected="true"]');
     expect(selected.attributes('id')).toBe('cp-tab-goal');
+    // 对象标识（2026-10-24）：目标对话不能再被叫成「真实课堂」；面包屑同步补可读名
+    expect(wrapper.text()).toContain('真实目标对话 · 只读监控');
+    expect(wrapper.text()).not.toContain('真实课堂 · 只读监控');
+    expect(subPage.value?.label).toBe('目标对话');
 
     wrapper.unmount();
   });
@@ -635,8 +652,19 @@ describe('SessionCockpit 双模式', () => {
     expect(pane.find('.pd-stage__caret').exists()).toBe(false);
     // 旧出口退役：stepper 的 Path 步点即唯一入口，不再有「打开路径详情页」按钮
     expect(pane.text()).not.toContain('打开路径详情页');
-    // 治理动作保留（真实能力：下线路径）
-    expect(pane.text()).toContain('下线路径');
+    // 治理动作保留，但收进右缘 ⋯ 菜单（2026-10-22 用户「这个位置不合适」）：
+    // 默认不露按钮；展开后才有「下线路径」，且没有第二颗刷新（顶栏刷新覆盖）
+    expect(pane.text()).not.toContain('下线路径');
+    expect(pane.text()).not.toContain('刷新');
+    await pane.find('.mk-menu__btn').trigger('click');
+    await flushPromises();
+    const menuItems = pane.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
+    expect(menuItems).toEqual(['下线路径']);
+    // 顶栏刷新同时驱动面板（面板不再自带刷新钮）
+    const detailCalls = getPathDetailMock.mock.calls.length;
+    liveRefreshSeq.value += 1;
+    await settle();
+    expect(getPathDetailMock.mock.calls.length).toBeGreaterThan(detailCalls);
 
     wrapper.unmount();
   });
@@ -922,6 +950,47 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  it('课堂转录按 markdown 渲染（用户「md没渲染」）：代码围栏出 pre，不露 ``` 原文', async () => {
+    const payload = realTeachingPayload();
+    const md = '看这段：\n\n```ts\ntype MyPick<T, K extends keyof T> = { [P in K]: T[P] }\n```\n\n边界在调用处。';
+    payload.data.conversations.learning.messages = [{ role: 'assistant', content: md, time: '2026-08-12T14:00:05.000Z' }];
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await nextTick();
+
+    const pre = wrapper.find('.cp-transcript__content pre code');
+    expect(pre.exists()).toBe(true);
+    expect(pre.text()).toContain('type MyPick<T, K extends keyof T>');
+    expect(wrapper.find('.cp-transcript__content').text()).not.toContain('```');
+
+    wrapper.unmount();
+  });
+
+  it('同一检查点重答（同 checkpointId）归并为一行，标尝试次数', async () => {
+    const payload = realTeachingPayload();
+    payload.data.teaching.checkpoints.push({
+      checkpointId: 'cp_1', type: 'short_answer',
+      question: '针对「完成5道错题重做」这条建议，它预设的动机状态是什么？',
+      passed: true, judgedBy: 'code', understanding: 0.9, conceptName: '识别隐含动机假设'
+    });
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await nextTick();
+
+    expect(wrapper.findAll('.cp-checkpoint')).toHaveLength(1);
+    const block = wrapper.find('.cp-checkpoints');
+    expect(block.text()).toContain('1 个 · 2 次作答');
+    expect(block.text()).toContain('尝试 2 次');
+    // 展示最新一次裁决
+    expect(block.text()).toContain('通过');
+
+    wrapper.unmount();
+  });
+
   /** 2026-10-18 用户走查「原始会话数据偏源码开发」：主列不再内联整包 JSON，
    *  改为一行数据包读数；完整载荷点「查看原始数据」进弹层，复制拿到的必须是完整串。 */
   it('会话数据包：主列只出读数，原始 JSON 进弹层且复制为完整载荷', async () => {
@@ -937,8 +1006,8 @@ describe('SessionCockpit 双模式', () => {
     const pkg = wrapper.find('.cp-raw');
     // 折叠态：页面上没有 JSON 直排（pre），只有一行读数与两个动作
     expect(pkg.find('pre').exists()).toBe(false);
-    expect(pkg.text()).toContain('教学会话');
-    expect(pkg.text()).toContain('条消息');
+    expect(pkg.text()).toContain('条时间线');
+    expect(pkg.text()).not.toContain('条消息');
     expect(pkg.findAll('button').map((b) => b.text())).toEqual(['查看原始数据', '复制 JSON']);
 
     // 打开弹层：完整载荷（无 4000 截断）+ 字符总数

@@ -9,7 +9,7 @@
     <span class="mk-alert__msg">{{ runningInfo || '评估运行中…' }}</span>
   </div>
   <!-- KPI 带 2026-10-15 迁回宿主读数槽位（用户走查「位置不对」）：宿主 Skills 的槽位是
-       「页头之下、页签栏之上」（Skill 运行 / 模型路由两条带都在那），本带此前留在面板根片段里
+       「页头之下、页签栏之上」（Skill 运行 / Prompt 评估两条带都在那），本带此前留在面板根片段里
        即落在页签栏之下——同页签切一下读数带就换位置。现由宿主 v-if="tab==='prompt-eval'" 渲染，
        数据经 defineExpose 的 kpiView 供出（与 runBatch 同法）。 -->
 
@@ -164,7 +164,6 @@
     <div v-else id="pe-panel-runs" role="tabpanel" aria-labelledby="pe-tab-runs" class="pe-panel">
       <!-- 跨运行对比（#94）：勾选 ≤2 次运行 → 并排 diff（benchmark 排期第 3 步的最小实现） -->
       <div v-if="runs.length" class="pe-compare-bar">
-        <span class="pe-filter__hint">勾选两次运行可并排对比（最多 2 条）</span>
         <button
           type="button"
           class="mk-btn mk-btn--sm mk-btn--primary"
@@ -264,7 +263,6 @@
         icon="◌"
         min
         title="还没有评估记录"
-        description="跑评估的两个真实入口：页头「批量跑评估」一次跑完当前筛选下所有启用用例；单条试跑在用例行 ⋯ 菜单里。运行记录会自动汇总到这里。"
         action-text="去评估用例"
         @action="switchTab('cases')"
       />
@@ -279,12 +277,6 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="formOpen = false">✕</button>
           </div>
           <div class="mk-modal__body">
-            <!-- 一行引导 -->
-            <div class="pe-guide">
-              <span class="pe-guide__title">评估用例 = 学生说的话 + 期望助手怎么回</span>
-              <span class="pe-guide__steps">改 prompt 后一键重跑防退化。期望可不填，填好直接「保存并立即试跑」。</span>
-            </div>
-
             <!-- 能力 + 名称 -->
             <div class="pe-form-grid">
               <label class="mk-field" :class="{ 'mk-field--error': errors.agentId }">
@@ -378,11 +370,10 @@
                 <label class="mk-field">
                   <span class="mk-field__label">不能出现</span>
                   <input v-model="form.mustNotInclude" class="mk-field__input" placeholder="例如：我不知道，去问老师吧" />
-                  <span class="mk-field__hint">回复出现这些字样就不通过。</span>
                 </label>
               </div>
               <details class="pe-adv">
-                <summary>高级校验 <span class="pe-adv__hint">让助手按固定结构输出后，逐项卡结构字段</span></summary>
+                <summary>高级校验</summary>
                 <div v-if="form.agentId === 'skill:goal-conversation'" class="mk-field">
                   <span class="mk-field__label">期望输出阶段</span>
                   <input v-model="form.expectedStage" class="mk-field__input mono" placeholder="understanding / proposal / confirmed" />
@@ -479,7 +470,7 @@
                       <span class="mk-badge" :class="res.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ res.passed ? '通过' : '未通过' }}</span>
                       <!-- 失败用例就近跳转（评审「失败用例无『去改 Prompt』链路」）：openCaseSkill 同口径剥 skill: 前缀进 Skill 详情 -->
                       <button v-if="!res.passed && runDetail?.agentId" type="button" class="mk-link" title="打开该用例对应的 Skill 详情（改 Prompt 前先看上下文）" @click="goCaseSkill(runDetail.agentId)">查看该 Skill</button>
-                      <span class="pe-result-row__meta mono">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
+                      <span class="pe-result-row__meta">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
                     </div>
                     <div v-if="!res.passed" class="pe-result-row__checks">
                       <span v-for="(v, k) in res.checks" :key="k" class="pe-check" :class="v ? 'pe-check--ok' : 'pe-check--fail'">{{ v ? '✓' : '✗' }} {{ checkLabel(String(k)) }}</span>
@@ -810,15 +801,9 @@ const lastPassRateText = computed(() => {
   if (lastRunEmpty.value) return '暂无通过数据（0 次执行）'
   return formatRate(latestRun.value?.summary?.passRate) ?? '—'
 })
-/** 基数（23/25）：summary 带通过数/总次数才拼接，缺一项就不硬凑；0 次执行不拼「（0/0）」 */
-/* 2026-10-19 用户走查「KPI hint 在报读数」：原副行是「（通过/执行）」这个读数，
-   改为口径短语；分子分母随长释进 lastRateTitle */
-const lastRateBase = computed(() => {
-  if (lastRunEmpty.value) return ''
-  const s = latestRun.value?.summary
-  if (!s || typeof s.passedCount !== 'number' || typeof s.totalRuns !== 'number') return ''
-  return '最近一次评测 · 通过用例 / 已执行用例'
-})
+/* 2026-10-21 用户「不要了」：通过率卡不再挂比例式分母，分子分母与口径全部进 lastRateTitle；
+   卡面副行只在「0 次执行」这种读不出通过率的状态下出现 */
+const lastRateBase = computed(() => (lastRunEmpty.value ? '0 次执行' : ''))
 /** KPI tone（2026-10-04 状态条退役，原 lastRateCls 类名着色翻译成 MkKpi tone）：
     阈值纪律走 rate-utils 单点不变；muted（缺 passRate）与 0 次执行不着色 */
 const lastRateTone = computed(() => {
@@ -826,12 +811,9 @@ const lastRateTone = computed(() => {
   const tone = rateToneOf(latestRun.value?.summary?.passRate)
   return tone === 'muted' ? '' : tone
 })
-/** 通过率卡 hint（2026-10-04 状态条退役）：基数 + agent 筛选限定词（原条句面口径迁入，数字不裸奔） */
-const lastRateHint = computed(() => {
-  const parts = [lastRateBase.value]
-  if (agentFilter.value) parts.push(`仅 ${agentLabel(agentFilter.value)}`)
-  return parts.filter(Boolean).join(' ')
-})
+/** 通过率卡 hint（2026-10-04 状态条退役）：只留比例式分母；agent 筛选限定词于 2026-10-21
+    撤除（顶部筛选已表达，口径在 title 里） */
+const lastRateHint = computed(() => lastRateBase.value)
 const lastRateTitle = computed(() => {
   if (!runs.value.length) return '暂无评测数据'
   if (lastRunEmpty.value) return '最近一次评估 0 次执行（用例全部被跳过或未运行），无通过率可显示'
@@ -855,8 +837,7 @@ const runsKpiTitle = computed(() =>
   }`
 )
 /* #88：用例/历史两张 KPI 的数字随顶部 agent 筛选收窄（reloadCases/reloadRuns 都带 agentFilter），
-   口径文案必须同步披露这层限定——否则「用例总数」被读成全站总数，切筛选后数字骤降像「用例丢了」 */
-const casesKpiHint = computed(() => (agentFilter.value ? `仅 ${agentLabel(agentFilter.value)}` : '全部 Agent'))
+   口径披露只留在 title——卡面副行不再复述筛选状态（2026-10-21 判例） */
 const casesKpiTitle = computed(() =>
   agentFilter.value
     ? `当前 agent 筛选「${agentLabel(agentFilter.value)}」下的评估用例数（非全站总数）`
@@ -1593,7 +1574,8 @@ const kpiView = computed(() => ({
   passRateTitle: lastRateTitle.value,
   // #72：加载失败不能落成 0（读不到 ≠ 没有）——三卡统一显「—」，失败原因进 title
   caseCount: casesFailed.value ? ('—' as const) : cases.value.length,
-  casesHint: casesFailed.value ? '用例列表加载失败' : casesKpiHint.value,
+  // 2026-10-21：agent 筛选复述（「仅 X / 全部 Agent」）撤出卡面，只留加载失败态
+  casesHint: casesFailed.value ? '用例列表加载失败' : '',
   casesTitle: casesFailed.value ? '评估用例加载失败：计数不可用（不代表没有用例）' : casesKpiTitle.value,
   enabledCaseCount: casesFailed.value
     ? ('—' as const)
@@ -1613,7 +1595,6 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
 .pe-running { flex: none; }
 /* 筛选/工具栏行收进单卡容器：与页签体之间以发丝线分层（原型 .toolbar border-bottom） */
 .pe-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--mk-line); }
-.pe-filter__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); margin-left: auto; }
 /* 主操作贴右缘（原由说明行的 margin-left:auto 顺带推开；说明行删后按钮会挤在筛选器旁） */
 .pe-filter__action { margin-left: auto; }
 
@@ -1632,7 +1613,7 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
 .pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .pe-persona-missing { margin-left: 6px; }
 .pe-result { display: grid; gap: 3px; justify-items: start; }
-.pe-result strong { font-size: var(--mk-fs-body); font-family: var(--mk-mono); }
+.pe-result strong { font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; }
 .pe-result span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .pe-result__bar { display: block; width: 64px; }
 .pe-result--ok .pe-result__bar i { background: var(--mk-green); }
@@ -1660,20 +1641,6 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
   border-radius: 6px;
 }
 
-/* 用例表单：白话引导 + 分步区块 */
-.pe-guide {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-  background: color-mix(in srgb, var(--mk-purple) 7%, transparent); /* 原 135deg 靛蓝渐变已退役（材质一律平面），取最近语义色 --mk-purple 平铺 */
-  border: 1px solid color-mix(in srgb, var(--mk-purple) 25%, transparent);
-  border-radius: var(--mk-radius-xl);
-  padding: 8px 12px;
-  margin-bottom: 4px;
-}
-.pe-guide__title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-purple); }
-.pe-guide__steps { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 /* .mk-field__opt（字段标签内的「（可选）」次级提示）已提升为全局，见 shared.css */
 
 /* ===== 宿主 fill 内滚（2026-10-04 折入 Skills 页签）：原独立页整页滚，折入 .mk-card--fill
@@ -1759,7 +1726,6 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
   user-select: none;
 }
 .pe-adv summary:hover { color: var(--mk-purple); }
-.pe-adv__hint { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
 
 /* 模拟对话轨迹 */
 .pe-transcript { display: grid; gap: 6px; margin-top: 6px; }

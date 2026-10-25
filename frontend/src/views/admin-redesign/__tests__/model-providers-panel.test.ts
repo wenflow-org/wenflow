@@ -100,6 +100,11 @@ function seedView(extra?: Partial<{ readOnly: boolean; providers: Array<Record<s
   getMock.mockResolvedValue({ data: { data: view } })
 }
 
+/** 模型行（排除「对话 / 推理」功能分组行） */
+function modelRows(wrapper: Awaited<ReturnType<typeof mountPanel>>) {
+  return wrapper.findAll('.mpp-table tbody tr').filter((r) => !r.classes('mpp-group'))
+}
+
 async function mountPanel(props: Record<string, unknown> = {}) {
   const wrapper = mount(ModelProvidersPanel, { props, global: { stubs: { teleport: true } } })
   await flushPromises()
@@ -150,6 +155,51 @@ describe('ModelProvidersPanel', () => {
     expect(w.text()).toContain('2 个')
   })
 
+  it('供应商列表按 tab 语义走 roving tabindex：只有选中项占 Tab 位，方向键/Home/End 移动选中', async () => {
+    const w = await mountPanel()
+    const tabs = () => w.findAll('.mpp-item')
+    expect(tabs().map((t) => t.attributes('tabindex'))).toEqual(['0', '-1'])
+
+    await w.find('.mpp-list').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(w.find('.mpp-item--on').text()).toContain('Acme 网关')
+    expect(tabs().map((t) => t.attributes('tabindex'))).toEqual(['-1', '0'])
+
+    // 末尾再按下越界回到第一项（循环），Home 直接回第一项
+    await w.find('.mpp-list').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(w.find('.mpp-item--on').text()).toContain('平台')
+    await w.find('.mpp-list').trigger('keydown', { key: 'End' })
+    await flushPromises()
+    expect(w.find('.mpp-item--on').text()).toContain('Acme 网关')
+    await w.find('.mpp-list').trigger('keydown', { key: 'Home' })
+    await flushPromises()
+    expect(w.find('.mpp-item--on').text()).toContain('平台')
+  })
+
+  it('平台详情只有模型一页：设置交给宿主弹窗，自定义供应商仍走注册表编辑', async () => {
+    const w = await mountPanel()
+    // 平台默认选中：没有二级页签，模型表直接可见
+    expect(w.findAll('.mpp-tabs')).toHaveLength(0)
+    expect(w.find('.mpp-models').exists()).toBe(true)
+    expect(w.text()).not.toContain('基础设施')
+    expect(w.text()).not.toContain('生成参数')
+
+    // 「设置」→ 通知宿主打开平台设置弹窗（连接段）
+    const settings = w.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置')!
+    await settings.trigger('click')
+    expect(w.emitted('open-platform-settings')?.[0]).toEqual(['conn'])
+
+    // 自定义供应商：设置仍打开注册表编辑弹层，不发射宿主事件
+    const acme = w.findAll('.mpp-item').find((i) => i.text().includes('Acme 网关'))!
+    await acme.trigger('click')
+    await flushPromises()
+    await w.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置')!.trigger('click')
+    await flushPromises()
+    expect(w.find('[aria-label="供应商设置"]').exists()).toBe(true)
+    expect(w.emitted('open-platform-settings')).toHaveLength(1)
+  })
+
   it('自带端点的供应商：详情显示服务地址、密钥三件套（掩码 + 显示切换 + 留空沿用）与模型清单', async () => {
     const w = await mountPanel()
     await pick(w, 'Acme 网关')
@@ -159,12 +209,40 @@ describe('ModelProvidersPanel', () => {
     expect(keyInput.attributes('placeholder')).toBe('已配置 ····9xQv，留空 = 沿用')
     await btn(w, '显示')!.trigger('click')
     expect(w.find('.mpp-endpoint__key input').attributes('type')).toBe('text')
-    // 模型表：只留 模型 / 单价 / 状态 / 操作 四列（平台限制与备用链收进编辑弹层的高级设置）
-    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '单价', '状态', ''])
-    const rows = w.findAll('.mpp-table tbody tr')
+    // 模型表：模型 / 功能 / 单价 / 状态 / 操作（用途分组行 + 能力标签见下一条用例）
+    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '功能', '单价', '状态', ''])
+    const rows = modelRows(w)
     expect(rows).toHaveLength(2)
     expect(rows[0].text()).toContain('acme-chat')
     expect(rows[1].text()).toContain('acme-chat-2')
+  })
+
+  it('按功能区分：按用途分组（对话 / 推理），能力（思考 / 推理强度 / 读图）单独成列', async () => {
+    const platform = providerView({ id: 'platform', name: '平台', models: [
+      { id: 'chat-plain' },
+      { id: 'chat-read' },
+      { id: 'think-fast', tier: 'reasoning' }
+    ] })
+    platform.models = (platform.models as Array<Record<string, unknown>>).map((m) => {
+      if (m.id === 'chat-read') return { ...m, vision: true }
+      if (m.id === 'think-fast') return { ...m, supportsThinking: true, supportsReasoningEffort: true }
+      return m
+    })
+    seedView({ providers: [platform] })
+    const w = await mountPanel()
+    const groups = w.findAll('.mpp-group')
+    // 两个用途各一段，组头写清功能与条数（空组不渲染）
+    expect(groups.map((g) => g.find('.mpp-group__name').text())).toEqual(['对话', '推理'])
+    expect(groups.map((g) => g.find('.mpp-group__count').text())).toEqual(['2 个', '1 个'])
+    expect(groups[0].text()).toContain('常规教学、工具调用与高频 Skill')
+
+    const rows = modelRows(w)
+    const fn = (i: number) => rows[i].find('.mpp-fn').text()
+    expect(fn(0)).toBe('基础对话')
+    expect(fn(1)).toBe('读图')
+    expect(fn(2)).toBe('思考推理强度')
+    // 能力标签有可读文本，不只靠颜色
+    expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['读图'])
   })
 
   it('启用开关即时保存：点开关就调写接口并采纳回吐的新视图', async () => {
@@ -178,6 +256,8 @@ describe('ModelProvidersPanel', () => {
       }
     })
     const acmeSwitch = w.findAll('.mpp-item')[1].find('.mk-switch')
+    // 2026-10-23 UI 审查：开关只有 aria-checked、没有可访问名，读屏只念「开关」
+    expect(acmeSwitch.attributes('aria-label')).toBe('启用供应商 Acme 网关')
     await acmeSwitch.trigger('click')
     await flushPromises()
     expect(updateMock).toHaveBeenCalledWith('acme-gateway', { enabled: false })
@@ -205,28 +285,58 @@ describe('ModelProvidersPanel', () => {
     expect(rowBtn('测试').attributes('disabled')).toBeUndefined()
   })
 
-  it('获取模型列表 → 逐条添加：一行一个模型，点「添加」带着模型 id 打开编辑弹层', async () => {
+  it('获取模型列表 → 浮窗勾选：不再铺内联清单，勾选后带模型 id 打开编辑弹层', async () => {
     const w = await mountPanel()
     await pick(w, 'Acme 网关')
     pullMock.mockResolvedValue({ data: { data: { models: ['acme-chat', 'acme-chat-2', 'acme-pro'] } } })
     await btn(w, '获取模型列表')!.trigger('click')
     await flushPromises()
-    const fetch = w.find('.mpp-fetch')
-    expect(fetch.text()).toContain('上游模型 3 个')
-    const rows = fetch.findAll('.mpp-fetch__row')
+    expect(w.find('.mpp-fetch').exists()).toBe(false)
+    const dialog = w.find('.pmd')
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.text()).toContain('已拉取 3 个')
+    const rows = dialog.findAll('.pmd-row')
     expect(rows).toHaveLength(3)
-    // 已登记的只显「已添加」，不再给添加按钮
+    // 已登记的只读「已添加」，勾选框禁用
     const registered = rows.find((r) => r.text().includes('acme-chat') && !r.text().includes('acme-chat-2'))!
     expect(registered.text()).toContain('已添加')
-    expect(registered.find('button').exists()).toBe(false)
-    // 未登记的逐条添加：id 预填进编辑弹层，基础信息由用户确认后保存
+    expect(registered.find('input').attributes('disabled')).toBeDefined()
+    // 未登记的勾选后点「配置」，模型 id 预填进编辑弹层
     const target = rows.find((r) => r.text().includes('acme-pro'))!
-    await target.find('button').trigger('click')
+    await target.find('input').setValue(true)
     await flushPromises()
-    // 占位符随已下线模型归一（deepseek-v4-flash → v4.1-flash）
+    const liveDialog = w.find('.pmd')
+    const confirm = liveDialog.findAll('button').find((b) => b.text().includes('配置选中的 1 个'))!
+    await confirm.trigger('click')
+    await flushPromises()
+    expect(w.find('.pmd').exists()).toBe(false)
     const idInput = w.find('.med-modal input[placeholder="deepseek-v4.1-flash"]')
     expect(idInput.exists()).toBe(true)
     expect((idInput.element as HTMLInputElement).value).toBe('acme-pro')
+  })
+
+  it('勾选多个后逐个配置：保存一个自动进下一个，标题带进度', async () => {
+    const w = await mountPanel({ upstream: ['mimo-v2.5-flash', 'step-3.5-flash'] })
+    ;(w.vm as unknown as { openPull: () => void }).openPull()
+    await nextTick()
+    const boxes = w.findAll('.pmd-sec .pmd-row input')
+    await boxes[0].setValue(true)
+    await nextTick()
+    await w.findAll('.pmd-sec .pmd-row input')[1].setValue(true)
+    await nextTick()
+    await w.findAll('.pmd .mk-modal__foot .mk-btn--primary')[0].trigger('click')
+    await nextTick()
+    const title = () => w.find('.med-modal .mk-modal__title').text()
+    const idValue = () => (w.find('.med-modal input[placeholder="deepseek-v4.1-flash"]').element as HTMLInputElement).value
+    expect(title()).toBe('添加模型 · 1/2')
+    expect(idValue()).toBe('mimo-v2.5-flash')
+    addModelMock.mockResolvedValue({ data: { data: {}, warnings: [] } })
+    await w.find('.med-modal .mk-modal__foot .mk-btn--primary').trigger('click')
+    await flushPromises()
+    await nextTick()
+    expect(title()).toBe('添加模型 · 2/2')
+    expect(idValue()).toBe('step-3.5-flash')
+    expect(addModelMock).toHaveBeenCalledTimes(1)
   })
 
   it('删除供应商要二次确认；确认后调删除接口', async () => {
@@ -262,17 +372,48 @@ describe('ModelProvidersPanel', () => {
     })
     const w = await mountPanel()
     await pick(w, 'Acme 网关')
-    const rows = w.findAll('.mpp-table tbody tr')
+    const rows = modelRows(w)
     expect(rows[0].text()).toContain('冷却中')
     expect(rows[1].text()).toContain('健康')
   })
 
-  it('平台通道的上游清单同样逐条列出（不铺胶囊、不做批量登记）', async () => {
+  it('平台通道的拉取结果进浮窗勾选（不在详情里铺清单）', async () => {
     const w = await mountPanel({ upstream: ['deepseek-v4-flash', 'mystery-1', 'mystery-2'] })
-    const rows = w.findAll('.mpp-fetch__row')
+    expect(w.find('.mpp-fetch').exists()).toBe(false)
+    expect(w.find('.pmd').exists()).toBe(false)
+    ;(w.vm as unknown as { openPull: () => void }).openPull()
+    await nextTick()
+    const rows = w.findAll('.pmd-row')
     expect(rows).toHaveLength(3)
     expect(rows[0].text()).toContain('已添加')
-    expect(rows[1].text()).toContain('添加')
+    expect(rows[1].text()).not.toContain('已添加')
+    expect(rows[1].find('input').attributes('disabled')).toBeUndefined()
     expect(w.find('.mpp-chip').exists()).toBe(false)
+  })
+
+  it('上游按用途分流：浮窗里向量/生图/决策不提供勾选，改去对应配置', async () => {
+    const w = await mountPanel({
+      upstream: ['deepseek-v4-flash', 'BAAI/bge-m3', 'agnes-image-2.5-flash', 'jev-latest', 'agnes-video-2.5']
+    })
+    ;(w.vm as unknown as { openPull: () => void }).openPull()
+    await nextTick()
+    const chatRows = w.findAll('.pmd-sec:not(.pmd-sec--other) .pmd-row')
+    expect(chatRows).toHaveLength(1)
+    expect(chatRows[0].text()).toContain('deepseek-v4-flash')
+
+    const otherRows = w.findAll('.pmd-row--other')
+    expect(otherRows).toHaveLength(4)
+    const rowText = (needle: string) => otherRows.find((r) => r.text().includes(needle))!
+    expect(rowText('BAAI/bge-m3').text()).toContain('向量')
+    expect(rowText('BAAI/bge-m3').find('button').text()).toBe('基础设施配置')
+    expect(rowText('agnes-image-2.5-flash').text()).toContain('生图')
+    expect(rowText('agnes-image-2.5-flash').find('button').text()).toBe('插件配置')
+    expect(rowText('jev-latest').text()).toContain('决策')
+    expect(rowText('agnes-video-2.5').text()).toContain('暂未接入')
+    expect(rowText('agnes-video-2.5').find('button').exists()).toBe(false)
+
+    // 基础设施配置 → 通知宿主打开平台设置并滚到基础设施段
+    await rowText('BAAI/bge-m3').find('button').trigger('click')
+    expect(w.emitted('open-platform-settings')?.[0]).toEqual(['infra'])
   })
 })

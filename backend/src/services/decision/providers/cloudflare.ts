@@ -12,6 +12,7 @@
  * 默认 clef-omni：同批可答性样本上准确率接近 27B 且延迟最低（0.28~0.31s）。
  */
 
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import type { DecisionCallOptions, DecisionProvider, DecisionProviderResult, DecisionRequest } from '../types';
 import { postDecision } from './shared';
 
@@ -27,10 +28,10 @@ export interface CloudflareDecisionConfig {
 
 export function readCloudflareDecisionConfig(): CloudflareDecisionConfig {
   return {
-    accountId: (process.env.CF_ACCOUNT_ID || process.env.CF_ACCT || '').trim(),
-    token: (process.env.CF_TOKEN || '').trim(),
-    baseUrl: (process.env.CF_AI_BASE_URL || DEFAULT_BASE_URL).trim().replace(/\/+$/, ''),
-    model: (process.env.CF_DECISION_MODEL || DEFAULT_MODEL).trim(),
+    accountId: readPluginProviderField('decision', 'cloudflare', 'accountId'),
+    token: readPluginProviderSecret('decision', 'cloudflare'),
+    baseUrl: (readPluginProviderField('decision', 'cloudflare', 'baseUrl') || DEFAULT_BASE_URL).replace(/\/+$/, ''),
+    model: readPluginProviderField('decision', 'cloudflare', 'model') || DEFAULT_MODEL,
   };
 }
 

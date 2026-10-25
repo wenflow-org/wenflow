@@ -38,15 +38,9 @@ function makeUser(i: number) {
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
-  // 2026-10-04 整组统一口径：共享 ref + set 回写（真实现语义）
-  const liveIncludeVirtual = ref(false);
   return {
     liveUsers: ref([]),
     liveUsersTotal: ref(0),
-    liveIncludeVirtual,
-    liveSetIncludeVirtual: vi.fn((v: boolean) => {
-      liveIncludeVirtual.value = v;
-    }),
     liveLoading: ref(false),
     liveFailures: ref<Record<string, string>>({}),
     registrationEnabled: ref<boolean | null>(null),
@@ -216,8 +210,8 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
     return [
       { ...makeUser(1), isAdmin: true, lastLoginAt: recent() }, // 真实 · 管理员 · 7 天内登录
       { ...makeUser(2), isAdmin: false, lastLoginAt: old }, // 真实 · 普通用户 · 久未登录
-      { ...makeUser(3), isTestAccount: true, isAdmin: true, lastLoginAt: recent() }, // 测试管理员 · 近 7 天
-      { ...makeUser(4), isVirtualLearner: true, isAdmin: false, lastLoginAt: recent() } // 虚拟学习者 · 近 7 天
+      { ...makeUser(3), isTestAccount: true, isAdmin: true, lastLoginAt: recent() } // 测试管理员 · 近 7 天
+      /* 虚拟学习者不进账号列表（2026-10-21 拍板：它在自己的域），夹具也不再含虚拟行 */
     ];
   }
 
@@ -237,35 +231,49 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
     liveUsers.value = mixedRows();
   });
 
-  it('管理员：badge 只数真实管理员，点开行数与之相等（测试管理员不入列）', async () => {
+  it('管理员：badge 与点开行数相等（测试管理员也计入——测试只是备注）', async () => {
     const w = await mountUsers();
-    expect(await badgeOf(w, '管理员')).toBe('1');
+    expect(await badgeOf(w, '管理员')).toBe('2');
     await pillOf(w, '管理员').trigger('click');
     await nextTick();
     const rows = w.findAll('tbody tr');
-    expect(rows).toHaveLength(1);
-    expect(rows[0].text()).toContain('用户1');
-    expect(w.text()).not.toContain('用户3'); // 测试管理员被挡在真实域之外
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.text()).join(' ')).toContain('用户1');
+    expect(rows.map((r) => r.text()).join(' ')).toContain('用户3');
+    w.unmount();
   });
 
-  it('近 7 天活跃：badge 只数真实账号，点开行数与之相等（虚拟 / 测试行不入列）', async () => {
+  it('近 7 天活跃：badge 与点开行数相等（测试账号照常计入）', async () => {
     const w = await mountUsers();
-    expect(await badgeOf(w, '近 7 天活跃')).toBe('1');
+    expect(await badgeOf(w, '近 7 天活跃')).toBe('2');
     await pillOf(w, '近 7 天活跃').trigger('click');
     await nextTick();
     const rows = w.findAll('tbody tr');
-    expect(rows).toHaveLength(1);
-    expect(rows[0].text()).toContain('用户1');
-    expect(w.text()).not.toContain('用户3');
-    expect(w.text()).not.toContain('用户4');
+    expect(rows).toHaveLength(2);
+    w.unmount();
   });
 
-  it('全部：含虚拟 / 测试行（4 行），且「管理员」行 badge 与「测试」行的管理员徽章不矛盾', async () => {
+  it('全部：测试账号照常列出并在行内标「测试」备注', async () => {
     const w = await mountUsers();
     await nextTick();
-    expect(w.findAll('tbody tr')).toHaveLength(4);
-    // 行内徽章仍如实显「管理员」（那是行的事实）；pill 的是「真实域有几个管理员」，title 已披露口径
-    expect(await badgeOf(w, '管理员')).toBe('1');
-    expect(pillOf(w, '管理员').attributes('title')).toContain('仅统计真实账号');
+    expect(w.findAll('tbody tr')).toHaveLength(3);
+    expect(await badgeOf(w, '管理员')).toBe('2');
+    // 测试行带备注徽章（不是视角、不是独立分档）
+    const testRow = w.findAll('tbody tr').find((r) => r.text().includes('用户3'));
+    expect(testRow!.find('.mk-badge').text()).toContain('测试');
+    w.unmount();
+  });
+
+  /* 2026-10-21 拍板「没有测试，测试只是备注」：角色/活跃 pill 只看该轴本身，
+     计数与筛选同一谓词（测试账号也计入）。 */
+  it('角色/活跃 pill 计数与筛选同谓词（不再叠加身份域）', async () => {
+    const w = await mountUsers();
+    await nextTick();
+    const labels = w.findAll('.mk-pill').map((p) => p.text());
+    expect(labels.some((t) => t.includes('全部'))).toBe(true);
+    expect(labels.some((t) => t.includes('管理员'))).toBe(true);
+    expect(labels.some((t) => t.includes('普通用户'))).toBe(true);
+    expect(labels.some((t) => t.includes('近 7 天活跃'))).toBe(true);
+    w.unmount();
   });
 });

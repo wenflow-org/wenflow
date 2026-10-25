@@ -43,4 +43,32 @@ describe('openSubPage 来源记忆', () => {
     closeSubPage();
     expect(subPage.value).toMatchObject({ view: 'learner', id: 'u2' });
   });
+
+  it('来源链可叠到三层以上（2026-10-24 画像 → 学习详情 → 座舱），逐层回退', () => {
+    subPage.value = {
+      view: 'virtual', id: 'p1', label: '画像',
+      from: { view: 'card', id: 'c1', label: '身份卡' }
+    };
+    openSubPage('learner', 'u1', { tab: 'memory', from: { view: 'virtual', id: 'p1', label: '画像' } });
+    expect(subPage.value?.from?.parent).toMatchObject({ view: 'card', id: 'c1' });
+    closeSubPage();
+    expect(subPage.value).toMatchObject({
+      view: 'virtual', id: 'p1', from: { view: 'card', id: 'c1' }
+    });
+    closeSubPage();
+    expect(subPage.value).toMatchObject({ view: 'card', id: 'c1' });
+  });
+
+  it('把祖先页当 from 透传时不复制 parent（PathDetail 换开座舱的场景）', () => {
+    subPage.value = {
+      view: 'path', id: 'lp1',
+      from: { view: 'learner', id: 'u1', label: '张三' }
+    };
+    openSubPage('session-real', 'gc1', {
+      stage: 'path',
+      from: { view: 'learner', id: 'u1', label: '张三' }
+    });
+    expect(subPage.value?.from).toMatchObject({ view: 'learner', id: 'u1' });
+    expect(subPage.value?.from?.parent).toBeUndefined();
+  });
 });

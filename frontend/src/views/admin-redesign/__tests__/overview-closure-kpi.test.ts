@@ -78,25 +78,28 @@ beforeEach(() => {
 });
 
 describe('总览完课量 KPI（#105）', () => {
-  it('hint 一行可见口径：真实 / 虚拟 / 未标记分解（legacy 不并入真实）', async () => {
+  it('分解挂在数值行内（valueNote）：真实 / 虚拟 / 未标记；不再单开副行抬高整排（2026-10-21）', async () => {
     const wrapper = await mountOverview();
 
     const card = closureCard(wrapper);
     expect(card).toBeTruthy();
     expect(card!.text()).toContain('127');
-    expect(card!.text()).toContain('真实 0');
-    expect(card!.text()).toContain('虚拟 20');
-    expect(card!.text()).toContain('未标记 107');
+    const note = card!.find('.mk-kpi__num-note');
+    expect(note.exists()).toBe(true);
+    expect(note.text()).toContain('真实 0');
+    expect(note.text()).toContain('虚拟 20');
+    expect(note.text()).toContain('未标记 107');
+    // 五卡里只有这一卡曾带副行，副行撤掉后整排高度一致
+    expect(card!.find('.mk-kpi__hint').exists()).toBe(false);
   });
 
-  it('title 长释：不回填纪律 + 通道构成 + 与真实口径 KPI 不同源', async () => {
+  it('title 只保留与真实口径不同源的限定', async () => {
     const wrapper = await mountOverview();
 
     const title = closureCard(wrapper)!.attributes('title') || '';
-    expect(title).toContain('不回填');
-    expect(title).toContain('未标记 107');
-    expect(title).toContain('通道构成');
-    expect(title).toContain('真实口径 KPI 不同源');
+    expect(title).toContain('与上方真实口径 KPI 不同源');
+    expect(title).not.toContain('不回填');
+    expect(title).not.toContain('通道构成');
   });
 
   it('点击进教学会话页（逐条轨道/通道在那里）', async () => {

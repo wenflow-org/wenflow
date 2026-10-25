@@ -10,11 +10,12 @@ import { buildOverviewHead } from '../live';
 import { errorCategoryText } from '../statusText';
 
 describe('live.buildOverviewHead（健康环口径）', () => {
-  it('低成功率 → score=真实值（5.3 而非 50），tone=bad，headline 带真实百分比', () => {
+  it('低成功率 → score=真实值（5.3 而非 50），tone=bad，标题只写「需要关注」', () => {
     const head = buildOverviewHead({ todayCalls: 19, todaySuccessRate: 5.3, todayFailed: 18, activeUsers: 3 });
     expect(head.score).toBe(5.3);
     expect(head.tone).toBe('bad');
-    expect(head.headline).toContain('5.3%');
+    expect(head.headline).toBe('需要关注');
+    expect(head.subline).toContain('18 次失败');
   });
 
   it('成功率 100 → score=100，tone=ok', () => {

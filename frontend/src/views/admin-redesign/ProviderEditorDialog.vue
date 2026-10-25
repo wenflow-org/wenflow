@@ -4,8 +4,8 @@
        同款；唯一的例外是平台通道的地址与密钥，那些在连接设置里按脏位保存。
        平台通道不出「服务地址/密钥」字段：它的端点在 platform_api_configs，两个写源会互相打架。 -->
   <Teleport v-if="open" to="body">
-    <div class="mk-modal">
-      <div class="mk-modal__panel" role="dialog" aria-label="供应商设置">
+    <div ref="maskRef" class="mk-modal">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="供应商设置">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ isCreate ? '添加供应商' : `供应商设置 · ${provider?.name || provider?.id}` }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -50,8 +50,8 @@
               />
             </label>
 
-            <label class="mk-field">
-              <span class="mk-field__label">{{ isCreate ? 'API Key' : 'API Key（留空 = 沿用已配置）' }}</span>
+            <label v-if="isCreate" class="mk-field">
+              <span class="mk-field__label">API Key</span>
               <input
                 v-model="form.apiKey"
                 class="mk-field__input"
@@ -72,7 +72,7 @@
             </select>
           </label>
 
-          <label class="mk-field mk-field--switch">
+          <label v-if="isCreate" class="mk-field mk-field--switch">
             <input v-model="form.enabled" type="checkbox" />
             <span>{{ enabledLabel }}</span>
           </label>
@@ -93,6 +93,8 @@
 import { computed, reactive, ref } from 'vue'
 import { adminModelProvidersApi } from '@/api/adminApi'
 import { errMsg } from './live'
+import { useEscape } from './useEscape'
+import { useMaskClose, useOverlay } from './useOverlay'
 
 /** 打开弹层所需的最小供应商形状（宿主传注册表条目，也可以是「新建」的空壳） */
 export interface ProviderLike {
@@ -113,6 +115,8 @@ const busy = ref(false)
 const error = ref('')
 const isCreate = ref(true)
 const provider = ref<ProviderLike | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
 
 const form = reactive({
   id: '', name: '', description: '', baseUrl: '', apiKey: '', enabled: true,
@@ -160,6 +164,10 @@ function close(): void {
   if (busy.value) return
   open.value = false
 }
+
+useEscape(() => open.value, close)
+useOverlay(open, panelRef)
+useMaskClose(maskRef, close)
 
 async function submit(): Promise<void> {
   busy.value = true

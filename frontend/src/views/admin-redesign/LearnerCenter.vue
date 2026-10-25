@@ -6,8 +6,8 @@
          静态贴顶 + 表格区内滚，首行 530px 入首屏。 -->
     <MkPageHead title="学习状态" sub="学习者学习状态分布与风险跟踪">
       <template #actions>
-        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
-        <DataScopeToggle v-model="includeTest" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             列表 = 全部非虚拟账号；虚拟学习者的学习数据只在虚拟学习者域看 -->
       </template>
     </MkPageHead>
     <!-- 后端学习者域窗口截断口径（2026-10-04 解锁 50→500；2026-10-10 窗口 500→2000，
@@ -34,15 +34,17 @@
         label="学习者账号"
         :value="learnerTotalText"
         :hint="learnerKpiHint"
+        title="有学习状态快照的账号数。与「用户与学习者」是同一账号集（都排除虚拟学习者），没有学习快照的账号不出现在本页"
       />
       <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
            常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
-      <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳高 / 有风险摘要" />
+      <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" />
+      <!-- 2026-10-21 用户「去掉；如果需要下方加字，那就说明这个卡片的标题起得不对」：
+           卡名自带人群（学习者），阈值 50% 归 title 与「置信」列表头 -->
       <MkKpi
-        label="低置信"
+        label="低置信学习者"
         :value="lowConfCount"
         :tone="lowConfCount ? 'warn' : ''"
-        :hint="lowConfHint"
         :title="lowConfTitle"
       />
       <MkKpi
@@ -51,26 +53,13 @@
         :hint="avgConfHint"
         :title="avgConfTitle"
       />
-      <!-- P-49（#74）：疲劳高 / 趋势下降原先被合并进「需关注」，看不到各自规模 -->
-      <MkKpi
-        label="疲劳高"
-        :value="fatigueHighCount"
-        :tone="fatigueHighCount ? 'warn' : ''"
-        hint="需要安排恢复"
-        title="fatigue=高 的学习者数（需关注卡把它和其它异常合并计数）"
-      />
-      <MkKpi
-        label="趋势下降"
-        :value="trendDownCount"
-        :tone="trendDownCount ? 'warn' : ''"
-        hint="学习状态走弱"
-        title="trend=down 的学习者数（需关注卡把它和其它异常合并计数）"
-      />
+      <!-- 2026-10-23 用户「按你推荐走」：疲劳高 / 趋势下降两卡撤除——它们是「需关注」的
+           构成项、常态为 0，单列只会把一整排读数摊成七张；需要看单项规模时用「风险摘要」
+           列与「观察」pill。数据覆盖率保留：它限定平均置信度代表谁。 -->
       <MkKpi
         label="数据覆盖率"
         :value="confCoverageText"
         :tone="confCoverageText === '—' ? 'muted' : ''"
-        hint="有学习任务且产出置信度的学习者 / 全部学习者"
         :title="`有学习任务且产出置信度的学习者占比。无任务行不计入置信度分布与均值。本次 ${confRows.length} / ${rows.length} 位`"
       />
     </section>
@@ -144,36 +133,36 @@
            表格，表格区内滚升入首屏，分页器保持卡尾吸底。 -->
       <div v-else class="lc-body">
 
-      <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-           列按内容自然分宽；长昵称/长任务由 mk-cell-main 上限与下方 max-width 截断兜底 -->
+      <!-- 固定列宽（2026-10-22 与教学组三表同判例）：学习者/当前进度/置信/风险四列在 auto 布局下
+           按当页最长内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
+           长昵称/长任务仍由 mk-cell-main 上限与下方 max-width 截断兜底 -->
       <div class="mk-table-scroll lc-tablewrap">
-      <table v-if="filtered.length" class="mk-table mk-table--nowrap">
+      <table v-if="filtered.length" class="mk-table mk-table--nowrap mk-table--fixed lc-table">
         <thead>
           <tr>
-            <th v-if="!lcHiddenCols.has('learner')">学习者</th>
-            <th v-if="!lcHiddenCols.has('progress')">当前进度</th>
-            <th v-if="!lcHiddenCols.has('trend')">趋势</th>
-            <th v-if="!lcHiddenCols.has('fatigue')">疲劳</th>
+            <th v-if="!lcHiddenCols.has('learner')" scope="col" class="lc-c-learner">学习者</th>
+            <th v-if="!lcHiddenCols.has('progress')" scope="col" class="lc-c-progress">当前进度</th>
+            <th v-if="!lcHiddenCols.has('status')" scope="col" class="lc-c-status" title="近况趋势 + 疲劳度">趋势 / 疲劳</th>
             <!-- 审核 #20（2026-10-06）：置信 / 更新接共享 useTableSort（Users.vue 同写法），
                  未点表头时保持默认序「风险优先 → 更新时间新→旧」（写进「操作」列表头 title） -->
             <th
               v-if="!lcHiddenCols.has('conf')"
               scope="col"
-              class="mk-th--sortable"
+              class="mk-th--sortable lc-c-conf"
               title="当前读数的置信度，低于 50% 记为低置信"
               :aria-sort="lcSortState('conf')"
               @click="toggleLcSort('conf')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th v-if="!lcHiddenCols.has('risk')">风险摘要</th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th v-if="!lcHiddenCols.has('risk')" scope="col" class="lc-c-risk">风险摘要</th>
             <th
               v-if="!lcHiddenCols.has('updated')"
               scope="col"
-              class="mk-th--sortable"
-              title="快照更新时间"
+              class="mk-th--sortable lc-c-updated"
+              title="学习证据最后一次变化的时间（课堂 / 目标对话 / 任务完成等），不是快照重算时间"
               :aria-sort="lcSortState('updated')"
               @click="toggleLcSort('updated')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th class="mk-th--right" title="默认排序：风险优先 → 更新时间新→旧">操作</th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">数据更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th scope="col" class="mk-th--right lc-c-act" title="默认排序：风险优先 → 更新时间新→旧">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -186,13 +175,13 @@
                 <MkCellAvatar :name="r.name" :tone="isVirtualRow(r) ? 'virtual' : r.isTestAccount ? 'test' : 'default'" />
                 <div class="mk-cell-main">
                   <strong :title="r.name">{{ r.name }}</strong>
-                  <span class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
+                  <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                  <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不复读；无副行内容时整行不占位 -->
+                  <span v-if="emailSubline(r.email, r.name) || r.isTestAccount" class="mk-cell-subline">
+                    <span v-if="emailSubline(r.email, r.name)" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
+                    <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                  </span>
                 </div>
-                <!-- 身份标记与「用户」页一致（审核 #11）：虚拟学习者出「虚拟」（紫，MkVariantBadge kind=virtual），
-                     仅审计/测试账号才出「测试」——此前后端 isTestAccountUser 对 /^virtual_/ 恒真，
-                     虚拟学习者被渲染成「测试账号」，两页同一账号标签互相矛盾 -->
-                <MkVariantBadge v-if="isVirtualRow(r)" kind="virtual" />
-                <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('progress')">
@@ -203,13 +192,17 @@
                 <span class="mk-cell-sub" :title="r.path || '尚未开始学习'">{{ r.path || '尚未开始学习' }}</span>
               </div>
             </td>
-            <td v-if="!lcHiddenCols.has('trend')">
-              <span class="lc-trend" :class="`lc-trend--${r.trend}`" :title="trendTitle(r)">
-                <i class="lc-trend__arrow" aria-hidden="true">{{ r.trend === 'up' ? '↗' : r.trend === 'down' ? '↘' : '→' }}</i>
-                {{ trendText(r.trend) }}
-              </span>
+            <td v-if="!lcHiddenCols.has('status')">
+              <div class="lc-status">
+                <span class="lc-trend" :class="`lc-trend--${r.trend}`" :title="trendTitle(r)">
+                  <i class="lc-trend__arrow" aria-hidden="true">{{ r.trend === 'up' ? '↗' : r.trend === 'down' ? '↘' : '→' }}</i>
+                  {{ trendText(r.trend) }}
+                </span>
+                <!-- 2026-10-23 运营视角：「稳定 低」两个词并排，读者不知道「低」是什么——
+                     给疲劳加回标签，与学习者详情同读法「疲劳：低」 -->
+                <span class="mk-badge" :class="fatigueBadge(r.fatigue)" :title="`疲劳度：${r.fatigue}（高 / 中 / 低）`">疲劳：{{ r.fatigue }}</span>
+              </div>
             </td>
-            <td v-if="!lcHiddenCols.has('fatigue')"><span class="mk-badge" :class="fatigueBadge(r.fatigue)">{{ r.fatigue }}</span></td>
             <td v-if="!lcHiddenCols.has('conf')" class="mk-num lc-conf-cell">
               <span
                 v-if="r.confidence != null && r.task"
@@ -217,15 +210,14 @@
                 :class="{ 'conf--low': evidenceLowConfidence(r.confidence) }"
                 :title="`置信度 ${Math.round(r.confidence * 100)}%。低于 50% 表示证据不足`"
               >
-                <span class="mk-minibar lc-conf__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="evidenceLowConfidence(r.confidence) ? 'warn' : undefined" :style="{ width: Math.round(r.confidence * 100) + '%' }"></i></span>
                 <span class="mono">{{ Math.round(r.confidence * 100) }}%</span><em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
               </span>
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
             </td>
-            <td v-if="!lcHiddenCols.has('risk')" class="risk-text" :class="{ 'mk-na': !r.risk }" :title="r.risk || ''">{{ r.risk || '—' }}</td>
+            <td v-if="!lcHiddenCols.has('risk')" class="lc-riskcell" :class="{ 'mk-na': !r.risk }" :title="r.risk || ''"><span class="risk-text">{{ r.risk || '—' }}</span></td>
             <td v-if="!lcHiddenCols.has('updated')">
               <span v-if="isUpdating(r.id)" class="lc-updated">重算中…</span>
-              <span v-else-if="r.updated" class="mk-fresh" :class="freshTone(r.ts)" :title="r.ts ? new Date(r.ts).toLocaleString() : undefined">{{ r.updated }}</span>
+              <span v-else-if="r.updated" class="mk-fresh" :class="freshTone(r.ts)" :title="updatedCellTitle(r)">{{ r.updated }}</span>
               <span v-else class="mk-na">—</span>
             </td>
             <td>
@@ -302,19 +294,18 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { openSubPage, isLive, LEARNER_DETAIL_LANDING } from './store'
-import { liveLearners, liveLearnersTotal, liveRecomputeLearner, liveSetLearnersIncludeTest, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { liveLearners, liveLearnersTotal, liveRecomputeLearner, refreshLiveLearners, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
 import { evidenceLowConfidence } from './evidence'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import { emailSubline } from '@/components/mk/avatarName'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { useTableSort } from './useTableSort'
@@ -334,6 +325,8 @@ interface Row {
   fatigue: '低' | '中' | '高'
   risk: string
   updated: string
+  /** 快照重建时刻（悬停披露，与「数据更新」区分开） */
+  recomputedAt?: string
   confidence?: number
   /** 更新时间戳（用于排序） */
   ts?: number
@@ -343,28 +336,17 @@ interface Row {
 
 const pill = ref<'all' | 'risk' | 'watch' | 'stale'>('all')
 const keyword = ref('')
-/* 整组统一口径（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（localStorage 持久化、跨页保持）；
-   本页 watch 只负责按新口径重拉学习者域 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
-watch(includeTest, (v) => {
-  // 切换失败不静默：用户以为已切到全量/仅真实口径，实际列表还是旧口径
-  if (isLive.value) {
-    liveSetLearnersIncludeTest(v).catch((e) => toast.error(`切换数据范围失败：${errMsg(e)}`))
-  }
-})
 
-/* P1-3 列显隐（公共组件 MkCols）：学习者/进度/趋势/疲劳/置信/风险/更新 可隐藏，操作固定 */
+/* P1-3 列显隐（公共组件 MkCols）：学习者/进度/状态/置信/风险/更新 可隐藏，操作固定
+   2026-10-22 用户「信息密度比较高」：趋势与疲劳合并为一列（同为一行内读的「当前状态」，
+   两列各只占一句短词）。旧存储键里的 trend/fatigue 已无对应列，不影响合并列显隐。 */
 const lcColDefs = [
   { key: 'learner', label: '学习者', title: '姓名 + 邮箱' },
   { key: 'progress', label: '当前进度', title: '当前任务 + 路径' },
-  { key: 'trend', label: '趋势', title: '近况趋势' },
-  { key: 'fatigue', label: '疲劳', title: '疲劳度' },
-  { key: 'conf', label: '置信', title: '当前读数置信度' },
+  { key: 'status', label: '趋势 / 疲劳', title: '近况趋势 + 疲劳度' },
+  { key: 'conf', label: '置信度', title: '当前读数有多可信，低于 50% 记为低置信' },
   { key: 'risk', label: '风险摘要', title: '风险原因' },
-  { key: 'updated', label: '更新', title: '快照更新时间' },
+  { key: 'updated', label: '数据更新', title: '学习证据最后一次变化的时间，不是快照重算时间' },
 ] as const
 /* 审核 #12（2026-10-06）：风险摘要列不再默认隐藏——它是 KPI「需关注」的判据之一
    （isRisk 含 !!r.risk），默认收起会让「需关注」筛出的行在可见列里全像正常值，看不出被抓原因。
@@ -377,11 +359,19 @@ function freshTone(ts?: number): string {
   if (!ts) return 'mk-fresh--never'
   return Date.now() - ts < 24 * 3600000 ? 'mk-fresh--fresh' : ''
 }
+/** 数据更新格悬停：先说「哪一刻的数据」，再说「档案什么时候重算过」——
+    两者此前混成一个读数，批重建把全表刷成同一分钟（2026-10-23） */
+function updatedCellTitle(r: Row): string | undefined {
+  const parts: string[] = []
+  if (r.ts) parts.push(`数据截至 ${new Date(r.ts).toLocaleString()}`)
+  if (r.recomputedAt) parts.push(`档案重算 ${new Date(r.recomputedAt).toLocaleString()}`)
+  return parts.length ? parts.join('；') : undefined
+}
 function openDetail(r: Row) {
   /* 落点页签：本列表读的是趋势 / 疲劳 / 置信 / 风险摘要，同口径内容在详情的「证据」页签
      （判据与常量单点在 store 的 LEARNER_DETAIL_LANDING）——不再一律落「概览」，
      2026-10-18 用户走查。干预弹窗里的「查看学习详情」是泛化措辞，仍落概览。 */
-  openSubPage('learner', r.id, { tab: LEARNER_DETAIL_LANDING.learnerState, ...(includeTest.value ? { includeTest: true } : {}) })
+  openSubPage('learner', r.id, { tab: LEARNER_DETAIL_LANDING.learnerState })
 }
 
 /* —— C2 干预动线：风险学习者 → 查看会话 / 发送站内提醒 —— */
@@ -407,7 +397,7 @@ function openIntervene(r: Row) {
 }
 function goInterveneSession(r: Row) {
   intervene.value = null
-  openSubPage('learner', r.id, includeTest.value ? { includeTest: true } : undefined)
+  openSubPage('learner', r.id)
 }
 function goInterveneLogs() {
   intervene.value = null
@@ -454,13 +444,17 @@ const learnerTotalText = computed(() => {
 })
 /** 「学习者账号」KPI 口径 hint（2026-10-15 KPI 审计）：随页头「真实/测试」互斥视角变化——
     真实视角绝不提虚拟/测试账号（否则读者以为数里混了假账号）；两视角都含未开始学习的账号。 */
-const learnerKpiHint = computed(() =>
-  includeTest.value
-    ? `仅测试视角：虚拟学习者与测试账号 · 含未开始学习的账号`
-    : `仅真实用户 · 含未开始学习的账号`
-)
+/* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：副行只留「含未开始学习的账号」这条
+   会改变读数含义的范围说明；视角（真实 / 测试）由右上角开关表达，不再复述 */
+const learnerKpiHint = ''
 const rows = computed<Row[]>(() =>
-  liveLearners.value.map((m) => ({
+  liveLearners.value.map((m) => {
+    /* 数据更新列读「学习证据最后变化」而非快照重建时刻：一次列表请求会把过期投影整批重建，
+       用 generatedAt 会让全表显示同一分钟（2026-10-23 用户「怎么都是 37 分钟呢」）。
+       dataUpdatedAt 三态：有值＝数据截至那一刻；null＝没有学习证据（显示「—」）；
+       undefined＝旧后端还没这个字段（回退旧读数，等后端一起升级）。 */
+    const dataAt = m.dataUpdatedAt === undefined ? m.generatedAt : m.dataUpdatedAt
+    return {
     id: m.userId,
     name: m.name,
     email: m.email,
@@ -477,11 +471,13 @@ const rows = computed<Row[]>(() =>
         : m.fragile.length
           ? `「${m.fragile[0]}」等 ${m.fragile.length} 个概念待巩固`
           : '',
-    updated: timeAgo(m.generatedAt),
+    updated: dataAt ? timeAgo(dataAt) : '',
     confidence: m.confidence,
-    ts: m.generatedAt ? new Date(m.generatedAt).getTime() : undefined,
+    ts: dataAt ? new Date(dataAt).getTime() : undefined,
+    recomputedAt: m.generatedAt || '',
     pathId: m.pathId
-  }))
+    }
+  })
 )
 
 /** 虚拟学习者识别（审核 #11）：优先用后端回传的 isVirtualLearner（users 表真列，与
@@ -516,17 +512,8 @@ const watchCount = computed(() => rows.value.filter(isWatch).length)
    有学习任务（r.task）才有有效置信度，与表格置信列的「—」口径一致 */
 const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence != null))
 /** 低置信 KPI 与均值同一口径（有任务的快照）：无任务行在表里置信列本显「—」，
-    计入会与均值对不上。2026-10-17 分布带退役后，「另 M 位无学习任务未计入」的说明
-    由「学习者账号」KPI 的 hint（含未开始学习的账号）与均值 hint 的基数共同承担。 */
+    计入会与均值对不上。2026-10-21 起这层口径只在卡 title 里说明（卡面不挂副行）。 */
 const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
-/** 低置信 hint 带基数（与平均置信度同判例：数字要能对上分母）。
-    2026-10-18：口径压成一行——原句 27 字在卡片宽度里折成两行，把整排读数卡撑到
-    115px；阈值、口径与基数都不变，只压措辞（「有任务」= 表格置信列出读数的条件）。 */
-/* 卡面副行只留口径（2026-10-19 用户走查「hint 在报读数」）：原句尾「共 N 位」与本卡读数
-   同值复读（低置信数就是它），样本量进 title 长释 */
-const lowConfHint = computed(() =>
-  confRows.value.length ? '低于 50% 的有学习任务的学习者' : '暂无有学习任务的学习者'
-)
 const lowConfTitle = computed(() =>
   confRows.value.length
     ? `置信度低于 50% 的有学习任务学习者数 · 纳入计算的学习者共 ${confRows.value.length} 位`
@@ -537,15 +524,15 @@ const avgConfText = computed(() => {
   const avg = confRows.value.reduce((s, r) => s + (r.confidence ?? 0), 0) / confRows.value.length
   return Math.round(avg * 100) + '%'
 })
-/* P-49（#74）：拆出被「需关注」合并的两个信号 + 置信度覆盖率 */
-const fatigueHighCount = computed(() => rows.value.filter((r) => r.fatigue === '高').length)
-const trendDownCount = computed(() => rows.value.filter((r) => r.trend === 'down').length)
+/* 2026-10-23：疲劳高 / 趋势下降两个派生计数随卡片撤除（同上注释）——它们仍参与
+   isRisk 与「需关注」判定，只是不再单独占一张读数卡。 */
 const confCoverageText = computed(() =>
   rows.value.length ? `${Math.round((confRows.value.length / rows.value.length) * 100)}%` : '—'
 )
-/** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁 */
+/** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁。
+    2026-10-21：这句取数算法不再常驻卡面，只在没有样本时给一句原因；算法进 title */
 const avgConfHint = computed(() =>
-  confRows.value.length ? '按有学习任务且产出置信度的学习者取平均' : '暂无有学习任务的学习者'
+  confRows.value.length ? '' : '暂无有学习任务的学习者'
 )
 const avgConfTitle = computed(() =>
   confRows.value.length
@@ -643,7 +630,7 @@ watch([pill, keyword, lcSortKey, lcSortDir], () => {
 /** 趋势纯文案（箭头由模板的 .lc-trend__arrow 图标渲染，文本再带箭头会「↗ ↗ 上升」双重箭头） */
 const trendText = (t: string) => (t === 'up' ? '上升' : t === 'down' ? '下降' : '稳定')
 const trendTitle = (r: Row) =>
-  `近况趋势：${trendText(r.trend)}${r.trend === 'down' ? '（需关注）' : r.trend === 'up' ? '（学习状态向好）' : '（状态平稳）'}。趋势基于近期学习表现，详细曲线见详情页`
+  `近况趋势：${trendText(r.trend)}${r.trend === 'down' ? '（需关注）' : r.trend === 'up' ? '（学习状态向好）' : '（状态平稳）'}`
 const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中' ? 'mk-badge--warn' : 'mk-badge--ok')
 
 /* 重算 */
@@ -719,9 +706,9 @@ async function recomputeAll() {
         recomputeProgress.value++
       }
     }
-    // 循环结束统一刷新一次（带当前「含模拟」口径，保持列表范围一致）
+    // 循环结束统一刷新一次（与列表同口径）
     try {
-      await liveSetLearnersIncludeTest(includeTest.value)
+      await refreshLiveLearners()
     } catch {
       toast.error('重算完成，但列表刷新失败，请手动刷新')
     }
@@ -755,8 +742,9 @@ async function recomputeAll() {
 /* 学习者单元格（原型 celluser：头像 + 主行/副行 + 身份徽章，Users.vue ul-user 同款判例） */
 .lc-celluser { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .lc-celluser .mk-cell-main { min-width: 0; flex: 1; }
-.lc-celluser .mk-cell-sub { max-width: 230px; }
-.lc-task .mk-cell-sub { max-width: 240px; }
+/* 固定列宽下单元格自身就是截断边界，行内 max-width 再收一档只会更早截断 */
+.lc-celluser .mk-cell-sub { max-width: 100%; }
+.lc-task .mk-cell-sub { max-width: 100%; }
 /* 原型 .tbl td：nowrap（表自动布局判例见 Users.vue；长内容由上方 max-width 截断兜底）。
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class）。 */
 /* （原页头计数锚点 .mk-status__meta-link 的暗色覆盖随死状态条删除；
@@ -769,20 +757,54 @@ async function recomputeAll() {
 .lc-trend--down { color: var(--mk-red); }
 .lc-trend--flat { color: var(--mk-muted); }
 .lc-trend__arrow { font-style: normal; }
+/* 趋势与疲劳同格（2026-10-22 合并列）：趋势在前、疲劳徽章贴后，读作一句状态 */
+.lc-status { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 
-.progress-title { font-weight: 600; }
-.risk-text { color: var(--mk-amber); font-size: var(--mk-fs-micro); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 主任务与风险摘要都是「一眼要读完」的句子：两行截断（title 仍有全文），
+   不再用单行 nowrap 把语义切成半句（2026-10-24 复核）。 */
+.lc-table .lc-task .progress-title {
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.risk-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--mk-amber);
+  font-size: var(--mk-fs-micro);
+  max-width: 100%;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* 固定列宽（2026-10-22 与教学组三表同判例）：学习者/当前进度/置信/风险四列在 auto 布局下
+   按当页最长内容分宽（风险摘要曾把列撑到 180px 上限），翻页整表跳动；fixed 后按表头定死。
+   宽度按 1280 现值校准并留余量，1200 档无横滚。 */
+/* 2026-10-24 视觉修复：趋势/置信/更新三列在多数行是短读数，把宽度让给学习者、当前进度
+   与风险摘要（风险文案此前 150px 内被 ellipsis 截成半句）；总宽基本不变避免 1280 横滚。 */
+.lc-c-learner { width: 170px; }
+@media (max-width: 1279px) { .lc-c-learner { width: 115px; } }
+.lc-c-progress { width: 205px; }
+.lc-c-status { width: 112px; }
+.lc-c-conf { width: 88px; }
+.lc-c-risk { width: 220px; }
+.lc-c-updated { width: 72px; }
+.lc-c-act { width: 108px; }
+/* fixed 档里列宽即契约：换行格 min-width 会把短内容顶出单元格 */
+.lc-table .mk-cell-text--wrap, .lc-table .mk-cell-main .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
 /* 更新列：相对时间不换行（"4 分钟前"拆行问题） */
 .lc-updated { white-space: nowrap; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .conf { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
 .conf__lack { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .conf--low { color: var(--mk-amber); }
-.lc-conf__bar { width: 56px; flex-shrink: 0; }
-/* 置信格左对齐（2026-10-15 用户走查「百分比条不一样长」）：td.mk-num 的 text-align:right
-   让整组 inline-flex 随内容宽右对齐——「100%」比「60%」宽、低置信行还多一枚「证据不足」
-   徽章，于是每行的条起点/终点左右横跳（真机实测同列条起点差 69px），轨道虽恒 56px、
-   填充比例也对，但看起来「不一样长」。左对齐后所有轨道占据同一 x 区间，长度才可比；
-   表头本就左对齐（th 无 mk-th--right），格与头随之同侧。 */
+/* 置信格左对齐：百分比 + 「证据不足」徽章左缘起排，各行读数同起点；
+   原 56px 迷你条已撤（2026-10-22 用户「信息密度比较高」）——数值本身已带两位有效数字，
+   条只重复了同一读数一次，且低置信行多了徽章把条推来推去。 */
 .lc-conf-cell { text-align: left; }
 
 @media (min-width: 2000px) {

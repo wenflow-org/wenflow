@@ -17,6 +17,7 @@
 
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import { withKeyedLock } from '../utils/keyed-lock';
 import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
 import { memoryTraceService } from '../services/memory/memory-trace.service';
 import { recordDegradation, degradationCause, type DegradationTelemetry } from '../skills/degradation-telemetry';
@@ -287,6 +288,22 @@ export async function writeProfileConceptsAfterLesson(
   } = {},
 ): Promise<void> {
   if (!userId) return;
+  // 画像 profile 是「整包 JSON 读改写」，且 recordCompletedArtifact 会并发写同一行的不同字段：
+  // 两个流各自读旧包整包写回时后写覆盖前写。同一 userId 的临界区在进程内串行（2026-10-24 修）。
+  await withKeyedLock(`vlab-profile:${userId}`, () =>
+    writeProfileConceptsAfterLessonLocked(userId, knowledgePoints, options)
+  );
+}
+
+async function writeProfileConceptsAfterLessonLocked(
+  userId: string,
+  knowledgePoints: LessonKnowledgePoint[],
+  options: {
+    source?: string;
+    selfState?: SelfReportedLearnerState | null;
+    curatedConcepts?: CuratedConceptLists | null;
+  } = {},
+): Promise<void> {
   try {
     const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId } });
     if (!profile) return;
@@ -654,6 +671,27 @@ export async function recordCompletedArtifact(input: {
   } | null;
 }): Promise<void> {
   if (!input.userId || !input.taskId) return;
+  // 与 writeProfileConceptsAfterLesson 并发写同一画像行的不同字段：进程内按 userId 串行，
+  // 防止「读旧包 → 整包写回」互相覆盖（丢 recentCompleted / 概念名单更新）。
+  await withKeyedLock(`vlab-profile:${input.userId}`, () => recordCompletedArtifactLocked(input));
+}
+
+async function recordCompletedArtifactLocked(input: {
+  userId: string;
+  taskId: string;
+  taskTitle: string;
+  artifactType?: string | null;
+  deliverable?: string | null;
+  knowledgePoints?: LessonKnowledgePoint[];
+  selfState?: SelfReportedLearnerState | null;
+  milestoneTitle?: string | null;
+  memoryDelta?: string | null;
+  memoryCurated?: {
+    mastered: MemoryCuratedMasteredItem[];
+    struggling: MemoryCuratedStruggleItem[];
+    selfCalibration: string;
+  } | null;
+}): Promise<void> {
   try {
     const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId: input.userId } });
     if (!profile) return;

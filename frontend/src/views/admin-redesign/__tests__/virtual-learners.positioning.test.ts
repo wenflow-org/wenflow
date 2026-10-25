@@ -42,6 +42,7 @@ vi.mock('../live', async () => {
     liveCreateVirtual: vi.fn(async () => 'vl-new'),
     liveDeleteVirtual: vi.fn(async () => {}),
     loadLiveData: vi.fn(async () => {}),
+    refreshLiveVirtuals: vi.fn(async () => {}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => String(e),
     shortId: (id: string) => id.slice(0, 8),
@@ -83,14 +84,15 @@ describe('虚拟学习者定位（D1）', () => {
     await nextTick();
     // 2026-10-04 页头状态条整体退役（教学会话同款判例）：复读的「共 N 人」随条删除
     expect(wrapper.find('.mk-status').exists()).toBe(false);
-    // 分区筛选计数（画像口径；P2「需关注」已正名「曾失败」，口径=累计失败）→ 卡头工具栏 chips
+    // 筛选 chips 与「运行状态」列同源（2026-10-21 逻辑重整：三档对齐，「曾失败」迁到异常列）
     // 按卡定位到列表卡：页内另有压测参数卡头（2026-10-08 加了标题），取「第一个 .mk-card__head」会取错
     const head = wrapper.find('.mk-card--fill .mk-card__head');
     const countOf = (label: string) =>
       head.findAll('.mk-pill').find((p) => p.text().replace(/\s/g, '').startsWith(label))?.find('.mk-pill__count').text();
-    expect(countOf('进行中')).toBe('0');
-    expect(countOf('已暂停')).toBe('0');
-    expect(countOf('曾失败')).toBe('0');
+    expect(countOf('运行中')).toBe('0');
+    expect(countOf('停滞')).toBe('0');
+    expect(countOf('已停止')).toBe('0');
+    expect(wrapper.text()).not.toContain('曾失败');
     expect(wrapper.text()).not.toContain('创建中');
     wrapper.unmount();
   });
@@ -105,16 +107,17 @@ describe('虚拟学习者定位（D1）', () => {
        用户走查「KPI hint 在报读数」后再往下沉一级——读数进 title 长释，副行留口径短语 */
     expect(wrapper.find('.mk-status').exists()).toBe(false);
     const completion = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === '完成率');
-    expect(completion!.find('.mk-kpi__hint').text()).toContain('已完成 / 全部会话');
+    expect(completion!.find('.mk-kpi__hint').exists()).toBe(false);
     expect(completion!.attributes('title')).toContain('活动会话 3');
     wrapper.unmount();
   });
 
-  it('manifest 导航中虚拟学习者组收敛为两个职责页（运行态 + 卡库；批量实验 2026-10-04 下线）', () => {
+  it('manifest 导航中虚拟实验组收敛为两个职责页（实例 + 身份池；批量实验 2026-10-04 下线）', () => {
     const scene = MOCK_SCENES.find((s) => s.id === 'virtual-learners');
     expect(scene).toBeDefined();
-    expect(scene!.group).toBe('虚拟学习者');
-    const groupIds = MOCK_SCENES.filter((s) => s.group === '虚拟学习者').map((s) => s.id);
+    // 2026-10-24 组名与首项解耦：组＝虚拟实验，避免侧栏两行「虚拟学习者」
+    expect(scene!.group).toBe('虚拟实验');
+    const groupIds = MOCK_SCENES.filter((s) => s.group === '虚拟实验').map((s) => s.id);
     expect(groupIds).toEqual(['virtual-learners', 'virtual-learner-cards']);
     expect(MOCK_SCENES.find((s) => s.id === 'batch-experiments')).toBeUndefined();
   });

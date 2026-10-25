@@ -121,6 +121,28 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(findBtn(w, '重试').exists()).toBe(true);
   });
 
+  it('动作列：未映射接口不再直出 /api/ 路径，插件启停/卡派生显示中文名', async () => {
+    h.getLogs.mockResolvedValue({
+      data: {
+        data: {
+          logs: [
+            { id: 'a', adminName: 'admin', action: 'POST /api/admin/virtual-learners/cards/clone', targetType: null, targetId: null, method: 'POST', path: '/api/admin/virtual-learners/cards/clone', statusCode: 200, success: true, createdAt: '2026-10-24T06:56:24' },
+            { id: 'b', adminName: 'admin', action: 'plugin-toggle', targetType: 'plugin', targetId: 'web', method: 'PUT', path: '/api/admin/plugins/web', statusCode: 200, success: true, createdAt: '2026-10-24T09:23:25' },
+            { id: 'c', adminName: 'admin', action: 'POST /api/admin/mystery/thing', targetType: null, targetId: null, method: 'POST', path: '/api/admin/mystery/thing', statusCode: 200, success: true, createdAt: '2026-10-24T09:10:00' }
+          ],
+          pagination: { total: 3, page: 1, limit: 30 }
+        }
+      }
+    });
+    const w = await mountAudit();
+    const text = w.text();
+    expect(text).toContain('卡派生虚拟学习者');
+    expect(text).toContain('启停插件');
+    expect(text).toContain('管理操作');
+    expect(text).not.toContain('/api/admin/virtual-learners');
+    expect(text).not.toContain('/api/admin/mystery');
+  });
+
   it('每页条数变更：回第 1 页并按新 limit 重查（378/50 → 8 页）', async () => {
     const w = await mountAudit();
     await findBtn(w, '下一页').trigger('click');

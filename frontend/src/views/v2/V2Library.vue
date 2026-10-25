@@ -19,7 +19,7 @@
       <p v-if="error" class="library__error">{{ error }}</p>
 
       <div v-if="items.length" class="library__tools">
-        <div class="library__tabs" role="tablist" aria-label="资料筛选">
+        <div class="library__tabs" role="tablist" aria-label="资料筛选" @keydown="onFilterKeydown">
           <button
             v-for="tab in tabs"
             :key="tab.key"
@@ -28,6 +28,7 @@
             class="library__tab"
             :class="{ 'library__tab--active': filter === tab.key }"
             :aria-selected="filter === tab.key"
+            :tabindex="filter === tab.key ? 0 : -1"
             @click="filter = tab.key"
           >
             {{ tab.label }} <b>{{ tab.count }}</b>
@@ -177,6 +178,7 @@ import V2Nav from './V2Nav.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { useEscape } from '@/views/admin-redesign/useEscape';
+import { onTabRowKeydown } from '@/utils/rovingTablist';
 import {
   getMaterialLibrary,
   readMaterial,
@@ -230,6 +232,14 @@ const preview = reactive<{
 
 const pendingDelete = ref<UploadedMaterial | null>(null);
 const deleting = ref(false);
+
+/** 资料筛选页签：方向键在行内切换并移动焦点 */
+function onFilterKeydown(e: KeyboardEvent): void {
+  onTabRowKeydown(e, (i) => {
+    const t = tabs.value[i]
+    if (t) filter.value = t.key
+  })
+}
 
 const tabs = computed<Array<{ key: FilterKey; label: string; count: number }>>(() => [
   { key: 'all', label: '全部', count: stats.value.total },
@@ -904,7 +914,8 @@ onMounted(load);
 .lib-preview__text {
   margin: 0;
   color: var(--ink);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 资料正文预览是阅读文本，跟全站无衬线；等宽只留给代码/ID（2026-10-23 全站字体检查） */
+  font-family: var(--mk-sans);
   font-size: 12.5px;
   line-height: 1.75;
   white-space: pre-wrap;

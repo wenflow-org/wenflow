@@ -21,11 +21,16 @@ export interface APIConfig {
   defaultThinkingMode?: string;
   /** 平台默认思考强度：default | high | max */
   defaultReasoningEffort?: string;
+  /** 平台默认结构化输出：none（默认，行为不变）| json_object（json 媒介技能解码层强制 JSON） */
+  defaultResponseFormat?: string;
   reasoningEndpoint?: string;
   lightEndpoint?: string;
   chatModels?: string[];
   reasoningModels?: string[];
   lightModels?: string[];
+  /** 连接健康快照（由管理台「连接并拉取 / 重新拉取」写入，随连接域保存） */
+  connectionStatus?: string;
+  lastCheckedAt?: Date | string | null;
 }
 
 const defaultConfig: APIConfig = {
@@ -39,6 +44,7 @@ const defaultConfig: APIConfig = {
   defaultMaxTokens: 2048,
   defaultThinkingMode: 'default',
   defaultReasoningEffort: 'default',
+  defaultResponseFormat: 'none',
   reasoningEndpoint: undefined,
   lightEndpoint: undefined,
   chatModels: [],
@@ -76,6 +82,7 @@ class APIConfigService {
           defaultMaxTokens: dbConfig.defaultMaxTokens ?? defaultConfig.defaultMaxTokens,
           defaultThinkingMode: dbConfig.defaultThinkingMode || defaultConfig.defaultThinkingMode,
           defaultReasoningEffort: dbConfig.defaultReasoningEffort || defaultConfig.defaultReasoningEffort,
+          defaultResponseFormat: dbConfig.defaultResponseFormat === 'json_object' ? 'json_object' : 'none',
           reasoningEndpoint: dbConfig.reasoningEndpoint || undefined,
           lightEndpoint: dbConfig.lightEndpoint || undefined,
           chatModels: dbConfig.chatModels ? JSON.parse(dbConfig.chatModels) : [],
@@ -102,6 +109,12 @@ class APIConfigService {
         ...currentConfig,
         ...newConfig,
       };
+      const parsedLastCheckedAt = mergedConfig.lastCheckedAt
+        ? new Date(mergedConfig.lastCheckedAt)
+        : undefined;
+      const validLastCheckedAt = parsedLastCheckedAt && !Number.isNaN(parsedLastCheckedAt.getTime())
+        ? parsedLastCheckedAt
+        : undefined;
 
       await prisma.platform_api_configs.upsert({
         where: { id: 'platform' },
@@ -116,11 +129,16 @@ class APIConfigService {
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
           defaultThinkingMode: mergedConfig.defaultThinkingMode || 'default',
           defaultReasoningEffort: mergedConfig.defaultReasoningEffort || 'default',
+          defaultResponseFormat: (mergedConfig.defaultResponseFormat || 'none').trim().toLowerCase() === 'json_object' ? 'json_object' : 'none',
           reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
           lightEndpoint: mergedConfig.lightEndpoint || null,
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
           reasoningModels: mergedConfig.reasoningModels ? JSON.stringify(mergedConfig.reasoningModels) : null,
           lightModels: mergedConfig.lightModels ? JSON.stringify(mergedConfig.lightModels) : null,
+          ...(typeof mergedConfig.connectionStatus === 'string'
+            ? { connectionStatus: mergedConfig.connectionStatus }
+            : {}),
+          ...(validLastCheckedAt ? { lastCheckedAt: validLastCheckedAt } : {}),
           updatedAt: new Date(),
         },
         create: {
@@ -135,11 +153,16 @@ class APIConfigService {
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
           defaultThinkingMode: mergedConfig.defaultThinkingMode || 'default',
           defaultReasoningEffort: mergedConfig.defaultReasoningEffort || 'default',
+          defaultResponseFormat: (mergedConfig.defaultResponseFormat || 'none').trim().toLowerCase() === 'json_object' ? 'json_object' : 'none',
           reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
           lightEndpoint: mergedConfig.lightEndpoint || null,
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
           reasoningModels: mergedConfig.reasoningModels ? JSON.stringify(mergedConfig.reasoningModels) : null,
           lightModels: mergedConfig.lightModels ? JSON.stringify(mergedConfig.lightModels) : null,
+          ...(typeof mergedConfig.connectionStatus === 'string'
+            ? { connectionStatus: mergedConfig.connectionStatus }
+            : {}),
+          ...(validLastCheckedAt ? { lastCheckedAt: validLastCheckedAt } : {})
         },
       });
 

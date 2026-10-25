@@ -12,7 +12,9 @@
     <title>问流 WenFlow</title>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- 挂载容器不叫 app：App.vue 根节点本身就是 #app（全站布局规则挂它），
+         两处同名叫同一个 id 会让 #app 选择器同时命中内外两层（2026-10-23 审查重复 id）。 -->
+    <div id="root"></div>
     <script>
       /* 最早执行：在CSS加载前就设好背景色，防止白闪。
          key 与 utils/theme.ts 保持一致：主 key v2_theme + 兼容 key wenflow-theme，

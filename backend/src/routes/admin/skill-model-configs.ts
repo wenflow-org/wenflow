@@ -55,13 +55,13 @@ function hasValidScheme(endpoint: string): boolean {
 
 const GHOST_PREFIX = 'skill:'; // 前缀行=展示名，运行时按裸 skillId 读取，写它无效
 
-/** 参数覆盖校验：{temperature:0..2, topP:0..1, maxTokens:256..131072, maxAttempts:1..5}，null=清空 */
+/** 参数覆盖校验：{temperature:0..2, topP:0..1, maxTokens:256..131072, maxAttempts:1..5, responseFormat:'json_object'|'none'}，null=清空 */
 function validateParamOverrides(raw: unknown):
-  { ok: true; value: Record<string, number> | null } | { ok: false; error: string } {
+  { ok: true; value: Record<string, number | string> | null } | { ok: false; error: string } {
   if (raw === null) return { ok: true, value: null };
   if (typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: 'paramOverrides 必须是对象或 null' };
   const b = raw as Record<string, unknown>;
-  const out: Record<string, number> = {};
+  const out: Record<string, number | string> = {};
   if (b.temperature !== undefined && b.temperature !== null) {
     const v = Number(b.temperature);
     if (!Number.isFinite(v) || v < 0 || v > 2) return { ok: false, error: 'temperature 须在 0 到 2 之间' };
@@ -81,6 +81,15 @@ function validateParamOverrides(raw: unknown):
     const v = Number(b.maxAttempts);
     if (!Number.isInteger(v) || v < 1 || v > 5) return { ok: false, error: 'maxAttempts 须是 1 到 5 的整数' };
     out.maxAttempts = v;
+  }
+  // 读写对称（2026-10-21）：router.parseSkillParamOverrides 一直支持 responseFormat，
+  // 但写路径此前静默丢弃，导致「界面写了 json_object、运行时没生效」。
+  if (b.responseFormat !== undefined && b.responseFormat !== null) {
+    const v = String(b.responseFormat).toLowerCase();
+    if (v !== 'json_object' && v !== 'none') {
+      return { ok: false, error: "responseFormat 只能是 json_object 或 none" };
+    }
+    out.responseFormat = v;
   }
   return { ok: true, value: out };
 }
@@ -244,6 +253,26 @@ router.post('/bulk-apply', async (req, res) => {
     const endpoint = typeof body.endpoint === 'string' ? normalizeEndpointIdentity(body.endpoint) : '';
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null;
+    /* 2026-10-24：清空模型覆盖（改为跟随平台默认）。与套用模型/通道互斥——
+       同一请求里既清空又设置只会让结果取决于字段顺序，明确拒绝。 */
+    const clearModel = body.clearModel === true;
+    if (clearModel) {
+      const conflicting = [
+        model ? 'model' : '',
+        endpoint ? 'endpoint' : '',
+        apiKey ? 'apiKey' : '',
+        body.paramOverrides !== undefined ? 'paramOverrides' : '',
+        body.fallbackChain !== undefined ? 'fallbackChain' : '',
+        body.tier !== undefined ? 'tier' : '',
+        body.thinkingMode !== undefined ? 'thinkingMode' : '',
+      ].filter(Boolean);
+      if (conflicting.length) {
+        return res.status(400).json({
+          success: false,
+          error: `清空模型覆盖不能同时修改 ${conflicting.join('、')}，请分开提交`,
+        });
+      }
+    }
     if (endpoint) {
       if (!hasValidScheme(endpoint)) {
         return res.status(400).json({ success: false, error: 'endpoint 必须带 http/https scheme' });
@@ -284,7 +313,11 @@ router.post('/bulk-apply', async (req, res) => {
     const after: any[] = [];
     for (const skillId of skillIds) {
       try {
-        const input: any = pickEditableConfig({ ...body, skillIdChecked: true });
+        // 只清模型：其余字段（thinking/超时/覆盖参数/备用链/独立通道）保持原样，
+        // 否则「跟随平台默认」会顺手抹掉行为差异配置。
+        const input: any = clearModel
+          ? { model: null }
+          : pickEditableConfig({ ...body, skillIdChecked: true });
         if (paramOverridesValue !== undefined) input.paramOverrides = paramOverridesValue;
         if (fallbackChainValue !== undefined) input.fallbackChain = fallbackChainValue;
         const saved = await skillModelConfigService.upsert(skillId, input);
@@ -308,7 +341,11 @@ router.post('/bulk-apply', async (req, res) => {
         results,
         warnings: visionWarnings,
       },
-      message: failed.length ? '部分技能套用失败，详见 results' : '批量套用完成',
+      message: failed.length
+        ? '部分技能套用失败，详见 results'
+        : clearModel
+          ? '已清空模型覆盖，改为跟随平台默认'
+          : '批量套用完成',
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

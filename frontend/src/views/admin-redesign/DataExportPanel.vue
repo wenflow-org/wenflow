@@ -43,7 +43,7 @@
       <!-- 文案与实现同口径（#157）：后端 users 导出已接 REAL_USER_WHERE（排虚拟学习者 +
            e2e_/shotsnap/@test.local 等测试账号前缀/域名），脚注承诺与实现一致。
            本页导出表单不提供 includeTest 开关（后端接口保留该参数供深链/脚本用）。 -->
-      <li>用户导出默认排除虚拟学习者与测试账号。</li>
+      <li>用户导出默认排除虚拟学习者，测试/审计账号照常导出（类型列标注）。</li>
       <li>导出为只读操作，不含敏感字段。</li>
     </ul>
   </div>
@@ -54,6 +54,7 @@ import { ref } from 'vue'
 import { errMsg } from './live'
 import { adminAxios } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
+import { askConfirm } from './useConfirm'
 
 /* 数据导出（原「系统工具」页 Tab2 整体迁入，2026-10-16）：多表 CSV 快照导出。
    各列表页有就地导出（导出本页/选中项），这里是「一次勾多张表打包拿快照」的唯一入口。 */
@@ -65,7 +66,7 @@ interface ExportDef {
 }
 
 const exportDefs: ExportDef[] = [
-  { key: 'users', label: '用户', desc: '全部真实用户：ID / 姓名 / 邮箱 / 角色 / XP / 等级 / 注册与登录时间' },
+  { key: 'users', label: '用户', desc: '全部账号（不含虚拟学习者）：ID / 姓名 / 邮箱 / 角色 / XP / 等级 / 注册与登录时间' },
   { key: 'teaching-sessions', label: '教学会话', desc: '会话：学科 / 主题 / 任务类型 / 模式 / 状态 / 时长 / 起止时间' },
   { key: 'feedback', label: '用户反馈', desc: '反馈：评分 / 难度 / 评论 / 处理状态 / 时间' },
   { key: 'goal-conversations', label: '目标对话', desc: '目标澄清：状态 / 阶段 / 描述 / 创建与更新时间' },
@@ -115,6 +116,20 @@ async function doExport(key: string) {
     与实时变的「已选 N 项」提示不一致（chips 现已随 exporting 禁用，快照是第二道保险）。 */
 async function runExport() {
   const keys = [...exportSel.value]
+  if (!keys.length) return
+  /* 导出口径写进确认框：勾选多表时用户未必记得「日志按行数、业务表固定 2 万条」的差异，
+     且导出文件含邮箱/IP 等个人数据，落盘前明确范围与用途。 */
+  const labels = keys.map((k) => exportDefs.find((d) => d.key === k)?.label || k)
+  const logKeys = keys.filter((k) => LOG_EXPORT_KEYS.has(k))
+  const ranges: string[] = []
+  if (logKeys.length) ranges.push(`日志类最近 ${logLimit.value} 行`)
+  if (keys.length > logKeys.length) ranges.push('业务表最近 20000 条')
+  const ok = await askConfirm({
+    title: '确认导出',
+    message: `将导出 ${labels.join('、')}（共 ${keys.length} 项，${ranges.join('，')}）。文件含账号联系方式与操作日志，请按数据安全规范保存。`,
+    confirmText: '开始导出',
+  })
+  if (!ok) return
   for (const key of keys) {
     if (exporting.value !== '') return
     await doExport(key)

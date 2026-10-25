@@ -64,9 +64,9 @@
                 仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
               </button>
             </div>
-            <!-- 真实/测试互斥视角（2026-10-10 拍板方言；2026-10-15 反馈列表接入——
-                 后端默认口径改为仅真实，测试视角显式切换，与运营待办/内容管理同判据） -->
-            <DataScopeToggle v-model="includeTest" />
+            <!-- 真实/测试互斥视角由宿主运营中心的页级开关统一承载（2026-10-23 走查：
+                 卡内开关与页级开关同屏并列、却只各管一半——页级动 KPI、卡内动列表）。
+                 这里不再放第二枚开关，视图随 :include-test 联动。 -->
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
           <span class="mk-card__head-right">
@@ -79,34 +79,35 @@
         </div>
 
         <div v-if="filtered.length" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap；
-             评论/节点/策略列由 fb- 局部 max-width 截断兜底（全文在 title） -->
-        <table class="mk-table">
+        <!-- 固定列宽（2026-10-22 与教学组三表同判例）：用户/评论两列在 auto 布局下按当页最长
+             内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。长评论仍由
+             fb- 局部 max-width 截断兜底（全文在 title） -->
+        <table class="mk-table mk-table--fixed fb-table">
           <thead>
             <tr>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable fb-c-user"
                 :aria-sort="fbSortState('user')"
                 @click="toggleFbSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 scope="col"
-                class="mk-th--right mk-th--sortable"
+                class="mk-th--right mk-th--sortable fb-c-rating"
                 :aria-sort="fbSortState('rating')"
                 @click="toggleFbSort('rating')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('rating')">评分<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>评论</th>
-              <th>节点</th>
-              <th>策略</th>
+              <th scope="col" class="fb-c-comment">评论</th>
+              <th scope="col" class="fb-c-node">节点</th>
+              <th scope="col" class="fb-c-strategy">策略</th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable fb-c-status"
                 :aria-sort="fbSortState('status')"
                 @click="toggleFbSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>时间</th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="fb-c-time">时间</th>
+              <th scope="col" class="mk-th--right fb-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -146,7 +147,7 @@
           icon="◌"
           min
           :title="isFiltered ? '当前筛选无匹配' : '暂无反馈'"
-          :description="isFiltered ? '放宽筛选条件试试。' : '学习者评分与评论出现后会在这里汇总，低分反馈会自动标记「待处理」。'"
+          :description="isFiltered ? '放宽筛选条件试试。' : ''"
           :action-text="isFiltered ? '清除筛选' : '刷新'"
           @action="isFiltered ? clearFilters() : load(true)"
         />
@@ -246,14 +247,15 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
 /** 嵌入模式：作为运营中心「反馈」tab 渲染（仅去掉外层状态条；宿主承载域计数）。
-    count 事件：反馈总数上报（宿主「反馈 N」徽章） */
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+    count 事件：反馈总数上报（宿主「反馈 N」徽章）。
+    includeTest：真实/测试视角由宿主页级开关下发（v-model:include-test），
+    列表数据范围与宿主 KPI 同源，不再各用一份本地状态。 */
+const props = withDefaults(defineProps<{ embedded?: boolean; includeTest?: boolean }>(), { embedded: false, includeTest: false })
 const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'status', status: string): void }>()
 
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
@@ -296,17 +298,19 @@ const total = ref(0)
 const pendingCount = ref(0)
 const recent30 = ref<number | null>(null)
 
-/** 宿主域计数徽章（embedded 才消费）：总数就绪/变化即上报 */
-watch(total, (n) => {
-  emit('count', n)
+/** 宿主域计数徽章（embedded 才消费）：只报「待处理」——角标位天然被读作待办量，
+    此前报总数（含已解决/已忽略），与运营待办的「待处理反馈」不同源。 */
+watch([pendingCount, total], ([pending]) => {
+  emit('count', pending)
 }, { immediate: true })
 const keyword = ref('')
 const statusFilter = ref('')
 const lowOnly = ref(false)
-/* 真实/测试互斥视角（2026-10-10 拍板方言）：默认真实——后端列表口径同步改为仅真实，
-   测试视角显式切换（与运营待办/内容管理同判据）；切换强制重拉（绕过页缓存） */
-const includeTest = ref(false)
-watch(includeTest, () => {
+/* 真实/测试互斥视角（2026-10-10 拍板方言）：默认真实——后端列表口径同步改为仅真实。
+   2026-10-23 起由宿主页级开关下发（见 props），本组件不再保留第二份本地状态；
+   切换仍强制重拉（绕过页缓存）。 */
+const scopeProp = computed(() => props.includeTest ?? false)
+watch(scopeProp, () => {
   void load(true)
 })
 const detail = ref<Detail | null>(null)
@@ -431,7 +435,7 @@ async function load(force?: boolean) {
   loading.value = true
   loadFailed.value = false
   try {
-    const scope = { includeTest: includeTest.value || undefined, testOnly: includeTest.value || undefined }
+    const scope = { includeTest: props.includeTest || undefined, testOnly: props.includeTest || undefined }
     const [listRes, newRes, trendRes] = await Promise.all([
       adminFeedbackApi.list({ limit: 1000, ...scope }),
       adminFeedbackApi.list({ limit: 1, status: 'new', ...scope }).catch(() => null),
@@ -522,6 +526,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 固定列宽（2026-10-22 与教学组三表同判例）：用户/评论两列在 auto 布局下按当页最长
+   内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 校准，1200 无横滚。 */
+.fb-c-user { width: 170px; }
+.fb-c-rating { width: 76px; }
+.fb-c-comment { width: 220px; }
+.fb-c-node { width: 120px; }
+.fb-c-strategy { width: 60px; }
+.fb-c-status { width: 84px; }
+.fb-c-time { width: 80px; }
+.fb-c-act { width: 96px; }
+/* fixed 档列宽即契约：评论格 320px 上限会顶出本列，改成随列收缩 + 省略号 */
+.fb-table .fb-comment { max-width: 100%; }
+
 /* 嵌入模式（运营中心宿主 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .fb-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .fb-row { cursor: pointer; }

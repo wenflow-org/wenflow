@@ -15,6 +15,7 @@
  * 响应形状：`{answers}` 或 `{result:{answers}}` 都能解析（见 providers/shared.ts）。
  */
 
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import type { DecisionCallOptions, DecisionProvider, DecisionProviderResult, DecisionRequest } from '../types';
 import { postDecision } from './shared';
 
@@ -26,11 +27,11 @@ export interface CustomDecisionConfig {
 }
 
 export function readCustomDecisionConfig(): CustomDecisionConfig {
-  const authStyleRaw = (process.env.DECISION_CUSTOM_AUTH_STYLE || 'bearer').trim().toLowerCase();
+  const authStyleRaw = (readPluginProviderField('decision', 'custom', 'authStyle') || 'bearer').trim().toLowerCase();
   return {
-    url: (process.env.DECISION_CUSTOM_URL || '').trim(),
-    model: (process.env.DECISION_CUSTOM_MODEL || '').trim(),
-    apiKey: (process.env.DECISION_CUSTOM_API_KEY || '').trim(),
+    url: readPluginProviderField('decision', 'custom', 'url'),
+    model: readPluginProviderField('decision', 'custom', 'model'),
+    apiKey: readPluginProviderSecret('decision', 'custom'),
     authStyle: authStyleRaw === 'raw' || authStyleRaw === 'header' ? authStyleRaw : 'bearer',
   };
 }

@@ -186,6 +186,15 @@ async function mountApiConfig() {
   return wrapper;
 }
 
+/** 平台设置浮窗（2026-10-24）：连接 / 基础设施 / 平台默认从二级页签收进「设置」。 */
+async function openPlatformSettings(wrapper: Awaited<ReturnType<typeof mountApiConfig>>) {
+  const btn = wrapper.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置');
+  expect(btn, '平台详情应有「设置」').toBeTruthy();
+  await btn!.trigger('click');
+  await nextTick();
+  await flushPromises();
+}
+
 describe('ApiConfig P1 修复批', () => {
   beforeEach(() => {
     getConfigMock.mockReset();
@@ -206,6 +215,7 @@ describe('ApiConfig P1 修复批', () => {
       data: {
         data: {
           generatedAt: '2026-09-19T12:00:00.000Z',
+          rateLimit: { windowMinutes: 60, count429: 4, coolingDown: 2 },
           providers: [
             {
               id: 'platform', name: '平台', enabled: true, recommended: true,
@@ -272,7 +282,7 @@ describe('ApiConfig P1 修复批', () => {
   /** 2026-09-29 拆 tab 后：能力健康/调用参数在「调用与健康」tab，路由在「模型路由」tab
    *  （2026-10-05 CM1：视图切换收敛到共享 MkSubTabs，按 .mk-subtab 定位） */
   async function gotoTab(wrapper: ReturnType<typeof mountApiConfig> extends Promise<infer W> ? W : never, label: string) {
-    const tab = wrapper.findAll('.mk-subtab').find((b) => b.text().includes(label));
+    const tab = wrapper.findAll('.ac-tabs .mk-subtab').find((b) => b.text().includes(label));
     expect(tab, `应存在「${label}」tab`).toBeTruthy();
     await tab!.trigger('click');
     await flushPromises();
@@ -281,9 +291,19 @@ describe('ApiConfig P1 修复批', () => {
   it('汇总角标：「5 能力 · 1 异常」（degraded 计异常）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '路由与调用');
+    await gotoTab(wrapper, '调用与健康');
     expect(wrapper.text()).toContain('5 能力 · 1 异常');
     expect(wrapper.find('.ac-sec__title .mk-badge--warn').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('D12：调用健康显示近 1 小时 429 与冷却模型读数', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用与健康');
+    await flushPromises();
+    expect(wrapper.find('#ac-panel-routing').text()).toContain('近 1 小时上游限流（429）4 次 · 冷却中模型 2 个');
+    expect(wrapper.find('#ac-panel-routing .ac-rel__error').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -303,7 +323,7 @@ describe('ApiConfig P1 修复批', () => {
       }
     });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '路由与调用');
+    await gotoTab(wrapper, '调用与健康');
     expect(wrapper.text()).toContain('5 能力 · 全部正常');
     wrapper.unmount();
   });
@@ -311,7 +331,7 @@ describe('ApiConfig P1 修复批', () => {
   it('未知档卡头用「待确认」并与汇总角标同词（2026-10-11 走查：原「状态确认中」谎称进行中）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot({ overall: 'unknown' }) } });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '路由与调用');
+    await gotoTab(wrapper, '调用与健康');
     expect(wrapper.text()).not.toContain('状态确认中');
     // 卡头徽章（整值即「待确认」；汇总角标是「N 能力 · M 待确认」复合串，不匹配整值）
     const badge = wrapper.findAll('.mk-badge').find((b) => b.text() === '待确认');
@@ -329,7 +349,7 @@ describe('ApiConfig P1 修复批', () => {
     let resolveProbe: (v: unknown) => void = () => {};
     probeCapabilitiesMock.mockReturnValue(new Promise((r) => { resolveProbe = r; }));
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '路由与调用');
+    await gotoTab(wrapper, '调用与健康');
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).toHaveBeenCalledTimes(1);
     // stale 语义：上次探测时间 + 已过期提示 + 探测中
@@ -350,7 +370,7 @@ describe('ApiConfig P1 修复批', () => {
       data: { data: makeSnapshot({ overall: 'unknown', stale: true }) }
     });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '路由与调用');
+    await gotoTab(wrapper, '调用与健康');
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('结果已过期');
@@ -361,20 +381,24 @@ describe('ApiConfig P1 修复批', () => {
   it('脏位分域标注：连接 + 策略 分别列出', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     // 修改服务地址 → 连接组
     const urlInput = wrapper.find('input[placeholder="https://api.example.com/v1"]');
     await urlInput.setValue('https://new.example.com/v1');
     await nextTick();
-    expect(wrapper.find('.ac-save').text()).toContain('连接 · 1 组未保存变更');
+    // 单组脏：不出现整页保存条（分区保存钮即唯一入口）
+    expect(wrapper.find('.ac-save').exists()).toBe(false);
     // 分段保存：只在该段有脏位时出现（连接段出现，路由段不出现）
     expect(wrapper.text()).toContain('保存连接');
-    expect(wrapper.text()).not.toContain('保存路由');
+    expect(wrapper.text()).not.toContain('保存生成参数');
     // 修改安全策略（点「仅白名单」）→ 策略组追加（拆 tab 后策略在「安全与访问」tab；
-    // 底部保存条在四个配置 tab 常驻，跨 tab 不丢脏位）
+    // 两组脏时底部保存条才出现（跨 tab 汇总；单组用该分区的保存钮）
     await gotoTab(wrapper, '安全与访问');
     const policyButtons = wrapper.findAll('.ac-policy__item .mk-seg__item');
     await policyButtons.find((b) => b.text() === '仅白名单')!.trigger('click');
     await nextTick();
+    // 两组脏：整页保存条出现，跨 tab 汇总
+    // 两组脏：整页保存条出现
     expect(wrapper.find('.ac-save').text()).toContain('连接 + 策略 · 2 组未保存变更');
     expect(wrapper.text()).toContain('保存策略');
     wrapper.unmount();
@@ -424,6 +448,7 @@ describe('ApiConfig P1 修复批', () => {
       networkPolicy: { adminAccessMode: 'private', adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
     };
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     // 护栏（判例 buckets-band.test.ts）：页头状态条整块下线，「上次探测」复读随之消失
     expect(wrapper.find('.mk-status').exists()).toBe(false);
     /* 2026-10-14 用户拍板撤掉页首 KPI 带：原来那三块（密钥 / 模型清单 / 默认路由）是把卡里
@@ -435,7 +460,7 @@ describe('ApiConfig P1 修复批', () => {
     // 2026-10-16 用户走查重排：原 30+ 枚模型胶囊（.ac-model）退役；2026-10-21 只报数字
     expect(wrapper.find('.ac-models__line').text()).toContain('已拉取 2 个');
     expect(wrapper.find('.ac-conn-body .mk-card .mk-badge').exists()).toBe(true);
-    await gotoTab(wrapper, '路由与调用');
+    await gotoTab(wrapper, '调用与健康');
     expect(wrapper.find('.ac-sec__sub').text()).toContain('最近探测');
     wrapper.unmount();
   });
@@ -443,9 +468,10 @@ describe('ApiConfig P1 修复批', () => {
   it('接入与模型 = 供应商两栏面板：左列表平铺一份清单 + 右详情（2026-10-19 去分区）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     // 默认页签即「接入与模型」：供应商面板随默认分支一起挂载（原独立页签需点击才挂）
-    expect(wrapper.findAll('.mk-subtab').some((b) => b.text().includes('模型总览'))).toBe(false);
-    const tab = wrapper.findAll('.mk-subtab').find((b) => b.text().includes('接入与模型'));
+    expect(wrapper.findAll('.ac-tabs .mk-subtab').some((b) => b.text().includes('模型总览'))).toBe(false);
+    const tab = wrapper.findAll('.ac-tabs .mk-subtab').find((b) => b.text().includes('接入与模型'));
     expect(tab, '应存在「接入与模型」tab').toBeTruthy();
     await flushPromises();
     // 面板读的是可编辑注册表视图（供应商 + 模型 + 文件可写状态）
@@ -460,18 +486,19 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.text()).not.toContain('自行接入');
     const items = wrapper.findAll('.mpp-item__name').map((el) => el.text());
     expect(items).toEqual(['平台', 'Acme 网关']);
-    // 默认选中平台通道：它的详情里嵌着连接表单（服务地址 / API Key / 连通性验证）
-    expect(wrapper.find('.ac-conn').exists()).toBe(true);
-    // 2026-10-21 BYOK 重做：端点、密钥、模型三步本身就是顺序，连接块不再挂说明句
-    expect(wrapper.text()).not.toContain('平台通道的服务地址与密钥在这里配置');
+    // 平台详情只有模型一页；连接表单在「设置」浮窗里（2026-10-24）
+    expect(wrapper.find('.ac-conn').exists()).toBe(false);
+    expect(wrapper.find('.ac-ps').exists()).toBe(true);
+    expect(wrapper.find('.ac-ps input[placeholder="https://api.example.com/v1"]').exists()).toBe(true);
     expect(wrapper.find('.mpp-models .ac-models-meta').exists()).toBe(true);
-    expect(wrapper.find('.ac-conn .ac-models-meta').exists()).toBe(false);
+    expect(wrapper.find('.ac-ps .ac-models-meta').exists()).toBe(false);
     // 平台通道没有自带端点：模型清单只给增改，不给「获取模型列表」（那是自带端点才有的动作）；
     // 连通性验证在连接表单里（上面那段「运行测试」），不在下面再挂第二枚检测钮
     const acts = wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text());
     expect(acts).toEqual(['＋ 添加模型']);
-    // 只读能力表已从本页签退役
-    expect(wrapper.find('.ac-registry').exists()).toBe(false);
+    // 只读能力表已从本页签退役；别名映射随默认生成参数留在接入页（不同卡）
+    expect(wrapper.find('.ac-registry--aliases').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('模型供应商与能力限额');
     wrapper.unmount();
   });
 
@@ -491,54 +518,31 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 注册表按域切片（2026-10-14；2026-10-15 供应商与能力限额合并；2026-10-18 BYOK 重做）：
-     别名映射是路由域事实，仍归「路由与调用」（只读切片，默认收起）；
-     「接入与模型」页签改成可编辑的供应商面板，只读能力表整块退役。 */
-  it('注册表切片：接入页是供应商编辑面板，路由页只留别名映射（默认收起）', async () => {
+  /* 2026-10-21 用户「这个走在接入里面会更好」：默认生成参数（含别名映射）搬到接入页；
+     调用与健康只留调用策略 / 调用健康两张卡。 */
+  it('默认生成参数与别名映射在接入页，调用页不再挂注册表切片', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     await flushPromises();
-    // 接入页：可编辑面板，不再是只读能力表
-    expect(wrapper.find('.ac-registry').exists()).toBe(false);
+    // 接入页：供应商编辑面板 + 设置浮窗（默认生成参数与别名映射在其中）
     expect(wrapper.find('.mpp').exists()).toBe(true);
-    // 可编辑面板自带写入口（即时保存），与「只读」形态互斥
+    await openPlatformSettings(wrapper);
     expect(wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text())).toContain('＋ 添加模型');
-
-    await gotoTab(wrapper, '路由与调用');
-    await flushPromises();
-    // 路由页那份只带别名映射一个分区（同一时刻只挂一份注册表切片）
     expect(wrapper.findAll('.ac-registry')).toHaveLength(1);
-    const routing = wrapper.find('.ac-registry--routing');
-    expect(routing.exists()).toBe(true);
-    expect(routing.text()).toContain('别名映射');
-    expect(routing.text()).not.toContain('默认路由（解析结果）');
-    expect(routing.text()).not.toContain('模型供应商与能力限额');
-    // 默认收起的折叠条（details 未开时内容仍在 DOM，但折叠条文案常显）
+    expect(wrapper.find('.ac-registry--aliases').text()).toContain('别名映射');
     const foldBar = wrapper.find('.ac-fold__bar');
     expect(foldBar.exists()).toBe(true);
     expect(foldBar.text()).toContain('内置别名映射表');
     expect(wrapper.find('.ac-fold').attributes('open')).toBeUndefined();
-    // 别名切片仍是只读的：本页签不冒出模型/供应商写入口
-    expect(wrapper.findAll('.mpp')).toHaveLength(0);
-    wrapper.unmount();
-  });
 
-  it('路由默认支持逻辑别名：选择器可填 chat（不再受模型清单未拉取限制）', async () => {
-    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
-    const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '路由与调用');
-    // 2026-10-20 起默认路由走 MkModelPicker：既能选目录模型，也能把别名直接按输入提交
-    const control = wrapper.findAll('.ac-route__inline .mk-mp__control')[0];
-    expect(control.exists(), '路由默认应有模型选择器（支持别名）').toBe(true);
-
-    await control.trigger('click');
-    await wrapper.find('.mk-mp__search').setValue('chat');
-    const aliasRow = wrapper.findAll('.mk-mp__opt').find((o) => o.find('.mk-mp__id').text() === 'chat');
-    expect(aliasRow, '输入别名后应给出可选行').toBeTruthy();
-    await aliasRow!.trigger('click');
-    await nextTick();
-    // 选择即标脏 → 出现分段保存入口
-    expect(wrapper.text()).toContain('保存路由');
+    await gotoTab(wrapper, '调用与健康');
+    await flushPromises();
+    // 调用页不再挂注册表切片，也没有模型/供应商写入口
+    expect(wrapper.find('.ac-registry').exists()).toBe(false);
+    expect(wrapper.find('.ac-fold').exists()).toBe(false);
+    expect(wrapper.find('.mpp').exists()).toBe(false);
+    expect(wrapper.text()).toContain('调用策略');
+    expect(wrapper.text()).toContain('调用健康');
     wrapper.unmount();
   });
 
@@ -564,6 +568,7 @@ describe('ApiConfig P1 修复批', () => {
     // ① 已保存清单（liveApiConfig 播种）：下拉直接可用，无未保存提示
     liveApiConfig.value = savedCfg;
     const saved = await mountApiConfig();
+    await openPlatformSettings(saved);
     expect((saved.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(false);
     expect(saved.findAll('.ac-test__model select option').map((o) => o.text())).toEqual(['model-a', 'model-b']);
     expect(saved.text()).not.toContain('本次拉取未保存');
@@ -584,6 +589,7 @@ describe('ApiConfig P1 修复批', () => {
     });
 
     const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
     expect((wrapper.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(true);
 
     const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('连接并拉取'))!;
@@ -604,16 +610,74 @@ describe('ApiConfig P1 修复批', () => {
     await nextTick();
     await flushPromises();
 
-    expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({ availableModels: ['m-1', 'm-2'] }));
+    expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({
+      availableModels: ['m-1', 'm-2'],
+      // 拉取结果随连接域落盘，刷新后「连接正常 · N 前」不再回退到旧时间
+      connectionStatus: 'connected',
+      lastCheckedAt: expect.any(String)
+    }));
     expect(wrapper.find('.ac-models-meta').text()).not.toContain('未保存');
     wrapper.unmount();
   });
 
+  /* 回归（2026-10-22 走查）：上游清单按字母排序，首个是向量模型 BAAI/bge-large-en-v1.5；
+     默认选它再点「运行测试」，chat 端点只会回「Model does not exist」，看着像配置错了。 */
+  it('测试模型默认选配置里的对话模型，而不是清单第一个（向量/重排序模型）', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    liveApiConfig.value = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKeyConfigured: true,
+      availableModels: ['BAAI/bge-large-en-v1.5', 'Qwen3-Reranker-0.6B', 'deepseek-v4.1-flash'],
+      defaultModel: 'deepseek-v4.1-flash',
+      defaultReasoningModel: 'deepseek-v4.1-flash',
+      defaultEvaluationModel: 'deepseek-v4.1-flash',
+      defaultThinkingMode: 'default' as const,
+      defaultReasoningEffort: 'default' as const,
+      defaultResponseFormat: 'none' as const,
+      connectionStatus: 'connected',
+      lastCheckedAt: '2026-08-13T09:00:00.000Z',
+      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
+    };
+    const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
+    const select = wrapper.find('.ac-test__model select').element as HTMLSelectElement;
+    expect(select.value).toBe('deepseek-v4.1-flash');
+    // D7（2026-10-22 拍板 B）：非对话模型保留在下拉里，但必须自带「不适用」标注。
+    const optionTexts = Array.from(select.options).map((o) => o.textContent || '');
+    expect(optionTexts).toContain('BAAI/bge-large-en-v1.5（向量模型 · chat 测试不适用）');
+    expect(optionTexts).toContain('Qwen3-Reranker-0.6B（重排模型 · chat 测试不适用）');
+    expect(optionTexts).toContain('deepseek-v4.1-flash');
+    wrapper.unmount();
+  });
+
+  it('配置里的默认模型不在清单里时，退到第一个非嵌入/重排序模型', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    liveApiConfig.value = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKeyConfigured: true,
+      availableModels: ['BAAI/bge-m3', 'agnes-3.0-flash'],
+      defaultModel: '已下线的模型',
+      defaultReasoningModel: '已下线的模型',
+      defaultEvaluationModel: '已下线的模型',
+      defaultThinkingMode: 'default' as const,
+      defaultReasoningEffort: 'default' as const,
+      defaultResponseFormat: 'none' as const,
+      connectionStatus: 'connected',
+      lastCheckedAt: '2026-08-13T09:00:00.000Z',
+      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
+    };
+    const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
+    const select = wrapper.find('.ac-test__model select').element as HTMLSelectElement;
+    expect(select.value).toBe('agnes-3.0-flash');
+    wrapper.unmount();
+  });
+
   /* #13：后端 POST /admin/api-config/reset 能力早已存在却无前端入口——补「重置为默认」入口 + 二次确认 */
-  it('#13：配置 tab 有「重置为默认」入口，确认后调用 reset API；取消则不调用', async () => {
+  it('#13：接入页有「重置接入配置」入口（范围写明），确认后调用 reset API；取消则不调用', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    const btn = wrapper.findAll('button').find((b) => b.text() === '重置为默认');
+    const btn = wrapper.findAll('button').find((b) => b.text() === '重置接入配置');
     expect(btn, '配置 tab 页头应有重置入口').toBeTruthy();
 
     // 取消 → 不触发
@@ -639,8 +703,8 @@ describe('ApiConfig P1 修复批', () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     await flushPromises();
-    const tabs = wrapper.findAll('.mk-subtab').map((t) => t.text().trim());
-    expect(tabs).toEqual(['接入与模型', '路由与调用', '虚拟学习者', '安全与访问']);
+    const tabs = wrapper.findAll('.ac-tabs .mk-subtab').map((t) => t.text().trim());
+    expect(tabs).toEqual(['接入与模型', '调用与健康', '虚拟学习者', '安全与访问']);
     expect(wrapper.text()).not.toContain('外挂能力');
     expect(wrapper.find('#ac-panel-addons').exists()).toBe(false);
     wrapper.unmount();
@@ -650,7 +714,7 @@ describe('ApiConfig P1 修复批', () => {
   it('#18：探测失败可见——失败条优先于旧快照 + 「重试」入口', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '路由与调用');
+    await gotoTab(wrapper, '调用与健康');
     // 旧快照已渲染；探测 reject；失败后静默补拉返回带 failureCode 的服务端快照
     probeCapabilitiesMock.mockRejectedValue(new Error('timeout of 310000ms exceeded'));
     getCapabilitiesMock.mockResolvedValue({
@@ -680,7 +744,7 @@ describe('ApiConfig P1 修复批', () => {
   /* #19：保存请求在途时，实时配置会因这次保存而回显并触发守卫 watch，而脏位要到请求返回才清——
      不把「正在保存」的域排除出「未保存」，就会在保存成功那一刻弹「丢弃未保存的配置修改」，
      把成功呈现成未保存（更坏是点「覆盖」丢改动）。 */
-  it('#19：保存路由在途时配置回显不弹「丢弃未保存的配置修改」', async () => {
+  it('#19：保存生成参数在途时配置回显不弹「丢弃未保存的配置修改」', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const baseCfg = {
       apiUrl: 'https://api.example.com/v1',
@@ -697,20 +761,16 @@ describe('ApiConfig P1 修复批', () => {
     };
     liveApiConfig.value = baseCfg;
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '路由与调用');
     await flushPromises();
+    await openPlatformSettings(wrapper);
     expect(confirmState.open).toBe(false);
 
-    // 改动路由 → 出现分段保存入口
-    const control = wrapper.findAll('.ac-route__inline .mk-mp__control')[0];
-    await control.trigger('click');
-    await wrapper.find('.mk-mp__search').setValue('agnes-2.5-flash');
-    const row = wrapper.findAll('.mk-mp__opt').find((o) => o.find('.mk-mp__id').text() === 'agnes-2.5-flash');
-    expect(row, '输入未登记模型也应能按输入选中').toBeTruthy();
-    await row!.trigger('click');
+    // 改动默认思考 → 出现分段保存入口
+    const thinkingSelect = wrapper.findAll('.ac-think select')[0];
+    await thinkingSelect.setValue('enabled');
     await nextTick();
-    const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存路由');
-    expect(saveBtn, '改动路由后应出现「保存路由」').toBeTruthy();
+    const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存生成参数');
+    expect(saveBtn, '改生成参数后应出现「保存生成参数」').toBeTruthy();
 
     // 保存请求挂起，制造「已发出、响应未回」的窗口
     let release: (v: unknown) => void = () => {};
@@ -718,50 +778,62 @@ describe('ApiConfig P1 修复批', () => {
     await saveBtn!.trigger('click');
     await nextTick();
     // 窗口内配置回显（这正是保存引起的刷新）→ 守卫不得弹确认框
-    liveApiConfig.value = { ...baseCfg, defaultModel: 'agnes-2.5-flash', availableModels: ['agnes-2.5-flash'] };
+    liveApiConfig.value = { ...baseCfg, defaultThinkingMode: 'enabled' };
     await nextTick();
     await flushPromises();
     expect(confirmState.open, '保存在途时不应弹「丢弃未保存的配置修改」').toBe(false);
     // 回显不覆盖正在保存的表单值
-    const shown = wrapper.findAll('.ac-route__inline .mk-mp__control')[0].find('.mk-mp__value');
-    expect(shown.text()).toBe('agnes-2.5-flash');
+    expect((wrapper.findAll('.ac-think select')[0].element as HTMLSelectElement).value).toBe('enabled');
 
     release({ data: { data: {} } });
     await flushPromises();
     await nextTick();
     await flushPromises();
-    // 保存完成：脏位清空（不再有「保存路由」分段入口），且全程未弹过丢弃确认
-    expect(wrapper.text()).not.toContain('保存路由');
+    // 保存完成：脏位清空（不再有「保存生成参数」分段入口），且全程未弹过丢弃确认
+    expect(wrapper.text()).not.toContain('保存生成参数');
     expect(confirmState.open).toBe(false);
     wrapper.unmount();
   });
 
-  /* 2026-10-20 用户「这个 tab 重新思考」：路由与调用页按域分卡，不再是一张 950px 的
-     「AI 调用与健康」把重试 / 容量 / 模拟 / 健康叠在一起。钉住三张卡的顺序与归属：
-     别名映射属于路由域（在模型路由卡内），探针属于健康域（在调用健康卡内）；
-     虚拟学习者容量已于 2026-10-21 迁出本页签。 */
-  it('路由页按域分卡：模型路由 / 调用策略 / 调用健康', async () => {
+  /* 2026-10-21 用户走查：「平台现在没有这三类分了吧其实，都是按 skill 配置的模型」。
+     默认路由三行退役，生成参数收进平台详情的二级页签。 */
+  it('默认路由三行已退役：不再出现对话/推理/评估默认模型选择器', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '路由与调用');
+    await flushPromises();
+    await openPlatformSettings(wrapper);
+    expect(wrapper.find('.ac-route').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('对话默认');
+    expect(wrapper.text()).not.toContain('推理默认');
+    expect(wrapper.text()).not.toContain('评估默认');
+    expect(wrapper.text()).toContain('生成参数');
+    expect(wrapper.text()).toContain('默认思考');
+    expect(wrapper.text()).toContain('结构化输出');
+    wrapper.unmount();
+  });
+
+  /* 2026-10-20 用户「这个 tab 重新思考」：调用与健康页按域分卡，不再是一张 950px 的
+     「AI 调用与健康」把重试 / 容量 / 模拟 / 健康叠在一起。默认生成参数已迁到接入页；
+     本页只剩调用策略与调用健康两张卡，虚拟学习者容量已于 2026-10-21 迁出本页签。 */
+  it('调用页按域分卡：调用策略 / 调用健康', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用与健康');
     await flushPromises();
 
     const cards = wrapper.findAll('#ac-panel-routing > .mk-card');
     expect(cards.map((c) => c.find('.mk-card__title').text())).toEqual([
-      '模型路由',
       '调用策略',
       '调用健康'
     ]);
 
-    // 别名映射是路由域的参考表：跟着模型路由卡，不再孤悬在页尾
-    expect(cards[0].find('.ac-fold').exists()).toBe(true);
     // 调用策略卡只放策略：探针与健康胶囊不在里面
-    expect(cards[1].find('.ac-probe').exists()).toBe(false);
-    expect(cards[1].find('.ac-hpills').exists()).toBe(false);
+    expect(cards[0].find('.ac-probe').exists()).toBe(false);
+    expect(cards[0].find('.ac-hpills').exists()).toBe(false);
     // 探针设置与探测结果同卡
-    expect(cards[2].find('.ac-probe').exists()).toBe(true);
-    expect(cards[2].find('.ac-hpills').exists()).toBe(true);
-    // 虚拟学习者容量已迁到独立页签，路由页不再挂它的设置块
+    expect(cards[1].find('.ac-probe').exists()).toBe(true);
+    expect(cards[1].find('.ac-hpills').exists()).toBe(true);
+    // 虚拟学习者容量已迁到独立页签，调用页不再挂它的设置块
     expect(wrapper.find('#ac-panel-routing .vl-settings').exists()).toBe(false);
     wrapper.unmount();
   });

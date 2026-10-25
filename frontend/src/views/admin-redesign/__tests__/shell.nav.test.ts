@@ -40,7 +40,7 @@ describe('Shell 导航', () => {
     const wrapper = mountShell();
     // 分组标题自 2026-09-27 起降级为纯文字标签（.mshell__caption），不再是可折叠按钮
     const groups = wrapper.findAll('.mshell__caption').map((n) => n.text());
-    expect(groups).toEqual(['教学', '虚拟学习者', 'Skill', '观测', '系统', '运营']);
+    expect(groups).toEqual(['教学', '虚拟实验', 'Skill', '观测', '系统', '运营']);
   });
 
   it('置顶入口（pinned）渲染在分组上方且无组标题', () => {

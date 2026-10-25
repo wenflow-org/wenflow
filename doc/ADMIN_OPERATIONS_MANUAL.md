@@ -44,7 +44,7 @@
 | 虚拟学习者 | `/admin/virtual-learners` | 虚拟学习者 | 合成画像压测教学闭环、运行/批量新建/回收 | `VirtualLearners.vue` |
 | 虚拟学习者 | `/admin/virtual-learner-cards` | 学习者卡库 | 角色卡（账号+档案+故事池）导入导出 | `VirtualLearnerCards.vue` |
 | Skill | `/admin/orchestrator` | 编排图 | 顶层 Agent 数据流转、字段血缘、治理 | `Orchestrator.vue` |
-| Skill | `/admin/skills` | Skill 与提示词 | Skill 运行、模型路由、Prompt 评估 | `Skills.vue` |
+| Skill | `/admin/skills` | Skill 与提示词 | Skill 运行、Prompt 评估（批量模型配置在页头弹窗） | `Skills.vue` |
 | 观测 | `/admin/execution-logs` | 执行日志 | Skill 执行日志 + Trace 链路、失败定位 | `ExecLogs.vue` |
 | 观测 | `/admin/token-cost` | 成本分析 | 模型/Skill/用户/模型维度 Token 与成本 | `TokenCost.vue` |
 | 观测 | `/admin/audit-logs` | 审计日志 | 管理操作审计 + 管理员登录审计 | `AuditLogs.vue` |
@@ -416,7 +416,7 @@
 | 虚拟学习者 | `/admin/virtual-learners` | 合成画像运行/批量新建/回收 | KPI：完成率、失败率、并发、今日调用、速率（`VirtualLearners.vue:34-71`）。「活动会话」= 进行中 + 创建中（含卡死），全库口径。「回收卡死（N）」先干跑确认清单再把卡死会话批量标失败（写操作）（`VirtualLearners.vue:13-17, 624-637`） |
 | 学习者卡库 | `/admin/virtual-learner-cards` | 角色卡导入/导出（账号+档案+故事池，不经编译链） | 卡库导出接口计数「当前自建卡 N 张」；YAML 卡片表单（`VirtualLearnerCards.vue:5-47`） |
 | 编排图 | `/admin/orchestrator` | 顶层 Agent 数据流转/字段血缘/治理 | 页签：总览 / 字段旅程 / 字段路由 / 治理（`?tab=` 兼容）。KPI：阶段、Skill、阶段交接、未解析、哈希漂移（`Orchestrator.vue:15-33, 271-276`） |
-| Skill 与提示词 | `/admin/skills` | Skill 运行/模型路由/Prompt 评估 | 页签：`run` / `model-routing` / `prompt-eval`；`?tab=` 与内层 `?peTab=`。KPI：Skill 数、live 数、成功率、平均耗时、空闲（`Skills.vue:20-50, 58-61, 370`） |
+| Skill 与提示词 | `/admin/skills` | Skill 运行/Prompt 评估 | 页签：`run` / `prompt-eval`；`?tab=` 与内层 `?peTab=`（旧 `?tab=model-routing` 打开页头「批量模型配置」弹窗并收敛为 `?tab=run`）。KPI：Skill 数、live 数、成功率、平均耗时、空闲（`Skills.vue`） |
 | 执行日志 | `/admin/execution-logs` | 日志 + Trace 链路排障 | 页签：日志 / Trace 链路。筛选：状态 pills(err/warn/ok)、测试、时间窗(15m/1h/today/yesterday/week/month/all)、节点(Skill)、关键词、Trace ID、sessionId、错误类别。URL 参数：`agent/status/cat/range/q/trace/session/test`（`ExecLogs.vue:18-30, 411-426, 816`） |
 | 成本分析 | `/admin/token-cost` | Token 与成本透视 | 时间窗 7/30/90 天；KPI：调用成本、单次调用均值、总 Token、失败调用。按 Skill / 按用户（支持搜索，单次上限 100，可「查看全部」）/ 按模型排行；CSV 导出（`TokenCost.vue:43-119, 283-345, 418-434`） |
 | 审计日志 | `/admin/audit-logs` | 管理操作 + 管理员登录审计 | 页签：操作审计 / 登录审计（`?tab=login`）。时间窗 today/yesterday/week/month/all；「失败 TOP」chip 下钻。登录审计行可跳「会话安全」（`AuditLogs.vue:405-409, 80-92, 250-253`） |
@@ -704,9 +704,9 @@ pages:
   - id: skills
     route: /admin/skills
     scene: skills
-    purpose: Skill 运行/模型路由/Prompt 评估
+    purpose: Skill 运行/Prompt 评估（批量模型配置在页头弹窗）
     kpis: [Skill, live, 成功率, 平均耗时, 空闲]
-    tabs: [run, model-routing, prompt-eval]
+    tabs: [run, prompt-eval]
     deep_links: {tab: "?tab=", pe_tab: "?peTab="}
     subpage: {view: skill}
   - id: execution-logs

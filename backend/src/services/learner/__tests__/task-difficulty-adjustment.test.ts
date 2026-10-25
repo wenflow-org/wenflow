@@ -331,15 +331,15 @@ describe('decideTaskDifficulty：最小挑战保底 D_floor', () => {
     expect(resolveDifficultyFloor(10)).toBe(9);
   });
 
-  it('两条降档理由（原可 -2）被地板抬回，最多 -1', () => {
+  it('两条降档理由也最多 -1（2026-10-24：-2 死代码移除，降档上限内建在判定里）', () => {
     const decision = decideTaskDifficulty({
       ...normalInput(),
       lessonMetrics: metrics(7.5, 4, 6.5), // lesson_stress_high + path_load_unbalanced
       globalMetrics: metrics(2, 3, 6.5),   // fatigue_high（global lf>=6）
     });
-    // 原逻辑 delta=-2 → adjusted 3；地板 = 4 → 抬回 4
+    // 多条降档理由不叠加：delta 直接 -1，desired 已等于地板，无需地板再抬
     expect(decision.floor).toBe(4);
-    expect(decision.floorApplied).toBe(true);
+    expect(decision.floorApplied).toBe(false);
     expect(decision.delta).toBe(-1);
     expect(decision.adjusted).toBe(4);
     expect(decision.direction).toBe('decrease');

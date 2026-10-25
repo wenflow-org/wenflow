@@ -6,9 +6,8 @@
       <div class="sk-rec__title">
         <h3 class="mk-card__title">技能一致性核查</h3>
         <span class="mk-card__meta" title="核对四个来源的登记是否一致：配置文件清单、系统运行注册、线上生效 Prompt、技能登记册">配置文件 × 运行注册 × 生效版本 × 登记册</span>
-        <!-- 口径说明（审核 #83）：对账数据不在页面 60s 轮询内，进入本页签时拉取一次；
-             手刷钮仅在自取模式出现（宿主下发报告时数据归宿主，刷新由宿主承担） -->
-        <span class="mk-card__meta" title="一致性核查报告不随健康中心 60s 轮询，切换进入本页签时拉取一次，失败可重试">进入时自动刷新</span>
+        <!-- 数据随进入本页签拉取，不参与健康中心 60s 轮询（审核 #83）；轮询页不放刷新钮，
+             失败/空态保留重试逃生动作。 -->
         <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click="clearRecDiff">清除差集定位</button>
       </div>
       <MkLoading v-if="recLoading" inline />

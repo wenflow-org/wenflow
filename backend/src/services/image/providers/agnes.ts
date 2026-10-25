@@ -18,6 +18,7 @@
  */
 
 import { safeHttpRequest } from '../../../utils/safe-http';
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import { ImageError } from '../types';
 import type {
   GeneratedImage,
@@ -46,9 +47,9 @@ export interface AgnesImageConfig {
 export function readAgnesImageConfig(): AgnesImageConfig {
   const timeout = Number(process.env.IMAGE_TIMEOUT_MS);
   return {
-    endpoint: (process.env.IMAGE_API_URL || DEFAULT_ENDPOINT).trim(),
-    apiKey: (process.env.IMAGE_API_KEY || '').trim(),
-    model: (process.env.IMAGE_MODEL || '').trim() || DEFAULT_MODEL,
+    endpoint: readPluginProviderField('image', 'agnes', 'endpoint'),
+    apiKey: readPluginProviderSecret('image', 'agnes'),
+    model: readPluginProviderField('image', 'agnes', 'model') || DEFAULT_MODEL,
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : DEFAULT_TIMEOUT_MS,
   };
 }

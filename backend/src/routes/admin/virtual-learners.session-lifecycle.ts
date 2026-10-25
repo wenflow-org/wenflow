@@ -12,9 +12,9 @@ import type { goal_conversations } from '../../services/prisma-client-types';
 import { randomUUID as uuidv4 } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-import { findProfileById, findProfileDetail, findProfileForProjectionToken, updateProfileFields, updateUserName, createVirtualLearnerUser, createVirtualLearnerProfile, listProfilesWithSessionSamples, countProfiles, groupPathCountsByProfile } from '../../services/virtual-lab/virtual-learner-profile.repo';
-import { deriveActiveRuns, deriveRunProgress } from '../../services/virtual-lab/virtual-run-progress';
-import { findSessionWithProfileAndUser, findGoalConversationById, getSessionStatusAggregates, getPerProfileStatusAggregates, findStaleSessionsByProfiles, findStaleSessionCandidates, findStaleSessionsForStats, findRunningSessionsByProfiles, findRunningSessionsForStats, findTerminalSessions, countTodayVirtualAgentCalls } from '../../services/virtual-lab/virtual-session.repo';
+import { findProfileById, findProfileDetail, findProfileForProjectionToken, updateProfileFields, updateUserName, createVirtualLearnerUser, createVirtualLearnerProfile, listProfilesWithSessionSamples, countProfiles, groupPathCountsByProfile, findLearningPathTitles } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { deriveActiveRuns, deriveRecentRuns, deriveRunProgress } from '../../services/virtual-lab/virtual-run-progress';
+import { findSessionWithProfileAndUser, findGoalConversationById, getSessionStatusAggregates, getPerProfileStatusAggregates, findStaleSessionsByProfiles, findStaleSessionCandidates, findStaleSessionsForStats, findLiveSessionsByProfiles, findLiveSessionsAll, findTerminalSessions, countTodayVirtualAgentCalls } from '../../services/virtual-lab/virtual-session.repo';
 import { hydrateSessionLogsField as hydrateVirtualSessionLogsField } from '../../services/virtual-lab/virtual-session-log-store';
 import { logger } from '../../utils/logger';
 import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository';
@@ -22,6 +22,7 @@ import { findTeachingSessionsByPathId } from '../../services/admin/session-conso
 import { teachingSessionHistoryOf } from './session-console';
 import { signProjectionToken } from '../../utils/projection-token';
 import { autopilotService } from '../../virtual-lab/autopilot.service';
+import { classifySessionRunPhase } from '../../services/virtual-lab/session-run-phase';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { simulatedDayService } from '../../services/virtual-lab/simulated-day.service';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
@@ -237,19 +238,17 @@ router.get('/', async (req: Request, res) => {
 
     // 全量口径聚合（P1-1/D3）：运行中/失败/卡死分区与状态条不再基于 50 条会话样本
     const profileIds = profiles.map(p => p.id);
-    const [statusAgg, perProfileAgg, staleSessions, staleCandidates, runningSessionsAll, pathAgg] = await Promise.all([
+    const staleBefore = staleThresholdAt();
+    const [statusAgg, perProfileAgg, liveSessions, staleCandidates, pathAgg] = await Promise.all([
       getSessionStatusAggregates(),
       profileIds.length
         ? getPerProfileStatusAggregates(profileIds)
         : Promise.resolve([]),
+      // 在跑/暂停/停滞的唯一输入（2026-10-21 口径统一）：非终态会话 + autopilot 状态 + 心跳
       profileIds.length
-        ? findStaleSessionsByProfiles(profileIds, staleThresholdAt())
+        ? findLiveSessionsByProfiles(profileIds)
         : Promise.resolve([]),
-      findStaleSessionCandidates(staleThresholdAt()),
-      // 运行中口径细分：会话 status=running 但 autopilot=stopped（用户暂停自动驾驶）不算「正在运行」
-      profileIds.length
-        ? findRunningSessionsByProfiles(profileIds)
-        : Promise.resolve([]),
+      findStaleSessionCandidates(staleBefore),
       // 每个画像的路径数（distinct learningPathId）：一个故事可衍生多条路径，同一路径的多次会话不重复计
       groupPathCountsByProfile(profileIds),
     ]);
@@ -262,32 +261,34 @@ router.get('/', async (req: Request, res) => {
     const abandonedByProfile = new Map<string, number>();
     for (const agg of perProfileAgg) {
       const n = agg._count?._all ?? 0;
-      if (agg.status === 'running') {
-        runningByProfile.set(agg.virtualProfileId, n);
-      } else if (agg.status === 'failed') {
+      if (agg.status === 'failed') {
         failedByProfile.set(agg.virtualProfileId, n);
       } else if (agg.status === 'abandoned') {
         abandonedByProfile.set(agg.virtualProfileId, n);
       }
     }
-    // 运行中扣减：autopilot=stopped（用户暂停自动驾驶）的会话归入「已暂停」，不再算运行中
+    /* 三档计数全部由 autopilot 状态推导（2026-10-21 口径统一）：
+       running=有自动驾驶在推且心跳新鲜，paused=自动驾驶/课堂被停，stalled=在推但超阈值无写入。
+       不再读 session.status——它只在新会话走完 goal+path 后才变 running，会把正在跑的会话报成已停止。 */
     const pausedByProfile = new Map<string, number>();
-    const isAutopilotStopped = isAutopilotStoppedSession;
-    for (const s of runningSessionsAll) {
-      if (!isAutopilotStopped(s.stageResults)) continue;
-      runningByProfile.set(s.virtualProfileId, Math.max(0, (runningByProfile.get(s.virtualProfileId) ?? 0) - 1));
-      pausedByProfile.set(s.virtualProfileId, (pausedByProfile.get(s.virtualProfileId) ?? 0) + 1);
-    }
-    // 卡死口径与 reclaim 服务同源：管理员暂停的会话（teaching.paused）无写入是预期行为，
-    // 不算卡死（否则「卡死 N」与回收 dryRun 清单不一致，且暂停会话会被误标）
     const staleByProfile = new Map<string, number>();
-    /* 逐会话口径：列表「进行中」列逐条标出哪一条运行会话无响应（与右侧「无响应」计数同源） */
+    const phaseBySessionId = new Map<string, ReturnType<typeof classifySessionRunPhase>>();
+    const inc = (m: Map<string, number>, key: string | null | undefined) => {
+      if (!key) return;
+      m.set(key, (m.get(key) ?? 0) + 1);
+    };
     const stalledSessionIds = new Set<string>();
-    for (const s of staleSessions) {
-      if (isTeachingPausedSession(s.stageResults)) continue;
-      stalledSessionIds.add(s.id);
-      staleByProfile.set(s.virtualProfileId, (staleByProfile.get(s.virtualProfileId) ?? 0) + 1);
+    for (const s of liveSessions) {
+      const phase = classifySessionRunPhase(s, staleBefore);
+      phaseBySessionId.set(s.id, phase);
+      if (phase === 'running') inc(runningByProfile, s.virtualProfileId);
+      else if (phase === 'paused') inc(pausedByProfile, s.virtualProfileId);
+      else if (phase === 'stalled') {
+        inc(staleByProfile, s.virtualProfileId);
+        stalledSessionIds.add(s.id);
+      }
     }
+    // 回收候选仍是全局清理口径（含从没开跑就放旧的 created 会话），与三档状态分开：一个是清理工具，一个是当下状态
     const staleTotal = staleCandidates.filter((s) => !isTeachingPausedSession(s.stageResults)).length;
 
     /* 路径数 = distinct learningPathId：故事是复杂情景，一次运行生成一条路径，一个故事可衍生多条。
@@ -298,6 +299,18 @@ router.get('/', async (req: Request, res) => {
       pathCountByProfile.set(row.virtualProfileId, (pathCountByProfile.get(row.virtualProfileId) ?? 0) + 1);
     }
     
+    /* 「进行中」列按路径归并后要写路径名：一个学习者可能有多条目标/路径，光有 id 读不出差异。
+       一次查全页涉及的路径标题（活跃 + 历史都算），避免逐行查询。 */
+    const involvedPathIds = new Set<string>();
+    for (const p of profiles) {
+      for (const s of (Array.isArray(p.sessions) ? p.sessions : []) as Array<{ learningPathId?: string | null }>) {
+        if (s.learningPathId) involvedPathIds.add(String(s.learningPathId));
+      }
+    }
+    const pathTitleById = new Map<string, string>(
+      (await findLearningPathTitles([...involvedPathIds])).map((r) => [r.id, r.title])
+    );
+
     const formattedProfiles = profiles.map(p => {
       const profileData = JSON.parse(p.profile || '{}');
       const storyPool = Array.isArray(profileData?.storyPool) ? profileData.storyPool : [];
@@ -322,7 +335,17 @@ router.get('/', async (req: Request, res) => {
       /* 多活跃会话（2026-10-18 用户走查）：一个学习者可同时跑多条路径，列表不再只画第一条。
          运行在前、暂停在后；逐条标记是否无响应。activeRunTotal 用全量聚合数，
          与 activeRuns.length 的差即样本窗口外未展开的条数。 */
-      const activeRuns = deriveActiveRuns(sessionSample, stalledSessionIds);
+      const activeRuns = deriveActiveRuns(sessionSample, stalledSessionIds).map((r) => ({
+        ...r,
+        pathTitle: r.pathId ? pathTitleById.get(r.pathId) ?? null : null,
+      }));
+      /* 历史摘要按学习路径归并：没有活跃运行时，前端按「每条路径一行」显示最近一次运行；
+         按会话取一条会把多路径学习者画成单线（见 deriveRecentRuns 注释）。 */
+      const recent = deriveRecentRuns(sessionSample);
+      const recentRuns = recent.runs.map((r) => ({
+        ...r,
+        pathTitle: r.pathId ? pathTitleById.get(r.pathId) ?? null : null,
+      }));
       const activeRunTotal = (runningByProfile.get(p.id) ?? 0) + (pausedByProfile.get(p.id) ?? 0);
       // 日期模拟进度（只读）：优先会话时钟，其次画像级；供列表「模拟进度」列
       let simulation: { enabled: boolean; dayIndex: number; baseDate: string | null; autoAdvance: boolean } | null = null;
@@ -387,6 +410,9 @@ router.get('/', async (req: Request, res) => {
         /* 逐条活跃会话：前端「进行中」列按行渲染多路径；无活跃行时为空数组 */
         activeRuns,
         activeRunTotal,
+        /* 无活跃运行时的历史摘要：按学习路径归并，每条路径只取最近一次运行 */
+        recentRuns,
+        recentRunTotal: recent.total,
       };
     });
 
@@ -434,15 +460,16 @@ router.get('/', async (req: Request, res) => {
  */
 router.get('/stats', async (req: Request, res) => {
   try {
-    const [statusAgg, profileCount, staleSessions, terminalSessions, todayVirtualCalls, runningSessionsAll] = await Promise.all([
+    const staleBefore = staleThresholdAt();
+    const [statusAgg, profileCount, staleSessions, terminalSessions, todayVirtualCalls, liveAll] = await Promise.all([
       getSessionStatusAggregates(),
       countProfiles(),
       findStaleSessionsForStats(staleThresholdAt()),
       findTerminalSessions(),
       // 今日虚拟/测试账号调用数（agent_call_logs）；仿真看板核心指标，与总览页真实口径互斥
       countTodayVirtualAgentCalls(),
-      // F20 口径对齐列表（2026-10-15）：running 要扣 autopilot=stopped（已暂停），与逐画像 runningCount 同式
-      findRunningSessionsForStats()
+      // 2026-10-21 口径统一：running/paused 由 autopilot 状态推导，与列表逐画像同一分类器
+      findLiveSessionsAll()
     ]);
 
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
@@ -451,9 +478,14 @@ router.get('/stats', async (req: Request, res) => {
     const failed = countByStatus('failed');
     const abandoned = countByStatus('abandoned');
     const created = countByStatus('created');
-    // 运行中扣减与列表同式：autopilot=stopped（用户暂停自动驾驶）归「已暂停」，不算进行中
-    const paused = runningSessionsAll.filter((s) => isAutopilotStoppedSession(s.stageResults)).length;
-    const running = Math.max(0, countByStatus('running') - paused);
+    // 与列表同式：running / paused 都由 autopilot 状态判定（不再用 status='running' 的条数）
+    let running = 0;
+    let paused = 0;
+    for (const s of liveAll) {
+      const phase = classifySessionRunPhase(s, staleBefore);
+      if (phase === 'running') running++;
+      else if (phase === 'paused') paused++;
+    }
 
     // 卡死口径与 reclaim 服务同源：管理员暂停的会话无写入是预期行为，不算卡死
     const staleCandidates = staleSessions.filter((s) => !isTeachingPausedSession(s.stageResults));
@@ -746,7 +778,17 @@ router.post('/:id/start-session', async (req: Request, res) => {
     if (!session) {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
-    res.json({ success: true, data: session });
+    /* 2026-10-21 口径统一：「运行」= 建会话 + 立刻开自动驾驶。
+       此前只建会话（status=created）就返回，前端再跳画像页——列表里这一行仍是「已停止」，
+       点完像什么都没发生。现在建完就开跑（并发满会进排队，不算失败）。 */
+    let autopilot: 'started' | 'queued' | 'failed' = 'failed';
+    try {
+      const started = await autopilotService.start(session.id, { target: 'final' });
+      autopilot = started.queued ? 'queued' : 'started';
+    } catch (error) {
+      logger.warn('会话已创建，但自动驾驶启动失败', { sessionId: session.id, error: (error as Error)?.message });
+    }
+    res.json({ success: true, data: { ...session, autopilot } });
   } catch (error) {
     const status = Number(error?.status) || 500;
     if (status >= 500) logger.error('启动模拟会话失败:', error);

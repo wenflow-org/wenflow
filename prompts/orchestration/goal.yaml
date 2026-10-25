@@ -52,7 +52,7 @@ fields:
     promptRole: soft-info
     valueType: string
     pathInRawOutput: internal.ext.goalConversation.understanding.current_baseline.level
-    description: 当前水平评估
+    description: 当前水平（enum beginner|intermediate|advanced|unknown 契约值；无法判断一律 unknown，不默认 beginner）
   - fieldId: understanding.current_baseline.evidence
     promptRole: soft-info
     valueType: string
@@ -100,6 +100,16 @@ fields:
     valueType: string
     pathInRawOutput: internal.ext.goalConversation.understanding.deadline_text
     description: 截止日期文本
+  - fieldId: understanding.deadline_date
+    promptRole: soft-info
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.deadline_date
+    description: 外部截止绝对日期（YYYY-MM-DD；考试/报名等高可信日历锚，排程一级输入，宁缺勿错、相对表述留空）
+  - fieldId: understanding.time_dimensions
+    promptRole: hidden-inference
+    valueType: object
+    pathInRawOutput: internal.ext.goalConversation.understanding.time_dimensions
+    description: 时间维度数值推断（camel 化为 timeDimensions 透传 path 层，planningHints 容量推导主输入）＝{totalSessions 总课次(可小数), sessionsLengthMin 每次分钟, totalWeeks 周数, sessionsPerWeek 每周次数, estimatedHours 总小时}；无依据字段给 null 禁止编造；课次<1 ⇒ 一次性操作不排课
   # hidden-inference
   - fieldId: understanding.background_experience
     promptRole: hidden-inference
@@ -121,6 +131,47 @@ fields:
     valueType: string
     pathInRawOutput: internal.ext.goalConversation.understanding.cognitive_bandwidth
     description: 认知带宽推断（可选 hidden，core yaml 已声明）
+  # 2026-10-24 契约同步批：以下分诊/结构化字段此前仅存在于提示词与消费端，补齐声明层
+  - fieldId: understanding.primary_block_type
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.primary_block_type
+    description: 主阻塞类型诊断（enum capability|oneoff_operation|environment_tooling|permission_process|emotion_relationship；达到诊断门槛才填，证据不足整体留空；影响平台分诊与路径体量）
+  - fieldId: understanding.recurrence
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.recurrence
+    description: 主阻塞是否反复发生（enum oneoff|recurring；与 primary_block_type 同门槛同留空规则）——triage 分流钥匙（transferable×recurrence）
+  - fieldId: understanding.block_type_evidence
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.block_type_evidence
+    description: primary_block_type 的一句支撑证据（优先保留用户原话关键词）
+  - fieldId: understanding.support_need
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.support_need
+    description: 学习之外的支持需求（enum none|emotional|referral；与 primary_block_type 独立可并存，证据不足取 none）
+  - fieldId: understanding.school_anchor
+    promptRole: hidden-inference
+    valueType: object
+    pathInRawOutput: internal.ext.goalConversation.understanding.school_anchor
+    description: 校内体系锚 {textbook 教材版本, examScope 考试形式, schoolPace 在校进度}；身处教材/考试体系才填，至少一项有值，无依据整体留空（教学侧 pathBackgroundContext.schoolAnchor 消费）
+  - fieldId: understanding.prerequisiteDiagnostics
+    promptRole: soft-info
+    valueType: array<object>
+    pathInRawOutput: internal.ext.goalConversation.understanding.prerequisiteDiagnostics
+    description: 前置知识探测题（最多 2 个二元单概念点）[{probeId, targetConcept, question, options[2], correctOption}]；作答结果由平台回传校准 prerequisiteTree.knownConcepts
+  - fieldId: understanding.prerequisiteCheckResults
+    promptRole: soft-info
+    valueType: array<object>
+    pathInRawOutput: internal.ext.goalConversation.understanding.prerequisiteCheckResults
+    description: 探测题作答结果（用户作答后回填）[{probeId, targetConcept, userAnswer, isCorrect}]
+  - fieldId: proposalQuality
+    promptRole: hidden-inference
+    valueType: object
+    pathInRawOutput: internal.ext.goalConversation.proposalQuality
+    description: 提案 SMART 自评（proposing 阶段随 confirmedProposal 产出）{specific, measurable, achievable, relevant, timeBound 均 0-100, overall 加权总分}；overall<60 时回复给一句质量改善建议但不阻断确认
   # 平台派生/旁路字段
   - fieldId: structuredData
     promptRole: soft-info
@@ -152,7 +203,7 @@ fields:
     promptRole: proposal-output
     valueType: string
     pathInRawOutput: internal.ext.goalConversation.confirmedProposal.scope_size
-    description: 问题规模（micro/small/medium/large），决定路径体量
+    description: 问题规模的自由判断与依据（一句话；**不选档位**——micro/small 等标签口径已废弃，下游 path 层仅作参考输入，阶段数由路径生成侧按实际复杂度决定）
   # public-reply
   - fieldId: userVisible
     promptRole: public-reply
@@ -323,6 +374,80 @@ routings:
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
+  # 2026-10-24 契约同步批新增字段的路由
+  - agentId: skill:goal-conversation
+    fieldId: understanding.deadline_date
+    render: visible
+    handoff: [goal-agent]
+    internal: false
+    accumulate: false
+    notes: 排程一级输入（绝对日期锚）
+  - agentId: skill:goal-conversation
+    fieldId: understanding.time_dimensions
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 数值时间推断（规划容量主输入）
+  - agentId: skill:goal-conversation
+    fieldId: understanding.primary_block_type
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.recurrence
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.block_type_evidence
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.support_need
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.school_anchor
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 教学侧学校体系锚（pathBackgroundContext.schoolAnchor）
+  - agentId: skill:goal-conversation
+    fieldId: understanding.prerequisiteDiagnostics
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.prerequisiteCheckResults
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: proposalQuality
+    render: hidden
+    handoff: [goal-agent]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: SMART 自评（仅 proposing 阶段）
   # 平台派生/旁路字段
   - agentId: skill:goal-conversation
     fieldId: structuredData
@@ -569,3 +694,43 @@ routings:
     handoff: [path]
     internal: false
     accumulate: false
+  # 2026-10-24 契约同步批：path 层实际消费的新字段桥接
+  - agentId: goal-agent
+    fieldId: understanding.time_dimensions
+    render: hidden
+    handoff: [path]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: planningHints 容量推导主输入（camel 化为 timeDimensions）
+  - agentId: goal-agent
+    fieldId: understanding.deadline_date
+    render: visible
+    handoff: [path]
+    internal: false
+    accumulate: false
+    notes: 排程一级输入（绝对日期锚）
+  - agentId: goal-agent
+    fieldId: understanding.primary_block_type
+    render: hidden
+    handoff: [path]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 一节课量级分流（triage）输入
+  - agentId: goal-agent
+    fieldId: understanding.recurrence
+    render: hidden
+    handoff: [path]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 一节课量级分流（triage）输入
+  - agentId: goal-agent
+    fieldId: understanding.school_anchor
+    render: hidden
+    handoff: [path]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 教学侧学校体系锚透传

@@ -16,7 +16,7 @@
         <MkSwitch
           v-model="rtForm.enabled"
           label="独立配置"
-          :state-text="rtForm.enabled ? '生效中' : '继承上层'"
+          :state-text="rtForm.enabled ? '生效中' : '已关闭'"
           class="sdp-head__switch"
         />
         <button
@@ -27,65 +27,86 @@
           @click="saveRuntime"
         >{{ rtSaving ? '保存中…' : '保存配置' }}</button>
       </div>
-      <!-- 口径一条放卡头正下方（卡头只放标题/现状/动作；规则不复述） -->
-      <p class="mk-card__note">未覆盖的项继承 Agent 与平台默认，这里只写给这个 Skill 的差异。Prompt 里声明了 model 时，本页模型不参与。</p>
+      <!-- 卡头只保留标题/开关/保存；旧「Prompt 里声明了 model 时，本页模型不参与」已删：
+           与运行时契约相反（route 优先于 prompt.model），且生效值胶囊已直接给出结果与来源。 -->
 
       <div class="sdp-body">
         <div v-if="rtLoadFailed" class="sdp-error">运行时配置加载失败，已重置为默认值。<button type="button" class="mk-link" @click="loadRuntime">重试</button></div>
 
-        <!-- 生效值（只读「所配即所得」）：先回答「现在生效的是什么」，再谈怎么改。
+        <!-- 生效值（只读「所配即所得」）：先回答「现在生效的是什么」，再进入分节编辑。
              来源词走 sdp-shared 的人话映射（后端枚举码不直接露给运营） -->
-        <div class="sdp-sec">
-          <span class="sdp-sec__title">生效值</span>
+        <div class="sdp-summary">
+          <div class="sdp-summary__head">
+            <span class="sdp-sec__title">生效值</span>
+            <span class="sdp-summary__hint">只读 · 当前实际生效</span>
+          </div>
           <div class="sdp-chips">
-            <span class="sdp-chip">超时 <b class="mono">{{ rtForm.requestTimeoutMs ? Math.round(rtForm.requestTimeoutMs / 1000) + 's' : '继承' }}</b></span>
-            <span class="sdp-chip">逻辑重试 <b class="mono">{{ effectiveLogicalRetries }}</b> 次</span>
-            <span class="sdp-chip">思考 <b class="mono">{{ thinkingLabel }}</b></span>
-            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('temperature')}`">T=<b class="mono">{{ generationParams?.temperature ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('temperature') }}</em></span>
-            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('topP')}`">topP=<b class="mono">{{ generationParams?.topP ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('topP') }}</em></span>
-            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('maxTokens')}`">Max=<b class="mono">{{ generationParams?.maxTokens ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('maxTokens') }}</em></span>
-            <span class="sdp-chip" :title="generationParams?.model ? `模型来源：${sourceLabel('model')}` : '按路由表选中，随路由变化'">
-              模型 <b class="mono">{{ generationParams?.model || '继承路由模型' }}</b>
-              <em v-if="generationParams?.model" class="sdp-chip__src">{{ sourceLabel('model') }}</em>
+            <span class="sdp-chip">超时 <b>{{ rtForm.requestTimeoutMs ? Math.round(rtForm.requestTimeoutMs / 1000) + 's' : '继承' }}</b></span>
+            <span class="sdp-chip">逻辑重试 <b>{{ effectiveLogicalRetries }}</b> 次</span>
+            <span class="sdp-chip">思考 <b>{{ thinkingLabel }}</b></span>
+            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('temperature')}`">T=<b>{{ generationParams?.temperature ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('temperature') }}</em></span>
+            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('topP')}`">topP=<b>{{ generationParams?.topP ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('topP') }}</em></span>
+            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('maxTokens')}`">Max=<b>{{ generationParams?.maxTokens ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('maxTokens') }}</em></span>
+            <span class="sdp-chip" :title="generationParams?.model ? `模型来源：${modelOriginLabel}` : '按路由表选中，随路由变化'">
+              模型 <b>{{ generationParams?.model || '继承路由模型' }}</b>
+              <em v-if="generationParams?.model" class="sdp-chip__src">{{ modelOriginLabel }}</em>
             </span>
           </div>
         </div>
 
-        <!-- 主列填配置，右列是验证（成熟控制台的 Settings + Test 动线）：
-             配置按「模型 / 生成参数 / 请求与容错」三段竖排，验证面板窄一档、视觉次级。
-             ≤1080 回落单列，字段拿到整行宽度。 -->
-        <div class="sdp-layout">
-          <div class="sdp-main">
-            <div class="sdp-sec">
-              <span class="sdp-sec__title">模型</span>
+        <!-- 与「模型与接入」的供应商详情同解剖：左分节导航 / 右当前分节。
+             一屏只展开一段，避免长表单把所有字段摊成一条竖线；导航上的副文就是各段
+             当前生效值，切段前也能看到全貌。≤900px 导航折成横向可滚动条。 -->
+        <div class="sdp-shell">
+          <nav class="sdp-nav" role="tablist" aria-label="运行时配置分节" @keydown="onNavKeydown">
+            <button
+              v-for="item in runtimeNav"
+              :key="item.key"
+              type="button"
+              role="tab"
+              :id="`sdp-nav-${item.key}`"
+              class="sdp-nav__item"
+              :class="{ 'is-on': runtimeSection === item.key }"
+              :aria-selected="runtimeSection === item.key"
+              :aria-controls="`sdp-panel-${item.key}`"
+              :tabindex="runtimeSection === item.key ? 0 : -1"
+              @click="runtimeSection = item.key"
+            >
+              <span class="sdp-nav__name">{{ item.label }}</span>
+              <span class="sdp-nav__meta">{{ item.meta }}</span>
+            </button>
+          </nav>
+
+          <div class="sdp-detail">
+            <section v-show="runtimeSection === 'model'" id="sdp-panel-model" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-model">
+              <header class="sdp-panel__head">
+                <h4>模型</h4>
+              </header>
               <div class="sdp-form__grid">
-                <label class="sdp-field">
-                  <span>模型层级</span>
-                  <select v-model="rtForm.tier" class="mk-input" :disabled="!rtForm.enabled">
-                    <option value="chat">chat</option>
-                    <option value="reasoning">reasoning</option>
-                  </select>
-                </label>
-                <label class="sdp-field">
-                  <span>模型<em>不选则继承 Agent / 平台默认</em></span>
+                <label class="sdp-field sdp-field--wide">
+                  <!-- 不再写「模型」字段标签：分节名与面板标题都是「模型」，第三遍纯复读 -->
                   <MkModelPicker
+                    aria-label="模型"
                     :model-value="rtForm.model"
                     :options="pickerOptions"
                     allow-inherit
-                    inherit-label="继承 Agent / 平台默认"
+                    inherit-label="跟随平台默认"
                     :tier="rtForm.tier"
                     :disabled="!rtForm.enabled"
                     @update:model-value="rtForm.model = $event"
                     @pick="onModelPicked"
                   />
                   <!-- 选中项的能力与价格就地核对（Azure Foundry 的部署行形态）：不必再回接入页查 -->
-                  <span v-if="primaryMetaText" class="sdp-model-meta mono">{{ primaryMetaText }}</span>
+                  <span v-if="primaryMetaText" class="sdp-model-meta">{{ primaryMetaText }}</span>
                 </label>
               </div>
-            </div>
+            </section>
 
-            <div class="sdp-sec">
-              <span class="sdp-sec__title">生成参数<span class="sdp-sec__hint">留空即继承 Prompt / 模型默认</span></span>
+            <section v-show="runtimeSection === 'params'" id="sdp-panel-params" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-params">
+              <header class="sdp-panel__head">
+                <h4>生成参数</h4>
+                <span class="sdp-panel__state">{{ thinkingLabel }} · T={{ generationParams?.temperature ?? '继承' }}</span>
+              </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field">
                   <span>思考模式</span>
@@ -105,9 +126,10 @@
                   </select>
                 </label>
               </div>
+              <!-- 能力冲突提示（2026-10-24）：模型支不支持思考/强度由注册表声明，网关按能力裁剪；
+                   裁剪是静默的，所以必须在配置处说明「写了也不会发」。模型不在目录时不猜、不提示。 -->
+              <p v-if="rtForm.enabled && thinkingNotice" class="sdp-cap-note" role="status">{{ thinkingNotice }}</p>
 
-              <!-- 参数覆盖：一行一个字段（标签 / 模式 / 值），三行对齐成一张小表，
-                   不再是三列大格子把长选项挤成两行 -->
               <div class="sdp-subhead">
                 <span>参数覆盖</span>
                 <em>未覆盖的字段沿用 Prompt 默认</em>
@@ -150,10 +172,13 @@
                   <span v-else class="sdp-param__inherit">继承</span>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div class="sdp-sec">
-              <span class="sdp-sec__title">请求与容错</span>
+            <section v-show="runtimeSection === 'request'" id="sdp-panel-request" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-request">
+              <header class="sdp-panel__head">
+                <h4>请求与容错</h4>
+                <span class="sdp-panel__state">超时 {{ rtForm.requestTimeoutMs ? Math.round(rtForm.requestTimeoutMs / 1000) + 's' : '继承' }} · 重试 {{ effectiveLogicalRetries }} 次</span>
+              </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field">
                   <span>请求超时（ms）</span>
@@ -198,66 +223,70 @@
                   <span v-if="probeMsg" class="sdp-chip" :class="probeErr ? 'sdp-chip--danger' : 'sdp-chip--ok'">{{ probeMsg }}</span>
                 </div>
               </div>
-            </div>
-          </div>
+            </section>
 
-          <!-- 验证列：与「模型与接入」连接卡的右列同一动线——改完档位顺手直发上游测一次 -->
-          <aside class="sdp-test">
-            <div class="sdp-test__head">
-              <span class="sdp-sec__title">模型测试</span>
-              <span class="sdp-sec__hint">直发上游，不留记录</span>
-            </div>
-            <div class="sdp-test__fields">
-              <label class="sdp-field">
-                <span>思考模式</span>
-                <select v-model="probeForm.thinkingMode" class="mk-input">
-                  <option value="default">跟随配置（{{ thinkingLabel }}）</option>
-                  <option value="enabled">开启</option>
-                  <option value="disabled">关闭</option>
-                </select>
-              </label>
-              <label class="sdp-field">
-                <span>思考强度</span>
-                <select v-model="probeForm.reasoningEffort" class="mk-input" :disabled="probeForm.thinkingMode === 'disabled'">
-                  <option value="default">跟随配置（{{ cfgEffortLabel }}）</option>
-                  <option value="low">low</option>
-                  <option value="high">high</option>
-                  <option value="max">max</option>
-                </select>
-              </label>
-            </div>
-            <div class="sdp-test__act">
-              <button type="button" class="mk-btn mk-btn--primary" :disabled="probeRunning" @click="runModelProbe">
-                {{ probeRunning ? '探测中…（最长 180s）' : '开始探测' }}
-              </button>
-              <span v-if="probeError" class="sdp-form__msg is-err">{{ probeError }}</span>
-            </div>
-            <p v-if="probeResult?.resolved" class="sdp-probe__resolved mono">
-              生效：{{ probeResult.resolved.model }} · {{ probeResult.resolved.thinkingMode }} / {{ probeResult.resolved.reasoningEffort }}
-            </p>
-            <div v-if="probeResult" class="sdp-probe" :class="probeResult.jsonOk === 'ok' ? 'is-ok' : 'is-bad'">
-              <div class="sdp-probe__grid">
-                <div><span>总耗时</span><strong class="mono">{{ fmtMs(probeResult.durationMs ?? 0) }}</strong></div>
-                <div><span>首字 TTFT</span><strong class="mono">{{ probeResult.ttftContentMs != null ? fmtMs(probeResult.ttftContentMs) : '—' }}</strong></div>
-                <div><span>JSON</span><strong class="mono">{{ probeResult.jsonOk || '—' }}</strong></div>
-                <div><span>输出字符</span><strong class="mono">{{ probeResult.contentChars ?? '—' }}</strong></div>
-                <div><span>输出 token</span><strong class="mono">{{ probeResult.completionTokens ?? '—' }}</strong></div>
-                <div><span>结束原因</span><strong class="mono">{{ probeResult.finish || '—' }}</strong></div>
+            <section v-show="runtimeSection === 'test'" id="sdp-panel-test" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-test">
+              <header class="sdp-panel__head">
+                <h4>模型测试</h4>
+                <span class="sdp-panel__state">直发上游，不留记录</span>
+              </header>
+              <div class="sdp-test-grid">
+                <div class="sdp-test-controls">
+                  <div class="sdp-form__grid">
+                    <label class="sdp-field">
+                      <span>思考模式</span>
+                      <select v-model="probeForm.thinkingMode" class="mk-input">
+                        <option value="default">跟随配置（{{ thinkingLabel }}）</option>
+                        <option value="enabled">开启</option>
+                        <option value="disabled">关闭</option>
+                      </select>
+                    </label>
+                    <label class="sdp-field">
+                      <span>思考强度</span>
+                      <select v-model="probeForm.reasoningEffort" class="mk-input" :disabled="probeForm.thinkingMode === 'disabled'">
+                        <option value="default">跟随配置（{{ cfgEffortLabel }}）</option>
+                        <option value="low">low</option>
+                        <option value="high">high</option>
+                        <option value="max">max</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="sdp-test__act">
+                    <button type="button" class="mk-btn mk-btn--primary" :disabled="probeRunning" @click="runModelProbe">
+                      {{ probeRunning ? '探测中…（最长 180s）' : '开始探测' }}
+                    </button>
+                    <span v-if="probeError" class="sdp-form__msg is-err">{{ probeError }}</span>
+                  </div>
+                </div>
+
+                <div class="sdp-test-result">
+                  <p v-if="probeResult?.resolved" class="sdp-probe__resolved">
+                    生效：{{ probeResult.resolved.model }} · {{ probeResult.resolved.thinkingMode }} / {{ probeResult.resolved.reasoningEffort }}
+                  </p>
+                  <div v-if="probeResult" class="sdp-probe" :class="probeResult.jsonOk === 'ok' ? 'is-ok' : 'is-bad'">
+                    <div class="sdp-probe__grid">
+                      <div><span>总耗时</span><strong class="mono">{{ fmtMs(probeResult.durationMs ?? 0) }}</strong></div>
+                      <div><span>首字 TTFT</span><strong class="mono">{{ probeResult.ttftContentMs != null ? fmtMs(probeResult.ttftContentMs) : '—' }}</strong></div>
+                      <div><span>JSON</span><strong class="mono">{{ probeResult.jsonOk || '—' }}</strong></div>
+                      <div><span>输出字符</span><strong class="mono">{{ probeResult.contentChars ?? '—' }}</strong></div>
+                      <div><span>输出 token</span><strong class="mono">{{ probeResult.completionTokens ?? '—' }}</strong></div>
+                      <div><span>结束原因</span><strong class="mono">{{ probeResult.finish || '—' }}</strong></div>
+                    </div>
+                    <pre v-if="probeResult.contentPreview" class="sdp-probe__pre mono">{{ probeResult.contentPreview }}</pre>
+                  </div>
+                  <p v-else class="sdp-test-result__empty">还没有探测结果。点「开始探测」直发一次上游请求，结果会留在这里。</p>
+                </div>
               </div>
-              <pre v-if="probeResult.contentPreview" class="sdp-probe__pre mono">{{ probeResult.contentPreview }}</pre>
-            </div>
-            <p class="sdp-test__hint">用线上生效 Prompt 直发上游，探测不保存配置。</p>
-          </aside>
+            </section>
+          </div>
         </div>
       </div>
 
       <div class="sdp-form__footer">
         <p v-if="rtMsg" class="sdp-form__msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
+        <!-- 2026-10-23 走查：卡内「刷新」与页头「刷新」同屏两颗、各刷一半（页头刷新会经
+             refreshTick 触发本组件重拉）——撤卡内这颗，页头刷新即全量来源。 -->
         <button type="button" class="mk-btn mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
-        <button type="button" class="mk-btn" :disabled="rtSaving" @click="loadRuntime">刷新</button>
-        <button type="button" class="mk-btn mk-btn--primary" :disabled="rtSaving" @click="saveRuntime">
-          {{ rtSaving ? '保存中…' : '保存配置' }}
-        </button>
       </div>
     </section>
 
@@ -272,10 +301,11 @@
 import { computed, ref, watch } from 'vue'
 import { adminPlatformSettingsApi, adminSkillsApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
-import { errText, fmtMs, callParamSourceLabel } from './sdp-shared'
+import { errText, fmtMs, callParamSourceLabel, thinkingCapabilityNotice, type ThinkingCapability } from './sdp-shared'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
+import { onTabRowKeydown } from '@/utils/rovingTablist'
 
 // 模型目录候选（File-as-Truth llm-providers.json）：模型与备用模型共用一个可选择器；
 // 加载失败静默降级为空目录（仍可按输入提交别名 / 注册表外 id，不影响保存）
@@ -341,6 +371,22 @@ const thinkingLabel = computed(() =>
   rtForm.value.thinkingMode === 'enabled' ? '开启' : rtForm.value.thinkingMode === 'disabled' ? '关闭' : '继承/默认'
 )
 const sourceLabel = (k: string) => callParamSourceLabel(generationParams.value?.sources?.[k])
+/** 模型来源（2026-10-24）：route-fallback 只说「路由表」，看不出是技能覆盖还是平台默认。
+ *  运行时契约：独立配置关掉 / 模型留空 → 继承平台默认。 */
+const modelOriginLabel = computed(() => (rtForm.value.enabled && rtForm.value.model ? '技能配置' : '平台默认'))
+/** 生效模型的能力声明（注册表）：选中模型优先；继承时用侧栏解析出的生效模型查目录 */
+const effectiveModelCap = computed<ThinkingCapability | null>(() => {
+  const id = String(rtForm.value.enabled && rtForm.value.model ? rtForm.value.model : generationParams.value?.model || '')
+  if (!id) return null
+  const opt = pickerOptions.value.find((o) => o.value === id)
+  return opt ? { thinking: opt.thinking, reasoning: opt.reasoning } : null
+})
+const thinkingNotice = computed(() =>
+  thinkingCapabilityNotice(
+    { thinkingMode: rtForm.value.thinkingMode, reasoningEffort: rtForm.value.reasoningEffort },
+    effectiveModelCap.value
+  )
+)
 
 /* ---------- 模型测试（model-probe；与 probeChannel 通道探测是两件事） ---------- */
 interface ProbeForm {
@@ -361,6 +407,42 @@ const probeForm = ref<ProbeForm>({ thinkingMode: 'default', reasoningEffort: 'de
 const probeRunning = ref(false)
 const probeError = ref('')
 const probeResult = ref<ProbeResult | null>(null)
+
+/* 分节导航（与「模型与接入」供应商详情的左列表/右详情同解剖）：
+   一屏只展开一段，副文直接写各段当前生效值，切段前也能看到全貌。 */
+type RuntimeSection = 'model' | 'params' | 'request' | 'test'
+const runtimeSection = ref<RuntimeSection>('model')
+/** 分节页签：方向键在行内切换并移动焦点（role=tablist 的键盘契约） */
+function onNavKeydown(e: KeyboardEvent): void {
+  onTabRowKeydown(e, (i) => {
+    const item = runtimeNav.value[i]
+    if (item) runtimeSection.value = item.key
+  })
+}
+
+const runtimeNav = computed<Array<{ key: RuntimeSection; label: string; meta: string }>>(() => [
+  {
+    key: 'model',
+    label: '模型',
+    // 面板里的选择器已给出完整取值；导航副文只报「用的是哪个」，不再复述开关状态
+    meta: rtForm.value.enabled && rtForm.value.model ? rtForm.value.model : '平台默认'
+  },
+  {
+    key: 'params',
+    label: '生成参数',
+    meta: `T=${generationParams.value?.temperature ?? '继承'} · ${thinkingLabel.value}`
+  },
+  {
+    key: 'request',
+    label: '请求与容错',
+    meta: `重试 ${effectiveLogicalRetries.value} 次 · 超时 ${rtForm.value.requestTimeoutMs ? Math.round(rtForm.value.requestTimeoutMs / 1000) + 's' : '继承'}`
+  },
+  {
+    key: 'test',
+    label: '模型测试',
+    meta: probeResult.value ? `已探测 ${fmtMs(probeResult.value.durationMs ?? 0)}` : '直发上游'
+  }
+])
 /** 「跟随配置」档位回显（读当前生效配置，不与探测参数混为一谈） */
 const cfgEffortLabel = computed(() =>
   rtForm.value.reasoningEffort === 'default' ? '继承/默认' : rtForm.value.reasoningEffort
@@ -425,7 +507,7 @@ const primaryMetaText = computed(() => {
   return [o.providerName, o.tier, caps, price].filter(Boolean).join(' · ')
 })
 const fallbackHint = computed(() => {
-  if (primaryOption.value) return '候选只含同供应商、同层级的模型'
+  if (primaryOption.value) return ''
   if (fallbackChain.value.length) return '主模型为空，候选按层级列出'
   return '留空继承平台默认备用模型'
 })
@@ -607,7 +689,7 @@ async function resetRuntime() {
   if (rtSaving.value) return
   const ok = await askConfirm({
     title: '恢复默认配置',
-    message: '确定恢复该 Skill 的默认模型配置吗？\n独立配置将被删除，恢复为继承上层 / 平台默认。',
+    message: '确定恢复该 Skill 的默认模型配置吗？\n独立配置将被删除，改为跟随平台默认。',
     confirmText: '恢复默认'
   })
   if (!ok) return
@@ -616,7 +698,7 @@ async function resetRuntime() {
   try {
     await adminSkillsApi.deleteSkillModelConfig(props.skillId)
     rtErr.value = false
-    rtMsg.value = '已恢复默认（继承上层 / 平台）'
+    rtMsg.value = '已恢复默认（跟随平台默认）'
     await loadRuntime()
   } catch (e) {
     rtErr.value = true
@@ -677,33 +759,85 @@ watch(() => props.skillId, () => {
 .sdp-pane { display: grid; gap: 14px; align-content: start; container-type: inline-size; }
 /* 卡体：与「模型与接入」的 .ac-body 同解剖（16px 内衬 + 14px 栅格），段与段之间靠发丝线分开 */
 .sdp-body { display: grid; gap: 16px; padding: 4px 16px 16px; }
-.sdp-sec { display: grid; gap: 9px; }
-.sdp-sec + .sdp-sec { padding-top: 14px; border-top: 1px solid var(--mk-line); }
 .sdp-sec__title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
-.sdp-sec__hint { font-size: var(--mk-fs-micro); font-weight: 500; color: var(--mk-faint); }
 
-/* 主列 + 验证栏（成熟控制台的 Settings + Test 动线）：主列宽一档，测试栏窄、视觉次级；
-   ≤1080 回落单列，字段拿到整行宽度 */
-.sdp-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); gap: 18px; align-items: start; }
-.sdp-main { display: grid; gap: 16px; min-width: 0; }
-.sdp-test {
+/* 生效值：一段只读摘要，和下面的编辑区用发丝线分开 */
+.sdp-summary {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-  align-content: start;
-  min-width: 0;
+  background: var(--mk-surface-2);
 }
-.sdp-test__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.sdp-test__fields { display: grid; gap: 12px; }
-.sdp-test__hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; }
-/* 按卡片自身宽度回落（容器查询）：侧栏展开时视口仍宽，但卡片只剩 850px，
-   再用视口断点会留下两张挤在一起的窄栏 */
-@container (max-width: 980px) {
-  .sdp-layout { grid-template-columns: minmax(0, 1fr); }
-  .sdp-test__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sdp-summary__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sdp-summary__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+
+/* 左分节导航 / 右当前分节：与「模型与接入」供应商详情的列表 + 详情同解剖 */
+.sdp-shell {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  overflow: hidden;
+  background: var(--mk-surface);
+}
+.sdp-nav {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 8px;
+  background: var(--mk-surface-2);
+  border-right: 1px solid var(--mk-line);
+}
+.sdp-nav__item {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--mk-radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.sdp-nav__item:hover { background: color-mix(in srgb, var(--mk-ink) 4%, transparent); }
+.sdp-nav__item.is-on { background: var(--mk-surface); border-color: var(--mk-line); box-shadow: var(--mk-shadow-sm); }
+.sdp-nav__name { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
+.sdp-nav__item.is-on .sdp-nav__name { color: var(--mk-blue); }
+.sdp-nav__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sdp-detail { min-width: 0; padding: 16px; }
+.sdp-panel { display: grid; gap: 14px; align-content: start; }
+.sdp-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.sdp-panel__head h4 { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
+.sdp-panel__state { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
+
+/* 模型测试：左控制 / 右结果。结果列用发丝线分隔，不再套一层卡 */
+.sdp-test-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; align-items: start; }
+.sdp-test-controls { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.sdp-test-result { display: grid; gap: 10px; align-content: start; min-width: 0; padding-left: 18px; border-left: 1px solid var(--mk-line); }
+.sdp-test-result__empty { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.6; }
+@container (max-width: 760px) {
+  .sdp-test-grid { grid-template-columns: minmax(0, 1fr); }
+  .sdp-test-result { padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px solid var(--mk-line); }
+}
+/* 按卡片自身宽度回落（容器查询）：侧栏展开时视口仍宽，但卡片只剩 850px */
+@container (max-width: 900px) {
+  .sdp-shell { grid-template-columns: minmax(0, 1fr); }
+  .sdp-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row;
+    border-right: 0;
+    border-bottom: 1px solid var(--mk-line);
+  }
 }
 
 .sdp-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -718,7 +852,7 @@ watch(() => props.skillId, () => {
   font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
-.sdp-chip b { color: var(--mk-ink); font-weight: 600; }
+.sdp-chip b { color: var(--mk-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .sdp-chip__src { font-style: normal; font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-left: 2px; }
 .sdp-chip--ok { background: var(--mk-green-bg, #e8f5ec); color: var(--mk-green, #20704a); }
 .sdp-chip--danger { background: var(--mk-red-bg, #fdecec); color: var(--mk-red, #b3372f); }
@@ -781,7 +915,6 @@ watch(() => props.skillId, () => {
 .sdp-param__ctl { display: grid; grid-template-columns: minmax(0, 1fr) 128px; gap: 8px; align-items: center; }
 .sdp-param__ctl > :only-child { grid-column: 1 / -1; }
 @media (max-width: 700px) {
-  .sdp-test__fields { grid-template-columns: minmax(0, 1fr); }
   /* 窄屏：参数行整行放模式选择；「继承」由选项文案已表达，不再单独占一列 */
   .sdp-param { grid-template-columns: minmax(0, 1fr); }
   .sdp-param__inherit { display: none; }
@@ -790,6 +923,7 @@ watch(() => props.skillId, () => {
   .sdp-form__grid { grid-template-columns: 1fr; }
 }
 .sdp-field { display: grid; gap: 5px; min-width: 0; align-content: start; }
+.sdp-field--wide { grid-column: 1 / -1; }
 .sdp-field > span { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 .sdp-field > span em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
 .sdp-model-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
@@ -829,13 +963,21 @@ watch(() => props.skillId, () => {
   color: var(--mk-red);
   font-size: var(--mk-fs-micro);
 }
+/* 能力冲突提示：不是错误（配置可保存、换模型后即生效），用琥珀预警色 */
+.sdp-cap-note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-amber-bg, rgba(217, 119, 6, 0.12));
+  color: var(--mk-amber);
+  font-size: var(--mk-fs-micro);
+}
 
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {
   .sdp-chip { font-size: var(--mk-fs-body); padding: 4px 12px; }
   .sdp-body { gap: 18px; padding: 6px 20px 20px; }
   .sdp-sec__title { font-size: var(--mk-fs-emphasis); }
-  .sdp-sec__hint { font-size: var(--mk-fs-body); }
   .sdp-field > span { font-size: var(--mk-fs-body); }
   .sdp-pane .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
   .sdp-form__msg { font-size: var(--mk-fs-body); }
@@ -843,6 +985,5 @@ watch(() => props.skillId, () => {
   .sdp-probe__resolved, .sdp-probe__grid > div, .sdp-probe__pre { font-size: var(--mk-fs-body); }
 }
 
-/* 暗色模式 */
-[data-theme='dark'] .sdp-test { background: var(--wf-bg-subtle); }
+/* 暗色模式：分节导航用壳层已有的 subtle 底，不再单独覆盖 */
 </style>

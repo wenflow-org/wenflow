@@ -1,9 +1,10 @@
 const findUnique = jest.fn()
-const upsert = jest.fn()
+const create = jest.fn()
+const updateMany = jest.fn()
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
-  default: { learner_projections: { findUnique, upsert } },
+  default: { learner_projections: { findUnique, create, updateMany } },
 }))
 jest.mock('../../../utils/logger', () => ({
   logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -21,7 +22,8 @@ import {
 describe('concept-belief.service (BKT, 零训练)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    upsert.mockResolvedValue({})
+    create.mockResolvedValue({})
+    updateMany.mockResolvedValue({ count: 1 })
   })
 
   it('观测为“对”时 pKnowL 上升；为“错”时下降', () => {
@@ -49,18 +51,42 @@ describe('concept-belief.service (BKT, 零训练)', () => {
     expect(payload?.beliefs.c1.pKnowL).toBeGreaterThan(DEFAULT_BKT_PARAMS.pL0)
     expect(payload?.beliefs.c2.pKnowL).toBeLessThanOrEqual(DEFAULT_BKT_PARAMS.pL0)
     expect(payload?.beliefs.c1.observations).toBe(1)
-    const call = upsert.mock.calls.at(-1)![0]
-    expect(call.where.projectionKey).toBe(beliefProjectionKey('u1', 'lp1'))
-    expect(call.create.scope).toBe('beliefs')
+    // 2026-10-24：首建走 create（带唯一 projectionKey），不再是 upsert
+    const call = create.mock.calls.at(-1)![0]
+    expect(call.data.projectionKey).toBe(beliefProjectionKey('u1', 'lp1'))
+    expect(call.data.scope).toBe('beliefs')
   })
 
   it('读取已有信念后在其上继续更新', async () => {
     findUnique.mockResolvedValue({
+      version: 7,
       payload: JSON.stringify({ schemaVersion: 'learner-concept-beliefs-v1', pathId: 'lp1', params: DEFAULT_BKT_PARAMS, beliefs: { c1: { pKnowL: 0.8, observations: 3, lastObservedAt: '' } } }),
     })
     const payload = await conceptBeliefService.applyObservations('u1', 'lp1', [{ conceptKey: 'c1', observed: false }])
     expect(payload?.beliefs.c1.observations).toBe(4)
     expect(payload?.beliefs.c1.pKnowL).toBeLessThan(0.8)
+    // 乐观锁：以读取到的 version 为条件更新
+    const call = updateMany.mock.calls.at(-1)![0]
+    expect(call.where).toEqual({ projectionKey: beliefProjectionKey('u1', 'lp1'), version: 7 })
+  })
+
+  it('乐观锁 miss（version 已被并发方推进）→ 重读重放并写回', async () => {
+    const rowPayload = (observations: number) => JSON.stringify({
+      schemaVersion: 'learner-concept-beliefs-v1', pathId: 'lp1', params: DEFAULT_BKT_PARAMS,
+      beliefs: { c1: { pKnowL: 0.5, observations, lastObservedAt: '' } },
+    })
+    findUnique
+      .mockResolvedValueOnce({ version: 7, payload: rowPayload(3) })
+      .mockResolvedValueOnce({ version: 8, payload: rowPayload(4) })
+    updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 })
+
+    const payload = await conceptBeliefService.applyObservations('u1', 'lp1', [{ conceptKey: 'c1', observed: true }])
+    // 第二次尝试以新 version 为条件，且基于重读到的 observations=4 继续累加
+    expect(payload?.beliefs.c1.observations).toBe(5)
+    expect(updateMany).toHaveBeenCalledTimes(2)
+    expect(updateMany.mock.calls[1][0].where).toEqual({ projectionKey: beliefProjectionKey('u1', 'lp1'), version: 8 })
   })
 })
 

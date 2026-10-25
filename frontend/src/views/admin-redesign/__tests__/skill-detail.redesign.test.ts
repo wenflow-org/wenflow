@@ -327,7 +327,7 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
 })
 
 describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
-  it('hero：S 头像 + 英文 canonical id + 中文别名/归属·类别副文 + 健康/类别/模型/版本 pills + 真实动作', async () => {
+  it('hero：S 头像 + 英文 canonical id + 中文别名/归属·类别副文 + 健康/类别/版本 pills + 真实动作', async () => {
     const w = mountDetail()
     await settle()
 
@@ -341,13 +341,14 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text())
     expect(pills[0]).toBe('健康') // 窗口内 100 调用 0 失败
     expect(pills[1]).toBe('教学')
-    expect(pills.join('|')).toContain('gpt-5.2')
+    // 2026-10-24 用户「还是重复部分」：生效模型只在运行时「生效值」里出现一次，hero 不再重复
+    expect(pills.join('|')).not.toContain('gpt-5.2')
     expect(pills.join('|')).toContain('线上生效 v2')
 
-    // 动作 = 真实能力（2026-10-15 设计页平铺进本页后，hero 只剩「刷新」——
-    // 原「打开设计页 →」跳转钮随独立页退役撤除，设计能力已在本页各页签就地铺开）
+    // 动作 = 真实能力（2026-10-23 用户「已经有刷新，为什么还有独立刷新」：hero 最后一颗
+    // 刷新钮也撤除，各域跟随顶栏 liveRefreshSeq 广播；hero 动作区不再留按钮）
     const actions = w.findAll('.mk-hero__actions button').map((b) => b.text())
-    expect(actions).toEqual(['刷新'])
+    expect(actions).toEqual([])
 
     w.unmount()
   })
@@ -452,7 +453,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('试跑页签：样例输入可编辑，试跑走 testSkill 真实接口并回显输出', async () => {
+  it('试跑页签：TrialTab 输入可编辑，试跑走 testSkill 真实接口并回显输出', async () => {
     testSkillMock.mockResolvedValueOnce({
       data: { data: { success: true, duration: 1234, cached: false, output: { explain: 'ok' } } }
     })
@@ -461,28 +462,25 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await w.findAll('.mk-subtab')[2].trigger('click') // 试跑（第 3 个）
     await nextTick()
 
-    expect(w.text()).toContain('样例输入')
-    const ta = w.find('.skd-ta')
+    expect(w.text()).toContain('试跑')
+    const ta = w.find('.sdp-json')
     expect(ta.exists()).toBe(true)
-    await ta.setValue('{\n  "input": "讲讲 p 值"\n}')
-    // 注意「试跑」也是页签名：动作钮限定在样例输入卡的 foot 里找
-    await w.find('.skd-ta-foot button').trigger('click')
+    await ta.setValue(JSON.stringify({ input: '讲讲 p 值' }))
+    // 唯一运行入口在 TrialTab 卡头（宿主旧的「样例输入 + 试跑」副本已撤）
+    const runBtn = w.findAll('button').find((b) => b.text().includes('运行预览'))!
+    await runBtn.trigger('click')
     await settle()
 
     expect(testSkillMock).toHaveBeenCalledWith('skill-a', { input: '讲讲 p 值' })
-    expect(w.find('.skd-code--tall').text()).toContain('explain')
-    expect(w.text()).toContain('上次试跑 成功')
-    // 执行链路：testSkill 仅回最终输出（无逐步 steps）→ 空态注明
+    expect(w.find('.sdp-output').text()).toContain('explain')
     expect(w.text()).toContain('执行链路')
     expect(w.text()).toContain('本次试跑仅返回最终输出')
-    // 原型「试跑对比」评分（ranklist 百分比）后端无此数据，不渲染
     expect(w.text()).not.toContain('试跑对比')
     expect(w.text()).not.toContain('结构完整')
-
     w.unmount()
   })
 
-  it('#15 宿主「样例输入」卡按 core 输入契约生成默认载荷（不再硬编码 input 键）', async () => {
+  it('#15 试跑输入按 core 输入契约生成默认载荷（唯一入口在 TrialTab）', async () => {
     // stage-designer 的真实契约：milestone / cognitiveCore 必填，其余可选
     coreMock.mockResolvedValue({
       data: {
@@ -504,13 +502,13 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await w.findAll('.mk-subtab')[2].trigger('click') // 试跑
     await nextTick()
 
-    const ta = w.find('.skd-ta')
+    const ta = w.find('.sdp-json')
     expect(JSON.parse((ta.element as HTMLTextAreaElement).value)).toEqual({ milestone: {}, cognitiveCore: {} })
 
-    await w.find('.skd-ta-foot button').trigger('click')
+    const runBtn = w.findAll('button').find((b) => b.text().includes('运行预览'))!
+    await runBtn.trigger('click')
     await settle()
     expect(testSkillMock).toHaveBeenCalledWith('skill-a', { milestone: {}, cognitiveCore: {} })
-
     w.unmount()
     coreMock.mockResolvedValue({ data: {} })
   })
@@ -556,7 +554,8 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // 现由 RuntimeTab 单点承载，卡名从「模型配置」改为「模型与路由」）
     expect(w.text()).toContain('模型与路由')
     expect(w.text()).toContain('独立配置')
-    expect(w.text()).toContain('保存配置')
+    // 保存钮只在表单变脏后出现在卡头（footer 的同名副本已撤）
+    expect(w.findAll('.sdp-card__save').length).toBe(0)
     expect(w.text()).toContain('恢复默认')
     // 生效值（只读「所配即所得」）：运行时限制独立卡退役后，超时等信息在这里看
     expect(w.text()).toContain('生效值')

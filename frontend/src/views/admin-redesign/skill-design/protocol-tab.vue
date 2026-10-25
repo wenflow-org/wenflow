@@ -15,9 +15,6 @@
           </button>
         </span>
       </header>
-      <p class="sdp-pw__hint">
-        core YAML 是业务定义的唯一声明源：保存即编译（dry run 出五块产物与门禁），发布后确定性编译为五块 Prompt（<code class="mono">skill.{{ skillId }}.md</code> + 数据库生效版本），运行时立即生效。
-      </p>
       <div class="sdp-pw__viewswitch">
         <button
           type="button"
@@ -300,7 +297,6 @@
     <section class="sdp-block sdp-proj">
       <header class="sdp-block__head">
         <h4>运行时契约（只读投影）</h4>
-        <span class="sdp-block__meta">字段契约与「字段路由」页签同源 · 状态机 / 终止条件读 core YAML</span>
       </header>
       <div class="sdp-proj__grid">
         <div class="sdp-proj__col">
@@ -967,13 +963,6 @@ watch(
 .sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sdp-bad-text { color: var(--mk-red); font-weight: 700; }
 
-.sdp-pw__hint {
-  margin: 0 18px 12px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  line-height: 1.7;
-}
-.sdp-pw__hint code { font-size: var(--mk-fs-micro); }
 .sdp-pw__textarea {
   width: 100%;
   min-height: 46vh;
@@ -1318,8 +1307,6 @@ watch(
   .sdp-block__meta { font-size: var(--mk-fs-body); }
   .sdp .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
   .sdp-pw { grid-template-columns: minmax(0, 1fr) 520px; }
-  .sdp-pw__hint { font-size: var(--mk-fs-body); }
-  .sdp-pw__hint code { font-size: var(--mk-fs-body); }
   .sdp-pw__textarea,
   .sdp-codehl__pre { font-size: var(--mk-fs-emphasis); }
   .sdp-pwform .mk-input { font-size: var(--mk-fs-emphasis); min-height: 46px; }

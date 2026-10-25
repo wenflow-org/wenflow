@@ -522,22 +522,22 @@ export function buildCardWallEntries(
   });
 }
 
-/** 卡墙索引聚合（GET /cards/index 数据源）：卡列表 + 预置/自建分计 */
+/** 卡墙索引聚合（GET /cards/index 数据源）：身份卡列表 + 预置/自建分计。
+ *  2026-10-24 层级收口：卡库＝身份池，只列未派生的身份卡（克隆实例归虚拟学习者列表）；derived 仍披露实例数。 */
 export async function getCardWallIndex() {
   const rows = await findProfilesForCardWall();
-  const cards = buildCardWallEntries(rows);
+  const all = buildCardWallEntries(rows);
+  const cards = all.filter((c) => !c.derivedFrom);
   return {
     cards,
     summary: {
       total: cards.length,
       builtin: cards.filter((c) => c.preset).length,
       custom: cards.filter((c) => !c.preset).length,
-      /** 已派生实例（带 derivedFrom 的卡）：卡库=身份池，此数说明池里有多少条已派生出虚拟学习者 */
-      derived: cards.filter((c) => c.derivedFrom).length,
+      derived: all.length - cards.length, // 已派生实例数：不在这面墙上，点 KPI 去虚拟学习者列表看
     },
   };
 }
-
 /* ============ 卡 → 虚拟学习者（2026-10-16 用户拍板：卡=身份模板，派生=建运行实例） ============
    卡库是「身份池」：一张卡 = 一份身份模板（人设 + 若干任务），虚拟学习者 = 用某张模板派生的实例。
    派生取「身份克隆」而非「引用」语义——同一张卡可反复派生多个独立实例，源卡留在池里。

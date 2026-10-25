@@ -16,6 +16,7 @@ import { loadSkillsFile } from '../services/skill-registry/skills-file';
 import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
 import { getRuntimeCapabilityProbeEnabled } from '../services/capability-probe-settings.service';
 import { loadInfraModelConfig } from '../services/embedding/infra-config.service';
+import { loadPluginProviderConfig } from '../services/plugin-providers.service';
 
 /**
  * 初始化 EduClaw Gateway
@@ -35,6 +36,17 @@ export async function initializeGateway(): Promise<EduClawGateway> {
     });
   } catch (error) {
     logger.warn('[startup] 基础设施模型配置加载失败，按环境变量兜底', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // 插件外部服务（联网 / 决策 / 生图）：provider 密钥与入口水合进同步快照。
+  // 失败不阻断：各 provider 读取时直接回落环境变量。
+  try {
+    await loadPluginProviderConfig();
+    logger.info('[startup] 插件外部服务配置已加载');
+  } catch (error) {
+    logger.warn('[startup] 插件外部服务配置加载失败，按环境变量处理', {
       error: error instanceof Error ? error.message : String(error),
     });
   }

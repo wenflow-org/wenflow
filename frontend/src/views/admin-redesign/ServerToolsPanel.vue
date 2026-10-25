@@ -127,7 +127,6 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">事件投递失败</h4>
-        <span class="mk-card__meta">这些事件未能送达，可在此人工重放</span>
         <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn——
              零值与加载中不得伪装成「确认无死信」 -->
         <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
@@ -324,7 +323,7 @@ async function requeueAll() {
     title: '重放全部失败事件',
     message: `将把全部 ${deadCount.value} 条投递失败的事件重新投递一次，可能产生重复的业务副作用。确定继续？`,
     confirmText: '全部重放',
-    danger: false,
+    danger: true,
   })
   if (!ok) return
   requeueBusy.value = true
@@ -368,7 +367,7 @@ async function requeueOne(eventType: string) {
     title: '重放该类事件',
     message: `将把「${eventType}」类全部投递失败的事件重新投递一次（当前清单内 ${count} 条），可能产生重复的业务副作用。确定继续？`,
     confirmText: '重放该类',
-    danger: false,
+    danger: true,
   })
   if (!ok) return
   requeueBusy.value = true

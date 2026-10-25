@@ -87,8 +87,8 @@
           <div v-for="(s, i) in stages" :key="s.id" class="orch-odg-col">
             <header class="orch-odg-colhead">
               <span class="orch-odg-no">{{ i + 1 }}</span>
-              <span class="orch-odg-colname">{{ s.name }}</span>
-              <span class="orch-odg-agent mono">{{ s.agentId }}</span>
+              <span class="orch-odg-colname" :title="s.name">{{ s.name }}</span>
+              <span class="orch-odg-agent mono" :title="s.agentId">{{ s.agentId }}</span>
             </header>
             <div class="orch-odg-body">
               <button
@@ -108,9 +108,13 @@
             </div>
             <footer class="orch-odg-foot">
               <!-- 字段契约三态：未加载显「…」（不按 0 渲染——加载完成前「入 0」与「真无必填」不可分辨；
-                   部分阶段确无必填入参，加载后「入 0」属实） -->
-              <span class="orch-odg-chip orch-odg-chip--in" :title="contractOf(s.id).loaded ? contractTitle('in', contractOf(s.id).ins.length) : '字段契约加载中…'">入 {{ contractOf(s.id).loaded ? contractOf(s.id).ins.length : '…' }}</span>
-              <span class="orch-odg-chip orch-odg-chip--out" :title="contractOf(s.id).loaded ? contractTitle('out', contractOf(s.id).outs.length) : '字段契约加载中…'">出 {{ contractOf(s.id).loaded ? contractOf(s.id).outs.length : '…' }}</span>
+                   部分阶段确无必填入参，加载后「入 0」属实）。
+                   2026-10-24：计数单独一行，字段名另占一行并允许两行——不再用 nowrap+ellipsis
+                   把唯一字段信息裁成一条。 -->
+              <div class="orch-odg-counts">
+                <span class="orch-odg-chip orch-odg-chip--in" :title="contractOf(s.id).loaded ? contractTitle('in', contractOf(s.id).ins.length) : '字段契约加载中…'">入 {{ contractOf(s.id).loaded ? contractOf(s.id).ins.length : '…' }}</span>
+                <span class="orch-odg-chip orch-odg-chip--out" :title="contractOf(s.id).loaded ? contractTitle('out', contractOf(s.id).outs.length) : '字段契约加载中…'">出 {{ contractOf(s.id).loaded ? contractOf(s.id).outs.length : '…' }}</span>
+              </div>
               <span class="orch-odg-fields" :title="contractOf(s.id).outs.join(' · ')">{{ contractOf(s.id).outs.slice(0, 4).join(' · ') }}<template v-if="contractOf(s.id).outs.length > 4">…</template></span>
             </footer>
           </div>
@@ -233,6 +237,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import { onTabRowKeydown } from '@/utils/rovingTablist'
 
 /** 阶段工作区子面板：总览（五阶段全貌，缺省）+ 阶段内两枚子视图（字段路由 / 治理）。
      沙盘契约 2026-10-05 下线（内容被 总览列脚 + 字段旅程 + 字段路由 三处覆盖，
@@ -252,24 +257,8 @@ const paneLabel = computed(() => {
   return SUB_PANES.find((p) => p.id === pane.value)?.label ?? '字段旅程'
 })
 /* 页签键盘契约（审核 #97）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换并移动焦点，
-   兑现 role=tablist/role=tab 的 ARIA tabs 语义。两级页签行（一级=总览+阶段、二级=阶段内子视图）
-   共用一份实现：按各自行内 role=tab 的 DOM 顺序走，选中项由 activate 回调落到状态上。 */
-function onTabRowKeydown(e: KeyboardEvent, activate: (index: number) => void) {
-  const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
-  if (!keys.includes(e.key)) return
-  const row = e.currentTarget as HTMLElement
-  const btns = Array.from(row.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-  const cur = btns.findIndex((b) => b === document.activeElement)
-  if (cur < 0 || !btns.length) return
-  e.preventDefault()
-  const n = btns.length
-  const next = e.key === 'ArrowRight' ? (cur + 1) % n
-    : e.key === 'ArrowLeft' ? (cur - 1 + n) % n
-      : e.key === 'Home' ? 0 : n - 1
-  activate(next)
-  // 切换后焦点跟随新页签（ARIA tabs 惯例）；等 tabindex 更新后再聚焦
-  void nextTick(() => btns[next]?.focus())
-}
+   兑现 role=tablist/role=tab 的 ARIA tabs 语义。实现已抽到 @/utils/rovingTablist，
+   一级（总览+阶段）、二级（阶段内子视图）与其它页面的页签行共用同一份。 */
 function onTopTabKeydown(e: KeyboardEvent) {
   onTabRowKeydown(e, (i) => {
     if (i === 0) goOverview()
@@ -586,6 +575,8 @@ function contractOf(id: string): StageFieldContract {
 
 /** 画布重算：列位置量出后画三次贝塞尔连线（仅箭头；字段明细不在边上渲染，
      见总览卡头注释——边标签曾压住相邻列节点文字，2026-10-04 撤） */
+/** 画布重算：列位置量出后画连线（仅箭头；字段明细不在边上渲染，
+     见总览卡头注释——边标签曾压住相邻列节点文字，2026-10-04 撤） */
 function layoutOrch() {
   const svg = odgSvgEl.value
   const canvas = odgCanvasEl.value
@@ -601,15 +592,28 @@ function layoutOrch() {
   svg.setAttribute('height', String(H))
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
   let out = '<defs><marker id="orchOdgArrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z"/></marker></defs>'
+  /* 锚点 = 阶段头（.orch-odg-colhead）的垂直中线，不再取整列的垂直中点（2026-10-21 用户
+     「线的位置不对 错位」）：列高随 Skill 条数从 148px 到 852px 不等，取列中点会让箭头落在
+     卡片之间的空白里（实测终点停在 2.2 与 2.3 之间、5.5 那一行），看起来既没接上游也没进下游。
+     阶段头是所有列在同一 y 起排的（同 flex 行），锚到它 → 四条线全水平，读作「阶段 1→2→3→4→5」。
+     坐标仍取 offset*（自有 px，不随 zoom 变），阶段头高度用 offsetHeight。 */
   for (let i = 0; i < cols.length - 1; i++) {
     const a = cols[i]
     const b = cols[i + 1]
+    const ha = a.querySelector<HTMLElement>('.orch-odg-colhead')
+    const hb = b.querySelector<HTMLElement>('.orch-odg-colhead')
     const x1 = a.offsetLeft + a.offsetWidth + 2
-    const y1 = a.offsetTop + Math.round(a.offsetHeight / 2)
+    const y1 = a.offsetTop + Math.round((ha ? ha.offsetHeight : a.offsetHeight) / 2)
     const x2 = b.offsetLeft - 6
-    const y2 = b.offsetTop + Math.round(b.offsetHeight / 2)
-    const dx = Math.max(26, Math.round((x2 - x1) / 2))
-    out += `<path class="orch-odg-edge" d="M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}" marker-end="url(#orchOdgArrow)"/>`
+    const y2 = b.offsetTop + Math.round((hb ? hb.offsetHeight : b.offsetHeight) / 2)
+    // 两端同高（阶段头对齐）时画直线；万一将来列头不同高，仍用贝塞尔，避免折角
+    const d = Math.abs(y2 - y1) < 1
+      ? `M${x1} ${y1} L${x2} ${y2}`
+      : (() => {
+        const dx = Math.max(26, Math.round((x2 - x1) / 2))
+        return `M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`
+      })()
+    out += `<path class="orch-odg-edge" d="${d}" marker-end="url(#orchOdgArrow)"/>`
   }
   svg.innerHTML = out
 }
@@ -817,7 +821,7 @@ const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + sta
     目录档案数（不含插件）。三数不必相等，问「平台共多少 Skill」先确认口径。 */
 const skillKpiTitle = computed(
   () =>
-    `编排图内挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）。治理卡「Skill 定义」与侧栏徽章的统计范围不同，数值不必相等`
+    `编排图内挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）`
 )
 /* 页级「未解析」读数（原告警条用）已随告警迁健康中心（检查项 orchestration-steps）删除；
    行级读数曾挂在「阶段交接明细」表的徽章上（unresolvedOf/哈希漂移），该表 2026-10-13 整体删除。 */
@@ -952,10 +956,13 @@ html[data-theme='dark'] {
   flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px; cursor: grab;
   display: flex; align-items: flex-start;
 }
+/* 2026-10-24：画布纵向拉伸到滚动区高度，五列才能等高（原先各列按 Skill 条数自然高，
+   列脚上下错位）。同特异性后置覆盖，保持上方居中契约的源码形态。 */
+.orch-odg-scroll { align-items: stretch; }
 .orch-odg-scroll.is-panning,
 .orch-odg-scroll.is-panning .orch-odg-node { cursor: grabbing; }
 .orch-odg-canvas {
-  position: relative; display: flex; align-items: flex-start; gap: 100px;
+  position: relative; display: flex; align-items: stretch; gap: 100px;
   /* 2026-10-13 宽屏舒展：原「width: max-content + margin-inline: auto」在 4K 上五列只占
      ~1560（卡宽实测 3440 视觉 px），两侧各空约 700px。改为撑满滚动区，富余宽度由
      .orch-odg-col 的 flex-grow 摊给各列，节点与字段行随之变宽、更好读。
@@ -969,7 +976,16 @@ html[data-theme='dark'] {
   flex: none; margin: auto;
   width: 100%;
 }
-.orch-odg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+/* 只保留水平居中：纵向 auto 边距会吃掉 stretch，列高回到内容高（等高列脚见下） */
+.orch-odg-canvas { margin: 0 auto; }
+.orch-odg-svg {
+  position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible;
+  /* 覆盖 main.css 里 img/svg/video/canvas 的全局 max-width:100%（2026-10-21 用户「线的位置
+     不对 错位」的真因）：窄档画布容器只有 770px 宽，而连线 SVG 的语言宽是 1172（= 五列最小宽），
+     max-width 把整张 SVG 等比缩到 65.7% 并按 preserveAspectRatio 垂直居中 → 4 条线整体上移、
+     端点落在卡片之间的空白里。画布本来就靠滚动区承接溢出，SVG 不该被容器夹窄。 */
+  max-width: none;
+}
 .orch-odg-edge { fill: none; stroke: var(--mk-blue, #2f6ae0); stroke-width: 1.6; opacity: 0.85; }
 .orch-odg-svg marker path { fill: var(--mk-blue, #2f6ae0); }
 /* 列宽地板必须显式：flex 项默认 min-width:auto 的内容地板会被列脚 nowrap 的 outs 长串
@@ -989,9 +1005,17 @@ html[data-theme='dark'] {
   color: var(--mk-accent-deep, #1f57cc);
   font-size: var(--mk-fs-micro, 12px); font-weight: 700;
 }
-.orch-odg-colname { font-weight: 700; font-size: var(--mk-fs-micro, 12px); color: var(--mk-ink); }
-.orch-odg-agent { margin-left: auto; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
-.orch-odg-body { display: flex; flex-direction: column; gap: 6px; }
+/* 阶段头必须单行：1440/1080 档 196px 列宽下 agent id 会折成第二行（实测头高 39→59），
+   各列头高不一致 → 连线锚点高低不齐。名称固定、agent id 吃剩余宽度并省略（hover 看全量）。 */
+.orch-odg-colname {
+  font-weight: 700; font-size: var(--mk-fs-micro, 12px); color: var(--mk-ink);
+  flex: 0 0 auto; white-space: nowrap;
+}
+.orch-odg-agent {
+  margin-left: auto; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.orch-odg-body { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; }
 .orch-odg-node {
   display: grid; gap: 1px; width: 100%; padding: 8px 10px; text-align: left;
   border: 1px solid var(--mk-line, #e6ebf4); border-radius: var(--mk-radius-lg, 10px);
@@ -1009,7 +1033,13 @@ html[data-theme='dark'] {
   overflow-wrap: anywhere;
 }
 /* 审核 #117：.orch-odg-nodemeta 规则随节点内重复 agentId 一起删（列头已承接，类无消费者） */
-.orch-odg-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
+/* 列脚压到统一列底：margin-top:auto + 计数/字段分两行，字段名允许两行（不再 nowrap 硬切） */
+.orch-odg-foot {
+  margin-top: auto;
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+  padding-top: 2px;
+}
+.orch-odg-counts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .orch-odg-chip {
   font-size: var(--mk-fs-micro, 12px); padding: 1px 6px;
   border-radius: var(--mk-radius-sm, 6px);
@@ -1020,7 +1050,10 @@ html[data-theme='dark'] {
    绿系 chip 字色改绿深档，让「蓝=入参/交互、绿=产出」在字色层也成立 */
 .orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-green, #15803d); }
 .orch-odg-fields {
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+  /* 字段名是列脚唯一的信息，允许折两行；超长才省略，完整值仍在 title */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
   font-family: var(--mk-mono, Consolas, monospace);
   font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
 }

@@ -155,7 +155,9 @@ function readMessageTimestamps(messages: unknown): number[] {
  */
 function estimateActiveMinutes(
   session: { messages?: unknown; teachingState?: unknown; updatedAt?: Date | string | null } | null | undefined,
-  startMs: number
+  startMs: number,
+  /** 预解析的消息时间戳（调用方已 parse 过 messages 时传入，避免同一大 JSON 解析两遍） */
+  precomputedTimes?: number[]
 ): number {
   const state = parseJsonColumn(session?.teachingState);
   const artifacts = (state?.sessionArtifacts && typeof state.sessionArtifacts === 'object')
@@ -164,7 +166,7 @@ function estimateActiveMinutes(
   let pausedDurationMs = Number(artifacts?.pausedDurationMs ?? 0);
   if (!Number.isFinite(pausedDurationMs) || pausedDurationMs < 0) pausedDurationMs = 0;
 
-  const times = readMessageTimestamps(session?.messages);
+  const times = precomputedTimes ?? readMessageTimestamps(session?.messages);
   const pausedAtMs = typeof artifacts?.pausedAt === 'string' ? new Date(artifacts.pausedAt).getTime() : NaN;
   const updatedAtMs = session?.updatedAt ? new Date(session.updatedAt).getTime() : NaN;
   // 终点信号优先级：暂停中 → pausedAt（那一刻离开）；否则 → updatedAt（最后一次动作）。
@@ -232,8 +234,10 @@ export function normalizeSessionDurationMinutes(session: {
   // 同日总计「2 次 · 1624 分钟」与累计「1756 分钟」全是假数；同一天里
   // 「已超时」的同类中止会话却因走封顶分支显示 30 分钟——三条路径三种口径。
   // 现在：无消息 = 无学习证据 → 0（前端显示「—」）；有消息 → 与结束分支同档封顶。
-  if (!readMessageTimestamps(session?.messages).length) return 0;
-  return Math.max(1, Math.min(30, estimateActiveMinutes(session, start)));
+  // messages 只解析一次，时间戳数组传给 estimateActiveMinutes 复用（旧口径同一大 JSON parse 两遍）。
+  const messageTimes = readMessageTimestamps(session?.messages);
+  if (!messageTimes.length) return 0;
+  return Math.max(1, Math.min(30, estimateActiveMinutes(session, start, messageTimes)));
 }
 
 export function normalizeStringArray(value: any): string[] {
@@ -270,7 +274,9 @@ export function buildConceptMap(cognitiveDesign: PathCognitiveDesign | null | un
 export function resolveTaskConcept(
   linkedConceptId: string | null | undefined,
   cognitiveDesign: PathCognitiveDesign | null | undefined,
-  fallbackText?: string | null | undefined
+  fallbackText?: string | null | undefined,
+  /** 预建的概念 Map：循环内逐任务调用时由调用方建一次传入，避免每任务重建整张 Map */
+  prebuiltConceptMap?: Map<string, PathCognitiveConcept>
 ): {
   linkedConceptId: string | null;
   linkedConceptName: string | null;
@@ -278,7 +284,7 @@ export function resolveTaskConcept(
   conceptSource: 'linked-concept' | 'fallback-text' | 'missing';
 } {
   const conceptId = normalizeConceptText(linkedConceptId);
-  const conceptMap = buildConceptMap(cognitiveDesign);
+  const conceptMap = prebuiltConceptMap ?? buildConceptMap(cognitiveDesign);
   const concept = conceptId ? conceptMap.get(conceptId) : null;
 
   if (concept) {

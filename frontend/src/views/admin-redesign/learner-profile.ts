@@ -183,7 +183,8 @@ export function memoryReviewUrl(userId: string): string {
  */
 export interface ListQueryState {
   pill: Ref<string>
-  keyword: Ref<string>
+  /** 搜索词；无搜索框的列表（如记忆与复习总览）可省略 */
+  keyword?: Ref<string>
   page: Ref<number>
   pageSize?: Ref<number>
   /** 附加下钻筛选（LearnerCenter 置信分段），null = 未下钻 */
@@ -258,8 +259,9 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
   const allowedPills = state.allowedPills
   const defaultSize = state.defaultPageSize ?? 15
   const extras = state.extra ?? []
+  const hasKeyword = !!state.keyword
   const managed = (): string[] =>
-    [K.pill, K.keyword, K.page, ...(state.pageSize ? [K.pageSize] : []), ...(state.bin ? [K.bin] : []), ...extras.map((e) => e.key)]
+    [K.pill, ...(hasKeyword ? [K.keyword] : []), K.page, ...(state.pageSize ? [K.pageSize] : []), ...(state.bin ? [K.bin] : []), ...extras.map((e) => e.key)]
   const str = (v: unknown): string => (typeof v === 'string' ? v : '')
   const posInt = (v: unknown, fallback: number): number => {
     const n = Number(str(v))
@@ -270,7 +272,7 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
   function desired(): Record<string, string> {
     const d: Record<string, string> = {}
     if (state.pill.value !== 'all') d[K.pill] = state.pill.value
-    if (state.keyword.value.trim()) d[K.keyword] = state.keyword.value.trim()
+    if (state.keyword?.value.trim()) d[K.keyword] = state.keyword.value.trim()
     if (state.page.value > 1) d[K.page] = String(state.page.value)
     if (state.pageSize && state.pageSize.value !== defaultSize) d[K.pageSize] = String(state.pageSize.value)
     if (state.bin && state.bin.value != null) d[K.bin] = String(state.bin.value)
@@ -290,7 +292,7 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
     const q = r.query
     const rawPill = str(q[K.pill])
     state.pill.value = rawPill && (!allowedPills || allowedPills.includes(rawPill)) ? rawPill : 'all'
-    state.keyword.value = str(q[K.keyword])
+    if (state.keyword) state.keyword.value = str(q[K.keyword])
     state.page.value = posInt(q[K.page], 1)
     if (state.pageSize) state.pageSize.value = posInt(q[K.pageSize], defaultSize)
     if (state.bin) {
@@ -316,7 +318,7 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
   watch(
     () => [
       state.pill.value,
-      state.keyword.value,
+      state.keyword?.value,
       state.page.value,
       state.pageSize?.value,
       state.bin?.value,

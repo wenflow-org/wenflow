@@ -2,18 +2,12 @@
   <div class="mk-page mk-page--fill oh-host">
     <!-- 页头（newui/admin pagehead）：页名 + 页级读数的口径开关与刷新/重试
          （2026-10-04 状态条退役：整块下线，读数各归其位） -->
-    <MkPageHead title="运营中心" sub="运营待办、用户反馈、成就与公告运营 · 运维工具、数据导出与会话安全">
+    <MkPageHead title="运营中心">
       <template #actions>
         <!-- 视角开关随页级读数带走（2026-10-18）：读数带在任何页签都在（见下），它管的就是那几个数
              ——留在「运营待办」卡头会变成「数在页级、开关在某个页签里」。口径开关收页头同学习组六页判例。 -->
-        <span class="oh-scope" title="反馈与生成失败路径按视角计数。事件投递失败与草稿公告为系统全域，不随视角变化">
-          <DataScopeToggle v-model="wbScope" />
-        </span>
-        <!-- 刷新钮在所有页签都在：页级读数带在 8 个页签都可见（含 export 表单页），
-             待办域始终有可刷的东西；失败时它是读数带的重试出口，故文案随读数带的失败态走 -->
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshActive">
-          {{ refreshing ? '刷新中…' : (wbHasError ? '重试' : '刷新') }}
-        </button>
+        <!-- 2026-10-23：刷新跟顶栏（liveRefreshSeq → refreshActive，含当前页签面板与失败态的读数带重试），
+             页头不再出第二颗 -->
       </template>
     </MkPageHead>
 
@@ -22,9 +16,12 @@
          页签里，成了「页签内才有、页签名还与本块同名」的错位；升为页级 = 页级概览 + 页签内工作台，
          页签体内的清单只留行动（事项 + 类别 + 去处理），数字不再讲两遍。
          失败必须显式落地：取不到 ≠ 没事（原实现把失败写成 0，页面伪装成「全部已清零」） -->
-    <p v-if="wbHasError" class="mk-alert" role="alert">
-      待办数据加载失败，对应计数不可信：{{ wbErrorText }}
-    </p>
+    <!-- 失败态的重试出口不放页头（顶栏已有刷新，页头第二颗钮重复）：失败时本行就地给重试
+         2026-10-23，与记忆与复习总览的失败条同一形态 -->
+    <div v-if="wbHasError" class="mk-alert mk-alert--row" role="alert">
+      <span class="mk-alert__msg">待办数据加载失败，对应计数不可信：{{ wbErrorText }}</span>
+      <button type="button" class="mk-alert__btn" :disabled="refreshing" @click="refreshActive">{{ refreshing ? '重试中…' : '重试' }}</button>
+    </div>
     <!-- 首屏加载态：待办请求在途且尚无 stats 时渲染骨架，不落定 0 值读数 -->
     <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="1" />
     <section v-else class="mk-kpi-grid oh-metrics" aria-label="运营待办读数">
@@ -34,7 +31,7 @@
         :label="m.label"
         :value="m.failed ? '—' : m.count"
         :tone="countTone(m)"
-        :hint="m.failed ? '加载失败，计数不可信' : (TODO_METRIC_FOOT[m.key] ?? '')"
+        :hint="m.failed ? '加载失败，计数不可信' : ''"
         :hint-tone="m.failed ? 'bad' : ''"
       />
     </section>
@@ -44,14 +41,17 @@
          各视图计数以角标随页签呈现，形态同共享 MkSubTabs 的 count 角标） -->
     <div class="tabs" role="tablist" aria-label="运营中心视图切换" @keydown="onTabKeydown">
       <button type="button" class="tab" role="tab" id="oh-tab-todo" :ref="(el) => setTabRef(el, 0)" :tabindex="tab === 'todo' ? 0 : -1" aria-controls="oh-panel-todo" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count" :title="domainCount.feedback === null ? TAB_COUNT_LOADING_TITLE : undefined">{{ domainCount.feedback === null ? '未加载' : domainCount.feedback }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? TAB_COUNT_LOADING_TITLE : '含虚拟学习者'">{{ domainCount.achievements === null ? '未加载' : domainCount.achievements }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span class="tab__count" :title="announcePillTitle">{{ announcePillCount }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? TAB_COUNT_LOADING_TITLE : undefined">{{ domainCount.inapp === null ? '未加载' : domainCount.inapp }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span v-if="domainCount.feedback !== null && domainCount.feedback >= 0" class="tab__count" title="待处理反馈数（可操作量）">{{ domainCount.feedback }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就</button>
+      <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span v-if="announcePillCount !== ''" class="tab__count" :title="announcePillTitle">{{ announcePillCount }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span v-if="domainCount.inapp !== null && domainCount.inapp >= 0" class="tab__count" title="未读通知数（可操作量）">{{ domainCount.inapp }}</span></button>
+      <!-- 域分界（2026-10-24）：左四是内容运营，右三是系统运维。两组动作的后果不同
+           （改文案 vs 重放事件/导数据/踢会话），用一条竖线把「谁来处理」分开。 -->
+      <span class="tabs__sep" aria-hidden="true"></span>
       <!-- 系统工具三页签（2026-10-16 由退役的「系统工具」场景整体迁入：运维工具/数据导出/会话安全） -->
-      <button type="button" class="tab" role="tab" id="oh-tab-tools" :ref="(el) => setTabRef(el, 5)" :tabindex="tab === 'tools' ? 0 : -1" aria-controls="oh-panel-tools" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-export" :ref="(el) => setTabRef(el, 6)" :tabindex="tab === 'export' ? 0 : -1" aria-controls="oh-panel-export" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-security" :ref="(el) => setTabRef(el, 7)" :tabindex="tab === 'security' ? 0 : -1" aria-controls="oh-panel-security" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span class="tab__count" :title="domainCount.security === null ? TAB_COUNT_LOADING_TITLE : undefined">{{ domainCount.security === null ? '未加载' : domainCount.security }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-tools" :ref="(el) => setTabRef(el, 5)" :tabindex="tab === 'tools' ? 0 : -1" aria-controls="oh-panel-tools" :aria-selected="tab === 'tools'" title="系统运维：失败事件重放与运维工具" @click="switchTab('tools')">运维工具</button>
+      <button type="button" class="tab" role="tab" id="oh-tab-export" :ref="(el) => setTabRef(el, 6)" :tabindex="tab === 'export' ? 0 : -1" aria-controls="oh-panel-export" :aria-selected="tab === 'export'" title="系统运维：全量数据导出" @click="switchTab('export')">数据导出</button>
+      <button type="button" class="tab" role="tab" id="oh-tab-security" :ref="(el) => setTabRef(el, 7)" :tabindex="tab === 'security' ? 0 : -1" aria-controls="oh-panel-security" :aria-selected="tab === 'security'" title="系统运维：在线会话与强制下线" @click="switchTab('security')">会话安全<span v-if="domainCount.security !== null && domainCount.security >= 0" class="tab__count" title="活跃会话数（可操作量）">{{ domainCount.security }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运营待办（原运营中心全量内容） ===== -->
@@ -150,7 +150,6 @@
     <section v-if="livePublished.length" class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">生效中公告</h4>
-        <button type="button" class="mk-link" @click="goAnnouncements">全部公告 →</button>
       </div>
       <div class="ow-ann-list">
         <button v-for="a in livePublished" :key="a.id" type="button" class="ow-ann" @click="goAnnouncements">
@@ -164,7 +163,7 @@
     </div><!-- /oh-body -->
     </template>
 
-    <!-- ===== Tab2: 反馈（Feedback embedded） ===== -->
+    <!-- ===== Tab2: 反馈（Feedback embedded；口径开关已退役，默认全部非虚拟账号） ===== -->
     <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" @status="onFeedbackStatus" />
     <!-- ===== Tab3: 成就（OpsAchievements embedded） ===== -->
     <OpsAchievements v-else-if="tab === 'achievements'" id="oh-panel-achievements" role="tabpanel" aria-labelledby="oh-tab-achievements" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
@@ -218,7 +217,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { timeAgo, liveAnnouncements, liveFailures, errMsg } from './live'
+import { timeAgo, liveAnnouncements, liveFailures, errMsg, liveRefreshSeq } from './live'
 import { intent } from './store'
 import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
 import { announcementCounts, segmentPct, PATH_STATUS_TEXT } from './opsShared'
@@ -232,7 +231,6 @@ import SessionSecurity from './SessionSecurity.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkStageband from '@/components/mk/MkStageband.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
 /* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知 · 运维工具 · 数据导出 · 会话安全 =====
@@ -243,17 +241,16 @@ import MockSkeletonTable from './SkeletonTable.vue'
    在 router 重定向到对应 tab。 */
 const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp', 'tools', 'export', 'security'] as const
 
-/* 文案单源（R6 复读单源化）：三个页签角标的「未加载」悬停释共用一份 */
-const TAB_COUNT_LOADING_TITLE = '进入该页签后加载计数'
 type OhTab = (typeof OH_TABS)[number]
 const tab = ref<OhTab>('todo')
 const route = useRoute()
 const router = useRouter()
 
 /** 宿主域计数（由激活子视图上报）：反馈总数 / 解锁数 / 公告数 / 通知数 / 会话数。
-    null = 该子页签尚未访问、计数未拉取 → 页签角标显「未加载」弱灰字，
-    不显 0（EG10：0 会被读成「确认无数据」，是假信号）。会话安全角标判例同此
-    （原 OpsCenter：0 会被读成「确认无会话」，是另一种假信号）。 */
+    null = 该子页签尚未访问、计数未拉取 → 2026-10-21 起角标不渲染（用户「我刚进来就显示
+    未加载，为什么会有这个状态」）：「未加载」是页面自己的取数状态，不是待处理量，
+    挂在页签上会被读成第 N 项待办。有数就显示数字，没拉过就什么都不显示
+    （0 照常显示——0 是「确认没有」，与「还没查」不是一回事）。 */
 const domainCount = ref<{ feedback: number | null; achievements: number | null; announce: number | null; inapp: number | null; security: number | null }>({
   feedback: null,
   achievements: null,
@@ -271,6 +268,9 @@ const notifRef = ref<{ reload?: () => void; openSend?: () => void } | null>(null
 const toolsRef = ref<{ refresh?: () => void } | null>(null)
 const securityRef = ref<{ refresh?: () => void } | null>(null)
 const refreshing = ref(false)
+/* 顶栏刷新广播：与旧页头刷新钮同一入口（当前页签面板 + 待办读数带） */
+watch(liveRefreshSeq, () => { void refreshActive() })
+
 async function refreshActive() {
   if (refreshing.value) return
   refreshing.value = true
@@ -284,7 +284,8 @@ async function refreshActive() {
     /* 页级读数带在 8 个页签都可见（2026-10-18），所以待办域始终可刷：
        todo / export 无本页签面板，直接刷读数带；其它页签在刷本面板之后再补一次待办域
        ——失败态下页头钮是「重试」，点它必须真的重拉读数带，不能刷成别的面板。 */
-    if (tab.value === 'todo' || tab.value === 'export' || wbHasError.value) await loadWorkbench()
+    /* 页级读数带常驻 8 个页签，任何页签刷新都要重拉它（2026-10-24 修「切走页签后读数带陈旧」） */
+    await loadWorkbench()
   } finally {
     refreshing.value = false
   }
@@ -303,9 +304,16 @@ watch(
 /** 切页签 + 写 URL。F5-3 审核：intent 直达必须与点页签同构——URL 才是可刷新/可复制/
     可后退的权威；原先 intent 路径只改 tab.value 不写 URL，地址栏停在 ?tab=todo
     （页面与地址栏脱节，刷新/复制链接回落「运营待办」）。单测可无 router 挂载，故访问保持可选 */
+/** 目标页签的 URL query：离开成就页签时清掉子页签键，避免残留 ?tab=feedback&sub=records */
+function queryFor(t: OhTab): Record<string, string | (string | null)[]> {
+  const q: Record<string, string | (string | null)[]> = { ...route?.query, tab: t }
+  if (t !== 'achievements') delete q.sub
+  return q
+}
 function switchTab(t: OhTab) {
   tab.value = t
-  if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+  // push：注释承诺「可后退」——从待办切到反馈后，后退应回待办而不是离开运营中心（2026-10-24）
+  if (route && router && route.query.tab !== t) void router.push({ query: queryFor(t) })
 }
 /** 同场景内的直达：切 tab 且把目的地视图的预筛一并写进 URL（单次 replace）。tab 取显式
     目标值——不用 route.query.tab，它此刻可能仍是旧值，会把 tab 写回去（F5-3 竞态根因）。 */
@@ -313,7 +321,7 @@ function openTabWith(t: OhTab, extra: Record<string, string>) {
   tab.value = t
   if (!route || !router) return
   const changed = route.query.tab !== t || Object.entries(extra).some(([k, v]) => route.query[k] !== v)
-  if (changed) void router.replace({ query: { ...route.query, ...extra, tab: t } })
+  if (changed) void router.push({ query: { ...queryFor(t), ...extra } })
 }
 /** 反馈筛选（?status=）→ URL：由宿主统一写（Feedback 上报筛选值），tab 取本层权威的
     tab.value——子组件自己写会用旧 route.query.tab 覆盖在途的 ?tab= replace（F5-3 竞态）。
@@ -377,9 +385,8 @@ watch(
 )
 
 /* ===== 运营待办：反馈待处理 / 失败路径 / 死信 / 草稿公告 ===== */
-/* 真实/测试互斥视角（2026-10-10 拍板方言）：false=真实用户；true=虚拟学习者与测试账号。
-   反馈与失败路径按此视角计数；事件投递（outbox 死信）与草稿公告是系统全域，不随视角变化 */
-const wbScope = ref(false)
+/* 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+   反馈与失败路径按全部非虚拟账号计数；事件投递（outbox 死信）与草稿公告是系统全域。 */
 const wbPendingFeedback = ref(0)
 const wbFailedPaths = ref(0)
 const wbDeadLetters = ref(0)
@@ -397,10 +404,10 @@ async function loadWorkbench() {
   wbLoading.value = true
   const errors: Record<string, string> = {}
   const [feedbackR, statsR, deadR] = await Promise.allSettled([
-    // 待处理反馈：后端 status=new 计数（与 Feedback 页口径一致）；按真实/测试视角过滤
-    adminFeedbackApi.list({ limit: 1, status: 'new', includeTest: wbScope.value || undefined, testOnly: wbScope.value || undefined }),
-    // 失败路径：学习内容 stats（与内容管理页口径一致）；按真实/测试视角过滤
-    adminLearningContentApi.getStats(wbScope.value || undefined, wbScope.value || undefined),
+    // 待处理反馈：后端 status=new 计数（与 Feedback 页口径一致）
+    adminFeedbackApi.list({ limit: 1, status: 'new' }),
+    // 失败路径：学习内容 stats（与内容管理页口径一致）
+    adminLearningContentApi.getStats(),
     // outbox 死信：系统工具页同源（返回 {deadCount, items}）；系统全域，无视角
     adminDevtoolsApi.getOutboxDead(),
   ])
@@ -450,24 +457,27 @@ const wbErrorText = computed(() =>
     2026-10-06 审核 #173：原句逐项复述数字，与下方四张指标卡 + 行动行构成「同一组四项讲三遍」。
     改为总括句（项数 + 排序 + 直达承诺），逐项数字只留指标卡一处。 */
 const todoConclusion = computed(() => {
-  const pending = todoItems.value.filter((t) => t.count > 0 && !t.failed).length
+  const pendingItems = todoItems.value.filter((t) => t.count > 0 && !t.failed)
+  const pending = pendingItems.length
+  const total = pendingItems.reduce((n, t) => n + t.count, 0)
   /* 有域失败时不得断言「全部已清零」：失败域的计数未被更新，清零结论不可信 */
-  if (wbHasError.value) return pending ? `${pending} 项待处理。另有部分待办加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
+  if (wbHasError.value) return pending ? `${pending} 类 · ${total} 件待处理。另有部分待办加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
   if (!pending) return '运营待办全部已清零'
-  return `${pending} 项待处理`
+  /* 2026-10-24：结论同时给「几类」与「几件」——原「N 项待处理」在跨域清单里分不清是类还是条。
+     保留「N 项待处理」前缀以维持既有文案契约，括号内补类/件口径。 */
+  return `${pending} 项待处理（${pending} 类 · ${total} 件）`
 })
 const TODO_SEV_RANK = { bad: 0, warn: 1, muted: 2 } as const
 /** 页级读数卡的短脚注（4-6 字，同其余页级 KPI 带的口径写法——长句口径住行内 title） */
-const TODO_METRIC_FOOT: Record<string, string> = { feedback: '等待分流', paths: '需排查重规划', dead: '待重放', draft: '待发布' }
 /* 待办四域（单一来源）：页级读数带按此顺序出四张卡，页签内的行动清单按严重度重排。
    零值弱化为「已清零」；域加载失败时该行显示「加载失败」，读数显「—」，都不伪装成 0；
    actionable = 有计数且未失败——「已清零 / 加载失败」行不给 pointer 样式也不挂跳转
    （原实现 cursor 已是 default，点击却仍跳转，是「看起来不可点其实可点」的误导） */
 const todoReadings = computed(() => [
-  { key: 'feedback', label: '待处理反馈', category: '反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback, actionable: !wbErrors.value.feedback && wbPendingFeedback.value > 0 },
-  { key: 'paths', label: '生成失败路径', category: '路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths, actionable: !wbErrors.value.paths && wbFailedPaths.value > 0 },
-  { key: 'dead', label: '事件投递失败', category: '事件', hint: '事件投递失败，影响画像与成就更新', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
-  { key: 'draft', label: '草稿公告', category: '公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value, actionable: !annFailed.value && ann.value.draft > 0 },
+  { key: 'feedback', label: '待处理反馈', category: '反馈', hint: '', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback, actionable: !wbErrors.value.feedback && wbPendingFeedback.value > 0 },
+  { key: 'paths', label: '生成失败路径', category: '路径', hint: '', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths, actionable: !wbErrors.value.paths && wbFailedPaths.value > 0 },
+  { key: 'dead', label: '事件投递失败', category: '事件', hint: '影响画像与成就更新', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
+  { key: 'draft', label: '草稿公告', category: '公告', hint: '', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value, actionable: !annFailed.value && ann.value.draft > 0 },
 ])
 /* 行动清单：按严重度排序（坏>警告>中性，同档按计数降序），与页级读数带是同一份数据的两种排布 */
 const todoItems = computed(() =>
@@ -501,15 +511,16 @@ const announcePillCount = computed(() => {
      不再出现第三种「—」形态；失败语义由 title 说明）。
      措辞从「待访问」改「未加载」（2026-10-13 运营走查 O7）：角标位天然被读成「待处理量」，
      「待访问」在中文里更像「有东西等我访问」，恰好读反——它只说计数还没拉。 */
-  if (annFailed.value) return '未加载'
+  if (annFailed.value) return ''
   const embedded = domainCount.value.announce
-  if (embedded !== null && embedded > 0) return embedded
-  return ann.value.rows
+  /* 0 是「确认没有草稿」，不能因为 0 就回退成公告总数（2026-10-24：角标只报待办量） */
+  if (embedded !== null) return embedded
+  return ann.value.draft
 })
-/** 公告角标悬停说明：失败与未加载分开口径（数字态不给 title，避免复读） */
+/** 公告角标悬停说明：只报草稿（可操作量），全部公告数在公告页内自报 */
 const announcePillTitle = computed(() => {
   if (annFailed.value) return '公告列表加载失败，计数不可信，此处显示为占位'
-  return undefined
+  return '草稿公告数（可操作量）。全部公告数见公告页'
 })
 
 /* 状态面板：路径四态 + 公告三态（比例条 + 行式计数） */
@@ -527,7 +538,8 @@ const pathCards = computed(() => {
   const failedN = s.failed || 0
   return [
     { label: PATH_STATUS_TEXT.active, value: String(s.active || 0), tone: (s.active || 0) > 0 ? ('ok' as const) : '' },
-    { label: PATH_STATUS_TEXT.completed, value: String(s.completed || 0), tone: '' },
+    // 已完成用 info 蓝：与上方构成条 pathSegments 的 completed tone 一致（2026-10-24）
+    { label: PATH_STATUS_TEXT.completed, value: String(s.completed || 0), tone: 'info' as const },
     { label: PATH_STATUS_TEXT.failed, value: String(failedN), tone: failedN > 0 ? ('bad' as const) : '' },
     { label: PATH_STATUS_TEXT.archived, value: String(s.archived || 0), tone: '' },
   ]
@@ -595,18 +607,17 @@ function goContent() {
   }
   intent.scene = 'learning-paths'
 }
-/** 公告管理（运营中心 · 公告 tab） */
+/** 草稿公告 → 本页「公告」页签并预筛草稿（2026-10-24）：此前只设 intent 不切 tab，
+    点「去处理」停在运营待办；预筛进 URL，刷新/复制链接可复原。 */
 function goAnnouncements() {
   intent.tab = 'announce'
+  intent.statusFilter = 'draft'
   intent.scene = 'ops-hub'
+  openTabWith('announce', { status: 'draft' })
 }
 
 /* 默认进入即拉取待办聚合（公告计数由 live 层加载） */
 onMounted(() => {
-  void loadWorkbench()
-})
-/* 切换真实/测试视角 → 按新视角重拉（事件投递与草稿公告全域不变，仍随请求刷新无妨） */
-watch(wbScope, () => {
   void loadWorkbench()
 })
 </script>
@@ -615,6 +626,14 @@ watch(wbScope, () => {
 /* ================= 宿主布局（tab 宿主：运营待办内滚；嵌入子页占满剩余高度） ================= */
 /* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
    （含 __count 角标，mk-primitives.css），本页不再私持拷贝。 */
+/* 内容运营 / 系统运维的域分界：竖线与页签底线同色，高度对齐文字行高 */
+.tabs__sep {
+  align-self: center;
+  width: 1px;
+  height: 14px;
+  margin: 0 8px;
+  background: var(--mk-line);
+}
 /* 待办 tab：内容在宿主 flex 列内独立滚动（页头/页签固定） */
 .oh-body {
   flex: 1 1 auto;
@@ -649,8 +668,6 @@ watch(wbScope, () => {
 .oh-tabbar .mk-btn { margin-left: auto; }
 /* 待办卡头左组（卡头成组判例）：标题+结论成组吃 flex，视角切换贴右 */
 .oh-wb-head { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.oh-scope { flex: none; }
-
 /* ================= 运营工作台（待办清单 + 状态面板，区别于 Dashboard 统计卡） ================= */
 /* 状态面板：路径 / 公告并列（行式计数 + 比例条，非 KPI 卡） */
 .ow-panels {

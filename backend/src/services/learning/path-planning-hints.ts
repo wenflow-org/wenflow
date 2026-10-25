@@ -10,6 +10,7 @@ import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig } from
 import { normalizePathDifficulty } from './path-difficulty';
 import { normalizeDeadlineDate } from './deadline-date';
 import { resolveCapacity, parseSessionMinutes } from './capacity-authority';
+import { dayKeyOf, endOfDay, parseDayKeyStart } from '../time/day-boundary';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
 export type TimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
@@ -87,14 +88,21 @@ export function inferMaxWeeksFromTimeHorizon(timeHorizon: string | null, now: Da
   const withYear = text.match(/(\d{4})\s*年\s*(\d{1,2})\s*月(?:\s*(\d{1,2})\s*[日号])?/);
   const withoutYear = withYear ? null : text.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
   if (withYear || withoutYear) {
-    const year = withYear ? Number(withYear[1]) : now.getFullYear();
+    // 「当前年份」按应用时区取（dayKeyOf），不用机器本地 getFullYear——跨时区部署下
+    // 12 月末的机器可能已经算到下一年（#12 日界口径统一，2026-10-24）
+    const year = withYear ? Number(withYear[1]) : Number(dayKeyOf(now).slice(0, 4));
     const month = Number(withYear ? withYear[2] : withoutYear![1]);
     const day = Number((withYear ? withYear[3] : withoutYear![2]) || 1);
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      let target = new Date(year, month - 1, day, 23, 59, 59);
+    // 月内日界校验：旧口径只查 day<=31，「2月31日」会被 JS 静默滚成 3月3日
+    const daysInMonth = month >= 1 && month <= 12 ? new Date(Date.UTC(year, month, 0)).getUTCDate() : 0;
+    if (month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth) {
+      const dayKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      // 目标时刻 = 该**应用时区本地日**的 23:59:59.999（日界单一真理源）。旧口径
+      // new Date(y, m-1, d, 23:59:59) 用服务器机器时区，机器不在 Asia/Shanghai 时会漂移。
+      let target = endOfDay(parseDayKeyStart(dayKey));
       // 无年份的日期若已过，按「下一次」算（10 月说「12月15日」= 今年的 12 月 15 日）
       if (!withYear && target.getTime() < now.getTime()) {
-        target = new Date(year + 1, month - 1, day, 23, 59, 59);
+        target = endOfDay(parseDayKeyStart(`${year + 1}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`));
       }
       const weeks = (target.getTime() - now.getTime()) / (7 * 24 * 60 * 60 * 1000);
       if (weeks > 0) return Math.round(weeks * 10) / 10;
@@ -717,6 +725,10 @@ export function derivePlanningHints(
         ? [Math.max(2, targetSubtasksPerStage - 3), Math.min(subtasksCap, targetSubtasksPerStage + 3)]
         : [fallbackPerStage, subtasksCap])
     : subtasksPerStageRange;
+    // 注（有意豁免，非遗漏）：上面任务区间在 subtasksCap=2（一节课量级）时允许塌成 [2,2] 单点
+    // ——与不变量 A（仅约束**里程碑**区间）不同：任务硬钳制本就是 ONE_SITTING 的 [1,2]
+    // （clampStageTasksToHints 用 subtasksPerStageRange，不用本区间），此处单点只是把
+    // "一节课 = 每段 2 任务"的锚如实交给提示词；放宽成 [2,3] 反而造成提示词与钳制不一致。
 
   // ---- 量级锚（2026-09-27 横向扩测驱动）：switch-data 270h 预算实得 94.5h（收缩比 0.35）——
   // 扩容块抬了结构天花板，但模型惯性仍按 ~11h/阶段、~60min/任务填充，守恒 prompt 的抽象区间被无视。
@@ -796,19 +808,22 @@ export function derivePlanningHints(
     const capacityHours = (lessonCountCap * lessonMinutesCap * targetMilestones) / 60;
     const deficitRatio = 1 - capacityHours / estimatedHoursTotal;
     if (!(deficitRatio > 0.05)) return null; // 装得下（或只差一点点）→ 无需声明
-    // 瓶颈来源：分别把每道上界抬到能装下所需的量，看哪个最先触顶（倍数最小者）。
-    // 三个"所需上界"都以**另外两道保持现状**为前提，故只反映"单靠这一道能不能补救"。
+    // 瓶颈来源（2026-10-24 修正）：原实现拿 needCount/needMinutes 这两个**绝对量**与 1.0001
+    // 比较（量纲错位），两个分支恒假 → limitingFactor 恒为 milestone_count。且数学上三道
+    // 单独补救的「相对抬升倍数」恒等于 requestedHours/capacityHours（缺口比例的倒数），
+    // 倍数彼此相等、无法区分瓶颈；真正能区分的是各道的**绝对天花板**。
+    // 按 2026-09-28 扩容口径——预算缺口优先由课数吸收、里程碑兜底、单课时长不作补救通道
+    // （保持会话档一比一校准，2026-09-29 已去掉 90 封顶与课数口径对齐）——判据改为
+    // 「单靠这一道（其余两道保持现状）能否装进其硬帽」：
+    //   ① 课数：所需课数 ≤ 30（与扩容块 Math.min(30,…) 同源，防 filler 复读的有意设计）；
+    //   ② 否则标 milestone_count（课数顶帽后由阶段数兜底；若阶段数也顶 HARD_MILESTONE_CAP，
+    //      缺口由结构容量钳制诚实收缩，bounds 仍留三道现值供人工判断）。
+    //   'lesson_minutes' 自此不再产出（枚举保留，兼容历史落库数据）。
     const needCount = (estimatedHoursTotal * 60) / (lessonMinutesCap * targetMilestones);
-    const needMinutes = (estimatedHoursTotal * 60) / (lessonCountCap * targetMilestones);
-    // 判据与 ReplanAdvisoryService 的「缺口深度」不同义，这里纯粹是容量补救路径排序：
-    // 能补救的那道就是瓶颈。三者都补救不了时不谎称某个是唯一原因——标为 milestone_count
-    // 只是"相对最可能的一档"，故 bounds 里同时给出三道现值供人工判断。
     const limitingFactor: CapacityDeficitReport['limitingFactor'] =
-      needCount <= 1.0001
+      needCount <= 30
         ? 'lesson_count'
-        : needMinutes <= 1.0001
-          ? 'lesson_minutes'
-          : 'milestone_count';
+        : 'milestone_count';
     return {
       requestedHours: Math.round(estimatedHoursTotal * 10) / 10,
       capacityHours: Math.round(capacityHours * 10) / 10,

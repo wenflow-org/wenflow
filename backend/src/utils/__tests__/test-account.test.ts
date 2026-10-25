@@ -13,7 +13,7 @@ jest.mock('../../config/database', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { findTestAccountUserIds, findRealUserIds, buildRealUserWhere } = require('../test-account');
+const { findTestAccountUserIds, findRealUserIds, buildRealUserWhere, buildQaUserWhere, findQaAccountIds } = require('../test-account');
 
 describe('isTestAccountUser', () => {
   it('虚拟学习者：id 以 virtual_ 开头', () => {
@@ -127,5 +127,37 @@ describe('真实用户过滤单点（buildRealUserWhere / findRealUserIds）', (
     // extra 覆盖：显式传入的 isVirtualLearner 生效
     const overridden = await buildRealUserWhere({ isVirtualLearner: true });
     expect(overridden.isVirtualLearner).toBe(true);
+  });
+});
+
+describe('QA 账号口径（教学组测试视角，2026-10-21 剔除虚拟学习者）', () => {
+  const rows = [
+    { id: 'u-real', name: '陈晓', email: 'chenxiao@example.com', isVirtualLearner: false },
+    { id: 'u-qa', name: 'vcheck_abc123', email: 'vcheck_abc123@wenflow.local', isVirtualLearner: false },
+    { id: 'u-virtual', name: '孙浩', email: 'builtin_student@preset.local', isVirtualLearner: true },
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    usersFindMany.mockResolvedValue(rows);
+  });
+
+  it('findQaAccountIds 只回有凭据的测试账号（虚拟学习者不进教学口径）', async () => {
+    // 注意 u-virtual 的邮箱不以 virtual_/@test.local 命名也仍按 isVirtualLearner 列排除
+    expect(await findQaAccountIds()).toEqual(['u-qa']);
+  });
+
+  it('buildQaUserWhere 产出「非虚拟 ∧ id in QA」正反双条件', async () => {
+    const where = await buildQaUserWhere({ deletedAt: null });
+    expect(where.isVirtualLearner).toBe(false);
+    expect((where.id as { in: string[] }).in).toEqual(['u-qa']);
+    expect(where.deletedAt).toBeNull();
+  });
+
+  it('没有 QA 账号时落空集，不退化成「不加条件」（否则会把全部账号放回来）', async () => {
+    usersFindMany.mockResolvedValue([rows[0], rows[2]]);
+    const where = await buildQaUserWhere();
+    expect((where.id as { in: string[] }).in).toHaveLength(1);
+    expect((where.id as { in: string[] }).in[0]).not.toBe('u-real');
   });
 });

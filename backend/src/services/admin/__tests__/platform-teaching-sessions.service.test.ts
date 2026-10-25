@@ -113,6 +113,39 @@ describe('教学会话列表：大 JSON 列不得进查询', () => {
 });
 
 /**
+ * 时长口径（2026-10-22 走查：「停在 1/4 但是没时间？」）。
+ * 超时路径长期只把活跃时长写进 wrapup.duration，duration 列留空，列表页于是在
+ * 「停在 x/y」旁显示「—」。列优先、缺列取兜底总结里的同口径读数；两者都无才回 0。
+ */
+describe('教学会话列表：时长读数列与历史兜底', () => {
+  type DurationResult = { items: Array<{ duration: number }> };
+
+  it('duration 列有值 → 直接用列（不被 wrapup 覆盖）', async () => {
+    mockPrisma.teaching_sessions.findMany.mockResolvedValue([
+      { ...baseSession, duration: 27, wrapup: JSON.stringify({ duration: 3 }) },
+    ]);
+    const result = (await call()) as unknown as DurationResult;
+    expect(result.items[0].duration).toBe(27);
+  });
+
+  it('duration 列为空的历史超时行 → 回落到 wrapup.duration', async () => {
+    mockPrisma.teaching_sessions.findMany.mockResolvedValue([
+      { ...baseSession, status: 'timeout', duration: null, wrapup: JSON.stringify({ status: 'summary-only', duration: 12 }) },
+    ]);
+    const result = (await call()) as unknown as DurationResult;
+    expect(result.items[0].duration).toBe(12);
+  });
+
+  it('列与 wrapup 都无时长 → 0（前端显示「—」，不编造读数）', async () => {
+    mockPrisma.teaching_sessions.findMany.mockResolvedValue([
+      { ...baseSession, status: 'timeout', duration: null, wrapup: null },
+    ]);
+    const result = (await call()) as unknown as DurationResult;
+    expect(result.items[0].duration).toBe(0);
+  });
+});
+
+/**
  * 路径收窄（2026-10-14，学习者详情页的页级「路径视角」开关）。
  * teaching_sessions.learningPathId 实测 248/248 非空（单列直连，无需 join）；
  * 不传即跨全部路径 = 本改动前的行为。

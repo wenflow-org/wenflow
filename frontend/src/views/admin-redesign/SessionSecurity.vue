@@ -247,7 +247,6 @@
     <MkEmptyState
       v-else
       :title="statusFilter ? '当前筛选无会话' : '暂无会话记录'"
-      description="管理员登录后会话会显示在这里，可随时强制下线"
       :action-text="statusFilter ? '清除筛选' : ''"
       @action="statusFilter = ''"
     >
@@ -459,12 +458,12 @@ function countOf(id: SessionStatus): number {
   return id === 'active' ? activeCount.value : id === 'expired' ? expiredCount.value : revokedCount.value
 }
 
-/** 宿主域计数徽章（embedded 才消费）：会话总数就绪/变化即上报。
+/** 宿主域计数徽章（embedded 才消费）：只报活跃会话数（可操作子集）；总数在卡头自报。
     审核 #175：0 是「确认无会话」的假信号——就绪门：仅加载成功上报真实条数，
     未就绪/失败上报 -1，宿主把 <0 渲染成「未加载」。
     B13 F6-1：上报值由窗口行数改全量 totalCount（页签角标不再把 limit=100 的窗口读成全量）。 */
 watch([sessions, counts, loaded, loadError], ([, , ok, err]) => {
-  emit('count', err || !ok ? -1 : totalCount.value)
+  emit('count', err || !ok ? -1 : activeCount.value)
 }, { immediate: true })
 
 const filtered = computed(() =>

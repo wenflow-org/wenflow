@@ -146,11 +146,18 @@ describe('SimulationOrchestrator requestStopLearning（旁路紧急停止）', (
     expect(sessionRecord.status).toBe('abandoned')
   })
 
-  it('goal 阶段终止：currentStage 保持 goal，不被写死成 teaching（#130）', async () => {
-    sessionRecord = buildSession({ currentStage: 'goal' })
+  /* 回归（2026-10-22 走查）：终止写死 currentStage='teaching'，在 goal 阶段被终止的会话
+     会自称进过课堂——阶段推进把未发生的 Path 标成已完成、deriveRunProgress 判 learnStarted、
+     goalReadiness 被抬到 0.86。终止只能改状态，不能改阶段。 */
+  it('在 goal 阶段终止：currentStage 保持 goal，不被改写成 teaching', async () => {
+    sessionRecord = buildSession({
+      currentStage: 'goal',
+      currentTaskId: null,
+      stageResults: JSON.stringify({ goal: { conversationId: 'gc_1' } })
+    })
     mockLeaseCreate.mockResolvedValue({})
 
-    const result = await coordinator.requestStopLearning('simulation-1', 'admin-stop')
+    const result = await coordinator.requestStopLearning('simulation-1', 'admin-emergency-stop')
 
     expect(result).toEqual({ success: true })
     expect(sessionRecord.status).toBe('abandoned')

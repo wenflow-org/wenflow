@@ -3,8 +3,8 @@
        面板：逐卡列出它的任务（故事池），勾中的任务随身份一起带走；一张卡创建出 1 个虚拟学习者。
        部分失败不整体回滚——按 created/failed 分别汇报，与批量新建「投产半成不报成整单失败」同判例。 -->
   <Teleport v-if="open" to="body">
-    <div class="mk-modal">
-      <div class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="从卡创建虚拟学习者">
+    <div ref="maskRef" class="mk-modal">
+      <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="从卡创建虚拟学习者">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">创建虚拟学习者</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -85,11 +85,13 @@
 
 <script setup lang="ts">
 /** 卡→虚拟学习者创建面板。父组件经 ref 调 open(profileIds) 打开；成功创建后 emit('created', ...)。 */
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, ref } from 'vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { errMsg } from './live'
+import { useEscape } from './useEscape'
+import { useMaskClose, useOverlay } from './useOverlay'
 import { toast } from '@/utils/toast'
 
 interface Task { id: string; title: string; opening: string | null }
@@ -99,6 +101,8 @@ interface CreatedItem { profileId: string; userId: string; name: string; cardKey
 const emit = defineEmits<{ (e: 'created', created: CreatedItem[]): void }>()
 
 const open = ref(false)
+const maskRef = ref<HTMLElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
@@ -149,19 +153,17 @@ function openWith(profileIds: string[]) {
   failed.value = []
   note.value = ''
   open.value = true
-  window.addEventListener('keydown', onKey)
   void load()
 }
 
 function close() {
   if (busy.value) return
   open.value = false
-  window.removeEventListener('keydown', onKey)
 }
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') close()
-}
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
+useEscape(() => open.value, close)
+useOverlay(open, panelRef)
+useMaskClose(maskRef, close)
 
 async function submit() {
   const items = derivable.value.map((g) => ({ profileId: g.profileId, storyIds: picked.value[g.profileId] || [] }))
@@ -185,7 +187,6 @@ async function submit() {
       groups.value = groups.value.filter((g) => kept.has(g.profileId))
     } else {
       open.value = false
-      window.removeEventListener('keydown', onKey)
     }
   } catch (e) {
     toast.error(errMsg(e) || '创建失败')

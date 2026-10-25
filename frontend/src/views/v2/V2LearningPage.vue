@@ -78,17 +78,19 @@
           <div class="kp__body">
             <div class="kp__bar"><i :style="{ width: weightedProgressPct + '%' }"></i></div>
             <!-- 视图切换：列表（默认）/ 图谱。图谱按需加载——只在切过去时才发请求 -->
-            <div class="kp__views" role="tablist" aria-label="知识点视图">
+            <div class="kp__views" role="tablist" aria-label="知识点视图" @keydown="onKpViewKeydown">
               <button
                 type="button" role="tab" class="kp__view"
                 :class="{ 'kp__view--on': kpView === 'list' }"
                 :aria-selected="kpView === 'list'"
+                :tabindex="kpView === 'list' ? 0 : -1"
                 @click="kpView = 'list'"
               >列表</button>
               <button
                 type="button" role="tab" class="kp__view"
                 :class="{ 'kp__view--on': kpView === 'graph' }"
                 :aria-selected="kpView === 'graph'"
+                :tabindex="kpView === 'graph' ? 0 : -1"
                 @click="switchKpToGraph"
               >图谱</button>
             </div>
@@ -672,6 +674,7 @@ import { aiTeachingAPI, createTeachingIdempotencyKey } from '@/api/aiTeaching';
 import { readMaterialSection } from '@/api/materials';
 import AiContentNote from '@/components/AiContentNote.vue';
 import ImmersiveMenu from '@/components/ImmersiveMenu.vue';
+import { onTabRowKeydown } from '@/utils/rovingTablist';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import TeachingDiagram from '@/components/TeachingDiagram.vue';
 import TeachingFigure from '@/components/TeachingFigure.vue';
@@ -2213,6 +2216,14 @@ const kpSelected = ref<MkGraphNode | null>(null)
 const kpGraphTheme = computed<'light' | 'dark'>(() =>
   typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
 )
+/** 知识点视图两枚页签：方向键在行内切换（图谱按需加载仍走 switchKpToGraph） */
+function onKpViewKeydown(e: KeyboardEvent): void {
+  onTabRowKeydown(e, (i) => {
+    if (i === 0) kpView.value = 'list'
+    else void switchKpToGraph()
+  })
+}
+
 async function switchKpToGraph() {
   kpView.value = 'graph'
   if (graphNodes.value.length || graphLoading.value) return
@@ -3083,7 +3094,7 @@ onBeforeUnmount(() => {
   color: #d6e4ff;
   border-radius: var(--mk-radius-lg);
   padding: 12px 14px;
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-family: var(--mk-mono);
   font-size: 12.5px; line-height: 1.6;
   overflow-x: auto;
 }
@@ -3208,7 +3219,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-lg);
   padding: 10px 12px;
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  /* 学生答题写的是自然语言，跟全站正文；等宽只给代码/ID */
+  font-family: var(--mk-sans);
   font-size: 13px;
   resize: none; outline: none;
   background: var(--surface);
@@ -3657,7 +3669,7 @@ onBeforeUnmount(() => {
   background: var(--code-bg);
   color: var(--code-fg);
   border-radius: 4px; padding: 10px 12px; /* 圆角阶梯：代码块 = 内芯档 */
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mk-mono);
   font-size: 12.5px; line-height: 1.7;
   overflow-x: auto; white-space: pre; tab-size: 2;
 }

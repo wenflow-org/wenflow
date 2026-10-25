@@ -39,6 +39,10 @@ export interface VirtualLearnerRow {
   } | null
   /** 逐条活跃会话（多路径可同时运行；运行在前、暂停在后） */
   activeRuns?: ActiveRun[]
+  /** 无活跃运行时的历史摘要：按学习路径归并，每条路径最近一次运行 */
+  recentRuns?: RecentRun[]
+  /** 历史摘要涉及的路径/阶段组总数（> recentRuns.length 时出「+N」） */
+  recentRunTotal?: number
   /** 活跃会话全量数（含逐条展示上限之外未展开的余量） */
   activeRunTotal?: number
   /** 日期模拟进度（只读）：会话时钟或画像级；无则 null */
@@ -60,6 +64,10 @@ export interface VirtualLearnerRow {
 /** 一条活跃会话（后端 activeRuns 项）：生命周期 + 阶段 + 任务进度 */
 export interface ActiveRun {
   sessionId: string
+  /** 这条运行在做哪条学习路径（null = 还没产出路径的目标阶段运行） */
+  pathId?: string | null
+  /** 路径标题（后端一次查好，列表直接展示；缺省回落到「目标阶段」） */
+  pathTitle?: string | null
   /** running = 真在跑；paused = 自动驾驶已暂停 */
   state: 'running' | 'paused'
   currentStage: string | null
@@ -70,6 +78,21 @@ export interface ActiveRun {
   taskTotal: number
   /** 超过回收阈值无写入（与「无响应」列同源；暂停会话恒 false） */
   stalled: boolean
+}
+
+/** 无活跃运行时的历史运行（按学习路径归并后的最近一次） */
+export interface RecentRun {
+  sessionId: string
+  pathId: string | null
+  pathTitle?: string | null
+  status: string | null
+  currentStage: string | null
+  updatedAt: string | null
+  goalReady: boolean
+  pathReady: boolean
+  learnStarted: boolean
+  taskDone: number
+  taskTotal: number
 }
 
 /** 启动实验弹窗里的故事条目 */

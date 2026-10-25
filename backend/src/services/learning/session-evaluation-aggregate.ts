@@ -317,24 +317,28 @@ export function aggregateSessionEvaluation(
 
   // 某一项整节课都没有信号：用与零证据同源的保守常量，而不是编造 0/5。
   // 该缺口会被 coverage/confidence 显式暴露，供比对时识别。
+  // 2026-10-24：兜底值按指标取各自的零证据常量（此前一律取 .lss——当前三项恰好同为 3，
+  // 但常量结构预留了分化能力，一旦分化 ktl/lf 会静默拿到 lss 的值）。
   const resolveMetric = (
     value: number | null,
     samples: number,
     method: string,
+    zeroEvidenceFallback: number,
   ): { value: number; diagnostic: SessionEvaluationMetricDiagnostic } => {
     const normalized = value === null ? null : round1(clamp(value, 0, 10));
     return {
-      value: normalized === null ? SESSION_EVALUATION_ZERO_EVIDENCE.lss : normalized,
+      value: normalized === null ? zeroEvidenceFallback : normalized,
       diagnostic: { method, samples, value: normalized },
     };
   };
 
-  const lss = resolveMetric(lssRaw, lssSeries.length, 'median');
-  const ktl = resolveMetric(ktlRaw, ktlSeries.length, 'median+tail-mean');
+  const lss = resolveMetric(lssRaw, lssSeries.length, 'median', SESSION_EVALUATION_ZERO_EVIDENCE.lss);
+  const ktl = resolveMetric(ktlRaw, ktlSeries.length, 'median+tail-mean', SESSION_EVALUATION_ZERO_EVIDENCE.ktl);
   const lf = resolveMetric(
     lfRaw,
     lfSeries.length,
     `worst-window-mean(${Math.min(WORST_WINDOW_SIZE, Math.max(1, lfSeries.length))})`,
+    SESSION_EVALUATION_ZERO_EVIDENCE.lf,
   );
 
   const coverage = buildCoverage(observations.length, lssSeries.length, ktlSeries.length, lfSeries.length);

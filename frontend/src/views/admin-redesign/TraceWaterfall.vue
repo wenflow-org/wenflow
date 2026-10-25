@@ -835,14 +835,14 @@ const wfEmpty = computed(() => {
   if (viewMode.value === 'session' && !sessionIds.value.length) {
     return {
       title: '暂无会话数据',
-      description: '教学 / 目标对话等业务调用产生后，这里按会话 ID 自动跨链路归组。',
+      description: '',
       actionText: '',
       action: () => {}
     }
   }
   return {
     title: '暂无链路数据',
-    description: '有真实调用发生后，这里按 Trace 展开完整链路。',
+    description: '',
     actionText: '',
     action: () => {}
   }

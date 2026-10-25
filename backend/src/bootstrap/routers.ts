@@ -50,6 +50,7 @@ import adminProjectionAccessGrantsRoutes from '../routes/admin/projection-access
 import adminFeedbackRoutes from '../routes/admin/feedback';
 import adminSystemStatusRoutes from '../routes/admin/system-status';
 import adminMcpRoutes from '../routes/admin/mcp';
+import adminPluginsRoutes from '../routes/admin/plugins';
 import adminHealthCenterRoutes from '../routes/admin/health-center';
 import adminGlossaryRoutes from '../routes/admin/glossary';
 import adminDevtoolsRoutes from '../routes/admin/devtools';
@@ -177,6 +178,7 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/audit-logs', adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin'), adminAuditLogsRoutes);
   app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
   app.use('/api/admin/mcp', ...adminRouteMiddleware, adminMcpRoutes);
+  app.use('/api/admin/plugins', ...adminRouteMiddleware, adminPluginsRoutes);
   app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
   app.use('/api/admin/memory-traces', ...adminRouteMiddleware, adminMemoryTracesRoutes);
   app.use('/api/admin/memory-review', ...adminRouteMiddleware, adminMemoryReviewRoutes);

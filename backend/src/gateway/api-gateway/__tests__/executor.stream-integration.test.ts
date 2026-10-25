@@ -85,8 +85,55 @@ describe('APIExecutor streaming integration (real transport)', () => {
     expect(telemetryWriterMock.createAgentCall).toHaveBeenCalledTimes(1)
   })
 
-  it('非流式路径（无 stream 标记）仍走缓冲 JSON 解析', async () => {
-    const serverWithJson = createServer((req, res) => {
+  it('空 SSE（无内容增量）→ 关闭思考重试一次后成功（D3 回归）', async () => {
+    let calls = 0
+    const emptyThenOk = createServer((req, res) => {
+      let body = ''
+      req.on('data', (chunk) => { body += chunk })
+      req.on('end', () => {
+        seenBodies.push(JSON.parse(body || '{}'))
+        calls += 1
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+        if (calls === 1) {
+          // 实测现场：200 + finish_reason=stop + 0 completion tokens + 无 content？
+          res.write('data: {"id":"c-empty","model":"m1","choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":0,"total_tokens":2}}\n\n')
+        } else {
+          res.write('data: {"id":"c-ok","model":"m1","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}\n\n')
+          res.write('data: {"id":"c-ok","model":"m1","choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}\n\n')
+        }
+        res.write('data: [DONE]\n\n')
+        res.end()
+      })
+    })
+    await new Promise<void>((resolve) => emptyThenOk.listen(0, '127.0.0.1', resolve))
+    const address = emptyThenOk.address() as { port: number }
+    const emptyUrl = `http://127.0.0.1:${address.port}`
+    jest.spyOn(APIExecutor.prototype as any, 'delay').mockResolvedValue(undefined)
+
+    const response = await new APIExecutor().execute(
+      {
+        providerType: 'openai-compatible',
+        providerId: 'int-test-empty',
+        endpoint: emptyUrl,
+        apiKey: 'test-key',
+        model: 'm1',
+        temperature: 0.2,
+        maxTokens: 128,
+        privateNetworkPolicy: 'runtime',
+        source: 'platform',
+      },
+      { messages: [{ role: 'user', content: 'hi' }], stream: true },
+      { traceId: 'int-empty-stream', retryBudget: createRetryBudget() }
+    )
+
+    expect(response.choices[0].message.content).toBe('ok')
+    expect(calls).toBe(2)
+    // 重试请求关闭思考（定向纠正「思考吃掉输出预算」）
+    expect(seenBodies[1].thinking).toEqual({ type: 'disabled' })
+    await new Promise<void>((resolve) => emptyThenOk.close(() => resolve()))
+  })
+
+  it('非流式路径（无 stream 标记）仍走缓冲 JSON 解析', async () => {    const serverWithJson = createServer((req, res) => {
       let body = ''
       req.on('data', (chunk) => { body += chunk })
       req.on('end', () => {

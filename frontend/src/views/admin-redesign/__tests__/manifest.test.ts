@@ -46,7 +46,7 @@ describe('AdminConsole 页面注册表', () => {
     expect(visible).toHaveLength(18);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = visible.map((s) => s.group);
-    expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟学习者', 'Skill', '观测', '系统', '运营']);
+    expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟实验', 'Skill', '观测', '系统', '运营']);
     const byGroup: Record<string, string[]> = {};
     for (const s of visible) (byGroup[s.group] ||= []).push(s.id);
     expect(byGroup).toEqual({
@@ -55,10 +55,12 @@ describe('AdminConsole 页面注册表', () => {
       //   → 学习状态（2026-10-15 用户拍板挪到教学会话后：工作台性质，收在流程尾）→ 记忆与复习
       // （「记忆与复习」2026-10-12 恢复跨用户总览；单用户明细在学习者详情页签）
       教学: ['people', 'goal-conversations', 'learning-paths', 'teaching-sessions', 'learner-state', 'memory-review'],
-      虚拟学习者: ['virtual-learners', 'virtual-learner-cards'],
+      // 2026-10-24 组名与首项解耦：组＝虚拟实验（实例 + 身份池）
+      虚拟实验: ['virtual-learners', 'virtual-learner-cards'],
       // 「外挂能力」2026-10-19 从 api-config 宿主拆回独立页并归入本组（用户拍板）
       Skill: ['orchestrator', 'skills', 'addons'],
-      观测: ['execution-logs', 'token-cost', 'audit-logs'],
+      // 2026-10-24 用户「重新排一下序」：两份日志相邻，成本分析接在后面
+      观测: ['execution-logs', 'audit-logs', 'token-cost'],
       系统: ['health-center', 'api-config'],
       运营: ['ops-hub']
     });

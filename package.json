@@ -42,6 +42,7 @@
     "ci:status": "node scripts/ci-status.mjs",
     "dev:entrypoints:check": "node backend/scripts/check-dev-entrypoints.mjs",
     "dev:entrypoints:selftest": "node backend/scripts/check-dev-entrypoints.mjs --self-test",
+    "check:quality:fast": "node scripts/check-quality-fast.mjs",
     "check:quality": "npm run security:scan:current && npm run prisma:validate && npm run prisma:migrate:verify-clean && npm run typecheck:backend && npm run check:frontend-types && npm run llm:calls:check && npm --prefix backend run constants:check && npm --prefix backend run prisma:migrate:deploy:all && npm --prefix backend run prompts:seed-routings && npm run prompts:check && npm run prompts:core:check && npm run prompts:runtime-contract:check && npm run design:check && npm --prefix backend run boundaries:check && npm --prefix backend run layering:check && npm run dev:entrypoints:check && npm --prefix backend run preset:invariants && npm run measurement:frozen-exam:selftest && node scripts/check-doc-dead-links.mjs && npm run lint",
     "measurement:frozen-exam": "node backend/scripts/measurement-verify/frozen-exam-run.mjs",
     "measurement:frozen-exam:verify": "node backend/scripts/measurement-verify/frozen-exam-run.mjs --verify",

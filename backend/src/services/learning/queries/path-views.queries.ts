@@ -38,6 +38,7 @@ import {
   parsePathPromptTemplate,
   parsePathSummary,
   parseTaskLearningObjectives,
+  buildConceptMap,
   resolveMilestoneConcept,
   resolveNormalizedInputSnapshot,
   resolvePersistedNormalizedInput,
@@ -96,9 +97,11 @@ export function buildPathProcessDetail(path: any) {
       ...resolvedMilestoneConcept,
     };
   });
+  // 概念 Map 建一次供全部任务复用（旧口径每任务重建整张 Map）
+  const taskConceptMap = buildConceptMap(cognitiveDesign);
   const taskProfiles = (path.milestones || []).flatMap((milestone: any) =>
     (milestone.subtasks || []).map((task: any) => ({
-      ...resolveTaskConcept(task.linkedConceptId || task.coreConcept, cognitiveDesign, task.linkedConceptName || task.coreConcept),
+      ...resolveTaskConcept(task.linkedConceptId || task.coreConcept, cognitiveDesign, task.linkedConceptName || task.coreConcept, taskConceptMap),
       taskId: task.id,
       milestoneId: milestone.id,
       milestoneTitle: milestone.title || milestone.goal || null,
@@ -315,6 +318,16 @@ export function getPathLearningAccessState(
   })();
 
   if (pathStatus !== 'active') {
+    // 已下线是管理员的治理动作，必须在这里短路：此前 archived 会掉进下面的
+    // 「generationStatus 齐全 + enrichment succeeded」分支，反而返回可学。
+    if (pathStatus === 'archived') {
+      return {
+        generationStatus,
+        canStartLearning: false,
+        learningBlockedReason: '该学习路径已下线，暂不可继续学习。'
+      };
+    }
+
     if (pathStatus === 'generating') {
       return {
         generationStatus,
@@ -711,7 +724,8 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
 export async function getUserLearningPaths(userId: string) {
   try {
     const paths = await prisma.learning_paths.findMany({
-      where: { userId },
+      // 已下线（archived）是内容治理状态：从学习端列表隐去，管理员在后台「已下线」里仍可见可恢复
+      where: { userId, status: { not: 'archived' } },
       include: {
         activeGenerationRun: true,
         milestones: {
@@ -888,8 +902,9 @@ export async function getLearningStats(userId: string) {
     const totalPaths = await prisma.learning_paths.count({
       where: {
         userId,
+        // 与 getUserLearningPaths 同口径：已下线路径不再计入学习端读数
         status: {
-          not: 'failed'
+          notIn: ['failed', 'archived']
         }
       }
     });

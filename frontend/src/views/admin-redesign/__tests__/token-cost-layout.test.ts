@@ -22,6 +22,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { nextTick } from 'vue';
 import TokenCost from '../TokenCost.vue';
+import { liveRefreshSeq } from '../live';
 import TcRankTable from '../TcRankTable.vue';
 import OvBars from '../OvBars.vue';
 
@@ -124,16 +125,13 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     w.unmount();
   });
 
-  it('成本口径不占卡面：公式与原因只留在卡标题悬停（2026-10-19 用户「不需要注释型文案」）', async () => {
+  it('成本口径不占卡面，标题也不再挂公式与原因', async () => {
     const w = await mountTokenCost();
     expect(w.find('.tc-card--skill .tc-card__note').exists()).toBe(false);
     const title = w.find('.tc-card--skill .mk-card__title');
-    expect(title.attributes('title')).toContain('成本＝已定价调用的金额合计（美元）');
-    expect(title.attributes('title')).toContain('占比按金额算，没有已定价金额时改按 Token 算');
-    expect(title.attributes('title')).toContain('未配置单价');
-    expect(title.attributes('title')).toContain('不计入成本合计');
-    // 卡头徽章仍承担可见的「未定价」状态与原因
-    expect(w.find('.tc-card--skill .mk-badge').attributes('title')).toContain('不计入成本合计');
+    expect(title.attributes('title')).toBeUndefined();
+    // 卡头徽章仍承担可见的「未定价」状态
+    expect(w.find('.tc-card--skill .mk-badge').attributes('title')).toContain('未配置单价');
     w.unmount();
   });
 
@@ -248,8 +246,8 @@ describe('成本页 · 失败三态（#72 P-47）', () => {
     expect(w.find('.tc-error').exists()).toBe(false);
 
     vi.mocked(adminTokenCostApi.getSummary).mockRejectedValueOnce(new Error('network down'));
-    const refresh = w.findAll('button').find((b) => b.text() === '刷新')!;
-    await refresh.trigger('click');
+    // 2026-10-23 页头刷新钮撤除：顶栏刷新经 liveRefreshSeq 广播到本页（同一入口）
+    liveRefreshSeq.value += 1;
     await flushPromises();
     await nextTick();
 

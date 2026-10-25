@@ -79,6 +79,17 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
+  it('embedded 模式不套第二层卡壳，只留紧凑块头', async () => {
+    const wrapper = mount(InfraModelsPanel, { props: { embedded: true } });
+    await flushPromises();
+    expect(wrapper.find('.mk-card').exists()).toBe(false);
+    expect(wrapper.find('.infra-embedded__head').exists()).toBe(true);
+    expect(wrapper.text()).toContain('基础设施模型');
+    expect(wrapper.text()).toContain('平台必需');
+    expect(wrapper.findAll('.infra-item')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
   it('测试连接调用接口并回显结果', async () => {
     const wrapper = mount(InfraModelsPanel);
     await flushPromises();

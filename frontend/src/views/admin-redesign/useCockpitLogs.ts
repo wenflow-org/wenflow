@@ -10,6 +10,8 @@ export interface CockpitLogEntry {
   time: string
   text: string
   view: LogEntryView
+  /** 折叠行：对话全文在左侧页签，点按跳到对应页签（2026-10-22 去重复读） */
+  jumpTab?: 'goal' | 'learning'
 }
 
 /** 日志窗口上限（条） */

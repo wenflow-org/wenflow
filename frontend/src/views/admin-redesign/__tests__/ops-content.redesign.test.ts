@@ -24,7 +24,6 @@ const mkPath = (id: string, over: Record<string, unknown> = {}) => ({
   completedMilestones: 1,
   aiGenerated: true,
   createdAt: '2026-09-01T00:00:00Z',
-  // 基线行 = fresh（非停滞）：停滞标记是 2026-10-10 新增语义，用近期时间避免基线行误标
   updatedAt: new Date().toISOString(),
   deadline: null,
   user: { id: 'u1', name: '张三', email: 'zs@wenflow.local', isVirtualLearner: false },
@@ -114,9 +113,10 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 独立页同样无 KPI 卡（2026-10-02 用户拍板：状态条已单源承载 总数/里程碑/任务/已下线）
     expect(w.find('.mk-kpi').exists()).toBe(false);
 
-    // 状态筛选 = 卡头 pills（2026-10-17 分布带退役后迁回）；「停滞」是复合口径快筛，与状态叠加为 AND
+    // 状态筛选 = 卡头 pills（2026-10-17 分布带退役后迁回）；
+    // 「停滞」快筛 2026-10-22 退役（判据是活跃时钟不是生成状态，真实路径的救援动作无效）
     const headPills = w.findAll('.mk-card__head .mk-filter .mk-pill').map((p) => p.text());
-    expect(headPills.some((t) => t.includes('停滞'))).toBe(true);
+    expect(headPills.some((t) => t.includes('停滞'))).toBe(false);
     for (const statusWord of ['全部', '学习中', '已完成', '生成失败', '已下线']) {
       expect(headPills.some((t) => t.includes(statusWord))).toBe(true);
     }
@@ -144,8 +144,9 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const pathCell = w.findAll('tbody td')[0];
     expect(pathCell.text()).toContain('这是一段很长的学习目标描述');
 
-    // 虚拟行标记
-    expect(w.find('.oc-tags .mk-badge--virtual').exists()).toBe(true);
+    // 虚拟行不再挂逐行徽章（右上角视角开关已表达身份域）；头像 tone 仍按身份着色
+    expect(w.find('.oc-tags').exists()).toBe(false);
+    expect(w.find('.mk-badge--virtual').exists()).toBe(false);
 
     w.unmount();
   });
@@ -201,23 +202,29 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
 
     const ths = w.findAll('thead th').map((t) => t.text());
-    expect(ths).toContain('难度');
-    expect(ths).toContain('时长');
+    // 2026-10-22 默认收起难度（真实数据多为未知、不改变运营动作）；列名补全为「预计时长」
+    expect(ths).not.toContain('难度');
+    expect(ths).toContain('预计时长');
     expect(ths).not.toContain('主题');
     /* 教学组列序统一（2026-10-16）：主体列（路径）→ 用户 → 状态 → 属性/过程（难度、时长、进度）→ 时间（更新）→ 操作。
        原断言是「难度紧跟路径列、用户之前（路径自身属性成组）」，与同组其它页的
        「主体 → 用户 → 状态 → 过程」不一致，也违背 2026-10-03 的「主体列恒在首、用户列随后」。 */
-    expect(ths.slice(0, 6)).toEqual(['路径', '用户', '状态', '难度', '时长', '进度']);
+    expect(ths.slice(0, 6)).toEqual(['路径', '用户', '状态', '预计时长', '进度', '最近活动']);
     expect(ths.at(-1)).toBe('操作');
 
-    // 路径列副行 = 主题（仅 subject≠title 时；P2-6）+ 短 ID，不夹带难度/时长
+    // 路径列副行 = 主题（仅 subject≠title 时；P2-6），不夹带难度/时长；
+    // 2026-10-23 走查后内部短 ID 也撤了（截断后不可读、也不可复制）
     const subs = w.findAll('tbody tr td:first-child .mk-cell-sub').map((s) => s.text());
     expect(subs.every((s) => !/入门|进阶|高阶|~?\d+h/.test(s))).toBe(true);
     expect(subs[0]).toContain('这是一段很长的学习目标描述');
-    expect(subs[1]).toContain('lp_d1');
-    expect(subs[3]).toContain('lp_d2');
+    expect(subs.join(' ')).not.toContain('lp_');
 
-    // 难度三态：枚举归一为中文、英文 unknown 与自述整句都收敛为「未知」
+    // 难度默认收起：从「列」菜单打开后再验证三态归一
+    const colsBtn = w.findAll('button').find((b) => b.text() === '列')!;
+    if (!w.find('.mk-cols__menu').exists()) await colsBtn.trigger('click');
+    const diffItem = w.findAll('.mk-cols__item').find((l) => l.text().includes('难度'))!;
+    await diffItem.find('input').setValue(true);
+    await nextTick();
     expect(w.findAll('.oc-diff').map((e) => e.text())).toEqual(['进阶', '未知', '未知']);
     // 未知态把原因/原文放进 title，不把半句自述当难度展示
     const diffTitles = w.findAll('.oc-diff').map((e) => e.attributes('title') || '');
@@ -227,7 +234,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 时长：有值带 ~，无值给 —
     expect(w.findAll('td.mk-num').map((e) => e.text())).toEqual(['~21h', '—', '~9h']);
     // 数字列右对齐（表头 mk-th--right + 单元格 mk-num）
-    expect(w.findAll('thead th').some((t) => t.text().includes('时长') && t.classes().includes('mk-th--right'))).toBe(true);
+    expect(w.findAll('thead th').some((t) => t.text() === '预计时长' && t.classes().includes('mk-th--right'))).toBe(true);
 
     w.unmount();
   });
@@ -318,7 +325,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 重试/下线收进折叠菜单，不再并排出钮
     const failRow = w.findAll('tbody tr').find((r) => r.text().includes('路径lp_fail'))!;
     expect(failRow.find('.mk-actions .mk-btn').text()).toBe('详情');
-    expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toContain('重试生成');
+    expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toBeUndefined();
     expect(failRow.find('.mk-actions .mk-btn--primary').exists()).toBe(false);
     await failRow.find('.mk-menu__btn').trigger('click');
     await nextTick();
@@ -329,20 +336,23 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.find('.mk-status').exists()).toBe(false);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
     const failPill = w.findAll('.mk-pill').find((p) => p.text().startsWith('生成失败'))!;
-    expect(failPill.attributes('title')).toContain('重试生成');
+    expect(failPill.attributes('title')).toBe('生成失败：1 条');
 
     w.unmount();
   });
 
-  /** 生成停滞（2026-10-10 跑批实锤）：active 且 updatedAt 超 24h → 「停滞」warn 标记 + 「重试生成」入口；
-   *  fresh 行不标（真实用户数日不学属正常，只提示不强判死）。
-   *  2026-10-15 用户拍板：「重试生成」自操作列收进 ⋯ 折叠菜单。 */
-  it('生成停滞：active 超 24h 无更新 → 「停滞」标记 + ⋯ 菜单「重试生成」；fresh 行不标', async () => {
+  /** 停滞信号 2026-10-22 退役（用户「停滞有必要放在这吗」）：判据是活跃时钟不是生成状态，
+   *  真实用户数日不学即命中，且其「重试生成」只对虚拟会话可用。救援入口只留给真正的 failed 行。 */
+  it('停滞信号退役：active 超 24h 不再标记、菜单无「重试生成」；failed 行仍有', async () => {
     listMock.mockResolvedValue({
       data: {
         data: {
-          paths: [mkPath('lp_fresh'), mkPath('lp_stall', { updatedAt: '2026-09-01T00:00:00Z' })],
-          pagination: { total: 2, page: 1, limit: 100 },
+          paths: [
+            mkPath('lp_fresh'),
+            mkPath('lp_stall', { updatedAt: '2026-09-01T00:00:00Z' }),
+            mkPath('lp_failed', { status: 'failed', updatedAt: '2026-09-01T00:00:00Z' }),
+          ],
+          pagination: { total: 3, page: 1, limit: 100 },
         },
       },
     });
@@ -350,16 +360,16 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await flushPromises();
     await nextTick();
     const trs = w.findAll('tbody tr');
-    expect(trs[0].find('.mk-badge--warn').exists()).toBe(false);
-    expect(trs[1].find('.mk-badge--warn').text()).toBe('停滞');
-    expect(trs[1].find('.mk-badge--warn').attributes('title')).toContain('重试生成');
-    // 停滞行 ⋯ 菜单内出「重试生成」；fresh 行菜单内无此入口
+    expect(trs[1].find('.mk-badge--warn').exists()).toBe(false);
+    expect(w.text()).not.toContain('停滞');
+    // 陈旧 active 行菜单内无「重试生成」；failed 行才是救援对象
     await trs[1].find('.mk-menu__btn').trigger('click');
     await nextTick();
-    expect(trs[1].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).toContain('重试生成');
-    await trs[0].find('.mk-menu__btn').trigger('click');
+    expect(trs[1].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).not.toContain('重试生成');
+    await trs[1].find('.mk-menu__btn').trigger('click');
+    await trs[2].find('.mk-menu__btn').trigger('click');
     await nextTick();
-    expect(trs[0].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).not.toContain('重试生成');
+    expect(trs[2].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).toContain('重试生成');
     w.unmount();
   });
 

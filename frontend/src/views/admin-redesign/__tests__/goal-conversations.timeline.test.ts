@@ -1,6 +1,8 @@
 /**
- * GoalConversations 阶段时间线冒烟（遗留项「目标对话阶段时间线」）：
- * 1. 阶段徽章 + 四步过程点条（创建→澄清→方案→完成，statusText 单源）
+ * GoalConversations 状态列 + 阶段时间线冒烟：
+ * 1. 状态列只回答完成没有（进行中 / 已完成 / 已取消 / 失败 / 已放弃）——
+ *    2026-10-22 用户「目标对话怎么会有阶段这一说？不应是完成未完成吗」，
+ *    四步过程点条退役，阶段动作词只进悬停说明；
  * 2. 轻量时间线文本「创建 08-12 → 澄清中 08-13」（goal_conversations 现表字段推导，无后端改动）；
  *    日期拆「阶段日期」独立列且写成「M月D日」（裸 'MM-DD' 单看像数字区间，2026-10-13 走查 F2；
  *    2026-10-15 用户拍板自阶段格副行拆列）
@@ -78,16 +80,19 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     return wrapper.find('span[title^="阶段时间线"]');
   }
 
-  it('live：阶段徽章 + 四步点条 + 时间线「创建 08-12 → 澄清中 08-13」', async () => {
+  it('live：进行中只出「进行中」徽章，阶段动作进 title；时间线仍「创建 08-12 → 澄清中 08-13」', async () => {
     listMock.mockResolvedValue({
       data: { success: true, data: { conversations: [makeConv('a')] } }
     });
     const wrapper = await mountLive();
-    const cell = wrapper.find('.gc-stage-cell');
-    expect(cell.text()).toContain('澄清中');
-    // 2026-10-03 去重：阶段词由徽章单源，完整时间线退 title；日期 2026-10-15 拆独立列
-    expect(cell.text()).not.toContain('8月13日');
-    expect(cell.text()).not.toContain('澄清中 08-13');
+    const cell = wrapper.findAll('tbody tr')[0].findAll('td')[2];
+    const badge = cell.find('.mk-badge');
+    expect(badge.text()).toBe('进行中');
+    expect(badge.classes()).toContain('mk-badge--info');
+    expect(badge.attributes('title')).toContain('正在了解你的情况');
+    expect(badge.attributes('title')).toContain('第 2/4 步');
+    // 阶段词不再作为徽章文本上屏
+    expect(cell.text()).not.toContain('澄清中');
     const dateEl = stageDateEl(wrapper);
     expect(dateEl.text()).toBe('8月13日');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 澄清中 08-13');
@@ -95,13 +100,17 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
        原先把「最近活动」紧跟状态列（当状态伴侣），与同组其它页「时间列在过程之后」不一致；
        现移到路径列之后、创建时间之前，两列时间收在表尾。约束条件默认隐藏（MkCols），不进可见表头。 */
     const ths = wrapper.findAll('thead th').map((t) => t.text());
-    expect(ths.slice(0, 6)).toEqual(['目标摘要', '用户', '状态 / 阶段', '澄清进度', '路径', '最近活动']);
-    expect(ths.at(-2)).toBe('创建时间');
+    expect(ths.slice(0, 6)).toEqual(['目标摘要', '用户', '状态', '澄清轮次', '路径', '最近活动']);
     expect(ths.at(-1)).toBe('操作');
-    const dots = cell.findAll('.gc-stage-cell__dot');
-    expect(dots).toHaveLength(4);
-    expect(dots.filter((d) => d.classes().includes('is-on'))).toHaveLength(2);
-    expect(cell.find('.mk-badge').classes()).toContain('mk-badge--info');
+    // 2026-10-22 默认收起创建时间与约束条件（列菜单仍可开）
+    expect(ths).not.toContain('创建时间');
+    const colsBtn = wrapper.findAll('button').find((b) => b.text() === '列')!;
+    await colsBtn.trigger('click');
+    const menu = wrapper.findAll('.mk-cols__item').map((x) => x.text());
+    expect(menu).toContain('创建时间');
+    expect(menu).toContain('约束条件');
+    // 四步过程点条退役（2026-10-22）
+    expect(wrapper.find('.gc-stage-cell__dot').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -121,13 +130,12 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
       }
     });
     const wrapper = await mountLive();
-    const cell = wrapper.find('.gc-stage-cell');
-    // 2026-10-15 合并列：终态行出结果词「已完成」（旧两列实现里阶段列压制该词，合并后单格只说一次）
-    expect(cell.text()).toContain('已完成');
+    const cell = wrapper.findAll('tbody tr')[0].findAll('td')[2];
+    expect(cell.text()).toBe('已完成');
     const dateEl = stageDateEl(wrapper);
     expect(dateEl.text()).toBe('8月14日');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 已完成 08-14');
-    expect(cell.findAll('.gc-stage-cell__dot.is-on')).toHaveLength(4);
+    expect(wrapper.find('.gc-stage-cell__dot').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -169,7 +177,7 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
       }
     });
     const wrapper = await mountLive();
-    const cell = wrapper.find('.gc-stage-cell');
+    const cell = wrapper.findAll('tbody tr')[0].findAll('td')[2];
     expect(cell.find('.mk-badge').exists()).toBe(true);
     // 日期列无时间线可显 → —（且没有可悬停的时间线标题）
     expect(stageDateEl(wrapper).exists()).toBe(false);
@@ -177,7 +185,7 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     wrapper.unmount();
   });
 
-  it('live：任意状态都渲染 4 步点条（创建→澄清→方案→完成；进行中点亮当前步）', async () => {
+  it('live：任意状态都只出一枚状态徽章（进行中/已完成/失败/已取消），不再渲染过程点条', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -194,17 +202,15 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
       }
     });
     const wrapper = await mountLive();
-    const cells = wrapper.findAll('.gc-stage-cell');
+    const cells = wrapper.findAll('tbody tr').map((tr) => tr.findAll('td')[2]);
     expect(cells).toHaveLength(6);
-    for (const cell of cells) {
-      expect(cell.findAll('.gc-stage-cell__dot')).toHaveLength(4);
-    }
-    const onCounts = cells.map((c) => c.findAll('.gc-stage-cell__dot.is-on').length);
-    expect(onCounts).toEqual([1, 2, 3, 4, 3, 2]);
+    const texts = cells.map((c) => c.find('.mk-badge').text());
+    expect(texts).toEqual(['进行中', '进行中', '进行中', '已完成', '失败', '已取消']);
+    expect(wrapper.find('.gc-stage-cell__dot').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it('live：合并列只在措得出阶段说不出的话时出结果词（2026-10-15 用户拍板）', async () => {
+  it('live：进行中一律「进行中」，终态/异常出结果词（2026-10-22 简化）', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -219,14 +225,15 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
       }
     });
     const wrapper = await mountLive();
-    const cells = wrapper.findAll('.gc-stage-cell');
-    // 进行中行：只出阶段词（澄清中）+ 过程条，不出「进行中」状态词（黑名单口径，同色蓝胶囊复读已消）
-    expect(cells[0].text()).toContain('澄清中');
-    expect(cells[0].text()).not.toContain('进行中');
-    // 终态/异常行：结果词压过阶段词（这些是阶段表达不了的终止方式）
-    expect(cells[1].text()).toContain('已完成');
-    expect(cells[2].text()).toContain('失败');
-    expect(cells[3].text()).toContain('已取消');
+    const cells = wrapper.findAll('tbody tr').map((tr) => tr.findAll('td')[2]);
+    // 进行中行：只出「进行中」，阶段词（澄清中）退到 title
+    expect(cells[0].text()).toBe('进行中');
+    expect(cells[0].text()).not.toContain('澄清中');
+    expect(cells[0].find('.mk-badge').attributes('title')).toContain('正在了解你的情况');
+    // 终态/异常行：结果词
+    expect(cells[1].text()).toBe('已完成');
+    expect(cells[2].text()).toBe('失败');
+    expect(cells[3].text()).toBe('已取消');
     wrapper.unmount();
   });
 });

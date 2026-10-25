@@ -11,7 +11,9 @@
           <!-- 账号轴的状态与账户操作归「账户信息」卡头（2026-10-08 重做）：沿用全站卡头语法，
                标题吃剩余宽度、尾部元素贴右（「头内成组」规则）。 -->
           <div class="mk-card__head">
-            <h3 class="mk-card__title">账户与许可</h3>
+            <!-- 2026-10-23 走查：标题原为「账户与许可」，页签叫「账号与许可」——同屏两个词；
+                 统一跟页签用「账号」（本卡字段也叫「账号类型」「账号操作」） -->
+            <h3 class="mk-card__title">账号与许可</h3>
             <div class="mk-card__head-right">
               <span class="mk-badge" :class="isDeleted ? 'mk-badge--deleted' : 'mk-badge--ok'">
                 {{ isDeleted ? '已删除' : '正常' }}
@@ -20,9 +22,9 @@
                 {{ restoring ? '恢复中…' : '恢复用户' }}
               </button>
               <div v-if="canDelete" class="mk-menu">
-                <button type="button" class="mk-menu__btn" aria-label="账户操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
+                <button type="button" class="mk-menu__btn" aria-label="账号操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
                 <div v-if="openMenu === 'account'" class="mk-menu__pop" :style="popStyle" @click.stop>
-                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
+                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留" @click="menuDelete">删除账号…</button>
                 </div>
               </div>
             </div>
@@ -247,6 +249,21 @@ async function openDebugStation() {
   if (!id || grantStatus.value !== 'active' || !projectionGrant.value?.id) return
   // 打开前先校验并清掉过期残留：本地不留已被服务端拒收的旧 token（本次会重新签发）
   purgeExpiredProjectionToken()
+  /* 先同步占位开窗再签发 token：window.open 在 await 之后会丢掉用户手势而被弹窗拦截。
+     失败时关掉空白窗并回传错误，不留白页。 */
+  const win = window.open('', '_blank')
+  if (!win) {
+    grantMessage.value = '打开失败：浏览器拦截了新标签页，请允许本站弹窗后重试'
+    grantMsgTone.value = 'error'
+    return
+  }
+  try {
+    win.opener = null
+    win.document.title = '正在打开调试站…'
+    win.document.body.textContent = '正在验证协助许可…'
+  } catch {
+    /* 同源窗口正常可写；受限浏览器忽略占位文案 */
+  }
   grantOpening.value = true
   try {
     const response = await adminUsersApi.createProjectionTokenFromGrant(projectionGrant.value.id, {
@@ -271,8 +288,9 @@ async function openDebugStation() {
     // 与 token 同步落过期时刻：先有 token 后有期限，避免出现无法清理的孤儿 token
     localStorage.setItem(PROJECTION_TOKEN_EXPIRES_KEY, String(expiresAt))
     projectionTokenExpiresAt.value = expiresAt
-    window.open('/admin/console', '_blank')
+    win.location.replace('/admin/console')
   } catch (e) {
+    win.close()
     grantMessage.value = `打开失败：${errMsg(e)}`
     grantMsgTone.value = 'error'
   } finally {
@@ -421,7 +439,7 @@ async function loadDetail() {
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* 账号类型（2026-10-11 深设计）：这一页的主语标签——数据隔离/排查先要知道看的是谁。
-   口径与列表徽章（MkVariantBadge 判例）、live.ts 的 isVirtualLearner/isTestAccount 一致 */
+   口径与列表身份徽章（虚拟 / 测试两类备注）、live.ts 的 isVirtualLearner/isTestAccount 一致 */
 const acctType = computed(() => {
   const base = liveUsers.value.find((u) => u.id === uid.value)
   if (!base) return '—'

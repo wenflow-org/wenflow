@@ -8,6 +8,9 @@
 export * from './protocol';
 export * from './context-envelope';
 
+import { pluginIdOfSkill, pluginNameOf } from '../config/plugin-catalog';
+import { getPluginStates } from '../services/plugin-states.service';
+
 // 阶段任务设计器
 export { stageDesignerDefinition } from './stage-designer';
 import { stageDesigner as stageDesignerFn } from './stage-designer';
@@ -287,6 +290,15 @@ export async function executeSkillWithResult(
 ): Promise<any> {
   const rawId = (definition.id || definition.name) as string;
   const skillId = executableSkillHandlers[rawId] ? rawId : rawId.replace(/^skill:/, '');
+  // 插件启停（2026-10-24）：停用插件 = 成员能力不执行；调用方按各自失败策略继续。
+  // 放在统一分发点而不是各 handler：新增成员 Skill 不会漏判。
+  const pluginId = pluginIdOfSkill(skillId);
+  if (pluginId) {
+    const states = await getPluginStates();
+    if (states[pluginId] === false) {
+      throw new Error(`插件「${pluginNameOf(pluginId)}」已停用，Skill「${skillId}」未执行`);
+    }
+  }
   const handler = executableSkillHandlers[skillId];
   if (!handler) {
     throw new Error(`Skill handler not found: ${skillId}`);

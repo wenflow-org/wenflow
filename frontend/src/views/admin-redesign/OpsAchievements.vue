@@ -60,32 +60,32 @@
         <div class="mk-card__head-right">
           <MkFilterSearch v-model="recordSearch" placeholder="搜索姓名 / 邮箱" @keydown.enter="reloadRecordsFromFirstPage" />
           <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecordsFromFirstPage">查询</button>
-          <DataScopeToggle :model-value="achIncludeTest" @update:model-value="onAchRescope" />
         </div>
       </div>
       <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap；
-             成就/用户双行单元格由 mk-cell-main 全局 max-width 截断兜底 -->
-        <table class="mk-table mk-table--nowrap">
+        <!-- 固定列宽（2026-10-22 与教学组三表同判例）：成就/用户两列在 auto 布局下按当页最长
+             名称分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。双行单元格由
+             mk-cell-main 全局 max-width 截断兜底 -->
+        <table class="mk-table mk-table--nowrap mk-table--fixed ach-table">
           <thead>
             <tr>
-              <th>成就</th>
-              <th>用户</th>
-              <th>类型</th>
+              <th scope="col" class="ach-c-title">成就</th>
+              <th scope="col" class="ach-c-user">用户</th>
+              <th scope="col" class="ach-c-type">类型</th>
               <th
                 scope="col"
-                class="mk-th--right mk-th--sortable"
+                class="mk-th--right mk-th--sortable ach-c-xp"
                 :aria-sort="achSortState('xpReward')"
                 @click="toggleAchSort('xpReward')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAchSort('xpReward')">XP<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ach-c-earned"
                 :aria-sort="achSortState('earnedAt')"
                 @click="toggleAchSort('earnedAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAchSort('earnedAt')">解锁时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right ach-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -103,9 +103,8 @@
                 <div class="mk-cell-main">
                   <strong>
                     {{ r.user?.name || '—' }}
-                    <span v-if="r.user?.isVirtualLearner" class="mk-badge mk-badge--virtual">虚拟</span>
                   </strong>
-                  <span class="mk-cell-sub">{{ r.user?.email || r.userId }}</span>
+                  <span class="mk-cell-sub" :title="r.user?.email || r.userId">{{ r.user?.email || r.userId }}</span>
                 </div>
               </td>
               <td><span class="mk-badge" :class="typeBadge(r.type)">{{ typeText(r.type) }}</span></td>
@@ -133,7 +132,7 @@
         :title="isRecordsFiltered ? '没有符合筛选条件的解锁记录' : '还没有解锁记录'"
         :description="isRecordsFiltered
           ? '当前搜索/筛选条件下无匹配记录，可清除筛选查看全部。'
-          : '用户完成任务、连续学习、达成里程碑后自动解锁，也可在「成就定义」手动发放。'"
+          : ''"
         min
         :action-text="isRecordsFiltered ? '清除筛选' : ''"
         @action="clearRecordsFilters"
@@ -184,7 +183,7 @@
                 @click="grantUserId = u.id"
               >
                 <strong>{{ u.name || u.email }}</strong>
-                <span class="mk-cell-sub">{{ u.email }}</span>
+                <span class="mk-cell-sub" :title="u.email">{{ u.email }}</span>
               </button>
             </div>
             <p v-else-if="grantSearched" class="ac-none">没有匹配用户</p>
@@ -204,8 +203,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useTableSort } from './useTableSort'
 import { timeAgo, errMsg } from './live'
 import { adminAchievementsApi, adminUsersApi, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
@@ -214,7 +213,6 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import AchIcon from './AchIcon.vue'
@@ -225,11 +223,33 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
-const achTab = ref<'defs' | 'records'>('defs')
-function switchAchTab(t: 'defs' | 'records') {
+/** 页签可寻址（2026-10-24）：宿主已占 ?tab=，子视图用 ?sub=defs|records。
+    「解锁记录」常被运维链接直指（如「谁拿了成就」），此前只能落到定义页再手点。
+    无 router 上下文（单测/独立挂载）时降级为纯组件内状态。 */
+const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.$router
+const achRoute = hasRouterCtx ? useRoute() : null
+const achRouter = hasRouterCtx ? useRouter() : null
+
+const achTab = ref<'defs' | 'records'>(achRoute?.query.sub === 'records' ? 'records' : 'defs')
+function applyAchTab(t: 'defs' | 'records') {
+  if (achTab.value === t) return
   achTab.value = t
   if (t === 'records' && !records.value.length && !recordsLoading.value) void reloadRecords()
 }
+/** URL 与页签双向：点击写 ?sub=（defs 为默认值，删键保持地址干净）；浏览器后退由 watcher 回放 */
+function switchAchTab(t: 'defs' | 'records') {
+  applyAchTab(t)
+  if (!achRoute || !achRouter) return
+  const cur = typeof achRoute.query.sub === 'string' ? achRoute.query.sub : ''
+  if (cur === (t === 'records' ? 'records' : '')) return
+  const query = { ...achRoute.query }
+  if (t === 'records') query.sub = 'records'
+  else delete query.sub
+  void achRouter.push({ query })
+}
+watch(() => achRoute?.query.sub, (v) => {
+  applyAchTab(v === 'records' ? 'records' : 'defs')
+})
 
 /* 页签键盘契约（审核 #167）：roving tabindex + 左右方向键循环切换并移动焦点 */
 const ACH_TABS = ['defs', 'records'] as const
@@ -325,8 +345,6 @@ const recordSearch = ref('')
    改词后点下一页，就会以「未查询过的新词 + 第 N 页」发请求——跳过了新结果的第一页，
    还可能落在越界页显示空列表（2026-10-08 走查确认）。 */
 const committedSearch = ref('')
-const achIncludeTest = ref(false)
-
 /* 服务端排序：白名单 earnedAt / xpReward，默认解锁时间倒序；变更回第 1 页重查。 */
 const {
   sortKey: achSortKey,
@@ -339,12 +357,6 @@ const {
   defaultDir: 'desc',
   storageKey: 'wf_achievements_records_sort'
 })
-/** 数据范围切换（仅真实/含模拟）→ 立即按新范围重拉 */
-function onAchRescope(v: boolean) {
-  achIncludeTest.value = v
-  reloadRecordsFromFirstPage()
-}
-
 /* 排序变更：回第 1 页重查（与筛选同义） */
 watch([achSortKey, achSortDir], () => {
   recordPage.value = 1
@@ -370,7 +382,7 @@ async function reloadRecords() {
       page: recordPage.value,
       limit: pageSize.value,
       ...search,
-      includeTest: achIncludeTest.value || undefined,
+
       sort: (achSortKey.value || undefined) as 'earnedAt' | 'xpReward',
       order: achSortDir.value,
     } as Parameters<typeof adminAchievementsApi.getRecords>[0])
@@ -387,7 +399,7 @@ async function reloadRecords() {
 
 /** 记录页签是否处于筛选态（搜索词 / 含测试账号口径）——按已生效的搜索词判断，
     输入框里未提交的草稿不算筛选态 */
-const isRecordsFiltered = computed(() => !!committedSearch.value || achIncludeTest.value)
+const isRecordsFiltered = computed(() => !!committedSearch.value)
 /** 筛选提交（回车 / 查询 / 清空 / 换页大小）：提交当前搜索词并回第 1 页重查
     （页码停在越界页会显示空列表） */
 function reloadRecordsFromFirstPage() {
@@ -398,7 +410,6 @@ function reloadRecordsFromFirstPage() {
 /** 清除记录筛选（搜索 + 数据范围），回第 1 页重查 */
 function clearRecordsFilters() {
   recordSearch.value = ''
-  achIncludeTest.value = false
   reloadRecordsFromFirstPage()
 }
 /* 每页条数变化：回第 1 页重查（此前只传 :page-size 不监听 @update:pageSize，
@@ -521,10 +532,20 @@ defineExpose({ refresh: () => { void loadDefs(); void reloadRecords() } })
 
 onMounted(() => {
   void loadDefs()
+  if (achTab.value === 'records') void reloadRecords()
 })
 </script>
 
 <style scoped>
+/* 固定列宽（2026-10-22 与教学组三表同判例）：成就/用户两列在 auto 布局下按当页最长
+   名称分宽，翻页跳动；fixed 后按表头定死，余量按权重摊开。 */
+.ach-c-title { width: 170px; }
+.ach-c-user { width: 240px; }
+.ach-c-type { width: 120px; }
+.ach-c-xp { width: 90px; }
+.ach-c-earned { width: 140px; }
+.ach-c-act { width: 140px; }
+
 /* 嵌入模式（运营中心宿主 flex 列内）：根挂 .mk-page--fill（模板）与反馈/公告/通知三页签同形——
    记录卡 .mk-card--fill 由此拿到确定高度，「卡片内滚动区接管纵向滚动、Pagination 吸底」契约生效。
    overflow-y 保留 auto：成就定义页签是普通卡（非 fill），内容超出时仍需根级可滚（对齐宿主 .oh-body 判例）。 */

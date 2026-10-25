@@ -3,8 +3,8 @@
        batch-delete 落地。与 VirtualLearnerReclaim 同族交互（Teleport 模态 / 预览清单 / busy 互斥），
        但判定在客户端算（建号时间与 tags 都在列表行里），删除走服务端既有批量端点。 -->
   <Teleport v-if="render" to="body">
-  <div v-if="state.open" class="mk-modal">
-    <div class="mk-modal__panel" role="dialog" aria-label="清理旧账号">
+  <div v-if="state.open" ref="maskRef" class="mk-modal">
+    <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="清理旧账号">
       <div class="mk-modal__head">
         <h3 class="mk-modal__title">清理旧账号</h3>
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="state.open = false">✕</button>
@@ -73,11 +73,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref, toRef } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { loadLiveData, errMsg } from './live'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import { useEscape } from './useEscape'
+import { useMaskClose, useOverlay } from './useOverlay'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import type { VirtualLearnerRow as Sample } from './virtualLearnersTypes'
 
@@ -98,6 +100,18 @@ const state = reactive({
   /** 分批删除进度文案（空 = 未在执行） */
   progress: ''
 })
+
+const maskRef = ref<HTMLElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
+const openRef = toRef(state, 'open')
+
+function close(): void {
+  state.open = false
+}
+
+useEscape(() => openRef.value, close)
+useOverlay(openRef, panelRef)
+useMaskClose(maskRef, close)
 
 const keepTagSet = computed(() => new Set(
   state.keepTagsText.split(/[\n,，;；\s]+/).map((s) => s.trim()).filter(Boolean)

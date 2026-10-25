@@ -28,3 +28,11 @@ export function findAnnouncementById(id: string) {
 export function deleteAnnouncement(id: string) {
   return prisma.announcements.delete({ where: { id } });
 }
+
+/** 公告里 createdBy 历史上落的是 admin_* 用户 id；读取侧补一次显示名解析。 */
+export function findAdminNamesByIds(ids: string[]) {
+  return prisma.users.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true }
+  });
+}

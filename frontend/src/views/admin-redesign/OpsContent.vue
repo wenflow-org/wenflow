@@ -2,34 +2,33 @@
   <div :class="embedded ? 'mk-page--fill oc-embedded' : 'mk-page mk-page--fill'">
     <!-- 页头（mk-pagehead 标准形态，2026-10-03 用户拍板全站统一）：标题+口径副文+口径开关。
          2026-10-04 页头状态条退役：总量读数迁 MkKpi 卡带，失败抬红归贴表分布条红段 -->
-    <MkPageHead v-if="!embedded" title="学习路径" sub="由目标澄清生成的阶段式路径与推进状态">
+    <MkPageHead v-if="!embedded" title="学习路径" sub="阶段式学习路径与推进状态">
       <template #actions>
-        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
-        <DataScopeToggle v-model="includeTest" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             列表 = 全部非虚拟账号；虚拟学习者的路径归虚拟学习者域 -->
       </template>
     </MkPageHead>
     <!-- 路径总量 KPI（2026-10-04 状态条退役：原状态条「共 N 条 · 里程碑 · 任务」读数迁入 MkKpi 卡带；
-         生成失败抬红由卡内贴表分布条红段单源承载，不再重复着色） -->
+         生成失败抬红由卡头状态 pill 与行内徽标承载，不再重复着色）。
+         2026-10-21 用户「不要这种注释型解释文案，kpi面板都要改一下这类文案」：四张卡的 hint 全部撤掉——
+         它们讲的都是数据从哪来、挂在哪、下一步去哪个入口（含测试账号、跨全部已生成路径、
+         挂在里程碑下、可在列表重试生成），不是读数本身。口径改为只在 title 里给。 -->
     <section v-if="!embedded" class="mk-kpi-grid" aria-label="路径总量">
-      <!-- hint = 一短句可见口径（全站家法，TokenCost 判例）；长解释收 title 悬停 -->
       <MkKpi
         label="路径总数"
         :value="stats?.total ?? '—'"
-        :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户'"
-        :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
+        title="不含虚拟学习者"
       />
-      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" hint="跨全部已生成路径" title="已生成路径的里程碑总数" />
+      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" title="已生成路径的里程碑总数" />
       <!-- 2026-10-16 KPI 审计补完：label 原为「任务」，而本页其它文案（删除确认）说的是「子任务」，
            同一个东西两个叫法。按页面内部多数用法统一为「子任务」。 -->
-      <MkKpi label="子任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的子任务总数" />
+      <MkKpi label="子任务" :value="stats?.totalTasks ?? '—'" title="已生成路径的子任务总数" />
       <!-- P-49（#74）：生成失败路径此前只在分布条红段；0 时不占位 -->
       <MkKpi
         v-if="byStatus('failed') > 0"
         label="生成失败"
         :value="byStatus('failed')"
         tone="bad"
-        hint="可在列表重试生成"
-        title="status=failed 的路径数（与分布条红段同源）。点分布条红段可下钻"
       />
     </section>
 
@@ -44,9 +43,9 @@
         <div class="mk-filter">
           <!-- 状态筛选（2026-10-17 从退役分布带迁回）：四枚举 + 枚举外的「其它」档；
                计数取 stats 全平台 byStatus，stats 未落定时不渲染计数徽章（不把未知读成 0）。
-               「停滞」是分布条表达不了的**复合口径快筛**——进行中 ∧ 超 24h 无更新，
-               该被拎出来的那批（与「生成失败」同为运营救援对象，行内带同名徽标、⋯ 菜单可
-               就地「重试生成」）。两者叠加为 AND；再点已选中的状态即取消 -->
+               2026-10-22 用户「停滞有必要放在这吗」后退役：停滞判据是「active 且 24h 无写入」，
+               真实用户数日不学即命中，且其救援动作只对虚拟会话可用；最近活动列本就按时间排序，
+               同题不再用一枚会承诺错动作的标签表达。 -->
           <div class="mk-pills" role="group" aria-label="状态筛选">
             <button
               v-for="p in ocStatusPills"
@@ -58,16 +57,6 @@
               :title="p.title"
               @click="selectStatus(p.key)"
             >{{ p.name }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
-          </div>
-          <div class="mk-pills" role="group" aria-label="路径快筛">
-            <button
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': stalledOnly }"
-              :aria-pressed="stalledOnly"
-              title="进行中且超过 24 小时无更新（生成链停滞，可「重试生成」补齐）"
-              @click="stalledOnly = !stalledOnly"
-            >停滞<span class="mk-pill__count">{{ stalledCount }}</span></button>
           </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
@@ -81,7 +70,8 @@
           <MkLoading v-if="loading" inline text="加载中…" />
           <MkCols
             :col-defs="colDefs"
-            storage-key="wf_paths_hidden_cols"
+            storage-key="wf_paths_hidden_cols_v2"
+            :default-hidden="PATH_DEFAULT_HIDDEN"
             v-model:hidden="hiddenCols"
           />
           <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
@@ -104,57 +94,55 @@
         @action="reload(true)"
       />
       <div v-else-if="filtered.length" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长标题/长主题由 .mk-cell-main/.mk-cell-text 的 max-width 截断兜底
-             （同 GoalConversations 判例）。此前 fixed+colgroup 是为压制超长主题列，截断类已兜住。
-             2026-10-06 审核 #56：td nowrap 收敛全局修饰类 .mk-table--nowrap（同批 5 页已挂），
-             本页私有 .oc-list td 拷贝与容器钩子 oc-list 随撤 -->
-        <table class="mk-table mk-table--click mk-table--nowrap">
+        <!-- 固定列宽（2026-10-22 与教学会话/目标对话同判例）：自动布局下路径/用户两列按当页
+             最长文本分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
+             单元格 nowrap 仍走全局 .mk-table--nowrap，长标题/主题由 .mk-cell-main/.mk-cell-text 截断 -->
+        <table class="mk-table mk-table--click mk-table--nowrap mk-table--fixed oc-table">
           <thead>
             <tr>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-path"
                 :aria-sort="ocSortState('path')"
                 @click="toggleOcSort('path')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('path')">路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('user')">用户</th>
+              <th v-if="!hiddenCols.has('user')" scope="col" class="oc-c-user">用户</th>
               <th
                 v-if="!hiddenCols.has('status')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-status"
                 :aria-sort="ocSortState('status')"
                 @click="toggleOcSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('difficulty')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-difficulty"
                 :aria-sort="ocSortState('difficulty')"
                 @click="toggleOcSort('difficulty')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('difficulty')">难度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('hours')"
                 scope="col"
-                class="mk-th--sortable mk-th--right"
+                class="mk-th--sortable mk-th--right oc-c-hours"
                 :aria-sort="ocSortState('hours')"
                 @click="toggleOcSort('hours')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('hours')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('hours')">预计时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('progress')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-progress"
                 :aria-sort="ocSortState('progress')"
                 @click="toggleOcSort('progress')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('progress')">进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('updated')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable oc-c-updated"
                 :aria-sort="ocSortState('updated')"
                 @click="toggleOcSort('updated')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('updated')">最近活动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-th--right oc-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -175,7 +163,8 @@
                   <!-- P2-6（2026-10-04 全站评审）：独立「主题」列退役——91% 行与路径列同文
                        （库内 885/951），改作路径副行且仅当 subject≠title 渲染（28/312 行有真增量） -->
                   <span v-if="p.subject && p.subject !== p.title" class="mk-cell-sub" :title="p.subject">{{ p.subject }}</span>
-                  <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }}</span>
+                  <!-- 2026-10-23 走查：内部路径 ID（lp_1792…）副行撤除——截断后既不可复制也不可读，
+                       本页搜索虽支持 ID，但 ID 的真实来源是日志，不在列表里认。 -->
                 </div>
               </td>
               <td v-if="!hiddenCols.has('user')">
@@ -198,15 +187,12 @@
                       @keydown.enter.stop.prevent="openLearnerOf(p)"
                     >{{ p.user?.name || '—' }}</button>
                     <strong v-else>{{ p.user?.name || '—' }}</strong>
-                    <span class="mk-cell-sub">{{ p.user?.email || '' }}</span>
-                  </div>
-                  <!-- 身份徽章与姓名同一行（2026-10-19 用户走查「这怎么是起了一行」）：
-                       原先 .oc-tags 是用户格之外的独立块，测试视角下每一行都会多出一行
-                       「虚拟 / 测试账号」，表格被拉高；改为与 Users · GoalConversations 同形，
-                       徽章右对齐挂在行内（邮箱过长由 .mk-cell-sub 省略号兜底）。 -->
-                  <div class="oc-tags">
-                    <MkVariantBadge v-if="p.user?.isVirtualLearner" kind="virtual" />
-                    <MkVariantBadge v-else-if="p.isTestAccount" kind="test" />
+                    <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                    <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不再复读 -->
+                    <span v-if="emailSubline(p.user?.email, p.user?.name) || p.isTestAccount" class="mk-cell-subline">
+                      <span v-if="emailSubline(p.user?.email, p.user?.name)" class="mk-cell-sub" :title="p.user?.email || ''">{{ p.user?.email || '' }}</span>
+                      <span v-if="p.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                    </span>
                   </div>
                 </div>
               </td>
@@ -226,11 +212,8 @@
                   <span class="oc-progress__count mk-cell-sub">{{ p.completedMilestones }}/{{ p.totalMilestones }}</span>
                 </div>
               </td>
-              <td v-if="!hiddenCols.has('updated')" :title="stallTitle(p)">
-                <span class="mk-cell-sub mono">{{ timeAgo(activityAt(p)) }}</span>
-                <!-- 停滞标记（2026-10-10 跑批实锤：active 且长时间无更新=生成链停滞，可「重试生成」补齐；
-                     真实用户数日不学属正常，只提示不强判死，amber=需关注可行动） -->
-                <span v-if="isStalled(p)" class="mk-badge mk-badge--warn mk-badge--sm" title="长时间无更新，可「重试生成」补齐课程任务">停滞</span>
+              <td v-if="!hiddenCols.has('updated')" :title="`完整时间 ${fmtDate(activityAt(p))}`">
+                <span class="mk-cell-sub">{{ timeAgo(activityAt(p)) }}</span>
               </td>
               <td>
                 <!-- 操作列（2026-10-15 用户拍板）：行内只留高频「详情」，其余（重试生成/下线恢复/删除）
@@ -240,15 +223,15 @@
                   <button
                     type="button"
                     class="mk-btn mk-btn--sm"
-                    :title="p.status === 'failed' ? '该路径生成失败，可在 ⋯ 菜单「重试生成」' : undefined"
                     @click.stop="openPath(p)"
                   >详情</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === p.id" @click.stop="toggleMenu(p.id)">⋯</button>
                     <div v-if="openMenu === p.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                      <!-- 失败行 / 停滞 active：就地重发（守卫自动判 core/stageDesign） -->
+                      <!-- 只有失败行需要重发（守卫自动判 core/stageDesign）；
+                           2026-10-22 起不再对「24h 无更新」的 active 行开放重试——真实路径没有虚拟会话，点了必 409 -->
                       <button
-                        v-if="p.status === 'failed' || isStalled(p)"
+                        v-if="p.status === 'failed'"
                         type="button"
                         class="mk-menu__item"
                         role="menuitem"
@@ -271,7 +254,7 @@
         v-else
         icon="◌"
         :title="isFiltered ? '当前筛选无匹配' : '没有学习路径'"
-        :description="isFiltered ? '放宽筛选条件试试。' : '用户的目标对话生成路径后，会出现在这里。'"
+        :description="isFiltered ? '放宽筛选条件试试。' : ''"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -296,7 +279,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { timeAgo, errMsg, shortId, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { timeAgo, errMsg, isPageCacheFresh, markPageFetched } from './live'
 import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -311,10 +294,9 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import { emailSubline } from '@/components/mk/avatarName'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
-import { statusText, statusBadge, isPathStalled, pathRetryTypeText, PATH_STALL_HOURS } from './opsShared'
+import { statusText, statusBadge, pathRetryTypeText } from './opsShared'
 import { isTestAccountUser, useListQueryState } from './learner-profile'
 
 /** 嵌入模式：作为「目标对话」页内「学习路径」tab 渲染（隐藏页面壳与状态条，筛选/表格/抽屉保留）；
@@ -335,14 +317,6 @@ const loadError = ref('')
 const keyword = ref('')
 /** 状态筛选（'' 退役，哨兵 'all' 与 useListQueryState 的 pill 约定一致） */
 const statusFilter = ref('all')
-/** 复合快筛「停滞」（进行中 ∧ 超阈值无更新）：与 statusFilter 叠加为 AND；再点取消。
-    计数按本页已加载窗口（同 GoalConversations「未生成路径」，不显服务端全量口径以免两数打架） */
-const stalledOnly = ref(false)
-/* 口径整组统一（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
 const stats = ref<LearningContentStats | null>(null)
 
 /* 列显隐（与同页其他列表一致）：路径/操作固定，其余可隐藏 */
@@ -353,11 +327,15 @@ const colDefs = [
   { key: 'user', label: '用户', title: '所属用户' },
   { key: 'status', label: '状态', title: '路径状态' },
   { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶），无法判断时为未知' },
-  { key: 'hours', label: '时长', title: '预计学习时长（约数，带 ~ 表示近似）' },
+  { key: 'hours', label: '预计时长', title: '预计学习时长（约数，带 ~ 表示近似）' },
   { key: 'progress', label: '进度', title: '里程碑完成进度' },
-  { key: 'updated', label: '更新时间', title: '最近更新' }
+  { key: 'updated', label: '最近活动', title: '路径最近一次活动（生成、推进或状态变化）' }
 ] as const
-const hiddenCols = ref<Set<string>>(new Set())
+/* 2026-10-22 默认收起「难度」：它由目标对话的水平自述归一而来，真实数据里多为「未知」，
+   且不改变运营动作（路径是否生成成功、进度如何才是要看的）。仍在「列」菜单可开；
+   存储键升 v2，旧本地配置不覆盖新默认。 */
+const PATH_DEFAULT_HIDDEN = ['difficulty'] as const
+const hiddenCols = ref<Set<string>>(new Set<string>(PATH_DEFAULT_HIDDEN))
 
 /* 状态条四态计数遗留口径：byStatus 仍供贴表分布条分段/图例（2026-10-04 状态条退役后
    dashTone 随条删除——失败抬红由分布条红段单源承载） */
@@ -404,7 +382,7 @@ const ocStatusPills = computed<Array<{ key: string; name: string; n: number | nu
       name: e.name,
       n: ready ? e.n : null,
       title: e.key === 'failed'
-        ? `生成失败：${e.n} 条 · 行内「重试生成」可就地重发（详情页同入口）`
+        ? `生成失败：${e.n} 条`
         : e.key === 'other'
           ? `枚举外状态合计 ${e.n} 条`
           : `${e.name}：${e.n} 条`
@@ -451,18 +429,14 @@ const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return sortOcRows(rows.value.filter((p) => {
     if (statusFilter.value !== 'all' && !pathStatusMatch(p.status, statusFilter.value)) return false
-    if (stalledOnly.value && !isStalled(p)) return false
     if (!k) return true
     return `${p.title} ${p.user?.name || ''} ${p.user?.email || ''} ${p.subject || ''}`.toLowerCase().includes(k)
   }))
 })
-/** 「停滞」快筛命中数（按当前已加载窗口；判据与行内「停滞」徽标同一 isStalled） */
-const stalledCount = computed(() => rows.value.filter((p) => isStalled(p)).length)
-const isFiltered = computed(() => !!keyword.value.trim() || statusFilter.value !== 'all' || stalledOnly.value)
+const isFiltered = computed(() => !!keyword.value.trim() || statusFilter.value !== 'all')
 function clearFilters() {
   keyword.value = ''
   statusFilter.value = 'all'
-  stalledOnly.value = false
 }
 /* 筛选 / 页码 ↔ URL query（2026-10-13 运营走查 O2）：本页原为「只读 URL 不回写」（写入权在
    发起方）——手动筛选在刷新 / 分享 / 收藏里全部丢失。改为双向同步（缺省值不写 URL，所以
@@ -473,15 +447,13 @@ function clearFilters() {
 useListQueryState(
   {
     pill: statusFilter, keyword, page, pageSize,
-    allowedPills: ['all', 'active', 'completed', 'failed', 'archived'],
-    /* 「停滞」快筛也进 URL（1=开），刷新/分享/返回可还原（与 pill 同一组合式单点） */
-    extra: [{ key: 'stalled', get: () => (stalledOnly.value ? '1' : ''), set: (v) => { stalledOnly.value = v === '1' }, allowed: ['1'] }]
+    allowedPills: ['all', 'active', 'completed', 'failed', 'archived']
   },
   { pill: 'status' }
 )
 /* 回第 1 页只监听筛选输入与排序（TeachingSessions 判例）：监听 filtered 会让数据回填
    （重挂载恢复列表态后的装载）也把页码打回第 1 页。越界收敛由 Pagination 自带 watcher 兜底。 */
-watch([keyword, statusFilter, stalledOnly, ocSortKey, ocSortDir], () => {
+watch([keyword, statusFilter, ocSortKey, ocSortDir], () => {
   page.value = 1
 })
 /* 出站下钻不再存快照：筛选/页码已住进 URL（上方 useListQueryState），
@@ -564,9 +536,6 @@ async function reload(force = false) {
     const res = await adminLearningContentApi.listPaths({
       page: 1,
       limit: 1000,
-      includeTest: includeTest.value || undefined,
-      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的路径
-      testOnly: includeTest.value || undefined,
     })
     // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
     if (seq !== listReqSeq) return
@@ -595,8 +564,8 @@ async function reload(force = false) {
 async function loadStats() {
   const seq = ++statsReqSeq
   try {
-    // 口径与列表同一判据：/stats 收 includeTest + testOnly（否则 KPI/里程碑/分布条与列表不同视角）
-    const res = await adminLearningContentApi.getStats(includeTest.value, includeTest.value)
+    // 口径与列表同一判据（否则 KPI/里程碑/分布条与列表不同视角）
+    const res = await adminLearningContentApi.getStats()
     if (seq !== statsReqSeq) return
     stats.value = res.data?.data ?? res.data
   } catch {
@@ -672,20 +641,7 @@ async function remove(p: PathRow) {
   }
 }
 
-/* 生成停滞（active 且「最近活动」超 PATH_STALL_HOURS）：提醒可「重试生成」补齐。
-   判据用真墙钟最近活动（同「更新」列口径）：虚拟路径的 updatedAt 是模拟钟未来值，会永远判「不停滞」。 */
-function isStalled(p: PathRow) {
-  const at = activityAt(p)
-  return at ? isPathStalled(p.status, at) : false
-}
-function stallTitle(p: PathRow) {
-  const full = `完整时间 ${fmtDate(activityAt(p))}`
-  return isStalled(p)
-    ? `${full}。超过 ${PATH_STALL_HOURS} 小时无更新，可「重试生成」补齐`
-    : full
-}
-
-/* 重试路径生成（failed / 停滞 active 的运营救援）：后端按 learningPathId 找最新虚拟会话
+/* 重试路径生成（只服务失败行）：后端按 learningPathId 找最新虚拟会话
    代发 retry-path-generation，守卫自动判 core=重建主结构 / stageDesign=补齐阶段任务；
    拒绝时 HTTP 200 + success:false，原因透传 toast（家法：修复类确认显式 danger:false） */
 async function retryGeneration(p: PathRow) {
@@ -705,7 +661,7 @@ async function retryGeneration(p: PathRow) {
       toast.success(`已提交重试（${pathRetryTypeText(body.data.retryType)}）`)
       doneConfirm()
       /* G6（2026-10-10）：必须 force——reload() 非 force 时 60s TTL 内直接短路 return，
-         重试提交后列表纹丝不动（行还挂在「停滞/失败」上，用户以为点了没生效） */
+         重试提交后列表纹丝不动（行还挂在「生成失败」上，用户以为点了没生效） */
       void reload(true)
       void loadStats()
     } else {
@@ -756,21 +712,6 @@ onMounted(() => {
   void reload()
   void loadStats()
 })
-/* 数据隔离切换：仅真实 ↔ 含虚拟/测试。
-   2026-10-06 审核 F2-3：此前切换只发起重拉、不动旧数据 —— 实测 /paths 响应可滞后 3.5-10s，
-   滞后期间「含测试」已选中、KPI/分布条已按新口径刷新，而表格仍是旧口径的行与分页读数
-   （「路径总数 1021」对「共 341 条」），三处读数互相打架且全程无任何加载提示。
-   改为切换即清列表与统计读数（清后 rows 为空 → 走骨架，两处读数不会同屏打架），再按新口径
-   重拉；页码回第 1 页（新口径是新结果集，避免停在旧口径才有的页码上）。 */
-watch(includeTest, () => {
-  rows.value = []
-  total.value = 0
-  stats.value = null
-  page.value = 1
-  void reload(true)
-  void loadStats()
-})
-
 /* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → 强制重拉：包装 force，TTL 内点击仍生效） */
 defineExpose({ reload: () => void reload(true) })
 </script>
@@ -789,14 +730,26 @@ defineExpose({ reload: () => void reload(true) })
 .oc-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 里程碑计数直出（#54）：百分比旁的达成量，等宽数字、不抢主值 */
 .oc-progress__count { font-variant-numeric: tabular-nums; }
-/* 虚拟/测试行内标记（对齐同页 conversations/teaching 行样式） */
-.oc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
+/* 固定列宽（2026-10-22 与教学会话/目标对话同判例）：auto 布局下路径/用户两列按当页最长
+   文本分宽，翻页整表跳动；fixed 后列宽由表头定死，余量按权重摊到各列。 */
+/* 2026-10-24 视觉修复：状态/最近活动这类短列此前吃掉 90/104px，路径主列只剩 170px
+   被省略号截断；把富余宽度让回路径列，总宽不变（fixed 表不新增横滚）。 */
+.oc-table .oc-c-path { width: 260px; }
+.oc-table .oc-c-user { width: 150px; }
+.oc-table .oc-c-status { width: 72px; }
+.oc-table .oc-c-difficulty { width: 60px; }
+.oc-table .oc-c-hours { width: 78px; }
+.oc-table .oc-c-progress { width: 130px; }
+.oc-table .oc-c-updated { width: 84px; }
+.oc-table .oc-c-act { width: 90px; }
+/* fixed 档里列宽即契约：进度条的 120px 最小宽会把内容顶出单元格，归零后由 flex 吸收 */
+.oc-table .oc-progress { min-width: 0; }
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */
 .oc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .oc-user .mk-cell-main { min-width: 0; flex: 1; }
 /* 行点击已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
 /* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文。
-   自动布局下列宽随内容，必须给显式截断上限（截断上限由共享 .mk-cell-text 承担） */
+   fixed 布局下列宽由表头定死，文本仍必须有显式截断上限（由共享 .mk-cell-text 承担） */
 /* 主题列已退役（P2-6 2026-10-04：91% 行与路径列同文）——subject≠title 时作路径列副行，
    截断走共享 .mk-cell-sub（oc-subject 私有复制此前已退役） */
 

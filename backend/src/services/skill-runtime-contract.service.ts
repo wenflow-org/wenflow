@@ -15,20 +15,6 @@ import skillModelConfigService from './skillModelConfig.service';
 
 export type SkillStatsRange = '24h' | '7d' | '30d' | 'all';
 
-/**
- * `agent_call_logs.calledAt` 在 SQLite 是整数列（epoch ms），`$queryRaw` 的
- * MAX/直选结果会以 BigInt 回来，`new Date(BigInt)` 直接抛
- * `Cannot convert a BigInt value to a number`（#127：Skill 目录 500）。
- * 这里统一归一 Date | number | bigint | string | null。
- */
-function coerceCalledAt(value: Date | number | bigint | string | null | undefined): Date | null {
-  if (value === null || value === undefined || value === '') return null;
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-  const numeric = typeof value === 'bigint' ? Number(value) : value;
-  const date = new Date(numeric as number | string);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 export interface UnifiedSkillStats {
   skillId: string;
   canonicalId: string;
@@ -141,11 +127,28 @@ export function __clearMetadataSkillIdSniffForTests(): void {
   metadataSkillIdSniff = null;
 }
 
+/**
+ * 原生聚合列归一：agent_call_logs.calledAt 在 SQLite 里是 INTEGER（epoch 毫秒），
+ * $queryRaw 会把它读成 BigInt，而 `new Date(bigint)` 直接抛 TypeError
+ * （读路径表现为 `/api/admin/skills` 500「Cannot convert a BigInt value to a number」）。
+ */
+function coerceCalledAt(value: unknown): Date | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'bigint') return new Date(Number(value));
+  if (typeof value === 'number') return new Date(value);
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 async function resolveMetadataFallbackRows(
   since: Date | null
-): Promise<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | null }>> {
+): Promise<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | number | bigint | null }>> {
   if (!(await hasNonPrefixedMetadataSkillId())) return [];
-  return prisma.$queryRaw<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | null }>>`
+  return prisma.$queryRaw<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | number | bigint | null }>>`
     SELECT "agentId",
            CASE WHEN "metadata" IS NOT NULL AND json_valid("metadata")
                 THEN json_extract("metadata", '$.skillId') END AS "skillId",
@@ -244,7 +247,7 @@ export async function getUnifiedSkillStats(
       _count: { _all: true },
     }),
     /* ① 前缀行聚合：agentId IN（skill:xxx…）精确命中，走 agentId 索引，不读 metadata 大列 */
-    prisma.$queryRaw<Array<{ agentId: string; success: number | boolean; n: number | bigint; durSum: number | bigint | null; lastAt: Date | string | null }>>`
+    prisma.$queryRaw<Array<{ agentId: string; success: number | boolean; n: number | bigint; durSum: number | bigint | null; lastAt: Date | string | number | bigint | null }>>`
       SELECT "agentId",
              "success",
              COUNT(*) AS "n",

@@ -36,6 +36,7 @@ router.get('/', async (req, res) => {
         defaultMaxTokens: config.defaultMaxTokens ?? 2048,
         defaultThinkingMode: config.defaultThinkingMode || 'default',
         defaultReasoningEffort: config.defaultReasoningEffort || 'default',
+        defaultResponseFormat: config.defaultResponseFormat || 'none',
         reasoningEndpoint: config.reasoningEndpoint,
         lightEndpoint: config.lightEndpoint,
         chatModels: config.chatModels || [],
@@ -118,11 +119,14 @@ router.put('/', async (req, res) => {
       defaultMaxTokens,
       defaultThinkingMode,
       defaultReasoningEffort,
+      defaultResponseFormat,
       reasoningEndpoint,
       lightEndpoint,
       chatModels,
       reasoningModels,
-      lightModels
+      lightModels,
+      connectionStatus,
+      lastCheckedAt
     } = req.body;
 
     const currentConfig = await apiConfigService.getConfig();
@@ -178,6 +182,20 @@ router.put('/', async (req, res) => {
       ? parsedModelsArray
       : currentConfig.availableModels;
 
+    // 连接域可随保存一起落盘（前端「连接并拉取 / 重新拉取」的真实结果）。
+    // 只认三态字符串与合法时间戳，防止把任意 body 写成连接状态。
+    const connectionUpdate: { connectionStatus?: string; lastCheckedAt?: Date } = {};
+    if (typeof connectionStatus === 'string') {
+      const normalized = connectionStatus.trim().toLowerCase();
+      connectionUpdate.connectionStatus = ['connected', 'failed', 'unknown'].includes(normalized)
+        ? normalized
+        : 'unknown';
+    }
+    if (typeof lastCheckedAt === 'string' && lastCheckedAt.trim()) {
+      const parsed = new Date(lastCheckedAt);
+      if (!Number.isNaN(parsed.getTime())) connectionUpdate.lastCheckedAt = parsed;
+    }
+
     const updatedConfig = await apiConfigService.updateConfig({
       apiUrl: finalApiUrl,
       apiKey: resolvedApiKey,
@@ -189,11 +207,19 @@ router.put('/', async (req, res) => {
       defaultMaxTokens: defaultMaxTokens ?? currentConfig.defaultMaxTokens,
       defaultThinkingMode: defaultThinkingMode || currentConfig.defaultThinkingMode || 'default',
       defaultReasoningEffort: defaultReasoningEffort || currentConfig.defaultReasoningEffort || 'default',
+      // 白名单归一：仅收 'json_object' / 'none'；body 未带该字段时保持现值（与兄弟字段口径一致）
+      defaultResponseFormat: ((() => {
+        const raw = typeof defaultResponseFormat === 'string'
+          ? defaultResponseFormat.trim().toLowerCase()
+          : (currentConfig.defaultResponseFormat || 'none');
+        return raw === 'json_object' ? 'json_object' : 'none';
+      })()),
       reasoningEndpoint: finalReasoningEndpoint,
       lightEndpoint: finalLightEndpoint,
       chatModels: chatModels || currentConfig.chatModels,
       reasoningModels: reasoningModels || currentConfig.reasoningModels,
-      lightModels: lightModels || currentConfig.lightModels
+      lightModels: lightModels || currentConfig.lightModels,
+      ...connectionUpdate
     });
     // 操作审计：保存后快照新配置（脱敏由审计中间件完成）
     setAuditAfter(res, updatedConfig);

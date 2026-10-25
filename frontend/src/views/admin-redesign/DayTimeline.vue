@@ -18,7 +18,7 @@
     />
 
     <!-- 空态给出口（R6D）：「启用日期模拟」开关唯一落点在压测参数卡的日期模拟页签
-         （模型与接入 → 路由与调用，2026-10-13 迁入）；本组件宿主（画像·日程）以 readonly
+         （模型与接入 → 调用与健康，2026-10-13 迁入）；本组件宿主（画像·日程）以 readonly
          嵌入，不放写操作，就地给跳转。原文「可在…设置中开启」的指路由按钮承担 -->
     <MkEmptyState
       v-else-if="!clock"
@@ -64,7 +64,7 @@
       </div>
 
       <p v-if="!clock.enabled" class="dt-hint">
-        日期模拟默认关闭。此时的按天读数按自然日统计（以会话创建日为第 1 天），可直接用于观察学习负担。
+        日期模拟关闭时，按天读数按自然日统计（会话创建日为第 1 天）。
       </p>
 
       <!-- 操作类失败（推进/自动推进/重置）走行内 alert：error ref 只留给 load() 整页失败，
@@ -214,9 +214,10 @@ const props = withDefaults(defineProps<{
 })
 
 const router = useRouter()
-/** 空态出口（R6D）：跳到「启用日期模拟」开关所在的压测参数卡（模型与接入 → 路由与调用），路由与页签参数均为既有契约 */
+/** 空态出口（R6D）：跳到「启用日期模拟」开关所在的压测参数卡（模型与接入 → 虚拟学习者）。
+ *  2026-10-24 修死链：该卡已从「调用与健康」迁到「虚拟学习者」页签。 */
 function goSimSettings() {
-  void router.push({ path: '/admin/api-config', query: { tab: 'routing' } })
+  void router.push({ path: '/admin/api-config', query: { tab: 'virtual' } })
 }
 
 /** 分页窗口：默认窗口只有 30 天，长会话更早的历史按 30 天一档翻页回看；load() 沿用这组 from/to 拉取参数 */
