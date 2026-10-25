@@ -363,10 +363,19 @@ async function enrichLearningPathWithAndersonInner(
       // 四阶段累计 227 分钟 vs 计划 132 分钟，承诺在 stageDesign 层二次违约）。
       // 传给 stage-designer 一个显式上限：本阶段任务分钟总和不得超过阶段锚的 1.25 倍
       // （超出部分说明该阶段装不下，应减任务/缩分钟，而不是把承诺撑破）。
-      const stageMinutesBudget = Math.max(20, Math.round(stageAnchorMinutes * 1.25));
+      const targetSubtasks = Math.max(2, Math.min(cap, Math.round(stageAnchorMinutes / anchorMinutes)));
+      // 预算下限必须 ≥ 最小任务数 × 单任务下限，否则「预算比最小任务量还小」——
+      // 模型只能二选一：超预算或把任务缩到不可执行（2026-10-26 迭代 2 实证 phil-sci：
+      // 阶段锚 0.5h → 预算 20 分钟，但 2 个任务 × 9 分钟下限 = 18 分钟起，
+      // 模型给 2×15=30 分钟即超预算 50%，最终实排/标称比值掉到 0.51）。
+      const minTaskMinutes = Number(baseHints.subtaskMinutesRange?.[0]) || 9;
+      const stageMinutesBudget = Math.max(
+        Math.round(stageAnchorMinutes * 1.25),
+        targetSubtasks * minTaskMinutes,
+      );
       return {
         ...baseHints,
-        targetSubtasksForStage: Math.max(2, Math.min(cap, Math.round(stageAnchorMinutes / anchorMinutes))),
+        targetSubtasksForStage: targetSubtasks,
         stageMinutesBudget,
       };
     };
