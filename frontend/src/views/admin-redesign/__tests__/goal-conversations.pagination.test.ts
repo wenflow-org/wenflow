@@ -319,4 +319,23 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(subText()).not.toContain('测试账号');
     expect(w.find('.ds-toggle').exists()).toBe(false);
   });
+
+  /** 2026-10-24 用户「空数据的时候，页面很奇怪，没有统一设计」：
+   *  本来就没数据时原走页面级一行裸文字（不在卡里、无说明），现与「筛选无匹配」同骨架同位置。 */
+  it('0 行：仍渲染列表卡（卡头 + 卡内 min 空态），不再有页面级裸文字空态', async () => {
+    listMock.mockResolvedValue({ data: { success: true, data: { conversations: [] } } });
+    statsMock.mockResolvedValue({ data: { success: true, data: { total: 0, active: 0, completed: 0, completionRate: '0' } } });
+    const w = await mountGoals();
+    // 卡在：卡头筛选带随卡渲染，空态在卡内且带 min（占满卡内剩余高度）
+    expect(w.find('.mk-card--fill').exists()).toBe(true);
+    expect(w.find('.mk-card--fill .mk-card__head').exists()).toBe(true);
+    const empty = w.find('.mk-empty');
+    expect(empty.classes()).toContain('mk-empty--min');
+    expect(empty.text()).toContain('暂无目标对话');
+    // 说清下一步由谁产生数据（此前只有四个字）
+    expect(empty.text()).toContain('学习者在学习端提出目标后');
+    // 0 行不挂分页器
+    expect(w.find('.mk-pagination').exists()).toBe(false);
+    w.unmount();
+  });
 });

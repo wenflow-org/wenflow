@@ -240,7 +240,7 @@
                 class="mk-th--right mk-th--sortable sk-c-calls"
                 :aria-sort="sortState('calls')"
                 @click="toggleSort('calls')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('calls')" title="统计窗口内调用次数（随「统计窗口」下拉切换，默认近 7 天）">调用<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('calls')" title="统计窗口内调用次数（随「统计窗口」下拉切换，默认近 7 天）">调用次数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- P95 占位：后端仅日志聚合提供 p50/p99，无技能级 P95；不编造数字。
                    整列恒「—」无信息量（评审 P3）→ 默认隐藏，「列」菜单可手动开启 -->
               <th v-if="showCol('p95')" scope="col" class="mk-th--right sk-c-p95" title="暂无单 Skill 的 P95 耗时数据，该列默认隐藏，可在「列」菜单开启">P95</th>
@@ -1269,7 +1269,8 @@ const fallbackPolicyTitle = computed(() => {
 .sk-c-agent { width: 140px; }
 .sk-c-version { width: 96px; }
 .sk-c-routing { width: 170px; }
-.sk-c-calls { width: 52px; }
+/* 调用列宽按四字表头「调用次数」定（2026-10-24 用户「调用次数就写调用次数就可以了」） */
+.sk-c-calls { width: 84px; }
 .sk-c-p95 { width: 56px; }
 .sk-c-rate { width: 70px; }
 .sk-c-last { width: 110px; }

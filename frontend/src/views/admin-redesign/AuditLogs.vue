@@ -1330,17 +1330,7 @@ html[data-theme='dark'] .log-method--delete { background: color-mix(in srgb, var
 html[data-theme='dark'] .log-method--options,
 html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: var(--mk-muted); }
 
-/* ================= 空态撑满主区剩余高度（P1-1，2026-09-27 走查「空态利用」）=================
-   本页是 .mk-page--fill + .mk-card--fill 应用式布局，空态带 mk-empty--min 后若不按本页壳层
-   覆写，会用全局默认口径（100dvh - 230px）——本页卡内还有页签切换行与筛选头两层，默认值会
-   把空态撑出卡片导致底部裁切。
-   2026-10-06（审核 #156）：原「逐项推导常量」--mk-empty-min-h: min(calc(100dvh - 258px), 1200px)
-   比实测可用高度大 5px（推导漏算 .mk-page--fill 的 12px gap），盒底越出卡片下缘被 overflow:clip
-   裁切；窗口更矮/卡头更高时会真顶破。改为让空态盒直接吃掉卡内剩余高度（父卡已是 flex 列）：
-   flex:1 + min-height:0 恒定不溢，也不再依赖任何手工常量。
-   骨架/错误态/列表分支不带 mk-empty--min，不受影响。 */
-.mk-card--fill > .mk-empty--min {
-  flex: 1;
-  min-height: 0;
-}
+/* 本页空态撑满主区剩余高度的覆写（P1-1「空态利用」→ 审核 #156 改为 flex:1 + min-height:0）
+   已提升为共享口径（styles/mk-primitives.css 的 .mk-card--fill > .mk-empty--min，2026-10-24），
+   本页不再重复定义；骨架/错误态/列表分支不带 mk-empty--min，不受影响。 */
 </style>

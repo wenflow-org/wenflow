@@ -1200,6 +1200,16 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   min-height: var(--mk-empty-min-h, calc(100dvh - 230px));
   place-content: center;
 }
+/* fill 卡内的空态：直接吃掉卡内剩余高度并在其中居中，不再走上面的视口常量。
+   视口常量按「顶栏 + 状态条 + 页脚 + 内衬」估算（≈230px），卡头/页签/筛选行越高就越不准，
+   窗口一矮就顶破卡片下缘（AuditLogs 审核 #156 实测溢出 5px 被裁）。
+   本规则原是 AuditLogs 的页级补丁，因同一形态在多页复现（Skills/记忆与复习/目标对话/执行日志…）
+   提升为共享口径：父卡已是 flex 列，flex:1 + min-height:0 恒定不溢、也不依赖任何手工常量。
+   例外：Announcements 页明确要求贴顶（用户「太靠下了」），在该页自行覆盖为 start center。 */
+.mk-card--fill > .mk-empty--min {
+  flex: 1;
+  min-height: 0;
+}
 
 /* ----- 加载态（统一形态：spinner + 文案）-----
    此前各页自搓容器（.dt-loading / .gc-none / .oc-loading / .pe-detail-loading /

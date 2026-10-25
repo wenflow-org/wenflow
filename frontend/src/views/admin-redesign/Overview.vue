@@ -174,7 +174,7 @@
     <!-- 动作队列带（原 Row B，2026-10-03 上移进首屏）：待处理事项是全页唯一
          要求操作的板块，不能落在折叠线下；Top 5 与虚拟学习者看板作参考位同行 -->
     <div class="row3">
-      <div class="mk-card">
+      <div class="mk-card ov-card--rank">
         <div class="mk-card__head">
           <span class="mk-card__title">Skill 调用量 Top 5</span>
           <!-- 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：卡头 meta 只留时间窗，
@@ -189,8 +189,8 @@
               <span class="rankrow__idx"></span>
               <span class="rankrow__grow">Skill</span>
               <span class="rankrow__bar"></span>
-              <span class="rankrow__val rankrow__calls rankrow__val--col">调用</span>
-              <span class="rankrow__val rankrow__col-failed">失败</span>
+              <span class="rankrow__val rankrow__calls rankrow__val--col">调用次数</span>
+              <span class="rankrow__val rankrow__col-failed">失败次数</span>
             </div>
             <div
               v-for="(s, i) in data.topSkills"
@@ -213,7 +213,9 @@
               <span class="rankrow__val mono rankrow__failed" :class="{ 'rankrow__failed--zero': !s.failed }">{{ s.failed || '–' }}</span>
             </div>
           </div>
-          <p v-if="!data.topSkills.length" class="note">近 7 天暂无调用，无排行。</p>
+          <!-- 0 行空态（2026-10-24 用户「最近事件设计有问题」同页同律）：不落在卡底，
+               改为在卡内剩余高度居中，与同页另两张卡的 0 行态同一形态 -->
+          <MkEmptyState v-if="!data.topSkills.length" class="ov-card__empty" title="近 7 天暂无调用" description="窗口内没有任何 Skill 调用记录。有调用后会按调用次数从多到少排行。" />
         </div>
       </div>
 
@@ -240,7 +242,7 @@
               <button type="button" class="todo-act" @click="t.action()">{{ t.actLabel }} →</button>
             </div>
           </div>
-          <p v-if="!todoItems.length" class="note">没有待处理的事项。</p>
+          <MkEmptyState v-if="!todoItems.length" class="ov-card__empty" title="没有待处理的事项" description="健康检查、失败调用与课后总结都没有异常，有需要处理的会出现在这里。" />
         </div>
       </div>
 
@@ -285,7 +287,7 @@
                审核 #1（2026-10-06）：本卡补空态——四张列表/图表卡中唯一没有空态文案，
                growth7d 为空时整块留白会被读成渲染坏了。 -->
           <OvBars v-if="barchartCols.length" :cols="barchartCols" :bar-width="40" :min-bars-height="120" />
-          <p v-else class="note">近 7 天暂无活跃数据。</p>
+          <MkEmptyState v-else class="ov-card__empty" title="近 7 天暂无活跃数据" description="窗口内没有活跃学习者记录。有人开始学习后，这里会逐日显示活跃人数。" />
         </div>
       </div>
       <div class="mk-card ov-card--feed">
@@ -294,7 +296,11 @@
           <span class="mk-card__meta">近 24h</span>
         </div>
         <div class="ov-card__body">
+          <!-- 2026-10-24 用户「最近事件设计有问题」：此前 feed 容器无条件渲染并 flex:1 撑满，
+               0 行时那条「暂无动态」小字被顶到卡片最底部（卡头之下两百多像素空白）。
+               现改为有事件才渲染 feed 容器，无事件走卡内居中空态（骨架：图标 + 为什么空 + 下一步）。 -->
           <div
+            v-if="feedRows.length"
             ref="feedRef"
             class="feed feed--capped"
             :class="{ 'feed--capped--overflow': feedOverflow }"
@@ -318,8 +324,15 @@
               </div>
             </div>
           </div>
-          <p v-if="!feedRows.length && data.feed.length" class="note">近期动态均来自测试 / 模拟账号，已按当前视角隐藏。</p>
-          <p v-else-if="!feedRows.length" class="note">近 24h 暂无动态。</p>
+          <MkEmptyState
+            v-else
+            class="ov-card__empty"
+            icon="◌"
+            :title="data.feed.length ? '动态均来自测试 / 模拟账号' : '近 24h 暂无动态'"
+            :description="data.feed.length
+              ? '按真实视角已隐藏这些动态，测试 / 模拟账号产生的动静不在这里列出。'
+              : '近 24 小时没有执行失败、新用户注册、教学会话或任务完成记录。有动静就会出现在这里。'"
+          />
         </div>
       </div>
     </div>
@@ -1169,6 +1182,14 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 /* ---- 卡片体（共享 .mk-card 无 .mk-card__body 原语，衬距用本页局部类，SessionCockpit 同判例）----
    16 → 18（评审 2026-10-10「整体过度紧凑」）：卡内呼吸感加半档，页 grid gap 同步 16 → 18 */
 .ov-card__body { padding: 18px; }
+/* 卡内 0 行空态（2026-10-24 用户「最近事件设计有问题」）：卡体转 flex 列，空态吃掉剩余高度并居中——
+   此前「暂无动态」这类小字被 flex:1 的列表容器顶到卡底，卡头之下两百多像素空白。
+   同页三张卡（调用量 Top 5 / 待处理事项 / 最近事件）同一形态，不再一处一样。 */
+.ov-card--rank .ov-card__body,
+.ov-card--todo .ov-card__body,
+.ov-card--chart .ov-card__body,
+.ov-card--feed .ov-card__body { display: flex; flex-direction: column; }
+.ov-card__empty { flex: 1; place-content: center; }
 
 /* ---- 警示状态条减重（评审 2026-10-10「大面积琥珀底显脏」）----
    共享 .mk-status--warn/--bad 是 2026-10-04「全站统一染底」的拍板口径，不动共享原语；
@@ -1369,13 +1390,15 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 .rankrow--link:hover .rankrow__grow { color: var(--mk-blue); }
 .rankrow__bar { width: 64px; flex: none; }
 .rankrow__val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
-/* 调用/失败两列（评审 2026-10-10）：右对齐定宽成列；失败非零红字提示，零给「–」保列形 */
-.rankrow__calls { width: 56px; text-align: right; }
-.rankrow__failed { width: 44px; text-align: right; }
+/* 调用/失败两列（评审 2026-10-10）：右对齐定宽成列；失败非零红字提示，零给「–」保列形。
+   宽度按「调用次数 / 失败次数」四字表头定（2026-10-24 用户「调用次数就写调用次数就可以了」）：
+   表头复用数据列的类，改宽必须两处同改，否则表头与数字对不齐 */
+.rankrow__calls { width: 76px; text-align: right; }
+.rankrow__failed { width: 64px; text-align: right; }
 .rankrow__failed:not(.rankrow__failed--zero) { color: var(--mk-red); }
 .rankrow__failed--zero { color: var(--mk-faint); font-weight: 500; }
 /* 列头「失败」用独立类：不挂 .rankrow__failed 以免吃红字规则（表头保持中性 faint） */
-.rankrow__col-failed { width: 44px; text-align: right; color: var(--mk-faint); font-weight: 600; }
+.rankrow__col-failed { width: 64px; text-align: right; color: var(--mk-faint); font-weight: 600; }
 /* 待处理事项行：单行主句，动作钮右对齐（口径副行 2026-10-22 已删） */
 .rankrow--todo { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 12px; }
 .todo-main { display: flex; align-items: center; gap: 8px; min-width: 0; }

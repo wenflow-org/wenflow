@@ -73,6 +73,7 @@
       </div>
       <MkEmptyState
         v-if="error && !rows.length"
+        min
         tone="error"
         :title="error"
         description="统计数据加载失败，页面数字可能不完整。"
@@ -82,7 +83,10 @@
         @action="refreshAll"
       />
       <MockSkeletonTable v-else-if="loading && !rows.length" :cols="7" :rows="8" />
-      <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="还没有用户产生记忆记录。学习者开始学习并完成概念提取后，这里会按待复习量从多到少列出用户。" />
+      <!-- 整页无数据（2026-10-24 用户「空数据的时候，页面很奇怪，没有统一设计」）：
+          min → 空态吃掉卡内剩余高度并在其中居中（.mk-card--fill > .mk-empty--min 共享口径），
+          不再「文案贴顶 + 下方六百像素空白」 -->
+      <MkEmptyState v-else-if="!loading && !rows.length" min title="暂无记忆痕迹数据" description="还没有用户产生记忆记录。学习者开始学习并完成概念提取后，这里会按待复习量从多到少列出用户。" />
       <!-- 用户列表（行点击跳学习者详情，EG1：回车不劫持行内按钮） -->
       <div v-else class="mk-table-scroll">
         <!-- 快筛筛空：给一个回「全部」的出口即可，不再解释筛选作用域 -->
@@ -208,8 +212,12 @@
           </tbody>
         </table>
       </div>
-      <!-- 服务端分页（审核 #41）：total=后端全量有痕迹用户数（totals.users）；v-model:pageSize 接住条数变更 -->
+      <!-- 服务端分页（审核 #41）：total=后端全量有痕迹用户数（totals.users）；v-model:pageSize 接住条数变更。
+           0 行不渲染（2026-10-24 用户「空数据的时候页面很奇怪」）：此前空数据页挂着
+           「共 0 条 · 第 1 / 1 页」+ 每页条数下拉，指着一个没有任何行的列表翻页。
+           全站另外 20 处 Pagination 都带守卫，只此处漏了。 -->
       <Pagination
+        v-if="totals.users > 0"
         v-model:page="userPage"
         v-model:pageSize="userPageSize"
         :total="totals.users"

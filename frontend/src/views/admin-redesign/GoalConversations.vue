@@ -54,253 +54,256 @@
       <button type="button" class="mk-status__meta mk-status__meta-link" @click="load(true)">重试</button>
     </div>
 
-    <!-- ===== 目标对话列表 ===== -->
-    <MkEmptyState
-      v-if="!rows.length && !loading && !loadError"
-      title="暂无目标对话"
-    />
+    <!-- ===== 目标对话列表 =====
+         2026-10-24 用户「空数据的时候，页面很奇怪，没有统一设计」：原「本来就没数据」走的是
+         页面级一行裸文字（不在卡里、无图标无说明，且与同页「筛选无匹配」的完整空态两副面孔），
+         已删除——下面列表卡的 else 分支本就覆盖这一态，走同一骨架与同一位置（min 居中）。
+         注意：卡不能再包进 <template> 包装器（原生 template 内容惰性，整张卡不渲染、页面只剩 KPI 带）。 -->
 
-    <template v-else>
-      <!-- 目标对话状态分布带已退役（2026-10-17 用户走查「这个东西不好了」）：
-           三状态里「已取消」常年为 0，图上只剩两段 = 一个比例，而同一个比例已在 KPI「完结率」；
-           且它同时是唯一状态筛选入口，2026-10-14 又被要求默认折叠 → 筛选被藏进折叠区。
-           状态筛选回到卡头 pills（计数仍取 stats 服务端全量口径），完结率升独立 KPI 卡。 -->
+    <!-- 目标对话状态分布带已退役（2026-10-17 用户走查「这个东西不好了」）：
+         三状态里「已取消」常年为 0，图上只剩两段 = 一个比例，而同一个比例已在 KPI「完结率」；
+         且它同时是唯一状态筛选入口，2026-10-14 又被要求默认折叠 → 筛选被藏进折叠区。
+         状态筛选回到卡头 pills（计数仍取 stats 服务端全量口径），完结率升独立 KPI 卡。 -->
 
-      <!-- 列表 -->
-      <div class="mk-card mk-card--fill">
-        <div class="mk-card__head">
-          <div class="mk-filter">
-            <!-- 状态筛选（2026-10-17 恢复为卡头 pills）：取消/失败/回收在「已取消」合一档。
-                 计数取 stats 服务端全量口径（与旧分布带同源）；「未生成路径」是复合口径快筛
-                 （进行中 ∧ 无路径，运营卡点），与状态筛选叠加为 AND -->
-            <div class="mk-pills" role="group" aria-label="状态筛选">
-              <button
-                v-for="p in gcStatusPills"
-                :key="p.key"
-                type="button"
-                class="mk-pill"
-                :class="{ 'mk-pill--active': gcStatusKey === p.key }"
-                :aria-pressed="gcStatusKey === p.key"
-                :title="p.title"
-                @click="selectStatus(p.key)"
-              >{{ p.label }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
-            </div>
-            <div class="mk-pills" role="group" aria-label="路径快筛">
-              <button
-                type="button"
-                class="mk-pill"
-                :class="{ 'mk-pill--active': noPathOnly }"
-                :aria-pressed="noPathOnly"
-                title="进行中 · 尚未生成路径"
-                @click="noPathOnly = !noPathOnly"
-              >未生成路径<span class="mk-pill__count">{{ pathPendingCount }}</span></button>
-            </div>
-            <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-            <!-- 排序复位入口（2026-10-06 审核 #51）：默认序是服务端 createdAt 倒序，
-                 排序态持久化后此前无路可回；创建时间已接排序，另给一键回默认序 -->
-            <button v-if="gcSortKey" type="button" class="mk-link" @click="gcResetSort()">恢复默认排序</button>
+    <!-- 列表 -->
+    <div class="mk-card mk-card--fill">
+      <div class="mk-card__head">
+        <div class="mk-filter">
+          <!-- 状态筛选（2026-10-17 恢复为卡头 pills）：取消/失败/回收在「已取消」合一档。
+               计数取 stats 服务端全量口径（与旧分布带同源）；「未生成路径」是复合口径快筛
+               （进行中 ∧ 无路径，运营卡点），与状态筛选叠加为 AND -->
+          <div class="mk-pills" role="group" aria-label="状态筛选">
+            <button
+              v-for="p in gcStatusPills"
+              :key="p.key"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': gcStatusKey === p.key }"
+              :aria-pressed="gcStatusKey === p.key"
+              :title="p.title"
+              @click="selectStatus(p.key)"
+            >{{ p.label }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
           </div>
-          <div class="mk-card__head-right">
-            <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位——
-                 左组只留快筛/清除，右组 = 搜索 → 列 → 计数 meta，全站同一槽位序 -->
-            <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
-            <MkCols
-              :col-defs="gcColDefsFiltered"
-              storage-key="wf_goal_hidden_cols_v2"
-              :default-hidden="GC_DEFAULT_HIDDEN"
-              v-model:hidden="gcHiddenCols"
-            />
-            <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
-                 这里再写一遍「（真实）」是同一状态复读（2026-10-19 用户走查「这个小文案不要」） -->
-            <span v-if="truncated" class="mk-card__meta" :title="`排序与搜索仅覆盖最近 ${LIST_LIMIT} 条`">共 {{ listTotal }} 条 · 当前显示最近 {{ rows.length }} 条</span>
+          <div class="mk-pills" role="group" aria-label="路径快筛">
+            <button
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': noPathOnly }"
+              :aria-pressed="noPathOnly"
+              title="进行中 · 尚未生成路径"
+              @click="noPathOnly = !noPathOnly"
+            >未生成路径<span class="mk-pill__count">{{ pathPendingCount }}</span></button>
           </div>
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+          <!-- 排序复位入口（2026-10-06 审核 #51）：默认序是服务端 createdAt 倒序，
+               排序态持久化后此前无路可回；创建时间已接排序，另给一键回默认序 -->
+          <button v-if="gcSortKey" type="button" class="mk-link" @click="gcResetSort()">恢复默认排序</button>
         </div>
-
-        <MockSkeletonTable v-if="loading && !rows.length" :cols="10" />
-        <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」）。
-             形态收敛共享 MkEmptyState tone="error"（2026-10-06 审核 #48）：私有 .gc-error
-             与同页 stats 失败条两套错误形态并存的局面收敛，role=alert + 重试由原语承担 -->
-        <MkEmptyState
-          v-else-if="loadError"
-          tone="error"
-          title="目标对话列表加载失败"
-          :description="loadError"
-          action-text="重试"
-          @action="load(true)"
-        />
-        <div v-else-if="filtered.length" class="mk-table-scroll">
-        <!-- 固定列宽（2026-10-22 与教学会话同判例）：自动布局下摘要/用户两列按当页最长文本分宽，
-             翻页整表跳动（摘要 303↔325、用户 241↔219）；改 fixed + 逐列表头宽度，余量按权重摊开。
-             长摘要/长邮箱仍由 .mk-cell-text / .mk-cell-main 的截断兜底 -->
-        <table class="mk-table mk-table--click mk-table--nowrap mk-table--fixed gc-table">
-          <thead>
-            <tr>
-              <th v-if="showCol('summary')" scope="col" class="gc-c-summary">目标摘要</th>
-              <th
-                scope="col"
-                class="mk-th--sortable gc-c-user"
-                :title="sortWindowTitle"
-                :aria-sort="gcSortState('user')"
-                @click="toggleGcSort('user')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                v-if="showCol('status')"
-                scope="col"
-                class="mk-th--sortable gc-c-status"
-                :title="sortWindowTitle"
-                :aria-sort="gcSortState('status')"
-                @click="toggleGcSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                v-if="showCol('turns')"
-                scope="col"
-                class="mk-th--sortable mk-th--right gc-c-turns"
-                :title="sortWindowTitle"
-                :aria-sort="gcSortState('turns')"
-                @click="toggleGcSort('turns')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清轮次<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="showCol('constraints')" scope="col" class="gc-c-constraints">约束条件</th>
-              <th v-if="showCol('path')" scope="col" class="gc-c-path">路径</th>
-              <th
-                v-if="showCol('stageDate')"
-                scope="col"
-                class="mk-th--sortable gc-c-stage-date"
-                :title="sortWindowTitle"
-                :aria-sort="gcSortState('stageDate')"
-                @click="toggleGcSort('stageDate')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('stageDate')">最近活动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                v-if="showCol('created')"
-                scope="col"
-                class="mk-th--sortable gc-c-created"
-                :title="sortWindowTitle"
-                :aria-sort="gcSortState('created')"
-                @click="toggleGcSort('created')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('created')">创建时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right gc-c-act">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in paged" :key="r.id" tabindex="0" @click="openDetail(r)" @keydown.enter.self.prevent="openDetail(r)">
-              <td v-if="showCol('summary')">
-                <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID。
-                     2026-10-23 走查：会话 ID 副行撤除——它是内部键，本页搜索也不匹配 ID，
-                     截图里逐行 `gc_1792…` 只增噪点；ID 只在排障时从日志取用。
-                     列序统一（2026-10-03）：主体列恒在首（同 TS 会话/OC 路径/MR 学习者），用户列随后。
-                     摘要改两行档 .mk-cell-text--wrap（2026-10-03 用户反馈「截断到看不清含义」）：
-                     单行 320px 只露出 ~24 字，两行档保留语义骨架（同虚拟学习者倾向列判例） -->
-                <div class="mk-cell-main">
-                  <strong class="mk-cell-text--wrap" :title="r.summary">{{ r.summary }}</strong>
-                </div>
-              </td>
-              <td>
-                <div class="gc-user">
-                  <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
-                  <div class="mk-cell-main">
-                    <!-- 全表唯一截断后无 title 的文本格（2026-10-06 审核 #46）：该格有
-                         200px（≤1599 收 176px）强制最小宽，长名字/长邮箱被省略号截断后
-                         看不到全值——同表其余格均有 title -->
-                    <!-- 2026-10-18：姓名即学习者详情入口（行点击仍是进会话，这里 stop 冒泡） -->
-                    <button
-                      type="button"
-                      class="mk-user-link"
-                      :title="`查看学习者详情：${r.userName}`"
-                      @click.stop="openLearner(r.userId)"
-                      @keydown.enter.stop.prevent="openLearner(r.userId)"
-                    >{{ r.userName }}</button>
-                    <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
-                    <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不再复读 -->
-                    <span v-if="emailSubline(r.userEmail, r.userName) || r.isTestAccount" class="mk-cell-subline">
-                      <span v-if="emailSubline(r.userEmail, r.userName)" class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
-                      <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
-                    </span>
-                  </div>
-                </div>
-              </td>
-              <td v-if="showCol('status')">
-                <!-- 2026-10-22 用户「目标对话怎么会有阶段这一说？不应是完成未完成吗」：
-                     状态列只回答完成没有——进行中 / 已完成 / 已取消 / 失败 / 已放弃。
-                     四步过程点条退役；进行中的细阶段（正在了解情况 / 方案待确认 /
-                     等待生成路径）收进悬停说明，不再作为徽章词或列名上屏。 -->
-                <span
-                  class="mk-badge"
-                  :class="isOngoingStatus(r.status) ? 'mk-badge--info' : statusBadge(r.status)"
-                  :title="statusCellTitle(r)"
-                >{{ isOngoingStatus(r.status) ? '进行中' : statusLabel(r.status) }}</span>
-              </td>
-              <td v-if="showCol('turns')" class="mk-num">
-                <!-- 原型「澄清进度」列 = meter turns/targetTurns；本系统无目标轮次分母，
-                     只呈现「N 轮」诚实读数（学习者发言条数），不造 meter -->
-                <span v-if="r.turns != null" class="mk-num" :title="`学习者发言 ${r.turns} 轮`">{{ r.turns }} 轮</span>
-                <span v-else class="mk-na">—</span>
-              </td>
-              <td v-if="showCol('constraints')">
-                <!-- 原型「约束条件」列 = pill--mute 多枚 wrap；真实数据为澄清收集的
-                     可用时间/期限文案（稀疏属真实分布），空时 — -->
-                <div v-if="r.constraints.length" class="gc-constraints">
-                  <span v-for="cst in r.constraints" :key="cst" class="mk-badge mk-badge--muted" :title="`约束：${cst}`">{{ cst }}</span>
-                </div>
-                <span v-else class="mk-na">—</span>
-              </td>
-              <td v-if="showCol('path')">
-                <!-- 2026-10-22 用户「查看路径和详细重复了」：两者都开 session-real 会话座舱，
-                     只是一个落 Path 页签、一个落默认页签。列只回答「路径有没有生成」，
-                     下钻统一走操作列「详情」，座舱内再切页签（TeachingSessions 同形态）。 -->
-                <span v-if="r.pathId || r.hasPath" class="mk-badge mk-badge--info" title="学习路径已生成">已生成</span>
-                <span v-else class="mk-na">—</span>
-              </td>
-              <td v-if="showCol('stageDate')">
-                <!-- 2026-10-15 用户拍板：原名「阶段日期」名实不符——进行中行取的是 updatedAt
-                     （表无「进入当前阶段日」字段），改名「最近活动」如实表达「会话最后动过哪天」。
-                     语义=时间线最后一站（已完成=完成日；进行中/失败/取消=最后活动日），完整链路悬停可见 -->
-                <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
-                <span v-else class="mk-na">—</span>
-              </td>
-              <!-- 相对时间是人话（「3 天前」），走正文无衬线；等宽只留给 id/代码类机器串 -->
-              <td v-if="showCol('created')"><span class="mk-cell-sub" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
-              <td>
-                <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）。
-                     行内只留高频项「详情」；低频项（链路 / 重建路径 / 删除会话）一律收 ⋯ 菜单——
-                     2026-10-15 用户拍板「链路做到折叠里面」，链路不再是高频，与另两项同为低频矫正操作。
-                     右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
-                <div class="mk-actions">
-                  <button type="button" class="mk-btn mk-btn--sm" title="打开只读详情" @click.stop="openDetail(r)">详情</button>
-                  <div class="mk-menu">
-                    <!-- aria-expanded 按行判定（2026-10-06 审核 #50）：此前绑全局 menuOpen，
-                         菜单一开 15 个按钮同时报 expanded=true；role=menu/menuitem 兑现
-                         aria-haspopup="menu" 的语义承诺 -->
-                    <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
-                    <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" role="menuitem" title="查看该目标对话的执行链路（只读）" @click="goTrace(r)">链路</button>
-                      <button type="button" class="mk-menu__item" role="menuitem" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '对该目标对话重新生成学习路径'" @click="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuRemove(r)">删除目标对话</button>
-                    </div>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位——
+               左组只留快筛/清除，右组 = 搜索 → 列 → 计数 meta，全站同一槽位序 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
+          <MkCols
+            :col-defs="gcColDefsFiltered"
+            storage-key="wf_goal_hidden_cols_v2"
+            :default-hidden="GC_DEFAULT_HIDDEN"
+            v-model:hidden="gcHiddenCols"
+          />
+          <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
+               这里再写一遍「（真实）」是同一状态复读（2026-10-19 用户走查「这个小文案不要」） -->
+          <span v-if="truncated" class="mk-card__meta" :title="`排序与搜索仅覆盖最近 ${LIST_LIMIT} 条`">共 {{ listTotal }} 条 · 当前显示最近 {{ rows.length }} 条</span>
         </div>
-        <MkLoading v-else-if="loading" />
-        <MkEmptyState
-          v-else
-          icon="◌"
-          :title="keyword || statusFilter || noPathOnly ? '当前筛选无匹配' : '暂无目标对话'"
-          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : '暂无目标对话。'"
-          :action-text="isFiltered ? '清除筛选' : ''"
-          @action="clearFilters"
-        />
-        <!-- 客户端分页（P2：76 行单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->
-        <Pagination
-          v-if="filtered.length"
-          v-model:page="page"
-          v-model:pageSize="pageSize"
-          :total="filtered.length"
-          :showTotal="true"
-        />
       </div>
-    </template>
+
+      <MockSkeletonTable v-if="loading && !rows.length" :cols="10" />
+      <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」）。
+           形态收敛共享 MkEmptyState tone="error"（2026-10-06 审核 #48）：私有 .gc-error
+           与同页 stats 失败条两套错误形态并存的局面收敛，role=alert + 重试由原语承担 -->
+      <MkEmptyState
+        v-else-if="loadError"
+        min
+        tone="error"
+        title="目标对话列表加载失败"
+        :description="loadError"
+        action-text="重试"
+        @action="load(true)"
+      />
+      <div v-else-if="filtered.length" class="mk-table-scroll">
+      <!-- 固定列宽（2026-10-22 与教学会话同判例）：自动布局下摘要/用户两列按当页最长文本分宽，
+           翻页整表跳动（摘要 303↔325、用户 241↔219）；改 fixed + 逐列表头宽度，余量按权重摊开。
+           长摘要/长邮箱仍由 .mk-cell-text / .mk-cell-main 的截断兜底 -->
+      <table class="mk-table mk-table--click mk-table--nowrap mk-table--fixed gc-table">
+        <thead>
+          <tr>
+            <th v-if="showCol('summary')" scope="col" class="gc-c-summary">目标摘要</th>
+            <th
+              scope="col"
+              class="mk-th--sortable gc-c-user"
+              :title="sortWindowTitle"
+              :aria-sort="gcSortState('user')"
+              @click="toggleGcSort('user')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              v-if="showCol('status')"
+              scope="col"
+              class="mk-th--sortable gc-c-status"
+              :title="sortWindowTitle"
+              :aria-sort="gcSortState('status')"
+              @click="toggleGcSort('status')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              v-if="showCol('turns')"
+              scope="col"
+              class="mk-th--sortable mk-th--right gc-c-turns"
+              :title="sortWindowTitle"
+              :aria-sort="gcSortState('turns')"
+              @click="toggleGcSort('turns')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清轮次<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th v-if="showCol('constraints')" scope="col" class="gc-c-constraints">约束条件</th>
+            <th v-if="showCol('path')" scope="col" class="gc-c-path">路径</th>
+            <th
+              v-if="showCol('stageDate')"
+              scope="col"
+              class="mk-th--sortable gc-c-stage-date"
+              :title="sortWindowTitle"
+              :aria-sort="gcSortState('stageDate')"
+              @click="toggleGcSort('stageDate')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('stageDate')">最近活动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              v-if="showCol('created')"
+              scope="col"
+              class="mk-th--sortable gc-c-created"
+              :title="sortWindowTitle"
+              :aria-sort="gcSortState('created')"
+              @click="toggleGcSort('created')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('created')">创建时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th scope="col" class="mk-th--right gc-c-act">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in paged" :key="r.id" tabindex="0" @click="openDetail(r)" @keydown.enter.self.prevent="openDetail(r)">
+            <td v-if="showCol('summary')">
+              <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID。
+                   2026-10-23 走查：会话 ID 副行撤除——它是内部键，本页搜索也不匹配 ID，
+                   截图里逐行 `gc_1792…` 只增噪点；ID 只在排障时从日志取用。
+                   列序统一（2026-10-03）：主体列恒在首（同 TS 会话/OC 路径/MR 学习者），用户列随后。
+                   摘要改两行档 .mk-cell-text--wrap（2026-10-03 用户反馈「截断到看不清含义」）：
+                   单行 320px 只露出 ~24 字，两行档保留语义骨架（同虚拟学习者倾向列判例） -->
+              <div class="mk-cell-main">
+                <strong class="mk-cell-text--wrap" :title="r.summary">{{ r.summary }}</strong>
+              </div>
+            </td>
+            <td>
+              <div class="gc-user">
+                <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
+                <div class="mk-cell-main">
+                  <!-- 全表唯一截断后无 title 的文本格（2026-10-06 审核 #46）：该格有
+                       200px（≤1599 收 176px）强制最小宽，长名字/长邮箱被省略号截断后
+                       看不到全值——同表其余格均有 title -->
+                  <!-- 2026-10-18：姓名即学习者详情入口（行点击仍是进会话，这里 stop 冒泡） -->
+                  <button
+                    type="button"
+                    class="mk-user-link"
+                    :title="`查看学习者详情：${r.userName}`"
+                    @click.stop="openLearner(r.userId)"
+                    @keydown.enter.stop.prevent="openLearner(r.userId)"
+                  >{{ r.userName }}</button>
+                  <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                  <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不再复读 -->
+                  <span v-if="emailSubline(r.userEmail, r.userName) || r.isTestAccount" class="mk-cell-subline">
+                    <span v-if="emailSubline(r.userEmail, r.userName)" class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
+                    <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                  </span>
+                </div>
+              </div>
+            </td>
+            <td v-if="showCol('status')">
+              <!-- 2026-10-22 用户「目标对话怎么会有阶段这一说？不应是完成未完成吗」：
+                   状态列只回答完成没有——进行中 / 已完成 / 已取消 / 失败 / 已放弃。
+                   四步过程点条退役；进行中的细阶段（正在了解情况 / 方案待确认 /
+                   等待生成路径）收进悬停说明，不再作为徽章词或列名上屏。 -->
+              <span
+                class="mk-badge"
+                :class="isOngoingStatus(r.status) ? 'mk-badge--info' : statusBadge(r.status)"
+                :title="statusCellTitle(r)"
+              >{{ isOngoingStatus(r.status) ? '进行中' : statusLabel(r.status) }}</span>
+            </td>
+            <td v-if="showCol('turns')" class="mk-num">
+              <!-- 原型「澄清进度」列 = meter turns/targetTurns；本系统无目标轮次分母，
+                   只呈现「N 轮」诚实读数（学习者发言条数），不造 meter -->
+              <span v-if="r.turns != null" class="mk-num" :title="`学习者发言 ${r.turns} 轮`">{{ r.turns }} 轮</span>
+              <span v-else class="mk-na">—</span>
+            </td>
+            <td v-if="showCol('constraints')">
+              <!-- 原型「约束条件」列 = pill--mute 多枚 wrap；真实数据为澄清收集的
+                   可用时间/期限文案（稀疏属真实分布），空时 — -->
+              <div v-if="r.constraints.length" class="gc-constraints">
+                <span v-for="cst in r.constraints" :key="cst" class="mk-badge mk-badge--muted" :title="`约束：${cst}`">{{ cst }}</span>
+              </div>
+              <span v-else class="mk-na">—</span>
+            </td>
+            <td v-if="showCol('path')">
+              <!-- 2026-10-22 用户「查看路径和详细重复了」：两者都开 session-real 会话座舱，
+                   只是一个落 Path 页签、一个落默认页签。列只回答「路径有没有生成」，
+                   下钻统一走操作列「详情」，座舱内再切页签（TeachingSessions 同形态）。 -->
+              <span v-if="r.pathId || r.hasPath" class="mk-badge mk-badge--info" title="学习路径已生成">已生成</span>
+              <span v-else class="mk-na">—</span>
+            </td>
+            <td v-if="showCol('stageDate')">
+              <!-- 2026-10-15 用户拍板：原名「阶段日期」名实不符——进行中行取的是 updatedAt
+                   （表无「进入当前阶段日」字段），改名「最近活动」如实表达「会话最后动过哪天」。
+                   语义=时间线最后一站（已完成=完成日；进行中/失败/取消=最后活动日），完整链路悬停可见 -->
+              <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
+              <span v-else class="mk-na">—</span>
+            </td>
+            <!-- 相对时间是人话（「3 天前」），走正文无衬线；等宽只留给 id/代码类机器串 -->
+            <td v-if="showCol('created')"><span class="mk-cell-sub" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
+            <td>
+              <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）。
+                   行内只留高频项「详情」；低频项（链路 / 重建路径 / 删除会话）一律收 ⋯ 菜单——
+                   2026-10-15 用户拍板「链路做到折叠里面」，链路不再是高频，与另两项同为低频矫正操作。
+                   右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
+              <div class="mk-actions">
+                <button type="button" class="mk-btn mk-btn--sm" title="打开只读详情" @click.stop="openDetail(r)">详情</button>
+                <div class="mk-menu">
+                  <!-- aria-expanded 按行判定（2026-10-06 审核 #50）：此前绑全局 menuOpen，
+                       菜单一开 15 个按钮同时报 expanded=true；role=menu/menuitem 兑现
+                       aria-haspopup="menu" 的语义承诺 -->
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
+                  <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                    <button type="button" class="mk-menu__item" role="menuitem" title="查看该目标对话的执行链路（只读）" @click="goTrace(r)">链路</button>
+                    <button type="button" class="mk-menu__item" role="menuitem" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '对该目标对话重新生成学习路径'" @click="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuRemove(r)">删除目标对话</button>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+      <MkLoading v-else-if="loading" />
+      <!-- 同一骨架覆盖两态（筛选无匹配 / 本来就没数据），只有文案与动作不同；
+           补 min 让空态吃掉卡内剩余高度并居中（2026-10-24「空数据的时候页面很奇怪」）。
+           「本来就没数据」的说明写清下一步：目标对话由学习者端发起，平台侧不产生。 -->
+      <MkEmptyState
+        v-else
+        min
+        icon="◌"
+        :title="keyword || statusFilter || noPathOnly ? '当前筛选无匹配' : '暂无目标对话'"
+        :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : '还没有学习者发起目标对话。学习者在学习端提出目标后，这里会按创建时间从新到旧列出。'"
+        :action-text="isFiltered ? '清除筛选' : ''"
+        @action="clearFilters"
+      />
+      <!-- 客户端分页（P2：76 行单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->
+      <Pagination
+        v-if="filtered.length"
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="filtered.length"
+        :showTotal="true"
+      />
+    </div>
 
   </div>
 </template>

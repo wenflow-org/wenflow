@@ -312,4 +312,28 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(w2.findAll('tbody tr')).toHaveLength(2);
     w2.unmount();
   });
+
+  /** 2026-10-24 用户「空数据的时候，页面很奇怪，没有统一设计」：
+   *  0 行时不再挂「共 0 条 · 第 1 / 1 页」的翻页器（全站另外 20 处 Pagination 都有守卫），
+   *  空态带 min 吃掉卡内剩余高度（不再贴顶 + 六百像素空白）。 */
+  it('0 行：不渲染分页器，空态走 min（吃掉卡内剩余高度）；有行时仍渲染分页器', async () => {
+    overview.mockResolvedValue({
+      data: { data: {
+        totals: { users: 0, traces: 0, due: 0, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 0, applied: 0, deleted: 0 },
+        users: [],
+      } },
+    });
+    const w = mount(MemoryReviewOverview);
+    await flushPromises();
+    expect(w.find('.mk-pagination').exists()).toBe(false);
+    const empty = w.find('.mk-empty');
+    expect(empty.classes()).toContain('mk-empty--min');
+    expect(empty.text()).toContain('暂无记忆痕迹数据');
+    w.unmount();
+
+    // 有数据时守卫不误伤：分页器照常出现（7 行 > 15/页 的窗口下仍渲染，供切页大小与计数）
+    const w2 = await mountWithRows(ROWS, { users: 1 });
+    expect(w2.find('.mk-pagination').exists()).toBe(true);
+    w2.unmount();
+  });
 });

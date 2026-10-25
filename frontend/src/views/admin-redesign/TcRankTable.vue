@@ -4,8 +4,8 @@
     <div class="tc-table__head" role="row">
       <span class="tc-c tc-c--rk" role="columnheader">#</span>
       <span class="tc-c tc-c--name" role="columnheader">{{ nameLabel }}</span>
-      <span class="tc-c tc-c--num" role="columnheader">调用</span>
-      <span class="tc-c tc-c--num" role="columnheader">失败</span>
+      <span class="tc-c tc-c--num" role="columnheader">调用次数</span>
+      <span class="tc-c tc-c--num" role="columnheader">失败次数</span>
       <span class="tc-c tc-c--tok" role="columnheader">Token 用量</span>
       <!-- 成本列（审核 #112）：接口 RankEntry 已带成本桶，此前 user/model 排行未渲染，与页头
            「按模型、Skill 与时间维度追踪模型调用成本」承诺不符 -->
@@ -207,17 +207,19 @@ function rowTitle(r: RankRow): string {
 .tc-table--user .tc-table__row,
 .tc-table--model .tc-table__head,
 .tc-table--model .tc-table__row {
-  grid-template-columns: 26px minmax(140px, 1fr) 52px 46px minmax(180px, 1fr) minmax(96px, 0.7fr) 100px;
+  grid-template-columns: 26px minmax(140px, 1fr) 74px 68px minmax(180px, 1fr) minmax(96px, 0.7fr) 100px;
 }
 /* 审核 #129：≤1599 时 TokenCost 的 .tc-ranks 回落单列全宽（卡内 ~1110px），而上面的双 fr 模板
    把 836px 余量平摊给名称/Token 两列（各 ~418px），数据列仅 52/46px——文本列大片空转。
-   单列档改用带上限的列模板（合计 ~1100px 贴合卡宽），两文本列不再无限膨胀 */
+   单列档改用带上限的列模板（合计 ~1100px 贴合卡宽），两文本列不再无限膨胀。
+   2026-10-24「调用次数 / 失败次数」四字表头把两数字列加宽 30px，从 Token 列上限扣回，
+   合计仍 ~1100px：26+300+76+68+330+140+100 + 6×10 = 1100 */
 @media (max-width: 1599px) {
   .tc-table--user .tc-table__head,
   .tc-table--user .tc-table__row,
   .tc-table--model .tc-table__head,
   .tc-table--model .tc-table__row {
-    grid-template-columns: 26px minmax(160px, 300px) 60px 54px minmax(200px, 360px) minmax(96px, 140px) 100px;
+    grid-template-columns: 26px minmax(160px, 300px) 76px 68px minmax(200px, 330px) minmax(96px, 140px) 100px;
   }
 }
 

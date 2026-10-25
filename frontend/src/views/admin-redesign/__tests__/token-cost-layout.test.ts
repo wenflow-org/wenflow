@@ -109,7 +109,8 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     const w = await mountTokenCost();
     const heads = w.findAll('.tc-skilltable__head > span').map((s) => s.text());
     // 输入/输出（原 Prompt/Completion，2026-10-16 用户：「那就输入输出就行了，不要搞那么多」）
-    expect(heads).toEqual(['Skill', '调用', 'Token 用量', '输入', '输出', '均次 Token', '成本', '占比']);
+    // 调用 → 调用次数（2026-10-24 用户「调用次数就写调用次数就可以了」：列名用可数的全名）
+    expect(heads).toEqual(['Skill', '调用次数', 'Token 用量', '输入', '输出', '均次 Token', '成本', '占比']);
     const rows = w.findAll('.tc-skilltable__row');
     expect(rows).toHaveLength(2);
     const priced = rows[0].find('.tc-st__cost');
@@ -179,12 +180,13 @@ describe('成本页 · 布局数值契约', () => {
     const tmpl = read('TcRankTable.vue')
       .match(/\.tc-table--user \.tc-table__row,[\s\S]{0,120}?grid-template-columns:\s*([^;]+);/)?.[1];
     expect(tmpl, '找不到排行表列模板（双列档）').toBeTruthy();
-    // 26+140+52+46+180+96+100 = 640，+6 个 10px 间隙 = 700
+    // 26+140+74+68+180+96+100 = 684，+6 个 10px 间隙 = 744
+    // （2026-10-24「调用次数 / 失败次数」四字表头把 52/46 两列加宽到 74/68）
     const tokens = tmpl!.replace(/,\s+/g, ',').trim().split(/\s+/);
     const need = tokens.reduce((sum, tk) => sum + Number(tk.match(/^(?:minmax\()?(\d+)px/)?.[1] ?? 0), 0)
       + (tokens.length - 1) * 10;
-    expect(need).toBe(700);
-    // 每卡需要 need + 表左右内衬 28 = 728 → 内容列 ≥ 1470 → 视口 ≥ 1754（内容列 = 视口 − 284）
+    expect(need).toBe(744);
+    // 每卡需要 need + 表左右内衬 28 = 772 → 内容列 ≥ 1544 → 视口 ≥ 1842（内容列 = 视口 − 284）
     const vpFloor = (need + 28) * 2 + 14 + 284;
     const mq = read('TokenCost.vue').match(/@media \(max-width: (\d+)px\) \{\s*\.tc-ranks/);
     expect(mq, '找不到 .tc-ranks 单列回落断点').toBeTruthy();

@@ -236,7 +236,7 @@
         <div v-if="skillRows.length" class="tc-skilltable" :class="{ 'tc-skilltable--cost': skillCostTotal > 0 }" role="table" :aria-label="SKILL_COST_TITLE">
           <div class="tc-skilltable__head" role="row">
             <span role="columnheader">Skill</span>
-            <span role="columnheader">调用</span>
+            <span role="columnheader">调用次数</span>
             <span role="columnheader">Token 用量</span>
             <span role="columnheader">输入</span>
             <span role="columnheader">输出</span>
@@ -870,13 +870,14 @@ const trendCols = computed(() => trend.value.map((d) => ({
   /* align-items:start 撤（2026-10-04 全站评审 P3#25，判例 42107f8e）：并排排行卡底边差 114.5px
      （右卡悬空），撤后 grid stretch 等高，与总览 Row A 同判 */
 }
-/* LY2（2026-10-05，2026-10-14 重算）：TcRankTable 半宽侧表有最小内容宽，卡窄于此值
+/* LY2（2026-10-05，2026-10-14 / 2026-10-24 重算）：TcRankTable 半宽侧表有最小内容宽，卡窄于此值
    会被 .mk-card 的 overflow:clip 静默裁掉最右「占比」列（实测强制双列 491px 卡里
-   行宽 756px，末列右缘越出卡右缘 280px）。最小内容宽随 2026-10-04「审核 #112」插入
-   成本列后从 594px 涨到 700px（grid 最小值合计），故每卡 ≥ 728px、内容列 ≥ 1470px、
-   视口 ≥ 1754px 双列才成立（1280 面板实测内容列 = 视口 − 284）。原断点 1599 是成本列
-   之前算的，1600~1753 这段会裁列——断点抬到 1799 覆盖整段。 */
-@media (max-width: 1799px) {
+   行宽 756px，末列右缘越出卡右缘 280px）。最小内容宽随
+   2026-10-04「审核 #112」插入成本列后从 594px 涨到 700px；2026-10-24「调用次数 / 失败次数」
+   四字表头再涨到 744px（26+140+74+68+180+96+100 + 6×10）——故每卡 ≥ 772px、
+   内容列 ≥ 1544px、视口 ≥ 1842px 双列才成立（1280 面板实测内容列 = 视口 − 284）。
+   断点取 1849 覆盖整段（原 1799 是成本列之前算的）。 */
+@media (max-width: 1849px) {
   .tc-ranks { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -933,14 +934,15 @@ const trendCols = computed(() => trend.value.map((d) => ({
      不制造空转白区。
      下限合计 613 + 7×10 间隙 = 683：admin 最窄档 1280 视口的内容宽 996（表宽 968）富余，
      八列在 ~1024 视口（表宽 ~712）仍不成行溢出（溢出=最右列被 .mk-card overflow:clip 静默裁掉）。
-     各列下限不低于表头文字宽（表头右对齐，窄列会让「均次 Token」折行）。 */
+     各列下限不低于表头文字宽（表头右对齐，窄列会让「均次 Token」折行；「调用次数」四字
+     下限 70px，2026-10-24 用户「调用次数就写调用次数就可以了」由 44px 上调）。 */
   /* 上限刻意压紧：grid 的「maximize tracks」先于 fr 展开，若上限留得宽，窄屏下 7 个受限列
      会先把余量吃光、末列只剩下限（实测 996px 卡里占比条塌到 39px，比改前 149px 更差）。
      上限合计 691 + 7×10 间隙：996px 卡（可用 896）下受限列刚好到顶、占列拿 ~135（条 ~113px），
      宽屏（内容 ≥1470）余量全归占列——条变长但不留空转白区。 */
   grid-template-columns:
     minmax(130px, 175px)
-    minmax(44px, 62px)
+    minmax(70px, 88px)
     minmax(70px, 100px)
     minmax(56px, 78px)
     minmax(76px, 100px)
