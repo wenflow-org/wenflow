@@ -10,10 +10,6 @@
         <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用。
              审核 #123：该按钮在 Trace 页签下也可见可点，但导出的日志行在 Trace 页签根本不在 DOM
              （表格在 logs 页签体内）——「本页」指向不明；限 logs 页签显示，文案细化「导出日志本页」 -->
-        <!-- 观测组互链（2026-10-24）：失败排查常要接着看成本与管理员操作；
-             此前组内三页零互链，必须回侧栏重进。 -->
-        <button type="button" class="mk-btn mk-btn--sm" title="看同一时间窗口的成本与用量（按 Skill / 用户 / 模型）" @click="goCost">成本分析 →</button>
-        <button type="button" class="mk-btn mk-btn--sm" title="看管理员操作与登录审计留痕" @click="goAudit">审计日志 →</button>
         <button v-if="elTab === 'logs'" type="button" class="mk-btn mk-btn--sm" :disabled="!logs.length" @click="exportJson">导出日志本页</button>
       </template>
     </MkPageHead>
@@ -65,6 +61,18 @@
       <div class="mk-card__head">
         <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
         <div class="mk-filter">
+          <!-- 时间范围提到主行（2026-10-24 用户「时间范围和筛选重新设计一下」）：
+               此前只活在「筛选」弹层里，主屏没有任何可见窗口；现在是一枚常驻的可操作胶囊
+               （label 包 select，点文字也能开），弹层里不再放第二份。 -->
+          <label class="mk-pill logs-range" :class="{ 'mk-pill--active': timeRangeActive }" title="统计与列表使用同一个时间窗口">
+            <span class="logs-range__k">时间范围</span>
+            <span class="logs-range__pick">
+              <select v-model="timeRange" class="logs-range__v" aria-label="时间范围" @change="onTimeRangeChange">
+                <option v-for="o in timeRangeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+              </select>
+              <ChevronDown :size="12" :stroke-width="2" aria-hidden="true" />
+            </span>
+          </label>
           <div class="mk-pills">
             <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" :aria-pressed="statusFilter === p.id" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span></button>
           </div>
@@ -78,8 +86,8 @@
             :title="testFilter === 'only' ? '仅看测试' : '测试日志'"
             @click="toggleTestFilter"
           >测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
-          <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「筛选」弹层
-              （2026-10-04「提上主行」的发现性问题由弹层钮生效计数兜住），主行回到 pills + 搜索 -->
+          <!-- 筛选弹层只剩「节点 / Trace ID / 会话 ID」与自定义时间段的始末输入；
+               时间档已提上主行，弹层不再放第二份（2026-10-24） -->
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
@@ -93,9 +101,8 @@
             @save="onSaveView"
           />
         </div>
-        <!-- 右侧：自动刷新 / 列 / 筛选（2026-10-05 全站卡头统一弹层法：时间范围/节点/
-             Trace ID 自主行收进共享 .mk-adv 弹层（此前 10-04 提上主行致 1440 折两行），
-             与私有的 sessionId 面板合并为同一弹层；触发钮标生效数） -->
+        <!-- 右侧：自动刷新 / 列 / 筛选（筛选=节点 / Trace ID / 会话 ID 三个精确定位项；
+             触发钮与「列」同为文字动作，激活时带生效数角标） -->
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位。
                审核 #127：搜索框补 aria-label（MkFilterSearch inheritAttrs:false + v-bind="$attrs"，
@@ -106,7 +113,8 @@
           <div class="mk-adv">
             <button
               type="button"
-              class="mk-btn mk-btn--sm"
+              class="mk-link logs-adv-trigger"
+              :class="{ 'mk-link--active': advOpen }"
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
@@ -114,12 +122,6 @@
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
-              <label class="mk-adv__field">
-                <span class="mk-cell-sub">时间范围</span>
-                <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围筛选" @change="onTimeRangeChange">
-                  <option v-for="o in timeRangeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-                </select>
-              </label>
               <!-- 自定义时间段（2026-10-16 用户走查「换成可以选定始末时间」）：选定后露出开始 / 结束两个
                    本地时间输入，换算成 startTime/endTime（ISO）下发——后端精确时间优先于快捷枚举，
                    且 statsWhere 与行查询同窗口。开始晚于结束时行内报错并拦住查询（不下发矛盾区间） -->
@@ -372,7 +374,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Copy, Filter } from 'lucide-vue-next'
+import { Copy, Filter, ChevronDown } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
@@ -421,16 +423,6 @@ watch(
   },
   { immediate: true }
 )
-/** 观测组互链：执行日志 → 成本分析（窗口近似映射）/ 审计日志 */
-function goCost() {
-  const range = String(route.query.range || '')
-  const days = range === 'month' ? 30 : range === 'all' ? 90 : 7
-  void router.push({ path: '/admin/token-cost', query: { days: String(days) } })
-}
-function goAudit() {
-  void router.push('/admin/audit-logs')
-}
-
 /** 切 tab（同步 ?tab= URL，深链/刷新可寻址） */
 function switchElTab(t: ElTab) {
   elTab.value = t
@@ -525,7 +517,8 @@ function presetToRange(r: ExecTimeRange): { start: string; end: string } {
 }
 /** 上一次非自定义档（切入自定义时按它回填始末） */
 let lastPresetRange: ExecTimeRange = 'today'
-/** 切档：入自定义先按上一档回填，随后下发；区间矛盾（开始晚于结束）时不下发，行内已报错 */
+/** 切档：入自定义先按上一档回填，随后下发；区间矛盾（开始晚于结束）时不下发，行内已报错。
+    自定义档的始末输入在「筛选」弹层里，选中即展开，免得用户选完不知道该去哪填。 */
 function onTimeRangeChange() {
   if (timeRange.value === 'custom') {
     if (!customStart.value && !customEnd.value) {
@@ -533,6 +526,7 @@ function onTimeRangeChange() {
       customStart.value = start
       customEnd.value = end
     }
+    advOpen.value = true
   } else {
     lastPresetRange = timeRange.value
   }
@@ -1046,9 +1040,10 @@ const listRefreshing = computed(() => (liveLoading.value || liveLogsLoading.valu
 /** 时间档是否偏离默认（'today'）：自定义档即便两端留空也算非默认（用户显式选过自定义）。
     与「筛选」徽章、isFiltered、清除筛选同一判据（单源，勿各写一遍）。 */
 const timeRangeActive = computed(() => timeRange.value !== 'today')
-/** 筛选弹层生效数：时间档非默认 / 节点 / Trace ID / sessionId 任一激活即计（收起也不丢状态） */
+/** 筛选弹层生效数：节点 / Trace ID / sessionId 任一激活即计（收起也不丢状态）。
+    时间档不计数——它已提上主行，角标只表示「弹层里还藏着几个条件」。 */
 const advancedFilterCount = computed(
-  () => (timeRangeActive.value ? 1 : 0) + (agentFilter.value ? 1 : 0) + (traceId.value.trim() ? 1 : 0) + (sessionId.value.trim() ? 1 : 0)
+  () => (agentFilter.value ? 1 : 0) + (traceId.value.trim() ? 1 : 0) + (sessionId.value.trim() ? 1 : 0)
 )
 /* 节点下拉数据源不能只来自当前页 30 行（截断后筛不到页外的 skill）。
    组合三源：注册表 skill 全集（liveSkillStatsMap，boot 域预载，去掉 skill: 前缀与行内
@@ -1389,6 +1384,29 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   cursor: pointer;
   white-space: nowrap;
 }
+
+/* 时间范围胶囊（2026-10-24）：外壳沿用 .mk-pill，真正的控件是里面透明的原生 select——
+   点文字/箭头都能开，键盘可达，弹层里不再放第二份时间档 */
+.logs-range { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 11px; }
+.logs-range__k { color: var(--mk-faint); }
+.logs-range__pick { position: relative; display: inline-flex; align-items: center; }
+.logs-range__v {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  padding: 1px 16px 1px 0;
+  cursor: pointer;
+}
+.logs-range:hover .logs-range__v { color: var(--mk-blue); }
+.logs-range:focus-within { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+.logs-range__pick svg { position: absolute; right: 0; color: var(--mk-muted); pointer-events: none; }
+/* 筛选触发器与「列」同为文字动作：图标与文字同一基线，不给它单独一颗描边按钮 */
+.logs-adv-trigger { display: inline-flex; align-items: center; gap: 4px; }
 /* 列表可见加载态（EG7：「更新中」角标 + 表格降透明）——排序/筛选/翻页重查时该查询
    实测可达 30s，无反馈时用户误判「箭头变了、数据没变」。仅在有数据时出现（首载走骨架）。 */
 .exec-updating { color: var(--mk-blue); font-weight: 600; white-space: nowrap; }

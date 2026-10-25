@@ -154,7 +154,6 @@
         icon="◌"
         min
         title="还没有评估用例"
-        description="为 Agent 维护输入消息与期望，跑评估验证 prompt 改动是否达标。"
         action-text="新建用例"
         @action="openCreate"
       />
@@ -824,10 +823,8 @@ const lastRateTitle = computed(() => {
     : ''
   return `${base}最近一次评估通过率；${RATE_THRESHOLD_NOTE}`
 })
-/* 评估历史卡副行 = 口径（2026-10-19 用户走查「hint 在报读数」）：原先副行是「上次 3 小时前」
-   这个时刻读数，改成窗口加载口径，时刻随长释进 title（P3 的「最近」异义消歧仍成立——
-   title 里写明是「上次评测」的时刻，副行不再有第二个「最近」）。 */
-const runsKpiHint = computed(() => `按最近 ${RUNS_LIMIT} 次窗口加载`)
+/* 评估历史卡副行（2026-10-24 用户「文案不要」）：卡面不再写「按最近 N 次窗口加载」，
+   窗口口径与上次评测时刻只留在 title。 */
 /** 评估历史卡 title（2026-10-04 状态条退役；2026-10-18 用户走查去掉分号堆叠）：
     窗口上限口径 + agent 筛选限定 + 上次评测时刻。最近一次通过率、着色阈值另有
     「最近评测通过率」卡承载，不在本卡重复。 #88：数字随 agent 筛选收窄，限定词一并披露 */
@@ -1584,7 +1581,7 @@ const kpiView = computed(() => ({
     ? ('—' as const)
     : cases.value.filter((c) => c.enabled === false).length,
   runCount: runsFailed.value ? ('—' as const) : runs.value.length,
-  runsHint: runsFailed.value ? '评估历史加载失败' : runsKpiHint.value,
+  runsHint: runsFailed.value ? '评估历史加载失败' : '',
   runsTitle: runsFailed.value ? '评估历史加载失败：计数与最近一次时间不可用' : runsKpiTitle.value,
 }))
 defineExpose({ running, canRunBatch, runBatch, kpiView })

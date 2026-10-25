@@ -382,16 +382,16 @@ describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 
     liveLogsFiltered.value = [errSpan(1)];
     const { w } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    await w.find('select[aria-label="时间范围筛选"]').setValue('1h');
+    await w.find('select[aria-label="时间范围"]').setValue('1h');
     await flushPromises();
     const q = h.reload.mock.calls.at(-1)![0] as Record<string, unknown>;
     expect(q.timeRange).toBeUndefined();
     expect(typeof q.startTime).toBe('string');
     expect(new Date(q.startTime as string).getTime()).toBeLessThan(Date.now());
     // 起点取整到分钟：同档重复触发签名稳定，不绕过 applyServerQuery 去重
-    await w.find('select[aria-label="时间范围筛选"]').setValue('today');
+    await w.find('select[aria-label="时间范围"]').setValue('today');
     await flushPromises();
-    await w.find('select[aria-label="时间范围筛选"]').setValue('1h');
+    await w.find('select[aria-label="时间范围"]').setValue('1h');
     await flushPromises();
     const q2 = h.reload.mock.calls.at(-1)![0] as Record<string, unknown>;
     expect(q.startTime).toBe(q2.startTime);
@@ -418,7 +418,7 @@ describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 
     liveLogsTotal.value = 1;
     const { w, router } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    await w.find('select[aria-label="时间范围筛选"]').setValue('custom');
+    await w.find('select[aria-label="时间范围"]').setValue('custom');
     await flushPromises();
     // 切入自定义：按上一档（默认 today）回填开始输入，结束留空
     const start = w.find('input[aria-label="开始时间"]');
@@ -447,7 +447,7 @@ describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 
   it('自定义时间段：开始晚于结束 = 矛盾区间，行内报错且不下发查询', async () => {
     const { w } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    await w.find('select[aria-label="时间范围筛选"]').setValue('custom');
+    await w.find('select[aria-label="时间范围"]').setValue('custom');
     await flushPromises();
     const start = w.find('input[aria-label="开始时间"]');
     const end = w.find('input[aria-label="结束时间"]');

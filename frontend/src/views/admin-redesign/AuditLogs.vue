@@ -40,15 +40,20 @@
       <!-- 筛选卡片头（关键词 / 时间范围 / 列） -->
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 时间范围常驻回显（B14/F6-2）：timeRange 默认 'today'，而后端按日界
-               （Asia/Shanghai）过滤——选择器只活在「筛选」弹层里，卡头原先无任何
-               可见提示，空态/低条数被读成「从未发生过」（实测操作审计默认 3 条、
-               登录审计直接空态；改「全部」后 87474 / 3927）。此 chip 常驻显示当前生效
-               档位（值随 select 单源联动），点击即展开同一弹层改范围。 -->
-          <span
-            class="mk-pill al-range"
-            :class="{ 'mk-pill--active': timeRange !== 'today' }"
-          ><span class="al-range__k">时间范围</span> <b class="al-range__v">{{ timeRangeLabels[timeRange] }}</b></span>
+          <!-- 时间范围常驻可操作（B14/F6-2 + 2026-10-24 用户「时间范围和筛选重新设计一下」）：
+               timeRange 默认 'today'，而后端按日界（Asia/Shanghai）过滤——档位必须主屏可见，
+               否则空态/低条数被读成「从未发生过」（实测操作审计默认 3 条、登录审计直接空态；
+               改「全部」后 87474 / 3927）。此前它是枚不可点的 <span>，真正的选择器藏在弹层里；
+               现在外壳沿用胶囊，内里就是原生 select，点文字或箭头都能改。 -->
+          <label class="mk-pill al-range" :class="{ 'mk-pill--active': timeRange !== 'today' }" title="统计与列表使用同一个时间窗口">
+            <span class="al-range__k">时间范围</span>
+            <span class="al-range__pick">
+              <select v-model="timeRange" class="al-range__v" aria-label="时间范围" @change="applyFilters">
+                <option v-for="(label, value) in timeRangeLabels" :key="value" :value="value">{{ label }}</option>
+              </select>
+              <ChevronDown :size="12" :stroke-width="2" aria-hidden="true" />
+            </span>
+          </label>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 失败 TOP 下钻的常驻状态（审核 #152）：弹层关闭后仍可见可退；徽章计数含 failedOnly，
                点击 = 退出下钻（与弹层内已激活 chip 同义） -->
@@ -87,7 +92,8 @@
           <div class="mk-adv">
             <button
               type="button"
-              class="mk-btn mk-btn--sm"
+              class="mk-link al-adv-trigger"
+              :class="{ 'mk-link--active': advOpen }"
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
@@ -110,16 +116,6 @@
                 >
                   <option value="">全部动作</option>
                   <option v-for="a in actionOptions" :key="a.value" :value="a.value">{{ a.label }} {{ a.count }}</option>
-                </select>
-              </label>
-              <label class="mk-adv__field">
-                <span class="mk-cell-sub">时间范围</span>
-                <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围" @change="applyFilters">
-                  <option value="today">今天</option>
-                  <option value="yesterday">昨天</option>
-                  <option value="week">近 7 天</option>
-                  <option value="month">近 30 天</option>
-                  <option value="all">全部</option>
                 </select>
               </label>
               <!-- 失败 TOP 快捷下钻（近 2000 条失败内聚合）：点击 = 只看失败 + path 首段关键词，
@@ -364,7 +360,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { KeyRound, Lock, Filter } from 'lucide-vue-next'
+import { KeyRound, Lock, Filter, ChevronDown } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
@@ -500,12 +496,11 @@ const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today')
    Esc 关闭走共享 useEscape（与教学会话同一外壳） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })
-/* 生效筛选计数（触发钮角标）：动作快筛 / 非默认时间范围 / 只看失败下钻——
+/* 生效筛选计数（触发钮角标）：动作快筛 / 只看失败下钻——时间档已提上主行，不再计。
    下钻态此前不计入，弹层关闭后工具栏无任何可见指示（审核 #152） */
 const advCount = computed(
   () =>
     (activeActionValue.value ? 1 : 0) +
-    (timeRange.value !== 'today' ? 1 : 0) +
     (failedOnly.value ? 1 : 0)
 )
 
@@ -1120,11 +1115,29 @@ function exportCurrentPage() {
   text-overflow: ellipsis;
   max-width: 240px;
 }
-/* 时间范围常驻回显 chip（B14/F6-2）：复用 .mk-pill 描边胶囊外观，默认档为中性灰，
-   非默认档（已改范围）走 .mk-pill--active 浅蓝激活态；点击展开筛选弹层。 */
-.al-range { display: inline-flex; align-items: center; gap: 5px; }
+/* 时间范围常驻胶囊（B14/F6-2 + 2026-10-24 重设计）：外壳复用 .mk-pill，内里的原生 select
+   透明化——文字与箭头都可点，默认档中性灰、非默认档走 .mk-pill--active 浅蓝激活态 */
+.al-range { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 11px; }
 .al-range__k { color: var(--mk-faint); font-weight: 600; }
-.al-range__v { font-weight: 800; font-variant-numeric: tabular-nums; }
+.al-range__pick { position: relative; display: inline-flex; align-items: center; }
+.al-range__v {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 16px 1px 0;
+  cursor: pointer;
+}
+.al-range:hover .al-range__v { color: var(--mk-blue); }
+.al-range:focus-within { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+.al-range__pick svg { position: absolute; right: 0; color: var(--mk-muted); pointer-events: none; }
+/* 筛选触发器与「列」同为文字动作：图标与文字同一基线，不给它单独一颗描边按钮 */
+.al-adv-trigger { display: inline-flex; align-items: center; gap: 4px; }
 /* P2-16：失败 TOP 聚合 chip（点击下钻到该动作的失败记录） */
 .al-fails { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 48%; }
 /* 弹层内档位：不受头部右区 48% 限宽，chip 允许换行铺开 */

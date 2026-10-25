@@ -71,11 +71,14 @@ describe('重复操作入口守卫', () => {
     expect(src).not.toContain('按会话归组查看')
   })
 
-  it('审计日志时间范围 chip 只回显，不再与「筛选」钮同开弹层', () => {
+  it('审计日志时间范围是主屏可操作控件，弹层里不再放第二份', () => {
     const src = read('AuditLogs.vue')
     // 只留「筛选」钮一个触发点
     expect((src.match(/advOpen = !advOpen/g) || []).length).toBe(1)
-    expect(src).toMatch(/<span\s+class="mk-pill al-range"/)
+    // 2026-10-24 用户「时间范围和筛选重新设计一下」：胶囊里是真 select，不再是不可点的 <span>
+    expect(src).toMatch(/<label class="mk-pill al-range"/)
+    expect(src).toContain('select v-model="timeRange"')
+    expect(src).not.toContain('<span class="mk-cell-sub">时间范围</span>')
   })
 
   it('运营中心：公告卡不再重复「全部公告」入口；嵌入空态不给第二颗主钮', () => {
