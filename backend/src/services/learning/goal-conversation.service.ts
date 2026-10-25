@@ -17,6 +17,7 @@ import {
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { isProposalConfirmationText, isExplicitRefusalText } from './goal-conversation.confirm-text';
+import { evaluateGoalDeferralCap, parseConversationMessageCount } from './goal-conversation.deferral-cap';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 import systemPrisma from '../../config/system-database';
 import {
@@ -393,7 +394,7 @@ class GoalConversationService {
    */
   private recordConfirmationMetering(
     currentData: Record<string, any>,
-    channel: 'flag' | 'text' | 'flag-vetoed-by-text',
+    channel: 'flag' | 'text' | 'flag-vetoed-by-text' | 'forced-by-deferral-cap',
     refusalVetoed: boolean,
     userReply: string
   ): void {
@@ -655,6 +656,23 @@ async continueConversation(
           });
         }
 
+        // goal 延期门禁（2026-10-25，v11/v12 夜批实证 14 步不收敛）：普通回合达到上限仍未离开
+        // goal 时确定性收敛。显式拒绝文本不得代签，门禁同样让位（与上方 veto 同规则）。
+        const deferralCap = evaluateGoalDeferralCap({
+          stage: conversation.stage,
+          messageCount: parseConversationMessageCount(conversation.messages),
+          confirmAlready: confirmProposal,
+        });
+        if (deferralCap.forceConfirm && !isExplicitRefusalText(userReply)) {
+          confirmProposal = true;
+          logger.info('[goal-conversation] 延期门禁触发：proposing 达回合上限，按事实确认收敛出路径', {
+            conversationId,
+            userId,
+            turnCount: deferralCap.turnCount,
+            replyPreview: userReply.slice(0, 40),
+          });
+        }
+
         if (conversation.stage === 'proposing' && confirmProposal) {
           if (options?.confirmProposal !== true) {
             logger.info('[goal-conversation] 自然语言确认命中，按 confirmProposal 推进', {
@@ -857,6 +875,28 @@ async continueConversation(
         logger.warn('模型自报 ready 已被回落为 proposing，等待用户显式确认', {
           conversationId,
           userId
+        });
+        return this.toServiceResult(responseWithConversationId, conversationId, {
+          stage: 'proposing',
+          isCompleted: false,
+        });
+      }
+
+      // 延期门禁第二段：understanding 达上限 → 本回合收敛为 proposing（用已收集的理解
+      // 合成方案），下一回合自然命中上方确认分支。与 ready 回落同款持久化 + 返回形态。
+      if (deferralCap.forcePropose && stage === 'understanding') {
+        await this.updateConversationLifecycle(conversationId, 'proposing', {
+          status: 'active',
+          completedAt: null,
+          mutateCollectedData: (data) => {
+            data.stage = 'proposing';
+            this.recordConfirmationMetering(data, 'forced-by-deferral-cap', true, userReply);
+          },
+        });
+        logger.warn('[goal-conversation] 延期门禁触发：understanding 达回合上限，收敛为 proposing', {
+          conversationId,
+          userId,
+          turnCount: deferralCap.turnCount,
         });
         return this.toServiceResult(responseWithConversationId, conversationId, {
           stage: 'proposing',
