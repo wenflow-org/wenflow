@@ -33,4 +33,10 @@ describe('编排图连线', () => {
     expect(OrchestratorSource).toMatch(/\.orch-odg-agent\s*\{[^}]*text-overflow:\s*ellipsis/)
     expect(OrchestratorSource).toContain(':title="s.agentId"')
   })
+
+  it('列脚跟着本组走：不压到列底（2026-10-24 用户「怎么固定底部了」）', () => {
+    // margin-top:auto + body flex-grow 会把字段行推到整屏下方，和所属阶段脱开
+    expect(OrchestratorSource).not.toMatch(/\.orch-odg-foot\s*\{[^}]*margin-top:\s*auto/)
+    expect(OrchestratorSource).not.toMatch(/\.orch-odg-body\s*\{[^}]*flex:\s*1 1 auto/)
+  })
 })

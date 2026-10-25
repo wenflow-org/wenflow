@@ -956,8 +956,8 @@ html[data-theme='dark'] {
   flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px; cursor: grab;
   display: flex; align-items: flex-start;
 }
-/* 2026-10-24：画布纵向拉伸到滚动区高度，五列才能等高（原先各列按 Skill 条数自然高，
-   列脚上下错位）。同特异性后置覆盖，保持上方居中契约的源码形态。 */
+/* 2026-10-24：画布纵向拉伸到滚动区高度，五列等高（原先各列按 Skill 条数自然高）。
+   列脚不再随之压到底（见 .orch-odg-foot）：等高只用于列头/列宽的稳定，不改变内容流向。 */
 .orch-odg-scroll { align-items: stretch; }
 .orch-odg-scroll.is-panning,
 .orch-odg-scroll.is-panning .orch-odg-node { cursor: grabbing; }
@@ -1015,7 +1015,7 @@ html[data-theme='dark'] {
   margin-left: auto; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
   flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.orch-odg-body { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; }
+.orch-odg-body { display: flex; flex-direction: column; gap: 6px; }
 .orch-odg-node {
   display: grid; gap: 1px; width: 100%; padding: 8px 10px; text-align: left;
   border: 1px solid var(--mk-line, #e6ebf4); border-radius: var(--mk-radius-lg, 10px);
@@ -1033,9 +1033,10 @@ html[data-theme='dark'] {
   overflow-wrap: anywhere;
 }
 /* 审核 #117：.orch-odg-nodemeta 规则随节点内重复 agentId 一起删（列头已承接，类无消费者） */
-/* 列脚压到统一列底：margin-top:auto + 计数/字段分两行，字段名允许两行（不再 nowrap 硬切） */
+/* 列脚紧跟本阶段的最后一个 Skill（2026-10-24 用户「怎么固定底部了，应该跟着组走」）：
+   撤掉 margin-top:auto 与 .orch-odg-body 的 flex-grow——等高列由画布 stretch 给出，
+   富余高度留在列底；否则列脚会被推到整屏最下方，和它所属的分组脱开（放大后更明显）。 */
 .orch-odg-foot {
-  margin-top: auto;
   display: flex; flex-direction: column; align-items: stretch; gap: 4px;
   padding-top: 2px;
 }
