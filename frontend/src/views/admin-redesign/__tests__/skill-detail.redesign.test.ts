@@ -341,7 +341,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text())
     expect(pills[0]).toBe('健康') // 窗口内 100 调用 0 失败
     expect(pills[1]).toBe('教学')
-    // 2026-10-24 用户「还是重复部分」：生效模型只在运行时「生效值」里出现一次，hero 不再重复
+    // 2026-10-24 用户「还是重复部分」：生效模型只在运行时里出现一次，hero 不再重复
     expect(pills.join('|')).not.toContain('gpt-5.2')
     expect(pills.join('|')).toContain('线上生效 v2')
 
@@ -553,12 +553,14 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // 模型与路由（2026-10-19 重排：宿主与设计区块原本各渲染一份同配置的可编辑副本，
     // 现由 RuntimeTab 单点承载，卡名从「模型配置」改为「模型与路由」）
     expect(w.text()).toContain('模型与路由')
-    expect(w.text()).toContain('独立配置')
+    // 2026-10-24 用户「什么叫独立配置」：开关改称「覆盖平台默认」，说出独立于谁
+    expect(w.text()).toContain('覆盖平台默认')
     // 保存钮只在表单变脏后出现在卡头（footer 的同名副本已撤）
     expect(w.findAll('.sdp-card__save').length).toBe(0)
     expect(w.text()).toContain('恢复默认')
-    // 生效值（只读「所配即所得」）：运行时限制独立卡退役后，超时等信息在这里看
-    expect(w.text()).toContain('生效值')
+    // 2026-10-24 用户「生效值没意义，拿掉」：只读摘要删掉，换成一行取值顺序（谁压谁）
+    expect(w.text()).not.toContain('只读 · 当前实际生效')
+    expect(w.find('.sdp-order').text()).toContain('取值顺序')
     // 模型测试（右侧验证列）
     expect(w.text()).toContain('模型测试')
     expect(w.text()).toContain('开始探测')

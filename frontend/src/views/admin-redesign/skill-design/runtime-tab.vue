@@ -6,7 +6,9 @@
        ② 配置按「模型 / 生成参数 / 请求与容错」三段竖排，每段内是两列字段；
           参数覆盖从三列大格子改成一行一个字段的小表（标签 / 模式 / 值对齐）；
        ③ 模型测试收成右侧窄栏、视觉次级，≤1080 回落单列；
-       ④ 生效值胶囊保留在顶部，先回答「现在生效的是什么」。 -->
+       2026-10-24（用户「生效值是什么东西，没意义，拿掉，什么叫独立配置」）：
+       顶部「生效值」只读摘要删掉——导航副文/分节页头/表单本身已有同样的当前值，
+       改为一行「取值顺序」；卡头开关从「独立配置」改称「覆盖平台默认」（说出独立于谁）。 -->
   <div class="sdp-pane">
     <section class="mk-card">
       <div class="mk-card__head sdp-card__head">
@@ -15,8 +17,9 @@
              下面的字段随开关统一禁用，不再用一枚小复选框占一行表单 -->
         <MkSwitch
           v-model="rtForm.enabled"
-          label="独立配置"
-          :state-text="rtForm.enabled ? '生效中' : '已关闭'"
+          label="覆盖平台默认"
+          :state-text="rtForm.enabled ? '已开启' : '跟随平台默认'"
+          :title="overrideTitle"
           class="sdp-head__switch"
         />
         <button
@@ -28,31 +31,19 @@
         >{{ rtSaving ? '保存中…' : '保存配置' }}</button>
       </div>
       <!-- 卡头只保留标题/开关/保存；旧「Prompt 里声明了 model 时，本页模型不参与」已删：
-           与运行时契约相反（route 优先于 prompt.model），且生效值胶囊已直接给出结果与来源。 -->
+           与运行时契约相反（route 优先于 prompt.model）。 -->
 
       <div class="sdp-body">
         <div v-if="rtLoadFailed" class="sdp-error">运行时配置加载失败，已重置为默认值。<button type="button" class="mk-link" @click="loadRuntime">重试</button></div>
 
-        <!-- 生效值（只读「所配即所得」）：先回答「现在生效的是什么」，再进入分节编辑。
-             来源词走 sdp-shared 的人话映射（后端枚举码不直接露给运营） -->
-        <div class="sdp-summary">
-          <div class="sdp-summary__head">
-            <span class="sdp-sec__title">生效值</span>
-            <span class="sdp-summary__hint">只读 · 当前实际生效</span>
-          </div>
-          <div class="sdp-chips">
-            <span class="sdp-chip">超时 <b>{{ rtForm.requestTimeoutMs ? Math.round(rtForm.requestTimeoutMs / 1000) + 's' : '继承' }}</b></span>
-            <span class="sdp-chip">逻辑重试 <b>{{ effectiveLogicalRetries }}</b> 次</span>
-            <span class="sdp-chip">思考 <b>{{ thinkingLabel }}</b></span>
-            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('temperature')}`">T=<b>{{ generationParams?.temperature ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('temperature') }}</em></span>
-            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('topP')}`">topP=<b>{{ generationParams?.topP ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('topP') }}</em></span>
-            <span class="sdp-chip sdp-chip--amber" :title="`来源：${sourceLabel('maxTokens')}`">Max=<b>{{ generationParams?.maxTokens ?? '—' }}</b><em class="sdp-chip__src">{{ sourceLabel('maxTokens') }}</em></span>
-            <span class="sdp-chip" :title="generationParams?.model ? `模型来源：${modelOriginLabel}` : '按路由表选中，随路由变化'">
-              模型 <b>{{ generationParams?.model || '继承路由模型' }}</b>
-              <em v-if="generationParams?.model" class="sdp-chip__src">{{ modelOriginLabel }}</em>
-            </span>
-          </div>
-        </div>
+        <!-- 取值顺序（2026-10-24 用户「生效值没意义、独立配置是什么、架构顺序是什么」）：
+             原「生效值」只读摘要已删——它把三个分节里已有的当前值又抄了一遍（导航副文、
+             分节页头、表单本身各一份），对运营是纯复读。这里只留「谁压谁」这一行：
+             冲突时按什么顺序取值才是这页答不出来的问题；具体当前值在下面各分节里。 -->
+        <p class="sdp-order" :title="orderTitle">
+          <span class="sdp-order__k">取值顺序</span>
+          <span class="sdp-order__chain">本 Skill 设置 → Prompt 文件声明 → 代码默认 → 平台默认</span>
+        </p>
 
         <!-- 与「模型与接入」的供应商详情同解剖：左分节导航 / 右当前分节。
              一屏只展开一段，避免长表单把所有字段摊成一条竖线；导航上的副文就是各段
@@ -97,7 +88,10 @@
                     @pick="onModelPicked"
                   />
                   <!-- 选中项的能力与价格就地核对（Azure Foundry 的部署行形态）：不必再回接入页查 -->
-                  <span v-if="primaryMetaText" class="sdp-model-meta">{{ primaryMetaText }}</span>
+                  <span v-if="!inheritingModel && primaryMetaText" class="sdp-model-meta">{{ primaryMetaText }}</span>
+                  <!-- 跟随平台默认时，把「实际在跑哪个模型」写出来：否则这一屏只有「平台默认」一个词，
+                       运营无法确认线上究竟是 deepseek 还是别的 -->
+                  <span v-else-if="inheritedModelText" class="sdp-model-meta">{{ inheritedModelText }}</span>
                 </label>
               </div>
             </section>
@@ -105,7 +99,7 @@
             <section v-show="runtimeSection === 'params'" id="sdp-panel-params" class="sdp-panel" role="tabpanel" aria-labelledby="sdp-nav-params">
               <header class="sdp-panel__head">
                 <h4>生成参数</h4>
-                <span class="sdp-panel__state">{{ thinkingLabel }} · T={{ generationParams?.temperature ?? '继承' }}</span>
+                <span class="sdp-panel__state">{{ thinkingLabel }} · T={{ generationParams?.temperature ?? '继承' }}<template v-if="generationParams?.temperature != null">（{{ sourceLabel('temperature') }}）</template></span>
               </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field">
@@ -295,7 +289,7 @@
 
 <script setup lang="ts">
 /**
- * 运行时 tab：模型与路由（独立配置开关 / 模型层级 / 思考档 / 超时 / 参数覆盖 / 失败处理与备用模型）
+ * 运行时 tab：模型与路由（覆盖平台默认开关 / 模型层级 / 思考档 / 超时 / 参数覆盖 / 失败处理与备用模型）
  * + 模型测试（直发上游探测）。重排说明见模板顶部注释：本组件是该页唯一的编辑入口。
  */
 import { computed, ref, watch } from 'vue'
@@ -371,9 +365,27 @@ const thinkingLabel = computed(() =>
   rtForm.value.thinkingMode === 'enabled' ? '开启' : rtForm.value.thinkingMode === 'disabled' ? '关闭' : '继承/默认'
 )
 const sourceLabel = (k: string) => callParamSourceLabel(generationParams.value?.sources?.[k])
-/** 模型来源（2026-10-24）：route-fallback 只说「路由表」，看不出是技能覆盖还是平台默认。
- *  运行时契约：独立配置关掉 / 模型留空 → 继承平台默认。 */
-const modelOriginLabel = computed(() => (rtForm.value.enabled && rtForm.value.model ? '技能配置' : '平台默认'))
+/** 卡头开关的悬停全文：说清「覆盖什么」与「关掉之后谁生效」——
+ *  「独立配置」只说明它独立，说不出独立于谁，运营没法据此判断该不该开。 */
+const overrideTitle =
+  '开启后本 Skill 使用下面这套模型、参数与超时设置，与平台默认冲突时优先。'
+  + '关闭后这些设置不参与，模型与超时按平台默认，生成参数仍按 Prompt 文件声明取值。'
+/** 取值顺序的悬停全文：UI 上一行只放主链，具体分层在这里写全（与后端
+ *  resolve-llm-call-params 的字段级合并序一致，2026-10-24 核对） */
+const orderTitle =
+  '模型：本 Skill 指定 → 平台默认模型 → 代码默认 → Prompt 里的历史副本\n'
+  + '生成参数（T / topP / Max）：本 Skill 覆盖 → Prompt 文件声明 → 代码默认 → 平台默认\n'
+  + '超时与逻辑重试：本 Skill 设置 → 平台默认\n'
+  + '每一层只取第一个有值的字段，未填即跳过'
+/** 模型沿用平台默认（开关关闭 或 模型留空）——此时表单里可能还留着上次选的模型值，
+ *  但真正在跑的是平台默认模型，模型段要显示后者 */
+const inheritingModel = computed(() => !(rtForm.value.enabled && rtForm.value.model))
+/** 跟随平台默认时实际在跑的模型：补上「平台默认」到底是谁 */
+const inheritedModelText = computed(() => {
+  if (!inheritingModel.value) return ''
+  const model = String(generationParams.value?.model || '')
+  return model ? `当前使用平台默认：${model}` : ''
+})
 /** 生效模型的能力声明（注册表）：选中模型优先；继承时用侧栏解析出的生效模型查目录 */
 const effectiveModelCap = computed<ThinkingCapability | null>(() => {
   const id = String(rtForm.value.enabled && rtForm.value.model ? rtForm.value.model : generationParams.value?.model || '')
@@ -609,7 +621,7 @@ async function loadRuntime() {
     fallbackChain.value = fc
     fallbackTouched.value = false
   } else {
-    // 无独立配置（404）等失败：显式重置为默认值，不残留上一 skill
+    // 无本 Skill 覆盖（404）等失败：显式重置为默认值，不残留上一 skill
     resetRtForm()
     generationParams.value = null
   }
@@ -689,7 +701,7 @@ async function resetRuntime() {
   if (rtSaving.value) return
   const ok = await askConfirm({
     title: '恢复默认配置',
-    message: '确定恢复该 Skill 的默认模型配置吗？\n独立配置将被删除，改为跟随平台默认。',
+    message: '确定恢复该 Skill 的默认模型配置吗？\n本 Skill 的覆盖配置将被删除，改为跟随平台默认。',
     confirmText: '恢复默认'
   })
   if (!ok) return
@@ -759,19 +771,23 @@ watch(() => props.skillId, () => {
 .sdp-pane { display: grid; gap: 14px; align-content: start; container-type: inline-size; }
 /* 卡体：与「模型与接入」的 .ac-body 同解剖（16px 内衬 + 14px 栅格），段与段之间靠发丝线分开 */
 .sdp-body { display: grid; gap: 16px; padding: 4px 16px 16px; }
-.sdp-sec__title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
-
-/* 生效值：一段只读摘要，和下面的编辑区用发丝线分开 */
-.sdp-summary {
-  display: grid;
-  gap: 10px;
-  padding: 12px 14px;
+/* 取值顺序：一行说清「谁压谁」。原来这块是「生效值」只读摘要，把下面各分节的
+   当前值又抄一遍（导航副文、分节页头、表单各一份），已删（2026-10-24 用户判定无意义）。 */
+.sdp-order {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 9px 12px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface-2);
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
 }
-.sdp-summary__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.sdp-summary__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sdp-order__k { font-weight: 700; color: var(--mk-ink); }
+.sdp-order__chain { color: var(--mk-muted); }
 
 /* 左分节导航 / 右当前分节：与「模型与接入」供应商详情的列表 + 详情同解剖 */
 .sdp-shell {
@@ -840,7 +856,6 @@ watch(() => props.skillId, () => {
   }
 }
 
-.sdp-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sdp-chip {
   display: inline-flex;
   align-items: center;
@@ -853,11 +868,8 @@ watch(() => props.skillId, () => {
   font-weight: 600;
 }
 .sdp-chip b { color: var(--mk-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-.sdp-chip__src { font-style: normal; font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-left: 2px; }
 .sdp-chip--ok { background: var(--mk-green-bg, #e8f5ec); color: var(--mk-green, #20704a); }
 .sdp-chip--danger { background: var(--mk-red-bg, #fdecec); color: var(--mk-red, #b3372f); }
-.sdp-chip--amber { background: var(--mk-amber-bg); color: var(--mk-amber); }
-.sdp-chip--amber b { color: var(--mk-amber); }
 .sdp-fallback { display: grid; gap: 8px; }
 .sdp-fallback__chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .sdp-fallback__chain b { color: var(--mk-faint); font-weight: 700; }
@@ -977,7 +989,7 @@ watch(() => props.skillId, () => {
 @media (min-width: 3600px) {
   .sdp-chip { font-size: var(--mk-fs-body); padding: 4px 12px; }
   .sdp-body { gap: 18px; padding: 6px 20px 20px; }
-  .sdp-sec__title { font-size: var(--mk-fs-emphasis); }
+  .sdp-order { font-size: var(--mk-fs-body); }
   .sdp-field > span { font-size: var(--mk-fs-body); }
   .sdp-pane .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
   .sdp-form__msg { font-size: var(--mk-fs-body); }

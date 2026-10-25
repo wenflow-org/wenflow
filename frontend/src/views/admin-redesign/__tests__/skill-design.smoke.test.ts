@@ -114,7 +114,7 @@ vi.mock('@/api/adminApi', () => ({
           thinkingMode: 'default',
           reasoningEffort: 'default',
           requestTimeoutMs: 30000,
-          // 生效值胶囊的来源词：后端给的是枚举码，页面须人话化（callParamSourceLabel）
+          // 生成参数来源词：后端给的是枚举码（active-prompt 等），页面须人话化（callParamSourceLabel）
           generationParams: {
             model: 'gpt-4o-mini',
             temperature: 0.4,
@@ -415,23 +415,27 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     await settle();
   }
 
-  it('运行时 tab：生效值用真实配置（不是硬编码展示）', async () => {
+  it('运行时 tab：当前值落在分节里，顶部只留一行取值顺序', async () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '运行时');
-    // 2026-10-19 重排：「运行时限制」独立卡退役（该页唯一可能出现的限制就是请求超时，
-    // 它既是下面的可编辑字段、又已在生效值胶囊里）。真实值改从生效值胶囊取。
-    const chips = wrapper.find('.sdp-chips');
-    expect(chips.exists()).toBe(true);
-    expect(chips.text()).toContain('超时');
-    expect(chips.text()).toContain('30s');   // mock 的 requestTimeoutMs = 30000
-    expect(chips.text()).toContain('逻辑重试');
+    // 2026-10-24 用户「生效值没意义，拿掉」：只读摘要把三个分节里的当前值又抄一遍，已删。
+    // 顶部只保留「谁压谁」一行（架构顺序），当前值去导航副文 / 分节页头看。
+    expect(wrapper.find('.sdp-summary').exists()).toBe(false);
+    const order = wrapper.find('.sdp-order');
+    expect(order.exists()).toBe(true);
+    expect(order.text()).toContain('取值顺序');
+    expect(order.text()).toContain('本 Skill 设置');
+    expect(order.text()).toContain('Prompt 文件声明');
+    expect(order.text()).toContain('平台默认');
+
+    // 真实值仍取自配置而非硬编码：mock requestTimeoutMs=30000 / T=0.4
+    expect(wrapper.find('.sdp-nav').text()).toContain('30s');
+    const paramsHead = wrapper.find('#sdp-panel-params .sdp-panel__state');
+    expect(paramsHead.text()).toContain('T=0.4');
     // 来源词人话化：后端枚举码不得直接露给运营（挂映射前这里渲染的是 active-prompt）
-    expect(chips.text()).toContain('Prompt 文件声明');
-    // 2026-10-24：模型来源不再笼统写「路由表」——技能自己配了就叫技能配置，留空才是平台默认
-    expect(chips.text()).toContain('技能配置');
-    expect(chips.text()).toContain('未设');   // topP 的 source = none
-    expect(chips.text()).not.toContain('active-prompt');
-    expect(chips.text()).not.toContain('route-fallback');
+    expect(paramsHead.text()).toContain('Prompt 文件声明');
+    expect(wrapper.text()).not.toContain('active-prompt');
+    expect(wrapper.text()).not.toContain('route-fallback');
     wrapper.unmount();
   });
 
