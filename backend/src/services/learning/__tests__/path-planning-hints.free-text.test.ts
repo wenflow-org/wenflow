@@ -465,3 +465,51 @@ describe('keyStages 缺失时的学时兜底（2026-09-27 横向扩测 heavy-fp#
     expect(hints.targetMilestones).toBe(3);
   });
 });
+
+/**
+ * 「承诺为顶」（2026-10-25 方向改造 / issue #138 决策 A）：goal 层与用户谈定的节奏总量
+ * （sessionsPerWeek × 单次分钟 × 总周数）是对用户的契约，不允许被「每日分钟 × 7」的
+ * 兜底假设放大。实证：uqcit3l（w05）承诺「4 周每周半小时」= 2h，goal 层结构化推断
+ * 正确（estimatedHours=2），但 inferredBudgetCap 按每日 30min 算出 14h，R1-d 的
+ * 25% 带下限（3.5h）反把承诺抬到 3.5h → 守恒 floor 把模型合规的 2h 拉到 3.4h。
+ */
+describe('derivePlanningHints：承诺为顶（cadence 总量不被「按每日」假设放大）', () => {
+  it('w05 场景回归：每周一次 30 分钟 × 4 周 → targetTotalHours = 2（不是 3.5）', () => {
+    const hints = derivePlanningHints(
+      '未明确（按「接下来4周走完一轮」假设推进）',
+      '每周下班后半小时',
+      '30分钟（每周一次，按原话推断）',
+      null,
+      ['搭最小数据口径', '算第一版周预测', '每周对照校准'],
+      { totalSessions: 4, sessionsLengthMin: 30, totalWeeks: 4, sessionsPerWeek: 1, estimatedHours: 2 },
+    );
+    expect(hints.targetTotalHours).toBe(2);
+  });
+
+  it('每日学习者不受影响：7 次/周 × 30min × 4 周 = 14h 维持原值', () => {
+    const hints = derivePlanningHints(
+      '一个月', '每天半小时', '每天30分钟', 'per_day',
+      ['一', '二', '三'],
+      { totalSessions: 28, sessionsLengthMin: 30, totalWeeks: 4, sessionsPerWeek: 7, estimatedHours: 14 },
+    );
+    expect(hints.targetTotalHours).toBe(14);
+  });
+
+  it('承诺口径字段缺失时不启用钳制（模型自报总量原样透传）', () => {
+    const hints = derivePlanningHints('六周', null, null, null, ['一', '二', '三'], {
+      totalWeeks: 6, estimatedHours: 9, sessionsPerWeek: null, sessionsLengthMin: null,
+    });
+    // cadence 三元组不全 → promisedCadenceHours=null → 钳制不介入，estimatedHours 原样生效
+    expect(hints.targetTotalHours).toBe(9);
+  });
+
+  it('模型自报总量偏离承诺节奏 >1.25× 时不压回（总量估计优先于 cadence 推导）', () => {
+    const hints = derivePlanningHints(
+      '三个月', null, null, null, ['S1', 'S2', 'S3'],
+      { totalWeeks: 2, estimatedHours: 16, sessionsPerWeek: 6, sessionsLengthMin: 60 },
+      'small',
+    );
+    // cadence 推出 12h 但模型自报 16h（>12×1.25）→ 不钳制，16h 生效（既有语义保持）
+    expect(hints.targetTotalHours).toBe(16);
+  });
+});

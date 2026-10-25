@@ -14,7 +14,6 @@ import { executeSkill } from '../../../skills';
 import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
-import { buildStageFillNote } from './stage-fill-note';
 import {
   appendDescriptionNote,
   buildPathFillNote,
@@ -998,7 +997,6 @@ async function enrichLearningPathWithAndersonInner(
         (sum, milestone) => sum + (Number(milestone.estimatedHours) || 0),
         0,
       );
-      let stageFillNoteCount = 0;
       for (const milestone of learningPath.milestones) {
         const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
         const stageTasks = stageOutput?.subtasks || [];
@@ -1013,22 +1011,10 @@ async function enrichLearningPathWithAndersonInner(
         });
         if (stageHours !== null) {
           pathNormalizedHours += stageHours;
-          // R3 欠 fill 诚实声明：锚必须在回写前读（回写后 estimatedHours 即任务汇总，锚丢失）
-          const fillNote = buildStageFillNote(
-            Number(milestone.estimatedHours) || null,
-            stageHours,
-            (milestone as { description?: string | null }).description,
-          );
-          if (fillNote) {
-            stageFillNoteCount += 1;
-            logger.info('[stage-enrichment] 阶段课时欠 fill，已追加容量说明', {
-              pathId: learningPath.id,
-              milestoneId: milestone.id,
-              stageNumber: milestone.stageNumber,
-              anchorHours: Number(milestone.estimatedHours) || null,
-              stageHours,
-            });
-          }
+          // 阶段级「时间说明」拼接已下线（2026-10-25 方向改造）：实证它把内部预算口径差
+          // （锚 13h vs 任务 6h）裸露给学习者；预算链「承诺为顶」重锚后锚≈任务，触发源
+          // 消失。真欠交付由路径级 buildPathFillNote 声明 + delivery 审计对账（delivery-ratio
+          // 仍识别存量行的时间说明/容量说明）。存量数据不改写。
           // 阶段目标锚补齐（b3 评审）：模型自发引用率 ~30%（抽签），缺锚时确定性追加对照括注
           const anchorNote = buildAnchorGoalNote(pathSchoolAnchor, String(milestone.goal || ''));
           const anchorGoalBase = anchorNote
@@ -1042,7 +1028,6 @@ async function enrichLearningPathWithAndersonInner(
             data: {
               estimatedHours: stageHours,
               ...(anchorNote && anchorGoalBase !== null ? { goal: `${anchorGoalBase}${anchorNote}` } : {}),
-              ...(fillNote ? { description: fillNote } : {}),
               updatedAt: new Date(),
             }
           });
@@ -1123,7 +1108,9 @@ async function enrichLearningPathWithAndersonInner(
         ? reconcileDeliveryConservation({
             conservation: (parsedTemplate as any)?.budgetConservation,
             deliveredHours: pathNormalizedHours,
-            declaration: pathFillNote ? 'path' : stageFillNoteCount > 0 ? 'stage' : 'none',
+            // 阶段级声明已下线（2026-10-25）：仅路径级【课时说明】计 path，其余 none；
+            // 存量行的阶段级声明由 delivery-ratio 审计侧识别，不在此重复记账
+            declaration: pathFillNote ? 'path' : 'none',
           })
         : null;
       if (pathSchoolAnchor && anchorGoalNotes > 0) {
@@ -1156,15 +1143,25 @@ async function enrichLearningPathWithAndersonInner(
 
       // 结构确定性审计（2026-10-24）：前置缺口 / 重复任务 / 课时偏差。只记录不重排，
       // 写入 aiPromptTemplate.pathAudit 供离线评审与后续生成修复消费。
+      // 2026-10-25 排序修复：stageDesignOutputs 按批次并发完成序 push（并发=2），
+      // 直接喂审计会把 stage-1 任务编到 stage-2 之后，制造虚假 lateCrossStage 告警
+      // （离线评审实证：uqcit3l/yng73ae/n9qzgpm 的「前置 KC 第 N 个」编号全部错位）。
+      // 审计与消费方一律按 stageNumber 排序，DB 里程碑顺序不受影响。
+      const stagesInOrder = [...stageDesignOutputs].sort((a, b) => a.stageNumber - b.stageNumber);
       const structureAudit = kcAnnotation
         ? auditGeneratedPath({
-            stages: stageDesignOutputs,
+            stages: stagesInOrder,
             kcAnnotation,
             totalMinutes: pathTotalMinutes,
             afterHours: Number((parsedTemplate as any)?.budgetConservation?.after) || null,
             delivery: (reconciledConservation as { delivery?: string } | null)?.delivery ?? null,
           })
         : null;
+      // kc-mapper 失败此前静默降级（kcAnnotation=null → 审计整个不跑，路径照样 success，
+      // 离线评审才发现 3 条路径 KC/审计双双丢失）。落显式标记：可见、可统计、可告警。
+      const auditDisabledReason = kcAnnotation
+        ? null
+        : (progressive ? 'kc-mapper-failed' : 'kc-mapper-persist-failed');
       if (structureAudit && structureAudit.issues.length > 0) {
         logger.warn('[stage-enrichment] 路径结构审计发现问题（只记录，不重排）', {
           pathId: learningPath.id,
@@ -1186,6 +1183,7 @@ async function enrichLearningPathWithAndersonInner(
             ...(reconciledConservation ? { budgetConservation: reconciledConservation } : {}),
             ...(stageBudgetAudit.ok ? {} : { stageBudgetAudit: stageBudgetAudit.violations }),
             ...(structureAudit && structureAudit.issues.length > 0 ? { pathAudit: structureAudit } : {}),
+            ...(auditDisabledReason ? { pathAuditDisabled: auditDisabledReason } : {}),
             ...(Object.keys(materialRefsByTask).length
               ? {
                   materialRefs: {

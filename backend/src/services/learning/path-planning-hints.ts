@@ -646,7 +646,7 @@ export function derivePlanningHints(
         ? (timeDimensions!.totalWeeks as number) * (timeDimensions!.sessionsPerWeek as number)
           * (timeDimensions!.sessionsLengthMin as number) / 60
         : null;
-  const estimatedHoursTotal =
+  const estimatedHoursTotalRaw =
     structuredHoursTotal !== null && inferredBudgetCap !== null
       // R1-d（rw-school-11/exam-12 target=1h 案例）：结构化锚也可能被污染成荒谬小值，
       // 直接 min() 会信任垃圾下限。预算应落在每日现实上限的 [25%, 100%] 带内。
@@ -654,6 +654,30 @@ export function derivePlanningHints(
       : structuredHoursTotal !== null
         ? structuredHoursTotal
         : inferredBudgetCap;
+  // 「承诺为顶」（2026-10-25 方向改造 / issue #138 决策 A：uqcit3l 实证 target 3.5h 把
+  // 模型合规的 2h 承诺 floor 抬到 3.4h）：goal 层与用户谈定的节奏总量
+  // （sessionsPerWeek × 单次分钟 × 总周数，如「4 周每周半小时」= 2h）是对用户的契约。
+  // inferredBudgetCap 的「每日分钟 × 7」假设在用户明确每周一次时会把顶错算成 7 倍
+  // （30min→14h），R1-d 的 25% 带下限（3.5h）随之把正确的承诺抬高 75%。
+  // 修复：仅当 goal 层自己的估计与承诺节奏**自洽**（structured ≤ 承诺×1.25，说明承诺可信、
+  // 是 R1-d 带把它放大越过了承诺）时压回承诺；模型自报偏离节奏（structured > 承诺×1.25）
+  // 不动——总量估计优先于 cadence 推导。只往下压、不往上抬，R1-d/R4 护栏不受影响。
+  const promisedCadenceHours = Number.isFinite(timeDimensions?.sessionsPerWeek)
+    && (timeDimensions!.sessionsPerWeek as number) > 0
+    && Number.isFinite(timeDimensions?.sessionsLengthMin)
+    && (timeDimensions!.sessionsLengthMin as number) > 0
+    && Number.isFinite(timeDimensions?.totalWeeks)
+    && (timeDimensions!.totalWeeks as number) > 0
+    ? (timeDimensions!.sessionsPerWeek as number) * (timeDimensions!.sessionsLengthMin as number)
+      * (timeDimensions!.totalWeeks as number) / 60
+    : null;
+  const estimatedHoursTotal =
+    promisedCadenceHours !== null
+    && structuredHoursTotal !== null
+    && structuredHoursTotal <= promisedCadenceHours * 1.25
+    && estimatedHoursTotalRaw > promisedCadenceHours * 1.25
+      ? promisedCadenceHours
+      : estimatedHoursTotalRaw;
   // ---- 大预算扩容（2026-09-27，基线 31 格实测驱动）：锚定总学时超过结构天花板
   // （阶段×任务×单任务分钟上限）时，按需抬升每阶段任务上限与单任务分钟上界——
   // 任务语义升级为「学习单元（可含多次坐学）」。基线收缩比 0.07-0.74（中位 0.13-0.26）
