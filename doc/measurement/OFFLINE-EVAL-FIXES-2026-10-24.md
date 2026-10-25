@@ -166,3 +166,50 @@ npx ts-node --transpile-only src/scripts/simulate-learner-e2e.ts \
 对 41 节 post-fix 会话静态回放：收口审计从 12 节升到 23 节（+11），
 4 节被 judge 判 `unclosedComplete` 的会话全部被新判据覆盖，无旧审计丢失。
 该修复只对新会话生效，存量 wrapup 不回填。
+
+## 七、ds4.1 授课夜批结果（2026-10-25 00:45 UTC）
+
+配置：工作树隔离环境（`verify/mixed-model-1024` 分支、独立后端 3002、DB 快照），
+**授课 / goal / 路径生成 = ds4.1，虚拟学生 = agnes-3.0-flash**，
+judge = ds4.1、`judgeVersion` 与 §六 post-fix 完全同版（4a7650857edd / e513c9cc7f75）。
+
+样本：w02（13 日，路径 completed）+ w03（8 日，completed）+ wt-probe（3 日）
++ w01/w05 部分，共 28 节完成课、18 条可评路径；课堂抽样 20、路径 18，K=3。
+
+| 指标 | 10-23 baseline（旧 judge） | 今日 agnes 授课（同 judge） | **今夜 ds4.1 授课（同 judge）** |
+|---|---:|---:|---:|
+| 课堂 pass | 10% | 15% | **80%** |
+| 课堂 overall | 0.757 | 0.718 | **0.811** |
+| unclosedComplete | 85% | 20% | **5%** |
+| summaryMismatch | 50% | 80% | **15%** |
+| wrongAnswerPassed | 5% | 5% | 5% |
+| loopStuck / fabricated | 15% / 0% | 5% / 5% | **0% / 0%** |
+| closure 维度 | 0.470 | 0.455 | **0.694** |
+| 路径 pass | 65% | 100%（n=5） | **94.4%（n=18）** |
+| prerequisiteGap | 30% | 0%（n=5） | 5.6% |
+| budgetMismatch | 35% | 20% | 16.7% |
+| duplicateTask | 20% | 20% | **0%** |
+
+结论（同 judge 内部可比）：
+
+1. **课堂质量的大头确实是授课模型**：同一 judge、同一收口语义下，ds4.1 授课把
+   pass 从 15% 拉到 80%、summaryMismatch 从 80% 降到 15%。agnes 适合当学员，
+   不适合当老师。
+2. **收口修复在 ds4.1 数据上依然一致**：28 节完成课中开放收口 20 节，
+   20/20 落 `closureAudit` + 「待验证」，`unclosedComplete` 只剩 1 例（5%）。
+3. **路径结构修复在更大样本上保持**：18 条路径 prerequisiteGap 5.6%（1 条）、
+   duplicateTask 0%、placeholder/domainViolation 0%；同阶段重排后 `lateWithinStage`
+   全部为 0。
+4. 跨 judge 版本与 10-23 baseline 的对比只看方向（unclosed 85%→5%、
+   prerequisite 30%→5.6%）。
+
+工程发现（夜批新增）：
+
+- **harness 30 分钟客户端超时误报**：`AbortSignal.timeout(30min)` 的
+  `TimeoutError`（DOMException code=23）被当成「网络中断/后端可能正在重启」，
+  ds4.1+限流下单日 25-35 分钟会被客户端掐死且重试预算（20 分钟）必死。
+  已修（verify 分支 `cde0eb2a`）：超时 60 分钟、重试预算 90 分钟、TimeoutError 独立标注。
+  w01/w05 两个会话是旧超时的受害者（客户端中断→网关 `caller_abort`→授课管线中止→
+  会话判 failed）。**调用方中止导致整个会话判死**的鲁棒性缺口待议。
+- **通道并发上限实测**：newapi 通道在途 1-2 个请求即触发 429（10/20/40 并发扫描
+  几乎全限流），VL 批次靠网关指数退避重试扛住；并行学习者 ≤2-3 路是安全线。
