@@ -360,15 +360,16 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.findAll('.mk-kpi')).toHaveLength(6);
   });
 
-  it('压测参数卡已迁出（2026-10-13）：本页不再有写控件，只留只读读数', async () => {
+  it('容量与实验环境卡在本页（2026-10-25 从模型与接入搬回）：读数与写控件同页', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    // 卡片连同写控件（速率/最高并发/日期模拟）整体迁往「模型与接入 → 虚拟学习者」页签，
-    // 卡内结构回归见 virtual-lab-load-settings.test.ts
-    expect(w.find('.vl-settings').exists()).toBe(false);
-    expect(w.find('.vl-rpm__input').exists()).toBe(false);
-    expect(w.find('.sd-settings').exists()).toBe(false);
-    // 只读读数保留：并发 / 速率 仍在 KPI 带里（运营仍可任意启动，上限由设置页统一管控）
+    // 2026-10-25 用户「这个组整个页面我觉得做的不好…可以功能打散」：容量配置搬回本页，
+    // KPI 读数（并发 / 速率）读的就是这里的上限——不再跨页往返。
+    expect(w.find('.vl-settings-card').exists()).toBe(true);
+    expect(w.find('.vl-settings').exists()).toBe(true);
+    expect(w.find('.vl-rpm__input').exists()).toBe(true);
+    expect(w.find('.sd-settings').exists()).toBe(true);
+    // 只读读数仍在 KPI 带里
     const kpiText = w.find('.vl-kpi').text();
     expect(kpiText).toContain('并发');
     expect(kpiText).toContain('速率');
@@ -450,10 +451,10 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(rate.element.tagName).toBe('BUTTON');
     expect(concurrency.classes()).toContain('mk-kpi--clickable');
     expect(rate.classes()).toContain('mk-kpi--clickable');
-    // 去向：容量治理 2026-10-21 迁到「模型与接入 · 虚拟学习者」页签（2026-10-24 修死链）
-    expect(concurrency.attributes('title')).toContain('虚拟学习者');
-    expect(rate.attributes('title')).toContain('虚拟学习者');
-    expect(rate.attributes('title')).not.toContain('调用与健康');
+    // 去向：容量治理 2026-10-25 已搬回本页，点击滚到「容量与实验环境」卡（不再跨页）
+    expect(concurrency.attributes('title')).toContain('容量与实验环境');
+    expect(rate.attributes('title')).toContain('容量与实验环境');
+    expect(rate.attributes('title')).not.toContain('模型与接入');
   });
 
   it('复选框勾选后出现批量条：已选数量 + 取消选择', async () => {

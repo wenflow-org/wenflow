@@ -98,8 +98,11 @@
         </div>
         <p v-if="selected.description && selected.id !== 'platform'" class="mpp-detail__desc">{{ selected.description }}</p>
 
-        <!-- 平台详情只留模型一页（2026-10-24 用户「保持就模型一个页面」）：
-             连接与基础设施移进平台「设置」弹窗，生成参数移到每个模型的编辑弹层。 -->
+        <!-- 平台通道的连接（服务地址 / 密钥 / 连通性验证）由宿主经 #platform-detail 就地注入：
+             2026-10-25 用户「这个组整个页面我觉得做的不好」——它此前藏在「平台设置」弹窗里，
+             改个地址要先点「设置」，而它本身就是「平台」这条供应商的连接属性，
+             和右侧模型表属于同一个对象的两面。 -->
+        <slot v-if="selected.id === 'platform'" name="platform-detail" />
 
         <template v-if="selected.id !== 'platform'">
           <div class="mpp-block">
@@ -307,8 +310,9 @@ const emit = defineEmits<{
   changed: []
   /** 已登记的模型 id（宿主用它算「上游还有几个没登记」的关系句，避免两处各算一遍） */
   registered: [ids: string[]]
-  /** 平台连接与基础设施已移进宿主的「平台设置」弹窗（2026-10-24） */
-  'open-platform-settings': [target?: 'conn' | 'infra']
+  /** 平台通道的「设置」：连接表单已由宿主经 #platform-detail 就地注入，此事件仅用于
+   *  把焦点/滚动带到那段表单（2026-10-25 拆掉平台设置弹窗后） */
+  'focus-platform-connection': []
 }>()
 
 const view = ref<ProvidersView | null>(null)
@@ -715,20 +719,20 @@ function openNextConfigure(): void {
   modelEditor.value?.openWith({ providerId: selected.value.id, model: null, presetId: id, step })
 }
 
-/** 非对话模型的去向：基础设施在平台详情页签里，生图/决策在插件页 */
+/** 非对话模型的去向：基础设施在同页「基础设施模型」卡，生图/决策在插件页 */
 function onPullNavigate(target: 'infra' | 'plugins'): void {
   if (target === 'plugins') {
     void router.push('/admin/addons')
     return
   }
   if (selectedId.value !== 'platform') select('platform')
-  emit('open-platform-settings', 'infra')
+  document.getElementById('ac-infra')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-/** 平台「设置」打开宿主的连接 + 基础设施弹窗；其他供应商仍走注册表编辑弹层 */
+/** 平台「设置」：滚到同页的连接表单；其他供应商仍走注册表编辑弹层 */
 function openSettings(p: ProviderView): void {
   if (p.id === 'platform') {
-    emit('open-platform-settings', 'conn')
+    emit('focus-platform-connection')
     return
   }
   providerEditor.value?.openWith(p)

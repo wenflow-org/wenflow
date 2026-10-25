@@ -113,6 +113,10 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 会话安全三页签）；ops-center 从侧栏撤除，旧 URL 在 router 重定向到对应 tab。
   { id: 'health-center', label: '健康中心', group: '系统', glyph: '康', icon: HeartPulse },
   { id: 'api-config', label: '模型与接入', group: '系统', glyph: '安', icon: Plug },
+  // 「访问与注册」2026-10-25 用户「这个组整个页面我觉得做的不好…可以功能打散」：
+  // 从「模型与接入 · 安全与访问」页签拆为独立页。它管后台谁能进来、谁能注册，
+  // 与「模型接哪个上游」没有共享对象或动线，塞在模型页里只是让模型页多一个不相干的页签。
+  { id: 'access-control', label: '访问与注册', group: '系统', glyph: '访', icon: ShieldCheck },
   // 运营组：运营中心为 tab 宿主（运营待办 · 反馈 · 成就 · 公告 · 站内通知
   //          · 2026-10-16 并入的运维工具 / 数据导出 / 会话安全）
   { id: 'ops-hub', label: '运营中心', group: '运营', glyph: '营', icon: Megaphone }

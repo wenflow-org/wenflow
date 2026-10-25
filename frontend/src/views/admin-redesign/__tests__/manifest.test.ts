@@ -39,11 +39,11 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线；2026-10-10 术语表改隐藏场景；2026-10-12 记忆与复习恢复跨用户总览；2026-10-16 系统工具并入运营中心；2026-10-19 外挂能力从模型与接入拆回独立页；2026-10-25 Prompt 评估拆回独立页）：7 分组 / 19 可见场景与目标 IA 完全一致', () => {
+  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线；2026-10-10 术语表改隐藏场景；2026-10-12 记忆与复习恢复跨用户总览；2026-10-16 系统工具并入运营中心；2026-10-19 外挂能力从模型与接入拆回独立页；2026-10-25 Prompt 评估拆回独立页 + 访问与注册拆为独立页）：7 分组 / 20 可见场景与目标 IA 完全一致', () => {
     // 隐藏场景（hidden: true，如运营术语表）不占侧栏席位：由顶栏帮助按钮跳转，单独断言
     const visible = MOCK_SCENES.filter((s) => !s.hidden);
-    expect(MOCK_SCENES).toHaveLength(20);
-    expect(visible).toHaveLength(19);
+    expect(MOCK_SCENES).toHaveLength(21);
+    expect(visible).toHaveLength(20);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = visible.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟实验', 'Skill', '观测', '系统', '运营']);
@@ -62,7 +62,7 @@ describe('AdminConsole 页面注册表', () => {
       Skill: ['orchestrator', 'skills', 'prompt-eval', 'addons'],
       // 2026-10-24 用户「重新排一下序」：两份日志相邻，成本分析接在后面
       观测: ['execution-logs', 'audit-logs', 'token-cost'],
-      系统: ['health-center', 'api-config'],
+      系统: ['health-center', 'api-config', 'access-control'],
       运营: ['ops-hub']
     });
     expect(MOCK_SCENES.filter((s) => s.hidden).map((s) => s.id)).toEqual(['glossary']);

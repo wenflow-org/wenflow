@@ -122,11 +122,18 @@
       </section>
     </div>
 
-    <!-- 压测参数卡（速率上限 / 最高并发 / 日期模拟）已迁往「模型与接入 · 调用与健康」页签的
-         「虚拟学习者通道 / 出站速率」分组（2026-10-13）：最高并发属上游容量治理，与其余接入
-         设置同处管理（两条 RPM 上限本就挨着——平台全局管真实用户、VL 通道单独计量）；
-         本页只保留并发 / 速率两个只读 KPI，点它们可直接到那处设置。
-         运营在此仍可任意启动任意数量。 -->
+    <!-- 容量与实验环境（2026-10-25 用户「这个组整个页面我觉得做的不好…可以功能打散」）：
+         专属 RPM / 最高并发 / 日期模拟从「模型与接入 · 虚拟学习者」页签搬回本页。
+         上面两卡读数（并发 / 速率）读的就是这里的上限，读数与改配置在同一页，
+         不再出现「KPI 写着去模型与接入改」的往返。 -->
+    <section v-if="isLive" class="mk-card vl-settings-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">容量与实验环境</h3>
+      </div>
+      <div class="vl-settings-card__body">
+        <VirtualLabLoadSettings />
+      </div>
+    </section>
 
     <!-- 学习者列表（「批量实验」2026-10-04 下线：批量发起与运行监控统一收在本页，
          资产输入归「学习者卡库」；旧 /admin/batch-experiments 深链重定向到本页） -->
@@ -438,15 +445,15 @@ import VirtualLearnerCleanup from './VirtualLearnerCleanup.vue'
 import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
+import VirtualLabLoadSettings from './VirtualLabLoadSettings.vue'
 import type { VirtualLearnerRow as Sample } from './virtualLearnersTypes'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
 const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
-/* 容量治理去向（2026-10-19 运营走查）：并发上限 / VL 专属 RPM / 日期模拟都在「模型与接入 ·
-   调用与健康」页签的「虚拟学习者通道 / 出站速率」分组里。此前三处注释与速率卡的 title 都写着
-   「模型与接入 → 虚拟学习者」页签——那个页签 2026-10-15 重组时就没了，照它找必然扑空。 */
-const VL_CHANNEL_LOCATION_TITLE = '上限与日期模拟在「模型与接入 · 虚拟学习者」页签'
+/* 容量治理去向（2026-10-25）：并发上限 / VL 专属 RPM / 日期模拟已搬回本页「容量与实验环境」卡，
+   读数与改配置同页——点击读数卡即滚动到那处。 */
+const VL_CHANNEL_LOCATION_TITLE = ' · 点击定位到本页「容量与实验环境」'
 const CONCURRENCY_KPI_TITLE = '自动驾驶同时在跑的运行数占配额比。「已满」是资源占满（后续请求排队），不是故障。'
 const RATE_KPI_TITLE = '在途为正在出站的调用数。上限是已保存的速率配置。'
 /* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
@@ -862,10 +869,10 @@ const concurrencyTone = computed<'ok' | 'warn' | 'bad'>(() => {
   return 'ok'
 })
 
-/* 虚拟学习者专属出站速率（RPM）：仅保留只读运行态读数——「速率」KPI 读 inFlight/queued 与已保存上限；
-   速率上限 / 最高并发 / 日期模拟的写控件已迁往「模型与接入 · 调用与健康」的「虚拟学习者通道」分组（2026-10-13）。 */
+/* 虚拟学习者专属出站速率（RPM）：KPI 读 inFlight/queued 与已保存上限；
+   写控件在下方「容量与实验环境」卡（2026-10-25 搬回本页）。 */
 const vlRpm = reactive({ inFlight: 0, queued: 0, rpm: 0 })
-/** 已保存的 RPM 上限：速率卡「上限」分母只认服务端已保存值（写入已在设置页，本页只读展示） */
+/** 已保存的 RPM 上限：速率卡「上限」分母只认服务端已保存值（写入在下方的容量卡） */
 const vlRpmSavedLimit = ref(0)
 /** 设置未加载位：getVirtualLabSettings 失败时置位——速率卡改显「不可用」，不把「没拉到」说成「0 / 不限」 */
 const vlRpmLoadFailed = ref(false)
@@ -987,7 +994,7 @@ const concurrencyText = computed(() => {
 /** 速率文案（P1#20）：值与口径分栏——比值「在途 / 上限」进 value、单位与「已保存值」口径进 hint。
     原写法把「在途 N · 上限 X/分」整串塞进 value，183px 卡宽下必换行成两行，把整排 KPI
     拉伸到 180px（连带 220px 的 KPI 带吃掉列表卡高度，裸评审 2026-10-03）；拆开后各占一行。
-    上限读已保存值（vlRpmSavedLimit），本页无写控件（改配置在「模型与接入 · 调用与健康」的「虚拟学习者通道」分组） */
+    上限读已保存值（vlRpmSavedLimit），写控件在同页「容量与实验环境」卡 */
 const rateValue = computed(() => {
   // #59：设置未加载时不把初始 0 断言成「0 / 不限」，显式「不可用」
   if (vlRpmLoadFailed.value) return '不可用'
@@ -1047,17 +1054,16 @@ const selected = ref<string[]>([])
 /** 页头「批量操作」：把选择框列打开（写 MkCols 同一个 hiddenCols，onWatch 会落 localStorage，
     所以这是一次持久的列偏好变更，不是临时态） */
 
-/** 并发/速率 KPI 的点击：失败态优先重试（hint 写着「点击重试」），否则去容量治理那处设置。
-    两个读数合用一个入口——它们本就是同一组配置的两个面，运营看到读数时正是要改上限的时候。 */
+/** 并发/速率 KPI 的点击：失败态优先重试（hint 写着「点击重试」），否则滚到本页的容量卡。
+    2026-10-25：上限控件已搬回本页「容量与实验环境」卡，读数与改配置同页，只需滚动定位，
+    不再跨页跳到「模型与接入」。 */
 function openVlChannelSettings() {
   if (statsState.value === 'error' || vlRpmLoadFailed.value) {
     if (statsState.value === 'error') onStatsRetry()
     if (vlRpmLoadFailed.value) void loadVlRpm()
     return
   }
-  // 2026-10-24 修死链：VRPM / 日期模拟 2026-10-21 已迁到「虚拟学习者」页签，
-  // 旧 tab=routing 会落到调用策略/调用健康，目标控件不在屏上。
-  void router.push({ path: '/admin/api-config', query: { tab: 'virtual' } })
+  document.querySelector('.vl-settings-card')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
 }
 /* 表头全选 = 当前页全选（2026-10-11 用户拍板，与用户页同规则：跨页全量勾选对批量
    终止/删除太易误伤）。再点一次只清当前页；跨页仍可手动逐个勾（selected 保留）。 */
@@ -1222,7 +1228,9 @@ function onBatchReclaim(ids: string[]) {
 .vl-kpi :deep(.mk-kpi) {
   background: var(--mk-surface-2);
 }
-/* 压测参数卡的 .vl-settings/.vl-rpm 样式已随卡片迁往 VirtualLabLoadSettings.vue（2026-10-13） */
+/* 容量与实验环境卡（2026-10-25 从「模型与接入 · 虚拟学习者」页签搬回）：
+   卡内三项各带独立保存钮，内衬与全站卡内内容一致 */
+.vl-settings-card__body { padding: 4px 16px 16px; }
 /* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
    长内容截断上限收敛到共享原语（.mk-cell-text / .mk-cell-main strong） */
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }

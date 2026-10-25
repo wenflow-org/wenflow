@@ -107,6 +107,8 @@ const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
 const TokenCost = asyncPage(() => import('./TokenCost.vue'));
 const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
 const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
+// 访问与注册（2026-10-25 从 api-config 的「安全与访问」页签拆为独立页，侧栏系统组）
+const AccessControl = asyncPage(() => import('./AccessControl.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
 // 运营术语表（2026-10-10 抽屉退役改整页）：壳层帮助按钮跳转的隐藏场景，不进侧栏
 const AdminGlossary = asyncPage(() => import('./AdminGlossary.vue'));
@@ -163,6 +165,8 @@ const components: Record<string, unknown> = {
   'memory-review': MemoryReview,
   'audit-logs': AuditLogs,
   'api-config': ApiConfig,
+  // 访问与注册（2026-10-25 从 api-config 页签拆为独立场景，侧栏系统组）
+  'access-control': AccessControl,
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
   // 健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,

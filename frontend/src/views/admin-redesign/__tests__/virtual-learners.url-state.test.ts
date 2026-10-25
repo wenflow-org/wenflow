@@ -83,13 +83,14 @@ function pill(wrapper: ReturnType<typeof mount>, label: string) {
 describe('VirtualLearners · 筛选 ↔ URL', () => {
   /* 2026-10-24 修正：容量治理（并发上限 / VL 专属 RPM / 日期模拟）2026-10-21 已迁到
      「模型与接入 · 虚拟学习者」页签；旧深链 tab=routing 会落到调用策略/调用健康，目标控件不在屏上。 */
-  it('并发 / 速率 KPI 点击 → 跳「模型与接入 · 虚拟学习者」页签', async () => {
+  it('并发 / 速率 KPI 点击 → 停在本页（容量卡已搬回本页，不再跨页跳）', async () => {
     const { wrapper, router } = await mountVl('/admin/virtual-learners');
     const kpi = (label: string) => wrapper.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text().trim() === label)!;
     await kpi('并发').trigger('click');
     await flushPromises();
-    expect(router.currentRoute.value.path).toBe('/admin/api-config');
-    expect(router.currentRoute.value.query.tab).toBe('virtual');
+    // 2026-10-25：上限控件与读数同页，点击只做滚动定位，路由不动
+    expect(router.currentRoute.value.path).toBe('/admin/virtual-learners');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
     wrapper.unmount();
   });
 

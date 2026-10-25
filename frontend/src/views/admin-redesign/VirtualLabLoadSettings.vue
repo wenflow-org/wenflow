@@ -1,11 +1,38 @@
 <template>
-  <!-- 虚拟学习者通道的两项容量设置（2026-10-15 用户重组）：自「模型与接入」的独立卡片，
-       收进「调用与健康 → AI 调用与健康」卡的「调用参数」栅格——自动驾驶并发上限与
-       日期模拟都属「调用怎么走、上游容量多少」，与同卡的出站速率同族。
-       不再自带卡片外壳与分段控件（原三段视图切换：速率上限 / 最高并发 / 日期模拟）：
-       速率上限已并入同卡的「出站速率」组（与平台全局上限同行，见 ApiConfig），
-       本组件只剩两项，各自独立保存，分组标题由宿主的 ac-group 承担。 -->
+  <!-- 虚拟学习者容量与实验环境（2026-10-25 用户「这个组整个页面我觉得做的不好…可以功能打散」）：
+       三项设置从「模型与接入 · 虚拟学习者」页签搬回本页——它们管的是「虚拟学习者能跑多少、
+       跑到哪天」，读数和改配置本来就该在同一页。此前 KPI 卡写着「上限在模型与接入 → 虚拟学习者」，
+       点过去再点回来，两处都不是家。
+       本组件只出字段，卡片外壳与分区标题由宿主（VirtualLearners.vue）承担。 -->
   <div class="vl-settings">
+    <div class="vl-settings__block">
+      <div class="vl-settings__label" title="虚拟学习者专属的出站速率上限，与平台全局 RPM 分开计量">专属 RPM 上限</div>
+      <div class="vl-settings__row">
+        <input
+          v-model.number="rpmInput"
+          type="number"
+          min="0"
+          max="100000"
+          step="10"
+          class="mk-field__input vl-rpm__input"
+          aria-label="虚拟学习者专属出站 RPM 上限"
+          :disabled="rpmLoadFailed"
+          :title="rpmLoadFailed ? LOAD_FAILED_EDIT_TITLE : undefined"
+          @input="rpmDirty = true"
+          @keydown.enter.prevent="saveRpm"
+        />
+        <span class="vl-rpm__unit">次 / 分 · 0 = 不限</span>
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm"
+          :disabled="!rpmDirty || rpmSaving || rpmLoadFailed"
+          @click="saveRpm"
+        >{{ rpmSaving ? '保存中…' : '保存' }}</button>
+        <span v-if="rpmDirty" class="vl-rpm__dirty">未保存</span>
+        <span v-if="rpmLoadFailed" class="vl-rpm__failed" role="alert">{{ LOAD_FAILED_SAVE_NOTE }}</span>
+      </div>
+    </div>
+
     <div class="vl-settings__block">
       <div
         class="vl-settings__label"
@@ -48,8 +75,6 @@
         <span class="vl-settings__fold vl-settings__fold--closed">展开设置</span>
         <span class="vl-settings__fold vl-settings__fold--open">收起</span>
       </summary>
-      <!-- 日期模拟挪出分段视图后不再需要「已开启」角标（原角标挂在被选中的分段项上）；
-           开关状态由 SimulatedDaySettings 自己的控件呈现 -->
       <SimulatedDaySettings />
     </details>
   </div>
@@ -66,6 +91,12 @@ import SimulatedDaySettings from './SimulatedDaySettings.vue'
 const LOAD_FAILED_EDIT_TITLE = '设置未加载：为避免用默认值覆盖已保存的配置，已禁用编辑'
 const LOAD_FAILED_SAVE_NOTE = '设置未加载，保存已禁用（请刷新重试）'
 
+/* 专属 RPM（0 = 不限）：与平台全局 RPM 是两条独立上限，保存链也不同 */
+const rpmInput = ref(0)
+const rpmDirty = ref(false)
+const rpmSaving = ref(false)
+const rpmLoadFailed = ref(false)
+
 /* 最高并发（自动驾驶全局并发上限，1–200） */
 const concurrencyInput = ref(1)
 const concurrencyDirty = ref(false)
@@ -73,16 +104,37 @@ const saving = ref(false)
 /** 设置未加载位：getVirtualLabSettings 失败时置位——写控件禁用，禁止拿初始值覆盖服务端配置 */
 const loadFailed = ref(false)
 
+/** 两项设置同源同接口：一次拉取回填两格，失败同时禁用，不出现「一个能改一个不能改」 */
 async function loadSettings() {
   try {
     const res = await adminVirtualLearnersApi.getVirtualLabSettings()
     const s = res.data?.data?.settings ?? {}
+    const rpm = Math.max(0, Number(s.virtualLearnerRpmLimit ?? 0) || 0)
+    if (!rpmDirty.value) rpmInput.value = rpm
+    rpmLoadFailed.value = false
     const limit = Math.max(1, Number(s.autopilotConcurrencyLimit ?? 1))
     if (!concurrencyDirty.value) concurrencyInput.value = limit
     loadFailed.value = false
   } catch {
-    /* 保留上次值（若有）；首访失败置 loadFailed，控件不把「没拉到」当默认值覆盖服务端 */
+    /* 保留上次值（若有）；首访失败置失败位，控件不把「没拉到」当默认值覆盖服务端 */
+    rpmLoadFailed.value = true
     loadFailed.value = true
+  }
+}
+
+async function saveRpm() {
+  if (rpmSaving.value || !rpmDirty.value || rpmLoadFailed.value) return
+  const value = Math.max(0, Math.min(100000, Math.round(Number(rpmInput.value) || 0)))
+  rpmInput.value = value
+  rpmSaving.value = true
+  try {
+    await adminVirtualLearnersApi.updateVirtualLabSettings({ virtualLearnerRpmLimit: value })
+    rpmDirty.value = false
+    toast.success(value > 0 ? `虚拟学习者 RPM 上限已设为 ${value}` : '虚拟学习者 RPM 已设为不限')
+  } catch (e) {
+    toast.error(errMsg(e) || '保存失败')
+  } finally {
+    rpmSaving.value = false
   }
 }
 

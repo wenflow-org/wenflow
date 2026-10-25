@@ -44,15 +44,16 @@ describe('VirtualLabLoadSettings（虚拟学习者通道设置）', () => {
     updateSettingsMock.mockResolvedValue({ data: { data: { settings: {}, rpm: {} } } });
   });
 
-  it('渲染两项设置：最高并发 + 日期模拟，不再自带卡片外壳与分段视图', async () => {
+  it('渲染三项设置：专属 RPM + 最高并发 + 日期模拟（2026-10-25 搬回本页），不自带卡片外壳', async () => {
     const w = await mountBlock();
-    expect(w.findAll('.vl-settings__block')).toHaveLength(2);
+    expect(w.findAll('.vl-settings__block')).toHaveLength(3);
     expect(w.find('.mk-card').exists()).toBe(false);
     expect(w.find('.mk-seg').exists()).toBe(false);
     const labels = w.findAll('.vl-settings__label').map((l) => l.text());
-    expect(labels).toEqual(['最高并发', '日期模拟']);
-    // 写控件不是裸输入框：字段名可见
+    expect(labels).toEqual(['专属 RPM 上限', '最高并发', '日期模拟']);
+    // 写控件不是裸输入框：单位与口径可见
     expect(w.text()).toContain('个会话');
+    expect(w.text()).toContain('次 / 分 · 0 = 不限');
   });
 
   it('加载：最高并发回填对应输入框', async () => {
@@ -61,11 +62,12 @@ describe('VirtualLabLoadSettings（虚拟学习者通道设置）', () => {
     expect(limit.value).toBe('25');
   });
 
-  it('保存：只发 autopilotConcurrencyLimit，不夹带速率字段', async () => {
+  it('并发保存：只发 autopilotConcurrencyLimit，不夹带速率字段', async () => {
     const w = await mountBlock();
     const limit = w.find('input[aria-label="自动驾驶最高并发上限"]');
     await limit.setValue(40);
-    await w.find('.vl-settings__row button').trigger('click');
+    // 第二块（最高并发）的保存钮
+    await w.findAll('.vl-settings__row button')[1].trigger('click');
     await flushPromises();
     expect(updateSettingsMock).toHaveBeenCalledWith({ autopilotConcurrencyLimit: 40 });
   });
@@ -74,9 +76,18 @@ describe('VirtualLabLoadSettings（虚拟学习者通道设置）', () => {
     const w = await mountBlock();
     const limit = w.find('input[aria-label="自动驾驶最高并发上限"]');
     await limit.setValue(999);
-    await w.find('.vl-settings__row button').trigger('click');
+    await w.findAll('.vl-settings__row button')[1].trigger('click');
     await flushPromises();
     expect(updateSettingsMock).toHaveBeenCalledWith({ autopilotConcurrencyLimit: 200 });
+  });
+
+  it('专属 RPM 保存：只发 virtualLearnerRpmLimit，0 = 不限', async () => {
+    const w = await mountBlock();
+    const rpm = w.find('input[aria-label="虚拟学习者专属出站 RPM 上限"]');
+    await rpm.setValue(120);
+    await w.findAll('.vl-settings__row button')[0].trigger('click');
+    await flushPromises();
+    expect(updateSettingsMock).toHaveBeenCalledWith({ virtualLearnerRpmLimit: 120 });
   });
 
   it('设置未加载：写控件禁用、保存不触发', async () => {
@@ -85,7 +96,7 @@ describe('VirtualLabLoadSettings（虚拟学习者通道设置）', () => {
     const limit = w.find('input[aria-label="自动驾驶最高并发上限"]');
     expect((limit.element as HTMLInputElement).disabled).toBe(true);
     expect(w.find('.vl-rpm__failed').exists()).toBe(true);
-    await w.find('.vl-settings__row button').trigger('click');
+    await w.findAll('.vl-settings__row button')[1].trigger('click');
     await flushPromises();
     expect(updateSettingsMock).not.toHaveBeenCalled();
   });
