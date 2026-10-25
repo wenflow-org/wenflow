@@ -1157,10 +1157,17 @@ export async function goalConversationAgentHandler(
 
     if (promptResult.success && promptResult.output) {
       const result = promptResult.output;
-      // #132：异形 success 产物（降级路径直通 output）缺 internal 时拼最小合法值，
-      // 不让 renderHints/metadata 再抛一次、也不让外层 `!result.internal` 判失败。
-      const internal = result.internal
-        ?? minimalGoalInternalFromOutput(result as unknown as Parameters<typeof minimalGoalInternalFromOutput>[0]);
+      /* #132（2026-10-22 走查）：历史失败 48 次都是 `internal` 缺失后读 `.ext` 抛
+         `Cannot read properties of undefined`。normalizeOutput 本应恒返回 internal，
+         缺失说明输出来自别的路径。这里把「数据形态坏了」说清（带可用键名），
+         不做静默兜底——先让失败可定位，再决定修复点。 */
+      const internal = result.internal as GoalConversationInternal | undefined;
+      if (!internal?.core || !internal?.ext?.goalConversation) {
+        throw new Error(
+          `[goal-conversation] 结构化输出缺少 internal.core / internal.ext.goalConversation`
+          + `（success=true，可用键：${Object.keys(result || {}).join(',') || '无'}）`
+        );
+      }
       return {
         success: true,
         userVisible: result.userVisible,
@@ -1171,14 +1178,14 @@ export async function goalConversationAgentHandler(
         }),
         renderHints: {
           component: 'goal-conversation',
-          quickReplies: goalInternalQuickReplies(internal),
+          quickReplies: internal.ext.goalConversation.quickReplies || [],
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'skill:goal-conversation',
           agentName: '目标对话 Skill',
           agentType: 'custom',
-          confidence: goalInternalConfidence(internal),
+          confidence: internal.core.confidence,
           generatedAt: new Date().toISOString(),
         },
         debug: {

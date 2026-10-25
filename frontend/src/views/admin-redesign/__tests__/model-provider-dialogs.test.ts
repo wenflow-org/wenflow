@@ -5,6 +5,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ProviderEditorDialog from '../ProviderEditorDialog.vue'
 import ModelEditorDialog from '../ModelEditorDialog.vue'
 
@@ -86,14 +87,39 @@ describe('ProviderEditorDialog', () => {
     expect(w.find('[role="dialog"]').exists()).toBe(true)
   })
 
+  it('弹层打开：面板带 aria-modal、锁背景滚动；Esc 关闭并把焦点还回触发按钮', async () => {
+    // 同文件前面的用例可能留下开着未卸载的弹层（body 仍锁滚动），这里先归零再断言
+    document.body.style.overflow = ''
+    const trigger = document.createElement('button')
+    trigger.textContent = '打开供应商设置'
+    document.body.appendChild(trigger)
+    trigger.focus()
+
+    const w = mount(ProviderEditorDialog, mountOptions)
+    w.vm.openWith(null)
+    await flushPromises()
+
+    const panel = w.find('[role="dialog"]')
+    expect(panel.attributes('aria-modal')).toBe('true')
+    expect(document.body.style.overflow).toBe('hidden')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(w.find('[role="dialog"]').exists()).toBe(false)
+    expect(document.body.style.overflow).toBe('')
+    expect(document.activeElement).toBe(trigger)
+    trigger.remove()
+    w.unmount()
+  })
+
   it('平台提供：不显示服务地址与密钥字段（那两项归连接设置）', async () => {
     const w = mount(ProviderEditorDialog, mountOptions)
     w.vm.openWith({ id: 'platform', name: '平台提供', description: null, enabled: true, baseUrl: null, keyHint: null })
     await flushPromises()
     expect(w.text()).not.toContain('服务地址')
     expect(w.find('input[type="password"]').exists()).toBe(false)
-    // 名称与启用位仍可改
-    expect(w.text()).toContain('参与路由')
+    // 名称仍可改；启用位只在创建时出现（编辑态由供应商行内开关承担，不再给第二个入口）
+    expect(w.text()).not.toContain('参与路由')
     updateMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
@@ -138,7 +164,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
     await w.find('input[placeholder="deepseek-v4.1-flash"]').setValue('acme-chat')
-    await w.find('select.mk-field__select').setValue('reasoning')
+    await w.find('.med-adv-body select.mk-field__select').setValue('reasoning')
     await w.find('input[placeholder="131072"]').setValue('65536')
 
     addModelMock.mockResolvedValue({ data: { success: true, warnings: ['备用链写了 2 条…'] } })
@@ -161,7 +187,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({
       providerId: 'acme-gateway',
       model: {
-        id: 'acme-chat', label: 'acme-chat', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false,
+        id: 'acme-chat', label: 'acme-chat', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false, vision: false,
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
         fallbacks: [], pricing: null, description: null
       }
@@ -195,7 +221,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({
       providerId: 'platform',
       model: {
-        id: 'm-priced', label: 'm-priced', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false,
+        id: 'm-priced', label: 'm-priced', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false, vision: false,
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
         fallbacks: [], pricing: { inputPer1M: 0.3, cachedInputPer1M: 0.006, outputPer1M: 1.2 }, description: null
       }
@@ -219,7 +245,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({
       providerId: 'acme-gateway',
       model: {
-        id: 'acme-chat', label: 'Acme Chat', tier: 'chat', supportsThinking: true, supportsReasoningEffort: false,
+        id: 'acme-chat', label: 'Acme Chat', tier: 'chat', supportsThinking: true, supportsReasoningEffort: false, vision: false,
         maxOutputTokens: 65536, defaultMaxTokens: 4096, reasoningReserveTokens: null, maxParallelRequests: 8,
         fallbacks: [], pricing: { inputPer1M: 0.3 }, description: '主用'
       }
@@ -236,6 +262,71 @@ describe('ModelEditorDialog', () => {
       defaultMaxTokens: 4096,
       pricing: { inputPer1M: 0.3 },
       description: '主用'
+    }))
+  })
+
+  it('生成参数：默认跟随平台，显式选择后随模型提交', async () => {
+    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-gen' })
+    await flushPromises()
+    const selects = w.findAll('.med-gen select')
+    expect(selects).toHaveLength(3)
+    expect(selects.map((s) => (s.element as HTMLSelectElement).value)).toEqual(['default', 'default', 'default'])
+
+    await selects[0].setValue('disabled')
+    await selects[1].setValue('max')
+    await selects[2].setValue('json_object')
+    addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
+    await btn(w, '保存').trigger('click')
+    await flushPromises()
+    expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({
+      defaultThinkingMode: 'disabled',
+      defaultReasoningEffort: 'max',
+      defaultResponseFormat: 'json_object'
+    }))
+  })
+
+  it('显示名称默认跟随模型 ID，手改后不再覆盖', async () => {
+    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-one' })
+    await flushPromises()
+    const id = w.find('input[placeholder="deepseek-v4.1-flash"]')
+    const label = w.find('input[placeholder="默认跟随模型 ID"]')
+    expect((label.element as HTMLInputElement).value).toBe('m-one')
+
+    const labelValue = () => (w.find('input[placeholder="默认跟随模型 ID"]').element as HTMLInputElement).value
+    await id.setValue('m-two')
+    await nextTick()
+    expect(labelValue()).toBe('m-two')
+
+    await label.setValue('自定义名称')
+    await id.setValue('m-three')
+    await nextTick()
+    expect(labelValue()).toBe('自定义名称')
+  })
+
+  it('备用模型：勾选顺序即尝试顺序，可单条移除', async () => {
+    const w = mount(ModelEditorDialog, {
+      props: { fallbackOptions: ['platform/m-chat', 'platform/m-backup', 'platform/m-third'] },
+      ...mountOptions
+    })
+    w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-main' })
+    await flushPromises()
+    const rows = w.findAll('.med-fb__row')
+    await rows[1].find('input').setValue(true)
+    await rows[2].find('input').setValue(true)
+    expect(w.findAll('.med-fb__chip .med-fb__name').map((e) => e.text())).toEqual(['platform/m-backup', 'platform/m-third'])
+    expect(w.findAll('.med-fb__order').map((e) => e.text())).toEqual(['1', '2'])
+
+    await w.findAll('.med-fb__remove')[0].trigger('click')
+    expect(w.findAll('.med-fb__chip .med-fb__name').map((e) => e.text())).toEqual(['platform/m-third'])
+    expect(w.findAll('.med-fb__order').map((e) => e.text())).toEqual(['1'])
+
+    addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
+    await btn(w, '保存').trigger('click')
+    await flushPromises()
+    expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({
+      fallbacks: ['platform/m-third']
     }))
   })
 })

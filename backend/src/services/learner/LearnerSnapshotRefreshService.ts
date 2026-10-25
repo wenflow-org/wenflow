@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
-import { buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { buildNonVirtualUserWhere, isTestAccountUser } from '../../utils/test-account';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
 export interface LearnerSnapshotRefreshInput {
@@ -95,9 +95,8 @@ export class LearnerSnapshotRefreshService {
     pathId?: string;
     staleOnly?: boolean;
     riskOnly?: boolean;
-    excludeTest?: boolean;
+    /** 按 id 直查虚拟账号时置 true（学习者详情），不是页面视角 */
     includeTest?: boolean;
-    testOnly?: boolean;
     page?: number;
     limit?: number;
   }) {
@@ -108,16 +107,12 @@ export class LearnerSnapshotRefreshService {
     const limit = Math.max(1, Math.min(2000, Number(params?.limit || 20)));
 
     // 软删用户不进入管理端快照列表（列表与总数口径一致）。
-    // 默认排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）；
-    // includeTest=true 时显式包含（管理需要查看虚拟数据，不删数据只改默认视图）；
-    // testOnly=true（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看虚拟 + 测试账号。
-    const excludeTest = params?.includeTest ? false : (params?.excludeTest ?? true);
+    // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注）；
+    // includeTest=true 是按 id 直查虚拟账号（学习者详情），不删数据只改默认视图。
     const userWhere = {
-      ...(params?.testOnly
-        ? await buildTestUserWhere({ deletedAt: null })
-        : excludeTest
-          ? await buildRealUserWhere({ deletedAt: null })
-          : { deletedAt: null }),
+      ...(params?.includeTest
+        ? { deletedAt: null }
+        : await buildNonVirtualUserWhere({ deletedAt: null })),
       ...(params?.userId ? { id: params.userId } : {}),
     };
     const total = await prisma.users.count({ where: userWhere });
@@ -226,6 +221,18 @@ export class LearnerSnapshotRefreshService {
       if (!snapshot) {
         throw new Error(`学习者快照构建失败: ${user.id}`);
       }
+      /* 数据截至（2026-10-23 用户「怎么都是 37 分钟呢」）：
+         generatedAt 是**本次快照重建**的时刻——列表页一次请求就会把过期投影整批重建，
+         于是全表显示同一分钟，读起来像所有人都在同一刻学习过。运营要的是学习证据最后
+         变化的时刻，取自 freshness.basedOn 里最新的那条；一条证据都没有（未开始学习）
+         给 null，前端显示「—」，不拿重建时间冒充。 */
+      const basedOnTimes = Object.values(snapshot.freshness?.basedOn || {})
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .map((value) => new Date(value).getTime())
+        .filter((time) => Number.isFinite(time));
+      const dataUpdatedAt = basedOnTimes.length > 0
+        ? new Date(Math.max(...basedOnTimes)).toISOString()
+        : null;
       return {
         userId: user.id,
         userName: user.name,
@@ -236,7 +243,9 @@ export class LearnerSnapshotRefreshService {
         isTestAccount: isTestAccountUser(user),
         pathId: path?.id || null,
         pathTitle: path?.title || null,
+        /** 快照重建时刻（排查用；列表的「数据更新」列读 dataUpdatedAt） */
         generatedAt: snapshot.freshness.generatedAt,
+        dataUpdatedAt,
         confidence: snapshot.freshness.confidence,
         recentTrend: snapshot.dynamicState.recentTrend,
         fatigueRisk: snapshot.dynamicState.fatigueRisk,

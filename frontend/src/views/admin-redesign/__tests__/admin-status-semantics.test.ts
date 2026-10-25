@@ -40,6 +40,7 @@ vi.mock('../live', async () => {
   return {
     liveAnnouncements: ref([]),
     liveFailures: ref({}),
+    liveRefreshSeq: ref(0),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
     shortId: (s: string) => s,
@@ -100,9 +101,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
       expect(row.text()).toContain('加载失败')
       expect(row.text()).not.toContain('已清零')
     }
-    // 重试入口（页头动作区，newui/admin pagehead 形态）——直接子钮才是刷新/重试，
-    // 视角开关注在页头动作区的 span 里，其内部分段钮不算（2026-10-18 开关随读数带迁入页头）
-    expect(w.find('.mk-pagehead__actions > button').text()).toContain('重试')
+    // 重试入口在失败条上（2026-10-23 页头第二颗刷新钮撤除：顶栏已有刷新，失败态就地重试）
+    expect(w.find('.mk-alert--row .mk-alert__btn').text()).toContain('重试')
 
     w.unmount()
   })
@@ -156,9 +156,10 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 位置：读数带在页签面板之外、页签栏之前（页级，不是某个页签体内的内容）
     expect(w.find('.oh-metrics').element.closest('[role="tabpanel"]')).toBeNull()
     expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
-    // 口径开关随读数带走（不再留在某个页签的卡头里），刷新钮也在（读数带有远端读数）
-    expect(w.find('.mk-pagehead__actions').text()).toContain('真实')
-    expect(w.find('.mk-pagehead__actions > button').text()).toContain('刷新')
+    // 口径开关随读数带走（不再留在某个页签的卡头里）；刷新不再在页头另出一颗（走顶栏）
+    // 口径开关已退役（2026-10-21）：页头动作区不再有 真实/测试 控件
+    expect(w.find('.mk-pagehead__actions').text()).not.toContain('真实')
+    expect(w.findAll('.mk-pagehead__actions > button').some((b) => b.text().includes('刷新'))).toBe(false)
     w.unmount()
   })
 
@@ -192,8 +193,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     w.unmount()
   })
 
-  /* EG10 护栏：宿主页签角标未访问时不得显假 0（0 会被读成「确认无数据」）。 */
-  it('页签计数未拉取时角标显「未加载」而非 0（反馈/成就/站内通知）', async () => {
+  /* EG10 护栏：宿主页签角标未访问时不得显假 0（0 会被读成「确认无数据」）。
+     2026-10-21 起改为「没拉过就不出角标」，同样不显 0、也不再显「未加载」。 */
+  it('页签计数未拉取时角标不渲染（既不显 0，也不显「未加载」）', async () => {
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 0 } } })
     h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 0 } } } })
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 0 } } })
@@ -201,11 +203,12 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     const w = mount(OpsHub)
     await flushPromises()
 
-    const tabCountText = (label: string) =>
-      w.findAll('.tabs .tab').find((t) => t.text().includes(label))!.find('.tab__count').text()
-    expect(tabCountText('反馈')).toBe('未加载')
-    expect(tabCountText('成就')).toBe('未加载')
-    expect(tabCountText('站内通知')).toBe('未加载')
+    const tabCount = (label: string) =>
+      w.findAll('.tabs .tab').find((t) => t.text().includes(label))!.find('.tab__count')
+    expect(tabCount('反馈').exists()).toBe(false)
+    expect(tabCount('成就').exists()).toBe(false)
+    expect(tabCount('站内通知').exists()).toBe(false)
+    expect(w.findAll('.tabs .tab').map((t) => t.text()).join(' ')).not.toContain('未加载')
 
     w.unmount()
   })

@@ -18,7 +18,7 @@
       <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
         只读
       </button>
-      <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refresh(true)">刷新</button>
+      <!-- 2026-10-23：与页头「刷新注册表」是同一动作（refresh(true)），同屏只留页头那一颗 -->
     </div>
 
     <div v-if="actionError" class="mk-alert mk-alert--row mpp-alert" role="alert">
@@ -44,7 +44,7 @@
 
     <div v-else class="mpp-body">
       <!-- 左：供应商列表（平铺一份清单，平台通道在最前；不再按来历分组） -->
-      <aside class="mpp-list" role="tablist" aria-label="模型供应商">
+      <aside class="mpp-list" role="tablist" aria-label="模型供应商" @keydown="onTablistKeydown">
         <div
           v-for="p in orderedProviders"
           :key="p.id"
@@ -52,7 +52,8 @@
           :class="{ 'mpp-item--on': p.id === selectedId }"
           role="tab"
           :aria-selected="p.id === selectedId"
-          tabindex="0"
+          :data-provider="p.id"
+          :tabindex="p.id === selectedId ? 0 : -1"
           @click="select(p.id)"
           @keydown.enter.prevent="select(p.id)"
           @keydown.space.prevent="select(p.id)"
@@ -65,6 +66,7 @@
           <MkSwitch
             :model-value="p.enabled"
             :disabled="busy"
+            :aria-label="`启用供应商 ${p.name}`"
             @update:model-value="(v: boolean) => toggleEnabled(p, v)"
           />
         </div>
@@ -84,7 +86,7 @@
             <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
           </div>
           <div class="mpp-detail__acts">
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="providerEditor?.openWith(selected)">设置</button>
+            <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openSettings(selected)">设置</button>
             <button
               v-if="selected.id !== 'platform'"
               type="button"
@@ -96,16 +98,10 @@
         </div>
         <p v-if="selected.description && selected.id !== 'platform'" class="mpp-detail__desc">{{ selected.description }}</p>
 
-        <!-- 平台通道（endpointSource=inherit，注册表里没有自己的 baseUrl）：服务地址与密钥
-             归连接设置（宿主注入），沿用既有的脏位保存 -->
-        <div v-if="selected.id === 'platform'" class="mpp-block">
-          <div class="mpp-block__head">
-            <span class="mpp-sec">连接</span>
-          </div>
-          <slot name="platform-detail" />
-        </div>
+        <!-- 平台详情只留模型一页（2026-10-24 用户「保持就模型一个页面」）：
+             连接与基础设施移进平台「设置」弹窗，生成参数移到每个模型的编辑弹层。 -->
 
-        <template v-else>
+        <template v-if="selected.id !== 'platform'">
           <div class="mpp-block">
             <div class="mpp-block__head">
               <span class="mpp-sec">连接</span>
@@ -150,8 +146,14 @@
 
         <div class="mpp-block mpp-models">
           <div class="mpp-models__head">
+            <!-- 平台详情只有一页：标题直接给模型计数（原页签计数随页签一起退役） -->
             <span class="mpp-sec">模型<span class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
             <span class="mpp-models__acts">
+              <!-- 拉取结果收进浮窗（2026-10-24）：清单不在详情里铺开，勾选后再逐个配置。
+                   拉取过一次就保留入口，关掉浮窗还能回来再选。 -->
+              <button v-if="pullableCount" type="button" class="mk-link" @click="openPull">
+                选择要添加的（{{ pullableCount }}）
+              </button>
               <button
                 v-if="selected.endpointSource === 'own'"
                 type="button"
@@ -159,57 +161,43 @@
                 :disabled="pulling || !selected.keyHint"
                 :title="selected.keyHint ? undefined : '先保存密钥'"
                 @click="pullModels(selected)"
-              >{{ pulling ? '拉取中…' : '获取模型列表' }}</button>
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: null })">＋ 添加模型</button>
+              >{{ pulling ? '拉取中…' : pulled.length ? '重新拉取' : '获取模型列表' }}</button>
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openManualAdd">＋ 添加模型</button>
             </span>
           </div>
 
           <slot v-if="selected.id === 'platform'" name="models-meta" />
 
-          <!-- 上游模型：一条一行，逐条添加（2026-10-21 用户走查：不做批量「按对话档登记」，
-               每个模型自己配置基础信息）。平台通道的清单由连接设置拉取，自带端点由本页拉取。 -->
-          <div v-if="fetchableModels.length" class="mpp-fetch">
-            <div v-if="selected.id !== 'platform' || fetchableModels.length > 8" class="mpp-fetch__head">
-              <span v-if="selected.id !== 'platform'">上游模型 <b>{{ fetchableModels.length }}</b> 个</span>
-              <input
-                v-if="fetchableModels.length > 8"
-                v-model="modelFilter"
-                class="mk-field__input mpp-fetch__filter"
-                placeholder="筛选模型"
-                aria-label="筛选上游模型"
-              />
-            </div>
-            <div class="mpp-fetch__list">
-              <div v-for="name in filteredFetched" :key="name" class="mpp-fetch__row">
-                <span class="mono mpp-fetch__id" :title="name">{{ name }}</span>
-                <span v-if="registeredIds.has(name)" class="mk-badge mk-badge--muted">已添加</span>
-                <button
-                  v-else
-                  type="button"
-                  class="mk-link"
-                  :disabled="busy || registry?.readOnly"
-                  @click="openAddModel(name)"
-                >添加</button>
-              </div>
-              <p v-if="!filteredFetched.length" class="mpp-fetch__empty">没有匹配的模型</p>
-            </div>
-          </div>
+          <!-- 上游清单不再铺在详情里（2026-10-24 用户「拉取作为浮窗」）：拉取只拿到清单，
+               勾选与用途分流都在 PullModelsDialog 里做——详情区只留已登记模型这张表。 -->
 
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense mpp-table">
               <colgroup>
-                <col style="width: 50%" /><col style="width: 22%" /><col style="width: 14%" /><col style="width: 14%" />
+                <col style="width: 38%" /><col style="width: 20%" /><col style="width: 18%" /><col style="width: 12%" /><col style="width: 12%" />
               </colgroup>
               <thead>
                 <tr>
                   <th>模型</th>
+                  <th>功能</th>
                   <th>单价</th>
                   <th>状态</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="m in selected.models" :key="m.id">
+                <!-- 按用途分组（2026-10-21 用户「按功能区分一下」）：同一张表里用分组行切段，
+                     不拆多张表——列宽与对齐保持一处。组内再按能力标「功能」列，运营一眼看得出
+                     哪个模型能思考、能调推理强度、能读图。 -->
+                <template v-for="g in modelGroups" :key="g.tier">
+                  <tr class="mpp-group">
+                    <td colspan="5">
+                      <span class="mpp-group__name">{{ g.label }}</span>
+                      <span class="mpp-group__count">{{ g.models.length }} 个</span>
+                      <span class="mpp-group__hint">{{ g.hint }}</span>
+                    </td>
+                  </tr>
+                  <tr v-for="m in g.models" :key="m.id">
                   <td class="mpp-model">
                     <span class="mono mpp-model__id">{{ m.id }}</span>
                     <span v-if="m.label && m.label !== m.id" class="mpp-desc" :title="m.label">{{ m.label }}</span>
@@ -220,7 +208,12 @@
                       :title="testResults[m.id].text"
                     >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
                   </td>
-                  <td class="mono mpp-price" :class="{ 'mpp-price--missing': priceMissing(m) }" :title="priceTitle(m)">{{ priceText(m) }}</td>
+                  <td class="mpp-fn">
+                    <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
+                    <span v-if="!functionTags(m).length" class="mpp-fn__none">基础对话</span>
+                  </td>
+                  <!-- 价格是「入 / 出」中文标签 + 数字，走正文 + 等宽数字对齐 -->
+                  <td class="mpp-price" :class="{ 'mpp-price--missing': priceMissing(m) }" :title="priceTitle(m)">{{ priceText(m) }}</td>
                   <td>
                     <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
                     <span v-else class="mk-badge mk-badge--ok">● 健康</span>
@@ -231,10 +224,11 @@
                     <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
                     <button type="button" class="mk-link mk-link--danger" :disabled="busy || registry?.readOnly" @click="removeModel(m)">删除</button>
                   </td>
-                </tr>
+                  </tr>
+                </template>
                 <tr v-if="!selected.models.length">
-                  <td colspan="4" class="mpp-empty">
-                    {{ selected.enabled ? '还没有模型，点「添加模型」或从上游清单逐条添加。' : '这个供应商当前停用，模型不参与路由。' }}
+                  <td colspan="5" class="mpp-empty">
+                    {{ selected.enabled ? '还没有模型' : '这个供应商当前停用，模型不参与路由。' }}
                   </td>
                 </tr>
               </tbody>
@@ -245,19 +239,30 @@
       <MkEmptyState v-else compact title="还没有供应商。用左栏底部的「添加供应商」建一个。" />
     </div>
 
+    <PullModelsDialog
+      ref="pullDialog"
+      :provider-name="selected?.name ?? ''"
+      :models="fetchableModels"
+      :registered="[...registeredIds]"
+      @confirm="startConfigure"
+      @navigate="onPullNavigate"
+    />
     <ProviderEditorDialog ref="providerEditor" @saved="onProviderSaved" />
     <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import ProviderEditorDialog, { type ProviderLike } from './ProviderEditorDialog.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
+import PullModelsDialog from './PullModelsDialog.vue'
+import { modelKindOf } from './platformModelKind'
 import { askConfirm } from './useConfirm'
 import { errMsg } from './live'
 
@@ -299,6 +304,8 @@ const emit = defineEmits<{
   changed: []
   /** 已登记的模型 id（宿主用它算「上游还有几个没登记」的关系句，避免两处各算一遍） */
   registered: [ids: string[]]
+  /** 平台连接与基础设施已移进宿主的「平台设置」弹窗（2026-10-24） */
+  'open-platform-settings': [target?: 'conn' | 'infra']
 }>()
 
 const view = ref<ProvidersView | null>(null)
@@ -317,28 +324,34 @@ const pulling = ref(false)
 /** 单模型测试结果（按模型 id 落在行内，不再用卡上方一条全局结果条） */
 const testResults = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
 const pulled = ref<string[]>([])
-const modelFilter = ref('')
+const router = useRouter()
 
 const providerEditor = ref<InstanceType<typeof ProviderEditorDialog> | null>(null)
 const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
+const pullDialog = ref<InstanceType<typeof PullModelsDialog> | null>(null)
+/** 勾选后逐个配置的待办队列（保存一个进下一个；数量用于弹层标题 2/5） */
+const configureQueue = ref<string[]>([])
+const configureTotal = ref(0)
 
 const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
 const registry = computed(() => view.value?.registry ?? null)
 const selected = computed(() => providers.value.find((p) => p.id === selectedId.value) ?? null)
+/** 平台详情只有模型一页；连接/基础设施在宿主的平台设置弹窗里（2026-10-24） */
 
+/* 2026-10-21 用户「不要了」：卡头 meta 只留可写/只读这个会改变操作的结论，
+   数据来源（来自模型目录文件）与生效方式进 title */
 const registryMeta = computed(() => {
   const r = view.value?.registry
-  if (!r) return '来自模型目录文件'
-  if (r.readOnly) return '只读 · 来自模型目录文件'
-  return '改动即时生效 · 来自模型目录文件'
+  if (!r) return ''
+  if (r.readOnly) return '只读'
+  return '改动即时生效'
 })
 const registryPathTitle = computed(() => {
   const r = view.value?.registry
   if (!r) return ''
   const parts = [`目录文件：${r.path}`]
   if (r.lastError) parts.push(`最近更新失败：${r.lastError}`)
-  else parts.push('改动由服务端校验后写入并立即生效')
   return parts.join('\n')
 })
 
@@ -354,10 +367,11 @@ const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m
 const fetchableModels = computed(() =>
   selected.value?.endpointSource === 'inherit' ? props.upstream : pulled.value
 )
-const filteredFetched = computed(() => {
-  const q = modelFilter.value.trim().toLowerCase()
-  return q ? fetchableModels.value.filter((n) => n.toLowerCase().includes(q)) : fetchableModels.value
-})
+/** 还能登记进模型清单的对话模型数：拉取结果里已添加的不再计入 */
+const pullableCount = computed(() =>
+  fetchableModels.value.filter((name) => modelKindOf(name) === 'chat' && !registeredIds.value.has(name)).length
+)
+
 const fallbackOptions = computed(() =>
   providers.value.flatMap((p) => p.models.map((m) => `${p.id}/${m.id}`))
 )
@@ -399,19 +413,58 @@ function priceText(m: ModelLike): string {
   const p = m.pricing!
   return `入 ${p.inputPer1M ?? '—'} / 出 ${p.outputPer1M ?? '—'}`
 }
+const MODEL_GROUPS = [
+  { tier: 'chat' as const, label: '对话', hint: '常规教学、工具调用与高频 Skill' },
+  { tier: 'reasoning' as const, label: '推理', hint: '长思考与复杂判断' }
+]
+/** 按用途（对话 / 推理）分组；空组不渲染，单组时也保留组头——它就是这个模型的功能归属 */
+const modelGroups = computed(() => {
+  const models = selected.value?.models ?? []
+  return MODEL_GROUPS
+    .map((g) => ({ ...g, models: models.filter((m) => m.tier === g.tier) }))
+    .filter((g) => g.models.length > 0)
+})
+/** 模型能力标签：功能列只列「有没有」，用途由分组行表达，不在此复述 */
+function functionTags(m: ModelLike): string[] {
+  const tags: string[] = []
+  if (m.supportsThinking) tags.push('思考')
+  if (m.supportsReasoningEffort) tags.push('推理强度')
+  if (m.vision) tags.push('读图')
+  return tags
+}
 function priceTitle(m: ModelLike): string {
   const p = m.pricing
   if (priceMissing(m)) return '未配单价：成本分析页这个模型的金额会显示「—」。点「编辑」补输入与输出单价'
   const cached = p!.cachedInputPer1M != null ? ` / 缓存 ${p!.cachedInputPer1M}` : ''
   return `单价 入 ${p!.inputPer1M ?? '—'}${cached} / 出 ${p!.outputPer1M ?? '—'}（USD / 1M tokens，只影响成本分析）`
 }
+/** 列表是一组 role=tab：按 WAI-ARIA 走 roving tabindex + 方向键，避免 N 个供应商占 N 个 Tab 位 */
+function onTablistKeydown(e: KeyboardEvent): void {
+  const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  const items = orderedProviders.value
+  if (!items.length) return
+  e.preventDefault()
+  const cur = items.findIndex((p) => p.id === selectedId.value)
+  const next = e.key === 'Home' ? 0
+    : e.key === 'End' ? items.length - 1
+      : e.key === 'ArrowDown' ? (cur < 0 ? 0 : (cur + 1) % items.length)
+        : (cur < 0 ? items.length - 1 : (cur - 1 + items.length) % items.length)
+  select(items[next].id)
+  nextTick(() => {
+    const host = e.currentTarget as HTMLElement | null
+    host?.querySelector<HTMLElement>(`[data-provider="${items[next].id}"]`)?.focus()
+  })
+}
+
 function select(id: string): void {
   selectedId.value = id
   keyDraft.value = ''
   keyVisible.value = false
   testResults.value = {}
   pulled.value = []
-  modelFilter.value = ''
+  configureQueue.value = []
+  configureTotal.value = 0
 }
 
 /** 选中项被删/首次加载后归位：优先平台通道，其次第一个 */
@@ -556,8 +609,11 @@ async function removeModel(m: ModelLike): Promise<void> {
 function onProviderSaved(payload: { providerId: string; warnings: string[] }): void {
   void reloadAfterDialog(payload.providerId, payload.warnings)
 }
-function onModelSaved(payload: { modelId: string; warnings: string[] }): void {
-  void reloadAfterDialog(null, payload.warnings)
+async function onModelSaved(payload: { modelId: string; warnings: string[] }): Promise<void> {
+  const fromQueue = configureQueue.value.length > 0
+  if (fromQueue) configureQueue.value = configureQueue.value.filter((id) => id !== payload.modelId)
+  await reloadAfterDialog(null, payload.warnings)
+  if (fromQueue) openNextConfigure()
 }
 
 /**
@@ -593,7 +649,8 @@ async function pullModels(p: ProviderView): Promise<void> {
   try {
     const res = await adminModelProvidersApi.pullModels(p.id)
     pulled.value = (res?.data?.data?.models ?? []) as string[]
-    modelFilter.value = ''
+    if (pulled.value.length) openPull()
+    else actionError.value = '供应商返回了空清单：确认这个服务地址是否提供 /models'
   } catch (e) {
     actionError.value = errMsg(e)
   } finally {
@@ -601,17 +658,75 @@ async function pullModels(p: ProviderView): Promise<void> {
   }
 }
 
-/** 上游清单逐条添加：把模型 id 带进编辑弹层，基础信息由用户确认后保存 */
-function openAddModel(name: string): void {
+/** 打开拉取结果浮窗：清单只用于勾选，不再在详情里铺开 */
+function openPull(): void {
   if (!selected.value) return
-  modelEditor.value?.openWith({ providerId: selected.value.id, model: null, presetId: name })
+  if (!fetchableModels.value.length) {
+    actionError.value = '还没有拉取到模型。先确认服务地址与密钥，再重新拉取。'
+    return
+  }
+  pullDialog.value?.openWith()
+}
+
+/** 宿主（页头「连接并拉取」）拉到平台清单后直接弹浮窗；顺便把选中项归位到平台通道 */
+function openHostPull(): void {
+  if (selectedId.value !== 'platform') select('platform')
+  openPull()
+}
+
+/** 手动新增：清掉勾选队列，避免保存后误跳到上一个批次的下一个模型 */
+function openManualAdd(): void {
+  if (!selected.value) return
+  configureQueue.value = []
+  configureTotal.value = 0
+  modelEditor.value?.openWith({ providerId: selected.value.id, model: null })
+}
+
+/** 浮窗确认：按勾选顺序逐个打开模型设置，保存一个自动进下一个 */
+function startConfigure(ids: string[]): void {
+  if (!selected.value || !ids.length) return
+  configureQueue.value = [...ids]
+  configureTotal.value = ids.length
+  openNextConfigure()
+}
+
+function openNextConfigure(): void {
+  const id = configureQueue.value[0]
+  if (!id || !selected.value) {
+    configureQueue.value = []
+    configureTotal.value = 0
+    return
+  }
+  const step = configureTotal.value > 1
+    ? { index: configureTotal.value - configureQueue.value.length + 1, total: configureTotal.value }
+    : undefined
+  modelEditor.value?.openWith({ providerId: selected.value.id, model: null, presetId: id, step })
+}
+
+/** 非对话模型的去向：基础设施在平台详情页签里，生图/决策在插件页 */
+function onPullNavigate(target: 'infra' | 'plugins'): void {
+  if (target === 'plugins') {
+    void router.push('/admin/addons')
+    return
+  }
+  if (selectedId.value !== 'platform') select('platform')
+  emit('open-platform-settings', 'infra')
+}
+
+/** 平台「设置」打开宿主的连接 + 基础设施弹窗；其他供应商仍走注册表编辑弹层 */
+function openSettings(p: ProviderView): void {
+  if (p.id === 'platform') {
+    emit('open-platform-settings', 'conn')
+    return
+  }
+  providerEditor.value?.openWith(p)
 }
 
 onMounted(() => {
   void refresh()
 })
 
-defineExpose({ refresh })
+defineExpose({ refresh, openPull, openHostPull })
 </script>
 
 <style scoped>
@@ -675,6 +790,8 @@ defineExpose({ refresh })
 }
 .mpp-add { width: 100%; margin-top: 10px; }
 .mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
+/* 平台详情只有模型一页：不再有二级页签条与面板间距补偿 */
+.mpp-detail > .mpp-models { margin-top: 0; padding-top: 0; border-top: 0; }
 
 /* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
 .mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
@@ -738,35 +855,7 @@ defineExpose({ refresh })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-/* 上游模型清单：一条一行，逐条添加；超过 8 条给筛选框（31 个模型靠肉眼找太慢） */
-.mpp-fetch {
-  margin-bottom: 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-lg);
-}
-.mpp-fetch__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--mk-line);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
-.mpp-fetch__head b { color: var(--mk-ink); }
-.mpp-fetch__filter { width: 180px; margin-left: auto; }
-.mpp-fetch__list { display: grid; max-height: 188px; overflow-y: auto; }
-.mpp-fetch__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 12px;
-  border-bottom: 1px solid var(--mk-line);
-  font-size: var(--mk-fs-micro);
-}
-.mpp-fetch__row:last-child { border-bottom: 0; }
-.mpp-fetch__id { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mpp-fetch__empty { margin: 0; padding: 10px 12px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 上游清单已移入 PullModelsDialog（2026-10-24 用户「拉取作为浮窗」），详情区只留已登记模型表 */
 .mpp-table { width: 100%; }
 .mpp-label {
   margin-left: 6px;
@@ -792,6 +881,25 @@ defineExpose({ refresh })
 .mpp-price { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
 /* 未配单价是能直接修的配置缺口：用警示色把「单价未知」从限额副行里拎出来，别读成普通弱字 */
 .mpp-price--missing { color: var(--mk-amber); }
+/* 功能分组行：一张表里切段（对话 / 推理），组内不再复述用途 */
+.mpp-group td {
+  padding: 6px 10px;
+  background: var(--mk-surface-2);
+  border-top: 1px solid var(--mk-line);
+}
+.mpp-group__name { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
+.mpp-group__count { margin-left: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.mpp-group__hint { margin-left: 10px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 功能列：能力标签；「基础对话」是缺省态，弱化成正文色不抢眼。
+   标签允许换行——窄档功能列只有百来像素，nowrap 会把整表宽度顶出去。 */
+.mpp-fn { white-space: normal; min-width: 88px; }
+.mpp-fn__chip {
+  display: inline-block; margin-right: 4px; margin-bottom: 2px; padding: 1px 7px;
+  border-radius: 999px; background: var(--mk-blue-bg);
+  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
+  white-space: nowrap;
+}
+.mpp-fn__none { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .mpp-rowacts { display: flex; gap: 8px; white-space: nowrap; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 </style>

@@ -39,7 +39,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { reloadLlmProvidersIfChanged } from '../../../config/models.config'
 
-function getHandler(method: 'get' | 'put', path: string) {
+function getHandler(method: 'get' | 'put' | 'post', path: string) {
   const layer = (router as any).stack.find(
     (item: any) => item.route?.path === path && item.route?.methods?.[method]
   )
@@ -202,6 +202,37 @@ describe('skill-model-configs routing-only write path', () => {
         }),
       })
     )
+  })
+})
+
+describe('bulk-apply：清空模型覆盖（跟随平台默认）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGet.mockResolvedValue({ skillId: 'a', model: 'deepseek-v4.1-flash' })
+    mockUpsert.mockImplementation(async (skillId: string, input: any) => ({ skillId, ...input }))
+  })
+
+  it('clearModel 只把 model 置空，不碰通道 / 思考 / 参数 / 备用链', async () => {
+    const handler = getHandler('post', '/bulk-apply')
+    const req: any = { body: { skillIds: ['a', 'b'], clearModel: true } }
+    const res = createRes()
+    await handler(req, res)
+    expect(mockUpsert).toHaveBeenCalledTimes(2)
+    expect(mockUpsert).toHaveBeenCalledWith('a', { model: null })
+    expect(mockUpsert).toHaveBeenCalledWith('b', { model: null })
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      message: '已清空模型覆盖，改为跟随平台默认',
+      data: expect.objectContaining({ applied: 2, failed: 0 }),
+    }))
+  })
+
+  it('clearModel 与设置模型 / 通道互斥（避免结果取决于字段顺序）', async () => {
+    const handler = getHandler('post', '/bulk-apply')
+    const res = createRes()
+    await handler({ body: { skillIds: ['a'], clearModel: true, model: 'agnes-3.0-flash' } } as any, res)
+    expect(mockUpsert).not.toHaveBeenCalled()
+    expect(res.status).toHaveBeenCalledWith(400)
   })
 })
 

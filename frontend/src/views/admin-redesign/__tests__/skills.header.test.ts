@@ -30,7 +30,14 @@ vi.mock('@/api/adminApi', () => ({
   adminAuthApi: apiObject(),
   adminSkillsApi: apiObject({
     getReconciliation: getReconciliationMock,
-    getSkills: vi.fn(async () => ({ data: { data: { skills: [] } } }))
+    getSkills: vi.fn(async () => ({ data: { data: { skills: [] } } })),
+    // 模型路由页签只剩覆盖矩阵一张表：给两行数据让它渲染出表头
+    getSkillModelCoverage: vi.fn(async () => ({
+      data: { data: { skills: [
+        { skillId: 'skill:a', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', source: 'skill-model-only', paramOverrides: null, fallbackChain: null },
+        { skillId: 'skill:c', endpoint: null, model: null, tier: 'chat', source: 'platform-default', paramOverrides: null, fallbackChain: null }
+      ] } }
+    }))
   }),
   adminMcpApi: apiObject(),
   adminGlossaryApi: apiObject(),
@@ -95,7 +102,7 @@ async function mountSkills(live?: { profiles?: unknown[]; stats?: Record<string,
   } else {
     injectLiveData()
   }
-  const wrapper = mount(Skills, { global: { plugins: [router] } })
+  const wrapper = mount(Skills, { global: { plugins: [router], stubs: { teleport: true } } })
   await flushPromises()
   return wrapper
 }
@@ -125,10 +132,11 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     const w = await mountSkills()
     // 成功率 76.7%（100+50 调用，30+5 失败 → 115/150，1 位小数精度）
     // 2026-10-19 用户走查「KPI hint 在报读数」：副行只留口径短语，分子分母进 title 长释
+    // 2026-10-22：卡面与悬停都不再复述公式/分母，只留窗口与着色阈值
     const rate = kpiOf(w, '成功率')!
     expect(rate.find('.mk-kpi__num').text()).toBe('76.7%')
-    expect(rate.find('.mk-kpi__hint').text()).toBe('成功 / 全部调用')
-    expect(rate.attributes('title')).toContain('成功 115 / 共 150 次')
+    expect(rate.find('.mk-kpi__hint').exists()).toBe(false)
+    expect(rate.attributes('title')).not.toContain('成功 115')
     expect(rate.attributes('title')).toContain('低于 90% 标红')
     expect(rate.attributes('title')).toContain('低于 97% 标黄')
     // 空闲（skill:c 0 调用）/ 平均耗时卡在
@@ -242,9 +250,8 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
-  it('运行表补齐版本 / 路由模型 / 最近调用排序；模型路由表五列全部可排', async () => {
+  it('运行表补齐版本 / 路由模型 / 最近调用排序；批量模型配置弹窗只有一张表', async () => {
     localStorage.removeItem('wf_skills_sort')
-    localStorage.removeItem('wf_skills_routing_sort')
     const w = await mountSkills()
     const runSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
     expect(runSortable).toEqual(expect.arrayContaining(['版本', '路由模型', '最近调用']))
@@ -253,11 +260,18 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     await versionTh!.find('button').trigger('click')
     expect(versionTh!.attributes('aria-sort')).toBe('descending')
 
-    const routingTab = w.findAll('.tabs .tab').find((t) => t.text() === '模型路由')
-    await routingTab!.trigger('click')
+    // 2026-10-24：原「模型路由」页签收进页头弹窗；弹窗内原「只读路由表 + 覆盖矩阵」
+    // 两张表已合成一张，只剩覆盖矩阵
+    const bulkBtn = w.findAll('.mk-pagehead__actions button').find((b) => b.text() === '批量模型配置')
+    await bulkBtn!.trigger('click')
     await flushPromises()
-    const routingSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
-    expect(routingSortable).toEqual(expect.arrayContaining(['Skill', '归属 Agent', '路由模型', '备用模型', '完成度']))
+    const dialog = w.find('[role="dialog"]')
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.findAll('table')).toHaveLength(1)
+    const routingSortable = dialog.findAll('th.mk-th--sortable').map((t) => t.text())
+    expect(routingSortable).toEqual(expect.arrayContaining(['Skill', '路由来源', 'model', '参数覆盖', '备用模型']))
+    const headers = dialog.findAll('th').map((t) => t.text())
+    expect(headers).toEqual(expect.arrayContaining(['完成度']))
     w.unmount()
   })
 

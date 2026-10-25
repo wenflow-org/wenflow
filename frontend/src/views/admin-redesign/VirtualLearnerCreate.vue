@@ -10,10 +10,6 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
       </div>
       <div class="mk-modal__body">
-        <p class="mk-alert mk-alert--info">
-          <template v-if="isLibrary">① 称呼与背景 → ② AI 补全身份（可选）→ ③ 生产入库（建卡 + 备好第一个故事）→ ④ 到虚拟学习者起跑</template>
-          <template v-else>① 称呼与背景 → ② AI 补全身份（可选）→ ③ 创建 → ④ 画像页生成故事 → ⑤ 按故事运行</template>
-        </p>
         <!-- 生产两阶段进度（library）：建卡秒回即入库，故事是单次 AI 调用，可能要等一会儿。
              故事阶段允许先关弹窗——卡已在库，服务端继续生成，完成后仍会刷新卡墙。 -->
         <p v-if="isLibrary && creating" class="mk-alert mk-alert--info" role="status">
@@ -64,7 +60,7 @@
           <button type="button" class="mk-btn mk-btn--ghost vl-ai" :disabled="personaBusy" @click="generatePersona">
             {{ personaBusy ? '生成身份中…' : 'AI 生成身份' }}
           </button>
-          <span class="vl-ai-hint">{{ PERSONA_SKILL_HINT }}{{ sampleType === 'student' ? ' · 学生样本含考试节点与学期节奏' : '' }}</span>
+          <span class="vl-ai-hint">{{ sampleType === 'student' ? '学生样本含考试节点与学期节奏' : '' }}</span>
         </div>
         <p v-if="personaSeed" class="mk-alert mk-alert--ok">{{ PERSONA_BACKFILLED_NOTE }}</p>
         <details class="vl-advanced">
@@ -76,7 +72,6 @@
               class="mk-field__input"
               placeholder="例如：总想补职场工具（留空则由故事的学习需求定义）"
             />
-            <span class="mk-field__hint">{{ ASPIRATION_HINT }}</span>
           </label>
         </details>
       </div>
@@ -103,10 +98,8 @@ import { toast } from '@/utils/toast'
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板就地引用 ---------- */
 const STORY_HINT_LIBRARY = '字 · 建议 ≥ 40 字 · 学习需求由入库后自动生成的故事定义'
 const STORY_HINT_PROFILE = '字 · 建议 ≥ 40 字 · 具体学习需求在画像页用「故事」产生'
-const PERSONA_SKILL_HINT = '人设 Skill · 只补稳定身份，不依赖学习目标，不写会话故事'
 const PERSONA_BACKFILLED_NOTE = '已回填人设，可改称呼/背景后创建'
 const ASPIRATION_SUMMARY = '可选 · 长期学习倾向（不是某次故事的目标）'
-const ASPIRATION_HINT = '写入画像备用，真正驱动学习路径的是故事里的学习需求'
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
 const props = withDefaults(defineProps<{ render?: boolean; context?: 'learners' | 'library' }>(), {

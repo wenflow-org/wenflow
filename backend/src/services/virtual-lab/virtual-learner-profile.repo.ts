@@ -180,6 +180,15 @@ export function groupPathCountsByProfile(profileIds: string[]) {
   });
 }
 
+/** 学习路径标题（列表「进行中」列按路径归并时要有名字，只回标题不回整条路径） */
+export function findLearningPathTitles(ids: string[]) {
+  if (!ids.length) return Promise.resolve([] as Array<{ id: string; title: string }>);
+  return prisma.learning_paths.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, title: true },
+  });
+}
+
 /* ---------- 卡库（card-import.service）取数 ---------- */
 
 /** 全量卡的查重索引取数：profile JSON + tags（cardKey/同源扫描用） */

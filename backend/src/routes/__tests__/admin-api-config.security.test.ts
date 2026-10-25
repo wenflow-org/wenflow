@@ -205,4 +205,36 @@ describe('Admin API 配置 Secret 绑定', () => {
     expect(res.statusCode).toBe(400)
     expect(updateConfig).not.toHaveBeenCalled()
   })
+
+  /* 连接健康快照（2026-10-23 接手）：前端「连接并拉取 / 重新拉取」的结果随连接域保存，
+     刷新后徽章时间不再回退。只认三态字符串与合法时间戳。 */
+  it('连接状态与检查时间可随保存落盘', async () => {
+    const checkedAt = '2026-10-23T01:02:03.000Z'
+    const req: any = {
+      body: { apiUrl: currentConfig.apiUrl, apiKey: '', connectionStatus: 'connected', lastCheckedAt: checkedAt }
+    }
+    const res = createResponse()
+
+    await routes['PUT /'](req, res)
+
+    expect(res.statusCode).toBe(200)
+    expect(updateConfig).toHaveBeenCalledWith(expect.objectContaining({
+      connectionStatus: 'connected',
+      lastCheckedAt: new Date(checkedAt)
+    }))
+  })
+
+  it('非法连接状态归一为 unknown，非法时间戳不落盘', async () => {
+    const req: any = {
+      body: { apiUrl: currentConfig.apiUrl, apiKey: '', connectionStatus: 'weird-state', lastCheckedAt: 'not-a-date' }
+    }
+    const res = createResponse()
+
+    await routes['PUT /'](req, res)
+
+    expect(res.statusCode).toBe(200)
+    const payload = updateConfig.mock.calls[0][0]
+    expect(payload.connectionStatus).toBe('unknown')
+    expect(payload).not.toHaveProperty('lastCheckedAt')
+  })
 })

@@ -1,9 +1,9 @@
 /**
- * 虚拟学习者「进行中」列多活跃会话 + 独立任务列（2026-10-18 用户走查）：
- * - 一个学习者同时跑多条路径时逐条展示（不再只画第一条），运行在前暂停在后
- * - 任务数单列、逐行对齐；超过上限给「+N」
- * - 无活跃会话时显示最近一次会话并标「最近」
- * - 「无响应」表头点明阈值与「暂停不计入」
+ * 虚拟学习者「运行状态」列（2026-10-21 晚用户定稿：只反映运行 / 停滞 / 停止）：
+ * - 一格里只有一个点 + 一个词，回答「这个人在跑还是不在跑」
+ * - 阶段、路径、任务数、终态一律不进列表（要看细节进画像页）
+ * - 判定：有在推进的会话=运行中，只有暂停或超时无写入=停滞，其余=已停止
+ * - 失败与无响应仍合并成一列「异常」，两枚标签各自带词、零值整格「—」
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -12,6 +12,7 @@ import VirtualLearners from '../VirtualLearners.vue';
 import { liveVirtuals, liveVirtualRunStats } from '../live';
 import { openSubPage } from '../store';
 import type { VirtualLearnerRow } from '../virtualLearnersTypes';
+import { adminVirtualLearnersApi } from '@/api/adminApi';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -43,6 +44,7 @@ vi.mock('../live', async () => {
     liveCreateVirtual: vi.fn(async () => 'vl-new'),
     liveDeleteVirtual: vi.fn(async () => {}),
     loadLiveData: vi.fn(async () => {}),
+    refreshLiveVirtuals: vi.fn(async () => {}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => String(e),
     shortId: (id: string) => id.slice(0, 8),
@@ -67,6 +69,8 @@ vi.mock('@/api/adminApi', () => ({
     startVirtualSession: vi.fn(async () => ({ data: { data: { id: 's' } } })),
     startBlackboxVirtualSession: vi.fn(async () => ({ data: { data: { id: 's' } } })),
     terminateVirtualSessions: vi.fn(async () => ({ data: {} })),
+    autopilotStart: vi.fn(async () => ({ data: {} })),
+    autopilotStop: vi.fn(async () => ({ data: {} })),
     reclaimStaleVirtualSessions: vi.fn(async () => ({ data: {} }))
   }
 }));
@@ -95,152 +99,207 @@ function baseRow(overrides: Partial<VirtualLearnerRow>): VirtualLearnerRow {
   } as VirtualLearnerRow;
 }
 
-const multiRow = baseRow({
-  runningCount: 2,
-  pausedCount: 1,
+/** 两条在跑，其中一条超时无写入：部分卡住仍算「运行中」 */
+const runningRow = baseRow({
+  id: 'p-run',
+  name: '在跑的人',
+  /* 2026-10-21 口径统一：runningCount 只含在推进的会话，卡住的单独进 stalledCount */
+  runningCount: 1,
   stalledCount: 1,
-  runningSessionIds: ['s-run-new', 's-run-old'],
-  pausedSessionIds: ['s-paused'],
-  activeRunTotal: 4,
+  runningSessionIds: ['s-new', 's-old'],
   activeRuns: [
-    { sessionId: 's-run-new', state: 'running', currentStage: 'learn', goalReady: true, pathReady: true, learnStarted: true, taskDone: 2, taskTotal: 25, stalled: false },
-    { sessionId: 's-run-old', state: 'running', currentStage: 'path', goalReady: true, pathReady: false, learnStarted: false, taskDone: 0, taskTotal: 0, stalled: true },
-    { sessionId: 's-paused', state: 'paused', currentStage: 'learn', goalReady: true, pathReady: true, learnStarted: true, taskDone: 1, taskTotal: 8, stalled: false }
+    { sessionId: 's-new', pathId: 'p1', pathTitle: '函数与导数', state: 'running', currentStage: 'learn', goalReady: true, pathReady: true, learnStarted: true, taskDone: 2, taskTotal: 25, stalled: false },
+    { sessionId: 's-old', pathId: 'p2', pathTitle: '立体几何', state: 'running', currentStage: 'path', goalReady: true, pathReady: false, learnStarted: false, taskDone: 0, taskTotal: 0, stalled: true }
   ]
 });
 
-const historyRow = baseRow({
-  id: 'p2',
-  name: '徐国栋',
+/** 只有一条在跑且它超时无写入：没在推进 = 停滞 */
+const stalledRow = baseRow({
+  id: 'p-stall',
+  name: '停滞的人',
   runningCount: 0,
-  pausedCount: 0,
+  stalledCount: 1,
+  runningSessionIds: [],
+  activeRuns: [
+    { sessionId: 's-stall', pathId: 'p1', pathTitle: '函数与导数', state: 'running', currentStage: 'learn', goalReady: true, pathReady: true, learnStarted: true, taskDone: 1, taskTotal: 8, stalled: true }
+  ]
+});
+
+/** 自动驾驶被停：会话还在，但没在跑 */
+const pausedRow = baseRow({ id: 'p-pause', name: '暂停的人', runningCount: 0, pausedCount: 1, pausedSessionIds: ['s-pause'] });
+
+/** 跑过、已结束 */
+const stoppedRow = baseRow({
+  id: 'p-stop',
+  name: '停过的人',
+  sessions: 5,
   stageProgress: { goalReady: true, pathReady: true, learnStarted: true, taskDone: 2, taskTotal: 25 }
 });
+
+/** 从没跑过 */
+const neverRow = baseRow({ id: 'p-never', name: '没跑过的人', sessions: 0 });
 
 function rowByName(wrapper: ReturnType<typeof mount>, name: string) {
   return wrapper.findAll('tbody tr').find((tr) => tr.text().includes(name))!;
 }
 
+function stateOf(wrapper: ReturnType<typeof mount>, name: string) {
+  return rowByName(wrapper, name).find('.vl-runstate');
+}
+
 beforeEach(() => {
   vi.mocked(openSubPage).mockClear();
-  liveVirtuals.value = [multiRow, historyRow] as unknown as typeof liveVirtuals.value;
+  liveVirtuals.value = [runningRow, stalledRow, pausedRow, stoppedRow, neverRow] as unknown as typeof liveVirtuals.value;
   liveVirtualRunStats.value = { ...liveVirtualRunStats.value, reclaimThresholdMs: 30 * 60 * 1000 };
 });
 
-describe('虚拟学习者：多活跃会话与任务列', () => {
-  it('同一学习者三条活跃会话逐条渲染，超过上限给 +N', async () => {
-    const w = mount(VirtualLearners);
-    await flushPromises();
-    await nextTick();
-    const row = rowByName(w, '沈舟');
-    expect(row.findAll('.vl-runline')).toHaveLength(3);
-    // 顺序：两条运行在前、暂停在后（与后端 activeRuns 同序）
-    const badges = row.findAll('.vl-runline .rs-badge');
-    expect(badges[0].attributes('title')).toContain('正在运行');
-    expect(badges[2].attributes('title')).toContain('已暂停');
-    // 全量 4 条，列表逐条取 3 条 → +1 且与最后一条同行（不额外占行）
-    expect(row.find('.vl-runmore').text()).toBe('+1');
-    expect(row.findAll('.vl-runline')).toHaveLength(3);
-    w.unmount();
-  });
-
-  it('任务数单列、按活跃会话逐行给出；没有任务维度给 —', async () => {
+describe('虚拟学习者：运行状态列只回答在不在跑', () => {
+  it('列名与口径：叫「运行状态」，title 说清三档，不再提阶段', async () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
     const heads = w.findAll('thead th').map((h) => h.text().trim());
-    const taskIdx = heads.indexOf('任务');
-    expect(taskIdx).toBeGreaterThan(-1);
-    const row = rowByName(w, '沈舟');
-    const nums = row.findAll('.vl-tasknum');
-    expect(nums.map((n) => n.text())).toEqual(['2/25', '—', '1/8']);
-    // 列头口径说清多会话对齐与历史回落
-    expect(w.findAll('thead th')[taskIdx].attributes('title')).toContain('按行与「进行中」对齐');
-    w.unmount();
-  });
-
-  it('点击哪条徽章就进哪条会话座舱（不再一律取第一条）', async () => {
-    const w = mount(VirtualLearners);
-    await flushPromises();
-    await nextTick();
-    const row = rowByName(w, '沈舟');
-    await row.findAll('.vl-runline .rs-badge')[1].trigger('click');
-    expect(openSubPage).toHaveBeenCalledWith('session', 's-run-old');
-    w.unmount();
-  });
-
-  it('无活跃会话时显示最近一次并标「最近」，任务列同步弱化显示', async () => {
-    const w = mount(VirtualLearners);
-    await flushPromises();
-    await nextTick();
-    const row = rowByName(w, '徐国栋');
-    expect(row.find('.vl-histmark').text()).toBe('最近');
-    expect(row.find('.vl-runline--history .vl-stage').attributes('title')).toContain('当前没有活跃会话');
-    const hist = row.find('.vl-tasknum--history');
-    expect(hist.text()).toBe('2/25');
-    expect(hist.attributes('title')).toContain('最近一次会话（已结束）');
-    w.unmount();
-  });
-
-  it('聚合有活跃会话但样本窗口内拿不到详情：如实说「未展开」，不冒领「最近」或「空闲」', async () => {
-    liveVirtuals.value = [baseRow({
-      runningCount: 2,
-      pausedCount: 0,
-      runningSessionIds: [],
-      stageProgress: { goalReady: true, pathReady: true, learnStarted: true, taskDone: 1, taskTotal: 25 },
-    })] as unknown as typeof liveVirtuals.value;
-    const w = mount(VirtualLearners);
-    await flushPromises();
-    await nextTick();
-    const row = w.find('tbody tr');
-    expect(row.find('.vl-unlisted').text()).toBe('活跃 2 条 · 未展开');
-    expect(row.find('.vl-unlisted').attributes('title')).toContain('不在本次载入的会话明细里');
-    expect(row.find('.vl-histmark').exists()).toBe(false);
-    expect(row.findAll('.vl-tasknum')).toHaveLength(0);
-    w.unmount();
-  });
-
-  it('「无响应」表头写明阈值与「哪一种暂停不计入」（回收口径排除的是管理员暂停，不是自动驾驶已暂停）', async () => {
-    const w = mount(VirtualLearners);
-    await flushPromises();
-    await nextTick();
-    const th = w.findAll('thead th').find((t) => t.text().trim() === '无响应')!;
+    expect(heads).toContain('运行状态');
+    expect(heads).not.toContain('进行中');
+    const th = w.findAll('thead th').find((t) => t.text().trim() === '运行状态')!;
     const title = th.attributes('title')!;
-    expect(title).toContain('30 分钟');
-    expect(title).toContain('管理员在会话页手动暂停的会话不计入');
-    expect(title).toContain('回收无响应');
-    // 「已暂停的会话不计入」会与本页「已暂停」pill（自动驾驶已停）撞义：那类会话仍在回收候选里
-    expect(title).not.toContain('已暂停的会话不计入');
+    expect(title).toContain('在跑还是不在跑');
+    expect(title).toContain('停滞');
+    expect(title).not.toContain('阶段');
     w.unmount();
   });
 
-  it('≤1439 档：任务不成列回落到阶段条，列菜单里也不留「任务」这项死开关', async () => {
-    const orig = window.matchMedia
-    // useIsNarrow 走 matchMedia：让 ≤1439 的查询命中，模拟中窄屏档
-    window.matchMedia = ((q: string) => ({
-      matches: /max-width: (1439|1599|720)px/.test(q),
-      media: q,
-      onchange: null,
-      addEventListener() {}, removeEventListener() {},
-      addListener() {}, removeListener() {},
-      dispatchEvent: () => false
-    })) as unknown as typeof window.matchMedia
-    try {
-      const w = mount(VirtualLearners)
-      await flushPromises()
-      await nextTick()
-      // 任务列不成列
-      expect(w.findAll('thead th').map((h) => h.text().trim())).not.toContain('任务')
-      // 列菜单里也没有「任务」勾选项（勾了也不会显形 = 死开关）
-      const colsBtn = w.findAll('button').find((b) => b.text().trim() === '列')!
-      await colsBtn.trigger('click')
-      expect(w.find('.mk-cols__menu').exists()).toBe(true)
-      const labels = w.findAll('.mk-cols__item span').map((s) => s.text().trim())
-      expect(labels).not.toContain('任务')
-      expect(labels).toContain('无响应')
-      w.unmount()
-    } finally {
-      window.matchMedia = orig
+  it('五档输入落到三档：后端计数即真值——有在推进=运行中，只有卡住/暂停=停滞', async () => {
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const cases: Array<[string, string, string]> = [
+      ['在跑的人', '运行中', 'vl-runstate--running'],
+      ['停滞的人', '停滞', 'vl-runstate--stalled'],
+      ['暂停的人', '停滞', 'vl-runstate--stalled'],
+      ['停过的人', '已停止', 'vl-runstate--stopped'],
+      ['没跑过的人', '已停止', 'vl-runstate--stopped']
+    ];
+    for (const [name, label, cls] of cases) {
+      const cell = stateOf(w, name);
+      expect(cell.text(), name).toBe(label);
+      expect(cell.classes(), name).toContain(cls);
+      expect(cell.find('.vl-runstate__dot').exists(), name).toBe(true);
     }
+    w.unmount();
+  });
+
+  it('口径写进 title：为什么是这一档，以及要看细节去哪', async () => {
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    expect(stateOf(w, '在跑的人').attributes('title')).toContain('1 条会话正在运行');
+    const stall = stateOf(w, '停滞的人').attributes('title')!;
+    expect(stall).toContain('超过回收阈值');
+    expect(stateOf(w, '暂停的人').attributes('title')).toContain('自动驾驶已暂停');
+    expect(stateOf(w, '停过的人').attributes('title')).toContain('当前没有运行中的会话');
+    expect(stateOf(w, '没跑过的人').attributes('title')).toBe('还没有运行过');
+    w.unmount();
+  });
+
+  it('明细不进列表：阶段 / 路径 / 任务 / 终态都不出现在这一列', async () => {
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const row = rowByName(w, '在跑的人');
+    expect(row.find('.vl-state-cell').text()).toBe('运行中');
+    // 路径名、阶段词、任务数、终态词都不该出现
+    for (const word of ['函数与导数', '立体几何', '任务', '学习', '已放弃', '已完成']) {
+      expect(row.text()).not.toContain(word);
+    }
+    // 旧的逐条运行/历史行结构整体退役
+    expect(row.find('.vl-runline').exists()).toBe(false);
+    expect(row.find('.vl-histline').exists()).toBe(false);
+    expect(row.find('.rs-bar').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('行主操作随状态走：运行中→暂停、停滞(暂停)→继续、停滞(无响应)→终止、已停止→运行', async () => {
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const actionOf = (name: string) => rowByName(w, name).find('.mk-actions > .mk-btn');
+    expect(actionOf('在跑的人').text()).toBe('暂停');
+    expect(actionOf('暂停的人').text()).toBe('继续');
+    expect(actionOf('停滞的人').text()).toBe('终止');
+    expect(actionOf('停过的人').text()).toBe('运行');
+    // 图标也要能区分：「运行」是裸三角（新开一条），「继续」是带圈播放（接着跑）
+    expect(actionOf('停过的人').find('svg').classes()).toContain('lucide-play');
+    expect(actionOf('暂停的人').find('svg').classes()).toContain('lucide-circle-play');
+    expect(actionOf('在跑的人').find('svg').classes()).toContain('lucide-pause');
+    // 终止是破坏性：走红描边档，不与「运行」同色
+    expect(actionOf('停滞的人').classes()).toContain('mk-btn--danger-ghost');
+    expect(actionOf('停过的人').classes()).not.toContain('mk-btn--danger-ghost');
+    w.unmount();
+  });
+
+  it('没有故事时「运行」真禁用，不再改字冒充可点', async () => {
+    liveVirtuals.value = [baseRow({ id: 'p-nostory', name: '没故事的人', storyCount: 0, sessions: 0 })] as unknown as typeof liveVirtuals.value;
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const btn = rowByName(w, '没故事的人').find('.mk-actions > .mk-btn');
+    expect(btn.text()).toBe('运行');
+    expect(btn.attributes('disabled')).toBeDefined();
+    expect(btn.attributes('title')).toContain('还没有故事');
+    w.unmount();
+  });
+
+  it('暂停走自动驾驶开关：只停最新会话，不终止会话', async () => {
+    vi.mocked(adminVirtualLearnersApi.getVirtualLearnerStories).mockResolvedValueOnce({
+      data: { data: { stories: [{ id: 'st-1', title: '故事一', latestRun: { sessionId: 'sess-9', status: 'running' } }] } }
+    } as never);
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    await rowByName(w, '在跑的人').find('.mk-actions > .mk-btn').trigger('click');
+    await flushPromises();
+    expect(adminVirtualLearnersApi.autopilotStop).toHaveBeenCalledWith('sess-9');
+    expect(adminVirtualLearnersApi.terminateVirtualSessions).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it('异常列把两种问题信号分开说：系统失败数与无响应数（带阈值与暂停口径）', async () => {
+    liveVirtuals.value = [baseRow({ name: '沈舟', failedCount: 2, stalledCount: 1 })] as unknown as typeof liveVirtuals.value;
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const th = w.findAll('thead th').find((t) => t.text().trim() === '异常')!;
+    expect(th.attributes('title')).toContain('系统失败的运行数');
+    expect(th.attributes('title')).toContain('人为终止不计入');
+    expect(th.attributes('title')).toContain('无响应');
+
+    const stall = rowByName(w, '沈舟').find('.vl-abn--stall');
+    expect(stall.attributes('title')).toContain('30 分钟');
+    expect(stall.attributes('title')).toContain('管理员在运行页手动暂停的运行不计入');
+    expect(stall.attributes('title')).toContain('回收无响应');
+    expect(stall.attributes('title')).not.toContain('已暂停的会话不计入');
+    w.unmount();
+  });
+
+  it('列收敛：任务不再成列，累计运行默认隐藏但可在列菜单打开，异常列可开关', async () => {
+    const w = mount(VirtualLearners)
+    await flushPromises()
+    await nextTick()
+    const heads = w.findAll('thead th').map((h) => h.text().trim())
+    expect(heads).not.toContain('任务')
+    expect(heads).not.toContain('累计运行')
+    expect(heads).not.toContain('失败')
+    expect(heads).not.toContain('无响应')
+    expect(heads).toContain('异常')
+    const colsBtn = w.findAll('button').find((b) => b.text().trim() === '列')!
+    await colsBtn.trigger('click')
+    const labels = w.findAll('.mk-cols__item span').map((s2) => s2.text().trim())
+    expect(labels).not.toContain('任务')
+    expect(labels).not.toContain('失败')
+    expect(labels).not.toContain('无响应')
+    expect(labels).toContain('累计运行')
+    expect(labels).toContain('异常')
+    w.unmount()
   });
 });

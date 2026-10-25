@@ -162,9 +162,11 @@ onMounted(async () => {
 /* 登记例外：本组件是自包含的 GitHub 风格 Markdown 阅读主题（浅色正文 #1f2328 / 发丝线 #d0d7de /
    深色块 #161b22 + 成对的 [data-theme='dark'] 覆写）。字面量为该主题的成对取值，
    改成 --mk-* 会改动全部 AI 内容面的观感（墨色/线色的色相偏移），超出机械合规范围，
-   保留并在此登记；交互色（链接蓝）除外——蓝是全站唯一交互色，已归 --mk-blue。 */
+   保留并在此登记；交互色（链接蓝）除外——蓝是全站唯一交互色，已归 --mk-blue。
+   字体不属该主题登记范围：2026-10-23 用户「全站字体检查」——正文本该跟全站 --mk-sans，
+   代码块跟全站 --mk-mono（此前正文 -apple-system / 代码 SFMono，等于第三、第四套字体）。 */
 .markdown-renderer {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--mk-sans);
   font-size: 16px;
   line-height: 1.8;
   color: #1f2328;
@@ -243,7 +245,7 @@ onMounted(async () => {
   font-size: 100%;
   background-color: transparent;
   color: #e6edf3;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: var(--mk-mono);
 }
 
 .markdown-renderer :deep(code) {
@@ -252,7 +254,7 @@ onMounted(async () => {
   font-size: 85%;
   background-color: rgba(175, 184, 193, 0.2);
   border-radius: var(--mk-radius-sm);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: var(--mk-mono);
 }
 
 .markdown-renderer :deep(blockquote) {

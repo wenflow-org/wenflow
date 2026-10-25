@@ -6,7 +6,7 @@
       <header class="mk-section__head">
         <h4>在线变体（A/B 实验）</h4>
         <span class="sdp-sec-meta">
-          按用户分流，同一用户恒定进同一变体 · 指标为近 7 天 · 新变体内容克隆自既有版本
+          指标为近 7 天
         </span>
       </header>
       <p v-if="variantMsg" class="sdp-versions-msg" :class="{ 'is-err': variantErr }">{{ variantMsg }}</p>
@@ -101,7 +101,7 @@
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="variantCorePublishing || !variantNewKey"
-          title="需先在协议页签保存核心文件。发布前的检查照常执行，不替换基线、不改技能源文件"
+          title="需先在协议页签保存核心文件"
           @click="publishCoreAsVariant"
         >
           {{ variantCorePublishing ? '发布中…' : '把当前核心文件改动发布为变体' }}

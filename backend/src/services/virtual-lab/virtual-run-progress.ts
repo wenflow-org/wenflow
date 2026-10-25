@@ -33,6 +33,8 @@ export interface VirtualRunProgress {
 
 export interface VirtualActiveRun extends VirtualRunProgress {
   sessionId: string
+  /** 这条运行在做哪条学习路径（null = 还没产出路径的早期阶段运行） */
+  pathId: string | null
   /** running = 真在跑；paused = 自动驾驶已暂停（会话仍是 running，但无写入是预期） */
   state: 'running' | 'paused'
   currentStage: string | null
@@ -94,10 +96,57 @@ function updatedMs(session: VirtualRunSession): number {
 function toRun(session: VirtualRunSession, state: 'running' | 'paused', stalledIds: ReadonlySet<string>): VirtualActiveRun {
   return {
     sessionId: session.id,
+    pathId: session.learningPathId ? String(session.learningPathId) : null,
     state,
     currentStage: session.currentStage ? String(session.currentStage) : null,
     ...deriveRunProgress(session),
     stalled: state === 'running' && stalledIds.has(session.id),
+  }
+}
+
+/** 一条历史运行（按学习路径归并后的最近一次） */
+export interface VirtualRecentRun extends VirtualRunProgress {
+  sessionId: string
+  /** null = 还没产出路径的阶段（目标阶段）运行 */
+  pathId: string | null
+  status: string | null
+  currentStage: string | null
+  updatedAt: string | null
+}
+
+/**
+ * 没有活跃运行时的历史摘要：**按学习路径归并**，每条路径只取最近一次运行。
+ *
+ * 为什么按路径而不是按会话：一个虚拟学习者可以有多条目标/路径（故事是复杂情景，一次运行
+ * 产出一条路径，同一路径可反复跑），列表若只取「最近一条会话」，多路径学习者看起来只有
+ * 一条线，另一条路径上跑到哪一步完全不可见。同一路径的多次运行（多节课/重跑）只显示最近那次，
+ * 完整历史留给画像页。
+ *
+ * 按 learningPathId 分组，null（尚未产出路径的目标阶段运行）单独一组；
+ * 组内取 updatedAt 最近的一条；组间按最近时间倒序。返回前 limit 条与组总数（前端用总数出「+N」）。
+ */
+export function deriveRecentRuns(
+  sessions: ReadonlyArray<VirtualRunSession>,
+  limit = 3
+): { runs: VirtualRecentRun[]; total: number } {
+  const byKey = new Map<string, VirtualRunSession>()
+  for (const s of sessions) {
+    const key = s.learningPathId ? `path:${s.learningPathId}` : 'goal'
+    const prev = byKey.get(key)
+    if (!prev || updatedMs(s) > updatedMs(prev)) byKey.set(key, s)
+  }
+  const ordered = [...byKey.values()].sort((a, b) => updatedMs(b) - updatedMs(a))
+  const cap = Math.max(1, limit)
+  return {
+    total: ordered.length,
+    runs: ordered.slice(0, cap).map((s) => ({
+      sessionId: s.id,
+      pathId: s.learningPathId ? String(s.learningPathId) : null,
+      status: s.status ? String(s.status) : null,
+      currentStage: s.currentStage ? String(s.currentStage) : null,
+      updatedAt: s.updatedAt ? new Date(s.updatedAt as string | Date).toISOString() : null,
+      ...deriveRunProgress(s)
+    }))
   }
 }
 

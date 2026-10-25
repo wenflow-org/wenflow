@@ -194,13 +194,14 @@ export function mapLogsToSpans(items: RawLog[], opts: { preserveOrder?: boolean 
       agent,
       stage: (log.agentName || log.agentId || '未知节点').replace(/^skill:/, ''),
       ts: ts || undefined,
-      title: errText ? errText.slice(0, 40) : '执行完成',
+      /* 2026-10-24：摘要不再在数据层硬切 40 字——展示层负责 ellipsis，title 需要全量文本 */
+      title: errText || '执行完成',
       startMs: Math.max(0, ts - (byTrace.get(traceId) || ts)),
       durationMs: Number(log.durationMs || 0),
       status: mapStatus(log.status),
       /* P1 语义修复：detail 不再塞 timeAgo(createdAt) 相对时间（消息列/瀑布「摘要」显示相对时间属语义错位，
          时间语义收敛到时间列）；改为错误摘要，无错误时留空（展开区/标题已承载其余信息） */
-      detail: errText ? errText.slice(0, 60) : '',
+      detail: errText,
       payload: errText || undefined,
       execLayer: log.executionLayer,
       model: log.model,
@@ -787,6 +788,16 @@ export interface LiveSkillProfile {
 export const liveSkillProfiles = ref<LiveSkillProfile[]>([])
 /** 外挂能力 Skill 档案（主目录排除，但抽屉/外挂页需要名称等基本信息） */
 export const liveExtraProfiles = ref<LiveSkillProfile[]>([])
+/** Skill id → 目录里的中文显示名（2026-10-23 运营视角：总览/成本页此前直接印
+    teaching-turn、virtual-learner-goal-dialogue-simulator 这类内部 id）。
+    目录未加载或未登记时回落 id 本身——宁可见旧读法，也不留空白。 */
+export function skillDisplayName(idOrAgentId: string): string {
+  const key = String(idOrAgentId || '').replace(/^(?:skill|agent):/, '')
+  if (!key) return ''
+  const hit = liveSkillProfiles.value.find((p) => p.id === key)
+    || liveExtraProfiles.value.find((p) => p.id === key)
+  return hit?.name && hit.name !== key ? hit.name : key
+}
 /** Skill 目录统计时间窗口（默认 7d，历史失败不永久红点） */
 export const liveSkillStatsRange = ref<'all' | '24h' | '7d' | '30d'>('7d')
 
@@ -839,12 +850,15 @@ async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
 }
 
 /* ================= 总览 ================= */
+/** KPI 稳定键：展示名/顺序可变，跳转与跨卡取数按身份匹配（2026-10-24 审计） */
+export type KpiKey = 'todayCalls' | 'todaySuccessRate' | 'activeUsers' | 'goalConversations'
 export interface LiveOverviewFull {
   tone: 'ok' | 'warn' | 'bad' | 'muted'
   score: number | null
   headline: string
   subline: string
-  kpis: { label: string; value: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }[]
+  /* key = 稳定标识（跳转目标按它匹配，不按可改的展示名/数组下标） */
+  kpis: { key: KpiKey; label: string; value: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }[]
   wrapup: {
     sampleSize: number
     summaryModel: number
@@ -934,8 +948,8 @@ export function buildOverviewHead(input: {
   const warnByRate = todayCalls >= 20 && todaySuccessRate < 90
   const warnByFailures = todayFailed > 0 && todayFailed >= 3
   const badByRate = todaySuccessRate < 80 && todayFailed >= 3
-  // bad 与「仅成功率告警」两个分支结论同文案：单源一份（R6 复读单源化）
-  const rateAttentionHeadline = `需要关注：今日成功率 ${todaySuccessRate}%`
+  // 结论行只写状态词，不带读数（2026-10-22 用户：标题就是「需要关注」，其他内容放明细行）
+  const rateAttentionHeadline = '需要关注'
   const rateAttentionSubline = `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
   if (todayCalls === 0) {
     if (todayOnlySimulated) {
@@ -968,7 +982,7 @@ export function buildOverviewHead(input: {
     return {
       tone: 'warn',
       score: todaySuccessRate,
-      headline: `需要关注：今日失败 ${todayFailed} 次`,
+      headline: '需要关注',
       subline: `今日 ${todayCalls} 次调用 · 成功率 ${todaySuccessRate}%。`
     }
   }
@@ -1100,6 +1114,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   const activeTrend = trendOf(activeUsers, Number(users.activeTodayBaseline || 0))
   const kpis = [
     {
+      key: 'todayCalls' as const,
       label: '今日调用',
       value: fmt(todayCalls),
       trend: callsTrend,
@@ -1109,24 +1124,29 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
          家法与 OpsContent「hint = 一短句可见口径」一致，卡面不再同时出现两个不同量纲的数。
          「N 个 Skill 近 24h 有调用」从「进行中对话」卡迁来（2026-10-14 KPI 审计）：它是
          平台活跃面的事实，挂在本卡（平台用量）才算同域。 */
-      hint: '只统计真实用户 · 今日截至现在（非全日）',
+      /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：副行里的视角复述
+         （「只统计真实用户」）撤掉——右上角真实/测试开关已表达；留「非全日」这条
+         会改变读数理解的完整性说明 */
+      hint: '',
       note: [
         todayCallsAll > todayCalls ? `若含虚拟与测试共 ${fmt(todayCallsAll)} 次` : '',
         `${fmt(Number(agents.activeAgents24h || 0))} 个 Skill 近 24h 有调用`,
       ].filter(Boolean).join(' · '),
     },
     {
+      key: 'todaySuccessRate' as const,
       label: TERMS.healthScore,
       value: todayCalls > 0 ? `${todaySuccessRate}%` : '—',
       foot: todayFailed > 0 ? `失败 ${todayFailed}` : todayOnlySimulated ? '今日无真实调用' : '无失败',
-      hint: '失败数 / 调用数 · 只统计真实用户',
+      hint: '',
     },
     {
+      key: 'activeUsers' as const,
       label: '用户活跃',
       value: fmt(activeUsers),
       trend: activeTrend,
       foot: `今日新增 ${fmt(Number(users.newToday || 0))} · ${baseNote(!!activeTrend)}`,
-      hint: '今日有学习会话的用户 · 只计真实用户',
+      hint: '',
       note: `总用户 ${users.total ?? 0}`,
     },
     {
@@ -1137,10 +1157,11 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       // 同源同数（都取 conv.active），同屏复读三处（KPI 值 + 闭环环 + 该环 title）。
       // 闭环卡是本页招牌块，把「进行中」留给它单源承载；本卡改读会话总量这个 KPI 级读数，
       // 与另三张（今日调用/成功率/用户活跃）同为「总量」量纲，不再是闭环的一个子读数。
+      key: 'goalConversations' as const,
       label: '目标对话',
       value: fmt(Number(conv.active || 0) + Number(conv.completed || 0) + Number(conv.cancelled || 0)),
       foot: `累计完成 ${fmt(Number(conv.completed || 0))} 个`,
-      hint: '累计总量 · 含进行中 / 已完成 / 已取消',
+      hint: '',
     },
   ]
 
@@ -1234,14 +1255,10 @@ export const liveUsersTotal = ref(0)
  *  规模真超出时再评估改为服务端分页。 */
 const LIVE_LIST_FULL_LIMIT = 1000
 
-/**
- * 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，后端单点 utils/test-account.ts）；
- * includeTest=true 时显式包含全量并带回行标记
- */
-async function fetchLiveUsers(includeTest = false): Promise<void> {
-  // 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：includeTest 档同时带 testOnly，
-  // 后端只回虚拟 + 测试账号；真实档不带任何参数（后端默认排除）
-  const res = await adminUsersApi.getUsers({ limit: LIVE_LIST_FULL_LIMIT, ...(includeTest ? { includeTest: true, testOnly: true } : {}) })
+/** 账号列表 = 全部非虚拟账号（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+ *  虚拟学习者归自己的域不进本页；测试/审计账号照常列出、行内带备注，不再有视角开关。 */
+async function fetchLiveUsers(): Promise<void> {
+  const res = await adminUsersApi.getUsers({ limit: LIVE_LIST_FULL_LIMIT })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.users || body.items || []
   liveUsersTotal.value = Number(body.pagination?.total || items.length)
@@ -1261,9 +1278,14 @@ async function fetchLiveUsers(includeTest = false): Promise<void> {
   }))
 }
 
-/** 用户列表数据隔离切换：切换「含虚拟/测试」后重拉列表（默认仅真实由 loadLiveData 兜底） */
-export async function liveSetUsersIncludeTest(includeTest: boolean): Promise<void> {
-  await fetchLiveUsers(includeTest)
+/** 账号域重拉（口径切换退役后只剩显式刷新：创建/恢复/删除后用） */
+export async function refreshLiveUsers(): Promise<void> {
+  await fetchLiveUsers()
+}
+
+/** 学习者域重拉（批量重算后用） */
+export async function refreshLiveLearners(): Promise<void> {
+  await fetchLiveLearners()
 }
 
 export async function liveCreateUser(data: { name: string; email: string; password: string; admin: boolean }): Promise<void> {
@@ -1311,7 +1333,10 @@ export interface LiveLearner {
   fatigue: string
   /** 快照置信度；缺省为 undefined（「无快照/证据不足」）而非 0——0 是「真测得 0 分」，两者必须可区分 */
   confidence: number | undefined
+  /** 快照重建时刻（排查用） */
   generatedAt: string
+  /** 学习证据最后变化的时刻（课堂/目标/任务等）；未开始学习为 null */
+  dataUpdatedAt?: string | null
   struggling: string[]
   fragile: string[]
 }
@@ -1331,9 +1356,10 @@ function mapFatigue(f?: string): string {
   return f === 'high' ? '高' : f === 'medium' ? '中' : '低'
 }
 
-async function fetchLiveLearners(includeTest = false): Promise<void> {
-  // 测试视角带 testOnly：后端只回虚拟 + 测试账号（互斥视角，见 DataScopeToggle）
-  const res = await adminLearnerModelsApi.list({ limit: 2000, ...(includeTest ? { includeTest: true, testOnly: true } : { excludeTest: true }) })
+async function fetchLiveLearners(): Promise<void> {
+  // 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注，不再单列视角）；
+  // 虚拟学习者不进教学组——它的学习数据在虚拟学习者详情「学习详情 →」里看
+  const res = await adminLearnerModelsApi.list({ limit: 2000 })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
   // P1#16 数据层：接住分页 total（此前被丢弃，KPI 只能显示「已加载 N」）
@@ -1353,13 +1379,11 @@ async function fetchLiveLearners(includeTest = false): Promise<void> {
     fatigue: mapFatigue(m.fatigueRisk as string),
     confidence: m.confidence == null ? undefined : Number(m.confidence),
     generatedAt: String(m.generatedAt || ''),
+    /* 三态：字符串＝有证据；null＝后端明确说没有；undefined＝旧后端没有该字段（前端回退 generatedAt） */
+    dataUpdatedAt: m.dataUpdatedAt === undefined ? undefined : (m.dataUpdatedAt ? String(m.dataUpdatedAt) : null),
     struggling: (m.strugglingConcepts as string[]) || [],
     fragile: (m.fragileConcepts as string[]) || []
   }))
-}
-
-export async function liveSetLearnersIncludeTest(includeTest: boolean): Promise<void> {
-  await fetchLiveLearners(includeTest)
 }
 
 export async function liveRecomputeLearner(userId: string, pathId?: string): Promise<void> {
@@ -1489,6 +1513,10 @@ export async function liveGetLearnerPredictions(userId: string, includeTest?: bo
 /** 一条活跃会话（virtual-learners 列表 activeRuns 项；与后端 virtual-run-progress 同形） */
 export interface LiveVirtualRun {
   sessionId: string
+  /** 这条运行在做哪条学习路径（null = 还没产出路径的目标阶段运行） */
+  pathId?: string | null
+  /** 路径标题（后端一次查好；缺省时前端回落到「目标阶段」） */
+  pathTitle?: string | null
   state: 'running' | 'paused'
   currentStage: string | null
   goalReady: boolean
@@ -1498,6 +1526,21 @@ export interface LiveVirtualRun {
   taskTotal: number
   /** 超过回收阈值无写入（与「无响应」列同源；暂停会话恒 false） */
   stalled: boolean
+}
+
+/** 无活跃运行时的历史摘要（按学习路径归并，每条路径只取最近一次） */
+export interface LiveVirtualRecentRun {
+  sessionId: string
+  pathId: string | null
+  pathTitle?: string | null
+  status: string | null
+  currentStage: string | null
+  updatedAt: string | null
+  goalReady: boolean
+  pathReady: boolean
+  learnStarted: boolean
+  taskDone: number
+  taskTotal: number
 }
 
 export interface LiveVirtual {
@@ -1540,6 +1583,10 @@ export interface LiveVirtual {
   activeRuns?: LiveVirtualRun[]
   /** 活跃会话全量数（含样本窗口外未展开的余量） */
   activeRunTotal?: number
+  /** 无活跃运行时的历史摘要：按学习路径归并，每条路径最近一次运行（2026-10-21） */
+  recentRuns?: LiveVirtualRecentRun[]
+  /** 历史摘要涉及的路径/阶段组总数（> recentRuns.length 时前端出「+N」） */
+  recentRunTotal?: number
   /** 最近一个运行中会话的阶段（无运行中会话时回退最近会话阶段） */
   currentStage: string | null
   createdAt: string
@@ -1664,6 +1711,18 @@ export function retryLiveVirtualStats(): Promise<void> {
   return loadLiveVirtualStats()
 }
 
+/**
+ * 只刷新「虚拟学习者」域（2026-10-21）：行内运行/暂停/继续/终止之后要立刻看到状态变化，
+ * 而 loadLiveData 在首屏加载期间会整体跳过（liveLoading 守卫），单域刷新不受这条影响。
+ */
+export async function refreshLiveVirtuals(): Promise<void> {
+  try {
+    await fetchLiveVirtuals()
+  } catch {
+    /* 单域刷新失败不打断交互：列表下一次全量刷新会补上 */
+  }
+}
+
 async function fetchLiveVirtuals(): Promise<void> {
   const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: LIVE_LIST_FULL_LIMIT })
   const body = res.data?.data ?? res.data ?? {}
@@ -1749,6 +1808,8 @@ async function fetchLiveVirtuals(): Promise<void> {
       activeRuns: Array.isArray(p.activeRuns)
         ? (p.activeRuns as LiveVirtualRun[]).map((r) => ({
             sessionId: String(r.sessionId),
+            pathId: r.pathId ? String(r.pathId) : null,
+            pathTitle: r.pathTitle ? String(r.pathTitle) : null,
             state: r.state === 'paused' ? 'paused' : 'running',
             currentStage: r.currentStage ? String(r.currentStage) : null,
             goalReady: !!r.goalReady,
@@ -1760,6 +1821,23 @@ async function fetchLiveVirtuals(): Promise<void> {
           }))
         : [],
       activeRunTotal: Number(p.activeRunTotal ?? 0),
+      /* 历史摘要：按路径归并（旧后端不返回时留空，前端回落到单条 stageProgress） */
+      recentRuns: Array.isArray(p.recentRuns)
+        ? (p.recentRuns as LiveVirtualRecentRun[]).map((r) => ({
+            sessionId: String(r.sessionId),
+            pathId: r.pathId ? String(r.pathId) : null,
+            pathTitle: r.pathTitle ? String(r.pathTitle) : null,
+            status: r.status ? String(r.status) : null,
+            currentStage: r.currentStage ? String(r.currentStage) : null,
+            updatedAt: r.updatedAt ? String(r.updatedAt) : null,
+            goalReady: !!r.goalReady,
+            pathReady: !!r.pathReady,
+            learnStarted: !!r.learnStarted,
+            taskDone: Number(r.taskDone) || 0,
+            taskTotal: Number(r.taskTotal) || 0,
+          }))
+        : [],
+      recentRunTotal: Number(p.recentRunTotal ?? 0),
       raw: p
     }
   })
@@ -1832,6 +1910,8 @@ export interface LiveApiConfig {
   defaultEvaluationModel: string
   defaultThinkingMode: 'default' | 'enabled' | 'disabled'
   defaultReasoningEffort: 'default' | 'low' | 'high' | 'max'
+  /** 输出格式默认（2026-10-22 走查：模型详情页按模型下沉；平台级保留缺省 none） */
+  defaultResponseFormat?: 'none' | 'json_object'
   connectionStatus: string
   lastCheckedAt: string
   networkPolicy: {
@@ -1883,6 +1963,10 @@ export async function liveSaveApiConfig(data: {
   defaultEvaluationModel: string
   defaultThinkingMode?: 'default' | 'enabled' | 'disabled'
   defaultReasoningEffort?: 'default' | 'low' | 'high' | 'max'
+  defaultResponseFormat?: 'none' | 'json_object'
+  /** 连接域随保存一起落盘：拉取/测试的成功或失败结果，避免刷新后回退到旧徽章 */
+  connectionStatus?: string
+  lastCheckedAt?: string
 }): Promise<void> {
   await adminApiConfigApi.updateConfig(data)
   await fetchLiveApiConfig()
@@ -2261,24 +2345,9 @@ export function clearPageCache(domain?: string): void {
   else Object.keys(pageFetchAt).forEach((k) => delete pageFetchAt[k])
 }
 
-/** 教学组统一数据口径开关（2026-10-04 用户拍板：撤页头刷新钮，整组统一「是否包含虚拟」）：
- *  是否包含虚拟学习者/测试账号——整组一个状态、localStorage 持久化跨页保持；
- *  六页页头挂同一 DataScopeToggle。切换即清全部页面 TTL 缓存：本页 watch 强制重拉，
- *  跨页导航后的首拉也按新口径（缓存键不带口径，只能整体失效）。 */
-export const liveIncludeVirtual = ref<boolean>((() => {
-  try { return localStorage.getItem('wf_include_virtual') === '1' } catch { return false }
-})())
-export function liveSetIncludeVirtual(v: boolean): void {
-  if (liveIncludeVirtual.value === v) return
-  liveIncludeVirtual.value = v
-  try { localStorage.setItem('wf_include_virtual', v ? '1' : '0') } catch { /* 隐私模式下仅内存态 */ }
-  clearPageCache()
-  /* 口径变了，域级缓存同样作废：users/learners 的 boot 拉取结果按旧口径缓存（liveFetchAt），
-     只清页面级 TTL 的话域级 ready 判定仍过关 → 切「测试」后跨页导航不触发重拉，
-     页头显示新口径而表格停留在旧口径数据。spans/skills 等域与本口径无关，不动。 */
-  delete liveFetchAt.users
-  delete liveFetchAt.learners
-}
+/* 2026-10-21 用户拍板「没有测试，测试只是备注」：教学组六页的「真实 / 测试」视角开关退役，
+   口径只剩一条——虚拟学习者归自己的域，其余账号一律照常计入。旧的 localStorage 键
+   wf_include_virtual 不再读写，留着也不会影响任何页面。 */
 /** 各域「已有数据」判定：null 型 ref 以非 null 为准，数组型以非空为准（空列表视为未就绪，下次重拉） */
 const liveDomainReady: Record<string, () => boolean> = {
   spans: () => liveSpans.value !== null,
@@ -2321,8 +2390,8 @@ export async function loadLiveData(force = false) {
     spans: async () => { liveSpans.value = await fetchLiveSpans() },
     skills: async () => { liveSkillStatsMap.value = await fetchLiveSkills() },
     overview: async () => { liveOverview.value = await fetchLiveOverview() },
-    users: () => fetchLiveUsers(liveIncludeVirtual.value),
-    learners: () => fetchLiveLearners(liveIncludeVirtual.value),
+    users: () => fetchLiveUsers(),
+    learners: () => fetchLiveLearners(),
     virtuals: fetchLiveVirtuals,
     apiConfig: fetchLiveApiConfig,
     topology: () => fetchLiveTopology(force),

@@ -1,11 +1,19 @@
 <template>
-  <section class="mk-card infra-card">
-    <div class="mk-card__head">
+  <section class="infra-card" :class="props.embedded ? 'infra-card--embedded' : 'mk-card'">
+    <div v-if="!props.embedded" class="mk-card__head">
       <h3 class="mk-card__title">
         基础设施模型
         <span class="mk-badge mk-badge--info">平台必需</span>
       </h3>
-      <span class="mk-card__meta">向量化与重排是资料语义层的底座，不随插件启停</span>
+      <button type="button" class="mk-link" :disabled="loading" @click="load">
+        {{ loading ? '刷新中…' : '刷新' }}
+      </button>
+    </div>
+    <div v-else class="infra-embedded__head">
+      <span class="infra-embedded__title">
+        基础设施模型
+        <span class="mk-badge mk-badge--info">平台必需</span>
+      </span>
       <button type="button" class="mk-link" :disabled="loading" @click="load">
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
@@ -71,10 +79,6 @@
           </div>
         </article>
       </div>
-
-      <p class="infra-hint">
-        缺失时语义召回退回结构化或余弦路径，主流程不中断。模型总览会把这两项列为平台必需缺口。
-      </p>
     </template>
 
     <Teleport to="body">
@@ -170,6 +174,11 @@ import { toast } from '@/utils/toast'
 import MkLoading from '@/components/mk/MkLoading.vue'
 
 type InfraKind = 'embedding' | 'rerank'
+
+const props = withDefaults(defineProps<{
+  /** 嵌入平台详情时去掉外层卡片与重复大标题，只留一条紧凑块头 */
+  embedded?: boolean
+}>(), { embedded: false })
 
 const loading = ref(false)
 const failed = ref('')
@@ -321,6 +330,25 @@ onMounted(load)
 
 <style scoped>
 .infra-card { container-type: inline-size; }
+.infra-card--embedded { display: grid; gap: 12px; }
+.infra-embedded__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.infra-embedded__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--mk-fs-emphasis);
+  font-weight: 600;
+  color: var(--mk-ink);
+}
+.infra-embedded__head .mk-link { margin-left: auto; }
+.infra-card--embedded .infra-alert { margin: 0; }
+.infra-card--embedded .infra-grid { padding: 0; }
 .infra-alert { margin: 12px 16px 0; }
 .infra-alert__line { display: block; }
 .infra-grid {
@@ -352,7 +380,6 @@ onMounted(load)
 .infra-test.is-ok { color: var(--mk-green); }
 .infra-test.is-bad { color: var(--mk-red); }
 .infra-test__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.infra-hint { margin: 0 16px 14px; font-size: var(--mk-fs-micro); line-height: 1.65; color: var(--mk-faint); }
 .infra-formrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .infra-check { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 @container (max-width: 420px) {

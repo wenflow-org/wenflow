@@ -24,6 +24,7 @@ const ANY_FROZEN = [
   'src/views/admin-redesign/FieldAddWizard.vue',
   'src/views/admin-redesign/FieldRoutingTable.vue',
   'src/views/admin-redesign/HealthCenter.vue',
+  'src/views/admin-redesign/MemoryReviewOverview.vue',
   'src/views/admin-redesign/Login.vue',
   'src/views/admin-redesign/MemoryReview.vue',
   'src/views/admin-redesign/OpsCenter.vue',
@@ -110,5 +111,9 @@ module.exports = [
   {
     files: ANY_FROZEN,
     rules: { '@typescript-eslint/no-explicit-any': 'off' },
+  },
+  {
+    files: ['src/components/mk/avatarName.ts'],
+    rules: { 'no-misleading-character-class': 'off' },
   },
 ];

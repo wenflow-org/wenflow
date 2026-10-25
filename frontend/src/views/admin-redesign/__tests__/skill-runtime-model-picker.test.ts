@@ -104,14 +104,13 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     expect(control.text()).toContain('deepseek-v4.1-flash')
 
     await openPicker(w, '.sdp-form__grid .mk-mp .mk-mp__control')
-    expect(optionIds(w)[0]).toBe('继承 Agent / 平台默认')
+    expect(optionIds(w)[0]).toBe('跟随平台默认')
     w.unmount()
   })
 
-  it('选到 reasoning 模型时层级同步切换', async () => {
+  it('选到 reasoning 模型时层级自动带出（不再单独选模型层级）', async () => {
     const w = await mountTab()
-    const tierSelect = w.find('.sdp-form__grid select') as ReturnType<typeof w.find>
-    expect((tierSelect.element as HTMLSelectElement).value).toBe('chat')
+    expect(w.text()).not.toContain('模型层级')
 
     await openPicker(w, '.sdp-form__grid .mk-mp .mk-mp__control')
     const acme = w.findAll('.mk-mp__opt').find((o) => o.find('.mk-mp__id').text() === 'acme-vision')
@@ -119,7 +118,27 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     await acme!.trigger('click')
     await flushPromises()
 
-    expect((tierSelect.element as HTMLSelectElement).value).toBe('reasoning')
+    expect(w.find('.sdp-model-meta').text()).toContain('reasoning')
+    // 层级随模型切到 reasoning 后，备用链只剩同层级候选（acme 自己是主模型被排除）
+    await openPicker(w, '.sdp-fallback .mk-mp__control')
+    expect(optionIds(w)).toEqual([])
+    w.unmount()
+  })
+
+  it('分节导航：默认「模型」，可切到「请求与容错」，面板互斥', async () => {
+    const w = await mountTab()
+    const nav = w.findAll('.sdp-nav__item')
+    expect(nav.map((n) => n.find('.sdp-nav__name').text())).toEqual(['模型', '生成参数', '请求与容错', '模型测试'])
+    expect(nav[0].classes()).toContain('is-on')
+    expect(nav[0].find('.sdp-nav__meta').text()).toContain('deepseek-v4.1-flash')
+    expect(w.find('#sdp-panel-model').attributes('style') || '').not.toContain('display: none')
+    expect(w.find('#sdp-panel-request').attributes('style') || '').toContain('display: none')
+
+    await nav[2].trigger('click')
+    await w.vm.$nextTick()
+    expect(nav[2].classes()).toContain('is-on')
+    expect(w.find('#sdp-panel-model').attributes('style') || '').toContain('display: none')
+    expect(w.find('#sdp-panel-request').attributes('style') || '').not.toContain('display: none')
     w.unmount()
   })
 

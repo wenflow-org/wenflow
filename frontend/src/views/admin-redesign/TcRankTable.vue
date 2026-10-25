@@ -10,15 +10,21 @@
       <!-- 成本列（审核 #112）：接口 RankEntry 已带成本桶，此前 user/model 排行未渲染，与页头
            「按模型、Skill 与时间维度追踪模型调用成本」承诺不符 -->
       <span class="tc-c tc-c--cost" role="columnheader">成本</span>
-      <span class="tc-c tc-c--share" role="columnheader">占比</span>
+      <!-- 排行表占比 = Token 占比（成本另有独立列），与导出 CSV 的 Token占比% 对齐 -->
+      <span class="tc-c tc-c--share" role="columnheader" title="Token 用量占比（金额占比在成本列单独统计）">Token 占比</span>
     </div>
 
     <div
       v-for="(r, i) in items"
       :key="r.key"
       class="tc-table__row"
-      role="row"
-      :title="rowTitle(r)"
+      :class="{ 'tc-table__row--clickable': clickable }"
+      :role="clickable ? 'button' : 'row'"
+      :tabindex="clickable ? 0 : undefined"
+      :title="clickable ? `${rowTitle(r)}。点击到执行日志查该维度调用` : rowTitle(r)"
+      @click="clickable && emit('select', r)"
+      @keydown.enter="clickable && emit('select', r)"
+      @keydown.space.prevent="clickable && emit('select', r)"
     >
       <!-- 排名徽章：1/2/3 实心蓝（前三），其余中性 -->
       <span class="tc-c tc-c--rk" role="cell">
@@ -105,9 +111,12 @@ const props = withDefaults(
         本组件不再提供 skill 档——审核 #132 删除无消费者的死分支） */
     variant: 'user' | 'model'
     totalTokens: number
+    /** 整行可点：到执行日志按该用户 / 模型筛调用明细（2026-10-24 成本下钻对称） */
+    clickable?: boolean
   }>(),
-  { totalTokens: 0 }
+  { totalTokens: 0, clickable: false }
 )
+const emit = defineEmits<{ select: [row: RankRow] }>()
 
 const nameLabel = computed(() => (props.variant === 'user' ? '用户' : '模型'))
 
@@ -164,9 +173,9 @@ function costDesc(r: RankRow): string {
   return '无已定价调用'
 }
 function costTitle(r: RankRow): string {
-  if (hasCost(r)) return `已定价 ${r.pricedCalls ?? 0} 次调用金额合计（USD）`
+  if (hasCost(r)) return ''
   if ((r.callsMissingPricing ?? 0) > 0) return `${r.callsMissingPricing} 次调用未配置模型单价，不计入金额`
-  return '本行无已定价调用'
+  return ''
 }
 
 function rowTitle(r: RankRow): string {
@@ -221,6 +230,10 @@ function rowTitle(r: RankRow): string {
   letter-spacing: 0.05em;
   color: var(--mk-faint);
 }
+/* 表头右缘对齐数值右缘：占比表头与行内 40px 数字槽同列右对齐；
+   成本列同理（否则表头文字与金额各站一边） */
+.tc-table__head .tc-c--share { text-align: right; padding-left: 14px; }
+.tc-table__head .tc-c--cost { text-align: right; }
 
 /* 行（分隔线/hover 走 mk-table 同套 token，与原型 .tbl tbody 行语言一致） */
 .tc-table__row {
@@ -229,6 +242,8 @@ function rowTitle(r: RankRow): string {
   transition: background 0.12s;
 }
 .tc-table__row:last-child { border-bottom: none; }
+.tc-table__row--clickable { cursor: pointer; }
+.tc-table__row--clickable:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .tc-table__row:hover { background: var(--mk-table-row-hover-bg); }
 
 .tc-c { min-width: 0; }
@@ -251,7 +266,7 @@ function rowTitle(r: RankRow): string {
   padding-left: 14px;
 }
 
-/* 排名徽章 */
+/* 名次文字：暗色 --mk-faint 在 surface-3 上仅 3.97:1，升到 --mk-muted */
 .tc-rank__no {
   display: inline-flex;
   align-items: center;
@@ -262,11 +277,12 @@ function rowTitle(r: RankRow): string {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   font-style: normal;
-  color: var(--mk-faint);
+  color: var(--mk-muted);
   background: var(--mk-surface-3);
   font-variant-numeric: tabular-nums;
 }
-.tc-rank__no--top { background: var(--mk-blue-bg); color: var(--mk-blue); }
+/* 前三名徽章：文字用 accent-deep（暗色 #7aa2ff），--mk-blue 在暗色浅蓝底上仅 3.96:1 */
+.tc-rank__no--top { background: var(--mk-blue-bg); color: var(--mk-accent-deep); }
 
 /* 名称列 */
 .tc-c--name { display: flex; align-items: center; gap: 9px; }
@@ -284,7 +300,8 @@ function rowTitle(r: RankRow): string {
   font-style: normal;
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
-  font-family: var(--mk-mono);
+  /* 副行是「输入 7.1M · 输出 201.0K」这类中文标签 + 数字，走正文；对齐交给 tabular-nums */
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -295,9 +312,8 @@ function rowTitle(r: RankRow): string {
 }
 
 
-/* 数字 */
+/* 数字：对齐靠 tabular-nums，字体跟正文（等宽只给 id / 代码） */
 .tc-num {
-  font-family: var(--mk-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--mk-ink);

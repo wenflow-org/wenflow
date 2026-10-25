@@ -8,8 +8,8 @@
       :sub="gcScopeSub"
     >
       <template #actions>
-        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
-        <DataScopeToggle v-model="includeTest" />
+        <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+             列表 = 全部非虚拟账号，测试账号行内备注，虚拟学习者的目标对话在虚拟学习者域看 -->
       </template>
     </MkPageHead>
 
@@ -17,39 +17,34 @@
          10-02 撤双带退役的是「状态数字 KPI」（四桶与构成带同数字复读）——本卡带只放总量/参与用户/
          近 7 天新增三个与分布带零重叠的指标，状态构成仍以分布带为唯一来源（计数全页只出现一次：
          总数升 KPI 卡后分布带副文不再复读「共 N 条」）。
-         hint = 一短句可见口径（全站家法，TokenCost 判例）；长解释收 title 悬停 -->
+         hint 只留比例式分母（「已完成 / 会话总数」）；视角复述与取数算法（按用户去重 / 按创建日）
+         于 2026-10-21 撤除，口径一律进 title -->
     <section class="mk-kpi-grid" aria-label="目标对话总量">
       <MkKpi
-        label="会话总数"
+        label="目标对话数"
         :value="stats?.total ?? '—'"
-        :hint="includeTest ? '仅虚拟学习者与测试账号' : '仅真实用户'"
-        :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
+        title="不含虚拟学习者"
       />
       <MkKpi
         label="完结率"
         :value="completionRatePct"
-        hint="已完成 / 会话总数"
-        title="已完成的目标对话占全部目标对话的比例，四舍五入到整数"
       />
       <MkKpi
         label="参与用户"
         :value="stats?.distinctUsers ?? '—'"
-        hint="按用户去重"
         title="至少发起过一次目标对话的用户数"
       />
       <MkKpi
         label="近 7 天新增"
         :value="recentCreated7d ?? '—'"
-        hint="按创建日"
         title="最近 7 天创建的目标对话数（按创建日期统计）"
       />
       <!-- P-49（#74）：停滞会话此前只活在分布带 hint 里；升为卡，0 是健康信号 -->
       <MkKpi
-        label="停滞会话"
+        label="停滞目标对话"
         :value="rows.length ? staleActiveCount : '—'"
         :tone="staleActiveCount ? 'warn' : ''"
-        hint="进行中 · 超过 7 天未更新"
-        :title="`按最近 ${LIST_LIMIT} 条列表窗口统计（非全量）。进行中、超过 ${STALLED_DAYS} 天未更新的会话数`"
+        :title="`最近 ${LIST_LIMIT} 条窗口内，进行中且超过 ${STALLED_DAYS} 天未更新`"
       />
     </section>
     <!-- stats 三态（P1#6）：失败显错误条 + 重试（原错误桶随构成带退役，2026-10-04 晚贴表分布条） -->
@@ -63,7 +58,6 @@
     <MkEmptyState
       v-if="!rows.length && !loading && !loadError"
       title="暂无目标对话"
-      description="学习者发起目标对话后自动呈现。"
     />
 
     <template v-else>
@@ -112,8 +106,8 @@
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
             <MkCols
               :col-defs="gcColDefsFiltered"
-              storage-key="wf_goal_hidden_cols"
-              :default-hidden="['constraints']"
+              storage-key="wf_goal_hidden_cols_v2"
+              :default-hidden="GC_DEFAULT_HIDDEN"
               v-model:hidden="gcHiddenCols"
             />
             <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
@@ -135,15 +129,16 @@
           @action="load(true)"
         />
         <div v-else-if="filtered.length" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长摘要/长邮箱由 .mk-cell-text / .mk-cell-main 的 max-width 截断兜底 -->
-        <table class="mk-table mk-table--click mk-table--nowrap">
+        <!-- 固定列宽（2026-10-22 与教学会话同判例）：自动布局下摘要/用户两列按当页最长文本分宽，
+             翻页整表跳动（摘要 303↔325、用户 241↔219）；改 fixed + 逐列表头宽度，余量按权重摊开。
+             长摘要/长邮箱仍由 .mk-cell-text / .mk-cell-main 的截断兜底 -->
+        <table class="mk-table mk-table--click mk-table--nowrap mk-table--fixed gc-table">
           <thead>
             <tr>
-              <th v-if="showCol('summary')">目标摘要</th>
+              <th v-if="showCol('summary')" scope="col" class="gc-c-summary">目标摘要</th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable gc-c-user"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('user')"
                 @click="toggleGcSort('user')"
@@ -151,25 +146,25 @@
               <th
                 v-if="showCol('status')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable gc-c-status"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('status')"
                 @click="toggleGcSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态 / 阶段<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('turns')"
                 scope="col"
-                class="mk-th--sortable mk-th--right"
+                class="mk-th--sortable mk-th--right gc-c-turns"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('turns')"
                 @click="toggleGcSort('turns')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="showCol('constraints')">约束条件</th>
-              <th v-if="showCol('path')">路径</th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清轮次<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th v-if="showCol('constraints')" scope="col" class="gc-c-constraints">约束条件</th>
+              <th v-if="showCol('path')" scope="col" class="gc-c-path">路径</th>
               <th
                 v-if="showCol('stageDate')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable gc-c-stage-date"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('stageDate')"
                 @click="toggleGcSort('stageDate')"
@@ -177,24 +172,25 @@
               <th
                 v-if="showCol('created')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable gc-c-created"
                 :title="sortWindowTitle"
                 :aria-sort="gcSortState('created')"
                 @click="toggleGcSort('created')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('created')">创建时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right gc-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" tabindex="0" @click="goConsole(r)" @keydown.enter.self.prevent="goConsole(r)">
+            <tr v-for="r in paged" :key="r.id" tabindex="0" @click="openDetail(r)" @keydown.enter.self.prevent="openDetail(r)">
               <td v-if="showCol('summary')">
                 <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID。
+                     2026-10-23 走查：会话 ID 副行撤除——它是内部键，本页搜索也不匹配 ID，
+                     截图里逐行 `gc_1792…` 只增噪点；ID 只在排障时从日志取用。
                      列序统一（2026-10-03）：主体列恒在首（同 TS 会话/OC 路径/MR 学习者），用户列随后。
                      摘要改两行档 .mk-cell-text--wrap（2026-10-03 用户反馈「截断到看不清含义」）：
                      单行 320px 只露出 ~24 字，两行档保留语义骨架（同虚拟学习者倾向列判例） -->
                 <div class="mk-cell-main">
                   <strong class="mk-cell-text--wrap" :title="r.summary">{{ r.summary }}</strong>
-                  <span class="mk-cell-sub mono" :title="`会话 ID ${r.id}`">{{ r.id }}</span>
                 </div>
               </td>
               <td>
@@ -212,34 +208,25 @@
                       @click.stop="openLearner(r.userId)"
                       @keydown.enter.stop.prevent="openLearner(r.userId)"
                     >{{ r.userName }}</button>
-                    <span class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
-                  </div>
-                  <div class="gc-tags">
-                    <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
-                    <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
+                    <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
+                    <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不再复读 -->
+                    <span v-if="emailSubline(r.userEmail, r.userName) || r.isTestAccount" class="mk-cell-subline">
+                      <span v-if="emailSubline(r.userEmail, r.userName)" class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
+                      <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test" title="用于测试与审计的账号">测试</span>
+                    </span>
                   </div>
                 </div>
               </td>
               <td v-if="showCol('status')">
-                <!-- 2026-10-15 用户拍板：状态与阶段合并为一列（两列编码同一件事——都源自
-                     status/stage 两个字段且阶段序号已含终态折算；拆两列时 active 行状态恒「—」、
-                     终态行词又与阶段重复，纯噪声）。合并后一列读完：
-                       进行中 → 阶段词（澄清中/方案确认中…）+ 四点过程条
-                       终态/异常 → 结果词（已完成/失败/已取消/已放弃）+ 过程条
-                     即：状态列只在说得出阶段说不出的话（终止方式）时压过阶段词。 -->
-                <div class="gc-stage-cell" :title="statusHint(r.status)">
-                  <div class="gc-stage-cell__head">
-                    <template v-if="showsStatusBadge(r.status)">
-                      <span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span>
-                    </template>
-                    <template v-else>
-                      <span class="mk-badge" :class="stageBadgeCls(r.stage)">{{ stageText(r.stage) || '—' }}</span>
-                    </template>
-                    <span v-if="r.timeline" class="gc-stage-cell__dots" :title="stageDotsTitle(r)" aria-label="阶段进度">
-                      <i v-for="d in GOAL_STAGE_TOTAL" :key="d" class="gc-stage-cell__dot" :class="{ 'is-on': d <= r.stageIndex + 1 }"></i>
-                    </span>
-                  </div>
-                </div>
+                <!-- 2026-10-22 用户「目标对话怎么会有阶段这一说？不应是完成未完成吗」：
+                     状态列只回答完成没有——进行中 / 已完成 / 已取消 / 失败 / 已放弃。
+                     四步过程点条退役；进行中的细阶段（正在了解情况 / 方案待确认 /
+                     等待生成路径）收进悬停说明，不再作为徽章词或列名上屏。 -->
+                <span
+                  class="mk-badge"
+                  :class="isOngoingStatus(r.status) ? 'mk-badge--info' : statusBadge(r.status)"
+                  :title="statusCellTitle(r)"
+                >{{ isOngoingStatus(r.status) ? '进行中' : statusLabel(r.status) }}</span>
               </td>
               <td v-if="showCol('turns')" class="mk-num">
                 <!-- 原型「澄清进度」列 = meter turns/targetTurns；本系统无目标轮次分母，
@@ -256,9 +243,10 @@
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="showCol('path')">
-                <!-- 原型 open-path 习惯：生成过的路径成跳转（2026-10-12 起落会话座舱 Path 页签）；后端未回 pathId 时回落徽章 -->
-                <button v-if="r.pathId" type="button" class="mk-btn mk-btn--sm" title="查看该目标的学习路径" @click.stop="openPathPage(r)">查看路径</button>
-                <span v-else-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
+                <!-- 2026-10-22 用户「查看路径和详细重复了」：两者都开 session-real 会话座舱，
+                     只是一个落 Path 页签、一个落默认页签。列只回答「路径有没有生成」，
+                     下钻统一走操作列「详情」，座舱内再切页签（TeachingSessions 同形态）。 -->
+                <span v-if="r.pathId || r.hasPath" class="mk-badge mk-badge--info" title="学习路径已生成">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="showCol('stageDate')">
@@ -268,23 +256,24 @@
                 <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td v-if="showCol('created')"><span class="mk-cell-sub mono" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
+              <!-- 相对时间是人话（「3 天前」），走正文无衬线；等宽只留给 id/代码类机器串 -->
+              <td v-if="showCol('created')"><span class="mk-cell-sub" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
               <td>
                 <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）。
                      行内只留高频项「详情」；低频项（链路 / 重建路径 / 删除会话）一律收 ⋯ 菜单——
                      2026-10-15 用户拍板「链路做到折叠里面」，链路不再是高频，与另两项同为低频矫正操作。
                      右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
                 <div class="mk-actions">
-                  <button type="button" class="mk-btn mk-btn--sm" title="打开会话座舱（只读监控）" @click.stop="goConsole(r)">详情</button>
+                  <button type="button" class="mk-btn mk-btn--sm" title="打开只读详情" @click.stop="openDetail(r)">详情</button>
                   <div class="mk-menu">
                     <!-- aria-expanded 按行判定（2026-10-06 审核 #50）：此前绑全局 menuOpen，
                          菜单一开 15 个按钮同时报 expanded=true；role=menu/menuitem 兑现
                          aria-haspopup="menu" 的语义承诺 -->
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
                     <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" role="menuitem" title="查看该会话的执行链路（只读）" @click="goTrace(r)">链路</button>
-                      <button type="button" class="mk-menu__item" role="menuitem" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '对该会话重新生成学习路径'" @click="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuRemove(r)">删除会话</button>
+                      <button type="button" class="mk-menu__item" role="menuitem" title="查看该目标对话的执行链路（只读）" @click="goTrace(r)">链路</button>
+                      <button type="button" class="mk-menu__item" role="menuitem" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '对该目标对话重新生成学习路径'" @click="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
+                      <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuRemove(r)">删除目标对话</button>
                     </div>
                   </div>
                 </div>
@@ -298,7 +287,7 @@
           v-else
           icon="◌"
           :title="keyword || statusFilter || noPathOnly ? '当前筛选无匹配' : '暂无目标对话'"
-          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : (includeTest ? '当前范围（虚拟学习者与测试账号）暂无目标对话。' : '当前只显示真实用户，切「测试」可查看虚拟 / 测试账号的对话。')"
+          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : '暂无目标对话。'"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -316,31 +305,15 @@
   </div>
 </template>
 
-<script lang="ts">
-/* G3a（2026-10-10）：列表态快照必须活过组件卸载——行点击「查看路径」进 PathDetail 二级页时
-   AdminConsole 互斥卸载本组件（<component :is> 无 KeepAlive，OpsContent.vue #39 同款场景），
-   <script setup> 作用域的变量随实例销毁，故快照放模块级（本 <script> 块每模块只执行一次），
-   才能跨「下钻 → 返回」存活。
-   为什么不走 openSubPage 的 from：from.view 必须是 SubPageView 二级页类型，目标对话是
-   一级列表页没有合法值可填。consume-once：只服务「路径格下钻 → 返回列表」一个场景，
-   不落 localStorage（防跨会话残留旧筛选）；下钻后经侧栏去别的场景再回来的窄边角
-   会消费一次旧快照，与 OpsContent 先例同口径，可接受。 */
-interface GcSavedListState {
-  page: number
-  keyword: string
-  statusFilter: string
-  noPathOnly: boolean
-}
-let gcSavedListState: GcSavedListState | null = null
-</script>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
+import { useListQueryState } from './learner-profile'
 import { useSessionDrill } from './useSessionDrill'
-import { errMsg, timeAgo, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, stageTimeline, monthDayText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
+import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
+import { stageProgressIndex, stageTimelineText, stageTimeline, monthDayText, GOAL_STAGE_TOTAL, statusText } from './statusText'
 import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -352,10 +325,9 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
-import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import { emailSubline } from '@/components/mk/avatarName'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 
@@ -454,7 +426,7 @@ const gcStatusPills = computed<Array<{ key: string; label: string; n: number | n
       key: 'cancelled',
       label: '已取消',
       n: s ? gcCancelledCount.value : null,
-      title: '含用户取消、失败中断与长时间无操作自动回收的会话'
+      title: '含用户取消、失败中断与长时间无操作自动回收的目标对话'
     }
   ]
 })
@@ -467,37 +439,34 @@ const completionRatePct = computed(() => {
   const n = Number(s.completionRate)
   return Number.isFinite(n) ? `${Math.round(n)}%` : '—'
 })
-/* G3a（2026-10-10）：挂载时一次性读回「路径格下钻前」存下的列表态（consume-once，
-   存储见文件顶 <script> 块）；未下钻过的普通进入读回 null，一切走初值 */
-function takeSavedListState(): GcSavedListState | null {
-  const s = gcSavedListState
-  gcSavedListState = null
-  return s
-}
-const restoredListState = takeSavedListState()
-const keyword = ref(restoredListState?.keyword || '')
-const statusFilter = ref(restoredListState?.statusFilter || '')
+const keyword = ref('')
+const statusFilter = ref('')
 /* 「未生成路径」快筛（2026-10-08）：进行中且尚未生成学习路径的运营卡点会话。
    与分布条状态筛选叠加为 AND；再点取消。不显计数——分布条计数是服务端全量口径
    （stats），本快筛只能按已加载窗口算，同屏两个口径会数字打架（同 TS 页教训） */
-const noPathOnly = ref(restoredListState?.noPathOnly || false)
+const noPathOnly = ref(false)
 /** 「未生成路径」谓词：hasPath 与路径列「—」同口径（均由后端 learningPathId 推导）；
     已完成桶口径 = 已生成学习路径，故「未生成」只拦进行中，两处口径呼应不矛盾 */
 const isPathPendingRow = (r: Row) => r.status === 'active' && !r.hasPath
 /** pill 命中数（2026-10-11 统一判例：筛选 pill 一律显命中数；按当前已加载窗口计） */
 const pathPendingCount = computed(() => rows.value.filter(isPathPendingRow).length)
 
-/* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/澄清进度/约束条件/路径/创建时间 可隐藏，用户/操作固定 */
+/* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/澄清轮次/约束条件/路径/最近活动/创建时间 可隐藏，用户/操作固定。
+   2026-10-22 默认只留 6 列（目标摘要/用户/状态/澄清轮次/路径/最近活动/操作）：
+   · 创建时间：与「最近活动」同为时间轴，分诊只看最近活动；
+   · 约束条件：真实数据稀疏（~35% 有值），逐条约束在详情里看。
+   两项仍可在「列」菜单打开；存储键升 v2，旧本地配置不覆盖新默认。 */
+const GC_DEFAULT_HIDDEN = ['constraints', 'created'] as const
 const gcColDefs = [
   { key: 'summary', label: '目标摘要', title: '对话目标摘要' },
-  { key: 'status', label: '状态 / 阶段', title: '会话状态与所在阶段（合并列）：进行中出阶段词 + 过程条，终态/异常出结果词 + 过程条' },
-  { key: 'turns', label: '澄清进度', title: '学习者发言轮次（澄清深度）' },
+  { key: 'status', label: '状态', title: '目标对话状态：进行中 / 已完成 / 已取消 / 失败 / 已放弃' },
+  { key: 'turns', label: '澄清轮次', title: '学习者在目标澄清里的发言轮次（不是完成度）' },
   { key: 'constraints', label: '约束条件', title: '澄清中收集的可用时间 / 期限等约束' },
   { key: 'path', label: '路径', title: '路径是否已生成' },
-  { key: 'stageDate', label: '最近活动', title: '会话最近一次活动日（进行中=最后活动日，已完成=完成日，失败/取消=终态日）；悬停看完整阶段时间线' },
+  { key: 'stageDate', label: '最近活动', title: '目标对话最近一次活动日：进行中取最后活动日，已完成取完成日，失败或取消取终态日。完整阶段时间线见行内展开' },
   { key: 'created', label: '创建时间', title: '对话创建时间' },
 ] as const
-const gcHiddenCols = ref<Set<string>>(new Set())
+const gcHiddenCols = ref<Set<string>>(new Set<string>(GC_DEFAULT_HIDDEN))
 
 /* 窄档列降级（UI 方案 §1 LAYOUT-3）：8 列 nowrap 表（2026-10-15 状态+阶段合并后少一列）
    在 1440 容器级仍有横滚，操作列易被挤出。
@@ -549,18 +518,11 @@ watch(
       void router.replace({ query: q })
     } else {
       // 目标可能超出最近 LIST_LIMIT 条或已被删除：明示而非静默忽略
-      toast.warning(`未能定位该会话：可能不在最近 ${LIST_LIMIT} 条内，或已被删除`)
+      toast.warning(`未能定位该目标对话：可能不在最近 ${LIST_LIMIT} 条内，或已被删除`)
     }
   },
   { immediate: true }
 )
-
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；口径整组统一（2026-10-04 用户拍板）——
-   get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
 
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
@@ -592,7 +554,7 @@ const statusLabel = (s: string) => statusText(s) || '—'
 const statusBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : s === 'cancelled' ? 'mk-badge--bad' : 'mk-badge--muted'
 
-/** 头像 tone（列表行与抽屉头共用；语义与 MkVariantBadge 一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
+/** 头像 tone（列表行与抽屉头共用；与全站身份色一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
 function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtual' | 'test' | 'default' {
   return r.isVirtualLearner ? 'virtual' : r.isTestAccount ? 'test' : 'default'
 }
@@ -601,8 +563,8 @@ function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtua
  *  列表里给一句解释，避免「会话莫名停下」；不新增后端字段，仅是文案。 */
 const statusHint = (s: string | null | undefined) => {
   const k = String(s || '').toLowerCase()
-  if (k === 'abandoned') return '会话已中止：因长时间无操作被自动回收，可在对应学习中重新发起'
-  if (k === 'failed') return '会话失败：可在会话座舱查看失败原因与日志'
+  if (k === 'abandoned') return '目标对话已中止：因长时间无操作被自动回收，可在对应学习中重新发起'
+  if (k === 'failed') return '目标对话失败：可在只读详情查看失败原因与日志'
   return ''
 }
 
@@ -611,11 +573,24 @@ const statusHint = (s: string | null | undefined) => {
     故留「—」把进度让给阶段列；终态（已完成/已取消）与异常终止（失败/已放弃）阶段列表达不了，才单独成徽章。
     黑名单（仅列进行中族）而非白名单：将来新增的终态/异常状态自动出词，不会静默丢信息。 */
 const ONGOING_STATUS = new Set(['active', 'in_progress', 'inprogress', 'running'])
-const showsStatusBadge = (s: string | null | undefined) => !ONGOING_STATUS.has(String(s || '').toLowerCase())
+const isOngoingStatus = (s: string | null | undefined) => ONGOING_STATUS.has(String(s || '').toLowerCase())
 
-/** 阶段过程点条工具提示（人话）：当前第 n/total 步（创建→澄清→方案→完成） */
-function stageDotsTitle(r: Row): string {
-  return `${stageText(r.stage) || '—'} · 第 ${r.stageIndex + 1}/${GOAL_STAGE_TOTAL} 步（${GOAL_STAGE_STEP_LABELS.join('→')}）`
+/** 进行中行的细阶段（动作词，2026-10-22）：只进悬停说明，不占列宽/徽章 */
+const ONGOING_STAGE_HINT: Record<string, string> = {
+  initial: '尚未开始澄清',
+  understanding: '正在了解你的情况',
+  clarifying: '正在了解你的情况',
+  proposing: '方案待学习者确认',
+  proposal: '方案待学习者确认',
+  planning: '正在生成学习方案',
+  ready: '方案已确认，等待生成路径'
+}
+
+/** 状态格悬停说明：进行中给阶段动作 + 第几步；终态给终止原因 */
+function statusCellTitle(r: Row): string {
+  if (!isOngoingStatus(r.status)) return statusHint(r.status)
+  const hint = ONGOING_STAGE_HINT[String(r.stage || '').toLowerCase()] || '进行中'
+  return `${hint} · 第 ${r.stageIndex + 1}/${GOAL_STAGE_TOTAL} 步`
 }
 
 /** 目标摘要：description 优先，其次 collectedData 里的 goal 字段 */
@@ -681,7 +656,7 @@ function mapRow(c: Record<string, unknown>): Row {
 /* 客户端排序：默认保持服务端顺序。窗口截断时（含测试口径触 LIST_LIMIT）排序与关键词
    只覆盖已加载窗口，属「窗口内排序」而非全量排序 —— 由 sortWindowTitle 在表头与卡头披露
    （2026-10-06 审核 #35：原注释「全量拉取 → 排序诚实」在截断口径下不成立） */
-const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows, sortKey: gcSortKey, reset: gcResetSort } = useTableSort<Row>({
+const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows, sortKey: gcSortKey, sortDir: gcSortDir, reset: gcResetSort } = useTableSort<Row>({
   accessors: {
     user: (r) => r.userName,
     status: (r) => r.stageIndex,
@@ -718,15 +693,40 @@ function clearFilters() {
    列表为客户端全量数据（limit:LIST_LIMIT 拉取后本地筛选），按页切片。
    回第 1 页只监听筛选输入（G3b，2026-10-10，对齐 TeachingSessions/OpsContent 判例）：
    此前监听 filtered 结果——删除行/口径切换回填数据也会把页码拽回第 1 页；
-   且快照恢复的页码会被「重挂载后 rows 回填」触发的 filtered watch 打回初值，
-   G3a 的 page 恢复就永远无效。越界收敛由 Pagination 自带 watcher 兜底 */
-const page = ref(restoredListState?.page || 1)
+   页码恢复交给 URL（下方 useListQueryState），不再依赖组件内快照。
+   越界收敛由 Pagination 自带 watcher 兜底 */
+const page = ref(1)
 const pageSize = ref(15)
+/* 列表态 URL 化（2026-10-24）：此前用模块级快照，刷新/分享即回初值。
+   参数名：status / q / page / size / noPath；缺省值不写 URL。 */
+/* helper 的中性档约定是 'all'，本页内部用空串表示「全部」（'' 才能绕过过滤分支）：
+   用可写计算属性做两侧映射，URL 仍写 pill=all 时归一成空串 */
+const gcPillFilter = computed({
+  get: () => statusFilter.value || 'all',
+  set: (v: string) => { statusFilter.value = v === 'all' ? '' : v },
+})
+useListQueryState(
+  {
+    pill: gcPillFilter,
+    keyword,
+    page,
+    pageSize,
+    allowedPills: ['all', 'active', 'completed', 'cancelled'],
+    extra: [{
+      key: 'noPath',
+      get: () => (noPathOnly.value ? '1' : ''),
+      set: (v) => { noPathOnly.value = v === '1' },
+    }],
+  },
+  { pill: 'status' }
+)
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([keyword, statusFilter, noPathOnly], () => {
+watch([keyword, statusFilter, noPathOnly, gcSortKey, gcSortDir], () => {
+  // 排序/筛选变化必须回第 1 页（2026-10-22 走查：在第 2 页点排序仍停在第 2 页，
+  // 与教学组其余页不一致——它们都在 watch 里带 sortKey/sortDir）
   page.value = 1
 })
 
@@ -760,12 +760,8 @@ async function load(force = false) {
   loadError.value = ''
   try {
     // 首屏主体是会话列表：只 await 列表接口，页面就绪时间不再被 stats 拖住；
-    // 测试视角（2026-10-10「真实/测试」互斥视角）带 testOnly 只回虚拟 + 测试账号的对话
-    const listRes = await adminGoalConversationsApi.list({
-      limit: LIST_LIMIT,
-      includeTest: includeTest.value,
-      testOnly: includeTest.value || undefined,
-    })
+    // 默认口径 = 全部非虚拟账号（2026-10-21 拍板：虚拟学习者的对话归虚拟学习者域）
+    const listRes = await adminGoalConversationsApi.list({ limit: LIST_LIMIT })
     const body = listRes.data?.data ?? listRes.data ?? {}
     rows.value = ((body.conversations as Record<string, unknown>[]) || []).map(mapRow)
     listTotal.value = Number(body.pagination?.total ?? rows.value.length)
@@ -788,7 +784,7 @@ async function load(force = false) {
   /* stats 非阻塞后台拉取：到达后回填 KPI 面板（总量/参与用户/近 7 日新增）与状态分布带。
      三态（P1#6）：失败时置 statsError（错误条 + 重试，KPI 卡显「—」），
      绝不回滚列表、不阻塞首屏；代际不符（已发起新一轮 load）的迟到响应直接丢弃 */
-  void adminGoalConversationsApi.getStats(includeTest.value, includeTest.value)
+  void adminGoalConversationsApi.getStats()
     .then((statsRes) => {
       if (seq !== statsReqSeq) return
       const s = statsRes?.data?.data ?? statsRes?.data
@@ -829,34 +825,22 @@ function openLearner(userId: string) {
 }
 const { goTrace, goConsole } = useSessionDrill(closeDetail)
 
-/** 页头副题随 includeTest 切换如实（评审 §口径）：默认仅真实，切「含测试」后不得再声称仅真实用户口径 */
-const gcScopeSub = computed(() =>
-  includeTest.value
-    ? '与学习者澄清真实目标 · 约束条件与澄清轮次（含虚拟学习者与测试账号）'
-    : '与学习者澄清真实目标 · 约束条件与澄清轮次（仅真实用户）'
-)
+/** 页头副题只说这一页管什么；当前视角由右上角真实/测试开关表达，副文不再复述
+ *  （2026-10-21 用户「右上角已经是真实了啊」同一判例：界面不重复控件状态） */
+const gcScopeSub = '与学习者澄清真实目标 · 约束条件与澄清轮次'
 
-/** 路径格 → 会话座舱的 Path 阶段页签（2026-10-12 拍板：路径不再有独立详情页）。
- *  行本身就是目标对话（r.id），直接开座舱并落 Path 页签，无需 id 反查。
- *  G3a（2026-10-10）：目标对话是一级列表页，from.view 无合法 SubPageView 可填，
- *  改走列表态快照（判例 OpsContent.vue #39）：出站前存 page/筛选，返回重挂载时
- *  一次性读回——此前返回直接落「第 1 页 + 无筛选」的初值列表，翻页/筛选全丢。 */
-function openPathPage(r: Row) {
-  if (!r.pathId) return
-  gcSavedListState = {
-    page: page.value,
-    keyword: keyword.value,
-    statusFilter: statusFilter.value,
-    noPathOnly: noPathOnly.value,
-  }
-  openSubPage('session-real', r.id, { stage: 'path' })
+/** 进会话座舱（行点击 / 操作列「详情」共用；路径与对话同一座舱的不同页签）。
+ *  2026-10-24：列表态（页码 / 关键词 / 状态 / 未生成路径）改由 URL 承载，
+ *  不再用模块级一次性快照——返回、刷新、复制链接都能复原。 */
+function openDetail(r: Row) {
+  goConsole(r)
 }
 
 async function regenerate(r: Row) {
   if (r.regenerating) return
   const ok = await askConfirm({
     title: '重建学习路径',
-    message: `确认为「${r.userName}」重新生成学习路径？\n将基于该会话重新生成路径，覆盖当前路径。`,
+    message: `确认为「${r.userName}」重新生成学习路径？\n将基于该目标对话重新生成路径，覆盖当前路径。`,
     confirmText: '重建路径',
     danger: false
   })
@@ -888,7 +872,7 @@ async function remove(r: Row) {
   try {
     await adminGoalConversationsApi.remove(r.id)
     rows.value = rows.value.filter((x) => x.id !== r.id)
-    toast.success('会话已删除')
+    toast.success('目标对话已删除')
     doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
@@ -898,10 +882,6 @@ async function remove(r: Row) {
 
 watch(isLive, () => {
   void load()
-})
-/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉，绕过 TTL 缓存） */
-watch(includeTest, () => {
-  void load(true)
 })
 onMounted(() => {
   if (isLive.value) void load()
@@ -916,23 +896,33 @@ onMounted(() => {
    KPI 带 / 分布带 / 列表卡，全树 .mk-page--fill 计数 0）。同形规则在 People(pp-host) /
    OpsHub(oh-host) / ApiConfig(ac-host) 仍在用，别照抄删除。 */
 .gc-host > .mk-status { flex: none; }/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
-/* 行点击/焦点态已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） *//* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
-/* 用户格 min-width：本表为自动布局（无 colgroup），补「澄清进度/约束条件」两列后
-   该列会被内容多的列挤到 ~90px（2026-10-02 视觉核对实测），名字/邮箱全截断——
-   给内容格兜底宽度，压缩由可换行的摘要/约束列吸收 */
-.gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }
+/* 行点击/焦点态已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
+/* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：摘要/用户两列
+   在 auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊到各列。
+   宽度取 1280 下的现值再留一点余量，保证 1200 档不出横滚。 */
+/* 2026-10-24 视觉修复：状态（100）/创建时间（84）让出的宽度归目标摘要主列，
+   摘要两行档不再在 240px 里只露出语义碎片。 */
+.gc-c-summary { width: 330px; }
+.gc-c-user { width: 160px; }
+.gc-c-status { width: 84px; }
+.gc-c-turns { width: 68px; }
+.gc-c-constraints { width: 140px; }
+.gc-c-path { width: 82px; }
+.gc-c-stage-date { width: 78px; }
+.gc-c-created { width: 72px; }
+.gc-c-act { width: 90px; }
+/* fixed 档里列宽即契约：行内 min-width 会把内容顶出单元格，统一归零由截断兜底 */
+.gc-table .gc-user { min-width: 0; }
+.gc-table .gc-c-summary .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
+/* 用户格布局：列宽由 fixed 表头契约决定（.gc-c-user），行内不再设 min-width——
+   2026-10-22 之前给过 200/176px 兜底，是为自动布局下防被长摘要挤扁；fixed 后
+   min-width 只会把内容顶出单元格，已由上方 .gc-table .gc-user 归零 */
+.gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 /* 分布条已退役（2026-10-17）：原页面级分布带连同 .gc-distband 类一起下线，
    卡头状态 pills 与「未生成路径」快筛并列；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
-.gc-user .mk-cell-main { min-width: 0; flex: 1; }.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
-.gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }.gc-stage-cell__dots { display: inline-flex; gap: 3px; }.gc-stage-cell__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--mk-radius-pill);
-  /* 未点亮色走 --mk-line（2026-10-06 审核 #47）：原私持字面量 #e2e8f2 是全仓唯一，
-     与 --mk-line 同一用途成对令牌（亮 #e6ebf4 / 暗 #36373c 由 tokens 切换） */
-  background: var(--mk-line);
-}.gc-stage-cell__dot.is-on { background: var(--mk-blue); }.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }/* gc-stage-cell__tl→.mk-cell-sub、gc-summary→.mk-cell-text（2026-10-03 方言收敛，截断/灰阶由原语承担） *//* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
-.gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
+.gc-user .mk-cell-main { min-width: 0; flex: 1; }
+.gc-user > .mk-badge { flex: none; }/* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
+.gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
    长摘要 .mk-cell-text 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：裸 `.mk-table td { white-space: nowrap }` 收敛为全局修饰类
    .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝。 */
@@ -943,9 +933,9 @@ onMounted(() => {
    状态/阶段合并列含四点过程条（4×6px + gap ≈ 45px）保留：min-width 120px 已容得下点条 */
 @media (max-width: 1599px) {
   .mk-table th, .mk-table td { padding-inline: 12px; }
-  .gc-user { min-width: 176px; }
-  .gc-stage-cell { min-width: 120px; }
-  .mk-cell-main .mk-cell-text--wrap { min-width: 180px; }
+  /* fixed 表里列宽即契约（.gc-c-user），行内再设 min-width 会把内容顶出单元格 */
+  .gc-user { min-width: 0; }
+  .mk-cell-main .mk-cell-text--wrap { min-width: 0; }
 }
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */

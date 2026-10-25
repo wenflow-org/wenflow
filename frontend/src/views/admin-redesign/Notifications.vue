@@ -95,14 +95,14 @@
             <tr v-for="n in visibleItems" :key="n.id" :class="{ 'nt-row--unread': !n.isRead }">
               <td>
                 <div class="mk-cell-main">
-                  <strong>{{ n.title }}</strong>
+                  <strong :title="n.title">{{ n.title }}</strong>
                   <span class="mk-cell-sub" :title="n.body || ''">{{ n.body || '—' }}</span>
                 </div>
               </td>
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ n.user?.name || '—' }}</strong>
-                  <span class="mk-cell-sub">{{ n.user?.email || n.userId }}</span>
+                  <span class="mk-cell-sub" :title="n.user?.email || n.userId">{{ n.user?.email || n.userId }}</span>
                 </div>
               </td>
               <td><span class="mk-badge" :class="kindBadge(n.kind)">{{ kindText(n.kind) }}</span></td>
@@ -145,8 +145,7 @@
         icon="◌"
         min
         title="还没有通知"
-        description="发送全员或定向通知后，用户端会收到站内信。"
-        action-text="发送第一条通知"
+        :action-text="embedded ? '' : '发送第一条通知'"
         @action="openSend"
       />
       <Pagination
@@ -220,7 +219,7 @@
                   @click="targetId = u.id"
                 >
                   <strong>{{ u.name || u.email }}</strong>
-                  <span class="mk-cell-sub">{{ u.email }}</span>
+                  <span class="mk-cell-sub" :title="u.email">{{ u.email }}</span>
                 </button>
               </div>
               <p v-else-if="targetSearched" class="nt-none">没有匹配用户</p>
@@ -334,9 +333,11 @@ const readRate = computed(() => (total.value > 0 ? Math.round((readCount.value /
    页头基调只在加载失败时降级为 bad（原实现按 unreadTotal>0 给 warn，属误报）。 */
 const statusTone = computed(() => (failed.value ? 'mk-status--bad' : 'mk-status--ok'))
 
-const kindText = (k: string) => ({ system: '系统', announcement: '公告', achievement: '成就' }[k] || k)
+/* kind 词表：后端 deadline-notify.service 新增的 'deadline' 此前未映射，列表直出英文
+   （2026-10-23 走查截图为证）→ 补「截止提醒」；未知 kind 仍回落原文。 */
+const kindText = (k: string) => ({ system: '系统', announcement: '公告', achievement: '成就', deadline: '截止提醒' }[k] || k)
 const kindBadge = (k: string) =>
-  k === 'announcement' ? 'mk-badge--warn' : k === 'achievement' ? 'mk-badge--ok' : 'mk-badge--info'
+  k === 'announcement' || k === 'deadline' ? 'mk-badge--warn' : k === 'achievement' ? 'mk-badge--ok' : 'mk-badge--info'
 
 function fmtDate(iso?: string): string {
   if (!iso) return '—'
@@ -377,7 +378,8 @@ async function reload() {
     items.value = (body.items || []).map((n: NotifRow) => ({ ...n, busy: false }))
     total.value = body.pagination?.total ?? items.value.length
     unreadTotal.value = body.unreadTotal ?? 0
-    emit('count', total.value)
+    // 角标只报未读（待办量），总数在卡头/分页器自报
+    emit('count', unreadTotal.value)
   } catch (e) {
     failed.value = true
     toast.error(`加载失败：${errMsg(e)}`)

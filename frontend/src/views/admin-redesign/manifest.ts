@@ -25,6 +25,9 @@
  * （同日收尾：参数一致性语义重分类为 consistency——它是 core↔definition 镜像的对等比对，
  *   不是「配置改了没生效」的方向性漂移；19 处镜像滞后已按 b905880c 的 32k 预算同步归零。）
  *
+ * 2026-10-24（用户拍板）：「模型路由」tab 退役——与 Skill 详情「运行时」里的单技能配置重复。
+ * 跨 Skill 对照与批量套用收进页头「批量模型配置」弹窗；skills 页签为 Skill 运行 / Prompt 评估。
+ *
  * 2026-10-04（用户拍板）：「批量实验」场景整体下线。其运行态能力已被「虚拟学习者」页吸收
  * （批量新建 / 并发配额 / 全局限速 / 实例流水），资产输入归「学习者卡库」；且建页至今
  * batch_experiments / batch_experiment_runs 两表始终 0 行（空占位页）。侧栏「虚拟学习者」
@@ -78,9 +81,11 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 「记忆与复习」2026-10-12 一度随独立页退役，同日恢复跨用户总览（按待复习量排序的用户
   // 列表 + 到期时间轴）；单用户明细在学习者详情「记忆与复习 / 记忆调度」页签
   { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆', icon: History },
-  // 虚拟学习者组：运行态（虚拟学习者）+ 配置态（学习者卡库）；「批量实验」2026-10-04 下线
-  { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟', icon: FlaskConical },
-  { id: 'virtual-learner-cards', label: '学习者卡库', group: '虚拟学习者', glyph: '卡', icon: IdCard },
+  // 虚拟实验组：实例（虚拟学习者）+ 身份池（学习者卡库）；「批量实验」2026-10-04 下线。
+  // 2026-10-24 层级收口：组名不再与首项同名——此前侧栏连续两行「虚拟学习者」，
+  // 分组读作页面的复读；「虚拟实验」覆盖实例与身份池两个一级入口。
+  { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟实验', glyph: '拟', icon: FlaskConical },
+  { id: 'virtual-learner-cards', label: '学习者卡库', group: '虚拟实验', glyph: '卡', icon: IdCard },
   // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组）。
   // 「Prompt 评估」2026-10-04 折入 skills 宿主「Prompt 评估」页签，本组收敛为 2 项
   // （orchestrator · skills）；旧 URL /admin/prompt-eval 在 router 重定向。
@@ -93,11 +98,11 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 这一页列的是可选能力与 MCP 服务（每项能力本身就是一条 Skill），关系更近 Skill，故归入本组；
   // 旧深链 /admin/addons 与 /admin/external-capabilities 本就是本页路径，?tab=addons 由路由改投。
   { id: 'addons', label: '插件', group: 'Skill', glyph: '插', icon: Puzzle },
-  // 观测组：Token 成本并入执行日志第三 tab（成本分析）；记忆与复习移出后只剩日志双子页
-  // 2026-09-29 用户拍板拆回独立页：成本分析从执行日志宿主 tab 释放（原 2026-09-04 并入）
+  // 观测组（2026-10-24 用户「重新排一下序」）：两份日志相邻，成本分析接在读日志之后。
+  // 此前「执行日志 / 成本分析 / 审计日志」把两份日志拆在两端。
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志', icon: ScrollText },
-  { id: 'token-cost', label: '成本分析', group: '观测', glyph: '费', icon: Coins },
   { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审', icon: ShieldCheck },
+  { id: 'token-cost', label: '成本分析', group: '观测', glyph: '费', icon: Coins },
   // 系统组：原「配置」组改名；模型与接入成为 tab 宿主（接入与模型 · 外挂能力）
   // 2026-09-29 用户拍板：健康中心从 skills 宿主 tab 释放，回独立场景并归入系统组
   //（「健康检查/漂移/对账」三个 tab 本就是同一份报表的三刀，合一后独立成页）

@@ -257,3 +257,19 @@ describe('字段详情抽屉（2026-10-18 用户：抽屉贴边且超高内容�
     expect(DataFlowGraphSource).not.toContain('<dd')
   })
 })
+
+describe('画布内的跳转是原生按钮（2026-10-21 交互走查）', () => {
+  it('长程端口徽标与阶段跳转不做「带 @click 的 span」：键盘 Enter/Space 与焦点环要原生可用', () => {
+    // 反例（改前）：<span class="dfg-step__port" @click=...> / <span class="dfg-step__stage" @click=...>
+    // 没有 role/tabindex，键盘完全打不开；改成 button 后 UA 自带激活与 :focus-visible。
+    expect(DataFlowGraphSource).not.toMatch(/<span[^>]*class="dfg-step__port"[^>]*@click/)
+    expect(DataFlowGraphSource).not.toMatch(/<span[^>]*class="dfg-step__stage"[^>]*@click/)
+    // 5 处端口（入口 / 出口 / 三个步骤区各一）
+    expect((DataFlowGraphSource.match(/<button type="button" v-for="p in farPorts\[/g) || []).length).toBe(5)
+    // 开标签换成 button 后必须同步收口（改漏了浏览器只会白屏「页面加载失败」）
+    const portLines = DataFlowGraphSource.split('\n').filter((l) => l.includes('class="dfg-step__port"'))
+    expect(portLines.length).toBe(5)
+    expect(portLines.filter((l) => l.trimEnd().endsWith('</span>'))).toEqual([])
+    expect(DataFlowGraphSource).toMatch(/<button[^>]*class="dfg-step__stage"[^>]*@click="switchStage/)
+  })
+})

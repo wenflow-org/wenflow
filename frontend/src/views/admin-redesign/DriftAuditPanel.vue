@@ -10,8 +10,6 @@
           新建字段请直接编辑编排文件，保存后立即生效（已有行修改见「不一致报告」）。
         </p>
         <p class="fdp__guide-file"><span class="mono">prompts/orchestration/{{ stage }}.yaml</span></p>
-        <p class="fdp__guide-text">入口：<strong>「字段路由」页顶部「编排文件」按钮</strong>，在文本框中按现有结构追加
-          <code class="mono">fields:</code> / <code class="mono">routings:</code> 条目后点击「{{ TERMS.saveToFile }}」。</p>
       </div>
     </details>
 
@@ -41,11 +39,11 @@
       />
       <ul v-else class="fdp__drift-list">
         <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
-          <span class="mono mk-badge mk-badge--warn fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
+          <span class="mk-badge mk-badge--warn fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
           <span class="mono fdp__drift-key">{{ d.key }}</span>
           <span class="fdp__drift-field">{{ d.field }}</span>
-          <span class="mono fdp__drift-val fdp__drift-val--seed">声明={{ stringify(d.seedValue) }}</span>
-          <span class="mono fdp__drift-val fdp__drift-val--db">数据库={{ stringify(d.dbValue) }}</span>
+          <span class="fdp__drift-val fdp__drift-val--seed">声明=<span class="mono">{{ stringify(d.seedValue) }}</span></span>
+          <span class="fdp__drift-val fdp__drift-val--db">数据库=<span class="mono">{{ stringify(d.dbValue) }}</span></span>
         </li>
       </ul>
       <p v-if="drift.totalDriftCount > drift.items.length" class="mk-card__note">（共 {{ drift.totalDriftCount }} 项，当前筛选显示 {{ drift.items.length }}）</p>

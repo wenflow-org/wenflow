@@ -13,6 +13,7 @@
  */
 
 import { safeHttpRequest } from '../../../utils/safe-http';
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import { SearchError } from '../types';
 import type {
   SearchCallOptions,
@@ -43,8 +44,8 @@ export interface ExaProviderConfig {
 export function readExaConfig(): ExaProviderConfig {
   const timeout = Number(process.env.SEARCH_TIMEOUT_MS);
   return {
-    endpoint: (process.env.EXA_API_URL || '').trim() || DEFAULT_ENDPOINT,
-    apiKey: (process.env.EXA_API_KEY || '').trim(),
+    endpoint: readPluginProviderField('web', 'exa', 'searchEndpoint') || DEFAULT_ENDPOINT,
+    apiKey: readPluginProviderSecret('web', 'exa'),
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : DEFAULT_TIMEOUT_MS,
   };
 }

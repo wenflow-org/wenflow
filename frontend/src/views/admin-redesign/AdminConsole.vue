@@ -68,7 +68,7 @@ function asyncPage(loader: () => Promise<any>) {
           h('div', { class: 'mk-alert mk-alert--row' }, [
             h('div', { class: 'mk-alert__msg' }, [
               h('strong', { style: 'margin-right: 8px' }, '页面加载失败'),
-              h('span', '资源加载失败（可能是网络异常或平台刚更新）'),
+              h('span', '页面依赖模块加载失败（可能是网络异常、开发态依赖缓存过期，或平台刚更新）'),
             ]),
             h('div', { class: 'mk-alert__act' }, [
               h('button', { type: 'button', class: 'mk-btn mk-btn--sm', onClick: () => window.location.reload() }, '刷新页面'),
@@ -220,26 +220,45 @@ const detailComponent = computed(() => (subPage.value ? detailComponents[subPage
 // 详情组件 key（回归 R3）：id + includeTest 二元化，includeTest 深链变化也强制重建详情组件
 const pageKey = computed(() => (subPage.value ? `${subPage.value.id}:${subPage.value.includeTest ? 1 : 0}` : undefined));
 /* 面包屑：二级页优先显示中文名/短标识（label），未设置时回退 ID 截断；title 始终给全 ID。
-   三级页（会话座舱由画像打开）拼出「二级 / 三级」，否则进详情后会丢掉二级名。 */
+   2026-10-24：from 支持 parent 链（二级 → 三级 → 四级），逐层拼出完整路径；
+   超过 3 段时保留最近 3 段并用「…」占位，避免顶栏被长链撑爆。 */
+const CRUMB_MAX_DEPTH = 3
 function crumbPart(label?: string, id?: string): string {
   const text = label || id || ''
   if (text.length <= 12) return text
   return `${text.slice(0, 8)}…${text.slice(-4)}`
 }
-const crumbLabel = computed(() => {
+/** 从当前 subPage 往上取完整链路（最外层在前） */
+function crumbChain(): string[] {
   const sp = subPage.value
-  if (!sp) return ''
-  const current = crumbPart(sp.label, sp.id)
-  const parent = sp.from ? crumbPart(sp.from.label, sp.from.id) : ''
-  return parent ? `${parent} / ${current}` : current
+  if (!sp) return []
+  const chain: string[] = [crumbPart(sp.label, sp.id)]
+  let from = sp.from
+  while (from) {
+    chain.unshift(crumbPart(from.label, from.id))
+    from = from.parent
+  }
+  return chain
+}
+const crumbLabel = computed(() => {
+  const chain = crumbChain()
+  if (!chain.length) return ''
+  if (chain.length > CRUMB_MAX_DEPTH) {
+    return ['…', ...chain.slice(chain.length - CRUMB_MAX_DEPTH)].join(' / ')
+  }
+  return chain.join(' / ')
 })
 const crumbTitle = computed(() => {
   const sp = subPage.value
   if (!sp) return ''
-  const parent = sp.from ? (sp.from.label || sp.from.id) : ''
   // label 回填后tooltip也应显示中文名（除名，避免裸 UUID）；深链瞬间 label 未到，回退 id
-  const current = sp.label ? `${sp.label}` : sp.id
-  return parent ? `${parent} / ${current}` : current
+  const chain: string[] = [sp.label || sp.id]
+  let from = sp.from
+  while (from) {
+    chain.unshift(from.label || from.id)
+    from = from.parent
+  }
+  return chain.join(' / ')
 })
 
 /* —— 真路由化：scene ↔ URL /admin/:page 双向同步 —— */
@@ -303,8 +322,15 @@ watch(
          不让详情挂载后再补一笔 replace——两笔导航互相竞态时，补参数那笔会把 view/id 冲掉，
          二级页被自己的 URL 同步当场关掉。离开 learner 详情时顺手清掉它，避免列表 URL 上
          留一个无主 tab（skills 宿主的 ?tab= 不受影响：只在 curView=learner 时清）。 */
-      if (sp.tab) q.tab = sp.tab
-      else if (curView === 'learner') delete q.tab
+      /* Skill 详情的页签用独立键 skdTab：?tab= 归宿主列表（Skills/Orchestrator），
+         两边共用会互相覆盖（2026-10-24 层级收口）。 */
+      if (sp.tab) {
+        if (sp.view === 'skill') q.skdTab = sp.tab
+        else q.tab = sp.tab
+      } else {
+        if (curView === 'learner') delete q.tab
+        if (sp.view === 'skill') delete q.skdTab
+      }
       if (curView !== sp.view || curId !== sp.id || (sp.includeTest ? route.query.includeTest !== 'true' : route.query.includeTest != null)) {
         void router.push({ query: q })
       }
@@ -318,8 +344,9 @@ watch(
         delete q.id
         delete q.includeTest
         delete q.stage
-        // 落点页签是详情自己的参数，随详情一起收（判据同上：只清 learner 写的那一个）
+        // 落点页签是详情自己的参数，随详情一起收（learner 用 ?tab=，skill 用 ?skdTab=）
         if (curView === 'learner') delete q.tab
+        if (curView === 'skill') delete q.skdTab
         void router.replace({ query: q })
       }
     }

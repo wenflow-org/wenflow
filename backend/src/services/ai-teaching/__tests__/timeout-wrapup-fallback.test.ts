@@ -104,7 +104,7 @@ describe('applyTimeoutWrapupFallback 课末记录口径（报告 #1/#6）', () =
     expect(mockApplyWarmupExtraction).toHaveBeenCalledTimes(1);
   });
 
-  it('单条学员消息 → 活跃时长取下限 1 分钟', async () => {
+  it('单条学员消息 → 活跃时长取下限 1 分钟，且同批写入 duration 列', async () => {
     mockGetById.mockResolvedValue(timeoutSession([
       { role: 'assistant', content: '我们开始吧', timestamp: new Date(Date.now() - 60_000).toISOString() },
       { role: 'user', content: '好的', timestamp: new Date(Date.now() - 60_000).toISOString() },
@@ -112,8 +112,35 @@ describe('applyTimeoutWrapupFallback 课末记录口径（报告 #1/#6）', () =
 
     await applyTimeoutWrapupFallback('sess-1');
 
-    const wrapup = JSON.parse(String(mockUpdateMany.mock.calls[0][0].data.wrapup));
+    const data = mockUpdateMany.mock.calls[0][0].data;
+    const wrapup = JSON.parse(String(data.wrapup));
     expect(wrapup.duration).toBe(1);
+    // 列表页时长列读的是 duration 列：只写进 wrapup 会在「停在 x/y」旁显示「—」
+    expect(data.duration).toBe(1);
+  });
+
+  it('多轮消息按活跃跨度算时长，duration 列与 wrapup.duration 同值', async () => {
+    mockGetById.mockResolvedValue(timeoutSession([
+      { role: 'assistant', content: '我们开始吧', timestamp: new Date(Date.now() - 12 * 60_000).toISOString() },
+      { role: 'user', content: '好的', timestamp: new Date(Date.now() - 8 * 60_000).toISOString() },
+      { role: 'assistant', content: '接着看下一题', timestamp: new Date(Date.now() - 3 * 60_000).toISOString() },
+    ]));
+
+    await applyTimeoutWrapupFallback('sess-1');
+
+    const data = mockUpdateMany.mock.calls[0][0].data;
+    expect(JSON.parse(String(data.wrapup)).duration).toBe(9);
+    expect(data.duration).toBe(9);
+  });
+
+  it('零证据会话不写 duration（没有活跃跨度可算，别写入 0 冒充读数）', async () => {
+    mockGetById.mockResolvedValue(timeoutSession([
+      { role: 'assistant', content: '同学你好', timestamp: new Date(Date.now() - 60_000).toISOString() },
+    ]));
+
+    await applyTimeoutWrapupFallback('sess-1');
+
+    expect(mockUpdateMany.mock.calls[0][0].data).not.toHaveProperty('duration');
   });
 
   it('已有正式总结（guarded.count=0）→ 整体跳过', async () => {

@@ -244,8 +244,9 @@ describe('Skill 目录 P1 修复批', () => {
 });
 
 /* 2026-09-29 用户拍板：健康检查/漂移/对账三 tab 退役——三者本是同一份报表的三刀，
-   合一后独立成 /admin/health-center（系统组）。2026-10-04 Prompt 评估由独立场景折入，
-   Skills 现为 Skill 运行 / 模型路由 / Prompt 评估三页签。 */
+   合一后独立成 /admin/health-center（系统组）。2026-10-04 Prompt 评估由独立场景折入。
+   2026-10-24「模型路由」页签退役（与 Skill 详情「运行时」重复），改为页头弹窗：
+   Skills 现为 Skill 运行 / Prompt 评估两页签。 */
 async function mountHost(path: string) {
   dataSource.value = 'live';
   const router = createRouter({
@@ -257,7 +258,7 @@ async function mountHost(path: string) {
   });
   await router.push(path);
   await router.isReady();
-  const wrapper = mount(Skills, { global: { plugins: [router] } });
+  const wrapper = mount(Skills, { global: { plugins: [router], stubs: { teleport: true } } });
   await flushPromises();
   await nextTick();
   await flushPromises();
@@ -272,10 +273,10 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     liveSkillStatsMap.value = null;
   });
 
-  it('三个页签：Skill 运行 / 模型路由 / Prompt 评估，且不再渲染健康中心', async () => {
+  it('两个页签：Skill 运行 / Prompt 评估，且不再渲染健康中心', async () => {
     const { wrapper } = await mountHost('/admin/skills');
     const tabs = wrapper.findAll('.skills-tabs .tab');
-    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '模型路由', 'Prompt 评估']);
+    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', 'Prompt 评估']);
     expect(wrapper.find('.hc-embedded').exists()).toBe(false);
     // 运行视图在位：KPI 卡带走 run 分支（无档案时 Skill 卡显 0；2026-10-04 状态条已退役）
     expect(wrapper.find('.mk-kpi-grid').exists()).toBe(true);
@@ -292,15 +293,42 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     }
   });
 
-  it('点击「模型路由」切换 tab 并同步 ?tab=model-routing', async () => {
+  it('点击「Prompt 评估」切换 tab 并同步 ?tab=prompt-eval', async () => {
     const { wrapper, router } = await mountHost('/admin/skills');
-    await wrapper.findAll('.skills-tabs .tab').find((t) => t.text() === '模型路由')!.trigger('click');
+    await wrapper.findAll('.skills-tabs .tab').find((t) => t.text() === 'Prompt 评估')!.trigger('click');
     await flushPromises();
-    expect(router.currentRoute.value.query.tab).toBe('model-routing');
-    // 离开运行视图后：运行统计带随页签消失（模型路由页签自带路由四卡，非运行读数）
+    expect(router.currentRoute.value.query.tab).toBe('prompt-eval');
+    // 离开运行视图后：运行统计带随页签消失（评估页签有自己的读数带）
     const runRateCard = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '成功率');
     expect(runRateCard).toBeUndefined();
     expect(wrapper.text()).not.toContain('仅看需关注');
+    wrapper.unmount();
+  });
+
+  it('页头「批量模型配置」打开覆盖矩阵弹窗（原「模型路由」页签的替代落点）', async () => {
+    const { wrapper } = await mountHost('/admin/skills');
+    const btn = wrapper.findAll('.mk-pagehead__actions button').find((b) => b.text() === '批量模型配置');
+    expect(btn, '运行页签页头应有「批量模型配置」').toBeTruthy();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    await btn!.trigger('click');
+    await flushPromises();
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.text()).toContain('批量模型配置');
+    // 弹窗内是同一份覆盖矩阵（嵌入形态：不再套第二层 mk-card 卡壳）
+    expect(dialog.find('.skc').exists()).toBe(true);
+    expect(dialog.find('.mk-card.skc').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('老深链 ?tab=model-routing 落到运行页签、打开弹窗并把地址收敛为 ?tab=run', async () => {
+    const { wrapper, router } = await mountHost('/admin/skills?tab=model-routing');
+    const selected = wrapper.findAll('.skills-tabs .tab').find((t) => t.attributes('aria-selected') === 'true');
+    expect(selected!.text()).toBe('Skill 运行');
+    expect(router.currentRoute.value.query.tab).toBe('run');
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.text()).toContain('批量模型配置');
     wrapper.unmount();
   });
 });

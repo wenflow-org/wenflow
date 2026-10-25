@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { isTestAccountUser } from '../../utils/test-account';
-import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
+import { buildNonVirtualUserWhere } from '../../utils/test-account';
 import { deriveTeachingSessionProgress } from '../teaching-session-progress.service';
 import { parseClosureObservation, type ClosureObservation } from '../learning/closure-observability';
 
@@ -113,11 +113,10 @@ export async function listTeachingSessionsDebug(params: {
   mode?: string;
   onlyWithAdvisory: boolean;
   onlyMissingWrapup: boolean;
+  /** 按 id 直查虚拟账号时置 true（学习者详情），不是页面视角 */
   includeTest: boolean;
-  /** 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：只看虚拟学习者 + 测试账号 */
-  testOnly?: boolean;
 }): Promise<unknown> {
-  const { page, limit, userId, pathId, status, mode, onlyWithAdvisory, onlyMissingWrapup, includeTest, testOnly } = params;
+  const { page, limit, userId, pathId, status, mode, onlyWithAdvisory, onlyMissingWrapup, includeTest } = params;
   const where: any = {
     ...(userId ? { userId } : {}),
     ...(pathId ? { learningPathId: pathId } : {}),
@@ -128,11 +127,7 @@ export async function listTeachingSessionsDebug(params: {
     ...(onlyMissingWrapup
       ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }
       : {}),
-    ...(testOnly
-      ? { users: await buildTestUserWhere() }
-      : includeTest
-        ? {}
-        : { users: await buildRealUserWhere() }),
+    ...(includeTest ? {} : { users: await buildNonVirtualUserWhere() }),
   };
 
   const [total, sessions] = await Promise.all([
@@ -206,7 +201,9 @@ export async function listTeachingSessionsDebug(params: {
       endReason,
       startTime: session.startTime,
       endTime: session.endTime,
-      duration: session.duration,
+      /* 历史超时会话的 duration 列是空的（超时收尾此前只把活跃时长写进 wrapup.duration），
+         列上留空会让「停在 x/y」旁边显示「—」。列优先，缺了再取兜底总结里的同口径读数。 */
+      duration: session.duration || (typeof wrapup?.duration === 'number' ? wrapup.duration : 0),
       messageCount: facts?.userCount ?? 0,
       knowledgePointCount: Array.isArray(knowledgePoints) ? knowledgePoints.length : 0,
       progress: progressById.get(session.id) || null,

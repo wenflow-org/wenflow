@@ -1,7 +1,8 @@
 <template>
   <!-- 卡详情二级页（2026-10-06 抽屉退役：用户不喜欢抽屉设计，按 SkillDetail/PathDetail 家族判例
-       改标准二级页 ?view=card&id=<profileId>）。卡=账号拍板不变：本页是卡的全字段可视面，
-       「到虚拟学习者」= openSubPage('virtual', profileId) 切到画像二级页（看运行态）。 -->
+       改标准二级页 ?view=card&id=<profileId>）。卡=身份模板：本页只呈现静态卡片内容与
+       「创建虚拟学习者」；运行 / 记忆属于创建出来的实例，不在卡库开运行入口
+       （2026-10-24 用户「卡不是静态的吗」）。 -->
   <div v-if="d" class="mk-page cd">
     <MkDetailHero :avatar="d.name.slice(0, 1)" :title="d.name" :sub="heroSubText">
       <template #pills>
@@ -11,11 +12,12 @@
         <span v-if="d.tags.length > 4" class="mk-badge mk-badge--muted" :title="d.tags.join(' · ')">+{{ d.tags.length - 4 }}</span>
       </template>
       <template #actions>
-        <button type="button" class="mk-btn" :disabled="loading" @click="load">{{ loading ? '刷新中…' : '刷新' }}</button>
+        <!-- 2026-10-23：本页数据跟随顶栏刷新广播（liveRefreshSeq），hero 不再出独立刷新钮 -->
         <!-- 「从这张卡造一个」的落点（2026-10-18 用户走查：卡库侧只有卡头勾选框，读作没有流程）：
-             身份卡可反复创建、不消耗卡本身，故本页主操作是创建，切画像降为次按钮。
-             文案 2026-10-19 与卡墙同批统一：原「派生虚拟学习者」是本页独有的说法。 -->
-        <button type="button" class="mk-btn" @click="goLearner">到虚拟学习者 →</button>
+             身份卡可反复创建、不消耗卡本身，故本页主操作是创建。
+             2026-10-24 用户「右侧两个按钮，感觉很怪」：原来「到虚拟学习者 →」与创建并列，
+             两个按钮都在说虚拟学习者，一个是导航、一个是动作，读不出主次。
+             改法：hero 只留创建；同一实体的运行/记忆视图降为「概览」卡头文字入口。 -->
         <button
           type="button"
           class="mk-btn mk-btn--primary"
@@ -71,7 +73,7 @@
       <div class="cd-pad cd-sec">
         <p v-if="d.background" class="cd-bg">{{ d.background }}</p>
         <div v-if="d.personaFacts.length" class="mk-facts mk-facts--rows">
-          <div v-for="f in d.personaFacts" :key="f.label"><span>{{ f.label }}</span><strong>{{ f.value }}</strong></div>
+          <div v-for="f in d.personaFacts" :key="f.label"><span>{{ f.label }}</span><strong>{{ personaValue(f.label, f.value) }}</strong></div>
         </div>
         <p v-if="!d.background && !d.personaFacts.length" class="mk-empty--line">这张卡没有人设字段（可能是批次运行产物，仅有账号与目标）。</p>
       </div>
@@ -125,21 +127,31 @@
       <MkSkeleton variant="identity" />
       <MkSkeleton variant="rows" :count="3" />
     </div>
-    <MkEmptyState v-else tone="error" title="卡不存在或已删除" description="卡墙数据可能已刷新，返回卡库重试。">
-      <button type="button" class="mk-btn" @click="closeSubPage()">返回卡墙</button>
+    <MkEmptyState
+      v-else
+      tone="error"
+      title="卡不存在或已删除"
+      description="卡墙数据可能已刷新，返回卡库重试。"
+      action-text="重试"
+      :action-busy="loading"
+      action-busy-text="重试中…"
+      @action="load()"
+    >
+      <!-- 顶栏刷新已覆盖本页，但详情取数失败时页内仍要有一个就地重试（失败不得只能离开） -->
+      <button type="button" class="mk-btn mk-btn--ghost" @click="closeSubPage()">返回卡墙</button>
     </MkEmptyState>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import { errMsg } from './live'
+import { errMsg, liveRefreshSeq } from './live'
 import { toast } from '@/utils/toast'
 import { shortHashTag } from '@/utils/shortHash'
 
@@ -198,15 +210,6 @@ async function load() {
   }
 }
 
-/** 「到虚拟学习者」：切画像二级页（id=profileId，findProfileDetail 按 profile 主键查）；
-    带 from 使画像页面包屑拼出「学习者卡 / 画像名」并可点面包屑回本卡（双向互链）。
-    from.label 用视图名而非卡名——卡与画像同一实体同名，用卡名会拼出「郑凯 / 郑凯」 */
-function goLearner() {
-  const pid = d.value?.profileId
-  if (!pid) return
-  openSubPage('virtual', pid, { from: { view: 'card', id: pid, label: '学习者卡' } })
-}
-
 /** 回派生来源的身份卡（本卡是实例时才有入口；label 用视图名，避免「同名卡 / 同名卡」） */
 function goTemplate(profileId: string) {
   openSubPage('card', profileId, { from: { view: 'card', id: profileId, label: '身份卡' } })
@@ -236,6 +239,18 @@ function levelText(level: string): string {
   const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
   return map[level] || level || '—'
 }
+/** 人设字段的枚举值 → 运营词（后端原样下发 reading / necessity / minimal / high；
+    2026-10-23 走查「卡片详情人设表在写英文码」，同页等级/预算都已中文化，这里补齐） */
+const PERSONA_ENUM_ZH: Record<string, Record<string, string>> = {
+  学习风格: { reading: '阅读型', video: '视频型', practice: '实践型', project: '项目型', quiz: '测验型', study: '系统学习', mixed: '混合型' },
+  动机类型: { necessity: '必要型', interest: '兴趣型', curiosity: '好奇型', 'external-pressure': '外部压力', career: '职业目标', achievement: '成就型', 'problem-solving': '问题驱动' },
+  可用时间: { minimal: '碎片时间', moderate: '适中', abundant: '充裕', short: '短', long: '长' },
+  技术熟练度: { high: '高', medium: '中', low: '低' },
+  认知风格: { intuitive: '直觉型', logical: '逻辑型', visual: '视觉型', practical: '实践型', mixed: '混合型' }
+}
+function personaValue(label: string, value: string): string {
+  return PERSONA_ENUM_ZH[label]?.[value] || value
+}
 function budgetLabel(k: string): string {
   const map: Record<string, string> = { dailyMinutes: '每日', horizonDays: '周期(天)', expectedHours: '预期(时)', weeklyHours: '每周(时)' }
   return map[k] || k
@@ -263,6 +278,8 @@ function onDerived() {
 }
 
 onMounted(load)
+/* 顶栏刷新：与旧 hero 刷新钮同一入口 */
+watch(liveRefreshSeq, () => { void load() })
 </script>
 
 <style scoped>

@@ -57,7 +57,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import { errMsg } from './live'
+import { errMsg, refreshLiveVirtuals } from './live'
 import { openSubPage, isLive } from './store'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -66,6 +66,9 @@ import type { LaunchStory } from './virtualLearnersTypes'
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
 withDefaults(defineProps<{ render?: boolean }>(), { render: true })
+
+/* 启动成功事件：列表行自己会刷新；画像页要据此回刷详情读数（2026-10-24 页头「运行」） */
+const emit = defineEmits<{ started: [session: Record<string, unknown>] }>()
 
 /** 启动目标（父页面行内「运行」按钮传入；只依赖 id/name/storyCount） */
 interface LaunchTarget {
@@ -154,11 +157,20 @@ async function startLaunch() {
         ? await adminVirtualLearnersApi.startBlackboxVirtualSession(target.id, payload)
         : await adminVirtualLearnersApi.startVirtualSession(target.id, payload)
     const session = res.data?.data ?? res.data ?? {}
-    const sid = String(session.id || session.sessionId || '')
     const storyTitle = launchStories.value.find((x) => x.id === launchForm.value.storyId)?.title || '故事'
+    const autopilot = String(session.autopilot || '')
     launchTarget.value = null
-    toast.success(`已按「${storyTitle}」启动：${sid.slice(0, 14)}${sid.length > 14 ? '…' : ''}`)
-    openSubPage('virtual', target.id)
+    /* 2026-10-21 口径统一：运行 = 建会话 + 立刻开跑。
+       建完不再跳画像页——列表这一行随即变「运行中」，运营留在原地继续盯别的。 */
+    if (autopilot === 'failed') {
+      toast.info(`已创建「${storyTitle}」的会话，但自动驾驶没启动，可在画像页继续`)
+    } else if (autopilot === 'queued') {
+      toast.success(`并发已满，「${storyTitle}」已排队，轮到即自动开跑`)
+    } else {
+      toast.success(`已开始运行「${storyTitle}」`)
+    }
+    emit('started', session)
+    void refreshLiveVirtuals()
   } catch (e) {
     toast.error(`启动失败：${errMsg(e)}`)
   } finally {

@@ -11,10 +11,6 @@
       <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '共 ' + liveUsersTotal + ' 人，当前显示前 ' + users.length + ' 人' : '共 ' + liveUsersTotal + ' 人') : undefined">
         共 {{ isLive && liveUsersTotal > users.length ? liveUsersTotal + ' 人 · 当前显示 ' + users.length : users.length }} 人
       </span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅统计真实用户（不含虚拟 / 测试账号）">
-        真实 {{ realUsers }}
-      </span>
-      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="含虚拟学习者与测试账号">测试/虚拟 {{ users.length - realUsers }}</span>
       <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 近 7 天活跃 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
         近 7 天活跃 {{ activeToday }}
       </span>
@@ -84,76 +80,83 @@
         @action="retryLoad"
       />
       <div v-else-if="filtered.length" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽、余量摊给可收缩列；长邮箱/长昵称用 max-width 截断兜底 -->
-        <table class="mk-table mk-table--nowrap">
+        <!-- 固定列宽（2026-10-22 与教学组三表同判例）：自动布局下用户/邮箱两列按当页最长内容
+             分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
+             单元格 nowrap 不变，长邮箱/长昵称仍由 max-width 截断兜底 -->
+        <table class="mk-table mk-table--nowrap mk-table--fixed ul-table">
           <thead>
             <tr>
-              <th v-if="isLive && showCol('check')" scope="col">
-                <input type="checkbox" aria-label="全选当前页" title="全选/清空当前页的账号" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
+              <th v-if="isLive && showCol('check')" scope="col" class="u-c-check">
+                <input type="checkbox" aria-label="全选当前页" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
               </th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable u-c-user"
                 :aria-sort="userSortState('user')"
                 @click="toggleUserSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="showCol('email')" scope="col">邮箱</th>
-              <th v-if="showCol('role')" scope="col">角色</th>
+              <th v-if="showCol('email')" scope="col" class="u-c-email">邮箱</th>
+              <th v-if="showCol('role')" scope="col" class="u-c-role">角色</th>
               <th
                 v-if="showCol('paths')"
                 scope="col"
-                class="mk-th--right mk-th--sortable"
+                class="mk-th--right mk-th--sortable u-c-paths"
                 :aria-sort="userSortState('paths')"
                 @click="toggleUserSort('paths')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('paths')">路径 / 会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('paths')">路径 / 课堂<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('created')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable u-c-created"
                 :aria-sort="userSortState('created')"
                 @click="toggleUserSort('created')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('created')">注册时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('lastlogin')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable u-c-lastlogin"
                 :aria-sort="userSortState('lastlogin')"
                 @click="toggleUserSort('lastlogin')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastlogin')">最后登录<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right u-c-act">操作</th>
             </tr>
           </thead>
         <tbody>
           <!-- 行点击进用户详情；键盘等价：tabindex + Enter 触发（对齐 gc-row/oc-row 判例），
                行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
           <!-- 口径透传：测试视角下点虚拟/测试账号，详情接口需按全量口径查询，否则 404（与行点击/详情钮同参） -->
-          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id, includeTest ? { includeTest: true } : undefined)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id, includeTest ? { includeTest: true } : undefined)">
-            <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
+          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id)">
+            <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u)" :aria-label="`选择 ${userName(u)}`" @click.stop /></td>
             <td>
               <div class="ul-user">
-                <MkCellAvatar :name="u.name" :tone="avaTone(u)" />
+                <MkCellAvatar :name="userName(u)" :tone="avaTone(u)" />
                 <div class="mk-cell-main">
-                  <strong :title="u.name">{{ u.name }}</strong>
-                  <!-- 原型 celluser meta 模式：等级 · N 条路径（XP 细节进悬停）。
+                  <strong :title="userName(u)">{{ userName(u) }}</strong>
+                  <!-- 原型 celluser meta 模式：等级（XP 细节进悬停）。
+                       2026-10-23 走查：路径条数不再在副行复述——同一读数已在「路径 / 课堂」列
+                       给全且可排序，副行只说等级。
                        等级词汇单点（learner-profile.ts）：统一「L2 · 进阶」并存格式 -->
                   <span
                     class="mk-cell-sub"
                     :title="u.xp === 0 ? '尚无经验值' : `${u.xp} XP · 距 L${levelFromXp(u.xp) + 1} 还需 ${xpToNext(u.xp)}`"
-                  >{{ levelBadgeZh(u.xp, u.currentLevel) }} · {{ u.paths }} 条路径</span>
+                  >{{ levelBadgeZh(u.xp, u.currentLevel) }}</span>
                 </div>
                 <div class="ul-tags">
                   <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
+                  <!-- 2026-10-21 用户拍板「测试只是备注」：不做视角，也不用筛选，行内一枚备注即可 -->
+                  <span
+                    v-else-if="isNonRealAccount(u) && !isVirtualAccount(u)"
+                    class="mk-badge mk-badge--sm mk-badge--test"
+                    title="用于测试与审计的账号"
+                  >测试</span>
                   <!-- 自己那一行（2026-10-19 用户走查「这不就重复了吗」）：原文案「当前管理员」
                        与身份列的「管理员」徽章读作同一个角色标签，实际标的是「这一行是你正在用的
                        账号」（该行 ⋯ 菜单刻意不给「降为用户 / 删除」）。改说账号，不再复述角色 -->
                   <span
                     v-else-if="isSelf(u)"
                     class="mk-badge mk-badge--sm mk-badge--self"
-                    title="你正在使用的账号：为避免把自己锁在门外，这一行不提供删除与降为用户的动作"
+                    title="你正在使用的账号"
                   >当前账号</span>
-                  <MkVariantBadge v-else-if="isVirtualAccount(u)" kind="virtual" />
-                  <MkVariantBadge v-else-if="isNonRealAccount(u)" kind="test" />
                 </div>
               </div>
             </td>
@@ -164,28 +167,20 @@
             <td v-if="showCol('paths')" class="mk-num">
               <!-- 原型列语言：数字列就是 mono 文本，不加自造可视化（双段条退役，计数进悬停）。
                    P2：0 值统一 mk-na 弱化（此前只有会话 0 弱化，路径 0 却实心黑，双标） -->
-              <span class="ul-ps" :title="`路径 ${u.paths} 条 · 会话 ${u.sessions} 次`"><b :class="{ 'mk-na': !u.paths }">{{ u.paths }}</b><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b></span>
+              <span class="ul-ps" :title="`路径 ${u.paths} 条 · 课堂 ${u.sessions} 节`"><b :class="{ 'mk-na': !u.paths }">{{ u.paths }}</b><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b></span>
             </td>
             <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
             <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
               <div class="mk-actions">
                 <!-- 原型操作列：文字「详情」描边小钮（.btn--sm 形态），行级管理动作留在 ⋯ 菜单 -->
-                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openSubPage('user', u.id, includeTest ? { includeTest: true } : undefined)">详情</button>
+                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openSubPage('user', u.id)">详情</button>
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === u.id" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
                     <button v-if="u.deleted" type="button" class="mk-menu__item" :disabled="u.busy" @click="menuRestore(u)">恢复</button>
                     <template v-else>
                       <button type="button" class="mk-menu__item" :disabled="u.busy" @click="menuEdit(u)">编辑</button>
-                      <button
-                        v-if="!isSelf(u) && !isNonRealAccount(u)"
-                        type="button"
-                        class="mk-menu__item"
-                        :class="{ 'mk-menu__item--danger': u.admin }"
-                        :disabled="u.busy"
-                        @click="menuRole(u)"
-                      >{{ u.admin ? '降为用户' : '设为管理员' }}</button>
                       <template v-if="!isSelf(u)">
                         <div class="mk-menu__sep"></div>
                         <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="u.busy" @click="menuDelete(u)">删除</button>
@@ -283,7 +278,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, liveSetUsersIncludeTest, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { liveUsers, liveCreateUser, liveDeleteUser, liveUsersTotal, refreshLiveUsers, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData } from './live'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -293,7 +288,7 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import { displayNameOf } from '@/components/mk/avatarName'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -310,6 +305,10 @@ function avaTone(u: UlUserLite): 'default' | 'virtual' | 'test' | 'muted' {
   // 身份判据单点（learner-profile.ts）：payload 标记 ∪ 命名约定，与 KPI / 构成带同口径
   if (isRealAccountUser(u)) return 'default'
   return isVirtualLearnerAccount(u) ? 'virtual' : 'test'
+}
+/** 昵称与头像共用同一清洗/降级结果（avatarName.ts）：乱码字符剔除后空 → 邮箱前缀 → 「用」 */
+function userName(u: UlUserLite): string {
+  return displayNameOf(u.name, u.email)
 }
 /** 升级进度：等级公式 floor(sqrt(xp/100))+1 → 当前级下限 100·(n-1)²，下一级门槛 100·n² */
 function xpProgress(xp: number): { pct: number; toNext: number } {
@@ -349,7 +348,6 @@ const isSelf = (u: UserRow) => !!currentAdmin.value.id && u.id === currentAdmin.
     builtin_*@preset.local —— payload 标了 isVirtualLearner=true）——含测试档下这类行既进
     「普通用户」筛选、又能勾选进批量删除/导出（F1-1）。标记优先、正则兜底的口径见该文件。 */
 const isVirtualAccount = isVirtualLearnerAccount
-const isRealAccount = isRealAccountUser
 /** 非真实账号（虚拟学习者 ∪ 测试/审计）：不参与管理员提升与批量删除（无意义且有风险） */
 const isNonRealAccount = (u: UserRow) => !isRealAccountUser(u)
 
@@ -359,7 +357,7 @@ interface UserRow {
   email: string
   admin: boolean
   online: boolean
-  /** 数据隔离标记（includeTest=true 时后端带回，供灰标） */
+  /** 测试/审计备注标记（后端按 isTestAccountUser 判定，行内展示「测试」） */
   isVirtualLearner?: boolean
   isTestAccount?: boolean
   createdAt: string
@@ -386,7 +384,9 @@ const deletedLoading = ref(false)
 function mapDeletedRow(u: Record<string, unknown>): UserRow {
   return {
     id: String(u.id),
-    name: String(u.name || u.email || u.id),
+    /* 入库即清洗（2026-10-24）：表格、排序、CSV、删除/恢复确认、编辑表单共用同一份
+       可渲染昵称，避免头像已降级而弹窗仍显示乱码。 */
+    name: displayNameOf(u.name, u.email),
     email: String(u.email || ''),
     admin: !!u.isAdmin,
     online: false,
@@ -426,7 +426,7 @@ const users = computed<UserRow[]>(() => {
   if (pill.value === 'deleted') return deletedUsers.value
   return liveUsers.value.map((u) => ({
     id: u.id,
-    name: u.name,
+    name: displayNameOf(u.name, u.email),
     email: u.email,
     admin: u.isAdmin,
     online: recentLogin(u.lastLoginAt),
@@ -446,18 +446,8 @@ const users = computed<UserRow[]>(() => {
 const pill = ref('all')
 const keyword = ref('')
 
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；口径整组统一（2026-10-04 用户拍板）——
-   get/set 走 live.ts 共享态（页头 DataScopeToggle 同源），本页 watch 只负责按新口径重拉并灰标 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
-watch(includeTest, (v) => {
-  // 切换失败不静默：用户以为已切到全量/仅真实口径，实际列表还是旧口径
-  if (isLive.value && pill.value !== 'deleted') {
-    liveSetUsersIncludeTest(v).catch((e) => toast.error(`切换数据范围失败：${errMsg(e)}`))
-  }
-})
+/* 视角开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+   列表 = 全部非虚拟账号；测试/审计账号照常列出，行内以「测试」备注标识。 */
 
 /* D3 表格增强：列显隐（公共组件 MkCols 接管：菜单 + localStorage 持久化；列可隐藏，用户/操作列固定）。
    默认列集对齐原型 .tbl（用户/邮箱/角色/路径会话/最后登录/操作）：「选择框」「注册时间」默认隐藏
@@ -468,7 +458,7 @@ const ulColDefs = [
   { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部导出 CSV / 批量删除' },
   { key: 'email', label: '邮箱', title: '登录邮箱' },
   { key: 'role', label: '角色', title: '管理员 / 用户' },
-  { key: 'paths', label: '路径 / 会话', title: '学习路径数 / 会话数' },
+  { key: 'paths', label: '路径 / 课堂', title: '学习路径数 / 教学课堂节数' },
   { key: 'created', label: '注册时间', title: '账号创建时间' },
   { key: 'lastlogin', label: '最后登录', title: '最近登录时间' },
 ] as const
@@ -486,8 +476,6 @@ const showCol = (key: string) =>
   !(isMedium.value && MEDIUM_HIDDEN_COLS.has(key)) &&
   !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 
-/** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐——列表已全量加载，仅超上限时截断） */
-const realUsers = computed(() => users.value.filter((u) => !u.deleted && isRealAccount(u)).length)
 
 /** live 用户域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(
@@ -503,26 +491,16 @@ defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
    「已删除」为独立数据源，切过去才拉取，未加载时不显示计数。 */
 const pills = computed<Array<{ id: string; label: string; count: number | string | null; title?: string }>>(() => {
   const active = liveUsers.value
-  /* 审核 #8（2026-10-06）：「普通用户」用真实域口径（排除虚拟/测试），与同面板 KPI
-     「真实用户」（hint 明写不含虚拟/测试）保持同一口径。
-     走查 F1-1（2026-10-07）：该口径原先只靠命名约定正则，漏掉卡库/预置库的虚拟学习者
-     （vl-*@cards.local / builtin_*@preset.local，含测试档实测 10 行）→ pill 比同屏 KPI 多 10、
-     这些行还能被筛出来勾进批量删除。改走 learner-profile.ts 单点（payload 标记优先）。 */
-  const realActive = active.filter(isRealAccount)
-  /* 三枚角色/活跃 pill 一律真实域，且**计数与筛选同谓词**（2026-10-11 走查实测）：
-     含测试档下「管理员」badge 0 而点开出现 1 行测试管理员、「近 7 天活跃」badge 0 而点开
-     出 3 行——同一控件两套分母（计数取 realActive、筛选取全量行）。现两者都走真实域，
-     title 明写口径：含测试档下列表本身含虚拟/测试行，但角色/活跃 pill 不把它们算作「用户」。 */
-  const pillDomainTitle = '仅统计真实账号（不含虚拟学习者 / 测试账号）'
+  /* 列表即全部非虚拟账号（后端已排除虚拟学习者），计数与筛选同一谓词、无第二套分母。 */
   return [
     { id: 'all', label: '全部', count: active.length },
-    { id: 'admin', label: '管理员', count: realActive.filter((u) => u.isAdmin).length, title: pillDomainTitle },
-    { id: 'user', label: '普通用户', count: realActive.filter((u) => !u.isAdmin).length, title: pillDomainTitle },
+    { id: 'admin', label: '管理员', count: active.filter((u) => u.isAdmin).length },
+    { id: 'user', label: '普通用户', count: active.filter((u) => !u.isAdmin).length },
     {
       id: 'online',
       label: '近 7 天活跃',
-      count: realActive.filter((u) => recentLogin(u.lastLoginAt)).length,
-      title: `近 7 天内有登录。${pillDomainTitle}`
+      count: active.filter((u) => recentLogin(u.lastLoginAt)).length,
+      title: '近 7 天内有登录'
     },
     /* 审核 #14（2026-10-06）：已删除列表取自单次 limit 窗口，超过窗口时计数会小于真实值——
        到顶显示「50+」并在 title 标注截断，界面不再把窗口当全量。 */
@@ -558,10 +536,6 @@ const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuEdit(u: UserRow) {
   closeMenu()
   openEdit(u)
-}
-function menuRole(u: UserRow) {
-  closeMenu()
-  void toggleRole(u)
 }
 function menuDelete(u: UserRow) {
   closeMenu()
@@ -719,7 +693,7 @@ function exportSelected() {
     if (/^[=+\-@]/.test(s)) s = `'${s}`
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
-  const header = ['姓名', '邮箱', '角色', '等级/XP', '路径/会话', '注册时间', '最后登录', '类型']
+  const header = ['姓名', '邮箱', '角色', '等级/XP', '路径/课堂', '注册时间', '最后登录', '类型']
   const lines = rows.map((u) =>
     [
       esc(u.name),
@@ -729,7 +703,7 @@ function exportSelected() {
       `${u.paths} / ${u.sessions}`,
       esc(u.createdAt || ''),
       esc(u.lastLogin || ''),
-      u.deleted ? '已删除' : isVirtualAccount(u) ? '虚拟' : isNonRealAccount(u) ? '测试' : '真实',
+      u.deleted ? '已删除' : isVirtualAccount(u) ? '虚拟学习者' : isNonRealAccount(u) ? '测试' : '普通',
     ].join(',')
   )
   const csv = '\uFEFF' + [header.join(','), ...lines].join('\r\n')
@@ -740,29 +714,6 @@ function exportSelected() {
   a.click()
   URL.revokeObjectURL(a.href)
   toast.success(`已导出 ${rows.length} 个用户`)
-}
-
-async function toggleRole(u: UserRow) {
-  const targetAdmin = !u.admin
-  const verb = targetAdmin ? '设为管理员' : '降为普通用户'
-  const ok = await askConfirm({
-    title: `${verb}「${u.name}」`,
-    message: targetAdmin
-      ? `确认将「${u.name}」设为管理员？该用户将获得全部管理权限。`
-      : `确认将「${u.name}」降为普通用户？将失去管理后台访问权限。`,
-    confirmText: verb,
-    danger: !targetAdmin
-  })
-  if (!ok) return
-  u.busy = true
-  try {
-    await liveSetUserRole(u.id, targetAdmin)
-    toast.success(`「${u.name}」已${targetAdmin ? '设为管理员' : '降为用户'}`)
-  } catch (e) {
-    toast.error(`操作失败：${errMsg(e)}`)
-  } finally {
-    u.busy = false
-  }
 }
 
 async function removeUser(u: UserRow) {
@@ -804,7 +755,7 @@ async function restoreUserRow(u: UserRow) {
     // （pill 的 watch 只在切到 deleted 时拉取，切回 all 不重拉）——与 liveDeleteUser 的
     // 对称清理成对；重拉失败不静默，如实告知需手动刷新
     if (isLive.value) {
-      await liveSetUsersIncludeTest(includeTest.value).catch(() => {
+      await refreshLiveUsers().catch(() => {
         toast.error('用户已恢复，但列表刷新失败，请手动刷新')
       })
     }
@@ -834,14 +785,11 @@ const { toggle: toggleUserSort, sortState: userSortState, sortRows: sortUserRows
 const filtered = computed(() =>
   sortUserRows(users.value.filter((u) => {
     if (pill.value === 'deleted' && !u.deleted) return false
-    /* 角色 / 活跃三枚 pill 与计数同一真实域口径（2026-10-11 走查：计数取 realActive 而筛选
-       只看该轴，含测试档下 badge 与结果打架）。 */
-    if (pill.value === 'admin' && (!u.admin || !isRealAccount(u))) return false
-    // 审核 #8（2026-10-06）+ 走查 F1-1（2026-10-07）：与 pill 计数同一真实域口径——「普通用户」
-    // 不含虚拟/测试账号；判据走 learner-profile.ts 单点（payload 标记 ∪ 命名约定），
-    // 否则含测试档下 vl-*/builtin_* 形态的虚拟学习者会被筛出来（badge=虚拟却可勾选）
-    if (pill.value === 'user' && (u.admin || !isRealAccount(u))) return false
-    if (pill.value === 'online' && (!u.online || !isRealAccount(u))) return false
+    /* 2026-10-21：列表已是全部非虚拟账号，角色/活跃 pill 只看该轴本身，不再叠加身份域
+       （否则计数含测试账号、筛选又把它滤掉，同屏两套分母）。 */
+    if (pill.value === 'admin' && !u.admin) return false
+    if (pill.value === 'user' && u.admin) return false
+    if (pill.value === 'online' && !u.online) return false
     const q = keyword.value.trim().toLowerCase()
     if (q && !`${u.name} ${u.email} ${u.id}`.toLowerCase().includes(q)) return false
     return true
@@ -907,7 +855,7 @@ function clearFilters() {
 /* pill 组维度分隔（角色/活跃 | 生命周期「已删除」）：细竖线，弱于 pill 边界。
    类名走页面前缀 ul-（design:check 规则 1：mk- 前缀属全局原语，页面 scoped 内禁定义）。 */
 .ul-pills__sep { width: 1px; align-self: stretch; margin: 7px 6px 7px 2px; background: color-mix(in srgb, currentColor 18%, transparent); }
-/* 路径/会话数字列（原型列语言：mono 文本） */
+/* 路径/课堂数字列（原型列语言：mono 文本） */
 .ul-ps { font-variant-numeric: tabular-nums; }
 .ul-ps b { font-weight: 600; }
 .ul-ps i { font-style: normal; color: var(--mk-faint); margin: 0 2px; }
@@ -925,6 +873,18 @@ function clearFilters() {
 .ul-row--deleted .mk-cell-sub { color: var(--mk-muted); }
 
 /* ===== 行级设计（2026-09-26）：身份 chip / 等级色阶+升级条 / 登录新鲜度 ===== */
+/* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：用户/邮箱两列在
+   auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊开。 */
+.u-c-check { width: 36px; }
+.u-c-user { width: 250px; }
+.u-c-email { width: 190px; }
+.u-c-role { width: 96px; }
+/* 390 档 fixed 表按比例摊薄列宽，「路径 / 课堂」+ 右缘 caret（绝对定位 -12px）会贴到内衬里；
+   112 = 文字 75 + 左右内衬 32 + 余量，窄屏保整词与箭头。 */
+.u-c-paths { width: 112px; min-width: 112px; }
+.u-c-created { width: 100px; }
+.u-c-lastlogin { width: 100px; }
+.u-c-act { width: 110px; }
 .ul-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .ul-user .mk-cell-main { min-width: 0; flex: 1; }
 .ul-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }

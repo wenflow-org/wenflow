@@ -10,6 +10,7 @@
  * 因此默认顺序把 cloudflare 放在前面，它是质量更稳的一档。
  */
 
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import type { DecisionCallOptions, DecisionProvider, DecisionProviderResult, DecisionRequest } from '../types';
 import { postDecision } from './shared';
 
@@ -24,9 +25,9 @@ export interface AlibabaDecisionConfig {
 
 export function readAlibabaDecisionConfig(): AlibabaDecisionConfig {
   return {
-    url: (process.env.DASHSCOPE_DECISION_URL || DEFAULT_URL).trim(),
-    apiKey: (process.env.DASHSCOPE_API_KEY || '').trim(),
-    model: (process.env.DASHSCOPE_DECISION_MODEL || DEFAULT_MODEL).trim(),
+    url: readPluginProviderField('decision', 'alibaba', 'url') || DEFAULT_URL,
+    apiKey: readPluginProviderSecret('decision', 'alibaba'),
+    model: readPluginProviderField('decision', 'alibaba', 'model') || DEFAULT_MODEL,
   };
 }
 

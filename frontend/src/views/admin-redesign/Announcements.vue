@@ -93,7 +93,7 @@
           <tr v-for="r in paged" :key="r.id">
             <td>
               <div class="mk-cell-main">
-                <strong>{{ r.title }}</strong>
+                <strong :title="r.title">{{ r.title }}</strong>
                 <span class="mk-cell-sub an-body" :title="r.body">{{ r.body }}</span>
               </div>
             </td>
@@ -141,8 +141,8 @@
         v-else
         icon="◌"
         :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
-        :description="isFiltered ? '放宽筛选条件试试。' : '维护通知、功能发布、政策变更都会在这里汇总。'"
-        :action-text="isFiltered ? '清除筛选' : '新建公告'"
+        :description="isFiltered ? '放宽筛选条件试试。' : ''"
+        :action-text="isFiltered ? '清除筛选' : embedded ? '' : '新建公告'"
         min
         @action="isFiltered ? clearFilters() : openCreate()"
       />
@@ -158,7 +158,7 @@
     <!-- 新建 / 编辑公告 -->
     <Teleport to="body">
     <div v-if="createOpen" ref="maskRef" class="mk-modal">
-      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="新建公告">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="editingId ? '编辑公告' : '新建公告'">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ editingId ? '编辑公告' : '新建公告' }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeCreate">✕</button>
@@ -173,7 +173,7 @@
           <label class="mk-field">
             <span class="mk-field__label">级别</span>
             <!-- 三选一分组：role=group + aria-label，每个按钮带 aria-pressed（读屏可知当前级别；
-                 选中态不再只靠颜色与描边表达，与 DataScopeToggle / Feedback 状态 pill 同判例） -->
+                 选中态不再只靠颜色与描边表达，与 Feedback 状态 pill 同判例） -->
             <div class="an-severity" role="group" aria-label="公告级别">
               <button
                 v-for="s in severities"
@@ -221,7 +221,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, getCurrentInstance, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { intent } from './store'
 import {
   liveAnnouncements,
@@ -266,10 +267,6 @@ interface Row {
 
 
 const rows = computed<Row[]>(() => liveAnnouncements.value)
-/* 宿主域计数徽章（embedded 才消费）：公告数就绪/变化即上报 */
-watch(liveAnnouncements, (list) => {
-  emit('count', list.length)
-}, { immediate: true })
 
 /* live 拉取失败态：liveFailures 由 store 的 loadLiveData 填充（announcements 域失败时置位） */
 const liveFailed = ref(false)
@@ -278,7 +275,10 @@ const liveRetrying = ref(false)
 /* 客户端筛选：关键词 + 级别 + 状态（与学习者域列表页同形态） */
 const keyword = ref('')
 const severityFilter = ref('')
-const statusFilter = ref('')
+/* 深链预筛（2026-10-24）：运营待办「草稿公告 →」带 ?status=draft；无 router 上下文时降级为无筛选 */
+const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.$router
+const announceRoute = hasRouterCtx ? useRoute() : null
+const statusFilter = ref(announceRoute && typeof announceRoute.query.status === 'string' ? String(announceRoute.query.status) : '')
 
 /* 客户端排序：公告全量已在 live 层（拉全量 + 客户端分页），排序诚实。
    级别/状态按语义档位排（非字典序）；发布/过期按时间戳，空值由 useTableSort 恒排末尾。
@@ -373,6 +373,11 @@ const activeCount = computed(
   () => rows.value.filter((r) => r.status === 'published' && (!r.expiresAt || new Date(r.expiresAt).getTime() > Date.now())).length
 )
 const draftCount = computed(() => rows.value.filter((r) => r.status === 'draft').length)
+/** 宿主域计数徽章（embedded 才消费）：只报草稿数——角标位被读作待办量，
+    全部公告数在列表卡头自报。与运营待办的「草稿公告」同源。 */
+watch([draftCount, liveAnnouncements], () => {
+  emit('count', draftCount.value)
+}, { immediate: true })
 const archivedCount = computed(() => rows.value.filter((r) => r.status === 'archived').length)
 
 /* 操作 */

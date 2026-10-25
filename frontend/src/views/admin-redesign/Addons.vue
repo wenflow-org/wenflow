@@ -4,90 +4,64 @@
        成员是运行时 Skill；停用插件不改变主流程结构，缺的那一步走各卡标注的降级路径。
        旧深链 ?tab=addons / /admin/addons / /admin/external-capabilities 由路由改投到本页。 -->
   <div class="mk-page">
-    <MkPageHead title="插件" sub="可选能力与 MCP 服务。停用任一插件都不阻断主流程，按各卡标注的降级路径继续">
-      <template #actions>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading || mcpLoading" @click="refreshAll">
-          {{ loading || mcpLoading ? '刷新中…' : '刷新' }}
-        </button>
-      </template>
-    </MkPageHead>
+    <!-- 2026-10-23 用户「已经有刷新，为什么还有独立刷新」：本页数据（能力配置 / MCP 服务）
+         跟随顶栏刷新广播 liveRefreshSeq，页头不再出第二颗刷新钮。 -->
+    <MkPageHead
+      title="插件"
+      sub="可选能力与 MCP 服务"
+    />
 
     <!-- ① 插件 + ② MCP 服务：堆叠单列全宽（2026-09-29 实测半宽卡内能力表 874px 溢出
          506px 容器，并栏不可行；审核 #157 删除恒 false 的 sideBySide 死分支与不可达 CSS） -->
     <div class="ac-cards">
 
-    <!-- 运行边界：把用户拍板的「启停不影响流程」写在页面上，避免把插件开关读成流程开关 -->
-    <div class="mk-card ac-note">
-      <div class="ac-note__title">停用插件 ≠ 停用流程</div>
-      <div class="ac-note__text">
-        目标对话、路径生成、课堂仍按原步骤推进。缺的那一步走每张卡标注的降级路径。
-        启停由服务端配置控制，本页展示当前生效的模型路由与实际可用状态。
-      </div>
-    </div>
-
-    <!-- ① 插件 -->
+    <!-- ① 插件（2026-10-21 重设计：四张等高卡 → 一张能力表）。
+         原设计每组一张卡，卡头「已单独配置」与每个成员的「已单独配置」重复、卡尾再压一段
+         「关闭后」说明与「最近 从未」，四张卡几乎一样高且信息密度低。
+         现在一行一组：能力 / 成员 / 模型路由 / 最近调用 / 操作；降级行为收进行悬停。 -->
     <div class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">插件</h3>
-        <span class="mk-card__meta">按用户可见能力分组。成员为运行时 Skill</span>
+        <!-- 2026-10-23 走查：卡头不复述页名（「插件」页里再挂一枚「插件」标题） -->
+        <h3 class="mk-card__title">可选能力</h3>
+        <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn" title="启停状态未读取，开关暂时按默认启用在显示">启停状态未读取</span>
+        <span class="mk-card__meta">{{ pluginRows.length }} 组 · {{ pluginMemberCount }} 个 Skill</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
         <span class="mk-alert__msg">插件配置加载失败，以下状态为占位，无法反映真实路由。</span>
-        <button type="button" class="mk-alert__btn" @click="loadConfigs">重试</button>
+        <button type="button" class="mk-alert__btn" @click="loadPluginConfigs">重试</button>
       </div>
       <MkLoading v-if="loading" min text="插件配置加载中…" />
-      <div v-else class="ac-pi-grid">
-        <article v-for="p in pluginRows" :key="p.id" class="ac-pi">
-          <div class="ac-pi__head">
-            <div class="ac-pi__id">
-              <span class="ac-pi__glyph" aria-hidden="true">{{ p.glyph }}</span>
-              <div class="ac-pi__names">
-                <strong>{{ p.name }}</strong>
-                <span class="ac-pi__desc">{{ p.description }}</span>
-              </div>
+      <!-- 2026-10-24 用户「插件就是配置启用，这设计的太丑了」：撤掉表格与成员路由徽标，
+           一行一个插件：身份/说明/成员一条线，右侧只有开关与配置。模型细节收进配置弹窗。 -->
+      <div v-else class="ac-plugins">
+        <div
+          v-for="p in pluginRows"
+          :key="p.id"
+          class="ac-plugin"
+          :class="{ 'is-off': !pluginEnabled(p.id) }"
+        >
+          <span class="ac-plugin__glyph" aria-hidden="true">{{ p.glyph }}</span>
+          <div class="ac-plugin__main">
+            <div class="ac-plugin__title">
+              <strong>{{ p.name }}</strong>
+              <span class="ac-plugin__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
             </div>
-            <span class="mk-badge ac-pi__state" :class="p.stateClass" :title="pluginStateTitle(p)">{{ p.stateText }}</span>
+            <span class="ac-plugin__desc">{{ p.description }}</span>
+            <span v-if="membersText(p)" class="ac-plugin__members">{{ membersText(p) }}</span>
           </div>
-
-          <div class="ac-pi__members">
-            <button
-              v-for="m in p.members"
-              :key="m.id"
-              type="button"
-              class="ac-pi__member"
-              :title="`打开 ${m.name} 的详情 / 配置`"
-              @click="openSkillDrawer(m.id)"
-            >
-              <span class="ac-pi__member-main">
-                <span class="ac-pi__member-name">{{ m.name }}</span>
-                <span class="mono ac-pi__member-id">{{ m.id }}</span>
-              </span>
-              <span class="ac-pi__member-badges">
-                <span class="mk-badge ac-pi__member-state" :class="m.stateClass" :title="routeTitle(m.stateText)">{{ m.stateText }}</span>
-                <span
-                  v-if="m.availability"
-                  class="mk-badge ac-pi__member-state"
-                  :class="m.availability.stateClass"
-                  title="MCP 服务列表中启用的服务数。停用的服务不会被调用"
-                >{{ m.availability.text }}</span>
-              </span>
-            </button>
+          <div class="ac-plugin__actions">
+            <MkSwitch
+              :model-value="pluginEnabled(p.id)"
+              :state-text="pluginEnabled(p.id) ? '启用' : '停用'"
+              :busy="pluginBusy === p.id"
+              :aria-label="`${p.name}插件开关`"
+              :title="`停用后：${p.fallback}`"
+              @update:model-value="togglePlugin(p.id, $event)"
+            />
+            <button type="button" class="mk-btn mk-btn--sm" @click="openConfig(p)">{{ p.id === 'mcp' ? '管理服务' : '配置' }}</button>
+            <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
           </div>
-
-          <div class="ac-pi__fallback">
-            <span class="ac-pi__fallback-label">关闭后</span>
-            <span class="ac-pi__fallback-text">{{ p.fallback }}</span>
-          </div>
-
-          <div class="ac-pi__foot">
-            <span class="ac-pi__last">最近 {{ p.last }}</span>
-            <div class="mk-actions">
-              <button v-if="p.actionId" type="button" class="mk-btn mk-btn--sm" @click="openSkillDrawer(p.actionId)">详情 / 配置</button>
-              <button v-else type="button" class="mk-btn mk-btn--sm" @click="goConfig">配置 →</button>
-              <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
-            </div>
-          </div>
-        </article>
+        </div>
       </div>
     </div>
 
@@ -102,15 +76,16 @@
       <div class="ac-mcp" v-if="mcpTools.length">
         <div v-for="t in mcpTools" :key="t.id" class="ac-mcp__row">
           <span class="ac-mcp__dot" :class="t.enabled ? 'is-on' : 'is-off'"></span>
-          <div class="ac-mcp__main">
+          <div class="ac-mcp__main" :title="`${t.name}（${t.id}）`">
             <strong>{{ t.name }}</strong>
-            <span class="ac-mcp__id mono">{{ t.id }}</span>
           </div>
-          <span class="ac-mcp__type mono">
+          <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
+          <span class="ac-mcp__type">
+            类型 ·
             <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
             <template v-else>{{ mcpTypeText(t.type) }}</template>
           </span>
-          <span class="ac-mcp__endpoint mono" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
+          <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">入口 · {{ endpointLabel(t.endpoint) }}</span>
           <span class="mk-badge" :class="t.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ t.enabled ? '启用' : '停用' }}</span>
           <div class="mk-actions">
             <button
@@ -146,7 +121,7 @@
         :tone="mcpFailed ? 'error' : 'neutral'"
         :icon="mcpFailed ? '!' : ''"
         :title="mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务'"
-        :description="mcpFailed ? '无法从后端拉取 MCP 服务列表。' : 'MCP 服务在此登记，供「MCP 工具调用」插件使用。停用或删除只影响调用它的能力，不阻断主流程。'"
+        :description="mcpFailed ? '无法从后端拉取 MCP 服务列表。' : ''"
         :action-text="mcpFailed ? '重试' : ''"
         action-busy-text="重试中…"
         :action-busy="mcpLoading"
@@ -211,9 +186,6 @@
             />
             <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
           </label>
-          <p v-if="toolForm.transport === 'mcp'" class="ac-mcp__hint">
-            工具由服务端动态发现，保存后可在列表中「发现工具」查看。
-          </p>
           <label class="mk-field">
             <span class="mk-field__label">描述（可选）</span>
             <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2" placeholder="这个工具做什么"></textarea>
@@ -228,15 +200,75 @@
       </div>
     </div>
     </Teleport>
+
+    <!-- 插件服务配置（2026-10-24 用户「联网是配置模型吗」）：
+         联网 = 搜索/抓取 provider 的密钥与入口；决策 = 判定模型端点；生图 = 生图端点与模型。
+         这里不碰 Skill 的 LLM 模型绑定（那在 Skill 运行时的模型面板里）。 -->
+    <Teleport to="body">
+      <div v-if="configOpen" ref="configMaskRef" class="mk-modal">
+        <div ref="configPanelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="插件服务配置">
+          <div class="mk-modal__head">
+            <h3 class="mk-modal__title">{{ configTarget?.label }} · 服务配置</h3>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
+          </div>
+          <div class="mk-modal__body">
+            <p class="ac-config-intro">{{ configTarget?.description }}</p>
+            <div class="ac-config-chain" v-for="channel in configTarget?.channels ?? []" :key="channel.id">
+              <span class="ac-config-chain__label">{{ channel.label }}</span>
+              <span class="ac-config-chain__order">{{ channel.order.map(providerLabelOf).join(' → ') || '—' }}</span>
+              <span class="ac-config-chain__note">按服务端配置顺序降级</span>
+            </div>
+            <section class="ac-config-provider" v-for="provider in configTarget?.providers ?? []" :key="provider.id">
+              <header class="ac-config-provider__head">
+                <div class="ac-config-provider__title">
+                  <strong>{{ provider.label }}</strong>
+                  <span>{{ provider.description }}</span>
+                </div>
+                <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
+                  {{ provider.configured ? '已配置' : '缺少密钥' }}
+                </span>
+              </header>
+              <div class="ac-config-fields">
+                <label class="mk-field" v-for="field in provider.fields" :key="field.key">
+                  <span class="mk-field__label">{{ field.label }}</span>
+                  <input
+                    v-model="draft[provider.id][field.key]"
+                    class="mk-field__input"
+                    :type="field.type"
+                    :placeholder="field.placeholder"
+                    :autocomplete="field.secret ? 'new-password' : 'off'"
+                  />
+                  <span class="mk-field__hint">{{ field.hint }}</span>
+                </label>
+              </div>
+              <div class="ac-config-provider__foot">
+                <span v-if="clearKeys[provider.id]" class="ac-config-provider__warn">保存后清除界面里保存的密钥，回落服务端环境变量</span>
+                <button
+                  v-if="provider.keySource === 'db' || clearKeys[provider.id]"
+                  type="button"
+                  class="mk-link"
+                  @click="toggleClearKey(provider.id)"
+                >{{ clearKeys[provider.id] ? '取消清除' : '清除界面密钥' }}</button>
+              </div>
+            </section>
+          </div>
+          <div class="mk-modal__foot">
+            <button type="button" class="mk-btn" @click="closeConfig">取消</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="configSaving" @click="saveConfig">
+              {{ configSaving ? '保存中…' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { dataSource, openSkillDrawer, investigateAgent, liveSkillStatsMap } from './store'
-import { errMsg } from './live'
-import { adminSkillsApi, adminMcpApi } from '@/api/adminApi'
+import { dataSource, investigateAgent, liveSkillStatsMap } from './store'
+import { errMsg, liveRefreshSeq } from './live'
+import { adminMcpApi, adminPluginsApi } from '@/api/adminApi'
 import { PLUGIN_GROUPS, type PluginGroup } from './capabilityCatalog'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -244,26 +276,20 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSwitch from '@/components/mk/MkSwitch.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { toast } from '@/utils/toast'
 
-const router = useRouter()
-
 /* 独立页（2026-10-19）：原 embedded prop 与 count 上报是给「模型与接入」宿主页签用的，
-   页签撤除后一并删除——页头刷新直接调两个加载器。 */
+   页签撤除后一并删除——页头刷新直接调三个加载器。 */
 async function refreshAll() {
-  await Promise.all([loadConfigs(), loadMcpTools()])
+  await Promise.all([loadPluginConfigs(), loadMcpTools(), loadPluginStates()])
 }
 
 /* ---------- ① 插件（能力 bundle → 运行时 Skill） ---------- */
 interface PluginMemberRow {
   id: string
   name: string
-  hasConfig: boolean
-  stateText: string
-  stateClass: string
-  /** MCP 成员额外展示服务可用性；其余成员没有独立可读的 provider 状态 */
-  availability: { text: string; stateClass: string } | null
 }
 
 interface PluginRow {
@@ -274,57 +300,37 @@ interface PluginRow {
   fallback: string
   primary: string
   members: PluginMemberRow[]
-  actionId: string | null
   hasStats: boolean
-  stateText: string
-  stateClass: string
+  /** MCP 组额外展示服务可用性（与模型路由是两个维度，分开写） */
+  availability: { text: string; stateClass: string } | null
   last: string
 }
 
 /**
- * 路由状态只说「这条 Skill 有没有单独配置」：
- * - skill_model_configs 无行 → 继承平台默认路由，能力仍可用；
- * - 有行且 enabled=false → 不用这条自定义路由，回落到平台默认，不是「能力已关闭」。
- * 页面不把两者写成「启用/停用」，避免一个假开关。
+ * 2026-10-24：列表页只回答「这个插件开没开」，模型路由细节收进「配置」弹窗。
+ * 这里不再把「有没有配置行」翻译成组级徽标——那是把成员状态混成一个结论。
  */
-function routeState(id: string): { hasConfig: boolean; text: string; stateClass: string } {
-  if (configsFailed.value) return { hasConfig: false, text: '配置未读取', stateClass: 'mk-badge--warn' }
-  const c = configMap.value[id]
-  if (!c) return { hasConfig: false, text: '继承默认', stateClass: 'mk-badge--muted' }
-  if (c.enabled === false) return { hasConfig: true, text: '自定义路由停用', stateClass: 'mk-badge--warn' }
-  return { hasConfig: true, text: '已单独配置', stateClass: 'mk-badge--ok' }
-}
-
-function routeTitle(text: string): string {
-  switch (text) {
-    case '已单独配置': return '该 Skill 使用单独配置的模型路由'
-    case '继承默认': return '未单独配置，使用平台默认路由。能力仍可用'
-    case '自定义路由停用': return '不使用该 Skill 的自定义模型路由。回落到平台默认后能力仍可用'
-    case '配置未读取': return '配置接口未返回，当前状态未知'
-    default: return text
-  }
-}
-
-function pluginStateTitle(p: PluginRow): string {
-  if (p.id === 'mcp') return p.stateText
-  switch (p.stateText) {
-    case '已单独配置': return '该组至少一条 Skill 使用单独配置的模型路由。这不代表能力开关'
-    case '继承默认': return '该组 Skill 均使用平台默认路由。能力仍可用'
-    case '路由停用': return '该组 Skill 均不使用自定义模型路由。回落到平台默认后能力仍可用'
-    case '配置未读取': return '配置状态未知。请先重试加载'
-    default: return p.stateText
-  }
-}
 
 /** 环境变量占位符（${ENV_VAR} 未替换）判定：直出原文会误导为真实地址，统一显示「未配置」 */
 const ENV_PLACEHOLDER = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/
 function endpointLabel(endpoint: string): string {
-  return ENV_PLACEHOLDER.test(endpoint) ? '未配置' : endpoint || '—'
+  if (ENV_PLACEHOLDER.test(endpoint)) return '未配置'
+  // 「local」是 MCP 服务的内部取值（本机进程），运营读不出它是什么
+  if (endpoint === 'local') return '本机进程'
+  return endpoint || '—'
 }
 function endpointTitle(endpoint: string): string {
   return ENV_PLACEHOLDER.test(endpoint)
     ? `环境变量 ${endpoint} 未替换（未在服务端配置），该工具当前不可用`
     : endpoint
+}
+/** 成员行去重（2026-10-24）：成员名与组名相同时不再逐字复述，
+    只保留可用性短语（如「2 个服务可用」）；两者都没有时整行不渲染。 */
+function membersText(p: PluginRow): string {
+  const names = p.members.map((m) => m.name).filter((n) => !!n && n !== p.name)
+  const parts: string[] = [...names]
+  if (p.availability) parts.push(p.availability.text)
+  return parts.join(' · ')
 }
 /** MCP 工具类型枚举 → 中文（下拉与表格同一套，避免同屏中英两套） */
 const MCP_TYPE_TEXT: Record<string, string> = {
@@ -332,27 +338,54 @@ const MCP_TYPE_TEXT: Record<string, string> = {
 }
 const mcpTypeText = (t: string) => MCP_TYPE_TEXT[t] || t
 
-const configMap = ref<Record<string, Record<string, unknown>>>({})
+/* ---------- 插件外部服务配置（联网 / 决策 / 生图） ---------- */
+interface PluginProviderField {
+  key: string
+  label: string
+  type: 'text' | 'password'
+  value: string
+  placeholder: string
+  hint: string
+  secret: boolean
+}
+interface PluginProvider {
+  id: string
+  label: string
+  description: string
+  configured: boolean
+  keySource: 'db' | 'env' | 'none'
+  keyHint: string | null
+  fields: PluginProviderField[]
+}
+interface PluginConfig {
+  id: string
+  label: string
+  description: string
+  channels: Array<{ id: string; label: string; description: string; order: string[] }>
+  providers: PluginProvider[]
+}
+
+const providerConfigs = ref<Record<string, PluginConfig>>({})
 const loading = ref(false)
-/** 能力配置拉取失败：保留现有表格并展示错误条，避免整表降级为「待配置」 */
+/** 服务配置拉取失败：保留现有列表并展示错误条，避免把未知状态读成「未配置」 */
 const configsFailed = ref(false)
 
-async function loadConfigs() {
+async function loadPluginConfigs() {
   loading.value = true
   configsFailed.value = false
   try {
-    const res = await adminSkillsApi.getSkillModelConfigs()
-    const body = res.data?.data ?? res.data ?? []
-    const items = Array.isArray(body) ? body : body.items || body.configs || []
-    const map: Record<string, Record<string, unknown>> = {}
-    for (const c of items as Record<string, unknown>[]) {
-      const skillId = String(c.skillId || c.id || '')
-      if (skillId) map[skillId] = c
+    const res = await adminPluginsApi.getConfig()
+    const list = res.data?.data?.plugins
+    const map: Record<string, PluginConfig> = {}
+    if (Array.isArray(list)) {
+      for (const plugin of list as PluginConfig[]) {
+        if (plugin?.id) map[plugin.id] = plugin
+      }
     }
-    configMap.value = map
+    providerConfigs.value = map
   } catch (e) {
     configsFailed.value = true
-    toast.error(`配置加载失败：${errMsg(e)}`)
+    toast.error(`插件服务配置加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
   }
@@ -363,28 +396,10 @@ function buildPluginRows(
   mcpAvailability: { text: string; stateClass: string },
 ): PluginRow[] {
   return groups.map((group) => {
-    const members: PluginMemberRow[] = group.members.map((member) => {
-      const route = routeState(member.id)
-      return {
-        id: member.id,
-        name: member.name,
-        hasConfig: route.hasConfig,
-        stateText: route.text,
-        stateClass: route.stateClass,
-        availability: group.id === 'mcp' ? mcpAvailability : null,
-      }
-    })
-    const configured = members.filter((member) => member.hasConfig)
-    const hasActiveRoute = configured.some((member) => member.stateText === '已单独配置')
-    const state = group.id === 'mcp'
-      ? mcpAvailability
-      : configsFailed.value
-        ? { text: '配置未读取', stateClass: 'mk-badge--warn' }
-        : hasActiveRoute
-          ? { text: '已单独配置', stateClass: 'mk-badge--ok' }
-          : configured.length
-            ? { text: '路由停用', stateClass: 'mk-badge--warn' }
-            : { text: '继承默认', stateClass: 'mk-badge--muted' }
+    const members: PluginMemberRow[] = group.members.map((member) => ({
+      id: member.id,
+      name: member.name,
+    }))
     const last = members
       .map((member) => liveSkillStatsMap.value?.[member.id]?.lastAt)
       .find((value) => value && value !== '从未') || '从未'
@@ -396,10 +411,8 @@ function buildPluginRows(
       fallback: group.fallback,
       primary: group.primary,
       members,
-      actionId: configured[0]?.id ?? null,
       hasStats: members.some((member) => (liveSkillStatsMap.value?.[member.id]?.calls ?? 0) > 0),
-      stateText: state.text,
-      stateClass: state.stateClass,
+      availability: group.id === 'mcp' ? mcpAvailability : null,
       last,
     }
   })
@@ -433,7 +446,9 @@ const mcpAvailability = computed(() => {
   if (!mcpTools.value.length) return { text: '未登记服务', stateClass: 'mk-badge--muted' }
   const enabled = mcpTools.value.filter((tool) => tool.enabled).length
   if (!enabled) return { text: '服务全部停用', stateClass: 'mk-badge--warn' }
-  return { text: `${enabled} 个服务可用`, stateClass: 'mk-badge--ok' }
+  /* 这里只数「启用」的服务，不代表可达：服务可以 enabled 但连接测试失败
+     （实测 file-reader 路径无效仍显示「1 个服务可用」）。可达性看 MCP 服务表里每行的「测试」。 */
+  return { text: `${enabled} 个服务启用`, stateClass: 'mk-badge--ok' }
 })
 
 /** 运行时统计变化时随重算（最近调用 / 日志入口） */
@@ -441,6 +456,8 @@ const pluginRows = computed(() => {
   void liveSkillStatsMap.value
   return buildPluginRows(PLUGIN_GROUPS, mcpAvailability.value)
 })
+/** 卡头读数：几组能力、几个运行时 Skill（2026-10-21 重设计后卡头只放数据） */
+const pluginMemberCount = computed(() => pluginRows.value.reduce((n, p) => n + p.members.length, 0))
 
 async function loadMcpTools() {
   mcpLoading.value = true
@@ -468,14 +485,16 @@ async function loadMcpTools() {
 watch(
   () => [dataSource.value],
   () => {
-    void loadConfigs()
+    void loadPluginConfigs()
     void loadMcpTools()
+    void loadPluginStates()
   },
   { immediate: true }
 )
 
-/** 独立页（2026-10-19）：数据源切换时自动重拉（上面那个 watch 的 immediate 首拉同款）；
-    页头「刷新」按钮走 refreshAll。 */
+/** 独立页（2026-10-19）：数据源切换时自动重拉（上面那个 watch 的 immediate 首拉同款）。
+    顶栏刷新经 liveRefreshSeq 广播到本页，页头不再有独立刷新钮（2026-10-23 全站收口）。 */
+watch(liveRefreshSeq, () => { void refreshAll() })
 defineExpose({ refresh: refreshAll })
 
 /* ---------- MCP 服务弹窗 ---------- */
@@ -489,6 +508,129 @@ const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => toolOpen.value), panelRef)
 useMaskClose(maskRef, () => { toolOpen.value = false })
+
+/* ---------- 插件启停（2026-10-24） ---------- */
+const pluginStates = ref<Record<string, boolean>>({ web: true, decision: true, image: true, mcp: true })
+const pluginStateFailed = ref(false)
+/** 在途的插件 id：开关自己 busy，避免连点 */
+const pluginBusy = ref('')
+const pluginEnabled = (id: string) => pluginStates.value[id] !== false
+
+async function loadPluginStates() {
+  try {
+    const res = await adminPluginsApi.list()
+    const states = res.data?.data?.states
+    if (states && typeof states === 'object') pluginStates.value = { ...pluginStates.value, ...states }
+    pluginStateFailed.value = false
+  } catch (e) {
+    pluginStateFailed.value = true
+    toast.error(`插件启停状态加载失败：${errMsg(e)}`)
+  }
+}
+
+async function togglePlugin(id: string, enabled: boolean) {
+  if (pluginBusy.value) return
+  pluginBusy.value = id
+  try {
+    const res = await adminPluginsApi.setEnabled(id, enabled)
+    const states = res.data?.data?.states
+    if (states && typeof states === 'object') pluginStates.value = { ...pluginStates.value, ...states }
+    else pluginStates.value = { ...pluginStates.value, [id]: enabled }
+    toast.success(enabled ? '插件已启用' : '插件已停用')
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    pluginBusy.value = ''
+  }
+}
+
+/* ---------- 插件服务配置（联网 / 决策 / 生图的 provider 密钥、入口与模型） ---------- */
+const configOpen = ref(false)
+const configTarget = ref<PluginConfig | null>(null)
+const configSaving = ref(false)
+/** providerId → fieldKey → 草稿值。密钥字段留空 = 不修改 */
+const draft = ref<Record<string, Record<string, string>>>({})
+/** providerId → 是否清除已存密钥 */
+const clearKeys = ref<Record<string, boolean>>({})
+const configMaskRef = ref<HTMLElement | null>(null)
+const configPanelRef = ref<HTMLElement | null>(null)
+useEscape(() => configOpen.value, () => closeConfig())
+useOverlay(computed(() => configOpen.value), configPanelRef)
+useMaskClose(configMaskRef, () => closeConfig())
+
+function openConfig(group: PluginRow) {
+  // MCP 不是 provider 链：服务登记就在本页下方，滚过去即可
+  if (group.id === 'mcp') {
+    document.querySelector('.ac-mcp-card')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  const cfg = providerConfigs.value[group.id]
+  if (!cfg) {
+    toast.error('服务配置尚未加载，请刷新后重试')
+    return
+  }
+  configTarget.value = cfg
+  const next: Record<string, Record<string, string>> = {}
+  for (const provider of cfg.providers) {
+    next[provider.id] = {}
+    for (const field of provider.fields) {
+      if (!field.secret) next[provider.id][field.key] = field.value
+    }
+  }
+  draft.value = next
+  clearKeys.value = {}
+  configOpen.value = true
+}
+
+function closeConfig() {
+  configOpen.value = false
+  configTarget.value = null
+  clearKeys.value = {}
+}
+
+function toggleClearKey(providerId: string) {
+  clearKeys.value = { ...clearKeys.value, [providerId]: !clearKeys.value[providerId] }
+}
+
+function providerLabelOf(providerId: string): string {
+  return configTarget.value?.providers.find((p) => p.id === providerId)?.label || providerId
+}
+
+async function saveConfig() {
+  const cfg = configTarget.value
+  if (!cfg || configSaving.value) return
+  const providers: Record<string, Record<string, string | null> & { clearKey?: boolean }> = {}
+  for (const provider of cfg.providers) {
+    const patch: Record<string, string | null> & { clearKey?: boolean } = {}
+    for (const field of provider.fields) {
+      const now = (draft.value[provider.id]?.[field.key] ?? '').trim()
+      if (field.secret) {
+        if (now) patch[field.key] = now
+      } else if (now !== field.value) {
+        // 空串 = 删除界面覆盖，回落服务端环境变量
+        patch[field.key] = now
+      }
+    }
+    if (clearKeys.value[provider.id]) patch.clearKey = true
+    if (Object.keys(patch).length) providers[provider.id] = patch
+  }
+  if (!Object.keys(providers).length) {
+    closeConfig()
+    return
+  }
+  configSaving.value = true
+  try {
+    const res = await adminPluginsApi.saveConfig(cfg.id, providers)
+    const saved = res.data?.data?.plugin as PluginConfig | undefined
+    if (saved?.id) providerConfigs.value = { ...providerConfigs.value, [saved.id]: saved }
+    toast.success(`${cfg.label}服务配置已保存`)
+    closeConfig()
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    configSaving.value = false
+  }
+}
 
 function openToolCreate() {
   toolEditingId.value = ''
@@ -617,11 +759,6 @@ async function discoverTools(t: McpTool) {
 function goLogs(skillId: string) {
   investigateAgent(skillId)
 }
-function goConfig() {
-  // 本页常以 ?tab=addons 嵌入宿主；push 同路径不带 query 不会重置 tab，显式指定落到「接入与验证」。
-  // 用宿主白名单键 connection（旧键 model 已由 ApiConfig 的 TAB_ALIAS 兼容，但新代码直接用有效键）。
-  void router.push({ path: '/admin/api-config', query: { tab: 'connection' } })
-}
 
 /* toast */
 </script>
@@ -631,101 +768,100 @@ function goConfig() {
    与成本分析 / 健康中心同款），不再需要宿主 flex 列里的内滚容器。 */
 .mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 
-/* 运行边界条：只解释「停用插件 ≠ 停用流程」，不承载操作 */
-.ac-note {
+/* 插件列表（2026-10-24 用户「插件就是配置启用，这设计的太丑了」）：
+   一行一个插件，左侧身份与说明、右侧开关与配置。表格式铺开把「开没开」埋进了徽标列。 */
+.ac-plugins { display: grid; }
+.ac-plugin {
   display: grid;
-  gap: 3px;
-  padding: 12px 16px;
-  border-left: 3px solid var(--mk-blue);
-}
-.ac-note__title { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.ac-note__text { font-size: var(--mk-fs-micro); line-height: 1.65; color: var(--mk-muted); }
-
-/* 插件卡片栅格：按用户可见能力分组（联网 / 决策 / 生图 / MCP），卡内成员是运行时 Skill。
-   窄容器由 auto-fit 自动落单列；成员行再按卡片自身宽度决定是否堆叠。 */
-.ac-pi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   gap: 12px;
-  padding: 4px 16px 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--mk-line);
 }
-.ac-pi {
-  display: grid;
-  /* 第 3 行吃剩余高度：成员少的卡把「关闭后」压到页脚上方，四张卡的页脚同一基线 */
-  grid-template-rows: auto auto 1fr auto;
-  gap: 10px;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-  container-type: inline-size;
-}
-.ac-pi__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.ac-pi__id { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
-.ac-pi__glyph {
+.ac-plugin:last-child { border-bottom: none; }
+.ac-plugin__glyph {
   flex: none;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--mk-radius-md);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
-.ac-pi__names { display: grid; gap: 2px; min-width: 0; }
-.ac-pi__names strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
-.ac-pi__desc { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
-.ac-pi__state { flex: none; }
-
-.ac-pi__members { display: grid; gap: 4px; }
-.ac-pi__member {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--mk-surface-3);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.ac-pi__member:hover { background: var(--mk-hover-surface); }
-.ac-pi__member-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.ac-pi__member-name { flex: none; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); }
-.ac-pi__member-id {
-  min-width: 0;
+.ac-plugin__main { display: grid; gap: 3px; min-width: 0; }
+.ac-plugin__title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.ac-plugin__title strong { font-size: var(--mk-fs-body); font-weight: 650; color: var(--mk-ink); }
+.ac-plugin__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.ac-plugin__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-plugin__members {
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.ac-pi__member-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; min-width: 0; }
-
-.ac-pi__fallback {
+/* 开关独立固定列（2026-10-24）：有无「日志」都不移动开关竖轴；
+   按钮列右对齐，日志位即使为空也保留 32px 槽位。 */
+.ac-plugin__actions {
   display: grid;
-  align-self: end;
-  gap: 3px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  /* 固定总宽 + 固定列：开关的 x 与按钮文案长短无关（「配置」/「管理服务」同轴） */
+  width: 224px;
+  grid-template-columns: 72px 96px 32px;
+  align-items: center;
+  justify-items: end;
+  gap: 12px;
+}
+.ac-plugin__actions > .mk-switch { justify-self: start; }
+/* 停用只压信息层，开关与按钮保持清晰可点 */
+.ac-plugin.is-off .ac-plugin__main,
+.ac-plugin.is-off .ac-plugin__glyph { opacity: 0.55; }
+
+/* 服务配置弹窗：先给通道降级顺序，再逐 provider 填密钥/入口/模型 */
+.ac-config-intro { margin: 0 0 12px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-config-chain {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: var(--mk-fs-micro);
+}
+.ac-config-chain__label { font-weight: 600; color: var(--mk-ink); }
+.ac-config-chain__order { font-family: var(--mk-mono); color: var(--mk-ink); }
+.ac-config-chain__note { color: var(--mk-faint); }
+.ac-config-provider {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
   background: var(--mk-surface-2);
 }
-.ac-pi__fallback-label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
-.ac-pi__fallback-text { font-size: var(--mk-fs-micro); line-height: 1.55; color: var(--mk-muted); }
-
-.ac-pi__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.ac-pi__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
-
-/* 极窄卡：成员行改为上下两行，徽标不再和 Skill 名抢宽度 */
-@container (max-width: 340px) {
-  .ac-pi__member { grid-template-columns: minmax(0, 1fr); }
-  .ac-pi__member-badges { justify-content: flex-start; }
+.ac-config-provider__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ac-config-provider__title { display: grid; gap: 2px; }
+.ac-config-provider__title strong { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
+.ac-config-provider__title span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-config-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 14px;
+  margin-top: 10px;
+}
+.ac-config-provider__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.ac-config-provider__foot .mk-link { font-size: var(--mk-fs-micro); }
+.ac-config-provider__warn { margin-right: auto; font-size: var(--mk-fs-micro); color: var(--mk-amber); }
+@media (max-width: 720px) {
+  .ac-plugin { grid-template-columns: 32px minmax(0, 1fr); }
+  .ac-plugin__actions {
+    grid-column: 1 / -1;
+    display: flex;
+    width: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 
 /* 两卡容器：堆叠单列全宽（并栏分支 2026-09-29 实测溢出后退役，审核 #157 清掉不可达规则） */
@@ -746,7 +882,11 @@ function goConfig() {
 .ac-mcp { display: grid; }
 .ac-mcp__row {
   display: grid;
-  grid-template-columns: 10px 1.2fr 90px 1fr auto auto;
+  /* 2026-10-24：类型/入口按内容收（max-content 上限），富余空间只留在末尾动作列，
+     消除 585–662px 的空白中段；动作列右对齐。 */
+  /* 名称吃掉剩余宽度，类型/入口/状态/动作全部 max-content 靠右成组；
+     不再让某个具名列被余量拉成 500px+ 的空列。 */
+  grid-template-columns: 10px minmax(0, 1fr) max-content max-content max-content max-content;
   gap: 12px;
   align-items: center;
   padding: 10px 16px;
@@ -758,8 +898,11 @@ function goConfig() {
 .ac-mcp__dot.is-off { background: var(--mk-faint); }
 .ac-mcp__main { display: grid; gap: 1px; min-width: 0; }
 .ac-mcp__main strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ac-mcp__id { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ac-mcp__type { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-mcp__type { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+/* 状态徽标与动作组同处右缘：徽标列吃 1fr 并右对齐，把空白留在类型/入口与动作之间，
+   消除某个具名列被拉成 585–662px 空列（2026-10-24 复核）。 */
+.ac-mcp__row > .mk-badge { justify-self: end; }
+.ac-mcp__row > .mk-actions { justify-self: end; }
 .ac-mcp__test { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
 .ac-mcp__test.is-bad { color: var(--mk-red); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
@@ -767,27 +910,14 @@ function goConfig() {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   min-width: 0;
+  /* max-content 列必须给上限：超长 endpoint 否则会把整行顶出卡片 */
+  max-width: 240px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .ac-mcp__formrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ac-mcp__formrow--three { grid-template-columns: 1fr 1fr 1fr; }
-/* MCP 服务提示：说明工具是运行时发现的，避免误以为要逐个登记 */
-.ac-mcp__hint {
-  margin: -6px 0 0;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.65;
-  color: var(--mk-faint);
-}
-.ac-mcp__hint code {
-  font-family: var(--mk-mono);
-  font-size: var(--mk-fs-micro);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  padding: 1px 4px;
-  border-radius: 4px;
-}
 
 /* MCP 卡片作为容器：行按「卡片自身宽度」重排，而非视口宽度
    （并栏时卡片可能远窄于视口，视口断点不触发） */
@@ -821,28 +951,24 @@ function goConfig() {
   .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 12px 18px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-body); }
-  .ac-mcp__id { font-size: var(--mk-fs-micro); }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
+    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 14px 22px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-micro); }
-  .ac-mcp__id { font-size: var(--mk-fs-micro); }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
+    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .mono { font-size: var(--mk-fs-body); }
   .ac-mcp__row { padding: 16px 26px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-emphasis); }
-  .ac-mcp__id { font-size: var(--mk-fs-micro); }
-  .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-body); }
+    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：外挂能力 ================= */
 html[data-theme='dark'] {
   .ac-error { background: rgba(248, 113, 113, 0.1); }
   /* .ac-mcp__dot.is-off 不再重写：基础规则已走 var(--mk-faint)，暗色下自动取 #7a7e85 */
-  .ac-mcp__hint code { background: var(--mk-surface-3); color: var(--mk-muted, #afb1b6); }
 }
 </style>

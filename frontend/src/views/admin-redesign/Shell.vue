@@ -177,7 +177,7 @@
             <div v-if="!searchHits.length" class="mshell__search-empty">
               <p class="mshell__search-empty-title">没有匹配的页面</p>
               <p class="mshell__search-empty-hint">
-                搜索只覆盖页面名称。找人 / 路径 / 调用记录请用下面的入口直接搜：
+                搜索只覆盖页面名称。
               </p>
               <button
                 v-for="f in searchFallbacks"
@@ -366,12 +366,16 @@ const topTitle = computed(() => {
 const topSub = computed(() => {
   if (props.crumb) {
     const parts = props.crumb.split(' / ')
-    if (parts.length > 1) return parts[0] || ''
+    // 深层链会以「…」占位（AdminConsole CRUMB_MAX_DEPTH）：副行取第一个真实段
+    if (parts.length > 1) return parts.find((p) => p && p !== '…') || ''
     const parentPage = currentScene.value?.label ?? ''
     if (parentPage && parentPage !== topTitle.value) return parentPage
     return currentScene.value?.group ?? ''
   }
-  return currentScene.value?.group ?? ''
+  /* L1：副行＝分组；分组名与页面同名时留空（2026-10-23 走查：虚拟学习者页出现过
+     「虚拟学习者 / 虚拟学习者」的头——同详情页「沈奕航 / 沈奕航」同一条判例） */
+  const group = currentScene.value?.group ?? ''
+  return group === currentScene.value?.label ? '' : group
 })
 
 const searchHits = computed(() => {
@@ -543,7 +547,7 @@ function badgeTitle(item: MockSceneDef): string {
   const count = badgeOf(item)
   if (!count) return ''
   if (alarmNavBadges.has(item.id)) {
-    return `近 7 天执行失败 ${count} 次（近 200 条日志内统计，进入执行日志页后自动平息）`
+    return `近 7 天执行失败 ${count} 次（近 200 条日志内统计）`
   }
   return `${BADGE_MEANING[item.id] || item.label}：${count}`
 }
@@ -823,11 +827,7 @@ watch(
 .mshell__item-badge--alarm {
   background: var(--mk-red-bg-strong);
   color: var(--mk-red-strong);
-  animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
-}
-@keyframes mshell-alarm-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-red-fill) 32%, transparent); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-red-fill) 0%, transparent); }
+  /* 2026-10-22 用户：不要闪烁特效；告警只靠红底/红字表达 */
 }
 
 /* 左侧底部：收起/展开导航一行（原型 .side__foot = 单个 nav__item）。

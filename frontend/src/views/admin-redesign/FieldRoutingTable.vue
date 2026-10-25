@@ -7,12 +7,6 @@
         <span class="frt__toolbar-hint">编辑 prompts/orchestration/{{ stage }}.yaml（字段路由以这份文件为准）</span>
       </div>
     </div>
-    <!-- 原型 .note--info：入口说明（不再自搓虚线蓝框）。审核 #111：按钮实为工具条最左侧（非右上角），
-         文案改「本面板顶部」与 DriftAuditPanel 同口径，避免指路与实际位置相反 -->
-    <p class="note note--info frt__notice">
-      修改字段路由请使用本面板顶部的「编排文件」按钮，保存后新建行即时生效，已有行修改后点「{{ TERMS.syncToDb }}」
-    </p>
-
     <!-- core 联动提示条（M3 轻量：当前 stage 各 skill 的 fields-sync 状态角标） -->
     <div v-if="skillSyncs.length" class="note frt-syncbar">
       <span class="frt-syncbar__title">core 联动</span>
@@ -37,7 +31,7 @@
         </template>
         <span v-else class="frt-syncbar__count">未核对</span>
       </button>
-      <span class="frt-syncbar__hint">该字段未登记 core 声明 / 未登记路由 → 去 Skill 详情页补全（字段路由 tab）</span>
+      <span class="frt-syncbar__hint">该字段未登记 core 声明 / 未登记路由</span>
     </div>
     <div v-else-if="skillSyncLoading" class="note frt-syncbar frt-syncbar--muted">
       <span class="frt-syncbar__title">core 联动</span>
@@ -318,7 +312,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { openSubPage } from './store';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
@@ -567,7 +561,6 @@ interface SkillSyncBadge {
   title: string;
 }
 
-const router = useRouter();
 const skillSyncs = ref<SkillSyncBadge[]>([]);
 const skillSyncLoading = ref(false);
 
@@ -621,8 +614,10 @@ async function loadSkillSyncs() {
 }
 
 function goSkill(skillId: string) {
-  // 2026-10-15：设计页平铺进 Skill 详情页，落点 ?view=skill&id=，页签键 skdTab=routing
-  void router.push({ path: '/admin/skills', query: { view: 'skill', id: skillId, skdTab: 'routing' } });
+  // 2026-10-24：同场景二级页（openSubPage）而不是换场景 router.push——
+  // 从编排图字段路由进入时，关闭详情应回到编排图原阶段/子页签，而不是落在 Skill 列表。
+  // 详情页签由宿主 URL 同步写成独立键 skdTab，不碰编排图的 ?tab=。
+  openSubPage('skill', skillId, { tab: 'routing' });
 }
 
 // ============ 编排文件编辑（单源化批次 C） ============
@@ -841,7 +836,6 @@ watch(() => props.stage, () => void loadStage());
    同一问题见「core 联动」标题：--mk-blue 在 surface-2 上 4.56，一并提亮到 7.44 留余量 */
 html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
 html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
-.frt__notice { font-weight: 600; }
 .frt__toolbar-hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 /* ========== core 联动提示条（M3） ========== */
@@ -1022,7 +1016,6 @@ html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
 
 @media (min-width: 2000px) {
   .frt__toolbar-hint { font-size: var(--mk-fs-micro); }
-  .frt__notice { font-size: var(--mk-fs-micro); padding: 11px 14px; }
   .frt__legend-title { font-size: var(--mk-fs-micro); }
   .frt__legend-loading { font-size: var(--mk-fs-micro); }
   .frt__legend-en { font-size: var(--mk-fs-micro); }
@@ -1041,7 +1034,6 @@ html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
 
 @media (min-width: 2800px) {
   .frt__toolbar-hint { font-size: var(--mk-fs-micro); }
-  .frt__notice { font-size: var(--mk-fs-micro); padding: 13px 17px; }
   .frt__legend-title { font-size: var(--mk-fs-micro); }
   .frt__legend-loading { font-size: var(--mk-fs-micro); }
   .frt__legend-en { font-size: var(--mk-fs-micro); }

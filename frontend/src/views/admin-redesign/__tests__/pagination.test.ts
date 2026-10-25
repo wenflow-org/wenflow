@@ -101,4 +101,23 @@ describe('Pagination（mk-pagination 传统分页器）', () => {
     const options = w.findAll('option').map((o) => Number(o.attributes('value')));
     expect(options).toEqual([15, 30, 50, 100]);
   });
+
+  it('翻页后表格内滚容器回到顶部（fill 卡内滚不在页面顶部）', async () => {
+    const host = document.createElement('div');
+    host.className = 'mk-card';
+    const scroller = document.createElement('div');
+    scroller.className = 'mk-table-scroll';
+    host.appendChild(scroller);
+    document.body.appendChild(host);
+    const w = mount(Pagination, {
+      props: { page: 1, total: 60, pageSize: 15 },
+      attachTo: scroller
+    });
+    scroller.scrollTop = 40;
+    await w.setProps({ page: 2 });
+    await nextTick();
+    expect(scroller.scrollTop).toBe(0);
+    w.unmount();
+    host.remove();
+  });
 });

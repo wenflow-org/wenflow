@@ -26,6 +26,9 @@ export interface APIConfig {
   chatModels?: string[];
   reasoningModels?: string[];
   lightModels?: string[];
+  /** 连接健康快照（由管理台「连接并拉取 / 重新拉取」写入，随连接域保存） */
+  connectionStatus?: string;
+  lastCheckedAt?: Date | string | null;
 }
 
 const defaultConfig: APIConfig = {
@@ -102,6 +105,12 @@ class APIConfigService {
         ...currentConfig,
         ...newConfig,
       };
+      const parsedLastCheckedAt = mergedConfig.lastCheckedAt
+        ? new Date(mergedConfig.lastCheckedAt)
+        : undefined;
+      const validLastCheckedAt = parsedLastCheckedAt && !Number.isNaN(parsedLastCheckedAt.getTime())
+        ? parsedLastCheckedAt
+        : undefined;
 
       await prisma.platform_api_configs.upsert({
         where: { id: 'platform' },
@@ -121,6 +130,10 @@ class APIConfigService {
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
           reasoningModels: mergedConfig.reasoningModels ? JSON.stringify(mergedConfig.reasoningModels) : null,
           lightModels: mergedConfig.lightModels ? JSON.stringify(mergedConfig.lightModels) : null,
+          ...(typeof mergedConfig.connectionStatus === 'string'
+            ? { connectionStatus: mergedConfig.connectionStatus }
+            : {}),
+          ...(validLastCheckedAt ? { lastCheckedAt: validLastCheckedAt } : {}),
           updatedAt: new Date(),
         },
         create: {
@@ -140,6 +153,10 @@ class APIConfigService {
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
           reasoningModels: mergedConfig.reasoningModels ? JSON.stringify(mergedConfig.reasoningModels) : null,
           lightModels: mergedConfig.lightModels ? JSON.stringify(mergedConfig.lightModels) : null,
+          ...(typeof mergedConfig.connectionStatus === 'string'
+            ? { connectionStatus: mergedConfig.connectionStatus }
+            : {}),
+          ...(validLastCheckedAt ? { lastCheckedAt: validLastCheckedAt } : {})
         },
       });
 
