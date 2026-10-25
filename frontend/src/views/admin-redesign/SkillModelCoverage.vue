@@ -110,7 +110,10 @@
             <tr v-for="s in visibleRows" :key="s.skillId">
               <td><input v-model="selected" type="checkbox" :value="s.skillId" :aria-label="`选择技能 ${s.skillId}`" /></td>
               <td>
-                <button type="button" class="mk-link skc__name" :title="s.skillId" @click="emit('open-skill', s.skillId)">{{ props.skillNames[s.skillId] || s.skillId }}</button>
+                <!-- 英文主行（2026-10-25 用户「以英文为主」）：与 Skills 列表、详情 hero 同口径——
+                     canonical id 是身份，中文 displayName 降为副行别名 -->
+                <button type="button" class="mk-link skc__name mono" :title="nameTitleOf(s.skillId)" @click="emit('open-skill', s.skillId)">{{ s.skillId }}</button>
+                <span v-if="aliasOf(s.skillId)" class="skc__alias" :title="aliasOf(s.skillId)">{{ aliasOf(s.skillId) }}</span>
                 <span class="skc__agent" :title="props.agentLabels[s.skillId] || 'Skill 目录中无归属信息'">{{ props.agentLabels[s.skillId] || '—' }}</span>
               </td>
               <td>
@@ -282,6 +285,15 @@ const { sortState: covSortState, toggle: toggleCovSort, sortRows: sortCovRows } 
   },
   storageKey: 'wf_skc_sort'
 })
+/** 中文别名（displayName）：主行是英文 id，别名只在它与 id 不同时进副行（2026-10-25 英文为主） */
+function aliasOf(skillId: string): string {
+  const alias = String(props.skillNames[skillId] || '').trim()
+  return alias && alias !== skillId ? alias : ''
+}
+function nameTitleOf(skillId: string): string {
+  const alias = aliasOf(skillId)
+  return alias ? `${skillId} · ${alias}` : skillId
+}
 /** 参数覆盖单元格：只给项数（原文在 title）；整串 JSON 在列里读不出「覆盖了几项」 */
 function overrideText(p: Record<string, number> | null): string {
   const n = p ? Object.keys(p).length : 0
@@ -308,8 +320,8 @@ const visibleRows = computed(() => {
     if (sourceFilter.value !== 'all' && r.source !== sourceFilter.value) return false
     if (onlyFallback.value && !(r.fallbackChain && r.fallbackChain.length)) return false
     if (!q) return true
-    // 展示名也能搜到；id / 模型 / endpoint 保持原口径
-    return [props.skillNames[r.skillId], r.skillId, r.model, r.endpoint].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))
+    // 别名也能搜到（主行是英文 id，运营常按中文名找）；id / 模型 / endpoint 保持原口径
+    return [aliasOf(r.skillId), r.skillId, r.model, r.endpoint].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))
   })
 })
 const loading = ref(false)
@@ -467,9 +479,11 @@ onMounted(load)
 .skc__filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 /* 右端常驻的批量动作：与左侧筛选分开，避免被误读成一种筛选 */
 .skc__inherit { margin-left: auto; }
-.skc__name { font-family: inherit; text-align: left; }
+.skc__name { font-family: var(--mk-mono); text-align: left; }
+/* 中文别名：主行是英文 id，别名降为副行（2026-10-25 英文为主） */
+.skc__alias { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.4; }
 /* 归属 Agent：Skill 名下副行（原只读路由表的列，合并后不另占一列） */
-.skc__agent { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.4; }
+.skc__agent { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.4; }
 .skc__model { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .skc__model-id { overflow-wrap: break-word; }
 /* 继承值：弱化色，和「技能覆盖」的实值区分开（值是真的，来源不是本行） */

@@ -322,4 +322,37 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     await th!.find('button').trigger('click')
     expect(th!.attributes('aria-sort')).toBe('ascending')
   })
+
+  it('Skill 名英文为主（2026-10-25 用户「以英文为主」）：主行 canonical id，中文别名进副行', async () => {
+    localStorage.removeItem('wf_skills_sort')
+    // 目录给中文 displayName（name），列表主行必须仍是 id——与详情 hero 同一身份口径
+    const w = await mountSkills({
+      profiles: [{ id: 'goal-conversation', name: '目标对话 Skill', agentId: 'goal-agent', agentName: '目标 Agent', category: 'teaching' }],
+      stats: { 'goal-conversation': { calls: 10, errors: 0, avgMs: 100, lastAt: '刚刚' } },
+    })
+    const row = w.find('.sk-table tbody tr')
+    const main = row.find('.sk-name-main')
+    expect(main.text()).toBe('goal-conversation')
+    expect(main.classes()).toContain('sk-name-main--id')
+    // 别名与 description 都在副行（description 来自 meta 端点，此处未 mock → 只有别名）
+    expect(row.find('.sk-sub').text()).toContain('目标对话 Skill')
+    // 悬停给全：id + 别名
+    expect(main.attributes('title')).toContain('goal-conversation')
+    expect(main.attributes('title')).toContain('目标对话 Skill')
+    // 行可访问名用 id（不是中文别名）
+    expect(row.attributes('aria-label')).toContain('goal-conversation')
+    w.unmount()
+  })
+
+  it('目录没有中文别名时不重复占位：副行只留 description', async () => {
+    localStorage.removeItem('wf_skills_sort')
+    const w = await mountSkills({
+      profiles: [{ id: 'teaching-turn', name: 'teaching-turn', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching' }],
+      stats: { 'teaching-turn': { calls: 5, errors: 0, avgMs: 100, lastAt: '刚刚' } },
+    })
+    const row = w.find('.sk-table tbody tr')
+    expect(row.find('.sk-name-main').text()).toBe('teaching-turn')
+    expect(row.find('.sk-sub').exists()).toBe(false)
+    w.unmount()
+  })
 })

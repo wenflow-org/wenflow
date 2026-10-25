@@ -203,7 +203,11 @@
               @keydown.space.self.prevent="openSubPage('skill', skillIdOf(s.agentId))"
             >
               <span class="rankrow__idx">{{ i + 1 }}</span>
-              <span class="rankrow__grow" :title="skillIdOf(s.agentId)">{{ skillDisplayName(s.agentId) }}</span>
+              <!-- 英文主行（2026-10-25 用户「以英文为主」）：与 Skills 列表 / 详情 hero 同口径，
+                   canonical id 在前；中文 displayName 只在它确实是别名时括注（同 id 不重复） -->
+              <span class="rankrow__grow" :title="skillNameTitle(s.agentId)">
+                {{ skillIdOf(s.agentId) }}<template v-if="skillAliasOf(s.agentId)"> · {{ skillAliasOf(s.agentId) }}</template>
+              </span>
               <!-- 占比条（mk-minibar 共享原语）：名次数字只给序，条给「梯队差距」一眼可读；
                    无金银铜——排序徽章是装饰不编码信息 -->
               <span class="mk-minibar rankrow__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: topBarPct(Number(s.calls)) }"></i></span>
@@ -954,15 +958,15 @@ const feedRows = computed<FeedView[]>(() => {
     const last = out[out.length - 1];
     // 「执行失败：来源（类别）」解析：捕获 1=来源、2=类别（feedRows 折叠与 desc 兜底共用此口径）
     const m = /^执行失败：(.+)（(.+)）$/.exec(f.text);
-    /* 来源名走目录里的中文名（2026-10-23 运营视角）：live.ts 的原文是内部 Skill id，
-       运营读不出 goal-conversation 是什么；括注里的类别保持原样 */
-    const text = m ? `执行失败：${skillDisplayName(f.agentId || m[1])}（${m[2]}）` : f.text;
+    /* 来源名走英文 id（2026-10-25 用户「以英文为主」）：与 Skills 列表 / 详情 hero 同一身份口径；
+       中文别名只在确实是别名时括注在后面，运营仍能对上「这个 id 是干嘛的」。括注里的类别保持原样 */
+    const text = m ? `执行失败：${skillLabelOf(f.agentId || m[1])}（${m[2]}）` : f.text;
     if (f.tone === 'bad' && m && last && last.tone === 'bad' && last.count > 0 && last.text.startsWith('执行失败：') && last.desc.startsWith('Skill · ')) {
       // 同构坏消息追加来源（desc 形如「Skill · a、b」）；首条 desc 的单名改组名
       last.count += 1;
       // 来源名：agentId 优先；缺源时 live.ts 在标题里写「未知节点」占位，该占位不进来源清单
       const rawName = f.agentId || (m[1] !== '未知节点' ? m[1] : '');
-      const name = rawName ? skillDisplayName(rawName) : '';
+      const name = rawName ? skillLabelOf(rawName) : '';
       if (name && !last.desc.includes(name)) last.desc = `${last.desc}、${name}`;
       continue;
     }
@@ -971,7 +975,7 @@ const feedRows = computed<FeedView[]>(() => {
   return out.slice(0, 12);
 });
 function feedDesc(f: BriefData['feed'][number]): string {
-  if (f.agentId) return `Skill · ${skillDisplayName(f.agentId)}`
+  if (f.agentId) return `Skill · ${skillLabelOf(f.agentId)}`
   // 失败类别不再回填副行（2026-10-04 全站评审 P3）：标题括注「（调用方中止）」已把类别说了一次，
   // 副行「失败类别 · 调用方中止」属同屏双写——类别只在标题出现一次；副行回退可点提示
   return ''
@@ -1026,6 +1030,20 @@ const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls
     与四个只读端点（effective-prompt / skill-model-configs / field-routings / prompt-lab-core）
     都按注册表裸 id 取数——直接透传前缀会让子视图全线 404/400/500、指标恒 0（FN8）。 */
 const skillIdOf = (agentId: string) => String(agentId || '').replace(/^(?:skill|agent):/, '')
+/** 中文别名（目录 displayName）：只在它确实是别名（≠ id）时返回，供英文主行后括注。
+    2026-10-25 用户「以英文为主」：总览此前只印中文名，与 Skills 列表 / 详情 hero 的英文身份两套读法。 */
+const skillAliasOf = (agentId: string): string => {
+  const id = skillIdOf(agentId)
+  const alias = skillDisplayName(agentId)
+  return alias && alias !== id ? alias : ''
+}
+const skillNameTitle = (agentId: string): string => {
+  const id = skillIdOf(agentId)
+  const alias = skillAliasOf(agentId)
+  return alias ? `${id} · ${alias}` : id
+}
+/** 事件/待办文本里的 Skill 标签：英文 id 为主，别名存在时以「id · 别名」括注（2026-10-25） */
+const skillLabelOf = (agentId: string): string => skillNameTitle(agentId)
 
 interface TodoItem { key: string; text: string; main: string; tone: Tone; actLabel: string; action: () => void }
 /** 去掉末尾括号口径（完整句仍进 title）：可见行只留动作本身 */
@@ -1051,8 +1069,9 @@ const todoItems = computed<TodoItem[]>(() => {
     });
   }
   for (const a of effectiveActions.value) {
-    // 事项标题里带内部 Skill id（live.ts 原文 `${agentId} 近 7 天失败…`）：换成目录中文名
-    const text = a.agentId ? a.text.replace(a.agentId, skillDisplayName(a.agentId)) : a.text
+    // 事项标题里带内部 Skill id（live.ts 原文 `${agentId} 近 7 天失败…`）：换成「id · 中文别名」
+    // （2026-10-25 英文为主；别名缺失时只剩 id，不再替换成纯中文名）
+    const text = a.agentId ? a.text.replace(a.agentId, skillLabelOf(a.agentId)) : a.text
     items.push({
       key: `a-${a.agentId}-${a.text}`,
       text,

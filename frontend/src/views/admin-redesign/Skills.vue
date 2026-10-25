@@ -274,16 +274,19 @@
             <!-- 2026-10-14 方案 B：行点击直达 Skill 详情（原「设计」小钮的同一落点）。
                  2026-10-15 设计页退役平铺进详情页后，行点击 = 详情页（自带设计能力），
                  与编排图节点下钻同一落点。 -->
-            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.name} 详情`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
+            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.id} 详情`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
               <td>
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
                   <div class="mk-cell-main">
-                    <strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong>
-                    <!-- 原型副行 = desc：/admin/skills 的 description；缺失时回落显示 skill id。
+                    <!-- 英文主行（2026-10-25 用户「以英文为主」）：canonical id 是身份，中文 displayName
+                         只是别名——与详情页 hero 同一口径（标题=id、中文名进副行），此前列表把别名当主名，
+                         同一实体两页两种读法。 -->
+                    <strong class="sk-name-main sk-name-main--id mk-ellipsis" :title="nameTitleOf(s)">{{ s.id }}</strong>
+                    <!-- 副行 = 中文别名 · description（别名与 id 相同时不重复）；
                          <1600 时「最近调用」列收进副行（showCol 同源），消掉中宽档表格横滚 -->
                     <span class="sk-subline">
-                      <span class="sk-sub" :class="{ 'sk-sub--id': !descOf(s.id) }" :title="descOf(s.id) || s.id">{{ descOf(s.id) || s.id }}</span>
+                      <span v-if="sublineOf(s)" class="sk-sub" :title="nameTitleOf(s)">{{ sublineOf(s) }}</span>
                       <span v-if="!showCol('last')" class="sk-recent" :title="'最近调用 ' + (s.lastAt || '—')">{{ s.lastAt }}</span>
                     </span>
                   </div>
@@ -745,7 +748,8 @@ const coverageReady = ref(false)
 const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetSort } = useTableSort<SkillRow>({
   accessors: {
     errors: (s) => s.errors,
-    skill: (s) => s.name || s.id,
+    /* 主行是 canonical id（2026-10-25 英文为主）：排序也按 id，否则视觉序与点击的列对不上 */
+    skill: (s) => s.id,
     agent: (s) => s.agentName || s.agentId || '',
     calls: (s) => s.calls,
     rate: (s) => successRateOf(s.calls, s.errors),
@@ -790,7 +794,8 @@ const filtered = computed(() => {
   if (agentFilter.value === '__none__') list = list.filter((c) => !c.agentId)
   else if (agentFilter.value) list = list.filter((c) => c.agentId === agentFilter.value)
   const q = keyword.value.trim().toLowerCase()
-  if (q) list = list.filter((c) => `${c.name} ${c.id}`.toLowerCase().includes(q))
+  // 搜索覆盖「id / 中文别名 / description」三处：主行改成英文 id 后，只搜 id 会让按中文名找人的用法失效
+  if (q) list = list.filter((c) => `${c.id} ${c.name} ${descOf(c.id)}`.toLowerCase().includes(q))
   return sortRows(list)
 })
 
@@ -1064,9 +1069,29 @@ async function refreshCoverage(): Promise<void> {
   }
 }
 
-/** Skill 副行：description 优先，缺失回落 id（原型 .sub） */
+/** Skill 描述（服务端目录返回的 description）：副行第二项 */
 function descOf(skillId: string): string {
   return skillMetaById.value.get(skillId)?.description || ''
+}
+/** 副行：中文别名（displayName）在前、description 在后，两者都空则不渲染。
+    2026-10-25 用户「以英文为主」：主行改为 canonical id，中文名降为副行首项（与详情页 hero 同口径）；
+    别名与 id 相同（目录未登记中文名）时不重复占位。 */
+function sublineOf(s: { id: string; name?: string }): string {
+  const alias = (s.name || '').trim()
+  const desc = descOf(s.id)
+  const parts: string[] = []
+  if (alias && alias !== s.id) parts.push(alias)
+  if (desc) parts.push(desc)
+  return parts.join(' · ')
+}
+/** 名称格悬停全文：id + 中文别名 + description（主行只放 id，别名与描述靠这里看全） */
+function nameTitleOf(s: { id: string; name?: string }): string {
+  const alias = (s.name || '').trim()
+  const desc = descOf(s.id)
+  const parts = [s.id]
+  if (alias && alias !== s.id) parts.push(alias)
+  if (desc) parts.push(desc)
+  return parts.join(' · ')
 }
 
 /** 版本列 = 线上生效的 Prompt 版本（无 ACTIVE Prompt → 「—」，不拿 definition.version 顶替） */
@@ -1291,6 +1316,8 @@ const fallbackPolicyTitle = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 主行是 canonical id（2026-10-25 英文为主）：机器串走等宽，与版本/路由模型列同一语义 */
+.sk-name-main--id { font-family: var(--mk-mono); }
 .sk-sub {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
@@ -1304,8 +1331,6 @@ const fallbackPolicyTitle = computed(() => {
 .sk-subline { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: var(--mk-cell-main-max); }
 .sk-subline .sk-sub { flex: 0 1 auto; max-width: none; }
 .sk-recent { flex: none; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-/* 回落显示 skill id 时保留等宽语义 */
-.sk-sub--id { font-family: var(--mk-mono); }
 /* 路由模型名较长（deepseek-v4.1-flash ~180px）：中宽档封顶省略，全名走 title
    （1440 收掉「最近调用」列后仍差 ~40px 横滚，此处补齐） */
 .sk-model { display: inline-block; max-width: 148px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
