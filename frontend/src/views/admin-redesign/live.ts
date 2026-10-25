@@ -1936,6 +1936,7 @@ async function fetchLiveApiConfig(): Promise<void> {
     defaultEvaluationModel: d.defaultEvaluationModel || '',
     defaultThinkingMode: d.defaultThinkingMode || 'default',
     defaultReasoningEffort: d.defaultReasoningEffort || 'default',
+    defaultResponseFormat: d.defaultResponseFormat === 'json_object' ? 'json_object' : 'none',
     connectionStatus: d.connectionStatus || 'unknown',
     lastCheckedAt: d.lastCheckedAt || '',
     networkPolicy: {

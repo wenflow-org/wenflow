@@ -84,30 +84,6 @@ export function goalInternalConfidence(internal: GoalConversationInternal | null
   return typeof confidence === 'number' && Number.isFinite(confidence) ? confidence : 0.2;
 }
 
-/** #132：降级/异形 success 产物缺 internal 时，用输出顶层字段拼最小合法 internal */
-export function minimalGoalInternalFromOutput(output: {
-  stage?: string;
-  confidence?: number;
-  state?: { understanding?: any };
-  nextQuestions?: unknown;
-  quickReplies?: unknown;
-}): GoalConversationInternal {
-  const validStages = ['understanding', 'proposing', 'ready', 'completed'];
-  const stage = (validStages.includes(String(output?.stage)) ? output?.stage : 'understanding') as GoalConversationInternal['core']['stage'];
-  const confidence = typeof output?.confidence === 'number' && Number.isFinite(output.confidence) ? output.confidence : 0.2;
-  return {
-    core: { conversationId: null, stage, confidence, isCompleted: stage === 'completed' },
-    ext: {
-      goalConversation: {
-        understanding: output?.state?.understanding ?? {},
-        nextQuestions: Array.isArray(output?.nextQuestions) ? output.nextQuestions : [],
-        quickReplies: Array.isArray(output?.quickReplies) ? output.quickReplies : [],
-        collected: {},
-      },
-    },
-  };
-}
-
 export interface GoalConversationAgentResult {
   userVisible: string;
   internal: GoalConversationInternal;
