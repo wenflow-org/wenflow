@@ -296,6 +296,8 @@
 **T1 列表页（12）**
 `overview`→T3 · `people` · `sessions` · `virtual-learners` · `skills` · `prompt-eval` · `ops-achievements` · `feedback` · `messages` · `addons` · `session-security` · `execution-logs` · `audit-logs`
 
+> 状态（2026-10-25 校正）：`prompt-eval` 拆回独立场景并归入侧栏 Skill 组（此前 2026-10-04 曾折入 `skills` 宿主页签）。
+
 > 状态（2026-09-19 校正）：名单随导航收敛而变——侧栏已为 14 项 / 7 组；`feedback`/`ops-achievements`/`messages`/`addons`/`session-security`/`health-center` 现为 tab 子页，`memory-review`/`batch-experiments` 为独立场景。详见 §3 T1 校正注。
 > 状态（2026-09-29 校正）：侧栏 18 项 / 7 组；`health-center` 已回独立场景（系统组），不再是 tab 子页；`token-cost` 亦已独立。
 > 状态（2026-10-04 校正）：侧栏 19 项 / 7 组；`batch-experiments` 整体下线（运行态并入 `virtual-learners`，资产输入归 `virtual-learner-cards`，旧 URL 重定向到 `/admin/virtual-learners`），「虚拟学习者」组余 2 项；`learner-state` 于同日从 `people` 宿主拆出独立成页。

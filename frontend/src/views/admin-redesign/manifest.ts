@@ -37,7 +37,7 @@
 
 import type { Component } from 'vue'
 import {
-  Activity, BookOpen, Coins, FlaskConical, HeartPulse, History, IdCard, LayoutDashboard,
+  Activity, BookOpen, ClipboardCheck, Coins, FlaskConical, HeartPulse, History, IdCard, LayoutDashboard,
   Megaphone, MessagesSquare, Plug, Puzzle, Route, ScrollText, ShieldCheck, Sparkles,
   Target, Users, Workflow,
 } from 'lucide-vue-next'
@@ -87,13 +87,16 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟实验', glyph: '拟', icon: FlaskConical },
   { id: 'virtual-learner-cards', label: '学习者卡库', group: '虚拟实验', glyph: '卡', icon: IdCard },
   // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组）。
-  // 「Prompt 评估」2026-10-04 折入 skills 宿主「Prompt 评估」页签，本组收敛为 2 项
-  // （orchestrator · skills）；旧 URL /admin/prompt-eval 在 router 重定向。
-  // 2026-10-19 用户拍板：「外挂能力」从 api-config 宿主拆回独立页并入本组（第 3 项）。
+  // 2026-10-19 用户拍板：「外挂能力」从 api-config 宿主拆回独立页并入本组。
   // label 带上「提示词」关键词（2026-09 定位收敛：管理台=轻运营调整，改 prompt 的
-  // 动线从这里进——新人搜「提示词」落到本组；评估动线现同在 skills 宿主页签内）
+  // 动线从这里进——新人搜「提示词」落到本组）
   { id: 'orchestrator', label: '编排图', group: 'Skill', glyph: '流', icon: Workflow },
   { id: 'skills', label: 'Skill 与提示词', group: 'Skill', glyph: '能', icon: Sparkles },
+  // 「Prompt 评估」2026-10-25 用户拍板拆回独立页（「拆成单页，把这个 tab 撤掉，放到组里」）：
+  // 2026-10-04 曾折入 skills 宿主页签，但评估（用例集 + 历史运行）与运行（谁在跑、跑得怎么样）
+  // 没有共享筛选/读数/操作，共处一页只是多一次页签点击。旧深链 /admin/skills?tab=prompt-eval
+  // 由 Skills 页改投本页（?peTab= 一并带走）。
+  { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill', glyph: '评', icon: ClipboardCheck },
   // 「插件」2026-10-19 用户拍板拆回独立页，2026-10-20 定名：「外挂能力」统一叫「插件」——
   // 这一页列的是可选能力与 MCP 服务（每项能力本身就是一条 Skill），关系更近 Skill，故归入本组；
   // 旧深链 /admin/addons 与 /admin/external-capabilities 本就是本页路径，?tab=addons 由路由改投。

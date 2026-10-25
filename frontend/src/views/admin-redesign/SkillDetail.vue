@@ -482,9 +482,9 @@ const tab = ref(DEFAULT_TAB)
 
 /* ?skdTab= 写/读（tab 路由化，判例 LearnerDetail P0-2 / Orchestrator ?stage=&tab=）：
    深链/刷新/前进后退保持所在页签——此前页签不写 URL，刷新即回协议页。
-   #133：键必须与宿主列表页 Skills 的 ?tab=（run/prompt-eval）分开——
-   本页在 /admin/skills?view=skill&id=… 上，与列表共用一个 ?tab= 会互相覆盖
-   （详情内切页签 → 列表键被写成 versions → Esc 关闭后列表被静默重置为「Skill 运行」）。 */
+   #133：键必须与宿主列表页 Skills 的 ?tab= 分开（列表已无页签，但 ?tab=run|model-routing
+   等兼容键仍在）——本页在 /admin/skills?view=skill&id=… 上，与列表共用一个 ?tab= 会互相覆盖
+   （详情内切页签 → 列表键被写成 versions → Esc 关闭后列表被静默重置）。 */
 const tabRoute = useRoute()
 const TAB_KEYS = new Set(TABS.map((t) => t.key))
 /** #149：旧深链别名——本页「字段路由」历史键 fields（设计页键是 routing），
@@ -509,7 +509,7 @@ function readTabFromQuery(): string {
   return DEFAULT_TAB
 }
 /** 写回键（#133）：URL 上已有「本页页签键」的 ?tab= 时属旧深链，继续写回同一键（向后兼容）；
-    否则一律写本页独立键 skdTab，绝不动宿主列表的 run/prompt-eval */
+    否则一律写本页独立键 skdTab，绝不动宿主列表的 ?tab=（run / model-routing 兼容键） */
 function useLegacyTabKey(): boolean {
   const t = tabRoute?.query?.tab
   // 旧别名（fields）同样视为本页键；routing 归编排图，不认领（见上）

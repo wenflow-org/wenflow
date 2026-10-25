@@ -1,30 +1,22 @@
 <template>
   <div class="mk-page mk-page--fill skills-host">
-    <!-- 页头（newui/admin pagehead）：页名对齐原型（Skill 与提示词）+ 随 tab 切换的口径副文。
-         2026-10-04 页头状态条退役：运行读数迁下方 MkKpi 卡带（仅 run 页签渲染）；
+    <!-- 页头（newui/admin pagehead）：页名对齐原型（Skill 与提示词）。
+         2026-10-04 页头状态条退役：运行读数迁下方 MkKpi 卡带；
          「失败节点」不再单列——卡头「仅看需关注」pill 已带同源计数并承载筛选。
-         页级动作：Prompt 评估页签 = 「批量跑评估」（经面板 defineExpose 驱动）；
-         运行页签 = 「批量模型配置」（跨 Skill 对照/批量套用，2026-10-24 由独立的
-         「模型路由」页签收进弹窗——单技能配置在详情「运行时」里，本页只留跨技能工具） -->
-    <MkPageHead title="Skill 与提示词" :sub="headSub">
+         页级动作：「批量模型配置」（跨 Skill 对照/批量套用，2026-10-24 由独立的
+         「模型路由」页签收进弹窗——单技能配置在详情「运行时」里，本页只留跨技能工具）。
+         2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」：Prompt 评估已拆为独立页
+         （侧栏 Skill 组），本页只剩目录，故页头与读数带不再随页签切换。 -->
+    <MkPageHead title="Skill 与提示词" sub="Skill 目录、版本与提示词管理（全量注册，含未上线与停用）">
       <template #actions>
-        <button v-if="tab === 'run'" type="button" class="mk-btn" @click="openBulk">批量模型配置</button>
-        <!-- running：批量/试跑期间互斥禁用，防止并发多批真实 LLM 调用重复烧 token -->
-        <button
-          v-if="tab === 'prompt-eval'"
-          type="button"
-          class="mk-btn mk-btn--primary"
-          :disabled="!pePanel?.canRunBatch || pePanel?.running"
-          @click="pePanel?.runBatch()"
-        >{{ pePanel?.running ? '评估运行中…' : '批量跑评估' }}</button>
+        <button type="button" class="mk-btn" @click="openBulk">批量模型配置</button>
       </template>
     </MkPageHead>
-    <!-- 读数带槽位（2026-10-14 用户两次校订后的定稿）：**页头之下、页签栏之上**，读数在前、
-         视图切换在后 —— 与全站同一形态（判例 ExecLogs 带@22 / 页签@34、HealthCenter MkKpi@58 /
-         页签@104、PromptEvalPanel 的带也排在它自己内层页签之上）。此前「模型路由」的带违规地塞在
-         路由表那张卡里面（.sk-routing__top），本次只把它移出卡、回到这条槽位；
-         读数带描述的是「当前页签」，所以随页签 v-if 渲染。 -->
-    <section v-if="tab === 'run'" class="mk-kpi-grid" aria-label="Skill 运行统计">
+    <!-- 读数带槽位（2026-10-14 用户两次校订后的定稿）：**页头之下、内容之上**，读数在前、
+         视图在后 —— 与全站同一形态（判例 ExecLogs 带@22 / 页签@34、HealthCenter MkKpi@58 /
+         页签@104）。此前「模型路由」的带违规地塞在路由表那张卡里面（.sk-routing__top），
+         本次只把它移出卡、回到这条槽位。 -->
+    <section class="mk-kpi-grid" aria-label="Skill 运行统计">
       <!-- #72：列表加载失败时 cards=[] 会落成 0——读不到 ≠ 0 个，显「—」并把原因放进 title -->
       <MkKpi
         label="Skill"
@@ -68,57 +60,8 @@
       />
     </section>
 
-    <!-- Prompt 评估页签的读数带（2026-10-15 用户走查「KPI 卡片位置不对」）：此前由面板
-         自己渲染（在页签栏之下），同一条槽位切页签就换位置；现与 run 同槽位。
-         面板为异步组件，chunk 未就绪时按 live 三态纪律显「…」，不落定 0。 -->
-    <section v-if="tab === 'prompt-eval'" class="mk-kpi-grid" aria-label="Prompt 评估统计">
-      <MkKpi
-        label="最近评测通过率"
-        :value="pePanel?.kpiView?.passRateText ?? '…'"
-        :tone="pePanel?.kpiView?.passRateTone ?? ''"
-        :hint="pePanel?.kpiView?.passRateHint"
-        :title="pePanel?.kpiView?.passRateTitle"
-      />
-      <MkKpi
-        label="评估用例"
-        :value="pePanel?.kpiView?.caseCount ?? '…'"
-        :hint="pePanel?.kpiView?.casesHint"
-        :title="pePanel?.kpiView?.casesTitle"
-      />
-      <MkKpi
-        label="启用用例"
-        :value="pePanel?.kpiView?.enabledCaseCount ?? '…'"
-        :title="`启用中的评估用例数。停用用例仍保留但不参与批量评测${pePanel?.kpiView?.disabledCaseCount != null ? ` · 当前停用 ${pePanel?.kpiView?.disabledCaseCount} 个` : ''}`"
-      />
-      <MkKpi
-        label="评估历史"
-        :value="pePanel?.kpiView?.runCount ?? '…'"
-        :hint="pePanel?.kpiView?.runsHint"
-        :title="pePanel?.kpiView?.runsTitle"
-      />
-    </section>
-
-    <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
-         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签）：
-         Skill 运行 / Prompt 评估。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
-         三者本就是同一份报表的三刀，合一后独立成 /admin/health-center，侧栏落在「系统」组。
-         Prompt 评估 2026-10-04 由独立场景 /admin/prompt-eval 折入（内层用例/历史页签用 ?peTab=）。
-         模型路由 2026-10-24 退役：与 Skill 详情「运行时」重复，改为页头「批量模型配置」弹窗。 -->
-    <div class="tabs skills-tabs" role="tablist" aria-label="Skill 视图切换" @keydown="onTabKeydown">
-      <button
-        v-for="(t, i) in SKILLS_TABS"
-        :key="t"
-        :ref="(el) => setTabRef(el, i)"
-        type="button"
-        role="tab"
-        class="tab"
-        :aria-selected="tab === t"
-        :tabindex="tab === t ? 0 : -1"
-        @click="switchTab(t)"
-      >{{ t === 'run' ? 'Skill 运行' : 'Prompt 评估' }}</button>
-    </div>
-    <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
-    <template v-if="tab === 'run'">
+    <!-- Prompt 评估的读数带与页签 2026-10-25 拆到独立页 PromptEval.vue（用户「拆成单页，
+         把这个 tab 撤掉，放到组里」）：本页只剩目录，不再有视图切换。 -->
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -354,12 +297,6 @@
         :showTotal="true"
       />
     </div>
-    </template>
-
-    <!-- ===== Prompt 评估（原 /admin/prompt-eval 独立场景，2026-10-04 折入；旧 URL 走
-         router 重定向 ?tab=cases|runs → ?peTab=）。内层 评估用例/评估历史 页签寻址用 ?peTab=
-         （宿主 ?tab= 归本页页签所有，不共键）；主操作「批量跑评估」在宿主页头（pePanel ref 驱动） -->
-    <PromptEvalPanel v-else-if="tab === 'prompt-eval'" ref="pePanel" />
 
     <!-- ===== 批量模型配置（2026-10-24 用户「这个页面和 Skill 内部运行时重复了」）=====
          跨 Skill 的对照表与批量套用不属于「点开某一个 Skill」的流程，但也不该再占一个
@@ -416,12 +353,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 import { useRoute, useRouter } from 'vue-router'
-import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
 import { skillStatOf, isLive, intent, investigateAgent, openSubPage } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { completionMetaOf } from './glossaryMeta'
@@ -440,40 +376,15 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import SkillModelCoverage from './SkillModelCoverage.vue'
 import { adminSkillsApi, adminApiConfigApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
-/* ================= 宿主：Skill 运行 · Prompt 评估（模型路由不再单独占页签：
-   2026-10-24 用户「这个页面和 Skill 内部的运行时重复了」——路由是 Skill 的属性，
-   单技能配置在详情「运行时」里改，跨 Skill 对照与批量套用收进页头「批量模型配置」弹窗） ================= */
-const SKILLS_TABS = ['run', 'prompt-eval'] as const
-type SkillsTab = (typeof SKILLS_TABS)[number]
+/* ================= 目录页（2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」：
+   Prompt 评估拆为独立页 PromptEval.vue 并归入侧栏 Skill 组，本页只剩目录；
+   「模型路由」2026-10-24 退役——路由是 Skill 的属性，单技能配置在详情「运行时」里改，
+   跨 Skill 对照与批量套用收进页头「批量模型配置」弹窗） ================= */
 
 /* Skill 列表加载失败标题：表格视图与空态共用一份文案（R6 复读单源化） */
 const SKILLS_LOAD_FAIL_TITLE = 'Skill 数据加载失败'
-const tab = ref<SkillsTab>('run')
 const route = useRoute()
 const router = useRouter()
-/* Prompt 评估面板动作面（defineExpose）：页头「批量跑评估」的禁用态与点击经模板 ref 驱动 */
-interface PromptEvalPanelExpose {
-  running: boolean
-  canRunBatch: boolean
-  runBatch: () => Promise<void>
-  /** KPI 带取值（2026-10-15 迁回宿主槽位：与 run 页签同一条「页头之下、页签栏之上」） */
-  kpiView: {
-    passRateText: string
-    passRateTone: 'ok' | 'warn' | 'bad' | 'muted' | ''
-    passRateHint: string
-    passRateTitle: string
-    caseCount: number | string
-    casesHint: string
-    casesTitle: string
-    enabledCaseCount: number | string
-    disabledCaseCount: number | string
-    runCount: number | string
-    runsHint: string
-    runsTitle: string
-  }
-}
-const pePanel = ref<PromptEvalPanelExpose | null>(null)
-const PromptEvalPanel = defineAsyncComponent(() => import('./PromptEvalPanel.vue'))
 /** 列表两个视图的共同落点：Skill 详情页（2026-10-15 设计页平铺后，详情页自带设计能力）。
  *  2026-10-14 方案 B：行点击直接走这里，列表侧不再单设「设计」小钮（同落点两入口冗余）。
  *  2026-10-15：独立设计页退役、内容平铺进详情页——行点击落 ?view=skill&id=，
@@ -482,8 +393,10 @@ function openDesign(id: string) {
   openSubPage('skill', id)
 }
 
-/** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页；只认现役 tab，其余回落 run */
+/** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页；Prompt 评估同批改投新独立页 */
 const RETIRED_TABS = new Set(['health', 'drift', 'recon'])
+/** 旧「Prompt 评估」页签 → 独立页 /admin/prompt-eval（2026-10-25 拆页；?peTab= 原样带走） */
+const LEGACY_EVAL_TAB = 'prompt-eval'
 /** 旧「模型路由」页签 → 页头弹窗（旧书签/旧文档链接不失效） */
 const LEGACY_ROUTING_TAB = 'model-routing'
 const bulkOpen = ref(false)
@@ -502,43 +415,40 @@ function openSkillFromBulk(id: string) {
 }
 const toHealthCenter = (extra: Record<string, string> = {}) =>
   void router.replace({ path: '/admin/health-center', query: extra })
+/** 旧评估页签 → 独立页：?peTab= 是评估页自己的内层键，原样带走（去掉宿主键 ?tab=） */
+const toPromptEval = (extra: Record<string, string> = {}) =>
+  void router.replace({ path: '/admin/prompt-eval', query: extra })
+/** 去掉宿主页签键后的其余 query（改投别的页时只带走定位参数） */
+function withoutTabKey(): Record<string, string> {
+  const q = { ...(route.query as Record<string, string>) }
+  delete q.tab
+  return q
+}
 
 watch(
   () => route?.query?.tab,
   (t) => {
     if (typeof t === 'string' && RETIRED_TABS.has(t)) {
       // 老书签 / 旧文档链接：/admin/skills?tab=health → /admin/health-center（?recon=/?diff= 等定位参数一并带走）
-      const { tab: _drop, ...rest } = route.query as Record<string, string>
-      toHealthCenter(rest)
+      toHealthCenter(withoutTabKey())
+      return
+    }
+    // 旧「Prompt 评估」页签：2026-10-25 拆为独立页，老深链 /admin/skills?tab=prompt-eval → /admin/prompt-eval
+    if (t === LEGACY_EVAL_TAB) {
+      toPromptEval(withoutTabKey())
       return
     }
     // 旧「模型路由」页签：落到运行列表并打开页头弹窗，地址收敛为 ?tab=run
     if (t === LEGACY_ROUTING_TAB) {
-      tab.value = 'run'
       openBulk()
       if (route && router) void router.replace({ query: { ...route.query, tab: 'run' } })
       return
     }
-    const v = typeof t === 'string' && (SKILLS_TABS as readonly string[]).includes(t) ? (t as SkillsTab) : null
-    if (v && v !== tab.value) tab.value = v
-    else if (!v && tab.value !== 'run') tab.value = 'run'
   },
   { immediate: true }
 )
-function switchTab(t: SkillsTab) {
-  tab.value = t
-  if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
-}
-/* 页签 ARIA 契约（#75）：roving tabindex + 方向键/Home/End（此前只有 role 与点击） */
-const { setTabRef, onTabKeydown } = useTablistKeyboard(SKILLS_TABS, tab, switchTab)
-/* 页头副文（原型 1698）：随 tab 切换口径——运行=目录/版本/提示词，
-   Prompt 评估=用例集与历史运行（沿原独立页副文） */
-const headSub = computed(() =>
-  tab.value === 'prompt-eval'
-    ? '提示词质量评测 · 用例集与历史运行'
-    : 'Skill 目录、版本与提示词管理（全量注册，含未上线与停用）'
-)
-/* 跨页深链：intent.tab 指向退役 tab（旧调用方还在传 health/drift/recon）也改投独立页 */
+/* 跨页深链：intent.tab 指向退役 tab（旧调用方还在传 health/drift/recon）也改投独立页；
+   指向 Prompt 评估（2026-10-25 拆页）同样改投新独立页 */
 watch(
   () => intent.tab,
   (t) => {
@@ -548,9 +458,9 @@ watch(
       toHealthCenter()
       return
     }
-    if ((SKILLS_TABS as readonly string[]).includes(t)) {
-      tab.value = t as SkillsTab
+    if (t === LEGACY_EVAL_TAB) {
       intent.tab = ''
+      toPromptEval()
     }
   },
   { immediate: true }

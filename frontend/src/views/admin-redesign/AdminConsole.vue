@@ -99,6 +99,8 @@ const LearningPaths = asyncPage(() => import('./OpsContent.vue'));
 const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
 const VirtualLearnerCards = asyncPage(() => import('./VirtualLearnerCards.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
+// Prompt 评估（2026-10-25 用户拍板从 skills 宿主页签拆回独立页，归入侧栏 Skill 组）
+const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
 const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
 // 2026-09-29 拆回独立页：成本分析从执行日志宿主释放
@@ -153,8 +155,9 @@ const components: Record<string, unknown> = {
   'orchestrator': Orchestrator,
   // 外挂能力（2026-10-19 从 api-config 宿主拆回独立场景，侧栏 Skill 组）
   'addons': Addons,
-  // 「Prompt 评估」2026-10-04 下线（折入 skills 宿主「Prompt 评估」页签；
-  // 组件更名 PromptEvalPanel 由 Skills 异步加载）；旧 URL 在 router 重定向 ?tab=cases|runs → ?peTab=
+  // Prompt 评估（2026-10-25 从 skills 宿主页签拆回独立场景，侧栏 Skill 组）：
+  // 面板 PromptEvalPanel 由本页异步加载；旧 /admin/skills?tab=prompt-eval 在 Skills 页改投
+  'prompt-eval': PromptEval,
   'execution-logs': ExecLogs,
   'token-cost': TokenCost,
   'memory-review': MemoryReview,

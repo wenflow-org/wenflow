@@ -1,23 +1,23 @@
 <template>
-  <!-- 面板（2026-10-04 独立场景下线，折入 Skills 宿主「Prompt 评估」页签）。多根片段（2026-10-06 审核
-       #87）：KPI 带移到宿主页签卡外，与 run 页签同构（KPI 在卡外、卡内只放页签+工具栏+表格），
+  <!-- 面板（2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」：拆回独立页 PromptEval.vue，
+       侧栏 Skill 组；2026-10-04 曾折入 Skills 宿主页签）。多根片段（2026-10-06 审核
+       #87）：KPI 带在卡外，卡内只放页签+工具栏+表格，
        不再把 KPI/页签/筛选/表格全塞进同一张 .mk-card--fill（ADMIN_VISUAL_LAYER_SPEC §163）。
-       原页头退役——主操作「批量跑评估」上移宿主页头（defineExpose 供宿主驱动）。 -->
-  <!-- 运行中常显条（#86）：批量/试跑是真 LLM 调用且跨页签存活（标志模块级），
-       切到别的页签再回来仍能看到「还在跑」，不再只靠常驻 toast -->
+       本面板仍无页头——主操作「批量跑评估」在宿主页页头（defineExpose 供宿主驱动）。 -->
+  <!-- 运行中常显条（#86）：批量/试跑是真 LLM 调用且跨页面存活（标志模块级），
+       切到别的页面再回来仍能看到「还在跑」，不再只靠常驻 toast -->
   <div v-if="running" class="mk-alert mk-alert--row mk-alert--info pe-running" role="status" aria-live="polite">
     <span class="mk-alert__msg">{{ runningInfo || '评估运行中…' }}</span>
   </div>
-  <!-- KPI 带 2026-10-15 迁回宿主读数槽位（用户走查「位置不对」）：宿主 Skills 的槽位是
-       「页头之下、页签栏之上」（Skill 运行 / Prompt 评估两条带都在那），本带此前留在面板根片段里
-       即落在页签栏之下——同页签切一下读数带就换位置。现由宿主 v-if="tab==='prompt-eval'" 渲染，
+  <!-- KPI 带由宿主页渲染在「页头之下、面板之上」的槽位（2026-10-15 用户走查「位置不对」；
+       2026-10-25 宿主由 Skills 页签换成独立页，槽位关系不变）。本面板不再自己渲染，
        数据经 defineExpose 的 kpiView 供出（与 runBatch 同法）。 -->
 
   <div class="mk-card mk-card--fill pe">
     <!-- 卡内主视图切换（原型 renderPromptEval card > .tabs 页签 + 工具栏 + 页签体；
          对齐 Users.vue / ExecLogs.vue / AuditLogs.vue 卡内页签判例。内层页签寻址用
-         ?peTab=（宿主 ?tab= 归 Skills 页签所有，二者不共键） -->
-    <!-- 主视图切换（全局 .tabs/.tab 原语，判例 Skills.vue:58-62）：
+         ?peTab=——本页唯一的页签键 -->
+    <!-- 主视图切换（全局 .tabs/.tab 原语，判例 Skills.vue 的目录工具条）：
            2026-10-06 审核收口——此前页内自搓 .pe-tabs/.pe-tab 是全仓最后一份 scoped 拷贝，
            与全局逐字重复且缺 transition（hover/激活硬切）。弹窗内两组改用 MkSubTabs -->
       <div class="tabs" role="tablist" aria-label="评估视图切换" @keydown="onTabKeydown">
@@ -596,8 +596,8 @@
 /* 模块级共享状态（与 <script setup> 编译进同一模块，故用命名空间导入避免 ref 重名） */
 import * as vue from 'vue'
 
-/* 运行互斥标志提到模块级（#86）：宿主 Skills.vue 用 v-else-if 挂载本面板，切页签即卸载实例——
-   实例内的 running 随卸载消失，切回后按钮恢复可点，可再发起第二批真实 LLM 调用（并发烧 token）。
+/* 运行互斥标志提到模块级（#86）：宿主页 PromptEval.vue 挂载本面板，离开页面即卸载实例——
+   实例内的 running 随卸载消失，回来按钮恢复可点，可再发起第二批真实 LLM 调用（并发烧 token）。
    模块级 ref 跨挂载存活，任何实例都读同一枚标志。 */
 const sharedRunning = vue.ref(false)
 /** 运行中条文案（用例数 / 试跑名）：模块级同样跨卸载存活 */
@@ -750,7 +750,8 @@ const RUN_SORT_FIELD: Record<string, string> = {
   created: 'createdAt'
 }
 
-/* URL ↔ 内层页签双向同步：键用 ?peTab=（宿主 ?tab= 归 Skills 页签所有，不共键）。
+/* URL ↔ 内层页签双向同步：键用 ?peTab=（2026-10-25 拆页后它是本页唯一的页签键；
+   旧 ?tab=cases|runs 由宿主 PromptEval.vue 在挂载时就地改写过来）。
    immediate 首跑兼作唯一挂载加载入口（原先 setup 末尾还有一组裸 reload，深链 ?peTab=runs 时会双拉，
    且该 watch 必须放在 cases/runs 等 ref 声明之后，否则 immediate 回调会撞 TDZ） */
 let bootstrapped = false
@@ -1318,7 +1319,7 @@ async function toggleEnabled(c: EvalCase) {
 /** 批量跑评估：对当前 agentFilter 下所有启用用例跑（走 DB caseIds） */
 const canRunBatch = computed(() => cases.value.some((c) => c.enabled))
 /* 运行互斥：批量/试跑都是真实 LLM 调用，运行期间禁用全部入口，防止并发多批重复烧 token。
-   running 为模块级 ref（见文件头 <script> 块）：面板被宿主切页签卸载后标志仍在，切回不可再发起 */
+   running 为模块级 ref（见文件头 <script> 块）：面板被宿主页卸载后标志仍在，回来不可再发起 */
 const running = sharedRunning
 const runningInfo = sharedRunningInfo
 async function runBatch() {
@@ -1564,9 +1565,9 @@ watch(agentFilter, () => { compareIds.value = [] })
 
 // 挂载加载统一走上方 watch 的 immediate 首跑（bootstrapped 分支），此处不再裸拉一遍
 
-/* 宿主协作面：批量跑评估上移 Skills 宿主页头（本面板无页头），宿主经模板 ref 驱动——
+/* 宿主协作面：批量跑评估在宿主页页头（本面板无页头），宿主经模板 ref 驱动——
    running/canRunBatch 供禁用态，runBatch 供点击（ref 上 ref 自动解包，宿主读布尔值即可）；
-   kpiView = KPI 带三卡的全部取值（computed 顶层被 expose 代理解包 → 宿主直接读 .passRateText）。
+   kpiView = KPI 带四卡的全部取值（computed 顶层被 expose 代理解包 → 宿主直接读 .passRateText）。
    tone 在面板内是 '' as const 的字面量联合，供出前放宽为 MkKpi 的入参类型。 */
 const kpiView = computed(() => ({
   passRateText: lastPassRateText.value,
@@ -1644,8 +1645,8 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
 
 /* .mk-field__opt（字段标签内的「（可选）」次级提示）已提升为全局，见 shared.css */
 
-/* ===== 宿主 fill 内滚（2026-10-04 折入 Skills 页签）：原独立页整页滚，折入 .mk-card--fill
-   后由面板接管纵向滚动——fill 卡只给「直接子」.mk-table-scroll 授权内滚，pe-panel 不是
+/* ===== 宿主 fill 内滚（2026-10-25 独立页复用同一形态）：页面整页不滚，由面板 .mk-card--fill
+   接管纵向滚动——fill 卡只给「直接子」.mk-table-scroll 授权内滚，pe-panel 不是
    直接子，须自补同一套 flex:1 + min-height:0 + overflow-y（判例 .orch-handoff .mk-table-scroll）。
    KPI 带/页签/筛选行钉在卡顶，仅页签体滚 ===== */
 .pe > .pe-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }

@@ -324,15 +324,6 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: '/admin/virtual-learners', query: to.query })
   },
   {
-    // 旧 Prompt 评估页 → skills 宿主页签（旧页内 ?tab=cases|runs 映射为 ?peTab=）
-    path: '/admin/prompt-eval',
-    redirect: (to) => {
-      const { tab: evalTab, ...rest } = to.query as Record<string, string>
-      const peTab = evalTab === 'runs' || evalTab === 'cases' ? { peTab: evalTab } : {}
-      return { path: '/admin/skills', query: { ...rest, tab: 'prompt-eval', ...peTab } }
-    }
-  },
-  {
     path: '/admin/models',
     redirect: '/admin/api-config'
   },

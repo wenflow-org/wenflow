@@ -1,5 +1,6 @@
 /**
- * Prompt 评估「评估历史」首屏读数与列表同源（B18/F7-2 回归；2026-10-15 读数带迁宿主后改写）。
+ * Prompt 评估「评估历史」首屏读数与列表同源（B18/F7-2 回归；2026-10-15 读数带迁宿主后改写；
+ * 2026-10-25 宿主由 Skills 页签换成独立页 PromptEval.vue）。
  *
  * 缺陷：watch(..., { immediate: true }) 在 setup 中同步调用 reloadRuns()，而 RUNS_LIMIT
  * 声明在该 watch 之后 → TDZ（Cannot access 'RUNS_LIMIT' before initialization），异常被
@@ -7,9 +8,9 @@
  * 切到历史页签后同一组读数才变真实条数（那时常量已初始化）。
  *
  * 2026-10-15 用户评审：读数带原在面板内，位置不对（面板自带内层页签，带被压在页签之下）。
- * 现由 Skills 宿主在「页头之下、页签栏之上」的槽位渲染，取值经 defineExpose 的 kpiView 供出。
+ * 现由宿主页在「页头之下、面板之上」的槽位渲染，取值经 defineExpose 的 kpiView 供出。
  * 本测试钉住两件事：① 面板首帧的 kpiView 读数即真实条数（TDZ 会让它恒 0）；
- * ② 面板自身不再渲染读数带（避免宿主 + 面板双带）。宿主侧渲染断言见 skills.header.test.ts。
+ * ② 面板自身不再渲染读数带（避免宿主 + 面板双带）。宿主侧渲染断言见 prompt-eval.page.test.ts。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -102,7 +103,7 @@ async function mountPanel() {
     history: createMemoryHistory(),
     routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
   });
-  await router.push('/admin/skills?tab=prompt-eval');
+  await router.push('/admin/prompt-eval');
   await router.isReady();
   const wrapper = mount(PromptEvalPanel, { global: { plugins: [router] } });
   await flushPromises();

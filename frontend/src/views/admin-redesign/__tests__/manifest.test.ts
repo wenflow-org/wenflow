@@ -39,11 +39,11 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线 + Prompt 评估折入 skills；2026-10-10 术语表改隐藏场景；2026-10-12 记忆与复习恢复跨用户总览；2026-10-16 系统工具并入运营中心；2026-10-19 外挂能力从模型与接入拆回独立页）：7 分组 / 18 可见场景与目标 IA 完全一致', () => {
+  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线；2026-10-10 术语表改隐藏场景；2026-10-12 记忆与复习恢复跨用户总览；2026-10-16 系统工具并入运营中心；2026-10-19 外挂能力从模型与接入拆回独立页；2026-10-25 Prompt 评估拆回独立页）：7 分组 / 19 可见场景与目标 IA 完全一致', () => {
     // 隐藏场景（hidden: true，如运营术语表）不占侧栏席位：由顶栏帮助按钮跳转，单独断言
     const visible = MOCK_SCENES.filter((s) => !s.hidden);
-    expect(MOCK_SCENES).toHaveLength(19);
-    expect(visible).toHaveLength(18);
+    expect(MOCK_SCENES).toHaveLength(20);
+    expect(visible).toHaveLength(19);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = visible.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟实验', 'Skill', '观测', '系统', '运营']);
@@ -57,8 +57,9 @@ describe('AdminConsole 页面注册表', () => {
       教学: ['people', 'goal-conversations', 'learning-paths', 'teaching-sessions', 'learner-state', 'memory-review'],
       // 2026-10-24 组名与首项解耦：组＝虚拟实验（实例 + 身份池）
       虚拟实验: ['virtual-learners', 'virtual-learner-cards'],
-      // 「外挂能力」2026-10-19 从 api-config 宿主拆回独立页并归入本组（用户拍板）
-      Skill: ['orchestrator', 'skills', 'addons'],
+      // 「外挂能力」2026-10-19 从 api-config 宿主拆回独立页并归入本组（用户拍板）；
+      // 「Prompt 评估」2026-10-25 从 skills 宿主页签拆回独立页（用户「拆成单页，把这个 tab 撤掉，放到组里」）
+      Skill: ['orchestrator', 'skills', 'prompt-eval', 'addons'],
       // 2026-10-24 用户「重新排一下序」：两份日志相邻，成本分析接在后面
       观测: ['execution-logs', 'audit-logs', 'token-cost'],
       系统: ['health-center', 'api-config'],
@@ -71,11 +72,11 @@ describe('AdminConsole 页面注册表', () => {
     const ids = new Set(MOCK_SCENES.map((s) => s.id));
     // health-center 2026-09-29 回归侧栏（系统组独立场景），故不在退役名单；
     // batch-experiments 2026-10-04 整体下线（运行态并入 virtual-learners、资产输入归卡库，URL 重定向）
-    // prompt-eval 2026-10-04 折入 skills 宿主「Prompt 评估」页签（旧 URL 重定向）
+    // prompt-eval 2026-10-25 拆回独立页（此前 2026-10-04 曾折入 skills 页签）——已不在退役名单
     // memory-review 2026-10-12 一度退役，同日恢复跨用户总览（单用户明细在学习者详情页签）——不再列退役
     // ops-center 2026-10-16 解散并入运营中心（运维工具 / 数据导出 / 会话安全三页签），侧栏撤除
     // addons 2026-10-19 移出退役名单——「外挂能力」拆回独立页，重回侧栏 Skill 组
-    for (const retired of ['feedback', 'ops-achievements', 'messages', 'session-security', 'ops-center', 'batch-experiments', 'prompt-eval']) {
+    for (const retired of ['feedback', 'ops-achievements', 'messages', 'session-security', 'ops-center', 'batch-experiments']) {
       expect(ids.has(retired), `退役场景「${retired}」不应在侧栏清单`).toBe(false);
     }
   });
