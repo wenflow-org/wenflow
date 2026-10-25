@@ -19,6 +19,7 @@ export function listActiveAgentPrompts(agentIds: string[]) {
       id: true,
       version: true,
       name: true,
+      variant: true,
       updatedAt: true,
       publishedAt: true,
       temperature: true,
@@ -26,6 +27,31 @@ export function listActiveAgentPrompts(agentIds: string[]) {
       model: true,
     },
   });
+}
+
+/**
+ * 「线上生效版本」的单一定义（Skill 列表「版本」列、详情 hero、运行时定义共用）：
+ * 每个 agent 取 ACTIVE 基线（variant 为空）里版本最高的一行；没有基线时退最高版本。
+ * A/B 实验臂不参与这个读数——它命中与否取决于分流键，不是配置版本。
+ * 与 AgentConfigService.getActivePrompt 的「不传 selection → 取最新基线」同一条规则。
+ */
+export function pickActivePromptPerAgent<
+  T extends { agentId: string; version: number; variant?: string | null }
+>(rows: T[]): Map<string, T> {
+  const baseline = new Map<string, T>();
+  const latest = new Map<string, T>();
+  for (const row of rows) {
+    const prevLatest = latest.get(row.agentId);
+    if (!prevLatest || row.version > prevLatest.version) latest.set(row.agentId, row);
+    if (row.variant) continue;
+    const prevBase = baseline.get(row.agentId);
+    if (!prevBase || row.version > prevBase.version) baseline.set(row.agentId, row);
+  }
+  const out = new Map<string, T>();
+  for (const [agentId, row] of latest) {
+    out.set(agentId, baseline.get(agentId) ?? row);
+  }
+  return out;
 }
 
 /** GET /admin/agent-prompts：按条件列出 Prompt 版本（不含 systemPrompt 大字段，避免响应过大） */

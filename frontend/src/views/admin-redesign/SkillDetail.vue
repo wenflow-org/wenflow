@@ -17,7 +17,7 @@
         <span class="mk-badge mk-badge--muted" :title="`类别：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</span>
         <!-- 2026-10-24 用户「还是重复部分」：生效模型只在运行时「生效值」里出现一次（带来源），
              hero 不再重复一枚模型徽标——同一页同一事实两处读数。 -->
-        <span v-if="promptVersionText" class="mk-badge mk-badge--info">线上生效 {{ promptVersionText }}</span>
+        <span v-if="promptVersionText" class="mk-badge mk-badge--info" :title="promptVersionTitle">线上生效 {{ promptVersionText }}</span>
       </template>
       <!-- 2026-10-23：详情各域跟随顶栏刷新广播（liveRefreshSeq → load(true)），hero 不再出刷新钮 -->
     </MkDetailHero>
@@ -253,6 +253,9 @@
               <button v-for="s in recent" :key="s.id" type="button" class="skd-call" :title="recentRowTitle(s)" @click="goTrace(s.traceId)">
                 <span class="skd-dot" :class="`is-${s.status}`" role="img" :aria-label="statusDotLabel(s.status)" :title="statusDotLabel(s.status)"></span>
                 <span class="skd-call__title">{{ recentRowText(s) }}</span>
+                <!-- 发生时间（2026-10-24 用户「最近调用可以加上调用时间」）：同日只给时:分，
+                     跨天带月-日；完整时刻在 title -->
+                <span v-if="s.ts" class="mono skd-call__time" :title="callTimeFull(s.ts)">{{ callTimeLabel(s.ts) }}</span>
                 <span class="mono skd-call__ms">{{ fmtMs(s.durationMs) }}</span>
               </button>
               <p v-if="!recent.length" class="mk-empty--line">近 7 天暂无该 Skill 的调用记录。指标由统计接口聚合，统计范围与列表不同，以指标卡为准。</p>
@@ -746,20 +749,40 @@ const healthBadge = computed<{ cls: string; text: string; title: string }>(() =>
 })
 
 /* ===== 生效 Prompt（协议页签 System Prompt 卡 + hero 版本 pill + 弹层预填） ===== */
-interface EffectivePrompt { prompt?: { version?: number | string; name?: string; systemPrompt?: string } }
+interface EffectivePrompt {
+  /** db-active = 线上生效的 DB 版本；code-fallback / generated-default = 无 DB 版本 */
+  source?: string
+  prompt?: { version?: number | string; name?: string; systemPrompt?: string }
+}
 const prompt = ref<EffectivePrompt | null>(null)
 const promptFailed = ref(false)
 /** 请求是否已返回（区分「加载中」与「成功但无生效版本」——此前空数据永久停留「加载中…」） */
 const promptLoaded = ref(false)
+/**
+ * hero 的版本读数（2026-10-24 用户「什么是版本，单一源头」）：
+ * 「版本」= 线上生效的 Prompt 版本号，与 Skill 列表「Prompt 版本」列同一条规则
+ * （ACTIVE 基线最高版本）。Prompt 名字（v4-default-skill.x）不再拼进徽标——
+ * 名字里本来就带着版本号，两句并排会把「v4 · v4-…」读成两个版本。
+ */
 const promptVersionText = computed(() => {
   const p = prompt.value?.prompt
-  if (!p) return ''
-  return [p.version != null ? `v${String(p.version)}` : '', String(p.name || '')].filter(Boolean).join(' · ')
+  if (!p || p.version == null) return ''
+  return `v${String(p.version)}`
+})
+const promptVersionTitle = computed(() => {
+  const name = prompt.value?.prompt?.name
+  return name
+    ? `线上生效 Prompt：${name} · 可在「版本」页签回滚`
+    : '线上生效 Prompt 版本 · 可在「版本」页签回滚'
 })
 const promptStateText = computed(() => {
   if (promptFailed.value) return '加载失败'
-  if (promptLoaded.value && !promptVersionText.value) return '暂无生效版本'
-  return promptVersionText.value ? `生效版本 ${promptVersionText.value}` : '生效版本加载中…'
+  if (!promptLoaded.value) return '生效版本加载中…'
+  if (promptVersionText.value) return `生效版本 ${promptVersionText.value}`
+  /* 无 DB 版本不是「坏」：代码内置兜底与按定义生成都是合法状态，分开说清 */
+  if (prompt.value?.source === 'code-fallback') return '代码内置 Prompt（无 DB 版本）'
+  if (prompt.value?.source === 'generated-default') return '按定义生成（无 DB 版本）'
+  return '暂无生效版本'
 })
 const systemPromptText = computed(() => String(prompt.value?.prompt?.systemPrompt || ''))
 /** 页内截断上限与 SkillDrawer 一致（slice(0, 1200)），完整内容在设计页 */
@@ -1126,6 +1149,18 @@ function recentRowTitle(s: TraceSpan): string {
   }
   return parts.join('\n')
 }
+/** 最近调用的发生时间：今天只给时:分，跨天带月-日（等宽数字，避免行内抖动） */
+function callTimeLabel(ts: number): string {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  const hm = `${p(d.getHours())}:${p(d.getMinutes())}`
+  const now = new Date()
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  return sameDay ? hm : `${p(d.getMonth() + 1)}-${p(d.getDate())} ${hm}`
+}
+function callTimeFull(ts: number): string {
+  return new Date(ts).toLocaleString('zh-CN', { hour12: false })
+}
 
 /* 模型配置 / 模型测试的状态与动作 2026-10-19 迁出本页：
    宿主原本自己维护一份 rtForm/probeForm 并渲染同名的两张卡，与设计区块 RuntimeTab 构成
@@ -1353,7 +1388,7 @@ useEscape(
 /* ===== 运行时：最近调用行（SkillDrawer msk__row 迁入：状态点 + 标题 + 耗时） ===== */
 .skd-call {
   display: grid;
-  grid-template-columns: 8px 1fr auto;
+  grid-template-columns: 8px 1fr auto auto;
   gap: 10px;
   align-items: center;
   padding: 8px 0;
@@ -1373,6 +1408,7 @@ useEscape(
 .skd-dot.is-warn { background: var(--mk-amber); }
 .skd-dot.is-err { background: var(--mk-red); }
 .skd-call__title { font-weight: 500; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skd-call__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .skd-call__ms { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
 
 /* ===== 说明行 / 卡内空态：复用共享原语（.mk-card__note / .mk-empty--line），

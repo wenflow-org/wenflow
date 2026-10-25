@@ -11,9 +11,10 @@ import Skills from '../Skills.vue';
 import { dataSource, liveSkillStatsMap, intent } from '../store';
 import { liveSkillProfiles } from '../live';
 
-const { getReconciliationMock, getEvalRunsMock } = vi.hoisted(() => ({
+const { getReconciliationMock, getEvalRunsMock, getSkillsMock } = vi.hoisted(() => ({
   getReconciliationMock: vi.fn(),
   getEvalRunsMock: vi.fn(),
+  getSkillsMock: vi.fn(async (): Promise<unknown> => ({ data: { data: { skills: [] } } })),
 }));
 
 function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
@@ -30,7 +31,7 @@ vi.mock('@/api/adminApi', () => ({
   adminAuthApi: apiObject(),
   adminSkillsApi: apiObject({
     getReconciliation: getReconciliationMock,
-    getSkills: vi.fn(async () => ({ data: { data: { skills: [] } } })),
+    getSkills: getSkillsMock,
     // 模型路由页签只剩覆盖矩阵一张表：给两行数据让它渲染出表头
     getSkillModelCoverage: vi.fn(async () => ({
       data: { data: { skills: [
@@ -254,7 +255,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     localStorage.removeItem('wf_skills_sort')
     const w = await mountSkills()
     const runSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
-    expect(runSortable).toEqual(expect.arrayContaining(['版本', '路由模型', '最近调用']))
+    expect(runSortable).toEqual(expect.arrayContaining(['Prompt 版本', '路由模型', '最近调用']))
     const versionTh = w.findAll('th.mk-th--sortable').find((t) => t.text().includes('版本'))
     expect(versionTh!.attributes('aria-sort')).toBe('none')
     await versionTh!.find('button').trigger('click')
@@ -275,8 +276,28 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
-  it('表头排序：点击「成功率」在 none → descending → ascending 间切换 aria-sort', async () => {
+  it('「Prompt 版本」列 = 线上生效版本（与详情 hero 同源）：无 ACTIVE Prompt 显示「—」', async () => {
     localStorage.removeItem('wf_skills_sort')
+    getSkillsMock.mockResolvedValueOnce({
+      data: {
+        data: {
+          skills: [
+            { name: 'skill:a', promptVersion: 4, promptName: 'v4-default-skill.a', description: 'A' },
+            { name: 'skill:b', promptVersion: null, description: 'B' },
+            { name: 'skill:c', promptVersion: 7, promptName: 'v7-default-skill.c', description: 'C' },
+          ],
+        },
+      },
+    })
+    const w = await mountSkills()
+    const cells = w.findAll('td.sk-c-version .mono')
+    expect(cells.map((c) => c.text())).toEqual(['v4', '—', 'v7'])
+    expect(cells[0].attributes('title')).toContain('v4-default-skill.a')
+    expect(cells[1].attributes('title')).toContain('暂无线上生效 Prompt')
+    w.unmount()
+  })
+
+  it('表头排序：点击「成功率」在 none → descending → ascending 间切换 aria-sort', async () => {    localStorage.removeItem('wf_skills_sort')
     const w = await mountSkills()
     const th = w.findAll('th.mk-th--sortable').find((t) => t.text().includes('成功率'))
     expect(th).toBeTruthy()

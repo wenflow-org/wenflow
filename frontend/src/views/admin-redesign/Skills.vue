@@ -220,14 +220,15 @@
                 :aria-sort="sortState('agent')"
                 @click="toggleSort('agent')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('agent')">归属 Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <!-- 版本：/admin/skills 的 definition.version（原型「版本」列） -->
+              <!-- 版本 = 线上生效的 Prompt 版本（2026-10-24 用户「什么是版本，单一源头」）：
+                   与详情 hero、运行时定义同一条规则；definition.version（代码语义版本）不再上这一列 -->
               <th
                 v-if="showCol('version')"
                 scope="col"
                 class="mk-th--sortable sk-c-version"
                 :aria-sort="sortState('version')"
                 @click="toggleSort('version')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('version')">版本<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('version')" title="线上生效的 Prompt 版本（取该 Skill 已启用的 Prompt 中版本最高的基线），可在详情「版本」页签回滚">Prompt 版本<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 路由模型：skill-model-configs/coverage 的生效 model；未配置 → 「平台默认」 -->
               <th
                 v-if="showCol('routing')"
@@ -303,7 +304,7 @@
                 <!-- 无归属不用裸文本「工具类」：与同列有归属的胶囊同构，弱化灰徽标（2026-10-24） -->
                 <span v-else class="mk-badge mk-badge--sm mk-badge--muted" title="没有归属的顶层 Agent">未归属</span>
               </td>
-              <td v-if="showCol('version')"><span class="mono">{{ versionOf(s.id) }}</span></td>
+              <td v-if="showCol('version')" class="sk-c-version"><span class="mono" :title="versionTitleOf(s.id)">{{ versionOf(s.id) }}</span></td>
               <!-- 路由口径是中文词（「平台默认」），不走等宽；版本号仍是机器串 -->
               <td v-if="showCol('routing')"><span class="sk-model" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
               <!-- 调用/P95/成功率三格挂 mk-num（2026-10-15 用户走查）：表头 mk-th--right 右对齐，
@@ -752,6 +753,29 @@ function healthLabel(health: Health): string {
   return '健康'
 }
 
+/* ================= 路由 · 版本元数据（P1① 原型列结构的数据来源） =================
+   原型 renderSkillHub 1662-1706 的 8 列里，版本/路由模型/备用模型三列不在 live.ts 的
+   LiveSkillProfile（id/name/category/agentId/agentName）里，故本页直接取两个只读端点：
+   - GET /admin/skills（同 live 注册表源）：promptVersion / promptName + description
+   - GET /admin/skill-model-configs/coverage：生效 model / fallbackChain（未配置=平台默认）
+   列可得性核查：
+     Skill ✓ / 归属 Agent ✓ / Prompt 版本 ✓ / 路由模型 ✓ / 调用 ✓（stats.callCount，窗口随筛选）
+     / P95 ✗（后端仅日志聚合 p50/p99，无技能级 P95 → 占位「—」）/ 通过率 ✓（stats.successRate）
+     / 状态 ✓（对账 completion status）
+   「版本」列的单一来源（2026-10-24 用户「什么是版本，单一源头」）：服务端按
+   ACTIVE Prompt 基线最高版本回填 promptVersion，与详情 hero「线上生效 vN」、
+   运行时定义 activePrompt.version 同一条规则；不再用 definition.version（代码语义版本）。
+   本页不外发这两个请求的结果，也不改动 live.ts 的档案口径。
+   ※ 状态声明必须在 useTableSort 之前（版本/路由排序访问器在 setup 期就可能被求值，
+     放到下方会撞 TDZ：恢复上次排序为「版本」时页面直接白屏）。 */
+interface SkillMetaEntry { promptVersion: number | null; promptName: string; description: string }
+interface SkillRouteEntry { model: string | null; fallbackChain: string[] | null; tier: string }
+
+const skillMetaById = ref<Map<string, SkillMetaEntry>>(new Map())
+const coverageById = ref<Map<string, SkillRouteEntry>>(new Map())
+/** coverage 是否成功拉到（空列表也算就绪）：区分「没拉到」与「确实无模型配置」 */
+const coverageReady = ref(false)
+
 /* 表格排序：默认失败数优先（问题浮顶，保持既有行为），表头可点切换。
    #107：默认键 errors 不在可见列里（表无「失败数」列），初始行序无可见列可解释，
    且点过别的表头后无法回到默认序 → 在工具条给「默认按失败数排列」可见说明 +
@@ -998,24 +1022,6 @@ function recGateDetail(completion: SkillCompletion): string {
   return '全部门槛通过'
 }
 
-/* ================= 路由 · 版本元数据（P1① 原型列结构的数据来源） =================
-   原型 renderSkillHub 1662-1706 的 8 列里，版本/路由模型/备用模型三列不在 live.ts 的
-   LiveSkillProfile（id/name/category/agentId/agentName）里，故本页直接取两个只读端点：
-   - GET /admin/skills（同 live 注册表源）：definition.version + description
-   - GET /admin/skill-model-configs/coverage：生效 model / fallbackChain（未配置=平台默认）
-   列可得性核查：
-     Skill ✓ / 归属 Agent ✓ / 版本 ✓ / 路由模型 ✓ / 调用 ✓（stats.callCount，窗口随筛选）
-     / P95 ✗（后端仅日志聚合 p50/p99，无技能级 P95 → 占位「—」）/ 通过率 ✓（stats.successRate）
-     / 状态 ✓（对账 completion status）
-   本页不外发这两个请求的结果，也不改动 live.ts 的档案口径。 */
-interface SkillMetaEntry { version: string; description: string }
-interface SkillRouteEntry { model: string | null; fallbackChain: string[] | null; tier: string }
-
-const skillMetaById = ref<Map<string, SkillMetaEntry>>(new Map())
-const coverageById = ref<Map<string, SkillRouteEntry>>(new Map())
-/** coverage 是否成功拉到（空列表也算就绪）：区分「没拉到」与「确实无模型配置」 */
-const coverageReady = ref(false)
-
 /* ---- registry 兜底链（F7-5，只读 /admin/model-registry）----
    运行时兜底来源 = skill 级 fallbackChain ?? 主模型在 llm-providers.json 的 fallbacks
    （executor.ts:378-410 / :760，超过运行时候选上限的尾部不生效）。
@@ -1072,7 +1078,12 @@ async function refreshSkillMeta(): Promise<void> {
     for (const s of items) {
       const id = String(s.skillId || s.id || s.name || '')
       if (!id) continue
-      m.set(id, { version: String(s.version || ''), description: String(s.description || '') })
+      const promptVersion = Number(s.promptVersion)
+      m.set(id, {
+        promptVersion: Number.isFinite(promptVersion) && promptVersion > 0 ? promptVersion : null,
+        promptName: String(s.promptName || ''),
+        description: String(s.description || '')
+      })
     }
     skillMetaById.value = m
   } catch {
@@ -1107,22 +1118,25 @@ function descOf(skillId: string): string {
   return skillMetaById.value.get(skillId)?.description || ''
 }
 
-/** 版本列：Skill 定义声明的 version（如 1.1.0）→ 显示 v1.1.0；缺失「—」 */
+/** 版本列 = 线上生效的 Prompt 版本（无 ACTIVE Prompt → 「—」，不拿 definition.version 顶替） */
 function versionOf(skillId: string): string {
-  const v = skillMetaById.value.get(skillId)?.version
-  if (!v) return '—'
-  return /^v/i.test(v) ? v : `v${v}`
+  const v = skillMetaById.value.get(skillId)?.promptVersion
+  return typeof v === 'number' ? `v${v}` : '—'
 }
 
-/** 版本排序键：逐段补零（v9 < v10），缺版本返回 null（恒排末尾） */
+/** 版本格 title：说清这是「线上生效 Prompt」的版本，并给出 Prompt 名（便于对版本页签） */
+function versionTitleOf(skillId: string): string {
+  const entry = skillMetaById.value.get(skillId)
+  if (!entry?.promptVersion) return '暂无线上生效 Prompt（当前只有代码内置或按定义生成的草案）'
+  return entry.promptName
+    ? `线上生效 Prompt：${entry.promptName}`
+    : `线上生效 Prompt v${entry.promptVersion}`
+}
+
+/** 版本排序键：按 Prompt 版本号数值（10 > 9），缺版本返回 null（恒排末尾） */
 function versionSortKey(skillId: string): string | null {
-  const v = skillMetaById.value.get(skillId)?.version
-  if (!v) return null
-  return v
-    .replace(/^v/i, '')
-    .split(/[.\-+]/)
-    .map((part) => part.padStart(6, '0'))
-    .join('.')
+  const v = skillMetaById.value.get(skillId)?.promptVersion
+  return typeof v === 'number' ? String(v).padStart(6, '0') : null
 }
 
 /** 路由模型列：coverage 有行 → 生效 model（空=平台默认）；无行/未加载 → 「—」，不伪装成平台默认 */
@@ -1305,7 +1319,7 @@ const fallbackPolicyTitle = computed(() => {
    翻页跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。 */
 .sk-c-skill { width: 220px; }
 .sk-c-agent { width: 140px; }
-.sk-c-version { width: 80px; }
+.sk-c-version { width: 96px; }
 .sk-c-routing { width: 170px; }
 .sk-c-calls { width: 52px; }
 .sk-c-p95 { width: 56px; }
