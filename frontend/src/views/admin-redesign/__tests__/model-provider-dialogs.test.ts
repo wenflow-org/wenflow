@@ -163,9 +163,9 @@ describe('ModelEditorDialog', () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: ['platform/m-chat'] }, ...mountOptions })
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
-    await w.find('input[placeholder="deepseek-v4.1-flash"]').setValue('acme-chat')
+    await w.find('.med-modal .med-two input').setValue('acme-chat')
     await w.find('.med-adv-body select.mk-field__select').setValue('reasoning')
-    await w.find('input[placeholder="131072"]').setValue('65536')
+    await w.findAll('.med-adv-body .med-two')[1].findAll('input')[0].setValue('65536')
 
     addModelMock.mockResolvedValue({ data: { success: true, warnings: ['备用链写了 2 条…'] } })
     await btn(w, '保存').trigger('click')
@@ -253,7 +253,7 @@ describe('ModelEditorDialog', () => {
     await flushPromises()
     // 占位符随已下线模型归一（deepseek-v4-flash → v4.1-flash）；
     // 「创建后不改」提示已在本次 UI 改造中从对话框移除，断言同步删除
-    expect(w.find('input[placeholder="deepseek-v4.1-flash"]').attributes('disabled')).toBeDefined()
+    expect(w.find('.med-modal .med-two input').attributes('disabled')).toBeDefined()
     updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
@@ -290,7 +290,7 @@ describe('ModelEditorDialog', () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
     w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-one' })
     await flushPromises()
-    const id = w.find('input[placeholder="deepseek-v4.1-flash"]')
+    const id = w.find('.med-modal .med-two input')
     const label = w.find('input[placeholder="默认跟随模型 ID"]')
     expect((label.element as HTMLInputElement).value).toBe('m-one')
 

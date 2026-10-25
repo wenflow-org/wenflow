@@ -45,7 +45,8 @@
     <details class="vl-settings__block vl-settings__date">
       <summary class="vl-settings__summary" title="把平台「当前日期」按偏移量前移/后移，用于验证跨日衰减、到期与复习节奏">
         <span class="vl-settings__label">日期模拟</span>
-        <span class="vl-settings__fold">展开设置</span>
+        <span class="vl-settings__fold vl-settings__fold--closed">展开设置</span>
+        <span class="vl-settings__fold vl-settings__fold--open">收起</span>
       </summary>
       <!-- 日期模拟挪出分段视图后不再需要「已开启」角标（原角标挂在被选中的分段项上）；
            开关状态由 SimulatedDaySettings 自己的控件呈现 -->
@@ -118,6 +119,9 @@ onMounted(() => {
 .vl-settings__summary::before { content: '▸'; color: var(--mk-faint); }
 .vl-settings__date[open] .vl-settings__summary::before { content: '▾'; }
 .vl-settings__fold { margin-left: auto; font-weight: 500; color: var(--mk-faint); }
+/* 折叠文案跟着开合状态走：开着还写「展开设置」会让人以为没生效 */
+.vl-settings__date:not([open]) .vl-settings__fold--open,
+.vl-settings__date[open] .vl-settings__fold--closed { display: none; }
 .vl-settings__row { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
 .vl-rpm__input { width: 84px; }
 .vl-rpm__unit {

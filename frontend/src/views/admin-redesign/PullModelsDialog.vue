@@ -38,6 +38,8 @@
             <div class="pmd-sec__head">
               <span class="pmd-sec__title">对话候选</span>
               <b>{{ chatModels.length }}</b>
+              <!-- 已添加的也计在候选里：两个数不一致时把「还能加几个」写出来，避免误读 -->
+              <span v-if="selectableChat.length !== chatModels.length" class="pmd-sec__hint">可添加 {{ selectableChat.length }}</span>
               <span class="pmd-sec__hint">勾选要登记进模型清单的对话模型</span>
             </div>
             <div class="pmd-list">
@@ -158,6 +160,8 @@ const matched = (name: string) => {
   return !q || name.toLowerCase().includes(q)
 }
 const filteredChat = computed(() => chatModels.value.filter(matched))
+/** 全部候选里还能勾的对话模型（不受筛选影响，只用于段头读数） */
+const selectableChat = computed(() => chatModels.value.filter((name) => !registeredSet.value.has(name)))
 const filteredOther = computed(() => otherModels.value.filter(matched))
 /** 当前筛选结果里还能勾的对话模型（已添加的不可勾） */
 const selectableVisibleChat = computed(() =>

@@ -31,7 +31,7 @@
                   v-model="form.id"
                   class="mk-field__input mono"
                   :disabled="!isCreate"
-                  placeholder="deepseek-v4.1-flash"
+                  placeholder="例如 gpt-4o-mini"
                   autocomplete="off"
                   @input="error = ''"
                 />
@@ -51,7 +51,7 @@
             <div class="med-price">
               <label class="mk-field">
                 <span class="mk-field__label">输入</span>
-                <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="0.00" />
+                <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
               </label>
               <label class="mk-field">
                 <span class="mk-field__label">缓存命中</span>
@@ -59,7 +59,7 @@
               </label>
               <label class="mk-field">
                 <span class="mk-field__label">输出</span>
-                <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="0.00" />
+                <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
               </label>
             </div>
           </section>
@@ -163,15 +163,15 @@
                 <div class="med-two">
                   <label class="mk-field">
                     <span class="mk-field__label">输出上限</span>
-                    <input v-model.number="form.maxOutputTokens" class="mk-field__input mono" type="number" min="1" placeholder="131072" />
+                    <input v-model.number="form.maxOutputTokens" class="mk-field__input mono" type="number" min="1" placeholder="平台默认" />
                   </label>
                   <label class="mk-field">
                     <span class="mk-field__label">默认输出</span>
-                    <input v-model.number="form.defaultMaxTokens" class="mk-field__input mono" type="number" min="1" placeholder="32768" />
+                    <input v-model.number="form.defaultMaxTokens" class="mk-field__input mono" type="number" min="1" placeholder="平台默认" />
                   </label>
                   <label class="mk-field">
                     <span class="mk-field__label">推理预留</span>
-                    <input v-model.number="form.reasoningReserveTokens" class="mk-field__input mono" type="number" min="1" placeholder="8192" />
+                    <input v-model.number="form.reasoningReserveTokens" class="mk-field__input mono" type="number" min="1" placeholder="平台默认" />
                   </label>
                   <label class="mk-field">
                     <span class="mk-field__label">并发上限</span>

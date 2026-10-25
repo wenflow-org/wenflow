@@ -310,7 +310,7 @@ describe('ModelProvidersPanel', () => {
     await confirm.trigger('click')
     await flushPromises()
     expect(w.find('.pmd').exists()).toBe(false)
-    const idInput = w.find('.med-modal input[placeholder="deepseek-v4.1-flash"]')
+    const idInput = w.find('.med-modal .med-two input')
     expect(idInput.exists()).toBe(true)
     expect((idInput.element as HTMLInputElement).value).toBe('acme-pro')
   })
@@ -327,7 +327,7 @@ describe('ModelProvidersPanel', () => {
     await w.findAll('.pmd .mk-modal__foot .mk-btn--primary')[0].trigger('click')
     await nextTick()
     const title = () => w.find('.med-modal .mk-modal__title').text()
-    const idValue = () => (w.find('.med-modal input[placeholder="deepseek-v4.1-flash"]').element as HTMLInputElement).value
+    const idValue = () => (w.find('.med-modal .med-two input').element as HTMLInputElement).value
     expect(title()).toBe('添加模型 · 1/2')
     expect(idValue()).toBe('mimo-v2.5-flash')
     addModelMock.mockResolvedValue({ data: { data: {}, warnings: [] } })
@@ -375,6 +375,24 @@ describe('ModelProvidersPanel', () => {
     const rows = modelRows(w)
     expect(rows[0].text()).toContain('冷却中')
     expect(rows[1].text()).toContain('健康')
+  })
+
+  it('配置告警不只给图标：别名未引用的模型在状态列写明「未被引用」，细节留在 title', async () => {
+    getModelRegistryMock.mockResolvedValue({
+      data: {
+        data: {
+          models: [],
+          cooldowns: [],
+          warnings: ['模型「acme-chat」未被任何别名引用（只能通过具体 id 使用）。'],
+          runtime: { maxModelCandidates: 2 }
+        }
+      }
+    })
+    const w = await mountPanel()
+    await pick(w, 'Acme 网关')
+    const badge = modelRows(w)[0].find('.mpp-label')
+    expect(badge.text()).toContain('未被引用')
+    expect(badge.attributes('title')).toContain('未被任何别名引用')
   })
 
   it('平台通道的拉取结果进浮窗勾选（不在详情里铺清单）', async () => {

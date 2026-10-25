@@ -146,8 +146,13 @@
 
         <div class="mpp-block mpp-models">
           <div class="mpp-models__head">
-            <!-- 平台详情只有一页：标题直接给模型计数（原页签计数随页签一起退役） -->
-            <span class="mpp-sec">模型<span class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
+            <!-- 平台详情只有一页：标题直接给模型计数（原页签计数随页签一起退役）。
+                 上游清单状态与计数同一行（2026-10-24 走查）：原先是表头之上独立一条，
+                 读起来像一行空记录。 -->
+            <div class="mpp-models__title">
+              <span class="mpp-sec">模型<span class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
+              <slot v-if="selected.id === 'platform'" name="models-meta" />
+            </div>
             <span class="mpp-models__acts">
               <!-- 拉取结果收进浮窗（2026-10-24）：清单不在详情里铺开，勾选后再逐个配置。
                    拉取过一次就保留入口，关掉浮窗还能回来再选。 -->
@@ -165,8 +170,6 @@
               <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openManualAdd">＋ 添加模型</button>
             </span>
           </div>
-
-          <slot v-if="selected.id === 'platform'" name="models-meta" />
 
           <!-- 上游清单不再铺在详情里（2026-10-24 用户「拉取作为浮窗」）：拉取只拿到清单，
                勾选与用途分流都在 PullModelsDialog 里做——详情区只留已登记模型这张表。 -->
@@ -217,7 +220,7 @@
                   <td>
                     <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
                     <span v-else class="mk-badge mk-badge--ok">● 健康</span>
-                    <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠</span>
+                    <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
                   </td>
                   <td class="mpp-rowacts">
                     <button type="button" class="mk-link" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
@@ -402,6 +405,15 @@ function cooldownOf(m: ModelLike) {
 }
 function modelWarnings(m: ModelLike): string[] {
   return (health.value?.warnings ?? []).filter((w) => w.includes(`模型「${m.id}」`))
+}
+/**
+ * 状态列里的告警徽标必须自带一句人话（2026-10-24 用户「警告图标是什么」）：
+ * 只有 ⚠ 时没人知道该修什么。当前唯一的告警类型是「未被别名引用」，
+ * 其它新增类型统一退回「告警」，细节仍在 title 里。
+ */
+function warningLabel(m: ModelLike): string {
+  const ws = modelWarnings(m)
+  return ws.length && ws.every((w) => w.includes('未被任何别名引用')) ? '未被引用' : '告警'
 }
 /** 未配单价 = 成本分析页这个模型的金额会显示「—」，是可在本页补的配置缺口 */
 function priceMissing(m: ModelLike): boolean {
@@ -845,9 +857,12 @@ defineExpose({ refresh, openPull, openHostPull })
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 8px;
 }
+/* 计数与上游清单状态同一行：两个都弱化，动作按钮仍独占右侧 */
+.mpp-models__title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
 .mpp-models__acts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .mpp-sec { font-size: var(--mk-fs-body); }
 .mpp-sec__count {

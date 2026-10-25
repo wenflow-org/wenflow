@@ -404,6 +404,25 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
+  it('平台设置关掉后，连接脏位由底部保存条接住（浮窗里的保存钮已不在屏上）', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
+    await wrapper.find('input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
+    await nextTick();
+    // 浮窗开着：窗内「保存连接」在屏，不再叠一条底部条
+    expect(wrapper.find('.ac-save').exists()).toBe(false);
+
+    await wrapper.find('.ac-ps .mk-modal__close').trigger('click');
+    await nextTick();
+    // 浮窗关掉：保存与放弃都必须有出口，否则拉取完只剩一条「未保存」提示
+    const bar = wrapper.find('.ac-save');
+    expect(bar.exists()).toBe(true);
+    expect(bar.text()).toContain('连接');
+    expect(bar.text()).toContain('放弃');
+    wrapper.unmount();
+  });
+
   it('新用户注册 / 注册配额是开关（MkSwitch）：布尔配置不再用并排双按钮', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     // 注册开关卡 v-if 要求 registrationEnabled !== null：它是 live.ts 的模块级 ref，
@@ -490,7 +509,8 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.ac-conn').exists()).toBe(false);
     expect(wrapper.find('.ac-ps').exists()).toBe(true);
     expect(wrapper.find('.ac-ps input[placeholder="https://api.example.com/v1"]').exists()).toBe(true);
-    expect(wrapper.find('.mpp-models .ac-models-meta').exists()).toBe(true);
+    // 上游清单状态与「模型 N 个」同一行，不再在表头之上单起一行（2026-10-24）
+    expect(wrapper.find('.mpp-models__head .ac-models-meta').exists()).toBe(true);
     expect(wrapper.find('.ac-ps .ac-models-meta').exists()).toBe(false);
     // 平台通道没有自带端点：模型清单只给增改，不给「获取模型列表」（那是自带端点才有的动作）；
     // 连通性验证在连接表单里（上面那段「运行测试」），不在下面再挂第二枚检测钮

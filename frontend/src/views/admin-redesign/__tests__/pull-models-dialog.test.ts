@@ -45,6 +45,10 @@ describe('PullModelsDialog', () => {
     expect(rowText('agnes-image-2.5-flash').find('button').text()).toBe('插件配置')
     expect(rowText('agnes-video-2.5').text()).toContain('暂未接入')
     expect(rowText('agnes-video-2.5').find('button').exists()).toBe(false)
+    // 段头两个数不一致时写清「可添加」：3 个候选里有 1 个已登记
+    const head = w.find('.pmd-sec__head')
+    expect(head.text()).toContain('3')
+    expect(head.text()).toContain('可添加 2')
   })
 
   it('勾选后确认：只回传勾中的对话模型', async () => {

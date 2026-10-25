@@ -85,7 +85,15 @@
             <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">拉取失败，请检查服务地址与密钥</span>
             <span v-else-if="models.length">{{ upstreamSummary }}</span>
             <span v-else>尚未拉取</span>
-            <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn" title="本次拉取仅在「保存连接」后生效">未保存</span>
+            <!-- 拉取只改了本页草稿：连接现在收在「设置」浮窗里，徽标直接把人送过去，
+                 否则「未保存」是一条没有出口的提示（2026-10-24 走查）。 -->
+            <button
+              v-if="hasUnsavedModels"
+              type="button"
+              class="mk-badge mk-badge--warn ac-models-meta__act"
+              title="本次拉取尚未保存，需在「设置」里保存连接"
+              @click="openPlatformSettings('conn')"
+            >未保存</button>
           </p>
         </template>
       </ModelProvidersPanel>
@@ -480,8 +488,9 @@
          平铺在宫格里会把左卡挤成半屏空白。分区标题行承担组级 badge 与「保存策略」。 -->
     <div class="ac-tab-body ac-sec-body" id="ac-panel-security" role="tabpanel" aria-labelledby="ac-tab-security">
       <div class="ac-sec__title ac-sec-head">
-        安全与访问
+        <!-- 页签已经叫「安全与访问」，这里不再复读同一句；这条只交代作用范围与生效方式 -->
         <span class="mk-badge mk-badge--info">平台策略 · 即时生效</span>
+        <span class="ac-sec__hint">覆盖管理端入口、注册与出站网络</span>
         <button v-if="dirty.has('policy')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['policy'])">{{ saving ? '保存中…' : '保存策略' }}</button>
       </div>
       <section class="mk-card">
@@ -1022,10 +1031,18 @@ const dirtyGroups = computed(() => [...dirty.value].map((g) => DIRTY_GROUP_LABEL
 const DIRTY_GROUP_TAB: Record<string, AcTab> = {
   conn: 'access', route: 'access', reliability: 'routing', policy: 'security', probe: 'routing'
 }
-const showSaveBar = computed(() =>
-  dirty.value.size > 1
-  || (dirty.value.size === 1 && [...dirty.value].some((g) => DIRTY_GROUP_TAB[g] !== tab.value))
-)
+/** conn / route 的保存钮在「平台设置」浮窗里：浮窗关着时底部条必须接住，
+    否则拉取完模型只剩一条「未保存」提示、既没有保存也没有放弃的出口（2026-10-24 走查）。 */
+const MODAL_DIRTY_GROUPS = new Set(['conn', 'route'])
+const showSaveBar = computed(() => {
+  // 浮窗开着时由窗内分段保存钮承担，不同屏出第二颗
+  if (platformSettingsOpen.value) return false
+  if (dirty.value.size > 1) return true
+  if (dirty.value.size !== 1) return false
+  const [group] = [...dirty.value]
+  if (MODAL_DIRTY_GROUPS.has(group)) return true
+  return DIRTY_GROUP_TAB[group] !== tab.value
+})
 
 function splitLines(s: string): string[] {
   return s.split('\n').map((x) => x.trim()).filter(Boolean)
@@ -1826,15 +1843,18 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 上游清单关系句（2026-10-16 用户走查重排）：原 30+ 枚模型胶囊（.ac-models/.ac-model）退役——
    与下方登记表并列成两份模型名单，被读成「同一件事说两遍」。现在只说关系，逐个名字在登记表折叠里。 */
 .ac-models__line { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-/* 上游对齐条（2026-10-20 从连接块搬进模型清单块）：嵌在模型块里只占一行读数，不再套第二层卡片 */
+/* 上游对齐条（2026-10-20 从连接块搬进模型清单块）：嵌在模型标题行里只占一行读数，
+   与「模型 N 个」并排（2026-10-24 走查：不再在表头之上单起一行） */
 .ac-models-meta {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
+  margin: 0;
 }
 .ac-models-meta__title { color: var(--mk-muted); }
+/* 徽标当入口用时只补指针，外观仍由 .mk-badge 决定 */
+.ac-models-meta__act { cursor: pointer; }
 /* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
 
 /* 默认思考：模式 + 强度，同一行两列字段（2026-10-14 删冗余「启用思考」开关后由三列改两列） */
@@ -1984,14 +2004,15 @@ async function saveQuota(enabled: boolean, quota: number) {
   font-size: var(--mk-fs-micro);
 }
 .ac-route-warn__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
-/* stale 时「立即探测」红色脉冲（A3：承认探活默认关闭的机制性状态，引导手动探测） */
+/* 结果过期 + 探针关闭时的提醒态：用警示色而不是危险红——「立即探测」是修复动作，
+   不是破坏性操作，红色会读成「点下去会出事」。 */
 .ac-probe--alert {
-  border-color: var(--mk-red) !important;
-  color: var(--mk-red) !important;
+  border-color: var(--mk-amber) !important;
+  color: var(--mk-amber) !important;
   animation: ac-probe-pulse 1.6s ease infinite;
 }
 @keyframes ac-probe-pulse {
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-red-fill) 18%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-amber) 20%, transparent); }
 }
 
 /* 探针行：AI 能力定期探测总开关（右卡第一段，开启后显示间隔；由 ac-body 统一间距，无独立边框） */
