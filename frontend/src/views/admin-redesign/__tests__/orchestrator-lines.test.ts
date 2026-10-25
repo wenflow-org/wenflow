@@ -16,17 +16,20 @@ describe('编排图连线', () => {
     expect(DataFlowGraphSource).toMatch(/\.dfg-edges\s*\{[^}]*max-width:\s*none/)
   })
 
-  it('锚点落在阶段头中线，不再取整列垂直中点', () => {
-    expect(OrchestratorSource).toContain("querySelector<HTMLElement>('.orch-odg-colhead')")
-    expect(OrchestratorSource).toContain('ha.offsetHeight')
-    // 旧实现（列高中点）不得回潮：列高差异越大，箭头越会停在卡片之间的空白
+  it('终点落在「组」的垂直中点：本组标题出发，汇入下一组内容带中点', () => {
+    // 2026-10-24 用户「向右下角的曲线指向下个组的中间，而不是指向第一列的 agent 名字」
+    expect(OrchestratorSource).toContain('const groupMidY')
+    expect(OrchestratorSource).toContain('foot.offsetTop + foot.offsetHeight')
+    expect(OrchestratorSource).toContain('const y1 = headMidY(a)')
+    expect(OrchestratorSource).toContain('const y2 = groupMidY(b)')
+    // 旧实现（拉伸后的列中点）不得回潮：中点会落在列底空白里
     expect(OrchestratorSource).not.toContain('a.offsetTop + Math.round(a.offsetHeight / 2)')
   })
 
   it('连线是曲线而不是横杠（2026-10-24 用户「箭头之前是曲线，更好看」）', () => {
-    // 同高也走三次贝塞尔：P1 抬 bow，P2 回到终点高度 → 末端切线水平，箭头水平入卡
+    // 三次贝塞尔：两端控制点都在水平切线上，起止都不歪，纵向落差在跨列间隙里完成
     expect(OrchestratorSource).not.toMatch(/orch-odg-edge[\s\S]{0,80}`M\$\{x1\} \$\{y1\} L\$\{x2\} \$\{y2\}`/)
-    expect(OrchestratorSource).toContain('`M${x1} ${y1} C${x1 + dx} ${y1 - bow} ${x2 - dx} ${y2} ${x2} ${y2}`')
+    expect(OrchestratorSource).toContain('`M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`')
   })
 
   it('阶段头单行：名称不折、agent id 省略，避免各列头高不一致把锚点拉斜', () => {
