@@ -259,7 +259,7 @@ function judgeVersionFor(target) {
 
 function selftest() {
   let passed = 0;
-  const total = 11;
+  const total = 14;
   const assert = (cond, label) => {
     if (!cond) throw new Error(`selftest failed: ${label}`);
     passed += 1;
@@ -309,6 +309,28 @@ function selftest() {
   }, pathBlock);
   assert(p1.ok && p1.flags.budgetMismatch && p1.flags.placeholderTask, 'path flags verified');
   assert(p1.verdict === 'fail' && p1.overall < 0.7, 'path low score fail');
+
+  // v2 硬门 flag：体力活陷阱/承诺违约一票否决（均分再高也 fail），对话摘录可作引文源
+  const v2Block = '【对话承诺摘录（产出本路径的目标对话，末 14 条）】\n👤 我每周也就下班后半小时\n🤖 第一周半小时搭好两列表算出第一版预测\n【结构事实（代码统计，可直接引用）】\n任务 7｜总预计 335 分钟\n阶段 1 任务 1：逐行确认每条记录落在星期几和哪个小时格子里并计数';
+  const v2Hard = validatePathVerdict({
+    dimensions: { goalAlignment: 0.9, integrity: 0.9, granularity: 0.9, specificity: 0.9, progression: 0.9, feasibility: 0.9 },
+    flags: { manualLaborTrap: true, promiseConsistency: true },
+    evidence: {
+      manualLaborTrap: ['逐行确认每条记录落在星期几和哪个小时格子里并计数'],
+      promiseConsistency: ['我每周也就下班后半小时'],
+    },
+    issues: [],
+  }, v2Block);
+  assert(v2Hard.ok && v2Hard.flags.manualLaborTrap && v2Hard.flags.promiseConsistency, 'v2 flags verified');
+  assert(v2Hard.verdict === 'fail' && v2Hard.softVerdict === 'pass', 'v2 hard gate vetoes despite high average');
+
+  const v2NoQuote = validatePathVerdict({
+    dimensions: { goalAlignment: 0.9, integrity: 0.9, granularity: 0.9, specificity: 0.9, progression: 0.9, feasibility: 0.9 },
+    flags: { asyncTimeLock: true },
+    evidence: { asyncTimeLock: ['记录里不存在的引文'] },
+    issues: [],
+  }, v2Block);
+  assert(v2NoQuote.flags.asyncTimeLock === false && v2NoQuote.verdict === 'pass', 'v2 flag without quote downgraded');
 
   const agg = aggregatePathJudgments([
     p1,
