@@ -127,9 +127,10 @@
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部</button>
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
           </div>
-          <!-- 2026-10-05 卡头统一弹层法：归属 Agent / 类别 两下拉收进右侧「筛选」弹层
+          <!-- 2026-10-05 卡头统一弹层法：归属 Agent 下拉收进右侧「筛选」弹层
               （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）；
-              触发钮标生效数 -->
+              触发钮标生效数。2026-10-24「类别」下拉随该列一起撤：只删列不删筛选会留下
+              一个隐形过滤器——筛完表格少一半行却看不出为什么。 -->
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- #107：默认排序键 errors 无可见列 → 默认态给可见说明，非默认态给一键复位
                （此前点过别的表头就再也回不到默认序，只能清 localStorage） -->
@@ -138,7 +139,7 @@
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID / 类别" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID" />
           <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口" title="统计窗口：改动本页 KPI 与卡内统计的聚合窗口，不筛列表行">
             <option value="7d">近 7 天</option>
             <option value="24h">近 24 小时</option>
@@ -172,13 +173,6 @@
                   <option v-for="a in agentOptions" :key="a.id" :value="a.id">{{ a.label }}（{{ a.count }}）</option>
                 </select>
               </label>
-              <label class="mk-adv__field">
-                <span class="mk-cell-sub">类别</span>
-                <select v-model="categoryFilter" class="mk-filter__select" aria-label="按类别筛选">
-                  <option value="">全部类别</option>
-                  <option v-for="c in categoryOptions" :key="c" :value="c">{{ categoryText(c) }}</option>
-                </select>
-              </label>
             </div>
           </div>
           <!-- 卡头不再出「筛选后 N 个」命中数：与分页器「共 N 条」同屏复读，计数单源交分页器
@@ -193,7 +187,7 @@
         <button type="button" class="mk-alert__btn" @click="retrySkills">重试</button>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="11" />
+      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="9" />
       <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
       <div class="mk-table-scroll">
@@ -204,7 +198,9 @@
           <!-- P1① 列结构对齐原型 renderSkillHub 1662-1706 的 8 列：
                Skill / 归属 Agent / 版本 / 路由模型 / 24h 调用 / P95 / 通过率 / 完成度。
                数据来源核查见脚本「路由 · 版本元数据」小节；P95 接口缺失 → 恒「—」且默认隐藏。
-               原型没有、但本页有的真实信息（类别 / 最近调用）排在原型列之后，操作列收尾。 -->
+               原型里的「完成度」与不在原型里的「类别」均已撤（见下方表头处说明，
+               2026-10-24 用户「有什么实际意义吗」）：现列 = 原型 8 列去掉完成度，
+               加「最近调用」，操作列收尾。 -->
           <thead>
             <tr>
               <th
@@ -255,21 +251,13 @@
                 :aria-sort="sortState('rate')"
                 @click="toggleSort('rate')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="RATE_THRESHOLD_NOTE">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <!-- 完成度 = 对账 completion status（draft → live）；原列名「状态」与行首健康点双语义 → 更名 -->
-              <th
-                v-if="showCol('status')"
-                scope="col"
-                class="mk-th--sortable sk-c-status"
-                :aria-sort="sortState('status')"
-                @click="toggleSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('status')" title="完成度：草稿 → 已上线">完成度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                v-if="showCol('cat')"
-                scope="col"
-                class="mk-th--sortable sk-c-cat"
-                :aria-sort="sortState('cat')"
-                @click="toggleSort('cat')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('cat')">类别<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 「完成度」「类别」两列已撤（2026-10-24 用户「有什么实际意义吗」）：
+                   完成度 = 对账 completion（草稿→入口→core→字段→已上线），实测 37 条对账
+                   全为 live，列表 30 行里 29 行显示「已上线」、1 行无对账行显示「—」——零区分度，
+                   排序也只是把那 1 个空行挑出来。它是工程侧的构建审计，判断依据全是代码/文件
+                   状态，运营没有动作能改它；门槛依据与失败档文本在健康中心对账明细里。
+                   类别 = Skill 定义声明的 category（本页实际只有「生成」「分析」两桶，36 条
+                   分布 18/14/3/1），不参与任何运行时行为，详情 hero 已显示同一枚徽标。 -->
               <th
                 v-if="showCol('last')"
                 scope="col"
@@ -318,20 +306,6 @@
                   <b>{{ successRateText(s.calls, s.errors) || '—' }}</b>
                 </div>
               </td>
-              <td v-if="showCol('status')">
-                <!-- 状态列（原「完成度」列折入）：对账 completion → mk-badge--rec-* pill；
-                     对账未就绪三态：加载中 / 加载失败 / 不在对账口径（此前失败与无数据同显「—」，整列塌成无意义符号） -->
-                <span
-                  v-if="completionBadgeOf(s.id)"
-                  class="mk-badge"
-                  :class="completionBadgeOf(s.id)!.cls"
-                  :title="completionBadgeOf(s.id)!.title"
-                >{{ completionBadgeOf(s.id)!.text }}</span>
-                <span v-else-if="recLoading" class="mk-na" :title="REC_LOADING_TITLE">…</span>
-                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`上线状态加载失败：${recError}`">状态未知</span>
-                <span v-else class="mk-na" :title="REC_NOT_IN_SCOPE_TITLE">—</span>
-              </td>
-              <td v-if="showCol('cat')"><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
               <td>
                 <div class="mk-actions">
@@ -442,8 +416,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
 import { skillStatOf, isLive, intent, investigateAgent, openSubPage } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
-import { categoryText } from './statusText'
-import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
+import { completionMetaOf } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
 import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneOf } from './rate-utils'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -465,9 +438,7 @@ import { adminSkillsApi, adminApiConfigApi, type SkillCompletion, type SkillReco
 const SKILLS_TABS = ['run', 'prompt-eval'] as const
 type SkillsTab = (typeof SKILLS_TABS)[number]
 
-/* 对账三态与空态文案单源：表格视图与原型卡视图各渲染一份（R6 复读单源化） */
-const REC_LOADING_TITLE = '上线状态加载中，暂不可用'
-const REC_NOT_IN_SCOPE_TITLE = '该 Skill 未纳入上线评估（多为插件）'
+/* Skill 列表加载失败标题：表格视图与空态共用一份文案（R6 复读单源化） */
 const SKILLS_LOAD_FAIL_TITLE = 'Skill 数据加载失败'
 const tab = ref<SkillsTab>('run')
 const route = useRoute()
@@ -581,7 +552,6 @@ type Health = 'ok' | 'idle' | 'warn' | 'error'
 interface SkillRow {
   id: string
   name: string
-  category: string
   agentId: string
   agentName?: string
   calls: number
@@ -595,13 +565,11 @@ interface SkillRow {
 
 const onlyAttention = ref(false)
 const keyword = ref('')
-const categoryFilter = ref('')
 /** 归属 Agent 筛选（P1②）：'' = 全部；'__none__' = 无归属（工具类） */
 const agentFilter = ref('')
 
 /* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担；Skill 列固定）。
-   列序对齐原型 8 列（Skill/归属 Agent/版本/路由模型/调用/P95/通过率/状态），
-   随后是本页独有的真实列（类别/最近调用），操作列固定收尾。 */
+   列 = 原型 8 列里的 7 列（完成度已撤：实测全为 live，零区分度）+ 最近调用，操作列固定收尾。 */
 const SK_COLS_KEY = 'wf_skills_hidden_cols'
 /** P95 整列恒「—」（后端无技能级 P95）→ 默认隐藏（MkCols defaultHidden：仅首访生效，已存配置尊重用户） */
 const SK_COLS_DEFAULT_HIDDEN = ['p95'] as const
@@ -612,19 +580,17 @@ const skColDefs = [
   { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
   { key: 'p95', label: 'P95', title: '暂无单 Skill 的 P95 耗时数据。该列默认隐藏' },
   { key: 'rate', label: '成功率', title: '窗口内成功率' },
-  { key: 'status', label: '完成度', title: '完成度：是否已上线' },
-  { key: 'cat', label: '类别', title: 'Skill 类别' },
   { key: 'last', label: '最近调用', title: '最近调用时间' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
 
-/* 移动端仅保留核心列：隐藏版本/路由/调用/P95/类别/最近调用，减少横向滚动 */
+/* 移动端仅保留核心列：隐藏版本/路由/调用/P95/最近调用，减少横向滚动 */
 const isNarrow = useIsNarrow()
 /* 中宽档（<1600）：「最近调用」列收进 Skill 名副行——本表 1440 自然宽超容器 136px（布局量测），裁掉最次要列即收回 */
 const isMid = useIsNarrow(1600)
 /* 小宽档（<1320，Users 判例）：再收「版本」列——1280 带仍余 48px 容器级横滚（LAYOUT-12） */
 const isSmall = useIsNarrow(1320)
-const MOBILE_HIDDEN_COLS = new Set(['version', 'routing', 'calls', 'p95', 'cat', 'last'])
+const MOBILE_HIDDEN_COLS = new Set(['version', 'routing', 'calls', 'p95', 'last'])
 const SMALL_HIDDEN_COLS = new Set(['version'])
 const showCol = (key: string) =>
   !hiddenCols.value.has(key) &&
@@ -647,17 +613,7 @@ const statsRange = liveSkillStatsRange
    Esc 关闭走共享 useEscape（与教学会话同一外壳） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })
-const advCount = computed(() => (agentFilter.value ? 1 : 0) + (categoryFilter.value ? 1 : 0))
-
-/** 类别下拉动态化：取当前档案实际出现的类别（覆盖 standard/teaching/simulation/tool） */
-const categoryOptions = computed(() => {
-  const seen: string[] = []
-  cards.value.forEach((c) => {
-    const key = String(c.category || '').toLowerCase()
-    if (key && !seen.includes(key)) seen.push(key)
-  })
-  return seen
-})
+const advCount = computed(() => (agentFilter.value ? 1 : 0))
 
 /** 归属 Agent 下拉选项（P1② 原型 toolbar）：按 agentId 聚合 + 计数；无归属归「工具类」 */
 interface AgentOption { id: string; label: string; count: number }
@@ -787,10 +743,7 @@ const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetS
     skill: (s) => s.name || s.id,
     agent: (s) => s.agentName || s.agentId || '',
     calls: (s) => s.calls,
-    /** 状态列排序 = 完成度五档序号（0=draft … 4=live，无对账行排末尾） */
-    status: (s) => completionRank(s.id),
     rate: (s) => successRateOf(s.calls, s.errors),
-    cat: (s) => s.category || '',
     /* 2026-10-17 用户走查补列：此前这三列头不可点。版本按段补零比较（v10 不排在 v9 前）；
        最近调用用原始时间戳（lastAt 是「2 天前」文案，字符串比较无意义） */
     version: (s) => versionSortKey(s.id),
@@ -831,9 +784,8 @@ const filtered = computed(() => {
   if (onlyAttention.value) list = list.filter((c) => c.health === 'error')
   if (agentFilter.value === '__none__') list = list.filter((c) => !c.agentId)
   else if (agentFilter.value) list = list.filter((c) => c.agentId === agentFilter.value)
-  if (categoryFilter.value) list = list.filter((c) => String(c.category || '').toLowerCase() === categoryFilter.value)
   const q = keyword.value.trim().toLowerCase()
-  if (q) list = list.filter((c) => `${c.name} ${c.id} ${c.category}`.toLowerCase().includes(q))
+  if (q) list = list.filter((c) => `${c.name} ${c.id}`.toLowerCase().includes(q))
   return sortRows(list)
 })
 
@@ -870,11 +822,10 @@ const RANGE_LABELS: Record<string, string> = { '7d': '近 7 天', '24h': '近 24
 const rangeLabel = computed(() => RANGE_LABELS[appliedRange.value] || '近期')
 const rangeLabelOf = (r: string) => RANGE_LABELS[r] || '近期'
 
-const isFiltered = computed(() => onlyAttention.value || !!keyword.value.trim() || !!categoryFilter.value || !!agentFilter.value)
+const isFiltered = computed(() => onlyAttention.value || !!keyword.value.trim() || !!agentFilter.value)
 function clearFilters() {
   onlyAttention.value = false
   keyword.value = ''
-  categoryFilter.value = ''
   agentFilter.value = ''
 }
 
@@ -895,10 +846,10 @@ const paged = computed(() => {
    （列表保持挂载）所以筛选不丢；现按 house 组合式单点 useListQueryState 落 URL
    （判例 Users / LearnerCenter / VirtualLearners / TeachingSessions 同一单点），
    顺带把深链与刷新还原一起修好。键：?q= / ?page= / ?size= / ?pill=（attn=仅看需关注）
-   + extra ?cat= / ?agent=。
+   + extra ?agent=。
    - 排序（?sort=/?dir=）**故意不在这里**：useTableSort 已带 storageKey 存 localStorage，
      跨卸载/跨会话都活着，再进 URL 只会让链接变脏。
-   - cat / agent 不给白名单：选项由数据派生（categoryOptions / agentOptions 依赖 cards 异步加载），
+   - agent 不给白名单：选项由数据派生（agentOptions 依赖 cards 异步加载），
      挂载时白名单还是空集，会把合法深链当脏值丢掉；未知取值最多筛出空表，而空态带「清除筛选」出口。
    - **调用位置必须在下方的「筛选变化回第 1 页」watch 之前**：本组合式在 setup 期同步落位 URL
      状态，若那个 watch 已存在，深链 ?q=…&page=3 会在落位后立刻被拽回第 1 页。 */
@@ -914,12 +865,13 @@ useListQueryState({
   allowedPills: ['all', 'attn'],
   defaultPageSize: 15,
   extra: [
-    { key: 'cat', get: () => categoryFilter.value, set: (v) => { categoryFilter.value = v } },
     { key: 'agent', get: () => agentFilter.value, set: (v) => { agentFilter.value = v } }
-  ]
+  ],
+  /** 类别筛选随该列一起撤（2026-10-24）：旧深链 ?cat= 仍从 URL 摘掉，不留说不通的状态 */
+  retired: ['cat']
 })
 
-watch([onlyAttention, keyword, categoryFilter, agentFilter, sortKey, sortDir], () => {
+watch([onlyAttention, keyword, agentFilter, sortKey, sortDir], () => {
   page.value = 1
 })
 watch(filtered, (list) => {
@@ -974,12 +926,14 @@ watch(bulkOpen, (open) => {
   if (open && !registryReady.value) void refreshRegistry()
 })
 
-/** 完成度五档色标（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐） */
+/** 完成度五档文案（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐）。
+ *  列表列已撤（2026-10-24），本页只剩「已上线」KPI 与批量弹窗的 completion 投影要它 */
 const recStatusText = (status: string) =>
   completionMetaOf(status)?.label || status
 
-/** 目录表完成度列数据源：复用对账面板 completion（live 模式一次拉取合并加载），
-    skillId → SkillCompletion；目录行不在对账口径（外挂等）时返回 null 显示 — */
+/** 对账完成度数据源：复用对账面板 completion（live 模式一次拉取合并加载），
+    skillId → SkillCompletion。列表不再渲染该列，仍供「已上线」KPI 与批量模型配置弹窗的
+    completion 投影（那个弹窗按 Skill 列完成度徽标） */
 const recCompletionOf = computed(() => {
   const m = new Map<string, SkillCompletion>()
   for (const r of recReport.value?.items ?? []) m.set(r.skillId, r.completion)
@@ -990,14 +944,6 @@ const recCompletionOf = computed(() => {
 const liveCount = computed(() =>
   cards.value.filter((c) => recCompletionOf.value.get(c.id)?.status === 'live').length
 )
-
-/** 完成度序号（0=draft … 4=live；无对账行 → null 排末尾），供表头排序 */
-function completionRank(skillId: string): number | null {
-  const c = recCompletionOf.value.get(skillId)
-  if (!c) return null
-  const i = COMPLETION_META.findIndex((m) => m.status === c.status)
-  return i >= 0 ? i : null
-}
 
 function completionBadgeOf(skillId: string): { cls: string; text: string; title: string } | null {
   const c = recCompletionOf.value.get(skillId)
@@ -1311,22 +1257,22 @@ const fallbackPolicyTitle = computed(() => {
 .sk-live-err { flex: none; margin: 10px 16px 0; }
 /* #107：默认排序口径说明（与「清除筛选」同排的弱化小字） */
 .sk-sort-hint { white-space: nowrap; }
-/* Skill 格 min-width：本表 11 列自动布局，Skill 名列会被调用/通过率等数字列挤窄
+/* Skill 格 min-width：本表约 9 列固定布局，Skill 名列会被调用/通过率等数字列挤窄
    （2026-10-02 视觉核对实测主行截成 4 字）——给内容格兜底宽度 */
 .sk-cell { display: flex; align-items: center; gap: 10px; min-width: 200px; }
 /* 原型 .tbl：自动布局 + 单元格 nowrap（列按内容自然分宽，不再 colgroup 定宽） */
 /* 固定列宽（2026-10-22）：Skill/归属/路由模型三列在 auto 布局下按当页最长名称分宽，
-   翻页跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。 */
-.sk-c-skill { width: 220px; }
+   翻页跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。
+   2026-10-24 撤「完成度」「类别」两列后腾出的 154px 归 Skill 名（220→300，主行原本最挤）
+   与「最近调用」（90→110），总量仍小于撤列前，横滚性质不变。 */
+.sk-c-skill { width: 300px; }
 .sk-c-agent { width: 140px; }
 .sk-c-version { width: 96px; }
 .sk-c-routing { width: 170px; }
 .sk-c-calls { width: 52px; }
 .sk-c-p95 { width: 56px; }
 .sk-c-rate { width: 70px; }
-.sk-c-status { width: 84px; }
-.sk-c-cat { width: 70px; }
-.sk-c-last { width: 90px; }
+.sk-c-last { width: 110px; }
 .sk-c-act { width: 100px; }
 .sk-table td { white-space: nowrap; }/* fixed 档列宽即契约：200px 兜底会把 Skill 名顶出单元格 */
 .sk-table .sk-cell { min-width: 0; }
@@ -1374,9 +1320,6 @@ const fallbackPolicyTitle = computed(() => {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
-/* 完成度列：对账拉取失败的行内提示（红字 + title 带原因） */
-.sk-rec-fail { color: var(--mk-red); font-weight: 700; }
-
 /* 指标阈值着色 */
 .sk-rate--bad { color: var(--mk-red); font-weight: 700; }
 .sk-rate--warn { color: var(--mk-amber); font-weight: 700; }

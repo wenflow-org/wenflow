@@ -168,15 +168,16 @@ describe('Skills 列表筛选 ↔ URL', () => {
     w.unmount();
   });
 
-  it('深链落位：?q=&pill=&cat=&agent= 四条筛选轴全部还原到控件', async () => {
-    const { w } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching&agent=path-agent');
+  it('深链落位：?q=&pill=&agent= 三条筛选轴全部还原到控件（?cat= 随该列一起退役，不再受理）', async () => {
+    const { w, router } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching&agent=path-agent');
     expect((w.find('input.mk-filter__input').element as HTMLInputElement).value).toBe('教学');
     expect(pillOf(w, '仅看需关注').attributes('aria-pressed')).toBe('true');
-    // 筛选弹层里的两个下拉
     await w.find('.mk-adv > button').trigger('click');
     await nextTick();
     expect((w.find('#skillAgentFilter').element as HTMLSelectElement).value).toBe('path-agent');
-    expect((w.find('select[aria-label="按类别筛选"]').element as HTMLSelectElement).value).toBe('teaching');
+    // 类别筛选已撤（2026-10-24）：弹层里没有该下拉，URL 上的 cat 也不再被写回
+    expect(w.find('select[aria-label="按类别筛选"]').exists()).toBe(false);
+    expect(router.currentRoute.value.query.cat).toBeUndefined();
     w.unmount();
   });
 
@@ -191,7 +192,7 @@ describe('Skills 列表筛选 ↔ URL', () => {
     w.unmount();
   });
 
-  it('点「清除筛选」把 q / pill / cat / agent 一并从 URL 摘掉', async () => {
+  it('点「清除筛选」把 q / pill / agent 一并从 URL 摘掉（退役的 cat 也不再残留）', async () => {
     const { w, router } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching');
     await w.find('.mk-link').trigger('click');
     await flushPromises();

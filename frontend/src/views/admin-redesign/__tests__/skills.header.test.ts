@@ -220,11 +220,26 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
-  it('「状态」列更名「完成度」：与行首健康点去双语义', async () => {
+  it('「完成度」「类别」两列已撤（实测零区分度），对账数据仍供「已上线」KPI', async () => {
+    getReconciliationMock.mockResolvedValueOnce({
+      data: {
+        data: {
+          items: [
+            { skillId: 'skill:a', completion: { status: 'live', gates: {} } },
+            { skillId: 'skill:b', completion: { status: 'draft', gates: {} } },
+          ],
+        },
+      },
+    })
     const w = await mountSkills()
-    const ths = w.findAll('th').map((t) => t.text())
-    expect(ths).toContain('完成度')
-    expect(ths).not.toContain('状态')
+    // 主表表头不再有这两列（「批量模型配置」弹窗里另有一张 completion 表，只查主表）
+    const mainThs = w.find('.sk-table').findAll('th').map((t) => t.text())
+    expect(mainThs).not.toContain('完成度')
+    expect(mainThs).not.toContain('类别')
+    expect(mainThs).not.toContain('状态')
+    // 对账数据没白拉：仍驱动「已上线」KPI（2 行里 1 行 live）
+    const live = kpiOf(w, '已上线')!
+    expect(live.find('.mk-kpi__num').text()).toBe('1')
     w.unmount()
   })
 

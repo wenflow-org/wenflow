@@ -18,7 +18,9 @@ const PAGES = [
   { file: 'GoalConversations.vue', prefix: 'gc-c-', minWidthCols: 8 },
   { file: 'OpsContent.vue', prefix: 'oc-c-', minWidthCols: 7 },
   { file: 'Users.vue', prefix: 'u-c-', minWidthCols: 7 },
-  { file: 'Skills.vue', prefix: 'sk-c-', minWidthCols: 10 },
+  // 撤「完成度」「类别」两列后（2026-10-24）剩 9 个宽度类；本断言的正则不含数字，
+  // 不数 .sk-c-p95，故下限取 8（= Skill/归属/版本/路由/调用/成功率/最近调用/操作）
+  { file: 'Skills.vue', prefix: 'sk-c-', minWidthCols: 8 },
   { file: 'ExecLogs.vue', prefix: 'ex-c-', minWidthCols: 6 },
   { file: 'AuditLogs.vue', prefix: 'al-c-', minWidthCols: 8 },
   { file: 'MemoryReviewOverview.vue', prefix: 'mr-c-', minWidthCols: 7 },

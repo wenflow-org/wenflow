@@ -1,6 +1,6 @@
 /**
  * Skills.vue P1 修复批冒烟：
- * 1. 目录表完成度列（复用对账 completion：live 渲染五档徽章，demo/无对账显示 —）
+ * 1. 对账 completion 只喂「已上线」KPI（列表的完成度列 2026-10-24 已撤：实测全 live，零区分度）
  * 2. 对账面板「仅看异常」切换（未注册/缺 ACTIVE 行过滤；完成度非 live 归「完成度」域，不再并入对账异常）
  * 3. 折叠 pill 口径标注（户口簿全量 vs 目录排除外挂能力）
  */
@@ -163,7 +163,7 @@ describe('Skill 目录 P1 修复批', () => {
     liveSkillStatsMap.value = null;
   });
 
-  it('live 模式：目录表渲染完成度五档徽章（复用对账数据）', async () => {
+  it('live 模式：对账数据只喂「已上线」KPI，目录表不再出完成度列', async () => {
     getReconciliationMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     liveSkillProfiles.value = [
       { id: 'live-a', name: 'Live A', category: 'analysis', agentId: 'goal-agent', agentName: '目标 Agent' },
@@ -177,11 +177,12 @@ describe('Skill 目录 P1 修复批', () => {
     };
     const wrapper = await mountSkills();
     expect(getReconciliationMock).toHaveBeenCalled();
-    // 目录表完成度徽章：live → 已上线，draft → 草稿；无对账行 → —
-    expect(wrapper.find('.sk-table tbody .mk-badge--rec-live').exists()).toBe(true);
-    expect(wrapper.find('.sk-table tbody .mk-badge--rec-draft').exists()).toBe(true);
-    expect(wrapper.text()).toContain('已上线');
-    expect(wrapper.text()).toContain('草稿');
+    // 2026-10-24「完成度有什么实际意义吗」：列已撤——表内不再有对账徽章，也不再有该表头
+    expect(wrapper.find('.sk-table tbody .mk-badge--rec-live').exists()).toBe(false);
+    expect(wrapper.find('.sk-table').findAll('th').map((t) => t.text())).not.toContain('完成度');
+    // 数据没白拉：仍按对账 status=live 计「已上线」KPI（3 行档案里 1 行 live）
+    const live = wrapper.findAll('.mk-kpi').find((k) => k.text().includes('已上线'))!;
+    expect(live.find('.mk-kpi__num').text()).toBe('1');
     wrapper.unmount();
   });
 
