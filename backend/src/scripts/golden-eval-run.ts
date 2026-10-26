@@ -1,15 +1,23 @@
 /**
- * 黄金评测集 harness：10 个人设 → 建可丢弃虚拟学习者 → 走真实 goal 对话 → 生成路径 → 收集。
+ * 黄金评测集 harness（夜批版）：N 个人设 → 建可丢弃虚拟学习者 → 走真实 goal 对话 → 生成路径 → 收集。
  *
  * 与 simulate-learner-e2e 的区别：只跑到「路径生成完成」，不进多日授课
  * （本批评的是路径质量，不是教学会话质量）。
  *
+ * 夜批版改造（2026-10-27）：
+ * - 外层并发 worker pool（--concurrency，默认 5，夜批从 5 起步找低报错平衡点）
+ * - 429/5xx/传输错误指数退避重试（5s→15s→45s→45s→45s）
+ * - 单调用超时 5 分钟（原 30 分钟一条卡死拖全批）；路径等待上限 20 分钟
+ * - 负样本分支：spec.expect==='triage' 时不等路径，goal 6 步后直读 collectedData 分诊结果
+ * - --deadline=ISO：到点不取新样本（08:00 收工保护）
+ * - 默认 --keep（跨轮分析需要路径留库；确要清理显式传 --cleanup）
+ *
  * 用法：
  *   npx ts-node --transpile-only src/scripts/golden-eval-run.ts \
- *     --spec=../outputs/verify-20261024/golden-10.json \
- *     --state=../outputs/verify-20261024/golden-run-state.json \
- *     --only=macro-econ-01,cog-memory-02        # 可选，分批跑
- *     --keep                                     # 保留学习者（默认跑完删除）
+ *     --spec=../outputs/verify-20261024/golden-100.json \
+ *     --state=../outputs/verify-20261024/golden-100-r1-state.json \
+ *     --concurrency=5 --deadline=2026-10-27T07:40:00
+ *     --only=A04-lin-alg-concepts,...     # 可选，冒烟/补跑
  */
 import 'dotenv/config';
 import * as fs from 'fs';
@@ -18,8 +26,12 @@ import * as path from 'path';
 const BASE_URL = process.env.GOLDEN_EVAL_BASE_URL || 'http://127.0.0.1:3002';
 const ORIGIN = 'http://localhost:5175';
 const GOAL_MAX_STEPS = 14;
-const REQUEST_TIMEOUT_MS = 30 * 60_000;
-const PATH_WAIT_MS = 40 * 60_000;
+const TRIAGE_MAX_STEPS = 6;
+const CALL_TIMEOUT_MS = 5 * 60_000;
+const PATH_WAIT_MS = 20 * 60_000;
+const BACKOFF_MS = [5_000, 15_000, 45_000, 45_000, 45_000];
+
+const DB_PATH = path.resolve(__dirname, '..', 'prisma', 'dev.db');
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -32,6 +44,7 @@ interface Spec {
   opening: string; surfaceGoal: string; realProblem: string;
   story: { id: string; title: string; visibleOpening: string; goalSeed: { surfaceGoal: string; realProblem: string }; triggerEvent: string };
   budget: Record<string, unknown>; outOfScope: string[]; expectedStages: number;
+  bucket?: string; expect?: 'path' | 'triage'; negativeType?: string;
 }
 
 const arg = (key: string): string | null => {
@@ -42,7 +55,9 @@ const has = (key: string): boolean => process.argv.includes(`--${key}`);
 const SPEC = arg('spec') || 'outputs/verify-20261024/golden-10.json';
 const STATE = arg('state') || 'outputs/verify-20261024/golden-run-state.json';
 const ONLY = arg('only') ? new Set(String(arg('only')).split(',').map((s) => s.trim())) : null;
-const KEEP = has('keep');
+const CONCURRENCY = Number(arg('concurrency')) || 5;
+const DEADLINE = arg('deadline') ? new Date(String(arg('deadline'))).getTime() : null;
+const KEEP = has('keep') || !has('cleanup');
 
 let cookie: string | null = null;
 const log = (s: string): void => { console.log(`[${new Date().toISOString().slice(11, 19)}] ${s}`); };
@@ -50,13 +65,13 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const rec = (v: unknown): Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
-async function api(method: string, urlPath: string, body?: unknown): Promise<{ status: number; body: any }> {
+async function apiOnce(method: string, urlPath: string, body?: unknown, timeoutMs = CALL_TIMEOUT_MS): Promise<{ status: number; body: any }> {
   try {
     const res = await fetch(`${BASE_URL}${urlPath}`, {
       method,
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...(cookie ? { Cookie: cookie } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     let parsed: any = null;
     try { parsed = await res.json(); } catch { parsed = null; }
@@ -64,6 +79,23 @@ async function api(method: string, urlPath: string, body?: unknown): Promise<{ s
   } catch (e) {
     return { status: 0, body: { error: String((e as Error).message).slice(0, 160) } };
   }
+}
+
+/** 429/5xx/传输错误指数退避；其余状态原样返回（业务失败由调用方判定） */
+async function api(method: string, urlPath: string, body?: unknown, timeoutMs = CALL_TIMEOUT_MS): Promise<{ status: number; body: any }> {
+  let last: { status: number; body: any } = { status: 0, body: {} };
+  for (let attempt = 0; attempt <= BACKOFF_MS.length; attempt++) {
+    last = await apiOnce(method, urlPath, body, timeoutMs);
+    if (last.status === 429 || last.status >= 500 || last.status === 0) {
+      if (attempt < BACKOFF_MS.length) {
+        log(`  ↯ ${method} ${urlPath.split('?')[0]} http=${last.status} ${String(last.body?.error ?? '').slice(0, 80)} → 退避 ${BACKOFF_MS[attempt] / 1000}s（第 ${attempt + 1} 次）`);
+        await sleep(BACKOFF_MS[attempt]);
+        continue;
+      }
+    }
+    return last;
+  }
+  return last;
 }
 
 async function login(): Promise<void> {
@@ -92,7 +124,10 @@ const sessionFields = (body: any) => {
 };
 
 interface RunState {
-  runs: Record<string, { profileId?: string; userId?: string; sessionId?: string; goalSteps?: number; learningPathId?: string; phase: string; note?: string }>;
+  runs: Record<string, {
+    profileId?: string; userId?: string; sessionId?: string; goalSteps?: number; learningPathId?: string;
+    phase: string; note?: string; triage?: Record<string, unknown>; seconds?: number;
+  }>;
 }
 
 function loadState(): RunState {
@@ -103,10 +138,58 @@ function saveState(s: RunState): void {
   fs.writeFileSync(STATE, JSON.stringify(s, null, 2));
 }
 
+/** 只读 dev.db：负样本分诊结果（collectedData.understanding + 最后一条 AI 回复）。
+ * understanding 字段在 step 返回后异步落库，抓不到时等待重试。 */
+function dumpTriage(sessionId: string): Record<string, unknown> | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { DatabaseSync } = require('node:sqlite');
+    const read = (): { u: Record<string, unknown>; lastAi: string } | null => {
+      const db = new DatabaseSync(DB_PATH, { readOnly: true });
+      const row = db.prepare(
+        `SELECT g.collectedData AS collectedData, g.messages AS messages
+         FROM virtual_sessions s JOIN goal_conversations g ON g.id = s.goalConversationId
+        WHERE s.id = ?`,
+      ).get(sessionId) as { collectedData?: string; messages?: string } | undefined;
+      db.close();
+      if (!row) return null;
+      let collected: any = {}; let lastAi = '';
+      try { collected = JSON.parse(row.collectedData || '{}'); } catch { /* */ }
+      try {
+        const msgs = JSON.parse(row.messages || '[]');
+        const ai = msgs.filter((m: any) => (m.role === 'assistant' || m.role === 'ai'));
+        lastAi = ai.length ? String(ai[ai.length - 1].content || ai[ai.length - 1].text || '').slice(0, 400) : '';
+      } catch { /* */ }
+      const u = (collected?.understanding ?? {}) as Record<string, unknown>;
+      return { u, lastAi };
+    };
+    let snapshot = read();
+    for (let i = 0; i < 4; i++) {
+      const u = snapshot?.u ?? {};
+      if (u.platform_judgment || u.skill_nature) break;
+      const wait = Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 8000);
+      if (wait === 'timed-out') snapshot = read() ?? snapshot;
+    }
+    if (!snapshot) return null;
+    const u = snapshot.u;
+    return {
+      skill_nature: u.skill_nature ?? null,
+      platform_judgment: u.platform_judgment ?? null,
+      primary_block_type: u.primary_block_type ?? null,
+      support_need: u.support_need ?? null,
+      lastAiReply: snapshot.lastAi,
+    };
+  } catch (e) {
+    return { dumpError: String((e as Error).message).slice(0, 120) };
+  }
+}
+
 async function runOne(spec: Spec, state: RunState): Promise<void> {
   const key = spec.id;
   const entry = state.runs[key] || { phase: 'new' };
   state.runs[key] = entry;
+  const isTriage = spec.expect === 'triage';
+  const t0 = Date.now();
 
   // 1) 建可丢弃学习者（含手写故事）
   if (!entry.profileId) {
@@ -130,8 +213,7 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
     log(`${key} 学习者已建 ${entry.profileId}`);
   }
 
-  // 2) 开会话（autopilot='off'：评测只需要路径就绪；默认 'final' 会让自动驾驶在
-    // path-ready 后继续自动「上课」——4 个样本各留一个 teaching 循环持续烧模型额度）
+  // 2) 开会话（autopilot='off'：评测只需要路径就绪，绝不触发 teaching 循环烧额度）
   if (!entry.sessionId) {
     const started = await api('POST', `/api/admin/virtual-learners/${entry.profileId}/start-session`, { autopilot: 'off' });
     const d = rec(started.body?.data ?? started.body);
@@ -140,26 +222,36 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
     log(`${key} 会话 ${entry.sessionId}`);
   }
 
-  // 3) 驱动 goal（step 自动应答）
+  // 3) 驱动 goal（step 自动应答）；负样本 6 步封顶
+  const stepCap = isTriage ? TRIAGE_MAX_STEPS : GOAL_MAX_STEPS;
   let steps = entry.goalSteps || 0;
-  while (steps < GOAL_MAX_STEPS) {
-    const detail = await api('GET', `/api/admin/virtual-learners/sessions/${entry.sessionId}`);
+  while (steps < stepCap) {
+    const detail = await api('GET', `/api/admin/virtual-learners/sessions/${entry.sessionId}`, undefined, 60_000);
     const f = sessionFields(detail.body);
     if (f.currentStage !== 'goal') { log(`${key} 离开 goal → ${f.currentStage}/${f.status}（${steps} 步）`); break; }
-    if (f.status === 'failed') { entry.phase = 'goal-failed'; saveState(state); return; }
+    if (f.status === 'failed') { entry.phase = 'goal-failed'; entry.seconds = Math.round((Date.now() - t0) / 1000); saveState(state); return; }
     const stepRes = await api('POST', `/api/admin/virtual-learners/sessions/${entry.sessionId}/step`, {});
     steps += 1;
     entry.goalSteps = steps;
     saveState(state);
-    if (stepRes.status === 0 || stepRes.status >= 500) { log(`${key} step#${steps} 传输问题，退避`); await sleep(30_000); continue; }
-    if (stepRes.status !== 200) { entry.phase = 'goal-step-failed'; entry.note = `http=${stepRes.status}`; saveState(state); return; }
+    if (stepRes.status !== 200) { entry.phase = 'goal-step-failed'; entry.note = `http=${stepRes.status} ${String(stepRes.body?.error ?? '').slice(0, 120)}`; entry.seconds = Math.round((Date.now() - t0) / 1000); saveState(state); return; }
     log(`${key} goal step#${steps}`);
   }
 
-  // 4) 等路径生成完成
+  // 3.5) 负样本：不进路径，直接收分诊结果
+  if (isTriage) {
+    entry.triage = dumpTriage(entry.sessionId) ?? undefined;
+    entry.phase = 'triage-done';
+    entry.seconds = Math.round((Date.now() - t0) / 1000);
+    saveState(state);
+    log(`${key} [triage] platform_judgment=${(entry.triage as any)?.platform_judgment} primary_block_type=${(entry.triage as any)?.primary_block_type}`);
+    return;
+  }
+
+  // 4) 等路径生成完成（20 分钟上限，超时标记继续下一条）
   const deadline = Date.now() + PATH_WAIT_MS;
   while (Date.now() < deadline) {
-    const st = await api('GET', `/api/admin/virtual-learners/sessions/${entry.sessionId}/path-status`);
+    const st = await api('GET', `/api/admin/virtual-learners/sessions/${entry.sessionId}/path-status`, undefined, 60_000);
     const d = rec(st.body?.data ?? st.body);
     const status = String(d.status ?? d.pathStatus ?? '');
     const pathId = String(d.learningPathId ?? d.pathId ?? '');
@@ -168,6 +260,7 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
     if (!inFlight && (status === 'ready' || status === 'completed' || pathId)) {
       log(`${key} 路径就绪 ${pathId || entry.learningPathId} (${status})`);
       entry.phase = 'path-ready';
+      entry.seconds = Math.round((Date.now() - t0) / 1000);
       saveState(state);
       return;
     }
@@ -175,11 +268,12 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
       const retry = await api('POST', `/api/admin/virtual-learners/sessions/${entry.sessionId}/retry-path-generation`, {});
       log(`${key} 路径失败，重试 http=${retry.status}`);
     }
-    await sleep(45_000);
+    await sleep(30_000);
   }
   entry.phase = 'path-timeout';
+  entry.seconds = Math.round((Date.now() - t0) / 1000);
   saveState(state);
-  log(`${key} 等待路径超时`);
+  log(`${key} 等待路径超时（${PATH_WAIT_MS / 60000}min）`);
 }
 
 async function cleanup(spec: Spec, state: RunState): Promise<void> {
@@ -190,18 +284,30 @@ async function cleanup(spec: Spec, state: RunState): Promise<void> {
 }
 
 (async () => {
-  const specs: Spec[] = JSON.parse(fs.readFileSync(SPEC, 'utf8'));
-  const targets = ONLY ? specs.filter((s) => ONLY.has(s.id)) : specs;
+  const specsAll: Spec[] = JSON.parse(fs.readFileSync(SPEC, 'utf8'));
+  let targets = ONLY ? specsAll.filter((s) => ONLY.has(s.id)) : specsAll;
   await login();
   const state = loadState();
-  log(`开始：${targets.length} 个样本 → ${BASE_URL}`);
-  for (const spec of targets) {
-    log(`===== ${spec.id} =====`);
-    try { await runOne(spec, state); }
-    catch (e) { state.runs[spec.id] = { ...(state.runs[spec.id] || {}), phase: 'error', note: String((e as Error).message).slice(0, 200) }; saveState(state); log(`${spec.id} 异常 ${(e as Error).message}`); }
-    saveState(state);
-  }
-  if (!KEEP) for (const spec of targets) { if (state.runs[spec.id]?.phase === 'path-ready') await cleanup(spec, state); }
+  // 断点续跑：已完成（path-ready / triage-done）的跳过
+  targets = targets.filter((s) => !['path-ready', 'triage-done'].includes(state.runs[s.id]?.phase || ''));
+  log(`开始：${targets.length} 个样本（并发 ${CONCURRENCY}${DEADLINE ? `，死线 ${new Date(DEADLINE).toISOString().slice(11, 19)}` : ''}）→ ${BASE_URL}`);
+
+  let cursor = 0;
+  let stopped = false;
+  const worker = async (slot: number): Promise<void> => {
+    while (cursor < targets.length) {
+      if (DEADLINE && Date.now() > DEADLINE) { stopped = true; return; }
+      const spec = targets[cursor++];
+      log(`===== [w${slot}] ${spec.id}${spec.expect === 'triage' ? '（triage 负样本）' : ''} =====`);
+      try { await runOne(spec, state); }
+      catch (e) { state.runs[spec.id] = { ...(state.runs[spec.id] || {}), phase: 'error', note: String((e as Error).message).slice(0, 200) }; log(`${spec.id} 异常 ${(e as Error).message}`); }
+      saveState(state);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, Math.max(1, targets.length)) }, (_, i) => worker(i + 1)));
+
+  if (stopped) log(`到达死线，停止取新样本（已完成 ${Object.values(state.runs).filter((r) => ['path-ready', 'triage-done'].includes(r.phase)).length}/${specsAll.length}）`);
+  if (!KEEP) for (const spec of specsAll) { if (state.runs[spec.id]?.phase === 'path-ready') await cleanup(spec, state); }
   const summary = Object.entries(state.runs).map(([k, v]) => `${k}: ${v.phase}${v.learningPathId ? ` ${v.learningPathId}` : ''}`);
   log(`DONE\n  ${summary.join('\n  ')}`);
 })();
