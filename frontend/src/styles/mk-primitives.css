@@ -963,6 +963,11 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   color: var(--mk-blue);
   border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line));
 }
+/* 胶囊里的图标（多选开关激活时的勾、已应用视图的叉）：文字两侧各留 4px，
+   不靠源码里的空格排版（空格在不同字宽下会挤成 0 或撑开）。
+   计数徽章自己的 margin-left 不受影响。 */
+.mk-pill > svg { margin-right: 4px; }
+.mk-pill > svg:last-child { margin-right: 0; margin-left: 4px; }
 /* 激活 = 筛选生效：浅蓝底 + 主色字 + 主色描边（原型 .chip[aria-pressed=true]），
    不再用内描边单线——胶囊现在自带描边，激活要换的是「底 + 描边色」两个通道 */
 .mk-pill--active {

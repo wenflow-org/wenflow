@@ -127,12 +127,11 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 本用例 0 行未触上限：连截断 meta 都不渲染（触限时才有「共 N 条 · 当前显示最近 1000 条」，
     // 那是分页器没有的事实；未触限时窗口=全量，无需再报一遍）
     expect(w.find('.mk-card--fill .mk-card__meta').exists()).toBe(false);
-    // 计数升 KPI 后 chips 全部去计数（学习状态判例：KPI 孪生 pill 退为纯筛选开关）；
-    // 0 行时异常 chip 不出现
-    expect(w.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
-      '全部', '进行中', '需关注', '缺总结'
-    ]);
-    expect(w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
+    /* 2026-10-27 筛选重建：焦点 chips（全部/进行中/需关注/缺总结）撤除——
+       进行中归状态下拉、缺总结归总结下拉、需关注是派生视图（点 KPI 卡，激活才出可移除胶囊）；
+       卡头唯一 chip 组 = 标志筛选。0 行时异常 chip 不出现。 */
+    expect(w.find('.mk-card__head .mk-pills[aria-label="焦点筛选"]').exists()).toBe(false);
+    expect(w.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
     w.unmount();
   });
 

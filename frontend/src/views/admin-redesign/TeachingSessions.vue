@@ -5,24 +5,34 @@
     <MkPageHead v-if="!embedded" title="教学会话" />
 
     <!-- 会话 KPI：需关注 / 缺总结 / 有建议 / 完结率。
-         2026-10-26：「异常终态」卡退役（与「需关注」在同一行数据上同源同数），
-         异常数只由卡头「异常」chip 承载；「需关注」改可点，点卡 = 选中同名 chip。 -->
+         2026-10-26：「异常终态」卡退役（与「需关注」在同一行数据上同源同数），异常数只由卡头
+         「异常」chip 承载。
+         2026-10-27：卡头「焦点 chips」撤除后，这三张卡就是它们的落点——「需关注」是派生视图
+         （点卡 = 打开视图，再点关闭），「缺总结 / 有建议」落到对应维度筛选。
+         读数在卡上、筛选入口在卡头，同一口径只有一处可改。 -->
     <section v-if="!embedded && rows.length" class="mk-kpi-grid" aria-label="教学会话运维关注量">
       <MkKpi
         clickable
         label="需关注"
         :value="attentionCount"
         :tone="attentionCount ? 'warn' : ''"
-        @click="pill = 'attention'"
+        :aria-pressed="pill === 'attention'"
+        @click="pill = pill === 'attention' ? 'all' : 'attention'"
       />
       <MkKpi
+        clickable
         label="缺总结"
         :value="missingWrapupCount"
         :tone="missingWrapupCount ? 'warn' : ''"
+        :aria-pressed="wrapFilter === 'missing'"
+        @click="wrapFilter = wrapFilter === 'missing' ? '' : 'missing'"
       />
       <MkKpi
+        clickable
         label="有建议"
         :value="advisoryCount"
+        :aria-pressed="onlyAdvisory"
+        @click="toggleOnlyAdvisory"
       />
       <MkKpi
         label="完结率"
@@ -47,31 +57,32 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 表前只此一行（2026-10-04 用户拍板：快筛并回卡头）：
-               左组 = 焦点 chips（单选）+ 两枚独立开关（有建议服务端过滤 / 异常多选），
-               随后是 10 档状态下拉与总结筛选（2026-10-26 从弹层提到主栏——逐条排查的主路径）；
-               课堂类型与时间窗仍收在右侧「筛选」弹层。 -->
-          <div class="mk-pills" role="group" aria-label="焦点筛选">
-            <button
-              v-for="p in pills"
-              :key="p.id"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': pill === p.id }"
-              :aria-pressed="pill === p.id"
-              @click="pill = pill === p.id && p.id !== 'all' ? 'all' : p.id"
-            >
-              {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
-            </button>
-          </div>
-          <div class="mk-pills" role="group" aria-label="快捷筛选">
+          <!-- 筛选区语法（2026-10-27 用户「这个筛选做到很不好」后按成熟体系重建）：
+               一行里只有三种职责，各一种形态，不再互相冒充——
+               ① 视图（派生状态，单选）= 只以「已应用 + 可移除」胶囊出现（Polaris：视图不是维度，
+                  用可移除 chip 表达；激活才出现，不占常驻位置）；
+               ② 标志（多选开关）= 全页唯一一组 chip，激活时前缀勾（M3 filter chip 的选中表达）。
+                  M3：同一页的不同 chip 组不得一组单选一组多选——原「焦点 chips（单选）+
+                  快捷 chips（多选）」并排同形，用户点下去才知道行为不同，已撤；
+               ③ 维度（单选）= 一次一维的胶囊下拉，全部可见。
+                  Carbon：多个筛选类别不得收进菜单/下拉——原「课型 + 开始时间」塞在「筛选」弹层里，
+                  弹层关闭态只剩一个数字角标，违反「类别不得藏进下拉」+「隐藏时必须给已应用数与
+                  就地清除」。 -->
+          <button
+            v-if="activeViewLabel"
+            type="button"
+            class="mk-pill mk-pill--active ts-view-chip"
+            :title="`清除「${activeViewLabel}」视图`"
+            @click="pill = 'all'"
+          >{{ activeViewLabel }}<X :size="12" :stroke-width="2.5" aria-hidden="true" /></button>
+          <div class="mk-pills" role="group" aria-label="标志筛选">
             <button
               type="button"
               class="mk-pill"
               :class="{ 'mk-pill--active': onlyAdvisory }"
               :aria-pressed="onlyAdvisory"
               @click="toggleOnlyAdvisory"
-            >有建议<span class="mk-pill__count">{{ advisoryCount }}</span></button>
+            ><Check v-if="onlyAdvisory" :size="12" :stroke-width="2.5" aria-hidden="true" />有建议<span class="mk-pill__count">{{ advisoryCount }}</span></button>
             <button
               v-if="abnormalSessionCount"
               type="button"
@@ -80,7 +91,7 @@
               :aria-pressed="abnormalOnly"
               :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}${abnormalHeap ? `（≥ ${TS_BAD_THRESHOLD}，异常堆积）` : ''}`"
               @click="abnormalOnly = !abnormalOnly"
-            >异常<span class="mk-pill__count">{{ abnormalSessionCount }}</span></button>
+            ><Check v-if="abnormalOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />异常<span class="mk-pill__count">{{ abnormalSessionCount }}</span></button>
           </div>
           <MkPillSelect
             v-model="statusFilter"
@@ -95,6 +106,20 @@
             aria-label="按总结筛选"
             :options="wrapSelectOptions"
             :active="!!wrapFilter"
+          />
+          <MkPillSelect
+            v-model="modeFilter"
+            label="课型"
+            aria-label="按课型筛选"
+            :options="modeSelectOptions"
+            :active="!!modeFilter"
+          />
+          <MkPillSelect
+            v-model="dateFilter"
+            label="开始时间"
+            aria-label="按开始时间筛选"
+            :options="dateSelectOptions"
+            :active="!!dateFilter"
           />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
@@ -113,40 +138,6 @@
             :default-hidden="TS_DEFAULT_HIDDEN"
             v-model:hidden="tsHiddenCols"
           />
-          <div class="mk-adv">
-            <!-- 主栏已放状态与总结两档筛选；课堂类型与时间窗收进弹层。
-                 触发器与「列」同为文字链 + 图标（2026-10-26 卡头统一）：次级工具成组用同一档，
-                 描边按钮留给页头主操作，两级层次才立得住。 -->
-            <button
-              type="button"
-              class="mk-link mk-adv-trigger"
-              :class="{ 'mk-link--active': advOpen || advCount > 0 }"
-              :aria-expanded="advOpen"
-              @click="advOpen = !advOpen"
-            >
-              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
-            </button>
-            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
-            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
-              <label class="mk-adv__field">
-                <span class="mk-cell-sub">课型</span>
-                <select v-model="modeFilter" class="mk-filter__select" aria-label="按课型筛选">
-                  <option value="">全部课型</option>
-                  <option value="tutor">正课</option>
-                  <option value="review">复习课</option>
-                  <option value="extension">延伸课</option>
-                </select>
-              </label>
-              <label class="mk-adv__field">
-                <span class="mk-cell-sub">开始时间</span>
-                <select v-model="dateFilter" class="mk-filter__select" aria-label="按开始时间筛选">
-                  <option value="">全部时间</option>
-                  <option value="7d">近 7 天</option>
-                  <option value="30d">近 30 天</option>
-                </select>
-              </label>
-            </div>
-          </div>
           <span v-if="truncated" class="mk-card__meta">共 {{ listTotal }} 条 · 当前显示最近 {{ LIST_LIMIT }} 条</span>
         </div>
       </div>
@@ -375,9 +366,8 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import { emailSubline, isIdentifierLike } from '@/components/mk/avatarName'
 import MkKpi from '@/components/mk/MkKpi.vue'
 
-import { Filter } from 'lucide-vue-next'
+import { Check, X } from 'lucide-vue-next'
 import { toast } from '@/utils/toast'
-import { useEscape } from './useEscape'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
     （原 count/stats 上报链随合并宿主退役，2026-10-02 撤页头 KPI 区时一并清除） */
@@ -647,12 +637,6 @@ const modeFilter = ref('')
 const dateFilter = ref('')
 /* 总结筛选（degraded / eval-failed / missing）：总览「评估失败」「降级总结」的落地入口 */
 const wrapFilter = ref('')
-/* 筛选弹层（课堂 / 时间两个下拉）：表前只留一行，放不进主栏的次级筛选收在这里。
-   Esc 关闭走共享 useEscape（与 用户与学习者 同一外壳 .mk-adv*） */
-const advOpen = ref(false)
-useEscape(() => advOpen.value, () => { advOpen.value = false })
-/** 弹层里生效的筛选数：触发钮上标出来，收起来也不丢状态（0 = 不标） */
-const advCount = computed(() => (modeFilter.value ? 1 : 0) + (dateFilter.value ? 1 : 0))
 
 /* P1-3 列显隐（公共组件 MkCols）：除课堂/操作外都可隐藏。
    2026-10-22 用户「信息噪点太多了需要优化，可能要拿掉一些列」：默认只留
@@ -692,26 +676,15 @@ const tsVisibleColCount = computed(() => 1 + tsColDefs.filter((c) => !tsHiddenCo
 const isTableCompact = useIsNarrow(1439)
 const isTableNarrow = useIsNarrow(1499)
 const isTableMid = useIsNarrow(1699)
-/* 焦点 chips（2026-10-05：计数升 KPI 面板后本组退为纯筛选开关——学习状态判例：
-   KPI 孪生 pill 不再显数）。「进行中」保留计数：它是 active 单状态口径，分布卡
-   「进行中」是四状态合并档，两个数互为唯一来源；「全部」不显数 = 卡头 meta 的已加载行数。
-   历史教训：pill 与页头状态条曾各算一遍「高关注」，口径不同（attention==='high' vs
-   !=='low'）致数字打架，该状态条计数已删。 */
-const pills = computed(() => {
-  const all = rows.value
-  return [
-    { id: 'all' as const, label: '全部', count: undefined as number | undefined },
-    {
-      id: 'active' as const,
-      label: '进行中',
-      count: all.filter((r) => r.status === 'active').length
-    },
-    /* 2026-10-16 KPI 审计补完：本页 KPI 叫「需关注」、这枚筛选 chip 叫「待关注」，同一件事两个词。
-       全站「需关注」42 处、「待关注」7 处，按多数统一为「需关注」（id 不变，筛选口径不受影响）。 */
-    { id: 'attention' as const, label: '需关注', count: attentionCount },
-    { id: 'missing' as const, label: '缺总结', count: missingWrapupCount }
-  ]
-})
+/* 视图态（2026-10-27 筛选重建）：原先「焦点 chips」把三个不同维度的东西并成一组单选胶囊
+   （进行中 = 状态的一档、需关注 = 派生视图、缺总结 = 总结的一档），和右侧维度下拉各自背一份
+   同一个数（选 chip「缺总结」时「总结」下拉仍显示「全部总结」）。现在视图形制只剩「需关注」
+   这一个真正派生的口径：以「已应用」胶囊出现，点一下清除。其余两个维度回到各自的下拉；
+   页头 KPI 卡承接一键入口（缺总结 / 有建议可点，落到对应筛选）。
+   兼容旧深链：?focus=active / missing 仍会筛，胶囊也按同一张表给出可读名。 */
+const VIEW_LABELS: Record<string, string> = { attention: '需关注', active: '进行中', missing: '缺总结' }
+const activeViewLabel = computed(() => (pill.value === 'all' ? '' : VIEW_LABELS[pill.value] ?? ''))
+
 /* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
 const statusOptions = [
   { value: 'initializing', label: '初始化中' },
@@ -725,13 +698,25 @@ const statusOptions = [
   { value: 'completed', label: '已完成' },
   { value: 'discarded', label: '已废弃' }
 ]
-/** 胶囊内嵌下拉的两组选项（空值 = 不筛该维） */
+/** 胶囊内嵌下拉的选项组（空值 = 不筛该维）。课型 / 开始时间 2026-10-27 从「筛选」弹层提到主栏：
+    Carbon 的筛选模式明确要求「多个类别不得收进菜单/下拉」。 */
 const statusSelectOptions = [{ value: '', label: '全部状态' }, ...statusOptions]
 const wrapSelectOptions = [
   { value: '', label: '全部总结' },
   { value: 'degraded', label: '降级总结' },
   { value: 'eval-failed', label: '评估失败' },
   { value: 'missing', label: '缺总结' },
+]
+const modeSelectOptions = [
+  { value: '', label: '全部课型' },
+  { value: 'tutor', label: '正课' },
+  { value: 'review', label: '复习课' },
+  { value: 'extension', label: '延伸课' },
+]
+const dateSelectOptions = [
+  { value: '', label: '全部时间' },
+  { value: '7d', label: '近 7 天' },
+  { value: '30d', label: '近 30 天' },
 ]
 
 /* 卡头异常 badge：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致） */

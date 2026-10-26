@@ -115,13 +115,13 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(rate.find('.mk-kpi__num').text()).toBe('14%');
     // 异常快捷筛选仍在卡头 chips（失败 + 超时 = 2，与「异常」计数同口径），点击可穿
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
-    const abnormalBtn = w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').find((b) => b.text().startsWith('异常'));
+    const abnormalBtn = w.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').find((b) => b.text().startsWith('异常'));
     expect(abnormalBtn?.text()).toContain('异常');
     await abnormalBtn!.trigger('click');
     await settle();
     expect(w.findAll('tbody tr').length).toBe(2);
     // 右组另一枚 = 有建议（2026-10-11 统一判例：chip 显命中数）
-    expect(w.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').text()).toContain('有建议');
+    expect(w.find('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').text()).toContain('有建议');
     w.unmount();
   });
 

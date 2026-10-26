@@ -3,7 +3,7 @@
  *
  * O2c 实测缺陷：点快筛「异常18」→ 进详情 → 返回（应用内「← 会话列表」或浏览器后退）或刷新，
  * 都回到「全部」167 条 —— 逐条排查每看一条要重筛一次，也无法把「这批异常」的链接发给同事。
- * 现在焦点 chip / 状态组 / 异常开关 / 高级筛选（状态·时间）/ 有建议开关全部住进 URL。
+ * 现在应用视图（需关注/缺总结）/ 状态下拉 / 异常开关 / 课型 / 开始时间 / 有建议开关全部住进 URL。
  * O4：行内「链路 / 详情」两个词此前无任何说明，点前只能猜。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -55,10 +55,6 @@ async function mountTs(url: string) {
   return { wrapper, router };
 }
 
-function pillByText(wrapper: ReturnType<typeof mount>, label: string) {
-  return wrapper.findAll('button.mk-pill').find((x) => x.text().startsWith(label));
-}
-
 beforeEach(() => {
   listMock.mockReset();
   listMock.mockResolvedValue({
@@ -77,19 +73,25 @@ beforeEach(() => {
 });
 
 describe('TeachingSessions · 筛选 ↔ URL（O2c）', () => {
-  it('深链 ?pill=missing 落位：缺总结 chip 高亮（返回 / 刷新还原）', async () => {
+  it('深链 ?pill=missing 落位：应用视图胶囊显示「缺总结」且可移除（返回 / 刷新还原）', async () => {
     const { wrapper } = await mountTs('/admin/teaching-sessions?pill=missing');
-    expect(pillByText(wrapper, '缺总结')?.classes()).toContain('mk-pill--active');
+    const chip = wrapper.find('button.ts-view-chip');
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toContain('缺总结');
+    expect(chip.classes()).toContain('mk-pill--active');
     wrapper.unmount();
   });
 
-  it('点「需关注」→ URL 带 pill=attention；再点一次取消 → 删键（title 承诺的「再点取消」）', async () => {
+  it('点「需关注」KPI → URL 带 pill=attention；点应用视图胶囊取消 → 删键', async () => {
     const { wrapper, router } = await mountTs('/admin/teaching-sessions');
-    const attention = pillByText(wrapper, '需关注')!;
+    // 2026-10-26：需关注不再有常驻 chip——它是派生视图，入口是「需关注」KPI 卡
+    const attention = wrapper.findAll('button.mk-kpi').find((c) => c.text().includes('需关注'))!;
     await attention.trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.query.pill).toBe('attention');
-    await pillByText(wrapper, '需关注')!.trigger('click');
+    const chip = wrapper.find('button.ts-view-chip');
+    expect(chip.text()).toContain('需关注');
+    await chip.trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.query.pill).toBeUndefined();
     wrapper.unmount();
