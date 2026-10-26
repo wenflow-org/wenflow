@@ -78,16 +78,20 @@
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID" />
           <!-- 归属 Agent 筛选（2026-10-26 评审：从「筛选」弹层移回卡头一行，选中值直接显示 Agent 名） -->
-          <select v-model="agentFilter" class="mk-filter__select" aria-label="按归属 Agent 筛选">
-            <option value="">全部 Agent</option>
-            <option v-for="a in agentOptions" :key="a.id" :value="a.id">{{ a.label }}（{{ a.count }}）</option>
-          </select>
-          <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口">
-            <option value="7d">近 7 天</option>
-            <option value="24h">近 24 小时</option>
-            <option value="30d">近 30 天</option>
-            <option value="all">全部</option>
-          </select>
+          <MkPillSelect
+            v-model="agentFilter"
+            label="归属"
+            aria-label="按归属 Agent 筛选"
+            :options="agentSelectOptions"
+            :active="!!agentFilter"
+          />
+          <MkPillSelect
+            v-model="statsRange"
+            label="窗口"
+            aria-label="统计窗口"
+            :options="statsRangeOptions"
+            :active="statsRange !== '7d'"
+          />
           <MkCols
             :col-defs="menuColDefs"
             :storage-key="SK_COLS_KEY"
@@ -324,6 +328,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import Pagination from './Pagination.vue'
 import { useIsNarrow } from './useIsNarrow'
 import { useTableSort } from './useTableSort'
@@ -500,9 +505,20 @@ const agentOptions = computed<AgentOption[]>(() => {
   }
   return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh'))
 })
+/** 胶囊内嵌下拉的两组选项（2026-10-26 卡头统一）：
+ *  归属 = 空值「全部 Agent」+ 带计数的 Agent 名；窗口 = 统计范围（默认近 7 天）。 */
+const agentSelectOptions = computed(() => [
+  { value: '', label: '全部 Agent' },
+  ...agentOptions.value.map((a) => ({ value: a.id, label: `${a.label}（${a.count}）` }))
+])
+const statsRangeOptions = [
+  { value: '7d', label: '近 7 天' },
+  { value: '24h', label: '近 24 小时' },
+  { value: '30d', label: '近 30 天' },
+  { value: 'all', label: '全部' },
+]
 
 /** 成功率含义短句（KPI 卡与列头 title 共用本页单源，避免「= 成功调用 / 总调用」逐字复读两套） */
-
 
 /** 成功率单元格 title：比例 + 全站统一阈值披露；无分母说明兜底口径（不按 0% 计） */
 function rowRateTitle(s: { calls: number; errors: number }): string {

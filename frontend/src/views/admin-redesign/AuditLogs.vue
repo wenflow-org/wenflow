@@ -39,15 +39,14 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <!-- 时间范围常驻可操作，默认「全部」：默认「今天」时首屏是空态，会被读成「没有异常」 -->
-          <label class="mk-pill al-range" :class="{ 'mk-pill--active': timeRange !== 'all' }">
-            <span class="al-range__k">时间范围</span>
-            <span class="al-range__pick">
-              <select v-model="timeRange" class="al-range__v" aria-label="时间范围" @change="applyFilters">
-                <option v-for="(label, value) in timeRangeLabels" :key="value" :value="value">{{ label }}</option>
-              </select>
-              <ChevronDown :size="12" :stroke-width="2" aria-hidden="true" />
-            </span>
-          </label>
+          <MkPillSelect
+            v-model="timeRange"
+            label="时间范围"
+            aria-label="时间范围"
+            :options="timeRangeOptions"
+            :active="timeRange !== 'all'"
+            @update:model-value="applyFilters"
+          />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
           <button v-if="!alSortIsDefault" type="button" class="mk-link" @click="resetAlSort">恢复默认序</button>
@@ -59,7 +58,7 @@
           <div v-else-if="tab === 'operation' && (failedCount > 0 || failureByAction.length)" class="al-fails">
             <button
               type="button"
-              class="al-fails__chip al-fails__chip--total"
+              class="mk-pill al-fails__chip al-fails__chip--total"
               :class="{ 'al-fails__chip--on': failedOnly && !failedAction }"
               :aria-pressed="failedOnly && !failedAction"
               @click="filterByFailure('')"
@@ -68,7 +67,7 @@
               v-for="f in failureByAction"
               :key="f.action"
               type="button"
-              class="al-fails__chip"
+              class="mk-pill al-fails__chip"
               :class="{ 'al-fails__chip--on': failedOnly && failedAction === f.action }"
               :aria-pressed="failedOnly && failedAction === f.action"
               @click="filterByFailure(f.action)"
@@ -101,7 +100,7 @@
           <div class="mk-adv">
             <button
               type="button"
-              class="mk-link al-adv-trigger"
+              class="mk-link mk-adv-trigger"
               :class="{ 'mk-link--active': advOpen }"
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
@@ -359,7 +358,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { KeyRound, Lock, Filter, ChevronDown } from 'lucide-vue-next'
+import { KeyRound, Lock, Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
@@ -368,6 +367,7 @@ import { prettyPayload } from './payload-format'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import { useIsNarrow } from './useIsNarrow'
@@ -825,6 +825,10 @@ const { views: savedViews, save: saveViewToStore, remove: removeView } = useSave
 
 const TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all'] as const
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
+/** 胶囊内嵌下拉的选项形态（顺序即下拉顺序，默认「全部」在最前） */
+const timeRangeOptions = (['all', 'today', 'yesterday', 'week', 'month'] as const).map(
+  (value) => ({ value, label: timeRangeLabels[value] })
+)
 
 /* ===== 筛选 / 页码 ↔ URL（2026-10-24）=====
    此前只有 ?tab=login 入 URL，关键词/时间/失败下钻/页码切场景或返回即复位；
@@ -1131,49 +1135,20 @@ function goExport() {
   text-overflow: ellipsis;
   max-width: 240px;
 }
-/* 时间范围常驻胶囊（B14/F6-2 + 2026-10-24 重设计）：外壳复用 .mk-pill，内里的原生 select
-   透明化——文字与箭头都可点，默认档中性灰、非默认档走 .mk-pill--active 浅蓝激活态 */
-.al-range { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 11px; }
-.al-range__k { color: var(--mk-faint); font-weight: 600; }
-.al-range__pick { position: relative; display: inline-flex; align-items: center; }
-.al-range__v {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  padding: 1px 16px 1px 0;
-  cursor: pointer;
-}
-.al-range:hover .al-range__v { color: var(--mk-blue); }
-.al-range:focus-within { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
-.al-range__pick svg { position: absolute; right: 0; color: var(--mk-muted); pointer-events: none; }
-/* 筛选触发器与「列」同为文字动作：图标与文字同一基线，不给它单独一颗描边按钮 */
-.al-adv-trigger { display: inline-flex; align-items: center; gap: 4px; }
-/* 失败 TOP 常驻主行：总数 chip + 各动作 chip，点击下钻 */
+/* 失败 TOP 常驻主行：总数 chip + 各动作 chip，点击下钻。
+   2026-10-26 卡头统一：底子改用共享 .mk-pill（描边胶囊 + 同档内衬/字重），页内只留
+   「失败语义用红」这一条差异——此前它是第三种胶囊变体（自带 padding/字重/无激活底色，
+   与同行的 .mk-pill 高差 10px）。 */
 .al-fails { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 100%; }
-.al-fails__chip--total { border-color: color-mix(in srgb, var(--mk-red) 40%, var(--mk-line)); }
 .al-stats-error { padding: 2px 8px; }
-.al-fails__chip {
-  border: 1px solid var(--mk-line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  padding: 2px 8px;
-  /* LY14：下钻态 chip 被 max-width:48% 压到 106px，内部计数折到第二行把卡头撑高；
-     单行不折，超出由 .al-fails 的 flex-wrap 换行承载。 */
-  white-space: nowrap;
-  /* span→button：重置按钮默认字体并补手型 */
-  cursor: pointer;
-  font-family: inherit;
+/* 总数 chip：红描边（失败域的语义色），其余走 .mk-pill 默认档 */
+.al-fails__chip--total { border-color: color-mix(in srgb, var(--mk-red) 40%, var(--mk-line)); }
+/* 下钻激活：与 .mk-pill--active 同构（浅红底 + 红字 + 红边），只是把蓝换成失败语义红 */
+.al-fails__chip--on {
+  background: var(--mk-red-bg, #fef2f2);
+  border-color: color-mix(in srgb, var(--mk-red) 44%, var(--mk-line));
+  color: var(--mk-red-strong);
 }
-.al-fails__chip--on { border-color: var(--mk-red, #dc2626); color: var(--mk-red, #dc2626); }
 .al-fails__chip b { color: var(--mk-red-strong); font-variant-numeric: tabular-nums; }
 .log-tt {
   font-size: var(--mk-fs-micro);

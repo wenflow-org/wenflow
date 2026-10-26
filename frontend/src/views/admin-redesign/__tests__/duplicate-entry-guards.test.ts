@@ -78,8 +78,13 @@ describe('重复操作入口守卫', () => {
     // 只留「筛选」钮一个触发点
     expect((src.match(/advOpen = !advOpen/g) || []).length).toBe(1)
     // 2026-10-24 用户「时间范围和筛选重新设计一下」：胶囊里是真 select，不再是不可点的 <span>
-    expect(src).toMatch(/<label class="mk-pill al-range"/)
-    expect(src).toContain('select v-model="timeRange"')
+    // 2026-10-26 卡头统一：形态收进共享 MkPillSelect（.mk-pill + 透明 select），
+    // 页内不再自带 .al-range 私有类（三页逐字重复的同一段 CSS 已删）
+    expect(src).toContain('<MkPillSelect')
+    expect(src).toContain('v-model="timeRange"')
+    // 页内不再自带 .al-range 私有类（三页逐字重复的同一段 CSS 已删）
+    expect(src).not.toMatch(/^\.al-range/m)
+    expect(src).not.toContain('class="mk-pill al-range"')
     expect(src).not.toContain('<span class="mk-cell-sub">时间范围</span>')
   })
 

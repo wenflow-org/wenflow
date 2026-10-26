@@ -28,11 +28,16 @@
       <!-- 筛选/工具栏行（两页签共用 agent 筛选；原型 cases 工具栏右侧的 primary sm
            「新建用例」落在同行最右，仅用例页签可见） -->
       <div class="pe-filter">
-        <!-- onAgentFilterChange：用例与历史共用该筛选，切换时两边都重拉（原只刷用例） -->
-        <select v-model="agentFilter" class="mk-filter__select" aria-label="按 Agent 筛选" @change="onAgentFilterChange">
-          <option value="">全部 Agent</option>
-          <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
-        </select>
+        <!-- onAgentFilterChange：用例与历史共用该筛选，切换时两边都重拉（原只刷用例）
+             2026-10-26 卡头统一：维度筛选走共享 MkPillSelect（与全站列表页同形态） -->
+        <MkPillSelect
+          v-model="agentFilter"
+          label="归属"
+          aria-label="按 Agent 筛选"
+          :options="agentSelectOptions"
+          :active="!!agentFilter"
+          @update:model-value="onAgentFilterChange"
+        />
         <!-- 原「用例驱动：为 goal-conversation 等 Agent 维护评估集…」说明行已删
              （2026-10-17 用户走查「这种文案清理掉」）：页头副文、两个页签名、
              空态正文与「新建用例 / 批量跑评估」按钮已经把同一件事说了四遍，
@@ -614,6 +619,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 
 interface EvalCase {
   id: string
@@ -680,6 +686,11 @@ const AGENT_META: Record<string, { label: string; desc: string; fields: string; 
   },
 }
 const agents = Object.entries(AGENT_META).map(([id, m]) => ({ id, label: m.label }))
+/** 胶囊内嵌下拉的选项（空值 = 全部 Agent） */
+const agentSelectOptions = [
+  { value: '', label: '全部 Agent' },
+  ...agents.map((a) => ({ value: a.id, label: a.label }))
+]
 const agentLabel = (id: string) => AGENT_META[id]?.label || id
 const agentDesc = computed(() => AGENT_META[form.value.agentId]?.desc || '')
 const agentFieldHint = computed(() => AGENT_META[form.value.agentId]?.fields || '')

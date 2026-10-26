@@ -14,12 +14,16 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="nt-filter">
-          <select v-model="kindFilter" class="mk-filter__select" @change="reloadFromFirstPage">
-            <option value="">全部类型</option>
-            <option value="system">系统</option>
-            <option value="announcement">公告提醒</option>
-            <option value="achievement">成就</option>
-          </select>
+          <!-- 类型筛选：形态统一走胶囊内嵌下拉（2026-10-26）。
+               「仅未读」是布尔开关不是维度，保持开关形态（下拉里放 true/false 会更难读）。 -->
+          <MkPillSelect
+            v-model="kindFilter"
+            label="类型"
+            aria-label="按类型筛选"
+            :options="kindOptions"
+            :active="!!kindFilter"
+            @update:model-value="reloadFromFirstPage"
+          />
           <label class="mk-field--switch">
             <input v-model="unreadOnly" type="checkbox" @change="reloadFromFirstPage" />
             <span class="mk-field__label" style="margin:0">仅未读</span>
@@ -249,6 +253,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import Pagination from './Pagination.vue'
 
 /** 嵌入模式：作为「通知与公告」页「站内通知」tab 渲染（仅去掉外层壳，状态条/发送弹窗保留）。
@@ -278,6 +283,13 @@ const loading = ref(false)
 const failed = ref(false)
 const kindFilter = ref('')
 const unreadOnly = ref(false)
+/** 类型维度选项（胶囊内嵌下拉）：空值 = 全部类型 */
+const kindOptions = [
+  { value: '', label: '全部类型' },
+  { value: 'system', label: '系统' },
+  { value: 'announcement', label: '公告提醒' },
+  { value: 'achievement', label: '成就' },
+]
 /** 定向核对（2026-10-26）：学习状态页「发提醒」→ ?userId= 落到本页，后端 list 支持 userId。
     无 router 上下文（单测/独立挂载）时降级为不筛。 */
 const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.$router

@@ -4,15 +4,14 @@
     <MkPageHead title="执行日志">
       <template #actions>
         <div class="logs-window">
-          <label class="mk-pill logs-range" :class="{ 'mk-pill--active': timeRangeActive }">
-            <span class="logs-range__k">时间范围</span>
-            <span class="logs-range__pick">
-              <select v-model="timeRange" class="logs-range__v" aria-label="时间范围" @change="onTimeRangeChange">
-                <option v-for="o in timeRangeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
-              <ChevronDown :size="12" :stroke-width="2" aria-hidden="true" />
-            </span>
-          </label>
+          <MkPillSelect
+            :model-value="timeRange"
+            label="时间范围"
+            aria-label="时间范围"
+            :options="timeRangeOptions"
+            :active="timeRangeActive"
+            @update:model-value="onTimeRangeChange($event)"
+          />
           <div v-if="timeRange === 'custom'" class="logs-window__custom">
             <label class="logs-window__field">
               <span class="mk-cell-sub">开始时间</span>
@@ -58,16 +57,14 @@
       <div class="mk-card__head">
         <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
         <div class="mk-filter">
-          <label class="mk-pill logs-agent" :class="{ 'mk-pill--active': !!agentFilter }">
-            <span class="logs-agent__k">节点</span>
-            <span class="logs-agent__pick">
-              <select v-model="agentFilter" class="logs-agent__v mono" aria-label="按节点（Skill）筛选">
-                <option value="">全部</option>
-                <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
-              </select>
-              <ChevronDown :size="12" :stroke-width="2" aria-hidden="true" />
-            </span>
-          </label>
+          <MkPillSelect
+            v-model="agentFilter"
+            label="节点"
+            aria-label="按节点（Skill）筛选"
+            mono
+            :options="agentSelectOptions"
+            :active="!!agentFilter"
+          />
           <div class="mk-pills">
             <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" :aria-pressed="statusFilter === p.id" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span></button>
           </div>
@@ -105,7 +102,7 @@
           <div class="mk-adv">
             <button
               type="button"
-              class="mk-link logs-adv-trigger"
+              class="mk-link mk-adv-trigger"
               :class="{ 'mk-link--active': advOpen }"
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
@@ -344,7 +341,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Copy, Filter, ChevronDown } from 'lucide-vue-next'
+import { Copy, Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
@@ -358,6 +355,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkStatStrip, { type MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
@@ -494,7 +492,8 @@ function presetToRange(r: ExecTimeRange): { start: string; end: string } {
 let lastPresetRange: ExecTimeRange = 'today'
 /** 切档：入自定义先按上一档回填，随后下发；区间矛盾（开始晚于结束）时不下发，行内已报错。
     始末输入就地展开在时间胶囊下方，不再打开「按 ID 定位」弹层。 */
-function onTimeRangeChange() {
+function onTimeRangeChange(value: string) {
+  timeRange.value = value as ExecTimeRange
   if (timeRange.value === 'custom') {
     if (!customStart.value && !customEnd.value) {
       const { start, end } = presetToRange(lastPresetRange)
@@ -1033,6 +1032,11 @@ const agentOptions = computed(() => {
   for (const v of savedViews.value) if (v.query?.agent) set.add(v.query.agent)
   return [...set].sort()
 })
+/** 胶囊内嵌下拉的选项形态（首项「全部」= 清空该维） */
+const agentSelectOptions = computed(() => [
+  { value: '', label: '全部' },
+  ...agentOptions.value.map((a) => ({ value: a, label: a }))
+])
 
 /** 连通性/探活测试日志识别：sourceEntry = system-canary（模型接入页探活 + 测试连接产生） */
 const isTestLog = (l: { sourceEntry?: string }) => l.sourceEntry === 'system-canary'
@@ -1334,52 +1338,11 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   white-space: nowrap;
 }
 
-/* 时间范围胶囊（页头动作区）：外壳沿用 .mk-pill，真正的控件是里面透明的原生 select */
+/* 时间范围 / 节点两个维度下拉（2026-10-26）：形态统一走共享 MkPillSelect
+   （原 .logs-range / .logs-agent 两份逐字重复的私有 CSS 已删） */
 .logs-window { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .logs-window__custom { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .logs-window__field { display: inline-flex; align-items: center; gap: 6px; }
-.logs-range { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 11px; }
-.logs-range__k { color: var(--mk-faint); }
-.logs-range__pick { position: relative; display: inline-flex; align-items: center; }
-.logs-range__v {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  padding: 1px 16px 1px 0;
-  cursor: pointer;
-}
-.logs-range:hover .logs-range__v { color: var(--mk-blue); }
-.logs-range:focus-within { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
-.logs-range__pick svg { position: absolute; right: 0; color: var(--mk-muted); pointer-events: none; }
-/* 节点下拉同款胶囊：36 个 Skill 在主行直接可选，不必开二级弹层 */
-.logs-agent { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 11px; max-width: 260px; }
-.logs-agent__k { color: var(--mk-faint); flex: none; }
-.logs-agent__pick { position: relative; display: inline-flex; align-items: center; min-width: 0; }
-.logs-agent__v {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  padding: 1px 16px 1px 0;
-  cursor: pointer;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.logs-agent:hover .logs-agent__v { color: var(--mk-blue); }
-.logs-agent:focus-within { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
-.logs-agent__pick svg { position: absolute; right: 0; color: var(--mk-muted); pointer-events: none; }
-/* 筛选触发器与「列」同为文字动作：图标与文字同一基线，不给它单独一颗描边按钮 */
-.logs-adv-trigger { display: inline-flex; align-items: center; gap: 4px; }
 /* 列表可见加载态（EG7：「更新中」角标 + 表格降透明）——排序/筛选/翻页重查时该查询
    实测可达 30s，无反馈时用户误判「箭头变了、数据没变」。仅在有数据时出现（首载走骨架）。 */
 .exec-updating { color: var(--mk-blue); font-weight: 600; white-space: nowrap; }

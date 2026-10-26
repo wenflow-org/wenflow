@@ -519,6 +519,8 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     // 表前只有一行：快筛条 .ts-toolbar 退役（chips 并回卡头，2026-10-04）
     expect(wrapper.find('.ts-toolbar').exists(), '快筛条已并回卡头一行').toBe(false);
     // 2026-10-26：10 档状态是逐条排查主路径，从弹层提到卡头主栏（枚举 = 全部状态 + statusOptions 10 档）
+    // 同日卡头统一：下拉外壳收进共享 MkPillSelect（.mk-pill + 透明 select）——仍是真 select，
+    // 原生下拉语义与 setValue 不变，只是从裸描边方框换成胶囊
     const sel = wrapper.find('.mk-filter select[aria-label="按状态筛选"]');
     expect(sel.exists()).toBe(true);
     expect(sel.findAll('option').map((o) => o.text())).toEqual([
@@ -527,8 +529,8 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     // 总结三档筛选（总览「评估失败 / 降级总结」的落地入口）也在主栏
     const wrapSel = wrapper.find('.mk-filter select[aria-label="按总结筛选"]');
     expect(wrapSel.findAll('option').map((o) => o.text())).toEqual(['全部总结', '降级总结', '评估失败', '缺总结']);
-    // 弹层只留课堂类型与开始时间
-    await wrapper.find('.mk-adv .mk-btn').trigger('click');
+    // 弹层只留课堂类型与开始时间；触发器与「列」同为文字链（次级工具同档）
+    await wrapper.find('.mk-adv .mk-adv-trigger').trigger('click');
     expect(wrapper.find('.mk-adv__pop select[aria-label="按开始时间筛选"]').exists()).toBe(true);
     expect(wrapper.find('.mk-adv__pop select[aria-label="按状态筛选"]').exists()).toBe(false);
     // 卡头两组 chips：焦点（单选，全部不显数）+ 快捷（两个独立开关）
@@ -546,7 +548,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(rows[0].text()).toContain('用户a');
     // 弹层里生效的筛选数标在触发钮上（收起来也不丢状态）
     await wrapper.find('.mk-adv__pop select[aria-label="按开始时间筛选"]').setValue('7d');
-    expect(wrapper.find('.mk-adv .mk-btn .mk-pill__count').text()).toBe('1');
+    expect(wrapper.find('.mk-adv .mk-adv-trigger .mk-pill__count').text()).toBe('1');
     wrapper.unmount();
   });
 

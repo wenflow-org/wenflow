@@ -82,16 +82,20 @@
               @click="abnormalOnly = !abnormalOnly"
             >异常<span class="mk-pill__count">{{ abnormalSessionCount }}</span></button>
           </div>
-          <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
-            <option value="">全部状态</option>
-            <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
-          </select>
-          <select v-model="wrapFilter" class="mk-filter__select" aria-label="按总结筛选">
-            <option value="">全部总结</option>
-            <option value="degraded">降级总结</option>
-            <option value="eval-failed">评估失败</option>
-            <option value="missing">缺总结</option>
-          </select>
+          <MkPillSelect
+            v-model="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusSelectOptions"
+            :active="!!statusFilter"
+          />
+          <MkPillSelect
+            v-model="wrapFilter"
+            label="总结"
+            aria-label="按总结筛选"
+            :options="wrapSelectOptions"
+            :active="!!wrapFilter"
+          />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
           <button v-if="!tsSortIsDefault" type="button" class="mk-link" @click="resetTsSort">恢复默认序</button>
@@ -110,10 +114,13 @@
             v-model:hidden="tsHiddenCols"
           />
           <div class="mk-adv">
-            <!-- 主栏已放状态与总结两档筛选；课堂类型与时间窗收进弹层 -->
+            <!-- 主栏已放状态与总结两档筛选；课堂类型与时间窗收进弹层。
+                 触发器与「列」同为文字链 + 图标（2026-10-26 卡头统一）：次级工具成组用同一档，
+                 描边按钮留给页头主操作，两级层次才立得住。 -->
             <button
               type="button"
-              class="mk-btn mk-btn--sm"
+              class="mk-link mk-adv-trigger"
+              :class="{ 'mk-link--active': advOpen || advCount > 0 }"
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
@@ -358,6 +365,7 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -716,6 +724,14 @@ const statusOptions = [
   { value: 'finalization_failed', label: '收尾失败' },
   { value: 'completed', label: '已完成' },
   { value: 'discarded', label: '已废弃' }
+]
+/** 胶囊内嵌下拉的两组选项（空值 = 不筛该维） */
+const statusSelectOptions = [{ value: '', label: '全部状态' }, ...statusOptions]
+const wrapSelectOptions = [
+  { value: '', label: '全部总结' },
+  { value: 'degraded', label: '降级总结' },
+  { value: 'eval-failed', label: '评估失败' },
+  { value: 'missing', label: '缺总结' },
 ]
 
 /* 卡头异常 badge：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致） */

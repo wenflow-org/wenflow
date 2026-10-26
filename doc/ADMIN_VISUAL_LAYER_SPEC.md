@@ -228,6 +228,8 @@ v3 修订两条：
 | `.tabs` | 顶层视图切换 = **下划线页签**（宿主页实现，如 `Users.vue` 的账号/学习状态；`.mk-pills` 不再承担视图切换，只留筛选/多标签过滤） | 页面 |
 | `.subtabs` | `MkSubTabs`（下划线式，9×12；抽屉/弹窗内部内容分区） | 原语组件 |
 | `.chips / .chip` | `.mk-pills / .mk-pill`（描边胶囊；激活=蓝底蓝字蓝调边） | 原语 |
+| `.chip` 内嵌下拉（卡头维度筛选：时间范围 / 节点 / 状态 / 级别…） | **共享原语** `MkPillSelect`（`.mk-pill` + 透明原生 select + 可见文本层）。2026-10-26 用户「表头部分需要重新设计，包括 pill 筛选 搜索统一设计」：提升前三页各有一份逐字重复的私有实现（ExecLogs `.logs-range`/`.logs-agent`、AuditLogs `.al-range`），字重 700/800 还不一致。**卡头里的维度下拉一律走它**；表单录入的下拉仍走 `.mk-filter__select` | 原语组件 |
+| 卡头次级动作（列 / 筛选 / 按 ID 定位） | `.mk-link` + `.mk-adv-trigger`（文字链 + 图标）。描边按钮 `.mk-btn` 只给页头主操作——卡头右组是一排次级工具，同档才成组 | 原语 |
 | `.tbl` | `.mk-table`（10×16；fixed 档列宽走 `--mk-col-*`） | 原语 |
 | `.pager` | `Pagination.vue` | 原语组件 |
 | `.empty` | `MkEmptyState`（大块居中空态）；筛选后 0 行的卡内表格/列表用 `.mk-empty--line`（**一行式内联空态**：单句「为什么空 + 现状结论」，不占最小高度，CM7） | 原语组件 / 原语 |

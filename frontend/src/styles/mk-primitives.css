@@ -992,6 +992,81 @@ html[data-theme='dark'] .mk-pill--active {
 }
 html[data-theme='dark'] .mk-pill__count { background: var(--mk-surface-3); }
 
+/* ----- 胶囊内嵌下拉（.mk-pillselect，2026-10-26 提升为共享原语）-----
+   卡头里的「维度下拉」统一形态：外壳是 .mk-pill（描边胶囊），内里是透明的原生 <select>，
+   前面一枚浅灰维度名（时间范围 / 节点 / 级别 / 状态），后面是深色粗体当前值 + ▾。
+
+   为什么不用裸 .mk-filter__select：裸下拉看不出「这一维是否偏离默认」——时间范围被改成
+   近 30 天，外观与「今天」一模一样，用户得点开才知道。胶囊内嵌下拉沿用 .mk-pill--active
+   的激活态（浅蓝底 + 主色描边），一维筛过就一眼可见；且与 chips 同为胶囊语言，
+   卡头里不再出现「胶囊 + 方框」两种控件形态。
+
+   提升前的三份私有实现（ExecLogs .logs-range / .logs-agent、AuditLogs .al-range）
+   逐字重复同一段 20 行 CSS，且字重 700/800 不一致——现在只剩这一处。 */
+.mk-pillselect {
+  /* 内衬比普通 pill 小：值由 select 自己撑，左侧维度名只需 2px 让位 */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 11px;
+  /* 整枚上限：长节点名/长动作名不许把胶囊撑成一条长条（值层另有 200px 截断，
+     但 flex 容器会按内容 max-content 撑开，上限必须落在胶囊本身上） */
+  max-width: 260px;
+}
+/* 维度名：浅灰、常规字重——它是标签不是值，不能与右侧当前值抢层级 */
+.mk-pillselect__k { color: var(--mk-faint); flex: none; }
+/* 值盒：定位锚点，箭头绝对定位到右缘 */
+.mk-pillselect__pick { position: relative; display: inline-flex; align-items: center; min-width: 0; flex: 0 1 auto; }
+/* 可见文本层：宽度只由当前值决定（原生 select 的固有宽度会取最长 option，
+   节点名一长整枚胶囊就被撑到 200px，而当前值是「全部」时右侧全是空白）。
+   右内衬 16px 给 ▾ 让位，超长值 ellipsis + title 全值。 */
+.mk-pillselect__txt {
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--mk-ink);
+  padding-right: 16px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* 透明覆盖层：铺满值盒，原生下拉行为（点击/键盘/AT）不变，视觉交给 .mk-pillselect__txt */
+.mk-pillselect__v {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+/* 激活态（= 该维偏离默认值）：整枚胶囊走 .mk-pill--active 的浅蓝底；
+   值本身也跟随主色，避免「底变了字没变」的半个激活态 */
+.mk-pill--active > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
+.mk-pillselect:hover .mk-pillselect__txt { color: var(--mk-blue); }
+.mk-pill--active:hover > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
+.mk-pillselect:focus-within { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+.mk-pillselect__pick > svg { position: absolute; right: 0; color: var(--mk-muted); pointer-events: none; }
+/* 紧凑密度档：与 .mk-pill 同档收窄（内衬与字号一起收，不单独缩值） */
+html[data-density='compact'] .mk-pillselect { padding: 2px 7px 2px 10px; }
+html[data-density='compact'] .mk-pillselect__txt { font-size: 12px; }
+
+/* 卡头次级动作触发器（「筛选」弹层的按钮，2026-10-26 提升为共享）：
+   与「列」同为文字链 + 图标 —— 卡头右组是一排次级工具，同档才成组；
+   描边按钮（.mk-btn）留给页头主操作，两级层次才立得住。
+   提升前 ExecLogs/AuditLogs 各有一份 `.logs-adv-trigger` / `.al-adv-trigger`，
+   TeachingSessions 用的却是描边小按钮——同一语义两种档。 */
+.mk-adv-trigger { display: inline-flex; align-items: center; gap: 4px; }
+
 /* 搜索框清空按钮（输入有值时显示）：包一层 .mk-search 提供定位锚点 */
 .mk-search { position: relative; display: inline-flex; align-items: center; }
 /* 清空按钮的右内衬只在有值时占用：无值时输入文本可多用约 12px 宽（2026-10-24 列表走查）。 */

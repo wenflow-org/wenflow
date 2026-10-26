@@ -19,19 +19,22 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <select v-model="severityFilter" class="mk-filter__select" aria-label="按级别筛选">
-            <option value="">全部级别</option>
-            <option value="info">通知</option>
-            <option value="warning">提醒</option>
-            <option value="critical">紧急</option>
-          </select>
-          <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
-            <option value="">全部状态</option>
-            <option value="published">生效中</option>
-            <option value="expired">已过期</option>
-            <option value="draft">草稿</option>
-            <option value="archived">已下线</option>
-          </select>
+          <!-- 级别 / 状态两维筛选：形态统一走胶囊内嵌下拉（2026-10-26），
+               偏离默认值时整枚转浅蓝激活态，一眼看出筛过 -->
+          <MkPillSelect
+            v-model="severityFilter"
+            label="级别"
+            aria-label="按级别筛选"
+            :options="severityOptions"
+            :active="!!severityFilter"
+          />
+          <MkPillSelect
+            v-model="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusOptions"
+            :active="!!statusFilter"
+          />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
           <button v-if="!anSortIsDefault" type="button" class="mk-link" @click="resetAnSort">恢复默认序</button>
@@ -246,6 +249,7 @@ import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import Pagination from './Pagination.vue'
 
@@ -284,6 +288,21 @@ const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.
 const announceRoute = hasRouterCtx ? useRoute() : null
 const initialStatus = typeof announceRoute?.query.status === 'string' ? String(announceRoute.query.status) : ''
 const statusFilter = ref(ANNOUNCE_STATUSES.has(initialStatus) ? initialStatus : '')
+
+/* 两维筛选的选项（胶囊内嵌下拉）：空值 = 不筛该维，文案即「全部X」 */
+const severityOptions = [
+  { value: '', label: '全部级别' },
+  { value: 'info', label: '通知' },
+  { value: 'warning', label: '提醒' },
+  { value: 'critical', label: '紧急' },
+]
+const statusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'published', label: '生效中' },
+  { value: 'expired', label: '已过期' },
+  { value: 'draft', label: '草稿' },
+  { value: 'archived', label: '已下线' },
+]
 
 /* 客户端排序：公告全量已在 live 层（拉全量 + 客户端分页），排序诚实。
    级别/状态按语义档位排（非字典序）；发布/过期按时间戳，空值由 useTableSort 恒排末尾。
