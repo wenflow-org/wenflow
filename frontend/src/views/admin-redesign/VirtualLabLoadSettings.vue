@@ -3,6 +3,7 @@
        卡片外壳与「保存」由宿主承担——三项是同一份设置接口，分开保存会让「改了两项只按一个」
        的另一项悄悄没生效，脏态也只跟着改过的那一项走。 -->
   <div class="vl-settings">
+    <div class="vl-settings__limits">
     <div class="vl-settings__block">
       <div class="vl-settings__label">专属 RPM 上限</div>
       <div class="vl-settings__row">
@@ -39,6 +40,7 @@
         <span class="vl-rpm__unit">个会话 · 1–200</span>
         <span class="vl-settings__read">{{ concurrencyReadout }}</span>
       </div>
+    </div>
     </div>
 
     <!-- 日期模拟默认收起：它是一整套模拟日历（每天几节、每周几天、上课星期…），
@@ -170,7 +172,22 @@ onMounted(() => {
 
 <style scoped>
 /* 两项设置内联进宿主的「调用参数」栅格：自身不再有卡片边框，节奏交由宿主的 ac-group 承担 */
-.vl-settings { display: grid; gap: 12px; }
+/* 2026-10-26：设置改为在右侧抽屉里呈现（原先占列表下方整行）。抽屉内宽足够，
+   两条上限并排两列，不再各占一行、右侧留一大片空；窄容器回单列。
+   容器查询而不是媒体查询：抽屉宽 560px，与视口宽无关。 */
+.vl-settings {
+  display: grid;
+  gap: 12px;
+  container-type: inline-size;
+}
+.vl-settings__limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+@container (max-width: 380px) {
+  .vl-settings__limits { grid-template-columns: minmax(0, 1fr); }
+}
 .vl-settings__block { display: grid; gap: 8px; min-width: 0; }
 .vl-settings__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
 /* 可折叠的日期模拟：summary 承担段标题，右侧给一个展开提示 */

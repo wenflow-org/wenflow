@@ -68,10 +68,29 @@ async function mountVl(url: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/:page?', component: { template: '<div />' } }] });
   await router.push(url);
   await router.isReady();
-  const wrapper = mount(VirtualLearners, { global: { plugins: [router] } });
+  const wrapper = mount(VirtualLearners, { global: { plugins: [router] }, attachTo: document.body });
   await flushPromises();
   await nextTick();
   return { wrapper, router };
+}
+
+/** 容量设置抽屉（Teleport 到 body）：从页头「维护」菜单打开 */
+async function openSettingsDrawer(wrapper: ReturnType<typeof mount>) {
+  const maint = wrapper.findAll('button').find((b) => b.text() === '维护');
+  if (!maint) throw new Error('页头没有「维护」菜单');
+  await maint.trigger('click');
+  await nextTick();
+  const item = [...document.querySelectorAll('.mk-menu__item')].find((el) =>
+    el.textContent?.includes('容量与实验环境')
+  ) as HTMLElement | undefined;
+  if (!item) throw new Error('维护菜单里没有「容量与实验环境」');
+  item.click();
+  await flushPromises();
+  await nextTick();
+}
+
+function closeSettingsDrawer() {
+  (document.querySelector('.mk-drawer__close') as HTMLElement | null)?.click();
 }
 
 function pill(wrapper: ReturnType<typeof mount>, label: string) {
@@ -87,7 +106,11 @@ describe('VirtualLearners · 筛选 ↔ URL', () => {
     const labels = wrapper.findAll('.mk-kpi .mk-kpi__label').map((l) => l.text().trim());
     expect(labels).not.toContain('并发');
     expect(labels).not.toContain('速率');
-    expect(wrapper.find('.vl-settings-card').text()).toContain('在跑');
+    // 2026-10-26：读数并进容量抽屉（页头「维护」→ 右侧抽屉），不再占列表下方版面
+    expect(wrapper.find('.vl-settings-card').exists()).toBe(false);
+    await openSettingsDrawer(wrapper);
+    expect(document.body.textContent || '').toContain('在跑');
+    closeSettingsDrawer();
     expect(router.currentRoute.value.path).toBe('/admin/virtual-learners');
     wrapper.unmount();
   });
@@ -151,9 +174,11 @@ describe('VirtualLearners · KPI 三态（2026-10-14 KPI 审计：失败不得�
     const live = await import('../live');
     (live.liveFailures as { value: Record<string, string> }).value = { virtuals: 'boom' };
     const { wrapper } = await mountVl('/admin/virtual-learners');
-    const readout = wrapper.find('.vl-settings-card').text();
+    await openSettingsDrawer(wrapper);
+    const readout = document.body.textContent || '';
     expect(readout).toContain('读数不可用');
     expect(readout).not.toContain('0 / 10');
+    closeSettingsDrawer();
     (live.liveFailures as { value: Record<string, string> }).value = {};
     wrapper.unmount();
   });

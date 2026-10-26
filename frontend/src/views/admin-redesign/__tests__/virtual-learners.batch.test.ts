@@ -138,10 +138,30 @@ async function mountPage() {
      先把已存隐藏集置空把所有列打开；默认隐藏本身另有专测。 */
   localStorage.setItem('wf_vl_hidden_cols_v2', JSON.stringify([]));
   localStorage.setItem('wf_vl_hidden_cols_v3', JSON.stringify([]));
-  const w = mount(VirtualLearners);
+  const w = mount(VirtualLearners, { attachTo: document.body });
   await flushPromises();
   await nextTick();
   return w;
+}
+
+/** 容量设置抽屉（Teleport 到 body）：从页头「维护」菜单打开，读/关都走 document */
+async function openSettingsDrawer(w: ReturnType<typeof mount>) {
+  const maint = w.findAll('button').find((b) => b.text() === '维护');
+  if (!maint) throw new Error('页头没有「维护」菜单');
+  await maint.trigger('click');
+  await nextTick();
+  const item = [...document.querySelectorAll('.mk-menu__item')].find((el) =>
+    el.textContent?.includes('容量与实验环境')
+  ) as HTMLElement | undefined;
+  if (!item) throw new Error('维护菜单里没有「容量与实验环境」');
+  item.click();
+  await flushPromises();
+  await nextTick();
+}
+
+function closeSettingsDrawer() {
+  const close = document.querySelector('.mk-drawer__close') as HTMLElement | null;
+  close?.click();
 }
 
 /** 默认隐藏专测用：清掉本地记录，走 MkCols 首访 defaultHidden 路径 */
@@ -286,22 +306,27 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(kpiNum('完成率（全部会话）')).toBe('<1%');
   });
 
-  it('并发读数并进容量卡：KPI 带不再有「并发」卡，读数与上限输入同行', async () => {
+  it('并发读数并进容量抽屉：KPI 带不再有「并发」卡，读数与上限输入同行', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     liveAutopilotConcurrency.value = { used: 10, limit: 10, queued: 0 };
     const w = await mountPage();
     expect(w.findAll('.mk-kpi').some((c) => c.find('.mk-kpi__label').text() === '并发')).toBe(false);
-    const readout = w.find('.vl-settings-card').text();
+    // 2026-10-26：容量设置移入页头「维护」菜单 → 右侧抽屉，读数要在抽屉打开后才在 DOM 里
+    await openSettingsDrawer(w);
+    const readout = document.body.textContent || '';
     expect(readout).toContain('在跑 10 / 上限 10');
     expect(readout).toContain('已满');
+    closeSettingsDrawer();
   });
 
-  it('速率读数并进容量卡：在途 / 上限（已保存回执值）', async () => {
+  it('速率读数并进容量抽屉：在途 / 上限（已保存回执值）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
     // getVirtualLabSettings 回执：limit=200 / inFlight=3
     expect(w.findAll('.mk-kpi').some((c) => c.find('.mk-kpi__label').text() === '速率')).toBe(false);
-    expect(w.find('.vl-settings-card').text()).toContain('在途 3 / 上限 200/分');
+    await openSettingsDrawer(w);
+    expect(document.body.textContent || '').toContain('在途 3 / 上限 200/分');
+    closeSettingsDrawer();
   });
 
   it('P1#20 创建列：相对时间配绝对时间 title', async () => {
@@ -383,19 +408,19 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.findAll('.mk-kpi')).toHaveLength(4);
   });
 
-  it('容量与实验环境卡在列表之后：低频设置不再把列表与分页器顶出首屏', async () => {
+  it('容量与实验环境不再占版面：只在维护菜单里，默认不渲染', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    expect(w.find('.vl-settings-card').exists()).toBe(true);
-    expect(w.find('.vl-settings').exists()).toBe(true);
-    expect(w.find('.vl-rpm__input').exists()).toBe(true);
-    expect(w.find('.sd-settings').exists()).toBe(true);
-    // 骨架顺序：页头 → KPI → 运行条 → 列表 → 设置卡
-    const html = w.html();
-    const listAt = html.indexOf('mk-card--fill');
-    const settingsAt = html.indexOf('vl-settings-card');
-    expect(listAt).toBeGreaterThan(-1);
-    expect(settingsAt).toBeGreaterThan(listAt);
+    // 2026-10-26 用户「功能看看放在右上角维护？」：低频设置不再占列表下方整行
+    expect(w.find('.vl-settings-card').exists()).toBe(false);
+    expect(w.text()).not.toContain('容量与实验环境');
+    // 维护菜单里有入口
+    const maint = w.findAll('button').find((b) => b.text() === '维护');
+    expect(maint, '页头应有「维护」菜单').toBeTruthy();
+    await maint!.trigger('click');
+    const item = [...document.querySelectorAll('.mk-menu__item')].find((el) => el.textContent?.includes('容量与实验环境'));
+    expect(item, '维护菜单应有「容量与实验环境」').toBeTruthy();
+    closeSettingsDrawer();
   });
 
   /* 2026-10-16 用户拍板「kpi 面板内部进度条不要出现」：完成率/并发两张卡原先各挂一根

@@ -27,6 +27,12 @@
               type="button"
               class="mk-menu__item"
               role="menuitem"
+              @click="openSettingsFromMenu"
+            >容量与实验环境</button>
+            <button
+              type="button"
+              class="mk-menu__item"
+              role="menuitem"
               :disabled="partition.stale === 0"
               @click="openReclaimFromMenu"
             >回收无响应（{{ partition.stale }}）</button>
@@ -353,37 +359,9 @@
       />
     </div>
 
-    <!-- 容量与实验环境（2026-10-25 用户「这个组整个页面我觉得做的不好…可以功能打散」）：
-         专属 RPM / 最高并发 / 日期模拟从「模型与接入 · 虚拟学习者」页签搬回本页。
-         2026-10-26：整卡移到列表之后——它是低频设置表单，排在 KPI 与列表之间时首屏读不到
-         完整列表与分页器。三项合成一个卡级「保存」，脏态统一挂在卡头。 -->
-    <section v-if="isLive" class="mk-card vl-settings-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">容量与实验环境</h3>
-        <div class="mk-card__head-right">
-          <span v-if="settingsDirty" class="vl-settings__dirty">未保存</span>
-          <button
-            type="button"
-            class="mk-btn mk-btn--sm mk-btn--primary"
-            :disabled="!settingsDirty || settingsSaving || settingsFailed"
-            @click="saveSettings"
-          >{{ settingsSaving ? '保存中…' : '保存' }}</button>
-        </div>
-      </div>
-      <div class="vl-settings-card__body">
-        <VirtualLabLoadSettings
-          ref="settingsRef"
-          :concurrency="concurrency"
-          :concurrency-unavailable="statsState === 'error'"
-          :rpm="vlRpm"
-          :rpm-saved-limit="vlRpmSavedLimit"
-          :rpm-unavailable="vlRpmLoadFailed"
-          @dirty="settingsDirty = $event"
-          @saving="settingsSaving = $event"
-          @failed="settingsFailed = $event"
-        />
-      </div>
-    </section>
+    <!-- 容量与实验环境已收进页头「维护」菜单 → 右侧抽屉（2026-10-26 用户「这个设计一下，
+         功能看看放在右上角维护？」）。原先是列表下方一整张卡：低频设置占满整行、下半截
+         全空，首屏还要滚过它才看得到分页器。设置不占版面，需要时从维护菜单展开。 -->
 
     <!-- 批量操作条（全局 mk-batchbar：选中后底部浮现） -->
     <VirtualLearnerBatchBar
@@ -400,6 +378,14 @@
     <VirtualLearnerCleanup ref="cleanupRef" :samples="samples" @done="onReclaimDone" />
     <VirtualLearnerLaunch ref="launchRef" />
     <VirtualLearnerPromptTest ref="promptRef" />
+    <VirtualLearnerSettingsDrawer
+      ref="settingsDrawerRef"
+      :concurrency="concurrency"
+      :concurrency-unavailable="statsState === 'error'"
+      :rpm="vlRpm"
+      :rpm-saved-limit="vlRpmSavedLimit"
+      :rpm-unavailable="vlRpmLoadFailed"
+    />
     <CardDeriveDialog ref="deriveRef" @created="onDerived" />
   </div>
 </template>
@@ -433,7 +419,7 @@ import VirtualLearnerCleanup from './VirtualLearnerCleanup.vue'
 import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
-import VirtualLabLoadSettings from './VirtualLabLoadSettings.vue'
+import VirtualLearnerSettingsDrawer from './VirtualLearnerSettingsDrawer.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
 import type { VirtualLearnerRow as Sample } from './virtualLearnersTypes'
 
@@ -893,13 +879,11 @@ vlRpmPolling.start()
 // 离开页面必须停：轮询是组件级副作用，卸载后继续打接口会打到已卸载页（泄漏到下一个页面）
 onUnmounted(() => vlRpmPolling.stop())
 
-/** 容量与实验环境：三项设置共用一个卡级保存，脏态统一到卡头 */
-const settingsRef = ref<InstanceType<typeof VirtualLabLoadSettings> | null>(null)
-const settingsDirty = ref(false)
-const settingsSaving = ref(false)
-const settingsFailed = ref(false)
-function saveSettings() {
-  void settingsRef.value?.save()
+/** 容量与实验环境：抽屉承载（保存与脏态都在抽屉里，页面只负责打开） */
+const settingsDrawerRef = ref<InstanceType<typeof VirtualLearnerSettingsDrawer> | null>(null)
+function openSettingsFromMenu() {
+  headMenu.value = ''
+  settingsDrawerRef.value?.open()
 }
 
 /** 当前有活跃会话的虚拟学习者（"正在运行"条直接列名） */
@@ -1198,15 +1182,6 @@ function onBatchReclaim(ids: string[]) {
 .vl-batch-toggle--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
 .vl-kpi :deep(.mk-kpi) {
   background: var(--mk-surface-2);
-}
-/* 容量与实验环境卡（2026-10-25 从「模型与接入 · 虚拟学习者」页签搬回）：
-   三项共用一个卡级保存（2026-10-26），脏态在卡头 */
-.vl-settings-card__body { padding: 4px 16px 16px; }
-.vl-settings__dirty {
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-amber);
-  white-space: nowrap;
 }
 /* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
    长内容截断上限收敛到共享原语（.mk-cell-text / .mk-cell-main strong） */
