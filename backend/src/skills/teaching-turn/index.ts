@@ -1668,7 +1668,7 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
         if (dotPointsEarly.length >= 24) break;
       }
     }
-    const out: Record<string, unknown> = { name, form: formRaw === 'scatter' ? 'scatter' : formRaw === 'parabola' ? 'parabola' : formRaw === 'linear' ? 'linear' : 'points' };
+    const out: Record<string, unknown> = { name, form: formRaw === 'scatter' ? 'scatter' : formRaw === 'parabola' ? 'parabola' : formRaw === 'linear' ? 'linear' : formRaw === 'bars' ? 'bars' : 'points' };
     if (out.form === 'parabola') {
       const a = toFiniteNumber(s.a);
       const b = toFiniteNumber(s.b);
@@ -1698,7 +1698,7 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
       if (!points.length && dotPointsEarly.length) {
         for (const raw of dotPointsEarly) points.push(raw);
       }
-      const minPoints = out.form === 'scatter' ? 1 : 2;
+      const minPoints = out.form === 'scatter' || out.form === 'bars' ? 1 : 2;
       if (points.length < minPoints) continue;
       out.points = points;
       if (s.dots === true) out.dots = true;

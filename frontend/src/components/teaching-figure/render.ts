@@ -1997,6 +1997,21 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
       for (const [vx, vy] of visible) out.push(`<circle cx="${px(vx)}" cy="${py(vy)}" r="4" fill="${tone}"/>`);
       return out;
     }
+    // V3 改造（外盲评 V1/V2 各点名一次：气温降水图缺柱）——柱状系列：每点一根从轴底
+    // 到 y 值的柱，宽度按点距自适应（两根柱不重叠），tone 淡色填充 + 描边
+    if (s.form === 'bars') {
+      const nB = visible.length;
+      const slot = nB > 1 ? Math.min(...visible.slice(1).map(([vx], i) => px(vx) - px(visible[i][0]))) : plotW / 4;
+      const bw = Math.max(8, Math.min(slot * 0.62, 46));
+      const baseY = py(Math.max(y0, Math.min(0, y1)));
+      for (const [vx, vy] of visible) {
+        const cx = px(vx);
+        const by = py(vy);
+        const h = Math.max(2, baseY - by);
+        out.push('<rect x="' + (cx - bw / 2).toFixed(1) + '" y="' + by.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + tone + '" fill-opacity="0.32" stroke="' + tone + '" stroke-width="1.4"/>');
+      }
+      return out;
+    }
     // 连续可见点切成段（中间越界就断开，避免一条直线横穿画布）
     const segments: Array<Array<[number, number]>> = [];
     let run: Array<[number, number]> = [];
@@ -2242,6 +2257,11 @@ function renderSplitCompare({ title, left, right, delta }: any): RenderedFigure 
           const subs = balancedWrap(row.sub, colW - 24, T.fontMicro);
           subs.forEach((line, li) => parts.push(text(x + 12, y + 36 + li * 12, line, 't-tiny', 'start', 'fill="' + T.muted + '"')));
         }
+      } else {
+        // V3 改造（外盲评：一侧只写一半/留白时行错位，分叉线指到空处）——缺行侧画
+        // 「?」虚线空槽占位，行行对齐的语义不塌；学生要补的就是这一格
+        parts.push(rect(x + 6, y + 2, colW - 12, rh - 4, { r: 6, fill: 'none', stroke: T.faint, sw: 1.1, dash: '4 4' }));
+        parts.push(text(x + colW / 2, y + rh / 2 + 5, '?', 't-label', 'middle', 'fill="' + T.faint + '"'));
       }
       if (i > 0) parts.push('<line x1="' + (x + 10) + '" y1="' + y + '" x2="' + (x + colW - 10) + '" y2="' + y + '" stroke="' + T.line + '" stroke-width="0.8"/>');
       y += rh;

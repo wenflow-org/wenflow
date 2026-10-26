@@ -35,7 +35,7 @@ const rubric = (it) => `下面是课堂上的一轮对话和紧随其后下发�
  "meta": true|false,         // 是否出现做题步骤、自查清单、批改评语这类元认知话术（而不是学科实体）
  "leak": true|false,         // 老师这一轮让学生自己产出某内容，而图里已经把完整答案给出
  "readability": 0-3,         // 文字是否读得全、有没有半截句/错位/压字/看不懂的缩写
- "redundant": true|false,    // 去掉这张图，学生靠老师这段话是否一样能懂
+ "redundant": true|false,    // 伪视觉判定：图的形态是否也是纯文字（把句子拆进方框/表格再连箭头，没有提供任何空间、数值对比、形态或色彩上的降维增益）。注意：图与正文讲了同一个关系不算多余——判「多余」只看图的形态有没有降维
  "verdict": "keep"|"fix"|"drop",
  "oneLine": "一句话说这张图到底在讲什么",
  "worstIssue": "最该修的一处（没有就写 none）"
@@ -107,15 +107,23 @@ async function judge(it, imgB64) {
   }
 }
 
+// 并发受控（用户 2026-10-26 定：全程 3 并发）：信号量池，最多 3 个评审同时在飞
+const CONC = Number(process.env.VISION_CONC || 3);
 const results = [];
-for (let i = 0; i < items.length; i++) {
+let cursor = 0;
+const runOne = async (i) => {
   const imgPath = path.join(imagesDir, `${i}.png`);
   if (!fs.existsSync(imgPath)) {
     results.push({ i, user: items[i].user, kind: items[i].figure?.kind, error: 'missing image' });
-    continue;
+    return;
   }
   const b64 = fs.readFileSync(imgPath).toString('base64');
-  const verdict = await judge(items[i], b64);
+  let verdict;
+  try {
+    verdict = await judge(items[i], b64);
+  } catch (err) {
+    verdict = { error: `network: ${String(err?.cause?.code || err?.message || err).slice(0, 80)}` };
+  }
   results.push({
     i,
     user: items[i].user,
@@ -125,8 +133,18 @@ for (let i = 0; i < items.length; i++) {
   });
   const tag = verdict.verdict || verdict.error || '?';
   console.log(`[${i + 1}/${items.length}] ${items[i].user} ${items[i].figure?.kind || 'position-line'} → ${tag}`);
-  await new Promise((r) => setTimeout(r, 1200));
-}
+};
+await Promise.all(
+  Array.from({ length: Math.min(CONC, items.length) }, async () => {
+    for (;;) {
+      const i = cursor;
+      cursor += 1;
+      if (i >= items.length) return;
+      await runOne(i);
+    }
+  }),
+);
+results.sort((a, b) => a.i - b.i);
 
 const ok = results.filter((r) => !r.error);
 const mean = (k) => (ok.length ? Math.round((ok.reduce((n, r) => n + (Number(r[k]) || 0), 0) / ok.length) * 100) / 100 : null);
