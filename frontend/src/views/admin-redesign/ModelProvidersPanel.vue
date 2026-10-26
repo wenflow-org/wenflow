@@ -104,10 +104,11 @@
         </div>
         <p v-if="selected.description && selected.id !== 'platform'" class="mpp-detail__desc">{{ selected.description }}</p>
 
-        <!-- 平台详情二级页签（2026-10-26）：模型 / 连接 / 基础设施。
-             用户「这个地方就可以配置重排序嵌入模型」——向量化与重排是平台这条供应商自己的
-             能力，原先作为独立卡挂在页面最下方，与「平台」分成两处看。
-             内容用 v-show 不用 v-if：切页签不重建表单，基础设施面板的已加载状态也留着。 -->
+        <!-- 平台详情二级页签（2026-10-26）：模型 / 连接 / 基础设施 / 生成参数。
+             用户「这个地方就可以配置重排序嵌入模型」「我不知为啥还要有默认设置。不就是配置的模型吗」——
+             向量化与重排、生成默认都是平台这条供应商自己的能力，原先各自独立成卡挂在页面
+             别处，与「平台」分成两处看。内容用 v-show 不用 v-if：切页签不重建表单，
+             基础设施面板的已加载状态也留着。 -->
         <MkSubTabs
           v-if="selected.id === 'platform'"
           v-model="platformTab"
@@ -287,6 +288,22 @@
         >
           <slot name="platform-infra" />
         </div>
+
+        <!-- 生成参数（思考模式 / 思考强度 / 输出格式）：模型级的生成默认。
+             2026-10-26 用户「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得
+             可以和前面的合并了」——它此前是接入页最下方一张独立卡，叫「平台默认生成参数」；
+             可它就是「这些模型默认怎么生成」，属于平台这条供应商，与模型表同一个对象。
+             模型级覆盖优先（ModelEditorDialog 的「用平台默认」），这里兜底。 -->
+        <div
+          v-if="selected.id === 'platform'"
+          v-show="platformTab === 'generation'"
+          id="mpp-platform-panel-generation"
+          role="tabpanel"
+          aria-labelledby="mpp-platform-tab-generation"
+          class="mpp-block mpp-generation"
+        >
+          <slot name="platform-generation" />
+        </div>
       </div>
       <MkEmptyState v-else compact title="还没有供应商" />
     </div>
@@ -310,7 +327,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -363,6 +380,9 @@ const emit = defineEmits<{
   changed: []
   /** 已登记的模型 id（宿主用它算「上游还有几个没登记」的关系句，避免两处各算一遍） */
   registered: [ids: string[]]
+  /** 平台详情当前页签（宿主据此判断「连接 / 生成参数」的分段保存钮是否在屏上，
+      不在屏时由底部保存条接手，否则单组脏会没有保存入口） */
+  platformTab: [key: string]
 }>()
 
 const view = ref<ProvidersView | null>(null)
@@ -394,16 +414,23 @@ const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
 const registry = computed(() => view.value?.registry ?? null)
 const selected = computed(() => providers.value.find((p) => p.id === selectedId.value) ?? null)
-/* 平台详情的二级页签（2026-10-26 用户「这个地方就可以配置重排序嵌入模型」）：
-   向量化 / 重排是平台这条供应商自己的能力，原来独立成卡挂在页面最下方，与「平台」是
-   两处；现在收进平台详情，和连接、模型并列。页签只对平台出现——示例供应商没有基础设施。
-   用组件内状态不写 URL：一级页签已占用 ?tab=，二级再写会抢键。 */
-const platformTab = ref<'models' | 'conn' | 'infra'>('models')
+/* 平台详情的二级页签（2026-10-26 用户「这个地方就可以配置重排序嵌入模型」+
+   「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得可以和前面的合并了」）：
+   向量化 / 重排 / 生成默认都是平台这条供应商自己的能力，原来各自独立成卡挂在页面别处，
+   与「平台」是两处；现在收进平台详情，和连接、模型并列。页签只对平台出现——
+   示例供应商没有基础设施与平台级生成默认。用组件内状态不写 URL：二级写键会与一级抢。 */
+const platformTab = ref<'models' | 'conn' | 'infra' | 'generation'>('models')
 const platformTabs = computed(() => [
   { key: 'models', label: '模型', count: selected.value?.models.length },
   { key: 'conn', label: '连接' },
   { key: 'infra', label: '基础设施' },
+  { key: 'generation', label: '生成参数' },
 ])
+/* 当前页签回传宿主：连接与生成参数的分段保存钮只在该页签可见，
+   宿主据此决定单组脏时要不要出底部保存条（否则切走页签就没有保存入口）。 */
+watch([platformTab, selectedId], () => {
+  emit('platformTab', selected.value?.id === 'platform' ? platformTab.value : '')
+}, { immediate: true })
 
 /* 2026-10-21 用户「不要了」：卡头 meta 只留可写/只读这个会改变操作的结论，
    数据来源（来自模型目录文件）与生效方式进 title */
@@ -886,11 +913,12 @@ defineExpose({ refresh, openPull, openHostPull })
 }
 .mpp-add { width: 100%; margin-top: 10px; }
 .mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
-/* 平台详情二级页签（模型 / 连接 / 基础设施）：页签条下已有分隔线，面板不再自带一条 */
+/* 平台详情二级页签（模型 / 连接 / 基础设施 / 生成参数）：页签条下已有分隔线，面板不再自带一条 */
 .mpp-subtabs { margin-top: 4px; }
 .mpp-detail > .mpp-models { margin-top: 0; padding-top: 0; border-top: 0; }
 .mpp-detail > .mpp-infra { margin-top: 0; padding-top: 0; border-top: 0; }
-.mpp-infra { margin-top: 14px; }
+.mpp-detail > .mpp-generation { margin-top: 0; padding-top: 0; border-top: 0; }
+.mpp-infra, .mpp-generation { margin-top: 14px; }
 /* 连接页签里的 #platform-detail 自带 .mpp-block 节奏（含顶部发丝线），页签下再压一条会双线 */
 .mpp-detail > div[role='tabpanel'] > .ac-conn { margin-top: 0; padding-top: 0; border-top: 0; }
 

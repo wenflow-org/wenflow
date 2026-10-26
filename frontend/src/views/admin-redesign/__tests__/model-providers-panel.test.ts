@@ -182,15 +182,15 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mpp-item--on').text()).toContain('平台')
   })
 
-  it('平台详情分「模型 / 连接 / 基础设施」三页签：连接由宿主经插槽内联注入，平台不再有「设置」钮', async () => {
+  it('平台详情分「模型 / 连接 / 基础设施 / 生成参数」四页签：连接与生成参数由宿主经插槽内联注入，平台不再有「设置」钮', async () => {
     const w = await mountPanel()
     // 2026-10-26：平台详情有二级页签，默认落在「模型」
     const tabs = w.findAll('.mpp-subtabs .mk-subtab').map((t) => t.text())
-    expect(tabs).toEqual(['模型2', '连接', '基础设施'])
+    expect(tabs).toEqual(['模型2', '连接', '基础设施', '生成参数'])
     expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('模型2')
     expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
-    expect(w.text()).not.toContain('生成参数')
+    expect(shown(w, '#mpp-platform-panel-generation')).toBe(false)
 
     // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
     expect(w.findAll('.mpp-detail__acts .mk-btn').some((b) => b.text() === '设置')).toBe(false)
@@ -203,6 +203,9 @@ describe('ModelProvidersPanel', () => {
     await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '基础设施')!.trigger('click')
     expect(shown(w, '#mpp-platform-panel-infra')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
+    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '生成参数')!.trigger('click')
+    expect(shown(w, '#mpp-platform-panel-generation')).toBe(true)
+    expect(shown(w, '#mpp-platform-panel-infra')).toBe(false)
 
     // 切到自定义供应商：没有二级页签（基础设施只属于平台），切回平台时归位到「模型」
     const acmeTab = w.findAll('.mpp-item').find((i) => i.text().includes('Acme 网关'))!
