@@ -58,9 +58,10 @@ async function main(): Promise<void> {
     ['misconception_ledger', 'createdAt'],
     ['learning_metrics', 'calculatedAt'],
     ['prediction_records', 'createdAt'],
-    ['login_attempts', 'createdAt'],
-    ['admin_sessions', 'createdAt'],
-    ['user_sessions', 'createdAt'],
+    /* 认证表不在这里平移：admin_sessions 的 expiresAt 不随 createdAt 走，
+       平移 createdAt 会让「已签发会话」看起来刚建、却按旧 expiresAt 判过期——
+       走查时登录态被踢出，且 403 会把前端 localStorage 的会话标记清掉。
+       login_attempts / user_sessions 同理：它们是安全审计时间线，不该被伪造。 */
   ]
   for (const [table, col] of shifts) {
     try {
@@ -72,9 +73,15 @@ async function main(): Promise<void> {
   }
 
   console.log('\n=== 2. 补造空表数据 ===')
-  const users = await db.users.findMany({ select: { id: true, name: true }, take: 12 })
+  /* 反馈列表默认排除虚拟账号（buildNonVirtualUserWhere）——种子必须挂真实账号，
+     否则页面上「待处理反馈」恒为 0，走查看到的是假空态。 */
+  const users = await db.users.findMany({
+    where: { isVirtualLearner: false, deletedAt: null },
+    select: { id: true, name: true },
+    take: 12,
+  })
   if (!users.length) {
-    console.log('  没有用户，跳过关联数据')
+    console.log('  没有非虚拟账号，跳过关联数据')
     return
   }
   const u = (i: number) => users[i % users.length].id
@@ -82,7 +89,8 @@ async function main(): Promise<void> {
   const sessionOf = (i: number) => sessions[i % Math.max(sessions.length, 1)]?.id ?? `${PREFIX}session-${i}`
 
   // 2a. 反馈（运营中心「待处理反馈」+ 反馈页）
-  const feedbackStates = ['new', 'new', 'new', 'in_progress', 'resolved', 'new', 'in_progress', 'resolved']
+  // 状态枚举与后端 listQuerySchema 对齐：new / triaged / resolved / dismissed
+  const feedbackStates = ['new', 'new', 'new', 'triaged', 'resolved', 'new', 'triaged', 'resolved']
   let fb = 0
   for (let i = 0; i < 14; i++) {
     const id = `${PREFIX}feedback-${i}`
@@ -213,6 +221,66 @@ async function main(): Promise<void> {
     nt++
   }
   console.log(`  站内通知：新增 ${nt} 条`)
+
+  /* 2e. 派生虚拟学习者实例
+     「虚拟学习者」页只列派生实例（profile 含 derivedFrom），卡库那 21 张是 builtin 预置卡。
+     两边都空时该页恒为空态，看不出运行态列表的排版。
+     约束：virtual_learner_profiles.userId 与 presetKey 都是唯一键——每个实例要配独立虚拟账号，
+     且不能复用模板的 presetKey（留空）。 */
+  const templates = await db.virtual_learner_profiles.findMany({ where: { source: 'builtin' }, take: 3 })
+  let derived = 0
+  for (let i = 0; i < templates.length; i++) {
+    const t = templates[i]
+    const vpId = `${PREFIX}vp-${i}`
+    if (await db.virtual_learner_profiles.findUnique({ where: { id: vpId } })) continue
+    const uid = `${PREFIX}vu-${i}`
+    if (!(await db.users.findUnique({ where: { id: uid } }))) {
+      await db.users.create({
+        data: {
+          id: uid,
+          email: `${uid}@wenflow.local`,
+          name: `派生学习者${i + 1}`,
+          password: 'x',
+          role: 'user',
+          currentLevel: 'beginner',
+          isVirtualLearner: true,
+          createdAt: new Date(now - (i + 2) * DAY),
+          updatedAt: new Date(now - (i + 2) * DAY),
+        },
+      })
+    }
+    let prof: Record<string, unknown> = {}
+    try {
+      prof = JSON.parse(String(t.profile))
+    } catch {
+      prof = {}
+    }
+    prof.derivedFrom = { presetId: t.id, presetKey: t.presetKey, at: new Date(now - i * DAY).toISOString() }
+    await db.virtual_learner_profiles.create({
+      data: {
+        id: vpId,
+        userId: uid,
+        profile: JSON.stringify(prof),
+        learningGoal: t.learningGoal,
+        knowledgeLevel: t.knowledgeLevel,
+        knownConcepts: t.knownConcepts,
+        struggleConcepts: t.struggleConcepts,
+        simulationPrompt: t.simulationPrompt,
+        simulationModel: t.simulationModel,
+        simulationTemperature: t.simulationTemperature,
+        personalityTraits: t.personalityTraits,
+        tags: t.tags,
+        notes: t.notes,
+        createdAt: new Date(now - (i + 1) * DAY),
+        updatedAt: new Date(now - (i + 1) * DAY),
+        source: 'derived',
+        presetKey: null,
+        presetVersion: null,
+      },
+    })
+    derived++
+  }
+  console.log(`  派生虚拟学习者：新增 ${derived} 条`)
 
   console.log('\n完成。')
 }
