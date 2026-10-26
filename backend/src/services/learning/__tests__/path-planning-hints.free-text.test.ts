@@ -736,3 +736,57 @@ describe('remapStageTaskReferences：重排后同步改写「任务 N」引用',
     expect(remapStageTaskReferences(a, b)).toBe(b);
   });
 });
+
+describe('remapStageTaskReferences：相对指代随重排改写（2026-10-26 评审悖论3）', () => {
+  it('被移动任务里的「上一步」改写为重排前紧邻任务的标题', () => {
+    const original = [
+      { type: 'execute', title: '在琴上把 Em 按到逐根发声', description: '逐根拨弦确认发声。' },
+      { type: 'refine', title: '把按弦要点收拢成口令', description: '沿用上一步的按弦结果，把哪些手指最先就位写成一句口令。' },
+    ];
+    const ordered = orderStageTasksByTopology(original);
+    // refine(收束档) 被推到 execute 之后——本例本来就是正序则不动；构造真倒挂：
+    expect(ordered.map((t) => t.type)).toEqual(['execute', 'refine']);
+    // 倒挂构造：refine 在前 execute 在后才会交换
+    const inverted = [
+      { type: 'refine', title: '把按弦要点收拢成口令', description: '沿用上一步的按弦结果，把要点写成一句口令。' },
+      { type: 'execute', title: '在琴上把 Em 按到逐根发声', description: '对照上一任务的口令逐根拨弦确认发声。' },
+    ];
+    const orderedInverted = orderStageTasksByTopology(inverted);
+    expect(orderedInverted.map((t) => t.type)).toEqual(['execute', 'refine']);
+    const remapped = remapStageTaskReferences(inverted, orderedInverted);
+    // refine 被移到第 2 位：重排前它在第 1 位、没有前任务 ⇒ 不改写（selfOldIndex=1 < 2）
+    expect(remapped[1].description).toContain('上一步');
+    // execute 被牵连位移到第 1 位：它原本在第 2 位，前任务是 refine ⇒「上一任务」改写为 refine 标题
+    expect(remapped[0].description).toContain('把按弦要点收拢成口令');
+    expect(remapped[0].description).not.toContain('上一任务');
+  });
+
+  it('「上一任务」同样被改写；无前任务（首位）不动', () => {
+    const inverted = [
+      { type: 'consolidate', title: '收拢判断卡', description: '合龙本阶段框架。' },
+      { type: 'execute', title: '产出底表', description: '对照上一任务的定义填两列底表。' },
+    ];
+    const ordered = orderStageTasksByTopology(inverted);
+    expect(ordered.map((t) => t.type)).toEqual(['execute', 'consolidate']);
+    const remapped = remapStageTaskReferences(inverted, ordered);
+    // execute 从第 2 位移到第 1 位？倒挂时 consolidate 在前 execute 在后，
+    // 重排后 execute 第 1、consolidate 第 2。execute 原第 2 位、前任务是 consolidate。
+    expect(remapped[0].description).toContain('收拢判断卡');
+    expect(remapped[0].description).not.toContain('上一任务');
+    // consolidate 原第 1 位（无前任务），它的文本不受相对指代改写
+    expect(remapped[1].description).toBe('合龙本阶段框架。');
+  });
+
+  it('未移动的任务不做相对指代改写', () => {
+    const original = [
+      { type: 'acquire', title: '认谱', description: '认识六线谱。' },
+      { type: 'execute', title: '爬格子', description: '沿用上一步的指位。' },
+      { type: 'consolidate', title: '写卡', description: '写一张卡。' },
+      { type: 'refine', title: '收口令', description: '收口令。' },
+    ];
+    const ordered = orderStageTasksByTopology(original);
+    // 4 个任务里 consolidate(3) 在 refine(4) 前——本就正序？consolidate/refine 同收束档、相对次序不动
+    const remapped = remapStageTaskReferences(original, ordered);
+    expect(remapped[1].description).toBe('沿用上一步的指位。');
+  });
+});

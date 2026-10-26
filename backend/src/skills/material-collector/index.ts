@@ -327,13 +327,15 @@ export function selectDiversifiedSources(
 /**
  * 检索语言缺省推断（2026-09-26）：SearchQuery.language 从前没有任何调用方传入（tinyfish/tavily
  * 都真消费该参数），中文资料的检索一直按"无语言偏好"发给上游。按标题字符构成做确定性推断：
- * CJK ≥2 → zh；无 CJK 且含 ASCII 词 → en；其余不推断（交上游默认）。
+ * CJK ≥2 → zh-CN；无 CJK 且含 ASCII 词 → en；其余不推断（交上游默认）。
+ * 2026-10-26 实证修复：tinyfish 对 `language=zh` 返回不相关结果，同一 query 换 `zh-CN` 即正常
+ * （短横线区域码才是合法 BCP-47 值）；tavily 对未知值按无偏好处理，`zh-CN` 不劣化。
  */
-export function detectQueryLanguage(text: string): 'zh' | 'en' | undefined {
+export function detectQueryLanguage(text: string): 'zh-CN' | 'en' | undefined {
   const value = normalizeText(text);
   if (!value) return undefined;
   const cjk = (value.match(/[\u4e00-\u9fff]/g) ?? []).length;
-  if (cjk >= 2) return 'zh';
+  if (cjk >= 2) return 'zh-CN';
   if (cjk === 0 && /[a-zA-Z]{3,}/.test(value)) return 'en';
   return undefined;
 }

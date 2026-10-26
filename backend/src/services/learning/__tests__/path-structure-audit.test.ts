@@ -23,7 +23,7 @@ describe('auditPathStructure（#路径结构：前置/重复/课时）', () => {
     expect(result.stats.missingPrerequisiteKcs).toBe(1)
   })
 
-  it('前置 KC 首次出现晚于后继任务 → high prerequisite-gap', () => {
+  it('前置 KC 首次出现晚于后继任务 → low prerequisite-gap（2026-10-26 降噪：kc-mapper 自画边系统性冲突，40/40 全报）', () => {
     const lateTasks = [
       { title: '叠加活动倍数', stageNumber: 1, order: 0 },
       { title: '识别底子', stageNumber: 2, order: 0 },
@@ -41,7 +41,7 @@ describe('auditPathStructure（#路径结构：前置/重复/课时）', () => {
       afterHours: 3,
     })
     const gap = result.issues.find((issue) => issue.kind === 'prerequisite-gap')
-    expect(gap?.severity).toBe('high')
+    expect(gap?.severity).toBe('low')
     expect(result.stats.latePrerequisiteEdges).toBe(1)
   })
 

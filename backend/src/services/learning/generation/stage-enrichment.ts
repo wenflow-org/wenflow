@@ -114,6 +114,51 @@ export async function pruneSupersededStageItems(
   return Number(result?.count) || 0;
 }
 
+/**
+ * not_judgeable 验收越界检测（2026-10-26 外部评审悖论/吉他 5 条越界实证）。
+ * 词表只抓「要求确认声音/动作属性达标」的判据形态，不抓「描述练习事实 + 自述归因」
+ * （「反复出现闷音，判断问题出在指法」是合法自述；「声音清晰无闷响」才是越界达标断言）。
+ * 保守优先：误伤的代价只是多一次修复重调，漏检的代价是下游判官永远放水。
+ */
+const UNJUDGEABLE_ACCEPTANCE_RE = new RegExp(
+  [
+    '声音清晰', '无闷响', '没有闷音', '不出现闷音', '无杂音', '没有杂音',
+    '听不出', '看不出', '录回来听', '录下来听', '回放听',
+    '[弹画唱吹跳奏拉]得?(干净|清晰|标准|到位|准确|流畅|均匀|稳定|好听)',
+    '(手型|指法|姿势|握拍|握笔|动作|坐姿|站姿)(正确|标准|到位|规范|标准)',
+    '逐根拨响', '逐根发声', '都能发声', '都能按响', '能按响', '能拨响',
+    '节奏稳', '不抢拍', '不拖拍', '音准',
+  ].join('|'),
+);
+
+export interface UnjudgeableAcceptanceViolation {
+  taskTitle: string;
+  acceptanceHint: string;
+  matchedTerms: string[];
+}
+
+export function detectUnjudgeableAcceptance<T extends Record<string, unknown>>(tasks: T[]): UnjudgeableAcceptanceViolation[] {
+  const violations: UnjudgeableAcceptanceViolation[] = [];
+  for (const task of Array.isArray(tasks) ? tasks : []) {
+    const hint = typeof task?.acceptanceHint === 'string'
+      ? task.acceptanceHint
+      : typeof task?.acceptanceCriteria === 'string'
+        ? String(task.acceptanceCriteria)
+        : '';
+    if (!hint) continue;
+    const matchedTerms = (hint.match(new RegExp(UNJUDGEABLE_ACCEPTANCE_RE.source, 'g')) || [])
+      .filter((term, index, all) => all.indexOf(term) === index);
+    if (matchedTerms.length > 0) {
+      violations.push({
+        taskTitle: String(task?.title || ''),
+        acceptanceHint: hint,
+        matchedTerms,
+      });
+    }
+  }
+  return violations;
+}
+
 export async function enrichLearningPathWithAnderson(
   pathId: string,
   runId: string,
@@ -337,11 +382,20 @@ async function enrichLearningPathWithAndersonInner(
       });
     }
 
-    // 阶段任务设计并发度：串行 M 次 LLM 是纯时钟浪费；
-    // 限流 2 路，兼顾 LLM 速率限制与 SQLite 写入串行化。
-    const STAGE_DESIGN_CONCURRENCY = 2;
+    // 阶段任务设计并发度：2026-10-26 起固定为 1（串行）——外部评审悖论1实证：
+    // 上一阶段真实任务清单（previousMilestone.tasks）只有在前一阶段**完成后**才存在，
+    // 并行批次里 Stage 2 拿不到 Stage 1 的产物，跨阶段衔接/去重规则形同虚设
+    // （power-train 三阶段连排「下周强度表」即此因）。单阶段 10-90 秒，串行总时长
+    // ≈ 阶段数 × 单阶段时长，可接受；进度心跳照常逐阶段上报。
+    const STAGE_DESIGN_CONCURRENCY = 1;
     inFlightStageItemIds = new Set<string>();
     let completedStageCount = 0;
+    // 已完成阶段的任务摘要（按 stageIndex，2026-10-26 幽灵通道修复）：提示词规则 13 承诺
+    // 「上一阶段的产物作为本阶段首个操作任务的输入上下文」，但代码从未注入过任务清单
+    // （旧 previousMilestone 只有 title/coreConcept 两个骨架字段，previousMilestoneContext
+    // 这个键在代码里根本不存在）——跨阶段衔接与去重规则长期空转。串行下 Stage N 完成后
+    // 存摘要，Stage N+1 注入 previousMilestone.tasks。
+    const stageTaskSummaries = new Map<number, Array<{ title: string; type: string | null; estimatedMinutes: number | null }>>();
 
     /**
      * 逐阶段任务锚（2026-09-28 去等分）：按**本阶段实际学时**反推该阶段该出几个任务，
@@ -480,6 +534,10 @@ async function enrichLearningPathWithAndersonInner(
             stageNumber: previousMilestone.stageNumber,
             title: previousMilestone.title,
             coreConcept: previousMilestone.coreConceptId || null,
+            // 幽灵通道修复（2026-10-26）：上一阶段真实任务清单（串行生成后才存在）。
+            // 提示词规则 13 的「previousMilestoneContext」从来不存在，跨阶段衔接/去重
+            // 规则此前只能靠阶段标题猜；现在首操作任务能真正「用上一阶段刚产出的东西」。
+            ...(stageTaskSummaries.get(stageIndex - 1) ? { tasks: stageTaskSummaries.get(stageIndex - 1) } : {}),
           } : null),
         } : {}),
         ...stageDesignerBaseInput,
@@ -519,9 +577,11 @@ async function enrichLearningPathWithAndersonInner(
       // 但模型惯性仍用长课时顶掉课数（法考案例：每阶段要 30 课、8 阶段 7 个只给 5-10 课，
       // 实交付 0.18×自述预算）。不足锚的 70% 时做**一次**补课调用，补的是清单外的新方向；
       // 同阶段标题近似的换皮课一律丢弃（评审实证：强填产同质化）。补不齐留缺口账，不硬塞。
+      // 2026-10-26 双条件（外部评审悖论4）：课数不足**且**分钟未饱和（<75% 预算）才补——
+      // 2×30 分钟扎实装满 60 分钟预算而锚是 3 课时，强补只会压薄每课或产凑数任务。
       const wantedLessons = Number((stageHints as any)?.targetSubtasksForStage);
       let supplementAudit: Record<string, unknown> | null = null;
-      if (needsLessonSupplement(stageTasks, wantedLessons)) {
+      if (needsLessonSupplement(stageTasks, wantedLessons, (stageHints as any)?.stageMinutesBudget)) {
         const initialCount = stageTasks.length;
         const supplementRequest = buildSupplementRequest(
           stageTasks,
@@ -569,6 +629,53 @@ async function enrichLearningPathWithAndersonInner(
         }
       }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
+      // 验收越界拦截（2026-10-26 外部评审 #4/#5）：platformJudgment=not_judgeable 时，
+      // 验收词必须落在「学习者文字自述 + 可记录练习事实」上——平台是纯文本的，琴声/手型
+      // 进不了系统，「声音清晰无闷响」「手型标准」这类判据给了下游 teaching 判官一个
+      // 永远无法执行的标准，只能放水（学习者复述形容词即通关）。这里确定性检测越界验收，
+      // 命中则带 repairHints.acceptanceFixes 重调**一次**；重调仍越界则放行并留审计
+      // （不阻塞、不改写文本——自动拼接前缀会改写语义，比越界更糟）。
+      const stagePlatformJudgment = (stageNormalizedInput as any)?.learnerProfile?.platformJudgment;
+      if (stagePlatformJudgment === 'not_judgeable') {
+        const violations = detectUnjudgeableAcceptance(stageTasks as Array<Record<string, unknown>>);
+        if (violations.length > 0) {
+          logger.warn('[stage-judgeability] not_judgeable 验收越界，带修复提示重调一次', {
+            pathId: learningPath.id,
+            stageNumber: milestone.stageNumber,
+            violations: violations.map((v) => v.taskTitle),
+          });
+          const retryResult = await executeSkill(stageDesignerDefinition, {
+            ...stageDesignerInput,
+            repairHints: {
+              acceptanceFixes: {
+                reason: '以下任务的验收标准要求平台判定它看不到/听不到的身体动作或声音属性，平台只能依据学习者的文字记录判断',
+                rules: '验收必须改写为「学习者在对话框提交的文字记录」可判定的形式：写了什么练习事实（练了几遍/录了音/哪里卡）、自评归因（可能是什么原因）、下一步改哪一处；禁止把声音/动作质量（干净、清晰、标准、不闷）作为达标判据',
+                tasks: violations,
+              },
+            },
+          } as any).catch((error: unknown) => {
+            logger.warn('[stage-judgeability] 验收修复重调失败，保留原产出', {
+              pathId: learningPath.id,
+              stageNumber: milestone.stageNumber,
+              error: String(error).slice(0, 200),
+            });
+            return null;
+          });
+          const retryTasks = Array.isArray((retryResult as any)?.subtasks) ? (retryResult as any).subtasks as Array<Record<string, unknown>> : [];
+          if (retryTasks.length > 0) {
+            const remaining = detectUnjudgeableAcceptance(retryTasks);
+            if (remaining.length < violations.length) {
+              stageTasks = clampStageTasksToHints(retryTasks, stageHints || (normalizedInput as any)?.planningHints);
+              logger.warn('[stage-judgeability] 验收修复重调采纳', {
+                pathId: learningPath.id,
+                stageNumber: milestone.stageNumber,
+                before: violations.length,
+                after: remaining.length,
+              });
+            }
+          }
+        }
+      }
       // 阶段内认知动作拓扑序（2026-10-25 外部评审实证）：prompt 规则 65 要求
       // 「建立 → 应用 → 收束」，但只是软约束。实证倒挂：py-clean S5 先 refine(复查脚本)
       // 后 model(写脚本)、eng-syntax S4 先 consolidate(产出流程卡) 后 model(才练嵌套句)、
@@ -736,6 +843,12 @@ async function enrichLearningPathWithAndersonInner(
         stageNumber: milestone.stageNumber,
         subtasks: stageTasks,
       });
+      // 幽灵通道修复：记录本阶段任务摘要，供下一阶段 previousMilestone.tasks 注入
+      stageTaskSummaries.set(stageIndex, stageTasks.slice(0, 12).map((task: any) => ({
+        title: String(task?.title || '').slice(0, 80),
+        type: typeof task?.type === 'string' ? task.type : null,
+        estimatedMinutes: Number.isFinite(Number(task?.estimatedMinutes)) ? Number(task.estimatedMinutes) : null,
+      })));
       const stageFinishedAt = new Date();
       await prisma.path_generation_stage_items.update({
         where: { id: stageItemId },

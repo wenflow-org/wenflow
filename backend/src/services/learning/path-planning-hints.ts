@@ -10,7 +10,7 @@ import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig } from
 import { normalizePathDifficulty } from './path-difficulty';
 import { normalizeDeadlineDate } from './deadline-date';
 import { resolveCapacity, parseSessionMinutes } from './capacity-authority';
-import { normalizeSkillNature, type SkillNature } from './goal-path-visible-summary';
+import { normalizeSkillNature, normalizePlatformJudgment, type SkillNature } from './goal-path-visible-summary';
 import { dayKeyOf, endOfDay, parseDayKeyStart } from '../time/day-boundary';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
@@ -500,18 +500,35 @@ export function remapStageTaskReferences<T extends { title?: string; description
     });
   };
 
+  // 相对指代重写（2026-10-26 外部评审悖论3）：模型极少写「见任务 1」，绝大多数写
+  // 「沿用上一步的表格 / 把上一任务标出的卡壳句…」。收束任务被后移后，紧随其后的任务
+  // 全体前移一位，「上一步」的指向就断了。对位置发生变化（含被牵连位移）的任务，
+  // 把相对指代替换为**重排前**它紧邻前一个任务的标题——标题不随重排变化，指代永远成立。
+  const RELATIVE_REF_RE = /上一?步|上一?(?:个)?任务/g;
+  const rewriteRelativeRefs = (text: string | undefined, selfOldIndex: number): string | undefined => {
+    if (typeof text !== 'string' || !text || selfOldIndex < 2) return text;
+    const previousTask = originalOrder[selfOldIndex - 2];
+    const previousTitle = typeof (previousTask as any)?.title === 'string' ? String((previousTask as any).title).trim() : '';
+    if (!previousTitle) return text;
+    return text.replace(RELATIVE_REF_RE, `「${previousTitle}」`);
+  };
+
   return ordered.map((task, index) => {
     const selfNewIndex = index + 1;
     const selfOldIndex = oldIndexByTask.get(task) ?? selfNewIndex;
+    const moved = selfNewIndex !== selfOldIndex;
     const next: any = { ...task };
     if (typeof (task as any).description === 'string') {
       next.description = rewriteText((task as any).description, selfNewIndex);
+      if (moved) next.description = rewriteRelativeRefs(next.description, selfOldIndex);
     }
     if (typeof (task as any).acceptanceHint === 'string') {
       next.acceptanceHint = rewriteText((task as any).acceptanceHint, selfNewIndex);
+      if (moved) next.acceptanceHint = rewriteRelativeRefs(next.acceptanceHint, selfOldIndex);
     }
     if (typeof (task as any).acceptanceCriteria === 'string') {
       next.acceptanceCriteria = rewriteText((task as any).acceptanceCriteria, selfNewIndex);
+      if (moved) next.acceptanceCriteria = rewriteRelativeRefs(next.acceptanceCriteria, selfOldIndex);
     }
     return next as T;
   });
@@ -1173,6 +1190,17 @@ export function buildFramedNormalizedInput(input: any): any {
   // 技能性质（2026-10-26）：goal 层 understanding.skill_nature 白名单透传，决定 AI 代跑边界。
   const skillNature = normalizeSkillNature(input.skillNature);
   const skillNatureEvidence = normalizeString(input.skillNatureEvidence) || null;
+  // 平台可判定性（2026-10-26 二拆）：与 skillNature 独立——决定「平台能不能判学习者做对了」。
+  // physical_internalized + not_judgeable 时，任务形态只能是「训练计划 + 复盘归因」，
+  // 不得编自查卡假装可判定。
+  const platformJudgment = normalizePlatformJudgment(input.platformJudgment);
+  const platformJudgmentEvidence = normalizeString(input.platformJudgmentEvidence) || null;
+  const sensorReadouts = Array.isArray(input.sensorReadouts)
+    ? (input.sensorReadouts as unknown[])
+        .map((v) => normalizeString(v))
+        .filter((v): v is string => !!v)
+        .slice(0, 8)
+    : null;
   // 校内锚：LLM 抽取口径（2026-09-30 用户拍板「不要走正则，走大模型自身的推理理解」）。
   // goal-conversation 的 understanding.school_anchor → visibleSummary → buildNormalizedInputV1
   // → 此处透传。没有该键（非校内学习者/旧链路）时**不注入**，不做任何关键词匹配兜底。
@@ -1257,6 +1285,17 @@ export function buildFramedNormalizedInput(input: any): any {
   } else {
     delete framed.learnerProfile.skillNature;
     delete framed.learnerProfile.skillNatureEvidence;
+  }
+  // 平台可判定性（2026-10-26 二拆）：同层透传。下游 stage-designer 据此决定任务形态——
+  // not_judgeable 时只能给「训练计划 + 复盘归因」，禁止把身体技能降级成写自查卡。
+  if (platformJudgment) {
+    framed.learnerProfile.platformJudgment = platformJudgment;
+    if (platformJudgmentEvidence) framed.learnerProfile.platformJudgmentEvidence = platformJudgmentEvidence;
+    if (sensorReadouts?.length) framed.learnerProfile.sensorReadouts = sensorReadouts;
+  } else {
+    delete framed.learnerProfile.platformJudgment;
+    delete framed.learnerProfile.platformJudgmentEvidence;
+    delete framed.learnerProfile.sensorReadouts;
   }
   return framed;
 }

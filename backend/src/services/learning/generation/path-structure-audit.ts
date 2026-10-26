@@ -167,7 +167,11 @@ export function auditPathStructure(input: {
       else lateCrossStage += 1;
       issues.push({
         kind: 'prerequisite-gap',
-        severity: 'high',
+        // 2026-10-26 降噪（外部评审悖论2）：前置边来自 kc-mapper 事后自画（temperature 0.3，
+        // 重跑就变），「首次引入点」判定与任务顺序冲突是系统性现象——最近 40/40 条路径
+        // 全报本类 issue（109 条），severity=high 已无信号价值。降为 low 留观测，
+        // 待审计对齐 cognitiveCore 概念级前置（真正的修复）后再恢复。
+        severity: 'low',
         detail: `前置 KC ${from} 首次出现在任务「${kcTaskTitle.get(from)}」（第 ${fromIndex + 1} 个），`
           + `晚于依赖它的任务「${tasks[toIndex].title}」（第 ${toIndex + 1} 个）`,
       });

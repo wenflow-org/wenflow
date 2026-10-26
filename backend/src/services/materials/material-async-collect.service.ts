@@ -104,3 +104,54 @@ export async function patchPathsWithAsyncMaterials(
   }
   return patched;
 }
+
+/**
+ * 死占位惰性清理（2026-10-26 外部评审 #8）：回填只扫创建后 15 分钟内的路径
+ * （PATH_WINDOW_MS），窗口外仍带 marker 的 pending 占位永远不会被回填——
+ * 实测 15 条历史路径 9 条空占位（重启丢后台任务 / 采集失败后 marker 永挂）。
+ * 在下一次该用户的资料装配入口 fire-and-forget 调用：把窗口外的 marker 占位
+ * 原位降级为 status='expired' 并摘除 marker（幂等：摘除后 contains 查询不再命中）。
+ * 只动 normalizedInput.normalizedInput.resources.materials（与回填同一解析路径）。
+ */
+export async function deactivateStaleAsyncPlaceholders(userId: string): Promise<number> {
+  const windowStart = new Date(Date.now() - PATH_WINDOW_MS);
+  const candidates = await prisma.learning_paths.findMany({
+    where: { userId, updatedAt: { lt: windowStart }, aiPromptTemplate: { contains: ASYNC_COLLECT_MARKER_PREFIX } },
+    select: { id: true, aiPromptTemplate: true },
+    take: 20,
+  });
+  let cleaned = 0;
+  for (const candidate of candidates) {
+    try {
+      const template = JSON.parse(candidate.aiPromptTemplate || '{}');
+      const materials = template?.normalizedInput?.normalizedInput?.resources?.materials;
+      if (!Array.isArray(materials)) continue;
+      let changed = false;
+      for (const item of materials) {
+        if (!extractAsyncCollectMarker(item?.notes)) continue;
+        item.status = 'expired';
+        item.pack = null;
+        item.notes = [
+          '联网资料采集未完成，本路径按无外部资料运行；如需要可在补充说明中重新生成',
+        ];
+        changed = true;
+      }
+      if (changed) {
+        await prisma.learning_paths.update({
+          where: { id: candidate.id },
+          data: { aiPromptTemplate: JSON.stringify(template) },
+        });
+        cleaned += 1;
+      }
+    } catch (error) {
+      logger.warn('[material-async-collect] 死占位清理失败（fail-open）', {
+        pathId: candidate.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (cleaned > 0) {
+    logger.info('[material-async-collect] 窗口外死占位已降级', { userId, cleaned });
+  }
+  return cleaned;
+}
