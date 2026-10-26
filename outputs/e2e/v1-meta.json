@@ -1,0 +1,8 @@
+{
+  "label": "V1 · 2026-10-26 夜",
+  "date": "2026-10-26",
+  "items": "frontend/figure-out/v1-final-items.json",
+  "review": "outputs/e2e/v1-review.json",
+  "html": "outputs/v1-review.html",
+  "changes": []
+}

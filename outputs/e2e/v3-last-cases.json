@@ -1,0 +1,16 @@
+[
+ {
+  "id": "bp-cs-reference",
+  "course": "Python入门·引用 第1课",
+  "subject": "计算机",
+  "topic": "变量与对象",
+  "taskTitle": "变量名指向对象",
+  "taskDescription": "讲解赋值后变量名与内存对象的指向关系",
+  "taskType": "model",
+  "intent": "demonstrate",
+  "acceptance": "学生能指出哪些名字指同一个对象",
+  "expectKind": "bipartite",
+  "student": "a=[1,2]; b=a; c=a[:]，现在改 b[0] 谁跟着变？a、b、c 各自指向哪里？",
+  "assistant": "左边变量名右边内存对象，连线画出来指向就清楚了。"
+ }
+]
