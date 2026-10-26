@@ -24,7 +24,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const BASE_URL = process.env.GOLDEN_EVAL_BASE_URL || 'http://127.0.0.1:3002';
-const ORIGIN = 'http://localhost:5175';
+const ORIGIN = 'http://localhost:5173'; // 必须在 .env CORS_ORIGIN 白名单内（CSRF 写请求校验）
 const GOAL_MAX_STEPS = 14;
 const TRIAGE_MAX_STEPS = 6;
 const CALL_TIMEOUT_MS = 5 * 60_000;
@@ -265,7 +265,7 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
       if (!core.length || core[core.length - 1].status !== 'succeeded') return false; // core 失败/缺失 → 永不就绪
       const sd = runs.filter((r) => r.phase === 'stageDesign');
       return !sd.length || sd[sd.length - 1].status === 'succeeded';
-    } catch { return true; } // 读库失败时退回旧行为，不卡死
+    } catch { return false; } // 读库失败（瞬时锁等）→ 视为未就绪继续轮询，宁可超时不误报
   };
   const deadline = Date.now() + PATH_WAIT_MS;
   while (Date.now() < deadline) {
