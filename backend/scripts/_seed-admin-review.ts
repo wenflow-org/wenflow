@@ -282,6 +282,85 @@ async function main(): Promise<void> {
   }
   console.log(`  派生虚拟学习者：新增 ${derived} 条`)
 
+  /* 2f. Prompt 评估用例 + 评估历史
+     两张表都在 system.db（评估是跨库的运维数据，不跟业务数据同库），所以这里另开一个
+     system client——上面的 db 指向 dev.db，用它是查不到这两张表的。
+     用例两边都空：页面只剩一个空态，看不出表格、期望摘要、人设失效徽章的排版。
+     历史从主库借 3 条（主库有运行记录但没有用例——用例是跑之前才建的，被清过）。 */
+  const { PrismaClient: SystemClient } = require('../src/generated/system-client')
+  const sys = new SystemClient()
+  try {
+    const evalCases = [
+      ['skill:goal-conversation', 'gc-money-01', '基金亏 30% 该割还是该补', '学生带着「要一个答案」的诉求进来，实际缺的是决策框架。',
+        [{ role: 'user', content: '我买的那只基金亏了 30%，你说我该割肉还是补仓？' }],
+        { mustIncludeFields: ['stage', 'confidence'], expectedStage: 'understanding' }],
+      ['skill:goal-conversation', 'gc-time-02', '想学 Python 但每天只有 20 分钟', '时间极紧的上班族，检验方案是否会压到不可执行。',
+        [{ role: 'user', content: '我想学 Python 做数据分析，但每天最多只有 20 分钟。' }],
+        { mustIncludeFields: ['stage'], mustContainText: ['每天'], expectedStage: 'understanding' }],
+      ['skill:goal-conversation', 'gc-sim-03', '模拟：被大道理劝退的学生', '用派生虚拟学习者跑多轮，检验面对抗拒时的收敛能力。',
+        [],
+        { mode: 'simulated', scenario: '学生对「长期主义」说教反感，只想要能马上用的办法。', personaId: `${PREFIX}vp-0`, dialogueRounds: 2, frictionBudget: 'normal' }],
+      ['skill:path-planning', 'pp-exam-01', '两个月准备教师资格证', '有明确考试日期，检验里程碑是否落在可检查的节点上。',
+        [{ role: 'user', content: '我要在两个月内考过教师资格证，帮我拆一下路径。' }],
+        { mustIncludeFields: ['cognitiveCore', 'milestones'], expectedStage: 'understanding' }],
+      ['skill:path-planning', 'pp-career-02', '转岗做产品经理', '目标宽泛、无截止时间，检验是否会先收敛范围。',
+        [{ role: 'user', content: '我想转岗做产品经理，但不知道从哪开始。' }],
+        { mustIncludeFields: ['milestones'] }],
+      ['skill:stage-designer', 'sd-01', '把「学会函数单调性」拆成子任务', '单里程碑展开，检验子任务粒度是否可执行。',
+        [{ role: 'user', content: '把「学会判断复合函数单调性」这个里程碑拆成具体子任务。' }],
+        { mustIncludeFields: ['subtasks'] }],
+    ] as const
+    let ec = 0
+    for (let i = 0; i < evalCases.length; i++) {
+      const [agentId, caseId, name, description, messages, expectations] = evalCases[i]
+      const id = `${PREFIX}ec-${i}`
+      if (await sys.prompt_eval_cases.findUnique({ where: { id } })) continue
+      await sys.prompt_eval_cases.create({
+        data: {
+          id,
+          agentId,
+          caseId,
+          name,
+          description,
+          messagesJson: JSON.stringify(messages),
+          expectationsJson: JSON.stringify(expectations),
+          // 停用 1 条：列表的启用/停用两态都要能看到
+          enabled: i !== 4,
+          createdBy: users[0].id,
+          createdAt: new Date(now - (i * 1.4 + 1) * DAY),
+          updatedAt: new Date(now - (i * 1.4 + 1) * DAY),
+        },
+      })
+      ec++
+    }
+    console.log(`  评估用例：新增 ${ec} 条`)
+
+    /* 历史从主库借：只读打开主库 system.db，按原 id 写入本库。
+       主库路径写死是故意的——这个脚本只服务走查，不参与生产，不引入环境变量。 */
+    let er = 0
+    const mainSystemDb = 'file:D:/test/wenflow/backend/prisma/system.db'
+    const mainSys = new SystemClient({ datasources: { db: { url: mainSystemDb } } })
+    try {
+      const borrowed = await mainSys.prompt_eval_runs.findMany({ orderBy: { createdAt: 'asc' } })
+      for (let i = 0; i < borrowed.length; i++) {
+        const r = borrowed[i]
+        if (await sys.prompt_eval_runs.findUnique({ where: { id: r.id } })) continue
+        // 主库记录停在 10-09，走查看「最近」页签会以为是旧数据：按顺序挪进最近几天
+        await sys.prompt_eval_runs.create({
+          data: { ...r, createdAt: new Date(now - (borrowed.length - i) * 1.3 * DAY) },
+        })
+        er++
+      }
+    } catch (e) {
+      console.log(`  评估历史：借入失败（${(e as Error).message.split('\n')[0]}），跳过`)
+    } finally {
+      await mainSys.$disconnect()
+    }
+    console.log(`  评估历史：借入 ${er} 条`)
+  } finally {
+    await sys.$disconnect()
+  }
+
   console.log('\n完成。')
 }
 

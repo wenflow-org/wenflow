@@ -1,9 +1,10 @@
 ﻿<template>
   <div class="mk-page mk-page--fill">
-    <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；2026-10-04 状态条退役，读数迁页首
-         KPI 带；2026-10-12 按用户走查再收一层：三张纯读数卡撤（阶段/Skill 进总览卡头 meta），
-         无警时页头直接接页签（详见下方告警条注释） -->
-    <MkPageHead title="编排图" />
+    <!-- 页头（newui/admin pagehead）：页名与侧栏条目一致（2026-10-26 走查：侧栏已改
+         「字段流转」——看的是字段在 Skill 间怎么流，不是一张拓扑图；页头却还叫「编排图」）。
+         2026-10-04 状态条退役，读数迁页首 KPI 带；2026-10-12 按用户走查再收一层：
+         三张纯读数卡撤（阶段/Skill 进总览卡头 meta），无警时页头直接接页签（详见下方告警条注释） -->
+    <MkPageHead title="字段流转" />
     <!-- 页头刷新已撤（2026-10-16 用户走查「这个刷新是不是重了，有一个固定的刷新了」）：
          本页原先另有一颗页头「刷新」，实测与顶栏固定刷新各打一半数据——页头打运行时定义/
          阶段清单/对账，顶栏打拓扑/目录/其余全域，用户按任一颗都会以为整页刷了。
@@ -23,7 +24,7 @@
          现合成一条：阶段升为一级页签，点开即该阶段的「字段旅程」内容，
          「字段路由 / 治理」降为该阶段内的二级页签（见下方 orch-stage-view）。
          键盘契约（审核 #97）：role=tablist/tab 兑现 roving tabindex + 左右方向键循环切换。 -->
-    <div class="tabs orch-top-tabs" role="tablist" aria-label="编排图视图" @keydown="onTopTabKeydown">
+    <div class="tabs orch-top-tabs" role="tablist" aria-label="字段流转视图" @keydown="onTopTabKeydown">
       <button
         id="orch-tab-overview"
         type="button" role="tab" class="tab"
@@ -884,11 +885,11 @@ watch([odgZoom, odgBaseW], () => {
 const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + stage.skills.length, 0))
 /** Skill KPI tooltip（F8-4 走查）：本页三处 Skill 总数各有域，本卡须自报口径——
     本卡 = 编排拓扑内挂载的 Skill 节点数（Σ 各阶段）；治理卡「Skill 定义」= 运行时
-    定义条目数（GET /admin/runtime-definitions）；侧栏「Skill 与提示词」徽章 = Skill
+    定义条目数（GET /admin/runtime-definitions）；侧栏「Skill 目录」徽章 = Skill
     目录档案数（不含插件）。三数不必相等，问「平台共多少 Skill」先确认口径。 */
 const skillKpiTitle = computed(
   () =>
-    `编排图内挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）`
+    `本页挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）`
 )
 /* 页级「未解析」读数（原告警条用）已随告警迁健康中心（检查项 orchestration-steps）删除；
    行级读数曾挂在「阶段交接明细」表的徽章上（unresolvedOf/哈希漂移），该表 2026-10-13 整体删除。 */

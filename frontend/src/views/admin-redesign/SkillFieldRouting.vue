@@ -22,7 +22,7 @@
         <span v-else class="mk-badge mk-badge--muted">core 文件缺失</span>
         <span class="sfr__status-actions">
           <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!canAdd" @click="openWizard">＋ 加字段</button>
-          <button type="button" class="mk-btn mk-btn--sm" @click="goOrchestration">→ 编排图页（{{ data.stage }}）</button>
+          <button type="button" class="mk-btn mk-btn--sm" @click="goOrchestration">→ 字段流转页（{{ data.stage }}）</button>
         </span>
       </div>
 

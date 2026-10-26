@@ -689,7 +689,7 @@ watch(
   { immediate: true }
 )
 /* 组级徽章聚合已随「组头降级为标签」移除：计数仍显示在具体页面项上
-   （虚拟学习者/Skill 与提示词/执行日志…），告警脉冲由 mshell__item-badge--alarm 承担 */
+   （虚拟学习者/Skill 目录/执行日志…），告警脉冲由 mshell__item-badge--alarm 承担 */
 </script>
 
 <style scoped>

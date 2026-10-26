@@ -123,14 +123,17 @@ import { useIsDark } from '@/composables/useIsDark';
 const isDark = useIsDark();
 
 /* 右侧导览的域清单：分组名与图标与侧栏清单（manifest.ts）同源，是「控制台里有什么」的
-   静态事实，不含任何运行期计数——登录页不展示会过期的数字。 */
+   静态事实，不含任何运行期计数——登录页不展示会过期的数字。
+   2026-10-26 走查：侧栏已收成 6 组（运营/学习/仿真/Skill/观测与排查/账号与接入），
+   本清单还停在旧组名（教学/虚拟学习者/Skill 与提示词/观测/系统），登录页承诺的分组
+   进去找不到——按侧栏重列。 */
 const DOMAINS: { label: string; sub: string; icon: Component }[] = [
-  { label: '教学', sub: '用户、路径、会话与复习的日常运营', icon: Users },
-  { label: '虚拟学习者', sub: '模拟学习者的运行与学习者卡库', icon: FlaskConical },
-  { label: 'Skill 与提示词', sub: '编排图与提示词的版本管理', icon: Sparkles },
-  { label: '观测', sub: '执行日志、成本分析与审计', icon: ScrollText },
-  { label: '系统', sub: '健康中心、模型接入与运维工具', icon: HeartPulse },
-  { label: '运营', sub: '运营待办、反馈、成就与公告', icon: Megaphone }
+  { label: '运营', sub: '运营待办、反馈、成就与公告', icon: Megaphone },
+  { label: '学习', sub: '目标对话、学习路径、教学会话、学习状态与复习积压', icon: Users },
+  { label: '仿真', sub: '虚拟学习者的运行与学习者卡库', icon: FlaskConical },
+  { label: 'Skill', sub: '字段流转、Skill 目录、Prompt 评估与插件', icon: Sparkles },
+  { label: '观测与排查', sub: '执行日志、审计日志、成本分析与健康中心', icon: ScrollText },
+  { label: '账号与接入', sub: '模型与接入、访问与注册、用户账号', icon: HeartPulse }
 ]
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, markAdminSession } from '@/api/adminApi'

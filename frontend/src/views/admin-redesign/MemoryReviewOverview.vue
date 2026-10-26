@@ -4,8 +4,10 @@
        单用户明细不在这里：点行进学习者详情「记忆与复习 / 记忆调度」页签；
        旧深链 /admin/memory-review?userId=… 转发 learner 详情（见 onMounted）。 -->
   <div class="mr mk-page mk-page--fill">
-    <!-- 页头（newui/admin pagehead）：页名；原状态条与作用域开关整体退役 -->
-    <MkPageHead title="记忆与复习观测" />
+    <!-- 页头（newui/admin pagehead）：页名与侧栏条目一致（2026-10-26 走查：侧栏已改
+         「复习积压」——本页回答的是积压量，不是复习机制；页头却还叫「记忆与复习观测」）。
+         原状态条与作用域开关整体退役 -->
+    <MkPageHead title="复习积压" />
     <!-- 页头 KPI 带（2026-09-28）：页级绝对值只在这里出现一次；口径说明进各卡 title。
          B5-F3-2：取数未落定前显「—」+「取数中…」（不渲染裸 0），栅格挂 aria-busy。
          2026-10-12 用户走查「怎么双 kpi」：原为两段栅格（量值五卡 + 碎片率三卡），1920 下

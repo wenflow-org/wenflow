@@ -1,13 +1,14 @@
 <template>
   <div class="mk-page mk-page--fill skills-host">
-    <!-- 页头（newui/admin pagehead）：页名对齐原型（Skill 与提示词）。
-         2026-10-04 页头状态条退役：运行读数迁下方 MkKpi 卡带；
+    <!-- 页头（newui/admin pagehead）：页名与侧栏条目一致（2026-10-26 走查：侧栏已改
+         「Skill 目录」——评估拆独立页后本页只剩目录，页头却还叫「Skill 与提示词」，
+         点进来看到两个名字）。2026-10-04 页头状态条退役：运行读数迁下方 MkKpi 卡带；
          「失败节点」不再单列——卡头「仅看需关注」pill 已带同源计数并承载筛选。
          页级动作：「批量模型配置」（跨 Skill 对照/批量套用，2026-10-24 由独立的
          「模型路由」页签收进弹窗——单技能配置在详情「运行时」里，本页只留跨技能工具）。
          2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」：Prompt 评估已拆为独立页
          （侧栏 Skill 组），本页只剩目录，故页头与读数带不再随页签切换。 -->
-    <MkPageHead title="Skill 与提示词">
+    <MkPageHead title="Skill 目录">
       <template #actions>
         <button type="button" class="mk-btn" @click="openBulk">批量模型配置</button>
       </template>
