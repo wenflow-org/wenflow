@@ -223,6 +223,10 @@ function rowTitle(r: RankRow): string {
   font-weight: 600;
   letter-spacing: 0.05em;
   color: var(--mk-faint);
+  /* 表头一律不折行：列宽是定值（占比 100px、成本 minmax(96px,·)），而中文表头加 0.05em
+     字距后「Token 占比」在 86px 可用宽里会折成三行（实测高 64px，其它表头 21px），
+     同一行表头高低不齐（2026-10-26 有数据走查实见）。 */
+  white-space: nowrap;
 }
 /* 表头右缘对齐数值右缘：占比表头与行内 40px 数字槽同列右对齐；
    成本列同理（否则表头文字与金额各站一边） */

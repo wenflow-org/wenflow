@@ -18,10 +18,24 @@ const DAY = 86_400_000
 const now = Date.now()
 const PREFIX = 'wfaudit-'
 
-/** 把一批行的某个时间列整体平移到「最近 days 天」区间，保留相对顺序 */
-async function shiftTime(table: string, col: string, days = 30): Promise<number> {
-  const rows = await db.$queryRawUnsafe<Array<{ id: unknown; t: number | null }>>(
-    `SELECT id, ${col} AS t FROM "${table}" WHERE ${col} IS NOT NULL ORDER BY ${col} ASC`,
+/** 把一批行的某个时间列整体平移到「最近 days 天」区间，保留相对顺序。
+ *
+ *  `also` 列出同一行上要**按同一比例**跟着走的兄弟时间列。只平移锚列会让同一行
+ *  自相矛盾：目标对话的 createdAt 进了最近 30 天，updatedAt / completedAt 还停在 10-09，
+ *  于是页面「最近活动」列整列显示 10月9日（2026-10-26 有数据走查实见）——
+ *  看着像所有人那天之后都没再动过。
+ *
+ *  兄弟列按**各自相对锚列的时间差**平移（差值保留，不是简单覆盖）：
+ *  completedAt 晚于 createdAt 三分钟，平移后仍晚三分钟。 */
+async function shiftTime(
+  table: string,
+  col: string,
+  also: string[] = [],
+  days = 30,
+): Promise<number> {
+  const extra = also.length ? `, ${also.join(', ')}` : ''
+  const rows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT id, ${col} AS t${extra} FROM "${table}" WHERE ${col} IS NOT NULL ORDER BY ${col} ASC`,
   )
   if (!rows.length) return 0
   const first = Number(rows[0].t)
@@ -30,42 +44,55 @@ async function shiftTime(table: string, col: string, days = 30): Promise<number>
   const targetStart = now - days * DAY
   const targetSpan = now - 6 * 60 * 60 * 1000 - targetStart
   for (const r of rows) {
-    const ratio = (Number(r.t) - first) / span
-    const next = Math.round(targetStart + ratio * targetSpan)
-    await db.$executeRawUnsafe(`UPDATE "${table}" SET ${col} = ? WHERE id = ?`, next, r.id)
+    const anchor = Number(r.t)
+    const next = Math.round(targetStart + ((anchor - first) / span) * targetSpan)
+    const sets = [`${col} = ?`]
+    const vals: unknown[] = [next]
+    for (const sibling of also) {
+      const v = r[sibling]
+      if (v == null) continue
+      sets.push(`${sibling} = ?`)
+      vals.push(Math.round(next + (Number(v) - anchor)))
+    }
+    vals.push(r.id)
+    await db.$executeRawUnsafe(
+      `UPDATE "${table}" SET ${sets.join(', ')} WHERE id = ?`,
+      ...vals,
+    )
   }
   return rows.length
 }
 
 async function main(): Promise<void> {
   console.log('=== 1. 平移存量时间到最近 30 天 ===')
-  const shifts: Array<[string, string]> = [
+  const shifts: Array<[string, string, string[]?]> = [
     ['agent_call_logs', 'createdAt'],
     ['prompt_call_logs', 'createdAt'],
     ['llm_execution_attempts', 'createdAt'],
-    ['goal_conversations', 'createdAt'],
-    ['learning_paths', 'createdAt'],
-    ['memory_traces', 'createdAt'],
+    ['goal_conversations', 'createdAt', ['updatedAt', 'completedAt']],
+    ['learning_paths', 'createdAt', ['updatedAt']],
+    ['memory_traces', 'createdAt', ['updatedAt', 'lastReviewedAt']],
     ['admin_audit_logs', 'createdAt'],
     ['virtual_session_logs', 'createdAt'],
-    ['learner_evidence', 'createdAt'],
+    ['learner_evidence', 'createdAt', ['occurredAt']],
     ['learner_projections', 'updatedAt'],
-    ['path_generation_runs', 'createdAt'],
-    ['path_generation_stage_items', 'createdAt'],
+    ['path_generation_runs', 'createdAt', ['updatedAt', 'finishedAt']],
+    ['path_generation_stage_items', 'createdAt', ['updatedAt']],
     ['domain_event_outbox', 'createdAt'],
     ['domain_event_inbox', 'createdAt'],
     ['degradation_events', 'createdAt'],
-    ['misconception_ledger', 'createdAt'],
+    ['misconception_ledger', 'createdAt', ['updatedAt']],
     ['learning_metrics', 'calculatedAt'],
     ['prediction_records', 'createdAt'],
+    ['teaching_sessions', 'createdAt', ['updatedAt', 'startTime', 'endTime']],
     /* 认证表不在这里平移：admin_sessions 的 expiresAt 不随 createdAt 走，
        平移 createdAt 会让「已签发会话」看起来刚建、却按旧 expiresAt 判过期——
        走查时登录态被踢出，且 403 会把前端 localStorage 的会话标记清掉。
        login_attempts / user_sessions 同理：它们是安全审计时间线，不该被伪造。 */
   ]
-  for (const [table, col] of shifts) {
+  for (const [table, col, also] of shifts) {
     try {
-      const n = await shiftTime(table, col)
+      const n = await shiftTime(table, col, also)
       console.log(`  ${table}.${col}: ${n} 行`)
     } catch (e) {
       console.log(`  ${table}.${col}: 跳过（${String(e).slice(0, 60)}）`)
@@ -232,7 +259,33 @@ async function main(): Promise<void> {
   for (let i = 0; i < templates.length; i++) {
     const t = templates[i]
     const vpId = `${PREFIX}vp-${i}`
-    if (await db.virtual_learner_profiles.findUnique({ where: { id: vpId } })) continue
+    const existing = await db.virtual_learner_profiles.findUnique({ where: { id: vpId } })
+    if (existing) {
+      /* 早期版本写的是 presetId/presetKey，卡墙认不出派生（见下）。已存在的行就地补正。 */
+      let old: Record<string, unknown> = {}
+      try {
+        old = JSON.parse(String(existing.profile))
+      } catch {
+        old = {}
+      }
+      const df = old.derivedFrom as Record<string, unknown> | undefined
+      if (!df?.name) {
+        delete old.cardKey
+        old.cardKey = `vl-${vpId.slice(-8)}`
+        old.derivedFrom = {
+          profileId: t.id,
+          cardKey: t.presetKey ?? null,
+          name: `派生学习者${i + 1}`,
+          at: df?.at ?? new Date(now - i * DAY).toISOString(),
+        }
+        await db.virtual_learner_profiles.update({
+          where: { id: vpId },
+          data: { profile: JSON.stringify(old) },
+        })
+        derived++
+      }
+      continue
+    }
     const uid = `${PREFIX}vu-${i}`
     if (!(await db.users.findUnique({ where: { id: uid } }))) {
       await db.users.create({
@@ -255,7 +308,22 @@ async function main(): Promise<void> {
     } catch {
       prof = {}
     }
-    prof.derivedFrom = { presetId: t.id, presetKey: t.presetKey, at: new Date(now - i * DAY).toISOString() }
+    /* 派生标记要照 card-import.service 的真实形状写：卡墙用 profile.derivedFrom.**name**
+       判「这是实例不是卡」（buildCardWallEntries:502）。只写 presetId/presetKey 的话
+       卡库认不出来，3 张派生实例会混进身份卡墙，「已创建实例」恒为 0
+       （2026-10-26 有数据走查实见）。
+       同时剥掉模板身份：cardKey 必须重算（沿用源卡号会让「导出卡库」把它当同一张卡），
+       运行期状态（recentCompleted）也不该跟着克隆走。 */
+    const cardKey = `vl-${vpId.slice(-8)}`
+    delete prof.cardKey
+    delete prof.recentCompleted
+    prof.cardKey = cardKey
+    prof.derivedFrom = {
+      profileId: t.id,
+      cardKey: t.presetKey ?? null,
+      name: `派生学习者${i + 1}`,
+      at: new Date(now - i * DAY).toISOString(),
+    }
     await db.virtual_learner_profiles.create({
       data: {
         id: vpId,
@@ -281,6 +349,48 @@ async function main(): Promise<void> {
     derived++
   }
   console.log(`  派生虚拟学习者：新增 ${derived} 条`)
+
+  /* 2g. 学习路径进度
+     源库 20 条路径的 completedMilestones 全是 0——「进度」列整列 0%，看不出进度条
+     有值时的排版与「已完成」页签。给前 6 条各补一段真实进度：解锁若干里程碑、
+     完成其中 1-2 个，并把 path 的 completedMilestones 一起改写（两处不一致会互相打架）。 */
+  const paths = await db.learning_paths.findMany({
+    where: { status: 'active' },
+    select: { id: true, totalMilestones: true },
+    take: 6,
+    orderBy: { updatedAt: 'desc' },
+  })
+  let msDone = 0
+  for (let i = 0; i < paths.length; i++) {
+    const p = paths[i]
+    const done = (i % 3) + 1
+    const ms = await db.milestones.findMany({
+      where: { learningPathId: p.id },
+      select: { id: true, stageNumber: true, status: true, startedAt: true, completedAt: true },
+      orderBy: { stageNumber: 'asc' },
+    })
+    for (const m of ms) {
+      if (m.completedAt) continue
+      if (m.stageNumber > done + 1) break
+      const isDone = m.stageNumber <= done
+      await db.milestones.update({
+        where: { id: m.id },
+        data: {
+          status: isDone ? 'completed' : 'in_progress',
+          unlockedAt: m.stageNumber === 1 ? new Date(now - (i + 3) * DAY) : new Date(now - (i + 2) * DAY),
+          startedAt: new Date(now - (i + 2) * DAY),
+          completedAt: isDone ? new Date(now - (i + 1) * DAY) : null,
+          updatedAt: new Date(now - i * DAY),
+        },
+      })
+      msDone++
+    }
+    await db.learning_paths.update({
+      where: { id: p.id },
+      data: { completedMilestones: done, updatedAt: new Date(now - i * 0.8 * DAY) },
+    })
+  }
+  console.log(`  学习路径进度：${paths.length} 条路径、${msDone} 个里程碑`)
 
   /* 2f. Prompt 评估用例 + 评估历史
      两张表都在 system.db（评估是跨库的运维数据，不跟业务数据同库），所以这里另开一个
