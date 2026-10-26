@@ -209,7 +209,10 @@
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('status')">
-              <div class="lc-status">
+              <!-- 还没开始学的人（无当前任务）不能按快照默认值报「稳定 / 疲劳：低」：
+                   那等于把「还没学过」读成「状态良好」，同一行的「当前进度」却写着「未开始」。
+                   与 rate-utils 的「缺数据 ≠ 0」同一条纪律，两格都显「—」。 -->
+              <div v-if="r.hasLearningState" class="lc-status">
                 <span class="lc-trend" :class="`lc-trend--${r.trend}`">
                   <i class="lc-trend__arrow" aria-hidden="true">{{ r.trend === 'up' ? '↗' : r.trend === 'down' ? '↘' : '→' }}</i>
                   {{ trendText(r.trend) }}
@@ -218,6 +221,7 @@
                      给疲劳加回标签，与学习者详情同读法「疲劳：低」 -->
                 <span class="mk-badge" :class="fatigueBadge(r.fatigue)">疲劳：{{ r.fatigue }}</span>
               </div>
+              <span v-else class="mk-na" title="还没有开始学习，趋势与疲劳无从计算">—</span>
             </td>
             <td v-if="!lcHiddenCols.has('conf')" class="mk-num lc-conf-cell">
               <span
@@ -338,6 +342,8 @@ interface Row {
   task: string
   trend: 'up' | 'down' | 'flat'
   fatigue: '低' | '中' | '高'
+  /** 有没有可判读的学习状态（有当前任务/里程碑）。false 时趋势与疲劳显「—」 */
+  hasLearningState: boolean
   risk: string
   updated: string
   /** 快照重建时刻（悬停披露，与「数据更新」区分开） */
@@ -479,6 +485,12 @@ const rows = computed<Row[]>(() =>
     task: m.currentTask || m.currentMilestone || '',
     trend: m.trend,
     fatigue: m.fatigue as Row['fatigue'],
+    /* 趋势/疲劳是「学到一半的状态」，只有已经开始学习（有当前任务）才有分母。
+       判据不用 dataUpdatedAt：那列包含建目标、生成路径这类目标域证据，而这类证据
+       不产生任何学习状态信号——快照的 trend/fatigue 此时仍是构造默认值，照报就是
+       「未开始」旁边写「稳定 / 疲劳：低」（2026-10-26 有数据走查实见）。
+       与本页置信度列同一口径（`r.task && r.confidence != null`）。 */
+    hasLearningState: !!m.currentTask || !!m.currentMilestone,
     risk: m.struggling.length
       ? `「${m.struggling[0]}」等 ${m.struggling.length} 个概念掌握薄弱`
       : m.fatigue === '高'
