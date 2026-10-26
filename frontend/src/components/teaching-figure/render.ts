@@ -265,7 +265,43 @@ function balancedWrap(str: unknown, maxW: number, size: number): string[] {
   const lines = wrapLines(str, maxW, size);
   if (lines.length < 2) return lines;
   const total = Array.from(String(str ?? '')).length;
-  return wrapChars(String(str ?? ''), Math.max(6, Math.ceil(total / lines.length)));
+  // V4 修复（外盲评：SYN_SENT 被截成 SYN_SE）：均分重排时英文词/数字/下划线是
+  // 不可拆单元——放不下整个词就换行，绝不从词中间切
+  return wrapCharsKeepTokens(String(str ?? ''), Math.max(6, Math.ceil(total / lines.length)));
+}
+
+/** 与 wrapChars 同按「均分字符数」断行，但 ASCII 词（含 _ . %）整词不拆。 */
+function wrapCharsKeepTokens(str: string, maxChars: number): string[] {
+  const isWord = (c: string) => /[0-9A-Za-z._%]/.test(c);
+  const units: string[] = [];
+  let tok = '';
+  for (const ch of str) {
+    if (tok && isWord(ch) === isWord(tok[0]) && isWord(ch)) tok += ch;
+    else if (tok && isWord(ch)) { units.push(tok); tok = ch; }
+    else if (tok && isWord(tok[0])) { units.push(tok); tok = ch; }
+    else { tok += ch; }
+  }
+  if (tok) units.push(tok);
+  // 连串非词字符（中文/标点）仍可逐字断：拆成单字符单元
+  const atoms: string[] = [];
+  for (const u of units) {
+    if (isWord(u[0])) atoms.push(u);
+    else for (const c of u) atoms.push(c);
+  }
+  const out: string[] = [];
+  let line = '';
+  for (const a of atoms) {
+    if (line && Array.from(line + a).length > maxChars && !isWord(a[0])) {
+      out.push(line.trimEnd());
+      line = a === ' ' ? '' : a;
+    } else if (line && Array.from(line + a).length > maxChars && isWord(a[0])) {
+      // 词放不下：整词换行
+      out.push(line.trimEnd());
+      line = a;
+    } else line += a;
+  }
+  if (line.trim()) out.push(line.trimEnd());
+  return out.filter((l) => l.length);
 }
 
 /**

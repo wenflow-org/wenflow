@@ -149,6 +149,8 @@ async function runCase(c: any): Promise<any> {
     emitted: !!figureRaw,
     rawKind: (figureRaw as any)?.kind ?? null,
     normalizeReason: (norm as any).reason ?? null,
+    // V4：归一化拒绝时把模型的原始 spec 带出来，离线能回答「为什么这张被拒」
+    rawSpec: (norm as any).figure ? null : ((figureRaw as any)?.spec ?? null),
     figure: (norm as any).figure ?? null,
     user: c.student,
     context: { student: c.student, teacher: reply },
