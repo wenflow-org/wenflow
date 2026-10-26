@@ -158,26 +158,29 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     document.body.innerHTML = '';
   });
 
-  it('需关注收窄（不含疲劳=中）；「观察」是独立可点 KPI，卡头不再有同名 pill 行', async () => {
+  it('需关注收窄（不含疲劳=中）；卡头胶囊与 KPI 卡共用同一个筛选状态', async () => {
     const w = mount(LearnerCenter);
     await settle();
-    /* 2026-10-26：筛选入口从卡头 pill 行移到 KPI 卡——同一个数字不再有「不能点的卡」与
-       「能点的胶囊」两个版本 */
-    expect(w.findAll('.mk-card__head .mk-pill')).toHaveLength(0);
+    /* 2026-10-26 二次走查：卡头恢复胶囊组（全站列表页的筛选正式入口），KPI 卡保留可点作快捷入口，
+       两者共用 `pill` 一个状态——不会出现两套各走各的筛选 */
+    const pills = w.findAll('.mk-card__head .mk-pill');
+    expect(pills.map((p) => p.text().replace(/\d+$/, '')).slice(0, 4)).toEqual(['全部', '需关注', '观察', '低置信']);
     const kpi = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === label)!;
     expect(kpi('观察').find('.mk-kpi__num').text()).toBe('1'); // 甲（疲劳中）
     expect(kpi('需关注').find('.mk-kpi__num').text()).toBe('3'); // 乙（趋势降）/ 丙（疲劳高）/ 丁（风险摘要）；甲不再计入
     expect(kpi('需关注').classes()).toContain('mk-kpi--clickable');
 
-    // 点「观察」卡 → 只剩甲；再点一次取消筛选
+    // 点「观察」卡 → 只剩甲；卡头同名胶囊同步高亮（同一状态）
     await kpi('观察').trigger('click');
     await nextTick();
     const rows = w.findAll('tbody tr').map((r) => r.text());
     expect(rows).toHaveLength(1);
     expect(rows[0]).toContain('甲');
     expect(kpi('观察').classes()).toContain('lc-kpi--on');
-    await kpi('观察').trigger('click');
+    expect(w.find('.mk-card__head .mk-pill--active').text()).toContain('观察');
+    // 再点胶囊的「全部」→ 取消筛选
+    await w.findAll('.mk-card__head .mk-pill')[0].trigger('click');
     await nextTick();
     expect(w.findAll('tbody tr')).toHaveLength(4);
     w.unmount();

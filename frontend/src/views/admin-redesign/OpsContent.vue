@@ -2,10 +2,14 @@
   <div :class="embedded ? 'mk-page--fill oc-embedded' : 'mk-page mk-page--fill'">
     <!-- 页头（mk-pagehead 标准形态，2026-10-03 用户拍板全站统一）：页名 + 读数卡带 -->
     <MkPageHead v-if="!embedded" title="学习路径" />
-    <!-- 路径总量 KPI：2026-10-26 只留「路径总数」一张——里程碑/子任务属内容体量、
-         「生成失败」与卡头 pill 同源同值，都不改变运营动作。
-         统计拉取失败时整带换成错误格 + 重试，不把「—」画成正常读数。 -->
-    <section v-if="!embedded" class="mk-kpi-grid" aria-label="路径总量">
+    <!-- 路径读数带（2026-10-26 用户走查「kpi 就一个，不太好看」）：
+         原带只留「路径总数」一张，flex 栅格把独卡拉满整行 1600px，读数 20 孤零零挂左上。
+         现按同组列表页（学习状态 / 复习积压）的密度补回四张真实读数：
+         · 学习中 / 生成失败 —— 两个最常被点开的状态，卡本身即筛选入口（与下方胶囊共用
+           同一个 statusFilter；生成失败非零时走 bad 着色，是这页唯一要动手的读数）；
+         · 累计里程碑 / 累计子任务 —— stats 里已有的内容体量，不另发请求。
+         计数一律取 stats（全平台 byStatus），与胶囊徽章同源；stats 未落定显「—」而不是 0。 -->
+    <section v-if="!embedded" class="mk-kpi-grid" aria-label="路径读数">
       <template v-if="statsFailed">
         <div class="oc-stats-error" role="alert">
           <span class="oc-stats-error__msg">统计加载失败</span>
@@ -14,6 +18,25 @@
       </template>
       <template v-else>
         <MkKpi label="路径总数" :value="stats?.total ?? '—'" />
+        <MkKpi
+          label="学习中"
+          :value="stats ? byStatus('active') : '—'"
+          clickable
+          :class="{ 'oc-kpi--on': statusFilter === 'active' }"
+          :aria-pressed="statusFilter === 'active'"
+          @click="selectStatus('active')"
+        />
+        <MkKpi
+          label="生成失败"
+          :value="stats ? byStatus('failed') : '—'"
+          :tone="stats && byStatus('failed') ? 'bad' : ''"
+          clickable
+          :class="{ 'oc-kpi--on': statusFilter === 'failed' }"
+          :aria-pressed="statusFilter === 'failed'"
+          @click="selectStatus('failed')"
+        />
+        <MkKpi label="累计里程碑" :value="stats?.totalMilestones ?? '—'" />
+        <MkKpi label="累计子任务" :value="stats?.totalTasks ?? '—'" />
       </template>
     </section>
 
@@ -698,6 +721,8 @@ defineExpose({ reload: () => void reload(true) })
   background: var(--mk-surface);
 }
 .oc-stats-error__msg { font-size: var(--mk-fs-micro); color: var(--mk-red); }
+/* 可点 KPI 的选中态（2026-10-26）：蓝只给可交互与选中，与 .lc-kpi--on / .mr-kpi--on 同一判例 */
+.oc-kpi--on { border-color: var(--mk-blue); }
 /* 分布条已退役（2026-10-17）：原页面级 .oc-distband 与类名一并下线，状态筛选在卡头 pills；
    页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
 /* 加载失败错误态已收敛共享 MkEmptyState tone="error"（role=alert + 失败原因 + 重试/busy），

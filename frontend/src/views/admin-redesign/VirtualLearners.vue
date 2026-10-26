@@ -1140,23 +1140,16 @@ function onBatchReclaim(ids: string[]) {
 .vl-abn--stall { color: var(--mk-amber); background: var(--mk-amber-bg); }
 
 /* 运行指标带：KPI 独占整行（共享 .mk-kpi-grid + MkKpi，卡自带面/描边，外层不套盒子）。
-   2026-10-26 撤掉并发 / 速率两张卡：读数并进「容量与实验环境」的输入行。 */
+   2026-10-26 撤掉并发 / 速率两张卡：读数并进「容量与实验环境」的输入行。
+   C 轮（2026-10-26 用户走查「kpi 面板设计配色和其他的不一样」）：撤本页私有覆写——
+   原先这里把卡面刷成 --mk-surface-2（灰蓝）并按卡数写死 4/2 列，别的页是白面 + 共享
+   弹性栅格；同一原语两套皮肤正是「每页各像各的」的来源。现在只留外层间距，列数与卡面
+   全部交回 .mk-kpi-grid / .mk-kpi。 */
 .vl-kpi {
   display: grid;
   gap: 8px;
   flex: none;
 }
-/* 四张卡成组：按卡数定列，行永远铺匀（共享 .mk-kpi-grid 是 flex-wrap + 180px 基准） */
-@media (min-width: 1360px) {
-  .vl-kpi :deep(.mk-kpi-grid) { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@media (min-width: 1024px) and (max-width: 1359.98px) {
-  .vl-kpi :deep(.mk-kpi-grid) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 1023.98px) {
-  .vl-kpi :deep(.mk-kpi-grid) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-/* 卡面给一层次级表面，与下方工作区剥离；暗色档由 token 自带，不新增阴影、不改共享原语 */
 /* 页头两枚下拉（维护 / 新建）：触发钮 + 与工具条同一套弹层。
    遮罩用 fixed 铺满视口接外点，层级压在弹层下一档（--mk-z-menu 是 60） */
 /* 异常列表头的「只看有异常」开关：24px 方形点击区，开着时蓝描边 */
@@ -1182,9 +1175,6 @@ function onBatchReclaim(ids: string[]) {
 .vl-headmenu__pop { z-index: calc(var(--mk-z-menu) + 1); top: calc(100% + 6px); }
 /* 批量态：蓝色只给「选中/可交互」——开着的批量按钮与勾选列同一状态 */
 .vl-batch-toggle--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
-.vl-kpi :deep(.mk-kpi) {
-  background: var(--mk-surface-2);
-}
 /* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
    长内容截断上限收敛到共享原语（.mk-cell-text / .mk-cell-main strong） */
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }

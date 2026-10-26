@@ -3,7 +3,7 @@
 
 stage: path
 order: 2
-displayName: Path 阶段
+displayName: 规划阶段
 description: 学习路径生成：Framing → Path Planning → Stage Designer → Path Reviewer → KC Mapper
 
 contracts:

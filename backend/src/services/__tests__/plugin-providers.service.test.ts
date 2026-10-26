@@ -35,6 +35,7 @@ jest.mock('../provider-secrets.service', () => ({
 import {
   getPluginProviderConfig,
   loadPluginProviderConfig,
+  readPluginChannelOrder,
   readPluginProviderField,
   readPluginProviderSecret,
   resetPluginProviderConfigCache,
@@ -45,6 +46,8 @@ import {
 const ENV_KEYS = ['SEARCH_API_KEY', 'FETCH_API_KEY', 'TAVILY_API_KEY', 'EXA_API_KEY', 'DASHSCOPE_API_KEY', 'IMAGE_API_KEY', 'SEARCH_PROVIDER', 'FETCH_PROVIDER'];
 const originalEnv: Record<string, string | undefined> = {};
 let storedValue: string | null = null;
+/** pluginProviderOrders 那一行（通道优先级）单独存，mock 按 key 分开 */
+let ordersValue: string | null = null;
 
 describe('plugin-providers（插件外部服务配置）', () => {
   beforeEach(() => {
@@ -58,9 +61,17 @@ describe('plugin-providers（插件外部服务配置）', () => {
     process.env.SEARCH_PROVIDER = 'tinyfish,tavily';
     process.env.FETCH_PROVIDER = 'tinyfish,tavily';
     storedValue = null;
-    findUnique.mockImplementation(async () => (storedValue ? { key: 'pluginProviders', value: storedValue } : null));
+    ordersValue = null;
+    findUnique.mockImplementation(async (args: any) => {
+      const key = args?.where?.key;
+      if (key === 'pluginProviderOrders') {
+        return ordersValue ? { key, value: ordersValue } : null;
+      }
+      return storedValue ? { key: 'pluginProviders', value: storedValue } : null;
+    });
     upsert.mockImplementation(async (args: any) => {
-      storedValue = args.update.value;
+      if (args?.where?.key === 'pluginProviderOrders') ordersValue = args.update.value;
+      else storedValue = args.update.value;
       return {};
     });
     resolveProviderApiKey.mockResolvedValue(null);
@@ -103,8 +114,8 @@ describe('plugin-providers（插件外部服务配置）', () => {
     });
 
     expect(setProviderSecret).toHaveBeenCalledWith('plugin:web:tinyfish', 'secret-key-123', 'SEARCH_API_KEY');
-    expect(upsert).toHaveBeenCalledTimes(1);
-    const stored = JSON.parse(upsert.mock.calls[0][0].update.value);
+    const providerUpsert = upsert.mock.calls.find((c: any[]) => c[0].where.key === 'pluginProviders')!;
+    const stored = JSON.parse(providerUpsert[0].update.value);
     expect(stored.web.tinyfish.searchEndpoint).toBe('https://proxy.example/search');
     // 空串 = 删除覆盖，不该写进平台设置
     expect(stored.web.tavily).toBeUndefined();
@@ -112,6 +123,37 @@ describe('plugin-providers（插件外部服务配置）', () => {
     expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://proxy.example/search');
     // 密钥仍在环境变量里（mock 未返回 DB 密钥）
     expect(readPluginProviderSecret('web', 'tinyfish')).toBe('search-key-1234');
+  });
+
+  /* ---------- 通道优先级（2026-10-26 用户「用户可以自己配置优先级」） ---------- */
+
+  it('通道优先级：保存后平台顺序优先于环境变量，并随视图下发', async () => {
+    await loadPluginProviderConfig();
+    // 环境变量是 tinyfish,tavily；用户把 tavily 设为搜索主用
+    await savePluginProviderConfig('web', { orders: { search: ['tavily', 'tinyfish'] } });
+    expect(readPluginChannelOrder('web', 'search')).toEqual(['tavily', 'tinyfish']);
+    // 抓取链没动，仍跟环境变量
+    expect(readPluginChannelOrder('web', 'fetch')).toEqual(['tinyfish', 'tavily']);
+    const view = await getPluginProviderConfig('web');
+    expect(view.channels.find((c) => c.id === 'search')?.order).toEqual(['tavily', 'tinyfish']);
+  });
+
+  it('通道优先级：未知 provider / 未知通道被拒，空数组 = 删掉覆盖回落环境变量', async () => {
+    await loadPluginProviderConfig();
+    await expect(savePluginProviderConfig('web', { orders: { search: ['bing'] } }))
+      .rejects.toThrow(/未知 provider/);
+    await expect(savePluginProviderConfig('web', { orders: { nope: ['tavily'] } }))
+      .rejects.toThrow(/未知通道/);
+    await savePluginProviderConfig('web', { orders: { search: ['tavily'] } });
+    expect(readPluginChannelOrder('web', 'search')).toEqual(['tavily']);
+    await savePluginProviderConfig('web', { orders: { search: [] } });
+    expect(readPluginChannelOrder('web', 'search')).toEqual(['tinyfish', 'tavily']);
+  });
+
+  it('通道优先级：重复 provider 只算一次', async () => {
+    await loadPluginProviderConfig();
+    await savePluginProviderConfig('web', { orders: { search: ['tavily', 'tavily', 'tinyfish'] } });
+    expect(readPluginChannelOrder('web', 'search')).toEqual(['tavily', 'tinyfish']);
   });
 
   it('平台密文优先于环境变量，视图只回尾号', async () => {

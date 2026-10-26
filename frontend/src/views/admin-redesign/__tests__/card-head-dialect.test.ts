@@ -89,3 +89,30 @@ describe('卡头工具条形态', () => {
     expect(offenders).toEqual([])
   })
 })
+
+/**
+ * 共享原语自身的守卫：胶囊内嵌下拉的「展开后看得见选项」契约。
+ *
+ * 闭合态靠 `color: transparent` 让原生 select 隐形（可见值由 .mk-pillselect__txt 承担），
+ * 但 Chromium 用 option 的计算色画弹层 —— 不显式给 option 定色，用户点开后是一片
+ * 没有文字的浮层（2026-10-26 用户走查「里面选项不可见，我无法截图到」）。
+ * 同理不能用 `opacity: 0` 隐形：整层透明会把弹层一起带走。
+ */
+describe('胶囊内嵌下拉的原生弹层', () => {
+  const css = readFileSync(
+    resolve(__dirname, '../../../../src/styles/mk-primitives.css'),
+    'utf8'
+  )
+
+  it('透明 select 不得整层 opacity: 0', () => {
+    const block = css.match(/\.mk-pillselect__v \{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(block).not.toBe('')
+    expect(block).not.toMatch(/opacity:\s*0\s*;/)
+  })
+
+  it('option 必须显式给文字色（否则继承 select 的 transparent）', () => {
+    const optionRule = css.match(/\.mk-pillselect__v > option \{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(optionRule).toContain('color:')
+    expect(optionRule).toContain('background:')
+  })
+})

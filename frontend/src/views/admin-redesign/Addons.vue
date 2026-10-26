@@ -208,27 +208,50 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
           </div>
           <div class="mk-modal__body">
-            <!-- 2026-10-25 用户「不要这种解释型文案」：简介句、「按服务端配置顺序降级」注记、
-                 每个 provider 的说明句、字段下方的环境变量/密钥提示全部撤除。
-                 弹窗只留可操作的东西：降级顺序（数据）+ provider + 字段 + 状态。 -->
-            <!-- 降级顺序只在真有多个候选时才出现：决策/生图各只有一个 provider，
-                 这一行会把同一名字在下面的卡头再写一遍（实测「阿里云 MaaS | 阿里云 MaaS」） -->
-            <template v-if="hasFallbackOrder">
-              <div class="ac-config-chain" v-for="channel in configTarget?.channels ?? []" :key="channel.id">
-                <span class="ac-config-chain__label">{{ channel.label }}</span>
-                <span class="ac-config-chain__order">{{ channel.order.map(providerLabelOf).join(' → ') || '—' }}</span>
+            <!-- 优先级（2026-10-26 用户两次走查：「这个真的很丑」「本身是三选一，然后用户可以
+                 自己配置优先级」）：每通道一条链，第一位是主用，其余是备用；顺序由用户自己排，
+                 也可以把 provider 加进/移出链。
+                 原先那行只读的「TinyFish → Tavily → Exa」+ 5 张平铺 provider 卡，读出的是
+                 「这些都在用」，而运行时其实只有一个首选——顺序必须能改，且只展示链上的人。 -->
+            <div v-for="channel in configTarget?.channels ?? []" :key="channel.id" class="ac-prio">
+              <span class="ac-prio__k">{{ channel.label }}</span>
+              <div class="ac-prio__list">
+                <span
+                  v-for="(pid, i) in orderOf(channel.id)"
+                  :key="pid"
+                  class="ac-prio__item"
+                  :title="providerConfiguredOf(pid) ? '已配置' : '缺少密钥'"
+                >
+                  <span class="ac-prio__rank">{{ i === 0 ? '主用' : `备用 ${i}` }}</span>
+                  <strong class="ac-prio__name">{{ providerLabelOf(pid) }}</strong>
+                  <span class="ac-prio__ops">
+                    <button type="button" class="ac-prio__op" aria-label="上移" :disabled="i === 0"
+                            @click="moveInOrder(channel.id, i, -1)">↑</button>
+                    <button type="button" class="ac-prio__op" aria-label="下移"
+                            :disabled="i === orderOf(channel.id).length - 1"
+                            @click="moveInOrder(channel.id, i, 1)">↓</button>
+                    <button type="button" class="ac-prio__op" aria-label="移出链"
+                            :disabled="orderOf(channel.id).length === 1"
+                            @click="removeFromOrder(channel.id, i)">✕</button>
+                  </span>
+                </span>
+                <select
+                  v-if="availableOf(channel.id).length"
+                  class="ac-prio__add"
+                  :aria-label="`把 provider 加入${channel.label}备用`"
+                  :value="''"
+                  @change="onAddToOrder(channel.id, $event)"
+                >
+                  <option value="">＋ 加入备用</option>
+                  <option v-for="p in availableOf(channel.id)" :key="p.id" :value="p.id">{{ p.label }}</option>
+                </select>
               </div>
-            </template>
-            <!-- 单候选通道：把「谁在链上」写成事实行，而不是让 5 张 provider 卡平铺后被误读成都在用 -->
-            <div v-else-if="singleChainLabel" class="ac-config-chain">
-              <span class="ac-config-chain__label">当前只用</span>
-              <span class="ac-config-chain__order">{{ singleChainLabel }}</span>
             </div>
-            <section class="ac-config-provider" v-for="provider in configTarget?.providers ?? []" :key="provider.id">
+            <!-- 字段只给链上的 provider（其余不参与调用，也不占版面） -->
+            <section class="ac-config-provider" v-for="provider in chainProviders" :key="provider.id">
               <header class="ac-config-provider__head">
                 <strong class="ac-config-provider__name">{{ provider.label }}</strong>
                 <span class="ac-config-provider__badges">
-                  <span v-if="singleChainLabel && !chainProviderIds.includes(provider.id)" class="mk-badge mk-badge--muted">未参与调用</span>
                   <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
                     {{ provider.configured ? '已配置' : '缺少密钥' }}
                   </span>
@@ -553,6 +576,8 @@ const configTarget = ref<PluginConfig | null>(null)
 const configSaving = ref(false)
 /** providerId → fieldKey → 草稿值。密钥字段留空 = 不修改 */
 const draft = ref<Record<string, Record<string, string>>>({})
+/** channelId → 有序 provider id 草稿（第一位 = 主用；保存时整体提交） */
+const orderDraft = ref<Record<string, string[]>>({})
 /** providerId → 是否清除已存密钥 */
 const clearKeys = ref<Record<string, boolean>>({})
 const configMaskRef = ref<HTMLElement | null>(null)
@@ -581,6 +606,10 @@ function openConfig(group: PluginRow) {
     }
   }
   draft.value = next
+  // 优先级草稿：每条通道从服务端当前生效顺序起步（平台保存 → 环境变量 → 默认）
+  const orders: Record<string, string[]> = {}
+  for (const channel of cfg.channels) orders[channel.id] = [...channel.order]
+  orderDraft.value = orders
   clearKeys.value = {}
   configOpen.value = true
 }
@@ -588,6 +617,7 @@ function openConfig(group: PluginRow) {
 function closeConfig() {
   configOpen.value = false
   configTarget.value = null
+  orderDraft.value = {}
   clearKeys.value = {}
 }
 
@@ -598,20 +628,58 @@ function toggleClearKey(providerId: string) {
 function providerLabelOf(providerId: string): string {
   return configTarget.value?.providers.find((p) => p.id === providerId)?.label || providerId
 }
-/** 降级顺序行只在真有先后之分时才有信息量：单候选（决策/生图）与 provider 卡头重复 */
-const hasFallbackOrder = computed(() =>
-  (configTarget.value?.channels ?? []).some((channel) => channel.order.length > 1),
-)
-/** 单候选通道的「谁在链上」：顺序行被折叠时，这条事实行替代它（不再让读者以为 5 个都在用） */
-const singleChainLabel = computed(() => {
-  const channel = (configTarget.value?.channels ?? [])[0]
-  if (!channel?.order.length) return ''
-  return channel.order.map(providerLabelOf).join(' → ')
+
+/* ---------- 通道优先级编辑（2026-10-26）---------- */
+function orderOf(channelId: string): string[] {
+  return orderDraft.value[channelId] ?? []
+}
+/** 该通道里还没上链的 provider（「加入备用」下拉的选项） */
+function availableOf(channelId: string) {
+  const used = new Set(orderOf(channelId))
+  return (configTarget.value?.providers ?? []).filter((p) => !used.has(p.id))
+}
+function providerConfiguredOf(providerId: string): boolean {
+  return configTarget.value?.providers.find((p) => p.id === providerId)?.configured ?? false
+}
+function setOrder(channelId: string, next: string[]) {
+  orderDraft.value = { ...orderDraft.value, [channelId]: next }
+}
+function moveInOrder(channelId: string, index: number, delta: number) {
+  const list = [...orderOf(channelId)]
+  const target = index + delta
+  if (target < 0 || target >= list.length) return
+  ;[list[index], list[target]] = [list[target], list[index]]
+  setOrder(channelId, list)
+}
+/** 移出链：至少留一个，清空会静默回落到环境变量/默认，与用户看到的操作不一致 */
+function removeFromOrder(channelId: string, index: number) {
+  const list = orderOf(channelId)
+  if (list.length <= 1) return
+  setOrder(channelId, list.filter((_, i) => i !== index))
+}
+function onAddToOrder(channelId: string, event: Event) {
+  const select = event.target as HTMLSelectElement
+  const id = select.value
+  select.value = ''
+  if (!id) return
+  setOrder(channelId, [...orderOf(channelId), id])
+}
+/** 只给「在链上」的 provider 渲染字段：不在链上的不参与调用，平铺出来会被读成都在用 */
+const chainProviders = computed<PluginProvider[]>(() => {
+  const ids: string[] = []
+  for (const channel of configTarget.value?.channels ?? []) {
+    for (const id of orderOf(channel.id)) if (!ids.includes(id)) ids.push(id)
+  }
+  return ids
+    .map((id) => configTarget.value?.providers.find((p) => p.id === id))
+    .filter((p): p is PluginProvider => Boolean(p))
 })
-/** 在降级链上的 provider id（用于给链外 provider 挂「不在降级链上」） */
-const chainProviderIds = computed(() =>
-  [...new Set((configTarget.value?.channels ?? []).flatMap((channel) => channel.order))],
-)
+/** 顺序改过才算脏：只改顺序也要能保存 */
+const ordersDirty = computed(() => {
+  const cfg = configTarget.value
+  if (!cfg) return false
+  return cfg.channels.some((ch) => orderOf(ch.id).join(',') !== ch.order.join(','))
+})
 
 async function saveConfig() {
   const cfg = configTarget.value
@@ -631,13 +699,18 @@ async function saveConfig() {
     if (clearKeys.value[provider.id]) patch.clearKey = true
     if (Object.keys(patch).length) providers[provider.id] = patch
   }
-  if (!Object.keys(providers).length) {
+  const orders = ordersDirty.value
+    ? Object.fromEntries(cfg.channels.map((ch) => [ch.id, orderOf(ch.id)]))
+    : undefined
+  if (!Object.keys(providers).length && !orders) {
     closeConfig()
     return
   }
   configSaving.value = true
   try {
-    const res = await adminPluginsApi.saveConfig(cfg.id, providers)
+    const res = orders
+      ? await adminPluginsApi.saveConfig(cfg.id, providers, orders)
+      : await adminPluginsApi.saveConfig(cfg.id, providers)
     const saved = res.data?.data?.plugin as PluginConfig | undefined
     if (saved?.id) providerConfigs.value = { ...providerConfigs.value, [saved.id]: saved }
     toast.success(`${cfg.label}服务配置已保存`)
@@ -854,32 +927,82 @@ function goLogs(skillId: string) {
 .ac-plugin.is-off .ac-plugin__main,
 .ac-plugin.is-off .ac-plugin__glyph { opacity: 0.55; }
 
-/* 服务配置弹窗：先给通道降级顺序，再逐 provider 填密钥/入口/模型。
-   2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤，
-   只剩顺序/字段/状态三样可操作的东西。 */
-.ac-config-chain {
+/* 服务配置弹窗：先排通道优先级（主用 + 备用，用户可自己调），再填链上 provider 的密钥/入口。
+   2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。
+   2026-10-26 用户两次走查「这个真的很丑」「本身是三选一，然后用户可以自己配置优先级」：
+   原先是「只读顺序行 + 全部 provider 平铺成灰底卡」，读起来像都在用、每张卡还各带一个
+   「缺少密钥」；现在顺序行变成可编辑的链，字段只给链上的人，卡也不再是灰底盒子。 */
+.ac-prio {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: var(--mk-fs-micro);
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mk-line);
 }
-.ac-config-chain__label { font-weight: 600; color: var(--mk-ink); }
-.ac-config-chain__order { font-family: var(--mk-mono); color: var(--mk-ink); }
-.ac-config-provider {
-  margin-top: 14px;
-  padding: 12px 14px;
+.ac-prio:last-of-type { border-bottom: 0; }
+.ac-prio__k {
+  flex: none;
+  width: 32px;
+  padding-top: 6px;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  color: var(--mk-muted);
+}
+.ac-prio__list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ac-prio__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 5px 3px 9px;
   border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
+  border-radius: 999px;
+  background: var(--mk-surface);
+}
+.ac-prio__rank { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.ac-prio__name { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
+.ac-prio__ops { display: inline-flex; align-items: center; gap: 1px; }
+.ac-prio__op {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  line-height: 1;
+  cursor: pointer;
+}
+.ac-prio__op:hover:not(:disabled) { background: var(--mk-hover-surface); color: var(--mk-ink); }
+.ac-prio__op:disabled { opacity: 0.35; cursor: default; }
+.ac-prio__add {
+  border: 1px dashed var(--mk-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mk-muted);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.ac-prio__add:hover { color: var(--mk-blue); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+/* provider 段：白面 + 发丝线分隔（不再用灰底卡片堆叠），字段两列避免占位符被压断 */
+.ac-config-provider {
+  margin-top: 0;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid var(--mk-line);
+  border-radius: 0;
+  background: transparent;
 }
 .ac-config-provider__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ac-config-provider__name { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
 .ac-config-provider__badges { display: inline-flex; align-items: center; gap: 6px; }
 .ac-config-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 14px;
   margin-top: 10px;
 }

@@ -219,6 +219,10 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(dialog.text()).toContain('抓取');
     expect(dialog.text()).toContain('密钥');
     expect(dialog.findAll('.ac-config-provider')).toHaveLength(2);
+    // 2026-10-26：优先级变成可编辑的链（主用 / 备用），不再是一行只读「A → B」
+    expect(dialog.findAll('.ac-prio')).toHaveLength(2);
+    expect(dialog.text()).toContain('主用');
+    expect(dialog.text()).toContain('备用 1');
     // 这是外部服务配置，不是 Skill 的 LLM 模型绑定
     expect(dialog.text()).not.toContain('跟随平台默认');
     expect(dialog.text()).not.toContain('完整运行时');
@@ -323,7 +327,7 @@ describe('Addons MCP 服务（transport 支持）', () => {
     wrapper.unmount();
   });
 
-  it('决策配置弹窗：单候选通道给事实行「当前只用」，链外 provider 挂「未参与调用」', async () => {
+  it('决策配置弹窗：字段只给链上 provider，链外的可「加入备用」再配置', async () => {
     pluginConfigMock.mockResolvedValue({
       data: {
         data: {
@@ -347,14 +351,52 @@ describe('Addons MCP 服务（transport 支持）', () => {
     const decisionRow = wrapper.findAll('.ac-plugin').find((r) => r.text().includes('决策'))!;
     await decisionRow.find('.mk-btn').trigger('click');
     await flushPromises();
-    const dialog = wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
-    expect(dialog.text()).toContain('当前只用');
-    expect(dialog.find('.ac-config-chain__order').text()).toBe('阿里云 MaaS');
-    const cards = dialog.findAll('.ac-config-provider');
-    const cloudflare = cards.find((c) => c.text().includes('Cloudflare'))!;
-    expect(cloudflare.text()).toContain('未参与调用');
-    const alibaba = cards.find((c) => c.text().includes('阿里云 MaaS'))!;
-    expect(alibaba.text()).not.toContain('未参与调用');
+    // 每次状态变化后重新取：Teleport 子树会重建，旧的 DOMWrapper 会指向已分离的节点
+    const dialog = () => wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
+    // 链上只有主用：不再把 5 家平铺成「都在用」，也不再有「未参与调用」这种负向徽标
+    const cards = dialog().findAll('.ac-config-provider');
+    expect(cards).toHaveLength(1);
+    expect(cards[0].text()).toContain('阿里云 MaaS');
+    expect(dialog().text()).toContain('主用');
+    expect(dialog().text()).not.toContain('未参与调用');
+    // 链外 provider 仍可加进备用链，加进来后才出现它的字段
+    const add = dialog().find('.ac-prio__add');
+    expect(add.exists()).toBe(true);
+    await add.setValue('cloudflare');
+    await flushPromises();
+    expect(dialog().findAll('.ac-config-provider')).toHaveLength(2);
+    expect(dialog().text()).toContain('备用 1');
+    wrapper.unmount();
+  });
+
+  it('优先级可调：上移 / 移出后保存把新顺序一起提交', async () => {
+    const wrapper = await mountLive();
+    await wrapper.findAll('.ac-plugin')[0].find('.mk-btn').trigger('click');
+    await flushPromises();
+    const dialog = () => wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
+    const searchChain = () => dialog().findAll('.ac-prio')[0];
+    const names = () => searchChain().findAll('.ac-prio__name').map((n) => n.text());
+    const ops = (label: string) => searchChain().findAll('.ac-prio__op')
+      .filter((b) => b.attributes('aria-label') === label);
+    // 搜索链：TinyFish（主用）→ Tavily（备用 1）
+    expect(names()).toEqual(['TinyFish', 'Tavily']);
+    // Tavily 上移成主用
+    await ops('上移')[1].trigger('click');
+    await flushPromises();
+    expect(names()).toEqual(['Tavily', 'TinyFish']);
+    // 移出链尾
+    await ops('移出链')[1].trigger('click');
+    await flushPromises();
+    expect(names()).toEqual(['Tavily']);
+    // 只剩一个时「移出」禁用（清空会静默回落默认顺序，与界面不一致）
+    expect(ops('移出链')[0].attributes('disabled')).toBeDefined();
+    // 只改顺序也要能保存，且把 orders 一起提交
+    await dialog().findAll('button').find((b) => b.text() === '保存')!.trigger('click');
+    await flushPromises();
+    expect(pluginSaveMock).toHaveBeenCalledWith('web', {}, {
+      search: ['tavily'],
+      fetch: ['tinyfish', 'tavily']
+    });
     wrapper.unmount();
   });
 });

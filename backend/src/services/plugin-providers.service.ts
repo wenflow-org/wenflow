@@ -29,8 +29,18 @@ import {
 } from './provider-secrets.service';
 
 const SETTING_KEY = 'pluginProviders';
+/**
+ * 通道优先级（2026-10-26 用户「本身是三选一，然后用户可以自己配置优先级」）。
+ *
+ * 单独存一个键，而不是塞进 pluginProviders JSON：那边是按 provider 分组的字段表，
+ * 混进一个非 provider 的键会让「未知 provider」校验把它当配置项。
+ * 解析优先级：平台顺序 → 通道环境变量（SEARCH_PROVIDER 等）→ 目录默认。
+ */
+const ORDER_SETTING_KEY = 'pluginProviderOrders';
 
 type StoredConfig = Record<string, Record<string, Record<string, string>>>;
+/** pluginId → channelId → 已保存的 provider 顺序 */
+type StoredOrders = Record<string, Record<string, string[]>>;
 
 interface RuntimeProvider {
   /** 平台设置里保存的非密钥字段 */
@@ -78,6 +88,8 @@ export interface PluginConfigView {
 
 export interface PluginProviderSaveInput {
   providers?: Record<string, Record<string, string | null> & { clearKey?: boolean }>;
+  /** 通道优先级（channelId → providerId 顺序）；空数组 = 删掉覆盖，回落到环境变量/默认 */
+  orders?: Record<string, string[]>;
 }
 
 export class PluginProviderConfigError extends Error {
@@ -90,6 +102,8 @@ export class PluginProviderConfigError extends Error {
 
 let runtime: RuntimeConfig | null = null;
 let hydration: Promise<RuntimeConfig> | null = null;
+/** 平台里保存的通道顺序（未水合时为空对象 → 各读取处回落环境变量/默认，行为与旧版一致） */
+let runtimeOrders: StoredOrders = {};
 
 function envFirst(names: readonly string[]): string {
   for (const name of names) {
@@ -166,19 +180,55 @@ async function readStored(): Promise<StoredConfig> {
   }
 }
 
+async function readStoredOrders(): Promise<StoredOrders> {
+  try {
+    const row = await systemPrisma.platform_settings.findUnique({ where: { key: ORDER_SETTING_KEY } });
+    if (!row?.value) return {};
+    const parsed = JSON.parse(row.value) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as StoredOrders;
+  } catch (error) {
+    logger.warn('[plugin-providers] 通道优先级读取失败，按环境变量处理', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {};
+  }
+}
+
+/** 把任意输入收敛成「本插件已知 provider 的去重顺序」；未知 id 直接丢弃（保存处另有严格校验） */
+function normalizeOrder(plugin: PluginConfigDef, raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const known = new Set(plugin.providers.map((p) => p.id));
+  const out: string[] = [];
+  for (const value of raw) {
+    const id = String(value ?? '').trim();
+    if (!id || !known.has(id) || out.includes(id)) continue;
+    out.push(id);
+  }
+  return out;
+}
+
 async function hydrate(): Promise<RuntimeConfig> {
   const stored = await readStored();
+  const storedOrders = await readStoredOrders();
   const next: RuntimeConfig = {};
+  const nextOrders: StoredOrders = {};
   for (const plugin of PLUGIN_CONFIGS) {
     next[plugin.id] = {};
+    nextOrders[plugin.id] = {};
     for (const provider of plugin.providers) {
       next[plugin.id][provider.id] = {
         fields: { ...(stored[plugin.id]?.[provider.id] || {}) },
         ...(await resolveSecret(plugin.id, provider)),
       };
     }
+    for (const channel of plugin.channels) {
+      const order = normalizeOrder(plugin, storedOrders[plugin.id]?.[channel.id]);
+      if (order.length) nextOrders[plugin.id][channel.id] = order;
+    }
   }
   runtime = next;
+  runtimeOrders = nextOrders;
   return next;
 }
 
@@ -237,15 +287,31 @@ export function readPluginProviderSecret(
   return cached?.apiKey || envFirst(secretField.env) || secretField.fallback || '';
 }
 
-function resolveOrder(plugin: PluginConfigDef, orderEnv: string, defaultOrder: readonly string[]): string[] {
+function resolveOrder(
+  plugin: PluginConfigDef,
+  channel: PluginConfigDef['channels'][number],
+): string[] {
+  const stored = runtimeOrders[plugin.id]?.[channel.id];
+  if (stored?.length) return [...stored];
   const known = new Set(plugin.providers.map((p) => p.id));
-  const raw = String(process.env[orderEnv] || '').trim();
-  if (!raw) return [...defaultOrder];
+  const raw = String(process.env[channel.orderEnv] || '').trim();
+  if (!raw) return [...channel.defaultOrder];
   const order = raw
     .split(',')
     .map((id) => id.trim().toLowerCase())
     .filter((id) => known.has(id));
-  return order.length ? order : [...defaultOrder];
+  return order.length ? order : [...channel.defaultOrder];
+}
+
+/**
+ * 运行时读取某通道的 provider 顺序（同步：搜索/抓取/决策/生图的请求路径上直接调）。
+ * 优先级：平台保存的顺序 → 通道环境变量 → 目录默认。
+ */
+export function readPluginChannelOrder(pluginId: PluginConfigId, channelId: string): string[] {
+  const plugin = getPluginConfigDef(pluginId);
+  const channel = plugin.channels.find((c) => c.id === channelId);
+  if (!channel) return [];
+  return resolveOrder(plugin, channel);
 }
 
 async function viewOf(plugin: PluginConfigDef): Promise<PluginConfigView> {
@@ -256,7 +322,7 @@ async function viewOf(plugin: PluginConfigDef): Promise<PluginConfigView> {
     channels: plugin.channels.map((channel) => ({
       id: channel.id,
       label: channel.label,
-      order: resolveOrder(plugin, channel.orderEnv, channel.defaultOrder),
+      order: resolveOrder(plugin, channel),
     })),
     providers: plugin.providers.map((provider) => {
       const cached = runtime?.[plugin.id]?.[provider.id];
@@ -320,6 +386,8 @@ export async function savePluginProviderConfig(
   const plugin = getPluginConfigDef(pluginId);
   const stored = await readStored();
   const pluginStored = { ...(stored[pluginId] || {}) };
+  const storedOrders = await readStoredOrders();
+  const pluginOrders = { ...(storedOrders[pluginId] || {}) };
 
   for (const [providerId, patch] of Object.entries(input.providers || {})) {
     const provider = getProviderDef(pluginId, providerId);
@@ -356,10 +424,34 @@ export async function savePluginProviderConfig(
   if (Object.keys(pluginStored).length) stored[pluginId] = pluginStored;
   else delete stored[pluginId];
 
+  for (const [channelId, raw] of Object.entries(input.orders || {})) {
+    const channel = plugin.channels.find((c) => c.id === channelId);
+    if (!channel) throw new PluginProviderConfigError(`未知通道：${pluginId}.${channelId}`);
+    if (!Array.isArray(raw)) throw new PluginProviderConfigError(`${channel.label} 的优先级无效`);
+    // 保存处比 hydrate 严格：未知 provider 直接拒绝，不静默丢弃（用户点选的一定要落库）
+    const known = new Set(plugin.providers.map((p) => p.id));
+    for (const value of raw) {
+      const id = String(value ?? '').trim();
+      if (id && !known.has(id)) {
+        throw new PluginProviderConfigError(`未知 provider：${pluginId}.${id}`);
+      }
+    }
+    const order = normalizeOrder(plugin, raw);
+    if (order.length) pluginOrders[channelId] = order;
+    else delete pluginOrders[channelId];
+  }
+  if (Object.keys(pluginOrders).length) storedOrders[pluginId] = pluginOrders;
+  else delete storedOrders[pluginId];
+
   await systemPrisma.platform_settings.upsert({
     where: { key: SETTING_KEY },
     update: { value: JSON.stringify(stored) },
     create: { key: SETTING_KEY, value: JSON.stringify(stored) },
+  });
+  await systemPrisma.platform_settings.upsert({
+    where: { key: ORDER_SETTING_KEY },
+    update: { value: JSON.stringify(storedOrders) },
+    create: { key: ORDER_SETTING_KEY, value: JSON.stringify(storedOrders) },
   });
   await loadPluginProviderConfig();
   return viewOf(plugin);
@@ -368,4 +460,5 @@ export async function savePluginProviderConfig(
 /** 测试缝 */
 export function resetPluginProviderConfigCache(): void {
   runtime = null;
+  runtimeOrders = {};
 }

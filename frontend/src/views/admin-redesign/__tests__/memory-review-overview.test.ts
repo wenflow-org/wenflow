@@ -121,8 +121,8 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await nextTick();
     expect(w.find('.mk-pill--active').text()).toContain('需关注');
     expect(card.classes()).toContain('mr-kpi--on');
-    // 快筛只作用于当前页：范围常驻可见（卡头 + 分页器 note）
-    expect(w.find('.mk-filter').text()).toContain('仅当前页');
+    // 2026-10-26：卡头「仅当前页 · 共 N 位」文案撤除（用户「我非常讨厌这种文案」），
+    // 范围说明单源留在分页器 note
     expect(w.find('.pagination-note').text()).toContain('筛选范围：当前页');
     w.unmount();
   });
@@ -275,8 +275,9 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await flushPromises();
     // 2026-10-23 用户「这种文案，不要」：卡头不再复述排序/分页机制，排序状态只由列头表达
     expect(w.find('.mk-card__head-right').exists()).toBe(false);
-    // 2026-10-26：卡头只留一条范围读数（快筛与计数都只作用于当前页），不写机制
-    expect(w.find('.mk-card__meta').text()).toBe('仅当前页 · 共 1 位');
+    // 2026-10-26 二次收口：卡头连「仅当前页 · 共 N 位」也撤除——同一事实由分页器复读，
+    // 用户明确「这种文案不要」
+    expect(w.find('.mk-card__meta').exists()).toBe(false);
 
     // 记忆痕迹：首击降序
     const tracesTh = w.findAll('thead th').find((t) => t.text() === '记忆痕迹')!;

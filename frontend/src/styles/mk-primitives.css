@@ -1047,8 +1047,18 @@ html[data-theme='dark'] .mk-pill__count { background: var(--mk-surface-3); }
   font-size: var(--mk-fs-micro);
   padding: 0;
   cursor: pointer;
-  opacity: 0;
+  /* 不再用 opacity: 0 隐藏：Chromium 的原生下拉弹层由 select 自身样式驱动，
+     整层透明会把展开后的选项一起带走。闭合态靠 color: transparent 隐形即可。 */
 }
+/* 展开的原生弹层不继承 .mk-pillselect__v 的透明外观（Chromium 用 option 的计算色画弹层），
+   而刚才那层「不可见」正是靠 color: transparent 实现的——不显式给 option 定色，
+   用户点开后看到的就是一片没有文字的浮层（2026-10-26 用户走查「选项不可见」）。 */
+.mk-pillselect__v > option {
+  color: var(--mk-ink);
+  background: var(--mk-surface);
+}
+/* 焦点环由整枚胶囊的 :focus-within 描边承担，透明 select 自己不再画一圈 */
+.mk-pillselect__v:focus-visible { outline: none; }
 /* 激活态（= 该维偏离默认值）：整枚胶囊走 .mk-pill--active 的浅蓝底；
    值本身也跟随主色，避免「底变了字没变」的半个激活态 */
 .mk-pill--active > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }

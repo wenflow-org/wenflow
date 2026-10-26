@@ -20,9 +20,9 @@
 
     <!-- 学习状态概览 KPI 带（2026-10-04 用户拍板：按同组形态拆出工作台卡到页级，
          页头/口径条之下、内容卡之上，与记忆复习 KPI 栅格同形同节拍）。
-         2026-10-26：KPI 即筛选入口——「需关注 / 观察 / 低置信」三卡可点，点中即筛、再点取消；
-         卡头那排同名 pill 撤除，同一个数字不再有「不能点的卡」和「能点的胶囊」两个版本。
-         读数卡不再随 rows.length 消失：0 行显 0，加载失败显「—」，不让「没人」与「没读到」同版面。 -->
+         2026-10-26：读数卡不再随 rows.length 消失：0 行显 0，加载失败显「—」，
+         不让「没人」与「没读到」同版面。三张档位卡（需关注 / 观察 / 低置信）可点即筛、
+         再点取消，与卡头胶囊组共用同一个 `pill` 状态（同记忆复习「需人工看」判例）。 -->
     <section class="mk-kpi-grid lc-kpi" aria-label="学习状态概览">
       <MkKpi
         label="学习者账号"
@@ -86,6 +86,21 @@
            使用者会先试搜索再回到「重试」（2026-10-26 走查） -->
       <div v-if="!loadFailed" class="mk-card__head">
         <div class="mk-filter">
+          <!-- 风险筛选归位（2026-10-26 二次走查）：上一轮把入场做成「KPI 卡可点」并撤掉卡头
+               胶囊，但全站列表页的卡头左侧都是 chips，这页空着只剩两个文字链，看着像没做完。
+               现按同类页（记忆复习 / 目标对话）的既有判定恢复胶囊组：胶囊是筛选的正式入口，
+               KPI 卡保留可点作为同一状态的快捷入口——两者共用 `pill` 一个状态，不会各走各的。 -->
+          <div class="mk-pills" role="group" aria-label="风险筛选">
+            <button
+              v-for="p in lcPills"
+              :key="p.key"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': pill === p.key }"
+              :aria-pressed="pill === p.key"
+              @click="pill = p.key"
+            >{{ p.label }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
+          </div>
           <!-- 排序回默认序的出口：默认序是「风险优先 → 更新时间新→旧」，点过置信/更新后
                列表就不再是「先找有问题的人」，得有一条路回去。槽位与其余列表页一致：
                清除筛选 → 恢复默认序（都是「撤销我改过的视图状态」）。 -->
@@ -542,6 +557,14 @@ const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence 
 /** 低置信 KPI 与均值同一口径（有任务的快照）：无任务行在表里置信列本显「—」，
     计入会与均值对不上。 */
 const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
+/** 卡头胶囊组（2026-10-26）：与 KPI 三卡同源同值，交互也共用 `pill`。
+    计数口径 = 当前范围（含测试账号开关）下的全集，不随搜索词变化——与 KPI 一致。 */
+const lcPills = computed<Array<{ key: 'all' | 'risk' | 'watch' | 'stale'; label: string; n: number | null }>>(() => [
+  { key: 'all', label: '全部', n: rows.value.length },
+  { key: 'risk', label: '需关注', n: riskCount.value },
+  { key: 'watch', label: '观察', n: watchCount.value },
+  { key: 'stale', label: '低置信', n: lowConfCount.value }
+])
 const avgConfText = computed(() => {
   if (!confRows.value.length) return '—'
   const avg = confRows.value.reduce((s, r) => s + (r.confidence ?? 0), 0) / confRows.value.length

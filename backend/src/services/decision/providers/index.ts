@@ -8,6 +8,7 @@
  */
 
 import type { DecisionProvider, DecisionProviderId } from '../types';
+import { readPluginChannelOrder } from '../../plugin-providers.service';
 import { AlibabaDecisionProvider } from './alibaba';
 import { CloudflareDecisionProvider } from './cloudflare';
 import { VeniceDecisionProvider } from './venice';
@@ -34,13 +35,11 @@ export function createDecisionProviders(): Record<DecisionProviderId, DecisionPr
   };
 }
 
+/** 优先级：平台保存的顺序 → 环境变量 → 默认（与联网两通道同判例） */
 export function resolveDecisionProviderOrder(): DecisionProviderId[] {
-  const raw = (process.env.DECISION_PROVIDER || '').trim();
-  if (!raw) return [...DEFAULT_DECISION_PROVIDER_ORDER];
-  const known = new Set<string>(IMPLEMENTED_DECISION_PROVIDERS);
-  const order = raw
-    .split(',')
-    .map((id) => id.trim().toLowerCase())
-    .filter((id) => known.has(id)) as DecisionProviderId[];
-  return order.length > 0 ? order : [...DEFAULT_DECISION_PROVIDER_ORDER];
+  const configured = readPluginChannelOrder('decision', 'decision').filter(
+    (id): id is DecisionProviderId => IMPLEMENTED_DECISION_PROVIDERS.includes(id as DecisionProviderId)
+  );
+  if (configured.length) return configured;
+  return [...DEFAULT_DECISION_PROVIDER_ORDER];
 }

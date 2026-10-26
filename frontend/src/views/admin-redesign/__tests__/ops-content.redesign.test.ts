@@ -337,8 +337,11 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 状态条已退役（2026-10-04）：总量读数迁 MkKpi 卡带
     expect(w.find('.mk-status').exists()).toBe(false);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
-    // 失败读数只留 pill 一处（KPI「生成失败」卡已删）
-    expect(w.findAll('.mk-kpi__label').map((n) => n.text().trim())).toEqual(['路径总数']);
+    // 2026-10-26 用户走查「kpi 就一个，不太好看」：单卡扩为五张真实读数
+    // （学习中的 / 生成失败两卡可点 = 筛选快捷入口；筛选正式入口仍是卡头胶囊）
+    expect(w.findAll('.mk-kpi__label').map((n) => n.text().trim())).toEqual([
+      '路径总数', '学习中', '生成失败', '累计里程碑', '累计子任务'
+    ]);
 
     w.unmount();
   });

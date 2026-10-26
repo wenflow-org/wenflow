@@ -1304,9 +1304,14 @@ export const adminPluginsApi = {
   },
   saveConfig: async (
     pluginId: string,
-    providers: Record<string, Record<string, string | null> & { clearKey?: boolean }>
+    providers: Record<string, Record<string, string | null> & { clearKey?: boolean }>,
+    /** 通道优先级（channelId → providerId 顺序）；不传 = 不动已保存的顺序 */
+    orders?: Record<string, string[]>
   ) => {
-    return adminAxios.put(`/admin/plugins/config/${encodeURIComponent(pluginId)}`, { providers });
+    return adminAxios.put(`/admin/plugins/config/${encodeURIComponent(pluginId)}`, {
+      providers,
+      ...(orders ? { orders } : {})
+    });
   }
 };
 
