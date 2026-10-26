@@ -31,7 +31,7 @@ import {
 import {
   aggregatePathJudgments, buildPathPrompt, DIMENSIONS as PATH_DIMS, DIMENSION_LABELS as PATH_LABELS,
   FLAG_KEYS as PATH_FLAGS, FLAG_LABELS as PATH_FLAG_LABELS, PATH_JUDGE_NAME,
-  selectPathCases, validatePathVerdict, detectToolVocabulary, WEIGHTS as PATH_WEIGHTS,
+  selectPathCases, validatePathVerdict, detectToolVocabulary, detectBodySkillHint, WEIGHTS as PATH_WEIGHTS,
 } from './path.mjs';
 
 const args = Object.fromEntries(process.argv.slice(2).map((raw) => {
@@ -259,7 +259,7 @@ function judgeVersionFor(target) {
 
 function selftest() {
   let passed = 0;
-  const total = 17;
+  const total = 20;
   const assert = (cond, label) => {
     if (!cond) throw new Error(`selftest failed: ${label}`);
     passed += 1;
@@ -355,6 +355,19 @@ function selftest() {
   ]);
   assert(realExcel && realExcel.coveredTasks === 2, 'tool vocab: real path covered');
   assert(detectToolVocabulary('心理学流派脉络', '', [{ title: 'a' }]) === null, 'tool vocab: non-tool goal skipped');
+
+  // 身体技能线索（judgeabilityGap 结构证据，2026-10-26）：无传感器 + 口才验收 = 判不了动作
+  const guitar = detectBodySkillHint('婚礼台上一首《平凡之路》弹唱', '', [
+    { title: '按 C 和弦逐弦拨响', description: '听声判断', acceptanceCriteria: '能说出每根弦是否干净' },
+    { title: '写一张按弦自查卡', description: '固定信号', acceptanceCriteria: '能描述触感' },
+  ]);
+  assert(guitar && guitar.isBodySkill && guitar.speakCount === 2 && guitar.docTasks === 1 && guitar.sensorHits === 0,
+    'body skill: guitar detected, no sensor');
+  const cycling = detectBodySkillHint('骑行台功率分层训练', '', [
+    { title: '分段认领区间', description: '用功率计的瓦数和心率漂移', acceptanceCriteria: '能说出这次属于哪一段' },
+  ]);
+  assert(cycling && cycling.sensorHits === 1, 'body skill: cycling has sensor');
+  assert(detectBodySkillHint('SQL 慢查询优化', '', [{ title: 'a', description: 'b' }]) === null, 'body skill: non-body goal skipped');
 
   console.log(`[selftest] ${passed}/${total} 通过｜不调模型、不写盘`);
 }

@@ -1,10 +1,33 @@
 export type GoalPathTimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
 
 /**
- * 技能性质（goal 层 understanding.skill_nature）：决定 AI 能不能替学习者代跑核心动作。
- * 见 prompts/core/goal-conversation.yaml 同名规则。
+ * 技能性质（goal 层 understanding.skill_nature）：决定 AI 能不能替学习者代跑核心动作，
+ * 以及**平台能不能判定核心动作做对了**。见 prompts/core/goal-conversation.yaml 同名规则。
+ *
+ * 2026-10-26 二拆（用户纠偏「乐器、运动…不能指导去具体画画什么的」）：
+ * 原 `internalized_skill` 把「英语拆句」和「吉他弹唱」混成一档，但两者的可判定性完全不同——
+ * 拆句的产出（哪句是主干、插入段挂在哪）学习者能交出来，平台能对照；
+ * 弹琴的手型/音色平台看不到、听不到，只能逼出「写一张自查卡」这种假验收。
+ *
+ * 四档：
+ *   - tool_operation        工具操作（Excel/SQL/Python/Git/剪辑）：可代跑繁琐部分
+ *   - cognitive_internalized 认知内化（拆句/推导/写作/口语）：核心动作本人做，**产出物可判**
+ *   - physical_internalized  身体内化（乐器/美术/运动/发音/舞蹈）：核心动作本人做，**平台判不了动作质量**
+ *   - knowledge_structure    知识建构（学科体系/理论脉络/概念辨析）：AI 可整理，学习者须自己复述
+ *
+ * 兼容：历史行里的 `internalized_skill` 归一为 `cognitive_internalized`（保守档——
+ * 至少不会因为分类变更而把可判定路径降级成不可判定）。
  */
-export type SkillNature = 'tool_operation' | 'internalized_skill' | 'knowledge_structure';
+export type SkillNature =
+  | 'tool_operation'
+  | 'cognitive_internalized'
+  | 'physical_internalized'
+  | 'knowledge_structure';
+
+/**
+ * 平台可判定性（见 GoalPathVisibleSummary.platformJudgment 注释）。
+ */
+export type PlatformJudgment = 'judgeable_output' | 'judgeable_sensor' | 'not_judgeable';
 
 import type { MaterialNeed } from '../../skills/material-collector/types';
 import { normalizeDeadlineDate } from './deadline-date';
@@ -76,6 +99,30 @@ export interface GoalPathVisibleSummary {
    */
   skillNature?: SkillNature | null;
   skillNatureEvidence?: string | null;
+  /**
+   * 平台可判定性（hidden，2026-10-26 用户纠偏「乐器、运动…不能指导去具体画画」）。
+   *
+   * 与 skillNature 分工：skillNature 回答「AI 能不能代跑」，本字段回答
+   * 「平台能不能判断学习者做对了」。两者可以不一致——吉他弹唱是本人练（不能代跑），
+   * 平台也判不了（不能验收）。
+   *
+   * 取值：
+   *   - judgeable_output    核心动作的**产出物**可提交、可对照（拆句结果、推导过程、代码、表格、文字稿）
+   *   - judgeable_sensor    核心动作发生在身体上，但有**客观读数**可判（功率计、心率带、配速、录音波形、体脂秤）
+   *   - not_judgeable       核心动作发生在身体/手上，平台既看不到也读不到（手型、音色、笔触、舞姿）
+   *
+   * 这个字段决定任务形态：not_judgeable 时，平台只能做「训练计划 + 复盘归因」，
+   * **不得**编造「自查卡/对照表」假装可判定（实证：吉他 81 任务里 27 条验收写「能说出」，
+   * 把身体技能降级成口头描述，学习者练不到手，平台也没真判到）。
+   */
+  platformJudgment?: PlatformJudgment | null;
+  /** 可判定性判据（一句，说明凭什么这么判；如「有功率计读数」/「只能靠自述」） */
+  platformJudgmentEvidence?: string | null;
+  /**
+   * 客观读数来源（judgeable_sensor 时填，如「功率计」「心率带」「录音」「配速表」）。
+   * 无传感器时为空——下游据此决定能不能把身体动作转成可判数据。
+   */
+  sensorReadouts?: string[] | null;
   successCriteria: {
     observableResult: string | null;
     acceptanceCheck: string | null;
@@ -209,6 +256,14 @@ export function buildGoalPathVisibleSummary(params: {
   const schoolAnchor = normalizeSchoolAnchorShape(understanding?.school_anchor);
   const skillNature = normalizeSkillNature(understanding?.skill_nature);
   const skillNatureEvidence = normalizeString(understanding?.skill_nature_evidence) || null;
+  const platformJudgment = normalizePlatformJudgment(understanding?.platform_judgment);
+  const platformJudgmentEvidence = normalizeString(understanding?.platform_judgment_evidence) || null;
+  const sensorReadouts = Array.isArray(understanding?.sensor_readouts)
+    ? (understanding.sensor_readouts as unknown[])
+        .map((v) => normalizeString(v))
+        .filter((v): v is string => !!v)
+        .slice(0, 8)
+    : null;
 
   const hasResources = !!(timeBudget || timePerSession || timeHorizon || deadlineText || deadlineDate);
   const observableResult = normalizeString(understanding?.success_criteria?.observable_result);
@@ -263,6 +318,9 @@ export function buildGoalPathVisibleSummary(params: {
     needsMaterial,
     skillNature,
     skillNatureEvidence,
+    platformJudgment,
+    platformJudgmentEvidence,
+    sensorReadouts,
   };
 }
 
@@ -298,11 +356,28 @@ export function normalizeSchoolAnchorShape(raw: any): GoalPathVisibleSummary['sc
   return { textbook, examScope, schoolPace };
 }
 
-/** 技能性质归一化：只认三档枚举，其余（含大小写变体外的脏值）一律 null——不猜测、不降级成默认档 */
+/**
+ * 技能性质归一化：只认四档枚举，其余（脏值）一律 null——不猜测、不降级成默认档。
+ * 历史兼容：旧档 `internalized_skill` 归一为 `cognitive_internalized`（保守方向——
+ * 旧数据没有「身体内化」的信息，不能凭空降级成不可判定）。
+ */
 export function normalizeSkillNature(raw: unknown): SkillNature | null {
   if (typeof raw !== 'string') return null;
   const value = raw.trim().toLowerCase();
-  return value === 'tool_operation' || value === 'internalized_skill' || value === 'knowledge_structure'
+  if (value === 'internalized_skill') return 'cognitive_internalized';
+  return value === 'tool_operation'
+    || value === 'cognitive_internalized'
+    || value === 'physical_internalized'
+    || value === 'knowledge_structure'
+    ? value
+    : null;
+}
+
+/** 平台可判定性归一化：只认三档，脏值 null（不猜测） */
+export function normalizePlatformJudgment(raw: unknown): PlatformJudgment | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim().toLowerCase();
+  return value === 'judgeable_output' || value === 'judgeable_sensor' || value === 'not_judgeable'
     ? value
     : null;
 }

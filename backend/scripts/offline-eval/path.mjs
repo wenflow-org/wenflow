@@ -28,6 +28,8 @@ export const FLAG_KEYS = [
   'domainViolation', 'prerequisiteGap', 'budgetMismatch', 'placeholderTask', 'duplicateTask',
   // v2（2026-10-25 方向改造）：三类「教条苦力化」硬伤 + 承诺一致性 + 领域事实。
   'manualLaborTrap', 'asyncTimeLock', 'missingToolScaffold', 'promiseConsistency', 'domainAccuracy',
+  // v3（2026-10-26 用户纠偏「乐器、运动…不能指导去具体画画」）：平台判不了的身体动作被当成可验收。
+  'judgeabilityGap',
 ];
 export const FLAG_LABELS = {
   domainViolation: '越界承诺（平台做不到的实体操作）',
@@ -40,6 +42,7 @@ export const FLAG_LABELS = {
   missingToolScaffold: '工具脚手架缺失（声明不会却无步骤卡）',
   promiseConsistency: '对话承诺违约（预算/工具形态承诺被推翻）',
   domainAccuracy: '领域事实/分类错误',
+  judgeabilityGap: '验收越界（要求平台判定看不到的身体动作）',
 };
 
 export function selectPathCases(db, {
@@ -140,6 +143,43 @@ export function detectToolVocabulary(title, subject, tasks) {
   };
 }
 
+/**
+ * 身体技能线索（judgeabilityGap 的结构性证据源，2026-10-26 用户纠偏）。
+ *
+ * 只对**身体/手上技能**目标生效（乐器/美术/运动/舞蹈/手工）：统计验收标准里有多少条
+ * 落在「能说出/能描述」这类口才判据上、有多少条是写文档产出。这两类都不是在验收动作。
+ *
+ * 实证（吉他弹唱 81 任务）：27 条验收写「能说出…」、4 个任务是写自查卡，
+ * 而平台既听不到音色也看不到手型——这些验收实际上什么也没判到。
+ */
+const BODY_SKILL_PATTERN = /吉他|钢琴|小提琴|乐器|弹唱|演奏|和弦|绘画|素描|水彩|油画|画画|书法|舞蹈|街舞|芭蕾|篮球|足球|网球|羽毛球|游泳|跑步|骑行|单车|健身|瑜伽|滑雪|滑板|力量训练|体能|手工|陶艺|编织/i;
+const SPEAK_ACCEPTANCE = /能说出|能描述|能解释|能讲清|说出自己|描述自己|口述/;
+const DOC_DELIVERABLE = /自查卡|对照表|检查清单|记录表|说明文档|写一份.*卡|写一张.*卡/;
+
+export function detectBodySkillHint(title, subject, tasks) {
+  const scope = `${title || ''} ${subject || ''}`;
+  if (!BODY_SKILL_PATTERN.test(scope)) return null;
+  const acceptanceTexts = tasks.map((t) => String(t.acceptanceCriteria || ''));
+  const speakCount = acceptanceTexts.filter((a) => SPEAK_ACCEPTANCE.test(a)).length;
+  const docTasks = tasks.filter((t) => DOC_DELIVERABLE.test(String(t.title || '') + String(t.description || ''))).length;
+  // 客观读数只认「外部仪表测出的数字」，不认「用手机录一段回听」这种自查动作
+  // （2026-10-26 实测：吉他路径因「录音回听」被误判为有客观读数）。
+  const sensorWords = ['功率计', '瓦数', '心率带', '心率漂移', '配速', '步频', '踏频', '体脂秤', '功率区间'];
+  const sensorHits = tasks.filter((t) => sensorWords.some((w) => String(t.description || '').includes(w))).length;
+  return {
+    isBodySkill: true,
+    speakCount,
+    docTasks,
+    sensorHits,
+    line: `身体技能目标：验收里「能说出/能描述」类 ${speakCount}/${tasks.length}`
+      + `｜写文档产出任务 ${docTasks} 个`
+      + `｜客观读数线索 ${sensorHits} 处`
+      + (sensorHits === 0
+        ? '（无功率/心率/配速/录音等读数 ⇒ 平台判不了动作质量，验收不该落在动作本身）'
+        : '（有客观读数，验收可落在读数判断上）'),
+  };
+}
+
 function kcSummary(template) {
   const ann = template?.kcAnnotation;
   if (!ann || typeof ann !== 'object') return null;
@@ -206,6 +246,9 @@ export function buildPathCase(db, row) {
   // 判据不是「有没有提到工具」，而是「路径目标就是学这个工具，任务里却检索不到该工具的核心操作词」。
   // 实证：职场 Excel 67h/76 任务，函数/公式/透视/图表/条件格式全部 0 次命中，全是写卡与自述反思。
   const toolVocabulary = detectToolVocabulary(row.title, row.subject, tasks);
+  // 身体技能线索（judgeabilityGap 的结构性证据，2026-10-26）：目标本身是乐器/美术/运动/舞蹈，
+  // 而验收里出现「能说出/能描述」或「写自查卡」——这正是把身体技能降级成口头描述的病灶。
+  const bodySkillHint = detectBodySkillHint(row.title, row.subject, tasks);
   const metrics = [
     `里程碑 ${milestones.length}｜任务 ${tasks.length}｜总预计 ${totalMinutes} 分钟`,
     budgetMinutes
@@ -216,6 +259,7 @@ export function buildPathCase(db, row) {
     kc ? `KC 组 ${kc.groups}｜KC ${kc.kcs}｜任务-KC 链接 ${kc.links}（覆盖任务 ${kcCoveredTasks}/${tasks.length}）｜图节点 ${kc.nodes}｜前置边 ${kc.edges}` : 'KC 标注：缺失',
     duplicates.length ? `重复标题 ${duplicates.length} 组：${duplicates.map(([k, n]) => `${k}×${n}`).join('、')}` : '重复标题：无',
     toolVocabulary ? toolVocabulary.line : '工具操作词覆盖：不适用（非工具操作型目标）',
+    bodySkillHint ? bodySkillHint.line : '',
     row.status ? `路径状态：${row.status}` : '',
   ].filter(Boolean);
 
@@ -301,6 +345,7 @@ const RUBRIC = `你是独立的学习路径质量评审员。评审对象是一�
 - missingToolScaffold（工具脚手架缺失）：路径目标本身是**学会用某个工具做出结果**（Excel 报表、SQL 调优、Git 操作、Python 脚本、剪辑软件等），但整条路径的任务里**没有任何一处真正教这个工具**——没有函数名/命令/点击步骤/代码骨架，全是在写字段对照卡、使用说明、自查清单、「和自己对话哪一步最卡」。判据（满足任一条即可）：① 对话/背景里学习者声明了不会该工具或零基础（「不会公式」「没用过透视表」「零基础」「只会皮毛」都算，不要求逐字说「不会」），而任务要求用该工具产出结果却未给模板/步骤卡；② **结构性证据**：路径主题是工具操作型，但全部任务标题+描述里检索不到该工具的核心操作词（如 Excel 路径搜不到 函数/公式/透视/图表/筛选，SQL 路径搜不到 索引/执行计划/EXPLAIN，Git 路径搜不到 rebase/cherry-pick/reset/reflog）。这条针对「只讲道不给术」的空壳路径——67 小时 Excel 路径 76 个任务零函数零透视表，比缺步骤卡更严重。若路径本身不是工具操作型（如学科知识、语言训练），不适用本 flag。
 - promiseConsistency（对话承诺违约）：路径**明显违背**对话中的明确承诺——以【对话承诺摘录】和【目标与确认方案】为准：总时间预算被超出 50% 以上，或对具体环节的工时承诺被超出数倍，或明确的工具形态承诺（如「配照着点就出图的操作步骤」）在路径中被推翻替换。轻微偏差（±20% 内）或对话中从未明确承诺过的不算。
 - domainAccuracy（领域事实/分类错误）：可核验的学科事实错误——把子领域/研究分支错当理论流派归类、给历史上无实验传统的学派硬编「经典实验」、教材版本或专有名词张冠李戴、虚构不存在的范例/文献。表述含糊但不算错的不算。
+- judgeabilityGap（验收越界）：路径目标本身是**身体/手上技能**（乐器演奏、美术绘画、运动训练、舞蹈、手工技艺），而任务的验收标准要求平台判定**平台看不到的东西**——「按对位置」「音色干净」「构图舒服」「动作标准」「当场勾卡」「现场演示一遍」都算。判据（满足任一条即可）：① 验收直接要求动作质量（听感/手感/视觉/姿势）；② 平台无任何客观读数（功率计/心率带/配速/录音波形），却把验收写成「能说出…」来假装可判——这不是验收了动作，是验收了口才；③ 用「写自查卡/对照表/检查清单」作为阶段交付物，替代练习本身。**不适用**：目标不是身体技能（学科知识、语言阅读、工具操作、写作推导都不适用）；有客观读数且验收落在读数判断上（如功率训练按瓦数与心率漂移判）也不适用。
 
 判定纪律：
 1. 以「结构事实」为准，不要自行重算课时；但可以指出事实之间的不一致。
@@ -331,6 +376,8 @@ export function buildPathPrompt(block) {
 const HARD_FAIL_FLAGS = [
   'domainViolation', 'prerequisiteGap',
   'manualLaborTrap', 'asyncTimeLock', 'missingToolScaffold', 'promiseConsistency', 'domainAccuracy',
+  // v3（2026-10-26 用户纠偏「乐器、运动…不能指导去具体画画」）：平台判不了的身体动作被当成可验收。
+  'judgeabilityGap',
 ];
 
 export function validatePathVerdict(raw, block) {

@@ -17,7 +17,7 @@ failurePolicy: propagate
 - learner：学习者画像投影（长期特征）
 - dialogue：当前输入与近期对话切片（用于语境理解，不充当状态载体）
 - task：当前任务 / 场景 / 控制指令
-- state：平台维护的主记忆快照（当前值，含 stage）
+- state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「learner（object）」`sandbox:simulation.learner`（编排注入） — 学习者画像（稳定人物设定，含掌握度描述）

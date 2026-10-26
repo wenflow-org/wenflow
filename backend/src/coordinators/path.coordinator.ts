@@ -25,7 +25,7 @@ import {
   type PathAgentInputConfig
 } from '../services/agentConfig.service';
 import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
-import { normalizeSchoolAnchorShape, normalizeSkillNature } from '../services/learning/goal-path-visible-summary';
+import { normalizeSchoolAnchorShape, normalizeSkillNature, normalizePlatformJudgment } from '../services/learning/goal-path-visible-summary';
 import { normalizeDeadlineDate } from '../services/learning/deadline-date';
 import { isDeadlineExplicitlyUnspecified, deriveRelativeDeadline, parseAbsoluteDeadline } from '../services/learning/deadline-text';
 import { resolveCapacity } from '../services/learning/capacity-authority';
@@ -334,6 +334,26 @@ class PathCoordinator {
               skillNatureEvidence: this.normalizeString(
                 str('understanding.skill_nature_evidence', visibleSummary?.skillNatureEvidence),
               ) || null,
+            }
+          : {}),
+        // 平台可判定性（2026-10-26 二拆）：与 skillNature 独立——决定「平台能不能判学习者做对了」。
+        // not_judgeable 时 stage 层只能给「训练计划 + 复盘归因」，不得编自查卡假装可判定。
+        ...(normalizePlatformJudgment(pick('understanding.platform_judgment') ?? visibleSummary?.platformJudgment)
+          ? {
+              platformJudgment: normalizePlatformJudgment(
+                pick('understanding.platform_judgment') ?? visibleSummary?.platformJudgment,
+              )!,
+              platformJudgmentEvidence: this.normalizeString(
+                str('understanding.platform_judgment_evidence', visibleSummary?.platformJudgmentEvidence),
+              ) || null,
+              ...(Array.isArray(pick('understanding.sensor_readouts') ?? visibleSummary?.sensorReadouts)
+                ? {
+                    sensorReadouts: (pick('understanding.sensor_readouts') ?? visibleSummary?.sensorReadouts as unknown[])
+                      .map((v: unknown) => this.normalizeString(v))
+                      .filter((v: string | null): v is string => !!v)
+                      .slice(0, 8),
+                  }
+                : {}),
             }
           : {}),
         currentBaseline: {
@@ -743,6 +763,20 @@ class PathCoordinator {
       (pack) => !(pack.pack?.materialId && uploadedMaterialIds.has(pack.pack.materialId))
     );
     const materialPacks = [...uploadedPacks, ...collectedPacks];
+
+    // 死占位惰性清理（2026-10-26 评审 #8）：回填窗口（15 分钟）外仍带 marker 的 pending
+    // 占位永远不会被回填（重启丢后台任务/采集失败后 marker 永挂）——每次走到资料装配
+    // 就顺手把该用户的死占位降级，不引入定时器。fire-and-forget，不阻塞生成。
+    if (typeof input.userId === 'string' && input.userId.trim()) {
+      void import('../services/materials/material-async-collect.service')
+        .then(({ deactivateStaleAsyncPlaceholders }) => deactivateStaleAsyncPlaceholders(input.userId as string))
+        .catch((error) => {
+          logger.warn('[path-coordinator] 死占位惰性清理失败（fail-open）', {
+            userId: input.userId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
 
     // 单一挂载点：定帧层（buildFramedNormalizedInput）负责归一化与字段透传，
     // materials 由本处统一合入（附件在前、联网在后），下游 path-planning 按序消费。

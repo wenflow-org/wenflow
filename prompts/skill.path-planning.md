@@ -17,7 +17,7 @@ failurePolicy: retry
 - dialogue：当前输入与近期对话切片（用于语境理解，不充当状态载体）
 - learner：学习者画像投影（长期特征）
 - path：路径与确认方案上下文
-- state：平台维护的主记忆快照（当前值，含 stage）
+- state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 - task：当前任务 / 场景 / 控制指令
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：

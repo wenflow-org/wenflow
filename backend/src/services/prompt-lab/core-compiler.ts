@@ -121,9 +121,11 @@ export function compileCoreFile(core: CoreFile, options: CompileCoreOptions = {}
   // ## 身份
   sections.push(`## 身份\n\n${core.identity}`);
 
-  // ## 使用通道（stateAdvance=true 时 state 标注"可推进"）
+  // ## 使用通道（state 通道始终显式标注 stateAdvance 控制语义：可推进 / 不推进）
+  // 只在 true 时标注会让 30 个 stateAdvance:false 的核心文件把该控制语义整块丢掉，
+  // 语义冻结判官据此判「核心文件有、产物无」→ divergent，阻断发布（2026-10-26 实证 stage-designer v56）。
   const channelLines = core.channels.map((channel) => {
-    const advance = channel === 'state' && core.stateAdvance ? '（可推进）' : '';
+    const advance = channel === 'state' ? (core.stateAdvance ? '（可推进）' : '（不推进）') : '';
     return `- ${channel}${advance}：${CORE_CHANNEL_DESCRIPTIONS[channel]}`;
   });
   // §2.5 输入契约声明：渲染进同一块，按来源分类标注（skill 上游产物 / sandbox 编排注入 / user 用户平台）
