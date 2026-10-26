@@ -1661,24 +1661,50 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
     if (!item || typeof item !== 'object') continue;
     const a = item as Record<string, unknown>;
     const from = toFiniteNumber(a.from);
-    const to = toFiniteNumber(a.to);
+    const to = toFiniteNumber(a.from2 ?? a.to);
     if (from === null || to === null || from === to) continue;
     const lo = Math.min(from, to);
     const hi = Math.max(from, to);
     if (hi <= x.min || lo >= x.max) continue;
     const seriesName = toFigureText(a.series, SPEC.labelMax);
-    const base = toFiniteNumber(a.baseline);
+    // series2：两条曲线之间的夹心填充（人口出生/死亡率之差、供需剩余）。给了两名就忽略 baseline。
+    const series2Name = toFigureText(a.series2, SPEC.labelMax);
+    const base = series2Name ? null : toFiniteNumber(a.baseline);
     const label = toFigureLabel(a.label, SPEC.subMax);
     const tone = normalizeTone(a.tone, ['accent', 'ok', 'warn', 'neutral']);
     areas.push({
       from: Math.max(lo, x.min),
       to: Math.min(hi, x.max),
       ...(seriesName ? { series: seriesName } : {}),
+      ...(series2Name ? { series2: series2Name } : {}),
       ...(base !== null ? { baseline: base } : {}),
       ...(label ? { label } : {}),
       ...(tone ? { tone } : {}),
     });
     if (areas.length >= 3) break;
+  }
+
+  // xBand：纵向高亮带（滴定突跃区间、均衡价格邻域）。给「看这一段」一个色块，
+  // 不再让模型用文字标签硬指——2026-10-24 外审 #5 的修法。
+  const bands: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.bands) ? raw.bands : []) {
+    if (!item || typeof item !== 'object') continue;
+    const bnd = item as Record<string, unknown>;
+    const from = toFiniteNumber(bnd.from);
+    const to = toFiniteNumber(bnd.to);
+    if (from === null || to === null || from === to) continue;
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    if (hi <= x.min || lo >= x.max) continue;
+    const label = toFigureLabel(bnd.label, SPEC.subMax);
+    const tone = normalizeTone(bnd.tone, ['accent', 'ok', 'warn', 'neutral']);
+    bands.push({
+      from: Math.max(lo, x.min),
+      to: Math.min(hi, x.max),
+      ...(label ? { label } : {}),
+      ...(tone ? { tone } : {}),
+    });
+    if (bands.length >= 3) break;
   }
 
   const title = toFigureText(raw.title, SPEC.titleMax);
@@ -1687,6 +1713,7 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
     y,
     series,
     ...(guides.length ? { guides } : {}),
+    ...(bands.length ? { bands } : {}),
     ...(areas.length ? { areas } : {}),
     ...(vectors.length ? { vectors } : {}),
     ...(marks.length ? { marks } : {}),

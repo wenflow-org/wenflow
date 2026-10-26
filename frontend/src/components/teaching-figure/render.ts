@@ -150,7 +150,7 @@ function wrap(body: string, w: number, h: number, material: RenderOptions['mater
     material !== 'none' ? `data-material="${material}"` : ''
   }>
 <style>
-  .tfx text{font-family:"PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif;fill:${T.ink}}
+  .tfx text{font-family:"PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif;fill:${T.ink};paint-order:stroke;stroke:#ffffff;stroke-width:3px;stroke-linejoin:round}
   .tfx .t-hero{font-size:${T.fontHero}px;font-weight:700;letter-spacing:-0.2px}
   .tfx .t-title{font-size:${T.fontTitle}px;font-weight:650}
   .tfx .t-key{font-size:${T.fontKey}px;font-weight:650}
@@ -1863,9 +1863,15 @@ function fmtNum(v: number): string {
  * 横轴 x、纵轴 y、曲线、等时刻辅助线。模型只给轴域、表达式/数据点、辅助线与箭头，
  * 采样与排版全部由这里确定性完成（同一份 spec 永远画出同一张图）。
  */
-function renderCartesianPlot({ title, x, y, series = [], guides = [], areas = [], vectors = [], marks = [] }: any): RenderedFigure | null {
-  if (!x || !y || !(Number(x.max) > Number(x.min)) || !(Number(y.max) > Number(y.min))) return null;
-  if (!Array.isArray(series) || !series.length) return null;
+function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = [], areas = [], vectors = [], marks = [] }: any): RenderedFigure | null {
+  if (!x || !y || !(Number(x.max) > Number(x.min)) || !(Number(y.max) > Number(y.min))) {
+    if (process.env.FIG_DEBUG) console.error('[cartesian] 轴域缺失');
+    return null;
+  }
+  if (!Array.isArray(series) || !series.length) {
+    if (process.env.FIG_DEBUG) console.error('[cartesian] 无系列');
+    return null;
+  }
 
   const TONE: Record<string, string> = { accent: T.accent, ok: T.ok, warn: T.warn, neutral: T.muted };
   const padL = 62;
@@ -2055,25 +2061,33 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], areas = []
   const curveOf = (name: string) => series.find((s: any) => s.name === name) || series[0];
 
   parts.push(`<g clip-path="url(#${clipId})">`);
+  // xBand：纵向高亮带垫在最底层——「看这一段」用色块说话，不靠文字标签硬指
+  for (const band of Array.isArray(bands) ? bands : []) {
+    const bx1 = px(Number(band.from));
+    const bx2 = px(Number(band.to));
+    const tone = TONE[band.tone] || T.accent;
+    parts.push(`<rect x="${Math.min(bx1, bx2).toFixed(1)}" y="${top}" width="${Math.abs(bx2 - bx1).toFixed(1)}" height="${plotH}" fill="${tone}" fill-opacity="0.10"/>`);
+    parts.push(`<line x1="${Math.min(bx1, bx2).toFixed(1)}" y1="${top}" x2="${Math.min(bx1, bx2).toFixed(1)}" y2="${axisY}" stroke="${tone}" stroke-width="1" stroke-dasharray="4 4" opacity="0.7"/>`);
+    parts.push(`<line x1="${Math.max(bx1, bx2).toFixed(1)}" y1="${top}" x2="${Math.max(bx1, bx2).toFixed(1)}" y2="${axisY}" stroke="${tone}" stroke-width="1" stroke-dasharray="4 4" opacity="0.7"/>`);
+    if (band.label) {
+      const bw = est(band.label, T.fontMicro);
+      const lx = Math.min(Math.max((bx1 + bx2) / 2, padL + bw / 2 + 2), padL + plotW - bw / 2 - 2);
+      parts.push(text(lx, top + 12, band.label, 't-tiny', 'middle', `fill="${tone}"`));
+    }
+  }
   for (const area of Array.isArray(areas) ? areas : []) {
     const curve = curveOf(area.series);
     const pts = sampleCurveInRange(curve, Number(area.from), Number(area.to));
     if (pts.length < 2) continue;
-    const baseY = area.baseline != null ? py(Number(area.baseline)) : axisY;
     const tone = TONE[area.tone] || T.accent;
-    const top = pts.map(([vx, vy]) => `${px(vx).toFixed(1)} ${py(vy).toFixed(1)}`).join(' L');
-    const d = `M${px(pts[0][0]).toFixed(1)} ${baseY} L${top} L${px(pts[pts.length - 1][0]).toFixed(1)} ${baseY} Z`;
-    parts.push(`<path d="${d}" fill="${tone}" fill-opacity="0.14" stroke="none"/>`);
-    parts.push(`<line x1="${px(pts[0][0]).toFixed(1)}" y1="${baseY}" x2="${px(pts[0][0]).toFixed(1)}" y2="${py(pts[0][1]).toFixed(1)}" stroke="${tone}" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>`);
-    parts.push(`<line x1="${px(pts[pts.length - 1][0]).toFixed(1)}" y1="${baseY}" x2="${px(pts[pts.length - 1][0]).toFixed(1)}" y2="${py(pts[pts.length - 1][1]).toFixed(1)}" stroke="${tone}" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>`);
-    if (area.label) {
-      // 标签放在面积的几何中心（按区间中点取曲线高度，再取与基线的中点），
-      // 不按采样点序号取——两点直线上序号 1/3 会落到右端（2026-10-23 实拍）
+    const labelAt = (topPts: Array<[number, number]>, botY: number) => {
+      if (!area.label) return;
+      // 标签放在面积的几何中心（按区间中点取曲线高度，再取与基线的中点）
       const midX = (Number(area.from) + Number(area.to)) / 2;
-      let curveY = pts[0][1];
-      for (let i = 1; i < pts.length; i += 1) {
-        const [x1p, y1p] = pts[i];
-        const [x0p, y0p] = pts[i - 1];
+      let curveY = topPts[0][1];
+      for (let i = 1; i < topPts.length; i += 1) {
+        const [x1p, y1p] = topPts[i];
+        const [x0p, y0p] = topPts[i - 1];
         if (midX >= x0p && midX <= x1p) {
           const t = x1p === x0p ? 0 : (midX - x0p) / (x1p - x0p);
           curveY = y0p + (y1p - y0p) * t;
@@ -2081,11 +2095,32 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], areas = []
         }
       }
       const cx = px(midX);
-      const cyMid = (py(curveY) + baseY) / 2;
+      const cyMid = (py(curveY) + botY) / 2;
       const labelW = est(area.label, T.fontMicro);
       const anchor = cx + labelW / 2 > padL + plotW ? 'end' : 'middle';
-      parts.push(text(anchor === 'end' ? cx - 4 : cx, cyMid + 4, area.label, 't-tiny', anchor, `${halo(T.surface)} fill="${tone}"`));
+      parts.push(text(anchor === 'end' ? cx - 4 : cx, cyMid + 4, area.label, 't-tiny', anchor, `fill="${tone}"`));
+    };
+    if (area.series2) {
+      // 两线夹心：出生率 vs 死亡率的差、供需剩余——「差值」用色块胖瘦直接看
+      const curve2 = curveOf(area.series2);
+      const pts2 = sampleCurveInRange(curve2, Number(area.from), Number(area.to));
+      if (pts2.length < 2) continue;
+      const n = Math.max(pts.length, pts2.length);
+      const topPath = pts.map(([vx, vy]) => `${px(vx).toFixed(1)} ${py(vy).toFixed(1)}`).join(' L');
+      const bottomRev = [...pts2].reverse().map(([vx, vy]) => `${px(vx).toFixed(1)} ${py(vy).toFixed(1)}`).join(' L');
+      parts.push(`<path d="M${topPath} L${bottomRev} Z" fill="${tone}" fill-opacity="0.16" stroke="none"/>`);
+      const midTop = pts[Math.floor(n / 2)] ?? pts[pts.length - 1];
+      const midBot = pts2[Math.floor(n / 2)] ?? pts2[pts2.length - 1];
+      labelAt(pts, py((midTop[1] + midBot[1]) / 2));
+      continue;
     }
+    const baseY = area.baseline != null ? py(Number(area.baseline)) : axisY;
+    const top = pts.map(([vx, vy]) => `${px(vx).toFixed(1)} ${py(vy).toFixed(1)}`).join(' L');
+    const d = `M${px(pts[0][0]).toFixed(1)} ${baseY} L${top} L${px(pts[pts.length - 1][0]).toFixed(1)} ${baseY} Z`;
+    parts.push(`<path d="${d}" fill="${tone}" fill-opacity="0.14" stroke="none"/>`);
+    parts.push(`<line x1="${px(pts[0][0]).toFixed(1)}" y1="${baseY}" x2="${px(pts[0][0]).toFixed(1)}" y2="${py(pts[0][1]).toFixed(1)}" stroke="${tone}" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>`);
+    parts.push(`<line x1="${px(pts[pts.length - 1][0]).toFixed(1)}" y1="${baseY}" x2="${px(pts[pts.length - 1][0]).toFixed(1)}" y2="${py(pts[pts.length - 1][1]).toFixed(1)}" stroke="${tone}" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>`);
+    labelAt(pts, baseY);
   }
   for (const s of series) parts.push(...drawSeries(s));
   parts.push('</g>');
@@ -2104,7 +2139,7 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], areas = []
     } else {
       const gx = px(Number(g.at));
       parts.push(`<line x1="${gx}" y1="${top}" x2="${gx}" y2="${axisY}" stroke="${T.muted}" stroke-width="1" stroke-dasharray="5 4" opacity="0.75"/>`);
-      if (g.label) parts.push(text(gx + 3, axisY - 8, g.label, 't-tiny', 'start', halo(T.surface)));
+      if (g.label) parts.push(text(gx + 3, top + 11, g.label, 't-tiny', 'start', halo(T.surface)));
     }
   }
 
@@ -2195,9 +2230,12 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
     outDeg.set(String(e.from), (outDeg.get(String(e.from)) || 0) + 1);
     inDeg.set(String(e.to), (inDeg.get(String(e.to)) || 0) + 1);
   });
-  const cyclic = nodes.every((n: any) => (inDeg.get(String(n.id)) || 0) >= 1 && (outDeg.get(String(n.id)) || 0) >= 1);
+  // 判环放宽：只要六成以上节点「既被推动又推动别人」，整张就按环形画——
+  // 工业革命里「工厂生产」是汇点、水循环里「太阳辐射」是源点，按旧判据它们会把整张图拖回纵向瀑布（外审 #16/#17 的教训）
+  const bothDeg = nodes.filter((n: any) => (inDeg.get(String(n.id)) || 0) >= 1 && (outDeg.get(String(n.id)) || 0) >= 1).length;
+  const cyclic = nodes.length >= 3 && edges.length >= nodes.length && bothDeg * 5 >= nodes.length * 3;
 
-  if (cyclic && nodes.length >= 3) {
+  if (cyclic) {
     const titleH = title ? T.fontTitle + 18 : 0;
     const boxH = (n: any) => (n.sub ? 48 : 38);
     const boxW = (n: any) => Math.min(190, Math.max(112, Math.max(est(n.label, T.fontKey) + 22, est(n.sub ?? '', T.fontMicro) + 18)));
@@ -2208,7 +2246,8 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
     const cx0 = w / 2;
     const cy0 = titleH + 20 + r + maxH / 2;
     const takeawayLinesR = takeaway ? balancedWrap(takeaway, w - padX * 2, T.fontSmall) : [];
-    const h = cy0 + r + maxH / 2 + 22 + (takeawayLinesR.length ? 12 + takeawayLinesR.length * 18 : 0);
+    // 底部节点的关系名会往下鼓出：底部留 46px（外审实拍：水循环最下沿标签被切）
+    const h = cy0 + r + maxH / 2 + 46 + (takeawayLinesR.length ? 12 + takeawayLinesR.length * 18 : 0);
     const parts: string[] = [...titleBlock(title, padX)];
     const pos = new Map<string, { x: number; y: number; w: number; h: number; cx: number; cy: number }>();
     nodes.forEach((n: any, i: number) => {
@@ -2218,6 +2257,7 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
       pos.set(String(n.id), { x: nx - boxW(n) / 2, y: ny - boxH(n) / 2, w: boxW(n), h: boxH(n), cx: nx, cy: ny });
     });
     const labels: string[] = [];
+    const nodeRectsR = nodes.map((n: any) => pos.get(String(n.id))).filter(Boolean) as Array<{ x: number; y: number; w: number; h: number }>;
     for (const e of edges) {
       const a = pos.get(String(e.from));
       const b = pos.get(String(e.to));
@@ -2240,11 +2280,22 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
       const ty = b.cy - (ctrlY - b.cy) * (1 - shrink) * 1.2;
       parts.push(`<path d="M${sx} ${sy} Q${ctrlX} ${ctrlY} ${tx} ${ty}" fill="none" stroke="${tone}" stroke-width="1.6"${e.dash ? ' stroke-dasharray="5 4"' : ''}/>`);
       parts.push(`<path d="M${tx} ${ty} l-7 -3.4 l1.6 7.4 Z" fill="${tone}"/>`);
-      const lx = mx + (dx / len) * (bulge + 12);
-      const ly = my + (dy / len) * (bulge + 12);
+      // 环上的关系名容易鼓出画布：沿外法线推出去，再夹回画布内（外审：顶部标签被切一半）
+      // 标签沿外法线推出去并夹回画布；若仍压在某个节点框上，继续往外推（外审 #4/#5：标签被方框压住）
+      let lx = Math.min(Math.max(mx + (dx / len) * (bulge + 12), 26), w - 26);
+      let ly = Math.min(Math.max(my + (dy / len) * (bulge + 12), titleH + 26), h - 30);
+      const lw = est(e.label, T.fontMicro);
+      for (let tries = 0; tries < 6; tries += 1) {
+        const r2 = { x: lx - lw / 2, y: ly - 8, w: lw, h: 14 };
+        const hit = nodeRectsR.some((q) => r2.x < q.x + q.w + 4 && r2.x + r2.w > q.x - 4 && r2.y < q.y + q.h + 3 && r2.y + r2.h > q.y - 3);
+        if (!hit) break;
+        lx += (dx / len) * 10;
+        ly += (dy / len) * 10;
+        lx = Math.min(Math.max(lx, 26), w - 26);
+        ly = Math.min(Math.max(ly, titleH + 26), h - 30);
+      }
       labels.push(text(lx, ly, e.label, 't-tiny', 'middle', `paint-order="stroke" stroke="${T.surface}" stroke-width="3" stroke-linejoin="round" fill="${tone}"`));
     }
-    parts.push(...labels);
     for (const n of nodes) {
       const q = pos.get(String(n.id))!;
       const tone = TONE[n.tone];
@@ -2252,6 +2303,7 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
       parts.push(text(q.cx, n.sub ? q.y + 20 : q.y + q.h / 2 + 5, n.label, 't-key', 'middle'));
       if (n.sub) parts.push(text(q.cx, q.y + 36, n.sub, 't-tiny', 'middle'));
     }
+    parts.push(...labels);
     takeawayLinesR.forEach((line: string, i: number) => {
       parts.push(text(padX, h - 14 - (takeawayLinesR.length - 1 - i) * 18, line, 't-small', 'start'));
     });
@@ -2424,7 +2476,8 @@ export function renderSpecFigure(
       default:
         return null;
     }
-  } catch {
+  } catch (err) {
+    if (process.env.FIG_DEBUG) console.error('[renderSpecFigure]', err);
     return null;
   } finally {
     T = previous;

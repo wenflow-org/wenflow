@@ -74,7 +74,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, endsWithQuestion, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, maskFigureForQuestion, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -902,7 +902,9 @@ export async function processStudentMessage(
   if (teachingOutput.figure) {
     // 课中图不挂结论注（用户 2026-10-23 硬指令）：caption / note 在实测里几乎只在替学生答题。
     const deReviewed = stripInLessonAnnotations(teachingOutput.figure);
-    const wanted = {
+    // 读图/复述题不扣图，改为脱敏：把被问的答案从图上挖掉，结构照常给学生看（外部讨论定案）
+    const maskedFigure = maskFigureForQuestion(deReviewed, teachingOutput.reply);
+    let wanted: typeof deReviewed = {
       ...deReviewed,
       // 学科调色板在这里盖章（模型不参与）：同一份 spec 换个学科就是另一套色相/材质，
       // 只影响观感，不改变任何几何与语义。模型自己给了合法 palette 则以它为准。
@@ -924,14 +926,6 @@ export async function processStudentMessage(
         kind: wanted.kind,
         figureNumbers: collectFigureNumbers(wanted).slice(0, 8),
         replyNumbers: [...collectReplyNumbers(teachingOutput.reply)].slice(0, 8),
-      });
-    } else if (endsWithQuestion(teachingOutput.reply)) {
-      // 「只在讲解的时候出图」（用户 2026-10-23）：这一轮最后一句是问句 = 等学生答，
-      // 图同屏就会替他把答案摆出来。等学生答完、下一轮讲解时再画。
-      logger.info('[AITeaching] 本轮以追问收尾（讲解未落定），跳过本轮图', {
-        sessionId,
-        taskId: session.taskId,
-        kind: wanted.kind,
       });
     } else if (teachingOutput.control?.checkpoint) {
       // 出题回合不出图（2026-10-23 第五批外审：14 张里 5 张的判词是「老师这一轮让学生自己产出，
@@ -977,6 +971,16 @@ export async function processStudentMessage(
         kind: wanted.kind,
       });
     } else {
+      // 走完全部闸门才下发。读图/复述题在这里脱敏：把被问的答案挖掉（点/辅助线标签→？，
+      // 关系名→？），结构照常呈现——外部讨论定案：扣图会让学生面对一句悬空的「看图」。
+      if (maskedFigure !== null && maskedFigure !== deReviewed) {
+        wanted = maskedFigure;
+        logger.info('[AITeaching] 本轮是读图/复述题，图已脱敏后下发', {
+          sessionId,
+          taskId: session.taskId,
+          kind: wanted.kind,
+        });
+      }
       assistantMessage.figures = [wanted];
       // 出图来源留痕（2026-10-21）：评审要能回答「这张图为什么出现」。
       // 模型自己给的理由在 figure.why；这里记的是编排层有没有给机会、因为什么给、建议了什么图型。

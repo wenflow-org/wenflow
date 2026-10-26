@@ -705,6 +705,50 @@ export function shouldWithholdFigureForQuestion(
 }
 
 /**
+ * 读图/复述题的图**不扣下，改为脱敏挖空**（2026-10-24 外部讨论定案）。
+ *
+ * 老师说「看下面这张图告诉我…」时把图扣掉，学生面对的是一句悬空的话；
+ * 正确做法是把**被问的那个答案**从图上抹掉（数值/关系名换成 ? 或代号），结构照常呈现——
+ * 图还是那个外置大脑，但答案得学生自己给。
+ *
+ * 返回值：脱敏后的图；null = 这张图没有可呈现的结构（整张扣下）。
+ * 当前覆盖 cartesian-plot 与 concept-map（读图/复述题最高发的两类）；其余图型维持扣下。
+ */
+export function maskFigureForQuestion<T extends { kind?: string; spec?: unknown }>(
+  figure: T,
+  reply: string | null | undefined,
+): T | null {
+  if (!figure || !endsWithQuestion(reply)) return figure;
+  const question = String(reply ?? '');
+  const readOff = /(读出|指出|指着|看图|图上|哪两个|哪一段|哪个位置|哪里|是多少|多少|等于几|填|补全|复述|说出|讲出来|列举|概括|推一推|用你自己的话|说一遍|讲一遍|按顺序|走一遍|解释一件事|挑一个|哪一步|哪一边|先出现)/;
+  if (!readOff.test(question)) return figure;
+  const spec = figure.spec && typeof figure.spec === 'object' ? ({ ...(figure.spec as Record<string, unknown>) } as Record<string, unknown>) : null;
+  if (!spec) return figure;
+  const kind = String(figure.kind ?? '');
+
+  if (kind === 'cartesian-plot') {
+    // 标注里的数值就是要读的答案：点标签撤掉（点留下当锚），辅助线标签撤掉（线留下当参照）
+    if (Array.isArray(spec.marks)) spec.marks = (spec.marks as Array<Record<string, unknown>>).map((m) => ({ ...m, label: '？' }));
+    if (Array.isArray(spec.guides)) spec.guides = (spec.guides as Array<Record<string, unknown>>).map((g) => {
+      const label = String(g.label ?? '');
+      // 轴本身的刻度含义保留（如「等当点 20 mL」里没有数值答案的标签），带数值的一律挖空
+      return /\d/.test(label) ? { ...g, label: label.replace(/[-+]?[\d.]+/g, '?').replace(/\s{2,}/g, ' ').slice(0, 14) } : g;
+    });
+    return { ...figure, spec };
+  }
+
+  if (kind === 'concept-map') {
+    // 结构照常画，关系名挖空——复述题问的就是「谁推动谁」，图替学生把答案写好才是泄题
+    if (Array.isArray(spec.edges)) {
+      spec.edges = (spec.edges as Array<Record<string, unknown>>).map((e) => ({ ...e, label: '？' }));
+    }
+    return { ...figure, spec };
+  }
+
+  return null;
+}
+
+/**
  * 课中图不挂结论注（2026-10-23 用户硬指令：课中图严禁渲染总结性 note / caption）。
  *
  * 图下那行注在实测里几乎只做一件事：把老师刚问、或学生还没自己说出口的结论写全。

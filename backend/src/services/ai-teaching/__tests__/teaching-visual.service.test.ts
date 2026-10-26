@@ -15,7 +15,7 @@ import {
   detectPositionDescription,
   detectStructuralCue,
   detectExerciseLeakInReply,
-  stripInLessonAnnotations, endsWithQuestion, shouldWithholdFigureForQuestion,
+  stripInLessonAnnotations, endsWithQuestion, shouldWithholdFigureForQuestion, maskFigureForQuestion,
   generateTeachingVisual,
   hasDanglingFigureReference,
   hasIdenticalVisualPrompt,
@@ -924,5 +924,42 @@ describe('会话级闸门改读库侧表 + 图型配额按证据等级（2026-10
     expect(FIGURE_KIND_EVIDENCE['position-line']).toBe('A');
     expect(FIGURE_KIND_EVIDENCE.ladder).toBe('D');
     expect(figureKindCap('未注册图型', '')).toBe(2);
+  });
+});
+
+describe('读图题脱敏不扣图（maskFigureForQuestion，2026-10-24 外部讨论定案）', () => {
+  const plot = {
+    kind: 'cartesian-plot',
+    spec: {
+      x: { min: 0, max: 4 }, y: { min: 0, max: 1 },
+      series: [{ name: '抛物线', form: 'parabola', a: -1, b: 0, c: 1 }],
+      marks: [{ at: [1, 0], label: '交点 (1,0)' }, { at: [3, 0], label: '交点 (3,0)' }],
+      guides: [{ axis: 'y', at: 0.75, label: 't=0.1s · 0.75m' }, { axis: 'y', at: 0.6, label: '同高参照' }],
+    },
+  };
+
+  it('读图题：点标签挖空成？，带数值的辅助线标签挖掉数值，曲线照常', () => {
+    const out = maskFigureForQuestion(plot, '现在请你指着图告诉我：曲线和 x 轴交在哪两个数上？') as any;
+    expect(out).not.toBeNull();
+    expect(out.spec.marks.map((m: any) => m.label)).toEqual(['？', '？']);
+    expect(out.spec.series).toHaveLength(1);
+    expect(out.spec.guides[0].label).not.toMatch(/\d/);
+    expect(out.spec.guides[1].label).toBe('同高参照');
+  });
+
+  it('非读图轮：原样返回（同一引用语义）', () => {
+    expect(maskFigureForQuestion(plot, '两条曲线弯得差那么多，为什么每一刻同高？')).toEqual(plot);
+  });
+
+  it('concept-map 复述题：关系名挖空成？，结构照常', () => {
+    const cm = { kind: 'concept-map', spec: { nodes: [{ id: 'a', label: '市场' }], edges: [{ from: 'a', to: 'b', label: '需求拉动' }] } };
+    const out = maskFigureForQuestion(cm, '从海面出发把这几个环节按顺序说一遍，谁推动谁？') as any;
+    expect(out.spec.edges[0].label).toBe('？');
+    expect(out.spec.nodes[0].label).toBe('市场');
+  });
+
+  it('不可脱敏的图型（venn）+ 读图题 → null（整张扣下）', () => {
+    const venn = { kind: 'venn', spec: { left: { head: '甲' }, right: { head: '乙' } } };
+    expect(maskFigureForQuestion(venn, '既在甲又在乙的同学在图的哪里？')).toBeNull();
   });
 });
