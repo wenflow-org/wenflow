@@ -59,6 +59,7 @@ vi.mock('../live', async () => {
 });
 
 import VirtualLearnerCards from '../VirtualLearnerCards.vue';
+import Source from '../VirtualLearnerCards.vue?raw';
 import { toast } from '@/utils/toast';
 
 const mountPage = async () => {
@@ -301,6 +302,91 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     expect(w.find('.mk-drawer').exists()).toBe(false);
     await w.findAll('.vlc-card')[0].trigger('click');
     expect(openSubPageMock).toHaveBeenCalledWith('card', 'p1');
+  });
+
+  /* 2026-10-27 用户「高度不一样，内部的信息密度也不高」：
+     卡脚钉底（同一行按钮同基线）+ 只印有区分度的信息（builtin 占位卡号 / 全同难度不上卡面）。 */
+  it('卡脚钉底：卡体是纵向 flex，按钮靠 margin-top:auto 落到卡底同一基线', () => {
+    const cardRule = Source.slice(Source.indexOf('.vlc-card {'), Source.indexOf('}', Source.indexOf('.vlc-card {')))
+    expect(cardRule).toContain('display: flex')
+    expect(cardRule).toContain('flex-direction: column')
+    const footRule = Source.slice(Source.indexOf('.vlc-card__foot {'), Source.indexOf('}', Source.indexOf('.vlc-card__foot {')))
+    expect(footRule).toContain('margin-top: auto')
+  });
+
+  it('「builtin」占位卡号不上卡面（预置卡统一值，不区分任何两张卡）', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            { profileId: 'p9', userId: 'u9', cardKey: 'builtin', name: '孙浩', goal: '理综提分', opening: null, knowledgeLevel: 'beginner', tags: [], preset: true, sourceKind: null, email: null },
+            { profileId: 'p10', userId: 'u10', cardKey: 'w6-x', name: '小周', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null },
+          ],
+          summary: { total: 2, builtin: 1, custom: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    expect(w.text()).not.toContain('builtin');
+    // 自定义卡的真实卡号仍有区分度，照常上卡面
+    expect(w.text()).toContain('w6-x');
+    w.unmount();
+  });
+
+  it('难度只在有区分度时上卡面：整面墙同级 → 不印；混级 → 逐卡印', async () => {
+    const card = (id: string, level: string) => ({ profileId: id, userId: 'u' + id, cardKey: 'k-' + id, name: '学习者' + id, goal: '目标', opening: null, knowledgeLevel: level, tags: [], preset: false, sourceKind: null, email: null });
+    cardsIndexMock.mockImplementation(async () => ({
+      data: { data: { cards: [card('a', 'beginner'), card('b', 'beginner')], summary: { total: 2, builtin: 0, custom: 2 } } },
+    }));
+    const same = await mountPage();
+    expect(same.findAll('.vlc-card__level')).toHaveLength(0);
+    same.unmount();
+
+    cardsIndexMock.mockImplementation(async () => ({
+      data: { data: { cards: [card('a', 'beginner'), card('b', 'advanced')], summary: { total: 2, builtin: 0, custom: 2 } } },
+    }));
+    const mixed = await mountPage();
+    expect(mixed.findAll('.vlc-card__level').map((x) => x.text())).toEqual(['入门', '高阶']);
+    mixed.unmount();
+  });
+
+  /* 2026-10-27 密度收口：目标是抽象的，真正会被开的那节课是首个任务。
+     卡面直接给任务标题；「1 个任务」这种全墙同值不印。 */
+  it('首个任务标题上卡面；多任务时才标任务数', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            { profileId: 'p1', userId: 'u1', cardKey: 'k1', name: '郑凯', goal: '回本', opening: null, knowledgeLevel: 'beginner', tags: [], preset: true, sourceKind: null, email: null, taskCount: 1, firstTaskTitle: '亏了三万的那只基金' },
+            { profileId: 'p2', userId: 'u2', cardKey: 'k2', name: '苏晴', goal: '重返职场', opening: null, knowledgeLevel: 'beginner', tags: [], preset: true, sourceKind: null, email: null, taskCount: 3, firstTaskTitle: '停在三年前的简历' },
+          ],
+          summary: { total: 2, builtin: 2, custom: 0 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    const tasks = w.findAll('.vlc-card__task');
+    expect(tasks.map((t) => t.text())).toEqual(['任务亏了三万的那只基金', '任务停在三年前的简历']);
+    // 只有多任务的卡标数量
+    const foot = w.findAll('.vlc-card__foot');
+    expect(foot[0].text()).not.toContain('个任务');
+    expect(foot[1].text()).toContain('3 个任务');
+    w.unmount();
+  });
+
+  it('老接口没有任务字段：不渲染任务行，也不把「不知道」写成 0 个任务', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [{ profileId: 'p1', userId: 'u1', cardKey: 'k1', name: '老卡', goal: '目标', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: null, email: null }],
+          summary: { total: 1, builtin: 0, custom: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    expect(w.find('.vlc-card__task').exists()).toBe(false);
+    expect(w.find('.vlc-card__foot').text()).not.toContain('任务');
+    w.unmount();
   });
 
   it('搜索过滤（名称/Key/目标/标签任一命中）', async () => {

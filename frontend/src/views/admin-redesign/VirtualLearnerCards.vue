@@ -141,15 +141,25 @@
             <strong class="vlc-card__name" :title="cardName(c)">{{ cardName(c) }}</strong>
             <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
           </header>
-          <div v-if="showCardKey(c)" class="vlc-card__key">{{ c.cardKey }}</div>
-          <p class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
+          <p v-if="c.goal" class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
+          <!-- 首个任务标题（2026-10-27 密度收口）：目标是抽象的（「回本，或者至少别再亏」），
+               真正会被开的那节课叫「亏了三万的那只基金」——创建时要勾的就是它，卡面直接给。
+               整面墙都是一张一任务的卡时不再重复「1 个任务」，只留标题。 -->
+          <p v-if="c.firstTaskTitle" class="vlc-card__task" :title="c.firstTaskTitle">
+            <span class="vlc-card__task-k">任务</span>{{ c.firstTaskTitle }}
+          </p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
-          <div v-if="wallTags(c).length" class="vlc-card__tags">
-            <!-- 运营视角只留「场景 / 目标」两个中文短标签：preset: / hash: / builtin / vN / in_scope 都是内部标记 -->
+          <!-- 标签与卡号同处一行（2026-10-27 密度收口）：卡号只有自定义卡才有区分度，
+               「builtin」这类占位值不上卡面（同 internal tag 判例）。 -->
+          <div v-if="wallTags(c).length || showCardKey(c)" class="vlc-card__tags">
             <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted">{{ t.text }}</span>
+            <span v-if="showCardKey(c)" class="vlc-card__key" :title="c.cardKey || ''">{{ c.cardKey }}</span>
           </div>
           <footer class="vlc-card__foot">
-            <span class="vlc-card__level">{{ levelText(c.knowledgeLevel) }}</span>
+            <!-- 任务数是「创建学习者」时要做的选择（勾几节课），比难度更有决策价值：
+                整面墙难度相同时只留任务数；混级时两者并列 -->
+            <span v-if="taskText(c)" class="vlc-card__count">{{ taskText(c) }}</span>
+            <span v-if="showLevel" class="vlc-card__level">{{ levelText(c.knowledgeLevel) }}</span>
             <!-- 卡面主操作（2026-10-26 从 12px 链接升为卡脚按钮）：这页的主操作此前藏在卡脚小字里，
                  而页头 primary 是「导入卡」。卡整体是 role=button，故 stop 冒泡。 -->
             <button
@@ -237,6 +247,10 @@ interface CardWallEntry {
   email: string | null
   /** 来源身份卡名（2026-10-16 卡=身份模板）：非空即本卡是从另一张卡创建的实例 */
   derivedFrom: string | null
+  /** 故事池任务数（2026-10-27）：创建实例时按任务勾选，卡面先答「这张卡能开几节课」 */
+  taskCount?: number
+  /** 首个任务标题（2026-10-27）：卡面上真正会被开的那节课叫什么 */
+  firstTaskTitle?: string | null
 }
 
 /* ===== 卡墙 ===== */
@@ -462,14 +476,33 @@ function wallTags(c: CardWallEntry): WallTag[] {
   }
   return out
 }
-/** 卡号与内部 profileId 相同、或整面墙都是同一个卡号时，卡号行没有区分度，不渲染 */
+/** 卡号与内部 profileId 相同、或整面墙都是同一个卡号时，卡号行没有区分度，不渲染。
+ *  2026-10-27 再收紧：`builtin` 是预置卡的系统占位值（整面墙 20 张卡全印这两个字），
+ *  它既不是卡号也不区分任何两张卡，按内部标记处理。 */
+const PLACEHOLDER_CARD_KEYS = new Set(['builtin'])
 function showCardKey(c: CardWallEntry): boolean {
   const key = (c.cardKey || '').trim()
   if (!key) return false
+  if (PLACEHOLDER_CARD_KEYS.has(key)) return false
   if (key === c.profileId || key === c.userId) return false
   const wall = cards.value
   return !(wall.length > 1 && wall.every((x) => (x.cardKey || '').trim() === key))
 }
+
+/** 任务数文案（2026-10-27）：只标「多任务的卡」——整面墙都是 1 个任务时，
+    每张卡印一遍「1 个任务」不区分任何两张卡；真有多任务的卡才是值得注意的那张。
+    老接口没有该字段（undefined）同样不占位，不把「不知道」写成「0 个任务」。 */
+function taskText(c: CardWallEntry): string {
+  const n = c.taskCount
+  return typeof n === 'number' && n > 1 ? `${n} 个任务` : ''
+}
+
+/* 难度只在「有区分度」时上卡面（2026-10-27 密度收口）：整面墙 21 张卡全是「入门」时，
+   这行字每张都印一遍，既不是读数也不是可操作信息，只是把卡脚垫高。 */
+const showLevel = computed(() => {
+  const levels = new Set(cards.value.map((c) => c.knowledgeLevel || ''))
+  return levels.size > 1
+})
 
 /* ===== 选角 → 创建虚拟学习者（2026-10-16 卡=身份模板，卡库即身份池） ===== */
 /** 待创建的身份卡 id（卡墙勾选框 v-model） */
@@ -550,11 +583,15 @@ watch(liveRefreshSeq, () => {
   gap: 12px;
   padding: 16px;
 }
+/* 卡面 = 纵向 flex + 底部操作钉底（2026-10-27 用户「高度不一样，信息密度也不高」）：
+   同一行的卡被网格拉到等高，但内容按顶部堆叠时，少一行标签的卡按钮会浮在中间、
+   多一行的卡按钮落在底部——一排卡里「创建学习者」高低错落，扫视时读不成一条线。
+   钉底后按钮恒在同一基线，行高差异只体现为卡内留白。 */
 .vlc-card {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  align-content: start;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
@@ -624,6 +661,8 @@ watch(liveRefreshSeq, () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 目标文案：只有真的有内容才占位（2026-10-27）。此前恒占两行高（min-height: 2.9em），
+   没有目标的卡也留一块空白，卡内密度被这条「空气」拉低。 */
 .vlc-card__goal {
   margin: 0;
   font-size: var(--mk-fs-micro);
@@ -633,7 +672,6 @@ watch(liveRefreshSeq, () => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 2.9em;
 }
 .vlc-card__opening {
   margin: 0;
@@ -644,9 +682,30 @@ watch(liveRefreshSeq, () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 首个任务行：与目标同字号，前面一个弱化的小标签；单行省略（标题通常 8–14 字） */
+.vlc-card__task {
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-ink);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vlc-card__task-k {
+  margin-right: 5px;
+  color: var(--mk-muted);
+}
+/* 标签 + 卡号同一行：标签左、卡号右对齐吃掉剩余宽度（卡号本身仍可省略） */
+.vlc-card__tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
 /* 单个 chip 可能就是一整串 preset:…+hash:…，必须能在卡宽内收缩并省略，
    否则超出卡宽后画到邻卡上（走查：标签/hash 被邻卡切断且无省略号） */
-.vlc-card__tags { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .vlc-card__tags .mk-badge {
   max-width: 100%;
   min-width: 0;
@@ -654,6 +713,7 @@ watch(liveRefreshSeq, () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.vlc-card__tags .vlc-card__key { margin-left: auto; max-width: 45%; }
 /* 勾选框：卡整体是 role=button，勾选框是它内部唯一的交互子控件，故撑到可点面积（≥24px 触控基准） */
 .vlc-card__pick {
   flex: none;
@@ -675,13 +735,18 @@ watch(liveRefreshSeq, () => {
 .vlc-card__foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
-  margin-top: 2px;
+  /* 钉底（2026-10-27）：卡被同行拉高时，按钮落到卡底同一基线，不再随内容行数浮动 */
+  margin-top: auto;
+  padding-top: 4px;
 }
+/* 卡脚左侧的读数（任务数 / 难度）可有可无，按钮恒靠右 */
+.vlc-card__count,
 .vlc-card__level { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.vlc-card__count + .vlc-card__level::before { content: '·'; margin-right: 4px; }
 /* 卡面主操作：卡脚右侧一位 */
-.vlc-card__derive { flex: none; }
+.vlc-card__derive { flex: none; margin-left: auto; }
 /* 创建结果条：卡墙顶部常驻，一句结果 + 一个出口 */
 .vlc-created {
   display: flex;
