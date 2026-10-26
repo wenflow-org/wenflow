@@ -288,7 +288,7 @@ export function paletteOfSubject(subject?: string | null): 'indigo' | 'earth' | 
 /** 图型选择表 + spec 形状：只在"该出图"的回合随 visualOpportunity 送进 prompt。
  * 不常驻 system prompt（避免每轮都付这段 token）；字段上限与 normalizeFigure 的 SPEC 一致。
  */
-const FIGURE_KIND_GUIDE = [
+export const FIGURE_KIND_GUIDE = [
   '（系统提示里若是旧版"v1 唯一图型 position-line"，以本轮为准：下列 kind 代码已支持并会逐字段校验。）',
   '**出图前先过三关（缺一不出）**：① 实体关——节点/标签必须是学科实体（真实代码、方程各项、数值与单位、时间点/事件、对象/要素），'
   + '出现「第一步/自查/缺X/重写/评分/口诀/批改」这类元认知或评语，整张作废；② 几何关——关系必须由位置/数值/区间/连线/包含读出来'
@@ -299,7 +299,7 @@ const FIGURE_KIND_GUIDE = [
   '- range-bar：**多组数值区间并排**（新组/旧组的波动范围、上下限、从哪到哪）。{"unit":"%","rows":[{"label":"新组四天","from":3.1,"to":3.8,"tone":"accent"},{"label":"旧组四天","from":2.9,"to":3.6,"tone":"neutral"}],"marks":[{"at":0.5,"label":"汇报的均值差"}],"note":"…"}——**数值区间不要塞进 position-line**：一根时间轴画不出带宽，把「幅度」横着放会被读成日期跨度。',
   '- concept-map：**概念结构图**（讲概念本身，不是出题）：{"nodes":[{"id":"light","label":"光反应","sub":"类囊体膜","tone":"accent"},{"id":"atp","label":"ATP / NADPH","sub":"能量与还原力"},{"id":"dark","label":"暗反应","sub":"叶绿体基质"}],"edges":[{"from":"light","to":"atp","label":"产生"},{"from":"atp","to":"dark","label":"供给"}],"takeaway":"光反应造能量，暗反应用能量把 CO₂ 变成糖"}——节点是概念要素（概念/过程/量/条件），**每条边必须有关系名**（产生/供给/构成/依赖/导致/对照）；讲解概念、机制、流程时优先用它，不要用「问题+答案」的画法；**概念图用在「第一次讲清/整体梳理」这一轮**——如果这一轮是让学生自己复述或推导整张结构，就不要把完整结构图放出来（可以留白或等学生说完再印证）。',
   '- split-compare：**正误并排对比**（学生做错一步、纠典型误区时优先用）。{"title":"…","left":{"head":"常见错法","tone":"warn","rows":[{"label":"60 ÷ 400","sub":"把秒当分钟除"}]},"right":{"head":"正确做法","tone":"ok","rows":[{"label":"60 × 400 ÷ 1000","sub":"先把米换算成千米"}]},"delta":{"label":"分叉在第二步：先除还是先换算","at":1}}——左右是**同一个动作的两种走法**，第 n 行对第 n 行；delta.at 指出分叉在第几步；正文不复述两栏，只点破分叉步。',
-  '- state-strip：**不回头的进程分帧**（三次握手/编译流程/消化过程/生命周期）。{"title":"TCP 三次握手","frames":[{"label":"SYN","items":["客户端 SYN_SENT","服务端 LISTEN"]},{"label":"SYN+ACK","items":["服务端 SYN_RCVD"]},{"label":"ACK","items":["双方 ESTABLISHED"]}] ,"note":"…"}——2~5 帧横排、帧间箭头是「下一步」；**要回到起点**的过程（循环/迭代）用 cycle，不要用条带。',
+  '- state-strip：**不回头的进程分帧**（三次握手/编译流程/消化过程/生命周期）。帧内 items 每帧 ≤3 条，只写**该时刻的状态快照**（主语+状态，如「客户端 SYN_SENT」「食糜进入小肠」），不写动作指令、操作命令或流程评论——写成了动作清单就退化成装框文字。{"title":"TCP 三次握手","frames":[{"label":"SYN","items":["客户端 SYN_SENT","服务端 LISTEN"]},{"label":"SYN+ACK","items":["服务端 SYN_RCVD"]},{"label":"ACK","items":["双方 ESTABLISHED"]}] ,"note":"…"}——2~5 帧横排、帧间箭头是「下一步」；**要回到起点**的过程（循环/迭代）用 cycle，不要用条带。',
   '- cartesian-plot：**二维坐标图**（函数曲线/平抛轨迹/实验数据）。{"x":{"label":"水平位移 / m","min":0,"max":2.6,"ticks":[0,0.6,1.2,1.8,2.4]},"y":{"label":"高度 / m","min":0,"max":0.85,"ticks":[0,0.4,0.8]},"series":[{"name":"3 m/s","form":"parabola","a":-0.5556,"b":0,"c":0.8,"tone":"ok","dotPoints":[[0.3,0.75],[0.6,0.6],[0.9,0.35],[1.2,0]]}],"guides":[{"axis":"y","at":0.75,"label":"t=0.1s · 0.75m"}],"vectors":[{"at":[0,0.8],"dx":0.6,"dy":0,"label":"v₀"}],"marks":[{"at":[1.2,0],"label":"落点 1.2 m"}]}——**同一时刻两个球在不在同一高度**，只能靠这张图看见；form 可用 points/parabola(a,b,c)/linear(k,b)/scatter，dotPoints 是等时间隔的位置点（频闪），属于同一条曲线，**不要另开一条散点系列**；**要表达「面积」时给 `areas`**：{"areas":[{"from":0,"to":4,"series":"速度","label":"位移 = 面积"}]}（v-t 图下面积=位移、供需曲线围出的剩余都靠它）；图例里写到的每条曲线都必须真的画出来；数值必须是真实量纲。',
   '- **变量名/引用/拷贝**：用 bipartite，左列变量名、右列内存对象，edges 表示指向；`b = a` 是两条边汇到同一个对象节点，`a[:]` 是外层两个节点、内层同一节点。**同一张图上不要同时画「改之前」和「改之后」两个状态**（外审：学生会以为 b 同时指向两个对象）——只画当前状态，或把前后两组分开并列并各自标头。',
   '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',

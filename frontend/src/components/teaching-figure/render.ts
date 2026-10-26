@@ -2251,6 +2251,20 @@ function renderSplitCompare({ title, left, right, delta }: any): RenderedFigure 
   drawCol(left, padX, lt);
   drawCol(right, W - padX - colW, rt);
 
+  // 行对齐虚线（V2 改造，外盲评：左右卡片被读成两段独立文字）——第 n 行对第 n 行
+  // 的连线就是「同一步的两种走法」这个语义本身；分叉行（delta.at）不画，让差异自己断开
+  {
+    let ry = bodyTop;
+    for (let i = 0; i < rowCount; i += 1) {
+      const midY = ry + rowHs[i] / 2;
+      const isFork = delta && Number(delta.at) === i + 1;
+      if (!isFork) {
+        parts.push(`<line x1="${padX + colW + 6}" y1="${midY}" x2="${W - padX - colW - 6}" y2="${midY}" stroke="${T.line}" stroke-width="0.9" stroke-dasharray="3 4"/>`);
+      }
+      ry += rowHs[i];
+    }
+  }
+
   // 中缝 vs：同一动作的两种走法在此分岔
   const vsY = colTop + headH / 2;
   parts.push('<line x1="' + W / 2 + '" y1="' + (colTop + 8) + '" x2="' + W / 2 + '" y2="' + (vsY - 17) + '" stroke="' + T.line + '" stroke-width="1"/>');
@@ -2303,9 +2317,22 @@ function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | n
   const frameH = headH + bodyH + 8;
   const noteLines = note ? balancedWrap(note, W - padX * 2 - 8, T.fontSmall) : [];
   const noteH = noteLines.length ? 12 + noteLines.length * 16 : 0;
-  const h = titleH + frameH + noteH + 16;
+  const h = titleH + frameH + noteH + 30;
   const parts: string[] = [...titleBlock(title)];
-  const top = titleH + 6;
+  const top = titleH + 16;
+
+  // 时基轨道（V2 改造，外盲评：帧框等大、读不出「推进」）：统一一条横轨，
+  // 每帧一个进度点（已走过的实心、未走的空心），把「不回头」画在帧框之外
+  const trackY = top - 10;
+  {
+    const x0 = padX + fw / 2;
+    const x1 = padX + (n - 1) * (fw + gap) + fw / 2;
+    parts.push(`<line x1="${x0}" y1="${trackY}" x2="${x1}" y2="${trackY}" stroke="${T.line}" stroke-width="1.2"/>`);
+    for (let i = 0; i < n; i += 1) {
+      const cx = padX + i * (fw + gap) + fw / 2;
+      parts.push(`<circle cx="${cx}" cy="${trackY}" r="4.5" fill="${i === 0 ? T.accent : T.surface}" stroke="${i === 0 ? T.accent : T.lineStrong}" stroke-width="1.4"/>`);
+    }
+  }
 
   frames.forEach((f: any, i: number) => {
     const tone = TONE[f.tone] || TONE.neutral;
@@ -2432,8 +2459,10 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
       parts.push(`<path d="M${tx} ${ty} l-7 -3.4 l1.6 7.4 Z" fill="${tone}"/>`);
       // 环上的关系名容易鼓出画布：沿外法线推出去，再夹回画布内（外审：顶部标签被切一半）
       // 标签沿外法线推出去并夹回画布；若仍压在某个节点框上，继续往外推（外审 #4/#5：标签被方框压住）
-      let lx = Math.min(Math.max(mx + (dx / len) * (bulge + 12), 26), w - 26);
-      let ly = Math.min(Math.max(my + (dy / len) * (bulge + 12), titleH + 26), h - 30);
+      // V2 修复（外盲评：? 标签飘在节点旁，看不出属于哪条边）：标签锚定**弧顶**（ctrl 再外推 12px），
+      // 而不是从弦中点径向推——跨环长弦的径向推出会远离弧线
+      let lx = Math.min(Math.max(ctrlX + (dx / len) * 12, 26), w - 26);
+      let ly = Math.min(Math.max(ctrlY + (dy / len) * 12, titleH + 26), h - 30);
       const lw = est(e.label, T.fontMicro);
       for (let tries = 0; tries < 6; tries += 1) {
         const r2 = { x: lx - lw / 2, y: ly - 8, w: lw, h: 14 };
