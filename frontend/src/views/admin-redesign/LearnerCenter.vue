@@ -779,7 +779,14 @@ async function recomputeAll() {
 .lc-status { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 
 /* 主任务与风险摘要都是「一眼要读完」的句子：两行截断（title 仍有全文），
-   不再用单行 nowrap 把语义切成半句（2026-10-24 复核）。 */
+   不再用单行 nowrap 把语义切成半句（2026-10-24 复核）。
+   2026-10-26 有数据走查：主行两行 + 副行一行 = 93px，而同行其他行是 68px，
+   一张表里两种行高看起来像排版坏了。主行保持两行能力，但整格限高，
+   超出部分由 clamp 收敛——行高由列内容的上限决定，不由当页最长那条决定。 */
+.lc-table .lc-task {
+  max-height: 44px;
+  overflow: hidden;
+}
 .lc-table .lc-task .progress-title {
   font-weight: 600;
   display: -webkit-box;

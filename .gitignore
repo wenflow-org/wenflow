@@ -359,3 +359,9 @@ outputs/
 
 # 单实例锁文件（架构优化批 #3：backend/.runtime/）
 backend/.runtime/
+
+# 后台走查的运行时证据（DOM 探针 / 截图，2026-10-26）
+.audit-probe/
+.audit-probe-data/
+.audit-shots/
+.audit-shots-after/

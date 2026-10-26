@@ -553,6 +553,13 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 }
 .mk-table tr:last-child td { border-bottom: none; }
 .mk-table tbody tr { transition: background 0.12s; }
+/* 行高下限：主行 + 副行（.mk-cell-main + .mk-cell-sub）是多数表的标准形态，
+   但副行按数据条件渲染——短标题没有副行时整行只剩一行文字，同一张表里相邻行
+   高低差 15px（2026-10-26 有数据走查：目标对话 4 行 49px、11 行 64px，看起来像排版坏了）。
+   给行一个下限，内容多少都不塌；真实多行内容仍可把行撑高。
+   密度档跟随全站：标准 64 / 紧凑 48。 */
+.mk-table tbody td { height: 64px; }
+html[data-density='compact'] .mk-table tbody td { height: 48px; }
 .mk-table tbody tr:hover { background: var(--mk-table-row-hover-bg); }
 .mk-table--click tbody tr { cursor: pointer; }
 /* 行点击契约的键盘半边（此前 GC 页私有 focus-visible 拷贝，2026-10-03 并入）：

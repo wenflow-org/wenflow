@@ -120,9 +120,9 @@
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
               <label class="mk-adv__field">
-                <span class="mk-cell-sub">课堂</span>
-                <select v-model="modeFilter" class="mk-filter__select" aria-label="按课堂类型筛选">
-                  <option value="">全部课堂</option>
+                <span class="mk-cell-sub">课型</span>
+                <select v-model="modeFilter" class="mk-filter__select" aria-label="按课型筛选">
+                  <option value="">全部课型</option>
                   <option value="tutor">正课</option>
                   <option value="review">复习课</option>
                   <option value="extension">延伸课</option>
@@ -181,7 +181,7 @@
                 v-if="!tsHiddenCols.has('mode')"
                 scope="col"
                 class="ts-c-mode"
-              >课堂</th>
+              >课型</th>
               <th
                 v-if="!isTableNarrow && !tsHiddenCols.has('track')"
                 scope="col"
