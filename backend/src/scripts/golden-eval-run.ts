@@ -25,7 +25,7 @@ import * as path from 'path';
 
 const BASE_URL = process.env.GOLDEN_EVAL_BASE_URL || 'http://127.0.0.1:3002';
 const ORIGIN = 'http://localhost:5173'; // 必须在 .env CORS_ORIGIN 白名单内（CSRF 写请求校验）
-const GOAL_MAX_STEPS = 14;
+const GOAL_MAX_STEPS = 18; // R2/R3 实证：1-3%/轮的样本对话质量到位但 14 步耗尽未走到确认（A14/A23/C17/D08），提额化解
 const TRIAGE_MAX_STEPS = 6;
 const CALL_TIMEOUT_MS = 5 * 60_000;
 const PATH_WAIT_MS = 20 * 60_000;
