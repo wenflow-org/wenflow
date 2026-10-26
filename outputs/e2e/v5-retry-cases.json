@@ -1,0 +1,44 @@
+[
+ {
+  "id": "sc-math-pace",
+  "course": "七年级数学·一元一次应用 第2课",
+  "subject": "数学",
+  "topic": "单位换算与配速",
+  "taskTitle": "配速换算纠错",
+  "taskDescription": "学生计算跑步配速出现单位换算错误，需要对比错误走法与正确走法",
+  "taskType": "diagnose",
+  "intent": "co-create",
+  "acceptance": "学生能说出错在哪一步、为什么错",
+  "expectKind": "split-compare",
+  "student": "老师，我算的配速是 60 除以 400 等于 0.15，也就是 0.15 分钟每千米，怎么感觉越跑越快了？哪里容易错啊？",
+  "assistant": "你把 400 米直接当成千米在除了。咱们把错走法和正确走法并排摆一遍，你自己看分叉在哪一步。"
+ },
+ {
+  "id": "ss-chem-filter",
+  "course": "初三化学·基本操作 第1课",
+  "subject": "化学",
+  "topic": "过滤操作",
+  "taskTitle": "过滤实验流程",
+  "taskDescription": "讲解过滤操作的分步流程与各步要点",
+  "taskType": "execute",
+  "intent": "demonstrate",
+  "acceptance": "学生能按顺序说出操作步骤",
+  "expectKind": "state-strip",
+  "student": "过滤实验的操作顺序我老记混，到底先做什么后做什么？每一步注意什么？",
+  "assistant": "我们把操作按步骤分帧，一帧一个动作，跟着走一遍。"
+ },
+ {
+  "id": "tree-eng-wordroot",
+  "course": "高一英语·构词法 第1课",
+  "subject": "英语",
+  "topic": "词根 spect",
+  "taskTitle": "spect 词族怎么长出来",
+  "taskDescription": "讲解 spect 词根派生出的词族",
+  "taskType": "deconstruct",
+  "intent": "demonstrate",
+  "acceptance": "学生能说出前缀如何改变词义",
+  "expectKind": "tree",
+  "student": "inspect、respect、prospect、suspect 都有 spect，它们为什么都跟「看」有关？这个词族怎么记？",
+  "assistant": "以 spect 为根画一棵派生树，前缀是枝。"
+ }
+]
