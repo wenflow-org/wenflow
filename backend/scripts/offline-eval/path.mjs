@@ -84,6 +84,62 @@ function loadTasks(db, pathId) {
 
 const normTitle = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
 
+/**
+ * 工具操作词覆盖（missingToolScaffold 的结构性证据源，2026-10-26）。
+ *
+ * 只对**工具操作型目标**生效：从标题/学科识别出工具家族，再看任务正文里有多少条真的
+ * 提到该家族的核心操作词。零覆盖 = 「只讲道不给术」的空壳路径。
+ *
+ * 为什么需要：旧判据要求学习者「明确声明不会某工具」，但真实对话里说的是「零基础、
+ * 只用过 Excel」——语义等价却触发不了，于是 67h/76 任务的零函数 Excel 路径拿了 pass。
+ */
+const TOOL_FAMILIES = [
+  {
+    name: 'Excel',
+    goalPattern: /excel|表格|报表|数据透视|工作簿|台账/i,
+    vocabulary: ['函数', '公式', 'VLOOKUP', 'XLOOKUP', 'SUMIF', 'COUNTIF', 'IF', '透视', '图表', '条件格式', '筛选', '排序', '单元格', '工作表'],
+  },
+  {
+    name: 'SQL',
+    goalPattern: /sql|数据库|查询|索引|执行计划|慢查询/i,
+    vocabulary: ['SELECT', 'JOIN', '索引', 'EXPLAIN', '执行计划', 'B+', '回表', '覆盖索引', 'GROUP BY', 'WHERE', '查询优化'],
+  },
+  {
+    name: 'Git',
+    goalPattern: /git|版本控制|分支|提交|合并|reflog/i,
+    vocabulary: ['rebase', 'cherry-pick', 'reset', 'reflog', 'merge', 'commit', 'branch', 'HEAD', 'push', 'stash', '冲突标记'],
+  },
+  {
+    name: 'Python/Pandas',
+    goalPattern: /python|pandas|numpy|脚本|数据清洗/i,
+    vocabulary: ['DataFrame', 'groupby', 'merge', 'concat', 'apply', 'loc', 'iloc', 'read_csv', '向量化', 'pivot'],
+  },
+];
+
+export function detectToolVocabulary(title, subject, tasks) {
+  const scope = `${title || ''} ${subject || ''}`;
+  const family = TOOL_FAMILIES.find((f) => f.goalPattern.test(scope));
+  if (!family) return null;
+  const texts = tasks.map((t) => `${t.title || ''} ${t.description || ''} ${t.acceptanceCriteria || ''}`);
+  const hits = family.vocabulary
+    .map((word) => ({ word, count: texts.filter((txt) => txt.toLowerCase().includes(word.toLowerCase())).length }))
+    .filter((x) => x.count > 0);
+  const coveredTasks = texts.filter((txt) =>
+    family.vocabulary.some((word) => txt.toLowerCase().includes(word.toLowerCase())),
+  ).length;
+  const missing = family.vocabulary.filter((v) => !hits.some((h) => h.word === v));
+  return {
+    family: family.name,
+    coveredTasks,
+    totalTasks: tasks.length,
+    hitWords: hits.map((h) => `${h.word}×${h.count}`),
+    missingWords: missing,
+    line: `工具操作词覆盖（${family.name}）：${coveredTasks}/${tasks.length} 个任务提到该工具的核心操作`
+      + `｜命中词：${hits.map((h) => `${h.word}×${h.count}`).join('、') || '（无）'}`
+      + `｜未出现：${missing.slice(0, 8).join('、') || '（无）'}`,
+  };
+}
+
 function kcSummary(template) {
   const ann = template?.kcAnnotation;
   if (!ann || typeof ann !== 'object') return null;
@@ -146,6 +202,10 @@ export function buildPathCase(db, row) {
     .map((m) => `${m?.role === 'user' ? '👤' : '🤖'} ${clip(String(m?.content || ''), 140)}`)
     .filter((line) => line.trim().length > 5);
 
+  // 工具操作词覆盖（missingToolScaffold 的结构性证据，2026-10-26）：
+  // 判据不是「有没有提到工具」，而是「路径目标就是学这个工具，任务里却检索不到该工具的核心操作词」。
+  // 实证：职场 Excel 67h/76 任务，函数/公式/透视/图表/条件格式全部 0 次命中，全是写卡与自述反思。
+  const toolVocabulary = detectToolVocabulary(row.title, row.subject, tasks);
   const metrics = [
     `里程碑 ${milestones.length}｜任务 ${tasks.length}｜总预计 ${totalMinutes} 分钟`,
     budgetMinutes
@@ -155,6 +215,7 @@ export function buildPathCase(db, row) {
     `有验收标准的任务 ${acCovered}/${tasks.length}`,
     kc ? `KC 组 ${kc.groups}｜KC ${kc.kcs}｜任务-KC 链接 ${kc.links}（覆盖任务 ${kcCoveredTasks}/${tasks.length}）｜图节点 ${kc.nodes}｜前置边 ${kc.edges}` : 'KC 标注：缺失',
     duplicates.length ? `重复标题 ${duplicates.length} 组：${duplicates.map(([k, n]) => `${k}×${n}`).join('、')}` : '重复标题：无',
+    toolVocabulary ? toolVocabulary.line : '工具操作词覆盖：不适用（非工具操作型目标）',
     row.status ? `路径状态：${row.status}` : '',
   ].filter(Boolean);
 
@@ -237,7 +298,7 @@ const RUBRIC = `你是独立的学习路径质量评审员。评审对象是一�
 - duplicateTask：两个任务实质重复（同一概念、同一产出）。
 - manualLaborTrap（体力活陷阱）：任务让学习者在**无工具辅助**下对**全量业务数据**做纯手工处理——逐行人工计数/核对整表、手工抄写大量数据、用字符（#号等）手画统计图——而该操作用现成工具（表格公式、数据透视表、插入图表、AI 代跑）本可在零基础可学的步骤内完成。判据：处理的行/格数量是「全量或大量」且工具明显可用；只在 3-5 行微样本上手工操作（为建立直觉）**不算**。
 - asyncTimeLock（跨周期等待死锁）：某个后续阶段必须等「尚未发生的未来真实数据/事件」才能执行（如等下周实际客流、等下次故障、等下一个自然月），导致学习者无法在当前连续学习周期内闭环。用**已发生的历史数据**切片回测验证不算。只有「下次实操时留意」级别的收尾提示不算。
-- missingToolScaffold（工具脚手架缺失）：对话或背景里学习者明确声明不会某工具操作（如不会公式、不会插图表、没用过透视表），而任务直接要求用该工具产出结果且未提供公式模板/点击步骤/傻瓜操作卡等脚手架。学习者未声明不熟悉的不算。
+- missingToolScaffold（工具脚手架缺失）：路径目标本身是**学会用某个工具做出结果**（Excel 报表、SQL 调优、Git 操作、Python 脚本、剪辑软件等），但整条路径的任务里**没有任何一处真正教这个工具**——没有函数名/命令/点击步骤/代码骨架，全是在写字段对照卡、使用说明、自查清单、「和自己对话哪一步最卡」。判据（满足任一条即可）：① 对话/背景里学习者声明了不会该工具或零基础（「不会公式」「没用过透视表」「零基础」「只会皮毛」都算，不要求逐字说「不会」），而任务要求用该工具产出结果却未给模板/步骤卡；② **结构性证据**：路径主题是工具操作型，但全部任务标题+描述里检索不到该工具的核心操作词（如 Excel 路径搜不到 函数/公式/透视/图表/筛选，SQL 路径搜不到 索引/执行计划/EXPLAIN，Git 路径搜不到 rebase/cherry-pick/reset/reflog）。这条针对「只讲道不给术」的空壳路径——67 小时 Excel 路径 76 个任务零函数零透视表，比缺步骤卡更严重。若路径本身不是工具操作型（如学科知识、语言训练），不适用本 flag。
 - promiseConsistency（对话承诺违约）：路径**明显违背**对话中的明确承诺——以【对话承诺摘录】和【目标与确认方案】为准：总时间预算被超出 50% 以上，或对具体环节的工时承诺被超出数倍，或明确的工具形态承诺（如「配照着点就出图的操作步骤」）在路径中被推翻替换。轻微偏差（±20% 内）或对话中从未明确承诺过的不算。
 - domainAccuracy（领域事实/分类错误）：可核验的学科事实错误——把子领域/研究分支错当理论流派归类、给历史上无实验传统的学派硬编「经典实验」、教材版本或专有名词张冠李戴、虚构不存在的范例/文献。表述含糊但不算错的不算。
 

@@ -31,7 +31,7 @@ import {
 import {
   aggregatePathJudgments, buildPathPrompt, DIMENSIONS as PATH_DIMS, DIMENSION_LABELS as PATH_LABELS,
   FLAG_KEYS as PATH_FLAGS, FLAG_LABELS as PATH_FLAG_LABELS, PATH_JUDGE_NAME,
-  selectPathCases, validatePathVerdict, WEIGHTS as PATH_WEIGHTS,
+  selectPathCases, validatePathVerdict, detectToolVocabulary, WEIGHTS as PATH_WEIGHTS,
 } from './path.mjs';
 
 const args = Object.fromEntries(process.argv.slice(2).map((raw) => {
@@ -259,7 +259,7 @@ function judgeVersionFor(target) {
 
 function selftest() {
   let passed = 0;
-  const total = 14;
+  const total = 17;
   const assert = (cond, label) => {
     if (!cond) throw new Error(`selftest failed: ${label}`);
     passed += 1;
@@ -342,6 +342,19 @@ function selftest() {
   assert(agg.samples === 2 && agg.dimensions.goalAlignment === 0.6 && agg.verdict === 'fail', 'median aggregation + majority flag');
 
   assert(hasVerbatimQuote(block, ['正确 A 作答 B']) && weightedScore({ a: 1, b: 0.5 }, { a: 0.5, b: 0.5 }) === 0.75, 'quote + weighted score');
+
+  // 工具操作词覆盖（missingToolScaffold 结构证据，2026-10-26）：空壳路径必须被识别
+  const shellExcel = detectToolVocabulary('职场Excel数据报表独立成稿', '', [
+    { title: '写一张字段角色对照卡', description: '逐列指出它是谁的数据' },
+    { title: '与自己对话：这阶段哪一步最卡', description: '反思' },
+  ]);
+  assert(shellExcel && shellExcel.coveredTasks === 0 && shellExcel.family === 'Excel', 'tool vocab: shell path detected');
+  const realExcel = detectToolVocabulary('职场Excel数据报表独立成稿', '', [
+    { title: '用 SUMIF 汇总', description: '写公式' },
+    { title: '插入数据透视表', description: '拖字段' },
+  ]);
+  assert(realExcel && realExcel.coveredTasks === 2, 'tool vocab: real path covered');
+  assert(detectToolVocabulary('心理学流派脉络', '', [{ title: 'a' }]) === null, 'tool vocab: non-tool goal skipped');
 
   console.log(`[selftest] ${passed}/${total} 通过｜不调模型、不写盘`);
 }

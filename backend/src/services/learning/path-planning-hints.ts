@@ -10,6 +10,7 @@ import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig } from
 import { normalizePathDifficulty } from './path-difficulty';
 import { normalizeDeadlineDate } from './deadline-date';
 import { resolveCapacity, parseSessionMinutes } from './capacity-authority';
+import { normalizeSkillNature, type SkillNature } from './goal-path-visible-summary';
 import { dayKeyOf, endOfDay, parseDayKeyStart } from '../time/day-boundary';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
@@ -263,6 +264,15 @@ export interface BudgetDerivation {
   perMilestoneAnchored: number | null;
   /** 是否发生了容量夹（anchored < requested） */
   anchorClamped: boolean;
+  /**
+   * 预算是否疑似「日历乘法」（2026-10-26 解耦诊断）：体量与日历容量几乎相等
+   * （比值 ≥ 0.9），说明总量不是从内容需求推出来的，而是把「我有半年」当成了
+   * 「必须排满半年」。外部评审实证：注安 270h ≈ 180 天 × 1.5h、教资 108h = 12 周 × 9h。
+   * 只做留痕与告警，不自动改数——真正该改的是 goal 层的 totalSessions 口径。
+   */
+  calendarDriven?: boolean;
+  /** 内容体量锚（goal 层 scopeAnchor 换算值；无颗粒度承诺时为 null） */
+  scopeAnchoredHours?: number | null;
 }
 
 /** 结构容量缺口报告（可持久化、可审计；口径见 derivePlanningHints 内 capacityDeficit 块） */
@@ -405,6 +415,109 @@ export function clampStageMinutesToBudget<T extends { estimatedMinutes?: number 
 }
 
 /**
+ * 阶段内认知动作拓扑序（确定性重排，2026-10-25 外部评审实证）。
+ *
+ * 问题：prompt 第 65 行已要求「先 acquire/diagnose/deconstruct，再 model/execute，
+ * 最后 refine/consolidate」，但只是软约束，模型经常不遵守：
+ *   - py-clean-07 S5（R1）：refine(复查固化脚本) → model(写出固化脚本) → execute(才学 groupby)
+ *     —— 复查的对象由后一个任务才产出，先审后产。
+ *   - eng-syntax-04 S4（R1）：deconstruct → consolidate → model → diagnose → execute
+ *     —— consolidate 要求产出流程卡，而流程卡要练的嵌套句在 model 才第一次练。
+ *   - power-train-10 S1（R1）：execute(逐档踩五档功率) 排在 diagnose(定恢复放行判据) 之前
+ *     —— 用户刚测完 FTP 腿酸三天，对话明确约定先低强度。
+ *
+ * **只治一类倒挂**（2026-10-26 收紧）：收束档（refine/consolidate）跑到应用档
+ * （model/execute）之前。这是唯一**结构上必然错**的倒挂——收束动作的宾语（要复查的脚本、
+ * 要合龙的流程卡）由应用档产出，先审后产在物理上不可能。
+ *
+ * **不动**建立档与应用档的相对次序：diagnose 既可能「先摸清现状再动手」（该在前），
+ * 也可能「做完再诊断」（该在后），语义上两可，代码无法判断。强行统一会把合法的
+ * 「做完再诊断」也翻过来（2026-10-26 实测：sql-perf S1 的 execute→diagnose 被误翻，
+ * 连带 5/10 条路径的引用编号失配）。这类次序留给 prompt 规则与评审。
+ *
+ * 稳定排序，同档内保持模型给的相对顺序；已是正序时恒等变换（零行为变化）。
+ */
+const TOPOLOGY_RANK: Record<string, number> = {
+  // 建立档与应用档同权（保持模型原序），只有收束档被强制压后。
+  acquire: 0,
+  deconstruct: 0,
+  diagnose: 0,
+  model: 0,
+  execute: 0,
+  refine: 1,
+  consolidate: 1,
+};
+
+export function orderStageTasksByTopology<T extends { type?: string }>(tasks: T[]): T[] {
+  if (!Array.isArray(tasks) || tasks.length < 2) return tasks;
+  const rankOf = (task: T): number => {
+    const key = String(task?.type || '').trim();
+    return key in TOPOLOGY_RANK ? TOPOLOGY_RANK[key] : 0;
+  };
+  // 稳定排序：同档保持原序（Array#sort 在 V8 已稳定，但显式带下标以防依赖实现细节）
+  return tasks
+    .map((task, index) => ({ task, index, rank: rankOf(task) }))
+    .sort((a, b) => (a.rank - b.rank) || (a.index - b.index))
+    .map((entry) => entry.task);
+}
+
+/**
+ * 重排后同步改写任务描述里的「任务 N」交叉引用（2026-10-26 拓扑重排的必要配套）。
+ *
+ * 为什么必须成对做：拓扑重排把 execute 提到 diagnose 之前后，原描述里的「沿用任务 1
+ * 抄下的同一份 EXPLAIN」就变成了自指（本任务现在是任务 1）。实测 5/10 条路径因此
+ * 被评审判 prerequisiteGap，但根因不是能力前置缺失，而是编号失配。
+ *
+ * 语义：只在**确定是引用本阶段其它任务**时改号。识别「任务 N」「第 N 步」「任务N」三类写法，
+ * N 落在 [1, 阶段任务数] 内才替换；替换成该任务在新顺序里的位次。指向自身的引用
+ * （重排前引用的任务恰好被换到本任务位置）改写为「本任务上一步的产出」这类不依赖编号的表述，
+ * 避免产生新的自指。
+ */
+export function remapStageTaskReferences<T extends { title?: string; description?: string; acceptanceHint?: string; acceptanceCriteria?: string }>(
+  originalOrder: T[],
+  ordered: T[],
+): T[] {
+  if (!Array.isArray(ordered) || ordered.length < 2) return ordered;
+  if (originalOrder.length !== ordered.length) return ordered;
+  // 旧位次(1-based) → 新位次(1-based)
+  const newIndexByTask = new Map<T, number>();
+  ordered.forEach((task, index) => newIndexByTask.set(task, index + 1));
+  const oldIndexByTask = new Map<T, number>();
+  originalOrder.forEach((task, index) => oldIndexByTask.set(task, index + 1));
+
+  const rewriteText = (text: string | undefined, selfOldIndex: number): string | undefined => {
+    if (typeof text !== 'string' || !text) return text;
+    return text.replace(/(任务\s*|第\s*)(\d+)(\s*步)?/g, (match, prefix: string, digits: string, suffix: string | undefined) => {
+      const oldNumber = Number(digits);
+      if (!Number.isFinite(oldNumber) || oldNumber < 1 || oldNumber > originalOrder.length) return match;
+      const referenced = originalOrder[oldNumber - 1];
+      if (!referenced) return match;
+      const newNumber = newIndexByTask.get(referenced);
+      if (!newNumber) return match;
+      // 原本引用「另一个任务」，现在那个任务被换到本任务的位置 ⇒ 改写为非编号表述
+      if (newNumber === selfOldIndex) return '上一步的';
+      return `${prefix}${newNumber}${suffix ?? ''}`;
+    });
+  };
+
+  return ordered.map((task, index) => {
+    const selfNewIndex = index + 1;
+    const selfOldIndex = oldIndexByTask.get(task) ?? selfNewIndex;
+    const next: any = { ...task };
+    if (typeof (task as any).description === 'string') {
+      next.description = rewriteText((task as any).description, selfNewIndex);
+    }
+    if (typeof (task as any).acceptanceHint === 'string') {
+      next.acceptanceHint = rewriteText((task as any).acceptanceHint, selfNewIndex);
+    }
+    if (typeof (task as any).acceptanceCriteria === 'string') {
+      next.acceptanceCriteria = rewriteText((task as any).acceptanceCriteria, selfNewIndex);
+    }
+    return next as T;
+  });
+}
+
+/**
  * 把任意已算好的 hints 收到「一节课」量级（只收上界，不拍死数字；区间不塌成单点）。
  * 两个调用方：① Goal 层 triage 判定（derivePlanningHints 内）；② Path 层自检后，
  * 给 stage-designer 用的 hints（path 产出 ≤1 小时 ⇒ 任务数/分钟一并收紧，否则学时仍会被
@@ -433,7 +546,17 @@ export function derivePlanningHints(
   timeBudget: string | null,
   timeBudgetCadence: TimeBudgetCadence | null,
   keyStages: string[],
-  timeDimensions?: { totalWeeks?: number | null; estimatedHours?: number | null; sessionsPerWeek?: number | null; sessionsLengthMin?: number | null; totalSessions?: number | null } | null,
+  timeDimensions?: {
+    totalWeeks?: number | null;
+    estimatedHours?: number | null;
+    sessionsPerWeek?: number | null;
+    sessionsLengthMin?: number | null;
+    totalSessions?: number | null;
+    /** 日历容量上限（2026-10-26 解耦）：只用于诊断「预算是否来自日历乘法」 */
+    calendarCapacityHours?: number | null;
+    /** 内容体量锚（goal 层颗粒度承诺换算值） */
+    scopeAnchorHours?: number | null;
+  } | null,
   scopeSize?: ScopeSize | null,
   learnerLoadProfile?: LearnerLoadProfile | null,
   triage?: TriageHint | null
@@ -692,11 +815,23 @@ export function derivePlanningHints(
         ? (timeDimensions!.totalWeeks as number) * (timeDimensions!.sessionsPerWeek as number)
           * (timeDimensions!.sessionsLengthMin as number) / 60
         : null;
+  // 显式课次算术（totalSessions × 单次分钟）≠「模型猜的总量」：前者是对话里谈定的课表
+  // （「8 层、每层一小时」），后者可能被污染成荒谬小值。R1-d 的日历下限只该防后者。
+  // 2026-10-25 实证（phil-sci-03 iter3）：goal 提取 totalSessions=8、sessionsLengthMin=60
+  // ⇒ 8h 正确，却被 inferredBudgetCap=60h 的 25% 下限抬到 15h，路径实排 11.8h——
+  // 比对话承诺「8 次 × 半小时到一小时」多出近 3 倍，且全程无告警。
+  // 注意：走这条分支的前提是 inferredBudgetCap 非空（即有 timePerSession/timeHorizon 可解析），
+  // 而 capacity.sessionMinutes 在无结构化字段时也会用同一份原话解析，所以此处的
+  // oneSessionMinutes 必然来自真实信号，不需要额外守卫。
+  const structuredHoursFromSessions = totalSessions !== null && oneSessionMinutes !== null;
   const estimatedHoursTotalRaw =
     structuredHoursTotal !== null && inferredBudgetCap !== null
       // R1-d（rw-school-11/exam-12 target=1h 案例）：结构化锚也可能被污染成荒谬小值，
       // 直接 min() 会信任垃圾下限。预算应落在每日现实上限的 [25%, 100%] 带内。
-      ? Math.max(Math.min(structuredHoursTotal, inferredBudgetCap), inferredBudgetCap * 0.25)
+      // 显式课次算术例外：只取上限（min），不抬下限。
+      ? (structuredHoursFromSessions
+          ? Math.min(structuredHoursTotal, inferredBudgetCap)
+          : Math.max(Math.min(structuredHoursTotal, inferredBudgetCap), inferredBudgetCap * 0.25))
       : structuredHoursTotal !== null
         ? structuredHoursTotal
         : inferredBudgetCap;
@@ -843,6 +978,12 @@ export function derivePlanningHints(
             : inferredBudgetCap !== null
               ? 'inferred_daily_minutes'
               : 'none';
+        // 日历乘法诊断（2026-10-26 解耦）：goal 层显式给了 calendarCapacityHours 时，
+        // 体量与日历容量几乎相等 ⇒ 预算不是从内容需求推出来的。
+        const calendarCapacity = Number(timeDimensions?.calendarCapacityHours);
+        const calendarDriven = Number.isFinite(calendarCapacity) && calendarCapacity > 0
+          ? estimatedHoursTotal >= calendarCapacity * 0.9
+          : undefined;
         return {
           source,
           structuredHours: structuredHoursTotal,
@@ -854,6 +995,10 @@ export function derivePlanningHints(
           anchorClamped: requestedPerMilestone !== null
             && targetHoursPerMilestone !== null
             && targetHoursPerMilestone < requestedPerMilestone - 0.05,
+          ...(calendarDriven === undefined ? {} : { calendarDriven }),
+          scopeAnchoredHours: Number.isFinite(Number(timeDimensions?.scopeAnchorHours))
+            ? Number(timeDimensions?.scopeAnchorHours)
+            : null,
         };
       })()
     : null;
@@ -1025,6 +1170,9 @@ export function buildFramedNormalizedInput(input: any): any {
     ? (input.triage as TriageHint)
     : null;
   const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile, triage);
+  // 技能性质（2026-10-26）：goal 层 understanding.skill_nature 白名单透传，决定 AI 代跑边界。
+  const skillNature = normalizeSkillNature(input.skillNature);
+  const skillNatureEvidence = normalizeString(input.skillNatureEvidence) || null;
   // 校内锚：LLM 抽取口径（2026-09-30 用户拍板「不要走正则，走大模型自身的推理理解」）。
   // goal-conversation 的 understanding.school_anchor → visibleSummary → buildNormalizedInputV1
   // → 此处透传。没有该键（非校内学习者/旧链路）时**不注入**，不做任何关键词匹配兜底。
@@ -1099,5 +1247,16 @@ export function buildFramedNormalizedInput(input: any): any {
   // （下游按"键不存在"判定非校内路径，空壳会让锚规则误触发）。
   if (schoolAnchor) framed.schoolAnchor = schoolAnchor;
   else delete framed.schoolAnchor;
+  // 技能性质（2026-10-26 外部评审实证）：决定「AI 能否替学习者代跑核心动作」。
+  // 与锚同样只在有值时带出——判不出时下游按通用口径处理，不强制任何一档。
+  // 放在 learnerProfile 内而不是顶层：path/stage 两处 prompt 都已引用 learnerProfile，
+  // 不必新增顶层输入契约（顶层键要同步 manifest 与沙箱声明）。
+  if (skillNature) {
+    framed.learnerProfile.skillNature = skillNature;
+    if (skillNatureEvidence) framed.learnerProfile.skillNatureEvidence = skillNatureEvidence;
+  } else {
+    delete framed.learnerProfile.skillNature;
+    delete framed.learnerProfile.skillNatureEvidence;
+  }
   return framed;
 }

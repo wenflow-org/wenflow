@@ -18,6 +18,8 @@ import {
   clampStageMinutesToBudget,
   clampStageTasksToHints,
   ONE_SITTING_MAX_HOURS,
+  orderStageTasksByTopology,
+  remapStageTaskReferences,
 } from '../path-planning-hints';
 import {
   appendDescriptionNote,
@@ -567,6 +569,23 @@ async function enrichLearningPathWithAndersonInner(
         }
       }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
+      // 阶段内认知动作拓扑序（2026-10-25 外部评审实证）：prompt 规则 65 要求
+      // 「建立 → 应用 → 收束」，但只是软约束。实证倒挂：py-clean S5 先 refine(复查脚本)
+      // 后 model(写脚本)、eng-syntax S4 先 consolidate(产出流程卡) 后 model(才练嵌套句)、
+      // power-train S1 先 execute(踩五档功率) 后 diagnose(定恢复放行判据，用户腿酸未恢复)。
+      // 稳定排序，同档内保留模型给的相对顺序；已是正序时恒等变换（零行为变化）。
+      const orderedTasks = orderStageTasksByTopology(stageTasks as Array<{ type?: string }>);
+      if (orderedTasks.some((task, index) => task !== stageTasks[index])) {
+        logger.warn('[stage-topology] 阶段内认知动作顺序倒挂，已确定性重排', {
+          pathId: learningPath.id,
+          stageNumber: milestone.stageNumber,
+          before: (stageTasks as any[]).map((t) => String(t?.type || '?')),
+          after: orderedTasks.map((t) => String(t?.type || '?')),
+        });
+        // 重排必须同步改写描述里的「任务 N」引用，否则原「沿用任务 1」会变成自指
+        // （2026-10-26 实测：重排后 5/10 条路径被判 prerequisiteGap，根因全是编号失配）。
+        stageTasks = remapStageTaskReferences(stageTasks as any[], orderedTasks as any[]) as typeof stageTasks;
+      }
       // 阶段分钟预算确定性夹（2026-10-25 承诺二次违约修复）：模型对 hints 的分钟锚
       // 遵从率低（实证 uqcit3l：hints 全对——总量 2h/阶段 0.7h/每任务 20 分钟/区间 9-30，
       // 模型仍排出 80+60+113=253 分钟 ≈ 承诺 2.1 倍）。提示词规则之外再加一道代码夹，
@@ -959,9 +978,10 @@ async function enrichLearningPathWithAndersonInner(
         // 阶段估时回写：以本阶段任务分钟汇总为准（ceil 到整小时），供各处展示与路径汇总使用
         const stageTotalMinutes = (stageTasks as Array<{ estimatedMinutes?: number }>)
           .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
-        // 2026-10-26 迭代 1：ceil 改保留一位小数（见下方 stageHours 同源修复说明）
+        // 2026-10-26 迭代 1：ceil 改保留一位小数（见下方 stageHours 同源修复说明）；
+        // 下限同为 0.1 而非 1（短课路径不该被抬到 1 小时，见下方说明）。
         const stageNormalizedHours = stageTasks.length > 0
-          ? Math.max(1, Math.round((stageTotalMinutes / 60) * 10) / 10)
+          ? Math.max(0.1, Math.round((stageTotalMinutes / 60) * 10) / 10)
           : null;
 
         for (let j = 0; j < stageTasks.length; j++) {
@@ -1055,10 +1075,14 @@ async function enrichLearningPathWithAndersonInner(
         pathTotalMinutes += stageTotalMinutes;
         // 阶段学时回写（2026-10-26 迭代 1）：此前用 Math.ceil 向上取整，N 个阶段各取整一次，
         // 累积误差让「路径标称」永远比「任务实排」高 5–13%（20 条实测：中位比值 0.90，
-        // eng-syntax 最差 0.61——标 10h 实排 6.1h）。改为保留一位小数（≥1 小时下限不变），
-        // 标称与实排同口径；展示层如需整数由前端格式化，不在数据层制造偏差。
+        // eng-syntax 最差 0.61——标 10h 实排 6.1h）。改为保留一位小数，标称与实排同口径；
+        // 展示层如需整数由前端格式化，不在数据层制造偏差。
+        // 下限（2026-10-26 修复 5 副作用）：原为硬编码 1 小时，对「一次 20 分钟」的短课路径
+        // 会把每阶段 0.3-0.6h 抬到 1h，5 个阶段累计虚增 3h（实测 phil-sci 标 5h 实排 2.1h，
+        // 比值 0.43）。下限应服从单次可用时间：锚到本阶段任务的真实分钟，仅保留「不能为 0」
+        // 这一条底线。
         const stageHours = stageTasks.length > 0
-          ? Math.max(1, Math.round((stageTotalMinutes / 60) * 10) / 10)
+          ? Math.max(0.1, Math.round((stageTotalMinutes / 60) * 10) / 10)
           : null;
         stageHoursForAudit.push({
           stageNumber: milestone.stageNumber,

@@ -1,5 +1,11 @@
 export type GoalPathTimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
 
+/**
+ * 技能性质（goal 层 understanding.skill_nature）：决定 AI 能不能替学习者代跑核心动作。
+ * 见 prompts/core/goal-conversation.yaml 同名规则。
+ */
+export type SkillNature = 'tool_operation' | 'internalized_skill' | 'knowledge_structure';
+
 import type { MaterialNeed } from '../../skills/material-collector/types';
 import { normalizeDeadlineDate } from './deadline-date';
 
@@ -48,6 +54,13 @@ export interface GoalPathVisibleSummary {
     estimatedHours?: number | null;
     sessionsPerWeek?: number | null;
     sessionsLengthMin?: number | null;
+    /** 课次锚（体量 = totalSessions × sessionsLengthMin） */
+    totalSessions?: number | null;
+    /**
+     * 日历容量上限（2026-10-26 解耦，goal 层新字段）：周期天数 × 每日可用分钟 / 60。
+     * 只用于识别「预算来自日历乘法」，不参与体量计算。
+     */
+    calendarCapacityHours?: number | null;
   } | null;
   /**
    * 外部权威资料需求（hidden，goal→path 资料采集缝）。
@@ -55,6 +68,14 @@ export interface GoalPathVisibleSummary {
    * 白名单透传后供 path.coordinator 调 material-collector 采集（未声明则为 null）。
    */
   needsMaterial?: MaterialNeed | MaterialNeed[] | null;
+  /**
+   * 技能性质（hidden，goal→path 教学策略缝，2026-10-26 外部评审实证）。
+   * 决定「AI 能否替学习者代跑核心动作」：工具操作型可以，内化训练型绝对不行
+   * （实证：英语长难句路径让 AI 代跑拆句，学习者到独立阅读照样懵）。
+   * 未声明 = null，下游按通用口径处理，不强制任何一档。
+   */
+  skillNature?: SkillNature | null;
+  skillNatureEvidence?: string | null;
   successCriteria: {
     observableResult: string | null;
     acceptanceCheck: string | null;
@@ -186,6 +207,8 @@ export function buildGoalPathVisibleSummary(params: {
   const currentBaseline = buildCurrentBaseline(understanding);
   const needsMaterial = normalizeNeedsMaterial(understanding?.needsMaterial);
   const schoolAnchor = normalizeSchoolAnchorShape(understanding?.school_anchor);
+  const skillNature = normalizeSkillNature(understanding?.skill_nature);
+  const skillNatureEvidence = normalizeString(understanding?.skill_nature_evidence) || null;
 
   const hasResources = !!(timeBudget || timePerSession || timeHorizon || deadlineText || deadlineDate);
   const observableResult = normalizeString(understanding?.success_criteria?.observable_result);
@@ -238,6 +261,8 @@ export function buildGoalPathVisibleSummary(params: {
       : null,
     timeDimensions,
     needsMaterial,
+    skillNature,
+    skillNatureEvidence,
   };
 }
 
@@ -255,6 +280,9 @@ function buildTimeDimensions(raw: unknown): NonNullable<GoalPathVisibleSummary['
     // 课次锚（2026-09-21）：体量 = totalSessions × sessionsLengthMin。
     // 让 LLM 估"总学时"产出率只有 10%，估"几节课"才估得动。
     totalSessions: num(r.totalSessions),
+    // 日历容量（2026-10-26 解耦）：周期天数 × 每日可用分钟 / 60。仅用于识别
+    // 「预算来自日历乘法」并降级，不参与体量计算本身。
+    calendarCapacityHours: num(r.calendarCapacityHours),
   };
   return Object.values(result).some((v) => v !== null) ? result : null;
 }
@@ -268,4 +296,13 @@ export function normalizeSchoolAnchorShape(raw: any): GoalPathVisibleSummary['sc
   const schoolPace = str(raw.schoolPace);
   if (!textbook && !examScope && !schoolPace) return null;
   return { textbook, examScope, schoolPace };
+}
+
+/** 技能性质归一化：只认三档枚举，其余（含大小写变体外的脏值）一律 null——不猜测、不降级成默认档 */
+export function normalizeSkillNature(raw: unknown): SkillNature | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim().toLowerCase();
+  return value === 'tool_operation' || value === 'internalized_skill' || value === 'knowledge_structure'
+    ? value
+    : null;
 }

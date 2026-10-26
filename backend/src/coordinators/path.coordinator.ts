@@ -25,7 +25,7 @@ import {
   type PathAgentInputConfig
 } from '../services/agentConfig.service';
 import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
-import { normalizeSchoolAnchorShape } from '../services/learning/goal-path-visible-summary';
+import { normalizeSchoolAnchorShape, normalizeSkillNature } from '../services/learning/goal-path-visible-summary';
 import { normalizeDeadlineDate } from '../services/learning/deadline-date';
 import { isDeadlineExplicitlyUnspecified, deriveRelativeDeadline, parseAbsoluteDeadline } from '../services/learning/deadline-text';
 import { resolveCapacity } from '../services/learning/capacity-authority';
@@ -326,6 +326,16 @@ class PathCoordinator {
       learnerProfile: {
         surfaceGoal: str('understanding.surface_goal', visibleSummary?.surfaceGoal)
           || this.normalizeString(rawGoal),
+        // 技能性质（2026-10-26）：决定 AI 能否替学习者代跑核心动作。无值时整键不出现，
+        // 下游按通用口径处理（不强制任何一档）。
+        ...(normalizeSkillNature(pick('understanding.skill_nature') ?? visibleSummary?.skillNature)
+          ? {
+              skillNature: normalizeSkillNature(pick('understanding.skill_nature') ?? visibleSummary?.skillNature)!,
+              skillNatureEvidence: this.normalizeString(
+                str('understanding.skill_nature_evidence', visibleSummary?.skillNatureEvidence),
+              ) || null,
+            }
+          : {}),
         currentBaseline: {
           level: str('understanding.current_baseline.level', visibleSummary?.currentBaseline?.level),
           evidence: str('understanding.current_baseline.evidence', visibleSummary?.currentBaseline?.evidence),
