@@ -1912,7 +1912,8 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
   }
 
   const TONE: Record<string, string> = { accent: T.accent, ok: T.ok, warn: T.warn, neutral: T.muted };
-  const padL = 62;
+  // V7（外盲评：y 轴标题被截成「降水 /10…」）：左侧让位给轴标题，按实际文字宽度给
+  const padL = Math.max(62, Math.ceil(est(y.label ?? '', T.fontMicro)) + 44);
   // V6 双轴（外盲评：气温降水同轴把气温压进 1/6 高度）：y2 有效且存在右轴系列时才启用
   const hasRight = Array.isArray(series) && series.some((sv: any) => sv?.axis === 'right');
   const y2ok = !!y2 && Number(y2.max) > Number(y2.min) && hasRight;
@@ -2316,9 +2317,16 @@ function renderSplitCompare({ title, left, right, delta }: any): RenderedFigure 
       const rh = rowHs[i];
       const hi = delta && Number.isInteger(Number(delta.at)) && Number(delta.at) === i + 1;
       if (row) {
-        if (hi) parts.push(rect(x + 6, y + 1, colW - 12, rh - 2, { r: 6, fill: tone.soft, stroke: tone.color, sw: 1.4 }));
-        parts.push(text(x + 12, y + (rh === 46 ? 20 : rh / 2 + 5), row.label, 't-label', 'start', 'fill="' + T.ink + '"'));
-        if (row.sub && rh === 46) {
+        // V7（外盲评：右栏 '?' 配绿色 ok 色调像「已完成」）：待填行一律中性虚线槽，不继承面板色
+        const masked = String(row.label ?? '') === '?' || String(row.label ?? '') === '？';
+        if (masked) {
+          parts.push(rect(x + 6, y + 2, colW - 12, rh - 4, { r: 6, fill: 'none', stroke: T.faint, sw: 1.1, dash: '4 4' }));
+          parts.push(text(x + colW / 2, y + rh / 2 + 5, '?', 't-label', 'middle', 'fill="' + T.faint + '"'));
+        } else {
+          if (hi) parts.push(rect(x + 6, y + 1, colW - 12, rh - 2, { r: 6, fill: tone.soft, stroke: tone.color, sw: 1.4 }));
+          parts.push(text(x + 12, y + (rh === 46 ? 20 : rh / 2 + 5), row.label, 't-label', 'start', 'fill="' + T.ink + '"'));
+        }
+        if (row.sub && rh === 46 && !masked) {
           const subs = balancedWrap(row.sub, colW - 24, T.fontMicro);
           subs.forEach((line, li) => parts.push(text(x + 12, y + 36 + li * 12, line, 't-tiny', 'start', 'fill="' + T.muted + '"')));
         }
