@@ -123,6 +123,11 @@ function btn(wrapper: Awaited<ReturnType<typeof mountPanel>>, text: string) {
   return wrapper.findAll('button').find((b) => b.text().includes(text))
 }
 
+/** 面板用 v-show 切页签；未挂载到 document 时 isVisible() 读不到内联 display，直接看 style */
+function shown(wrapper: Awaited<ReturnType<typeof mountPanel>>, selector: string): boolean {
+  return !(wrapper.find(selector).attributes('style') || '').includes('display: none')
+}
+
 describe('ModelProvidersPanel', () => {
   beforeEach(() => {
     getMock.mockReset()
@@ -177,17 +182,36 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mpp-item--on').text()).toContain('平台')
   })
 
-  it('平台详情只有模型一页：连接由宿主经插槽内联注入，平台不再有「设置」钮', async () => {
+  it('平台详情分「模型 / 连接 / 基础设施」三页签：连接由宿主经插槽内联注入，平台不再有「设置」钮', async () => {
     const w = await mountPanel()
-    // 平台默认选中：没有二级页签，模型表直接可见
-    expect(w.findAll('.mpp-tabs')).toHaveLength(0)
-    expect(w.find('.mpp-models').exists()).toBe(true)
-    expect(w.text()).not.toContain('基础设施')
+    // 2026-10-26：平台详情有二级页签，默认落在「模型」
+    const tabs = w.findAll('.mpp-subtabs .mk-subtab').map((t) => t.text())
+    expect(tabs).toEqual(['模型2', '连接', '基础设施'])
+    expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('模型2')
+    expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
+    expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
     expect(w.text()).not.toContain('生成参数')
 
     // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
     expect(w.findAll('.mpp-detail__acts .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()
+
+    // 切到「连接」页签：连接表单可见、模型表隐藏；再切「基础设施」
+    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '连接')!.trigger('click')
+    expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
+    expect(shown(w, '#mpp-platform-panel-models')).toBe(false)
+    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '基础设施')!.trigger('click')
+    expect(shown(w, '#mpp-platform-panel-infra')).toBe(true)
+    expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
+
+    // 切到自定义供应商：没有二级页签（基础设施只属于平台），切回平台时归位到「模型」
+    const acmeTab = w.findAll('.mpp-item').find((i) => i.text().includes('Acme 网关'))!
+    await acmeTab.trigger('click')
+    await flushPromises()
+    expect(w.findAll('.mpp-subtabs')).toHaveLength(0)
+    await w.findAll('.mpp-item').find((i) => i.text().includes('平台'))!.trigger('click')
+    await flushPromises()
+    expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('模型2')
 
     // 自定义供应商：设置仍打开注册表编辑弹层
     const acme = w.findAll('.mpp-item').find((i) => i.text().includes('Acme 网关'))!

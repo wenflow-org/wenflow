@@ -104,11 +104,31 @@
         </div>
         <p v-if="selected.description && selected.id !== 'platform'" class="mpp-detail__desc">{{ selected.description }}</p>
 
+        <!-- 平台详情二级页签（2026-10-26）：模型 / 连接 / 基础设施。
+             用户「这个地方就可以配置重排序嵌入模型」——向量化与重排是平台这条供应商自己的
+             能力，原先作为独立卡挂在页面最下方，与「平台」分成两处看。
+             内容用 v-show 不用 v-if：切页签不重建表单，基础设施面板的已加载状态也留着。 -->
+        <MkSubTabs
+          v-if="selected.id === 'platform'"
+          v-model="platformTab"
+          :tabs="platformTabs"
+          id-base="mpp-platform"
+          class="mpp-subtabs"
+        />
+
         <!-- 平台通道的连接（服务地址 / 密钥 / 连通性验证）由宿主经 #platform-detail 就地注入：
              2026-10-25 用户「这个组整个页面我觉得做的不好」——它此前藏在「平台设置」弹窗里，
              改个地址要先点「设置」，而它本身就是「平台」这条供应商的连接属性，
              和右侧模型表属于同一个对象的两面。 -->
-        <slot v-if="selected.id === 'platform'" name="platform-detail" />
+        <div
+          v-if="selected.id === 'platform'"
+          v-show="platformTab === 'conn'"
+          id="mpp-platform-panel-conn"
+          role="tabpanel"
+          aria-labelledby="mpp-platform-tab-conn"
+        >
+          <slot name="platform-detail" />
+        </div>
 
         <template v-if="selected.id !== 'platform'">
           <div class="mpp-block">
@@ -153,7 +173,13 @@
           </div>
         </template>
 
-        <div class="mpp-block mpp-models">
+        <div
+          v-show="selected.id !== 'platform' || platformTab === 'models'"
+          :id="selected.id === 'platform' ? 'mpp-platform-panel-models' : undefined"
+          :role="selected.id === 'platform' ? 'tabpanel' : undefined"
+          :aria-labelledby="selected.id === 'platform' ? 'mpp-platform-tab-models' : undefined"
+          class="mpp-block mpp-models"
+        >
           <div class="mpp-models__head">
             <!-- 平台详情只有一页：标题直接给模型计数（原页签计数随页签一起退役）。
                  上游清单状态与计数同一行（2026-10-24 走查）：原先是表头之上独立一条，
@@ -247,6 +273,20 @@
             </table>
           </div>
         </div>
+
+        <!-- 基础设施（向量化 / 重排）：平台这条供应商自己的能力，收进详情第三个页签。
+             2026-10-26 用户「这个地方就可以配置重排序嵌入模型」——此前它是页面最下方一张
+             独立卡，和「平台」分成两处，改个嵌入模型得往下滚过整个模型表。 -->
+        <div
+          v-if="selected.id === 'platform'"
+          v-show="platformTab === 'infra'"
+          id="mpp-platform-panel-infra"
+          role="tabpanel"
+          aria-labelledby="mpp-platform-tab-infra"
+          class="mpp-block mpp-infra"
+        >
+          <slot name="platform-infra" />
+        </div>
       </div>
       <MkEmptyState v-else compact title="还没有供应商" />
     </div>
@@ -275,6 +315,7 @@ import { useRouter } from 'vue-router'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import ProviderEditorDialog, { type ProviderLike } from './ProviderEditorDialog.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
@@ -353,7 +394,16 @@ const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
 const registry = computed(() => view.value?.registry ?? null)
 const selected = computed(() => providers.value.find((p) => p.id === selectedId.value) ?? null)
-/** 平台详情只有模型一页；连接/基础设施在宿主的平台设置弹窗里（2026-10-24） */
+/* 平台详情的二级页签（2026-10-26 用户「这个地方就可以配置重排序嵌入模型」）：
+   向量化 / 重排是平台这条供应商自己的能力，原来独立成卡挂在页面最下方，与「平台」是
+   两处；现在收进平台详情，和连接、模型并列。页签只对平台出现——示例供应商没有基础设施。
+   用组件内状态不写 URL：一级页签已占用 ?tab=，二级再写会抢键。 */
+const platformTab = ref<'models' | 'conn' | 'infra'>('models')
+const platformTabs = computed(() => [
+  { key: 'models', label: '模型', count: selected.value?.models.length },
+  { key: 'conn', label: '连接' },
+  { key: 'infra', label: '基础设施' },
+])
 
 /* 2026-10-21 用户「不要了」：卡头 meta 只留可写/只读这个会改变操作的结论，
    数据来源（来自模型目录文件）与生效方式进 title */
@@ -484,6 +534,8 @@ function onTablistKeydown(e: KeyboardEvent): void {
 
 function select(id: string): void {
   selectedId.value = id
+  /* 切供应商时二级页签归位到「模型」：从平台切到示例供应商再切回来，不该停在上一家的页签 */
+  platformTab.value = 'models'
   keyDraft.value = ''
   keyVisible.value = false
   testResults.value = {}
@@ -834,8 +886,13 @@ defineExpose({ refresh, openPull, openHostPull })
 }
 .mpp-add { width: 100%; margin-top: 10px; }
 .mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
-/* 平台详情只有模型一页：不再有二级页签条与面板间距补偿 */
+/* 平台详情二级页签（模型 / 连接 / 基础设施）：页签条下已有分隔线，面板不再自带一条 */
+.mpp-subtabs { margin-top: 4px; }
 .mpp-detail > .mpp-models { margin-top: 0; padding-top: 0; border-top: 0; }
+.mpp-detail > .mpp-infra { margin-top: 0; padding-top: 0; border-top: 0; }
+.mpp-infra { margin-top: 14px; }
+/* 连接页签里的 #platform-detail 自带 .mpp-block 节奏（含顶部发丝线），页签下再压一条会双线 */
+.mpp-detail > div[role='tabpanel'] > .ac-conn { margin-top: 0; padding-top: 0; border-top: 0; }
 
 /* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
 .mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }

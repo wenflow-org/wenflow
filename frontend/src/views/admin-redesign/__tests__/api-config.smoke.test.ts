@@ -557,15 +557,19 @@ describe('ApiConfig P1 修复批', () => {
   /* 2026-10-25 用户「这个组整个页面我觉得做的不好…可以功能打散」：默认生成参数（含别名映射）
      从接入页搬到「调用」页——它是「调用怎么走」的默认值，与同页调用策略同类；
      接入页只留「接哪些上游、模型怎么登记」。 */
-  it('默认生成参数与别名映射在调用页，接入页只有供应商与基础设施', async () => {
+  it('默认生成参数与别名映射在调用页，接入页只有供应商（基础设施在其页签内）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     await flushPromises();
-    // 接入页：供应商编辑面板（平台连接内联）+ 基础设施卡，不含生成参数
+    // 接入页：只有供应商编辑面板；连接与基础设施都是平台详情里的二级页签
     expect(wrapper.find('.mpp').exists()).toBe(true);
     expect(wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text())).toContain('＋ 添加模型');
-    expect(wrapper.find('.ac-conn').exists()).toBe(true);
-    expect(wrapper.find('#ac-infra').exists()).toBe(true);
+    expect(wrapper.find('.mpp-subtabs').exists()).toBe(true);
+    // 连接页签的内容在 DOM 里（v-show 保留），但默认页签是「模型」
+    expect(wrapper.find('#mpp-platform-panel-conn').exists()).toBe(true);
+    expect(wrapper.find('#mpp-platform-panel-infra').exists()).toBe(true);
+    // 旧的独立基础设施卡已撤
+    expect(wrapper.find('#ac-infra').exists()).toBe(false);
     expect(wrapper.find('.ac-registry').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('默认思考');
 

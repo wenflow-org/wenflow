@@ -41,12 +41,13 @@
     <template v-if="isConfigTab">
     <template v-if="tab === 'access'">
     <!-- 接入（2026-10-25 用户「这个组整个页面我觉得做的不好…可以功能打散」）：
-         本页只回答一件事——接哪些上游、模型怎么登记。三段自上而下：
-         ① 供应商面板（左列表 / 右详情；平台通道的连接表单内联在它自己的详情里）
-         ② 基础设施模型（向量化 / 重排，平台必需）
-         ③ 平台默认生成参数与别名映射 → 已移到「调用」页（它们是「调用怎么走」，不是「接谁」）
-         原「平台设置」浮窗撤除：它把①②与生成参数三件事塞进一个 974px 弹窗，
-         改个服务地址要先点「设置」，等于给最常改的字段加了一层门。 -->
+         本页只回答一件事——接哪些上游、模型怎么登记。只有供应商面板一张卡：
+         左列表 / 右详情；平台通道的详情分「模型 / 连接 / 基础设施」三页签。
+         平台默认生成参数与别名映射在「调用」页（它们是「调用怎么走」，不是「接谁」）。
+         原「平台设置」浮窗撤除：它把连接、模型与生成参数三件事塞进一个 974px 弹窗，
+         改个服务地址要先点「设置」，等于给最常改的字段加了一层门。
+         2026-10-26 用户「这个地方就可以配置重排序嵌入模型」：基础设施从页面最下方的独立卡
+         并入平台详情第三个页签——向量化/重排是平台自己的能力，不该与「平台」分成两处。 -->
     <div class="ac-tab-body ac-conn-body" id="ac-panel-access" role="tabpanel" aria-labelledby="ac-tab-access">
       <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试 -->
       <div v-if="apiConfigFailed" class="mk-alert mk-alert--row" role="alert">
@@ -65,11 +66,11 @@
           </button>
         </template>
         <!-- 平台通道的连接：服务地址 / 密钥 / 连通性验证。它属于「平台」这条供应商本身，
-             不再是弹窗里的一个分区。 -->
+             不再是弹窗里的一个分区。2026-10-26 起它是平台详情的「连接」页签，块头不再复述
+             「连接」二字（页签已说明区域），只留状态徽标与保存钮。 -->
         <template #platform-detail>
           <div ref="platformConnRef" class="ac-conn mpp-block">
             <div class="mpp-block__head">
-              <span class="mpp-sec">连接</span>
               <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
               <button
                 v-if="dirty.has('conn')"
@@ -145,12 +146,14 @@
             <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">未保存</span>
           </p>
         </template>
-      </ModelProvidersPanel>
 
-      <!-- 基础设施模型（向量化 / 重排）：平台必需，与供应商无关，自成一张卡 -->
-      <section id="ac-infra" class="mk-card ac-infra-card">
-        <InfraModelsPanel embedded />
-      </section>
+        <!-- 基础设施（向量化 / 重排）：平台这条供应商自己的能力，收进平台详情第三个页签。
+             2026-10-26 用户「这个地方就可以配置重排序嵌入模型」——原先它自成一张卡挂在
+             页面最下方，改嵌入模型要滚过整个模型表，而且「平台」被拆成两处看。 -->
+        <template #platform-infra>
+          <InfraModelsPanel embedded />
+        </template>
+      </ModelProvidersPanel>
     </div>
     </template>
     <template v-else-if="tab === 'routing'">
@@ -1352,7 +1355,7 @@ function discardAll() {
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
 .ac-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
 
-/* 接入页 = 供应商面板 + 基础设施模型，两张卡按内容高度自上而下，页签体统一内滚。
+/* 接入页 = 供应商面板一张卡（连接与基础设施在平台详情页签里），按内容高度自上而下，页签体统一内滚。
    2026-10-25 用户「这个组整个页面我觉得做的不好」：此前供应商卡被设成 flex:1 吃掉整屏剩余高度，
    而它只有 2 个供应商 / 3 个模型，卡内下方 600px 全是空白——满高工作台适合长表，
    不适合这张会随注册表变短的清单。改为按内容占高：内容多就长、内容少就短，不留假空白。 */
@@ -1363,11 +1366,7 @@ function discardAll() {
   overflow-y: auto;
   overflow-x: hidden;
 }
-.ac-conn-body > .mpp,
-.ac-conn-body > .ac-infra-card { flex: none; }
-/* 基础设施卡：InfraModelsPanel embedded 形态不带卡头，外层 .mk-card 提供外壳，
-   内衬由这里补（与全站卡内内容同一档） */
-.ac-infra-card { padding: 14px 16px 16px; }
+.ac-conn-body > .mpp { flex: none; }
 /* 供应商面板给一个内容下限，避免模型只有一两行时详情区塌成一条 */
 .ac-conn-body > .mpp { min-height: 360px; }
 /* 「调用」页默认生成参数卡内的注册表切片（别名映射）：外层是 details，
