@@ -6,14 +6,11 @@
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta">共 {{ total }}</span>
       <span class="mk-status__meta">未读 {{ unreadTotal }}</span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action mk-status__action--primary" @click="openSend">发送通知</button>
-      </span>
     </div>
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
-        <div class="nt-filter">
+        <div class="mk-filter">
           <!-- 类型筛选：形态统一走胶囊内嵌下拉（2026-10-26）。
                「仅未读」是布尔开关不是维度，保持开关形态（下拉里放 true/false 会更难读）。 -->
           <MkPillSelect
@@ -24,9 +21,9 @@
             :active="!!kindFilter"
             @update:model-value="reloadFromFirstPage"
           />
-          <label class="mk-field--switch">
+          <label class="nt-unread">
             <input v-model="unreadOnly" type="checkbox" @change="reloadFromFirstPage" />
-            <span class="mk-field__label" style="margin:0">仅未读</span>
+            <span class="mk-field__label">仅未读</span>
           </label>
           <!-- 定向核对（2026-10-26）：学习状态页「发提醒」带 ?userId= 落到这里，
                筛选行显式写出当前只看谁，否则「按用户筛过」与「全部通知」长得一样。 -->
@@ -47,6 +44,9 @@
             placeholder="搜索标题 / 姓名 / 邮箱"
             title="在当前页内搜索"
           />
+          <!-- 主操作归位（2026-10-26 用户「重新设计一下」）：原先独占页签条下的一整行、
+               悬浮在卡片之外；现在与全站列表页同语法——卡头右组 = 搜索 → 主操作。 -->
+          <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openSend">发送通知</button>
         </div>
       </div>
 
@@ -93,7 +93,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="n in visibleItems" :key="n.id" :class="{ 'nt-row--unread': !n.isRead }">
+            <tr v-for="n in visibleItems" :key="n.id">
               <td>
                 <div class="mk-cell-main">
                   <strong :title="n.title">{{ n.title }}</strong>
@@ -116,8 +116,35 @@
               </td>
               <td :title="fmtDate(n.createdAt)">{{ notifTimeAgo(n.createdAt) }}</td>
               <td>
+                <!-- 2026-10-26 用户「重新设计一下」：原先每行一颗红色「删除」，20 行连成一片红。
+                     破坏性动作收进 ⋯（与公告/执行日志同判例：主操作平铺，删除进菜单）。 -->
                 <div class="mk-actions">
-                  <button type="button" class="mk-link mk-link--danger" :disabled="n.busy" @click="remove(n)">删除</button>
+                  <div class="mk-menu">
+                    <button
+                      type="button"
+                      class="mk-menu__btn"
+                      aria-label="更多操作"
+                      aria-haspopup="menu"
+                      :aria-expanded="openMenu === n.id"
+                      @click.stop="toggleMenu(n.id)"
+                    >⋯</button>
+                    <div
+                      v-if="openMenu === n.id"
+                      class="mk-menu__pop"
+                      role="menu"
+                      aria-label="更多操作"
+                      :style="popStyle"
+                      @click.stop
+                    >
+                      <button
+                        type="button"
+                        class="mk-menu__item mk-menu__item--danger"
+                        role="menuitem"
+                        :disabled="n.busy"
+                        @click="menuRemove(n)"
+                      >删除</button>
+                    </div>
+                  </div>
                 </div>
               </td>
             </tr>
@@ -248,6 +275,7 @@ import { timeAgo, errMsg } from './live'
 import { adminNotificationsApi, adminUsersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
+import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -439,6 +467,14 @@ watch([ntSortKey, ntSortDir], () => {
   void reload()
 })
 
+const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
+
+/** ⋯ 菜单里的删除：先收菜单再走确认（菜单盖在确认弹窗上会读成「点了个寂寞」） */
+function menuRemove(n: NotifRow) {
+  closeMenu()
+  void remove(n)
+}
+
 async function remove(n: NotifRow) {
   const ok = await askConfirm({
     title: '删除通知',
@@ -557,7 +593,11 @@ void reload()
 <style scoped>
 /* 嵌入模式（宿主通知与公告页 flex 列内）：占满剩余高度，表格区内滚 */
 .nt-embedded { flex: 1; min-height: 0; overflow: hidden; }
-.nt-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* 筛选行本体走共享 .mk-filter（2026-10-26：本页原私有的 .nt-filter 只差 gap 10 vs 8，
+   两份 flex 声明没必要并存）；这里只保留本页特有的「定向用户」片段与已读率行。 */
+/* 「仅未读」开关：布尔开关不是维度筛选，与胶囊并列但不套下拉。
+   原实现用 .mk-field--switch + 内联 style="margin:0" 压掉字段标签的上下距——内联样式换成这里一行。 */
+.nt-unread { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 /* 定向用户筛选：筛选行里显式写出当前只看哪个账号，可一键清除 */
 .nt-user-filter {
   display: inline-flex;
@@ -577,12 +617,15 @@ void reload()
   border-bottom: 1px solid var(--mk-line);
 }
 .nt-rate__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.nt-rate__bar { flex: 0 1 220px; min-width: 80px; display: block; }
+/* 2026-10-26 重新设计：条收窄、口径说明推到右缘——原先进度条 + 百分数挤在左侧，
+   右侧大片空白让这行读成「没排完的表格」。现在左侧「已读率 + 条 + %」，右侧「已读 N / 送达 M」。 */
+.nt-rate__bar { flex: 0 1 160px; min-width: 80px; display: block; }
 .nt-rate__pct { font-size: var(--mk-fs-micro); color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.nt-rate__note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.nt-row--unread { background: var(--mk-blue-bg, #f6f9ff); }
-.nt-row--unread .mk-cell-main strong { color: var(--mk-blue); }
-/* 未读状态（批C）：点+文字替代胶囊徽章 */
+.nt-rate__note { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 未读信号（2026-10-26 重新设计）：整行蓝底撤除。
+   原实现给每条未读行铺 --mk-blue-bg，而这批通知 90% 未读 → 整张表读成一块浅蓝、
+   像全选态；规范里蓝只给交互与选中。未读现在只由「状态」列的蓝点 + 蓝字表达，
+   行样式不再随已读态变化（批C 注释本就写着「行底色冗余信号降为一枚点」，此处补齐实现）。 */
 .nt-read { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .nt-read__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-surface-3); flex: none; }
 .nt-read--no { color: var(--mk-blue); font-weight: 700; }
@@ -624,8 +667,6 @@ void reload()
   .nt-none { font-size: var(--mk-fs-emphasis); }
 }
 
-/* ================= 暗色模式（D1 补完）：站内通知 ================= */
-html[data-theme='dark'] {
-  .nt-row--unread { background: color-mix(in srgb, var(--wf-color-primary) 8%, transparent); }
-}
+/* ================= 暗色模式（D1 补完）：站内通知 =================
+   未读行底色已撤（见上），暗色档也不再需要补丁——未读只由状态列的蓝点表达 */
 </style>

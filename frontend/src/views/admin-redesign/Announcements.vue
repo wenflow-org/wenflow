@@ -8,9 +8,6 @@
       <span class="mk-status__meta">生效中 {{ activeCount }}</span>
       <span class="mk-status__meta">草稿 {{ draftCount }}</span>
       <span class="mk-status__meta">已下线 {{ archivedCount }}</span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建公告</button>
-      </span>
     </div>
 
 
@@ -44,14 +41,11 @@
           <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 正文" />
           <!-- 命中数只在真筛过时出（2026-10-26 动线收口）：未筛时它与分页器「共 N 条」同数同源 -->
           <span v-if="filtered.length < rows.length" class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
+          <!-- 主操作归位（2026-10-26 用户「重新设计一下」）：原先它独占页签条下面一整行、
+               靠右悬浮在卡片之外；现在与全站列表页同语法——卡头右组 = 搜索 → 主操作。
+               独立页同一条出口，原先卡内那条 .an-toolbar 也一并撤除。 -->
+          <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openCreate">新建公告</button>
         </span>
-      </div>
-
-      <!-- 工具条（原型 1894-1899 .toolbar：左 sub 说明 + grow + 右侧 primary sm「新建公告」）；
-           置于卡头筛选之下、列表之上，与原型 toolbar→tablewrap 次序一致。
-           embedded 态由宿主 OpsHub 提供同款工具行（避免重复入口），故此处仅独立页渲染。 -->
-      <div v-if="!embedded" class="an-toolbar">
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary an-toolbar__new" @click="openCreate">新建公告</button>
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="7" />
@@ -640,7 +634,7 @@ function expiresLabel(iso: string): string {
 /* 空态居中由共享口径承担（.mk-card--fill > .mk-empty--min { flex:1; min-height:0 } + 全局
    place-content:center）。2026-10-21 曾按用户「太靠下了」在本页覆写成贴顶（start center）——
    2026-10-24 全站空态收齐时实测该覆写在本页嵌入 ops-hub 后变成「文案贴顶 + 卡底 545px 空白」，
-   与全站统一形态冲突，故撤除；本页的「新建公告」动作在页签头，不依赖空态内的按钮位置。 */
+   与全站统一形态冲突，故撤除；本页的「新建公告」动作在卡头右组，不依赖空态内的按钮位置。 */
 /* 单元格 nowrap 走表级 .mk-table--nowrap（表元素已挂）；
    标题列例外（原型 td.wrap）：双行 cell-main + 正文两行预览需要换行 */
 .an-list .mk-table td:first-child { white-space: normal; }
@@ -652,15 +646,6 @@ function expiresLabel(iso: string): string {
   overflow: hidden;
 }
 /* 工具条（原型 249-250 .toolbar）：右侧新建主钮（原型 1894-1899） */
-.an-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.an-toolbar__new { margin-left: auto; }
 /* 创建人列（原型 1898 创建人 mono sub）：mono 由全局 .mono 承载，此处补字号/弱化色 */
 .an-author { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .an-severity { display: flex; gap: 6px; }

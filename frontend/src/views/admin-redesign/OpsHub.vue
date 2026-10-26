@@ -95,23 +95,30 @@
     <!-- ===== Tab3: 成就（OpsAchievements embedded） ===== -->
     <OpsAchievements v-else-if="tab === 'achievements'" id="oh-panel-achievements" role="tabpanel" aria-labelledby="oh-tab-achievements" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
     <!-- ===== Tab4: 公告（Announcements embedded） =====
-         嵌入态下 Announcements 隐藏自身承载「新建公告」的状态条，列表非空时无可见入口；
-         由宿主提供工具行并调用其暴露的 openCreate()（defineExpose），不再重复按钮。 -->
-    <template v-else-if="tab === 'announce'">
-      <div class="oh-tabbar">
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="announceRef?.openCreate?.()">新建公告</button>
-      </div>
-      <Announcements id="oh-panel-announce" role="tabpanel" aria-labelledby="oh-tab-announce" ref="announceRef" embedded @count="onDomainCount('announce', $event)" />
-    </template>
-    <!-- ===== Tab5: 站内通知（Notifications embedded） =====
-         与公告 tab 同判例：嵌入态下 Notifications 隐藏自身状态条，列表非空时
-         「发送通知」主钮无处可见（空态按钮只在无数据时出现），宿主补工具行并调其 openSend()。 -->
-    <template v-else-if="tab === 'inapp'">
-      <div class="oh-tabbar">
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="notifRef?.openSend?.()">发送通知</button>
-      </div>
-      <Notifications id="oh-panel-inapp" role="tabpanel" aria-labelledby="oh-tab-inapp" ref="notifRef" embedded @count="onDomainCount('inapp', $event)" />
-    </template>
+         2026-10-26 用户「重新设计一下，包括站内通知」：宿主不再单起一行工具行放主操作。
+         原先页签条与卡片之间夹着一整行、只有一个靠右的「新建公告」，既不在卡里也不在页头，
+         读起来像掉出来的一颗钮。主操作归位到子页卡头右组（搜索 → 主操作），
+         嵌入/独立两种形态同一处出口。 -->
+    <Announcements
+      v-else-if="tab === 'announce'"
+      id="oh-panel-announce"
+      role="tabpanel"
+      aria-labelledby="oh-tab-announce"
+      ref="announceRef"
+      embedded
+      @count="onDomainCount('announce', $event)"
+    />
+    <!-- ===== Tab5: 站内通知（Notifications embedded）=====
+         与公告 tab 同判例：主操作「发送通知」由子页卡头自己给，宿主不再补工具行。 -->
+    <Notifications
+      v-else-if="tab === 'inapp'"
+      id="oh-panel-inapp"
+      role="tabpanel"
+      aria-labelledby="oh-tab-inapp"
+      ref="notifRef"
+      embedded
+      @count="onDomainCount('inapp', $event)"
+    />
 
     <!-- ===== Tab6: 运维工具（时间推进模拟 + outbox 死信重放；原「系统工具」页 Tab1） ===== -->
     <ServerToolsPanel
@@ -520,17 +527,8 @@ onMounted(() => {
   .oh-host > .stp-body,
   .oh-host > .exp-body { flex: none; min-height: 0; overflow: visible; }
 }
-/* 公告 tab 工具行：嵌入态宿主提供「新建公告」唯一入口（子页自身工具条在 embedded 隐藏），
-   形态对齐子页 .an-toolbar（左说明 + grow + 右 primary sm） */
-.oh-tabbar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 4px 0 10px;
-}
-.oh-tabbar .mk-btn { margin-left: auto; }
+/* 公告 / 站内通知页签此前各有一行 .oh-tabbar 只放主操作（2026-10-26 撤除：
+   整行一颗钮夹在页签条与卡片之间，既不属于页头也不属于卡；主操作已归位到子页卡头右组）。 */
 
 /* 待办行动行：事项 + 类别 + 出口。计数在页级读数带，本清单只负责「点哪去处理」。
    仅可跳转行给 pointer（「已清零 / 加载失败」行不挂跳转）。 */
