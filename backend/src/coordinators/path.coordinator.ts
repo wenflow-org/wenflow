@@ -183,6 +183,8 @@ interface NormalizedPathInputV1 {
     estimatedHours?: number | null;
     sessionsPerWeek?: number | null;
     sessionsLengthMin?: number | null;
+    /** 内容体量锚小时（2026-10-27 接线）：存在时 planningHints 把总预算夹到锚×1.5 */
+    scopeAnchorHours?: number | null;
   } | null;
   /** 前置知识探测结果（goal 层透传，path-planning 读入 prerequisiteTree.knownConcepts） */
   prerequisiteCheckResults?: PrerequisiteCheckResult[];

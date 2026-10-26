@@ -84,6 +84,12 @@ export interface GoalPathVisibleSummary {
      * 只用于识别「预算来自日历乘法」，不参与体量计算。
      */
     calendarCapacityHours?: number | null;
+    /**
+     * 内容体量锚小时（2026-10-27 R3 遗留接线）：goal 层按颗粒度承诺换算的内容总小时
+     * （如「前五章每章3-4天+后十章每章2天≈52h」→ 52）。存在且显著小于日历/节奏算术时，
+     * planningHints 把总预算夹到锚×1.5——算术只回答「能学多久」，锚才回答「内容有多少」。
+     */
+    scopeAnchorHours?: number | null;
   } | null;
   /**
    * 外部权威资料需求（hidden，goal→path 资料采集缝）。
@@ -341,6 +347,9 @@ function buildTimeDimensions(raw: unknown): NonNullable<GoalPathVisibleSummary['
     // 日历容量（2026-10-26 解耦）：周期天数 × 每日可用分钟 / 60。仅用于识别
     // 「预算来自日历乘法」并降级，不参与体量计算本身。
     calendarCapacityHours: num(r.calendarCapacityHours),
+    // 内容体量锚小时（2026-10-27 R3 遗留接线）：goal 层按颗粒度承诺换算的内容总小时。
+    // 存在时 planningHints 把总预算夹到锚×1.5（见 path-planning-hints 窄目标体量硬夹）。
+    scopeAnchorHours: num(r.scopeAnchorHours),
   };
   return Object.values(result).some((v) => v !== null) ? result : null;
 }

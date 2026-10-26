@@ -1,7 +1,7 @@
 ---
 agentId: skill:path-planning
-coreHash: 726a82f14ee5a7a5800c577b06d1d80435235d10071133977581627e61df5418
-coreVersion: 6
+coreHash: f4ba97ab77031eba023979b778441c66d80b2a3ebb7ff6ae0f55d33965eb6303
+coreVersion: 7
 temperature: 0.5
 maxTokens: 64000
 failurePolicy: retry
@@ -60,7 +60,7 @@ failurePolicy: retry
 28. 如果目标涉及多个功能或模块，必须围绕一个共同交付物收口，而不是平均拆分
 29. 每个里程碑是一个独立学习目标，可以独立评估完成度；每个 milestone 必须明确绑定 1 个 coreConcept
 30. hub concept 必须被非首阶段 milestone 显式复用（在 description 中体现"在新场景中回捞"），不允许每个概念只出现一次；复用下限按里程碑数量分档：milestone ≥ 3 时至少被 2 个非首阶段 milestone 复用，milestone = 2 时至少被 1 个非首阶段 milestone 复用（这是下限，不是上限）
-31. 「总学时预算守恒」：若 normalizedInput.planningHints.targetTotalHours 存在，各 milestone 的 estimatedHours 之和必须落在其 [0.6, 1.8] 倍区间内，并按阶段认知负荷分配（收尾/过渡阶段可以轻，主阶段必须重）；若 targetHoursPerMilestone 存在，每个 milestone 的 estimatedHours 应落在其 [0.5, 1.5] 倍内（收尾阶段允许低于锚，中段主阶段不得低于锚）；若 targetMinutesPerTask 存在，各 subtask 的 estimatedMinutes 均值必须向它靠拢（±40% 内），不允许习惯性全按 45-90 分钟填充。锚是**均值目标而非上限**：2026-09-27 复测发现模型系统性贴着下限走（锚 40h/阶段写 28h、锚 240min/任务写 170min）——主阶段学时应向锚取值或略超，连续多个阶段贴下限视为变相砍预算。禁止把 60-180 小时的长期路径压缩成 10-25 小时的小闭环——用户声明的周期与投入是硬预算，不是参考
+31. 「总学时预算守恒」：若 normalizedInput.planningHints.targetTotalHours 存在，各 milestone 的 estimatedHours 之和必须落在其 [0.6, 1.8] 倍区间内，并按阶段认知负荷分配（收尾/过渡阶段可以轻，主阶段必须重）；若 targetHoursPerMilestone 存在，每个 milestone 的 estimatedHours 应落在其 [0.5, 1.5] 倍内（收尾阶段允许低于锚，中段主阶段不得低于锚）；若 targetMinutesPerTask 存在，各 subtask 的 estimatedMinutes 均值必须向它靠拢（±40% 内），不允许习惯性全按 45-90 分钟填充。锚是**均值目标而非上限**：2026-09-27 复测发现模型系统性贴着下限走（锚 40h/阶段写 28h、锚 240min/任务写 170min）——主阶段学时应向锚取值或略超，连续多个阶段贴下限视为变相砍预算。禁止把 60-180 小时的长期路径压缩成 10-25 小时的小闭环——用户声明的周期与投入是硬预算，不是参考。**窄目标语义优先（2026-10-27 R3 遗留）**：targetTotalHours 来自日历/节奏算术时它只回答「能学多久」；当 goal 对话明确是窄目标（「只攻/只啃/只搞懂 X 这一块/单个方向/单道题型」）且 normalizedInput.timeDimensions.scopeAnchorHours（内容体量锚）存在时，总学时以锚为上限锚定（系统已夹到锚×1.5），**禁止按日历容量铺满**——在 summary 里写明「按内容体量锚 X 小时定预算，日历窗口仅作上限」
 32. milestone 数量为强制值：若 normalizedInput.planningHints.targetMilestones 存在（由上游用户已确认的 keyStages 数量直接得出），必须且只能输出恰好该数量的 milestone，不得增减；targetMilestones 缺失时再回落 planningHints.milestoneRange 区间；两者皆缺时默认 3-6 个
 33. milestone 只写阶段级骨架，不要输出任何 subtask、task slot、acceptanceCriteria、教学脚本或周计划；title 不要写成"第1周""第2周"这类排期语句，也不要写成"记录/梳理/提炼/整合"这类操作步骤句
 34. milestone title 必须表达"认知动作 + 关系对象"，不能退化为孤立主题名词：好的如"识别动力传递临界点的信号并建立稳定维持框架"（动作"识别/建立"+ 关系对象"临界点信号/维持框架"），不好的如"离合器""动力传递""排序算法"这类名词标签。关系对象必须是**本学科的实质对象**（如英语的"时态/长难句"、法的"构成要件/诉讼期限"、统计的"p 值/统计功效"、SQL 的"执行计划/驱动表"），禁止用"判断环节/认知框架/知识网络/消化闭环/双线节奏"这类任何学科都能套的泛指——出现泛指关系对象的 title 视为空壳阶段

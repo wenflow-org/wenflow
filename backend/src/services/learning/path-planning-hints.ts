@@ -869,13 +869,24 @@ export function derivePlanningHints(
     ? (timeDimensions!.sessionsPerWeek as number) * (timeDimensions!.sessionsLengthMin as number)
       * (timeDimensions!.totalWeeks as number) / 60
     : null;
-  const estimatedHoursTotal =
+  const estimatedHoursTotalPreScope =
     promisedCadenceHours !== null
     && structuredHoursTotal !== null
     && structuredHoursTotal <= promisedCadenceHours * 1.25
     && estimatedHoursTotalRaw > promisedCadenceHours * 1.25
       ? promisedCadenceHours
       : estimatedHoursTotalRaw;
+  // 窄目标体量硬夹（2026-10-27 R3 遗留接线）：goal 层给出 scopeAnchorHours（按颗粒度承诺
+  // 换算的内容总小时）且显著小于日历/节奏算术时，预算夹到锚×1.5。日历与节奏算术只回答
+  // 「能学多久」，体量锚才回答「内容有多少」（实证：D13 连续三轮 ≥1.05× 容量；
+  // E03 汉译英单方向 55h vs 体量锚 14-18h——两者 goal 对话都明确说了「只攻 X」）。
+  const scopeAnchorHoursNum = Number(timeDimensions?.scopeAnchorHours);
+  const estimatedHoursTotal =
+    Number.isFinite(scopeAnchorHoursNum) && scopeAnchorHoursNum > 0
+    && estimatedHoursTotalPreScope !== null
+    && estimatedHoursTotalPreScope > scopeAnchorHoursNum * 1.5
+      ? Math.round(scopeAnchorHoursNum * 1.5 * 10) / 10
+      : estimatedHoursTotalPreScope;
   // ---- 大预算扩容（2026-09-27，基线 31 格实测驱动）：锚定总学时超过结构天花板
   // （阶段×任务×单任务分钟上限）时，按需抬升每阶段任务上限与单任务分钟上界——
   // 任务语义升级为「学习单元（可含多次坐学）」。基线收缩比 0.07-0.74（中位 0.13-0.26）
