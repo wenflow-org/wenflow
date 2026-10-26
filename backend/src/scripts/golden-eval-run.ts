@@ -249,6 +249,24 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
   }
 
   // 4) 等路径生成完成（20 分钟上限，超时标记继续下一条）
+  // 就绪判定：pathId 存在且该路径没有 processing 中的生成 run
+  // （path 行在 core 阶段就落库为 active，仅看 pathId 会提前放行、漏等 stageDesign）
+  const stageDone = (pathId: string): boolean => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { DatabaseSync } = require('node:sqlite');
+      const db = new DatabaseSync(DB_PATH, { readOnly: true });
+      const row = db.prepare(
+        `SELECT status FROM path_generation_runs WHERE learningPathId = ? AND phase = 'stageDesign' ORDER BY createdAt DESC LIMIT 1`,
+      ).get(pathId) as { status?: string } | undefined;
+      const processing = db.prepare(
+        `SELECT COUNT(*) c FROM path_generation_runs WHERE learningPathId = ? AND status = 'processing'`,
+      ).get(pathId) as { c: number };
+      db.close();
+      if (processing?.c) return false;
+      return !row || row.status === 'succeeded';
+    } catch { return true; } // 读库失败时退回旧行为，不卡死
+  };
   const deadline = Date.now() + PATH_WAIT_MS;
   while (Date.now() < deadline) {
     const st = await api('GET', `/api/admin/virtual-learners/sessions/${entry.sessionId}/path-status`, undefined, 60_000);
@@ -257,8 +275,15 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
     const pathId = String(d.learningPathId ?? d.pathId ?? '');
     if (pathId) entry.learningPathId = pathId;
     const inFlight = /generating|processing|queued|running|pending/i.test(status);
-    if (!inFlight && (status === 'ready' || status === 'completed' || pathId)) {
+    if (!inFlight && (status === 'ready' || status === 'completed') && (!pathId || stageDone(pathId))) {
       log(`${key} 路径就绪 ${pathId || entry.learningPathId} (${status})`);
+      entry.phase = 'path-ready';
+      entry.seconds = Math.round((Date.now() - t0) / 1000);
+      saveState(state);
+      return;
+    }
+    if (!inFlight && pathId && stageDone(pathId)) {
+      log(`${key} 路径就绪 ${pathId} (stageDesign 完成)`);
       entry.phase = 'path-ready';
       entry.seconds = Math.round((Date.now() - t0) / 1000);
       saveState(state);
