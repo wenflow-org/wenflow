@@ -18,11 +18,17 @@
         label="完结率"
         :value="completionRatePct"
       />
-      <!-- P-49（#74）：停滞会话此前只活在分布带 hint 里；升为卡，0 是健康信号 -->
+      <!-- P-49（#74）：停滞会话此前只活在分布带 hint 里；升为卡，0 是健康信号。
+           2026-10-26 动线：读数有对应行就得能落到那几行——点卡即筛「停滞」，
+           与学习状态页可点 KPI 同一语法（本页原先只有它是点了没反应的卡）。 -->
       <MkKpi
         label="停滞目标对话"
         :value="rows.length ? staleActiveCount : '—'"
         :tone="staleActiveCount ? 'warn' : ''"
+        :clickable="!!rows.length && staleActiveCount > 0"
+        :class="{ 'gc-kpi--on': stalledOnly }"
+        :aria-pressed="rows.length && staleActiveCount > 0 ? stalledOnly : undefined"
+        @click="stalledOnly = !stalledOnly"
       />
     </section>
     <!-- stats 三态（P1#6）：失败显错误条 + 重试（原错误桶随构成带退役，2026-10-04 晚贴表分布条） -->
@@ -70,11 +76,20 @@
               :aria-pressed="noPathOnly"
               @click="noPathOnly = !noPathOnly"
             >未生成路径</button>
+            <!-- 停滞快筛（KPI 卡同源同判据）：从「停滞 N」读数进来的人，落点就是这枚 chip -->
+            <button
+              v-if="staleActiveCount"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': stalledOnly }"
+              :aria-pressed="stalledOnly"
+              @click="stalledOnly = !stalledOnly"
+            >停滞<span class="mk-pill__count">{{ staleActiveCount }}</span></button>
           </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 排序复位入口（2026-10-06 审核 #51）：默认序是服务端 createdAt 倒序，
                排序态持久化后此前无路可回；创建时间已接排序，另给一键回默认序 -->
-          <button v-if="gcSortKey" type="button" class="mk-link" @click="gcResetSort()">恢复默认排序</button>
+          <button v-if="!gcSortIsDefault" type="button" class="mk-link" @click="gcResetSort()">恢复默认序</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位——
@@ -358,14 +373,13 @@ const recentCreated7d = computed<number | null>(() => {
 /* 停滞信号（P1#6 前端可做部分）：列表窗口内 active 且 updatedAt 超 7 天未更新的行数；
    口径 title「按最近 1000 条窗口」随行披露（全量分位需后端 lastActivity，登记不做） */
 const STALLED_DAYS = 7
-const staleActiveCount = computed(() => {
-  const cutoff = Date.now() - STALLED_DAYS * 86400000
-  return rows.value.filter((r) => {
-    if (r.status !== 'active' || !r.updatedAt) return false
-    const t = new Date(r.updatedAt).getTime()
-    return Number.isFinite(t) && t < cutoff
-  }).length
-})
+/** 停滞判据单点：KPI 计数与「停滞」快筛共用，避免读数和筛出来的行对不上 */
+function isStalledRow(r: Row): boolean {
+  if (r.status !== 'active' || !r.updatedAt) return false
+  const t = new Date(r.updatedAt).getTime()
+  return Number.isFinite(t) && t < Date.now() - STALLED_DAYS * 86400000
+}
+const staleActiveCount = computed(() => rows.value.filter(isStalledRow).length)
 /* ===== 状态快筛 pills（2026-10-17 从退役的分布带迁回；2026-10-26 拆开混合桶）=====
    「已取消」只含用户取消与自动回收（cancelled / abandoned），「失败」单列 failed——
    此前三值合一档，筛出来的行状态列却写着「失败」。
@@ -396,6 +410,10 @@ const statusFilter = ref('')
    与状态筛选叠加为 AND；再点取消。不显计数——它与「进行中」是包含关系，
    计数会让两个 pill 看起来是两档（同 TS 页口径教训）。 */
 const noPathOnly = ref(false)
+/** 「停滞」快筛（2026-10-26 动线收口）：本页 KPI 里「停滞目标对话」是唯一一张点了没反应的卡，
+ *  而同组学习状态页的需关注/观察 KPI 都可点即筛。读数有对应行就必须能落到那几行，
+ *  否则它只是「知道了但动不了」。与状态筛选、未生成路径叠加为 AND。 */
+const stalledOnly = ref(false)
 /** 「未生成路径」谓词：hasPath 与路径列「—」同口径（均由后端 learningPathId 推导）；
     已完成桶口径 = 已生成学习路径，故「未生成」只拦进行中，两处口径呼应不矛盾 */
 const isPathPendingRow = (r: Row) => r.status === 'active' && !r.hasPath
@@ -602,7 +620,10 @@ const statusOrderOf = (r: Row) => STATUS_ORDER[String(r.status || '').toLowerCas
 
 /* 客户端排序：默认保持服务端顺序。窗口截断时（含测试口径触 LIST_LIMIT）排序与关键词
    只覆盖已加载窗口，属「窗口内排序」而非全量排序（卡头 meta 已如实给出窗口条数） */
-const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows, sortKey: gcSortKey, sortDir: gcSortDir, reset: gcResetSort } = useTableSort<Row>({
+const {
+  toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows,
+  sortKey: gcSortKey, sortDir: gcSortDir, reset: gcResetSort, isDefault: gcSortIsDefault
+} = useTableSort<Row>({
   accessors: {
     user: (r) => r.userName,
     status: (r) => statusOrderOf(r),
@@ -617,6 +638,7 @@ const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return sortGcRows(rows.value.filter((r) => {
     if (noPathOnly.value && !isPathPendingRow(r)) return false
+    if (stalledOnly.value && !isStalledRow(r)) return false
     if (statusFilter.value === 'cancelled') {
       if (!isCancelledRow(r)) return false
     } else if (statusFilter.value === 'failed') {
@@ -629,11 +651,12 @@ const filtered = computed(() => {
   }))
 })
 
-const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value || noPathOnly.value)
+const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value || noPathOnly.value || stalledOnly.value)
 function clearFilters() {
   keyword.value = ''
   statusFilter.value = ''
   noPathOnly.value = false
+  stalledOnly.value = false
 }
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
@@ -645,7 +668,7 @@ function clearFilters() {
 const page = ref(1)
 const pageSize = ref(15)
 /* 列表态 URL 化（2026-10-24）：此前用模块级快照，刷新/分享即回初值。
-   参数名：status / q / page / size / noPath；缺省值不写 URL。 */
+   参数名：status / q / page / size / noPath / stalled；缺省值不写 URL。 */
 /* helper 的中性档约定是 'all'，本页内部用空串表示「全部」（'' 才能绕过过滤分支）：
    用可写计算属性做两侧映射，URL 仍写 pill=all 时归一成空串 */
 const gcPillFilter = computed({
@@ -663,6 +686,10 @@ useListQueryState(
       key: 'noPath',
       get: () => (noPathOnly.value ? '1' : ''),
       set: (v) => { noPathOnly.value = v === '1' },
+    }, {
+      key: 'stalled',
+      get: () => (stalledOnly.value ? '1' : ''),
+      set: (v) => { stalledOnly.value = v === '1' },
     }],
   },
   { pill: 'status' }
@@ -671,7 +698,7 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([keyword, statusFilter, noPathOnly, gcSortKey, gcSortDir], () => {
+watch([keyword, statusFilter, noPathOnly, stalledOnly, gcSortKey, gcSortDir], () => {
   // 排序/筛选变化必须回第 1 页（2026-10-22 走查：在第 2 页点排序仍停在第 2 页，
   // 与教学组其余页不一致——它们都在 watch 里带 sortKey/sortDir）
   page.value = 1
@@ -852,6 +879,9 @@ onMounted(() => {
    KPI 带 / 分布带 / 列表卡，全树 .mk-page--fill 计数 0）。同形规则在 People(pp-host) /
    OpsHub(oh-host) / ApiConfig(ac-host) 仍在用，别照抄删除。 */
 .gc-host > .mk-status { flex: none; }/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
+/* 可点 KPI 的选中态（停滞卡 → 停滞快筛）：蓝只给可交互与选中，与
+   MemoryReview .mr-kpi--on / LearnerCenter .lc-kpi--on 同一判例 */
+.gc-kpi--on { border-color: var(--mk-blue); }
 /* 行点击/焦点态已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：摘要/用户两列
    在 auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊到各列。

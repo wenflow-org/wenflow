@@ -93,6 +93,12 @@ function pagerText(w: Awaited<ReturnType<typeof mountSS>>) {
   return w.find('.mk-pagination').text();
 }
 
+/** 状态 pill 的计数徽章（全量口径的唯一可见位置，2026-10-26 起卡头 meta 不再复述） */
+function pillCount(w: Awaited<ReturnType<typeof mountSS>>, label: string) {
+  const pill = w.findAll('.mk-pill').find((p) => p.text().startsWith(label));
+  return pill ? pill.find('.mk-pill__count').text() : '';
+}
+
 describe('SessionSecurity 分页（标准页码器）', () => {
   beforeEach(() => {
     h.getMe.mockReset();
@@ -173,10 +179,12 @@ describe('SessionSecurity 分页（标准页码器）', () => {
       adminCounts: [{ adminId: 'admin-1', total: 100, active: 93, expired: 7, revoked: 0 }],
       window: { limit: 100, returned: 30 }
     });
-    // 卡头全量口径 + 窗口截断披露（93 活跃 > 窗口内 30 行）
-    expect(w.find('.mk-card__meta').text()).toContain('100 个会话');
-    expect(w.find('.mk-card__meta').text()).toContain('活跃 93');
+    // 全量口径住在状态 pills（2026-10-26：卡头 meta 不再复述 pills 已有的数字）
+    expect(pillCount(w, '活跃')).toBe('93');
+    expect(pillCount(w, '已过期')).toBe('7');
+    // 卡头只留 pills 与页码器都说不出的事实：行窗口截断
     expect(w.find('.mk-card__meta').text()).toContain('行列表仅含最近 30 条');
+    expect(w.find('.mk-card__meta').text()).not.toContain('个会话');
     // 组头读 adminCounts（非窗口行数）
     expect(w.find('.ss-group__count').text()).toContain('100 个会话');
     expect(w.find('.ss-group__count').text()).toContain('93 个活跃');
@@ -295,14 +303,15 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     const w = mount(SessionSecurity, { global: { plugins: [router] } });
     await flushPromises();
     await flushPromises();
-    expect(w.find('.mk-card__meta').text()).toContain('活跃 4');
+    expect(pillCount(w, '活跃')).toBe('4');
     // sess-1 是当前标签页（后端 isCurrent 标记），首枚「强制下线」即 sess-2
     const revokeBtn = w.findAll('button').find((b) => b.text().trim() === '强制下线')!;
     await revokeBtn.trigger('click');
     await flushPromises();
     await flushPromises();
-    // 卡头/组头/批量下线读数全部来自重取后的 counts（活跃 3、已撤销 1）
-    expect(w.find('.mk-card__meta').text()).toContain('活跃 3');
+    // pill / 组头读数全部来自重取后的 counts（活跃 3、已撤销 1）
+    expect(pillCount(w, '活跃')).toBe('3');
+    expect(pillCount(w, '已撤销')).toBe('1');
     expect(w.find('.ss-group__count').text()).toContain('3 个活跃');
   });
 });

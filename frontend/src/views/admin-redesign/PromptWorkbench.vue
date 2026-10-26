@@ -30,7 +30,7 @@
       <MockSkeletonTable v-if="loading && !cores.length" :cols="6" :rows="8" />
       <!-- 原型 .tbl 口径：自动布局 + 单元格 nowrap（不用 fixed+colgroup 定宽），
            宽度随内容自适应、横向滚动由 .mk-table-scroll 兜底 -->
-      <table v-else-if="cores.length" class="mk-table mk-table--click pw-table">
+      <table v-else-if="cores.length" class="mk-table mk-table--click mk-table--nowrap pw-table">
         <thead>
           <tr>
             <th>Skill</th>
@@ -188,8 +188,7 @@ watch(liveRefreshSeq, () => { void loadList() });
 .pw-hash { font-size: var(--mk-fs-micro); }
 .mk-table--click tbody tr { cursor: pointer; }
 
-/* 原型 .tbl 单元格语言：不换行；首列 skill id 超长时省略号截断（完整 id 挂 title） */
-.pw-table td { white-space: nowrap; }
+/* 首列 skill id 超长时省略号截断（完整 id 挂 title）。nowrap 走表级 .mk-table--nowrap */
 .pw-table td:first-child code {
   display: inline-block;
   max-width: 280px;

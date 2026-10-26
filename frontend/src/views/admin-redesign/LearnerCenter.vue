@@ -87,9 +87,10 @@
       <div v-if="!loadFailed" class="mk-card__head">
         <div class="mk-filter">
           <!-- 排序回默认序的出口：默认序是「风险优先 → 更新时间新→旧」，点过置信/更新后
-               列表就不再是「先找有问题的人」，得有一条路回去 -->
-          <button v-if="lcSortKey" type="button" class="mk-link" @click="resetLcSort">默认序</button>
+               列表就不再是「先找有问题的人」，得有一条路回去。槽位与其余列表页一致：
+               清除筛选 → 恢复默认序（都是「撤销我改过的视图状态」）。 -->
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+          <button v-if="!lcSortIsDefault" type="button" class="mk-link" @click="resetLcSort">恢复默认序</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -155,7 +156,7 @@
            长昵称/长任务仍由 mk-cell-main 上限与下方 max-width 截断兜底。
            0 行不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃满卡高，把空态顶到卡底 -->
       <div v-if="filtered.length" class="mk-table-scroll lc-tablewrap">
-      <table v-if="filtered.length" class="mk-table mk-table--nowrap mk-table--fixed lc-table">
+      <table v-if="filtered.length" class="mk-table mk-table--click mk-table--nowrap mk-table--fixed lc-table">
         <thead>
           <tr>
             <th v-if="!lcHiddenCols.has('learner')" scope="col" class="lc-c-learner">学习者</th>
@@ -567,7 +568,8 @@ const {
   toggle: toggleLcSort,
   sortState: lcSortState,
   sortRows: sortLcRows,
-  reset: resetLcSort
+  reset: resetLcSort,
+  isDefault: lcSortIsDefault
 } = useTableSort<Row>({
   accessors: {
     conf: (r) => r.confidence ?? null,

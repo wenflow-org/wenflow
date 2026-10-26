@@ -31,6 +31,8 @@
             <button type="button" class="mk-link" @click="clearUserFilter">清除</button>
           </span>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
+          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
+          <button v-if="!ntSortIsDefault" type="button" class="mk-link" @click="resetNtSort">恢复默认序</button>
         </div>
         <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组。
              关键词：后端列表接口无关键词参数（adminApi list 无 search），按当前页客户端过滤；
@@ -65,7 +67,7 @@
       <div v-else-if="visibleItems.length" class="mk-table-scroll nt-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap，
              列按内容自然分宽；通知/用户双行单元格由 mk-cell-main 全局 max-width 截断兜底 -->
-        <table class="mk-table">
+        <table class="mk-table mk-table--nowrap">
           <thead>
             <tr>
               <th>通知</th>
@@ -326,7 +328,9 @@ const {
   sortKey: ntSortKey,
   sortDir: ntSortDir,
   toggle: toggleNtSort,
-  sortState: ntSortState
+  sortState: ntSortState,
+  reset: resetNtSort,
+  isDefault: ntSortIsDefault
 } = useTableSort({
   keys: ['createdAt', 'isRead'],
   defaultKey: 'createdAt',
@@ -564,8 +568,6 @@ void reload()
 .nt-rate__bar { flex: 0 1 220px; min-width: 80px; display: block; }
 .nt-rate__pct { font-size: var(--mk-fs-micro); color: var(--mk-ink); font-variant-numeric: tabular-nums; }
 .nt-rate__note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-/* 原型 .tbl td：nowrap（双行单元格由 mk-cell-main 全局 max-width 截断兜底，不换行撑行高） */
-.nt-list .mk-table td { white-space: nowrap; }
 .nt-row--unread { background: var(--mk-blue-bg, #f6f9ff); }
 .nt-row--unread .mk-cell-main strong { color: var(--mk-blue); }
 /* 未读状态（批C）：点+文字替代胶囊徽章 */

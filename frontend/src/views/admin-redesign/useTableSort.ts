@@ -20,7 +20,7 @@
  *   const { sortKey, sortDir, toggle, sortState } = useTableSort({ keys: ['calledAt', 'durationMs'], defaultKey: 'calledAt' })
  *   watch([sortKey, sortDir], () => reload({ sort: sortKey.value, order: sortDir.value }))
  */
-import { ref, type Ref } from 'vue'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
 export type SortDir = 'asc' | 'desc'
 export type SortValue = string | number | boolean | null | undefined
@@ -57,6 +57,9 @@ export interface UseTableSort<T> {
   sortRows: (rows: T[]) => T[]
   /** 回到默认排序（或原始顺序） */
   reset: () => void
+  /** 当前是否仍在默认序（含方向）。排序态写 localStorage，用户点过表头后下次进来
+   *  仍是非默认序；工具条靠它决定是否出「恢复默认序」出口。 */
+  isDefault: ComputedRef<boolean>
 }
 
 interface SortSnapshot {
@@ -156,5 +159,10 @@ export function useTableSort<T>(options: UseTableSortOptions<T>): UseTableSort<T
     persist()
   }
 
-  return { sortKey, sortDir, toggle, toggleDir, isSortable, sortState, sortRows, reset }
+  const isDefault = computed(
+    () => sortKey.value === validDefault
+      && sortDir.value === ((validDefault ? options.defaultDirOf?.[validDefault] : undefined) ?? options.defaultDir ?? 'desc')
+  )
+
+  return { sortKey, sortDir, toggle, toggleDir, isSortable, sortState, sortRows, reset, isDefault }
 }

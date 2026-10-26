@@ -68,13 +68,17 @@
                  卡内开关与页级开关同屏并列、却只各管一半——页级动 KPI、卡内动列表）。
                  这里不再放第二枚开关，视图随 :include-test 联动。 -->
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+            <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
+            <button v-if="!fbSortIsDefault" type="button" class="mk-link" @click="resetFbSort">恢复默认序</button>
           </div>
           <span class="mk-card__head-right">
             <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 评论 / 任务" />
             <!-- 口径（真实/测试）由左侧开关自明，meta 只报「筛选命中 / 本页行数」这一个事实
-                 （2026-10-19 用户走查「这个小文案不要」删掉前置的（真实）复读） -->
-            <span class="mk-card__meta" title="筛选命中条数 / 已载入条数">命中 {{ filtered.length }} / {{ rows.length }} 条</span>
+                 （2026-10-19 用户走查「这个小文案不要」删掉前置的（真实）复读）。
+                 2026-10-26 动线收口：只在真筛过（命中 < 已载入）时才出——未筛时它与分页器
+                 「共 N 条」同数同源，同屏两个一样的数字。 -->
+            <span v-if="filtered.length < rows.length" class="mk-card__meta" title="筛选命中条数 / 已载入条数">命中 {{ filtered.length }} / {{ rows.length }} 条</span>
           </span>
         </div>
 
@@ -82,7 +86,7 @@
         <!-- 固定列宽（2026-10-22 与教学组三表同判例）：用户/评论两列在 auto 布局下按当页最长
              内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。长评论仍由
              fb- 局部 max-width 截断兜底（全文在 title） -->
-        <table class="mk-table mk-table--fixed fb-table">
+        <table class="mk-table mk-table--click mk-table--fixed mk-table--nowrap fb-table">
           <thead>
             <tr>
               <th
@@ -373,7 +377,10 @@ function mapRow(f: Record<string, unknown>): Row {
 }
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
-const { toggle: toggleFbSort, sortState: fbSortState, sortRows: sortFbRows } = useTableSort<Row>({
+const {
+  toggle: toggleFbSort, sortState: fbSortState, sortRows: sortFbRows,
+  reset: resetFbSort, isDefault: fbSortIsDefault
+} = useTableSort<Row>({
   accessors: {
     user: (r) => r.userName,
     rating: (r) => r.rating,
@@ -554,8 +561,6 @@ onMounted(() => {
   vertical-align: bottom;
   color: var(--mk-muted);
 }
-/* 原型 .tbl td：nowrap（长内容由下方 fb- 截断与 mk-cell-main 全局 max-width 兜底） */
-.fb-row td { white-space: nowrap; }
 .fb-agent {
   display: inline-block;
   max-width: 160px;

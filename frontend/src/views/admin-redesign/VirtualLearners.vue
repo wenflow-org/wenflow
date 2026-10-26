@@ -91,13 +91,15 @@
         />
         <!-- P-49（#74）：无响应候选此前只在页头按钮和分区里出现，没有 KPI 位。
              2026-10-26：这张卡就是回收入口本身——点击打开「回收无响应」预览弹层（与维护菜单
-             同一个弹窗）。此前只在统计失败态才可点，正常态点了没反应。 -->
+             同一个弹窗）。此前只在统计失败态才可点，正常态点了没反应。
+             同日动线收口：候选为 0 时同样不可点——`clickable` 原先恒 true，于是空列表下
+             卡片带指针、点了什么都不发生（与「停滞目标对话」同批修的「空动作」缺陷）。 -->
         <MkKpi
           label="无响应候选"
           :value="statsState === 'error' ? '—' : liveVirtualStaleCount"
           :tone="statsState !== 'error' && liveVirtualStaleCount ? 'warn' : ''"
           :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : ''"
-          :clickable="true"
+          :clickable="statsState === 'error' || liveVirtualStaleCount > 0"
           @click="onStaleKpiClick"
         />
       </section>

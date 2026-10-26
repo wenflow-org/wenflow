@@ -447,9 +447,10 @@ defineExpose({ refresh })
 /* 模型供应商组（2026-10-15 合并块）：供应商=组头行，其模型=组内能力行。
    组头沿用 mrow 词汇（方块徽标 + 名/用途 + id/承载/端点 + 状态徽标），但进水表格后
    去掉卡片描边/底色，改由行分隔线与缩进承担层级。 */
+/* 分组行不覆写内边距：跟随 .mk-table td 的档位节奏（同 SkillReconciliation 判例，
+   低于 SPEC §3 的 40px 行高下限即视为不合规）。 */
 .ac-mr-pgroup > td {
   background: var(--mk-surface-2);
-  padding: 8px 12px;
 }
 .ac-mr-pgroup .ac-mr-mrow--flat {
   padding: 0;

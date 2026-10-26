@@ -31,7 +31,7 @@
         <div class="mk-table-scroll">
           <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
                单元格 nowrap、列按内容自然分宽；事件类型 / 错误信息两处长内容列 max-width 截断兜底 -->
-          <table class="mk-table stp-dead-table">
+          <table class="mk-table mk-table--nowrap stp-dead-table">
             <thead>
               <tr>
                 <th>事件</th>
@@ -499,8 +499,7 @@ defineExpose({ refresh, reload: loadDead })
   align-content: start;
 }
 .dt-body { padding: 14px; display: grid; gap: 14px; }
-/* 死信表（自动布局）：单元格 nowrap；事件类型长名截断（title 全值） */
-.stp-dead-table td { white-space: nowrap; }
+/* 死信表（自动布局）：事件类型长名截断（title 全值）。nowrap 走表级 .mk-table--nowrap */
 .stp-ev {
   display: inline-block;
   max-width: 220px;

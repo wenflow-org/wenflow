@@ -33,11 +33,14 @@
             <option value="archived">已下线</option>
           </select>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
+          <button v-if="!anSortIsDefault" type="button" class="mk-link" @click="resetAnSort">恢复默认序</button>
         </div>
         <span class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 正文" />
-          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
+          <!-- 命中数只在真筛过时出（2026-10-26 动线收口）：未筛时它与分页器「共 N 条」同数同源 -->
+          <span v-if="filtered.length < rows.length" class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
         </span>
       </div>
 
@@ -56,7 +59,7 @@
            其余列 nowrap，长内容由全局 mk-cell-main max-width / an-body 截断兜底。
            列向原型对齐（1895-1898）：标题/状态/时间/创建人为原型列；级别/过期为现状真实
            能力保留；渠道/受众后端无对应字段，按纪律不硬造。 -->
-      <table class="mk-table">
+      <table class="mk-table mk-table--nowrap">
         <thead>
           <tr>
             <th>公告</th>
@@ -287,7 +290,10 @@ const statusFilter = ref(ANNOUNCE_STATUSES.has(initialStatus) ? initialStatus : 
    与 Feedback/Notifications 同款交互（点击列头切换升降序，localStorage 记忆）。 */
 const SEVERITY_RANK: Record<Row['severity'], number> = { info: 0, warning: 1, critical: 2 }
 const STATUS_RANK: Record<string, number> = { draft: 0, published: 1, archived: 2 }
-const { toggle: toggleAnSort, sortState: anSortState, sortRows: sortAnRows } = useTableSort<Row>({
+const {
+  toggle: toggleAnSort, sortState: anSortState, sortRows: sortAnRows,
+  reset: resetAnSort, isDefault: anSortIsDefault
+} = useTableSort<Row>({
   accessors: {
     severity: (r) => SEVERITY_RANK[r.severity] ?? 0,
     status: (r) => STATUS_RANK[r.status] ?? 0,
@@ -616,9 +622,8 @@ function expiresLabel(iso: string): string {
    place-content:center）。2026-10-21 曾按用户「太靠下了」在本页覆写成贴顶（start center）——
    2026-10-24 全站空态收齐时实测该覆写在本页嵌入 ops-hub 后变成「文案贴顶 + 卡底 545px 空白」，
    与全站统一形态冲突，故撤除；本页的「新建公告」动作在页签头，不依赖空态内的按钮位置。 */
-/* 原型 .tbl td：nowrap（长内容由全局 mk-cell-main max-width 截断兜底）；
+/* 单元格 nowrap 走表级 .mk-table--nowrap（表元素已挂）；
    标题列例外（原型 td.wrap）：双行 cell-main + 正文两行预览需要换行 */
-.an-list .mk-table td { white-space: nowrap; }
 .an-list .mk-table td:first-child { white-space: normal; }
 .an-body {
   max-width: 380px;

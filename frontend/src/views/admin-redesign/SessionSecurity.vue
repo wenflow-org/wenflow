@@ -70,7 +70,11 @@
           <button v-if="statusFilter" type="button" class="mk-link" @click="statusFilter = ''">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
-          <span class="mk-card__meta" :title="countsTitle">{{ totalCount }} 个会话<template v-if="activeCount"> · 活跃 {{ activeCount }}</template><template v-if="truncated"> · 行列表仅含最近 {{ sessions.length }} 条</template></span>
+          <!-- 口径 meta 只说 pills 表达不了的事实（2026-10-26 动线收口）：
+               「54 个会话 · 活跃 54」此前把左侧 pill 的读数原样复述了一遍（同一数字同屏三处：
+               pill 计数、本 meta、组头），而 54 = 活跃 54 + 已过期 0 + 已撤销 0，是 pills 的和。
+               现在只留「行窗口截断」这条 pills 与页码器都说不出的事实。 -->
+          <span v-if="truncated" class="mk-card__meta" :title="countsTitle">行列表仅含最近 {{ sessions.length }} 条</span>
         </div>
       </div>
 
@@ -715,8 +719,9 @@ onMounted(async () => {
 .ss-tr--current:hover td { background: color-mix(in srgb, var(--mk-blue-bg) 75%, var(--mk-line)); }
 /* 当前行次要文字用 muted 而非 faint：暗色下 faint 叠 16% 蓝行底仅 4.22:1（<4.5 AA） */
 .ss-tr--current .mk-cell-sub { color: var(--mk-muted); }
+/* 表内空行（colspan 单行）：行高走 .mk-table td 的统一档位，不写纵向硬值
+   ——26px 硬值会在紧凑密度档里比数据行还高，空态比有数据更占地。 */
 .ss-tr--empty td {
-  padding: 26px 14px;
   text-align: center;
   color: var(--mk-faint);
   font-size: var(--mk-fs-micro);

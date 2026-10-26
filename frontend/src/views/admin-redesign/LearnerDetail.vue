@@ -786,7 +786,9 @@
           </div>
         </div>
         <div v-if="ldSessionRowsFiltered.length" class="mk-table-scroll">
-          <table class="mk-table">
+          <!-- 行整行可点（打开只读座舱）：挂 --click 才有 pointer 光标；键盘入口由主题格的原生
+               button 承担（审核 #20），行本身不设 tabindex，避免与按钮重复落在 Tab 序里。 -->
+          <table class="mk-table mk-table--click">
             <thead>
               <!-- 列方言对齐平台页（2026-10-06 审核 #39「三行并两行」同法），并按用户走查
                    把「阶段」拆回独立列（里程碑是被 阶段切换器 直接筛选的维度，混在身份副行里

@@ -79,6 +79,8 @@
             @click="toggleTestFilter"
           >仅看测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
+          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
+          <button v-if="!logSortIsDefault" type="button" class="mk-link" @click="resetLogSort">恢复默认序</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
             :views="savedViews"
@@ -147,7 +149,7 @@
         <!-- 固定列宽（2026-10-22 与教学组三表同判例）：Skill / Trace / 消息三列在 auto 布局下
              按当页最长内容分宽（消息列 348→437px），翻页整表跳动；改 fixed + 逐列表头宽度，
              余量按权重摊开。长内容列仍由 max-width 截断兜底；列全开时容器横向滚动，见 .mk-table-scroll -->
-        <table class="mk-table mk-table--click mk-table--fixed exec-table">
+        <table class="mk-table mk-table--click mk-table--fixed mk-table--nowrap exec-table">
           <thead>
             <tr>
               <!-- 列序 = 原型 renderObserve 日志表：时间 | 级别 | Skill | Trace | 消息 | 耗时
@@ -661,7 +663,9 @@ const {
   sortKey: logSortKey,
   sortDir: logSortDir,
   toggle: toggleLogSort,
-  sortState: logSortState
+  sortState: logSortState,
+  reset: resetLogSort,
+  isDefault: logSortIsDefault
 } = useTableSort({
   keys: ['calledAt', 'durationMs'],
   defaultKey: 'calledAt',
@@ -1397,8 +1401,6 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .exec-table td.right { text-align: right; }
 /* 行高对齐审计日志节奏（2026-09 统一：td 8px 13px ≈ 43px 行高）：
    双行消息列因副行略高，但主行 12.5px 后整体与审计页同密度 */
-.exec-table th { padding: 8px 13px; }
-.exec-table td { padding: 8px 13px; white-space: nowrap; }
 
 .exec-row--open { background: var(--mk-table-row-hover-bg); }
 /* 失败行层级（2026-10-24）：同一屏里失败行原先与成功行只差一枚红色状态词；
@@ -1546,8 +1548,16 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
 .exec-tracecell { display: inline-flex; align-items: center; gap: 5px; }
 
 /* 展开详情行（colspan=动态列数）：浅底 + 内容盒内聚，干扰最小化；
-   文本可换行（列表行的 nowrap 不下探进详情区） */
-.exec-detail td { padding: 6px 14px 14px; background: #fbfcfe; vertical-align: top; white-space: normal; }
+   文本可换行（列表行的 nowrap 不下探进详情区）。
+   它是「行内抽屉」不是数据行：上下留白归内层 .exec-detail__box 管，
+   单元格本身只留左右内衬，纵向不另加 padding（否则数据行与详情行两种节奏同屏打架）。 */
+.exec-detail td {
+  padding-inline: 14px;
+  padding-block: 0;
+  background: var(--mk-surface-2);
+  vertical-align: top;
+  white-space: normal;
+}
 /* 审核 #125：此处原有 `html[data-theme='dark'] .exec-detail td{background:#161718}`，与文件末尾暗色块内
    同选择器的 #19191a 同特异性、后者在后取胜——一行永不生效的死规则，删 */
 .exec-detail__box {

@@ -110,7 +110,7 @@
         <!-- 原型 .tbl：自动布局（去 mk-table--fixed 与 <colgroup>），
              单元格 nowrap；长文本列（含义）走 wrap 列，长标识列 max-width+ellipsis 截断 -->
         <div v-if="rows.length" class="sfr__scroll mk-table-scroll">
-          <table class="mk-table mk-table--dense sfr__table">
+          <table class="mk-table mk-table--dense mk-table--nowrap sfr__table">
             <thead>
               <tr>
                 <th scope="col">字段</th>
@@ -650,8 +650,6 @@ onMounted(() => void load())
 .sfr__scroll { overflow-x: auto; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); background: var(--mk-surface); }
 /* 窄屏最小宽度挂页面前缀类（页面 scoped 不得定义 mk- 类） */
 @media (max-width: 860px) { .sfr__table { min-width: 1180px; } }
-/* 原型 .tbl td nowrap：自动布局下单元格单行，列按内容自然分宽 */
-.sfr__table td { white-space: nowrap; }
 .sfr__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
 .sfr__field { display: block; min-width: 0; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sfr__fieldpath { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

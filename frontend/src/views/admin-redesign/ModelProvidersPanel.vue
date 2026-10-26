@@ -259,9 +259,29 @@
                     <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
                   </td>
                   <td class="mpp-rowacts">
+                    <!-- 高频两枚平铺（测试 / 编辑）；删除是低频且不可撤销，收进 ⋯ 菜单
+                         ——与公告、账号、虚拟学习者同一套行内操作层级（useRowMenu 同源） -->
                     <button type="button" class="mk-link" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
                     <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
-                    <button type="button" class="mk-link mk-link--danger" :disabled="busy || registry?.readOnly" @click="removeModel(m)">删除</button>
+                    <div class="mk-menu">
+                      <button
+                        type="button"
+                        class="mk-menu__btn"
+                        aria-label="更多操作"
+                        aria-haspopup="menu"
+                        :aria-expanded="openMenu === m.id"
+                        @click.stop="toggleMenu(m.id)"
+                      >⋯</button>
+                      <div v-if="openMenu === m.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                        <button
+                          type="button"
+                          class="mk-menu__item mk-menu__item--danger"
+                          role="menuitem"
+                          :disabled="busy || registry?.readOnly"
+                          @click="removeModel(m)"
+                        >删除</button>
+                      </div>
+                    </div>
                   </td>
                   </tr>
                 </template>
@@ -339,6 +359,7 @@ import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
 import PullModelsDialog from './PullModelsDialog.vue'
 import { modelKindOf } from './platformModelKind'
 import { askConfirm } from './useConfirm'
+import { useRowMenu } from './useRowMenu'
 import { errMsg } from './live'
 import { toast } from '@/utils/toast'
 
@@ -402,6 +423,8 @@ const pulling = ref(false)
 const testResults = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
 const pulled = ref<string[]>([])
 const router = useRouter()
+/** 行内 ⋯ 菜单（低频/危险操作）：与公告、账号、虚拟学习者同一套实现 */
+const { openMenu, toggleMenu, popStyle } = useRowMenu()
 
 const providerEditor = ref<InstanceType<typeof ProviderEditorDialog> | null>(null)
 const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
@@ -1013,9 +1036,10 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-price { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
 /* 未配单价是能直接修的配置缺口：用警示色把「单价未知」从限额副行里拎出来，别读成普通弱字 */
 .mpp-price--missing { color: var(--mk-amber); }
-/* 功能分组行：一张表里切段（对话 / 推理），组内不再复述用途 */
+/* 功能分组行：一张表里切段（对话 / 推理），组内不再复述用途。
+   不覆写内边距：6px 纵向曾把单行小字单元格压到 30px，低于 SPEC §3 的 40px 行高下限
+   （SkillReconciliation 同款判例）。跟随 .mk-table td 的档位节奏。 */
 .mpp-group td {
-  padding: 6px 10px;
   background: var(--mk-surface-2);
   border-top: 1px solid var(--mk-line);
 }
@@ -1032,7 +1056,7 @@ defineExpose({ refresh, openPull, openHostPull })
   white-space: nowrap;
 }
 .mpp-fn__none { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.mpp-rowacts { display: flex; gap: 8px; white-space: nowrap; }
+.mpp-rowacts { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .mpp-queue {
   display: flex;

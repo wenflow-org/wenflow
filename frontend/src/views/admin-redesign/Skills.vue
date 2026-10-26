@@ -43,14 +43,18 @@
         :value="rangeRefreshing ? '…' : avgLatencyText"
       />
       <!-- P-49（#74）：异常 Skill 此前只活在筛选 pill 上；0 时不渲染，避免占位。
-           2026-10-26 评审：这枚读数即「仅看需关注」筛选，点击直接收敛列表，不再让读者往下找 pill -->
+           2026-10-26 评审：这枚读数即「仅看需关注」筛选，点击直接收敛列表，不再让读者往下找 pill。
+           同日动线收口：可点 KPI 一律是开关（再点取消）——原先只单向置 true，
+           点第二下没反应，与同组学习状态/复习积压/目标对话的 KPI 语法相反。 -->
       <MkKpi
         v-if="errorCount > 0"
         label="需关注 Skill"
         :value="errorCount"
         tone="bad"
         clickable
-        @click="onlyAttention = true"
+        :class="{ 'sk-kpi--on': onlyAttention }"
+        :aria-pressed="onlyAttention"
+        @click="onlyAttention = !onlyAttention"
       />
     </section>
 
@@ -111,7 +115,7 @@
         <!-- 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：自动布局下
              Skill / 归属 / 路由模型三列按当页最长名称分宽，翻页整表跳动；改 fixed + 逐列
              表头宽度，余量按权重摊开。长名称仍由 --mk-cell-main-max 截断兜底 -->
-        <table v-if="filtered.length" class="mk-table mk-table--click mk-table--fixed sk-table">
+        <table v-if="filtered.length" class="mk-table mk-table--click mk-table--fixed mk-table--nowrap sk-table">
           <!-- P1① 列结构对齐原型 renderSkillHub 1662-1706 的 8 列：
                Skill / 归属 Agent / 版本 / 路由模型 / 24h 调用 / P95 / 通过率 / 完成度。
                数据来源核查见脚本「路由 · 版本元数据」小节；P95 接口缺失 → 恒「—」且默认隐藏。
@@ -605,7 +609,7 @@ const coverageReady = ref(false)
    且点过别的表头后无法回到默认序 → 在工具条给「默认按失败数排列」可见说明 +
    非默认态一键「恢复默认序」（useTableSort.reset，此前解构未取用）。
    数据为 live 注册表全量（有界）→ 客户端排序是诚实的；截断/服务端分页列表不适用本机制。 */
-const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetSort } = useTableSort<SkillRow>({
+const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetSort, isDefault: isDefaultSort } = useTableSort<SkillRow>({
   accessors: {
     errors: (s) => s.errors,
     /* 主行是 canonical id（2026-10-25 英文为主）：排序也按 id，否则视觉序与点击的列对不上 */
@@ -623,8 +627,6 @@ const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetS
   defaultDir: 'desc',
   storageKey: 'wf_skills_sort'
 })
-/** 当前是否仍在默认序（失败数降序）：非默认时工具条出「恢复默认序」按钮 */
-const isDefaultSort = computed(() => sortKey.value === 'errors' && sortDir.value === 'desc')
 
 /* 覆盖矩阵复用运行表的路由上下文（2026-10-24 合并两张重复表）：
    归属 Agent、完成度、备用链解析都从这里取，矩阵不再另查一份。
@@ -1123,8 +1125,11 @@ const fallbackPolicyText = computed(() => {
 .sk-c-p95 { width: 56px; }
 .sk-c-rate { width: 70px; }
 .sk-c-last { width: 110px; }
-.sk-table td { white-space: nowrap; }/* fixed 档列宽即契约：200px 兜底会把 Skill 名顶出单元格 */
+/* fixed 档列宽即契约：200px 兜底会把 Skill 名顶出单元格。nowrap 走表级 .mk-table--nowrap */
 .sk-table .sk-cell { min-width: 0; }
+/* 可点 KPI 的选中态（需关注 Skill ↔ 仅看需关注）：蓝只给交互与选中，
+   与 MemoryReview .mr-kpi--on / LearnerCenter .lc-kpi--on / GoalConversations .gc-kpi--on 同判例 */
+.sk-kpi--on { border-color: var(--mk-blue); }
 /* 中文名主行（正文重色）；副行 = description（原型 .sub），缺失回落 skill id（等宽）。
    截断上限统一引用 token（--mk-cell-main-max）：自动布局下防长 Skill 名/长副行独吃列宽 */
 .sk-name-main {

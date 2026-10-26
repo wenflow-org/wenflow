@@ -52,7 +52,7 @@
                  2026-10-13 列宽重配（走查 1080p）：原三列共用共享 --mk-col-id(128)，实测只剩 179px，
                  而字段名/落库键最长 ~300px → 68 处截断。含义列会换行（.frt__wrap），收窄不丢内容，
                  把宽度让给会截断的标识列；移交列内容短（阶段名），同步收窄。合计 1575 ≤ 容器 1592。 -->
-            <table class="mk-table mk-table--dense mk-table--fixed frt__table">
+            <table class="mk-table mk-table--dense mk-table--fixed mk-table--nowrap frt__table">
               <colgroup>
                 <col style="width:var(--frt-col-key)" />
                 <col style="width:var(--frt-col-text)" />
@@ -717,8 +717,6 @@ html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
 }
 /* 横向+纵向滚动容器（滚动修复 #1）：表头 sticky 吸顶，容器限高内部滚动，页面本体不被撑长 */
 .frt__scroll { overflow: auto; max-height: 62vh; }
-/* 原型 .tbl td nowrap：自动布局下单元格单行，列按内容自然分宽 */
-.frt__table td { white-space: nowrap; }
 @media (max-width: 860px) {
   .frt__table { min-width: 1060px; }
 }

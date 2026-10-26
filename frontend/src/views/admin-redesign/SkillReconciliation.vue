@@ -54,7 +54,7 @@
         </div>
       </div>
       <div class="mk-table-scroll">
-        <table v-if="recReport.items.length && recPageRows.length" class="mk-table sk-table sk-rec-table mk-table--fixed">
+        <table v-if="recReport.items.length && recPageRows.length" class="mk-table mk-table--click sk-table sk-rec-table mk-table--fixed">
           <colgroup>
             <!-- Skill 列宽收敛（2026-10-14 用户评审「中间三列全是孤零零的小绿勾、像撒芝麻」）：
                  原首尾两列都吃 --mk-col-text（372px 起），实测名称列 355px 只装 ~150px 文字，
@@ -440,7 +440,7 @@ defineExpose({ refresh, recReport, recDiff });
    这些类（.sk-row/.sk-cell/.sk-id-main/.sk-name-desc/.sk-dot）此前只存在于宿主
    scoped style，跨组件不生效 → 对账行健康点不可见、样式全丢。scoped 隔离机制
    不动，改为本组件自带同款声明（保持与宿主目录表视觉一致）。 */
-.sk-row { cursor: pointer; }
+/* 行可点由表级 .mk-table--click 承担（cursor + 键盘焦点描边），本组件不再私持 cursor */
 .sk-cell { display: flex; align-items: center; gap: 10px; }
 .sk-id-main {
   font-family: var(--mk-mono);

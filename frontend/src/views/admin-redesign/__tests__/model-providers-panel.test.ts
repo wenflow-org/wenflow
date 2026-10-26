@@ -316,11 +316,17 @@ describe('ModelProvidersPanel', () => {
     const w = await mountPanel()
     expect(w.text()).toContain('注册表文件所在目录当前不可写')
     expect(btn(w, '添加供应商')!.attributes('disabled')).toBeDefined()
-    // 模型行的写入口（编辑/删除）一并禁用；「测试」是只读动作，仍可用
+    // 模型行的写入口（编辑 / 删除）一并禁用；「测试」是只读动作，仍可用
     const rowBtn = (text: string) => w.findAll('.mpp-rowacts .mk-link').find((b) => b.text() === text)!
     expect(rowBtn('编辑').attributes('disabled')).toBeDefined()
-    expect(rowBtn('删除').attributes('disabled')).toBeDefined()
     expect(rowBtn('测试').attributes('disabled')).toBeUndefined()
+    // 删除是低频且不可撤销的动作，收进 ⋯ 菜单（与公告/账号/虚拟学习者同一套行内层级）
+    expect(w.findAll('.mpp-rowacts .mk-link').some((b) => b.text() === '删除')).toBe(false)
+    await w.find('.mpp-rowacts .mk-menu__btn').trigger('click')
+    await flushPromises()
+    const removeItem = w.findAll('.mpp-rowacts .mk-menu__item').find((b) => b.text() === '删除')!
+    expect(removeItem.exists()).toBe(true)
+    expect(removeItem.attributes('disabled')).toBeDefined()
   })
 
   it('获取模型列表 → 浮窗勾选：不再铺内联清单，勾选后带模型 id 打开编辑弹层', async () => {

@@ -43,6 +43,8 @@
             >{{ p.name }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
           </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
+          <button v-if="!ocSortIsDefault" type="button" class="mk-link" @click="resetOcSort">恢复默认序</button>
         </div>
         <div class="mk-card__head-right">
           <MkFilterSearch v-model="keyword" placeholder="搜索标题或用户" />
@@ -361,7 +363,10 @@ function pathStatusMatch(status: string, key: string): boolean {
 }
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
-const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows, sortKey: ocSortKey, sortDir: ocSortDir } = useTableSort<PathRow>({
+const {
+  toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows,
+  sortKey: ocSortKey, sortDir: ocSortDir, reset: resetOcSort, isDefault: ocSortIsDefault
+} = useTableSort<PathRow>({
   accessors: {
     path: (p) => p.title,
     /* P2-6（2026-10-04 全站评审）：「主题」独立列退役（91% 行与路径列同文），随列撤排序 */

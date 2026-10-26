@@ -285,6 +285,57 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(stale.find('.mk-kpi__num').text()).toBe('1');
   });
 
+  /* 2026-10-26 动线收口：停滞读数有对应行，就必须能落到那几行。此前它是本页唯一
+     点了没反应的 KPI（同组学习状态页的需关注/观察都可点即筛）。 */
+  it('停滞 KPI 可点即筛：点卡只剩停滞行，再点取消；卡头同步出「停滞」chip', async () => {
+    const fresh = new Date(Date.now() - 86400000).toISOString();
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          conversations: [
+            makeConv(1, { status: 'active', updatedAt: '2020-01-01T00:00:00Z' }),
+            makeConv(2, { status: 'active', updatedAt: fresh })
+          ]
+        }
+      }
+    });
+    statsMock.mockResolvedValue({
+      data: { success: true, data: { total: 2, active: 2, completed: 0, completionRate: '0' } }
+    });
+    const w = await mountGoals();
+    const card = () => w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '停滞目标对话')!;
+    expect(card().classes()).toContain('mk-kpi--clickable');
+    // 卡头 chip 与 KPI 同源同判据
+    const chip = () => w.findAll('.mk-pill').find((p) => p.text().startsWith('停滞'))!;
+    expect(chip().exists()).toBe(true);
+
+    await card().trigger('click');
+    await nextTick();
+    expect(card().classes()).toContain('gc-kpi--on');
+    expect(w.findAll('tbody tr')).toHaveLength(1);
+    expect(chip().classes()).toContain('mk-pill--active');
+
+    await card().trigger('click');
+    await nextTick();
+    expect(card().classes()).not.toContain('gc-kpi--on');
+    expect(w.findAll('tbody tr')).toHaveLength(2);
+  });
+
+  it('停滞为 0 时 KPI 不可点、不出 chip（不承诺一个空动作）', async () => {
+    const fresh = new Date(Date.now() - 86400000).toISOString();
+    listMock.mockResolvedValue({
+      data: { success: true, data: { conversations: [makeConv(1, { status: 'active', updatedAt: fresh })] } }
+    });
+    statsMock.mockResolvedValue({
+      data: { success: true, data: { total: 1, active: 1, completed: 0, completionRate: '0' } }
+    });
+    const w = await mountGoals();
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '停滞目标对话')!;
+    expect(card.classes()).not.toContain('mk-kpi--clickable');
+    expect(w.findAll('.mk-pill').some((p) => p.text().startsWith('停滞'))).toBe(false);
+  });
+
   it('P1#6 stats 拉取失败 → 错误条「统计暂不可用 · 重试」，完结率 KPI 不拿 0 冒充读数', async () => {
     statsMock.mockRejectedValue(new Error('stats boom'));
     const w = await mountGoals();

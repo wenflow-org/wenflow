@@ -167,7 +167,7 @@
               </div>
             </div>
             <div class="skd-tablewrap">
-              <table v-if="versions.length" class="mk-table">
+              <table v-if="versions.length" class="mk-table mk-table--nowrap">
                 <thead>
                   <tr>
                     <th>版本</th>
@@ -301,7 +301,7 @@
               </div>
             </div>
             <div class="skd-tablewrap">
-              <table v-if="routingRows.length" class="mk-table">
+              <table v-if="routingRows.length" class="mk-table mk-table--nowrap">
                 <thead>
                   <tr>
                     <th>字段</th><th>角色</th><th class="skd-th-wrap">说明</th><th>流向</th><th>渲染</th><th>属性</th>
@@ -1383,7 +1383,6 @@ useEscape(
 
 /* ===== 版本 / 字段路由表格（原型 .tbl 包壳） ===== */
 .skd-tablewrap { overflow-x: auto; }
-.skd-tablewrap .mk-table td { white-space: nowrap; }
 .skd-tablewrap .mk-table .skd-td-wrap { white-space: normal; min-width: 160px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .skd-tablewrap .mk-table th.skd-th-wrap { white-space: normal; }
 

@@ -47,7 +47,7 @@
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
              长内容（用例名/期望摘要）由 mk-cell-main 上限与 pe-expect 截断兜底 -->
-        <table class="mk-table mk-table--click">
+        <table class="mk-table mk-table--click mk-table--nowrap">
           <thead>
             <tr>
               <th
@@ -1574,9 +1574,6 @@ defineExpose({ running, canRunBatch, runBatch, openCreate, kpiView })
 .pe-delta--fast { color: var(--mk-green); font-weight: 700; }
 /* 列表高度：空态占位交给 mk-empty--min，有数据时表格自然高度（不再硬撑满屏） */
 .pe-list { min-height: 0; }
-/* 原型 .tbl td：nowrap（自动布局下列宽随内容；长内容由 mk-cell-main 上限与 pe-expect 截断兜底，
-   不换行撑行高） */
-.pe-list .mk-table td { white-space: nowrap; }
 .pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 「人设失效」是可点的修复入口（打开编辑弹窗并落在模拟学生区块）：复位按钮外观，沿用 warn 徽章配色 */
 .pe-persona-missing { margin-left: 6px; border: 1px solid transparent; font: inherit; font-size: var(--mk-fs-micro); font-weight: 600; cursor: pointer; }

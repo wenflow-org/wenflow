@@ -48,6 +48,10 @@
               >{{ p.label }}<span v-if="p.count != null && p.id !== 'all'" class="mk-pill__count">{{ p.count }}</span></button>
             </template>
           </div>
+          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过任一表头后
+               下次进来仍是那个序，此前本页没有回默认序的出口（同批补齐六页，出口位置统一在
+               左组筛选之后——它和「清除筛选」一样是「撤销我改过的视图状态」）。 -->
+          <button v-if="!userSortIsDefault" type="button" class="mk-link" @click="resetUserSort">恢复默认序</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -89,7 +93,7 @@
         <!-- 固定列宽（2026-10-22 与教学组三表同判例）：自动布局下用户/邮箱两列按当页最长内容
              分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
              单元格 nowrap 不变，长邮箱/长昵称仍由 max-width 截断兜底 -->
-        <table class="mk-table mk-table--nowrap mk-table--fixed ul-table">
+        <table class="mk-table mk-table--click mk-table--nowrap mk-table--fixed ul-table">
           <thead>
             <tr>
               <th v-if="isLive && showCol('check')" scope="col" class="u-c-check">
@@ -681,7 +685,10 @@ const activeToday = computed(() => users.value.filter((u) => u.online).length)
 
 /* 客户端排序：数据全量在客户端（live 全量拉取）→ 排序诚实。
    默认保持服务端顺序（注册时间倒序）；点表头切换，状态 localStorage 记忆。 */
-const { toggle: toggleUserSort, sortState: userSortState, sortRows: sortUserRows, sortKey: userSortKey, sortDir: userSortDir } = useTableSort<UserRow>({
+const {
+  toggle: toggleUserSort, sortState: userSortState, sortRows: sortUserRows,
+  sortKey: userSortKey, sortDir: userSortDir, reset: resetUserSort, isDefault: userSortIsDefault
+} = useTableSort<UserRow>({
   accessors: {
     user: (u) => u.name || u.email,
     level: (u) => u.xp,
