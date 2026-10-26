@@ -164,10 +164,10 @@ function dumpTriage(sessionId: string): Record<string, unknown> | null {
       return { u, lastAi };
     };
     let snapshot = read();
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 10; i++) {
       const u = snapshot?.u ?? {};
       if (u.platform_judgment || u.skill_nature) break;
-      const wait = Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 8000);
+      const wait = Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000);
       if (wait === 'timed-out') snapshot = read() ?? snapshot;
     }
     if (!snapshot) return null;
@@ -256,15 +256,15 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { DatabaseSync } = require('node:sqlite');
       const db = new DatabaseSync(DB_PATH, { readOnly: true });
-      const row = db.prepare(
-        `SELECT status FROM path_generation_runs WHERE learningPathId = ? AND phase = 'stageDesign' ORDER BY createdAt DESC LIMIT 1`,
-      ).get(pathId) as { status?: string } | undefined;
-      const processing = db.prepare(
-        `SELECT COUNT(*) c FROM path_generation_runs WHERE learningPathId = ? AND status = 'processing'`,
-      ).get(pathId) as { c: number };
+      const runs = db.prepare(
+        `SELECT phase, status FROM path_generation_runs WHERE learningPathId = ? ORDER BY createdAt`,
+      ).all(pathId) as Array<{ phase: string; status: string }>;
       db.close();
-      if (processing?.c) return false;
-      return !row || row.status === 'succeeded';
+      if (runs.some((r) => r.status === 'processing')) return false;
+      const core = runs.filter((r) => r.phase === 'core');
+      if (!core.length || core[core.length - 1].status !== 'succeeded') return false; // core 失败/缺失 → 永不就绪
+      const sd = runs.filter((r) => r.phase === 'stageDesign');
+      return !sd.length || sd[sd.length - 1].status === 'succeeded';
     } catch { return true; } // 读库失败时退回旧行为，不卡死
   };
   const deadline = Date.now() + PATH_WAIT_MS;

@@ -556,6 +556,18 @@ async function enrichLearningPathWithAndersonInner(
             estimatedHours: m.estimatedHours || null,
           })),
         },
+        // 全部前序阶段任务标题（2026-10-27 R1 夜批实证：previousMilestone.tasks 只给上一阶段，
+        // 阶段 N≥3 看不到更早阶段，跨阶段重复仍占 12/95（duplicateTask 第二大 flag；
+        // D14 三个阶段各排一次「回放被岔开的对话」）。标题体积小（≤60 条），全量注入。
+        ...(stageIndex > 1 ? {
+          allPreviousStageTasks: learningPath.milestones
+            .slice(0, stageIndex)
+            .map((m, i) => ({
+              stageNumber: m.stageNumber,
+              tasks: (stageTaskSummaries.get(i) || []).map((t) => t.title),
+            }))
+            .filter((s) => s.tasks.length > 0),
+        } : {}),
         // 渐进式（批次 D）：上一阶段的学习者账本信号——脆弱/挣扎概念、先修缺口、
         // wrapup 里仍未掌握的点。stage-designer 据此调整下一阶段的坡度与回补任务。
         ...(progressive && options.previousStageOutcome
