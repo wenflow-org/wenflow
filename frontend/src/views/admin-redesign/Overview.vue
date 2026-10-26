@@ -991,6 +991,29 @@ const testFilteredFeed = computed(() => {
     同一分钟批量中止的 N 个 Skill 合并为「执行失败 ×N（同因）」，desc 列出来源；
     点击仍按首条失败类别跳日志。非坏消息/非同构文案原样透传（feedDesc 口径不变） */
 interface FeedView { time: string; text: string; desc: string; tone: BriefData['feed'][number]['tone']; errorCategory?: string; count: number }
+/* Skill 标签三件套必须在 feedRows 之前定义：feedRows / feedDesc 的取值函数里会调 skillLabelOf，
+   而 computed 的 getter 在组件 setup 期间就会被求值——定义在文件末尾会触发
+   TDZ「Cannot access 'skillLabelOf' before initialization」，整页白屏
+   （2026-10-26 走查在浏览器 console 里抓到）。
+   agentId 形如 "skill:goal-conversation"（agent_call_logs 口径），而 Skill 详情二级页与四个
+   只读端点（effective-prompt / skill-model-configs / field-routings / prompt-lab-core）都按
+   注册表裸 id 取数——直接透传前缀会让子视图全线 404/400/500、指标恒 0（FN8）。 */
+const skillIdOf = (agentId: string) => String(agentId || '').replace(/^(?:skill|agent):/, '')
+/** 中文别名（目录 displayName）：只在它确实是别名（≠ id）时返回，供英文主行后括注。
+    2026-10-25 用户「以英文为主」：总览此前只印中文名，与 Skills 列表 / 详情 hero 的英文身份两套读法。 */
+const skillAliasOf = (agentId: string): string => {
+  const id = skillIdOf(agentId)
+  const alias = skillDisplayName(agentId)
+  return alias && alias !== id ? alias : ''
+}
+const skillNameTitle = (agentId: string): string => {
+  const id = skillIdOf(agentId)
+  const alias = skillAliasOf(agentId)
+  return alias ? `${id} · ${alias}` : id
+}
+/** 事件/待办文本里的 Skill 标签：英文 id 为主，别名存在时以「id · 别名」括注（2026-10-25） */
+const skillLabelOf = (agentId: string): string => skillNameTitle(agentId)
+
 const feedRows = computed<FeedView[]>(() => {
   const out: FeedView[] = [];
   for (const f of testFilteredFeed.value) {
@@ -1067,22 +1090,8 @@ const topMaxCalls = computed(() => Math.max(1, ...(data.value?.topSkills || []).
 const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls.value) * 100), 4)}%`;
 /** Top5 行 agentId 形如 "skill:goal-conversation"（agent_call_logs 口径）；Skill 详情二级页
     与四个只读端点（effective-prompt / skill-model-configs / field-routings / prompt-lab-core）
-    都按注册表裸 id 取数——直接透传前缀会让子视图全线 404/400/500、指标恒 0（FN8）。 */
-const skillIdOf = (agentId: string) => String(agentId || '').replace(/^(?:skill|agent):/, '')
-/** 中文别名（目录 displayName）：只在它确实是别名（≠ id）时返回，供英文主行后括注。
-    2026-10-25 用户「以英文为主」：总览此前只印中文名，与 Skills 列表 / 详情 hero 的英文身份两套读法。 */
-const skillAliasOf = (agentId: string): string => {
-  const id = skillIdOf(agentId)
-  const alias = skillDisplayName(agentId)
-  return alias && alias !== id ? alias : ''
-}
-const skillNameTitle = (agentId: string): string => {
-  const id = skillIdOf(agentId)
-  const alias = skillAliasOf(agentId)
-  return alias ? `${id} · ${alias}` : id
-}
-/** 事件/待办文本里的 Skill 标签：英文 id 为主，别名存在时以「id · 别名」括注（2026-10-25） */
-const skillLabelOf = (agentId: string): string => skillNameTitle(agentId)
+    都按注册表裸 id 取数——直接透传前缀会让子视图全线 404/400/500、指标恒 0（FN8）。
+    定义位置见文件上方「Skill 标签三件套」：必须早于 feedRows（TDZ）。 */
 
 interface TodoItem { key: string; text: string; main: string; tone: Tone; actLabel: string; action: () => void }
 /** 去掉末尾括号口径（完整句仍进 title）：可见行只留动作本身 */

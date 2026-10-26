@@ -815,14 +815,19 @@ watch(() => props.skillId, () => {
 .sdp-params { display: grid; gap: 8px; }
 .sdp-param {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(170px, 1.2fr) 128px;
+  /* 两列：标签 + 控件。第三列（128px）原留给「继承」二字，但下拉框选中的文案就是
+     「继承当前 Prompt」——同一个事实说两遍，还白占 128px（2026-10-26 走查实见）。
+     选「覆盖」时数值输入框接在控件列里，行高不变。 */
+  grid-template-columns: minmax(140px, 1fr) minmax(170px, 1.2fr);
   gap: 8px;
   align-items: center;
   min-width: 0;
 }
 .sdp-param__label { display: flex; align-items: baseline; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 .sdp-param__range { font-weight: 400; color: var(--mk-faint); }
-.sdp-param__inherit { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 「继承」二字不再渲染：模式下拉的选中项已写明「继承当前 Prompt」。
+   保留选择器只为旧快照/回归测试里的节点查询不报错。 */
+.sdp-param__inherit { display: none; }
 @media (max-width: 900px) {
   .sdp-param { grid-template-columns: minmax(0, 1fr) 128px; }
   .sdp-param__label { grid-column: 1 / -1; }
@@ -830,9 +835,8 @@ watch(() => props.skillId, () => {
 .sdp-param__ctl { display: grid; grid-template-columns: minmax(0, 1fr) 128px; gap: 8px; align-items: center; }
 .sdp-param__ctl > :only-child { grid-column: 1 / -1; }
 @media (max-width: 700px) {
-  /* 窄屏：参数行整行放模式选择；「继承」由选项文案已表达，不再单独占一列 */
+  /* 窄屏：参数行整行放模式选择 */
   .sdp-param { grid-template-columns: minmax(0, 1fr); }
-  .sdp-param__inherit { display: none; }
 }
 @media (max-width: 860px) {
   .sdp-form__grid { grid-template-columns: 1fr; }

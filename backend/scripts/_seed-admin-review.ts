@@ -111,6 +111,11 @@ async function main(): Promise<void> {
     console.log('  没有非虚拟账号，跳过关联数据')
     return
   }
+  /* 公告的创建人写管理员 id（admin_ 前缀），不写普通账号：
+     后端 shapeWithCreatorNames 只解析 admin_* → 管理员名，其它 id 原样上屏，
+     页面上就是那串 UUID（2026-10-26 走查实见）。 */
+  const admin = await db.users.findFirst({ where: { isAdmin: true }, select: { id: true } })
+  const authorId = admin?.id ?? users[0].id
   const u = (i: number) => users[i % users.length].id
   const sessions = await db.teaching_sessions.findMany({ select: { id: true, userId: true }, take: 12 })
   const sessionOf = (i: number) => sessions[i % Math.max(sessions.length, 1)]?.id ?? `${PREFIX}session-${i}`
@@ -184,7 +189,7 @@ async function main(): Promise<void> {
         status,
         publishedAt: publishedDaysAgo === null ? null : new Date(now - publishedDaysAgo * DAY),
         expiresAt: status === 'published' ? new Date(now + 30 * DAY) : null,
-        createdBy: users[0].id,
+        createdBy: authorId,
         createdAt: new Date(now - (publishedDaysAgo ?? i + 1) * DAY),
         updatedAt: new Date(now - (publishedDaysAgo ?? i + 1) * DAY),
       },
@@ -241,7 +246,7 @@ async function main(): Promise<void> {
         kind: ['announcement', 'system', 'system', 'system', 'system'][i % 5],
         link: ['/admin/ops-hub?tab=announce', '/admin/ops-hub?tab=feedback', '/admin/token-cost', '/admin/skills', '/admin/memory-review'][i % 5],
         isRead: i > 5,
-        createdBy: users[0].id,
+        createdBy: authorId,
         createdAt: new Date(now - i * 0.6 * DAY),
       },
     })
