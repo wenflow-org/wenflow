@@ -130,9 +130,10 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
     log(`${key} 学习者已建 ${entry.profileId}`);
   }
 
-  // 2) 开会话
+  // 2) 开会话（autopilot='off'：评测只需要路径就绪；默认 'final' 会让自动驾驶在
+    // path-ready 后继续自动「上课」——4 个样本各留一个 teaching 循环持续烧模型额度）
   if (!entry.sessionId) {
-    const started = await api('POST', `/api/admin/virtual-learners/${entry.profileId}/start-session`, {});
+    const started = await api('POST', `/api/admin/virtual-learners/${entry.profileId}/start-session`, { autopilot: 'off' });
     const d = rec(started.body?.data ?? started.body);
     entry.sessionId = String(d.id ?? '');
     if (!entry.sessionId) { entry.phase = 'start-failed'; entry.note = JSON.stringify(started.body).slice(0, 200); log(`${key} 开会话失败 ${entry.note}`); saveState(state); return; }
