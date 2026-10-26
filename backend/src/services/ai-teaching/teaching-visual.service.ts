@@ -298,9 +298,9 @@ export const FIGURE_KIND_GUIDE = [
   '- matrix：二维命中矩阵（✓有/—无/叠=重复堆砌/≡两边同一项）。{"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":1,"tone":"hit|miss|dup|key"}],"legend":[{"text":"✓ 已写到","fill":"#e6f4f1"}]}',
   '- range-bar：**多组数值区间并排**（新组/旧组的波动范围、上下限、从哪到哪）。{"unit":"%","rows":[{"label":"新组四天","from":3.1,"to":3.8,"tone":"accent"},{"label":"旧组四天","from":2.9,"to":3.6,"tone":"neutral"}],"marks":[{"at":0.5,"label":"汇报的均值差"}],"note":"…"}——**数值区间不要塞进 position-line**：一根时间轴画不出带宽，把「幅度」横着放会被读成日期跨度。',
   '- concept-map：**概念结构图**（讲概念本身，不是出题）：{"nodes":[{"id":"light","label":"光反应","sub":"类囊体膜","tone":"accent"},{"id":"atp","label":"ATP / NADPH","sub":"能量与还原力"},{"id":"dark","label":"暗反应","sub":"叶绿体基质"}],"edges":[{"from":"light","to":"atp","label":"产生"},{"from":"atp","to":"dark","label":"供给"}],"takeaway":"光反应造能量，暗反应用能量把 CO₂ 变成糖"}——节点是概念要素（概念/过程/量/条件），**每条边必须有关系名**（产生/供给/构成/依赖/导致/对照）；**机制里的子要素要展开成自己的节点**（如「压强差」是独立节点，不要印在父节点的小字里——学生要看的是要素之间的关系，不是注解）；**takeaway 是结构总结不是答案**——本轮要学生自己推导的结论（如「风向就反过来」）不进 takeaway，写结构层面的收束或干脆省略；讲解概念、机制、流程时优先用它，不要用「问题+答案」的画法；**概念图用在「第一次讲清/整体梳理」这一轮**——如果这一轮是让学生自己复述或推导整张结构，就不要把完整结构图放出来（可以留白或等学生说完再印证）。',
-  '- split-compare：**正误并排对比**（学生做错一步、纠典型误区时优先用）。{"title":"…","left":{"head":"常见错法","tone":"warn","rows":[{"label":"60 ÷ 400","sub":"把秒当分钟除"}]},"right":{"head":"正确做法","tone":"ok","rows":[{"label":"60 × 400 ÷ 1000","sub":"先把米换算成千米"}]},"delta":{"label":"分叉在第二步：先除还是先换算","at":1}}——左右是**同一个动作的两种走法**，第 n 行对第 n 行；delta.at 指出分叉在第几步；正文不复述两栏，只点破分叉步；**左右必须按同样的步骤序列写**（左第 n 步对右第 n 步），一侧没做的那一步就写 "?"（渲染成待填空槽）；**留白只留一步**——正确栏至多一行留 "?"，其余行必须写出正确的走法，整栏留白的对照图学生看不到「对的样子」，等于没有对照；**受力/方向/位置这类空间关系不要用本图型**——它画不出矢量。',
+  '- split-compare：**正误并排对比**（学生做错一步、纠典型误区时优先用）。{"title":"…","left":{"head":"常见错法","tone":"warn","rows":[{"label":"60 ÷ 400","sub":"把秒当分钟除"}]},"right":{"head":"正确做法","tone":"ok","rows":[{"label":"60 × 400 ÷ 1000","sub":"先把米换算成千米"}]},"delta":{"label":"分叉在第二步：先除还是先换算","at":1}}——左右是**同一个动作的两种走法**，第 n 行对第 n 行；delta.at 指出分叉在第几步；正文不复述两栏，只点破分叉步；**左右必须按同样的步骤序列写**（左第 n 步对右第 n 步），一侧没做的那一步就写 "?"（渲染成待填空槽）；**留白按本轮任务分流**：本轮是老师示范对照（学生还没有动手）→ 正确栏写全、至多留一步给学生核验，整栏留白的对照图学生看不到「对的样子」等于没有对照；本轮就要学生**自己改错/说答案**（纠错轮、追问轮）→ 正确栏的**答案行**必须留 "?"（可以多于一格），否则图替学生把错改完了；**受力/方向/位置这类空间关系不要用本图型**——它画不出矢量。',
   '- state-strip：**不回头的进程分帧**（三次握手/编译流程/消化过程/生命周期）。帧内 items 每帧 ≤3 条，只写**该时刻的状态快照**（主语+状态，如「客户端 SYN_SENT」「食糜进入小肠」），不写动作指令、操作命令或流程评论——写成了动作清单就退化成装框文字；**帧 label 或帧内含时间/序号时先自查先后自洽**（第②步不许写在第①步之前发生的事）；本轮要学生**自己推导的目标状态**（如推送完成后各区的状态）留空槽 "?"，不要替学生写全。{"title":"TCP 三次握手","frames":[{"label":"SYN","items":["客户端 SYN_SENT","服务端 LISTEN"]},{"label":"SYN+ACK","items":["服务端 SYN_RCVD"]},{"label":"ACK","items":["双方 ESTABLISHED"]}] ,"note":"…"}——2~5 帧横排、帧间箭头是「下一步」；**要回到起点**的过程（循环/迭代）用 cycle，不要用条带。',
-  '- cartesian-plot：**二维坐标图**（函数曲线/平抛轨迹/实验数据）。{"x":{"label":"水平位移 / m","min":0,"max":2.6,"ticks":[0,0.6,1.2,1.8,2.4]},"y":{"label":"高度 / m","min":0,"max":0.85,"ticks":[0,0.4,0.8]},"series":[{"name":"3 m/s","form":"parabola","a":-0.5556,"b":0,"c":0.8,"tone":"ok","dotPoints":[[0.3,0.75],[0.6,0.6],[0.9,0.35],[1.2,0]]}],"guides":[{"axis":"y","at":0.75,"label":"t=0.1s · 0.75m"}],"vectors":[{"at":[0,0.8],"dx":0.6,"dy":0,"label":"v₀"}],"marks":[{"at":[1.2,0],"label":"落点 1.2 m"}]}——**同一时刻两个球在不在同一高度**，只能靠这张图看见；form 可用 points/parabola(a,b,c)/linear(k,b)/scatter，dotPoints 是等时间隔的位置点（频闪），属于同一条曲线，**不要另开一条散点系列**；**要表达「面积」时给 `areas`**：{"areas":[{"from":0,"to":4,"series":"速度","label":"位移 = 面积"}]}（v-t 图下面积=位移、供需曲线围出的剩余都靠它）；图例里写到的每条曲线都必须真的画出来；数值必须是真实量纲。',
+  '- cartesian-plot：**二维坐标图**（函数曲线/平抛轨迹/实验数据；**柱状量用 form="bars"**——气温降水图的降水柱、各月销量对比，点和线画柱状量会被读成趋势）。{"x":{"label":"水平位移 / m","min":0,"max":2.6,"ticks":[0,0.6,1.2,1.8,2.4]},"y":{"label":"高度 / m","min":0,"max":0.85,"ticks":[0,0.4,0.8]},"series":[{"name":"3 m/s","form":"parabola","a":-0.5556,"b":0,"c":0.8,"tone":"ok","dotPoints":[[0.3,0.75],[0.6,0.6],[0.9,0.35],[1.2,0]]}],"guides":[{"axis":"y","at":0.75,"label":"t=0.1s · 0.75m"}],"vectors":[{"at":[0,0.8],"dx":0.6,"dy":0,"label":"v₀"}],"marks":[{"at":[1.2,0],"label":"落点 1.2 m"}]}——**同一时刻两个球在不在同一高度**，只能靠这张图看见；form 可用 points/parabola(a,b,c)/linear(k,b)/scatter/bars，dotPoints 是等时间隔的位置点（频闪），属于同一条曲线，**不要另开一条散点系列**；**vectors 的 dx/dy 是坐标域单位**——速度/力这类量纲不同的箭头只在起点示意方向，长度不按数值比例，label 里写清数值与单位；**要表达「面积」时给 `areas`**：{"areas":[{"from":0,"to":4,"series":"速度","label":"位移 = 面积"}]}（v-t 图下面积=位移、供需曲线围出的剩余都靠它）；图例里写到的每条曲线都必须真的画出来；数值必须是真实量纲。',
   '- **变量名/引用/拷贝**：用 bipartite，左列变量名、右列内存对象，edges 表示指向；`b = a` 是两条边汇到同一个对象节点，`a[:]` 是外层两个节点、内层同一节点。**同一张图上不要同时画「改之前」和「改之后」两个状态**（外审：学生会以为 b 同时指向两个对象）——只画当前状态，或把前后两组分开并列并各自标头。',
   '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',
   '- quadrant：2×2（四格顺序：左上、右上、左下、右下）。{"colLabels":["左","右"],"rowLabels":[{"label":"上","sub":"…"},{"label":"下"}],"cells":[{"title":"…","body":["…"],"tone":"ok|warn|neutral"}]}',
@@ -732,7 +732,9 @@ export function maskFigureForQuestion<T extends { kind?: string; spec?: unknown 
 ): T | null {
   if (!figure || !endsWithQuestion(reply)) return figure;
   const question = String(reply ?? '');
-  const readOff = /(读出|指出|指着|看图|图上|哪两个|哪一段|哪个位置|哪里|是多少|多少|等于几|填|补全|复述|说出|讲出来|列举|概括|推一推|用你自己的话|说一遍|讲一遍|按顺序|走一遍|解释一件事|挑一个|哪一步|哪一边|先出现)/;
+  // 纠错产出句式（2026-10-27 V5）：让学生自己改错/指出分叉的轮次，图不能替学生把错改完——
+  // 正确栏与结论与答案行同属「本轮要产出的 X」，与读图题同走脱敏
+  const readOff = /(读出|指出|指着|看图|图上|哪两个|哪一段|哪个位置|哪里|是多少|多少|等于几|填|补全|复述|说出|讲出来|列举|概括|推一推|用你自己的话|说一遍|讲一遍|按顺序|走一遍|解释一件事|挑一个|哪一步|哪一边|先出现|你来改|轮到你|自己(改|指出|说|写|填)|错在哪|分岔在哪|哪里错了|改过来)/;
   if (!readOff.test(question)) return figure;
   const spec = figure.spec && typeof figure.spec === 'object' ? ({ ...(figure.spec as Record<string, unknown>) } as Record<string, unknown>) : null;
   if (!spec) return figure;
@@ -751,9 +753,17 @@ export function maskFigureForQuestion<T extends { kind?: string; spec?: unknown 
 
   if (kind === 'split-compare') {
     // 两栏做法是事实、delta 是结论（分叉在哪一步+为什么）——结论挖掉，分叉行的高亮位置保留，
-    // 学生对着一排差异自己说；只挖 delta 不空壳（两栏完整在）
+    // 学生对着一排差异自己说；只挖 delta 不空壳（两栏完整在）。
+    // V5：纠错产出轮把**正确栏**每行答案也挖成 ？（错误栏保留当事实骨架，行数与行高不变，不空壳）
     if (spec.delta && typeof spec.delta === 'object') {
       spec.delta = { ...(spec.delta as Record<string, unknown>), label: '？' };
+    }
+    if (spec.right && typeof spec.right === 'object') {
+      const right = { ...((spec.right as Record<string, unknown>)) };
+      if (Array.isArray(right.rows)) {
+        right.rows = (right.rows as Array<Record<string, unknown>>).map((r) => ({ ...r, label: '？', sub: undefined }));
+      }
+      spec.right = right;
     }
     return { ...figure, spec };
   }

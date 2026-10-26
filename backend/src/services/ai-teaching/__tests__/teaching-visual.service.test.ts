@@ -996,6 +996,22 @@ describe('读图题脱敏不扣图（maskFigureForQuestion，2026-10-24 外部�
     expect(out.spec.frames[1].items).toEqual(['？']);
   });
 
+  it('split-compare 纠错产出轮：正确栏答案行挖成？，错误栏保留当事实骨架', () => {
+    const sc = {
+      kind: 'split-compare',
+      spec: {
+        left: { head: '你的写法', tone: 'warn', rows: [{ label: 'I have been to Shanghai last year' }] },
+        right: { head: '正确走法', tone: 'ok', rows: [{ label: 'I went to Shanghai last year', sub: '过去时间配过去时' }] },
+        delta: { label: '分叉在时态选择', at: 1 },
+      },
+    };
+    const out = maskFigureForQuestion(sc, '轮到你了：把右栏的正确句子改出来，错在哪一步？') as any;
+    expect(out).not.toBeNull();
+    expect(out.spec.right.rows[0].label).toBe('？');
+    expect(out.spec.left.rows[0].label).toBe('I have been to Shanghai last year');
+    expect(out.spec.delta.label).toBe('？');
+  });
+
   it('不可脱敏的图型（venn）+ 读图题 → null（整张扣下）', () => {
     const venn = { kind: 'venn', spec: { left: { head: '甲' }, right: { head: '乙' } } };
     expect(maskFigureForQuestion(venn, '既在甲又在乙的同学在图的哪里？')).toBeNull();
