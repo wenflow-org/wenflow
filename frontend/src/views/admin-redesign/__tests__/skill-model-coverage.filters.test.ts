@@ -65,6 +65,19 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     w.unmount()
   })
 
+  it('筛选语法：来源单选组与备用模型开关组分居两组，开关激活时前缀勾', async () => {
+    const w = await mountCoverage()
+    const groups = w.findAll('.mk-pills')
+    expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['来源筛选', '标志筛选'])
+    // 单选组的每一次点击都是「换选中项」，不出现勾选图标
+    expect(groups[0].findAll('svg')).toHaveLength(0)
+    const fallback = pill(w, '自定义备用模型')!
+    expect(fallback.find('svg').exists()).toBe(false)
+    await fallback.trigger('click')
+    expect(pill(w, '自定义备用模型')!.find('svg').exists()).toBe(true)
+    w.unmount()
+  })
+
   it('来源 pill 收窄表格；计数保持不变（筛的是视图不是数据）', async () => {
     const w = await mountCoverage()
     await pill(w, '独立通道')!.trigger('click')

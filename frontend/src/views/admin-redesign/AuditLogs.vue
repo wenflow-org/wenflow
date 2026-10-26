@@ -47,6 +47,18 @@
             :active="timeRange !== 'all'"
             @update:model-value="applyFilters"
           />
+          <!-- 动作快筛（2026-10-27 从「筛选」弹层提到主栏）：Carbon 的筛选模式禁止把类别
+               收进菜单/下拉——这里原本是一个只装单项的弹层，收起后只剩数字角标。选项仍是
+               当前页动作聚合（口径如实写在「全部动作」之后），下钻走 keyword 搜索。 -->
+          <MkPillSelect
+            v-if="tab === 'operation'"
+            :model-value="activeActionValue"
+            label="动作"
+            aria-label="按动作筛选"
+            :options="actionSelectOptions"
+            :active="!!activeActionValue"
+            @update:model-value="applyActionFilter"
+          />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
           <button v-if="!alSortIsDefault" type="button" class="mk-link" @click="resetAlSort">恢复默认序</button>
@@ -92,41 +104,9 @@
             :placeholder="tab === 'login' ? '用户名 / IP' : '关键词'"
             @keydown.enter="applyFilters"
           />
-          <!-- 2026-10-05 卡头统一弹层法：动作/时间下拉自主行收进共享 .mk-adv 弹层，
-               失败 TOP 快捷下钻同迁（此前在头部右区占位致 1440 折两行）；触发钮标生效数 -->
           <!-- 列设置仅操作审计页签有效（登录表 6 列为固定列，不读 colVisible）；
                在登录页签隐藏，避免出现「勾选无效却写 localStorage 的隐式副作用」 -->
           <MkCols v-if="tab === 'operation'" :col-defs="alColDefs" :storage-key="AL_COLS_KEY" v-model:hidden="hiddenCols" />
-          <div class="mk-adv">
-            <button
-              type="button"
-              class="mk-link mk-adv-trigger"
-              :class="{ 'mk-link--active': advOpen }"
-              :aria-expanded="advOpen"
-              @click="advOpen = !advOpen"
-            >
-              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
-            </button>
-            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
-            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
-              <label v-if="tab === 'operation'" class="mk-adv__field">
-                <span class="mk-cell-sub">动作快筛</span>
-                <!-- 动作快筛（2026-10-05 重设计）：调试期自动化调用（如「推进虚拟会话」连发 20+ 行）
-                     淹没人工操作。选项=当前页 30 行动作聚合（口径如实标注，非全量 TOP）；下钻走
-                     keyword 搜索（path 稳定尾段 contains / 语义键），与失败 TOP chip 同机制、
-                     同一搜索框真源（手动改搜索词后下拉自动回落）。 -->
-                <select
-                  :value="activeActionValue"
-                  class="mk-filter__select"
-                  aria-label="按动作筛选"
-                  @change="applyActionFilter(($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="">全部动作</option>
-                  <option v-for="a in actionOptions" :key="a.value" :value="a.value">{{ a.label }} {{ a.count }}</option>
-                </select>
-              </label>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -358,8 +338,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { KeyRound, Lock, Filter } from 'lucide-vue-next'
-import { useEscape } from './useEscape'
+import { KeyRound, Lock } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId, liveRefreshSeq } from './live'
@@ -476,6 +455,11 @@ const actionOptions = computed<ActionOption[]>(() => {
 const activeActionValue = computed(
   () => actionOptions.value.find((a) => a.keyword && keyword.value.trim() === a.keyword)?.value ?? ''
 )
+/** 胶囊下拉的选项：计数是当前页 30 行的聚合口径（非全量 TOP），随 label 一起显示 */
+const actionSelectOptions = computed(() => [
+  { value: '', label: '全部动作' },
+  ...actionOptions.value.map((a) => ({ value: a.value, label: `${a.label} ${a.count}` })),
+])
 function applyActionFilter(value: string) {
   const opt = actionOptions.value.find((a) => a.value === value)
   keyword.value = opt?.keyword ?? ''
@@ -491,12 +475,6 @@ type TabId = (typeof tabs)[number]['id']
 const tab = ref<TabId>('operation')
 const keyword = ref('')
 const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('all')
-/* 筛选弹层（2026-10-05 卡头统一：动作/时间/失败 TOP 自主行收进共享 .mk-adv），
-   Esc 关闭走共享 useEscape（与教学会话同一外壳） */
-const advOpen = ref(false)
-useEscape(() => advOpen.value, () => { advOpen.value = false })
-/* 生效筛选计数（触发钮角标）：弹层里只剩动作快筛一项；失败下钻与时间档都在主行 */
-const advCount = computed(() => (activeActionValue.value ? 1 : 0))
 
 /** 页签 panel 关联（审核 #154）：id/aria-controls 成对，面板随当前页签取同名 id */
 const panelId = computed(() => `al-panel-${tab.value}`)

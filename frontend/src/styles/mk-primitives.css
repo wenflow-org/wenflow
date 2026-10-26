@@ -936,6 +936,13 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    容器类名保持不变（25 个页面无需改标记）；页面里对 .mk-pills 写的 padding 随之失效，
    属预期（胶囊行不再有内衬）。 */
 .mk-pills { display: inline-flex; flex-wrap: wrap; gap: var(--mk-space-2); }
+/* 并排的两组胶囊（状态单选 + 标志多选，2026-10-27）：组间距必须明显大于组内间距，
+   否则一排同形胶囊里换组没人看得出来——行为差异只能靠点下去试。
+   发丝竖线是最低成本的边界；勾（✓）仍只在激活的开关上出现。 */
+.mk-pills + .mk-pills {
+  padding-left: 12px;
+  border-left: 1px solid var(--mk-line);
+}
 /* 页签语言分工（2026-09-26 钉死，2026-09-30 按原型修订）：
    ① 顶层视图/筛选切换 → .mk-pills（描边胶囊，如 People/GoalConversations 视图 pills）；
    ② 抽屉/弹窗**内部**内容分区 → 下划线式 tab（MkSubTabs/ts-tabs/pe-tabs 形态：底线+sticky），与胶囊是两种合法 genre，勿互改；

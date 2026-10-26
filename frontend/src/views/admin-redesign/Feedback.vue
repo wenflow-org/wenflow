@@ -39,8 +39,9 @@
       <div class="mk-card mk-card--fill">
         <div class="mk-card__head">
           <div class="mk-filter">
-            <!-- 搜索槽位归一（2026-10-11 卡头走查）：pills 之后，对齐卡头统一语法 -->
-            <div class="mk-pills">
+            <!-- 2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
+                 状态一组单选、标志一组多选开关（激活前缀勾），两组各有 aria-label。 -->
+            <div class="mk-pills" role="group" aria-label="状态筛选">
               <button
                 v-for="p in statusPills"
                 :key="p.id"
@@ -53,7 +54,7 @@
                 {{ p.label }}<span class="mk-pill__count">{{ p.count }}</span>
               </button>
             </div>
-            <div class="mk-pills">
+            <div class="mk-pills" role="group" aria-label="标志筛选">
               <button
                 type="button"
                 class="mk-pill"
@@ -61,7 +62,7 @@
                 :aria-pressed="lowOnly"
                 @click="lowOnly = !lowOnly"
               >
-                仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
+                <Check v-if="lowOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
               </button>
             </div>
             <!-- 真实/测试互斥视角由宿主运营中心的页级开关统一承载（2026-10-23 走查：
@@ -242,6 +243,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { Check } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 import { isLive, intent } from './store'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'

@@ -10,7 +10,7 @@
     <!-- 吸顶工具条：搜索 + 分类（计数跟随过滤，与原抽屉同口径） -->
     <div class="mg__toolbar">
       <input v-model="keyword" type="search" class="mk-input mg__search" placeholder="搜索术语 / 英文标识 / 定义" aria-label="搜索术语 / 英文标识 / 定义" />
-      <div class="mk-pills">
+      <div class="mk-pills" role="group" aria-label="术语分类">
         <button
           v-for="c in categories"
           :key="c.id"

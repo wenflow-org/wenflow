@@ -55,8 +55,10 @@
         <div class="mk-filter">
           <!-- 状态筛选（2026-10-17 恢复为卡头 pills）：取消 / 失败 / 放弃三档分开
                （2026-10-26：此前合一档，筛「已取消」出来的行状态列却写「失败」）。
-               计数取 stats 服务端全量口径，但后端只给合并桶 → 取消与失败两档不显计数；
-               「未生成路径」是复合口径快筛（进行中 ∧ 无路径，运营卡点），与状态筛选叠加为 AND -->
+               计数取 stats 服务端全量口径，但后端只给合并桶 → 取消与失败两档不显计数。
+               2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
+               状态一组单选；「未生成路径 / 停滞」是两个可叠加的开关 → 独立「标志筛选」组，
+               激活时前缀勾（此前两组同形并排，点下去才知道行为不同）。 -->
           <div class="mk-pills" role="group" aria-label="状态筛选">
             <button
               v-for="p in gcStatusPills"
@@ -68,14 +70,14 @@
               @click="selectStatus(p.key)"
             >{{ p.label }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
           </div>
-          <div class="mk-pills" role="group" aria-label="路径快筛">
+          <div class="mk-pills" role="group" aria-label="标志筛选">
             <button
               type="button"
               class="mk-pill"
               :class="{ 'mk-pill--active': noPathOnly }"
               :aria-pressed="noPathOnly"
               @click="noPathOnly = !noPathOnly"
-            >未生成路径</button>
+            ><Check v-if="noPathOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />未生成路径</button>
             <!-- 停滞快筛（KPI 卡同源同判据）：从「停滞 N」读数进来的人，落点就是这枚 chip -->
             <button
               v-if="staleActiveCount"
@@ -84,7 +86,7 @@
               :class="{ 'mk-pill--active': stalledOnly }"
               :aria-pressed="stalledOnly"
               @click="stalledOnly = !stalledOnly"
-            >停滞<span class="mk-pill__count">{{ staleActiveCount }}</span></button>
+            ><Check v-if="stalledOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />停滞<span class="mk-pill__count">{{ staleActiveCount }}</span></button>
           </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 排序复位入口（2026-10-06 审核 #51）：默认序是服务端 createdAt 倒序，
@@ -290,6 +292,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { Check } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
 import { useListQueryState } from './learner-profile'

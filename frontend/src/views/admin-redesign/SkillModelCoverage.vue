@@ -22,16 +22,18 @@
            「对多个技能套用同一份…配置：」是表单自身的用途，输入框占位与按钮已说明。
            原 p 的 title 还挂着一条 2026-09-28 的研发事故记录，属实现历史，不该出现在界面上。 -->
       <!-- 可筛选的来源视图（2026-10-20 走查）：此前只有一张不可筛的矩阵，
-           看不出「多少 Skill 在用平台默认、多少独立配置」。计数取全量口径，不随其它筛选变化。 -->
+           看不出「多少 Skill 在用平台默认、多少独立配置」。计数取全量口径，不随其它筛选变化。
+           2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
+           来源是单选视图（含「全部」），备用模型是可叠加的开关 → 独立「标志筛选」组 + 激活前缀勾。 -->
       <div class="skc__filters">
-        <div class="mk-pills" role="group" aria-label="按路由来源筛选">
+        <div class="mk-pills" role="group" aria-label="来源筛选">
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'all' }" :aria-pressed="sourceFilter === 'all'" @click="sourceFilter = 'all'">全部<span class="mk-pill__count">{{ counts.all }}</span></button>
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'platform-default' }" :aria-pressed="sourceFilter === 'platform-default'" @click="sourceFilter = 'platform-default'">用平台默认<span class="mk-pill__count">{{ counts.platformDefault }}</span></button>
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'skill-model-only' }" :aria-pressed="sourceFilter === 'skill-model-only'" @click="sourceFilter = 'skill-model-only'">技能覆盖<span class="mk-pill__count">{{ counts.skillModelOnly }}</span></button>
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'skill-channel' }" :aria-pressed="sourceFilter === 'skill-channel'" @click="sourceFilter = 'skill-channel'">独立通道<span class="mk-pill__count">{{ counts.skillChannel }}</span></button>
         </div>
-        <div class="mk-pills" role="group" aria-label="按备用模型筛选">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyFallback }" :aria-pressed="onlyFallback" @click="onlyFallback = !onlyFallback">自定义备用模型<span class="mk-pill__count">{{ counts.fallback }}</span></button>
+        <div class="mk-pills" role="group" aria-label="标志筛选">
+          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyFallback }" :aria-pressed="onlyFallback" @click="onlyFallback = !onlyFallback"><Check v-if="onlyFallback" :size="12" :stroke-width="2.5" aria-hidden="true" />自定义备用模型<span class="mk-pill__count">{{ counts.fallback }}</span></button>
         </div>
         <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         <!-- 2026-10-26：原「把默认还原成继承」的按钮改口「用平台默认」——
@@ -194,6 +196,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { Check } from 'lucide-vue-next'
 import { adminSkillsApi } from '@/api/adminApi'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'

@@ -73,15 +73,17 @@ describe('重复操作入口守卫', () => {
     expect(src).not.toContain('按会话归组查看')
   })
 
-  it('审计日志时间范围是主屏可操作控件，弹层里不再放第二份', () => {
+  it('审计日志：时间范围与动作都在主栏，卡头不再有「筛选」弹层', () => {
     const src = read('AuditLogs.vue')
-    // 只留「筛选」钮一个触发点
-    expect((src.match(/advOpen = !advOpen/g) || []).length).toBe(1)
+    /* 2026-10-27：动作维度从弹层上提到主栏后，这一页没有弹层了——
+       同类别的多个筛选不得收进菜单/下拉（Carbon），只装一项的弹层更是纯隐藏。 */
+    expect(src).not.toContain('advOpen')
+    expect(src).not.toContain('mk-adv')
     // 2026-10-24 用户「时间范围和筛选重新设计一下」：胶囊里是真 select，不再是不可点的 <span>
-    // 2026-10-26 卡头统一：形态收进共享 MkPillSelect（.mk-pill + 透明 select），
-    // 页内不再自带 .al-range 私有类（三页逐字重复的同一段 CSS 已删）
+    // 2026-10-26 卡头统一：形态收进共享 MkPillSelect（.mk-pill + 透明 select）
     expect(src).toContain('<MkPillSelect')
     expect(src).toContain('v-model="timeRange"')
+    expect(src).toContain('aria-label="按动作筛选"')
     // 页内不再自带 .al-range 私有类（三页逐字重复的同一段 CSS 已删）
     expect(src).not.toMatch(/^\.al-range/m)
     expect(src).not.toContain('class="mk-pill al-range"')

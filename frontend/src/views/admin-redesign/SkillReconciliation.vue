@@ -41,7 +41,7 @@
     />
     <template v-else-if="recReport">
       <div class="sk-rec-tools">
-        <div class="mk-pills">
+        <div class="mk-pills" role="group" aria-label="异常范围筛选">
           <button
             v-for="f in REC_FILTERS"
             :key="f.id"

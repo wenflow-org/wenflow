@@ -32,7 +32,7 @@
          原来 7 个控件平铺一行、无主次，按语法分两组后左侧可折行、右侧稳定贴右） -->
     <div class="wf-tracepick">
       <div class="wf-tracepick__left">
-      <span v-if="sessionIds.length" class="mk-pills wf-mode">
+      <span v-if="sessionIds.length" class="mk-pills wf-mode" role="group" aria-label="链路视图">
         <button
           type="button"
           class="mk-pill"

@@ -53,7 +53,7 @@
       </div>
       <div class="mk-card__head">
         <div class="mk-filter">
-          <div class="mk-pills">
+          <div class="mk-pills" role="group" aria-label="状态筛选">
             <button
               v-for="p in statusPills"
               :key="p.id"

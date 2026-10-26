@@ -332,6 +332,11 @@ describe('AuditLogs 动作快筛 + 负载美化（2026-10-05 重设计）', () =
     await nextTick();
     const sel = w.find('select[aria-label="按动作筛选"]');
     expect(sel.exists()).toBe(true);
+    // 2026-10-27：动作维度从「筛选」弹层提到主栏（Carbon：类别不得藏进菜单/下拉），
+    // 收起态直接显示当前值；卡头不再有 .mk-adv 弹层
+    expect(sel.element.closest('.mk-filter')).not.toBeNull();
+    expect(sel.element.closest('.mk-pillselect')).not.toBeNull();
+    expect(w.find('.mk-adv').exists()).toBe(false);
     const options = sel.findAll('option').map((o) => o.text());
     expect(options).toHaveLength(4); // 全部动作 + 3 个聚合动作
     expect(options[1]).toContain('21'); // 按计数倒序：推进（21）第一

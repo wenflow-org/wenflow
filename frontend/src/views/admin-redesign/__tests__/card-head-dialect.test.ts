@@ -33,6 +33,12 @@ const LIST_PAGES = [
   'Notifications.vue',
   'OpsAchievements.vue',
   'SessionSecurity.vue',
+  /* 非 .mk-card__head 形态、但有自己筛选行的面板与工具条：
+     上面的组标签守卫按整份源码扫，加入后一并受约束 */
+  'SkillModelCoverage.vue',
+  'SkillReconciliation.vue',
+  'AdminGlossary.vue',
+  'TraceWaterfall.vue',
 ]
 
 describe('卡头工具条形态', () => {
@@ -84,6 +90,39 @@ describe('卡头工具条形态', () => {
          走 .mk-field__input 是正确的，不属于列表工具条。 */
       for (const m of head[1].matchAll(/<input[^>]*placeholder="([^"]*搜索[^"]*)"/g)) {
         offenders.push(`${file}: 手搓搜索框「${m[1]}」`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  /* 2026-10-27 用户「不仅是教学区，其他区域也有」：教学会话重建的三职责语法
+     （视图 = 可移除胶囊 / 标志 = 独立多选组 / 维度 = 胶囊下拉）推广到其余列表页。
+     下面两条锁住最容易复发的那一半：多组 chip 并排时，用户只能靠可访问名分辨行为。 */
+  it('每组筛选 chip 都带 role=group + 非空 aria-label（单选 / 多选并排时靠它区分）', () => {
+    const offenders: string[] = []
+    for (const file of LIST_PAGES) {
+      const src = read(file)
+      for (const m of src.matchAll(/class="mk-pills[^"]*"([^>]*)>/g)) {
+        const attrs = m[1]
+        if (!/role="group"/.test(attrs) || !/aria-label="[^"]+"/.test(attrs)) {
+          offenders.push(`${file}: ${m[0]}`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('可叠加开关只住在「标志筛选」组，不与单选 chip 同组（M3：同页 chip 组不得混行为）', () => {
+    const offenders: string[] = []
+    for (const file of LIST_PAGES) {
+      const src = read(file)
+      // 这些组内只有 button（无嵌套 div），非贪婪匹配到组尾即可
+      for (const m of src.matchAll(/<div class="mk-pills"([^>]*)>([\s\S]*?)<\/div>/g)) {
+        const [, attrs, body] = m
+        const toggles = /@click="[^"]*=\s*!/.test(body)
+        if (!toggles) continue
+        const label = attrs.match(/aria-label="([^"]+)"/)?.[1]
+        if (label !== '标志筛选') offenders.push(`${file}: 开关组标签为「${label ?? '（空）'}」`)
       }
     }
     expect(offenders).toEqual([])

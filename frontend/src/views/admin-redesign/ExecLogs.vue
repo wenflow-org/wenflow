@@ -65,16 +65,20 @@
             :options="agentSelectOptions"
             :active="!!agentFilter"
           />
-          <div class="mk-pills">
+          <!-- 2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
+               失败/超时/成功一组单选；「仅看测试」是可叠加开关 → 独立「标志筛选」组 + 激活前缀勾 -->
+          <div class="mk-pills" role="group" aria-label="状态筛选">
             <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" :aria-pressed="statusFilter === p.id" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span></button>
           </div>
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': testFilter !== '' }"
-            :aria-pressed="testFilter !== ''"
-            @click="toggleTestFilter"
-          >仅看测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
+          <div class="mk-pills" role="group" aria-label="标志筛选">
+            <button
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': testFilter !== '' }"
+              :aria-pressed="testFilter !== ''"
+              @click="toggleTestFilter"
+            ><Check v-if="testFilter !== ''" :size="12" :stroke-width="2.5" aria-hidden="true" />仅看测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
+          </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
           <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
           <button v-if="!logSortIsDefault" type="button" class="mk-link" @click="resetLogSort">恢复默认序</button>
@@ -341,7 +345,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Copy, Filter } from 'lucide-vue-next'
+import { Copy, Check, Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { useTablistKeyboard } from '@/composables/useTablistKeyboard'

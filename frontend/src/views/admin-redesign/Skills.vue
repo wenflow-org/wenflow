@@ -64,7 +64,7 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <div class="mk-pills">
+          <div class="mk-pills" role="group" aria-label="关注筛选">
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部</button>
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注</button>
           </div>

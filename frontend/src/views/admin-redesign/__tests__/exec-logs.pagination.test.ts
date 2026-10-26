@@ -324,10 +324,14 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     await nextTick();
     const btn = findBtn(w, '仅看测试');
     expect(btn.text()).toContain('5');
+    // 2026-10-27 三职责语法：开关住在独立「标志筛选」组，激活时前缀勾
+    expect(btn.element.closest('.mk-pills')?.getAttribute('aria-label')).toBe('标志筛选');
+    expect(btn.find('svg').exists()).toBe(false);
     await btn.trigger('click');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sourceEntry: 'system-canary' });
     expect(router.currentRoute.value.query.test).toBe('only');
+    expect(findBtn(w, '仅看测试').find('svg').exists()).toBe(true);
     await findBtn(w, '仅看测试').trigger('click');
     await flushPromises();
     expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).sourceEntry).toBeUndefined();
