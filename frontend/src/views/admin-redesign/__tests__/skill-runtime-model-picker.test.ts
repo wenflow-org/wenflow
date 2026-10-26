@@ -98,13 +98,13 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     vi.clearAllMocks()
   })
 
-  it('主模型显示当前目录条目；继承是显式选项', async () => {
+  it('主模型显示当前目录条目；「用平台默认模型」是显式选项', async () => {
     const w = await mountTab()
     const control = w.find('.sdp-form__grid .mk-mp')
     expect(control.text()).toContain('deepseek-v4.1-flash')
 
     await openPicker(w, '.sdp-form__grid .mk-mp .mk-mp__control')
-    expect(optionIds(w)[0]).toBe('跟随平台默认')
+    expect(optionIds(w)[0]).toBe('用平台默认模型')
     w.unmount()
   })
 

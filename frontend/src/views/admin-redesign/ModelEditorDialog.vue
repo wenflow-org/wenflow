@@ -65,17 +65,17 @@
           </section>
 
           <!-- 生成参数（2026-10-24 用户拍板「每个模型各自一套」）：原来只有平台级默认，
-               现在每个模型可单独覆盖；「跟随平台默认」= 不写模型字段。 -->
+               现在每个模型可单独覆盖；「用平台默认」= 不写模型字段。 -->
           <section class="med-sec med-gen">
             <div class="med-sec__head">
               <h4 class="med-sec__title">生成参数</h4>
-              <span class="med-sec__hint">不单独设置时跟随平台默认</span>
+              <span class="med-sec__hint">不单独设置时用平台默认</span>
             </div>
             <div class="med-price">
               <label class="mk-field">
                 <span class="mk-field__label">思考模式</span>
                 <select v-model="form.defaultThinkingMode" class="mk-field__select">
-                  <option value="default">跟随平台默认</option>
+                  <option value="default">用平台默认</option>
                   <option value="enabled">强制开启</option>
                   <option value="disabled">关闭</option>
                 </select>
@@ -87,7 +87,7 @@
                   class="mk-field__select"
                   :disabled="form.defaultThinkingMode === 'disabled'"
                 >
-                  <option value="default">跟随平台默认</option>
+                  <option value="default">用平台默认</option>
                   <option value="low">低（low）</option>
                   <option value="high">高（high）</option>
                   <option value="max">最高（max）</option>
@@ -96,7 +96,7 @@
               <label class="mk-field">
                 <span class="mk-field__label">输出格式</span>
                 <select v-model="form.defaultResponseFormat" class="mk-field__select">
-                  <option value="default">跟随平台默认</option>
+                  <option value="default">用平台默认</option>
                   <option value="none">关闭</option>
                   <option value="json_object">JSON 对象</option>
                 </select>

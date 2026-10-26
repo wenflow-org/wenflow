@@ -54,10 +54,10 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     vi.clearAllMocks()
   })
 
-  it('计数取全量口径：继承平台默认 / 技能覆盖 / 独立通道 / 有备用模型', async () => {
+  it('计数取全量口径：用平台默认 / 技能覆盖 / 独立通道 / 有备用模型', async () => {
     const w = await mountCoverage()
     expect(pill(w, '全部')?.text()).toBe('全部4')
-    expect(pill(w, '继承平台默认')?.text()).toBe('继承平台默认2')
+    expect(pill(w, '用平台默认')?.text()).toBe('用平台默认2')
     expect(pill(w, '技能覆盖')?.text()).toBe('技能覆盖1')
     expect(pill(w, '独立通道')?.text()).toBe('独立通道1')
     expect(pill(w, '自定义备用模型')?.text()).toBe('自定义备用模型2')
@@ -70,7 +70,7 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     await pill(w, '独立通道')!.trigger('click')
     expect(skillIds(w)).toEqual(['session-wrapup'])
     expect(w.find('.mk-card__meta').text()).toContain('命中 1 / 共 4')
-    expect(pill(w, '继承平台默认')?.text()).toBe('继承平台默认2')
+    expect(pill(w, '用平台默认')?.text()).toBe('用平台默认2')
 
     // 叠加搜索：独立通道 ∧ 命中关键字
     await w.find('.mk-filter__input').setValue('agnes')
@@ -124,23 +124,23 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     w.unmount()
   })
 
-  it('未配模型的技能显示继承到的平台默认并标「继承」（默认不物化成覆盖）', async () => {
+  it('未配模型的技能显示实际用到的平台默认并标「平台默认」（默认不物化成覆盖）', async () => {
     const w = await mountCoverage({ platformDefaultModel: 'agnes-3.0-flash', platformDefaultReasoningModel: 'deepseek-v4.1-flash' })
     const cells = w.findAll('.skc__model')
-    const inherited = cells.filter((c) => c.text().includes('继承'))
-    // stage-designer（chat）与 path-planner（reasoning）两行都是继承
+    const inherited = cells.filter((c) => c.text().includes('平台默认'))
+    // stage-designer（chat）与 path-planner（reasoning）两行都用平台默认
     expect(inherited).toHaveLength(2)
     expect(inherited[0].text()).toContain('agnes-3.0-flash')
-    // 推理档继承平台推理默认，而不是对话默认
+    // 推理档用平台推理默认，而不是对话默认
     expect(inherited[1].text()).toContain('deepseek-v4.1-flash')
     w.unmount()
   })
 
-  it('「跟随平台默认」只发 clearModel，不重复写模型/通道', async () => {
+  it('「用平台默认模型」只发 clearModel，不重复写模型/通道', async () => {
     const w = await mountCoverage()
     await w.find('thead input[type="checkbox"]').setValue(true)
-    const btn = w.findAll('button').find((b) => b.text() === '跟随平台默认')
-    expect(btn, '批量区应有「跟随平台默认」').toBeTruthy()
+    const btn = w.findAll('button').find((b) => b.text() === '用平台默认模型')
+    expect(btn, '批量区应有「用平台默认模型」').toBeTruthy()
     await btn!.trigger('click')
     await flushPromises()
     const payload = bulkApplyMock.mock.calls[0]?.[0] as { skillIds: string[]; clearModel?: boolean; endpoint?: string }

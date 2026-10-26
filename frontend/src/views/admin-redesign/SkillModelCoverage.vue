@@ -26,7 +26,7 @@
       <div class="skc__filters">
         <div class="mk-pills" role="group" aria-label="按路由来源筛选">
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'all' }" :aria-pressed="sourceFilter === 'all'" @click="sourceFilter = 'all'">全部<span class="mk-pill__count">{{ counts.all }}</span></button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'platform-default' }" :aria-pressed="sourceFilter === 'platform-default'" @click="sourceFilter = 'platform-default'">继承平台默认<span class="mk-pill__count">{{ counts.platformDefault }}</span></button>
+          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'platform-default' }" :aria-pressed="sourceFilter === 'platform-default'" @click="sourceFilter = 'platform-default'">用平台默认<span class="mk-pill__count">{{ counts.platformDefault }}</span></button>
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'skill-model-only' }" :aria-pressed="sourceFilter === 'skill-model-only'" @click="sourceFilter = 'skill-model-only'">技能覆盖<span class="mk-pill__count">{{ counts.skillModelOnly }}</span></button>
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'skill-channel' }" :aria-pressed="sourceFilter === 'skill-channel'" @click="sourceFilter = 'skill-channel'">独立通道<span class="mk-pill__count">{{ counts.skillChannel }}</span></button>
         </div>
@@ -34,15 +34,17 @@
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyFallback }" :aria-pressed="onlyFallback" @click="onlyFallback = !onlyFallback">自定义备用模型<span class="mk-pill__count">{{ counts.fallback }}</span></button>
         </div>
         <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-        <!-- 2026-10-24：把「默认」还原成继承，而不是再写一遍同样的模型值。
+        <!-- 2026-10-26：原「把默认还原成继承」的按钮改口「用平台默认」——
+             这个动作的结果就是「本 Skill 不再单独指定模型，改用平台默认那个」，
+             直接说结果，不引入「继承」这层中间概念。
              只清 model，通道/思考/参数/备用链保持原样；放筛选行右端，不挤占通道套用那一行。 -->
         <button
           type="button"
           class="mk-btn mk-btn--sm skc__inherit"
           :disabled="bulkSaving || !selected.length"
-          title="清空所选技能的模型覆盖。通道、思考、参数与备用链保持不变"
+          title="清空所选技能单独指定的模型，改用平台默认模型。通道、思考、参数与备用链保持不变"
           @click="clearModelOverride"
-        >跟随平台默认</button>
+        >用平台默认模型</button>
       </div>
 
       <div class="skc__apply">
@@ -118,15 +120,16 @@
               </td>
               <td>
                 <span class="mk-badge" :class="s.source === 'platform-default' ? 'mk-badge--muted' : 'mk-badge--ok'">
-                  {{ s.source === 'platform-default' ? '继承平台默认' : s.source === 'skill-channel' ? '独立通道' : '技能覆盖' }}
+                  {{ s.source === 'platform-default' ? '用平台默认' : s.source === 'skill-channel' ? '独立通道' : '技能覆盖' }}
                 </span>
               </td>
               <!-- 模型/参数/备用链三格的值可能是中文（未配置 / 平台默认），走正文；对齐靠 tabular-nums。
                    2026-10-24 用户「还 chat 上了，没有这种了」：tier 是技能自己的档位字段，
                    不是模型名的一部分；对话档是全站默认，挂在模型后面只会被读成
                    「deepseek-v4.1-flash chat」这种不存在的模型名。只保留有用的推理档提示。
-                   同日「默认不物化成覆盖」：没写 model 就显示继承到的平台默认，并标「继承」，
-                   不再把空值读成「未配置」——那会让人以为没生效。 -->
+                   2026-10-26 用户「不太想走继承这个说法」：徽章由「继承」改为「平台默认」——
+                   这一格说的是「本 Skill 没单独指定，实际跑的是平台那个模型」，
+                   而模型 id 就在左边写着，说「平台默认」比说「继承」更直接。 -->
               <td>
                 <span class="skc__model">
                   <template v-if="s.model">
@@ -135,7 +138,7 @@
                   </template>
                   <template v-else>
                     <span class="skc__model-id skc__model-id--inherit">{{ inheritedModelOf(s) }}</span>
-                    <span class="mk-badge mk-badge--muted" :title="inheritTitleOf(s)">继承</span>
+                    <span class="mk-badge mk-badge--muted" :title="inheritTitleOf(s)">平台默认</span>
                     <span v-if="s.tier === 'reasoning'" class="mk-badge mk-badge--muted" title="推理档：未配模型时走平台推理默认">推理</span>
                   </template>
                 </span>
@@ -307,10 +310,10 @@ function inheritedModelOf(row: Row): string {
 }
 function inheritTitleOf(row: Row): string {
   const model = inheritedModelOf(row)
-  if (model === '—') return '跟随平台默认（平台默认模型暂未加载）'
+  if (model === '—') return '本 Skill 没有单独指定模型，用平台默认模型（平台默认模型暂未加载）'
   return row.tier === 'reasoning'
-    ? `未单独配置模型，跟随平台推理默认：${model}`
-    : `未单独配置模型，跟随平台默认：${model}`
+    ? `本 Skill 没有单独指定模型，实际用平台推理默认：${model}`
+    : `本 Skill 没有单独指定模型，实际用平台默认：${model}`
 }
 const sortedRows = computed(() => sortCovRows(rows.value))
 const visibleRows = computed(() => {
@@ -367,13 +370,13 @@ async function load() {
   }
 }
 
-/** 跟随平台默认：只把 model 置空，其余配置不动（后端 clearModel 契约） */
+/** 用平台默认模型：只把 model 置空，其余配置不动（后端 clearModel 契约） */
 async function clearModelOverride() {
   if (bulkSaving.value || !selected.value.length) return
   const count = selected.value.length
   const ok = await askConfirm({
-    title: '跟随平台默认',
-    message: `将清空选中的 ${count} 个技能的模型覆盖，改为继承平台默认。通道、参数覆盖与备用链保持不变，可随时在 Skill 运行时重新指定模型。`,
+    title: '用平台默认模型',
+    message: `将清空选中的 ${count} 个技能单独指定的模型，改用平台默认模型。通道、参数覆盖与备用链保持不变，可随时在 Skill 运行时重新指定模型。`,
     confirmText: '清空模型覆盖',
     busy: true,
     danger: false,
@@ -392,8 +395,8 @@ async function clearModelOverride() {
     const applied = data?.applied ?? 0
     bulkErr.value = failed.length > 0
     bulkMsg.value = failed.length
-      ? `已改为继承 ${applied} 个，失败 ${failed.length} 个：${failed.map((f) => `${f.skillId}（${f.error}）`).join('；')}`
-      : `已改为继承平台默认 ${applied} 个`
+      ? `已改为用平台默认 ${applied} 个，失败 ${failed.length} 个：${failed.map((f) => `${f.skillId}（${f.error}）`).join('；')}`
+      : `已改为用平台默认模型 ${applied} 个`
     await load()
     emit('applied')
   } catch (e) {

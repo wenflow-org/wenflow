@@ -2,7 +2,7 @@
   <!-- 模型选择器（2026-10-20 走查：借鉴 OpenRouter / LiteLLM / Dify 的做法）。
        此前路由与 Skill 运行时都是「手填模型 ID + datalist」，运营必须记得住 id 才能配；
        成熟产品的共同形态是：可搜索、按供应商分组、每行带层级与能力徽标、价格可见。
-       本组件只管选择与展示；「继承上层」由 allowInherit 提供一条显式选项，
+       本组件只管选择与展示；「不单独指定、用平台默认」由 allowInherit 提供一条显式选项，
        不再依赖空输入框的隐含语义。 -->
   <div ref="rootEl" class="mk-mp" :class="{ 'mk-mp--open': open, 'mk-mp--up': openUp, 'mk-mp--disabled': disabled }">
     <button
@@ -135,7 +135,7 @@ const props = withDefaults(
   {
     placeholder: '选择模型',
     allowInherit: false,
-    inheritLabel: '继承上层默认',
+    inheritLabel: '用平台默认模型',
     allowCustom: true,
     tier: null,
     exclude: () => [],

@@ -577,7 +577,7 @@
                     <span class="mk-badge" :class="storyStatusMeta(s).cls">
                       {{ storyStatusMeta(s).text }}
                     </span>
-                    <span v-if="storyBudgetBadge(s)" class="vp-story__budget-badge" :title="'故事级预算：' + storyBudgetBadge(s) + '。留空字段继承角色级'">预算自定义</span>
+                    <span v-if="storyBudgetBadge(s)" class="vp-story__budget-badge" :title="'故事级预算：' + storyBudgetBadge(s) + '。留空字段按角色级取值'">预算自定义</span>
                   </div>
                   <p class="vp-story__outline" :title="s.outline">{{ s.outline || '暂无故事概述' }}</p>
                   <div class="vp-story__stats">
@@ -612,7 +612,7 @@
                       @click.stop="toggleMenu(`story-${storyKey(s, i)}`)"
                     >⋯</button>
                     <div v-if="openMenu === `story-${storyKey(s, i)}`" class="mk-menu__pop" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i, poolIndex(s, i)); closeMenu()">编辑</button>
+                      <button type="button" class="mk-menu__item" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空按角色级取值）" @click="openEditStory(i, poolIndex(s, i)); closeMenu()">编辑</button>
                       <!-- 场景诊断（#73）：scenario-designer 的隐藏字段此前直接铺在行内（含原始 JSON），
                            每行都多一块噪声；收进弹窗，列表只留标题/概述/运行态 -->
                       <button v-if="hasStoryDiagnostics(s)" type="button" class="mk-menu__item" title="查看场景设计诊断：易误诊、隐藏细节、行为钩子、目标种子与披露计划" @click="openStoryDiag(s); closeMenu()">场景诊断</button>
@@ -807,17 +807,17 @@
               <input v-model="editStoryForm.problemKnowledge.selfAssessment" class="mk-field__input" />
             </label>
           </div>
-          <!-- 故事级预算覆盖（可选）：缺省继承角色级预算 -->
+          <!-- 故事级预算覆盖（可选）：缺省按角色级预算取值 -->
           <div class="vp-pk">
-            <span class="mk-field__label">故事级预算（可选，留空继承角色级）</span>
+            <span class="mk-field__label">故事级预算（可选，留空按角色级取值）</span>
             <label class="mk-field" :class="{ 'mk-field--error': storyBudgetErrors.maxRetriesPerStep }">
               <span class="mk-field__label">单步最大重试</span>
-              <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空即继承角色级（默认 8）" />
+              <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空按角色级取值（默认 8）" />
               <span v-if="storyBudgetErrors.maxRetriesPerStep" class="mk-field__err">{{ storyBudgetErrors.maxRetriesPerStep }}</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': storyBudgetErrors.maxRetriesTotal }">
               <span class="mk-field__label">{{ BUDGET_TOTAL_LABEL }}</span>
-              <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" placeholder="留空即继承角色级（默认 600）" />
+              <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" placeholder="留空按角色级取值（默认 600）" />
               <span v-if="storyBudgetErrors.maxRetriesTotal" class="mk-field__err">{{ storyBudgetErrors.maxRetriesTotal }}</span>
               <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防本故事无限跑</span>
             </label>
@@ -1562,7 +1562,7 @@ interface StoryEditForm {
     hiddenGaps: string
     selfAssessment: string
   }
-  /** 故事级预算覆盖（可留空 = 继承角色级） */
+  /** 故事级预算覆盖（可留空 = 按角色级取值） */
   budget: {
     maxRetriesPerStep: string
     maxRetriesTotal: string
@@ -1640,7 +1640,7 @@ async function saveStory() {
   const f = editStoryForm.value
   const splitList = (v: string) => v.split(/[\n,，;；]/).map((x) => x.trim()).filter(Boolean)
   const familiarities = ['low', 'medium', 'high']
-  // 故事级预算：留空 = 继承角色级；有值才提交。越界此前被静默 clamp 后保存，
+  // 故事级预算：留空 = 按角色级取值；有值才提交。越界此前被静默 clamp 后保存，
   // 与角色级预算的报错口径不一致——改为报错并中止（审核 2026-10-06 低 [94]）
   const budget: Record<string, number> = {}
   const stepRaw = String(f.budget.maxRetriesPerStep ?? '').trim()
@@ -1649,7 +1649,7 @@ async function saveStory() {
   if (stepRaw) {
     const v = Math.round(Number(stepRaw))
     if (!Number.isFinite(v) || v < 1 || v > 20) {
-      storyBudgetErrors.value.maxRetriesPerStep = '单步重试须为 1–20 的整数（或留空继承角色级）'
+      storyBudgetErrors.value.maxRetriesPerStep = '单步重试须为 1–20 的整数（或留空按角色级取值）'
       return
     }
     budget.maxRetriesPerStep = v
@@ -1657,7 +1657,7 @@ async function saveStory() {
   if (totalRaw) {
     const v = Math.round(Number(totalRaw))
     if (!Number.isFinite(v) || v < 1 || v > 1000) {
-      storyBudgetErrors.value.maxRetriesTotal = '运行调用上限须为 1–1000 的整数（或留空继承角色级）'
+      storyBudgetErrors.value.maxRetriesTotal = '运行调用上限须为 1–1000 的整数（或留空按角色级取值）'
       return
     }
     budget.maxRetriesTotal = v
