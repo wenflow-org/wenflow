@@ -4,7 +4,8 @@
  * 背景：平台预置的定义随代码进仓（virtual-learners/presets.yaml），但实例自 2026-10-09
  * 起不再随启动同步——管理台此前只有「预置卡」计数，没有任何加载入口。
  * 本测试锁：① 页头右组的按钮（2026-10-20 从预置 KPI 卡面挪出）与定义侧脚注；② 点按钮的 loading + 结果提示 + 卡墙回刷；
- * ③ 失败必须显式报错（不能静默成功）；④ 定义回退/失败走 warning 档而不是 success。
+ * ③ 失败必须显式报错（不能静默成功）；④ 定义回退/失败走 warning 档而不是 success；
+ * ⑤ 2026-10-26：只在真有缺卡 / 待升级 / 定义回退时出现（9 张预置卡都在墙上时它没有结果）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -40,7 +41,10 @@ vi.mock('@/api/adminApi', () => ({
 }));
 
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
-vi.mock('../live', () => ({ errMsg: (e: unknown) => String(e), liveCreateVirtual: vi.fn() }));
+vi.mock('../live', async () => {
+  const { ref } = await import('vue');
+  return { errMsg: (e: unknown) => String(e), liveCreateVirtual: vi.fn(), liveRefreshSeq: ref(0) };
+});
 
 import VirtualLearnerCards from '../VirtualLearnerCards.vue';
 import { toast } from '@/utils/toast';
@@ -64,7 +68,7 @@ function loadButton(w: ReturnType<typeof mount>) {
 
 describe('卡库预置「一键加载」（#91 / P-67）', () => {
   it('入口在页头右组：KPI 卡面只留读数，不再被按钮撑成一条宽卡', async () => {
-    presetsOverviewMock.mockResolvedValue({ data: { data: SUMMARY } });
+    presetsOverviewMock.mockResolvedValue({ data: { data: { summary: SUMMARY } } });
     const w = mount(VirtualLearnerCards);
     await flushPromises();
     const btn = loadButton(w);
@@ -74,6 +78,17 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     expect(w.find('.mk-kpi button').exists()).toBe(false);
     w.unmount();
   });
+
+  it('预置卡已全部就绪时不出「一键加载」（按钮只在有缺卡 / 待升级 / 定义回退时出现）', async () => {
+    presetsOverviewMock.mockResolvedValue({
+      data: { data: { summary: { definitions: 9, loaded: 9, missing: 0, upgradable: 0, rolledBack: 0, drifted: 0 } } }
+    });
+    const w = mount(VirtualLearnerCards);
+    await flushPromises();
+    expect(loadButton(w)).toBeUndefined();
+    w.unmount();
+  });
+
   beforeEach(() => {
     openSubPageMock.mockClear();
     cardsIndexMock.mockReset();
@@ -86,20 +101,17 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     (toast.warning as unknown as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it('「预置」KPI 卡内有加载入口，计数进 title 长释（副行只留口径，2026-10-19 全站统一）', async () => {
+  it('「身份卡」KPI：两个构成数进 hint（预置 / 自建），定义回退走琥珀档', async () => {
     const w = mount(VirtualLearnerCards);
     await flushPromises();
 
     const btn = loadButton(w);
     expect(btn, '预置区缺少「一键加载」按钮').toBeTruthy();
-    // 2026-10-21 用户「不要了」：有数据时预置卡不再挂口径副行，计数只在读数位
-    expect(w.findAll('.mk-kpi')[0].find('.mk-kpi__hint').exists()).toBe(false);
-    expect(w.findAll('.mk-kpi')[0].attributes('title')).toContain('定义 9 条');
-    const title = w.findAll('.mk-kpi')[0].attributes('title') || '';
-    expect(title).toContain('已加载 5');
-    expect(title).toContain('待加载 4');
-    // 旧口径「随版本自动同步」不再出现在卡面副行（副行已撤）；title 里的
-    // 「不随启动自动同步」是正确行为说明，保留
+    const kpi = w.findAll('.mk-kpi')[0];
+    expect(kpi.find('.mk-kpi__label').text()).toBe('身份卡');
+    const hint = kpi.find('.mk-kpi__hint');
+    expect(hint.text()).toContain('预置 1');
+    expect(hint.text()).toContain('自建 0');
     w.unmount();
   });
 
@@ -132,8 +144,8 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     expect(msg).toContain('跳过 1');
     // 加载后必须回刷卡墙（新卡要立刻出现在墙上）
     expect(cardsIndexMock.mock.calls.length).toBeGreaterThanOrEqual(1);
-    // 长释用服务端返回的新快照（副行口径短语不变）
-    expect(w.findAll('.mk-kpi')[0].attributes('title')).toContain('已加载 8');
+    // 服务端返回的新快照回填构成读数
+    expect(w.findAll('.mk-kpi')[0].find('.mk-kpi__hint').text()).toContain('预置 1');
     w.unmount();
   });
 

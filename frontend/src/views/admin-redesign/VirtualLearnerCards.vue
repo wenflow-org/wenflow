@@ -9,30 +9,24 @@
     <MkPageHead
       v-if="!embedded"
       title="学习者卡库"
-      sub="可复用的学习者身份卡"
     >
       <template #actions>
-        <!-- 预置「一键加载」：页面级动作，2026-10-20 从「预置卡」KPI 卡面挪到页头右组
-             （KPI 卡只放 label + 值 + 一句口径，不放控件；按钮也不该把整张卡面撑成一个宽条）。
-             预置不是「随版本自动同步」，而是「定义随代码进仓、卡需一键加载」——
-             加载只把预置身份卡放进卡库（身份池），不会建出虚拟学习者实例：
-             实例一律由「选角 → 创建虚拟学习者」派生（2026-10-25 用户「不播种，都派生」）。 -->
+        <!-- 预置「一键加载」：只在真有缺卡 / 待升级 / 定义回退时出现——9 张预置卡都在墙上时
+             它是个没有结果的动作。 -->
         <button
+          v-if="presetActionable"
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="presetLoading"
-          :title="presetLoadTitle"
           @click="doLoadPresets"
         >{{ presetLoading ? '同步中…' : '一键加载' }}</button>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
+        <!-- 后端只导出「自建卡」：自建卡为 0 时导出的是一个空文件 -->
+        <button v-if="(summary?.custom ?? 0) > 0" type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出卡库' }}
         </button>
-        <!-- 卡库的两个入卡口：外部导入（文档）/ 平台生产（AI 生成角色卡）。
-             生产完留在本页——卡的运行进度在「虚拟学习者」看板，不把人推过去。 -->
         <button
           type="button"
           class="mk-btn mk-btn--sm"
-          title="平台生产角色卡：AI 生成身份并建卡入库，同时备好第一个故事，可直接到虚拟学习者起跑"
           @click="openProduce"
         >平台生产</button>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openImport">导入卡</button>
@@ -40,51 +34,42 @@
     </MkPageHead>
 
     <!-- 卡库构成 KPI（全站家法：label + 28px 值 + hint 一短句口径，长解释收 title）。
-         2026-10-14 KPI 审计：原「卡总数」卡删除——那个数与下方「卡墙」卡头「共 N 张」同屏复读，
-         且它的 hint 又把「预置 / 自建」两个数说了一遍（就是右边这两张卡）。按计数单源家法，
-         列表长度交给列表卡头自报，KPI 只说列表说不出的构成拆分。
-         2026-10-16 卡=身份模板后新增「已派生实例」：池子派生过几个实例。
-         2026-10-24 层级收口：实例不再混在卡墙上（卡库＝身份池，实例归虚拟学习者），
-         这个数只作披露，点击去实例列表。 -->
+         2026-10-14 KPI 审计：原「卡总数」卡删除——那个数与下方「卡墙」卡头「共 N 张」同屏复读。
+         2026-10-26：「预置卡 / 自建卡」合成一张（两个数并排，hint 拆分）；
+         「已创建实例」只留读数，跳转改卡头链接（可点这件事此前只有悬停才看得出）。 -->
     <section class="mk-kpi-grid" aria-label="卡库构成">
-      <!-- 预置卡读数（#91 的加载入口 2026-10-20 移到页头右组）。启动同步 2026-10-09 已摘除
-           （空白项目零 VL 起步），卡需显式加载一次；卡面只报数与口径。 -->
       <MkKpi
-        label="预置卡"
-        :value="summary?.builtin ?? '—'"
-        :hint="presetHint"
+        label="身份卡"
+        :value="summary?.total ?? '—'"
+        :hint="compositionHint"
         :hintTone="presetHintTone"
-        :title="presetCardTitle"
       />
-      <MkKpi label="自建卡" :value="summary?.custom ?? '—'" title="卡文档导入与后台/AI 创建的卡。「导出卡库」仅导出这部分" />
-      <!-- 实例不在卡墙上（卡库＝身份池）：这个数只说明池子派生过几次，点击去实例所在的列表 -->
       <MkKpi
-        label="已派生实例"
+        label="已创建实例"
         :value="summary?.derived ?? '—'"
-        :clickable="true"
-        title="已经从身份卡创建出来的虚拟学习者数量。创建不消耗身份卡，同一张卡可反复创建。实例不在卡墙上，点击去虚拟学习者列表"
-        @click="goInstances"
       />
     </section>
 
-    <!-- 卡墙：全部卡的可视清单（搜名称/Key/目标/标签/邮箱）；点卡 = 卡详情二级页 -->
+    <!-- 卡墙：全部卡的可视清单；点卡 = 卡详情二级页 -->
     <section class="mk-card">
       <div class="mk-card__head">
         <div>
-          <h3 class="mk-card__title">卡墙</h3>
-          <!-- 计数 meta 只说独有事实（卡头计数语法）：无关键词 = 卡库总量，
-               有关键词 = 命中/总量（此前第一段也用 filtered.length，与「命中 N/M」的分子复读）。
-               卡总数从 KPI 卡迁来这里自报（2026-10-14），原卡上「一张卡 = …」的解释随之下沉到本行。 -->
-          <span class="mk-card__meta" title="点卡查看卡详情（人设 / 故事池 / 自带资料）">
+          <h3 class="mk-card__title">身份卡</h3>
+          <span class="mk-card__meta">
             <template v-if="keyword">命中 {{ filtered.length }} / 共 {{ cards.length }} 张</template>
             <template v-else>共 {{ cards.length }} 张</template>
           </span>
         </div>
         <div class="mk-card__head-right">
-          <!-- 占位符收短到框内可完整显示（2026-10-23 走查：原 4 项在 200px 框里被切成
-               「搜索名称 / 卡号 / 目标 /」的悬空斜杠）；未显示的字段进 title，搜索仍在用 -->
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 卡号 / 目标" title="也支持按标签 / 邮箱搜索" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 卡号 / 目标" />
+          <a v-if="summary?.derived" href="#" class="mk-link" @click.prevent="goInstances">已创建实例 {{ summary.derived }} →</a>
         </div>
+      </div>
+
+      <!-- 创建成功后的持久结果条（toast 3 秒消失，而实例不在这面墙上）：一句结果 + 一个出口 -->
+      <div v-if="lastCreated" class="vlc-created mk-alert mk-alert--ok" role="status">
+        <span>已创建 {{ lastCreated }} 个虚拟学习者</span>
+        <a href="#" class="mk-link" @click.prevent="goInstances">去虚拟学习者 →</a>
       </div>
 
       <!-- 卡墙加载态：用 MkSkeleton variant="cards" 原语（表格骨架自带 .mk-card 边框会与
@@ -105,18 +90,16 @@
         :action-busy="indexLoading"
         @action="loadIndex"
       />
-      <!-- 池子被派空 ≠ 卡库是空的：卡片还在，只是都变成实例了（实例不在这面墙上） -->
+      <!-- 池子被派空 ≠ 卡库是空的：卡片还在，只是都变成实例了 -->
       <MkEmptyState
         v-else-if="!filtered.length && !keyword.trim() && summary?.derived"
         title="身份池已派空"
-        description="身份卡本身都还在，它们的实例不在这面墙上；到「虚拟学习者」看实例、继续运行。"
         action-text="去虚拟学习者"
         @action="goInstances"
       />
       <MkEmptyState
         v-else-if="!cards.length"
         title="卡库还是空的"
-        description="导入卡文档后，这里会以卡片墙展示身份卡。卡是身份模板：选卡创建出来的虚拟学习者不在这面墙上，在「虚拟学习者」里运行。"
       >
         <button type="button" class="mk-btn mk-btn--primary" @click="openImport">导入第一张卡</button>
       </MkEmptyState>
@@ -124,16 +107,17 @@
       <MkEmptyState
         v-else-if="!filtered.length"
         :class="LINE_EMPTY"
-        title="没有命中的卡：换个关键词试试（名称 / 卡号 / 目标 / 标签 / 邮箱）。"
+        title="没有命中的卡"
       />
       <div v-else class="vlc-wall">
         <article
           v-for="c in pagedCards"
           :key="c.profileId"
           class="vlc-card"
+          :class="{ 'vlc-card--selected': selected.includes(c.profileId) }"
           role="button"
           tabindex="0"
-          :title="`${cardName(c)}（${c.cardKey || '无卡号'}）`"
+          :title="cardName(c)"
           @click="openCard(c)"
           @keydown.enter.prevent="openCard(c)"
           @keydown.space.prevent="openCard(c)"
@@ -143,7 +127,6 @@
                  否则点它就等于点开卡详情。键盘同样 stop，Enter/Space 才不会既勾选又进详情。 -->
             <label
               class="vlc-card__pick"
-              :title="`勾选「${cardName(c)}」，在页面底部批量创建虚拟学习者`"
               @click.stop
               @keydown.stop
             >
@@ -162,30 +145,20 @@
           <p class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
           <div v-if="wallTags(c).length" class="vlc-card__tags">
-            <!-- 运营视角只留「场景 / 目标」两个中文短标签（2026-10-24 用户「preset:… 是无意义信息，
-                 要加就换点数据」）：preset: / hash: / builtin / vN / in_scope 都是内部标记，不上卡面。 -->
-            <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted" :title="t.title">{{ t.text }}</span>
+            <!-- 运营视角只留「场景 / 目标」两个中文短标签：preset: / hash: / builtin / vN / in_scope 都是内部标记 -->
+            <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted">{{ t.text }}</span>
           </div>
           <footer class="vlc-card__foot">
-            <span class="vlc-card__level" :title="`知识水平：${c.knowledgeLevel}`">{{ levelText(c.knowledgeLevel) }}</span>
-            <span class="vlc-card__acts">
-              <!-- 单卡创建入口（2026-10-18 用户走查「从卡库想创建一个虚拟学习者，为什么没有流程」）：
-                   此前只有卡头那个无标签勾选框能到创建面板，运营读作「没有流程」。卡内放一枚动作，
-                   勾选框留给批量；卡整体是 role=button，故 stop 冒泡（点它不进详情）。
-                   文案 2026-10-19 用户「两个操作按钮文案再优化一下」：原「派生」是内部说法，
-                   与本页批量栏、弹窗标题的「创建虚拟学习者」是同一动作两个词——统一说「创建」。 -->
-              <button
-                type="button"
-                class="mk-link vlc-card__derive"
-                :aria-label="`从「${cardName(c)}」创建虚拟学习者`"
-                title="从这张身份卡创建 1 个虚拟学习者，下一步挑要带走的故事"
-                @click.stop="openDeriveFor(c)"
-                @keydown.stop
-              >创建学习者</button>
-              <!-- 卡整体可点即进详情，这里只是明面提示（2026-10-19 用户建议「让新人知道是有
-                   二级页面的」）；文案与全站行内操作一致用「详情」，不再写「看详情 →」 -->
-              <span class="vlc-card__go" title="详情：这张身份卡的完整档案（人设、已备故事、来源）">详情</span>
-            </span>
+            <span class="vlc-card__level">{{ levelText(c.knowledgeLevel) }}</span>
+            <!-- 卡面主操作（2026-10-26 从 12px 链接升为卡脚按钮）：这页的主操作此前藏在卡脚小字里，
+                 而页头 primary 是「导入卡」。卡整体是 role=button，故 stop 冒泡。 -->
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm mk-btn--primary vlc-card__derive"
+              :aria-label="`从「${cardName(c)}」创建虚拟学习者`"
+              @click.stop="openDeriveFor(c)"
+              @keydown.stop
+            >创建学习者</button>
           </footer>
         </article>
       </div>
@@ -208,7 +181,6 @@
       <button
         type="button"
         class="mk-btn mk-btn--primary"
-        title="每张选中的身份卡创建 1 个虚拟学习者，任务在下一步挑"
         @click="openDerive"
       >创建虚拟学习者</button>
     </div>
@@ -233,7 +205,7 @@ import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
 import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
 import { openSubPage } from './store'
-import { errMsg } from './live'
+import { errMsg, liveRefreshSeq } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 
@@ -357,37 +329,26 @@ interface PresetLoadResult {
 }
 
 const presetLoading = ref(false)
-/** 定义侧快照（只读副信息）：拿不到就退回静态提示，不影响按钮可用 */
+/** 定义侧快照（只读副信息）：拿不到就不影响页面 */
 const presetSummary = ref<PresetOverviewSummary | null>(null)
 
-/* 卡面副行只留口径（2026-10-19 用户走查「hint 在报读数」）：原副行报「定义 N 条 · 已加载 M」
-   等计数读数，计数随长释进卡 title。例外是「定义回退」——那是人工要看的异常档，副行留着它
-   （读数可降级、告警不隐藏，与三态纪律同一条）。 */
-const presetHint = computed(() => {
+/** 一键加载只在真有缺卡 / 待升级 / 定义回退时出现（9 张预置卡都在墙上时它没有结果）。
+ *  定义侧快照拿不到时保留入口：那说明「是否缺卡」未知，不能因此把唯一的加载口藏掉。 */
+const presetActionable = computed(() => {
   const s = presetSummary.value
-  if (!s) return '平台预置（需一键加载）'
-  if (s.rolledBack) return `定义回退 ${s.rolledBack} 张 · 需人工确认`
-  return ''
+  if (!s) return true
+  return s.missing > 0 || s.upgradable > 0 || s.rolledBack > 0
 })
-/** 预置卡 title：静态说明 + 当期计数（原计数读数的落点） */
-const presetCardTitle = computed(() => {
-  const base = '加载只新建缺卡并按版本更新已有卡，不删除卡'
-  const s = presetSummary.value
-  if (!s) return base
-  const parts = [`定义 ${s.definitions} 条`, `已加载 ${s.loaded}`]
-  if (s.missing) parts.push(`待加载 ${s.missing}`)
-  if (s.upgradable) parts.push(`待升级 ${s.upgradable}`)
-  if (s.rolledBack) parts.push(`定义回退 ${s.rolledBack}`)
-  return `${base}（当前 ${parts.join(' · ')}）`
+/** 身份卡构成：两个数并排；定义回退是人工要看的异常档，用琥珀脚注 */
+const compositionHint = computed(() => {
+  const s = summary.value
+  if (!s) return ''
+  const parts = [`预置 ${s.builtin}`, `自建 ${s.custom}`]
+  const rolledBack = presetSummary.value?.rolledBack ?? 0
+  if (rolledBack) parts.push(`定义回退 ${rolledBack}`)
+  return parts.join(' · ')
 })
-/** 定义回退（实例版本高于定义）是人工要看的异常档：琥珀脚注（不阻断，只是要人看一眼） */
 const presetHintTone = computed<'warn' | ''>(() => ((presetSummary.value?.rolledBack ?? 0) > 0 ? 'warn' : ''))
-const presetLoadTitle = computed(() => {
-  const s = presetSummary.value
-  const base = '从仓库预置定义把平台预置身份卡加载进卡库：新建缺的卡，按版本更新已有卡的定义，故事与记忆保留，卡不会被删。只入身份池，不会建出虚拟学习者——实例要在卡上点「创建虚拟学习者」派生'
-  if (!s) return base
-  return `${base}（当前 定义 ${s.definitions} 条 / 已加载 ${s.loaded}）`
-})
 
 async function loadPresetOverview() {
   try {
@@ -458,10 +419,10 @@ function sourceBadge(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
   return 'mk-badge--muted'
 }
 function sourceTitle(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
-  if (c.preset) return '平台预置角色（卡库内「一键加载」同步）'
+  if (c.preset) return '来源：平台预置'
   if (c.sourceKind === 'web') return '来源：网络采集卡'
   if (c.sourceKind === 'synthetic') return '来源：合成生成卡'
-  return '后台手动 / AI 创建'
+  return '来源：后台创建'
 }
 function levelText(level: string): string {
   const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
@@ -490,20 +451,13 @@ const GOAL_TAG_LABELS: Record<string, string> = {
 const INTERNAL_TAG_RE = /^(?:preset:|hash:|builtin$|in_scope$|out_of_scope$|v\d+(?:\.\d+)*$|w\d+$)/i
 interface WallTag {
   text: string
-  title: string
 }
 function wallTags(c: CardWallEntry): WallTag[] {
   const out: WallTag[] = []
   for (const tag of c.tags) {
     if (INTERNAL_TAG_RE.test(tag)) continue
-    const source = SOURCE_TAG_LABELS[tag]
-    const goal = GOAL_TAG_LABELS[tag]
-    const item: WallTag = source
-      ? { text: source, title: `场景类型：${source}` }
-      : goal
-        ? { text: goal, title: `目标类型：${goal}` }
-        : { text: tag, title: tag }
-    if (!out.some((x) => x.text === item.text)) out.push(item)
+    const text = SOURCE_TAG_LABELS[tag] || GOAL_TAG_LABELS[tag] || tag
+    if (!out.some((x) => x.text === text)) out.push({ text })
     if (out.length === 2) break
   }
   return out
@@ -542,8 +496,11 @@ function openDeriveFor(c: { profileId: string }) {
   deriveRef.value?.openWith([c.profileId])
 }
 
-/** 创建成功：清勾选 + 回刷（实例不在卡墙上，刷新只更新 KPI 的「已派生实例」与勾选状态） */
-function onDerived() {
+/** 创建成功：清勾选 + 回刷，并在卡墙顶部留一条持久结果条（实例不在卡墙上，
+ *  toast 一闪而过后人找不到刚建的去哪了）。 */
+const lastCreated = ref(0)
+function onDerived(created: Array<{ profileId: string }>) {
+  lastCreated.value = created.length
   clearPick()
   void loadIndex()
 }
@@ -576,7 +533,11 @@ async function doExport() {
 
 onMounted(() => {
   void loadIndex()
-  // 预置定义快照（只读，失败静默）：用于「预置」卡脚注的 定义/已加载/待升级 计数
+  void loadPresetOverview()
+})
+/* 顶栏刷新：Shell 广播 liveRefreshSeq，本页此前只在挂载时拉一次，别人刚导入/加载的卡看不到 */
+watch(liveRefreshSeq, () => {
+  void loadIndex()
   void loadPresetOverview()
 })
 </script>
@@ -603,6 +564,8 @@ onMounted(() => {
 }
 .vlc-card:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
 .vlc-card:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
+/* 选中态：蓝色只给「选中」与可交互——此前勾选后只有 15px 方框变化，卡面上看不出选了哪几张 */
+.vlc-card--selected { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 /* grid 子项默认 min-width:auto：hash / cardKey / tag 都是长不可断串，会把网格轨道
    撑出卡宽，内容直接画到卡框外、被下一张卡整块盖住（走查：来源/版本角标被邻卡遮没、
    hash 条横跨到下一列）。卡片是固定网格轨，子项必须允许收缩，再由各自省略号收尾。 */
@@ -717,8 +680,14 @@ onMounted(() => {
   margin-top: 2px;
 }
 .vlc-card__level { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-/* 页脚动作组：创建学习者（低频但此前无处可寻）与详情并排，右对齐 */
-.vlc-card__acts { display: inline-flex; align-items: center; gap: 10px; }
-.vlc-card__derive { font-size: var(--mk-fs-micro); font-weight: 700; }
-.vlc-card__go { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue); white-space: nowrap; }
+/* 卡面主操作：卡脚右侧一位 */
+.vlc-card__derive { flex: none; }
+/* 创建结果条：卡墙顶部常驻，一句结果 + 一个出口 */
+.vlc-created {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 16px 12px;
+}
 </style>

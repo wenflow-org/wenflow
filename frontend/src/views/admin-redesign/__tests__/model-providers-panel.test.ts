@@ -177,7 +177,7 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mpp-item--on').text()).toContain('平台')
   })
 
-  it('平台详情只有模型一页：连接由宿主经插槽内联注入，自定义供应商仍走注册表编辑', async () => {
+  it('平台详情只有模型一页：连接由宿主经插槽内联注入，平台不再有「设置」钮', async () => {
     const w = await mountPanel()
     // 平台默认选中：没有二级页签，模型表直接可见
     expect(w.findAll('.mpp-tabs')).toHaveLength(0)
@@ -185,19 +185,18 @@ describe('ModelProvidersPanel', () => {
     expect(w.text()).not.toContain('基础设施')
     expect(w.text()).not.toContain('生成参数')
 
-    // 「设置」→ 通知宿主把焦点带到同页的连接表单（2026-10-25 撤掉平台设置弹窗）
-    const settings = w.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置')!
-    await settings.trigger('click')
-    expect(w.emitted('focus-platform-connection')).toHaveLength(1)
+    // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
+    expect(w.findAll('.mpp-detail__acts .mk-btn').some((b) => b.text() === '设置')).toBe(false)
+    expect(w.emitted('focus-platform-connection')).toBeUndefined()
 
-    // 自定义供应商：设置仍打开注册表编辑弹层，不发射宿主事件
+    // 自定义供应商：设置仍打开注册表编辑弹层
     const acme = w.findAll('.mpp-item').find((i) => i.text().includes('Acme 网关'))!
     await acme.trigger('click')
     await flushPromises()
     await w.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置')!.trigger('click')
     await flushPromises()
     expect(w.find('[aria-label="供应商设置"]').exists()).toBe(true)
-    expect(w.emitted('focus-platform-connection')).toHaveLength(1)
+    expect(w.emitted('focus-platform-connection')).toBeUndefined()
   })
 
   it('自带端点的供应商：详情显示服务地址、密钥三件套（掩码 + 显示切换 + 留空沿用）与模型清单', async () => {
@@ -245,7 +244,7 @@ describe('ModelProvidersPanel', () => {
     expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['读图'])
   })
 
-  it('启用开关即时保存：点开关就调写接口并采纳回吐的新视图', async () => {
+  it('停用开关先确认再写盘，成功后给回执（误触不会让上游直接退出路由）', async () => {
     const w = await mountPanel()
     updateMock.mockResolvedValue({
       data: {
@@ -259,6 +258,16 @@ describe('ModelProvidersPanel', () => {
     // 2026-10-23 UI 审查：开关只有 aria-checked、没有可访问名，读屏只念「开关」
     expect(acmeSwitch.attributes('aria-label')).toBe('启用供应商 Acme 网关')
     await acmeSwitch.trigger('click')
+    await nextTick()
+    // 停用要二次确认；取消则一次都不写
+    expect(confirmState.open).toBe(true)
+    settleConfirm(false)
+    await flushPromises()
+    expect(updateMock).not.toHaveBeenCalled()
+
+    await acmeSwitch.trigger('click')
+    await nextTick()
+    settleConfirm(true)
     await flushPromises()
     expect(updateMock).toHaveBeenCalledWith('acme-gateway', { enabled: false })
     // 回吐视图被采纳：左栏该行变成停用态
@@ -269,6 +278,8 @@ describe('ModelProvidersPanel', () => {
     const w = await mountPanel()
     updateMock.mockRejectedValue({ response: { data: { error: '默认对话模型「deepseek-v4-flash」解析不到已启用供应商提供的模型，保存会让全平台默认路由落空。' } } })
     await w.findAll('.mpp-item')[1].find('.mk-switch').trigger('click')
+    await nextTick()
+    settleConfirm(true)
     await flushPromises()
     expect(w.find('.mpp-alert').text()).toContain('解析不到已启用供应商提供的模型')
   })

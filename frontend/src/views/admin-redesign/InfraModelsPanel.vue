@@ -24,7 +24,7 @@
       <button type="button" class="mk-alert__btn" @click="load">重试</button>
     </div>
 
-    <MkLoading v-if="loading && !view" min text="基础设施配置加载中…" />
+    <MkLoading v-if="loading && !view" inline text="基础设施配置加载中…" />
 
     <template v-else-if="view">
       <div v-if="view.warnings.length" class="mk-alert mk-alert--row infra-alert" role="alert">
@@ -38,7 +38,6 @@
           <div class="infra-item__head">
             <div class="infra-item__id">
               <strong>{{ entry.kind === 'embedding' ? '向量化' : '重排' }}</strong>
-              <span class="infra-item__desc">{{ entry.kind === 'embedding' ? '文本 → 向量' : '查询 + 候选 → 相关分' }}</span>
             </div>
             <span class="mk-badge" :class="entry.configured ? 'mk-badge--ok' : 'mk-badge--bad'">
               {{ entry.configured ? '已配置' : '未配置' }}
@@ -369,11 +368,10 @@ onMounted(load)
 .infra-item__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .infra-item__id { display: grid; gap: 2px; min-width: 0; }
 .infra-item__id strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
-.infra-item__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .infra-kv { display: grid; gap: 5px; margin: 0; }
 .infra-kv > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: baseline; }
 .infra-kv dt { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.infra-kv dd { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.infra-kv dd { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .infra-item__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .infra-item__source { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .infra-test { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--mk-fs-micro); }

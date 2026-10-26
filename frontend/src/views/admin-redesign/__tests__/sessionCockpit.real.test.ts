@@ -8,7 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import SessionCockpit from '../SessionCockpit.vue';
-import { subPage } from '../store';
+import { intent, subPage } from '../store';
 import { liveRefreshSeq } from '../live';
 
 /** 后端 /admin/session-console 同构载荷（teaching 会话，含 path/goal/wrapup/evidence/timeline）
@@ -235,6 +235,19 @@ describe('SessionCockpit 双模式', () => {
     expect(getRealSessionConsole.mock.calls.length).toBeGreaterThan(callsAfterMount);
   });
 
+  it('真实模式 hero 给「执行日志」出口：按 sessionId 落执行日志的 Trace 归组', async () => {
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const btn = wrapper.findAll('.mk-hero__actions button').find((b) => b.text() === '执行日志');
+    expect(btn).toBeTruthy();
+    intent.scene = '';
+    await btn!.trigger('click');
+    await settle();
+    expect(intent.scene).toBe('execution-logs');
+    expect(intent.sessionId).toBe('ts_real_1');
+    wrapper.unmount();
+  });
+
   it('真实模式：同构数据渲染（阶段条/Path 里程碑/时间线日志/wrapup 字段卡 + 来源徽章）', async () => {
     getRealSessionConsole.mockResolvedValue(realTeachingPayload());
 
@@ -295,7 +308,7 @@ describe('SessionCockpit 双模式', () => {
     expect(rawView!.textContent).toContain('Python 入门学习路径');
     expect(rawView!.textContent).toContain('函数基础');
     expect(rawView!.textContent).toContain('参数与返回值');
-    ;[...rawView!.querySelectorAll('button')].find((b) => b.textContent === '关闭')?.click();
+    [...rawView!.querySelectorAll('button')].find((b) => b.textContent === '关闭')?.click();
     await flushPromises();
 
     // 黑盒/仿真专属区隐藏：无 act() 按钮、无对抗预算、无删除会话、无评审面板

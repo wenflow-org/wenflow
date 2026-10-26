@@ -24,17 +24,12 @@
             <input v-model="unreadOnly" type="checkbox" @change="reloadFromFirstPage" />
             <span class="mk-field__label" style="margin:0">仅未读</span>
           </label>
-          <!-- 嵌入态（宿主 OpsHub 有相邻「公告」页签）做成真按钮：点它切到公告页（审核 #172）——
-               此前是带右箭头的纯展示胶囊（cursor:help），看着像跳转却点了没反应。
-               独立页无相邻页签，退回纯提示文案并去掉箭头。 -->
-          <button
-            v-if="embedded"
-            type="button"
-            class="nt-boundary nt-boundary--link"
-            :title="BANNER_BOUNDARY_NOTE"
-            @click="emit('go-announce')"
-          >横幅公告 → 公告页</button>
-          <span v-else class="nt-boundary" :title="BANNER_BOUNDARY_NOTE">{{ BANNER_BOUNDARY_NOTE }}</span>
+          <!-- 定向核对（2026-10-26）：学习状态页「发提醒」带 ?userId= 落到这里，
+               筛选行显式写出当前只看谁，否则「按用户筛过」与「全部通知」长得一样。 -->
+          <span v-if="userIdFilter" class="nt-user-filter">
+            <span>{{ userFilterLabel }}</span>
+            <button type="button" class="mk-link" @click="clearUserFilter">清除</button>
+          </span>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
         </div>
         <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组。
@@ -138,7 +133,6 @@
         icon="◌"
         min
         title="当前筛选无匹配"
-        description="试试切换通知类型、关闭「仅未读」，或清空搜索关键词。"
         action-text="清除筛选"
         @action="clearFilter"
       />
@@ -147,7 +141,6 @@
         icon="◌"
         min
         title="还没有通知"
-        description="系统通知与管理员发送的消息都会出现在这里。"
         :action-text="embedded ? '' : '发送第一条通知'"
         @action="openSend"
       />
@@ -188,7 +181,6 @@
                 <option value="announcement">公告提醒（站内信）</option>
                 <option value="achievement">成就</option>
               </select>
-              <span class="mk-field__hint">{{ BANNER_BOUNDARY_NOTE }}</span>
             </label>
             <div class="mk-field">
               <span class="mk-field__label">发送范围</span>
@@ -243,7 +235,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, getCurrentInstance, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useTableSort } from './useTableSort'
 import { timeAgo, errMsg } from './live'
 import { adminNotificationsApi, adminUsersApi } from '@/api/adminApi'
@@ -257,14 +250,9 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import Pagination from './Pagination.vue'
 
 /** 嵌入模式：作为「通知与公告」页「站内通知」tab 渲染（仅去掉外层壳，状态条/发送弹窗保留）。
-    count 事件：通知总数上报（宿主「通知 N」徽章；embedded 才消费）
-    go-announce 事件：嵌入态「横幅公告 →」胶囊的跳转（审核 #172，宿主收后 switchTab('announce')） */
+    count 事件：通知总数上报（宿主「通知 N」徽章；embedded 才消费） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'go-announce'): void }>()
-
-/* 文案单源（R6 复读单源化）：横幅公告的边界说明原有两个措辞（「请到…管理」/「在…管理」），
-   统一为陈述式一份，边界胶囊 title / 可见文本与发送弹窗 hint 共用。 */
-const BANNER_BOUNDARY_NOTE = '全站横幅公告在「公告」页管理'
+const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 interface NotifRow {
   id: string
@@ -288,6 +276,40 @@ const loading = ref(false)
 const failed = ref(false)
 const kindFilter = ref('')
 const unreadOnly = ref(false)
+/** 定向核对（2026-10-26）：学习状态页「发提醒」→ ?userId= 落到本页，后端 list 支持 userId。
+    无 router 上下文（单测/独立挂载）时降级为不筛。 */
+const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.$router
+const notifRoute = hasRouterCtx ? useRoute() : null
+const notifRouter = hasRouterCtx ? useRouter() : null
+const userIdFilter = ref(typeof notifRoute?.query.userId === 'string' ? String(notifRoute.query.userId) : '')
+/** 定向用户的显示名：先查账号名（邮箱次之），查不到才回落 id——筛选行不摆裸 ID */
+const userFilterLabel = ref(userIdFilter.value)
+watch(userIdFilter, async (id) => {
+  userFilterLabel.value = id
+  if (!id) return
+  try {
+    const res = await adminUsersApi.getUser(id)
+    const u = (res.data?.data ?? res.data ?? {}) as { name?: string; email?: string }
+    userFilterLabel.value = String(u.name || u.email || id)
+  } catch {
+    userFilterLabel.value = id
+  }
+}, { immediate: true })
+watch(() => notifRoute?.query.userId, (v) => {
+  userIdFilter.value = typeof v === 'string' ? v : ''
+  page.value = 1
+  void reload()
+})
+function clearUserFilter() {
+  if (notifRouter && notifRoute) {
+    const q = { ...notifRoute.query }
+    delete q.userId
+    void notifRouter.replace({ query: q })
+    return
+  }
+  userIdFilter.value = ''
+  reloadFromFirstPage()
+}
 /** 关键词：后端列表接口无 search 参数，仅对当前页做客户端过滤（口径在输入框 title 与分页 note 标注） */
 const keyword = ref('')
 /** 当前页可见行：关键词非空时按标题/正文/用户姓名/邮箱过滤当前页 */
@@ -316,17 +338,18 @@ function reloadFromFirstPage() {
   page.value = 1
   void reload()
 }
-/** 清除筛选并重新加载（回第 1 页）；关键词一并清空 */
+/** 清除筛选并重新加载（回第 1 页）；关键词与定向用户一并清空 */
 function clearFilter() {
   kindFilter.value = ''
   unreadOnly.value = false
   keyword.value = ''
+  if (userIdFilter.value) { clearUserFilter(); return }
   reloadFromFirstPage()
 }
 /* 每页条数变化：回第 1 页重查（此前只传 :page-size 不监听 @update:pageSize，
    下拉可选但列表恒按 20 条渲染，是死控件） */
 watch(pageSize, () => { reloadFromFirstPage() })
-const isFiltered = computed(() => !!kindFilter.value || unreadOnly.value || !!keyword.value.trim())
+const isFiltered = computed(() => !!kindFilter.value || unreadOnly.value || !!keyword.value.trim() || !!userIdFilter.value)
 
 /** 已读率聚合（原型 1900-1904 表内「已读率」列）：同筛选域内 已读 = 送达 − 未读 */
 const readCount = computed(() => Math.max(0, total.value - unreadTotal.value))
@@ -372,6 +395,7 @@ async function reload() {
     const res = await adminNotificationsApi.list({
       page: page.value,
       limit: pageSize.value,
+      userId: userIdFilter.value || undefined,
       kind: kindFilter.value || undefined,
       unreadOnly: unreadOnly.value || undefined,
       sort: (ntSortKey.value || undefined) as 'createdAt' | 'isRead',
@@ -518,29 +542,14 @@ void reload()
 /* 嵌入模式（宿主通知与公告页 flex 列内）：占满剩余高度，表格区内滚 */
 .nt-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .nt-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.nt-boundary {
-  margin-left: auto;
+/* 定向用户筛选：筛选行里显式写出当前只看哪个账号，可一键清除 */
+.nt-user-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
-  background: var(--mk-line);
-  border: 1px dashed var(--mk-line);
-  padding: 2px 8px;
-  border-radius: 999px;
-  cursor: help;
 }
-/* 嵌入态的可点跳转档（审核 #172）：同一外形，但改实线边框 + 指针 + 悬停底色，
-   让「看着像跳转」的胶囊真的可点，且与纯提示档有可辨差异 */
-.nt-boundary--link {
-  cursor: pointer;
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--mk-blue) 35%, var(--mk-line));
-  /* 亮色前景用 --mk-accent-deep（#1f57cc）：--mk-blue 压 --mk-line(#e6ebf4) 底仅 4.12:1 < 4.5
-     （2026-10-06 渲染探针亮色 1920 实测 button.nt-boundary--link）；暗色档自动取 #7aa2ff。 */
-  color: var(--mk-accent-deep, var(--mk-blue));
-  font-family: inherit;
-}
-.nt-boundary--link:hover { background: var(--mk-blue-bg); }
-.nt-boundary--link:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 .nt-list { flex: 1; min-height: 0; overflow-y: auto; }
 /* 已读率聚合行（原型 meterrow：meter 条 + mono %）：条沿用共享 .mk-minibar 原语 */
 .nt-rate {
@@ -584,21 +593,18 @@ void reload()
 .nt-candidate strong { font-size: var(--mk-fs-micro); }
 .nt-none { color: var(--mk-faint); font-size: var(--mk-fs-micro); text-align: center; padding: 10px 0; }
 
-/* 4K：弹窗内候选列表/提示条跟随全站节奏 */
+/* 4K：弹窗内候选列表跟随全站节奏 */
 @media (min-width: 2000px) {
-  .nt-boundary { font-size: var(--mk-fs-micro); padding: 3px 10px; }
   .nt-candidate strong { font-size: var(--mk-fs-body); }
   .nt-candidate { padding: 10px 12px; }
   .nt-none { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .nt-boundary { font-size: var(--mk-fs-micro); padding: 4px 12px; }
   .nt-candidate strong { font-size: var(--mk-fs-body); }
   .nt-candidate { padding: 12px 14px; }
   .nt-none { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
-  .nt-boundary { font-size: var(--mk-fs-body); padding: 5px 14px; }
   .nt-candidate strong { font-size: var(--mk-fs-emphasis); }
   .nt-candidate { padding: 14px 16px; }
   .nt-none { font-size: var(--mk-fs-emphasis); }
@@ -607,8 +613,5 @@ void reload()
 /* ================= 暗色模式（D1 补完）：站内通知 ================= */
 html[data-theme='dark'] {
   .nt-row--unread { background: color-mix(in srgb, var(--wf-color-primary) 8%, transparent); }
-  /* 审核 #166：原 #202122/#313235 是同一语义的第二个真源；改引 token（--mk-surface-2 /
-     --mk-line 暗色档自动换档）。可点档不吃这条覆写，其蓝 tint 由 .nt-boundary--link 自带。 */
-  .nt-boundary:not(.nt-boundary--link) { background: var(--mk-surface-2); border-color: var(--mk-line); color: var(--mk-muted); }
 }
 </style>

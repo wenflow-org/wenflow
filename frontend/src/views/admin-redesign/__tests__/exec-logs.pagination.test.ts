@@ -45,9 +45,23 @@ vi.mock('../live', async () => {
     reloadLiveSpans: h.reload,
     fetchLogDetail: vi.fn(async () => ({ attempts: [], attemptCount: 1, maxAttempts: 1 })),
     loadPromptIndex: vi.fn(async () => {}),
+    // Trace 页签（TraceWaterfall）数据源：失败状态跨页签同源用例需要它挂载
+    waterfallSpans: ref([]),
+    waterfallTotal: ref(0),
+    waterfallLoading: ref(false),
+    waterfallSyncFromBoot: vi.fn(() => {}),
+    waterfallLoadMore: vi.fn(async () => {}),
+    waterfallFetchTrace: vi.fn(async () => {}),
+    waterfallFetchSession: vi.fn(async () => {}),
+    WATERFALL_MAX_SPANS: 2000,
     totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / Math.max(1, pageSize)))
   };
 });
+
+vi.mock('../traceCost', () => ({
+  loadModelPrices: vi.fn(async () => null),
+  estimateTraceCostUsd: vi.fn(() => ({ usd: null, priced: 0, unpriced: 0, pricedModels: [], unpricedModels: [] }))
+}));
 
 vi.mock('../store', async () => {
   const { ref, reactive } = await import('vue');
@@ -77,11 +91,11 @@ function findBtn(wrapper: ReturnType<typeof mount>, text: string) {
   return b;
 }
 
-/** 「筛选」钮（2026-10-19 起原「高级筛选」改名，全站统一叫「筛选」）：
-    includes 匹配会先撞上左组的「清除筛选」链接，这里按文本开头精确认这颗 */
+/** 「按 ID 定位」钮（2026-10-26：弹层只剩 Trace ID / 会话 ID 两个精确定位项，
+    节点与时间档已提上主行）：按文本开头精确认这颗 */
 function findFilterBtn(wrapper: ReturnType<typeof mount>) {
-  const b = wrapper.findAll('button').find((x) => x.text().trim().startsWith('筛选'));
-  if (!b) throw new Error('button not found: 筛选');
+  const b = wrapper.findAll('button').find((x) => x.text().trim().startsWith('按 ID 定位'));
+  if (!b) throw new Error('button not found: 按 ID 定位');
   return b;
 }
 
@@ -205,8 +219,8 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await nextTick();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    // 2026-10-05 卡头统一：Trace ID 收进「筛选」弹层（v-show 常驻 DOM，jsdom 直接可寻址）
-    const input = w.find<HTMLInputElement>('input[aria-label="Trace ID（链路 ID）"]');
+    // Trace ID 收进「按 ID 定位」弹层（v-show 常驻 DOM，jsdom 直接可寻址）
+    const input = w.find<HTMLInputElement>('input[aria-label="链路 ID"]');
     await input.setValue('tr:abc');
     await input.trigger('keydown.enter');
     await flushPromises();
@@ -290,8 +304,8 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     liveLogsTotal.value = 5;
     const { w, router } = await mountExecAt('/admin/execution-logs?agent=api-gateway&status=err&test=only');
     await nextTick();
-    // 2026-10-04 状态条退役：筛选徽章随条删除，「仅看测试」态改由工具栏「测试」pill 激活态承载
-    const testPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('测试'))!;
+    // 「仅看测试」态由工具栏 pill 激活态承载
+    const testPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('仅看测试'))!;
     expect(testPill.classes()).toContain('mk-pill--active');
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({
       agentId: 'api-gateway',
@@ -302,19 +316,19 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     expect(router.currentRoute.value.query).toMatchObject({ agent: 'api-gateway', status: 'err', test: 'only' });
   });
 
-  it('stats.canary > 0 → 「测试 N」入口出现；点击仅看测试（sourceEntry 上服务端），再点恢复默认', async () => {
+  it('stats.canary > 0 → 「仅看测试 N」入口出现；点击仅看测试（sourceEntry 上服务端），再点恢复默认', async () => {
     liveLogStats.value = { total: 200, success: 190, timeout: 4, error: 6, canary: 5 };
     // only 态下入口计数 = 该查询 total（liveLogsTotal），需 > 0 按钮才保持可见（可再次点击退出）
     liveLogsTotal.value = 5;
     const { w, router } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    const btn = findBtn(w, '测试');
+    const btn = findBtn(w, '仅看测试');
     expect(btn.text()).toContain('5');
     await btn.trigger('click');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sourceEntry: 'system-canary' });
     expect(router.currentRoute.value.query.test).toBe('only');
-    await findBtn(w, '测试').trigger('click');
+    await findBtn(w, '仅看测试').trigger('click');
     await flushPromises();
     expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).sourceEntry).toBeUndefined();
     expect(router.currentRoute.value.query.test).toBeUndefined();
@@ -476,8 +490,8 @@ describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 
   });
 });
 
-/* ---------- 2026-10-04 状态条退役：页头 .mk-status 整块下线，读数迁页首 KPI 卡带、
-   「测试」入口迁日志卡头工具栏 pill（判例 buckets-band.test.ts 结构断言 + 护栏） ---------- */
+/* ---------- 页首读数带（2026-10-26 由 4 张 KPI 卡改为 MkStatStrip 一行三格；
+   失败数只在卡头「失败」pill 角标报一次） ---------- */
 describe('2026-10-04 状态条退役（ExecLogs）', () => {
   beforeEach(() => {
     h.reload.mockClear();
@@ -502,47 +516,40 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     return w;
   }
 
-  it('护栏：页头无 .mk-status；读数迁 KPI 卡带（成功率按数值着色 / P50 / P99），「测试」pill 迁工具栏可点', async () => {
+  it('护栏：页头无 .mk-status；读数带一行三格（成功率 / P50 / P99），「仅看测试」pill 在工具栏', async () => {
     liveLogStats.value = { total: 200, success: 190, timeout: 4, error: 6, canary: 5 };
     liveLogsTotal.value = 378;
     liveLogsFiltered.value = [fakeSpan(1), fakeSpan(2)];
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    // 状态条整块下线
     expect(w.find('.mk-status').exists()).toBe(false);
-    // KPI 卡带三张：成功率（95% ≥ 90 是健康读数，有失败也不标红——错误信号由告警条单源承载）
-    const kpis = w.findAll('.mk-kpi');
-    expect(kpis.length).toBe(4);
-    expect(kpis[0].text()).toContain('成功率');
-    expect(kpis[0].text()).toContain('95%');
-    expect(kpis[0].classes()).not.toContain('mk-kpi--bad');
-    expect(kpis[1].text()).toContain('P50');
-    expect(kpis[2].text()).toContain('P99');
-    // 「测试」入口迁日志卡头工具栏 pill：计数常驻（canary 5），点击仅看测试上服务端
-    const testPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('测试'))!;
+    // 读数带：失败数不占格子（卡头「失败」pill 角标单源）
+    const stats = w.findAll('.mk-stat');
+    expect(stats.map((s) => s.find('.mk-stat__label').text())).toEqual(['成功率', '耗时 P50', '耗时 P99']);
+    expect(stats[0].text()).toContain('95%');
+    expect(stats[0].classes()).not.toContain('mk-stat--bad');
+    const testPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('仅看测试'))!;
     expect(testPill.text()).toContain('5');
     await testPill.trigger('click');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sourceEntry: 'system-canary' });
   });
 
-  it('成功率 KPI 着色只跟数值走：<90% 标红，与是否有失败日志无关（外部评审解耦拍板）', async () => {
-    // 89% < 90 → 红（即使本样本无失败行）；90% → 不红
+  it('成功率着色只跟数值走：<90% 标红，与是否有失败日志无关', async () => {
     liveLogStats.value = { total: 100, success: 89, timeout: 0, error: 11, canary: 0 };
     liveLogsTotal.value = 2;
     liveLogsFiltered.value = [fakeSpan(1), fakeSpan(2)];
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    expect(w.findAll('.mk-kpi')[0].classes()).toContain('mk-kpi--bad');
+    expect(w.findAll('.mk-stat')[0].classes()).toContain('mk-stat--bad');
   });
 
-  it('无日志不显数值：KPI 带随 logs.length 隐藏（原状态条同语义）；「测试」pill 仍常驻', async () => {
+  it('无日志不显数值：读数带随 logs.length 隐藏；「仅看测试」pill 仍常驻', async () => {
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
     expect(w.find('.mk-status').exists()).toBe(false);
-    expect(w.find('.mk-kpi-grid').exists()).toBe(false);
-    // 测试入口常驻语义保留：计数为 0 也保持可点（否则切过去后失去切回入口）
-    expect(w.findAll('.mk-pill').find((b) => b.text().startsWith('测试'))).toBeTruthy();
+    expect(w.find('.mk-stat-strip').exists()).toBe(false);
+    expect(w.findAll('.mk-pill').find((b) => b.text().startsWith('仅看测试'))).toBeTruthy();
   });
 });
 
@@ -596,20 +603,81 @@ describe('批次 1：EG7 / EG17 / D19', () => {
     expect(adv.find('.mk-pill__count').text()).toBe('1');
   });
 
-  it('D19 改（2026-10-18 用户走查「这类文案」）：页码器不再自述并入，规则收进「Trace」列 title', async () => {
+  it('页码器只报记录数（单位「条记录」），表头与列菜单不再挂合并口径说明', async () => {
     liveLogsTotal.value = 30;
     liveLogsFiltered.value = [fakeSpan(1)];
     liveLogsRowsMerged.value = 2;
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    // 页码器旁边不再出现讲系统怎么拼数据的句子
+    // 页码器旁边不再出现讲系统怎么拼数据的句子；单位自身说清数的是记录
     expect(w.find('.pagination-note').exists()).toBe(false);
-    // 规则改住在 Trace 列（默认可见），表头与列菜单同一句
+    expect(w.find('.mk-pagination__total').text()).toContain('共 30 条记录');
     const traceTh = w.findAll('th').find((th) => th.text().trim() === 'Trace')!;
-    expect(traceTh.attributes('title')).toContain('合并为一行');
+    expect(traceTh.attributes('title')).toBeUndefined();
     await findBtn(w, '列').trigger('click');
     await nextTick();
     const item = w.findAll('.mk-cols__item').find((x) => x.text().includes('Trace'))!;
-    expect(item.attributes('title')).toContain('合并为一行');
+    expect(item.attributes('title')).toBeUndefined();
+  });
+
+  it('空态只给一个出口：窄时间窗 → 「查看全部时间」（只动时间范围，不清筛选）', async () => {
+    liveLogsTotal.value = 0;
+    liveLogsFiltered.value = [];
+    const w = await mountExecAt('/admin/execution-logs?range=today&agent=a1');
+    await nextTick();
+    const btn = w.find('.mk-empty__action');
+    expect(btn.text()).toBe('查看全部时间');
+    await btn.trigger('click');
+    await flushPromises();
+    const q = h.reload.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(q.timeRange).toBe('all');
+    // 筛选（节点）不被这个动作清掉
+    expect(q.agentId).toBe('a1');
+  });
+
+  it('首载骨架：无行时占满卡片剩余高度，并留出分页位（避免卡底大片空白）', async () => {
+    liveLogsLoading.value = true;
+    liveLogsFiltered.value = [];
+    const w = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    const skel = w.find('.exec-skel');
+    expect(skel.exists()).toBe(true);
+    expect(skel.find('.skl-card').exists()).toBe(true);
+    expect(skel.find('.exec-skel__foot').exists()).toBe(true);
+    // 骨架期分页器不渲染真实页码（占位由 .exec-skel__foot 承担）
+    expect(w.find('.mk-pagination').exists()).toBe(false);
+    liveLogsLoading.value = false;
+  });
+
+  it('失败状态跨页签同源：日志页签的「失败」= Trace 页签的「仅失败」，切页签不丢也不各持一套', async () => {
+    liveLogsTotal.value = 10;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    const w = await mountExecAt('/admin/execution-logs?status=err');
+    await nextTick();
+    await w.findAll('.tab').find((t) => t.text() === 'Trace 链路')!.trigger('click');
+    await flushPromises();
+    const traceFailPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('仅失败'))!;
+    expect(traceFailPill.classes()).toContain('mk-pill--active');
+    // 在 Trace 侧关掉「仅失败」→ 日志页签的 status 筛选一并清掉
+    await traceFailPill.trigger('click');
+    await flushPromises();
+    await w.findAll('.tab').find((t) => t.text() === '日志')!.trigger('click');
+    await flushPromises();
+    expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).status).toBeUndefined();
+  });
+
+  it('列菜单不再逐条给字段解释；类型列默认可见（合并行的来源线索）', async () => {
+    liveLogsTotal.value = 1;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    const w = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    await findBtn(w, '列').trigger('click');
+    await nextTick();
+    const items = w.findAll('.mk-cols__item');
+    expect(items.map((i) => i.attributes('title'))).toEqual(items.map(() => undefined));
+    // 类型列默认显示；模型 / 输入输出仍默认隐藏
+    const kindItem = items.find((i) => i.text() === '类型')!;
+    expect((kindItem.find('input').element as HTMLInputElement).checked).toBe(true);
+    expect((items.find((i) => i.text() === '模型')!.find('input').element as HTMLInputElement).checked).toBe(false);
   });
 });

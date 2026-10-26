@@ -1,17 +1,17 @@
 <template>
-  <!-- 清理旧账号向导（2026-10-10）：按建号时间筛选 + 保留名单豁免 → 干跑预览 → 分批（≤100/批）调
+  <!-- 按创建时间清理（2026-10-10）：按创建时间筛选 + 保留名单豁免 → 干跑预览 → 分批（≤100/批）调
        batch-delete 落地。与 VirtualLearnerReclaim 同族交互（Teleport 模态 / 预览清单 / busy 互斥），
-       但判定在客户端算（建号时间与 tags 都在列表行里），删除走服务端既有批量端点。 -->
+       但判定在客户端算（创建时间与 tags 都在列表行里），删除走服务端既有批量端点。 -->
   <Teleport v-if="render" to="body">
   <div v-if="state.open" ref="maskRef" class="mk-modal">
-    <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="清理旧账号">
+    <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="按创建时间清理">
       <div class="mk-modal__head">
-        <h3 class="mk-modal__title">清理旧账号</h3>
+        <h3 class="mk-modal__title">按创建时间清理</h3>
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="state.open = false">✕</button>
       </div>
       <div class="mk-modal__body">
         <p class="mk-alert mk-alert--info">
-          将删除「建号早于保留期」的虚拟学习者：其会话、教学记录、学习数据级联清除，不可恢复。
+          将删除创建时间早于保留期的虚拟学习者，其会话、教学记录、学习数据一并清除，不可恢复。
           进行中的账号与保留名单命中的账号自动豁免。
         </p>
         <div class="vl-cleanup-criteria">
@@ -26,14 +26,14 @@
             </select>
           </label>
           <label class="vl-cleanup-field vl-cleanup-field--grow">
-            <span>保留名单（每行一个画像 tag，如 cohort / 批次 id）</span>
+            <span>保留名单（每行一个画像标签）</span>
             <textarea v-model="state.keepTagsText" rows="3" :disabled="state.busy" placeholder="rw-acad5-31&#10;preset:nurse-career-transition"></textarea>
           </label>
         </div>
         <template v-if="candidates.length">
           <p class="vl-cleanup-summary">
             将删除 <b>{{ candidates.length }}</b> 人（合计会话 {{ totalSessions }}）。
-            豁免 <b>{{ exempted }}</b> 人<template v-if="exemptRunning">（进行中 {{ exemptRunning }}）</template><template v-if="exemptKeepTags">（保留名单 {{ exemptKeepTags }}）</template><template v-if="exemptNoDate">（建号缺失 {{ exemptNoDate }}，宁多勿误删）</template>。
+            豁免 <b>{{ exempted }}</b> 人<template v-if="exemptRunning">（进行中 {{ exemptRunning }}）</template><template v-if="exemptKeepTags">（保留名单 {{ exemptKeepTags }}）</template><template v-if="exemptNoDate">（创建时间缺失 {{ exemptNoDate }}）</template>。
           </p>
           <div class="vl-cleanup-list">
             <div v-for="s in previewRows" :key="s.id" class="vl-cleanup-item">
@@ -48,11 +48,8 @@
         </template>
         <MkEmptyState
           v-else
-          title="没有符合条件的旧账号"
-          description="当前保留期与保留名单下没有可删除的账号，无需清理。"
-          action-text="关闭"
+          title="没有符合条件的账号"
           compact
-          @action="state.open = false"
         />
         <p v-if="state.progress" class="vl-cleanup-footnote">{{ state.progress }}</p>
       </div>
@@ -156,8 +153,8 @@ async function confirmCleanup() {
   const ids = candidates.value.map((s) => s.id)
   if (!ids.length || state.busy) return
   const ok = await askConfirm({
-    title: '清理旧账号',
-    message: `确认删除 ${ids.length} 个旧虚拟学习者？\n将级联删除其全部会话、教学记录、学习数据，该操作不可撤销。`,
+    title: '按创建时间清理',
+    message: `确认删除 ${ids.length} 个虚拟学习者？\n将一并删除其全部会话、教学记录、学习数据，不可撤销。`,
     confirmText: `删除 ${ids.length} 人`
   })
   if (!ok) return
@@ -184,7 +181,7 @@ async function confirmCleanup() {
         break
       }
     }
-    if (deleted > 0) toast.success(`已删除 ${deleted} 个旧账号${failed > 0 ? `，${failed} 人失败可重开向导重试` : ''}`)
+    if (deleted > 0) toast.success(`已删除 ${deleted} 个账号${failed > 0 ? `，${failed} 人失败可重开向导重试` : ''}`)
     else if (failed === 0) toast.info('没有可删除的账号')
     state.open = false
     emit('done')

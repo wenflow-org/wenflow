@@ -68,7 +68,6 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     const w = await mountWithRows(ROWS);
     const detail = w.findAll('tbody .mk-actions button').find((b) => b.text() === '详情');
     expect(detail, '行内应有「详情」钮').toBeTruthy();
-    expect(detail!.attributes('title')).toContain('记忆与复习详情页');
     // 与整行点击同一落点；@click.stop 保证不冒泡重复触发（只调一次）
     await detail!.trigger('click');
     expect(openSubPage).toHaveBeenCalledTimes(1);
@@ -78,19 +77,77 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(labels.indexOf('详情')).toBeLessThan(labels.indexOf('重新观察'));
   });
 
-  /** P1#13：KPI「当前到期」阈值化（占痕迹 ≥20% 或人均 ≥5），阈值写进 title */
-  it('KPI「当前到期」阈值化：占比 <20% 且人均 <5 保持中性；达阈值才抬琥珀且 title 披露阈值', async () => {
+  /** 2026-10-26：行内三个待办数字（人工看 / 归并候选 / 散键）改成按钮——确认 / 驳回 / 回滚
+   *  都在「记忆调度」页签，点行只落只读的 FSRS 普查面。 */
+  it('行内待办数字可点，落「记忆调度」页签；整行点击仍落「记忆与复习」', async () => {
+    overview.mockResolvedValue({
+      data: { data: {
+        totals: { users: 1, traces: 10, due: 6, usersWithAudit: 1, proposed: 2, autoApplicable: 0, ambiguous: 2, applied: 0, deleted: 0 },
+        users: [{
+          userId: 'u2', name: '小红', email: null, isVirtualLearner: false, traces: 10, due: 6,
+          audit: { mode: 'review', generatedAt: new Date().toISOString(), candidates: 4, proposed: 2, autoApplicable: 0, ambiguous: 2, drops: 0, applied: 0, deleted: 0 },
+          weak: 3, avgStrength: 0.52, lastReviewedAt: new Date().toISOString(), unattachedScatterKeys: 3,
+        }],
+      } },
+    });
+    const w = mount(MemoryReviewOverview);
+    await flushPromises();
+    const tds = w.findAll('tbody tr')[0].findAll('td');
+    const manual = tds[3].findAll('button').find((b) => b.text().includes('人工看'));
+    expect(manual, '人工看应是按钮').toBeTruthy();
+    await manual!.trigger('click');
+    expect(openSubPage).toHaveBeenLastCalledWith('learner', 'u2', { tab: 'memory-ops' });
+    // 归并候选 / 散键同理
+    const proposed = tds[4].find('button');
+    expect(proposed.text()).toBe('2');
+    await proposed.trigger('click');
+    expect(openSubPage).toHaveBeenLastCalledWith('learner', 'u2', { tab: 'memory-ops' });
+    const scatter = tds[5].find('button');
+    expect(scatter.text()).toBe('3');
+    await scatter.trigger('click');
+    expect(openSubPage).toHaveBeenLastCalledWith('learner', 'u2', { tab: 'memory-ops' });
+    // 整行点击仍是「记忆与复习」（只读普查）
+    await w.find('tbody tr').trigger('click');
+    expect(openSubPage).toHaveBeenLastCalledWith('learner', 'u2', { tab: 'memory' });
+    w.unmount();
+  });
+
+  /** 2026-10-26：「需人工看」可点 → 落到需关注快筛（同一批人） */
+  it('KPI「需人工看」可点，点中落到「需关注」快筛', async () => {
+    const w = await mountWithRows(ROWS, { usersWithAudit: 1, ambiguous: 1, fragmentation: { pendingReview: 3 } });
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工看')!;
+    expect(card.classes()).toContain('mk-kpi--clickable');
+    await card.trigger('click');
+    await nextTick();
+    expect(w.find('.mk-pill--active').text()).toContain('需关注');
+    expect(card.classes()).toContain('mr-kpi--on');
+    // 快筛只作用于当前页：范围常驻可见（卡头 + 分页器 note）
+    expect(w.find('.mk-filter').text()).toContain('仅当前页');
+    expect(w.find('.pagination-note').text()).toContain('筛选范围：当前页');
+    w.unmount();
+  });
+
+  it('分页器单位是「位学习者」，每页条数默认 50', async () => {
+    const w = await mountWithRows(ROWS, { users: 120 });
+    expect(w.find('.mk-pagination').text()).toContain('共 120 位学习者');
+    const size = w.find<HTMLSelectElement>('.mk-pagination__size');
+    expect(size.element.value).toBe('50');
+    w.unmount();
+  });
+
+  /** P1#13：KPI「当前到期」阈值化（占痕迹 ≥20% 或人均 ≥5），达阈值抬琥珀；title 只留读数本身 */
+  it('KPI「当前到期」阈值化：占比 <20% 且人均 <5 保持中性；达阈值才抬琥珀', async () => {
     // due 1 / traces 7 ≈ 14%，人均 1 → 常态积压，不着警示色
     const w = await mountWithRows(ROWS);
     const dueCard = w.findAll('.mk-kpi')[2];
     expect(dueCard.classes()).not.toContain('mk-kpi--warn');
 
-    // due 2 / traces 7 ≈ 28.6% ≥ 20% → 抬琥珀，title 披露阈值
+    // due 2 / traces 7 ≈ 28.6% ≥ 20% → 抬琥珀；title 只报读数（占比），不复述阈值规则
     const w2 = await mountWithRows(ROWS, { due: 2 });
     const dueCard2 = w2.findAll('.mk-kpi')[2];
     expect(dueCard2.classes()).toContain('mk-kpi--warn');
-    expect(dueCard2.attributes('title')).toContain('标为需关注');
-    expect(dueCard2.attributes('title')).toContain('达到 20%');
+    expect(dueCard2.attributes('title')).toContain('占全部记录 29%');
+    expect(dueCard2.attributes('title')).not.toContain('标为需关注');
   });
 
   /** 2026-10-12 用户走查「怎么双 kpi」：量值五卡 + 碎片率三卡两段栅格并为一条单带 */
@@ -117,9 +174,8 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label);
     const card = byLabel('需人工看')!;
     expect(card.find('.mk-kpi__num').text()).toBe('5');
-    expect(card.attributes('title')).toContain('同义概念待确认');
-    expect(card.attributes('title')).toContain('散键清理');
-    expect(card.attributes('title')).toContain('不会自动执行');
+    // 2026-10-26：卡面与 title 都只留读数（机制说明整条撤除）
+    expect(card.attributes('title')).toBeUndefined();
     expect(byLabel('待审队列')).toBeUndefined();
   });
 
@@ -130,15 +186,16 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
   it('全部用户都没跑过归并观察 → 需人工看显示「—」，不把没观察写成 0', async () => {
     // 2026-10-23 用户「为什么包括测试的也是很多0」：测试视角 26 位用户、55 条痕迹，
     // 但归并审计投影一条都没有——0 是「没算过」，不是「很干净」。
-    // 2026-10-24 用户「文案去掉」：卡面不再挂「尚未观察 / 已观察 X/Y 人」副行，
-    // 「没观察过」仍靠「—」与 0 区分，原因收进 title。
+    // 2026-10-26：卡面与 title 都不再挂解释句，「没观察过」只靠「—」与 0 区分。
     const w = await mountWithRows(ROWS, { usersWithAudit: 0, ambiguous: 0 });
     const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工看')!;
     expect(card.find('.mk-kpi__num').text()).toBe('—');
     expect(card.find('.mk-kpi__hint').exists()).toBe(false);
     expect(card.text()).not.toContain('尚未观察');
     expect(card.text()).not.toContain('已观察');
-    expect(card.attributes('title')).toContain('还没跑过归并观察');
+    expect(card.attributes('title')).toBeUndefined();
+    // 没观察过 → 没有可筛的对象，卡不可点
+    expect(card.classes()).not.toContain('mk-kpi--clickable');
   });
 
   it('无痕迹时「当前到期」只留 0，不再挂「暂无痕迹」副行', async () => {
@@ -183,7 +240,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(trs[0].findAll('.mk-minibar')).toHaveLength(0);
     expect(trs[1].findAll('.mk-minibar')).toHaveLength(1);
     expect(trs[1].findAll('td')[6].find('.mr__strength-pct').text()).toBe('52%');
-    // 需关注列：无事项出「无」，有事项出两枚徽章
+    // 需关注列：无事项出「无」，有事项出薄弱徽章 + 人工看按钮
     expect(trs[0].findAll('td')[3].text()).toBe('无');
     expect(trs[1].findAll('td')[3].text()).toContain('薄弱 3');
     expect(trs[1].findAll('td')[3].text()).toContain('人工看 2');
@@ -193,10 +250,9 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(trs[1].findAll('td')[4].text()).toBe('2');
     expect(trs[0].findAll('td')[5].text()).toBe('0');
     expect(trs[1].findAll('td')[5].text()).toBe('3');
-    // 页级合计不退场：进列头 title
+    // 列头不再复述排序语义与口径（2026-10-26）
     const ths = w.findAll('thead th');
-    expect(ths[4].attributes('title')).toContain('当前视角合计 2 条');
-    expect(ths[5].attributes('title')).toContain('当前视角合计 3 条');
+    for (const th of ths) expect(th.attributes('title')).toBeUndefined();
     // 最近复习列独立：从未复习只出状态词
     expect(trs[0].findAll('td')[7].text()).toBe('未复习');
     w.unmount();
@@ -219,7 +275,8 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await flushPromises();
     // 2026-10-23 用户「这种文案，不要」：卡头不再复述排序/分页机制，排序状态只由列头表达
     expect(w.find('.mk-card__head-right').exists()).toBe(false);
-    expect(w.find('.mk-card__meta').exists()).toBe(false);
+    // 2026-10-26：卡头只留一条范围读数（快筛与计数都只作用于当前页），不写机制
+    expect(w.find('.mk-card__meta').text()).toBe('仅当前页 · 共 1 位');
 
     // 记忆痕迹：首击降序
     const tracesTh = w.findAll('thead th').find((t) => t.text() === '记忆痕迹')!;

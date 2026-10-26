@@ -380,13 +380,18 @@ watch(
 // scene → URL（侧栏/意图跳转）；push 保留历史，浏览器后退可回到上一页面
 // 门闩 bootstrapped：挂载完成前不主动 push，避免初始化瞬态把深链 URL 改写掉（QA ISSUE-001）
 let bootstrapped = false;
+/* 跨页跳转携带的目标页预筛（侧栏角标点进执行日志即 ?range=week&status=err 等）。
+   与 intent 并存：intent 是模块级共享的排查动线，这里是「这一次导航」的一次性 query，
+   push 落定即清空，不残留到下一次侧栏点击。 */
+let pendingSceneQuery: Record<string, string> | null = null
 watch(scene, (s) => {
   const cur = typeof route.params.page === 'string' ? route.params.page : ''
   if (bootstrapped && cur !== s) {
     /* 排查动线（P0）：intent 筛选随跳转进 URL——执行日志「已过滤故障视图」
        可刷新/分享/前进后退还原（ExecLogs 侧做 URL↔筛选双向同步）。
        只带 intent 参数、不透传当前页 query（避免把 ?view=&id= 等二级页状态漏进目标页） */
-    const q = intentQueryParams(s)
+    const q = { ...intentQueryParams(s), ...(pendingSceneQuery || {}) }
+    pendingSceneQuery = null
     if (Object.keys(q).length) void router.push({ path: `/admin/${s}`, query: q })
     else void router.push(`/admin/${s}`)
     subPage.value = null;
@@ -429,12 +434,16 @@ watch(
   }
 );
 
-function navigate(id: string) {
+function navigate(id: string, query?: Record<string, string>) {
   // 相同 scene 再点击：scene watch 不会触发，这里显式清空 subPage 返回列表
   if (id === scene.value) {
     subPage.value = null;
+    /* 带预筛的同页点击（如已在执行日志再点角标）：直接 replace 到该筛选，
+       否则「点了没反应」。 */
+    if (query) void router.push({ path: `/admin/${id}`, query })
     return;
   }
+  pendingSceneQuery = query || null
   scene.value = id;
 }
 

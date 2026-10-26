@@ -3,7 +3,7 @@
     <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；2026-10-04 状态条退役，读数迁页首
          KPI 带；2026-10-12 按用户走查再收一层：三张纯读数卡撤（阶段/Skill 进总览卡头 meta），
          无警时页头直接接页签（详见下方告警条注释） -->
-    <MkPageHead title="编排图" sub="顶层 Agent 数据流转逻辑图 · 字段影响范围" />
+    <MkPageHead title="编排图" />
     <!-- 页头刷新已撤（2026-10-16 用户走查「这个刷新是不是重了，有一个固定的刷新了」）：
          本页原先另有一颗页头「刷新」，实测与顶栏固定刷新各打一半数据——页头打运行时定义/
          阶段清单/对账，顶栏打拓扑/目录/其余全域，用户按任一颗都会以为整页刷了。
@@ -56,19 +56,22 @@
       <div class="mk-card__head">
         <!-- 卡题 2026-10-05 改名：原「字段数据旅程」与「字段旅程」页签撞车（两处都自称旅程）——
              本卡是五阶段全貌，归属「总览」；单阶段旅程图归「字段旅程」页签 -->
-        <h3 class="mk-card__title">管线总览 · 五阶段字段影响范围</h3>
+        <h3 class="mk-card__title">管线总览</h3>
         <!-- 2026-10-12：原页首「阶段 / Skill」两张读数卡收进卡头右组（列表卡头统一语法：
              计数 meta 归 head-right）——单行不占画布高度。阶段数画布五列可见这里点明（窄屏
              画布横向滚动时兜底）；Skill 总数是本页唯一非显然读数，title 保留 F8-4 三源口径 -->
         <div class="mk-card__head-right">
           <span v-if="stages.length" class="mk-card__meta" :title="skillKpiTitle">{{ stages.length }} 阶段 · {{ totalSkills }} 个 Skill</span>
-          <!-- 图例（原型 card__tools：卡头右侧只放工具/图例，title 独占左侧） -->
-          <span class="orch-odg-chip orch-odg-chip--in">阶段入参</span>
-          <span class="orch-odg-chip orch-odg-chip--out">阶段产出</span>
+          <button
+            v-if="contractFailed"
+            type="button"
+            class="mk-btn mk-btn--sm"
+            @click="retryStageContracts"
+          >字段契约重试</button>
           <!-- 画布缩放（2026-10-13 用户：居中 / 可拖动 / 可放大）：**滚轮直接缩放**，连续无档位
                （触控板双指捏合走同一条，浏览器把它合成 ctrlKey 的 wheel）；指针处为锚点。
                这里只留一枚读数 —— 当前比例，点它回到 100%（默认态 = 撑满可视宽） -->
-          <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" title="当前缩放比例" @click="odgZoom = 1">{{ Math.round(odgZoom * 100) }}%</button>
+          <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" @click="odgZoom = 1">{{ Math.round(odgZoom * 100) }}%</button>
         </div>
       </div>
       <div
@@ -112,8 +115,13 @@
                    2026-10-24：计数单独一行，字段名另占一行并允许两行——不再用 nowrap+ellipsis
                    把唯一字段信息裁成一条。 -->
               <div class="orch-odg-counts">
-                <span class="orch-odg-chip orch-odg-chip--in" :title="contractOf(s.id).loaded ? contractTitle('in', contractOf(s.id).ins.length) : '字段契约加载中…'">入 {{ contractOf(s.id).loaded ? contractOf(s.id).ins.length : '…' }}</span>
-                <span class="orch-odg-chip orch-odg-chip--out" :title="contractOf(s.id).loaded ? contractTitle('out', contractOf(s.id).outs.length) : '字段契约加载中…'">出 {{ contractOf(s.id).loaded ? contractOf(s.id).outs.length : '…' }}</span>
+                <span
+                  v-for="kind in (['in', 'out'] as const)"
+                  :key="kind"
+                  class="orch-odg-chip"
+                  :class="contractOf(s.id).failed ? 'orch-odg-chip--failed' : `orch-odg-chip--${kind}`"
+                  :title="contractChipTitle(s.id, kind)"
+                >{{ kind === 'in' ? '入' : '出' }} {{ contractCountText(s.id, kind) }}</span>
               </div>
               <span class="orch-odg-fields" :title="contractOf(s.id).outs.join(' · ')">{{ contractOf(s.id).outs.slice(0, 4).join(' · ') }}<template v-if="contractOf(s.id).outs.length > 4">…</template></span>
             </footer>
@@ -133,20 +141,27 @@
          未访问过的页签仍不挂载（不在首屏白拉数据）。阶段切换仍按原契约重取
          （DataFlowGraph 的 :key 与 FieldRoutingTable/DriftAuditPanel 的 watch(stage)）。 -->
     <div v-if="pane !== 'overview'" id="orch-stage-view" role="tabpanel" :aria-labelledby="`orch-tab-${active}`" class="orch-stage-view">
-    <!-- 二级页签（阶段内）：字段旅程是该阶段页签的**默认视图**，不再单独占一枚页签
-         （2026-10-13 用户：字段旅程这个页签不要了，阶段页签点开就是它）；这里只列另两种子视图。
-         回到字段旅程 = 再点一次当前阶段页签（阶段页签的 title 已注明）。 -->
-    <div class="tabs orch-subtabs" role="tablist" aria-label="阶段视图" @keydown="onSubTabKeydown">
+    <!-- 二级页签（阶段内）：字段旅程 / 字段路由 / 治理 三枚并列，
+         阶段页签点开默认落字段旅程。右端「编排文件」是字段路由的唯一声明源入口。 -->
+    <div class="orch-subtabs-row">
+      <div class="tabs orch-subtabs" role="tablist" aria-label="阶段视图" @keydown="onSubTabKeydown">
+        <button
+          v-for="sp in SUB_PANES"
+          :key="sp.id"
+          :id="`orch-tab-${sp.id}`"
+          type="button" role="tab" class="tab"
+          :aria-selected="pane === sp.id"
+          :aria-controls="`orch-pane-${sp.id}`"
+          :tabindex="pane === sp.id ? 0 : -1"
+          @click="pane = sp.id"
+        >{{ sp.label }}</button>
+      </div>
       <button
-        v-for="sp in SUB_PANES"
-        :key="sp.id"
-        :id="`orch-tab-${sp.id}`"
-        type="button" role="tab" class="tab"
-        :aria-selected="pane === sp.id"
-        :aria-controls="`orch-pane-${sp.id}`"
-        :tabindex="pane === sp.id ? 0 : -1"
-        @click="pane = sp.id"
-      >{{ sp.label }}</button>
+        v-if="current"
+        type="button"
+        class="mk-btn mk-btn--sm orch-subtabs__action"
+        @click="openOrchestrationFile"
+      >编排文件</button>
     </div>
     <DataFlowGraph
       v-if="current && visitedPanes.has('journey')"
@@ -162,19 +177,19 @@
     />
     <section v-if="current && visitedPanes.has('routing')" v-show="pane === 'routing'" id="orch-pane-routing" role="tabpanel" aria-labelledby="orch-tab-routing" class="mk-card mk-card--fill orch-pane orch-routing">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">字段路由与编排文件</h3>
+        <h3 class="mk-card__title">字段路由</h3>
         <!-- meta 换同源口径（2026-10-05 页签重设计）：原「输入 0/0 · 输出 0/0」来自
              liveSkillCatalog 的阶段级变量流——catalog 对多数阶段为空，出假零，与表内
              25 行字段同页打架。改用字段契约 stageFieldContract（与画布 chips
              同源同数）：必填入参 = hard-required，产出 = 三产出角色；未加载显「…」 -->
-        <span class="mk-card__meta" :title="routingMetaTitle">
-          <!-- 未加载显「…」（与画布 chips 同一三态约定；规则 5 禁内联「加载中」文案，
-               口径解释在 :title 里） -->
-          <template v-if="!contractOf(active).loaded">…</template>
+        <span class="mk-card__meta">
+          <!-- 未加载显「…」（与画布 chips 同一三态约定；规则 5 禁内联「加载中」文案） -->
+          <template v-if="contractOf(active).failed">字段契约未加载</template>
+          <template v-else-if="!contractOf(active).loaded">…</template>
           <template v-else>必填入参 {{ contractOf(active).ins.length }} · 产出 {{ contractOf(active).outs.length }}</template>
         </span>
       </div>
-      <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
+      <FieldRoutingTable ref="routingRef" :stage="active" @changed="onRoutingChanged" />
     </section>
     <section v-if="current && visitedPanes.has('governance')" v-show="pane === 'governance'" id="orch-pane-governance" role="tabpanel" aria-labelledby="orch-tab-governance" class="mk-card mk-card--fill orch-pane orch-pane--scroll">
       <div class="mk-card__head">
@@ -189,7 +204,7 @@
       <!-- 定义明细（definitionNotes 调试转储）2026-10-05 撤：Skill 行名称字段全空
            （API 无 name/title 字段）、编排行与总览/字段路由信息重复，且双定义接口
            为此白拉——治理回归三折叠本体（新建字段/漂移报告/最近变更） -->
-      <DriftAuditPanel :stage="active" />
+      <DriftAuditPanel :stage="active" @open-orchestration="fixDriftFromGovernance" />
     </section>
     </div><!-- /orch-stage-view -->
 
@@ -217,7 +232,6 @@
       <MkEmptyState
         v-else
         title="暂无编排阶段数据"
-        description="暂无编排阶段：请先在编排文件中配置阶段与 Agent。"
       />
     </div>
   </div>
@@ -227,7 +241,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
-import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, reloadLiveTopology, liveRefreshSeq } from './live'
+import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, reloadLiveTopology, liveRefreshSeq, errMsg } from './live'
 import { TERMS } from './terms'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
@@ -239,22 +253,24 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import { onTabRowKeydown } from '@/utils/rovingTablist'
 
-/** 阶段工作区子面板：总览（五阶段全貌，缺省）+ 阶段内两枚子视图（字段路由 / 治理）。
+/** 阶段工作区子面板：总览（五阶段全貌，缺省）+ 阶段内三枚子视图（字段旅程 / 字段路由 / 治理）。
      沙盘契约 2026-10-05 下线（内容被 总览列脚 + 字段旅程 + 字段路由 三处覆盖，
      自我定位即「深链次要入口」）；旧深链 ?tab=sandbox 落总览。
-     2026-10-13 两级页签改造（用户拍板）：阶段升为一级页签、点开即该阶段的「字段旅程」，
-     故 journey 仍是合法 pane（默认视图），但不再有自己的页签。 */
+     2026-10-13 两级页签改造（用户拍板）：阶段升为一级页签、点开即该阶段的「字段旅程」；
+     2026-10-26 字段旅程补回自己的页签：此前只能靠「再点一次当前阶段页签」回程，
+     进了路由/治理后页签行两枚都不是选中态，使用者会以为卡住。 */
 type OrchSubPane = 'journey' | 'routing' | 'governance'
 type OrchPane = 'overview' | OrchSubPane
 const SUB_PANES: Array<{ id: OrchSubPane; label: string }> = [
+  { id: 'journey', label: '字段旅程' },
   { id: 'routing', label: '字段路由' },
   { id: 'governance', label: '治理' },
 ]
 const pane = ref<OrchPane>('overview')
-/** 当前 pane 的可读名（无阶段数据兜底面板的 aria-label 用——字段旅程没有自己的页签可指） */
+/** 当前 pane 的可读名（无阶段数据兜底面板的 aria-label 用） */
 const paneLabel = computed(() => {
   if (pane.value === 'overview') return '总览'
-  return SUB_PANES.find((p) => p.id === pane.value)?.label ?? '字段旅程'
+  return SUB_PANES.find((p) => p.id === pane.value)?.label ?? ''
 })
 /* 页签键盘契约（审核 #97）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换并移动焦点，
    兑现 role=tablist/role=tab 的 ARIA tabs 语义。实现已抽到 @/utils/rovingTablist，
@@ -277,14 +293,8 @@ function onSubTabKeydown(e: KeyboardEvent) {
 function goOverview() {
   pane.value = 'overview'
 }
-/** 阶段页签：点别的阶段 → 切过去并落在该阶段默认视图（字段旅程）；
-    点当前阶段 → 从子视图（字段路由/治理）回到字段旅程（字段旅程不再有自己的页签，
-    回程只能靠这一下，故 title 里写明了）。 */
+/** 阶段页签：切过去并落在该阶段默认视图（字段旅程）。 */
 function selectStageTab(id: string) {
-  if (pane.value !== 'overview' && active.value === id) {
-    pane.value = 'journey'
-    return
-  }
   active.value = id
   pane.value = 'journey'
   flowKey.value++
@@ -303,6 +313,19 @@ const flowKey = ref(0)
 function onRoutingChanged() {
   flowKey.value++
 }
+/** 字段路由面板的编排文件弹窗宿主：入口在阶段页签行，弹窗仍由面板持有（数据与保存动作都在那边） */
+const routingRef = ref<{ openOrchestration: () => void } | null>(null)
+function openOrchestrationFile() {
+  if (!visitedPanes.value.has('routing')) {
+    visitedPanes.value = new Set<OrchPane>([...visitedPanes.value, 'routing'])
+  }
+  void nextTick(() => routingRef.value?.openOrchestration())
+}
+/** 治理里看到不一致 → 落到字段路由并直接开编排文件（修复入口与证据同屏） */
+function fixDriftFromGovernance() {
+  pane.value = 'routing'
+  openOrchestrationFile()
+}
 /** 图内锚点跳转切阶段：同步 active（tab 高亮跟随） */
 function onStageChange(s: string) {
   active.value = s
@@ -320,9 +343,10 @@ function applyStageQuery() {
   const qTab = typeof route.query.tab === 'string' ? route.query.tab.trim() : ''
   if (qStage) active.value = qStage
   // ?tab= 语义:overview(缺省)/journey/routing/governance;legacy:drift→治理,topology→旅程,
+  // field-routings→字段路由（SkillFieldRouting 的「→ 编排图页」用这个值）,
   // sandbox→总览（2026-10-05 沙盘契约下线,内容已被 总览/字段旅程/字段路由 覆盖）
-  const knownTab = qTab === '' || qTab === 'routing' || qTab === 'governance' || qTab === 'drift' || qTab === 'journey' || qTab === 'topology'
-  if (qTab === 'routing') pane.value = 'routing'
+  const knownTab = qTab === '' || qTab === 'routing' || qTab === 'governance' || qTab === 'drift' || qTab === 'journey' || qTab === 'topology' || qTab === 'field-routings'
+  if (qTab === 'routing' || qTab === 'field-routings') pane.value = 'routing'
   else if (qTab === 'governance' || qTab === 'drift') pane.value = 'governance'
   else if (qTab === 'journey' || qTab === 'topology') pane.value = 'journey'
   else pane.value = 'overview'
@@ -509,9 +533,13 @@ interface StageFieldContract {
   outs: string[]
   /** 字段契约是否已加载（此前加载完成前按 0 渲染：「入 0」与「真无必填」不可分辨，评审「状态三态缺失」） */
   loaded?: boolean
+  /** 该阶段契约拉取失败的原因（失败与「加载中」必须可分辨） */
+  failed?: string
 }
 const OUT_ROLES = ['proposal-output', 'public-reply', 'derived-presentation']
 const stageFieldContract = ref<Record<string, StageFieldContract>>({})
+/** 字段契约整体失败（任一阶段失败即给卡头「字段契约重试」） */
+const contractFailed = computed(() => Object.values(stageFieldContract.value).some((c) => c.failed))
 /** promptRole 人话（后端 yaml-vocabulary 单源下发；前端不写第二份）——悬停时把「入/出」的
     口径连同「缺了会怎样 / 由谁派生」一起摆出来，让数字自带解释（2026-10-14 用户：悬停信息兼顾业务与技术查验） */
 const roleMetaById = ref<Record<string, { label: string; hint: string }>>({})
@@ -542,7 +570,10 @@ async function loadStageFieldContracts(ids: string[]) {
     const map: Record<string, StageFieldContract> = {}
     let meta: Array<{ id: string; label: string; hint: string }> = []
     results.forEach((r, i) => {
-      if (r.status !== 'fulfilled') return
+      if (r.status !== 'fulfilled') {
+        map[ids[i]] = { ins: [], outs: [], loaded: false, failed: errMsg(r.reason) }
+        return
+      }
       const data = r.value.data?.data
       const fields = (data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string }>
       if (!meta.length && Array.isArray(data?.promptRoleMeta) && data.promptRoleMeta.length) {
@@ -554,7 +585,8 @@ async function loadStageFieldContracts(ids: string[]) {
         loaded: true,
       }
     })
-    stageFieldContract.value = map
+    // 已加载的阶段覆盖旧值，失败阶段保留失败态；成功阶段不因同批其他失败而回退成「加载中」
+    stageFieldContract.value = { ...stageFieldContract.value, ...map }
     if (meta.length) {
       roleMetaById.value = Object.fromEntries(meta.map((m) => [m.id, { label: m.label, hint: m.hint }]))
     }
@@ -569,8 +601,26 @@ watch(
   },
   { immediate: true },
 )
+/** 契约失败重试：清掉在途签名后按当前阶段集重拉（此前失败永远停在「入 …」且无重试） */
+async function retryStageContracts() {
+  stageContractInflight = null
+  await loadStageFieldContracts(stages.value.map((s) => s.id))
+}
 function contractOf(id: string): StageFieldContract {
   return stageFieldContract.value[id] ?? { ins: [], outs: [], loaded: false }
+}
+/** 列脚读数三态：失败 → 「未加载」；未完成 → 「…」；就绪 → 数字 */
+function contractCountText(id: string, kind: 'in' | 'out'): string {
+  const c = contractOf(id)
+  if (c.failed) return '未加载'
+  if (!c.loaded) return '…'
+  return String(kind === 'in' ? c.ins.length : c.outs.length)
+}
+function contractChipTitle(id: string, kind: 'in' | 'out'): string {
+  const c = contractOf(id)
+  if (c.failed) return `字段契约未加载：${c.failed}`
+  if (!c.loaded) return '字段契约加载中'
+  return contractTitle(kind, kind === 'in' ? c.ins.length : c.outs.length)
 }
 
 /** 画布重算：列位置量出后画三次贝塞尔连线（仅箭头；字段明细不在边上渲染，
@@ -866,63 +916,45 @@ async function retryStages() {
   ])
 }
 
-/** 阶段页签 tooltip：skills=0 时说明去向（计数只显「0」，无从判断是真空还是没拉到）；
-    末尾缀上回程提示——字段旅程不再有自己的页签，「点当前阶段」是唯一回程入口 */
-/** 阶段页签的悬停信息：双层结构（首行中文阶段名，其后 Agent / Skill 数 / 操作提示）。
-    末尾缀上回程提示——字段旅程不再有自己的页签，「点当前阶段」是唯一回程入口 */
-/** 阶段页签英文名（2026-10-14 用户：除「总览」外一律英文）。
- *  阶段 id 本身就是流水线里的英文名（goal/path/teaching/profile/simulation，与 `<stage>-agent` 同源），
- *  中文 displayName（「教学阶段」…）是同一对象的展示名——此前页签直接剥「阶段」二字，
- *  于是 Goal/Path（后端名自带英文）与教学/画像/仿真（后端名是中文）半中半英地并排。
- *  这里按 id 取英文名，未登记的阶段回退中文显示名（不裸出 id、也不留空）。 */
+/** 阶段页签名与画布列头同名（2026-10-26 评审）：此前页签是英文 Goal/Path/…、列头是中文
+ *  「目标 Agent / 路径 Agent…」，读一屏要在脑子里做一次英中对照。阶段 id 仍是英文
+ *  （与 `<stage>-agent` 同源），只在展示层换成中文；未登记的阶段回退后端显示名。 */
 const STAGE_TAB_LABEL: Record<string, string> = {
-  goal: 'Goal',
-  path: 'Path',
-  teaching: 'Teaching',
-  profile: 'Profile',
-  simulation: 'Simulation'
+  goal: '目标',
+  path: '路径',
+  teaching: '教学',
+  profile: '学习者',
+  simulation: '仿真'
 }
 const stageTabLabel = (s: Stage) => STAGE_TAB_LABEL[s.id] || s.name.replace(/阶段$/, '')
 
 function stageTabTitle(s: Stage): string {
-  const lines = [s.name, `Agent: ${s.agentId}`]
-  lines.push(s.skills.length
-    ? `Skill: ${s.skills.length} 个`
-    : '该阶段下辖 0 个 Skill：调度结构可能未登记，或尚未拉取成功')
-  lines.push('该阶段的字段旅程')
-  return lines.join('\n')
+  return [s.name, `Agent: ${s.agentId}`, `Skill: ${s.skills.length} 个`].join('\n')
 }
 
-/** 总览 Skill 节点的悬停信息：同样双层（中文名 / Skill id / Agent / 产出数 / 点击提示） */
+/** 总览 Skill 节点的悬停信息：中文名 / Skill id / Agent / 产出数 */
 function skillNodeTitle(sk: Stage['skills'][number], s: Stage): string {
   const lines = [sk.name, `Skill: ${sk.id}`, `Agent: ${s.agentId}`]
   if (sk.produces.length) lines.push(`产出字段: ${sk.produces.length} 个`)
-  lines.push('Skill 详情')
   return lines.join('\n')
 }
 
-/** 字段路由卡头 tooltip：与画布 chips 同一份字段契约（同页同数纪律） */
-const routingMetaTitle = computed(() => {
-  const c = contractOf(active.value)
-  if (!c.loaded) return '字段契约加载中'
-  return `必填入参 ${c.ins.length} 项，产出 ${c.outs.length} 项`
-})
-
-/** 治理卡头 tooltip：定义与对账口径说明 */
+/** 治理卡头读数：运行时定义条数 + 一致性核查已上线数 */
 const govMetaTitle = computed(() =>
-  [
-    '运行时定义（编排与执行两类）',
-    recReport.value ? `一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}（含插件，多于 Skill 定义数属正常）` : '一致性核查报告不可用'
-  ].join('；')
+  recReport.value ? `一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}` : '一致性核查报告不可用'
 )
 </script><style scoped>
 /* 一级页签（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局
    .tabs/.tab（mk-primitives.css），本页只留容器间距修饰。 */
 .orch-top-tabs { margin-bottom: 2px; }
-/* 二级页签（阶段内：字段路由 / 治理）：与一级同语言、弱一档（字号更小 + 不占满行宽）。
-   字段旅程是阶段页签的默认视图，不在此列（见模板注释）。 */
-.orch-subtabs { margin-bottom: 2px; }
+/* 二级页签（阶段内：字段旅程 / 字段路由 / 治理）：与一级同语言、弱一档（字号更小 + 不占满行宽）。
+   右端挂「编排文件」入口（字段路由的唯一声明源）。 */
+.orch-subtabs-row { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
+.orch-subtabs { flex: 1 1 auto; min-width: 0; }
 .orch-subtabs .tab { font-weight: 600; }
+.orch-subtabs__action { flex: none; }
+/* 页签计数等宽：切阶段时页签宽度不跳（本页唯一会变的读数就是它） */
+.orch-top-tabs .tab__count { font-variant-numeric: tabular-nums; }
 /* 阶段视图容器：一级页签的 aria-controls 指向它，内部再分二级页签 + 内容。
    与 .orch-pane 同构（flex 列 + 弹性填满），保证套一层后各面板几何不变。 */
 .orch-stage-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
@@ -1067,6 +1099,8 @@ html[data-theme='dark'] {
 /* 审核 #119：--out 原继承 --mk-accent-deep 蓝字，与 --in 字色相同——绿底蓝字把「产出」读成可交互蓝。
    绿系 chip 字色改绿深档，让「蓝=入参/交互、绿=产出」在字色层也成立 */
 .orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-green, #15803d); }
+/* 契约拉取失败：红字显式说出「未加载」，与「加载中 …」和「真 0 个」在视觉上可分辨 */
+.orch-odg-chip--failed { background: color-mix(in srgb, var(--mk-red, #dc2626) 10%, transparent); color: var(--mk-red, #dc2626); }
 .orch-odg-fields {
   min-width: 0;
   /* 字段名是列脚唯一的信息，允许折两行；超长才省略，完整值仍在 title */

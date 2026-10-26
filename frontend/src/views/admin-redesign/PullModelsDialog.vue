@@ -40,7 +40,6 @@
               <b>{{ chatModels.length }}</b>
               <!-- 已添加的也计在候选里：两个数不一致时把「还能加几个」写出来，避免误读 -->
               <span v-if="selectableChat.length !== chatModels.length" class="pmd-sec__hint">可添加 {{ selectableChat.length }}</span>
-              <span class="pmd-sec__hint">勾选要登记进模型清单的对话模型</span>
             </div>
             <div class="pmd-list">
               <label
@@ -74,7 +73,6 @@
             <summary class="pmd-more__summary">
               <span class="pmd-sec__title">其他用途</span>
               <b>{{ otherModels.length }}</b>
-              <span class="pmd-sec__hint">不登记进 LLM 模型表，按用途去对应配置</span>
             </summary>
             <div class="pmd-list pmd-list--other">
               <div v-for="name in filteredOther" :key="name" class="pmd-row pmd-row--other">

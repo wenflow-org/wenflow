@@ -591,7 +591,9 @@ async function onDelete(row: Record<string, any>) {
 
 function goOrchestration() {
   if (!data.value) return
-  void router.push({ path: '/admin/orchestrator', query: { stage: data.value.stage, tab: 'field-routings' } })
+  // 落编排图的「字段路由」子页签：键与编排图白名单同词（routing），不再用只在本页出现过的
+  // field-routings ——那个值编排图不认，点了会静默落回总览。
+  void router.push({ path: '/admin/orchestrator', query: { stage: data.value.stage, tab: 'routing' } })
 }
 
 onMounted(() => void load())

@@ -11,7 +11,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import TeachingSessions from '../TeachingSessions.vue';
-import { clearPageCache } from '../live';
+import { clearPageCache, liveRefreshSeq } from '../live';
+import { subPage, closeSubPage } from '../store';
 
 const { listMock } = vi.hoisted(() => ({ listMock: vi.fn() }));
 
@@ -122,13 +123,71 @@ describe('TeachingSessions · 筛选 ↔ URL（O2c）', () => {
   });
 });
 
-describe('TeachingSessions · 行内动作（O4 说明保留 + 2026-10-19 下线链路）', () => {
-  it('行内只剩「详情」且带 tooltip；「链路」入口已下线（工程排查面不进运营列表）', async () => {
+describe('TeachingSessions · 行内动作（2026-10-19 下线链路 / 2026-10-26 撤重复详情钮）', () => {
+  it('行内不再有「详情」钮（行点击已是同一动作），也没有「链路」入口', async () => {
     const { wrapper } = await mountTs('/admin/teaching-sessions');
     const btns = wrapper.findAll('button').filter((b) => ['链路', '详情'].includes(b.text()));
-    expect(btns.some((b) => b.text() === '链路')).toBe(false);
-    const detail = btns.find((b) => b.text() === '详情')!;
-    expect(detail.attributes('title')).toContain('只读详情');
+    expect(btns).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it('缺总结行点击 → 座舱总结页签（stage=wrapup）；其余行落默认页签', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        data: {
+          items: [
+            makeItem('s-missing', { status: 'completed', wrapup: null }),
+            makeItem('s-done', { status: 'completed', wrapup: { status: 'complete', summary: { topicSummary: '总结' } } })
+          ],
+          total: 2
+        }
+      }
+    });
+    const { wrapper } = await mountTs('/admin/teaching-sessions');
+    const rows = wrapper.findAll('tbody tr');
+    await rows[0].trigger('click');
+    await flushPromises();
+    expect(subPage.value).toMatchObject({ view: 'session-real', id: 's-missing', stage: 'wrapup' });
+    closeSubPage();
+    await rows[1].trigger('click');
+    await flushPromises();
+    expect(subPage.value).toMatchObject({ view: 'session-real', id: 's-done' });
+    expect(subPage.value?.stage).toBeUndefined();
+    closeSubPage();
+    wrapper.unmount();
+  });
+
+  it('?wrap=eval-failed 落位：只留评估失败行，并写回 URL', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        data: {
+          items: [
+            makeItem('s-evalfail', {
+              status: 'completed',
+              wrapup: { status: 'complete', summary: { topicSummary: '总结' }, sources: { summary: 'model', evaluation: 'failed' } }
+            }),
+            makeItem('s-ok', {
+              status: 'completed',
+              wrapup: { status: 'complete', summary: { topicSummary: '总结' }, sources: { summary: 'model', evaluation: 'model' } }
+            })
+          ],
+          total: 2
+        }
+      }
+    });
+    const { wrapper, router } = await mountTs('/admin/teaching-sessions?wrap=eval-failed');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1);
+    expect(wrapper.text()).toContain('用户s-evalfail');
+    expect(router.currentRoute.value.query.wrap).toBe('eval-failed');
+    wrapper.unmount();
+  });
+
+  it('顶栏刷新（liveRefreshSeq 广播）触发一次强制重拉', async () => {
+    const { wrapper } = await mountTs('/admin/teaching-sessions');
+    const before = listMock.mock.calls.length;
+    liveRefreshSeq.value += 1;
+    await flushPromises();
+    expect(listMock.mock.calls.length).toBeGreaterThan(before);
     wrapper.unmount();
   });
 });

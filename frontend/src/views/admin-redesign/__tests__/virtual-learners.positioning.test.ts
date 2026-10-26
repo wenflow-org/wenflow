@@ -106,18 +106,18 @@ describe('虚拟学习者定位（D1）', () => {
     /* 活动会话 = running 2 + created 1 = 3：原状态条读数先迁进完成率卡 hint，2026-10-19
        用户走查「KPI hint 在报读数」后再往下沉一级——读数进 title 长释，副行留口径短语 */
     expect(wrapper.find('.mk-status').exists()).toBe(false);
-    const completion = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === '完成率');
+    const completion = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === '完成率（全部会话）');
     expect(completion!.find('.mk-kpi__hint').exists()).toBe(false);
     expect(completion!.attributes('title')).toContain('活动会话 3');
     wrapper.unmount();
   });
 
-  it('manifest 导航中虚拟实验组收敛为两个职责页（实例 + 身份池；批量实验 2026-10-04 下线）', () => {
+  it('manifest 导航中仿真组收敛为两个职责页（实例 + 身份池；批量实验 2026-10-04 下线）', () => {
     const scene = MOCK_SCENES.find((s) => s.id === 'virtual-learners');
     expect(scene).toBeDefined();
-    // 2026-10-24 组名与首项解耦：组＝虚拟实验，避免侧栏两行「虚拟学习者」
-    expect(scene!.group).toBe('虚拟实验');
-    const groupIds = MOCK_SCENES.filter((s) => s.group === '虚拟实验').map((s) => s.id);
+    // 2026-10-26 组名与总览状态条同词（「仿真 · 仿真空闲」）
+    expect(scene!.group).toBe('仿真');
+    const groupIds = MOCK_SCENES.filter((s) => s.group === '仿真').map((s) => s.id);
     expect(groupIds).toEqual(['virtual-learners', 'virtual-learner-cards']);
     expect(MOCK_SCENES.find((s) => s.id === 'batch-experiments')).toBeUndefined();
   });

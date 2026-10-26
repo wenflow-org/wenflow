@@ -119,8 +119,8 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     const unpriced = rows[1].find('.tc-st__cost');
     expect(unpriced.text()).toBe('—');
     expect(unpriced.classes()).toContain('tc-st__cost--none');
-    // 原因改由行 title 承担（占位符自身不带原因，若 title 也不说就是净丢信息）
-    expect(rows[1].attributes('title')).toContain('单价未配置');
+    // 行内不再挂解释型 title（占位符只说「没有金额」，原因在卡头徽章与调用成本卡）
+    expect(rows[1].attributes('title')).toBeUndefined();
     // 拆分与派生列真的算出来了（不是空列占位）
     expect(rows[0].findAll('.tc-st__num--dim').map((c) => c.text())).toEqual(['9.5M', '500.0K', '100.0K']);
     w.unmount();
@@ -131,8 +131,10 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     expect(w.find('.tc-card--skill .tc-card__note').exists()).toBe(false);
     const title = w.find('.tc-card--skill .mk-card__title');
     expect(title.attributes('title')).toBeUndefined();
-    // 卡头徽章仍承担可见的「未定价」状态
-    expect(w.find('.tc-card--skill .mk-badge').attributes('title')).toContain('未配置单价');
+    // 卡头「N 个未配置单价」是可点动作（与调用成本卡同落点），不再挂解释型 title
+    const unpriced = w.find('.tc-card--skill .tc-unpriced');
+    expect(unpriced.element.tagName).toBe('BUTTON');
+    expect(unpriced.attributes('title')).toBeUndefined();
     w.unmount();
   });
 
@@ -241,6 +243,37 @@ describe('OvBars · 数值贴柱顶', () => {
   });
 });
 
+describe('成本页 · 下钻口径（2026-10-26 评审）', () => {
+  it('Skill 行下钻带当前时间窗（执行日志默认「今天」，不带窗会落到另一个窗口）', async () => {
+    const { intent } = await import('../store');
+    intent.timeRange = '';
+    const w = await mountTokenCost();
+    await w.find('.tc-skilltable__row').trigger('click');
+    expect(intent.timeRange).toBe('week');
+    expect(intent.agentFilter).toBe('teaching-turn');
+    expect(intent.scene).toBe('execution-logs');
+    w.unmount();
+  });
+
+  it('用户 / 模型排行不可点（执行日志尚无 user / model 筛选，点了会落到空表）', async () => {
+    const { adminTokenCostApi } = await import('@/api/adminApi');
+    vi.mocked(adminTokenCostApi.getByUser).mockResolvedValueOnce({
+      data: { data: { items: [{ key: 'u1', display: 'u1', name: '甲', tokens: 60, calls: 3, failed: 0 }] } }
+    } as never);
+    vi.mocked(adminTokenCostApi.getByModel).mockResolvedValueOnce({
+      data: { data: { items: [{ key: 'm1', display: 'm1', tokens: 60, calls: 3, failed: 0 }] } }
+    } as never);
+    const w = await mountTokenCost();
+    const rows = w.findAll('.tc-table__row');
+    expect(rows.length).toBe(2);
+    for (const r of rows) {
+      expect(r.attributes('tabindex')).toBeUndefined();
+      expect(r.attributes('role')).toBe('row');
+    }
+    w.unmount();
+  });
+});
+
 describe('成本页 · 失败三态（#72 P-47）', () => {
   it('刷新失败保留旧数时：显式提示「以下为上次结果」，失败数与总 Token 不落成 0', async () => {
     const { adminTokenCostApi } = await import('@/api/adminApi');
@@ -255,7 +288,7 @@ describe('成本页 · 失败三态（#72 P-47）', () => {
 
     expect(w.find('.tc-error').exists()).toBe(true);
     expect(w.find('.tc-error').text()).toContain('上次加载结果');
-    const failed = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '失败调用')!;
+    const failed = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '失败')!;
     const tokens = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '总 Token')!;
     // 旧 summary 里 failed=0，刷新失败后必须显示「—」而不是沿用 0 冒充健康
     expect(failed.find('.mk-kpi__num').text()).toBe('—');

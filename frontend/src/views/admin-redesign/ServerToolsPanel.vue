@@ -2,18 +2,99 @@
   <!-- 运维工具面板（原「系统工具」页 Tab1；2026-10-16 用户拍板该场景解散并入运营中心：
        本组件作为运营中心宿主的一个页签体渲染，id/role=tabpanel/aria-labelledby 由宿主透传落到本根节点） -->
   <div class="stp-body">
+    <!-- Outbox 死信（2026-10-26 移到页签第一张）：运营待办「事件投递失败 → 去处理」落在这里，
+         首屏必须就是重放入口，不能先看到一张要求填内部用户 ID 的模拟表单。 -->
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h4 class="mk-card__title">事件投递失败</h4>
+        <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn——
+             零值与加载中不得伪装成「确认无死信」 -->
+        <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
+        <span v-else-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重放</span>
+        <div class="mk-card__head-right">
+          <!-- P3（2026-10-04 全站评审）：空态不给假动作——0 死信时禁点（此前点了会弹
+               「重放全部 0 条死信」确认框，暗示一个不存在的可执行动作） -->
+          <!-- 清单加载失败时作用域未知，禁用重放（否则确认框按 deadCount=0 生成假读数，
+               与「重放全部」自相矛盾） -->
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :disabled="requeueBusy || deadFailed || (!deadLoading && deadCount === 0)"
+            @click="requeueAll"
+          >
+            {{ requeueBusy ? '重放中…' : '重放全部失败事件' }}
+          </button>
+        </div>
+      </div>
+      <MkLoading v-if="deadLoading" />
+      <template v-else-if="deadItems.length">
+        <div class="mk-table-scroll">
+          <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
+               单元格 nowrap、列按内容自然分宽；事件类型 / 错误信息两处长内容列 max-width 截断兜底 -->
+          <table class="mk-table stp-dead-table">
+            <thead>
+              <tr>
+                <th>事件</th>
+                <th>用户</th>
+                <th>关联对象</th>
+                <th class="mk-th--right">尝试</th>
+                <th>错误</th>
+                <th>发生时间</th>
+                <th class="mk-th--right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in deadItems" :key="item.id">
+                <td><span class="mono stp-ev" :title="item.eventType">{{ item.eventType }}</span></td>
+                <td><span class="mono mk-cell-text">{{ shortId(item.userId || '—', 10, 4) }}</span></td>
+                <td><span class="mono mk-cell-text" :title="item.aggregateId || ''">{{ shortId(item.aggregateId || '—', 10, 4) }}</span></td>
+                <td class="mk-num">{{ item.attemptCount }}</td>
+                <td><span class="dt-err" :title="item.lastError || ''">{{ item.lastError || '—' }}</span></td>
+                <td :title="fmtDate(item.occurredAt)">{{ timeAgo(item.occurredAt) }}</td>
+                <td>
+                  <div class="mk-actions">
+                    <button type="button" class="mk-btn mk-btn--sm" :disabled="requeueBusy" @click="requeueOne(item.eventType)">重放该类</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mk-list-more">
+          <!-- CP8：死信总条数由卡头 warn 徽标单源承载，列表尾不再复读「共 N 条死信」。
+               口径与后端一致（outbox.worker 按 occurredAt 升序 take 50 → 实为最早 50 条，
+               不是「最近」）；总数一并给出，避免把窗口读成全量 -->
+          <span>最早 50 条（共 {{ deadCount }} 条）</span>
+          <button type="button" class="mk-link" @click="loadDead">刷新</button>
+        </div>
+      </template>
+      <!-- 失败态走 tone=error（红系图标 + role=alert），与页内另两处错误态同口径 -->
+      <MkEmptyState
+        v-else-if="deadFailed"
+        tone="error"
+        icon="!"
+        title="事件清单加载失败"
+        action-text="重试"
+        compact
+        @action="loadDead"
+      />
+      <MkEmptyState
+        v-else
+        title="没有待重放的事件"
+        compact
+      />
+    </section>
+
     <!-- 时间推进模拟 -->
     <section class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">时间推进模拟</h4>
-        <span class="mk-card__meta">模拟预览「N 天后」的学习者画像变化，不改动真实数据</span>
       </div>
       <div class="dt-body">
         <div class="dt-grid">
           <label class="mk-field">
             <span class="mk-field__label">用户 ID</span>
             <input v-model="advance.userId" class="mk-field__input mono" placeholder="留空 = 当前管理员" />
-            <span class="mk-field__hint">填内部用户 ID（user_…）；用户名不会匹配</span>
           </label>
           <!-- 天数校验（F6-4）：越界/空值显式报错并拦截，不再静默 clamp（判例
                VirtualLearnerBatchCreate 审核 #58「填 999 显 999 实建 20」）。原实现
@@ -69,7 +150,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">批量吞吐</h4>
-        <span class="mk-card__meta" title="rpm = 每分钟 LLM 尝试数（含失败，空转分钟计 0）。下限只对运行中的批次生效：无批次时空闲不告警">最近 {{ throughput?.windowMinutes ?? 60 }} 分钟 · 下限 {{ throughput?.minRpm ?? 20 }} rpm<template v-if="throughput?.idle"> · 空闲</template></span>
+        <span class="mk-card__meta">最近 {{ throughput?.windowMinutes ?? 60 }} 分钟 · 下限 {{ throughput?.minRpm ?? 20 }} rpm<template v-if="throughput?.idle"> · 空闲</template></span>
         <div class="mk-card__head-right">
           <button type="button" class="mk-btn mk-btn--sm" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '刷新' }}</button>
         </div>
@@ -84,15 +165,13 @@
         <div class="st-kpi" :class="{ 'st-kpi--warn': throughput?.alert }"><span class="st-kpi__label">最长连续</span><b class="st-kpi__value">{{ throughput?.longestLowRun ?? '—' }}</b><span class="st-kpi__hint">分钟</span></div>
       </div>
       <p v-if="throughput?.alert" class="mk-field__hint st-alert" role="alert">⚠ {{ throughput.alertReason }}</p>
-      <p v-else-if="throughput?.idle" class="mk-field__hint">空闲：没有运行中的批次或虚拟学习者会话，rpm 仅供参考。</p>
-      <p v-else-if="throughput" class="mk-field__hint">无持续低吞吐。</p>
     </section>
     <!-- 内容抽检（#121，2026-10-21）：CLI 闭环接到管理端；与 CLI 同表同键，标注后 CLI --metrics 立即可见。
          挂点在运维工具而不是「记忆与复习」：后者已收成学习者详情内的单用户面板，抽检是跨会话的运营动作。 -->
     <section class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">内容抽检</h4>
-        <span class="mk-card__meta" title="按确定性哈希从窗口内教师回合抽样。覆盖率=已标注/抽中，错误率=判错/已标注（未标注时为 n/a）">
+        <span class="mk-card__meta">
           近 7 天 · rate 5% · 抽中 {{ contentReview?.sampled ?? '—' }} / 已标注 {{ contentReview?.labeled ?? '—' }}<template v-if="contentReview"> · 覆盖率 {{ pctText(contentReview.coverage) }} · 错误率 {{ contentReview.errorRate == null ? 'n/a' : pctText(contentReview.errorRate) }} · 今日 {{ contentReview.todayLabeled ?? 0 }}/{{ contentReview.dailyTarget ?? 10 }}</template>
         </span>
         <div class="mk-card__head-right">
@@ -100,7 +179,7 @@
         </div>
       </div>
       <p v-if="contentFailed" class="mk-alert mk-alert--row" role="alert">内容抽检读取失败</p>
-      <div v-else-if="!contentReview?.items.length" class="mk-field__hint">本窗口没有抽中的教师回合（语料少或已过滤）。</div>
+      <div v-else-if="!contentReview?.items.length" class="mk-field__hint">本窗口没有抽中的教师回合。</div>
       <div v-else class="st-cr">
         <div class="st-cr__bar">
           <span class="mk-field__hint">待标注 {{ unlabeledCount }} 条 · 未标注优先</span>
@@ -109,7 +188,7 @@
             只看未标注
           </label>
         </div>
-        <div v-if="!contentItems.length" class="mk-field__hint">这批样本已全部标注，可「重新抽样」换一批。</div>
+        <div v-if="!contentItems.length" class="mk-field__hint">这批样本已全部标注。</div>
         <div v-for="item in contentItems" :key="item.messageId" class="st-cr__row">
           <span class="st-cr__id mono" :title="`消息 ${item.messageId} · 会话 ${item.sessionId}`">#{{ item.messageId }}</span>
           <span class="st-cr__text" :title="item.content">{{ item.content }}</span>
@@ -121,91 +200,6 @@
           </span>
         </div>
       </div>
-    </section>
-
-    <!-- Outbox 死信 -->
-    <section class="mk-card">
-      <div class="mk-card__head">
-        <h4 class="mk-card__title">事件投递失败</h4>
-        <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn——
-             零值与加载中不得伪装成「确认无死信」 -->
-        <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
-        <span v-else-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重放</span>
-        <div class="mk-card__head-right">
-          <!-- P3（2026-10-04 全站评审）：空态不给假动作——0 死信时禁点（此前点了会弹
-               「重放全部 0 条死信」确认框，暗示一个不存在的可执行动作） -->
-          <!-- 清单加载失败时作用域未知，禁用重放（否则确认框按 deadCount=0 生成假读数，
-               与「重放全部」自相矛盾） -->
-          <button
-            type="button"
-            class="mk-btn mk-btn--sm"
-            :disabled="requeueBusy || deadFailed || (!deadLoading && deadCount === 0)"
-            :title="deadFailed ? '清单未加载成功，请先重试' : (!deadLoading && deadCount === 0 ? '暂无待重放的事件' : undefined)"
-            @click="requeueAll"
-          >
-            {{ requeueBusy ? '重放中…' : '重放全部失败事件' }}
-          </button>
-        </div>
-      </div>
-      <MkLoading v-if="deadLoading" />
-      <template v-else-if="deadItems.length">
-        <div class="mk-table-scroll">
-          <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
-               单元格 nowrap、列按内容自然分宽；事件类型 / 错误信息两处长内容列 max-width 截断兜底 -->
-          <table class="mk-table stp-dead-table">
-            <thead>
-              <tr>
-                <th>事件</th>
-                <th>用户</th>
-                <th>关联对象</th>
-                <th class="mk-th--right">尝试</th>
-                <th>错误</th>
-                <th>发生时间</th>
-                <th class="mk-th--right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in deadItems" :key="item.id">
-                <td><span class="mono stp-ev" :title="item.eventType">{{ item.eventType }}</span></td>
-                <td><span class="mono mk-cell-text">{{ shortId(item.userId || '—', 10, 4) }}</span></td>
-                <td><span class="mono mk-cell-text" :title="item.aggregateId || ''">{{ shortId(item.aggregateId || '—', 10, 4) }}</span></td>
-                <td class="mk-num">{{ item.attemptCount }}</td>
-                <td><span class="dt-err" :title="item.lastError || ''">{{ item.lastError || '—' }}</span></td>
-                <td :title="fmtDate(item.occurredAt)">{{ timeAgo(item.occurredAt) }}</td>
-                <td>
-                  <div class="mk-actions">
-                    <button type="button" class="mk-btn mk-btn--sm" :disabled="requeueBusy" @click="requeueOne(item.eventType)">重放该类</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="mk-list-more">
-          <!-- CP8：死信总条数由卡头 warn 徽标单源承载，列表尾不再复读「共 N 条死信」。
-               口径与后端一致（outbox.worker 按 occurredAt 升序 take 50 → 实为最早 50 条，
-               不是「最近」）；总数一并给出，避免把窗口读成全量 -->
-          <span>最早 50 条（共 {{ deadCount }} 条）</span>
-          <button type="button" class="mk-link" @click="loadDead">刷新</button>
-        </div>
-      </template>
-      <!-- 失败态走 tone=error（红系图标 + role=alert），与页内另两处错误态同口径 -->
-      <MkEmptyState
-        v-else-if="deadFailed"
-        tone="error"
-        icon="!"
-        title="事件清单加载失败"
-        description="请先重试加载，再决定是否重放。"
-        action-text="重试"
-        compact
-        @action="loadDead"
-      />
-      <MkEmptyState
-        v-else
-        title="没有待重放的事件"
-        description="事件投递全部正常，无待处理积压。"
-        compact
-      />
     </section>
   </div>
 </template>

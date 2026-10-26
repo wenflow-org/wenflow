@@ -9,7 +9,6 @@
         <button
           type="button"
           class="mk-btn mk-btn--sm"
-          title="运营待办、反馈、公告与系统运维"
           @click="goOpsHub"
         >运营中心</button>
         <!-- 刷新状态独立于副文：副文只放事实段（运行全景/数据截至/最近活动），
@@ -43,6 +42,7 @@
         clickable
         :label="k.label"
         :value="k.value"
+        :value-note="k.valueNote"
         :hint="k.hint"
         :title="kpiTitle(k)"
         @click="jumpToKpi(k)"
@@ -50,17 +50,25 @@
       <!-- 完课量（#105 读侧接入，2026-10-19）：收束事件统一观测的按轨拆分，
            点卡进教学会话页看逐条轨道/通道。与上方四卡不同源（含虚拟/测试）。
            2026-10-21 用户「五个就一个有，也不要了，直接把这个做到上面」：五卡里只有本卡
-           带副行，整排被抬高一档——分解移到数值行内（valueNote），副行只留给取数三态。 -->
+           带副行，整排被抬高一档——分解移到数值行内（valueNote），副行只留给取数三态。
+           失败态卡不可点（卡内放重试钮），读数失败不能靠点卡跳去别处兜底。 -->
       <MkKpi
-        clickable
+        :clickable="closureState === 'ready'"
         :label="closureKpi.label"
         :value="closureKpi.value"
         :value-note="closureKpi.note"
         :hint="closureKpi.hint"
         :hint-tone="closureKpi.hintTone"
         :title="closureKpi.title"
-        @click="jump('teaching-sessions')"
-      />
+        @click="closureState === 'ready' ? jump('teaching-sessions') : undefined"
+      >
+        <button
+          v-if="closureState === 'error'"
+          type="button"
+          class="mk-link ov-closure__retry"
+          @click.stop="retryClosure"
+        >重试</button>
+      </MkKpi>
     </div>
 
     <!-- 系统状态（原型 .statusbar）：点色=结论、粗体=标题、meta=子项、右端=动作。
@@ -91,10 +99,12 @@
           >{{ statusAction.label }}</button>
         </div>
       </div>
-      <!-- 明细行 = 通道状态（调用/健康/仿真），不带动作项——去冗余（2026-10-03 用户反馈
+      <!-- 明细行 = 通道状态（调用/仿真），不带动作项——去冗余（2026-10-03 用户反馈
            「同一批异常出现 3 次」）：agent 失败/总结事项是「要做的事」，全数归底部待处理卡
            （那有按钮），事件流保有原始逐条；横幅只回答「各通道现在什么状态」。
-           2026-10-22 用户：标题只写「需要关注」，今日失败数下移到这里，与「健康 · 1 项异常」同级。 -->
+           2026-10-22 用户：标题只写「需要关注」，今日失败数下移到这里。
+           2026-10-26：健康 chip 撤除——同一控件加载中点击会跳走、失败态点击却是就地重试；
+           健康只留结论行右端一个出口。 -->
       <div class="ov-row ov-subs">
         <button
           v-if="todayFailed > 0"
@@ -103,13 +113,6 @@
           :class="health.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
           @click="investigateTodayFailures"
         >调用 · 今日失败 {{ todayFailed }} 次</button>
-        <button
-          type="button"
-          class="mk-status__meta-link"
-          :class="healthTone === 'bad' ? 'mk-status__meta--bad' : healthTone === 'warn' ? 'mk-status__meta--warn' : healthTone === 'ok' ? 'mk-status__meta--ok' : ''"
-          :title="healthTitle"
-          @click="healthChipClick"
-        >健康 · {{ healthText }}</button>
         <button
           type="button"
           class="mk-status__meta-link"
@@ -140,13 +143,12 @@
               role="button"
               tabindex="0"
               :title="s.title"
-              @click="jump(s.scene)"
-              @keydown.enter.self.prevent="jump(s.scene)"
-              @keydown.space.self.prevent="jump(s.scene)"
+              @click="openStage(s)"
+              @keydown.enter.self.prevent="openStage(s)"
+              @keydown.space.self.prevent="openStage(s)"
             >
               <span class="loop__no">阶段 {{ i + 1 }}</span>
               <span class="loop__name">{{ s.name }}</span>
-              <span class="loop__meta">{{ s.meta }}</span>
               <!-- 错误内联（2026-10-03 反馈「失败标记与责任阶段割裂」）：失败数贴在
                    责任阶段的指标行，amber 底色由此自证；点击即筛失败路径 -->
               <span class="loop__valrow">
@@ -161,9 +163,10 @@
                   v-if="s.failN"
                   type="button"
                   class="mk-badge mk-badge--sm mk-badge--bad loop__fail"
-                  :title="s.failScene === 'teaching-sessions' ? '评估失败次数' : '生成失败的路径数'"
-                  @click.stop="s.failScene ? jump(s.failScene) : jumpToFailedPaths()"
+                  title="生成失败的路径数"
+                  @click.stop="jumpToFailedPaths()"
                 >失败 {{ s.failN }}</button>
+                <span class="loop__go" aria-hidden="true">→</span>
               </span>
             </div>
           </template>
@@ -179,7 +182,7 @@
           <span class="mk-card__title">Skill 调用量 Top 5</span>
           <!-- 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：卡头 meta 只留时间窗，
                账号口径（仅真实账号 / 含管理员发起的仿真任务）进 title -->
-          <span class="mk-card__meta" title="仅真实账号（含管理员发起的仿真任务）">近 7 天</span>
+          <span class="mk-card__meta">近 7 天</span>
         </div>
         <div class="ov-card__body">
           <div class="ranklist">
@@ -219,7 +222,7 @@
           </div>
           <!-- 0 行空态（2026-10-24 用户「最近事件设计有问题」同页同律）：不落在卡底，
                改为在卡内剩余高度居中，与同页另两张卡的 0 行态同一形态 -->
-          <MkEmptyState v-if="!data.topSkills.length" class="ov-card__empty" title="近 7 天暂无调用" description="窗口内没有任何 Skill 调用记录。有调用后会按调用次数从多到少排行。" />
+          <MkEmptyState v-if="!data.topSkills.length" class="ov-card__empty" title="近 7 天暂无调用" description="窗口内没有任何 Skill 调用记录。" />
         </div>
       </div>
 
@@ -246,7 +249,7 @@
               <button type="button" class="todo-act" @click="t.action()">{{ t.actLabel }} →</button>
             </div>
           </div>
-          <MkEmptyState v-if="!todoItems.length" class="ov-card__empty" title="没有待处理的事项" description="健康检查、失败调用与课后总结都没有异常，有需要处理的会出现在这里。" />
+          <MkEmptyState v-if="!todoItems.length" class="ov-card__empty" title="没有待处理的事项" description="健康检查、失败调用与课后总结都没有异常。" />
         </div>
       </div>
 
@@ -282,16 +285,21 @@
           <span class="mk-card__title">近 7 天活跃学习者</span>
           <span class="mk-card__meta">单位：人</span>
           <span class="mk-card__head-right">
-            <button type="button" class="mk-btn mk-btn--sm" @click="jump('people')">用户与学习者 →</button>
+            <button type="button" class="mk-btn mk-btn--sm" @click="jump('people')">用户账号 →</button>
           </span>
         </div>
         <div class="ov-card__body">
           <!-- P1#2：手写 .barchart 无「今日进行中」语义（清晨当日累计尚小 → 柱高塌陷读成活跃崩塌），
                换全站统一 OvBars：零值「·」+ 今日列高亮内建；今日列 title 补「截至现在」防误读。
                审核 #1（2026-10-06）：本卡补空态——四张列表/图表卡中唯一没有空态文案，
-               growth7d 为空时整块留白会被读成渲染坏了。 -->
-          <OvBars v-if="barchartCols.length" :cols="barchartCols" :bar-width="40" :min-bars-height="120" />
-          <MkEmptyState v-else class="ov-card__empty" title="近 7 天暂无活跃数据" description="窗口内没有活跃学习者记录。有人开始学习后，这里会逐日显示活跃人数。" />
+               growth7d 为空时整块留白会被读成渲染坏了。
+               2026-10-26：7 天只有 1 天有值时改一行读数——321px 柱图只装一个点，其余六列是「·」。 -->
+          <div v-if="sparseActiveDay" class="ov-active-line">
+            <b class="ov-active-line__num">{{ sparseActiveDay.activeUsers }}</b>
+            <span class="ov-active-line__meta">人 · {{ sparseActiveDay.date }}</span>
+          </div>
+          <OvBars v-else-if="barchartCols.length" :cols="barchartCols" :bar-width="40" :min-bars-height="120" />
+          <MkEmptyState v-else class="ov-card__empty" title="近 7 天暂无活跃数据" description="窗口内没有活跃学习者记录。" />
         </div>
       </div>
       <div class="mk-card ov-card--feed">
@@ -334,8 +342,8 @@
             icon="◌"
             :title="data.feed.length ? '动态均来自测试 / 模拟账号' : '近 24h 暂无动态'"
             :description="data.feed.length
-              ? '按真实视角已隐藏这些动态，测试 / 模拟账号产生的动静不在这里列出。'
-              : '近 24 小时没有执行失败、新用户注册、教学会话或任务完成记录。有动静就会出现在这里。'"
+              ? '按真实视角已隐藏这些动态。'
+              : '近 24 小时没有执行失败、新用户注册、教学会话或任务完成记录。'"
           />
         </div>
       </div>
@@ -351,14 +359,13 @@
     min
     tone="error"
     title="真实数据暂不可用，请刷新或稍后重试。"
-    description="无法加载总览数据，可能是服务未启动或网络不可达。"
     action-text="重试"
     @action="retryOverview"
   />
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue';
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue';
 import { overviewHealth, investigateAgent, investigateTodayFailures, statusActionOf, intent, dataSource, openSubPage } from './store';
 import {
   liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing,
@@ -414,27 +421,28 @@ type LoopExtraState = 'loading' | 'ready' | 'failed';
 const teachState = ref<LoopExtraState>('loading');
 const memState = ref<LoopExtraState>('loading');
 /** P2 异常→动作闭环：五环各接深链（跳目标页 scene），点击行为与 title 同步披露 */
-interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title?: string; scene: string; failN?: number; ringFailed?: boolean; failScene?: string }
+interface LoopStage { name: string; val: string; tone: 'active' | 'done' | 'alert'; title?: string; scene: string; sceneQuery?: Record<string, string>; failN?: number; ringFailed?: boolean }
 const loopStages = computed<LoopStage[]>(() => {
   const d = data.value;
   const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
+  const evalFailed = d?.wrapup.evaluationFailed ?? 0;
   const pathsFailed = d?.loop.pathsFailed ?? 0;
   return [
     {
-      name: '目标对话', meta: '澄清真实目标与约束',
+      name: '目标对话',
       val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'active',
       title: '进行中的目标对话数',
       scene: 'goal-conversations',
     },
     {
       // P2：失败环不再恒 done——有失败路径时转 alert（着色条件与计数随 title 披露）
-      name: '路径规划', meta: '生成阶段化学习路径',
+      name: '路径规划',
       val: `${d?.loop.pathsActive ?? 0} 进行中`, tone: pathsFailed > 0 ? 'alert' : 'done',
       failN: pathsFailed > 0 ? pathsFailed : undefined,
       scene: 'learning-paths',
     },
     {
-      name: '教学回合', meta: '回合式讲解与追问',
+      name: '教学回合',
       val: teachState.value === 'loading'
         ? '加载中…'
         : teachState.value === 'failed'
@@ -448,21 +456,23 @@ const loopStages = computed<LoopStage[]>(() => {
       scene: 'teaching-sessions',
     },
     {
-      // 口径（#3）：evalOk 是「最近 sampleSize 条 wrapup 日志」里的成功条数（结构上 ≤ sampleSize），
-      // 与另外四环的全量口径不同源——数值必须带分母，否则与「320 待办 / 208 累计」并排会被读成漏斗塌陷
-      name: '课后评估', meta: '产出与掌握度评估',
-      val: `${evalOk}/${d?.wrapup.sampleSize ?? 0} 次完成`,
+      /* 口径（#3）：evalOk 是「最近 sampleSize 条 wrapup 日志」里的成功条数（结构上 ≤ sampleSize），
+         与另外四环的全量口径不同源——数值必须带分母，否则与「320 待办 / 208 累计」并排会被读成漏斗塌陷。
+         失败数并入同一读数（2026-10-26）：此前「0/1 次完成」旁边另挂「失败 1」徽章，同屏两处说同一件事；
+         有失败时本卡直接落到教学会话的评估失败筛选。 */
+      name: '课后评估',
+      val: evalFailed > 0
+        ? `最近 ${d?.wrapup.sampleSize ?? 0} 次总结 · ${evalOk} 完成 · ${evalFailed} 失败`
+        : `最近 ${d?.wrapup.sampleSize ?? 0} 次总结 · ${evalOk} 完成`,
       // 视觉修复 2026-10-24：评估失败数 > 0 时阶段卡必须与「路径规划」同档转 alert，
       // 不能继续绿框（同屏「失败 N」+ 绿色阶段卡会被读成互相矛盾）
-      tone: (d?.wrapup.evaluationFailed ?? 0) > 0 ? 'alert' : 'done',
-      failN: (d?.wrapup.evaluationFailed ?? 0) > 0 ? (d?.wrapup.evaluationFailed ?? 0) : undefined,
-      // 评估失败落在教学会话（不是路径失败）：失败徽章必须带自己的落点
-      failScene: 'teaching-sessions',
-      title: `最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结中 ${evalOk} 次评估完成 · 失败 ${d?.wrapup.evaluationFailed ?? 0}`,
+      tone: evalFailed > 0 ? 'alert' : 'done',
+      title: `最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结中 ${evalOk} 次评估完成 · 失败 ${evalFailed}`,
       scene: 'teaching-sessions',
+      sceneQuery: evalFailed > 0 ? { wrap: 'eval-failed' } : undefined,
     },
     {
-      name: '记忆复习', meta: '按遗忘曲线安排复习',
+      name: '记忆复习',
       val: memState.value === 'loading'
         ? '加载中…'
         : memState.value === 'failed'
@@ -487,6 +497,20 @@ function jumpToFailedPaths() {
   intent.tab = '';
   intent.statusFilter = 'failed';
   intent.scene = 'learning-paths';
+}
+/** 带目标页预筛的跳转：预筛进 URL（可刷新/可分享），与运营中心 goFailedPaths 同判例；
+    无 router 上下文（单测/独立挂载）时退回 intent 通道。 */
+const appRouter = getCurrentInstance()?.appContext.config.globalProperties.$router as
+  | { push: (to: { path: string; query: Record<string, string> }) => unknown }
+  | undefined;
+function openSceneWith(scene: string, query: Record<string, string>) {
+  if (!appRouter) { jump(scene); return }
+  void appRouter.push({ path: `/admin/${scene}`, query });
+}
+/** 闭环阶段卡下钻：评估失败阶段带自己的筛选，其余按 scene 直达 */
+function openStage(s: LoopStage) {
+  if (s.sceneQuery) openSceneWith(s.scene, s.sceneQuery);
+  else jump(s.scene);
 }
 async function loadLoopExtras() {
   teachState.value = 'loading';
@@ -537,9 +561,20 @@ function refreshNow() {
    activeTodayBaseline），不再与昨日全日直接比——旧趋势 foot 因「今日进行中 vs 昨日全日」
    失真下线（凌晨 ▼-97% 实证），等的就是这个口径。口径注释（全量含虚拟/测试、总用户）
    退到悬停 tooltip（hint），foot 只留 超时/失败/新增 与基线说明。 */
-interface KpiCard { key?: string; label: string; value: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }
+interface KpiCard { key?: string; label: string; value: string; valueNote?: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }
+/** 目标对话卡报的是「进行中 + 已完成 + 已取消」总量，与闭环阶段 1 的「N 进行中」同名不同量：
+ *  卡名与数值行都标出总量口径，避免两处读成同一指标。 */
 const kpiCards = computed<KpiCard[]>(() =>
-  (data.value?.kpis ?? []).map((k) => ({ key: k.key, label: k.label, value: k.value, foot: k.foot, hint: k.hint, note: k.note, trend: k.trend }))
+  (data.value?.kpis ?? []).map((k) => ({
+    key: k.key,
+    label: k.key === 'goalConversations' ? '累计目标对话' : k.label,
+    value: k.value,
+    valueNote: k.key === 'goalConversations' ? '总量' : undefined,
+    foot: k.foot,
+    hint: k.hint,
+    note: k.note,
+    trend: k.trend,
+  }))
 );
 
 /* ===== 完课量（#105 读侧接入，2026-10-19）=====
@@ -578,9 +613,10 @@ const closureKpi = computed(() => {
       label: '完课量',
       value: '—',
       note: '',
-      hint: closureState.value === 'error' ? '读数加载失败' : '读数加载中…',
+      /* 加载中不出卡面文案（读数位给「—」即可）；失败是事实，必须写在卡上并配重试。 */
+      hint: closureState.value === 'error' ? '读数加载失败' : '',
       hintTone: (closureState.value === 'error' ? 'warn' : '') as '' | 'warn',
-      title: '完课量：收束事件的统一观测（#105）——任务完成按真实 / 虚拟学习者拆分',
+      title: '',
     }
   }
   const s = closureSummary.value
@@ -590,12 +626,7 @@ const closureKpi = computed(() => {
   const unmarkedLabel = closureTrackText('legacy')
   const hintParts = [`真实 ${human}`, `虚拟 ${virtual}`]
   if (unmarked > 0) hintParts.push(`${unmarkedLabel} ${unmarked}`)
-  const titleParts = [
-    '本卡含虚拟学习者与测试账号，与上方真实口径 KPI 不同源。',
-    /* 目标页口径（2026-10-24 审计）：教学会话默认只列非虚拟账号，点进去的数会小于本卡；
-       先在这里说清，避免把差额读成丢数据。虚拟轨道到「虚拟学习者」核对。 */
-    '「教学会话」列表只列非虚拟账号的课堂，虚拟学习者的完成量在「虚拟学习者」里核对。',
-  ].filter(Boolean)
+  const title = '本卡含虚拟学习者与测试账号，与真实用户 KPI 不同源。'
   return {
     label: '完课量',
     value: `${s.total}`,
@@ -603,7 +634,7 @@ const closureKpi = computed(() => {
     note: hintParts.join(' · '),
     hint: '',
     hintTone: '' as const,
-    title: titleParts.join(''),
+    title,
   }
 });
 
@@ -634,6 +665,11 @@ const barchartCols = computed(() => (data.value?.growth7d || []).map((g) => {
     bars: [{ pct: barPct(active, activeMax.value), tone: 'blue' as const }],
   };
 }));
+/** 稀疏窗口：7 天里只有 1 天有活跃值时不画柱图，改为一行读数（柱图在此只会留下六个「·」）。 */
+const sparseActiveDay = computed(() => {
+  const days = (data.value?.growth7d || []).filter((g) => (g.activeUsers || 0) > 0)
+  return days.length === 1 ? days[0] : null
+});
 
 /* 系统健康摘要：拉统一健康清单（60s 缓存），只取 warn/error 计数。
    P1#3 三态纪律：加载中 / 加载失败 / 空清单 / 有数据是四种不同事实，
@@ -646,25 +682,8 @@ const healthTone = computed<Tone>(() => {
   if (healthState.value !== 'ready' || !healthCheck.value) return 'muted';
   return healthCheck.value.error > 0 ? 'bad' : healthCheck.value.warn > 0 ? 'warn' : 'ok';
 });
-const healthText = computed(() => {
-  if (healthState.value === 'error') return '加载失败（可重试）';
-  if (healthState.value === 'empty') return '无检查项';
-  if (healthState.value !== 'ready' || !healthCheck.value) return '健康检查加载中';
-  if (healthCheck.value.error > 0) return `${healthCheck.value.error} 项异常`;
-  if (healthCheck.value.warn > 0) return `${healthCheck.value.warn} 项需关注`;
-  return `${healthCheck.value.total} 项检查全部正常`;
-});
-const healthTitle = computed(() => {
-  if (healthState.value === 'error') return '健康检查清单加载失败';
-  if (healthState.value === 'empty') return '健康中心暂无检查项';
-  if (healthState.value === 'loading') return '健康检查加载中';
-  return '查看健康中心完整检查清单';
-});
-function healthChipClick() {
-  // 失败态点击 = 就地重试（健康中心仍可从状态条右侧动作进入），兑现「可重试」承诺
-  if (healthState.value === 'error') { void loadHealth(); return; }
-  jump('health-center');
-}
+/** 健康清单的状态事实：只在取数失败时给一句错误原文（按钮文案已说明去哪） */
+const healthTitle = computed(() => (healthState.value === 'error' ? '健康检查清单加载失败' : ''));
 
 /** 今日失败数：读同屏「今日成功率」KPI 的 foot（唯一已发布读数），不另造一份计数。
     按稳定 key 取，展示名改文案不会让这里静默变 0（旧夹具无 key 时按标签兜底）。 */
@@ -676,10 +695,8 @@ const todayFailed = computed(() => {
 })
 
 /** 结论行右端动作：按结论自己的口径派生。
-    此前硬编码「查看健康中心」——结论写「需要关注：今日失败 17 次」时，右端按钮却把人
-    送到系统检查清单（14 项系统检查），在那里找不到这 17 条失败（2026-10-13 运营走查 O3）。
     「需要关注」（今日失败 / 今日成功率两类触发）→ 去执行日志按「失败 + 今天」排查；
-    其余（运行平稳 / 空闲 / 统计未就绪）→ 维持健康中心入口。健康项本身在明细行另有链接。 */
+    其余（运行平稳 / 空闲 / 统计未就绪）→ 健康中心入口（健康明细已从状态条撤除，这里只剩这一个出口）。 */
 const statusAction = computed(() => {
   if (statusActionOf(health.value?.headline || '') === 'investigate-today') {
     return {
@@ -735,9 +752,20 @@ const simTitle = computed(() => {
   return parts.join(' · ')
 })
 
-/* 状态条结论取色 = 最差子项（调用结论 / 健康检查 / 仿真 / 今日失败）。
-   视觉修复 2026-10-24：此前结论色只跟调用成功率走，明细行却把 healthCheck 的
-   「1 项异常」染红——同一状态条绿点 + 红字互相矛盾。muted 只在所有子项都无读数时保留。 */
+/* 状态条结论取色 = 最差子项（调用结论 / 健康检查 / 仿真 / 今日失败 / 待处理事项）。
+   2026-10-24：此前结论色只跟调用成功率走，明细行却把 healthCheck 的「1 项异常」染红——
+   同一状态条绿点 + 红字互相矛盾。muted 只在所有子项都无读数时保留。
+   2026-10-26：今日 0 调用时 live.ts 直接给「系统空闲」，而同屏待处理事项仍有条目——
+   结论必须并入待办条数与近 7 天失败数，不能只按今日读数下结论。 */
+const todayCalls = computed(() => {
+  const kpi = data.value?.kpis?.find((k) => k.key === 'todayCalls')
+    ?? data.value?.kpis?.find((k) => k.label === '今日调用')
+  const n = Number(String(kpi?.value ?? '').replace(/[^\d.-]/g, ''))
+  return Number.isFinite(n) ? n : 0
+})
+const failed7d = computed(() => Number(data.value?.usage?.failed7d ?? 0))
+/** 今日无调用 ≠ 没事：同屏待办与近 7 天失败是唯一要求动手的事实，结论先报它 */
+const todoTakesOver = computed(() => todayCalls.value === 0 && todoItems.value.length > 0)
 const statusTone = computed<Tone>(() => {
   const rank: Record<Tone, number> = { muted: 0, ok: 1, warn: 2, bad: 3 }
   const tones: Tone[] = [health.value.tone]
@@ -747,12 +775,20 @@ const statusTone = computed<Tone>(() => {
   // 仿真「加载中 / 空闲」是 muted，不参与降级；只有已就绪且判定出 warn/bad 才计入
   if (simTone.value !== 'muted') tones.push(simTone.value)
   if (todayFailed.value > 0) tones.push('warn')
+  if (todoTakesOver.value) {
+    tones.push(todoItems.value.some((t) => t.tone === 'bad') ? 'bad' : 'warn')
+  }
   return tones.reduce<Tone>((worst, t) => (rank[t] > rank[worst] ? t : worst), 'muted')
 })
 /** 结论文案：健康清单有异常/需关注时把数量并入结论，避免「系统空闲」或「运行平稳」
     与明细行的红/琥珀读数读成互相矛盾；结论本身已是「需要关注」时不重复追加。 */
 const statusHeadline = computed(() => {
   const base = health.value.headline
+  if (todoTakesOver.value) {
+    const parts = [`${todoItems.value.length} 项待处理`]
+    if (failed7d.value > 0) parts.push(`近 7 天失败 ${failed7d.value} 次`)
+    return parts.join(' · ')
+  }
   if (!base || base.includes('需要关注')) return base
   const hc = healthCheck.value
   const reasons: string[] = []
@@ -864,20 +900,21 @@ const wrapupIssue = computed(() => {
 async function retryOverview() {
   const ok = await refreshOverviewTracked(true)
   if (ok) lastUpdated.value = nowHm()
-  // 完课量卡失败态无独立重试钮：整页重试一并重拉（与闭环两环同节奏）
   if (closureState.value !== 'ready') void loadClosure()
 }
+/** 完课量卡失败态的就地重试：不再依赖整页重试（整页重试只在 data 为空时出现）。 */
+function retryClosure() { void loadClosure() }
 
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤）
 const hideTestAccounts = overviewHideTest
 /* KPI 目标：按稳定 key 匹配——只按展示名或数组下标都会在改文案/调顺序时静默跳错页。
    「今日」卡同时带上时间窗，「今日成功率」再带失败筛：卡面读的是今日失败 N 次，
    落地页要同口径，不能在今日全部调用里让人自己翻（2026-10-24 层级审计）。 */
-type KpiJump = { scene: string; tab?: string; statusFilter?: string; timeRange?: string }
+type KpiJump = { scene: string; tab?: string; statusFilter?: string; timeRange?: string; query?: Record<string, string> }
 const KPI_TARGETS: Record<string, KpiJump> = {
   todayCalls: { scene: 'execution-logs', timeRange: 'today' },
   todaySuccessRate: { scene: 'execution-logs', statusFilter: 'err', timeRange: 'today' },
-  activeUsers: { scene: 'people' },
+  activeUsers: { scene: 'people', query: { pill: 'online' } },
   goalConversations: { scene: 'goal-conversations' }
 }
 /** 旧夹具/旧缓存可能没有 key：按展示名兜底，仍不退回数组下标 */
@@ -885,10 +922,12 @@ const KPI_TARGET_BY_LABEL: Record<string, KpiJump> = {
   今日调用: KPI_TARGETS.todayCalls,
   今日成功率: KPI_TARGETS.todaySuccessRate,
   用户活跃: KPI_TARGETS.activeUsers,
-  目标对话: KPI_TARGETS.goalConversations
+  目标对话: KPI_TARGETS.goalConversations,
+  累计目标对话: KPI_TARGETS.goalConversations
 }
 function jumpToKpi(k: KpiCard) {
   const t = (k.key ? KPI_TARGETS[k.key] : undefined) ?? KPI_TARGET_BY_LABEL[k.label] ?? { scene: 'execution-logs' }
+  if (t.query) { openSceneWith(t.scene, t.query); return }
   jump(t.scene, t.tab, { statusFilter: t.statusFilter, timeRange: t.timeRange })
 }
 function goOpsHub() {
@@ -1083,7 +1122,7 @@ const todoItems = computed<TodoItem[]>(() => {
   }
   const w = wrapupIssue.value;
   if (w) {
-    items.push({ key: 'wrapup', text: w.text, main: splitTodoMain(w.text), tone: w.tone as Tone, actLabel: '教学会话', action: () => jump('teaching-sessions') });
+    items.push({ key: 'wrapup', text: w.text, main: splitTodoMain(w.text), tone: w.tone as Tone, actLabel: '教学会话', action: () => openSceneWith('teaching-sessions', { wrap: 'degraded' }) });
   }
   return items;
 });
@@ -1209,6 +1248,23 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 .ov-card--chart .ov-card__body,
 .ov-card--feed .ov-card__body { display: flex; flex-direction: column; }
 .ov-card__empty { flex: 1; place-content: center; }
+/* 稀疏活跃窗口的一行读数（7 天只有 1 天有值时不画柱图）：数字与单位同行、垂直居中 */
+.ov-active-line {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+}
+.ov-active-line__num {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--mk-ink);
+}
+.ov-active-line__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 完课量失败态的重试：挂在 MkKpi 默认 slot 内，与读数同位对齐 */
+.ov-closure__retry { justify-self: start; font-size: var(--mk-fs-micro); }
 
 /* ---- 警示状态条减重（评审 2026-10-10「大面积琥珀底显脏」）----
    共享 .mk-status--warn/--bad 是 2026-10-04「全站统一染底」的拍板口径，不动共享原语；
@@ -1222,8 +1278,7 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
   border-color: color-mix(in srgb, var(--mk-red) 38%, var(--mk-line));
 }
 
-/* ---- 胶囊（原型 .pill：卡头 tools 徽标）---- */
-.pill {
+/* ---- 胶囊（原型 .pill：卡头 tools 徽标）---- */.pill {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 2px 9px; border-radius: 999px;
   font-size: var(--mk-fs-micro); font-weight: 600;
@@ -1257,18 +1312,23 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
   border-radius: var(--mk-radius-lg); background: var(--mk-surface);
   /* P2：五环可点穿（携 intent 深链跳目标页），交互 affordance 与 .card--kpi 同语言 */
   cursor: pointer;
+  transition: border-color 0.12s var(--mk-ease-out), background 0.12s var(--mk-ease-out);
 }
+/* 可点线索：悬停只换边框与底色（全站判例，不做位移），行尾箭头常显 */
+.loop__step:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); background: var(--mk-btn-hover-bg); }
 .loop__step:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
 .loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
+.loop__step--active:hover { background: var(--mk-blue-bg-strong); }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
 /* 阶段号是人话标签（「阶段 1」），不与等宽字体混排 */
 .loop__no { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
-.loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
 /* 指标行 = 数值 + 失败徽章（错误内联，2026-10-03）：徽章可点，需手型与文字对齐 */
 .loop__valrow { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+/* 行尾箭头：role=button 的可点线索，与页内文字链「→」同词汇 */
+.loop__go { margin-left: auto; color: var(--mk-blue); font-weight: 700; }
 .loop__fail { cursor: pointer; font-family: inherit; }
 /* 对比度（#0）：暗色 --mk-red-bg 是 14% 半透明红，红字压在本页 .loop__step--alert 的
    半透明琥珀底上合成 3.49:1（<小字 AA 4.5）。徽章自铺不透明底板：暗色取 --mk-surface-2

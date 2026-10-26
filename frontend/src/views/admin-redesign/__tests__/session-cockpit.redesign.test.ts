@@ -239,9 +239,10 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
 
     // 真实会话只读：hero 动作区只剩确定性出口——刷新已收归顶栏一颗（2026-10-19 用户走查
     // 「刷新重复了吧」，页内改为 watch liveRefreshSeq 接住顶栏刷新），无生命周期控制、
-    // 原型假钮（导出日志）与危险动作（中断会话）不出现
+    // 原型假钮（导出日志）与危险动作（中断会话）不出现。
+    // 2026-10-26：异常会话的唯一排查出口「执行日志」放在座舱里（列表侧不摆第二颗钮）。
     const acts = w.findAll('.mk-hero__actions button').map((b) => b.text());
-    expect(acts).toEqual(['← 教学会话列表']);
+    expect(acts).toEqual(['执行日志', '← 教学会话列表']);
     expect(w.text()).not.toContain('导出日志');
     expect(w.text()).not.toContain('中断会话');
 

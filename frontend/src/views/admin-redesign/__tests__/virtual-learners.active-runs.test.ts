@@ -1,8 +1,9 @@
 /**
- * 虚拟学习者「运行状态」列（2026-10-21 晚用户定稿：只反映运行 / 停滞 / 停止）：
+ * 虚拟学习者「运行状态」列（2026-10-21 晚定稿，2026-10-26 拆四档）：
  * - 一格里只有一个点 + 一个词，回答「这个人在跑还是不在跑」
  * - 阶段、路径、任务数、终态一律不进列表（要看细节进画像页）
- * - 判定：有在推进的会话=运行中，只有暂停或超时无写入=停滞，其余=已停止
+ * - 判定：有在推进的会话=运行中；超阈值无写入=停滞（琥珀）；运营主动停=已暂停（中性灰）；其余=已停止
+ * - 暂停与停滞分开：前者是主动操作、后者是故障，同词同色会让黄灯失去区分度
  * - 失败与无响应仍合并成一列「异常」，两枚标签各自带词、零值整格「—」
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -154,7 +155,7 @@ beforeEach(() => {
 });
 
 describe('虚拟学习者：运行状态列只回答在不在跑', () => {
-  it('列名与口径：叫「运行状态」，title 说清三档，不再提阶段', async () => {
+  it('列名与口径：叫「运行状态」，title 只回答在不在跑，不再提阶段', async () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
@@ -164,19 +165,18 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     const th = w.findAll('thead th').find((t) => t.text().trim() === '运行状态')!;
     const title = th.attributes('title')!;
     expect(title).toContain('在跑还是不在跑');
-    expect(title).toContain('停滞');
     expect(title).not.toContain('阶段');
     w.unmount();
   });
 
-  it('五档输入落到三档：后端计数即真值——有在推进=运行中，只有卡住/暂停=停滞', async () => {
+  it('四档状态：后端计数即真值——有在推进=运行中，超阈值无写入=停滞，主动暂停=已暂停', async () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
     const cases: Array<[string, string, string]> = [
       ['在跑的人', '运行中', 'vl-runstate--running'],
       ['停滞的人', '停滞', 'vl-runstate--stalled'],
-      ['暂停的人', '停滞', 'vl-runstate--stalled'],
+      ['暂停的人', '已暂停', 'vl-runstate--paused'],
       ['停过的人', '已停止', 'vl-runstate--stopped'],
       ['没跑过的人', '已停止', 'vl-runstate--stopped']
     ];
@@ -189,16 +189,16 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     w.unmount();
   });
 
-  it('口径写进 title：为什么是这一档，以及要看细节去哪', async () => {
+  it('这一档的读数写进 title（条数 + 阈值），不写「去哪看」', async () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
     expect(stateOf(w, '在跑的人').attributes('title')).toContain('1 条会话正在运行');
     const stall = stateOf(w, '停滞的人').attributes('title')!;
     expect(stall).toContain('超过回收阈值');
-    expect(stateOf(w, '暂停的人').attributes('title')).toContain('自动驾驶已暂停');
-    expect(stateOf(w, '停过的人').attributes('title')).toContain('当前没有运行中的会话');
-    expect(stateOf(w, '没跑过的人').attributes('title')).toBe('还没有运行过');
+    expect(stateOf(w, '暂停的人').attributes('title')).toContain('已暂停');
+    expect(stateOf(w, '停过的人').attributes('title')).toContain('没有运行中的会话');
+    expect(stateOf(w, '没跑过的人').attributes('title')).toBe('没有运行过');
     w.unmount();
   });
 
@@ -219,22 +219,39 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     w.unmount();
   });
 
-  it('行主操作随状态走：运行中→暂停、停滞(暂停)→继续、停滞(无响应)→终止、已停止→运行', async () => {
+  it('行主操作随状态走：运行中→暂停、已暂停/停滞→继续、已停止→运行；终止不占行主位', async () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
     const actionOf = (name: string) => rowByName(w, name).find('.mk-actions > .mk-btn');
     expect(actionOf('在跑的人').text()).toBe('暂停');
     expect(actionOf('暂停的人').text()).toBe('继续');
-    expect(actionOf('停滞的人').text()).toBe('终止');
+    // 2026-10-26：停滞也给「继续」（此前只剩终止，想恢复被暂停的会话只能进画像页）
+    expect(actionOf('停滞的人').text()).toBe('继续');
     expect(actionOf('停过的人').text()).toBe('运行');
     // 图标也要能区分：「运行」是裸三角（新开一条），「继续」是带圈播放（接着跑）
     expect(actionOf('停过的人').find('svg').classes()).toContain('lucide-play');
     expect(actionOf('暂停的人').find('svg').classes()).toContain('lucide-circle-play');
     expect(actionOf('在跑的人').find('svg').classes()).toContain('lucide-pause');
-    // 终止是破坏性：走红描边档，不与「运行」同色
-    expect(actionOf('停滞的人').classes()).toContain('mk-btn--danger-ghost');
-    expect(actionOf('停过的人').classes()).not.toContain('mk-btn--danger-ghost');
+    // 终止不可逆：只在 ⋯ 菜单里，不占行主位
+    await rowByName(w, '停滞的人').find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    const items = rowByName(w, '停滞的人').findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
+    expect(items).toContain('终止');
+    expect(actionOf('停滞的人').classes()).not.toContain('mk-btn--danger-ghost');
+    w.unmount();
+  });
+
+  it('暂停与停滞同时存在：给「继续」（先恢复被暂停的会话）', async () => {
+    liveVirtuals.value = [
+      baseRow({ id: 'p-mixed', name: '混合的人', runningCount: 0, pausedCount: 1, stalledCount: 1 })
+    ] as unknown as typeof liveVirtuals.value;
+    const w = mount(VirtualLearners);
+    await flushPromises();
+    await nextTick();
+    const row = rowByName(w, '混合的人');
+    expect(row.find('.vl-runstate').text()).toBe('停滞');
+    expect(row.find('.mk-actions > .mk-btn').text()).toBe('继续');
     w.unmount();
   });
 
@@ -264,7 +281,7 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     w.unmount();
   });
 
-  it('异常列把两种问题信号分开说：系统失败数与无响应数（带阈值与暂停口径）', async () => {
+  it('异常列把两种问题信号分开说：系统失败数与无响应数（带阈值）', async () => {
     liveVirtuals.value = [baseRow({ name: '沈舟', failedCount: 2, stalledCount: 1 })] as unknown as typeof liveVirtuals.value;
     const w = mount(VirtualLearners);
     await flushPromises();
@@ -276,8 +293,6 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
 
     const stall = rowByName(w, '沈舟').find('.vl-abn--stall');
     expect(stall.attributes('title')).toContain('30 分钟');
-    expect(stall.attributes('title')).toContain('管理员在运行页手动暂停的运行不计入');
-    expect(stall.attributes('title')).toContain('回收无响应');
     expect(stall.attributes('title')).not.toContain('已暂停的会话不计入');
     w.unmount();
   });

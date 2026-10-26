@@ -122,10 +122,11 @@ describe('Prompt 评估独立页（拆页后的宿主契约）', () => {
     getEvalRunsMock.mockResolvedValue({ data: { data: makeRuns(3) } });
   });
 
-  it('页头：页名 + 口径副文 + 唯一动作「批量跑评估」，不再有一级视图页签', async () => {
+  it('页头：页名 + 唯一动作（有启用用例时为「批量跑评估」），不再有一级视图页签', async () => {
     const { wrapper } = await mountPage();
     expect(wrapper.find('.mk-pagehead__title').text()).toBe('Prompt 评估');
-    expect(wrapper.find('.mk-pagehead__sub').text()).toBe('提示词质量评测 · 用例集与历史运行');
+    // 页头副文已删（2026-10-26 评审：复述页名 + 两个页签名）
+    expect(wrapper.find('.mk-pagehead__sub').exists()).toBe(false);
     const actions = wrapper.findAll('.mk-pagehead__actions button').map((b) => b.text());
     expect(actions).toEqual(['批量跑评估']);
     // 一级页签（Skill 运行 / Prompt 评估）随拆页撤除；面板内层「评估用例/评估历史」仍在
@@ -135,16 +136,32 @@ describe('Prompt 评估独立页（拆页后的宿主契约）', () => {
     wrapper.unmount();
   });
 
-  it('读数带由宿主渲染在面板之上，四条读数与面板同源', async () => {
+  it('无启用用例时页头主操作变成「新建用例」（不再是一颗点不动的灰按钮）', async () => {
+    getEvalCasesMock.mockResolvedValue({
+      data: { data: [{ id: 'c1', name: '停用用例', agentId: 'skill:goal-conversation', enabled: false, messages: [] }] },
+    });
+    const { wrapper } = await mountPage();
+    await vi.waitFor(() => {
+      const actions = wrapper.findAll('.mk-pagehead__actions button');
+      expect(actions.map((b) => b.text())).toEqual(['新建用例']);
+      expect(actions[0].attributes('disabled')).toBeUndefined();
+    });
+    await wrapper.find('.mk-pagehead__actions button').trigger('click');
+    await flushPromises();
+    // 与空态中央同一弹窗（Teleport 到 body）
+    expect(document.body.querySelector('[role="dialog"][aria-label="编辑评估用例"]')).toBeTruthy();
+    wrapper.unmount();
+  });
+
+  it('读数带收成一张：通过率 + 用例分母（valueNote）', async () => {
     const { wrapper } = await mountPage();
     await vi.waitFor(() => {
       const labels = wrapper.findAll('.mk-kpi-grid .mk-kpi__label').map((el) => el.text().trim());
-      expect(labels).toEqual(['最近评测通过率', '评估用例', '启用用例', '评估历史']);
+      expect(labels).toEqual(['最近评测通过率']);
     });
     await vi.waitFor(() => {
-      const nums = wrapper.findAll('.mk-kpi-grid .mk-kpi__num').map((el) => el.text().trim());
-      // 用例 2 条（1 启用 1 停用）、历史 3 条；通过率取最近一次 100%
-      expect(nums).toEqual(['100%', '2', '1', '3']);
+      expect(wrapper.find('.mk-kpi-grid .mk-kpi__num').text()).toContain('100%');
+      expect(wrapper.find('.mk-kpi-grid .mk-kpi__num-note').text()).toBe('用例 2 · 启用 1');
     });
     // 带在页头之下、面板之上：首个 .mk-kpi-grid 出现在 .pe 卡片之前
     const html = wrapper.html();

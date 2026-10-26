@@ -1,15 +1,7 @@
 <template>
   <div class="mk-page">
-    <!-- 页头（newui/admin 原型 pagehead）：标题 + 口径副文 + 主操作上移；
-         原状态条承担的「身份+口径+刷新」迁入页头，三个数字仍归下方 KPI 卡
-         （避免同一批数在页头与 KPI 区各说一遍，2026-09-29 口径延续）。
-         sub 用原型固定文案（2026-10-01 页头对齐批）；动态窗口/测试流量口径
-         转为页名悬停 hint——窗口 pill 与数据视角开关就在同一动作区，取值本就可见 -->
-    <MkPageHead
-      title="成本分析"
-      sub="按模型、Skill 与时间维度追踪模型调用成本"
-      :hint="`近 ${days} 天 · 全部账号`"
-    >
+    <!-- 页头：页名 + 动作区（时间窗 / 读数时刻 / 导出）。读数归下方 KPI 卡，页头不复述 -->
+    <MkPageHead title="成本分析">
       <template #actions>
         <!-- 时间窗口（2026-10-16 用户走查「这个地方不应该这么设计」）：
              原为独立一张通栏描边筛选条——1300px 宽只放 337px 控件，读作一张空卡，
@@ -28,8 +20,9 @@
             {{ p.label }}
           </button>
         </div>
-        <!-- 导出报表（原型 pagehead 动作位真实化）：当前窗口三张明细表合一个 CSV，客户端生成 -->
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="!summary || summaryEmpty" title="导出 CSV" @click="exportCsv">
+        <span v-if="statsAt" class="mk-card__meta tc-stats-at">统计截至 {{ statsAt }}</span>
+        <!-- 导出报表：当前窗口三张明细表合一个 CSV，客户端生成 -->
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="!summary || summaryEmpty || !bySkill.length" @click="exportCsv">
           导出报表
         </button>
         <!-- 2026-10-23：刷新走顶栏广播（liveRefreshSeq → refreshAll，summary/趋势/三表一起重拉），
@@ -80,10 +73,9 @@
         v-if="summaryEmpty"
         min
         icon="◌"
-        title="这个时间窗暂无 LLM 调用"
-        :description="`近 ${days} 天没有任何调用记录。`"
-        :action-text="days !== 90 ? '看近 90 天' : ''"
-        @action="days = 90"
+        title="这个时间窗没有调用"
+        :action-text="days !== 90 ? '看近 90 天' : '去执行日志'"
+        @action="days !== 90 ? (days = 90) : goExecLogs()"
       />
       <template v-else>
       <!-- 刷新失败但仍有上次结果：不把旧数当新数静默展示（#72 P-47） -->
@@ -91,38 +83,16 @@
         <span class="mk-alert__msg">成本数据刷新失败，以下为上次加载结果</span>
         <button type="button" class="mk-alert__btn" :disabled="loading" @click="load(true)">{{ loading ? '重试中…' : '重试' }}</button>
       </div>
-      <!-- 概览卡（统一走共享 .mk-kpi-grid + MkKpi；原型 renderCost 1771-1772 metricCard 四卡）。
-           数据源核查（2026-10-01，只读后端 /admin/token-cost/summary）：
-           金额已随接口返回（totals.usd / pricedCalls / callsMissingPricing），但**只按所选窗口聚合**——
-           无分日金额（trend 仅 date/tokens/calls/failed）、无自然月窗口、无会话维度、无缓存命中明细
-           （agent_call_logs 无 cachedTokens 列）。故按可得口径如实重排，缺项不编造金额/不拿 0 冒充：
-           ① 调用成本＝当前窗口金额（窗口随 pills 切换，口径见 hint）；
-           ② 单次调用均值＝金额 ÷ 已定价调用（原型「单会话均值」无会话维度，如实降级到每次调用）；
-           ③ 总 Token＝用量基线（成本卡的分母，保留）；
-           ④ P1#25（2026-10-02 人类可读性）：原「缓存命中率」恒「—」死卡（接口无此口径）占 KPI 位，
-              换活卡「失败调用」——totals.failed 后端已返回，失败信号值得首屏一位。 -->
+      <!-- 概览卡（共享 .mk-kpi-grid + MkKpi）：调用成本 / 已定价调用 / 总 Token / 失败。
+           失败卡在卡面给分母（共 N 次调用），失败率不再另开一张卡。 -->
       <section class="mk-kpi-grid">
-        <!-- hint 只放当前窗口的数据或状态（2026-10-19 用户走查「不需要注释型文案」：
-             不再写「仅已定价调用 / 按…折算 / 相加即总量」这类定义句，定义与长解释收进 title）。
-             P1#25：单价未配置态可点直达「模型与接入」。W6（2026-10-10）当时该页还没有单价编辑入口；
-             2026-10-18 BYOK 模型编辑器补上单价（输入 / 缓存命中 / 输出，USD per 1M tokens）后，
-             补价路径=「接入与模型」→ 供应商 → 模型行「编辑」→ 单价，落回 llm-providers.json 的 pricing 块。
-             2026-10-14 用户评审：状态词此前占着 28px 数值位（「调用成本 / 单价未配置」），
-             被读成主数值——数值位改为暗灰占位「—」，原因与动作由 hint 一行承担（该卡仍可点）。 -->
         <MkKpi
           label="调用成本"
           :value="costLoading ? '…' : costFailed ? '加载失败' : costUsd !== null ? `≈ $${fmtCostUsd(costUsd)}` : '—'"
           :tone="costFailed ? 'warn' : pricingMissing ? 'muted' : ''"
           :hint="costHintShort"
-          :title="costHint"
           :clickable="pricingMissing"
           @click="pricingMissing && goModelConfig()"
-        />
-        <MkKpi
-          label="单次调用均值"
-          :value="costLoading ? '…' : costFailed ? '—' : costPerCall !== null ? `≈ $${fmtCostUsd(costPerCall)}` : '—'"
-          :hint="perCallHintShort"
-          :title="perCallHint"
         />
         <MkKpi
           label="已定价调用"
@@ -134,24 +104,15 @@
           :value="loadFailed ? '—' : summary ? fmtTokens(summary.totals.tokens) : '—'"
           :tone="loadFailed ? 'muted' : ''"
           :hint="loadFailed ? '数据加载失败，Token 用量暂不可用' : ''"
-          :title="loadFailed
-            ? '数据加载失败：Token 用量不可用'
-            : `输入 ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · 输出 ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`"
+          :title="summary ? `输入 ${fmtTokens(summary.totals.promptTokens)} · 输出 ${fmtTokens(summary.totals.completionTokens)}` : undefined"
         />
         <MkKpi
-          label="失败调用"
+          label="失败"
           :value="loadFailed ? '—' : failedCallsText"
           :tone="loadFailed ? 'muted' : failedCalls > 0 ? 'bad' : ''"
-          :hint="loadFailed ? '数据加载失败，失败数未知' : ''"
-          :title="failedHint"
-        />
-        <!-- 2026-10-21 用户「如果次数很重要，就加一个 kpi 面板」同一判据：失败率不再当副行，
-             与失败数拆成两张卡（同源同窗口，title 互指） -->
-        <MkKpi
-          label="失败率"
-          :value="loadFailed ? '—' : failedPct"
-          :tone="loadFailed ? 'muted' : failedCalls > 0 ? 'bad' : ''"
-          :title="failedHint"
+          :hint="loadFailed ? '数据加载失败，失败数未知' : failedHintShort"
+          :clickable="!loadFailed && failedCalls > 0"
+          @click="failedCalls > 0 && goFailedLogs()"
         />
       </section>
 
@@ -161,9 +122,8 @@
            系列（失败数移入卡尾 note 与柱 title，不再与用量混读）。 -->
       <section class="mk-card">
         <div class="mk-card__head">
-          <!-- 卡头 = 原型形态（title + 单位 sub）；口径细节收 title 悬停，右侧只留跨页跳转。
-               P1#25：「接口未提供金额」暴露实现细节 → 「暂无分日金额」（原因留 title） -->
-          <div class="tc-card-head__main" title="暂无分日金额，仅展示 Token 量">
+          <!-- 卡头 = 标题 + 单位；右侧只留跨页跳转 -->
+          <div class="tc-card-head__main">
             <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
             <span class="mk-card__meta">单位：Token</span>
           </div>
@@ -172,20 +132,8 @@
             <button type="button" class="mk-link" @click="goExecLogs()">逐调用明细 →</button>
           </div>
         </div>
-        <!-- 窗口合计释义行（2026-10-16 用户走查：原为卡尾脚注，贴卡左缘、矮在图下，读作事后补丁）：
-             移到卡头正下方当释义行，读数据前先给口径。与 KPI 同源的 totals 渲染（审核 #111），
-             全页同一事实只用一个数据源；「未按日拆分」说明为何逐日柱合计略低于总量（不是漏统计）。
-             2026-10-16 KPI 审计补完：原句把「N 次调用 / 失败 K 次」也念了一遍，而上面 KPI 带的
-             「总 Token」插文与「失败调用」值已经说过——同一分母不两处说。此行只留图表侧独有的事实：
-             Token 合计与「有多少次没按日拆分」。 -->
-        <p
-          v-if="trend.length"
-          class="mk-card__note tc-card__note"
-          :title="summary && trendCallsShortfall > 0 ? `逐日柱按自然日聚合，跨日窗口头部不足一日的 ${trendCallsShortfall} 次调用只计入总量，故柱合计略低于总量` : ''"
-        >
-          逐日合计 {{ fmtTokens(summary?.totals.tokens ?? 0) }} token
-        </p>
-        <p v-else class="mk-card__note tc-card__note">近 {{ days }} 天暂无调用记录。</p>
+        <!-- 无逐日数据时给一句事实（逐日合计与 KPI 总 Token 同源，不再重复念） -->
+        <p v-if="!trend.length" class="mk-card__note tc-card__note">近 {{ days }} 天暂无调用记录。</p>
         <!-- 趋势柱：走全 admin 统一图表语言 OvBars（2026-09-29 自 MkChart/ECharts 换入）。
              2026-10-01 成本批：原 Token+failed 双柱改为单柱序列（金额缺失，单位=Token）。
              2026-10-06 审核修复：此前写死 bar-width=44 且不传 labelEvery/showNums，
@@ -220,9 +168,9 @@
           <h3 class="mk-card__title">{{ SKILL_COST_TITLE }}</h3>
           <div class="mk-card__head-right">
             <span class="mk-card__meta">{{ bySkill.length }} 个 Skill</span>
-            <!-- 未配置单价是可执行的配置缺口，用徽章单列（原做法挤在读数行里，会让「N 个」被读成缺价数） -->
-            <span v-if="skillAllUnpriced" class="mk-badge mk-badge--muted" title="这些 Skill 均未配置单价">均未配置单价</span>
-            <span v-else-if="skillUnpriced > 0" class="mk-badge mk-badge--muted" :title="`其中 ${skillUnpriced} 个 Skill 未配置单价`">{{ skillUnpriced }} 个未配置单价</span>
+            <!-- 未配置单价是可执行的配置缺口：与「调用成本」卡同落点，直接去补单价 -->
+            <button v-if="skillAllUnpriced" type="button" class="mk-badge mk-badge--muted tc-unpriced" @click="goModelConfig">均未配置单价</button>
+            <button v-else-if="skillUnpriced > 0" type="button" class="mk-badge mk-badge--muted tc-unpriced" @click="goModelConfig">{{ skillUnpriced }} 个未配置单价</button>
             <button
               v-if="bySkill.length > skillLimit"
               type="button"
@@ -245,8 +193,8 @@
             <!-- 文案保持「占比」（表格契约锁定），口径用 title 说清：已定价按成本、未定价按 Token；
                  导出 CSV 已拆成「Token占比% / 成本占比%」两列。 -->
             <!-- 可见文案由 .tc-share-head 的伪元素补成「成本占比 / Token 占比」；
-                 DOM 文本保持「占比」（表头文案契约锁定），口径全称仍在 title。 -->
-            <span class="tc-share-head" role="columnheader" :aria-label="skillCostTotal > 0 ? '成本占比' : 'Token 占比'" title="已配置单价时按成本占比，未配置单价时按 Token 占比。导出 CSV 分列为 Token占比% / 成本占比%">占比</span>
+                 DOM 文本保持「占比」（表头文案契约锁定），口径全称在 aria-label。 -->
+            <span class="tc-share-head" role="columnheader" :aria-label="skillCostTotal > 0 ? '成本占比' : 'Token 占比'">占比</span>
           </div>
           <!-- EG19：整行可点下钻，键盘等价 tabindex + Enter/Space（此前 div role=row 无 tabindex，键盘不可达） -->
           <div
@@ -255,7 +203,6 @@
             class="tc-skilltable__row"
             role="row"
             tabindex="0"
-            :title="skillRowTitle(r)"
             @click="goSkillLogs(r)"
             @keydown.enter.prevent="goSkillLogs(r)"
             @keydown.space.prevent="goSkillLogs(r)"
@@ -300,7 +247,7 @@
               </button>
             </div>
           </div>
-          <TcRankTable v-if="byUser.length" :items="userRows" variant="user" :total-tokens="totalTokens" clickable @select="goUserLogs" />
+          <TcRankTable v-if="byUser.length" :items="userRows" variant="user" :total-tokens="totalTokens" />
           <p v-else class="mk-card__note">{{ userQuery ? `没有匹配「${userQuery}」的用户` : '暂无数据。' }}</p>
         </section>
 
@@ -309,7 +256,7 @@
             <h3 class="mk-card__title">模型用量排行</h3>
             <span class="mk-card__meta">{{ byModel.length }} 个</span>
           </div>
-          <TcRankTable v-if="byModel.length" :items="byModel" variant="model" :total-tokens="totalTokens" clickable @select="goModelLogs" />
+          <TcRankTable v-if="byModel.length" :items="byModel" variant="model" :total-tokens="totalTokens" />
           <p v-else class="mk-card__note">暂无数据。</p>
         </section>
       </div>
@@ -380,6 +327,8 @@ watch(days, (d) => {
 })
 const loading = ref(false)
 const loadFailed = ref(false)
+/** 本次加载完成时刻（后端有 5 分钟缓存，页面必须给出读数时间） */
+const statsAt = ref('')
 /* 冷载反馈（F8-3）：全表聚合冷载实测 11.6s（7 天）/ 21.7s（90 天），后端缓存预热只在
    20s 后首次进 TTL、且默认 7d 口径——换窗口/冷启动后首访必然吃满一次全表聚合。
    超过阈值仍在加载时给一句「仍在计算」，避免长时间只有骨架被读成卡死。 */
@@ -470,30 +419,12 @@ const rangePills = [
 
 const trend = computed(() => summary.value?.trend || [])
 const totalTokens = computed(() => summary.value?.totals.tokens || 0)
-/* 审核 #111：趋势卡尾 note 改用 totals（与 KPI 同源）。若窗口头部不足一日的行只进总量
-   （后端口径），totals.calls 会略大于 trend 逐日合计——此差额用于 note 里如实自证口径。 */
-const trendCallsShortfall = computed(() => {
-  const t = summary.value?.totals.calls ?? 0
-  const sum = trend.value.reduce((acc, d) => acc + d.calls, 0)
-  return Math.max(0, t - sum)
-})
 /* 空窗口判据：后端 getSummary 恒返回对象（totals 全 0），「!summary」整页空态不可达；
    以 calls === 0 判空，筛选项（时间窗/测试流量）切换后用户仍可换窗自救 */
 const summaryEmpty = computed(() => !!summary.value && summary.value.totals.calls === 0)
 const skillRows = computed(() => bySkill.value.slice(0, skillAll.value ? bySkill.value.length : skillLimit))
 const userRows = computed(() => byUser.value.slice(0, userAll.value ? byUser.value.length : userLimit))
 
-/* 单次调用均值（原型「单会话均值」的可得口径）：仅按已定价调用折算。
-   token-cost 只给 per-user/model/skill 聚合，**无会话维度**，如实不称「会话」。 */
-const costPerCall = computed(() =>
-  costUsd.value !== null && costPricedCalls.value > 0 ? costUsd.value / costPricedCalls.value : null
-)
-const perCallHint = computed(() => {
-  if (costLoading.value) return '金额统计中'
-  if (costFailed.value) return '金额统计拉取失败，可刷新重试'
-  if (costUsd.value === null) return '无已定价调用，暂不可算'
-  return `近 ${days.value} 天 · 按 ${costPricedCalls.value} 次已定价调用折算`
-})
 
 /* Skill 明细表占比分母：优先已定价金额合计；全未定价时退回 Token 占比（并在表尾注明） */
 const skillCostTotal = computed(() =>
@@ -532,37 +463,7 @@ function skillSharePct(r: SkillCostRow): string {
   const p = skillShareNum(r)
   return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`
 }
-function skillRowTitle(r: SkillCostRow): string {
-  // 成本原因随占位一起离开行内（行内只留 —），故 title 必须把原因说全，否则信息净丢
-  if (hasCost(r)) return ''
-  return (r.callsMissingPricing ?? 0) > 0
-    ? `成本：单价未配置（${r.callsMissingPricing} 次调用未计入金额）`
-    : '成本：无已定价调用'
-}
-
-/* 成本卡副行（长版，收进 KPI 卡 title 悬停）：数值本身只给结论。
-   原型此位为「今日成本·预算」——接口无分日金额也无预算配置，故如实给当前窗口口径。 */
-const costHint = computed(() => {
-  if (costLoading.value) return '金额统计中'
-  if (costFailed.value) return '金额统计拉取失败，可刷新重试'
-  const window = `近 ${days.value} 天`
-  if (costUsd.value !== null) {
-    const priced = `${window} · 已定价 ${costPricedCalls.value} 次`
-    return costMissingCalls.value > 0 ? `${priced} · ${costMissingCalls.value} 次未定价（未计入）` : priced
-  }
-  if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `${window}没有带 token 的 LLM 调用`
-  const missing = missingPricingModels.value
-  // 2026-10-10 走查 W6 时这条动线是死胡同（那页没有单价编辑入口）；2026-10-18 BYOK 模型编辑器
-  // 补上单价后，点击可直达「接入与模型」，模型行的「单价未知 · 点编辑补」就是入口，
-  // 保存落回 llm-providers.json 的 pricing 块并热重载（File-as-Truth）。
-  return missing.length
-    ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}`
-    : `${window} · 尚未配置单价，暂不展示金额`
-})
-
-/* KPI 副行（2026-10-19 起两轮收紧，2026-10-21 用户「如果次数很重要，就加一个 kpi 面板」）：
-   卡面不再出现任何数值副行——已定价调用次数升为独立卡，均值与成本各自只报一个数。
-   副行只剩取不到数/待补单价这类状态与动作。 */
+/* 成本卡副行：只剩取不到数 / 待补单价这类状态与动作，不放口径说明 */
 const costHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value) return '金额统计失败'
@@ -572,11 +473,6 @@ const costHintShort = computed(() => {
     // 补价入口可点：这是动作提示，不是口径解释
     return `待补 ${n} 个模型单价 · 查看配置`
   }
-  return ''
-})
-const perCallHintShort = computed(() => {
-  if (costLoading.value) return '金额统计中'
-  if (costFailed.value || costPerCall.value === null) return '无已定价调用'
   return ''
 })
 /* 2026-10-21：输入/输出拆分与失败率都不再走副行——拆分在 title 与明细表列里，
@@ -629,36 +525,24 @@ function exportCsv() {
   toast.success(`报表已导出（${bySkill.value.length} 个 Skill · 近 ${days.value} 天）`)
 }
 
-/* 跨页互跳：成本聚合页 ⇄ 明细页（执行日志行级 token）/ 总览趋势
-   口径说明：本页为 token-cost 端点精确聚合（含重试终态失败）；执行日志展示逐调用行级 token 明细；
-   总览「LLM 用量」卡为近 7 天汇总 hero。三处同域但粒度/窗口不同，互跳避免口径黑盒。 */
-/* P1#25（2026-10-02 人类可读性）：goExecLogs 支持携 agentFilter 深链——Skill 明细行可点，
-   跳执行日志即得该 Skill 的故障/用量视图（ExecLogs 已消费 intent.agentFilter；AdminConsole
-   按 intentQueryParams 把筛选合进 URL，刷新/分享可还原） */
+/* 跨页下钻：本页 → 执行日志。窗口必须带上——执行日志默认「今天」，
+   从近 7/30/90 天点进去会落到另一个窗口，看到空表。 */
+const EXEC_RANGE = { 7: 'week', 30: 'month', 90: 'all' } as const
 function goExecLogs(agentFilter = '') {
   intent.agentFilter = agentFilter
   intent.statusFilter = ''
   intent.errorCategory = ''
-  intent.timeRange = ''
+  intent.timeRange = EXEC_RANGE[days.value as 7 | 30 | 90] ?? 'week'
   intent.scene = 'execution-logs'
 }
-/** 成本下钻（2026-10-24）：用户/模型榜整行可点 → 执行日志按关键词 + 同窗口筛调用。
-    执行日志关键词搜 input/output/error，用户 id 与模型名通常出现在调用载荷里；
-    窗口按成本页天数映射到执行日志的时间档。 */
-function goLogsByKeyword(keyword: string) {
-  const range = days.value === 30 ? 'month' : days.value === 90 ? 'all' : 'week'
-  void router.push({ path: '/admin/execution-logs', query: { q: keyword, range } })
-}
-function goUserLogs(r: RankRow) {
-  goLogsByKeyword(String(r.email || r.name || r.key || ''))
-}
-function goModelLogs(r: RankRow) {
-  goLogsByKeyword(String(r.key || r.display || ''))
-}
-
 /** Skill 明细行点击：key 可能带 skill: 前缀（注册表口径），执行日志行内 agent 是裸名 */
 function goSkillLogs(r: SkillCostRow) {
   goExecLogs(String(r.key || '').replace(/^skill:/, ''))
+}
+/** 失败卡：同窗口、只看失败 */
+function goFailedLogs() {
+  goExecLogs()
+  intent.statusFilter = 'err'
 }
 function goOverview() {
   intent.scene = 'overview'
@@ -689,14 +573,8 @@ const failedPct = computed(() => {
 const failedCallsText = computed(() =>
   failedCalls.value > 0 ? `${failedCalls.value} 次` : '0 次'
 )
-/* 长释（title）：失败计数、总调用与占比的完整句子；卡面副行只放失败率这一条数据 */
-const failedHint = computed(() => {
-  const win = `近 ${days.value} 天`
-  const base = failedCalls.value > 0
-    ? `${win}内失败 ${failedCalls.value} / 共 ${totalCalls.value} 次（重试后仍失败才计入），占总调用 ${failedPct.value}`
-    : `${win}内共 ${totalCalls.value} 次调用，没有重试后仍失败的调用`
-  return base
-})
+/** 失败卡副行：同一张卡内给分母，失败率不再另开一张卡 */
+const failedHintShort = computed(() => `共 ${totalCalls.value} 次调用 · ${failedPct.value}`)
 
 /* P1#25 单价未配置 = 决策态：卡可点直达「模型与接入」补单价 */
 const pricingMissing = computed(
@@ -739,6 +617,7 @@ watch([days], () => {
     costPricedCalls.value = 0
     costMissingCalls.value = 0
     missingPricingModels.value = []
+    statsAt.value = ''
   }
   void load()
 }, { immediate: true })
@@ -791,6 +670,7 @@ async function load(force = false) {
     }
     byModel.value = (modelRes.data?.data?.items ?? []) as RankRow[]
     loadedKey.value = key
+    statsAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
     markPageFetched(key)
   } catch (e) {
     if (seq !== loadSeq) return
@@ -847,6 +727,11 @@ const trendCols = computed(() => trend.value.map((d) => ({
 /* 窗口 pill 随页头动作区排布（2026-10-16）：与「导出报表/刷新」同一行，窄屏由
    MkPageHead__actions 的 flex-wrap 自动折行；不再有独立的描边筛选条。 */
 .tc-pagehead-pills { display: inline-flex; }
+/* 读数时刻：后端 5 分钟缓存，金额不是实时值 */
+.tc-stats-at { white-space: nowrap; }
+/* 未配置单价是可点动作（与「调用成本」卡同落点），徽章外观 + 手型 */
+.tc-unpriced { border: 0; font-family: inherit; cursor: pointer; }
+.tc-unpriced:hover { color: var(--mk-blue); }
 /* KPI 区已改用共享 .mk-kpi-grid（2026-09-29 重设：原私有 .tc-overview
    repeat(4,1fr)/gap14 与全站 KPI 栅格不是同一套；.tc-status--bad 随状态条
    去数字一并退役 → 见下方模板注释 */
@@ -936,19 +821,17 @@ const trendCols = computed(() => trend.value.map((d) => ({
      八列在 ~1024 视口（表宽 ~712）仍不成行溢出（溢出=最右列被 .mk-card overflow:clip 静默裁掉）。
      各列下限不低于表头文字宽（表头右对齐，窄列会让「均次 Token」折行；「调用次数」四字
      下限 70px，2026-10-24 用户「调用次数就写调用次数就可以了」由 44px 上调）。 */
-  /* 上限刻意压紧：grid 的「maximize tracks」先于 fr 展开，若上限留得宽，窄屏下 7 个受限列
-     会先把余量吃光、末列只剩下限（实测 996px 卡里占比条塌到 39px，比改前 149px 更差）。
-     上限合计 691 + 7×10 间隙：996px 卡（可用 896）下受限列刚好到顶、占列拿 ~135（条 ~113px），
-     宽屏（内容 ≥1470）余量全归占列——条变长但不留空转白区。 */
+  /* 余量归 Skill 名称列（唯一文本列）：占比列上限 150px，不再吃光一行宽度的四分之一。
+     七列固定上限合计 692 + 7×10 间隙 = 762，996px 卡里名称列拿 ~206px。 */
   grid-template-columns:
-    minmax(130px, 175px)
+    minmax(130px, 1fr)
     minmax(70px, 88px)
     minmax(70px, 100px)
     minmax(56px, 78px)
     minmax(76px, 100px)
     minmax(62px, 84px)
     minmax(70px, 92px)
-    minmax(105px, 1fr);
+    minmax(105px, 150px);
   align-items: center;
   gap: 10px;
 }

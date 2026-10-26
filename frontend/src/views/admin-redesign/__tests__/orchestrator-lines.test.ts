@@ -43,4 +43,24 @@ describe('编排图连线', () => {
     expect(OrchestratorSource).not.toMatch(/\.orch-odg-foot\s*\{[^}]*margin-top:\s*auto/)
     expect(OrchestratorSource).not.toMatch(/\.orch-odg-body\s*\{[^}]*flex:\s*1 1 auto/)
   })
+
+  it('阶段内三枚页签并列：字段旅程不再靠「再点一次阶段页签」回程（2026-10-26 评审）', () => {
+    expect(OrchestratorSource).toContain("{ id: 'journey', label: '字段旅程' }")
+    // 回程特殊分支已删：点当前阶段页签与点别的阶段同一条路径
+    expect(OrchestratorSource).not.toContain("pane.value !== 'overview' && active.value === id")
+    // SkillFieldRouting 的「→ 编排图页」用 ?tab=routing，与白名单同词
+    expect(OrchestratorSource).toContain("qTab === 'field-routings'")
+  })
+
+  it('字段契约失败可分辨、可重试：列脚显红字「未加载」，卡头给重试（2026-10-26 评审）', () => {
+    // 失败与「加载中 …」必须两态可分辨；重试入口接回同一加载器
+    expect(OrchestratorSource).toContain('orch-odg-chip--failed')
+    expect(OrchestratorSource).toContain('function contractCountText')
+    expect(OrchestratorSource).toContain("if (c.failed) return '未加载'")
+    expect(OrchestratorSource).toContain('async function retryStageContracts')
+    expect(OrchestratorSource).toContain('@click="retryStageContracts"')
+    // 卡头两枚图例 chip（阶段入参 / 阶段产出）与列脚同形，已撤
+    expect(OrchestratorSource).not.toContain('>阶段入参</span>')
+    expect(OrchestratorSource).not.toContain('>阶段产出</span>')
+  })
 })

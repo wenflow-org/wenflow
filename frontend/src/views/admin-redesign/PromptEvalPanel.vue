@@ -37,12 +37,13 @@
              （2026-10-17 用户走查「这种文案清理掉」）：页头副文、两个页签名、
              空态正文与「新建用例 / 批量跑评估」按钮已经把同一件事说了四遍，
              且句中硬编码了一个 Agent id，Agent 目录一变就是过期示例。 -->
-        <button v-if="tab === 'cases'" type="button" class="mk-btn mk-btn--sm mk-btn--primary pe-filter__action" @click="openCreate">新建用例</button>
+        <!-- 2026-10-26 评审：空库时隐藏工具栏这颗「新建用例」，只留空态中央那颗（同文案同动作） -->
+        <button v-if="tab === 'cases' && cases.length" type="button" class="mk-btn mk-btn--sm mk-btn--primary pe-filter__action" @click="openCreate">新建用例</button>
       </div>
 
     <!-- 用例 Tab -->
     <div v-if="tab === 'cases'" id="pe-panel-cases" role="tabpanel" aria-labelledby="pe-tab-cases" class="pe-panel">
-      <MockSkeletonTable v-if="casesLoading && !cases.length" :cols="6" />
+      <MockSkeletonTable v-if="casesLoading && !cases.length" :cols="7" />
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
              长内容（用例名/期望摘要）由 mk-cell-main 上限与 pe-expect 截断兜底 -->
@@ -84,16 +85,16 @@
             </tr>
           </thead>
           <tbody>
-            <!-- 原型 2105：用例行 data-action="open-skill" → 点击/回车打开对应 Skill 详情；
-                 行内按钮一律 stop，键盘冒泡在 openCaseSkill 内按 target 守卫 -->
+            <!-- 2026-10-26 评审：行点击开该用例的编辑弹窗（行内已有「编辑」，原点击却把人带去
+                 Skill 详情——想看这例的输入/期望却离开了本页）。「去 Skill」只留在 ⋯ 菜单与运行详情 -->
             <tr
               v-for="c in sortedCases"
               :key="c.id"
               tabindex="0"
               role="button"
-              :aria-label="`查看用例 ${c.name} 对应的 Skill 详情`"
-              @click="openCaseSkill(c)"
-              @keydown.enter="openCaseSkill(c, $event)"
+              :aria-label="`编辑用例 ${c.name}`"
+              @click="openEdit(c)"
+              @keydown.enter="openCaseEdit(c, $event)"
             >
               <td>
                 <div class="mk-cell-main">
@@ -104,7 +105,7 @@
               <td><span class="mk-badge mk-badge--info" :title="agentLabel(c.agentId)">{{ agentLabel(c.agentId) }}</span></td>
               <!-- P3（设计评审 4.3-19）：「消息」列头下放的是模式词「模拟」，列头与内容错位——
                    列头改「消息数」；模拟用例该格改 mk-badge--muted 徽章与数量值视觉区分（title 保留原解释） -->
-              <td class="mk-num" :title="c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟用例：学生话由模拟器生成，无需手写消息' : ''">
+              <td class="mk-num">
                 <span v-if="c.messages.length === 0 && c.expectations?.mode === 'simulated'" class="mk-badge mk-badge--muted">模拟</span>
                 <template v-else>{{ c.messages.length }}</template>
               </td>
@@ -114,11 +115,12 @@
               </td>
               <td>
                 <span class="mk-badge" :class="c.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ c.enabled ? '启用' : '停用' }}</span>
-                <span
+                <button
                   v-if="c.personaMissing"
+                  type="button"
                   class="mk-badge mk-badge--warn pe-persona-missing"
-                  title="引用的虚拟学习者已被删除：批量评估会跳过该用例，请重选学生人设或改用场景描述"
-                >人设失效</span>
+                  @click.stop="openEdit(c, true)"
+                >人设失效</button>
               </td>
               <td :title="fmtDate(c.updatedAt)">{{ timeAgo(c.updatedAt) }}</td>
               <td>
@@ -129,7 +131,7 @@
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === c.id" @click.stop="toggleMenu(c.id)">⋯</button>
                     <div v-if="openMenu === c.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" @click="menuEdit(c)">编辑用例</button>
+                      <button type="button" class="mk-menu__item" @click="menuGoSkill(c)">查看该 Skill</button>
                       <button type="button" class="mk-menu__item" :disabled="running" @click="menuRunSingle(c)">单条试跑</button>
                       <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuDelete(c)">删除</button>
                     </div>
@@ -146,7 +148,6 @@
         tone="error"
         icon="!"
         title="评估用例加载失败"
-        description="无法从服务读取用例列表。"
         action-text="重试"
         @action="reloadCases"
       />
@@ -155,7 +156,6 @@
         icon="◌"
         min
         title="还没有评估用例"
-        description="用例决定评估跑什么。新建一条后即可批量跑评估并对比通过率。"
         action-text="新建用例"
         @action="openCreate"
       />
@@ -226,7 +226,7 @@
                 <div class="mk-cell-main">
                   <strong>{{ runRateText(r) }} · {{ r.caseCount }} 例 × {{ r.summary.repeatCount ?? 1 }} 次</strong>
                   <span class="mk-cell-sub">{{ agentLabel(r.agentId) }} · {{ timeAgo(r.createdAt) }}</span>
-                  <span class="mk-cell-sub" :title="`run id ${r.id}`">#{{ shortId(r.id, 8, 4) }} · {{ modeText(r.mode) }} · {{ promptSourceText(r.promptSource) }} v{{ r.promptVersion ?? '—' }}</span>
+                  <span class="mk-cell-sub" :title="r.id">#{{ shortId(r.id, 8, 4) }} · {{ modeText(r.mode) }} · {{ promptSourceText(r.promptSource) }} v{{ r.promptVersion ?? '—' }}</span>
                 </div>
               </td>
               <td><span class="mk-badge mk-badge--info">{{ agentLabel(r.agentId) }}</span></td>
@@ -256,7 +256,6 @@
         tone="error"
         icon="!"
         title="评估历史加载失败"
-        description="无法从服务读取评估历史。"
         action-text="重试"
         @action="reloadRuns"
       />
@@ -265,7 +264,6 @@
         icon="◌"
         min
         title="还没有评估记录"
-        description="跑过一次评估后，这里会按时间列出每轮的通过率与逐例结果。"
         action-text="去评估用例"
         @action="switchTab('cases')"
       />
@@ -331,7 +329,6 @@
                     <textarea v-model="form.scenario" class="mk-field__textarea" rows="2"
                       placeholder="例如：我想考英语，每周只能挤两次一小时" />
                     <span v-if="errors.scenario" class="mk-field__err">{{ errors.scenario }}</span>
-                    <span class="mk-field__hint">一句话描述学生是谁、想干什么。跑评估时虚拟学习者按此扮演学生，说得更真实。</span>
                   </div>
                   <label class="mk-field">
                     <span class="mk-field__label">学生人设 <span class="mk-field__opt">（可选）</span></span>
@@ -349,11 +346,11 @@
                     <label class="pe-param">
                       <span class="pe-param__label">学生对抗度</span>
                       <select v-model="form.frictionBudget" class="mk-input">
-                        <option value="none">none · 配合</option>
-                        <option value="low">low · 犹豫</option>
-                        <option value="normal">normal · 正常</option>
-                        <option value="high">high · 难缠</option>
-                        <option value="stress_test">stress · 极端</option>
+                        <option value="none">配合</option>
+                        <option value="low">犹豫</option>
+                        <option value="normal">正常</option>
+                        <option value="high">难缠</option>
+                        <option value="stress_test">极端</option>
                       </select>
                     </label>
                   </div>
@@ -368,7 +365,6 @@
                 <label class="mk-field">
                   <span class="mk-field__label">必须做到 <span class="mk-field__opt">（人话，逗号分隔）</span></span>
                   <input v-model="form.mustContain" class="mk-field__input" :placeholder="agentMustContainPlaceholder" />
-                  <span class="mk-field__hint">回复必须包含这些内容才算通过，例如：{{ agentMustContainExample }}</span>
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">不能出现</span>
@@ -379,23 +375,19 @@
                 <summary>高级校验</summary>
                 <div v-if="form.agentId === 'skill:goal-conversation'" class="mk-field">
                   <span class="mk-field__label">期望输出阶段</span>
-                  <input v-model="form.expectedStage" class="mk-field__input mono" placeholder="understanding / proposal / confirmed" />
-                  <span class="mk-field__hint">助手内部应进入的阶段（选填）。</span>
+                  <input v-model="form.expectedStage" class="mk-field__input mono" />
                 </div>
                 <div v-if="form.agentId === 'skill:path-planning'" class="mk-field">
                   <span class="mk-field__label">期望里程碑数</span>
                   <input v-model.number="form.expectedMilestones" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：3" />
-                  <span class="mk-field__hint">助手必须拆出恰好这么多阶段里程碑。</span>
                 </div>
                 <div v-if="form.agentId === 'skill:stage-designer'" class="mk-field">
                   <span class="mk-field__label">期望子任务数</span>
                   <input v-model.number="form.expectedSubtaskCount" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：4" />
-                  <span class="mk-field__hint">助手必须拆出恰好这么多子任务。</span>
                 </div>
                 <label class="mk-field">
                   <span class="mk-field__label">输出结构字段 <span class="mk-field__opt">（进阶）</span></span>
                   <input v-model="form.mustInclude" class="mk-field__input mono" :placeholder="`例如：${agentFieldHint}`" />
-                  <span class="mk-field__hint">{{ agentLabel(form.agentId) }} 的合法输出字段：{{ agentFieldHint }}。只在想精确卡结构时填。</span>
                 </label>
                 <div v-if="isStructuredSkill(form.agentId)" class="mk-field">
                   <span class="mk-field__label">完整输入结构（JSON，一般不用填）</span>
@@ -408,7 +400,6 @@
                 <div v-if="form.inputSource === 'simulated'" class="mk-field">
                   <span class="mk-field__label">对话收尾条件 <span class="mk-field__opt">（进阶）</span></span>
                   <input v-model="form.convergeRequires" class="mk-field__input mono" placeholder="real_problem,confirmedProposal" />
-                  <span class="mk-field__hint">模拟对话收集齐这些信息才算聊完，一般保持默认即可。</span>
                 </div>
               </details>
               <label class="mk-field">
@@ -419,7 +410,7 @@
 
             <label class="mk-field mk-field--switch">
               <input v-model="form.enabled" type="checkbox" />
-              <span class="mk-field__label" style="margin:0">参与批量评估（不勾就只单独试跑时用）</span>
+              <span class="mk-field__label" style="margin:0">参与批量评估</span>
             </label>
             <div v-if="formError" class="mk-alert" role="alert">{{ formError }}</div>
           </div>
@@ -451,7 +442,7 @@
               <!-- 首段徽章行（原型 .ovl__body 首段 pills）：通过率 / 通过数为 summary 行上已有字段；
                    passRate 缺失显「—」+ title「暂无评测数据」（不 `?? 0` 伪装全挂）；阈值披露于 title -->
               <div class="pe-detail__pills">
-                <span class="mk-badge" :class="passTone(runDetail.summary)" :title="detailPassRateText === '—' ? '暂无评测数据：该运行未回传通过率' : RATE_THRESHOLD_NOTE">通过率 {{ detailPassRateText }}</span>
+                <span class="mk-badge" :class="passTone(runDetail.summary)" :title="RATE_THRESHOLD_NOTE">通过率 {{ detailPassRateText }}</span>
                 <span class="mk-badge mk-badge--muted">通过 {{ runDetail.summary.passedCount ?? '—' }} / {{ runDetail.summary.totalRuns ?? '—' }}</span>
               </div>
               <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：summary 数值不再用页面级 MkKpi 卡 -->
@@ -472,7 +463,7 @@
                       <strong>{{ res.caseName }} <span class="mk-na">({{ res.caseId }})</span></strong>
                       <span class="mk-badge" :class="res.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ res.passed ? '通过' : '未通过' }}</span>
                       <!-- 失败用例就近跳转（评审「失败用例无『去改 Prompt』链路」）：openCaseSkill 同口径剥 skill: 前缀进 Skill 详情 -->
-                      <button v-if="!res.passed && runDetail?.agentId" type="button" class="mk-link" title="打开该用例对应的 Skill 详情（改 Prompt 前先看上下文）" @click="goCaseSkill(runDetail.agentId)">查看该 Skill</button>
+                      <button v-if="!res.passed && runDetail?.agentId" type="button" class="mk-link" @click="goCaseSkill(runDetail.agentId)">查看该 Skill</button>
                       <span class="pe-result-row__meta">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
                     </div>
                     <div v-if="!res.passed" class="pe-result-row__checks">
@@ -499,7 +490,7 @@
                   </div>
                 </div>
               </section>
-              <MkEmptyState v-else compact title="无结果明细" description="这一例没有留下逐项输出，可能是在旧版本上跑的。" />
+              <MkEmptyState v-else compact title="无结果明细" />
             </template>
             <!-- P2-1（2026-09-27 走查）：详情拉取失败时抽屉正文此前整块空白、无重试入口
                  （toast 转瞬即逝，用户只能关掉抽屉再点一次「详情」）。补 tone=error 空态，
@@ -581,7 +572,7 @@
                 </table>
               </div>
             </template>
-            <MkEmptyState v-else compact title="无可对比的用例明细" description="两次评估没有共同用例，换两条有交集的记录再比。" />
+            <MkEmptyState v-else compact title="两次运行没有共同用例" />
           </div>
           <footer class="mk-drawer__foot">
             <button type="button" class="mk-btn" @click="closeCompare">关闭</button>
@@ -692,7 +683,6 @@ const agents = Object.entries(AGENT_META).map(([id, m]) => ({ id, label: m.label
 const agentLabel = (id: string) => AGENT_META[id]?.label || id
 const agentDesc = computed(() => AGENT_META[form.value.agentId]?.desc || '')
 const agentFieldHint = computed(() => AGENT_META[form.value.agentId]?.fields || '')
-const agentMustContainExample = computed(() => AGENT_META[form.value.agentId]?.mustContainExample || '')
 const agentMustContainPlaceholder = computed(() => `例如：${AGENT_META[form.value.agentId]?.mustContainExample || ''}`)
 
 const tab = ref<'cases' | 'runs'>('cases')
@@ -805,8 +795,7 @@ const lastPassRateText = computed(() => {
   if (lastRunEmpty.value) return '暂无通过数据（0 次执行）'
   return formatRate(latestRun.value?.summary?.passRate) ?? '—'
 })
-/* 2026-10-21 用户「不要了」：通过率卡不再挂比例式分母，分子分母与口径全部进 lastRateTitle；
-   卡面副行只在「0 次执行」这种读不出通过率的状态下出现 */
+/* 通过率卡副行只在「0 次执行」这种读不出通过率的状态下出现 */
 const lastRateBase = computed(() => (lastRunEmpty.value ? '0 次执行' : ''))
 /** KPI tone（2026-10-04 状态条退役，原 lastRateCls 类名着色翻译成 MkKpi tone）：
     阈值纪律走 rate-utils 单点不变；muted（缺 passRate）与 0 次执行不着色 */
@@ -815,36 +804,8 @@ const lastRateTone = computed(() => {
   const tone = rateToneOf(latestRun.value?.summary?.passRate)
   return tone === 'muted' ? '' : tone
 })
-/** 通过率卡 hint（2026-10-04 状态条退役）：只留比例式分母；agent 筛选限定词于 2026-10-21
-    撤除（顶部筛选已表达，口径在 title 里） */
+/** 通过率卡 hint：只在读不出通过率时出现（0 次执行） */
 const lastRateHint = computed(() => lastRateBase.value)
-const lastRateTitle = computed(() => {
-  if (!runs.value.length) return '暂无评测数据'
-  if (lastRunEmpty.value) return '最近一次评估 0 次执行（用例全部被跳过或未运行），无通过率可显示'
-  if (lastPassRateText.value === '—') return '暂无评测数据：该运行未回传通过率'
-  const s = latestRun.value?.summary
-  const base = s && typeof s.passedCount === 'number' && typeof s.totalRuns === 'number'
-    ? `最近一次评估通过 ${s.passedCount} / 执行 ${s.totalRuns} 例。`
-    : ''
-  return `${base}最近一次评估通过率；${RATE_THRESHOLD_NOTE}`
-})
-/* 评估历史卡副行（2026-10-24 用户「文案不要」）：卡面不再写「按最近 N 次窗口加载」，
-   窗口口径与上次评测时刻只留在 title。 */
-/** 评估历史卡 title（2026-10-04 状态条退役；2026-10-18 用户走查去掉分号堆叠）：
-    窗口上限口径 + agent 筛选限定 + 上次评测时刻。最近一次通过率、着色阈值另有
-    「最近评测通过率」卡承载，不在本卡重复。 #88：数字随 agent 筛选收窄，限定词一并披露 */
-const runsKpiTitle = computed(() =>
-  `按最近 ${RUNS_LIMIT} 次窗口加载，上限并非总数${agentFilter.value ? ` · 仅 ${agentLabel(agentFilter.value)}` : ''} · ${
-    latestRun.value ? `上次评测 ${timeAgo(latestRun.value.createdAt)}` : '暂无评估记录'
-  }`
-)
-/* #88：用例/历史两张 KPI 的数字随顶部 agent 筛选收窄（reloadCases/reloadRuns 都带 agentFilter），
-   口径披露只留在 title——卡面副行不再复述筛选状态（2026-10-21 判例） */
-const casesKpiTitle = computed(() =>
-  agentFilter.value
-    ? `当前 agent 筛选「${agentLabel(agentFilter.value)}」下的评估用例数（非全站总数）`
-    : '全部 Agent 的评估用例数（可按顶部 Agent 筛选收窄）'
-)
 
 function fmtDate(iso: string): string {
   if (!iso) return '—'
@@ -1037,7 +998,7 @@ const expectSummary = computed(() => {
   if (mc) parts.push(`必须做到 ${mc} 项`)
   if (mn) parts.push(`不能出现 ${mn} 项`)
   if (adv) parts.push('已配高级校验')
-  return parts.length ? `已设置：${parts.join(' · ')}` : '可选，跳过也能试跑'
+  return parts.length ? `已设置：${parts.join(' · ')}` : ''
 })
 
 /** 已有虚拟学习者列表（复用其 persona + 故事池） */
@@ -1116,7 +1077,8 @@ function openCreate() {
   void loadVirtualLearners()
 }
 
-function openEdit(c: EvalCase) {
+/** 打开编辑弹窗；focusPersona = 从「人设失效」徽章进来，直接落在「模拟学生」区块 */
+function openEdit(c: EvalCase, focusPersona = false) {
   editingId.value = c.id
   const e = c.expectations || {}
   // path/stage 结构化输入：从 previousState/inputPayload 回填（DB 用例的 previousStateJson 同时承载）
@@ -1156,6 +1118,8 @@ function openEdit(c: EvalCase) {
   // 编辑时：已有期望配置则自动展开期望折叠
   const e2 = c.expectations || {}
   expectOpen.value = !!(e2.mustIncludeFields?.length || e2.mustContainText?.length || e2.mustNotInclude?.length || e2.expectedStage || e2.expectedMilestones != null || e2.expectedSubtaskCount != null)
+  // 「人设失效」入口：模拟学生区块就是要改的地方，打开即落在这里
+  if (focusPersona) setInputSource('simulated')
   void loadVirtualLearners()
 }
 
@@ -1270,17 +1234,22 @@ async function saveAndRun() {
 
 /* 行操作 */
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
-function menuEdit(c: EvalCase) { closeMenu(); openEdit(c) }
 function menuDelete(c: EvalCase) { closeMenu(); void removeCase(c) }
 async function menuRunSingle(c: EvalCase) { closeMenu(); await runSingle(c) }
+/** ⋯ → 查看该 Skill（用例 agentId 形如 skill:goal-conversation，落点收裸 id） */
+function menuGoSkill(c: EvalCase) { closeMenu(); openCaseSkill(c) }
 
-/* 用例行点击 → 对应 Skill 详情（原型 2105：data-action="open-skill"）。
-   用例 agentId 形如 skill:goal-conversation，而 openSkillDrawer 收的是裸 skill id
-   （store 原样存进 subPage.id，SkillDetail 再自行补 skill: 前缀；判例 live.ts:180 同样剥前缀），
-   故必须剥掉 skill: ——直接透传会落到 SkillDetail「未注册或 ID 有误」错误态。
-   e 存在（键盘触发）时，行内按钮/菜单上的回车会冒泡到行：target 非行本身则忽略（判例 ExecLogs.toggleRowOpen）。 */
-function openCaseSkill(c: EvalCase, e?: Event) {
+/* 用例行点击 → 该用例的编辑弹窗（行内「编辑」同一动作）。键盘触发时行内按钮的回车会冒泡到行，
+   target 非行本身则忽略（判例 ExecLogs.toggleRowOpen）。 */
+function openCaseEdit(c: EvalCase, e?: Event) {
   if (e && e.target !== e.currentTarget) return
+  openEdit(c)
+}
+
+/* 「去 Skill」：用例 agentId 形如 skill:goal-conversation，而 openSkillDrawer 收的是裸 skill id
+   （store 原样存进 subPage.id，SkillDetail 再自行补 skill: 前缀；判例 live.ts:180 同样剥前缀），
+   故必须剥掉 skill: ——直接透传会落到 SkillDetail「未注册或 ID 有误」错误态。 */
+function openCaseSkill(c: EvalCase) {
   const skillId = c.agentId.replace(/^skill:/, '')
   if (skillId) openSkillDrawer(skillId)
 }
@@ -1344,6 +1313,7 @@ async function runBatch() {
     let passed = 0
     let totalRuns = 0
     const skippedAll: string[] = []
+    const runIds: string[] = []
     for (const [agentId, list] of groups) {
       const res = await adminPromptOpsApi.runEval({
         agentId,
@@ -1354,16 +1324,22 @@ async function runBatch() {
       const summary = data?.summary || {}
       passed += Number(summary.passedCount ?? 0)
       totalRuns += Number(summary.totalRuns ?? 0)
+      if (data?.runId) runIds.push(String(data.runId))
       const skipped = Array.isArray(data?.skipped) ? data.skipped : []
       for (const s of skipped) skippedAll.push(`[${agentLabel(agentId)}] ${String((s as any)?.reason || '未知原因')}`)
     }
     toast.close(busy)
-    const passRate = totalRuns > 0 ? Math.round((passed / totalRuns) * 100) : 0
-    toast.success(`批量完成 ${totalCases} 个用例：${passed}/${totalRuns} 通过（${passRate}%）`)
+    const passRate = totalRuns > 0 ? formatRate((passed / totalRuns) * 100) : null
+    toast.success(`批量完成 ${totalCases} 个用例：${passed}/${totalRuns} 通过${passRate ? `（${passRate}）` : ''}`)
     if (skippedAll.length) {
       toast.info(`跳过 ${skippedAll.length} 个用例：${skippedAll.join('；')}`, 0)
     }
-    void reloadRuns()
+    /* 跑完直接落到结果（2026-10-26 评审）：停在用例页会让使用者以为没跑成，
+       再点一次批量就是重复的真实 LLM 调用。单批时顺手打开这次运行的详情。 */
+    await reloadRuns()
+    switchTab('runs')
+    const latest = runIds.length === 1 ? runs.value.find((r) => r.id === runIds[0]) : undefined
+    if (latest) void openRunDetail(latest)
   } catch (e) {
     toast.close(busy)
     toast.error(`批量评估失败：${errMsg(e)}`)
@@ -1565,31 +1541,20 @@ watch(agentFilter, () => { compareIds.value = [] })
 
 // 挂载加载统一走上方 watch 的 immediate 首跑（bootstrapped 分支），此处不再裸拉一遍
 
-/* 宿主协作面：批量跑评估在宿主页页头（本面板无页头），宿主经模板 ref 驱动——
-   running/canRunBatch 供禁用态，runBatch 供点击（ref 上 ref 自动解包，宿主读布尔值即可）；
-   kpiView = KPI 带四卡的全部取值（computed 顶层被 expose 代理解包 → 宿主直接读 .passRateText）。
+/* 宿主协作面：主操作在宿主页页头（本面板无页头），宿主经模板 ref 驱动——
+   running/canRunBatch 供主操作随状态走，runBatch / openCreate 供点击
+   （ref 上 ref 自动解包，宿主读布尔值即可）；kpiView 供读数带。
    tone 在面板内是 '' as const 的字面量联合，供出前放宽为 MkKpi 的入参类型。 */
 const kpiView = computed(() => ({
   passRateText: lastPassRateText.value,
   passRateTone: lastRateTone.value as 'ok' | 'warn' | 'bad' | 'muted' | '',
   passRateHint: lastRateHint.value,
-  passRateTitle: lastRateTitle.value,
-  // #72：加载失败不能落成 0（读不到 ≠ 没有）——三卡统一显「—」，失败原因进 title
-  caseCount: casesFailed.value ? ('—' as const) : cases.value.length,
-  // 2026-10-21：agent 筛选复述（「仅 X / 全部 Agent」）撤出卡面，只留加载失败态
-  casesHint: casesFailed.value ? '用例列表加载失败' : '',
-  casesTitle: casesFailed.value ? '评估用例加载失败：计数不可用（不代表没有用例）' : casesKpiTitle.value,
-  enabledCaseCount: casesFailed.value
-    ? ('—' as const)
-    : cases.value.filter((c) => c.enabled !== false).length,
-  disabledCaseCount: casesFailed.value
-    ? ('—' as const)
-    : cases.value.filter((c) => c.enabled === false).length,
-  runCount: runsFailed.value ? ('—' as const) : runs.value.length,
-  runsHint: runsFailed.value ? '评估历史加载失败' : '',
-  runsTitle: runsFailed.value ? '评估历史加载失败：计数与最近一次时间不可用' : runsKpiTitle.value,
+  // 用例分母（原「评估用例 / 启用用例」两卡撤除后的唯一去处）：加载失败显 —，不落 0
+  casesNote: casesFailed.value
+    ? '用例未加载'
+    : `用例 ${cases.value.length} · 启用 ${cases.value.filter((c) => c.enabled !== false).length}`,
 }))
-defineExpose({ running, canRunBatch, runBatch, kpiView })
+defineExpose({ running, canRunBatch, runBatch, openCreate, kpiView })
 </script>
 
 <style scoped>
@@ -1613,7 +1578,8 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
    不换行撑行高） */
 .pe-list .mk-table td { white-space: nowrap; }
 .pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.pe-persona-missing { margin-left: 6px; }
+/* 「人设失效」是可点的修复入口（打开编辑弹窗并落在模拟学生区块）：复位按钮外观，沿用 warn 徽章配色 */
+.pe-persona-missing { margin-left: 6px; border: 1px solid transparent; font: inherit; font-size: var(--mk-fs-micro); font-weight: 600; cursor: pointer; }
 .pe-result { display: grid; gap: 3px; justify-items: start; }
 .pe-result strong { font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; }
 .pe-result span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }

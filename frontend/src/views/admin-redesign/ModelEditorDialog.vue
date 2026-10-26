@@ -262,7 +262,7 @@ export interface ModelLike {
 }
 
 const props = defineProps<{ fallbackOptions: string[] }>()
-const emit = defineEmits<{ saved: [{ modelId: string; warnings: string[] }] }>()
+const emit = defineEmits<{ saved: [{ modelId: string; warnings: string[] }]; closed: [] }>()
 
 const open = ref(false)
 const busy = ref(false)
@@ -380,6 +380,7 @@ function openWith(target: { providerId: string; model: ModelLike | null; presetI
 function close(): void {
   if (busy.value) return
   open.value = false
+  emit('closed')
 }
 
 useEscape(() => open.value, close)
@@ -435,7 +436,7 @@ async function submit(): Promise<void> {
   }
 }
 
-defineExpose({ openWith })
+defineExpose({ openWith, close })
 </script>
 
 <style scoped>

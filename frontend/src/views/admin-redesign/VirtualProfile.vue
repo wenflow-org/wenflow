@@ -359,13 +359,8 @@
             <label class="mk-field">
               <span class="mk-field__label">默认难度</span>
               <select v-model="budgetForm.frictionBudget" class="mk-field__select" @change="budgetDirty = true">
-                <option value="none">无</option>
-                <option value="low">低</option>
-                <option value="normal">正常</option>
-                <option value="high">高</option>
-                <option value="stress_test">压力测试</option>
+                <option v-for="o in FRICTION_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
               </select>
-              <span class="mk-field__hint">新运行的默认难度（可在座舱按运行临时调整）</span>
             </label>
           </div>
           <div class="mk-card__foot">
@@ -1076,6 +1071,7 @@ import { useSafePolling } from '@/composables/useSafePolling'
 import { useRowMenu } from './useRowMenu'
 import { useIsDark } from '@/composables/useIsDark'
 import {
+  FRICTION_OPTIONS,
   RUNS_TAB_WINDOW
 } from './vlab'
 

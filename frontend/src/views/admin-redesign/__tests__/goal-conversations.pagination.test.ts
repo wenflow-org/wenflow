@@ -9,6 +9,7 @@ import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import GoalConversations from '../GoalConversations.vue';
 import { openSubPage } from '../store';
+import { liveRefreshSeq } from '../live';
 
 const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 
@@ -176,7 +177,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
   });
 
-  it('P1#5「已取消」桶 = 取消/中断/回收合计；pill 同口径——非 active 且非 completed 全收（cancelled/failed/abandoned）', async () => {
+  it('「已取消」与「失败」拆成两档：取消/回收进已取消，失败独立成档（2026-10-26）', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -195,24 +196,75 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
       data: { success: true, data: { total: 5, active: 1, completed: 1, completionRate: '20' } }
     });
     const w = await mountGoals();
-    // 计数 = 5 − 1 − 1 = 3；口径披露进 pill 的 title（不再是「用户取消或中断」文案）
+    // 后端只给合并桶（total−active−completed=3），拆分后两档不显计数，避免窗口口径冒充全量
     const cancelPill = w.findAll('.mk-pill').find((x) => x.text().startsWith('已取消'))!;
-    expect(cancelPill.find('.mk-pill__count').text()).toBe('3');
-    expect(cancelPill.attributes('title')).toContain('含用户取消、失败中断');
-    expect(w.text()).not.toContain('用户取消或中断');
-    // 点「已取消」→ 与计数同口径（补集聚合），点进去对得上
+    const failPill = w.findAll('.mk-pill').find((x) => x.text().startsWith('失败'))!;
+    expect(cancelPill.find('.mk-pill__count').exists()).toBe(false);
+    expect(failPill.find('.mk-pill__count').exists()).toBe(false);
+    // 点「已取消」→ 只剩 cancelled + abandoned（失败不再混进来）
     await cancelPill.trigger('click');
     await nextTick();
-    const rows = w.findAll('tbody tr');
-    expect(rows).toHaveLength(3);
-    expect(w.text()).toContain('用户1'); // cancelled
-    expect(w.text()).toContain('用户2'); // abandoned
-    expect(w.text()).toContain('用户3'); // failed
-    expect(w.text()).not.toContain('用户4'); // completed 不入桶
-    expect(w.text()).not.toContain('用户5'); // active 不入桶
+    let rows = w.findAll('tbody tr');
+    expect(rows).toHaveLength(2);
+    expect(w.text()).toContain('用户1');
+    expect(w.text()).toContain('用户2');
+    expect(w.text()).not.toContain('用户3');
+    // 点「失败」→ 只有 failed 行
+    await cancelPill.trigger('click');
+    await nextTick();
+    await failPill.trigger('click');
+    await nextTick();
+    rows = w.findAll('tbody tr');
+    expect(rows).toHaveLength(1);
+    expect(w.text()).toContain('用户3');
+    expect(w.text()).not.toContain('用户1');
   });
 
-  it('P1#6 停滞信号：窗口内 active 且 updatedAt 超 7 天 → 「进行中」桶 foot 出现「其中 N 条超 7 天未更新」+ 口径 title', async () => {
+  it('状态列语义色：失败红、取消灰（spec：bad=需立即行动 / muted=不适用）', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          conversations: [
+            makeConv(1, { status: 'failed' }),
+            makeConv(2, { status: 'cancelled' })
+          ]
+        }
+      }
+    });
+    const w = await mountGoals();
+    const badges = w.findAll('tbody .mk-badge');
+    const failBadge = badges.find((b) => b.text() === '失败')!;
+    const cancelBadge = badges.find((b) => b.text() === '已取消')!;
+    expect(failBadge.classes()).toContain('mk-badge--bad');
+    expect(cancelBadge.classes()).toContain('mk-badge--muted');
+  });
+
+  it('「状态」表头按状态档固定序排（进行中 → 已完成 → 已取消 → 失败 → 已放弃），不按阶段序号', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          conversations: [
+            makeConv(1, { status: 'failed', stage: 'initial' }),
+            makeConv(2, { status: 'active', stage: 'proposal' }),
+            makeConv(3, { status: 'completed', stage: 'completed' }),
+            makeConv(4, { status: 'abandoned', stage: 'initial' }),
+            makeConv(5, { status: 'cancelled', stage: 'understanding' })
+          ]
+        }
+      }
+    });
+    const w = await mountGoals();
+    const statusTh = w.findAll('thead th').find((th) => th.text().startsWith('状态'))!;
+    await statusTh.trigger('click');
+    await nextTick();
+    const order = w.findAll('tbody tr').map((tr) => tr.findAll('td')[2].find('.mk-badge').text());
+    // 首击降序（desc）→ 固定档序倒排；关键是同档聚在一起，而不是按阶段穿插
+    expect(order).toEqual(['已放弃', '失败', '已取消', '已完成', '进行中']);
+  });
+
+  it('P1#6 停滞信号：窗口内 active 且 updatedAt 超 7 天 → 停滞 KPI 计数', async () => {
     const fresh = new Date(Date.now() - 86400000).toISOString();
     listMock.mockResolvedValue({
       data: {
@@ -229,10 +281,8 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
       data: { success: true, data: { total: 2, active: 2, completed: 0, completionRate: '0' } }
     });
     const w = await mountGoals();
-    // 口径披露随「进行中」pill 的 title（原分布带段悬停文案迁移）
-    const activePill = w.findAll('.mk-pill').find((el) => el.text().startsWith('进行中'))!;
-    expect(activePill.attributes('title')).toContain('其中 1 条超过 7 天未更新');
-    expect(activePill.attributes('title')).toContain('澄清中或待确认');
+    const stale = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '停滞目标对话')!;
+    expect(stale.find('.mk-kpi__num').text()).toBe('1');
   });
 
   it('P1#6 stats 拉取失败 → 错误条「统计暂不可用 · 重试」，完结率 KPI 不拿 0 冒充读数', async () => {
@@ -260,7 +310,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(w.findAll('.mk-pill').find((p) => p.text().startsWith('进行中'))!.find('.mk-pill__count').text()).toBe('5');
   });
 
-  it('2026-10-05 KPI 面板：四卡（会话总数/完结率/参与用户/近 7 天新增）；状态计数只在卡头 pills', async () => {
+  it('2026-10-26 KPI 带压到三张（总数 / 完结率 / 停滞），近 7 天新增挂总数卡数值行注记', async () => {
     // 日期动态生成（组件按「今天−6」UTC 日历日过滤窗口，硬编码日期会跨日失效）；
     // d(9) 在窗口外，必须被过滤掉——证明近 7 天新增口径没被「按完成日归集的老对话」污染
     const d = (offsetDays: number) => new Date(Date.now() - offsetDays * 86400000).toISOString().slice(0, 10);
@@ -280,13 +330,15 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
     const w = await mountGoals();
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['目标对话数', '完结率', '参与用户', '近 7 天新增', '停滞目标对话']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40', '0%', '12', '8', '5']);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['目标对话数', '完结率', '停滞目标对话']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40近 7 天 +8', '0%', '5']);
+    // 增长读数（参与用户）不再单开卡
+    expect(w.findAll('.mk-kpi__label').map((n) => n.text().trim())).not.toContain('参与用户');
     // 状态数字只活在卡头 pills（2026-10-17 分布带退役后）；「全部」不显数（总数单源=分页器）
     const pill = (label: string) => w.findAll('.mk-pill').find((p) => p.text().startsWith(label))!;
     expect(pill('进行中').find('.mk-pill__count').text()).toBe('40');
     expect(pill('已完成').find('.mk-pill__count').text()).toBe('0');
-    expect(pill('已取消').find('.mk-pill__count').text()).toBe('0');
+    expect(pill('已取消').find('.mk-pill__count').exists()).toBe(false);
     expect(pill('全部').find('.mk-pill__count').exists()).toBe(false);
     expect(w.find('.gc-distband').exists()).toBe(false);
   });
@@ -309,20 +361,18 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(rows[0].text()).toContain('—');
   });
 
-  /* 2026-10-21 用户「右上角已经是真实了啊」+「其他地方也有这种文案」：页头副题不再复述视角，
-     视角只由 .ds-toggle 表达（2026-10-04 的「副题随开关改口径」判例据此退役） */
-  it('页头副题不复述口径；口径开关已退役（2026-10-21「没有测试，测试只是备注」）', async () => {
+  /* 2026-10-26：页头副题（复述页名 + 两个列名）已删，口径只由页名与数据自明；
+     口径开关已于 2026-10-21 退役（「没有测试，测试只是备注」） */
+  it('页头只剩标题：不再有复述型副题，也没有口径开关', async () => {
     const w = await mountGoals();
-    const subText = () => w.find('.mk-pagehead__sub').text();
-    expect(subText()).toContain('与学习者澄清真实目标');
-    expect(subText()).not.toContain('仅真实用户');
-    expect(subText()).not.toContain('测试账号');
+    expect(w.find('.mk-pagehead__sub').exists()).toBe(false);
     expect(w.find('.ds-toggle').exists()).toBe(false);
   });
 
   /** 2026-10-24 用户「空数据的时候，页面很奇怪，没有统一设计」：
-   *  本来就没数据时原走页面级一行裸文字（不在卡里、无说明），现与「筛选无匹配」同骨架同位置。 */
-  it('0 行：仍渲染列表卡（卡头 + 卡内 min 空态），不再有页面级裸文字空态', async () => {
+   *  本来就没数据时原走页面级一行裸文字（不在卡里、无说明），现与「筛选无匹配」同骨架同位置。
+   *  2026-10-26：空态只留一句事实 + 一个出口（不再有教学第二句），分页器常驻。 */
+  it('0 行：仍渲染列表卡（卡头 + 卡内 min 空态 + 常驻分页器），空态给「查看学习者」出口', async () => {
     listMock.mockResolvedValue({ data: { success: true, data: { conversations: [] } } });
     statsMock.mockResolvedValue({ data: { success: true, data: { total: 0, active: 0, completed: 0, completionRate: '0' } } });
     const w = await mountGoals();
@@ -332,10 +382,76 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const empty = w.find('.mk-empty');
     expect(empty.classes()).toContain('mk-empty--min');
     expect(empty.text()).toContain('暂无目标对话');
-    // 说清下一步由谁产生数据（此前只有四个字）
-    expect(empty.text()).toContain('学习者在学习端提出目标后');
-    // 0 行不挂分页器
-    expect(w.find('.mk-pagination').exists()).toBe(false);
+    expect(empty.text()).not.toContain('学习者在学习端提出目标后');
+    const action = empty.findAll('button').find((b) => b.text() === '查看学习者');
+    expect(action).toBeTruthy();
+    // 分页器常驻：0 行时仍给「共 0 条 · 第 1 / 1 页」，否则整页像数据没了
+    expect(w.find('.mk-pagination').exists()).toBe(true);
+    expect(w.find('.mk-pagination').text()).toContain('共 0 条');
+    w.unmount();
+  });
+
+  it('筛选无匹配：只留「当前筛选无匹配」+ 清除筛选（不再有「放宽筛选条件试试」）', async () => {
+    const w = await mountGoals();
+    const input = w.find('input[placeholder*="搜索用户"]');
+    await input.setValue('绝不匹配的关键词');
+    await flushPromises();
+    const empty = w.find('.mk-empty');
+    expect(empty.text()).toContain('当前筛选无匹配');
+    expect(empty.text()).not.toContain('放宽筛选条件');
+    expect(empty.findAll('button').some((b) => b.text() === '清除筛选')).toBe(true);
+    w.unmount();
+  });
+
+  it('「路径」列「已生成」可点 → 座舱「路径」页签', async () => {
+    const w = await mountGoals();
+    const pathBtn = w.findAll('tbody button.mk-user-link').find((b) => b.text() === '已生成')!;
+    expect(pathBtn).toBeTruthy();
+    await pathBtn.trigger('click');
+    expect(vi.mocked(openSubPage)).toHaveBeenCalledWith('session-real', 'conv-2', { stage: 'path' });
+  });
+
+  it('「重建路径」只对已完成行开放：未完成行的菜单项禁用，文案按有无路径切换', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          conversations: [
+            makeConv(1, { status: 'active', learningPathId: null }),
+            makeConv(2, { status: 'completed', learningPathId: 'path-2' }),
+            makeConv(3, { status: 'completed', learningPathId: null })
+          ]
+        }
+      }
+    });
+    const w = await mountGoals();
+    const rowOf = (name: string) => w.findAll('tbody tr').find((tr) => tr.text().includes(name))!;
+    await rowOf('用户1').find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    let item = rowOf('用户1').findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().includes('路径'))!;
+    expect(item.text()).toBe('生成路径');
+    expect(item.attributes('disabled')).toBeDefined();
+    await rowOf('用户1').find('.mk-menu__btn').trigger('click');
+    await rowOf('用户2').find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    item = rowOf('用户2').findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().includes('路径'))!;
+    expect(item.text()).toBe('重建路径');
+    expect(item.attributes('disabled')).toBeUndefined();
+    await rowOf('用户2').find('.mk-menu__btn').trigger('click');
+    await rowOf('用户3').find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    item = rowOf('用户3').findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().includes('路径'))!;
+    expect(item.text()).toBe('生成路径');
+    expect(item.attributes('disabled')).toBeUndefined();
+  });
+
+  it('顶栏刷新（liveRefreshSeq 广播）强制重拉列表', async () => {
+    const w = await mountGoals();
+    const before = listMock.mock.calls.length;
+    liveRefreshSeq.value += 1;
+    await flushPromises();
+    await flushPromises();
+    expect(listMock.mock.calls.length).toBeGreaterThan(before);
     w.unmount();
   });
 });

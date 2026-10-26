@@ -48,10 +48,15 @@ vi.mock('@/api/adminApi', () => ({
 }));
 
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
-vi.mock('../live', () => ({
-  errMsg: (e: unknown) => String(e),
-  liveCreateVirtual: liveCreateVirtualMock,
-}));
+vi.mock('../live', async () => {
+  const { ref } = await import('vue');
+  return {
+    errMsg: (e: unknown) => String(e),
+    liveCreateVirtual: liveCreateVirtualMock,
+    /* 顶栏刷新广播（2026-10-26 本页接上 watch(liveRefreshSeq)） */
+    liveRefreshSeq: ref(0),
+  };
+});
 
 import VirtualLearnerCards from '../VirtualLearnerCards.vue';
 import { toast } from '@/utils/toast';
@@ -111,12 +116,14 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     (toast.error as unknown as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it('KPI 三卡（预置卡/自建卡/已派生实例；卡总数 2026-10-14 并入卡墙卡头）+ 卡墙渲染身份卡与来源徽章', async () => {
+  it('KPI 两卡（身份卡 / 已创建实例）+ 卡墙渲染身份卡与来源徽章', async () => {
     const w = await mountPage();
     const labels = w.findAll('.mk-kpi .mk-kpi__label').map((x) => x.text());
-    // 卡总数不再立卡：它恒等于下方卡墙行数，卡头「共 N 张」已自报（计数单源在列表）
-    // 「已派生实例」2026-10-24 改名并转为入口：实例不在卡墙上，点它去虚拟学习者列表
-    expect(labels).toEqual(['预置卡', '自建卡', '已派生实例']);
+    // 2026-10-26：预置 / 自建合成一张「身份卡」，两个数进 hint；
+    // 「已创建实例」只留读数，跳转改卡头链接（可点这件事此前只有悬停才看得出）
+    expect(labels).toEqual(['身份卡', '已创建实例']);
+    expect(w.find('.mk-kpi__hint').text()).toContain('预置 1');
+    expect(w.find('.mk-kpi__hint').text()).toContain('自建 1');
     expect(w.find('.mk-card__meta').text()).toContain('共 2 张');
     const wall = w.findAll('.vlc-card');
     expect(wall).toHaveLength(2);
@@ -212,9 +219,9 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     await flushPromises();
 
     expect(cardsCloneMock).toHaveBeenCalledWith([{ profileId: 'p1', storyIds: ['story-1'] }], undefined);
-    expect(toast.success).toHaveBeenCalledWith('已创建 1 个虚拟学习者');
-    // 创建出实例后清勾选并回刷卡墙
+    // 创建出实例后清勾选、回刷卡墙，并在卡墙顶部留一条持久结果条
     expect(w.find('.mk-batchbar').exists()).toBe(false);
+    expect(w.find('.vlc-created').text()).toContain('已创建 1 个虚拟学习者');
     expect(cardsIndexMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     w.unmount();
   });
@@ -233,7 +240,9 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     const submit = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.includes('个虚拟学习者'))!;
     submit.dispatchEvent(new Event('click'));
     await flushPromises();
-    expect(toast.success).toHaveBeenCalledWith('已创建 1 个虚拟学习者');
+    // 创建结果改用卡墙顶部持久结果条（toast 3 秒消失，而实例不在这面墙上）
+    expect(w.find('.vlc-created').text()).toContain('已创建 1 个虚拟学习者');
+    expect(w.find('.vlc-created').text()).toContain('去虚拟学习者');
     const failed = document.body.querySelector('.cdd-failed');
     expect(failed?.textContent).toContain('英语复读生');
     expect(failed?.textContent).toContain('未勾选任何任务');
@@ -261,8 +270,9 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     const chips = w.findAll('.vlc-card__tags .mk-badge');
     // 2026-10-24 用户「preset:… 是无意义信息，要加就换点数据」：枚举转中文，内部标记全部撤掉
     expect(chips.map((c) => c.text())).toEqual(['学习', '考试备战']);
-    expect(chips[0].attributes('title')).toBe('场景类型：学习');
-    expect(chips[1].attributes('title')).toBe('目标类型：考试备战');
+    // 2026-10-26：标签不再挂「场景类型 / 目标类型」注释型 title
+    expect(chips[0].attributes('title')).toBeUndefined();
+    expect(chips[1].attributes('title')).toBeUndefined();
     expect(w.find('.vlc-card__tags').text()).not.toContain('preset:');
     expect(w.find('.vlc-card__tags').text()).not.toContain('hash:');
     expect(w.find('.vlc-card__more').exists()).toBe(false);

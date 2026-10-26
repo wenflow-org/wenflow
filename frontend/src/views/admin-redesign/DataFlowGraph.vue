@@ -225,7 +225,15 @@
           <section v-else :data-card-key="step.agentId" class="dfg-step" :class="{ 'has-inputs': step.inputChips.length, 'is-flash': flashKey === step.agentId }" :style="{ '--hz': stepHue(step) }">
             <header class="dfg-step__head">
               <span class="dfg-step__idx">{{ step.index }}</span>
-              <strong class="dfg-step__name">{{ step.name }}</strong>
+              <!-- 卡题即「打开该 Skill 详情」：旅程里看到某步未解析/异常，入口必须和总览节点同一落点 -->
+              <button
+                v-if="step.agentId.startsWith('skill:')"
+                type="button"
+                class="dfg-step__name dfg-step__name--link"
+                :title="step.agentId"
+                @click="openSkill(step.agentId)"
+              >{{ step.name }}</button>
+              <strong v-else class="dfg-step__name">{{ step.name }}</strong>
               <span class="dfg-step__badge">Skill</span>
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
               <span class="dfg-step__agent mono">{{ step.agentId }}</span>
@@ -526,7 +534,7 @@ import {
 import type { StageDetailLike } from './fieldFlowLayout'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import { AGENT_TONES } from './store'
+import { AGENT_TONES, openSubPage } from './store'
 
 /* ================= props / emits（与 FieldFlowGraph 同接口，Orchestrator 无缝替换） ================= */
 const props = defineProps<{ stage: string }>()
@@ -653,6 +661,12 @@ function switchStage(id: string) {
   query.value = ''
   focusId.value = ''
   selected.value = null
+}
+
+/** Skill 步骤卡头 → 该 Skill 详情二级页：与总览节点同一落点（skill: 前缀剥掉） */
+function openSkill(agentId: string) {
+  const id = agentId.replace(/^skill:/, '')
+  if (id) openSubPage('skill', id)
 }
 
 /* ================= 角色词表（后端 promptRoleMeta，多阶段同源） ================= */
@@ -1606,6 +1620,12 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 }
 .dfg-step--gate .dfg-step__idx { border-radius: 50%; }
 .dfg-step__name { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
+/* 卡题可点（进 Skill 详情）：蓝字 = 可交互，其余排版与相邻纯文本卡题一致 */
+.dfg-step__name--link {
+  padding: 0; border: 0; background: none; font-family: inherit; line-height: inherit;
+  color: var(--mk-blue); cursor: pointer; text-align: left;
+}
+.dfg-step__name--link:hover { text-decoration: underline; }
 .dfg-step__badge {
   padding: 1px 7px; border-radius: 999px; background: var(--mk-graph-badge-bg); color: var(--mk-muted);
   font-size: var(--mk-fs-micro); font-weight: 800;

@@ -187,11 +187,9 @@ async function mountApiConfig() {
 }
 
 /** 平台连接表单（2026-10-25 撤掉「平台设置」浮窗后内联在平台详情里）：
-    点「设置」只是滚动定位，表单本身常驻 DOM——这里保留 helper 以便旧断言继续可读。 */
+    表单常驻 DOM，平台详情不再有「设置」钮（点了画面几乎不动），helper 直接等一拍。 */
 async function openPlatformSettings(wrapper: Awaited<ReturnType<typeof mountApiConfig>>) {
-  const btn = wrapper.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置');
-  expect(btn, '平台详情应有「设置」').toBeTruthy();
-  await btn!.trigger('click');
+  expect(wrapper.find('.mpp-detail__acts .mk-btn').exists(), '平台详情不再有「设置」').toBe(false);
   await nextTick();
   await flushPromises();
 }
@@ -375,7 +373,58 @@ describe('ApiConfig P1 修复批', () => {
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('结果已过期');
-    expect(wrapper.text()).toContain('关闭后不自动探测');
+    // 探针关闭时不渲染间隔输入，只剩手动「立即探测」
+    expect(wrapper.find('.ac-probe__interval').exists()).toBe(false);
+    expect(wrapper.findAll('button').some((b) => b.text().includes('立即探测'))).toBe(true);
+    wrapper.unmount();
+  });
+
+  /* 输出格式是生成参数的一部分：改完保存必须随 route 组提交并回显，否则刷新后静默回默认值。 */
+  it('输出格式随生成参数保存与回显', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用');
+    const formatSelect = wrapper.findAll('select').find((el) =>
+      Array.from(el.findAll('option')).some((o) => o.text().includes('JSON 对象')),
+    )!;
+    await formatSelect.setValue('json_object');
+    await nextTick();
+    const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存生成参数');
+    expect(saveBtn, '改输出格式后应出现「保存生成参数」').toBeTruthy();
+    updateConfigMock.mockResolvedValue({ data: { data: {} } });
+    await saveBtn!.trigger('click');
+    await flushPromises();
+    expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({
+      defaultResponseFormat: 'json_object'
+    }));
+    wrapper.unmount();
+  });
+
+  /* 限流读数读不到时不能整行消失——那会被读成「近 1 小时没有限流」。 */
+  it('限流读数读取失败：卡内报失败并给重试，不静默消失', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    getModelRegistryMock.mockRejectedValue(new Error('boom'));
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用');
+    await flushPromises();
+    expect(wrapper.text()).toContain('限流读数读取失败');
+    const retry = wrapper.find('.ac-rel__note.ac-rel__error .mk-link');
+    expect(retry.exists()).toBe(true);
+    getModelRegistryMock.mockResolvedValue({
+      data: { data: { rateLimit: { windowMinutes: 60, count429: 4, coolingDown: 2 }, aliases: [], models: [] } }
+    });
+    await retry.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('近 1 小时上游限流（429）4 次');
+    wrapper.unmount();
+  });
+
+  /* 调用健康报异常时给出处理页出口 */
+  it('能力异常时调用健康卡给出「去健康中心」出口', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用');
+    expect(wrapper.find('.mk-card__head .mk-link').text()).toContain('去健康中心');
     wrapper.unmount();
   });
 

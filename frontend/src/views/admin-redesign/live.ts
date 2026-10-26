@@ -39,6 +39,8 @@ const isExtraSkill = (id: string) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(id.repla
 export const liveLoading = ref(false)
 /** 各域拉取失败记录（页面据此局部降级） */
 export const liveFailures = ref<Record<string, string>>({})
+/** 各域失败的后端原文（只供 title 悬停，不直接上屏——原始调用栈会挤掉空态并暴露服务器路径） */
+export const liveFailureRaw = ref<Record<string, string>>({})
 /** 并发守卫：防止 auto-refresh 在上一次未完成时重复发起请求 */
 export const liveRefreshing = ref(false)
 /** 顶栏「刷新」序号：`loadLiveData(true)` 每次自增。页面自有域（不在 boot 域内、
@@ -66,6 +68,13 @@ export function timeAgo(iso?: string | null): string {
   return new Date(t).toLocaleDateString('zh-CN')
 }
 
+/**
+ * 后端原始错误（Prisma 调用栈、TS 类型签名、源码绝对路径）不是给运营读的：
+ * 一整屏 `Invalid prisma.x.findFirst() invocation in D:\...\backend\src\...` 会把空态挤没，
+ * 还暴露服务器目录结构。这里把它收敛成一句人话，原文交给 title 供排查时复制。
+ */
+const RAW_ERROR_RE = /Invalid `prisma\.|invocation in [A-Za-z]:\\|Unknown argument|\.ts:\d+:\d+|PrismaClient|at [A-Za-z0-9_$.]+ \(/
+
 export function errMsg(e: unknown): string {
   const err = e as { response?: { data?: { error?: { message?: unknown } | string }; status?: number }; message?: string }
   const raw = err?.response?.data?.error
@@ -80,7 +89,19 @@ export function errMsg(e: unknown): string {
   const human = humanizeHttpError(message, status)
   if (human) return human
   if (status === 401) return '需要 admin 登录'
+  if (RAW_ERROR_RE.test(message)) {
+    return status ? `服务端读取失败（HTTP ${status}）` : '服务端读取失败'
+  }
   return message || '网络错误'
+}
+
+/** 后端原始错误全文：只给 title 用，界面上不展开 */
+export function errRaw(e: unknown): string {
+  const err = e as { response?: { data?: { error?: { message?: unknown } | string } }; message?: string }
+  const raw = err?.response?.data?.error
+  if (typeof raw === 'string') return raw
+  if (raw && typeof raw.message === 'string') return raw.message
+  return err?.message || ''
 }
 
 /** 长 ID（UUID / traceId）在动态、列表等紧凑场景的截断显示 */
@@ -2383,6 +2404,7 @@ export async function loadLiveData(force = false) {
   if (liveLoading.value) return
   liveLoading.value = true
   liveFailures.value = {}
+  liveFailureRaw.value = {}
   /* 显式刷新（Shell 顶栏）广播一次：页面自有域由各自 watch(liveRefreshSeq) 重跑，
      与 boot 域同一入口、同一时刻（见 liveRefreshSeq 注释） */
   if (force) liveRefreshSeq.value++
@@ -2421,6 +2443,7 @@ export async function loadLiveData(force = false) {
         liveFetchAt[key] = Date.now()
       } catch (e) {
         liveFailures.value[key] = errMsg(e)
+        liveFailureRaw.value[key] = errRaw(e)
       }
     })
   ).then(() => {

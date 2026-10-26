@@ -121,7 +121,7 @@ describe('Prompt 评估「评估历史」首屏读数与列表同源（F7-2）',
     getEvalRunsMock.mockResolvedValue({ data: { data: makeRuns() } });
   });
 
-  it('挂载即拉历史（带 RUNS_LIMIT=30），kpiView 读数与历史条数同源、无 TDZ 错误', async () => {
+  it('挂载即拉历史（带 RUNS_LIMIT=30），kpiView 与历史同源、无 TDZ 错误', async () => {
     const wrapper = await mountPanel();
 
     // 首屏就发起了历史请求，且窗口上限常量可达（TDZ 会让调用根本发不出去）
@@ -131,9 +131,10 @@ describe('Prompt 评估「评估历史」首屏读数与列表同源（F7-2）',
     // 没有任何「加载历史失败」toast（TDZ 曾被 reloadRuns 自身 catch 吞成此 toast）
     expect(toastErrorMock).not.toHaveBeenCalled();
 
-    // 首帧读数即真实条数，而不是 0（0→30 的自愈假象消失）
-    const kpiView = (wrapper.vm as unknown as { kpiView: { runCount: number } }).kpiView;
-    expect(kpiView.runCount).toBe(RUN_COUNT);
+    // 首帧读数即真实值：通过率取最新一次运行；用例分母由同一份 cases 派生
+    const kpiView = (wrapper.vm as unknown as { kpiView: { passRateText: string; casesNote: string } }).kpiView;
+    expect(kpiView.passRateText).toBe('100%');
+    expect(kpiView.casesNote).toBe('用例 0 · 启用 0');
 
     // 读数带已迁宿主槽位：面板自身不再渲染 .mk-kpi（否则宿主 + 面板两条带同屏）
     expect(wrapper.findAll('.mk-kpi')).toHaveLength(0);
@@ -192,14 +193,14 @@ describe('Prompt 评估「评估历史」首屏读数与列表同源（F7-2）',
   it('切到「评估历史」页签后读数不变', async () => {
     const wrapper = await mountPanel();
 
-    const before = (wrapper.vm as unknown as { kpiView: { runCount: number } }).kpiView.runCount;
+    const read = () => (wrapper.vm as unknown as { kpiView: { passRateText: string } }).kpiView.passRateText;
+    const before = read();
     await wrapper.findAll('.tabs .tab')[1].trigger('click');
     await flushPromises();
     await nextTick();
 
-    const after = (wrapper.vm as unknown as { kpiView: { runCount: number } }).kpiView.runCount;
-    expect(before).toBe(RUN_COUNT);
-    expect(after).toBe(RUN_COUNT);
+    expect(before).toBe('100%');
+    expect(read()).toBe('100%');
 
     // 历史列表确实渲染出 RUN_COUNT 行
     expect(wrapper.findAll('.pe-panel table.mk-table tbody tr').length).toBe(RUN_COUNT);

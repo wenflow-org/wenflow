@@ -12,8 +12,9 @@ import Addons from '../Addons.vue';
 import { dataSource } from '../store';
 import { liveRefreshSeq } from '../live';
 
-const { mcpListMock, listMcpToolsMock, pluginListMock, pluginSetMock, pluginConfigMock, pluginSaveMock } = vi.hoisted(() => ({
+const { mcpListMock, mcpUpdateMock, listMcpToolsMock, pluginListMock, pluginSetMock, pluginConfigMock, pluginSaveMock } = vi.hoisted(() => ({
   mcpListMock: vi.fn(),
+  mcpUpdateMock: vi.fn(),
   listMcpToolsMock: vi.fn(),
   pluginListMock: vi.fn(),
   pluginSetMock: vi.fn(),
@@ -32,7 +33,7 @@ function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
 }
 
 vi.mock('@/api/adminApi', () => ({
-  adminMcpApi: apiObject({ list: mcpListMock, listMcpTools: listMcpToolsMock }),
+  adminMcpApi: apiObject({ list: mcpListMock, listMcpTools: listMcpToolsMock, updateTool: mcpUpdateMock }),
   adminPluginsApi: apiObject({
     list: pluginListMock,
     setEnabled: pluginSetMock,
@@ -90,6 +91,7 @@ async function mountLive() {
 
 beforeEach(() => {
   mcpListMock.mockReset();
+  mcpUpdateMock.mockReset();
   listMcpToolsMock.mockReset();
   pluginListMock.mockReset();
   pluginSetMock.mockReset();
@@ -118,6 +120,9 @@ beforeEach(() => {
   listMcpToolsMock.mockResolvedValue({
     data: { data: { tools: [{ name: 'tavily_search' }, { name: 'tavily_map' }] } }
   });
+  mcpUpdateMock.mockImplementation(async (id: string, patch: Record<string, unknown>) => ({
+    data: { data: { id, ...patch } }
+  }));
   mcpListMock.mockResolvedValue({
     data: {
       data: {
@@ -137,14 +142,16 @@ afterEach(() => {
 });
 
 describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () => {
-  it('独立页形态：页头只有标题，刷新跟着顶栏广播走（2026-10-23 全站收口）', async () => {
+  it('独立页形态：页头只有「新建 MCP 服务」，刷新跟着顶栏广播走（2026-10-23 全站收口）', async () => {
     const wrapper = await mountLive();
     expect(wrapper.find('.mk-page').exists()).toBe(true);
     const head = wrapper.find('.mk-pagehead');
     expect(head.exists()).toBe(true);
     expect(head.text()).toContain('插件');
-    // 站内已有顶栏刷新，页头不再出第二颗钮（用户「已经有刷新，为什么还有独立刷新」）
-    expect(head.findAll('button')).toHaveLength(0);
+    // 页头副文已删；新增入口从 MCP 卡头上移到页头 actions
+    expect(head.find('.mk-pagehead__sub').exists()).toBe(false);
+    expect(head.findAll('.mk-pagehead__actions button').map((b) => b.text())).toEqual(['新建 MCP 服务']);
+    expect(wrapper.find('.ac-mcp-card .mk-card__head button').exists()).toBe(false);
     // 顶栏刷新 = liveRefreshSeq 广播 → 本页与旧页头刷新钮同一入口重拉
     const calls = pluginConfigMock.mock.calls.length;
     liveRefreshSeq.value += 1;
@@ -153,7 +160,7 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
-  it('一行一个插件：名称、说明、成员与最近调用同排，模型细节不出现在列表里', async () => {
+  it('一行一个插件：名称、成员与最近调用同排，插件说明句不再上列表', async () => {
     const wrapper = await mountLive();
     const rows = wrapper.findAll('.ac-plugin');
     expect(rows).toHaveLength(4);
@@ -161,13 +168,21 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     for (const name of ['联网', '决策', '生图', 'MCP 工具调用', '网页搜索', '网页抓取', '资料采集']) {
       expect(text).toContain(name);
     }
-    // 列表只回答「开没开」：成员模型与路由徽标收进配置弹窗
+    // 列表只回答「开没开」：成员模型、说明句与路由徽标都不上列表
     expect(text).not.toContain('deepseek-v4-flash');
     expect(text).not.toContain('跟随平台默认');
     expect(text).not.toContain('关闭后');
+    expect(text).not.toContain('检索、抓取外部网页');
     const switches = wrapper.findAll('.ac-plugin .mk-switch');
     expect(switches).toHaveLength(4);
-    expect(switches[0].attributes('title')).toContain('停用后：');
+    // 开关不再挂「停用后：…」解释型 title
+    expect(switches[0].attributes('title')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('「查失败」只在有失败调用时出现（零失败的插件不给这颗钮）', async () => {
+    const wrapper = await mountLive();
+    expect(wrapper.findAll('.ac-plugin .mk-link').map((b) => b.text())).not.toContain('查失败');
     wrapper.unmount();
   });
 
@@ -290,6 +305,56 @@ describe('Addons MCP 服务（transport 支持）', () => {
     expect(listMcpToolsMock).toHaveBeenCalledWith('tavily', true);
     expect(wrapper.find('.ac-mcp__row').text()).toContain('工具 2');
 
+    wrapper.unmount();
+  });
+
+  it('MCP 行内开关直接落 PUT enabled（不再进编辑弹窗改）', async () => {
+    withTools([
+      { id: 'tavily', name: 'Tavily MCP', description: '', type: 'http', transport: 'mcp', endpoint: 'https://x/mcp', enabled: true }
+    ]);
+    const wrapper = await mountLive();
+    const sw = wrapper.find('.ac-mcp__row .mk-switch');
+    expect(sw.exists()).toBe(true);
+    expect(sw.attributes('aria-checked')).toBe('true');
+    await sw.trigger('click');
+    await flushPromises();
+    expect(mcpUpdateMock).toHaveBeenCalledWith('tavily', { enabled: false });
+    expect(wrapper.find('.ac-mcp__row .mk-switch').attributes('aria-checked')).toBe('false');
+    wrapper.unmount();
+  });
+
+  it('决策配置弹窗：单候选通道给事实行「当前只用」，链外 provider 挂「未参与调用」', async () => {
+    pluginConfigMock.mockResolvedValue({
+      data: {
+        data: {
+          plugins: [
+            webConfig(),
+            {
+              id: 'decision',
+              label: '决策',
+              channels: [{ id: 'judge', label: '判定', order: ['alibaba'] }],
+              providers: [
+                { id: 'alibaba', label: '阿里云 MaaS', configured: true, keySource: 'env', keyHint: null, fields: [] },
+                { id: 'cloudflare', label: 'Cloudflare', configured: true, keySource: 'db', keyHint: null, fields: [] }
+              ]
+            },
+            { id: 'image', label: '生图', channels: [], providers: [] }
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const decisionRow = wrapper.findAll('.ac-plugin').find((r) => r.text().includes('决策'))!;
+    await decisionRow.find('.mk-btn').trigger('click');
+    await flushPromises();
+    const dialog = wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
+    expect(dialog.text()).toContain('当前只用');
+    expect(dialog.find('.ac-config-chain__order').text()).toBe('阿里云 MaaS');
+    const cards = dialog.findAll('.ac-config-provider');
+    const cloudflare = cards.find((c) => c.text().includes('Cloudflare'))!;
+    expect(cloudflare.text()).toContain('未参与调用');
+    const alibaba = cards.find((c) => c.text().includes('阿里云 MaaS'))!;
+    expect(alibaba.text()).not.toContain('未参与调用');
     wrapper.unmount();
   });
 });

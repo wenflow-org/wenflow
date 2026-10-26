@@ -22,7 +22,6 @@
         <button
           type="button"
           class="sv-pill__del"
-          title="删除此视图"
           :aria-label="`删除视图 ${v.name}`"
           @click.stop="$emit('remove', v.id)"
         >×</button>
@@ -36,7 +35,6 @@
       class="sv-name"
       :placeholder="suggestName || '视图名称'"
       maxlength="24"
-      title="回车保存 · Esc 取消"
       @keydown.enter.prevent="confirmSave"
       @keydown.esc.prevent="cancelSave"
       @blur="cancelSave"

@@ -260,9 +260,9 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    // 旧注册表：/admin/agent-registry → 编排图
+    // 旧注册表：/admin/agent-registry → 字段流转（总览，不带页签）
     path: '/admin/agent-registry/:agentId?',
-    redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
+    redirect: () => ({ path: '/admin/orchestrator' })
   },
   {
     // 旧工作台详情深链：改投 Skill 详情二级页（2026-10-15；与上面 /admin/skills/:agentId 同源）。
@@ -274,9 +274,9 @@ const routes: RouteRecordRaw[] = [
     })
   },
   {
-    // 旧拓扑页：/admin/topology → 编排图
+    // 旧拓扑页：/admin/topology → 字段流转（总览，不带页签）
     path: '/admin/topology',
-    redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
+    redirect: () => ({ path: '/admin/orchestrator' })
   },
   {
     // 旧命名：/admin/prompt-workbench → /admin/skill-workbench
@@ -499,11 +499,19 @@ router.beforeEach(async (to, _from, next) => {
      此前改投写在 Skills.vue 的 query watch 里，要等控制台首屏启动完、Skills 场景挂载后才发生，
      实测 3-5s 内用户先看到的是目标错误的页面；路由级在导航瞬间完成改投（2026-09-29 功能走查）。 */
   if (to.path === '/admin/skills') {
-    const retiredTab = typeof to.query.tab === 'string' ? to.query.tab : '';
-    if (retiredTab === 'health' || retiredTab === 'drift' || retiredTab === 'recon') {
+    const tab = typeof to.query.tab === 'string' ? to.query.tab : '';
+    if (tab === 'health' || tab === 'drift' || tab === 'recon') {
       const query = { ...to.query };
       delete query.tab;
       next({ path: '/admin/health-center', query });
+      return;
+    }
+    /* Prompt 评估 2026-10-25 拆为独立页：老深链 ?tab=prompt-eval 路由级改投，
+       ?peTab= 原样带走。模型路由是页内弹窗，仍需 Skills 挂载后打开，不在路由层处理。 */
+    if (tab === 'prompt-eval') {
+      const query = { ...to.query };
+      delete query.tab;
+      next({ path: '/admin/prompt-eval', query });
       return;
     }
   }
@@ -515,6 +523,38 @@ router.beforeEach(async (to, _from, next) => {
     delete query.tab;
     next({ path: '/admin/addons', query });
     return;
+  }
+  /* 安全与访问 2026-10-25 拆为独立页：/admin/api-config?tab=security 路由级改投，
+     不再等控制台挂载后由 ApiConfig 的 MOVED_TABS 兜。 */
+  if (to.path === '/admin/api-config' && to.query.tab === 'security') {
+    const query = { ...to.query };
+    delete query.tab;
+    next({ path: '/admin/access-control', query });
+    return;
+  }
+  /* 复习积压的单用户明细（?userId=）是学习者详情的「记忆调度」页签：
+     路由级改投，页面不必先挂载再转发。 */
+  if (to.path === '/admin/memory-review' && typeof to.query.userId === 'string' && to.query.userId) {
+    const query = { ...to.query };
+    const userId = String(query.userId);
+    delete query.userId;
+    next({ path: '/admin/learner-state', query: { ...query, view: 'learner', id: userId, tab: 'memory-ops' } });
+    return;
+  }
+  /* 运营中心的 ?status= 只认当前页签的枚举：别的页签留下的值（反馈的 new 落到公告）
+     会把列表筛成空表。非法值丢弃，页签与其余参数照旧。 */
+  if (to.path === '/admin/ops-hub' && typeof to.query.status === 'string' && to.query.status) {
+    const tab = typeof to.query.tab === 'string' ? to.query.tab : 'todo';
+    const allowed: Record<string, readonly string[]> = {
+      feedback: ['new', 'triaged', 'resolved', 'dismissed'],
+      announce: ['published', 'expired', 'draft', 'archived'],
+    };
+    if (!(allowed[tab] || []).includes(to.query.status)) {
+      const query = { ...to.query };
+      delete query.status;
+      next({ path: to.path, query, replace: true });
+      return;
+    }
   }
   document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   syncThemeForRoute(to.path);

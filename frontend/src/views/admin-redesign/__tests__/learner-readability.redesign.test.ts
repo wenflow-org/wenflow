@@ -1,9 +1,11 @@
 /**
  * 人员轴「人类可读性」修复回归（2026-10-02 评审 P1#14/15/16/17 + P2）：
- * - LearnerCenter isRisk 拆档：需关注=趋势降 ∨ 疲劳高 ∨ 有风险摘要；疲劳=中 单列「观察」pill
+ * - LearnerCenter isRisk 拆档：需关注=趋势降 ∨ 疲劳高 ∨ 有风险摘要；疲劳=中 单列「观察」
  * - LearnerCenter KPI 学习者=「已加载 N」（live.ts 未透出后端 total 前的诚实口径）
- * - LearnerCenter 风险摘要带量级 + 平均置信度 hint 带 n=
+ * - LearnerCenter 风险摘要带量级 + 平均置信度卡面只留读数
  * - UserAccountPane（人员详情合并后 LearnerDetail 的「账号与许可」pane）：统计条「学习状态」格 + 最后登录无兜底显「—」
+ * 2026-10-26：KPI 即筛选入口（卡头 pill 行撤除）；干预弹窗出口收口（删「查看执行日志」，
+ * 「查看学习详情」与行内「详情」同落证据页签）；发送成功给可核对落点。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -112,26 +114,72 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     w.unmount();
   });
 
-  it('需关注收窄（不含疲劳=中）；「观察」pill 单列疲劳中且可筛选；pill 计数全显（2026-10-11 统一判例）', async () => {
+  /* 2026-10-26：干预弹窗原先两个出口都到不了这个人——「查看执行日志」落全站日志首页
+     （执行日志没有学习者维度），「查看学习详情」落概览（找不到弹窗里那条风险摘要）。
+     现在只留一个，且与行内「详情」同落证据页签。 */
+  it('干预弹窗：删「查看执行日志」；「查看学习详情」与行内「详情」同落证据页签', async () => {
     const w = mount(LearnerCenter);
     await settle();
-    const pillCount = (label: string) => {
-      const pill = w.findAll('.mk-pill').find((p) => p.text().includes(label));
-      const c = pill?.find('.mk-pill__count');
-      return c && c.exists() ? c.text() : undefined;
-    };
-    // 2026-10-11 统一判例：筛选 pill 一律显命中数（需关注与 KPI 卡同源同数）
-    expect(pillCount('观察')).toBe('1'); // 甲（疲劳中）
-    expect(pillCount('需关注')).toBe('3');
-    const riskKpi = w.findAll('.mk-kpi').find((c) => c.text().includes('需关注'));
-    expect(riskKpi!.text()).toContain('3'); // 乙（趋势降）/ 丙（疲劳高）/ 丁（风险摘要）；甲（疲劳中）不再计入
+    const riskRow = w.findAll('tbody tr').find((r) => r.text().includes('乙'))!;
+    const intervene = riskRow.findAll('.mk-actions button').find((b) => b.text() === '干预')!;
+    await intervene.trigger('click');
+    await settle();
+    const labels = Array.from(document.body.querySelectorAll('.mk-modal button')).map((b) => b.textContent?.trim());
+    expect(labels).toContain('查看学习详情');
+    expect(labels).not.toContain('查看执行日志');
+    // 弹窗底部那句解释也撤了
+    expect(document.body.querySelector('.mk-modal')!.textContent).not.toContain('站内通知中');
 
-    // 点「观察」pill → 只剩甲
-    await w.findAll('.mk-pill').find((p) => p.text().includes('观察'))!.trigger('click');
+    const detailBtn = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.mk-modal button'))
+      .find((b) => b.textContent?.trim() === '查看学习详情')!;
+    detailBtn.click();
+    await settle();
+    expect(subPage.value).toMatchObject({ view: 'learner', id: 'yi', tab: 'evidence' });
+    w.unmount();
+    document.body.innerHTML = '';
+  });
+
+  /* 发送成功不再只有一闪而过的 toast：页内留结果条，带「查看通知」按该学习者筛 */
+  it('发送提醒成功 → 页内结果条 + 「查看通知」指向 ops-hub?tab=inapp&userId=', async () => {
+    const w = mount(LearnerCenter);
+    await settle();
+    const riskRow = w.findAll('tbody tr').find((r) => r.text().includes('乙'))!;
+    await riskRow.findAll('.mk-actions button').find((b) => b.text() === '干预')!.trigger('click');
+    await settle();
+    const modal = document.body.querySelector<HTMLElement>('.mk-modal')!;
+    // 标题已预填，直接发送
+    const send = Array.from(modal.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.trim() === '发送提醒')!;
+    send.click();
+    await settle();
+    const bar = w.find('.mk-alert--row');
+    expect(bar.text()).toContain('提醒已发送给「乙」');
+    expect(bar.findAll('button').some((b) => b.text() === '查看通知')).toBe(true);
+    w.unmount();
+    document.body.innerHTML = '';
+  });
+
+  it('需关注收窄（不含疲劳=中）；「观察」是独立可点 KPI，卡头不再有同名 pill 行', async () => {
+    const w = mount(LearnerCenter);
+    await settle();
+    /* 2026-10-26：筛选入口从卡头 pill 行移到 KPI 卡——同一个数字不再有「不能点的卡」与
+       「能点的胶囊」两个版本 */
+    expect(w.findAll('.mk-card__head .mk-pill')).toHaveLength(0);
+    const kpi = (label: string) =>
+      w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === label)!;
+    expect(kpi('观察').find('.mk-kpi__num').text()).toBe('1'); // 甲（疲劳中）
+    expect(kpi('需关注').find('.mk-kpi__num').text()).toBe('3'); // 乙（趋势降）/ 丙（疲劳高）/ 丁（风险摘要）；甲不再计入
+    expect(kpi('需关注').classes()).toContain('mk-kpi--clickable');
+
+    // 点「观察」卡 → 只剩甲；再点一次取消筛选
+    await kpi('观察').trigger('click');
     await nextTick();
     const rows = w.findAll('tbody tr').map((r) => r.text());
     expect(rows).toHaveLength(1);
     expect(rows[0]).toContain('甲');
+    expect(kpi('观察').classes()).toContain('lc-kpi--on');
+    await kpi('观察').trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody tr')).toHaveLength(4);
     w.unmount();
   });
 
@@ -189,7 +237,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     liveLearners.value = []
   });
 
-  it('风险摘要带量级「X 等 2 个概念掌握薄弱」；平均置信度基数进 title 长释', async () => {
+  it('风险摘要带量级「X 等 2 个概念掌握薄弱」；平均置信度卡面只有读数', async () => {
     // 审核 #12：风险摘要列不再默认隐藏（默认集变更同时升键 v2→v3）；本用例播种「全列显示」
     // 的列偏好，仍锁行内量级文案的渲染契约
     localStorage.setItem('wf_learner_hidden_cols_v3', JSON.stringify([]));
@@ -197,11 +245,10 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     await settle();
     const dingRow = w.findAll('tbody tr').find((r) => r.text().includes('丁'));
     expect(dingRow!.text()).toContain('「X」等 2 个概念掌握薄弱');
-    /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：取数算法（按…取平均）不再常驻
-       卡面，样本量仍在 title 长释里 */
+    /* 2026-10-26：KPI 卡的 title 口径自述整批撤除，卡面只留 label + 读数 */
     const avg = w.findAll('.mk-kpi').find((c) => c.text().includes('平均置信度'));
     expect(avg!.find('.mk-kpi__hint').exists()).toBe(false);
-    expect(avg!.attributes('title')).toContain('本次纳入 4 位'); // 四人都有任务，全部入均值
+    expect(avg!.attributes('title')).toBeUndefined();
     w.unmount();
     localStorage.removeItem('wf_learner_hidden_cols_v3');
     liveLearners.value = [];
@@ -224,17 +271,15 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       return card!;
     };
     expect(kpiCard('低置信学习者').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
-    // 2026-10-21 用户「去掉；需要下方加字说明标题起得不对」：卡名自带人群，卡面无副行，
-    // 阈值与基数只在 title
+    // 2026-10-26：KPI 卡面只留 label + 读数，口径自述不再挂 title
     expect(kpiCard('低置信学习者').find('.mk-kpi__hint').exists()).toBe(false);
-    expect(kpiCard('低置信学习者').attributes('title')).toContain('纳入计算的学习者共 4 位');
+    expect(kpiCard('低置信学习者').attributes('title')).toBeUndefined();
 
-    // 分布带已退役：无任务行不计的口径由 KPI 基数承载（现住 title），不再有分档条副文
+    // 分布带已退役：无任务行不计的口径由「低置信学习者」卡与列表过滤共同承载
     expect(w.find('.mk-distband').exists()).toBe(false);
-    expect(kpiCard('平均置信度').attributes('title')).toContain('本次纳入 4 位');
 
-    // 「低置信」pill 过滤与 KPI 同口径：戊不出现，行数=KPI 读数（否则计数/过滤再打架）
-    await w.findAll('.mk-pill').find((p) => p.text().includes('低置信'))!.trigger('click');
+    // 点「低置信学习者」卡 → 与 KPI 同口径：戊不出现，行数=KPI 读数（否则计数/过滤再打架）
+    await kpiCard('低置信学习者').trigger('click');
     await nextTick();
     const rowsText = w.findAll('tbody tr').map((r) => r.text());
     expect(rowsText).toHaveLength(2);
@@ -401,5 +446,43 @@ describe('UserAccountPane 账户信息卡头（状态与账户操作归位）', 
     expect(accountHead(w).find('.mk-badge').text()).toBe('正常');
     w.unmount();
     localStorage.removeItem('admin_user');
+  });
+
+  /* 2026-10-26：详情页原先全文没有编辑或改密入口——看到「角色：管理员」想改只能退回列表。
+     卡头补「编辑」，与账号列表行内「编辑」打开同一份表单。 */
+  it('卡头「编辑」打开同一份表单（改昵称 / 邮箱 / 角色、重置密码）', async () => {
+    const w = await mountPane();
+    const head = accountHead(w);
+    const edit = head.findAll('button').find((b) => b.text() === '编辑');
+    expect(edit, '卡头应有「编辑」').toBeTruthy();
+    await edit!.trigger('click');
+    await settle();
+    const modal = document.body.querySelector('.mk-modal');
+    expect(modal).toBeTruthy();
+    expect(modal!.textContent).toContain('编辑用户 · 测试用户');
+    // 角色下拉与密码重置字段都在
+    expect(modal!.textContent).toContain('重置密码');
+    expect(modal!.querySelector('select')).toBeTruthy();
+    w.unmount();
+    document.body.innerHTML = '';
+  });
+
+  it('已删除态不给编辑（先恢复再改）', async () => {
+    getUserDetail.mockResolvedValue({
+      data: {
+        data: {
+          deletedAt: '2026-10-01T00:00:00Z',
+          user: {
+            name: '测试用户', email: 't@x.com', createdAt: '2026-08-01T00:00:00Z',
+            xp: 0, currentLevel: 'beginner', _count: { teaching_sessions: 0, learning_paths: 0 }
+          }
+        }
+      }
+    });
+    const w = await mountPane();
+    const head = accountHead(w);
+    expect(head.findAll('button').some((b) => b.text() === '编辑')).toBe(false);
+    expect(head.findAll('button').some((b) => b.text().includes('恢复用户'))).toBe(true);
+    w.unmount();
   });
 });

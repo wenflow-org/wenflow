@@ -1,32 +1,12 @@
 <template>
   <div class="mk-page mk-page--fill ac-host">
-    <!-- 页头（newui/admin pagehead）：页名 + 当前页签的主操作。
-         2026-10-25：接入页三个钮都是「接入」域的动作（刷新注册表 / 拉取模型 / 重置接入），
-         调用页没有页级动作（策略按卡保存），所以整组动作只在接入页出现。 -->
-    <MkPageHead title="模型与接入" :sub="headSub">
+    <MkPageHead title="模型与接入">
       <template #actions>
-        <!-- 本页唯一主操作升 primary（2026-10-04 全站评审 P3#37：此前 sm 次要形态，
-             动作权重与视觉权重倒挂）；sm 档保留，与页头动作位其余刷新钮同高 -->
         <button v-if="tab === 'access'" type="button" class="mk-btn mk-btn--sm" @click="providersRef?.refresh?.(true)">刷新注册表</button>
-        <button v-if="tab === 'access'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="fetching || !form.apiUrl" @click="fetchModels">
+        <button v-if="tab === 'access'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="fetching || !providersReady" @click="onFetchClick">
           <MkLoading v-if="fetching" inline text="拉取中…" />
-          <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
+          <span v-else>{{ !providersReady ? '读取配置中…' : models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>
-        <!-- 刷新钮只挂在真有远端数据源的页签（接入与模型含只读注册表）；其余配置 tab 的
-             读取失败重试走卡内 mk-alert「重试」，页头不放无效刷新。
-             （外挂能力 2026-10-19 拆出独立页时带走它自己的刷新钮，这里不再有第三个分支） -->
-        <!-- 重置为默认（#13）：后端 POST /admin/api-config/reset 此前无前端入口。高风险不可撤销，
-             二次确认在 resetConfig 内；三个配置 tab 常驻，与「分组保存」并列但语义是整页级 -->
-        <!-- 2026-10-24：重置只作用于接入配置域（后端 api-config/reset），此前在四个页签都显示，
-             会被读成「重置当前屏」。收回到接入与模型页签，名字写清范围。 -->
-        <button
-          v-if="tab === 'access'"
-          type="button"
-          class="mk-btn mk-btn--sm"
-          :disabled="resetting"
-          title="把接入配置恢复为默认值（不影响调用策略、访问与注册）"
-          @click="resetConfig"
-        >{{ resetting ? '重置中…' : '重置接入配置' }}</button>
       </template>
     </MkPageHead>
     <!-- 页首 KPI 带已撤（2026-10-14 用户拍板「模型与接入的 kpi 也不要了」）：原两处带
@@ -70,16 +50,20 @@
     <div class="ac-tab-body ac-conn-body" id="ac-panel-access" role="tabpanel" aria-labelledby="ac-tab-access">
       <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试 -->
       <div v-if="apiConfigFailed" class="mk-alert mk-alert--row" role="alert">
-        <span class="mk-alert__msg">配置读取失败：为空不代表未配置，请重试</span>
+        <span class="mk-alert__msg">配置读取失败：为空不代表未配置</span>
         <button type="button" class="mk-alert__btn" @click="retryApiConfigLoad">重试</button>
       </div>
       <ModelProvidersPanel
         ref="providersRef"
         :upstream="models"
         @changed="onProvidersChanged"
-        @registered="registeredModelIds = $event"
-        @focus-platform-connection="focusPlatformConnection"
+        @registered="onProvidersRegistered"
       >
+        <template #card-actions>
+          <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="resetting" @click="resetConfig">
+            {{ resetting ? '重置中…' : '重置接入配置' }}
+          </button>
+        </template>
         <!-- 平台通道的连接：服务地址 / 密钥 / 连通性验证。它属于「平台」这条供应商本身，
              不再是弹窗里的一个分区。 -->
         <template #platform-detail>
@@ -158,14 +142,7 @@
             <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">拉取失败，请检查服务地址与密钥</span>
             <span v-else-if="models.length">{{ upstreamSummary }}</span>
             <span v-else>尚未拉取</span>
-            <!-- 拉取只改了本页草稿：连接表单就在上面，徽标把人带过去 -->
-            <button
-              v-if="hasUnsavedModels"
-              type="button"
-              class="mk-badge mk-badge--warn ac-models-meta__act"
-              title="本次拉取尚未保存，需在上面「连接」里保存"
-              @click="focusPlatformConnection"
-            >未保存</button>
+            <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">未保存</span>
           </p>
         </template>
       </ModelProvidersPanel>
@@ -192,7 +169,6 @@
             <span class="ac-gen-default__label">平台默认模型</span>
             <b class="mono">{{ runtimeDefaultInfo.model || '—' }}</b>
             <span class="mk-badge" :class="runtimeDefaultInfo.source === '环境变量' ? 'mk-badge--warn' : 'mk-badge--muted'">{{ runtimeDefaultInfo.source }}</span>
-            <span class="ac-gen-default__hint">未单独配置模型的 Skill 继承它</span>
           </p>
           <div v-if="routeWarnText" class="ac-route-warn" role="status">
             <span class="ac-route-warn__dot"></span>
@@ -231,7 +207,7 @@
               </div>
             </div>
             <div class="ac-cols__side">
-              <div class="ac-sec__title">结构化输出<span class="ac-sec__hint">对输出 JSON 的 Skill 强制 JSON</span></div>
+              <div class="ac-sec__title">结构化输出</div>
               <div class="ac-row ac-row--2">
                 <label class="mk-field">
                   <span class="mk-field__label">输出格式</span>
@@ -250,7 +226,6 @@
           <details class="ac-fold">
             <summary class="ac-fold__bar">
               <span class="ac-fold__title">内置别名映射表</span>
-              <span class="ac-fold__hint">逻辑别名（chat / reasoning / light 等）实际指向的候选模型与默认选中项 · 只读</span>
               <span class="ac-fold__mark" aria-hidden="true"></span>
             </summary>
             <ModelRegistryOverview ref="registryRef" class="ac-registry ac-registry--aliases" :parts="['aliases']" @defaults="registryDefaults = $event" />
@@ -278,7 +253,7 @@
           </div>
           <div v-if="reliability" class="ac-groups ac-groups--3">
             <div class="ac-group">
-              <div class="ac-group__title" title="降级触发条件：1 + 传输重试 ＜ 上游最大尝试（例：3 次尝试、1 次传输重试时仍留一次降级机会）">尝试与降级</div>
+              <div class="ac-group__title">尝试与降级</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">上游最大尝试</span>
@@ -314,10 +289,9 @@
                 <input type="checkbox" v-model="reliability.jitterEnabled" @change="markDirty('reliability')" />
                 <span class="mk-field__label" style="margin:0">随机抖动</span>
               </label>
-              <span class="ac-group__hint">退避从基数开始逐次翻倍。429 时按上游 Retry-After 等待，不超过上限</span>
             </div>
             <div class="ac-group">
-              <div class="ac-group__title" title="只管真实用户与平台自身，虚拟学习者通道单独计量（见「虚拟学习者」页签）">平台出站速率</div>
+              <div class="ac-group__title">平台出站速率</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">平台全局 RPM 上限（0=不限）</span>
@@ -336,6 +310,7 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">调用健康</h3>
           <span class="mk-badge" :class="healthBadgeCls" :title="healthLabelTip || undefined">{{ healthLabel }}</span>
+          <button v-if="healthAbnormal" type="button" class="mk-link" @click="goHealthCenter">去健康中心 →</button>
         </div>
         <div class="ac-body">
           <!-- 探针（定期探测能力健康）：全站 mk-field 行式配置（与其他开关一致），开启后显示间隔 -->
@@ -350,7 +325,6 @@
                 />
                 <span class="mk-field__label" style="margin:0">能力探针</span>
               </label>
-              <em class="ac-probe__desc">{{ probe.enabled ? `每 ${probe.intervalSec}s 自动探测 5 项核心能力并更新结果` : '关闭后不自动探测，可手动「立即探测」' }}</em>
             </div>
             <div class="ac-probe__ctrl">
               <label v-if="probe.enabled" class="mk-field ac-probe__interval">
@@ -396,6 +370,10 @@
           <!-- D12：限流读数放在能力健康之前——先回答「现在是不是在挨 429」，再看单项能力 -->
           <div v-if="rateLimitReadout" class="ac-rel__note" :class="{ 'ac-rel__error': rateLimitReadout.count429 > 0 }" role="status">
             近 1 小时上游限流（429）{{ rateLimitReadout.count429 }} 次 · 冷却中模型 {{ rateLimitReadout.coolingDown }} 个
+          </div>
+          <div v-else-if="rateLimitFailed" class="ac-rel__note ac-rel__error" role="alert">
+            限流读数读取失败
+            <button type="button" class="mk-link" :disabled="rateLimitLoading" @click="loadRateLimitReadout">{{ rateLimitLoading ? '读取中…' : '重试' }}</button>
           </div>
           <!-- 失败态必须优先于旧快照可见（2026-10-14 #18） -->
           <div v-if="healthFailed" class="ac-rel__note ac-rel__error" role="alert">
@@ -497,14 +475,6 @@ const MOVED_TABS: Record<string, string> = {
   virtual: '/admin/virtual-learners',
 }
 const tab = ref<AcTab>('access')
-/* 页头副文随页签说明「这页能改什么、什么只是读数」：调用与健康把配置（调用策略/降级守卫）
-   和观测（能力健康、429/冷却、路由解析）放在同一页签，不点明会让人以为读数也能保存
-   （2026-10-24 层级审计）。 */
-const headSub = computed(() =>
-  tab.value === 'routing'
-    ? '调用策略保存后生效。能力健康与 429 / 冷却读数是只读观测'
-    : '管理模型供应商、基础设施模型与默认生成参数'
-)
 /** 底部保存条挂载的 tab（脏位跨 tab 不丢）：两个配置页签都可写 */
 const isConfigTab = computed(() => (AC_TABS as readonly string[]).includes(tab.value))
 const route = useRoute()
@@ -525,8 +495,23 @@ function onTabChange(key: string) {
 const providersRef = ref<{ refresh?: (force?: boolean) => void; openHostPull?: () => void } | null>(null)
 /** 已登记模型 id（面板回传）：上游清单的关系句与折叠共用这一次计算 */
 const registeredModelIds = ref<string[]>([])
+/** 供应商面板首次回传即视为注册表已就绪：页头拉取钮此前按 apiUrl 判禁用，首屏地址未回填时点不动 */
+const providersLoaded = ref(false)
+function onProvidersRegistered(ids: string[]) {
+  registeredModelIds.value = ids
+  providersLoaded.value = true
+}
+/** 注册表已就绪：面板首次回传，或 live 配置已到（首屏未回填地址时按钮不该点不动） */
+const providersReady = computed(() => providersLoaded.value || !!cfg.value)
+function onFetchClick() {
+  if (!providersReady.value || !form.apiUrl) {
+    focusPlatformConnection()
+    return
+  }
+  void fetchModels()
+}
 /* 平台连接表单已内联进供应商详情（2026-10-25 撤掉「平台设置」浮窗）：
-   「设置」钮与「未保存」徽标只需把人带到那段表单，不再开弹窗。 */
+   页头拉取钮在地址未就绪时把视线带到这段表单。 */
 const platformConnRef = ref<HTMLElement | null>(null)
 function focusPlatformConnection() {
   platformConnRef.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
@@ -535,12 +520,19 @@ function focusPlatformConnection() {
    数据来自只读的 model-registry 总览（429 计数取 agent_call_logs，冷却取部署健康快照），
    只在「调用与健康」页签加载，不额外增加接入页的首屏请求。 */
 const rateLimitReadout = ref<{ windowMinutes: number; count429: number; coolingDown: number } | null>(null)
+const rateLimitFailed = ref(false)
+const rateLimitLoading = ref(false)
 async function loadRateLimitReadout() {
+  rateLimitLoading.value = true
   try {
     const res = await adminApiConfigApi.getModelRegistry()
     rateLimitReadout.value = (res as { data?: { data?: { rateLimit?: typeof rateLimitReadout.value } } })?.data?.data?.rateLimit ?? null
+    rateLimitFailed.value = !rateLimitReadout.value
   } catch {
     rateLimitReadout.value = null
+    rateLimitFailed.value = true
+  } finally {
+    rateLimitLoading.value = false
   }
 }
 watch(tab, (t) => {
@@ -690,6 +682,13 @@ const healthBadgeCls = computed(
       '': 'mk-badge--muted',
     } as Record<string, string>)[health.value?.overall || '']
 )
+/** 能力异常时的出口：本页只报读数，处理在健康中心 */
+const healthAbnormal = computed(() =>
+  (health.value?.capabilities ?? []).some((c) => c.status === 'unavailable' || c.status === 'degraded')
+)
+function goHealthCenter() {
+  void router.push('/admin/health-center')
+}
 
 /** 页面进入自动探测（方案 c）：组件挂载期间快照过期时自动补一次探测，避免「已过期」常驻；
     只自动一次（避免 deep watch 重复触发烧 LLM 调用），重新进入页面（重新挂载）再触发 */
@@ -793,17 +792,17 @@ function markDirty(group: string) {
   dirty.value = new Set([...dirty.value, group])
 }
 
-/** 脏位分域标注：保存条列出具体未保存组（连接 / 生成参数 / 可靠性 / 探测） */
+/** 脏位分域标注：保存条列出具体未保存组（连接 / 生成参数 / 调用策略 / 探测） */
 const DIRTY_GROUP_LABELS: Record<string, string> = {
   conn: '连接',
   route: '生成参数',
-  reliability: '可靠性',
+  reliability: '调用策略',
   probe: '探测'
 }
 const dirtyGroups = computed(() => [...dirty.value].map((g) => DIRTY_GROUP_LABELS[g] || g))
 /** 脏组所属页签：单组脏时判断它的分段保存钮是否就在当前屏（在则不重复出底部保存条） */
 const DIRTY_GROUP_TAB: Record<string, AcTab> = {
-  conn: 'access', route: 'access', reliability: 'routing', probe: 'routing'
+  conn: 'access', route: 'routing', reliability: 'routing', probe: 'routing'
 }
 const showSaveBar = computed(() => {
   if (dirty.value.size > 1) return true
@@ -967,6 +966,7 @@ function applyLiveConfig() {
   form.defaultEvaluationModel = cfg.value.defaultEvaluationModel
   form.defaultThinkingMode = cfg.value.defaultThinkingMode || 'default'
   form.defaultReasoningEffort = cfg.value.defaultReasoningEffort || 'default'
+  form.defaultResponseFormat = cfg.value.defaultResponseFormat === 'json_object' ? 'json_object' : 'none'
   fetchedModels.value = [...cfg.value.availableModels]
   fetchedModelsEndpoint.value = cfg.value.apiUrl
   keySet.value = cfg.value.apiKeyConfigured
@@ -1253,7 +1253,8 @@ async function saveGroups(groups: string[]) {
       // 模型按 Skill 配置：本页只保存生成默认，不再写平台三档模型字段（partial 合并保留库中原值）
       await liveSaveApiConfig({
         defaultThinkingMode: form.defaultThinkingMode,
-        defaultReasoningEffort: form.defaultReasoningEffort
+        defaultReasoningEffort: form.defaultReasoningEffort,
+        defaultResponseFormat: form.defaultResponseFormat
       } as Parameters<typeof liveSaveApiConfig>[0])
     }
     if (set.has('reliability') && reliability.value) {
@@ -1293,15 +1294,14 @@ function saveAll() {
   return saveGroups([...dirty.value])
 }
 
-/* 重置为默认配置（#13）：后端 POST /admin/api-config/reset 能力早已存在却无前端入口。
-   重置会删除已保存配置行（服务地址 / 密钥 / 默认生成参数 / 调用参数全回默认）——高风险不可撤销，
-   故走二次确认；成功后强制重拉 live 配置（绕过 TTL）+ 可靠性/探针 + 健康快照，并清空脏位。 */
+/* 重置接入配置：后端 POST /admin/api-config/reset 只删 platform_api_configs 一行
+   （服务地址 / 密钥 / 模型清单 / 生成参数默认值），不动调用策略与访问策略。高风险不可撤销，走二次确认。 */
 const resetting = ref(false)
 async function resetConfig() {
   if (resetting.value) return
   const ok = await askConfirm({
-    title: '重置为默认配置',
-    message: '将清空已保存的服务地址、API Key、默认生成参数与调用参数，恢复出厂默认。此操作不可撤销。',
+    title: '重置接入配置',
+    message: '将删除已保存的服务地址、API Key、模型清单与生成参数默认值。此操作不可撤销。',
     confirmText: '确认重置'
   })
   if (!ok) return
@@ -1454,8 +1454,6 @@ function discardAll() {
   margin: 0;
 }
 .ac-models-meta__title { color: var(--mk-muted); }
-/* 徽标当入口用时只补指针，外观仍由 .mk-badge 决定 */
-.ac-models-meta__act { cursor: pointer; }
 /* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
 
 /* 默认思考：模式 + 强度，同一行两列字段（2026-10-14 删冗余「启用思考」开关后由三列改两列） */
@@ -1478,7 +1476,6 @@ function discardAll() {
   font-weight: 700;
   color: var(--mk-muted);
 }
-.ac-sec__hint { font-size: var(--mk-fs-micro); font-weight: 500; color: var(--mk-faint); }
 .ac-sec__sub { margin-left: auto; font-size: var(--mk-fs-micro); font-weight: 500; color: var(--mk-faint); }
 /* 分段保存（方向 A）：该段有未保存改动时才出现；与底部统一保存条并存 */
 .ac-sec__save {
@@ -1548,7 +1545,6 @@ function discardAll() {
 .ac-fold__bar::-webkit-details-marker { display: none; }
 .ac-fold__bar:hover { border-color: var(--mk-blue); }
 .ac-fold__title { font-weight: 700; color: var(--mk-ink); }
-.ac-fold__hint { color: var(--mk-faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-fold__mark { margin-left: auto; color: var(--mk-faint); flex: none; }
 .ac-fold__mark::before { content: '▸'; }
 .ac-fold[open] .ac-fold__mark::before { content: '▾'; }
@@ -1587,12 +1583,6 @@ function discardAll() {
 }
 .ac-probe__main { display: flex; align-items: center; gap: 12px; min-width: 200px; flex: 1; }
 .ac-probe__switch { flex: none; margin: 0; }
-.ac-probe__desc {
-  font-style: normal;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  line-height: 1.5;
-}
 .ac-probe__ctrl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ac-probe__interval {
   display: flex;
@@ -1617,7 +1607,6 @@ function discardAll() {
   font-size: var(--mk-fs-micro);
 }
 .ac-gen-default__label { color: var(--mk-muted); }
-.ac-gen-default__hint { color: var(--mk-faint); }
 /* 调用参数 + 能力健康：两列（左参数右健康，2026-10-05 修复——注释/1100px 收合断点/
    移动端摘边距规则都证明双列是设计意图，基础 grid-template-columns 却在历史改动中丢失，
    实际一直堆叠渲染，健康表被参数组压到折叠线下）；分隔线沿用卡内原 dashed 方言。
@@ -1629,12 +1618,11 @@ function discardAll() {
 .ac-groups { display: grid; gap: 12px; }
 /* 策略卡三列（重试 / 超时 / 出站）：每组内部竖排，数字输入框不再被拉成整列宽 */
 .ac-groups--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.ac-field--num { max-width: 140px; }
+.ac-field--num { max-width: 140px; font-variant-numeric: tabular-nums; }
 /* 单字段分组（平台 RPM / VL RPM）：字段吃满组宽，标签不再按 1/3 格折行 */
 .ac-group__fields > .mk-field:only-child { grid-column: 1 / -1; }
 /* 三列分组：组内只有几个数字，标题与字段贴顶，不随相邻组的高度垂直居中 */
 .ac-groups--3 > .ac-group { align-content: start; }
-.ac-group__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.5; }
 @media (max-width: 1200px) {
   .ac-groups--3 { grid-template-columns: minmax(0, 1fr); }
 }
@@ -1728,7 +1716,6 @@ function discardAll() {
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 8px 14px; }
   .ac-textarea { font-size: var(--mk-fs-micro); }
   .ac-sec__title { font-size: var(--mk-fs-micro); }
-  .ac-sec__hint { font-size: var(--mk-fs-micro); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
   .ac-sec__sub { font-size: var(--mk-fs-micro); }
@@ -1745,7 +1732,6 @@ function discardAll() {
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 9px 16px; }
   .ac-textarea { font-size: var(--mk-fs-micro); }
   .ac-sec__title { font-size: var(--mk-fs-micro); }
-  .ac-sec__hint { font-size: var(--mk-fs-micro); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
   .ac-sec__sub { font-size: var(--mk-fs-micro); }
@@ -1762,7 +1748,6 @@ function discardAll() {
   .mk-seg__item { font-size: var(--mk-fs-body); padding: 11px 19px; }
   .ac-textarea { font-size: var(--mk-fs-body); }
   .ac-sec__title { font-size: var(--mk-fs-body); }
-  .ac-sec__hint { font-size: var(--mk-fs-micro); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
   .ac-sec__sub { font-size: var(--mk-fs-body); }

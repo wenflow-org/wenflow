@@ -1625,7 +1625,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
   // 落点来源：?tab=（列表条目带进来的落点页签，或读者自己切过的页签）> 轴默认。
   // 2026-10-11 曾统一为「概览」；2026-10-18 改为按列表主题落点（学习状态→证据、
   // 记忆与复习→记忆与复习），由列表页带 ?tab=（映射单点在 store 的 LEARNER_DETAIL_LANDING）。
-  // 2026-10-24：账号轴（view=user，从「用户与学习者」进）默认落「账号与许可」——
+  // 2026-10-24：账号轴（view=user，从「用户账号」进）默认落「账号与许可」——
   // 注册表一直这么写，但实现只对空账号才切，有学习数据的账号会落到概览，账号编辑要再切页签。
   const axisDefault: LdTab = subPage.value?.view === 'user' ? 'account' : 'overview'
   tab.value = urlTab ? normalizeLdTab(urlTab) : axisDefault
@@ -1704,7 +1704,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
       if (accountIsVirtual) {
         // 继续按稀疏详情渲染（name 由账号记录兜底，见 liveDetail）
       } else if (subPage.value?.view === 'user') {
-        // 账号轴入口（用户与学习者）且无任何学习侧数据（测试账号常态）：落「账号与许可」
+        // 账号轴入口（用户账号）且无任何学习侧数据（测试账号常态）：落「账号与许可」
         // ——UserAccountPane 自取用户记录、自带错误态与软删恢复入口（原 ?view=user 默认落点语义）
         tab.value = 'account'
       } else {

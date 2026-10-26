@@ -177,7 +177,6 @@
       <MkEmptyState
         v-else-if="!loading"
         title="暂无技能覆盖数据"
-        description="技能目录为空。可点击「刷新」重新拉取。"
         action-text="刷新"
         @action="load"
       />
@@ -374,9 +373,10 @@ async function clearModelOverride() {
   const count = selected.value.length
   const ok = await askConfirm({
     title: '跟随平台默认',
-    message: `将清空选中的 ${count} 个技能的模型覆盖，改为继承平台默认。\n通道、思考、参数覆盖与备用链保持不变，可随时在 Skill 运行时重新指定模型。确定继续？`,
+    message: `将清空选中的 ${count} 个技能的模型覆盖，改为继承平台默认。通道、参数覆盖与备用链保持不变，可随时在 Skill 运行时重新指定模型。`,
     confirmText: '清空模型覆盖',
     busy: true,
+    danger: false,
   })
   if (!ok) return
   bulkSaving.value = true

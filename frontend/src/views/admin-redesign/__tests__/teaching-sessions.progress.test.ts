@@ -108,10 +108,9 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     expect(rows[0].find('.ts-status').text()).toContain('手动结束');
     expect(rows[0].text()).toContain('停在 1/4');
     // 徽章 title 不把 manual-end 一律说成用户动作：后台收束悬挂会话也写同一个原因
+    // （2026-10-26 文案收口：解释型悬停说明已删，徽章只留状态词）
     const badge = rows[0].findAll('.ts-status .mk-badge--sm').find((b) => b.text() === '手动结束');
-    const t = badge!.attributes('title') || '';
-    expect(t).toContain('任务未必做完');
-    expect(t).not.toContain('用户主动结束');
+    expect(badge!.attributes('title')).toBeUndefined();
     expect(rows[1].find('.ts-status').text()).not.toContain('手动结束');
     expect(rows[1].text()).toContain('停在 4/4');
     expect(rows[2].find('.ts-status').text()).not.toContain('手动结束');
@@ -288,15 +287,34 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     });
     const wrapper = await mountLive();
     // 三运维关注量 + 完结率住 MkKpi 卡带（值 = attentionCount / missingWrapupCount / advisoryCount / 1-已完成占比）
+    // 2026-10-26：「异常终态」卡退役（与「需关注」在同一行数据上同源同数），异常数由「异常」chip 承载
     const tiles = wrapper.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议', '完结率', '异常终态']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0', '0%', '1']);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议', '完结率']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0', '0%']);
     // KPI 孪生 chips 去计数（学习状态判例）：pill 退为纯筛选开关
     const chip = (label: string) =>
       wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
     expect(chip('需关注').find('.mk-pill__count').exists()).toBe(true);
     expect(chip('缺总结').find('.mk-pill__count').exists()).toBe(true);
     expect(wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill .mk-pill__count').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('「需关注」KPI 可点：点卡 = 选中「需关注」chip', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: { items: [makeItem('a', { status: 'failed' }), makeItem('b', { status: 'active' })] }
+      }
+    });
+    const wrapper = await mountLive();
+    const tile = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '需关注')!;
+    expect(tile.element.tagName).toBe('BUTTON');
+    await tile.trigger('click');
+    await nextTick();
+    const chip = wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().startsWith('需关注'))!;
+    expect(chip.attributes('aria-pressed')).toBe('true');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1);
     wrapper.unmount();
   });
 
@@ -490,7 +508,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('筛选：一行到底——chips 全在卡头，状态下拉与时间下拉收进「筛选」弹层', async () => {
+  it('筛选：一行到底——chips 与状态下拉全在卡头，课堂与时间下拉收进「筛选」弹层', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -500,14 +518,19 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const wrapper = await mountLive();
     // 表前只有一行：快筛条 .ts-toolbar 退役（chips 并回卡头，2026-10-04）
     expect(wrapper.find('.ts-toolbar').exists(), '快筛条已并回卡头一行').toBe(false);
-    // 状态 / 时间 = 筛选弹层里的 select（枚举 = 全部状态 + statusOptions 10 档）
-    await wrapper.find('.mk-adv .mk-btn').trigger('click');
-    const sel = wrapper.find('.mk-adv__pop select[aria-label="按状态筛选"]');
+    // 2026-10-26：10 档状态是逐条排查主路径，从弹层提到卡头主栏（枚举 = 全部状态 + statusOptions 10 档）
+    const sel = wrapper.find('.mk-filter select[aria-label="按状态筛选"]');
     expect(sel.exists()).toBe(true);
     expect(sel.findAll('option').map((o) => o.text())).toEqual([
       '全部状态', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
     ]);
+    // 总结三档筛选（总览「评估失败 / 降级总结」的落地入口）也在主栏
+    const wrapSel = wrapper.find('.mk-filter select[aria-label="按总结筛选"]');
+    expect(wrapSel.findAll('option').map((o) => o.text())).toEqual(['全部总结', '降级总结', '评估失败', '缺总结']);
+    // 弹层只留课堂类型与开始时间
+    await wrapper.find('.mk-adv .mk-btn').trigger('click');
     expect(wrapper.find('.mk-adv__pop select[aria-label="按开始时间筛选"]').exists()).toBe(true);
+    expect(wrapper.find('.mk-adv__pop select[aria-label="按状态筛选"]').exists()).toBe(false);
     // 卡头两组 chips：焦点（单选，全部不显数）+ 快捷（两个独立开关）
     const groups = wrapper.findAll('.mk-card__head .mk-pills');
     expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['焦点筛选', '快捷筛选']);
@@ -522,6 +545,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
     // 弹层里生效的筛选数标在触发钮上（收起来也不丢状态）
+    await wrapper.find('.mk-adv__pop select[aria-label="按开始时间筛选"]').setValue('7d');
     expect(wrapper.find('.mk-adv .mk-btn .mk-pill__count').text()).toBe('1');
     wrapper.unmount();
   });

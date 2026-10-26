@@ -100,7 +100,7 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(w.text()).not.toContain('user-op-1-1');
   });
 
-  it('翻页失败：清空上一页行并禁用本页导出', async () => {
+  it('翻页失败：清空上一页行；导出只剩运营中心数据导出页一个入口', async () => {
     const w = await mountAudit();
     h.getLogs.mockImplementationOnce(async () => { throw new Error('page unavailable'); });
     await findBtn(w, '下一页').trigger('click');
@@ -108,17 +108,88 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     await nextTick();
     expect(w.text()).toContain('审计日志加载失败');
     expect(w.text()).not.toContain('user-op-1-1');
-    expect(findBtn(w, '导出本页').attributes('disabled')).toBeDefined();
+    // 本页不再自出 JSON：导出统一走运营中心数据导出页
+    expect(w.findAll('button').some((b) => b.text() === '导出本页')).toBe(false);
+    expect(findBtn(w, '导出').exists()).toBe(true);
   });
 
-  it('统计请求失败：失败 TOP 区显示提示并可重试', async () => {
+  it('统计请求失败：失败统计条在主行显示并可重试（不必开筛选弹层）', async () => {
     h.getStats.mockRejectedValue(new Error('stats unavailable'));
     const w = await mountAudit();
     await flushPromises();
-    await findBtn(w, '筛选').trigger('click');
     await nextTick();
-    expect(w.text()).toContain('失败 TOP 统计不可用，无法判断是否存在失败动作。');
+    expect(w.text()).toContain('失败统计不可用');
     expect(findBtn(w, '重试').exists()).toBe(true);
+  });
+
+  it('默认时间范围是「全部」：首屏不带 timeRange，空态也不给出口（已是最宽窗口）', async () => {
+    h.getLogs.mockImplementation(async () => ({
+      data: { data: { logs: [], attempts: [], pagination: { total: 0, page: 1, limit: 30 } } }
+    }));
+    const w = await mountAudit();
+    await nextTick();
+    expect(h.getLogs.mock.calls[0][0]).toMatchObject({ page: 1, limit: 30, scope: 'operation' });
+    expect((h.getLogs.mock.calls[0][0] as Record<string, unknown>).timeRange).toBeUndefined();
+    expect(w.text()).toContain('暂无审计记录');
+    expect(w.find('.mk-empty__action').exists()).toBe(false);
+  });
+
+  it('目标列可点：用户类型跳 ?view=user&id=，其余类型保持纯文本', async () => {
+    h.getLogs.mockResolvedValue({
+      data: {
+        data: {
+          logs: [
+            { id: 'a', adminName: 'admin', action: 'user.delete', targetType: 'user', targetId: 'u-123456789012345678', method: 'DELETE', path: '/api/admin/users/u', statusCode: 200, success: true, createdAt: '2026-10-24T06:56:24' },
+            { id: 'b', adminName: 'admin', action: 'plugin-toggle', targetType: 'plugin', targetId: 'web', method: 'PUT', path: '/api/admin/plugins/web', statusCode: 200, success: true, createdAt: '2026-10-24T09:23:25' }
+          ],
+          pagination: { total: 2, page: 1, limit: 30 }
+        }
+      }
+    });
+    const w = await mountAudit();
+    await nextTick();
+    const links = w.findAll('.al-target-link');
+    expect(links).toHaveLength(1);
+    await links[0].trigger('click');
+    await flushPromises();
+    expect(w.vm.$router.currentRoute.value.path).toBe('/admin/people');
+    expect(w.vm.$router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'u-123456789012345678' });
+    // 插件类型没有二级页：保持纯文本，不出链接
+    expect(w.findAll('.log-target span').some((s) => s.text() === 'web')).toBe(true);
+  });
+
+  it('登录审计失败行给「查该用户名」：点击把该用户名写进关键词重查', async () => {
+    h.getLogs.mockResolvedValue({
+      data: {
+        data: {
+          logs: [],
+          attempts: [{ id: 'l1', scope: 'admin', username: 'alice', ip: '10.0.0.1', success: false, reason: 'invalid_credentials', createdAt: '2026-08-14T09:05:07' }],
+          pagination: { total: 1, page: 1, limit: 30 }
+        }
+      }
+    });
+    const w = await mountAudit();
+    await w.findAll('.tab').find((x) => x.text() === '登录审计')!.trigger('click');
+    await flushPromises();
+    const btn = findBtn(w, '查该用户名');
+    await btn.trigger('click');
+    await flushPromises();
+    expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ page: 1, keyword: 'alice', scope: 'login' });
+  });
+
+  it('失败条数上主行：stats.failed 与失败 TOP chip 同屏可见，点击下钻只看失败', async () => {
+    h.getStats.mockResolvedValue({
+      data: { data: { stats: { total: 378, failed: 7 }, failureByAction: [{ action: 'user.delete', count: 5 }] } }
+    });
+    const w = await mountAudit();
+    await flushPromises();
+    await nextTick();
+    const chips = w.findAll('.al-fails__chip');
+    expect(chips[0].text()).toContain('失败 7');
+    expect(chips[1].text()).toContain('5');
+    await chips[0].trigger('click');
+    await flushPromises();
+    expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ success: false });
   });
 
   it('动作列：未映射接口不再直出 /api/ 路径，插件启停/卡派生显示中文名', async () => {

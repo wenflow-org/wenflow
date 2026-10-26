@@ -45,7 +45,6 @@
            置于卡头筛选之下、列表之上，与原型 toolbar→tablewrap 次序一致。
            embedded 态由宿主 OpsHub 提供同款工具行（避免重复入口），故此处仅独立页渲染。 -->
       <div v-if="!embedded" class="an-toolbar">
-        <span class="an-toolbar__sub">面向学习者的公告、站内信与推送</span>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary an-toolbar__new" @click="openCreate">新建公告</button>
       </div>
 
@@ -142,7 +141,7 @@
         v-else
         icon="◌"
         :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
-        :description="isFiltered ? '放宽筛选条件试试。' : '还没有发布过公告。发布一条后，这里会按发布时间从新到旧列出。'"
+        :description="isFiltered ? '放宽筛选条件试试。' : ''"
         :action-text="isFiltered ? '清除筛选' : embedded ? '' : '新建公告'"
         min
         @action="isFiltered ? clearFilters() : openCreate()"
@@ -188,18 +187,16 @@
                 {{ s.label }}
               </button>
             </div>
-            <span class="mk-field__hint">{{ severityHint(form.severity) }}</span>
           </label>
           <label class="mk-field" :class="{ 'mk-field--error': errors.body }">
             <span class="mk-field__label">正文 <em class="mk-field__req">*</em></span>
-            <textarea v-model="form.body" class="mk-field__textarea" rows="4" maxlength="3000" placeholder="给用户看的内容：说清时间、影响与建议动作"></textarea>
+            <textarea v-model="form.body" class="mk-field__textarea" rows="4" maxlength="3000"></textarea>
             <span class="mk-field__hint">{{ form.body.length }} / 3000 字</span>
             <span v-if="errors.body" class="mk-field__err">{{ errors.body }}</span>
           </label>
           <label class="mk-field">
             <span class="mk-field__label">过期时间（可选）</span>
             <input v-model="form.expiresAt" type="datetime-local" class="mk-field__input" />
-            <span class="mk-field__hint">留空表示不过期，需手动下线</span>
           </label>
           <!-- 仅新建态显示：编辑走「保存修改」，saveEdit 不读 publishNow（发布由行内「发布」按钮负责），
                编辑态留着会是看得见、改了没用的控件 -->
@@ -276,10 +273,14 @@ const liveRetrying = ref(false)
 /* 客户端筛选：关键词 + 级别 + 状态（与学习者域列表页同形态） */
 const keyword = ref('')
 const severityFilter = ref('')
-/* 深链预筛（2026-10-24）：运营待办「草稿公告 →」带 ?status=draft；无 router 上下文时降级为无筛选 */
+/* 深链预筛（2026-10-24）：运营待办「草稿公告 →」带 ?status=draft；无 router 上下文时降级为无筛选。
+   2026-10-26：只认本页状态枚举——别的页签留下的 ?status=（如反馈的 new）会让列表静默变成
+   「没有匹配的公告」，读起来像公告全没了。 */
+const ANNOUNCE_STATUSES = new Set(['published', 'expired', 'draft', 'archived'])
 const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.$router
 const announceRoute = hasRouterCtx ? useRoute() : null
-const statusFilter = ref(announceRoute && typeof announceRoute.query.status === 'string' ? String(announceRoute.query.status) : '')
+const initialStatus = typeof announceRoute?.query.status === 'string' ? String(announceRoute.query.status) : ''
+const statusFilter = ref(ANNOUNCE_STATUSES.has(initialStatus) ? initialStatus : '')
 
 /* 客户端排序：公告全量已在 live 层（拉全量 + 客户端分页），排序诚实。
    级别/状态按语义档位排（非字典序）；发布/过期按时间戳，空值由 useTableSort 恒排末尾。
@@ -575,8 +576,6 @@ async function create() {
 
 const severityText = (s: string) => ({ info: '通知', warning: '提醒', critical: '紧急' }[s] || s)
 const severityBadge = (s: string) => (s === 'critical' ? 'mk-badge--bad' : s === 'warning' ? 'mk-badge--warn' : 'mk-badge--info')
-const severityHint = (s: string) =>
-  s === 'critical' ? '红色横幅，用于故障、安全事件' : s === 'warning' ? '黄色横幅，用于维护、变更预告' : '蓝色横幅，用于功能发布、常规通知'
 const statusText = (r: Row) => (r.status === 'published' ? (r.expiresAt && new Date(r.expiresAt).getTime() <= Date.now() ? '已过期' : '生效中') : r.status === 'draft' ? '草稿' : '已下线')
 const statusBadge = (r: Row) => (statusText(r) === '生效中' ? 'mk-badge--ok' : statusText(r) === '已过期' ? 'mk-badge--muted' : r.status === 'draft' ? 'mk-badge--info' : 'mk-badge--muted')
 /** 绝对日期：2026-08-06 14:30（公告管理需要精确时间，相对时间入 tooltip） */
@@ -628,7 +627,7 @@ function expiresLabel(iso: string): string {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* 工具条（原型 249-250 .toolbar）：左说明 + grow + 右侧新建主钮（原型 1894-1899） */
+/* 工具条（原型 249-250 .toolbar）：右侧新建主钮（原型 1894-1899） */
 .an-toolbar {
   display: flex;
   align-items: center;
@@ -637,7 +636,6 @@ function expiresLabel(iso: string): string {
   padding: 10px 14px;
   border-bottom: 1px solid var(--mk-line);
 }
-.an-toolbar__sub { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .an-toolbar__new { margin-left: auto; }
 /* 创建人列（原型 1898 创建人 mono sub）：mono 由全局 .mono 承载，此处补字号/弱化色 */
 .an-author { font-size: var(--mk-fs-micro); color: var(--mk-muted); }

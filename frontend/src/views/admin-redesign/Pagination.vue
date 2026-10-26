@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="mk-pagination">
+  <div v-if="!hidden" ref="rootEl" class="mk-pagination">
     <!-- 信息行 = 原型 .pager__info 口径（newui pager()）：「共 N 条 · 第 P / T 页」恒显、
          muted 弱化色、tabular-nums，不再加粗当前页。showTotal 保留为兼容 prop（12 个页面在传），
          原「共 N 条」前缀开关已并入恒显口径。
@@ -30,7 +30,7 @@
         <button
           type="button"
           class="mk-pagination__btn"
-          :disabled="page <= 1 || loading"
+          :disabled="page <= 1 || totalPages <= 1 || loading"
           @click="$emit('update:page', page - 1)"
         >
           上一页
@@ -42,7 +42,7 @@
             type="button"
             class="mk-pagination__num"
             :class="{ 'mk-pagination__num--active': n === page }"
-            :disabled="loading"
+            :disabled="loading || total === 0"
             :aria-current="n === page ? 'page' : undefined"
             :aria-label="`第 ${n} 页`"
             @click="$emit('update:page', n)"
@@ -53,7 +53,7 @@
         <button
           type="button"
           class="mk-pagination__btn"
-          :disabled="page >= totalPages || loading"
+          :disabled="page >= totalPages || totalPages <= 1 || loading"
           @click="$emit('update:page', page + 1)"
         >
           下一页
@@ -81,6 +81,8 @@ const props = withDefaults(
     unit?: string
     /** 附加口径说明（如「在当前页内搜索」）：显示在总数右侧，弱化文本；装配自述（谁并入谁）不属于此列 */
     note?: string
+    /** 只有一页时整条自隐（默认 false：total=0 也常驻「共 0 条 · 第 1 / 1 页」） */
+    hideWhenSinglePage?: boolean
   }>(),
   {
     loading: false,
@@ -88,7 +90,8 @@ const props = withDefaults(
     hideSize: false,
     sizes: () => [15, 30, 50, 100],
     unit: '条',
-    note: ''
+    note: '',
+    hideWhenSinglePage: false
   }
 )
 
@@ -98,6 +101,9 @@ const emit = defineEmits<{
 }>()
 
 const totalPages = computed(() => totalPagesOf(props.total, props.pageSize))
+/* 单页自隐：仅当调用方显式要求（hideWhenSinglePage）且 totalPages===1 时整条不渲染。
+   total=0 时 totalPages 仍为 1，但调用方没传 hideWhenSinglePage 就常驻空计数行。 */
+const hidden = computed(() => props.hideWhenSinglePage && totalPages.value === 1)
 
 /* 翻页后列表回到顶部（2026-10-22 走查）：fill 卡内的 .mk-table-scroll 自带纵向滚动，
    换页后仍停在上一次的 scrollTop（实测 400px 纹丝不动），用户落在新页中段。

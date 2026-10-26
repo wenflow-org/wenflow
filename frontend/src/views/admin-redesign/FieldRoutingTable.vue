@@ -1,113 +1,5 @@
 <template>
   <div class="frt">
-    <!-- 吸顶操作条（滚动修复 #1：长表关键操作常驻顶部） -->
-    <div class="frt__stickybar">
-      <div class="frt__toolbar">
-        <button type="button" class="mk-btn" :disabled="!stage" @click="openOrchestration">编排文件</button>
-        <span class="frt__toolbar-hint">编辑 prompts/orchestration/{{ stage }}.yaml（字段路由以这份文件为准）</span>
-      </div>
-    </div>
-    <!-- core 联动提示条（M3 轻量：当前 stage 各 skill 的 fields-sync 状态角标） -->
-    <div v-if="skillSyncs.length" class="note frt-syncbar">
-      <span class="frt-syncbar__title">core 联动</span>
-      <button
-        v-for="s in skillSyncs"
-        :key="s.skillId"
-        type="button"
-        class="frt-syncbar__badge mk-badge"
-        :class="s.tone === 'err' ? 'mk-badge--bad' : `mk-badge--${s.tone}`"
-        :title="s.title"
-        @click="goSkill(s.skillId)"
-      >
-        <code class="mono">{{ s.skillId }}</code>
-        <template v-if="s.sync">
-          <span v-if="s.sync.missing.length" class="frt-syncbar__count">{{ TERMS.statusMissing }} {{ s.sync.missing.length }}</span>
-          <span v-else-if="s.sync.state === 'ok'">{{ TERMS.fieldsSynced }}</span>
-          <span v-else-if="s.sync.state === 'no-core'">core 缺失</span>
-          <span v-else-if="s.sync.state === 'no-routings'">未声明产出</span>
-          <span v-else>已声明</span>
-          <span v-if="s.sync.orphan.length" class="frt-syncbar__count">{{ TERMS.statusOrphan }} {{ s.sync.orphan.length }}</span>
-          <span v-if="s.sync.typeMismatch.length" class="frt-syncbar__count">类型不一致 {{ s.sync.typeMismatch.length }}</span>
-        </template>
-        <span v-else class="frt-syncbar__count">未核对</span>
-      </button>
-      <span class="frt-syncbar__hint">该字段未登记 core 声明 / 未登记路由</span>
-    </div>
-    <div v-else-if="skillSyncLoading" class="note frt-syncbar frt-syncbar--muted">
-      <span class="frt-syncbar__title">core 联动</span>
-      <span class="frt-syncbar__hint">逐 skill 核对 core 声明状态…</span>
-    </div>
-
-    <!-- 图例：角色 / render / 锁定 / 流转 一句话人话表（可折叠） -->
-    <details class="frt__legend" :open="legendOpen" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
-      <summary class="mk-section__summary mk-section__summary--muted">图例：字段角色 / 对外可见性 / 锁定 / 流转 —— 不懂就看这里</summary>
-      <div class="frt__legend-body">
-        <div class="frt__legend-group frt__legend-group--roles">
-          <h5 class="frt__legend-title">字段角色</h5>
-          <ul v-if="roleMeta.length" class="frt__legend-list">
-            <li v-for="m in roleMeta" :key="m.id" class="frt__legend-item">
-              <span class="mk-badge" :class="`mk-badge--role-${m.id}`">{{ m.label }}</span>
-              <span class="frt__legend-en mono">{{ m.id }}</span>
-              <span class="frt__legend-hint">{{ m.hint }}</span>
-            </li>
-          </ul>
-          <p v-else class="frt__legend-loading">角色词表待后端下发…</p>
-        </div>
-        <div class="frt__legend-group">
-          <h5 class="frt__legend-title">可见性</h5>
-          <ul class="frt__legend-list">
-            <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--render-visible" title="可见性：可见">可见</span>
-              <span class="frt__legend-hint">{{ RENDER_VISIBLE_HINT }}</span>
-            </li>
-            <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--render-hidden" title="可见性：隐藏">隐藏</span>
-              <span class="frt__legend-hint">{{ RENDER_HIDDEN_HINT }}</span>
-            </li>
-          </ul>
-          <h5 class="frt__legend-title">流转（移交 / 内部 / 累积）</h5>
-          <ul class="frt__legend-list">
-            <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--flow-handoff">移交</span>
-              <span class="frt__legend-hint">移交：字段产完后交给下一阶段（path / agent / skill），留空则不转交</span>
-            </li>
-            <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--flow-internal">内部</span>
-              <span class="frt__legend-hint">内部：仅供平台内部使用，不进业务状态</span>
-            </li>
-            <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--flow-accumulate">累积</span>
-              <span class="frt__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span>
-            </li>
-          </ul>
-          <h5 class="frt__legend-title">存储字段名</h5>
-          <ul class="frt__legend-list">
-            <li class="frt__legend-item">
-              <span class="frt__legend-hint">字段值实际保存的键路径，与字段名不一致时单独标注（一致时默认显示字段名）</span>
-            </li>
-          </ul>
-          <h5 class="frt__legend-title">锁定</h5>
-          <ul class="frt__legend-list">
-            <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--lock-system">平台锁定</span>
-              <span class="frt__legend-hint">平台自动生成，管理员不可直接改（需改编排文件）</span>
-            </li>
-            <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--lock-structure">平台锁定</span>
-              <span class="frt__legend-hint">结构约束锁定，修改需谨慎</span>
-            </li>
-            <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--lock-editable">可编辑</span>
-              <span class="frt__legend-hint">可自由调整（仍走编排文件入口）</span>
-            </li>
-          </ul>
-        </div>
-      </div>
-      <p class="frt__legend-foot">
-
-      </p>
-    </details>
-
     <!-- 搜索 / 角色过滤 -->
     <div class="mk-filter frt__filter">
       <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色 / 移交" />
@@ -141,7 +33,6 @@
       <MkEmptyState
         v-if="!agents.length"
         title="该阶段暂无字段路由"
-        description="编排文件未声明字段路由，或接口暂不可用。"
         action-text="重试"
         @action="loadStage"
       />
@@ -237,7 +128,6 @@
             v-else
             compact
             :title="filterActive ? '无匹配行' : '该 Agent 没有字段的路由记录'"
-            :description="filterActive ? '试试调整搜索关键词或角色过滤。' : '本阶段该 Agent 暂无产出字段的声明。'"
             :action-text="filterActive ? '清除筛选' : ''"
             @action="clearFilter"
           />
@@ -289,9 +179,22 @@
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="closeOrchestration">关闭</button>
-          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="runPrune(false)">
-            {{ orchPruning ? '清理中…' : '清理孤儿行' }}
-          </button>
+          <div class="mk-menu frt__orch-more">
+            <button
+              type="button"
+              class="mk-btn"
+              aria-haspopup="menu"
+              :aria-expanded="orchMoreOpen"
+              :disabled="orchSaving || orchSyncing || orchPruning"
+              @click="orchMoreOpen = !orchMoreOpen"
+            >更多</button>
+            <div v-if="orchMoreOpen" class="mk-menu__pop" @click.stop>
+              <button type="button" class="mk-menu__item" @click="menuSync">{{ TERMS.syncToDb }}</button>
+              <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuPrune">
+                {{ orchPruning ? '清理中…' : '清理孤儿行' }}
+              </button>
+            </div>
+          </div>
           <button
             v-if="pruneConfirming"
             type="button"
@@ -299,7 +202,6 @@
             :disabled="orchSaving || orchSyncing || orchPruning"
             @click="runPrune(true)"
           >确认清理冗余配置</button>
-          <button type="button" class="mk-btn" :disabled="orchSaving || orchSyncing || orchPruning" @click="forceSync">{{ TERMS.syncToDb }}</button>
           <button type="button" class="mk-btn mk-btn--primary" :disabled="orchSaving || orchSyncing || orchPruning" @click="saveOrchestration">
             {{ orchSaving ? '保存中…' : TERMS.saveToFile }}
           </button>
@@ -312,7 +214,6 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
-import { openSubPage } from './store';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
@@ -338,7 +239,7 @@ interface FieldItem {
 }
 interface AgentItem { agentId: string; description?: string }
 
-/* 可见性释义单源（R6 复读单源化）：图例与行悬停提示 renderHint 共用一份 */
+/* 可见性释义单源（R6 复读单源化）：行悬停提示 renderHint 用 */
 const RENDER_VISIBLE_HINT = '可见：会出现在对外交付（用户 / 界面）'
 const RENDER_HIDDEN_HINT = '隐藏：仅内部流转，不对外展示'
 interface RoutingItem {
@@ -369,7 +270,6 @@ const loading = ref(false);
 const error = ref('');
 const keyword = ref('');
 const roleFilter = ref('');
-const legendOpen = ref(false);
 
 /* 组内排序：数据完整（一次拉取本阶段全部路由行 → 按 agent 分组 → 本地分页），
    默认保持后端编排顺序（promptRole/fieldId 升序），下拉选字段 + 升/降按钮切换。
@@ -538,7 +438,6 @@ async function loadStage() {
     routings.value = res.data?.data?.routings || [];
     roleMeta.value = res.data?.data?.promptRoleMeta || [];
     agentPages.value = {};
-    await loadSkillSyncs();
   } catch (e: any) {
     // 人话化走全站单源 errMsg（此前直出 e?.message，网关/限流黑话管理员看不懂）
     error.value = errMsg(e);
@@ -546,80 +445,6 @@ async function loadStage() {
     loading.value = false;
   }
 }
-
-/* ============ core 联动（M3 轻量）：当前 stage 各 skill 的 fields-sync 状态角标 ============ */
-
-interface SkillSyncBadge {
-  skillId: string;
-  sync: {
-    state?: string;
-    missing: Array<unknown>;
-    orphan: Array<unknown>;
-    typeMismatch: Array<unknown>;
-  } | null;
-  tone: 'ok' | 'warn' | 'err' | 'muted';
-  title: string;
-}
-
-const skillSyncs = ref<SkillSyncBadge[]>([]);
-const skillSyncLoading = ref(false);
-
-/**
- * 批量拉当前 stage 全部 skill 的 core-sync 投影（GET /field-routings/skill-batch?stage=X）。
- * P2 N+1 收尾：此前逐 skill GET /skill/:skillId + Promise.all（请求数 = skill 数），
- * 现改一次批量拉全。响应字段与旧逐个拉取的合并结果对齐，无需字段映射：
- *   data.skills[i].skillId   ↔ 旧由 agentId 去前缀反解
- *   data.skills[i].core.sync ↔ 旧 res.data.data.core.sync
- * 唯一差异 promptRoleMeta 收敛到 data 顶层（本函数不消费该元信息）。
- * 失败静默降级（角标整体不显示）：批量为单请求，部分成功语义不再保留（旧版可跳过单 skill 失败）。
- * save/sync/prune 后维持全量 loadStage：三者均整阶段文件改动，全量刷新语义正确，无需增量。
- */
-async function loadSkillSyncs() {
-  const skillAgents = agents.value
-    .map((a) => a.agentId)
-    .filter((id) => id.startsWith('skill:'));
-  if (!skillAgents.length) {
-    skillSyncs.value = [];
-    skillSyncLoading.value = false;
-    return;
-  }
-  skillSyncLoading.value = true;
-  try {
-    const res = await adminFieldRoutingsApi.getSkillBatch(props.stage);
-    // 与旧逐个拉取同口径：只保留当前 stage 详情 agents 里登记的 skill，
-    // 编排文件与 skills.yaml 极端漂移时不引入多余额标
-    const want = new Set(skillAgents.map((id) => id.replace(/^skill:/, '')));
-    skillSyncs.value = ((res.data?.data?.skills ?? []) as Array<{ skillId: string; core?: { sync?: SkillSyncBadge['sync'] } }>)
-      .filter((s) => want.has(s.skillId))
-      .map((s) => {
-        const sync = s.core?.sync ?? null;
-        const tone = !sync
-          ? 'muted'
-          : sync.missing.length
-            ? 'err'
-            : sync.orphan.length || sync.typeMismatch.length
-              ? 'warn'
-              : 'ok';
-        const title = [
-          sync?.state === 'no-core' ? 'core 文件缺失（协议 tab 未建核心声明）' : '',
-          sync ? `${TERMS.statusMissing} ${sync.missing.length} · ${TERMS.statusOrphan} ${sync.orphan.length} · 类型不一致 ${sync.typeMismatch.length}` : 'core 状态不可用'
-        ].filter(Boolean).join('\n');
-        return { skillId: s.skillId, sync, tone, title };
-      });
-  } catch {
-    skillSyncs.value = [];
-  } finally {
-    skillSyncLoading.value = false;
-  }
-}
-
-function goSkill(skillId: string) {
-  // 2026-10-24：同场景二级页（openSubPage）而不是换场景 router.push——
-  // 从编排图字段路由进入时，关闭详情应回到编排图原阶段/子页签，而不是落在 Skill 列表。
-  // 详情页签由宿主 URL 同步写成独立键 skdTab，不碰编排图的 ?tab=。
-  openSubPage('skill', skillId, { tab: 'routing' });
-}
-
 // ============ 编排文件编辑（单源化批次 C） ============
 
 const orchOpen = ref(false);
@@ -635,6 +460,16 @@ const pruneConfirming = ref(false);
 const orchMsg = ref('');
 const orchPanelRef = ref<HTMLElement | null>(null);
 const orchMaskRef = ref<HTMLElement | null>(null);
+const orchMoreOpen = ref(false);
+
+function menuSync() {
+  orchMoreOpen.value = false;
+  void forceSync();
+}
+function menuPrune() {
+  orchMoreOpen.value = false;
+  void runPrune(false);
+}
 
 /** 弹窗关闭统一入口（✕/关闭/遮罩/Esc 共用）：有未保存修改时先确认再丢 */
 async function closeOrchestration() {
@@ -798,28 +633,12 @@ async function forceSync() {
 
 onMounted(() => void loadStage());
 watch(() => props.stage, () => void loadStage());
+
+/** 编排文件弹窗的宿主在阶段页签行（Orchestrator），由它经 ref 调起 */
+defineExpose({ openOrchestration });
 </script>
 
 <style scoped>
-.frt__toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-/* 吸顶操作条（滚动修复 #1）：长表关键操作常驻顶部，负 margin 满宽于 tab 面板。
-   磨砂底走 token 混色（原亮/暗两份 rgba 硬编码已删） */
-.frt__stickybar {
-  position: sticky;
-  top: 0;
-  z-index: 25;
-  margin: -14px -16px 14px;
-  padding: 10px 16px 8px;
-  /* 粘性表头：94% 半透明 + backdrop-filter: blur(8px) 的毛玻璃已退役
-     （批次 D，2026-10-02），改为不透明面 + 1px 下缘线。
-     粘性表头下滚时内容会从其下穿过，半透明无模糊会让文字「糊在一起」，
-     比纯平面更难读；规范的做法是给足不透明面 + 发丝线，靠线表达「这层在上面」。
-     box-shadow: var(--mk-shadow-sm) 保留——那是规范内的悬浮档，不是彩色光晕。 */
-  background: var(--mk-surface);
-  border-bottom: 1px solid var(--mk-line);
-  box-shadow: var(--mk-shadow-sm);
-}
-.frt__stickybar .frt__toolbar { margin-bottom: 0; }
 /* 原型 .note：说明/提示行（surface-2 底 + muted 小字；--info 走品牌蓝底） */
 .note {
   margin: 0 0 14px;
@@ -832,81 +651,16 @@ watch(() => props.stage, () => void loadStage());
 }
 .note--info { background: var(--mk-blue-bg); color: var(--mk-blue); }
 /* 暗色对比度（2026-10-06 复核）：--mk-blue(#5b8def) 压在 --mk-blue-bg(16% 蓝 tint，合成 #293244)
-   上仅 3.98:1 < 4.5。暗色覆写文字色为同族提亮档 --mk-badge-info-fg(#9db8f5，实测 6.49:1)，底色不动。
-   同一问题见「core 联动」标题：--mk-blue 在 surface-2 上 4.56，一并提亮到 7.44 留余量 */
+   上仅 3.98:1 < 4.5。暗色覆写文字色为同族提亮档 --mk-badge-info-fg(#9db8f5，实测 6.49:1)，底色不动。 */
 html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
-html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
-.frt__toolbar-hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-
-/* ========== core 联动提示条（M3） ========== */
-.frt-syncbar {
-  display: flex;
-  align-items: center;
-  gap: 6px 12px;
-  flex-wrap: wrap;
-  margin: 0 0 12px;
-}
-.frt-syncbar--muted { color: var(--mk-muted); }
-/* 亮色对比度（2026-10-06 渲染探针亮色 1920）：--mk-blue(#2f6ae0) 压 .note 的 --mk-surface-2
-   底（#eef2fa）实测 4.39:1 < 4.5（本元素字号 micro 且非大字档）。改用 --mk-accent-deep
-   （亮色 #1f57cc，同 .mk-badge--self 用法）→ 5.59:1；暗色档仍由下方 html[data-theme='dark']
-   覆写取 --mk-badge-info-fg(#9db8f5)。 */
-.frt-syncbar__title { font-weight: 800; color: var(--mk-accent-deep, var(--mk-blue)); }
-/* 胶囊徽章走全局 .mk-badge（--ok/--warn/--bad/--muted 四态）；本类只保留按钮复位与悬停反馈 */
-.frt-syncbar__badge {
-  cursor: pointer;
-  text-decoration: none;
-  font-family: inherit;
-  transition: filter 0.12s ease;
-}
-.frt-syncbar__badge:hover { filter: brightness(0.97); }
-.frt-syncbar__badge code { font-size: var(--mk-fs-micro); }
-.frt-syncbar__count { font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
-.frt-syncbar__hint { color: var(--mk-muted); }
-
-/* ========== 图例（可折叠） ========== */
-.frt__legend {
-  margin: 0 0 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-sm);
-}
-/* 折叠头走 .mk-section__summary（shared.css） */
-/* hover 基调由 .mk-section__summary 提供（统一 → --mk-blue） */
-.frt__legend-body {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 14px;
-  padding: 4px 14px 10px;
-}
-@media (max-width: 860px) {
-  .frt__legend-body { grid-template-columns: 1fr; }
-}
-.frt__legend-title {
-  margin: 0 0 6px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--mk-faint);
-}
-.frt__legend-group--roles + .frt__legend-group .frt__legend-title { margin-top: 10px; }
-.frt__legend-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
-.frt__legend-loading { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.frt__legend-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.frt__legend-en { flex-shrink: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.frt__legend-hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); min-width: 0; }
-.frt__legend-foot {
-  margin: 0;
-  padding: 6px 14px 10px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-}
-.frt__legend-foot .mono { font-size: var(--mk-fs-micro); color: var(--mk-blue); }
 
 /* ========== 搜索 / 过滤 ========== */
 .frt__filter { margin-bottom: 12px; }
 .frt__filter-count { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 弹窗底部的整文件级动作收在「更多」里：菜单在底栏内向上展开（弹窗 overflow:hidden，
+   向下展开会被裁掉） */
+.frt__orch-more { position: relative; }
+.frt__orch-more .mk-menu__pop { top: auto; bottom: calc(100% + 4px); }
 
 .frt__orch-summary {
   display: flex;
@@ -993,9 +747,6 @@ html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
   line-height: 1.5;
 }
 
-/* 角色徽章（7 类着色，与图例共用） */
-/* render 徽章 */
-/* 流转徽章（图例） */
 /* 落库键列：截断上限随列宽（fixed 布局下列宽 = colgroup --mk-col-id，用 100% 防内层 span 越出单元格） */
 .frt__persist { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .frt__persist--alias { color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: var(--mk-radius-sm); padding: 0 5px; }
@@ -1015,13 +766,6 @@ html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
 .frt__handoff { max-width: 100%; color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (min-width: 2000px) {
-  .frt__toolbar-hint { font-size: var(--mk-fs-micro); }
-  .frt__legend-title { font-size: var(--mk-fs-micro); }
-  .frt__legend-loading { font-size: var(--mk-fs-micro); }
-  .frt__legend-en { font-size: var(--mk-fs-micro); }
-  .frt__legend-hint { font-size: var(--mk-fs-micro); }
-  .frt__legend-foot { font-size: var(--mk-fs-micro); }
-  .frt__legend-foot .mono { font-size: var(--mk-fs-micro); }
   .frt__filter-count { font-size: var(--mk-fs-micro); }
   .frt__orch-summary { font-size: var(--mk-fs-micro); }
   .frt__orch-textarea { font-size: var(--mk-fs-micro); padding: 14px; }
@@ -1033,13 +777,6 @@ html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
   }
 
 @media (min-width: 2800px) {
-  .frt__toolbar-hint { font-size: var(--mk-fs-micro); }
-  .frt__legend-title { font-size: var(--mk-fs-micro); }
-  .frt__legend-loading { font-size: var(--mk-fs-micro); }
-  .frt__legend-en { font-size: var(--mk-fs-micro); }
-  .frt__legend-hint { font-size: var(--mk-fs-micro); }
-  .frt__legend-foot { font-size: var(--mk-fs-micro); }
-  .frt__legend-foot .mono { font-size: var(--mk-fs-micro); }
   .frt__filter-count { font-size: var(--mk-fs-micro); }
   .frt__orch-summary { font-size: var(--mk-fs-micro); }
   .frt__orch-textarea { font-size: var(--mk-fs-micro); padding: 17px; }

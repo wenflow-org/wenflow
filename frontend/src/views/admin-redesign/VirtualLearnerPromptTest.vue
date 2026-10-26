@@ -9,17 +9,14 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="closePromptTest">✕</button>
       </div>
       <div class="mk-modal__body">
-        <p class="mk-alert mk-alert--info">
-          不创建用例、不影响正式会话。
-        </p>
         <!-- 配置行 -->
         <div class="pt-config">
           <label class="mk-field">
             <span class="mk-field__label">助手能力</span>
             <select v-model="testForm.agentId" class="mk-field__select">
-              <option value="skill:goal-conversation">goal-conversation · 聊目标</option>
-              <option value="skill:path-planning">path-planning · 拆路径</option>
-              <option value="skill:stage-designer">stage-designer · 拆子任务</option>
+              <option value="skill:goal-conversation">聊目标</option>
+              <option value="skill:path-planning">拆路径</option>
+              <option value="skill:stage-designer">拆子任务</option>
             </select>
           </label>
           <label class="mk-field">
@@ -29,11 +26,7 @@
           <label class="mk-field">
             <span class="mk-field__label">学生对抗度</span>
             <select v-model="testForm.friction" class="mk-field__select">
-              <option value="none">配合</option>
-              <option value="low">犹豫</option>
-              <option value="normal">正常</option>
-              <option value="high">难缠</option>
-              <option value="stress_test">极端</option>
+              <option v-for="o in FRICTION_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
             </select>
           </label>
         </div>
@@ -103,6 +96,7 @@ import { errMsg } from './live'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
+import { FRICTION_OPTIONS, frictionLabel, type FrictionBudget } from './vlab'
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
 withDefaults(defineProps<{ render?: boolean }>(), { render: true })
@@ -150,7 +144,7 @@ const testResult = ref<PromptTestResult | null>(null)
 const testForm = ref({
   agentId: 'skill:goal-conversation',
   dialogueRounds: 2,
-  friction: 'normal' as 'none' | 'low' | 'normal' | 'high' | 'stress_test',
+  friction: 'normal' as FrictionBudget,
 })
 const testPanelRef = ref<HTMLElement | null>(null)
 const testMaskRef = ref<HTMLElement | null>(null)
@@ -182,10 +176,7 @@ const personaBriefText = computed(() => {
   if (p.background) parts.push(String(p.background).slice(0, 60))
   return parts.join(' · ')
 })
-const frictionLabelText = computed(() => {
-  const m: Record<string, string> = { none: '全程配合', low: '轻微犹豫', normal: '正常', high: '难缠', stress_test: '极端对抗' }
-  return m[String(testResult.value?.simMeta?.frictionBudget)] || '正常'
-})
+const frictionLabelText = computed(() => frictionLabel(testResult.value?.simMeta?.frictionBudget))
 function shortField(v: unknown): string {
   const s = typeof v === 'string' ? v : JSON.stringify(v)
   return s.length > 40 ? `${s.slice(0, 40)}…` : s

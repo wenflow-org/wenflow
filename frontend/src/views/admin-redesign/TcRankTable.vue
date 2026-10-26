@@ -11,20 +11,15 @@
            「按模型、Skill 与时间维度追踪模型调用成本」承诺不符 -->
       <span class="tc-c tc-c--cost" role="columnheader">成本</span>
       <!-- 排行表占比 = Token 占比（成本另有独立列），与导出 CSV 的 Token占比% 对齐 -->
-      <span class="tc-c tc-c--share" role="columnheader" title="Token 用量占比（金额占比在成本列单独统计）">Token 占比</span>
+      <span class="tc-c tc-c--share" role="columnheader">Token 占比</span>
     </div>
 
     <div
       v-for="(r, i) in items"
       :key="r.key"
       class="tc-table__row"
-      :class="{ 'tc-table__row--clickable': clickable }"
-      :role="clickable ? 'button' : 'row'"
-      :tabindex="clickable ? 0 : undefined"
-      :title="clickable ? `${rowTitle(r)}。点击到执行日志查该维度调用` : rowTitle(r)"
-      @click="clickable && emit('select', r)"
-      @keydown.enter="clickable && emit('select', r)"
-      @keydown.space.prevent="clickable && emit('select', r)"
+      role="row"
+      :title="rowTitle(r)"
     >
       <!-- 排名徽章：1/2/3 实心蓝（前三），其余中性 -->
       <span class="tc-c tc-c--rk" role="cell">
@@ -111,12 +106,9 @@ const props = withDefaults(
         本组件不再提供 skill 档——审核 #132 删除无消费者的死分支） */
     variant: 'user' | 'model'
     totalTokens: number
-    /** 整行可点：到执行日志按该用户 / 模型筛调用明细（2026-10-24 成本下钻对称） */
-    clickable?: boolean
   }>(),
-  { totalTokens: 0, clickable: false }
+  { totalTokens: 0 }
 )
-const emit = defineEmits<{ select: [row: RankRow] }>()
 
 const nameLabel = computed(() => (props.variant === 'user' ? '用户' : '模型'))
 
@@ -244,8 +236,6 @@ function rowTitle(r: RankRow): string {
   transition: background 0.12s;
 }
 .tc-table__row:last-child { border-bottom: none; }
-.tc-table__row--clickable { cursor: pointer; }
-.tc-table__row--clickable:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .tc-table__row:hover { background: var(--mk-table-row-hover-bg); }
 
 .tc-c { min-width: 0; }

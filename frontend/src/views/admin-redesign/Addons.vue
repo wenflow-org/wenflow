@@ -6,10 +6,11 @@
   <div class="mk-page">
     <!-- 2026-10-23 用户「已经有刷新，为什么还有独立刷新」：本页数据（能力配置 / MCP 服务）
          跟随顶栏刷新广播 liveRefreshSeq，页头不再出第二颗刷新钮。 -->
-    <MkPageHead
-      title="插件"
-      sub="可选能力与 MCP 服务"
-    />
+    <MkPageHead title="插件">
+      <template #actions>
+        <button type="button" class="mk-btn" @click="openToolCreate">新建 MCP 服务</button>
+      </template>
+    </MkPageHead>
 
     <!-- ① 插件 + ② MCP 服务：堆叠单列全宽（2026-09-29 实测半宽卡内能力表 874px 溢出
          506px 容器，并栏不可行；审核 #157 删除恒 false 的 sideBySide 死分支与不可达 CSS） -->
@@ -23,11 +24,11 @@
       <div class="mk-card__head">
         <!-- 2026-10-23 走查：卡头不复述页名（「插件」页里再挂一枚「插件」标题） -->
         <h3 class="mk-card__title">可选能力</h3>
-        <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn" title="启停状态未读取，开关暂时按默认启用在显示">启停状态未读取</span>
-        <span class="mk-card__meta">{{ pluginRows.length }} 组 · {{ pluginMemberCount }} 个 Skill</span>
+        <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn">启停状态未读取</span>
+        <span class="mk-card__meta ac-count">{{ pluginMemberCount }} 个 Skill</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
-        <span class="mk-alert__msg">插件配置加载失败，以下状态为占位，无法反映真实路由。</span>
+        <span class="mk-alert__msg">{{ configErrorText }}</span>
         <button type="button" class="mk-alert__btn" @click="loadPluginConfigs">重试</button>
       </div>
       <MkLoading v-if="loading" min text="插件配置加载中…" />
@@ -46,7 +47,6 @@
               <strong>{{ p.name }}</strong>
               <span class="ac-plugin__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
             </div>
-            <span class="ac-plugin__desc">{{ p.description }}</span>
             <span v-if="membersText(p)" class="ac-plugin__members">{{ membersText(p) }}</span>
           </div>
           <div class="ac-plugin__actions">
@@ -55,11 +55,10 @@
               :state-text="pluginEnabled(p.id) ? '启用' : '停用'"
               :busy="pluginBusy === p.id"
               :aria-label="`${p.name}插件开关`"
-              :title="`停用后：${p.fallback}`"
               @update:model-value="togglePlugin(p.id, $event)"
             />
             <button type="button" class="mk-btn mk-btn--sm" @click="openConfig(p)">{{ p.id === 'mcp' ? '管理服务' : '配置' }}</button>
-            <button v-if="p.hasStats" type="button" class="mk-link" @click="goLogs(p.primary)">日志</button>
+            <button v-if="p.errorCount > 0" type="button" class="mk-link" @click="goLogs(p.primary)">查失败</button>
           </div>
         </div>
       </div>
@@ -69,9 +68,6 @@
     <div class="mk-card ac-mcp-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">MCP 服务</h3>
-        <div class="mk-actions">
-          <button type="button" class="mk-link" @click="openToolCreate">新建 MCP 服务</button>
-        </div>
       </div>
       <div class="ac-mcp" v-if="mcpTools.length">
         <div v-for="t in mcpTools" :key="t.id" class="ac-mcp__row">
@@ -81,12 +77,17 @@
           </div>
           <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
           <span class="ac-mcp__type">
-            类型 ·
             <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
             <template v-else>{{ mcpTypeText(t.type) }}</template>
           </span>
-          <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">入口 · {{ endpointLabel(t.endpoint) }}</span>
-          <span class="mk-badge" :class="t.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ t.enabled ? '启用' : '停用' }}</span>
+          <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
+          <MkSwitch
+            :model-value="t.enabled"
+            :state-text="t.enabled ? '启用' : '停用'"
+            :busy="toolBusy === t.id"
+            :aria-label="`${t.name}服务开关`"
+            @update:model-value="toggleToolEnabled(t, $event)"
+          />
           <div class="mk-actions">
             <button
               v-if="t.transport === 'mcp'"
@@ -104,6 +105,7 @@
             <span v-if="testResult?.id === t.id" class="ac-mcp__test" :class="testResult.ok ? 'is-ok' : 'is-bad'">
               {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
             </span>
+            <button v-if="testResult?.id === t.id && !testResult.ok" type="button" class="mk-link" @click="openToolEdit(t)">编辑</button>
             <div class="mk-menu">
               <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
               <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -115,18 +117,19 @@
           </div>
         </div>
       </div>
-      <MkLoading v-else-if="mcpLoading" min />
+      <!-- 卡内局部加载：MkLoading 的 min 会按整页口径撑高约 544px，卡内只剩空白 -->
+      <MkSkeleton v-else-if="mcpLoading" variant="rows" :count="4" :h="40" />
       <MkEmptyState
         v-else
         :tone="mcpFailed ? 'error' : 'neutral'"
         :icon="mcpFailed ? '!' : ''"
         :title="mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务'"
-        :description="mcpFailed ? '无法从后端拉取 MCP 服务列表。' : '还没有接入任何 MCP 服务。接入后这里会列出可用工具与连接状态。'"
-        :action-text="mcpFailed ? '重试' : ''"
+        :description="mcpFailed ? mcpErrorText : ''"
+        :action-text="mcpFailed ? '重试' : '新建 MCP 服务'"
         action-busy-text="重试中…"
         :action-busy="mcpLoading"
         min
-        @action="loadMcpTools"
+        @action="mcpFailed ? loadMcpTools() : openToolCreate()"
       />
     </div>
 
@@ -151,7 +154,7 @@
             <input v-model="toolForm.name" class="mk-field__input" placeholder="例如：网页搜索" />
             <span v-if="toolErrors.name" class="mk-field__err">{{ toolErrors.name }}</span>
           </label>
-          <div class="ac-mcp__formrow ac-mcp__formrow--three">
+          <div class="ac-mcp__formrow">
             <label class="mk-field">
               <span class="mk-field__label">连接方式</span>
               <select v-model="toolForm.transport" class="mk-field__select">
@@ -160,7 +163,7 @@
               </select>
             </label>
             <label class="mk-field">
-              <span class="mk-field__label">类型（标注）</span>
+              <span class="mk-field__label">类型</span>
               <select v-model="toolForm.type" class="mk-field__select" :disabled="toolForm.transport === 'mcp'">
                 <option value="http">HTTP 接口</option>
                 <option value="code">代码执行</option>
@@ -169,16 +172,9 @@
                 <option value="image">生图</option>
               </select>
             </label>
-            <label class="mk-field">
-              <span class="mk-field__label">启用</span>
-              <select v-model="toolForm.enabled" class="mk-field__select">
-                <option :value="true">启用</option>
-                <option :value="false">停用</option>
-              </select>
-            </label>
           </div>
           <label class="mk-field" :class="{ 'mk-field--error': toolErrors.endpoint }">
-            <span class="mk-field__label">{{ toolForm.transport === 'mcp' ? 'MCP 服务地址' : 'Endpoint' }}</span>
+            <span class="mk-field__label">服务地址</span>
             <input
               v-model="toolForm.endpoint"
               class="mk-field__input"
@@ -188,7 +184,7 @@
           </label>
           <label class="mk-field">
             <span class="mk-field__label">描述（可选）</span>
-            <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2" placeholder="这个工具做什么"></textarea>
+            <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2"></textarea>
           </label>
         </div>
         <div class="mk-modal__foot">
@@ -223,11 +219,19 @@
                 <span class="ac-config-chain__order">{{ channel.order.map(providerLabelOf).join(' → ') || '—' }}</span>
               </div>
             </template>
+            <!-- 单候选通道：把「谁在链上」写成事实行，而不是让 5 张 provider 卡平铺后被误读成都在用 -->
+            <div v-else-if="singleChainLabel" class="ac-config-chain">
+              <span class="ac-config-chain__label">当前只用</span>
+              <span class="ac-config-chain__order">{{ singleChainLabel }}</span>
+            </div>
             <section class="ac-config-provider" v-for="provider in configTarget?.providers ?? []" :key="provider.id">
               <header class="ac-config-provider__head">
                 <strong class="ac-config-provider__name">{{ provider.label }}</strong>
-                <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
-                  {{ provider.configured ? '已配置' : '缺少密钥' }}
+                <span class="ac-config-provider__badges">
+                  <span v-if="singleChainLabel && !chainProviderIds.includes(provider.id)" class="mk-badge mk-badge--muted">未参与调用</span>
+                  <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
+                    {{ provider.configured ? '已配置' : '缺少密钥' }}
+                  </span>
                 </span>
               </header>
               <div class="ac-config-fields">
@@ -247,7 +251,7 @@
                   type="button"
                   class="mk-link"
                   @click="toggleClearKey(provider.id)"
-                >{{ clearKeys[provider.id] ? '取消清除' : '清除界面密钥' }}</button>
+                >{{ clearKeys[provider.id] ? '取消清除' : '清除已保存密钥' }}</button>
               </div>
             </section>
           </div>
@@ -275,6 +279,7 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { toast } from '@/utils/toast'
@@ -295,11 +300,10 @@ interface PluginRow {
   id: string
   name: string
   glyph: string
-  description: string
-  fallback: string
   primary: string
   members: PluginMemberRow[]
-  hasStats: boolean
+  /** 窗口内有失败调用的成员数 > 0：决定「查失败」入口出不出现（零失败的插件不该给这颗钮） */
+  errorCount: number
   /** MCP 组额外展示服务可用性（与模型路由是两个维度，分开写） */
   availability: { text: string; stateClass: string } | null
   last: string
@@ -365,6 +369,10 @@ const providerConfigs = ref<Record<string, PluginConfig>>({})
 const loading = ref(false)
 /** 服务配置拉取失败：保留现有列表并展示错误条，避免把未知状态读成「未配置」 */
 const configsFailed = ref(false)
+/** 后端原文（错误原文保留，运营据此判断是网关、权限还是配置） */
+const configErrorText = ref('')
+/** MCP 列表拉取失败原因（同口径） */
+const mcpErrorText = ref('')
 
 async function loadPluginConfigs() {
   loading.value = true
@@ -381,6 +389,7 @@ async function loadPluginConfigs() {
     providerConfigs.value = map
   } catch (e) {
     configsFailed.value = true
+    configErrorText.value = errMsg(e)
     toast.error(`插件服务配置加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
@@ -403,11 +412,9 @@ function buildPluginRows(
       id: group.id,
       name: group.name,
       glyph: group.glyph,
-      description: group.description,
-      fallback: group.fallback,
       primary: group.primary,
       members,
-      hasStats: members.some((member) => (liveSkillStatsMap.value?.[member.id]?.calls ?? 0) > 0),
+      errorCount: members.reduce((n, member) => n + (liveSkillStatsMap.value?.[member.id]?.errors ?? 0), 0),
       availability: group.id === 'mcp' ? mcpAvailability : null,
       last,
     }
@@ -470,14 +477,14 @@ async function loadMcpTools() {
       endpoint: String(t.endpoint || ''),
       enabled: t.enabled !== false
     }))
-  } catch {
+  } catch (e) {
     mcpTools.value = []
     mcpFailed.value = true
+    mcpErrorText.value = errMsg(e)
   } finally {
     mcpLoading.value = false
   }
 }
-
 watch(
   () => [dataSource.value],
   () => {
@@ -595,6 +602,16 @@ function providerLabelOf(providerId: string): string {
 const hasFallbackOrder = computed(() =>
   (configTarget.value?.channels ?? []).some((channel) => channel.order.length > 1),
 )
+/** 单候选通道的「谁在链上」：顺序行被折叠时，这条事实行替代它（不再让读者以为 5 个都在用） */
+const singleChainLabel = computed(() => {
+  const channel = (configTarget.value?.channels ?? [])[0]
+  if (!channel?.order.length) return ''
+  return channel.order.map(providerLabelOf).join(' → ')
+})
+/** 在降级链上的 provider id（用于给链外 provider 挂「不在降级链上」） */
+const chainProviderIds = computed(() =>
+  [...new Set((configTarget.value?.channels ?? []).flatMap((channel) => channel.order))],
+)
 
 async function saveConfig() {
   const cfg = configTarget.value
@@ -679,6 +696,24 @@ async function saveTool() {
     toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     toolSaving.value = false
+  }
+}
+
+/** MCP 服务启停：落 PUT /admin/mcp/tools/:id 的 enabled（此前只能在编辑弹窗里改，与插件开关两个粒度混在一起） */
+const toolBusy = ref('')
+async function toggleToolEnabled(t: McpTool, enabled: boolean) {
+  if (toolBusy.value) return
+  toolBusy.value = t.id
+  const before = t.enabled
+  t.enabled = enabled
+  try {
+    await adminMcpApi.updateTool(t.id, { enabled })
+    toast.success(enabled ? '服务已启用' : '服务已停用')
+  } catch (e) {
+    t.enabled = before
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    toolBusy.value = ''
   }
 }
 
@@ -795,8 +830,8 @@ function goLogs(skillId: string) {
 .ac-plugin__main { display: grid; gap: 3px; min-width: 0; }
 .ac-plugin__title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
 .ac-plugin__title strong { font-size: var(--mk-fs-body); font-weight: 650; color: var(--mk-ink); }
-.ac-plugin__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ac-plugin__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-plugin__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.ac-count { font-variant-numeric: tabular-nums; }
 .ac-plugin__members {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
@@ -804,13 +839,12 @@ function goLogs(skillId: string) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 开关独立固定列（2026-10-24）：有无「日志」都不移动开关竖轴；
-   按钮列右对齐，日志位即使为空也保留 32px 槽位。 */
+/* 开关独立固定列：有无「查失败」都不移动开关竖轴（2026-10-26 撤掉恒空 32px 槽位） */
 .ac-plugin__actions {
   display: grid;
   /* 固定总宽 + 固定列：开关的 x 与按钮文案长短无关（「配置」/「管理服务」同轴） */
-  width: 224px;
-  grid-template-columns: 72px 96px 32px;
+  width: 192px;
+  grid-template-columns: 72px 96px;
   align-items: center;
   justify-items: end;
   gap: 12px;
@@ -842,6 +876,7 @@ function goLogs(skillId: string) {
 }
 .ac-config-provider__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ac-config-provider__name { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
+.ac-config-provider__badges { display: inline-flex; align-items: center; gap: 6px; }
 .ac-config-fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -898,9 +933,9 @@ function goLogs(skillId: string) {
 .ac-mcp__type { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
 /* 状态徽标与动作组同处右缘：徽标列吃 1fr 并右对齐，把空白留在类型/入口与动作之间，
    消除某个具名列被拉成 585–662px 空列（2026-10-24 复核）。 */
-.ac-mcp__row > .mk-badge { justify-self: end; }
+.ac-mcp__row > .mk-switch { justify-self: end; }
 .ac-mcp__row > .mk-actions { justify-self: end; }
-.ac-mcp__test { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }
+.ac-mcp__test { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
 .ac-mcp__test.is-bad { color: var(--mk-red); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .ac-mcp__endpoint {
@@ -914,7 +949,6 @@ function goLogs(skillId: string) {
   text-overflow: ellipsis;
 }
 .ac-mcp__formrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.ac-mcp__formrow--three { grid-template-columns: 1fr 1fr 1fr; }
 
 /* MCP 卡片作为容器：行按「卡片自身宽度」重排，而非视口宽度
    （并栏时卡片可能远窄于视口，视口断点不触发） */
@@ -936,7 +970,7 @@ function goLogs(skillId: string) {
   .ac-mcp__main { grid-area: main; }
   .ac-mcp__type { grid-area: type; }
   .ac-mcp__endpoint { grid-area: endpoint; }
-  .ac-mcp__row .mk-badge { grid-area: badge; }
+  .ac-mcp__row .mk-switch { grid-area: badge; justify-self: end; }
   .ac-mcp__row .mk-actions { grid-area: actions; }
 }
 @media (max-width: 800px) {

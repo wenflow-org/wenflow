@@ -18,7 +18,9 @@ describe('重复操作入口守卫', () => {
     const src = read('Users.vue')
     expect(src).not.toContain('menuRole')
     expect(src).not.toContain('设为管理员')
-    expect(src).toContain('<span class="mk-field__label">角色</span>')
+    // 表单已抽成 UserFormDialog（列表行与详情页卡头共用一份），角色字段随之搬家
+    expect(src).toContain('UserFormDialog')
+    expect(read('UserFormDialog.vue')).toContain('<span class="mk-field__label">角色</span>')
   })
 
   it('虚拟画像：学习详情只在页头右缘留一处，⋯ 菜单不再重复', () => {
@@ -105,15 +107,18 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain("'orchestration-steps',")
   })
 
-  it('目标对话：路径列只报生成状态，下钻只有「详情」一个入口', () => {
-    // 2026-10-22 用户「查看路径和详细重复了」：两者都开 session-real 座舱，
-    // 差别只是落 Path 页签还是默认页签。保留「详情」（座舱内切页签），路径列回到状态徽章。
+  it('目标对话：路径列是落「路径」页签的唯一入口，「详情」仍落默认页签', () => {
+    // 2026-10-22 用户「查看路径和详细重复了」：两者都开 session-real 座舱，差别是落哪个页签。
+    // 2026-10-26 改判：「已生成」徽章长得像入口却不可点，且详情默认落目标对话页签——
+    // 已生成路径的人要再点一次阶段瓦片。故路径格改可点（唯一落 Path 页签的入口），
+    // 「详情」保持原语义（落默认页签），两个入口不再指向同一处。
     const src = read('GoalConversations.vue')
     expect(src).not.toMatch(/查看路径</)
     expect(src).not.toContain('openPathPage')
-    expect(src).not.toContain("stage: 'path'")
+    expect(src).toContain('function openPathStage')
+    expect(src).toContain("openSubPage('session-real', r.id, { stage: 'path' })")
+    expect(src).toContain('@click.stop="openPathStage(r)"')
     expect(src).toContain('@click.stop="openDetail(r)"')
-    expect(src).toContain('@click="openDetail(r)"')
   })
 
   it('路径治理：重试生成只服务 failed 行（停滞信号已退役）', () => {

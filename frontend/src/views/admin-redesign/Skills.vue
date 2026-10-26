@@ -7,22 +7,21 @@
          「模型路由」页签收进弹窗——单技能配置在详情「运行时」里，本页只留跨技能工具）。
          2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」：Prompt 评估已拆为独立页
          （侧栏 Skill 组），本页只剩目录，故页头与读数带不再随页签切换。 -->
-    <MkPageHead title="Skill 与提示词" sub="Skill 目录、版本与提示词管理（全量注册，含未上线与停用）">
+    <MkPageHead title="Skill 与提示词">
       <template #actions>
         <button type="button" class="mk-btn" @click="openBulk">批量模型配置</button>
       </template>
     </MkPageHead>
     <!-- 读数带槽位（2026-10-14 用户两次校订后的定稿）：**页头之下、内容之上**，读数在前、
          视图在后 —— 与全站同一形态（判例 ExecLogs 带@22 / 页签@34、HealthCenter MkKpi@58 /
-         页签@104）。此前「模型路由」的带违规地塞在路由表那张卡里面（.sk-routing__top），
-         本次只把它移出卡、回到这条槽位。 -->
+         页签@104）。 -->
     <section class="mk-kpi-grid" aria-label="Skill 运行统计">
-      <!-- #72：列表加载失败时 cards=[] 会落成 0——读不到 ≠ 0 个，显「—」并把原因放进 title -->
+      <!-- #72：列表加载失败时 cards=[] 会落成 0——读不到 ≠ 0 个，显「—」 -->
       <MkKpi
         label="Skill"
         :value="liveLoading && !cards.length ? '…' : skillsError && !cards.length ? '—' : cards.length"
         :tone="skillsError && !cards.length ? 'muted' : ''"
-        :title="skillsError && !cards.length ? `Skill 列表加载失败：${skillsError}（读不到 ≠ 0 个）` : skillCountHint || '全量注册的 Skill 数'"
+        :title="skillsError && !cards.length ? `Skill 列表加载失败：${skillsError}` : ''"
       />
       <!-- live 三态（评审「状态三态缺失」）：对账加载中 → 「…」；加载失败 → 「?」（读不到 ≠ 0）；
            就绪且为 0 → 红 0（全 draft 是真异常，必须显性报警而非静默消失） -->
@@ -30,13 +29,7 @@
         label="已上线"
         :value="recLoading ? '…' : recError ? '?' : liveCount"
         :tone="!recLoading && !recError && liveCount === 0 ? 'bad' : ''"
-        :title="recLoading
-          ? '完成度对账加载中，已上线计数暂不可用'
-          : recError
-            ? `上线状态加载失败：${recError}；加载失败不代表没有已上线的 Skill`
-            : liveCount === 0
-              ? '已上线的 Skill 数为 0：所有 Skill 均未完成上线流程，请检查发布状态'
-              : '已完成上线（提示词已生效）的 Skill 数'"
+        :title="recLoading ? '上线状态加载中' : recError ? `上线状态加载失败：${recError}` : ''"
       />
       <MkKpi
         label="成功率"
@@ -47,16 +40,16 @@
       <MkKpi
         label="平均耗时"
         :value="rangeRefreshing ? '…' : avgLatencyText"
-        :title="`统计窗口：${rangeLabel}。成功调用按调用量加权`"
       />
-      <MkKpi v-if="idleCount > 0" label="空闲" :value="idleCount" title="窗口内无调用的 Skill 数。空闲是正常状态，不是故障" />
-      <!-- P-49（#74）：异常 Skill 此前只活在筛选 pill 上；0 时不渲染，避免占位 -->
+      <!-- P-49（#74）：异常 Skill 此前只活在筛选 pill 上；0 时不渲染，避免占位。
+           2026-10-26 评审：这枚读数即「仅看需关注」筛选，点击直接收敛列表，不再让读者往下找 pill -->
       <MkKpi
         v-if="errorCount > 0"
         label="需关注 Skill"
         :value="errorCount"
         tone="bad"
-        title="成功率红档（<90%）的 Skill 数，与「仅看需关注」筛选同一谓词"
+        clickable
+        @click="onlyAttention = true"
       />
     </section>
 
@@ -68,22 +61,23 @@
         <div class="mk-filter">
           <div class="mk-pills">
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部</button>
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注</button>
           </div>
           <!-- 2026-10-05 卡头统一弹层法：归属 Agent 下拉收进右侧「筛选」弹层
-              （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）；
-              触发钮标生效数。2026-10-24「类别」下拉随该列一起撤：只删列不删筛选会留下
-              一个隐形过滤器——筛完表格少一半行却看不出为什么。 -->
+              （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）。 -->
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-          <!-- #107：默认排序键 errors 无可见列 → 默认态给可见说明，非默认态给一键复位
-               （此前点过别的表头就再也回不到默认序，只能清 localStorage） -->
-          <span v-if="isDefaultSort" class="mk-cell-sub sk-sort-hint" title="默认排序：失败多的排在前面">默认按失败数排列</span>
-          <button v-else type="button" class="mk-link" @click="resetSort">恢复默认序（失败数优先）</button>
+          <!-- #107：非默认序时给一键复位（此前点过别的表头就再也回不到默认序，只能清 localStorage） -->
+          <button v-if="!isDefaultSort" type="button" class="mk-link" @click="resetSort">恢复默认序（失败数优先）</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID" />
-          <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口" title="统计窗口：改动本页 KPI 与卡内统计的聚合窗口，不筛列表行">
+          <!-- 归属 Agent 筛选（2026-10-26 评审：从「筛选」弹层移回卡头一行，选中值直接显示 Agent 名） -->
+          <select v-model="agentFilter" class="mk-filter__select" aria-label="按归属 Agent 筛选">
+            <option value="">全部 Agent</option>
+            <option v-for="a in agentOptions" :key="a.id" :value="a.id">{{ a.label }}（{{ a.count }}）</option>
+          </select>
+          <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口">
             <option value="7d">近 7 天</option>
             <option value="24h">近 24 小时</option>
             <option value="30d">近 30 天</option>
@@ -95,29 +89,6 @@
             v-model:hidden="hiddenCols"
             :default-hidden="SK_COLS_DEFAULT_HIDDEN"
           />
-          <div class="mk-adv">
-            <button
-              type="button"
-              class="mk-btn mk-btn--sm"
-              :aria-expanded="advOpen"
-              @click="advOpen = !advOpen"
-            >
-              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
-            </button>
-            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
-            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
-              <label class="mk-adv__field">
-                <span class="mk-cell-sub">归属 Agent</span>
-                <!-- P1② 归属 Agent 筛选（原型 renderSkillHub 1662-1706 工具条）：
-                     全部 Agent + 每 Agent 名（N），change 即筛。
-                     2026-10-05 CP1：全部档去计数（与 KPI「Skill N」/ 卡头计数三处复读，单源交 KPI） -->
-                <select id="skillAgentFilter" v-model="agentFilter" class="mk-filter__select" aria-label="按归属 Agent 筛选">
-                  <option value="">全部 Agent</option>
-                  <option v-for="a in agentOptions" :key="a.id" :value="a.id">{{ a.label }}（{{ a.count }}）</option>
-                </select>
-              </label>
-            </div>
-          </div>
           <!-- 卡头不再出「筛选后 N 个」命中数：与分页器「共 N 条」同屏复读，计数单源交分页器
                （2026-10-05 CP1 判例 Users.vue:26-29） -->
         </div>
@@ -130,7 +101,7 @@
         <button type="button" class="mk-alert__btn" @click="retrySkills">重试</button>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="9" />
+      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="7" />
       <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶。
            0 行时不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃掉整卡高度，
@@ -169,7 +140,7 @@
                 class="mk-th--sortable sk-c-version"
                 :aria-sort="sortState('version')"
                 @click="toggleSort('version')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('version')" title="线上生效的 Prompt 版本（取该 Skill 已启用的 Prompt 中版本最高的基线），可在详情「版本」页签回滚">Prompt 版本<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('version')">Prompt 版本<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 路由模型：skill-model-configs/coverage 的生效 model；未配置 → 「平台默认」 -->
               <th
                 v-if="showCol('routing')"
@@ -177,7 +148,7 @@
                 class="mk-th--sortable sk-c-routing"
                 :aria-sort="sortState('routing')"
                 @click="toggleSort('routing')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('routing')" title="该 Skill 生效的模型，未单独配置时使用平台默认">路由模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('routing')">路由模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 原型「24h 调用」：本页窗口由「统计窗口」下拉决定（默认近 7 天），故列名取中性「调用」，口径随窗口 -->
               <th
                 v-if="showCol('calls')"
@@ -185,10 +156,10 @@
                 class="mk-th--right mk-th--sortable sk-c-calls"
                 :aria-sort="sortState('calls')"
                 @click="toggleSort('calls')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('calls')" title="统计窗口内调用次数（随「统计窗口」下拉切换，默认近 7 天）">调用次数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('calls')">调用次数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- P95 占位：后端仅日志聚合提供 p50/p99，无技能级 P95；不编造数字。
                    整列恒「—」无信息量（评审 P3）→ 默认隐藏，「列」菜单可手动开启 -->
-              <th v-if="showCol('p95')" scope="col" class="mk-th--right sk-c-p95" title="暂无单 Skill 的 P95 耗时数据，该列默认隐藏，可在「列」菜单开启">P95</th>
+              <th v-if="showCol('p95')" scope="col" class="mk-th--right sk-c-p95">P95</th>
               <th
                 v-if="showCol('rate')"
                 scope="col"
@@ -210,7 +181,6 @@
                 :aria-sort="sortState('last')"
                 @click="toggleSort('last')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('last')">最近调用<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right sk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -223,14 +193,14 @@
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
                   <div class="mk-cell-main">
                     <!-- 英文主行（2026-10-25 用户「以英文为主」）：canonical id 是身份，中文 displayName
-                         只是别名——与详情页 hero 同一口径（标题=id、中文名进副行），此前列表把别名当主名，
-                         同一实体两页两种读法。 -->
-                    <strong class="sk-name-main sk-name-main--id mk-ellipsis" :title="nameTitleOf(s)">{{ s.id }}</strong>
-                    <!-- 副行 = 中文别名 · description（别名与 id 相同时不重复）；
-                         <1600 时「最近调用」列收进副行（showCol 同源），消掉中宽档表格横滚 -->
+                         只是别名——与详情页 hero 同一口径（标题=id、中文名进副行）。
+                         2026-10-26 评审：id 做成蓝色链接，让「打开详情」有可见入口（整行仍可点）。 -->
+                    <button type="button" class="sk-name-main sk-name-main--id sk-name-link mk-ellipsis" :title="nameTitleOf(s)" @click.stop="openDesign(s.id)">{{ s.id }}</button>
+                    <!-- 副行 = 中文别名 + 排障入口；<1600 时「最近调用」列收进副行（showCol 同源） -->
                     <span class="sk-subline">
                       <span v-if="sublineOf(s)" class="sk-sub" :title="nameTitleOf(s)">{{ sublineOf(s) }}</span>
-                      <span v-if="!showCol('last')" class="sk-recent" :title="'最近调用 ' + (s.lastAt || '—')">{{ s.lastAt }}</span>
+                      <button v-if="s.errors > 0" type="button" class="mk-link sk-fail-link" @click.stop="investigateAgent(s.id)">查失败</button>
+                      <span v-if="!showCol('last')" class="sk-recent">{{ s.lastAt }}</span>
                     </span>
                   </div>
                 </div>
@@ -238,15 +208,15 @@
               <td v-if="showCol('agent')">
                 <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId">{{ s.agentName || s.agentId }}</span>
                 <!-- 无归属不用裸文本「工具类」：与同列有归属的胶囊同构，弱化灰徽标（2026-10-24） -->
-                <span v-else class="mk-badge mk-badge--sm mk-badge--muted" title="没有归属的顶层 Agent">未归属</span>
+                <span v-else class="mk-badge mk-badge--sm mk-badge--muted">未归属</span>
               </td>
-              <td v-if="showCol('version')" class="sk-c-version"><span class="mono" :title="versionTitleOf(s.id)">{{ versionOf(s.id) }}</span></td>
+              <td v-if="showCol('version')" class="sk-c-version"><button type="button" class="mono sk-version-link" :title="versionTitleOf(s.id)" @click.stop="openVersions(s.id)">{{ versionOf(s.id) }}</button></td>
               <!-- 路由口径是中文词（「平台默认」），不走等宽；版本号仍是机器串 -->
               <td v-if="showCol('routing')"><span class="sk-model" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
               <!-- 调用/P95/成功率三格挂 mk-num（2026-10-15 用户走查）：表头 mk-th--right 右对齐，
                    值格此前无 mk-num 左对齐，头与值各站一边；mk-num 同时补齐 mono/tabular 方言 -->
               <td v-if="showCol('calls')" class="mk-num">{{ s.calls }}</td>
-              <td v-if="showCol('p95')" class="mk-num"><span class="mk-na" title="暂无单 Skill 的 P95 耗时数据">—</span></td>
+              <td v-if="showCol('p95')" class="mk-num"><span class="mk-na">—</span></td>
               <td v-if="showCol('rate')" class="mk-num">
                 <!-- 2026-10-15 用户拍板：成功率列只留百分比，比例条撤（数字+条双元素读作装饰噪音；
                      精度/阈值/兜底仍走 rate-utils 单点，tone 着色保留在数字上） -->
@@ -255,16 +225,6 @@
                 </div>
               </td>
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
-              <td>
-                <div class="mk-actions">
-                  <!-- 2026-10-14 用户拍板方案 B：行点击即进详情页，原「设计」小钮撤除——
-                       同一落点两个入口冗余。排障入口「查失败」（异常→动作→证据）保留。 -->
-                  <!-- 失败行直达证据（评审「异常→动作→证据断链」：排障从 4 跳压到 1 跳）：
-                       复用 store.investigateAgent（agent+status=err intent 深链执行日志）；
-                       行级拿不到错误类别，errorCategory 置空交日志页自筛 -->
-                  <button v-if="s.errors > 0" type="button" class="mk-btn mk-btn--sm" title="跳转执行日志：已过滤该 Skill 的失败调用" @click.stop="investigateAgent(s.id)">查失败</button>
-                </div>
-              </td>
             </tr>
           </tbody>
         </table>
@@ -282,8 +242,7 @@
       <MkEmptyState
         v-else-if="!filtered.length"
         min
-        :title="onlyAttention ? '没有需关注的 Skill' : keyword ? '当前筛选无 Skill' : '暂无运行数据'"
-        :description="onlyAttention ? '当前窗口内没有成功率低于 90% 的 Skill。' : keyword ? '换个关键词试试。' : '注册表里还没有可运行的 Skill。'"
+        :title="onlyAttention ? '没有需关注的 Skill' : isFiltered ? '当前筛选无 Skill' : '暂无 Skill'"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -316,21 +275,16 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="bulkOpen = false">✕</button>
           </div>
           <div class="mk-modal__body">
-            <p class="skills-bulk__intro">跨 Skill 对照生效模型与备用模型，或把同一份接入配置套用到多个 Skill。单个 Skill 的模型与参数在它自己的「运行时」页签里修改。</p>
             <!-- 读数带（原「模型路由」页签的页面级读数槽位）：前 3 张从 skills 列表 +
                  coverage 派生（去重模型数 / 已路由 Skill 数 / 主模型覆盖占比）；降级策略另读
                  只读的 /admin/model-registry，把「registry 默认」解析成实际链，拉不到显 — 不编造 -->
             <section class="mk-kpi-grid" aria-label="Skill 模型路由统计">
-              <MkKpi label="承载模型" :value="routeModelCount" :title="routeModelTitle" />
-              <MkKpi
-                label="已路由 Skill"
-                :value="routedSkillCount"
-                title="在模型覆盖里有生效路由的 Skill 数。与同屏「承载模型」「主模型覆盖」同源，未加载覆盖数据时显 —"
-              />
-              <MkKpi label="主模型覆盖" :value="primaryCoverageText" :title="primaryCoverageTitle" />
+              <MkKpi label="承载模型" :value="routeModelCount" />
+              <MkKpi label="已路由 Skill" :value="routedSkillCount" />
+              <MkKpi label="主模型覆盖" :value="primaryCoverageText" />
               <!-- 降级策略：真实口径 = 自定义兜底链计数；无自定义链时给出 registry 默认链的
                    解析结果（F7-5：空数组=「无（空链）」）。registry 未加载显 —，不伪装 -->
-              <MkKpi label="降级策略" :value="fallbackPolicyText" :title="fallbackPolicyTitle" />
+              <MkKpi label="降级策略" :value="fallbackPolicyText" />
             </section>
             <SkillModelCoverage
               embedded
@@ -354,14 +308,12 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 import { useRoute, useRouter } from 'vue-router'
 import { skillStatOf, isLive, intent, investigateAgent, openSubPage } from './store'
-import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
+import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg, liveRefreshSeq } from './live'
 import { completionMetaOf } from './glossaryMeta'
-import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
 import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneOf } from './rate-utils'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
@@ -387,10 +339,14 @@ const route = useRoute()
 const router = useRouter()
 /** 列表两个视图的共同落点：Skill 详情页（2026-10-15 设计页平铺后，详情页自带设计能力）。
  *  2026-10-14 方案 B：行点击直接走这里，列表侧不再单设「设计」小钮（同落点两入口冗余）。
- *  2026-10-15：独立设计页退役、内容平铺进详情页——行点击落 ?view=skill&id=，
- *  与编排图节点下钻同一落点（两处跳转保持一致）。 */
+ *  2026-10-26：落点页签显式写 runtime——不依赖 SkillDetail 的 DEFAULT_TAB 常量，
+ *  详情页默认页签一改，列表下钻不会跟着漂移。 */
 function openDesign(id: string) {
-  openSubPage('skill', id)
+  openSubPage('skill', id, { tab: 'runtime' })
+}
+/** 版本列 → 详情「版本」页签（回滚入口与读数同格，不再靠表头 title 指路） */
+function openVersions(id: string) {
+  openSubPage('skill', id, { tab: 'versions' })
 }
 
 /** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页；Prompt 评估同批改投新独立页 */
@@ -483,11 +439,10 @@ interface SkillRow {
 
 const onlyAttention = ref(false)
 const keyword = ref('')
-/** 归属 Agent 筛选（P1②）：'' = 全部；'__none__' = 无归属（工具类） */
+/** 归属 Agent 筛选（P1②）：'' = 全部；'__none__' = 无归属 */
 const agentFilter = ref('')
 
-/* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担；Skill 列固定）。
-   列 = 原型 8 列里的 7 列（完成度已撤：实测全为 live，零区分度）+ 最近调用，操作列固定收尾。 */
+/* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担；Skill 列固定）。 */
 const SK_COLS_KEY = 'wf_skills_hidden_cols'
 /** P95 整列恒「—」（后端无技能级 P95）→ 默认隐藏（MkCols defaultHidden：仅首访生效，已存配置尊重用户） */
 const SK_COLS_DEFAULT_HIDDEN = ['p95'] as const
@@ -496,7 +451,7 @@ const skColDefs = [
   { key: 'version', label: '版本', title: 'Skill 定义里声明的版本号' },
   { key: 'routing', label: '路由模型', title: '生效模型。未单独配置时用平台默认，无配置数据时显示 —' },
   { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
-  { key: 'p95', label: 'P95', title: '暂无单 Skill 的 P95 耗时数据。该列默认隐藏' },
+  { key: 'p95', label: 'P95', title: '暂无数据' },
   { key: 'rate', label: '成功率', title: '窗口内成功率' },
   { key: 'last', label: '最近调用', title: '最近调用时间' },
 ] as const
@@ -527,19 +482,13 @@ const menuColDefs = computed<ReadonlyArray<{ key: string; label: string; title: 
 })
 const statsRange = liveSkillStatsRange
 
-/* 筛选弹层（2026-10-05 卡头统一：归属 Agent/类别自主行收进共享 .mk-adv），
-   Esc 关闭走共享 useEscape（与教学会话同一外壳） */
-const advOpen = ref(false)
-useEscape(() => advOpen.value, () => { advOpen.value = false })
-const advCount = computed(() => (agentFilter.value ? 1 : 0))
-
-/** 归属 Agent 下拉选项（P1② 原型 toolbar）：按 agentId 聚合 + 计数；无归属归「工具类」 */
+/** 归属 Agent 下拉选项（P1② 原型 toolbar）：按 agentId 聚合 + 计数；无归属归「未归属」 */
 interface AgentOption { id: string; label: string; count: number }
 const agentOptions = computed<AgentOption[]>(() => {
   const m = new Map<string, AgentOption>()
   for (const c of cards.value) {
     const id = c.agentId || '__none__'
-    const label = c.agentName || c.agentId || '工具类'
+    const label = c.agentName || c.agentId || '未归属'
     const cur = m.get(id)
     if (cur) cur.count += 1
     else m.set(id, { id, label, count: 1 })
@@ -717,12 +666,6 @@ const errorCount = computed(() => cards.value.filter((c) => c.health === 'error'
 /* ===== Skill 运营概览（sk-dash：窗口内聚合 + 结论 + KPI） ===== */
 const totalCalls = computed(() => cards.value.reduce((a, c) => a + c.calls, 0))
 const totalErrors = computed(() => cards.value.reduce((a, c) => a + c.errors, 0))
-/** 口径提示：Skill 运行页不含插件（MCP + 能力 Skill），而健康中心/对账的登记总数含它们——避免「31/28/3」三处数字无从解释 */
-const skillCountHint = computed(
-  () => (EXTRA_CAPABILITY_SKILLS.length
-    ? `不含 ${EXTRA_CAPABILITY_SKILLS.length} 个插件（见「插件」页）。健康中心 / 一致性核查的登记总数含它们`
-    : ''),
-)
 /** 状态条成功率：精度/阈值/兜底走 rate-utils 单点（P1#26：1 位小数，99.9% 不再显示 100%） */
 const overallRateText = computed(() => successRateText(totalCalls.value, totalErrors.value))
 /** 2026-10-04 状态条退役：成功率 KPI tone——rate-utils 的 muted（无分母）对 MkKpi 显空档 */
@@ -730,7 +673,6 @@ const overallRateTone = computed<'' | 'ok' | 'warn' | 'bad'>(() => {
   const t = successRateTone(totalCalls.value, totalErrors.value)
   return t === 'muted' ? '' : t
 })
-const idleCount = computed(() => cards.value.filter((c) => c.calls === 0).length)
 const avgLatencyMs = computed(() => {
   const called = cards.value.filter((c) => c.calls > 0 && c.avgMs > 0)
   if (!called.length) return null
@@ -836,6 +778,14 @@ onMounted(() => {
   refreshReconciliation()
   // 版本/描述（/admin/skills）与路由模型/兜底链（skill-model-configs/coverage）：
   // live 层未透出这两组字段，本页按原型列结构自取（只读数据源，不改 live.ts）
+  void refreshSkillMeta()
+  void refreshCoverage()
+})
+
+/* 顶栏刷新（liveRefreshSeq 广播）：本页自有域（版本/描述、路由模型、已上线对账）
+   不在 boot 域内，必须各自重拉，否则按钮按下去读数仍是旧值（对照 SkillDetail.vue） */
+watch(liveRefreshSeq, () => {
+  refreshReconciliation()
   void refreshSkillMeta()
   void refreshCoverage()
 })
@@ -1098,11 +1048,6 @@ const routeModelCount = computed<number | string>(() =>
 const routedSkillCount = computed<number | string>(() =>
   coverageReady.value ? routingLabels.value.length : '—'
 )
-const routeModelTitle = computed(() =>
-  routingLabels.value.length
-    ? `去重模型 ${new Set(routingLabels.value).size} 个（「平台默认」计为一种）`
-    : '模型覆盖数据未加载或无生效路由'
-)
 /** 主模型覆盖 = 使用最多的那个模型占全部 Skill 的比例 */
 const primaryModel = computed(() => {
   const counts = new Map<string, number>()
@@ -1114,14 +1059,6 @@ const primaryModel = computed(() => {
 })
 const primaryCoverageText = computed(() =>
   routingLabels.value.length ? `${Math.round((primaryModel.value.count / cards.value.length) * 100)}%` : '—'
-)
-/* primaryModelLabel 随「主模型覆盖」副行退役（2026-10-19）：模型名不再上卡面副行，
-   口径短语代替它，模型名与覆盖数在 primaryCoverageTitle 里（未配置时该 title 不渲染 —
-   由 routingLabels 是否加载决定，与模型名是否为空无关）。 */
-const primaryCoverageTitle = computed(() =>
-  routingLabels.value.length
-    ? `${primaryModel.value.count} / ${cards.value.length} 个 Skill 使用「${primaryModel.value.label}」`
-    : '模型覆盖数据未加载'
 )
 /** 降级策略副行：有自定义兜底链数 → 计数；否则 registry 默认 */
 const fallbackConfigured = computed(() =>
@@ -1154,30 +1091,6 @@ const fallbackPolicyText = computed(() => {
   if (chain === null) return '—'
   return chain.length ? `${chain.length} 个备用模型` : '无备用模型'
 })
-/* 降级策略卡不再出 hint（2026-10-18 用户走查「这类文案」）：读数位报「几个自定义」，
-   hint 讲「其余那些走什么」是另一个范围的事实，连读会让运营分不清数字属于哪一边。
-   完整规则（含无自定义时走什么）都在这张卡的 title 里。 */
-const fallbackPolicyTitle = computed(() => {
-  const head = '模型重试耗尽后按备用模型列表自动切换。降级仅换模型名，网关与密钥沿用主调用'
-  if (!coverageReady.value) return '备用模型配置未加载（配置数据拉取失败或未就绪）'
-  if (fallbackConfigured.value > 0) {
-    return `${head}。当前 ${fallbackConfigured.value} 个 Skill 配了自定义备用模型列表`
-  }
-  if (!registryReady.value) {
-    return `${head}。无自定义备用模型列表：走平台默认列表，但平台默认模型数据暂未加载，默认列表暂不可解析`
-  }
-  const chain = primaryRegistryChain.value
-  const model = primaryModelId.value
-  if (!model) return `${head}。无自定义备用模型列表：暂无可解析的主模型`
-  if (chain === null) return `${head}。无自定义备用模型列表：模型「${model}」不在模型目录，默认列表无法解析`
-  return chain.length
-    ? `${head}。无自定义备用模型列表，走平台默认（${model}）：${chain.join(' → ')}`
-    : `${head}。无自定义备用模型列表：平台默认（${model}）未配置备用模型，调用失败时不会自动切换`
-})
-/* 卡头的「备用模型规则」说明行已删（2026-10-17 用户走查：这类文案没有用）：
-   同一件事已由上方「降级策略」KPI（value + hint + title）与表格「备用模型」列逐行表达，
-   卡头再用一句自然语言复述规则与当前值只是第三遍重复，还会随加载态换文案让卡头跳动。
-   真要查口径，悬停 KPI 卡即得完整规则。 */
 </script>
 
 <style scoped>
@@ -1190,11 +1103,8 @@ const fallbackPolicyTitle = computed(() => {
    body 允许内部横滚，不让宽表把面板撑破 */
 .skills-bulk { width: min(var(--mk-modal-w-wide-xxl, 1160px), 100%); }
 .skills-bulk .mk-modal__body { min-width: 0; }
-.skills-bulk__intro { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 统计刷新失败条：卡内位置 + 不参与 fill 伸缩 */
 .sk-live-err { flex: none; margin: 10px 16px 0; }
-/* #107：默认排序口径说明（与「清除筛选」同排的弱化小字） */
-.sk-sort-hint { white-space: nowrap; }
 /* Skill 格 min-width：本表约 9 列固定布局，Skill 名列会被调用/通过率等数字列挤窄
    （2026-10-02 视觉核对实测主行截成 4 字）——给内容格兜底宽度 */
 .sk-cell { display: flex; align-items: center; gap: 10px; min-width: 200px; }
@@ -1212,7 +1122,6 @@ const fallbackPolicyTitle = computed(() => {
 .sk-c-p95 { width: 56px; }
 .sk-c-rate { width: 70px; }
 .sk-c-last { width: 110px; }
-.sk-c-act { width: 100px; }
 .sk-table td { white-space: nowrap; }/* fixed 档列宽即契约：200px 兜底会把 Skill 名顶出单元格 */
 .sk-table .sk-cell { min-width: 0; }
 /* 中文名主行（正文重色）；副行 = description（原型 .sub），缺失回落 skill id（等宽）。
@@ -1226,6 +1135,20 @@ const fallbackPolicyTitle = computed(() => {
 }
 /* 主行是 canonical id（2026-10-25 英文为主）：机器串走等宽，与版本/路由模型列同一语义 */
 .sk-name-main--id { font-family: var(--mk-mono); }
+/* 主行 id 是可点的入口（蓝 = 可交互）；按钮复位成文本排版，行高与纯文本行一致 */
+.sk-name-link {
+  padding: 0; border: 0; background: none; text-align: left;
+  color: var(--mk-blue); cursor: pointer; font-size: inherit;
+}
+.sk-name-link:hover { text-decoration: underline; }
+/* 版本格 → 详情「版本」页签（回滚入口与读数同格） */
+.sk-version-link {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--mk-blue); font-family: var(--mk-mono);
+}
+.sk-version-link:hover { text-decoration: underline; }
+/* 副行里的排障入口（原操作列 100px 整列空白撤除后并入副行） */
+.sk-fail-link { flex: none; font-size: var(--mk-fs-micro); white-space: nowrap; }
 .sk-sub {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);

@@ -65,6 +65,8 @@ vi.mock('../live', async () => {
     // 2026-10-04 整组统一口径：includeTest 升为共享 ref（须真 ref 才能驱动 computed/watch）
     liveIncludeVirtual: ref(false),
     liveSetIncludeVirtual: vi.fn(),
+    // 顶栏刷新广播（页面 watch 它重拉列表与统计）
+    liveRefreshSeq: ref(0),
     timeAgo: (v: string) => v,
     errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
     shortId: (id: string, h: number, t: number) => (id ? `${id.slice(0, h)}…${id.slice(-t)}` : id),
@@ -202,14 +204,15 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
 
     const ths = w.findAll('thead th').map((t) => t.text());
-    // 2026-10-22 默认收起难度（真实数据多为未知、不改变运营动作）；列名补全为「预计时长」
+    // 2026-10-22 默认收起难度（真实数据多为未知、不改变运营动作）；
+    // 2026-10-26 预计时长同理默认收起（约数不改变处理动作）
     expect(ths).not.toContain('难度');
-    expect(ths).toContain('预计时长');
+    expect(ths).not.toContain('预计时长');
     expect(ths).not.toContain('主题');
     /* 教学组列序统一（2026-10-16）：主体列（路径）→ 用户 → 状态 → 属性/过程（难度、时长、进度）→ 时间（更新）→ 操作。
        原断言是「难度紧跟路径列、用户之前（路径自身属性成组）」，与同组其它页的
        「主体 → 用户 → 状态 → 过程」不一致，也违背 2026-10-03 的「主体列恒在首、用户列随后」。 */
-    expect(ths.slice(0, 6)).toEqual(['路径', '用户', '状态', '预计时长', '进度', '最近活动']);
+    expect(ths.slice(0, 5)).toEqual(['路径', '用户', '状态', '进度', '最近活动']);
     expect(ths.at(-1)).toBe('操作');
 
     // 路径列副行 = 主题（仅 subject≠title 时；P2-6），不夹带难度/时长；
@@ -219,17 +222,17 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(subs[0]).toContain('这是一段很长的学习目标描述');
     expect(subs.join(' ')).not.toContain('lp_');
 
-    // 难度默认收起：从「列」菜单打开后再验证三态归一
+    // 难度 / 时长默认收起：从「列」菜单打开后再验证
     const colsBtn = w.findAll('button').find((b) => b.text() === '列')!;
     if (!w.find('.mk-cols__menu').exists()) await colsBtn.trigger('click');
     const diffItem = w.findAll('.mk-cols__item').find((l) => l.text().includes('难度'))!;
     await diffItem.find('input').setValue(true);
+    const hoursItem = w.findAll('.mk-cols__item').find((l) => l.text().includes('预计时长'))!;
+    await hoursItem.find('input').setValue(true);
     await nextTick();
     expect(w.findAll('.oc-diff').map((e) => e.text())).toEqual(['进阶', '未知', '未知']);
-    // 未知态把原因/原文放进 title，不把半句自述当难度展示
-    const diffTitles = w.findAll('.oc-diff').map((e) => e.attributes('title') || '');
-    expect(diffTitles[1]).toContain('未归入任何难度档');
-    expect(diffTitles[2]).toContain('无法识别的难度记录');
+    // 2026-10-26 文案收口：难度不再挂解释型悬停
+    w.findAll('.oc-diff').forEach((e) => expect(e.attributes('title')).toBeUndefined());
 
     // 时长：有值带 ~，无值给 —
     expect(w.findAll('td.mk-num').map((e) => e.text())).toEqual(['~21h', '—', '~9h']);
@@ -241,8 +244,8 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
 
   /** 原型对齐（2026-10-01）：行点击 open-path 进 PathDetail 二级页（抽屉退役，
    *  与教学会话行点击进座舱 / UserDetail/LearnerDetail 同一交互习惯）。
-   *  落点断言走共享 store：subPage.view='path' + 页面内不再渲染抽屉。 */
-  it('行点击 / Enter → 路径详情二级页（subPage=path）；操作列「详情」钮同目标；不再开抽屉', async () => {
+   *  2026-10-26：操作列不再摆重复「详情」钮（行点击已是同一动作）。 */
+  it('行点击 / Enter → 路径详情二级页（subPage=path）；不再开抽屉，操作列无重复详情钮', async () => {
     closeSubPage();
     const w = mount(OpsContent, { props: { embedded: true } });
     await flushPromises();
@@ -254,12 +257,8 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(subPage.value).toMatchObject({ view: 'path', id: 'lp_a' });
     // 不再渲染抽屉（结构详情整体退役）
     expect(document.body.querySelector('.mk-drawer')).toBeNull();
-
-    // 操作列「详情」文字钮 = 同一下钻目标
-    closeSubPage();
-    await w.find('tbody tr .mk-actions .mk-btn').trigger('click');
-    await nextTick();
-    expect(subPage.value).toMatchObject({ view: 'path', id: 'lp_a' });
+    // 操作列没有「详情」钮（重复入口已撤）
+    expect(w.findAll('tbody tr .mk-actions .mk-btn').some((b) => b.text() === '详情')).toBe(false);
 
     // Enter 键盘可达（同 gc-row/ts-row 判例）
     closeSubPage();
@@ -281,7 +280,6 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const row = w.findAll('tbody tr').find((tr) => tr.find('.mk-user-link').exists() && tr.find('.mk-user-link').text() === '张三');
     expect(row).toBeTruthy();
     const nameBtn = row!.find('.mk-user-link');
-    expect(nameBtn.attributes('title')).toContain('查看学习者详情');
     await nameBtn.trigger('click');
     await nextTick();
     expect(subPage.value).toMatchObject({ view: 'learner', id: 'u1' });
@@ -321,29 +319,33 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');
     expect(tones).toEqual(['ok', '', 'bad']);
 
-    // 操作列（2026-10-15 用户拍板）：行内只留「详情」，失败行 title 指向 ⋯ 菜单「重试生成」；
-    // 重试/下线收进折叠菜单，不再并排出钮
+    // 操作列（2026-10-26）：失败行的「重试生成」提到一级（这页唯一要动手的动作）；
+    // 下线/恢复/删除仍在 ⋯ 菜单，操作列不再有重复的「详情」钮（行点击已是详情）
     const failRow = w.findAll('tbody tr').find((r) => r.text().includes('路径lp_fail'))!;
-    expect(failRow.find('.mk-actions .mk-btn').text()).toBe('详情');
-    expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toBeUndefined();
+    const failPrimary = failRow.find('.mk-actions > .mk-btn');
+    expect(failPrimary.text()).toBe('重试生成');
     expect(failRow.find('.mk-actions .mk-btn--primary').exists()).toBe(false);
     await failRow.find('.mk-menu__btn').trigger('click');
     await nextTick();
-    const retryItem = failRow.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '重试生成');
-    expect(retryItem).toBeTruthy();
+    const menuItems = failRow.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
+    expect(menuItems).not.toContain('重试生成');
+    expect(menuItems).toContain('下线');
+    // 非失败行没有一级重试钮
+    const okRow = w.findAll('tbody tr').find((r) => r.text().includes('路径lp_ok'))!;
+    expect(okRow.findAll('.mk-actions > .mk-btn').map((b) => b.text())).not.toContain('重试生成');
 
-    // 状态条已退役（2026-10-04）：失败行的救援入口在 ⋯ 菜单「重试生成」；总量读数迁 MkKpi 卡带
+    // 状态条已退役（2026-10-04）：总量读数迁 MkKpi 卡带
     expect(w.find('.mk-status').exists()).toBe(false);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
-    const failPill = w.findAll('.mk-pill').find((p) => p.text().startsWith('生成失败'))!;
-    expect(failPill.attributes('title')).toBe('生成失败：1 条');
+    // 失败读数只留 pill 一处（KPI「生成失败」卡已删）
+    expect(w.findAll('.mk-kpi__label').map((n) => n.text().trim())).toEqual(['路径总数']);
 
     w.unmount();
   });
 
   /** 停滞信号 2026-10-22 退役（用户「停滞有必要放在这吗」）：判据是活跃时钟不是生成状态，
    *  真实用户数日不学即命中，且其「重试生成」只对虚拟会话可用。救援入口只留给真正的 failed 行。 */
-  it('停滞信号退役：active 超 24h 不再标记、菜单无「重试生成」；failed 行仍有', async () => {
+  it('停滞信号退役：active 超 24h 不再标记、也无一级「重试生成」；failed 行才有', async () => {
     listMock.mockResolvedValue({
       data: {
         data: {
@@ -362,14 +364,9 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const trs = w.findAll('tbody tr');
     expect(trs[1].find('.mk-badge--warn').exists()).toBe(false);
     expect(w.text()).not.toContain('停滞');
-    // 陈旧 active 行菜单内无「重试生成」；failed 行才是救援对象
-    await trs[1].find('.mk-menu__btn').trigger('click');
-    await nextTick();
-    expect(trs[1].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).not.toContain('重试生成');
-    await trs[1].find('.mk-menu__btn').trigger('click');
-    await trs[2].find('.mk-menu__btn').trigger('click');
-    await nextTick();
-    expect(trs[2].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).toContain('重试生成');
+    // 陈旧 active 行没有一级重试钮；failed 行才是救援对象
+    expect(trs[1].findAll('.mk-actions > .mk-btn').map((b) => b.text())).not.toContain('重试生成');
+    expect(trs[2].findAll('.mk-actions > .mk-btn').map((b) => b.text())).toContain('重试生成');
     w.unmount();
   });
 
@@ -384,11 +381,10 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
     const callsBefore = listMock.mock.calls.length;
 
-    // 「重试生成」已收进 ⋯ 折叠菜单（2026-10-15 用户拍板）：先开菜单再点条目
+    // 一级按钮（2026-10-26 从 ⋯ 菜单提到操作列）
     const row = w.findAll('tbody tr')[0];
-    await row.find('.mk-menu__btn').trigger('click');
-    await nextTick();
-    const btn = row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '重试生成')!;
+    const btn = row.find('.mk-actions > .mk-btn');
+    expect(btn.text()).toBe('重试生成');
     await btn.trigger('click');
     await nextTick();
     const btns = [...document.querySelectorAll<HTMLButtonElement>('.mk-confirm button')];
@@ -419,9 +415,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
 
     const row = w.findAll('tbody tr')[0];
-    await row.find('.mk-menu__btn').trigger('click');
-    await nextTick();
-    const btn = row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '重试生成')!;
+    const btn = row.find('.mk-actions > .mk-btn');
     await btn.trigger('click');
     await nextTick();
     const btns = [...document.querySelectorAll<HTMLButtonElement>('.mk-confirm button')];
@@ -433,6 +427,64 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(last?.type).toBe('error');
     expect(last?.message).toContain('未失败或未过期');
     dialog.unmount();
+    w.unmount();
+  });
+
+  it('统计拉取失败：KPI 带换成「统计加载失败 + 重试」，重试成功后恢复读数', async () => {
+    statsMock.mockRejectedValueOnce(new Error('stats boom'));
+    const w = mount(OpsContent);
+    await flushPromises();
+    await nextTick();
+    const err = w.find('.oc-stats-error');
+    expect(err.exists()).toBe(true);
+    expect(err.text()).toContain('统计加载失败');
+    // 不把「—」画成正常读数
+    expect(w.find('.mk-kpi').exists()).toBe(false);
+    const retry = err.findAll('button').find((b) => b.text() === '重试')!;
+    await retry.trigger('click');
+    await flushPromises();
+    await nextTick();
+    expect(w.find('.oc-stats-error').exists()).toBe(false);
+    expect(w.find('.mk-kpi__label').text().trim()).toBe('路径总数');
+    w.unmount();
+  });
+
+  it('搜索框只承诺标题与用户（placeholder 不再含 ID）', async () => {
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+    const input = w.find('input.mk-filter__input');
+    expect(input.attributes('placeholder')).toBe('搜索标题或用户');
+    w.unmount();
+  });
+
+  it('空态：没路径时给「去目标对话」出口（不再有教学第二句）', async () => {
+    listMock.mockResolvedValue({ data: { data: { paths: [], pagination: { total: 0, page: 1, limit: 100 } } } });
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+    const empty = w.find('.mk-empty');
+    expect(empty.text()).toContain('没有学习路径');
+    expect(empty.text()).not.toContain('还没有生成过学习路径');
+    expect(empty.findAll('button').some((b) => b.text() === '去目标对话')).toBe(true);
+    // 翻页器常驻：0 行时仍给「共 0 条」
+    expect(w.find('.mk-pagination').text()).toContain('共 0 条');
+    w.unmount();
+  });
+
+  it('「其它」档可筛（枚举外取值的聚合），不再只是展示', async () => {
+    statsMock.mockResolvedValue({ data: { data: { byStatus: { active: 0, completed: 0, failed: 0, archived: 0, weird: 2 } } } });
+    listMock.mockResolvedValue({
+      data: { data: { paths: [mkPath('lp_weird', { status: 'weird' })], pagination: { total: 1, page: 1, limit: 100 } } },
+    });
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+    const otherPill = w.findAll('.mk-pill').find((p) => p.text().startsWith('其它'))!;
+    expect(otherPill).toBeTruthy();
+    await otherPill.trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody tr')).toHaveLength(1);
     w.unmount();
   });
 });

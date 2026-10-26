@@ -21,6 +21,7 @@
               <button v-if="isDeleted" type="button" class="mk-btn mk-btn--sm" :disabled="restoring" @click="doRestore">
                 {{ restoring ? '恢复中…' : '恢复用户' }}
               </button>
+              <button v-else type="button" class="mk-btn mk-btn--sm" @click="openEdit">编辑</button>
               <div v-if="canDelete" class="mk-menu">
                 <button type="button" class="mk-menu__btn" aria-label="账号操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
                 <div v-if="openMenu === 'account'" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -69,6 +70,8 @@
           <div v-if="grantMsgTone === 'error'" class="mk-alert ud-grant-row__notice">{{ grantMessage }}</div>
         </section>
     </div>
+    <!-- 与账号列表行内「编辑」同一份表单：改昵称 / 邮箱 / 角色、重置密码 -->
+    <UserFormDialog v-model:open="editOpen" :user="editUser" @saved="onEdited" />
   </div>
 
   <div v-else-if="detailError" class="ud-root">
@@ -96,7 +99,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
-import { liveUsers, timeAgo, errMsg, shortId } from './live'
+import UserFormDialog, { type EditableUser } from './UserFormDialog.vue'
+import { liveUsers, timeAgo, errMsg, shortId, refreshLiveUsers } from './live'
+import { isLive } from './store'
 import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
@@ -338,6 +343,29 @@ async function menuDelete() {
   closeMenu()
   await doDelete()
 }
+
+/* 编辑：与账号列表行内「编辑」共用 UserFormDialog（改昵称 / 邮箱 / 角色、重置密码） */
+const editOpen = ref(false)
+const editUser = computed<EditableUser | null>(() => {
+  const d0 = liveDetail.value
+  if (!d0) return null
+  return { id: uid.value, name: d0.name, email: d0.email, admin: d0.role === '管理员' }
+})
+function openEdit() {
+  editOpen.value = true
+}
+function onEdited(p: { mode: 'create' } | { mode: 'edit'; id: string; name: string; email: string; admin: boolean }) {
+  if (p.mode !== 'edit') return
+  // 详情与列表同源：本页改完，列表里的同一行也要同步（列表数据在 live 域）
+  const base = liveUsers.value.find((u) => u.id === p.id)
+  if (base) {
+    base.name = p.name
+    base.email = p.email
+    base.isAdmin = p.admin
+  }
+  void loadDetail()
+}
+
 async function doDelete() {
   const id = uid.value
   const name = liveDetail.value?.name || id
@@ -355,6 +383,12 @@ async function doDelete() {
     doneConfirm()
     // 停在本页：重拉后 isDeleted 翻真，删除入口被「恢复用户」顶替，详情态与后端一致
     void loadDetail()
+    // 列表同源：不重拉 live 域的话，从详情返回列表这一行还在、还显示正常
+    if (isLive.value) {
+      await refreshLiveUsers().catch(() => {
+        toast.error('用户已删除，但列表刷新失败，请手动刷新')
+      })
+    }
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
     failConfirm()
@@ -380,6 +414,12 @@ async function doRestore() {
     toast.success('用户已恢复，可重新登录')
     isDeleted.value = false
     void loadDetail()
+    // 列表同源：与列表页恢复后 refreshLiveUsers 同一口径
+    if (isLive.value) {
+      await refreshLiveUsers().catch(() => {
+        toast.error('用户已恢复，但列表刷新失败，请手动刷新')
+      })
+    }
   } catch (e) {
     toast.error(`恢复失败：${errMsg(e)}`)
   } finally {

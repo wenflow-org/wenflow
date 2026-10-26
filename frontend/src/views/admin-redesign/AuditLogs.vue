@@ -3,11 +3,9 @@
     <!-- 页头（newui/admin pagehead）：页名随 tab（审计日志/登录审计）+ 导出/刷新上移。
          无统计带（2026-10-02 用户拍板「新UI没有kpi条」：原型 renderAudit = pageTitle +
          card(tabs+table)，页头之下直接是列表卡；总数在分页 foot「共 N 条」单源可见） -->
-    <MkPageHead :title="statusTitle" sub="管理员操作与登录行为的完整审计追踪">
+    <MkPageHead title="审计日志">
       <template #actions>
-        <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用 -->
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="!rows.length" @click="exportCurrentPage">导出本页</button>
-        <!-- 2026-10-23：重取当前页跟随顶栏刷新广播（refreshPage 保留页码与列表），页头不再出第二颗 -->
+        <button type="button" class="mk-btn mk-btn--sm" @click="goExport">导出</button>
       </template>
     </MkPageHead>
 
@@ -40,12 +38,8 @@
       <!-- 筛选卡片头（关键词 / 时间范围 / 列） -->
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 时间范围常驻可操作（B14/F6-2 + 2026-10-24 用户「时间范围和筛选重新设计一下」）：
-               timeRange 默认 'today'，而后端按日界（Asia/Shanghai）过滤——档位必须主屏可见，
-               否则空态/低条数被读成「从未发生过」（实测操作审计默认 3 条、登录审计直接空态；
-               改「全部」后 87474 / 3927）。此前它是枚不可点的 <span>，真正的选择器藏在弹层里；
-               现在外壳沿用胶囊，内里就是原生 select，点文字或箭头都能改。 -->
-          <label class="mk-pill al-range" :class="{ 'mk-pill--active': timeRange !== 'today' }" title="统计与列表使用同一个时间窗口">
+          <!-- 时间范围常驻可操作，默认「全部」：默认「今天」时首屏是空态，会被读成「没有异常」 -->
+          <label class="mk-pill al-range" :class="{ 'mk-pill--active': timeRange !== 'all' }">
             <span class="al-range__k">时间范围</span>
             <span class="al-range__pick">
               <select v-model="timeRange" class="al-range__v" aria-label="时间范围" @change="applyFilters">
@@ -55,16 +49,29 @@
             </span>
           </label>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-          <!-- 失败 TOP 下钻的常驻状态（审核 #152）：弹层关闭后仍可见可退；徽章计数含 failedOnly，
-               点击 = 退出下钻（与弹层内已激活 chip 同义） -->
-          <button
-            v-if="failedOnly"
-            type="button"
-            class="al-fails__chip al-fails__chip--on"
-            aria-pressed="true"
-            :title="`只看失败：${failedAction ? failureLabel(failedAction) : '全部失败'}`"
-            @click="filterByFailure(failedAction)"
-          >只看失败 ×</button>
+          <!-- 失败 TOP 常驻主行：先看到「最近什么在失败」，再点 chip 下钻 -->
+          <div v-if="statsError" class="mk-alert mk-alert--row al-stats-error" role="alert">
+            <span class="mk-alert__msg">失败统计不可用</span>
+            <button type="button" class="mk-alert__btn" :disabled="statsLoading" @click="fetchStats">{{ statsLoading ? '重试中…' : '重试' }}</button>
+          </div>
+          <div v-else-if="tab === 'operation' && (failedCount > 0 || failureByAction.length)" class="al-fails">
+            <button
+              type="button"
+              class="al-fails__chip al-fails__chip--total"
+              :class="{ 'al-fails__chip--on': failedOnly && !failedAction }"
+              :aria-pressed="failedOnly && !failedAction"
+              @click="filterByFailure('')"
+            >失败 <b>{{ failedCount }}</b></button>
+            <button
+              v-for="f in failureByAction"
+              :key="f.action"
+              type="button"
+              class="al-fails__chip"
+              :class="{ 'al-fails__chip--on': failedOnly && failedAction === f.action }"
+              :aria-pressed="failedOnly && failedAction === f.action"
+              @click="filterByFailure(f.action)"
+            >{{ failureLabel(f.action) }} <b>{{ f.count }}</b></button>
+          </div>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
             :views="savedViews"
@@ -111,34 +118,12 @@
                   :value="activeActionValue"
                   class="mk-filter__select"
                   aria-label="按动作筛选"
-                  title="按本页动作快筛"
                   @change="applyActionFilter(($event.target as HTMLSelectElement).value)"
                 >
                   <option value="">全部动作</option>
                   <option v-for="a in actionOptions" :key="a.value" :value="a.value">{{ a.label }} {{ a.count }}</option>
                 </select>
               </label>
-              <!-- 失败 TOP 快捷下钻（近 2000 条失败内聚合）：点击 = 只看失败 + path 首段关键词，
-                   再点已激活 chip 退出；自头部右区迁入（同一机制，只换家不换行为） -->
-              <div v-if="statsError" class="mk-alert mk-alert--row" role="alert">
-                <span class="mk-alert__msg">失败 TOP 统计不可用，无法判断是否存在失败动作。</span>
-                <button type="button" class="mk-alert__btn" :disabled="statsLoading" @click="fetchStats">{{ statsLoading ? '重试中…' : '重试' }}</button>
-              </div>
-              <div v-else-if="failureByAction.length" class="al-fails al-fails--pop">
-                <span class="al-fails__label" title="失败最多的动作（基于最近 2000 条失败记录）">失败 TOP</span>
-                <!-- P2：span→button。后端 /admin/audit-logs 支持 success=true/false 白名单参数（parseSuccess），
-                     点击 = 只看失败 + path 首段关键词；再点已激活的 chip 退出下钻 -->
-                <button
-                  v-for="f in failureByAction"
-                  :key="f.action"
-                  type="button"
-                  class="al-fails__chip"
-                  :class="{ 'al-fails__chip--on': failedOnly && failedAction === f.action }"
-                  :title="f.action"
-                  :aria-pressed="failedOnly && failedAction === f.action"
-                  @click="filterByFailure(f.action)"
-                >{{ failureLabel(f.action) }} <b>{{ f.count }}</b></button>
-              </div>
             </div>
           </div>
         </div>
@@ -182,7 +167,7 @@
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('createdAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="colVisible('admin')" scope="col" class="al-c-admin">操作者</th>
               <th v-if="colVisible('action')" scope="col" class="al-c-action">动作</th>
-              <th v-if="!noTargetTypes && colVisible('tt')" scope="col" class="al-c-tt" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
+              <th v-if="!noTargetTypes && colVisible('tt')" scope="col" class="al-c-tt">目标类型</th>
               <th v-if="colVisible('target')" scope="col" class="al-c-target">目标</th>
               <th
                 v-if="colVisible('result')"
@@ -223,7 +208,7 @@
                          名字与方法读成两段无关信息。 -->
                     <span v-if="methodOf(log)" class="log-act-method">
                       <span class="log-action-sep" aria-hidden="true">·</span>
-                      <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
+                      <span class="log-method">{{ methodOf(log) }}</span>
                     </span>
                   </div>
                   <!-- 可区分字段（2026-10-24）：同秒同动作的重复写入此前整行完全一致；
@@ -233,8 +218,16 @@
                     <span v-if="log.durationMs != null">{{ fmtMs(log.durationMs) }}</span>
                   </div>
                 </td>
-                <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt" :title="log.targetType || '当前记录未包含目标类型'">{{ targetTypeText(log.targetType) }}</td>
-                <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''"><span class="al-ellipsis">{{ log.targetId ? shortId(log.targetId) : '—' }}</span></td>
+                <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt">{{ targetTypeText(log.targetType) }}</td>
+                <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">
+                  <button
+                    v-if="log.targetId && targetLinkOf(log)"
+                    type="button"
+                    class="al-target-link al-ellipsis"
+                    @click.stop="openTarget(log)"
+                  >{{ shortId(log.targetId) }}</button>
+                  <span v-else class="al-ellipsis">{{ log.targetId ? shortId(log.targetId) : '—' }}</span>
+                </td>
                 <td v-if="colVisible('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
                 <td v-if="colVisible('ip')" class="log-ip" :title="log.ip || ''"><span class="al-ellipsis">{{ ipText(log.ip) }}</span></td>
                 <td class="mk-th--right log-arrow" aria-hidden="true"><span class="log-arrow__i">▸</span></td>
@@ -320,6 +313,12 @@
                   class="mk-link"
                   @click="goSessions(a.username)"
                 >查看会话 →</button>
+                <button
+                  v-else-if="a.username"
+                  type="button"
+                  class="mk-link"
+                  @click="searchUsername(a.username)"
+                >查该用户名</button>
                 <span v-else class="mk-na">—</span>
               </td>
             </tr>
@@ -335,9 +334,7 @@
       />
     </template>
 
-    <!-- 空态（P1-1/P2-8，2026-09-27 走查）：
-         min：本页是 .mk-card--fill 应用式布局，未传 :min 时空态贴卡片头、下方 60-70% 视口空白；
-         文案按 tab 分流，筛选无结果时登录 tab 也说「无登录记录」而非统一的「无审计记录」 -->
+    <!-- 空态：一句事实 + 一个出口 -->
     <MkEmptyState
       v-else
       :id="panelId"
@@ -346,8 +343,8 @@
       min
       :title="isFiltered ? (tab === 'login' ? '当前筛选无登录记录' : '当前筛选无审计记录') : tab === 'login' ? '暂无登录审计' : '暂无审计记录'"
       :description="emptyDescription"
-      :action-text="isFiltered ? '清除筛选' : ''"
-      @action="clearFilters"
+      :action-text="emptyActionText"
+      @action="emptyAction"
     >
       <template #icon>
         <KeyRound v-if="tab === 'login'" :size="26" :stroke-width="1.75" style="opacity:.85" />
@@ -491,18 +488,13 @@ type TabId = (typeof tabs)[number]['id']
 
 const tab = ref<TabId>('operation')
 const keyword = ref('')
-const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today')
+const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('all')
 /* 筛选弹层（2026-10-05 卡头统一：动作/时间/失败 TOP 自主行收进共享 .mk-adv），
    Esc 关闭走共享 useEscape（与教学会话同一外壳） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })
-/* 生效筛选计数（触发钮角标）：动作快筛 / 只看失败下钻——时间档已提上主行，不再计。
-   下钻态此前不计入，弹层关闭后工具栏无任何可见指示（审核 #152） */
-const advCount = computed(
-  () =>
-    (activeActionValue.value ? 1 : 0) +
-    (failedOnly.value ? 1 : 0)
-)
+/* 生效筛选计数（触发钮角标）：弹层里只剩动作快筛一项；失败下钻与时间档都在主行 */
+const advCount = computed(() => (activeActionValue.value ? 1 : 0))
 
 /** 页签 panel 关联（审核 #154）：id/aria-controls 成对，面板随当前页签取同名 id */
 const panelId = computed(() => `al-panel-${tab.value}`)
@@ -521,6 +513,8 @@ const failedOnly = ref(false)
 const failedAction = ref('')
 /** P2-16：失败按动作聚合 TOP（后端 /stats 返回），作为「失败 N」的下钻入口 */
 const failureByAction = ref<Array<{ action: string; count: number }>>([])
+/** 窗口失败条数（后端 /stats 的 failed；与失败 TOP 同一次响应） */
+const failedCount = ref(0)
 /** /stats 失败时单独标记：空聚合既可能表示「没有失败动作」，也可能表示统计不可用，
     不区分会让用户把请求故障误读为无失败；该状态在失败 TOP 区提供说明与重试 */
 const statsError = ref('')
@@ -558,13 +552,13 @@ const noTargetTypes = computed(() => logs.value.length > 0 && logs.value.every((
 /* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担） */
 const AL_COLS_KEY = 'wf_audit_hidden_cols'
 const alColDefs = [
-  { key: 'time', label: '时间', title: '操作时间' },
-  { key: 'admin', label: '操作者', title: '管理员账号' },
-  { key: 'action', label: '动作', title: 'HTTP 方法与路径' },
-  { key: 'tt', label: '目标类型', title: '操作对象类别' },
-  { key: 'target', label: '目标', title: '操作对象 ID' },
-  { key: 'result', label: '结果', title: '成功 / 失败' },
-  { key: 'ip', label: 'IP', title: '来源 IP' },
+  { key: 'time', label: '时间' },
+  { key: 'admin', label: '操作者' },
+  { key: 'action', label: '动作' },
+  { key: 'tt', label: '目标类型' },
+  { key: 'target', label: '目标' },
+  { key: 'result', label: '结果' },
+  { key: 'ip', label: 'IP' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
 /* 窄屏（≤720）：目标类型/目标/IP 次要列随 useIsNarrow 隐藏（th/td 统一走 colVisible），
@@ -666,6 +660,7 @@ async function fetchStats() {
     const stats = res.data?.data?.stats
     if (stats) {
       total.value = typeof stats.total === 'number' ? stats.total : total.value
+      failedCount.value = typeof stats.failed === 'number' ? stats.failed : 0
     }
     const byAction = res.data?.data?.failureByAction
     failureByAction.value = Array.isArray(byAction)
@@ -700,7 +695,8 @@ function failureKeyword(action: string): string {
   return m ? m[1] : action
 }
 
-/** 失败 TOP chip 下钻：只看失败 + 该动作关键词；再点已激活的 chip = 退出下钻（关键词一并还原） */
+/** 失败 chip 下钻：只看失败 + 该动作关键词；再点已激活的 chip = 退出下钻（关键词一并还原）。
+    传空串 = 只按失败筛（「失败 N」总 chip）。 */
 function filterByFailure(action: string) {
   if (failedOnly.value && failedAction.value === action) {
     failedOnly.value = false
@@ -786,12 +782,36 @@ watch([alSortKey, alSortDir], () => {
 /* 顶栏刷新：重取当前页（与旧页头钮同一语义，保留页码与列表） */
 watch(liveRefreshSeq, () => { void refreshPage() })
 
-const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'today' || failedOnly.value)
+const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'all' || failedOnly.value)
 function clearFilters() {
   keyword.value = ''
-  timeRange.value = 'today'
+  timeRange.value = 'all'
   failedOnly.value = false
   failedAction.value = ''
+  void applyFilters()
+}
+/** 空态出口：有筛选 → 清筛选；默认「全部」为空则没有更宽的时间窗可放 */
+const emptyActionText = computed(() => (isFiltered.value ? '清除筛选' : ''))
+function emptyAction() {
+  if (isFiltered.value) clearFilters()
+}
+
+/** 目标对象可点：用户 / 会话走二级页深链（AdminConsole 的 ?view=&id= 契约），其余类型保持纯文本 */
+function targetLinkOf(log: AuditLogRow): string {
+  const t = String(log.targetType || '').toLowerCase()
+  return t === 'user' || t === 'session' ? t : ''
+}
+function openTarget(log: AuditLogRow) {
+  const t = targetLinkOf(log)
+  const id = String(log.targetId || '')
+  if (!t || !id) return
+  const view = t === 'user' ? 'user' : 'session-real'
+  const scene = t === 'user' ? 'people' : 'teaching-sessions'
+  void router.push({ path: `/admin/${scene}`, query: { view, id } })
+}
+/** 登录失败/锁定行：按该用户名重查 */
+function searchUsername(username: string) {
+  keyword.value = username
   void applyFilters()
 }
 
@@ -811,7 +831,7 @@ const AUDIT_SIZES = [15, 30, 50, 100] as const
 function readFiltersFromRoute() {
   keyword.value = typeof route.query.q === 'string' ? route.query.q : ''
   const r = typeof route.query.range === 'string' ? route.query.range : ''
-  timeRange.value = (TIME_RANGES as readonly string[]).includes(r) ? (r as typeof timeRange.value) : 'today'
+  timeRange.value = (TIME_RANGES as readonly string[]).includes(r) ? (r as typeof timeRange.value) : 'all'
   failedOnly.value = route.query.failed === '1'
   failedAction.value = typeof route.query.action === 'string' ? route.query.action : ''
   const p = Number(route.query.page)
@@ -826,7 +846,7 @@ function syncFiltersToRoute() {
   const q = { ...route.query }
   for (const k of AUDIT_FILTER_KEYS) delete q[k]
   if (keyword.value.trim()) q.q = keyword.value.trim()
-  if (timeRange.value !== 'today') q.range = timeRange.value
+  if (timeRange.value !== 'all') q.range = timeRange.value
   if (failedOnly.value) q.failed = '1'
   if (failedAction.value) q.action = failedAction.value
   if (page.value > 1) q.page = String(page.value)
@@ -846,28 +866,24 @@ watch(
   }
 )
 
-/** 空态副文案（B14/F6-2）：未筛选时补一句时间范围口径——默认「今天」下清空只说明
-    今天无记录，不等于历史从未发生（会话安全页跳登录审计最易误读）。
-    未筛选 ⇒ timeRange 必为默认档（isFiltered 口径已含时间范围）。 */
-const emptyDescription = computed(() => {
-  const base = tab.value === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕'
-  if (isFiltered.value) return base
-  return `${base} · 默认时间范围「${timeRangeLabels[timeRange.value]}」，打开「筛选」即可修改`
-})
+/** 空态：只留一句事实 */
+const emptyDescription = computed(() =>
+  timeRange.value === 'today' ? '今天没有记录' : ''
+)
 
 /** 当前筛选快照（仅含非默认值；tab 默认「操作审计」不存） */
 function filterSnapshot(): Record<string, string> {
   const snap: Record<string, string> = {}
   if (tab.value !== 'operation') snap.tab = tab.value
   if (keyword.value.trim()) snap.q = keyword.value.trim()
-  if (timeRange.value !== 'today') snap.range = timeRange.value
+  if (timeRange.value !== 'all') snap.range = timeRange.value
   return snap
 }
 
 /** 快照可读摘要（pill 悬停说明 / 命名建议） */
 const filterLabel = computed(() => {
   const parts: string[] = []
-  if (timeRange.value !== 'today') parts.push(timeRangeLabels[timeRange.value])
+  if (timeRange.value !== 'all') parts.push(timeRangeLabels[timeRange.value])
   if (keyword.value.trim()) parts.push(`关键词「${keyword.value.trim()}」`)
   if (tab.value === 'login') parts.push('登录审计')
   return parts.join(' · ') || ''
@@ -880,7 +896,7 @@ function describeQuery(q: Record<string, string>): string {
   return parts.join(' · ') || '默认筛选'
 }
 function savedViewTitle(v: SavedView): string {
-  return `${describeQuery(v.query)}（点击应用 · × 删除）`
+  return describeQuery(v.query)
 }
 
 /** 应用保存视图：整体重写筛选后重查（tab 相同也走 applyFilters——keyword/range 无 watch） */
@@ -894,7 +910,7 @@ function applySavedView(v: SavedView) {
   keyword.value = q.q || ''
   timeRange.value = (TIME_RANGES as readonly string[]).includes(q.range)
     ? (q.range as typeof timeRange.value)
-    : 'today'
+    : 'all'
   void applyFilters()
 }
 
@@ -908,8 +924,6 @@ const activeSavedViewName = computed(() => {
 function onSaveView(name: string) {
   saveViewToStore(name, filterSnapshot())
 }
-
-const statusTitle = computed(() => (tab.value === 'login' ? '登录审计' : '审计日志'))
 
 const REASON_TEXT: Record<string, string> = {
   account_locked: '账户已锁定',
@@ -951,16 +965,9 @@ function goSessions(username: string) {
   void router.push({ path: '/admin/ops-hub', query: { tab: 'security', user: username } })
 }
 
-/** 导出当前筛选页为 JSON（与 ExecLogs.exportJson 同款：仅当前页 rows，非全量筛选结果）。
-    操作审计 / 登录审计两个 tab 共用——rows 随 tab 取对应列表，文件名带 scope 区分 */
-function exportCurrentPage() {
-  const blob = new Blob([JSON.stringify(rows.value, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `audit-logs-${tab.value}-${Date.now()}.json`
-  a.click()
-  URL.revokeObjectURL(url)
+/** 导出只有运营中心数据导出页一个入口（CSV、最近 2000 条），本页不再自出 JSON */
+function goExport() {
+  void router.push({ path: '/admin/ops-hub', query: { tab: 'export' } })
 }
 </script>
 
@@ -982,6 +989,19 @@ function exportCurrentPage() {
 .al-table .log-target, .al-table .log-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* td 上的 text-overflow 在表格单元里不生效（2026-10-22 实测仍切字）：内层 span 承担截断 */
 .al-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 目标可点（用户 / 会话）：继承单元格字号，只染字色，不撑行高 */
+.al-target-link {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  text-align: left;
+  cursor: pointer;
+}
+.al-target-link:hover { text-decoration: underline; }
 
 /* 本页无统计带（原型 renderAudit 页头下直接是列表卡，2026-10-02 撤） */
 
@@ -996,10 +1016,9 @@ function exportCurrentPage() {
    2026-10-06：.log-body 包裹层已拆（#139/#140），th nowrap 由 mk-primitives.css 的
    .mk-table th 承担，纵向滚动与表头 sticky 交给 .mk-card--fill > .mk-table-scroll。 */
 
-/* 行状态：失败行淡红底 + 展开行高亮（行首 3px 色条已撤，2026-10-03 用户拍板：
-   与级别列同源冗余、语义不可发现；失败语义由级别徽章 + 淡红底承载） */
+/* 行状态：失败行语义红底 + 展开行高亮。失败语义由结果徽章与红底共同承载 */
 .log-tr { cursor: pointer; }
-.log-tr--err { background: rgba(220, 38, 38, 0.04); }
+.log-tr--err { background: var(--mk-red-bg); }
 .log-tr--open td { background: var(--mk-blue-bg); }
 .log-tr--open .log-arrow__i { transform: rotate(90deg); }
 
@@ -1037,6 +1056,7 @@ function exportCurrentPage() {
 .log-act-method { display: inline-flex; align-items: center; flex: none; }
 /* 动作格第二行：状态码/耗时是行内可区分字段，弱化小字 */
 .log-act-meta { display: flex; align-items: center; gap: 8px; margin-top: 1px; color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
+/* HTTP 方法徽标：中性单色。语义色只留给结果列——按方法上绿/琥珀/红会被读成执行结果 */
 .log-method {
   display: inline-block;
   font-family: var(--mk-mono);
@@ -1044,21 +1064,13 @@ function exportCurrentPage() {
   font-weight: 800;
   border-radius: var(--mk-radius-sm);
   padding: 1px 7px;
-  /* 最小宽：两端对齐后 chip 右缘成一条线，但 POST 与 DELETE 字样宽窄不同，左缘仍差十几像素；
-     收一个下限把最窄的 POST 抬到与 PUT 同级（再放宽到 DELETE 那么宽会让 1440 档名字+徽章放不下、
-     行高翻倍，实测过）。 */
+  /* 最小宽：POST 与 DELETE 字样宽窄不同，收一个下限让左缘对齐 */
   min-width: 46px;
   text-align: center;
   vertical-align: middle;
+  background: var(--mk-surface-3);
+  color: var(--mk-muted);
 }
-.log-method--get { background: var(--mk-blue-bg); color: #1d4ed8; }
-.log-method--post { background: var(--mk-green-bg); color: #047857; }
-.log-method--put { background: var(--mk-amber-bg); color: var(--mk-amber); }
-.log-method--patch { background: #f5f3ff; color: #6d28d9; }
-.log-method--delete { background: var(--mk-red-bg); color: var(--mk-red-strong); }
-.log-method--options,
-.log-method--head { background: var(--mk-badge-virtual-bg); color: #475569; }
-/* HTTP 方法徽标：按方法着色（颜色仅作识别辅助） */
 /* 动作名与方法之间的分隔符：两段之间隔着空白，仍留一个点，复制文本时不至于「推进虚拟会话POST」黏成一体 */
 .log-action-sep {
   display: inline-block;
@@ -1138,11 +1150,10 @@ function exportCurrentPage() {
 .al-range__pick svg { position: absolute; right: 0; color: var(--mk-muted); pointer-events: none; }
 /* 筛选触发器与「列」同为文字动作：图标与文字同一基线，不给它单独一颗描边按钮 */
 .al-adv-trigger { display: inline-flex; align-items: center; gap: 4px; }
-/* P2-16：失败 TOP 聚合 chip（点击下钻到该动作的失败记录） */
-.al-fails { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 48%; }
-/* 弹层内档位：不受头部右区 48% 限宽，chip 允许换行铺开 */
-.al-fails--pop { max-width: none; }
-.al-fails__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); }
+/* 失败 TOP 常驻主行：总数 chip + 各动作 chip，点击下钻 */
+.al-fails { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 100%; }
+.al-fails__chip--total { border-color: color-mix(in srgb, var(--mk-red) 40%, var(--mk-line)); }
+.al-stats-error { padding: 2px 8px; }
 .al-fails__chip {
   border: 1px solid var(--mk-line);
   border-radius: 999px;
@@ -1318,17 +1329,6 @@ function exportCurrentPage() {
   .log-payload-row td { padding-left: 100px !important; }
   .log-arrow { font-size: var(--mk-fs-body); }
 }
-
-/* ================= 暗色模式：仅方法徽标需单独配色。行底/嵌套面已随
-   --mk-blue-bg / --mk-surface-2 / --mk-line 变量自动适配，
-   原嵌套块与扁平规则两组重复覆盖一并删除 ================= */
-html[data-theme='dark'] .log-method--get { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--wf-color-primary-light); }
-html[data-theme='dark'] .log-method--post { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
-html[data-theme='dark'] .log-method--put { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
-html[data-theme='dark'] .log-method--patch { background: color-mix(in srgb, var(--mk-purple) 16%, transparent); color: var(--wf-color-accent-light); }
-html[data-theme='dark'] .log-method--delete { background: color-mix(in srgb, var(--wf-color-danger) 14%, transparent); color: var(--wf-color-danger); }
-html[data-theme='dark'] .log-method--options,
-html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: var(--mk-muted); }
 
 /* 本页空态撑满主区剩余高度的覆写（P1-1「空态利用」→ 审核 #156 改为 flex:1 + min-height:0）
    已提升为共享口径（styles/mk-primitives.css 的 .mk-card--fill > .mk-empty--min，2026-10-24），

@@ -43,6 +43,13 @@ describe('总览小卡 0 行空态与列名', () => {
     }
   });
 
+  it('空态只留一句事实：不写「有调用后会…」「有动静就会…」这类教学第二句', () => {
+    expect(src).not.toContain('有调用后会按调用次数从多到少排行');
+    expect(src).not.toContain('有人开始学习后');
+    expect(src).not.toContain('有需要处理的会出现在这里');
+    expect(src).not.toContain('有动静就会出现在这里');
+  });
+
   it('列名用可数的全名：调用次数 / 失败次数（表头与定宽同改，保像素级对齐）', () => {
     expect(src).toContain('>调用次数</span>');
     expect(src).toContain('>失败次数</span>');

@@ -129,7 +129,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     expect(w.find('.mk-kpi-grid').exists()).toBe(true)
   })
 
-  it('KPI 卡带：成功率/空闲/平均耗时卡（失败节点由卡头「仅看需关注」pill 单源承载）', async () => {
+  it('KPI 卡带：成功率/平均耗时卡（失败节点由卡头「仅看需关注」pill 单源承载）', async () => {
     const w = await mountSkills()
     // 成功率 76.7%（100+50 调用，30+5 失败 → 115/150，1 位小数精度）
     // 2026-10-19 用户走查「KPI hint 在报读数」：副行只留口径短语，分子分母进 title 长释
@@ -140,12 +140,24 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     expect(rate.attributes('title')).not.toContain('成功 115')
     expect(rate.attributes('title')).toContain('低于 90% 标红')
     expect(rate.attributes('title')).toContain('低于 97% 标黄')
-    // 空闲（skill:c 0 调用）/ 平均耗时卡在
-    expect(kpiOf(w, '空闲')!.find('.mk-kpi__num').text()).toBe('1')
+    // 平均耗时卡在；「空闲」卡已撤（2026-10-26 评审：4 张固定，不随数据换行）
     expect(kpiOf(w, '平均耗时')!.find('.mk-kpi__num').text()).toBeTruthy()
+    expect(kpiOf(w, '空闲')).toBeUndefined()
     // 失败节点不再单列：卡头 pill 承载同源计数
     expect(w.text()).not.toContain('失败节点')
     expect(w.text()).toContain('仅看需关注')
+    w.unmount()
+  })
+
+  it('「需关注 Skill」KPI 可点：点击即切到「仅看需关注」（pill 不再挂计数）', async () => {
+    const w = await mountSkills()
+    const kpi = kpiOf(w, '需关注 Skill')!
+    expect(kpi.element.tagName).toBe('BUTTON')
+    expect(kpi.find('.mk-kpi__num').text()).toBe('1')
+    await kpi.trigger('click')
+    expect((w.vm as any).onlyAttention).toBe(true)
+    const pill = w.findAll('.mk-pill').find((p) => p.text().includes('仅看需关注'))!
+    expect(pill.find('.mk-pill__count').exists()).toBe(false)
     w.unmount()
   })
 
@@ -227,12 +239,13 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
-  it('失败行操作列「查失败」小钮：携 agent+status intent 深链执行日志', async () => {
+  it('失败行「查失败」：挂在 Skill 名副行，携 agent+status intent 深链执行日志', async () => {
     const w = await mountSkills()
     // 默认按失败数降序：第一行 = skill:a（30 失败）
     const rowBtns = w.findAll('.sk-table tbody tr')[0].findAll('button').map((b) => b.text())
     expect(rowBtns).toContain('查失败')
     const failBtn = w.findAll('.sk-table tbody tr')[0].findAll('button').find((b) => b.text() === '查失败')!
+    expect(failBtn.classes()).toContain('sk-fail-link')
     await failBtn.trigger('click')
     expect(intent.scene).toBe('execution-logs')
     expect(intent.agentFilter).toBe('skill:a')
@@ -241,6 +254,18 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     intent.scene = 'overview'
     intent.agentFilter = ''
     intent.statusFilter = ''
+  })
+
+  it('Skill 主行 id 是可点的蓝色链接（整行仍可点），操作列已撤', async () => {
+    const w = await mountSkills()
+    const row = w.findAll('.sk-table tbody tr')[0]
+    const link = row.find('.sk-name-link')
+    expect(link.exists()).toBe(true)
+    expect(link.element.tagName).toBe('BUTTON')
+    expect(link.text()).toBe('skill:a')
+    // 操作列（100px 整列空白）已撤：表头不再有「操作」
+    expect(w.find('.sk-table thead').text()).not.toContain('操作')
+    w.unmount()
   })
 
   it('P95 列默认隐藏（恒「—」无信息量）：首访不含该表头，可在「列」菜单开启', async () => {

@@ -79,7 +79,7 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     detail.mockResolvedValue({ data: { data: {} } });
   });
 
-  it('People：页头 KPI 带已退役（2026-10-01 用户拍板：原型无此板块），页头=单视图「用户与学习者」', async () => {
+  it('People：页头 KPI 带已退役（2026-10-01 用户拍板：原型无此板块），页头=单视图「用户账号」', async () => {
     const { router, ready } = mockRouter('/admin/people');
     await ready;
     const w = mount(People, { global: { plugins: [router] } });
@@ -87,21 +87,21 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 反向断言：不再渲染任何 KPI 卡
     expect(kpiLabels(w)).toEqual([]);
     expect(w.find('.mk-kpi-grid').exists()).toBe(false);
-    // 页头 = 原型 pageTitle 形态：页名 + 副题（2026-10-04 学习状态拆页后副题固定为账号管理口径）
+    // 页头 = 页名 + 主操作（副题已删：复述页名属注释型文案）
     expect(w.find('.mk-pagehead').exists()).toBe(true);
-    expect(w.find('.mk-pagehead').text()).toContain('管理用户账号、角色与登录状态');
+    expect(w.find('.mk-pagehead').text()).toContain('用户账号');
     expect(w.find('.mk-pagehead').text()).not.toContain('学习状态分布');
     w.unmount();
   });
 
-  it('目标对话独立页：KPI 面板 = 会话总数/完结率/参与用户/近 7 天新增，状态计数归卡头 pills（2026-10-17 分布带退役）', async () => {
+  it('目标对话独立页：KPI 面板 = 总数/完结率/停滞（2026-10-26 增长读数并入总数卡），状态计数归卡头 pills', async () => {
     const { router, ready } = mockRouter('/admin/goal-conversations');
     await ready;
     const w = mount(GoalConversations, { global: { plugins: [router] } });
     await settle();
     // 2026-10-17：分布带退役，完结率从带副文升独立 KPI 卡（两位小数 → 四舍五入）；状态计数迁回卡头 pills
-    // P-49（#74）：停滞会话从分布带 hint 升为卡，排尾
-    expect(kpiLabels(w)).toEqual(['目标对话数', '完结率', '参与用户', '近 7 天新增', '停滞目标对话']);
+    // 2026-10-26：「参与用户」「近 7 天新增」两张增长读数卡删除，近 7 天新增改挂总数卡数值行注记
+    expect(kpiLabels(w)).toEqual(['目标对话数', '完结率', '停滞目标对话']);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
     // 构成卡旧形态不复辟：状态计数只活在卡头 pills（10-02 撤双带判例不回退）
     expect(w.find('.mk-card .buckets').exists()).toBe(false);

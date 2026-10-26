@@ -5,9 +5,6 @@
     <div class="mk-card__head">
       <div class="sk-rec__title">
         <h3 class="mk-card__title">技能一致性核查</h3>
-        <span class="mk-card__meta" title="核对四个来源的登记是否一致：配置文件清单、系统运行注册、线上生效 Prompt、技能登记册">配置文件 × 运行注册 × 生效版本 × 登记册</span>
-        <!-- 数据随进入本页签拉取，不参与健康中心 60s 轮询（审核 #83）；轮询页不放刷新钮，
-             失败/空态保留重试逃生动作。 -->
         <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click="clearRecDiff">清除差集定位</button>
       </div>
       <MkLoading v-if="recLoading" inline />
@@ -45,13 +42,16 @@
     <template v-else-if="recReport">
       <div class="sk-rec-tools">
         <div class="mk-pills">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !recOnlyAbnormal }" :aria-pressed="!recOnlyAbnormal" @click="recOnlyAbnormal = false">全部</button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': recOnlyAbnormal }" :aria-pressed="recOnlyAbnormal" @click="recOnlyAbnormal = true">仅看异常</button>
+          <button
+            v-for="f in REC_FILTERS"
+            :key="f.id"
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': recFilter === f.id }"
+            :aria-pressed="recFilter === f.id"
+            @click="setRecFilter(f.id)"
+          >{{ f.label }}</button>
         </div>
-        <!-- 2026-10-07 F6-3：异常口径与卡头 pill / 概要「对账异常」KPI 统一为「未注册 / 无生效版本 / 失效注册残留」
-             三项（完成度非 live 属「完成度」页签与第 4 张 KPI 的域，不再并进对账异常——原口径把两域混算，
-             造成 KPI 与筛选行集互斥） -->
-        <span class="mk-card__meta" title="异常三类：未注册（配置声明缺失）· 无生效版本（缺少线上生效 Prompt）· 失效注册残留（登记册已删但注册仍残留）">核查异常：未注册 · 无生效版本 · 失效注册残留</span>
       </div>
       <div class="mk-table-scroll">
         <table v-if="recReport.items.length && recPageRows.length" class="mk-table sk-table sk-rec-table mk-table--fixed">
@@ -165,7 +165,7 @@
     <MkEmptyState
       v-else
       title="暂无一致性核查数据"
-      description="技能尚未登记，或一致性核查报告暂不可用。可点击「刷新」重试。"
+      description="技能尚未登记，或一致性核查报告暂不可用。"
       action-text="刷新"
       :action-busy="recLoading"
       action-busy-text="刷新中…"
@@ -176,9 +176,9 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { isLive } from "./store";
-import { errMsg } from "./live";
+import { errMsg, liveRefreshSeq } from "./live";
 import { completionMetaOf } from "./glossaryMeta";
 import Pagination from "./Pagination.vue";
 import MkEmptyState from "@/components/mk/MkEmptyState.vue";
@@ -193,6 +193,14 @@ const emit = defineEmits<{ (e: "openSkill", id: string): void; (e: "refresh"): v
 /* 文案单源（R6 复读单源化）：口径 pill 与明细行两种视图的「无生效版本」悬停释共用一份 */
 const ACTIVE_MISSING_HINT = "缺少线上生效 Prompt";
 
+/** 筛选档：全部 / 核查异常（差集行）/ 完成度未达标 */
+type RecFilter = "all" | "abnormal" | "unmet";
+const REC_FILTERS: Array<{ id: RecFilter; label: string }> = [
+  { id: "all", label: "全部" },
+  { id: "abnormal", label: "仅看异常" },
+  { id: "unmet", label: "仅看未达标" },
+];
+
 const ownReport = ref<SkillReconciliationReport | null>(null);
 const ownError = ref("");
 /** 宿主（Skills 目录表）是唯一拉取方并经 prop 下发（避免同屏双请求）；prop 缺省（独立挂载/测试）时自取。
@@ -202,8 +210,9 @@ const recReport = computed<SkillReconciliationReport | null>(() =>
 );
 const recError = computed<string>(() => (props.error !== undefined ? props.error || "" : ownError.value));
 const recLoading = ref(false);
-const recOnlyAbnormal = ref(false);
+const recFilter = ref<RecFilter>("all");
 const route = useRoute();
+const router = useRouter();
 const recDiff = ref("");
 const recPanelRef = ref<HTMLElement | null>(null);
 let recDeepLinked = false;
@@ -211,10 +220,24 @@ let recDeepLinked = false;
 function applyRecQuery() {
   const recon = String(route.query.recon || "");
   const diff = typeof route.query.diff === "string" ? route.query.diff : "";
-  recDeepLinked = recon === "1" || recon === "true";
+  if (diff === "unregistered" || diff === "active-missing" || diff === "abnormal") recFilter.value = "abnormal";
+  else if (diff === "unmet") recFilter.value = "unmet";
+  else if (diff === "all") recFilter.value = "all";
+  recDeepLinked = recon === "1" || recon === "true" || diff === "unmet" || diff === "unregistered" || diff === "active-missing" || diff === "abnormal";
   recDiff.value = diff === "unregistered" || diff === "active-missing" || diff === "live" ? diff : "";
 }
 function clearRecDiff() { recDiff.value = ""; }
+/** 手点筛选：清掉 URL 上的差集定位，否则地址栏与屏幕上的筛选互相矛盾 */
+function setRecFilter(f: RecFilter) {
+  recFilter.value = f
+  if (recDiff.value) recDiff.value = ""
+  if (route.query.diff || route.query.recon) {
+    const query = { ...route.query }
+    delete query.diff
+    delete query.recon
+    void router.replace({ query })
+  }
+}
 
 watch(recReport, async (report) => {
   if (!report || !recDeepLinked) return;
@@ -243,6 +266,9 @@ async function refresh() {
 
 // isLive 翻转的刷新节奏由宿主承担（prop 模式），仅自取模式在此响应
 watch(isLive, () => { if (props.report === undefined) refresh(); });
+// 顶栏刷新：本组件自取报告时跟着重拉（宿主健康中心不代它拉）
+watch(liveRefreshSeq, () => { if (props.report === undefined) refresh(); });
+watch(() => route.query.diff, () => { applyRecQuery(); });
 onMounted(() => { applyRecQuery(); refresh(); });
 
 const recStatusOrder = ["draft", "handler-ready", "core-ready", "fields-synced", "live"] as const;
@@ -273,22 +299,23 @@ const recGroups = computed<RecGroup[]>(() => {
 });
 
 function matchesRecFilter(row: RecRow): boolean {
-  if (recOnlyAbnormal.value && !isRecAbnormal(row)) return false;
+  if (recFilter.value === "abnormal" && !isRecAbnormal(row)) return false;
+  if (recFilter.value === "unmet" && row.completion.status === "live") return false;
   if (recDiff.value === "unregistered") return row.diff === "unregistered";
   if (recDiff.value === "active-missing") return row.diff === "active-missing";
   if (recDiff.value === "live") return row.completion.status === "live";
   return true;
 }
-/** 异常口径（2026-10-07 F6-3 与卡头 pill / 概要「对账异常」KPI 单源）：未注册 / 无生效版本（row.diff）
-    + 失效注册残留（表下残留块，无户口簿行可挂）。完成度非 live 属「完成度」页签与第 4 张 KPI 的域，
-    不再并进本筛选——原口径「diff ∪ 非 live」使筛选行集大于 KPI 可定位集，同屏两套互斥口径。 */
+/** 核查异常口径：未注册 / 无生效版本（row.diff）+ 失效注册残留（表下残留块，无户口簿行可挂）。
+    完成度非 live 由「仅看未达标」单列，不并进本档。 */
 function isRecAbnormal(row: RecRow): boolean { return row.diff !== null; }
 
 const recFlat = computed<RecEntry[]>(() => {
   const out: RecEntry[] = [];
+  const filtering = recFilter.value !== "all" || !!recDiff.value;
   for (const g of recGroups.value) {
-    const items = recDiff.value || recOnlyAbnormal.value ? g.items.filter(matchesRecFilter) : g.items;
-    if ((recDiff.value || recOnlyAbnormal.value) && !items.length) continue;
+    const items = filtering ? g.items.filter(matchesRecFilter) : g.items;
+    if (filtering && !items.length) continue;
     out.push({ kind: "group", group: { ...g, items, liveCount: items.filter((r) => r.completion.status === "live").length } });
     for (const row of items) out.push({ kind: "row", row });
   }
@@ -305,7 +332,7 @@ const recShown = computed<RecEntry[]>(() =>
   recRowEntries.value.slice((recPage.value - 1) * recPageSize.value, recPage.value * recPageSize.value)
 );
 /** 筛选/差集定位变化 → 回第 1 页（数据缩水导致的越界由 Pagination 自身收敛） */
-watch([recOnlyAbnormal, recDiff], () => { recPage.value = 1; });
+watch([recFilter, recDiff], () => { recPage.value = 1; });
 
 const recPageRows = computed<RecEntry[]>(() => {
   const seen = new Set<string>();
@@ -331,6 +358,7 @@ const recEmptyText = computed<string>(() => {
   if (recDiff.value === "unregistered") return "无未注册 Skill：全部已声明";
   if (recDiff.value === "active-missing") return "无缺生效版本的 Skill：全部已生效";
   if (recDiff.value === "live") return "无完成度已上线的 Skill";
+  if (recFilter.value === "unmet") return "无未达标 Skill：全部已上线";
   const orphans = recReport.value?.orphanRegistrations.length ?? 0;
   if (orphans > 0) return `无异常技能：${total} 项全部核查一致，另有 ${orphans} 条失效注册残留`;
   return `无异常技能：${total} 项全部核查一致`;

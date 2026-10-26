@@ -41,6 +41,7 @@ vi.mock('../live', async () => {
     liveAnnouncements: ref([]),
     liveFailures: ref({}),
     liveRefreshSeq: ref(0),
+    loadLiveData: vi.fn(async () => {}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
     shortId: (s: string) => s,
@@ -82,24 +83,22 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(w.find('.mk-alert').exists()).toBe(true)
     expect(w.text()).toContain('待办数据加载失败')
     // 读数不得显假 0：三个失败域显「—」+「加载失败」脚注，只有「草稿公告」（取 live 层、未失败）显真 0。
-    // 2026-10-18 用户拍板：四张读数卡升到页签栏之上（页级概览 + 页签内工作台），
-    // 选择器从行内 .ow-rankrow__count 回到 .mk-kpi__num，断言语义不变。
+    // 2026-10-18 用户拍板：四张读数卡升到页签栏之上（页级概览 + 页签内工作台）。
     const naValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '—')
     expect(naValues).toHaveLength(3)
     expect(w.findAll('.mk-kpi__hint--bad')).toHaveLength(3)
     const zeroValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '0')
     expect(zeroValues).toHaveLength(1)
-    // 数字单源：行动清单里不再复读计数（读数卡与行动行同一组四项，两处讲两遍是本次走查的原始问题）
-    expect(w.findAll('.ow-rankrow__count')).toHaveLength(0)
-    // 三个失败域行动行标失败态，且该行不得显示「已清零」
-    // （第 4 行「草稿公告」取自 live 层，未失败 → 仍显示「已清零」是正确的）
-    // 2026-10-01 对齐原型：待办清单由行动行改为 metricCard 条 + ranklist 行，
-    // 失败类名随之由 .ow-todo--failed 改为 .ow-rankrow--failed（语义断言不变）
-    const failedRows = w.findAll('.ow-rankrow--failed')
-    expect(failedRows).toHaveLength(3)
-    for (const row of failedRows) {
+    // 2026-10-26：页签内保留「待办清单」作为行动出口；失败行不可点、不显示「去处理」
+    expect(w.findAll('.ow-rankrow')).toHaveLength(4)
+    expect(w.findAll('.ow-rankrow--failed')).toHaveLength(3)
+    for (const row of w.findAll('.ow-rankrow--failed')) {
       expect(row.text()).toContain('加载失败')
-      expect(row.text()).not.toContain('已清零')
+      expect(row.attributes('disabled')).toBeDefined()
+    }
+    const failedCards = w.findAll('.mk-kpi').filter((c) => c.find('.mk-kpi__num').text() === '—')
+    for (const card of failedCards) {
+      expect(card.classes()).not.toContain('mk-kpi--clickable')
     }
     // 重试入口在失败条上（2026-10-23 页头第二颗刷新钮撤除：顶栏已有刷新，失败态就地重试）
     expect(w.find('.mk-alert--row .mk-alert__btn').text()).toContain('重试')
@@ -107,7 +106,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     w.unmount()
   })
 
-  it('三个待办域成功且全为 0 → 结论句「运营待办全部已清零」入「待办清单」卡头 meta（2026-10-04 状态条退役迁入）', async () => {
+  it('三个待办域成功且全为 0 → 读数带四卡显 0，页签内清单全部弱化为「已清零」', async () => {
     // D16：mock 换 live 信封（后端体为 { success, data: [...], pagination: {...} }，pagination 与 data 平级），
     // 旧 mock 的 { data: {}, pagination } 形状与真实不符，会让「解析错位」在任何测试里不可见。
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 0 } } })
@@ -117,20 +116,17 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     const w = mount(OpsHub)
     await flushPromises()
 
-    // 护栏：页头状态条已退役，结论句不回条上
+    // 护栏：页头状态条已退役
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false)
     expect(w.find('.mk-alert').exists()).toBe(false)
-    // 结论句（原状态条 strong）并入清单卡头 meta；卡名不再与页签名同名（读数已升页级）
-    const todoHead = w.find('.mk-card__head')
-    expect(todoHead.find('.mk-card__title').text()).toBe('待办清单')
-    expect(todoHead.find('.mk-card__meta').text()).toContain('运营待办全部已清零')
     // 读数如实显示 0（真实 0 可以显；四卡：待处理反馈/生成失败路径/事件投递失败/草稿公告）
-    // 2026-10-06 审核 #174：瓦片迁 MkKpi，.oh-metric__value → .mk-kpi__num
-    // 2026-10-18 用户拍板：四张读数卡回到页级（页签栏之上），行内不再复读数字
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toEqual(['0', '0', '0', '0'])
-    // 行动行仍给「已清零」收尾
-    expect(w.text()).toContain('已清零')
+    // 2026-10-26：页签内待办清单在（行动出口），全 0 时四行都弱化为「已清零」且不可点
+    expect(w.findAll('.mk-card')).toHaveLength(1)
+    expect(w.findAll('.ow-rankrow')).toHaveLength(4)
+    expect(w.findAll('.ow-rankrow--done')).toHaveLength(4)
+    expect(w.text()).toContain('运营待办全部已清零')
 
     w.unmount()
   })
@@ -163,9 +159,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     w.unmount()
   })
 
-  /* D7/D16 护栏：live 信封下待处理反馈计数必须从 pagination.total 解析且行动行可点。
+  /* D7/D16 护栏：live 信封下待处理反馈计数必须从 pagination.total 解析且读数卡可点下钻。
      旧实现 `data?.data?.pagination` 恒 undefined，把真实 10 条显示成「已清零」且不可下钻。 */
-  it('待处理反馈 live 信封（data 数组 + pagination 平级）→ 计数=10、结论句点名、行动行可点并挂跳转', async () => {
+  it('待处理反馈 live 信封（data 数组 + pagination 平级）→ 计数=10、读数卡可点', async () => {
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [{ id: 'f1', status: 'new' }], pagination: { total: 10 } } })
     h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 0 } } } })
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 0 } } })
@@ -173,22 +169,15 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     const w = mount(OpsHub)
     await flushPromises()
 
-    // 读数如实显示 10（不再解析错位成 0）。2026-10-06 审核 #174：瓦片迁 MkKpi（读数卡在页级）。
+    // 读数如实显示 10（不再解析错位成 0）。
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toContain('10')
-    // 结论句改总括句（审核 #173：逐项数字只留指标卡一处，卡头不再复述数字）
-    const todoHead = w.find('.mk-card__head')
-    expect(todoHead.find('.mk-card__meta').text()).toContain('1 项待处理')
-    // 行动行可点（非 disabled + act 类）——D7 修复前反馈计数恒 0 → 该行 actionable=false 被禁点
-    const feedbackRow = w.findAll('.ow-rankrow').find((r) => r.text().includes('待处理反馈'))!
-    expect(feedbackRow.attributes('disabled')).toBeUndefined()
-    expect(feedbackRow.classes()).toContain('ow-rankrow--act')
-    expect(feedbackRow.find('.ow-rankrow__go').text()).toContain('去处理')
     // 值色分档：待处理反馈的严重度是 warn（琥珀），不是 bad（红）——颜色只承载紧急度。
-    // 2026-10-18 读数卡回页级，断言从行内 .ow-rankrow__count--warn 回到卡上的 mk-kpi--warn
     const feedbackCard = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '待处理反馈')!
     expect(feedbackCard.classes()).toContain('mk-kpi--warn')
     expect(feedbackCard.find('.mk-kpi__num').text()).toBe('10')
+    // 2026-10-26：读数卡自身就是入口（页签内的第二份清单已删）
+    expect(feedbackCard.classes()).toContain('mk-kpi--clickable')
 
     w.unmount()
   })

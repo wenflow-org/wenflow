@@ -147,7 +147,7 @@
           icon="◌"
           min
           :title="isFiltered ? '当前筛选无匹配' : '暂无反馈'"
-          :description="isFiltered ? '放宽筛选条件试试。' : '还没有收到用户反馈。用户在学习端提交反馈后，会按时间从新到旧列在这里。'"
+          :description="isFiltered ? '放宽筛选条件试试。' : ''"
           :action-text="isFiltered ? '清除筛选' : '刷新'"
           @action="isFiltered ? clearFilters() : load(true)"
         />

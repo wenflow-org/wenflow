@@ -277,35 +277,35 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain('@pointerdown="onOdgPointerDown"')
   })
 
-  it('编排图导航两级页签（2026-10-13 用户：阶段选择解散成 tab，去掉「字段旅程」页签）', () => {
+  it('编排图导航两级页签（2026-10-26：字段旅程补回阶段内页签）', () => {
     // 一级 = 总览 + 阶段；原来的「阶段选择」胶囊行退役（同一屏两套导航）
     expect(OrchestratorSource).toContain('class="tabs orch-top-tabs"')
     expect(OrchestratorSource).toContain('@click="goOverview"')
     expect(OrchestratorSource).toContain('@click="selectStageTab(s.id)"')
     expect(OrchestratorSource).not.toContain('class="orch-stage-pills"')
     expect(OrchestratorSource).not.toContain('stageScoped')
-    // 「字段旅程」不再是一枚页签：阶段页签点开即它（SUB_PANES 里没有 journey）
+    // 阶段内三枚子视图并列：进了路由/治理仍能点回字段旅程（此前只能再点一次阶段页签）
     expect(OrchestratorSource).toContain("const SUB_PANES: Array<{ id: OrchSubPane; label: string }> = [")
+    expect(OrchestratorSource).toContain("{ id: 'journey', label: '字段旅程' }")
     expect(OrchestratorSource).toContain("{ id: 'routing', label: '字段路由' }")
     expect(OrchestratorSource).toContain("{ id: 'governance', label: '治理' }")
-    expect(OrchestratorSource).not.toContain("{ id: 'journey', label: '字段旅程' }")
+    // 回程逻辑已删：再点当前阶段页签不再有特殊分支
+    expect(OrchestratorSource).not.toContain('pane.value !== \'overview\' && active.value === id')
     // 二级页签与阶段内容同壳（一级页签 aria-controls 指向它）
     expect(OrchestratorSource).toContain('id="orch-stage-view"')
     expect(OrchestratorSource).toContain('class="tabs orch-subtabs"')
-    // 点阶段页签落在该阶段的字段旅程；已在其中时再点一次 = 从子视图回程
     expect(OrchestratorSource).toContain("pane.value = 'journey'")
     expect(OrchestratorSource).toContain('function selectStageTab(id: string)')
+    // SkillFieldRouting 传来的 ?tab=field-routings 必须落在字段路由（此前静默落回总览）
+    expect(OrchestratorSource).toContain("qTab === 'field-routings'")
   })
 
-  it('编排图阶段页签一律英文（2026-10-14 用户：除「总览」外）', () => {
-    // 阶段 id 本身就是流水线英文名（与 <stage>-agent 同源），中文 displayName 只在中文语境用；
-    // 此前页签直接剥 displayName 的「阶段」二字 → Goal/Path（后端名自带英文）与
-    // 教学/画像/仿真（后端名是中文）半中半英并排。
+  it('编排图阶段页签用中文（2026-10-26 评审：与画布列头同名，不再英中对照）', () => {
     expect(OrchestratorSource).toContain('{{ stageTabLabel(s) }}')
     expect(OrchestratorSource).toContain('const STAGE_TAB_LABEL: Record<string, string> = {')
-    expect(OrchestratorSource).toContain("teaching: 'Teaching'")
-    expect(OrchestratorSource).toContain("profile: 'Profile'")
-    expect(OrchestratorSource).toContain("simulation: 'Simulation'")
+    expect(OrchestratorSource).toContain("teaching: '教学'")
+    expect(OrchestratorSource).toContain("profile: '学习者'")
+    expect(OrchestratorSource).toContain("simulation: '仿真'")
     // 未登记的阶段回退中文显示名：不裸出 id、也不留空
     expect(OrchestratorSource).toContain('STAGE_TAB_LABEL[s.id] || s.name.replace(/阶段$/, \'\')')
   })

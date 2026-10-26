@@ -18,7 +18,7 @@
       <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
         只读
       </button>
-      <!-- 2026-10-23：与页头「刷新注册表」是同一动作（refresh(true)），同屏只留页头那一颗 -->
+      <slot name="card-actions" />
     </div>
 
     <div v-if="actionError" class="mk-alert mk-alert--row mpp-alert" role="alert">
@@ -86,7 +86,13 @@
             <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
           </div>
           <div class="mpp-detail__acts">
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openSettings(selected)">设置</button>
+            <button
+              v-if="selected.id !== 'platform'"
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :disabled="busy || registry?.readOnly"
+              @click="openSettings(selected)"
+            >设置</button>
             <button
               v-if="selected.id !== 'platform'"
               type="button"
@@ -242,7 +248,7 @@
           </div>
         </div>
       </div>
-      <MkEmptyState v-else compact title="还没有供应商。用左栏底部的「添加供应商」建一个。" />
+      <MkEmptyState v-else compact title="还没有供应商" />
     </div>
 
     <PullModelsDialog
@@ -254,7 +260,12 @@
       @navigate="onPullNavigate"
     />
     <ProviderEditorDialog ref="providerEditor" @saved="onProviderSaved" />
-    <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" />
+    <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" @closed="onEditorClosed" />
+    <!-- 逐个配置队列：常驻进度与「跳过剩余」，中途关掉模型弹窗也能知道还剩几个 -->
+    <div v-if="configureQueue.length" class="mpp-queue" role="status">
+      <span>还剩 {{ configureQueue.length }} 个模型未配置</span>
+      <button type="button" class="mk-link" @click="skipRemaining">跳过剩余</button>
+    </div>
   </section>
 </template>
 
@@ -271,6 +282,7 @@ import PullModelsDialog from './PullModelsDialog.vue'
 import { modelKindOf } from './platformModelKind'
 import { askConfirm } from './useConfirm'
 import { errMsg } from './live'
+import { toast } from '@/utils/toast'
 
 /** 注册表编辑视图（后端 services/admin/model-providers.service.ts 的 ProviderRegistryView） */
 interface ProviderView extends ProviderLike {
@@ -310,9 +322,6 @@ const emit = defineEmits<{
   changed: []
   /** 已登记的模型 id（宿主用它算「上游还有几个没登记」的关系句，避免两处各算一遍） */
   registered: [ids: string[]]
-  /** 平台通道的「设置」：连接表单已由宿主经 #platform-detail 就地注入，此事件仅用于
-   *  把焦点/滚动带到那段表单（2026-10-25 拆掉平台设置弹窗后） */
-  'focus-platform-connection': []
 }>()
 
 const view = ref<ProvidersView | null>(null)
@@ -450,9 +459,9 @@ function functionTags(m: ModelLike): string[] {
 }
 function priceTitle(m: ModelLike): string {
   const p = m.pricing
-  if (priceMissing(m)) return '未配单价：成本分析页这个模型的金额会显示「—」。点「编辑」补输入与输出单价'
+  if (priceMissing(m)) return '未配置单价：成本分析页这个模型的金额会显示「—」'
   const cached = p!.cachedInputPer1M != null ? ` / 缓存 ${p!.cachedInputPer1M}` : ''
-  return `单价 入 ${p!.inputPer1M ?? '—'}${cached} / 出 ${p!.outputPer1M ?? '—'}（USD / 1M tokens，只影响成本分析）`
+  return `单价 入 ${p!.inputPer1M ?? '—'}${cached} / 出 ${p!.outputPer1M ?? '—'}（USD / 1M tokens）`
 }
 /** 列表是一组 role=tab：按 WAI-ARIA 走 roving tabindex + 方向键，避免 N 个供应商占 N 个 Tab 位 */
 function onTablistKeydown(e: KeyboardEvent): void {
@@ -537,11 +546,21 @@ function adopt(payload: unknown, warnings: string[]): void {
 }
 
 async function toggleEnabled(p: ProviderView, value: boolean): Promise<void> {
+  if (!value) {
+    const ok = await askConfirm({
+      title: `停用供应商「${p.name}」`,
+      message: `停用后它的 ${p.models.length} 个模型立即退出路由。`,
+      confirmText: '停用',
+      danger: true,
+    })
+    if (!ok) return
+  }
   busy.value = true
   actionError.value = ''
   try {
     const res = await adminModelProvidersApi.update(p.id, { enabled: value })
     adopt(res?.data, res?.data?.warnings ?? [])
+    toast.success(value ? `「${p.name}」已启用` : `「${p.name}」已停用，模型退出路由`)
   } catch (e) {
     actionError.value = errMsg(e)
   } finally {
@@ -678,7 +697,7 @@ async function pullModels(p: ProviderView): Promise<void> {
 function openPull(): void {
   if (!selected.value) return
   if (!fetchableModels.value.length) {
-    actionError.value = '还没有拉取到模型。先确认服务地址与密钥，再重新拉取。'
+    actionError.value = '还没有拉取到模型'
     return
   }
   pullDialog.value?.openWith()
@@ -719,6 +738,19 @@ function openNextConfigure(): void {
   modelEditor.value?.openWith({ providerId: selected.value.id, model: null, presetId: id, step })
 }
 
+/** 跳过剩余：队列清空，已保存的模型保持原样 */
+function skipRemaining(): void {
+  configureQueue.value = []
+  configureTotal.value = 0
+  modelEditor.value?.close?.()
+}
+
+/** 模型弹窗被关掉（取消/ESC/遮罩）：队列没有续接入口，直接清空避免「还剩 N 个」常挂 */
+function onEditorClosed(): void {
+  configureQueue.value = []
+  configureTotal.value = 0
+}
+
 /** 非对话模型的去向：基础设施在同页「基础设施模型」卡，生图/决策在插件页 */
 function onPullNavigate(target: 'infra' | 'plugins'): void {
   if (target === 'plugins') {
@@ -729,12 +761,8 @@ function onPullNavigate(target: 'infra' | 'plugins'): void {
   document.getElementById('ac-infra')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-/** 平台「设置」：滚到同页的连接表单；其他供应商仍走注册表编辑弹层 */
+/** 供应商「设置」：打开注册表编辑弹层（平台通道的按钮已撤，连接表单就在详情下方） */
 function openSettings(p: ProviderView): void {
-  if (p.id === 'platform') {
-    emit('focus-platform-connection')
-    return
-  }
   providerEditor.value?.openWith(p)
 }
 
@@ -921,4 +949,13 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-fn__none { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .mpp-rowacts { display: flex; gap: 8px; white-space: nowrap; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.mpp-queue {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--mk-line);
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+}
 </style>

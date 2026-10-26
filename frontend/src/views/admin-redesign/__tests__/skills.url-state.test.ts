@@ -27,6 +27,7 @@ vi.mock('../live', async () => {
     liveSkillStatsRange: ref('7d'),
     liveFailures: ref<Record<string, string>>({}),
     liveLoading: ref(false),
+    liveRefreshSeq: ref(0),
     refreshLiveSkills: vi.fn(async () => {}),
     errMsg: (e: unknown) => String(e),
     totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / Math.max(1, pageSize)))
@@ -172,9 +173,8 @@ describe('Skills 列表筛选 ↔ URL', () => {
     const { w, router } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching&agent=path-agent');
     expect((w.find('input.mk-filter__input').element as HTMLInputElement).value).toBe('教学');
     expect(pillOf(w, '仅看需关注').attributes('aria-pressed')).toBe('true');
-    await w.find('.mk-adv > button').trigger('click');
-    await nextTick();
-    expect((w.find('#skillAgentFilter').element as HTMLSelectElement).value).toBe('path-agent');
+    // 归属 Agent 下拉已从「筛选」弹层移回卡头一行（2026-10-26），控件直取
+    expect((w.find('select[aria-label="按归属 Agent 筛选"]').element as HTMLSelectElement).value).toBe('path-agent');
     // 类别筛选已撤（2026-10-24）：弹层里没有该下拉，URL 上的 cat 也不再被写回
     expect(w.find('select[aria-label="按类别筛选"]').exists()).toBe(false);
     expect(router.currentRoute.value.query.cat).toBeUndefined();

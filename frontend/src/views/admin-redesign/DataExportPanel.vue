@@ -30,7 +30,7 @@
       </select>
     </label>
     <div class="exp-foot">
-      <span class="exp-hint" title="导出为 CSV，带 UTF-8 BOM，Excel / WPS 可直接打开">已选 {{ exportSel.length }} 项</span>
+      <span class="exp-hint">已选 {{ exportSel.length }} 项</span>
       <button
         type="button"
         class="mk-btn mk-btn--primary exp-go"
@@ -39,11 +39,6 @@
       >{{ exporting !== '' ? '导出中…' : '开始导出' }}</button>
     </div>
     <ul class="exp-notes">
-      <li>执行日志默认导出最近 1000 行，可切换上限。其余业务表导出最近 20000 条。</li>
-      <!-- 文案与实现同口径（#157）：后端 users 导出已接 REAL_USER_WHERE（排虚拟学习者 +
-           e2e_/shotsnap/@test.local 等测试账号前缀/域名），脚注承诺与实现一致。
-           本页导出表单不提供 includeTest 开关（后端接口保留该参数供深链/脚本用）。 -->
-      <li>用户导出默认排除虚拟学习者，测试/审计账号照常导出（类型列标注）。</li>
       <li>导出为只读操作，不含敏感字段。</li>
     </ul>
   </div>

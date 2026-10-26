@@ -68,18 +68,31 @@ describe('PathDetail 路径深链适配层', () => {
     w.unmount()
   })
 
-  it('无关联对话（孤儿路径）→ 空态明示 + 返回列表；不换开座舱', async () => {
+  it('无关联对话（孤儿路径）→ 空态明示 + 返回列表 + 「去目标对话」出口；不换开座舱', async () => {
     detailMock.mockResolvedValue({ data: { data: { id: 'lp_1', title: '孤儿路径', conversationId: null } } })
     const w = mountShim()
     await settle()
     expect(w.text()).toContain('该路径没有关联的目标对话')
     expect(subPage.value?.view).toBe('path')
+    // 空态只留一句事实 + 出口（解释型第二句已删）
+    expect(w.text()).not.toContain('返回列表后可下线或删除该路径')
     // 「返回列表」= closeSubPage（无 from → 回一级列表）
     const btn = w.findAll('button').find((b) => b.text() === '返回列表')
     expect(btn).toBeTruthy()
     await btn!.trigger('click')
     await nextTick()
     expect(subPage.value).toBeNull()
+    w.unmount()
+  })
+
+  it('孤儿路径的第二个出口「去目标对话」：无 Router 上下文时不炸（单测直挂）', async () => {
+    detailMock.mockResolvedValue({ data: { data: { id: 'lp_1', title: '孤儿路径', conversationId: null } } })
+    const w = mountShim()
+    await settle()
+    const alt = w.findAll('button').find((b) => b.text() === '去目标对话')
+    expect(alt).toBeTruthy()
+    await alt!.trigger('click')
+    await nextTick()
     w.unmount()
   })
 

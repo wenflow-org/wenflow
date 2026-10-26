@@ -1,50 +1,41 @@
 <template>
-  <!-- 访问与注册（2026-10-25 用户「这个组整个页面我觉得做的不好…可以功能打散」）：
-       原为「模型与接入 · 安全与访问」页签。三张卡管的是后台谁能进来、谁能注册，
-       与「模型接哪个上游」没有共享的对象或动线，留在模型页只是把两个不相干的域塞进一个入口。
-       拆为独立页并归入侧栏「系统」组（与健康中心、模型与接入并列）。
-       旧深链 /admin/api-config?tab=security 由路由改投本页。 -->
-  <div class="mk-page">
-    <MkPageHead
-      title="访问与注册"
-      sub="后台入口的来源限制、私有网络放行与自助注册"
-      hint="改动保存后即时生效。覆盖管理端入口、注册与出站网络"
-    />
+  <div class="mk-page acl-host">
+    <MkPageHead title="访问与注册">
+      <template #actions>
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm mk-btn--primary"
+          :disabled="!policyDirty || saving || saveBlocked"
+          @click="savePolicy"
+        >{{ saving ? '保存中…' : '保存策略' }}</button>
+      </template>
+    </MkPageHead>
 
-    <!-- 读取失败：空表单不得伪装成「未配置」 -->
     <div v-if="configFailed" class="mk-alert mk-alert--row" role="alert">
-      <span class="mk-alert__msg">访问策略读取失败：为空不代表未配置，请重试</span>
+      <span class="mk-alert__msg">访问策略读取失败：为空不代表未配置</span>
       <button type="button" class="mk-alert__btn" @click="retryLoad">重试</button>
     </div>
 
-    <!-- 左一右二（2026-10-15 用户重组）：左卡管「谁能连进来」（入站来源 + 出站目标两段），
-         右列两张小卡管「谁能注册进来」（自助注册 + 单 IP 配额）——各自只有一个开关，
-         平铺成宫格会把左卡挤成半屏空白。 -->
+    <!-- 左「谁能连进来」（入站来源 + 出站目标，一次保存），右「谁能注册进来」（两个开关）。
+         左右列按对象分组，不再限宽居中：限宽会把 1080P 下的半屏留给空白。 -->
     <div class="acl-grid">
       <section class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">访问来源与网络</h3>
-          <button
-            v-if="policyDirty"
-            type="button"
-            class="mk-btn mk-btn--sm mk-btn--primary"
-            :disabled="saving"
-            @click="savePolicy"
-          >{{ saving ? '保存中…' : '保存策略' }}</button>
+          <h3 class="mk-card__title">后台访问来源</h3>
         </div>
-        <div class="ac-body ac-policy__item">
-          <div class="ac-group__title" title="管理端入口允许哪些来源访问：公网 / 仅内网 / 仅白名单">访问来源模式</div>
-          <!-- radio 单选卡片（radiogroup + role=radio + aria-checked）；
-               键盘契约（审核 #160）：roving tabindex（仅选中项可 Tab 进入）+ 方向键循环切换 -->
+        <div class="ac-body">
+          <div class="ac-group__title">访问来源模式</div>
           <div class="ac-radio-row" role="radiogroup" aria-label="访问来源模式" @keydown="onAccessKeydown">
             <span
-              v-for="(opt, i) in ACCESS_OPTIONS"
+              v-for="(opt, i) in accessOptions"
               :key="opt.id"
               :ref="(el) => setAccessRef(el, i)"
               class="ac-radio"
+              :class="{ 'ac-radio--disabled': opt.disabled }"
               role="radio"
               :tabindex="policy.adminAccessMode === opt.id ? 0 : -1"
               :aria-checked="policy.adminAccessMode === opt.id"
+              :aria-disabled="opt.disabled || undefined"
               @click="setAccessMode(opt.id)"
               @keydown.enter.prevent="setAccessMode(opt.id)"
               @keydown.space.prevent="setAccessMode(opt.id)"
@@ -52,13 +43,13 @@
               <span class="ac-radio__mark" aria-hidden="true">{{ policy.adminAccessMode === opt.id ? '●' : '○' }}</span>
               <span class="ac-radio__text">
                 <span class="ac-radio__title">{{ opt.label }}</span>
-                <span class="ac-radio__sub">{{ opt.sub }}</span>
+                <span v-if="opt.sub" class="ac-radio__sub">{{ opt.sub }}</span>
               </span>
             </span>
           </div>
           <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">公网开放 · 入口无访问限制</span>
           <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
-            <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
+            <span class="mk-field__label">额外允许的客户端 IP</span>
             <textarea
               class="mk-field__textarea ac-textarea"
               rows="2"
@@ -67,11 +58,9 @@
               placeholder="203.0.113.10"
             ></textarea>
           </label>
-        </div>
-        <div class="ac-body ac-policy__item ac-policy__item--sep">
-          <!-- 访问来源模式管「谁能连进来」（入站来源）；这条管「服务端能往哪里发请求」（出站目标） -->
-          <div class="ac-group__title" title="服务端是否允许请求内网/私有地址：仅白名单时只放行「允许的 Host / IP」里的地址">私有网络服务</div>
-          <div class="mk-seg" role="group" aria-label="私有网络服务">
+
+          <div class="ac-group__title ac-group__title--sep">服务端出站白名单</div>
+          <div class="mk-seg" role="group" aria-label="服务端出站白名单">
             <button
               type="button"
               class="mk-seg__item"
@@ -88,7 +77,7 @@
             >仅白名单</button>
           </div>
           <label v-if="!policy.allowPrivateNetwork" class="mk-field">
-            <span class="mk-field__label">允许的 Host / IP（每行一个）</span>
+            <span class="mk-field__label">允许的 Host / IP</span>
             <textarea
               class="mk-field__textarea ac-textarea"
               rows="2"
@@ -97,36 +86,31 @@
               placeholder="192.168.1.20"
             ></textarea>
           </label>
+          <span v-if="outboundEmptyWarn" class="ac-policy__warn">名单为空：服务端将无法请求任何内网地址</span>
         </div>
       </section>
 
-      <div class="ac-side-stack">
-        <section v-if="isLive && registrationEnabled !== null" class="mk-card">
+      <div class="acl-side">
+        <section v-if="isLive && registrationEnabled !== null && registerIpQuotaEnabled !== null" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">新用户注册</h3>
+            <h3 class="mk-card__title">注册</h3>
           </div>
-          <div class="ac-body ac-policy__item">
-            <MkSwitch
-              :model-value="registrationEnabled"
-              :busy="registrationBusy"
-              aria-label="允许新用户自助注册"
-              :state-text="registrationEnabled ? '任何人均可注册' : '仅管理员创建'"
-              :title="registrationEnabled ? '关闭后新账号只能由管理员手动创建' : '开放后任何人可自助注册账号'"
-              @update:model-value="setRegistration"
-            />
-          </div>
-        </section>
-
-        <section v-if="isLive && registerIpQuotaEnabled !== null" class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">{{ IP_QUOTA_TITLE }}</h3>
-          </div>
-          <div class="ac-body ac-policy__item">
-            <div class="ac-quota-row">
+          <div class="ac-body">
+            <div class="ac-reg-row">
               <MkSwitch
-                :model-value="registerIpQuotaEnabled"
+                :model-value="registrationEnabled === true"
+                :busy="registrationBusy"
+                label="新用户注册"
+                :state-text="registrationStateText"
+                @update:model-value="setRegistration"
+              />
+              <button v-if="!registrationEnabled" type="button" class="mk-link" @click="goCreateUser">新建用户 →</button>
+            </div>
+            <div class="ac-reg-row">
+              <MkSwitch
+                :model-value="registerIpQuotaEnabled === true"
                 :busy="quotaBusy"
-                :aria-label="IP_QUOTA_TITLE"
+                :label="IP_QUOTA_TITLE"
                 :state-text="quotaEnabledText"
                 @update:model-value="setQuotaEnabled"
               />
@@ -143,8 +127,14 @@
                 />
                 <em>个 / IP</em>
               </label>
+              <button
+                v-if="registerIpQuotaEnabled && quotaDirty"
+                type="button"
+                class="mk-btn mk-btn--sm mk-btn--primary"
+                :disabled="quotaBusy"
+                @click="saveQuota(registerIpQuotaEnabled === true, quotaInput)"
+              >保存上限</button>
             </div>
-            <span class="ac-policy__hint">同一公网出口 IP 24 小时内最多注册 {{ quotaInput || 5 }} 个账号（批量注册风险出现时再开）</span>
           </div>
         </section>
       </div>
@@ -153,10 +143,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import { toast } from '@/utils/toast'
+import { authAPI } from '@/api/auth'
 import {
   liveApiConfig as cfg,
   liveFailures,
@@ -172,10 +164,11 @@ import {
 import { isLive } from './store'
 import { askConfirm } from './useConfirm'
 
-/* 文案单源（R6 复读单源化）：卡标题与开关 aria-label 共用一份 */
+/* 文案单源（R6 复读单源化）：卡标题与开关标签共用一份 */
 const IP_QUOTA_TITLE = '单 IP 每日注册配额'
+const router = useRouter()
 
-/* ---------- 访问来源与私有网络（策略组，一次保存） ---------- */
+/* ---------- 访问来源与出站白名单（策略组，一次保存） ---------- */
 const policy = reactive({
   adminAccessMode: 'private' as 'loopback' | 'private' | 'any',
   adminAllowedIps: [] as string[],
@@ -204,13 +197,27 @@ function retryLoad(): void {
   void loadLiveData()
 }
 
-const ACCESS_OPTIONS = [
-  { id: 'loopback' as const, label: '仅本机', sub: 'localhost / 127.0.0.1' },
-  { id: 'private' as const, label: '私有网段（推荐）', sub: '本机 + RFC1918 局域网' },
-  { id: 'any' as const, label: '不限制', sub: '不建议用于公网' },
-]
+/** 仅白名单且名单为空：保存后服务端请求不到任何内网地址（含内网模型上游） */
+const outboundEmptyWarn = computed(
+  () => !policy.allowPrivateNetwork && policy.privateNetworkHosts.length === 0,
+)
+const saveBlocked = computed(() => outboundEmptyWarn.value)
+
+/** 生产环境后端拒绝「不限制」来源，选项就地置灰并写原因 */
+const isProduction = import.meta.env.PROD
+const accessOptions = computed(() => [
+  { id: 'loopback' as const, label: '仅本机', sub: '', disabled: false },
+  { id: 'private' as const, label: '私有网段（推荐）', sub: '', disabled: false },
+  {
+    id: 'any' as const,
+    label: '不限制',
+    sub: isProduction ? '生产环境不可选 · 请用私有网段 + IP 白名单' : '',
+    disabled: isProduction,
+  },
+])
 function setAccessMode(mode: 'loopback' | 'private' | 'any'): void {
   if (policy.adminAccessMode === mode) return
+  if (accessOptions.value.find((o) => o.id === mode)?.disabled) return
   policy.adminAccessMode = mode
   markDirty()
 }
@@ -222,22 +229,29 @@ function setAccessRef(el: unknown, i: number): void {
 function onAccessKeydown(e: KeyboardEvent): void {
   const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End']
   if (!keys.includes(e.key)) return
-  const n = ACCESS_OPTIONS.length
-  const cur = ACCESS_OPTIONS.findIndex((o) => o.id === policy.adminAccessMode)
+  const opts = accessOptions.value
+  const n = opts.length
+  const cur = opts.findIndex((o) => o.id === policy.adminAccessMode)
   const from = cur >= 0 ? cur : 0
+  const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1
   let next = from
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (from + 1) % n
-  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (from - 1 + n) % n
-  else if (e.key === 'Home') next = 0
-  else next = n - 1
+  if (e.key === 'Home') next = 0
+  else if (e.key === 'End') next = n - 1
+  else {
+    // 跳过不可选档（生产环境的「不限制」）
+    for (let i = 1; i <= n; i++) {
+      const cand = (from + step * i + n * i) % n
+      if (!opts[cand].disabled) { next = cand; break }
+    }
+  }
   e.preventDefault()
-  setAccessMode(ACCESS_OPTIONS[next].id)
+  if (opts[next].disabled) return
+  setAccessMode(opts[next].id)
   void nextTick(() => accessEls.value[next]?.focus())
 }
 
 async function savePolicy(): Promise<void> {
-  if (saving.value || !policyDirty.value) return
-  // 高风险确认：开放公网访问需二次确认
+  if (saving.value || !policyDirty.value || saveBlocked.value) return
   if (policy.adminAccessMode === 'any') {
     const ok = await askConfirm({
       title: '开放公网访问',
@@ -258,8 +272,45 @@ async function savePolicy(): Promise<void> {
   }
 }
 
+/* 未保存保护：与 ApiConfig 同款，离开页面前拦一次 */
+onBeforeRouteLeave(async () => {
+  if (!policyDirty.value) return true
+  const ok = await askConfirm({
+    title: '有未保存的访问策略',
+    message: '离开将丢弃这些修改，确认离开？',
+    confirmText: '丢弃并离开',
+  })
+  return ok === true
+})
+function onBeforeUnloadHandler(e: BeforeUnloadEvent) {
+  if (policyDirty.value) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnloadHandler))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnloadHandler))
+
 /* ---------- 注册开关（高风险，二次确认） ---------- */
 const registrationBusy = ref(false)
+/** 生效值：配置开但核心学习服务阻断时注册实际不可用（auth.ts registration-status） */
+const registrationTemporaryUnavailable = ref(false)
+async function loadRegistrationStatus(): Promise<void> {
+  try {
+    const s = await authAPI.getRegistrationStatus()
+    registrationTemporaryUnavailable.value = s.temporaryUnavailable === true
+  } catch {
+    registrationTemporaryUnavailable.value = false
+  }
+}
+const registrationStateText = computed(() => {
+  if (!registrationEnabled.value) return '仅管理员创建'
+  if (registrationTemporaryUnavailable.value) return '已开放 · 核心服务异常，暂时无法注册'
+  return '任何人均可注册'
+})
+function goCreateUser(): void {
+  void router.push('/admin/people')
+}
 async function setRegistration(target: boolean): Promise<void> {
   if (registrationBusy.value || registrationEnabled.value === null) return
   if (target === registrationEnabled.value) return
@@ -275,6 +326,7 @@ async function setRegistration(target: boolean): Promise<void> {
   registrationBusy.value = true
   try {
     await updateRegistrationSetting(target)
+    await loadRegistrationStatus()
     toast.success(target ? '注册已开放' : '注册已关闭，新账号只能由管理员创建')
   } catch (e) {
     registrationEnabled.value = !target
@@ -287,13 +339,21 @@ async function setRegistration(target: boolean): Promise<void> {
 /* ---------- 单 IP 每日注册配额（默认关，避免误伤同一出口的正常注册） ---------- */
 const quotaBusy = ref(false)
 const quotaInput = ref(5)
+/** 已落盘的限额：状态词只报它，改数字未保存时屏幕上不出现新值 */
+const quotaSaved = ref(5)
 watch(
   () => registerIpDailyQuota.value,
-  (v) => { if (typeof v === 'number' && v >= 1 && v <= 100) quotaInput.value = v },
+  (v) => {
+    if (typeof v === 'number' && v >= 1 && v <= 100) {
+      quotaInput.value = v
+      quotaSaved.value = v
+    }
+  },
   { immediate: true },
 )
+const quotaDirty = computed(() => quotaInput.value !== quotaSaved.value)
 const quotaEnabledText = computed(() =>
-  registerIpQuotaEnabled.value ? `已启用 · 每 IP 每日 ${quotaInput.value} 个` : '未启用（不限制注册数量）',
+  registerIpQuotaEnabled.value ? `已启用 · 每 IP 每日 ${quotaSaved.value} 个` : '未启用（不限制注册数量）',
 )
 /** 配额输入只在 change 时校验：清空/非法值回退最近一次有效值（Number('')=0 会被钳到 1 静默改值） */
 function onQuotaInput(e: Event): void {
@@ -324,40 +384,33 @@ async function saveQuota(enabled: boolean, quota: number): Promise<void> {
   quotaBusy.value = true
   try {
     await updateRegisterIpQuotaSetting(enabled, quota)
+    quotaSaved.value = quota
     toast.success(enabled ? `配额已启用：每 IP 每日 ${quota} 个` : '配额已关闭，注册不再限制数量')
   } catch (e) {
+    quotaInput.value = quotaSaved.value
     toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     quotaBusy.value = false
   }
 }
+
+onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 </script>
 
 <style scoped>
-/* 左一右二（2026-10-15 用户重组）：左卡管「谁能连进来」（入站来源 + 出站目标两段），
-   右列两张小卡管「谁能注册进来」——各只有一个开关，平铺成宫格会把左卡挤成半屏空白。
-   2026-10-25 拆页后右列内容更少，比例从 1.35:1 收到 1.6:1，让右列两张窄卡不拉得过宽；
-   ≤1100px 回落单列。 */
+/* 左「入站 + 出站」（一次保存）、右「注册」（两个独立开关）：按对象分列，窄屏回落单列 */
 .acl-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
+  gap: 16px;
+  align-items: start;
 }
-.ac-side-stack { display: grid; gap: 12px; align-content: start; min-width: 0; }
-/* 左卡与右列等高：右列两张卡叠起来比左卡矮时，左卡底部会拖出一块空；反过来也一样。
-   用 grid 的 stretch（默认）让左卡撑满行高，右列自身按内容排、不拉伸。 */
+.acl-side { display: grid; gap: 16px; }
 @media (max-width: 1100px) {
   .acl-grid { grid-template-columns: minmax(0, 1fr); }
 }
-
-/* 卡内内容容器：统一内边距与间距（与模型页同一语言） */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
 .ac-body .mk-field { margin: 0; min-width: 0; }
-.ac-policy__item { min-width: 0; }
-/* 同一张卡的两段（入站 / 出站）之间用虚线分层，不另起卡 */
-.ac-policy__item--sep { border-top: 1px dashed var(--mk-line); padding-top: 14px; }
-.ac-policy__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; display: block; }
 .ac-policy__warn { font-size: var(--mk-fs-micro); color: var(--mk-red); font-weight: 600; }
 
 /* 访问来源模式：radio 卡片（三选一，带一行口径副文） */
@@ -383,18 +436,23 @@ async function saveQuota(enabled: boolean, quota: number): Promise<void> {
   background: color-mix(in srgb, var(--mk-blue) 8%, transparent);
   color: var(--mk-blue);
 }
+.ac-radio--disabled { cursor: not-allowed; opacity: 0.55; }
+.ac-radio--disabled:hover { border-color: var(--mk-line); }
 .ac-radio__mark { flex: none; line-height: 1; }
 .ac-radio__text { display: grid; gap: 0; min-width: 0; }
+.ac-radio__title { font-weight: 600; }
 .ac-radio__sub { color: var(--mk-muted); font-weight: 500; }
 .ac-radio[aria-checked='true'] .ac-radio__sub { color: inherit; opacity: 0.82; }
 
-/* 配额输入行：开关 + 数字 + 单位同行 */
-.ac-quota-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* 注册卡两行：开关 + 数字 + 保存 */
+.ac-reg-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ac-quota-field { display: inline-flex; align-items: center; gap: 8px; }
 .ac-quota-field .mk-field__label { margin: 0; }
-.ac-quota-field .mk-field__input { width: 76px; text-align: center; }
+.ac-quota-field .mk-field__input { width: 76px; text-align: center; font-variant-numeric: tabular-nums; }
 .ac-quota-field em { font-style: normal; color: var(--mk-faint); }
 
-.ac-group__title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
+.ac-group__title { font-size: var(--mk-fs-emphasis); font-weight: 700; color: var(--mk-ink); }
+/* 第二段（出站）与第一段（入站）之间加一条分隔，同卡两域不靠间距猜 */
+.ac-group__title--sep { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--mk-line); }
 .ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); min-height: 0; }
 </style>

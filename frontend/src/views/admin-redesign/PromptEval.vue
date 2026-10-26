@@ -6,13 +6,21 @@
        自成入口，Skill 页只留目录。
        旧深链 /admin/skills?tab=prompt-eval 由 Skills 页改投到本页（?peTab= 一并带走）。 -->
   <div class="mk-page mk-page--fill">
-    <MkPageHead title="Prompt 评估" sub="提示词质量评测 · 用例集与历史运行">
+    <MkPageHead title="Prompt 评估">
       <template #actions>
-        <!-- running：批量/试跑期间互斥禁用，防止并发多批真实 LLM 调用重复烧 token -->
+        <!-- 主操作随状态走（2026-10-26 评审）：没有启用用例时「批量跑评估」点了也只会弹提示，
+             灰按钮让人以为页面坏了；此时页头直接给「新建用例」，与空态中央同一个弹窗。 -->
         <button
+          v-if="panel && !panel.canRunBatch"
           type="button"
           class="mk-btn mk-btn--primary"
-          :disabled="!panel?.canRunBatch || panel?.running"
+          @click="panel?.openCreate()"
+        >新建用例</button>
+        <button
+          v-else
+          type="button"
+          class="mk-btn mk-btn--primary"
+          :disabled="!panel || panel.running"
           @click="panel?.runBatch()"
         >{{ panel?.running ? '评估运行中…' : '批量跑评估' }}</button>
       </template>
@@ -20,31 +28,16 @@
 
     <!-- 读数带槽位：页头之下、面板（内含用例/历史页签）之上——与全站同一形态
          （判例 ExecLogs 带在页签之上、HealthCenter MkKpi 在页签之上）。
-         面板为异步组件，chunk 未就绪时按 live 三态纪律显「…」，不落定 0。 -->
+         面板为异步组件，chunk 未就绪时按 live 三态纪律显「…」，不落定 0。
+         2026-10-26 评审：四卡里三卡的数字就是两张页签里的行数（同屏可数），
+         收成一张——通过率 + 用例分母（valueNote）。 -->
     <section class="mk-kpi-grid" aria-label="Prompt 评估统计">
       <MkKpi
         label="最近评测通过率"
         :value="panel?.kpiView?.passRateText ?? '…'"
         :tone="panel?.kpiView?.passRateTone ?? ''"
         :hint="panel?.kpiView?.passRateHint"
-        :title="panel?.kpiView?.passRateTitle"
-      />
-      <MkKpi
-        label="评估用例"
-        :value="panel?.kpiView?.caseCount ?? '…'"
-        :hint="panel?.kpiView?.casesHint"
-        :title="panel?.kpiView?.casesTitle"
-      />
-      <MkKpi
-        label="启用用例"
-        :value="panel?.kpiView?.enabledCaseCount ?? '…'"
-        :title="`启用中的评估用例数。停用用例仍保留但不参与批量评测${panel?.kpiView?.disabledCaseCount != null ? ` · 当前停用 ${panel?.kpiView?.disabledCaseCount} 个` : ''}`"
-      />
-      <MkKpi
-        label="评估历史"
-        :value="panel?.kpiView?.runCount ?? '…'"
-        :hint="panel?.kpiView?.runsHint"
-        :title="panel?.kpiView?.runsTitle"
+        :value-note="panel?.kpiView?.casesNote"
       />
     </section>
 
@@ -58,25 +51,17 @@ import { useRoute, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 
-/* 面板动作面（defineExpose）：页头「批量跑评估」的禁用态与点击、读数带取值经模板 ref 驱动。
-   与折叠进 Skills 宿主时的契约一致（面板自身不再渲染读数带，避免两条带同屏）。 */
+/* 面板动作面（defineExpose）：页头主操作的可用态与点击、读数带取值经模板 ref 驱动。 */
 interface PromptEvalPanelExpose {
   running: boolean
   canRunBatch: boolean
   runBatch: () => Promise<void>
+  openCreate: () => void
   kpiView: {
     passRateText: string
     passRateTone: 'ok' | 'warn' | 'bad' | 'muted' | ''
     passRateHint: string
-    passRateTitle: string
-    caseCount: number | string
-    casesHint: string
-    casesTitle: string
-    enabledCaseCount: number | string
-    disabledCaseCount: number | string
-    runCount: number | string
-    runsHint: string
-    runsTitle: string
+    casesNote: string
   }
 }
 const panel = ref<PromptEvalPanelExpose | null>(null)

@@ -8,6 +8,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import Users from '../Users.vue';
 import { liveUsers } from '../live';
+import { getDeletedUsers } from '@/api/adminApi';
 
 const { apiObject } = vi.hoisted(() => ({
   apiObject: (): Record<string, unknown> =>
@@ -99,29 +100,58 @@ describe('Users 客户端分页（mk-pagination）', () => {
     liveUsers.value = Array.from({ length: 37 }, (_, i) => makeUser(i + 1));
   });
 
-  it('37 行 → 总数展示「共 37 条」+ 第 1 / 3 页 + 首屏 15 行', async () => {
+  it('37 行 → 总数展示「共 37 个账号」+ 第 1 / 3 页 + 首屏 15 行', async () => {
     const w = await mountUsers();
     await nextTick();
-    expect(w.text()).toContain('共 37 条');
+    // 分页器数的是人不是条：unit="个账号"
+    expect(w.text()).toContain('共 37 个账号');
     expect(w.text()).toContain('第 1 / 3 页');
     expect(w.findAll('tbody tr')).toHaveLength(15);
     expect(w.text()).toContain('用户1');
     expect(w.text()).not.toContain('用户16');
   });
 
-  /** 2026-10-17 用户走查「这个多选，默认不出来吧」：勾选列默认不出，
-   *  批量入口保留在「列」菜单（选择框（批量操作）），需要时自己打开。 */
-  it('选择框列默认隐藏：首访无全选、无行内勾选，列菜单仍可找回', async () => {
+  /** 2026-10-17 用户走查「这个多选，默认不出来吧」：勾选列默认不出。
+   *  2026-10-26：入口不再只藏在「列」菜单里——卡头明面给一枚「批量操作」，点开即显示勾选列。 */
+  it('选择框列默认隐藏：首访无全选、无行内勾选；「批量操作」一键打开，列菜单仍可找回', async () => {
     localStorage.removeItem('wf_users_hidden_cols_v5');
     const w = await mountUsers();
     await nextTick();
     expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(false);
     expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(0);
 
+    const batch = findBtn(w, '批量操作');
+    await batch.trigger('click');
+    await nextTick();
+    expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(true);
+    expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(15);
+    // 再点一次收起并清空已选
+    await batch.trigger('click');
+    await nextTick();
+    expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(false);
+
     await findBtn(w, '列').trigger('click');
     await nextTick();
     const labels = w.findAll('.mk-cols__item label, .mk-cols__item').map((x) => x.text());
     expect(labels.some((t) => t.includes('选择框'))).toBe(true);
+    w.unmount();
+  });
+
+  /** 2026-10-26：这页唯一的处置动作（改昵称 / 邮箱 / 角色、重置密码）从 ⋯ 菜单提到操作列 */
+  it('操作列「编辑」打开表单；⋯ 菜单不再有第二个「编辑」入口', async () => {
+    localStorage.removeItem('wf_users_hidden_cols_v5');
+    const w = await mountUsers();
+    await nextTick();
+    const firstRow = w.findAll('tbody tr')[0];
+    const rowBtns = firstRow.findAll('.mk-actions .mk-btn');
+    expect(rowBtns.some((b) => b.text() === '编辑'), '行内应有「编辑」钮').toBe(true);
+    // 行点击本来就是详情，操作列不再重复一颗「详情」
+    expect(rowBtns.some((b) => b.text() === '详情')).toBe(false);
+    // ⋯ 里只剩删除（改角色/改密回到行内）
+    await firstRow.find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    const menuItems = firstRow.findAll('.mk-menu__item').map((b) => b.text());
+    expect(menuItems).toEqual(['删除']);
     w.unmount();
   });
 
@@ -274,6 +304,72 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
     expect(labels.some((t) => t.includes('管理员'))).toBe(true);
     expect(labels.some((t) => t.includes('普通用户'))).toBe(true);
     expect(labels.some((t) => t.includes('近 7 天活跃'))).toBe(true);
+    w.unmount();
+  });
+
+  /* 2026-10-26：宿主页撤掉 4 张 KPI 卡后，「从未登录」「近 7 日新增」必须能筛——
+     看到「从未登录 3」却无处点，是这页原本最大的断点。 */
+  it('「从未登录」「近 7 日新增」是 pill 且计数与筛选同谓词', async () => {
+    liveUsers.value = [
+      { ...makeUser(1), lastLoginAt: null },
+      { ...makeUser(2), lastLoginAt: recent() }
+    ] as unknown as typeof liveUsers.value;
+    const w = await mountUsers();
+    expect(await badgeOf(w, '从未登录')).toBe('1'); // 用户1（lastLoginAt 为空）
+    await pillOf(w, '从未登录').trigger('click');
+    await nextTick();
+    let rows = w.findAll('tbody tr');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text()).toContain('用户1');
+
+    await pillOf(w, '全部').trigger('click');
+    await nextTick();
+    // 夹具的 createdAt 都在 7 天外
+    expect(await badgeOf(w, '近 7 日新增')).toBe('0');
+    liveUsers.value = [
+      { ...makeUser(1), createdAt: new Date(Date.now() - 86400000).toISOString() },
+      { ...makeUser(2), createdAt: '2026-01-01T10:00:00.000Z' }
+    ] as unknown as typeof liveUsers.value;
+    await nextTick();
+    await vi.waitFor(() => expect(pillOf(w, '近 7 日新增').find('.mk-pill__count').text()).toBe('1'));
+    await pillOf(w, '近 7 日新增').trigger('click');
+    await nextTick();
+    rows = w.findAll('tbody tr');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text()).toContain('用户1');
+    w.unmount();
+  });
+});
+
+describe('Users 已删除视图：后端分页', () => {
+  const deleted = (i: number) => ({
+    id: `d${i}`, name: `已删${i}`, email: `d${i}@example.com`, isAdmin: false,
+    createdAt: '2026-07-01T10:00:00', lastLoginAt: null, deletedAt: '2026-09-01T10:00:00',
+    xp: 0, currentLevel: 'L1', _count: { learning_paths: 0, teaching_sessions: 0 }
+  });
+
+  beforeEach(() => {
+    liveUsers.value = [makeUser(1)];
+    (getDeletedUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { data: { users: Array.from({ length: 15 }, (_, i) => deleted(i + 1)), pagination: { total: 120, page: 1, limit: 15 } } }
+    });
+  });
+
+  it('计数取后端真总数；翻页带 page/limit 回后端（不再「50+」死窗）', async () => {
+    const w = await mountUsers();
+    const pill = w.findAll('.mk-pill').find((p) => p.text().includes('已删除'))!;
+    await pill.trigger('click');
+    await flushPromises();
+    // 计数是真总数，不是「50+」
+    await vi.waitFor(() => expect(pill.find('.mk-pill__count').text()).toBe('120'));
+    expect(w.text()).toContain('共 120 个账号');
+    expect(w.text()).toContain('第 1 / 8 页');
+    expect(w.findAll('tbody tr')).toHaveLength(15);
+    expect(getDeletedUsers).toHaveBeenLastCalledWith({ page: 1, limit: 15, search: undefined });
+
+    await findBtn(w, '下一页').trigger('click');
+    await flushPromises();
+    expect(getDeletedUsers).toHaveBeenLastCalledWith({ page: 2, limit: 15, search: undefined });
     w.unmount();
   });
 });

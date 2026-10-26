@@ -18,8 +18,8 @@ const PAGES = [
   { file: 'GoalConversations.vue', prefix: 'gc-c-', minWidthCols: 8 },
   { file: 'OpsContent.vue', prefix: 'oc-c-', minWidthCols: 7 },
   { file: 'Users.vue', prefix: 'u-c-', minWidthCols: 7 },
-  // 撤「完成度」「类别」两列后（2026-10-24）剩 9 个宽度类；本断言的正则不含数字，
-  // 不数 .sk-c-p95，故下限取 8（= Skill/归属/版本/路由/调用/成功率/最近调用/操作）
+  // 撤「完成度」「类别」「操作」三列后（2026-10-24 / 10-26）剩 8 个宽度类：
+  // Skill / 归属 / 版本 / 路由 / 调用 / P95 / 成功率 / 最近调用
   { file: 'Skills.vue', prefix: 'sk-c-', minWidthCols: 8 },
   { file: 'ExecLogs.vue', prefix: 'ex-c-', minWidthCols: 6 },
   { file: 'AuditLogs.vue', prefix: 'al-c-', minWidthCols: 8 },
@@ -35,7 +35,7 @@ describe('表格列宽稳定性', () => {
     it(`${file}：表格 fixed + 每个表头都带宽度类`, () => {
       const src = read(file)
       expect(src).toContain('mk-table--fixed')
-      const widthCols = src.match(new RegExp(`\\.${prefix}[a-z-]+ \\{ width:`, 'g')) || []
+      const widthCols = src.match(new RegExp(`\\.${prefix}[a-z0-9-]+ \\{ width:`, 'g')) || []
       expect(widthCols.length).toBeGreaterThanOrEqual(minWidthCols)
       // 固定表的每个 <th> 都必须带宽度类：漏一个该列就退回平分剩余，仍会被文本撑开。
       // 按 </table> 切段，只检查挂了 mk-table--fixed 的表（同页可能还有弹层小表）。

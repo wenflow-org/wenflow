@@ -39,33 +39,45 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线；2026-10-10 术语表改隐藏场景；2026-10-12 记忆与复习恢复跨用户总览；2026-10-16 系统工具并入运营中心；2026-10-19 外挂能力从模型与接入拆回独立页；2026-10-25 Prompt 评估拆回独立页 + 访问与注册拆为独立页）：7 分组 / 20 可见场景与目标 IA 完全一致', () => {
+  it('导航（2026-10-26 收口）：6 分组 + 置顶总览，20 个可见场景与目标 IA 一致', () => {
     // 隐藏场景（hidden: true，如运营术语表）不占侧栏席位：由顶栏帮助按钮跳转，单独断言
     const visible = MOCK_SCENES.filter((s) => !s.hidden);
     expect(MOCK_SCENES).toHaveLength(21);
     expect(visible).toHaveLength(20);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = visible.map((s) => s.group);
-    expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟实验', 'Skill', '观测', '系统', '运营']);
+    expect([...new Set(groups)]).toEqual(['总览', '运营', '学习', '仿真', 'Skill', '观测与排查', '账号与接入']);
     const byGroup: Record<string, string[]> = {};
     for (const s of visible) (byGroup[s.group] ||= []).push(s.id);
     expect(byGroup).toEqual({
       总览: ['overview'],
-      // 排列＝学习流程（2026-10-11 走查「重新排序」）：Goal 目标对话 → Path 学习路径 → Learn 教学会话
-      //   → 学习状态（2026-10-15 用户拍板挪到教学会话后：工作台性质，收在流程尾）→ 记忆与复习
-      // （「记忆与复习」2026-10-12 恢复跨用户总览；单用户明细在学习者详情页签）
-      教学: ['people', 'goal-conversations', 'learning-paths', 'teaching-sessions', 'learner-state', 'memory-review'],
-      // 2026-10-24 组名与首项解耦：组＝虚拟实验（实例 + 身份池）
-      虚拟实验: ['virtual-learners', 'virtual-learner-cards'],
-      // 「外挂能力」2026-10-19 从 api-config 宿主拆回独立页并归入本组（用户拍板）；
-      // 「Prompt 评估」2026-10-25 从 skills 宿主页签拆回独立页（用户「拆成单页，把这个 tab 撤掉，放到组里」）
+      // 运营中心紧跟总览：日循环是「总览看待办 → 运营中心处置」
+      运营: ['ops-hub'],
+      // 排列＝学习流程：Goal 目标对话 → Path 学习路径 → Learn 教学会话 → 学习状态（工作台）→ 复习积压
+      学习: ['goal-conversations', 'learning-paths', 'teaching-sessions', 'learner-state', 'memory-review'],
+      // 组名与总览状态条同词（「仿真 · 仿真空闲」）：实例 + 身份池
+      仿真: ['virtual-learners', 'virtual-learner-cards'],
       Skill: ['orchestrator', 'skills', 'prompt-eval', 'addons'],
-      // 2026-10-24 用户「重新排一下序」：两份日志相邻，成本分析接在后面
-      观测: ['execution-logs', 'audit-logs', 'token-cost'],
-      系统: ['health-center', 'api-config', 'access-control'],
-      运营: ['ops-hub']
+      // 健康中心 13 项都是排查项，与两份日志同一动线
+      观测与排查: ['execution-logs', 'audit-logs', 'token-cost', 'health-center'],
+      // 接哪个上游、谁能进、账号怎么管
+      账号与接入: ['api-config', 'access-control', 'people']
     });
     expect(MOCK_SCENES.filter((s) => s.hidden).map((s) => s.id)).toEqual(['glossary']);
+  });
+
+  it('页面搜索检索词：每项 keywords 可选，填入的必须是可检索的短词（无空串）', () => {
+    for (const scene of MOCK_SCENES) {
+      if (scene.keywords === undefined) continue;
+      expect(Array.isArray(scene.keywords), `「${scene.id}」keywords 不是数组`).toBe(true);
+      for (const k of scene.keywords) {
+        expect(typeof k, `「${scene.id}」keywords 含非字符串`).toBe('string');
+        expect(k.trim().length, `「${scene.id}」keywords 含空串`).toBeGreaterThan(0);
+      }
+    }
+    // 运营搜「密钥」应命中两处：插件（MCP/联网）与模型与接入（上游密钥）
+    const hit = MOCK_SCENES.filter((s) => (s.keywords || []).includes('密钥')).map((s) => s.id);
+    expect(hit).toEqual(expect.arrayContaining(['addons', 'api-config']));
   });
 
   it('退役场景（已折入宿主 tab / 已下线）不再出现在侧栏清单', () => {

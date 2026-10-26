@@ -20,13 +20,29 @@ vi.mock('../store', async () => {
   };
 });
 
-const { cardsTasksMock, cardsCloneMock } = vi.hoisted(() => ({ cardsTasksMock: vi.fn(), cardsCloneMock: vi.fn() }));
+const { cardsTasksMock, cardsCloneMock, getVirtualsMock } = vi.hoisted(() => ({
+  cardsTasksMock: vi.fn(),
+  cardsCloneMock: vi.fn(),
+  /* 本卡派生出的实例数：列表接口每行的 profile.derivedFrom.profileId 指向来源卡 */
+  getVirtualsMock: vi.fn(async () => ({
+    data: {
+      data: {
+        profiles: [
+          { id: 'i1', profile: { derivedFrom: { profileId: 'p1' } } },
+          { id: 'i2', profile: { derivedFrom: { profileId: 'p1' } } },
+          { id: 'i3', profile: { derivedFrom: { profileId: 'other' } } },
+        ],
+      },
+    },
+  })),
+}));
 
 vi.mock('@/api/adminApi', () => ({
   adminVirtualLearnersApi: {
     /* 创建面板（CardDeriveDialog）走这两个端点 */
     cardsTasks: cardsTasksMock,
     cardsClone: cardsCloneMock,
+    getVirtualLearners: getVirtualsMock,
     cardsDetail: vi.fn(async () => ({
       data: {
         data: {
@@ -48,6 +64,7 @@ vi.mock('../live', async () => {
   const { ref } = await import('vue');
   return { liveRefreshSeq: ref(0), errMsg: (e: unknown) => String(e) };
 });
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import CardDetailPage from '../CardDetailPage.vue';
 
@@ -99,6 +116,17 @@ describe('CardDetailPage（卡详情二级页）', () => {
     expect(w.text()).not.toContain('运行与记忆');
     expect(w.findAll('button').some((b) => b.text().includes('到虚拟学习者'))).toBe(false);
     expect(openSubPageMock).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  /** 2026-10-26：KPI 只说「已创建 2」，卡墙上任何一张卡都不显示是哪张建的——
+   *  实例数落到单卡粒度，入口就在概览卡头。 */
+  it('概览卡头给出「已创建 N 个实例」：按 derivedFrom.profileId 归到本卡', async () => {
+    const w = mount(CardDetailPage);
+    await flushPromises();
+    expect(getVirtualsMock).toHaveBeenCalled();
+    const head = w.findAll('.mk-card__head').find((h) => h.text().includes('概览'))!;
+    expect(head.text()).toContain('已创建 2 个实例');
     w.unmount();
   });
 

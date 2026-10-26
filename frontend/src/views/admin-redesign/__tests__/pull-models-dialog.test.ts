@@ -25,7 +25,7 @@ function mountDialog(registered: string[] = ['deepseek-v4.1-flash']) {
 }
 
 async function open(wrapper: ReturnType<typeof mountDialog>) {
-  ;(wrapper.vm as unknown as { openWith: () => void }).openWith()
+  (wrapper.vm as unknown as { openWith: () => void }).openWith()
   await nextTick()
   await flushPromises()
 }

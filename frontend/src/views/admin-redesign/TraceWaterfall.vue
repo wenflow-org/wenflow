@@ -54,7 +54,6 @@
           class="mk-pill"
           :class="{ 'mk-pill--active': failuresOnly }"
           :aria-pressed="failuresOnly"
-          :title="`只显示失败的 span 行，当前样本共 ${errorTotal} 个失败 span（「N 条链路含失败」计的是链路数，两者单位不同）`"
           @click="failuresOnly = !failuresOnly"
         >仅失败{{ errorTotal > 0 ? ` ${errorTotal}` : '' }}</button>
         <select v-model="sortMode" class="wf-sort mono" aria-label="排序方式" title="按耗时排序">
@@ -110,7 +109,7 @@
          达上限时「加载更多样本」入口随之消失，若无任何说明就像按钮丢了/没数据了。
          这里常驻 wf-notice 说清「为什么不再有更多样本 + 怎么继续看」 -->
     <div v-if="embedded && waterfallCapReached" class="wf-notice" role="alert">
-      <span>已达本地样本上限 {{ WATERFALL_MAX_SPANS }} 条，为保持流畅已停止追加。要看更多链路，请输入完整链路 ID 回车直达。</span>
+      <span>已达样本上限 {{ WATERFALL_MAX_SPANS }} 条</span>
     </div>
 
     <!-- 链路概要卡 -->
@@ -135,7 +134,7 @@
         </div>
         <div class="wf-summary__item wf-summary__models"><span>模型</span><b class="mono">{{ traceSummary.models.join(' / ') }}</b></div>
       </template>
-      <span v-else class="wf-summary__note" title="这条链路只有网关 / 模拟类 span，没有 LLM 调用，因此没有 Token、成本与模型读数">无 LLM 调用</span>
+      <span v-else class="wf-summary__note">无 LLM 调用</span>
     </div>
 
     <div v-if="activeSpans.length" class="wf" ref="wfRoot">
@@ -291,8 +290,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { spans, intent, openSkillDrawer, dataSource, type TraceSpan } from './store'
 
-/** 嵌入模式：作为执行日志「Trace 链路」tab 渲染（隐藏页面外壳/状态条） */
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+/* 嵌入模式：作为执行日志「Trace 链路」tab 渲染（隐藏页面外壳/状态条）。
+   failuresOnly 由宿主 v-model 控制时与日志页签的「失败」同源；独立页自持 */
+const props = withDefaults(defineProps<{ embedded?: boolean; failuresOnly?: boolean }>(), { embedded: false, failuresOnly: undefined })
 import {
   livePromptIndex,
   loadPromptIndex,
@@ -335,8 +335,17 @@ const notice = ref('')
 /* 会话视图：跨 trace 按业务会话归组（sessionId 链路已注入，数据积累后自动出现） */
 const viewMode = ref<'trace' | 'session'>('trace')
 const activeSession = ref('')
-/* W4：失败聚焦 + 耗时排序（作用于当前视图的行） */
-const failuresOnly = ref(false)
+/* W4：失败聚焦 + 耗时排序（作用于当前视图的行）。
+   宿主传了 failuresOnly 就以宿主为准（执行日志页签与日志页签的「失败」同源） */
+const emit = defineEmits<{ 'update:failuresOnly': [value: boolean] }>()
+const failuresOnlyLocal = ref(false)
+const failuresOnly = computed({
+  get: () => props.failuresOnly ?? failuresOnlyLocal.value,
+  set: (v: boolean) => {
+    failuresOnlyLocal.value = v
+    emit('update:failuresOnly', v)
+  }
+})
 const sortMode = ref<'time' | 'dur-desc' | 'dur-asc'>('time')
 
 /* W1：瀑布样本源 = 服务端可扩充集合（boot 快照 + 追加页 + 直达重查） */
@@ -818,7 +827,7 @@ const wfEmpty = computed(() => {
   if (failuresOnly.value && !raw.some((s) => s.status === 'err')) {
     return {
       title: '当前视图没有失败 span',
-      description: '「仅失败」筛选下没有失败记录，可关闭筛选查看当前视图的全部 span。',
+      description: '',
       actionText: '关闭仅失败',
       action: () => { failuresOnly.value = false }
     }
@@ -827,7 +836,7 @@ const wfEmpty = computed(() => {
   if (q && !traceIds.value.length) {
     return {
       title: '没有匹配的链路',
-      description: `筛选「${q}」未匹配到任何链路 ID，可清除筛选，或输入完整链路 ID 后回车查找。`,
+      description: '',
       actionText: '清除链路筛选',
       action: () => { traceKeyword.value = '' }
     }

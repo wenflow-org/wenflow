@@ -40,7 +40,7 @@ vi.mock('@/api/adminApi', async (importOriginal) => {
 })
 vi.mock('../live', async () => {
   const { ref } = await import('vue')
-  return { timeAgo: () => 'x', liveAnnouncements: ref([]), liveFailures: ref({}), liveRefreshSeq: ref(0), errMsg: (e: unknown) => String(e), shortId: (s: string) => s }
+  return { timeAgo: () => 'x', liveAnnouncements: ref([]), liveFailures: ref({}), liveRefreshSeq: ref(0), loadLiveData: vi.fn(async () => {}), errMsg: (e: unknown) => String(e), shortId: (s: string) => s }
 })
 vi.mock('../store', () => ({ intent: {} }))
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }))
@@ -79,10 +79,10 @@ async function mountWithRouter(component: unknown, route = '/admin/ops-hub') {
 describe('运维工具面板（原系统工具 Tab1）', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('两张卡：时间推进模拟 + 事件投递失败；零死信时重放钮禁用（不给假动作）', async () => {
+  it('两张卡：事件投递失败 + 时间推进模拟；死信卡在前（「去处理」落到首屏就是重放入口），零死信时重放钮禁用', async () => {
     const w = await mountWithRouter(ServerToolsPanel)
-    expect(w.text()).toContain('时间推进模拟')
-    expect(w.text()).toContain('事件投递失败')
+    const titles = w.findAll('.mk-card__title').map((t) => t.text())
+    expect(titles.slice(0, 2)).toEqual(['事件投递失败', '时间推进模拟'])
     const requeue = w.findAll('button').find((b) => b.text() === '重放全部失败事件')
     expect(requeue, '零死信也要有重放入口（禁用态）').toBeTruthy()
     expect(requeue!.attributes('disabled')).toBeDefined()

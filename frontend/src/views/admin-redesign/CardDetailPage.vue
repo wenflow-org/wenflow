@@ -12,16 +12,9 @@
         <span v-if="d.tags.length > 4" class="mk-badge mk-badge--muted" :title="d.tags.join(' · ')">+{{ d.tags.length - 4 }}</span>
       </template>
       <template #actions>
-        <!-- 2026-10-23：本页数据跟随顶栏刷新广播（liveRefreshSeq），hero 不再出独立刷新钮 -->
-        <!-- 「从这张卡造一个」的落点（2026-10-18 用户走查：卡库侧只有卡头勾选框，读作没有流程）：
-             身份卡可反复创建、不消耗卡本身，故本页主操作是创建。
-             2026-10-24 用户「右侧两个按钮，感觉很怪」：原来「到虚拟学习者 →」与创建并列，
-             两个按钮都在说虚拟学习者，一个是导航、一个是动作，读不出主次。
-             改法：hero 只留创建；同一实体的运行/记忆视图降为「概览」卡头文字入口。 -->
         <button
           type="button"
           class="mk-btn mk-btn--primary"
-          title="从这张身份卡创建 1 个虚拟学习者，下一步挑要带走的故事。卡留在卡库，可再创建"
           @click="openDerive"
         >创建虚拟学习者</button>
       </template>
@@ -38,18 +31,21 @@
           本卡由身份卡「<a
             href="#"
             class="mk-link"
-            :title="`打开身份卡「${d.derivedFrom.name}」`"
             @click.prevent="goTemplate(d.derivedFrom!.profileId)"
           >{{ d.derivedFrom.name }}</a>」创建，任务取自该身份卡的故事池。创建不消耗身份卡，可重复创建。
         </p>
       </div>
     </section>
 
-    <!-- 概览事实栅格（mk-facts 原语：div>span+strong 契约） -->
+    <!-- 概览事实栅格（mk-facts 原语：div>span+strong 契约）。
+         「已创建 N 个实例」落在本卡卡头：KPI 只说「已创建 2」，卡墙上任何一张卡都不显示是哪张建的。 -->
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">概览</h3>
-        <span class="mk-card__meta mono">{{ d.cardKey || '（无卡号）' }}</span>
+        <div class="mk-card__head-right">
+          <span class="mk-card__meta mono">{{ d.cardKey || '（无卡号）' }}</span>
+          <a v-if="derivedCount > 0" href="#" class="mk-link" @click.prevent="goInstances">已创建 {{ derivedCount }} 个实例 →</a>
+        </div>
       </div>
       <div class="cd-pad">
         <div class="mk-facts mk-facts--rows">
@@ -131,7 +127,6 @@
       v-else
       tone="error"
       title="卡不存在或已删除"
-      description="卡墙数据可能已刷新，返回卡库重试。"
       action-text="重试"
       :action-busy="loading"
       action-busy-text="重试中…"
@@ -145,6 +140,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
@@ -191,7 +187,26 @@ interface CardDetail {
 
 const d = ref<CardDetail | null>(null)
 const loading = ref(true)
+const router = useRouter()
+/** 本卡派生出的实例数（列表接口每行的 profile.derivedFrom.profileId 指向来源卡） */
+const derivedCount = ref(0)
 const profileId = computed(() => (subPage.value?.view === 'card' ? subPage.value.id || '' : ''))
+
+async function loadDerivedCount(pid: string) {
+  try {
+    const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 1000 })
+    const body = res.data?.data ?? res.data ?? {}
+    const items = Array.isArray(body.profiles) ? body.profiles : Array.isArray(body.items) ? body.items : []
+    derivedCount.value = items.filter((it: Record<string, unknown>) => {
+      const p = (it.profile || {}) as Record<string, unknown>
+      const df = (p.derivedFrom || {}) as Record<string, unknown>
+      return String(df.profileId || '') === pid
+    }).length
+  } catch {
+    /* 读数为空不是错误态：保持 0，页面其余部分照常可用 */
+    derivedCount.value = 0
+  }
+}
 
 async function load() {
   const pid = profileId.value
@@ -203,6 +218,7 @@ async function load() {
     // 深链/刷新/从卡墙进入时 subPage 只有 id（面包屑退化成裸 ID），加载出名字后回填。
     // id 守卫：慢响应返回时用户可能已切到别的实体详情，不能把别家的面包屑改名。
     if (d.value?.name && subPage.value?.id === pid) setSubPageLabel(d.value.name)
+    void loadDerivedCount(pid)
   } catch (e) {
     toast.error(errMsg(e) || '卡详情加载失败')
   } finally {
@@ -215,8 +231,13 @@ function goTemplate(profileId: string) {
   openSubPage('card', profileId, { from: { view: 'card', id: profileId, label: '身份卡' } })
 }
 
+/** 实例不在卡墙上：去虚拟学习者列表看 */
+function goInstances() {
+  void router.push('/admin/virtual-learners')
+}
+
 const heroSubText = computed(() => {
-  return d.value?.preset ? PRESET_SYNC_NOTE : '学习者卡 · 导入即用'
+  return d.value?.preset ? PRESET_SYNC_NOTE : ''
 });
 function sourceText(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
   if (c.preset) return '预置'
