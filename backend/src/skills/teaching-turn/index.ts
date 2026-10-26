@@ -532,7 +532,9 @@ export type TeachingFigureKind =
   | 'bullseye'
   | 'range-bar'
   | 'cartesian-plot'
-  | 'concept-map';
+  | 'concept-map'
+  | 'split-compare'
+  | 'state-strip';
 
 export interface TeachingFigure {
   /** 渲染引擎；归一化后恒为 'svg'（其他值整块丢弃，见 normalizeFigure） */
@@ -923,6 +925,14 @@ const FIGURE_KINDS: ReadonlySet<string> = new Set([
   // 2026-10-23 晚：概念图（concept-map）。用户点破方向：要的不是「讲完一处配一张答案图」，
   // 而是把**概念本身**摆出来——要素有哪些、彼此是什么关系、从哪来、导致什么。
   'concept-map',
+  // 2026-10-26：正误对比画布（split-compare）。动作诊所节奏的专属图型——
+  // 把「易错做法 vs 正确做法」左右并排，delta 指出分叉在哪一步；
+  // 误区纠错靠嘴说学生只能对号入座，并排一摆差异自己跳出来。
+  'split-compare',
+  // 2026-10-26：状态条带（state-strip）。过程类知识的三/四帧速写——
+  // 每帧一个时刻/阶段，帧内几条要点，帧间箭头表示推进；
+  // cycle 是回到原点的环，state-strip 是不回头的进程（握手、编译、消化、翻案）。
+  'state-strip',
 ]);
 
 /**
@@ -1310,6 +1320,10 @@ function normalizeFigureSpec(kind: TeachingFigureKind, raw: Record<string, unkno
       return normalizeCartesianPlotSpec(raw);
     case 'concept-map':
       return normalizeConceptMapSpec(raw);
+    case 'split-compare':
+      return normalizeSplitCompareSpec(raw);
+    case 'state-strip':
+      return normalizeStateStripSpec(raw);
     default:
       return null;
   }
@@ -1372,6 +1386,106 @@ function normalizeBalanceSpec(raw: Record<string, unknown>): Record<string, unkn
     right,
     ...(pivotLabel ? { pivotLabel } : {}),
     ...(focus ? { focus } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/**
+ * split-compare（2026-10-26）：正误并排对比画布。
+ *
+ * 为什么单独一种图型：纠错语境下学生要看的不是「正确的抽象描述」，而是
+ * **自己的做法和正确做法差在哪一步**——左右并排、行行对齐，delta 一句话点破分叉点。
+ * 这是「动作诊所」节奏（diagnose/refine 任务）的专属图型，也是误区预判（misconceptionHints）
+ * 的首选载体；compare 是双栏列表（已退役），split-compare 的两栏是**同一动作的两种走法**，
+ * 行与行之间有对应关系，不是两段文字。
+ *
+ * 约束：left/right 必填（head ≤18 字，rows 1~4，每行 label 必填 ≤18 字、sub 可选 ≤22 字）；
+ * delta 可选（label ≤22 字，at 为 1-based 行号、越界丢弃）；tone 只认四种。
+ */
+function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const normalizePanel = (panelRaw: unknown): Record<string, unknown> | null => {
+    if (!panelRaw || typeof panelRaw !== 'object') return null;
+    const panel = panelRaw as Record<string, unknown>;
+    const head = toFigureLabel(panel.head, SPEC.labelMax);
+    if (!head) return null;
+    const rows: Array<Record<string, unknown>> = [];
+    const seen = new Set<string>();
+    for (const item of Array.isArray(panel.rows) ? panel.rows : []) {
+      if (!item || typeof item !== 'object' || rows.length >= 4) continue;
+      const row = item as Record<string, unknown>;
+      const label = toFigureLabel(row.label, SPEC.labelMax);
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      const sub = toFigureText(row.sub, SPEC.subMax);
+      const tone = normalizeTone(row.tone, ['ok', 'warn', 'accent', 'neutral']);
+      rows.push({
+        label,
+        ...(sub ? { sub } : {}),
+        ...(tone ? { tone } : {}),
+      });
+    }
+    if (!rows.length) return null;
+    const tone = normalizeTone(panel.tone, ['ok', 'warn', 'accent', 'neutral']);
+    return { head, rows, ...(tone ? { tone } : {}) };
+  };
+  const left = normalizePanel(raw.left);
+  const right = normalizePanel(raw.right);
+  if (!left || !right) return null;
+  // at 是 1-based 行号，超过两栏最大行数就是指向不存在的行——高亮会落空，直接丢
+  const rowCount = Math.max((left.rows as unknown[]).length, (right.rows as unknown[]).length);
+  let delta: Record<string, unknown> | null = null;
+  if (raw.delta && typeof raw.delta === 'object') {
+    const deltaRaw = raw.delta as Record<string, unknown>;
+    const deltaLabel = toFigureText(deltaRaw.label, SPEC.subMax);
+    if (deltaLabel) {
+      const at = toFiniteNumber(deltaRaw.at);
+      delta = { label: deltaLabel, ...(at !== null && at >= 1 && at <= rowCount ? { at: Math.floor(at) } : {}) };
+    }
+  }
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  return {
+    left,
+    right,
+    ...(delta ? { delta } : {}),
+    ...(title ? { title } : {}),
+  };
+}
+
+/**
+ * state-strip（2026-10-26）：状态条带——不回头的进程分帧速写。
+ *
+ * 为什么单独一种图型：过程类知识（三次握手、编译四步、消化流程、翻案时间线）的
+ * 本体是「状态随阶段推进」，cycle 画成环会误导（它不回原点），cartesian 又没有
+ * 离散阶段轴。条带帧间箭头就是「下一步」，帧内要点是该时刻的状态快照。
+ *
+ * 约束：frames 2~5（label ≤18 字），每帧 items 0~3 条（≤18 字）；同一条目跨帧
+ * 复用由模型自己重写（渲染不做状态对齐）；note ≤160 字；tone 只认四种。
+ */
+function normalizeStateStripSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const frames: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.frames) ? raw.frames : []) {
+    if (!item || typeof item !== 'object' || frames.length >= 5) continue;
+    const frame = item as Record<string, unknown>;
+    const label = toFigureLabel(frame.label, SPEC.labelMax);
+    if (!label) continue;
+    const items: string[] = [];
+    const seen = new Set<string>();
+    for (const rawItem of Array.isArray(frame.items) ? frame.items : []) {
+      if (items.length >= 3) break;
+      const text = typeof rawItem === 'string' ? toFigureLabel(rawItem, SPEC.labelMax) : null;
+      if (!text || seen.has(text)) continue;
+      seen.add(text);
+      items.push(text);
+    }
+    const tone = normalizeTone(frame.tone, ['ok', 'warn', 'accent', 'neutral']);
+    frames.push({ label, items, ...(tone ? { tone } : {}) });
+  }
+  if (frames.length < 2) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    frames,
     ...(title ? { title } : {}),
     ...(note ? { note } : {}),
   };

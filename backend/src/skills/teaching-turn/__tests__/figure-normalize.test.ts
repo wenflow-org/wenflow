@@ -731,3 +731,69 @@ describe('concept-map：概念结构图（2026-10-23 用户定调：要概念可
     expect(one.figure.spec.edges).toEqual([{ from: 'a', to: 'b', label: '导致' }]);
   });
 });
+
+describe('split-compare：正误并排对比（2026-10-26 动作诊所）', () => {
+  it('左右面板 + delta 保留；空 rows 面板整图拒绝', async () => {
+    const ok = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        title: '换算：先除还是先换算',
+        left: { head: '常见错法', tone: 'warn', rows: [{ label: '60 ÷ 400', sub: '把秒当分钟除' }, { label: '得 0.15 分/米' }] },
+        right: { head: '正确做法', tone: 'ok', rows: [{ label: '60 × 400 ÷ 1000', sub: '先把米换算成千米' }, { label: '得 24 分/千米' }] },
+        delta: { label: '分叉在第一步：先换算再除', at: 1 },
+      },
+    });
+    expect(ok.figure.kind).toBe('split-compare');
+    expect(ok.figure.spec.left.head).toBe('常见错法');
+    expect(ok.figure.spec.right.rows).toHaveLength(2);
+    expect(ok.figure.spec.delta).toEqual({ label: '分叉在第一步：先换算再除', at: 1 });
+
+    const empty = await runWithFigure({
+      kind: 'split-compare',
+      spec: { left: { head: 'A', rows: [{ label: '甲' }] }, right: { head: 'B', rows: [] } },
+    });
+    expect(empty.figure).toBeUndefined();
+  });
+
+  it('delta.at 越界丢弃；head 缺失整图拒绝；行 label 缺失该行丢弃', async () => {
+    const trimmed = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        left: { head: '错', rows: [{ label: '甲' }, { label: '乙' }] },
+        right: { head: '对', rows: [{ label: '甲' }, { label: '乙' }] },
+        delta: { label: '分叉', at: 9 },
+      },
+    });
+    expect(trimmed.figure.spec.delta).toEqual({ label: '分叉' });
+
+    const noHead = await runWithFigure({
+      kind: 'split-compare',
+      spec: { left: { rows: [{ label: '甲' }] }, right: { head: '对', rows: [{ label: '甲' }] } },
+    });
+    expect(noHead.figure).toBeUndefined();
+  });
+});
+
+describe('state-strip：不回头的进程分帧（2026-10-26）', () => {
+  it('2~5 帧保留；items 截到 3 条、去重；单帧拒绝', async () => {
+    const ok = await runWithFigure({
+      kind: 'state-strip',
+      spec: {
+        title: 'TCP 三次握手',
+        frames: [
+          { label: 'SYN', tone: 'neutral', items: ['客户端 SYN_SENT', '服务端 LISTEN', '第一次', '多余第四条'] },
+          { label: 'SYN+ACK', items: ['服务端 SYN_RCVD', '服务端 SYN_RCVD'] },
+          { label: 'ACK', tone: 'ok', items: ['双方 ESTABLISHED'] },
+        ],
+        note: '每一步都是状态迁移，走完不回头',
+      },
+    });
+    expect(ok.figure.kind).toBe('state-strip');
+    expect(ok.figure.spec.frames).toHaveLength(3);
+    expect(ok.figure.spec.frames[0].items).toEqual(['客户端 SYN_SENT', '服务端 LISTEN', '第一次']);
+    expect(ok.figure.spec.frames[1].items).toEqual(['服务端 SYN_RCVD']);
+
+    const one = await runWithFigure({ kind: 'state-strip', spec: { frames: [{ label: '只有一步', items: ['x'] }] } });
+    expect(one.figure).toBeUndefined();
+  });
+});

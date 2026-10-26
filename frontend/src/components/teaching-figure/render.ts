@@ -2186,6 +2186,156 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
  * 边是**带名字的关系**（产生/供给/构成/导致/对照）。版面按最长路径自动分层（上→下），
  * 边标签压在连线上并带白描边；孤岛节点后端已剪掉。
  */
+/**
+ * split-compare（2026-10-26）：正误并排对比画布。
+ * 布局：左右两栏「同一步的两种走法」行行对齐（行高按两栏取大统一，保证第 n 行对第 n 行），
+ * 中缝 vs 圆片；delta.at 在两栏对应行加强调描边；底部一条分叉说明。
+ */
+function renderSplitCompare({ title, left, right, delta }: any): RenderedFigure | null {
+  // 契约与归一化一致：两栏都必须有至少一行——空栏不是对比
+  if (!left || !right || !Array.isArray(left.rows) || !left.rows.length || !Array.isArray(right.rows) || !right.rows.length) return null;
+  const W = 620;
+  const padX = 20;
+  const titleH = title ? T.fontTitle + 20 : 6;
+  const headH = 32;
+  const gapMid = 56;
+  const colW = Math.round((W - padX * 2 - gapMid) / 2);
+  const TONE: Record<string, { color: string; soft: string; ink: string }> = {
+    ok: { color: T.ok, soft: T.okSoft, ink: T.ok },
+    warn: { color: T.warn, soft: T.warnSoft, ink: T.warn },
+    accent: { color: T.accent, soft: T.accentSoft, ink: T.accentInk },
+    neutral: { color: T.muted, soft: T.soft, ink: T.muted },
+  };
+  const lt = TONE[left.tone] || TONE.warn;
+  const rt = TONE[right.tone] || TONE.ok;
+  const rowCount = Math.max(left.rows.length, right.rows.length);
+  // 行高按两栏同一行取大：有 sub 的行 46，否则 32——行行对齐是这张图的语义核心
+  const rowHs: number[] = [];
+  for (let i = 0; i < rowCount; i += 1) {
+    const a = left.rows[i];
+    const b = right.rows[i];
+    const hasSub = Boolean((a && a.sub) || (b && b.sub));
+    rowHs.push(hasSub ? 46 : 32);
+  }
+  const bodyTop = titleH + headH + 10;
+  const bodyH = rowHs.reduce((m, v) => m + v, 0) + 8;
+  const deltaH = delta && delta.label ? 40 : 8;
+  const h = bodyTop + bodyH + deltaH + 14;
+  const parts: string[] = [...titleBlock(title)];
+  const colTop = titleH + 6;
+
+  const drawCol = (col: any, x: number, tone: { color: string; soft: string; ink: string }) => {
+    parts.push(rect(x, colTop, colW, headH + bodyH + 4, { r: T.radius, fill: T.surface, stroke: T.line }));
+    parts.push(rect(x, colTop, colW, headH, { r: T.radius, fill: tone.soft, stroke: 'none', sw: 0 }));
+    // 圆角头部：盖一块矩形把下沿两个圆角补直
+    parts.push('<rect x="' + x + '" y="' + (colTop + headH - 8) + '" width="' + colW + '" height="8" fill="' + tone.soft + '"/>');
+    parts.push(text(x + colW / 2, colTop + headH / 2 + 5, col.head || '', 't-key', 'middle', 'fill="' + tone.ink + '"'));
+    let y = bodyTop;
+    for (let i = 0; i < rowCount; i += 1) {
+      const row = col.rows[i];
+      const rh = rowHs[i];
+      const hi = delta && Number.isInteger(Number(delta.at)) && Number(delta.at) === i + 1;
+      if (row) {
+        if (hi) parts.push(rect(x + 6, y + 1, colW - 12, rh - 2, { r: 6, fill: tone.soft, stroke: tone.color, sw: 1.4 }));
+        parts.push(text(x + 12, y + (rh === 46 ? 20 : rh / 2 + 5), row.label, 't-label', 'start', 'fill="' + T.ink + '"'));
+        if (row.sub && rh === 46) {
+          const subs = balancedWrap(row.sub, colW - 24, T.fontMicro);
+          subs.forEach((line, li) => parts.push(text(x + 12, y + 36 + li * 12, line, 't-tiny', 'start', 'fill="' + T.muted + '"')));
+        }
+      }
+      if (i > 0) parts.push('<line x1="' + (x + 10) + '" y1="' + y + '" x2="' + (x + colW - 10) + '" y2="' + y + '" stroke="' + T.line + '" stroke-width="0.8"/>');
+      y += rh;
+    }
+  };
+
+  drawCol(left, padX, lt);
+  drawCol(right, W - padX - colW, rt);
+
+  // 中缝 vs：同一动作的两种走法在此分岔
+  const vsY = colTop + headH / 2;
+  parts.push('<line x1="' + W / 2 + '" y1="' + (colTop + 8) + '" x2="' + W / 2 + '" y2="' + (vsY - 17) + '" stroke="' + T.line + '" stroke-width="1"/>');
+  parts.push('<line x1="' + W / 2 + '" y1="' + (vsY + 17) + '" x2="' + W / 2 + '" y2="' + (colTop + headH + bodyH - 4) + '" stroke="' + T.line + '" stroke-width="1"/>');
+  parts.push('<circle cx="' + W / 2 + '" cy="' + vsY + '" r="15" fill="' + T.surface + '" stroke="' + T.lineStrong + '" stroke-width="1.2"/>');
+  parts.push(text(W / 2, vsY + 4, 'vs', 't-tiny', 'middle', 'fill="' + T.muted + '"'));
+
+  if (delta && delta.label) {
+    const dy = bodyTop + bodyH + 8;
+    const lines = balancedWrap(String(delta.label), W - padX * 2 - 34, T.fontSmall);
+    const boxH = Math.max(30, 12 + lines.length * 16);
+    parts.push(rect(padX, dy, W - padX * 2, boxH, { r: 8, fill: T.accentSoft, stroke: 'none', sw: 0 }));
+    parts.push('<path d="M' + (padX + 12) + ' ' + (dy + boxH / 2 - 5) + ' l8 5 l-8 5 Z" fill="' + T.accentInk + '"/>');
+    lines.forEach((line, li) => parts.push(text(padX + 28, dy + 19 + li * 16, line, 't-small', 'start', 'fill="' + T.accentInk + '" font-weight="600"')));
+  }
+  return { svg: wrap(parts.join('\n'), W, h), width: W, height: h };
+}
+
+/**
+ * state-strip（2026-10-26）：状态条带——不回头的进程分帧速写。
+ * 布局：2~5 帧横排，帧间箭头「下一步」；每帧头部条 + 状态要点若干行（折行）。
+ */
+function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | null {
+  if (!Array.isArray(frames) || frames.length < 2) return null;
+  const W = 620;
+  const padX = 20;
+  const titleH = title ? T.fontTitle + 20 : 6;
+  const headH = 30;
+  const gap = 30;
+  const n = frames.length;
+  const fw = Math.round((W - padX * 2 - (n - 1) * gap) / n);
+  const TONE: Record<string, { color: string; soft: string; ink: string }> = {
+    ok: { color: T.ok, soft: T.okSoft, ink: T.ok },
+    warn: { color: T.warn, soft: T.warnSoft, ink: T.warn },
+    accent: { color: T.accent, soft: T.accentSoft, ink: T.accentInk },
+    neutral: { color: T.muted, soft: T.soft, ink: T.muted },
+  };
+  // 每帧行数（items 折行后的总行数），帧高按最高帧对齐
+  const frameLines: string[][] = frames.map((f: any) => {
+    const items: string[] = Array.isArray(f.items) ? f.items.filter((x: any) => typeof x === 'string' && x.trim()).slice(0, 3) : [];
+    const out: string[] = [];
+    for (const it of items) {
+      const lines = balancedWrap(it, fw - 20, T.fontSmall);
+      out.push(...lines.slice(0, 2));
+    }
+    return out;
+  });
+  const maxLines = Math.max(1, ...frameLines.map((ls) => ls.length));
+  const bodyH = maxLines * 17 + 12;
+  const frameH = headH + bodyH + 8;
+  const noteLines = note ? balancedWrap(note, W - padX * 2 - 8, T.fontSmall) : [];
+  const noteH = noteLines.length ? 12 + noteLines.length * 16 : 0;
+  const h = titleH + frameH + noteH + 16;
+  const parts: string[] = [...titleBlock(title)];
+  const top = titleH + 6;
+
+  frames.forEach((f: any, i: number) => {
+    const tone = TONE[f.tone] || TONE.neutral;
+    const x = padX + i * (fw + gap);
+    parts.push(rect(x, top, fw, frameH, { r: T.radius, fill: T.surface, stroke: i === n - 1 ? T.lineStrong : T.line }));
+    parts.push(rect(x, top, fw, headH, { r: T.radius, fill: tone.soft, stroke: 'none', sw: 0 }));
+    parts.push('<rect x="' + x + '" y="' + (top + headH - 8) + '" width="' + fw + '" height="8" fill="' + tone.soft + '"/>');
+    // 帧序号 + 帧名
+    parts.push(text(x + 10, top + headH / 2 + 5, String(i + 1), 't-tiny', 'start', 'fill="' + tone.ink + '" font-weight="700"'));
+    parts.push(text(x + fw / 2 + 5, top + headH / 2 + 5, String(f.label ?? ''), 't-key', 'middle', 'fill="' + tone.ink + '"'));
+    const ls = frameLines[i];
+    ls.forEach((line, li) => parts.push(text(x + 10, top + headH + 20 + li * 17, line, 't-small', 'start', 'fill="' + T.ink + '"')));
+    if (!ls.length) parts.push(text(x + fw / 2, top + headH + bodyH / 2, '—', 't-small', 'middle', 'fill="' + T.faint + '"'));
+    // 帧间箭头
+    if (i < n - 1) {
+      const ax1 = x + fw + 4;
+      const ax2 = x + fw + gap - 4;
+      const ay = top + frameH / 2;
+      parts.push('<line x1="' + ax1 + '" y1="' + ay + '" x2="' + (ax2 - 7) + '" y2="' + ay + '" stroke="' + T.lineStrong + '" stroke-width="1.6"/>');
+      parts.push('<path d="M' + ax2 + ' ' + ay + ' l-8 -4 l1.8 8.4 Z" fill="' + T.lineStrong + '"/>');
+    }
+  });
+
+  if (noteLines.length) {
+    const ny = top + frameH + 10;
+    noteLines.forEach((line, li) => parts.push(text(padX + 4, ny + li * 16, line, 't-small', 'start', 'fill="' + T.muted + '"')));
+  }
+  return { svg: wrap(parts.join('\n'), W, h), width: W, height: h };
+}
+
 function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): RenderedFigure | null {
   if (!Array.isArray(nodes) || nodes.length < 2 || !Array.isArray(edges) || !edges.length) return null;
   const byId = new Map<string, any>(nodes.map((n: any) => [String(n.id), n]));
@@ -2473,6 +2623,10 @@ export function renderSpecFigure(
         return renderCartesianPlot(spec);
       case 'concept-map':
         return renderConceptMap(spec);
+      case 'split-compare':
+        return renderSplitCompare(spec);
+      case 'state-strip':
+        return renderStateStrip(spec);
       default:
         return null;
     }

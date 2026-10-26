@@ -112,6 +112,12 @@ describe('图型提示：只给有专属几何的图型（2026-10-23 用户：�
     expect(chooseFigureKind('同一时刻水平方向走了几米，竖直方向落了多高？')?.kind).toBe('cartesian-plot');
     expect(chooseFigureKind('平抛的轨迹到底长什么样？')?.kind).toBe('cartesian-plot');
   });
+  it('误区/易错 → split-compare；流程推进 → state-strip（2026-10-26 动作诊所）', () => {
+    expect(chooseFigureKind('很多同学在这一步容易错：直接拿 60 除以 400')?.kind).toBe('split-compare');
+    expect(chooseFigureKind('你这个步骤弄反了，正确做法是先把单位换算过去')?.kind).toBe('split-compare');
+    expect(chooseFigureKind('三次握手的第一步是客户端发 SYN，第二步服务端回 SYN+ACK')?.kind).toBe('state-strip');
+    expect(chooseFigureKind('这个请求的生命周期分为四个阶段，按流程推进')?.kind).toBe('state-strip');
+  });
   it('泛化「对比/区别」不再落任何图型（没有专属几何就不出图）', () => {
     expect(chooseFigureKind('这两种写法有什么区别？')).toBeNull();
     expect(chooseFigureKind('两种方案的请求路径：跨集群往返几次？')).toBeNull();
@@ -956,6 +962,38 @@ describe('读图题脱敏不扣图（maskFigureForQuestion，2026-10-24 外部�
     const out = maskFigureForQuestion(cm, '从海面出发把这几个环节按顺序说一遍，谁推动谁？') as any;
     expect(out.spec.edges[0].label).toBe('？');
     expect(out.spec.nodes[0].label).toBe('市场');
+  });
+
+  it('split-compare 读图题：delta 结论挖空、两栏与分叉行高亮保留（不空壳）', () => {
+    const sc = {
+      kind: 'split-compare',
+      spec: {
+        left: { head: '错法', rows: [{ label: '60 ÷ 400' }] },
+        right: { head: '正解', rows: [{ label: '60 × 400 ÷ 1000' }] },
+        delta: { label: '分叉在第一步：先换算', at: 1 },
+      },
+    };
+    const out = maskFigureForQuestion(sc, '两栏在哪一步分岔？为什么是那一步？') as any;
+    expect(out).not.toBeNull();
+    expect(out.spec.delta.label).toBe('？');
+    expect(out.spec.delta.at).toBe(1);
+    expect(out.spec.left.rows[0].label).toBe('60 ÷ 400');
+  });
+
+  it('state-strip 读图题：帧名骨架保留、帧内状态挖空', () => {
+    const st = {
+      kind: 'state-strip',
+      spec: {
+        frames: [
+          { label: 'SYN', items: ['客户端 SYN_SENT'] },
+          { label: 'SYN+ACK', items: ['服务端 SYN_RCVD'] },
+        ],
+      },
+    };
+    const out = maskFigureForQuestion(st, '看图说：每一步双方的状态分别是什么？') as any;
+    expect(out).not.toBeNull();
+    expect(out.spec.frames[0].label).toBe('SYN');
+    expect(out.spec.frames[1].items).toEqual(['？']);
   });
 
   it('不可脱敏的图型（venn）+ 读图题 → null（整张扣下）', () => {

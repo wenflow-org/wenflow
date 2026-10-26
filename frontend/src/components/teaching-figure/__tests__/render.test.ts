@@ -635,3 +635,61 @@ describe('concept-map（2026-10-23：概念与知识可视化，不是出题）'
     expect(renderSpecFigure('concept-map', { nodes: [{ id: 'a', label: '甲' }], edges: [] })).toBeNull();
   });
 });
+
+describe('split-compare（2026-10-26：正误并排，行行对齐）', () => {
+  it('两栏行对齐、delta.at 高亮分叉行、底部说明画出', () => {
+    const out = renderSpecFigure('split-compare', {
+      title: '换算：先除还是先换算',
+      left: { head: '常见错法', tone: 'warn', rows: [{ label: '60 ÷ 400', sub: '把秒当分钟除' }, { label: '得 0.15' }] },
+      right: { head: '正确做法', tone: 'ok', rows: [{ label: '60 × 400 ÷ 1000', sub: '先把米换算成千米' }, { label: '得 24' }] },
+      delta: { label: '分叉在第一步：先换算再除', at: 1 },
+    });
+    expect(out).not.toBeNull();
+    const svg = out!.svg;
+    expect(svg).toContain('常见错法');
+    expect(svg).toContain('把秒当分钟除');
+    expect(svg).toContain('先把米换算成千米');
+    expect(svg).toContain('分叉在第一步');
+    expect(svg).toContain('vs');
+    // delta.at=1：第一行（y≈bodyTop..bodyTop+46 区间）内应出现强调描边矩形
+    const hi = (svg.match(/stroke="#[0-9a-f]+"/g) || []).length;
+    expect(hi).toBeGreaterThan(0);
+  });
+
+  it('rows 全空 / 缺面板 → null', () => {
+    expect(renderSpecFigure('split-compare', { left: { head: 'A', rows: [] }, right: { head: 'B', rows: [{ label: '甲' }] } })).toBeNull();
+    expect(renderSpecFigure('split-compare', { left: { head: 'A', rows: [{ label: '甲' }] } })).toBeNull();
+  });
+});
+
+describe('state-strip（2026-10-26：不回头的进程分帧）', () => {
+  it('帧序号、帧名、帧内要点、帧间箭头、note 都画出', () => {
+    const out = renderSpecFigure('state-strip', {
+      title: 'TCP 三次握手',
+      frames: [
+        { label: 'SYN', items: ['客户端 SYN_SENT', '服务端 LISTEN'] },
+        { label: 'SYN+ACK', tone: 'accent', items: ['服务端 SYN_RCVD'] },
+        { label: 'ACK', tone: 'ok', items: ['双方 ESTABLISHED'] },
+      ],
+      note: '每一步都是状态迁移，走完不回头',
+    });
+    expect(out).not.toBeNull();
+    const svg = out!.svg;
+    expect(svg).toContain('TCP 三次握手');
+    expect(svg).toContain('SYN_SENT');
+    expect(svg).toContain('SYN_RCVD');
+    expect(svg).toContain('每一步都是状态迁移');
+    // 帧间箭头（2 个）与帧序号
+    expect(svg).toContain('l-8 -4');
+    expect(svg).toContain('>1<');
+    for (const m of svg.matchAll(/(?:cx|cy|x1|x2|y1|y2|x|y)="(-?\d+(?:\.\d+)?)"/g)) {
+      const v = Number(m[1]);
+      expect(v).toBeGreaterThanOrEqual(-1);
+      expect(v).toBeLessThanOrEqual(Math.max(out!.width, out!.height) + 1);
+    }
+  });
+
+  it('少于 2 帧 → null', () => {
+    expect(renderSpecFigure('state-strip', { frames: [{ label: '单帧', items: ['x'] }] })).toBeNull();
+  });
+});

@@ -298,6 +298,8 @@ const FIGURE_KIND_GUIDE = [
   '- matrix：二维命中矩阵（✓有/—无/叠=重复堆砌/≡两边同一项）。{"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":1,"tone":"hit|miss|dup|key"}],"legend":[{"text":"✓ 已写到","fill":"#e6f4f1"}]}',
   '- range-bar：**多组数值区间并排**（新组/旧组的波动范围、上下限、从哪到哪）。{"unit":"%","rows":[{"label":"新组四天","from":3.1,"to":3.8,"tone":"accent"},{"label":"旧组四天","from":2.9,"to":3.6,"tone":"neutral"}],"marks":[{"at":0.5,"label":"汇报的均值差"}],"note":"…"}——**数值区间不要塞进 position-line**：一根时间轴画不出带宽，把「幅度」横着放会被读成日期跨度。',
   '- concept-map：**概念结构图**（讲概念本身，不是出题）：{"nodes":[{"id":"light","label":"光反应","sub":"类囊体膜","tone":"accent"},{"id":"atp","label":"ATP / NADPH","sub":"能量与还原力"},{"id":"dark","label":"暗反应","sub":"叶绿体基质"}],"edges":[{"from":"light","to":"atp","label":"产生"},{"from":"atp","to":"dark","label":"供给"}],"takeaway":"光反应造能量，暗反应用能量把 CO₂ 变成糖"}——节点是概念要素（概念/过程/量/条件），**每条边必须有关系名**（产生/供给/构成/依赖/导致/对照）；讲解概念、机制、流程时优先用它，不要用「问题+答案」的画法；**概念图用在「第一次讲清/整体梳理」这一轮**——如果这一轮是让学生自己复述或推导整张结构，就不要把完整结构图放出来（可以留白或等学生说完再印证）。',
+  '- split-compare：**正误并排对比**（学生做错一步、纠典型误区时优先用）。{"title":"…","left":{"head":"常见错法","tone":"warn","rows":[{"label":"60 ÷ 400","sub":"把秒当分钟除"}]},"right":{"head":"正确做法","tone":"ok","rows":[{"label":"60 × 400 ÷ 1000","sub":"先把米换算成千米"}]},"delta":{"label":"分叉在第二步：先除还是先换算","at":1}}——左右是**同一个动作的两种走法**，第 n 行对第 n 行；delta.at 指出分叉在第几步；正文不复述两栏，只点破分叉步。',
+  '- state-strip：**不回头的进程分帧**（三次握手/编译流程/消化过程/生命周期）。{"title":"TCP 三次握手","frames":[{"label":"SYN","items":["客户端 SYN_SENT","服务端 LISTEN"]},{"label":"SYN+ACK","items":["服务端 SYN_RCVD"]},{"label":"ACK","items":["双方 ESTABLISHED"]}] ,"note":"…"}——2~5 帧横排、帧间箭头是「下一步」；**要回到起点**的过程（循环/迭代）用 cycle，不要用条带。',
   '- cartesian-plot：**二维坐标图**（函数曲线/平抛轨迹/实验数据）。{"x":{"label":"水平位移 / m","min":0,"max":2.6,"ticks":[0,0.6,1.2,1.8,2.4]},"y":{"label":"高度 / m","min":0,"max":0.85,"ticks":[0,0.4,0.8]},"series":[{"name":"3 m/s","form":"parabola","a":-0.5556,"b":0,"c":0.8,"tone":"ok","dotPoints":[[0.3,0.75],[0.6,0.6],[0.9,0.35],[1.2,0]]}],"guides":[{"axis":"y","at":0.75,"label":"t=0.1s · 0.75m"}],"vectors":[{"at":[0,0.8],"dx":0.6,"dy":0,"label":"v₀"}],"marks":[{"at":[1.2,0],"label":"落点 1.2 m"}]}——**同一时刻两个球在不在同一高度**，只能靠这张图看见；form 可用 points/parabola(a,b,c)/linear(k,b)/scatter，dotPoints 是等时间隔的位置点（频闪），属于同一条曲线，**不要另开一条散点系列**；**要表达「面积」时给 `areas`**：{"areas":[{"from":0,"to":4,"series":"速度","label":"位移 = 面积"}]}（v-t 图下面积=位移、供需曲线围出的剩余都靠它）；图例里写到的每条曲线都必须真的画出来；数值必须是真实量纲。',
   '- **变量名/引用/拷贝**：用 bipartite，左列变量名、右列内存对象，edges 表示指向；`b = a` 是两条边汇到同一个对象节点，`a[:]` 是外层两个节点、内层同一节点。**同一张图上不要同时画「改之前」和「改之后」两个状态**（外审：学生会以为 b 同时指向两个对象）——只画当前状态，或把前后两组分开并列并各自标头。',
   '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',
@@ -389,7 +391,9 @@ export type FigureKindHint =
   | 'matrix'
   | 'range-bar'
   | 'cartesian-plot'
-  | 'concept-map';
+  | 'concept-map'
+  | 'split-compare'
+  | 'state-strip';
 
 interface KindRule {
   kind: FigureKindHint;
@@ -416,6 +420,11 @@ const KIND_RULES: readonly KindRule[] = [
   // 概念结构（2026-10-23 用户定调「要概念可视化，不是出题」）：
   // 一轮在讲「这个概念由什么构成、先后/依赖/对照关系」，学习对象是知识结构本身。
   { kind: 'concept-map', test: /(由.{0,8}(构成|组成|分两部分|三个阶段)|包括.{0,8}(几部分|两部分|三部分)|组成部分|构成要素|两个阶段|三个阶段|机制是|前提是|依赖于|取决于|导致|促成|与.{0,6}相对|与之相反|区别在于)/, why: '这一轮讲的是概念的结构：谁由谁构成、谁依赖谁——要的是概念图，不是答案' },
+  // 正误对比（2026-10-26 动作诊所）：学生做错一步、或任务预判了典型误区时，最值钱的图是
+  // 把「错走法 vs 对走法」并排摆出来让差异自己跳出来——嘴上纠正学生只能对号入座。
+  { kind: 'split-compare', test: /(易错|常见错误|常见误区|容易错|做错了|做错.{0,4}(一步|地方|地方)|错在|正误|对错|正确做法|错误做法|典型错误|误区|踩坑|陷阱|步骤反了|顺序反了|弄反|搞反)/, why: '这一轮在纠一个具体错法：错与对要并排看差异，delta 指出分叉在哪一步' },
+  // 不回头的进程（2026-10-26）：阶段推进类过程，cycle 画成环会误导（它不回原点）。
+  { kind: 'state-strip', test: /(第[一二三四五1-5]步|流程(分为|图|是|：|:)|时序|生命周期|三次握手|握手过程|构建流程|步骤(是|为|如下)|按(流程|步骤)推进|阶段推进)/, why: '过程按阶段推进、不回原点：分帧条带比环图诚实，帧间箭头就是下一步' },
   // 二维坐标图（2026-10-23）：平抛/斜抛/函数图像/实验曲线——学生要看见的关系只存在于二维空间，
   // 表格永远画不出来（用户：「这不叫图，叫制表信息」）。
   { kind: 'cartesian-plot', test: /(平抛|斜抛|抛体|自由落体|抛物线|轨迹|函数图像|二次函数|一次函数|曲线(变化|关系)|成正比|成反比|斜率|截距)/, why: '关系写在横纵两轴上：两条曲线在同一时刻的比较只能靠坐标图看见' },
@@ -734,6 +743,26 @@ export function maskFigureForQuestion<T extends { kind?: string; spec?: unknown 
       // 轴本身的刻度含义保留（如「等当点 20 mL」里没有数值答案的标签），带数值的一律挖空
       return /\d/.test(label) ? { ...g, label: label.replace(/[-+]?[\d.]+/g, '?').replace(/\s{2,}/g, ' ').slice(0, 14) } : g;
     });
+    return { ...figure, spec };
+  }
+
+  if (kind === 'split-compare') {
+    // 两栏做法是事实、delta 是结论（分叉在哪一步+为什么）——结论挖掉，分叉行的高亮位置保留，
+    // 学生对着一排差异自己说；只挖 delta 不空壳（两栏完整在）
+    if (spec.delta && typeof spec.delta === 'object') {
+      spec.delta = { ...(spec.delta as Record<string, unknown>), label: '？' };
+    }
+    return { ...figure, spec };
+  }
+
+  if (kind === 'state-strip') {
+    // 帧名是骨架（学生能对着帧名说状态），帧内状态快照是要复述的答案——骨架留、答案挖
+    if (Array.isArray(spec.frames)) {
+      spec.frames = (spec.frames as Array<Record<string, unknown>>).map((f) => ({
+        ...f,
+        items: Array.isArray(f.items) ? (f.items as unknown[]).map(() => '？') : f.items,
+      }));
+    }
     return { ...figure, spec };
   }
 
