@@ -1432,6 +1432,10 @@ function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string,
   const left = normalizePanel(raw.left);
   const right = normalizePanel(raw.right);
   if (!left || !right) return null;
+  // 两栏内容完全相同 = 不是对比（外盲评 V4 #2：两侧代码一字不差，学生看不到差异）
+  const leftSeq = (left.rows as Array<Record<string, unknown>>).map((r) => r.label).join('');
+  const rightSeq = (right.rows as Array<Record<string, unknown>>).map((r) => r.label).join('');
+  if (leftSeq === rightSeq) return null;
   // at 是 1-based 行号，超过两栏最大行数就是指向不存在的行——高亮会落空，直接丢
   const rowCount = Math.max((left.rows as unknown[]).length, (right.rows as unknown[]).length);
   let delta: Record<string, unknown> | null = null;
@@ -1644,6 +1648,8 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
   const x = axisOf(raw.x, SPEC.labelMax);
   const y = axisOf(raw.y, SPEC.labelMax);
   if (!x || !y) return null;
+  // V6 双轴：y2 只在存在 right 轴系列时才生效（孤立 y2 是模型笔误，丢掉）
+  const y2 = axisOf(raw.y2, SPEC.labelMax);
 
   const series: Array<Record<string, unknown>> = [];
   for (const item of Array.isArray(raw.series) ? raw.series : []) {
@@ -1719,6 +1725,8 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
       if (dots.length) out.dotPoints = dots;
     }
     if (tone) out.tone = tone;
+    // 双轴：只有右侧确实有轴（y2 有效）才保留 axis:'right'，否则退回左轴
+    if (y2 && (s as Record<string, unknown>).axis === 'right') out.axis = 'right';
     series.push(out);
     if (series.length >= 3) break;
   }
@@ -1822,9 +1830,11 @@ function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string
   }
 
   const title = toFigureText(raw.title, SPEC.titleMax);
+  const rightSeries = series.some((sv) => sv.axis === 'right');
   return {
     x,
     y,
+    ...(y2 && rightSeries ? { y2 } : {}),
     series,
     ...(guides.length ? { guides } : {}),
     ...(bands.length ? { bands } : {}),

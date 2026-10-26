@@ -755,12 +755,23 @@ describe('split-compare：正误并排对比（2026-10-26 动作诊所）', () =
     expect(empty.figure).toBeUndefined();
   });
 
+  it('两栏内容完全相同 → 整图拒绝（不是对比）', async () => {
+    const same = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        left: { head: '错', rows: [{ label: 'copy[0].push(9)' }] },
+        right: { head: '对', rows: [{ label: 'copy[0].push(9)' }] },
+      },
+    });
+    expect(same.figure).toBeUndefined();
+  });
+
   it('delta.at 越界丢弃；head 缺失整图拒绝；行 label 缺失该行丢弃', async () => {
     const trimmed = await runWithFigure({
       kind: 'split-compare',
       spec: {
         left: { head: '错', rows: [{ label: '甲' }, { label: '乙' }] },
-        right: { head: '对', rows: [{ label: '甲' }, { label: '乙' }] },
+        right: { head: '对', rows: [{ label: '甲对' }, { label: '乙对' }] },
         delta: { label: '分叉', at: 9 },
       },
     });

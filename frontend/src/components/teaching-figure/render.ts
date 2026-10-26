@@ -1680,7 +1680,7 @@ function renderVenn({ title, left, right, overlap, note }: any): RenderedFigure 
    */
   const sideMaxW = Math.round(r * 0.8);
   const blockLines = (items: string[]) =>
-    items.slice(0, 3).map((it) => wrapLines(it, sideMaxW, T.fontMicro).slice(0, 2));
+    items.slice(0, 3).map((it) => balancedWrap(it, sideMaxW, T.fontMicro).slice(0, 2));
   const block = (x: number, head: string | undefined, items: string[], tone: string) => {
     const out: string[] = [];
     const groups = blockLines(items);
@@ -1735,7 +1735,9 @@ function renderBullseye({ title, colLabels = [], rowLabels = [], cells = [], not
   const cellH = 152;
   const gapX = 16;
   const gapY = 18;
-  const padL = 104;
+  // V6 修复（外盲评：行标签「低」被裁掉）：padL 按最长行标签动态给
+  const rowLabelW = Math.max(0, ...rowLabels.map((lab: any) => est(lab?.label ?? String(lab), T.fontKey)));
+  const padL = Math.max(104, Math.ceil(rowLabelW) + 26);
   const pad = 18;
   const titleH = title ? T.fontTitle + 20 : 0;
   const W = Math.ceil(padL + cellW * 2 + gapX + pad);
@@ -1750,7 +1752,7 @@ function renderBullseye({ title, colLabels = [], rowLabels = [], cells = [], not
   );
   rowLabels.forEach((lab: any, r: number) => {
     const y = top + r * (cellH + gapY) + cellH / 2;
-    parts.push(text(padL - 18, y - 2, lab?.label ?? String(lab), 't-key', 'end'));
+    parts.push(text(padL - 18, y - 2, fitText(lab?.label ?? String(lab), padL - 26, T.fontKey), 't-key', 'end'));
     if (lab?.sub) parts.push(text(padL - 18, y + 16, lab.sub, 't-tiny', 'end'));
   });
 
@@ -1899,7 +1901,7 @@ function fmtNum(v: number): string {
  * 横轴 x、纵轴 y、曲线、等时刻辅助线。模型只给轴域、表达式/数据点、辅助线与箭头，
  * 采样与排版全部由这里确定性完成（同一份 spec 永远画出同一张图）。
  */
-function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = [], areas = [], vectors = [], marks = [] }: any): RenderedFigure | null {
+function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands = [], areas = [], vectors = [], marks = [] }: any): RenderedFigure | null {
   if (!x || !y || !(Number(x.max) > Number(x.min)) || !(Number(y.max) > Number(y.min))) {
     if (process.env.FIG_DEBUG) console.error('[cartesian] 轴域缺失');
     return null;
@@ -1911,6 +1913,10 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
 
   const TONE: Record<string, string> = { accent: T.accent, ok: T.ok, warn: T.warn, neutral: T.muted };
   const padL = 62;
+  // V6 双轴（外盲评：气温降水同轴把气温压进 1/6 高度）：y2 有效且存在右轴系列时才启用
+  const hasRight = Array.isArray(series) && series.some((sv: any) => sv?.axis === 'right');
+  const y2ok = !!y2 && Number(y2.max) > Number(y2.min) && hasRight;
+  const rightAxisW = y2ok ? 34 + (y2.label ? 12 : 0) : 0;
   // 右侧留出辅助线标签栏（写在画布外侧，绝不压在数据上）；宽度按最长标签动态给
   const padR = Math.max(
     24,
@@ -1918,7 +1924,7 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
       130,
       14 + Math.max(0, ...(Array.isArray(guides) ? guides.map((g: any) => (g.label ? est(g.label, T.fontMicro) : 0)) : [])),
     ),
-  );
+  ) + rightAxisW;
   const padB = 44;
   const titleH = title ? T.fontTitle + 18 : 0;
   const plotW = 560;
@@ -1967,7 +1973,7 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
       }
       const tone = TONE[s.tone] || T.accent;
       parts.push(`<circle cx="${lx + 4}" cy="${ly - 4}" r="4" fill="${tone}"/>`);
-      parts.push(text(lx + 13, ly, s.name, 't-small', 'start'));
+      parts.push(text(lx + 13, ly, s.axis === 'right' ? `${s.name}（右轴）` : s.name, 't-small', 'start'));
       lx += need;
     });
   }
@@ -1993,6 +1999,23 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
     parts.push(text(padL - 8, gy + 3.5, fmtNum(Number(t)), 't-tiny', 'end'));
   }
 
+  // 右轴（V6 双轴）：刻度标签靠右画，与左轴互不干扰
+  if (y2ok) {
+    const ry0 = Number(y2.min);
+    const ry1 = Number(y2.max);
+    const py2 = (v: number) => axisY - ((v - ry0) / (ry1 - ry0)) * plotH;
+    const rTicks: number[] = Array.isArray(y2.ticks) ? y2.ticks : [];
+    parts.push(`<line x1="${padL + plotW}" y1="${top}" x2="${padL + plotW}" y2="${axisY}" stroke="${T.lineStrong}" stroke-width="1.5"/>`);
+    let lastRLabel = Number.NEGATIVE_INFINITY;
+    for (const t of rTicks) {
+      const gy = py2(Number(t));
+      if (Math.abs(gy - lastRLabel) < 15) continue;
+      lastRLabel = gy;
+      parts.push(text(padL + plotW + 6, gy + 3.5, fmtNum(Number(t)), 't-tiny', 'start'));
+    }
+    if (y2.label) parts.push(text(padL + plotW + 20, top + 8, String(y2.label), 't-tiny', 'start', `fill="${T.muted}"`));
+  }
+
   // 坐标轴
   parts.push(`<line x1="${padL}" y1="${top}" x2="${padL}" y2="${axisY}" stroke="${T.lineStrong}" stroke-width="1.5"/>`);
   parts.push(`<line x1="${padL}" y1="${axisY}" x2="${padL + plotW}" y2="${axisY}" stroke="${T.lineStrong}" stroke-width="1.5"/>`);
@@ -2006,6 +2029,12 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
   const drawSeries = (s: any): string[] => {
     const tone = TONE[s.tone] || T.accent;
     const out: string[] = [];
+    // 右轴系列用右轴的域与映射；左轴系列不变
+    const useRight = !!y2ok && s.axis === 'right';
+    const yDomain = useRight ? { min: Number(y2.min), max: Number(y2.max) } : { min: y0, max: y1 };
+    const toY = useRight
+      ? (v: number) => axisY - ((v - Number(y2.min)) / (Number(y2.max) - Number(y2.min))) * plotH
+      : (v: number) => py(v);
     let pts: Array<[number, number]> = [];
     if (s.form === 'parabola') {
       const a = Number(s.a);
@@ -2052,7 +2081,7 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
     const segments: Array<Array<[number, number]>> = [];
     let run: Array<[number, number]> = [];
     for (const p of pts) {
-      if (inRange(p[0], x0, x1) && inRange(p[1], y0, y1)) run.push(p);
+      if (inRange(p[0], x0, x1) && inRange(p[1], yDomain.min, yDomain.max)) run.push(p);
       else {
         if (run.length > 1) segments.push(run);
         run = [];
@@ -2060,13 +2089,13 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
     }
     if (run.length > 1) segments.push(run);
     for (const seg of segments) {
-      const d = seg.map(([vx, vy], i) => `${i === 0 ? 'M' : 'L'}${px(vx).toFixed(1)} ${py(vy).toFixed(1)}`).join(' ');
+      const d = seg.map(([vx, vy], i) => `${i === 0 ? 'M' : 'L'}${px(vx).toFixed(1)} ${toY(vy).toFixed(1)}`).join(' ');
       out.push(`<path d="${d}" fill="none" stroke="${tone}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`);
     }
     // 频闪点：等时刻采样点用实心点标出来——「每一拍都在同一高度」靠点对齐才看得见
     if (s.dots) {
       for (const [vx, vy] of visible) {
-        out.push(`<circle cx="${px(vx)}" cy="${py(vy)}" r="3.6" fill="${tone}" stroke="${T.surface}" stroke-width="1.2"/>`);
+        out.push(`<circle cx="${px(vx)}" cy="${toY(vy)}" r="3.6" fill="${tone}" stroke="${T.surface}" stroke-width="1.2"/>`);
       }
     }
     // 频闪点属于同一条曲线：同色实心点，不另立图例
@@ -2075,8 +2104,8 @@ function renderCartesianPlot({ title, x, y, series = [], guides = [], bands = []
         const vx = Number(raw[0]);
         const vy = Number(raw[1]);
         if (!Number.isFinite(vx) || !Number.isFinite(vy)) continue;
-        if (vx < x0 || vx > x1 || vy < y0 || vy > y1) continue;
-        out.push(`<circle cx="${px(vx)}" cy="${py(vy)}" r="3.8" fill="${tone}" stroke="${T.surface}" stroke-width="1.2"/>`);
+        if (vx < x0 || vx > x1 || vy < yDomain.min || vy > yDomain.max) continue;
+        out.push(`<circle cx="${px(vx)}" cy="${toY(vy)}" r="3.8" fill="${tone}" stroke="${T.surface}" stroke-width="1.2"/>`);
       }
     }
     return out;
