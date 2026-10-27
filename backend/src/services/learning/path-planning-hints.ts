@@ -37,6 +37,47 @@ function normalizeCadence(value: any): TimeBudgetCadence | null {
     : null;
 }
 
+/** R8：客观内容体量锚的理智上界；超出视为脏值，按未提供处理（不参与任何日历乘法） */
+export const MAX_OBJECTIVE_SCOPE_HOURS = 2000;
+
+/** R8：正数归一（字符串数字可接受；null/NaN/负数/超上界一律 null） */
+function positiveFinite(value: unknown, max = Number.POSITIVE_INFINITY): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 && n <= max ? n : null;
+}
+
+/**
+ * R8：是否为新时间模型形状。
+ * 不能只看 deadlineDate 键——delta 合并把 null 当删除（delta-merge.ts:17-24），
+ * 无期限时该键会被删掉；timeModelVersion=2 是非空标记，保证「无期限」语义不丢。
+ * 注意：归一化层会始终写出 `deadlineDate: null` 这类空键，所以**只有非空值/版本标记**
+ * 才算 R8；否则 v70 老数据经归一化后会被误判成 R8，丢掉既有的 totalWeeks 推导。
+ * 老数据没有这三个键 ⇒ false，继续走既有推导（增量兼容）。
+ */
+function hasR8TimeShape(td: Record<string, any> | null | undefined): boolean {
+  if (!td || typeof td !== 'object') return false;
+  const version = Number(td.timeModelVersion);
+  if (Number.isFinite(version) && version >= 2) return true;
+  const objective = Number(td.objectiveScopeHours);
+  if (Number.isFinite(objective) && objective > 0) return true;
+  return typeof td.deadlineDate === 'string' && normalizeDeadlineDate(td.deadlineDate) !== null;
+}
+
+/**
+ * R8：由绝对截止日反推可用周数（应用时区日界口径，与 inferMaxWeeksFromTimeHorizon 一致）。
+ * 过期/非法日期返回 null；null 表示「没有确定截止」，不是「0 周」。
+ */
+export function inferWeeksUntilDeadline(
+  deadlineDate: string | null | undefined,
+  now: Date = new Date(),
+): number | null {
+  const normalized = normalizeDeadlineDate(deadlineDate);
+  if (!normalized) return null;
+  const target = endOfDay(parseDayKeyStart(normalized));
+  const weeks = (target.getTime() - now.getTime()) / (7 * 24 * 60 * 60 * 1000);
+  return weeks > 0 ? Math.round(weeks * 10) / 10 : null;
+}
+
 /**
  * 学习者负荷画像（可选）：可用时间与认知负荷耐受。仅在显式传入时影响推导。
  */
@@ -208,6 +249,13 @@ export interface PlanningHints {
   subtasksPerStageRange: [number, number];
   subtaskMinutesRange: [number, number];
   maxWeeks: number;
+  /**
+   * R8：周数上限来源。
+   * - deadline_date：有确定外部截止，按截止日反推
+   * - hard_cap：无期限，仅 52 周结构硬顶，**不构成总周数要求**
+   * - legacy_total_weeks / legacy_time_horizon：老数据兼容（R8 形状不进入）
+   */
+  maxWeeksSource: 'deadline_date' | 'legacy_total_weeks' | 'legacy_time_horizon' | 'hard_cap';
   /** 问题规模（goal 层 scope_size 透传，未提供为 null） */
   scopeSize: ScopeSize | null;
   /** 强制里程碑目标数量（由 scope_size 与 keyStages 共同决定，path LLM 必须精确输出该值，不增减） */
@@ -248,8 +296,13 @@ export interface PlanningHints {
 
 /** 预算派生链（可持久化、可审计；口径见 derivePlanningHints 内 budgetDerivation 块） */
 export interface BudgetDerivation {
-  /** 总学时锚的来源：结构化小时 / 会话频率推算 / 每日分钟兜底 / 无锚 */
-  source: 'structured_estimated_hours' | 'structured_sessions' | 'inferred_daily_minutes' | 'none';
+  /** 总学时锚的来源（R8 新增最高优先级 objective_scope_hours） */
+  source:
+    | 'objective_scope_hours'
+    | 'structured_estimated_hours'
+    | 'structured_sessions'
+    | 'inferred_daily_minutes'
+    | 'none';
   /** 结构化 timeDimensions 原样给出的小时（未经带内钳制） */
   structuredHours: number | null;
   /** 现实上限（每日分钟 × 周期天数 / 60）：超过它按现实钳制 */
@@ -271,14 +324,30 @@ export interface BudgetDerivation {
    * 只做留痕与告警，不自动改数——真正该改的是 goal 层的 totalSessions 口径。
    */
   calendarDriven?: boolean;
-  /** 内容体量锚（goal 层 scopeAnchor 换算值；无颗粒度承诺时为 null） */
+  /** 内容体量锚（legacy goal 层 scopeAnchor 换算值；无颗粒度承诺时为 null） */
   scopeAnchoredHours?: number | null;
-  /** R7-4：锚与日历容量相差 ≤20% ⇒ 判污染（把日历预算填进了内容锚），按未提供处理 */
+  /** R7-4：legacy scopeAnchorHours 与日历容量相差 ≤20% ⇒ 判污染，按未提供处理 */
   scopeAnchorPolluted?: boolean;
-  /** R7-4：锚缺失/污染时按 keyStages×2.5h 算出的兜底锚（未触发为 null） */
+  /** R7-4：legacy 锚缺失/污染时按 keyStages×2.5h 算出的兜底锚（未触发为 null） */
   scopeAnchorFallbackHours?: number | null;
-  /** R7-4：最终生效的锚值（原始锚 或 兜底锚；都无则 null） */
+  /** R7-4：legacy 最终生效锚（原始锚 或 兜底锚；都无则 null；保持旧字段语义） */
   effectiveScopeAnchorHours?: number | null;
+  /** R8：objectiveScopeHours 原值（未夹取） */
+  objectiveScopeHours?: number | null;
+  /** R8：最终生效的内容锚（objective > 未污染 legacy 锚 > keyStages 兜底） */
+  effectiveContentAnchorHours?: number | null;
+  /** R8：生效锚来源 */
+  contentAnchorSource?: 'objective_scope_hours' | 'scope_anchor_hours' | 'key_stages_fallback' | null;
+  /** R8：生效锚来源（contentAnchorSource 的简写别名，便于落库侧直接读） */
+  anchorSource?: 'objective_scope_hours' | 'scope_anchor_hours' | 'key_stages_fallback' | null;
+  /** R8：objective 存在时，旧日历/节奏算术值只留痕（不参与预算） */
+  legacyArithmeticHours?: number | null;
+  /** R8：承诺节奏总量（sessionsPerWeek × sessionsLengthMin × totalWeeks/60），仅诊断 */
+  cadenceHours?: number | null;
+  /** R8：objective 与日历容量相差 ≤20%（可能把容量填成了体量；只告警，不弃用） */
+  objectiveScopeNearCalendar?: boolean;
+  /** R8：无期限且旧 totalWeeks 有值，已忽略（maxWeeks 只受硬顶约束） */
+  legacyTotalWeeksIgnored?: boolean;
 }
 
 /** 结构容量缺口报告（可持久化、可审计；口径见 derivePlanningHints 内 capacityDeficit 块） */
@@ -574,11 +643,19 @@ export function derivePlanningHints(
     estimatedHours?: number | null;
     sessionsPerWeek?: number | null;
     sessionsLengthMin?: number | null;
+    /** R8：兼容单数拼写；归一化时 sessionsLengthMin 优先 */
+    sessionLengthMin?: number | null;
     totalSessions?: number | null;
     /** 日历容量上限（2026-10-26 解耦）：只用于诊断「预算是否来自日历乘法」 */
     calendarCapacityHours?: number | null;
-    /** 内容体量锚（goal 层颗粒度承诺换算值） */
+    /** legacy 内容体量锚（被 R8 objectiveScopeHours 取代，仅兼容/诊断） */
     scopeAnchorHours?: number | null;
+    /** R8 权威：客观内容体量小时（只由内容颗粒度承诺换算） */
+    objectiveScopeHours?: number | null;
+    /** R8 权威：外部截止绝对日期（YYYY-MM-DD；无期限为 null） */
+    deadlineDate?: string | null;
+    /** R8 形状标记：2=新时间模型 */
+    timeModelVersion?: number | null;
   } | null,
   scopeSize?: ScopeSize | null,
   learnerLoadProfile?: LearnerLoadProfile | null,
@@ -589,7 +666,20 @@ export function derivePlanningHints(
    */
   narrowScopeSignal?: boolean | null
 ): PlanningHints {
-  const paceSignal = inferPaceSignal(timeHorizon);
+  // R8：deadlineDate 是唯一日历权威；有截止时按截止日定节奏档，无截止时不把相对周期当硬约束。
+  const r8TimeShape = hasR8TimeShape(timeDimensions as Record<string, any> | null | undefined);
+  const objectiveScopeHoursNum = positiveFinite(
+    (timeDimensions as any)?.objectiveScopeHours,
+    MAX_OBJECTIVE_SCOPE_HOURS,
+  );
+  const deadlineDate = normalizeDeadlineDate((timeDimensions as any)?.deadlineDate);
+  const deadlineWeeks = inferWeeksUntilDeadline(deadlineDate);
+  // 注意：deadlineDate 已给但已过期时 deadlineWeeks 也是 null；此时应取最紧档，而不是回退宽松档。
+  const paceSignal: PlanningPaceSignal = deadlineDate !== null
+    ? (deadlineWeeks === null || deadlineWeeks <= 1
+        ? 'compact'
+        : deadlineWeeks <= 8 ? 'standard' : 'extended')
+    : inferPaceSignal(timeHorizon);
   const keyStageCount = keyStages.length;
   const paceConfig = paceSignalRangeConfig[paceSignal];
 
@@ -626,11 +716,13 @@ export function derivePlanningHints(
   let milestoneRange: [number, number] = [scopeMilestoneFloor, milestoneCap];
   // 学时早估（仅用于 keyStages 缺失时的里程碑兜底；与后文 estimatedHoursTotal 同源不同时机）
   const earlyHoursEstimate: number | null = (() => {
+    // R8：keyStages 缺失时，优先用客观内容体量反推里程碑数，而不是旧的 estimatedHours/totalSessions。
+    if (objectiveScopeHoursNum !== null) return objectiveScopeHoursNum;
     const td: Record<string, unknown> | null | undefined = timeDimensions;
     const est = Number(td?.estimatedHours);
     if (Number.isFinite(est) && est > 0) return est;
     const sessions = Number(td?.totalSessions);
-    const lenMin = Number(td?.sessionsLengthMin);
+    const lenMin = Number(td?.sessionsLengthMin) || Number(td?.sessionLengthMin);
     if (Number.isFinite(sessions) && sessions > 0 && Number.isFinite(lenMin) && lenMin > 0) {
       return (sessions * lenMin) / 60;
     }
@@ -671,12 +763,36 @@ export function derivePlanningHints(
     ? capacity.sessionMinutes
     : null;
 
-  const inferredWeeks = Number.isFinite(timeDimensions?.totalWeeks) && (timeDimensions!.totalWeeks as number) > 0
+  // R8：deadlineDate 是唯一日历权威。无期限（或 R8 形状但 deadlineDate=null）时，
+  // 不再把 totalWeeks / 相对 time_horizon 乘法变成「总周数要求」，只保留 52 周结构硬顶。
+  // 老数据（没有 R8 新键）继续走原兜底链，保证增量兼容。
+  const legacyTotalWeeks = Number.isFinite(timeDimensions?.totalWeeks) && (timeDimensions!.totalWeeks as number) > 0
     ? (timeDimensions!.totalWeeks as number)
-    : inferMaxWeeksFromTimeHorizon(timeHorizon);
-  let maxWeeks: number = inferredWeeks
-    ? Math.min(52, Math.max(1, Math.ceil(inferredWeeks * 1.2)))
-    : paceConfig.maxWeeks;
+    : null;
+  const inferredWeeksLegacy = legacyTotalWeeks ?? inferMaxWeeksFromTimeHorizon(timeHorizon);
+  let maxWeeks: number;
+  let maxWeeksSource: PlanningHints['maxWeeksSource'];
+  if (deadlineDate !== null && deadlineWeeks === null) {
+    // 截止日已过（或落在今天之前）：按最紧 1 周收口，不能因为反推不出正周数就回退 52 周。
+    maxWeeks = 1;
+    maxWeeksSource = 'deadline_date';
+  } else if (deadlineWeeks !== null) {
+    maxWeeks = Math.min(52, Math.max(1, Math.ceil(deadlineWeeks)));
+    maxWeeksSource = 'deadline_date';
+  } else if (!r8TimeShape) {
+    maxWeeks = inferredWeeksLegacy
+      ? Math.min(52, Math.max(1, Math.ceil(inferredWeeksLegacy * 1.2)))
+      : paceConfig.maxWeeks;
+    maxWeeksSource = legacyTotalWeeks !== null
+      ? 'legacy_total_weeks'
+      : inferredWeeksLegacy !== null
+        ? 'legacy_time_horizon'
+        : 'hard_cap';
+  } else {
+    // R8：无期限路径只有结构硬顶，不是「必须几周学完」的目标。
+    maxWeeks = 52;
+    maxWeeksSource = 'hard_cap';
+  }
 
   // 单次时长解析（含中文数字——2026-09-29 第三波评审实证漏解析：「一天三小时」
   // 正则只认阿拉伯数字 → 回退默认档 [30,120]，本该 [45,120]，整条路径排了 90min 课）。
@@ -706,7 +822,8 @@ export function derivePlanningHints(
   // 自述每天 30 分钟，分钟档却被推成 [36,120]，阶段 3 出现 90 分钟单课——家长按半小时排时间，
   // 打开课就不可执行，直接违反提示词「单课必须能在用户一次学习坐姿里上完」的硬规则。
   // 修法：结构化日槽位存在时，**上界不得越过它**（周末长块是学习者自己的选择，不是默认课长）。
-  const structuredSessionMinutes = Number(timeDimensions?.sessionsLengthMin);
+  const structuredSessionMinutes = Number(timeDimensions?.sessionsLengthMin)
+    || Number(timeDimensions?.sessionLengthMin);
   if (Number.isFinite(structuredSessionMinutes) && structuredSessionMinutes > 0) {
     const dailyCap = Math.max(8, Math.round(structuredSessionMinutes));
     const upper = Math.min(subtaskMinutesRange[1], dailyCap);
@@ -796,7 +913,9 @@ export function derivePlanningHints(
   const availabilityText = normalizeString(learnerLoadProfile?.availableTime);
   const isTightAvailabilitySignal = availabilityText ? isMinimalAvailabilitySignal(availabilityText) : false;
   // 课次 < 1 ⇒ 这是一次操作（不是一门课）——最干净、且**代码可判**的判据，不需要类型分类
-  const lessThanOneLesson = totalSessions !== null && totalSessions < 1;
+  // R8：objectiveScopeHours 取代 totalSessions 后，≤1h 的客观体量也必须按「一节课」收口。
+  const lessThanOneLesson = (totalSessions !== null && totalSessions < 1)
+    || (objectiveScopeHoursNum !== null && objectiveScopeHoursNum <= ONE_SITTING_MAX_HOURS);
   if (lessThanOneLesson || isTightAvailabilitySignal) {
     const cap = ONE_SITTING_BOUNDS;
     milestoneRange = [...cap.milestoneRange];
@@ -826,8 +945,9 @@ export function derivePlanningHints(
   //    用户自述的「每日可投入 × 周期」是现实上限，超过它按现实钳制；
   // b) 结构化字段缺失但 timeHorizon + timePerSession 可解析时，做兜底推断
   //    （周期天数 × 每日分钟），否则这类案例完全没有守恒锚（career-14 空锚）。
-  const inferredBudgetCap = Number.isFinite(parsedSessionMinutes) && inferredWeeks
-    ? Math.round(((parsedSessionMinutes as number) * inferredWeeks * 7) / 60)
+  // R8：这里只是诊断/legacy 预算的日历容量，不再参与 objective 路径的预算。
+  const inferredBudgetCap = Number.isFinite(parsedSessionMinutes) && inferredWeeksLegacy
+    ? Math.round(((parsedSessionMinutes as number) * inferredWeeksLegacy * 7) / 60)
     : null;
   const structuredHoursTotal =
     totalSessions !== null && oneSessionMinutes !== null
@@ -887,20 +1007,21 @@ export function derivePlanningHints(
     && estimatedHoursTotalRaw > promisedCadenceHours * 1.25
       ? promisedCadenceHours
       : estimatedHoursTotalRaw;
-  // 窄目标体量硬夹（2026-10-27 R3 遗留接线）：goal 层给出 scopeAnchorHours（按颗粒度承诺
-  // 换算的内容总小时）且显著小于日历/节奏算术时，预算夹到锚×1.5。日历与节奏算术只回答
-  // 「能学多久」，体量锚才回答「内容有多少」（实证：D13 连续三轮 ≥1.05× 容量；
-  // E03 汉译英单方向 55h vs 体量锚 14-18h——两者 goal 对话都明确说了「只攻 X」）。
-  const scopeAnchorHoursNum = Number(timeDimensions?.scopeAnchorHours);
-  const anchorPresent = Number.isFinite(scopeAnchorHoursNum) && scopeAnchorHoursNum > 0;
-  const calendarCapacityNum = Number(timeDimensions?.calendarCapacityHours);
-  const estimatedHoursSeed = Number(timeDimensions?.estimatedHours);
+  // ---- 内容体量锚（R8，2026-10-27）----------------------------------------------------
+  // 优先级：objectiveScopeHours（权威）> (scopeAnchorHours 且未污染，legacy) > keyStages×2.5 兜底。
+  // objective 存在时预算**直接取 objective×1.5**；日历/节奏乘法（estimatedHoursTotalPreScope）
+  // 只进 budgetDerivation.legacyArithmeticHours 做诊断，不再参与 min/floor（R8 核心）。
+  // legacy 锚（含 R7-4 污染检测/双证据兜底）只在 objective 缺失时启用，既有语义原样保留。
+  const scopeAnchorHoursNum = positiveFinite((timeDimensions as any)?.scopeAnchorHours);
+  const anchorPresent = scopeAnchorHoursNum !== null;
+  const calendarCapacityNum = positiveFinite((timeDimensions as any)?.calendarCapacityHours);
+  const estimatedHoursSeed = Number((timeDimensions as any)?.estimatedHours);
   // 体量证据：自报学时优先；缺失时用课次算术（totalSessions×单次分钟）——两者都没有才算无证据
   // （独立审查 H2：此前 estH 缺失被无条件当成「日历驱动」，会把 60h 真实课表砍到 15h）。
   const hoursEvidence = Number.isFinite(estimatedHoursSeed) && estimatedHoursSeed > 0
     ? estimatedHoursSeed
     : structuredHoursTotal;
-  const hasCalendarCapacity = Number.isFinite(calendarCapacityNum) && calendarCapacityNum > 0;
+  const hasCalendarCapacity = Number.isFinite(calendarCapacityNum) && (calendarCapacityNum as number) > 0;
   const calendarDrivenEvidence = hasCalendarCapacity
     && Number.isFinite(hoursEvidence as number) && (hoursEvidence as number) > 0
     && (hoursEvidence as number) >= (calendarCapacityNum as number) * 0.85;
@@ -910,9 +1031,9 @@ export function derivePlanningHints(
   // 绝不因「疑似污染」丢弃唯一护栏（R6 90h 案例：锚 45=cap 45 被判污染后无兜底 → 完全不夹）。
   const scopeAnchorPolluted = anchorPresent
     && hasCalendarCapacity
-    && scopeAnchorHoursNum <= 30
+    && (scopeAnchorHoursNum as number) <= 30
     && narrowScopeSignal === true
-    && Math.abs(scopeAnchorHoursNum - (calendarCapacityNum as number))
+    && Math.abs((scopeAnchorHoursNum as number) - (calendarCapacityNum as number))
       <= Math.max(1, (calendarCapacityNum as number) * 0.10);
   // 漏发兜底（2026-10-27 R7-4，独立审查 H1/H2 收紧）：仅在有**日历乘法证据**时启用，
   // 且必须满足其一：
@@ -930,18 +1051,42 @@ export function derivePlanningHints(
     && keyStageCount > 0
       ? Math.round(keyStageCount * 2.5 * 10) / 10
       : null;
-  // 生效锚：污染且兜底可用 → 兜底；污染但无兜底 → 保留原锚（宁可少夹，不可不夹）；
-  // 未污染 → 原锚；缺锚 → 兜底/无。
+  // legacy 生效锚：污染且兜底可用 → 兜底；污染但无兜底 → 保留原锚（宁可少夹，不可不夹）；
+  // 未污染 → 原锚；缺锚 → 兜底/无。保持 R7 语义（既有单测/落库依赖）。
   const effectiveScopeAnchorHours = anchorPresent
     ? (scopeAnchorPolluted && fallbackAnchorHours !== null ? fallbackAnchorHours : scopeAnchorHoursNum)
     : fallbackAnchorHours;
-  const hasUsableAnchor = effectiveScopeAnchorHours !== null;
+  // R8：objective 与日历容量近似只告警、不弃用（高估/低估交给后续动态重排校正）。
+  const objectiveScopeNearCalendar = objectiveScopeHoursNum !== null
+    && hasCalendarCapacity
+    && Math.abs(objectiveScopeHoursNum - (calendarCapacityNum as number))
+      <= (calendarCapacityNum as number) * 0.2;
+  const contentAnchor: {
+    hours: number;
+    source: NonNullable<BudgetDerivation['contentAnchorSource']>;
+  } | null = objectiveScopeHoursNum !== null
+    ? { hours: objectiveScopeHoursNum, source: 'objective_scope_hours' }
+    : effectiveScopeAnchorHours !== null && effectiveScopeAnchorHours > 0
+      ? {
+          hours: effectiveScopeAnchorHours,
+          // 污染且无兜底时保留的是原 legacy 锚（宁可少夹，不可不夹），来源仍记 scope_anchor_hours。
+          source: (anchorPresent && !scopeAnchorPolluted)
+            || (scopeAnchorPolluted && fallbackAnchorHours === null)
+            ? 'scope_anchor_hours'
+            : 'key_stages_fallback',
+        }
+      : null;
+  const effectiveContentAnchorHours = contentAnchor?.hours ?? null;
   const estimatedHoursTotalRawFinal =
-    Number.isFinite(effectiveScopeAnchorHours as number) && (effectiveScopeAnchorHours as number) > 0
-    && estimatedHoursTotalPreScope !== null
-    && estimatedHoursTotalPreScope > (effectiveScopeAnchorHours as number) * 1.5
-      ? (effectiveScopeAnchorHours as number) * 1.5
-      : estimatedHoursTotalPreScope;
+    contentAnchor?.source === 'objective_scope_hours'
+      // R8：客观内容体量直接定预算（×1.5 留出理解/复盘的合理余量），
+      // 不再与日历/节奏乘法取 min——那是「能学多久」，不是「内容有多少」。
+      ? contentAnchor.hours * 1.5
+      : Number.isFinite(effectiveContentAnchorHours as number) && (effectiveContentAnchorHours as number) > 0
+        && estimatedHoursTotalPreScope !== null
+        && estimatedHoursTotalPreScope > (effectiveContentAnchorHours as number) * 1.5
+        ? (effectiveContentAnchorHours as number) * 1.5
+        : estimatedHoursTotalPreScope;
   // 浮点收尾（2026-10-27 R7-5a）：阶段小时累加会产生 5.500000000000001h 这类 IEEE754 尾巴，
   // 落库/展示层统一保留 1 位小数；下界 0.1 防止 round 成 0 后把锚传成 0（L2）。
   const estimatedHoursTotal = estimatedHoursTotalRawFinal === null
@@ -1057,19 +1202,24 @@ export function derivePlanningHints(
           ? Math.round((estimatedHoursTotal / targetMilestones) * 10) / 10
           : null;
         const source: BudgetDerivation['source'] =
-          structuredHoursTotal !== null
-            ? (totalSessions !== null && oneSessionMinutes !== null
-                ? 'structured_sessions'
-                : Number.isFinite(timeDimensions?.estimatedHours) && (timeDimensions!.estimatedHours as number) > 0
-                  ? 'structured_estimated_hours'
-                  : 'structured_sessions')
-            : inferredBudgetCap !== null
-              ? 'inferred_daily_minutes'
-              : 'none';
+          objectiveScopeHoursNum !== null
+            ? 'objective_scope_hours'
+            : structuredHoursTotal !== null
+              ? (totalSessions !== null && oneSessionMinutes !== null
+                  ? 'structured_sessions'
+                  : Number.isFinite(timeDimensions?.estimatedHours) && (timeDimensions!.estimatedHours as number) > 0
+                    ? 'structured_estimated_hours'
+                    : 'structured_sessions')
+              : inferredBudgetCap !== null
+                ? 'inferred_daily_minutes'
+                : 'none';
         // 日历乘法诊断（2026-10-26 解耦）：goal 层显式给了 calendarCapacityHours 时，
         // 体量与日历容量几乎相等 ⇒ 预算不是从内容需求推出来的。
+        // R8：objective 不是日历乘法，不再按「≈日历容量」判 calendarDriven；
+        // 是否近日历单独记 objectiveScopeNearCalendar。
         const calendarCapacity = Number(timeDimensions?.calendarCapacityHours);
-        const calendarDriven = Number.isFinite(calendarCapacity) && calendarCapacity > 0
+        const calendarDriven = objectiveScopeHoursNum === null
+          && Number.isFinite(calendarCapacity) && calendarCapacity > 0
           ? estimatedHoursTotal >= calendarCapacity * 0.9
           : undefined;
         return {
@@ -1084,13 +1234,20 @@ export function derivePlanningHints(
             && targetHoursPerMilestone !== null
             && targetHoursPerMilestone < requestedPerMilestone - 0.05,
           ...(calendarDriven === undefined ? {} : { calendarDriven }),
-          scopeAnchoredHours: Number.isFinite(Number(timeDimensions?.scopeAnchorHours))
-            ? Number(timeDimensions?.scopeAnchorHours)
-            : null,
-          // R7-4 可观测：锚是否被判污染、是否走了兜底、最终生效锚值
+          scopeAnchoredHours: scopeAnchorHoursNum,
+          // R7-4 可观测：legacy 锚是否被判污染、是否走了兜底、最终生效 legacy 锚值
           scopeAnchorPolluted,
           scopeAnchorFallbackHours: fallbackAnchorHours,
           effectiveScopeAnchorHours: effectiveScopeAnchorHours ?? null,
+          // R8 可观测：objective 原值、最终内容锚、来源、被绕过的日历/节奏算术、承诺节奏
+          objectiveScopeHours: objectiveScopeHoursNum,
+          effectiveContentAnchorHours,
+          contentAnchorSource: contentAnchor?.source ?? null,
+          anchorSource: contentAnchor?.source ?? null,
+          legacyArithmeticHours: estimatedHoursTotalPreScope,
+          cadenceHours: promisedCadenceHours,
+          objectiveScopeNearCalendar,
+          legacyTotalWeeksIgnored: r8TimeShape && deadlineDate === null && legacyTotalWeeks !== null,
         };
       })()
     : null;
@@ -1163,6 +1320,7 @@ export function derivePlanningHints(
     budgetDerivation,
     subtaskMinutesRange,
     maxWeeks,
+    maxWeeksSource,
   };
 }
 

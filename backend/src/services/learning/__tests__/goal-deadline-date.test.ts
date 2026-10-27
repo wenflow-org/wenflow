@@ -178,3 +178,95 @@ describe('path.coordinator · 模型绝对日期优先，正则启发式兜底�
     expect(result.deadlineText).toBeUndefined();
   });
 });
+
+/**
+ * R8（2026-10-27）：deadlineDate 的镜像源 time_dimensions.deadlineDate。
+ * 模型可能只填 time_dimensions.deadlineDate（与 understanding.deadline_date 同值），
+ * 归一化/透传层必须能识别，否则「有期限/无期限」在 visibleSummary 与 coordinator 两处漂移。
+ */
+describe('R8 · time_dimensions.deadlineDate 镜像源', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 探针/测试：visibleSummary 形状内在动态
+  const visibleWith = (over: Record<string, unknown>): any => ({
+    surfaceGoal: '随便学学',
+    realProblem: null,
+    resources: {
+      timeBudget: null,
+      timeBudgetCadence: null,
+      timePerWeek: null,
+      timePerSession: null,
+      timeHorizon: null,
+      deadlineText: null,
+      deadlineDate: null,
+      ...over,
+    },
+    successCriteria: null,
+    confirmedProposal: null,
+  });
+  it('visibleSummary：只有 time_dimensions.deadlineDate 也进 resources.deadlineDate 与 timeDimensions', () => {
+    const visible = buildGoalPathVisibleSummary({
+      understanding: {
+        time_dimensions: { timeModelVersion: 2, objectiveScopeHours: 18, deadlineDate: '2027-01-05' },
+      },
+      confirmedProposal: null,
+      collected: {},
+    });
+    expect(visible.resources?.deadlineDate).toBe('2027-01-05');
+    expect(visible.timeDimensions?.deadlineDate).toBe('2027-01-05');
+    expect(visible.timeDimensions?.objectiveScopeHours).toBe(18);
+    expect(visible.timeDimensions?.timeModelVersion).toBe(2);
+  });
+
+  it('visibleSummary：无期限时两处都为 null，resources 不因 deadline 产生', () => {
+    const visible = buildGoalPathVisibleSummary({
+      understanding: {
+        time_dimensions: { timeModelVersion: 2, objectiveScopeHours: 20, deadlineDate: null },
+      },
+      confirmedProposal: null,
+      collected: {},
+    });
+    expect(visible.resources).toBeNull();
+    expect(visible.timeDimensions?.deadlineDate).toBeNull();
+  });
+
+  it('coordinator：handoff 的 understanding.time_dimensions 能进 normalizedInput（visibleSummary 为空）', async () => {
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u-r8-1',
+      rawGoal: '学会 SQL 调优',
+      visibleSummary: visibleWith({}),
+      goalHandoffFields: {
+        'understanding.time_dimensions': {
+          timeModelVersion: 2,
+          sessionsLengthMin: 60,
+          objectiveScopeHours: 18,
+          deadlineDate: '2027-01-05',
+        },
+      },
+    } as any);
+    const normalized = (result.userProfile as any)?.normalizedInput;
+    expect(normalized?.timeDimensions?.objectiveScopeHours).toBe(18);
+    expect(normalized?.timeDimensions?.deadlineDate).toBe('2027-01-05');
+    expect(normalized?.timeDimensions?.timeModelVersion).toBe(2);
+    // deadline 也应从 timeDimensions 镜像落到硬锚（handoff 无 understanding.deadline_date）
+    expect(result.deadline).toBeTruthy();
+    expect((result.deadline as Date).getTime()).toBe(new Date('2027-01-05T00:00:00').getTime());
+  });
+
+  it('coordinator：无期限（deadlineDate=null）不产生硬截止', async () => {
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u-r8-2',
+      rawGoal: '随便学学',
+      visibleSummary: visibleWith({}),
+      goalHandoffFields: {
+        'understanding.time_dimensions': {
+          timeModelVersion: 2,
+          objectiveScopeHours: 20,
+          deadlineDate: null,
+        },
+      },
+    } as any);
+    const normalized = (result.userProfile as any)?.normalizedInput;
+    expect(normalized?.timeDimensions?.objectiveScopeHours).toBe(20);
+    expect(normalized?.timeDimensions?.deadlineDate).toBeNull();
+    expect(result.deadline).toBeUndefined();
+  });
+});

@@ -180,23 +180,22 @@ fields:
         （"2027年1月5日考试""12月20号前要提交"），或结合对话能唯一推出的日期时填写；
         相对表述（"三个月后"）无法锚定具体日历时**留空**——相对周期照旧写进 time_horizon。
         这是排程的一级输入：宁缺勿错，拿不准就留空，禁止编造或取整估算。
-      · time_dimensions（object，可选，hidden）时间维度数值推断（供 path 层规划参考，LLM 自由推断，无法确定给 null）。
-        **优先答"这件事大概要几节课"**（可估），不要硬凑"总投入小时"（估不准，给不出就给 null）：
-        { "totalSessions": 总课次（单位 = 用户自己一次能学的时长；如"每天睡前半小时"→ 一次 30 分钟。**口径 = 这件事需要几次坐下来学完**，不是日历上有多少个晚上——见下方推导纪律）, "sessionsLengthMin": 每次学习分钟数（取自用户原话；用户没说给 null）, "totalWeeks": 总学习周期周数, "sessionsPerWeek": 每周学习次数, "estimatedHours": 预计总投入小时（**仅当总课次与一次时长都能定出时才填，否则 null**）, "calendarCapacityHours": 日历容量上限小时（= 周期天数 × 每日可用分钟 / 60，仅用于下游判断预算是否来自日历乘法；无法算出给 null）, "scopeAnchor": 内容体量的换算依据一句话（如「前五章每章3-4天+后十章每章2天≈52h」；没有颗粒度承诺时给 null）, "scopeAnchorHours": 内容体量换算的**小时数**（把 scopeAnchor 那句话算成数字；仅当颗粒度承诺能换算出总小时时填，如 52；没有颗粒度承诺给 null——2026-10-27 接线：该数值存在且小于日历容量时，下游把总预算夹到它的 1.5 倍，防止「只攻一个单点」被日历乘法撑爆） }
-        **totalSessions 推导纪律（2026-10-26 修正：区分「日历容量」与「内容需求」）**：
-        这个字段要回答的是**这件事需要多少次坐下来学完**，不是「日历上还有多少个晚上」。
-        先看确认方案里有没有可直接换算的**颗粒度承诺**——「练 8-10 道题」「前五章每章 3-4 天」「8 层每层一小时」「整本书过一遍」
-        都能直接算出课次。有颗粒度承诺时，`totalSessions` 取**内容体量换算值**。
-        没有颗粒度承诺时，才用「全周期天数 × 每天学习次数」估**上限**，并在 `calendarCapacityHours` 里记下这个上限值，
-        供下游判断「预算是否来自日历乘法」。
-        **禁止**把日历容量直接当 `totalSessions` 填进去：用户说「我有半年」是「半年内做完都行」，不是「必须排满 180 次」。
-        2026-10-26 实证：教资路径用户明说「8-10 道题就能稳住」，仍被按 12 周 × 每晚 1.5h 排成 108h / 54 个任务；
-        注安用户说「半年过完一遍」，被按 180 天 × 1.5h 排成 270h / 117 个任务，而按用户自己谈的节奏全书只需约 50-55h。
-        内容体量确实接近日历容量时（如全职备考），两者一致，无需特殊处理；明显小于时按内容体量排，
-        并在 reply 里如实说「这件事本身大约需要 N 小时，你的时间够用，不用把半年排满」。
-        **不许**以「富余预算应转化为更从容的递进」为由把内容体量撑到日历容量——富余时间是给学习者留的缓冲，不是排课配额。
-        **课次小于 1 ⇒ 这只是一次操作，不该排课**（下游据此只给"一节课"或一张操作卡）。
-        由 time_horizon/time_budget/time_per_session 自然推断（月→周换算、频率×时长×周期乘除推导均可），无依据的字段给 null，禁止编造。
+        R8：本字段与 time_dimensions.deadlineDate 必须一致；无期限时两处都置 null（由平台按 null 处理，不再要求总周数）。
+      · time_dimensions（object，可选，hidden）时间模型**只回答三件事**（R8，2026-10-27）：
+        一次能坐多久、内容客观需要多少小时、外部截止是哪天。**不再要求你推算总周数 / 总课次 /
+        日历容量等相互耦合的算术字段**——学习者对总投入的高估或低估由路径后续动态重排校正，
+        首版规划只按单次节奏与客观内容体量走。
+        { "timeModelVersion": 2, "sessionsLengthMin": 单次可投入分钟数（number｜null；取自用户原话或最小档假设，如「每天睡前半小时」→30。**只描述一次坐下来能学多久**，与总周期无关）, "objectiveScopeHours": 客观内容体量小时（number｜null；**只由内容颗粒度承诺换算**，如「前五章每章3-4天+后十章每章2天≈52h」→52、「练8-10道题×10分钟」→1.5；换算不出给 null）, "deadlineDate": 外部截止绝对日期（string｜null；YYYY-MM-DD，仅考试日/报名截止/证书日期等高可信日历锚；无期限、只说了相对周期或「随便学学」时一律 null）, "scopeAnchor": 一句话写出 objectiveScopeHours 的换算依据（如「前五章每章3-4天+后十章每章2天」；没有颗粒度承诺给 null，仅作诊断） }
+        三字段口径（硬规则）：
+        ① sessionsLengthMin 是**单次节奏**，不是每日累计。用户说「每天一小时但不一定」时按「一次约 60 分钟」落数值，同时在 available_resources 保留不确定表述；**禁止**据此推算总周数或总课次。
+        ② objectiveScopeHours 是**内容需要多少**，不是「日历上能学多少」：先找确认方案里的颗粒度承诺（「练 8-10 道题」「前五章每章 3-4 天」「8 层每层一小时」「整本书过一遍」），换算成小时；换算不出就给 null。**禁止**把「我有半年」「每天一小时」乘成小时填进来——那是可用容量，不是内容体量；两者数值接近只是巧合，不能作为依据。
+        ③ deadlineDate 只在有**确定外部截止**时填。无期限时写 null，**并且不要为了凑时间模型去估算 totalWeeks / estimatedWeeks**：无期限路径按内容体量推进，不设「必须几周学完」的目标。它与 understanding.deadline_date 必须是同一个值；无期限时两处都置 null。
+        已废弃字段（deprecated，仅供诊断，禁止作为预算依据）：totalSessions、totalWeeks、sessionsPerWeek、estimatedHours、calendarCapacityHours、scopeAnchorHours。如果你已经能算出，可以保留原字段名与原形态用于平台审计，但**不得**用它们替代 objectiveScopeHours，也不得因为它们有值而回头改动 objectiveScopeHours / deadlineDate。新输出优先只填三字段 + scopeAnchor + timeModelVersion。
+        示例：
+        · 确定截止：「明年1月5日考试，每天下班后大概一个小时，考纲前三章」→ { "timeModelVersion": 2, "sessionsLengthMin": 60, "objectiveScopeHours": 18, "deadlineDate": "2027-01-05", "scopeAnchor": "考纲前三章，每章约6h" }
+        · 无期限：「随便学学，周末有空看两小时，想把这本书过一遍」→ { "timeModelVersion": 2, "sessionsLengthMin": 120, "objectiveScopeHours": 22, "deadlineDate": null, "scopeAnchor": "全书12章×约2h" }
+        · 体量估不出：「想提升表达，每周聊一次，一次半小时」→ { "timeModelVersion": 2, "sessionsLengthMin": 30, "objectiveScopeHours": null, "deadlineDate": null, "scopeAnchor": null }（体量未知就 null，禁止拿「每周一次 × 多少周」硬乘）
+        由 available_resources 的 time_horizon / time_budget / time_per_session 自然推断单次节奏；**总周数只在 deadlineDate 存在时由平台按截止日反推**，LLM 不再自行估算总周期。无依据的字段给 null，禁止编造。
       · success_criteria（object）{ "observable_result": "", "acceptance_check": "" }
       · constraints_and_boundaries（string[]）硬约束、禁区
       · motivation（string）

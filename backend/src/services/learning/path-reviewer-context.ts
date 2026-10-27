@@ -15,12 +15,14 @@ export interface PathReviewerGoalContext {
   confirmedProposal: unknown;
   learnerProfile: unknown;
   successCriteria: unknown;
-  /** 时间维度（与 normalizedInput 同命名，驼峰） */
+  /** 时间模型（与 normalizedInput 同命名，驼峰；R8 权威字段 + legacy 诊断字段） */
   timeDimensions?: {
     scopeAnchorHours?: number | null;
     objectiveScopeHours?: number | null;
     calendarCapacityHours?: number | null;
     estimatedHours?: number | null;
+    deadlineDate?: string | null;
+    timeModelVersion?: number | null;
   } | null;
   /** 用户自述时间资源（含 timeBudget/timeHorizon），供对照日历容量 */
   resources?: { timeBudget?: string | null; timeHorizon?: string | null } | null;

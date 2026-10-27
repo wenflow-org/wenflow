@@ -109,7 +109,7 @@ fields:
     promptRole: hidden-inference
     valueType: object
     pathInRawOutput: internal.ext.goalConversation.understanding.time_dimensions
-    description: 时间维度数值推断（camel 化为 timeDimensions 透传 path 层，planningHints 容量推导主输入）＝{totalSessions 总课次(可小数), sessionsLengthMin 每次分钟, totalWeeks 周数, sessionsPerWeek 每周次数, estimatedHours 总小时}；无依据字段给 null 禁止编造；课次<1 ⇒ 一次性操作不排课
+    description: 时间模型（R8，camel 化为 timeDimensions 透传 path 层）＝{timeModelVersion:2, sessionsLengthMin 单次分钟, objectiveScopeHours 客观内容体量小时, deadlineDate 绝对截止日(可空), scopeAnchor 换算依据(诊断)}；objectiveScopeHours/deadlineDate 为权威，totalSessions/totalWeeks/sessionsPerWeek/estimatedHours/calendarCapacityHours/scopeAnchorHours 已废弃、仅供诊断，禁止作为预算依据；无期限 deadlineDate=null 且不要求总周数
   # hidden-inference
   - fieldId: understanding.background_experience
     promptRole: hidden-inference
@@ -389,7 +389,7 @@ routings:
     internal: false
     accumulate: false
     visibilityPreset: agent-internal
-    notes: 数值时间推断（规划容量主输入）
+    notes: R8 时间模型：三权威字段（sessionsLengthMin/objectiveScopeHours/deadlineDate）；旧算术字段仅诊断
   - agentId: skill:goal-conversation
     fieldId: understanding.primary_block_type
     render: hidden
@@ -702,7 +702,7 @@ routings:
     internal: false
     accumulate: false
     visibilityPreset: agent-internal
-    notes: planningHints 容量推导主输入（camel 化为 timeDimensions）
+    notes: R8 planningHints 主输入：objectiveScopeHours 优先于日历/节奏乘法；deadlineDate 为唯一日历权威
   - agentId: goal-agent
     fieldId: understanding.deadline_date
     render: visible

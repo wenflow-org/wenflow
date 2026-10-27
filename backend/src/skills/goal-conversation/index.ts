@@ -968,6 +968,7 @@ function buildRetryNotice(prevFailureType: string, prevViolations: string[]): st
   lines.push('- 若把 nextQuestions 嵌进 state.nextQuestions，请改为放到顶层');
   lines.push('- 不要使用 goalConversation 包装层；quickReplies / understanding / nextQuestions 等字段直接放在顶层');
   lines.push('- state 必须包含 stage / confidence / done 三个字段，不要把 understanding 塞进 state');
+  lines.push('- time_dimensions 只填 sessionsLengthMin/sessionLengthMin、objectiveScopeHours、deadlineDate；数值字段必须是 number，deadlineDate 用 YYYY-MM-DD 或 null');
   lines.push('- 起草时严格按 system prompt 的输出规格，参考但不要照搬输入 payload 的嵌套形态');
   return lines.join('\n');
 }

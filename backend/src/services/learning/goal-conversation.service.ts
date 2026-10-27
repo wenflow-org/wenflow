@@ -99,7 +99,8 @@ function buildGoalNormalizedState(data: any): GoalNormalizedStateV1 {
     constraints: {
       availableTime: typeof understanding?.background?.available_time === 'string' ? understanding.background.available_time : null,
       deadlineText: typeof understanding?.deadline_text === 'string' ? understanding.deadline_text : null,
-      deadlineDate: normalizeDeadlineDate(understanding?.deadline_date),
+      deadlineDate: normalizeDeadlineDate(understanding?.deadline_date)
+        ?? normalizeDeadlineDate(understanding?.time_dimensions?.deadlineDate),
     },
     successCriteria: {
       observableResult: typeof understanding?.success_criteria?.observable_result === 'string'

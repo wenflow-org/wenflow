@@ -71,25 +71,26 @@ export interface GoalPathVisibleSummary {
     examScope: string | null;
     schoolPace: string | null;
   } | null;
-  /** LLM 推断的时间维度数值（totalWeeks/estimatedHours/sessionsPerWeek/sessionsLengthMin） */
+  /** 时间模型（R8）：sessionsLengthMin/objectiveScopeHours/deadlineDate 为权威，旧字段仅诊断 */
   timeDimensions: {
     totalWeeks?: number | null;
     estimatedHours?: number | null;
     sessionsPerWeek?: number | null;
     sessionsLengthMin?: number | null;
-    /** 课次锚（体量 = totalSessions × sessionsLengthMin） */
+    /** R8：兼容单数拼写（prompt 若写 sessionLengthMin）；归一化时复数键优先 */
+    sessionLengthMin?: number | null;
+    /** 课次锚（legacy，体量 = totalSessions × sessionsLengthMin） */
     totalSessions?: number | null;
-    /**
-     * 日历容量上限（2026-10-26 解耦，goal 层新字段）：周期天数 × 每日可用分钟 / 60。
-     * 只用于识别「预算来自日历乘法」，不参与体量计算。
-     */
+    /** 日历容量上限：只用于识别「预算来自日历乘法」，不参与体量计算 */
     calendarCapacityHours?: number | null;
-    /**
-     * 内容体量锚小时（2026-10-27 R3 遗留接线）：goal 层按颗粒度承诺换算的内容总小时
-     * （如「前五章每章3-4天+后十章每章2天≈52h」→ 52）。存在且显著小于日历/节奏算术时，
-     * planningHints 把总预算夹到锚×1.5——算术只回答「能学多久」，锚才回答「内容有多少」。
-     */
+    /** legacy 内容体量锚小时（被 R8 objectiveScopeHours 取代，仅兼容/诊断） */
     scopeAnchorHours?: number | null;
+    /** R8 权威：客观内容体量小时（只由内容颗粒度承诺换算） */
+    objectiveScopeHours?: number | null;
+    /** R8 权威：外部截止绝对日期（YYYY-MM-DD；无期限为 null） */
+    deadlineDate?: string | null;
+    /** R8 形状标记：2=新时间模型（delta 合并会删 null 键，靠它保留无期限语义） */
+    timeModelVersion?: number | null;
   } | null;
   /**
    * 外部权威资料需求（hidden，goal→path 资料采集缝）。
@@ -253,9 +254,11 @@ export function buildGoalPathVisibleSummary(params: {
     || (timeBudgetCadence === 'per_session' ? timeBudget : null);
   const timeHorizon = normalizeString(understanding?.available_resources?.time_horizon);
   const deadlineText = normalizeString(understanding?.deadline_text);
-  // P0.1：模型解析出的绝对日期（understanding.deadline_date）。可空；相对表述不会进这里。
-  const deadlineDate = normalizeDeadlineDate(understanding?.deadline_date);
-  const timeDimensions = buildTimeDimensions(understanding?.time_dimensions);
+  // P0.1 + R8：优先 understanding.deadline_date（路由主源），其次 time_dimensions.deadlineDate（镜像）。
+  // 无期限时两者都应为 null；相对表述不会进这里。
+  const deadlineDate = normalizeDeadlineDate(understanding?.deadline_date)
+    ?? normalizeDeadlineDate(understanding?.time_dimensions?.deadlineDate);
+  const timeDimensions = buildTimeDimensions(understanding?.time_dimensions, deadlineDate);
   const scenario = buildScenario(understanding, backgroundExperience, realProblem);
   const currentBaseline = buildCurrentBaseline(understanding);
   const needsMaterial = normalizeNeedsMaterial(understanding?.needsMaterial);
@@ -330,8 +333,11 @@ export function buildGoalPathVisibleSummary(params: {
   };
 }
 
-/** LLM 推断的时间维度数值（goal 层 time_dimensions）：数值型钳制，非法/缺失给 null */
-function buildTimeDimensions(raw: unknown): NonNullable<GoalPathVisibleSummary['timeDimensions']> {
+/** timeDimensions（R8 时间模型 + legacy 诊断字段）：数值型钳制，非法/缺失给 null */
+function buildTimeDimensions(
+  raw: unknown,
+  fallbackDeadlineDate?: string | null,
+): NonNullable<GoalPathVisibleSummary['timeDimensions']> {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const num = (v: unknown): number | null =>
@@ -340,16 +346,20 @@ function buildTimeDimensions(raw: unknown): NonNullable<GoalPathVisibleSummary['
     totalWeeks: num(r.totalWeeks),
     estimatedHours: num(r.estimatedHours),
     sessionsPerWeek: num(r.sessionsPerWeek),
-    sessionsLengthMin: num(r.sessionsLengthMin),
+    // R8：兼容单数别名；复数旧键优先
+    sessionsLengthMin: num(r.sessionsLengthMin) ?? num(r.sessionLengthMin),
     // 课次锚（2026-09-21）：体量 = totalSessions × sessionsLengthMin。
     // 让 LLM 估"总学时"产出率只有 10%，估"几节课"才估得动。
     totalSessions: num(r.totalSessions),
     // 日历容量（2026-10-26 解耦）：周期天数 × 每日可用分钟 / 60。仅用于识别
     // 「预算来自日历乘法」并降级，不参与体量计算本身。
     calendarCapacityHours: num(r.calendarCapacityHours),
-    // 内容体量锚小时（2026-10-27 R3 遗留接线）：goal 层按颗粒度承诺换算的内容总小时。
-    // 存在时 planningHints 把总预算夹到锚×1.5（见 path-planning-hints 窄目标体量硬夹）。
+    // legacy 内容体量锚（R8 起被 objectiveScopeHours 取代，仅兼容/诊断）
     scopeAnchorHours: num(r.scopeAnchorHours),
+    // R8 权威三字段
+    objectiveScopeHours: num(r.objectiveScopeHours),
+    deadlineDate: normalizeDeadlineDate(r.deadlineDate) ?? fallbackDeadlineDate ?? null,
+    timeModelVersion: num(r.timeModelVersion),
   };
   return Object.values(result).some((v) => v !== null) ? result : null;
 }

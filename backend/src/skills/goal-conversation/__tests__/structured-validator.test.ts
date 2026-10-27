@@ -216,3 +216,112 @@ describe('validateGoalConversationStructuredOutput', () => {
     expect(result.violations[0]).toContain('totallyUnknownField');
   });
 });
+
+/**
+ * R8 时间模型校验（2026-10-27）：只硬校验新权威字段。
+ * legacy 算术字段（totalWeeks/estimatedHours/...）非法不阻断（只诊断），
+ * 新字段写错会导致下游预算静默走兜底，必须 invalid_goal_payload 触发 retry。
+ */
+describe('R8 time_dimensions 校验', () => {
+  const withTimeDimensions = (timeDimensions: any) =>
+    buildValidPayload({
+      understanding: { ...VALID_UNDERSTANDING, time_dimensions: timeDimensions },
+    });
+
+  test('合法三字段通过', () => {
+    const result = validateGoalConversationStructuredOutput(
+      withTimeDimensions({
+        timeModelVersion: 2,
+        sessionsLengthMin: 60,
+        objectiveScopeHours: 18,
+        deadlineDate: '2027-01-05',
+      }),
+    );
+    expect(result.valid).toBe(true);
+    expect(result.failureType).toBe('none');
+  });
+
+  test('单数别名 sessionLengthMin 通过（兼容旧拼写）', () => {
+    const result = validateGoalConversationStructuredOutput(withTimeDimensions({ sessionLengthMin: 45 }));
+    expect(result.valid).toBe(true);
+  });
+
+  test('objectiveScopeHours 非数字 → invalid_goal_payload', () => {
+    const result = validateGoalConversationStructuredOutput(withTimeDimensions({ objectiveScopeHours: '18' }));
+    expect(result.valid).toBe(false);
+    expect(result.failureType).toBe('invalid_goal_payload');
+  });
+
+  test('objectiveScopeHours 越界（5000）→ invalid_goal_payload', () => {
+    const result = validateGoalConversationStructuredOutput(withTimeDimensions({ objectiveScopeHours: 5000 }));
+    expect(result.valid).toBe(false);
+    expect(result.failureType).toBe('invalid_goal_payload');
+  });
+
+  test('sessionsLengthMin 越界（0 / 1000）→ invalid_goal_payload', () => {
+    expect(validateGoalConversationStructuredOutput(withTimeDimensions({ sessionsLengthMin: 0 })).valid).toBe(false);
+    expect(validateGoalConversationStructuredOutput(withTimeDimensions({ sessionsLengthMin: 1000 })).valid).toBe(false);
+  });
+
+  test('deadlineDate 非法日历日（2027-02-30）→ invalid_goal_payload', () => {
+    const result = validateGoalConversationStructuredOutput(withTimeDimensions({ deadlineDate: '2027-02-30' }));
+    expect(result.valid).toBe(false);
+    expect(result.failureType).toBe('invalid_goal_payload');
+  });
+
+  test('timeModelVersion 非法（3）→ invalid_goal_payload', () => {
+    const result = validateGoalConversationStructuredOutput(withTimeDimensions({ timeModelVersion: 3 }));
+    expect(result.valid).toBe(false);
+    expect(result.failureType).toBe('invalid_goal_payload');
+  });
+
+  test('time_dimensions 非对象 → invalid_goal_payload', () => {
+    const result = validateGoalConversationStructuredOutput(withTimeDimensions('每周5小时'));
+    expect(result.valid).toBe(false);
+    expect(result.failureType).toBe('invalid_goal_payload');
+  });
+
+  test('旧字段非法不阻断（只诊断，不影响 valid）', () => {
+    const result = validateGoalConversationStructuredOutput(
+      withTimeDimensions({ estimatedHours: '很多', totalWeeks: -1, sessionsPerWeek: '高频' }),
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  test('delta 模式：state.understanding.time_dimensions 同样校验通过', () => {
+    const payload = JSON.stringify({
+      reply: '这是一条回复',
+      state: {
+        stage: 'understanding',
+        confidence: 0.4,
+        done: false,
+        understanding: {
+          ...VALID_UNDERSTANDING,
+          time_dimensions: { timeModelVersion: 2, objectiveScopeHours: 18, deadlineDate: null },
+        },
+        nextQuestions: ['下一步？'],
+      },
+    });
+    const result = validateGoalConversationStructuredOutput(payload, { deltaMode: true });
+    expect(result.valid).toBe(true);
+  });
+
+  test('delta 模式下 state 里的非法 objective 仍然报错', () => {
+    const payload = JSON.stringify({
+      reply: '这是一条回复',
+      state: {
+        stage: 'understanding',
+        confidence: 0.4,
+        done: false,
+        understanding: {
+          ...VALID_UNDERSTANDING,
+          time_dimensions: { objectiveScopeHours: '18' },
+        },
+        nextQuestions: ['下一步？'],
+      },
+    });
+    const result = validateGoalConversationStructuredOutput(payload, { deltaMode: true });
+    expect(result.valid).toBe(false);
+    expect(result.failureType).toBe('invalid_goal_payload');
+  });
+});
