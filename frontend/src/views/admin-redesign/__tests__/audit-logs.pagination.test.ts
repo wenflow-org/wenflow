@@ -179,19 +179,57 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ page: 1, keyword: 'alice', scope: 'login' });
   });
 
-  it('失败条数上主行：stats.failed 与失败 TOP chip 同屏可见，点击下钻只看失败', async () => {
+  it('KPI 带：总数/失败/失败率/失败动作同屏，失败卡一键下钻，不再有常驻失败胶囊', async () => {
     h.getStats.mockResolvedValue({
       data: { data: { stats: { total: 378, failed: 7 }, failureByAction: [{ action: 'user.delete', count: 5 }] } }
     });
     const w = await mountAudit();
     await flushPromises();
     await nextTick();
-    const chips = w.findAll('.al-fails__chip');
-    expect(chips[0].text()).toContain('失败 7');
-    expect(chips[1].text()).toContain('5');
-    await chips[0].trigger('click');
+    const kpis = w.findAll('.mk-kpi');
+    expect(kpis).toHaveLength(4);
+    const card = (label: string) => {
+      const found = kpis.find((k) => k.find('.mk-kpi__label').text() === label);
+      if (!found) throw new Error(`kpi not found: ${label}`);
+      return found;
+    };
+    expect(card('记录总数').text()).toContain('378');
+    expect(card('失败记录').text()).toContain('7');
+    expect(card('失败率').text()).toContain('2%');
+    expect(card('失败动作').text()).toContain('最多：user.delete 5');
+    // 常驻失败胶囊退役：计数只在 KPI / 下拉选项里
+    expect(w.find('.al-fails').exists()).toBe(false);
+    await card('失败记录').trigger('click');
     await flushPromises();
     expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ success: false });
+    expect(filterValue(w, '失败动作')).toBe('');
+    expect(filterOptions(w, '失败动作')).toEqual(['全部失败', 'user.delete 5']);
+  });
+
+  it('失败动作下拉：按动作下钻；清空回「全部失败」而不是退出失败域', async () => {
+    h.getStats.mockResolvedValue({
+      data: { data: { stats: { total: 378, failed: 7 }, failureByAction: [{ action: 'user.delete', count: 5 }] } }
+    });
+    const w = await mountAudit();
+    await flushPromises();
+    await nextTick();
+    expect(filterOptions(w, '失败动作')).toEqual(['不过滤', 'user.delete 5']);
+    await chooseFilter(w, '失败动作', 'user.delete');
+    await flushPromises();
+    expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ success: false, keyword: 'user.delete' });
+    await chooseFilter(w, '失败动作', '全部失败');
+    await flushPromises();
+    const last = h.getLogs.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(last).toMatchObject({ success: false });
+    expect(last.keyword).toBeUndefined();
+  });
+
+  it('登录审计同样有 KPI 带，但不渲染操作审计专属的「失败动作」卡', async () => {
+    const w = await mountAudit();
+    await w.findAll('.tab').find((x) => x.text() === '登录审计')!.trigger('click');
+    await flushPromises();
+    const labels = w.findAll('.mk-kpi .mk-kpi__label').map((x) => x.text());
+    expect(labels).toEqual(['记录总数', '失败记录', '失败率']);
   });
 
   it('动作列：未映射接口不再直出 /api/ 路径，插件启停/卡派生显示中文名', async () => {

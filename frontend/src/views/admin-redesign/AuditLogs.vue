@@ -1,8 +1,8 @@
 <template>
   <div class="mk-page mk-page--fill">
     <!-- 页头（newui/admin pagehead）：页名随 tab（审计日志/登录审计）+ 导出/刷新上移。
-         无统计带（2026-10-02 用户拍板「新UI没有kpi条」：原型 renderAudit = pageTitle +
-         card(tabs+table)，页头之下直接是列表卡；总数在分页 foot「共 N 条」单源可见） -->
+         2026-10-27 用户「这里还有很多 pill，可以加上 KPI 面板」：失败 TOP 胶囊行退役，
+         页头之下补 4 卡 KPI 带（记录总数 / 失败记录 / 失败率 / 失败动作）。 -->
     <MkPageHead title="审计日志">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" @click="goExport">导出</button>
@@ -32,6 +32,42 @@
       </button>
     </div>
 
+    <!-- KPI 带（2026-10-27 用户「这里还有很多 pill，可以加上 KPI 面板」）：
+         原「失败 25 + 各失败动作」常驻胶囊行改成读数面板。计数只在这里出现一次，
+         失败下钻收敛为两条入口——「失败记录」卡（一键只看失败）与「失败动作」下拉
+         （按动作下钻，选项自带次数）；卡头不再挂一排动作胶囊。 -->
+    <section class="mk-kpi-grid" aria-label="审计日志统计" :aria-busy="statsLoading || undefined">
+      <MkKpi
+        label="记录总数"
+        :value="statsLoading ? '—' : total"
+        :hint="timeRange === 'all' ? '全部时间' : timeRangeLabels[timeRange]"
+      />
+      <MkKpi
+        clickable
+        label="失败记录"
+        :value="statsLoading || statsError ? '—' : failedCount"
+        :tone="failedCount && !statsError ? 'bad' : ''"
+        :hint="statsError ? '统计不可用' : failedOnly ? (failedAction ? '再点查看全部失败' : '再点恢复全部记录') : '点击只看失败'"
+        :hint-tone="statsError ? 'bad' : ''"
+        :class="{ 'al-kpi--on': failedOnly }"
+        :aria-pressed="failedOnly"
+        @click="toggleFailureOnly"
+      />
+      <MkKpi
+        label="失败率"
+        :value="statsLoading || statsError ? '—' : failedRate"
+        :tone="failedCount && !statsError ? 'bad' : ''"
+        :hint="tab === 'login' ? '失败 / 登录记录' : '失败 / 记录总数'"
+      />
+      <MkKpi
+        v-if="tab === 'operation'"
+        label="失败动作"
+        :value="statsLoading || statsError ? '—' : failureByAction.length"
+        :hint="failureKpiHint"
+        :hint-tone="failureByAction.length ? 'bad' : ''"
+      />
+    </section>
+
     <!-- 单卡容器（原型 renderAudit：筛选头 + 页签体同卡）：操作审计 / 登录审计两个页签体共用一张卡
          （页签已提到页面级，卡内只留筛选头与表体） -->
     <div class="mk-card mk-card--fill">
@@ -59,28 +95,21 @@
             :active="!!activeActionValue"
             @update:model-value="applyActionFilter"
           />
+          <!-- 失败动作下钻（2026-10-27）：替代原先「失败 N + 每个动作一枚胶囊」的常驻行。
+               计数只随选项出现；空选项在失败域里读作「全部失败」，不在失败域时读作「不过滤」。 -->
+          <MkPillSelect
+            v-if="tab === 'operation' && failureByAction.length"
+            :model-value="failedAction"
+            label="失败动作"
+            aria-label="按失败动作筛选"
+            :options="failureSelectOptions"
+            :active="failedOnly && !!failedAction"
+            @update:model-value="applyFailureFilter"
+          />
           <!-- 失败 TOP 常驻主行：先看到「最近什么在失败」，再点 chip 下钻 -->
           <div v-if="statsError" class="mk-alert mk-alert--row al-stats-error" role="alert">
             <span class="mk-alert__msg">失败统计不可用</span>
             <button type="button" class="mk-alert__btn" :disabled="statsLoading" @click="fetchStats">{{ statsLoading ? '重试中…' : '重试' }}</button>
-          </div>
-          <div v-else-if="tab === 'operation' && (failedCount > 0 || failureByAction.length)" class="al-fails">
-            <button
-              type="button"
-              class="mk-pill al-fails__chip al-fails__chip--total"
-              :class="{ 'al-fails__chip--on': failedOnly && !failedAction }"
-              :aria-pressed="failedOnly && !failedAction"
-              @click="filterByFailure('')"
-            >失败 <b>{{ failedCount }}</b></button>
-            <button
-              v-for="f in failureByAction"
-              :key="f.action"
-              type="button"
-              class="mk-pill al-fails__chip"
-              :class="{ 'al-fails__chip--on': failedOnly && failedAction === f.action }"
-              :aria-pressed="failedOnly && failedAction === f.action"
-              @click="filterByFailure(f.action)"
-            >{{ failureLabel(f.action) }} <b>{{ f.count }}</b></button>
           </div>
         </div>
         <div class="mk-card__head-right">
@@ -348,6 +377,7 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import { useIsNarrow } from './useIsNarrow'
@@ -487,10 +517,10 @@ if (route.query.tab === 'login') tab.value = 'login'
 const logs = ref<AuditLogRow[]>([])
 const attempts = ref<LoginAttemptRow[]>([])
 const total = ref(0)
-/** 失败 TOP chip 下钻态：success=false（后端白名单参数）+ path 首段做 keyword contains */
+/** 失败域下钻态：success=false（后端白名单参数）+ 可选动作关键词 */
 const failedOnly = ref(false)
 const failedAction = ref('')
-/** P2-16：失败按动作聚合 TOP（后端 /stats 返回），作为「失败 N」的下钻入口 */
+/** P2-16：失败按动作聚合 TOP（后端 /stats 返回），作为「失败动作」下拉的下钻入口 */
 const failureByAction = ref<Array<{ action: string; count: number }>>([])
 /** 窗口失败条数（后端 /stats 的 failed；与失败 TOP 同一次响应） */
 const failedCount = ref(0)
@@ -498,6 +528,24 @@ const failedCount = ref(0)
     不区分会让用户把请求故障误读为无失败；该状态在失败 TOP 区提供说明与重试 */
 const statsError = ref('')
 const statsLoading = ref(false)
+/** KPI：失败率与失败动作读数（统计失败时模板显示 —，不把 0 冒充结论） */
+const failedRate = computed(() =>
+  total.value > 0 ? `${Math.round((failedCount.value / total.value) * 100)}%` : '—'
+)
+const topFailure = computed(() => failureByAction.value[0])
+const failureKpiHint = computed(() => {
+  if (statsError.value) return '统计不可用'
+  if (!topFailure.value) return failedCount.value ? '暂无动作聚合' : '当前窗口没有失败'
+  return `最多：${failureLabel(topFailure.value.action)} ${topFailure.value.count}`
+})
+/** 失败动作下拉：空值的文案随失败域变化——在失败域里=「全部失败」，否则=「不过滤」 */
+const failureSelectOptions = computed(() => [
+  { value: '', label: failedOnly.value ? '全部失败' : '不过滤' },
+  ...failureByAction.value.map((f) => ({
+    value: f.action,
+    label: `${failureLabel(f.action)} ${f.count}`,
+  })),
+])
 /** 当前页（1 基）；筛选/tab/每页条数变化回第 1 页 */
 const page = ref(1)
 /** 每页条数（与执行日志同一分页器形态：15/30/50/100，默认 30） */
@@ -577,7 +625,7 @@ function buildParams(nextPage: number, scopeOverride?: typeof tab.value): AuditL
     timeRange: timeRange.value === 'all' ? undefined : timeRange.value,
     sort: (alSortKey.value || undefined) as AuditLogQuery['sort'],
     order: alSortDir.value,
-    /* 只看失败（失败 TOP chip 下钻）：后端 parseSuccess 白名单 true/false */
+    /* 失败域下钻（KPI 卡 / 失败动作下拉）：后端 parseSuccess 白名单 true/false */
     success: failedOnly.value ? false : undefined,
   }
 }
@@ -674,17 +722,28 @@ function failureKeyword(action: string): string {
   return m ? m[1] : action
 }
 
-/** 失败 chip 下钻：只看失败 + 该动作关键词；再点已激活的 chip = 退出下钻（关键词一并还原）。
-    传空串 = 只按失败筛（「失败 N」总 chip）。 */
-function filterByFailure(action: string) {
-  if (failedOnly.value && failedAction.value === action) {
+/** KPI「失败记录」卡：一键进入/退出失败域。若当前正按某动作下钻，先回到「全部失败」。 */
+function toggleFailureOnly() {
+  if (failedOnly.value && !failedAction.value) {
     failedOnly.value = false
-    failedAction.value = ''
     keyword.value = ''
   } else {
     failedOnly.value = true
-    failedAction.value = action
+    failedAction.value = ''
+    keyword.value = ''
+  }
+  void applyFilters()
+}
+
+/** 失败动作下拉：选动作 = 只看失败 + 该动作关键词；选空值 = 退出动作下钻。
+    空值在失败域里保留「只看失败」（读作「全部失败」），不悄悄把失败域一起关掉。 */
+function applyFailureFilter(action: string) {
+  failedAction.value = action
+  if (action) {
+    failedOnly.value = true
     keyword.value = failureKeyword(action)
+  } else {
+    keyword.value = ''
   }
   void applyFilters()
 }
@@ -1051,21 +1110,9 @@ function goExport() {
   text-overflow: ellipsis;
   max-width: 240px;
 }
-/* 失败 TOP 常驻主行：总数 chip + 各动作 chip，点击下钻。
-   2026-10-26 卡头统一：底子改用共享 .mk-pill（描边胶囊 + 同档内衬/字重），页内只留
-   「失败语义用红」这一条差异——此前它是第三种胶囊变体（自带 padding/字重/无激活底色，
-   与同行的 .mk-pill 高差 10px）。 */
-.al-fails { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 100%; }
+/* 失败域 KPI 激活态：与教学组 .ts-kpi--on 同构（只改描边，不做位移） */
+.al-kpi--on { border-color: var(--mk-blue); }
 .al-stats-error { padding: 2px 8px; }
-/* 总数 chip：红描边（失败域的语义色），其余走 .mk-pill 默认档 */
-.al-fails__chip--total { border-color: color-mix(in srgb, var(--mk-red) 40%, var(--mk-line)); }
-/* 下钻激活：与 .mk-pill--active 同构（浅红底 + 红字 + 红边），只是把蓝换成失败语义红 */
-.al-fails__chip--on {
-  background: var(--mk-red-bg, #fef2f2);
-  border-color: color-mix(in srgb, var(--mk-red) 44%, var(--mk-line));
-  color: var(--mk-red-strong);
-}
-.al-fails__chip b { color: var(--mk-red-strong); font-variant-numeric: tabular-nums; }
 .log-tt {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
