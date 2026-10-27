@@ -248,20 +248,14 @@
                        复述左侧徽章已经说过的结果；x/y 是位置，不是完成数（表头 title 已说明）。 -->
                   <span v-if="progressStopText(r)" class="ts-prog" :title="progressTitle(r)">{{ progressStopText(r) }}</span>
                   <span v-else class="mk-na">—</span>
-                  <span
-                    v-if="r.status === 'completed' && (r.messageCount ?? 0) < 2"
-                    class="mk-badge mk-badge--sm mk-badge--muted"
-                  >低参与</span>
-                  <span
-                    v-if="r.status === 'completed' && r.endReason === 'manual-end'"
-                    class="mk-badge mk-badge--sm mk-badge--muted"
-                  >手动结束</span>
+                  <!-- 2026-10-27 用户「教学会话怎么这么多 pill」：低参与 / 手动结束是从属说明，
+                       不是独立状态档；合流成状态列第二行的弱化文本，不再各占一枚灰胶囊。 -->
+                  <span v-if="statusNote(r)" class="ts-status__note">{{ statusNote(r) }}</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('mode')">
-                <div class="ts-classroom">
-                  <span class="mk-badge mk-badge--sm" :class="sessionModeBadgeCls(r.mode)">{{ sessionModeText(r.mode) }}</span>
-                </div>
+                <!-- 2026-10-27：课型是分类值（正课/复习课/延伸课），不是需要着色的状态，去掉胶囊改纯文本。 -->
+                <span class="ts-mode">{{ sessionModeText(r.mode) }}</span>
               </td>
               <td v-if="!isTableNarrow && !tsHiddenCols.has('track')">
                 <div class="ts-track">
@@ -292,13 +286,17 @@
                      处置状态 + 触发原因 + 影响范围，见 statusText.advisoryOps*。
                      固定列宽后两枚徽章在窄档会超出本列：外层 flex-wrap 换行，不裁不挤邻列。 -->
                 <div class="ts-out">
-                  <span class="mk-badge" :class="wrapupBadge(r)">{{ wrapupText(r) }}</span>
+                  <!-- 2026-10-27 用户「教学会话怎么这么多 pill」：只有异常档（缺总结 / 降级总结）
+                       保留提醒徽章；「有总结 / 未生成」是常态，降为文字，行内视觉重心回到状态列。 -->
+                  <span v-if="wrapupTier(r) === 'complete' || wrapupTier(r) === 'pending'" class="ts-out__text">{{ wrapupText(r) }}</span>
+                  <span v-else class="mk-badge" :class="wrapupBadge(r)">{{ wrapupText(r) }}</span>
+                  <!-- 建议从属说明同样去掉胶囊：严重度只染图标与文字，不再铺色底。 -->
                   <span
                     v-if="r.hasAdvisory"
-                    class="mk-badge ts-adv-badge"
-                    :class="advisoryOpsBadgeCls(r.advisory)"
+                    class="ts-adv-note"
+                    :class="advisoryNoteTone(r.advisory)"
                     :title="advisoryOpsTitle(r.advisory)"
-                  ><span class="ts-adv-badge__txt">{{ advisoryOpsText(r.advisory) }}</span></span>
+                  ><TriangleAlert :size="11" :stroke-width="2.2" aria-hidden="true" /><span class="ts-adv-note__txt">{{ advisoryOpsText(r.advisory) }}</span></span>
                 </div>
               </td>
               <td v-if="!isTableNarrow && !tsHiddenCols.has('attention')">
@@ -343,7 +341,7 @@ import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
 import { timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched, shortId } from './live'
-import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, sessionModeText, sessionModeBadgeCls, advisoryOpsText, advisoryOpsTitle, advisoryOpsBadgeCls } from './statusText'
+import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, sessionModeText, advisoryOpsText, advisoryOpsTitle } from './statusText'
 import type { SessionProgress, OpsAdvisoryLike } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -360,7 +358,7 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import { emailSubline, isIdentifierLike } from '@/components/mk/avatarName'
 import MkKpi from '@/components/mk/MkKpi.vue'
 
-import { X } from 'lucide-vue-next'
+import { X, TriangleAlert } from 'lucide-vue-next'
 import { toast } from '@/utils/toast'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
@@ -889,6 +887,22 @@ const wrapupBadge = (r: Row) =>
   wrapupTier(r) === 'complete' ? 'mk-badge--ok' : wrapupTier(r) === 'missing' ? 'mk-badge--warn' : 'mk-badge--muted'
 const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
 
+/* 状态列从属说明（2026-10-27 用户「教学会话怎么这么多 pill」）：低参与 / 手动结束
+   描述的是「这次课怎么结束的」，不是独立状态档；合成一行弱化文本，避免每行堆两枚灰胶囊。 */
+const statusNote = (r: Row): string => {
+  if (r.status !== 'completed') return ''
+  const notes: string[] = []
+  if (r.endReason === 'manual-end') notes.push('手动结束')
+  if ((r.messageCount ?? 0) < 2) notes.push('低参与')
+  return notes.join(' · ')
+}
+
+/* 建议说明的严重度只染文字（与 advisoryOpsBadgeCls 同判据）：胶囊留给真正的状态档。 */
+const advisoryNoteTone = (a: OpsAdvisoryLike | null | undefined): string => {
+  if (a?.learnerResponse?.action === 'keep') return 'ts-adv-note--muted'
+  return a?.priority === 'high' ? 'ts-adv-note--bad' : a?.priority === 'medium' ? 'ts-adv-note--warn' : 'ts-adv-note--info'
+}
+
 /* P3（设计评审 4.3-9）：异常态（失败/收尾失败/超时）会话列副行是后端降级模板句
    「本次会话未正常结束，为你保留了基础学习记录。」——与状态徽章同事实且首屏多行同文。
    命中模板句时改显行内已有的增量信息（时长优先，缺时长用开始时间；两者皆缺撤副行不硬凑）。
@@ -1111,13 +1125,17 @@ defineExpose({ refreshNow })
    隐藏后失配（状态列变第 2 个 td），切换状态筛选时列宽照样跳动——正是本规则要防的。
    该类挂在 td 内层 div 上（display:flex 不能挂 td，见上方 .ts-track 注释）。
    68px = 4 字 × micro 档 + 徽章内边距，容得下最长档。
-   只给主状态徽章（.ts-status__main）：标注徽章（低参与 / 手动结束）是内容宽，
-   套上 68px 会把「低参与 + 手动结束」撑到 ~150px，把状态列拉宽又没换来任何对齐。 */
-.ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
-   badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
-/* 产物格：两枚徽章在固定列宽内换行（不再靠 margin-left 贴前一枚） */
+   只给主状态徽章（.ts-status__main）：从属说明（低参与 / 手动结束）2026-10-27 起合流成
+   第二行弱化文本（.ts-status__note），不再参与徽章定宽。 */
+.ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }.ts-status__note { flex: 1 0 100%; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.4; white-space: nowrap; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） */
+/* 课型去胶囊（2026-10-27）：分类值直接用正文文本，不为「正课」这类常态值着色。 */
+.ts-mode { white-space: nowrap; }
+/* 建议从属说明：图标 + 文字，严重度只染文字（不再铺色底，避免一行第二枚胶囊）。
+   截断落在内层文本节点（flex 项 overflow!=visible → min-width 归 0 可收缩）。 */
+/* 产物格：异常档徽章与常态文字在固定列宽内换行 */
 .ts-out { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.ts-adv-badge { max-width: 96px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
+.ts-out__text { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
+.ts-adv-note { display: inline-flex; align-items: center; gap: 3px; min-width: 0; max-width: 96px; font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.4; }.ts-adv-note__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.ts-adv-note--bad { color: var(--mk-red); }.ts-adv-note--warn { color: var(--mk-amber); }.ts-adv-note--info { color: var(--mk-blue); }.ts-adv-note--muted { color: var(--mk-muted); }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
 .ts-error { margin: 0 16px 10px; }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
    4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {

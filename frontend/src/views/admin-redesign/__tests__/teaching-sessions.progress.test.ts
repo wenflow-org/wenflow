@@ -62,7 +62,7 @@ async function mountLive() {
 }
 
 describe('TeachingSessions 低参与标注（拍板 #1：completed 且用户消息 <2 条，显示口径）', () => {
-  it('completed + messageCount<2 → 状态列出「低参与」badge；≥2 条不出', async () => {
+  it('completed + messageCount<2 → 状态列备注含「低参与」；≥2 条不出', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -85,7 +85,7 @@ describe('TeachingSessions 低参与标注（拍板 #1：completed 且用户消�
 });
 
 describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后区分「任务完成」与「用户结束」）', () => {
-  it('completed + manual-end → 「手动结束」徽章；task-completed 与缺失不猜', async () => {
+  it('completed + manual-end → 「手动结束」备注；task-completed 与缺失不猜', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -108,17 +108,17 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     expect(rows[0].find('.ts-status').text()).toContain('已完成');
     expect(rows[0].find('.ts-status').text()).toContain('手动结束');
     expect(rows[0].text()).toContain('停在 1/4');
-    // 徽章 title 不把 manual-end 一律说成用户动作：后台收束悬挂会话也写同一个原因
-    // （2026-10-26 文案收口：解释型悬停说明已删，徽章只留状态词）
-    const badge = rows[0].findAll('.ts-status .mk-badge--sm').find((b) => b.text() === '手动结束');
-    expect(badge!.attributes('title')).toBeUndefined();
+    // 2026-10-27：从属说明不再带解释型 title，也不再说成用户动作
+    const note = rows[0].find('.ts-status .ts-status__note');
+    expect(note.text()).toBe('手动结束');
+    expect(note.attributes('title')).toBeUndefined();
     expect(rows[1].find('.ts-status').text()).not.toContain('手动结束');
     expect(rows[1].text()).toContain('停在 4/4');
     expect(rows[2].find('.ts-status').text()).not.toContain('手动结束');
     wrapper.unmount();
   });
 
-  it('状态列徽章：主状态徽章带 ts-status__main（68px 定宽），标注徽章不受定宽牵连', async () => {
+  it('状态列：主状态徽章定宽，低参与 / 手动结束合流为一条备注文本', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -130,10 +130,10 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     const wrapper = await mountLive();
     const main = wrapper.find('.ts-status .ts-status__main');
     expect(main.exists()).toBe(true);
-    // 低参与 + 手动结束两枚标注徽章都按内容宽（模板里不再落到 .ts-status .mk-badge 那条定宽规则）
-    const sm = wrapper.findAll('.ts-status .mk-badge--sm');
-    expect(sm).toHaveLength(2);
-    sm.forEach((b) => expect(b.classes()).not.toContain('ts-status__main'));
+    // 2026-10-27 用户「怎么这么多 pill」：两枚灰胶囊并成一行「手动结束 · 低参与」
+    expect(wrapper.findAll('.ts-status .mk-badge')).toHaveLength(1);
+    const note = wrapper.find('.ts-status .ts-status__note');
+    expect(note.text()).toBe('手动结束 · 低参与');
     wrapper.unmount();
   });
 });
@@ -387,9 +387,10 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const adv = wrapper.find('.ts-adv-badge');
+    const adv = wrapper.find('.ts-adv-note');
     expect(adv.text()).toBe('待确认调整');
-    expect(adv.classes()).toContain('mk-badge--bad');
+    expect(adv.classes()).toContain('ts-adv-note--bad');
+    expect(adv.classes()).not.toContain('mk-badge');
     const title = adv.attributes('title') || '';
     expect(title).toContain('高优先级');
     expect(title).toContain('影响后续路径');
@@ -438,10 +439,10 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const adv = wrapper.find('.ts-adv-badge');
+    const adv = wrapper.find('.ts-adv-note');
     expect(adv.text()).toBe('已保持计划');
-    expect(adv.classes()).toContain('mk-badge--muted');
-    expect(adv.classes()).not.toContain('mk-badge--bad');
+    expect(adv.classes()).toContain('ts-adv-note--muted');
+    expect(adv.classes()).not.toContain('ts-adv-note--bad');
     expect(adv.attributes('title')).toContain('处置：学员选择保持原计划');
     wrapper.unmount();
   });
