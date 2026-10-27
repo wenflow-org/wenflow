@@ -351,3 +351,7 @@ newui/
 # 设计体系交接包（2026-10-17 用户拍板「不需要进入 git」：本地只读参考，含 PNG/2.7MB zip）
 # 通配同时覆盖解压目录与压缩包两种形态（.rar / .zip 都可能被再次放进来）
 WenFlow-Design-System*
+
+# 小红书单词卡侧项目（2026-10-19 用户：不是平台项目、不上 GitHub；只有 *.png 被上面的通配挡住，
+# py/mjs/json/csv/svg 仍会进 git status，故整目录忽略）
+小红书/
