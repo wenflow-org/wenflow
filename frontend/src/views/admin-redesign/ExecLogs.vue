@@ -225,7 +225,10 @@
                     </div>
                   </div>
                 </td>
-                <td v-if="!hiddenCols.has('model')"><span class="mono exec-model__name" :title="log.model || undefined">{{ log.model || '—' }}</span></td>
+                <td v-if="!hiddenCols.has('model')">
+                  <span v-if="log.model" class="mono exec-model__name" :title="log.model">{{ log.model }}</span>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td v-if="!hiddenCols.has('tokens')">
                   <div class="exec-tok" :title="tokensTitle(log)">
                     <b v-if="tokensSum(log) != null" class="exec-tok__num">{{ tokensSum(log)!.toLocaleString() }}</b>

@@ -162,7 +162,7 @@
               :aria-sort="gcSortState('created')"
               @click="toggleGcSort('created')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('created')">创建时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th scope="col" class="mk-th--right gc-c-act">操作</th>
+            <th scope="col" class="mk-th--right mk-c-act">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -241,7 +241,7 @@
             <td v-if="showCol('created')"><span class="mk-cell-sub" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(r)">详情</button>
+                <button type="button" class="mk-link" @click.stop="openDetail(r)">详情</button>
                 <div class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
                   <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
@@ -899,7 +899,7 @@ onMounted(() => {
 .gc-c-path { width: 82px; }
 .gc-c-stage-date { width: 78px; }
 .gc-c-created { width: 72px; }
-.gc-c-act { width: 90px; }
+/* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
 /* fixed 档里列宽即契约：行内 min-width 会把内容顶出单元格，统一归零由截断兜底 */
 .gc-table .gc-user { min-width: 0; }
 .gc-table .gc-c-summary .mk-cell-text--wrap { min-width: 0; max-width: 100%; }

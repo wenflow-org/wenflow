@@ -161,7 +161,9 @@
               >
                 <td v-if="colVisible('time')" class="log-time mono" :title="fmtFull(log.createdAt)">{{ fmtTime(log.createdAt) }}</td>
                 <td v-if="colVisible('admin')" class="log-admin" :title="log.adminName || log.adminId || ''">
-                  {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
+                  <template v-if="log.adminName">{{ log.adminName }}</template>
+                  <template v-else-if="log.adminId">{{ shortId(log.adminId) }}</template>
+                  <span v-else class="mk-na">—</span>
                 </td>
                 <!-- 动作格两段式（2026-10-24 视觉修复）：方法徽章紧贴动作名（8px）。
                      2026-10-18 曾用两端对齐把徽章固定到格右缘，实测读成「名字」与「方法」
@@ -185,7 +187,10 @@
                     <span v-if="log.durationMs != null">{{ fmtMs(log.durationMs) }}</span>
                   </div>
                 </td>
-                <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt">{{ targetTypeText(log.targetType) }}</td>
+                <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt">
+                  <template v-if="log.targetType">{{ targetTypeText(log.targetType) }}</template>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">
                   <button
                     v-if="log.targetId && targetLinkOf(log)"
@@ -193,10 +198,14 @@
                     class="al-target-link al-ellipsis"
                     @click.stop="openTarget(log)"
                   >{{ shortId(log.targetId) }}</button>
-                  <span v-else class="al-ellipsis">{{ log.targetId ? shortId(log.targetId) : '—' }}</span>
+                  <span v-else-if="log.targetId" class="al-ellipsis">{{ shortId(log.targetId) }}</span>
+                  <span v-else class="mk-na">—</span>
                 </td>
                 <td v-if="colVisible('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
-                <td v-if="colVisible('ip')" class="log-ip" :title="log.ip || ''"><span class="al-ellipsis">{{ ipText(log.ip) }}</span></td>
+                <td v-if="colVisible('ip')" class="log-ip" :title="log.ip || ''">
+                  <span v-if="(log.ip || '').trim()" class="al-ellipsis">{{ ipText(log.ip) }}</span>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td class="mk-th--right log-arrow" aria-hidden="true"><span class="log-arrow__i">▸</span></td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
@@ -258,7 +267,7 @@
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="al-c-reason">原因</th>
-              <th scope="col" class="mk-th--right al-act al-c-act">操作</th>
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -269,8 +278,14 @@
               :class="a.success ? 'log-tr--ok' : 'log-tr--err'"
             >
               <td class="log-time mono" :title="fmtFull(a.createdAt)">{{ fmtTime(a.createdAt) }}</td>
-              <td class="log-admin" :title="a.username">{{ a.username || '—' }}</td>
-              <td class="log-ip" :title="a.ip || ''"><span class="al-ellipsis">{{ ipText(a.ip) }}</span></td>
+              <td class="log-admin" :title="a.username">
+                <template v-if="a.username">{{ a.username }}</template>
+                <span v-else class="mk-na">—</span>
+              </td>
+              <td class="log-ip" :title="a.ip || ''">
+                <span v-if="(a.ip || '').trim()" class="al-ellipsis">{{ ipText(a.ip) }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
               <td><span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span></td>
               <td class="log-reason" :title="a.reason || ''">{{ reasonText(a.reason) }}</td>
               <td class="mk-th--right al-act">
@@ -894,7 +909,6 @@ function goExport() {
 .al-c-ip { width: 136px; }
 .al-c-expand { width: 34px; }
 .al-c-reason { width: 280px; }
-.al-c-act { width: 90px; }
 /* fixed 档列宽即契约：行内 max-width 会顶出单元格，改成随列收缩 + 省略号 */
 .al-table .log-target, .al-table .log-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* td 上的 text-overflow 在表格单元里不生效（2026-10-22 实测仍切字）：内层 span 承担截断 */

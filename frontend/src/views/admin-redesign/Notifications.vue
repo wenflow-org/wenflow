@@ -86,7 +86,7 @@
                 :aria-sort="ntSortState('createdAt')"
                 @click="toggleNtSort('createdAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleNtSort('createdAt')">发送时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -99,7 +99,8 @@
               </td>
               <td>
                 <div class="mk-cell-main">
-                  <strong>{{ n.user?.name || '—' }}</strong>
+                  <strong v-if="n.user?.name">{{ n.user.name }}</strong>
+                  <span v-else class="mk-na">—</span>
                   <span class="mk-cell-sub" :title="n.user?.email || n.userId">{{ n.user?.email || n.userId }}</span>
                 </div>
               </td>

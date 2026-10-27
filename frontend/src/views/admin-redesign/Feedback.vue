@@ -101,7 +101,7 @@
                 @click="toggleFbSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="fb-c-time">时间</th>
-              <th scope="col" class="mk-th--right fb-c-act">操作</th>
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -120,9 +120,18 @@
                   <b class="mono">{{ r.rating }}</b>
                 </span>
               </td>
-              <td><span class="fb-comment" :title="r.comment">{{ r.comment || '—' }}</span></td>
-              <td><span class="mono fb-agent">{{ r.agentId || '—' }}</span></td>
-              <td><span class="fb-strategy">{{ r.strategy || '—' }}</span></td>
+              <td>
+                <span v-if="r.comment" class="fb-comment" :title="r.comment">{{ r.comment }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
+              <td>
+                <span v-if="r.agentId" class="mono fb-agent">{{ r.agentId }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
+              <td>
+                <span v-if="r.strategy" class="fb-strategy">{{ r.strategy }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
               <td><span class="mk-cell-sub" :title="fmtDateTime(r.createdAtRaw)">{{ r.createdAt }}</span></td>
               <td>
@@ -547,7 +556,6 @@ onMounted(() => {
 .fb-c-strategy { width: 60px; }
 .fb-c-status { width: 84px; }
 .fb-c-time { width: 80px; }
-.fb-c-act { width: 96px; }
 /* fixed 档列宽即契约：评论格 320px 上限会顶出本列，改成随列收缩 + 省略号 */
 .fb-table .fb-comment { max-width: 100%; }
 

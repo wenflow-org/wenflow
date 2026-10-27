@@ -149,6 +149,28 @@ v4 修正）。
 图表色唯一来源：`components/mk/chartPalette.ts`（echarts 图）；原型的轻量图
 （barchart/stageband/meter）用 DOM 复刻，柱与段色走语义 token。
 
+### 列表单元格与操作列（2026-10-27 收口）
+
+用户原话：「这种横线都不一样」「操作列各自为战，每个子页面一套体系」。全站列表按下面一套判据执行，教学组先落，随后扩到其余列表。
+
+**空值占位只有一种形态：`.mk-na`。**
+
+- 颜色 `--mk-faint`、字重 **400**（不继承 `<b>` 的 700）、`font-variant-numeric: tabular-nums`；表格内再用 `.mk-table .mk-na` 兜住 `<b>` 场景。
+- 表格单元格里的 `—` 必须落在 `.mk-na` 上，不得裸写 `{{ x || '—' }}`（源码守卫见 `list-cell-dialect.test.ts`）。
+- 「0」不是空值（如 0 次调用、0 条路径）；只有 `null / undefined / ''` 才显示横线。语义上「无 / 未统计 / 不过期」可继续用 `.mk-na`，但字样固定，不混用横线与文字。
+- 空值占位不套徽章、不加图标；徽章只用于状态/来源等有语义的值。
+
+**操作列只有一套几何与控件档。**
+
+- 表头统一 `<th class="mk-th--right mk-c-act">操作</th>`；`mk-c-act` 在 `mk-primitives.css` 里定义 **140px**，页面不再写私有 `xx-c-act` 宽度。
+- 单元格统一 `.mk-actions`：右对齐、`gap: 8px`、`white-space: nowrap`、`min-width: 72px`。
+- 一级动作（每行必给、且只有一个主行动）用 `.mk-link` 文字链，`padding-inline: 6px`；需要图标的图标与文字间距 4px。
+- 低频、危险或次要动作收进 `⋯` 菜单；菜单项文案不复用一级动作，避免同一行动两个入口。
+- 禁用在操作列里混用 `.mk-btn--sm` 与 `.mk-link`；禁用态仍用 `.mk-link:disabled`，不换成灰按钮。
+- 固定布局（`mk-table--fixed`）下 `140px` 是宽度基数，余量按列权重摊分导致实际像素浮动（实测 140–195，随容器宽度与可见列变化），这是预期行为，不靠私有宽度修。
+
+守卫：`list-cell-dialect.test.ts`（`.mk-na` 形态、裸横线、全站 `mk-c-act`、私有宽度）与 `table-column-stability.test.ts`（固定表每个 `<th>` 必须带页面前缀宽度类或全局 `mk-c-act`）。
+
 ## 1. 层级（Typography hierarchy）
 
 文本仍只有**三个角色 token**（micro 12 / body 14 / emphasis 15；档位覆写在 `styles/mk-primitives.css` 的 `:root` —— 1440 档 12.5/14.5/15.5、1920 档 13/15/16，**不在 main.css**）。

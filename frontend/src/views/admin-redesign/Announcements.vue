@@ -82,7 +82,7 @@
               @click="toggleAnSort('expires')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleAnSort('expires')">过期<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th>创建人</th>
-            <th class="mk-th--right">操作</th>
+            <th class="mk-th--right mk-c-act">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -99,7 +99,10 @@
             </td>
             <td :class="{ 'mk-na': !r.publishedAt }" :title="r.publishedAt ? fmtDate(r.publishedAt) : ''">{{ r.publishedAt ? timeAgo(r.publishedAt) : '—' }}</td>
             <td :class="[r.expiresAt ? expiresTone(r.expiresAt) : 'mk-na']" :title="r.expiresAt ? fmtDate(r.expiresAt) : ''">{{ r.expiresAt ? expiresLabel(r.expiresAt) : '不过期' }}</td>
-            <td><span class="mono an-author" :title="r.createdBy || ''">{{ r.createdBy || '—' }}</span></td>
+            <td>
+              <span v-if="r.createdBy" class="mono an-author" :title="r.createdBy">{{ r.createdBy }}</span>
+              <span v-else class="mk-na">—</span>
+            </td>
             <td>
               <div class="mk-actions">
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>

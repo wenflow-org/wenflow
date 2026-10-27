@@ -223,7 +223,7 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    const actionOf = (name: string) => rowByName(w, name).find('.mk-actions > .mk-btn');
+    const actionOf = (name: string) => rowByName(w, name).find('.mk-actions > .mk-link');
     expect(actionOf('在跑的人').text()).toBe('暂停');
     expect(actionOf('暂停的人').text()).toBe('继续');
     // 2026-10-26：停滞也给「继续」（此前只剩终止，想恢复被暂停的会话只能进画像页）
@@ -251,7 +251,7 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     await nextTick();
     const row = rowByName(w, '混合的人');
     expect(row.find('.vl-runstate').text()).toBe('停滞');
-    expect(row.find('.mk-actions > .mk-btn').text()).toBe('继续');
+    expect(row.find('.mk-actions > .mk-link').text()).toBe('继续');
     w.unmount();
   });
 
@@ -260,7 +260,7 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    const btn = rowByName(w, '没故事的人').find('.mk-actions > .mk-btn');
+    const btn = rowByName(w, '没故事的人').find('.mk-actions > .mk-link');
     expect(btn.text()).toBe('运行');
     expect(btn.attributes('disabled')).toBeDefined();
     expect(btn.attributes('title')).toContain('还没有故事');
@@ -274,7 +274,7 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    await rowByName(w, '在跑的人').find('.mk-actions > .mk-btn').trigger('click');
+    await rowByName(w, '在跑的人').find('.mk-actions > .mk-link').trigger('click');
     await flushPromises();
     expect(adminVirtualLearnersApi.autopilotStop).toHaveBeenCalledWith('sess-9');
     expect(adminVirtualLearnersApi.terminateVirtualSessions).not.toHaveBeenCalled();

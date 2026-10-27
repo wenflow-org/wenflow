@@ -185,7 +185,7 @@
               :aria-sort="lcSortState('updated')"
               @click="toggleLcSort('updated')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">数据更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th scope="col" class="mk-th--right lc-c-act">操作</th>
+            <th scope="col" class="mk-th--right mk-c-act">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -240,19 +240,33 @@
               </span>
               <span v-else class="mk-na">—</span>
             </td>
-            <td v-if="!lcHiddenCols.has('risk')" class="lc-riskcell" :class="{ 'mk-na': !r.risk }" :title="r.risk || ''"><span class="risk-text">{{ r.risk || '—' }}</span></td>
+            <td v-if="!lcHiddenCols.has('risk')" class="lc-riskcell" :title="r.risk || ''">
+              <span v-if="r.risk" class="risk-text">{{ r.risk }}</span>
+              <span v-else class="mk-na">—</span>
+            </td>
             <td v-if="!lcHiddenCols.has('updated')">
               <span v-if="isUpdating(r.id)" class="lc-updated">重算中…</span>
               <span v-else-if="r.updated" class="mk-fresh" :class="freshTone(r.ts)" :title="updatedCellTitle(r)">{{ r.updated }}</span>
               <span v-else class="mk-na">—</span>
             </td>
             <td>
-              <!-- 2026-10-05 表格方言收敛：icon-only 钮是全站唯一离群（LP/Users/TS/GC/MR 均为
-                   mk-btn--sm 文字钮），且 mk-actions--left 与 th--right 左右分家致操作列偏移 -->
+              <!-- 操作列（2026-10-27 统一）：一级动作 = 详情 / 干预（风险行琥珀）；
+                   「重算」这种低频维护动作收进 ⋯，与全站「可见动作 + 溢出菜单」同一语法。 -->
               <div class="mk-actions">
-                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(r)">详情</button>
-                <button v-if="isLive && !r.isTestAccount" type="button" class="mk-btn mk-btn--sm" :class="{ 'lc-intervene--hot': isRisk(r) }" @click.stop="openIntervene(r)">干预</button>
-                <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingAll || isUpdating(r.id)" @click.stop="recompute(r)">{{ isUpdating(r.id) ? '重算中…' : '重算' }}</button>
+                <button type="button" class="mk-link" @click.stop="openDetail(r)">详情</button>
+                <button v-if="isLive && !r.isTestAccount" type="button" class="mk-link" :class="{ 'lc-intervene--hot': isRisk(r) }" @click.stop="openIntervene(r)">干预</button>
+                <div class="mk-menu">
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="rowMenu === r.id" @click.stop="toggleRowMenu(r.id)">⋯</button>
+                  <div v-if="rowMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="rowPopStyle" @click.stop>
+                    <button
+                      type="button"
+                      class="mk-menu__item"
+                      role="menuitem"
+                      :disabled="recomputingAll || isUpdating(r.id)"
+                      @click="closeRowMenu(); recompute(r)"
+                    >{{ isUpdating(r.id) ? '重算中…' : '重算' }}</button>
+                  </div>
+                </div>
               </div>
             </td>
           </tr>
@@ -462,6 +476,8 @@ async function sendIntervene() {
 
 /** 卡头「⋯」：批量写操作（全部重算）收在这里，不占列表主工具位 */
 const { openMenu: moreMenu, toggleMenu: toggleMoreMenu, closeMenu: closeMoreMenu, popStyle: morePopStyle } = useRowMenu()
+/** 行内 ⋯（重算）：与卡头 ⋯（全部重算）分开，避免同一状态互相串行 */
+const { openMenu: rowMenu, toggleMenu: toggleRowMenu, closeMenu: closeRowMenu, popStyle: rowPopStyle } = useRowMenu()
 
 /** P1#16 数据层接线：liveLearnersTotal=后端分页 total；真窗口显「N · 已载 M」，
  *  total 未知才退「已加载 N」（2026-10-04 解锁 500 窗口后全量加载成常态，等值时念「已加载」=假截断暗示） */
@@ -858,7 +874,7 @@ async function recomputeAll() {
 .lc-c-conf { width: 88px; }
 .lc-c-risk { width: 220px; }
 .lc-c-updated { width: 72px; }
-.lc-c-act { width: 108px; }
+/* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
 /* fixed 档里列宽即契约：换行格 min-width 会把短内容顶出单元格 */
 .lc-table .mk-cell-text--wrap, .lc-table .mk-cell-main .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
 /* 更新列：相对时间不换行（"4 分钟前"拆行问题） */

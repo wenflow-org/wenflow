@@ -124,7 +124,7 @@
                 <th scope="col">存储字段名</th>
                 <th scope="col">锁定</th>
                 <th scope="col">core 状态</th>
-                <th scope="col" class="mk-th--right">操作</th>
+                <th scope="col" class="mk-th--right mk-c-act">操作</th>
               </tr>
             </thead>
             <tbody>

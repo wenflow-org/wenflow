@@ -197,7 +197,7 @@
               <tr>
                 <th class="mr__th-check">选择</th>
                 <th>归并目标</th><th>证据（别名 · 理由）</th><th class="mk-num">置信度</th><th class="mk-num">名称相似度</th>
-                <th>可自动执行</th><th class="mk-th--right">操作</th>
+                <th>可自动执行</th><th class="mk-th--right mk-c-act">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -276,7 +276,7 @@
             <!-- 表头补明「候选 A / B 是概念键」（2026-10-06 审核 #62）：原表头只写 A / B
                  两个单字母；A/B 两列是无人类可读 label 的裸 conceptKey，与另三表同降 .mr__sub 档。
                  R7：补 选择/操作 两列——此前这组建议只可看不可动（审计 CC-2） -->
-            <thead><tr><th class="mr__th-check">选择</th><th>归并目标（候选 A）</th><th>并入（候选 B）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check">选择</th><th>归并目标（候选 A）</th><th>并入（候选 B）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
             <tbody>
               <tr v-for="(item, index) in detail.audit.ambiguous" :key="`${item.a}-${item.b}-${index}`">
                 <td>
@@ -290,7 +290,10 @@
                 </td>
                 <td class="mr__sub">{{ item.a }}</td>
                 <td class="mr__sub">{{ item.b }}</td>
-                <td class="mr__sub">{{ item.reason || '—' }}</td>
+                <td class="mr__sub">
+                  <template v-if="item.reason">{{ item.reason }}</template>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td>
                   <div class="mk-actions">
                     <button
@@ -328,7 +331,7 @@
               <col />
               <col style="width: 132px" />
             </colgroup>
-            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念标识）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念标识）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
             <tbody>
               <tr v-for="(drop, index) in detail.audit.dropCandidates" :key="`${drop.conceptKey}-${index}`">
                 <td>
@@ -341,7 +344,10 @@
                   />
                 </td>
                 <td class="mr__sub">{{ drop.conceptKey }}</td>
-                <td class="mr__sub">{{ drop.reason || '—' }}</td>
+                <td class="mr__sub">
+                  <template v-if="drop.reason">{{ drop.reason }}</template>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td>
                   <div class="mk-actions">
                     <button

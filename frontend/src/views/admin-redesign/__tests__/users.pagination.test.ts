@@ -145,8 +145,8 @@ describe('Users 客户端分页（mk-pagination）', () => {
     const w = await mountUsers();
     await nextTick();
     const firstRow = w.findAll('tbody tr')[0];
-    const rowBtns = firstRow.findAll('.mk-actions .mk-btn');
-    expect(rowBtns.some((b) => b.text() === '编辑'), '行内应有「编辑」钮').toBe(true);
+    const rowBtns = firstRow.findAll('.mk-actions .mk-link');
+    expect(rowBtns.some((b) => b.text() === '编辑'), '行内应有「编辑」动作').toBe(true);
     // 行点击本来就是详情，操作列不再重复一颗「详情」
     expect(rowBtns.some((b) => b.text() === '详情')).toBe(false);
     // ⋯ 里只剩删除（改角色/改密回到行内）

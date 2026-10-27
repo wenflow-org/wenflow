@@ -121,7 +121,7 @@
               <th scope="col" class="mk-th--sortable mr-c-last" :aria-sort="userSortState('lastReviewed')"
                 @click="toggleUserSort('lastReviewed')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastReviewed')">最近复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right mr-c-act">操作</th>
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -207,10 +207,10 @@
                 <div class="mk-actions">
                   <button
                     type="button"
-                    class="mk-btn mk-btn--sm"
+                    class="mk-link"
                     @click.stop="openLearner(row.userId)"
                   >详情</button>
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" @click.stop="recompute(row.userId, row.name)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
+                  <button type="button" class="mk-link" :disabled="recomputingId === row.userId" @click.stop="recompute(row.userId, row.name)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
                 </div>
               </td>
             </tr>
@@ -631,7 +631,7 @@ onMounted(async () => {
 .mr-c-scatter { width: 76px; }
 .mr-c-strength { width: 150px; }
 .mr-c-last { width: 100px; }
-.mr-c-act { width: 140px; }
+/* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
 
 .mr { display: flex; flex-direction: column; }
 

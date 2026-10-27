@@ -38,7 +38,7 @@
             <th>输出</th>
             <th title="核心文件哈希">核心哈希</th>
             <th>状态</th>
-            <th class="mk-th--right">操作</th>
+            <th class="mk-th--right mk-c-act">操作</th>
           </tr>
         </thead>
         <tbody>

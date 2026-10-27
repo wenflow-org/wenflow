@@ -221,7 +221,7 @@
               :aria-sort="vlSortState('created')"
               @click="toggleVlSort('created')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('created')">创建<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th scope="col" class="vl-c-act">操作</th>
+            <th scope="col" class="mk-th--right mk-c-act">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -277,13 +277,13 @@
             </td>
             <td v-if="!isNarrow && !isCompact && !hiddenCols.has('created')"><span class="mk-cell-sub" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</span></td>
             <td>
-              <div class="mk-actions mk-actions--left">
+              <div class="mk-actions">
                 <!-- 行内只留「这个状态下的下一步」：运行中→暂停、已暂停/停滞→继续、已停止→运行。
                      不可逆的「终止」不占行主位（进 ⋯ 菜单）；没故事时真禁用，不改字冒充。 -->
                 <button
                   v-if="isLive"
                   type="button"
-                  class="mk-btn mk-btn--sm"
+                  class="mk-link"
                   :disabled="rowActionOf(s).disabled || busyId === s.id"
                   :title="rowActionOf(s).title"
                   @click.stop="onRowAction(s)"
@@ -1085,7 +1085,6 @@ function onBatchReclaim(ids: string[]) {
 /* 异常列要同时容下「失败 N」「无响应 N」两枚标签 */
 .vl-c-abnormal { width: 124px; }
 .vl-c-created { width: 70px; }
-.vl-c-act { width: 96px; }
 @media (max-width: 1279px) {
   /* 窄档同宽：状态列内容不变，不随断点回宽 */
   .vl-c-running { width: 84px; }

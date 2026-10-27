@@ -40,16 +40,25 @@
                 <th class="mk-th--right">尝试</th>
                 <th>错误</th>
                 <th>发生时间</th>
-                <th class="mk-th--right">操作</th>
+                <th class="mk-th--right mk-c-act">操作</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="item in deadItems" :key="item.id">
                 <td><span class="mono stp-ev" :title="item.eventType">{{ item.eventType }}</span></td>
-                <td><span class="mono mk-cell-text">{{ shortId(item.userId || '—', 10, 4) }}</span></td>
-                <td><span class="mono mk-cell-text" :title="item.aggregateId || ''">{{ shortId(item.aggregateId || '—', 10, 4) }}</span></td>
+                <td>
+                  <span v-if="item.userId" class="mono mk-cell-text">{{ shortId(item.userId, 10, 4) }}</span>
+                  <span v-else class="mk-na">—</span>
+                </td>
+                <td>
+                  <span v-if="item.aggregateId" class="mono mk-cell-text" :title="item.aggregateId">{{ shortId(item.aggregateId, 10, 4) }}</span>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td class="mk-num">{{ item.attemptCount }}</td>
-                <td><span class="dt-err" :title="item.lastError || ''">{{ item.lastError || '—' }}</span></td>
+                <td>
+                  <span v-if="item.lastError" class="dt-err" :title="item.lastError">{{ item.lastError }}</span>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td :title="fmtDate(item.occurredAt)">{{ timeAgo(item.occurredAt) }}</td>
                 <td>
                   <div class="mk-actions">

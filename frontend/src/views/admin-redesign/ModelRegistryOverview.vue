@@ -36,9 +36,13 @@
                     </span>
                   </td>
                   <td class="mono">{{ alias.members.length ? alias.members.join(' → ') : '（无可用模型）' }}</td>
-                  <td class="mono">{{ alias.selected ?? '—' }}</td>
+                  <td class="mono">
+                    <template v-if="alias.selected">{{ alias.selected }}</template>
+                    <span v-else class="mk-na">—</span>
+                  </td>
                   <td>
-                    <span class="mono">{{ alias.selectedWhenRequiringThinking ?? '—' }}</span>
+                    <span v-if="alias.selectedWhenRequiringThinking" class="mono">{{ alias.selectedWhenRequiringThinking }}</span>
+                    <span v-else class="mk-na">—</span>
                     <span v-if="alias.degradedWhenRequiringThinking" class="mk-badge mk-badge--warn ac-mr-badge" title="候选模型都不支持思考，已退回该别名的第一个模型。发起请求时会自动去掉思考参数">降级</span>
                   </td>
                 </tr>
@@ -127,16 +131,31 @@
                       >⚠</span>
                     </td>
                     <!-- 档位列：表头有「档位」而此前缺这一格，整行会右移、数值与标签错配 -->
-                    <td><span class="mk-badge mk-badge--muted">{{ model.tier || '—' }}</span></td>
+                    <td>
+                      <span v-if="model.tier" class="mk-badge mk-badge--muted">{{ model.tier }}</span>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td>
                       <span class="mk-badge" :class="model.capabilities.supportsThinking ? 'mk-badge--ok' : 'mk-badge--muted'">
                         {{ model.capabilities.supportsThinking ? '支持' : '不支持' }}
                       </span>
                     </td>
-                    <td>{{ model.capabilities.supportsReasoningEffort ? '支持' : '—' }}</td>
-                    <td class="mono">{{ model.limits.maxOutputTokens ?? '—' }}</td>
-                    <td class="mono">{{ model.limits.defaultMaxTokens ?? '—' }}</td>
-                    <td class="mono">{{ model.limits.reasoningReserveTokens || '—' }}</td>
+                    <td>
+                      <span v-if="model.capabilities.supportsReasoningEffort">支持</span>
+                      <span v-else class="mk-na">—</span>
+                    </td>
+                    <td class="mono">
+                      <template v-if="model.limits.maxOutputTokens != null">{{ model.limits.maxOutputTokens }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
+                    <td class="mono">
+                      <template v-if="model.limits.defaultMaxTokens != null">{{ model.limits.defaultMaxTokens }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
+                    <td class="mono">
+                      <template v-if="model.limits.reasoningReserveTokens != null">{{ model.limits.reasoningReserveTokens }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td class="mono">{{ model.limits.maxParallelRequests ?? '不限' }}</td>
                     <td class="mono">
                       <template v-if="model.fallbacks.length">

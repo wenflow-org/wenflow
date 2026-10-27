@@ -26,8 +26,8 @@ const PAGES = [
   { file: 'MemoryReviewOverview.vue', prefix: 'mr-c-', minWidthCols: 7 },
   { file: 'VirtualLearners.vue', prefix: 'vl-c-', minWidthCols: 9 },
   { file: 'LearnerCenter.vue', prefix: 'lc-c-', minWidthCols: 7 },
-  { file: 'Feedback.vue', prefix: 'fb-c-', minWidthCols: 8 },
-  { file: 'OpsAchievements.vue', prefix: 'ach-c-', minWidthCols: 6 }
+  { file: 'Feedback.vue', prefix: 'fb-c-', minWidthCols: 7 },
+  { file: 'OpsAchievements.vue', prefix: 'ach-c-', minWidthCols: 5 }
 ]
 
 describe('表格列宽稳定性', () => {
@@ -44,7 +44,8 @@ describe('表格列宽稳定性', () => {
       for (const seg of tables) {
         const ths = seg.match(/<th\b[^>]*>/g) || []
         expect(ths.length).toBeGreaterThanOrEqual(4)
-        expect(ths.filter((th) => !th.includes(prefix))).toEqual([])
+        // 操作列统一走全局 .mk-c-act（2026-10-27），其余列仍用页面前缀宽度类
+        expect(ths.filter((th) => !th.includes(prefix) && !th.includes('mk-c-act'))).toEqual([])
       }
     })
   }

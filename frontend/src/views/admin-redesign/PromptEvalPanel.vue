@@ -86,7 +86,7 @@
                 :aria-sort="caseSortState('updated')"
                 @click="toggleCaseSort('updated')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleCaseSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -210,7 +210,7 @@
                 :aria-sort="runSortState('created')"
                 @click="toggleRunSort('created')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleRunSort('created')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>

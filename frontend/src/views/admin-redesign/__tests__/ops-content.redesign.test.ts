@@ -245,8 +245,9 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
 
   /** 原型对齐（2026-10-01）：行点击 open-path 进 PathDetail 二级页（抽屉退役，
    *  与教学会话行点击进座舱 / UserDetail/LearnerDetail 同一交互习惯）。
-   *  2026-10-26：操作列不再摆重复「详情」钮（行点击已是同一动作）。 */
-  it('行点击 / Enter → 路径详情二级页（subPage=path）；不再开抽屉，操作列无重复详情钮', async () => {
+   *  2026-10-27 操作列统一：非失败行一级动作=详情（与行点击同一落点），
+   *  失败行一级动作=重试生成、详情收进 ⋯。 */
+  it('行点击 / Enter → 路径详情二级页（subPage=path）；操作列一级动作按行状态统一', async () => {
     closeSubPage();
     const w = mount(OpsContent, { props: { embedded: true } });
     await flushPromises();
@@ -258,8 +259,9 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(subPage.value).toMatchObject({ view: 'path', id: 'lp_a' });
     // 不再渲染抽屉（结构详情整体退役）
     expect(document.body.querySelector('.mk-drawer')).toBeNull();
-    // 操作列没有「详情」钮（重复入口已撤）
-    expect(w.findAll('tbody tr .mk-actions .mk-btn').some((b) => b.text() === '详情')).toBe(false);
+    // 非失败行一级动作 = 详情（文字链，全站统一控制档）
+    expect(w.find('tbody tr .mk-actions > .mk-link').text()).toBe('详情');
+    expect(w.find('tbody tr .mk-actions .mk-btn').exists()).toBe(false);
 
     // Enter 键盘可达（同 gc-row/ts-row 判例）
     closeSubPage();
@@ -320,20 +322,22 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');
     expect(tones).toEqual(['ok', '', 'bad']);
 
-    // 操作列（2026-10-26）：失败行的「重试生成」提到一级（这页唯一要动手的动作）；
-    // 下线/恢复/删除仍在 ⋯ 菜单，操作列不再有重复的「详情」钮（行点击已是详情）
+    // 操作列（2026-10-27 统一）：一级动作是文字链（失败行=重试生成，其它行=详情）；
+    // 下线/恢复/删除仍在 ⋯ 菜单；失败行的「详情」也收进菜单，一级位只留最该做的动作。
     const failRow = w.findAll('tbody tr').find((r) => r.text().includes('路径lp_fail'))!;
-    const failPrimary = failRow.find('.mk-actions > .mk-btn');
+    const failPrimary = failRow.find('.mk-actions > .mk-link');
     expect(failPrimary.text()).toBe('重试生成');
-    expect(failRow.find('.mk-actions .mk-btn--primary').exists()).toBe(false);
+    expect(failRow.find('.mk-actions .mk-btn').exists()).toBe(false);
     await failRow.find('.mk-menu__btn').trigger('click');
     await nextTick();
     const menuItems = failRow.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
+    expect(menuItems).toContain('详情');
     expect(menuItems).not.toContain('重试生成');
     expect(menuItems).toContain('下线');
-    // 非失败行没有一级重试钮
+    // 非失败行的一级动作是「详情」，没有重试
     const okRow = w.findAll('tbody tr').find((r) => r.text().includes('路径lp_ok'))!;
-    expect(okRow.findAll('.mk-actions > .mk-btn').map((b) => b.text())).not.toContain('重试生成');
+    expect(okRow.find('.mk-actions > .mk-link').text()).toBe('详情');
+    expect(okRow.findAll('.mk-actions > .mk-link').map((b) => b.text())).not.toContain('重试生成');
 
     // 状态条已退役（2026-10-04）：总量读数迁 MkKpi 卡带
     expect(w.find('.mk-status').exists()).toBe(false);
@@ -368,9 +372,9 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const trs = w.findAll('tbody tr');
     expect(trs[1].find('.mk-badge--warn').exists()).toBe(false);
     expect(w.text()).not.toContain('停滞');
-    // 陈旧 active 行没有一级重试钮；failed 行才是救援对象
-    expect(trs[1].findAll('.mk-actions > .mk-btn').map((b) => b.text())).not.toContain('重试生成');
-    expect(trs[2].findAll('.mk-actions > .mk-btn').map((b) => b.text())).toContain('重试生成');
+    // 陈旧 active 行的一级动作是「详情」而不是重试；failed 行才是救援对象
+    expect(trs[1].findAll('.mk-actions > .mk-link').map((b) => b.text())).not.toContain('重试生成');
+    expect(trs[2].findAll('.mk-actions > .mk-link').map((b) => b.text())).toContain('重试生成');
     w.unmount();
   });
 
@@ -385,9 +389,9 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
     const callsBefore = listMock.mock.calls.length;
 
-    // 一级按钮（2026-10-26 从 ⋯ 菜单提到操作列）
+    // 一级动作（2026-10-27 统一为文字链）
     const row = w.findAll('tbody tr')[0];
-    const btn = row.find('.mk-actions > .mk-btn');
+    const btn = row.find('.mk-actions > .mk-link');
     expect(btn.text()).toBe('重试生成');
     await btn.trigger('click');
     await nextTick();
@@ -419,7 +423,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
 
     const row = w.findAll('tbody tr')[0];
-    const btn = row.find('.mk-actions > .mk-btn');
+    const btn = row.find('.mk-actions > .mk-link');
     await btn.trigger('click');
     await nextTick();
     const btns = [...document.querySelectorAll<HTMLButtonElement>('.mk-confirm button')];

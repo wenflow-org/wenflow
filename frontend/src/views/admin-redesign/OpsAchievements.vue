@@ -93,7 +93,7 @@
                 :aria-sort="achSortState('earnedAt')"
                 @click="toggleAchSort('earnedAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAchSort('earnedAt')">解锁时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right ach-c-act">操作</th>
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -109,9 +109,8 @@
               </td>
               <td>
                 <div class="mk-cell-main">
-                  <strong>
-                    {{ r.user?.name || '—' }}
-                  </strong>
+                  <strong v-if="r.user?.name">{{ r.user.name }}</strong>
+                  <span v-else class="mk-na">—</span>
                   <span class="mk-cell-sub" :title="r.user?.email || r.userId">{{ r.user?.email || r.userId }}</span>
                 </div>
               </td>
@@ -554,7 +553,6 @@ onMounted(() => {
 .ach-c-type { width: 120px; }
 .ach-c-xp { width: 90px; }
 .ach-c-earned { width: 140px; }
-.ach-c-act { width: 140px; }
 
 /* 嵌入模式（运营中心宿主 flex 列内）：根挂 .mk-page--fill（模板）与反馈/公告/通知三页签同形——
    记录卡 .mk-card--fill 由此拿到确定高度，「卡片内滚动区接管纵向滚动、Pagination 吸底」契约生效。

@@ -112,7 +112,7 @@
                 <th>最后活跃</th>
                 <th>过期时间</th>
                 <th>状态</th>
-                <th class="mk-th--right">操作</th>
+                <th class="mk-th--right mk-c-act">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -195,7 +195,7 @@
                   <th>最后活跃</th>
                   <th>过期时间</th>
                   <th>状态</th>
-                  <th class="mk-th--right">操作</th>
+                  <th class="mk-th--right mk-c-act">操作</th>
                 </tr>
               </thead>
               <tbody>

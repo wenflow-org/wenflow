@@ -115,7 +115,7 @@
                 :aria-sort="userSortState('lastlogin')"
                 @click="toggleUserSort('lastlogin')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastlogin')">最后登录<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right u-c-act">操作</th>
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
         <tbody>
@@ -170,7 +170,7 @@
               <div class="mk-actions">
                 <!-- 行点击进详情，操作列留给这页唯一的处置动作：编辑（改昵称 / 邮箱 / 角色、重置密码）。
                      已删除行不给编辑（账号不可登录，先恢复再改）。 -->
-                <button v-if="!u.deleted" type="button" class="mk-btn mk-btn--sm" @click.stop="openEdit(u)">编辑</button>
+                <button v-if="!u.deleted" type="button" class="mk-link" @click.stop="openEdit(u)">编辑</button>
                 <div v-if="isLive && (u.deleted || !isSelf(u))" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === u.id" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -799,7 +799,6 @@ function clearFilters() {
 .u-c-paths { width: 112px; min-width: 112px; }
 .u-c-created { width: 100px; }
 .u-c-lastlogin { width: 100px; }
-.u-c-act { width: 110px; }
 .ul-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .ul-user .mk-cell-main { min-width: 0; flex: 1; }
 .ul-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }

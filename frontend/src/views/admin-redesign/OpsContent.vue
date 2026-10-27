@@ -135,7 +135,7 @@
                 :aria-sort="ocSortState('updated')"
                 @click="toggleOcSort('updated')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('updated')">最近活动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right oc-c-act">操作</th>
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -194,7 +194,10 @@
                      一律显示「未知」，原文进 title，不把半句话当难度展示 -->
                 <span class="oc-diff">{{ difficultyText(p.difficulty) }}</span>
               </td>
-              <td v-if="!hiddenCols.has('hours')" class="mk-num">{{ p.estimatedHours ? `~${p.estimatedHours}h` : '—' }}</td>
+              <td v-if="!hiddenCols.has('hours')" class="mk-num">
+                <span v-if="p.estimatedHours">~{{ p.estimatedHours }}h</span>
+                <span v-else class="mk-na">—</span>
+              </td>
               <td v-if="!hiddenCols.has('progress')">
                 <div class="oc-progress">
                   <span class="mk-minibar"><span class="mk-minibar__fill" :data-tone="progressTone(p)" :style="{ width: progressPct(p) + '%' }"></span></span>
@@ -206,19 +209,27 @@
                 <span class="mk-cell-sub">{{ timeAgo(activityAt(p)) }}</span>
               </td>
               <td>
-                <!-- 操作列：失败行的「重试生成」提到一级（这页唯一要动手的动作，不再藏在两跳后）；
-                     其余低频项（下线恢复 / 删除）收进 ⋯ 菜单。行点击已是详情，不再摆重复钮。 -->
+                <!-- 操作列（2026-10-27 统一）：每行一枚一级文字动作 + ⋯ 菜单。
+                     失败行的一级动作 = 「重试生成」（这页唯一要动手的动作）；
+                     其它行的一级动作 = 「详情」；其余（下线恢复 / 删除）收进 ⋯。 -->
                 <div class="mk-actions">
                   <button
                     v-if="p.status === 'failed'"
                     type="button"
-                    class="mk-btn mk-btn--sm"
+                    class="mk-link"
                     :disabled="p.busy"
                     @click.stop="retryGeneration(p)"
                   >重试生成</button>
+                  <button
+                    v-else
+                    type="button"
+                    class="mk-link"
+                    @click.stop="openPath(p)"
+                  >详情</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === p.id" @click.stop="toggleMenu(p.id)">⋯</button>
                     <div v-if="openMenu === p.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                      <button v-if="p.status === 'failed'" type="button" class="mk-menu__item" role="menuitem" @click="menuOpenDetail(p)">详情</button>
                       <button v-if="p.status !== 'archived'" type="button" class="mk-menu__item" role="menuitem" :disabled="p.busy" @click="menuArchive(p)">下线</button>
                       <button v-else type="button" class="mk-menu__item" role="menuitem" :disabled="p.busy" @click="menuRestore(p)">恢复</button>
                       <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuDelete(p)">删除路径</button>
@@ -683,6 +694,7 @@ const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuDelete(p: PathRow) { closeMenu(); void remove(p) }
 function menuArchive(p: PathRow) { closeMenu(); void archive(p) }
 function menuRestore(p: PathRow) { closeMenu(); void restore(p) }
+function menuOpenDetail(p: PathRow) { closeMenu(); openPath(p) }
 
 /* 深链：独立场景形态（嵌入时由宿主 GoalConversations 消费 intent 并传 initialStatus 预筛）：
    工作台「生成失败路径」→ 预筛 failed（消费后清空，避免菜单直达被残留筛选污染）。
@@ -747,7 +759,7 @@ defineExpose({ reload: () => void reload(true) })
 .oc-table .oc-c-hours { width: 78px; }
 .oc-table .oc-c-progress { width: 130px; }
 .oc-table .oc-c-updated { width: 84px; }
-.oc-table .oc-c-act { width: 140px; }
+/* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
 /* fixed 档里列宽即契约：进度条的 120px 最小宽会把内容顶出单元格，归零后由 flex 吸收 */
 .oc-table .oc-progress { min-width: 0; }
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */

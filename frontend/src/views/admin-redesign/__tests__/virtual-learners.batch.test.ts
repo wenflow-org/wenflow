@@ -749,7 +749,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const row = w.find('.mk-card--fill tbody tr');
     expect(row.exists()).toBe(true);
     // 2026-10-12 外部批评采纳（操作密度）：行内 = 运行 / ⋯；测试（低频诊断）与跨页导航都进 ⋯ 菜单
-    expect(row.findAll('.mk-actions > .mk-btn').map((b) => b.text())).toEqual(['运行']);
+    expect(row.findAll('.mk-actions > .mk-link').map((b) => b.text())).toEqual(['运行']);
     await row.find('.mk-menu__btn').trigger('click');
     await nextTick();
     const itemOf = (text: string) => row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === text);
@@ -776,7 +776,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     liveVirtuals.value = [makeVirtual(1, { runningCount: 1, runningSessionIds: ['r-1'] })];
     const w = await mountPage();
     const row = w.find('.mk-card--fill tbody tr');
-    expect(row.find('.mk-actions > .mk-btn').text()).toBe('暂停');
+    expect(row.find('.mk-actions > .mk-link').text()).toBe('暂停');
     await row.find('.mk-menu__btn').trigger('click');
     await nextTick();
     const items = row.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());

@@ -271,7 +271,8 @@
               </td>
               <td v-if="!tsHiddenCols.has('duration')">
                 <div class="ts-ia ts-ia--dur" :title="interactTitle(r)">
-                  <b class="ts-ia__dur" :class="{ 'ts-ia__dur--long': r.duration >= IDLE_LONG_MINUTES }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
+                  <b v-if="r.duration" class="ts-ia__dur" :class="{ 'ts-ia__dur--long': r.duration >= IDLE_LONG_MINUTES }">{{ fmtDuration(r.duration) }}</b>
+                  <span v-else class="mk-na">—</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('messages')">
@@ -307,7 +308,8 @@
                 >{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span>
               </td>
               <td v-if="!isTableCompact && !tsHiddenCols.has('start')">
-                <span class="mk-cell-sub" :title="startAbsTitle(r)">{{ r.startAt || '—' }}</span>
+                <span v-if="r.startAt" class="mk-cell-sub" :title="startAbsTitle(r)">{{ r.startAt }}</span>
+                <span v-else class="mk-na">—</span>
               </td>
             </tr>
           </tbody>

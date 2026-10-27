@@ -182,9 +182,15 @@
                 <tbody>
                   <tr v-for="v in versions" :key="v.id">
                     <td class="mono">v{{ v.version }}</td>
-                    <td>{{ v.name || '—' }}</td>
+                    <td>
+                      <template v-if="v.name">{{ v.name }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td v-if="hasVersionMeta" class="mono">{{ fmtDate(v.createdAt) }}</td>
-                    <td v-if="hasVersionMeta">{{ v.createdBy || '—' }}</td>
+                    <td v-if="hasVersionMeta">
+                      <template v-if="v.createdBy">{{ v.createdBy }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td v-if="hasVersionMeta" class="skd-td-wrap" :title="versionDescTitle(v)">{{ versionDescText(v) }}</td>
                     <td><span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span></td>
                   </tr>
@@ -312,7 +318,10 @@
                   <tr v-for="r in routingRows" :key="`${r.agentId}:${r.fieldId}`">
                     <td class="mono">{{ r.fieldId }}</td>
                     <td><span v-if="r.roleLabel" class="mk-badge" :class="r.roleCls">{{ r.roleLabel }}</span><span v-else class="mk-na">—</span></td>
-                    <td class="skd-td-wrap">{{ r.desc || '—' }}</td>
+                    <td class="skd-td-wrap">
+                      <template v-if="r.desc">{{ r.desc }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td class="mono">{{ r.handoffText }}</td>
                     <td><span class="mk-badge" :class="r.render === 'visible' ? 'mk-badge--render-visible' : 'mk-badge--render-hidden'">{{ r.render === 'visible' ? '可见' : '隐藏' }}</span></td>
                     <td>
