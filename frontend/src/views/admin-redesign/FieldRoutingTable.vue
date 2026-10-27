@@ -22,7 +22,6 @@
         title="切换排序方向"
         @click="toggleDir"
       >{{ sortDir === 'asc' ? '升序' : '降序' }}</button>
-      <button v-if="filterActive" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
       <span v-if="filterActive" class="frt__filter-count">命中 {{ filteredTotal }} / {{ routings.length }} 行</span>
     </div>
 

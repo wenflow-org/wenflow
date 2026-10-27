@@ -61,7 +61,6 @@
             :options="ocStatusOptions"
             :active="statusFilter !== 'all'"
           />
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <MkFilterSearch v-model="keyword" placeholder="搜索标题或用户" />

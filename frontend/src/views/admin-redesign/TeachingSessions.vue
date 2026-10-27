@@ -121,7 +121,6 @@
             :options="dateSelectOptions"
             :active="!!dateFilter"
           />
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->

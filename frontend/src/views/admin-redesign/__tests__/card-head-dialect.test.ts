@@ -147,6 +147,17 @@ describe('卡头工具条形态', () => {
      两张截图（教学会话 vs 路径列表）的差异不在几何，而在**单选维度用了两种控件**
      —— 一边是带标签的胶囊下拉，一边是带计数的 chip 组。统一后：单选维度一律
      MkPillSelect（KPI 卡仍可作同一维度的快捷入口），chip 组只留给可叠加的「标志筛选」。 */
+  /* 2026-10-27 用户「清除筛选我也不太想要」：工具条不再挂这条文字链，每个控件自己复位
+     （下拉选回「全部」、chip 再点取消、搜索框 ✕）。空态里的「清除筛选」CTA 不在卡头内，不受限。 */
+  it('卡头不再挂「清除筛选」文字链', () => {
+    /* 只看「工具条里的文字链按钮」这一种形态：
+       空态 CTA 走 MkEmptyState 的 action-text、深链横幅带「×」前缀，都不会命中。 */
+    const offenders = LIST_PAGES.filter((file) =>
+      /<button[^>]*class="mk-link[^"]*"[^>]*>清除筛选<\/button>/.test(read(file))
+    )
+    expect(offenders).toEqual([])
+  })
+
   it('卡头主栏的单选维度一律 MkPillSelect，chip 组只留多选「标志筛选」', () => {
     const offenders: string[] = []
     for (const file of LIST_PAGES) {

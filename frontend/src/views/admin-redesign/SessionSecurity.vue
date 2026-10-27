@@ -60,7 +60,6 @@
             :options="statusSelectOptions"
             :active="!!statusFilter"
           />
-          <button v-if="statusFilter" type="button" class="mk-link" @click="statusFilter = ''">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 口径 meta 只说 pills 表达不了的事实（2026-10-26 动线收口）：

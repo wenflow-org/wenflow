@@ -31,7 +31,6 @@
             <span>{{ userFilterLabel }}</span>
             <button type="button" class="mk-link" @click="clearUserFilter">清除</button>
           </span>
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
         </div>
         <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组。
              关键词：后端列表接口无关键词参数（adminApi list 无 search），按当前页客户端过滤；

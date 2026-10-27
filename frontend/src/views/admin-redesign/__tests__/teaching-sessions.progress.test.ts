@@ -553,19 +553,18 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
-    /* 生效中的筛选不藏进弹层（Carbon：收起容器也要能看见并就地清掉）：
-       清除入口常驻主栏，点一下把所有维度归零 */
-    const clearLink = wrapper.findAll('.mk-filter .mk-link').find((b) => b.text() === '清除筛选');
-    expect(clearLink, '有生效筛选时必须出现就地清除入口').toBeTruthy();
+    /* 2026-10-27 用户「清除筛选也不想要」：工具条不再挂文字链，每个维度自己复位
+       （下拉选回「全部…」），不再有第三个重复入口 */
+    expect(wrapper.findAll('.mk-filter .mk-link').some((b) => b.text() === '清除筛选')).toBe(false);
     await dateSel.setValue('7d');
     const selValue = (label: string) =>
       (wrapper.find(`.mk-filter select[aria-label="${label}"]`).element as HTMLSelectElement).value;
     expect(selValue('按开始时间筛选')).toBe('7d');
-    await clearLink!.trigger('click');
+    await sel.setValue('');
+    await dateSel.setValue('');
     expect(selValue('按状态筛选')).toBe('');
     expect(selValue('按开始时间筛选')).toBe('');
     expect(wrapper.findAll('tbody tr')).toHaveLength(2);
-    expect(wrapper.findAll('.mk-filter .mk-link').some((b) => b.text() === '清除筛选')).toBe(false);
     wrapper.unmount();
   });
 

@@ -192,9 +192,11 @@ describe('Skills 列表筛选 ↔ URL', () => {
     w.unmount();
   });
 
-  it('点「清除筛选」把 q / pill / agent 一并从 URL 摘掉（退役的 cat 也不再残留）', async () => {
+  it('逐个复位控件会把 q / pill 从 URL 摘掉（工具条不再有「清除筛选」文字链）', async () => {
     const { w, router } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching');
-    await w.find('.mk-link').trigger('click');
+    expect(w.findAll('.mk-filter button').some((b) => b.text() === '清除筛选')).toBe(false);
+    await w.find('input.mk-filter__input').setValue('');
+    await chooseFilter(w as never, '关注', '全部');
     await flushPromises();
     expect(router.currentRoute.value.query.q).toBeUndefined();
     expect(router.currentRoute.value.query.pill).toBeUndefined();

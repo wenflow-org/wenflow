@@ -97,7 +97,6 @@
           <option value="">全部角色</option>
           <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
         </select>
-        <button v-if="filterActive" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
         <span v-if="filterActive" class="sfr__filter-count">命中 {{ rows.length }} / {{ data.routings.length }} 行</span>
       </div>
 

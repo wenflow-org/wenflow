@@ -36,7 +36,6 @@
         <div class="mk-pills" role="group" aria-label="标志筛选">
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyFallback }" :aria-pressed="onlyFallback" @click="onlyFallback = !onlyFallback"><Check v-if="onlyFallback" :size="12" :stroke-width="2.5" aria-hidden="true" />自定义备用模型<span class="mk-pill__count">{{ counts.fallback }}</span></button>
         </div>
-        <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         <!-- 2026-10-26：原「把默认还原成继承」的按钮改口「用平台默认」——
              这个动作的结果就是「本 Skill 不再单独指定模型，改用平台默认那个」，
              直接说结果，不引入「继承」这层中间概念。

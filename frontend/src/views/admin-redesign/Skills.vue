@@ -73,7 +73,6 @@
           />
           <!-- 2026-10-05 卡头统一弹层法：归属 Agent 下拉收进右侧「筛选」弹层
               （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）。 -->
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->

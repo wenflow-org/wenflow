@@ -93,7 +93,6 @@
               @click="toggleTestFilter"
             ><Check v-if="testFilter !== ''" :size="12" :stroke-width="2.5" aria-hidden="true" />仅看测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
           </div>
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
             :views="savedViews"

@@ -59,7 +59,6 @@
             :active="!!activeActionValue"
             @update:model-value="applyActionFilter"
           />
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 失败 TOP 常驻主行：先看到「最近什么在失败」，再点 chip 下钻 -->
           <div v-if="statsError" class="mk-alert mk-alert--row al-stats-error" role="alert">
             <span class="mk-alert__msg">失败统计不可用</span>

@@ -62,7 +62,6 @@
             <!-- 真实/测试互斥视角由宿主运营中心的页级开关统一承载（2026-10-23 走查：
                  卡内开关与页级开关同屏并列、却只各管一半——页级动 KPI、卡内动列表）。
                  这里不再放第二枚开关，视图随 :include-test 联动。 -->
-            <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
           <span class="mk-card__head-right">
             <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->

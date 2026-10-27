@@ -84,7 +84,6 @@
               @click="stalledOnly = !stalledOnly"
             ><Check v-if="stalledOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />停滞<span class="mk-pill__count">{{ staleActiveCount }}</span></button>
           </div>
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位——
