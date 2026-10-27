@@ -27,8 +27,18 @@
         <button v-if="elTab === 'logs'" type="button" class="mk-btn mk-btn--sm" :disabled="!logs.length" @click="exportJson">导出日志本页</button>
       </template>
     </MkPageHead>
-    <!-- 读数带：成功率 / 耗时分位。失败数只在卡头「失败」pill 角标报一次 -->
-    <MkStatStrip v-if="logs.length" layout="grid" :items="statItems" aria-label="执行读数" />
+    <!-- 页级 KPI 带（2026-10-27 用户「执行日志的 kpi 设计和其他的都不一样」）：
+         此前用 MkStatStrip layout=grid——那是详情页 hero 下面的一行读数条（无白面卡片、
+         数值 18px 级），在本页既不成卡也不成带，与目标对话 / 教学会话 / 学习路径的 KPI
+         带是两副面孔。改回列表页统一形态：section.mk-kpi-grid + MkKpi。
+         失败数仍不在此重复（卡头「失败」pill 角标单源）。
+         也不随 logs.length 隐藏：无行时读数是「—」（与目标对话同语义），
+         整条消失会让下面的页签与明细卡整体上跳。 -->
+    <section class="mk-kpi-grid" aria-label="执行读数">
+      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" />
+      <MkKpi label="耗时 P50" :value="latencyP50" />
+      <MkKpi label="耗时 P99" :value="latencyP99" />
+    </section>
 
     <!-- 视图切换（2026-10-14 用户评审：此前贴在表格卡顶、通栏一条下划线，读起来像表格的表头）：
          移到页面级槽位——读数带之下、明细卡之上；卡片顶部回归「筛选头 + 表头」。
@@ -360,7 +370,7 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
-import MkStatStrip, { type MkStatItem } from '@/components/mk/MkStatStrip.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
 /* 文案单源（R6 复读单源化）：筛选项可见标签与其 aria-label 共用一份 */
@@ -1181,12 +1191,6 @@ const testCount = computed<number | null>(() => {
   if (testFilter.value === 'only') return liveLogsTotal.value
   return liveStats.value ? liveStats.value.canary ?? 0 : null
 })
-/** 页首读数带：成功率 / 耗时 P50 / P99。失败数不在此重复（卡头「失败」pill 角标单源） */
-const statItems = computed<MkStatItem[]>(() => [
-  { label: '成功率', value: successRateText.value, tone: successKpiTone.value === 'muted' ? '' : successKpiTone.value },
-  { label: '耗时 P50', value: latencyP50.value },
-  { label: '耗时 P99', value: latencyP99.value },
-])
 /** 测试筛选两态切换：默认（已排除测试）→ 仅看测试 → 默认（重查由 status/agent/test watch 触发） */
 function toggleTestFilter() {
   testFilter.value = testFilter.value === '' ? 'only' : ''

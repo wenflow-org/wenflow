@@ -246,7 +246,7 @@ v3 修订两条：
 | `.ranklist/.rankrow` | 页面本地复刻（Overview Row B / LearnerCenter / ApiConfig 等） | 页面 |
 | `.meterrow/.meter` | 页面本地复刻（LearnerCenter / LearnerDetail / DayTimeline） | 页面 |
 | `.hero` | `MkDetailHero`（24px 标题） | 原语组件 |
-| `.statstrip`（L2 详情页 hero 下的一行分格读数） | **共享原语** `MkStatStrip`（`layout="grid"`，2026-10-05 批次五 CM2 收敛页私有复刻，`components/mk/MkStatStrip.vue:124-127`）；现消费四处：LearnerDetail / UserAccountPane（原 UserDetail 抽出的账号面）/ VirtualProfile / SessionCockpit。**PathDetail 不渲染**（2026-10-02 用户拍板撤除，原型路径详情本无此带） | 原语组件 |
+| `.statstrip`（L2 详情页 hero 下的一行分格读数） | **共享原语** `MkStatStrip`（`layout="grid"`，2026-10-05 批次五 CM2 收敛页私有复刻，`components/mk/MkStatStrip.vue:124-127`）；现消费四处：LearnerDetail / UserAccountPane（原 UserDetail 抽出的账号面）/ VirtualProfile / SessionCockpit。**PathDetail 不渲染**（2026-10-02 用户拍板撤除，原型路径详情本无此带）。**归属（2026-10-27 用户「执行日志的 kpi 设计和其他的都不一样」）**：它只服务「详情页 hero 下」与「卡内读数槽」（现宿主 VirtualProfile / Overview / MemoryReview）；**列表页的页级读数一律 `section.mk-kpi-grid` + `MkKpi`**（白面卡 + 26px 数字），不得用 statstrip 充当页头 KPI 带。守卫：`host-kpi-band.test.ts` 的「页级读数形态归属」 | 原语组件 |
 | L2 详情骨架（hero + statstrip + subtabs） | LearnerDetail 已按此骨架（318da349 起；原独立 UserDetail 页并入其「账号与许可」页签，由 UserAccountPane 承载） | 页面 |
 | `.login*` | `Login.vue` 页面复刻（分栏品牌 aside + 表单 panel） | 页面 |
 | `odg-*` | `DataFlowGraph`（orch-odg-*） | 页面 |

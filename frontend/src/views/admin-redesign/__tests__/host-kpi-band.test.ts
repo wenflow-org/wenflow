@@ -10,6 +10,8 @@
  * - 记忆与复习 / 学习路径：保留 .mk-kpi-grid（页级绝对值只住 KPI 卡）
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
@@ -136,4 +138,38 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
 
   // 「MemoryReview：页级 KPI 卡」用例随独立页退役（2026-10-12 并入学习者详情页签；
   // 页签内面板无页级 KPI 栅格，面板契约见 memory-review.redesign/outlet/apply 三件套）
+});
+
+/**
+ * 页级读数原语的归属（2026-10-27 用户「执行日志的 kpi 设计和其他的都不一样」）。
+ *
+ * 两种读数形态长得像、语义不同：
+ * - `MkKpi` + `.mk-kpi-grid` = **列表页页级 KPI 卡带**（白面、26px 数字、可点即筛）；
+ * - `MkStatStrip layout="grid"` = **详情页 hero 下的一行读数条**（分格竖线、18px），
+ *   或卡内的一排小读数。
+ *
+ * 执行日志曾把后者当页级 KPI 用，于是同一层级的目标对话（成卡）与执行日志（成条）
+ * 页头读数两副面孔。这条守卫把 statstrip 的宿主钉在详情页与卡内槽位。
+ */
+describe('页级读数形态归属', () => {
+  const DIR = resolve(__dirname, '..');
+  /* 允许的宿主：VirtualProfile = 虚拟学习者详情 hero 下；Overview / MemoryReview = 卡内读数槽 */
+  const STATSTRIP_HOSTS = new Set(['VirtualProfile.vue', 'Overview.vue', 'MemoryReview.vue']);
+  const files = readdirSync(DIR).filter((f) => f.endsWith('.vue'));
+
+  it('MkStatStrip 只住详情页 hero 与卡内读数槽，列表页页级 KPI 一律 MkKpi 卡带', () => {
+    const offenders = files.filter((f) => {
+      if (STATSTRIP_HOSTS.has(f)) return false;
+      return readFileSync(resolve(DIR, f), 'utf8').includes("from '@/components/mk/MkStatStrip.vue'");
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it('执行日志页头读数是三张 MkKpi（成功率 / P50 / P99），且不随行数隐藏', () => {
+    const src = readFileSync(resolve(DIR, 'ExecLogs.vue'), 'utf8');
+    expect(src).toContain('<section class="mk-kpi-grid" aria-label="执行读数">');
+    expect(src.split('<MkKpi ').length - 1).toBe(3);
+    // 原先的 v-if="logs.length" 包围整条读数带：窗口筛空时页头读数与页签之间会整体上跳
+    expect(src).not.toMatch(/<section class="mk-kpi-grid"[^>]*v-if/);
+  });
 });

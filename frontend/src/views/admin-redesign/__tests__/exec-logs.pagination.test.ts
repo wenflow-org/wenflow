@@ -494,7 +494,9 @@ describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 
   });
 });
 
-/* ---------- 页首读数带（2026-10-26 由 4 张 KPI 卡改为 MkStatStrip 一行三格；
+/* ---------- 页首 KPI 带（2026-10-27 由 MkStatStrip 一行三格改回 MkKpi 卡带：
+   用户「执行日志的 kpi 设计和其他的都不一样」——列表页的页级读数一律
+   section.mk-kpi-grid + MkKpi，MkStatStrip 只留给详情页 hero 与卡内读数槽。
    失败数只在卡头「失败」pill 角标报一次） ---------- */
 describe('2026-10-04 状态条退役（ExecLogs）', () => {
   beforeEach(() => {
@@ -520,18 +522,20 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     return w;
   }
 
-  it('护栏：页头无 .mk-status；读数带一行三格（成功率 / P50 / P99），「仅看测试」pill 在工具栏', async () => {
+  it('护栏：页头无 .mk-status；KPI 带是列表页统一的三张 MkKpi 卡（成功率 / P50 / P99），「仅看测试」pill 在工具栏', async () => {
     liveLogStats.value = { total: 200, success: 190, timeout: 4, error: 6, canary: 5 };
     liveLogsTotal.value = 378;
     liveLogsFiltered.value = [fakeSpan(1), fakeSpan(2)];
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
     expect(w.find('.mk-status').exists()).toBe(false);
-    // 读数带：失败数不占格子（卡头「失败」pill 角标单源）
-    const stats = w.findAll('.mk-stat');
-    expect(stats.map((s) => s.find('.mk-stat__label').text())).toEqual(['成功率', '耗时 P50', '耗时 P99']);
-    expect(stats[0].text()).toContain('95%');
-    expect(stats[0].classes()).not.toContain('mk-stat--bad');
+    // KPI 带：失败数不占卡（卡头「失败」pill 角标单源）
+    expect(w.find('.mk-kpi-grid').exists()).toBe(true);
+    expect(w.find('.mk-stat-strip').exists(), '页级读数不再用详情页的 MkStatStrip').toBe(false);
+    const kpis = w.findAll('.mk-kpi');
+    expect(kpis.map((k) => k.find('.mk-kpi__label').text().trim())).toEqual(['成功率', '耗时 P50', '耗时 P99']);
+    expect(kpis[0].find('.mk-kpi__num').text()).toContain('95%');
+    expect(kpis[0].classes()).not.toContain('mk-kpi--bad');
     const testPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('仅看测试'))!;
     expect(testPill.text()).toContain('5');
     await testPill.trigger('click');
@@ -545,14 +549,17 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     liveLogsFiltered.value = [fakeSpan(1), fakeSpan(2)];
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    expect(w.findAll('.mk-stat')[0].classes()).toContain('mk-stat--bad');
+    expect(w.findAll('.mk-kpi')[0].classes()).toContain('mk-kpi--bad');
   });
 
-  it('无日志不显数值：读数带随 logs.length 隐藏；「仅看测试」pill 仍常驻', async () => {
+  it('无日志时 KPI 卡常驻、数值为「—」（不隐藏也不给 0），成功率按 muted 不染色', async () => {
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
     expect(w.find('.mk-status').exists()).toBe(false);
-    expect(w.find('.mk-stat-strip').exists()).toBe(false);
+    const kpis = w.findAll('.mk-kpi');
+    expect(kpis).toHaveLength(3);
+    expect(kpis.map((k) => k.find('.mk-kpi__num').text())).toEqual(['—', '—', '—']);
+    expect(kpis[0].classes()).toContain('mk-kpi--muted');
     expect(w.findAll('.mk-pill').find((b) => b.text().startsWith('仅看测试'))).toBeTruthy();
   });
 });
