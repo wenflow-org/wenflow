@@ -33,10 +33,13 @@
             :options="sourceOptions"
             :active="sourceFilter !== 'all'"
           />
-        <div class="mk-pills" role="group" aria-label="标志筛选">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyFallback }" :aria-pressed="onlyFallback" @click="onlyFallback = !onlyFallback"><Check v-if="onlyFallback" :size="12" :stroke-width="2.5" aria-hidden="true" />自定义备用模型<span class="mk-pill__count">{{ counts.fallback }}</span></button>
-        </div>
-        <!-- 2026-10-26：原「把默认还原成继承」的按钮改口「用平台默认」——
+        <MkPillSelect
+          v-model="fallbackSelect"
+          label="备用模型"
+          aria-label="按备用模型筛选"
+          :options="fallbackSelectOptions"
+          :active="onlyFallback"
+        />        <!-- 2026-10-26：原「把默认还原成继承」的按钮改口「用平台默认」——
              这个动作的结果就是「本 Skill 不再单独指定模型，改用平台默认那个」，
              直接说结果，不引入「继承」这层中间概念。
              只清 model，通道/思考/参数/备用链保持原样；放筛选行右端，不挤占通道套用那一行。 -->
@@ -201,7 +204,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Check } from 'lucide-vue-next'
 import { adminSkillsApi } from '@/api/adminApi'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -289,6 +291,15 @@ const counts = computed(() => {
   }
   return out
 })
+/** 备用模型维度（2026-10-27 统一）：从常驻 chip 迁入下拉，计数只在 option 文案里。 */
+const fallbackSelect = computed<string>({
+  get: () => (onlyFallback.value ? 'fallback' : ''),
+  set: (v) => { onlyFallback.value = v === 'fallback' }
+})
+const fallbackSelectOptions = computed(() => [
+  { value: '', label: '全部备用模型' },
+  { value: 'fallback', label: `自定义备用模型（${counts.value.fallback}）` }
+])
 const isFiltered = computed(() => sourceFilter.value !== 'all' || onlyFallback.value || !!keyword.value.trim())
 function clearFilters(): void {
   sourceFilter.value = 'all'

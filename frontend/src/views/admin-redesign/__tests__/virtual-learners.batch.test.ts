@@ -11,6 +11,7 @@ import VirtualLearners from '../VirtualLearners.vue';
 import Confirm from '../Confirm.vue';
 import { liveVirtuals, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats, liveAutopilotConcurrency, refreshLiveVirtuals } from '../live';
 import { settleConfirm, confirmState } from '../useConfirm';
+import { filterOption } from './filter-controls';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -234,15 +235,13 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const completion = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完成率（全部会话）');
     expect(completion!.find('.mk-kpi__hint').exists()).toBe(false);
     expect(completion!.attributes('title')).toContain('活动会话 5');
-    // 筛选 chips 与「运行状态」列同源（runPhaseOf 四档），「曾失败」已迁到异常列表头
-    // 按卡定位到列表卡（.mk-card--fill）：页内还有压测参数等其它卡头，取「第一个 .mk-card__head」会取错
-    const head = w.find('.mk-card--fill .mk-card__head');
-    const countOf = (label: string) =>
-      head.findAll('.mk-pill').find((p) => p.text().replace(/\s/g, '').startsWith(label))?.find('.mk-pill__count').text();
-    expect(countOf('运行中')).toBe('1');
-    expect(countOf('已暂停')).toBe('1');
-    expect(countOf('停滞')).toBe('1');
-    expect(countOf('已停止')).toBe('0');
+    // 生命周期是维度下拉（2026-10-27 统一），计数在 option 文案里，与「运行状态」列同源
+    const countOf = (label: string) => filterOption(w as never, '状态', label).text()
+    expect(countOf('运行中')).toBe('运行中（1）')
+    expect(countOf('已暂停')).toBe('已暂停（1）')
+    expect(countOf('停滞')).toBe('停滞（1）')
+    expect(countOf('已停止')).toBe('已停止（0）')
+    expect(w.find('.mk-card--fill .mk-card__head .mk-pills').exists()).toBe(false)
     expect(w.text()).not.toContain('需关注');
     // 截断提示迁卡头 meta（与行数同格）；单位与分页器同词（位学习者），并说明「本次载入」而非再报一个「共」
     expect(w.text()).toContain('共 80 位学习者 · 本次载入');

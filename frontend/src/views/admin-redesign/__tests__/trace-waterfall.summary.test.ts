@@ -191,12 +191,14 @@ describe('分组名与选择器标签（2026-10-14 第二批：英文分组 / �
     w.unmount();
   });
 
-  it('工具条按卡头语法分左右组：左组＝模式/仅失败/排序/搜索，右组＝动作/计数/选择器', async () => {
+  it('工具条按卡头语法分左右组：左组＝模式/结果下拉/排序/搜索，右组＝动作/计数/选择器', async () => {
     const w = mountWith(GATEWAY_ONLY);
     await w.vm.$nextTick();
     const left = w.find('.wf-tracepick__left');
     const right = w.find('.wf-tracepick__right');
     expect(left.exists() && right.exists()).toBe(true);
+    // 2026-10-27 统一：失败筛选从常驻 chip 迁入「结果」下拉
+    expect(left.find('.mk-pillselect[aria-label="按结果筛选"]').exists()).toBe(true);
     expect(left.text()).toContain('仅失败');
     expect(left.find('.wf-tracepick__search').exists()).toBe(true);   // 搜索框归左组
     expect(right.find('.wf-tracepick__count').exists()).toBe(true);   // 计数归右组

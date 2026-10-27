@@ -48,17 +48,15 @@
             :options="statusSelectOptions"
             :active="!!statusFilter"
           />
-            <div class="mk-pills" role="group" aria-label="标志筛选">
-              <button
-                type="button"
-                class="mk-pill"
-                :class="{ 'mk-pill--active': lowOnly }"
-                :aria-pressed="lowOnly"
-                @click="lowOnly = !lowOnly"
-              >
-                <Check v-if="lowOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
-              </button>
-            </div>
+          <!-- 2026-10-27 用户「需要统一调整」：低分也归维度下拉——评分是一个维度，
+               常驻 chip 组退场，计数进 option 文案（同一读数只出现一处）。 -->
+          <MkPillSelect
+            v-model="scoreSelect"
+            label="评分"
+            aria-label="按评分筛选"
+            :options="scoreSelectOptions"
+            :active="lowOnly"
+          />
             <!-- 真实/测试互斥视角由宿主运营中心的页级开关统一承载（2026-10-23 走查：
                  卡内开关与页级开关同屏并列、却只各管一半——页级动 KPI、卡内动列表）。
                  这里不再放第二枚开关，视图随 :include-test 联动。 -->
@@ -234,7 +232,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Check } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 import { isLive, intent } from './store'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
@@ -341,6 +338,15 @@ const statusSelectOptions = computed(() => [
 
 /** 低分（≤2）条数：供「仅低分」pill 计数 */
 const lowCount = computed(() => rows.value.filter((r) => r.rating <= 2).length)
+/** 评分维度（2026-10-27 统一）：低分从常驻 chip 迁入下拉，计数只在 option 文案里。 */
+const scoreSelect = computed<string>({
+  get: () => (lowOnly.value ? 'low' : ''),
+  set: (v) => { lowOnly.value = v === 'low' }
+})
+const scoreSelectOptions = computed(() => [
+  { value: '', label: '全部评分' },
+  { value: 'low', label: `低分 ≤2（${lowCount.value}）` }
+])
 
 const statusLabel = (s: string) =>
   ({ new: '待处理', triaged: '已分流', resolved: '已解决', dismissed: '已忽略' })[s] || s || '—'

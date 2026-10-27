@@ -11,6 +11,7 @@ import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import VirtualLearners from '../VirtualLearners.vue';
 import { liveVirtuals } from '../live';
+import { filterValue, chooseFilter } from './filter-controls';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -93,12 +94,6 @@ function closeSettingsDrawer() {
   (document.querySelector('.mk-drawer__close') as HTMLElement | null)?.click();
 }
 
-function pill(wrapper: ReturnType<typeof mount>, label: string) {
-  const b = wrapper.findAll('button.mk-pill').find((x) => x.text().startsWith(label));
-  if (!b) throw new Error(`pill not found: ${label}`);
-  return b;
-}
-
 describe('VirtualLearners · 筛选 ↔ URL', () => {
   /* 2026-10-26：并发 / 速率两张 KPI 卡撤出数字栅格，读数并进「容量与实验环境」的输入行。 */
   it('并发 / 速率读数并进容量卡：不再有跨页跳转的 KPI 卡', async () => {
@@ -115,10 +110,9 @@ describe('VirtualLearners · 筛选 ↔ URL', () => {
     wrapper.unmount();
   });
 
-  it('深链 ?pill=stalled 落位：该 pill 高亮（刷新 / 收藏还原）', async () => {
+  it('深链 ?pill=stalled 落位：生命周期下拉当前值为停滞（刷新 / 收藏还原）', async () => {
     const { wrapper } = await mountVl('/admin/virtual-learners?pill=stalled');
-    expect(pill(wrapper, '停滞').classes()).toContain('mk-pill--active');
-    expect(pill(wrapper, '全部').classes()).not.toContain('mk-pill--active');
+    expect(filterValue(wrapper as never, '状态')).toBe('stalled');
     wrapper.unmount();
   });
 
@@ -151,7 +145,7 @@ describe('VirtualLearners · 筛选 ↔ URL', () => {
 
   it('点回「全部」→ URL 删掉 pill（缺省值不留在地址栏）', async () => {
     const { wrapper, router } = await mountVl('/admin/virtual-learners?pill=stalled');
-    await pill(wrapper, '全部').trigger('click');
+    await chooseFilter(wrapper as never, '状态', '全部');
     await flushPromises();
     expect(router.currentRoute.value.query.pill).toBeUndefined();
     wrapper.unmount();

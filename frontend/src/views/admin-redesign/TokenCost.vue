@@ -7,19 +7,15 @@
              原为独立一张通栏描边筛选条——1300px 宽只放 337px 控件，读作一张空卡，
              且全站仅此一处用「自己的卡装筛选」。现已收进页头动作区；
              数据视角开关于 2026-10-21 退役（成本统计全部账号，仿真花费也在总额里）。 -->
-        <div class="mk-pills tc-pagehead-pills" role="group" aria-label="时间窗口">
-          <button
-            v-for="p in rangePills"
-            :key="p.days"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': days === p.days }"
-            :aria-pressed="days === p.days"
-            @click="days = p.days"
-          >
-            {{ p.label }}
-          </button>
-        </div>
+        <!-- 时间窗口（2026-10-16 收进页头；2026-10-27 用户「需要统一调整」：
+             与执行日志同一控件——维度下拉，不再用一排常驻 chip） -->
+        <MkPillSelect
+          v-model="rangeSelect"
+          label="时间范围"
+          aria-label="时间范围"
+          :options="rangeOptions"
+          :active="days !== 30"
+        />
         <span v-if="statsAt" class="mk-card__meta tc-stats-at">统计截至 {{ statsAt }}</span>
         <!-- 导出报表：当前窗口三张明细表合一个 CSV，客户端生成 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!summary || summaryEmpty || !bySkill.length" @click="exportCsv">
@@ -277,6 +273,7 @@ import TcRankTable, { type RankRow } from './TcRankTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
 
@@ -411,11 +408,16 @@ onBeforeUnmount(() => {
   clearSlowTimer()
 })
 
-const rangePills = [
-  { days: 7, label: '近 7 天' },
-  { days: 30, label: '近 30 天' },
-  { days: 90, label: '近 90 天' },
+const rangeOptions = [
+  { value: '7', label: '近 7 天' },
+  { value: '30', label: '近 30 天' },
+  { value: '90', label: '近 90 天' },
 ]
+/** MkPillSelect 只有字符串值：选区仍写回 store 的 number 天数 */
+const rangeSelect = computed<string>({
+  get: () => String(days.value),
+  set: (v) => { days.value = Number(v) },
+})
 
 const trend = computed(() => summary.value?.trend || [])
 const totalTokens = computed(() => summary.value?.totals.tokens || 0)
@@ -726,7 +728,6 @@ const trendCols = computed(() => trend.value.map((d) => ({
 <style scoped>
 /* 窗口 pill 随页头动作区排布（2026-10-16）：与「导出报表/刷新」同一行，窄屏由
    MkPageHead__actions 的 flex-wrap 自动折行；不再有独立的描边筛选条。 */
-.tc-pagehead-pills { display: inline-flex; }
 /* 读数时刻：后端 5 分钟缓存，金额不是实时值 */
 .tc-stats-at { white-space: nowrap; }
 /* 未配置单价是可点动作（与「调用成本」卡同落点），徽章外观 + 手型 */

@@ -9,7 +9,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import ExecLogs from '../ExecLogs.vue';
-import { chooseFilter, filterOption } from './filter-controls';
+import { chooseFilter, filterOption, filterOptions, filterValue } from './filter-controls';
 import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 import type { TraceSpan } from '../store';
 import {
@@ -306,9 +306,8 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     liveLogsTotal.value = 5;
     const { w, router } = await mountExecAt('/admin/execution-logs?agent=api-gateway&status=err&test=only');
     await nextTick();
-    // 「仅看测试」态由工具栏 pill 激活态承载
-    const testPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('仅看测试'))!;
-    expect(testPill.classes()).toContain('mk-pill--active');
+    // 「仅看测试」态由「来源」下拉的当前值承载（2026-10-27 常驻 chip 退役）
+    expect(filterValue(w as never, '来源')).toBe('only');
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({
       agentId: 'api-gateway',
       status: 'error',
@@ -318,23 +317,19 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     expect(router.currentRoute.value.query).toMatchObject({ agent: 'api-gateway', status: 'err', test: 'only' });
   });
 
-  it('stats.canary > 0 → 「仅看测试 N」入口出现；点击仅看测试（sourceEntry 上服务端），再点恢复默认', async () => {
+  it('stats.canary > 0 → 「仅测试调用（N）」进来源下拉；选中后 sourceEntry 上服务端，选回全部恢复', async () => {
     liveLogStats.value = { total: 200, success: 190, timeout: 4, error: 6, canary: 5 };
-    // only 态下入口计数 = 该查询 total（liveLogsTotal），需 > 0 按钮才保持可见（可再次点击退出）
+    // only 态下计数 = 该查询 total（liveLogsTotal）
     liveLogsTotal.value = 5;
     const { w, router } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    const btn = findBtn(w, '仅看测试');
-    expect(btn.text()).toContain('5');
-    // 2026-10-27 三职责语法：开关住在独立「标志筛选」组，激活时前缀勾
-    expect(btn.element.closest('.mk-pills')?.getAttribute('aria-label')).toBe('标志筛选');
-    expect(btn.find('svg').exists()).toBe(false);
-    await btn.trigger('click');
+    expect(filterOptions(w as never, '来源')).toEqual(['全部来源', '仅测试调用（5）']);
+    await chooseFilter(w as never, '来源', '仅测试调用');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sourceEntry: 'system-canary' });
     expect(router.currentRoute.value.query.test).toBe('only');
-    expect(findBtn(w, '仅看测试').find('svg').exists()).toBe(true);
-    await findBtn(w, '仅看测试').trigger('click');
+    expect(filterValue(w as never, '来源')).toBe('only');
+    await chooseFilter(w as never, '来源', '全部来源');
     await flushPromises();
     expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).sourceEntry).toBeUndefined();
     expect(router.currentRoute.value.query.test).toBeUndefined();
@@ -523,23 +518,24 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     return w;
   }
 
-  it('护栏：页头无 .mk-status；KPI 带是列表页统一的三张 MkKpi 卡（成功率 / P50 / P99），「仅看测试」pill 在工具栏', async () => {
+  it('护栏：页头无 .mk-status；KPI 带是列表页统一的三张 MkKpi 卡（成功率 / P50 / P99），来源在维度下拉', async () => {
     liveLogStats.value = { total: 200, success: 190, timeout: 4, error: 6, canary: 5 };
     liveLogsTotal.value = 378;
     liveLogsFiltered.value = [fakeSpan(1), fakeSpan(2)];
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
     expect(w.find('.mk-status').exists()).toBe(false);
-    // KPI 带：失败数不占卡（卡头「失败」pill 角标单源）
+    // KPI 带：失败数不占卡（状态下拉的单选项与 KPI 不重复计数）
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
     expect(w.find('.mk-stat-strip').exists(), '页级读数不再用详情页的 MkStatStrip').toBe(false);
     const kpis = w.findAll('.mk-kpi');
     expect(kpis.map((k) => k.find('.mk-kpi__label').text().trim())).toEqual(['成功率', '耗时 P50', '耗时 P99']);
     expect(kpis[0].find('.mk-kpi__num').text()).toContain('95%');
     expect(kpis[0].classes()).not.toContain('mk-kpi--bad');
-    const testPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('仅看测试'))!;
-    expect(testPill.text()).toContain('5');
-    await testPill.trigger('click');
+    // 2026-10-27：常驻 chip 组退场，来源是维度下拉（计数在 option 文案里）
+    expect(w.find('.mk-card__head .mk-pills').exists()).toBe(false);
+    expect(filterOptions(w as never, '来源')).toEqual(['全部来源', '仅测试调用（5）']);
+    await chooseFilter(w as never, '来源', '仅测试调用');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sourceEntry: 'system-canary' });
   });
@@ -561,7 +557,8 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     expect(kpis).toHaveLength(3);
     expect(kpis.map((k) => k.find('.mk-kpi__num').text())).toEqual(['—', '—', '—']);
     expect(kpis[0].classes()).toContain('mk-kpi--muted');
-    expect(w.findAll('.mk-pill').find((b) => b.text().startsWith('仅看测试'))).toBeTruthy();
+    // 来源维度常驻可点，计数未就绪时 option 不带数字（不把未知读成 0）
+    expect(filterOptions(w as never, '来源')).toEqual(['全部来源', '仅测试调用']);
   });
 });
 
@@ -661,17 +658,17 @@ describe('批次 1：EG7 / EG17 / D19', () => {
     liveLogsLoading.value = false;
   });
 
-  it('失败状态跨页签同源：日志页签的「失败」= Trace 页签的「仅失败」，切页签不丢也不各持一套', async () => {
+  it('失败状态跨页签同源：日志页签的「失败」= Trace 页签的「结果=仅失败」，切页签不丢也不各持一套', async () => {
     liveLogsTotal.value = 10;
     liveLogsFiltered.value = [fakeSpan(1)];
     const w = await mountExecAt('/admin/execution-logs?status=err');
     await nextTick();
     await w.findAll('.tab').find((t) => t.text() === 'Trace 链路')!.trigger('click');
     await flushPromises();
-    const traceFailPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('仅失败'))!;
-    expect(traceFailPill.classes()).toContain('mk-pill--active');
-    // 在 Trace 侧关掉「仅失败」→ 日志页签的 status 筛选一并清掉
-    await traceFailPill.trigger('click');
+    // Trace 的「结果」下拉与日志的 status 筛选同源（v-model:failures-only）
+    expect(filterValue(w as never, '结果')).toBe('failed');
+    // 在 Trace 侧选回「全部 span」→ 日志页签的 status 筛选一并清掉
+    await chooseFilter(w as never, '结果', '全部 span');
     await flushPromises();
     await w.findAll('.tab').find((t) => t.text() === '日志')!.trigger('click');
     await flushPromises();

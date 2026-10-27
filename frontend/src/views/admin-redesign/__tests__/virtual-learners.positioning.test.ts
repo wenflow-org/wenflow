@@ -10,6 +10,7 @@ import { nextTick } from 'vue';
 import VirtualLearners from '../VirtualLearners.vue';
 import { liveVirtuals, liveVirtualSessionStats, liveVirtualRunStats } from '../live';
 import { MOCK_SCENES } from '../manifest';
+import { filterOption } from './filter-controls';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -78,20 +79,18 @@ beforeEach(() => {
 });
 
 describe('虚拟学习者定位（D1）', () => {
-  it('状态条已退役：筛选 chips 住卡头工具栏，计数全 0（无「创建中」旧叫法）', async () => {
+  it('状态条已退役：生命周期筛选在卡头维度下拉，计数全 0（无「创建中」旧叫法）', async () => {
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
     // 2026-10-04 页头状态条整体退役（教学会话同款判例）：复读的「共 N 人」随条删除
     expect(wrapper.find('.mk-status').exists()).toBe(false);
-    // 筛选 chips 与「运行状态」列同源（2026-10-21 逻辑重整：三档对齐，「曾失败」迁到异常列）
-    // 按卡定位到列表卡：页内另有压测参数卡头（2026-10-08 加了标题），取「第一个 .mk-card__head」会取错
-    const head = wrapper.find('.mk-card--fill .mk-card__head');
-    const countOf = (label: string) =>
-      head.findAll('.mk-pill').find((p) => p.text().replace(/\s/g, '').startsWith(label))?.find('.mk-pill__count').text();
-    expect(countOf('运行中')).toBe('0');
-    expect(countOf('停滞')).toBe('0');
-    expect(countOf('已停止')).toBe('0');
+    // 2026-10-27 统一：生命周期是维度下拉，计数在 option 文案里
+    const countOf = (label: string) => filterOption(wrapper as never, '状态', label).text()
+    expect(countOf('运行中')).toBe('运行中（0）')
+    expect(countOf('停滞')).toBe('停滞（0）')
+    expect(countOf('已停止')).toBe('已停止（0）')
+    expect(wrapper.find('.mk-card--fill .mk-card__head .mk-pills').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('曾失败');
     expect(wrapper.text()).not.toContain('创建中');
     wrapper.unmount();

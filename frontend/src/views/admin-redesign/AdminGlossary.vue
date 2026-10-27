@@ -10,17 +10,15 @@
     <!-- 吸顶工具条：搜索 + 分类（计数跟随过滤，与原抽屉同口径） -->
     <div class="mg__toolbar">
       <input v-model="keyword" type="search" class="mk-input mg__search" placeholder="搜索术语 / 英文标识 / 定义" aria-label="搜索术语 / 英文标识 / 定义" />
-      <div class="mk-pills" role="group" aria-label="术语分类">
-        <button
-          v-for="c in categories"
-          :key="c.id"
-          type="button"
-          class="mk-pill"
-          :class="{ 'mk-pill--active': category === c.id }"
-          :aria-pressed="category === c.id"
-          @click="category = c.id"
-        >{{ c.label }}（{{ countOf(c.id) }}）</button>
-      </div>
+      <!-- 2026-10-27 用户「需要统一调整」：分类是单选维度 → 胶囊下拉；
+           原先一排常驻 chip 在窄屏折成多行，且与全站维度筛选不是同一控件。 -->
+      <MkPillSelect
+        v-model="categorySelect"
+        label="分类"
+        aria-label="按术语分类筛选"
+        :options="categorySelectOptions"
+        :active="category !== 'all'"
+      />
     </div>
 
     <!-- 加载失败：给原因 + 重试（接口失败不能伪装成「无匹配词条」） -->
@@ -126,6 +124,7 @@ import { adminGlossaryApi } from '@/api/adminApi'
 import { COMPLETION_META, SEMANTICS_META, type GlossaryTerm } from './glossaryMeta'
 import { errMsg } from './live'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 
 interface PromptRoleMeta { id: string; label: string; hint: string }
 interface StageMeta { id: string; label: string; hint: string }
@@ -168,6 +167,14 @@ const categories: Array<{ id: CategoryId; label: string }> = [
   { id: 'health', label: '健康' },
   { id: 'stage', label: '阶段' },
 ]
+/** 分类维度（2026-10-27 统一）：计数进 option 文案，不再由一排 chip 承载。 */
+const categorySelect = computed<CategoryId>({
+  get: () => category.value,
+  set: (v) => { category.value = v },
+})
+const categorySelectOptions = computed(() =>
+  categories.map((c) => ({ value: c.id, label: `${c.label}（${countOf(c.id)}）` }))
+)
 
 function showCategory(id: string) {
   // 全部视图 = 所有分区；单分类 = 只留命中那一格
@@ -273,7 +280,6 @@ onMounted(() => {
   border-bottom: 1px solid var(--mk-line);
 }
 .mg__search { flex: 0 1 320px; min-width: 200px; }
-.mk-pills { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .mg__error {
   display: flex;

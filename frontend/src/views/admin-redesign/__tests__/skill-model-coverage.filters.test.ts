@@ -59,23 +59,23 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     expect(opt('用平台默认')).toBe('用平台默认（2）')
     expect(opt('技能覆盖')).toBe('技能覆盖（1）')
     expect(opt('独立通道')).toBe('独立通道（1）')
-    expect(w.findAll('.mk-pill').find((p) => p.text().startsWith('自定义备用模型'))?.text()).toBe('自定义备用模型2')
+    expect(w.findAll('.mk-pills').length).toBe(0)
+    expect(filterOptions(w as never, '备用模型')).toEqual(['全部备用模型', '自定义备用模型（2）'])
     expect(skillIds(w)).toHaveLength(4)
     w.unmount()
   })
 
-  it('筛选语法：来源单选组与备用模型开关组分居两组，开关激活时前缀勾', async () => {
+  it('筛选语法：来源与备用模型都是维度下拉，备用模型选中后只剩有备用链的行', async () => {
     const w = await mountCoverage()
-    const groups = w.findAll('.mk-pills')
-    expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['标志筛选'])
-    // 单选维度是带标签的胶囊下拉（不再与开关组同形）
+    // 2026-10-27 用户「需要统一调整」：常驻 chip 组退场，两个维度都走 MkPillSelect
+    expect(w.findAll('.mk-pills').length).toBe(0)
     expect(filterOptions(w as never, '来源')).toEqual([
       '全部（4）', '用平台默认（2）', '技能覆盖（1）', '独立通道（1）'
     ])
-    const fallback = w.findAll('.mk-pill').find((p) => p.text().startsWith('自定义备用模型'))!
-    expect(fallback.find('svg').exists()).toBe(false)
-    await fallback.trigger('click')
-    expect(w.findAll('.mk-pill').find((p) => p.text().startsWith('自定义备用模型'))!.find('svg').exists()).toBe(true)
+    expect(filterOptions(w as never, '备用模型')).toEqual(['全部备用模型', '自定义备用模型（2）'])
+    await chooseFilter(w as never, '备用模型', '自定义备用模型')
+    expect(skillIds(w)).toEqual(['session-wrapup', 'path-planner'])
+    expect(filterOption(w as never, '备用模型', '自定义备用模型').text()).toBe('自定义备用模型（2）')
     w.unmount()
   })
 
@@ -97,7 +97,7 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
   it('筛空保留筛选控件与清除入口', async () => {
     const w = await mountCoverage()
     await w.find('.mk-filter__input').setValue('不存在的技能')
-    expect(w.find('.mk-pills').exists()).toBe(true)
+    expect(w.findAll('.mk-pillselect-wrap').length).toBe(2)
     expect(w.text()).toContain('没有符合筛选的技能')
     const clear = w.findAll('button').find((b) => b.text() === '清除筛选')
     expect(clear).toBeTruthy()

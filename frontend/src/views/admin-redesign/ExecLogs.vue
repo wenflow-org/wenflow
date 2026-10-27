@@ -75,8 +75,8 @@
             :options="agentSelectOptions"
             :active="!!agentFilter"
           />
-          <!-- 2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
-               失败/超时/成功一组单选；「仅看测试」是可叠加开关 → 独立「标志筛选」组 + 激活前缀勾 -->
+          <!-- 2026-10-27 用户「需要统一调整」：来源也归维度下拉——失败/超时/成功是状态维度，
+               测试调用是来源维度；常驻 chip 组退场，计数进 option 文案（单一出处）。 -->
           <MkPillSelect
             v-model="statusFilter"
             label="状态"
@@ -84,15 +84,13 @@
             :options="statusSelectOptions"
             :active="!!statusFilter"
           />
-          <div class="mk-pills" role="group" aria-label="标志筛选">
-            <button
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': testFilter !== '' }"
-              :aria-pressed="testFilter !== ''"
-              @click="toggleTestFilter"
-            ><Check v-if="testFilter !== ''" :size="12" :stroke-width="2.5" aria-hidden="true" />仅看测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
-          </div>
+          <MkPillSelect
+            v-model="sourceSelect"
+            label="来源"
+            aria-label="按来源筛选"
+            :options="sourceSelectOptions"
+            :active="!!testFilter"
+          />
         </div>
         <!-- 右侧：自动刷新 / 列 / 筛选（筛选=节点 / Trace ID / 会话 ID 三个精确定位项；
              触发钮与「列」同为文字动作，激活时带生效数角标） -->
@@ -345,7 +343,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Copy, Check, Filter } from 'lucide-vue-next'
+import { Copy, Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
@@ -1112,16 +1110,22 @@ const successKpiTone = computed<'ok' | 'bad' | 'muted'>(() => {
 })
 /** 测试日志计数：默认态读后端 stats.canary（默认视图已排除 canary，行内数不到）；
     仅看测试态 = 该查询的 total（口径即测试行数）。
-    B22/F8-1：默认态 stats 未就绪时返回 null（模板渲染「—」）——0 会被读成
-    「本窗口 0 条测试日志」的伪读数；入口 pill 本身常驻可点不变。 */
+    B22/F8-1：默认态 stats 未就绪时返回 null（option 文案不渲染计数）——0 会被读成
+    「本窗口 0 条测试日志」的伪读数；入口本身常驻可点不变。 */
 const testCount = computed<number | null>(() => {
   if (testFilter.value === 'only') return liveLogsTotal.value
   return liveStats.value ? liveStats.value.canary ?? 0 : null
 })
-/** 测试筛选两态切换：默认（已排除测试）→ 仅看测试 → 默认（重查由 status/agent/test watch 触发） */
-function toggleTestFilter() {
-  testFilter.value = testFilter.value === '' ? 'only' : ''
-}
+/** 来源维度（2026-10-27 统一）：原先「仅看测试」是常驻多选 chip，现归入维度下拉，
+    与状态并列；计数只出现在 option 文案里（同一读数不两处渲染）。 */
+const sourceSelect = computed<string>({
+  get: () => testFilter.value,
+  set: (v) => { testFilter.value = v === 'only' ? 'only' : '' }
+})
+const sourceSelectOptions = computed(() => [
+  { value: '', label: '全部来源' },
+  { value: 'only', label: testCount.value == null ? '仅测试调用' : `仅测试调用（${testCount.value}）` }
+])
 /* 状态 pills（失败/超时/成功）：计数来自当前窗口 stats（与表格同源）。B22/F8-1：
    stats 未就绪（查询在途 / 失败）时不显示 0——0 会被读成「本窗口 0 条失败」的伪读数；
    置 undefined 使模板不渲染计数角标（与「测试」pill 的常驻入口语义一致）。 */

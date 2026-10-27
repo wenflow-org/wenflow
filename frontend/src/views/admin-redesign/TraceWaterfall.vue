@@ -48,18 +48,20 @@
           @click="viewMode = 'session'"
         >会话</button>
       </span>
-      <span class="wf-filter">
-        <button
-          type="button"
-          class="mk-pill"
-          :class="{ 'mk-pill--active': failuresOnly }"
-          :aria-pressed="failuresOnly"
-          @click="failuresOnly = !failuresOnly"
-        >仅失败{{ errorTotal > 0 ? ` ${errorTotal}` : '' }}</button>
+      <div class="wf-filter">
+        <!-- 2026-10-27 用户「需要统一调整」：失败筛选归维度下拉（计数进 option），
+             常驻 chip 退场；链路/会话是视图模式，不是筛选维度，保留分段按钮。 -->
+        <MkPillSelect
+          v-model="resultSelect"
+          label="结果"
+          aria-label="按结果筛选"
+          :options="resultSelectOptions"
+          :active="failuresOnly"
+        />
         <span class="wf-sort" title="按耗时排序">
           <MkSelect v-model="sortMode" :options="SORT_OPTIONS" aria-label="排序方式" mono />
         </span>
-      </span>
+      </div>
         <!-- 链路 ID 搜索属左组（全站卡头语法：快筛 chips → 搜索框） -->
         <input
           v-if="viewMode === 'trace'"
@@ -311,6 +313,7 @@ import { estimateTraceCostUsd, loadModelPrices, type PriceMap } from './traceCos
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSelect from '@/components/mk/MkSelect.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 
 /* 估算成本的单价表（接入页登记的单价，进程内缓存一次）：概要卡按它逐 span 算金额。
    读不到就保持 null——此时成本格显「—」，title 说明是读不到还是没配。 */
@@ -341,6 +344,16 @@ const failuresOnly = computed({
     emit('update:failuresOnly', v)
   }
 })
+/** 结果维度（2026-10-27 统一）：失败筛选从 chip 迁入下拉，计数只在 option 文案里；
+    执行日志嵌入态通过 v-model:failures-only 与宿主「失败」保持同源。 */
+const resultSelect = computed<string>({
+  get: () => (failuresOnly.value ? 'failed' : ''),
+  set: (v) => { failuresOnly.value = v === 'failed' }
+})
+const resultSelectOptions = computed(() => [
+  { value: '', label: '全部 span' },
+  { value: 'failed', label: errorTotal.value > 0 ? `仅失败（${errorTotal.value}）` : '仅失败' }
+])
 type SortMode = 'time' | 'dur-desc' | 'dur-asc'
 const SORT_OPTIONS: ReadonlyArray<{ value: SortMode; label: string }> = [
   { value: 'time', label: '默认（时间序）' },

@@ -116,19 +116,16 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 生命周期筛选（原页头状态条的 meta-link 迁入，2026-10-04）：点选筛选 / 再点取消，
-               胶囊形态对齐全站工具条 chips（同 TeachingSessions）。计数判例（2026-10-11 全站统一）：
-               筛选 pill 一律显命中数，唯「全部」不显（总数单源=分页器「共 N 条」）；
-               搜索槽位归一：pills 之后（2026-10-11 卡头走查） -->
-          <button
-            v-for="o in statePillOptions"
-            :key="o.key"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': stateFilter === o.key }"
-            :aria-pressed="stateFilter === o.key"
-            @click="stateFilter = stateFilter === o.key ? 'all' : o.key"
-          >{{ o.label }}<span v-if="o.key !== 'all'" class="mk-pill__count">{{ o.count }}</span></button>
+          <!-- 生命周期筛选（原页头状态条的 meta-link 迁入，2026-10-04；2026-10-27 统一）：
+               生命周期是单选维度 → 胶囊下拉，常驻 chip 组退场；计数进 option 文案，
+               唯「全部」不显（总数单源=分页器「共 N 条」）。 -->
+          <MkPillSelect
+            v-model="stateSelect"
+            label="状态"
+            aria-label="按生命周期筛选"
+            :options="stateSelectOptions"
+            :active="stateFilter !== 'all'"
+          />
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -407,6 +404,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
@@ -613,6 +611,17 @@ const stateFilterOptions = computed(() => {
     { key: 'stopped', label: '已停止', count: n(byPhase('stopped')) },
   ]
 })
+/** 生命周期维度（2026-10-27 统一）：计数只在 option 文案里；「全部」不显（总数单源=分页器）。 */
+const stateSelect = computed<string>({
+  get: () => stateFilter.value,
+  set: (v) => { stateFilter.value = v || 'all' }
+})
+const stateSelectOptions = computed(() =>
+  stateFilterOptions.value.map((o) => ({
+    value: o.key,
+    label: o.key === 'all' || o.count === '—' ? o.label : `${o.label}（${o.count}）`
+  }))
+)
 /** live 虚拟人域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(
   () => isLive.value && !liveLoading.value && !!liveFailures.value.virtuals && !liveVirtuals.value.length
@@ -973,9 +982,6 @@ function fmtDateTime(iso: string): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
-
-/** 状态筛选（卡头工具栏 chips）：点激活项取消筛选 */
-const statePillOptions = computed(() => stateFilterOptions.value.filter((o) => o.key))
 
 /** 「今日调用」卡 hint（2026-10-05 口径纠偏）：只报口径不复述数字。原 hint「平均耗时」
     实为 avgDurationMs = 终态会话「创建→结束」平均墙钟时长（virtual-learners.ts:1704），

@@ -127,26 +127,21 @@ describe('卡头工具条形态', () => {
     expect(offenders).toEqual([])
   })
 
-  it('可叠加开关只住在「标志筛选」组，不与单选 chip 同组（M3：同页 chip 组不得混行为）', () => {
-    const offenders: string[] = []
-    for (const file of LIST_PAGES) {
-      const src = read(file)
-      // 这些组内只有 button（无嵌套 div），非贪婪匹配到组尾即可
-      for (const m of src.matchAll(/<div class="mk-pills"([^>]*)>([\s\S]*?)<\/div>/g)) {
-        const [, attrs, body] = m
-        const toggles = /@click="[^"]*=\s*!/.test(body)
-        if (!toggles) continue
-        const label = attrs.match(/aria-label="([^"]+)"/)?.[1]
-        if (label !== '标志筛选') offenders.push(`${file}: 开关组标签为「${label ?? '（空）'}」`)
-      }
-    }
+  /* 2026-10-27 用户「需要统一调整」：列表筛选统一为「KPI 卡（读数 + 快捷入口）+
+     维度下拉 + 生效时的已应用 token」，全站不再有常驻「标志筛选」chip 组。
+     视图模式切换（Trace 的链路/会话）与表单多选（导出范围）不是列表筛选，不在此列。 */
+  it('全站不再有常驻「标志筛选」chip 组（开关已并入 KPI 卡或维度下拉）', () => {
+    const offenders = allVueFiles()
+      .filter((file) => readFileSync(file, 'utf8').includes('aria-label="标志筛选"'))
+      .map((file) => relative(resolve(__dirname, '../../../..'), file))
     expect(offenders).toEqual([])
   })
 
   /* 2026-10-27 用户「这明显设计的都不一样，我需要一个新的、好用的表头」：
      两张截图（教学会话 vs 路径列表）的差异不在几何，而在**单选维度用了两种控件**
      —— 一边是带标签的胶囊下拉，一边是带计数的 chip 组。统一后：单选维度一律
-     MkPillSelect（KPI 卡仍可作同一维度的快捷入口），chip 组只留给可叠加的「标志筛选」。 */
+     MkPillSelect（KPI 卡仍可作同一维度的快捷入口）；2026-10-27「需要统一调整」后，
+     常驻 chip 组也全部退场，只保留生效时的已应用 token。 */
   /* 2026-10-27 用户「清除筛选我也不太想要」：工具条不再挂这条文字链，每个控件自己复位
      （下拉选回「全部」、chip 再点取消、搜索框 ✕）。空态里的「清除筛选」CTA 不在卡头内，不受限。 */
   it('卡头不再挂「清除筛选」文字链', () => {
@@ -158,7 +153,7 @@ describe('卡头工具条形态', () => {
     expect(offenders).toEqual([])
   })
 
-  it('卡头主栏的单选维度一律 MkPillSelect，chip 组只留多选「标志筛选」', () => {
+  it('卡头主栏不再有常驻 chip 组（筛选 = 维度下拉 + 已应用 token）', () => {
     const offenders: string[] = []
     for (const file of LIST_PAGES) {
       const src = read(file)
@@ -166,10 +161,7 @@ describe('卡头工具条形态', () => {
       if (idx < 0) continue
       const tableIdx = src.indexOf('<table', idx)
       const block = src.slice(idx, tableIdx > 0 ? tableIdx : idx + 6000)
-      for (const m of block.matchAll(/<div class="mk-pills[^"]*"([^>]*)>/g)) {
-        const label = m[1].match(/aria-label="([^"]+)"/)?.[1]
-        if (label !== '标志筛选') offenders.push(`${file}: ${label ?? '（无 aria-label）'}`)
-      }
+      if (/<div class="mk-pills/.test(block)) offenders.push(`${file}: 卡头主栏仍有 chip 组`)
     }
     expect(offenders).toEqual([])
   })
