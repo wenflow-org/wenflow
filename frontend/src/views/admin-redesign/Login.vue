@@ -116,7 +116,7 @@ import { onMounted, reactive, ref, type Component } from 'vue'
 /* 密码显隐图标：模板用了 <Eye>/<EyeOff> 却从未 import → 按钮点得动但图标空白
    （同 EyeOff 幽灵图标一类，2026-09-29 修） */
 import {
-  Eye, EyeOff, FlaskConical, HeartPulse, Megaphone, ScrollText, Sparkles, Users,
+  Eye, EyeOff, FlaskConical, Megaphone, ScrollText, Sparkles, Users,
 } from 'lucide-vue-next'
 import { useIsDark } from '@/composables/useIsDark';
 
@@ -124,16 +124,14 @@ const isDark = useIsDark();
 
 /* 右侧导览的域清单：分组名与图标与侧栏清单（manifest.ts）同源，是「控制台里有什么」的
    静态事实，不含任何运行期计数——登录页不展示会过期的数字。
-   2026-10-26 走查：侧栏已收成 6 组（运营/学习/仿真/Skill/观测与排查/账号与接入），
-   本清单还停在旧组名（教学/虚拟学习者/Skill 与提示词/观测/系统），登录页承诺的分组
-   进去找不到——按侧栏重列。 */
+   2026-10-27 用户「账号与接入组不要了，组内页面移到运营」：侧栏收成 5 组，
+   本清单同步——模型与接入 / 访问与注册 / 用户账号 并入运营组。 */
 const DOMAINS: { label: string; sub: string; icon: Component }[] = [
-  { label: '运营', sub: '运营待办、反馈、成就与公告', icon: Megaphone },
+  { label: '运营', sub: '运营待办、反馈、成就与公告，以及模型与接入、访问与注册、用户账号', icon: Megaphone },
   { label: '学习', sub: '目标对话、学习路径、教学会话、学习状态与复习积压', icon: Users },
   { label: '仿真', sub: '虚拟学习者的运行与学习者卡库', icon: FlaskConical },
   { label: 'Skill', sub: '字段流转、Skill 目录、Prompt 评估与插件', icon: Sparkles },
-  { label: '观测与排查', sub: '执行日志、审计日志、成本分析与健康中心', icon: ScrollText },
-  { label: '账号与接入', sub: '模型与接入、访问与注册、用户账号', icon: HeartPulse }
+  { label: '观测与排查', sub: '执行日志、审计日志、成本分析与健康中心', icon: ScrollText }
 ]
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, markAdminSession } from '@/api/adminApi'

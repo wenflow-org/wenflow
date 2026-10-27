@@ -39,8 +39,9 @@ describe('Shell 导航', () => {
   it('导航分组齐全且顺序稳定（总览为置顶入口，不进分组）', () => {
     const wrapper = mountShell();
     // 分组标题自 2026-09-27 起降级为纯文字标签（.mshell__caption），不再是可折叠按钮
+    // 2026-10-27：账号与接入组撤销，组内页面并入运营
     const groups = wrapper.findAll('.mshell__caption').map((n) => n.text());
-    expect(groups).toEqual(['运营', '学习', '仿真', 'Skill', '观测与排查', '账号与接入']);
+    expect(groups).toEqual(['运营', '学习', '仿真', 'Skill', '观测与排查']);
   });
 
   it('置顶入口（pinned）渲染在分组上方且无组标题', () => {

@@ -1,17 +1,19 @@
 /**
  * Admin 控制台：场景清单（侧栏单一数据源）
  *
- * 2026-10-26 导航收口：6 组 + 置顶（运营 → 学习 → 仿真 → Skill → 观测与排查 → 账号与接入）。
+ * 2026-10-27 用户「账号与接入组不要了，组内页面移到运营」：导航收成 5 组 + 置顶
+ * （运营 → 学习 → 仿真 → Skill → 观测与排查）；撤掉第 6 组，模型与接入 /
+ * 访问与注册 / 用户账号并入「运营」组（组内追加在运营中心之后）。
  * 组内条目按运营日循环排列：总览看待办 → 运营中心处置 → 回到业务域核对。
  * 场景 id 与 URL 一律未改（改名只动 label/group），旧深链与书签继续可达。
  *
  * 分组归属：
  * - 运营：运营中心（tab 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知 · 运维工具 · 数据导出 · 会话安全）
+ *   + 模型与接入 / 访问与注册 / 用户账号（2026-10-27 并入：接哪个上游、谁能进、账号怎么管）
  * - 学习：目标对话 / 学习路径 / 教学会话 / 学习状态 / 复习积压（跨用户待复习榜）
  * - 仿真：虚拟学习者（运行态）/ 学习者卡库（配置态）
  * - Skill：字段流转 / Skill 目录 / Prompt 评估 / 插件
  * - 观测与排查：执行日志 / 审计日志 / 成本分析 / 健康中心
- * - 账号与接入：模型与接入 / 访问与注册 / 用户账号
  *
  * 已下线场景（URL 由 router 改投，不占侧栏）：feedback / ops-achievements / messages /
  * session-security / ops-center / batch-experiments / skill-workbench（隐藏二级页）。
@@ -68,8 +70,8 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'audit-logs', label: '审计日志', group: '观测与排查', glyph: '审', icon: ShieldCheck, keywords: ['审计', '登录', '操作记录'] },
   { id: 'token-cost', label: '成本分析', group: '观测与排查', glyph: '费', icon: Coins, keywords: ['成本', 'Token', '用量', '单价'] },
   { id: 'health-center', label: '健康中心', group: '观测与排查', glyph: '康', icon: HeartPulse, keywords: ['健康', '检查', '一致性', '漂移'] },
-  // 账号与接入：接哪个上游、谁能进、账号怎么管
-  { id: 'api-config', label: '模型与接入', group: '账号与接入', glyph: '模', icon: Plug, keywords: ['密钥', '上游', '单价', '模型', '供应商'] },
-  { id: 'access-control', label: '访问与注册', group: '账号与接入', glyph: '访', icon: ShieldCheck, keywords: ['访问', '注册', '登录', '白名单'] },
-  { id: 'people', label: '用户账号', group: '账号与接入', glyph: '人', icon: Users, keywords: ['用户', '账号', '角色', '密码'] }
+  // 原「账号与接入」组（2026-10-27 并入运营）：接哪个上游、谁能进、账号怎么管
+  { id: 'api-config', label: '模型与接入', group: '运营', glyph: '模', icon: Plug, keywords: ['密钥', '上游', '单价', '模型', '供应商'] },
+  { id: 'access-control', label: '访问与注册', group: '运营', glyph: '访', icon: ShieldCheck, keywords: ['访问', '注册', '登录', '白名单'] },
+  { id: 'people', label: '用户账号', group: '运营', glyph: '人', icon: Users, keywords: ['用户', '账号', '角色', '密码'] }
 ]
