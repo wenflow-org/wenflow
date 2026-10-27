@@ -266,7 +266,8 @@ describe('ApiConfig P1 修复批', () => {
   }
 
   /* D12：429 / 冷却读数从原「调用健康」卡搬进调用策略卡的右栏——
-     参数与它造成的结果同一视平线；读数非零时数字上警示色。 */
+     参数与它造成的结果同一视平线；读数非零时数字上警示色。
+     2026-10-28 右栏并入跑批读数：前两格是近 1 小时调用，后四格是后台跑批。 */
   it('D12：调用策略右栏显示近 1 小时 429 与冷却模型读数', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
@@ -274,28 +275,39 @@ describe('ApiConfig P1 修复批', () => {
     expect(side.exists(), '调用策略卡应有读数右栏').toBe(true);
     expect(side.text()).toContain('近 1 小时');
     const stats = side.findAll('.ac-stat');
-    expect(stats.map((s) => s.text())).toEqual(['4上游 429', '2冷却中模型']);
-    // 非零即警示：4 次 429 / 2 个冷却模型都要看得出来
-    expect(side.findAll('.ac-stat--alert')).toHaveLength(2);
-    expect(side.find('.ac-policy__link').text()).toContain('健康中心');
-    wrapper.unmount();
-  });
-
-  /* 2026-10-28 用户「批量吞吐可以和模型与接入合到一起」：从运维工具迁入本页。 */
-  it('后台跑批卡：四格读数 + 一句口径说明', async () => {
-    const wrapper = await mountApiConfig();
-    await flushPromises();
-    await flushPromises();
-    const card = wrapper.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '后台跑批');
-    expect(card, '模型与接入页应有后台跑批卡').toBeTruthy();
-    expect(card!.findAll('.ac-stat')).toHaveLength(4);
-    expect(card!.findAll('.ac-stat').map((s) => s.text())).toEqual([
+    expect(stats.map((s) => s.text())).toEqual([
+      '4上游 429',
+      '2冷却中模型',
       '12平均 条/分',
       '4最低单分钟',
       '2低于下限分钟',
       '1最长连续低于下限'
     ]);
-    expect(card!.find('.ac-throughput__note').text()).toContain('后台批处理每分钟实际处理多少条');
+    // 非零即警示：4 次 429 / 2 个冷却模型都要看得出来（跑批 mock 未告警）
+    expect(side.findAll('.ac-stat--alert')).toHaveLength(2);
+    expect(side.find('.ac-policy__link').text()).toContain('健康中心');
+    wrapper.unmount();
+  });
+
+  /* 2026-10-28 用户「批量吞吐可以和模型与接入合到一起」→「自由设计一下」：
+     跑批读数并入调用策略右栏，与近 1 小时调用同栏（虚线分隔），不再单独成卡。 */
+  it('后台跑批读数并入调用策略右栏：四格读数 + 一句口径说明', async () => {
+    const wrapper = await mountApiConfig();
+    await flushPromises();
+    await flushPromises();
+    const side = wrapper.find('.ac-policy__side');
+    expect(side.text()).toContain('后台跑批');
+    expect(side.text()).toContain('后台批处理每分钟实际处理多少条');
+    const stats = side.findAll('.ac-stat');
+    expect(stats.map((s) => s.text())).toEqual([
+      '4上游 429',
+      '2冷却中模型',
+      '12平均 条/分',
+      '4最低单分钟',
+      '2低于下限分钟',
+      '1最长连续低于下限'
+    ]);
+    expect(side.text()).toContain('刷新读数');
     wrapper.unmount();
   });
 
@@ -710,14 +722,14 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线后下半只剩调用策略；
-     2026-10-28 后台跑批从运维工具迁入，调用面 = 策略卡 + 跑批读数卡。 */
-  it('调用面：一张策略卡 + 一张后台跑批卡，探针与细项都已下线', async () => {
+  /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线；2026-10-28 跑批读数并入
+     调用策略右栏（不再单独成卡），调用面 = 供应商卡 + 一张策略与读数卡。 */
+  it('调用面只剩一张策略卡（跑批读数并入右栏），探针与细项都已下线', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
 
     const cards = wrapper.findAll('#ac-panel-access > .mk-card').filter((c) => !c.classes('mpp'));
-    expect(cards.map((c) => c.find('.mk-card__title').text())).toEqual(['调用策略', '后台跑批']);
+    expect(cards.map((c) => c.find('.mk-card__title').text())).toEqual(['调用策略']);
 
     const card = cards[0];
     /* 2026-10-26 用户「不用写那么详细，分那么多，就最大重试、间隔、rpm 就够了」：

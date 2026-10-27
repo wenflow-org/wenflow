@@ -257,9 +257,11 @@
             <p v-if="reliability" class="ac-policy__note">
               「最大重试」是总尝试上限，含首次调用与改用备用模型。出站 RPM 超出后排队等待，0 = 不限。单次超时、退避上限、抖动沿用当前配置。
             </p>          </div>
-          <!-- 运行读数：参数的效果面。原先挂在「调用健康」卡里，与参数隔着两张卡的卡头，
-               读者要自己把「我把重试调高了」和「还在挨 429」对上。 -->
-          <aside class="ac-policy__side" aria-label="近 1 小时调用读数">
+          <!-- 运行读数（2026-10-28 合并）：参数的效果面同栏呈现——上组是近 1 小时调用
+               （429 / 冷却），下组是后台跑批（2026-10-28 从运维工具迁入，口径与
+               scripts/audit-batch-throughput 同一纯函数）。读数失败各自就地重试，
+               不把 0 当成「没有问题」。 -->
+          <aside class="ac-policy__side" aria-label="调用与跑批读数">
             <div class="ac-policy__side-title">{{ readoutWindowText }}</div>
             <div v-if="rateLimitReadout" class="ac-policy__stats">
               <div class="ac-stat" :class="{ 'ac-stat--alert': rateLimitReadout.count429 > 0 }">
@@ -277,33 +279,25 @@
             </div>
             <div v-else class="ac-policy__readout-fail">读数读取中…</div>
             <button type="button" class="mk-link ac-policy__link" @click="goHealthCenter">健康中心 →</button>
+
+            <div class="ac-side__divider" aria-hidden="true"></div>
+            <div class="ac-policy__side-title">后台跑批 · 最近 {{ throughput?.windowMinutes ?? 60 }} 分钟<template v-if="throughput?.idle"> · 空闲</template></div>
+            <p class="ac-side__hint">后台批处理每分钟实际处理多少条；低于下限（{{ throughput?.minRpm ?? 20 }} 条/分）的分钟越多，越可能已经停摆。</p>
+            <div v-if="throughput" class="ac-policy__stats">
+              <div class="ac-stat"><b>{{ throughput.avgRpm }}</b><span>平均 条/分</span></div>
+              <div class="ac-stat"><b>{{ throughput.worstRpm }}</b><span>最低单分钟</span></div>
+              <div class="ac-stat"><b>{{ throughput.lowMinutes }}</b><span>低于下限分钟</span></div>
+              <div class="ac-stat" :class="{ 'ac-stat--alert': throughput.alert }"><b>{{ throughput.longestLowRun }}</b><span>最长连续低于下限</span></div>
+            </div>
+            <div v-else-if="throughputFailed" class="ac-policy__readout-fail" role="alert">
+              跑批读取失败
+              <button type="button" class="mk-link" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '重试' }}</button>
+            </div>
+            <div v-else class="ac-policy__readout-fail">跑批读取中…</div>
+            <span v-if="throughput?.alert" class="ac-side__alert" role="alert">⚠ {{ throughput.alertReason }}</span>
+            <button type="button" class="mk-link ac-policy__link" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '刷新读数' }}</button>
           </aside>
         </div>
-      </section>
-
-      <!-- 后台跑批（2026-10-28 从运维工具迁入）：这页看的是「上游系统跑得怎么样」——
-           供应商连通性与后台批处理是否空转同属一类可见性需求。
-           口径与 scripts/audit-batch-throughput 同一纯函数（窗口内全部尝试，含失败）。 -->
-      <section v-if="isLive" class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">后台跑批</h3>
-          <span class="mk-card__meta">最近 {{ throughput?.windowMinutes ?? 60 }} 分钟 · 下限 {{ throughput?.minRpm ?? 20 }} 条/分<template v-if="throughput?.idle"> · 空闲</template></span>
-          <div class="mk-card__head-right">
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '刷新' }}</button>
-          </div>
-        </div>
-        <p class="ac-throughput__note">后台批处理每分钟实际处理多少条。低于下限的分钟越多，越可能已经停摆。</p>
-        <div v-if="throughputFailed" class="mk-alert mk-alert--row ac-throughput__error" role="alert">
-          <span class="mk-alert__msg">吞吐读取失败</span>
-          <button type="button" class="mk-alert__btn" :disabled="throughputLoading" @click="loadThroughput">重试</button>
-        </div>
-        <div v-else class="ac-throughput__stats">
-          <div class="ac-stat"><b>{{ throughput?.avgRpm ?? '—' }}</b><span>平均 条/分</span></div>
-          <div class="ac-stat"><b>{{ throughput?.worstRpm ?? '—' }}</b><span>最低单分钟</span></div>
-          <div class="ac-stat"><b>{{ throughput?.lowMinutes ?? '—' }}</b><span>低于下限分钟</span></div>
-          <div class="ac-stat" :class="{ 'ac-stat--alert': throughput?.alert }"><b>{{ throughput?.longestLowRun ?? '—' }}</b><span>最长连续低于下限</span></div>
-        </div>
-        <p v-if="throughput?.alert" class="ac-throughput__alert" role="alert">⚠ {{ throughput.alertReason }}</p>
       </section>
 
     </div>
@@ -1287,28 +1281,27 @@ function discardAll() {
   font-weight: 600;
 }
 .ac-policy__link { justify-self: start; font-size: var(--mk-fs-micro); }
-/* 后台跑批（2026-10-28 从运维工具迁入）：四格读数与调用策略右栏同一 .ac-stat 形态 */
-.ac-throughput__note { margin: 0; padding: 0 16px 10px; font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
-.ac-throughput__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0 16px 14px; }
-.ac-throughput__error { margin: 0 16px 12px; }
-.ac-throughput__alert { margin: 0; padding: 0 16px 14px; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-amber); }
-@media (max-width: 900px) { .ac-throughput__stats { grid-template-columns: 1fr 1fr; } }
+/* 后台跑批（2026-10-28 从运维工具迁入）：与近 1 小时调用同栏，用虚线分隔两组读数 */
+.ac-side__divider { border-top: 1px dashed var(--mk-line); margin: 12px 0 10px; }
+.ac-side__hint { margin: 0 0 10px; font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
+.ac-side__alert { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-amber); }
 
 /* 内容区不足 1500px 时右栏落到参数下面，改成一条横读数带（不再挤窄参数三列） */
 @media (max-width: 1500px) {
   .ac-policy { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  /* 2026-10-28 右栏并入跑批读数后是「两组读数」的纵向块，不再拆横排三槽 */
   .ac-policy__side {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 14px;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
     padding: 14px 0 0;
     border-left: 0;
     border-top: 1px dashed var(--mk-line);
   }
-  .ac-policy__stats { grid-template-columns: repeat(2, minmax(0, 168px)); }
+  .ac-policy__stats { grid-template-columns: repeat(2, minmax(0, 200px)); }
   .ac-stat { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; }
   .ac-stat b { font-size: 18px; }
-  .ac-policy__link { justify-self: end; }
+  .ac-policy__link { justify-self: start; }
 }
 @media (max-width: 1100px) {
   .ac-policy__fields { grid-template-columns: repeat(2, minmax(0, 200px)); }
