@@ -46,6 +46,13 @@ vi.mock('@/api/adminApi', () => ({
     updateReliabilitySettings: updateReliabilityMock,
     getRegistrationSetting: vi.fn(async () => ({ data: { data: { registrationEnabled: false } } }))
   }),
+  adminOpsApi: apiObject({
+    throughput: vi.fn(async () => ({
+      data: {
+        data: { windowMinutes: 60, minRpm: 20, avgRpm: 12, worstRpm: 4, lowMinutes: 2, longestLowRun: 1, idle: false, alert: false, alertReason: null }
+      }
+    }))
+  }),
   adminAuditApi: apiObject(),
   adminFieldRoutingsApi: apiObject(),
   adminPromptWorkbenchApi: apiObject(),
@@ -271,6 +278,24 @@ describe('ApiConfig P1 修复批', () => {
     // 非零即警示：4 次 429 / 2 个冷却模型都要看得出来
     expect(side.findAll('.ac-stat--alert')).toHaveLength(2);
     expect(side.find('.ac-policy__link').text()).toContain('健康中心');
+    wrapper.unmount();
+  });
+
+  /* 2026-10-28 用户「批量吞吐可以和模型与接入合到一起」：从运维工具迁入本页。 */
+  it('后台跑批卡：四格读数 + 一句口径说明', async () => {
+    const wrapper = await mountApiConfig();
+    await flushPromises();
+    await flushPromises();
+    const card = wrapper.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '后台跑批');
+    expect(card, '模型与接入页应有后台跑批卡').toBeTruthy();
+    expect(card!.findAll('.ac-stat')).toHaveLength(4);
+    expect(card!.findAll('.ac-stat').map((s) => s.text())).toEqual([
+      '12平均 条/分',
+      '4最低单分钟',
+      '2低于下限分钟',
+      '1最长连续低于下限'
+    ]);
+    expect(card!.find('.ac-throughput__note').text()).toContain('后台批处理每分钟实际处理多少条');
     wrapper.unmount();
   });
 
@@ -685,14 +710,14 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线后本页下半只剩一张卡：
-     调用策略（三个字段 + 右栏读数），生成参数仍在平台详情的第四页签里。 */
-  it('调用面只有一张策略卡：三个字段 + 读数，探针与细项都已下线', async () => {
+  /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线后下半只剩调用策略；
+     2026-10-28 后台跑批从运维工具迁入，调用面 = 策略卡 + 跑批读数卡。 */
+  it('调用面：一张策略卡 + 一张后台跑批卡，探针与细项都已下线', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
 
     const cards = wrapper.findAll('#ac-panel-access > .mk-card').filter((c) => !c.classes('mpp'));
-    expect(cards.map((c) => c.find('.mk-card__title').text())).toEqual(['调用策略']);
+    expect(cards.map((c) => c.find('.mk-card__title').text())).toEqual(['调用策略', '后台跑批']);
 
     const card = cards[0];
     /* 2026-10-26 用户「不用写那么详细，分那么多，就最大重试、间隔、rpm 就够了」：

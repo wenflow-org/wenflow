@@ -281,6 +281,31 @@
         </div>
       </section>
 
+      <!-- 后台跑批（2026-10-28 从运维工具迁入）：这页看的是「上游系统跑得怎么样」——
+           供应商连通性与后台批处理是否空转同属一类可见性需求。
+           口径与 scripts/audit-batch-throughput 同一纯函数（窗口内全部尝试，含失败）。 -->
+      <section v-if="isLive" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">后台跑批</h3>
+          <span class="mk-card__meta">最近 {{ throughput?.windowMinutes ?? 60 }} 分钟 · 下限 {{ throughput?.minRpm ?? 20 }} 条/分<template v-if="throughput?.idle"> · 空闲</template></span>
+          <div class="mk-card__head-right">
+            <button type="button" class="mk-btn mk-btn--sm" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '刷新' }}</button>
+          </div>
+        </div>
+        <p class="ac-throughput__note">后台批处理每分钟实际处理多少条。低于下限的分钟越多，越可能已经停摆。</p>
+        <div v-if="throughputFailed" class="mk-alert mk-alert--row ac-throughput__error" role="alert">
+          <span class="mk-alert__msg">吞吐读取失败</span>
+          <button type="button" class="mk-alert__btn" :disabled="throughputLoading" @click="loadThroughput">重试</button>
+        </div>
+        <div v-else class="ac-throughput__stats">
+          <div class="ac-stat"><b>{{ throughput?.avgRpm ?? '—' }}</b><span>平均 条/分</span></div>
+          <div class="ac-stat"><b>{{ throughput?.worstRpm ?? '—' }}</b><span>最低单分钟</span></div>
+          <div class="ac-stat"><b>{{ throughput?.lowMinutes ?? '—' }}</b><span>低于下限分钟</span></div>
+          <div class="ac-stat" :class="{ 'ac-stat--alert': throughput?.alert }"><b>{{ throughput?.longestLowRun ?? '—' }}</b><span>最长连续低于下限</span></div>
+        </div>
+        <p v-if="throughput?.alert" class="ac-throughput__alert" role="alert">⚠ {{ throughput.alertReason }}</p>
+      </section>
+
     </div>
     <!-- 底部保存条（脏位跨分段不丢）：多组脏恒出；单组脏仅当该组的分段保存钮不在当前
          可见区域时出——否则同屏两颗保存钮。 -->
@@ -317,7 +342,7 @@ import {
   liveFailures,
   loadLiveData
 } from './live'
-import { adminPlatformSettingsApi, adminApiConfigApi } from '@/api/adminApi'
+import { adminPlatformSettingsApi, adminApiConfigApi, adminOpsApi, type ThroughputReportLike } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -393,8 +418,29 @@ async function loadRateLimitReadout() {
     rateLimitLoading.value = false
   }
 }
+/* 后台跑批吞吐（2026-10-28 从运维工具迁入）：与调用策略同属「上游跑得怎么样」的读数。
+   窗口 60 分钟 / 下限 20 条/分，与 CLI 默认一致；失败时显式报错，不把 0 当成停摆。 */
+const throughput = ref<ThroughputReportLike | null>(null)
+const throughputLoading = ref(false)
+const throughputFailed = ref(false)
+async function loadThroughput() {
+  throughputLoading.value = true
+  throughputFailed.value = false
+  try {
+    const res = await adminOpsApi.throughput({ window: 60, minRpm: 20 })
+    throughput.value = res.data?.data ?? null
+  } catch {
+    throughputFailed.value = true
+  } finally {
+    throughputLoading.value = false
+  }
+}
+
 watch(isLive, (live) => {
-  if (live) void loadRateLimitReadout()
+  if (live) {
+    void loadRateLimitReadout()
+    void loadThroughput()
+  }
 }, { immediate: true })
 /** 读数窗口按后端给的值写，不硬编码「近 1 小时」——窗口若改，标题跟着改 */
 const readoutWindowText = computed(() => {
@@ -1241,6 +1287,12 @@ function discardAll() {
   font-weight: 600;
 }
 .ac-policy__link { justify-self: start; font-size: var(--mk-fs-micro); }
+/* 后台跑批（2026-10-28 从运维工具迁入）：四格读数与调用策略右栏同一 .ac-stat 形态 */
+.ac-throughput__note { margin: 0; padding: 0 16px 10px; font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
+.ac-throughput__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0 16px 14px; }
+.ac-throughput__error { margin: 0 16px 12px; }
+.ac-throughput__alert { margin: 0; padding: 0 16px 14px; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-amber); }
+@media (max-width: 900px) { .ac-throughput__stats { grid-template-columns: 1fr 1fr; } }
 
 /* 内容区不足 1500px 时右栏落到参数下面，改成一条横读数带（不再挤窄参数三列） */
 @media (max-width: 1500px) {
