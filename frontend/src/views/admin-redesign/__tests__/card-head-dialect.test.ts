@@ -251,14 +251,15 @@ describe('卡头工具条几何', () => {
     expect(cols).toMatch(/\.mk-cols__trigger \{[^}]*min-height: 32px/)
   })
 
-  /* 2026-10-27 用户先「那个列，干嘛的」、后「还是改成列」：可见文案回到单字「列」，
-     自解释交给 aria-label / title（列设置：显示或隐藏表格列）与菜单头；隐藏计数保留；
-     菜单有「显示列」头与「恢复默认」（回到该页首访默认集，而不是一律全显）。 */
-  it('列入口：可见「列」+ 可访问名自解释 + 隐藏计数 + 恢复默认', () => {
+  /* 2026-10-27 用户先「那个列，干嘛的」、后「还是改成列」、再「不要计数，并且去掉前面的图标」：
+     可见文案只有单字「列」，无图标、无隐藏计数；自解释交给 aria-label / title
+     （列设置：显示或隐藏表格列）与菜单头的「显示列 n / m」；底部「恢复默认」回到首访默认集。 */
+  it('列入口：可见只有「列」（无图标/计数）+ 可访问名自解释 + 恢复默认', () => {
     const cols = readFileSync(resolve(__dirname, '../../../components/mk/MkCols.vue'), 'utf8')
-    expect(cols).toMatch(/aria-hidden="true" \/>列/)
+    expect(cols).toContain('<span>列</span>')
+    expect(cols).not.toContain('Columns3')
+    expect(cols).not.toMatch(/mk-cols__count/)
     expect(cols).toContain('aria-label="列设置：显示或隐藏表格列"')
-    expect(cols).toMatch(/mk-cols__count/)
     expect(cols).toMatch(/mk-cols__reset[^>]*>\s*恢复默认/)
   })
 

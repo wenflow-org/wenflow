@@ -10,9 +10,7 @@
       title="列设置：显示 / 隐藏表格列"
       @click="open = !open"
     >
-      <Columns3 :size="14" :stroke-width="1.75" aria-hidden="true" />列
-      <!-- 隐藏计数：入口本身要能说明「这页的列被改过」，否则用户看不出自己藏过列 -->
-      <span v-if="hidden.size" class="mk-cols__count" :title="`已隐藏 ${hidden.size} 列`">{{ hidden.size }}</span>
+      <span>列</span>
     </button>
     <div v-if="open" class="mk-cols__menu" role="group" aria-label="显示列" @click.stop>
       <div class="mk-cols__head">
@@ -33,12 +31,11 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import { Columns3 } from 'lucide-vue-next'
 
 /**
  * 列显隐公共组件（P1-3）：卡片头「列」入口 + 勾选菜单 + localStorage 持久化。
- * 可见文案保持单字「列」（2026-10-27 用户「还是改成列」）；可访问名与 title 仍写全
- * 「列设置：显示或隐藏表格列」，鼠标悬停 / 读屏能自解释。
+ * 可见文案只有「列」——不带图标、不带隐藏计数（2026-10-27 用户「不要计数，并且去掉前面的图标」）。
+ * 可访问名与 title 仍写全「列设置：显示或隐藏表格列」，鼠标悬停 / 读屏能自解释。
  * 用法：<MkCols :col-defs="[...]" storage-key="wf_xxx_hidden_cols" v-model:hidden="hiddenCols" />
  * 页面表头/行用 hidden.has('key') 控制 v-if。
  */
@@ -118,21 +115,6 @@ function resetToDefault() {
 /* 触发器与工具条里的搜索框/筛选同一行盒：文字链本身只有 20px 高，
    在 32px 的控件行里会贴着中线「浮」着（2026-10-27 表头复核） */
 .mk-cols__trigger { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; }
-/* 隐藏列计数：与筛选胶囊的计数同形，但更小，避免在右组抢走搜索的注意力 */
-.mk-cols__count {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--mk-blue-bg);
-  color: var(--mk-pill-active-fg);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
 .mk-cols__menu {
   position: absolute;
   right: 0;

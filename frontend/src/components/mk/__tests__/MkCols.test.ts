@@ -1,9 +1,10 @@
 /**
  * MkCols（列显隐）行为测试。
  *
- * 2026-10-27 用户先「那个列，干嘛的」、后「还是改成列」，最终契约：
- * - 可见文案是单字「列」；可访问名与 title 仍写全「列设置：显示或隐藏表格列」；
- * - 藏过列时入口带计数，菜单头给「显示列 n / m」；
+ * 2026-10-27 用户「还是改成列」→「不要计数，并且去掉前面的图标」，最终契约：
+ * - 可见文案只有单字「列」，不带图标、不带隐藏计数；
+ * - 可访问名与 title 仍写全「列设置：显示或隐藏表格列」；
+ * - 藏过列的事实在菜单头用「显示列 n / m」表达；
  * - 「恢复默认」回到该页首访默认集（defaultHidden），不是一律全显
  *   —— 目标对话的「约束条件」、用户页的「选择框」本就默认收起。
  */
@@ -33,11 +34,12 @@ function harness(defaultHidden?: string[], storageKey = 'wf_test_hidden_cols') {
 describe('MkCols 列显隐', () => {
   beforeEach(() => localStorage.clear())
 
-  it('入口：可见文案「列」+ 可访问名/悬停说明 + 菜单头「显示列 n / m」', async () => {
+  it('入口：可见文案只有「列」，无图标无计数；可访问名/悬停说明 + 菜单头「显示列 n / m」', async () => {
     const w = harness()
     const trigger = w.find('.mk-cols__trigger')
-    expect(trigger.text()).toContain('列')
-    expect(trigger.text()).not.toContain('列设置')
+    expect(trigger.text()).toBe('列')
+    expect(trigger.find('svg').exists()).toBe(false)
+    expect(w.find('.mk-cols__count').exists()).toBe(false)
     expect(trigger.attributes('aria-label')).toBe('列设置：显示或隐藏表格列')
     expect(trigger.attributes('title')).toContain('显示 / 隐藏表格列')
     expect(trigger.attributes('aria-expanded')).toBe('false')
@@ -49,14 +51,15 @@ describe('MkCols 列显隐', () => {
     expect(w.find('.mk-cols__hint').text()).toBe('3 / 3')
   })
 
-  it('勾掉一列：计数徽章出现、菜单头同步、写 localStorage', async () => {
+  it('勾掉一列：入口不出现计数，菜单头同步、写 localStorage', async () => {
     const w = harness()
     await w.find('.mk-cols__trigger').trigger('click')
     await w.findAll('.mk-cols__item input')[1].setValue(false)
     await w.vm.$nextTick()
 
     expect([...w.vm.hidden]).toEqual(['b'])
-    expect(w.find('.mk-cols__count').text()).toBe('1')
+    expect(w.find('.mk-cols__count').exists()).toBe(false)
+    expect(w.find('.mk-cols__trigger').text()).toBe('列')
     expect(w.find('.mk-cols__hint').text()).toBe('2 / 3')
     expect(localStorage.getItem('wf_test_hidden_cols')).toBe('["b"]')
   })
@@ -65,7 +68,7 @@ describe('MkCols 列显隐', () => {
     const w = harness(['c'])
     await w.vm.$nextTick()
     expect([...w.vm.hidden]).toEqual(['c'])
-    expect(w.find('.mk-cols__count').text()).toBe('1')
+    expect(w.find('.mk-cols__count').exists()).toBe(false)
 
     await w.find('.mk-cols__trigger').trigger('click')
     await w.findAll('.mk-cols__item input')[0].setValue(false)
