@@ -93,18 +93,24 @@ describe('运维工具面板（原系统工具 Tab1）', () => {
 describe('数据导出面板（原系统工具 Tab2）', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('范围 chips 多选 + 「开始导出」；无选中时主钮禁用', async () => {
+  it('六张数据表按组平铺为选择卡 + 「开始导出」；无选中时主钮禁用', async () => {
     const w = await mountWithRouter(DataExportPanel)
-    const chips = w.findAll('.mk-pill')
-    expect(chips.length, '六个导出范围 chips').toBe(6)
+    const boxes = w.findAll('.exp-item input[type="checkbox"]')
+    expect(boxes.length, '六个导出数据表').toBe(6)
+    expect(w.findAll('.exp-group')).toHaveLength(3)
     const go = w.findAll('button').find((b) => b.text() === '开始导出')
     expect(go?.attributes('disabled')).toBeDefined()
-    await chips[0]!.trigger('click')
-    await chips[1]!.trigger('click')
-    expect(w.findAll('.mk-pill.mk-pill--active').map((c) => c.text())).toEqual(['用户', '教学会话'])
+    await boxes[0]!.setValue(true)
+    await boxes[1]!.setValue(true)
+    expect(w.findAll('.exp-item--on').map((c) => c.find('.exp-item__title').text())).toEqual(['用户', '教学会话'])
     expect(w.text()).toContain('已选 2 项')
     const go2 = w.findAll('button').find((b) => b.text() === '开始导出')
     expect(go2?.attributes('disabled')).toBeUndefined()
+    // 行数上限只服务日志组：选业务表时不出现，选日志后出现
+    expect(w.find('.exp-limit').exists()).toBe(false)
+    const logBox = w.findAll('.exp-item input[type="checkbox"]')[4]!
+    await logBox.setValue(true)
+    expect(w.find('.exp-limit').exists()).toBe(true)
     w.unmount()
   })
 
