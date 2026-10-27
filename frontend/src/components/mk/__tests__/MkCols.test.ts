@@ -1,8 +1,8 @@
 /**
- * MkCols（列设置）行为测试。
+ * MkCols（列显隐）行为测试。
  *
- * 2026-10-27 用户「那个列，干嘛的」后的收口：
- * - 入口文案必须是「列设置」，不是单字「列」；
+ * 2026-10-27 用户先「那个列，干嘛的」、后「还是改成列」，最终契约：
+ * - 可见文案是单字「列」；可访问名与 title 仍写全「列设置：显示或隐藏表格列」；
  * - 藏过列时入口带计数，菜单头给「显示列 n / m」；
  * - 「恢复默认」回到该页首访默认集（defaultHidden），不是一律全显
  *   —— 目标对话的「约束条件」、用户页的「选择框」本就默认收起。
@@ -30,13 +30,16 @@ function harness(defaultHidden?: string[], storageKey = 'wf_test_hidden_cols') {
   return mount(Harness)
 }
 
-describe('MkCols 列设置', () => {
+describe('MkCols 列显隐', () => {
   beforeEach(() => localStorage.clear())
 
-  it('入口自解释：可见文案「列设置」+ 菜单头「显示列 n / m」', async () => {
+  it('入口：可见文案「列」+ 可访问名/悬停说明 + 菜单头「显示列 n / m」', async () => {
     const w = harness()
     const trigger = w.find('.mk-cols__trigger')
-    expect(trigger.text()).toContain('列设置')
+    expect(trigger.text()).toContain('列')
+    expect(trigger.text()).not.toContain('列设置')
+    expect(trigger.attributes('aria-label')).toBe('列设置：显示或隐藏表格列')
+    expect(trigger.attributes('title')).toContain('显示 / 隐藏表格列')
     expect(trigger.attributes('aria-expanded')).toBe('false')
     expect(trigger.attributes('aria-haspopup')).toBe('true')
 

@@ -10,7 +10,7 @@
       title="列设置：显示 / 隐藏表格列"
       @click="open = !open"
     >
-      <Columns3 :size="14" :stroke-width="1.75" aria-hidden="true" />列设置
+      <Columns3 :size="14" :stroke-width="1.75" aria-hidden="true" />列
       <!-- 隐藏计数：入口本身要能说明「这页的列被改过」，否则用户看不出自己藏过列 -->
       <span v-if="hidden.size" class="mk-cols__count" :title="`已隐藏 ${hidden.size} 列`">{{ hidden.size }}</span>
     </button>
@@ -36,7 +36,9 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Columns3 } from 'lucide-vue-next'
 
 /**
- * 列显隐公共组件（P1-3）：卡片头「列设置」入口 + 勾选菜单 + localStorage 持久化。
+ * 列显隐公共组件（P1-3）：卡片头「列」入口 + 勾选菜单 + localStorage 持久化。
+ * 可见文案保持单字「列」（2026-10-27 用户「还是改成列」）；可访问名与 title 仍写全
+ * 「列设置：显示或隐藏表格列」，鼠标悬停 / 读屏能自解释。
  * 用法：<MkCols :col-defs="[...]" storage-key="wf_xxx_hidden_cols" v-model:hidden="hiddenCols" />
  * 页面表头/行用 hidden.has('key') 控制 v-if。
  */

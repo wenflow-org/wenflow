@@ -251,12 +251,13 @@ describe('卡头工具条几何', () => {
     expect(cols).toMatch(/\.mk-cols__trigger \{[^}]*min-height: 32px/)
   })
 
-  /* 2026-10-27 用户「那个列，干嘛的」：入口只写一个「列」字，看不出是列显隐、
-     也看不出当前藏过列。契约：可见文案 = 列设置；有隐藏列时带计数；菜单有「显示列」头
-     与「恢复默认」（回到该页首访默认集，而不是一律全显）。 */
-  it('列设置入口自解释：可见文案 + 隐藏计数 + 恢复默认', () => {
+  /* 2026-10-27 用户先「那个列，干嘛的」、后「还是改成列」：可见文案回到单字「列」，
+     自解释交给 aria-label / title（列设置：显示或隐藏表格列）与菜单头；隐藏计数保留；
+     菜单有「显示列」头与「恢复默认」（回到该页首访默认集，而不是一律全显）。 */
+  it('列入口：可见「列」+ 可访问名自解释 + 隐藏计数 + 恢复默认', () => {
     const cols = readFileSync(resolve(__dirname, '../../../components/mk/MkCols.vue'), 'utf8')
-    expect(cols).toContain('列设置')
+    expect(cols).toMatch(/aria-hidden="true" \/>列/)
+    expect(cols).toContain('aria-label="列设置：显示或隐藏表格列"')
     expect(cols).toMatch(/mk-cols__count/)
     expect(cols).toMatch(/mk-cols__reset[^>]*>\s*恢复默认/)
   })
