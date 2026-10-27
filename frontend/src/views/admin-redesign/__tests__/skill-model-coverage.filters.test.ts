@@ -11,7 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import SkillModelCoverage from '../SkillModelCoverage.vue'
-import { chooseFilter, filterOption, filterSelect } from './filter-controls';
+import { chooseFilter, filterOption, filterOptions } from './filter-controls';
 
 const ROWS = [
   { skillId: 'stage-designer', endpoint: null, model: null, tier: 'chat', source: 'platform-default', paramOverrides: null, fallbackChain: null },
@@ -69,8 +69,7 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     const groups = w.findAll('.mk-pills')
     expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['标志筛选'])
     // 单选维度是带标签的胶囊下拉（不再与开关组同形）
-    const source = filterSelect(w as never, '来源')
-    expect(source.findAll('option').map((o) => o.text())).toEqual([
+    expect(filterOptions(w as never, '来源')).toEqual([
       '全部（4）', '用平台默认（2）', '技能覆盖（1）', '独立通道（1）'
     ])
     const fallback = w.findAll('.mk-pill').find((p) => p.text().startsWith('自定义备用模型'))!

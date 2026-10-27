@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import LearnerCenter from '../LearnerCenter.vue';
-import { chooseFilter, filterSelect } from './filter-controls';
+import { chooseFilter, filterOptions, filterValue } from './filter-controls';
 import UserAccountPane from '../UserAccountPane.vue';
 import { liveLearners } from '../live';
 import { subPage } from '../store';
@@ -164,7 +164,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     await settle();
     /* 2026-10-26 二次走查：卡头恢复胶囊组（全站列表页的筛选正式入口），KPI 卡保留可点作快捷入口，
        两者共用 `pill` 一个状态——不会出现两套各走各的筛选 */
-    const opts = filterSelect(w as never, '风险').findAll('option').map((o) => o.text().replace(/（\d+）$/, ''));
+    const opts = filterOptions(w as never, '风险').map((t) => t.replace(/（\d+）$/, ''));
     expect(opts.slice(0, 4)).toEqual(['全部', '需关注', '观察', '低置信']);
     const kpi = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === label)!;
@@ -179,7 +179,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toContain('甲');
     expect(kpi('观察').classes()).toContain('lc-kpi--on');
-    expect((filterSelect(w as never, '风险').element as HTMLSelectElement).value).toBe('watch');
+    expect(filterValue(w as never, '风险')).toBe('watch');
     // 再选下拉的「全部」→ 取消筛选
     await chooseFilter(w as never, '风险', '全部');
     await nextTick();

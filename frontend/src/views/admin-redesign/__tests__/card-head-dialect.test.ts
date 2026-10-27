@@ -297,28 +297,46 @@ describe('卡头工具条几何', () => {
 })
 
 /**
- * 共享原语自身的守卫：胶囊内嵌下拉的「展开后看得见选项」契约。
+ * 共享原语自身的守卫：维度下拉必须是自绘 listbox，不能再回退到原生 `<select>`。
  *
- * 闭合态靠 `color: transparent` 让原生 select 隐形（可见值由 .mk-pillselect__txt 承担），
- * 但 Chromium 用 option 的计算色画弹层 —— 不显式给 option 定色，用户点开后是一片
- * 没有文字的浮层（2026-10-26 用户走查「里面选项不可见，我无法截图到」）。
- * 同理不能用 `opacity: 0` 隐形：整层透明会把弹层一起带走。
+ * 2026-10-27 用户「这个下拉，完全没有设计」：原生弹层由浏览器进程绘制，option 只能改
+ * 文字色/底色，改不了弹层圆角、描边、行内边距与选中态——点开就是系统默认的蓝底菜单，
+ * 与页面其它浮层（列设置、行菜单）两套语言。现在触发器是 button[role=combobox]，
+ * 弹层是 ul[role=listbox]，参数与 MkCols 菜单同源（surface / line / shadow-pop / z-menu）。
  */
-describe('胶囊内嵌下拉的原生弹层', () => {
-  const css = readFileSync(
-    resolve(__dirname, '../../../../src/styles/mk-primitives.css'),
+describe('MkPillSelect：自绘 listbox 而非原生弹层', () => {
+  const src = readFileSync(
+    resolve(__dirname, '../../../components/mk/MkPillSelect.vue'),
     'utf8'
   )
 
-  it('透明 select 不得整层 opacity: 0', () => {
-    const block = css.match(/\.mk-pillselect__v \{[\s\S]*?\n\}/)?.[0] ?? ''
-    expect(block).not.toBe('')
-    expect(block).not.toMatch(/opacity:\s*0\s*;/)
+  it('不再渲染 <select>，触发器带 combobox 语义', () => {
+    // 只看模板且去掉模板内注释：注释里会引用「原生 <select>」，不能算实现
+    const template = src
+      .slice(0, src.indexOf('</template>'))
+      .replace(/<!--[\s\S]*?-->/g, '')
+    expect(template).not.toMatch(/<select\b/)
+    expect(src).toContain('role="combobox"')
+    expect(src).toContain('aria-haspopup="listbox"')
+    expect(src).toContain('aria-expanded')
   })
 
-  it('option 必须显式给文字色（否则继承 select 的 transparent）', () => {
-    const optionRule = css.match(/\.mk-pillselect__v > option \{[\s\S]*?\n\}/)?.[0] ?? ''
-    expect(optionRule).toContain('color:')
-    expect(optionRule).toContain('background:')
+  it('弹层是可键盘操作的 listbox / option', () => {
+    expect(src).toContain('role="listbox"')
+    expect(src).toContain('role="option"')
+    expect(src).toContain('aria-activedescendant')
+  })
+
+  it('弹层样式与 MkCols 菜单同参数；原生 option 补丁退役', () => {
+    const css = readFileSync(
+      resolve(__dirname, '../../../../src/styles/mk-primitives.css'),
+      'utf8'
+    )
+    const menu = css.match(/\.mk-pillselect__menu \{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(menu).toContain('var(--mk-surface)')
+    expect(menu).toContain('var(--mk-line)')
+    expect(menu).toContain('var(--mk-shadow-pop)')
+    expect(menu).toContain('var(--mk-z-menu)')
+    expect(css).not.toMatch(/\.mk-pillselect__v\b/)
   })
 })

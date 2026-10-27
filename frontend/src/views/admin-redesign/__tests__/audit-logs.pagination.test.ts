@@ -8,6 +8,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import AuditLogs from '../AuditLogs.vue';
+import { chooseFilter, filterOptions, filterValue } from './filter-controls';
 
 const h = vi.hoisted(() => ({
   getLogs: vi.fn(),
@@ -330,14 +331,13 @@ describe('AuditLogs 动作快筛 + 负载美化（2026-10-05 重设计）', () =
     mockMixedActions();
     const w = await mountAudit();
     await nextTick();
-    const sel = w.find('select[aria-label="按动作筛选"]');
-    expect(sel.exists()).toBe(true);
+    const trigger = w.find('.mk-pillselect[aria-label="按动作筛选"]');
+    expect(trigger.exists()).toBe(true);
     // 2026-10-27：动作维度从「筛选」弹层提到主栏（Carbon：类别不得藏进菜单/下拉），
     // 收起态直接显示当前值；卡头不再有 .mk-adv 弹层
-    expect(sel.element.closest('.mk-filter')).not.toBeNull();
-    expect(sel.element.closest('.mk-pillselect')).not.toBeNull();
+    expect(trigger.element.closest('.mk-filter')).not.toBeNull();
     expect(w.find('.mk-adv').exists()).toBe(false);
-    const options = sel.findAll('option').map((o) => o.text());
+    const options = filterOptions(w as never, '动作');
     expect(options).toHaveLength(4); // 全部动作 + 3 个聚合动作
     expect(options[1]).toContain('21'); // 按计数倒序：推进（21）第一
     expect(options[2]).toContain('3');
@@ -347,27 +347,27 @@ describe('AuditLogs 动作快筛 + 负载美化（2026-10-05 重设计）', () =
     // 切登录 tab：动作维度不存在
     await w.findAll('.tab').find((x) => x.text() === '登录审计')!.trigger('click');
     await flushPromises();
-    expect(w.find('select[aria-label="按动作筛选"]').exists()).toBe(false);
+    expect(w.find('.mk-pillselect[aria-label="按动作筛选"]').exists()).toBe(false);
   });
 
   it('选中动作 → keyword=路径稳定尾段（/teaching-step）回第 1 页重查；手动改搜索框后下拉回落「全部动作」', async () => {
     mockMixedActions();
     const w = await mountAudit();
     await nextTick();
-    const sel = w.find('select[aria-label="按动作筛选"]');
-    const restartValue = sel.findAll('option')[2].element.getAttribute('value')!;
-    await sel.setValue(restartValue);
+    const opts = w.findAll('ul.mk-pillselect__menu[aria-label="按动作筛选"] .mk-pillselect__option');
+    const restartValue = opts[2].attributes('data-value')!;
+    await chooseFilter(w as never, '动作', opts[2].text().replace(/（\d+）$/, ''));
     await flushPromises();
     const last = h.getLogs.mock.calls.at(-1)![0];
     expect(last).toMatchObject({ page: 1, keyword: '/restart-learning' });
     // keyword 单源推导：下拉保持选中态
-    expect((w.find('select[aria-label="按动作筛选"]').element as HTMLSelectElement).value).toBe(restartValue);
+    expect(filterValue(w as never, '动作')).toBe(restartValue);
     // 手动改搜索框（非任何动作的下钻词）→ 下拉回落「全部动作」
     const input = w.find<HTMLInputElement>('.mk-filter__input');
     await input.setValue('admin');
     await input.trigger('keydown.enter');
     await flushPromises();
-    expect((w.find('select[aria-label="按动作筛选"]').element as HTMLSelectElement).value).toBe('');
+    expect(filterValue(w as never, '动作')).toBe('');
   });
 
   it('展开行负载美化：紧凑 JSON 两格缩进（与执行日志同款 prettyPayload）', async () => {

@@ -1043,35 +1043,40 @@ html[data-theme='dark'] .mk-pill--active {
 }
 html[data-theme='dark'] .mk-pill__count { background: var(--mk-surface-3); }
 
-/* ----- 胶囊内嵌下拉（.mk-pillselect，2026-10-26 提升为共享原语）-----
-   卡头里的「维度下拉」统一形态：外壳是 .mk-pill（描边胶囊），内里是透明的原生 <select>，
-   前面一枚浅灰维度名（时间范围 / 节点 / 级别 / 状态），后面是深色粗体当前值 + ▾。
+/* ----- 胶囊内嵌下拉（.mk-pillselect，2026-10-27 改为自绘 listbox）-----
+   卡头里的「维度下拉」统一形态：外壳是 .mk-pill（描边胶囊），前面一枚浅灰维度名
+   （时间范围 / 节点 / 级别 / 状态），后面是深色粗体当前值 + ▾。
 
    为什么不用裸 .mk-filter__select：裸下拉看不出「这一维是否偏离默认」——时间范围被改成
    近 30 天，外观与「今天」一模一样，用户得点开才知道。胶囊内嵌下拉沿用 .mk-pill--active
    的激活态（浅蓝底 + 主色描边），一维筛过就一眼可见；且与 chips 同为胶囊语言，
    卡头里不再出现「胶囊 + 方框」两种控件形态。
 
-   提升前的三份私有实现（ExecLogs .logs-range / .logs-agent、AuditLogs .al-range）
-   逐字重复同一段 20 行 CSS，且字重 700/800 不一致——现在只剩这一处。 */
+   为什么不再用透明原生 <select>：原生弹层由浏览器进程绘制，option 只能改文字色/底色，
+   改不了弹层的圆角、描边、行内边距、选中态——点开就是系统默认的蓝底白字菜单，
+   与页面其它浮层（列设置、行菜单）是两套语言（2026-10-27 用户「这个下拉，完全没有设计」）。
+   现在触发器是 button[role=combobox]，弹层是与 MkCols 同参数的自绘 listbox：
+   surface + 1px 发丝线 + shadow-pop + radius-xl，行内 hover、选中行勾选、键盘可操作。 */
+.mk-pillselect-wrap { position: relative; display: inline-flex; }
 .mk-pillselect {
-  /* 内衬比普通 pill 小：值由 select 自己撑，左侧维度名只需 2px 让位。
+  /* 内衬比普通 pill 小：左侧维度名只需 2px 让位，右侧值自带 ▾ 的 16px 内衬。
      高度/行盒继承 .mk-pill（32px），只覆盖左右内衬 */
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 0 8px 0 11px;
-  /* 整枚上限：长节点名/长动作名不许把胶囊撑成一条长条（值层另有 200px 截断，
+  /* 整枚上限：长节点名/长动作名不许把胶囊撑成一条长条（值层另有 180px 截断，
      但 flex 容器会按内容 max-content 撑开，上限必须落在胶囊本身上） */
   max-width: 260px;
 }
+/* button 复位：.mk-pill 已给 border/background/font，这里只清掉 UA 的居中与最小宽 */
+.mk-pillselect { text-align: left; }
 /* 维度名：浅灰、常规字重——它是标签不是值，不能与右侧当前值抢层级 */
 .mk-pillselect__k { color: var(--mk-faint); flex: none; }
 /* 值盒：定位锚点，箭头绝对定位到右缘 */
 .mk-pillselect__pick { position: relative; display: inline-flex; align-items: center; min-width: 0; flex: 0 1 auto; }
-/* 可见文本层：宽度只由当前值决定（原生 select 的固有宽度会取最长 option，
-   节点名一长整枚胶囊就被撑到 200px，而当前值是「全部」时右侧全是空白）。
-   右内衬 16px 给 ▾ 让位，超长值 ellipsis + title 全值。 */
+/* 可见文本层：宽度只由当前值决定，超长值 ellipsis + title 全值。
+   右内衬 16px 给 ▾ 让位。 */
 .mk-pillselect__txt {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -1084,40 +1089,64 @@ html[data-theme='dark'] .mk-pill__count { background: var(--mk-surface-3); }
   white-space: nowrap;
   pointer-events: none;
 }
-/* 透明覆盖层：铺满值盒，原生下拉行为（点击/键盘/AT）不变，视觉交给 .mk-pillselect__txt */
-.mk-pillselect__v {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  color: transparent;
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  padding: 0;
-  cursor: pointer;
-  /* 不再用 opacity: 0 隐藏：Chromium 的原生下拉弹层由 select 自身样式驱动，
-     整层透明会把展开后的选项一起带走。闭合态靠 color: transparent 隐形即可。 */
-}
-/* 展开的原生弹层不继承 .mk-pillselect__v 的透明外观（Chromium 用 option 的计算色画弹层），
-   而刚才那层「不可见」正是靠 color: transparent 实现的——不显式给 option 定色，
-   用户点开后看到的就是一片没有文字的浮层（2026-10-26 用户走查「选项不可见」）。 */
-.mk-pillselect__v > option {
-  color: var(--mk-ink);
-  background: var(--mk-surface);
-}
-/* 焦点环由整枚胶囊的 :focus-within 描边承担，透明 select 自己不再画一圈 */
-.mk-pillselect__v:focus-visible { outline: none; }
 /* 激活态（= 该维偏离默认值）：整枚胶囊走 .mk-pill--active 的浅蓝底；
    值本身也跟随主色，避免「底变了字没变」的半个激活态 */
 .mk-pill--active > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
 .mk-pillselect:hover .mk-pillselect__txt { color: var(--mk-blue); }
 .mk-pill--active:hover > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
-.mk-pillselect:focus-within { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
-.mk-pillselect__pick > svg { position: absolute; right: 0; color: var(--mk-muted); pointer-events: none; }
+.mk-pillselect:focus-visible { outline: none; border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+.mk-pillselect__pick > svg {
+  position: absolute;
+  right: 0;
+  color: var(--mk-muted);
+  pointer-events: none;
+  transition: transform 0.15s ease;
+}
+/* 展开时箭头翻转：闭合 ▾ / 展开 ▴，状态不必靠弹层本身提示 */
+.mk-pillselect--open .mk-pillselect__pick > svg { transform: rotate(180deg); }
+
+/* 弹层：与 MkCols 同参数（surface / line / shadow-pop / radius-xl / --mk-z-menu），
+   两处浮层在页面上才像同一套组件；宽度随触发器（min-width: 100%）但给上限，
+   长动作名折在 320px 内靠 label 的 ellipsis。 */
+.mk-pillselect__menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: var(--mk-z-menu);
+  min-width: 100%;
+  max-width: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  box-shadow: var(--mk-shadow-pop);
+}
+.mk-pillselect__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--mk-radius-sm);
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+/* hover 与实际键盘焦点行（activeIndex）同一视觉：鼠标进哪行、↑↓ 停哪行，都是这块浅底 */
+.mk-pillselect__option.is-active {
+  background: var(--mk-graph-flow-bg);
+  color: var(--mk-ink);
+}
+/* 选中行：主色粗体 + 右侧勾。不靠底色区分——hover 也会给底色，两个通道会打架 */
+.mk-pillselect__option.is-selected { color: var(--mk-blue); font-weight: 700; }
+.mk-pillselect__option.is-selected > svg { flex: none; color: var(--mk-blue); }
+.mk-pillselect__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* 紧凑密度档：与 .mk-pill 同档收窄（内衬与字号一起收，不单独缩值） */
 html[data-density='compact'] .mk-pillselect { padding: 2px 7px 2px 10px; }
 html[data-density='compact'] .mk-pillselect__txt { font-size: 12px; }

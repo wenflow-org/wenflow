@@ -9,7 +9,7 @@ import { nextTick } from 'vue';
 import Users from '../Users.vue';
 import { liveUsers } from '../live';
 import { getDeletedUsers } from '@/api/adminApi';
-import { chooseFilter, filterOption, filterSelect } from './filter-controls';
+import { chooseFilter, filterOption, filterOptions } from './filter-controls';
 
 const { apiObject } = vi.hoisted(() => ({
   apiObject: (): Record<string, unknown> =>
@@ -207,10 +207,10 @@ describe('Users 客户端分页（mk-pagination）', () => {
     // 「30 分钟在线」已随宿主 KPI 换窗为「近 7 天活跃」
     /* 2026-10-27 表头统一：单选维度改为带标签的胶囊下拉，计数进入 option 文案；
        「全部」仍不显计数（总数单源=分页器）。 */
-    const opts = filterSelect(w as never, '视图').findAll('option');
-    expect(opts.find((o) => o.text().startsWith('全部'))?.text()).toBe('全部用户');
-    expect(opts.find((o) => o.text().startsWith('管理员'))?.text()).toMatch(/^管理员（\d+）$/);
-    expect(opts.find((o) => o.text().startsWith('近 7 天活跃'))?.text()).toMatch(/^近 7 天活跃（\d+）$/);
+    const opts = filterOptions(w as never, '视图');
+    expect(opts.find((t) => t.startsWith('全部'))).toBe('全部用户');
+    expect(opts.find((t) => t.startsWith('管理员'))).toMatch(/^管理员（\d+）$/);
+    expect(opts.find((t) => t.startsWith('近 7 天活跃'))).toMatch(/^近 7 天活跃（\d+）$/);
     // 计数在用户数据到达后才进入 option（CI 时序下先渲染下拉、count 后至 → 竞态）——waitFor 轮询
     await vi.waitFor(() => expect(filterOption(w as never, '视图', '普通用户').text()).toBe('普通用户（36）'));
     // 2026-10-17 用户拍板：本页只有 pill（单选）与搜索，二者各自有「全部」与搜索框 ✕，
@@ -299,7 +299,7 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
   it('角色/活跃 pill 计数与筛选同谓词（不再叠加身份域）', async () => {
     const w = await mountUsers();
     await nextTick();
-    const labels = filterSelect(w as never, '视图').findAll('option').map((o) => o.text());
+    const labels = filterOptions(w as never, '视图');
     expect(labels.some((t) => t.includes('全部'))).toBe(true);
     expect(labels.some((t) => t.includes('管理员'))).toBe(true);
     expect(labels.some((t) => t.includes('普通用户'))).toBe(true);

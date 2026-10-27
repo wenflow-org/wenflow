@@ -17,7 +17,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory, type Router } from 'vue-router';
 import Skills from '../Skills.vue';
-import { chooseFilter, filterSelect } from './filter-controls';
+import { chooseFilter, filterValue } from './filter-controls';
 import { dataSource, liveSkillStatsMap } from '../store';
 import { liveSkillProfiles } from '../live';
 
@@ -134,8 +134,7 @@ async function mountAt(url: string): Promise<{ w: ReturnType<typeof mount>; rout
   return { w, router };
 }
 
-const pillValue = (w: ReturnType<typeof mount>) =>
-  (filterSelect(w as never, '关注').element as HTMLSelectElement).value;
+const pillValue = (w: ReturnType<typeof mount>) => filterValue(w as never, '关注');
 
 describe('Skills 列表筛选 ↔ URL', () => {
   it('改筛选写 URL：只写非缺省值，且不动别人的键（?view=&id= 保留）', async () => {
@@ -174,9 +173,9 @@ describe('Skills 列表筛选 ↔ URL', () => {
     expect((w.find('input.mk-filter__input').element as HTMLInputElement).value).toBe('教学');
     expect(pillValue(w)).toBe('attention');
     // 归属 Agent 下拉已从「筛选」弹层移回卡头一行（2026-10-26），控件直取
-    expect((w.find('select[aria-label="按归属 Agent 筛选"]').element as HTMLSelectElement).value).toBe('path-agent');
+    expect(filterValue(w as never, '归属')).toBe('path-agent');
     // 类别筛选已撤（2026-10-24）：弹层里没有该下拉，URL 上的 cat 也不再被写回
-    expect(w.find('select[aria-label="按类别筛选"]').exists()).toBe(false);
+    expect(w.find('.mk-pillselect[aria-label="按类别筛选"]').exists()).toBe(false);
     expect(router.currentRoute.value.query.cat).toBeUndefined();
     w.unmount();
   });

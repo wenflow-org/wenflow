@@ -8,7 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import Skills from '../Skills.vue';
-import { chooseFilter, filterOption, filterSelect } from './filter-controls';
+import { chooseFilter, filterOption, filterValue } from './filter-controls';
 import { dataSource, liveSkillStatsMap, intent } from '../store';
 import { liveSkillProfiles } from '../live';
 
@@ -155,7 +155,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     expect(kpi.find('.mk-kpi__num').text()).toBe('1')
     await kpi.trigger('click')
     expect((w.vm as any).onlyAttention).toBe(true)
-    expect((filterSelect(w as never, '关注').element as HTMLSelectElement).value).toBe('attention')
+    expect(filterValue(w as never, '关注')).toBe('attention')
     expect(filterOption(w as never, '关注', '仅看需关注').text()).toBe('仅看需关注')
     w.unmount()
   })
@@ -174,7 +174,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     const w = await mountSkills()
     await chooseFilter(w as never, '关注', '仅看需关注')
     expect((w.vm as any).onlyAttention).toBe(true)
-    expect((filterSelect(w as never, '关注').element as HTMLSelectElement).value).toBe('attention')
+    expect(filterValue(w as never, '关注')).toBe('attention')
   })
 
   it('成功率 tone 着色：77% < 90 归红档（全站阈值收敛 <90 红 / <97 琥珀，旧 <70/<90 私有口径退役）', async () => {

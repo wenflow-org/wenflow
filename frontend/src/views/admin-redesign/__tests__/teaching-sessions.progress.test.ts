@@ -11,6 +11,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import TeachingSessions from '../TeachingSessions.vue';
 import { dataSource, subPage, closeSubPage } from '../store';
 import { clearPageCache } from '../live';
+import { chooseFilter, filterOptions, filterTrigger, filterValue } from './filter-controls';
 
 const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 
@@ -338,14 +339,13 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     // 卡头不再有「全部 / 进行中 / 需关注 / 缺总结」这组单选胶囊
     expect(wrapper.find('.mk-card__head .mk-pills[aria-label="焦点筛选"]').exists()).toBe(false);
     // 「进行中」归状态下拉
-    const statusSel = wrapper.find('.mk-filter select[aria-label="按状态筛选"]');
-    expect(statusSel.findAll('option').map((o) => o.text())).toContain('进行中');
+    expect(filterOptions(wrapper as never, '状态')).toContain('进行中');
     // 「缺总结」归总结下拉：点 KPI 卡 → 下拉落到 missing，整枚胶囊激活，列表只剩缺总结行
     const missingTile = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '缺总结')!;
     await missingTile.trigger('click');
     await nextTick();
-    expect((wrapper.find('.mk-filter select[aria-label="按总结筛选"]').element as HTMLSelectElement).value).toBe('missing');
-    expect(wrapper.find('.mk-filter label.mk-pill--active').text()).toContain('缺总结');
+    expect(filterValue(wrapper as never, '总结')).toBe('missing');
+    expect(wrapper.find('.mk-filter button.mk-pill--active').text()).toContain('缺总结');
     expect(wrapper.findAll('tbody tr')).toHaveLength(1);
     wrapper.unmount();
   });
@@ -525,45 +525,38 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const wrapper = await mountLive();
     // 表前只有一行：快筛条 .ts-toolbar 退役（chips 并回卡头，2026-10-04）
     expect(wrapper.find('.ts-toolbar').exists(), '快筛条已并回卡头一行').toBe(false);
-    // 2026-10-26：10 档状态是逐条排查主路径，从弹层提到卡头主栏（枚举 = 全部状态 + statusOptions 10 档）
-    // 同日卡头统一：下拉外壳收进共享 MkPillSelect（.mk-pill + 透明 select）——仍是真 select，
-    // 原生下拉语义与 setValue 不变，只是从裸描边方框换成胶囊
-    const sel = wrapper.find('.mk-filter select[aria-label="按状态筛选"]');
-    expect(sel.exists()).toBe(true);
-    expect(sel.findAll('option').map((o) => o.text())).toEqual([
+    // 2026-10-27：卡头维度下拉统一为 MkPillSelect（描边胶囊触发器 + 自绘 listbox），
+    // 原生 select 已退役——option 文案与选择结果不变，查询走 filter-controls。
+    expect(filterTrigger(wrapper as never, '状态').exists()).toBe(true);
+    expect(filterOptions(wrapper as never, '状态')).toEqual([
       '全部状态', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
     ]);
     // 总结三档筛选（总览「评估失败 / 降级总结」的落地入口）也在主栏
-    const wrapSel = wrapper.find('.mk-filter select[aria-label="按总结筛选"]');
-    expect(wrapSel.findAll('option').map((o) => o.text())).toEqual(['全部总结', '降级总结', '评估失败', '缺总结']);
+    expect(filterOptions(wrapper as never, '总结')).toEqual(['全部总结', '降级总结', '评估失败', '缺总结']);
     /* 2026-10-27：课型 / 开始时间从「筛选」弹层提到主栏——Carbon 的筛选模式明确
        「多个类别不得收进菜单/下拉」；卡头不再有弹层触发器，维度一维一枚胶囊下拉。 */
     expect(wrapper.find('.mk-adv').exists()).toBe(false);
-    const modeSel = wrapper.find('.mk-filter select[aria-label="按课型筛选"]');
-    expect(modeSel.findAll('option').map((o) => o.text())).toEqual(['全部课型', '正课', '复习课', '延伸课']);
-    const dateSel = wrapper.find('.mk-filter select[aria-label="按开始时间筛选"]');
-    expect(dateSel.findAll('option').map((o) => o.text())).toEqual(['全部时间', '近 7 天', '近 30 天']);
+    expect(filterOptions(wrapper as never, '课型')).toEqual(['全部课型', '正课', '复习课', '延伸课']);
+    expect(filterOptions(wrapper as never, '开始时间')).toEqual(['全部时间', '近 7 天', '近 30 天']);
     // 卡头只有一组 chips（标志开关）：单选/多选不再并排同形（M3「同一页别混 chip 行为」）
     const groups = wrapper.findAll('.mk-card__head .mk-pills');
     expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['标志筛选']);
     expect(wrapper.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
       '有建议', '异常'
     ]);
-    await sel.setValue('failed');
+    await chooseFilter(wrapper as never, '状态', '失败');
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
     /* 2026-10-27 用户「清除筛选也不想要」：工具条不再挂文字链，每个维度自己复位
        （下拉选回「全部…」），不再有第三个重复入口 */
     expect(wrapper.findAll('.mk-filter .mk-link').some((b) => b.text() === '清除筛选')).toBe(false);
-    await dateSel.setValue('7d');
-    const selValue = (label: string) =>
-      (wrapper.find(`.mk-filter select[aria-label="${label}"]`).element as HTMLSelectElement).value;
-    expect(selValue('按开始时间筛选')).toBe('7d');
-    await sel.setValue('');
-    await dateSel.setValue('');
-    expect(selValue('按状态筛选')).toBe('');
-    expect(selValue('按开始时间筛选')).toBe('');
+    await chooseFilter(wrapper as never, '开始时间', '近 7 天');
+    expect(filterValue(wrapper as never, '开始时间')).toBe('7d');
+    await chooseFilter(wrapper as never, '状态', '全部状态');
+    await chooseFilter(wrapper as never, '开始时间', '全部时间');
+    expect(filterValue(wrapper as never, '状态')).toBe('');
+    expect(filterValue(wrapper as never, '开始时间')).toBe('');
     expect(wrapper.findAll('tbody tr')).toHaveLength(2);
     wrapper.unmount();
   });

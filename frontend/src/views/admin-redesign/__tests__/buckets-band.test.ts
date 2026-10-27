@@ -15,7 +15,7 @@ import TeachingSessions from '../TeachingSessions.vue';
 import OpsContent from '../OpsContent.vue';
 import People from '../People.vue';
 import { liveUsers, liveUsersTotal } from '../live';
-import { filterSelect } from './filter-controls';
+import { filterOptions } from './filter-controls';
 
 const { tsList, pathStats, lcApi, tsApi, apiObject } = vi.hoisted(() => {
   const apiObject = (): Record<string, unknown> =>
@@ -136,7 +136,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(w.find('.buckets').exists()).toBe(false);
     expect(w.find('.mk-distband').exists()).toBe(false);
     // pills 恒显全部档位（含零值「已下线 0」），枚举外 custom_state 归「其它」；「全部」不显数
-    const opts = filterSelect(w as never, '状态').findAll('option').map((o) => o.text());
+    const opts = filterOptions(w as never, '状态');
     expect(opts).toEqual(['全部状态', '学习中（4）', '已完成（3）', '生成失败（2）', '已下线（0）', '其它（1）']);
     w.unmount();
   });
@@ -159,7 +159,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     await nextTick();
     // KPI 带已退役：计数住在筛选 pill 上（除「全部」外一律显命中数）
     expect(w.find('.mk-kpi-grid').exists()).toBe(false);
-    const opts = filterSelect(w as never, '视图').findAll('option').map((o) => o.text());
+    const opts = filterOptions(w as never, '视图');
     expect(opts).toEqual([
       '全部用户', '管理员（1）', '普通用户（2）', '近 7 天活跃（1）', '近 7 日新增（0）', '从未登录（2）', '已删除'
     ]);

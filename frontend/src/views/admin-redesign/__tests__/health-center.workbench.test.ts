@@ -11,7 +11,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import HealthCenter from '../HealthCenter.vue';
-import { filterSelect } from './filter-controls';
+import { filterValue } from './filter-controls';
 import { dataSource } from '../store';
 import type {
   HealthCenterItem,
@@ -333,14 +333,14 @@ describe('健康中心（G1）', () => {
     await nextTick();
     expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('技能核查');
     expect(router.currentRoute.value.query.diff).toBe('abnormal');
-    expect((filterSelect(wrapper as never, '范围').element as HTMLSelectElement).value).toBe('abnormal');
+    expect(filterValue(wrapper as never, '范围')).toBe('abnormal');
 
     // 「完成度未达标」→ 技能核查页 + 仅看未达标
     await cards[3].trigger('click');
     await flushPromises();
     await nextTick();
     expect(router.currentRoute.value.query.diff).toBe('unmet');
-    expect((filterSelect(wrapper as never, '范围').element as HTMLSelectElement).value).toBe('unmet');
+    expect(filterValue(wrapper as never, '范围')).toBe('unmet');
     // 未达标档排除已上线行
     const rows = wrapper.findAll('.sk-rec-table tbody tr.sk-row').map((r) => r.text());
     expect(rows.some((t) => t.includes('live-a'))).toBe(false);

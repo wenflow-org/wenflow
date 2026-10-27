@@ -12,7 +12,7 @@ import OpsContent from '../OpsContent.vue';
 import Confirm from '../Confirm.vue';
 import { intent, subPage, closeSubPage } from '../store';
 import { toast } from '@/utils/toast';
-import { chooseFilter, filterOption } from './filter-controls';
+import { chooseFilter, filterOption, filterOptions } from './filter-controls';
 
 const mkPath = (id: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -116,12 +116,13 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 独立页同样无 KPI 卡（2026-10-02 用户拍板：状态条已单源承载 总数/里程碑/任务/已下线）
     expect(w.find('.mk-kpi').exists()).toBe(false);
 
-    // 状态筛选 = 卡头 pills（2026-10-17 分布带退役后迁回）；
+    // 状态筛选 = 卡头胶囊下拉（2026-10-17 分布带退役后迁回；2026-10-27 单选维度
+    // 统一为 MkPillSelect，档位在 listbox 里而不是一排 pill）；
     // 「停滞」快筛 2026-10-22 退役（判据是活跃时钟不是生成状态，真实路径的救援动作无效）
-    const headPills = w.findAll('.mk-card__head .mk-filter .mk-pill').map((p) => p.text());
-    expect(headPills.some((t) => t.includes('停滞'))).toBe(false);
+    const statusOptions = filterOptions(w as never, '状态');
+    expect(statusOptions.some((t) => t.includes('停滞'))).toBe(false);
     for (const statusWord of ['全部', '学习中', '已完成', '生成失败', '已下线']) {
-      expect(headPills.some((t) => t.includes(statusWord))).toBe(true);
+      expect(statusOptions.some((t) => t.includes(statusWord))).toBe(true);
     }
     expect(w.find('.mk-distband').exists()).toBe(false);
 
