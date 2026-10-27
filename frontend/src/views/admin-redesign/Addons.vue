@@ -37,7 +37,9 @@
           :class="{ 'is-off': !pluginEnabled(p.id), 'ac-cap--wide': p.id === 'mcp' }"
         >
           <header class="ac-cap__head">
-            <span class="ac-cap__glyph" aria-hidden="true">{{ p.glyph }}</span>
+            <span class="ac-cap__glyph" aria-hidden="true">
+              <component :is="p.icon" :size="18" :stroke-width="1.8" />
+            </span>
             <div class="ac-cap__id">
               <strong>{{ p.name }}</strong>
               <span class="ac-cap__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
@@ -282,11 +284,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type Component } from 'vue'
+import { Globe, Image as ImageIcon, Scale, Wrench } from 'lucide-vue-next'
 import { dataSource, investigateAgent, liveSkillStatsMap } from './store'
 import { errMsg, liveRefreshSeq } from './live'
 import { adminMcpApi, adminPluginsApi } from '@/api/adminApi'
-import { PLUGIN_GROUPS, type PluginGroup } from './capabilityCatalog'
+import { PLUGIN_GROUPS, type PluginGroup, type PluginId } from './capabilityCatalog'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
@@ -313,7 +316,8 @@ interface PluginMemberRow {
 interface PluginRow {
   id: string
   name: string
-  glyph: string
+  /** 能力图标（2026-10-27 用户「能换个图标吗」：中文单字 glyph → lucide 线性图标） */
+  icon: Component
   primary: string
   members: PluginMemberRow[]
   /** 窗口内有失败调用的成员数 > 0：决定「查失败」入口出不出现（零失败的插件不该给这颗钮） */
@@ -410,6 +414,14 @@ async function loadPluginConfigs() {
   }
 }
 
+/** 能力图标：中文单字 glyph 换成可扫读的线性图标 */
+const PLUGIN_ICONS: Record<PluginId, Component> = {
+  web: Globe,
+  decision: Scale,
+  image: ImageIcon,
+  mcp: Wrench,
+}
+
 function buildPluginRows(
   groups: readonly PluginGroup[],
   mcpAvailability: { text: string; stateClass: string },
@@ -425,7 +437,7 @@ function buildPluginRows(
     return {
       id: group.id,
       name: group.name,
-      glyph: group.glyph,
+      icon: PLUGIN_ICONS[group.id],
       primary: group.primary,
       members,
       errorCount: members.reduce((n, member) => n + (liveSkillStatsMap.value?.[member.id]?.errors ?? 0), 0),
