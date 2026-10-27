@@ -2394,10 +2394,16 @@ function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | n
   const W = 620;
   const padX = 20;
   const titleH = title ? T.fontTitle + 20 : 6;
-  const headH = 30;
   const gap = 30;
   const n = frames.length;
   const fw = Math.round((W - padX * 2 - (n - 1) * gap) / n);
+  // 帧名可能比帧宽长（4 帧 × 年号/长地名时必超）：按帧宽折行，帧头高度随行数长高。
+  // 不折行时标签会横穿相邻帧，并在右边缘被裁掉（2026-10-27 盲评实拍）。
+  const labelLines: string[][] = frames.map((f: any) =>
+    balancedWrap(String(f.label ?? ''), fw - 18, T.fontKey).slice(0, 2),
+  );
+  const maxLabelLines = Math.max(1, ...labelLines.map((ls) => ls.length));
+  const headH = 10 + maxLabelLines * (T.fontKey + 3);
   const TONE: Record<string, { color: string; soft: string; ink: string }> = {
     ok: { color: T.ok, soft: T.okSoft, ink: T.ok },
     warn: { color: T.warn, soft: T.warnSoft, ink: T.warn },
@@ -2442,9 +2448,13 @@ function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | n
     parts.push(rect(x, top, fw, frameH, { r: T.radius, fill: T.surface, stroke: i === n - 1 ? T.lineStrong : T.line }));
     parts.push(rect(x, top, fw, headH, { r: T.radius, fill: tone.soft, stroke: 'none', sw: 0 }));
     parts.push('<rect x="' + x + '" y="' + (top + headH - 8) + '" width="' + fw + '" height="8" fill="' + tone.soft + '"/>');
-    // 帧序号 + 帧名
-    parts.push(text(x + 10, top + headH / 2 + 5, String(i + 1), 't-tiny', 'start', 'fill="' + tone.ink + '" font-weight="700"'));
-    parts.push(text(x + fw / 2 + 5, top + headH / 2 + 5, String(f.label ?? ''), 't-key', 'middle', 'fill="' + tone.ink + '"'));
+    // 帧序号 + 帧名（帧名按帧宽折行，避免横穿相邻帧）
+    parts.push(text(x + 10, top + 16, String(i + 1), 't-tiny', 'start', 'fill="' + tone.ink + '" font-weight="700"'));
+    labelLines[i].forEach((line, li) => {
+      parts.push(
+        text(x + fw / 2 + 5, top + 16 + li * (T.fontKey + 3), line, 't-key', 'middle', 'fill="' + tone.ink + '"'),
+      );
+    });
     const ls = frameLines[i];
     ls.forEach((line, li) => parts.push(text(x + 10, top + headH + 20 + li * 17, line, 't-small', 'start', 'fill="' + T.ink + '"')));
     if (!ls.length) parts.push(text(x + fw / 2, top + headH + bodyH / 2, '—', 't-small', 'middle', 'fill="' + T.faint + '"'));

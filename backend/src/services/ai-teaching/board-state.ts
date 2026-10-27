@@ -19,6 +19,7 @@
  */
 
 import { maskFigureAnswers, stripInLessonAnnotations } from './teaching-visual.service';
+import { applyBoardIntent, describeIntentForTeacher, type BoardIntent } from './board-intent';
 
 /** 白板阶段：搭骨架（提问态）→ 等待学生（仍提问态）→ 揭晓（完整态） */
 export type BoardStage = 'setup' | 'awaiting' | 'revealed';
@@ -50,6 +51,8 @@ export interface BoardFigureState {
   slots: number;
   /** 这张板用的是哪种藏法 */
   conceal: BoardConcealMode;
+  /** 本轮板书意图（先定问什么，再决定结论上不上板）；null 表示未裁决 */
+  intent?: BoardIntent | null;
   stage: BoardStage;
   /** 老师本轮指向的锚点（行/帧/节点），前端据此高亮；null 表示不指 */
   focusId?: string | null;
@@ -170,12 +173,14 @@ function prunePlaceholderRows<T>(value: T): T {
  * 由一份**已归一化**的 figure 构造板书。
  * @param figure 归一化后的 figure（engine 已做过 stripInLessonAnnotations 也可以重复调用，幂等）
  * @param options.conceal 藏到什么程度，默认 'full'（与既有行为一致）；新默认建议 'takeaway'
+ * @param options.intent 本轮板书意图：非 mapping/none 时把「本轮要学生说的那句结论」从板上撤掉
  */
 export function deriveBoardFigure(
   figure: { kind?: string; spec?: unknown },
-  options: { conceal?: BoardConcealMode } = {},
+  options: { conceal?: BoardConcealMode; intent?: BoardIntent | null } = {},
 ): BoardFigureState {
   const conceal = options.conceal ?? 'full';
+  const intent = options.intent ?? null;
   const deReviewed = stripInLessonAnnotations(figure as Record<string, unknown>) as {
     kind?: string;
     spec?: unknown;
@@ -197,9 +202,17 @@ export function deriveBoardFigure(
     );
   }
 
-  // 结论句是唯一在 takeaway 模式里也要留在对话里的东西：
-  // 板面负责「材料与结构」，结论由老师问、学生说——这是本模式对「泄题」的唯一约束
-  const hideConclusion = conceal !== 'none';
+  // 结论句是唯一在减负口径里也要留在对话里的东西：
+  // 板面负责「材料与结构」，结论由老师问、学生说。
+  // 两档都要藏：takeaway 一律藏；none（全展示）在「本轮要学生说结论」时由意图收口再藏一次。
+  let hideConclusion = conceal !== 'none';
+  if (intent) {
+    const beforeKeys = ['takeaway', 'delta', 'note'].filter((k) => k in maskedSpec).length;
+    maskedSpec = applyBoardIntent(maskedSpec, intent) as Record<string, unknown>;
+    const afterKeys = ['takeaway', 'delta', 'note'].filter((k) => k in maskedSpec).length;
+    // 意图撤掉了结论句（且不是 mapping/none 档）→ describe 时按「未上板」说
+    if (afterKeys < beforeKeys) hideConclusion = true;
+  }
   if (hideConclusion && hiddenTakeaway) {
     delete maskedSpec.takeaway;
     delete maskedSpec.delta;
@@ -213,6 +226,7 @@ export function deriveBoardFigure(
     hiddenTakeaway: hideConclusion ? hiddenTakeaway : null,
     slots,
     conceal,
+    intent,
     stage: slots > 0 ? 'setup' : 'revealed',
     focusId: null,
   };
@@ -222,7 +236,7 @@ export function deriveBoardFigure(
 export function openBoard(
   taskId: string,
   figure: { kind?: string; spec?: unknown },
-  options: { conceal?: BoardConcealMode } = {},
+  options: { conceal?: BoardConcealMode; intent?: BoardIntent | null } = {},
 ): BoardState {
   const derived = deriveBoardFigure(figure, options);
   return {
@@ -264,9 +278,10 @@ export function updateBoard(
   board: BoardState,
   figure: { kind?: string; spec?: unknown },
   summary?: string,
+  intent?: BoardIntent | null,
 ): BoardState {
   const conceal = board.figure?.conceal ?? 'takeaway';
-  const derived = deriveBoardFigure(figure, { conceal });
+  const derived = deriveBoardFigure(figure, { conceal, intent: intent ?? board.figure?.intent ?? null });
   return {
     ...board,
     figure: { ...derived, stage: 'revealed', focusId: board.figure?.focusId ?? null },
@@ -275,14 +290,11 @@ export function updateBoard(
   };
 }
 
-/** 当前应该下发给前端的 spec：随 conceal 模式与阶段而定 */
+/** 当前应该下发给前端的 spec：随 conceal 模式与阶段而定（老师可见的同一份） */
 export function boardSpecForRender(board: BoardState): Record<string, unknown> | null {
   const f = board.figure;
   if (!f) return null;
-  if (f.conceal === 'none') return f.fullSpec;
-  // takeaway 模式：完整材料（含副标注），但没有结论句——所以发 maskedSpec 而不是 fullSpec
-  if (f.conceal === 'takeaway') return f.maskedSpec;
-  return f.stage === 'revealed' ? f.fullSpec : f.maskedSpec;
+  return visibleSpec(f);
 }
 
 /** 白板可下发的最小 figure 形态（前端 TeachingFigure 直接用） */
@@ -299,11 +311,17 @@ export function boardFigureForRender(board: BoardState): { kind: string; spec: R
  * 并且明确标出空槽与未揭晓的结论。老师在提示词里看到的就是学生在白板上看到的东西，
  * 因此不可能再指着不存在的东西说话（V8 的 #15/#16/#27 病灶）。
  */
+/** 老师此刻看到的那份 spec：与下发给学生的完全一致 */
+function visibleSpec(f: BoardFigureState): Record<string, unknown> {
+  if (f.conceal === 'full') return f.stage === 'revealed' ? f.fullSpec : f.maskedSpec;
+  return f.maskedSpec;
+}
+
 export function describeBoardForTeacher(board: BoardState): string {
   const f = board.figure;
   if (!f) return '【白板】本任务暂无板书。请纯用语言推进，不要提及或假设任何图。';
 
-  const spec = f.conceal === 'none' ? f.fullSpec : f.conceal === 'takeaway' ? f.maskedSpec : f.stage === 'revealed' ? f.fullSpec : f.maskedSpec;
+  const spec = visibleSpec(f);
   const title = typeof spec.title === 'string' && spec.title.trim() ? spec.title.trim() : '';
   const stageCN =
     f.conceal !== 'full'
@@ -326,10 +344,11 @@ export function describeBoardForTeacher(board: BoardState): string {
     if (texts.length) lines.push(`板上文字（按顺序）：${texts.join(' / ')}`);
   }
 
-  if (f.conceal === 'takeaway' && f.hiddenTakeaway) {
-    lines.push('底部结论：**未上板**（这条要留给学生说，不要替他说出来）');
-  } else if (f.conceal === 'full' && f.stage !== 'revealed' && f.hiddenTakeaway) {
-    lines.push('底部结论：未揭晓（学生答对后再补上）');
+  // 结论到底在不在板上，以「实际下发的那份 spec」为准——意图收口后可能被撤掉
+  const conclusionOnBoard = 'takeaway' in spec || 'delta' in spec || 'note' in spec;
+  if (f.hiddenTakeaway && !conclusionOnBoard) {
+    const why = f.conceal === 'full' && f.stage !== 'revealed' ? '未揭晓（学生答对后再补上）' : '**未上板**（这条要留给学生说，不要替他说出来）';
+    lines.push(`底部结论：${why}`);
   } else if (f.hiddenTakeaway) {
     lines.push(`底部结论（已上板）：${f.hiddenTakeaway}`);
   }
@@ -348,6 +367,7 @@ export function describeBoardForTeacher(board: BoardState): string {
         '直接引用板上的标签/行号/帧号，一次只说 2~3 句，把「为什么」「下一步」留给学生。',
     );
   }
+  if (f.intent) lines.push(describeIntentForTeacher(f.intent));
   return lines.join('\n');
 }
 

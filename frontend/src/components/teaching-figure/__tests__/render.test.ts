@@ -692,4 +692,27 @@ describe('state-strip（2026-10-26：不回头的进程分帧）', () => {
   it('少于 2 帧 → null', () => {
     expect(renderSpecFigure('state-strip', { frames: [{ label: '单帧', items: ['x'] }] })).toBeNull();
   });
+
+  it('4 帧 + 长帧名按帧宽折行，不横穿相邻帧（2026-10-27 盲评实拍）', () => {
+    const labels = [
+      '公元前361年·孝公求贤',
+      '公元前356年·南门立木',
+      '公元前356年·第一次变法',
+      '公元前350年·第二次变法',
+    ];
+    const out = renderSpecFigure('state-strip', {
+      title: '变法怎么落地',
+      frames: labels.map((label) => ({ label, items: ['一帧一个动作'] })),
+    });
+    expect(out).not.toBeNull();
+    const keyTexts = [...out!.svg.matchAll(/<text[^>]*class="t-key"[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]);
+    // 至少有一帧被拆成两行（4 个标签 → 5 个以上文本节点）
+    expect(keyTexts.length).toBeGreaterThan(labels.length);
+    // 每个文本节点都在帧宽能容纳的字数内（按 14.5px 字号折算约 7 个汉字）
+    for (const t of keyTexts) {
+      expect(Array.from(t).length).toBeLessThanOrEqual(8);
+    }
+    // 标签内容没有丢
+    expect(keyTexts.join('')).toBe(labels.join(''));
+  });
 });

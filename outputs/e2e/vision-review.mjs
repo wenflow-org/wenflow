@@ -57,7 +57,10 @@ const RUBRICS = {
     system: `你是一位严格的教学视觉评审。这个课堂里的白板**不是做题区**——它的职责是把多步对比、
 多变量结构、长背景材料一次摊开，替学生的纯文字工作记忆减负（把复杂信息外化，学生不用在脑子里
 同时转六个数或想象两个烧杯）。所以「板面信息完整」是它的本职工作，不是泄题。
-你不看渲染代码，只看学生看到的东西：图 + 它出现时的那一轮对话。请严格，但不要用「信息太多」当缺点。`,
+你不看渲染代码，只看学生看到的东西：图 + 它出现时的那一轮对话。请严格，但不要用「信息太多」当缺点。
+
+输出格式：**只输出一个 JSON 对象**——不要写推理过程、不要开场白、不要 markdown 围栏；
+第一个字符必须是 {，最后一个字符必须是 }。所有判断在心里完成。`,
     prompt: (it) => `下面是课堂上的一轮对话和紧随其后下发的一张白板。
 【学生上一句】${(it.context?.student || '（无）').slice(0, 600)}
 【老师这一轮】${(it.context?.teacher || '（无）').slice(0, 1200)}
@@ -86,48 +89,7 @@ const RUBRICS = {
 const SYSTEM = RUBRICS[RUBRIC].system;
 const rubric = RUBRICS[RUBRIC].prompt;
 
-async function judge(it, imgB64) {
-  const body = {
-    model: MODEL,
-    temperature: 0,
-    max_tokens: 1400,
-    messages: [
-      { role: 'system', content: SYSTEM },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: rubric(it) },
-          { type: 'image_url', image_url: { url: `data:image/png;base64,${imgB64}` } },
-        ],
-      },
-    ],
-  };
-  let content = '';
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(`${BASE}/chat/completions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
-      body: JSON.stringify(body),
-    });
-    const text = await res.text();
-    if (!res.ok) {
-      if (res.status === 429 && attempt < 2) {
-        await new Promise((r) => setTimeout(r, 8000 * (attempt + 1)));
-        continue;
-      }
-      return { error: `HTTP ${res.status}: ${text.slice(0, 200)}` };
-    }
-    try {
-      const env = JSON.parse(text);
-      content = env.choices?.[0]?.message?.content || '';
-      if (content.trim()) break;
-      const reason = env.choices?.[0]?.finish_reason;
-      if (attempt === 2) return { error: `empty content (finish=${reason})`, raw: text.slice(0, 200) };
-    } catch {
-      if (attempt === 2) return { error: `bad envelope: ${text.slice(0, 160)}` };
-    }
-    await new Promise((r) => setTimeout(r, 700));
-  }
+function parseVerdict(content) {
   const m = content.match(/\{[\s\S]*\}/);
   const candidate = m ? m[0] : content.trim();
   const repair = (value) => {
@@ -147,9 +109,63 @@ async function judge(it, imgB64) {
     try {
       return JSON.parse(repair(candidate));
     } catch {
-      return { error: `bad json: ${candidate.slice(0, 160)}`, raw: content };
+      return null;
     }
   }
+}
+
+async function judge(it, imgB64) {
+  const messages = [
+    { role: 'system', content: SYSTEM },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: rubric(it) },
+        { type: 'image_url', image_url: { url: `data:image/png;base64,${imgB64}` } },
+      ],
+    },
+  ];
+  let lastRaw = '';
+  // 模型会间歇性地把推理写进正文（判据未变，只是输出格式不听话）：
+  // 拿着它的上一段话明确要求「只输出 JSON」再要一次，而不是把这条样本丢掉。
+  for (let round = 0; round < 3; round++) {
+    let content = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const body = { model: MODEL, temperature: 0, max_tokens: 2400, messages };
+      const res = await fetch(`${BASE}/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        if (res.status === 429 && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 8000 * (attempt + 1)));
+          continue;
+        }
+        return { error: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+      }
+      try {
+        const env = JSON.parse(text);
+        content = env.choices?.[0]?.message?.content || '';
+        if (content.trim()) break;
+        const reason = env.choices?.[0]?.finish_reason;
+        if (attempt === 2) return { error: `empty content (finish=${reason})`, raw: text.slice(0, 200) };
+      } catch {
+        if (attempt === 2) return { error: `bad envelope: ${text.slice(0, 160)}` };
+      }
+      await new Promise((r) => setTimeout(r, 700));
+    }
+    const verdict = parseVerdict(content);
+    if (verdict) return verdict;
+    lastRaw = content;
+    messages.push({ role: 'assistant', content: content.slice(0, 2000) || '(空)' });
+    messages.push({
+      role: 'user',
+      content: '上一个回复不是可解析的 JSON。请只输出一个 JSON 对象：第一个字符必须是 {、最后一个字符必须是 }，不要解释、不要围栏。',
+    });
+  }
+  return { error: `bad json: ${String(lastRaw).slice(0, 160)}`, raw: lastRaw };
 }
 
 // 并发受控（用户 2026-10-26 定：全程 3 并发）：信号量池，最多 3 个评审同时在飞

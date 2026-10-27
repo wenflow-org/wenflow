@@ -25,11 +25,13 @@ import {
   openBoard,
   describeBoardForTeacher,
   diffBoardStages,
+  extractHiddenConclusion,
   boardFigureForRender,
   type BoardState,
   type BoardConcealMode,
 } from '../src/services/ai-teaching/board-state';
 import { decideBoardOp, applyBoardOp, describeBoardOp, hasNewNumbers } from '../src/services/ai-teaching/board-controller';
+import { decideBoardIntent, numbersOnBoard, describeIntentForTeacher, type BoardIntent } from '../src/services/ai-teaching/board-intent';
 import { FIGURE_KIND_GUIDE, buildVisualOpportunity } from '../src/services/ai-teaching/teaching-visual.service';
 
 const [casesPath, outPath, concRaw, modeRaw] = process.argv.slice(2);
@@ -151,25 +153,36 @@ async function runCase(c: any): Promise<any> {
   const history: Array<{ role: string; content: string }> = [];
   const turns: any[] = [];
   let board: BoardState | null = null;
+  let lastTeacherReply: string | null = null;
 
-  // ---- 第 1 轮：建板（提问态）+ 老师看着板提问 ----
+  // ---- 第 1 轮：定问法 → 建板 → 老师看着板提问 ----
   const opp = buildVisualOpportunity(
     [{ role: 'user', content: c.turns[0].student, timestamp: '2026-10-27T00:00:00.000Z' }] as any,
     c.taskTitle,
   );
+  const intent1 = decideBoardIntent({
+    taskType: c.taskType,
+    kind: opp?.kindHint ?? c.expectKind ?? null,
+    studentText: c.turns[0].student,
+    lastTeacherText: null,
+    boardNumbers: [],
+  });
   const boardOut = await callModel(BOARD_SYSTEM(MODE), {
     task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
     scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
     studentSays: c.turns[0].student,
     kindHint: opp?.kindHint ?? c.expectKind ?? null,
+    // 先定问法再画板（2026-10-27）：画板时就知道这一轮要学生说什么，才画得出边界
+    questionIntent: intent1,
+    lastTeacherReply: null,
     instruction: MASKED
       ? '画出这张白板的完整形态：骨架、正确答案、结论都写全（系统会自动挖空成提问态）。'
-      : '画出这张白板的完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。标题只点题，不写结论。',
+      : `画出这张白板的完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。标题只点题，不写结论。${intent1.instruction}`,
   });
   const normalized = boardOut?.figure ? normalizeTeachingFigureForProbe(boardOut.figure) : { figure: null };
   const figure = (normalized as any).figure;
   const op1 = decideBoardOp({ board: null, firstTurnOfTask: true, taskChanged: false, wantsNewBoard: !!figure });
-  if (figure && op1.type === 'setup') board = openBoard(c.id, figure, CONCEAL);
+  if (figure && op1.type === 'setup') board = openBoard(c.id, figure, { ...CONCEAL, intent: intent1 });
 
   const hiddenBefore = board?.figure ? diffBoardStages(board.figure).map((d) => d.after) : [];
   const boardContext1 = board
@@ -190,16 +203,27 @@ async function runCase(c: any): Promise<any> {
     n: 1, stage: board?.figure?.stage ?? null, studentIn: c.turns[0].student,
     teacher: String(t1?.reply ?? ''), boardContext: boardContext1,
     boardOp: op1.type,
+    intent: intent1,
     // 每轮把「当时下发给学生的那块板」存下来：减负模式下板会随例子刷新，
     // 只看最终态会丢掉「老师换题 → 板跟着换」这一段的证据
     boardSpec: board?.figure?.maskedSpec ?? null,
+    conclusionOnBoard: board?.figure ? extractHiddenConclusion({ kind: board.figure.kind, spec: board.figure.maskedSpec }) !== null : false,
     audit: auditTeacherReply(String(t1?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, hiddenBefore),
   });
+  lastTeacherReply = String(t1?.reply ?? '');
 
   // ---- 第 2 轮：学生答到了关键处 ----
   // 做题区：答对 → 揭晓同一块板。
-  // 减负区：板面本来就完整，没有揭晓；只判断老师是不是换了现场（学生带来新数值）→ 换板。
-  const newEx2 = !!board?.figure && hasNewNumbers(board.figure.maskedSpec, c.turns[1].student);
+  // 减负区：板面本来就完整，没有揭晓；只判断「现场变没变」→ 换板。
+  // 换题信号以**老师上一句**为准（2026-10-27 改造）：老师宣布的新数据，这一轮必须已经上板。
+  const intent2 = decideBoardIntent({
+    taskType: c.taskType,
+    kind: board?.figure?.kind ?? null,
+    studentText: c.turns[1].student,
+    lastTeacherText: lastTeacherReply,
+    boardNumbers: numbersOnBoard(board?.figure?.maskedSpec),
+  });
+  const newEx2 = intent2.exampleChange !== 'none';
   const op2 = decideBoardOp({
     board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false, filledSlot: true, newExample: newEx2,
   });
@@ -209,9 +233,13 @@ async function runCase(c: any): Promise<any> {
       scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
       studentSays: c.turns[1].student,
       kindHint: board.figure?.kind ?? null,
+      questionIntent: intent2,
+      lastTeacherReply,
       instruction:
-        '学生带来了新数据/新条件。把同一结构的板换成**当前这组条件**（新数值、新单位），' +
-        '结构和图型都不变；材料、步骤、副标注照样写全，标题只点题。',
+        (intent2.exampleChange === 'scene'
+          ? '老师换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
+          : '老师宣布了新数据。把同一结构的板换成**当前这组条件**（新数值、新单位），旧数据不要留。') +
+        '结构、图型、副标注写法不变。' + intent2.instruction,
     });
     const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
     board = applyBoardOp(board, op2, nextFig ?? undefined) ?? board;
@@ -236,15 +264,25 @@ async function runCase(c: any): Promise<any> {
     n: 2, stage: board?.figure?.stage ?? null, studentIn: c.turns[1].student,
     teacher: String(t2?.reply ?? ''), boardContext: boardContext2,
     boardOp: op2.type,
+    intent: intent2,
     newExample: newEx2,
     boardSpec: board?.figure?.maskedSpec ?? null,
+    conclusionOnBoard: board?.figure ? extractHiddenConclusion({ kind: board.figure.kind, spec: board.figure.maskedSpec }) !== null : false,
     // 揭晓/换板轮老师引用板上答案是合法教学行为，不计泄题（只统计提问态的轮次）
     audit: { ...auditTeacherReply(String(t2?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
   });
+  lastTeacherReply = String(t2?.reply ?? '');
 
   // ---- 第 3 轮：迁移检查（板已完整，只指板；若又换了现场则再换一次板） ----
   history.push({ role: 'assistant', content: turns[1].teacher });
-  const newEx3 = !!board?.figure && hasNewNumbers(board.figure.maskedSpec, c.turns[2].student);
+  const intent3 = decideBoardIntent({
+    taskType: c.taskType,
+    kind: board?.figure?.kind ?? null,
+    studentText: c.turns[2].student,
+    lastTeacherText: lastTeacherReply,
+    boardNumbers: numbersOnBoard(board?.figure?.maskedSpec),
+  });
+  const newEx3 = intent3.exampleChange !== 'none';
   const op3 = decideBoardOp({
     board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false, newExample: newEx3,
   });
@@ -254,9 +292,13 @@ async function runCase(c: any): Promise<any> {
       scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
       studentSays: c.turns[2].student,
       kindHint: board.figure?.kind ?? null,
+      questionIntent: intent3,
+      lastTeacherReply,
       instruction:
-        '学生把问题挪到了新情境。把同一结构的板换成**当前这组条件**（新对象/新液体/新数值），' +
-        '结构和图型都不变；材料、步骤、副标注照样写全，标题只点题。',
+        (intent3.exampleChange === 'scene'
+          ? '问题挪到了新情境。把同一结构的板换成**当前这个情境**（新对象/新液体/新条件标签）。'
+          : '老师宣布了新数据。把同一结构的板换成**当前这组条件**（新数值、新单位），旧数据不要留。') +
+        '结构、图型、副标注写法不变。' + intent3.instruction,
     });
     const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
     board = applyBoardOp(board, op3, nextFig ?? undefined) ?? board;
@@ -277,10 +319,22 @@ async function runCase(c: any): Promise<any> {
     n: 3, stage: board?.figure?.stage ?? null, studentIn: c.turns[2].student,
     teacher: String(t3?.reply ?? ''), boardContext: boardContext3,
     boardOp: op3.type,
+    intent: intent3,
     newExample: newEx3,
     boardSpec: board?.figure?.maskedSpec ?? null,
+    conclusionOnBoard: board?.figure ? extractHiddenConclusion({ kind: board.figure.kind, spec: board.figure.maskedSpec }) !== null : false,
     audit: { ...auditTeacherReply(String(t3?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
   });
+
+  // 换题是否跟上：老师上一轮宣布过、而当前板上仍然没有的数字（>0 就是「板比老师慢」）
+  const staleNumbers = turns
+    .flatMap((t: any, i: number) => {
+      const prev = i === 0 ? null : turns[i - 1].teacher;
+      if (!prev) return [];
+      const onBoard = new Set(numbersOnBoard(t.boardSpec));
+      return numbersOnBoard({ text: prev }).filter((n) => !onBoard.has(n));
+    })
+    .filter((n: string) => !/^\d{1,2}$/.test(n) || Number(n) > 31); // 页码/序号类小整数不算
 
   const rendered = board ? boardFigureForRender(board) : null;
   return {
@@ -294,6 +348,9 @@ async function runCase(c: any): Promise<any> {
     expectKind: c.expectKind ?? null,
     routedKind: opp?.kindHint ?? null,
     boardOps: [op1.type, op2.type, op3.type],
+    intents: [intent1, intent2, intent3],
+    staleNumbers: [...new Set(staleNumbers)],
+    conclusionOnBoardTotal: turns.filter((t: any) => t.conclusionOnBoard).length,
     slots: board?.figure?.slots ?? 0,
     hiddenTakeaway: board?.figure?.hiddenTakeaway ?? null,
     maskedSpec: board?.figure?.maskedSpec ?? null,
