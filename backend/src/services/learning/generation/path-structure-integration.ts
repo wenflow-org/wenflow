@@ -10,10 +10,11 @@ import {
   type PathAuditKcAnnotation,
   type PathAuditResult,
 } from './path-structure-audit';
+import { remapStageTaskReferences } from '../path-planning-hints';
 
 export interface PathStructureStage {
   stageNumber: number;
-  subtasks: Array<{ title?: unknown; description?: unknown }>;
+  subtasks: Array<{ title?: unknown; description?: unknown; type?: unknown }>;
 }
 
 /** 同阶段前置重排（原地修改 subtasks，保证 DB 与模板顺序一致）；返回重排的边数。 */
@@ -24,9 +25,13 @@ export function reorderStageTasks(
   if (!kcAnnotation) return 0;
   let reorderedEdges = 0;
   for (const stage of stages) {
+    // 快照重排前顺序：边重排会把任务挪位，拓扑重排时已改写的「任务 N / 上一步」
+    // 引用会二次失配（R6 实证：A14 T2「用任务2标好的」自指）。挪动后必须再重映射一次。
+    const before = [...stage.subtasks];
     const ordered = reorderTasksForPrerequisites(stage.subtasks, kcAnnotation);
     if (!ordered.changed) continue;
-    stage.subtasks.splice(0, stage.subtasks.length, ...ordered.tasks);
+    const remapped = remapStageTaskReferences(before as any[], ordered.tasks as any[]) as typeof stage.subtasks;
+    stage.subtasks.splice(0, stage.subtasks.length, ...remapped);
     reorderedEdges += ordered.reorderedEdges;
   }
   return reorderedEdges;

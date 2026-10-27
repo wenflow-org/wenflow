@@ -145,4 +145,40 @@ describe('reorderTasksForPrerequisites（同阶段稳定拓扑）', () => {
     expect(result.changed).toBe(false)
     expect(result.tasks.map((task) => task.title)).toEqual(['乙', '甲'])
   })
+
+  it('R7-1 守卫：收束档不得被前移到建立/应用档之前（R6 的 14/14 倒挂根因）', () => {
+    // KC 边声称「收束任务的 KC」是「拆解任务」的前置——边方向对知识图成立，
+    // 但认知动作上收束的宾语由应用档产出，不能先审后产。
+    const closingFirst = {
+      kcGraph: { edges: [{ from: 'kc-summary', to: 'kc-deconstruct' }] },
+      taskKcLinks: [
+        { taskTitle: '复述整条解封装路径', linkedKCs: ['kc-summary'] },
+        { taskTitle: '写一遍接收路径', linkedKCs: ['kc-deconstruct'] },
+      ],
+    }
+    const tasks = [
+      { title: '复述整条解封装路径', type: 'consolidate' },
+      { title: '写一遍接收路径', type: 'deconstruct' },
+    ]
+    const result = reorderTasksForPrerequisites(tasks, closingFirst)
+    expect(result.changed).toBe(false)
+    expect(result.tasks.map((task) => task.title)).toEqual(['复述整条解封装路径', '写一遍接收路径'])
+  })
+
+  it('R7-1 守卫放行反向：建立档前移越过收束档仍生效', () => {
+    const foundationLate = {
+      kcGraph: { edges: [{ from: 'kc-base', to: 'kc-summary' }] },
+      taskKcLinks: [
+        { taskTitle: '识别底子', linkedKCs: ['kc-base'] },
+        { taskTitle: '写结论', linkedKCs: ['kc-summary'] },
+      ],
+    }
+    const tasks = [
+      { title: '写结论', type: 'consolidate' },
+      { title: '识别底子', type: 'acquire' },
+    ]
+    const result = reorderTasksForPrerequisites(tasks, foundationLate)
+    expect(result.changed).toBe(true)
+    expect(result.tasks.map((task) => task.title)).toEqual(['识别底子', '写结论'])
+  })
 })

@@ -230,13 +230,20 @@ export function auditPathStructure(input: {
  * 跨阶段依赖不在这里动（移动任务会改变阶段语义，留审计）。
  * 有环/无法排序时保持原顺序，绝不丢任务。
  */
-export function reorderTasksForPrerequisites<T extends { title?: unknown }>(
+export function reorderTasksForPrerequisites<T extends { title?: unknown; type?: unknown }>(
   tasks: T[],
   kcAnnotation: PathAuditKcAnnotation | null | undefined,
 ): { tasks: T[]; changed: boolean; reorderedEdges: number } {
   const ann = kcAnnotation || {};
   const original = Array.isArray(tasks) ? tasks : [];
   if (original.length < 2) return { tasks: original, changed: false, reorderedEdges: 0 };
+
+  // 认知动作权重守卫（2026-10-27 R7-1）：本重排在 orderStageTasksByTopology 之后运行，
+  // 而 KC 边只表达知识依赖、不表达「收束动作的宾语由应用档产出」这一物理事实。
+  // 无守卫时 R6 实测 14/14 条路径的收束档（refine/consolidate）被边重排又拉回建立档之前。
+  // 只拦一个方向：收束档不得被前移到建立/应用档之前；反向（建立档前移）照常放行。
+  const closingRank = (task: T): number =>
+    ['refine', 'consolidate'].includes(String((task as any)?.type || '').trim()) ? 1 : 0;
 
   const taskIndexByTitle = new Map<string, number>();
   original.forEach((task, index) => {
@@ -269,6 +276,8 @@ export function reorderTasksForPrerequisites<T extends { title?: unknown }>(
     const fromKey = keyOfKc.get(from);
     const toKey = keyOfKc.get(to);
     if (!fromKey || !toKey || fromKey === toKey) continue;
+    // R7-1 守卫：收束档（refine/consolidate）不得被前移到建立/应用档之前。
+    if (closingRank(original[fromIndex]) > closingRank(original[toIndex])) continue;
     constraints.push([fromKey, toKey]);
     if (fromIndex > toIndex) reorderedEdges += 1;
   }

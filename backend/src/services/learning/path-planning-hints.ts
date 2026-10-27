@@ -273,6 +273,12 @@ export interface BudgetDerivation {
   calendarDriven?: boolean;
   /** 内容体量锚（goal 层 scopeAnchor 换算值；无颗粒度承诺时为 null） */
   scopeAnchoredHours?: number | null;
+  /** R7-4：锚与日历容量相差 ≤20% ⇒ 判污染（把日历预算填进了内容锚），按未提供处理 */
+  scopeAnchorPolluted?: boolean;
+  /** R7-4：锚缺失/污染时按 keyStages×2.5h 算出的兜底锚（未触发为 null） */
+  scopeAnchorFallbackHours?: number | null;
+  /** R7-4：最终生效的锚值（原始锚 或 兜底锚；都无则 null） */
+  effectiveScopeAnchorHours?: number | null;
 }
 
 /** 结构容量缺口报告（可持久化、可审计；口径见 derivePlanningHints 内 capacityDeficit 块） */
@@ -576,7 +582,12 @@ export function derivePlanningHints(
   } | null,
   scopeSize?: ScopeSize | null,
   learnerLoadProfile?: LearnerLoadProfile | null,
-  triage?: TriageHint | null
+  triage?: TriageHint | null,
+  /**
+   * 窄目标措辞信号（2026-10-27 R7-4）：surfaceGoal/realProblem/keyStages 命中「只攻/只练/
+   * 这一件事/单方向…」。只用于锚缺失时的体量兜底，不参与其它推导。
+   */
+  narrowScopeSignal?: boolean | null
 ): PlanningHints {
   const paceSignal = inferPaceSignal(timeHorizon);
   const keyStageCount = keyStages.length;
@@ -881,12 +892,43 @@ export function derivePlanningHints(
   // 「能学多久」，体量锚才回答「内容有多少」（实证：D13 连续三轮 ≥1.05× 容量；
   // E03 汉译英单方向 55h vs 体量锚 14-18h——两者 goal 对话都明确说了「只攻 X」）。
   const scopeAnchorHoursNum = Number(timeDimensions?.scopeAnchorHours);
-  const estimatedHoursTotal =
-    Number.isFinite(scopeAnchorHoursNum) && scopeAnchorHoursNum > 0
+  const calendarCapacityNum = Number(timeDimensions?.calendarCapacityHours);
+  // 锚污染检测（2026-10-27 R7-4）：R6 实证 4/7 膨胀样本把**日历预算**填进了内容体量锚
+  // （E02 22h≈cap 24h、E03 45h、B14 45h、C05 30h，estH=anchor≈capH）——锚失去"内容有多少"
+  // 的语义，min(算术, 锚×1.5) 完全夹不住。与日历容量相差 ≤20% 视为污染，按未提供处理。
+  const scopeAnchorPolluted = Number.isFinite(scopeAnchorHoursNum) && scopeAnchorHoursNum > 0
+    && Number.isFinite(calendarCapacityNum) && calendarCapacityNum > 0
+    && Math.abs(scopeAnchorHoursNum - calendarCapacityNum) <= calendarCapacityNum * 0.2;
+  const hasUsableAnchor = Number.isFinite(scopeAnchorHoursNum) && scopeAnchorHoursNum > 0 && !scopeAnchorPolluted;
+  // 漏发兜底（2026-10-27 R7-4，外部评审建议 + R6 数据校准）：锚缺失（或已判污染）时，
+  // 仅在**有窄目标证据**时按 keyStages×2.5h 兜底，避免误伤真实大预算路径：
+  //   ① 窄目标措辞信号（"只攻/只练/这一件事/单方向…"），或
+  //   ② 日历驱动信号（自报学时 ≥ 日历容量的 85% ⇒ 预算等于日历乘法，不是内容需求）。
+  // E04(42/42)、B19(54/54)、E02(22/24 且锚污染) 全部命中 ②；无信号的 90-180h 真实考证
+  // 路径（keyStages 多、estH 远低于日历容量）不受影响。
+  const estimatedHoursSeed = Number(timeDimensions?.estimatedHours);
+  const calendarDrivenNoAnchor = !hasUsableAnchor
+    && Number.isFinite(calendarCapacityNum) && calendarCapacityNum > 0
+    && (Number.isFinite(estimatedHoursSeed) && estimatedHoursSeed > 0
+      ? estimatedHoursSeed >= calendarCapacityNum * 0.85
+      : true);
+  const fallbackAnchorHours = !hasUsableAnchor
+    && keyStageCount > 0
+    && (narrowScopeSignal === true || calendarDrivenNoAnchor)
+      ? Math.round(keyStageCount * 2.5 * 10) / 10
+      : null;
+  const effectiveScopeAnchorHours = hasUsableAnchor ? scopeAnchorHoursNum : fallbackAnchorHours;
+  const estimatedHoursTotalRawFinal =
+    Number.isFinite(effectiveScopeAnchorHours as number) && (effectiveScopeAnchorHours as number) > 0
     && estimatedHoursTotalPreScope !== null
-    && estimatedHoursTotalPreScope > scopeAnchorHoursNum * 1.5
-      ? Math.round(scopeAnchorHoursNum * 1.5 * 10) / 10
+    && estimatedHoursTotalPreScope > (effectiveScopeAnchorHours as number) * 1.5
+      ? (effectiveScopeAnchorHours as number) * 1.5
       : estimatedHoursTotalPreScope;
+  // 浮点收尾（2026-10-27 R7-5a）：阶段小时累加会产生 5.500000000000001h 这类 IEEE754 尾巴，
+  // 落库/展示层统一保留 1 位小数。
+  const estimatedHoursTotal = estimatedHoursTotalRawFinal === null
+    ? null
+    : Math.round(estimatedHoursTotalRawFinal * 10) / 10;
   // ---- 大预算扩容（2026-09-27，基线 31 格实测驱动）：锚定总学时超过结构天花板
   // （阶段×任务×单任务分钟上限）时，按需抬升每阶段任务上限与单任务分钟上界——
   // 任务语义升级为「学习单元（可含多次坐学）」。基线收缩比 0.07-0.74（中位 0.13-0.26）
@@ -1027,6 +1069,10 @@ export function derivePlanningHints(
           scopeAnchoredHours: Number.isFinite(Number(timeDimensions?.scopeAnchorHours))
             ? Number(timeDimensions?.scopeAnchorHours)
             : null,
+          // R7-4 可观测：锚是否被判污染、是否走了兜底、最终生效锚值
+          scopeAnchorPolluted,
+          scopeAnchorFallbackHours: fallbackAnchorHours,
+          effectiveScopeAnchorHours: effectiveScopeAnchorHours ?? null,
         };
       })()
     : null;
@@ -1197,7 +1243,11 @@ export function buildFramedNormalizedInput(input: any): any {
   const triage = input.triage && typeof input.triage === 'object'
     ? (input.triage as TriageHint)
     : null;
-  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile, triage);
+  // 窄目标措辞信号（R7-4）：只在锚缺失/污染时用于体量兜底（keyStages×2.5h）。
+  // 与 track（确定性）原则一致：标记词是「用户明说了只攻一件事」，不是替模型判语义。
+  const narrowScopeSignal = /(只(?:攻|练|学|做|讲|搞|要|想|需)|单方向|一个方向|这一件事|这件事|不展开|专门(?:攻|练|学)|仅(?:攻|练|学))/
+    .test([surfaceGoal, explicitProblem, ...keyStages].join(' '));
+  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile, triage, narrowScopeSignal);
   // 技能性质（2026-10-26）：goal 层 understanding.skill_nature 白名单透传，决定 AI 代跑边界。
   const skillNature = normalizeSkillNature(input.skillNature);
   const skillNatureEvidence = normalizeString(input.skillNatureEvidence) || null;
