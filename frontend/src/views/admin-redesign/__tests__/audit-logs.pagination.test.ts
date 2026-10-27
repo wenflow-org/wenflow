@@ -179,6 +179,18 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ page: 1, keyword: 'alice', scope: 'login' });
   });
 
+  it('动作格单行：HTTP 状态/耗时归结果列，动作格不再叠第二行', async () => {
+    const w = await mountAudit();
+    const row = w.find('.al-table tbody tr.log-tr');
+    expect(row.find('.log-act-meta').exists()).toBe(false);
+    const result = row.find('.log-result-line');
+    expect(result.text()).toContain('成功');
+    expect(result.text()).toContain('200');
+    // 紧凑读数不写 HTTP 前缀，完整口径在 title
+    expect(result.find('.log-result-meta').attributes('title')).toBe('HTTP 200');
+    w.unmount();
+  });
+
   it('KPI 带在页签之上：先读页面统计，再切操作/登录视图', async () => {
     const w = await mountAudit();
     await nextTick();

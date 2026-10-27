@@ -205,12 +205,6 @@
                       <span class="log-method">{{ methodOf(log) }}</span>
                     </span>
                   </div>
-                  <!-- 可区分字段（2026-10-24）：同秒同动作的重复写入此前整行完全一致；
-                       HTTP 状态码与耗时给出行内差异，展开区仍有完整请求原文。 -->
-                  <div v-if="log.statusCode || log.durationMs != null" class="log-act-meta mono">
-                    <span v-if="log.statusCode">HTTP {{ log.statusCode }}</span>
-                    <span v-if="log.durationMs != null">{{ fmtMs(log.durationMs) }}</span>
-                  </div>
                 </td>
                 <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt">
                   <template v-if="log.targetType">{{ targetTypeText(log.targetType) }}</template>
@@ -226,7 +220,17 @@
                   <span v-else-if="log.targetId" class="al-ellipsis">{{ shortId(log.targetId) }}</span>
                   <span v-else class="mk-na">—</span>
                 </td>
-                <td v-if="colVisible('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
+                <!-- 结果列一行读完：结果徽章 + HTTP 状态码/耗时（2026-10-27 用户「尽量不换行，
+                     做到一行」：这两项原先压在动作格第二行，把整行撑到 65px）。 -->
+                <td v-if="colVisible('result')">
+                  <div class="log-result-line">
+                    <span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span>
+                    <span v-if="log.statusCode || log.durationMs != null" class="log-result-meta mono" :title="resultMetaTitle(log)">
+                      <span v-if="log.statusCode">{{ log.statusCode }}</span>
+                      <span v-if="log.durationMs != null">{{ fmtMs(log.durationMs) }}</span>
+                    </span>
+                  </div>
+                </td>
                 <td v-if="colVisible('ip')" class="log-ip" :title="log.ip || ''">
                   <span v-if="(log.ip || '').trim()" class="al-ellipsis">{{ ipText(log.ip) }}</span>
                   <span v-else class="mk-na">—</span>
@@ -913,6 +917,13 @@ function reasonText(reason: string | null | undefined): string {
 function fmtMs(ms: number) {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
 }
+/** 结果列的紧凑读数在格内只写「200 18ms」；HTTP 口径与完整耗时放 title */
+function resultMetaTitle(log: AuditLogRow): string {
+  const parts: string[] = []
+  if (log.statusCode) parts.push(`HTTP ${log.statusCode}`)
+  if (log.durationMs != null) parts.push(fmtMs(log.durationMs))
+  return parts.join(' · ')
+}
 const pad = (n: number) => String(n).padStart(2, '0')
 /* 绝对时间：与执行日志统一 MM-DD HH:MM:SS（完整时间见 tooltip fmtFull） */
 function fmtTime(iso?: string | null): string {
@@ -949,13 +960,15 @@ function goExport() {
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：动作/目标两列在
    auto 布局下按当页最长内容分宽，翻页跳动；fixed 后按表头定死，余量按权重摊开。
    宽度按 1280 现值校准并留余量，1200 档无横滚。 */
-.al-c-time { width: 115px; }
-.al-c-admin { width: 165px; }
-.al-c-action { width: 152px; }
-.al-c-tt { width: 122px; }
-.al-c-target { width: 114px; }
-.al-c-result { width: 70px; }
-.al-c-ip { width: 136px; }
+.al-c-time { width: 105px; }
+.al-c-admin { width: 170px; }
+/* 动作列按「动作名 + 方法徽章」单行校准；HTTP 状态/耗时移到结果列，动作格不再叠第二行 */
+.al-c-action { width: 205px; }
+.al-c-tt { width: 90px; }
+.al-c-target { width: 95px; }
+/* 结果列从纯徽章升级为「结果 + HTTP 状态 + 耗时」单行，宽度相应让出 */
+.al-c-result { width: 130px; }
+.al-c-ip { width: 134px; }
 .al-c-expand { width: 34px; }
 .al-c-reason { width: 280px; }
 /* fixed 档列宽即契约：行内 max-width 会顶出单元格，改成随列收缩 + 省略号 */
@@ -1021,14 +1034,21 @@ function goExport() {
   text-overflow: ellipsis;
   max-width: 220px;
 }
-/* 动作格两段：名字靠左、方法徽章贴格右缘——徽章位置不再随名字长短漂移（两端对齐把
-   名字与徽章之间多出的宽度吃掉）。flex-wrap 保留换行：1280 档动作列仅 189px，
-   名字+徽章本就放不下（原版该档已有 5 行折行），能换行才不至于把整表顶出横向滚动。 */
-/* 方法徽章紧贴动作名（8–10px），不再两端对齐把徽章推到格右缘（2026-10-24） */
-.log-act-line { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 2px; }
+/* 动作格单行：动作名 + 方法徽章。2026-10-27 用户「尽量不换行，做到一行」：
+   原先把 HTTP 状态/耗时放在同一格第二行，1280 档每行高 65px；现在这两项归结果列。
+   flex-wrap 改 nowrap，长动作名由 .log-path 截断（title 保留全文）。 */
+.log-act-line { display: flex; flex-wrap: nowrap; align-items: center; column-gap: 8px; min-width: 0; }
 .log-act-method { display: inline-flex; align-items: center; flex: none; }
-/* 动作格第二行：状态码/耗时是行内可区分字段，弱化小字 */
-.log-act-meta { display: flex; align-items: center; gap: 8px; margin-top: 1px; color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
+/* 结果列：结果徽章 + HTTP 状态码/耗时，同排单行 */
+.log-result-line { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.log-result-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+  font-variant-numeric: tabular-nums;
+}
 /* HTTP 方法徽标：中性单色。语义色只留给结果列——按方法上绿/琥珀/红会被读成执行结果 */
 .log-method {
   display: inline-block;
@@ -1076,8 +1096,10 @@ function goExport() {
    内容保持一行不折。2026-10-18 方法徽章拆列后本档不再需要 150px 那么紧，
    但保持收起一档：1280 内容区宽度不变，动作列多让出的宽要还给其余长列。 */
 @media (max-width: 1439px) {
-  .log-path { max-width: 150px; }
-  .log-action { max-width: 200px; }
+  /* 1280 档动作列 205px：动作名留 120px + 方法徽章约 60px + 间距，单行放得下；
+     更长的动作名省略，完整值在行 title / 展开区。 */
+  .log-path { max-width: 120px; }
+  .log-action { max-width: 180px; }
 }
 /* 窄屏（≤720，次要列已随 useIsNarrow 隐藏）：操作者/动作列收为弹性宽 + 单行截断
    （全文在 title），长值不撑列 → 免横向滚动。
