@@ -1451,7 +1451,9 @@ function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string,
     for (const item of Array.isArray(panel.rows) ? panel.rows : []) {
       if (!item || typeof item !== 'object' || rows.length >= 4) continue;
       const row = item as Record<string, unknown>;
-      const label = toFigureLabel(row.label, SPEC.labelMax);
+      // 26 字（英文句子按字符计，18 字会把 "I have been to Shanghai" 整行丢掉）；
+      // 超长截断加 …，渲染侧折两行
+      const label = toFigureText(row.label, 26);
       if (!label || seen.has(label)) continue;
       seen.add(label);
       const sub = toFigureText(row.sub, SPEC.subMax);
@@ -1469,10 +1471,10 @@ function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string,
   const left = normalizePanel(raw.left);
   const right = normalizePanel(raw.right);
   if (!left || !right) return null;
-  // V8：两栏行数差 >1 = 对照不成立（外盲评：左 1 行右 3 行，行与行比的不是同一件事）
+  // V8：两栏行数差 >2 = 对照不成立（差 1~2 行由渲染侧「?」空槽兜住，差 3+ 才整图拒绝）
   const leftLen = (left.rows as unknown[]).length;
   const rightLen = (right.rows as unknown[]).length;
-  if (Math.abs(leftLen - rightLen) > 1) return null;
+  if (Math.abs(leftLen - rightLen) > 2) return null;
   // 两栏内容完全相同 = 不是对比（外盲评 V4 #2：两侧代码一字不差，学生看不到差异）
   const leftSeq = (left.rows as Array<Record<string, unknown>>).map((r) => r.label).join('');
   const rightSeq = (right.rows as Array<Record<string, unknown>>).map((r) => r.label).join('');

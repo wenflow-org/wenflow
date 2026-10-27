@@ -2290,13 +2290,17 @@ function renderSplitCompare({ title, left, right, delta }: any): RenderedFigure 
   const lt = TONE[left.tone] || TONE.warn;
   const rt = TONE[right.tone] || TONE.ok;
   const rowCount = Math.max(left.rows.length, right.rows.length);
-  // 行高按两栏同一行取大：有 sub 的行 46，否则 32——行行对齐是这张图的语义核心
+  // 行高按两栏同一行取大（行行对齐是这张图的语义核心）：
+  // label 可折两行（英文句子 26 字符放不进 238px 单行），sub 再占一行
+  const labelWrap = (row: any) => (row ? balancedWrap(String(row.label ?? ''), colW - 24, T.fontLabel).slice(0, 2) : []);
+  const subWrap = (row: any) => (row && row.sub ? balancedWrap(row.sub, colW - 24, T.fontMicro).slice(0, 1) : []);
   const rowHs: number[] = [];
   for (let i = 0; i < rowCount; i += 1) {
     const a = left.rows[i];
     const b = right.rows[i];
+    const labelLines = Math.max(1, labelWrap(a).length, labelWrap(b).length);
     const hasSub = Boolean((a && a.sub) || (b && b.sub));
-    rowHs.push(hasSub ? 46 : 32);
+    rowHs.push(Math.max(30, labelLines * 17 + (hasSub ? 14 : 0) + 12));
   }
   const bodyTop = titleH + headH + 10;
   const bodyH = rowHs.reduce((m, v) => m + v, 0) + 8;
@@ -2324,11 +2328,10 @@ function renderSplitCompare({ title, left, right, delta }: any): RenderedFigure 
           parts.push(text(x + colW / 2, y + rh / 2 + 5, '?', 't-label', 'middle', 'fill="' + T.faint + '"'));
         } else {
           if (hi) parts.push(rect(x + 6, y + 1, colW - 12, rh - 2, { r: 6, fill: tone.soft, stroke: tone.color, sw: 1.4 }));
-          parts.push(text(x + 12, y + (rh === 46 ? 20 : rh / 2 + 5), row.label, 't-label', 'start', 'fill="' + T.ink + '"'));
-        }
-        if (row.sub && rh === 46 && !masked) {
-          const subs = balancedWrap(row.sub, colW - 24, T.fontMicro);
-          subs.forEach((line, li) => parts.push(text(x + 12, y + 36 + li * 12, line, 't-tiny', 'start', 'fill="' + T.muted + '"')));
+          const lls = labelWrap(row);
+          lls.forEach((line, li) => parts.push(text(x + 12, y + 18 + li * 17, line, 't-label', 'start', 'fill="' + T.ink + '"')));
+          const sls = subWrap(row);
+          sls.forEach((line) => parts.push(text(x + 12, y + 18 + lls.length * 17 + 2, line, 't-tiny', 'start', 'fill="' + T.muted + '"')));
         }
       } else {
         // V3 改造（外盲评：一侧只写一半/留白时行错位，分叉线指到空处）——缺行侧画

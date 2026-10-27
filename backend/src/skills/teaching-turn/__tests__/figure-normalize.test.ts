@@ -844,14 +844,22 @@ describe('V8 内容核验：图内算式复算 / 概念图并列边合并 / 对�
     expect(merged.figure.spec.edges[0].label).toContain('、');
   });
 
-  it('两栏行数差 >1 → 整图拒绝（对照不成立）', async () => {
+  it('两栏行数差 >2 → 整图拒绝；差 1~2 由空槽兜住保留', async () => {
     const skew = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        left: { head: '错', rows: [{ label: '只一行' }] },
+        right: { head: '对', rows: [{ label: '甲' }, { label: '乙' }, { label: '丙' }, { label: '丁' }] },
+      },
+    });
+    expect(skew.figure).toBeUndefined();
+    const tolerable = await runWithFigure({
       kind: 'split-compare',
       spec: {
         left: { head: '错', rows: [{ label: '只一行' }] },
         right: { head: '对', rows: [{ label: '甲' }, { label: '乙' }, { label: '丙' }] },
       },
     });
-    expect(skew.figure).toBeUndefined();
+    expect(tolerable.figure).toBeDefined();
   });
 });
