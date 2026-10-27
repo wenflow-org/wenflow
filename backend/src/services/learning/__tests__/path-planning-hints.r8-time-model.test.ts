@@ -4,14 +4,14 @@ import { derivePlanningHints, inferWeeksUntilDeadline } from '../path-planning-h
  * R8 时间模型（2026-10-27）
  *
  * 口径：objectiveScopeHours 是最高优先级的「内容体量锚」——存在且 >0 时
- * 预算直接取 objective×1.5，不再与日历/节奏乘法取 min；deadlineDate 是唯一
+ * 预算直接取 objective（1.0×），不再与日历/节奏乘法取 min；deadlineDate 是唯一
  * 日历权威，无期限时不生成总周数要求（maxWeeks 只受 52 周结构硬顶约束）。
  * objectiveScopeHours 缺失时完整回退 R7 的锚污染/双证据兜底逻辑。
  */
-function hintsOf(td: Record<string, any> | null, keyStages = 3, narrowScopeSignal?: boolean) {
+function hintsOf(td: Record<string, any> | null, keyStages = 3, narrowScopeSignal?: boolean, timePerSession: string | null = null) {
   return derivePlanningHints(
     null,
-    null,
+    timePerSession,
     null,
     null,
     Array.from({ length: keyStages }, (_, i) => `阶段${i + 1}`),
@@ -24,7 +24,7 @@ function hintsOf(td: Record<string, any> | null, keyStages = 3, narrowScopeSigna
 }
 
 describe('R8 objectiveScopeHours 最高优先级', () => {
-  it('objective 优先于日历/节奏乘法：10h 客观体量 ⇒ 15h（×1.5），不被 90h 日历算术撑大', () => {
+  it('objective 优先于日历/节奏乘法：10h 客观体量 ⇒ 10h（1.0×），不被 90h 日历算术撑大', () => {
     const hints = hintsOf({
       timeModelVersion: 2,
       sessionsLengthMin: 60,
@@ -34,24 +34,24 @@ describe('R8 objectiveScopeHours 最高优先级', () => {
       totalWeeks: 26,
       sessionsPerWeek: 7,
     });
-    expect(hints.targetTotalHours).toBe(15);
+    expect(hints.targetTotalHours).toBe(10);
     expect(hints.budgetDerivation?.source).toBe('objective_scope_hours');
     expect(hints.budgetDerivation?.contentAnchorSource).toBe('objective_scope_hours');
     expect(hints.budgetDerivation?.objectiveScopeHours).toBe(10);
     expect(hints.budgetDerivation?.effectiveContentAnchorHours).toBe(10);
     expect(hints.budgetDerivation?.anchorSource).toBe('objective_scope_hours');
-    expect(hints.budgetDerivation?.legacyArithmeticHours).toBeGreaterThan(15);
+    expect(hints.budgetDerivation?.legacyArithmeticHours).toBeGreaterThan(10);
     expect(hints.budgetDerivation?.cadenceHours).toBe(182);
     expect(hints.maxWeeks).toBe(52);
     expect(hints.maxWeeksSource).toBe('hard_cap');
     expect(hints.budgetDerivation?.legacyTotalWeeksIgnored).toBe(true);
   });
 
-  it('objective 近日历容量只告警、不弃用（日历 24h，objective 22h ⇒ 33h）', () => {
+  it('objective 近日历容量只告警、不弃用（日历 24h，objective 22h ⇒ 22h）', () => {
     const hints = hintsOf({ timeModelVersion: 2, objectiveScopeHours: 22, calendarCapacityHours: 24 });
     expect(hints.budgetDerivation?.objectiveScopeNearCalendar).toBe(true);
     expect(hints.budgetDerivation?.contentAnchorSource).toBe('objective_scope_hours');
-    expect(hints.targetTotalHours).toBe(33);
+    expect(hints.targetTotalHours).toBe(22);
   });
 
   it('objective ≤1h 触发「一节课」收口（只收结构上界，不改预算）', () => {
@@ -59,12 +59,18 @@ describe('R8 objectiveScopeHours 最高优先级', () => {
     expect(hints.milestoneRange[1]).toBeLessThanOrEqual(2);
     expect(hints.targetMilestones).toBeLessThanOrEqual(2);
     expect(hints.subtasksPerStageRange[1]).toBeLessThanOrEqual(2);
-    expect(hints.targetTotalHours).toBe(1.2);
+    expect(hints.targetTotalHours).toBe(0.8);
+  });
+
+  it('单任务硬上界 90 分钟：会话 120 分钟不再产生 100-120 分钟巨型单课', () => {
+    const hints = hintsOf({ sessionsLengthMin: 120, objectiveScopeHours: 20 }, 3, false, '2小时');
+    expect(hints.subtaskMinutesRange[1]).toBeLessThanOrEqual(90);
+    expect(hints.subtaskMinutesRange[0]).toBeLessThanOrEqual(hints.subtaskMinutesRange[1]);
   });
 
   it('浮点收尾保持 1 位小数', () => {
     const hints = hintsOf({ timeModelVersion: 2, objectiveScopeHours: 5.500000000000001 });
-    expect(hints.targetTotalHours).toBe(8.3);
+    expect(hints.targetTotalHours).toBe(5.5);
   });
 });
 
@@ -90,7 +96,7 @@ describe('R8 无期限不产生总周数要求', () => {
       const weeks = inferWeeksUntilDeadline('2027-01-05')!;
       expect(hints.maxWeeksSource).toBe('deadline_date');
       expect(hints.maxWeeks).toBe(Math.min(52, Math.max(1, Math.ceil(weeks))));
-      expect(hints.targetTotalHours).toBe(30);
+      expect(hints.targetTotalHours).toBe(20);
     } finally {
       jest.useRealTimers();
     }

@@ -278,6 +278,12 @@ export function reorderTasksForPrerequisites<T extends { title?: unknown; type?:
     if (!fromKey || !toKey || fromKey === toKey) continue;
     // R7-1 守卫：收束档（refine/consolidate）不得被前移到建立/应用档之前。
     if (closingRank(original[fromIndex]) > closingRank(original[toIndex])) continue;
+    // R7-1 追加守卫（2026-10-27 外部审查）：acquire 是后续一切动作的原料。
+    // KC 边不得把任何非 acquire 任务前移到 acquire 之前——R6 B17 S4 实证
+    // execute/deconstruct/acquire 的倒序（手工微样本被推到第 3 课，全量跑在第 1 课）。
+    const fromType = String((original[fromIndex] as any)?.type || '').trim();
+    const toType = String((original[toIndex] as any)?.type || '').trim();
+    if (toType === 'acquire' && fromType !== 'acquire') continue;
     constraints.push([fromKey, toKey]);
     if (fromIndex > toIndex) reorderedEdges += 1;
   }

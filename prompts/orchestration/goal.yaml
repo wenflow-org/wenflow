@@ -157,6 +157,36 @@ fields:
     valueType: object
     pathInRawOutput: internal.ext.goalConversation.understanding.school_anchor
     description: 校内体系锚 {textbook 教材版本, examScope 考试形式, schoolPace 在校进度}；身处教材/考试体系才填，至少一项有值，无依据整体留空（教学侧 pathBackgroundContext.schoolAnchor 消费）
+  - fieldId: understanding.skill_nature
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.skill_nature
+    description: 技能性质 tool_operation|cognitive_internalized|physical_internalized|knowledge_structure；决定 AI 能否代跑核心动作，判不出留空（2026-10-27 补齐路由声明）
+  - fieldId: understanding.skill_nature_evidence
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.skill_nature_evidence
+    description: 支撑 skill_nature 的一句证据（优先用户原话）
+  - fieldId: understanding.platform_judgment
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.platform_judgment
+    description: 平台可判定性 judgeable_output|judgeable_sensor|not_judgeable；与 skill_nature 相互独立
+  - fieldId: understanding.platform_judgment_evidence
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.platform_judgment_evidence
+    description: 支撑 platform_judgment 的一句依据
+  - fieldId: understanding.sensor_readouts
+    promptRole: hidden-inference
+    valueType: array<string>
+    pathInRawOutput: internal.ext.goalConversation.understanding.sensor_readouts
+    description: judgeable_sensor 时的客观读数来源，如 ["功率计","心率带"]
+  - fieldId: understanding.needsMaterial
+    promptRole: hidden-inference
+    valueType: object
+    pathInRawOutput: internal.ext.goalConversation.understanding.needsMaterial
+    description: 外部权威资料需求 {kind,title,why,queries[]}；无需求留空（下游 material-collector 消费）
   - fieldId: understanding.prerequisiteDiagnostics
     promptRole: soft-info
     valueType: array<object>
@@ -426,6 +456,48 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
     notes: 教学侧学校体系锚（pathBackgroundContext.schoolAnchor）
+  - agentId: skill:goal-conversation
+    fieldId: understanding.skill_nature
+    render: hidden
+    handoff: [goal-agent, path]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.skill_nature_evidence
+    render: hidden
+    handoff: [path]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.platform_judgment
+    render: hidden
+    handoff: [goal-agent, path]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.platform_judgment_evidence
+    render: hidden
+    handoff: [path]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.sensor_readouts
+    render: hidden
+    handoff: [path]
+    internal: false
+    accumulate: false
+    visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.needsMaterial
+    render: hidden
+    handoff: [path]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
   - agentId: skill:goal-conversation
     fieldId: understanding.prerequisiteDiagnostics
     render: hidden

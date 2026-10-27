@@ -9,6 +9,7 @@
  */
 import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
+import { clampMilestoneHoursToBudget, resolveTargetTotalHoursFromData } from './path-budget-clamp';
 import { ownerContextOverride } from './owner-context';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill, executeSkillWithResult } from '../../../skills';
@@ -463,7 +464,23 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
 
 async function persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[], runId?: string) {
   const cognitiveDesign = buildPathCognitiveDesign(data, analysis);
-  const normalizedMilestonesData = normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign);
+  const normalizedMilestonesDataPreClamp = normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign);
+  // core 超排夹取：hints 目标在 core 层被无视时（E02 实证 12h→23.9h），
+  // 在落库前等比缩回，避免膨胀的 milestone 学时把 stageDesign 预算一路放大。
+  const milestoneTargetHours = resolveTargetTotalHoursFromData(data);
+  const milestoneBudgetClamp = clampMilestoneHoursToBudget(
+    normalizedMilestonesDataPreClamp as unknown as Record<string, any>[],
+    milestoneTargetHours,
+  );
+  if (milestoneBudgetClamp.info?.scaled) {
+    logger.warn('[path-budget-clamp] core 里程碑学时超目标，已等比夹取', {
+      runId,
+      beforeHours: milestoneBudgetClamp.info.before,
+      afterHours: milestoneBudgetClamp.info.after,
+      targetHours: milestoneTargetHours,
+    });
+  }
+  const normalizedMilestonesData = milestoneBudgetClamp.milestones as unknown as typeof normalizedMilestonesDataPreClamp;
 
   // 资料引用（materialRefs）：里程碑 → 资料条目，**已在 skill 侧逐字核对**过。
   // 落进 aiPromptTemplate（不新增表列），读侧由 path-views 合并进 milestones/subtasks 返回给学习者。

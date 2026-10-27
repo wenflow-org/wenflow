@@ -44,6 +44,12 @@
 | `understanding.block_type_evidence` | string | goal-agent |
 | `understanding.support_need` | string | goal-agent |
 | `understanding.school_anchor` | object | goal-agent |
+| `understanding.skill_nature` | string | goal-agent, path |
+| `understanding.skill_nature_evidence` | string | path |
+| `understanding.platform_judgment` | string | goal-agent, path |
+| `understanding.platform_judgment_evidence` | string | path |
+| `understanding.sensor_readouts` | array<string> | path |
+| `understanding.needsMaterial` | object | path |
 | `understanding.prerequisiteDiagnostics` | array<object> | goal-agent |
 | `understanding.prerequisiteCheckResults` | array<object> | goal-agent |
 | `proposalQuality` | object? | goal-agent |
@@ -182,6 +188,7 @@ sandbox:goal-agent.understanding.urgency
 ### 合法沙盘键（sandbox: 对账注册表）
 
 ```
+sandbox:path-agent.allPreviousStageTasks
 sandbox:path-agent.cognitiveCore
 sandbox:path-agent.materials
 sandbox:path-agent.milestones

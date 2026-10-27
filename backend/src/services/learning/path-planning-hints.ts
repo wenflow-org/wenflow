@@ -830,6 +830,18 @@ export function derivePlanningHints(
     subtaskMinutesRange = [Math.min(subtaskMinutesRange[0], upper), upper];
   }
 
+  // 原子任务硬上界（2026-10-27 外部审查，R8）：一次坐 2 小时 ≠ 单个任务 2 小时。
+  // immersive 档此前会把 subtaskMinutesRange 上界抬到 90-120，规则 34「取上沿 70-100%」
+  // 随即逼出 100-120 分钟的巨型单课（R6 D15/C17/E03 实证）。硬顶取 90：
+  //   - 覆盖全部 100-120 分钟实证问题；
+  //   - 不砍大预算结构容量（60 会让 490h 案例容量从 225h 掉到 150h，测试实证）。
+  // 更小的原子粒度（30-50 分钟分段）由 stage-designer 提示词在长会话场景要求。
+  const ATOMIC_TASK_MINUTES_CAP = 90;
+  if (subtaskMinutesRange[1] > ATOMIC_TASK_MINUTES_CAP) {
+    const upper = ATOMIC_TASK_MINUTES_CAP;
+    subtaskMinutesRange = [Math.min(subtaskMinutesRange[0], upper), upper];
+  }
+
   const parsedBudgetMinutes = parseBudgetMinutes(timeBudget);
   if (Number.isFinite(parsedBudgetMinutes)) {
     const budgetMinutes = parsedBudgetMinutes as number;
@@ -1079,9 +1091,11 @@ export function derivePlanningHints(
   const effectiveContentAnchorHours = contentAnchor?.hours ?? null;
   const estimatedHoursTotalRawFinal =
     contentAnchor?.source === 'objective_scope_hours'
-      // R8：客观内容体量直接定预算（×1.5 留出理解/复盘的合理余量），
-      // 不再与日历/节奏乘法取 min——那是「能学多久」，不是「内容有多少」。
-      ? contentAnchor.hours * 1.5
+      // R8（2026-10-27 外部审查收紧）：objectiveScopeHours 本身就是「客观需要多少」，
+      // 直接作 targetTotalHours（1.0×）。×1.5 会让「goal 估 10h → hints 15h → core 21h」
+      // 平白膨胀一倍。旧日历/节奏算术在此只留痕（legacyArithmeticHours），不参与取值；
+      // 上界由 core 落库前的 1.15× 等比夹取与提示词 [0.7,1.2] 区间共同约束。
+      ? contentAnchor.hours
       : Number.isFinite(effectiveContentAnchorHours as number) && (effectiveContentAnchorHours as number) > 0
         && estimatedHoursTotalPreScope !== null
         && estimatedHoursTotalPreScope > (effectiveContentAnchorHours as number) * 1.5

@@ -166,6 +166,23 @@ describe('reorderTasksForPrerequisites（同阶段稳定拓扑）', () => {
     expect(result.tasks.map((task) => task.title)).toEqual(['写一遍接收路径', '复述整条解封装路径'])
   })
 
+  it('R7-1 追加守卫：任何非 acquire 任务不得被 KC 边前移到 acquire 之前（B17 S4 实证）', () => {
+    const execBeforeAcquire = {
+      kcGraph: { edges: [{ from: 'kc-exec', to: 'kc-acq' }] },
+      taskKcLinks: [
+        { taskTitle: '手工走一遍配对', linkedKCs: ['kc-acq'] },
+        { taskTitle: '让工具跑全量', linkedKCs: ['kc-exec'] },
+      ],
+    }
+    const tasks = [
+      { title: '手工走一遍配对', type: 'acquire' },
+      { title: '让工具跑全量', type: 'execute' },
+    ]
+    const result = reorderTasksForPrerequisites(tasks, execBeforeAcquire)
+    expect(result.changed).toBe(false)
+    expect(result.tasks.map((task) => task.title)).toEqual(['手工走一遍配对', '让工具跑全量'])
+  })
+
   it('R7-1 守卫放行反向：建立档前移越过收束档仍生效', () => {
     const foundationLate = {
       kcGraph: { edges: [{ from: 'kc-base', to: 'kc-summary' }] },
