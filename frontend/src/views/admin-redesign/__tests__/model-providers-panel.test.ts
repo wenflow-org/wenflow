@@ -144,20 +144,33 @@ describe('ModelProvidersPanel', () => {
     seedView()
   })
 
-  it('两栏结构：左列表平铺一份供应商清单（不按来历分组），默认选中平台通道', async () => {
+  it('两栏结构：左列表平铺一份供应商清单（不按来历分组），默认选中当前通道', async () => {
     const w = await mountPanel()
     // 2026-10-19 用户「就不分区」：原「平台提供 / 自行接入」两组与详情头「平台提供」徽标都撤了
     expect(w.findAll('.mpp-group__title')).toHaveLength(0)
     expect(w.text()).not.toContain('平台提供')
     expect(w.text()).not.toContain('自行接入')
-    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['平台', 'Acme 网关'])
+    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['当前通道', 'Acme 网关'])
     // 列表行只给「N 个模型」，不露注册表 id（id 在详情头）
     expect(w.findAll('.mpp-item__meta').map((el) => el.text())).toEqual(['2 个模型', '2 个模型'])
-    expect(w.find('.mpp-item--on').text()).toContain('平台')
+    expect(w.find('.mpp-item--on').text()).toContain('当前通道')
     // 平台通道详情：状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
-    expect(w.find('.mpp-detail__head').text()).toContain('平台')
+    expect(w.find('.mpp-detail__head').text()).toContain('当前通道')
     expect(w.find('.mpp-detail__head').findAll('.mk-badge')).toHaveLength(0)
     expect(w.text()).toContain('2 个')
+  })
+
+  it('模型为空时给下一步：当前通道直接去配置连接，不铺一张空表', async () => {
+    seedView({ providers: [providerView({ id: 'platform', name: '平台', models: [] })] })
+    const w = await mountPanel()
+    const setup = w.find('.mpp-setup')
+    expect(setup.exists()).toBe(true)
+    expect(setup.text()).toContain('还没有登记模型')
+    expect(setup.text()).toContain('先配置服务地址与 API Key')
+    expect(w.find('.mpp-table').exists()).toBe(false)
+    await btn(w, '去配置连接')!.trigger('click')
+    await flushPromises()
+    expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
   })
 
   it('供应商列表按 tab 语义走 roving tabindex：只有选中项占 Tab 位，方向键/Home/End 移动选中', async () => {
@@ -173,13 +186,13 @@ describe('ModelProvidersPanel', () => {
     // 末尾再按下越界回到第一项（循环），Home 直接回第一项
     await w.find('.mpp-list').trigger('keydown', { key: 'ArrowDown' })
     await flushPromises()
-    expect(w.find('.mpp-item--on').text()).toContain('平台')
+    expect(w.find('.mpp-item--on').text()).toContain('当前通道')
     await w.find('.mpp-list').trigger('keydown', { key: 'End' })
     await flushPromises()
     expect(w.find('.mpp-item--on').text()).toContain('Acme 网关')
     await w.find('.mpp-list').trigger('keydown', { key: 'Home' })
     await flushPromises()
-    expect(w.find('.mpp-item--on').text()).toContain('平台')
+    expect(w.find('.mpp-item--on').text()).toContain('当前通道')
   })
 
   it('平台详情分「模型 / 连接 / 基础设施 / 生成参数」四页签：连接与生成参数由宿主经插槽内联注入，平台不再有「设置」钮', async () => {
@@ -212,7 +225,7 @@ describe('ModelProvidersPanel', () => {
     await acmeTab.trigger('click')
     await flushPromises()
     expect(w.findAll('.mpp-subtabs')).toHaveLength(0)
-    await w.findAll('.mpp-item').find((i) => i.text().includes('平台'))!.trigger('click')
+    await w.findAll('.mpp-item').find((i) => i.text().includes('当前通道'))!.trigger('click')
     await flushPromises()
     expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('模型2')
 
@@ -236,7 +249,7 @@ describe('ModelProvidersPanel', () => {
     await btn(w, '显示')!.trigger('click')
     expect(w.find('.mpp-endpoint__key input').attributes('type')).toBe('text')
     // 模型表：模型 / 功能 / 单价 / 状态 / 操作（用途分组行 + 能力标签见下一条用例）
-    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '功能', '单价', '状态', ''])
+    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '功能', '状态', ''])
     const rows = modelRows(w)
     expect(rows).toHaveLength(2)
     expect(rows[0].text()).toContain('acme-chat')
@@ -297,7 +310,11 @@ describe('ModelProvidersPanel', () => {
     settleConfirm(true)
     await flushPromises()
     expect(updateMock).toHaveBeenCalledWith('acme-gateway', { enabled: false })
-    // 回吐视图被采纳：左栏该行变成停用态
+    // 停用条目默认收起：清单只剩当前通道，底部给出「显示已停用」入口
+    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['当前通道'])
+    expect(w.text()).toContain('显示已停用（1）')
+    await w.find('.mpp-show-disabled').trigger('click')
+    await flushPromises()
     expect(w.find('.mpp-item__dot--disabled').exists()).toBe(true)
   })
 
@@ -315,7 +332,8 @@ describe('ModelProvidersPanel', () => {
     seedView({ readOnly: true })
     const w = await mountPanel()
     expect(w.text()).toContain('注册表文件所在目录当前不可写')
-    expect(btn(w, '添加供应商')!.attributes('disabled')).toBeDefined()
+    // 2026-10-28 新人视角：不再从清单里「新建供应商」，只编辑当前通道
+    expect(w.text()).not.toContain('添加供应商')
     // 模型行的写入口（编辑 / 删除）一并禁用；「测试」是只读动作，仍可用
     const rowBtn = (text: string) => w.findAll('.mpp-rowacts .mk-link').find((b) => b.text() === text)!
     expect(rowBtn('编辑').attributes('disabled')).toBeDefined()

@@ -1,13 +1,16 @@
 <template>
-  <!-- 模型供应商与模型（BYOK 重做，2026-10-18；2026-10-19 去分区）。
-       左=供应商列表（平台自己的通道 + 若干自加上游，平铺一份清单、不分组），右=选中供应商的详情
-       （服务地址、密钥三件套、模型清单可增删改、上游未登记折叠；平台通道的服务地址与密钥、
+  <!-- 模型供应商与模型（BYOK 重做，2026-10-18；2026-10-19 去分区；2026-10-28 新人视角收敛）。
+       左=供应商列表（当前通道 + 其余启用中的上游；停用条目默认收起），右=选中供应商的详情
+       （服务地址、密钥三件套、模型清单可增删改、上游未登记折叠；当前通道的服务地址与密钥、
         连通性验证由宿主经 #platform-detail 注入）。
        2026-10-19 用户「就不分区，不要做什么平台提供，对于运营来说就是平台本身，自行接入又是什么
        意义呢」：原先按 id==='platform' 硬切「平台提供 / 自行接入」两组，详情头还挂「平台提供」
        徽标——那是「这条通道是谁给的」的来历视角，运营不需要，两栏看着还像两种东西。现在平铺成
-       一份供应商清单（平台通道排最前），来历词全部撤掉。
-       编辑是**即时保存**：点保存就落盘并热生效，不并入页脚保存条——只有平台通道的服务地址与
+       一份供应商清单（当前通道排最前），来历词全部撤掉。
+       2026-10-28 用户「不应该出现新建供应商，走两家供应商的事情」：撤掉「添加供应商」入口，
+       新人只需要把当前通道配好；停用的示例条目不占第一屏。价格不再占模型表一列，收进模型编辑的
+       高级设置（单价只服务成本分析，不是接入路径）。
+       编辑是**即时保存**：点保存就落盘并热生效，不并入页脚保存条——只有当前通道的服务地址与
        密钥仍是连接设置的脏位保存（那段表单由宿主经 #platform-detail 插槽注入）。
        运行面读数（冷却/健康/配置漂移告警）另取 GET /admin/model-registry：编辑面只有配置值，
        把「这个模型现在能不能用」也算在这里会让两个接口互相复述。 -->
@@ -43,13 +46,15 @@
     />
 
     <div v-else class="mpp-body">
-      <!-- 左：供应商列表（平铺一份清单，平台通道在最前；不再按来历分组） -->
+      <!-- 左：供应商列表（启用中的平铺一份清单，当前通道在最前；停用条目默认收起）
+           2026-10-28 用户「不应该出现新建供应商，走两家供应商的事情」：撤掉「添加供应商」。
+           新人只需要把当前通道配好；停用的示例条目不再占据第一屏，需要时再展开。 -->
       <aside class="mpp-list" role="tablist" aria-label="模型供应商" @keydown="onTablistKeydown">
         <div
           v-for="p in orderedProviders"
           :key="p.id"
           class="mpp-item"
-          :class="{ 'mpp-item--on': p.id === selectedId }"
+          :class="{ 'mpp-item--on': p.id === selectedId, 'mpp-item--off': !p.enabled }"
           role="tab"
           :aria-selected="p.id === selectedId"
           :data-provider="p.id"
@@ -60,28 +65,32 @@
         >
           <span class="mpp-item__dot" :class="`mpp-item__dot--${p.status}`" :title="statusLabel(p)" aria-hidden="true"></span>
           <span class="mpp-item__grow">
-            <span class="mpp-item__name">{{ p.name }}</span>
-            <span class="mpp-item__meta">{{ p.models.length }} 个模型</span>
+            <span class="mpp-item__name">{{ providerName(p) }}</span>
+            <span class="mpp-item__meta">{{ p.models.length }} 个模型<template v-if="!p.enabled"> · 已停用</template></span>
           </span>
           <MkSwitch
             :model-value="p.enabled"
             :disabled="busy"
-            :aria-label="`启用供应商 ${p.name}`"
+            :aria-label="`启用供应商 ${providerName(p)}`"
             @update:model-value="(v: boolean) => toggleEnabled(p, v)"
           />
         </div>
-        <button type="button" class="mk-btn mk-btn--sm mpp-add" :disabled="busy || registry?.readOnly" @click="providerEditor?.openWith(null)">
-          ＋ 添加供应商
-        </button>
+        <button
+          v-if="disabledCount"
+          type="button"
+          class="mk-link mpp-show-disabled"
+          @click="showDisabled = !showDisabled"
+        >{{ showDisabled ? '收起已停用' : `显示已停用（${disabledCount}）` }}</button>
       </aside>
 
       <!-- 右：详情 -->
       <div v-if="selected" class="mpp-detail">
         <div class="mpp-detail__head">
           <div class="mpp-detail__id">
-            <strong class="mpp-detail__name">{{ selected.name }}</strong>
-            <span class="mono mpp-detail__code">{{ selected.id }}</span>
-            <!-- 状态徽标只出「能不能用」；平台通道那一档（endpointSource=inherit）不出徽标——
+            <strong class="mpp-detail__name">{{ providerName(selected) }}</strong>
+            <span v-if="selected.id !== 'platform'" class="mono mpp-detail__code">{{ selected.id }}</span>
+            <span v-else class="mpp-detail__code">这个部署实际调用的模型服务</span>
+            <!-- 状态徽标只出「能不能用」；当前通道（endpointSource=inherit）不出徽标——
                  它用不用得了由下面「连接」段的连接徽标回答，同屏两处说同一件事是复读 -->
             <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
           </div>
@@ -210,16 +219,36 @@
           <!-- 上游清单不再铺在详情里（2026-10-24 用户「拉取作为浮窗」）：拉取只拿到清单，
                勾选与用途分流都在 PullModelsDialog 里做——详情区只留已登记模型这张表。 -->
 
-          <div class="mk-table-scroll">
+          <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么 -->
+          <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
+            <div class="mpp-setup__text">
+              <strong>还没有登记模型</strong>
+              <span>先配置服务地址与 API Key，再拉取上游模型，或手动添加模型 ID。</span>
+            </div>
+            <button
+              v-if="selected.id === 'platform'"
+              type="button"
+              class="mk-btn mk-btn--sm"
+              @click="platformTab = 'conn'"
+            >去配置连接</button>
+            <button
+              v-else
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :disabled="busy || registry?.readOnly"
+              @click="openManualAdd"
+            >添加模型</button>
+          </div>
+
+          <div v-if="selected.models.length || !selected.enabled" class="mk-table-scroll">
             <table class="mk-table mk-table--dense mpp-table">
               <colgroup>
-                <col style="width: 38%" /><col style="width: 20%" /><col style="width: 18%" /><col style="width: 12%" /><col style="width: 12%" />
+                <col style="width: 46%" /><col style="width: 24%" /><col style="width: 15%" /><col style="width: 15%" />
               </colgroup>
               <thead>
                 <tr>
                   <th>模型</th>
                   <th>功能</th>
-                  <th>单价</th>
                   <th>状态</th>
                   <th></th>
                 </tr>
@@ -230,7 +259,7 @@
                      哪个模型能思考、能调推理强度、能读图。 -->
                 <template v-for="g in modelGroups" :key="g.tier">
                   <tr class="mpp-group">
-                    <td colspan="5">
+                    <td colspan="4">
                       <span class="mpp-group__name">{{ g.label }}</span>
                       <span class="mpp-group__count">{{ g.models.length }} 个</span>
                       <span class="mpp-group__hint">{{ g.hint }}</span>
@@ -251,8 +280,6 @@
                     <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
                     <span v-if="!functionTags(m).length" class="mpp-fn__none">基础对话</span>
                   </td>
-                  <!-- 价格是「入 / 出」中文标签 + 数字，走正文 + 等宽数字对齐 -->
-                  <td class="mpp-price" :class="{ 'mpp-price--missing': priceMissing(m) }" :title="priceTitle(m)">{{ priceText(m) }}</td>
                   <td>
                     <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
                     <span v-else class="mk-badge mk-badge--ok">● 健康</span>
@@ -286,8 +313,8 @@
                   </tr>
                 </template>
                 <tr v-if="!selected.models.length">
-                  <td colspan="5" class="mpp-empty">
-                    {{ selected.enabled ? '还没有模型' : '这个供应商当前停用，模型不参与路由。' }}
+                  <td colspan="4" class="mpp-empty">
+                    这个供应商当前停用，模型不参与路由。
                   </td>
                 </tr>
               </tbody>
@@ -416,6 +443,8 @@ const busy = ref(false)
 const actionError = ref('')
 const writeWarnings = ref<string[]>([])
 const selectedId = ref('')
+/** 已停用供应商默认收起：新人第一眼只看到正在用的通道，示例/停用条目不占清单 */
+const showDisabled = ref(false)
 const keyDraft = ref('')
 const keyVisible = ref(false)
 const testingId = ref('')
@@ -441,7 +470,7 @@ const selected = computed(() => providers.value.find((p) => p.id === selectedId.
 /* 平台详情的二级页签（2026-10-26 用户「这个地方就可以配置重排序嵌入模型」+
    「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得可以和前面的合并了」）：
    向量化 / 重排 / 生成默认都是平台这条供应商自己的能力，原来各自独立成卡挂在页面别处，
-   与「平台」是两处；现在收进平台详情，和连接、模型并列。页签只对平台出现——
+   与「当前通道」是两处；现在收进通道详情，和连接、模型并列。页签只对平台出现——
    示例供应商没有基础设施与平台级生成默认。用组件内状态不写 URL：二级写键会与一级抢。 */
 const platformTab = ref<'models' | 'conn' | 'infra' | 'generation'>('models')
 const platformTabs = computed(() => [
@@ -472,10 +501,15 @@ const registryPathTitle = computed(() => {
   return parts.join('\n')
 })
 
-/** 平铺一份清单：平台通道在最前（它是平台自己的通道），其余按文件声明序。
-    2026-10-19 去分区：原按 id==='platform' 切「平台提供 / 自行接入」两组，那是来历视角。 */
+/** 供应商展示名：文件里的 dev 默认名「平台」不带到界面上——没有平台默认这回事，
+    它就是「这个部署当前实际调用的通道」。别的部署给 platform 起了真名就照实显示。 */
+function providerName(p: ProviderView): string {
+  return p.id === 'platform' && p.name === '平台' ? '当前通道' : p.name
+}
+/** 平铺一份清单：当前通道在最前；停用条目默认不出现，由清单底部一行展开 */
+const disabledCount = computed(() => providers.value.filter((p) => !p.enabled).length)
 const orderedProviders = computed(() => {
-  const list = providers.value
+  const list = showDisabled.value ? providers.value : providers.value.filter((p) => p.enabled)
   return [...list.filter((p) => p.id === 'platform'), ...list.filter((p) => p.id !== 'platform')]
 })
 
@@ -504,7 +538,7 @@ function statusLabel(p: ProviderView): string {
   if (p.status === 'unconfigured') return '还没配置密钥'
   return '可用'
 }
-/** 详情头徽标：只出「能不能用」。「用平台连接设置」这一档返回 null——那句话由下面「连接」段
+/** 详情头徽标：只出「能不能用」。「用连接设置」这一档返回 null——那句话由下面「连接」段
     的连接徽标回答（同屏一处事实一个控件）。 */
 function statusBadge(p: ProviderView): { cls: string; label: string } | null {
   if (p.status === 'inherit') return null
@@ -529,16 +563,7 @@ function warningLabel(m: ModelLike): string {
   const ws = modelWarnings(m)
   return ws.length && ws.every((w) => w.includes('未被任何别名引用')) ? '未被引用' : '告警'
 }
-/** 未配单价 = 成本分析页这个模型的金额会显示「—」，是可在本页补的配置缺口 */
-function priceMissing(m: ModelLike): boolean {
-  const p = m.pricing
-  return !p || (p.inputPer1M == null && p.outputPer1M == null)
-}
-function priceText(m: ModelLike): string {
-  if (priceMissing(m)) return '未配置'
-  const p = m.pricing!
-  return `入 ${p.inputPer1M ?? '—'} / 出 ${p.outputPer1M ?? '—'}`
-}
+/** 未配单价 = 成本分析页这个模型的金额会显示「—」，是可在模型编辑高级设置里补的配置缺口 */
 const MODEL_GROUPS = [
   { tier: 'chat' as const, label: '对话', hint: '常规教学、工具调用与高频 Skill' },
   { tier: 'reasoning' as const, label: '推理', hint: '长思考与复杂判断' }
@@ -557,12 +582,6 @@ function functionTags(m: ModelLike): string[] {
   if (m.supportsReasoningEffort) tags.push('推理强度')
   if (m.vision) tags.push('读图')
   return tags
-}
-function priceTitle(m: ModelLike): string {
-  const p = m.pricing
-  if (priceMissing(m)) return '未配置单价：成本分析页这个模型的金额会显示「—」'
-  const cached = p!.cachedInputPer1M != null ? ` / 缓存 ${p!.cachedInputPer1M}` : ''
-  return `单价 入 ${p!.inputPer1M ?? '—'}${cached} / 出 ${p!.outputPer1M ?? '—'}（USD / 1M tokens）`
 }
 /** 列表是一组 role=tab：按 WAI-ARIA 走 roving tabindex + 方向键，避免 N 个供应商占 N 个 Tab 位 */
 function onTablistKeydown(e: KeyboardEvent): void {
@@ -595,12 +614,18 @@ function select(id: string): void {
   configureTotal.value = 0
 }
 
-/** 选中项被删/首次加载后归位：优先平台通道，其次第一个 */
+/** 选中项被删/首次加载后归位：优先当前通道，其次第一个可见供应商。
+    停用条目默认收起，选中项若刚被停用也要让位，避免详情停在一个清单里看不到的供应商。 */
 function ensureSelection(): void {
-  if (providers.value.some((p) => p.id === selectedId.value)) return
-  const first = providers.value.find((p) => p.id === 'platform') ?? providers.value[0]
+  const visible = showDisabled.value ? providers.value : providers.value.filter((p) => p.enabled)
+  if (visible.some((p) => p.id === selectedId.value)) return
+  const first = visible.find((p) => p.id === 'platform') ?? visible[0]
   selectedId.value = first?.id ?? ''
 }
+/** 收起已停用时，详情不能停在一个已经不在清单里的供应商 */
+watch(showDisabled, () => {
+  if (!showDisabled.value) ensureSelection()
+})
 
 async function refresh(force = false): Promise<void> {
   if (view.value && !force) return
@@ -651,7 +676,7 @@ function adopt(payload: unknown, warnings: string[]): void {
 async function toggleEnabled(p: ProviderView, value: boolean): Promise<void> {
   if (!value) {
     const ok = await askConfirm({
-      title: `停用供应商「${p.name}」`,
+      title: `停用供应商「${providerName(p)}」`,
       message: `停用后它的 ${p.models.length} 个模型立即退出路由。`,
       confirmText: '停用',
       danger: true,
@@ -663,7 +688,7 @@ async function toggleEnabled(p: ProviderView, value: boolean): Promise<void> {
   try {
     const res = await adminModelProvidersApi.update(p.id, { enabled: value })
     adopt(res?.data, res?.data?.warnings ?? [])
-    toast.success(value ? `「${p.name}」已启用` : `「${p.name}」已停用，模型退出路由`)
+    toast.success(value ? `「${providerName(p)}」已启用` : `「${providerName(p)}」已停用，模型退出路由`)
   } catch (e) {
     actionError.value = errMsg(e)
   } finally {
@@ -935,7 +960,14 @@ defineExpose({ refresh, openPull, openHostPull })
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mpp-add { width: 100%; margin-top: 10px; }
+.mpp-item--off { opacity: 0.72; }
+.mpp-show-disabled {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px;
+  text-align: left;
+}
 .mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
 /* 平台详情二级页签（模型 / 连接 / 基础设施 / 生成参数）：页签条下已有分隔线，面板不再自带一条 */
 .mpp-subtabs { margin-top: 4px; }
@@ -1033,10 +1065,22 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-model__id { overflow-wrap: anywhere; }
 .mpp-rowtest { display: block; margin-top: 2px; color: var(--mk-green); font-size: var(--mk-fs-micro); }
 .mpp-rowtest--bad { color: var(--mk-red); }
-/* 单价是一句读数（入 x / 出 y），断行会把它拆成两截读不出配对关系 */
-.mpp-price { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
-/* 未配单价是能直接修的配置缺口：用警示色把「单价未知」从限额副行里拎出来，别读成普通弱字 */
-.mpp-price--missing { color: var(--mk-amber); }
+/* 空模型时的下一步：一句话 + 一个动作，不丢一张只有表头的空表 */
+.mpp-setup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+}
+.mpp-setup__text { display: grid; gap: 4px; min-width: 0; }
+.mpp-setup__text strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
+.mpp-setup__text span { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
 /* 功能分组行：一张表里切段（对话 / 推理），组内不再复述用途。
    不覆写内边距：6px 纵向曾把单行小字单元格压到 30px，低于 SPEC §3 的 40px 行高下限
    （SkillReconciliation 同款判例）。跟随 .mk-table td 的档位节奏。 */

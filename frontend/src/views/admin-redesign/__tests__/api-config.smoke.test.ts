@@ -370,12 +370,12 @@ describe('ApiConfig P1 修复批', () => {
     expect(panel.exists()).toBe(true);
     expect(panel.text()).toContain('模型供应商');
     // 2026-10-19 用户「就不分区，不要做什么平台提供…自行接入又是什么意义呢」：
-    // 分组标题与来历词都不再出现，只剩一份平铺清单（平台通道排最前）
+    // 分组标题与来历词都不再出现，只剩一份平铺清单（当前通道排最前）
     expect(wrapper.findAll('.mpp-group__title')).toHaveLength(0);
     expect(wrapper.text()).not.toContain('平台提供');
     expect(wrapper.text()).not.toContain('自行接入');
     const items = wrapper.findAll('.mpp-item__name').map((el) => el.text());
-    expect(items).toEqual(['平台', 'Acme 网关']);
+    expect(items).toEqual(['当前通道', 'Acme 网关']);
     // 平台连接表单内联在详情里（2026-10-25 撤掉「平台设置」浮窗）
     expect(wrapper.find('.ac-conn').exists()).toBe(true);
     expect(wrapper.find('.ac-ps').exists()).toBe(false);

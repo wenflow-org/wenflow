@@ -16,9 +16,8 @@
             <span class="mk-alert__msg">{{ error }}</span>
           </div>
 
-          <!-- 身份与价格分开（2026-10-24 用户「添加模型表格再优化一下」）：
-               原「基本信息」把 ID/名称和三档价格挤在一段里，价格没有单位与口径；
-               现在身份一行、价格一行，价格注明 USD / 1M tokens 与影响范围。 -->
+          <!-- 主路径只留「模型身份 + 生成参数」；价格与能力/限额/备用链一起进高级设置
+               （2026-10-28 用户「单价不是很重要的东西」），不占新增模型的第一屏。 -->
           <section class="med-sec">
             <div class="med-sec__head">
               <h4 class="med-sec__title">模型身份</h4>
@@ -43,33 +42,12 @@
             </div>
           </section>
 
-          <section class="med-sec">
-            <div class="med-sec__head">
-              <h4 class="med-sec__title">价格</h4>
-              <span class="med-sec__hint">USD / 1M tokens，选填，只影响成本分析</span>
-            </div>
-            <div class="med-price">
-              <label class="mk-field">
-                <span class="mk-field__label">输入</span>
-                <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
-              </label>
-              <label class="mk-field">
-                <span class="mk-field__label">缓存命中</span>
-                <input v-model.number="form.cachedInputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
-              </label>
-              <label class="mk-field">
-                <span class="mk-field__label">输出</span>
-                <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
-              </label>
-            </div>
-          </section>
-
           <!-- 生成参数（2026-10-24 用户拍板「每个模型各自一套」）：原来只有平台级默认，
-               现在每个模型可单独覆盖；「用平台默认」= 不写模型字段。 -->
+               现在每个模型可单独覆盖；「跟随默认」= 不写模型字段。 -->
           <section class="med-sec med-gen">
             <div class="med-sec__head">
               <h4 class="med-sec__title">生成参数</h4>
-              <span class="med-sec__hint">不单独设置时用平台默认</span>
+              <span class="med-sec__hint">不单独设置时用默认值</span>
             </div>
             <div class="med-price">
               <label class="mk-field">
@@ -106,7 +84,7 @@
           <details class="med-advanced">
             <summary>
               高级设置
-              <span class="med-advanced__hint">用途、能力、调用限制、备用模型</span>
+              <span class="med-advanced__hint">用途、能力、调用限制、备用模型、价格</span>
             </summary>
             <div class="med-adv-body">
               <div class="med-two">
@@ -159,20 +137,20 @@
               <div>
                 <div class="med-subrow">
                   <h5 class="med-sub">调用限制</h5>
-                  <span class="med-sub__hint">留空 = 平台默认，并发留空 = 不限</span>
+                  <span class="med-sub__hint">留空 = 使用默认值，并发留空 = 不限</span>
                 </div>
                 <div class="med-two">
                   <label class="mk-field">
                     <span class="mk-field__label">输出上限</span>
-                    <input v-model.number="form.maxOutputTokens" class="mk-field__input mono" type="number" min="1" placeholder="平台默认" />
+                    <input v-model.number="form.maxOutputTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
                   </label>
                   <label class="mk-field">
                     <span class="mk-field__label">默认输出</span>
-                    <input v-model.number="form.defaultMaxTokens" class="mk-field__input mono" type="number" min="1" placeholder="平台默认" />
+                    <input v-model.number="form.defaultMaxTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
                   </label>
                   <label class="mk-field">
                     <span class="mk-field__label">推理预留</span>
-                    <input v-model.number="form.reasoningReserveTokens" class="mk-field__input mono" type="number" min="1" placeholder="平台默认" />
+                    <input v-model.number="form.reasoningReserveTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
                   </label>
                   <label class="mk-field">
                     <span class="mk-field__label">并发上限</span>
@@ -196,7 +174,7 @@
                       <button type="button" class="med-fb__remove" :aria-label="`移除 ${opt}`" @click="removeFallback(opt)">✕</button>
                     </span>
                   </div>
-                  <p v-else class="med-fb__empty">未选备用模型：沿用平台默认的备用模型列表</p>
+                  <p v-else class="med-fb__empty">未选备用模型：沿用默认备用模型列表</p>
                   <input
                     v-model="fallbackQuery"
                     class="mk-field__input med-fb__filter"
@@ -218,6 +196,29 @@
                       {{ availableFallbacks.length ? '没有匹配的模型' : '当前没有其他可选模型' }}
                     </p>
                   </div>
+                </div>
+              </div>
+
+              <!-- 价格不是接入模型的关键路径（2026-10-28 用户「单价不是很重要的东西，
+                   可以在二级页面编辑」）：收进高级设置，只在成本分析需要时再填。 -->
+              <div>
+                <div class="med-subrow">
+                  <h5 class="med-sub">价格</h5>
+                  <span class="med-sub__hint">USD / 1M tokens，选填，只影响成本分析</span>
+                </div>
+                <div class="med-price">
+                  <label class="mk-field">
+                    <span class="mk-field__label">输入</span>
+                    <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
+                  </label>
+                  <label class="mk-field">
+                    <span class="mk-field__label">缓存命中</span>
+                    <input v-model.number="form.cachedInputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
+                  </label>
+                  <label class="mk-field">
+                    <span class="mk-field__label">输出</span>
+                    <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
+                  </label>
                 </div>
               </div>
             </div>
@@ -302,18 +303,18 @@ const form = reactive({
 
 /* 三个生成参数与用途的下拉档位：文案保持与旧原生 select 逐字一致 */
 const THINKING_MODE_OPTIONS: Array<{ value: 'default' | 'enabled' | 'disabled'; label: string }> = [
-  { value: 'default', label: '用平台默认' },
+  { value: 'default', label: '跟随默认' },
   { value: 'enabled', label: '强制开启' },
   { value: 'disabled', label: '关闭' }
 ]
 const REASONING_EFFORT_OPTIONS: Array<{ value: 'default' | 'low' | 'high' | 'max'; label: string }> = [
-  { value: 'default', label: '用平台默认' },
+  { value: 'default', label: '跟随默认' },
   { value: 'low', label: '低（low）' },
   { value: 'high', label: '高（high）' },
   { value: 'max', label: '最高（max）' }
 ]
 const RESPONSE_FORMAT_OPTIONS: Array<{ value: 'default' | 'none' | 'json_object'; label: string }> = [
-  { value: 'default', label: '用平台默认' },
+  { value: 'default', label: '跟随默认' },
   { value: 'none', label: '关闭' },
   { value: 'json_object', label: 'JSON 对象' }
 ]

@@ -112,6 +112,11 @@
                 </div>
               </div>
             </div>
+            <!-- 换服务商是新人最容易卡住的一步（2026-10-28）：保存连接只是换端点，
+                 新模型清单还要拉一次，旧模型要自己删——把这条路径写在表单下面。 -->
+            <p class="ac-conn__hint">
+              换服务商时：保存连接后点「连接并拉取」拿到新模型清单。旧模型不再使用的话，到「模型」页签逐行删除。
+            </p>
           </div>
         </template>
 
@@ -970,6 +975,13 @@ function discardAll() {
    状态徽标与「保存连接」收进一条细条，右侧一句说明这段表单管什么。 */
 /* 槽位已在供应商详情的内衬里：连接块自身的 .ac-body 不再补一层 16px 边 */
 .ac-conn .ac-body { padding: 0; }
+/* 换服务商的下一步：一句路径说明，跟随连接表单，不另开卡片 */
+.ac-conn__hint {
+  margin: 10px 0 0;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.5;
+  color: var(--mk-faint);
+}
 
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }

@@ -32,7 +32,7 @@
                   <td class="mono">{{ alias.alias }}</td>
                   <td>
                     <span class="mk-badge" :class="alias.source === 'db-override' ? 'mk-badge--warn' : 'mk-badge--muted'">
-                      {{ alias.source === 'db-override' ? '平台覆盖' : '平台内置' }}
+                      {{ alias.source === 'db-override' ? '界面覆盖' : '内置默认' }}
                     </span>
                   </td>
                   <td class="mono">{{ alias.members.length ? alias.members.join(' → ') : '（无可用模型）' }}</td>
@@ -49,8 +49,8 @@
               </tbody>
             </table>
           </div>
-          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="这些别名以平台配置为准">
-            平台覆盖的别名：
+          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="这些别名以界面配置为准">
+            界面覆盖的别名：
             <span v-for="alias in data.aliases.filter((a) => a.dbMembers)" :key="`db-${alias.alias}`" class="mono ac-mr-note__item">
               {{ alias.alias }} = {{ alias.dbMembers?.join(', ') }}
             </span>
