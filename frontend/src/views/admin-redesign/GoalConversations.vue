@@ -921,7 +921,6 @@ onMounted(() => {
    单元格 padding 16→12 + 三处 min-width 各收一档；「约束条件」列默认不进表（showCol 同源）。
    状态/阶段合并列含四点过程条（4×6px + gap ≈ 45px）保留：min-width 120px 已容得下点条 */
 @media (max-width: 1599px) {
-  .mk-table th, .mk-table td { padding-inline: 12px; }
   /* fixed 表里列宽即契约（.gc-c-user），行内再设 min-width 会把内容顶出单元格 */
   .gc-user { min-width: 0; }
   .mk-cell-main .mk-cell-text--wrap { min-width: 0; }

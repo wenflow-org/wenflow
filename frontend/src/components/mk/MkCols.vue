@@ -1,6 +1,8 @@
 <template>
   <div ref="rootEl" class="mk-cols">
-    <button type="button" class="mk-link" :class="{ 'mk-link--active': open }" @click="open = !open" :aria-expanded="open" title="设置显示的列">列</button>
+    <button type="button" class="mk-link mk-cols__trigger" :class="{ 'mk-link--active': open }" @click="open = !open" :aria-expanded="open" title="设置显示的列">
+      <Columns3 :size="14" :stroke-width="1.75" aria-hidden="true" />列
+    </button>
     <div v-if="open" class="mk-cols__menu" @click.stop>
       <label v-for="c in colDefs" :key="c.key" class="mk-cols__item" :title="c.title">
         <input type="checkbox" :checked="!hidden.has(c.key)" @change="toggle(c.key)" />
@@ -13,6 +15,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { Columns3 } from 'lucide-vue-next'
 
 /**
  * 列显隐公共组件（P1-3）：卡片头「列」按钮 + 勾选菜单 + localStorage 持久化。
@@ -80,6 +83,9 @@ function toggle(key: string) {
 
 <style scoped>
 .mk-cols { position: relative; display: inline-flex; }
+/* 触发器与工具条里的搜索框/筛选同一行盒：文字链本身只有 20px 高，
+   在 32px 的控件行里会贴着中线「浮」着（2026-10-27 表头复核） */
+.mk-cols__trigger { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; }
 .mk-cols__menu {
   position: absolute;
   right: 0;

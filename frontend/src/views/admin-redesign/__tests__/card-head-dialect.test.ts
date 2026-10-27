@@ -12,10 +12,25 @@
  * 这里只锁「结构性方言」，不管某个页面具体放几个 pill。
  */
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative, resolve } from 'node:path'
 
 const read = (file: string) => readFileSync(resolve(__dirname, '..', file), 'utf8')
+
+/** 前端源码里全部 .vue（表头/工具条几何的扫描面：页面与 mk 原语都算） */
+function allVueFiles(dir = resolve(__dirname, '../../../..')): string[] {
+  const out: string[] = []
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name)
+    if (statSync(p).isDirectory()) {
+      if (name === 'node_modules' || name === 'dist' || name === '__tests__') continue
+      out.push(...allVueFiles(p))
+    } else if (name.endsWith('.vue')) {
+      out.push(p)
+    }
+  }
+  return out
+}
 
 /** 有列表卡头的页面（壳/弹窗/详情面板不在内） */
 const LIST_PAGES = [
@@ -123,6 +138,117 @@ describe('卡头工具条形态', () => {
         if (!toggles) continue
         const label = attrs.match(/aria-label="([^"]+)"/)?.[1]
         if (label !== '标志筛选') offenders.push(`${file}: 开关组标签为「${label ?? '（空）'}」`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+})
+
+/**
+ * 卡头工具条几何（2026-10-27 复核）：用户「所有表格的表头部分看看如何统一设计了」。
+ *
+ * 统一前实测（Playwright，1280/1440/1920 三档）：用户 / 审计日志卡头 97px，右组被
+ * flex-wrap 挤到第二行左边缘、右边空一大片，其余页 57px；同一条工具条上 pill 33px /
+ * pillselect 29px / 输入框 32px 三种高度；目标对话搜索框固定 180px 把占位
+ * 「搜索用户 / 邮箱 / 目标摘要」裁成「…目标摘」；表头行高 41 / 45 / 46 三档；
+ * 可排序列箭头静止 opacity 0（扫一眼看不出哪列能排）。
+ *
+ * 这些几何量**只能由原语一处定义**：页面各写一份覆盖，就是下一轮「不统一」的来源。
+ * 下面把原语里的定值与「页面不许再覆盖」同时钉住。
+ */
+describe('卡头工具条几何', () => {
+  /* 注释里写着「原为 opacity: 0」这类历史值，取值前先把注释剥掉，
+     否则断言读到的是注释里那个数字，而不是规则生效的值 */
+  const css = readFileSync(resolve(__dirname, '../../../../src/styles/mk-primitives.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+  const block = (selector: string) => {
+    const lit = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return css.match(new RegExp(`(?:^|\\n)${lit} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? ''
+  }
+  /** 同一断点可能有多段（各管各的卡），取含目标选择器的那一段 */
+  const mediaBlock = (width: number, needle: string) => {
+    for (const m of css.matchAll(new RegExp(`@media \\(max-width: ${width}px\\) \\{([\\s\\S]*?)\\n\\}`, 'g'))) {
+      if (m[1].includes(needle)) return m[1]
+    }
+    return ''
+  }
+  const num = (body: string, prop: string) => {
+    const m = body.match(new RegExp(`${prop}:\\s*([\\d.]+)`))
+    return m ? Number(m[1]) : NaN
+  }
+
+  it('工具条单行：右组恒与左组同行贴右，窄屏（≤900）才允许折行', () => {
+    expect(block('.mk-card__head')).toContain('flex-wrap: nowrap')
+    expect(block('.mk-card__head > :first-child')).toContain('min-width: 0')
+    expect(block('.mk-card__head-right')).toContain('margin-left: auto')
+    const narrow = mediaBlock(900, '.mk-card__head {')
+    expect(narrow, '窄屏兜底：右组不许被左组挤没').toMatch(/\.mk-card__head \{[^}]*flex-wrap: wrap/)
+  })
+
+  it('同一行盒：pill / 胶囊下拉 / 列按钮都锚在 32px', () => {
+    expect(block('.mk-pill')).toContain('height: 32px')
+    // 胶囊下拉靠共用 .mk-pill 拿高度，自己只调左右内衬（原先 padding: 3px 8px 3px 11px → 29px）
+    expect(block('.mk-pillselect')).not.toMatch(/^\s*height:/m)
+    expect(block('.mk-pillselect')).toMatch(/padding: 0 [\d]+px 0 [\d]+px/)
+    const cols = readFileSync(resolve(__dirname, '../../../components/mk/MkCols.vue'), 'utf8')
+    expect(cols).toMatch(/\.mk-cols__trigger \{[^}]*min-height: 32px/)
+  })
+
+  it('搜索框按占位文本自适应，长占位不再被裁', () => {
+    const b = block('.mk-card__head-right .mk-search > .mk-filter__input')
+    expect(b).toContain('field-sizing: content')
+    expect(num(b, 'min-width')).toBeGreaterThanOrEqual(200)
+    expect(num(b, 'max-width')).toBeGreaterThanOrEqual(280)
+  })
+
+  it('表头行高 44px：有没有排序列都是同一条基线', () => {
+    expect(num(block('.mk-table thead th'), 'height')).toBe(44)
+  })
+
+  it('可排序列常驻淡指示器（静止可见、悬停加重、激活满显）', () => {
+    const rest = num(block('.mk-th__caret'), 'opacity')
+    const hover = num(css.match(/\.mk-table th\.mk-th--sortable:hover \.mk-th__caret \{([^}]*)\}/)?.[1] ?? '', 'opacity')
+    expect(rest, '静止即淡显，不然用户看不出哪列能排').toBeGreaterThanOrEqual(0.2)
+    expect(hover).toBeGreaterThan(rest)
+  })
+
+  it('中宽档单元格内衬只在原语一处定义，页面不再各写一份 12px 覆盖', () => {
+    const offenders: string[] = []
+    for (const file of allVueFiles()) {
+      const src = readFileSync(file, 'utf8')
+      for (const m of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const [, selector, body] = m
+        if (!/padding-inline/.test(body)) continue
+        if (/\.mk-table\b[^{]*\bth\b/.test(selector) && /12px/.test(body)) {
+          offenders.push(`${relative(resolve(__dirname, '../../../..'), file)}: 页面重复中宽档内衬`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('深层收紧档（≤1365 / ≤1439）必须同时对 th 与 td 生效，否则表头与行错位', () => {
+    const offenders: string[] = []
+    for (const file of allVueFiles()) {
+      const src = readFileSync(file, 'utf8')
+      for (const m of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const [, selector, body] = m
+        if (!/padding-inline/.test(body)) continue
+        if (!/table/.test(selector) || !/\btd\b/.test(selector)) continue
+        if (!/\bth\b/.test(selector)) {
+          offenders.push(`${relative(resolve(__dirname, '../../../..'), file)}: ${selector.trim()}`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('标了 mk-th--sortable 的表头必须渲染 .mk-th__caret', () => {
+    const offenders: string[] = []
+    for (const file of allVueFiles()) {
+      const src = readFileSync(file, 'utf8')
+      if (src.includes('mk-th--sortable') && !src.includes('mk-th__caret')) {
+        offenders.push(relative(resolve(__dirname, '../../../..'), file))
       }
     }
     expect(offenders).toEqual([])

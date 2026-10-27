@@ -1191,7 +1191,6 @@ const fallbackPolicyText = computed(() => {
    min-content 赤本、操作列被裁；削列宽是打地鼠，padding 档一次收净 */
 @media (max-width: 1599px) {
   .sk-cell .mk-cell-main { max-width: 200px; }
-  .mk-table th, .mk-table td { padding-inline: 12px; }
 }
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .sk-dot--ok { background: var(--mk-green); }
