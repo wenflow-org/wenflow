@@ -625,7 +625,7 @@ describe('批次 1：EG7 / EG17 / D19', () => {
     expect(w.find('.mk-pagination__total').text()).toContain('共 30 条记录');
     const traceTh = w.findAll('th').find((th) => th.text().trim() === 'Trace')!;
     expect(traceTh.attributes('title')).toBeUndefined();
-    await findBtn(w, '列').trigger('click');
+    await w.find('.mk-cols__trigger').trigger('click');
     await nextTick();
     const item = w.findAll('.mk-cols__item').find((x) => x.text().includes('Trace'))!;
     expect(item.attributes('title')).toBeUndefined();
@@ -682,7 +682,7 @@ describe('批次 1：EG7 / EG17 / D19', () => {
     liveLogsFiltered.value = [fakeSpan(1)];
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    await findBtn(w, '列').trigger('click');
+    await w.find('.mk-cols__trigger').trigger('click');
     await nextTick();
     const items = w.findAll('.mk-cols__item');
     expect(items.map((i) => i.attributes('title'))).toEqual(items.map(() => undefined));

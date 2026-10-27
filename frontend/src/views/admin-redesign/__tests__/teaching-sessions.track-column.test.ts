@@ -56,7 +56,7 @@ async function mountTs() {
 /** 从「列」菜单把默认隐藏的列打开（2026-10-22 起完成方式/消息/知识点/关注默认收起） */
 async function showColumn(wrapper: ReturnType<typeof mount>, label: string) {
   if (!wrapper.find('.mk-cols__menu').exists()) {
-    const colsBtn = wrapper.findAll('button').find((b) => b.text() === '列');
+    const colsBtn = wrapper.find('.mk-cols__trigger');
     expect(colsBtn).toBeTruthy();
     await colsBtn!.trigger('click');
   }

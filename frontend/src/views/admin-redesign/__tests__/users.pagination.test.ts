@@ -131,7 +131,7 @@ describe('Users 客户端分页（mk-pagination）', () => {
     await nextTick();
     expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(false);
 
-    await findBtn(w, '列').trigger('click');
+    await w.find('.mk-cols__trigger').trigger('click');
     await nextTick();
     const labels = w.findAll('.mk-cols__item label, .mk-cols__item').map((x) => x.text());
     expect(labels.some((t) => t.includes('选择框'))).toBe(true);

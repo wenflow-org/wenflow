@@ -475,7 +475,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(header.text()).not.toContain('批量操作');
     const cardHead = w.find('.mk-card--fill .mk-card__head');
     expect(cardHead.text()).toContain('批量');
-    await findBtn(w, '列').trigger('click');
+    await w.find('.mk-cols__trigger').trigger('click');
     await nextTick();
     const item = w.findAll('.mk-cols__item').find((x) => x.text().includes('选择框'))!;
     await item.find('input[type="checkbox"]').setValue(true);

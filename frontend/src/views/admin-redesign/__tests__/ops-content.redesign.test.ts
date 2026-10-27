@@ -223,7 +223,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(subs.join(' ')).not.toContain('lp_');
 
     // 难度 / 时长默认收起：从「列」菜单打开后再验证
-    const colsBtn = w.findAll('button').find((b) => b.text() === '列')!;
+    const colsBtn = w.find('.mk-cols__trigger');
     if (!w.find('.mk-cols__menu').exists()) await colsBtn.trigger('click');
     const diffItem = w.findAll('.mk-cols__item').find((l) => l.text().includes('难度'))!;
     await diffItem.find('input').setValue(true);

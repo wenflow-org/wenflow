@@ -214,6 +214,16 @@ describe('卡头工具条几何', () => {
     expect(cols).toMatch(/\.mk-cols__trigger \{[^}]*min-height: 32px/)
   })
 
+  /* 2026-10-27 用户「那个列，干嘛的」：入口只写一个「列」字，看不出是列显隐、
+     也看不出当前藏过列。契约：可见文案 = 列设置；有隐藏列时带计数；菜单有「显示列」头
+     与「恢复默认」（回到该页首访默认集，而不是一律全显）。 */
+  it('列设置入口自解释：可见文案 + 隐藏计数 + 恢复默认', () => {
+    const cols = readFileSync(resolve(__dirname, '../../../components/mk/MkCols.vue'), 'utf8')
+    expect(cols).toContain('列设置')
+    expect(cols).toMatch(/mk-cols__count/)
+    expect(cols).toMatch(/mk-cols__reset[^>]*>\s*恢复默认/)
+  })
+
   it('搜索框按占位文本自适应，长占位不再被裁', () => {
     const b = block('.mk-card__head-right .mk-search > .mk-filter__input')
     expect(b).toContain('field-sizing: content')

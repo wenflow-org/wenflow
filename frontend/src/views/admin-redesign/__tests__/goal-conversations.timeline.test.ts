@@ -104,7 +104,7 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     expect(ths.at(-1)).toBe('操作');
     // 2026-10-22 默认收起创建时间与约束条件（列菜单仍可开）
     expect(ths).not.toContain('创建时间');
-    const colsBtn = wrapper.findAll('button').find((b) => b.text() === '列')!;
+    const colsBtn = wrapper.find('.mk-cols__trigger');
     await colsBtn.trigger('click');
     const menu = wrapper.findAll('.mk-cols__item').map((x) => x.text());
     expect(menu).toContain('创建时间');

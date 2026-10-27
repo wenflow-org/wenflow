@@ -307,7 +307,7 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     expect(heads).not.toContain('失败')
     expect(heads).not.toContain('无响应')
     expect(heads).toContain('异常')
-    const colsBtn = w.findAll('button').find((b) => b.text().trim() === '列')!
+    const colsBtn = w.find('.mk-cols__trigger')
     await colsBtn.trigger('click')
     const labels = w.findAll('.mk-cols__item span').map((s2) => s2.text().trim())
     expect(labels).not.toContain('任务')
