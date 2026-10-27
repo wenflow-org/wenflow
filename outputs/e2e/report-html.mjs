@@ -109,6 +109,61 @@ const tableRows = rows.map((r) => {
   </tr>`;
 }).join('\n');
 
+// 管线报告：把 doc/TEACHING_PIPELINE_REPORT.md 转成一节（极简 md → html：标题/表格/代码块/列表/段落）
+const pipelineMdPath = path.join(ROOT, 'doc', 'TEACHING_PIPELINE_REPORT.md');
+const mdToHtml = (md) => {
+  const inline = (t) => esc(t)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const lines = md.split('\n');
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^```/.test(line)) {
+      const buf = [];
+      i += 1;
+      while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i += 1; }
+      i += 1;
+      out.push(`<pre class="flow">${esc(buf.join('\n'))}</pre>`);
+      continue;
+    }
+    if (/^\|/.test(line)) {
+      const rows = [];
+      while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i]); i += 1; }
+      const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      const head = cells(rows[0]);
+      const body = rows.slice(2).map(cells);
+      out.push(`<table class="pipe"><thead><tr>${head.map((h) => `<th>${inline(h)}</th>`).join('')}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+      continue;
+    }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) {
+      const lv = Math.min(6, h[1].length + 1); // 整节降一级
+      out.push(`<h${lv}>${inline(h[2])}</h${lv}>`);
+      i += 1;
+      continue;
+    }
+    if (/^>\s?/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^>\s?/, '')); i += 1; }
+      out.push(`<blockquote>${buf.map(inline).join('<br>')}</blockquote>`);
+      continue;
+    }
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { items.push(lines[i].replace(/^\s*[-*]\s+/, '')); i += 1; }
+      out.push(`<ul>${items.map((t) => `<li>${inline(t)}</li>`).join('')}</ul>`);
+      continue;
+    }
+    if (line.trim() === '' || /^---+$/.test(line.trim())) { i += 1; continue; }
+    out.push(`<p>${inline(line)}</p>`);
+    i += 1;
+  }
+  return out.join('\n');
+};
+const pipelineHtml = fs.existsSync(pipelineMdPath) ? mdToHtml(fs.readFileSync(pipelineMdPath, 'utf8')) : '';
+
 const html = `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -174,6 +229,24 @@ const html = `<!doctype html>
   pre{margin:8px 0 0;padding:10px 12px;background:#0f1117;color:#d6deeb;border-radius:6px;
     font-size:11.5px;line-height:1.55;overflow:auto;max-height:260px}
   footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);color:var(--faint);font-size:12.5px}
+  /* 管线章节 */
+  .pipe-wrap{font-size:14px}
+  .pipe-wrap h2{font-size:17px;margin:30px 0 12px}
+  .pipe-wrap h3{font-size:15.5px;margin:24px 0 10px;color:var(--ink)}
+  .pipe-wrap h4{font-size:14px;margin:18px 0 8px;color:var(--muted)}
+  .pipe-wrap p{margin:10px 0;color:#333a45}
+  .pipe-wrap ul{margin:10px 0 10px 22px;padding:0}
+  .pipe-wrap li{margin:4px 0}
+  .pipe-wrap blockquote{margin:12px 0;padding:10px 14px;background:var(--soft);
+    border-left:3px solid var(--lineStrong, #c9cfd9);color:var(--muted);border-radius:4px}
+  .pipe-wrap code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+    background:#f1f3f7;padding:1px 5px;border-radius:4px;color:#2d3440}
+  pre.flow{background:#0f1117;color:#d6deeb;padding:16px 18px;border-radius:8px;overflow:auto;
+    font-size:12px;line-height:1.7;margin:14px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  table.pipe{margin:12px 0;font-size:13px}
+  table.pipe th{background:var(--soft);font-weight:650}
+  table.pipe td,table.pipe th{padding:7px 10px;border:1px solid var(--line)}
+  @media print{.pipe-wrap{font-size:12px}pre.flow{background:#f6f7f9;color:#1f2430}}
   @media print{.toolbar{display:none}.card{break-inside:avoid}}
 </style>
 </head>
@@ -199,6 +272,11 @@ const html = `<!doctype html>
     <div class="stat"><b>${mean('readability')}</b><i>可读均分 /3</i></div>
     <div class="stat drop"><b>${pct('redundant')}%</b><i>伪视觉占比</i></div>
     <div class="stat drop"><b>${pct('leak')}%</b><i>泄题占比</i></div>
+  </div>
+
+  <h2 id="pipeline">课堂管线（这一版跑的是哪条链）</h2>
+  <div class="pipe-wrap">
+${pipelineHtml}
   </div>
 
   <h2>按图型</h2>
