@@ -5,27 +5,26 @@
        旧深链 ?tab=addons / /admin/addons / /admin/external-capabilities 由路由改投到本页。 -->
   <div class="mk-page">
     <!-- 2026-10-23 用户「已经有刷新，为什么还有独立刷新」：本页数据（能力配置 / MCP 服务）
-         跟随顶栏刷新广播 liveRefreshSeq，页头不再出第二颗刷新钮。 -->
-    <MkPageHead title="插件">
-      <template #actions>
-        <button type="button" class="mk-btn" @click="openToolCreate">新建 MCP 服务</button>
-      </template>
-    </MkPageHead>
+         跟随顶栏刷新广播 liveRefreshSeq，页头不再出第二颗刷新钮。
+         2026-10-27 用户「mcp 和可选能力有什么不一样」：MCP 服务是 MCP 工具调用的子资源，
+         不再另起一张同权卡；新建入口跟着 MCP 能力行走，页头不再挂全局「新建 MCP 服务」。 -->
+    <MkPageHead title="插件" />
 
-    <!-- ① 插件 + ② MCP 服务：堆叠单列全宽（2026-09-29 实测半宽卡内能力表 874px 溢出
-         506px 容器，并栏不可行；审核 #157 删除恒 false 的 sideBySide 死分支与不可达 CSS） -->
+    <!-- 能力卡单列全宽（2026-09-29 实测半宽卡内能力表 874px 溢出 506px 容器，
+         并栏不可行；审核 #157 删除恒 false 的 sideBySide 死分支与不可达 CSS） -->
     <div class="ac-cards">
 
-    <!-- ① 插件（2026-10-21 重设计：四张等高卡 → 一张能力表）。
-         原设计每组一张卡，卡头「已单独配置」与每个成员的「已单独配置」重复、卡尾再压一段
-         「关闭后」说明与「最近 从未」，四张卡几乎一样高且信息密度低。
-         现在一行一组：能力 / 成员 / 模型路由 / 最近调用 / 操作；降级行为收进行悬停。 -->
+    <!-- ① 可选能力（2026-10-27 重设计）：
+         「联网 / 决策 / 生图」是内置能力；「MCP 工具调用」也是能力之一，但它下面挂的是
+         平台登记的 MCP 服务。此前能力行与 MCP 服务各占一张同权卡，读起来像两套系统，
+         用户直接问「mcp 和可选能力有什么不一样」。现在 MCP 服务缩进挂在 MCP 能力行下，
+         整页只有一张能力卡：能力行回答「开没开」，子列表回答「接了哪些服务」。 -->
     <div class="mk-card">
       <div class="mk-card__head">
         <!-- 2026-10-23 走查：卡头不复述页名（「插件」页里再挂一枚「插件」标题） -->
         <h3 class="mk-card__title">可选能力</h3>
         <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn">启停状态未读取</span>
-        <span class="mk-card__meta ac-count">{{ pluginMemberCount }} 个 Skill</span>
+        <span class="mk-card__meta ac-count">{{ pluginRows.length }} 项能力 · {{ pluginMemberCount }} 个 Skill</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
         <span class="mk-alert__msg">{{ configErrorText }}</span>
@@ -35,102 +34,101 @@
       <!-- 2026-10-24 用户「插件就是配置启用，这设计的太丑了」：撤掉表格与成员路由徽标，
            一行一个插件：身份/说明/成员一条线，右侧只有开关与配置。模型细节收进配置弹窗。 -->
       <div v-else class="ac-plugins">
-        <div
-          v-for="p in pluginRows"
-          :key="p.id"
-          class="ac-plugin"
-          :class="{ 'is-off': !pluginEnabled(p.id) }"
-        >
-          <span class="ac-plugin__glyph" aria-hidden="true">{{ p.glyph }}</span>
-          <div class="ac-plugin__main">
-            <div class="ac-plugin__title">
-              <strong>{{ p.name }}</strong>
-              <span class="ac-plugin__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
+        <template v-for="p in pluginRows" :key="p.id">
+          <div
+            class="ac-plugin"
+            :class="{ 'is-off': !pluginEnabled(p.id) }"
+          >
+            <span class="ac-plugin__glyph" aria-hidden="true">{{ p.glyph }}</span>
+            <div class="ac-plugin__main">
+              <div class="ac-plugin__title">
+                <strong>{{ p.name }}</strong>
+                <span class="ac-plugin__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
+              </div>
+              <span v-if="membersText(p)" class="ac-plugin__members">{{ membersText(p) }}</span>
             </div>
-            <span v-if="membersText(p)" class="ac-plugin__members">{{ membersText(p) }}</span>
+            <div class="ac-plugin__actions">
+              <MkSwitch
+                :model-value="pluginEnabled(p.id)"
+                :state-text="pluginEnabled(p.id) ? '启用' : '停用'"
+                :busy="pluginBusy === p.id"
+                :aria-label="`${p.name}插件开关`"
+                @update:model-value="togglePlugin(p.id, $event)"
+              />
+              <!-- MCP 的能力行本身就是服务入口：新建落在子列表上方，不再另开一张卡 -->
+              <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm" @click="openToolCreate">新建服务</button>
+              <button v-else type="button" class="mk-btn mk-btn--sm" @click="openConfig(p)">配置</button>
+              <button v-if="p.errorCount > 0" type="button" class="mk-link" @click="goLogs(p.primary)">查失败</button>
+            </div>
           </div>
-          <div class="ac-plugin__actions">
-            <MkSwitch
-              :model-value="pluginEnabled(p.id)"
-              :state-text="pluginEnabled(p.id) ? '启用' : '停用'"
-              :busy="pluginBusy === p.id"
-              :aria-label="`${p.name}插件开关`"
-              @update:model-value="togglePlugin(p.id, $event)"
-            />
-            <button type="button" class="mk-btn mk-btn--sm" @click="openConfig(p)">{{ p.id === 'mcp' ? '管理服务' : '配置' }}</button>
-            <button v-if="p.errorCount > 0" type="button" class="mk-link" @click="goLogs(p.primary)">查失败</button>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- ② MCP 服务 -->
-    <div class="mk-card ac-mcp-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">MCP 服务</h3>
-      </div>
-      <div class="ac-mcp" v-if="mcpTools.length">
-        <div v-for="t in mcpTools" :key="t.id" class="ac-mcp__row">
-          <span class="ac-mcp__dot" :class="t.enabled ? 'is-on' : 'is-off'"></span>
-          <div class="ac-mcp__main" :title="`${t.name}（${t.id}）`">
-            <strong>{{ t.name }}</strong>
-          </div>
-          <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
-          <span class="ac-mcp__type">
-            <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
-            <template v-else>{{ mcpTypeText(t.type) }}</template>
-          </span>
-          <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
-          <MkSwitch
-            :model-value="t.enabled"
-            :state-text="t.enabled ? '启用' : '停用'"
-            :busy="toolBusy === t.id"
-            :aria-label="`${t.name}服务开关`"
-            @update:model-value="toggleToolEnabled(t, $event)"
-          />
-          <div class="mk-actions">
-            <button
-              v-if="t.transport === 'mcp'"
-              type="button"
-              class="mk-link"
-              :disabled="discoveringId === t.id"
-              :title="discoveredMap[t.id]?.join(', ')"
-              @click="discoverTools(t)"
-            >
-              {{ discoveringId === t.id ? '发现中…' : (discoveredMap[t.id] ? `工具 ${discoveredMap[t.id].length}` : '发现工具') }}
-            </button>
-            <button type="button" class="mk-link" :disabled="testingId === t.id" @click="testTool(t)">
-              {{ testingId === t.id ? '测试中…' : '测试' }}
-            </button>
-            <span v-if="testResult?.id === t.id" class="ac-mcp__test" :class="testResult.ok ? 'is-ok' : 'is-bad'">
-              {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
-            </span>
-            <button v-if="testResult?.id === t.id && !testResult.ok" type="button" class="mk-link" @click="openToolEdit(t)">编辑</button>
-            <div class="mk-menu">
-              <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
-              <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                <button type="button" class="mk-menu__item" @click="menuEdit(t)">编辑</button>
-                <div class="mk-menu__sep"></div>
-                <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(t)">删除</button>
+          <!-- MCP 服务是 MCP 工具调用的子资源：缩进挂在能力行下，独立开关/测试/发现工具 -->
+          <div v-if="p.id === 'mcp'" class="ac-mcp-group">
+            <div v-if="mcpTools.length" class="ac-mcp__list">
+              <div v-for="t in mcpTools" :key="t.id" class="ac-mcp__row">
+                <span class="ac-mcp__dot" :class="t.enabled ? 'is-on' : 'is-off'"></span>
+                <div class="ac-mcp__main" :title="`${t.name}（${t.id}）`">
+                  <strong>{{ t.name }}</strong>
+                </div>
+                <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
+                <span class="ac-mcp__type">
+                  <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
+                  <template v-else>{{ mcpTypeText(t.type) }}</template>
+                </span>
+                <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
+                <MkSwitch
+                  :model-value="t.enabled"
+                  :state-text="t.enabled ? '启用' : '停用'"
+                  :busy="toolBusy === t.id"
+                  :aria-label="`${t.name}服务开关`"
+                  @update:model-value="toggleToolEnabled(t, $event)"
+                />
+                <div class="mk-actions">
+                  <button
+                    v-if="t.transport === 'mcp'"
+                    type="button"
+                    class="mk-link"
+                    :disabled="discoveringId === t.id"
+                    :title="discoveredMap[t.id]?.join(', ')"
+                    @click="discoverTools(t)"
+                  >
+                    {{ discoveringId === t.id ? '发现中…' : (discoveredMap[t.id] ? `工具 ${discoveredMap[t.id].length}` : '发现工具') }}
+                  </button>
+                  <button type="button" class="mk-link" :disabled="testingId === t.id" @click="testTool(t)">
+                    {{ testingId === t.id ? '测试中…' : '测试' }}
+                  </button>
+                  <span v-if="testResult?.id === t.id" class="ac-mcp__test" :class="testResult.ok ? 'is-ok' : 'is-bad'">
+                    {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
+                  </span>
+                  <button v-if="testResult?.id === t.id && !testResult.ok" type="button" class="mk-link" @click="openToolEdit(t)">编辑</button>
+                  <div class="mk-menu">
+                    <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
+                    <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
+                      <button type="button" class="mk-menu__item" @click="menuEdit(t)">编辑</button>
+                      <div class="mk-menu__sep"></div>
+                      <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(t)">删除</button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
+            <!-- 子列表局部加载：MkLoading 的 min 会按整页口径撑高，卡内只剩空白 -->
+            <MkSkeleton v-else-if="mcpLoading" variant="rows" :count="3" :h="36" />
+            <MkEmptyState
+              v-else
+              :tone="mcpFailed ? 'error' : 'neutral'"
+              :icon="mcpFailed ? '!' : ''"
+              :title="mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务'"
+              :description="mcpFailed ? mcpErrorText : ''"
+              :action-text="mcpFailed ? '重试' : '新建服务'"
+              action-busy-text="重试中…"
+              :action-busy="mcpLoading"
+              compact
+              @action="mcpFailed ? loadMcpTools() : openToolCreate()"
+            />
           </div>
-        </div>
+        </template>
       </div>
-      <!-- 卡内局部加载：MkLoading 的 min 会按整页口径撑高约 544px，卡内只剩空白 -->
-      <MkSkeleton v-else-if="mcpLoading" variant="rows" :count="4" :h="40" />
-      <MkEmptyState
-        v-else
-        :tone="mcpFailed ? 'error' : 'neutral'"
-        :icon="mcpFailed ? '!' : ''"
-        :title="mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务'"
-        :description="mcpFailed ? mcpErrorText : ''"
-        :action-text="mcpFailed ? '重试' : '新建 MCP 服务'"
-        action-busy-text="重试中…"
-        :action-busy="mcpLoading"
-        min
-        @action="mcpFailed ? loadMcpTools() : openToolCreate()"
-      />
     </div>
 
     </div>
@@ -592,11 +590,6 @@ useOverlay(computed(() => configOpen.value), configPanelRef)
 useMaskClose(configMaskRef, () => closeConfig())
 
 function openConfig(group: PluginRow) {
-  // MCP 不是 provider 链：服务登记就在本页下方，滚过去即可
-  if (group.id === 'mcp') {
-    document.querySelector('.ac-mcp-card')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-    return
-  }
   const cfg = providerConfigs.value[group.id]
   if (!cfg) {
     toast.error('服务配置尚未加载，请刷新后重试')
@@ -926,7 +919,7 @@ function goLogs(skillId: string) {
 /* 开关独立固定列：有无「查失败」都不移动开关竖轴（2026-10-26 撤掉恒空 32px 槽位） */
 .ac-plugin__actions {
   display: grid;
-  /* 固定总宽 + 固定列：开关的 x 与按钮文案长短无关（「配置」/「管理服务」同轴） */
+  /* 固定总宽 + 固定列：开关的 x 与按钮文案长短无关（「配置」/「新建服务」同轴） */
   width: 192px;
   grid-template-columns: 72px 96px;
   align-items: center;
@@ -1021,7 +1014,8 @@ function goLogs(skillId: string) {
   }
 }
 
-/* 两卡容器：堆叠单列全宽（并栏分支 2026-09-29 实测溢出后退役，审核 #157 清掉不可达规则） */
+/* 能力卡容器（2026-10-27 后只有一张卡：MCP 服务挂在 MCP 能力行下，
+   不再与「可选能力」并列为两张同权卡） */
 .ac-cards {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1035,8 +1029,21 @@ function goLogs(skillId: string) {
 .ac-error { margin: 12px 16px 0; }
 
 
-/* ② MCP 服务行 */
-.ac-mcp { display: grid; }
+/* ② MCP 服务行（MCP 工具调用的子列表） */
+/* 子列表缩进到能力行文字列（16 padding + 32 glyph + 12 gap = 60px）：
+   视觉上明确「这些服务属于上面的 MCP 工具调用」，而不是另一套同级能力。 */
+.ac-mcp-group {
+  container-type: inline-size;
+  padding: 0 16px 12px 60px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.ac-mcp-group:last-child { border-bottom: none; }
+.ac-mcp__list {
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+  overflow: hidden;
+}
 .ac-mcp__row {
   display: grid;
   /* 2026-10-24：类型/入口按内容收（max-content 上限），富余空间只留在末尾动作列，
@@ -1046,7 +1053,7 @@ function goLogs(skillId: string) {
   grid-template-columns: 10px minmax(0, 1fr) max-content max-content max-content max-content;
   gap: 12px;
   align-items: center;
-  padding: 10px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--mk-line);
 }
 .ac-mcp__row:last-child { border-bottom: none; }
@@ -1075,10 +1082,8 @@ function goLogs(skillId: string) {
 }
 .ac-mcp__formrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-/* MCP 卡片作为容器：行按「卡片自身宽度」重排，而非视口宽度
-   （并栏时卡片可能远窄于视口，视口断点不触发） */
-.ac-mcp-card { container-type: inline-size; }
-
+/* MCP 子列表作为容器：行按「子列表自身宽度」重排，而非视口宽度
+   （窄屏缩进后子列表可用宽度更小，视口断点不触发） */
 /* 窄卡：MCP 行两行重排（状态点/名称/徽标一行，类型/endpoint 次行，操作收底行） */
 @container (max-width: 540px) {
   .ac-mcp__row {

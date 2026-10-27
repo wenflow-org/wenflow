@@ -143,16 +143,19 @@ afterEach(() => {
 });
 
 describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () => {
-  it('独立页形态：页头只有「新建 MCP 服务」，刷新跟着顶栏广播走（2026-10-23 全站收口）', async () => {
+  it('独立页形态：整页一张能力卡，刷新跟着顶栏广播走（2026-10-23 全站收口）', async () => {
     const wrapper = await mountLive();
     expect(wrapper.find('.mk-page').exists()).toBe(true);
     const head = wrapper.find('.mk-pagehead');
     expect(head.exists()).toBe(true);
     expect(head.text()).toContain('插件');
-    // 页头副文已删；新增入口从 MCP 卡头上移到页头 actions
+    // 页头副文已删；2026-10-27 新建入口跟着 MCP 能力行走，页头不再挂全局动作
     expect(head.find('.mk-pagehead__sub').exists()).toBe(false);
-    expect(head.findAll('.mk-pagehead__actions button').map((b) => b.text())).toEqual(['新建 MCP 服务']);
-    expect(wrapper.find('.ac-mcp-card .mk-card__head button').exists()).toBe(false);
+    expect(head.findAll('.mk-pagehead__actions button')).toEqual([]);
+    // 「MCP 服务」不再是与「可选能力」并列的第二张卡，而是 MCP 能力行的子列表
+    expect(wrapper.findAll('.mk-card')).toHaveLength(1);
+    expect(wrapper.find('.ac-mcp-card').exists()).toBe(false);
+    expect(wrapper.find('.ac-mcp-group').exists()).toBe(true);
     // 顶栏刷新 = liveRefreshSeq 广播 → 本页与旧页头刷新钮同一入口重拉
     const calls = pluginConfigMock.mock.calls.length;
     liveRefreshSeq.value += 1;
@@ -248,16 +251,29 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
-  it('MCP 行不套 provider 配置：按钮是「管理服务」，滚到本页服务登记', async () => {
-    const scrollSpy = vi.fn();
-    Element.prototype.scrollIntoView = scrollSpy;
+  it('MCP 行不套 provider 配置：新建服务在能力行内，直接打开 MCP 弹窗', async () => {
     const wrapper = await mountLive();
     const mcpRow = wrapper.findAll('.ac-plugin').find((r) => r.text().includes('MCP 工具调用'));
-    const btn = mcpRow!.findAll('button').find((b) => b.text() === '管理服务');
+    const btn = mcpRow!.findAll('button').find((b) => b.text() === '新建服务');
     expect(btn).toBeTruthy();
     await btn!.trigger('click');
-    expect(scrollSpy).toHaveBeenCalled();
+    await flushPromises();
+    expect(wrapper.find('[role="dialog"][aria-label="MCP 服务"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="插件服务配置"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('MCP 服务缩进挂在 MCP 能力行下：同一张卡、子列表在能力行之后', async () => {
+    const wrapper = await mountLive();
+    const card = wrapper.find('.mk-card');
+    expect(card.exists()).toBe(true);
+    const groups = wrapper.findAll('.ac-mcp-group');
+    expect(groups).toHaveLength(1);
+    expect(groups[0].findAll('.ac-mcp__row')).toHaveLength(3);
+    const mcpRow = wrapper.findAll('.ac-plugin').find((r) => r.text().includes('MCP 工具调用'))!;
+    expect(
+      mcpRow.element.compareDocumentPosition(groups[0].element) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
     wrapper.unmount();
   });
 
