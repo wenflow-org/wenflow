@@ -1,17 +1,21 @@
 /**
  * 共享白板（2026-10-27 白板改造）：把「图」从一次性消息附件，升级为任务级持久板书。
  *
+ * 定位（2026-10-27 用户定调，一句话：「白板解决的是纯文字认知压力过大的问题，不是做题区」）：
+ * 白板是学生的**外部工作记忆**——把多步对比、多变量结构、长背景材料一次摊开，替对话框减负。
+ * 因此默认**不靠挖空提问**：材料完整上板，只有「结论句」留给对话（老师问、学生说）。
+ * 挖空（conceal:'full'）降级为一种场景专用口径（检索练习），不再当默认。
+ *
  * 要解决的问题（V8 报告里的三大死结）：
  *  1. 图教合一 → 老师在同一次模型调用里既写话术又凑 spec，话里的图与真实 spec 不一致
- *     （「右列有两个对象」而图上只有一个）。修法：先定板、再由老师看着**已归一化、已脱敏**的
- *     真实板书说话（见 board-controller 与运行时的两段式调用）。
- *  2. 静态卡片 → 「要么泄题、要么永远残缺」：提问时把答案画上=泄题，挖成 ? 后又不复原=残缺。
- *     修法：同一份 spec 存**两态**（maskedSpec / fullSpec），学生答对后由 reveal 补上，
- *     原本被当病灶删掉的结论（takeaway / delta）变成「闯关奖励」。
+ *     （「右列有两个对象」而图上只有一个）。修法：先定板、再由老师看着**已归一化**的真实板书
+ *     说话（见 board-controller 与运行时的两段式调用）。
+ *  2. 静态卡片 → 「要么泄题、要么永远残缺」。修法：结论句与材料分离——材料常驻板上，
+ *     结论句由对话产生；需要检索时用 reveal 补上（见 conceal 模式说明）。
  *  3. 每轮重画 → 会话配额、同骨架去重这些闸门只是为了压制刷屏。白板共享后，
- *     同骨架不再是「重复发图」，而是「同一块板上 focus / reveal」。
+ *     同骨架不再是「重复发图」，而是「同一块板上 focus / update」。
  *
- * 本模块只做纯计算（给定规范化的 figure → 两态 + 老师可读的画面描述），不碰 IO、不调模型。
+ * 本模块只做纯计算（给定规范化的 figure → 各模式下的板面 + 老师可读的画面描述），不碰 IO、不调模型。
  */
 
 import { maskFigureAnswers, stripInLessonAnnotations } from './teaching-visual.service';
@@ -19,17 +23,33 @@ import { maskFigureAnswers, stripInLessonAnnotations } from './teaching-visual.s
 /** 白板阶段：搭骨架（提问态）→ 等待学生（仍提问态）→ 揭晓（完整态） */
 export type BoardStage = 'setup' | 'awaiting' | 'revealed';
 
+/**
+ * 白板的「藏」到什么程度——这是 2026-10-27 用户定调后的核心开关：
+ *
+ * 白板的本职是**替学生的文字工作记忆减负**（外化对比、结构、背景），不是做题区。
+ * 所以默认不再是「挖空考学生」，而是把材料完整摆出来：
+ *   none      全部展示（材料 + 副标注 + 结论句）——纯参考板
+ *   takeaway  材料与副标注全展示，只把**结论句**留给对话（老师问、学生说）——推荐默认
+ *   full      旧口径：挖答案位 + 撤副标注 + 藏结论（做题区；保留给「检索练习」场景）
+ *
+ * 为什么还留 full：白板在教学里有两个用途，减负（讲解、推演、背景）与检索（让学生回忆），
+ * 后者才需要遮蔽。两者共用一个渲染器、共用一块板，只是 `conceal` 不同。
+ */
+export type BoardConcealMode = 'none' | 'takeaway' | 'full';
+
 export interface BoardFigureState {
   /** 图型（与 render.ts 的 kind 同一套） */
   kind: string;
   /** 完整 spec：揭晓态下发给前端的形态（含答案与结论） */
   fullSpec: Record<string, unknown>;
-  /** 提问态 spec：答案位为 ?、结论未上板；不可安全挖空的图型时与 fullSpec 相同 */
+  /** 实际下发给学生的 spec：随 conceal 模式不同（none=同 fullSpec） */
   maskedSpec: Record<string, unknown>;
-  /** 被藏到揭晓态的结论（概念图 takeaway / 对照图 delta / 注），null 表示该图无结论项 */
+  /** 被藏起来的结论（概念图 takeaway / 对照图 delta / 注），null 表示没有结论项或没藏 */
   hiddenTakeaway: string | null;
   /** 待填槽位数（0 = 这张板没有留白，可直接完整展示） */
   slots: number;
+  /** 这张板用的是哪种藏法 */
+  conceal: BoardConcealMode;
   stage: BoardStage;
   /** 老师本轮指向的锚点（行/帧/节点），前端据此高亮；null 表示不指 */
   focusId?: string | null;
@@ -116,10 +136,46 @@ export function extractHiddenConclusion(figure: { kind?: string; spec?: unknown 
 }
 
 /**
- * 由一份**已归一化**的 figure 构造两态板书。
- * @param figure 归一化后的 figure（engine 已做过 stripInLessonAnnotations 也可以重复调用，幂等）
+ * 减负模式下把模型自己留的占位行删掉（2026-10-27 实拍：none 模式下绘图员仍在
+ * 左栏末尾补了一行「？」，等于白板又变成考卷）。
+ *
+ * 规则：数组里凡是「本身就是空槽字符串」或「label 是空槽」的元素整条去掉；
+ * 并在 spec 上打 `placeholder:'none'`，渲染侧据此不再为「另一侧缺行」补虚线空框。
  */
-export function deriveBoardFigure(figure: { kind?: string; spec?: unknown }): BoardFigureState {
+function prunePlaceholderRows<T>(value: T): T {
+  const isSlot = (v: unknown) => typeof v === 'string' && /^[?？]$/.test(v.trim());
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) {
+      return v
+        .filter((item) => {
+          if (isSlot(item)) return false;
+          if (item && typeof item === 'object' && isSlot((item as Record<string, unknown>).label)) return false;
+          return true;
+        })
+        .map(walk);
+    }
+    if (v && typeof v === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) out[k] = walk(val);
+      return out;
+    }
+    return v;
+  };
+  const pruned = walk(value) as Record<string, unknown>;
+  if (pruned && typeof pruned === 'object') pruned.placeholder = 'none';
+  return pruned as T;
+}
+
+/**
+ * 由一份**已归一化**的 figure 构造板书。
+ * @param figure 归一化后的 figure（engine 已做过 stripInLessonAnnotations 也可以重复调用，幂等）
+ * @param options.conceal 藏到什么程度，默认 'full'（与既有行为一致）；新默认建议 'takeaway'
+ */
+export function deriveBoardFigure(
+  figure: { kind?: string; spec?: unknown },
+  options: { conceal?: BoardConcealMode } = {},
+): BoardFigureState {
+  const conceal = options.conceal ?? 'full';
   const deReviewed = stripInLessonAnnotations(figure as Record<string, unknown>) as {
     kind?: string;
     spec?: unknown;
@@ -129,36 +185,46 @@ export function deriveBoardFigure(figure: { kind?: string; spec?: unknown }): Bo
     : {}) as Record<string, unknown>);
   const hiddenTakeaway = extractHiddenConclusion({ kind: deReviewed.kind, spec: fullSpec });
 
-  // 提问态：能安全挖就挖，挖不动（该图型没有答案位结构）就退化为完整展示——
-  // 宁可展示完整，也不要因为「挖空失败」让白板变成一张空白框
-  const maskedFigure = maskFigureAnswers({ kind: deReviewed.kind, spec: fullSpec });
-  // 提问态 = 骨架 + 空槽：副标注一律归揭晓项（见 stripSecondaryAnnotations 的注释）
-  const maskedSpec = stripSecondaryAnnotations(
-    maskedFigure ? ((maskedFigure.spec as Record<string, unknown>) ?? fullSpec) : fullSpec,
-  );
-
-  // 结论属于「揭晓项」：从提问态整条移除（只留一个 '?' 的横幅没有信息量），
-  // 揭晓态由 fullSpec 原样补回——这正是「负面红灯变闯关奖励」的机制
-  if (hiddenTakeaway) {
-    delete (maskedSpec as Record<string, unknown>).takeaway;
-    delete (maskedSpec as Record<string, unknown>).delta;
+  // 减负模式（none / takeaway）：材料、步骤、副标注一律照发——它们正是替学生省力的部分
+  // 旧口径（full）：挖答案位 + 撤副标注 + 藏结论，供「检索练习」用
+  let maskedSpec: Record<string, unknown>;
+  if (conceal === 'none' || conceal === 'takeaway') {
+    maskedSpec = prunePlaceholderRows({ ...fullSpec });
+  } else {
+    const maskedFigure = maskFigureAnswers({ kind: deReviewed.kind, spec: fullSpec });
+    maskedSpec = stripSecondaryAnnotations(
+      maskedFigure ? ((maskedFigure.spec as Record<string, unknown>) ?? fullSpec) : fullSpec,
+    );
   }
 
-  const slots = countBoardSlots(maskedSpec);
+  // 结论句是唯一在 takeaway 模式里也要留在对话里的东西：
+  // 板面负责「材料与结构」，结论由老师问、学生说——这是本模式对「泄题」的唯一约束
+  const hideConclusion = conceal !== 'none';
+  if (hideConclusion && hiddenTakeaway) {
+    delete maskedSpec.takeaway;
+    delete maskedSpec.delta;
+  }
+
+  const slots = conceal === 'full' ? countBoardSlots(maskedSpec) : 0;
   return {
     kind: String(deReviewed.kind ?? ''),
     fullSpec,
     maskedSpec,
-    hiddenTakeaway,
+    hiddenTakeaway: hideConclusion ? hiddenTakeaway : null,
     slots,
+    conceal,
     stage: slots > 0 ? 'setup' : 'revealed',
     focusId: null,
   };
 }
 
-/** 建板：以提问态上板（有留白 → awaiting；无留白 → 直接 revealed） */
-export function openBoard(taskId: string, figure: { kind?: string; spec?: unknown }): BoardState {
-  const derived = deriveBoardFigure(figure);
+/** 建板：按模式上板（有留白 → awaiting；无留白 / 减负模式 → revealed） */
+export function openBoard(
+  taskId: string,
+  figure: { kind?: string; spec?: unknown },
+  options: { conceal?: BoardConcealMode } = {},
+): BoardState {
+  const derived = deriveBoardFigure(figure, options);
   return {
     taskId,
     figure: { ...derived, stage: derived.slots > 0 ? 'awaiting' : 'revealed' },
@@ -188,10 +254,34 @@ export function focusBoard(board: BoardState, focusId: string | null): BoardStat
   return { ...board, figure: { ...board.figure, focusId }, revision: board.revision + 1 };
 }
 
-/** 当前应该下发给前端的 spec：提问态发 maskedSpec，揭晓态发完整 spec */
+/**
+ * 换板：老师换了例子/条件（800 m 4 min、铁块从水挪到酒精），同结构的板换成新数据。
+ *
+ * 这是减负模式的核心动作——白板要「永远替学生记住当前在讨论什么现场」。
+ * 旧口径里没有这个动作，只能靠 reveal 或干脆不动，于是出现「老师讲新题、板上还是旧题」。
+ */
+export function updateBoard(
+  board: BoardState,
+  figure: { kind?: string; spec?: unknown },
+  summary?: string,
+): BoardState {
+  const conceal = board.figure?.conceal ?? 'takeaway';
+  const derived = deriveBoardFigure(figure, { conceal });
+  return {
+    ...board,
+    figure: { ...derived, stage: 'revealed', focusId: board.figure?.focusId ?? null },
+    revision: board.revision + 1,
+    lastReveal: summary ? { revision: board.revision + 1, summary } : null,
+  };
+}
+
+/** 当前应该下发给前端的 spec：随 conceal 模式与阶段而定 */
 export function boardSpecForRender(board: BoardState): Record<string, unknown> | null {
   const f = board.figure;
   if (!f) return null;
+  if (f.conceal === 'none') return f.fullSpec;
+  // takeaway 模式：完整材料（含副标注），但没有结论句——所以发 maskedSpec 而不是 fullSpec
+  if (f.conceal === 'takeaway') return f.maskedSpec;
   return f.stage === 'revealed' ? f.fullSpec : f.maskedSpec;
 }
 
@@ -213,9 +303,16 @@ export function describeBoardForTeacher(board: BoardState): string {
   const f = board.figure;
   if (!f) return '【白板】本任务暂无板书。请纯用语言推进，不要提及或假设任何图。';
 
-  const spec = f.stage === 'revealed' ? f.fullSpec : f.maskedSpec;
+  const spec = f.conceal === 'none' ? f.fullSpec : f.conceal === 'takeaway' ? f.maskedSpec : f.stage === 'revealed' ? f.fullSpec : f.maskedSpec;
   const title = typeof spec.title === 'string' && spec.title.trim() ? spec.title.trim() : '';
-  const stageCN = f.stage === 'revealed' ? '已揭晓' : f.slots > 0 ? '提问态（有留白）' : '提问态';
+  const stageCN =
+    f.conceal !== 'full'
+      ? '完整板书'
+      : f.stage === 'revealed'
+        ? '已揭晓'
+        : f.slots > 0
+          ? '提问态（有留白）'
+          : '提问态';
   const lines: string[] = [
     `【白板｜${stageCN}】图型 ${f.kind}${title ? `，标题「${title}」` : ''}`,
   ];
@@ -229,17 +326,28 @@ export function describeBoardForTeacher(board: BoardState): string {
     if (texts.length) lines.push(`板上文字（按顺序）：${texts.join(' / ')}`);
   }
 
-  if (f.stage !== 'revealed' && f.hiddenTakeaway) {
+  if (f.conceal === 'takeaway' && f.hiddenTakeaway) {
+    lines.push('底部结论：**未上板**（这条要留给学生说，不要替他说出来）');
+  } else if (f.conceal === 'full' && f.stage !== 'revealed' && f.hiddenTakeaway) {
     lines.push('底部结论：未揭晓（学生答对后再补上）');
-  } else if (f.stage === 'revealed' && f.hiddenTakeaway) {
-    lines.push(`底部结论（已揭晓）：${f.hiddenTakeaway}`);
+  } else if (f.hiddenTakeaway) {
+    lines.push(`底部结论（已上板）：${f.hiddenTakeaway}`);
   }
   if (f.focusId) lines.push(`本轮焦点：${f.focusId}`);
-  lines.push(
-    f.slots > 0 && f.stage !== 'revealed'
-      ? `共 ${f.slots} 个空槽待学生补。规则：只谈板上已有的内容与空槽，不要替学生补空槽，不要描述图的画法。`
-      : '规则：只谈板上已有的内容，不要描述图的画法。',
-  );
+
+  if (f.conceal === 'full') {
+    lines.push(
+      f.slots > 0 && f.stage !== 'revealed'
+        ? `共 ${f.slots} 个空槽待学生补。规则：只谈板上已有的内容与空槽，不要替学生补空槽，不要描述图的画法。`
+        : '规则：只谈板上已有的内容，不要描述图的画法。',
+    );
+  } else {
+    lines.push(
+      '规则（减负模式）：板面已经把背景、数据与结构完整摆出来了，它就是学生的外部工作记忆。' +
+        '严禁用文字复述板上已有的内容（不要念列表、念步骤、念数值），也不要描述图的画法；' +
+        '直接引用板上的标签/行号/帧号，一次只说 2~3 句，把「为什么」「下一步」留给学生。',
+    );
+  }
   return lines.join('\n');
 }
 

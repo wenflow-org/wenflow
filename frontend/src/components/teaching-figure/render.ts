@@ -2271,8 +2271,11 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
  * split-compare（2026-10-26）：正误并排对比画布。
  * 布局：左右两栏「同一步的两种走法」行行对齐（行高按两栏取大统一，保证第 n 行对第 n 行），
  * 中缝 vs 圆片；delta.at 在两栏对应行加强调描边；底部一条分叉说明。
+ *
+ * `placeholder:'none'`（2026-10-27 减负口径）：这块板是参考板不是考卷，
+ * 一侧缺行时不补「?」空框——否则白板又变成一张挂着问号的题。
  */
-function renderSplitCompare({ title, left, right, delta }: any): RenderedFigure | null {
+function renderSplitCompare({ title, left, right, delta, placeholder }: any): RenderedFigure | null {
   // 契约与归一化一致：两栏都必须有至少一行——空栏不是对比
   if (!left || !right || !Array.isArray(left.rows) || !left.rows.length || !Array.isArray(right.rows) || !right.rows.length) return null;
   const W = 620;
@@ -2335,9 +2338,12 @@ function renderSplitCompare({ title, left, right, delta }: any): RenderedFigure 
         }
       } else {
         // V3 改造（外盲评：一侧只写一半/留白时行错位，分叉线指到空处）——缺行侧画
-        // 「?」虚线空槽占位，行行对齐的语义不塌；学生要补的就是这一格
-        parts.push(rect(x + 6, y + 2, colW - 12, rh - 4, { r: 6, fill: 'none', stroke: T.faint, sw: 1.1, dash: '4 4' }));
-        parts.push(text(x + colW / 2, y + rh / 2 + 5, '?', 't-label', 'middle', 'fill="' + T.faint + '"'));
+        // 「?」虚线空槽占位，行行对齐的语义不塌；学生要补的就是这一格。
+        // 减负板（placeholder:'none'）不补：那是参考板，不是待填的卷子。
+        if (placeholder !== 'none') {
+          parts.push(rect(x + 6, y + 2, colW - 12, rh - 4, { r: 6, fill: 'none', stroke: T.faint, sw: 1.1, dash: '4 4' }));
+          parts.push(text(x + colW / 2, y + rh / 2 + 5, '?', 't-label', 'middle', 'fill="' + T.faint + '"'));
+        }
       }
       if (i > 0) parts.push('<line x1="' + (x + 10) + '" y1="' + y + '" x2="' + (x + colW - 10) + '" y2="' + y + '" stroke="' + T.line + '" stroke-width="0.8"/>');
       y += rh;
@@ -2648,6 +2654,9 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
   };
 
   let lane = 0;
+  // 汇入同一节点的多条边：标签沿连线错开落点，否则四条「决定·正比」会叠成一片
+  // （2026-10-27 白板减负板实拍：浮力四因素同时汇入，标签互相压字）
+  const fanCount = new Map<string, number>();
   for (const e of edges) {
     const a = positions.get(String(e.from));
     const b = positions.get(String(e.to));
@@ -2664,7 +2673,10 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
       const midY = (y1 + y2) / 2;
       parts.push(`<path d="M${x1} ${y1} C${x1} ${midY} ${x2} ${midY} ${x2} ${y2 - 2}" fill="none" stroke="${tone}" stroke-width="1.5"${e.dash ? ' stroke-dasharray="5 4"' : ''}/>`);
       parts.push(`<path d="M${x2 - 4} ${y2 - 6} L${x2} ${y2 - 1} L${x2 + 4} ${y2 - 6} Z" fill="${tone}"/>`);
-      putLabel((x1 + x2) / 2, y1 + (y2 - y1) * 0.7, e.label, 'middle', tone);
+      const fan = fanCount.get(String(e.to)) ?? 0;
+      fanCount.set(String(e.to), fan + 1);
+      const at = 0.42 + (fan % 4) * 0.13;
+      putLabel((x1 + x2) / 2, y1 + (y2 - y1) * at, e.label, 'middle', tone);
     } else {
       // 跨层/同层/回环：一律走右侧车道，避免从中间那排节点身上穿过去
       const laneX = w - 20 - lane * 14;

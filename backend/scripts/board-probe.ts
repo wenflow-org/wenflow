@@ -1,14 +1,21 @@
 /**
- * 白板模式探针（2026-10-27）：验证「先定板书 → 老师看着真板说话」能否根治 V8 的三大死结。
+ * 白板模式探针（2026-10-27）：验证两种定位下白板的表现。
+ *
+ * 两种定位（第 4 个参数 `mode`）：
+ *   full      做题区：绘图员画完整板 → 系统挖空成提问态 → 学生答对后揭晓
+ *   takeaway  减负区：材料与副标注完整上板，只把结论句留给对话（推荐默认）
+ *   none      纯参考板：连结论句也上板
+ *
+ * 减负口径下的动作序列是「上板 → 换板 → 不动」：老师换了新数据就用新 figure 换板，
+ * 白板要永远替学生记住「现在讨论的现场」。做题区口径保留 reveal。
  *
  * 与 versioned-probe 的区别：那边一次调用里既写话术又凑 spec（图教合一）；
  * 这边每轮拆成两次调用，顺序固定：
- *   ① board-designer：只画板（提问态：骨架 + 留白，不写结论）
+ *   ① board-designer：只画板
  *   ② 归一化 + 图闸 → 得到「板上真实可见」的 verified board
  *   ③ teaching-turn：拿 describeBoardForTeacher() 的文本，看着真板说话（不再画图）
- * 第 2 轮学生答对 → 代码判定 filledSlot → reveal（同一块板切完整态）→ 老师看着完整板反馈。
  *
- * 用法：npx ts-node --transpile-only scripts/board-probe.ts <cases.json> <out.json> [concurrency=2]
+ * 用法：npx ts-node --transpile-only scripts/board-probe.ts <cases.json> <out.json> [concurrency=2] [mode=full|takeaway|none]
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,13 +27,17 @@ import {
   diffBoardStages,
   boardFigureForRender,
   type BoardState,
+  type BoardConcealMode,
 } from '../src/services/ai-teaching/board-state';
-import { decideBoardOp, applyBoardOp, describeBoardOp } from '../src/services/ai-teaching/board-controller';
+import { decideBoardOp, applyBoardOp, describeBoardOp, hasNewNumbers } from '../src/services/ai-teaching/board-controller';
 import { FIGURE_KIND_GUIDE, buildVisualOpportunity } from '../src/services/ai-teaching/teaching-visual.service';
 
-const [casesPath, outPath, concRaw] = process.argv.slice(2);
-if (!casesPath || !outPath) throw new Error('用法: board-probe <cases.json> <out.json> [concurrency=2]');
+const [casesPath, outPath, concRaw, modeRaw] = process.argv.slice(2);
+if (!casesPath || !outPath) throw new Error('用法: board-probe <cases.json> <out.json> [concurrency=2] [mode=full|takeaway|none]');
 const CONCURRENCY = Math.max(1, Number(concRaw) || 2);
+const MODE = (['full', 'takeaway', 'none'].includes(String(modeRaw)) ? modeRaw : 'full') as BoardConcealMode;
+const CONCEAL = { conceal: MODE };
+const MASKED = MODE === 'full';
 
 const KEY = readFileSync(process.env.WF_VISION_KEY_FILE || join(tmpdir(), 'wf-vis-key'), 'utf8').trim();
 const BASE = process.env.WF_VISION_BASE || 'https://newapi.wenflow.org/v1';
@@ -36,23 +47,32 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const teachingMd = readFileSync(join(__dirname, '..', '..', 'prompts', 'skill.teaching-turn.md'), 'utf8');
 const teachingSystem = teachingMd.replace(/^---[\s\S]*?---\s*/, '');
 
-const BOARD_SYSTEM = `你是一位课堂板书的绘图员。你只负责画一张白板，不负责讲课。
+const BOARD_SYSTEM = (mode: BoardConcealMode) => `你是一位课堂板书的绘图员。你只负责画一张白板，不负责讲课。
 
-任务：根据给定的课堂上下文，产出这一块白板的 figure JSON。白板会一直留在学生眼前，随着教学推进揭晓。
+任务：根据给定的课堂上下文，产出这一块白板的 figure JSON。白板会一直留在学生眼前，随教学推进更新。
 
 硬约束：
 1. 只输出 JSON：{"figure":{"kind":"...","spec":{...}}}，不要任何解释。
-2. 画的是**完整形态**：骨架 + 正确答案 + 结论都要写全（系统会自动派生出「提问态」：
-   把答案位挖成 ?、把结论藏起来，学生答对后再揭晓）。**不要**自己留 ?，也不要为了留白而写半截。
-3. 图里每个标签必须是学科实体（数值/单位/术语/公式），不要写"第一步/自查/待填"这类元话术。
-4. 图型必须承载关系（位置/数值/区间/指向/包含/并排对照/分帧推进）；只是把句子装进框的，不要画。
-5. 标签 ≤18 字（英文句子可到 26 字），化学式用 Unicode 下标（H₂O）。
-6. **板上必须包含学生当前问题所涉及的对象**：学生问「立木为信」，板上就必须有这一格；
+2. ${
+  mode === 'full'
+    ? `画的是**完整形态**：骨架 + 正确答案 + 结论都要写全（系统会自动派生出「提问态」：
+   把答案位挖成 ?、把结论藏起来，学生答对后再揭晓）。**不要**自己留 ?，也不要为了留白而写半截。`
+    : `画的是**完整形态**：这块板要替学生扛住文字认知压力，所以材料、步骤、数值、单位、
+   以及解释性的副标注（sub）都要写全——**一个 ? 都不要留**。板面信息越完整，学生越省力。`
+}
+3. **标题只点题、不写结论**：标题写「配速换算：60 s 跑完 400 m 该得多少」这种「在讨论什么」，
+   禁止写「分叉在单位不在数字」这种「答案是什么」——结论由老师在对话里问、由学生说出来。
+   帧名/节点名同理：用中性指代（里正、乡邻、官府），不要用结论词（取信、成功、失败）。
+4. 图里每个标签必须是学科实体（数值/单位/术语/公式），不要写"第一步/自查/待填"这类元话术。
+5. 图型必须承载关系（位置/数值/区间/指向/包含/并排对照/分帧推进）；只是把句子装进框的，不要画。
+6. 标签 ≤18 字（英文句子可到 26 字），化学式用 Unicode 下标（H₂O）。
+7. **板上必须包含学生当前问题所涉及的对象**：学生问「立木为信」，板上就必须有这一格；
    缺了这一格，老师只能含糊地说「变法前」，学生的问题在板上无处安放。
-7. **否定的关系也要有形状**：概念图里「深度不影响浮力」「重力不影响浮力」这类无关关系，
+8. **否定的关系也要有形状**：概念图里「深度不影响浮力」「重力不影响浮力」这类无关关系，
    用 tone:"neutral" + dash:true 明确画出来（虚线灰线），并与「决定」的实线分开——
    否则学生只看到四个因素都连向浮力，读出来的就是反的。
-8. 同一句结论不要写两遍：行里已经写了具体数值/结论，就不要再在最后一行重复一遍。
+9. 同一句结论不要写两遍：行里已经写了具体数值，就不要再在最后一行重复一遍。
+${mode === 'full' ? '' : '10. **标题与帧名不要出现结论句**（见第 3 条）：这块板不藏答案，但也不替学生把「为什么」说出来。\n'}
 
 ${FIGURE_KIND_GUIDE}`;
 
@@ -148,17 +168,19 @@ async function runCase(c: any): Promise<any> {
     [{ role: 'user', content: c.turns[0].student, timestamp: '2026-10-27T00:00:00.000Z' }] as any,
     c.taskTitle,
   );
-  const boardOut = await callModel(BOARD_SYSTEM, {
+  const boardOut = await callModel(BOARD_SYSTEM(MODE), {
     task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
     scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
     studentSays: c.turns[0].student,
     kindHint: opp?.kindHint ?? c.expectKind ?? null,
-    instruction: '画出这张白板的完整形态：骨架、正确答案、结论都写全（系统会自动挖空成提问态）。',
+    instruction: MASKED
+      ? '画出这张白板的完整形态：骨架、正确答案、结论都写全（系统会自动挖空成提问态）。'
+      : '画出这张白板的完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。标题只点题，不写结论。',
   });
   const normalized = boardOut?.figure ? normalizeTeachingFigureForProbe(boardOut.figure) : { figure: null };
   const figure = (normalized as any).figure;
   const op1 = decideBoardOp({ board: null, firstTurnOfTask: true, taskChanged: false, wantsNewBoard: !!figure });
-  if (figure && op1.type === 'setup') board = openBoard(c.id, figure);
+  if (figure && op1.type === 'setup') board = openBoard(c.id, figure, CONCEAL);
 
   const hiddenBefore = board?.figure ? diffBoardStages(board.figure).map((d) => d.after) : [];
   const boardContext1 = board
@@ -171,19 +193,42 @@ async function runCase(c: any): Promise<any> {
     messages: [{ role: 'user', content: c.turns[0].student }],
     boardContext: boardContext1,
     boardAction: describeBoardOp(op1),
-    instruction: '白板已经在你和学生眼前。**看图说话**：只指板上真实存在的那一处（用板上写着的标签原文，不要用「第几行」这类序号），提出一个能推动学生作答的问题。不要描述图怎么画，不要复述板上的内容，不要把空槽的答案说出来。',
+    instruction: MASKED
+      ? '白板已经在你和学生眼前。**看图说话**：只指板上真实存在的那一处（用板上写着的标签原文，不要用「第几行」这类序号），提出一个能推动学生作答的问题。不要描述图怎么画，不要复述板上的内容，不要把空槽的答案说出来。'
+      : '白板已经在你和学生眼前，板面信息是完整的，学生不需要你再用语言交代一遍。**不要复述板面**（不要念行、念步骤、念数值），只指板上真实存在的那一处（用板上写着的标签原文），用 2~3 句话提出一个需要学生推理的问题。不要描述图怎么画，也不要把板面结论替学生说出来。',
   });
   turns.push({
     n: 1, stage: board?.figure?.stage ?? null, studentIn: c.turns[0].student,
     teacher: String(t1?.reply ?? ''), boardContext: boardContext1,
+    boardOp: op1.type,
+    // 每轮把「当时下发给学生的那块板」存下来：减负模式下板会随例子刷新，
+    // 只看最终态会丢掉「老师换题 → 板跟着换」这一段的证据
+    boardSpec: board?.figure?.maskedSpec ?? null,
     audit: auditTeacherReply(String(t1?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, hiddenBefore),
   });
 
-  // ---- 第 2 轮：学生答对 → 代码判定 filledSlot → 揭晓 → 老师看着完整板反馈 ----
+  // ---- 第 2 轮：学生答到了关键处 ----
+  // 做题区：答对 → 揭晓同一块板。
+  // 减负区：板面本来就完整，没有揭晓；只判断老师是不是换了现场（学生带来新数值）→ 换板。
+  const newEx2 = !!board?.figure && hasNewNumbers(board.figure.maskedSpec, c.turns[1].student);
   const op2 = decideBoardOp({
-    board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false, filledSlot: true,
+    board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false, filledSlot: true, newExample: newEx2,
   });
-  if (board) board = applyBoardOp(board, op2);
+  if (board && op2.type === 'update') {
+    const nextOut = await callModel(BOARD_SYSTEM(MODE), {
+      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
+      scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+      studentSays: c.turns[1].student,
+      kindHint: board.figure?.kind ?? null,
+      instruction:
+        '学生带来了新数据/新条件。把同一结构的板换成**当前这组条件**（新数值、新单位），' +
+        '结构和图型都不变；材料、步骤、副标注照样写全，标题只点题。',
+    });
+    const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
+    board = applyBoardOp(board, op2, nextFig ?? undefined) ?? board;
+  } else if (board) {
+    board = applyBoardOp(board, op2) ?? board;
+  }
   const revealedHidden = board?.figure ? diffBoardStages(board.figure).map((d) => d.after) : [];
   const boardContext2 = board ? describeBoardForTeacher(board) : '【白板】暂无板书。';
   history.push({ role: 'assistant', content: turns[0].teacher });
@@ -194,19 +239,41 @@ async function runCase(c: any): Promise<any> {
     messages: [...history, { role: 'user', content: c.turns[1].student }],
     boardContext: boardContext2,
     boardAction: describeBoardOp(op2),
-    instruction: '学生刚才答到了关键处，白板已经揭晓（空槽补上、结论上板）。用一句话确认板上的变化，然后只问一个问题，且必须是**换条件 / 反事实 / 新数据**这三种之一——板上已经写出结论的内容一律不许再问（包括刚揭晓的那条结论），否则等于把答案又念一遍。',
+    instruction: MASKED
+      ? '学生刚才答到了关键处，白板已经揭晓（空槽补上、结论上板）。用一句话确认板上的变化，然后只问一个问题，且必须是**换条件 / 反事实 / 新数据**这三种之一——板上已经写出结论的内容一律不许再问（包括刚揭晓的那条结论），否则等于把答案又念一遍。'
+      : '学生刚才答到了关键处。板面本来就是完整的，**不要再补充或复述板面**；只问一个问题，且必须是**换条件 / 反事实 / 新数据**这三种之一。如果这组新数据已经上板（boardAction 说「换成了当前这组条件」），就让学生直接用板上的新数据往下推。',
   });
   turns.push({
     n: 2, stage: board?.figure?.stage ?? null, studentIn: c.turns[1].student,
     teacher: String(t2?.reply ?? ''), boardContext: boardContext2,
-    // 揭晓轮之后老师引用板上答案是合法教学行为，不计泄题（只统计提问态的轮次）
+    boardOp: op2.type,
+    newExample: newEx2,
+    boardSpec: board?.figure?.maskedSpec ?? null,
+    // 揭晓/换板轮老师引用板上答案是合法教学行为，不计泄题（只统计提问态的轮次）
     audit: { ...auditTeacherReply(String(t2?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
   });
 
-  // ---- 第 3 轮：迁移检查（板已完整，只指板，不重画） ----
+  // ---- 第 3 轮：迁移检查（板已完整，只指板；若又换了现场则再换一次板） ----
   history.push({ role: 'assistant', content: turns[1].teacher });
-  const op3 = decideBoardOp({ board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false });
-  if (board) board = applyBoardOp(board, op3);
+  const newEx3 = !!board?.figure && hasNewNumbers(board.figure.maskedSpec, c.turns[2].student);
+  const op3 = decideBoardOp({
+    board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false, newExample: newEx3,
+  });
+  if (board && op3.type === 'update') {
+    const nextOut = await callModel(BOARD_SYSTEM(MODE), {
+      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
+      scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+      studentSays: c.turns[2].student,
+      kindHint: board.figure?.kind ?? null,
+      instruction:
+        '学生把问题挪到了新情境。把同一结构的板换成**当前这组条件**（新对象/新液体/新数值），' +
+        '结构和图型都不变；材料、步骤、副标注照样写全，标题只点题。',
+    });
+    const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
+    board = applyBoardOp(board, op3, nextFig ?? undefined) ?? board;
+  } else if (board) {
+    board = applyBoardOp(board, op3) ?? board;
+  }
   const boardContext3 = board ? describeBoardForTeacher(board) : '【白板】暂无板书。';
   const t3 = await callModel(teachingSystem, {
     task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType, acceptanceCriteria: c.acceptance },
@@ -215,11 +282,14 @@ async function runCase(c: any): Promise<any> {
     messages: [...history, { role: 'user', content: c.turns[2].student }],
     boardContext: boardContext3,
     boardAction: describeBoardOp(op3),
-    instruction: '白板已经完整。让学生用板上的结论做一次迁移判断：问题必须是板上**没有直接答案**的（换数据/换情境），不要重画、不要复述板面。',
+    instruction: '白板已经完整（必要时已换成当前情境）。让学生用板上的结论做一次迁移判断：问题必须是板上**没有直接答案**的，不要重画、不要复述板面。',
   });
   turns.push({
     n: 3, stage: board?.figure?.stage ?? null, studentIn: c.turns[2].student,
     teacher: String(t3?.reply ?? ''), boardContext: boardContext3,
+    boardOp: op3.type,
+    newExample: newEx3,
+    boardSpec: board?.figure?.maskedSpec ?? null,
     audit: { ...auditTeacherReply(String(t3?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
   });
 
@@ -230,6 +300,7 @@ async function runCase(c: any): Promise<any> {
     subject: c.subject,
     topic: c.topic,
     taskTitle: c.taskTitle,
+    mode: MODE,
     kind: figure?.kind ?? null,
     expectKind: c.expectKind ?? null,
     routedKind: opp?.kindHint ?? null,
@@ -274,7 +345,7 @@ async function pool<T>(tasks: Array<() => Promise<T>>): Promise<T[]> {
         console.log(`[${c.id}] 失败：${message.slice(0, 120)}`);
         return {
           id: c.id, course: c.course, subject: c.subject, topic: c.topic, taskTitle: c.taskTitle,
-          kind: null, expectKind: c.expectKind ?? null, routedKind: null, boardOps: [],
+          mode: MODE, kind: null, expectKind: c.expectKind ?? null, routedKind: null, boardOps: [],
           slots: 0, hiddenTakeaway: null, maskedSpec: null, fullSpec: null, finalSpec: null,
           turns: [], leakTotal: 0, phantomTotal: 0, restateMax: 0, error: message,
         };
@@ -286,7 +357,7 @@ async function pool<T>(tasks: Array<() => Promise<T>>): Promise<T[]> {
   const leak = rows.reduce((n, r) => n + r.leakTotal, 0);
   const phantom = rows.reduce((n, r) => n + r.phantomTotal, 0);
   const restate = rows.map((r) => r.restateMax);
-  console.log(`\n${rows.length} 例｜建板 ${withBoard}｜泄题命中 ${leak} 处｜指着空气 ${phantom} 处｜复述率最高 ${Math.max(...restate)}`);
+  console.log(`\n[${MODE}] ${rows.length} 例｜建板 ${withBoard}｜泄题命中 ${leak} 处｜指着空气 ${phantom} 处｜复述率最高 ${Math.max(...restate)}`);
   console.log(`耗时 ${Math.round((Date.now() - started) / 1000)}s → ${outPath}`);
   rows.forEach((r) => console.log(`  [${r.id}] ${r.kind}｜ops=${r.boardOps.join('→')}｜slots=${r.slots}｜leak=${r.leakTotal}｜phantom=${r.phantomTotal}｜restate=${r.restateMax}`));
 })();

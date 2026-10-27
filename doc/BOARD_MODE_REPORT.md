@@ -4,6 +4,10 @@
 > 结论：**管线级的三个死结已消**（老师不再指着不存在的行、不再复述、提问态不再泄题）；
 > **但内容与几何承载没有随范式自动变好**——外部盲评仍在 1 分档，且同一批图两次评审结论不稳定。
 > 本报告对 4.2/4.3 的数字做了更正，上一版「三盏红灯归零」的说法只对**确定性审计**成立。
+>
+> **2026-10-27 二次定调（§九，推翻了本报告前半的判断）**：白板解决的是纯文字造成的认知压力，
+> 不是做题区。据此把「挖空」从默认降为一种场景口径，重跑三案例：板面 0 个问号、
+> 盲评从「全删」翻成「6 保留 / 3 要修 / 0 删掉」，减负度 2.78、自明性 2.56（旧口径 1.0 / 1.17）。
 
 ---
 
@@ -208,3 +212,81 @@ PDF 的问题不在排版，在**通道混用**：人要看，模型也要看，
 
 生成：`node outputs/e2e/board-review-app.mjs`（读 `board-run-v5.json` + `board-pngs-v6-2x`，输出 `index.html` / `brief.md` / `images/`）。
 图片目录被 `.gitignore` 的 `*.png` 挡住，**换机器要重跑这条命令**才能看到图。
+
+---
+
+## 九、范式修正：白板是减负区，不是做题区（2026-10-27 二次定调）
+
+一句话：**白板解决的是纯文字造成的认知压力，不是做题区。**
+
+学生看纯文字吃力的三种情形——元素太多（四个数、两套单位、四个变量）压不住工作记忆；一维文字表达不了二维对照（两种走法每一步差在哪）；聊到第三轮忘了第一轮的前提。这三件正是白板该扛的活。但本报告前半的管线是反着做的：
+
+- `maskFigureAnswers()` 把最能帮学生对照的那几格挖成 `?`（配速右栏 3 个、浮力 4 个、商鞅 9 个）；
+- 为了把「泄题率」压到 0，v4 又加了 `stripSecondaryAnnotations()`，把「单位没换」「秒当分钟除」这类**解释性副标注**整片撤掉；
+- 结果是白板从「reference」变成「挂满问号的考卷」——认知压力比纯文字更大。外部盲评连续判「满屏 ?、自明性接近 0、删掉」，根因在这里，不在排版。
+
+### 9.1 三种口径
+
+`deriveBoardFigure(figure, { conceal })`：
+
+| 口径 | 板面 | 用途 |
+|---|---|---|
+| `none` | 材料 + 步骤 + 副标注 + 结论句全上板，0 个 `?` | 纯参考板 |
+| `takeaway` | 材料 + 副标注全上板，只把**结论句**留在对话里 | 推荐折中：材料属减负，结论属学生要说的话 |
+| `full` | 挖答案位 + 撤副标注 + 藏结论（旧默认） | 检索练习（让学生回忆） |
+
+配套改动：
+
+| 位置 | 改动 |
+|---|---|
+| `board-state.ts` | `conceal` 三口径；`prunePlaceholderRows` 删掉模型自留的占位行并打 `placeholder:'none'`；`updateBoard` 换板；`describeBoardForTeacher` 在减负口径下换成「严禁复述板面、直接引用标签、一次 2~3 句」 |
+| `board-controller.ts` | 动作从「建板→填空→揭晓」改为「show → focus → update」；`hasNewNumbers(spec, text)` 用「话里出现板上没有的数字」判定换题 |
+| `board-probe.ts` | 第 4 个参数选口径；每轮记录 `boardSpec`（板面演进可回放）；换题轮触发 board-designer 重画 |
+| `render.ts` | `placeholder:'none'` 时不再为缺行补 `?` 空框；同一节点多条入边的标签沿连线错开（浮力四因素原先叠字） |
+| `vision-review.mjs` | 新增 `load` 判据：减负度 / 自明性 / **结论前置**；`leak` 口径保留以便对照 |
+
+### 9.2 实测（3 案例 × 3 轮，none 口径）
+
+确定性：提问轮泄题 0 处、指着空气 0 处、复述率最高 0.23、**9/9 张板 0 个问号**；板书动作 `setup → none → update`（配速：第三轮换题，板跟着换成 800 m / 60 s 那组数据）。
+
+外部盲评换判据后（n=9）：
+
+| 口径 | 保留/要修/删掉 | 减负度 | 自明性 | 结论前置 | 元话 |
+|---|---|---|---|---|---|
+| 旧（leak 判据，v6 两次） | 0/0/6、0/2/4 | 1.00 / 0.83（有用度） | 1.17 / 0.83（几何） | — | 0% |
+| 新（load 判据，none） | **6/3/0** | **2.78** | **2.56** | 22% | 0% |
+| 新（load 判据，takeaway） | 4/5/0 | 2.78 | 2.33 | 33% | 0% |
+
+三个可直接引用的结论：
+
+1. **判据换了，结论就翻了**：同一批板在 `leak` 口径下「全删」，在 `load` 口径下「三分之二保留」。之前的差评主要是**尺子**造成的，不是板造成的。
+2. **标题不写结论这条立竿见影**：商鞅板标题从「先取信，再分两步推开」改成点题式后，两次盲评都不再判泄题。
+3. **但别拿单次盲评当验收**：n=9 时同一张板在两次评审间会翻转；`takeaway` 那一次反而更差（4/5），因为评委把「正确栏的副标注『先把米换算成千米』」也读成了结论前置。**减负口径的稳证据是确定性的（0 问号、材料齐全、换题刷新），盲评只作参照。**
+
+### 9.3 还没修好的
+
+1. **结论句仍会漏上板**：配速板的底部 `delta`「分叉在第 2 步：直接除米数，还是先换成千米」是 2/9 里被判「结论前置」的主要来源——`none` 口径把结论也展示了。要么默认改 `takeaway`，要么让 delta 在提问轮不写死结论。
+2. **副标注里也可能写结论**：配速右栏 sub「先把米换算成千米」既是减负也是答案，这条边界目前只能靠提示词（「副标注写单位与俗称，不写判断」）。
+3. **概念图排版**：浮力图四个因素同时汇入一个节点，标签虽已错开，节点副标注（`m³；浸入体积`）仍会溢出框宽——需要按副标注长度算框宽。
+4. **迁移轮板面不跟情境**：浮力第 3 轮学生问「铁球放进水银」，板仍是通用关系图；`hasNewNumbers` 只认数字，认不出「换液体」这种条件变化。
+
+### 9.4 复现
+
+```bash
+# 0 问号口径（每轮记录板面，换题轮重画）
+cd backend && npx ts-node --transpile-only scripts/board-probe.ts ../outputs/e2e/board-cases.json ../frontend/figure-out/board-show2.json 1 none
+
+# 逐轮板面 → 渲染（--all 给盲评用，索引必须与轮次一一对应）
+npx ts-node --transpile-only scripts/board-turn-items.ts ../frontend/figure-out/board-show2.json ../frontend/figure-out/board-turn-items-all.json --all
+cd ../frontend && node node_modules/vite-node/vite-node.mjs scripts/figure-pages.ts figure-out/board-turn-items-all.json figure-out/board-turn-all-pages
+node ../outputs/e2e/render-pngs.mjs figure-out/board-turn-all-pages figure-out/board-turn-all-pngs
+
+# 盲评（新判据 load）
+node ../outputs/e2e/board-review-items.mjs ../frontend/figure-out/board-show2.json ../frontend/figure-out/board-show-review-items.json --turns
+node ../outputs/e2e/vision-review.mjs frontend/figure-out/board-show-review-items.json frontend/figure-out/board-turn-all-pngs outputs/e2e/board-review-load.json LOAD1 load
+
+# 对照页（旧 / 新 / 换题后三列）
+node ../outputs/e2e/board-compare.mjs
+```
+
+对照片：`outputs/board-compare/index.html`（9KB，无 base64）＋ `brief.md`（1KB）。

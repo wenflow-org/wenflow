@@ -1,0 +1,123 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>白板口径对照：做题区 vs 减负区</title>
+<style>
+  :root{--ink:#1f2430;--muted:#5b6472;--faint:#8b94a3;--line:#e3e6ec;--soft:#f6f7f9;--accent:#4f46e5;--ok:#0f766e;--warn:#b45309;--bad:#b42318}
+  *{box-sizing:border-box}
+  body{margin:0;background:#fbfbfd;color:var(--ink);font:15px/1.7 "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+  .wrap{max-width:1320px;margin:0 auto;padding:26px 22px 60px}
+  h1{font-size:23px;margin:0 0 6px}
+  .sub{color:var(--muted);font-size:13.5px;margin:0 0 14px}
+  .kpis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 13px;min-width:150px}
+  .kpi b{display:block;font-size:20px;line-height:1.25}
+  .kpi i{font-style:normal;font-size:11.5px;color:var(--muted)}
+  .case{background:#fff;border:1px solid var(--line);border-radius:14px;padding:15px 17px 13px;margin:0 0 16px}
+  .case header{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:10px}
+  .case h2{margin:0;font-size:16.5px}
+  .kind{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--accent);background:#eef0ff;padding:1px 6px;border-radius:5px}
+  .meta{font-size:12px;color:var(--muted)}
+  .cols{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+  .cols.three{grid-template-columns:1fr 1fr 1fr}
+  .cols figure{margin:0}
+  .cols img{width:100%;display:block;border:1px solid #eef0f4;border-radius:9px;background:#fff}
+  .cols figcaption{font-size:12px;color:var(--muted);margin-bottom:5px;display:flex;gap:7px;align-items:center}
+  .tag{font-size:11px;padding:1px 7px;border-radius:999px;color:#fff;background:var(--faint)}
+  .tag.old{background:#9a3412}.tag.new{background:var(--ok)}.tag.upd{background:var(--accent)}
+  .issue{font-size:11.5px;color:var(--faint);margin:5px 0 0;line-height:1.55}
+  .issue:empty{display:none}
+  .talk{margin-top:10px;border-top:1px solid #f0f2f6;padding-top:8px;font-size:13px;color:#2a3040;white-space:pre-wrap}
+  .talk b{display:block;font-size:11px;color:var(--faint);font-weight:600;margin-bottom:3px}
+  .note{background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px 16px;font-size:13px}
+  .note h3{margin:0 0 6px;font-size:14px}
+  .note ul{margin:6px 0 0 18px;padding:0}
+  .note li{margin:3px 0}
+  @media (max-width:1000px){.cols,.cols.three{grid-template-columns:1fr}}
+</style></head><body><div class="wrap">
+  <h1>白板口径对照：做题区 → 减负区</h1>
+  <p class="sub">同一堂课、同一份板面数据，只改「藏什么」：旧口径把答案位挖成问号；新口径把材料、步骤、副标注全部摆出来，0 个问号。</p>
+  <div class="kpis">
+    <div class="kpi"><b>0 / 0</b><i>提问轮泄题（旧 / 新，确定性）</i></div>
+    <div class="kpi"><b>0%</b><i>板面问号占比（9/9 张为 0）</i></div>
+    <div class="kpi"><b>2.78 / 2.56</b><i>盲评：减负度 / 自明性（旧 1.0 / 1.17）</i></div>
+    <div class="kpi"><b>6 / 3 / 0</b><i>盲评保留 / 要修 / 删掉（旧 0/0/6、0/2/4）</i></div>
+  </div>
+  <section class="case">
+  <header>
+    <h2>七年级数学·一元一次应用 第2课</h2><span class="kind">split-compare</span>
+    <span class="meta">板书动作：setup → none → update</span>
+  </header>
+  <div class="cols three">
+    <figure>
+      <figcaption><span class="tag old">旧：做题区</span>删掉 / 要修</figcaption>
+      <img src="images/b1-math-pace-old.png" alt="旧口径">
+      <p class="issue">图恰恰没有呈现最关键的这层关系：“60 的单位是秒、400 的单位是米，所以商是秒/米，再换算成分钟/千米”；左右两栏的虚线也连着空槽，没有承载任何对应关系，整张图只是把老师的口头复述框进两个框里。</p>
+    </figure>
+    <figure>
+      <figcaption><span class="tag new">新：减负区（0 问号）</span>要修</figcaption>
+      <img src="images/b1-math-pace-new.png" alt="新口径">
+      <p class="issue">底部『分叉在第 2 步：直接除米数，还是先换成千米』直接说出了老师要学生判断的『长度换算』答案，应改成中性提示或不写结论</p>
+    </figure>
+    <figure>
+      <figcaption><span class="tag upd">换题后</span>保留</figcaption>
+      <img src="images/b1-math-pace-updated.png" alt="换题后的板">
+      <p class="issue">老师换了数据，同一块板换成新数字——学生不用再记「现在讨论的是哪组数」。</p>
+    </figure>
+  </div>
+  <div class="talk"><b>新口径下老师这一轮说的话</b>只看左栏『常见错法』最后那行：数没变，单位却从 s/m 变成了 min/km。
+
+单位不会自己变身——这中间漏掉的换算，是发生在长度上、还是时间上？说一个就行。</div>
+</section><section class="case">
+  <header>
+    <h2>初二物理·浮力 第1课</h2><span class="kind">concept-map</span>
+    <span class="meta">板书动作：setup → none → none</span>
+  </header>
+  <div class="cols">
+    <figure>
+      <figcaption><span class="tag old">旧：做题区</span>删掉 / 删掉</figcaption>
+      <img src="images/b2-phys-buoyancy-old.png" alt="旧口径">
+      <p class="issue">四个因素等权并列且都标“？”，没有体现本轮要区分的“继续下沉但完全浸没时，深度变了、排开液体体积不变”，反而把浸入深度和排开体积混成同级候选。</p>
+    </figure>
+    <figure>
+      <figcaption><span class="tag new">新：减负区（0 问号）</span>要修</figcaption>
+      <img src="images/b2-phys-buoyancy-new.png" alt="新口径">
+      <p class="issue">「物体重力 G物」节点被放在四条连线的汇合处，看上去像中间的汇总点，容易误读成「重力是浮力的中间变量」；应挪到侧边，并用虚线或叉号明确标出「无关」。</p>
+    </figure>
+    
+  </div>
+  <div class="talk"><b>新口径下老师这一轮说的话</b>先看板上「浸入深度 h」指向「浮力 F浮」那一条边。设想一块石头已经完全没进水里，你再把它往下按深一些，它排开的液体体积有变化吗？这个答案决定那条边到底该怎么读。</div>
+</section><section class="case">
+  <header>
+    <h2>初二历史·战国变法 第1课</h2><span class="kind">state-strip</span>
+    <span class="meta">板书动作：setup → none → none</span>
+  </header>
+  <div class="cols">
+    <figure>
+      <figcaption><span class="tag old">旧：做题区</span>删掉 / 删掉</figcaption>
+      <img src="images/b3-hist-shangyang-old.png" alt="旧口径">
+      <p class="issue">标题「先取信，再分两步推开」和学生正要自己回答的「他真正想先拿到的是什么」直接撞答案——学生只要照读标题和第一格标签「取信」就完事，思考被掐断；同时三格全是光秃秃的「?」，没给任何可操作的填写抓手，也看不出前356与前350之间「隔了几年」这个关键时间差（三格等宽等距，六年和零年长得一模一样）。</p>
+    </figure>
+    <figure>
+      <figcaption><span class="tag new">新：减负区（0 问号）</span>保留</figcaption>
+      <img src="images/b3-hist-shangyang-new.png" alt="新口径">
+      <p class="issue">none</p>
+    </figure>
+    
+  </div>
+  <div class="talk"><b>新口径下老师这一轮说的话</b>不是一下子推开的——这一点板上摆得很清楚，扫一眼「前359 · 朝议」和「前350 · 第二次变法」这两处，中间隔着什么，你自己能读出来。
+
+我想让你盯住的是栎阳南门那一帧里的四个字：「民怪之，莫敢徙」。连挪一根木头，老百姓都不肯信他。
+
+那问题就落到这里——商鞅为什么非要先把这根木头的事办成，才接着去颁垦草令？这两件事之间到底是什么关系？</div>
+</section>
+  <div class="note">
+    <h3>这套改动落地后，管线里发生了什么</h3>
+    <ul>
+      <li><b>maskFigureAnswers 不再是默认</b>：三种口径 <code>none / takeaway / full</code>，默认走减负；挖空保留给「检索练习」场景。</li>
+      <li><b>stripSecondaryAnnotations 只在 full 口径用</b>：副标注（单位、俗称、简短解释）本来就是降负荷的，不该被撤。</li>
+      <li><b>新增 update 动作</b>：老师换例子/条件时，同一结构的板换成新数据；判据是「话里出现了板上没有的数字」。</li>
+      <li><b>老师话术改成禁止复述</b>：boardContext 结尾从「X 个空槽待学生补」改为「板面已完整，严禁用文字复述，直接引用标签，一次 2~3 句」。</li>
+      <li><b>标题不许写结论</b>：商鞅板标题从「先取信，再分两步推开」改成点题式后，两次盲评都不再判泄题。</li>
+    </ul>
+  </div>
+</div></body></html>

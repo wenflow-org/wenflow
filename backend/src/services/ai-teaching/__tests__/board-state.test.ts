@@ -12,6 +12,7 @@ import {
   deriveBoardFigure,
   openBoard,
   revealBoard,
+  updateBoard,
   boardSpecForRender,
   boardFigureForRender,
   describeBoardForTeacher,
@@ -182,5 +183,105 @@ describe('board-state：渲染出口', () => {
     const revealed = revealBoard(board);
     expect((boardSpecForRender(revealed) as any).edges[0].label).toBe('供给 ATP');
     expect(boardFigureForRender(revealed)!.kind).toBe('concept-map');
+  });
+});
+
+/**
+ * 减负口径（2026-10-27 用户定调）：白板不是做题区。
+ *
+ * 验收点：
+ *  1) none / takeaway 两档必须把材料、步骤、副标注完整上板（0 个问号）；
+ *  2) takeaway 只藏结论句——那是「老师问、学生说」的部分，也是唯一还算泄题的东西；
+ *  3) 每种口径的老师描述都要换成对应规则，不能还留着「不要替学生补空槽」这种做题区指令。
+ */
+describe('board-state：减负模式（conceal）', () => {
+  const withSubs = {
+    kind: 'split-compare',
+    spec: {
+      title: '配速换算',
+      left: {
+        head: '直接除',
+        tone: 'warn',
+        rows: [
+          { label: '60 ÷ 400 = 0.15', sub: '秒除以米，单位没换' },
+          { label: '读成 0.15 分钟/千米', sub: '把秒当分钟' },
+        ],
+      },
+      right: {
+        head: '先换单位',
+        tone: 'ok',
+        rows: [
+          { label: '400 m = 0.4 km', sub: '先把米换成千米' },
+          { label: '1 ÷ 0.4 = 2.5', sub: '分钟/千米' },
+        ],
+      },
+      delta: { label: '分叉在第二步：单位', at: 2 },
+    },
+  };
+
+  it('none：材料、副标注、结论全部上板，0 个空槽', () => {
+    const f = deriveBoardFigure(withSubs, { conceal: 'none' });
+    expect(f.conceal).toBe('none');
+    expect(f.slots).toBe(0);
+    expect(f.stage).toBe('revealed');
+    expect((f.maskedSpec.left as any).rows[0].sub).toBe('秒除以米，单位没换');
+    expect((f.maskedSpec as any).delta.label).toContain('分叉在第二步');
+    expect(f.hiddenTakeaway).toBeNull();
+    expect(JSON.stringify(f.maskedSpec)).not.toContain('？');
+  });
+
+  it('takeaway：材料与副标注照发，只把结论句留在对话里', () => {
+    const f = deriveBoardFigure(withSubs, { conceal: 'takeaway' });
+    expect((f.maskedSpec.left as any).rows[1].sub).toBe('把秒当分钟');
+    expect((f.maskedSpec as any).delta).toBeUndefined();
+    expect(f.hiddenTakeaway).toContain('分叉在第二步');
+    expect(JSON.stringify(f.maskedSpec)).not.toContain('？');
+  });
+
+  it('full：仍是旧口径（挖答案位 + 撤副标注 + 藏结论），不受本次改动影响', () => {
+    const f = deriveBoardFigure(withSubs, { conceal: 'full' });
+    expect((f.maskedSpec as any).right.rows[0].label).toBe('？');
+    expect((f.maskedSpec.left as any).rows[0].sub).toBeUndefined();
+    expect(f.slots).toBe(2);
+    expect(f.stage).toBe('setup');
+  });
+
+  it('老师描述：减负口径换成「禁止复述板面」，不再出现「空槽待学生补」', () => {
+    const none = describeBoardForTeacher(openBoard('t', withSubs, { conceal: 'none' }));
+    expect(none).toContain('完整板书');
+    expect(none).toContain('严禁用文字复述板上已有的内容');
+    expect(none).not.toContain('空槽待学生补');
+    expect(none).toContain('分叉在第二步');
+
+    const takeaway = describeBoardForTeacher(openBoard('t', withSubs, { conceal: 'takeaway' }));
+    expect(takeaway).toContain('未上板');
+    expect(takeaway).toContain('留给学生说');
+    expect(takeaway).not.toContain('分叉在第二步');
+  });
+
+  it('下发 spec：none 发完整、takeaway 发无结论的完整、full 按阶段发', () => {
+    const none = boardSpecForRender(openBoard('t', withSubs, { conceal: 'none' }))!;
+    expect((none as any).delta.label).toContain('分叉');
+    const take = boardSpecForRender(openBoard('t', withSubs, { conceal: 'takeaway' }))!;
+    expect((take as any).delta).toBeUndefined();
+    expect((take as any).left.rows[0].sub).toBeDefined();
+    const full = boardSpecForRender(openBoard('t', withSubs, { conceal: 'full' }))!;
+    expect((full as any).right.rows[0].label).toBe('？');
+  });
+
+  it('换板：同结构换新数据，版本递增且沿用原口径', () => {
+    const board = openBoard('t', withSubs, { conceal: 'takeaway' });
+    const next = updateBoard(board, {
+      kind: 'split-compare',
+      spec: {
+        ...withSubs.spec,
+        title: '配速换算（800 m 4 min）',
+        left: { ...withSubs.spec.left, rows: [{ label: '240 ÷ 800 = 0.3' }] },
+      },
+    });
+    expect(next.revision).toBe(board.revision + 1);
+    expect(next.figure!.conceal).toBe('takeaway');
+    expect((next.figure!.maskedSpec.left as any).rows[0].label).toBe('240 ÷ 800 = 0.3');
+    expect((next.figure!.maskedSpec as any).delta).toBeUndefined();
   });
 });

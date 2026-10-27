@@ -2,10 +2,10 @@
 /**
  * 板书状态机（2026-10-27）：这一轮白板做什么动作。
  *
- * 动作空间只有五个：建板 / 揭晓 / 指板 / 不动（纠错覆盖由 focus 承载）。
+ * 减负口径下动作是 上板 / 聚焦 / 换板 / 不动；旧口径（conceal:'full'）另有 揭晓。
  * 判据全部来自代码事实，模型不参与决定。
  */
-import { decideBoardOp, applyBoardOp, describeBoardOp } from '../board-controller';
+import { decideBoardOp, applyBoardOp, describeBoardOp, hasNewNumbers } from '../board-controller';
 import { openBoard } from '../board-state';
 
 const figure = {
@@ -106,5 +106,89 @@ describe('board-controller：动作落地', () => {
       describeBoardOp({ type: 'none', reason: 'no-board' }),
     ];
     texts.forEach((t) => expect(t.length).toBeGreaterThan(4));
+  });
+});
+
+/**
+ * 减负口径（2026-10-27 用户定调「白板不是做题区」）：
+ * 动作空间从「建板 → 填空 → 揭晓」改成「上板 → 聚焦 → 换板」，并给换板一个确定性判据。
+ */
+describe('board-controller：减负口径（show / focus / update）', () => {
+  const showBoard = openBoard('task-1', figure, { conceal: 'takeaway' });
+
+  it('老师引入板上没有的新数值 → 换板（老师讲新题、板上还是旧题是实测问题）', () => {
+    expect(
+      decideBoardOp({
+        board: showBoard,
+        firstTurnOfTask: false,
+        taskChanged: false,
+        wantsNewBoard: true,
+        newExample: true,
+      }),
+    ).toEqual({ type: 'update', reason: 'new-example' });
+  });
+
+  it('减负板没有「揭晓」这个动作：学生答对后板面不动', () => {
+    expect(
+      decideBoardOp({
+        board: showBoard,
+        firstTurnOfTask: false,
+        taskChanged: false,
+        wantsNewBoard: true,
+        checkpointVerdict: { passed: true },
+        filledSlot: true,
+      }),
+    ).toEqual({ type: 'none', reason: 'revealed-already' });
+  });
+
+  it('减负板 + 学生误解 → 只指板', () => {
+    expect(
+      decideBoardOp({
+        board: showBoard,
+        firstTurnOfTask: false,
+        taskChanged: false,
+        wantsNewBoard: true,
+        misconception: true,
+      }),
+    ).toEqual({ type: 'focus', target: null, reason: 'misconception' });
+  });
+
+  it('旧口径（full）保持填空语义：答对才揭晓', () => {
+    const masked = openBoard('task-1', figure, { conceal: 'full' });
+    expect(masked.figure!.slots).toBeGreaterThan(0);
+    expect(
+      decideBoardOp({
+        board: masked,
+        firstTurnOfTask: false,
+        taskChanged: false,
+        wantsNewBoard: true,
+        checkpointVerdict: { passed: true },
+      }).type,
+    ).toBe('reveal');
+  });
+
+  it('换板动作落地：给新 figure 才生效，版本递增', () => {
+    const next = applyBoardOp(showBoard, { type: 'update', reason: 'new-example' }, {
+      kind: 'split-compare',
+      spec: {
+        left: { head: '错', rows: [{ label: '240 ÷ 800' }] },
+        right: { head: '对', rows: [{ label: '4 ÷ 0.8' }] },
+      },
+    });
+    expect(next!.revision).toBe(showBoard.revision + 1);
+    expect((next!.figure!.maskedSpec.left as any).rows[0].label).toBe('240 ÷ 800');
+    // 没给新 figure 就什么都不做（避免把板清空）
+    expect(applyBoardOp(showBoard, { type: 'update', reason: 'new-example' })).toBe(showBoard);
+  });
+
+  it('新数值判据：板上有 400/60，话里出现 800 或 4 就认为换了现场', () => {
+    const spec = {
+      left: { head: '错', rows: [{ label: '60 ÷ 400 = 0.15' }] },
+      right: { head: '对', rows: [{ label: '1 ÷ 0.4 = 2.5' }] },
+    };
+    expect(hasNewNumbers(spec, '同样先换算：60 ÷ 400 还是 0.15')).toBe(false);
+    expect(hasNewNumbers(spec, '换成 800 米、4 分钟再走一遍')).toBe(true);
+    // 板上没有的小数也算（酒精密度 0.8 倍）
+    expect(hasNewNumbers(spec, '挪到酒精里，密度大约是水的 0.8 倍')).toBe(true);
   });
 });
