@@ -290,8 +290,8 @@ describe('ApiConfig P1 修复批', () => {
   });
 
   /* 2026-10-28 用户「批量吞吐可以和模型与接入合到一起」→「自由设计一下」：
-     跑批读数并入调用策略右栏，与近 1 小时调用同栏（虚线分隔），不再单独成卡。 */
-  it('后台跑批读数并入调用策略右栏：四格读数 + 一句口径说明', async () => {
+     跑批读数并入调用策略卡的读数带，与近 1 小时调用同排（虚线分隔），不再单独成卡。 */
+  it('后台跑批读数并入调用策略读数带：四格读数 + 一句口径说明', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     await flushPromises();
@@ -308,6 +308,28 @@ describe('ApiConfig P1 修复批', () => {
       '1最长连续低于下限'
     ]);
     expect(side.text()).toContain('刷新读数');
+    wrapper.unmount();
+  });
+
+  /* 后端告警句是 rpm 口径；页面读数统一用「条/分」，告警句不能又冒出 rpm。 */
+  it('跑批告警句把 rpm 口径换成条/分', async () => {
+    const { adminOpsApi } = await import('@/api/adminApi');
+    vi.mocked(adminOpsApi.throughput).mockResolvedValueOnce({
+      data: {
+        data: {
+          windowMinutes: 60, minRpm: 20, avgRpm: 0.03, worstRpm: 0, lowMinutes: 60,
+          longestLowRun: 60, idle: false, alert: true,
+          alertReason: '连续 60 分钟低于 20 rpm（窗口均值 0.03 rpm）'
+        }
+      }
+    } as never);
+    const wrapper = await mountApiConfig();
+    await flushPromises();
+    await flushPromises();
+    const alert = wrapper.find('.ac-policy__side .ac-side__alert');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text()).toContain('20 条/分');
+    expect(alert.text()).not.toContain('rpm');
     wrapper.unmount();
   });
 
@@ -738,7 +760,11 @@ describe('ApiConfig P1 修复批', () => {
     expect(card.findAll('.ac-policy__fields > .mk-field')).toHaveLength(3);
     expect(card.findAll('.ac-policy__unit').map((u) => u.text())).toEqual(['次', '毫秒', '次/分']);
     const labels = card.findAll('.ac-policy__fields .mk-field__label').map((l) => l.text());
-    expect(labels).toEqual(['最大重试', '重试间隔', '出站 RPM 上限']);
+    expect(labels).toEqual(['最大重试', '重试间隔', 'RPM 上限 全站共享']);
+    // 2026-10-28 用户「rpm 全站共享，虚拟学习者单独设置最高 rpm 就行了」：
+    // 本页只说清共享口径并给出虚拟学习者出口，不再把两套上限摆在一起。
+    expect(card.find('.ac-policy__fields').text()).toContain('所有供应商共用');
+    expect(card.find('.ac-policy__fields a.mk-link').attributes('href')).toBe('/admin/virtual-learners');
     expect(wrapper.text()).not.toContain('传输重试');
     expect(wrapper.text()).not.toContain('Retry-After');
     expect(wrapper.text()).not.toContain('随机抖动');

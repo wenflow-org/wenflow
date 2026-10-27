@@ -207,16 +207,15 @@
         </template>
       </ModelProvidersPanel>
 
-      <!-- ===== 调用策略（2026-10-26 重建）=====
-           2026-10-26 用户「不用写那么详细，分那么多，就最大重试、间隔、rpm 就够了」：
-           原先三组八个控件（上游尝试 / 传输重试 / 逻辑重试 / 退避基数 / Retry-After /
-           单次超时 / 随机抖动 / RPM）是一份网关调参台，而这一页的读者只想知道
-           「重试几次、隔多久、出站多快」。收成三个字段一行；没露出的几项沿用库里现值，
-           保存时原样回传（不会因为界面不显示而被重置成默认值），一句注解说明这点。
-           右侧仍是这些参数的效果面：近 1 小时 429 与冷却模型。 -->
+      <!-- ===== 调用策略（2026-10-28 重排）=====
+           用户「rpm 全站共享，虚拟学习者单独设置最高 rpm 就行了」：这里只有一份
+           全站额度（所有供应商共用），虚拟学习者另有自己的上限，在本页不重复设置，
+           只给一个出口。参数在上、读数在下：三个字段各自带一句口径，读数带铺满
+           整行、两组并排——不再出现左栏参数早早结束、右栏一路拉长的空档。 -->
       <section v-if="isLive && (reliability || configLoadFailed)" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">调用策略</h3>
+          <span class="mk-card__meta">重试与全站出站速率</span>
           <button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button>
         </div>
         <div class="ac-body ac-policy">
@@ -236,6 +235,7 @@
                   <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
                   <em class="ac-policy__unit">次</em>
                 </span>
+                <span class="ac-policy__hint">总尝试上限，含首次调用与改用备用模型</span>
               </label>
               <label class="mk-field">
                 <span class="mk-field__label">重试间隔</span>
@@ -243,60 +243,78 @@
                   <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
                   <em class="ac-policy__unit">毫秒</em>
                 </span>
+                <span class="ac-policy__hint">两次尝试之间的基础等待</span>
               </label>
               <label class="mk-field">
-                <span class="mk-field__label">出站 RPM 上限</span>
+                <span class="mk-field__label">
+                  RPM 上限
+                  <span class="mk-badge mk-badge--muted">全站共享</span>
+                </span>
                 <span class="ac-policy__control">
                   <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
                   <em class="ac-policy__unit">次/分</em>
                 </span>
+                <span class="ac-policy__hint">
+                  所有供应商共用，超出后排队等待，0 = 不限。
+                  <a class="mk-link" href="/admin/virtual-learners" @click.prevent="goVirtualLearners">虚拟学习者上限单独设 →</a>
+                </span>
               </label>
             </div>
-            <!-- 一句说清这个数字的口径（它是总尝试上限，不是「同模型重试几次」）：
-                 其余细项仍生效、仍随保存原样回传，只是不再占版面 -->
+            <!-- 没露出的细项仍生效、仍随保存原样回传，只留一句免得被读成「已关闭」 -->
             <p v-if="reliability" class="ac-policy__note">
-              「最大重试」是总尝试上限，含首次调用与改用备用模型。出站 RPM 超出后排队等待，0 = 不限。单次超时、退避上限、抖动沿用当前配置。
-            </p>          </div>
-          <!-- 运行读数（2026-10-28 合并）：参数的效果面同栏呈现——上组是近 1 小时调用
-               （429 / 冷却），下组是后台跑批（2026-10-28 从运维工具迁入，口径与
-               scripts/audit-batch-throughput 同一纯函数）。读数失败各自就地重试，
-               不把 0 当成「没有问题」。 -->
-          <aside class="ac-policy__side" aria-label="调用与跑批读数">
-            <div class="ac-policy__side-title">{{ readoutWindowText }}</div>
-            <div v-if="rateLimitReadout" class="ac-policy__stats">
-              <div class="ac-stat" :class="{ 'ac-stat--alert': rateLimitReadout.count429 > 0 }">
-                <b>{{ rateLimitReadout.count429 }}</b>
-                <span>上游 429</span>
-              </div>
-              <div class="ac-stat" :class="{ 'ac-stat--alert': rateLimitReadout.coolingDown > 0 }">
-                <b>{{ rateLimitReadout.coolingDown }}</b>
-                <span>冷却中模型</span>
-              </div>
-            </div>
-            <div v-else-if="rateLimitFailed" class="ac-policy__readout-fail" role="alert">
-              读数读取失败
-              <button type="button" class="mk-link" :disabled="rateLimitLoading" @click="loadRateLimitReadout">{{ rateLimitLoading ? '读取中…' : '重试' }}</button>
-            </div>
-            <div v-else class="ac-policy__readout-fail">读数读取中…</div>
-            <button type="button" class="mk-link ac-policy__link" @click="goHealthCenter">健康中心 →</button>
+              其余超时与退避细项沿用现有配置，保存时原样保留。
+            </p>
+          </div>
 
-            <div class="ac-side__divider" aria-hidden="true"></div>
-            <div class="ac-policy__side-title">后台跑批 · 最近 {{ throughput?.windowMinutes ?? 60 }} 分钟<template v-if="throughput?.idle"> · 空闲</template></div>
-            <p class="ac-side__hint">后台批处理每分钟实际处理多少条；低于下限（{{ throughput?.minRpm ?? 20 }} 条/分）的分钟越多，越可能已经停摆。</p>
-            <div v-if="throughput" class="ac-policy__stats">
-              <div class="ac-stat"><b>{{ throughput.avgRpm }}</b><span>平均 条/分</span></div>
-              <div class="ac-stat"><b>{{ throughput.worstRpm }}</b><span>最低单分钟</span></div>
-              <div class="ac-stat"><b>{{ throughput.lowMinutes }}</b><span>低于下限分钟</span></div>
-              <div class="ac-stat" :class="{ 'ac-stat--alert': throughput.alert }"><b>{{ throughput.longestLowRun }}</b><span>最长连续低于下限</span></div>
-            </div>
-            <div v-else-if="throughputFailed" class="ac-policy__readout-fail" role="alert">
-              跑批读取失败
-              <button type="button" class="mk-link" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '重试' }}</button>
-            </div>
-            <div v-else class="ac-policy__readout-fail">跑批读取中…</div>
-            <span v-if="throughput?.alert" class="ac-side__alert" role="alert">⚠ {{ throughput.alertReason }}</span>
-            <button type="button" class="mk-link ac-policy__link" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '刷新读数' }}</button>
-          </aside>
+          <!-- 读数带：参数的效果面。左组看「现在挨不挨限流」，右组看「后台跑批有没有停摆」；
+               读数失败各自就地重试，不把 0 当成「没有问题」。 -->
+          <div class="ac-policy__side" aria-label="调用与跑批读数">
+            <section class="ac-readout" aria-label="调用健康">
+              <div class="ac-readout__head">
+                <h4 class="ac-readout__title">调用健康</h4>
+                <span class="ac-readout__meta">{{ readoutWindowText }}</span>
+              </div>
+              <div v-if="rateLimitReadout" class="ac-policy__stats ac-policy__stats--health">
+                <div class="ac-stat" :class="{ 'ac-stat--alert': rateLimitReadout.count429 > 0 }">
+                  <b>{{ rateLimitReadout.count429 }}</b>
+                  <span>上游 429</span>
+                </div>
+                <div class="ac-stat" :class="{ 'ac-stat--alert': rateLimitReadout.coolingDown > 0 }">
+                  <b>{{ rateLimitReadout.coolingDown }}</b>
+                  <span>冷却中模型</span>
+                </div>
+              </div>
+              <div v-else-if="rateLimitFailed" class="ac-policy__readout-fail" role="alert">
+                读数读取失败
+                <button type="button" class="mk-link" :disabled="rateLimitLoading" @click="loadRateLimitReadout">{{ rateLimitLoading ? '读取中…' : '重试' }}</button>
+              </div>
+              <div v-else class="ac-policy__readout-fail">读数读取中…</div>
+              <button type="button" class="mk-link ac-policy__link" @click="goHealthCenter">健康中心 →</button>
+            </section>
+
+            <section class="ac-readout" aria-label="后台跑批">
+              <div class="ac-readout__head">
+                <h4 class="ac-readout__title">后台跑批</h4>
+                <span class="ac-readout__meta">
+                  最近 {{ throughput?.windowMinutes ?? 60 }} 分钟 · 下限 {{ throughput?.minRpm ?? 20 }} 条/分<template v-if="throughput?.idle"> · 空闲</template>
+                </span>
+              </div>
+              <p class="ac-readout__note">后台批处理每分钟实际处理多少条。低于下限的分钟越多，越可能已经停摆。</p>
+              <div v-if="throughput" class="ac-policy__stats">
+                <div class="ac-stat"><b>{{ throughput.avgRpm }}</b><span>平均 条/分</span></div>
+                <div class="ac-stat"><b>{{ throughput.worstRpm }}</b><span>最低单分钟</span></div>
+                <div class="ac-stat"><b>{{ throughput.lowMinutes }}</b><span>低于下限分钟</span></div>
+                <div class="ac-stat" :class="{ 'ac-stat--alert': throughput.alert }"><b>{{ throughput.longestLowRun }}</b><span>最长连续低于下限</span></div>
+              </div>
+              <div v-else-if="throughputFailed" class="ac-policy__readout-fail" role="alert">
+                跑批读取失败
+                <button type="button" class="mk-link" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '重试' }}</button>
+              </div>
+              <div v-else class="ac-policy__readout-fail">跑批读取中…</div>
+              <span v-if="throughput?.alert" class="ac-side__alert" role="alert">⚠ {{ throughputAlertText }}</span>
+              <button type="button" class="mk-link ac-policy__link" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '刷新读数' }}</button>
+            </section>
+          </div>
         </div>
       </section>
 
@@ -393,6 +411,10 @@ function focusPlatformConnection() {
 function goHealthCenter() {
   void router.push('/admin/health-center')
 }
+/** 全站 RPM 与虚拟学习者上限是两条独立上限：容量设置只在该页改，这里只给出入口 */
+function goVirtualLearners() {
+  void router.push('/admin/virtual-learners')
+}
 /* D12（2026-10-22 拍板 B）：近 1 小时 429 / 冷却模型读数。
    数据来自只读的 model-registry 总览（429 计数取 agent_call_logs，冷却取部署健康快照）。
    2026-10-26 单页后不再有「切到调用页才加载」的时机，随页面进入直接读。 */
@@ -443,6 +465,10 @@ const readoutWindowText = computed(() => {
   const h = Math.round((m / 60) * 10) / 10
   return `近 ${h} 小时`
 })
+/** 告警句由后端拼装，口径是 rpm；本页读数一律用「条/分」，只替换展示不改数据 */
+const throughputAlertText = computed(() =>
+  (throughput.value?.alertReason ?? '').replace(/\brpm\b/gi, '条/分')
+)
 
 /** 注册表读数（只读总览回传）：上游清单与「已添加」的对照只用 models 这一段。
     与生成参数页签的别名映射是同一份接口，不重复请求。 */
@@ -1204,20 +1230,15 @@ function discardAll() {
 .ac-cols__side { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
 .ac-fallback-alert { margin: 0; }
 
-/* ===== 调用策略（2026-10-26：三字段 + 读数）=====
-   用户「不用写那么详细，分那么多，就最大重试、间隔、rpm 就够了」：三个字段一行排开，
-   每个是「标签在上、输入框 + 单位在下」——与全站表单同一种形状，不再有分组标题与
-   九宫格。读数从原「调用健康」卡搬进来当右栏：参数与它造成的结果在同一视平线。 */
+/* ===== 调用策略（2026-10-28 重排：参数在上、读数带在下）=====
+   三个字段一行，各自带一句口径；两处「共享 / 单独设」的边界写在字段下面，
+   不另开一段长注解。读数带铺满整行、两组并排——参数区短也不会留下整列空白。 */
 .ac-policy {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 28px;
-  align-items: start;
+  gap: 18px;
   padding-top: 14px;
 }
 .ac-policy__form { display: grid; gap: 12px; min-width: 0; }
-/* 三个字段等分左栏（标签均匀铺开），控件本身封顶 220px——数字只有一两位，
-   输入框不必跟着拉成整列宽，但三列仍各占一等分，不会挤在左边留半屏空白 */
 .ac-policy__fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1237,7 +1258,14 @@ function discardAll() {
   white-space: nowrap;
   flex: none;
 }
-/* 字段注解：一行小字说清「重试次数含降级」「0 = 不限」，并交代没露出的细项沿用现值 */
+/* 字段口径：说完就走，不再堆成一段长注解 */
+.ac-policy__hint {
+  font-size: var(--mk-fs-micro);
+  line-height: 1.5;
+  color: var(--mk-faint);
+  font-weight: 400;
+}
+.ac-policy__hint .mk-link { white-space: nowrap; }
 .ac-policy__note {
   margin: 0;
   font-size: var(--mk-fs-micro);
@@ -1245,33 +1273,49 @@ function discardAll() {
   color: var(--mk-faint);
 }
 
-/* 右栏：近 1 小时读数（429 / 冷却模型）。读者的问题只有一个「现在挨不挨限流」 */
+/* 读数带：左组「调用健康」（现在挨不挨限流），右组「后台跑批」（有没有停摆）。
+   两组并排铺满整行，数字不装盒子——与参数区同一张卡里，不再套一层卡。 */
 .ac-policy__side {
   display: grid;
-  gap: 10px;
-  align-content: start;
-  padding-left: 24px;
-  border-left: 1px dashed var(--mk-line);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  gap: 24px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--mk-line);
 }
-.ac-policy__side-title {
+.ac-readout { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.ac-readout + .ac-readout { padding-left: 24px; border-left: 1px dashed var(--mk-line); }
+.ac-readout__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ac-readout__title {
+  margin: 0;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  color: var(--mk-ink);
+}
+.ac-readout__meta {
+  font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
+  font-variant-numeric: tabular-nums;
 }
-.ac-policy__stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.ac-stat {
-  display: grid;
-  gap: 2px;
-  padding: 10px 12px 11px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
+.ac-readout__note {
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.5;
+  color: var(--mk-muted);
 }
-.ac-stat b { font-size: 22px; line-height: 1.15; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
+.ac-policy__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 20px; }
+.ac-policy__stats--health { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ac-stat { display: grid; gap: 2px; min-width: 0; }
+.ac-stat b { font-size: 24px; line-height: 1.15; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--mk-ink); }
 .ac-stat span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.ac-stat--alert { border-color: color-mix(in srgb, var(--mk-amber) 46%, var(--mk-line)); background: var(--mk-amber-bg); }
 .ac-stat--alert b { color: var(--mk-amber); }
+.ac-stat--alert span { color: var(--mk-amber); }
 .ac-policy__readout-fail {
   display: flex;
   align-items: center;
@@ -1281,35 +1325,17 @@ function discardAll() {
   font-weight: 600;
 }
 .ac-policy__link { justify-self: start; font-size: var(--mk-fs-micro); }
-/* 后台跑批（2026-10-28 从运维工具迁入）：与近 1 小时调用同栏，用虚线分隔两组读数 */
-.ac-side__divider { border-top: 1px dashed var(--mk-line); margin: 12px 0 10px; }
-.ac-side__hint { margin: 0 0 10px; font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
 .ac-side__alert { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-amber); }
 
-/* 内容区不足 1500px 时右栏落到参数下面，改成一条横读数带（不再挤窄参数三列） */
-@media (max-width: 1500px) {
-  .ac-policy { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-  /* 2026-10-28 右栏并入跑批读数后是「两组读数」的纵向块，不再拆横排三槽 */
-  .ac-policy__side {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 10px;
-    padding: 14px 0 0;
-    border-left: 0;
-    border-top: 1px dashed var(--mk-line);
-  }
-  .ac-policy__stats { grid-template-columns: repeat(2, minmax(0, 200px)); }
-  .ac-stat { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; }
-  .ac-stat b { font-size: 18px; }
-  .ac-policy__link { justify-self: start; }
-}
+/* 内容区不足 1100px：读数带两组改上下排，分隔线从竖线换成横线 */
 @media (max-width: 1100px) {
   .ac-policy__fields { grid-template-columns: repeat(2, minmax(0, 200px)); }
+  .ac-policy__side { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .ac-readout + .ac-readout { padding-left: 0; padding-top: 16px; border-left: 0; border-top: 1px dashed var(--mk-line); }
 }
 @media (max-width: 800px) {
   .ac-policy__fields { grid-template-columns: minmax(0, 1fr); }
-  .ac-policy__side { grid-template-columns: auto 1fr; }
-  .ac-policy__link { justify-self: start; }
+  .ac-policy__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .ac-save {
   position: sticky;

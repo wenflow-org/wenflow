@@ -1,11 +1,11 @@
 <template>
-  <!-- 虚拟学习者容量与实验环境：三项设置（专属 RPM / 最高并发 / 日期模拟）。
+  <!-- 虚拟学习者容量与实验环境：三项设置（最高 RPM / 最高并发 / 日期模拟）。
        卡片外壳与「保存」由宿主承担——三项是同一份设置接口，分开保存会让「改了两项只按一个」
        的另一项悄悄没生效，脏态也只跟着改过的那一项走。 -->
   <div class="vl-settings">
     <div class="vl-settings__limits">
     <div class="vl-settings__block">
-      <div class="vl-settings__label">专属 RPM 上限</div>
+      <div class="vl-settings__label">最高 RPM</div>
       <div class="vl-settings__row">
         <input
           v-model.number="rpmInput"
@@ -14,7 +14,7 @@
           max="100000"
           step="10"
           class="mk-field__input vl-rpm__input"
-          aria-label="虚拟学习者专属出站 RPM 上限"
+          aria-label="虚拟学习者最高出站 RPM"
           :disabled="loadFailed"
           @input="rpmDirty = true"
         />
@@ -42,6 +42,9 @@
       </div>
     </div>
     </div>
+    <!-- 2026-10-28 用户「rpm 全站共享，虚拟学习者单独设置最高 rpm 就行了」：
+         这里只是虚拟学习者自己的上限，不是全站额度——两者同时生效，说清免得被读成二选一。 -->
+    <p class="vl-settings__hint">虚拟学习者的独立上限。实际调用仍占用「模型与接入」里的全站 RPM 共享额度。</p>
 
     <!-- 日期模拟默认收起：它是一整套模拟日历（每天几节、每周几天、上课星期…），
          展开后比整张卡其余内容加起来还高。 -->
@@ -67,7 +70,7 @@ const props = withDefaults(defineProps<{
   /** 自动驾驶并发读数（used/limit/queued）：与最高并发输入行同源 */
   concurrency?: { used: number; limit: number; queued: number }
   concurrencyUnavailable?: boolean
-  /** 专属出站速率读数（在途 / 排队） */
+  /** 最高出站速率读数（在途 / 排队） */
   rpm?: { inFlight: number; queued: number; rpm: number }
   rpmSavedLimit?: number
   rpmUnavailable?: boolean
@@ -85,7 +88,7 @@ const emit = defineEmits<{
   (e: 'failed', v: boolean): void
 }>()
 
-/* 专属 RPM（0 = 不限）：与平台全局 RPM 是两条独立上限 */
+/* 最高 RPM（0 = 不限）：与全站共享 RPM 是两条同时生效的上限 */
 const rpmInput = ref(0)
 const rpmDirty = ref(false)
 /* 最高并发（自动驾驶全局并发上限，1–200） */
@@ -209,6 +212,13 @@ onMounted(() => {
   color: var(--mk-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+/* 与全站共享额度的关系：一句小字，不另开一组设置 */
+.vl-settings__hint {
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.5;
+  color: var(--mk-faint);
 }
 /* 设置未加载提示（#59）：失败态红字，与「未保存」脏态区分 */
 .vl-rpm__failed {

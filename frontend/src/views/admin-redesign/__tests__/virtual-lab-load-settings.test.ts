@@ -44,15 +44,18 @@ describe('VirtualLabLoadSettings（容量与实验环境）', () => {
     updateSettingsMock.mockResolvedValue({ data: { data: { settings: {}, rpm: {} } } });
   });
 
-  it('渲染三项设置：专属 RPM + 最高并发 + 日期模拟，不自带卡片外壳与保存钮', async () => {
+  it('渲染三项设置：最高 RPM + 最高并发 + 日期模拟，不自带卡片外壳与保存钮', async () => {
     const w = await mountBlock();
     expect(w.findAll('.vl-settings__block')).toHaveLength(3);
     expect(w.find('.mk-card').exists()).toBe(false);
     const labels = w.findAll('.vl-settings__label').map((l) => l.text());
-    expect(labels).toEqual(['专属 RPM 上限', '最高并发', '日期模拟']);
+    expect(labels).toEqual(['最高 RPM', '最高并发', '日期模拟']);
     // 单位与口径可见；保存钮在宿主卡头，组件里不再各带一个
     expect(w.text()).toContain('个会话');
     expect(w.text()).toContain('次 / 分 · 0 = 不限');
+    // 2026-10-28 用户「rpm 全站共享，虚拟学习者单独设置最高 rpm 就行了」：
+    // 这里是虚拟学习者自己的上限，与全站共享额度同时生效。
+    expect(w.text()).toContain('全站 RPM 共享额度');
     expect(w.findAll('button')).toHaveLength(0);
   });
 
@@ -65,7 +68,7 @@ describe('VirtualLabLoadSettings（容量与实验环境）', () => {
   it('卡级保存：一次提交三项（RPM / 并发 / 日期模拟），越界夹紧', async () => {
     const w = await mountBlock();
     const limit = w.find('input[aria-label="自动驾驶最高并发上限"]');
-    const rpm = w.find('input[aria-label="虚拟学习者专属出站 RPM 上限"]');
+    const rpm = w.find('input[aria-label="虚拟学习者最高出站 RPM"]');
     await limit.setValue(999);
     await rpm.setValue(120);
     await flushPromises();
@@ -84,7 +87,7 @@ describe('VirtualLabLoadSettings（容量与实验环境）', () => {
 
   it('RPM 0 = 不限，原样提交 0', async () => {
     const w = await mountBlock();
-    await w.find('input[aria-label="虚拟学习者专属出站 RPM 上限"]').setValue(0);
+    await w.find('input[aria-label="虚拟学习者最高出站 RPM"]').setValue(0);
     await flushPromises();
     (w.vm as unknown as { save: () => Promise<void> }).save();
     await flushPromises();

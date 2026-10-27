@@ -855,7 +855,7 @@ const concurrency = computed(() => ({
   queued: Number(liveAutopilotConcurrency.value?.queued ?? 0),
 }))
 
-/* 虚拟学习者专属出站速率（RPM）：KPI 读 inFlight/queued 与已保存上限；
+/* 虚拟学习者最高出站速率（RPM）：KPI 读 inFlight/queued 与已保存上限；
    写控件在下方「容量与实验环境」卡（2026-10-25 搬回本页）。 */
 const vlRpm = reactive({ inFlight: 0, queued: 0, rpm: 0 })
 /** 已保存的 RPM 上限：速率卡「上限」分母只认服务端已保存值（写入在下方的容量卡） */
