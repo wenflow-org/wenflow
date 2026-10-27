@@ -70,9 +70,9 @@
         <table class="mk-table mk-table--nowrap">
           <thead>
             <tr>
-              <th>成就</th>
-              <th>用户</th>
-              <th>类型</th>
+              <th scope="col">成就</th>
+              <th scope="col">用户</th>
+              <th scope="col">类型</th>
               <th
                 scope="col"
                 class="mk-th--right mk-th--sortable"
@@ -85,7 +85,7 @@
                 :aria-sort="achSortState('earnedAt')"
                 @click="toggleAchSort('earnedAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAchSort('earnedAt')">解锁时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

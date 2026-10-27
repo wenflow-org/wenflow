@@ -188,7 +188,7 @@
               :aria-sort="vlSortState('name')"
               @click="toggleVlSort('name')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('name')">虚拟学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th v-if="!isNarrow && !hiddenCols.has('tendency')">长期倾向</th>
+            <th scope="col" v-if="!isNarrow && !hiddenCols.has('tendency')">长期倾向</th>
             <th
               v-if="!isNarrow && !hiddenCols.has('story')"
               scope="col"
@@ -241,7 +241,7 @@
               :aria-sort="vlSortState('created')"
               @click="toggleVlSort('created')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('created')">创建<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th>操作</th>
+            <th scope="col">操作</th>
           </tr>
         </thead>
         <tbody>

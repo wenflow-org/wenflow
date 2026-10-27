@@ -118,7 +118,7 @@
                 :aria-sort="ocSortState('path')"
                 @click="toggleOcSort('path')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('path')">路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('user')">用户</th>
+              <th scope="col" v-if="!hiddenCols.has('user')">用户</th>
               <th
                 v-if="!hiddenCols.has('status')"
                 scope="col"
@@ -154,7 +154,7 @@
                 :aria-sort="ocSortState('updated')"
                 @click="toggleOcSort('updated')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

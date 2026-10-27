@@ -70,7 +70,7 @@
       <div class="mk-table-scroll">
         <table class="mk-table">
           <thead>
-            <tr><th>卡号</th><th>状态</th><th>问题</th></tr>
+            <tr><th scope="col">卡号</th><th scope="col">状态</th><th scope="col">问题</th></tr>
           </thead>
           <tbody>
             <tr v-for="(r, i) in report.reports" :key="(r.cardKey || 'row') + i">
@@ -103,7 +103,7 @@
       <div class="mk-table-scroll">
         <table class="mk-table">
           <thead>
-            <tr><th>卡号</th><th>动作</th><th>备注</th></tr>
+            <tr><th scope="col">卡号</th><th scope="col">动作</th><th scope="col">备注</th></tr>
           </thead>
           <tbody>
             <tr v-for="(r, i) in importResult.results" :key="(r.cardKey || 'row') + i">

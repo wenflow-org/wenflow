@@ -166,8 +166,11 @@
 │                                                        │
 │ [.mk-card--fill]                        ← flex:1 填满  │
 │   ├ .mk-card__head                                     │
-│   │    左：MkFilterSearch + 清除筛选                    │
-│   │    右：筛选 pills + MkCols + 「N / M 条」           │
+│   │    左：范围 pills → 次级快筛 → 清除筛选              │
+│   │    右：MkFilterSearch → 页级动作 → MkCols → 筛选弹层 │
+│   │        → 「N / M 条」meta                          │
+│   │    （2026-10-27 校正：搜索按 2026-10-15 拍板进右组首位，│
+│   │      列头契约见 ADMIN_TABLE_HEADER_SPEC.md）        │
 │   ├ 主体（三态统一，见 R3）                             │
 │   │    .mk-table--fixed + colgroup token 列宽           │
 │   └ Pagination（卡内吸底，随卡片）                      │

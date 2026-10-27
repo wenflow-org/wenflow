@@ -96,17 +96,17 @@
                 :aria-sort="fbSortState('rating')"
                 @click="toggleFbSort('rating')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('rating')">评分<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>评论</th>
-              <th>节点</th>
-              <th>策略</th>
+              <th scope="col">评论</th>
+              <th scope="col">节点</th>
+              <th scope="col">策略</th>
               <th
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="fbSortState('status')"
                 @click="toggleFbSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>时间</th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col">时间</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

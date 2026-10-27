@@ -184,17 +184,17 @@
                 :aria-sort="logSortState('calledAt')"
                 @click="toggleLogSort('calledAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('calledAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('status')">级别</th>
-              <th v-if="!hiddenCols.has('kind')">类型</th>
-              <th v-if="!hiddenCols.has('agent')">Skill</th>
-              <th v-if="!hiddenCols.has('trace')" :title="TRACE_COL_TITLE">Trace</th>
-              <th v-if="!hiddenCols.has('msg')">消息</th>
-              <th v-if="!hiddenCols.has('model')">模型</th>
-              <th v-if="!hiddenCols.has('tokens')">输入 / 输出</th>
+              <th scope="col" v-if="!hiddenCols.has('status')">级别</th>
+              <th scope="col" v-if="!hiddenCols.has('kind')">类型</th>
+              <th scope="col" v-if="!hiddenCols.has('agent')">Skill</th>
+              <th scope="col" v-if="!hiddenCols.has('trace')" :title="TRACE_COL_TITLE">Trace</th>
+              <th scope="col" v-if="!hiddenCols.has('msg')">消息</th>
+              <th scope="col" v-if="!hiddenCols.has('model')">模型</th>
+              <th scope="col" v-if="!hiddenCols.has('tokens')">输入 / 输出</th>
               <th
                 v-if="!hiddenCols.has('dur')"
                 scope="col"
-                class="right mk-th--sortable"
+                class="mk-th--right mk-th--sortable"
                 :aria-sort="logSortState('durationMs')"
                 @click="toggleLogSort('durationMs')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('durationMs')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -256,7 +256,7 @@
                     <span class="mk-cell-sub">{{ tokensSplitText(log) }}</span>
                   </div>
                 </td>
-                <td v-if="!hiddenCols.has('dur')" class="right"><span class="mk-latency exec-dur" :class="latencyTone(log.durationMs)" :title="`${fmtMs(log.durationMs)}（P90 ${latencyP90} · P99 ${latencyP99}）`">{{ fmtMs(log.durationMs) }}</span></td>
+                <td v-if="!hiddenCols.has('dur')" class="mk-num"><span class="mk-latency exec-dur" :class="latencyTone(log.durationMs)" :title="`${fmtMs(log.durationMs)}（P90 ${latencyP90} · P99 ${latencyP99}）`">{{ fmtMs(log.durationMs) }}</span></td>
               </tr>
               <tr v-if="openId === log.id" class="exec-detail">
                 <td :colspan="visibleColCount">
@@ -1368,11 +1368,9 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
    max-content 由内容决定，不设上限时长消息会把整列撑到不可读）：
    - 调用：.exec-cell max-width 460px，主行标题 ellipsis（展开行看全量）
    - 节点 / 模型：160px / 150px 单行截断（title 全值）
-   - 时间 / 耗时 / Trace：短内容自然宽，右对齐列走 .right
+   - 时间 / 耗时 / Trace：短内容自然宽，右对齐列走 .mk-num / .mk-th--right
    视觉基调与审计日志对齐（2026-09）：主体统一 12.5px、行 padding 8px 13px、
    失败行不再整行红底（错误语义交给红标题 + 状态 pill），整体更清爽易扫。 */
-.exec-table th.right,
-.exec-table td.right { text-align: right; }
 /* 行高对齐审计日志节奏（2026-09 统一：td 8px 13px ≈ 43px 行高）：
    双行消息列因副行略高，但主行 12.5px 后整体与审计页同密度 */
 .exec-table th { padding: 8px 13px; }

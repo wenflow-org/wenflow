@@ -96,13 +96,13 @@
           <table class="mk-table stp-dead-table">
             <thead>
               <tr>
-                <th>事件</th>
-                <th>用户</th>
-                <th>关联对象</th>
-                <th class="mk-th--right">尝试</th>
-                <th>错误</th>
-                <th>发生时间</th>
-                <th class="mk-th--right">操作</th>
+                <th scope="col">事件</th>
+                <th scope="col">用户</th>
+                <th scope="col">关联对象</th>
+                <th scope="col" class="mk-th--right">尝试</th>
+                <th scope="col">错误</th>
+                <th scope="col">发生时间</th>
+                <th scope="col" class="mk-th--right">操作</th>
               </tr>
             </thead>
             <tbody>

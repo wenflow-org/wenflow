@@ -124,7 +124,7 @@
                 title="点列头排序：升序 = 最久没复习的在前（从未复习的恒排末尾）"
                 @click="toggleUserSort('lastReviewed')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastReviewed')">最近复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

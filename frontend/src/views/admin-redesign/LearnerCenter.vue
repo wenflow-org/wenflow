@@ -150,10 +150,10 @@
       <table v-if="filtered.length" class="mk-table mk-table--nowrap">
         <thead>
           <tr>
-            <th v-if="!lcHiddenCols.has('learner')">学习者</th>
-            <th v-if="!lcHiddenCols.has('progress')">当前进度</th>
-            <th v-if="!lcHiddenCols.has('trend')">趋势</th>
-            <th v-if="!lcHiddenCols.has('fatigue')">疲劳</th>
+            <th scope="col" v-if="!lcHiddenCols.has('learner')">学习者</th>
+            <th scope="col" v-if="!lcHiddenCols.has('progress')">当前进度</th>
+            <th scope="col" v-if="!lcHiddenCols.has('trend')">趋势</th>
+            <th scope="col" v-if="!lcHiddenCols.has('fatigue')">疲劳</th>
             <!-- 审核 #20（2026-10-06）：置信 / 更新接共享 useTableSort（Users.vue 同写法），
                  未点表头时保持默认序「风险优先 → 更新时间新→旧」（写进「操作」列表头 title） -->
             <th
@@ -164,7 +164,7 @@
               :aria-sort="lcSortState('conf')"
               @click="toggleLcSort('conf')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th v-if="!lcHiddenCols.has('risk')">风险摘要</th>
+            <th scope="col" v-if="!lcHiddenCols.has('risk')">风险摘要</th>
             <th
               v-if="!lcHiddenCols.has('updated')"
               scope="col"
@@ -173,7 +173,7 @@
               :aria-sort="lcSortState('updated')"
               @click="toggleLcSort('updated')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th class="mk-th--right" title="默认排序：风险优先 → 更新时间新→旧">操作</th>
+            <th scope="col" class="mk-th--right" title="默认排序：风险优先 → 更新时间新→旧">操作</th>
           </tr>
         </thead>
         <tbody>

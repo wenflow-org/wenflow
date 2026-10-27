@@ -60,7 +60,7 @@
       <table class="mk-table">
         <thead>
           <tr>
-            <th>公告</th>
+            <th scope="col">公告</th>
             <th
               scope="col"
               class="mk-th--sortable"
@@ -85,8 +85,8 @@
               :aria-sort="anSortState('expires')"
               @click="toggleAnSort('expires')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleAnSort('expires')">过期<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th>创建人</th>
-            <th class="mk-th--right">操作</th>
+            <th scope="col">创建人</th>
+            <th scope="col" class="mk-th--right">操作</th>
           </tr>
         </thead>
         <tbody>

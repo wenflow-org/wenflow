@@ -5,7 +5,7 @@
       <summary>字段影响范围（产出字段 → 下游消费者）</summary>
       <MkLoading v-if="lineageLoading" inline text="影响范围加载中…" />
       <table v-else-if="lineage.length" class="sdp-routing__table">
-        <thead><tr><th>字段</th><th>消费者</th></tr></thead>
+        <thead><tr><th scope="col">字段</th><th scope="col">消费者</th></tr></thead>
         <tbody>
           <tr v-for="(entry, i) in lineage" :key="i">
             <td class="mono">{{ entry.field }}</td>

@@ -140,7 +140,7 @@
         <table class="mk-table mk-table--click mk-table--nowrap">
           <thead>
             <tr>
-              <th v-if="showCol('summary')">目标摘要</th>
+              <th scope="col" v-if="showCol('summary')">目标摘要</th>
               <th
                 scope="col"
                 class="mk-th--sortable"
@@ -164,8 +164,8 @@
                 :aria-sort="gcSortState('turns')"
                 @click="toggleGcSort('turns')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="showCol('constraints')">约束条件</th>
-              <th v-if="showCol('path')">路径</th>
+              <th scope="col" v-if="showCol('constraints')">约束条件</th>
+              <th scope="col" v-if="showCol('path')">路径</th>
               <th
                 v-if="showCol('stageDate')"
                 scope="col"
@@ -182,7 +182,7 @@
                 :aria-sort="gcSortState('created')"
                 @click="toggleGcSort('created')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('created')">创建时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

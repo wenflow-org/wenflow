@@ -190,10 +190,10 @@
                 :aria-sort="alSortState('createdAt')"
                 @click="toggleAlSort('createdAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('createdAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="colVisible('admin')">操作者</th>
-              <th v-if="colVisible('action')">动作</th>
-              <th v-if="!noTargetTypes && colVisible('tt')" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
-              <th v-if="colVisible('target')">目标</th>
+              <th scope="col" v-if="colVisible('admin')">操作者</th>
+              <th scope="col" v-if="colVisible('action')">动作</th>
+              <th scope="col" v-if="!noTargetTypes && colVisible('tt')" title="操作对象类别（如 用户 / 公告 / 会话）">目标类型</th>
+              <th scope="col" v-if="colVisible('target')">目标</th>
               <th
                 v-if="colVisible('result')"
                 scope="col"
@@ -201,8 +201,8 @@
                 :aria-sort="alSortState('success')"
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="colVisible('ip')">IP</th>
-              <th class="mk-th--right" aria-hidden="true"></th>
+              <th scope="col" v-if="colVisible('ip')">IP</th>
+              <th scope="col" class="mk-th--right" aria-hidden="true"></th>
             </tr>
           </thead>
           <tbody>
@@ -293,16 +293,16 @@
                 :aria-sort="alSortState('createdAt')"
                 @click="toggleAlSort('createdAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('createdAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>用户名</th>
-              <th>IP</th>
+              <th scope="col">用户名</th>
+              <th scope="col">IP</th>
               <th
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="alSortState('success')"
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>原因</th>
-              <th class="mk-th--right al-act">操作</th>
+              <th scope="col">原因</th>
+              <th scope="col" class="mk-th--right al-act">操作</th>
             </tr>
           </thead>
           <tbody>

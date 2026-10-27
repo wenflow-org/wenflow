@@ -37,12 +37,12 @@
       <table v-else-if="cores.length" class="mk-table mk-table--click pw-table">
         <thead>
           <tr>
-            <th>Skill</th>
-            <th>结构</th>
-            <th>输出</th>
-            <th title="核心文件哈希">核心哈希</th>
-            <th>状态</th>
-            <th class="mk-th--right">操作</th>
+            <th scope="col">Skill</th>
+            <th scope="col">结构</th>
+            <th scope="col">输出</th>
+            <th scope="col" title="核心文件哈希">核心哈希</th>
+            <th scope="col">状态</th>
+            <th scope="col" class="mk-th--right">操作</th>
           </tr>
         </thead>
         <tbody>

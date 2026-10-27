@@ -202,10 +202,10 @@
               </colgroup>
               <thead>
                 <tr>
-                  <th>模型</th>
-                  <th>单价</th>
-                  <th>状态</th>
-                  <th></th>
+                  <th scope="col">模型</th>
+                  <th scope="col">单价</th>
+                  <th scope="col">状态</th>
+                  <th scope="col"></th>
                 </tr>
               </thead>
               <tbody>

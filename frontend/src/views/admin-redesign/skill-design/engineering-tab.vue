@@ -5,23 +5,23 @@
       <header class="mk-section__head"><h4>基础信息</h4></header>
       <table class="sdp-kv">
         <tbody>
-          <tr><th title="kind">类型</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
-          <tr><th title="agentId">Agent 标识</th><td><code class="mono">{{ overview.agentId }}</code></td></tr>
-          <tr v-if="overview.file"><th title="file.path">文件路径</th><td><code class="mono">{{ overview.file.path }}</code></td></tr>
-          <tr v-if="overview.file?.hash"><th title="file.hash">文件哈希</th><td><code class="mono" :title="overview.file.hash">{{ shortHash(overview.file.hash) }}</code></td></tr>
-          <tr v-if="overview.db?.id"><th title="db.id">生效记录 ID</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
-          <tr v-if="overview.db?.version"><th title="db.version">生效版本</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
+          <tr><th scope="col" title="kind">类型</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
+          <tr><th scope="col" title="agentId">Agent 标识</th><td><code class="mono">{{ overview.agentId }}</code></td></tr>
+          <tr v-if="overview.file"><th scope="col" title="file.path">文件路径</th><td><code class="mono">{{ overview.file.path }}</code></td></tr>
+          <tr v-if="overview.file?.hash"><th scope="col" title="file.hash">文件哈希</th><td><code class="mono" :title="overview.file.hash">{{ shortHash(overview.file.hash) }}</code></td></tr>
+          <tr v-if="overview.db?.id"><th scope="col" title="db.id">生效记录 ID</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
+          <tr v-if="overview.db?.version"><th scope="col" title="db.version">生效版本</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
           <!-- B19-F7-3：本行是生效 Prompt 版本记录自身的计数列（agent_prompts.useCount），
                与状态条按调用日志聚合的窗口统计口径不同；标签必须带限定词，否则同屏两个
                「调用次数」会被读成同一事实的两种值。 -->
           <tr v-if="overview.db?.useCount !== undefined">
-            <th title="agent_prompts.useCount">本版本累计调用</th>
+            <th scope="col" title="agent_prompts.useCount">本版本累计调用</th>
             <td :title="`本版本自启用以来的累计调用次数`">{{ overview.db.useCount }}</td>
           </tr>
-          <tr v-if="overview.db?.model"><th>默认模型</th><td><code class="mono">{{ overview.db.model }}</code></td></tr>
-          <tr v-if="overview.db?.publishedAt"><th>发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
+          <tr v-if="overview.db?.model"><th scope="col">默认模型</th><td><code class="mono">{{ overview.db.model }}</code></td></tr>
+          <tr v-if="overview.db?.publishedAt"><th scope="col">发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
           <tr v-if="overview.drift">
-            <th>不一致状态</th>
+            <th scope="col">不一致状态</th>
             <td>
               <code class="mono" :class="overview.drift === 'in-sync' ? 'sdp-ok' : 'sdp-warn'">{{ driftLabel(overview.drift) }}</code>
             </td>
@@ -52,14 +52,14 @@
       </header>
       <table class="sdp-kv">
         <tbody>
-          <tr><th title="version">契约版本</th><td><code class="mono">{{ overview.runtimeContract.version }}</code></td></tr>
-          <tr><th title="contextMode">上下文模式</th><td><code class="mono">{{ overview.runtimeContract.contextMode }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.domain"><th title="domain">业务域</th><td><code class="mono">{{ overview.runtimeContract.businessState.domain }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.phases"><th title="phases">阶段集合</th><td><code class="mono">{{ overview.runtimeContract.businessState.phases.join(', ') }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.defaultPhase"><th title="defaultPhase">默认阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.defaultPhase }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.terminalPhases"><th title="terminalPhases">终止阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.terminalPhases.join(', ') }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.contextUpdate?.mode"><th title="contextUpdate.mode">上下文更新模式</th><td><code class="mono">{{ overview.runtimeContract.contextUpdate.mode }}</code></td></tr>
-          <tr><th title="outputEnvelope">输出封装</th><td><code class="mono">{{ overview.runtimeContract.outputEnvelope }}</code></td></tr>
+          <tr><th scope="col" title="version">契约版本</th><td><code class="mono">{{ overview.runtimeContract.version }}</code></td></tr>
+          <tr><th scope="col" title="contextMode">上下文模式</th><td><code class="mono">{{ overview.runtimeContract.contextMode }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.domain"><th scope="col" title="domain">业务域</th><td><code class="mono">{{ overview.runtimeContract.businessState.domain }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.phases"><th scope="col" title="phases">阶段集合</th><td><code class="mono">{{ overview.runtimeContract.businessState.phases.join(', ') }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.defaultPhase"><th scope="col" title="defaultPhase">默认阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.defaultPhase }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.terminalPhases"><th scope="col" title="terminalPhases">终止阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.terminalPhases.join(', ') }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.contextUpdate?.mode"><th scope="col" title="contextUpdate.mode">上下文更新模式</th><td><code class="mono">{{ overview.runtimeContract.contextUpdate.mode }}</code></td></tr>
+          <tr><th scope="col" title="outputEnvelope">输出封装</th><td><code class="mono">{{ overview.runtimeContract.outputEnvelope }}</code></td></tr>
         </tbody>
       </table>
     </section>

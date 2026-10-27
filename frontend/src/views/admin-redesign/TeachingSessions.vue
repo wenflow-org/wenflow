@@ -230,8 +230,8 @@
               <th v-if="!tsHiddenCols.has('interact')" scope="col" title="消息：会话内用户与平台的往来条数">消息</th>
               <th v-if="!isTableMid && !tsHiddenCols.has('interact')" scope="col" title="知识点：这次会话触及的知识点个数。窄窗口下这列不占宽度，读数仍随「消息」列的说明文字给出">知识点</th>
               <th v-if="!tsHiddenCols.has('progress')" scope="col" title="任务进度：进行中显示「任务 第几个/共几个」，终态显示「结束于 第几个/共几个」——两种说法都是位置，不是完成数">进度</th>
-              <th v-if="!tsHiddenCols.has('output')">产物</th>
-              <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')">关注</th>
+              <th scope="col" v-if="!tsHiddenCols.has('output')">产物</th>
+              <th scope="col" v-if="!isTableNarrow && !tsHiddenCols.has('attention')">关注</th>
               <th
                 v-if="!isTableCompact && !tsHiddenCols.has('start')"
                 scope="col"
@@ -239,7 +239,7 @@
                 :aria-sort="tsSortState('start')"
                 @click="toggleTsSort('start')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('start')">开始时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>

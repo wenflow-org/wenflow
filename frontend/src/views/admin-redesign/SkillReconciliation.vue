@@ -74,12 +74,12 @@
           </colgroup>
           <thead>
             <tr>
-              <th>Skill</th>
-              <th title="是否在配置文件中声明">配置声明</th>
-              <th title="是否已在系统运行中注册">运行注册</th>
-              <th title="线上生效 Prompt：是否有生效版本">生效版本</th>
-              <th>完成度</th>
-              <th title="只列未注册 / 无生效版本两类异常，失效注册残留在表末单独列出">差集</th>
+              <th scope="col">Skill</th>
+              <th scope="col" title="是否在配置文件中声明">配置声明</th>
+              <th scope="col" title="是否已在系统运行中注册">运行注册</th>
+              <th scope="col" title="线上生效 Prompt：是否有生效版本">生效版本</th>
+              <th scope="col">完成度</th>
+              <th scope="col" title="只列未注册 / 无生效版本两类异常，失效注册残留在表末单独列出">差集</th>
             </tr>
           </thead>
           <tbody>

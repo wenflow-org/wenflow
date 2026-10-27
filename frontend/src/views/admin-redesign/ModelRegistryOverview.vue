@@ -25,7 +25,7 @@
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
               <thead>
-                <tr><th>别名</th><th>候选来源</th><th>候选模型（按序）</th><th>默认选中</th><th>需要思考时</th></tr>
+                <tr><th scope="col">别名</th><th scope="col">候选来源</th><th scope="col">候选模型（按序）</th><th scope="col">默认选中</th><th scope="col">需要思考时</th></tr>
               </thead>
               <tbody>
                 <tr v-for="alias in data.aliases" :key="alias.alias">
@@ -80,8 +80,8 @@
             <table class="mk-table mk-table--dense">
               <thead>
                 <tr>
-                  <th>模型</th><th>状态</th><th>档位</th><th>思考</th><th>推理强度</th>
-                  <th>输出上限</th><th>默认输出</th><th>推理预留</th><th>并发上限</th><th>备用模型</th>
+                  <th scope="col">模型</th><th scope="col">状态</th><th scope="col">档位</th><th scope="col">思考</th><th scope="col">推理强度</th>
+                  <th scope="col">输出上限</th><th scope="col">默认输出</th><th scope="col">推理预留</th><th scope="col">并发上限</th><th scope="col">备用模型</th>
                 </tr>
               </thead>
               <tbody>

@@ -67,7 +67,7 @@
                 :aria-sort="caseSortState('messages')"
                 @click="toggleCaseSort('messages')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleCaseSort('messages')">消息数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>期望</th>
+              <th scope="col">期望</th>
               <th
                 scope="col"
                 class="mk-th--sortable"
@@ -80,7 +80,7 @@
                 :aria-sort="caseSortState('updated')"
                 @click="toggleCaseSort('updated')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleCaseSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -178,15 +178,15 @@
         <table class="mk-table">
           <thead>
             <tr>
-              <th class="pe-compare-col"><span class="visually-hidden">选择对比</span></th>
-              <th>运行</th>
+              <th scope="col" class="pe-compare-col"><span class="visually-hidden">选择对比</span></th>
+              <th scope="col">运行</th>
               <th
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="runSortState('agent')"
                 @click="toggleRunSort('agent')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleRunSort('agent')">Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>结果</th>
+              <th scope="col">结果</th>
               <th
                 scope="col"
                 class="mk-th--sortable"
@@ -205,7 +205,7 @@
                 :aria-sort="runSortState('created')"
                 @click="toggleRunSort('created')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleRunSort('created')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -561,12 +561,12 @@
                 <table class="mk-table pe-compare-table">
                   <thead>
                     <tr>
-                      <th>用例</th>
-                      <th>A · 结果</th>
-                      <th>A · 耗时</th>
-                      <th>B · 结果</th>
-                      <th>B · 耗时</th>
-                      <th class="mk-th--right">耗时差</th>
+                      <th scope="col">用例</th>
+                      <th scope="col">A · 结果</th>
+                      <th scope="col">A · 耗时</th>
+                      <th scope="col">B · 结果</th>
+                      <th scope="col">B · 耗时</th>
+                      <th scope="col" class="mk-th--right">耗时差</th>
                     </tr>
                   </thead>
                   <tbody>

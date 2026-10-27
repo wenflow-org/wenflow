@@ -247,13 +247,13 @@
               <table v-if="versions.length" class="mk-table">
                 <thead>
                   <tr>
-                    <th>版本</th>
-                    <th>名称</th>
+                    <th scope="col">版本</th>
+                    <th scope="col">名称</th>
                     <!-- 原型 versions 表含 日期/作者/变更说明（index.html 2344-2346）：列表返回了才补列，空则省略 -->
-                    <th v-if="hasVersionMeta">日期</th>
-                    <th v-if="hasVersionMeta">作者</th>
-                    <th v-if="hasVersionMeta" class="skd-th-wrap">变更说明</th>
-                    <th>状态</th>
+                    <th scope="col" v-if="hasVersionMeta">日期</th>
+                    <th scope="col" v-if="hasVersionMeta">作者</th>
+                    <th scope="col" v-if="hasVersionMeta" class="skd-th-wrap">变更说明</th>
+                    <th scope="col">状态</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -392,8 +392,8 @@
               <table v-if="routingRows.length" class="mk-table">
                 <thead>
                   <tr>
-                    <th>字段</th><th>角色</th><th class="skd-th-wrap">说明</th><th>流向</th><th>渲染</th><th>属性</th>
-                    <th v-if="hasMaskedCol">脱敏</th>
+                    <th scope="col">字段</th><th scope="col">角色</th><th scope="col" class="skd-th-wrap">说明</th><th scope="col">流向</th><th scope="col">渲染</th><th scope="col">属性</th>
+                    <th scope="col" v-if="hasMaskedCol">脱敏</th>
                   </tr>
                 </thead>
                 <tbody>
