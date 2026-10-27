@@ -1458,18 +1458,17 @@ function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string,
   const normalizePanel = (panelRaw: unknown): Record<string, unknown> | null => {
     if (!panelRaw || typeof panelRaw !== 'object') return null;
     const panel = panelRaw as Record<string, unknown>;
-    // 栏头超长只截断，不整图拒绝：英语句子栏头（"现在完成时 have finished"）常超 18 字，
-    // 因为一个栏头就把整张对照图丢掉不值得（2026-10-27 英语案例实拍）
-    const head = toFigureText(panel.head, SPEC.labelMax);
+    // 栏头允许到 30 字：渲染侧折两行（14.5px × 2 行），不再把长栏头截成歧义半句
+    const head = toFigureText(panel.head, 30);
     if (!head) return null;
     const rows: Array<Record<string, unknown>> = [];
     const seen = new Set<string>();
     for (const item of Array.isArray(panel.rows) ? panel.rows : []) {
       if (!item || typeof item !== 'object' || rows.length >= 4) continue;
       const row = item as Record<string, unknown>;
-      // 26 字（英文句子按字符计，18 字会把 "I have been to Shanghai" 整行丢掉）；
-      // 超长截断加 …，渲染侧折两行
-      const label = toFigureText(row.label, 26);
+      // 40 字（英文句子按字符计，26 字会把 "I have finished the report yesterday" 截成半句）；
+      // 超长截断加 …，渲染侧折三行
+      const label = toFigureText(row.label, 40);
       if (!label || seen.has(label)) continue;
       seen.add(label);
       const sub = toFigureText(row.sub, SPEC.subMax);

@@ -30,6 +30,8 @@ export type ExampleChange = 'none' | 'variant' | 'scene';
 export interface BoardIntent {
   askAbout: BoardAskAbout;
   exampleChange: ExampleChange;
+  /** 本轮是「把顺序/条件倒过来」的反事实推演（板面必须标假设，不能写成史实） */
+  hypothetical?: boolean;
   /** 本轮新出现的数据（用于画板时直接摆上新现场） */
   newNumbers: string[];
   /** 给绘图员的一句话：这一轮板面画到哪里为止 */
@@ -58,8 +60,17 @@ const SCENE_WORDS =
  * 文科与语言类课堂的常见形态：「把 yesterday 拿掉」「换成 last night」「假设他迟到了」。
  * 这类换题不触发换板，板会一直停在上一个例句上。
  */
-const VARIANT_WORDS = /(换成|改成|改为|拿掉|去掉|删掉|变成|再试|反过来|假设)/;
-const NOT_EXAMPLE_CHANGE = /(换个说法|换一种说法|换句话说)/;
+const VARIANT_WORDS = /(换成|改成|改为|拿掉|去掉|删掉|变成|再试|反过来|假设|假如|要是|换一(?:个|种|场)|变化后的?现场|另一种(?:情况|情形))/;
+const NOT_EXAMPLE_CHANGE = /(换个说法|换一种说法|换句话说|换(?:一)?个(?:角度|思路)|从另一个角度)/;
+/**
+ * 「把顺序倒过来」这类反事实：不是新例子，但也绝不是「板面不用动」。
+ * 只认带顺序/流程语境的假设句，避免「如果有不懂就问我」把板换掉。
+ */
+// 反事实的两种说法：①「假设/如果 + 倒过来/顺序」；② 直接写没发生的走法（只给十金/未处罚）。
+// 模型会把语序倒过来（「把顺序倒过来试试：假设…」），所以不按固定顺序匹配，按线索计数。
+const HYPOTHETICAL_LEAD = /(假如|如果|要是|倘若|假设)/;
+const HYPOTHETICAL_SHAPE = /(倒过来|反过来|顺序|先[^。？！]{0,12}(?:再|才|然后)|照抄|换一(?:个|种))/;
+const COUNTERFACTUAL_DETAIL = /(只给|只取|只发|实发|仅发|少给|未加|没给|不认账|没兑现)/;
 
 const numbersIn = (s: string): string[] => {
   const out: string[] = [];
@@ -81,7 +92,9 @@ export function numbersOnBoard(spec: unknown, depth = 0): string[] {
 
 /** 按图型/任务类型定「这一轮问什么」 */
 function defaultAskAbout(kind: string, taskType: string): BoardAskAbout {
-  if (kind === 'split-compare') return 'fork';
+  // 对照图有两类问法：诊所（纠错）问「分叉在哪一步」；副驾/沙盘（控制变量）问「哪个条件变了」。
+  // 一律按 fork 会让 b2 这类「水 vs 酒精」的对照被当成找错，且 fork 会去挖正确栏的答案。
+  if (kind === 'split-compare') return taskType === 'diagnose' || taskType === 'refine' ? 'fork' : 'condition';
   if (kind === 'state-strip') return 'order';
   if (taskType === 'consolidate') return 'mapping';
   if (kind === 'concept-map') return 'condition';
@@ -93,7 +106,8 @@ const INSTRUCTION: Record<BoardAskAbout, string> = {
   fork:
     '这一轮老师要学生指出「分叉在哪一步、错在哪」。板面画到分叉那一步为止：' +
     '两栏的步骤、单位、副标注全部写全，但**不要把最终得数圈出来**，也不要写「分叉在第 n 步」这类结论横幅——' +
-    '那句话就是本轮要学生说的。',
+    '那句话就是本轮要学生说的。错法栏只放老师本轮点名的那个具体错误：如果两条路径最后得到同一个答案，' +
+    '就不是正误对照，不要硬拆成两栏；学生本轮要比较的关键词/条件（时间状语、单位、对象）必须原样留在板面，不能省略成「无」。',
   condition:
     '这一轮老师要学生说清「哪个条件变了、哪个没变」。板面把两个条件的具体数值并排摆全' +
     '（如 浸入 5 cm / 15 cm、排开体积都是 V铁），但**不要写「决定/无关」这类判断词**，' +
@@ -127,8 +141,13 @@ export function decideBoardIntent(signals: IntentSignals): BoardIntent {
   // 现场词看**两个人**：数字只认老师（学生话里的数是他的得数），但「挪到水银里」这类
   // 现场变化常常先由学生提出，老师这一句只是在复述旧现场——只看老师会让板落后一轮。
   const sceneChanged = SCENE_WORDS.test(teacher) || SCENE_WORDS.test(student);
+  // 时间线题里「假设/假如」本身就足够强：模型会用各种说法包裹它（只随便给一点/换个条件推一推），
+  // 继续按搭配词匹配只会漏。非时间线题仍要求「假设 + 形状」两个信号。
+  const hypotheticalOrder =
+    (kind === 'state-strip' && (COUNTERFACTUAL_DETAIL.test(teacher) || HYPOTHETICAL_LEAD.test(teacher))) ||
+    (HYPOTHETICAL_LEAD.test(teacher) && HYPOTHETICAL_SHAPE.test(teacher));
   const variantChanged =
-    !NOT_EXAMPLE_CHANGE.test(source) && VARIANT_WORDS.test(teacher);
+    !NOT_EXAMPLE_CHANGE.test(source) && (VARIANT_WORDS.test(teacher) || hypotheticalOrder);
   // 换场景不要求出现新数字；换例子也可以只靠「改成/拿掉」这类词（语言类课堂没有数字）
   const exampleChange: ExampleChange = sceneChanged
     ? 'scene'
@@ -144,18 +163,26 @@ export function decideBoardIntent(signals: IntentSignals): BoardIntent {
     );
   }
   if (exampleChange === 'scene') reasonParts.push(`出现新条件（换液体/换物体）→ 换场景`);
+  if (hypotheticalOrder) reasonParts.push('老师提出反事实顺序 → 需要并排画假设路径');
 
   // 换现场时最容易出的事故：把旧现场的「前提」原样抄到新现场
   // （水里的「全部浸没 → V排=V石」抄到水银里，就变成错误前提）。
-  const instruction =
+  let instruction =
     exampleChange === 'scene'
       ? `${INSTRUCTION[askAbout]}本轮换了现场：与旧现场绑定的前提（浸没状态、体积关系、温度、溶解度等）` +
         '**不得沿用**——按新现场重写，或留空让学生自己判断。'
       : INSTRUCTION[askAbout];
+  if (hypotheticalOrder) {
+    // 反事实不是史实：板面必须让「假设」可见，否则学生会把反向流程当成真实发生过的顺序。
+    instruction +=
+      '本轮老师提出的是**假设顺序**（把顺序倒过来/换一种走法）：保留事实帧，另加一层并排画假设路径，' +
+      '并在该层标题或帧名里写明「假设」；不要把假设写成史实，也不要用事实板的旧结论回答这个假设。';
+  }
 
   return {
     askAbout,
     exampleChange,
+    ...(hypotheticalOrder ? { hypothetical: true } : {}),
     newNumbers: [...new Set(fresh)].slice(0, 8),
     instruction,
     reason: reasonParts.join('；'),
@@ -167,7 +194,8 @@ export function decideBoardIntent(signals: IntentSignals): BoardIntent {
  * 但绘图员会把「数字照搬」「单位写错了」这类判断写进去——它同样是替学生把结论说了。
  * 结构化撤键管不到自由文本，这里按词表清掉；只清带判断词的 sub，单位说明保留。
  */
-const JUDGMENT_SUB = /(错了|错在|照搬|没换|未换|写成|误把|误用|应该|不该|漏了|漏写|正确做法|错误做法)/;
+const JUDGMENT_SUB =
+  /(错了|错在|照搬|没换|未换|写成|误把|误用|当成|当作|算成|误当|应该|不该|漏了|漏写|正确做法|错误做法)/;
 
 function stripJudgmentSubs(value: unknown): unknown {
   if (Array.isArray(value)) return value.map((v) => stripJudgmentSubs(v));
@@ -202,11 +230,82 @@ export function guardTitleAgainstContent<T>(spec: T): T {
 }
 
 /**
+ * 纠错轮（fork）把「正确栏的最后一行」挖成 ?：这一行正是老师要学生自己改出来的答案。
+ * 错法栏保留原样——对照的语义还在；只把答案从板上拿掉，不把整张图变成卷子。
+ * 只在 split-compare 上生效；正确栏按 tone 判断（ok / 非 warn）。
+ */
+function maskForkAnswer<T extends Record<string, unknown>>(spec: T): T {
+  const s = spec as any;
+  if (!s?.left?.rows || !s?.right?.rows) return spec;
+  const leftRows: any[] = Array.isArray(s.left.rows) ? s.left.rows : [];
+  const rightRows: any[] = Array.isArray(s.right.rows) ? s.right.rows : [];
+  const correctKey = s.right.tone === 'warn' && s.left.tone !== 'warn' ? 'left' : 'right';
+  const rows = correctKey === 'right' ? rightRows : leftRows;
+  if (rows.length < 2) return spec;
+
+  // 只挖最后一行不够：模型常把「240 ÷ 0.8 = 300」放在倒数第二行、最后一行留一个 ?，
+  // 答案仍然在板上。尾行是占位时，先把最后一条算式的**结果**挖掉（保留算式骨架）。
+  const lastIsPlaceholder = /^[?？]\s*$/.test(String(rows[rows.length - 1]?.label ?? ''));
+  const eqAt = !lastIsPlaceholder
+    ? -1
+    : (() => {
+        for (let i = rows.length - 2; i >= 0; i -= 1) {
+          const label = String(rows[i]?.label ?? '');
+          if (label.lastIndexOf('=') > 0) return i;
+        }
+        return -1;
+      })();
+  let nextRows = rows;
+  if (eqAt >= 0) {
+    const label = String(rows[eqAt].label);
+    const eq = label.lastIndexOf('=');
+    const next = { ...rows[eqAt], label: `${label.slice(0, eq + 1).trimEnd()} ?` };
+    delete next.sub;
+    nextRows = rows.map((r, i) => (i === eqAt ? next : r));
+    return { ...s, [correctKey]: { ...s[correctKey], rows: nextRows } } as T;
+  }
+
+  const last = nextRows[nextRows.length - 1];
+  if (!last || last.label === '?' || last.label === '？' || /=\s*\?$/.test(String(last.label))) {
+    return { ...s, [correctKey]: { ...s[correctKey], rows: nextRows } } as T;
+  }
+  const masked = { ...last, label: '?' };
+  delete masked.sub;
+  return {
+    ...s,
+    [correctKey]: {
+      ...s[correctKey],
+      rows: [...nextRows.slice(0, -1), masked],
+    },
+  } as T;
+}
+
+/**
+ * 栏头里直接写「填 have finished」等于把答案放在标题上——挖行挖不到。
+ * 只在 fork 轮清理「填 X」这个片段；清理后太短就保留原栏头（避免把栏头清空）。
+ */
+function neutraliseForkHeads<T extends Record<string, unknown>>(spec: T): T {
+  const s = spec as any;
+  if (!s?.left || !s?.right) return spec;
+  const FILL = /(?:应该?|应|请)?填\s*[A-Za-z][A-Za-z'’\-]*(?:\s+[A-Za-z][A-Za-z'’\-]*)*/;
+  const strip = (head: unknown): unknown => {
+    if (typeof head !== 'string' || !FILL.test(head)) return head;
+    const next = head.replace(FILL, '').replace(/[：:]\s*$/, '').trim();
+    // 整个栏头就是「填 X」时不能留空（空栏头会让学生不知道这一栏在比什么）
+    return next.length >= 2 ? next : '待判断';
+  };
+  const left = strip(s.left.head);
+  const right = strip(s.right.head);
+  if (left === s.left.head && right === s.right.head) return spec;
+  return { ...s, left: { ...s.left, head: left }, right: { ...s.right, head: right } } as T;
+}
+
+/**
  * 按意图对**已归一化**的板面收口：把「本轮要学生说出口的那句话」从板上撤掉。
  *
- * 只动结论句（概念图 takeaway / 对照图 delta / 时间线 note）与带判断词的副标注，
- * 不动材料与步骤——材料属于减负，结论属于学生。`mapping`/`none` 两档保留结论
- * （迁移需要参照物、无问不需要藏）。
+ * 只动结论句（概念图 takeaway / 对照图 delta / 时间线 note）、带判断词的副标注，
+ * 以及纠错轮正确栏的最后一行；不动材料与步骤——材料属于减负，结论属于学生。
+ * `mapping`/`none` 两档保留结论（迁移需要参照物、无问不需要藏）。
  */
 export function applyBoardIntent<T extends Record<string, unknown>>(spec: T, intent: BoardIntent): T {
   if (intent.askAbout === 'mapping' || intent.askAbout === 'none') return spec;
@@ -214,7 +313,36 @@ export function applyBoardIntent<T extends Record<string, unknown>>(spec: T, int
   delete out.takeaway;
   delete out.delta;
   delete out.note;
-  return stripJudgmentSubs(out) as T;
+  const stripped = stripJudgmentSubs(out) as Record<string, unknown>;
+  const marked = intent.hypothetical ? markHypothetical(stripped) : stripped;
+  if (intent.askAbout !== 'fork') return marked as T;
+  return neutraliseForkHeads(maskForkAnswer(marked)) as T;
+}
+
+/**
+ * 反事实板必须自带「假设」标记：盲评两次都指出，假设帧与史实帧同格式时，
+ * 学生单看板会把「未加处罚/实发二十五金」当成真发生过。
+ * 只给带反事实线索的帧加前缀；整块板再在标题上标一次（帧都没命中时也有兜底）。
+ */
+const HYPOTHETICAL_CUE = /(未加|未受|只发|实发|仅发|假设|假如|倒过来|反过来|并非|没给|不认账)/;
+
+function markHypothetical<T extends Record<string, unknown>>(spec: T): T {
+  const s = spec as any;
+  if (!s || typeof s !== 'object') return spec;
+  const out: Record<string, unknown> = { ...s };
+  if (Array.isArray(out.frames)) {
+    out.frames = out.frames.map((frame: any) => {
+      if (!frame || typeof frame !== 'object') return frame;
+      const label = String(frame.label ?? '');
+      const text = `${label} ${Array.isArray(frame.items) ? frame.items.join(' ') : ''}`;
+      if (!HYPOTHETICAL_CUE.test(text)) return frame;
+      return { ...frame, label: /^假设/.test(label) ? label : `假设 · ${label || '推演'}` };
+    });
+  }
+  if (typeof out.title === 'string' && out.title && !/^假设(?:推演)?[｜|]/.test(out.title)) {
+    out.title = `假设推演｜${out.title}`;
+  }
+  return out as T;
 }
 
 /** 给老师可见描述的补充：这一轮板面为什么画到这里为止 */

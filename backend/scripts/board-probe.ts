@@ -76,10 +76,20 @@ async function callModel(system: string, payload: unknown, attempts = 4): Promis
         headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
         body: JSON.stringify({
           model: MODEL,
-          temperature: 0,
+          // temperature=0 下同一条消息会稳定复现同一种错误（例如模型改画 ASCII 表格）：
+          // 重试必须换一条纠偏消息并稍微升温，否则 4 次重试等于只跑 1 次。
+          temperature: i === 0 ? 0 : 0.35,
           messages: [
             { role: 'system', content: system },
             { role: 'user', content: JSON.stringify(payload) },
+            ...(i === 0
+              ? []
+              : [{
+                  role: 'user',
+                  content:
+                    '你上一条回复不是可解析的 JSON。不要画 ASCII 图、不要 Markdown 表格、不要解释。' +
+                    '只输出一个 JSON 对象：{"figure":{"kind":"...","spec":{...}}}，与上面要求的图型契约一致。',
+                }]),
           ],
         }),
       });
@@ -174,23 +184,35 @@ async function refreshBoardForTurn(args: {
   });
   if (!board || intent.exampleChange === 'none') return { board, opType: 'none', intent };
 
-  const nextOut = await callModel(BOARD_SYSTEM(MODE), {
-    task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
-    scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
-    studentSays: studentText,
-    kindHint: board.figure?.kind ?? null,
-    questionIntent: intent,
-    lastTeacherReply: teacherReply,
-    instruction:
-      (intent.exampleChange === 'scene'
-        ? '老师这一轮换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
-        : '老师这一轮换了例子/条件。把同一结构的板换成**老师这一轮给的例子**（该换的词、数值、单位全换，旧例子不要留）。') +
-      '结构、图型、副标注写法不变。' + intent.instruction,
-  });
-  const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
+  const baseInstruction =
+    (intent.exampleChange === 'scene'
+      ? '老师这一轮换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
+      : '老师这一轮换了例子/条件。把同一结构的板换成**老师这一轮给的例子**（该换的词、数值、单位全换，旧例子不要留）。') +
+    '结构、图型、副标注写法不变。' + intent.instruction;
+  let nextOut: any = null;
+  let nextFig: any = null;
+  let reason = 'no-attempt';
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    nextOut = await callModel(BOARD_SYSTEM(MODE), {
+      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
+      scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+      studentSays: studentText,
+      kindHint: board.figure?.kind ?? null,
+      questionIntent: intent,
+      lastTeacherReply: teacherReply,
+      instruction:
+        attempt === 0
+          ? baseInstruction
+          : `${baseInstruction}\n【重试】上一版没有通过图型校验（${reason}）。只输出一个符合该图型契约的 JSON 对象，不要 Markdown 表格。`,
+    });
+    const n = nextOut?.figure ? normalizeTeachingFigureForProbe(nextOut.figure) : { figure: null, reason: 'no-figure' };
+    nextFig = (n as any).figure;
+    reason = String((n as any).reason ?? 'unknown');
+    if (nextFig) break;
+  }
   if (!nextFig) {
     console.warn(
-      `[${c.id}] 换板绘图被拒：kind=${String((nextOut as any)?.figure?.kind ?? '∅')}` +
+      `[${c.id}] 换板绘图被拒（已重试）：kind=${String(nextOut?.figure?.kind ?? '∅')} reason=${reason}` +
         ` intent=${intent.askAbout}/${intent.exampleChange}`,
     );
     return { board, opType: 'none', intent };
@@ -217,26 +239,38 @@ async function runCase(c: any): Promise<any> {
     lastTeacherText: null,
     boardNumbers: [],
   });
-  const boardOut = await callModel(BOARD_SYSTEM(MODE), {
-    task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
-    scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
-    studentSays: c.turns[0].student,
-    kindHint: opp?.kindHint ?? c.expectKind ?? null,
-    // 先定问法再画板（2026-10-27）：画板时就知道这一轮要学生说什么，才画得出边界
-    questionIntent: intent1,
-    lastTeacherReply: null,
-    instruction: MASKED
-      ? '画出这张白板的完整形态：骨架、正确答案、结论都写全（系统会自动挖空成提问态）。'
-      : `画出这张白板的完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。标题只点题，不写结论。${intent1.instruction}`,
-  });
-  const normalized = boardOut?.figure ? normalizeTeachingFigureForProbe(boardOut.figure) : { figure: null };
-  const figure = (normalized as any).figure;
+  const baseInstruction = MASKED
+    ? '画出这张白板的完整形态：骨架、正确答案、结论都写全（系统会自动挖空成提问态）。'
+    : `画出这张白板的完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。标题只点题，不写结论。${intent1.instruction}`;
+  let boardOut: any = null;
+  let normalized: any = { figure: null, reason: 'no-attempt' };
+  let figure: any = null;
+  // 归一化被拒重试一次（2026-10-28）：绘图员偶尔给出合法 JSON 但 spec 不合图型契约，
+  // 直接空板会把整节课的板书丢掉；带拒绝原因再要一版，成本远低于重跑整节。
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    boardOut = await callModel(BOARD_SYSTEM(MODE), {
+      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
+      scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+      studentSays: c.turns[0].student,
+      kindHint: opp?.kindHint ?? c.expectKind ?? null,
+      questionIntent: intent1,
+      lastTeacherReply: null,
+      instruction:
+        attempt === 0
+          ? baseInstruction
+          : `${baseInstruction}\n【重试】上一次输出没有通过图型校验（${String(normalized?.reason ?? 'unknown')}）。` +
+            '只输出一个符合该图型契约的 JSON 对象：kind 与 spec 必须匹配，两栏对照用 left/right.head + rows[].label，不要 Markdown 表格。',
+    });
+    normalized = boardOut?.figure ? normalizeTeachingFigureForProbe(boardOut.figure) : { figure: null };
+    figure = normalized.figure;
+    if (figure) break;
+  }
   if (!figure) {
     // 归一化拒绝后要能从产物里看出「模型给了什么、为什么被拒」，否则只剩一个 null
-    const rawFigure = (boardOut as any)?.figure ?? null;
+    const rawFigure = boardOut?.figure ?? null;
     console.warn(
-      `[${c.id}] 首轮绘图被拒：kind=${String(rawFigure?.kind ?? '∅')}` +
-        ` reason=${String((normalized as any)?.reason ?? '∅')}` +
+      `[${c.id}] 首轮绘图被拒（已重试）：kind=${String(rawFigure?.kind ?? '∅')}` +
+        ` reason=${String(normalized?.reason ?? '∅')}` +
         ` spec=${JSON.stringify(rawFigure?.spec ?? null).slice(0, 600)}`,
     );
   }

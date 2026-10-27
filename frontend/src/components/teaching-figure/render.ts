@@ -2281,9 +2281,11 @@ function renderSplitCompare({ title, left, right, delta, placeholder }: any): Re
   const W = 620;
   const padX = 20;
   const titleH = title ? T.fontTitle + 20 : 6;
-  const headH = 32;
   const gapMid = 56;
   const colW = Math.round((W - padX * 2 - gapMid) / 2);
+  // 栏头允许折两行（英语栏头「现在完成时 have finished」单行放不下，硬截会变成歧义半句）
+  const headLinesOf = (col: any) => balancedWrap(String(col?.head ?? ''), colW - 24, T.fontKey).slice(0, 2);
+  const headH = 12 + Math.max(1, headLinesOf(left).length, headLinesOf(right).length) * (T.fontKey + 3);
   const TONE: Record<string, { color: string; soft: string; ink: string }> = {
     ok: { color: T.ok, soft: T.okSoft, ink: T.ok },
     warn: { color: T.warn, soft: T.warnSoft, ink: T.warn },
@@ -2294,8 +2296,8 @@ function renderSplitCompare({ title, left, right, delta, placeholder }: any): Re
   const rt = TONE[right.tone] || TONE.ok;
   const rowCount = Math.max(left.rows.length, right.rows.length);
   // 行高按两栏同一行取大（行行对齐是这张图的语义核心）：
-  // label 可折两行（英文句子 26 字符放不进 238px 单行），sub 再占一行
-  const labelWrap = (row: any) => (row ? balancedWrap(String(row.label ?? ''), colW - 24, T.fontLabel).slice(0, 2) : []);
+  // label 可折三行（英文句子 40 字符放不进 238px 单行），sub 再占一行
+  const labelWrap = (row: any) => (row ? balancedWrap(String(row.label ?? ''), colW - 24, T.fontLabel).slice(0, 3) : []);
   const subWrap = (row: any) => (row && row.sub ? balancedWrap(row.sub, colW - 24, T.fontMicro).slice(0, 1) : []);
   const rowHs: number[] = [];
   for (let i = 0; i < rowCount; i += 1) {
@@ -2317,7 +2319,10 @@ function renderSplitCompare({ title, left, right, delta, placeholder }: any): Re
     parts.push(rect(x, colTop, colW, headH, { r: T.radius, fill: tone.soft, stroke: 'none', sw: 0 }));
     // 圆角头部：盖一块矩形把下沿两个圆角补直
     parts.push('<rect x="' + x + '" y="' + (colTop + headH - 8) + '" width="' + colW + '" height="8" fill="' + tone.soft + '"/>');
-    parts.push(text(x + colW / 2, colTop + headH / 2 + 5, col.head || '', 't-key', 'middle', 'fill="' + tone.ink + '"'));
+    const hls = headLinesOf(col);
+    hls.forEach((line, li) => {
+      parts.push(text(x + colW / 2, colTop + 16 + li * (T.fontKey + 3), line, 't-key', 'middle', 'fill="' + tone.ink + '"'));
+    });
     let y = bodyTop;
     for (let i = 0; i < rowCount; i += 1) {
       const row = col.rows[i];

@@ -1,0 +1,167 @@
+{
+  "_note": "10 个虚拟学习者。public 字段才会进平台；internal 只作本地评测记录，绝不传给平台/学习者。",
+  "cases": [
+    {
+      "id": "f1",
+      "public": {
+        "learnerName": "[评测] 李岚 · 奶茶店配方",
+        "learningGoal": "学会按浓度配比调整饮品配方，避免同一款饮品不同班次口味不一致",
+        "storyTitle": "同一杯奶茶，两个味道",
+        "storyOpening": "我在商场开奶茶店，最近顾客总说同一款奶茶早班和晚班味道不一样。我怀疑是糖浆比例换算的问题，但我说不清到底错在哪。",
+        "storyProblem": "店员按不同杯型换算糖浆时，有人先加糖浆再兑水，有人先把糖浆稀释，结果浓度差很多",
+        "storyTrigger": "上周有位老顾客连续两天喝到明显偏淡的同款奶茶，给了差评",
+        "profileRole": "奶茶店店长",
+        "profileScenario": "门店配方标准化与员工培训"
+      },
+      "internal": {
+        "taskType": "diagnose",
+        "kindHint": "split-compare",
+        "coreTestPoint": "错法/对法并排时副标注不得直接给出判断；分叉行要能看出第一步差异"
+      }
+    },
+    {
+      "id": "f2",
+      "public": {
+        "learnerName": "[评测] 陈锐 · 外贸邮件时态",
+        "learningGoal": "学会在客户邮件里正确区分现在完成时和一般过去时，避免把已完成的动作说成还在进行",
+        "storyTitle": "一封让客户误解的邮件",
+        "storyOpening": "我做外贸跟单，上周给客户写邮件说我们已经安排发货，结果客户理解成货还在生产。我想弄清这两种时态到底差在哪。",
+        "storyProblem": "写邮件时凭语感选时态，分不清动作是否延续到现在",
+        "storyTrigger": "客户按错误理解调整了仓储计划，差点产生额外费用"
+      },
+      "internal": {
+        "taskType": "refine",
+        "kindHint": "split-compare",
+        "coreTestPoint": "两种时态的对比要落到具体句子，栏头与行内容不重复，副标注不提前泄露答案"
+      }
+    },
+    {
+      "id": "f3",
+      "public": {
+        "learnerName": "[评测] 王蓓 · 社区园艺光合作用",
+        "learningGoal": "理解光合作用需要哪些条件，能向志愿者解释大棚为什么要补光和通风",
+        "storyTitle": "大棚里的菜为什么不长",
+        "storyOpening": "我在社区带园艺志愿者，大家总问大棚明明很暖和，为什么冬天菜还是长得慢。我想把光合作用讲明白，但一讲就变成背名词。",
+        "storyProblem": "只知道光合作用这个词，说不清光照、二氧化碳、水各自起什么作用",
+        "storyTrigger": "志愿者按自己的理解把大棚封得很严，结果叶片发黄"
+      },
+      "internal": {
+        "taskType": "explain",
+        "kindHint": "state-strip",
+        "coreTestPoint": "过程分帧要按阶段推进，帧名不回头；每帧要点独立可读"
+      }
+    },
+    {
+      "id": "f4",
+      "public": {
+        "learnerName": "[评测] 赵鹏 · 配送时效估算",
+        "learningGoal": "学会用距离、速度、时间的关系估算送达时间，遇到堵车或绕路时能快速重算",
+        "storyTitle": "总是差十分钟的送达时间",
+        "storyOpening": "我在配送站做调度，系统给的预计送达时间经常和实际差十分钟以上。我想自己会算，能在临时改路线时判断还来不来得及。",
+        "storyProblem": "只会按经验加时间，不会把距离和速度的变化换算成时间",
+        "storyTrigger": "上周一条主干道临时施工，站点有六单超时"
+      },
+      "internal": {
+        "taskType": "diagnose",
+        "kindHint": "cartesian-plot",
+        "coreTestPoint": "坐标轴与单位完整；同轮情境变化后图要跟着换，不能停在旧路线"
+      }
+    },
+    {
+      "id": "f5",
+      "public": {
+        "learnerName": "[评测] 孙浩 · 家电维修欧姆定律",
+        "learningGoal": "学会用欧姆定律判断串联和并联电路的常见故障，能说清先测哪里、为什么",
+        "storyTitle": "一台查不出毛病的电热水壶",
+        "storyOpening": "我跟师傅学家电维修，遇到一台电热水壶不加热，换了保险丝还是不行。师傅说先量电压再量电阻，但我不知道为什么要按这个顺序。",
+        "storyProblem": "记不住串联并联里电流电压的关系，排查时靠猜",
+        "storyTrigger": "误判加热管损坏，多买了一个配件"
+      },
+      "internal": {
+        "taskType": "diagnose",
+        "kindHint": "tree",
+        "coreTestPoint": "分支结构要体现排查顺序；结论不能写在标题或副标注里"
+      }
+    },
+    {
+      "id": "f6",
+      "public": {
+        "learnerName": "[评测] 周敏 · 工业革命讲解",
+        "learningGoal": "理清工业革命的主要因果链，能按参观者能听懂的顺序讲出来",
+        "storyTitle": "讲解词总是讲成流水账",
+        "storyOpening": "我在博物馆做志愿讲解，讲工业革命时总被参观者问住：到底是先有技术还是先有市场？我不想再按时间背事件了。",
+        "storyProblem": "事件记得住，但因果关系说不清，一被追问就乱",
+        "storyTrigger": "上次讲解被一位中学生连续追问三个为什么，答不上来"
+      },
+      "internal": {
+        "taskType": "explain",
+        "kindHint": "concept-map",
+        "coreTestPoint": "因果链方向明确；节点不堆砌；讲解顺序与图一致"
+      }
+    },
+    {
+      "id": "f7",
+      "public": {
+        "learnerName": "[评测] 林哲 · 循环边界",
+        "learningGoal": "弄懂循环里小于和小于等于的边界差别，能解释为什么统计会漏掉最后一条数据",
+        "storyTitle": "每天都少一条的日报",
+        "storyOpening": "我从运营转做数据分析，自己写脚本统计每日订单，但每天的总数总比后台少一条。同事说是循环边界写错了，我看代码看不出问题。",
+        "storyProblem": "分不清什么时候用小于、什么时候用小于等于，也不知道从 0 开始计数的影响",
+        "storyTrigger": "月度汇总因此少算了一天的订单，被主管要求写说明"
+      },
+      "internal": {
+        "taskType": "diagnose",
+        "kindHint": "matrix",
+        "coreTestPoint": "边界值逐步对照；错行与对行差异可见；不直接写出结论"
+      }
+    },
+    {
+      "id": "f8",
+      "public": {
+        "learnerName": "[评测] 吴倩 · 小店供需价格",
+        "learningGoal": "理解供需变化为什么会推动价格变化，能在进货和定价时做出判断",
+        "storyTitle": "涨价之后反而卖不动",
+        "storyOpening": "我开一家社区水果店，进价涨了我就跟着涨价，结果销量掉得厉害。有人说要看供需，可我只会看进价。",
+        "storyProblem": "不知道价格、供给、需求三者怎么互相影响，调价全靠感觉",
+        "storyTrigger": "一批应季水果定价过高，压了半个月库存"
+      },
+      "internal": {
+        "taskType": "explain",
+        "kindHint": "cartesian-plot",
+        "coreTestPoint": "曲线方向与轴含义正确；移动的是曲线还是点要说清；同轮换例子要换板"
+      }
+    },
+    {
+      "id": "f9",
+      "public": {
+        "learnerName": "[评测] 何静 · 山地天气判断",
+        "learningGoal": "理解山地迎风坡和背风坡的降水差异，能在带队前判断天气风险",
+        "storyTitle": "同一座山，两边两种天气",
+        "storyOpening": "我带队走户外线路，发现山这头下雨、翻过去那头却是干的。队员问我为什么，我只能说地形原因，再往下就讲不清了。",
+        "storyProblem": "知道有迎风坡背风坡，但说不清空气上升、降温、降水的过程",
+        "storyTrigger": "一次活动没预判到背风坡的强风，队伍提前下撤"
+      },
+      "internal": {
+        "taskType": "explain",
+        "kindHint": "concept-map",
+        "coreTestPoint": "过程方向与空间位置一致；术语有落地解释；不用结论句代替过程"
+      }
+    },
+    {
+      "id": "f10",
+      "public": {
+        "learnerName": "[评测] 郑凯 · 会员消费统计",
+        "learningGoal": "学会用平均数和中位数看会员消费，避免被少数高消费会员带偏判断",
+        "storyTitle": "被一个大客户拉高的平均消费",
+        "storyOpening": "我在健身房管前台，老板让我看会员月均消费。我算出来挺高，但实际大多数会员花得很少。我不知道该怎么解释这个差距。",
+        "storyProblem": "只会算平均数，不知道极端值会把它拉高，也没用过中位数",
+        "storyTrigger": "按平均消费制定的续费方案，大部分会员觉得太贵"
+      },
+      "internal": {
+        "taskType": "diagnose",
+        "kindHint": "bins",
+        "coreTestPoint": "分布与均值/中位数位置关系清楚；极端值影响可见；标题不写结论"
+      }
+    }
+  ]
+}

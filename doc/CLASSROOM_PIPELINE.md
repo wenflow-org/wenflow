@@ -228,6 +228,8 @@ prompts/core/teaching-turn.yaml   ← 唯一真相源（83 条 rules，单行 ` 
 口径注意：
 - 「现场滞后」按上一轮老师话比对，会在**学生主动换话题**时误报（板正确地跟了学生，指标却记成滞后）；看到 1 先读这一轮的学生话。
 - 同轮刷新（pipeline=`post-teacher-refresh`）之后，**同轮脱节是主指标**；`板滞后/现场滞后` 只用来发现「老师上一轮宣布的内容连刷新都没落到板上」，要求上一块板和当前板都没有才算。
+- 同轮脱节的数字会排掉**学生这一轮刚说过的数**（2026-10-28）：老师常复述学生的得数（「150 秒每千米，两步都对」），那不是新例子；不排掉会把「板已正确换到新数据」误判成脱节。
+- 「板滞后」仍可能把老师**回指旧数据**读成滞后（这一轮老师提的是前一组数，板当然没有）。非 0 时先看这一轮老师说的是新数据还是旧数据。
 
 ### 2.2 外部盲评（视觉模型，只看图和那一轮对话）
 
@@ -290,6 +292,22 @@ prompts/core/teaching-turn.yaml   ← 唯一真相源（83 条 rules，单行 ` 
 | `outputs/e2e/board-review-after8b-load.json` | 机器 | 方案 A 后盲评（17/18 可判） |
 
 页面都不含 base64（图片走 `<img src>`）；`*.png` 被 `.gitignore` 挡住，换机器要重跑生成脚本。
+
+### 2.6 真实课堂跑数：10 个虚拟学习者（2026-10-28）
+
+目的：不只看探针里「被要求画板」时的质量，也看**生产引擎自己会不会出板**。
+
+- 每个案例新建一个虚拟学习者，给身份、故事、目标，只跑 1 个模拟日（`simulate-learner-e2e.ts --days=1 --keep`）。
+- 案例与人设：`outputs/e2e/learner-cases-10.json`。`internal`（taskType/kindHint/coreTestPoint）只留在本地，**不进平台请求**。
+- 驱动：`outputs/e2e/run-learners-10.mjs`；导出：`outputs/e2e/export-classroom.mjs`；报告：`outputs/e2e/learner-report.mjs`。
+- 产物：`doc/learners/README.md`、`doc/learners/f1..f10.md`、`doc/learners/index.html`；原始 JSON 在 `outputs/e2e/classroom/`。
+
+结果（10 案例 × 2 节 = 20 节课）：**实际下发课堂图 0 张**。
+
+- 不是导出遗漏：`teaching_session_messages.payload` 与 `virtual_session_logs.details.output` 里都没有 `figures`/`figure` 键；后端也没有任何图闸拒绝日志。也就是说**模型根本没有提出过图**，不是被 10 道闸挡掉。
+- `buildVisualOpportunity` 只在特定线索（ASCII 结构、位置描述、时序描述等）出现时给 hint；这批对话大多没有命中。命中也不是强制出图，最终仍要模型自己输出 `figure`。
+- 因此：探针里的白板裁剪/换板修复**没有进入真实课堂**——`board-intent/board-state/board-controller` 仍未接 `teaching-turn-engine`。这 10 份记录是生产现状基线，不是本轮修复的验收。
+- 第二个结构性观察：`--days=1` 时每案例都完成 1 节、第 2 节停在 active。课节确实在推进，但「一节课上完」与「一天结束」不是同一件事，报告里两种情况都保留。
 
 ---
 

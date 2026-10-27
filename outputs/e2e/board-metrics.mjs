@@ -61,7 +61,10 @@ const analyse = (rows) => {
       if (t.teacher && t.boardSpec) {
         const boardText = JSON.stringify(t.boardSpec);
         const onBoard = new Set(numbersOf(t.boardSpec));
-        const fresh = numbersOf(t.teacher).filter((n) => !onBoard.has(n) && Number(n) > 31);
+        // 老师常复述学生刚说的数（「150 秒每千米，两步都对」），那不是新例子；
+        // 不排掉学生这句，会把「板正确地换了新数据」误判成同轮脱节。
+        const studentNums = new Set(numbersOf(t.studentIn));
+        const fresh = numbersOf(t.teacher).filter((n) => !onBoard.has(n) && !studentNums.has(n) && Number(n) > 31);
         const freshScene = SCENE_TOKENS.filter((s) => t.teacher.includes(s) && !boardText.includes(s));
         if (fresh.length) out.sameTurnNum += 1;
         if (freshScene.length) out.sameTurnScene += 1;

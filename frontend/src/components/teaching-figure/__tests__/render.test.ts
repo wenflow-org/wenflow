@@ -660,6 +660,18 @@ describe('split-compare（2026-10-26：正误并排，行行对齐）', () => {
     expect(renderSpecFigure('split-compare', { left: { head: 'A', rows: [] }, right: { head: 'B', rows: [{ label: '甲' }] } })).toBeNull();
     expect(renderSpecFigure('split-compare', { left: { head: 'A', rows: [{ label: '甲' }] } })).toBeNull();
   });
+
+  it('长栏头不截成歧义半句（英语时态实拍）', () => {
+    const out = renderSpecFigure('split-compare', {
+      left: { head: '现在完成时 have finished', tone: 'ok', rows: [{ label: 'have finished' }, { label: '结果留到现在' }] },
+      right: { head: '一般过去时 finished', tone: 'warn', rows: [{ label: 'finished' }, { label: '动作在过去' }] },
+    });
+    expect(out).not.toBeNull();
+    const keyTexts = [...out!.svg.matchAll(/<text[^>]*class="t-key"[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]);
+    const joined = keyTexts.join('').replace(/\s/g, '');
+    expect(joined).toContain('现在完成时havefinished');
+    expect(joined).toContain('一般过去时finished');
+  });
 });
 
 describe('state-strip（2026-10-26：不回头的进程分帧）', () => {

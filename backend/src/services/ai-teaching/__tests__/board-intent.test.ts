@@ -25,6 +25,8 @@ const conceptBoard = {
 describe('board-intent：问法由图型与任务类型决定', () => {
   it('对比图 → 问分叉；时间线 → 问顺序；概念图 → 问条件；复盘课 → 问迁移', () => {
     expect(decideBoardIntent({ kind: 'split-compare', taskType: 'diagnose' }).askAbout).toBe('fork');
+    // 控制变量对照（副驾/沙盘）不是找错，问「哪个条件变了」
+    expect(decideBoardIntent({ kind: 'split-compare', taskType: 'acquire' }).askAbout).toBe('condition');
     expect(decideBoardIntent({ kind: 'state-strip', taskType: 'acquire' }).askAbout).toBe('order');
     expect(decideBoardIntent({ kind: 'concept-map', taskType: 'acquire' }).askAbout).toBe('condition');
     expect(decideBoardIntent({ kind: 'concept-map', taskType: 'consolidate' }).askAbout).toBe('mapping');
@@ -188,6 +190,135 @@ describe('board-intent：结论句按意图收口', () => {
     // 迁移轮保留结论与副标注（参照物）
     const mapping = applyBoardIntent(spec, decideBoardIntent({ kind: 'concept-map', taskType: 'consolidate' })) as any;
     expect(mapping.left.rows[1].sub).toBe('数字照搬，单位写成 min/km');
+  });
+
+  it('副标注出现「把…当成…」也按剧透清掉（iter1 b1 盲评）', () => {
+    const spec = {
+      title: '配速换算',
+      left: {
+        head: '常见错法',
+        tone: 'warn',
+        rows: [
+          { label: '60 ÷ 400 = 0.15', sub: '把秒算出的数当成分钟' },
+          { label: '0.15 分钟/千米', sub: '单位：分钟/千米' },
+        ],
+      },
+      right: { head: '正确做法', rows: [{ label: '400 m = 0.4 km' }, { label: '60 ÷ 0.4 = 150' }] },
+    };
+    const fork = applyBoardIntent(spec, decideBoardIntent({ kind: 'split-compare', taskType: 'diagnose' })) as any;
+    expect(fork.left.rows[0].sub).toBeUndefined();
+    expect(fork.left.rows[1].sub).toBe('单位：分钟/千米');
+  });
+
+  it('正确栏倒数第二行已经算出结果时，挖的是算式结果而不是尾行占位（iter1 b1 盲评）', () => {
+    const spec = {
+      left: { head: '错法', tone: 'warn', rows: [{ label: '240 ÷ 800 = 0.3' }, { label: '0.3 分/千米' }] },
+      right: {
+        head: '正解',
+        tone: 'ok',
+        rows: [
+          { label: '800 m = 0.8 km' },
+          { label: '240 ÷ 0.8 = 300', sub: '秒每千米' },
+          { label: '?' },
+        ],
+      },
+    };
+    const fork = applyBoardIntent(spec, decideBoardIntent({ kind: 'split-compare', taskType: 'diagnose' })) as any;
+    expect(fork.right.rows[1].label).toBe('240 ÷ 0.8 = ?');
+    expect(fork.right.rows[1].sub).toBeUndefined();
+    expect(fork.right.rows[2].label).toBe('?');
+  });
+
+  it('纠错轮栏头里的「填 have finished」不留在标题上（iter1 c2 盲评）', () => {
+    const spec = {
+      left: { head: 'since this morning 这一句：填 have finished', tone: 'warn', rows: [{ label: 'A' }, { label: 'B' }] },
+      right: { head: '填 finished', tone: 'ok', rows: [{ label: 'C' }, { label: 'D' }] },
+    };
+    const fork = applyBoardIntent(spec, decideBoardIntent({ kind: 'split-compare', taskType: 'refine' })) as any;
+    expect(fork.left.head).toBe('since this morning 这一句');
+    expect(fork.right.head).toBe('待判断');
+  });
+
+  it('把顺序倒过来的假设句会触发换板（iter1 b3 盲评）', () => {
+    const intent = decideBoardIntent({
+      kind: 'state-strip',
+      taskType: 'explain',
+      studentText: '为什么不信任官府？',
+      lastTeacherText: '假如这道顺序被倒过来——先颁《垦草令》硬推下去，等各县闹起来了，才回头补做「立木为信」。会怎样？',
+    });
+    expect(intent.exampleChange).toBe('variant');
+    expect(intent.instruction).toContain('假设');
+  });
+
+  it('时间线题只要出现「假设」就判反事实，不再要求搭配固定词（iter3c 实拍）', () => {
+    const intent = decideBoardIntent({
+      kind: 'state-strip',
+      taskType: 'acquire',
+      lastTeacherText: '换个条件推一推：假设南门那个人真把木头搬走了，官府却没按承诺给五十金，或者只随便给一点。',
+    });
+    expect(intent.hypothetical).toBe(true);
+    // 非时间线题不因一句普通条件句就把整块板标成假设
+    const plain = decideBoardIntent({
+      kind: 'split-compare',
+      taskType: 'diagnose',
+      lastTeacherText: '如果不理解就问我，先自己看两栏的单位。',
+    });
+    expect(plain.hypothetical).toBeUndefined();
+  });
+
+  it('「把顺序倒过来试试：假设…」语序颠倒也能判反事实（iter3b 实拍）', () => {
+    const intent = decideBoardIntent({
+      kind: 'state-strip',
+      taskType: 'acquire',
+      lastTeacherText: '那我们把这个顺序倒过来试试：假设商鞅先把第一次变法的条文贴满城门，立木的事放到后面再补办。',
+    });
+    expect(intent.hypothetical).toBe(true);
+  });
+
+  it('没有「假设」二字、但写的是没发生的走法，也判反事实（iter3 b3 实拍）', () => {
+    const intent = decideBoardIntent({
+      kind: 'state-strip',
+      taskType: 'acquire',
+      lastTeacherText: '换一个情况看看。立木那天，木头搬到北门，官府却只取出五金，说国库一时拿不出五十金。',
+    });
+    expect(intent.hypothetical).toBe(true);
+    const other = decideBoardIntent({
+      kind: 'state-strip',
+      taskType: 'acquire',
+      lastTeacherText: '换个现场试：假设魏国照抄这一套，南门立木、当场兑现五十金。',
+    });
+    expect(other.hypothetical).toBe(true);
+  });
+
+  it('反事实板：假设帧加「假设 ·」前缀，标题标「假设推演」（iter2 盲评）', () => {
+    const spec = {
+      title: '商鞅变法推行',
+      frames: [
+        { label: '前356年 · 南门立木', items: ['徙木者予五十金'] },
+        { label: '前356年 · 太子犯法', items: ['太子驷犯法', '商鞅未加处罚'] },
+      ],
+    };
+    const intent = decideBoardIntent({
+      kind: 'state-strip',
+      taskType: 'explain',
+      lastTeacherText: '假如这道顺序被倒过来——先颁《垦草令》，才回头补「立木为信」。',
+    });
+    expect(intent.hypothetical).toBe(true);
+    const out = applyBoardIntent(spec, intent) as any;
+    expect(out.title).toBe('假设推演｜商鞅变法推行');
+    expect(out.frames[0].label).toBe('前356年 · 南门立木');
+    expect(out.frames[1].label).toBe('假设 · 前356年 · 太子犯法');
+  });
+
+  it('纠错轮把正确栏最后一行挖成 ?，错法栏保留（答案由学生补）', () => {
+    const spec = {
+      left: { head: '错法', tone: 'warn', rows: [{ label: '60 ÷ 400' }, { label: '0.15 min/km' }] },
+      right: { head: '正解', tone: 'ok', rows: [{ label: '400 m = 0.4 km' }, { label: '0.15 s/m', sub: '秒每米' }] },
+    };
+    const fork = applyBoardIntent(spec, decideBoardIntent({ kind: 'split-compare', taskType: 'diagnose' })) as any;
+    expect(fork.right.rows[1].label).toBe('?');
+    expect(fork.right.rows[1].sub).toBeUndefined();
+    expect(fork.left.rows[1].label).toBe('0.15 min/km');
   });
 
   it('标题点名了板面没有的实体 → 撤掉标题（b2「深度与自重」实拍）', () => {
