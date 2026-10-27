@@ -10,44 +10,39 @@
          不再另起一张同权卡；新建入口跟着 MCP 能力行走，页头不再挂全局「新建 MCP 服务」。 -->
     <MkPageHead title="插件" />
 
-    <!-- 能力卡单列全宽（2026-09-29 实测半宽卡内能力表 874px 溢出 506px 容器，
-         并栏不可行；审核 #157 删除恒 false 的 sideBySide 死分支与不可达 CSS） -->
-    <div class="ac-cards">
-
-    <!-- ① 可选能力（2026-10-27 重设计）：
-         「联网 / 决策 / 生图」是内置能力；「MCP 工具调用」也是能力之一，但它下面挂的是
-         平台登记的 MCP 服务。此前能力行与 MCP 服务各占一张同权卡，读起来像两套系统，
-         用户直接问「mcp 和可选能力有什么不一样」。现在 MCP 服务缩进挂在 MCP 能力行下，
-         整页只有一张能力卡：能力行回答「开没开」，子列表回答「接了哪些服务」。 -->
-    <div class="mk-card">
-      <div class="mk-card__head">
-        <!-- 2026-10-23 走查：卡头不复述页名（「插件」页里再挂一枚「插件」标题） -->
-        <h3 class="mk-card__title">可选能力</h3>
+    <!-- 可选能力（2026-10-27 bento 重设计）：
+         三张内置能力卡并排（联网 / 决策 / 生图），MCP 工具调用占一整行——
+         它不是第四张同形卡，而是带子资源的容器：能力头在下、服务列表挂在卡内。
+         这样「可选能力」回答开没开、最近用没用；MCP 卡再回答「接了哪些服务」。 -->
+    <section class="ac-section">
+      <div class="ac-section__head">
+        <h2 class="ac-section__title">可选能力</h2>
         <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn">启停状态未读取</span>
-        <span class="mk-card__meta ac-count">{{ pluginRows.length }} 项能力 · {{ pluginMemberCount }} 个 Skill</span>
+        <span class="ac-section__meta">{{ pluginRows.length }} 项能力 · {{ pluginMemberCount }} 个 Skill</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
         <span class="mk-alert__msg">{{ configErrorText }}</span>
         <button type="button" class="mk-alert__btn" @click="loadPluginConfigs">重试</button>
       </div>
-      <MkLoading v-if="loading" min text="插件配置加载中…" />
-      <!-- 2026-10-24 用户「插件就是配置启用，这设计的太丑了」：撤掉表格与成员路由徽标，
-           一行一个插件：身份/说明/成员一条线，右侧只有开关与配置。模型细节收进配置弹窗。 -->
-      <div v-else class="ac-plugins">
-        <template v-for="p in pluginRows" :key="p.id">
-          <div
-            class="ac-plugin"
-            :class="{ 'is-off': !pluginEnabled(p.id) }"
-          >
-            <span class="ac-plugin__glyph" aria-hidden="true">{{ p.glyph }}</span>
-            <div class="ac-plugin__main">
-              <div class="ac-plugin__title">
-                <strong>{{ p.name }}</strong>
-                <span class="ac-plugin__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
-              </div>
-              <span v-if="membersText(p)" class="ac-plugin__members">{{ membersText(p) }}</span>
+      <!-- 首载骨架：保持三卡 + 全宽 MCP 卡的位置，数据到达不跳版 -->
+      <div v-if="loading" class="ac-cap-grid" aria-hidden="true">
+        <div v-for="n in 3" :key="n" class="mk-skeleton ac-cap-skel"></div>
+        <div class="mk-skeleton ac-cap-skel ac-cap-skel--wide"></div>
+      </div>
+      <div v-else class="ac-cap-grid">
+        <article
+          v-for="p in pluginRows"
+          :key="p.id"
+          class="ac-cap"
+          :class="{ 'is-off': !pluginEnabled(p.id), 'ac-cap--wide': p.id === 'mcp' }"
+        >
+          <header class="ac-cap__head">
+            <span class="ac-cap__glyph" aria-hidden="true">{{ p.glyph }}</span>
+            <div class="ac-cap__id">
+              <strong>{{ p.name }}</strong>
+              <span class="ac-cap__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
             </div>
-            <div class="ac-plugin__actions">
+            <div class="ac-cap__actions">
               <MkSwitch
                 :model-value="pluginEnabled(p.id)"
                 :state-text="pluginEnabled(p.id) ? '启用' : '停用'"
@@ -55,15 +50,18 @@
                 :aria-label="`${p.name}插件开关`"
                 @update:model-value="togglePlugin(p.id, $event)"
               />
-              <!-- MCP 的能力行本身就是服务入口：新建落在子列表上方，不再另开一张卡 -->
+              <!-- MCP 的入口是「新建服务」；其余能力的入口是服务配置 -->
               <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm" @click="openToolCreate">新建服务</button>
               <button v-else type="button" class="mk-btn mk-btn--sm" @click="openConfig(p)">配置</button>
-              <button v-if="p.errorCount > 0" type="button" class="mk-link" @click="goLogs(p.primary)">查失败</button>
             </div>
+          </header>
+          <div class="ac-cap__meta">
+            <span v-if="membersText(p)" class="ac-cap__members">{{ membersText(p) }}</span>
+            <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" @click="goLogs(p.primary)">查失败</button>
           </div>
 
-          <!-- MCP 服务是 MCP 工具调用的子资源：缩进挂在能力行下，独立开关/测试/发现工具 -->
-          <div v-if="p.id === 'mcp'" class="ac-mcp-group">
+          <!-- MCP 服务是 MCP 工具调用的子资源：同一张卡内展开，独立开关/测试/发现工具 -->
+          <div v-if="p.id === 'mcp'" class="ac-mcp__body">
             <div v-if="mcpTools.length" class="ac-mcp__list">
               <div v-for="t in mcpTools" :key="t.id" class="ac-mcp__row">
                 <span class="ac-mcp__dot" :class="t.enabled ? 'is-on' : 'is-off'"></span>
@@ -127,11 +125,9 @@
               @action="mcpFailed ? loadMcpTools() : openToolCreate()"
             />
           </div>
-        </template>
+        </article>
       </div>
-    </div>
-
-    </div>
+    </section>
 
     <!-- MCP 服务编辑弹窗 -->
     <Teleport to="body">
@@ -296,7 +292,6 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -880,56 +875,68 @@ function goLogs(skillId: string) {
    与成本分析 / 健康中心同款），不再需要宿主 flex 列里的内滚容器。 */
 .mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 
-/* 插件列表（2026-10-24 用户「插件就是配置启用，这设计的太丑了」）：
-   一行一个插件，左侧身份与说明、右侧开关与配置。表格式铺开把「开没开」埋进了徽标列。 */
-.ac-plugins { display: grid; }
-.ac-plugin {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--mk-line);
+/* 可选能力：三张内置能力卡 + 一张全宽 MCP 卡（2026-10-27 bento 重设计）。
+   auto-fit 280px：1280 档三列，窄屏自动两列/单列；MCP 卡始终整行。 */
+.ac-section { display: grid; gap: 12px; }
+.ac-section__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ac-section__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 650; color: var(--mk-ink); }
+.ac-section__meta {
+  margin-left: auto;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.ac-plugin:last-child { border-bottom: none; }
-.ac-plugin__glyph {
+.ac-cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.ac-cap {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface);
+}
+.ac-cap--wide { grid-column: 1 / -1; container-type: inline-size; }
+.ac-cap__head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.ac-cap__glyph {
   flex: none;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--mk-radius-md);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
-.ac-plugin__main { display: grid; gap: 3px; min-width: 0; }
-.ac-plugin__title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
-.ac-plugin__title strong { font-size: var(--mk-fs-body); font-weight: 650; color: var(--mk-ink); }
-.ac-plugin__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-.ac-count { font-variant-numeric: tabular-nums; }
-.ac-plugin__members {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* 开关独立固定列：有无「查失败」都不移动开关竖轴（2026-10-26 撤掉恒空 32px 槽位） */
-.ac-plugin__actions {
-  display: grid;
-  /* 固定总宽 + 固定列：开关的 x 与按钮文案长短无关（「配置」/「新建服务」同轴） */
-  width: 192px;
-  grid-template-columns: 72px 96px;
+.ac-cap__id { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.ac-cap__id strong { font-size: var(--mk-fs-body); font-weight: 650; color: var(--mk-ink); line-height: 1.3; }
+.ac-cap__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.ac-cap__actions {
+  display: flex;
   align-items: center;
-  justify-items: end;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: none;
 }
-.ac-plugin__actions > .mk-switch { justify-self: start; }
+.ac-cap__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.ac-cap__members { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.45; }
+.ac-cap__fail { font-size: var(--mk-fs-micro); }
 /* 停用只压信息层，开关与按钮保持清晰可点 */
-.ac-plugin.is-off .ac-plugin__main,
-.ac-plugin.is-off .ac-plugin__glyph { opacity: 0.55; }
+.ac-cap.is-off .ac-cap__id,
+.ac-cap.is-off .ac-cap__glyph,
+.ac-cap.is-off .ac-cap__meta { opacity: 0.55; }
+.ac-cap-skel { height: 104px; border-radius: var(--mk-radius-xl); }
+.ac-cap-skel--wide { grid-column: 1 / -1; height: 168px; }
 
 /* 服务配置弹窗：先排通道优先级（主用 + 备用，用户可自己调），再填链上 provider 的密钥/入口。
    2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。
@@ -1004,41 +1011,18 @@ function goLogs(skillId: string) {
 .ac-config-provider__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .ac-config-provider__foot .mk-link { font-size: var(--mk-fs-micro); }
 @media (max-width: 720px) {
-  .ac-plugin { grid-template-columns: 32px minmax(0, 1fr); }
-  .ac-plugin__actions {
-    grid-column: 1 / -1;
-    display: flex;
-    width: auto;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
+  .ac-cap { padding: 12px 14px; }
+  .ac-cap__head { flex-wrap: wrap; }
+  .ac-cap__actions { width: 100%; justify-content: flex-end; }
 }
 
-/* 能力卡容器（2026-10-27 后只有一张卡：MCP 服务挂在 MCP 能力行下，
-   不再与「可选能力」并列为两张同权卡） */
-.ac-cards {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
-}
-/* 卡片可压缩：左卡宽表 min-content 会撑爆 1fr，饿死右卡导致 MCP 行逐字竖排 */
-.ac-cards > .mk-card { min-width: 0; }
+/* 能力配置加载失败错误条：外形走 .mk-alert--row，本类只保留节内位置 */
+.ac-error { margin: 0; }
 
-/* 能力配置加载失败错误条：外形走 .mk-alert--row，本类只保留卡内位置 */
-.ac-error { margin: 12px 16px 0; }
-
-
-/* ② MCP 服务行（MCP 工具调用的子列表） */
-/* 子列表缩进到能力行文字列（16 padding + 32 glyph + 12 gap = 60px）：
-   视觉上明确「这些服务属于上面的 MCP 工具调用」，而不是另一套同级能力。 */
-.ac-mcp-group {
-  container-type: inline-size;
-  padding: 0 16px 12px 60px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.ac-mcp-group:last-child { border-bottom: none; }
+/* MCP 子列表：挂在 MCP 工具调用卡内（cap--wide），不再另起卡或缩进到行外 */
+.ac-mcp__body { display: grid; gap: 8px; }
 .ac-mcp__list {
+  container-type: inline-size;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-md);
   background: var(--mk-surface-2);

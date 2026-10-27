@@ -143,7 +143,7 @@ afterEach(() => {
 });
 
 describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () => {
-  it('独立页形态：整页一张能力卡，刷新跟着顶栏广播走（2026-10-23 全站收口）', async () => {
+  it('独立页形态：三张内置能力卡 + 一张全宽 MCP 卡，刷新跟着顶栏广播走（2026-10-23 全站收口）', async () => {
     const wrapper = await mountLive();
     expect(wrapper.find('.mk-page').exists()).toBe(true);
     const head = wrapper.find('.mk-pagehead');
@@ -152,10 +152,11 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     // 页头副文已删；2026-10-27 新建入口跟着 MCP 能力行走，页头不再挂全局动作
     expect(head.find('.mk-pagehead__sub').exists()).toBe(false);
     expect(head.findAll('.mk-pagehead__actions button')).toEqual([]);
-    // 「MCP 服务」不再是与「可选能力」并列的第二张卡，而是 MCP 能力行的子列表
-    expect(wrapper.findAll('.mk-card')).toHaveLength(1);
+    // 三张内置能力卡 + 一张全宽 MCP 卡；MCP 服务不再是并列的第二张卡
+    expect(wrapper.findAll('.ac-cap')).toHaveLength(4);
+    expect(wrapper.findAll('.ac-cap--wide')).toHaveLength(1);
     expect(wrapper.find('.ac-mcp-card').exists()).toBe(false);
-    expect(wrapper.find('.ac-mcp-group').exists()).toBe(true);
+    expect(wrapper.find('.ac-cap--wide .ac-mcp__row').exists()).toBe(true);
     // 顶栏刷新 = liveRefreshSeq 广播 → 本页与旧页头刷新钮同一入口重拉
     const calls = pluginConfigMock.mock.calls.length;
     liveRefreshSeq.value += 1;
@@ -164,9 +165,9 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
-  it('一行一个插件：名称、成员与最近调用同排，插件说明句不再上列表', async () => {
+  it('能力卡：名称、成员与最近调用同排，插件说明句不再上列表', async () => {
     const wrapper = await mountLive();
-    const rows = wrapper.findAll('.ac-plugin');
+    const rows = wrapper.findAll('.ac-cap');
     expect(rows).toHaveLength(4);
     const text = wrapper.text();
     for (const name of ['联网', '决策', '生图', 'MCP 工具调用', '网页搜索', '网页抓取', '资料采集']) {
@@ -177,7 +178,7 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(text).not.toContain('跟随平台默认');
     expect(text).not.toContain('关闭后');
     expect(text).not.toContain('检索、抓取外部网页');
-    const switches = wrapper.findAll('.ac-plugin .mk-switch');
+    const switches = wrapper.findAll('.ac-cap__head .mk-switch');
     expect(switches).toHaveLength(4);
     // 开关不再挂「停用后：…」解释型 title
     expect(switches[0].attributes('title')).toBeUndefined();
@@ -186,19 +187,19 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
 
   it('「查失败」只在有失败调用时出现（零失败的插件不给这颗钮）', async () => {
     const wrapper = await mountLive();
-    expect(wrapper.findAll('.ac-plugin .mk-link').map((b) => b.text())).not.toContain('查失败');
+    expect(wrapper.findAll('.ac-cap .mk-link').map((b) => b.text())).not.toContain('查失败');
     wrapper.unmount();
   });
 
   it('开关直接落库，并跟随返回状态；停用只压信息层', async () => {
     const wrapper = await mountLive();
-    const webRow = wrapper.findAll('.ac-plugin')[0];
+    const webRow = wrapper.findAll('.ac-cap')[0];
     expect(webRow.text()).toContain('启用');
     await webRow.find('.mk-switch').trigger('click');
     await flushPromises();
     expect(pluginSetMock).toHaveBeenCalledWith('web', false);
-    expect(wrapper.findAll('.ac-plugin')[0].classes()).toContain('is-off');
-    expect(wrapper.findAll('.ac-plugin')[0].text()).toContain('停用');
+    expect(wrapper.findAll('.ac-cap')[0].classes()).toContain('is-off');
+    expect(wrapper.findAll('.ac-cap')[0].text()).toContain('停用');
     wrapper.unmount();
   });
 
@@ -211,7 +212,7 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
 
   it('配置弹窗：联网展示搜索/抓取 provider 的密钥与入口，不再是模型选择', async () => {
     const wrapper = await mountLive();
-    const webRow = wrapper.findAll('.ac-plugin')[0];
+    const webRow = wrapper.findAll('.ac-cap')[0];
     await webRow.find('.mk-btn').trigger('click');
     await flushPromises();
     const dialog = wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
@@ -235,7 +236,7 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
 
   it('服务配置保存只提交改过的 provider 字段（密钥留空不覆盖）', async () => {
     const wrapper = await mountLive();
-    await wrapper.findAll('.ac-plugin')[0].find('.mk-btn').trigger('click');
+    await wrapper.findAll('.ac-cap')[0].find('.mk-btn').trigger('click');
     await flushPromises();
     const dialog = wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
     const tavily = dialog.findAll('.ac-config-provider').find((p) => p.text().includes('Tavily'));
@@ -253,7 +254,7 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
 
   it('MCP 行不套 provider 配置：新建服务在能力行内，直接打开 MCP 弹窗', async () => {
     const wrapper = await mountLive();
-    const mcpRow = wrapper.findAll('.ac-plugin').find((r) => r.text().includes('MCP 工具调用'));
+    const mcpRow = wrapper.findAll('.ac-cap').find((r) => r.text().includes('MCP 工具调用'));
     const btn = mcpRow!.findAll('button').find((b) => b.text() === '新建服务');
     expect(btn).toBeTruthy();
     await btn!.trigger('click');
@@ -263,23 +264,19 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
-  it('MCP 服务缩进挂在 MCP 能力行下：同一张卡、子列表在能力行之后', async () => {
+  it('MCP 服务挂在 MCP 全宽能力卡内：同卡子列表，不再另起卡', async () => {
     const wrapper = await mountLive();
-    const card = wrapper.find('.mk-card');
-    expect(card.exists()).toBe(true);
-    const groups = wrapper.findAll('.ac-mcp-group');
-    expect(groups).toHaveLength(1);
-    expect(groups[0].findAll('.ac-mcp__row')).toHaveLength(3);
-    const mcpRow = wrapper.findAll('.ac-plugin').find((r) => r.text().includes('MCP 工具调用'))!;
-    expect(
-      mcpRow.element.compareDocumentPosition(groups[0].element) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+    const mcpCard = wrapper.findAll('.ac-cap').find((r) => r.text().includes('MCP 工具调用'))!;
+    expect(mcpCard.classes()).toContain('ac-cap--wide');
+    expect(mcpCard.findAll('.ac-mcp__row')).toHaveLength(3);
+    expect(mcpCard.find('.ac-cap__head .mk-switch').exists()).toBe(true);
+    expect(wrapper.findAll('.ac-cap--wide')).toHaveLength(1);
     wrapper.unmount();
   });
 
   it('MCP 组的服务可用性跟在成员后面，与插件开关是两个维度', async () => {
     const wrapper = await mountLive();
-    const mcpRow = wrapper.findAll('.ac-plugin').find((r) => r.text().includes('MCP 工具调用'));
+    const mcpRow = wrapper.findAll('.ac-cap').find((r) => r.text().includes('MCP 工具调用'));
     expect(mcpRow).toBeTruthy();
     expect(mcpRow!.text()).toContain('3 个服务启用');
     expect(mcpRow!.find('.mk-switch').exists()).toBe(true);
@@ -365,7 +362,7 @@ describe('Addons MCP 服务（transport 支持）', () => {
       }
     });
     const wrapper = await mountLive();
-    const decisionRow = wrapper.findAll('.ac-plugin').find((r) => r.text().includes('决策'))!;
+    const decisionRow = wrapper.findAll('.ac-cap').find((r) => r.text().includes('决策'))!;
     await decisionRow.find('.mk-btn').trigger('click');
     await flushPromises();
     // 每次状态变化后重新取：Teleport 子树会重建，旧的 DOMWrapper 会指向已分离的节点
@@ -388,7 +385,7 @@ describe('Addons MCP 服务（transport 支持）', () => {
 
   it('优先级可调：上移 / 移出后保存把新顺序一起提交', async () => {
     const wrapper = await mountLive();
-    await wrapper.findAll('.ac-plugin')[0].find('.mk-btn').trigger('click');
+    await wrapper.findAll('.ac-cap')[0].find('.mk-btn').trigger('click');
     await flushPromises();
     const dialog = () => wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
     const searchChain = () => dialog().findAll('.ac-prio')[0];
