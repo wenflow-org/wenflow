@@ -1,0 +1,58 @@
+[
+ {
+  "id": "sc-eng-tense",
+  "course": "初二英语·时态巩固 第3课",
+  "subject": "英语",
+  "topic": "has been to 与 went",
+  "taskTitle": "去过与去了的分岔",
+  "taskDescription": "学生混淆 has been to 与 went to，需要正误对比",
+  "taskType": "diagnose",
+  "intent": "check",
+  "acceptance": "学生能用一句话说清两者的分叉",
+  "expectKind": "split-compare",
+  "student": "I have been to Shanghai last year 这样说错在哪？我总是弄不清 have been to 和 went to。",
+  "assistant": "这两句的动作落点不一样。把你的写法和正确写法并排放好，指出来你是从哪个词开始混的。"
+ },
+ {
+  "id": "cp-chem-titration",
+  "course": "高二化学·酸碱中和滴定 第1课",
+  "subject": "化学",
+  "topic": "滴定曲线",
+  "taskTitle": "NaOH 滴定盐酸的突跃",
+  "taskDescription": "讲解滴定过程中 pH 随体积变化与突跃",
+  "taskType": "acquire",
+  "intent": "demonstrate",
+  "acceptance": "学生能从曲线指出突跃范围",
+  "expectKind": "cartesian-plot",
+  "student": "为什么滴定终点附近多加一滴 pH 就从 4 跳到 10？这个突跃能画出来吗？",
+  "assistant": "画出整条曲线，你盯住终点附近那一段怎么走。"
+ },
+ {
+  "id": "tree-eng-wordroot",
+  "course": "高一英语·构词法 第1课",
+  "subject": "英语",
+  "topic": "词根 spect",
+  "taskTitle": "spect 词族怎么长出来",
+  "taskDescription": "讲解 spect 词根派生出的词族",
+  "taskType": "deconstruct",
+  "intent": "demonstrate",
+  "acceptance": "学生能说出前缀如何改变词义",
+  "expectKind": "tree",
+  "student": "inspect、respect、prospect、suspect 都有 spect，它们为什么都跟「看」有关？这个词族怎么记？",
+  "assistant": "以 spect 为根画一棵派生树，前缀是枝。"
+ },
+ {
+  "id": "bp-cs-reference",
+  "course": "Python入门·引用 第1课",
+  "subject": "计算机",
+  "topic": "变量与对象",
+  "taskTitle": "变量名指向对象",
+  "taskDescription": "讲解赋值后变量名与内存对象的指向关系",
+  "taskType": "model",
+  "intent": "demonstrate",
+  "acceptance": "学生能指出哪些名字指同一个对象",
+  "expectKind": "bipartite",
+  "student": "a=[1,2]; b=a; c=a[:]，现在改 b[0] 谁跟着变？a、b、c 各自指向哪里？",
+  "assistant": "左边变量名右边内存对象，连线画出来指向就清楚了。"
+ }
+]

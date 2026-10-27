@@ -1,0 +1,44 @@
+[
+ {
+  "id": "sc-eng-tense",
+  "course": "初二英语·时态巩固 第3课",
+  "subject": "英语",
+  "topic": "has been to 与 went",
+  "taskTitle": "去过与去了的分岔",
+  "taskDescription": "学生混淆 has been to 与 went to，需要正误对比",
+  "taskType": "diagnose",
+  "intent": "check",
+  "acceptance": "学生能用一句话说清两者的分叉",
+  "expectKind": "split-compare",
+  "student": "I have been to Shanghai last year 这样说错在哪？我总是弄不清 have been to 和 went to。",
+  "assistant": "这两句的动作落点不一样。把你的写法和正确写法并排放好，指出来你是从哪个词开始混的。"
+ },
+ {
+  "id": "ss-hist-shangyang",
+  "course": "初二历史·战国变法 第1课",
+  "subject": "历史",
+  "topic": "商鞅变法推行",
+  "taskTitle": "变法怎么落地",
+  "taskDescription": "讲解商鞅变法从立信到推行的阶段推进",
+  "taskType": "acquire",
+  "intent": "demonstrate",
+  "acceptance": "学生能按顺序说出推行步骤",
+  "expectKind": "state-strip",
+  "student": "商鞅变法是一下子全面推开的吗？之前发生了什么？流程是怎样的？",
+  "assistant": "不是一步到位。我们把推行过程分帧摆开，一步步看。"
+ },
+ {
+  "id": "ss-chem-filter",
+  "course": "初三化学·基本操作 第1课",
+  "subject": "化学",
+  "topic": "过滤操作",
+  "taskTitle": "过滤实验流程",
+  "taskDescription": "讲解过滤操作的分步流程与各步要点",
+  "taskType": "execute",
+  "intent": "demonstrate",
+  "acceptance": "学生能按顺序说出操作步骤",
+  "expectKind": "state-strip",
+  "student": "过滤实验的操作顺序我老记混，到底先做什么后做什么？每一步注意什么？",
+  "assistant": "我们把操作按步骤分帧，一帧一个动作，跟着走一遍。"
+ }
+]
