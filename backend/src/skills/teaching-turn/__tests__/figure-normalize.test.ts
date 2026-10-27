@@ -766,6 +766,51 @@ describe('split-compare：正误并排对比（2026-10-26 动作诊所）', () =
     expect(same.figure).toBeUndefined();
   });
 
+  it('delta 是一句完整结论：超过副标注 22 字也不切在半句上', async () => {
+    const sentence = '分叉在第二步：得数单位是 s/m，不是 m/s';
+    expect(sentence.length).toBeGreaterThan(22);
+    const out = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        left: { head: '错', rows: [{ label: '甲' }] },
+        right: { head: '对', rows: [{ label: '甲对' }] },
+        delta: { label: sentence, at: 1 },
+      },
+    });
+    expect(out.figure.spec.delta).toEqual({ label: sentence, at: 1 });
+  });
+
+  it('标签点名「第 n 步」时以标签落点为准（模型 at 与自己的句子打架）', async () => {
+    const spec = {
+      left: { head: '错', rows: [{ label: '甲' }, { label: '乙' }, { label: '丙' }] },
+      right: { head: '对', rows: [{ label: '甲对' }, { label: '乙对' }, { label: '丙对' }] },
+    };
+    const arabic = await runWithFigure({
+      kind: 'split-compare',
+      spec: { ...spec, delta: { label: '分叉在第二步：先换算再除', at: 1 } },
+    });
+    expect(arabic.figure.spec.delta).toEqual({ label: '分叉在第二步：先换算再除', at: 2 });
+
+    const chinese = await runWithFigure({
+      kind: 'split-compare',
+      spec: { ...spec, delta: { label: '分叉在第三步：单位没跟着走', at: 1 } },
+    });
+    expect(chinese.figure.spec.delta).toEqual({ label: '分叉在第三步：单位没跟着走', at: 3 });
+
+    // 标签没点名就照模型给的 at；点名超出实际行数则不动（不能指向不存在的行）
+    const plain = await runWithFigure({
+      kind: 'split-compare',
+      spec: { ...spec, delta: { label: '两栏在此分开', at: 2 } },
+    });
+    expect(plain.figure.spec.delta).toEqual({ label: '两栏在此分开', at: 2 });
+
+    const overflow = await runWithFigure({
+      kind: 'split-compare',
+      spec: { ...spec, delta: { label: '分叉在第九步', at: 1 } },
+    });
+    expect(overflow.figure.spec.delta).toEqual({ label: '分叉在第九步', at: 1 });
+  });
+
   it('delta.at 越界丢弃；head 缺失整图拒绝；行 label 缺失该行丢弃', async () => {
     const trimmed = await runWithFigure({
       kind: 'split-compare',

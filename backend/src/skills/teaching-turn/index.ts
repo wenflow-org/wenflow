@@ -958,6 +958,9 @@ const SPEC = {
   noteMax: 160,
   labelMax: 18,
   subMax: 22,
+  // 分叉说明是一句结论（「分叉在第二步：得数单位是 s/m，不是 m/s」），按副标注的 22 字会被切在半句上；
+  // 渲染侧对 delta 整条折行、盒子高度自适应，所以放宽到一句话的长度
+  deltaMax: 44,
   itemsMax: 8,
   itemTextMax: 26,
   nodesMax: 8,
@@ -983,6 +986,17 @@ function toFiniteNumber(value: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+/** 图内序号字样 → 数字（「第二步」「第 2 行」「第十二步」）。认不出返回 null。 */
+function chineseOrdinal(token: string): number | null {
+  const t = token.trim();
+  if (/^\d+$/.test(t)) return Number(t);
+  const digit: Record<string, number> = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (t === '十') return 10;
+  const m = t.match(/^([一二两三四五六七八九])?十([一二三四五六七八九])?$/);
+  if (m) return (m[1] ? digit[m[1]] : 1) * 10 + (m[2] ? digit[m[2]] : 0);
+  return digit[t] ?? null;
 }
 
 /** 图内文本归一：去控制字符、裁长、空串归 null（用于可选文本：caption/unit） */
@@ -1484,9 +1498,14 @@ function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string,
   let delta: Record<string, unknown> | null = null;
   if (raw.delta && typeof raw.delta === 'object') {
     const deltaRaw = raw.delta as Record<string, unknown>;
-    const deltaLabel = toFigureText(deltaRaw.label, SPEC.subMax);
+    const deltaLabel = toFigureText(deltaRaw.label, SPEC.deltaMax);
     if (deltaLabel) {
-      const at = toFiniteNumber(deltaRaw.at);
+      let at = toFiniteNumber(deltaRaw.at);
+      // 标签里点名了「第 n 步/行」就按标签落点：模型给的 at 与它自己写的句子打架时
+      // （白板 v4 实拍：标签「分叉在第二步」+ at=1），学生读到的是两句话矛盾，标签才算数
+      const named = deltaLabel.match(/第\s*([0-9一二三四五六七八九十两]+)\s*[步行]/);
+      const namedAt = named ? chineseOrdinal(named[1]) : null;
+      if (namedAt !== null && namedAt !== at && namedAt >= 1 && namedAt <= rowCount) at = namedAt;
       delta = { label: deltaLabel, ...(at !== null && at >= 1 && at <= rowCount ? { at: Math.floor(at) } : {}) };
     }
   }

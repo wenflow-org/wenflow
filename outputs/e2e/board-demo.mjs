@@ -5,21 +5,22 @@
  *   - 左侧常驻白板（可切提问态/揭晓态），右侧对话流
  *   - 每轮标出板书动作（建板 / 揭晓 / 不动），老师话术里可以看到它只引用板上真实存在的标签
  *
- * 用法：node outputs/e2e/board-demo.mjs [srcJson=frontend/figure-out/board-v4.json] [outDir=outputs/board-demo]
+ * 用法：node outputs/e2e/board-demo.mjs [srcJson=frontend/figure-out/board-v5.json] [outDir=outputs/board-demo] [pngDir=frontend/figure-out/board-pngs-v6]
+ * 图片：*.png 在仓库里被忽略（.gitignore），所以 index.html 引用的图片要指到已渲染的目录。
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const [srcArg, outArg] = process.argv.slice(2);
-const srcPath = path.resolve(ROOT, srcArg || 'frontend/figure-out/board-v4.json');
+const [srcArg, outArg, pngArg] = process.argv.slice(2);
+const srcPath = path.resolve(ROOT, srcArg || 'frontend/figure-out/board-v5.json');
 const outDir = path.resolve(ROOT, outArg || 'outputs/board-demo');
 const imgDir = path.join(outDir, 'images');
 fs.mkdirSync(imgDir, { recursive: true });
 
 const rows = JSON.parse(fs.readFileSync(srcPath, 'utf8')).filter((r) => r.maskedSpec);
-const pngDir = path.join(ROOT, 'frontend/figure-out/board-pngs');
+const pngDir = path.resolve(ROOT, pngArg || 'frontend/figure-out/board-pngs-v6');
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const OP_CN = { setup: '建板', reveal: '揭晓', focus: '指板', none: '不动' };
