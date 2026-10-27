@@ -1,0 +1,162 @@
+{
+ "label": "AFTER6",
+ "rubric": "load",
+ "generatedAt": "2026-10-27T13:27:45.237Z",
+ "model": "deepseek-v4.1-flash",
+ "total": 9,
+ "judged": 9,
+ "errors": 0,
+ "verdicts": {
+  "keep": 4,
+  "fix": 5,
+  "drop": 0
+ },
+ "meanUsefulness": 0,
+ "meanGeometry": 0,
+ "leakShare": 0,
+ "redundantShare": 0,
+ "meanRelief": 2.44,
+ "meanSelfExplain": 2.22,
+ "preAnswerShare": 11,
+ "meanReadability": 2.89,
+ "metaShare": 0,
+ "byKind": {
+  "split-compare": {
+   "n": 3,
+   "keep": 2,
+   "drop": 0,
+   "relief": 3
+  },
+  "concept-map": {
+   "n": 3,
+   "keep": 0,
+   "drop": 0,
+   "relief": 1.67
+  },
+  "state-strip": {
+   "n": 3,
+   "keep": 2,
+   "drop": 0,
+   "relief": 2.67
+  }
+ },
+ "results": [
+  {
+   "i": 0,
+   "user": "b1-math-pace·第1轮",
+   "kind": "split-compare",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": true,
+   "meta": false,
+   "readability": 3,
+   "verdict": "fix",
+   "oneLine": "把「同一个 0.15 却配了两种单位」和「60 s 跑 400 m 的正确配速换算」两条计算链并排摊开，学生不必在脑子里同时压住两套步骤和单位。",
+   "worstIssue": "左栏最后一行「数字照搬，单位写成 min/km」已经把老师这一问的判断（min/km 那条是错的）替学生说了出来，学生只需看板就能直接读出结论，不必自己判断 60÷400 的单位是哪一种。应改成仅并列呈现两行候选单位、去掉「数字照搬」这类判定性注释。"
+  },
+  {
+   "i": 1,
+   "user": "b1-math-pace·第2轮",
+   "kind": "split-compare",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "这张板把两条四步换算链并排摊开，学生不必在脑子里同时压住两条路径和各自的单位，从而能把注意力放在「单位换没换」这一分叉上。",
+   "worstIssue": "左栏整卡标了 warn 色，但真正出错的那一行（0.15 min/km 数字照搬）没有单独强调，分叉点也只靠虚线对齐暗示，可以再点明一步。"
+  },
+  {
+   "i": 2,
+   "user": "b1-math-pace·第3轮",
+   "kind": "split-compare",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "把「直接相除」和「先换算再相除」两条并行算法连同单位标注并排摊开，学生不用在脑子里同时记住两套步骤和两种单位",
+   "worstIssue": "左栏标题「0.15 的算法」用的是结果数字而不是做法名字，看不出这是「单位写错的那条路」，得读到最后一行才明白两栏在比什么；可改成「直接相除（单位没换）」之类"
+  },
+  {
+   "i": 3,
+   "user": "b2-phys-buoyancy·第1轮",
+   "kind": "concept-map",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "fix",
+   "oneLine": "这张板把“两次都相同”的ρ液与V排并排放在公式下方，替学生承担了“继续下沉时哪个量变了”的跨状态对照记忆。",
+   "worstIssue": "标题写的是“深度与自重的条件对照”，但板面只画出深度这一条涉及的两个量，自重完全没有出现，学生扫一眼会以为下半张图漏了。"
+  },
+  {
+   "i": 4,
+   "user": "b2-phys-buoyancy·第2轮",
+   "kind": "concept-map",
+   "relief": 2,
+   "selfExplain": 1,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "fix",
+   "oneLine": "把「浮力由哪两个量相乘决定、哪一项变、哪一项不变」展成关系图，学生不必边听边在脑里给公式和变量配对。",
+   "worstIssue": "标题「深度与自重的条件对照」与板面内容对不上：全图只有液体密度和排开体积两个节点，深度和自重根本没有出现；而且「两次相同」的副标注与接下来「水换成酒精、密度改变」的问题直接冲突，学生扫一眼会误以为密度也不变。"
+  },
+  {
+   "i": 5,
+   "user": "b2-phys-buoyancy·第3轮",
+   "kind": "concept-map",
+   "relief": 0,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "fix",
+   "oneLine": "板子摊开了「同体积、不同液体密度→浮力不同」的乘法结构，但摊的是水和酒精，不是这一轮要查的水和水银。",
+   "worstIssue": "对比对象错了：板面是水/酒精且两边都标 V排=V石，而本轮要判断铁球在水银中是否完全浸没；这会强化「排开体积不变」的错误前提。"
+  },
+  {
+   "i": 6,
+   "user": "b3-hist-shangyang·第1轮",
+   "kind": "state-strip",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "把「立木—前356—前350」三段先后和两轮变法的具体措施排到同一条时间线上，学生不用在脑子里同时压着年份和两批法令。",
+   "worstIssue": "第1帧没有标年份，老师口头强调的「隔了好几年」在板上看不出来，三个节点等距排布容易让学生误以为间隔相近。"
+  },
+  {
+   "i": 7,
+   "user": "b3-hist-shangyang·第2轮",
+   "kind": "state-strip",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "把四次变法的年份、各项措施，以及『太子犯法被罚』这一节点一次性摊开，学生做反事实推演时不必在脑中同时记住四帧内容。",
+   "worstIssue": "箭头只表示时间先后，没有标出因果关系，学生可能把第3帧到第4帧读成『必然发生』；至于『网开一面会怎样』，板上没有任何提示，这一点恰好可以留作讨论点。"
+  },
+  {
+   "i": 8,
+   "user": "b3-hist-shangyang·第3轮",
+   "kind": "state-strip",
+   "relief": 2,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 2,
+   "verdict": "fix",
+   "oneLine": "把商鞅变法四个阶段摊成一条时间线，替学生扛住「四帧先后顺序＋每帧关键动作」的记忆负担",
+   "worstIssue": "第3帧文字断行把「商鞅网开一面，未加惩处」拆成半截句，另三帧也有词内换行，扫读时要回拼"
+  }
+ ]
+}
