@@ -47,34 +47,23 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const teachingMd = readFileSync(join(__dirname, '..', '..', 'prompts', 'skill.teaching-turn.md'), 'utf8');
 const teachingSystem = teachingMd.replace(/^---[\s\S]*?---\s*/, '');
 
-const BOARD_SYSTEM = (mode: BoardConcealMode) => `你是一位课堂板书的绘图员。你只负责画一张白板，不负责讲课。
-
-任务：根据给定的课堂上下文，产出这一块白板的 figure JSON。白板会一直留在学生眼前，随教学推进更新。
-
-硬约束：
-1. 只输出 JSON：{"figure":{"kind":"...","spec":{...}}}，不要任何解释。
-2. ${
-  mode === 'full'
-    ? `画的是**完整形态**：骨架 + 正确答案 + 结论都要写全（系统会自动派生出「提问态」：
-   把答案位挖成 ?、把结论藏起来，学生答对后再揭晓）。**不要**自己留 ?，也不要为了留白而写半截。`
-    : `画的是**完整形态**：这块板要替学生扛住文字认知压力，所以材料、步骤、数值、单位、
-   以及解释性的副标注（sub）都要写全——**一个 ? 都不要留**。板面信息越完整，学生越省力。`
-}
-3. **标题只点题、不写结论**：标题写「配速换算：60 s 跑完 400 m 该得多少」这种「在讨论什么」，
-   禁止写「分叉在单位不在数字」这种「答案是什么」——结论由老师在对话里问、由学生说出来。
-   帧名/节点名同理：用中性指代（里正、乡邻、官府），不要用结论词（取信、成功、失败）。
-4. 图里每个标签必须是学科实体（数值/单位/术语/公式），不要写"第一步/自查/待填"这类元话术。
-5. 图型必须承载关系（位置/数值/区间/指向/包含/并排对照/分帧推进）；只是把句子装进框的，不要画。
-6. 标签 ≤18 字（英文句子可到 26 字），化学式用 Unicode 下标（H₂O）。
-7. **板上必须包含学生当前问题所涉及的对象**：学生问「立木为信」，板上就必须有这一格；
-   缺了这一格，老师只能含糊地说「变法前」，学生的问题在板上无处安放。
-8. **否定的关系也要有形状**：概念图里「深度不影响浮力」「重力不影响浮力」这类无关关系，
-   用 tone:"neutral" + dash:true 明确画出来（虚线灰线），并与「决定」的实线分开——
-   否则学生只看到四个因素都连向浮力，读出来的就是反的。
-9. 同一句结论不要写两遍：行里已经写了具体数值，就不要再在最后一行重复一遍。
-${mode === 'full' ? '' : '10. **标题与帧名不要出现结论句**（见第 3 条）：这块板不藏答案，但也不替学生把「为什么」说出来。\n'}
-
-${FIGURE_KIND_GUIDE}`;
+/**
+ * 板书提示词从 prompts/skill.board-designer.md 取（与 teaching-turn 同一套约定）：
+ * 文件里用 `<!-- mode:load -->` / `<!-- mode:full -->` 标记两套口径的补充段，
+ * 这里按当前口径挑一段拼上图型指南。提示词只有一份，改提示词不用改脚本。
+ */
+const boardMd = readFileSync(join(__dirname, '..', '..', 'prompts', 'skill.board-designer.md'), 'utf8');
+const boardShared = boardMd.replace(/^---[\s\S]*?---\s*/, '');
+// 用 indexOf 切段而不是正则：标记两侧是 HTML 注释，正则里 `[\s\S]` 在多层转义下容易写坏
+const sectionOf = (tag: string): string => {
+  const open = `<!-- mode:${tag} -->`;
+  const close = `<!-- /mode:${tag} -->`;
+  const a = boardMd.indexOf(open);
+  const b = boardMd.indexOf(close);
+  return a >= 0 && b > a ? boardMd.slice(a + open.length, b) : '';
+};
+const BOARD_SYSTEM = (mode: BoardConcealMode) =>
+  `${boardShared.replace(/<!--\s*\/?mode:[a-z]+\s*-->/g, '')}\n${sectionOf(mode === 'full' ? 'full' : 'load')}\n\n${FIGURE_KIND_GUIDE}`;
 
 async function callModel(system: string, payload: unknown, attempts = 4): Promise<any> {
   let lastErr = '';
