@@ -264,6 +264,32 @@ describe('问题结构轴：coupling/stakes 静默推断 + 三条件测试', () 
     expect(r.mode).toBe('learning_path');
   });
 
+  it('R8 即时微操作覆盖：当日死线 + objective ≤1.5h ⇒ oneoff，不误开学习路径（E10 实证）', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'capability',
+      recurrence: 'recurring',
+      surface_goal: '今天把两张表头不一样的月度表拼成一张能交差的总表',
+      time_dimensions: { objectiveScopeHours: 0.8 },
+    });
+    expect(r.mode).toBe('combination');
+    expect(r.reasons[0]).toContain('一次性微操作');
+  });
+
+  it('R8 覆盖不误伤：无死线词或体量大 ⇒ 保持 capability 原判', () => {
+    const big = triageGoalResponse({
+      primary_block_type: 'capability',
+      surface_goal: '今天开始准备三个月后的考试',
+      time_dimensions: { objectiveScopeHours: 45 },
+    });
+    expect(big.mode).toBe('learning_path');
+    const noDeadline = triageGoalResponse({
+      primary_block_type: 'capability',
+      surface_goal: '把两张表拼成一张总表',
+      time_dimensions: { objectiveScopeHours: 0.8 },
+    });
+    expect(noDeadline.mode).toBe('learning_path');
+  });
+
   it('非 learning_path 模式不应用三条件（emotional_support 原样）', () => {
     const r = triageGoalResponse({
       primary_block_type: 'emotion_relationship',

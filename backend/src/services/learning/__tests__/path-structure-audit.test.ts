@@ -183,6 +183,23 @@ describe('reorderTasksForPrerequisites（同阶段稳定拓扑）', () => {
     expect(result.tasks.map((task) => task.title)).toEqual(['手工走一遍配对', '让工具跑全量'])
   })
 
+  it('R8 建立档守卫：execute 不得被 KC 边前移到 deconstruct 之前（B19 S3 实证）', () => {
+    const ann = {
+      kcGraph: { edges: [{ from: 'kc-exec', to: 'kc-decon' }] },
+      taskKcLinks: [
+        { taskTitle: '排名单', linkedKCs: ['kc-decon'] },
+        { taskTitle: '写同比', linkedKCs: ['kc-exec'] },
+      ],
+    }
+    const tasks = [
+      { title: '排名单', type: 'deconstruct' },
+      { title: '写同比', type: 'execute' },
+    ]
+    const result = reorderTasksForPrerequisites(tasks, ann)
+    expect(result.changed).toBe(false)
+    expect(result.tasks.map((task) => task.title)).toEqual(['排名单', '写同比'])
+  })
+
   it('R7-1 守卫放行反向：建立档前移越过收束档仍生效', () => {
     const foundationLate = {
       kcGraph: { edges: [{ from: 'kc-base', to: 'kc-summary' }] },

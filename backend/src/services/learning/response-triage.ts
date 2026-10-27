@@ -283,7 +283,22 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
   const painPoints = pickStringArray(understanding, ['painPoints', 'pain_points']);
   const supportNeed = normalizeSupportNeed(pickString(understanding, ['supportNeed', 'support_need']));
 
-  if (isUnknownBlockType(blockType)) {
+  // 即时微操作覆盖（2026-10-27 外部审查，R8 冒烟 E10 实证）：
+  // surface_goal 带当日死线词且 objectiveScopeHours ≤ 1.5 时，对话里「以后每个月还会遇到」
+  // 这类随口话会把 primary_block_type 带成 capability → 误开学习路径。
+  // 「今天就要交的东西」不是学习路径的对象，一律按 oneoff_operation 分诊。
+  const surfaceGoal = pickString(understanding, ['surfaceGoal', 'surface_goal']);
+  const objectiveHours = Number(
+    (asObject((understanding as any)?.time_dimensions) as any)?.objectiveScopeHours
+      ?? (understanding as any)?.objectiveScopeHours,
+  );
+  const immediateDelivery = !!surfaceGoal
+    && /(今天|今晚|马上|立刻|小时内|半小时后|下班前|等下|待会儿?)/.test(surfaceGoal);
+  const immediateOneoff =
+    immediateDelivery && Number.isFinite(objectiveHours) && objectiveHours > 0 && objectiveHours <= 1.5;
+  const effectiveBlockType = immediateOneoff ? 'oneoff_operation' : blockType;
+
+  if (isUnknownBlockType(effectiveBlockType)) {
     // 阻塞类型缺失（模型证据不足）：若已明确表达支持需求，仍按需求出负向出口；否则不拦截。
     if (supportNeed === 'emotional') {
       return {
@@ -306,7 +321,7 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     };
   }
 
-  const base = triageByBlockType(blockType as PrimaryBlockType, {
+  const base = triageByBlockType(effectiveBlockType as PrimaryBlockType, {
     recurrence,
     evidence,
     realProblem,
@@ -315,6 +330,9 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     constraints,
   });
   const withSupport = applySupportNeed(base, supportNeed);
+  if (immediateOneoff) {
+    withSupport.reasons.unshift('当日死线 + 客观体量 ≤1.5h：按一次性微操作分诊（覆盖 primary_block_type）');
+  }
   // 问题结构轴（静默推断，禁止向用户追问）：与 recurrence 合成三条件测试，
   // 只调制 learning_path 的置信度与 reasons；轴值随结论落 collectedData 供后续路由消费。
   const axisTexts = [realProblem, evidence, ...painPoints];
