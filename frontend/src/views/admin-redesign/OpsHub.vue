@@ -57,34 +57,51 @@
     </div>
 
     <!-- ===== Tab1: 运营待办 =====
-         页级读数带只报四个数；带「去处理」的行动清单在本页签。两者不是同一件事的两份拷贝：
-         读数卡是「有多少」，清单是「点哪去处理」，撤掉清单等于把页签清空（2026-10-26 走查：
-         本页签一度只剩公告空态，而公告有独立页签）。按严重度排序，零值行弱化为「已清零」。 -->
+         2026-10-27 用户「自由设计一下这个 tab 内容」：页级读数卡负责「有多少」，
+         本页签改成一张行动队列——只列真正需要处理的事项（含加载失败），
+         每条给「是什么 / 为什么 / 点哪去处理」；清零项不再各占一行，压成底部一行「已清零」。
+         失败仍显式落地：失败行不进清零带，也不给「去处理」。 -->
     <template v-if="tab === 'todo'">
     <div class="oh-body" id="oh-panel-todo" role="tabpanel" aria-labelledby="oh-tab-todo">
-    <section class="mk-card">
+    <section class="mk-card oh-queue">
       <div class="mk-card__head">
         <div class="oh-wb-head">
-          <h4 class="mk-card__title">待办清单</h4>
+          <h4 class="mk-card__title">待办</h4>
           <span class="mk-card__meta">{{ wbLoading && !stats ? '正在拉取待办…' : todoConclusion }}</span>
         </div>
       </div>
-      <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="4" />
-      <div v-else class="ow-ranklist">
-        <button
-          v-for="t in todoItems"
-          :key="t.key"
-          type="button"
-          class="ow-rankrow"
-          :class="{ 'ow-rankrow--done': t.count === 0 && !t.failed, 'ow-rankrow--failed': t.failed, 'ow-rankrow--act': t.actionable }"
-          :disabled="!t.actionable"
-          :title="t.failed ? '该项数据加载失败，计数不可信' : (t.count > 0 ? t.hint : '该事项已清零')"
-          @click="t.actionable ? t.action() : undefined"
-        >
-          <span class="ow-rankrow__main">{{ t.label }}</span>
-          <span class="mk-badge mk-badge--muted">{{ t.category }}</span>
-          <span class="ow-rankrow__go" :class="{ 'ow-rankrow__go--bad': t.failed }">{{ t.failed ? '加载失败' : (t.count > 0 ? '去处理 →' : '已清零') }}</span>
-        </button>
+      <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="3" />
+      <div v-else class="oh-queue__body">
+        <ul v-if="activeTodo.length" class="oh-queue__list">
+          <li
+            v-for="t in activeTodo"
+            :key="t.key"
+            class="oh-task"
+            :class="t.failed ? 'oh-task--failed' : `oh-task--${t.severity}`"
+          >
+            <span class="oh-task__bar" aria-hidden="true"></span>
+            <div class="oh-task__text">
+              <span class="oh-task__label">{{ t.label }}</span>
+              <span class="oh-task__hint">{{ t.failed ? '数据加载失败，计数不可信' : t.hint }}</span>
+            </div>
+            <span v-if="t.failed" class="oh-task__state">加载失败</span>
+            <button v-else type="button" class="mk-btn mk-btn--sm" @click="t.action()">去处理 →</button>
+          </li>
+        </ul>
+        <!-- 全部清零：不再渲染 N 个不可点的空行 -->
+        <div v-else class="oh-queue__empty">
+          <CheckCircle2 :size="20" :stroke-width="1.8" aria-hidden="true" />
+          <div>
+            <strong>没有待处理项</strong>
+            <span>反馈、路径、事件和公告都已处理完。</span>
+          </div>
+        </div>
+        <!-- 清零项压缩成一行，保留「哪些已经没事」的信息 -->
+        <div v-if="activeTodo.length && clearedTodo.length" class="oh-queue__cleared">
+          <CheckCircle2 :size="13" :stroke-width="2" aria-hidden="true" />
+          <span class="oh-queue__cleared-label">已清零</span>
+          <span class="oh-queue__cleared-names">{{ clearedNames }}</span>
+        </div>
       </div>
     </section>
     </div><!-- /oh-body -->
@@ -163,6 +180,7 @@ import SessionSecurity from './SessionSecurity.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import { CheckCircle2 } from 'lucide-vue-next'
 
 /* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知 · 运维工具 · 数据导出 · 会话安全 =====
    低频页折入 tab 宿主；?tab= 双向同步，深链/刷新/前进后退可寻址（对齐消息/用户宿主约定）。
@@ -391,13 +409,13 @@ const ann = announcementCounts
 
 /* 待办四域（单一来源）：页级读数带按此顺序出四张卡，卡本身即入口。
    域加载失败时该卡显「—」且不可点（读数不可信，不能带人去目标页）。
-   2026-10-26：页级读数卡接上点击后，页签内的「待办清单」只保留「点哪去处理」这一件事，
-   不再复述卡头结论与四张状态卡（那两张状态卡的数字与读数带同源，已删）。 */
+   2026-10-27：页签内改成行动队列——只列失败或仍有计数的事项，每条带一句「为什么」，
+   清零项压成底部一行；计数与入口仍以页级读数卡为单源。 */
 const todoReadings = computed(() => [
-  { key: 'feedback', label: '待处理反馈', category: '反馈', hint: '', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback, actionable: !wbErrors.value.feedback && wbPendingFeedback.value > 0 },
-  { key: 'paths', label: '生成失败路径', category: '路径', hint: '', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths, actionable: !wbErrors.value.paths && wbFailedPaths.value > 0 },
-  { key: 'dead', label: '事件投递失败', category: '事件', hint: '影响画像与成就更新', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
-  { key: 'draft', label: '草稿公告', category: '公告', hint: '', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value, actionable: !annFailed.value && ann.value.draft > 0 },
+  { key: 'feedback', label: '待处理反馈', hint: '用户反馈还没有人回复', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback },
+  { key: 'paths', label: '生成失败路径', hint: '学习者卡在路径生成，无法进入下一课', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths },
+  { key: 'dead', label: '事件投递失败', hint: '画像与成就更新会延迟', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead },
+  { key: 'draft', label: '草稿公告', hint: '公告尚未发布', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value },
 ])
 
 const TODO_SEV_RANK = { bad: 0, warn: 1, muted: 2 } as const
@@ -406,6 +424,17 @@ const TODO_SEV_RANK = { bad: 0, warn: 1, muted: 2 } as const
 const todoItems = computed(() =>
   todoReadings.value.slice().sort((a, b) => TODO_SEV_RANK[a.severity] - TODO_SEV_RANK[b.severity] || b.count - a.count)
 )
+
+/* 行动队列（2026-10-27）：只列失败或仍有计数的事项；失败排最前（未知 ≠ 已清零）。
+   计数已经在页级读数带讲过一次，这里只讲「是什么 / 为什么 / 点哪去处理」。 */
+const activeTodo = computed(() =>
+  todoItems.value
+    .filter((t) => t.failed || t.count > 0)
+    .sort((a, b) => Number(b.failed) - Number(a.failed) || TODO_SEV_RANK[a.severity] - TODO_SEV_RANK[b.severity] || b.count - a.count)
+)
+/* 已清零：不再各占一行，压成底部一行名单。 */
+const clearedTodo = computed(() => todoItems.value.filter((t) => !t.failed && t.count === 0))
+const clearedNames = computed(() => clearedTodo.value.map((t) => t.label).join(' · '))
 
 /** 卡头结论句：三态纪律——首屏未拉回前不得渲染「全部已清零」（取不到 ≠ 没事） */
 const todoConclusion = computed(() => {
@@ -530,51 +559,53 @@ onMounted(() => {
 /* 公告 / 站内通知页签此前各有一行 .oh-tabbar 只放主操作（2026-10-26 撤除：
    整行一颗钮夹在页签条与卡片之间，既不属于页头也不属于卡；主操作已归位到子页卡头右组）。 */
 
-/* 待办行动行：事项 + 类别 + 出口。计数在页级读数带，本清单只负责「点哪去处理」。
-   仅可跳转行给 pointer（「已清零 / 加载失败」行不挂跳转）。 */
-.ow-ranklist { padding: 0 14px 6px; }
-.ow-rankrow {
+/* 待办行动队列（2026-10-27 用户「自由设计一下这个 tab 内容」）：
+   每条 = 严重度色条 + 事项/说明 + 一个出口；清零项压成底部署名行。
+   计数只在上方页级读数带讲，队列不重复数字。 */
+.oh-queue__list { margin: 0; padding: 0; list-style: none; }
+.oh-task {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--mk-line);
+}
+.oh-queue__list .oh-task:first-child { border-top: 0; }
+.oh-task__bar {
+  flex: none;
+  width: 3px;
+  align-self: stretch;
+  min-height: 28px;
+  border-radius: var(--mk-radius-pill);
+  background: var(--mk-line);
+}
+.oh-task--bad .oh-task__bar { background: var(--mk-red); }
+.oh-task--warn .oh-task__bar { background: var(--mk-amber); }
+.oh-task--muted .oh-task__bar { background: var(--mk-blue); }
+.oh-task--failed .oh-task__bar { background: var(--mk-red); }
+.oh-task__text { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.oh-task__label { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
+.oh-task__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.oh-task__state { flex: none; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-red); }
+.oh-queue__empty {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  padding: 9px 0;
-  border: 0;
-  border-bottom: 1px solid var(--mk-line);
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  transition: background 0.12s;
+  padding: 26px 18px;
+  color: var(--mk-green);
 }
-.ow-rankrow:last-child { border-bottom: 0; }
-.ow-rankrow--act { cursor: pointer; }
-.ow-rankrow--act:hover { background: var(--mk-surface-2); }
-.ow-rankrow__main {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: var(--mk-fs-body);
-  font-weight: 700;
-  color: var(--mk-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ow-rankrow__go {
+.oh-queue__empty strong { display: block; font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
+.oh-queue__empty span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.oh-queue__cleared {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px 14px;
+  border-top: 1px dashed var(--mk-line);
   font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-blue);
-  white-space: nowrap;
-  padding: 3px 8px;
-  border-radius: var(--mk-radius-sm);
-  transition: background 0.12s;
+  color: var(--mk-muted);
 }
-.ow-rankrow--act:hover .ow-rankrow__go { background: var(--mk-surface-2); }
-/* 已清零：整体弱化 */
-.ow-rankrow--done { cursor: default; }
-.ow-rankrow--done .ow-rankrow__main { color: var(--mk-faint); font-weight: 600; }
-.ow-rankrow--done .ow-rankrow__go { color: var(--mk-green); }
-/* 加载失败：与「已清零」明确区分（红而非绿，不弱化为完成态） */
-.ow-rankrow--failed { cursor: default; }
-.ow-rankrow--failed .ow-rankrow__main { color: var(--mk-red); }
-.ow-rankrow__go--bad { color: var(--mk-red); }
+.oh-queue__cleared svg { flex: none; color: var(--mk-green); }
+.oh-queue__cleared-label { font-weight: 600; }
+.oh-queue__cleared-names { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

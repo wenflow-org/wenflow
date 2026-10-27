@@ -75,16 +75,19 @@ describe('运营中心：运营待办页签只留行动清单', () => {
     w.unmount()
   })
 
-  it('待办清单在页签内（四行，带「去处理」出口）——页级读数卡只有数、没有出口', async () => {
+  it('待办页签是行动队列：只列有计数的事项（带「去处理」出口），清零项压成一行', async () => {
     h.stats = { byStatus: { active: 1, completed: 1, failed: 2, archived: 0 } }
     const w = mount(OpsHub)
     await flushPromises()
 
-    expect(w.findAll('.ow-rankrow')).toHaveLength(4)
-    expect(w.find('.mk-card__title').text()).toBe('待办清单')
-    // 有计数的行给出跳转文案，清零行弱化为「已清零」
-    expect(w.text()).toContain('去处理 →')
-    expect(w.text()).toContain('已清零')
+    expect(w.find('.mk-card__title').text()).toBe('待办')
+    // 只有「生成失败路径」有计数；反馈 / 事件 / 草稿都是 0，不再各占一行
+    expect(w.findAll('.oh-task')).toHaveLength(1)
+    expect(w.find('.oh-task').text()).toContain('生成失败路径')
+    expect(w.find('.oh-task').text()).toContain('去处理 →')
+    expect(w.find('.oh-queue__cleared').text()).toContain('已清零')
+    expect(w.find('.oh-queue__cleared').text()).toContain('待处理反馈')
+    expect(w.find('.oh-queue__cleared').text()).toContain('草稿公告')
 
     w.unmount()
   })

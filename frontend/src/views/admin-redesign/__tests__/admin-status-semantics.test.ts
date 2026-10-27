@@ -89,13 +89,14 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(w.findAll('.mk-kpi__hint--bad')).toHaveLength(3)
     const zeroValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '0')
     expect(zeroValues).toHaveLength(1)
-    // 2026-10-26：页签内保留「待办清单」作为行动出口；失败行不可点、不显示「去处理」
-    expect(w.findAll('.ow-rankrow')).toHaveLength(4)
-    expect(w.findAll('.ow-rankrow--failed')).toHaveLength(3)
-    for (const row of w.findAll('.ow-rankrow--failed')) {
+    // 2026-10-27：页签内是行动队列——失败行保留但不可操作，清零项压成底部署名
+    expect(w.findAll('.oh-task')).toHaveLength(3)
+    expect(w.findAll('.oh-task--failed')).toHaveLength(3)
+    for (const row of w.findAll('.oh-task--failed')) {
       expect(row.text()).toContain('加载失败')
-      expect(row.attributes('disabled')).toBeDefined()
+      expect(row.find('button').exists()).toBe(false)
     }
+    expect(w.find('.oh-queue__cleared').text()).toContain('草稿公告')
     const failedCards = w.findAll('.mk-kpi').filter((c) => c.find('.mk-kpi__num').text() === '—')
     for (const card of failedCards) {
       expect(card.classes()).not.toContain('mk-kpi--clickable')
@@ -106,7 +107,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     w.unmount()
   })
 
-  it('三个待办域成功且全为 0 → 读数带四卡显 0，页签内清单全部弱化为「已清零」', async () => {
+  it('三个待办域成功且全为 0 → 读数带四卡显 0，页签内收成一行「没有待处理项」', async () => {
     // D16：mock 换 live 信封（后端体为 { success, data: [...], pagination: {...} }，pagination 与 data 平级），
     // 旧 mock 的 { data: {}, pagination } 形状与真实不符，会让「解析错位」在任何测试里不可见。
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 0 } } })
@@ -122,10 +123,12 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 读数如实显示 0（真实 0 可以显；四卡：待处理反馈/生成失败路径/事件投递失败/草稿公告）
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toEqual(['0', '0', '0', '0'])
-    // 2026-10-26：页签内待办清单在（行动出口），全 0 时四行都弱化为「已清零」且不可点
+    // 2026-10-27：全部清零时不再渲染 4 个空行，改一行空态；清零名单不再需要
     expect(w.findAll('.mk-card')).toHaveLength(1)
-    expect(w.findAll('.ow-rankrow')).toHaveLength(4)
-    expect(w.findAll('.ow-rankrow--done')).toHaveLength(4)
+    expect(w.findAll('.oh-task')).toHaveLength(0)
+    expect(w.find('.oh-queue__empty').exists()).toBe(true)
+    expect(w.find('.oh-queue__empty').text()).toContain('没有待处理项')
+    expect(w.find('.oh-queue__cleared').exists()).toBe(false)
     expect(w.text()).toContain('运营待办全部已清零')
 
     w.unmount()
