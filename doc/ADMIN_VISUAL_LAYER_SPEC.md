@@ -527,6 +527,19 @@ v4 改为扫出 `<Transition name>` 的静态 name 集合 + Vue 约定的钩子�
 把明度提上去了，代价是压不住白字。**待体系包补档**，不建议在本仓私自把暗色蓝调深
 （会与 `WenFlow-Design-System` 的定义分叉）。
 
+### 7.5.8 用户侧共享控件：级联与表单尺寸（2026-10-28）
+
+用户侧 `.v2-page button:where(...)` 的按钮归零规则特异性是 (0,1,1)，会压过全局
+MkSelect 触发器裸 class 的 (0,1,0)——下拉在用户页被清成透明底、深色边框、16px 字体，
+看起来像浏览器默认控件（admin 页没有这条归零，所以一直正常）。两条约束：
+
+- MkSelect 触发器基础规则写成 `.mk-select .mk-select__trigger`（(0,2,0)），并且 v2 归零显式
+  `:not(.mk-select__trigger):not(.mk-pillselect)`；守卫 `mkSelect.user-cascade.test.ts`。
+- 表单语境里的自绘下拉与输入框同尺寸：`.uc-field` / 调用日志 `.filter-select` 内统一
+  42px 高、16px 圆角（工具条仍用 MkSelect 的 32px 紧凑档）。日期输入的日历钮按图标灰度处理，
+  `color-scheme` 跟随明暗主题。
+- 用户侧文案不再出现「平台默认」：状态条与调用日志统一写「内置模型 / 内置模型服务」。
+
 ---
 
 ## 8. 洼地与批次状态（v4 更新）

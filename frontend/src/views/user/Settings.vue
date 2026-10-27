@@ -5,11 +5,11 @@
     <div class="user-settings-page">
       <!-- 状态条（P3-45，设计评审）：撤「已启用/未启用」徽章——标题是唯一状态句。
            开关绑的是 apiConfig.enabled（自定义模型服务是否启用），标签必须写明它真正控制的对象，
-           不再用裸「启用/禁用」贴在标题右侧（会被读成「平台默认模型服务 禁用」）——走查 2026-10-08 #10 -->
+           不再用裸「启用/禁用」贴在标题右侧（会被读成「内置模型服务 禁用」）——走查 2026-10-08 #10 -->
       <div class="settings-status">
         <div class="settings-status__left">
           <div>
-            <strong>{{ apiConfig.enabled ? '使用自定义模型服务' : '使用平台默认模型服务' }}</strong>
+            <strong>{{ apiConfig.enabled ? '使用自定义模型服务' : '使用内置模型服务' }}</strong>
             <p>对话模型 {{ apiConfig.chatModel || 'deepseek-v4.1-flash' }} · 推理模型 {{ apiConfig.reasoningModel || 'deepseek-v4.1-flash' }}</p>
           </div>
         </div>
@@ -128,7 +128,7 @@
             </div>
             <ul class="help-list">
               <li><strong>自带模型服务</strong><span>接入你自己购买的模型服务（DeepSeek / OpenAI / 兼容端点），学习对话将使用你的模型</span></li>
-              <li><strong>平台默认</strong><span>不配置时使用平台内置模型，无需任何操作</span></li>
+              <li><strong>内置模型</strong><span>不配置时使用内置模型，无需任何操作</span></li>
               <li><strong>密钥安全</strong><span>API Key 加密存储，仅用于平台调用你的模型服务</span></li>
             </ul>
             <div class="help-tip">
@@ -496,7 +496,7 @@ const saveApiConfig = async (): Promise<boolean> => {
 const disableConfig = async () => {
   const ok = await askConfirm({
     title: '禁用自定义 API',
-    message: '禁用后将立即改用平台默认模型，已保存的端点和 API Key 会保留。确认继续吗？',
+    message: '禁用后将立即改用内置模型，已保存的端点和 API Key 会保留。确认继续吗？',
     confirmText: '确认禁用',
     danger: true,
     busy: true
@@ -506,7 +506,7 @@ const disableConfig = async () => {
   try {
     await disableUserApiConfig();
     apiConfig.enabled = false;
-    toast.success('已禁用自定义 API，将使用平台默认配置');
+    toast.success('已禁用自定义 API，将使用内置模型配置');
     doneConfirm();
   } catch (error: any) {
     apiConfig.enabled = true;

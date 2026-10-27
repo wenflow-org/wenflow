@@ -61,7 +61,7 @@
    「输入框语言」，同一控件形态混用会让两种语境都读错。 */
 .mk-select { position: relative; display: inline-flex; min-width: 0; vertical-align: middle; }
 .mk-select--block { display: flex; width: 100%; }
-.mk-select__trigger {
+.mk-select .mk-select__trigger {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
@@ -96,7 +96,7 @@
 .mk-select__menu { max-width: 360px; }
 /* 窄屏触控：触发器抬到 36px（mobile:spec 的 lt36 硬门禁），桌面仍保持 32/30px 行盒 */
 @media (max-width: 900px) {
-  .mk-select__trigger { height: 36px; }
+  .mk-select .mk-select__trigger { height: 36px; }
   .mk-select--sm .mk-select__trigger { height: 36px; }
 }
 /* 无选项占位行：不可点，弱化色 */
@@ -122,7 +122,7 @@ html[data-theme='dark'] input:-webkit-autofill:focus {
 
 /* 减少动效：本文件是全局加载的第三块样式，兜底与 main.css / mk-primitives.css 同口径 */
 @media (prefers-reduced-motion: reduce) {
-  .mk-select__trigger,
+  .mk-select .mk-select__trigger,
   .mk-select__trigger > svg,
   .mk-listbox-opt { transition-property: none; }
 }

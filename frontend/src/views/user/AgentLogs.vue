@@ -726,7 +726,7 @@ const getModelSourceInfo = (log: AgentLogItem | null) => {
 
   return {
     usesUserProvider,
-    label: usesUserProvider ? '用户 AI API' : '平台默认模型',
+    label: usesUserProvider ? '用户 AI API' : '内置模型',
     providerName: metadata.providerName || 'platform-default',
     providerBaseUrl: metadata.providerBaseUrl || '-',
     providerId: metadata.providerId || 'platform-default'
@@ -820,6 +820,24 @@ const copyText = async (text: string, successMessage: string) => {
 
 .filter-dates input {
   width: 130px;
+  height: 42px;
+}
+/* 日期输入的日历钮是浏览器自绘：压到与其它图标同一灰度，悬停再提亮；
+   color-scheme 让弹出的日历跟随明暗主题，不出现白底日历压在暗色页上。 */
+.filter-dates input[type='date'] {
+  color-scheme: light;
+  cursor: pointer;
+}
+.filter-dates input[type='date']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+.filter-dates input[type='date']:hover::-webkit-calendar-picker-indicator {
+  opacity: 0.9;
+}
+html[data-theme='dark'] .filter-dates input[type='date'] {
+  color-scheme: dark;
 }
 
 .filter-dates__sep {
