@@ -2,7 +2,6 @@
  * 共享原语新增档（2026-10-26 导航与共享原语收口）：
  * - Pagination：total=0 常驻空计数并禁用导航；hideWhenSinglePage 单页自隐
  * - SkeletonTable：flat 不渲染卡片外壳；rows 省略按宿主高度算
- * - SavedViewsBar：不再带交互说明书 title
  * - OvBars：列级 select 事件（键盘可达）与稀疏形态
  */
 import { describe, expect, it } from 'vitest'
@@ -10,7 +9,6 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import Pagination from '../Pagination.vue'
 import SkeletonTable from '../SkeletonTable.vue'
-import SavedViewsBar from '../SavedViewsBar.vue'
 import OvBars from '../OvBars.vue'
 
 describe('Pagination · 0 行与单页', () => {
@@ -67,23 +65,6 @@ describe('SkeletonTable · flat 与按高度定行数', () => {
     await nextTick()
     // jsdom 无布局高度：回落默认 5 行，且不抛错
     expect(w.findAll('.skl')).toHaveLength(5)
-    w.unmount()
-  })
-})
-
-describe('SavedViewsBar · 不再带交互说明书 title', () => {
-  it('命名输入与删除钮都不带 title（控件自己会说话）', async () => {
-    const w = mount(SavedViewsBar, {
-      props: {
-        views: [{ id: 'v1', name: '仅失败', query: { status: 'err' }, createdAt: 1 }],
-        activeName: '',
-        canSave: true
-      }
-    })
-    expect(w.find('.sv-pill__del').attributes('title')).toBeUndefined()
-    await w.find('.mk-link').trigger('click')
-    await nextTick()
-    expect(w.find('.sv-name').attributes('title')).toBeUndefined()
     w.unmount()
   })
 })

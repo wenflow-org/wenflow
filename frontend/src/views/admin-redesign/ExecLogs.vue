@@ -62,7 +62,7 @@
       <!-- ===== Tab1: 日志流（默认） ===== -->
       <!-- 卡片常驻（对齐 Users.vue：页签 + 常驻筛选头同卡，骨架/错误/空态/表格/分页都在卡片内）。
            旧实现把渲染条件挂在卡片外壳（v-else-if="filtered.length"），空列表时状态 pills / 搜索 /
-           筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
+           筛选 / 列设置 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
       <div v-if="elTab === 'logs'" id="el-panel-logs" role="tabpanel" aria-labelledby="el-tab-logs" class="exec-tabpanel">
       <div class="mk-card__head">
         <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
@@ -93,17 +93,6 @@
               @click="toggleTestFilter"
             ><Check v-if="testFilter !== ''" :size="12" :stroke-width="2.5" aria-hidden="true" />仅看测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
           </div>
-          <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
-          <SavedViewsBar
-            :views="savedViews"
-            :active-name="activeSavedViewName"
-            :can-save="isFiltered"
-            :suggest-name="filterLabel"
-            :title-of="savedViewTitle"
-            @apply="applySavedView"
-            @remove="removeView"
-            @save="onSaveView"
-          />
         </div>
         <!-- 右侧：自动刷新 / 列 / 筛选（筛选=节点 / Trace ID / 会话 ID 三个精确定位项；
              触发钮与「列」同为文字动作，激活时带生效数角标） -->
@@ -381,8 +370,6 @@ const TRACE_FIELD_LABEL = '链路 ID'
 import { TERMS, errorCodeLabel, routeSourceLabel, shortTrace } from './terms'
 import { prettyPayload } from './payload-format'
 import { useTableSort } from './useTableSort'
-import SavedViewsBar from './SavedViewsBar.vue'
-import { useSavedViews, sameViewQuery, type SavedView } from './useSavedViews'
 
 /* 日志 / Trace 链路 tab（Trace 为执行日志下钻视图） */
 const EL_TABS = ['logs', 'trace'] as const
@@ -922,7 +909,7 @@ watch(
   },
   { immediate: true }
 )
-/** 当前筛选快照（仅含非默认值；键与 URL query 同名——保存视图与深链共用同一形状） */
+/** 当前筛选快照（仅含非默认值；键与 URL query 同名——深链写回与快照同一形状） */
 function filterSnapshot(): Record<string, string> {
   const desired: Record<string, string> = {}
   if (agentFilter.value) desired.agent = agentFilter.value
@@ -955,64 +942,6 @@ watch(
   { immediate: true }
 )
 
-/* —— 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 —— */
-const { views: savedViews, save: saveViewToStore, remove: removeView } = useSavedViews('wf_exec_saved_views')
-
-/** 快照可读摘要（pill 悬停说明），与 filterLabel 同一套措辞 */
-function describeQuery(q: Record<string, string>): string {
-  const parts: string[] = []
-  if (q.range === 'custom') {
-    const s = q.from || ''
-    const e = q.to || ''
-    parts.push(`时间「${s && e ? `${s.replace('T', ' ')} ~ ${e.replace('T', ' ')}` : s ? `${s.replace('T', ' ')} 起` : e ? `截至 ${e.replace('T', ' ')}` : '全部'}」`)
-  } else if (q.range) {
-    parts.push(timeRangeLabels[q.range as keyof typeof timeRangeLabels] || q.range)
-  }
-  if (q.test === 'only') parts.push('仅看测试')
-  if (q.agent) parts.push(q.agent)
-  if (q.status === 'err') parts.push('仅失败')
-  else if (q.status === 'warn') parts.push('仅超时')
-  else if (q.status === 'ok') parts.push('仅成功')
-  if (q.cat) parts.push(`类别「${q.cat}」`)
-  if (q.q) parts.push(`关键词「${q.q}」`)
-  if (q.trace) parts.push(`trace「${q.trace}」`)
-  if (q.session) parts.push(`会话「${q.session}」`)
-  return parts.join(' · ') || '默认筛选'
-}
-function savedViewTitle(v: SavedView): string {
-  return describeQuery(v.query)
-}
-
-/** 应用保存视图：整体重写筛选 refs 后服务端重查（URL 同步 watch 会随之回写 ?query） */
-function applySavedView(v: SavedView) {
-  const q = v.query || {}
-  agentFilter.value = q.agent || ''
-  statusFilter.value = ['err', 'warn', 'ok'].includes(q.status) ? q.status : ''
-  errorCategory.value = q.cat || ''
-  keyword.value = q.q || ''
-  traceId.value = q.trace || ''
-  sessionId.value = q.session || ''
-  timeRange.value = (EL_TIME_RANGES as readonly string[]).includes(q.range)
-    ? (q.range as typeof timeRange.value)
-    : 'today'
-  customStart.value = q.range === 'custom' ? (q.from || '') : ''
-  customEnd.value = q.range === 'custom' ? (q.to || '') : ''
-  testFilter.value = q.test === 'only' ? 'only' : ''
-  /* keyword/trace/session 等输入项不在 watch 内（输入即查询防抖动），需显式重查 */
-  void applyServerQuery()
-}
-
-/** 当前筛选恰好命中的保存视图名（高亮该 pill；默认视图不高亮） */
-const activeSavedViewName = computed(() => {
-  const snap = filterSnapshot()
-  if (!Object.keys(snap).length) return ''
-  return savedViews.value.find((v) => sameViewQuery(v.query, snap))?.name || ''
-})
-
-function onSaveView(name: string) {
-  saveViewToStore(name, filterSnapshot())
-}
-
 const logs = computed(() => liveLogsFiltered.value)
 /** 失败状态跨页签同源：日志页签的 status=err 与 Trace 页签的「仅失败」是同一个开关 */
 const traceFailuresOnly = computed({
@@ -1036,13 +965,12 @@ const advancedFilterCount = computed(
   () => (traceId.value.trim() ? 1 : 0) + (sessionId.value.trim() ? 1 : 0)
 )
 /* 节点下拉数据源不能只来自当前页 30 行（截断后筛不到页外的 skill）。
-   组合三源：注册表 skill 全集（liveSkillStatsMap，boot 域预载，去掉 skill: 前缀与行内
-   agent 口径对齐）+ 当前页实际出现的节点（网关/流程行不在注册表）+ 保存视图历史用过的节点 */
+   组合两源：注册表 skill 全集（liveSkillStatsMap，boot 域预载，去掉 skill: 前缀与行内
+   agent 口径对齐）+ 当前页实际出现的节点（网关/流程行不在注册表） */
 const agentOptions = computed(() => {
   const set = new Set<string>()
   for (const k of Object.keys(liveSkillStatsMap.value ?? {})) set.add(k.replace(/^skill:/, ''))
   for (const s of logs.value) set.add(s.agent)
-  for (const v of savedViews.value) if (v.query?.agent) set.add(v.query.agent)
   return [...set].sort()
 })
 /** 胶囊内嵌下拉的选项形态（首项「全部」= 清空该维） */
@@ -1194,32 +1122,6 @@ const testCount = computed<number | null>(() => {
 function toggleTestFilter() {
   testFilter.value = testFilter.value === '' ? 'only' : ''
 }
-/* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词/时间范围/trace/会话 */
-const timeRangeLabels = { '15m': '近 15 分钟', '1h': '近 1 小时', today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部', custom: '自定义时间段' } as const
-/** 自定义时间段的可见措辞（读始末输入，缺一端说「起/至」，都缺=全部） */
-const customRangeLabel = computed(() => {
-  const s = customStart.value
-  const e = customEnd.value
-  if (s && e) return `${s.replace('T', ' ')} ~ ${e.replace('T', ' ')}`
-  if (s) return `${s.replace('T', ' ')} 起`
-  if (e) return `截至 ${e.replace('T', ' ')}`
-  return '全部'
-})
-const filterLabel = computed(() =>
-  [
-    timeRange.value === 'custom' ? `时间「${customRangeLabel.value}」` : timeRange.value !== 'today' ? timeRangeLabels[timeRange.value] : '',
-    testFilter.value === 'only' ? '仅看测试' : '',
-    agentFilter.value || '',
-    statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '',
-    errorCategory.value ? `类别「${errorCategory.value}」` : '',
-    keyword.value.trim() ? `关键词「${keyword.value.trim()}」` : '',
-    traceId.value.trim() ? `trace「${traceId.value.trim()}」` : '',
-    sessionId.value.trim() ? `会话「${sessionId.value.trim()}」` : ''
-  ]
-    .filter(Boolean)
-    .join(' · ')
-)
-
 /* 状态 pills（失败/超时/成功）：计数来自当前窗口 stats（与表格同源）。B22/F8-1：
    stats 未就绪（查询在途 / 失败）时不显示 0——0 会被读成「本窗口 0 条失败」的伪读数；
    置 undefined 使模板不渲染计数角标（与「测试」pill 的常驻入口语义一致）。 */

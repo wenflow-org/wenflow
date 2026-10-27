@@ -82,17 +82,6 @@
               @click="filterByFailure(f.action)"
             >{{ failureLabel(f.action) }} <b>{{ f.count }}</b></button>
           </div>
-          <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
-          <SavedViewsBar
-            :views="savedViews"
-            :active-name="activeSavedViewName"
-            :can-save="isFiltered"
-            :suggest-name="filterLabel"
-            :title-of="savedViewTitle"
-            @apply="applySavedView"
-            @remove="removeView"
-            @save="onSaveView"
-          />
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -350,8 +339,6 @@ import { useIsNarrow } from './useIsNarrow'
 import MkCols from '@/components/mk/MkCols.vue'
 import { actionText, targetTypeText, ipText, pathActionText } from './statusText'
 import { useTableSort } from './useTableSort'
-import SavedViewsBar from './SavedViewsBar.vue'
-import { useSavedViews, sameViewQuery, type SavedView } from './useSavedViews'
 
 /** admin_audit_logs 行（与后端 Prisma 模型一致） */
 interface AuditLogRow {
@@ -792,10 +779,6 @@ function searchUsername(username: string) {
   void applyFilters()
 }
 
-/* —— 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 ——
-   本页筛选未入 URL（仅 ?tab= 深链），保存视图即「可命名的筛选快捷方式」，价值比执行日志页更高 */
-const { views: savedViews, save: saveViewToStore, remove: removeView } = useSavedViews('wf_audit_saved_views')
-
 const TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all'] as const
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
 /** 胶囊内嵌下拉的选项形态（顺序即下拉顺序，默认「全部」在最前） */
@@ -851,60 +834,6 @@ watch(
 const emptyDescription = computed(() =>
   timeRange.value === 'today' ? '今天没有记录' : ''
 )
-
-/** 当前筛选快照（仅含非默认值；tab 默认「操作审计」不存） */
-function filterSnapshot(): Record<string, string> {
-  const snap: Record<string, string> = {}
-  if (tab.value !== 'operation') snap.tab = tab.value
-  if (keyword.value.trim()) snap.q = keyword.value.trim()
-  if (timeRange.value !== 'all') snap.range = timeRange.value
-  return snap
-}
-
-/** 快照可读摘要（pill 悬停说明 / 命名建议） */
-const filterLabel = computed(() => {
-  const parts: string[] = []
-  if (timeRange.value !== 'all') parts.push(timeRangeLabels[timeRange.value])
-  if (keyword.value.trim()) parts.push(`关键词「${keyword.value.trim()}」`)
-  if (tab.value === 'login') parts.push('登录审计')
-  return parts.join(' · ') || ''
-})
-function describeQuery(q: Record<string, string>): string {
-  const parts: string[] = []
-  if (q.range) parts.push(timeRangeLabels[q.range as keyof typeof timeRangeLabels] || q.range)
-  if (q.q) parts.push(`关键词「${q.q}」`)
-  if (q.tab === 'login') parts.push('登录审计')
-  return parts.join(' · ') || '默认筛选'
-}
-function savedViewTitle(v: SavedView): string {
-  return describeQuery(v.query)
-}
-
-/** 应用保存视图：整体重写筛选后重查（tab 相同也走 applyFilters——keyword/range 无 watch） */
-function applySavedView(v: SavedView) {
-  const q = v.query || {}
-  tab.value = q.tab === 'login' ? 'login' : 'operation'
-  syncTabQuery(tab.value)
-  /* 下钻态不在保存视图快照内：应用视图时一并还原，避免残留「只看失败」 */
-  failedOnly.value = false
-  failedAction.value = ''
-  keyword.value = q.q || ''
-  timeRange.value = (TIME_RANGES as readonly string[]).includes(q.range)
-    ? (q.range as typeof timeRange.value)
-    : 'all'
-  void applyFilters()
-}
-
-/** 当前筛选恰好命中的保存视图名（高亮该 pill；默认视图不高亮） */
-const activeSavedViewName = computed(() => {
-  const snap = filterSnapshot()
-  if (!Object.keys(snap).length) return ''
-  return savedViews.value.find((v) => sameViewQuery(v.query, snap))?.name || ''
-})
-
-function onSaveView(name: string) {
-  saveViewToStore(name, filterSnapshot())
-}
 
 const REASON_TEXT: Record<string, string> = {
   account_locked: '账户已锁定',
