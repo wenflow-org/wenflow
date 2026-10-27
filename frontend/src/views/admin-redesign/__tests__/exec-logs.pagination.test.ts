@@ -10,6 +10,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import ExecLogs from '../ExecLogs.vue';
 import { chooseFilter, filterOption } from './filter-controls';
+import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 import type { TraceSpan } from '../store';
 import {
   liveLogsPage,
@@ -171,7 +172,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     liveLogsFiltered.value = [fakeSpan(1)];
     const w = await mountExec();
     await nextTick();
-    await w.find('.mk-pagination__size').setValue('50');
+    await chooseMkSelect(w as never, '每页条数', '50');
     expect(liveLogsPageSize.value).toBe(50);
     expect(liveLogsPage.value).toBe(1);
     expect(h.reload).toHaveBeenCalledTimes(2);

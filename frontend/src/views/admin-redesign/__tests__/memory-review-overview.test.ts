@@ -37,6 +37,7 @@ vi.mock('vue-router', () => ({
 
 import MemoryReviewOverview from '../MemoryReviewOverview.vue';
 import { chooseFilter, filterOption } from './filter-controls';
+import { mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 
 const ROWS = Array.from({ length: 7 }, (_, i) => ({ id: `t${i}`, userId: 'u1' }));
 
@@ -131,8 +132,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
   it('分页器单位是「位学习者」，每页条数默认 50', async () => {
     const w = await mountWithRows(ROWS, { users: 120 });
     expect(w.find('.mk-pagination').text()).toContain('共 120 位学习者');
-    const size = w.find<HTMLSelectElement>('.mk-pagination__size');
-    expect(size.element.value).toBe('50');
+    expect(mkSelectValue(w as never, '每页条数')).toBe('50');
     w.unmount();
   });
 

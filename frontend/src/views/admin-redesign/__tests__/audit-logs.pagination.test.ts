@@ -9,6 +9,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import AuditLogs from '../AuditLogs.vue';
 import { chooseFilter, filterOptions, filterValue } from './filter-controls';
+import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 
 const h = vi.hoisted(() => ({
   getLogs: vi.fn(),
@@ -219,7 +220,7 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     const w = await mountAudit();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    await w.find('.mk-pagination__size').setValue('50');
+    await chooseMkSelect(w as never, '每页条数', '50');
     await flushPromises();
     const last = h.getLogs.mock.calls.at(-1)![0];
     expect(last).toMatchObject({ page: 1, limit: 50 });
@@ -354,7 +355,7 @@ describe('AuditLogs 动作快筛 + 负载美化（2026-10-05 重设计）', () =
     mockMixedActions();
     const w = await mountAudit();
     await nextTick();
-    const opts = w.findAll('ul.mk-pillselect__menu[aria-label="按动作筛选"] .mk-pillselect__option');
+    const opts = w.findAll('ul.mk-pillselect__menu[aria-label="按动作筛选"] .mk-listbox-opt');
     const restartValue = opts[2].attributes('data-value')!;
     await chooseFilter(w as never, '动作', opts[2].text().replace(/（\d+）$/, ''));
     await flushPromises();

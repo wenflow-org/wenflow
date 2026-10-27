@@ -837,7 +837,12 @@ onMounted(async () => {
   width: fit-content;
   font-size: 12px;
   color: var(--blue-deep);
+  /* 系统三角退役：与全站 details 同用自绘 ▸（2026-10-27 收口） */
+  list-style: none;
 }
+.history__subs > summary::-webkit-details-marker { display: none; }
+.history__subs > summary::before { content: '▸'; display: inline-block; margin-right: 5px; transition: transform 0.12s ease; }
+.history__subs[open] > summary::before { transform: rotate(90deg); }
 .history__sublist {
   list-style: none;
   margin: 6px 0 0;

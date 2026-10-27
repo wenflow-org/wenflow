@@ -52,7 +52,14 @@
       <div class="skc__apply">
         <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（必填，http://host:30001）" :class="{ 'is-err': bulkErr }" />
         <input v-model="bulk.apiKey" class="mk-input mono" type="password" placeholder="apiKey（必填）" :class="{ 'is-err': bulkErr }" />
-        <input v-model="bulk.model" class="mk-input mono" placeholder="model（留空则不覆盖）" list="skc-model-options" />
+        <MkModelPicker
+          v-model="bulk.model"
+          :options="pickerOptions"
+          compact
+          allow-custom
+          aria-label="批量套用的模型"
+          placeholder="model（留空则不覆盖）"
+        />
         <button type="button" class="mk-btn mk-btn--primary" :disabled="bulkSaving || !selected.length" @click="applyBulk">
           {{ bulkSaving ? '套用中…' : `套用到 ${selected.length} 个技能` }}
         </button>
@@ -187,10 +194,8 @@
       />
     </div>
 
-    <!-- 模型目录候选（File-as-Truth llm-providers.json；带「供应商 · tier」标注） -->
-    <datalist id="skc-model-options">
-      <option v-for="o in catalogOptions" :key="`cat-${o.value}`" :value="o.value" :label="o.label" />
-    </datalist>
+    <!-- 模型目录候选（File-as-Truth llm-providers.json）已由 MkModelPicker 直接消费，
+         datalist 不再需要（2026-10-27 原生弹层收口） -->
   </div>
 </template>
 
@@ -203,6 +208,7 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
+import MkModelPicker from '@/components/mk/MkModelPicker.vue'
 import { askConfirm } from './useConfirm'
 import { useTableSort } from './useTableSort'
 
@@ -243,7 +249,7 @@ const props = withDefaults(defineProps<{
 
 const NOT_IN_RECON_TITLE = '一致性核查清单中没有此 Skill（不是故障）'
 
-const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
+const { pickerOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
 
 interface Row {

@@ -18,6 +18,7 @@ import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory, type Router } from 'vue-router';
 import Skills from '../Skills.vue';
 import { chooseFilter, filterValue } from './filter-controls';
+import { mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 import { dataSource, liveSkillStatsMap } from '../store';
 import { liveSkillProfiles } from '../live';
 
@@ -161,7 +162,7 @@ describe('Skills 列表筛选 ↔ URL', () => {
   it('深链落位：?page=2&size=10 还原页码与页大小，且不被「筛选变化回第 1 页」拽回', async () => {
     const { w, router } = await mountAt('/admin/skills?page=2&size=10');
     expect(w.text()).toContain('第 2 / 2 页');
-    expect((w.find('.mk-pagination__size').element as HTMLSelectElement).value).toBe('10');
+    expect(mkSelectValue(w as never, '每页条数')).toBe('10');
     // 落位后不回写脏值：URL 上仍是 2 / 10
     expect(router.currentRoute.value.query.page).toBe('2');
     expect(router.currentRoute.value.query.size).toBe('10');

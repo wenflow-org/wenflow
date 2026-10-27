@@ -73,15 +73,28 @@
             <div class="api-form__grid">
               <label class="uc-field">
                 <span class="uc-field__label">对话模型</span>
-                <input v-model="apiConfig.chatModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4.1-flash" :disabled="busy" />
+                <MkModelPicker
+                  v-model="apiConfig.chatModel"
+                  :options="modelPickerOptions"
+                  compact
+                  allow-custom
+                  aria-label="对话模型"
+                  placeholder="deepseek-v4.1-flash"
+                  :disabled="busy"
+                />
               </label>
               <label class="uc-field">
                 <span class="uc-field__label">推理模型</span>
-                <input v-model="apiConfig.reasoningModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4.1-flash" :disabled="busy" />
+                <MkModelPicker
+                  v-model="apiConfig.reasoningModel"
+                  :options="modelPickerOptions"
+                  compact
+                  allow-custom
+                  aria-label="推理模型"
+                  placeholder="deepseek-v4.1-flash"
+                  :disabled="busy"
+                />
               </label>
-              <datalist id="api-model-options">
-                <option v-for="m in modelOptions" :key="m" :value="m" />
-              </datalist>
             </div>
             <div v-if="modelOptions.length" class="model-options-hint">
               来自端点的可用模型：<span v-for="m in modelOptions.slice(0, 6)" :key="m" class="model-chip">{{ m }}</span>
@@ -290,6 +303,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import MkModelPicker from '@/components/mk/MkModelPicker.vue';
 import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm';
 import { toast } from '../../utils/toast';
 import request from '@/utils/api';
@@ -321,6 +335,8 @@ const hasSavedApiKey = ref(false);
 const showKey = ref(false);
 const loadingModels = ref(false);
 const modelOptions = ref<string[]>([]);
+/** 端点返回的模型 id → MkModelPicker 候选（2026-10-27 取代原生 datalist 弹层） */
+const modelPickerOptions = computed(() => modelOptions.value.map((m) => ({ value: m, label: m })));
 const busy = computed(() => loading.value || saving.value || testing.value || disabling.value || loadingModels.value);
 
 // 单配置模式

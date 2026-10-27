@@ -9,6 +9,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import SessionSecurity from '../SessionSecurity.vue';
 import { chooseFilter, filterOption } from './filter-controls';
+import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 
 const h = vi.hoisted(() => ({
   getMe: vi.fn(),
@@ -135,8 +136,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
   it('切换每页条数下拉 → 行数与页码器同步', async () => {
     const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions);
-    const select = w.find('.mk-pagination__size');
-    await select.setValue('30');
+    await chooseMkSelect(w as never, '每页条数', '30');
     await flushPromises();
     expect(w.findAll('.ss-tr').length).toBe(30);
     expect(pagerText(w)).toContain('第 1 / 1 页');

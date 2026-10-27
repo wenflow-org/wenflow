@@ -71,19 +71,18 @@
       />
       <div class="ld-scope" role="group" aria-label="路径范围">
         <label class="ld-scope__label" for="ld-scope-path">路径范围</label>
-        <select
-          id="ld-scope-path"
-          class="mk-filter__select ld-scope__select"
-          :value="scopePathId"
-          :disabled="pathOptionsLoading || !pathOptions.length"
-          @change="scopePathId = ($event.target as HTMLSelectElement).value"
-        >
-          <option v-if="!pathOptionsLoading && !pathOptions.length" value="" disabled>该学习者暂无学习路径</option>
-          <option v-for="p in pathOptions" :key="p.id" :value="p.id">
-            {{ p.title }}（{{ pathStatusText(p.status) }}）{{ p.id === learnerCurrentPathId ? ' · 当前' : '' }}
-          </option>
-        </select>
-        <!-- 路径选项加载态走共享原语（select 内放不下组件），转圈挂在其后：select 不被挤位 -->
+        <div class="ld-scope__select">
+          <MkSelect
+            id="ld-scope-path"
+            v-model="scopePathId"
+            :options="scopeSelectOptions"
+            placeholder="该学习者暂无学习路径"
+            aria-label="路径范围"
+            block
+            :disabled="pathOptionsLoading || !pathOptions.length"
+          />
+        </div>
+        <!-- 路径选项加载态走共享原语，转圈挂在选择器之后：选择器不被挤位 -->
         <MkLoading v-if="pathOptionsLoading" inline min />
       </div>
     </div>
@@ -989,6 +988,7 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from '@/components/mk/MkChart.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import MkGraphExplorer from '@/components/mk/MkGraphExplorer.vue'
 import type { MkGraphConceptFacts } from '@/components/mk/MkGraph.vue'
 import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
@@ -1169,6 +1169,13 @@ async function loadPathOptions(userId: string) {
     pathOptionsLoading.value = false
   }
 }
+/** 作用域下拉的选项：路径标题 + 状态，当前路径额外标注（原原生 option 文案逐字保留） */
+const scopeSelectOptions = computed(() =>
+  pathOptions.value.map((p) => ({
+    value: p.id,
+    label: `${p.title}（${pathStatusText(p.status)}）${p.id === learnerCurrentPathId.value ? ' · 当前' : ''}`
+  }))
+)
 /** 作用域读数：'' = 未定（后端按「当前 active 路径」回落，不是跨路径聚合）→ 也标「当前路径」 */
 const scopeNote = computed(() => {
   const title = pathOptions.value.find((p) => p.id === scopePathId.value)?.title || ''
@@ -3056,10 +3063,8 @@ const snapshotHint = computed(() =>
    纵向：共享档 height:32 + 上下 7px 内衬后内容区只剩 16px，而行高 1.4≈20px，
    中文字形底部会被切；本控件压缩上下内衬并收紧行高，保持 32px 外观高度。 */
 .ld-scope__select {
+  /* 只定宽：触发器视觉由 MkSelect 承担；360 上限避免长路径名把页签行挤折 */
   max-width: min(360px, 100%);
-  padding-top: 4px;
-  padding-bottom: 4px;
-  line-height: 1.2;
 }
 /* 表格不做全出血：末行底边此前贴死卡底（实测仅剩 1px 边框），补 12px 收尾（同卡头下节奏） */
 #ld-panel-sessions .mk-table-scroll,

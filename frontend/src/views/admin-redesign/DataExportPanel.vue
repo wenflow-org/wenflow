@@ -23,11 +23,12 @@
     <!-- label 包裹而非 div（审核 #176）：与同页另三处 .mk-field 同构，select 拿到可访问名 -->
     <label v-if="exportSel.some((k) => LOG_EXPORT_KEYS.has(k))" class="mk-field exp-limit">
       <span class="mk-field__label">日志行数上限</span>
-      <select v-model="logLimit" class="mk-filter__select" :disabled="exporting !== ''">
-        <option :value="1000">1000 行</option>
-        <option :value="5000">5000 行</option>
-        <option :value="20000">20000 行</option>
-      </select>
+      <MkSelect
+        v-model="logLimit"
+        :options="LOG_LIMIT_OPTIONS"
+        aria-label="日志行数上限"
+        :disabled="exporting !== ''"
+      />
     </label>
     <div class="exp-foot">
       <span class="exp-hint">已选 {{ exportSel.length }} 项</span>
@@ -50,6 +51,7 @@ import { errMsg } from './live'
 import { adminAxios } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import { askConfirm } from './useConfirm'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 /* 数据导出（原「系统工具」页 Tab2 整体迁入，2026-10-16）：多表 CSV 快照导出。
    各列表页有就地导出（导出本页/选中项），这里是「一次勾多张表打包拿快照」的唯一入口。 */
@@ -72,6 +74,11 @@ const exportDefs: ExportDef[] = [
 /** 只有日志类导出支持行数上限（后端 ?limit=）；业务表固定最近 20000 条 */
 const LOG_EXPORT_KEYS = new Set(['agent-logs', 'audit-logs'])
 const logLimit = ref<number>(1000)
+const LOG_LIMIT_OPTIONS = [
+  { value: 1000, label: '1000 行' },
+  { value: 5000, label: '5000 行' },
+  { value: 20000, label: '20000 行' }
+]
 
 const exportSel = ref<string[]>([])
 function toggleExport(key: string) {

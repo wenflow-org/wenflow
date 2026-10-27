@@ -3,18 +3,16 @@
     <!-- 搜索 / 角色过滤 -->
     <div class="mk-filter frt__filter">
       <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色 / 移交" />
-      <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色过滤">
-        <option value="">全部角色</option>
-        <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
-      </select>
-      <select v-model="sortKey" class="mk-filter__select" aria-label="组内排序字段">
-        <option value="">默认顺序</option>
-        <option value="field">字段名</option>
-        <option value="role">角色</option>
-        <option value="render">可见性</option>
-        <option value="type">类型</option>
-        <option value="meaning">含义</option>
-      </select>
+      <MkSelect
+        v-model="roleFilter"
+        :options="roleFilterOptions"
+        aria-label="按角色过滤"
+      />
+      <MkSelect
+        v-model="sortKey"
+        :options="SORT_OPTIONS"
+        aria-label="组内排序字段"
+      />
       <button
         type="button"
         class="mk-btn mk-btn--sm"
@@ -222,6 +220,7 @@ import { TERMS } from './terms';
 import { errMsg } from './live';
 import Pagination from './Pagination.vue';
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue';
+import MkSelect from '@/components/mk/MkSelect.vue';
 import { useTableSort } from './useTableSort';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
@@ -269,6 +268,18 @@ const loading = ref(false);
 const error = ref('');
 const keyword = ref('');
 const roleFilter = ref('');
+const roleFilterOptions = computed(() => [
+  { value: '', label: '全部角色' },
+  ...roleMeta.value.map((m) => ({ value: m.id, label: `${m.label}（${m.id}）` }))
+]);
+const SORT_OPTIONS = [
+  { value: '', label: '默认顺序' },
+  { value: 'field', label: '字段名' },
+  { value: 'role', label: '角色' },
+  { value: 'render', label: '可见性' },
+  { value: 'type', label: '类型' },
+  { value: 'meaning', label: '含义' }
+];
 
 /* 组内排序：数据完整（一次拉取本阶段全部路由行 → 按 agent 分组 → 本地分页），
    默认保持后端编排顺序（promptRole/fieldId 升序），下拉选字段 + 升/降按钮切换。

@@ -16,16 +16,15 @@
       <span v-if="note" class="pagination-note">{{ note }}</span>
     </span>
     <span class="mk-pagination__right">
-      <select
+      <MkSelect
         v-if="!hideSize"
-        class="mk-pagination__size mono"
-        :value="pageSize"
-        :disabled="loading"
+        v-model="sizeModel"
         aria-label="每页条数"
-        @change="onSizeChange"
-      >
-        <option v-for="s in sizeOptions" :key="s" :value="s">{{ s }}条/页</option>
-      </select>
+        size="sm"
+        mono
+        :disabled="loading"
+        :options="sizeSelectOptions"
+      />
       <div class="mk-pagination__nav">
         <button
           type="button"
@@ -66,6 +65,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { totalPagesOf } from './live'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -135,6 +135,14 @@ const sizeOptions = computed(() => {
   set.add(props.pageSize)
   return [...set].sort((a, b) => a - b)
 })
+const sizeSelectOptions = computed(() =>
+  sizeOptions.value.map((s) => ({ value: s, label: `${s} 条/页` }))
+)
+/** MkSelect 的 v-model：保留 number（原生 select 靠 change 里 Number()，这里不需要） */
+const sizeModel = computed({
+  get: () => props.pageSize,
+  set: (v) => emit('update:pageSize', Number(v))
+})
 
 /* 页码按钮序列（AntD 风格折叠）：≤7 页全显；>7 页显示 1 … p-1 p p+1 … N */
 const pageItems = computed<(number | '…')[]>(() => {
@@ -149,10 +157,6 @@ const pageItems = computed<(number | '…')[]>(() => {
   items.push(n)
   return items
 })
-
-function onSizeChange(e: Event) {
-  emit('update:pageSize', Number((e.target as HTMLSelectElement).value))
-}
 
 /* 自动收敛越界页码：自动刷新/数据变化导致 total 缩小、当前页超出总页数时，
    回落到最后一页（父组件收到 update:page 后重查），避免停在「第 5 / 3 页」 */
@@ -206,17 +210,6 @@ watch(
   gap: 8px;
   min-width: 0;
 }
-.mk-pagination__size {
-  padding: 4px 8px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  cursor: pointer;
-  transition: border-color 0.12s;
-}
-.mk-pagination__size:hover { border-color: color-mix(in srgb, var(--mk-blue) 40%, transparent); }
 .mk-pagination__nav {
   display: flex;
   align-items: center;
@@ -271,13 +264,11 @@ watch(
 @media (min-width: 2000px) {
   .mk-pagination { font-size: var(--mk-fs-micro); gap: 12px; padding: 10px 18px; }
   .mk-pagination__total { font-size: var(--mk-fs-micro); }
-  .mk-pagination__size { font-size: var(--mk-fs-micro); padding: 5px 10px; border-radius: var(--mk-radius-sm); }
   .mk-pagination__btn, .mk-pagination__num { font-size: var(--mk-fs-micro); min-width: 32px; height: 32px; padding: 0 10px; }
 }
 @media (min-width: 3600px) {
   .mk-pagination { font-size: var(--mk-fs-micro); }
   .mk-pagination__total { font-size: var(--mk-fs-micro); }
-  .mk-pagination__size { font-size: var(--mk-fs-micro); }
   .mk-pagination__btn { font-size: var(--mk-fs-micro); }
 }
 </style>

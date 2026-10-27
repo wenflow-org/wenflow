@@ -93,10 +93,11 @@
       <!-- 搜索 -->
       <div class="mk-filter sfr__filter">
         <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色 / 移交" />
-        <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色过滤">
-          <option value="">全部角色</option>
-          <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
-        </select>
+        <MkSelect
+          v-model="roleFilter"
+          :options="roleFilterOptions"
+          aria-label="按角色过滤"
+        />
         <span v-if="filterActive" class="sfr__filter-count">命中 {{ rows.length }} / {{ data.routings.length }} 行</span>
       </div>
 
@@ -208,6 +209,7 @@ import { useRouter } from 'vue-router'
 import { adminFieldRoutingsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import FieldAddWizard from './FieldAddWizard.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { askConfirm } from './useConfirm'
@@ -277,6 +279,10 @@ const fieldMap = computed(() => new Map((data.value?.fields || []).map((f) => [f
 const coreFieldNames = computed(() => new Set((data.value?.core.fields || []).map((f) => f.name)))
 const syncReport = computed(() => data.value?.core.sync ?? null)
 const roleMeta = computed(() => data.value?.promptRoleMeta || [])
+const roleFilterOptions = computed(() => [
+  { value: '', label: '全部角色' },
+  ...roleMeta.value.map((m) => ({ value: m.id, label: `${m.label}（${m.id}）` }))
+])
 
 const syncToneTone = computed(() => {
   const s = syncReport.value

@@ -536,7 +536,11 @@ onMounted(() => {
 .ac-error__card span { font-size: var(--mk-fs-body); color: var(--mk-muted); }
 .ac-error__actions { display: flex; gap: 10px; margin-top: 6px; }
 .ac-error__diag { max-width: 460px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ac-error__diag summary { cursor: pointer; }
+.ac-error__diag summary { cursor: pointer; list-style: none; }
+/* 系统三角退役：与全站 details（.mk-section__summary）同用自绘 ▸ */
+.ac-error__diag summary::-webkit-details-marker { display: none; }
+.ac-error__diag summary::before { content: '▸'; display: inline-block; margin-right: 6px; transition: transform 0.12s ease; }
+.ac-error__diag[open] summary::before { transform: rotate(90deg); }
 .ac-error__diag code {
   display: block;
   margin-top: 6px;

@@ -10,6 +10,7 @@ import Users from '../Users.vue';
 import { liveUsers } from '../live';
 import { getDeletedUsers } from '@/api/adminApi';
 import { chooseFilter, filterOption, filterOptions } from './filter-controls';
+import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 
 const { apiObject } = vi.hoisted(() => ({
   apiObject: (): Record<string, unknown> =>
@@ -183,7 +184,7 @@ describe('Users 客户端分页（mk-pagination）', () => {
 
   it('每页条数 50 → 单页展示全部 37 行', async () => {
     const w = await mountUsers();
-    await w.find('.mk-pagination__size').setValue('50');
+    await chooseMkSelect(w as never, '每页条数', '50');
     await nextTick();
     expect(w.text()).toContain('第 1 / 1 页');
     expect(w.findAll('tbody tr')).toHaveLength(37);

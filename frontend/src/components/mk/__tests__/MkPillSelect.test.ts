@@ -32,7 +32,7 @@ function harness(initial = '', active = false) {
 }
 
 const trigger = (w: ReturnType<typeof harness>) => w.find('button.mk-pillselect')
-const options = (w: ReturnType<typeof harness>) => w.findAll('.mk-pillselect__option')
+const options = (w: ReturnType<typeof harness>) => w.findAll('.mk-listbox-opt')
 const menu = (w: ReturnType<typeof harness>) => w.find('ul.mk-pillselect__menu')
 
 describe('MkPillSelect · 自绘 listbox', () => {

@@ -332,11 +332,27 @@ describe('MkPillSelect：自绘 listbox 而非原生弹层', () => {
       resolve(__dirname, '../../../../src/styles/mk-primitives.css'),
       'utf8'
     )
-    const menu = css.match(/\.mk-pillselect__menu \{[\s\S]*?\n\}/)?.[0] ?? ''
+    // 弹层外壳已抽成两个下拉原语共用的 .mk-listbox-pop（MkSelect 也用它）
+    const menu = css.match(/\.mk-listbox-pop \{[\s\S]*?\n\}/)?.[0] ?? ''
     expect(menu).toContain('var(--mk-surface)')
     expect(menu).toContain('var(--mk-line)')
     expect(menu).toContain('var(--mk-shadow-pop)')
     expect(menu).toContain('var(--mk-z-menu)')
     expect(css).not.toMatch(/\.mk-pillselect__v\b/)
+  })
+
+  it('MkSelect 与 MkPillSelect 共用弹层外壳，表单下拉不再回退原生 select', () => {
+    const select = readFileSync(
+      resolve(__dirname, '../../../components/mk/MkSelect.vue'),
+      'utf8'
+    )
+    const template = select
+      .slice(0, select.indexOf('</template>'))
+      .replace(/<!--[\s\S]*?-->/g, '')
+    expect(template).not.toMatch(/<select\b/)
+    expect(select).toContain('mk-listbox-pop')
+    expect(select).toContain('role="combobox"')
+    expect(select).toContain('role="listbox"')
+    expect(select).toContain('useListbox')
   })
 })

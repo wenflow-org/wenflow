@@ -31,7 +31,7 @@ export function filterValue(w: VueWrapper<any>, dimLabel: string): string {
 /** 全部选项文案（v-show 只改 display，选项始终在 DOM 里，无需先展开） */
 export function filterOptions(w: VueWrapper<any>, dimLabel: string): string[] {
   return filterWrap(w, dimLabel)
-    .findAll('.mk-pillselect__option')
+    .findAll('.mk-listbox-opt')
     .map((o) => o.text());
 }
 
@@ -42,7 +42,7 @@ export function filterOption(
   optionLabelPrefix: string
 ): DOMWrapper<Element> {
   const opt = filterWrap(w, dimLabel)
-    .findAll('.mk-pillselect__option')
+    .findAll('.mk-listbox-opt')
     .find((o) => o.text().startsWith(optionLabelPrefix));
   if (!opt) throw new Error(`option not found: ${dimLabel} / ${optionLabelPrefix}`);
   return opt;
