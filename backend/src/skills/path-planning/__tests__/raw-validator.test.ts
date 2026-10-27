@@ -1,4 +1,5 @@
-import { validatePathPlanningOutput } from '../index'
+import { validatePathPlanningOutput, validateScopeBinding } from '../index';
+import { resolveSubjectScope } from '../../../services/learning/subject-scopes';
 
 describe('path-planning raw validator', () => {
   const validOutput = {
@@ -152,3 +153,59 @@ describe('path-planning raw validator', () => {
     expect((result as any).warnings).toContain('PATH_PLANNING_CONCEPT_COUNT_HIGH(totalConcepts=9, cap=8)')
   })
 })
+
+describe('整条路径都是元认知 → 拒绝（2026-10-20 理综实跑）', () => {
+  const build = (conceptNames: string[], titles: string[]) => ({
+    name: '理综物理大题限时止损与转场',
+    totalMilestones: titles.length,
+    cognitiveCore: { coreConcepts: conceptNames.map((n, i) => ({ id: `concept-${i + 1}`, name: n, role: i === 0 ? 'hub' : 'supporting' })) },
+    milestones: titles.map((t, i) => ({ stageNumber: i + 1, title: t, description: t, goal: t, coreConcept: conceptNames[i] })),
+  });
+
+  it('四节课全在讲自检/归类/清单 → 判为元认知路径', () => {
+    const parsed = build(
+      ['解题中途不确定感的可观察信号化', '方向性错误与计算性错误的分类判别'],
+      ['标出算到一半不对劲的具体时刻', '归类成方向性错误还是计算性错误'],
+    );
+    expect(validatePathPlanningOutput(parsed).valid).toBe(false);
+    const result = validatePathPlanningOutput(parsed) as { valid: boolean; failureReason?: string };
+    expect(result.failureReason).toBe('PATH_PLANNING_META_ONLY_PATH');
+  });
+
+  it('学科实体当概念 → 放行（策略词出现在标题里没关系）', () => {
+    const parsed = build(
+      ['多数派与任期在日志比对中的作用', '日志复制的一致性检查'],
+      ['对照 ZooKeeper 拆出省掉的是另一次独立共识', '用事件簿复盘提交规则'],
+    );
+    expect(validatePathPlanningOutput(parsed).valid).toBe(true);
+  });
+});
+describe('范围绑定（Scope）：阶段概念必须落在学习范围内', () => {
+  const scope = resolveSubjectScope('高考理综合卷')!;
+  const build = (conceptNames: string[], titles: string[]) => ({
+    name: '力学大题的点拨',
+    totalMilestones: titles.length,
+    cognitiveCore: { coreConcepts: conceptNames.map((n, i) => ({ id: `concept-${i + 1}`, name: n, role: i === 0 ? 'hub' : 'supporting' })) },
+    milestones: conceptNames.map((n, i) => ({ stageNumber: i + 1, title: titles[i], description: titles[i], goal: titles[i], coreConcept: `concept-${i + 1}` })),
+  });
+
+  it('概念取自范围 → 通过', () => {
+    const parsed = build(['受力分析与受力图', '动能定理'], ['读懂受力图', '用动能定理算']);
+    expect(validateScopeBinding(parsed, scope).valid).toBe(true);
+  });
+
+  it('整条路径都是元认知概念 → SCOPE_UNBOUND', () => {
+    const parsed = build(
+      ['解题中途不确定感的可观察信号化', '方向性错误与计算性错误的分类判别'],
+      ['标出卡壳时刻', '归类错误类型'],
+    );
+    const result = validateScopeBinding(parsed, scope) as { valid: boolean; failureReason?: string };
+    expect(result.valid).toBe(false);
+    expect(result.failureReason).toBe('PATH_PLANNING_SCOPE_UNBOUND');
+  });
+
+  it('没有范围（未命中注册表）→ 不做约束，保持旧行为', () => {
+    const parsed = build(['任何概念'], ['任何阶段']);
+    expect(validateScopeBinding(parsed, null).valid).toBe(true);
+  });
+});

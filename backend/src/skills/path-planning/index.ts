@@ -26,6 +26,8 @@ import { buildPromptFriendlyMaterials } from '../../services/materials/material-
 import { assessMaterialRefCoverage } from '../../services/materials/material-ref-coverage.service';
 import { normalizeMaterialRefs } from '../../services/materials/material-refs';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
+import { resolveSubjectScope, formatScopeForPrompt, measureScopeCoverage } from '../../services/learning/subject-scopes';
+import type { SubjectScope } from '../../services/learning/subject-scopes';
 
 const AGENT_ID = 'skill:path-planning';
 const PATH_AGENT_MAX_TOKENS = 64000;
@@ -283,6 +285,13 @@ const PATH_VALIDATION_REPAIR_HINTS: Record<string, string> = {
     `上一次的 milestone.coreConcept 引用了未声明的概念。请严格按这个骨架重出（coreConcept 只能填 coreConcepts 里已声明的 id，如 "concept-1"）：${PATH_OUTPUT_SKELETON}`,
   PATH_PLANNING_MILESTONES_MISSING:
     `上一次没有 milestones 数组。请严格按这个骨架重出：${PATH_OUTPUT_SKELETON}`,
+  PATH_PLANNING_SCOPE_UNBOUND:
+    '上一次的里程碑概念大多落在学习范围之外。请让每个阶段的 coreConcept 取自下面清单（可用清单里的 id），'
+    + '策略、自检、复盘这类方法不要占阶段概念位，写进任务的验收标准。',
+  PATH_PLANNING_META_ONLY_PATH:
+    '上一次的整条路径都是「元认知/策略」本身当核心概念（自检、清单、挂起、复盘、校准这类）。'
+    + '策略目标可以保留，但每个阶段的核心概念必须落在一个**学科实体**上（例如「受力分析中的摩擦力方向判定」「多数派提交与角色变更」），'
+    + '把自检/清单/校准降级为任务的验收标准，而不是阶段概念。请按这个骨架重出：' + PATH_OUTPUT_SKELETON,
   PATH_PLANNING_COGNITIVE_CORE_MISSING:
     `上一次缺少 cognitiveCore。请严格按这个骨架重出：${PATH_OUTPUT_SKELETON}`,
 };
@@ -296,6 +305,36 @@ export function buildPathValidationRepairNotice(failureReason: string): string {
   const key = Object.keys(PATH_VALIDATION_REPAIR_HINTS).find((candidate) => reason.includes(candidate));
   if (key) return PATH_VALIDATION_REPAIR_HINTS[key];
   return `请只输出一个学习路径 JSON 对象，严格按这个骨架（字段名逐字一致）：${PATH_OUTPUT_SKELETON}`;
+}
+
+/**
+ * 范围绑定校验（2026-10-20 根本性修复）：起了 scope 就必须有一半以上的阶段概念真的落在范围内。
+ * 只校验「概念落在范围内」，不规定怎么排课——排课仍是模型的事。
+ */
+/**
+ * 范围绑定校验（2026-10-20 根本性修复）。
+ *
+ * 判据不是「概念名写得像不像知识点」，而是**每个阶段有没有真的点名一个学科实体**：
+ * 把 title/description/goal 拼起来，至少命中学习范围里的一条术语（全文或前 4 字）。
+ * 为什么这样判：一条「理综做不完」的路径可以写出「标出卡壳时刻」「归类错误类型」这种完全自洽的阶段，
+ * 但它从头到尾没有出现过任何一个物理实体——这种路径不是课，是自我复盘。
+ * 反面样本（分布式课）三个阶段都点名了共识/多数派/任期/日志，判定通过。
+ */
+export function validateScopeBinding(parsed: any, scope: SubjectScope | null) {
+  if (!scope) return { valid: true as const };
+  const milestones = Array.isArray(parsed?.milestones) ? parsed.milestones : [];
+  if (!milestones.length) return { valid: true as const };
+  // 用短词（term）判命中：阶段标题写的是自然语言，不会逐字复述标签全称
+  const terms = scope.entries.map((entry) => entry.term).filter(Boolean);
+  const namesEntity = (milestone: any) => {
+    const text = [String(milestone?.title || ''), String(milestone?.description || ''), String(milestone?.goal || '')].join(' ');
+    return terms.some((term) => text.includes(term));
+  };
+  const named = milestones.filter(namesEntity).length;
+  // 半数以上阶段必须点名实体；一个都没有时一定失败
+  const enough = named * 2 >= milestones.length;
+  if (enough) return { valid: true as const };
+  return { valid: false as const, failureReason: 'PATH_PLANNING_SCOPE_UNBOUND' };
 }
 
 /** 导出以便回归测试（§3.19 P0①：learnerLearningContext 必须真正进入提示词） */
@@ -578,6 +617,21 @@ export function validatePathPlanningOutput(
     }
     if (hubCount > 1) {
       return { valid: false as const, failureReason: 'PATH_PLANNING_HUB_CONCEPT_MULTIPLE' };
+    }
+  }
+
+  // 整条路径都是元认知（2026-10-20 实跑：理综「做不完」生成了一条 4 课全在讲「自检/清单/归类」的路径）。
+  // 策略类目标合法，但阶段的核心概念必须落在学科实体上，否则整条路径没有一节课在教东西。
+  const META_CONCEPT_MARKERS = /(元认知|自检|清单|挂起|复盘|策略|校准|漏判|误判|信号化|止损|转场|时间分配|答题节奏|分类判别|决策规则)/;
+  {
+    const concepts = coreConcepts.map((c: any) => String(c?.name || c?.description || '')).join(' ');
+    const stages = Array.isArray(parsed.milestones) ? parsed.milestones : [];
+    const metaStages = stages.filter((m: any) => {
+      const text = [String(m?.coreConcept || ''), String(m?.title || ''), String(m?.goal || '')].join(' ');
+      return META_CONCEPT_MARKERS.test(text);
+    }).length;
+    if (stages.length > 0 && metaStages * 2 >= stages.length && META_CONCEPT_MARKERS.test(concepts)) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_META_ONLY_PATH' };
     }
   }
 
@@ -997,6 +1051,17 @@ async function generatePath(
       : null;
   const promptFriendlySceneFraming = buildPromptFriendlyNormalizedInput(framingNormalizedInput);
 
+  // 学习范围：叙事里没有「该学什么」，这里按考试范围/学科文本解析出权威清单。
+  // 命中不了就返回 null，行为与旧版一致（绝不拿错的清单去逼模型）。
+  const learningScope: SubjectScope | null = resolveSubjectScope(
+    (input as any)?.metadata?.normalizedInput?.schoolAnchor?.examScope,
+    analysis.subject,
+    analysis.context,
+    input.goal,
+  );
+  const scopeSection = learningScope ? String.fromCharCode(10, 10) + formatScopeForPrompt(learningScope) + String.fromCharCode(10) : '';
+  logger.info('[path-planning] 学习范围', { scope: learningScope ? learningScope.name : null, scopeChars: scopeSection.length, examScope: (input as any)?.metadata?.normalizedInput?.schoolAnchor?.examScope ?? null, subject: analysis.subject ?? null, goal: String(input.goal || '').slice(0, 40) });
+
   const userPayload = `原始学习目标：${input.goal}
 学习主题：${analysis.subject}
 目标水平：${analysis.level}
@@ -1033,7 +1098,7 @@ ${replan ? renderReplanSection(replan) : ''}
 【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
 - 路径名称必须包含"${analysis.context || input.goal}"的核心主题关键词（提取 2-6 字即可），不得使用通用模板名称
 - 每个里程碑的标题必须体现"${analysis.context || input.goal}"的具体阶段
-- 禁止使用电商、音乐 App、房价预测、鸢尾花、泰坦尼克号等通用示例，全部替换为"${analysis.context || input.goal}"相关场景
+- 禁止使用电商、音乐 App、房价预测、鸢尾花、泰坦尼克号等通用示例，全部替换为"${analysis.context || input.goal}"相关场景${scopeSection}
 
 重要要求：
 1. 所有里程碑标题、描述、goal 都要具体化到"${analysis.context || input.goal}"场景，不要使用泛泛的通用描述
@@ -1157,7 +1222,13 @@ ${replan ? renderReplanSection(replan) : ''}
       };
     },
     coerceParsedForContract: (parsed: any) => coercePathPlanningParsed(parsed, promptMaterials),
-    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange),
+    validateParsedOutput: (parsed) => {
+      const base = validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange);
+      if (!base.valid) return base;
+      // 离线评测要单独看 prompt 质量，不能被代码层的范围门挡住（正常运行时不受影响）
+      if (process.env.PATH_EVAL_BYPASS_GATES === '1') return base;
+      return validateScopeBinding(parsed, learningScope);
+    },
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
       artifact: output,
@@ -1170,6 +1241,7 @@ ${replan ? renderReplanSection(replan) : ''}
     retryStrategy: {
       maxAttempts: 2,
       onValidationFail: ({ failureReason }) => `${buildPathValidationRepairNotice(failureReason)}`
+        + (failureReason.includes('SCOPE_UNBOUND') && learningScope ? String.fromCharCode(10) + formatScopeForPrompt(learningScope) + String.fromCharCode(10) : '')
         + `上次失败原因：${failureReason}`,
     },
   }, input, { userId, ...(systemPromptOverride ? { systemPromptOverride } : {}) });
