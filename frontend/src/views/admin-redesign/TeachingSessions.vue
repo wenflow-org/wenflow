@@ -274,7 +274,9 @@
                   <!-- 2026-10-27 用户「总结那边还有四类，简化一下」：行内只留两档——
                        有总结（文字）/ 缺总结（徽章，含降级总结，与 KPI、筛选同一口径）；
                        未生成是过程态，按空值占位；降级与建议细节留在 title。 -->
-                  <span v-if="wrapupTier(r) === 'complete'" class="ts-out__text">有总结</span>
+                  <!-- 2026-10-27 用户「有总结可以设计 pill」：总结结果成对用徽章——
+                       有总结=绿色实心，缺总结=琥珀虚线；两者是同一列的两个结论档。 -->
+                  <span v-if="wrapupTier(r) === 'complete'" class="mk-badge mk-badge--ok">有总结</span>
                   <span v-else-if="wrapupTier(r) === 'missing'" class="mk-badge mk-badge--warn">缺总结</span>
                   <span v-else class="mk-na">—</span>
                 </div>
@@ -1095,9 +1097,8 @@ defineExpose({ refreshNow })
 .ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） */
 /* 课型去胶囊（2026-10-27）：分类值直接用正文文本，不为「正课」这类常态值着色；默认收起，列菜单可开。 */
 .ts-mode { white-space: nowrap; }
-/* 产物格：结论词与异常徽章在固定列宽内换行；建议处置并入 title，不再占行内位置。 */
-.ts-out { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.ts-out__text { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
+/* 产物格：有总结 / 缺总结两档都用徽章，在固定列宽内换行；建议处置并入 title，不再占行内位置。 */
+.ts-out { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
 .ts-error { margin: 0 16px 10px; }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
    4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {

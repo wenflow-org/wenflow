@@ -444,6 +444,33 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
+  it('课后总结：有总结 / 缺总结都用徽章（绿实心 / 琥珀虚线），未生成按空值', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('done', { status: 'completed', wrapup: { status: 'complete', summary: { topicSummary: '总结' } } }),
+            makeItem('miss', { status: 'completed', wrapup: null }),
+            makeItem('active', { status: 'active', wrapup: null })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const rows = wrapper.findAll('tbody tr');
+    const ok = rows[0].find('.ts-out .mk-badge');
+    expect(ok.text()).toBe('有总结');
+    expect(ok.classes()).toContain('mk-badge--ok');
+    const missing = rows[1].find('.ts-out .mk-badge');
+    expect(missing.text()).toBe('缺总结');
+    expect(missing.classes()).toContain('mk-badge--warn');
+    expect(rows[2].find('.ts-out .mk-na').text()).toBe('—');
+    // 旧的灰色文字档位下线，两档统一走徽章
+    expect(wrapper.find('.ts-out__text').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('「异常」KPI 可点即筛：落到状态下拉的「异常」档，再点取消；与下拉同一状态', async () => {
     listMock.mockResolvedValue({
       data: {
