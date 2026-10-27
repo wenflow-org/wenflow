@@ -173,6 +173,26 @@ describe('卡头工具条形态', () => {
     }
     expect(offenders).toEqual([])
   })
+
+  /* 2026-10-27 用户「没有统一排序，先下拉还是先 pill」：收敛为**维度在前、标志在后**。
+     维度是每一页都有的主筛选轴（读作「先缩小范围」），标志是叠加精修（读作「再开关一类」）；
+     多数页面本就是此序，教学会话把标志组写在四个下拉前属历史漂移。这里锁死，防止再掺回来。
+     已应用视图胶囊（激活才出现）不在组内，位置不受限。 */
+  it('卡头主栏顺序：维度下拉在前，标志 chip 组在后', () => {
+    const offenders: string[] = []
+    for (const file of LIST_PAGES) {
+      const src = read(file)
+      const head = src.match(/<div class="mk-card__head"[^>]*>([\s\S]*?)\n      <\/div>/)
+      if (!head) continue
+      const body = head[1]
+      const firstSelect = body.indexOf('<MkPillSelect')
+      const firstFlags = body.indexOf('class="mk-pills"')
+      if (firstSelect >= 0 && firstFlags >= 0 && firstFlags < firstSelect) {
+        offenders.push(`${file}: 标志组排在下拉前`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
 })
 
 /**

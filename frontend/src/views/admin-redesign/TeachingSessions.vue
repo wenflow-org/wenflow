@@ -75,25 +75,6 @@
             :title="`清除「${activeViewLabel}」视图`"
             @click="pill = 'all'"
           >{{ activeViewLabel }}<X :size="12" :stroke-width="2.5" aria-hidden="true" /></button>
-          <div class="mk-pills" role="group" aria-label="标志筛选">
-            <button
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': onlyAdvisory }"
-              :aria-pressed="onlyAdvisory"
-              :title="`有建议 ${advisoryCount} 条（KPI 同源）`"
-              @click="toggleOnlyAdvisory"
-            ><Check v-if="onlyAdvisory" :size="12" :stroke-width="2.5" aria-hidden="true" />有建议</button>
-            <button
-              v-if="abnormalSessionCount"
-              type="button"
-              class="mk-pill ts-abn-chip"
-              :class="{ 'mk-pill--active': abnormalOnly, 'ts-abn-chip--heap': abnormalHeap && !abnormalOnly }"
-              :aria-pressed="abnormalOnly"
-              :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}${abnormalHeap ? `（≥ ${TS_BAD_THRESHOLD}，异常堆积）` : ''}`"
-              @click="abnormalOnly = !abnormalOnly"
-            ><Check v-if="abnormalOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />异常<span class="mk-pill__count">{{ abnormalSessionCount }}</span></button>
-          </div>
           <MkPillSelect
             v-model="statusFilter"
             label="状态"
@@ -122,6 +103,25 @@
             :options="dateSelectOptions"
             :active="!!dateFilter"
           />
+          <div class="mk-pills" role="group" aria-label="标志筛选">
+            <button
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': onlyAdvisory }"
+              :aria-pressed="onlyAdvisory"
+              :title="`有建议 ${advisoryCount} 条（KPI 同源）`"
+              @click="toggleOnlyAdvisory"
+            ><Check v-if="onlyAdvisory" :size="12" :stroke-width="2.5" aria-hidden="true" />有建议</button>
+            <button
+              v-if="abnormalSessionCount"
+              type="button"
+              class="mk-pill ts-abn-chip"
+              :class="{ 'mk-pill--active': abnormalOnly, 'ts-abn-chip--heap': abnormalHeap && !abnormalOnly }"
+              :aria-pressed="abnormalOnly"
+              :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}${abnormalHeap ? `（≥ ${TS_BAD_THRESHOLD}，异常堆积）` : ''}`"
+              @click="abnormalOnly = !abnormalOnly"
+            ><Check v-if="abnormalOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />异常<span class="mk-pill__count">{{ abnormalSessionCount }}</span></button>
+          </div>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
