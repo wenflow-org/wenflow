@@ -178,3 +178,33 @@ node ../outputs/e2e/vision-review.mjs frontend/figure-out/board-review-items.jso
 ```
 
 测试：`board-state` 13 条 + `board-controller` 11 条 + 脱敏回归 95 条 + 归一化 45 条全绿。
+
+---
+
+## 八、评审通道：为什么不再走 PDF
+
+PDF 的问题不在排版，在**通道混用**：人要看，模型也要看，于是双方都被同一个文件拖累。
+
+- 人看 PDF：12 页、逐页翻，改一条判词要重排版再重出；
+- 模型看 PDF：必须先渲染成页图，12 页 ≈ 7.7k token（且判词写在图上，模型还得 OCR）；
+- 退而求其次把整页 HTML 贴给模型：base64 图片直接把一份报告推到 **55.8 万 token**——这才是「网页 token 太大」的真正原因。
+
+改成两条通道后，各自只承担自己该承担的：
+
+| 产物 | 给谁 | 体积 | 估算 token |
+|---|---|---|---|
+| `outputs/board-review/index.html` | 人（浏览器打开，本地起静态服务） | 33KB，**无 base64** | 不消耗（不进模型） |
+| `outputs/board-review/brief.md` | 模型 | 2KB | ~800 |
+| 浏览器里勾完「导出结论」 | 模型（贴回来） | ~0.4KB | ~200 |
+| 六张两态图（可选，逐张喂） | 模型 | 140KB | ~520 |
+
+关键约束：**HTML 里不出现 `data:image`**，图片一律走 `<img src="images/…">`。这样页面可以随手复制/粘贴/存档，而体积只跟文字有关；需要给模型看图时，单独给那几张 PNG，而不是把图塞进文档。
+
+评审台做了三件 PDF 做不到的事：
+
+1. **两态切换**（并排 / 只看提问态 / 只看揭晓态）——单态时图放大到整栏宽，专看留白画得对不对；
+2. **逐条勾判 + 一句话备注**，存在 `localStorage`，刷新不丢；
+3. **导出即结论**：点一下得到 `board-review-result.md`（约 400B），贴回来就能接着改；旁边还附「机器简报」（盲评两次的判词），所以下一轮不需要重新跑一遍评审。
+
+生成：`node outputs/e2e/board-review-app.mjs`（读 `board-run-v5.json` + `board-pngs-v6-2x`，输出 `index.html` / `brief.md` / `images/`）。
+图片目录被 `.gitignore` 的 `*.png` 挡住，**换机器要重跑这条命令**才能看到图。
