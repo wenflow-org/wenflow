@@ -284,7 +284,7 @@
             <template v-else>
               <article v-for="(message, index) in goalConversationMessages" :key="`goal-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
                 <span>{{ message.role === 'assistant' ? '平台目标' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
-                <p>{{ message.content }}</p>
+                <div class="cp-transcript__md" v-html="mdHtml(message.content)" />
               </article>
               <MkEmptyState
                 v-if="!goalConversationMessages.length"
@@ -413,37 +413,43 @@
               <MkSkeleton v-if="teachingDetailLoading" variant="rows" :count="3" :h="12" :radius="4" />
               <!-- 单课总结不在此渲染（2026-10-12 二次拍板「总结就单独总结」）：总结只住总结页签，
                    本列只放课堂对话；要总结去总结页点对应课。 -->
-              <template v-if="learnConversationMessages.length">
-                <article v-for="(message, index) in learnConversationMessages" :key="`learn-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
-                  <span>{{ message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
-                  <p>{{ message.content }}</p>
-                </article>
-              </template>
-              <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">教学记录获取失败 <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button></p>
-              <p v-else-if="!viewedLesson" class="cp-none">尚未选择课程。</p>
-              <p v-else-if="!learnConversationMessages.length" class="cp-none">{{ learnEmptyHint }}</p>
-              <!-- 检查点：题目/作答/判分（2026-10-13 走查「教学会话看不到检查点题目」）。检查点走结构化
-                   通道（pendingCheckpoint → checkpointAnswer），题目**不进聊天逐字稿**，故单独渲染；
-                   否则只看到老师反复喊「接下来出检查题」而看不到题本身。 -->
-              <div v-if="lessonCheckpoints.length" class="cp-checkpoints">
-                <div class="cp-checkpoints__head">
-                  <span class="cp-checkpoints__title">检查点</span>
-                  <span
-                    class="cp-checkpoints__meta"
-                    title="题目与作答走结构化通道，不写入聊天逐字稿，所以在转录之外单独列出"
-                  >{{ lessonCheckpoints.length }} 次作答</span>
-                </div>
-                <div v-for="(cp, i) in lessonCheckpoints" :key="`cp-${i}`" class="cp-checkpoint">
-                  <p class="cp-checkpoint__q">{{ cp.question || cp.title || '（无题干）' }}</p>
-                  <div class="cp-checkpoint__meta">
-                    <span class="mk-badge" :class="cp.passed === true ? 'mk-badge--ok' : cp.passed === false ? 'mk-badge--warn' : 'mk-badge--muted'">{{ cp.passed === true ? '通过' : cp.passed === false ? '未通过' : '未判分' }}</span>
-                    <span class="cp-checkpoint__tag">{{ checkpointTypeLabel(cp.type) }}</span>
-                    <span v-if="cp.judgedBy" class="cp-checkpoint__tag">判分 {{ cp.judgedBy }}</span>
-                    <span v-if="cp.understanding != null" class="cp-checkpoint__tag" title="AI 对本次作答的理解度估计">理解度 {{ Math.round(cp.understanding * 100) }}%</span>
-                    <span v-if="cp.conceptName" class="cp-checkpoint__concept">{{ cp.conceptName }}</span>
+              <template v-if="learnTimeline.length">
+                <template v-for="entry in learnTimeline" :key="entry.key">
+                  <article v-if="entry.message" class="cp-transcript__message" :class="entry.message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
+                    <span>{{ entry.message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+                    <div v-if="entry.message.content" class="cp-transcript__md" v-html="mdHtml(entry.message.content)" />
+                    <!-- 课堂视觉产物：与学习者侧同一套确定性渲染（mermaid + 多图型 SVG），
+                         运营在座舱里能直接看到老师当时摆的图，而不是只看到「见图」二字。 -->
+                    <TeachingDiagram
+                      v-for="(diagram, di) in entry.message.diagrams"
+                      :key="`${entry.key}-d${di}`"
+                      :code="String(diagram.code || '')"
+                      :caption="diagram.caption || null"
+                    />
+                    <TeachingFigure
+                      v-for="(figure, fi) in entry.message.figures"
+                      :key="`${entry.key}-f${fi}`"
+                      :figure="figure"
+                    />
+                  </article>
+                  <!-- 检查点：题目/作答/判分。题目走结构化通道、不进聊天逐字稿，所以按时间插回
+                       它发生的那一回合（2026-10-19 用户走查「不符合课堂阅读顺序」）。 -->
+                  <div v-else-if="entry.checkpoint" class="cp-checkpoint cp-checkpoint--inline">
+                    <p class="cp-checkpoint__q">{{ entry.checkpoint.question || entry.checkpoint.title || '（无题干）' }}</p>
+                    <div class="cp-checkpoint__meta">
+                      <span class="cp-checkpoint__kind">检查点</span>
+                      <span class="mk-badge" :class="entry.checkpoint.passed === true ? 'mk-badge--ok' : entry.checkpoint.passed === false ? 'mk-badge--warn' : 'mk-badge--muted'">{{ entry.checkpoint.passed === true ? '通过' : entry.checkpoint.passed === false ? '未通过' : '未判分' }}</span>
+                      <span class="cp-checkpoint__tag">{{ checkpointTypeLabel(entry.checkpoint.type) }}</span>
+                      <span v-if="entry.checkpoint.judgedBy" class="cp-checkpoint__tag">判分 {{ entry.checkpoint.judgedBy }}</span>
+                      <span v-if="entry.checkpoint.understanding != null" class="cp-checkpoint__tag" title="AI 对本次作答的理解度估计">理解度 {{ Math.round(entry.checkpoint.understanding * 100) }}%</span>
+                      <span v-if="entry.checkpoint.conceptName" class="cp-checkpoint__concept">{{ entry.checkpoint.conceptName }}</span>
+                    </div>
                   </div>
-                </div>
-              </div>
+                </template>
+              </template>
+              <p v-else-if="teachingDetailFailed && !learnTimeline.length" class="cp-degrade">教学记录获取失败 <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button></p>
+              <p v-else-if="!viewedLesson" class="cp-none">尚未选择课程。</p>
+              <p v-else-if="!learnTimeline.length" class="cp-none">{{ learnEmptyHint }}</p>
             </div>
           </div>
         </section>
@@ -966,13 +972,18 @@ import { toast } from '@/utils/toast'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+// 课堂转录里的视觉产物：与学习者侧同一套确定性渲染组件（同一份 spec → 同一张图）
+import TeachingDiagram from '@/components/TeachingDiagram.vue'
+import TeachingFigure from '@/components/TeachingFigure.vue'
+import { renderAiMessageHtml } from '@/utils/sanitize'
 import { runHealthTone, statusText } from './statusText'
 import { parseLogEntry, virtualLogPhaseZh } from './sessionLog'
 // 评分助手（evalScore）原供终局评估面板使用；面板已随裁判独立面移除（2026-09-27），本组件不再引用
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
   asRecord, normalized, firstText, boolValue, numberValue,
-  conversationMessages, formatTime, stageLabel, wrapupCardIcon
+  conversationMessages, transcriptMessages, mergeLearnTimeline, formatTime, stageLabel, wrapupCardIcon,
+  type CheckpointRecord
 } from './cockpitFormat'
 import { useCockpitTraces, timelineKindLabel } from './cockpitTraces'
 import { useCockpitLogs, LOG_WINDOW } from './useCockpitLogs'
@@ -1007,6 +1018,9 @@ const FRICTION_LABEL: Record<string, string> = { none: '无', low: '低', normal
 
 const sessionId = computed(() => subPage.value?.id || '')
 const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.value.slice(-16)}` : sessionId.value))
+
+/** 发言正文按 markdown 渲染（复用学习者页同一条 markdown-it + DOMPurify 管线）。 */
+const mdHtml = (text: string | null | undefined) => renderAiMessageHtml(text)
 
 /* 双模式：session=虚拟会话控制台（原行为 100% 保留）；session-real=真实教学/目标会话只读控制台 */
 const isRealMode = computed(() => subPage.value?.view === 'session-real')
@@ -1333,7 +1347,7 @@ const pathReview = computed(() => asRecord(stageResults.value.path_review || sta
 const learningResult = computed(() => asRecord(stageResults.value.teaching))
 const conversations = computed(() => asRecord(session.value?.conversations))
 const goalConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.goal).messages))
-const fallbackLearnConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.learning).messages))
+const fallbackLearnConversationMessages = computed(() => transcriptMessages(asRecord(conversations.value.learning).messages))
 const teachingSessionHistory = computed(() => {
   const history = learningResult.value.teachingSessionHistory
   if (!Array.isArray(history)) return [] as Array<{ id: string; taskId: string; taskTitle: string; status: string }>
@@ -1346,23 +1360,14 @@ const teachingSessionHistory = computed(() => {
     status: normalized(item.status)
   })).filter((item) => item.id && !seen.has(item.id) && !!seen.add(item.id))
 })
-const teachingDetailMessages = computed(() => conversationMessages(teachingDetail.value?.messages))
+const teachingDetailMessages = computed(() => transcriptMessages(teachingDetail.value?.messages))
 const learnConversationMessages = computed(() =>
   teachingDetailMessages.value.length ? teachingDetailMessages.value : fallbackLearnConversationMessages.value
 )
 /** 检查点记录（题目/判分/理解度）。检查点是结构化通道，题目不进聊天逐字稿——
- *  真实模式经 /admin/session-console 的 teaching.checkpoints，虚拟模式在 state.checkpointHistory。 */
-interface CockpitCheckpoint {
-  checkpointId?: string | null
-  title?: string | null
-  type?: string | null
-  question?: string | null
-  passed?: boolean | null
-  judgedBy?: string | null
-  understanding?: number | null
-  conceptName?: string | null
-  submittedAt?: string | null
-}
+ *  真实模式经 /admin/session-console 的 teaching.checkpoints，虚拟模式在 state.checkpointHistory。
+ *  字段定义单源在 cockpitFormat（时间轴合并也要读它）。 */
+type CockpitCheckpoint = CheckpointRecord
 const lessonCheckpoints = computed<CockpitCheckpoint[]>(() => {
   // 真实模式：session（/admin/session-console）随首帧加载、始终可用 → 优先；
   // 虚拟模式：teaching-detail 的 state.checkpointHistory 兜底。
@@ -1379,6 +1384,10 @@ const CHECKPOINT_TYPE_LABEL: Record<string, string> = {
 function checkpointTypeLabel(t: string | null | undefined) {
   return (t && CHECKPOINT_TYPE_LABEL[t]) || t || '检查点'
 }
+
+/** 课堂时间轴：消息与检查点按发生时间交错（2026-10-19 用户走查「这检查点怎么在下方，
+ *  不符合课堂阅读顺序」）。合并规则与判据见 `cockpitFormat.ts#mergeLearnTimeline`。 */
+const learnTimeline = computed(() => mergeLearnTimeline(learnConversationMessages.value, lessonCheckpoints.value))
 const displayedTeachingSessionId = computed(() => firstText(
   teachingDetail.value?.id,
   selectedTeachingSessionId.value,
@@ -3309,17 +3318,34 @@ async function copyRawJson() {
 .cp-transcript__message.is-learner { border-left-color: var(--mk-teal); background: rgba(45, 212, 191, 0.1); }
 .cp-transcript__message span { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); }
 .cp-transcript__message p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+/* 老师发言按 markdown 渲染（与学习者页同一管线）：段落/列表/加粗/行内码各有形状。
+   纯文本插值时老师写出的 **加粗** 会原样露出星号，在座舱里看着像坏掉的文案。 */
+.cp-transcript__md { font-size: var(--mk-fs-micro); line-height: 1.6; word-break: break-word; }
+.cp-transcript__md > :first-child { margin-top: 0; }
+.cp-transcript__md > :last-child { margin-bottom: 0; }
+.cp-transcript__md p { margin: 0 0 6px; }
+.cp-transcript__md strong { font-weight: 800; }
+.cp-transcript__md ul, .cp-transcript__md ol { margin: 4px 0; padding-left: 18px; }
+.cp-transcript__md code { padding: 0 4px; border-radius: 4px; background: var(--mk-surface-3, rgba(15, 23, 42, 0.06)); font-size: 0.95em; }
+.cp-transcript__md pre { margin: 6px 0; padding: 8px 10px; overflow-x: auto; border-radius: var(--mk-radius-sm); background: var(--mk-surface-2); }
+.cp-transcript__md pre code { padding: 0; background: none; }
 
-/* 检查点（题目不走聊天逐字稿，单独渲染；2026-10-13 走查 lesson 13） */
-.cp-checkpoints {
-  display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px;
-  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); background: var(--mk-surface-2);
-}
-.cp-checkpoints__head { display: flex; align-items: baseline; gap: 8px; }
-.cp-checkpoints__title { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-ink); }
-.cp-checkpoints__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 检查点（题目不走聊天逐字稿，按时间插回它发生的那一回合；2026-10-13 走查 lesson 13，
+   2026-10-19 用户走查改内联：堆在转录末尾不符合课堂阅读顺序） */
 .cp-checkpoint { display: grid; gap: 5px; padding-top: 8px; border-top: 1px solid var(--mk-line); }
 .cp-checkpoint:first-of-type { padding-top: 0; border-top: none; }
+/* 内联在转录流里：与消息同宽同边距，靠左侧紫色轨与「检查点」标签和老师发言区分开 */
+.cp-checkpoint--inline {
+  gap: 6px; padding: 8px 10px;
+  border: none; border-left: 3px solid var(--mk-violet-fill); border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+}
+.cp-checkpoint--inline:first-of-type { padding-top: 8px; }
+.cp-checkpoint__kind {
+  padding: 1px 6px; border-radius: var(--mk-radius-pill);
+  background: var(--mk-surface-3);
+  font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-ink);
+}
 .cp-checkpoint__q { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.6; color: var(--mk-ink); word-break: break-word; }
 .cp-checkpoint__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cp-checkpoint__tag { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
