@@ -15,7 +15,7 @@ const read = (file: string) => readFileSync(resolve(__dirname, '..', file), 'utf
 
 const PAGES = [
   { file: 'TeachingSessions.vue', prefix: 'ts-c-', minWidthCols: 10 },
-  { file: 'GoalConversations.vue', prefix: 'gc-c-', minWidthCols: 8 },
+  { file: 'GoalConversations.vue', prefix: 'gc-c-', minWidthCols: 7 },
   { file: 'OpsContent.vue', prefix: 'oc-c-', minWidthCols: 7 },
   { file: 'Users.vue', prefix: 'u-c-', minWidthCols: 7 },
   // 撤「完成度」「类别」「操作」三列后（2026-10-24 / 10-26）剩 8 个宽度类：

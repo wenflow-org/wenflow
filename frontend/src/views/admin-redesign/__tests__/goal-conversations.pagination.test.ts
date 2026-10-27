@@ -434,14 +434,17 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(w.findAll('button').some((b) => b.text() === '控制台')).toBe(false);
   });
 
-  /* 2026-10-22 用户「目标对话的查看路径，和详细，重复了」：两个按钮都开 session-real 座舱，
-     只是一个落 Path 页签、一个落默认页签。路径列改纯状态，下钻只留「详情」。 */
-  it('路径列只回答有没有生成：不再有与「详情」重复的「查看路径」按钮', async () => {
+  /* 2026-10-27 用户「这个列还是重复了，从外部看」：路径状态并入状态列（已完成即已生成），
+     不再单列重复；路径入口收进操作列，有路径时显示「路径」。 */
+  it('不再有独立「路径」列：路径状态并入状态，入口收进操作列', async () => {
     const w = await mountGoals();
+    expect(w.findAll('thead th').map((t) => t.text())).not.toContain('路径');
+    expect(w.text()).not.toContain('已生成');
     expect(w.findAll('button').some((b) => b.text() === '查看路径')).toBe(false);
     const rows = w.findAll('tbody tr');
-    expect(rows[1].text()).toContain('已生成');
-    expect(rows[0].text()).toContain('—');
+    // makeConv：偶数行有 learningPathId → 操作列出现「路径」；奇数行没有
+    expect(rows[1].findAll('.mk-actions .mk-link').map((b) => b.text())).toContain('路径');
+    expect(rows[0].findAll('.mk-actions .mk-link').map((b) => b.text())).not.toContain('路径');
   });
 
   /* 2026-10-26：页头副题（复述页名 + 两个列名）已删，口径只由页名与数据自明；
@@ -486,9 +489,9 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     w.unmount();
   });
 
-  it('「路径」列「已生成」可点 → 座舱「路径」页签', async () => {
+  it('操作列「路径」→ 座舱「路径」页签', async () => {
     const w = await mountGoals();
-    const pathBtn = w.findAll('tbody button.mk-user-link').find((b) => b.text() === '已生成')!;
+    const pathBtn = w.findAll('tbody .mk-actions .mk-link').find((b) => b.text() === '路径')!;
     expect(pathBtn).toBeTruthy();
     await pathBtn.trigger('click');
     expect(vi.mocked(openSubPage)).toHaveBeenCalledWith('session-real', 'conv-2', { stage: 'path' });

@@ -147,7 +147,6 @@
               @click="toggleGcSort('turns')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清轮次<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th v-if="showCol('constraints')" scope="col" class="gc-c-constraints">约束条件</th>
-            <th v-if="showCol('path')" scope="col" class="gc-c-path">路径</th>
             <th
               v-if="showCol('stageDate')"
               scope="col"
@@ -222,17 +221,6 @@
               </div>
               <span v-else class="mk-na">—</span>
             </td>
-            <td v-if="showCol('path')">
-              <!-- 路径列即入口：点击直接落座舱「路径」页签（详情默认落目标对话页签，
-                   已生成路径的人不必再切一次）。 -->
-              <button
-                v-if="r.pathId || r.hasPath"
-                type="button"
-                class="mk-user-link"
-                @click.stop="openPathStage(r)"
-              >已生成</button>
-              <span v-else class="mk-na">—</span>
-            </td>
             <td v-if="showCol('stageDate')">
               <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
               <span v-else class="mk-na">—</span>
@@ -242,6 +230,9 @@
             <td>
               <div class="mk-actions">
                 <button type="button" class="mk-link" @click.stop="openDetail(r)">详情</button>
+                <!-- 2026-10-27 用户「这个列还是重复了」：路径列并入状态（已完成即已生成），
+                     保留一个「路径」动作作为座舱路径页签入口，不再单列重复状态。 -->
+                <button v-if="r.hasPath" type="button" class="mk-link" @click.stop="openPathStage(r)">路径</button>
                 <div class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
                   <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
@@ -420,8 +411,8 @@ const noPathOnly = ref(false)
  *  而同组学习状态页的需关注/观察 KPI 都可点即筛。读数有对应行就必须能落到那几行，
  *  否则它只是「知道了但动不了」。与状态筛选、未生成路径叠加为 AND。 */
 const stalledOnly = ref(false)
-/** 「未生成路径」谓词：hasPath 与路径列「—」同口径（均由后端 learningPathId 推导）；
-    已完成桶口径 = 已生成学习路径，故「未生成」只拦进行中，两处口径呼应不矛盾 */
+/** 「未生成路径」谓词：hasPath 由后端 learningPathId 推导；路径已并入状态列
+    （已完成即已生成），故「未生成」只拦进行中，两处口径呼应不矛盾 */
 const isPathPendingRow = (r: Row) => r.status === 'active' && !r.hasPath
 const pathPendingCount = computed(() => rows.value.filter(isPathPendingRow).length)
 
@@ -434,10 +425,12 @@ const gcAppliedViews = computed(() => {
   return views
 })
 
-/* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/澄清轮次/约束条件/路径/最近活动/创建时间 可隐藏，用户/操作固定。
-   2026-10-22 默认只留 6 列（目标摘要/用户/状态/澄清轮次/路径/最近活动/操作）：
+/* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/澄清轮次/约束条件/最近活动/创建时间 可隐藏，用户/操作固定。
+   2026-10-22 默认只留 5 列（目标摘要/用户/状态/澄清轮次/最近活动/操作）：
    · 创建时间：与「最近活动」同为时间轴，分诊只看最近活动；
    · 约束条件：真实数据稀疏（~35% 有值），逐条约束在详情里看。
+   2026-10-27 用户「这个列还是重复了」：路径列并入状态（已完成即已生成），路径入口
+   收进操作列（有路径时显示「路径」），不再单列重复。
    两项仍可在「列」菜单打开；存储键升 v2，旧本地配置不覆盖新默认。 */
 const GC_DEFAULT_HIDDEN = ['constraints', 'created'] as const
 const gcColDefs = [
@@ -445,7 +438,6 @@ const gcColDefs = [
   { key: 'status', label: '状态' },
   { key: 'turns', label: '澄清轮次' },
   { key: 'constraints', label: '约束条件' },
-  { key: 'path', label: '路径' },
   { key: 'stageDate', label: '最近活动' },
   { key: 'created', label: '创建时间' },
 ] as const
@@ -896,7 +888,6 @@ onMounted(() => {
 .gc-c-status { width: 84px; }
 .gc-c-turns { width: 68px; }
 .gc-c-constraints { width: 140px; }
-.gc-c-path { width: 82px; }
 .gc-c-stage-date { width: 78px; }
 .gc-c-created { width: 72px; }
 /* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
