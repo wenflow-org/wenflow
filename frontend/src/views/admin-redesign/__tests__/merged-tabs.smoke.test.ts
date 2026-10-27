@@ -221,7 +221,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     // ①统计六卡（共享 .mk-kpi-grid，2026-10-04 拆到页级；2026-10-23 撤疲劳高/趋势下降；
     //   2026-10-26 补「观察」：KPI 即筛选入口，卡头同名 pill 已撤）
     const kpiLabels = w.findAll('.lc-kpi .mk-kpi__label').map((c) => c.text().trim());
-    expect(kpiLabels).toEqual(['学习者账号', '需关注', '观察', '低置信学习者', '平均置信度', '数据覆盖率']);
+    expect(kpiLabels).toEqual(['用户账号', '需关注', '观察', '低置信用户', '平均置信度', '数据覆盖率']);
     // ②置信分布带已退役（2026-10-17）：置信口径由「低置信」KPI 与可排序的「置信」列承载
     expect(w.find('.mk-distband').exists()).toBe(false);
     // 低置信卡与「低置信」筛选同口径：丙（无任务、confidence 0）不计入（外部评审「274 vs 高分区 7」型接缝的护栏）

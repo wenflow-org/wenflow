@@ -195,20 +195,20 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       expect(card, `缺少 KPI：${label}`).toBeTruthy();
       return card!.text();
     };
-    expect(kpi('学习者账号')).toContain('已加载 4');
+    expect(kpi('用户账号')).toContain('已加载 4');
     // P2（2026-10-04 全站评审）：「快照单次最多加载 50 条」不再进 hint（单源=本页状态条，拆页后住学习状态页头）
     // 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：视角复述撤出副行（右上角开关自明），
     // 只留会改变读数含义的范围说明
-    expect(kpi('学习者账号')).not.toContain('仅真实用户');
+    expect(kpi('用户账号')).not.toContain('仅真实用户');
     // 2026-10-21 用户「不要了」：KPI 卡面只留 label + 读数，范围说明只在 title
-    expect(kpi('学习者账号')).not.toContain('含未开始学习的账号');
-    expect(kpi('学习者账号')).not.toContain('50 条');
+    expect(kpi('用户账号')).not.toContain('含未开始学习的账号');
+    expect(kpi('用户账号')).not.toContain('50 条');
 
     // 数据层接线后：liveLearnersTotal 有值且 ≠ 窗口数 → 显「N · 已载 M」
     const { liveLearnersTotal } = await import('../live');
     (liveLearnersTotal as unknown as { value: number | null }).value = 137;
     await nextTick();
-    expect(kpi('学习者账号')).toContain('137 · 已加载 4');
+    expect(kpi('用户账号')).toContain('137 · 已加载 4');
     expect(kpi('需关注')).not.toContain('疲劳高'); // 构成说明只在 title
     w.unmount();
   });
@@ -263,7 +263,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     const w = mount(LearnerCenter);
     await settle();
     expect(w.findAll('.lc-table thead th').map((th) => th.text().trim())).toEqual([
-      '学习者',
+      '用户',
       '当前进度',
       '趋势 / 疲劳',
       '风险摘要',
@@ -291,16 +291,16 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       expect(card, `缺少 KPI：${label}`).toBeTruthy();
       return card!;
     };
-    expect(kpiCard('低置信学习者').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
+    expect(kpiCard('低置信用户').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
     // 2026-10-26：KPI 卡面只留 label + 读数，口径自述不再挂 title
-    expect(kpiCard('低置信学习者').find('.mk-kpi__hint').exists()).toBe(false);
-    expect(kpiCard('低置信学习者').attributes('title')).toBeUndefined();
+    expect(kpiCard('低置信用户').find('.mk-kpi__hint').exists()).toBe(false);
+    expect(kpiCard('低置信用户').attributes('title')).toBeUndefined();
 
-    // 分布带已退役：无任务行不计的口径由「低置信学习者」卡与列表过滤共同承载
+    // 分布带已退役：无任务行不计的口径由「低置信用户」卡与列表过滤共同承载
     expect(w.find('.mk-distband').exists()).toBe(false);
 
-    // 点「低置信学习者」卡 → 与 KPI 同口径：戊不出现，行数=KPI 读数（否则计数/过滤再打架）
-    await kpiCard('低置信学习者').trigger('click');
+    // 点「低置信用户」卡 → 与 KPI 同口径：戊不出现，行数=KPI 读数（否则计数/过滤再打架）
+    await kpiCard('低置信用户').trigger('click');
     await nextTick();
     const rowsText = w.findAll('tbody tr').map((r) => r.text());
     expect(rowsText).toHaveLength(2);

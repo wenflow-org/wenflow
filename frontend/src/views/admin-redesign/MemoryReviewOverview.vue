@@ -54,7 +54,7 @@
           />
           <!-- 2026-10-26 用户走查「我非常讨厌这种文案」：原「仅当前页 · 共 N 位」口径行撤除。
                它复述的是分页机制本身，不是读数也不是可操作信息；「共 N 位」还与本页底部分页器
-               的「共 N 位学习者」逐字复读（同一事实两处出现）。 -->
+               的「共 N 位用户」逐字复读（同一事实两处出现）。 -->
         </div>
         <!-- 2026-10-23 用户「这种文案，不要」：卡头 meta 原样复述分页/排序/筛选的作用机制
              （「在全部用户里排好再分页，不是只排当前页」「快速筛选只作用于当前页」），
@@ -99,7 +99,7 @@
             <tr>
               <th scope="col" class="mk-th--sortable mr-c-user" :aria-sort="userSortState('name')"
                 @click="toggleUserSort('name')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('name')">学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('name')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable mr-c-traces" :aria-sort="userSortState('traces')"
                 @click="toggleUserSort('traces')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('traces')">记忆痕迹<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -221,7 +221,7 @@
       <MkEmptyState
         v-else
         min
-        title="没有符合条件的学习者"
+        title="没有符合条件的用户"
         action-text="显示全部"
         @action="mrPill = 'all'"
       />
@@ -235,7 +235,7 @@
         v-model:pageSize="userPageSize"
         :total="totals.users"
         :loading="loading"
-        unit="位学习者"
+        unit="位用户"
         :note="mrPill !== 'all' ? '筛选范围：当前页' : ''"
       />
     </div>

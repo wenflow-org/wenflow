@@ -129,9 +129,9 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     w.unmount();
   });
 
-  it('分页器单位是「位学习者」，每页条数默认 50', async () => {
+  it('分页器单位是「位用户」，每页条数默认 50', async () => {
     const w = await mountWithRows(ROWS, { users: 120 });
-    expect(w.find('.mk-pagination').text()).toContain('共 120 位学习者');
+    expect(w.find('.mk-pagination').text()).toContain('共 120 位用户');
     expect(mkSelectValue(w as never, '每页条数')).toBe('50');
     w.unmount();
   });
@@ -230,7 +230,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     const w = mount(MemoryReviewOverview);
     await flushPromises();
 
-    expect(w.findAll('thead th').map((t) => t.text())).toEqual(['学习者', '记忆痕迹', '待复习', '需关注', '归并候选', '散键', '记忆强度', '最近复习', '操作']);
+    expect(w.findAll('thead th').map((t) => t.text())).toEqual(['用户', '记忆痕迹', '待复习', '需关注', '归并候选', '散键', '记忆强度', '最近复习', '操作']);
 
     const trs = w.findAll('tbody tr');
     expect(trs).toHaveLength(2);
@@ -363,7 +363,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await chooseFilter(w2 as never, '状态', '有待复习');
     await nextTick();
     expect(w2.findAll('tbody tr')).toHaveLength(0);
-    expect(w2.find('.mk-empty').text()).toContain('没有符合条件的学习者');
+    expect(w2.find('.mk-empty').text()).toContain('没有符合条件的用户');
     // 空态不再解释「筛选只作用于当前页」这类机制，只给出口
     expect(w2.find('.mk-empty').text()).not.toContain('快速筛选只作用于当前页');
     await w2.find('.mk-empty__action').trigger('click');

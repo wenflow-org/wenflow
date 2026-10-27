@@ -9,7 +9,7 @@
          有多少加载多少）：只在真截断（total > 已载）时出现并给真实数字，全量加载后整条消失 -->
     <div v-if="learnerTotal != null && learnerTotal > liveLearners.length" class="mk-status mk-status--muted">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta">共 {{ learnerTotal }} 位学习者，当前显示前 {{ liveLearners.length }} 位</span>
+      <span class="mk-status__meta">共 {{ learnerTotal }} 位用户，当前显示前 {{ liveLearners.length }} 位</span>
     </div>
     <!-- 审核 #17（2026-10-06）：已有旧行时刷新失败此前无任何呈现（loadFailed 要求列表为空），
          页面继续把上次结果当当前值——补一条行内告警 + 重试出口（对照 Feedback.vue 行内告警判例） -->
@@ -25,7 +25,7 @@
          再点取消，与卡头胶囊组共用同一个 `pill` 状态（同记忆复习「需人工确认」判例）。 -->
     <section class="mk-kpi-grid lc-kpi" aria-label="学习状态概览">
       <MkKpi
-        label="学习者账号"
+        label="用户账号"
         :value="kpiValue(learnerTotalText)"
         :hint="learnerKpiHint"
         :tone="loadFailed ? 'muted' : ''"
@@ -50,7 +50,7 @@
         @click="togglePill('watch')"
       />
       <MkKpi
-        label="低置信学习者"
+        label="低置信用户"
         :value="kpiValue(lowConfCount)"
         :tone="loadFailed ? 'muted' : lowConfCount ? 'warn' : ''"
         clickable
@@ -157,7 +157,7 @@
            表格，表格区内滚升入首屏，分页器保持卡尾吸底。 -->
       <div v-else class="lc-body">
 
-      <!-- 固定列宽（2026-10-22 与教学组三表同判例）：学习者/当前进度/置信/风险四列在 auto 布局下
+      <!-- 固定列宽（2026-10-22 与教学组三表同判例）：用户/当前进度/置信/风险四列在 auto 布局下
            按当页最长内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
            长昵称/长任务仍由 mk-cell-main 上限与下方 max-width 截断兜底。
            0 行不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃满卡高，把空态顶到卡底 -->
@@ -165,7 +165,7 @@
       <table v-if="filtered.length" class="mk-table mk-table--click mk-table--nowrap mk-table--fixed lc-table">
         <thead>
           <tr>
-            <th v-if="!lcHiddenCols.has('learner')" scope="col" class="lc-c-learner">学习者</th>
+            <th v-if="!lcHiddenCols.has('learner')" scope="col" class="lc-c-learner">用户</th>
             <th v-if="!lcHiddenCols.has('progress')" scope="col" class="lc-c-progress">当前进度</th>
             <th v-if="!lcHiddenCols.has('status')" scope="col" class="lc-c-status">趋势 / 疲劳</th>
             <!-- 列序（2026-10-27 用户「这个列的顺序，和其他的页面不太一样」）：
@@ -280,7 +280,7 @@
         <MkEmptyState
           v-else
           min
-          :title="isFiltered ? '没有匹配的学习者' : '暂无学习者快照'"
+          :title="isFiltered ? '没有匹配的用户' : '暂无用户快照'"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -292,14 +292,14 @@
         v-model:pageSize="pageSize"
         :total="filtered.length"
         :showTotal="true"
-        unit="位学习者"
+        unit="位用户"
       />
     </div>
 
     <!-- C2 干预动线：风险学习者 → 查看会话 / 发送站内提醒（对标英跃"过程管理"） -->
     <Teleport to="body">
       <div v-if="intervene" ref="interveneMaskRef" class="mk-modal">
-        <div ref="intervenePanelRef" class="mk-modal__panel" role="dialog" aria-label="学习者干预">
+        <div ref="intervenePanelRef" class="mk-modal__panel" role="dialog" aria-label="用户干预">
           <div class="mk-modal__head">
             <h3 class="mk-modal__title">干预 · {{ intervene.name }}</h3>
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="intervene = null">✕</button>
@@ -381,11 +381,11 @@ interface Row {
 }
 
 const keyword = ref('')
-/* P1-3 列显隐（公共组件 MkCols）：学习者/进度/状态/置信/风险/更新 可隐藏，操作固定
+/* P1-3 列显隐（公共组件 MkCols）：用户/进度/状态/风险/置信/更新 可隐藏，操作固定
    2026-10-22 用户「信息密度比较高」：趋势与疲劳合并为一列（同为一行内读的「当前状态」，
    两列各只占一句短词）。旧存储键里的 trend/fatigue 已无对应列，不影响合并列显隐。 */
 const lcColDefs = [
-  { key: 'learner', label: '学习者' },
+  { key: 'learner', label: '用户' },
   { key: 'progress', label: '当前进度' },
   { key: 'status', label: '趋势 / 疲劳' },
   { key: 'risk', label: '风险摘要' },
@@ -490,7 +490,7 @@ const learnerTotalText = computed(() => {
   if (t != null) return t === rows.value.length ? String(t) : `${t} · 已加载 ${rows.value.length}`
   return rows.value.length ? `已加载 ${rows.value.length}` : '0'
 })
-/** 「学习者账号」KPI 口径 hint（2026-10-15 KPI 审计）：随页头「真实/测试」互斥视角变化——
+/** 「用户账号」KPI 口径 hint（2026-10-15 KPI 审计）：随页头「真实/测试」互斥视角变化——
     真实视角绝不提虚拟/测试账号（否则读者以为数里混了假账号）；两视角都含未开始学习的账号。 */
 /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：副行只留「含未开始学习的账号」这条
    会改变读数含义的范围说明；视角（真实 / 测试）由右上角开关表达，不再复述 */
@@ -746,7 +746,7 @@ async function recomputeAll() {
   if (recomputingAll.value || !targets.length) return
   const confirmed = await askConfirm({
     title: '重算快照',
-    message: `确认重算当前筛选命中的 ${targets.length} 位学习者的快照？将逐个重新生成，耗时取决于人数。`
+    message: `确认重算当前筛选命中的 ${targets.length} 位用户的快照？将逐个重新生成，耗时取决于人数。`
       + (targets.length > 50 ? `\n当前命中 ${targets.length} 人（超过 50），建议先筛选分批。开始后可随时点「停止」中止。` : ''),
     confirmText: `重算 ${targets.length} 人`,
     danger: false
