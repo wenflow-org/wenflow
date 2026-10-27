@@ -1,7 +1,7 @@
 ---
 agentId: skill:stage-designer
 coreHash: 6cc561be6400e871b6d1b2ab7782f8dc8a5649047490f74a67f8a21f6e33bb77
-coreVersion: 17
+coreVersion: 18
 temperature: 0.3
 maxTokens: 64000
 failurePolicy: retry
