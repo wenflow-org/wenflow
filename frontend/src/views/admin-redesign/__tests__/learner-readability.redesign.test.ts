@@ -258,6 +258,23 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     liveLearners.value = [];
   });
 
+  it('列序与其他列表一致：身份 → 进度 → 状态信号 → 数值 → 时间 → 操作', async () => {
+    localStorage.setItem('wf_learner_hidden_cols_v3', JSON.stringify([]));
+    const w = mount(LearnerCenter);
+    await settle();
+    expect(w.findAll('.lc-table thead th').map((th) => th.text().trim())).toEqual([
+      '学习者',
+      '当前进度',
+      '趋势 / 疲劳',
+      '风险摘要',
+      '置信度',
+      '数据更新',
+      '操作'
+    ]);
+    w.unmount();
+    localStorage.removeItem('wf_learner_hidden_cols_v3');
+  });
+
   it('低置信 KPI 与均值同口径（无任务快照不计）；基数差异由 KPI 披露（分布带已于 2026-10-17 退役）', async () => {
     // 四人都有任务 + 戊无任务且低置信（0.2）：旧口径会把戊算进低置信 → 与紧邻的分布对不上
     liveLearners.value = [

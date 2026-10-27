@@ -168,6 +168,10 @@
             <th v-if="!lcHiddenCols.has('learner')" scope="col" class="lc-c-learner">学习者</th>
             <th v-if="!lcHiddenCols.has('progress')" scope="col" class="lc-c-progress">当前进度</th>
             <th v-if="!lcHiddenCols.has('status')" scope="col" class="lc-c-status">趋势 / 疲劳</th>
+            <!-- 列序（2026-10-27 用户「这个列的顺序，和其他的页面不太一样」）：
+                 身份 → 当前进度 → 状态信号（趋势/疲劳、风险摘要）→ 数值指标（置信度）→ 时间 → 操作。
+                 风险摘要是默认排序「风险优先」的判据，放在置信度之前，需关注的原因先被看到。 -->
+            <th v-if="!lcHiddenCols.has('risk')" scope="col" class="lc-c-risk">风险摘要</th>
             <!-- 审核 #20（2026-10-06）：置信 / 更新接共享 useTableSort（Users.vue 同写法）。
                  2026-10-26：排序补回默认序的出口——再点当前排序列回到「风险优先 → 更新时间新→旧」。 -->
             <th
@@ -177,7 +181,6 @@
               :aria-sort="lcSortState('conf')"
               @click="toggleLcSort('conf')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th v-if="!lcHiddenCols.has('risk')" scope="col" class="lc-c-risk">风险摘要</th>
             <th
               v-if="!lcHiddenCols.has('updated')"
               scope="col"
@@ -230,6 +233,10 @@
               </div>
               <span v-else class="mk-na" title="还没有开始学习，趋势与疲劳无从计算">—</span>
             </td>
+            <td v-if="!lcHiddenCols.has('risk')" class="lc-riskcell" :title="r.risk || ''">
+              <span v-if="r.risk" class="risk-text">{{ r.risk }}</span>
+              <span v-else class="mk-na">—</span>
+            </td>
             <td v-if="!lcHiddenCols.has('conf')" class="mk-num lc-conf-cell">
               <span
                 v-if="r.confidence != null && r.task"
@@ -238,10 +245,6 @@
               >
                 <span class="mono">{{ Math.round(r.confidence * 100) }}%</span><em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
               </span>
-              <span v-else class="mk-na">—</span>
-            </td>
-            <td v-if="!lcHiddenCols.has('risk')" class="lc-riskcell" :title="r.risk || ''">
-              <span v-if="r.risk" class="risk-text">{{ r.risk }}</span>
               <span v-else class="mk-na">—</span>
             </td>
             <td v-if="!lcHiddenCols.has('updated')">
@@ -385,8 +388,8 @@ const lcColDefs = [
   { key: 'learner', label: '学习者' },
   { key: 'progress', label: '当前进度' },
   { key: 'status', label: '趋势 / 疲劳' },
-  { key: 'conf', label: '置信度' },
   { key: 'risk', label: '风险摘要' },
+  { key: 'conf', label: '置信度' },
   { key: 'updated', label: '数据更新' },
 ] as const
 /* 审核 #12（2026-10-06）：风险摘要列不再默认隐藏——它是 KPI「需关注」的判据之一
@@ -867,13 +870,18 @@ async function recomputeAll() {
    宽度按 1280 现值校准并留余量，1200 档无横滚。 */
 /* 2026-10-24 视觉修复：趋势/置信/更新三列在多数行是短读数，把宽度让给学习者、当前进度
    与风险摘要（风险文案此前 150px 内被 ellipsis 截成半句）；总宽基本不变避免 1280 横滚。 */
-.lc-c-learner { width: 170px; }
-@media (max-width: 1279px) { .lc-c-learner { width: 115px; } }
-.lc-c-progress { width: 205px; }
+.lc-c-learner { width: 160px; }
+.lc-c-progress { width: 190px; }
 .lc-c-status { width: 112px; }
-.lc-c-conf { width: 88px; }
-.lc-c-risk { width: 220px; }
+.lc-c-conf { width: 115px; }
+.lc-c-risk { width: 180px; }
 .lc-c-updated { width: 72px; }
+@media (max-width: 1279px) {
+  /* 1200 档：学习者/进度/风险三列各收一档，表格不横滚、操作列保持可见 */
+  .lc-c-learner { width: 115px; }
+  .lc-c-progress { width: 175px; }
+  .lc-c-risk { width: 170px; }
+}
 /* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
 /* fixed 档里列宽即契约：换行格 min-width 会把短内容顶出单元格 */
 .lc-table .mk-cell-text--wrap, .lc-table .mk-cell-main .mk-cell-text--wrap { min-width: 0; max-width: 100%; }
