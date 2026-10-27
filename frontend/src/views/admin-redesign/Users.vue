@@ -40,10 +40,6 @@
             :options="ulViewOptions"
             :active="pill !== 'all'"
           />
-          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过任一表头后
-               下次进来仍是那个序，此前本页没有回默认序的出口（同批补齐六页，出口位置统一在
-               左组筛选之后——它和「清除筛选」一样是「撤销我改过的视图状态」）。 -->
-          <button v-if="!userSortIsDefault" type="button" class="mk-link" @click="resetUserSort">恢复默认序</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -688,7 +684,7 @@ const activeToday = computed(() => users.value.filter((u) => u.online).length)
    默认保持服务端顺序（注册时间倒序）；点表头切换，状态 localStorage 记忆。 */
 const {
   toggle: toggleUserSort, sortState: userSortState, sortRows: sortUserRows,
-  sortKey: userSortKey, sortDir: userSortDir, reset: resetUserSort, isDefault: userSortIsDefault
+  sortKey: userSortKey, sortDir: userSortDir
 } = useTableSort<UserRow>({
   accessors: {
     user: (u) => u.name || u.email,

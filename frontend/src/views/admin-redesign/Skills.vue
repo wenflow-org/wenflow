@@ -74,8 +74,6 @@
           <!-- 2026-10-05 卡头统一弹层法：归属 Agent 下拉收进右侧「筛选」弹层
               （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）。 -->
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-          <!-- #107：非默认序时给一键复位（此前点过别的表头就再也回不到默认序，只能清 localStorage） -->
-          <button v-if="!isDefaultSort" type="button" class="mk-link" @click="resetSort">恢复默认序（失败数优先）</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -634,10 +632,10 @@ const coverageReady = ref(false)
 
 /* 表格排序：默认失败数优先（问题浮顶，保持既有行为），表头可点切换。
    #107：默认键 errors 不在可见列里（表无「失败数」列），初始行序无可见列可解释，
-   且点过别的表头后无法回到默认序 → 在工具条给「默认按失败数排列」可见说明 +
-   非默认态一键「恢复默认序」（useTableSort.reset，此前解构未取用）。
+   点过别的表头后回默认序的出口由表头第三次点击承担（useTableSort.toggle），
+   工具条不再挂文字链。
    数据为 live 注册表全量（有界）→ 客户端排序是诚实的；截断/服务端分页列表不适用本机制。 */
-const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetSort, isDefault: isDefaultSort } = useTableSort<SkillRow>({
+const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir } = useTableSort<SkillRow>({
   accessors: {
     errors: (s) => s.errors,
     /* 主行是 canonical id（2026-10-25 英文为主）：排序也按 id，否则视觉序与点击的列对不上 */

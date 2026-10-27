@@ -63,8 +63,6 @@
                  卡内开关与页级开关同屏并列、却只各管一半——页级动 KPI、卡内动列表）。
                  这里不再放第二枚开关，视图随 :include-test 联动。 -->
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-            <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
-            <button v-if="!fbSortIsDefault" type="button" class="mk-link" @click="resetFbSort">恢复默认序</button>
           </div>
           <span class="mk-card__head-right">
             <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -382,7 +380,6 @@ function mapRow(f: Record<string, unknown>): Row {
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
 const {
   toggle: toggleFbSort, sortState: fbSortState, sortRows: sortFbRows,
-  reset: resetFbSort, isDefault: fbSortIsDefault
 } = useTableSort<Row>({
   accessors: {
     user: (r) => r.userName,

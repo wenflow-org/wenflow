@@ -33,8 +33,6 @@
             :active="!!statusFilter"
           />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
-          <button v-if="!anSortIsDefault" type="button" class="mk-link" @click="resetAnSort">恢复默认序</button>
         </div>
         <span class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -305,7 +303,6 @@ const SEVERITY_RANK: Record<Row['severity'], number> = { info: 0, warning: 1, cr
 const STATUS_RANK: Record<string, number> = { draft: 0, published: 1, archived: 2 }
 const {
   toggle: toggleAnSort, sortState: anSortState, sortRows: sortAnRows,
-  reset: resetAnSort, isDefault: anSortIsDefault
 } = useTableSort<Row>({
   accessors: {
     severity: (r) => SEVERITY_RANK[r.severity] ?? 0,

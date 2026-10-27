@@ -94,8 +94,6 @@
             ><Check v-if="testFilter !== ''" :size="12" :stroke-width="2.5" aria-hidden="true" />仅看测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
           </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
-          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
-          <button v-if="!logSortIsDefault" type="button" class="mk-link" @click="resetLogSort">恢复默认序</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
             :views="savedViews"
@@ -681,8 +679,6 @@ const {
   sortDir: logSortDir,
   toggle: toggleLogSort,
   sortState: logSortState,
-  reset: resetLogSort,
-  isDefault: logSortIsDefault
 } = useTableSort({
   keys: ['calledAt', 'durationMs'],
   defaultKey: 'calledAt',

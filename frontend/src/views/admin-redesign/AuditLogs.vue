@@ -60,8 +60,6 @@
             @update:model-value="applyActionFilter"
           />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
-          <button v-if="!alSortIsDefault" type="button" class="mk-link" @click="resetAlSort">恢复默认序</button>
           <!-- 失败 TOP 常驻主行：先看到「最近什么在失败」，再点 chip 下钻 -->
           <div v-if="statsError" class="mk-alert mk-alert--row al-stats-error" role="alert">
             <span class="mk-alert__msg">失败统计不可用</span>
@@ -516,8 +514,6 @@ const {
   sortDir: alSortDir,
   toggle: toggleAlSort,
   sortState: alSortState,
-  reset: resetAlSort,
-  isDefault: alSortIsDefault
 } = useTableSort({
   keys: ['createdAt', 'success'],
   defaultKey: 'createdAt',

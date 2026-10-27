@@ -85,9 +85,6 @@
             ><Check v-if="stalledOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />停滞<span class="mk-pill__count">{{ staleActiveCount }}</span></button>
           </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-          <!-- 排序复位入口（2026-10-06 审核 #51）：默认序是服务端 createdAt 倒序，
-               排序态持久化后此前无路可回；创建时间已接排序，另给一键回默认序 -->
-          <button v-if="!gcSortIsDefault" type="button" class="mk-link" @click="gcResetSort()">恢复默认序</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位——
@@ -616,7 +613,7 @@ const statusOrderOf = (r: Row) => STATUS_ORDER[String(r.status || '').toLowerCas
    只覆盖已加载窗口，属「窗口内排序」而非全量排序（卡头 meta 已如实给出窗口条数） */
 const {
   toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows,
-  sortKey: gcSortKey, sortDir: gcSortDir, reset: gcResetSort, isDefault: gcSortIsDefault
+  sortKey: gcSortKey, sortDir: gcSortDir
 } = useTableSort<Row>({
   accessors: {
     user: (r) => r.userName,

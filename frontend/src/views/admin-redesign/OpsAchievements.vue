@@ -63,11 +63,6 @@
     <!-- 解锁记录 -->
     <div v-else id="oa-panel-records" role="tabpanel" aria-labelledby="oa-tab-records" class="mk-card mk-card--fill">
       <div class="mk-card__head">
-        <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序。
-             本页左组没有筛选 chip（搜索是唯一的筛选入口），复位就放左组首位。 -->
-        <div class="mk-filter">
-          <button v-if="!achSortIsDefault" type="button" class="mk-link" @click="resetAchSort">恢复默认序</button>
-        </div>
         <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位；
              「查询」钮随搜索框一起移（它是搜索的提交动作，贴着输入框才读得出从属） -->
         <div class="mk-card__head-right">
@@ -366,8 +361,6 @@ const {
   sortDir: achSortDir,
   toggle: toggleAchSort,
   sortState: achSortState,
-  reset: resetAchSort,
-  isDefault: achSortIsDefault
 } = useTableSort({
   keys: ['earnedAt', 'xpReward'],
   defaultKey: 'earnedAt',

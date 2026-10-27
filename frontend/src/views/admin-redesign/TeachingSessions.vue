@@ -122,8 +122,6 @@
             :active="!!dateFilter"
           />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-          <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
-          <button v-if="!tsSortIsDefault" type="button" class="mk-link" @click="resetTsSort">恢复默认序</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -741,7 +739,7 @@ const completionRate = computed(() => {
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
 const {
   toggle: toggleTsSort, sortState: tsSortState, sortRows: sortTsRows,
-  sortKey: tsSortKey, sortDir: tsSortDir, reset: resetTsSort, isDefault: tsSortIsDefault
+  sortKey: tsSortKey, sortDir: tsSortDir
 } = useTableSort<Row>({
   accessors: {
     topic: (r) => r.topic,

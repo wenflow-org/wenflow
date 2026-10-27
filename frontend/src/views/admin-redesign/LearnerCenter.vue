@@ -97,11 +97,7 @@
             :options="lcPillOptions"
             :active="pill !== 'all'"
           />
-          <!-- 排序回默认序的出口：默认序是「风险优先 → 更新时间新→旧」，点过置信/更新后
-               列表就不再是「先找有问题的人」，得有一条路回去。槽位与其余列表页一致：
-               清除筛选 → 恢复默认序（都是「撤销我改过的视图状态」）。 -->
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-          <button v-if="!lcSortIsDefault" type="button" class="mk-link" @click="resetLcSort">恢复默认序</button>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -600,8 +596,6 @@ const {
   toggle: toggleLcSort,
   sortState: lcSortState,
   sortRows: sortLcRows,
-  reset: resetLcSort,
-  isDefault: lcSortIsDefault
 } = useTableSort<Row>({
   accessors: {
     conf: (r) => r.confidence ?? null,
