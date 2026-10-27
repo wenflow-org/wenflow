@@ -91,7 +91,7 @@ async function settle() {
 
 /**
  * 点击视图切换 tab（原型 .tabs 下划线页签，非胶囊；2026-10-04 起 People 页签随拆页退役，此助手仅 OpsHub 在用）。
- * tab 文本带计数角标（如「站内通知」），按 .tab 定位 + includes 匹配标签。
+ * tab 文本按 .tab 定位 + includes 匹配标签（2026-10-27 起页签不再带计数角标）。
  */
 async function clickTab(w: ReturnType<typeof mount>, label: string) {
   const btn = w.findAll('.tab').find((b) => b.text().includes(label));

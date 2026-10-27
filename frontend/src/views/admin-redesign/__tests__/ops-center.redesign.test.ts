@@ -119,14 +119,15 @@ describe('数据导出面板（原系统工具 Tab2）', () => {
 describe('运营中心宿主：系统工具三页签在位', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('页签含 运维工具 / 数据导出 / 会话安全；「会话安全」未访问时角标不渲染（不写「未加载」）', async () => {
+  it('页签含 运维工具 / 数据导出 / 会话安全；页签不带计数角标（数字归 KPI 卡）', async () => {
     const w = await mountWithRouter(OpsHub)
     const tabs = w.findAll('.tabs .tab').map((t) => t.text())
     expect(tabs.some((t) => t.includes('运维工具'))).toBe(true)
     expect(tabs.some((t) => t.includes('数据导出'))).toBe(true)
     const sec = tabs.find((t) => t.includes('会话安全'))
     expect(sec).toBeTruthy()
-    // 2026-10-21 用户「我刚进来就显示未加载，为什么会有这个状态」：未拉取就不出角标
+    // 2026-10-27 用户「tab 里面的数字不要了」：页签只写标签，不挂角标
+    expect(w.findAll('.tab__count')).toHaveLength(0)
     expect(sec).not.toContain('未加载')
     expect(sec).not.toContain('—')
     expect(w.find('.mk-status').exists(), '宿主无状态条（信息各归其位）').toBe(false)

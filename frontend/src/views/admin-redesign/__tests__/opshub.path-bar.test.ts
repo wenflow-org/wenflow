@@ -132,19 +132,17 @@ describe('运营中心：页签切换的 URL 口径', () => {
   })
 })
 
-describe('运营中心：页签角标只出数（2026-10-21 用户「我刚进来就显示未加载，为什么会有这个状态」）', () => {
-  it('未访问页签不出角标：页面自己的取数状态不挂到页签上', async () => {
+describe('运营中心：页签不挂数字（2026-10-27 用户「tab 里面的数字不要了」）', () => {
+  it('所有页签都不渲染计数角标；数字只在页级 KPI 卡里', async () => {
     const w = mount(OpsHub);
     await flushPromises();
 
     const tabsText = w.findAll('[role="tab"]').map((t) => t.text()).join(' ');
     expect(tabsText).not.toContain('未加载');
     expect(tabsText).not.toContain('待访问');
-    // 未拉取过的页签（反馈 / 成就 / 站内通知 / 会话安全）没有 .tab__count
-    for (const label of ['反馈', '成就', '站内通知']) {
-      const tabEl = w.findAll('.tabs .tab').find((t) => t.text().includes(label))!;
-      expect(tabEl.find('.tab__count').exists()).toBe(false);
-    }
+    expect(w.findAll('.tab__count')).toHaveLength(0);
+    // 四个读数仍由页级 KPI 卡承载
+    expect(w.findAll('.oh-metrics .mk-kpi')).toHaveLength(4);
 
     w.unmount();
   });

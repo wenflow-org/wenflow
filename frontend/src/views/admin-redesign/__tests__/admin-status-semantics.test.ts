@@ -185,9 +185,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     w.unmount()
   })
 
-  /* EG10 护栏：宿主页签角标未访问时不得显假 0（0 会被读成「确认无数据」）。
-     2026-10-21 起改为「没拉过就不出角标」，同样不显 0、也不再显「未加载」。 */
-  it('页签计数未拉取时角标不渲染（既不显 0，也不显「未加载」）', async () => {
+  /* 2026-10-27 用户「tab 里面的数字不要了」：页签计数角标整体退役，
+     计数只在页级 KPI 卡里出现（单一出处）。 */
+  it('页签不渲染计数角标（数字统一在 KPI 卡）', async () => {
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 0 } } })
     h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 0 } } } })
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 0 } } })
@@ -195,12 +195,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     const w = mount(OpsHub)
     await flushPromises()
 
-    const tabCount = (label: string) =>
-      w.findAll('.tabs .tab').find((t) => t.text().includes(label))!.find('.tab__count')
-    expect(tabCount('反馈').exists()).toBe(false)
-    expect(tabCount('成就').exists()).toBe(false)
-    expect(tabCount('站内通知').exists()).toBe(false)
-    expect(w.findAll('.tabs .tab').map((t) => t.text()).join(' ')).not.toContain('未加载')
+    expect(w.findAll('.tab__count')).toHaveLength(0)
+    const tabsText = w.findAll('.tabs .tab').map((t) => t.text()).join(' ')
+    expect(tabsText).not.toContain('未加载')
 
     w.unmount()
   })

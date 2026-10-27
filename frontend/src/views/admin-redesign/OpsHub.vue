@@ -40,20 +40,22 @@
 
     <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签。
-         各视图计数以角标随页签呈现，形态同共享 MkSubTabs 的 count 角标） -->
+         2026-10-27 用户「tab 里面的数字不要了」：页签不再挂计数角标，
+         计数只在页级 KPI 读数卡里出现（待处理反馈 / 生成失败路径 / 事件投递失败 / 草稿公告），
+         单一出处，页签只负责切换视图。 -->
     <div class="tabs" role="tablist" aria-label="运营中心视图切换" @keydown="onTabKeydown">
       <button type="button" class="tab" role="tab" id="oh-tab-todo" :ref="(el) => setTabRef(el, 0)" :tabindex="tab === 'todo' ? 0 : -1" aria-controls="oh-panel-todo" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span v-if="domainCount.feedback !== null && domainCount.feedback >= 0" class="tab__count">{{ domainCount.feedback }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈</button>
       <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span v-if="announcePillCount !== ''" class="tab__count" :title="announcePillTitle">{{ announcePillCount }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span v-if="domainCount.inapp !== null && domainCount.inapp >= 0" class="tab__count">{{ domainCount.inapp }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告</button>
+      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知</button>
       <!-- 域分界（2026-10-24）：左四是内容运营，右三是系统运维。两组动作的后果不同
            （改文案 vs 重放事件/导数据/踢会话），用一条竖线把「谁来处理」分开。 -->
       <span class="tabs__sep" aria-hidden="true"></span>
       <!-- 系统工具三页签（2026-10-16 由退役的「系统工具」场景整体迁入：运维工具/数据导出/会话安全） -->
       <button type="button" class="tab" role="tab" id="oh-tab-tools" :ref="(el) => setTabRef(el, 5)" :tabindex="tab === 'tools' ? 0 : -1" aria-controls="oh-panel-tools" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
       <button type="button" class="tab" role="tab" id="oh-tab-export" :ref="(el) => setTabRef(el, 6)" :tabindex="tab === 'export' ? 0 : -1" aria-controls="oh-panel-export" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-security" :ref="(el) => setTabRef(el, 7)" :tabindex="tab === 'security' ? 0 : -1" aria-controls="oh-panel-security" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span v-if="domainCount.security !== null && domainCount.security >= 0" class="tab__count">{{ domainCount.security }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-security" :ref="(el) => setTabRef(el, 7)" :tabindex="tab === 'security' ? 0 : -1" aria-controls="oh-panel-security" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全</button>
     </div>
 
     <!-- ===== Tab1: 运营待办 =====
@@ -108,9 +110,9 @@
     </template>
 
     <!-- ===== Tab2: 反馈（Feedback embedded；口径开关已退役，默认全部非虚拟账号） ===== -->
-    <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" @status="onFeedbackStatus" />
+    <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded @status="onFeedbackStatus" />
     <!-- ===== Tab3: 成就（OpsAchievements embedded） ===== -->
-    <OpsAchievements v-else-if="tab === 'achievements'" id="oh-panel-achievements" role="tabpanel" aria-labelledby="oh-tab-achievements" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
+    <OpsAchievements v-else-if="tab === 'achievements'" id="oh-panel-achievements" role="tabpanel" aria-labelledby="oh-tab-achievements" ref="achievementsRef" embedded />
     <!-- ===== Tab4: 公告（Announcements embedded） =====
          2026-10-26 用户「重新设计一下，包括站内通知」：宿主不再单起一行工具行放主操作。
          原先页签条与卡片之间夹着一整行、只有一个靠右的「新建公告」，既不在卡里也不在页头，
@@ -123,7 +125,6 @@
       aria-labelledby="oh-tab-announce"
       ref="announceRef"
       embedded
-      @count="onDomainCount('announce', $event)"
     />
     <!-- ===== Tab5: 站内通知（Notifications embedded）=====
          与公告 tab 同判例：主操作「发送通知」由子页卡头自己给，宿主不再补工具行。 -->
@@ -134,7 +135,6 @@
       aria-labelledby="oh-tab-inapp"
       ref="notifRef"
       embedded
-      @count="onDomainCount('inapp', $event)"
     />
 
     <!-- ===== Tab6: 运维工具（时间推进模拟 + outbox 死信重放；原「系统工具」页 Tab1） ===== -->
@@ -158,7 +158,6 @@
       aria-labelledby="oh-tab-security"
       ref="securityRef"
       embedded
-      @count="onDomainCount('security', $event)"
     />
   </div>
 </template>
@@ -195,21 +194,9 @@ const tab = ref<OhTab>('todo')
 const route = useRoute()
 const router = useRouter()
 
-/** 宿主域计数（由激活子视图上报）：反馈总数 / 解锁数 / 公告数 / 通知数 / 会话数。
-    null = 该子页签尚未访问、计数未拉取 → 2026-10-21 起角标不渲染（用户「我刚进来就显示
-    未加载，为什么会有这个状态」）：「未加载」是页面自己的取数状态，不是待处理量，
-    挂在页签上会被读成第 N 项待办。有数就显示数字，没拉过就什么都不显示
-    （0 照常显示——0 是「确认没有」，与「还没查」不是一回事）。 */
-const domainCount = ref<{ feedback: number | null; achievements: number | null; announce: number | null; inapp: number | null; security: number | null }>({
-  feedback: null,
-  achievements: null,
-  announce: null,
-  inapp: null,
-  security: null
-})
-function onDomainCount(domain: keyof typeof domainCount.value, n: number) {
-  domainCount.value[domain] = n
-}
+/* 2026-10-27 用户「tab 里面的数字不要了」：页签计数角标整体退役。
+   计数只在页级 KPI 读数卡里出现（反馈 / 路径 / 事件 / 公告四域），页签只负责切换视图；
+   子视图不再向宿主上报计数，也不再需要「未访问不显示」这套取数态。 */
 const feedbackRef = ref<{ refresh?: () => void } | null>(null)
 const achievementsRef = ref<{ refresh?: () => void } | null>(null)
 const announceRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
@@ -457,23 +444,6 @@ function countTone(t: { count: number; severity: 'bad' | 'warn' | 'muted'; faile
   if (t.failed || (t.count > 0 && t.severity === 'bad')) return 'bad'
   return t.count > 0 && t.severity === 'warn' ? 'warn' : ''
 }
-
-/**
- * 公告页签角标：报草稿数（页签位天然被读成待办量）。
- * 以 live 层已加载计数为 seed，嵌入门 @count 进入页签后覆盖刷新。
- * 加载失败不出角标（失败是取数状态，不是待处理量）。
- */
-const announcePillCount = computed(() => {
-  if (annFailed.value) return ''
-  const embedded = domainCount.value.announce
-  if (embedded !== null) return embedded
-  return ann.value.draft
-})
-/** 角标悬停：公告页签角标只报草稿，不报全部公告数 */
-const announcePillTitle = computed(() => {
-  if (annFailed.value) return '公告列表加载失败'
-  return '草稿公告数'
-})
 
 /* 状态面板：路径四态 + 公告三态（比例条 + 行式计数）——2026-10-26 撤除：
    这两张卡的数字与页级读数带同源（生成失败路径 = 读数卡「生成失败路径」、草稿 = 读数卡「草稿公告」），
