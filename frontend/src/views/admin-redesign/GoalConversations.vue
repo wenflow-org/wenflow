@@ -59,17 +59,13 @@
                2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
                状态一组单选；「未生成路径 / 停滞」是两个可叠加的开关 → 独立「标志筛选」组，
                激活时前缀勾（此前两组同形并排，点下去才知道行为不同）。 -->
-          <div class="mk-pills" role="group" aria-label="状态筛选">
-            <button
-              v-for="p in gcStatusPills"
-              :key="p.key"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': gcStatusKey === p.key }"
-              :aria-pressed="gcStatusKey === p.key"
-              @click="selectStatus(p.key)"
-            >{{ p.label }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
-          </div>
+          <MkPillSelect
+            v-model="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="gcStatusOptions"
+            :active="gcStatusKey !== 'all'"
+          />
           <div class="mk-pills" role="group" aria-label="标志筛选">
             <button
               type="button"
@@ -305,6 +301,7 @@ import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -398,6 +395,13 @@ const gcStatusPills = computed<Array<{ key: string; label: string; n: number | n
     { key: 'failed', label: '失败', n: null }
   ]
 })
+/** 卡头「状态」下拉：后端未拆分的档（取消 / 失败）不显计数 */
+const gcStatusOptions = computed(() => [
+  { value: '', label: '全部状态' },
+  ...gcStatusPills.value
+    .filter((p) => p.key !== 'all')
+    .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${p.n}）` : p.label }))
+])
 /** 默认 '' 与显式「全部」（'all'）是同一档：高亮与筛选都按这个归一键判断 */
 const gcStatusKey = computed(() => (statusFilter.value === 'all' ? 'all' : statusFilter.value || 'all'))
 /** 完结率 KPI（旧分布带副文的读数）：后端给两位小数字符串，四舍五入到整数避免 70.00% 的假精度 */
@@ -500,19 +504,6 @@ const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuRemove(r: Row) {
   closeMenu()
   void remove(r)
-}
-
-/** 状态快筛 pills（2026-10-17 由分布带迁回）：再点已选中的状态取消，回「全部」（空串）。
-    「全部」必须显式清成空串——写 'all' 会进过滤分支把每一行都判成不匹配。 */
-function toggleStatusBand(key: string) {
-  statusFilter.value = statusFilter.value === key ? '' : key
-}
-function selectStatus(key: string) {
-  if (key === 'all') {
-    statusFilter.value = ''
-    return
-  }
-  toggleStatusBand(key)
 }
 
 /** 「已取消」档 = 用户取消 + 长时间无操作回收；失败（failed）独立成档 */

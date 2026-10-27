@@ -17,6 +17,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory, type Router } from 'vue-router';
 import Skills from '../Skills.vue';
+import { chooseFilter, filterSelect } from './filter-controls';
 import { dataSource, liveSkillStatsMap } from '../store';
 import { liveSkillProfiles } from '../live';
 
@@ -133,8 +134,8 @@ async function mountAt(url: string): Promise<{ w: ReturnType<typeof mount>; rout
   return { w, router };
 }
 
-const pillOf = (w: ReturnType<typeof mount>, label: string) =>
-  w.findAll('.mk-pill').find((p) => p.text().startsWith(label))!;
+const pillValue = (w: ReturnType<typeof mount>) =>
+  (filterSelect(w as never, '关注').element as HTMLSelectElement).value;
 
 describe('Skills 列表筛选 ↔ URL', () => {
   it('改筛选写 URL：只写非缺省值，且不动别人的键（?view=&id= 保留）', async () => {
@@ -151,8 +152,8 @@ describe('Skills 列表筛选 ↔ URL', () => {
     expect(router.currentRoute.value.query.page).toBeUndefined();
     expect(router.currentRoute.value.query.size).toBeUndefined();
 
-    // 点「仅看需关注」→ ?pill=attn
-    await pillOf(w, '仅看需关注').trigger('click');
+    // 选「仅看需关注」→ ?pill=attn
+    await chooseFilter(w as never, '关注', '仅看需关注');
     await flushPromises();
     expect(router.currentRoute.value.query.pill).toBe('attn');
     w.unmount();
@@ -171,7 +172,7 @@ describe('Skills 列表筛选 ↔ URL', () => {
   it('深链落位：?q=&pill=&agent= 三条筛选轴全部还原到控件（?cat= 随该列一起退役，不再受理）', async () => {
     const { w, router } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching&agent=path-agent');
     expect((w.find('input.mk-filter__input').element as HTMLInputElement).value).toBe('教学');
-    expect(pillOf(w, '仅看需关注').attributes('aria-pressed')).toBe('true');
+    expect(pillValue(w)).toBe('attention');
     // 归属 Agent 下拉已从「筛选」弹层移回卡头一行（2026-10-26），控件直取
     expect((w.find('select[aria-label="按归属 Agent 筛选"]').element as HTMLSelectElement).value).toBe('path-agent');
     // 类别筛选已撤（2026-10-24）：弹层里没有该下拉，URL 上的 cat 也不再被写回
@@ -182,7 +183,7 @@ describe('Skills 列表筛选 ↔ URL', () => {
 
   it('脏值回落：非法 pill 当缺省、非法页码 / 页大小回落默认（不把列表筛空）', async () => {
     const { w, router } = await mountAt('/admin/skills?pill=zzz&page=abc&size=0');
-    expect(pillOf(w, '全部').attributes('aria-pressed')).toBe('true');
+    expect(pillValue(w)).toBe('all');
     expect(w.text()).toContain('共 12 条 · 第 1 / 1 页');
     // 脏值被清出 URL，不留一个说不通的状态
     expect(router.currentRoute.value.query.pill).toBeUndefined();

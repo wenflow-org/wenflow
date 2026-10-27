@@ -54,17 +54,13 @@
                2026-10-22 用户「停滞有必要放在这吗」后退役：停滞判据是「active 且 24h 无写入」，
                真实用户数日不学即命中，且其救援动作只对虚拟会话可用；最近活动列本就按时间排序，
                同题不再用一枚会承诺错动作的标签表达。 -->
-          <div class="mk-pills" role="group" aria-label="状态筛选">
-            <button
-              v-for="p in ocStatusPills"
-              :key="p.key"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': statusFilter === p.key }"
-              :aria-pressed="statusFilter === p.key"
-              @click="selectStatus(p.key)"
-            >{{ p.name }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
-          </div>
+          <MkPillSelect
+            v-model="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="ocStatusOptions"
+            :active="statusFilter !== 'all'"
+          />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过表头后无法回默认序 -->
           <button v-if="!ocSortIsDefault" type="button" class="mk-link" @click="resetOcSort">恢复默认序</button>
@@ -271,6 +267,7 @@ import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { useTableSort } from './useTableSort'
@@ -375,7 +372,14 @@ const ocStatusPills = computed<Array<{ key: string; name: string; n: number | nu
     ...pathBand.value.map((e) => ({ key: e.key, name: e.name, n: ready ? e.n : null }))
   ]
 })
-/** 点状态 pill = 单状态筛选；再点已选中的取消回「全部」（'all'） */
+/** 卡头「状态」下拉：计数与分布带同源（byStatus 全平台）；未就绪时不显计数 */
+const ocStatusOptions = computed(() => [
+  { value: 'all', label: '全部状态' },
+  ...ocStatusPills.value
+    .filter((p) => p.key !== 'all')
+    .map((p) => ({ value: p.key, label: p.n != null ? `${p.name}（${p.n}）` : p.name }))
+])
+/** KPI 卡 / 旧 pill 入口 = 单状态筛选；再点已选中的取消回「全部」 */
 function selectStatus(key: string) {
   statusFilter.value = statusFilter.value === key ? 'all' : key
 }

@@ -8,6 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import Skills from '../Skills.vue';
+import { chooseFilter, filterOption, filterSelect } from './filter-controls';
 import { dataSource, liveSkillStatsMap, intent } from '../store';
 import { liveSkillProfiles } from '../live';
 
@@ -154,8 +155,8 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     expect(kpi.find('.mk-kpi__num').text()).toBe('1')
     await kpi.trigger('click')
     expect((w.vm as any).onlyAttention).toBe(true)
-    const pill = w.findAll('.mk-pill').find((p) => p.text().includes('仅看需关注'))!
-    expect(pill.find('.mk-pill__count').exists()).toBe(false)
+    expect((filterSelect(w as never, '关注').element as HTMLSelectElement).value).toBe('attention')
+    expect(filterOption(w as never, '关注', '仅看需关注').text()).toBe('仅看需关注')
     w.unmount()
   })
 
@@ -171,12 +172,9 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
 
   it('「仅看需关注」pill 点击切换筛选（原状态条失败节点 meta-link 的动作迁卡头 pill）', async () => {
     const w = await mountSkills()
-    const pill = w.findAll('.mk-pill').find((p) => p.text().includes('仅看需关注'))!
-    expect(pill).toBeTruthy()
-    await pill.trigger('click')
+    await chooseFilter(w as never, '关注', '仅看需关注')
     expect((w.vm as any).onlyAttention).toBe(true)
-    // 激活态类
-    expect(pill.classes()).toContain('mk-pill--active')
+    expect((filterSelect(w as never, '关注').element as HTMLSelectElement).value).toBe('attention')
   })
 
   it('成功率 tone 着色：77% < 90 归红档（全站阈值收敛 <90 红 / <97 琥珀，旧 <70/<90 私有口径退役）', async () => {

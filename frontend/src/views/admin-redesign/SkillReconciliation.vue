@@ -41,17 +41,13 @@
     />
     <template v-else-if="recReport">
       <div class="sk-rec-tools">
-        <div class="mk-pills" role="group" aria-label="异常范围筛选">
-          <button
-            v-for="f in REC_FILTERS"
-            :key="f.id"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': recFilter === f.id }"
-            :aria-pressed="recFilter === f.id"
-            @click="setRecFilter(f.id)"
-          >{{ f.label }}</button>
-        </div>
+        <MkPillSelect
+          v-model="recFilterSelect"
+          label="范围"
+          aria-label="按异常范围筛选"
+          :options="recFilterOptions"
+          :active="recFilter !== 'all'"
+        />
       </div>
       <div class="mk-table-scroll">
         <table v-if="recReport.items.length && recPageRows.length" class="mk-table mk-table--click sk-table sk-rec-table mk-table--fixed">
@@ -184,6 +180,7 @@ import Pagination from "./Pagination.vue";
 import MkEmptyState from "@/components/mk/MkEmptyState.vue";
 import MkLoading from "@/components/mk/MkLoading.vue";
 import MkSkeleton from "@/components/mk/MkSkeleton.vue";
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from "@/api/adminApi";
 // adminSkillsApi 仍被自取模式（无 report prop）使用
 
@@ -200,6 +197,22 @@ const REC_FILTERS: Array<{ id: RecFilter; label: string }> = [
   { id: "abnormal", label: "仅看异常" },
   { id: "unmet", label: "仅看未达标" },
 ];
+/** 卡头「范围」下拉的字符串代理（recFilter 是 RecFilter 联合） */
+const recFilterSelect = computed({
+  get: () => recFilter.value,
+  set: (v: string) => {
+    recFilter.value = (v as RecFilter);
+    /* 手点筛选：清掉 URL 上的差集定位，否则地址栏与屏幕上的筛选互相矛盾 */
+    if (recDiff.value) recDiff.value = "";
+    if (route.query.diff || route.query.recon) {
+      const query = { ...route.query };
+      delete query.diff;
+      delete query.recon;
+      void router.replace({ query });
+    }
+  }
+});
+const recFilterOptions = REC_FILTERS.map((f) => ({ value: f.id, label: f.label }));
 
 const ownReport = ref<SkillReconciliationReport | null>(null);
 const ownError = ref("");
@@ -227,17 +240,6 @@ function applyRecQuery() {
   recDiff.value = diff === "unregistered" || diff === "active-missing" || diff === "live" ? diff : "";
 }
 function clearRecDiff() { recDiff.value = ""; }
-/** 手点筛选：清掉 URL 上的差集定位，否则地址栏与屏幕上的筛选互相矛盾 */
-function setRecFilter(f: RecFilter) {
-  recFilter.value = f
-  if (recDiff.value) recDiff.value = ""
-  if (route.query.diff || route.query.recon) {
-    const query = { ...route.query }
-    delete query.diff
-    delete query.recon
-    void router.replace({ query })
-  }
-}
 
 watch(recReport, async (report) => {
   if (!report || !recDeepLinked) return;

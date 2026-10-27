@@ -8,6 +8,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import GoalConversations from '../GoalConversations.vue';
+import { chooseFilter, filterOption } from './filter-controls';
 import { openSubPage } from '../store';
 import { liveRefreshSeq } from '../live';
 
@@ -158,7 +159,7 @@ describe('GoalConversations 客户端分页（mk-pagination）', () => {
     await nextTick();
     expect(w.text()).toContain('第 2 / 3 页');
     // 状态筛选入口 = 卡头 pills（2026-10-17 由退役的分布带迁回）
-    await w.findAll('.mk-pill').find((x) => x.text().startsWith('已取消'))!.trigger('click');
+    await chooseFilter(w as never, '状态', '已取消');
     await nextTick();
     expect(w.text()).toContain('第 1 / 1 页');
     expect(w.findAll('tbody tr')).toHaveLength(5);
@@ -197,22 +198,18 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
     const w = await mountGoals();
     // 后端只给合并桶（total−active−completed=3），拆分后两档不显计数，避免窗口口径冒充全量
-    const cancelPill = w.findAll('.mk-pill').find((x) => x.text().startsWith('已取消'))!;
-    const failPill = w.findAll('.mk-pill').find((x) => x.text().startsWith('失败'))!;
-    expect(cancelPill.find('.mk-pill__count').exists()).toBe(false);
-    expect(failPill.find('.mk-pill__count').exists()).toBe(false);
-    // 点「已取消」→ 只剩 cancelled + abandoned（失败不再混进来）
-    await cancelPill.trigger('click');
+    expect(filterOption(w as never, '状态', '已取消').text()).toBe('已取消');
+    expect(filterOption(w as never, '状态', '失败').text()).toBe('失败');
+    // 选「已取消」→ 只剩 cancelled + abandoned（失败不再混进来）
+    await chooseFilter(w as never, '状态', '已取消');
     await nextTick();
     let rows = w.findAll('tbody tr');
     expect(rows).toHaveLength(2);
     expect(w.text()).toContain('用户1');
     expect(w.text()).toContain('用户2');
     expect(w.text()).not.toContain('用户3');
-    // 点「失败」→ 只有 failed 行
-    await cancelPill.trigger('click');
-    await nextTick();
-    await failPill.trigger('click');
+    // 选「失败」→ 只有 failed 行
+    await chooseFilter(w as never, '状态', '失败');
     await nextTick();
     rows = w.findAll('tbody tr');
     expect(rows).toHaveLength(1);
@@ -348,7 +345,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     // 取数失败：完结率显「—」而不是 0%；状态 pills 也不渲染计数徽章（不把未知读成 0）
     const rateCard = () => w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完结率')!;
     expect(rateCard().find('.mk-kpi__num').text()).toBe('—');
-    expect(w.findAll('.mk-pill').find((p) => p.text().startsWith('进行中'))!.find('.mk-pill__count').exists()).toBe(false);
+    expect(filterOption(w as never, '状态', '进行中').text()).toBe('进行中');
     // 重试后 stats 恢复 → 错误条消失、完结率与计数回来
     statsMock.mockResolvedValue({
       data: { success: true, data: { total: 5, active: 5, completed: 0, completionRate: '0' } }
@@ -358,7 +355,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     await flushPromises();
     expect(w.find('.mk-status--bad').exists()).toBe(false);
     expect(rateCard().find('.mk-kpi__num').text()).toBe('0%');
-    expect(w.findAll('.mk-pill').find((p) => p.text().startsWith('进行中'))!.find('.mk-pill__count').text()).toBe('5');
+    expect(filterOption(w as never, '状态', '进行中').text()).toBe('进行中（5）');
   });
 
   it('2026-10-26 KPI 带压到三张（总数 / 完结率 / 停滞），近 7 天新增挂总数卡数值行注记', async () => {
@@ -386,11 +383,11 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     // 增长读数（参与用户）不再单开卡
     expect(w.findAll('.mk-kpi__label').map((n) => n.text().trim())).not.toContain('参与用户');
     // 状态数字只活在卡头 pills（2026-10-17 分布带退役后）；「全部」不显数（总数单源=分页器）
-    const pill = (label: string) => w.findAll('.mk-pill').find((p) => p.text().startsWith(label))!;
-    expect(pill('进行中').find('.mk-pill__count').text()).toBe('40');
-    expect(pill('已完成').find('.mk-pill__count').text()).toBe('0');
-    expect(pill('已取消').find('.mk-pill__count').exists()).toBe(false);
-    expect(pill('全部').find('.mk-pill__count').exists()).toBe(false);
+    const opt = (label: string) => filterOption(w as never, '状态', label).text();
+    expect(opt('进行中')).toBe('进行中（40）');
+    expect(opt('已完成')).toBe('已完成（0）');
+    expect(opt('已取消')).toBe('已取消');
+    expect(opt('全部')).toBe('全部状态');
     expect(w.find('.gc-distband').exists()).toBe(false);
   });
 

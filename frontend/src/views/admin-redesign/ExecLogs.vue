@@ -77,9 +77,13 @@
           />
           <!-- 2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
                失败/超时/成功一组单选；「仅看测试」是可叠加开关 → 独立「标志筛选」组 + 激活前缀勾 -->
-          <div class="mk-pills" role="group" aria-label="状态筛选">
-            <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" :aria-pressed="statusFilter === p.id" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span></button>
-          </div>
+          <MkPillSelect
+            v-model="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusSelectOptions"
+            :active="!!statusFilter"
+          />
           <div class="mk-pills" role="group" aria-label="标志筛选">
             <button
               type="button"
@@ -1232,6 +1236,15 @@ const statusPills = computed(() => {
     { id: 'ok', label: '成功', count: st?.success }
   ]
 })
+
+/** 卡头「状态」下拉：计数取当前窗口 stats；未就绪时不显计数（不把未知读成 0） */
+const statusSelectOptions = computed(() => [
+  { value: '', label: '全部状态' },
+  ...statusPills.value.map((p) => ({
+    value: p.id,
+    label: p.count != null ? `${p.label}（${p.count}）` : p.label
+  }))
+])
 
 function clearFilter() {
   testFilter.value = ''

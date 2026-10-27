@@ -45,17 +45,13 @@
              2026-10-17 用户「参考学习组做一些 pill」：分布带退役后左组是空的，
              补三枚复习状态快筛（有待复习 / 未复习 / 需关注），计数按当前页计算。 -->
         <div class="mk-filter">
-          <div class="mk-pills" role="group" aria-label="复习状态筛选">
-            <button
-              v-for="p in mrPills"
-              :key="p.key"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': mrPill === p.key }"
-              :aria-pressed="mrPill === p.key"
-              @click="mrPill = p.key"
-            >{{ p.label }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
-          </div>
+          <MkPillSelect
+            v-model="mrPillSelect"
+            label="状态"
+            aria-label="按复习状态筛选"
+            :options="mrPillOptions"
+            :active="mrPill !== 'all'"
+          />
           <!-- 2026-10-26 用户走查「我非常讨厌这种文案」：原「仅当前页 · 共 N 位」口径行撤除。
                它复述的是分页机制本身，不是读数也不是可操作信息；「共 N 位」还与本页底部分页器
                的「共 N 位学习者」逐字复读（同一事实两处出现）。 -->
@@ -253,6 +249,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { emailSubline } from '@/components/mk/avatarName'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
@@ -376,6 +373,18 @@ const mrPills = computed<Array<{ key: MrPill; label: string; n: number | null }>
     { key: 'attention', label: '需关注', n: attention }
   ]
 })
+/** 卡头「状态」下拉的字符串代理（mrPill 是字面量联合） */
+const mrPillSelect = computed({
+  get: () => mrPill.value,
+  set: (v: string) => { mrPill.value = (v as MrPill) }
+})
+const mrPillOptions = computed(() => [
+  { value: 'all', label: '全部' },
+  ...mrPills.value
+    .filter((p) => p.key !== 'all')
+    .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${p.n}）` : p.label }))
+])
+
 const visibleRows = computed(() => {
   if (mrPill.value === 'due') return rows.value.filter((r) => r.due > 0)
   if (mrPill.value === 'unreviewed') return rows.value.filter((r) => !r.lastReviewedAt)

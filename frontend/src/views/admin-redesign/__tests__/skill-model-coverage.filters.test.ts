@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import SkillModelCoverage from '../SkillModelCoverage.vue'
+import { chooseFilter, filterOption, filterSelect } from './filter-controls';
 
 const ROWS = [
   { skillId: 'stage-designer', endpoint: null, model: null, tier: 'chat', source: 'platform-default', paramOverrides: null, fallbackChain: null },
@@ -42,9 +43,6 @@ async function mountCoverage(props: Record<string, unknown> = {}) {
   return w
 }
 
-function pill(w: Awaited<ReturnType<typeof mountCoverage>>, label: string) {
-  return w.findAll('.mk-pill').find((p) => p.text().startsWith(label))
-}
 function skillIds(w: Awaited<ReturnType<typeof mountCoverage>>): string[] {
   return w.findAll('.skc__name').map((b) => b.text())
 }
@@ -56,11 +54,12 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
 
   it('计数取全量口径：用平台默认 / 技能覆盖 / 独立通道 / 有备用模型', async () => {
     const w = await mountCoverage()
-    expect(pill(w, '全部')?.text()).toBe('全部4')
-    expect(pill(w, '用平台默认')?.text()).toBe('用平台默认2')
-    expect(pill(w, '技能覆盖')?.text()).toBe('技能覆盖1')
-    expect(pill(w, '独立通道')?.text()).toBe('独立通道1')
-    expect(pill(w, '自定义备用模型')?.text()).toBe('自定义备用模型2')
+    const opt = (label: string) => filterOption(w as never, '来源', label).text()
+    expect(opt('全部')).toBe('全部（4）')
+    expect(opt('用平台默认')).toBe('用平台默认（2）')
+    expect(opt('技能覆盖')).toBe('技能覆盖（1）')
+    expect(opt('独立通道')).toBe('独立通道（1）')
+    expect(w.findAll('.mk-pill').find((p) => p.text().startsWith('自定义备用模型'))?.text()).toBe('自定义备用模型2')
     expect(skillIds(w)).toHaveLength(4)
     w.unmount()
   })
@@ -68,22 +67,25 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
   it('筛选语法：来源单选组与备用模型开关组分居两组，开关激活时前缀勾', async () => {
     const w = await mountCoverage()
     const groups = w.findAll('.mk-pills')
-    expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['来源筛选', '标志筛选'])
-    // 单选组的每一次点击都是「换选中项」，不出现勾选图标
-    expect(groups[0].findAll('svg')).toHaveLength(0)
-    const fallback = pill(w, '自定义备用模型')!
+    expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['标志筛选'])
+    // 单选维度是带标签的胶囊下拉（不再与开关组同形）
+    const source = filterSelect(w as never, '来源')
+    expect(source.findAll('option').map((o) => o.text())).toEqual([
+      '全部（4）', '用平台默认（2）', '技能覆盖（1）', '独立通道（1）'
+    ])
+    const fallback = w.findAll('.mk-pill').find((p) => p.text().startsWith('自定义备用模型'))!
     expect(fallback.find('svg').exists()).toBe(false)
     await fallback.trigger('click')
-    expect(pill(w, '自定义备用模型')!.find('svg').exists()).toBe(true)
+    expect(w.findAll('.mk-pill').find((p) => p.text().startsWith('自定义备用模型'))!.find('svg').exists()).toBe(true)
     w.unmount()
   })
 
   it('来源 pill 收窄表格；计数保持不变（筛的是视图不是数据）', async () => {
     const w = await mountCoverage()
-    await pill(w, '独立通道')!.trigger('click')
+    await chooseFilter(w as never, '来源', '独立通道')
     expect(skillIds(w)).toEqual(['session-wrapup'])
     expect(w.find('.mk-card__meta').text()).toContain('命中 1 / 共 4')
-    expect(pill(w, '用平台默认')?.text()).toBe('用平台默认2')
+    expect(filterOption(w as never, '来源', '用平台默认').text()).toBe('用平台默认（2）')
 
     // 叠加搜索：独立通道 ∧ 命中关键字
     await w.find('.mk-filter__input').setValue('agnes')
@@ -107,12 +109,12 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
 
   it('全选只选当前可见行', async () => {
     const w = await mountCoverage()
-    await pill(w, '独立通道')!.trigger('click')
+    await chooseFilter(w as never, '来源', '独立通道')
     await w.find('thead input[type="checkbox"]').setValue(true)
     expect(w.find('.skc__apply .mk-btn--primary').text()).toBe('套用到 1 个技能')
 
     // 切回全部：已选的那行保留，全选框不是「全选」态
-    await pill(w, '全部')!.trigger('click')
+    await chooseFilter(w as never, '来源', '全部')
     expect((w.find('thead input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false)
     expect(w.find('.skc__apply .mk-btn--primary').text()).toBe('套用到 1 个技能')
     w.unmount()

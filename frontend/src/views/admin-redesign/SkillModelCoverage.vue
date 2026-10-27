@@ -26,12 +26,13 @@
            2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
            来源是单选视图（含「全部」），备用模型是可叠加的开关 → 独立「标志筛选」组 + 激活前缀勾。 -->
       <div class="skc__filters">
-        <div class="mk-pills" role="group" aria-label="来源筛选">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'all' }" :aria-pressed="sourceFilter === 'all'" @click="sourceFilter = 'all'">全部<span class="mk-pill__count">{{ counts.all }}</span></button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'platform-default' }" :aria-pressed="sourceFilter === 'platform-default'" @click="sourceFilter = 'platform-default'">用平台默认<span class="mk-pill__count">{{ counts.platformDefault }}</span></button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'skill-model-only' }" :aria-pressed="sourceFilter === 'skill-model-only'" @click="sourceFilter = 'skill-model-only'">技能覆盖<span class="mk-pill__count">{{ counts.skillModelOnly }}</span></button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'skill-channel' }" :aria-pressed="sourceFilter === 'skill-channel'" @click="sourceFilter = 'skill-channel'">独立通道<span class="mk-pill__count">{{ counts.skillChannel }}</span></button>
-        </div>
+          <MkPillSelect
+            v-model="sourceSelect"
+            label="来源"
+            aria-label="按来源筛选"
+            :options="sourceOptions"
+            :active="sourceFilter !== 'all'"
+          />
         <div class="mk-pills" role="group" aria-label="标志筛选">
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyFallback }" :aria-pressed="onlyFallback" @click="onlyFallback = !onlyFallback"><Check v-if="onlyFallback" :size="12" :stroke-width="2.5" aria-hidden="true" />自定义备用模型<span class="mk-pill__count">{{ counts.fallback }}</span></button>
         </div>
@@ -202,6 +203,7 @@ import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { askConfirm } from './useConfirm'
 import { useTableSort } from './useTableSort'
 
@@ -260,6 +262,17 @@ const rows = ref<Row[]>([])
 type SourceFilter = 'all' | Row['source']
 const keyword = ref('')
 const sourceFilter = ref<SourceFilter>('all')
+/** 卡头「来源」下拉的字符串代理（sourceFilter 是 SourceFilter 联合） */
+const sourceSelect = computed({
+  get: () => sourceFilter.value,
+  set: (v: string) => { sourceFilter.value = (v as SourceFilter) }
+})
+const sourceOptions = computed(() => [
+  { value: 'all', label: `全部（${counts.value.all}）` },
+  { value: 'platform-default', label: `用平台默认（${counts.value.platformDefault}）` },
+  { value: 'skill-model-only', label: `技能覆盖（${counts.value.skillModelOnly}）` },
+  { value: 'skill-channel', label: `独立通道（${counts.value.skillChannel}）` }
+])
 const onlyFallback = ref(false)
 const counts = computed(() => {
   const out = { all: rows.value.length, platformDefault: 0, skillModelOnly: 0, skillChannel: 0, fallback: 0 }

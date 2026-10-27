@@ -142,6 +142,26 @@ describe('卡头工具条形态', () => {
     }
     expect(offenders).toEqual([])
   })
+
+  /* 2026-10-27 用户「这明显设计的都不一样，我需要一个新的、好用的表头」：
+     两张截图（教学会话 vs 路径列表）的差异不在几何，而在**单选维度用了两种控件**
+     —— 一边是带标签的胶囊下拉，一边是带计数的 chip 组。统一后：单选维度一律
+     MkPillSelect（KPI 卡仍可作同一维度的快捷入口），chip 组只留给可叠加的「标志筛选」。 */
+  it('卡头主栏的单选维度一律 MkPillSelect，chip 组只留多选「标志筛选」', () => {
+    const offenders: string[] = []
+    for (const file of LIST_PAGES) {
+      const src = read(file)
+      const idx = src.indexOf('mk-card__head')
+      if (idx < 0) continue
+      const tableIdx = src.indexOf('<table', idx)
+      const block = src.slice(idx, tableIdx > 0 ? tableIdx : idx + 6000)
+      for (const m of block.matchAll(/<div class="mk-pills[^"]*"([^>]*)>/g)) {
+        const label = m[1].match(/aria-label="([^"]+)"/)?.[1]
+        if (label !== '标志筛选') offenders.push(`${file}: ${label ?? '（无 aria-label）'}`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
 })
 
 /**

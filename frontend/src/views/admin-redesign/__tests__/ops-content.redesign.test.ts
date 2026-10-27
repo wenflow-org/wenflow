@@ -12,6 +12,7 @@ import OpsContent from '../OpsContent.vue';
 import Confirm from '../Confirm.vue';
 import { intent, subPage, closeSubPage } from '../store';
 import { toast } from '@/utils/toast';
+import { chooseFilter, filterOption } from './filter-controls';
 
 const mkPath = (id: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -153,19 +154,18 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     w.unmount();
   });
 
-  it('卡头状态 pill 点击 = 状态筛选；再点取消；目标摘要列单行省略类存在', async () => {
+  it('卡头状态下拉 = 状态筛选；选回「全部」恢复；目标摘要列单行省略类存在', async () => {
     const w = mount(OpsContent);
     await flushPromises();
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(3);
 
-    // 点「已完成」→ 1 行；再点取消恢复 3 行
-    const donePill = w.findAll('.mk-pill').find((b) => b.text().startsWith('已完成'))!;
-    await donePill.trigger('click');
+    // 选「已完成」→ 1 行；选回「全部」恢复 3 行
+    await chooseFilter(w as never, '状态', '已完成');
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(1);
     expect(w.find('tbody').text()).toContain('完成的目标摘要');
-    await donePill.trigger('click');
+    await chooseFilter(w as never, '状态', '全部');
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(3);
 
@@ -309,11 +309,11 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 分布带已退役（2026-10-17）：状态筛选回到卡头 pills，计数取 stats 全平台 byStatus
     expect(w.find('.oc-distband').exists()).toBe(false);
     expect(w.find('.mk-distband').exists()).toBe(false);
-    const pill = (label: string) => w.findAll('.mk-pill').find((p) => p.text().startsWith(label))!;
-    expect(pill('学习中').find('.mk-pill__count').text()).toBe('1');
-    expect(pill('已完成').find('.mk-pill__count').text()).toBe('1');
-    expect(pill('生成失败').find('.mk-pill__count').text()).toBe('1');
-    expect(pill('全部').find('.mk-pill__count').exists()).toBe(false);
+    const opt = (label: string) => filterOption(w as never, '状态', label).text();
+    expect(opt('学习中')).toBe('学习中（1）');
+    expect(opt('已完成')).toBe('已完成（1）');
+    expect(opt('生成失败')).toBe('生成失败（1）');
+    expect(opt('全部')).toBe('全部状态');
 
     // 进度条三态：100% = 绿（ok）/ 进行中 = 默认中性（无 warn 琥珀）/ 失败 = 红（bad）
     const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');
@@ -483,9 +483,8 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const w = mount(OpsContent, { props: { embedded: true } });
     await flushPromises();
     await nextTick();
-    const otherPill = w.findAll('.mk-pill').find((p) => p.text().startsWith('其它'))!;
-    expect(otherPill).toBeTruthy();
-    await otherPill.trigger('click');
+    expect(filterOption(w as never, '状态', '其它').text()).toBe('其它（2）');
+    await chooseFilter(w as never, '状态', '其它');
     await nextTick();
     expect(w.findAll('tbody tr')).toHaveLength(1);
     w.unmount();

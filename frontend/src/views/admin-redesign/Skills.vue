@@ -64,10 +64,13 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <div class="mk-pills" role="group" aria-label="关注筛选">
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部</button>
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注</button>
-          </div>
+          <MkPillSelect
+            v-model="focusSelect"
+            label="关注"
+            aria-label="按关注度筛选"
+            :options="focusOptions"
+            :active="onlyAttention"
+          />
           <!-- 2026-10-05 卡头统一弹层法：归属 Agent 下拉收进右侧「筛选」弹层
               （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）。 -->
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
@@ -448,6 +451,15 @@ interface SkillRow {
 }
 
 const onlyAttention = ref(false)
+/** 卡头「关注」下拉的布尔代理（原两枚 chip：全部 / 仅看需关注） */
+const focusSelect = computed({
+  get: () => (onlyAttention.value ? 'attention' : 'all'),
+  set: (v: string) => { onlyAttention.value = v === 'attention' }
+})
+const focusOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'attention', label: '仅看需关注' }
+]
 const keyword = ref('')
 /** 归属 Agent 筛选（P1②）：'' = 全部；'__none__' = 无归属 */
 const agentFilter = ref('')

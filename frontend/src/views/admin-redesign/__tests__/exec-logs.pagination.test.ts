@@ -9,6 +9,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import ExecLogs from '../ExecLogs.vue';
+import { chooseFilter, filterOption } from './filter-controls';
 import type { TraceSpan } from '../store';
 import {
   liveLogsPage,
@@ -184,7 +185,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
     expect(liveLogsPage.value).toBe(2);
-    await w.findAll('.mk-pill').find((x) => x.text() === '失败')!.trigger('click');
+    await chooseFilter(w as never, '状态', '失败');
     await flushPromises();
     const last = h.reload.mock.calls.at(-1)!;
     expect(last[0]).toMatchObject({ status: 'error' });
@@ -343,7 +344,7 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     liveLogsFiltered.value = [fakeSpan(1)];
     const { w, router } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    await w.findAll('.mk-pill').find((x) => x.text() === '失败')!.trigger('click');
+    await chooseFilter(w as never, '状态', '失败');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'error' });
     expect(router.currentRoute.value.query.status).toBe('err');
@@ -422,12 +423,11 @@ describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 
     const { w } = await mountExecAt('/admin/execution-logs');
     await nextTick();
     expect(w.findAll('button').some((b) => b.text().includes('只看失败'))).toBe(false);
-    const failPill = w.findAll('.mk-pills .mk-pill').find((p) => p.text().startsWith('失败'))!;
-    expect(failPill).toBeTruthy();
-    await failPill.trigger('click');
+    expect(filterOption(w as never, '状态', '失败')).toBeTruthy();
+    await chooseFilter(w as never, '状态', '失败');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'error' });
-    await w.findAll('.mk-pills .mk-pill').find((p) => p.text().startsWith('失败'))!.trigger('click');
+    await chooseFilter(w as never, '状态', '全部');
     await flushPromises();
     expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).status).toBeUndefined();
   });

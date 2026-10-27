@@ -90,17 +90,13 @@
                胶囊，但全站列表页的卡头左侧都是 chips，这页空着只剩两个文字链，看着像没做完。
                现按同类页（记忆复习 / 目标对话）的既有判定恢复胶囊组：胶囊是筛选的正式入口，
                KPI 卡保留可点作为同一状态的快捷入口——两者共用 `pill` 一个状态，不会各走各的。 -->
-          <div class="mk-pills" role="group" aria-label="风险筛选">
-            <button
-              v-for="p in lcPills"
-              :key="p.key"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': pill === p.key }"
-              :aria-pressed="pill === p.key"
-              @click="pill = p.key"
-            >{{ p.label }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
-          </div>
+          <MkPillSelect
+            v-model="lcPillSelect"
+            label="风险"
+            aria-label="按风险筛选"
+            :options="lcPillOptions"
+            :active="pill !== 'all'"
+          />
           <!-- 排序回默认序的出口：默认序是「风险优先 → 更新时间新→旧」，点过置信/更新后
                列表就不再是「先找有问题的人」，得有一条路回去。槽位与其余列表页一致：
                清除筛选 → 恢复默认序（都是「撤销我改过的视图状态」）。 -->
@@ -335,6 +331,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
@@ -565,6 +562,18 @@ const lcPills = computed<Array<{ key: 'all' | 'risk' | 'watch' | 'stale'; label:
   { key: 'watch', label: '观察', n: watchCount.value },
   { key: 'stale', label: '低置信', n: lowConfCount.value }
 ])
+/** 卡头「风险」下拉的字符串代理（pill 是字面量联合，select 值需先收窄） */
+const lcPillSelect = computed({
+  get: () => pill.value,
+  set: (v: string) => { pill.value = (v as 'all' | 'risk' | 'watch' | 'stale') }
+})
+const lcPillOptions = computed(() => [
+  { value: 'all', label: '全部' },
+  ...lcPills.value
+    .filter((p) => p.key !== 'all')
+    .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${p.n}）` : p.label }))
+])
+
 const avgConfText = computed(() => {
   if (!confRows.value.length) return '—'
   const avg = confRows.value.reduce((s, r) => s + (r.confidence ?? 0), 0) / confRows.value.length

@@ -9,6 +9,7 @@ import { nextTick } from 'vue';
 import Users from '../Users.vue';
 import { liveUsers } from '../live';
 import { getDeletedUsers } from '@/api/adminApi';
+import { chooseFilter, filterOption, filterSelect } from './filter-controls';
 
 const { apiObject } = vi.hoisted(() => ({
   apiObject: (): Record<string, unknown> =>
@@ -204,13 +205,14 @@ describe('Users 客户端分页（mk-pagination）', () => {
     const w = await mountUsers();
     // pill 计数（2026-10-11 全站统一判例）：筛选 pill 一律显命中数，唯「全部」不显（总数单源=分页器）；
     // 「30 分钟在线」已随宿主 KPI 换窗为「近 7 天活跃」
-    const pills = w.findAll('.mk-pill');
-    expect(pills.find((p) => p.text().includes('全部'))?.find('.mk-pill__count').exists()).toBe(false);
-    expect(pills.find((p) => p.text().includes('管理员'))?.find('.mk-pill__count').exists()).toBe(true);
-    expect(pills.find((p) => p.text().includes('近 7 天活跃'))?.find('.mk-pill__count').exists()).toBe(true);
-    // 计数徽章在用户数据到达后才渲染（CI 时序下 pill 先行、count 后至 → 空 DOMWrapper 竞态）——waitFor 轮询
-    const normalPill = pills.find((p) => p.text().includes('普通用户'));
-    await vi.waitFor(() => expect(normalPill?.find('.mk-pill__count').text()).toBe('36'));
+    /* 2026-10-27 表头统一：单选维度改为带标签的胶囊下拉，计数进入 option 文案；
+       「全部」仍不显计数（总数单源=分页器）。 */
+    const opts = filterSelect(w as never, '视图').findAll('option');
+    expect(opts.find((o) => o.text().startsWith('全部'))?.text()).toBe('全部用户');
+    expect(opts.find((o) => o.text().startsWith('管理员'))?.text()).toMatch(/^管理员（\d+）$/);
+    expect(opts.find((o) => o.text().startsWith('近 7 天活跃'))?.text()).toMatch(/^近 7 天活跃（\d+）$/);
+    // 计数在用户数据到达后才进入 option（CI 时序下先渲染下拉、count 后至 → 竞态）——waitFor 轮询
+    await vi.waitFor(() => expect(filterOption(w as never, '视图', '普通用户').text()).toBe('普通用户（36）'));
     // 2026-10-17 用户拍板：本页只有 pill（单选）与搜索，二者各自有「全部」与搜索框 ✕，
     // 卡头「清除筛选」是第三个重复入口，已退役
     expect(w.find('.mk-search__clear').exists()).toBe(false);
@@ -246,15 +248,13 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
   }
 
   function pillOf(w: ReturnType<typeof mount>, label: string) {
-    const p = w.findAll('.mk-pill').find((x) => x.text().includes(label));
-    if (!p) throw new Error(`pill not found: ${label}`);
-    return p;
+    return filterOption(w as never, '视图', label);
   }
 
   async function badgeOf(w: ReturnType<typeof mount>, label: string) {
-    const p = pillOf(w, label);
-    await vi.waitFor(() => expect(p.find('.mk-pill__count').exists()).toBe(true));
-    return p.find('.mk-pill__count').text();
+    const opt = pillOf(w, label);
+    await vi.waitFor(() => expect(opt.text()).toMatch(/（\d+）$/));
+    return opt.text().match(/（(\d+)）$/)?.[1] ?? '';
   }
 
   beforeEach(() => {
@@ -264,7 +264,7 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
   it('管理员：badge 与点开行数相等（测试管理员也计入——测试只是备注）', async () => {
     const w = await mountUsers();
     expect(await badgeOf(w, '管理员')).toBe('2');
-    await pillOf(w, '管理员').trigger('click');
+    await chooseFilter(w as never, '视图', '管理员');
     await nextTick();
     const rows = w.findAll('tbody tr');
     expect(rows).toHaveLength(2);
@@ -276,7 +276,7 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
   it('近 7 天活跃：badge 与点开行数相等（测试账号照常计入）', async () => {
     const w = await mountUsers();
     expect(await badgeOf(w, '近 7 天活跃')).toBe('2');
-    await pillOf(w, '近 7 天活跃').trigger('click');
+    await chooseFilter(w as never, '视图', '近 7 天活跃');
     await nextTick();
     const rows = w.findAll('tbody tr');
     expect(rows).toHaveLength(2);
@@ -299,7 +299,7 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
   it('角色/活跃 pill 计数与筛选同谓词（不再叠加身份域）', async () => {
     const w = await mountUsers();
     await nextTick();
-    const labels = w.findAll('.mk-pill').map((p) => p.text());
+    const labels = filterSelect(w as never, '视图').findAll('option').map((o) => o.text());
     expect(labels.some((t) => t.includes('全部'))).toBe(true);
     expect(labels.some((t) => t.includes('管理员'))).toBe(true);
     expect(labels.some((t) => t.includes('普通用户'))).toBe(true);
@@ -316,13 +316,13 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
     ] as unknown as typeof liveUsers.value;
     const w = await mountUsers();
     expect(await badgeOf(w, '从未登录')).toBe('1'); // 用户1（lastLoginAt 为空）
-    await pillOf(w, '从未登录').trigger('click');
+    await chooseFilter(w as never, '视图', '从未登录');
     await nextTick();
     let rows = w.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户1');
 
-    await pillOf(w, '全部').trigger('click');
+    await chooseFilter(w as never, '视图', '全部');
     await nextTick();
     // 夹具的 createdAt 都在 7 天外
     expect(await badgeOf(w, '近 7 日新增')).toBe('0');
@@ -331,8 +331,8 @@ describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走
       { ...makeUser(2), createdAt: '2026-01-01T10:00:00.000Z' }
     ] as unknown as typeof liveUsers.value;
     await nextTick();
-    await vi.waitFor(() => expect(pillOf(w, '近 7 日新增').find('.mk-pill__count').text()).toBe('1'));
-    await pillOf(w, '近 7 日新增').trigger('click');
+    await vi.waitFor(() => expect(pillOf(w, '近 7 日新增').text()).toBe('近 7 日新增（1）'));
+    await chooseFilter(w as never, '视图', '近 7 日新增');
     await nextTick();
     rows = w.findAll('tbody tr');
     expect(rows).toHaveLength(1);
@@ -357,11 +357,10 @@ describe('Users 已删除视图：后端分页', () => {
 
   it('计数取后端真总数；翻页带 page/limit 回后端（不再「50+」死窗）', async () => {
     const w = await mountUsers();
-    const pill = w.findAll('.mk-pill').find((p) => p.text().includes('已删除'))!;
-    await pill.trigger('click');
+    await chooseFilter(w as never, '视图', '已删除');
     await flushPromises();
     // 计数是真总数，不是「50+」
-    await vi.waitFor(() => expect(pill.find('.mk-pill__count').text()).toBe('120'));
+    await vi.waitFor(() => expect(filterOption(w as never, '视图', '已删除').text()).toBe('已删除（120）'));
     expect(w.text()).toContain('共 120 个账号');
     expect(w.text()).toContain('第 1 / 8 页');
     expect(w.findAll('tbody tr')).toHaveLength(15);

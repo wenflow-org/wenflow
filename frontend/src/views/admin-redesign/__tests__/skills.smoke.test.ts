@@ -9,6 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import Skills from '../Skills.vue';
+import { chooseFilter, filterOption } from './filter-controls';
 import SkillReconciliation from '../SkillReconciliation.vue';
 import { dataSource, liveSkillStatsMap } from '../store';
 import { liveSkillProfiles } from '../live';
@@ -200,13 +201,12 @@ describe('Skill 目录 P1 修复批', () => {
     const wrapper = await mountRecon();
     // 整卡折叠已退役（2026-10-05，details 包壳撤）：面板常开，无需展开步骤
     await flushPromises();
-    const pills = wrapper.findAll('.sk-rec-tools .mk-pill');
-    expect(pills.some((p) => p.text() === '仅看异常')).toBe(true);
+    expect(filterOption(wrapper as never, '范围', '仅看异常')).toBeTruthy();
     const rowsBefore = wrapper.findAll('.sk-rec-table tbody tr.sk-row').length;
     expect(rowsBefore).toBeGreaterThan(2);
     // 点击「仅看异常」→ 仅保留 diff 行（未注册/无生效版本）；live 行与「非 live 但无差集」的草稿行都隐藏
     // （2026-10-07 F6-3：完成度非 live 归「完成度」页签/第 4 张 KPI，不再并入对账异常口径）
-    await pills.find((p) => p.text() === '仅看异常')!.trigger('click');
+    await chooseFilter(wrapper as never, '范围', '仅看异常');
     await nextTick();
     await flushPromises();
     const rowsAfter = wrapper.findAll('.sk-rec-table tbody tr.sk-row').length;
@@ -231,7 +231,7 @@ describe('Skill 目录 P1 修复批', () => {
     expect(wrapper.text()).toContain('失效注册 1');
     expect(wrapper.find('.sk-rec-orphans').text()).toContain('triage-judge');
     // 点「仅看异常」→ 0 行（残留无户口簿行），空态必须披露残留而非「全部对账一致」
-    await wrapper.findAll('.sk-rec-tools .mk-pill').find((p) => p.text() === '仅看异常')!.trigger('click');
+    await chooseFilter(wrapper as never, '范围', '仅看异常');
     await nextTick();
     await flushPromises();
     expect(wrapper.findAll('.sk-rec-table tbody tr.sk-row').length).toBe(0);

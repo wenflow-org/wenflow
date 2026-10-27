@@ -36,6 +36,7 @@ vi.mock('vue-router', () => ({
 }));
 
 import MemoryReviewOverview from '../MemoryReviewOverview.vue';
+import { chooseFilter, filterOption } from './filter-controls';
 
 const ROWS = Array.from({ length: 7 }, (_, i) => ({ id: `t${i}`, userId: 'u1' }));
 
@@ -326,23 +327,23 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     const w = mount(MemoryReviewOverview);
     await flushPromises();
 
-    const pill = (label: string) => w.findAll('.mk-pill').find((p) => p.text().replace(/\d+$/, '') === label)!;
-    expect(pill('全部').find('.mk-pill__count').exists()).toBe(false);
-    expect(pill('有待复习').find('.mk-pill__count').text()).toBe('1');   // 小红
-    expect(pill('未复习').find('.mk-pill__count').text()).toBe('1');     // 小明
-    expect(pill('需关注').find('.mk-pill__count').text()).toBe('1');     // 小刚（薄弱 + 人工看）
+    const opt = (label: string) => filterOption(w as never, '状态', label).text();
+    expect(opt('全部')).toBe('全部');
+    expect(opt('有待复习')).toBe('有待复习（1）');   // 小红
+    expect(opt('未复习')).toBe('未复习（1）');       // 小明
+    expect(opt('需关注')).toBe('需关注（1）');       // 小刚（薄弱 + 人工看）
 
-    await pill('有待复习').trigger('click');
+    await chooseFilter(w as never, '状态', '有待复习');
     await nextTick();
     expect(w.findAll('tbody tr')).toHaveLength(1);
     expect(w.find('tbody').text()).toContain('小红');
 
-    await pill('需关注').trigger('click');
+    await chooseFilter(w as never, '状态', '需关注');
     await nextTick();
     expect(w.findAll('tbody tr')).toHaveLength(1);
     expect(w.find('tbody').text()).toContain('小刚');
 
-    await pill('全部').trigger('click');
+    await chooseFilter(w as never, '状态', '全部');
     await nextTick();
     expect(w.findAll('tbody tr')).toHaveLength(3);
     w.unmount();
@@ -359,7 +360,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     });
     const w2 = mount(MemoryReviewOverview);
     await flushPromises();
-    await w2.findAll('.mk-pill').find((p) => p.text().startsWith('有待复习'))!.trigger('click');
+    await chooseFilter(w2 as never, '状态', '有待复习');
     await nextTick();
     expect(w2.findAll('tbody tr')).toHaveLength(0);
     expect(w2.find('.mk-empty').text()).toContain('没有符合条件的学习者');

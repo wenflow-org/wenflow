@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import SessionSecurity from '../SessionSecurity.vue';
+import { chooseFilter, filterOption } from './filter-controls';
 
 const h = vi.hoisted(() => ({
   getMe: vi.fn(),
@@ -95,8 +96,7 @@ function pagerText(w: Awaited<ReturnType<typeof mountSS>>) {
 
 /** 状态 pill 的计数徽章（全量口径的唯一可见位置，2026-10-26 起卡头 meta 不再复述） */
 function pillCount(w: Awaited<ReturnType<typeof mountSS>>, label: string) {
-  const pill = w.findAll('.mk-pill').find((p) => p.text().startsWith(label));
-  return pill ? pill.find('.mk-pill__count').text() : '';
+  return filterOption(w as never, '状态', label).text().match(/（(\d+)）$/)?.[1] ?? '';
 }
 
 describe('SessionSecurity 分页（标准页码器）', () => {
@@ -164,8 +164,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     await flushPromises();
     expect(pagerText(w)).toContain('第 2 / 2 页');
     // 「只看活跃」→ statusFilter 由 '' 变为 'active'
-    const pill = w.findAll('.mk-pill').find((p) => p.text().startsWith('活跃'))!;
-    await pill.trigger('click');
+    await chooseFilter(w as never, '状态', '活跃');
     await flushPromises();
     expect(pagerText(w)).toContain('第 1 / 2 页');
   });

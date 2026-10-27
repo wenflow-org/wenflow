@@ -53,20 +53,13 @@
       </div>
       <div class="mk-card__head">
         <div class="mk-filter">
-          <div class="mk-pills" role="group" aria-label="状态筛选">
-            <button
-              v-for="p in statusPills"
-              :key="p.id"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': statusFilter === p.id }"
-              :aria-pressed="statusFilter === p.id"
-              :title="`只看${p.label}会话`"
-              @click="statusFilter = statusFilter === p.id ? '' : p.id"
-            >
-              {{ p.label }}<span v-if="countOf(p.id) > 0" class="mk-pill__count">{{ countOf(p.id) }}</span>
-            </button>
-          </div>
+          <MkPillSelect
+            v-model="statusSelect"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusSelectOptions"
+            :active="!!statusFilter"
+          />
           <button v-if="statusFilter" type="button" class="mk-link" @click="statusFilter = ''">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
@@ -288,6 +281,7 @@ import { Lock } from 'lucide-vue-next'
 import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 
 /** 嵌入模式：作为「运营中心」页「会话安全」tab 渲染（仅去掉外层状态条；宿主承载域计数与刷新）。
     count 事件：会话总数上报（宿主「会话 N」徽章） */
@@ -401,6 +395,16 @@ const statusPills: Array<{ id: SessionStatus; label: string }> = [
   { id: 'expired', label: '已过期' },
   { id: 'revoked', label: '已撤销' },
 ]
+
+/** 卡头「状态」下拉的字符串代理（statusFilter 是 '' | SessionStatus） */
+const statusSelect = computed({
+  get: () => statusFilter.value,
+  set: (v: string) => { statusFilter.value = (v as '' | SessionStatus) }
+})
+const statusSelectOptions = computed(() => [
+  { value: '', label: '全部状态' },
+  ...statusPills.map((p) => ({ value: p.id, label: `${p.label}（${countOf(p.id)}）` }))
+])
 
 function statusOf(s: AdminSessionRow): SessionStatus {
   if (s.revokedAt) return 'revoked'

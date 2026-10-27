@@ -41,19 +41,13 @@
           <div class="mk-filter">
             <!-- 2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
                  状态一组单选、标志一组多选开关（激活前缀勾），两组各有 aria-label。 -->
-            <div class="mk-pills" role="group" aria-label="状态筛选">
-              <button
-                v-for="p in statusPills"
-                :key="p.id"
-                type="button"
-                class="mk-pill"
-                :class="{ 'mk-pill--active': statusFilter === p.id }"
-                :aria-pressed="statusFilter === p.id"
-                @click="statusFilter = statusFilter === p.id ? '' : p.id"
-              >
-                {{ p.label }}<span class="mk-pill__count">{{ p.count }}</span>
-              </button>
-            </div>
+          <MkPillSelect
+            v-model="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusSelectOptions"
+            :active="!!statusFilter"
+          />
             <div class="mk-pills" role="group" aria-label="标志筛选">
               <button
                 type="button"
@@ -253,6 +247,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -341,6 +336,12 @@ const statusPills = computed(() => {
     { id: 'dismissed', label: '已忽略', count: all.filter((r) => r.status === 'dismissed').length }
   ]
 })
+/** 卡头「状态」下拉：计数取当前已载入行 */
+const statusSelectOptions = computed(() => [
+  { value: '', label: '全部状态' },
+  ...statusPills.value.map((p) => ({ value: p.id, label: `${p.label}（${p.count}）` }))
+])
+
 /** 低分（≤2）条数：供「仅低分」pill 计数 */
 const lowCount = computed(() => rows.value.filter((r) => r.rating <= 2).length)
 

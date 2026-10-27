@@ -33,21 +33,13 @@
                可叠加的只有 pill（单选）与搜索，二者各自已有「全部」与搜索框 ✕ 两条一键复位；
                卡头不再出「清除筛选」（空态里的「显示全部用户」仍保留）。其它四页保留——那里
                它同时负责清掉分布条的下钻段。 -->
-          <div class="mk-pills" role="group" aria-label="用户视图">
-            <template v-for="p in pills" :key="p.id">
-              <!-- 「已删除」是生命周期维度（独立数据源），与角色/活跃 pills 之间加分隔，
-                   视觉语法与真实语义对齐（2026-10-11 用户走查） -->
-              <span v-if="p.id === 'deleted'" class="ul-pills__sep" aria-hidden="true"></span>
-              <button
-                type="button"
-                class="mk-pill"
-                :class="{ 'mk-pill--active': pill === p.id }"
-                :aria-pressed="pill === p.id"
-                :title="p.title"
-                @click="pill = p.id"
-              >{{ p.label }}<span v-if="p.count != null && p.id !== 'all'" class="mk-pill__count">{{ p.count }}</span></button>
-            </template>
-          </div>
+          <MkPillSelect
+            v-model="pill"
+            label="视图"
+            aria-label="按用户视图筛选"
+            :options="ulViewOptions"
+            :active="pill !== 'all'"
+          />
           <!-- 排序复位（2026-10-26 动线收口）：排序态写 localStorage，点过任一表头后
                下次进来仍是那个序，此前本页没有回默认序的出口（同批补齐六页，出口位置统一在
                左组筛选之后——它和「清除筛选」一样是「撤销我改过的视图状态」）。 -->
@@ -245,6 +237,7 @@ import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
@@ -484,6 +477,14 @@ const pills = computed<Array<{ id: string; label: string; count: number | string
     { id: 'deleted', label: '已删除', count: deletedTotal.value || null }
   ]
 })
+
+/** 卡头「视图」下拉：角色 / 活跃 / 新增 / 生命周期合成一维（与 KPI 同源同计数） */
+const ulViewOptions = computed(() => [
+  { value: 'all', label: '全部用户' },
+  ...pills.value
+    .filter((p) => p.id !== 'all')
+    .map((p) => ({ value: p.id, label: p.count != null ? `${p.label}（${p.count}）` : p.label }))
+])
 
 /* Phase 2：「已删除」是后端分页的独立数据源，取数时机见文件末的 watch（需排在「筛选回第 1 页」之后）。 */
 
@@ -774,9 +775,6 @@ function clearFilters() {
 @media (max-width: 900px) {
   .u-embedded { flex: none; height: auto; overflow: visible; }
 }
-/* pill 组维度分隔（角色/活跃 | 生命周期「已删除」）：细竖线，弱于 pill 边界。
-   类名走页面前缀 ul-（design:check 规则 1：mk- 前缀属全局原语，页面 scoped 内禁定义）。 */
-.ul-pills__sep { width: 1px; align-self: stretch; margin: 7px 6px 7px 2px; background: color-mix(in srgb, currentColor 18%, transparent); }
 /* 路径/课堂数字列（原型列语言：mono 文本） */
 .ul-ps { font-variant-numeric: tabular-nums; }
 .ul-ps b { font-weight: 600; }
