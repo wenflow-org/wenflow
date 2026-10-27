@@ -5,7 +5,7 @@
  * 运营中心宿主（OpsHub）的同名页签；本文件守住三件容易在后续改动中走形的事：
  *  1) 数据导出 = 范围 chips 多选 + 右对齐「开始导出」；无选中时主钮禁用；
  *     后端导出接口不支持时间范围 / JSONL 格式，对应控件不得渲染（不暗示不存在的功能）。
- *  2) 运维工具 = 时间推进模拟 + 事件投递失败（死信）两张卡；零死信时重放钮禁用（不给假动作）。
+ *  2) 运维工具 = 事件投递失败 / 批量吞吐 / 内容抽检三张卡；时间推进模拟已退役；零死信时重放钮禁用（不给假动作）。
  *  3) 运营中心宿主里这三个页签在位；「会话安全」未访问角标显「未加载」（不显 0/—）。
  *
  * 原型 renderOpsCenter（newui index.html 1848-1886）骨架保持不变，只是宿主换了。
@@ -18,7 +18,6 @@ const apiObject = vi.hoisted(() => {
   const ok = <T,>(data: T) => ({ data: { data } })
   return {
     adminDevtoolsApi: {
-      advanceTime: vi.fn(async () => ok({})),
       getOutboxDead: vi.fn(async () => ok({ deadCount: 0, items: [] })),
       requeueOutboxDead: vi.fn(async () => ok({ requeued: 0 })),
     },
@@ -79,10 +78,14 @@ async function mountWithRouter(component: unknown, route = '/admin/ops-hub') {
 describe('运维工具面板（原系统工具 Tab1）', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('两张卡：事件投递失败 + 时间推进模拟；死信卡在前（「去处理」落到首屏就是重放入口），零死信时重放钮禁用', async () => {
+  it('三张卡：事件投递失败在前，后接批量吞吐 / 内容抽检；时间推进已退役，零死信时重放钮禁用', async () => {
     const w = await mountWithRouter(ServerToolsPanel)
     const titles = w.findAll('.mk-card__title').map((t) => t.text())
-    expect(titles.slice(0, 2)).toEqual(['事件投递失败', '时间推进模拟'])
+    expect(titles).toEqual(['事件投递失败', '批量吞吐', '内容抽检'])
+    expect(w.text()).not.toContain('时间推进')
+    expect(w.text()).not.toContain('模拟推进')
+    // 每张工具卡都有一句用途说明，避免只看到内部黑话
+    expect(w.findAll('.stp-intro')).toHaveLength(3)
     const requeue = w.findAll('button').find((b) => b.text() === '重放全部失败事件')
     expect(requeue, '零死信也要有重放入口（禁用态）').toBeTruthy()
     expect(requeue!.attributes('disabled')).toBeDefined()

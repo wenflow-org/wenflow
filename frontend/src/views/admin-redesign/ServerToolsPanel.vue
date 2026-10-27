@@ -26,6 +26,7 @@
           </button>
         </div>
       </div>
+      <p class="stp-intro">异步事件（画像更新、成就解锁等）投递失败后会堆在这里；根因修复后重放，事件会重新投递。</p>
       <MkLoading v-if="deadLoading" />
       <template v-else-if="deadItems.length">
         <div class="mk-table-scroll">
@@ -56,7 +57,7 @@
                 </td>
                 <td class="mk-num">{{ item.attemptCount }}</td>
                 <td>
-                  <span v-if="item.lastError" class="dt-err" :title="item.lastError">{{ item.lastError }}</span>
+                  <span v-if="item.lastError" class="stp-err" :title="item.lastError">{{ item.lastError }}</span>
                   <span v-else class="mk-na">—</span>
                 </td>
                 <td :title="fmtDate(item.occurredAt)">{{ timeAgo(item.occurredAt) }}</td>
@@ -94,65 +95,8 @@
       />
     </section>
 
-    <!-- 时间推进模拟 -->
-    <section class="mk-card">
-      <div class="mk-card__head">
-        <h4 class="mk-card__title">时间推进模拟</h4>
-      </div>
-      <div class="dt-body">
-        <div class="dt-grid">
-          <label class="mk-field">
-            <span class="mk-field__label">用户 ID</span>
-            <input v-model="advance.userId" class="mk-field__input mono" placeholder="留空 = 当前管理员" />
-          </label>
-          <!-- 天数校验（F6-4）：越界/空值显式报错并拦截，不再静默 clamp（判例
-               VirtualLearnerBatchCreate 审核 #58「填 999 显 999 实建 20」）。原实现
-               Math.min(365,…) 夹取后结果区显「365 天后」、输入框仍留 999、toast 无提示，
-               会被读成「模拟了 999 天」；label 已有 min/max，原生校验因按钮非 submit 从不触发 -->
-          <label class="mk-field" :class="{ 'mk-field--error': !!advanceDaysError }">
-            <span class="mk-field__label">天数（1-365）</span>
-            <input
-              v-model.number="advance.days"
-              type="number"
-              min="1"
-              max="365"
-              class="mk-field__input"
-              :aria-invalid="!!advanceDaysError"
-              @input="advanceDaysError = ''"
-            />
-            <span v-if="advanceDaysError" class="mk-field__err">{{ advanceDaysError }}</span>
-          </label>
-          <label class="mk-field">
-            <span class="mk-field__label">路径 ID（可选）</span>
-            <input v-model="advance.pathId" class="mk-field__input mono" placeholder="留空 = 全局画像" />
-          </label>
-          <div class="mk-field dt-actions">
-            <span class="mk-field__label">&nbsp;</span>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="advanceBusy" @click="runAdvance">
-              {{ advanceBusy ? '模拟中…' : '模拟推进' }}
-            </button>
-          </div>
-        </div>
-        <div v-if="advanceResult" class="dt-result">
-          <div class="dt-result__head">
-            <strong>模拟结果：{{ advanceResult.dayDiff }} 天后</strong>
-            <span class="mono">{{ fmtDate(advanceResult.simulatedAsOf) }}</span>
-            <span v-if="advanceResult.hasMetricRecord" class="mk-badge mk-badge--warn">基于最近指标 {{ fmtDate(advanceResult.latestMetricAt) }}</span>
-            <span v-else class="mk-badge mk-badge--muted">无指标记录</span>
-          </div>
-          <div class="dt-compare">
-            <div class="dt-compare__col">
-              <h5>当前</h5>
-              <pre class="mono">{{ pretty(advanceResult.before) }}</pre>
-            </div>
-            <div class="dt-compare__col">
-              <h5>模拟后</h5>
-              <pre class="mono">{{ pretty(advanceResult.after) }}</pre>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+    <!-- 2026-10-28 用户「时间推进应该不用了，那个属于虚拟学习，这个拿掉」：
+         时间推进模拟整卡退役。运维工具只保留线上真实数据的排障动作。 -->
 
     <!-- 批量吞吐（2026-10-21）：rpm 下限此前只在 CLI 审计里，跑批空转在后台看不出来。
          口径与 scripts/audit-batch-throughput 同一纯函数（窗口内全部尝试，含失败）。 -->
@@ -164,6 +108,7 @@
           <button type="button" class="mk-btn mk-btn--sm" :disabled="throughputLoading" @click="loadThroughput">{{ throughputLoading ? '读取中…' : '刷新' }}</button>
         </div>
       </div>
+      <p class="stp-intro">后台跑批的实时吞吐：每分钟处理条数（rpm）。低于下限的分钟越多，越可能已经空转。</p>
       <div v-if="throughputFailed" class="mk-alert mk-alert--row" role="alert">
         <span class="mk-alert__msg">吞吐读取失败</span>
       </div>
@@ -187,6 +132,7 @@
           <button type="button" class="mk-btn mk-btn--sm" :disabled="contentLoading" @click="loadContentReview">{{ contentLoading ? '读取中…' : '重新抽样' }}</button>
         </div>
       </div>
+      <p class="stp-intro">按 5% 抽样人工判断 AI 回复质量；标注结果会回流到 Prompt 评估，作为调优依据。</p>
       <p v-if="contentFailed" class="mk-alert mk-alert--row" role="alert">内容抽检读取失败</p>
       <div v-else-if="!contentReview?.items.length" class="mk-field__hint">本窗口没有抽中的教师回合。</div>
       <div v-else class="st-cr">
@@ -222,69 +168,10 @@ import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 
-/* 运维工具（原「系统工具」页 Tab1 整体迁入，2026-10-16）：时间推进模拟 + outbox 死信重放。
-   两件事都是「只看不改数据」或「显式确认后才改」的运维动作。 */
+/* 运维工具（原「系统工具」页 Tab1 整体迁入，2026-10-16）：outbox 死信重放 + 跑批吞吐 + 内容抽检。
+   三件事都是线上真实数据的排障 / 质检动作；时间推进属于虚拟学习者仿真，2026-10-28 已整卡退役。 */
 
-const advanceBusy = ref(false)
 const requeueBusy = ref(false)
-const refreshing = ref(false)
-
-/* 时间推进 */
-const advance = ref({ userId: '', days: 30, pathId: '' })
-/** 模拟结果结构：后端 /admin/devtools/advance-time 的 data 载荷（adminApi.ts 侧响应尚未标注类型，按模板消费字段镜像） */
-interface AdvanceTimeResult {
-  dayDiff: number
-  simulatedAsOf: string
-  hasMetricRecord?: boolean
-  latestMetricAt?: string | null
-  before: unknown
-  after: unknown
-}
-const advanceResult = ref<AdvanceTimeResult | null>(null)
-/** 天数内联校验文案（空 = 通过）；上限与后端 devtools.ts:25 的 clamp(1,365) 同源 */
-const advanceDaysError = ref('')
-
-/** 天数取值校验：越界/留空/非整数显式报错，不做静默夹取（口径同 VirtualLearnerBatchCreate，
-    见文件头 F6-4 注释）。后端对越界值同样 clamp 1–365，故前端必须在提交前拦住不一致读数。 */
-function resolveAdvanceDays(): { ok: true; days: number } | { ok: false; error: string } {
-  // v-model.number 在输入框清空时回填 ''（非 number），故按 unknown 收口
-  const raw: unknown = advance.value.days
-  const n = Number(raw)
-  if (raw === '' || raw === null || raw === undefined || !Number.isFinite(n)) {
-    return { ok: false, error: '请填写天数（1–365 的整数）' }
-  }
-  if (!Number.isInteger(n)) {
-    return { ok: false, error: '天数须为整数（1–365）' }
-  }
-  if (n < 1 || n > 365) {
-    return { ok: false, error: '天数须为 1–365 的整数（最大 365 天）' }
-  }
-  return { ok: true, days: n }
-}
-
-async function runAdvance() {
-  const check = resolveAdvanceDays()
-  if (!check.ok) {
-    advanceDaysError.value = check.error
-    return
-  }
-  advanceDaysError.value = ''
-  advanceBusy.value = true
-  advanceResult.value = null
-  try {
-    const res = await adminDevtoolsApi.advanceTime({
-      userId: advance.value.userId.trim() || undefined,
-      days: check.days,
-      pathId: advance.value.pathId.trim() || undefined,
-    })
-    advanceResult.value = res.data?.data ?? res.data
-    toast.success('模拟完成（只读预览，未改动真实数据）')
-  } catch (e) {
-    toast.error(`模拟失败：${errMsg(e)}`)
-  } finally {
-    advanceBusy.value = false
-  }
-}
 
 /* 死信 */
 /** 死信行结构：镜像 adminApi.ts getOutboxDead 泛型内联类型（api 侧未导出，只能就地声明） */
@@ -386,11 +273,9 @@ async function requeueOne(eventType: string) {
   }
 }
 
-/** 宿主刷新钮调用的整体重载：只重拉死信清单（时间推进是表单，无需刷新） */
+/** 宿主刷新钮调用的整体重载：只重拉死信清单 */
 async function refresh() {
-  refreshing.value = true
   await loadDead()
-  refreshing.value = false
 }
 
 function fmtDate(iso?: string | null): string {
@@ -398,15 +283,6 @@ function fmtDate(iso?: string | null): string {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function pretty(obj: unknown): string {
-  if (!obj) return '（无）'
-  try {
-    return JSON.stringify(obj, null, 2)
-  } catch {
-    return String(obj)
-  }
 }
 
 /* 死信懒加载：与页签同生共死（宿主 v-if 挂载本组件时才拉），故挂载即拉一次 */
@@ -507,7 +383,14 @@ defineExpose({ refresh, reload: loadDead })
   gap: 12px;
   align-content: start;
 }
-.dt-body { padding: 14px; display: grid; gap: 14px; }
+/* 每张工具卡的用途说明（2026-10-28 用户「这些工具都是干嘛的」）：
+   一句话讲清「什么时候用它」，把内部黑话（rpm / 死信 / 抽检）落到运营能看懂的动作上。 */
+.stp-intro {
+  margin: -2px 16px 10px;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.5;
+  color: var(--mk-muted);
+}
 /* 死信表（自动布局）：事件类型长名截断（title 全值）。nowrap 走表级 .mk-table--nowrap */
 .stp-ev {
   display: inline-block;
@@ -517,36 +400,7 @@ defineExpose({ refresh, reload: loadDead })
   white-space: nowrap;
   vertical-align: bottom;
 }
-.dt-grid { display: grid; grid-template-columns: 1.6fr 0.7fr 1.4fr auto; gap: 12px; align-items: end; }
-.dt-actions { display: grid; gap: 6px; }
-.dt-result { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); overflow: hidden; }
-.dt-result__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  font-size: var(--mk-fs-micro);
-}
-.dt-result__head strong { font-size: var(--mk-fs-body); }
-.dt-result__head .mono { color: var(--mk-muted); }
-.dt-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-.dt-compare__col { padding: 12px; min-width: 0; }
-.dt-compare__col + .dt-compare__col { border-left: 1px dashed var(--mk-line); }
-.dt-compare__col h5 { margin: 0 0 8px; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.05em; }
-.dt-compare__col pre {
-  margin: 0;
-  max-height: 300px;
-  overflow: auto;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.6;
-  color: var(--mk-muted);
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.dt-err {
+.stp-err {
   display: inline-block;
   /* 自动布局下 max-content 决定列宽：固定截断上限，长错误信息不独吃表格宽度（title 全值） */
   max-width: 260px;
@@ -556,22 +410,6 @@ defineExpose({ refresh, reload: loadDead })
   vertical-align: bottom;
   color: var(--mk-red);
   font-size: var(--mk-fs-micro);
-}
-
-@media (min-width: 2000px) {
-  .dt-grid { grid-template-columns: 1.6fr 0.7fr 1.4fr auto; }
-  .dt-compare__col pre { font-size: var(--mk-fs-micro); }
-}
-@media (min-width: 2800px) {
-  .dt-compare__col pre { font-size: var(--mk-fs-micro); }
-}
-@media (min-width: 3600px) {
-  .dt-compare__col pre { font-size: var(--mk-fs-body); }
-}
-@media (max-width: 1100px) {
-  .dt-grid { grid-template-columns: 1fr 1fr; }
-  .dt-compare { grid-template-columns: 1fr; }
-  .dt-compare__col + .dt-compare__col { border-left: none; border-top: 1px dashed var(--mk-line); }
 }
 /* 批量吞吐 KPI（2026-10-21）：四格读数；只有「最长连续」在告警时转 warn */
 .st-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 4px 0 8px; }
