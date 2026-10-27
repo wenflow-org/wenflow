@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>白板模式 demo · 共享板书演进</title>
+<style>
+  :root{--ink:#1f2430;--muted:#5b6472;--faint:#8b94a3;--line:#e3e6ec;--soft:#f6f7f9;
+    --accent:#4f46e5;--ok:#0f766e;--warn:#b45309;--bg:#fff}
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.65 "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+  .wrap{max-width:1240px;margin:0 auto;padding:34px 24px 80px}
+  h1{font-size:25px;margin:0 0 6px;letter-spacing:-.2px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 20px}
+  .note{background:var(--soft);border-left:3px solid var(--accent);padding:12px 16px;border-radius:6px;
+    font-size:13.5px;color:var(--muted);margin:0 0 22px}
+  .kpi{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 26px}
+  .kpi div{border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:120px}
+  .kpi b{display:block;font-size:22px;line-height:1.2}
+  .kpi i{font-style:normal;font-size:12px;color:var(--muted)}
+  .kpi .good b{color:var(--ok)}
+  .case{border-top:1px solid var(--line);padding:26px 0 6px}
+  .case header h2{font-size:17px;margin:0 0 6px}
+  .meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .kind{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--accent);background:#eef0ff;
+    padding:2px 8px;border-radius:5px}
+  .chip{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 10px}
+  .split{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:22px;align-items:start}
+  @media (max-width:900px){.split{grid-template-columns:1fr}}
+  .board{position:sticky;top:16px;background:var(--soft);border-radius:12px;padding:12px}
+  .board-tabs{display:flex;gap:6px;margin-bottom:10px}
+  .board-tabs button{font:inherit;font-size:12.5px;padding:5px 12px;border-radius:999px;cursor:pointer;
+    border:1px solid var(--line);background:#fff;color:var(--muted)}
+  .board-tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .board-img img{width:100%;height:auto;display:block;border-radius:6px;background:#fff}
+  .board-note{font-size:12px;color:var(--faint);margin:8px 2px 0}
+  .chat{display:flex;flex-direction:column;gap:12px}
+  .turn{position:relative;padding-left:14px;border-left:2px solid var(--line)}
+  .op{font-size:11px;color:#fff;background:var(--faint);border-radius:4px;padding:0 6px;
+    display:inline-block;margin-bottom:5px}
+  .op.reveal{background:var(--ok)}
+  .bubble{border-radius:10px;padding:9px 12px;font-size:13.5px;margin-bottom:7px}
+  .bubble.student{background:#f0f2f7;color:var(--muted)}
+  .bubble.teacher{background:#fff;border:1px solid var(--line)}
+  .bubble.teacher::before{content:"老师 ";font-size:11.5px;color:var(--faint)}
+  footer{margin-top:46px;padding-top:18px;border-top:1px solid var(--line);color:var(--faint);font-size:12.5px}
+</style></head>
+<body><div class="wrap">
+  <h1>白板模式 demo · 共享板书演进</h1>
+  <p class="sub">同一块板从「提问态」到「揭晓态」，老师每轮看着板上真实存在的内容说话。</p>
+
+  <p class="note">
+    和图教合一的区别：以前一次模型调用里既写话术又凑图，话里的图与真实 spec 常常不一致，
+    而且图是一次性附件——提问时画上答案就泄题，挖成「?」又永远残缺。
+    白板模式下：<b>先定板（完整态）→ 引擎派生提问态 → 老师看着真板说话 → 学生答对后同一块板揭晓</b>。
+  </p>
+
+  <div class="kpi">
+    <div class="good"><b>0</b><i>提问态泄题（处）</i></div>
+    <div class="good"><b>0</b><i>指着空气说话（处）</i></div>
+    <div class="good"><b>0%</b><i>伪视觉 · 元话（盲评）</i></div>
+    <div><b>17%</b><i>最高复述率（V8 常被批「把图念一遍」）</i></div>
+    <div><b>3</b><i>案例（配速 / 浮力 / 商鞅变法）</i></div>
+  </div>
+
+  <section class="case" data-case="0">
+    <header>
+      <h2>七年级数学·一元一次应用 第2课</h2>
+      <div class="meta">
+        <span class="kind">split-compare</span>
+        <span class="chip">板：建板 → 揭晓 → 不动</span>
+        <span class="chip">提问态藏了 4 处</span>
+        <span class="chip">结论：分叉在第二步：得数单位是 s/m，不是 m…</span>
+      </div>
+    </header>
+    <div class="split">
+      <div class="board">
+        <div class="board-tabs" data-case="0">
+          <button class="on" data-stage="masked">提问态（第 1 轮）</button>
+          <button data-stage="full">揭晓态（答对后）</button>
+        </div>
+        <div class="board-img">
+          <img class="stage-masked" src="images/b1-math-pace-0.png" alt="提问态白板">
+          <img class="stage-full" src="images/b1-math-pace-1.png" alt="揭晓态白板" hidden>
+        </div>
+        <p class="board-note">左：学生此刻看到的板（骨架 + 空槽，结论未上板）｜右：学生答对后，同一块板补上答案与结论</p>
+      </div>
+      <div class="chat"><div class="turn">
+      <div class="op setup">建板</div>
+      <div class="bubble student">老师，我算的配速是 60 除以 400 等于 0.15，也就是 0.15 分钟每千米，怎么感觉越跑越快了？哪里容易错啊？</div>
+      <div class="bubble teacher">「越跑越快」这个感觉其实是一条好线索——数字一路变小，说明中途有东西被换掉了。
+
+看左栏从「60 ÷ 400 = 0.15」跳到「0.15 分钟/千米」这两步：60 和 400 各自带的是什么单位？这两个单位相除，留下的应该是什么？
+
+先只说这一处，右栏的空槽我们等这一步说清了再动。</div>
+    </div><div class="turn">
+      <div class="op reveal">揭晓</div>
+      <div class="bubble student">我想了一下，400 米要先变成 0.4 千米，所以应该是 60 ÷ 0.4 = 150 秒每千米，也就是 2.5 分钟每千米。分叉就在单位换算那一步。</div>
+      <div class="bubble teacher">板子右边空着的那几格已经补上，底部结论也贴出来了——你说的「分叉在单位那一步」和板上写的一致，你最后落到 2 分 30 秒每千米，这个数也对。
+
+换一组数，你自己走一遍：一个人跑 800 米，用了 3 分 20 秒。
+
+他的配速是几分几秒每千米？中间那个得数的单位也一起写出来给我看。</div>
+    </div><div class="turn">
+      <div class="op reveal">不动</div>
+      <div class="bubble student">那如果改成 800 米跑，用时还是一分钟，配速是多少？我是不是也先换算再除？</div>
+      <div class="bubble teacher">你提的这组数正好可以拿来验一验。先回答你那句「是不是也先换算再除」：两条路都走得通——把 800 米换成 0.8 千米，时间还是 1 分钟，再拿分钟数去除，出来的就是「分钟/千米」；也可以像板上那样先算每米多少秒，再乘 1000。决定对错的不是顺序，而是每一步那个数后面的单位有没有跟着一起算。
+
+所以你自己走一遍 800 米、60 秒这组：
+
+- 用板上那条路（先算每米多少秒），把中间那个得数写出来，**单位也一起写出来**
+- 再用你说的「先换算再除」走一遍
+
+两条路最后是不是同一个数？把中间那步的数和单位发我。</div>
+    </div></div>
+    </div>
+  </section>
+<section class="case" data-case="1">
+    <header>
+      <h2>初二物理·浮力 第1课</h2>
+      <div class="meta">
+        <span class="kind">concept-map</span>
+        <span class="chip">板：建板 → 揭晓 → 不动</span>
+        <span class="chip">提问态藏了 6 处</span>
+        <span class="chip">结论：两条实线进入公式，两条虚线只改变物体位置或运动状态，不改变浮力大小</span>
+      </div>
+    </header>
+    <div class="split">
+      <div class="board">
+        <div class="board-tabs" data-case="1">
+          <button class="on" data-stage="masked">提问态（第 1 轮）</button>
+          <button data-stage="full">揭晓态（答对后）</button>
+        </div>
+        <div class="board-img">
+          <img class="stage-masked" src="images/b2-phys-buoyancy-2.png" alt="提问态白板">
+          <img class="stage-full" src="images/b2-phys-buoyancy-3.png" alt="揭晓态白板" hidden>
+        </div>
+        <p class="board-note">左：学生此刻看到的板（骨架 + 空槽，结论未上板）｜右：学生答对后，同一块板补上答案与结论</p>
+      </div>
+      <div class="chat"><div class="turn">
+      <div class="op setup">建板</div>
+      <div class="bubble student">浮力到底跟什么有关？我猜跟浸进去的深度有关，越深应该越大吧？还跟物体自己的重量有关吗？</div>
+      <div class="bubble teacher">你猜的这两条，板上正好都摆着：「浸入深度 h」和「物体自重 G物」。我们先把第一个拿出来单独查一下。
+
+同一块铁块挂在弹簧秤下面：先让它刚好全部没入水面，再往下放，沉到水面以下半米。两次都是完全浸没在水里。
+
+这两次弹簧秤的读数会一样吗？先说说你的判断，再把理由一起给我。</div>
+    </div><div class="turn">
+      <div class="op reveal">揭晓</div>
+      <div class="bubble student">我明白了，浮力只跟液体的密度和排开液体的体积有关。深度不影响，因为压强虽然变大但上下表面的差没变；物体自己的重量也不影响浮力大小。</div>
+      <div class="bubble teacher">白板上刚才空着的两处补上了，底部那句结论也上板了——“两条实线进入公式，两条虚线只改变位置或运动状态，不改变浮力大小”。这节课要练的判断，你自己说全了。
+
+有一点我想留下：你解释深度为什么不影响时，用的是“压强变大但上下表面的**差**没变”，也就是说，你看的是差值，而不是压强本身。这个比较方式在浮力这类问题里很可靠。
+
+最后再换一个条件：同一块铁块，先完全浸没在水中；再把它往上提，让它**只浸入一半体积**。这时浮力大约是刚才的多少？说说你的根据。</div>
+    </div><div class="turn">
+      <div class="op reveal">不动</div>
+      <div class="bubble student">那同一个铁球，在水里和在水银里受到的浮力一样吗？为什么？</div>
+      <div class="bubble teacher">你把刚才那道题改了个方向来问——不是换体积，而是换液体，这是在用结论往外试，问得有道理。
+
+先补一条板上没有的事实：水银密度约 13.6 g/cm³，铁约 7.9，所以铁球放进水银里不会沉到底，而是浮在上头，只有一部分体积没进液体里；放进水里它就沉到底，整个球都进去了。
+
+那么，照板上那两条进入公式的量比一比：这两次浮力一样吗？先说结论，再说清哪一次的排开液体体积更大。</div>
+    </div></div>
+    </div>
+  </section>
+<section class="case" data-case="2">
+    <header>
+      <h2>初二历史·战国变法 第1课</h2>
+      <div class="meta">
+        <span class="kind">state-strip</span>
+        <span class="chip">板：建板 → 揭晓 → 不动</span>
+        <span class="chip">提问态藏了 9 处</span>
+        
+      </div>
+    </header>
+    <div class="split">
+      <div class="board">
+        <div class="board-tabs" data-case="2">
+          <button class="on" data-stage="masked">提问态（第 1 轮）</button>
+          <button data-stage="full">揭晓态（答对后）</button>
+        </div>
+        <div class="board-img">
+          <img class="stage-masked" src="images/b3-hist-shangyang-4.png" alt="提问态白板">
+          <img class="stage-full" src="images/b3-hist-shangyang-5.png" alt="揭晓态白板" hidden>
+        </div>
+        <p class="board-note">左：学生此刻看到的板（骨架 + 空槽，结论未上板）｜右：学生答对后，同一块板补上答案与结论</p>
+      </div>
+      <div class="chat"><div class="turn">
+      <div class="op setup">建板</div>
+      <div class="bubble student">商鞅变法是一下子全面推开的吗？我听说他先在城南门立了一根木头，这跟变法有什么关系？</div>
+      <div class="bubble teacher">不是一下子全面推开。商鞅先把「让人信」这件事做在前面，然后才分两次把新法往下推——板子标题上写的「先取信，再分两步推」就是这个意思。
+
+你问的那根木头，对应板上「① 立木为信」这一格，三个槽现在还是空的。先别急着写变法的条文，回到南门现场：木头搬走、赏金当场兑现，围在边上看的人对「官府说的话到底算不算数」，心里会起什么变化？
+
+用你自己的话写一句填进去，不用术语。</div>
+    </div><div class="turn">
+      <div class="op reveal">揭晓</div>
+      <div class="bubble student">立木为信是为了让百姓相信官府说话算数，赏金真的会给。先取信于民，后面的法令才推得动。然后才是颁布新法、太子犯法也照罚。</div>
+      <div class="bubble teacher">对，你把这条因果链接上了：赏金当场兑现，百姓才认定「官府说话算数」，新法这才推得动。板上「① 立木为信」那格底下写的「民信：令必行」，就是从你这句里来的。
+
+换个条件再走一步。第一次变法里有「军功爵制取代世卿」这一条：一个世代做卿的贵族子弟，和一个种地出身的农夫之子，同样二十岁上战场——按新法，他们挣前途的路子各是什么？</div>
+    </div><div class="turn">
+      <div class="op reveal">不动</div>
+      <div class="bubble student">那为什么秦国人一开始不愿意变法？如果百姓不信任官府，新法会怎么样？</div>
+      <div class="bubble teacher">你这两问其实是一件事，都问在关键处。
+
+变法动的是两拨人的利益，反对变法的不止一种声音：世代做卿的贵族，军功爵制一立，那条靠出身传下去的路就没了；普通百姓则见多了官府「说了不算」，一开始多半站在边上看。至于失信会怎样，你上一条其实已经写出了答案：赏金不当场兑现，百姓就不信「官府说话算数」；法还没出宫门，就先被当耳旁风了。所以失信不只是名声问题，它会导致令不行。
+
+再走一步：商鞅后来被杀，秦国并没有把新法废掉，照旧往下推。按这条线索，人不在了，法为什么还立得住？想的时候盯住「民信：令必行」和「推行县制」那两格。</div>
+    </div></div>
+    </div>
+  </section>
+
+  <footer>
+    数据：frontend/figure-out/board-v4.json ｜ 外部盲评：outputs/e2e/board-review-v4.json ｜
+    生成：outputs/e2e/board-demo.mjs
+  </footer>
+</div>
+<script>
+  document.querySelectorAll('.board-tabs').forEach((tabs) => {
+    const caseEl = tabs.closest('.case');
+    const masked = caseEl.querySelector('.stage-masked');
+    const full = caseEl.querySelector('.stage-full');
+    tabs.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => {
+      tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === btn));
+      const showFull = btn.dataset.stage === 'full';
+      masked.hidden = showFull;
+      full.hidden = !showFull;
+    }));
+  });
+</script>
+</body></html>

@@ -726,16 +726,19 @@ export function shouldWithholdFigureForQuestion(
  * 返回值：脱敏后的图；null = 这张图没有可呈现的结构（整张扣下）。
  * 当前覆盖 cartesian-plot 与 concept-map（读图/复述题最高发的两类）；其余图型维持扣下。
  */
-export function maskFigureForQuestion<T extends { kind?: string; spec?: unknown }>(
-  figure: T,
-  reply: string | null | undefined,
-): T | null {
-  if (!figure || !endsWithQuestion(reply)) return figure;
-  const question = String(reply ?? '');
-  // 纠错产出句式（2026-10-27 V5）：让学生自己改错/指出分叉的轮次，图不能替学生把错改完——
-  // 正确栏与结论与答案行同属「本轮要产出的 X」，与读图题同走脱敏
-  const readOff = /(读出|指出|指着|看图|图上|哪两个|哪一段|哪个位置|哪里|是多少|多少|等于几|填|补全|复述|说出|讲出来|列举|概括|推一推|用你自己的话|说一遍|讲一遍|按顺序|走一遍|解释一件事|挑一个|哪一步|哪一边|先出现|你来改|轮到你|自己(改|指出|说|写|填)|错在哪|分岔在哪|哪里错了|改过来)/;
-  if (!readOff.test(question)) return figure;
+/**
+ * 按图型把「答案位」无条件挖空（2026-10-27 白板改造）。
+ *
+ * 这是「两阶段板书」的构造基础：同一份 spec 同时存在两个可下发形态——
+ *   提问态（masked）：答案位是 ?，结论未揭晓，学生要先自己想；
+ *   揭晓态（full）：学生答对后原样补上。
+ * 与 maskFigureForQuestion 的分工：本函数**不看对话**，只按图型结构挖；后者负责
+ * 「这一轮是不是读图/纠错轮」的触发判断，命中后调用本函数。
+ *
+ * 返回 null 表示该图型没有可靠的「答案位」结构（venn/bullseye/board 等），不能安全挖空。
+ */
+export function maskFigureAnswers<T extends { kind?: string; spec?: unknown }>(figure: T): T | null {
+  if (!figure) return figure;
   const spec = figure.spec && typeof figure.spec === 'object' ? ({ ...(figure.spec as Record<string, unknown>) } as Record<string, unknown>) : null;
   if (!spec) return figure;
   const kind = String(figure.kind ?? '');
@@ -788,6 +791,23 @@ export function maskFigureForQuestion<T extends { kind?: string; spec?: unknown 
   }
 
   return null;
+}
+
+/**
+ * 读图/复述/纠错轮才挖空（2026-10-24 外部讨论定案：此时扣图会让学生面对悬空的「看图」）。
+ * 触发条件：回复以问句收尾，且问句属于「让学生自己说出/指出/改出」的句式。
+ */
+export function maskFigureForQuestion<T extends { kind?: string; spec?: unknown }>(
+  figure: T,
+  reply: string | null | undefined,
+): T | null {
+  if (!figure || !endsWithQuestion(reply)) return figure;
+  const question = String(reply ?? '');
+  // 纠错产出句式（2026-10-27 V5）：让学生自己改错/指出分叉的轮次，图不能替学生把错改完——
+  // 正确栏与结论与答案行同属「本轮要产出的 X」，与读图题同走脱敏
+  const readOff = /(读出|指出|指着|看图|图上|哪两个|哪一段|哪个位置|哪里|是多少|多少|等于几|填|补全|复述|说出|讲出来|列举|概括|推一推|用你自己的话|说一遍|讲一遍|按顺序|走一遍|解释一件事|挑一个|哪一步|哪一边|先出现|你来改|轮到你|自己(改|指出|说|写|填)|错在哪|分岔在哪|哪里错了|改过来)/;
+  if (!readOff.test(question)) return figure;
+  return maskFigureAnswers(figure);
 }
 
 /**
