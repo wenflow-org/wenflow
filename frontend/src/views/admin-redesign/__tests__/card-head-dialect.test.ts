@@ -174,6 +174,20 @@ describe('卡头工具条形态', () => {
     expect(offenders).toEqual([])
   })
 
+  /* 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：教学组定稿为
+     KPI 卡承担读数与快捷筛选入口，卡头不再常驻标志 chip 组（筛选生效时才出 token）。 */
+  it('教学组列表页不再有常驻 chip 组（KPI 卡 = 读数 + 筛选入口）', () => {
+    const teachingGroup = [
+      'GoalConversations.vue',
+      'TeachingSessions.vue',
+      'OpsContent.vue',
+      'LearnerCenter.vue',
+      'MemoryReviewOverview.vue',
+    ]
+    const offenders = teachingGroup.filter((file) => /class="mk-pills/.test(read(file)))
+    expect(offenders).toEqual([])
+  })
+
   /* 2026-10-27 用户「没有统一排序，先下拉还是先 pill」：收敛为**维度在前、标志在后**。
      维度是每一页都有的主筛选轴（读作「先缩小范围」），标志是叠加精修（读作「再开关一类」）；
      多数页面本就是此序，教学会话把标志组写在四个下拉前属历史漂移。这里锁死，防止再掺回来。

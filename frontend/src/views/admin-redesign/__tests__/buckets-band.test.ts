@@ -86,7 +86,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     liveUsersTotal.value = 0;
   });
 
-  it('教学会话：分布带退役（2026-10-17）→ 完结率升 KPI、状态组筛选交给快捷 chips 与筛选', async () => {
+  it('教学会话：分布带退役（2026-10-17）→ 完结率升 KPI、状态筛选交给维度下拉与 KPI 卡', async () => {
     tsList.mockResolvedValue({
       data: { data: { total: 7, items: [
         { id: 's1', status: 'active', userName: '甲', topic: 'T1' },
@@ -107,20 +107,19 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(w.find('.ts-distband').exists()).toBe(false);
     expect(w.find('.mk-distband').exists()).toBe(false);
     // 完结率从带副文升 KPI：1/7 → 14%（四舍五入，不再有 14.29% 的假精度）
-    // 2026-10-26：「异常终态」卡退役——与「需关注」在同一行数据上同源同数，异常数只由卡头「异常」chip 承载
+    // 2026-10-27：异常升为 KPI 卡（读数 + 入口），卡头常驻 chip 组退役
     const kpis = w.findAll('.mk-kpi');
-    expect(kpis.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议', '完结率']);
+    expect(kpis.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '异常', '缺总结', '有建议', '完结率']);
     const rate = kpis.find((c) => c.find('.mk-kpi__label').text() === '完结率')!;
     expect(rate.find('.mk-kpi__num').text()).toBe('14%');
-    // 异常快捷筛选仍在卡头 chips（失败 + 超时 = 2，与「异常」计数同口径），点击可穿
+    // 异常 = 失败 + 超时 = 2，点 KPI 卡即筛
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
-    const abnormalBtn = w.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').find((b) => b.text().startsWith('异常'));
-    expect(abnormalBtn?.text()).toContain('异常');
-    await abnormalBtn!.trigger('click');
+    const abnormalCard = kpis.find((c) => c.find('.mk-kpi__label').text().trim() === '异常')!;
+    expect(abnormalCard.find('.mk-kpi__num').text()).toBe('2');
+    await abnormalCard.trigger('click');
     await settle();
     expect(w.findAll('tbody tr').length).toBe(2);
-    // 右组另一枚 = 有建议（2026-10-27 计数收敛：数字只在上方 KPI 卡，chip 只标已应用）
-    expect(w.find('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').text()).toContain('有建议');
+    expect(w.find('.mk-card__head .mk-pills').exists()).toBe(false);
     w.unmount();
   });
 

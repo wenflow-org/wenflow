@@ -3,7 +3,7 @@
  *
  * O2c 实测缺陷：点快筛「异常18」→ 进详情 → 返回（应用内「← 会话列表」或浏览器后退）或刷新，
  * 都回到「全部」167 条 —— 逐条排查每看一条要重筛一次，也无法把「这批异常」的链接发给同事。
- * 现在应用视图（需关注/缺总结）/ 状态下拉 / 异常开关 / 课型 / 开始时间 / 有建议开关全部住进 URL。
+ * 现在应用视图（需关注/有建议）/ 状态下拉（含异常组合档）/ 课型 / 开始时间全部住进 URL。
  * O4：行内「链路 / 详情」两个词此前无任何说明，点前只能猜。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import TeachingSessions from '../TeachingSessions.vue';
 import { clearPageCache, liveRefreshSeq } from '../live';
 import { subPage, closeSubPage } from '../store';
+import { filterValue } from './filter-controls';
 
 const { listMock } = vi.hoisted(() => ({ listMock: vi.fn() }));
 
@@ -97,20 +98,22 @@ describe('TeachingSessions · 筛选 ↔ URL（O2c）', () => {
     wrapper.unmount();
   });
 
-  it('「异常」开关进 URL（abn=1）：刷新 / 分享后仍是异常视图', async () => {
+  it('「异常」进 URL（adv=abnormal）：刷新 / 分享后仍是异常视图', async () => {
     const { wrapper, router } = await mountTs('/admin/teaching-sessions');
-    const abn = wrapper.find('button.ts-abn-chip');
-    expect(abn.exists()).toBe(true);
+    const abn = wrapper.findAll('.mk-kpi').find((c) => c.text().includes('异常'))!;
     await abn.trigger('click');
     await flushPromises();
-    expect(router.currentRoute.value.query.abn).toBe('1');
+    expect(router.currentRoute.value.query.adv).toBe('abnormal');
+    // 旧独立键（abn）不再写出：异常已并入状态维度，URL 只留一个表达
+    expect(router.currentRoute.value.query.abn).toBeUndefined();
     wrapper.unmount();
   });
 
-  it('深链 ?abn=1 落位：异常开关是按下态', async () => {
+  it('深链 ?abn=1 落位（旧链接兼容）：状态下拉 = 异常，KPI 卡是按下态', async () => {
     const { wrapper } = await mountTs('/admin/teaching-sessions?abn=1');
-    const abn = wrapper.find('button.ts-abn-chip');
-    expect(abn.classes()).toContain('mk-pill--active');
+    expect(filterValue(wrapper as never, '状态')).toBe('abnormal');
+    const abn = wrapper.findAll('.mk-kpi').find((c) => c.text().includes('异常'))!;
+    expect(abn.attributes('aria-pressed')).toBe('true');
     wrapper.unmount();
   });
 

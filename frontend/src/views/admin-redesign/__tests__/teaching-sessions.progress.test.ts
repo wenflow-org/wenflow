@@ -279,7 +279,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
 });
 
 describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对照）', () => {
-  it('KPI 四卡：需关注 / 缺总结 / 有建议 / 完结率；卡头只留一组标志 chip（显命中数）', async () => {
+  it('KPI 五卡：需关注 / 异常 / 缺总结 / 有建议 / 完结率；卡头不再常驻任何 chip', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -287,18 +287,14 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    // 三运维关注量 + 完结率住 MkKpi 卡带（值 = attentionCount / missingWrapupCount / advisoryCount / 1-已完成占比）
-    // 2026-10-26：「异常终态」卡退役（与「需关注」在同一行数据上同源同数），异常数由「异常」chip 承载
+    // 四运维关注量 + 完结率住 MkKpi 卡带（值 = attentionCount / abnormal / missing / advisory / 已完成占比）
     const tiles = wrapper.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议', '完结率']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0', '0%']);
-    /* 2026-10-27 筛选重建：焦点 chips 撤除——「进行中」在状态下拉、「缺总结」在总结下拉、
-       「需关注」是派生视图（点 KPI 卡）。同一维度不再有胶囊和下拉两个入口。
-       卡头唯一 chip 组 = 标志筛选（多选开关），激活态仍在；有建议的数字只在 KPI 卡
-       （2026-10-27 计数收敛），异常没有独立 KPI 仍带计数。 */
-    expect(wrapper.find('.mk-card__head .mk-pills[aria-label="焦点筛选"]').exists()).toBe(false);
-    const flags = wrapper.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill');
-    expect(flags.map((c) => c.text())).toEqual(['有建议', '异常1']);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '异常', '缺总结', '有建议', '完结率']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '1', '0', '0%']);
+    /* 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：KPI 是读数唯一出处，
+       也是快捷筛选入口；卡头不再有常驻 chip 组——筛选生效时只出现「已应用」胶囊。 */
+    expect(wrapper.find('.mk-card__head .mk-pills').exists()).toBe(false);
+    expect(wrapper.find('.mk-card__head .ts-view-chip').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -351,7 +347,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('异常堆积告警（原 tsDashTone bad 档）：失败/收尾失败/超时合计 ≥ 10 → 「异常」chip 转红 + title 披露阈值', async () => {
+  it('异常堆积告警：失败/收尾失败/超时合计 ≥ 10 → 「异常」KPI 转红 + hint 披露阈值', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -359,15 +355,15 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const abn = wrapper.find('.ts-abn-chip');
-    expect(abn.exists()).toBe(true);
-    expect(abn.classes()).toContain('ts-abn-chip--heap');
+    const abn = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '异常')!;
+    expect(abn.classes()).toContain('mk-kpi--bad');
+    expect(abn.find('.mk-kpi__hint').text()).toBe('异常堆积');
     expect(abn.attributes('title')).toContain('≥ 10');
     expect(abn.attributes('title')).toContain('失败 / 收尾失败 / 超时');
     wrapper.unmount();
   });
 
-  it('卡头「有建议」开关可点穿：服务端 onlyWithAdvisory 过滤 toggle（再点取消）；建议徽章读运营口径', async () => {
+  it('「有建议」KPI 可点穿：服务端 onlyWithAdvisory 过滤 toggle；卡头出现可移除胶囊', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -391,10 +387,6 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const link = wrapper.find('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill');
-    expect(link.text()).toBe('有建议');
-    expect(link.attributes('aria-pressed')).toBe('false');
-    // 徽章 = 运营视角状态（待确认），不是学员端「建议先确认路径调整」原句
     const adv = wrapper.find('.ts-adv-badge');
     expect(adv.text()).toBe('待确认调整');
     expect(adv.classes()).toContain('mk-badge--bad');
@@ -405,15 +397,21 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(title).toContain('建议动作：先补强再推进');
     expect(title).toContain('处置：未处置');
     expect(title).not.toContain('不会覆盖你已完成的内容');
-    // 点击 → 服务端过滤（onlyWithAdvisory: true），再点 → 取消（参数收敛）
-    await link.trigger('click');
+    // 点击 KPI 卡 → 服务端过滤（onlyWithAdvisory: true），卡头出现「有建议」已应用胶囊
+    const tile = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '有建议')!;
+    expect(tile.attributes('aria-pressed')).toBe('false');
+    await tile.trigger('click');
     await flushPromises();
     expect(listMock).toHaveBeenLastCalledWith(expect.objectContaining({ onlyWithAdvisory: true, limit: 1000 }));
-    expect(wrapper.find('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').attributes('aria-pressed')).toBe('true');
-    await wrapper.find('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').trigger('click');
+    expect(tile.attributes('aria-pressed')).toBe('true');
+    const viewChip = wrapper.find('.mk-card__head .ts-view-chip');
+    expect(viewChip.text()).toContain('有建议');
+    // 胶囊就地清除 → 取消服务端过滤
+    await viewChip.trigger('click');
     await flushPromises();
     const lastArg = listMock.mock.calls[listMock.mock.calls.length - 1][0];
     expect(lastArg.onlyWithAdvisory).toBeUndefined();
+    expect(wrapper.find('.mk-card__head .ts-view-chip').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -448,7 +446,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('卡头「异常」开关可点穿：失败/收尾失败/超时 状态多选筛选 toggle；计数由分布条红段单源承载', async () => {
+  it('「异常」KPI 可点即筛：落到状态下拉的「异常」档，再点取消；与下拉同一状态', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -462,17 +460,20 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const abn = wrapper.find('.ts-abn-chip');
-    // 2026-10-11 统一判例：chip 显命中数（失败 / 收尾失败 / 超时合计）
-    expect(abn.text()).toBe('异常2');
+    const abn = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '异常')!;
+    expect(abn.find('.mk-kpi__num').text()).toBe('2');
     expect(abn.attributes('aria-pressed')).toBe('false');
     await abn.trigger('click');
     await nextTick();
     expect(wrapper.findAll('tbody tr')).toHaveLength(2);
-    expect(wrapper.find('.ts-abn-chip').attributes('aria-pressed')).toBe('true');
-    await wrapper.find('.ts-abn-chip').trigger('click');
+    /* KPI 卡与「状态」下拉共用 statusFilter：点卡后下拉的当前值也必须是 abnormal，
+       不再维护第二套 abnormalOnly 开关（同一维度只有一处状态）。 */
+    expect(filterValue(wrapper as never, '状态')).toBe('abnormal');
+    expect(abn.attributes('aria-pressed')).toBe('true');
+    await abn.trigger('click');
     await nextTick();
     expect(wrapper.findAll('tbody tr')).toHaveLength(3);
+    expect(filterValue(wrapper as never, '状态')).toBe('');
     wrapper.unmount();
   });
 
@@ -530,7 +531,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     // 原生 select 已退役——option 文案与选择结果不变，查询走 filter-controls。
     expect(filterTrigger(wrapper as never, '状态').exists()).toBe(true);
     expect(filterOptions(wrapper as never, '状态')).toEqual([
-      '全部状态', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
+      '全部状态', '异常（失败 · 超时）', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
     ]);
     // 总结三档筛选（总览「评估失败 / 降级总结」的落地入口）也在主栏
     expect(filterOptions(wrapper as never, '总结')).toEqual(['全部总结', '降级总结', '评估失败', '缺总结']);
@@ -539,12 +540,9 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(wrapper.find('.mk-adv').exists()).toBe(false);
     expect(filterOptions(wrapper as never, '课型')).toEqual(['全部课型', '正课', '复习课', '延伸课']);
     expect(filterOptions(wrapper as never, '开始时间')).toEqual(['全部时间', '近 7 天', '近 30 天']);
-    // 卡头只有一组 chips（标志开关）：单选/多选不再并排同形（M3「同一页别混 chip 行为」）
-    const groups = wrapper.findAll('.mk-card__head .mk-pills');
-    expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['标志筛选']);
-    expect(wrapper.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
-      '有建议', '异常'
-    ]);
+    // 卡头不再有常驻 chip 组：KPI 是读数与入口，筛选区只留维度下拉 + 已应用视图胶囊
+    expect(wrapper.find('.mk-card__head .mk-pills').exists()).toBe(false);
+    expect(wrapper.find('.mk-card__head .ts-view-chip').exists()).toBe(false);
     await chooseFilter(wrapper as never, '状态', '失败');
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);

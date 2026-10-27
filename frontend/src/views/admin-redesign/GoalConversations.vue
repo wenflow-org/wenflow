@@ -30,6 +30,17 @@
         :aria-pressed="rows.length && staleActiveCount > 0 ? stalledOnly : undefined"
         @click="stalledOnly = !stalledOnly"
       />
+      <!-- 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：未生成路径原先只有卡头
+           chip、没有读数；升为 KPI 卡后，读数与入口都在这张卡上，chip 组整体退役。 -->
+      <MkKpi
+        label="未生成路径"
+        :value="rows.length ? pathPendingCount : '—'"
+        :tone="pathPendingCount ? 'warn' : ''"
+        :clickable="!!rows.length && pathPendingCount > 0"
+        :class="{ 'gc-kpi--on': noPathOnly }"
+        :aria-pressed="rows.length && pathPendingCount > 0 ? noPathOnly : undefined"
+        @click="noPathOnly = !noPathOnly"
+      />
     </section>
     <!-- stats 三态（P1#6）：失败显错误条 + 重试（原错误桶随构成带退役，2026-10-04 晚贴表分布条） -->
     <div v-if="statsError" class="mk-status mk-status--bad">
@@ -53,12 +64,23 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 状态筛选（2026-10-17 恢复为卡头 pills）：取消 / 失败 / 放弃三档分开
+          <!-- 状态筛选（2026-10-17 恢复为卡头下拉）：取消 / 失败 / 放弃三档分开
                （2026-10-26：此前合一档，筛「已取消」出来的行状态列却写「失败」）。
                计数取 stats 服务端全量口径，但后端只给合并桶 → 取消与失败两档不显计数。
-               2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
-               状态一组单选；「未生成路径 / 停滞」是两个可叠加的开关 → 独立「标志筛选」组，
-               激活时前缀勾（此前两组同形并排，点下去才知道行为不同）。 -->
+               2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：「未生成路径 / 停滞」
+               从常驻 chip 组迁到上方 KPI 卡（读数 + 一键筛选），卡头只在筛选中时出现
+               「已应用」胶囊，筛选区最终只留维度下拉。 -->
+          <!-- 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：未生成路径 / 停滞
+               两个开关的读数与入口都迁到上方 KPI 卡；卡头只在筛选中时出现「已应用」胶囊，
+               与教学会话同一语法（常驻 chip 组不再出现在列表页，token 在维度下拉之前）。 -->
+          <button
+            v-for="view in gcAppliedViews"
+            :key="view.key"
+            type="button"
+            class="mk-pill mk-pill--active gc-view-chip"
+            :title="`清除「${view.label}」视图`"
+            @click="view.clear()"
+          >{{ view.label }}<X :size="12" :stroke-width="2.5" aria-hidden="true" /></button>
           <MkPillSelect
             v-model="statusFilter"
             label="状态"
@@ -66,26 +88,6 @@
             :options="gcStatusOptions"
             :active="gcStatusKey !== 'all'"
           />
-          <div class="mk-pills" role="group" aria-label="标志筛选">
-            <button
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': noPathOnly }"
-              :aria-pressed="noPathOnly"
-              @click="noPathOnly = !noPathOnly"
-            ><Check v-if="noPathOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />未生成路径</button>
-            <!-- 停滞快筛（KPI 卡同源同判据）：从「停滞 N」读数进来的人，落点就是这枚 chip。
-                 2026-10-27 计数收敛：数字只留在 KPI 卡（唯一出处），chip 只表达「已应用」。 -->
-            <button
-              v-if="staleActiveCount"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': stalledOnly }"
-              :aria-pressed="stalledOnly"
-              :title="`停滞 ${staleActiveCount} 个（KPI 同源）`"
-              @click="stalledOnly = !stalledOnly"
-            ><Check v-if="stalledOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />停滞</button>
-          </div>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位——
@@ -286,7 +288,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Check } from 'lucide-vue-next'
+import { X } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
 import { useListQueryState } from './learner-profile'
@@ -411,9 +413,8 @@ const completionRatePct = computed(() => {
 })
 const keyword = ref('')
 const statusFilter = ref('')
-/* 「未生成路径」快筛（2026-10-08）：进行中且尚未生成学习路径的运营卡点会话。
-   与状态筛选叠加为 AND；再点取消。不显计数——它与「进行中」是包含关系，
-   计数会让两个 pill 看起来是两档（同 TS 页口径教训）。 */
+/* 「未生成路径」（2026-10-08；2026-10-27 升为 KPI 卡）：进行中且尚未生成学习路径的运营卡点会话。
+   与状态筛选叠加为 AND；再点 KPI 卡或清除 token 即取消。计数只在上方 KPI 卡。 */
 const noPathOnly = ref(false)
 /** 「停滞」快筛（2026-10-26 动线收口）：本页 KPI 里「停滞目标对话」是唯一一张点了没反应的卡，
  *  而同组学习状态页的需关注/观察 KPI 都可点即筛。读数有对应行就必须能落到那几行，
@@ -422,6 +423,16 @@ const stalledOnly = ref(false)
 /** 「未生成路径」谓词：hasPath 与路径列「—」同口径（均由后端 learningPathId 推导）；
     已完成桶口径 = 已生成学习路径，故「未生成」只拦进行中，两处口径呼应不矛盾 */
 const isPathPendingRow = (r: Row) => r.status === 'active' && !r.hasPath
+const pathPendingCount = computed(() => rows.value.filter(isPathPendingRow).length)
+
+/** 卡头「已应用」胶囊：两个派生开关没有对应的维度下拉，筛选中才出现，点叉即清。
+    与教学会话 `appliedViews` 同一语法；常驻 chip 组已退役。 */
+const gcAppliedViews = computed(() => {
+  const views: Array<{ key: string; label: string; clear: () => void }> = []
+  if (noPathOnly.value) views.push({ key: 'nopath', label: '未生成路径', clear: () => { noPathOnly.value = false } })
+  if (stalledOnly.value) views.push({ key: 'stalled', label: '停滞', clear: () => { stalledOnly.value = false } })
+  return views
+})
 
 /* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/澄清轮次/约束条件/路径/最近活动/创建时间 可隐藏，用户/操作固定。
    2026-10-22 默认只留 6 列（目标摘要/用户/状态/澄清轮次/路径/最近活动/操作）：

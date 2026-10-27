@@ -95,16 +95,17 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('目标对话独立页：KPI 面板 = 总数/完结率/停滞（2026-10-26 增长读数并入总数卡），状态计数归卡头 pills', async () => {
+  it('目标对话独立页：KPI 面板 = 总数/完结率/停滞/未生成路径（2026-10-27 筛选入口归 KPI）', async () => {
     const { router, ready } = mockRouter('/admin/goal-conversations');
     await ready;
     const w = mount(GoalConversations, { global: { plugins: [router] } });
     await settle();
-    // 2026-10-17：分布带退役，完结率从带副文升独立 KPI 卡（两位小数 → 四舍五入）；状态计数迁回卡头 pills
+    // 2026-10-17：分布带退役，完结率从带副文升独立 KPI 卡（两位小数 → 四舍五入）
     // 2026-10-26：「参与用户」「近 7 天新增」两张增长读数卡删除，近 7 天新增改挂总数卡数值行注记
-    expect(kpiLabels(w)).toEqual(['目标对话数', '完结率', '停滞目标对话']);
+    // 2026-10-27：未生成路径升 KPI（读数 + 一键筛选入口），卡头常驻 chip 组退役
+    expect(kpiLabels(w)).toEqual(['目标对话数', '完结率', '停滞目标对话', '未生成路径']);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
-    // 构成卡旧形态不复辟：状态计数只活在卡头 pills（10-02 撤双带判例不回退）
+    // 构成卡旧形态不复辟：状态计数只活在卡头下拉（10-02 撤双带判例不回退）
     expect(w.find('.mk-card .buckets').exists()).toBe(false);
     expect(w.find('.buckets').exists()).toBe(false);
     expect(w.find('.gc-distband').exists()).toBe(false);
@@ -113,27 +114,23 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('教学会话独立页：KPI 面板 = 需关注/缺总结/有建议（2026-10-05 统一面板设计，v-if 有行才渲染），状态比例归分布卡', async () => {
+  it('教学会话独立页：KPI 面板 = 需关注/异常/缺总结/有建议/完结率（v-if 有行才渲染）', async () => {
     const { router, ready } = mockRouter('/admin/teaching-sessions');
     await ready;
     const w = mount(TeachingSessions, { global: { plugins: [router] } });
     await settle();
     // 本用例 mock 空响应（0 行）：KPI 面板 v-if rows.length 不渲染；有行时的值见 progress 测试
     expect(kpiLabels(w)).toEqual([]);
-    // 2026-10-04 用户拍板：页头状态条整体退役——需关注 / 缺总结与焦点 chips 同源同数、
-    // 异常与分布条「异常终态」段同源同数（同一数字不两处渲染）；总数与窗口截断口径并进卡头 meta
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     // 口径开关已退役（2026-10-21「没有测试，测试只是备注」）：页头不再有视角控件
     expect(w.find('.ds-toggle').exists()).toBe(false);
     // 本用例 0 行未触上限：连截断 meta 都不渲染（触限时才有「共 N 条 · 当前显示最近 1000 条」，
     // 那是分页器没有的事实；未触限时窗口=全量，无需再报一遍）
     expect(w.find('.mk-card--fill .mk-card__meta').exists()).toBe(false);
-    /* 2026-10-27 筛选重建：焦点 chips（全部/进行中/需关注/缺总结）撤除——
-       进行中归状态下拉、缺总结归总结下拉、需关注是派生视图（点 KPI 卡，激活才出可移除胶囊）；
-       卡头唯一 chip 组 = 标志筛选。0 行时异常 chip 不出现。 */
-    expect(w.find('.mk-card__head .mk-pills[aria-label="焦点筛选"]').exists()).toBe(false);
-    // 2026-10-27 计数收敛：有建议的数字只在 KPI 卡（同源同判据），chip 只表达已应用
-    expect(w.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议']);
+    /* 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：卡头不再有常驻 chip 组
+       （有建议 / 异常都已并入 KPI 卡与维度下拉）；筛选生效时才出现「已应用」胶囊。 */
+    expect(w.find('.mk-card__head .mk-pills').exists()).toBe(false);
+    expect(w.find('.mk-card__head .ts-view-chip').exists()).toBe(false);
     w.unmount();
   });
 

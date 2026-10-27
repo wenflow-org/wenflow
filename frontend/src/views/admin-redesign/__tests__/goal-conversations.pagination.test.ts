@@ -284,7 +284,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
 
   /* 2026-10-26 动线收口：停滞读数有对应行，就必须能落到那几行。此前它是本页唯一
      点了没反应的 KPI（同组学习状态页的需关注/观察都可点即筛）。 */
-  it('停滞 KPI 可点即筛：点卡只剩停滞行，再点取消；卡头同步出「停滞」chip', async () => {
+  it('停滞 KPI 可点即筛：点卡只剩停滞行，再点取消；卡头出现「停滞」已应用胶囊', async () => {
     const fresh = new Date(Date.now() - 86400000).toISOString();
     listMock.mockResolvedValue({
       data: {
@@ -303,23 +303,24 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const w = await mountGoals();
     const card = () => w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '停滞目标对话')!;
     expect(card().classes()).toContain('mk-kpi--clickable');
-    // 卡头 chip 与 KPI 同源同判据
-    const chip = () => w.findAll('.mk-pill').find((p) => p.text().startsWith('停滞'))!;
-    expect(chip().exists()).toBe(true);
+    // 常驻 chip 已退役：卡头只在筛选生效时出现「已应用」胶囊
+    expect(w.find('.mk-card__head .mk-pills').exists()).toBe(false);
+    expect(w.find('.mk-card__head .gc-view-chip').exists()).toBe(false);
 
     await card().trigger('click');
     await nextTick();
     expect(card().classes()).toContain('gc-kpi--on');
     expect(w.findAll('tbody tr')).toHaveLength(1);
-    expect(chip().classes()).toContain('mk-pill--active');
+    expect(w.find('.mk-card__head .gc-view-chip').text()).toContain('停滞');
 
     await card().trigger('click');
     await nextTick();
     expect(card().classes()).not.toContain('gc-kpi--on');
     expect(w.findAll('tbody tr')).toHaveLength(2);
+    expect(w.find('.mk-card__head .gc-view-chip').exists()).toBe(false);
   });
 
-  it('停滞为 0 时 KPI 不可点、不出 chip（不承诺一个空动作）', async () => {
+  it('停滞为 0 时 KPI 不可点、筛选区无「已应用」胶囊（不承诺一个空动作）', async () => {
     const fresh = new Date(Date.now() - 86400000).toISOString();
     listMock.mockResolvedValue({
       data: { success: true, data: { conversations: [makeConv(1, { status: 'active', updatedAt: fresh })] } }
@@ -330,7 +331,40 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const w = await mountGoals();
     const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '停滞目标对话')!;
     expect(card.classes()).not.toContain('mk-kpi--clickable');
-    expect(w.findAll('.mk-pill').some((p) => p.text().startsWith('停滞'))).toBe(false);
+    expect(w.find('.mk-card__head .gc-view-chip').exists()).toBe(false);
+  });
+
+  /* 2026-10-27 综合重做：未生成路径从常驻 chip 升为 KPI 卡（读数 + 一键筛选），
+     KPI 是唯一读数出处，卡头只在筛选生效时给可移除胶囊。 */
+  it('未生成路径 KPI 可点即筛：点卡只剩未生成行，胶囊就地清除', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          conversations: [
+            makeConv(1, { status: 'active' }), // 无 learningPathId
+            makeConv(2, { status: 'active' }), // 有 learningPathId
+            makeConv(3, { status: 'active', learningPathId: null })
+          ]
+        }
+      }
+    });
+    statsMock.mockResolvedValue({
+      data: { success: true, data: { total: 3, active: 3, completed: 0, completionRate: '0' } }
+    });
+    const w = await mountGoals();
+    const card = () => w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '未生成路径')!;
+    expect(card().find('.mk-kpi__num').text()).toBe('2');
+    await card().trigger('click');
+    await nextTick();
+    expect(card().classes()).toContain('gc-kpi--on');
+    expect(w.findAll('tbody tr')).toHaveLength(2);
+    const token = w.find('.mk-card__head .gc-view-chip');
+    expect(token.text()).toContain('未生成路径');
+    await token.trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody tr')).toHaveLength(3);
+    expect(w.find('.mk-card__head .gc-view-chip').exists()).toBe(false);
   });
 
   it('P1#6 stats 拉取失败 → 错误条「统计暂不可用 · 重试」，完结率 KPI 不拿 0 冒充读数', async () => {
@@ -358,7 +392,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(filterOption(w as never, '状态', '进行中').text()).toBe('进行中（5）');
   });
 
-  it('2026-10-26 KPI 带压到三张（总数 / 完结率 / 停滞），近 7 天新增挂总数卡数值行注记', async () => {
+  it('KPI 带四张（总数 / 完结率 / 停滞 / 未生成路径），近 7 天新增挂总数卡数值行注记', async () => {
     // 日期动态生成（组件按「今天−6」UTC 日历日过滤窗口，硬编码日期会跨日失效）；
     // d(9) 在窗口外，必须被过滤掉——证明近 7 天新增口径没被「按完成日归集的老对话」污染
     const d = (offsetDays: number) => new Date(Date.now() - offsetDays * 86400000).toISOString().slice(0, 10);
@@ -378,8 +412,9 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
     const w = await mountGoals();
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['目标对话数', '完结率', '停滞目标对话']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40近 7 天 +8', '0%', '5']);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['目标对话数', '完结率', '停滞目标对话', '未生成路径']);
+    // 本组 beforeEach 的行窗口 = 5 行；奇数行无 learningPathId → 未生成路径 = 3
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40近 7 天 +8', '0%', '5', '3']);
     // 增长读数（参与用户）不再单开卡
     expect(w.findAll('.mk-kpi__label').map((n) => n.text().trim())).not.toContain('参与用户');
     // 状态数字只活在卡头 pills（2026-10-17 分布带退役后）；「全部」不显数（总数单源=分页器）

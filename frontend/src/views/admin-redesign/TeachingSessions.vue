@@ -4,26 +4,41 @@
          本页 20s 静默轮询 + 顶栏刷新（watch liveRefreshSeq）；拉取失败走错误条重试钮。 -->
     <MkPageHead v-if="!embedded" title="教学会话" />
 
-    <!-- 会话 KPI：需关注 / 缺总结 / 有建议 / 完结率。
-         2026-10-26：「异常终态」卡退役（与「需关注」在同一行数据上同源同数），异常数只由卡头
-         「异常」chip 承载。
-         2026-10-27：卡头「焦点 chips」撤除后，这三张卡就是它们的落点——「需关注」是派生视图
-         （点卡 = 打开视图，再点关闭），「缺总结 / 有建议」落到对应维度筛选。
-         读数在卡上、筛选入口在卡头，同一口径只有一处可改。 -->
+    <!-- 会话 KPI：需关注 / 异常 / 缺总结 / 有建议 / 完结率。
+         2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：KPI 是读数的唯一出处，
+         也是可点即筛的快捷入口；卡头不再常驻任何 chip——
+         · 需关注（派生视图）→ 点卡筛选，卡头只出现「已应用」可移除胶囊；
+         · 异常（失败 / 收尾失败 / 超时）→ 点卡落到「状态」下拉的「异常」档；
+         · 缺总结 → 落到「总结」下拉；有建议（服务端开关）→ 点卡筛选，卡头出现可移除胶囊；
+         · 完结率只读。 -->
     <section v-if="!embedded && rows.length" class="mk-kpi-grid" aria-label="教学会话运维关注量">
       <MkKpi
         clickable
         label="需关注"
         :value="attentionCount"
         :tone="attentionCount ? 'warn' : ''"
+        :class="{ 'ts-kpi--on': pill === 'attention' }"
         :aria-pressed="pill === 'attention'"
         @click="pill = pill === 'attention' ? 'all' : 'attention'"
+      />
+      <MkKpi
+        label="异常"
+        :value="abnormalSessionCount"
+        :tone="abnormalSessionCount ? 'bad' : ''"
+        :hint="abnormalHeap ? '异常堆积' : ''"
+        hint-tone="bad"
+        :clickable="!!abnormalSessionCount || statusFilter === 'abnormal'"
+        :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}${abnormalHeap ? `（≥ ${TS_BAD_THRESHOLD}，异常堆积）` : ''}`"
+        :class="{ 'ts-kpi--on': statusFilter === 'abnormal' }"
+        :aria-pressed="abnormalSessionCount || statusFilter === 'abnormal' ? statusFilter === 'abnormal' : undefined"
+        @click="toggleStatusFilter('abnormal')"
       />
       <MkKpi
         clickable
         label="缺总结"
         :value="missingWrapupCount"
         :tone="missingWrapupCount ? 'warn' : ''"
+        :class="{ 'ts-kpi--on': wrapFilter === 'missing' }"
         :aria-pressed="wrapFilter === 'missing'"
         @click="wrapFilter = wrapFilter === 'missing' ? '' : 'missing'"
       />
@@ -31,6 +46,7 @@
         clickable
         label="有建议"
         :value="advisoryCount"
+        :class="{ 'ts-kpi--on': onlyAdvisory }"
         :aria-pressed="onlyAdvisory"
         @click="toggleOnlyAdvisory"
       />
@@ -48,7 +64,7 @@
       class="mk-kpi-grid"
       aria-hidden="true"
     >
-      <div v-for="n in 4" :key="n" class="mk-skeleton ts-skel-kpi"></div>
+      <div v-for="n in 5" :key="n" class="mk-skeleton ts-skel-kpi"></div>
     </section>
 
     <!-- G5（2026-10-10）：深链未命中提示由常驻 alert 横幅改为一次性 toast（见 script 区 watch），
@@ -57,24 +73,21 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 筛选区语法（2026-10-27 用户「这个筛选做到很不好」后按成熟体系重建）：
-               一行里只有三种职责，各一种形态，不再互相冒充——
-               ① 视图（派生状态，单选）= 只以「已应用 + 可移除」胶囊出现（Polaris：视图不是维度，
-                  用可移除 chip 表达；激活才出现，不占常驻位置）；
-               ② 标志（多选开关）= 全页唯一一组 chip，激活时前缀勾（M3 filter chip 的选中表达）。
-                  M3：同一页的不同 chip 组不得一组单选一组多选——原「焦点 chips（单选）+
-                  快捷 chips（多选）」并排同形，用户点下去才知道行为不同，已撤；
-               ③ 维度（单选）= 一次一维的胶囊下拉，全部可见。
-                  Carbon：多个筛选类别不得收进菜单/下拉——原「课型 + 开始时间」塞在「筛选」弹层里，
-                  弹层关闭态只剩一个数字角标，违反「类别不得藏进下拉」+「隐藏时必须给已应用数与
-                  就地清除」。 -->
+          <!-- 筛选区语法（2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」后定稿）：
+               KPI 卡带 = 读数 + 一键筛选入口；卡头只留两种东西——
+               ① 派生视图的「已应用」胶囊：只有当前生效才出现（需关注 / 有建议），点叉即清；
+                  常驻 chip 组（有建议 / 异常）全部退役——它们的读数与入口都在 KPI 卡上；
+               ② 维度（单选）= 一次一维的胶囊下拉，全部可见。
+                  异常是状态维度的组合档（失败 / 收尾失败 / 超时），落在「状态」下拉里，
+                  点 KPI「异常」卡与在下拉里选「异常」是同一个状态，不再各走一套。 -->
           <button
-            v-if="activeViewLabel"
+            v-for="view in appliedViews"
+            :key="view.key"
             type="button"
             class="mk-pill mk-pill--active ts-view-chip"
-            :title="`清除「${activeViewLabel}」视图`"
-            @click="pill = 'all'"
-          >{{ activeViewLabel }}<X :size="12" :stroke-width="2.5" aria-hidden="true" /></button>
+            :title="`清除「${view.label}」视图`"
+            @click="view.clear()"
+          >{{ view.label }}<X :size="12" :stroke-width="2.5" aria-hidden="true" /></button>
           <MkPillSelect
             v-model="statusFilter"
             label="状态"
@@ -103,25 +116,6 @@
             :options="dateSelectOptions"
             :active="!!dateFilter"
           />
-          <div class="mk-pills" role="group" aria-label="标志筛选">
-            <button
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': onlyAdvisory }"
-              :aria-pressed="onlyAdvisory"
-              :title="`有建议 ${advisoryCount} 条（KPI 同源）`"
-              @click="toggleOnlyAdvisory"
-            ><Check v-if="onlyAdvisory" :size="12" :stroke-width="2.5" aria-hidden="true" />有建议</button>
-            <button
-              v-if="abnormalSessionCount"
-              type="button"
-              class="mk-pill ts-abn-chip"
-              :class="{ 'mk-pill--active': abnormalOnly, 'ts-abn-chip--heap': abnormalHeap && !abnormalOnly }"
-              :aria-pressed="abnormalOnly"
-              :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}${abnormalHeap ? `（≥ ${TS_BAD_THRESHOLD}，异常堆积）` : ''}`"
-              @click="abnormalOnly = !abnormalOnly"
-            ><Check v-if="abnormalOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />异常<span class="mk-pill__count">{{ abnormalSessionCount }}</span></button>
-          </div>
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
@@ -364,7 +358,7 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import { emailSubline, isIdentifierLike } from '@/components/mk/avatarName'
 import MkKpi from '@/components/mk/MkKpi.vue'
 
-import { Check, X } from 'lucide-vue-next'
+import { X } from 'lucide-vue-next'
 import { toast } from '@/utils/toast'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
@@ -676,14 +670,27 @@ const isTableNarrow = useIsNarrow(1499)
 const isTableMid = useIsNarrow(1699)
 /* 视图态（2026-10-27 筛选重建）：原先「焦点 chips」把三个不同维度的东西并成一组单选胶囊
    （进行中 = 状态的一档、需关注 = 派生视图、缺总结 = 总结的一档），和右侧维度下拉各自背一份
-   同一个数（选 chip「缺总结」时「总结」下拉仍显示「全部总结」）。现在视图形制只剩「需关注」
-   这一个真正派生的口径：以「已应用」胶囊出现，点一下清除。其余两个维度回到各自的下拉；
-   页头 KPI 卡承接一键入口（缺总结 / 有建议可点，落到对应筛选）。
+   同一个数（选 chip「缺总结」时「总结」下拉仍显示「全部总结」）。现在真正派生的口径只剩
+   「需关注 / 有建议」，以「已应用」胶囊出现，点一下清除；其余维度回到各自的下拉。
+   页头 KPI 卡承接全部一键入口（需关注 / 异常 / 缺总结 / 有建议）。
    兼容旧深链：?focus=active / missing 仍会筛，胶囊也按同一张表给出可读名。 */
 const VIEW_LABELS: Record<string, string> = { attention: '需关注', active: '进行中', missing: '缺总结' }
-const activeViewLabel = computed(() => (pill.value === 'all' ? '' : VIEW_LABELS[pill.value] ?? ''))
+/* 派生视图的「已应用」胶囊（2026-10-27）：只有没有维度下拉可承载的视图才在这里出现；
+   有下拉的（缺总结 / 异常）由下拉自身显示当前值，不再多出一枚重复 token。 */
+const appliedViews = computed(() => {
+  const views: Array<{ key: string; label: string; clear: () => void }> = []
+  if (pill.value !== 'all') {
+    const label = VIEW_LABELS[pill.value]
+    if (label) views.push({ key: 'view', label, clear: () => { pill.value = 'all' } })
+  }
+  if (onlyAdvisory.value) {
+    views.push({ key: 'advisory', label: '有建议', clear: toggleOnlyAdvisory })
+  }
+  return views
+})
 
-/* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
+/* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded）。
+   「异常」是失败 / 收尾失败 / 超时的组合档：KPI 卡与下拉共用这一个值，不再单独维护 abnormalOnly 开关。 */
 const statusOptions = [
   { value: 'initializing', label: '初始化中' },
   { value: 'active', label: '进行中' },
@@ -698,7 +705,11 @@ const statusOptions = [
 ]
 /** 胶囊内嵌下拉的选项组（空值 = 不筛该维）。课型 / 开始时间 2026-10-27 从「筛选」弹层提到主栏：
     Carbon 的筛选模式明确要求「多个类别不得收进菜单/下拉」。 */
-const statusSelectOptions = [{ value: '', label: '全部状态' }, ...statusOptions]
+const statusSelectOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'abnormal', label: '异常（失败 · 超时）' },
+  ...statusOptions
+]
 const wrapSelectOptions = [
   { value: '', label: '全部总结' },
   { value: 'degraded', label: '降级总结' },
@@ -717,15 +728,12 @@ const dateSelectOptions = [
   { value: '30d', label: '近 30 天' },
 ]
 
-/* 卡头异常 badge：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致） */
+/* 异常读数：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致）。
+   KPI 卡与「状态」下拉的「异常」档同源同判据；阈值告警由 KPI 的红色 tone + 「异常堆积」hint 承载。 */
 const ABNORMAL_STATUSES = new Set(['failed', 'finalization_failed', 'timeout'])
 const abnormalSessionCount = computed(() =>
   rows.value.filter((r) => ABNORMAL_STATUSES.has(r.status)).length
 )
-/* 异常 badge 可点穿（评审 §5）：点击 = 异常状态多选筛选（与单选 statusFilter 叠加为 AND）；
-   与分布条「异常终态」段的差别：chip 可与其它筛选叠加 + 承载异常堆积告警（阈值转红），
-   分布条段 = 互斥切片（一次只看一组）。 */
-const abnormalOnly = ref(false)
 
 /* ===== 完结率（2026-10-17 分布带退役后从带副文迁入 KPI）=====
    口径 = 已加载会话窗口（rows，最近 LIST_LIMIT 条），非后端全量；后端两位小数的
@@ -756,8 +764,9 @@ const filtered = computed(() => {
   if (pill.value === 'active') list = list.filter((r) => r.status === 'active')
   if (pill.value === 'attention') list = list.filter((r) => r.attention !== 'low')
   if (pill.value === 'missing') list = list.filter(isMissingWrapup)
-  if (abnormalOnly.value) list = list.filter((r) => ABNORMAL_STATUSES.has(r.status))
-  if (statusFilter.value) {
+  if (statusFilter.value === 'abnormal') {
+    list = list.filter((r) => ABNORMAL_STATUSES.has(r.status))
+  } else if (statusFilter.value) {
     list = list.filter((r) => r.status === statusFilter.value)
   }
   if (wrapFilter.value) {
@@ -779,6 +788,11 @@ const filtered = computed(() => {
   return sortTsRows(list)
 })
 
+/** 状态下拉与「异常」KPI 卡共用：再点同一档 = 取消（与 KPI 卡的按下态同一语法） */
+function toggleStatusFilter(value: string) {
+  statusFilter.value = statusFilter.value === value ? '' : value
+}
+
 /** 总结筛选三档：降级总结（兜底来源）/ 评估失败（evaluation 非 model）/ 缺总结（终态无产物） */
 function matchesWrapFilter(r: Row, key: string): boolean {
   if (key === 'degraded') return r.wrapupDegraded
@@ -787,11 +801,10 @@ function matchesWrapFilter(r: Row, key: string): boolean {
   return true
 }
 
-const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!statusFilter.value || !!wrapFilter.value || !!modeFilter.value || !!dateFilter.value || !!keyword.value.trim() || onlyAdvisory.value)
+const isFiltered = computed(() => pill.value !== 'all' || !!statusFilter.value || !!wrapFilter.value || !!modeFilter.value || !!dateFilter.value || !!keyword.value.trim() || onlyAdvisory.value)
 function clearFilters() {
   const hadOnlyAdvisory = onlyAdvisory.value
   pill.value = 'all'
-  abnormalOnly.value = false
   statusFilter.value = ''
   wrapFilter.value = ''
   modeFilter.value = ''
@@ -816,7 +829,7 @@ const pageSize = ref(15)
    而筛选此前只活在内存里——实测点「异常18」→ 进详情 → 返回（或刷新）都回到全部 167 条，
    逐条看要重筛一遍，也没法把「这批异常」的链接发给同事。与 用户与学习者 / 学习状态 /
    虚拟学习者 / 学习路径 同一组合式单点（learner-profile.ts useListQueryState）。
-   焦点 chip、状态组、异常开关、筛选（状态/时间）、有建议开关全部进 URL：
+   焦点视图、状态/总结/课型/时间维度、有建议开关全部进 URL：
    缺省值不写（URL 短且人可读），空结果也不怕深链缺失。
    必须在下方「筛选变化回第 1 页」的 watch 之前调用：URL 落位要发生在监听建立之前，
    否则挂载时还原出来的筛选会被当成用户改筛选、把还原的页码打回 1（Users.vue 判例）。 */
@@ -828,13 +841,15 @@ useListQueryState(
     pageSize,
     allowedPills: ['all', 'active', 'attention', 'missing'],
     extra: [
-      { key: 'abn', get: () => (abnormalOnly.value ? '1' : ''), set: (v) => (abnormalOnly.value = v === '1'), allowed: ['1'] },
       {
         key: 'adv',
         get: () => statusFilter.value,
         set: (v) => (statusFilter.value = v),
-        allowed: statusOptions.map((o) => o.value)
+        allowed: [...statusOptions.map((o) => o.value), 'abnormal']
       },
+      /* 旧深链兼容：2026-10-27 前「异常」是独立开关（abn=1），现并入状态下拉（adv=abnormal）。
+         只读不写：落位时映射到同一个状态，随后由 adv 接管 URL 表达。 */
+      { key: 'abn', get: () => '', set: (v) => { if (v === '1') statusFilter.value = 'abnormal' }, allowed: ['1'] },
       { key: 'mode', get: () => modeFilter.value, set: (v) => (modeFilter.value = v), allowed: ['tutor', 'review', 'extension'] },
       { key: 'date', get: () => dateFilter.value, set: (v) => (dateFilter.value = v) },
       { key: 'wrap', get: () => wrapFilter.value, set: (v) => (wrapFilter.value = v), allowed: ['degraded', 'eval-failed', 'missing'] },
@@ -847,7 +862,7 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([pill, statusFilter, wrapFilter, modeFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, onlyAdvisory], () => {
+watch([pill, statusFilter, wrapFilter, modeFilter, dateFilter, keyword, tsSortKey, tsSortDir, onlyAdvisory], () => {
   page.value = 1
 })
 
@@ -1086,14 +1101,10 @@ defineExpose({ refreshNow })
    主值只有 4~6 个字，让回 max-content，auto 布局才会按字宽给这列留位 */
 .ts-ia--dur { overflow: visible; }.ts-ia--dur > .ts-ia__dur { min-width: max-content; max-width: none; white-space: nowrap; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--long { color: var(--mk-amber); }/* 状态 / 进度合并列（2026-10-23）：位置短语只占一行原地文字，不再配迷你条；
    结果由左侧徽章着色（完成绿 / 超时红 / 暂停琥珀），条与文字同说一件事。 */
-.ts-prog { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
-   选中态（筛选生效中）由模板守卫——abnormalOnly 时不再加本类，让位给 .mk-pill--active 的蓝 */
-/* 分布带已退役（2026-10-17）：原页面级 .ts-distband 与类名一并下线，状态筛选在卡头 chips
-   与「筛选」下拉；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
-.ts-abn-chip--heap {
-  color: var(--mk-red);
-  border-color: color-mix(in srgb, var(--mk-red) 45%, var(--mk-line));
-}/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字）。
+.ts-prog { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }/* 可点 KPI 的选中态（2026-10-27）：与同组 gc-/oc-/lc-/mr- 同一判例，蓝只给可交互与选中 */
+.ts-kpi--on { border-color: var(--mk-blue); }
+/* 分布带已退役（2026-10-17）：原页面级 .ts-distband 与类名一并下线，状态筛选在卡头下拉；
+   页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 *//* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字）。
    锚点用稳定类 .ts-status（2026-10-06 审核 #37）：原 td:nth-child(3) 在用户列被
    隐藏后失配（状态列变第 2 个 td），切换状态筛选时列宽照样跳动——正是本规则要防的。
    该类挂在 td 内层 div 上（display:flex 不能挂 td，见上方 .ts-track 注释）。
