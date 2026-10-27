@@ -287,9 +287,14 @@
             <div class="pe-form-grid">
               <label class="mk-field" :class="{ 'mk-field--error': errors.agentId }">
                 <span class="mk-field__label">助手能力 <em class="mk-field__req">*</em></span>
-                <select v-model="form.agentId" class="mk-field__select" :disabled="!!editingId">
-                  <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
-                </select>
+                <MkSelect
+                  v-model="form.agentId"
+                  :options="AGENT_OPTIONS"
+                  aria-label="助手能力"
+                  block
+                  :disabled="!!editingId"
+                  :error="!!errors.agentId"
+                />
                 <span class="mk-field__hint">{{ agentDesc }}</span>
                 <span v-if="errors.agentId" class="mk-field__err">{{ errors.agentId }}</span>
               </label>
@@ -315,10 +320,12 @@
                 <template v-if="form.inputSource === 'manual'">
                   <div class="pe-msgs">
                     <div v-for="(m, i) in form.messages" :key="i" class="pe-msg">
-                      <select v-model="m.role" class="mk-input pe-msg__role">
-                        <option value="user">学生</option>
-                        <option value="assistant">助手</option>
-                      </select>
+                      <MkSelect
+                        v-model="m.role"
+                        :options="MESSAGE_ROLE_OPTIONS"
+                        aria-label="角色"
+                        block
+                      />
                       <input v-model="m.content" class="mk-input pe-msg__content"
                         :placeholder="m.role === 'user' ? '例如：我想考英语，帮帮我' : '助手历史回复（可选，模拟多轮）'" />
                       <button type="button" class="mk-link mk-link--danger" :disabled="form.messages.length <= 1" @click="form.messages.splice(i, 1)">✕</button>
@@ -337,10 +344,12 @@
                   </div>
                   <label class="mk-field">
                     <span class="mk-field__label">学生人设 <span class="mk-field__opt">（可选）</span></span>
-                    <select v-model="form.personaId" class="mk-field__select">
-                      <option value="">为这个场景新建（自动生成学生人设）</option>
-                      <option v-for="v in virtualLearners" :key="v.id" :value="v.id">{{ v.label }}</option>
-                    </select>
+                    <MkSelect
+                      v-model="form.personaId"
+                      :options="personaSelectOptions"
+                      aria-label="学生人设"
+                      block
+                    />
                   </label>
                   <!-- 模拟参数：一行内联，不折叠（收敛门禁字段为进阶配置，挪入下方「高级校验」折叠） -->
                   <div class="pe-params">
@@ -350,13 +359,12 @@
                     </label>
                     <label class="pe-param">
                       <span class="pe-param__label">学生对抗度</span>
-                      <select v-model="form.frictionBudget" class="mk-input">
-                        <option value="none">配合</option>
-                        <option value="low">犹豫</option>
-                        <option value="normal">正常</option>
-                        <option value="high">难缠</option>
-                        <option value="stress_test">极端</option>
-                      </select>
+                      <MkSelect
+                        v-model="form.frictionBudget"
+                        :options="FRICTION_BUDGET_OPTIONS"
+                        aria-label="学生对抗度"
+                        block
+                      />
                     </label>
                   </div>
                 </template>
@@ -620,6 +628,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 interface EvalCase {
   id: string
@@ -686,6 +695,24 @@ const AGENT_META: Record<string, { label: string; desc: string; fields: string; 
   },
 }
 const agents = Object.entries(AGENT_META).map(([id, m]) => ({ id, label: m.label }))
+/** 助手能力下拉选项（旧原生 select 的 v-for 选项，文案不变） */
+const AGENT_OPTIONS = agents.map((a) => ({ value: a.id, label: a.label }))
+/** 消息角色：值与旧原生 select 一致（user / assistant） */
+const MESSAGE_ROLE_OPTIONS: Array<{ value: 'user' | 'assistant'; label: string }> = [
+  { value: 'user', label: '学生' },
+  { value: 'assistant', label: '助手' }
+]
+/** 学生对抗度档位（文案与旧原生 select 逐字一致） */
+const FRICTION_BUDGET_OPTIONS: Array<{
+  value: 'none' | 'low' | 'normal' | 'high' | 'stress_test'
+  label: string
+}> = [
+  { value: 'none', label: '配合' },
+  { value: 'low', label: '犹豫' },
+  { value: 'normal', label: '正常' },
+  { value: 'high', label: '难缠' },
+  { value: 'stress_test', label: '极端' }
+]
 /** 胶囊内嵌下拉的选项（空值 = 全部 Agent） */
 const agentSelectOptions = [
   { value: '', label: '全部 Agent' },
@@ -1014,6 +1041,11 @@ const expectSummary = computed(() => {
 
 /** 已有虚拟学习者列表（复用其 persona + 故事池） */
 const virtualLearners = ref<Array<{ id: string; label: string }>>([])
+/** 学生人设下拉：首项 = 新建（空值），其余 = 已加载的虚拟学习者 */
+const personaSelectOptions = computed(() => [
+  { value: '', label: '为这个场景新建（自动生成学生人设）' },
+  ...virtualLearners.value.map((v) => ({ value: v.id, label: v.label }))
+])
 const virtualLearnersLoading = ref(false)
 async function loadVirtualLearners() {
   if (virtualLearners.value.length || virtualLearnersLoading.value) return

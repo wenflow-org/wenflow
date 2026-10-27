@@ -253,17 +253,21 @@
           <div class="api-form__grid">
             <label class="uc-field">
               <span class="uc-field__label">连接方式</span>
-              <select v-model="mcpForm.transport" class="uc-field__input">
-                <option value="http">HTTP 接口</option>
-                <option value="mcp">MCP 服务</option>
-              </select>
+              <MkSelect
+                v-model="mcpForm.transport"
+                :options="MCP_TRANSPORT_OPTIONS"
+                aria-label="连接方式"
+                block
+              />
             </label>
             <label class="uc-field">
               <span class="uc-field__label">状态</span>
-              <select v-model="mcpForm.enabled" class="uc-field__input">
-                <option :value="true">启用</option>
-                <option :value="false">停用</option>
-              </select>
+              <MkSelect
+                v-model="mcpForm.enabled"
+                :options="MCP_ENABLED_OPTIONS"
+                aria-label="状态"
+                block
+              />
             </label>
           </div>
           <label class="uc-field">
@@ -304,6 +308,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import MkModelPicker from '@/components/mk/MkModelPicker.vue';
+import MkSelect from '@/components/mk/MkSelect.vue';
 import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm';
 import { toast } from '../../utils/toast';
 import request from '@/utils/api';
@@ -551,6 +556,15 @@ const mcpFormHadKey = ref(false);
 const mcpTestingId = ref('');
 /** 每个 MCP server 的测试工具名（用于拼 serverId:toolName 寻址） */
 const mcpToolName = reactive<Record<string, string>>({});
+/* MCP 表单下拉选项（2026-10-27 原生 select → MkSelect 自绘弹层），文案与原 option 逐字一致 */
+const MCP_TRANSPORT_OPTIONS: ReadonlyArray<{ value: 'http' | 'mcp'; label: string }> = [
+  { value: 'http', label: 'HTTP 接口' },
+  { value: 'mcp', label: 'MCP 服务' },
+];
+const MCP_ENABLED_OPTIONS: ReadonlyArray<{ value: boolean; label: string }> = [
+  { value: true, label: '启用' },
+  { value: false, label: '停用' },
+];
 const mcpForm = reactive({
   id: '',
   name: '',

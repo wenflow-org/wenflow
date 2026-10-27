@@ -1,4 +1,4 @@
-import type { DOMWrapper, VueWrapper } from '@vue/test-utils';
+import type { VueWrapper } from '@vue/test-utils';
 
 /**
  * 卡头「带标签的胶囊下拉」（MkPillSelect）的测试助手。
@@ -7,6 +7,9 @@ import type { DOMWrapper, VueWrapper } from '@vue/test-utils';
  * `<div class="mk-pillselect-wrap">` 里一枚 `button[role=combobox]` + 自绘 listbox
  * （原生 `<select>` 的弹层无法与页面浮层同语言，2026-10-27 用户「这个下拉，完全没有设计」）。
  * 计数进入 option 文案（如「管理员（2）」）。查询统一走这里，避免每个测试文件各写一套。
+ *
+ * 弹层用 fixed 定位（不被 modal / 滚动容器裁剪）；这里按触发器的 `aria-controls`
+ * 取菜单节点，避免依赖 DOM 层级。
  */
 
 /** 某维的包裹层（含触发器与弹层）：按可见维度名定位 */
@@ -23,6 +26,17 @@ export function filterTrigger(w: VueWrapper<any>, dimLabel: string) {
   return filterWrap(w, dimLabel).find('button.mk-pillselect');
 }
 
+/** 菜单节点：优先组件子树（测试默认挂载），再按 aria-controls 到 document 上兜底 */
+function filterMenu(w: VueWrapper<any>, dimLabel: string): HTMLElement {
+  const wrap = filterWrap(w, dimLabel);
+  const inTree = wrap.find('ul.mk-listbox-pop');
+  if (inTree.exists()) return inTree.element as HTMLElement;
+  const id = filterTrigger(w, dimLabel).attributes('aria-controls');
+  const menu = id ? document.getElementById(id) : null;
+  if (!menu) throw new Error(`filter menu not found: ${dimLabel}`);
+  return menu;
+}
+
 /** 当前选中值；未选任何档时为空串（「全部…」的 value 由页面给） */
 export function filterValue(w: VueWrapper<any>, dimLabel: string): string {
   return filterTrigger(w, dimLabel).attributes('data-value') ?? '';
@@ -30,9 +44,14 @@ export function filterValue(w: VueWrapper<any>, dimLabel: string): string {
 
 /** 全部选项文案（v-show 只改 display，选项始终在 DOM 里，无需先展开） */
 export function filterOptions(w: VueWrapper<any>, dimLabel: string): string[] {
-  return filterWrap(w, dimLabel)
-    .findAll('.mk-listbox-opt')
-    .map((o) => o.text());
+  return Array.from(filterMenu(w, dimLabel).querySelectorAll('.mk-listbox-opt')).map(
+    (o) => o.textContent?.trim() ?? ''
+  );
+}
+
+export interface FilterOptionHandle {
+  text: () => string;
+  element: HTMLElement;
 }
 
 /** 取某维某档的 option（文案含计数，按前缀匹配）。 */
@@ -40,12 +59,12 @@ export function filterOption(
   w: VueWrapper<any>,
   dimLabel: string,
   optionLabelPrefix: string
-): DOMWrapper<Element> {
-  const opt = filterWrap(w, dimLabel)
-    .findAll('.mk-listbox-opt')
-    .find((o) => o.text().startsWith(optionLabelPrefix));
-  if (!opt) throw new Error(`option not found: ${dimLabel} / ${optionLabelPrefix}`);
-  return opt;
+): FilterOptionHandle {
+  const el = Array.from(filterMenu(w, dimLabel).querySelectorAll<HTMLElement>('.mk-listbox-opt')).find(
+    (o) => (o.textContent?.trim() ?? '').startsWith(optionLabelPrefix)
+  );
+  if (!el) throw new Error(`option not found: ${dimLabel} / ${optionLabelPrefix}`);
+  return { text: () => el.textContent?.trim() ?? '', element: el };
 }
 
 /** 展开下拉并点选某档 —— 等价于真实用户的开弹层 + 点选项。 */
@@ -56,5 +75,6 @@ export async function chooseFilter(
 ): Promise<void> {
   const opt = filterOption(w, dimLabel, optionLabelPrefix);
   await filterTrigger(w, dimLabel).trigger('click');
-  await opt.trigger('click');
+  opt.element.click();
+  await w.vm.$nextTick();
 }

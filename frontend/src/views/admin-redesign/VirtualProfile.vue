@@ -358,9 +358,13 @@
             </label>
             <label class="mk-field">
               <span class="mk-field__label">默认难度</span>
-              <select v-model="budgetForm.frictionBudget" class="mk-field__select" @change="budgetDirty = true">
-                <option v-for="o in FRICTION_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
+              <MkSelect
+                v-model="budgetForm.frictionBudget"
+                :options="FRICTION_OPTIONS"
+                aria-label="默认难度"
+                block
+                @change="budgetDirty = true"
+              />
             </label>
           </div>
           <div class="mk-card__foot">
@@ -638,15 +642,16 @@
             <!-- 2026-10-21：选运行从「整行 label + 全宽下拉」收进卡头右组（用户走查「标的地方重新做一下」）。
                  只有一次运行时不出下拉，直接把那次的标签写成 meta（下拉里只有一个选项没有意义）。 -->
             <div v-if="timelineSessionOptions.length" class="mk-card__head-right">
-              <select
-                v-if="timelineSessionOptions.length > 1"
-                v-model="timelineSessionId"
-                class="mk-field__select vp-timeline__select"
-                aria-label="选择要看的运行"
-                title="切换运行：日程按会话分别记录，换一条就是另一份日程"
-              >
-                <option v-for="opt in timelineSessionOptions" :key="opt.sessionId" :value="opt.sessionId">{{ opt.label }}</option>
-              </select>
+              <span v-if="timelineSessionOptions.length > 1" class="vp-timeline__select">
+                <MkSelect
+                  v-model="timelineSessionId"
+                  :options="timelineSelectOptions"
+                  aria-label="选择要看的运行"
+                  title="切换运行：日程按会话分别记录，换一条就是另一份日程"
+                  size="sm"
+                  block
+                />
+              </span>
               <span v-else class="mk-card__meta">{{ timelineSessionOptions[0].label }}</span>
             </div>
           </div>
@@ -729,12 +734,12 @@
           </label>
           <label class="mk-field">
             <span class="mk-field__label">知识水平</span>
-            <select v-model="editForm.level" class="mk-field__select">
-              <option value="beginner">零基础</option>
-              <option value="elementary">入门</option>
-              <option value="intermediate">中级</option>
-              <option value="advanced">进阶</option>
-            </select>
+            <MkSelect
+              v-model="editForm.level"
+              :options="LEVEL_OPTIONS"
+              aria-label="知识水平"
+              block
+            />
           </label>
           <label class="mk-field">
             <span class="mk-field__label">故事 / 备注</span>
@@ -784,11 +789,12 @@
             <span class="mk-field__label">问题知识</span>
             <label class="mk-field">
               <span class="mk-field__label">领域熟悉度</span>
-              <select v-model="editStoryForm.problemKnowledge.domainFamiliarity" class="mk-field__select">
-                <option value="low">低（完全陌生）</option>
-                <option value="medium">中（略知一二）</option>
-                <option value="high">高（有相关经验）</option>
-              </select>
+              <MkSelect
+                v-model="editStoryForm.problemKnowledge.domainFamiliarity"
+                :options="DOMAIN_FAMILIARITY_OPTIONS"
+                aria-label="领域熟悉度"
+                block
+              />
             </label>
             <label class="mk-field">
               <span class="mk-field__label">已知概念（逗号分隔）</span>
@@ -1064,6 +1070,7 @@ import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkChart from '@/components/mk/MkChart.vue'
 import DayTimeline from './DayTimeline.vue'
@@ -1077,6 +1084,21 @@ import {
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板就地引用 ---------- */
 const BUDGET_TOTAL_LABEL = '单次运行 AI 调用上限'
+
+/** 画像编辑：知识水平档位（原 option 文案逐字保留） */
+const LEVEL_OPTIONS = [
+  { value: 'beginner', label: '零基础' },
+  { value: 'elementary', label: '入门' },
+  { value: 'intermediate', label: '中级' },
+  { value: 'advanced', label: '进阶' }
+] as const
+
+/** 故事编辑：问题知识的领域熟悉度档位 */
+const DOMAIN_FAMILIARITY_OPTIONS = [
+  { value: 'low', label: '低（完全陌生）' },
+  { value: 'medium', label: '中（略知一二）' },
+  { value: 'high', label: '高（有相关经验）' }
+] as const
 
 interface RunItem {
   time: string
@@ -2821,6 +2843,10 @@ const timelineSessionOptions = computed(() =>
       label: `${formatRunResult(r.result)} · ${r.storyTitle || '未关联故事'} · ${timeAgo(String(r.createdAt || ''))}`,
     })),
 )
+/** MkSelect 形态：value = sessionId（v-model 仍是 timelineSessionId） */
+const timelineSelectOptions = computed(() =>
+  timelineSessionOptions.value.map((o) => ({ value: o.sessionId, label: o.label }))
+)
 watch(
   () => timelineSessionOptions.value.length,
   () => {
@@ -3047,7 +3073,7 @@ async function quietReload(id: string) {
 
 <style scoped>
 /* 学习日程卡头的运行下拉：卡头右组里的紧凑选择器，不铺满整行 */
-.vp-timeline__select { width: 300px; max-width: 100%; }
+.vp-timeline__select { display: inline-flex; width: 300px; max-width: 100%; }
 
 /* 故事编辑弹窗：宽面板 + 问题知识分区（P2-2）；宽度随全站 .mk-modal__panel--wide token */
 .vp-pk {

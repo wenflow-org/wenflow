@@ -11,6 +11,7 @@ import { nextTick } from 'vue';
 import Addons from '../Addons.vue';
 import { dataSource } from '../store';
 import { liveRefreshSeq } from '../live';
+import { chooseMkSelect, mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 
 const { mcpListMock, mcpUpdateMock, listMcpToolsMock, pluginListMock, pluginSetMock, pluginConfigMock, pluginSaveMock } = vi.hoisted(() => ({
   mcpListMock: vi.fn(),
@@ -360,9 +361,9 @@ describe('Addons MCP 服务（transport 支持）', () => {
     expect(dialog().text()).toContain('主用');
     expect(dialog().text()).not.toContain('未参与调用');
     // 链外 provider 仍可加进备用链，加进来后才出现它的字段
-    const add = dialog().find('.ac-prio__add');
-    expect(add.exists()).toBe(true);
-    await add.setValue('cloudflare');
+    // 2026-10-27 原生 select → MkSelect：按 aria-label 展开并点选 provider
+    expect(mkSelectValue(wrapper as never, '把 provider 加入判定备用')).toBe('');
+    await chooseMkSelect(wrapper as never, '把 provider 加入判定备用', 'cloudflare');
     await flushPromises();
     expect(dialog().findAll('.ac-config-provider')).toHaveLength(2);
     expect(dialog().text()).toContain('备用 1');

@@ -90,10 +90,15 @@
                 <div class="ac-test">
                   <label class="mk-field ac-test__model">
                     <span class="mk-field__label">测试模型</span>
-                    <select class="mk-field__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
-                      <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
-                      <option v-for="m in models" :key="m" :value="m" :title="modelTestHint(m)">{{ modelTestLabel(m) }}</option>
-                    </select>
+                    <!-- 2026-10-27 原生 select → MkSelect：选项随上游清单动态生成；
+                         非对话模型的提示已并入可见 label（MkSelect 选项无逐项 title）。 -->
+                    <MkSelect
+                      v-model="testModel"
+                      :options="testModelOptions"
+                      aria-label="测试模型"
+                      :disabled="!models.length"
+                      block
+                    />
                   </label>
                   <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
                     <MkLoading v-if="testing" inline text="测试中…" />
@@ -150,29 +155,26 @@
                 <div class="ac-row ac-row--2 ac-think">
                   <label class="mk-field">
                     <span class="mk-field__label">思考模式</span>
-                    <select
-                      class="mk-field__select"
-                      :value="form.defaultThinkingMode"
-                      @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
-                    >
-                      <option value="default">跟随模型默认</option>
-                      <option value="enabled">强制开启</option>
-                      <option value="disabled">关闭</option>
-                    </select>
+                    <!-- 2026-10-27 原生 select → MkSelect -->
+                    <MkSelect
+                      v-model="form.defaultThinkingMode"
+                      :options="THINKING_MODE_OPTIONS"
+                      aria-label="思考模式"
+                      @change="setThinkingMode"
+                      block
+                    />
                   </label>
                   <label class="mk-field">
                     <span class="mk-field__label">思考强度</span>
-                    <select
-                      class="mk-field__select"
+                    <!-- 2026-10-27 原生 select → MkSelect -->
+                    <MkSelect
+                      v-model="form.defaultReasoningEffort"
+                      :options="EFFORT_OPTIONS"
+                      aria-label="思考强度"
                       :disabled="!thinkingOn"
-                      :value="form.defaultReasoningEffort"
-                      @change="setEffort(($event.target as HTMLSelectElement).value)"
-                    >
-                      <option value="default">跟随模型默认</option>
-                      <option value="low">低（low）</option>
-                      <option value="high">高（high）</option>
-                      <option value="max">最高（max）</option>
-                    </select>
+                      @change="setEffort"
+                      block
+                    />
                   </label>
                 </div>
               </div>
@@ -181,14 +183,15 @@
                 <div class="ac-row ac-row--2">
                   <label class="mk-field">
                     <span class="mk-field__label">输出格式</span>
-                    <select
-                      class="mk-field__select"
-                      :value="form.defaultResponseFormat"
-                      @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
-                    >
-                      <option value="none">关闭（默认行为）</option>
-                      <option value="json_object">JSON 对象</option>
-                    </select>
+                    <!-- 2026-10-27 原生 select → MkSelect：v-model 保留联合值类型，
+                         change 只负责标脏 -->
+                    <MkSelect
+                      v-model="form.defaultResponseFormat"
+                      :options="RESPONSE_FORMAT_OPTIONS"
+                      aria-label="输出格式"
+                      @change="markDirty('route')"
+                      block
+                    />
                   </label>
                 </div>
               </div>
@@ -318,6 +321,7 @@ import { adminPlatformSettingsApi, adminApiConfigApi } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import { toast } from '@/utils/toast'
 
 /* ---------- 宿主：单页（2026-10-26 用户「我不知为啥还要有默认设置。不就是配置的模型吗，
@@ -457,6 +461,24 @@ const apiConfigFailed = computed(() => !!liveFailures.value.apiConfig)
 function retryApiConfigLoad() {
   void loadLiveData()
 }
+/* 2026-10-27 原生 select → MkSelect：选项文案与原 <option> 逐字一致；
+   `as const` 让值保持联合类型，v-model 不改写 form 的字段类型。 */
+const THINKING_MODE_OPTIONS = [
+  { value: 'default', label: '跟随模型默认' },
+  { value: 'enabled', label: '强制开启' },
+  { value: 'disabled', label: '关闭' }
+] as const
+const EFFORT_OPTIONS = [
+  { value: 'default', label: '跟随模型默认' },
+  { value: 'low', label: '低（low）' },
+  { value: 'high', label: '高（high）' },
+  { value: 'max', label: '最高（max）' }
+] as const
+const RESPONSE_FORMAT_OPTIONS = [
+  { value: 'none', label: '关闭（默认行为）' },
+  { value: 'json_object', label: 'JSON 对象' }
+] as const
+
 const form = reactive({
   apiUrl: '',
   apiKey: '',
@@ -763,11 +785,14 @@ function modelTestLabel(m: string): string {
   if (!NON_CHAT_MODEL_PATTERN.test(m)) return m
   return `${m}（${RERANK_MODEL_PATTERN.test(m) ? '重排' : '向量'}模型 · chat 测试不适用）`
 }
-function modelTestHint(m: string): string {
-  return NON_CHAT_MODEL_PATTERN.test(m)
-    ? '该模型不是对话模型，连通性测试失败属预期结果，不代表配置错误'
-    : ''
-}
+/** 测试模型下拉的选项（2026-10-27 原生 select → MkSelect）：清单为空时保留原占位项。
+    原 `<option :title="modelTestHint(m)">` 的逐项提示在 MkSelect 里不可表达——可见 label
+    已写明「chat 测试不适用」，故不再单独保留 modelTestHint。 */
+const testModelOptions = computed(() =>
+  models.value.length
+    ? models.value.map((m) => ({ value: m, label: modelTestLabel(m) }))
+    : [{ value: '', label: '无可用模型（等待拉取）' }]
+)
 watch(models, (ms) => {
   if (!ms.length) return
   if (testModel.value && ms.includes(testModel.value)) return
@@ -1000,7 +1025,6 @@ function discardAll() {
    （与 MCP 弹窗、加字段向导同原语）——原「.mk-field 下 .mk-filter__input 补 100% 宽」的补偿规则
    随控件换原语一并删除（字段原语自身即 width:100%） */
 .ac-body .mk-field { margin: 0; min-width: 0; }
-.ac-body .mk-field__select[disabled] { opacity: 0.6; cursor: not-allowed; }
 .ac-key-wrap { display: grid; gap: 4px; min-width: 0; }
 .ac-key-input-row { display: flex; align-items: center; gap: 6px; }
 .ac-key-input-row .mk-field__input { flex: 1; min-width: 0; }

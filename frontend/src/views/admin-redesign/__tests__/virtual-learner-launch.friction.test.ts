@@ -40,8 +40,11 @@ vi.mock('../store', async () => {
 import VirtualLearnerLaunch from '../VirtualLearnerLaunch.vue';
 import VirtualLearnerPromptTest from '../VirtualLearnerPromptTest.vue';
 import { FRICTION_OPTIONS } from '../vlab';
+import { mkSelectLabels } from '@/components/mk/__tests__/mkSelect';
 
 const EXPECTED_LABELS = FRICTION_OPTIONS.map((o) => o.label);
+/* Teleport 打平到组件内（attachTo body）：MkSelect 助手按 aria-label 在 wrapper 里定位 */
+const mountOpts = { attachTo: document.body, global: { stubs: { teleport: true } } };
 
 beforeEach(() => {
   document.body.innerHTML = '';
@@ -49,7 +52,7 @@ beforeEach(() => {
 });
 
 async function openLaunch() {
-  const w = mount(VirtualLearnerLaunch, { attachTo: document.body });
+  const w = mount(VirtualLearnerLaunch, mountOpts);
   await (w.vm as unknown as { open: (s: unknown) => Promise<void> }).open({ id: 'p1', name: '小陈', storyCount: 2 });
   await flushPromises();
   return w;
@@ -67,27 +70,23 @@ describe('启动弹层：故事 + 启动，低频调参折进更多设置', () =
     const more = document.body.querySelector('.vl-launch-more')!;
     expect(more).toBeTruthy();
     expect(more.querySelector('summary')!.textContent).toBe('更多设置');
-    expect(more.querySelectorAll('select')).toHaveLength(2);
+    expect(more.querySelectorAll('.mk-select')).toHaveLength(2);
     w.unmount();
   });
 
   it('对抗度用与提示词试跑同一套中文词（vlab.FRICTION_OPTIONS）', async () => {
     const w = await openLaunch();
-    const selects = document.body.querySelectorAll('.vl-launch-more select');
-    const labels = [...selects[1].querySelectorAll('option')].map((o) => o.textContent);
-    expect(labels).toEqual(EXPECTED_LABELS);
+    expect(mkSelectLabels(w as never, '学生对抗度')).toEqual(EXPECTED_LABELS);
     w.unmount();
   });
 });
 
 describe('提示词试跑：对抗度同一套中文词', () => {
   it('下拉选项 = FRICTION_OPTIONS（不再出现「无摩擦 / 压力测试」）', async () => {
-    const w = mount(VirtualLearnerPromptTest, { attachTo: document.body });
+    const w = mount(VirtualLearnerPromptTest, mountOpts);
     (w.vm as unknown as { open: (s: unknown) => void }).open({ id: 'p1', name: '小陈' });
     await flushPromises();
-    const selects = document.body.querySelectorAll('.pt-config select');
-    const labels = [...selects[1].querySelectorAll('option')].map((o) => o.textContent);
-    expect(labels).toEqual(EXPECTED_LABELS);
+    expect(mkSelectLabels(w as never, '学生对抗度')).toEqual(EXPECTED_LABELS);
     w.unmount();
   });
 });

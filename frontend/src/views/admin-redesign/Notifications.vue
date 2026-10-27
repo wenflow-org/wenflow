@@ -206,11 +206,12 @@
             </label>
             <label class="mk-field">
               <span class="mk-field__label">类型</span>
-              <select v-model="form.kind" class="mk-field__select">
-                <option value="system">系统通知</option>
-                <option value="announcement">公告提醒（站内信）</option>
-                <option value="achievement">成就</option>
-              </select>
+              <MkSelect
+                v-model="form.kind"
+                :options="NOTIFICATION_KIND_OPTIONS"
+                aria-label="类型"
+                block
+              />
             </label>
             <div class="mk-field">
               <span class="mk-field__label">发送范围</span>
@@ -279,6 +280,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import Pagination from './Pagination.vue'
 
 /** 嵌入模式：作为「通知与公告」页「站内通知」tab 渲染（仅去掉外层壳，状态条/发送弹窗保留）。
@@ -511,6 +513,12 @@ useOverlay(computed(() => sendOpen.value), panelRef)
 useMaskClose(maskRef, closeSend)
 
 const form = ref({ title: '', body: '', kind: 'system', scope: 'all' as 'all' | 'user' })
+/** 发送弹窗的类型下拉（文案与旧原生 select 逐字一致） */
+const NOTIFICATION_KIND_OPTIONS = [
+  { value: 'system', label: '系统通知' },
+  { value: 'announcement', label: '公告提醒（站内信）' },
+  { value: 'achievement', label: '成就' }
+]
 const errors = ref<{ title?: string }>({})
 const sending = ref(false)
 const sendError = ref('')

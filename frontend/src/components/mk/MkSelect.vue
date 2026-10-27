@@ -13,6 +13,7 @@
       'mk-select--open': open,
       'mk-select--sm': size === 'sm',
       'mk-select--block': block,
+      'mk-select--error': error,
       'mk-select--disabled': disabled
     }"
   >
@@ -42,6 +43,7 @@
       :id="menuId"
       ref="menuEl"
       class="mk-listbox-pop mk-select__menu"
+      :style="popStyle"
       role="listbox"
     >
       <li
@@ -104,12 +106,15 @@ const props = withDefaults(defineProps<{
   mono?: boolean
   /** 撑满父容器（表单字段） */
   block?: boolean
+  /** 校验失败态（替代旧 select 上的 is-err / mk-field--error） */
+  error?: boolean
 }>(), {
   placeholder: '请选择',
   disabled: false,
   size: 'md',
   mono: false,
-  block: false
+  block: false,
+  error: false
 })
 const emit = defineEmits<{
   'update:modelValue': [value: T]
@@ -132,6 +137,7 @@ const currentLabel = computed(
 
 const {
   open,
+  popStyle,
   activeIndex,
   rootEl,
   triggerEl,

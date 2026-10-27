@@ -74,32 +74,31 @@
             <div class="med-price">
               <label class="mk-field">
                 <span class="mk-field__label">思考模式</span>
-                <select v-model="form.defaultThinkingMode" class="mk-field__select">
-                  <option value="default">用平台默认</option>
-                  <option value="enabled">强制开启</option>
-                  <option value="disabled">关闭</option>
-                </select>
+                <MkSelect
+                  v-model="form.defaultThinkingMode"
+                  :options="THINKING_MODE_OPTIONS"
+                  aria-label="思考模式"
+                  block
+                />
               </label>
               <label class="mk-field">
                 <span class="mk-field__label">思考强度</span>
-                <select
+                <MkSelect
                   v-model="form.defaultReasoningEffort"
-                  class="mk-field__select"
+                  :options="REASONING_EFFORT_OPTIONS"
+                  aria-label="思考强度"
+                  block
                   :disabled="form.defaultThinkingMode === 'disabled'"
-                >
-                  <option value="default">用平台默认</option>
-                  <option value="low">低（low）</option>
-                  <option value="high">高（high）</option>
-                  <option value="max">最高（max）</option>
-                </select>
+                />
               </label>
               <label class="mk-field">
                 <span class="mk-field__label">输出格式</span>
-                <select v-model="form.defaultResponseFormat" class="mk-field__select">
-                  <option value="default">用平台默认</option>
-                  <option value="none">关闭</option>
-                  <option value="json_object">JSON 对象</option>
-                </select>
+                <MkSelect
+                  v-model="form.defaultResponseFormat"
+                  :options="RESPONSE_FORMAT_OPTIONS"
+                  aria-label="输出格式"
+                  block
+                />
               </label>
             </div>
           </section>
@@ -113,10 +112,12 @@
               <div class="med-two">
                 <label class="mk-field">
                   <span class="mk-field__label">用途</span>
-                  <select v-model="form.tier" class="mk-field__select">
-                    <option value="chat">对话</option>
-                    <option value="reasoning">推理</option>
-                  </select>
+                  <MkSelect
+                    v-model="form.tier"
+                    :options="TIER_OPTIONS"
+                    aria-label="用途"
+                    block
+                  />
                   <span class="med-field-hint">推理档用于长思考与复杂判断</span>
                 </label>
                 <label class="mk-field">
@@ -238,6 +239,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { adminModelProvidersApi } from '@/api/adminApi'
 import { errMsg } from './live'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 
@@ -297,6 +299,28 @@ const form = reactive({
   cachedInputPer1M: null as number | null,
   outputPer1M: null as number | null
 })
+
+/* 三个生成参数与用途的下拉档位：文案保持与旧原生 select 逐字一致 */
+const THINKING_MODE_OPTIONS: Array<{ value: 'default' | 'enabled' | 'disabled'; label: string }> = [
+  { value: 'default', label: '用平台默认' },
+  { value: 'enabled', label: '强制开启' },
+  { value: 'disabled', label: '关闭' }
+]
+const REASONING_EFFORT_OPTIONS: Array<{ value: 'default' | 'low' | 'high' | 'max'; label: string }> = [
+  { value: 'default', label: '用平台默认' },
+  { value: 'low', label: '低（low）' },
+  { value: 'high', label: '高（high）' },
+  { value: 'max', label: '最高（max）' }
+]
+const RESPONSE_FORMAT_OPTIONS: Array<{ value: 'default' | 'none' | 'json_object'; label: string }> = [
+  { value: 'default', label: '用平台默认' },
+  { value: 'none', label: '关闭' },
+  { value: 'json_object', label: 'JSON 对象' }
+]
+const TIER_OPTIONS: Array<{ value: 'chat' | 'reasoning'; label: string }> = [
+  { value: 'chat', label: '对话' },
+  { value: 'reasoning', label: '推理' }
+]
 
 /** 备用链候选：排除自己（主模型出错后不可能再回落给自己） */
 const availableFallbacks = computed(() => {

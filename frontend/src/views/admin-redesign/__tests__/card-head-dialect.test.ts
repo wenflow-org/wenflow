@@ -328,8 +328,9 @@ describe('MkPillSelect：自绘 listbox 而非原生弹层', () => {
   })
 
   it('弹层样式与 MkCols 菜单同参数；原生 option 补丁退役', () => {
+    // 2026-10-27：select/listbox 外壳已提到全局 mk-select.css（用户/V2 路由也要加载）
     const css = readFileSync(
-      resolve(__dirname, '../../../../src/styles/mk-primitives.css'),
+      resolve(__dirname, '../../../../src/styles/mk-select.css'),
       'utf8'
     )
     // 弹层外壳已抽成两个下拉原语共用的 .mk-listbox-pop（MkSelect 也用它）

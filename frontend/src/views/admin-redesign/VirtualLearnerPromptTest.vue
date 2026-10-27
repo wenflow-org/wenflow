@@ -13,11 +13,12 @@
         <div class="pt-config">
           <label class="mk-field">
             <span class="mk-field__label">助手能力</span>
-            <select v-model="testForm.agentId" class="mk-field__select">
-              <option value="skill:goal-conversation">聊目标</option>
-              <option value="skill:path-planning">拆路径</option>
-              <option value="skill:stage-designer">拆子任务</option>
-            </select>
+            <MkSelect
+              v-model="testForm.agentId"
+              :options="AGENT_OPTIONS"
+              aria-label="助手能力"
+              block
+            />
           </label>
           <label class="mk-field">
             <span class="mk-field__label">对话轮数</span>
@@ -25,9 +26,12 @@
           </label>
           <label class="mk-field">
             <span class="mk-field__label">学生对抗度</span>
-            <select v-model="testForm.friction" class="mk-field__select">
-              <option v-for="o in FRICTION_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
-            </select>
+            <MkSelect
+              v-model="testForm.friction"
+              :options="FRICTION_OPTIONS"
+              aria-label="学生对抗度"
+              block
+            />
           </label>
         </div>
 
@@ -97,6 +101,13 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import { FRICTION_OPTIONS, frictionLabel, type FrictionBudget } from './vlab'
+import MkSelect from '@/components/mk/MkSelect.vue'
+
+const AGENT_OPTIONS = [
+  { value: 'skill:goal-conversation', label: '聊目标' },
+  { value: 'skill:path-planning', label: '拆路径' },
+  { value: 'skill:stage-designer', label: '拆子任务' }
+] as const
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
 withDefaults(defineProps<{ render?: boolean }>(), { render: true })

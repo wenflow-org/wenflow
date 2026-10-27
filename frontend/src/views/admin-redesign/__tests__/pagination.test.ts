@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import Pagination from '../Pagination.vue';
+import { chooseMkSelect, mkSelectOptions } from '@/components/mk/__tests__/mkSelect';
 
 function mountPagination(props: Record<string, unknown> = {}) {
   return mount(Pagination, {
@@ -56,8 +57,7 @@ describe('Pagination（mk-pagination 传统分页器）', () => {
   it('每页条数选择发出 update:pageSize', async () => {
     const w = mountPagination();
     // 2026-10-27：原生 select 换成 MkSelect（自绘 listbox），交互 = 展开 + 点选项
-    await w.find('button[aria-label="每页条数"]').trigger('click');
-    await w.findAll('.mk-listbox-opt').find((o) => o.attributes('data-value') === '50')!.trigger('click');
+    await chooseMkSelect(w as never, '每页条数', '50');
     expect(w.emitted('update:pageSize')?.at(-1)).toEqual([50]);
   });
 
@@ -100,7 +100,7 @@ describe('Pagination（mk-pagination 传统分页器）', () => {
 
   it('sizes 可自定义（默认 15/30/50/100）', () => {
     const w = mountPagination();
-    const options = w.findAll('.mk-listbox-opt').map((o) => Number(o.attributes('data-value')));
+    const options = mkSelectOptions(w as never, '每页条数').map((o) => Number(o.getAttribute('data-value')));
     expect(options).toEqual([15, 30, 50, 100]);
   });
 

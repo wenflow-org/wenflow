@@ -8,6 +8,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ProviderEditorDialog from '../ProviderEditorDialog.vue'
 import ModelEditorDialog from '../ModelEditorDialog.vue'
+import { chooseMkSelect, mkSelectValue } from '@/components/mk/__tests__/mkSelect'
 
 const { createMock, updateMock, addModelMock, updateModelMock } = vi.hoisted(() => ({
   createMock: vi.fn(),
@@ -133,10 +134,9 @@ describe('ProviderEditorDialog', () => {
       baseUrl: 'https://gw.acme.com/v1', keyHint: null, supportsSystemRole: false,
     })
     await flushPromises()
-    const select = w.find('select.mk-field__input')
-    expect((select.element as HTMLSelectElement).value).toBe('fold')
+    expect(mkSelectValue(w, '系统提示词')).toBe('fold')
 
-    await select.setValue('keep')
+    await chooseMkSelect(w, '系统提示词', 'keep')
     updateMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
@@ -149,7 +149,7 @@ describe('ProviderEditorDialog', () => {
       baseUrl: 'https://gw.acme.com/v1', keyHint: null, supportsSystemRole: null,
     })
     await flushPromises()
-    expect((w2.find('select.mk-field__input').element as HTMLSelectElement).value).toBe('auto')
+    expect(mkSelectValue(w2, '系统提示词')).toBe('auto')
   })
 })
 
@@ -164,7 +164,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
     await w.find('.med-modal .med-two input').setValue('acme-chat')
-    await w.find('.med-adv-body select.mk-field__select').setValue('reasoning')
+    await chooseMkSelect(w, '用途', 'reasoning')
     await w.findAll('.med-adv-body .med-two')[1].findAll('input')[0].setValue('65536')
 
     addModelMock.mockResolvedValue({ data: { success: true, warnings: ['备用链写了 2 条…'] } })
@@ -269,13 +269,13 @@ describe('ModelEditorDialog', () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
     w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-gen' })
     await flushPromises()
-    const selects = w.findAll('.med-gen select')
-    expect(selects).toHaveLength(3)
-    expect(selects.map((s) => (s.element as HTMLSelectElement).value)).toEqual(['default', 'default', 'default'])
+    expect(mkSelectValue(w, '思考模式')).toBe('default')
+    expect(mkSelectValue(w, '思考强度')).toBe('default')
+    expect(mkSelectValue(w, '输出格式')).toBe('default')
 
-    await selects[0].setValue('disabled')
-    await selects[1].setValue('max')
-    await selects[2].setValue('json_object')
+    await chooseMkSelect(w, '思考模式', 'disabled')
+    await chooseMkSelect(w, '思考强度', 'max')
+    await chooseMkSelect(w, '输出格式', 'json_object')
     addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()

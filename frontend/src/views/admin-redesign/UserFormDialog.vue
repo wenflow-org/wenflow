@@ -29,10 +29,12 @@
           </label>
           <label class="mk-field">
             <span class="mk-field__label">角色</span>
-            <select v-model="form.admin" class="mk-field__select">
-              <option :value="false">用户</option>
-              <option :value="true">管理员</option>
-            </select>
+            <MkSelect
+              v-model="form.admin"
+              :options="ROLE_OPTIONS"
+              aria-label="角色"
+              block
+            />
           </label>
         </div>
         <div class="mk-modal__foot">
@@ -54,6 +56,7 @@ import { adminUsersApi } from '@/api/adminApi'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 /** 新建 / 编辑用户共用的表单弹窗：账号列表行内「编辑」与详情「账号与许可」卡头「编辑」打开同一份。 */
 export interface EditableUser {
@@ -71,6 +74,12 @@ const emit = defineEmits<{
 
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
 const PASSWORD_RULE_MSG = '密码至少 8 位，且同时包含字母和数字'
+
+/** 角色下拉：值为 boolean（与旧原生 select 的 :value 绑定一致） */
+const ROLE_OPTIONS: Array<{ value: boolean; label: string }> = [
+  { value: false, label: '用户' },
+  { value: true, label: '管理员' }
+]
 
 const saving = ref(false)
 const form = ref({ name: '', email: '', password: '', confirmPassword: '', admin: false })

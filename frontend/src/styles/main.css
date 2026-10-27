@@ -13,6 +13,9 @@
 /* 核心设计系统 */
 @import './design-system.css';
 
+/* 自绘下拉：跨 admin / 用户 / V2 三端共用（只含 select/listbox 外壳与 autofill） */
+@import './mk-select.css';
+
 /* Admin 体系 B 兼容映射（admin-surface.css 收敛为 :root 映射，见该文件） */
 @import './admin-surface.css';
 

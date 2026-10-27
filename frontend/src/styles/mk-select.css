@@ -1,0 +1,128 @@
+/**
+ * 自绘下拉与弹层（全局加载）
+ *
+ * 为什么单独成文件：`mk-primitives.css` 只在 admin 壳里引入，而 MkSelect 已经出现在
+ * 用户设置、执行日志与 V2 页面；这些路由不经过 AdminConsole，样式会整段缺席。
+ * 本文件只装「跨端共用的 select/listbox 外壳 + 浏览器 autofill 覆盖」，不引 admin 卡片、
+ * 按钮等原语，避免把 admin 视觉漏到用户侧。
+ * 依赖 main.css 里全局定义的 --mk-* 令牌（tokens.css 先加载）。
+ */
+
+/* 自绘 listbox 弹层（MkPillSelect / MkSelect 共用）：
+   与 MkCols 菜单同参数（surface / line / shadow-pop / radius-xl / --mk-z-menu），
+   页面上所有浮层才像同一套组件。定位由 useListbox 写 inline style（fixed），
+   fixed 定位不受 modal / 表格滚动容器的 overflow 裁剪。 */
+.mk-listbox-pop {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: var(--mk-z-menu);
+  min-width: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  box-shadow: var(--mk-shadow-pop);
+}
+.mk-listbox-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--mk-radius-sm);
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+/* hover 与实际键盘焦点行（activeIndex）同一视觉：鼠标进哪行、↑↓ 停哪行，都是这块浅底 */
+.mk-listbox-opt.is-active {
+  background: var(--mk-graph-flow-bg);
+  color: var(--mk-ink);
+}
+/* 选中行：主色粗体 + 右侧勾。不靠底色区分——hover 也会给底色，两个通道会打架 */
+.mk-listbox-opt.is-selected { color: var(--mk-blue); font-weight: 700; }
+.mk-listbox-opt.is-selected > svg { flex: none; color: var(--mk-blue); }
+.mk-listbox-opt__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.mk-pillselect__menu { max-width: 320px; }
+/* 紧凑密度档：与 .mk-pill 同档收窄（内衬与字号一起收，不单独缩值） */
+
+/* ----- 表单/工具栏单选下拉（.mk-select，2026-10-27 自绘）-----
+   原生 <select> 的替代品：闭合态是设计系统的描边框，展开后与 MkPillSelect 共用
+   `.mk-listbox-pop`。三种形态：默认 32px 工具条、`--sm` 30px 紧凑位、`--block` 表单撑满。
+   为什么另起一个原语而不复用胶囊：工具条里的维度筛选是「胶囊语言」，表单字段是
+   「输入框语言」，同一控件形态混用会让两种语境都读错。 */
+.mk-select { position: relative; display: inline-flex; min-width: 0; vertical-align: middle; }
+.mk-select--block { display: flex; width: 100%; }
+.mk-select__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 32px;
+  min-width: 104px;
+  max-width: 100%;
+  /* 右内衬 8px：箭头不再需要给原生 select 的 1.75em 留位 */
+  padding: 0 8px 0 11px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface);
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: var(--mk-fs-body);
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.mk-select--block .mk-select__trigger { width: 100%; min-width: 0; }
+.mk-select--sm .mk-select__trigger { height: 30px; min-width: 0; padding: 0 7px 0 9px; font-size: var(--mk-fs-micro); }
+.mk-select__trigger:hover:not(:disabled) { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+.mk-select__trigger:focus-visible { outline: none; border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); }
+.mk-select__trigger:disabled { opacity: 0.5; cursor: not-allowed; }
+/* 校验失败：与 .mk-field--error 的输入框同色 */
+.mk-select--error .mk-select__trigger { border-color: var(--mk-red, #dc2626); }
+.mk-select__value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-select__value.is-empty { color: var(--mk-faint); }
+.mk-select__trigger > svg { flex: none; color: var(--mk-muted); transition: transform 0.15s ease; }
+.mk-select--open .mk-select__trigger > svg { transform: rotate(180deg); }
+.mk-select__menu { max-width: 360px; }
+/* 窄屏触控：触发器抬到 36px（mobile:spec 的 lt36 硬门禁），桌面仍保持 32/30px 行盒 */
+@media (max-width: 900px) {
+  .mk-select__trigger { height: 36px; }
+  .mk-select--sm .mk-select__trigger { height: 36px; }
+}
+/* 无选项占位行：不可点，弱化色 */
+.mk-select__empty { color: var(--mk-faint); cursor: default; }
+
+/* 浏览器自动填充：系统浅黄底会把设计系统的输入框底色撕开一个口子（admin 登录页此前
+   没有覆写，Chrome 记住的账号密码一填就是原生黄底）。用 inset 大阴影盖住底色、
+   文字色跟令牌走；暗色档换成 surface-2，避免在深色表单上出现一块白/黄。 */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--mk-surface) inset;
+  -webkit-text-fill-color: var(--mk-ink);
+  caret-color: var(--mk-ink);
+}
+html[data-theme='dark'] input:-webkit-autofill,
+html[data-theme='dark'] input:-webkit-autofill:hover,
+html[data-theme='dark'] input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--mk-surface-2) inset;
+  -webkit-text-fill-color: var(--mk-ink);
+  caret-color: var(--mk-ink);
+}
+
+/* 减少动效：本文件是全局加载的第三块样式，兜底与 main.css / mk-primitives.css 同口径 */
+@media (prefers-reduced-motion: reduce) {
+  .mk-select__trigger,
+  .mk-select__trigger > svg,
+  .mk-listbox-opt { transition-property: none; }
+}

@@ -33,6 +33,7 @@
       :id="menuId"
       ref="menuEl"
       class="mk-listbox-pop mk-pillselect__menu"
+      :style="popStyle"
       role="listbox"
       :aria-label="ariaLabel || label"
     >
@@ -94,6 +95,7 @@ const currentLabel = computed(
 
 const {
   open,
+  popStyle,
   activeIndex,
   rootEl,
   triggerEl,

@@ -49,26 +49,21 @@
             <label class="mk-field">
               <span class="mk-field__label">类型（core 侧） <em class="mk-field__req">*</em></span>
               <!-- enum 仅 core 侧可声明（编排侧无对应 valueType 写法），置灰防误选；存量 enum 编辑仍回显，由 formProblems 拦提交 -->
-              <select v-model="form.type" class="mk-input">
-                <option v-for="t in CORE_TYPES" :key="t" :value="t" :disabled="t === 'enum'">{{ t === 'enum' ? 'enum（仅 core 侧，编排无对应写法）' : t }}</option>
-              </select>
+              <!-- 2026-10-27 原生 select → MkSelect：MkSelect 无逐项 disabled，enum 只在已是当前值时出现
+                   （等价于原「置灰不可选」：一旦切走就不能再选回） -->
+              <MkSelect v-model="form.type" :options="coreTypeOptions" aria-label="类型（core 侧）" block />
               <span class="mk-field__hint" :class="typeHintCls">{{ typeHint }}</span>
             </label>
 
             <label class="mk-field">
               <span class="mk-field__label">字段角色 <em class="mk-field__req">*</em></span>
-              <select v-model="form.role" class="mk-input">
-                <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
-              </select>
+              <MkSelect v-model="form.role" :options="roleOptions" aria-label="字段角色" block />
               <span class="mk-field__hint">{{ roleHint }}</span>
             </label>
 
             <label class="mk-field">
               <span class="mk-field__label">可见性</span>
-              <select v-model="form.render" class="mk-input">
-                <option value="visible">可见（对外交付）</option>
-                <option value="hidden">隐藏（仅内部流转）</option>
-              </select>
+              <MkSelect v-model="form.render" :options="RENDER_OPTIONS" aria-label="可见性" block />
             </label>
 
             <label class="mk-field">
@@ -79,20 +74,12 @@
 
             <label class="mk-field">
               <span class="mk-field__label">可见性预设</span>
-              <select v-model="form.visibilityPreset" class="mk-input">
-                <option value="">默认（不声明）</option>
-                <option value="user-clarification">user-clarification</option>
-                <option value="agent-internal">agent-internal</option>
-              </select>
+              <MkSelect v-model="form.visibilityPreset" :options="VISIBILITY_PRESET_OPTIONS" aria-label="可见性预设" block />
             </label>
 
             <label class="mk-field">
               <span class="mk-field__label">锁定</span>
-              <select v-model="form.locked" class="mk-input">
-                <option value="">不锁定</option>
-                <option value="system">平台锁定（平台自动生成）</option>
-                <option value="structure">平台锁定（结构约束）</option>
-              </select>
+              <MkSelect v-model="form.locked" :options="LOCKED_OPTIONS" aria-label="锁定" block />
             </label>
 
             <label class="mk-field">
@@ -158,6 +145,7 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import { TERMS } from './terms'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 interface RoleMeta { id: string; label: string; hint: string }
 interface SyncCheck {
@@ -250,6 +238,32 @@ const form = ref({
   systemLocked: false,
   structureLocked: false
 })
+
+/* 2026-10-27 原生 select → MkSelect：选项文案与原 <option> 逐字一致。
+   MkSelect 没有逐项 disabled，enum 只在「当前值已是 enum」（编辑存量）时保留，
+   否则不出现——与原「置灰不可选」等价；提交守卫 formProblems 不变。 */
+const coreTypeOptions = computed(() =>
+  CORE_TYPES
+    .filter((t) => t !== 'enum' || form.value.type === 'enum')
+    .map((t) => ({ value: t, label: t === 'enum' ? 'enum（仅 core 侧，编排无对应写法）' : t }))
+)
+const RENDER_OPTIONS = [
+  { value: 'visible', label: '可见（对外交付）' },
+  { value: 'hidden', label: '隐藏（仅内部流转）' }
+]
+const VISIBILITY_PRESET_OPTIONS = [
+  { value: '', label: '默认（不声明）' },
+  { value: 'user-clarification', label: 'user-clarification' },
+  { value: 'agent-internal', label: 'agent-internal' }
+]
+const LOCKED_OPTIONS = [
+  { value: '', label: '不锁定' },
+  { value: 'system', label: '平台锁定（平台自动生成）' },
+  { value: 'structure', label: '平台锁定（结构约束）' }
+] as const
+const roleOptions = computed(() =>
+  props.roleMeta.map((m) => ({ value: m.id, label: `${m.label}（${m.id}）` }))
+)
 
 const saving = ref(false)
 const msg = ref('')

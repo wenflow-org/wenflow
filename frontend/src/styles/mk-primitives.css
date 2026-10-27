@@ -1105,99 +1105,8 @@ html[data-theme='dark'] .mk-pill__count { background: var(--mk-surface-3); }
 /* 展开时箭头翻转：闭合 ▾ / 展开 ▴，状态不必靠弹层本身提示 */
 .mk-pillselect--open .mk-pillselect__pick > svg { transform: rotate(180deg); }
 
-/* 自绘 listbox 弹层（MkPillSelect / MkSelect 共用）：
-   与 MkCols 菜单同参数（surface / line / shadow-pop / radius-xl / --mk-z-menu），
-   页面上所有浮层才像同一套组件。宽度随触发器（min-width: 100%），具体上限由
-   各原语覆盖（胶囊 320 / 表单框 360）。 */
-.mk-listbox-pop {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 4px);
-  z-index: var(--mk-z-menu);
-  min-width: 100%;
-  max-height: 320px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 4px;
-  list-style: none;
-  background: var(--mk-surface);
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  box-shadow: var(--mk-shadow-pop);
-}
-.mk-listbox-opt {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: var(--mk-radius-sm);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-}
-/* hover 与实际键盘焦点行（activeIndex）同一视觉：鼠标进哪行、↑↓ 停哪行，都是这块浅底 */
-.mk-listbox-opt.is-active {
-  background: var(--mk-graph-flow-bg);
-  color: var(--mk-ink);
-}
-/* 选中行：主色粗体 + 右侧勾。不靠底色区分——hover 也会给底色，两个通道会打架 */
-.mk-listbox-opt.is-selected { color: var(--mk-blue); font-weight: 700; }
-.mk-listbox-opt.is-selected > svg { flex: none; color: var(--mk-blue); }
-.mk-listbox-opt__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-
-.mk-pillselect__menu { max-width: 320px; }
-/* 紧凑密度档：与 .mk-pill 同档收窄（内衬与字号一起收，不单独缩值） */
 html[data-density='compact'] .mk-pillselect { padding: 2px 7px 2px 10px; }
 html[data-density='compact'] .mk-pillselect__txt { font-size: 12px; }
-
-/* ----- 表单/工具栏单选下拉（.mk-select，2026-10-27 自绘）-----
-   原生 <select> 的替代品：闭合态是设计系统的描边框，展开后与 MkPillSelect 共用
-   `.mk-listbox-pop`。三种形态：默认 32px 工具条、`--sm` 30px 紧凑位、`--block` 表单撑满。
-   为什么另起一个原语而不复用胶囊：工具条里的维度筛选是「胶囊语言」，表单字段是
-   「输入框语言」，同一控件形态混用会让两种语境都读错。 */
-.mk-select { position: relative; display: inline-flex; min-width: 0; vertical-align: middle; }
-.mk-select--block { display: flex; width: 100%; }
-.mk-select__trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  height: 32px;
-  min-width: 104px;
-  max-width: 100%;
-  /* 右内衬 8px：箭头不再需要给原生 select 的 1.75em 留位 */
-  padding: 0 8px 0 11px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface);
-  color: var(--mk-ink);
-  font: inherit;
-  font-size: var(--mk-fs-body);
-  line-height: 1.4;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.12s ease, color 0.12s ease;
-}
-.mk-select--block .mk-select__trigger { width: 100%; min-width: 0; }
-.mk-select--sm .mk-select__trigger { height: 30px; min-width: 0; padding: 0 7px 0 9px; font-size: var(--mk-fs-micro); }
-.mk-select__trigger:hover:not(:disabled) { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
-.mk-select__trigger:focus-visible { outline: none; border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); }
-.mk-select__trigger:disabled { opacity: 0.5; cursor: not-allowed; }
-.mk-select__value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mk-select__value.is-empty { color: var(--mk-faint); }
-.mk-select__trigger > svg { flex: none; color: var(--mk-muted); transition: transform 0.15s ease; }
-.mk-select--open .mk-select__trigger > svg { transform: rotate(180deg); }
-.mk-select__menu { max-width: 360px; }
-/* 窄屏触控：触发器抬到 36px（mobile:spec 的 lt36 硬门禁），桌面仍保持 32/30px 行盒 */
-@media (max-width: 900px) {
-  .mk-select__trigger { height: 36px; }
-  .mk-select--sm .mk-select__trigger { height: 36px; }
-}
-/* 无选项占位行：不可点，弱化色 */
-.mk-select__empty { color: var(--mk-faint); cursor: default; }
 
 /* 卡头次级动作触发器（「筛选」弹层的按钮，2026-10-26 提升为共享）：
    与「列」同为文字链 + 图标 —— 卡头右组是一排次级工具，同档才成组；
@@ -1645,24 +1554,6 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-field--error .mk-filter__input,
 .mk-field--error .mk-filter__select { border-color: var(--mk-red, #dc2626); }
 .mk-field__err { font-size: var(--mk-fs-micro); color: var(--mk-red, #dc2626); font-weight: 600; }
-
-/* 浏览器自动填充：系统浅黄底会把设计系统的输入框底色撕开一个口子（admin 登录页此前
-   没有覆写，Chrome 记住的账号密码一填就是原生黄底）。用 inset 大阴影盖住底色、
-   文字色跟令牌走；暗色档换成 surface-2，避免在深色表单上出现一块白/黄。 */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 1000px var(--mk-surface) inset;
-  -webkit-text-fill-color: var(--mk-ink);
-  caret-color: var(--mk-ink);
-}
-html[data-theme='dark'] input:-webkit-autofill,
-html[data-theme='dark'] input:-webkit-autofill:hover,
-html[data-theme='dark'] input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 1000px var(--mk-surface-2) inset;
-  -webkit-text-fill-color: var(--mk-ink);
-  caret-color: var(--mk-ink);
-}
 
 /* 通用输入框（input/select/textarea 三合一）：FieldAddWizard 等 Teleport/子组件场景必须用全局类，
    页面级 scoped 输入类不作用于子组件内部元素（原 sdp-input 缺陷的替代方案） */

@@ -12,14 +12,14 @@
         <div class="vl-launch-row">
           <label class="mk-field vl-launch-row__story">
             <span class="mk-field__label">选择故事 <em class="mk-field__req">必填</em></span>
-            <select v-model="launchForm.storyId" class="mk-field__select" :disabled="launchStoriesLoading">
-              <option disabled value="">
-                {{ launchStoriesLoading ? '加载故事中…' : launchStories.length ? '请选择故事' : '暂无故事，请先在画像页生成' }}
-              </option>
-              <option v-for="st in launchStories" :key="st.id" :value="st.id">
-                {{ st.title }}{{ st.runCount ? ` · 已生成 ${st.pathCount} 条路径（已运行 ${st.runCount} 次）` : ' · 尚未运行' }}
-              </option>
-            </select>
+            <MkSelect
+              v-model="launchForm.storyId"
+              :options="launchStoryOptions"
+              :placeholder="launchStoryPlaceholder"
+              :disabled="launchStoriesLoading"
+              aria-label="选择故事"
+              block
+            />
           </label>
           <button
             type="button"
@@ -35,16 +35,21 @@
           <div class="vl-launch-more__body">
             <label class="mk-field">
               <span class="mk-field__label">运行模式</span>
-              <select v-model="launchForm.mode" class="mk-field__select">
-                <option value="assisted">辅助模拟</option>
-                <option value="blackbox">黑盒模拟</option>
-              </select>
+              <MkSelect
+                v-model="launchForm.mode"
+                :options="MODE_OPTIONS"
+                aria-label="运行模式"
+                block
+              />
             </label>
             <label class="mk-field">
               <span class="mk-field__label">学生对抗度</span>
-              <select v-model="launchForm.friction" class="mk-field__select">
-                <option v-for="o in FRICTION_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
+              <MkSelect
+                v-model="launchForm.friction"
+                :options="FRICTION_OPTIONS"
+                aria-label="学生对抗度"
+                block
+              />
             </label>
           </div>
         </details>
@@ -66,7 +71,13 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import { FRICTION_OPTIONS, type FrictionBudget } from './vlab'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import type { LaunchStory } from './virtualLearnersTypes'
+
+const MODE_OPTIONS = [
+  { value: 'assisted', label: '辅助模拟' },
+  { value: 'blackbox', label: '黑盒模拟' }
+] as const
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
 withDefaults(defineProps<{ render?: boolean }>(), { render: true })
@@ -90,6 +101,19 @@ const launchForm = ref({
 const launchBusy = ref(false)
 const launchStoriesLoading = ref(false)
 const launchStories = ref<LaunchStory[]>([])
+
+/** 故事下拉选项：标签沿用原 option 文案（已生成路径数 / 是否运行过） */
+const launchStoryOptions = computed(() =>
+  launchStories.value.map((st) => ({
+    value: st.id,
+    label: `${st.title}${st.runCount ? ` · 已生成 ${st.pathCount} 条路径（已运行 ${st.runCount} 次）` : ' · 尚未运行'}`
+  }))
+)
+/** 空值占位：加载中 / 待选 / 无故事三种状态（原 disabled option 的文案） */
+const launchStoryPlaceholder = computed(() => {
+  if (launchStoriesLoading.value) return '加载故事中…'
+  return launchStories.value.length ? '请选择故事' : '暂无故事，请先在画像页生成'
+})
 
 const launchPanelRef = ref<HTMLElement | null>(null)
 const launchMaskRef = ref<HTMLElement | null>(null)

@@ -32,18 +32,51 @@ export function useListbox<O>(
   const rootEl = ref<HTMLElement | null>(null)
   const triggerEl = ref<HTMLElement | null>(null)
   const menuEl = ref<HTMLElement | null>(null)
+  /** 触发器靠近视口底部时向上弹（分页器在页脚，向下展开会掉出视口） */
+  const openUp = ref(false)
+  /** fixed 定位坐标：弹层不受 modal/drawer/表格滚动容器的 overflow 裁剪 */
+  const popStyle = ref<Record<string, string>>({})
 
   function scrollActiveIntoView() {
     const item = menuEl.value?.children[activeIndex.value] as HTMLElement | undefined
     item?.scrollIntoView({ block: 'nearest' })
   }
 
+  /** 估算弹层高度：选项行 ≈29px + 内衬；实际展开后再用 scrollHeight 校正 */
+  function estimateMenuHeight(): number {
+    return Math.min(options().length * 29 + 12, 320)
+  }
+  function placeMenu() {
+    const el = triggerEl.value
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const below = window.innerHeight - rect.bottom
+    const measured = menuEl.value?.scrollHeight || estimateMenuHeight()
+    const up = below < measured + 8 && rect.top > below
+    openUp.value = up
+    /* 在弹窗/抽屉里时抬到覆盖层之上（--mk-z-modal + 10）；普通页面用卡片菜单层。
+       与 MkModelPicker 同一套 fixed 定位思路：祖先 overflow 不会裁掉浮层。 */
+    const inOverlay = !!el.closest('.mk-modal, .mk-drawer')
+    popStyle.value = {
+      left: `${Math.round(rect.left)}px`,
+      top: up ? 'auto' : `${Math.round(rect.bottom + 4)}px`,
+      bottom: up ? `${Math.round(window.innerHeight - rect.top + 4)}px` : 'auto',
+      minWidth: `${Math.round(rect.width)}px`,
+      zIndex: inOverlay ? 'calc(var(--mk-z-modal) + 10)' : 'var(--mk-z-menu)'
+    }
+  }
+
   function openMenu() {
     if (open.value) return
+    placeMenu()
     open.value = true
     const i = options().findIndex(isSelected)
     activeIndex.value = i >= 0 ? i : 0
-    void nextTick(scrollActiveIntoView)
+    void nextTick(() => {
+      /* 选项渲染后拿到真实高度再校正一次（长列表比估算高） */
+      placeMenu()
+      scrollActiveIntoView()
+    })
   }
   function closeMenu() {
     open.value = false
@@ -117,14 +150,46 @@ export function useListbox<O>(
 
   function onDocMousedown(e: MouseEvent) {
     if (!open.value) return
-    const root = rootEl.value
-    if (root && e.target instanceof Node && !root.contains(e.target)) closeMenu()
+    const target = e.target
+    if (!(target instanceof Node)) return
+    /* 弹层可能是独立定位层：根与菜单都要判「内部」 */
+    const inside = rootEl.value?.contains(target) || menuEl.value?.contains(target)
+    if (!inside) closeMenu()
   }
-  onMounted(() => document.addEventListener('mousedown', onDocMousedown, true))
-  onBeforeUnmount(() => document.removeEventListener('mousedown', onDocMousedown, true))
+
+  /* fixed 定位后滚动/缩放会让弹层脱离触发器：跟随重算，而不是让它悬在旧位置。
+     菜单自身滚动（长列表）不算页面滚动。 */
+  let raf = 0
+  function onDocScroll(e: Event) {
+    if (!open.value) return
+    const target = e.target
+    if (target instanceof Node && menuEl.value?.contains(target)) return
+    if (raf) return
+    raf = requestAnimationFrame(() => {
+      raf = 0
+      if (open.value) placeMenu()
+    })
+  }
+  function onWindowResize() {
+    if (open.value) placeMenu()
+  }
+
+  onMounted(() => {
+    document.addEventListener('mousedown', onDocMousedown, true)
+    document.addEventListener('scroll', onDocScroll, true)
+    window.addEventListener('resize', onWindowResize)
+  })
+  onBeforeUnmount(() => {
+    document.removeEventListener('mousedown', onDocMousedown, true)
+    document.removeEventListener('scroll', onDocScroll, true)
+    window.removeEventListener('resize', onWindowResize)
+    if (raf) cancelAnimationFrame(raf)
+  })
 
   return {
     open,
+    openUp,
+    popStyle,
     activeIndex,
     rootEl,
     triggerEl,

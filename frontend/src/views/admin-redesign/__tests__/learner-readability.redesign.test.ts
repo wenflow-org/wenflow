@@ -466,7 +466,8 @@ describe('UserAccountPane 账户信息卡头（状态与账户操作归位）', 
     expect(modal!.textContent).toContain('编辑用户 · 测试用户');
     // 角色下拉与密码重置字段都在
     expect(modal!.textContent).toContain('重置密码');
-    expect(modal!.querySelector('select')).toBeTruthy();
+    // 角色下拉已换 MkSelect（自绘 listbox）：断言触发器而非原生 select
+    expect(modal!.querySelector('.mk-select [role="combobox"]')).toBeTruthy();
     w.unmount();
     document.body.innerHTML = '';
   });

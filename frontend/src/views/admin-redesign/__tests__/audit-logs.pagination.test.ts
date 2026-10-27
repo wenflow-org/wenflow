@@ -355,7 +355,8 @@ describe('AuditLogs 动作快筛 + 负载美化（2026-10-05 重设计）', () =
     mockMixedActions();
     const w = await mountAudit();
     await nextTick();
-    const opts = w.findAll('ul.mk-pillselect__menu[aria-label="按动作筛选"] .mk-listbox-opt');
+    // 菜单在组件子树里（fixed 定位）；按 listbox 的 aria-label 定位当前维
+    const opts = w.findAll('ul.mk-listbox-pop[aria-label="按动作筛选"] .mk-listbox-opt');
     const restartValue = opts[2].attributes('data-value')!;
     await chooseFilter(w as never, '动作', opts[2].text().replace(/（\d+）$/, ''));
     await flushPromises();

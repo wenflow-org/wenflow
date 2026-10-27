@@ -157,20 +157,17 @@
           <div class="ac-mcp__formrow">
             <label class="mk-field">
               <span class="mk-field__label">连接方式</span>
-              <select v-model="toolForm.transport" class="mk-field__select">
-                <option value="http">HTTP 接口</option>
-                <option value="mcp">MCP 服务</option>
-              </select>
+              <MkSelect v-model="toolForm.transport" :options="TRANSPORT_OPTIONS" aria-label="连接方式" block />
             </label>
             <label class="mk-field">
               <span class="mk-field__label">类型</span>
-              <select v-model="toolForm.type" class="mk-field__select" :disabled="toolForm.transport === 'mcp'">
-                <option value="http">HTTP 接口</option>
-                <option value="code">代码执行</option>
-                <option value="search">搜索</option>
-                <option value="filesystem">文件系统</option>
-                <option value="image">生图</option>
-              </select>
+              <MkSelect
+                v-model="toolForm.type"
+                :options="TOOL_TYPE_OPTIONS"
+                aria-label="类型"
+                :disabled="toolForm.transport === 'mcp'"
+                block
+              />
             </label>
           </div>
           <label class="mk-field" :class="{ 'mk-field--error': toolErrors.endpoint }">
@@ -235,16 +232,16 @@
                             @click="removeFromOrder(channel.id, i)">✕</button>
                   </span>
                 </span>
-                <select
+                <!-- 2026-10-27 原生 select → MkSelect：触发器常驻「＋ 加入备用」，
+                     选中后由 setOrder 追加并保持 modelValue=''（原生 select 需手动复位已不需要） -->
+                <MkSelect
                   v-if="availableOf(channel.id).length"
-                  class="ac-prio__add"
+                  :model-value="''"
+                  :options="addOptionsOf(channel)"
                   :aria-label="`把 provider 加入${channel.label}备用`"
-                  :value="''"
+                  size="sm"
                   @change="onAddToOrder(channel.id, $event)"
-                >
-                  <option value="">＋ 加入备用</option>
-                  <option v-for="p in availableOf(channel.id)" :key="p.id" :value="p.id">{{ p.label }}</option>
-                </select>
+                />
               </div>
             </div>
             <!-- 字段只给链上的 provider（其余不参与调用，也不占版面） -->
@@ -305,6 +302,7 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import { toast } from '@/utils/toast'
 
 /* 独立页（2026-10-19）：原 embedded prop 与 count 上报是给「模型与接入」宿主页签用的，
@@ -529,6 +527,13 @@ const toolEditingId = ref('')
 const toolSaving = ref(false)
 const toolForm = ref({ id: '', name: '', transport: 'http', type: 'http', endpoint: '', description: '', enabled: true })
 const toolErrors = ref<{ id?: string; name?: string; endpoint?: string }>({})
+/* 2026-10-27 原生 select → MkSelect：文案与原 <option> 逐字一致；
+   类型选项从 MCP_TYPE_TEXT 派生，避免下拉与行内展示两套中文名。 */
+const TRANSPORT_OPTIONS = [
+  { value: 'http', label: 'HTTP 接口' },
+  { value: 'mcp', label: 'MCP 服务' }
+]
+const TOOL_TYPE_OPTIONS = Object.entries(MCP_TYPE_TEXT).map(([value, label]) => ({ value, label }))
 useEscape(() => toolOpen.value, () => { toolOpen.value = false })
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -638,6 +643,13 @@ function availableOf(channelId: string) {
   const used = new Set(orderOf(channelId))
   return (configTarget.value?.providers ?? []).filter((p) => !used.has(p.id))
 }
+/** 「加入备用」下拉的选项：首项是常驻占位，其余为该通道尚未上链的 provider */
+function addOptionsOf(channel: { id: string }) {
+  return [
+    { value: '', label: '＋ 加入备用' },
+    ...availableOf(channel.id).map((p) => ({ value: p.id, label: p.label }))
+  ]
+}
 function providerConfiguredOf(providerId: string): boolean {
   return configTarget.value?.providers.find((p) => p.id === providerId)?.configured ?? false
 }
@@ -657,10 +669,9 @@ function removeFromOrder(channelId: string, index: number) {
   if (list.length <= 1) return
   setOrder(channelId, list.filter((_, i) => i !== index))
 }
-function onAddToOrder(channelId: string, event: Event) {
-  const select = event.target as HTMLSelectElement
-  const id = select.value
-  select.value = ''
+/** 加入备用链（2026-10-27 原生 select → MkSelect）：change 直接给选中值，
+    触发器保持 modelValue=''，不再需要把原生 select 手动复位成 ''。 */
+function onAddToOrder(channelId: string, id: string) {
   if (!id) return
   setOrder(channelId, [...orderOf(channelId), id])
 }
@@ -977,17 +988,8 @@ function goLogs(skillId: string) {
 }
 .ac-prio__op:hover:not(:disabled) { background: var(--mk-hover-surface); color: var(--mk-ink); }
 .ac-prio__op:disabled { opacity: 0.35; cursor: default; }
-.ac-prio__add {
-  border: 1px dashed var(--mk-line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--mk-muted);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  padding: 4px 10px;
-  cursor: pointer;
-}
-.ac-prio__add:hover { color: var(--mk-blue); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+/* 「加入备用」下拉的视觉由 MkSelect 承担（2026-10-27 原生 select → MkSelect）：
+   原 .ac-prio__add 的虚线胶囊壳不再需要，触发器的描边/圆角/字号统一走共享原语。 */
 /* provider 段：白面 + 发丝线分隔（不再用灰底卡片堆叠），字段两列避免占位符被压断 */
 .ac-config-provider {
   margin-top: 0;

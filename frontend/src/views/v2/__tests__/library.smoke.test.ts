@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
+import { chooseMkSelect, mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 import V2Library from '../V2Library.vue';
 
 const mockLibrary = vi.fn();
@@ -182,22 +183,21 @@ describe('V2Library', () => {
     const w = mount(V2Library, { global: mountGlobal });
     await flushPromises();
 
-    const usageSelect = () => w.find('select[aria-label="使用状态筛选"]');
-    await usageSelect().setValue('used');
+    await chooseMkSelect(w, '使用状态筛选', 'used');
     expect(w.text()).toContain('公司合规手册.md');
     expect(w.text()).not.toContain('未引用资料.md');
 
-    await usageSelect().setValue('unused');
+    await chooseMkSelect(w, '使用状态筛选', 'unused');
     expect(w.text()).toContain('未引用资料.md');
     expect(w.text()).not.toContain('公司合规手册.md');
 
-    await usageSelect().setValue('used');
+    await chooseMkSelect(w, '使用状态筛选', 'used');
     await w.find('input[type="search"]').setValue('不存在的关键词');
     expect(w.text()).toContain('没有匹配的资料');
 
     await w.findAll('button').find((button) => button.text().includes('清空筛选'))!.trigger('click');
     expect(w.text()).toContain('公司合规手册.md');
     expect(w.text()).toContain('未引用资料.md');
-    expect((usageSelect().element as HTMLSelectElement).value).toBe('all');
+    expect(mkSelectValue(w, '使用状态筛选')).toBe('all');
   });
 });

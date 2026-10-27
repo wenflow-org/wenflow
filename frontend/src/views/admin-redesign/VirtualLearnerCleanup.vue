@@ -17,13 +17,13 @@
         <div class="vl-cleanup-criteria">
           <label class="vl-cleanup-field">
             <span>保留最近</span>
-            <select v-model.number="state.keepDays" :disabled="state.busy">
-              <option :value="1">1 天</option>
-              <option :value="3">3 天</option>
-              <option :value="7">7 天</option>
-              <option :value="14">14 天</option>
-              <option :value="30">30 天</option>
-            </select>
+            <MkSelect
+              v-model="state.keepDays"
+              :options="KEEP_DAY_OPTIONS"
+              :disabled="state.busy"
+              aria-label="保留最近"
+              block
+            />
           </label>
           <label class="vl-cleanup-field vl-cleanup-field--grow">
             <span>保留名单（每行一个画像标签）</span>
@@ -78,7 +78,17 @@ import { toast } from '@/utils/toast'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import type { VirtualLearnerRow as Sample } from './virtualLearnersTypes'
+
+/** 保留期档位（天）：建号在此窗口内的账号一律不动 */
+const KEEP_DAY_OPTIONS = [
+  { value: 1, label: '1 天' },
+  { value: 3, label: '3 天' },
+  { value: 7, label: '7 天' },
+  { value: 14, label: '14 天' },
+  { value: 30, label: '30 天' }
+]
 
 const props = withDefaults(defineProps<{
   /** 全量行数据（liveVirtuals 映射后；判定建号时间与 tags 都在行里） */
@@ -214,7 +224,6 @@ defineExpose({ open, state })
   color: var(--mk-muted, #5b6577);
 }
 .vl-cleanup-field--grow { flex: 1 1 240px; }
-.vl-cleanup-field select,
 .vl-cleanup-field textarea {
   font-size: var(--mk-fs-micro);
   color: var(--mk-ink);

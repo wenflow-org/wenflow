@@ -65,11 +65,12 @@
 
           <label class="mk-field">
             <span class="mk-field__label">系统提示词</span>
-            <select v-model="form.supportsSystemRole" class="mk-field__input">
-              <option value="auto">自动（按端点来源）</option>
-              <option value="keep">保留 system 消息</option>
-              <option value="fold">合并进用户消息</option>
-            </select>
+            <MkSelect
+              v-model="form.supportsSystemRole"
+              :options="SUPPORTS_SYSTEM_ROLE_OPTIONS"
+              aria-label="系统提示词"
+              block
+            />
           </label>
 
           <label v-if="isCreate" class="mk-field mk-field--switch">
@@ -93,6 +94,7 @@
 import { computed, reactive, ref } from 'vue'
 import { adminModelProvidersApi } from '@/api/adminApi'
 import { errMsg } from './live'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 
@@ -123,6 +125,13 @@ const form = reactive({
   /** auto = 未声明（跟随端点来源）；keep/fold = 显式声明 */
   supportsSystemRole: 'auto' as 'auto' | 'keep' | 'fold'
 })
+
+/* 系统提示词三态：文案与旧原生 select 逐字一致 */
+const SUPPORTS_SYSTEM_ROLE_OPTIONS: Array<{ value: 'auto' | 'keep' | 'fold'; label: string }> = [
+  { value: 'auto', label: '自动（按端点来源）' },
+  { value: 'keep', label: '保留 system 消息' },
+  { value: 'fold', label: '合并进用户消息' }
+]
 
 const isPlatform = computed(() => !isCreate.value && provider.value?.id === 'platform')
 /** 平台通道停用是允许的（整团队改用自建网关时的正当操作），后端会拦住「全平台无路可走」那种 */

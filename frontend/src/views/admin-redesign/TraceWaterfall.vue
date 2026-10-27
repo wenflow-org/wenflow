@@ -56,11 +56,9 @@
           :aria-pressed="failuresOnly"
           @click="failuresOnly = !failuresOnly"
         >仅失败{{ errorTotal > 0 ? ` ${errorTotal}` : '' }}</button>
-        <select v-model="sortMode" class="wf-sort mono" aria-label="排序方式" title="按耗时排序">
-          <option value="time">默认（时间序）</option>
-          <option value="dur-desc">耗时 ↓</option>
-          <option value="dur-asc">耗时 ↑</option>
-        </select>
+        <span class="wf-sort" title="按耗时排序">
+          <MkSelect v-model="sortMode" :options="SORT_OPTIONS" aria-label="排序方式" mono />
+        </span>
       </span>
         <!-- 链路 ID 搜索属左组（全站卡头语法：快筛 chips → 搜索框） -->
         <input
@@ -86,16 +84,12 @@
           {{ locateLabel }}
         </button>
         <span class="wf-tracepick__count">{{ viewMode === 'session' ? `${sessionIds.length} 个会话` : `${traceIds.length} 条链路` }}</span>
-        <select v-if="viewMode === 'session'" class="wf-tracepick__select mono" v-model="activeSession" aria-label="选择会话">
-          <option v-for="s in sessionIds" :key="s" :value="s" :title="s">
-            {{ sessionLabel(s) }}
-          </option>
-        </select>
-        <select v-else class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
-          <option v-for="t in traceIds" :key="t" :value="t" :title="t">
-            {{ traceLabel(t) }}
-          </option>
-        </select>
+        <div v-if="viewMode === 'session'" class="wf-tracepick__select">
+          <MkSelect v-model="activeSession" :options="sessionOptions" aria-label="选择会话" mono block />
+        </div>
+        <div v-else class="wf-tracepick__select">
+          <MkSelect v-model="activeTrace" :options="traceOptions" aria-label="选择链路" mono block />
+        </div>
       </div>
     </div>
 
@@ -316,6 +310,7 @@ import { prettyPayload } from './payload-format'
 import { estimateTraceCostUsd, loadModelPrices, type PriceMap } from './traceCost'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 /* 估算成本的单价表（接入页登记的单价，进程内缓存一次）：概要卡按它逐 span 算金额。
    读不到就保持 null——此时成本格显「—」，title 说明是读不到还是没配。 */
@@ -346,7 +341,13 @@ const failuresOnly = computed({
     emit('update:failuresOnly', v)
   }
 })
-const sortMode = ref<'time' | 'dur-desc' | 'dur-asc'>('time')
+type SortMode = 'time' | 'dur-desc' | 'dur-asc'
+const SORT_OPTIONS: ReadonlyArray<{ value: SortMode; label: string }> = [
+  { value: 'time', label: '默认（时间序）' },
+  { value: 'dur-desc', label: '耗时 ↓' },
+  { value: 'dur-asc', label: '耗时 ↑' }
+]
+const sortMode = ref<SortMode>('time')
 
 /* W1：瀑布样本源 = 服务端可扩充集合（boot 快照 + 追加页 + 直达重查） */
 const baseSpans = computed<TraceSpan[]>(() => waterfallSpans.value ?? spans.value)
@@ -501,6 +502,9 @@ const traceIds = computed(() => {
   if (!q) return allTraceIds.value
   return allTraceIds.value.filter((t) => t.toLowerCase().includes(q))
 })
+/* MkSelect 选项表：label 仍是原来的 traceLabel/sessionLabel 文案（逐字不变），
+   完整 ID 保存在 value（触发器 data-value），不再借 option 的 title 承载。 */
+const traceOptions = computed(() => traceIds.value.map((t) => ({ value: t, label: traceLabel(t) })))
 /** 默认链路选择：span 数多 → 含失败 → 总耗时最长（避开探测型单 span 链路）。
  *  排序语义不变（V8 sort 稳定，键序 count ↓ / 含失败 ↓ / maxEnd ↓）；
  *  分数改读预聚合 traceAggMap——此前每次比较全量 filter 两次，O(t·log t·n)。 */
@@ -556,6 +560,7 @@ const sessionIds = computed(() => {
   }
   return [...order.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id)
 })
+const sessionOptions = computed(() => sessionIds.value.map((s) => ({ value: s, label: sessionLabel(s) })))
 function sessionOf(id: string) {
   /* 读预聚合 sessionAggMap（此前每次调用对 baseSpans 全量 filter/reduce） */
   const a = sessionAggMap.value.get(id)
@@ -928,16 +933,11 @@ const verdictText = computed(() => {
   align-items: center;
   gap: 6px;
 }
+/* 包裹层只做排布；描边/内衬/字号由 MkSelect 原语承担（2026-10-27 自绘下拉） */
 .wf-sort {
-  padding: 6px 8px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-ink);
-  outline: none;
+  display: inline-flex;
+  align-items: center;
 }
-.wf-sort:focus { border-color: var(--mk-blue); }
 
 /* 跳转目标不在当前加载样本内的提示条（琥珀色，与失败/漂移徽章同族） */
 .wf-notice {
@@ -1024,14 +1024,10 @@ const verdictText = computed(() => {
   outline: none;
 }
 .wf-tracepick__search:focus { border-color: var(--mk-blue); }
+/* 包裹层只限宽，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉） */
 .wf-tracepick__select {
   max-width: 320px;
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-ink);
+  min-width: 0;
 }
 
 .wf-ruler {
@@ -1280,7 +1276,7 @@ const verdictText = computed(() => {
 @media (min-width: 2000px) {
   .wf-tracepick__count { font-size: var(--mk-fs-micro); }
   .wf-tracepick__search { font-size: var(--mk-fs-micro); padding: 8px 12px; width: 150px; }
-  .wf-tracepick__select { font-size: var(--mk-fs-micro); padding: 8px 12px; max-width: 380px; }
+  .wf-tracepick__select { max-width: 380px; }
   .wf-ruler { grid-template-columns: 340px 1fr; padding: 10px 16px; }
   .wf-ruler__label { font-size: var(--mk-fs-micro); }
   .wf-row__main { grid-template-columns: 340px 1fr auto; }
@@ -1296,7 +1292,7 @@ const verdictText = computed(() => {
   /* zoom 1.15 档：字号沿用 2000px 档 */
   .wf-tracepick__count { font-size: var(--mk-fs-micro); }
   .wf-tracepick__search { font-size: var(--mk-fs-micro); padding: 10px 14px; width: 180px; }
-  .wf-tracepick__select { font-size: var(--mk-fs-micro); padding: 10px 14px; max-width: 460px; }
+  .wf-tracepick__select { max-width: 460px; }
   .wf-ruler { grid-template-columns: 400px 1fr; padding: 10px 16px; }
   .wf-ruler__label { font-size: var(--mk-fs-micro); }
   .wf-row__main { grid-template-columns: 400px 1fr auto; }
@@ -1317,7 +1313,7 @@ const verdictText = computed(() => {
   .wf-row__stage-id { font-size: var(--mk-fs-micro); }
   .wf-row__dur { font-size: var(--mk-fs-body); }
   .wf-tracepick__search { font-size: var(--mk-fs-body); padding: 12px 16px; width: 210px; }
-  .wf-tracepick__select { font-size: var(--mk-fs-body); padding: 12px 16px; max-width: 540px; }
+  .wf-tracepick__select { max-width: 540px; }
   .wf-detail-label { font-size: var(--mk-fs-body); }
   .wf-payload { font-size: var(--mk-fs-body); }
   .wf-verdict strong { font-size: var(--mk-fs-emphasis); }

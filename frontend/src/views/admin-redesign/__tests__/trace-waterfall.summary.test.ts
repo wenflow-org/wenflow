@@ -9,6 +9,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
+import { mkSelectOptions, mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 import type { TraceSpan } from '../store';
 
 const h = vi.hoisted(() => ({
@@ -180,11 +181,13 @@ describe('分组名与选择器标签（2026-10-14 第二批：英文分组 / �
       span({ id: 'b', ts: new Date('2026-10-14T09:22:31+08:00').getTime(), startMs: 7700, durationMs: 2000 })
     ]);
     await w.vm.$nextTick();
-    const opt = w.find('.wf-tracepick__select option');
-    const label = opt.text();
+    const opt = mkSelectOptions(w, '选择链路')[0];
+    const label = opt.textContent?.trim() ?? '';
     expect(label).toMatch(/\d{2}:\d{2}:\d{2}/);
     expect(label).toContain('2 span');
-    expect(opt.attributes('title')).toBe('tr-1');   // 完整链路 ID 落在 title（可复制核对）
+    // 完整链路 ID 仍是选项的值（自绘 listbox 用 data-value 承载，不再借 option title）
+    expect(opt.getAttribute('data-value')).toBe('tr-1');
+    expect(mkSelectValue(w, '选择链路')).toBe('tr-1');
     w.unmount();
   });
 

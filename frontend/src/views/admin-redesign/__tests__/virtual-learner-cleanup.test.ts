@@ -6,11 +6,12 @@
  * 注意：模态 Teleport 到 body，查询走 document.body（batch 测试同判例）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import VirtualLearnerCleanup from '../VirtualLearnerCleanup.vue';
 import Confirm from '../Confirm.vue';
 import { settleConfirm, confirmState } from '../useConfirm';
+import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -64,15 +65,18 @@ const samples = [
   mk({ id: 'no-date', name: '无建号', createdAt: '' })
 ];
 
-const mountWizard = (rows: typeof samples = samples) => mount(VirtualLearnerCleanup, { props: { samples: rows } });
+const mountWizard = (rows: typeof samples = samples) => mount(VirtualLearnerCleanup, {
+  props: { samples: rows },
+  attachTo: document.body,
+  // Teleport 打平到组件内：既能在 body 里断言，也能用 MkSelect 助手按 aria-label 定位
+  global: { stubs: { teleport: true } }
+});
 const bodyText = () => document.body.textContent || '';
 const bodyButton = (match: (b: HTMLButtonElement) => boolean) =>
   Array.from(document.body.querySelectorAll('button')).find(match);
 
-async function setSelect(value: string) {
-  const el = document.body.querySelector('select') as HTMLSelectElement;
-  el.value = value;
-  el.dispatchEvent(new Event('change'));
+async function setSelect(w: VueWrapper, value: string) {
+  await chooseMkSelect(w as never, '保留最近', value);
   await nextTick();
   await flushPromises();
 }
@@ -111,7 +115,7 @@ describe('按创建时间清理向导 · 判定口径', () => {
     const w = mountWizard(fresh);
     (w.vm as unknown as { open: () => void }).open();
     await nextTick();
-    await setSelect('30');
+    await setSelect(w, '30');
     expect(bodyText()).toContain('没有符合条件的账号');
     const del = bodyButton((b) => b.classList.contains('mk-btn--danger')) as HTMLButtonElement;
     expect(del.disabled).toBe(true);

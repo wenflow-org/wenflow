@@ -43,19 +43,12 @@
 
         <label class="library__usage">
           <span>使用状态</span>
-          <select v-model="usageFilter" aria-label="使用状态筛选">
-            <option value="all">全部</option>
-            <option value="used">已用于路径</option>
-            <option value="unused">未用于路径</option>
-          </select>
+          <MkSelect v-model="usageFilter" :options="USAGE_OPTIONS" aria-label="使用状态筛选" />
         </label>
 
         <label class="library__sort">
           <span>排序</span>
-          <select v-model="sort" aria-label="资料排序">
-            <option value="recent">最近上传</option>
-            <option value="name">名称</option>
-          </select>
+          <MkSelect v-model="sort" :options="SORT_OPTIONS" aria-label="资料排序" />
         </label>
       </div>
 
@@ -177,6 +170,7 @@ import { Eye, Search, Trash2, Upload, X } from 'lucide-vue-next';
 import V2Nav from './V2Nav.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
+import MkSelect from '@/components/mk/MkSelect.vue';
 import { useEscape } from '@/views/admin-redesign/useEscape';
 import { onTabRowKeydown } from '@/utils/rovingTablist';
 import {
@@ -192,6 +186,17 @@ import { toast } from '@/utils/toast';
 type FilterKey = 'all' | 'upload' | 'web';
 type SortKey = 'recent' | 'name';
 type UsageFilterKey = 'all' | 'used' | 'unused';
+
+/* 下拉选项（2026-10-27 原生 select → MkSelect 自绘弹层），文案与原 option 逐字一致 */
+const SORT_OPTIONS: ReadonlyArray<{ value: SortKey; label: string }> = [
+  { value: 'recent', label: '最近上传' },
+  { value: 'name', label: '名称' }
+];
+const USAGE_OPTIONS: ReadonlyArray<{ value: UsageFilterKey; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'used', label: '已用于路径' },
+  { value: 'unused', label: '未用于路径' }
+];
 
 const ACCEPT = '.pdf,.docx,.pptx,.xlsx,.txt,.md,.markdown,.csv';
 const PREVIEW_LIMIT = 60_000;
@@ -595,18 +600,6 @@ onMounted(load);
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: var(--mk-fs-micro);
-}
-
-.library__sort select,
-.library__usage select {
-  min-height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
   font-size: var(--mk-fs-micro);
 }
 

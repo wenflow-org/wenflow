@@ -11,6 +11,7 @@ import ApiConfig from '../ApiConfig.vue';
 import { dataSource } from '../store';
 import { liveApiConfig, pickChatTestModel } from '../live';
 import { confirmState, settleConfirm } from '../useConfirm';
+import { chooseMkSelect, mkSelectLabels, mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 
 const { getConfigMock, getReliabilityMock, updateReliabilityMock, getModelRegistryMock, getModelProvidersMock, getInfraModelsMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
@@ -277,10 +278,9 @@ describe('ApiConfig P1 修复批', () => {
   it('输出格式随生成参数保存与回显', async () => {
     const wrapper = await mountApiConfig();
     await gotoPlatformTab(wrapper, '生成参数');
-    const formatSelect = wrapper.findAll('select').find((el) =>
-      Array.from(el.findAll('option')).some((o) => o.text().includes('JSON 对象')),
-    )!;
-    await formatSelect.setValue('json_object');
+    // 2026-10-27 原生 select → MkSelect：闭合态无 option，按 aria-label 展开后点选
+    await chooseMkSelect(wrapper as never, '输出格式', 'json_object');
+    expect(mkSelectValue(wrapper as never, '输出格式')).toBe('json_object');
     await nextTick();
     const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存生成参数');
     expect(saveBtn, '改输出格式后应出现「保存生成参数」').toBeTruthy();
@@ -339,11 +339,8 @@ describe('ApiConfig P1 修复批', () => {
 
     // 再改生成参数 → 两组脏，底部条恒出并列出两组
     await gotoPlatformTab(wrapper, '生成参数');
-    const formatSelect = wrapper.findAll('select').find((el) =>
-      Array.from(el.findAll('option')).some((o) => o.text().includes('JSON 对象')),
-    );
-    expect(formatSelect, '生成参数页签应有「输出格式」下拉').toBeTruthy();
-    await formatSelect!.setValue('json_object');
+    expect(wrapper.find('.ac-cols__side .mk-select').exists(), '生成参数页签应有「输出格式」下拉').toBe(true);
+    await chooseMkSelect(wrapper as never, '输出格式', 'json_object');
     await nextTick();
     expect(wrapper.find('.ac-save').text()).toContain('连接 + 生成参数 · 2 组未保存变更');
     expect(wrapper.text()).toContain('保存生成参数');
@@ -486,8 +483,8 @@ describe('ApiConfig P1 修复批', () => {
     liveApiConfig.value = savedCfg;
     const saved = await mountApiConfig();
     await openPlatformSettings(saved);
-    expect((saved.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(false);
-    expect(saved.findAll('.ac-test__model select option').map((o) => o.text())).toEqual(['model-a', 'model-b']);
+    expect((saved.find('.ac-test__model .mk-select__trigger').element as HTMLButtonElement).disabled).toBe(false);
+    expect(mkSelectLabels(saved as never, '测试模型')).toEqual(['model-a', 'model-b']);
     expect(saved.text()).not.toContain('本次拉取未保存');
     saved.unmount();
 
@@ -507,7 +504,7 @@ describe('ApiConfig P1 修复批', () => {
 
     const wrapper = await mountApiConfig();
     await openPlatformSettings(wrapper);
-    expect((wrapper.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(true);
+    expect((wrapper.find('.ac-test__model .mk-select__trigger').element as HTMLButtonElement).disabled).toBe(true);
 
     const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('连接并拉取'))!;
     await fetchBtn.trigger('click');
@@ -518,7 +515,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.ac-models__line').text()).toContain('已拉取 2 个');
     expect(wrapper.find('.ac-models-meta').text()).toContain('未保存');
     // 拉取后下拉立即可用（本页内联动不回归）
-    expect((wrapper.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(false);
+    expect((wrapper.find('.ac-test__model .mk-select__trigger').element as HTMLButtonElement).disabled).toBe(false);
 
     const saveBtn = wrapper.find('.ac-sec__save');
     expect(saveBtn.text()).toBe('保存连接');
@@ -556,10 +553,9 @@ describe('ApiConfig P1 修复批', () => {
     };
     const wrapper = await mountApiConfig();
     await openPlatformSettings(wrapper);
-    const select = wrapper.find('.ac-test__model select').element as HTMLSelectElement;
-    expect(select.value).toBe('deepseek-v4.1-flash');
+    expect(mkSelectValue(wrapper as never, '测试模型')).toBe('deepseek-v4.1-flash');
     // D7（2026-10-22 拍板 B）：非对话模型保留在下拉里，但必须自带「不适用」标注。
-    const optionTexts = Array.from(select.options).map((o) => o.textContent || '');
+    const optionTexts = mkSelectLabels(wrapper as never, '测试模型');
     expect(optionTexts).toContain('BAAI/bge-large-en-v1.5（向量模型 · chat 测试不适用）');
     expect(optionTexts).toContain('Qwen3-Reranker-0.6B（重排模型 · chat 测试不适用）');
     expect(optionTexts).toContain('deepseek-v4.1-flash');
@@ -583,8 +579,7 @@ describe('ApiConfig P1 修复批', () => {
     };
     const wrapper = await mountApiConfig();
     await openPlatformSettings(wrapper);
-    const select = wrapper.find('.ac-test__model select').element as HTMLSelectElement;
-    expect(select.value).toBe('agnes-3.0-flash');
+    expect(mkSelectValue(wrapper as never, '测试模型')).toBe('agnes-3.0-flash');
     wrapper.unmount();
   });
 
@@ -646,8 +641,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(confirmState.open).toBe(false);
 
     // 改动默认思考 → 出现分段保存入口
-    const thinkingSelect = wrapper.findAll('.ac-think select')[0];
-    await thinkingSelect.setValue('enabled');
+    await chooseMkSelect(wrapper as never, '思考模式', 'enabled');
     await nextTick();
     const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存生成参数');
     expect(saveBtn, '改生成参数后应出现「保存生成参数」').toBeTruthy();
@@ -663,7 +657,7 @@ describe('ApiConfig P1 修复批', () => {
     await flushPromises();
     expect(confirmState.open, '保存在途时不应弹「丢弃未保存的配置修改」').toBe(false);
     // 回显不覆盖正在保存的表单值
-    expect((wrapper.findAll('.ac-think select')[0].element as HTMLSelectElement).value).toBe('enabled');
+    expect(mkSelectValue(wrapper as never, '思考模式')).toBe('enabled');
 
     release({ data: { data: {} } });
     await flushPromises();

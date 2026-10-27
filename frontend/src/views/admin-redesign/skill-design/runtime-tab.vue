@@ -85,20 +85,23 @@
               <div class="sdp-form__grid">
                 <label class="sdp-field">
                   <span>思考模式</span>
-                  <select v-model="rtForm.thinkingMode" class="mk-input" :disabled="!rtForm.enabled">
-                    <option value="default">{{ INHERIT_DEFAULT_LABEL }}</option>
-                    <option value="enabled">开启</option>
-                    <option value="disabled">关闭</option>
-                  </select>
+                  <MkSelect
+                    v-model="rtForm.thinkingMode"
+                    :options="THINKING_MODE_OPTIONS"
+                    aria-label="思考模式"
+                    block
+                    :disabled="!rtForm.enabled"
+                  />
                 </label>
                 <label class="sdp-field">
                   <span>思考强度</span>
-                  <select v-model="rtForm.reasoningEffort" class="mk-input" :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'">
-                    <option value="default">{{ INHERIT_DEFAULT_LABEL }}</option>
-                    <option value="low">low</option>
-                    <option value="high">high</option>
-                    <option value="max">max</option>
-                  </select>
+                  <MkSelect
+                    v-model="rtForm.reasoningEffort"
+                    :options="REASONING_EFFORT_OPTIONS"
+                    aria-label="推理强度"
+                    block
+                    :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'"
+                  />
                 </label>
               </div>
               <!-- 能力冲突提示（2026-10-24）：模型支不支持思考/强度由注册表声明，网关按能力裁剪；
@@ -112,34 +115,46 @@
               <div class="sdp-params">
                 <div class="sdp-param">
                   <span class="sdp-param__label">temperature<span class="sdp-param__range">0–2</span></span>
-                  <select v-model="paramT.mode" class="mk-input" :disabled="!rtForm.enabled">
-                    <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
-                    <option value="override">覆盖</option>
-                  </select>
+                  <MkSelect
+                    v-model="paramT.mode"
+                    :options="PARAM_MODE_OPTIONS"
+                    aria-label="temperature 参数生效方式"
+                    block
+                    :disabled="!rtForm.enabled"
+                  />
                   <input v-if="paramT.mode === 'override'" v-model.number="paramT.value" type="number" min="0" max="2" step="0.1" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="temperature 覆盖值" />
                 </div>
                 <div class="sdp-param">
                   <span class="sdp-param__label">topP<span class="sdp-param__range">0–1</span></span>
-                  <select v-model="paramTopP.mode" class="mk-input" :disabled="!rtForm.enabled">
-                    <option value="inherit" title="Prompt 未声明该字段时不发送">{{ INHERIT_PROMPT_LABEL }}</option>
-                    <option value="override">覆盖</option>
-                  </select>
+                  <MkSelect
+                    v-model="paramTopP.mode"
+                    :options="PARAM_MODE_OPTIONS"
+                    aria-label="topP 参数生效方式"
+                    block
+                    :disabled="!rtForm.enabled"
+                  />
                   <input v-if="paramTopP.mode === 'override'" v-model.number="paramTopP.value" type="number" min="0.01" max="1" step="0.05" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="topP 覆盖值" />
                 </div>
                 <div class="sdp-param">
                   <span class="sdp-param__label">maxTokens<span class="sdp-param__range">256–131072</span></span>
-                  <select v-model="paramMax.mode" class="mk-input" :disabled="!rtForm.enabled">
-                    <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
-                    <option value="override">覆盖</option>
-                  </select>
+                  <MkSelect
+                    v-model="paramMax.mode"
+                    :options="PARAM_MODE_OPTIONS"
+                    aria-label="maxTokens 参数生效方式"
+                    block
+                    :disabled="!rtForm.enabled"
+                  />
                   <input v-if="paramMax.mode === 'override'" v-model.number="paramMax.value" type="number" min="256" max="131072" step="1000" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="maxTokens 覆盖值" />
                 </div>
                 <div class="sdp-param">
                   <span class="sdp-param__label">maxAttempts<span class="sdp-param__range">1–5</span></span>
-                  <select v-model="paramAttempts.mode" class="mk-input" :disabled="!rtForm.enabled">
-                    <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
-                    <option value="override">覆盖</option>
-                  </select>
+                  <MkSelect
+                    v-model="paramAttempts.mode"
+                    :options="PARAM_MODE_OPTIONS"
+                    aria-label="maxAttempts 参数生效方式"
+                    block
+                    :disabled="!rtForm.enabled"
+                  />
                   <input v-if="paramAttempts.mode === 'override'" v-model.number="paramAttempts.value" type="number" min="1" max="5" step="1" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="maxAttempts 覆盖值" />
                 </div>
               </div>
@@ -158,11 +173,12 @@
                 <div class="sdp-field">
                   <span>逻辑重试<em>平台默认 {{ platformLogicalRetries }} 次，可单独设置</em></span>
                   <div class="sdp-param__ctl">
-                    <select v-model="logicalRetryMode" class="mk-input">
-                      <option value="inherit">用平台默认</option>
-                      <option value="disabled">禁用</option>
-                      <option value="custom" :disabled="platformLogicalRetries <= 0">自定义</option>
-                    </select>
+                    <MkSelect
+                      v-model="logicalRetryMode"
+                      :options="logicalRetryOptions"
+                      aria-label="逻辑重试"
+                      block
+                    />
                     <input v-if="logicalRetryMode === 'custom'" v-model.number="customLogicalRetries" type="number" :min="1" :max="platformLogicalRetries" step="1" class="mk-input mono" aria-label="最大逻辑重试次数" />
                   </div>
                 </div>
@@ -206,20 +222,22 @@
                   <div class="sdp-form__grid">
                     <label class="sdp-field">
                       <span>思考模式</span>
-                      <select v-model="probeForm.thinkingMode" class="mk-input">
-                        <option value="default">跟随配置（{{ thinkingLabel }}）</option>
-                        <option value="enabled">开启</option>
-                        <option value="disabled">关闭</option>
-                      </select>
+                      <MkSelect
+                        v-model="probeForm.thinkingMode"
+                        :options="probeThinkingModeOptions"
+                        aria-label="模型测试思考模式"
+                        block
+                      />
                     </label>
                     <label class="sdp-field">
                       <span>思考强度</span>
-                      <select v-model="probeForm.reasoningEffort" class="mk-input" :disabled="probeForm.thinkingMode === 'disabled'">
-                        <option value="default">跟随配置（{{ cfgEffortLabel }}）</option>
-                        <option value="low">low</option>
-                        <option value="high">high</option>
-                        <option value="max">max</option>
-                      </select>
+                      <MkSelect
+                        v-model="probeForm.reasoningEffort"
+                        :options="probeReasoningEffortOptions"
+                        aria-label="模型测试推理强度"
+                        block
+                        :disabled="probeForm.thinkingMode === 'disabled'"
+                      />
                     </label>
                   </div>
                   <div class="sdp-test__act">
@@ -275,6 +293,7 @@ import { errText, fmtMs, callParamSourceLabel, thinkingCapabilityNotice, type Th
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 // 模型目录候选（File-as-Truth llm-providers.json）：模型与备用模型共用一个可选择器；
 // 加载失败静默降级为空目录（仍可按输入提交别名 / 注册表外 id，不影响保存）
@@ -287,6 +306,23 @@ loadModelCatalog()
    · 参数覆盖：不填 = 按 Prompt 文件声明取值（Prompt 优先于平台默认，是另一层） */
 const INHERIT_DEFAULT_LABEL = '按模型默认'
 const INHERIT_PROMPT_LABEL = '按 Prompt 声明'
+
+/* MkSelect 选项：值与原 <option> 的 value 一致，文案逐字保留 */
+const THINKING_MODE_OPTIONS = [
+  { value: 'default', label: INHERIT_DEFAULT_LABEL },
+  { value: 'enabled', label: '开启' },
+  { value: 'disabled', label: '关闭' }
+] as const
+const REASONING_EFFORT_OPTIONS = [
+  { value: 'default', label: INHERIT_DEFAULT_LABEL },
+  { value: 'low', label: 'low' },
+  { value: 'high', label: 'high' },
+  { value: 'max', label: 'max' }
+] as const
+const PARAM_MODE_OPTIONS = [
+  { value: 'inherit', label: INHERIT_PROMPT_LABEL },
+  { value: 'override', label: '覆盖' }
+] as const
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 /* #118：运行时配置的未保存改动上报宿主（此前只有协议编辑器有脏态，切 Skill/离开页面会静默丢弃） */
@@ -317,6 +353,15 @@ const dirtyNow = ref(false)
 const platformLogicalRetries = ref(1)
 const logicalRetryMode = ref<'inherit' | 'disabled' | 'custom'>('inherit')
 const customLogicalRetries = ref(1)
+/** 「自定义」在原 <option> 上按平台上限禁用；MkSelect 无逐项禁用，改为上限为 0 时不出该项
+ *  （已选 custom 时仍保留，避免回显空白）。 */
+const logicalRetryOptions = computed<Array<{ value: 'inherit' | 'disabled' | 'custom'; label: string }>>(() => [
+  { value: 'inherit', label: '用平台默认' },
+  { value: 'disabled', label: '禁用' },
+  ...(platformLogicalRetries.value > 0 || logicalRetryMode.value === 'custom'
+    ? [{ value: 'custom' as const, label: '自定义' }]
+    : [])
+])
 const generationParams = ref<{ model?: string | null; temperature?: number | null; topP?: number | null; maxTokens?: number | null; sources?: Record<string, string>; owner?: string } | null>(null)
 
 // ── 参数覆盖（paramOverrides）：每字段「继承 / 覆盖」三选 ──
@@ -402,6 +447,18 @@ const probeResult = ref<ProbeResult | null>(null)
 const cfgEffortLabel = computed(() =>
   rtForm.value.reasoningEffort === 'default' ? '按模型默认' : rtForm.value.reasoningEffort
 )
+/* 探测下拉首项带当前配置回显 → 动态选项 */
+const probeThinkingModeOptions = computed<Array<{ value: ProbeForm['thinkingMode']; label: string }>>(() => [
+  { value: 'default', label: `跟随配置（${thinkingLabel.value}）` },
+  { value: 'enabled', label: '开启' },
+  { value: 'disabled', label: '关闭' }
+])
+const probeReasoningEffortOptions = computed<Array<{ value: ProbeForm['reasoningEffort']; label: string }>>(() => [
+  { value: 'default', label: `跟随配置（${cfgEffortLabel.value}）` },
+  { value: 'low', label: 'low' },
+  { value: 'high', label: 'high' },
+  { value: 'max', label: 'max' }
+])
 
 function resetProbe() {
   probeRunning.value = false
