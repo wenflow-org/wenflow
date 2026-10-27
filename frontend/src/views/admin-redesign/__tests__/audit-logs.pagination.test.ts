@@ -204,7 +204,9 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(card('记录总数').text()).toContain('378');
     expect(card('失败记录').text()).toContain('7');
     expect(card('失败率').text()).toContain('2%');
-    expect(card('失败动作').text()).toContain('最多：user.delete 5');
+    expect(card('失败动作').find('.mk-kpi__num').text()).toBe('1');
+    // 2026-10-27 用户「不要这种说明文字」：KPI 只留 label + 数值，不写脚注
+    expect(w.findAll('.mk-kpi__hint')).toHaveLength(0);
     // 常驻失败胶囊退役：计数只在 KPI / 下拉选项里
     expect(w.find('.al-fails').exists()).toBe(false);
     await card('失败记录').trigger('click');

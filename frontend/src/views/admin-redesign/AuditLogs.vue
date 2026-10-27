@@ -19,15 +19,12 @@
       <MkKpi
         label="记录总数"
         :value="statsLoading ? '—' : total"
-        :hint="timeRange === 'all' ? '全部时间' : timeRangeLabels[timeRange]"
       />
       <MkKpi
         clickable
         label="失败记录"
         :value="statsLoading || statsError ? '—' : failedCount"
         :tone="failedCount && !statsError ? 'bad' : ''"
-        :hint="statsError ? '统计不可用' : failedOnly ? (failedAction ? '再点查看全部失败' : '再点恢复全部记录') : '点击只看失败'"
-        :hint-tone="statsError ? 'bad' : ''"
         :class="{ 'al-kpi--on': failedOnly }"
         :aria-pressed="failedOnly"
         @click="toggleFailureOnly"
@@ -36,14 +33,11 @@
         label="失败率"
         :value="statsLoading || statsError ? '—' : failedRate"
         :tone="failedCount && !statsError ? 'bad' : ''"
-        :hint="tab === 'login' ? '失败 / 登录记录' : '失败 / 记录总数'"
       />
       <MkKpi
         v-if="tab === 'operation'"
         label="失败动作"
         :value="statsLoading || statsError ? '—' : failureByAction.length"
-        :hint="failureKpiHint"
-        :hint-tone="failureByAction.length ? 'bad' : ''"
       />
     </section>
 
@@ -534,12 +528,6 @@ const statsLoading = ref(false)
 const failedRate = computed(() =>
   total.value > 0 ? `${Math.round((failedCount.value / total.value) * 100)}%` : '—'
 )
-const topFailure = computed(() => failureByAction.value[0])
-const failureKpiHint = computed(() => {
-  if (statsError.value) return '统计不可用'
-  if (!topFailure.value) return failedCount.value ? '暂无动作聚合' : '当前窗口没有失败'
-  return `最多：${failureLabel(topFailure.value.action)} ${topFailure.value.count}`
-})
 /** 失败动作下拉：空值的文案随失败域变化——在失败域里=「全部失败」，否则=「不过滤」 */
 const failureSelectOptions = computed(() => [
   { value: '', label: failedOnly.value ? '全部失败' : '不过滤' },
