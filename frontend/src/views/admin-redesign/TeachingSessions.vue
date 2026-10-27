@@ -126,7 +126,7 @@
           <MkLoading v-if="refreshing" inline text="加载中…" />
           <MkCols
             :col-defs="tsColDefs"
-            storage-key="wf_teaching_hidden_cols_v2"
+            storage-key="wf_teaching_hidden_cols_v3"
             :default-hidden="TS_DEFAULT_HIDDEN"
             v-model:hidden="tsHiddenCols"
           />
@@ -168,7 +168,7 @@
                 class="mk-th--sortable ts-c-status"
                 :aria-sort="tsSortState('status')"
                 @click="toggleTsSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态 / 进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!tsHiddenCols.has('mode')"
                 scope="col"
@@ -217,8 +217,8 @@
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('user')">
-                <!-- 用户格对齐全站判例（2026-10-08：六个同格页均 MkCellAvatar，本页是遗漏）：
-                     头像 + 主副行，同 Users.ul-user / GoalConversations.gc-user -->
+                <!-- 2026-10-27 用户「还是太多数据了」：用户格只留头像 + 姓名；
+                     邮箱 / 用户 ID 收进姓名的 title，不再每行各占一条副行。 -->
                 <div class="ts-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
                   <div class="mk-cell-main">
@@ -226,31 +226,19 @@
                     <button
                       type="button"
                       class="mk-user-link"
+                      :title="userMetaTitle(r)"
                       @click.stop="openLearner(r.userId)"
                       @keydown.enter.stop.prevent="openLearner(r.userId)"
                     >{{ r.userName }}</button>
-                    <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
-                    <!-- 副行去重（2026-10-24 视觉修复）：邮箱 local part 与姓名同值时跳过；
-                         主行已是纯 ID 时不再用 shortId 复读同一标识 -->
-                    <span v-if="emailSubline(r.email, r.userName) || (r.userId && !isIdentifierLike(r.userName)) || r.isTestAccount" class="mk-cell-subline">
-                      <span v-if="emailSubline(r.email, r.userName)" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
-                      <span v-else-if="r.userId && !isIdentifierLike(r.userName)" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
-                      <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test">测试</span>
-                    </span>
+                    <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test">测试</span>
                   </div>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('status')">
-                <div class="ts-status">
+                <!-- 2026-10-27 用户「还是太多数据了，为什么放那么多」：状态列只留一枚状态徽章。
+                     进度 x/y、低参与 / 手动结束等从属说明全部收进 title，行内不再复述。 -->
+                <div class="ts-status" :title="statusTitle(r)">
                   <span class="mk-badge ts-status__main" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
-                  <!-- 2026-10-27 用户「又是超时又是停在」：生命周期终态与任务位置并成一列后，
-                       位置只留 x/y 这个读数，「停在」三个字每行复读没有信息量；
-                       结果由左侧徽章承担，定位细节在 title（表头已写「状态 / 进度」）。 -->
-                  <span v-if="progressFractionText(r)" class="ts-prog" :title="progressTitle(r)">{{ progressFractionText(r) }}</span>
-                  <span v-else class="mk-na">—</span>
-                  <!-- 2026-10-27 用户「教学会话怎么这么多 pill」：低参与 / 手动结束是从属说明，
-                       不是独立状态档；合流成状态列第二行的弱化文本，不再各占一枚灰胶囊。 -->
-                  <span v-if="statusNote(r)" class="ts-status__note">{{ statusNote(r) }}</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('mode')">
@@ -279,26 +267,16 @@
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('output')">
-                <!-- 产物徽章（评审 §5）：「有总结」且 wrapupDegraded（summary-only / fallback 兜底来源）
-                     时文案改「降级总结」+ title 说明（2026-10-06 审核 #40）。
-                     建议徽章读运营口径（2026-10-22 用户走查「这个页面看的视角是运营者」）：
-                     后端 advisory.ui.* 是写给学习者的（「建议先确认路径调整」），运营要看的是
-                     处置状态 + 触发原因 + 影响范围，见 statusText.advisoryOps*。
-                     固定列宽后两枚徽章在窄档会超出本列：外层 flex-wrap 换行，不裁不挤邻列。 -->
-                <div class="ts-out">
+                <!-- 2026-10-27 用户「还是太多数据了」：总结格只留结论词。
+                     降级总结与「待确认调整」不再各占一枚行内标记，全部并入 title：
+                     运营视角的处置状态 + 触发原因 + 影响范围仍可在悬停时读到（statusText.advisoryOps*）。 -->
+                <div class="ts-out" :title="wrapupCellTitle(r)">
                   <!-- 2026-10-27 用户「总结那边还有四类，简化一下」：行内只留两档——
                        有总结（文字）/ 缺总结（徽章，含降级总结，与 KPI、筛选同一口径）；
-                       未生成是过程态，按空值占位；降级细节留在 title。 -->
+                       未生成是过程态，按空值占位；降级与建议细节留在 title。 -->
                   <span v-if="wrapupTier(r) === 'complete'" class="ts-out__text">有总结</span>
-                  <span v-else-if="wrapupTier(r) === 'missing'" class="mk-badge mk-badge--warn" :title="wrapupMissingTitle(r)">缺总结</span>
+                  <span v-else-if="wrapupTier(r) === 'missing'" class="mk-badge mk-badge--warn">缺总结</span>
                   <span v-else class="mk-na">—</span>
-                  <!-- 建议从属说明同样去掉胶囊：严重度只染图标与文字，不再铺色底。 -->
-                  <span
-                    v-if="r.hasAdvisory"
-                    class="ts-adv-note"
-                    :class="advisoryNoteTone(r.advisory)"
-                    :title="advisoryOpsTitle(r.advisory)"
-                  ><TriangleAlert :size="11" :stroke-width="2.2" aria-hidden="true" /><span class="ts-adv-note__txt">{{ advisoryOpsText(r.advisory) }}</span></span>
                 </div>
               </td>
               <td v-if="!isTableNarrow && !tsHiddenCols.has('attention')">
@@ -342,8 +320,8 @@ import { isDegradedWrapup } from './cockpitWrapup'
 import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
-import { timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched, shortId } from './live'
-import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, sessionModeText, advisoryOpsText, advisoryOpsTitle } from './statusText'
+import { timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched } from './live'
+import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, sessionModeText, advisoryOpsTitle } from './statusText'
 import type { SessionProgress, OpsAdvisoryLike } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -357,10 +335,9 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import { emailSubline, isIdentifierLike } from '@/components/mk/avatarName'
 import MkKpi from '@/components/mk/MkKpi.vue'
 
-import { X, TriangleAlert } from 'lucide-vue-next'
+import { X } from 'lucide-vue-next'
 import { toast } from '@/utils/toast'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
@@ -639,11 +616,11 @@ const wrapFilter = ref('')
    · 消息、知识点：条数读数与「时长 + 进度」重复，且「N 个」本身不可行动；
    · 关注：高/中/低三档在真实数据里近乎恒定，页头「需关注」KPI 与 chips 已承担分诊。
    四项都留在「列」菜单里可随时打开（升存储键 v2，旧本地配置不覆盖新默认）。 */
-const TS_DEFAULT_HIDDEN = ['track', 'messages', 'knowledge', 'attention'] as const
+const TS_DEFAULT_HIDDEN = ['mode', 'track', 'messages', 'knowledge', 'attention'] as const
 const tsColDefs = [
   { key: 'user', label: '用户' },
-  { key: 'status', label: '状态 / 进度' },
-  { key: 'mode', label: '课堂' },
+  { key: 'status', label: '状态' },
+  { key: 'mode', label: '课型' },
   { key: 'track', label: '完成方式' },
   { key: 'duration', label: '时长' },
   { key: 'messages', label: '消息' },
@@ -882,10 +859,17 @@ const wrapupTier = (r: Row): 'complete' | 'missing' | 'pending' =>
 /* 缺总结的悬停说明：降级总结并入同一档（与 KPI / 总结下拉同口径），区别只在 title。 */
 const wrapupMissingTitle = (r: Row): string =>
   r.wrapupDegraded ? '降级总结：生成走了兜底来源，内容不完整' : '缺总结：会话结束后没有生成总结'
+/* 总结格悬停：结论 + 降级/未生成说明 + 建议处置，行内只显示结论词。 */
+const wrapupCellTitle = (r: Row): string => {
+  const tier = wrapupTier(r)
+  const base =
+    tier === 'complete' ? '有总结' : tier === 'missing' ? wrapupMissingTitle(r) : '未生成：会话进行中，总结尚未到生成时机'
+  return r.hasAdvisory ? `${base} · ${advisoryOpsTitle(r.advisory)}` : base
+}
 const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
 
-/* 状态列从属说明（2026-10-27 用户「教学会话怎么这么多 pill」）：低参与 / 手动结束
-   描述的是「这次课怎么结束的」，不是独立状态档；合成一行弱化文本，避免每行堆两枚灰胶囊。 */
+/* 状态列从属说明（2026-10-27）：低参与 / 手动结束描述「这次课怎么结束的」，
+   不是独立状态档；2026-10-27 起连行内文本也不占，只进状态格的 title。 */
 const statusNote = (r: Row): string => {
   if (r.status !== 'completed') return ''
   const notes: string[] = []
@@ -894,11 +878,11 @@ const statusNote = (r: Row): string => {
   return notes.join(' · ')
 }
 
-/* 建议说明的严重度只染文字（与 advisoryOpsBadgeCls 同判据）：胶囊留给真正的状态档。 */
-const advisoryNoteTone = (a: OpsAdvisoryLike | null | undefined): string => {
-  if (a?.learnerResponse?.action === 'keep') return 'ts-adv-note--muted'
-  return a?.priority === 'high' ? 'ts-adv-note--bad' : a?.priority === 'medium' ? 'ts-adv-note--warn' : 'ts-adv-note--info'
-}
+/* 状态格悬停：结果由徽章承担，进度定位与结束方式在这里补全，行内不再复述。 */
+const statusTitle = (r: Row): string => [statusNote(r), progressTitle(r)].filter(Boolean).join(' · ')
+
+/* 用户格悬停：邮箱 / 用户 ID 只留一处可查，不再每行铺一条副行。 */
+const userMetaTitle = (r: Row): string | undefined => [r.email, r.userId].filter(Boolean).join(' · ') || undefined
 
 /* P3（设计评审 4.3-9）：异常态（失败/收尾失败/超时）会话列副行是后端降级模板句
    「本次会话未正常结束，为你保留了基础学习记录。」——与状态徽章同事实且首屏多行同文。
@@ -1017,21 +1001,11 @@ function interactTitle(r: Row): string | undefined {
   if (r.knowledgePointCount) parts.push(`${r.knowledgePointCount} 个知识点`)
   return parts.join(' · ')
 }
-/** 进度工具提示（人话）：阶段 n/m · 任务 x/y；无里程碑维度只给任务 */
 /** 进度工具提示（人话）：阶段 n/m · 第 x 个任务（共 y 个）。
  *  写成「第 x 个」而不是「任务 x/y」，是因为后端 taskIndex 是**位置**不是完成数——
  *  「任务 1/4」容易被读成「4 个里做完了 1 个」。 */
 function progressTitle(r: Row): string {
-  // 措辞单源在 statusText.sessionProgressTitle：taskIndex=0（结束时还没定位到具体任务）
-  // 不能 clamp 成「第 1 个」——同一行的可见文本写的是「0/4」，两处互相打脸
   return sessionProgressTitle(r.progress, { withMilestone: true })
-}
-/** 状态 / 进度合并列的位置读数（2026-10-27 用户「又是超时又是停在」）：只给 x/y，
-    结果（完成/中断/超时）由左侧徽章承担，定位细节在 title。 */
-function progressFractionText(r: Row): string {
-  const p = r.progress
-  if (!p || !Number.isFinite(p.totalTasks) || p.totalTasks <= 0) return ''
-  return `${Math.min(Math.max(p.taskIndex, 0), p.totalTasks)}/${p.totalTasks}`
 }
 
 /* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → refreshNow） */
@@ -1109,9 +1083,7 @@ defineExpose({ refreshNow })
 .ts-ia { display: grid; gap: 2px; justify-items: start; max-width: 100%; min-width: 0; overflow: hidden; }.ts-ia > * { min-width: 0; max-width: 100%; }/* 时长格：容器别再裁主值（2026-10-21 用户「时长被截断」：td 81px / 内容盒 49px /「27 分钟」53px，
    被 overflow:hidden 切掉 4px）。.ts-ia 的 min-width:0 + overflow:hidden 本是给副行省略号用的，
    主值只有 4~6 个字，让回 max-content，auto 布局才会按字宽给这列留位 */
-.ts-ia--dur { overflow: visible; }.ts-ia--dur > .ts-ia__dur { min-width: max-content; max-width: none; white-space: nowrap; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }/* 状态 / 进度合并列（2026-10-23）：位置短语只占一行原地文字，不再配迷你条；
-   结果由左侧徽章着色（完成绿 / 超时红 / 暂停琥珀），条与文字同说一件事。 */
-.ts-prog { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }/* 可点 KPI 的选中态（2026-10-27）：与同组 gc-/oc-/lc-/mr- 同一判例，蓝只给可交互与选中 */
+.ts-ia--dur { overflow: visible; }.ts-ia--dur > .ts-ia__dur { min-width: max-content; max-width: none; white-space: nowrap; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }/* 可点 KPI 的选中态（2026-10-27）：与同组 gc-/oc-/lc-/mr- 同一判例，蓝只给可交互与选中 */
 .ts-kpi--on { border-color: var(--mk-blue); }
 /* 分布带已退役（2026-10-17）：原页面级 .ts-distband 与类名一并下线，状态筛选在卡头下拉；
    页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 *//* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字）。
@@ -1119,17 +1091,13 @@ defineExpose({ refreshNow })
    隐藏后失配（状态列变第 2 个 td），切换状态筛选时列宽照样跳动——正是本规则要防的。
    该类挂在 td 内层 div 上（display:flex 不能挂 td，见上方 .ts-track 注释）。
    68px = 4 字 × micro 档 + 徽章内边距，容得下最长档。
-   只给主状态徽章（.ts-status__main）：从属说明（低参与 / 手动结束）2026-10-27 起合流成
-   第二行弱化文本（.ts-status__note），不再参与徽章定宽。 */
-.ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }.ts-status__note { flex: 1 0 100%; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.4; white-space: nowrap; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） */
-/* 课型去胶囊（2026-10-27）：分类值直接用正文文本，不为「正课」这类常态值着色。 */
+   2026-10-27 用户「还是太多数据了」：格内只留这一枚徽章，进度 / 结束方式全部进 title。 */
+.ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） */
+/* 课型去胶囊（2026-10-27）：分类值直接用正文文本，不为「正课」这类常态值着色；默认收起，列菜单可开。 */
 .ts-mode { white-space: nowrap; }
-/* 建议从属说明：图标 + 文字，严重度只染文字（不再铺色底，避免一行第二枚胶囊）。
-   截断落在内层文本节点（flex 项 overflow!=visible → min-width 归 0 可收缩）。 */
-/* 产物格：异常档徽章与常态文字在固定列宽内换行 */
+/* 产物格：结论词与异常徽章在固定列宽内换行；建议处置并入 title，不再占行内位置。 */
 .ts-out { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.ts-out__text { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
-.ts-adv-note { display: inline-flex; align-items: center; gap: 3px; min-width: 0; max-width: 96px; font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.4; }.ts-adv-note__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.ts-adv-note--bad { color: var(--mk-red); }.ts-adv-note--warn { color: var(--mk-amber); }.ts-adv-note--info { color: var(--mk-blue); }.ts-adv-note--muted { color: var(--mk-muted); }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
+.ts-out__text { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
 .ts-error { margin: 0 16px 10px; }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
    4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {

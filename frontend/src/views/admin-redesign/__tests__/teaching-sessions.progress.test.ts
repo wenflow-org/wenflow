@@ -62,7 +62,7 @@ async function mountLive() {
 }
 
 describe('TeachingSessions 低参与标注（拍板 #1：completed 且用户消息 <2 条，显示口径）', () => {
-  it('completed + messageCount<2 → 状态列备注含「低参与」；≥2 条不出', async () => {
+  it('completed + messageCount<2 → 状态格 title 含「低参与」；≥2 条不出', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -77,15 +77,18 @@ describe('TeachingSessions 低参与标注（拍板 #1：completed 且用户消�
     });
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
-    expect(rows[0].find('.ts-status').text()).toContain('低参与');
-    expect(rows[1].find('.ts-status').text()).not.toContain('低参与');
-    expect(rows[2].find('.ts-status').text()).not.toContain('低参与');
+    const title = (i: number) => rows[i].find('.ts-status').attributes('title') || '';
+    expect(title(0)).toContain('低参与');
+    expect(title(1)).not.toContain('低参与');
+    expect(title(2)).not.toContain('低参与');
+    // 行内只留状态徽章，不再铺备注文本
+    expect(rows[0].find('.ts-status').text()).toBe('已完成');
     wrapper.unmount();
   });
 });
 
 describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后区分「任务完成」与「用户结束」）', () => {
-  it('completed + manual-end → 「手动结束」备注；task-completed 与缺失不猜', async () => {
+  it('completed + manual-end → 状态格 title 含「手动结束」；task-completed 与缺失不猜', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -105,20 +108,17 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     });
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
-    expect(rows[0].find('.ts-status').text()).toContain('已完成');
-    expect(rows[0].find('.ts-status').text()).toContain('手动结束');
-    expect(rows[0].text()).toContain('1/4');
-    // 2026-10-27：从属说明不再带解释型 title，也不再说成用户动作
-    const note = rows[0].find('.ts-status .ts-status__note');
-    expect(note.text()).toBe('手动结束');
-    expect(note.attributes('title')).toBeUndefined();
-    expect(rows[1].find('.ts-status').text()).not.toContain('手动结束');
-    expect(rows[1].text()).toContain('4/4');
-    expect(rows[2].find('.ts-status').text()).not.toContain('手动结束');
+    const title = (i: number) => rows[i].find('.ts-status').attributes('title') || '';
+    expect(rows[0].find('.ts-status').text()).toBe('已完成');
+    expect(title(0)).toContain('手动结束');
+    expect(title(0)).toContain('第 1 个任务（共 4 个）');
+    expect(title(1)).not.toContain('手动结束');
+    expect(title(1)).toContain('第 4 个任务（共 4 个）');
+    expect(title(2)).not.toContain('手动结束');
     wrapper.unmount();
   });
 
-  it('状态列：主状态徽章定宽，低参与 / 手动结束合流为一条备注文本', async () => {
+  it('状态格：行内只有一枚主状态徽章，结束方式与进度都在 title', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -130,10 +130,10 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     const wrapper = await mountLive();
     const main = wrapper.find('.ts-status .ts-status__main');
     expect(main.exists()).toBe(true);
-    // 2026-10-27 用户「怎么这么多 pill」：两枚灰胶囊并成一行「手动结束 · 低参与」
+    // 2026-10-27 用户「还是太多数据了」：格内只留状态徽章，副行文本下线
     expect(wrapper.findAll('.ts-status .mk-badge')).toHaveLength(1);
-    const note = wrapper.find('.ts-status .ts-status__note');
-    expect(note.text()).toBe('手动结束 · 低参与');
+    const title = wrapper.find('.ts-status').attributes('title') || '';
+    expect(title).toContain('手动结束 · 低参与');
     wrapper.unmount();
   });
 });
@@ -149,7 +149,7 @@ afterEach(() => {
 });
 
 describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）', () => {
-  it('live：已完成会话 → 状态/进度列显「x/y」（不渲染进度条），title 保留历史进度', async () => {
+  it('live：已完成会话 → 状态格 title 给「阶段 + 任务位置」，行内只留徽章、不渲染进度条', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -165,19 +165,19 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     });
     const wrapper = await mountLive();
     const headers = wrapper.findAll('th').map((th) => th.text());
-    expect(headers).toContain('状态 / 进度');
+    expect(headers).toContain('状态');
+    expect(headers).not.toContain('状态 / 进度');
     const row = wrapper.find('tbody tr');
-    const prog = row.find('.ts-prog');
-    expect(prog.exists()).toBe(true);
-    // 2026-10-27：生命周期由徽章表达，位置只留 x/y（去掉每行复读的「停在」）
-    expect(prog.text()).toBe('2/5');
+    const cell = row.find('.ts-status');
+    // 2026-10-27 用户「还是太多数据了」：进度不再上屏，只进 title
+    expect(cell.text()).toBe('已完成');
+    expect(cell.attributes('title')).toBe('阶段 2/4 · 第 2 个任务（共 5 个）');
     expect(row.find('.mk-minibar').exists()).toBe(false);
-    expect(row.text()).not.toContain('任务 2/5');
-    expect(prog.attributes('title')).toContain('阶段 2/4 · 第 2 个任务（共 5 个）');
+    expect(row.text()).not.toContain('2/5');
     wrapper.unmount();
   });
 
-  it('live：失败/超时中断态 → 状态徽章 + 「x/y」', async () => {
+  it('live：失败/超时中断态 → 状态徽章，进度在 title', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -198,9 +198,9 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
     expect(rows[0].text()).toContain('失败');
-    expect(rows[0].text()).toContain('3/4');
+    expect(rows[0].find('.ts-status').attributes('title')).toContain('第 3 个任务（共 4 个）');
     expect(rows[1].text()).toContain('超时');
-    expect(rows[1].text()).toContain('1/2');
+    expect(rows[1].find('.ts-status').attributes('title')).toContain('第 1 个任务（共 2 个）');
     // 合并后不再有进度条：结果着色只由状态徽章承担
     expect(rows[0].find('.mk-minibar').exists()).toBe(false);
     wrapper.unmount();
@@ -223,12 +223,12 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const row = wrapper.find('tbody tr');
     expect(row.text()).toContain('已被替代');
-    expect(row.text()).toContain('2/4');
+    expect(row.find('.ts-status').attributes('title')).toContain('第 2 个任务（共 4 个）');
     expect(row.find('.ts-status__main').classes()).toContain('mk-badge--warn');
     wrapper.unmount();
   });
 
-  it('live：老数据无 progress → 进度列显示 —', async () => {
+  it('live：老数据无 progress → 状态格 title 为空，不留占位符', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -236,13 +236,13 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
       }
     });
     const wrapper = await mountLive();
-    const row = wrapper.find('tbody tr');
-    expect(row.text()).toContain('—');
-    expect(row.find('.ts-prog').exists()).toBe(false);
+    const cell = wrapper.find('tbody tr .ts-status');
+    expect(cell.text()).toBe('进行中');
+    expect(cell.attributes('title') || '').toBe('');
     wrapper.unmount();
   });
 
-  it('live：终态但 totalTasks=0 → 出灰色「—」，不套绿色终态样式（绿色破折号会被读成「第 0 格也算完成」）', async () => {
+  it('live：终态但 totalTasks=0 → 不把 0/0 或 — 冒充进度', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -252,14 +252,13 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
       }
     });
     const wrapper = await mountLive();
-    const row = wrapper.find('tbody tr');
-    expect(row.find('.ts-prog--done').exists()).toBe(false);
-    // 合并列内仍是「—」守卫（不再有独立的进度格）
-    expect(row.find('.ts-status .mk-na').text()).toBe('—');
+    const cell = wrapper.find('tbody tr .ts-status');
+    expect(cell.text()).toBe('已完成');
+    expect(cell.attributes('title') || '').not.toContain('/0');
     wrapper.unmount();
   });
 
-  it('live：taskIndex=0（结束时还没定位到任务）→ title 说「未进入具体任务」，不说「第 1 个」（与可见的 0/4 自相矛盾）', async () => {
+  it('live：taskIndex=0（结束时还没定位到任务）→ title 说「未进入具体任务」，不说「第 1 个」', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -269,9 +268,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
       }
     });
     const wrapper = await mountLive();
-    const prog = wrapper.find('tbody tr').find('.ts-prog');
-    expect(prog.text()).toBe('0/4');
-    const title = prog.attributes('title') || '';
+    const title = wrapper.find('tbody tr .ts-status').attributes('title') || '';
     expect(title).toContain('未进入具体任务（共 4 个）');
     expect(title).not.toContain('第 1 个任务');
     wrapper.unmount();
@@ -387,11 +384,13 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const adv = wrapper.find('.ts-adv-note');
-    expect(adv.text()).toBe('待确认调整');
-    expect(adv.classes()).toContain('ts-adv-note--bad');
-    expect(adv.classes()).not.toContain('mk-badge');
-    const title = adv.attributes('title') || '';
+    // 2026-10-27 用户「还是太多数据了」：建议处置不再占行内位置，只进总结格 title
+    expect(wrapper.find('.ts-adv-note').exists()).toBe(false);
+    const out = wrapper.find('tbody tr .ts-out');
+    // 进行中会话没有总结：行内只显示空值占位，建议细节在 title
+    expect(out.text()).toBe('—');
+    const title = out.attributes('title') || '';
+    expect(title).toContain('未生成');
     expect(title).toContain('高优先级');
     expect(title).toContain('影响后续路径');
     expect(title).toContain('触发原因：前置缺口');
@@ -416,7 +415,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('建议已被学习者「保持原计划」→ 徽章退为中性与已决态，title 记处置动作', async () => {
+  it('建议已被学习者「保持原计划」→ 行内不铺建议标记，title 记处置动作', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -439,11 +438,9 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const adv = wrapper.find('.ts-adv-note');
-    expect(adv.text()).toBe('已保持计划');
-    expect(adv.classes()).toContain('ts-adv-note--muted');
-    expect(adv.classes()).not.toContain('ts-adv-note--bad');
-    expect(adv.attributes('title')).toContain('处置：学员选择保持原计划');
+    const out = wrapper.find('tbody tr .ts-out');
+    expect(out.text()).toBe('—');
+    expect(out.attributes('title')).toContain('处置：学员选择保持原计划');
     wrapper.unmount();
   });
 
