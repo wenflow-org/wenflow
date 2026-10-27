@@ -147,8 +147,8 @@ describe('reorderTasksForPrerequisites（同阶段稳定拓扑）', () => {
   })
 
   it('R7-1 守卫：收束档不得被前移到建立/应用档之前（R6 的 14/14 倒挂根因）', () => {
-    // KC 边声称「收束任务的 KC」是「拆解任务」的前置——边方向对知识图成立，
-    // 但认知动作上收束的宾语由应用档产出，不能先审后产。
+    // 收束档在后、KC 边要求它前移——无守卫时 fromIndex(1)>toIndex(0) 会真的重排，
+    // 有守卫时约束被丢弃、顺序不变（该用例在去掉守卫后会失败，是有效回归）。
     const closingFirst = {
       kcGraph: { edges: [{ from: 'kc-summary', to: 'kc-deconstruct' }] },
       taskKcLinks: [
@@ -157,12 +157,13 @@ describe('reorderTasksForPrerequisites（同阶段稳定拓扑）', () => {
       ],
     }
     const tasks = [
-      { title: '复述整条解封装路径', type: 'consolidate' },
       { title: '写一遍接收路径', type: 'deconstruct' },
+      { title: '复述整条解封装路径', type: 'consolidate' },
     ]
     const result = reorderTasksForPrerequisites(tasks, closingFirst)
     expect(result.changed).toBe(false)
-    expect(result.tasks.map((task) => task.title)).toEqual(['复述整条解封装路径', '写一遍接收路径'])
+    expect(result.reorderedEdges).toBe(0)
+    expect(result.tasks.map((task) => task.title)).toEqual(['写一遍接收路径', '复述整条解封装路径'])
   })
 
   it('R7-1 守卫放行反向：建立档前移越过收束档仍生效', () => {

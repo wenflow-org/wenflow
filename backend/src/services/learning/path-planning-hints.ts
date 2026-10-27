@@ -892,32 +892,50 @@ export function derivePlanningHints(
   // 「能学多久」，体量锚才回答「内容有多少」（实证：D13 连续三轮 ≥1.05× 容量；
   // E03 汉译英单方向 55h vs 体量锚 14-18h——两者 goal 对话都明确说了「只攻 X」）。
   const scopeAnchorHoursNum = Number(timeDimensions?.scopeAnchorHours);
+  const anchorPresent = Number.isFinite(scopeAnchorHoursNum) && scopeAnchorHoursNum > 0;
   const calendarCapacityNum = Number(timeDimensions?.calendarCapacityHours);
-  // 锚污染检测（2026-10-27 R7-4）：R6 实证 4/7 膨胀样本把**日历预算**填进了内容体量锚
-  // （E02 22h≈cap 24h、E03 45h、B14 45h、C05 30h，estH=anchor≈capH）——锚失去"内容有多少"
-  // 的语义，min(算术, 锚×1.5) 完全夹不住。与日历容量相差 ≤20% 视为污染，按未提供处理。
-  const scopeAnchorPolluted = Number.isFinite(scopeAnchorHoursNum) && scopeAnchorHoursNum > 0
-    && Number.isFinite(calendarCapacityNum) && calendarCapacityNum > 0
-    && Math.abs(scopeAnchorHoursNum - calendarCapacityNum) <= calendarCapacityNum * 0.2;
-  const hasUsableAnchor = Number.isFinite(scopeAnchorHoursNum) && scopeAnchorHoursNum > 0 && !scopeAnchorPolluted;
-  // 漏发兜底（2026-10-27 R7-4，外部评审建议 + R6 数据校准）：锚缺失（或已判污染）时，
-  // 仅在**有窄目标证据**时按 keyStages×2.5h 兜底，避免误伤真实大预算路径：
-  //   ① 窄目标措辞信号（"只攻/只练/这一件事/单方向…"），或
-  //   ② 日历驱动信号（自报学时 ≥ 日历容量的 85% ⇒ 预算等于日历乘法，不是内容需求）。
-  // E04(42/42)、B19(54/54)、E02(22/24 且锚污染) 全部命中 ②；无信号的 90-180h 真实考证
-  // 路径（keyStages 多、estH 远低于日历容量）不受影响。
   const estimatedHoursSeed = Number(timeDimensions?.estimatedHours);
-  const calendarDrivenNoAnchor = !hasUsableAnchor
-    && Number.isFinite(calendarCapacityNum) && calendarCapacityNum > 0
-    && (Number.isFinite(estimatedHoursSeed) && estimatedHoursSeed > 0
-      ? estimatedHoursSeed >= calendarCapacityNum * 0.85
-      : true);
-  const fallbackAnchorHours = !hasUsableAnchor
+  // 体量证据：自报学时优先；缺失时用课次算术（totalSessions×单次分钟）——两者都没有才算无证据
+  // （独立审查 H2：此前 estH 缺失被无条件当成「日历驱动」，会把 60h 真实课表砍到 15h）。
+  const hoursEvidence = Number.isFinite(estimatedHoursSeed) && estimatedHoursSeed > 0
+    ? estimatedHoursSeed
+    : structuredHoursTotal;
+  const hasCalendarCapacity = Number.isFinite(calendarCapacityNum) && calendarCapacityNum > 0;
+  const calendarDrivenEvidence = hasCalendarCapacity
+    && Number.isFinite(hoursEvidence as number) && (hoursEvidence as number) > 0
+    && (hoursEvidence as number) >= (calendarCapacityNum as number) * 0.85;
+  // 锚污染检测（2026-10-27 R7-4，独立审查 H3 收紧）：R6 实证锚被日历预算污染（estH=anchor≈capH）。
+  // 三条件同时成立才判污染：①与日历容量近似相等（≤10% 且 ≤1h 容差）②体量 ≤30h（窄目标量级；
+  // 74-80h 的考证锚即使贴近 cap 也是真实内容体量）③强窄目标措辞。不满足时**保留原锚**——
+  // 绝不因「疑似污染」丢弃唯一护栏（R6 90h 案例：锚 45=cap 45 被判污染后无兜底 → 完全不夹）。
+  const scopeAnchorPolluted = anchorPresent
+    && hasCalendarCapacity
+    && scopeAnchorHoursNum <= 30
+    && narrowScopeSignal === true
+    && Math.abs(scopeAnchorHoursNum - (calendarCapacityNum as number))
+      <= Math.max(1, (calendarCapacityNum as number) * 0.10);
+  // 漏发兜底（2026-10-27 R7-4，独立审查 H1/H2 收紧）：仅在有**日历乘法证据**时启用，
+  // 且必须满足其一：
+  //   ① 强窄目标措辞 + 体量证据 ≥ 日历容量 85%（E02：22/24 + "这一件事"）
+  //   ② 体量证据与日历容量几乎精确相等（≥97%，纯日历乘法，与措辞无关；E04 42/42、B19 54/54）
+  // 单纯出现"只要/只想"等宽泛词、或 estH 缺失，都不再触发（前者会误伤真实大预算，后者无证据）。
+  const nearExactCalendar = hasCalendarCapacity
+    && Number.isFinite(hoursEvidence as number) && (hoursEvidence as number) > 0
+    && Math.abs((hoursEvidence as number) - (calendarCapacityNum as number))
+      <= Math.max(1, (calendarCapacityNum as number) * 0.03);
+  const fallbackEligible = calendarDrivenEvidence
+    && (narrowScopeSignal === true || nearExactCalendar);
+  const fallbackAnchorHours = fallbackEligible
+    && (!anchorPresent || scopeAnchorPolluted)
     && keyStageCount > 0
-    && (narrowScopeSignal === true || calendarDrivenNoAnchor)
       ? Math.round(keyStageCount * 2.5 * 10) / 10
       : null;
-  const effectiveScopeAnchorHours = hasUsableAnchor ? scopeAnchorHoursNum : fallbackAnchorHours;
+  // 生效锚：污染且兜底可用 → 兜底；污染但无兜底 → 保留原锚（宁可少夹，不可不夹）；
+  // 未污染 → 原锚；缺锚 → 兜底/无。
+  const effectiveScopeAnchorHours = anchorPresent
+    ? (scopeAnchorPolluted && fallbackAnchorHours !== null ? fallbackAnchorHours : scopeAnchorHoursNum)
+    : fallbackAnchorHours;
+  const hasUsableAnchor = effectiveScopeAnchorHours !== null;
   const estimatedHoursTotalRawFinal =
     Number.isFinite(effectiveScopeAnchorHours as number) && (effectiveScopeAnchorHours as number) > 0
     && estimatedHoursTotalPreScope !== null
@@ -925,10 +943,10 @@ export function derivePlanningHints(
       ? (effectiveScopeAnchorHours as number) * 1.5
       : estimatedHoursTotalPreScope;
   // 浮点收尾（2026-10-27 R7-5a）：阶段小时累加会产生 5.500000000000001h 这类 IEEE754 尾巴，
-  // 落库/展示层统一保留 1 位小数。
+  // 落库/展示层统一保留 1 位小数；下界 0.1 防止 round 成 0 后把锚传成 0（L2）。
   const estimatedHoursTotal = estimatedHoursTotalRawFinal === null
     ? null
-    : Math.round(estimatedHoursTotalRawFinal * 10) / 10;
+    : Math.max(0.1, Math.round(estimatedHoursTotalRawFinal * 10) / 10);
   // ---- 大预算扩容（2026-09-27，基线 31 格实测驱动）：锚定总学时超过结构天花板
   // （阶段×任务×单任务分钟上限）时，按需抬升每阶段任务上限与单任务分钟上界——
   // 任务语义升级为「学习单元（可含多次坐学）」。基线收缩比 0.07-0.74（中位 0.13-0.26）
@@ -1243,9 +1261,9 @@ export function buildFramedNormalizedInput(input: any): any {
   const triage = input.triage && typeof input.triage === 'object'
     ? (input.triage as TriageHint)
     : null;
-  // 窄目标措辞信号（R7-4）：只在锚缺失/污染时用于体量兜底（keyStages×2.5h）。
-  // 与 track（确定性）原则一致：标记词是「用户明说了只攻一件事」，不是替模型判语义。
-  const narrowScopeSignal = /(只(?:攻|练|学|做|讲|搞|要|想|需)|单方向|一个方向|这一件事|这件事|不展开|专门(?:攻|练|学)|仅(?:攻|练|学))/
+  // 窄目标措辞信号（R7-4，独立审查 H1 收紧）：只保留强窄目标短语。此前的
+  // 「只要/只想/只需/只做/这件事」等宽泛词会把"只要每天半小时"这类真实大预算目标误判为窄目标。
+  const narrowScopeSignal = /(只(?:攻|练|学)|单方向|一个方向|这一件事|这件事就够|不展开|专门(?:攻|练|学)|仅(?:攻|练|学))/
     .test([surfaceGoal, explicitProblem, ...keyStages].join(' '));
   const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile, triage, narrowScopeSignal);
   // 技能性质（2026-10-26）：goal 层 understanding.skill_nature 白名单透传，决定 AI 代跑边界。
