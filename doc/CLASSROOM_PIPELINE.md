@@ -93,7 +93,11 @@ POST /api/ai-teaching/sessions/:sessionId/messages        routes/ai-teaching.rou
 | `checkpointVerdict` | 上一题判卷结果（送进本轮反馈口径） | 只有 `judgedBy === 'code'` 才注入 |
 | `anchorProbe` | 独立锚题（防遗忘） | `resolveAnchorProbeTarget`：只在「本轮会出检查点」时投放 |
 | `repairInstruction` | 修复指令 | 上轮误解/断链 |
-| `mode` | 课堂形态（工作台副驾 / 动作诊所 / 沙盘共建 / 复盘收束） | 由 `taskType` 七档推导 |
+| `mode` | **不是**课堂形态：类型是 `'tutor' \| 'peer' \| 'debate'`（主讲/同伴/辩论） | 编排层按场景给 |
+
+> 更正（2026-10-27 复核）：课堂形态（工作台副驾 / 动作诊所 / 沙盘共建 / 复盘收束）**不是** `controls` 里的字段，
+> 也不由代码计算——它写在 `skill.teaching-turn.md` 规则 56 里，是 `taskType` 七档的**静态文字映射**。
+> 两者混为一谈会导致「代码算了但没分流」的误判。
 
 **为什么要代码裁决**：实测埋在 2 万字提示词里的规则会被忽略；写进本轮输入（`controls`）才生效。
 
