@@ -91,9 +91,7 @@ const ACTION_RULES: ActionRule[] = [
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/reclaim-stale$/, action: 'virtual-session-stale-reclaim', targetType: 'virtual-session' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/terminate$/, action: 'virtual-session-batch-terminate', targetType: 'virtual-session' },
   // P2-16：配置/观测类高频接口语义化（此前动作列直接显示原始 HTTP 串）
-  { method: 'POST', pattern: /^\/api\/admin\/system\/capabilities\/probe$/, action: 'capability-probe' },
   { method: 'PUT', pattern: /^\/api\/admin\/settings\/reliability$/, action: 'reliability-update' },
-  { method: 'PUT', pattern: /^\/api\/admin\/settings\/capability-probe$/, action: 'capability-probe-update' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/generate-persona$/, action: 'virtual-persona-generate', targetType: 'virtual-learner' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/teaching-step$/, action: 'virtual-session-step', targetType: 'virtual-session' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/restart-learning$/, action: 'virtual-session-restart', targetType: 'virtual-session' },

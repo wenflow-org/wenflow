@@ -331,6 +331,7 @@
     <PullModelsDialog
       ref="pullDialog"
       :provider-name="selected?.name ?? ''"
+      :provider-id="selected?.id ?? ''"
       :models="fetchableModels"
       :registered="[...registeredIds]"
       @confirm="startConfigure"

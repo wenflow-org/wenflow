@@ -24,17 +24,6 @@ import {
 , isFallbackEffectivelyDisabled } from '../../services/reliability-settings.service';
 import { applyRpmLimitsFromSettings } from '../../services/rpm-limit-config.service';
 import { telemetryWriter } from '../../services/telemetry-writer.service';
-import {
-  getPlatformCapabilityProbeEnabled,
-  getPlatformCapabilityProbeInterval,
-  DEFAULT_CAPABILITY_PROBE_ENABLED,
-  DEFAULT_CAPABILITY_PROBE_INTERVAL_MS,
-  MIN_CAPABILITY_PROBE_INTERVAL_MS,
-  MAX_CAPABILITY_PROBE_INTERVAL_MS,
-  updatePlatformCapabilityProbeEnabled,
-  updatePlatformCapabilityProbeInterval
-} from '../../services/capability-probe-settings.service';
-import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
 import { checkIsAdmin } from '../../services/admin-access.service';
 import {
   timeoutErrorSignals,
@@ -1189,93 +1178,6 @@ router.put('/settings/reliability', async (req: Request, res: Response) => {
     res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits(), warnings } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error.message || '更新 AI 可靠性设置失败' } });
-  }
-});
-
-router.get('/settings/capability-probe', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
-    }
-    const [enabled, intervalMs] = await Promise.all([
-      getPlatformCapabilityProbeEnabled(),
-      getPlatformCapabilityProbeInterval()
-    ]);
-    res.json({
-      success: true,
-      data: {
-        enabled,
-        intervalMs,
-        defaultEnabled: DEFAULT_CAPABILITY_PROBE_ENABLED,
-        defaultIntervalMs: DEFAULT_CAPABILITY_PROBE_INTERVAL_MS,
-        minIntervalMs: MIN_CAPABILITY_PROBE_INTERVAL_MS,
-        maxIntervalMs: MAX_CAPABILITY_PROBE_INTERVAL_MS,
-        timerActive: aiCapabilityHealthService.isEnabled()
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error.message || '获取 AI 能力探测设置失败' } });
-  }
-});
-
-router.put('/settings/capability-probe', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
-    }
-    const { enabled, intervalMs } = req.body || {};
-    if (enabled !== undefined && typeof enabled !== 'boolean') {
-      return res.status(400).json({ success: false, error: { message: 'enabled 必须是布尔值' } });
-    }
-    if (intervalMs !== undefined) {
-      const n = Number(intervalMs);
-      if (!Number.isFinite(n) || !Number.isInteger(n)
-        || n < MIN_CAPABILITY_PROBE_INTERVAL_MS || n > MAX_CAPABILITY_PROBE_INTERVAL_MS) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            message: `intervalMs 必须是 ${MIN_CAPABILITY_PROBE_INTERVAL_MS}～${MAX_CAPABILITY_PROBE_INTERVAL_MS} 之间的整数毫秒`
-          }
-        });
-      }
-    }
-    if (enabled === undefined && intervalMs === undefined) {
-      return res.status(400).json({ success: false, error: { message: '请至少提供 enabled 或 intervalMs' } });
-    }
-
-    let nextEnabled = await getPlatformCapabilityProbeEnabled();
-    let nextInterval = await getPlatformCapabilityProbeInterval();
-    if (typeof enabled === 'boolean') {
-      nextEnabled = await updatePlatformCapabilityProbeEnabled(enabled);
-    }
-    if (intervalMs !== undefined) {
-      nextInterval = await updatePlatformCapabilityProbeInterval(intervalMs);
-      await aiCapabilityHealthService.setIntervalMs(nextInterval);
-    }
-    if (typeof enabled === 'boolean') {
-      await aiCapabilityHealthService.setEnabled(nextEnabled);
-    }
-
-    const intervalSec = Math.round(nextInterval / 1000);
-    res.json({
-      success: true,
-      data: {
-        enabled: nextEnabled,
-        intervalMs: nextInterval,
-        defaultEnabled: DEFAULT_CAPABILITY_PROBE_ENABLED,
-        defaultIntervalMs: DEFAULT_CAPABILITY_PROBE_INTERVAL_MS,
-        minIntervalMs: MIN_CAPABILITY_PROBE_INTERVAL_MS,
-        maxIntervalMs: MAX_CAPABILITY_PROBE_INTERVAL_MS,
-        timerActive: aiCapabilityHealthService.isEnabled()
-      },
-      message: nextEnabled
-        ? `AI 能力探测已开启，将每 ${intervalSec} 秒自动向模型服务发送探活请求`
-        : 'AI 能力探测已关闭，将停止周期性 LLM 探活请求'
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error.message || '更新 AI 能力探测设置失败' } });
   }
 });
 

@@ -41,7 +41,6 @@ vi.mock('@/api/adminApi', () => ({
   adminGoalConversationsApi: apiObject(),
   adminTeachingSessionsApi: apiObject(),
   adminLearningContentApi: apiObject(),
-  adminSystemApi: apiObject(),
   clearAdminSession: vi.fn(),
   markAdminSession: vi.fn(),
   hasAdminSession: vi.fn(() => true),

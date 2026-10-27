@@ -42,21 +42,41 @@
               <span v-if="selectableChat.length !== chatModels.length" class="pmd-sec__hint">可添加 {{ selectableChat.length }}</span>
             </div>
             <div class="pmd-list">
-              <label
+              <div
                 v-for="name in filteredChat"
                 :key="name"
                 class="pmd-row"
                 :class="{ 'pmd-row--done': registeredSet.has(name) }"
               >
-                <input
-                  v-model="selected"
-                  type="checkbox"
-                  :value="name"
-                  :disabled="registeredSet.has(name)"
-                />
-                <span class="mono pmd-row__id" :title="name">{{ name }}</span>
+                <label class="pmd-row__pick">
+                  <input
+                    v-model="selected"
+                    type="checkbox"
+                    :value="name"
+                    :disabled="registeredSet.has(name)"
+                  />
+                  <span class="mono pmd-row__id" :title="name">{{ name }}</span>
+                </label>
                 <span v-if="registeredSet.has(name)" class="mk-badge mk-badge--muted">已添加</span>
-              </label>
+                <!-- 就地验一次（2026-10-26 用户「拉取模型那里可以测试了」）：
+                     勾选前就知道这个 id 在这个供应商下能不能真的调通，省掉「先登记再回表格测」的一圈 -->
+                <span v-if="providerId" class="pmd-row__probe">
+                  <button
+                    type="button"
+                    class="mk-link pmd-row__test"
+                    :disabled="!!testing"
+                    @click="runTest(name)"
+                  >{{ testing === name ? '测试中…' : '测试' }}</button>
+                  <span
+                    v-if="results[name]"
+                    class="pmd-row__res"
+                    :class="results[name].ok ? 'is-ok' : 'is-bad'"
+                    :title="results[name].text"
+                  >{{ results[name].ok ? `已连通 · ${results[name].latency}` : '连接失败' }}</span>
+                  <!-- 结果位常驻：没有结果的行也占住同一列宽，各行的「测试」才对得齐 -->
+                  <span v-else class="pmd-row__res" aria-hidden="true"></span>
+                </span>
+              </div>
               <p v-if="!filteredChat.length" class="pmd-empty">
                 {{ chatModels.length ? '没有匹配的对话模型' : '这次没有拉取到对话模型' }}
               </p>
@@ -115,13 +135,17 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { adminModelProvidersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
+import { errMsg } from './live'
 import { MODEL_KIND_LABEL, MODEL_KIND_ORDER, modelKindOf, modelTargetOf } from './platformModelKind'
 
 const props = defineProps<{
   /** 供应商名（浮窗副标题，说明这批模型从哪来） */
   providerName: string
+  /** 供应商 id：就地测试要用它自己的地址与密钥（未传 = 不渲染测试动作） */
+  providerId?: string
   /** 本次拉取到的全部模型 id */
   models: string[]
   /** 已登记进模型清单的 id：这些行只读标记「已添加」 */
@@ -138,6 +162,10 @@ const emit = defineEmits<{
 const open = ref(false)
 const query = ref('')
 const selected = ref<string[]>([])
+/** 正在测试的模型 id（同一时刻只跑一个：串行避免一把把上游打满） */
+const testing = ref('')
+/** 行内测试结果：ok 显耗时，失败显「✗ 失败」（原因进 title） */
+const results = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
 const maskRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
@@ -185,7 +213,28 @@ function toggleAll(): void {
 function openWith(): void {
   selected.value = []
   query.value = ''
+  results.value = {}
+  testing.value = ''
   open.value = true
+}
+
+/** 就地测试：复用供应商测试端点（用该供应商自己的地址与密钥真发一次），
+    结果只落在本行——勾选清单不该因为一个模型失败而整块变红。 */
+async function runTest(modelId: string): Promise<void> {
+  if (!props.providerId || testing.value) return
+  testing.value = modelId
+  try {
+    const res = await adminModelProvidersApi.test(props.providerId, { modelId })
+    const data = res?.data?.data ?? {}
+    results.value = {
+      ...results.value,
+      [modelId]: { ok: true, latency: `${data.durationMs ?? 0}ms`, text: data.content || '连通正常' },
+    }
+  } catch (e) {
+    results.value = { ...results.value, [modelId]: { ok: false, latency: '', text: errMsg(e) } }
+  } finally {
+    testing.value = ''
+  }
 }
 
 function close(): void {
@@ -273,12 +322,42 @@ defineExpose({ openWith })
   padding: 0 12px;
   border-bottom: 1px solid var(--mk-line);
   font-size: var(--mk-fs-micro);
-  cursor: pointer;
 }
 .pmd-row:last-child { border-bottom: 0; }
 .pmd-row:hover { background: var(--mk-table-row-hover-bg); }
 .pmd-row--done { cursor: default; }
 .pmd-row--done .pmd-row__id { color: var(--mk-faint); }
+/* 勾选区自成一枚 label：整行不再是 label，行内的「测试」钮才能独立点击
+   （此前把测试按钮放进 label，点它会连带切换勾选）。 */
+.pmd-row__pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+.pmd-row--done .pmd-row__pick { cursor: default; }
+/* 行内测试：动作与结果各自定宽、贴右缘——有「已添加」徽标或没有结果时，
+   各行的「测试」仍在同一条竖线上，结果列也同一条右边缘。 */
+.pmd-row__probe {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.pmd-row__test { width: 32px; flex: none; font-size: var(--mk-fs-micro); text-align: left; }
+.pmd-row__test:disabled { opacity: 0.55; cursor: default; }
+.pmd-row__res {
+  width: 108px;
+  flex: none;
+  font-size: var(--mk-fs-micro);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+.pmd-row__res.is-ok { color: var(--mk-green); }
+.pmd-row__res.is-bad { color: var(--mk-red); font-weight: 600; }
 .pmd-row__id {
   flex: 1 1 auto;
   min-width: 0;

@@ -33,8 +33,6 @@ vi.mock('@/api/adminApi', () => ({
   adminGlossaryApi: apiObject(),
   adminAnnouncementsApi: apiObject(),
   adminPlatformSettingsApi: apiObject(),
-  adminCapabilityProbeApi: apiObject(),
-  adminSystemApi: apiObject(),
   adminAuditApi: apiObject(),
   adminFieldRoutingsApi: apiObject(),
   adminPromptWorkbenchApi: apiObject(),

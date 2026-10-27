@@ -8,11 +8,6 @@ const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
    负载下可超默认 30s 被 axios abort——走查 F8-3 的 net::ERR_ABORTED @30007ms）。
    分析页非操作面，单点放宽到 2min；其余 admin 请求保持 30s 默认不变。 */
 const TOKEN_COST_REQUEST_TIMEOUT_MS = 120000;
-/* 能力探针（POST /admin/system/capabilities/probe）是管理端唯一会「同步串行跑多组 LLM 连通性检查」的接口：
-   服务端每组金丝雀预算 CANARY_TIMEOUT_MS=60s，最多 5 组按路由指纹分组串行 → 最坏 ~300s。
-   管理端 axios 默认 30s 会先 abort，用户看到的是「按钮恢复、结果原样不动、无失败提示」的假静默。
-   此处单独放宽到服务端预算上限 + 余量，让客户端等到服务端结论（含 failureCode）。 */
-const CAPABILITY_PROBE_REQUEST_TIMEOUT_MS = 310000;
 
 /**
  * 管理员会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
@@ -905,33 +900,6 @@ export const adminInfraModelsApi = {
   get: async () => adminAxios.get('/admin/infra-models'),
   update: async (data: InfraModelsUpdateInput) => adminAxios.put('/admin/infra-models', data),
   test: async (kind: 'embedding' | 'rerank') => adminAxios.post('/admin/infra-models/test', { kind })
-};
-
-/**
- * AI 能力探测设置（开关 + 间隔；默认关闭）
- */
-export const adminCapabilityProbeApi = {
-  getSettings: async () => {
-    return adminAxios.get('/admin/settings/capability-probe');
-  },
-  updateSettings: async (payload: { enabled?: boolean; intervalMs?: number }) => {
-    return adminAxios.put('/admin/settings/capability-probe', payload);
-  }
-};
-
-/**
- * AI 能力健康快照（5 个核心能力 + 主动探测）
- */
-export const adminSystemApi = {
-  getCapabilities: async () => {
-    return adminAxios.get('/admin/system/capabilities');
-  },
-  probeCapabilities: async () => {
-    // 见 CAPABILITY_PROBE_REQUEST_TIMEOUT_MS：与服务端金丝雀串行预算对齐，不用默认 30s
-    return adminAxios.post('/admin/system/capabilities/probe', undefined, {
-      timeout: CAPABILITY_PROBE_REQUEST_TIMEOUT_MS,
-    });
-  }
 };
 
 // ============================================================

@@ -1294,8 +1294,6 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
   border: 1px solid transparent; white-space: nowrap;
 }
 
-.pill__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
 /* ---- 闭环条（原型 .loop）---- */
 .loop { display: flex; align-items: stretch; gap: 10px; overflow-x: auto; padding: 4px 0; }
 /* 流程指向增强（评审 2026-10-10「箭头微弱」）：文字箭头 → 线段 + 实心三角，

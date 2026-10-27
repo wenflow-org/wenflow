@@ -480,7 +480,18 @@ const ACTION_TEXT: Record<string, string> = {
   'virtual-session-stale-reclaim': '回收无响应会话',
   'virtual-session-batch-terminate': '批量终止虚拟会话',
   'virtual-cascade-delete': '级联删除虚拟数据',
+  /* 2026-10-26 视觉复核：BYOK 写审计后动作列直接印英文键（如 model-provider-model-add），
+     审计筛选 chip 里也出现了 virtual-batch-delete——口径与后端 admin-audit 的 action 一一对应 */
+  'model-provider-create': '添加模型供应商',
+  'model-provider-update': '修改模型供应商',
+  'model-provider-delete': '删除模型供应商',
+  'model-provider-key-clear': '移除供应商密钥',
+  'model-provider-model-add': '添加供应商模型',
+  'model-provider-model-update': '修改供应商模型',
+  'model-provider-model-delete': '删除供应商模型',
+  'virtual-batch-delete': '批量删除虚拟学习者',
   // P2-16：配置/观测类高频接口语义名（避免动作列显示原始 HTTP 串）
+  // 能力探针已下线（2026-10-26）：映射保留，历史审计行仍要读得懂
   'capability-probe': '探测模型能力',
   'reliability-update': '修改可靠性配置',
   'capability-probe-update': '修改能力探针设置',
@@ -600,7 +611,9 @@ const TARGET_TEXT: Record<string, string> = {
   'virtual-learner': '虚拟学习者',
   'virtual-session': '虚拟会话',
   // 2026-10-24：插件启停写审计后，目标类型此前回退成英文 plugin
-  plugin: '插件'
+  plugin: '插件',
+  // 2026-10-26：模型供应商的增删改审计此前把 model-provider 原样印在「目标类型」列
+  'model-provider': '模型供应商'
 }
 
 export function targetTypeText(s: string | null | undefined): string {

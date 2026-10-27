@@ -14,7 +14,6 @@ import { ReadinessService } from './services/readiness.service';
 import { ApplicationLifecycle, resolveShutdownDeadlineMs } from './services/application-lifecycle.service';
 import { applyServerTimeouts } from './config/server-timeouts';
 import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordinator';
-import { aiCapabilityHealthService } from './services/ai-capability-health.service';
 import { backgroundTaskTracker } from './services/background-task-tracker.service';
 import { telemetryWriter } from './services/telemetry-writer.service';
 import { logRetentionService } from './services/log-retention.service';
@@ -27,7 +26,7 @@ import { bootstrapEnvironment } from './bootstrap/env';
 import { acquireInstanceLock, InstanceConflictError, type InstanceLockHandle } from './utils/instance-lock';
 import { createHttpApp, registerErrorHandlers } from './bootstrap/http-app';
 import { registerRoutes } from './bootstrap/routers';
-import { initializeGateway, purgeRetiredSkills, syncCapabilityProbeSettings } from './bootstrap/gateway';
+import { initializeGateway, purgeRetiredSkills } from './bootstrap/gateway';
 import {
   runPromptFileSeed,
   runFieldRoutingSeed,
@@ -106,8 +105,6 @@ export async function startServer() {
     await runSkillModelConfigSeed();
     gateway = await initializeGateway();
     assertStartupActive();
-    await syncCapabilityProbeSettings();
-    assertStartupActive();
 
     outboxWorker = startOutboxWorker();
 
@@ -165,7 +162,6 @@ export async function shutdown(signal: string) {
       await virtualSessionReclaimService.stop();
       stopBatchExperimentScheduler();
       autopilotService.stopReconcileScheduler();
-      await aiCapabilityHealthService.stop();
     },
     teaching: aiTeachingOrchestrator,
     backgroundTaskTracker,

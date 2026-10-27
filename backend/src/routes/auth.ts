@@ -15,7 +15,6 @@ import {
 } from '../utils/auth-cookie';
 import { verifyRefreshToken } from '../utils/session-token';
 import { rotateUserSession, revokeUserSessionByToken } from '../services/auth/user-session.service';
-import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
 import { logger } from '../utils/logger';
 import {
   registerQuotaService,
@@ -123,18 +122,21 @@ const resetPasswordLimiter = createIpLimiter(20, 60 * 60 * 1000);
 router.get('/registration-status', async (req, res, next) => {
   try {
     const settings = await getPlatformSettings();
-    const coreLearningBlocked = aiCapabilityHealthService.isCapabilityBlocked('goal-conversation');
     // 配额仅平台开关启用时生效（默认关 → 0 = 不限制）；注册页仅在 >0 时展示提示
     const quotaEnabled = settings.registerIpQuotaEnabled === true;
     const effectiveQuota = quotaEnabled
       ? (settings.registerIpDailyQuota ?? DEFAULT_IP_DAILY_QUOTA)
       : (IP_DAILY_QUOTA_FROM_ENV > 0 ? IP_DAILY_QUOTA_FROM_ENV : 0);
+    /* 2026-10-27 能力探针退役：原先「核心学习能力不可用 → 注册临时关闭」那道闸门
+       由探针快照驱动，探针删掉后没有可信来源，闸门一并撤除。注册只受管理员开关与
+       IP 配额约束。temporaryUnavailable 字段保留恒 false：注册页与访问控制页都在读它，
+       直接删字段会让「暂时不可用」的旧缓存文案失去判别依据。 */
     res.status(200).json({
       success: true,
       data: {
-        registrationEnabled: settings.registrationEnabled && !coreLearningBlocked,
+        registrationEnabled: settings.registrationEnabled,
         configuredRegistrationEnabled: settings.registrationEnabled,
-        temporaryUnavailable: settings.registrationEnabled && coreLearningBlocked,
+        temporaryUnavailable: false,
         maxAccountsPerIpPerDay: effectiveQuota
       }
     });
@@ -171,17 +173,13 @@ router.post('/register', async (req, res, next) => {
 
   try {
     const settings = await getPlatformSettings();
-    const coreLearningBlocked = aiCapabilityHealthService.isCapabilityBlocked('goal-conversation');
-    if (!settings.registrationEnabled || coreLearningBlocked) {
-      const temporaryUnavailable = settings.registrationEnabled && coreLearningBlocked;
-      return res.status(temporaryUnavailable ? 503 : 403).json({
+    if (!settings.registrationEnabled) {
+      return res.status(403).json({
         success: false,
         error: {
-          message: temporaryUnavailable
-            ? '核心学习服务正在恢复，暂时无法创建账号'
-            : '平台注册已关闭，请联系管理员',
-          code: temporaryUnavailable ? 'REGISTRATION_TEMPORARILY_UNAVAILABLE' : 'REGISTRATION_DISABLED',
-          status: temporaryUnavailable ? 503 : 403
+          message: '平台注册已关闭，请联系管理员',
+          code: 'REGISTRATION_DISABLED',
+          status: 403
         }
       });
     }
