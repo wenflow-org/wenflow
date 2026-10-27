@@ -253,11 +253,18 @@
               <span v-else class="mk-na">—</span>
             </td>
             <td>
-              <!-- 操作列（2026-10-27 统一）：一级动作 = 详情 / 干预（风险行琥珀）；
-                   「重算」这种低频维护动作收进 ⋯，与全站「可见动作 + 溢出菜单」同一语法。 -->
+              <!-- 操作列（2026-10-27 用户「详情不要了」）：行点击已进学习者详情，不再重复「详情」；
+                   「发提醒」实际就是给这个人发一条站内信（adminNotificationsApi.send），
+                   风险行的琥珀色已撤——风险摘要在左侧列，动作本身与风险无关，颜色只保留一种。
+                   「重算」这种低频维护动作收进 ⋯。 -->
               <div class="mk-actions">
-                <button type="button" class="mk-link" @click.stop="openDetail(r)">详情</button>
-                <button v-if="isLive && !r.isTestAccount" type="button" class="mk-link" :class="{ 'lc-intervene--hot': isRisk(r) }" @click.stop="openIntervene(r)">干预</button>
+                <button
+                  v-if="isLive && !r.isTestAccount"
+                  type="button"
+                  class="mk-link"
+                  title="发送站内提醒（站内信）"
+                  @click.stop="openIntervene(r)"
+                >发提醒</button>
                 <div class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="rowMenu === r.id" @click.stop="toggleRowMenu(r.id)">⋯</button>
                   <div v-if="rowMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="rowPopStyle" @click.stop>
@@ -299,9 +306,9 @@
     <!-- C2 干预动线：风险学习者 → 查看会话 / 发送站内提醒（对标英跃"过程管理"） -->
     <Teleport to="body">
       <div v-if="intervene" ref="interveneMaskRef" class="mk-modal">
-        <div ref="intervenePanelRef" class="mk-modal__panel" role="dialog" aria-label="用户干预">
+        <div ref="intervenePanelRef" class="mk-modal__panel" role="dialog" aria-label="发送站内提醒">
           <div class="mk-modal__head">
-            <h3 class="mk-modal__title">干预 · {{ intervene.name }}</h3>
+            <h3 class="mk-modal__title">站内提醒 · {{ intervene.name }}</h3>
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="intervene = null">✕</button>
           </div>
           <div class="mk-modal__body">
@@ -899,11 +906,9 @@ async function recomputeAll() {
   .risk-text { font-size: var(--mk-fs-body); }
 }
 
-/* ================= C2 干预动线 ================= */
-/* 审核 #16（2026-10-06）：原 `html[data-theme='dark'] .lc-intervene--hot { color: #fbbf24; }`
-   是零效果死规则（--mk-amber 暗色本身即 #fbbf24）且引入页内私写 hex，已删；描边改走
-   color-mix(…, var(--mk-line))，暗色随 --mk-amber/--mk-red 自动翻转，不再是亮色档字面量。 */
-.lc-intervene--hot { color: var(--mk-amber); }
+/* ================= C2 站内提醒动线 ================= */
+/* 2026-10-27 用户「干预还两种颜色，是干嘛呢」：风险行把「干预」染琥珀只重复了左侧风险列，
+   动作本身没有第二种语义——已撤 .lc-intervene--hot，所有行动作统一 .mk-link 蓝。 */
 .lc-iv__risk {
   display: grid;
   gap: 4px;

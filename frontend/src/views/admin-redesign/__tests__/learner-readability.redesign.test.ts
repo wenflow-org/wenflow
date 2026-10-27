@@ -106,30 +106,39 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     subPage.value = null;
   });
 
-  it('行「详情」落在「证据」页签（列表读数列与详情证据页签同口径；2026-10-18 用户走查，不再一律落概览）', async () => {
+  it('行点击落在「证据」页签；操作列不再重复「详情」，只留「发提醒」+ ⋯', async () => {
     const w = mount(LearnerCenter);
     await settle();
-    await w.find('tbody tr').trigger('click');
+    const row = w.find('tbody tr');
+    await row.trigger('click');
     expect(subPage.value).toMatchObject({ view: 'learner', tab: 'evidence' });
     expect(subPage.value?.id).toBeTruthy();
+    // 2026-10-27 用户「详情不要了」：行点击即详情，操作列只留站内提醒
+    const labels = row.findAll('.mk-actions button').map((b) => b.text());
+    expect(labels).not.toContain('详情');
+    expect(labels).not.toContain('干预');
+    expect(labels).toContain('发提醒');
+    expect(row.find('.mk-link').attributes('title')).toBe('发送站内提醒（站内信）');
     w.unmount();
   });
 
   /* 2026-10-26：干预弹窗原先两个出口都到不了这个人——「查看执行日志」落全站日志首页
      （执行日志没有学习者维度），「查看学习详情」落概览（找不到弹窗里那条风险摘要）。
-     现在只留一个，且与行内「详情」同落证据页签。 */
-  it('干预弹窗：删「查看执行日志」；「查看学习详情」与行内「详情」同落证据页签', async () => {
+     现在只留一个，且与行点击同落证据页签。2026-10-27 入口改名「发提醒」：动作就是站内信。 */
+  it('站内提醒弹窗：删「查看执行日志」；「查看学习详情」与行点击同落证据页签', async () => {
     const w = mount(LearnerCenter);
     await settle();
     const riskRow = w.findAll('tbody tr').find((r) => r.text().includes('乙'))!;
-    const intervene = riskRow.findAll('.mk-actions button').find((b) => b.text() === '干预')!;
+    const intervene = riskRow.findAll('.mk-actions button').find((b) => b.text() === '发提醒')!;
     await intervene.trigger('click');
     await settle();
-    const labels = Array.from(document.body.querySelectorAll('.mk-modal button')).map((b) => b.textContent?.trim());
+    const modal = document.body.querySelector('.mk-modal')!;
+    expect(modal.textContent).toContain('站内提醒 · 乙');
+    const labels = Array.from(modal.querySelectorAll('button')).map((b) => b.textContent?.trim());
     expect(labels).toContain('查看学习详情');
     expect(labels).not.toContain('查看执行日志');
     // 弹窗底部那句解释也撤了
-    expect(document.body.querySelector('.mk-modal')!.textContent).not.toContain('站内通知中');
+    expect(modal.textContent).not.toContain('站内通知中');
 
     const detailBtn = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.mk-modal button'))
       .find((b) => b.textContent?.trim() === '查看学习详情')!;
@@ -145,7 +154,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     const w = mount(LearnerCenter);
     await settle();
     const riskRow = w.findAll('tbody tr').find((r) => r.text().includes('乙'))!;
-    await riskRow.findAll('.mk-actions button').find((b) => b.text() === '干预')!.trigger('click');
+    await riskRow.findAll('.mk-actions button').find((b) => b.text() === '发提醒')!.trigger('click');
     await settle();
     const modal = document.body.querySelector<HTMLElement>('.mk-modal')!;
     // 标题已预填，直接发送
