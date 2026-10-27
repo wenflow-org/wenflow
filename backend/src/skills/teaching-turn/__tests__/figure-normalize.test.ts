@@ -808,3 +808,50 @@ describe('state-strip：不回头的进程分帧（2026-10-26）', () => {
     expect(one.figure).toBeUndefined();
   });
 });
+
+describe('V8 内容核验：图内算式复算 / 概念图并列边合并 / 对照行数差', () => {
+  it('图内算式算错 → 整图拒绝（60 ÷ 0.4 应为 150，写成 15）', async () => {
+    const bad = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        left: { head: '错', rows: [{ label: '60 ÷ 0.4 = 15' }] },
+        right: { head: '对', rows: [{ label: '60 ÷ 0.4 = 150' }] },
+      },
+    });
+    expect(bad.figure).toBeUndefined();
+    const ok = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        left: { head: '错', rows: [{ label: '60 ÷ 400' }] },
+        right: { head: '对', rows: [{ label: '60 ÷ 0.4 = 150' }] },
+      },
+    });
+    expect(ok.figure).toBeDefined();
+  });
+
+  it('概念图同端点两条边 → 关系名合并成「A、B」', async () => {
+    const merged = await runWithFigure({
+      kind: 'concept-map',
+      spec: {
+        nodes: [{ id: 'm', label: '市场' }, { id: 'f', label: '工厂' }],
+        edges: [
+          { from: 'm', to: 'f', label: '催生' },
+          { from: 'm', to: 'f', label: '提供资金' },
+        ],
+      },
+    });
+    expect(merged.figure.spec.edges).toHaveLength(1);
+    expect(merged.figure.spec.edges[0].label).toContain('、');
+  });
+
+  it('两栏行数差 >1 → 整图拒绝（对照不成立）', async () => {
+    const skew = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        left: { head: '错', rows: [{ label: '只一行' }] },
+        right: { head: '对', rows: [{ label: '甲' }, { label: '乙' }, { label: '丙' }] },
+      },
+    });
+    expect(skew.figure).toBeUndefined();
+  });
+});

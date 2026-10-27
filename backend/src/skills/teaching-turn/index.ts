@@ -1046,6 +1046,36 @@ function toFigureLabel(value: unknown, max: number): string | null {
  * 静默丢弃会让「reply 里写着『这张对照表』、消息里却没有图」变成不可观测的悬空引用——
  * 2026-10-20 实跑里整节 0 图就是靠这条日志才定位到是块被拒，而不是模型没画。
  */
+/**
+ * 图内算式复算（2026-10-27 V8）：外盲评多轮抓到图里算式/数值自相矛盾。
+ * engine 的算式校验只覆盖 reply，图内文字此前是无人核验区。
+ * 只认「数字 运算 数字 = 数字」的确定式（用「≈」的不算），相对误差 >1% 判错——
+ * 一张图里出现算错的式子，学生对着它推理只会把错推得更远，整张拒绝比下发更安全。
+ */
+function specArithmeticErrors(value: unknown, out: string[], depth = 0): void {
+  if (depth > 6 || out.length >= 8) return;
+  if (typeof value === 'string') {
+    for (const m of value.matchAll(/(\d+(?:\.\d+)?)\s*([+\-×÷xX*/])\s*(\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)/g)) {
+      const a = Number(m[1]);
+      const b = Number(m[3]);
+      const claimed = Number(m[4]);
+      const op = m[2];
+      const actual = op === '+' ? a + b : op === '-' ? a - b : op === '×' || op === 'x' || op === 'X' || op === '*' ? a * b : a / b;
+      if (!Number.isFinite(actual) || b === 0) continue;
+      const denom = Math.max(Math.abs(actual), 1e-9);
+      if (Math.abs(actual - claimed) / denom > 0.01) out.push(`${m[0]}（应为 ${Math.round(actual * 1000) / 1000}）`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) specArithmeticErrors(item, out, depth + 1);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const v of Object.values(value as Record<string, unknown>)) specArithmeticErrors(v, out, depth + 1);
+  }
+}
+
 function normalizeFigureOrLog(raw: unknown): { figure: NonNullable<TeachingTurnOutput['figure']> } | null {
   const result = normalizeFigure(raw);
   if (!result && raw && typeof raw === 'object') {
@@ -1084,6 +1114,13 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
   const specRaw = record.spec && typeof record.spec === 'object' ? (record.spec as Record<string, unknown>) : record;
   const spec = normalizeFigureSpec(kind as TeachingFigureKind, specRaw);
   if (!spec) return null;
+  // V8：图内算式复算，算错整张拒绝（见 specArithmeticErrors 注释）
+  const arithmeticErrors: string[] = [];
+  specArithmeticErrors(spec, arithmeticErrors);
+  if (arithmeticErrors.length) {
+    logger.warn('[teaching-turn] 图内算式复算不一致，整图丢弃', { kind, errors: arithmeticErrors.slice(0, 3) });
+    return null;
+  }
   return { figure: { engine: 'svg', kind: kind as TeachingFigureKind, caption, ...(why ? { why } : {}), spec, ...(palette ? { palette } : {}) } };
 }
 
@@ -1432,6 +1469,10 @@ function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string,
   const left = normalizePanel(raw.left);
   const right = normalizePanel(raw.right);
   if (!left || !right) return null;
+  // V8：两栏行数差 >1 = 对照不成立（外盲评：左 1 行右 3 行，行与行比的不是同一件事）
+  const leftLen = (left.rows as unknown[]).length;
+  const rightLen = (right.rows as unknown[]).length;
+  if (Math.abs(leftLen - rightLen) > 1) return null;
   // 两栏内容完全相同 = 不是对比（外盲评 V4 #2：两侧代码一字不差，学生看不到差异）
   const leftSeq = (left.rows as Array<Record<string, unknown>>).map((r) => r.label).join('');
   const rightSeq = (right.rows as Array<Record<string, unknown>>).map((r) => r.label).join('');
@@ -1581,6 +1622,7 @@ function normalizeConceptMapSpec(raw: Record<string, unknown>): Record<string, u
   if (nodes.length < 2) return null;
 
   const edges: Array<Record<string, unknown>> = [];
+  const edgeByKey = new Map<string, number>();
   for (const item of Array.isArray(raw.edges) ? raw.edges : []) {
     if (!item || typeof item !== 'object') continue;
     const edge = item as Record<string, unknown>;
@@ -1588,8 +1630,21 @@ function normalizeConceptMapSpec(raw: Record<string, unknown>): Record<string, u
     const to = toFigureLabel(edge.to, 24);
     const label = toFigureLabel(edge.label, 10);
     if (!from || !to || !label || from === to || !seen.has(from) || !seen.has(to)) continue;
+    // V8（外盲评：两条边挤成一条，学生分不清 A→B 是一个关系还是两个）：同端点合并，
+    // 关系名并成「A、B」——并列关系本来就是一个关系
+    const key = `${from}${to}`;
+    const existing = edgeByKey.get(key);
+    if (existing !== undefined) {
+      const prev = edges[existing];
+      const prevLabel = String(prev.label ?? '');
+      if (!prevLabel.split('、').includes(label) && prevLabel.length + label.length + 1 <= 10) {
+        prev.label = `${prevLabel}、${label}`;
+      }
+      continue;
+    }
     const tone = normalizeTone(edge.tone, ['accent', 'ok', 'warn', 'neutral']);
     const dash = normalizeDash(edge.dash);
+    edgeByKey.set(key, edges.length);
     edges.push({ from, to, label, ...(tone ? { tone } : {}), ...(dash ? { dash } : {}) });
     if (edges.length >= 14) break;
   }
