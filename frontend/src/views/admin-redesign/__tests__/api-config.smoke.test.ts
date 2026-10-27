@@ -2,7 +2,7 @@
  * ApiConfig.vue 冒烟：
  * 1. 供应商面板（模型 / 连接 / 基础设施 / 生成参数四个二级页签）
  * 2. 脏位分域标注（连接 / 生成参数 / 调用策略）
- * 3. 调用策略卡：参数三组 + 右栏近 1 小时读数（429 / 冷却模型）
+ * 3. 调用策略卡：参数三组（读数已撤出，归健康中心与虚拟学习者页）
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -265,71 +265,16 @@ describe('ApiConfig P1 修复批', () => {
     await flushPromises();
   }
 
-  /* D12：429 / 冷却读数从原「调用健康」卡搬进调用策略卡的右栏——
-     参数与它造成的结果同一视平线；读数非零时数字上警示色。
-     2026-10-28 右栏并入跑批读数：前两格是近 1 小时调用，后四格是后台跑批。 */
-  it('D12：调用策略右栏显示近 1 小时 429 与冷却模型读数', async () => {
-    const wrapper = await mountApiConfig();
-    await flushPromises();
-    const side = wrapper.find('.ac-policy__side');
-    expect(side.exists(), '调用策略卡应有读数右栏').toBe(true);
-    expect(side.text()).toContain('近 1 小时');
-    const stats = side.findAll('.ac-stat');
-    expect(stats.map((s) => s.text())).toEqual([
-      '4上游 429',
-      '2冷却中模型',
-      '12平均 条/分',
-      '4最低单分钟',
-      '2低于下限分钟',
-      '1最长连续低于下限'
-    ]);
-    // 非零即警示：4 次 429 / 2 个冷却模型都要看得出来（跑批 mock 未告警）
-    expect(side.findAll('.ac-stat--alert')).toHaveLength(2);
-    expect(side.find('.ac-policy__link').text()).toContain('健康中心');
-    wrapper.unmount();
-  });
-
-  /* 2026-10-28 用户「批量吞吐可以和模型与接入合到一起」→「自由设计一下」：
-     跑批读数并入调用策略卡的读数带，与近 1 小时调用同排（虚线分隔），不再单独成卡。 */
-  it('后台跑批读数并入调用策略读数带：四格读数 + 一句口径说明', async () => {
-    const wrapper = await mountApiConfig();
-    await flushPromises();
-    await flushPromises();
-    const side = wrapper.find('.ac-policy__side');
-    expect(side.text()).toContain('后台跑批');
-    expect(side.text()).toContain('后台批处理每分钟实际处理多少条');
-    const stats = side.findAll('.ac-stat');
-    expect(stats.map((s) => s.text())).toEqual([
-      '4上游 429',
-      '2冷却中模型',
-      '12平均 条/分',
-      '4最低单分钟',
-      '2低于下限分钟',
-      '1最长连续低于下限'
-    ]);
-    expect(side.text()).toContain('刷新读数');
-    wrapper.unmount();
-  });
-
-  /* 后端告警句是 rpm 口径；页面读数统一用「条/分」，告警句不能又冒出 rpm。 */
-  it('跑批告警句把 rpm 口径换成条/分', async () => {
+  /* 2026-10-28 用户「这个直接不要了，调用健康没必要在这里出现，后台跑在虚拟学习者那边已经实现了」：
+     调用策略卡只留参数；429 读数归健康中心，跑批读数归虚拟学习者页。 */
+  it('调用策略卡只留参数：不再出现调用健康 / 后台跑批读数', async () => {
     const { adminOpsApi } = await import('@/api/adminApi');
-    vi.mocked(adminOpsApi.throughput).mockResolvedValueOnce({
-      data: {
-        data: {
-          windowMinutes: 60, minRpm: 20, avgRpm: 0.03, worstRpm: 0, lowMinutes: 60,
-          longestLowRun: 60, idle: false, alert: true,
-          alertReason: '连续 60 分钟低于 20 rpm（窗口均值 0.03 rpm）'
-        }
-      }
-    } as never);
     const wrapper = await mountApiConfig();
     await flushPromises();
-    await flushPromises();
-    const alert = wrapper.find('.ac-policy__side .ac-side__alert');
-    expect(alert.exists()).toBe(true);
-    expect(alert.text()).toContain('20 条/分');
-    expect(alert.text()).not.toContain('rpm');
+    expect(wrapper.find('.ac-policy__side').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('调用健康');
+    expect(wrapper.text()).not.toContain('后台跑批');
+    expect(adminOpsApi.throughput).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
@@ -349,31 +294,6 @@ describe('ApiConfig P1 修复批', () => {
     expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({
       defaultResponseFormat: 'json_object'
     }));
-    wrapper.unmount();
-  });
-
-  /* 读数读不到时不能让右栏空着——那会被读成「近 1 小时没有限流」。 */
-  it('限流读数读取失败：右栏报失败并给重试，不静默消失', async () => {
-    getModelRegistryMock.mockRejectedValue(new Error('boom'));
-    const wrapper = await mountApiConfig();
-    await flushPromises();
-    const side = wrapper.find('.ac-policy__side');
-    expect(side.find('.ac-policy__readout-fail').text()).toContain('读数读取失败');
-    const retry = side.find('.ac-policy__readout-fail .mk-link');
-    expect(retry.exists()).toBe(true);
-    getModelRegistryMock.mockResolvedValue({
-      data: { data: { rateLimit: { windowMinutes: 60, count429: 4, coolingDown: 2 }, aliases: [], models: [] } }
-    });
-    await retry.trigger('click');
-    await flushPromises();
-    expect(wrapper.find('.ac-policy__side').text()).toContain('4上游 429');
-    wrapper.unmount();
-  });
-
-  /* 读数右栏给出处理页出口（本页只报读数，排查在健康中心） */
-  it('读数右栏给出「健康中心」出口', async () => {
-    const wrapper = await mountApiConfig();
-    expect(wrapper.find('.ac-policy__side .ac-policy__link').text()).toContain('健康中心');
     wrapper.unmount();
   });
 
@@ -744,9 +664,9 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线；2026-10-28 跑批读数并入
-     调用策略右栏（不再单独成卡），调用面 = 供应商卡 + 一张策略与读数卡。 */
-  it('调用面只剩一张策略卡（跑批读数并入右栏），探针与细项都已下线', async () => {
+  /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线；2026-10-28 读数整块撤出，
+     调用面 = 供应商卡 + 一张只含参数的策略卡。 */
+  it('调用面只剩一张策略卡（只留参数），探针与细项都已下线', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
 
@@ -768,8 +688,9 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.text()).not.toContain('传输重试');
     expect(wrapper.text()).not.toContain('Retry-After');
     expect(wrapper.text()).not.toContain('随机抖动');
-    // 读数在被参数影响的同一张卡里
-    expect(card.find('.ac-policy__side .ac-stat').exists()).toBe(true);
+    // 2026-10-28 读数整块撤出：健康读数归健康中心，跑批读数归虚拟学习者页
+    expect(card.find('.ac-policy__side').exists()).toBe(false);
+    expect(card.find('.ac-stat').exists()).toBe(false);
     // 探针与能力胶囊整块下线
     expect(wrapper.text()).not.toContain('能力探针');
     expect(wrapper.text()).not.toContain('立即探测');
