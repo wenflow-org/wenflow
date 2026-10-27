@@ -40,8 +40,9 @@ export function imageTokens(w, h) {
 const pngSize = (buf) => ({ w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) });
 
 const files = process.argv.slice(2);
-if (!files.length) throw new Error('用法: token-estimate.mjs <file...>');
-
+// 作为模块被 import 时（llm-brief 复用口径）不执行 CLI 逻辑
+const isCLI = files.length > 0 && !process.env.WF_TOKEN_IMPORT_ONLY;
+if (isCLI) {
 let total = 0;
 for (const f of files) {
   if (!fs.existsSync(f)) {
@@ -69,3 +70,5 @@ for (const f of files) {
   console.log(`${path.basename(f).padEnd(28)} ${String(Math.round(buf.length / 1024)).padStart(6)}KB  ${String(tokens).padStart(8)} tok  ${note}`);
 }
 console.log(`${'合计'.padEnd(28)} ${''.padStart(6)}  ${String(total).padStart(8)} tok`);
+}
+export { isCJK, pngSize };
