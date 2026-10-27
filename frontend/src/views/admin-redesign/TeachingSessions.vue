@@ -81,8 +81,9 @@
               class="mk-pill"
               :class="{ 'mk-pill--active': onlyAdvisory }"
               :aria-pressed="onlyAdvisory"
+              :title="`有建议 ${advisoryCount} 条（KPI 同源）`"
               @click="toggleOnlyAdvisory"
-            ><Check v-if="onlyAdvisory" :size="12" :stroke-width="2.5" aria-hidden="true" />有建议<span class="mk-pill__count">{{ advisoryCount }}</span></button>
+            ><Check v-if="onlyAdvisory" :size="12" :stroke-width="2.5" aria-hidden="true" />有建议</button>
             <button
               v-if="abnormalSessionCount"
               type="button"

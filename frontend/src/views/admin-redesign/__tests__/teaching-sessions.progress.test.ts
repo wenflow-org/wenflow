@@ -294,10 +294,11 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0', '0%']);
     /* 2026-10-27 筛选重建：焦点 chips 撤除——「进行中」在状态下拉、「缺总结」在总结下拉、
        「需关注」是派生视图（点 KPI 卡）。同一维度不再有胶囊和下拉两个入口。
-       卡头唯一 chip 组 = 标志筛选（多选开关），激活态与计数仍在。 */
+       卡头唯一 chip 组 = 标志筛选（多选开关），激活态仍在；有建议的数字只在 KPI 卡
+       （2026-10-27 计数收敛），异常没有独立 KPI 仍带计数。 */
     expect(wrapper.find('.mk-card__head .mk-pills[aria-label="焦点筛选"]').exists()).toBe(false);
     const flags = wrapper.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill');
-    expect(flags.map((c) => c.text())).toEqual(['有建议0', '异常1']);
+    expect(flags.map((c) => c.text())).toEqual(['有建议', '异常1']);
     wrapper.unmount();
   });
 
@@ -391,7 +392,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     });
     const wrapper = await mountLive();
     const link = wrapper.find('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill');
-    expect(link.text()).toBe('有建议1');
+    expect(link.text()).toBe('有建议');
     expect(link.attributes('aria-pressed')).toBe('false');
     // 徽章 = 运营视角状态（待确认），不是学员端「建议先确认路径调整」原句
     const adv = wrapper.find('.ts-adv-badge');

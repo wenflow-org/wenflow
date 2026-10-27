@@ -74,15 +74,17 @@
               :aria-pressed="noPathOnly"
               @click="noPathOnly = !noPathOnly"
             ><Check v-if="noPathOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />未生成路径</button>
-            <!-- 停滞快筛（KPI 卡同源同判据）：从「停滞 N」读数进来的人，落点就是这枚 chip -->
+            <!-- 停滞快筛（KPI 卡同源同判据）：从「停滞 N」读数进来的人，落点就是这枚 chip。
+                 2026-10-27 计数收敛：数字只留在 KPI 卡（唯一出处），chip 只表达「已应用」。 -->
             <button
               v-if="staleActiveCount"
               type="button"
               class="mk-pill"
               :class="{ 'mk-pill--active': stalledOnly }"
               :aria-pressed="stalledOnly"
+              :title="`停滞 ${staleActiveCount} 个（KPI 同源）`"
               @click="stalledOnly = !stalledOnly"
-            ><Check v-if="stalledOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />停滞<span class="mk-pill__count">{{ staleActiveCount }}</span></button>
+            ><Check v-if="stalledOnly" :size="12" :stroke-width="2.5" aria-hidden="true" />停滞</button>
           </div>
         </div>
         <div class="mk-card__head-right">

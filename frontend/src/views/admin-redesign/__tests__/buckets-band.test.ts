@@ -119,7 +119,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     await abnormalBtn!.trigger('click');
     await settle();
     expect(w.findAll('tbody tr').length).toBe(2);
-    // 右组另一枚 = 有建议（2026-10-11 统一判例：chip 显命中数）
+    // 右组另一枚 = 有建议（2026-10-27 计数收敛：数字只在上方 KPI 卡，chip 只标已应用）
     expect(w.find('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').text()).toContain('有建议');
     w.unmount();
   });

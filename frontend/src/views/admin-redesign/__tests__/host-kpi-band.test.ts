@@ -132,7 +132,8 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
        进行中归状态下拉、缺总结归总结下拉、需关注是派生视图（点 KPI 卡，激活才出可移除胶囊）；
        卡头唯一 chip 组 = 标志筛选。0 行时异常 chip 不出现。 */
     expect(w.find('.mk-card__head .mk-pills[aria-label="焦点筛选"]').exists()).toBe(false);
-    expect(w.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
+    // 2026-10-27 计数收敛：有建议的数字只在 KPI 卡（同源同判据），chip 只表达已应用
+    expect(w.findAll('.mk-card__head .mk-pills[aria-label="标志筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议']);
     w.unmount();
   });
 
