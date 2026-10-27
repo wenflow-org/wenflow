@@ -54,9 +54,30 @@ node outputs/e2e/llm-pack.mjs v8 outputs/pack --only=fix,drop
 - **文字与图分离**：判词、病灶走纯文本（CJK 约 1 字 1 token），不塞进图片。要读判词读清单，要看图看图。
 - **pal8 + 480px**：教学图是白底纯色块 + 文字，256 色调色板几乎无损失，体积降 5~8 倍。
 
-## 什么时候仍用 HTML
+## 三、要一个「能拷走、双击就开」的 HTML（图片是图片格式）
 
-`v*-review.html` 保留给**人**看：可点击、可滚动、单图大图对照。它是给人读的交付物，不是喂模型的输入。
+```bash
+node outputs/e2e/report-html.mjs v8
+```
+
+产出 **`outputs/V8-review/`** 文件夹：
+
+- `index.html` **99KB**（不含任何 base64）
+- `images/01.png … 30.png`，30 张独立图片文件
+
+整个文件夹拷走即可，双击 `index.html` 就能看。页面内容：总览卡片、按图型汇总表、逐图总表、30 张卡片（图 + 图型 + 判词 + 三项评分 + 红灯标记 + 「图在讲」+「最该修」+ 可展开的老师原话与 spec），顶部还有「全部 / 要修 / 删掉 / 保留」筛选按钮，样式已做打印适配。
+
+三种 HTML 的区别：
+
+| 脚本 | 图片形态 | index.html 体积 | 用途 |
+|---|---|---|---|
+| `vision-report.mjs`（旧） | base64 内嵌 | 850KB | 早期单文件交付，**图片不是图片格式** |
+| `report-html.mjs`（新） | **独立 PNG 文件** | 99KB | 拷走整包 / 双击打开 / 分享给同事 |
+| `llm-brief.mjs` | 无图（纯文本） | 9KB | 喂模型，最省 token |
+
+## 什么时候仍用人看 HTML
+
+给人读的交付物用 `report-html.mjs` 那一份（可筛选、可展开、可打印）；旧版 `v*-review.html` 保留只为历史对照。喂模型用 `llm-brief.mjs` 的纯文本或 `llm-pack.mjs` 的拼版。
 
 ## 发之前先量一下
 
