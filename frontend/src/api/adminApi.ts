@@ -476,7 +476,7 @@ export const adminMemoryReviewApi = {
     canonicals: string[],
     options?: {
       includeNeedsReview?: boolean;
-      /** 确认执行的「需人工看」对（a ← b） */
+      /** 确认执行的「需人工确认」对（a ← b） */
       ambiguous?: Array<{ a: string; b: string }>;
       /** 确认清理的散键（dropCandidates.conceptKey） */
       drops?: string[];
@@ -499,7 +499,7 @@ export const adminMemoryReviewApi = {
     payload: {
       /** 驳回的归并建议（proposals.canonical） */
       canonicals?: string[];
-      /** 驳回的「需人工看」对（ambiguous 的 a/b） */
+      /** 驳回的「需人工确认」对（ambiguous 的 a/b） */
       ambiguous?: Array<{ a: string; b: string }>;
       /** 驳回的散键清理建议（dropCandidates.conceptKey） */
       drops?: string[];

@@ -163,8 +163,9 @@
                     v-if="row.audit?.ambiguous"
                     type="button"
                     class="mk-link mr__act"
+                    title="待人工确认的归并候选：点击到「记忆调度」确认或驳回"
                     @click.stop="openOps(row.userId)"
-                  >人工看 {{ row.audit.ambiguous }}</button>
+                  >待确认 {{ row.audit.ambiguous }}</button>
                 </div>
                 <span v-else class="mr__none">无</span>
               </td>
@@ -434,7 +435,7 @@ interface OverviewCard {
   /** 悬停只留读数本身（如「到该复习而未复习 N 条，占全部记录 X%」），不写机制与阈值说明 */
   title?: string
   tone?: 'ok' | 'warn' | 'bad' | 'muted' | ''
-  /** 可点：点中落到对应快筛（「需人工看」→ 需关注） */
+  /** 可点：点中落到对应快筛（「需人工确认」→ 需关注） */
   clickable?: boolean
 }
 
@@ -447,11 +448,11 @@ const overviewCards = computed<OverviewCard[]>(() => {
   const val = (v: number) => (na ? '—' : v)
   const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
   const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : text)
-  /* 待审队列已并入此卡（2026-10-22 用户「合并了」）：需人工看的不是只有 ambiguous，
+  /* 待审队列已并入此卡（2026-10-22 用户「合并了」）：需人工确认的不是只有 ambiguous，
      同义概念待确认 + 模糊候选 + 散键清理建议才是完整的「人审待办」。口径取
      fragmentation.pendingReview；后端旧版没这个字段时退回 ambiguous，不静默归零。 */
   const reviewQueue = totals.value.fragmentation?.pendingReview
-  /* 归并审计是「按用户跑观察」才有的投影：一条都没有时，需人工看/归并候选的 0 不是
+  /* 归并审计是「按用户跑观察」才有的投影：一条都没有时，需人工确认/归并候选的 0 不是
      「观察过、很干净」，而是「还没观察」。两者必须分开显示（2026-10-23 用户
      「为什么包括测试的也是很多0」——26 位测试用户、55 条痕迹，审计读数全是 0）。 */
   const noAudit = (t.usersWithAudit ?? 0) === 0
@@ -460,7 +461,7 @@ const overviewCards = computed<OverviewCard[]>(() => {
     { label: '记忆痕迹', value: val(t.traces), tone: numTone('') },
     { label: '当前到期', value: val(t.due), hint: numHint(''), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
     {
-      label: '需人工看',
+      label: '需人工确认',
       value: noAudit ? '—' : val(reviewQueue ?? t.ambiguous),
       hint: numHint(''),
       tone: numTone(!noAudit && (reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
@@ -473,7 +474,7 @@ const overviewCards = computed<OverviewCard[]>(() => {
 });
 
 /* 碎片率 KPI 行（R7 outlet 域契约 D）：后端未部署（字段整体缺失）→ '—' +「指标未取到」。
-   2026-10-22 起只留两卡：「待审队列」并入「需人工看」，不再同维度说两遍。 */
+   2026-10-22 起只留两卡：「待审队列」并入「需人工确认」，不再同维度说两遍。 */
 const fragmentationCards = computed<OverviewCard[]>(() => {
   const frag = totals.value.fragmentation
   const failed = !!error.value
@@ -596,7 +597,7 @@ function openLearner(userId: string) {
   openSubPage('learner', userId, { tab: LEARNER_DETAIL_LANDING.memoryReview })
 }
 
-/** 行内待办数字（人工看 / 归并候选 / 散键）→ 「记忆调度」页签：确认、驳回、回滚都在那里 */
+/** 行内待办数字（待确认 / 归并候选 / 散键）→ 「记忆调度」页签：确认、驳回、回滚都在那里 */
 function openOps(userId: string) {
   openSubPage('learner', userId, { tab: 'memory-ops' })
 }
@@ -644,7 +645,7 @@ onMounted(async () => {
 .mr__due-num--warn { color: var(--mk-amber); }
 .mr__due-num--high { color: var(--mk-red-strong); }
 
-/* 需关注：薄弱徽章 + 人工看入口（后者可点直达「记忆调度」）；无事项出一行「无」，不留空列 */
+/* 需关注：薄弱徽章 + 待确认入口（后者可点直达「记忆调度」）；无事项出一行「无」，不留空列 */
 .mr__focus { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mr__none { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 /* 行内数字按钮：读数是可点的入口，样式仍按数字（tabular-nums），只借 .mk-link 的交互语义 */

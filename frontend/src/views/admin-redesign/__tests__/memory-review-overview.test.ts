@@ -79,7 +79,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(labels.indexOf('详情')).toBeLessThan(labels.indexOf('重新观察'));
   });
 
-  /** 2026-10-26：行内三个待办数字（人工看 / 归并候选 / 散键）改成按钮——确认 / 驳回 / 回滚
+  /** 2026-10-26：行内三个待办数字（待确认 / 归并候选 / 散键）改成按钮——确认 / 驳回 / 回滚
    *  都在「记忆调度」页签，点行只落只读的 FSRS 普查面。 */
   it('行内待办数字可点，落「记忆调度」页签；整行点击仍落「记忆与复习」', async () => {
     overview.mockResolvedValue({
@@ -95,8 +95,8 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     const w = mount(MemoryReviewOverview);
     await flushPromises();
     const tds = w.findAll('tbody tr')[0].findAll('td');
-    const manual = tds[3].findAll('button').find((b) => b.text().includes('人工看'));
-    expect(manual, '人工看应是按钮').toBeTruthy();
+    const manual = tds[3].findAll('button').find((b) => b.text().includes('待确认'));
+    expect(manual, '待确认应是按钮').toBeTruthy();
     await manual!.trigger('click');
     expect(openSubPage).toHaveBeenLastCalledWith('learner', 'u2', { tab: 'memory-ops' });
     // 归并候选 / 散键同理
@@ -114,10 +114,10 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     w.unmount();
   });
 
-  /** 2026-10-26：「需人工看」可点 → 落到需关注快筛（同一批人） */
-  it('KPI「需人工看」可点，点中落到「需关注」快筛', async () => {
+  /** 2026-10-26：「需人工确认」可点 → 落到需关注快筛（同一批人） */
+  it('KPI「需人工确认」可点，点中落到「需关注」快筛', async () => {
     const w = await mountWithRows(ROWS, { usersWithAudit: 1, ambiguous: 1, fragmentation: { pendingReview: 3 } });
-    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工看')!;
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工确认')!;
     expect(card.classes()).toContain('mk-kpi--clickable');
     await card.trigger('click');
     await nextTick();
@@ -159,13 +159,13 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     const labels = grids[0].findAll('.mk-kpi__label').map((x) => x.text());
     /* 2026-10-23 用户「列的信息就很少，但是 kpi 信息很多」：待归并建议 / 未挂靠散键
        都能落到具体学习者，改由列表「归并候选」「散键」两列承载；页头只留列表表达不了的读数 */
-    expect(labels).toEqual(['有记忆痕迹的用户', '记忆痕迹', '当前到期', '需人工看', '措辞重复率']);
+    expect(labels).toEqual(['有记忆痕迹的用户', '记忆痕迹', '当前到期', '需人工确认', '措辞重复率']);
   });
 
   /** 2026-10-22 用户「合并了」：待审队列 = 人审档归并建议 + ambiguous + 散键清理建议
-   *  （后端 memory-review.ts:64-68），与「需人工看」是同口径的加总+加数，并排两张卡
-   *  会被读成两个矛盾读数 → 合并进「需人工看」，值取 pendingReview。 */
-  it('需人工看 = 人审待办总数（含归并建议 + 模糊候选 + 散键清理），不再单列待审队列卡', async () => {
+   *  （后端 memory-review.ts:64-68），与「需人工确认」是同口径的加总+加数，并排两张卡
+   *  会被读成两个矛盾读数 → 合并进「需人工确认」，值取 pendingReview。 */
+  it('需人工确认 = 人审待办总数（含归并建议 + 模糊候选 + 散键清理），不再单列待审队列卡', async () => {
     const w = await mountWithRows(ROWS, {
       usersWithAudit: 2,
       ambiguous: 2,
@@ -173,23 +173,23 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     });
     const byLabel = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label);
-    const card = byLabel('需人工看')!;
+    const card = byLabel('需人工确认')!;
     expect(card.find('.mk-kpi__num').text()).toBe('5');
     // 2026-10-26：卡面与 title 都只留读数（机制说明整条撤除）
     expect(card.attributes('title')).toBeUndefined();
     expect(byLabel('待审队列')).toBeUndefined();
   });
 
-  /** 2026-10-17 重设计：19 位有痕迹的用户里 17 位从未复习，旧的四列（需人工看/薄弱/强度/
+  /** 2026-10-17 重设计：19 位有痕迹的用户里 17 位从未复习，旧的四列（需人工确认/薄弱/强度/
    *  最近复习）成片「—」，0 到期还各画一条空轨。
    *  二次调整：相邻两列各画一条比例条会读成一排重叠的条——待复习只留数字，
    *  记忆强度单独一列带条，需关注与最近复习各自成列。 */
-  it('全部用户都没跑过归并观察 → 需人工看显示「—」，不把没观察写成 0', async () => {
+  it('全部用户都没跑过归并观察 → 需人工确认显示「—」，不把没观察写成 0', async () => {
     // 2026-10-23 用户「为什么包括测试的也是很多0」：测试视角 26 位用户、55 条痕迹，
     // 但归并审计投影一条都没有——0 是「没算过」，不是「很干净」。
     // 2026-10-26：卡面与 title 都不再挂解释句，「没观察过」只靠「—」与 0 区分。
     const w = await mountWithRows(ROWS, { usersWithAudit: 0, ambiguous: 0 });
-    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工看')!;
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工确认')!;
     expect(card.find('.mk-kpi__num').text()).toBe('—');
     expect(card.find('.mk-kpi__hint').exists()).toBe(false);
     expect(card.text()).not.toContain('尚未观察');
@@ -207,9 +207,9 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(card.text()).not.toContain('暂无痕迹');
   });
 
-  it('后端没有 fragmentation.pendingReview 时，需人工看退回 ambiguous，不归零', async () => {
+  it('后端没有 fragmentation.pendingReview 时，需人工确认退回 ambiguous，不归零', async () => {
     const w = await mountWithRows(ROWS, { usersWithAudit: 1, ambiguous: 4, fragmentation: null });
-    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工看')!;
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工确认')!;
     expect(card.find('.mk-kpi__num').text()).toBe('4');
   });
 
@@ -241,10 +241,10 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(trs[0].findAll('.mk-minibar')).toHaveLength(0);
     expect(trs[1].findAll('.mk-minibar')).toHaveLength(1);
     expect(trs[1].findAll('td')[6].find('.mr__strength-pct').text()).toBe('52%');
-    // 需关注列：无事项出「无」，有事项出薄弱徽章 + 人工看按钮
+    // 需关注列：无事项出「无」，有事项出薄弱徽章 + 待确认按钮
     expect(trs[0].findAll('td')[3].text()).toBe('无');
     expect(trs[1].findAll('td')[3].text()).toContain('薄弱 3');
-    expect(trs[1].findAll('td')[3].text()).toContain('人工看 2');
+    expect(trs[1].findAll('td')[3].text()).toContain('待确认 2');
     // 归并候选 / 散键：逐用户读数（原来只住在 KPI 的数字）
     // 没跑过归并观察 ≠ 0 候选：两者必须分开
     expect(trs[0].findAll('td')[4].text()).toBe('未观察');
@@ -331,7 +331,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(opt('全部')).toBe('全部');
     expect(opt('有待复习')).toBe('有待复习（1）');   // 小红
     expect(opt('未复习')).toBe('未复习（1）');       // 小明
-    expect(opt('需关注')).toBe('需关注（1）');       // 小刚（薄弱 + 人工看）
+    expect(opt('需关注')).toBe('需关注（1）');       // 小刚（薄弱 + 待确认）
 
     await chooseFilter(w as never, '状态', '有待复习');
     await nextTick();
