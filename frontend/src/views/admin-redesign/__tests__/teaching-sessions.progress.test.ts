@@ -107,13 +107,13 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     const rows = wrapper.findAll('tbody tr');
     expect(rows[0].find('.ts-status').text()).toContain('已完成');
     expect(rows[0].find('.ts-status').text()).toContain('手动结束');
-    expect(rows[0].text()).toContain('停在 1/4');
+    expect(rows[0].text()).toContain('1/4');
     // 2026-10-27：从属说明不再带解释型 title，也不再说成用户动作
     const note = rows[0].find('.ts-status .ts-status__note');
     expect(note.text()).toBe('手动结束');
     expect(note.attributes('title')).toBeUndefined();
     expect(rows[1].find('.ts-status').text()).not.toContain('手动结束');
-    expect(rows[1].text()).toContain('停在 4/4');
+    expect(rows[1].text()).toContain('4/4');
     expect(rows[2].find('.ts-status').text()).not.toContain('手动结束');
     wrapper.unmount();
   });
@@ -149,7 +149,7 @@ afterEach(() => {
 });
 
 describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）', () => {
-  it('live：已完成会话 → 状态/进度列显「停在 x/y」（不渲染进度条），title 保留历史进度', async () => {
+  it('live：已完成会话 → 状态/进度列显「x/y」（不渲染进度条），title 保留历史进度', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -169,15 +169,15 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const row = wrapper.find('tbody tr');
     const prog = row.find('.ts-prog');
     expect(prog.exists()).toBe(true);
-    // 2026-10-23：生命周期由徽章表达，位置只说「停在 x/y」，不复述结果
-    expect(prog.text()).toBe('停在 2/5');
+    // 2026-10-27：生命周期由徽章表达，位置只留 x/y（去掉每行复读的「停在」）
+    expect(prog.text()).toBe('2/5');
     expect(row.find('.mk-minibar').exists()).toBe(false);
     expect(row.text()).not.toContain('任务 2/5');
     expect(prog.attributes('title')).toContain('阶段 2/4 · 第 2 个任务（共 5 个）');
     wrapper.unmount();
   });
 
-  it('live：失败/超时中断态 → 状态徽章 + 「停在 x/y」', async () => {
+  it('live：失败/超时中断态 → 状态徽章 + 「x/y」', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -198,9 +198,9 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
     expect(rows[0].text()).toContain('失败');
-    expect(rows[0].text()).toContain('停在 3/4');
+    expect(rows[0].text()).toContain('3/4');
     expect(rows[1].text()).toContain('超时');
-    expect(rows[1].text()).toContain('停在 1/2');
+    expect(rows[1].text()).toContain('1/2');
     // 合并后不再有进度条：结果着色只由状态徽章承担
     expect(rows[0].find('.mk-minibar').exists()).toBe(false);
     wrapper.unmount();
@@ -223,7 +223,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const row = wrapper.find('tbody tr');
     expect(row.text()).toContain('已被替代');
-    expect(row.text()).toContain('停在 2/4');
+    expect(row.text()).toContain('2/4');
     expect(row.find('.ts-status__main').classes()).toContain('mk-badge--warn');
     wrapper.unmount();
   });
@@ -270,7 +270,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     });
     const wrapper = await mountLive();
     const prog = wrapper.find('tbody tr').find('.ts-prog');
-    expect(prog.text()).toBe('停在 0/4');
+    expect(prog.text()).toBe('0/4');
     const title = prog.attributes('title') || '';
     expect(title).toContain('未进入具体任务（共 4 个）');
     expect(title).not.toContain('第 1 个任务');
@@ -496,7 +496,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('时长按分钟解释（后端 duration 单位是分钟）：90 → 1 小时 30 分、1600 → 26 小时 40 分；长时阈值进 title；未知任务类型回退「—」+ title 原文', async () => {
+  it('时长按分钟解释（后端 duration 单位是分钟）：90 → 1 小时 30 分、1600 → 26 小时 40 分；title 只给读数，不再标长时；未知任务类型回退「—」+ title 原文', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -514,7 +514,8 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(rows[1].text()).toContain('26 小时 40 分');
     expect(rows[0].text()).toContain('—');
     expect(rows[0].find('td .mk-cell-sub').attributes('title')).toBe('任务类型原文：weird_type');
-    expect(rows[1].find('.ts-ia').attributes('title')).toContain('≥ 25 分钟按长时标注');
+    expect(rows[1].find('.ts-ia').attributes('title')).toContain('时长 26 小时 40 分');
+    expect(rows[1].find('.ts-ia').attributes('title')).not.toContain('长时标注');
     wrapper.unmount();
   });
 

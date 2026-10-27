@@ -163,7 +163,8 @@ describe('教学会话「互动」拆成时长 / 消息 / 知识点三列（2026
 
     const cells = wrapper.findAll('.ts-ia');
     expect(cells[0].text()).toBe('25 分钟');
-    expect(cells[0].find('.ts-ia__dur--long').exists()).toBe(true); // ≥25 分钟长时标琥珀
+    // 2026-10-27 用户「时长还有两种颜色，简化一下」：不再按长时阈值染琥珀
+    expect(cells[0].find('.ts-ia__dur--long').exists()).toBe(false);
     expect(cells[1].text()).toBe('4 条');
     expect(cells[2].text()).toBe('2 个');
   });

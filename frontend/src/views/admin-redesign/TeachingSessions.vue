@@ -243,10 +243,10 @@
               <td v-if="!tsHiddenCols.has('status')">
                 <div class="ts-status">
                   <span class="mk-badge ts-status__main" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
-                  <!-- 2026-10-23 用户「已完成和进度是一样的吧，应该保留一个就行」：
-                       生命周期终态与任务位置并成一列。位置只写「停在 x/y」，不再用「结束于/中断于」
-                       复述左侧徽章已经说过的结果；x/y 是位置，不是完成数（表头 title 已说明）。 -->
-                  <span v-if="progressStopText(r)" class="ts-prog" :title="progressTitle(r)">{{ progressStopText(r) }}</span>
+                  <!-- 2026-10-27 用户「又是超时又是停在」：生命周期终态与任务位置并成一列后，
+                       位置只留 x/y 这个读数，「停在」三个字每行复读没有信息量；
+                       结果由左侧徽章承担，定位细节在 title（表头已写「状态 / 进度」）。 -->
+                  <span v-if="progressFractionText(r)" class="ts-prog" :title="progressTitle(r)">{{ progressFractionText(r) }}</span>
                   <span v-else class="mk-na">—</span>
                   <!-- 2026-10-27 用户「教学会话怎么这么多 pill」：低参与 / 手动结束是从属说明，
                        不是独立状态档；合流成状态列第二行的弱化文本，不再各占一枚灰胶囊。 -->
@@ -265,7 +265,7 @@
               </td>
               <td v-if="!tsHiddenCols.has('duration')">
                 <div class="ts-ia ts-ia--dur" :title="interactTitle(r)">
-                  <b v-if="r.duration" class="ts-ia__dur" :class="{ 'ts-ia__dur--long': r.duration >= IDLE_LONG_MINUTES }">{{ fmtDuration(r.duration) }}</b>
+                  <b v-if="r.duration" class="ts-ia__dur">{{ fmtDuration(r.duration) }}</b>
                   <span v-else class="mk-na">—</span>
                 </div>
               </td>
@@ -286,10 +286,12 @@
                      处置状态 + 触发原因 + 影响范围，见 statusText.advisoryOps*。
                      固定列宽后两枚徽章在窄档会超出本列：外层 flex-wrap 换行，不裁不挤邻列。 -->
                 <div class="ts-out">
-                  <!-- 2026-10-27 用户「教学会话怎么这么多 pill」：只有异常档（缺总结 / 降级总结）
-                       保留提醒徽章；「有总结 / 未生成」是常态，降为文字，行内视觉重心回到状态列。 -->
-                  <span v-if="wrapupTier(r) === 'complete' || wrapupTier(r) === 'pending'" class="ts-out__text">{{ wrapupText(r) }}</span>
-                  <span v-else class="mk-badge" :class="wrapupBadge(r)">{{ wrapupText(r) }}</span>
+                  <!-- 2026-10-27 用户「总结那边还有四类，简化一下」：行内只留两档——
+                       有总结（文字）/ 缺总结（徽章，含降级总结，与 KPI、筛选同一口径）；
+                       未生成是过程态，按空值占位；降级细节留在 title。 -->
+                  <span v-if="wrapupTier(r) === 'complete'" class="ts-out__text">有总结</span>
+                  <span v-else-if="wrapupTier(r) === 'missing'" class="mk-badge mk-badge--warn" :title="wrapupMissingTitle(r)">缺总结</span>
+                  <span v-else class="mk-na">—</span>
                   <!-- 建议从属说明同样去掉胶囊：严重度只染图标与文字，不再铺色底。 -->
                   <span
                     v-if="r.hasAdvisory"
@@ -877,14 +879,9 @@ const attentionCount = computed(() => rows.value.filter((r) => r.attention !== '
    进行中会话页头就恒 warn、计数虚高。 */
 const wrapupTier = (r: Row): 'complete' | 'missing' | 'pending' =>
   r.wrapupStatus === 'complete' ? 'complete' : isTerminal(r.status) ? 'missing' : 'pending'
-const wrapupText = (r: Row) => {
-  const t = wrapupTier(r)
-  /* 降级总结（#40）：summary-only / fallback 兜底来源与「完全没总结」同档计数，
-     但行内文案区分——否则 wrapupDegraded 算出无消费（死数据） */
-  return t === 'complete' ? '有总结' : t === 'missing' ? (r.wrapupDegraded ? '降级总结' : '缺总结') : '未生成'
-}
-const wrapupBadge = (r: Row) =>
-  wrapupTier(r) === 'complete' ? 'mk-badge--ok' : wrapupTier(r) === 'missing' ? 'mk-badge--warn' : 'mk-badge--muted'
+/* 缺总结的悬停说明：降级总结并入同一档（与 KPI / 总结下拉同口径），区别只在 title。 */
+const wrapupMissingTitle = (r: Row): string =>
+  r.wrapupDegraded ? '降级总结：生成走了兜底来源，内容不完整' : '缺总结：会话结束后没有生成总结'
 const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
 
 /* 状态列从属说明（2026-10-27 用户「教学会话怎么这么多 pill」）：低参与 / 手动结束
@@ -1013,14 +1010,11 @@ function startAbsTitle(r: Row): string | undefined {
   const t = new Date(r.startTime).getTime()
   return Number.isFinite(t) ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : r.startAt || undefined
 }
-/** 长时阈值（分钟）：≥25 分钟标琥珀；阈值写进时长列 title 与表头披露 */
-const IDLE_LONG_MINUTES = 25
 /** 时长 / 消息 / 知识点共用的悬停读数：拆列后知识点在窄档不占列宽，读数仍可查 */
 function interactTitle(r: Row): string | undefined {
   if (!r.duration) return undefined
   const parts = [`时长 ${fmtDuration(r.duration)}`, `${r.messageCount} 条消息`]
   if (r.knowledgePointCount) parts.push(`${r.knowledgePointCount} 个知识点`)
-  if (r.duration >= IDLE_LONG_MINUTES) parts.push(`≥ ${IDLE_LONG_MINUTES} 分钟按长时标注`)
   return parts.join(' · ')
 }
 /** 进度工具提示（人话）：阶段 n/m · 任务 x/y；无里程碑维度只给任务 */
@@ -1029,16 +1023,15 @@ function interactTitle(r: Row): string | undefined {
  *  「任务 1/4」容易被读成「4 个里做完了 1 个」。 */
 function progressTitle(r: Row): string {
   // 措辞单源在 statusText.sessionProgressTitle：taskIndex=0（结束时还没定位到具体任务）
-  // 不能 clamp 成「第 1 个」——同一行的可见文本写的是「停在 0/4」，两处互相打脸
+  // 不能 clamp 成「第 1 个」——同一行的可见文本写的是「0/4」，两处互相打脸
   return sessionProgressTitle(r.progress, { withMilestone: true })
 }
-/** 状态 / 进度合并列的定位短语：只说停在哪一格；结果（完成/中断/超时）由左侧徽章承担，
-    不再用「结束于 / 中断于」把同一件事说两遍（2026-10-23 用户走查）。 */
-function progressStopText(r: Row): string {
+/** 状态 / 进度合并列的位置读数（2026-10-27 用户「又是超时又是停在」）：只给 x/y，
+    结果（完成/中断/超时）由左侧徽章承担，定位细节在 title。 */
+function progressFractionText(r: Row): string {
   const p = r.progress
   if (!p || !Number.isFinite(p.totalTasks) || p.totalTasks <= 0) return ''
-  const pos = `${Math.min(Math.max(p.taskIndex, 0), p.totalTasks)}/${p.totalTasks}`
-  return `停在 ${pos}`
+  return `${Math.min(Math.max(p.taskIndex, 0), p.totalTasks)}/${p.totalTasks}`
 }
 
 /* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → refreshNow） */
@@ -1063,14 +1056,15 @@ defineExpose({ refreshNow })
    fixed 档下按表头宽度定死，余量按各列宽度权重摊开；断点与 isTableCompact/Narrow/Mid
    的列显隐对齐，隐藏列的宽度不参与分配。 */
 /* 2026-10-24 视觉修复：状态（204）/课后总结（190）/开始时间（92）在多数行是短内容，
-   富余宽度让给课堂主列；状态列仍够放下「已完成 + 停在 x/y」一行。 */
+   富余宽度让给课堂主列；状态列仍够放下「已完成 + x/y」一行。 */
 .ts-c-user { width: 150px; }
 .ts-c-status { width: 150px; }
 .ts-c-track { width: 84px; }
-.ts-c-dur { width: 74px; }
+.ts-c-dur { width: 90px; }
 .ts-c-msg { width: 66px; }
 .ts-c-kp { width: 62px; }
-.ts-c-mode { width: 88px; }
+/* 课型去徽章后是纯文本（最长「复习课」3 字），宽度从 88 收到 72，让给时长列。 */
+.ts-c-mode { width: 72px; }
 .ts-c-out { width: 150px; }
 .ts-c-att { width: 50px; }
 .ts-c-start { width: 80px; }
@@ -1083,7 +1077,7 @@ defineExpose({ refreshNow })
   .ts-c-topic { width: 260px; }
   .ts-c-user { width: 140px; }
   .ts-c-status { width: 150px; }
-  .ts-c-dur { width: 72px; }
+  .ts-c-dur { width: 86px; }
   .ts-c-msg { width: 64px; }
   .ts-c-out { width: 150px; }
 }
@@ -1115,7 +1109,7 @@ defineExpose({ refreshNow })
 .ts-ia { display: grid; gap: 2px; justify-items: start; max-width: 100%; min-width: 0; overflow: hidden; }.ts-ia > * { min-width: 0; max-width: 100%; }/* 时长格：容器别再裁主值（2026-10-21 用户「时长被截断」：td 81px / 内容盒 49px /「27 分钟」53px，
    被 overflow:hidden 切掉 4px）。.ts-ia 的 min-width:0 + overflow:hidden 本是给副行省略号用的，
    主值只有 4~6 个字，让回 max-content，auto 布局才会按字宽给这列留位 */
-.ts-ia--dur { overflow: visible; }.ts-ia--dur > .ts-ia__dur { min-width: max-content; max-width: none; white-space: nowrap; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--long { color: var(--mk-amber); }/* 状态 / 进度合并列（2026-10-23）：位置短语只占一行原地文字，不再配迷你条；
+.ts-ia--dur { overflow: visible; }.ts-ia--dur > .ts-ia__dur { min-width: max-content; max-width: none; white-space: nowrap; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }/* 状态 / 进度合并列（2026-10-23）：位置短语只占一行原地文字，不再配迷你条；
    结果由左侧徽章着色（完成绿 / 超时红 / 暂停琥珀），条与文字同说一件事。 */
 .ts-prog { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }/* 可点 KPI 的选中态（2026-10-27）：与同组 gc-/oc-/lc-/mr- 同一判例，蓝只给可交互与选中 */
 .ts-kpi--on { border-color: var(--mk-blue); }
