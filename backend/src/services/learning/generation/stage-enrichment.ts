@@ -1336,7 +1336,11 @@ async function enrichLearningPathWithAndersonInner(
           totalStages: learningPath.milestones.length,
         });
       }
-      const pathHoursToWrite = pathNormalizedHours > 0 ? pathNormalizedHours : undefined;
+      // 浮点收尾（2026-10-27 R8 冒烟实证 A13=6.600000000000001）：阶段小时逐项累加会带 IEEE754 尾巴，
+      // 写路径总学时前统一保留一位小数（下界 0.1），与标称/展示口径一致。
+      const pathHoursToWrite = pathNormalizedHours > 0
+        ? Math.max(0.1, Math.round(pathNormalizedHours * 10) / 10)
+        : undefined;
 
       // #56 阶段预算不变量：阶段预算必须按内容反推，不能恒等复制上游总量（等分/全等于总量
       // 都是退化形态）。这里只做可见化：判成 violations → warn + 落 aiPromptTemplate，
