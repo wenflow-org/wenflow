@@ -205,11 +205,12 @@
       </ModelProvidersPanel>
 
       <!-- ===== 调用策略（2026-10-26 重建）=====
-           此前是「调用策略 / 调用健康」两张卡：左卡七个数字塞在 3×3 嵌套栅格里（标签折行、
-           输入框跨列不对齐、单字段分组空掉半列），右卡整张由能力探针撑起（探针已下线）。
-           现在合成一张：左边是这一页唯一要人定的七个参数（尝试 / 退避 / 出站），
-           右边是这些参数直接影响的运行读数（近 1 小时 429 与冷却模型）——
-           「我调了什么」与「现在挨不挨限流」在同一视平线上。 -->
+           2026-10-26 用户「不用写那么详细，分那么多，就最大重试、间隔、rpm 就够了」：
+           原先三组八个控件（上游尝试 / 传输重试 / 逻辑重试 / 退避基数 / Retry-After /
+           单次超时 / 随机抖动 / RPM）是一份网关调参台，而这一页的读者只想知道
+           「重试几次、隔多久、出站多快」。收成三个字段一行；没露出的几项沿用库里现值，
+           保存时原样回传（不会因为界面不显示而被重置成默认值），一句注解说明这点。
+           右侧仍是这些参数的效果面：近 1 小时 429 与冷却模型。 -->
       <section v-if="isLive && (reliability || configLoadFailed)" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">调用策略</h3>
@@ -221,71 +222,38 @@
               <span class="mk-alert__msg">配置读取失败</span>
               <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
             </div>
-            <!-- 不变式违例升格为卡级告警：7 个数字里最该先读的一句 -->
+            <!-- 不变式违例升格为卡级告警：三个数字里最该先读的一句 -->
             <div v-if="reliability && fallbackDisabled" class="mk-alert mk-alert--row ac-fallback-alert" role="alert">
-              <span class="mk-alert__msg">当前配置下「模型降级」永远不会触发，请增大「上游最大尝试」或减小「传输重试」</span>
+              <span class="mk-alert__msg">当前重试预算下「模型降级」永远不会触发：同模型重试会先耗尽尝试次数，请把「最大重试」调大</span>
             </div>
-            <div v-if="reliability" class="ac-policy__groups">
-              <div class="ac-policy__group">
-                <div class="ac-policy__group-title">尝试与降级</div>
-                <div class="ac-policy__rows">
-                  <label class="ac-policy__row">
-                    <span class="mk-field__label ac-policy__label">上游最大尝试</span>
-                    <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input ac-policy__num" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">次</em>
-                  </label>
-                  <label class="ac-policy__row">
-                    <span class="mk-field__label ac-policy__label">传输重试</span>
-                    <input v-model.number="reliability.maxTransportRetries" type="number" min="0" :max="limMax('maxTransportRetries', 5)" class="mk-field__input ac-policy__num" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">次</em>
-                  </label>
-                  <label class="ac-policy__row">
-                    <span class="mk-field__label ac-policy__label">逻辑重试</span>
-                    <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" :max="limMax('maxLogicalRetries', 5)" class="mk-field__input ac-policy__num" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">次</em>
-                  </label>
-                </div>
-              </div>
-              <div class="ac-policy__group">
-                <div class="ac-policy__group-title">退避与超时</div>
-                <div class="ac-policy__rows">
-                  <label class="ac-policy__row">
-                    <span class="mk-field__label ac-policy__label">退避基数</span>
-                    <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input ac-policy__num" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">毫秒</em>
-                  </label>
-                  <label class="ac-policy__row">
-                    <span class="mk-field__label ac-policy__label">Retry-After 上限</span>
-                    <input v-model.number="reliability.maxRetryAfterMs" type="number" min="0" :max="limMax('maxRetryAfterMs', 30000)" step="1000" class="mk-field__input ac-policy__num" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">毫秒</em>
-                  </label>
-                  <label class="ac-policy__row">
-                    <span class="mk-field__label ac-policy__label">单次超时</span>
-                    <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" :min="limMin('minRequestTimeoutMs', 1000)" :max="limMax('maxRequestTimeoutMs', 600000)" step="1000" class="mk-field__input ac-policy__num" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">毫秒</em>
-                  </label>
-                  <!-- 抖动是布尔项，但仍排成一行：同一张卡里的设置只有一种形状（标签—控件） -->
-                  <label class="ac-policy__row ac-policy__row--switch">
-                    <span class="mk-field__label ac-policy__label">随机抖动</span>
-                    <input type="checkbox" v-model="reliability.jitterEnabled" @change="markDirty('reliability')" />
-                    <span class="ac-policy__unit" aria-hidden="true"></span>
-                  </label>
-                </div>
-              </div>
-              <div class="ac-policy__group">
-                <div class="ac-policy__group-title">平台出站速率</div>
-                <div class="ac-policy__rows">
-                  <label class="ac-policy__row">
-                    <span class="mk-field__label ac-policy__label">全局 RPM 上限</span>
-                    <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input ac-policy__num" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">次/分</em>
-                  </label>
-                </div>
-                <!-- 唯一需要解释的一组：这一栏的数字按「逻辑调用」计，超了是排队不是报错 -->
-                <p class="ac-policy__note">超出后排队等待，不报错。0 = 不限。</p>
-              </div>
+            <div v-if="reliability" class="ac-policy__fields">
+              <label class="mk-field">
+                <span class="mk-field__label">最大重试</span>
+                <span class="ac-policy__control">
+                  <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
+                  <em class="ac-policy__unit">次</em>
+                </span>
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">重试间隔</span>
+                <span class="ac-policy__control">
+                  <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
+                  <em class="ac-policy__unit">毫秒</em>
+                </span>
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">出站 RPM 上限</span>
+                <span class="ac-policy__control">
+                  <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
+                  <em class="ac-policy__unit">次/分</em>
+                </span>
+              </label>
             </div>
-          </div>
+            <!-- 一句说清这个数字的口径（它是总尝试上限，不是「同模型重试几次」）：
+                 其余细项仍生效、仍随保存原样回传，只是不再占版面 -->
+            <p v-if="reliability" class="ac-policy__note">
+              「最大重试」是总尝试上限，含首次调用与改用备用模型。出站 RPM 超出后排队等待，0 = 不限。单次超时、退避上限、抖动沿用当前配置。
+            </p>          </div>
           <!-- 运行读数：参数的效果面。原先挂在「调用健康」卡里，与参数隔着两张卡的卡头，
                读者要自己把「我把重试调高了」和「还在挨 429」对上。 -->
           <aside class="ac-policy__side" aria-label="近 1 小时调用读数">
@@ -911,6 +879,11 @@ async function saveGroups(groups: string[]) {
         return Number.isInteger(f) ? f : 0
       }
       const base = reliabilityBase.value ?? {}
+      /* 2026-10-26 界面只露「最大重试」（= maxUpstreamAttempts，含降级跳转的总尝试上限）。
+         同模型重试数、超时、退避上限、抖动这几项不再上屏，但必须原样回传库里的现值：
+         后端 PUT 是 partial 合并，少传一项就等于把它重置成默认值。
+         刻意不把「最大重试」联动到同模型重试数——执行器只在「上游尝试还有余量」时才会
+         跳到备用模型，把同模型重试顶到 上游-1 会让降级永远不触发（本卡上面那条告警就是它）。 */
       const sanitized = {
         maxUpstreamAttempts: intOr(reliability.value.maxUpstreamAttempts, base.maxUpstreamAttempts),
         maxTransportRetries: intOr(reliability.value.maxTransportRetries, base.maxTransportRetries),
@@ -1167,10 +1140,10 @@ function discardAll() {
 .ac-cols__side { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
 .ac-fallback-alert { margin: 0; }
 
-/* ===== 调用策略（2026-10-26 重建：左参数 / 右读数）=====
-   参数行改成「标签 — 数值 — 单位」三段栅格：标签不再折行，三组的输入框共用同一条
-   右对齐竖线（此前是三组 × 三字段的九宫格，标签折两行、输入框各落各的位置）。
-   读数从原「调用健康」卡搬进来当右栏：参数与它造成的结果在同一视平线。 */
+/* ===== 调用策略（2026-10-26：三字段 + 读数）=====
+   用户「不用写那么详细，分那么多，就最大重试、间隔、rpm 就够了」：三个字段一行排开，
+   每个是「标签在上、输入框 + 单位在下」——与全站表单同一种形状，不再有分组标题与
+   九宫格。读数从原「调用健康」卡搬进来当右栏：参数与它造成的结果在同一视平线。 */
 .ac-policy {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -1178,38 +1151,17 @@ function discardAll() {
   align-items: start;
   padding-top: 14px;
 }
-.ac-policy__form { display: grid; gap: 14px; min-width: 0; }
-.ac-policy__groups {
+.ac-policy__form { display: grid; gap: 12px; min-width: 0; }
+/* 三个字段等分左栏（标签均匀铺开），控件本身封顶 220px——数字只有一两位，
+   输入框不必跟着拉成整列宽，但三列仍各占一等分，不会挤在左边留半屏空白 */
+.ac-policy__fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 22px 32px;
+  gap: 24px;
   align-items: start;
 }
-.ac-policy__group { display: grid; gap: 4px; min-width: 0; }
-/* 组标题是一条细横线：三组的上边缘因此对齐成一条水平节奏 */
-.ac-policy__group-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--mk-line);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--mk-faint);
-}
-.ac-policy__rows { display: grid; gap: 4px; }
-/* 行内三段：标签吃余量、数值定宽、单位定宽——同组内所有数值的左右边缘对齐 */
-.ac-policy__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 104px 30px;
-  align-items: center;
-  gap: 10px;
-  padding: 3px 0;
-}
-.ac-policy__label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ac-policy__num {
+.ac-policy__control { display: flex; align-items: center; gap: 8px; max-width: 220px; }
+.ac-policy__control .mk-field__input {
   width: 100%;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -1219,21 +1171,14 @@ function discardAll() {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   white-space: nowrap;
+  flex: none;
 }
-/* 组内注解：只在「一个字段撑不满一列」的分组里出现，补上这栏数字的行为说明 */
+/* 字段注解：一行小字说清「重试次数含降级」「0 = 不限」，并交代没露出的细项沿用现值 */
 .ac-policy__note {
-  margin: 2px 0 0;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.65;
-  color: var(--mk-faint);
-}
-/* 布尔行：与数字行同一栅格，勾选框落在数字列的左边缘（同一竖线） */
-.ac-policy__row--switch { padding: 1px 0; }
-.ac-policy__row--switch input[type='checkbox'] {
-  justify-self: start;
   margin: 0;
-  accent-color: var(--mk-blue);
-  cursor: pointer;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.7;
+  color: var(--mk-faint);
 }
 
 /* 右栏：近 1 小时读数（429 / 冷却模型）。读者的问题只有一个「现在挨不挨限流」 */
@@ -1290,11 +1235,10 @@ function discardAll() {
   .ac-policy__link { justify-self: end; }
 }
 @media (max-width: 1100px) {
-  .ac-policy__groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ac-policy__fields { grid-template-columns: repeat(2, minmax(0, 200px)); }
 }
 @media (max-width: 800px) {
-  .ac-policy__groups { grid-template-columns: minmax(0, 1fr); }
-  .ac-policy__row { grid-template-columns: minmax(0, 1fr) 88px 30px; }
+  .ac-policy__fields { grid-template-columns: minmax(0, 1fr); }
   .ac-policy__side { grid-template-columns: auto 1fr; }
   .ac-policy__link { justify-self: start; }
 }
@@ -1349,8 +1293,7 @@ function discardAll() {
   .ac-sec__title { font-size: var(--mk-fs-micro); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
-  .ac-policy__group-title { font-size: var(--mk-fs-micro); }
-  .ac-policy__groups { gap: 24px 36px; }
+  .ac-policy__fields { grid-template-columns: repeat(3, minmax(0, 220px)); gap: 22px; }
   .ac-save { padding: 11px 14px 11px 18px; }
 }
 @media (min-width: 2800px) {
@@ -1363,8 +1306,7 @@ function discardAll() {
   .ac-sec__title { font-size: var(--mk-fs-micro); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
-  .ac-policy__group-title { font-size: var(--mk-fs-micro); }
-  .ac-policy__groups { gap: 26px 38px; }
+  .ac-policy__fields { grid-template-columns: repeat(3, minmax(0, 250px)); gap: 24px; }
   .ac-save { padding: 13px 16px 13px 20px; }
 }
 @media (min-width: 3600px) {
@@ -1377,8 +1319,7 @@ function discardAll() {
   .ac-sec__title { font-size: var(--mk-fs-body); }
   .ac-cols__main { padding: 0; }
   .ac-cols__side { padding: 0; }
-  .ac-policy__group-title { font-size: var(--mk-fs-body); }
-  .ac-policy__groups { gap: 30px 44px; }
+  .ac-policy__fields { grid-template-columns: repeat(3, minmax(0, 290px)); gap: 28px; }
   .ac-save { padding: 15px 18px 15px 24px; }
 }
 

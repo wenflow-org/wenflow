@@ -12,9 +12,10 @@ import { dataSource } from '../store';
 import { liveApiConfig, pickChatTestModel } from '../live';
 import { confirmState, settleConfirm } from '../useConfirm';
 
-const { getConfigMock, getReliabilityMock, getModelRegistryMock, getModelProvidersMock, getInfraModelsMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
+const { getConfigMock, getReliabilityMock, updateReliabilityMock, getModelRegistryMock, getModelProvidersMock, getInfraModelsMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
   getReliabilityMock: vi.fn(),
+  updateReliabilityMock: vi.fn(),
   getModelRegistryMock: vi.fn(),
   getModelProvidersMock: vi.fn(),
   getInfraModelsMock: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('@/api/adminApi', () => ({
   adminAnnouncementsApi: apiObject(),
   adminPlatformSettingsApi: apiObject({
     getReliabilitySettings: getReliabilityMock,
+    updateReliabilitySettings: updateReliabilityMock,
     getRegistrationSetting: vi.fn(async () => ({ data: { data: { registrationEnabled: false } } }))
   }),
   adminAuditApi: apiObject(),
@@ -168,6 +170,8 @@ describe('ApiConfig P1 修复批', () => {
   beforeEach(() => {
     getConfigMock.mockReset();
     getReliabilityMock.mockReset();
+    updateReliabilityMock.mockReset();
+    updateReliabilityMock.mockResolvedValue({ data: { data: {} } });
     getModelRegistryMock.mockReset();
     getModelProvidersMock.mockReset();
     getModelProvidersMock.mockResolvedValue({ data: { data: providersView() } });
@@ -688,8 +692,8 @@ describe('ApiConfig P1 修复批', () => {
   });
 
   /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线后本页下半只剩一张卡：
-     调用策略（左参数 / 右读数），生成参数仍在平台详情的第四页签里。 */
-  it('调用面只有一张策略卡：参数与读数同卡，探针已下线', async () => {
+     调用策略（三个字段 + 右栏读数），生成参数仍在平台详情的第四页签里。 */
+  it('调用面只有一张策略卡：三个字段 + 读数，探针与细项都已下线', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
 
@@ -697,12 +701,16 @@ describe('ApiConfig P1 修复批', () => {
     expect(cards.map((c) => c.find('.mk-card__title').text())).toEqual(['调用策略']);
 
     const card = cards[0];
-    // 七个数字 + 一个布尔（随机抖动）按三组排开，单位独立成列，标签不再自带单位
-    expect(card.findAll('.ac-policy__group')).toHaveLength(3);
-    expect(card.findAll('.ac-policy__row')).toHaveLength(8);
-    expect(card.findAll('.ac-policy__unit').map((u) => u.text()).filter(Boolean)).toEqual([
-      '次', '次', '次', '毫秒', '毫秒', '毫秒', '次/分',
-    ]);
+    /* 2026-10-26 用户「不用写那么详细，分那么多，就最大重试、间隔、rpm 就够了」：
+       三个字段一行，单位跟在输入框后面；细项（传输重试 / 逻辑重试 / Retry-After /
+       单次超时 / 随机抖动）不再占版面。 */
+    expect(card.findAll('.ac-policy__fields > .mk-field')).toHaveLength(3);
+    expect(card.findAll('.ac-policy__unit').map((u) => u.text())).toEqual(['次', '毫秒', '次/分']);
+    const labels = card.findAll('.ac-policy__fields .mk-field__label').map((l) => l.text());
+    expect(labels).toEqual(['最大重试', '重试间隔', '出站 RPM 上限']);
+    expect(wrapper.text()).not.toContain('传输重试');
+    expect(wrapper.text()).not.toContain('Retry-After');
+    expect(wrapper.text()).not.toContain('随机抖动');
     // 读数在被参数影响的同一张卡里
     expect(card.find('.ac-policy__side .ac-stat').exists()).toBe(true);
     // 探针与能力胶囊整块下线
@@ -711,6 +719,35 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.ac-hpills').exists()).toBe(false);
     // 虚拟学习者容量在它自己的页面，本页不挂
     expect(wrapper.find('.vl-settings').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  /* 收掉细项后，保存仍要把库里现值的整组字段回传——否则后端 partial 合并会把
+     没露出的传输重试 / 超时重置成默认值，等于悄悄改了策略。
+     也不得把「最大重试」联动到同模型重试数：执行器只在还有上游余量时才降级，
+     把同模型重试顶到 上游-1 会让降级永远不触发。 */
+  it('只露三个字段时，保存回传完整策略（隐藏项与同模型重试均沿用现值）', async () => {
+    const wrapper = await mountApiConfig();
+    await flushPromises();
+    const retryInput = wrapper.find('.ac-policy__fields .mk-field__input');
+    await retryInput.setValue(6);
+    await nextTick();
+    const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存参数');
+    expect(saveBtn, '改最大重试后应出现「保存参数」').toBeTruthy();
+    await saveBtn!.trigger('click');
+    await flushPromises();
+    expect(updateReliabilityMock).toHaveBeenCalledTimes(1);
+    expect(updateReliabilityMock.mock.calls[0][0]).toMatchObject({
+      maxUpstreamAttempts: 6,
+      // 不联动：保留现值 1，降级才有余量可用
+      maxTransportRetries: 1,
+      // 其余细项同样沿用 beforeEach 里的现值
+      maxLogicalRetries: 1,
+      defaultRequestTimeoutMs: 600000,
+      retryBaseDelayMs: 2000,
+      maxRetryAfterMs: 30000,
+      jitterEnabled: true,
+    });
     wrapper.unmount();
   });
 });
