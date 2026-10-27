@@ -229,13 +229,12 @@
             <td v-if="showCol('created')"><span class="mk-cell-sub" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link" @click.stop="openDetail(r)">详情</button>
-                <!-- 2026-10-27 用户「这个列还是重复了」：路径列并入状态（已完成即已生成），
-                     保留一个「路径」动作作为座舱路径页签入口，不再单列重复状态。 -->
-                <button v-if="r.hasPath" type="button" class="mk-link" @click.stop="openPathStage(r)">路径</button>
+                <!-- 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
+                     行点击已进座舱，不再单列「详情」；路径入口收进 ⋯ 菜单，操作列只留溢出菜单。 -->
                 <div class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
                   <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                    <button v-if="r.hasPath" type="button" class="mk-menu__item" role="menuitem" @click="menuOpenPath(r)">查看路径</button>
                     <button type="button" class="mk-menu__item" role="menuitem" @click="goTrace(r)">链路</button>
                     <button
                       type="button"
@@ -505,6 +504,10 @@ const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuRemove(r: Row) {
   closeMenu()
   void remove(r)
+}
+function menuOpenPath(r: Row) {
+  closeMenu()
+  openPathStage(r)
 }
 
 /** 「已取消」档 = 用户取消 + 长时间无操作回收；失败（failed）独立成档 */

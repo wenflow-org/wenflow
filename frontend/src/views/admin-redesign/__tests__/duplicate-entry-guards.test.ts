@@ -114,18 +114,19 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain("'orchestration-steps',")
   })
 
-  it('目标对话：路径列是落「路径」页签的唯一入口，「详情」仍落默认页签', () => {
-    // 2026-10-22 用户「查看路径和详细重复了」：两者都开 session-real 座舱，差别是落哪个页签。
-    // 2026-10-26 改判：「已生成」徽章长得像入口却不可点，且详情默认落目标对话页签——
-    // 已生成路径的人要再点一次阶段瓦片。故路径格改可点（唯一落 Path 页签的入口），
-    // 「详情」保持原语义（落默认页签），两个入口不再指向同一处。
+  it('目标对话：行点击进座舱，路径页签入口只留在 ⋯ 菜单', () => {
+    // 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
+    // 行点击已落默认页签，操作列不再重复「详情」；路径页签入口收进 ⋯ 菜单，
+    // 操作列只留溢出菜单，不再出现整行可见的文本链接。
     const src = read('GoalConversations.vue')
-    expect(src).not.toMatch(/查看路径</)
-    expect(src).not.toContain('openPathPage')
+    expect(src).toContain('@click="openDetail(r)"')
+    expect(src).not.toContain('>详情</button>')
+    expect(src).not.toContain('@click.stop="openDetail(r)"')
+    expect(src).toContain('>查看路径</button>')
+    expect(src).toContain('menuOpenPath(r)')
+    expect(src).not.toContain('@click.stop="openPathStage(r)"')
     expect(src).toContain('function openPathStage')
     expect(src).toContain("openSubPage('session-real', r.id, { stage: 'path' })")
-    expect(src).toContain('@click.stop="openPathStage(r)"')
-    expect(src).toContain('@click.stop="openDetail(r)"')
   })
 
   it('路径治理：重试生成只服务 failed 行（停滞信号已退役）', () => {

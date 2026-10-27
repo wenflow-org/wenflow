@@ -426,25 +426,28 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(w.find('.gc-distband').exists()).toBe(false);
   });
 
-  it('行点击进座舱（与 TeachingSessions 语义对齐）：openSubPage session-real；操作列按钮改名「详情」，不再叫「控制台」', async () => {
+  it('行点击进座舱；操作列不再重复「详情」按钮，只保留 ⋯ 溢出菜单', async () => {
     const w = await mountGoals();
     await w.find('tbody tr').trigger('click');
     expect(vi.mocked(openSubPage)).toHaveBeenCalledWith('session-real', 'conv-1');
-    expect(w.findAll('button').some((b) => b.text() === '详情')).toBe(true);
+    expect(w.findAll('tbody .mk-actions .mk-link')).toHaveLength(0);
     expect(w.findAll('button').some((b) => b.text() === '控制台')).toBe(false);
   });
 
-  /* 2026-10-27 用户「这个列还是重复了，从外部看」：路径状态并入状态列（已完成即已生成），
-     不再单列重复；路径入口收进操作列，有路径时显示「路径」。 */
-  it('不再有独立「路径」列：路径状态并入状态，入口收进操作列', async () => {
+  /* 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
+     行点击即详情；路径页签入口收进 ⋯ 菜单。 */
+  it('不再有独立「路径」列或「路径」按钮：路径入口收进 ⋯ 菜单', async () => {
     const w = await mountGoals();
     expect(w.findAll('thead th').map((t) => t.text())).not.toContain('路径');
     expect(w.text()).not.toContain('已生成');
-    expect(w.findAll('button').some((b) => b.text() === '查看路径')).toBe(false);
     const rows = w.findAll('tbody tr');
-    // makeConv：偶数行有 learningPathId → 操作列出现「路径」；奇数行没有
-    expect(rows[1].findAll('.mk-actions .mk-link').map((b) => b.text())).toContain('路径');
-    expect(rows[0].findAll('.mk-actions .mk-link').map((b) => b.text())).not.toContain('路径');
+    // makeConv：偶数行有 learningPathId → ⋯ 菜单出现「查看路径」；奇数行没有
+    await rows[1].find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    expect(rows[1].findAll('.mk-menu__item').map((b) => b.text())).toContain('查看路径');
+    await rows[0].find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    expect(rows[0].findAll('.mk-menu__item').map((b) => b.text())).not.toContain('查看路径');
   });
 
   /* 2026-10-26：页头副题（复述页名 + 两个列名）已删，口径只由页名与数据自明；
@@ -489,11 +492,14 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     w.unmount();
   });
 
-  it('操作列「路径」→ 座舱「路径」页签', async () => {
+  it('⋯ 菜单「查看路径」→ 座舱「路径」页签', async () => {
     const w = await mountGoals();
-    const pathBtn = w.findAll('tbody .mk-actions .mk-link').find((b) => b.text() === '路径')!;
-    expect(pathBtn).toBeTruthy();
-    await pathBtn.trigger('click');
+    const row = w.findAll('tbody tr')[1];
+    await row.find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    const item = row.findAll('.mk-menu__item').find((b) => b.text() === '查看路径')!;
+    expect(item).toBeTruthy();
+    await item.trigger('click');
     expect(vi.mocked(openSubPage)).toHaveBeenCalledWith('session-real', 'conv-2', { stage: 'path' });
   });
 
@@ -514,19 +520,19 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const rowOf = (name: string) => w.findAll('tbody tr').find((tr) => tr.text().includes(name))!;
     await rowOf('用户1').find('.mk-menu__btn').trigger('click');
     await nextTick();
-    let item = rowOf('用户1').findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().includes('路径'))!;
+    let item = rowOf('用户1').findAll('.mk-menu__pop .mk-menu__item').find((b) => ['生成路径', '重建路径'].includes(b.text()))!;
     expect(item.text()).toBe('生成路径');
     expect(item.attributes('disabled')).toBeDefined();
     await rowOf('用户1').find('.mk-menu__btn').trigger('click');
     await rowOf('用户2').find('.mk-menu__btn').trigger('click');
     await nextTick();
-    item = rowOf('用户2').findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().includes('路径'))!;
+    item = rowOf('用户2').findAll('.mk-menu__pop .mk-menu__item').find((b) => ['生成路径', '重建路径'].includes(b.text()))!;
     expect(item.text()).toBe('重建路径');
     expect(item.attributes('disabled')).toBeUndefined();
     await rowOf('用户2').find('.mk-menu__btn').trigger('click');
     await rowOf('用户3').find('.mk-menu__btn').trigger('click');
     await nextTick();
-    item = rowOf('用户3').findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().includes('路径'))!;
+    item = rowOf('用户3').findAll('.mk-menu__pop .mk-menu__item').find((b) => ['生成路径', '重建路径'].includes(b.text()))!;
     expect(item.text()).toBe('生成路径');
     expect(item.attributes('disabled')).toBeUndefined();
   });
