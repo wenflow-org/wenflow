@@ -179,6 +179,14 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ page: 1, keyword: 'alice', scope: 'login' });
   });
 
+  it('KPI 带在页签之上：先读页面统计，再切操作/登录视图', async () => {
+    const w = await mountAudit();
+    await nextTick();
+    const kpi = w.find('.mk-kpi-grid').element;
+    const tabs = w.find('.tabs').element;
+    expect(kpi.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('KPI 带：总数/失败/失败率/失败动作同屏，失败卡一键下钻，不再有常驻失败胶囊', async () => {
     h.getStats.mockResolvedValue({
       data: { data: { stats: { total: 378, failed: 7 }, failureByAction: [{ action: 'user.delete', count: 5 }] } }

@@ -9,33 +9,12 @@
       </template>
     </MkPageHead>
 
-    <!-- 视图切换（2026-10-14 用户评审，与执行日志同批：此前贴在表格卡顶、通栏一条下划线，读起来像
-         表格的表头）：移到页面级槽位——明细卡之上；卡片顶部回归「筛选头 + 表头」。页签为原型 .tabs
-         下划线页签：12px/600、激活蓝字+2px 蓝下划线（2026-10-01 由 mk-pills 胶囊迁入） -->
-    <!-- 键盘契约（审核 #154）：role=tablist/tab 兑现 roving tabindex + 左右方向键循环切换，
-         每枚页签 aria-controls 到对应 role=tabpanel 的内容容器（判例 HealthCenter.vue:104-119） -->
-    <div class="tabs" role="tablist" aria-label="审计视图切换" @keydown="onTabKeydown">
-      <button
-        v-for="(t, i) in tabs"
-        :key="t.id"
-        :id="`al-tab-${t.id}`"
-        :ref="(el) => setTabRef(el, i)"
-        type="button"
-        role="tab"
-        class="tab"
-        :aria-selected="tab === t.id"
-        :aria-controls="`al-panel-${t.id}`"
-        :tabindex="tab === t.id ? 0 : -1"
-        @click="switchTab(t.id)"
-      >
-        {{ t.label }}
-      </button>
-    </div>
-
     <!-- KPI 带（2026-10-27 用户「这里还有很多 pill，可以加上 KPI 面板」）：
          原「失败 25 + 各失败动作」常驻胶囊行改成读数面板。计数只在这里出现一次，
          失败下钻收敛为两条入口——「失败记录」卡（一键只看失败）与「失败动作」下拉
-         （按动作下钻，选项自带次数）；卡头不再挂一排动作胶囊。 -->
+         （按动作下钻，选项自带次数）；卡头不再挂一排动作胶囊。
+         2026-10-27 用户「kpi 和 tab 位置反了」：KPI 是页面级读数，放在页签之上；
+         页签下才是筛选头与表体。 -->
     <section class="mk-kpi-grid" aria-label="审计日志统计" :aria-busy="statsLoading || undefined">
       <MkKpi
         label="记录总数"
@@ -67,6 +46,29 @@
         :hint-tone="failureByAction.length ? 'bad' : ''"
       />
     </section>
+
+    <!-- 视图切换（2026-10-14 用户评审，与执行日志同批：此前贴在表格卡顶、通栏一条下划线，读起来像
+         表格的表头）：移到页面级槽位——明细卡之上；卡片顶部回归「筛选头 + 表头」。页签为原型 .tabs
+         下划线页签：12px/600、激活蓝字+2px 蓝下划线（2026-10-01 由 mk-pills 胶囊迁入） -->
+    <!-- 键盘契约（审核 #154）：role=tablist/tab 兑现 roving tabindex + 左右方向键循环切换，
+         每枚页签 aria-controls 到对应 role=tabpanel 的内容容器（判例 HealthCenter.vue:104-119） -->
+    <div class="tabs" role="tablist" aria-label="审计视图切换" @keydown="onTabKeydown">
+      <button
+        v-for="(t, i) in tabs"
+        :key="t.id"
+        :id="`al-tab-${t.id}`"
+        :ref="(el) => setTabRef(el, i)"
+        type="button"
+        role="tab"
+        class="tab"
+        :aria-selected="tab === t.id"
+        :aria-controls="`al-panel-${t.id}`"
+        :tabindex="tab === t.id ? 0 : -1"
+        @click="switchTab(t.id)"
+      >
+        {{ t.label }}
+      </button>
+    </div>
 
     <!-- 单卡容器（原型 renderAudit：筛选头 + 页签体同卡）：操作审计 / 登录审计两个页签体共用一张卡
          （页签已提到页面级，卡内只留筛选头与表体） -->
