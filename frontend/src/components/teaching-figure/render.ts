@@ -2416,7 +2416,8 @@ function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | n
     const out: string[] = [];
     for (const it of items) {
       const lines = balancedWrap(it, fw - 20, T.fontSmall);
-      out.push(...lines.slice(0, 2));
+      // 每项最多 4 行：原先只留 2 行会把长条目直接截掉（2026-10-27 盲评：帧内文字断成半截句）
+      out.push(...lines.slice(0, 4));
     }
     return out;
   });

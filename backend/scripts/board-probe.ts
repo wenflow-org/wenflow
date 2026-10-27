@@ -149,6 +149,56 @@ function auditTeacherReply(reply: string, board: BoardState, hiddenBefore: strin
   return { leakHits, phantomRefs, restateRatio: rb.size ? Math.round((hit / rb.size) * 100) / 100 : 0 };
 }
 
+/**
+ * 方案 A（2026-10-27 复盘后）：老师先说，系统再按老师这一轮的话刷新板。
+ *
+ * 旧的「先画板、后说话」在换题轮必然错位：第 t 轮的板用的是第 t-1 轮老师的话，
+ * 而第 t 轮老师已经在问新现场（b2 实拍：t3 板是酒精，老师问水银）。
+ * 首轮仍保持板先行（开局 0 指空）；第 2 轮起改成同轮刷新，板与老师这一轮的话对齐。
+ */
+const POST_TEACHER_REFRESH = MODE !== 'full';
+
+async function refreshBoardForTurn(args: {
+  c: any;
+  board: BoardState | null;
+  studentText: string;
+  teacherReply: string;
+}): Promise<{ board: BoardState | null; opType: string; intent: BoardIntent }> {
+  const { c, board, studentText, teacherReply } = args;
+  const intent = decideBoardIntent({
+    taskType: c.taskType,
+    kind: board?.figure?.kind ?? null,
+    studentText,
+    lastTeacherText: teacherReply,
+    boardNumbers: numbersOnBoard(board?.figure?.maskedSpec),
+  });
+  if (!board || intent.exampleChange === 'none') return { board, opType: 'none', intent };
+
+  const nextOut = await callModel(BOARD_SYSTEM(MODE), {
+    task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
+    scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+    studentSays: studentText,
+    kindHint: board.figure?.kind ?? null,
+    questionIntent: intent,
+    lastTeacherReply: teacherReply,
+    instruction:
+      (intent.exampleChange === 'scene'
+        ? '老师这一轮换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
+        : '老师这一轮换了例子/条件。把同一结构的板换成**老师这一轮给的例子**（该换的词、数值、单位全换，旧例子不要留）。') +
+      '结构、图型、副标注写法不变。' + intent.instruction,
+  });
+  const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
+  if (!nextFig) {
+    console.warn(
+      `[${c.id}] 换板绘图被拒：kind=${String((nextOut as any)?.figure?.kind ?? '∅')}` +
+        ` intent=${intent.askAbout}/${intent.exampleChange}`,
+    );
+    return { board, opType: 'none', intent };
+  }
+  const next = applyBoardOp(board, { type: 'update', reason: 'new-example' }, nextFig) ?? board;
+  return { board: next, opType: 'update', intent };
+}
+
 async function runCase(c: any): Promise<any> {
   const history: Array<{ role: string; content: string }> = [];
   const turns: any[] = [];
@@ -181,6 +231,15 @@ async function runCase(c: any): Promise<any> {
   });
   const normalized = boardOut?.figure ? normalizeTeachingFigureForProbe(boardOut.figure) : { figure: null };
   const figure = (normalized as any).figure;
+  if (!figure) {
+    // 归一化拒绝后要能从产物里看出「模型给了什么、为什么被拒」，否则只剩一个 null
+    const rawFigure = (boardOut as any)?.figure ?? null;
+    console.warn(
+      `[${c.id}] 首轮绘图被拒：kind=${String(rawFigure?.kind ?? '∅')}` +
+        ` reason=${String((normalized as any)?.reason ?? '∅')}` +
+        ` spec=${JSON.stringify(rawFigure?.spec ?? null).slice(0, 600)}`,
+    );
+  }
   const op1 = decideBoardOp({ board: null, firstTurnOfTask: true, taskChanged: false, wantsNewBoard: !!figure });
   if (figure && op1.type === 'setup') board = openBoard(c.id, figure, { ...CONCEAL, intent: intent1 });
 
@@ -215,130 +274,203 @@ async function runCase(c: any): Promise<any> {
   // ---- 第 2 轮：学生答到了关键处 ----
   // 做题区：答对 → 揭晓同一块板。
   // 减负区：板面本来就完整，没有揭晓；只判断「现场变没变」→ 换板。
-  // 换题信号以**老师上一句**为准（2026-10-27 改造）：老师宣布的新数据，这一轮必须已经上板。
-  const intent2 = decideBoardIntent({
-    taskType: c.taskType,
-    kind: board?.figure?.kind ?? null,
-    studentText: c.turns[1].student,
-    lastTeacherText: lastTeacherReply,
-    boardNumbers: numbersOnBoard(board?.figure?.maskedSpec),
-  });
-  const newEx2 = intent2.exampleChange !== 'none';
-  const op2 = decideBoardOp({
-    board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false, filledSlot: true, newExample: newEx2,
-  });
-  if (board && op2.type === 'update') {
-    const nextOut = await callModel(BOARD_SYSTEM(MODE), {
-      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
-      scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
-      studentSays: c.turns[1].student,
-      kindHint: board.figure?.kind ?? null,
-      questionIntent: intent2,
-      lastTeacherReply,
-      instruction:
-        (intent2.exampleChange === 'scene'
-          ? '老师换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
-          : '老师宣布了新数据。把同一结构的板换成**当前这组条件**（新数值、新单位），旧数据不要留。') +
-        '结构、图型、副标注写法不变。' + intent2.instruction,
-    });
-    const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
-    board = applyBoardOp(board, op2, nextFig ?? undefined) ?? board;
-  } else if (board) {
-    board = applyBoardOp(board, op2) ?? board;
-  }
-  const revealedHidden = board?.figure ? diffBoardStages(board.figure).map((d) => d.after) : [];
-  const boardContext2 = board ? describeBoardForTeacher(board) : '【白板】暂无板书。';
+  // 方案 A：老师先说，说完再按老师这句刷新板（同轮同步）；full 口径仍先揭晓再说话。
+  const boardBefore2 = board;
   history.push({ role: 'assistant', content: turns[0].teacher });
-  const t2 = await callModel(teachingSystem, {
-    task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType, acceptanceCriteria: c.acceptance },
-    scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
-    knowledge: { currentPoint: c.topic },
-    messages: [...history, { role: 'user', content: c.turns[1].student }],
-    boardContext: boardContext2,
-    boardAction: describeBoardOp(op2),
-    instruction: MASKED
-      ? '学生刚才答到了关键处，白板已经揭晓（空槽补上、结论上板）。用一句话确认板上的变化，然后只问一个问题，且必须是**换条件 / 反事实 / 新数据**这三种之一——板上已经写出结论的内容一律不许再问（包括刚揭晓的那条结论），否则等于把答案又念一遍。'
-      : '学生刚才答到了关键处。板面本来就是完整的，**不要再补充或复述板面**；只问一个问题，且必须是**换条件 / 反事实 / 新数据**这三种之一。如果这组新数据已经上板（boardAction 说「换成了当前这组条件」），就让学生直接用板上的新数据往下推。',
-  });
-  turns.push({
-    n: 2, stage: board?.figure?.stage ?? null, studentIn: c.turns[1].student,
-    teacher: String(t2?.reply ?? ''), boardContext: boardContext2,
-    boardOp: op2.type,
-    intent: intent2,
-    newExample: newEx2,
-    boardSpec: board?.figure?.maskedSpec ?? null,
-    conclusionOnBoard: board?.figure ? extractHiddenConclusion({ kind: board.figure.kind, spec: board.figure.maskedSpec }) !== null : false,
-    // 揭晓/换板轮老师引用板上答案是合法教学行为，不计泄题（只统计提问态的轮次）
-    audit: { ...auditTeacherReply(String(t2?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
-  });
-  lastTeacherReply = String(t2?.reply ?? '');
-
-  // ---- 第 3 轮：迁移检查（板已完整，只指板；若又换了现场则再换一次板） ----
-  history.push({ role: 'assistant', content: turns[1].teacher });
-  const intent3 = decideBoardIntent({
-    taskType: c.taskType,
-    kind: board?.figure?.kind ?? null,
-    studentText: c.turns[2].student,
-    lastTeacherText: lastTeacherReply,
-    boardNumbers: numbersOnBoard(board?.figure?.maskedSpec),
-  });
-  const newEx3 = intent3.exampleChange !== 'none';
-  const op3 = decideBoardOp({
-    board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false, newExample: newEx3,
-  });
-  if (board && op3.type === 'update') {
-    const nextOut = await callModel(BOARD_SYSTEM(MODE), {
-      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
+  const boardContext2 = boardBefore2 ? describeBoardForTeacher(boardBefore2) : '【白板】暂无板书。';
+  let intent2: BoardIntent;
+  let op2Type: string;
+  if (POST_TEACHER_REFRESH) {
+    const t2 = await callModel(teachingSystem, {
+      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType, acceptanceCriteria: c.acceptance },
       scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
-      studentSays: c.turns[2].student,
-      kindHint: board.figure?.kind ?? null,
-      questionIntent: intent3,
-      lastTeacherReply,
+      knowledge: { currentPoint: c.topic },
+      messages: [...history, { role: 'user', content: c.turns[1].student }],
+      boardContext: boardContext2,
+      boardAction: '本轮白板暂时保持上一轮的板面；你可以在回复里直接引入新条件/新数据，说完后系统会按你说的现场刷新白板。因此不要引用旧板上的具体数字或行号。',
       instruction:
-        (intent3.exampleChange === 'scene'
-          ? '问题挪到了新情境。把同一结构的板换成**当前这个情境**（新对象/新液体/新条件标签）。'
-          : '老师宣布了新数据。把同一结构的板换成**当前这组条件**（新数值、新单位），旧数据不要留。') +
-        '结构、图型、副标注写法不变。' + intent3.instruction,
+        '学生刚才答到了关键处。**不要复述板面**；只问一个问题，且必须是**换条件 / 反事实 / 新数据**这三种之一。' +
+        '你可以在这一轮直接引入新现场；说完后系统会刷新白板，所以不要引用旧板上的具体行号或数字。',
     });
-    const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
-    board = applyBoardOp(board, op3, nextFig ?? undefined) ?? board;
-  } else if (board) {
-    board = applyBoardOp(board, op3) ?? board;
+    const refreshed = await refreshBoardForTurn({
+      c, board: boardBefore2, studentText: c.turns[1].student, teacherReply: String(t2?.reply ?? ''),
+    });
+    board = refreshed.board;
+    intent2 = refreshed.intent;
+    op2Type = refreshed.opType;
+    turns.push({
+      n: 2, stage: board?.figure?.stage ?? null, studentIn: c.turns[1].student,
+      teacher: String(t2?.reply ?? ''), boardContext: boardContext2,
+      boardOp: refreshed.opType,
+      intent: intent2,
+      newExample: refreshed.intent.exampleChange !== 'none',
+      // boardSpec = 学生这一轮最终看到的板；teacherBoardSpec = 老师说话时看到的板（审计指空用它）
+      boardSpec: board?.figure?.maskedSpec ?? null,
+      teacherBoardSpec: boardBefore2?.figure?.maskedSpec ?? null,
+      conclusionOnBoard: board?.figure ? extractHiddenConclusion({ kind: board.figure.kind, spec: board.figure.maskedSpec }) !== null : false,
+      audit: { ...auditTeacherReply(String(t2?.reply ?? ''), boardBefore2 ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
+    });
+    lastTeacherReply = String(t2?.reply ?? '');
+  } else {
+    intent2 = decideBoardIntent({
+      taskType: c.taskType,
+      kind: board?.figure?.kind ?? null,
+      studentText: c.turns[1].student,
+      lastTeacherText: lastTeacherReply,
+      boardNumbers: numbersOnBoard(board?.figure?.maskedSpec),
+    });
+    const newEx2 = intent2.exampleChange !== 'none';
+    const op2 = decideBoardOp({
+      board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false, filledSlot: true, newExample: newEx2,
+    });
+    op2Type = op2.type;
+    if (board && op2.type === 'update') {
+      const nextOut = await callModel(BOARD_SYSTEM(MODE), {
+        task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
+        scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+        studentSays: c.turns[1].student,
+        kindHint: board.figure?.kind ?? null,
+        questionIntent: intent2,
+        lastTeacherReply,
+        instruction:
+          (intent2.exampleChange === 'scene'
+            ? '老师换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
+            : '老师换了例子/条件。把同一结构的板换成**当前这个例子**（该换的词、数值、单位全换，旧例子不要留）。') +
+          '结构、图型、副标注写法不变。' + intent2.instruction,
+      });
+      const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
+      board = applyBoardOp(board, op2, nextFig ?? undefined) ?? board;
+    } else if (board) {
+      board = applyBoardOp(board, op2) ?? board;
+    }
+    const revealedHidden = board?.figure ? diffBoardStages(board.figure).map((d) => d.after) : [];
+    const t2 = await callModel(teachingSystem, {
+      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType, acceptanceCriteria: c.acceptance },
+      scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+      knowledge: { currentPoint: c.topic },
+      messages: [...history, { role: 'user', content: c.turns[1].student }],
+      boardContext: boardContext2,
+      boardAction: describeBoardOp(op2),
+      instruction: MASKED
+        ? '学生刚才答到了关键处，白板已经揭晓（空槽补上、结论上板）。用一句话确认板上的变化，然后只问一个问题，且必须是**换条件 / 反事实 / 新数据**这三种之一——板上已经写出结论的内容一律不许再问（包括刚揭晓的那条结论），否则等于把答案又念一遍。'
+        : '学生刚才答到了关键处。板面本来就是完整的，**不要再补充或复述板面**；只问一个问题，且必须是**换条件 / 反事实 / 新数据**这三种之一。如果这组新数据已经上板（boardAction 说「换成了当前这组条件」），就让学生直接用板上的新数据往下推。',
+    });
+    turns.push({
+      n: 2, stage: board?.figure?.stage ?? null, studentIn: c.turns[1].student,
+      teacher: String(t2?.reply ?? ''), boardContext: boardContext2,
+      boardOp: op2.type,
+      intent: intent2,
+      newExample: newEx2,
+      boardSpec: board?.figure?.maskedSpec ?? null,
+      conclusionOnBoard: board?.figure ? extractHiddenConclusion({ kind: board.figure.kind, spec: board.figure.maskedSpec }) !== null : false,
+      // 揭晓/换板轮老师引用板上答案是合法教学行为，不计泄题（只统计提问态的轮次）
+      audit: { ...auditTeacherReply(String(t2?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
+    });
+    lastTeacherReply = String(t2?.reply ?? '');
   }
-  const boardContext3 = board ? describeBoardForTeacher(board) : '【白板】暂无板书。';
-  const t3 = await callModel(teachingSystem, {
-    task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType, acceptanceCriteria: c.acceptance },
-    scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
-    knowledge: { currentPoint: c.topic },
-    messages: [...history, { role: 'user', content: c.turns[2].student }],
-    boardContext: boardContext3,
-    boardAction: describeBoardOp(op3),
-    instruction: '白板已经完整（必要时已换成当前情境）。让学生用板上的结论做一次迁移判断：问题必须是板上**没有直接答案**的，不要重画、不要复述板面。',
-  });
-  turns.push({
-    n: 3, stage: board?.figure?.stage ?? null, studentIn: c.turns[2].student,
-    teacher: String(t3?.reply ?? ''), boardContext: boardContext3,
-    boardOp: op3.type,
-    intent: intent3,
-    newExample: newEx3,
-    boardSpec: board?.figure?.maskedSpec ?? null,
-    conclusionOnBoard: board?.figure ? extractHiddenConclusion({ kind: board.figure.kind, spec: board.figure.maskedSpec }) !== null : false,
-    audit: { ...auditTeacherReply(String(t3?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
-  });
 
-  // 换题是否跟上：老师上一轮宣布过、而当前板上仍然没有的数字（>0 就是「板比老师慢」）
+  // ---- 第 3 轮：迁移检查；方案 A 下同样是「老师先说 → 按这一句刷新板」 ----
+  const boardBefore3 = board;
+  history.push({ role: 'assistant', content: turns[1].teacher });
+  const boardContext3 = boardBefore3 ? describeBoardForTeacher(boardBefore3) : '【白板】暂无板书。';
+  let intent3: BoardIntent;
+  let op3Type: string;
+  if (POST_TEACHER_REFRESH) {
+    const t3 = await callModel(teachingSystem, {
+      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType, acceptanceCriteria: c.acceptance },
+      scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+      knowledge: { currentPoint: c.topic },
+      messages: [...history, { role: 'user', content: c.turns[2].student }],
+      boardContext: boardContext3,
+      boardAction: '本轮白板暂时保持上一轮的板面；你可以在回复里直接引入新条件/新数据，说完后系统会按你说的现场刷新白板。因此不要引用旧板上的具体数字或行号。',
+      instruction: '让学生用板上的结论做一次迁移判断：问题必须是板上**没有直接答案**的；可以引入新数据或新现场，但不要引用旧板的具体行号/数字（说完后板会刷新）。不要重画、不要复述板面。',
+    });
+    const refreshed = await refreshBoardForTurn({
+      c, board: boardBefore3, studentText: c.turns[2].student, teacherReply: String(t3?.reply ?? ''),
+    });
+    board = refreshed.board;
+    intent3 = refreshed.intent;
+    op3Type = refreshed.opType;
+    turns.push({
+      n: 3, stage: board?.figure?.stage ?? null, studentIn: c.turns[2].student,
+      teacher: String(t3?.reply ?? ''), boardContext: boardContext3,
+      boardOp: refreshed.opType,
+      intent: intent3,
+      newExample: refreshed.intent.exampleChange !== 'none',
+      boardSpec: board?.figure?.maskedSpec ?? null,
+      teacherBoardSpec: boardBefore3?.figure?.maskedSpec ?? null,
+      conclusionOnBoard: board?.figure ? extractHiddenConclusion({ kind: board.figure.kind, spec: board.figure.maskedSpec }) !== null : false,
+      audit: { ...auditTeacherReply(String(t3?.reply ?? ''), boardBefore3 ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
+    });
+  } else {
+    intent3 = decideBoardIntent({
+      taskType: c.taskType,
+      kind: board?.figure?.kind ?? null,
+      studentText: c.turns[2].student,
+      lastTeacherText: lastTeacherReply,
+      boardNumbers: numbersOnBoard(board?.figure?.maskedSpec),
+    });
+    const newEx3 = intent3.exampleChange !== 'none';
+    const op3 = decideBoardOp({
+      board, firstTurnOfTask: false, taskChanged: false, wantsNewBoard: false, newExample: newEx3,
+    });
+    op3Type = op3.type;
+    if (board && op3.type === 'update') {
+      const nextOut = await callModel(BOARD_SYSTEM(MODE), {
+        task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType },
+        scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+        studentSays: c.turns[2].student,
+        kindHint: board.figure?.kind ?? null,
+        questionIntent: intent3,
+        lastTeacherReply,
+        instruction:
+          (intent3.exampleChange === 'scene'
+            ? '问题挪到了新情境。把同一结构的板换成**当前这个情境**（新对象/新液体/新条件标签）。'
+            : '老师换了例子/条件。把同一结构的板换成**当前这个例子**（该换的词、数值、单位全换，旧例子不要留）。') +
+          '结构、图型、副标注写法不变。' + intent3.instruction,
+      });
+      const nextFig = nextOut?.figure ? (normalizeTeachingFigureForProbe(nextOut.figure) as any).figure : null;
+      board = applyBoardOp(board, op3, nextFig ?? undefined) ?? board;
+    } else if (board) {
+      board = applyBoardOp(board, op3) ?? board;
+    }
+    const t3 = await callModel(teachingSystem, {
+      task: { title: c.taskTitle, description: c.taskDescription, taskType: c.taskType, acceptanceCriteria: c.acceptance },
+      scenario: { subject: c.subject, topic: c.topic, learnerLevel: 'beginner' },
+      knowledge: { currentPoint: c.topic },
+      messages: [...history, { role: 'user', content: c.turns[2].student }],
+      boardContext: boardContext3,
+      boardAction: describeBoardOp(op3),
+      instruction: '白板已经完整（必要时已换成当前情境）。让学生用板上的结论做一次迁移判断：问题必须是板上**没有直接答案**的，不要重画、不要复述板面。',
+    });
+    turns.push({
+      n: 3, stage: board?.figure?.stage ?? null, studentIn: c.turns[2].student,
+      teacher: String(t3?.reply ?? ''), boardContext: boardContext3,
+      boardOp: op3.type,
+      intent: intent3,
+      newExample: newEx3,
+      boardSpec: board?.figure?.maskedSpec ?? null,
+      conclusionOnBoard: board?.figure ? extractHiddenConclusion({ kind: board.figure.kind, spec: board.figure.maskedSpec }) !== null : false,
+      audit: { ...auditTeacherReply(String(t3?.reply ?? ''), board ?? { taskId: c.id, figure: null, revision: 0 }, []), leakHits: [] },
+    });
+  }
+
+  // 换题是否跟上：老师上一轮宣布过、但**上一块板和当前板都没有**的数字。
+  // 旧口径只看当前板，会把「板正确地跟到了更新的现场」误判成滞后；要求两块板都没有才算真丢了。
   const staleNumbers = turns
     .flatMap((t: any, i: number) => {
       const prev = i === 0 ? null : turns[i - 1].teacher;
       if (!prev) return [];
       const onBoard = new Set(numbersOnBoard(t.boardSpec));
-      return numbersOnBoard({ text: prev }).filter((n) => !onBoard.has(n));
+      const onPrevBoard = new Set(numbersOnBoard(turns[i - 1]?.boardSpec));
+      return numbersOnBoard({ text: prev }).filter((n) => !onBoard.has(n) && !onPrevBoard.has(n));
     })
     .filter((n: string) => !/^\d{1,2}$/.test(n) || Number(n) > 31); // 页码/序号类小整数不算
 
   const rendered = board ? boardFigureForRender(board) : null;
   return {
     id: c.id,
+    pipeline: POST_TEACHER_REFRESH ? 'post-teacher-refresh' : 'board-first',
     course: c.course,
     subject: c.subject,
     topic: c.topic,
@@ -347,7 +479,7 @@ async function runCase(c: any): Promise<any> {
     kind: figure?.kind ?? null,
     expectKind: c.expectKind ?? null,
     routedKind: opp?.kindHint ?? null,
-    boardOps: [op1.type, op2.type, op3.type],
+    boardOps: [op1.type, op2Type, op3Type],
     intents: [intent1, intent2, intent3],
     staleNumbers: [...new Set(staleNumbers)],
     conclusionOnBoardTotal: turns.filter((t: any) => t.conclusionOnBoard).length,

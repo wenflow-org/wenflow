@@ -37,6 +37,7 @@ const analyse = (rows) => {
     out.slots += r.slots ?? 0;
     out.ops.push(`${r.id}:${(r.boardOps || []).join('→')}`);
     let prevTeacher = null;
+    let prevBoard = null;
     r.turns?.forEach((t) => {
       out.turns += 1;
       out.leak += t.audit?.leakHits?.length ?? 0;
@@ -45,15 +46,18 @@ const analyse = (rows) => {
       if (hasConclusion(t.boardSpec)) out.conclusion += 1;
       if (prevTeacher && t.boardSpec) {
         const onBoard = new Set(numbersOf(t.boardSpec));
-        const missing = numbersOf(prevTeacher).filter((n) => !onBoard.has(n) && Number(n) > 31);
+        const onPrevBoard = new Set(numbersOf(prevBoard));
+        // 只有「上一块板和当前板都没有」才算真丢了：板正确地跟到了更新的现场，不该记滞后
+        const missing = numbersOf(prevTeacher).filter((n) => !onBoard.has(n) && !onPrevBoard.has(n) && Number(n) > 31);
         if (missing.length) out.stale += 1;
         const boardText = JSON.stringify(t.boardSpec);
-        const missingScene = SCENE_TOKENS.filter((s) => prevTeacher.includes(s) && !boardText.includes(s));
+        const prevBoardText = JSON.stringify(prevBoard);
+        const missingScene = SCENE_TOKENS.filter((s) => prevTeacher.includes(s) && !boardText.includes(s) && !prevBoardText.includes(s));
         if (missingScene.length) out.sceneLag += 1;
       }
       // 同轮脱节：老师这一轮说出的新数字/新现场，板还停在旧现场。
-      // 与 stale 的区别：stale 看上一轮（板应该已经跟上），sameTurn 看本轮（板画在老师说话之前，
-      // 只能由「下一轮换板」补偿）——它衡量的是这套时序还剩多少结构性滞后。
+      // 板先行（board-first）时它是结构性滞后；同轮刷新（post-teacher-refresh）后它应恒为 0，
+      // 非 0 就说明刷新漏了（新场景没被识别，或 designer 没画对）。
       if (t.teacher && t.boardSpec) {
         const boardText = JSON.stringify(t.boardSpec);
         const onBoard = new Set(numbersOf(t.boardSpec));
@@ -63,6 +67,7 @@ const analyse = (rows) => {
         if (freshScene.length) out.sameTurnScene += 1;
       }
       prevTeacher = t.teacher;
+      prevBoard = t.boardSpec;
     });
   }
   return out;

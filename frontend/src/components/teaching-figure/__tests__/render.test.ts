@@ -715,4 +715,20 @@ describe('state-strip（2026-10-26：不回头的进程分帧）', () => {
     // 标签内容没有丢
     expect(keyTexts.join('')).toBe(labels.join(''));
   });
+
+  it('帧内长条目不被截断（原先每项只留 2 行）', () => {
+    const item = '商鞅网开一面，未加惩处，太子照旧，百姓看在眼里';
+    const out = renderSpecFigure('state-strip', {
+      title: '变法怎么落地',
+      frames: [
+        { label: '前356年·第一次变法', items: [item] },
+        { label: '前350年·第二次变法', items: ['推行县制，编定户口'] },
+      ],
+    });
+    expect(out).not.toBeNull();
+    const bodyText = [...out!.svg.matchAll(/<text[^>]*class="t-small"[^>]*>([^<]*)<\/text>/g)]
+      .map((m) => m[1])
+      .join('');
+    expect(bodyText.replace(/\s/g, '')).toContain(item.replace(/\s/g, ''));
+  });
 });

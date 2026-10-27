@@ -95,8 +95,9 @@ const STAGES = [
   {
     title: '二、课堂执行：学生每说一句话，走一遍',
     note:
-      '这是「一节课里反复发生的」四个 skill。teaching-turn 是主体；board-designer 是 2026-10-27 新增的板书层，' +
-      '与 teaching-turn 串行（先定板、再说话），保证老师说的每句话都对应板上真实存在的东西。',
+      '这是「一节课里反复发生的」四个 skill。teaching-turn 是主体；board-designer 是 2026-10-27 的板书层，' +
+      '在探针内与 teaching-turn 串行（先定板、再说话），保证老师说的每句话都对应板上真实存在的东西。' +
+      '板书层尚未接进 teaching-turn-engine，线上课堂目前只跑 teaching-turn。',
     items: [
       {
         file: 'skill.teaching-opening-generator.md',
@@ -114,10 +115,10 @@ const STAGES = [
       },
       {
         file: 'skill.board-designer.md',
-        when: '每轮（或换例子时）先于 teaching-turn 调用',
-        input: 'task + 学生这句话 + 图型建议 + 上一块板（换板时）',
+        when: '探针内每轮（或换例子时）先于 teaching-turn 调用；引擎尚未接线',
+        input: 'task + 学生这句话 + 图型建议 + questionIntent + 上一块板（换板时）',
         output: 'figure JSON（完整板）；由代码派生提问态 / 剥注释 / 过图闸后才下发',
-        code: 'backend/scripts/board-probe.ts（原型）；接线见 CLASSROOM_PIPELINE.md §2.6',
+        code: 'backend/scripts/board-probe.ts（原型）；接线见 CLASSROOM_PIPELINE.md §1.6',
       },
       {
         file: 'skill.session-wrapup.md',

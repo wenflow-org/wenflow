@@ -19,7 +19,7 @@
  */
 
 import { maskFigureAnswers, stripInLessonAnnotations } from './teaching-visual.service';
-import { applyBoardIntent, describeIntentForTeacher, type BoardIntent } from './board-intent';
+import { applyBoardIntent, describeIntentForTeacher, guardTitleAgainstContent, type BoardIntent } from './board-intent';
 
 /** 白板阶段：搭骨架（提问态）→ 等待学生（仍提问态）→ 揭晓（完整态） */
 export type BoardStage = 'setup' | 'awaiting' | 'revealed';
@@ -185,9 +185,11 @@ export function deriveBoardFigure(
     kind?: string;
     spec?: unknown;
   };
-  const fullSpec = ((deReviewed.spec && typeof deReviewed.spec === 'object'
-    ? { ...(deReviewed.spec as Record<string, unknown>) }
-    : {}) as Record<string, unknown>);
+  const fullSpec = guardTitleAgainstContent(
+    (deReviewed.spec && typeof deReviewed.spec === 'object'
+      ? { ...(deReviewed.spec as Record<string, unknown>) }
+      : {}) as Record<string, unknown>,
+  );
   const hiddenTakeaway = extractHiddenConclusion({ kind: deReviewed.kind, spec: fullSpec });
 
   // 减负模式（none / takeaway）：材料、步骤、副标注一律照发——它们正是替学生省力的部分

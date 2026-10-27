@@ -755,6 +755,26 @@ describe('split-compare：正误并排对比（2026-10-26 动作诊所）', () =
     expect(empty.figure).toBeUndefined();
   });
 
+  it('栏头超长只截断，不整图拒绝（英语句子栏头实拍）', async () => {
+    const out = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        left: {
+          head: '现在完成时 have finished',
+          rows: [{ label: 'yesterday', sub: '两栏相同' }, { label: 'have finished' }],
+        },
+        right: {
+          head: '一般过去时 finished',
+          rows: [{ label: 'yesterday', sub: '两栏相同' }, { label: 'finished' }],
+        },
+      },
+    });
+    expect(out.figure?.kind).toBe('split-compare');
+    const head = String((out.figure?.spec as any).left.head);
+    expect(head.length).toBeLessThanOrEqual(18);
+    expect(head.endsWith('…')).toBe(true);
+  });
+
   it('两栏内容完全相同 → 整图拒绝（不是对比）', async () => {
     const same = await runWithFigure({
       kind: 'split-compare',

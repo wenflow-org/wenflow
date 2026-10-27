@@ -7,7 +7,7 @@
  *  2) 换题信号要同时读**老师上一句**（老师主动换的数据）与**学生这一句**；
  *  3) 「要学生说的那句结论」按意图从板上撤掉，但材料与步骤一个不少。
  */
-import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher } from '../board-intent';
+import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent } from '../board-intent';
 import { deriveBoardFigure, openBoard, describeBoardForTeacher } from '../board-state';
 
 const splitBoard = {
@@ -103,6 +103,28 @@ describe('board-intent：问法由图型与任务类型决定', () => {
     });
     expect(same.exampleChange).toBe('none');
   });
+
+  it('语言类课堂没有数字，靠「拿掉/换成」也能识别换例子', () => {
+    const variant = decideBoardIntent({
+      kind: 'split-compare',
+      taskType: 'diagnose',
+      boardNumbers: ['400', '60'],
+      studentText: '好',
+      lastTeacherText: '把 yesterday 拿掉，只说 I ___ my homework. 这时 finished 和 have finished 都能填吗？',
+    });
+    expect(variant.exampleChange).toBe('variant');
+    expect(variant.newNumbers).toEqual([]);
+
+    // 只是换个说法，不是换例子
+    const rephrase = decideBoardIntent({
+      kind: 'split-compare',
+      taskType: 'diagnose',
+      boardNumbers: ['400', '60'],
+      studentText: '好',
+      lastTeacherText: '换句话说，单位没有换，只是写法变了。',
+    });
+    expect(rephrase.exampleChange).toBe('none');
+  });
 });
 
 describe('board-intent：结论句按意图收口', () => {
@@ -145,5 +167,42 @@ describe('board-intent：结论句按意图收口', () => {
     const f = deriveBoardFigure({ kind: 'split-compare', spec: splitBoard }, { conceal: 'full', intent });
     expect((f.maskedSpec as any).right.rows[0].label).toBe('？');
     expect(f.slots).toBeGreaterThan(0);
+  });
+
+  it('副标注里的判断句按意图清掉，纯单位说明保留（b1 实拍）', () => {
+    const spec = {
+      title: '配速换算',
+      left: {
+        head: '0.15 的算法',
+        rows: [
+          { label: '0.15 s/m', sub: '秒每米' },
+          { label: '0.15 min/km', sub: '数字照搬，单位写成 min/km' },
+        ],
+      },
+      right: { head: '配速的算法', rows: [{ label: '150 s/km', sub: '秒每千米' }] },
+    };
+    const fork = applyBoardIntent(spec, decideBoardIntent({ kind: 'split-compare', taskType: 'diagnose' })) as any;
+    expect(fork.left.rows[0].sub).toBe('秒每米');
+    expect(fork.left.rows[1].sub).toBeUndefined();
+
+    // 迁移轮保留结论与副标注（参照物）
+    const mapping = applyBoardIntent(spec, decideBoardIntent({ kind: 'concept-map', taskType: 'consolidate' })) as any;
+    expect(mapping.left.rows[1].sub).toBe('数字照搬，单位写成 min/km');
+  });
+
+  it('标题点名了板面没有的实体 → 撤掉标题（b2「深度与自重」实拍）', () => {
+    const bad = {
+      title: '浮力大小：深度与自重的条件对照',
+      nodes: [{ id: 'a', label: '液体密度 ρ液' }, { id: 'b', label: '排开液体体积 V排' }],
+      edges: [{ from: 'a', to: 'b' }],
+    };
+    expect(guardTitleAgainstContent(bad).title).toBeUndefined();
+
+    const good = {
+      title: '浮力大小：密度与排开体积的条件对照',
+      nodes: [{ id: 'a', label: '液体密度 ρ液' }, { id: 'b', label: '排开液体体积 V排' }],
+      edges: [],
+    };
+    expect(guardTitleAgainstContent(good).title).toBe('浮力大小：密度与排开体积的条件对照');
   });
 });

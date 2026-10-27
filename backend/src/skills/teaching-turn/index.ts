@@ -1458,7 +1458,9 @@ function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string,
   const normalizePanel = (panelRaw: unknown): Record<string, unknown> | null => {
     if (!panelRaw || typeof panelRaw !== 'object') return null;
     const panel = panelRaw as Record<string, unknown>;
-    const head = toFigureLabel(panel.head, SPEC.labelMax);
+    // 栏头超长只截断，不整图拒绝：英语句子栏头（"现在完成时 have finished"）常超 18 字，
+    // 因为一个栏头就把整张对照图丢掉不值得（2026-10-27 英语案例实拍）
+    const head = toFigureText(panel.head, SPEC.labelMax);
     if (!head) return null;
     const rows: Array<Record<string, unknown>> = [];
     const seen = new Set<string>();
