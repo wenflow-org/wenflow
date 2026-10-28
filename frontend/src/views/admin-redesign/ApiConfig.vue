@@ -100,13 +100,12 @@
           </div>
         </template>
 
-        <!-- 上游模型（只报已拉取/已添加的读数，逐条清单由面板渲染） -->
+        <!-- 上游清单状态（只报读数，逐条清单由面板渲染） -->
         <template #models-meta>
           <p class="ac-models-meta ac-models__line">
-            <span class="ac-models-meta__title">上游模型</span>
-            <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">拉取失败，请检查服务地址与密钥</span>
+            <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">获取失败，请检查服务地址与密钥</span>
             <span v-else-if="models.length">{{ upstreamSummary }}</span>
-            <span v-else>尚未拉取</span>
+            <span v-else>还没获取模型清单</span>
             <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">未保存</span>
           </p>
         </template>
@@ -269,7 +268,6 @@ import ModelRegistryOverview from './ModelRegistryOverview.vue'
 import ModelProvidersPanel from './ModelProvidersPanel.vue'
 import InfraModelsPanel from './InfraModelsPanel.vue'
 import { splitUpstreamByRegistry } from './modelNameMatch'
-import { modelKindOf } from './platformModelKind'
 import {
   liveApiConfig as cfg,
   liveFetchModels,
@@ -618,10 +616,9 @@ function onProvidersChanged() {
 const upstreamSummary = computed(() => {
   const total = models.value.length
   if (!total) return ''
-  const chat = models.value.filter((id) => modelKindOf(id) === 'chat').length
-  if (!upstreamReady.value) return `已拉取 ${total} 个 · 对话候选 ${chat} 个`
+  if (!upstreamReady.value) return `已获取 ${total} 个模型`
   const matched = upstreamSplit.value.registered.length
-  return `已拉取 ${total} 个 · 对话候选 ${chat} 个 · ${matched} 个已添加`
+  return `已获取 ${total} 个 · ${matched} 个已接入`
 })
 
 /**
@@ -663,20 +660,21 @@ function setEffort(v: string) {
 /* 2026-10-04 状态条退役：页头红/黄/绿基调 statusTone 随状态条整块删除（读取失败信号由
    接入卡内 mk-alert + KPI 卡「—」读数承载，不再有整页基调色） */
 const connBadge = computed(() => {
-  // 附「N 前」时间戳（P1#32 子集）：连接状态是上次获取模型的结果，无时间的「连接正常」
+  // 附「N 前」时间戳（P1#32 子集）：状态是上次获取模型时的连接结果，无时间的「连接成功」
   // 会把陈旧快照读成实时健康。时间源 = 本次会话刚获取成功的时刻，否则退回 DB lastCheckedAt
   // （与 connectionStatus 同源；不用健康快照 checkedAt——那是能力探测时间，语义不同）
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
-  const suffix = at ? ` · ${timeAgo(at)}` : ''
-  if (connectionStatus.value === 'connected') return { cls: 'mk-badge--ok', text: `连接正常${suffix}` }
-  if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次拉取失败' }
-  return { cls: 'mk-badge--muted', text: '连接未探测' }
+  if (connectionStatus.value === 'connected') {
+    return { cls: 'mk-badge--ok', text: at ? `${timeAgo(at)}连接成功` : '最近连接成功' }
+  }
+  if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次连接失败' }
+  return { cls: 'mk-badge--muted', text: '还没连接过' }
 })
-/** connBadge 悬停口径：说明「正常/失败」是什么时候、什么动作留下的，不冒充实时探活 */
+/** connBadge 悬停口径：说明「成功/失败」是什么时候、什么动作留下的，不冒充实时探活 */
 const connBadgeTitle = computed(() => {
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
-  const when = at ? `上次验证：${new Date(at).toLocaleString('zh-CN', { hour12: false })}` : '尚无验证记录'
-  return `${when}（「获取模型」成功/失败时更新）。连接状态为上次拉取的结果，非实时检测结果`
+  const when = at ? `上次连接：${new Date(at).toLocaleString('zh-CN', { hour12: false })}` : '还没有连接记录'
+  return `${when}（点「获取模型」时更新）。展示的是上次结果，不是实时探测。`
 })
 
 /** 已配置密钥但改了服务地址且 Key 留空：密钥不会随地址迁移，需提示重新输入 */
@@ -937,7 +935,6 @@ function discardAll() {
   gap: 8px;
   margin: 0;
 }
-.ac-models-meta__title { color: var(--mk-muted); }
 /* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
 
 /* 默认思考：模式 + 强度，同一行两列字段（2026-10-14 删冗余「启用思考」开关后由三列改两列） */

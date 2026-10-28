@@ -129,9 +129,9 @@ describe('ModelProvidersPanel', () => {
     // 自建通道仍在注册表里，但这一页不再提供它的入口
     expect(w.text()).not.toContain('Acme 网关')
     expect(w.text()).not.toContain('显示已停用')
-    // 详情头只留「平台通道 + 平台内置」，不再解释通道由什么组成
+    // 卡头只留「平台通道 + 内置」，不再解释通道由什么组成
     expect(w.find('.mk-card__head').text()).toContain('平台通道')
-    expect(w.find('.mk-card__head').find('.mpp-type').text()).toBe('平台内置')
+    expect(w.find('.mk-card__head').find('.mpp-type').text()).toBe('内置')
     expect(w.find('.mk-card__head').text()).not.toContain('一条通道 =')
     // 状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
     expect(w.find('.mk-card__head').findAll('.mk-badge')).toHaveLength(0)

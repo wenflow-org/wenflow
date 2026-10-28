@@ -345,7 +345,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.findAll('.mk-kpi')).toHaveLength(0);
     expect(wrapper.find('input[type="password"]').attributes('placeholder')).toBe('留空 = 沿用已配置');
     // 2026-10-16 用户走查重排：原 30+ 枚模型胶囊（.ac-model）退役；2026-10-21 只报数字
-    expect(wrapper.find('.ac-models__line').text()).toContain('已拉取 2 个');
+    expect(wrapper.find('.ac-models__line').text()).toContain('已获取 2 个');
     expect(wrapper.find('.ac-conn-body .mk-card .mk-badge').exists()).toBe(true);
     wrapper.unmount();
   });
@@ -368,7 +368,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(panel.text()).not.toContain('Acme 网关');
     const detail = wrapper.find('.mpp .mk-card__head');
     expect(detail.text()).toContain('平台通道');
-    expect(detail.find('.mpp-type').text()).toBe('平台内置');
+    expect(detail.find('.mpp-type').text()).toBe('内置');
     // 平台连接表单内联在详情里（2026-10-25 撤掉「平台设置」浮窗）
     expect(wrapper.find('.ac-conn').exists()).toBe(true);
     expect(wrapper.find('.ac-ps').exists()).toBe(false);
@@ -450,7 +450,7 @@ describe('ApiConfig P1 修复批', () => {
     liveApiConfig.value = savedCfg;
     const saved = await mountApiConfig();
     await openPlatformSettings(saved);
-    expect(saved.find('.ac-models__line').text()).toContain('已拉取 2 个');
+    expect(saved.find('.ac-models__line').text()).toContain('已获取 2 个');
     expect(saved.find('.ac-models-meta').text()).not.toContain('未保存');
     saved.unmount();
 
@@ -486,7 +486,7 @@ describe('ApiConfig P1 修复批', () => {
     // ③ 不再有「保存连接」分段按钮与「未保存」徽标
     expect(wrapper.find('.ac-sec__save').exists()).toBe(false);
     expect(wrapper.find('.ac-models-meta').text()).not.toContain('未保存');
-    expect(wrapper.find('.ac-models__line').text()).toContain('已拉取 2 个');
+    expect(wrapper.find('.ac-models__line').text()).toContain('已获取 2 个');
     wrapper.unmount();
   });
 

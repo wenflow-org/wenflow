@@ -76,7 +76,7 @@
                  上游清单状态与计数同一行（2026-10-24 走查）：原先是表头之上独立一条，
                  读起来像一行空记录。 -->
             <div class="mpp-models__title">
-              <span class="mpp-sec">模型<span class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
+              <span class="mpp-sec">已接入 {{ selected.models.length }} 个模型</span>
               <slot name="models-meta" />
             </div>
             <span class="mpp-models__acts">
@@ -322,7 +322,7 @@ const registryMeta = computed(() => {
   const r = view.value?.registry
   if (!r) return ''
   if (r.readOnly) return '只读'
-  return '改动即时生效'
+  return '保存即生效'
 })
 const registryPathTitle = computed(() => {
   const r = view.value?.registry
@@ -337,9 +337,9 @@ const registryPathTitle = computed(() => {
 function providerName(p: ProviderView): string {
   return p.id === 'platform' && p.name === '平台' ? '平台通道' : p.name
 }
-/** 通道类型：平台内置 / 自建。接入通道 = 一个服务地址 + 一套凭据 + 模型清单。 */
+/** 通道类型：内置 / 自建。接入通道 = 一个服务地址 + 一套凭据 + 模型清单。 */
 function providerTypeLabel(p: ProviderView): string {
-  return p.id === 'platform' ? '平台内置' : '自建通道'
+  return p.id === 'platform' ? '内置' : '自建'
 }
 /** 上游物理模型名：P2 独立映射落地前就是本地 id */
 function upstreamNameOf(m: ModelLike): string {
@@ -637,11 +637,6 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-models__title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
 .mpp-models__acts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .mpp-sec { font-size: var(--mk-fs-body); }
-.mpp-sec__count {
-  margin-left: 8px;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
 /* 上游清单已移入 PullModelsDialog（2026-10-24 用户「拉取作为浮窗」），详情区只留已登记模型表 */
 .mpp-table { width: 100%; }
 .mpp-label {
