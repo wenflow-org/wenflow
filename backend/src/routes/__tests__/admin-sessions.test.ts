@@ -9,6 +9,7 @@ const sessionsGroupBy = jest.fn()
 const sessionsFindUnique = jest.fn()
 const sessionsUpdate = jest.fn()
 const sessionsUpdateMany = jest.fn()
+const sessionsDeleteMany = jest.fn()
 const usersFindMany = jest.fn()
 
 const mockRouter = () => ({
@@ -32,7 +33,8 @@ jest.mock('../../config/database', () => ({
       groupBy: sessionsGroupBy,
       findUnique: sessionsFindUnique,
       update: sessionsUpdate,
-      updateMany: sessionsUpdateMany
+      updateMany: sessionsUpdateMany,
+      deleteMany: sessionsDeleteMany
     }
   }
 }))
@@ -106,6 +108,7 @@ describe('GET /api/admin/sessions', () => {
     jest.clearAllMocks()
     sessionsFindMany.mockResolvedValue([baseSession])
     sessionsGroupBy.mockResolvedValue([])
+    sessionsDeleteMany.mockResolvedValue({ count: 0 })
     usersFindMany.mockResolvedValue([{ id: 'admin-1', name: '管理员甲', email: 'admin@example.com' }])
   })
 
@@ -244,7 +247,7 @@ describe('POST /api/admin/sessions/revoke-all', () => {
 
     expect(res.statusCode).toBe(200)
     expect(sessionsUpdateMany).toHaveBeenCalledWith({
-      where: { revokedAt: null, adminId: 'admin-1', jti: { not: 'jti-operator' } },
+      where: { revokedAt: null, expiresAt: { gt: expect.any(Date) }, adminId: 'admin-1', jti: { not: 'jti-operator' } },
       data: { revokedAt: expect.any(Date) }
     })
     expect(res.body.data).toEqual({ count: 3 })
@@ -259,7 +262,7 @@ describe('POST /api/admin/sessions/revoke-all', () => {
 
     expect(res.statusCode).toBe(200)
     expect(sessionsUpdateMany).toHaveBeenCalledWith({
-      where: { revokedAt: null, jti: { not: 'jti-operator' } },
+      where: { revokedAt: null, expiresAt: { gt: expect.any(Date) }, jti: { not: 'jti-operator' } },
       data: { revokedAt: expect.any(Date) }
     })
     expect(res.body.data).toEqual({ count: 3 })
@@ -269,8 +272,44 @@ describe('POST /api/admin/sessions/revoke-all', () => {
     await run('POST', '/revoke-all', adminReq({ body: { adminId: 'admin-1' } }, 'jti-operator'))
 
     expect(sessionsUpdateMany).toHaveBeenCalledWith({
-      where: { revokedAt: null, adminId: 'admin-1' },
+      where: { revokedAt: null, expiresAt: { gt: expect.any(Date) }, adminId: 'admin-1' },
       data: { revokedAt: expect.any(Date) }
+    })
+  })
+})
+
+describe('POST /api/admin/sessions/cleanup', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    sessionsDeleteMany.mockResolvedValue({ count: 38 })
+  })
+
+  it('按 adminId 删除已结束会话（过期或已吊销），返回条数', async () => {
+    const { res } = await run('POST', '/cleanup', adminReq({ body: { adminId: 'admin-1' } }))
+
+    expect(res.statusCode).toBe(200)
+    expect(sessionsDeleteMany).toHaveBeenCalledWith({
+      where: {
+        adminId: 'admin-1',
+        OR: [
+          { revokedAt: { not: null } },
+          { revokedAt: null, expiresAt: { lte: expect.any(Date) } }
+        ]
+      }
+    })
+    expect(res.body.data).toEqual({ count: 38 })
+  })
+
+  it('不带 adminId 时清理全部管理员的历史会话', async () => {
+    await run('POST', '/cleanup', adminReq({ body: {} }))
+
+    expect(sessionsDeleteMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { revokedAt: { not: null } },
+          { revokedAt: null, expiresAt: { lte: expect.any(Date) } }
+        ]
+      }
     })
   })
 })

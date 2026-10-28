@@ -2220,9 +2220,14 @@ export const adminSessionsApi = {
     return adminAxios.delete(`/admin/sessions/${encodeURIComponent(sessionId)}`);
   },
 
-  /** 批量吊销：指定 adminId（缺省为全部）的未吊销会话；excludeCurrent=true 保留请求者当前会话 */
+  /** 批量吊销：指定 adminId（缺省为全部）的活跃会话；excludeCurrent=true 保留请求者当前会话 */
   revokeAllAdminSessions: async (payload: { adminId?: string; excludeCurrent?: boolean }) => {
     return adminAxios.post('/admin/sessions/revoke-all', payload);
+  },
+
+  /** 清理已结束会话（已吊销 / 已过期）：只删历史行，登录审计不受影响 */
+  cleanupAdminSessions: async (payload: { adminId?: string }) => {
+    return adminAxios.post('/admin/sessions/cleanup', payload);
   },
 };
 

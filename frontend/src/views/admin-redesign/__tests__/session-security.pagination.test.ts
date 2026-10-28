@@ -14,7 +14,8 @@ import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 const h = vi.hoisted(() => ({
   getMe: vi.fn(),
   getSessions: vi.fn(),
-  revoke: vi.fn()
+  revoke: vi.fn(),
+  cleanup: vi.fn()
 }));
 
 const { apiObject } = vi.hoisted(() => ({
@@ -29,7 +30,7 @@ const { apiObject } = vi.hoisted(() => ({
 
 vi.mock('@/api/adminApi', () => ({
   adminAuthApi: { getMe: h.getMe },
-  adminSessionsApi: { getAdminSessions: h.getSessions, revokeAdminSession: h.revoke, revokeAllAdminSessions: vi.fn() },
+  adminSessionsApi: { getAdminSessions: h.getSessions, revokeAdminSession: h.revoke, revokeAllAdminSessions: vi.fn(), cleanupAdminSessions: h.cleanup },
   adminAgentsApi: apiObject(),
   adminDashboardApi: apiObject(),
   adminSkillsApi: apiObject(),
@@ -106,6 +107,8 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     h.getSessions.mockReset();
     h.revoke.mockReset();
     h.revoke.mockResolvedValue({ data: {} });
+    h.cleanup.mockReset();
+    h.cleanup.mockResolvedValue({ data: { data: { count: 38 } } });
     h.getMe.mockResolvedValue({ data: { data: { id: 'admin-1' } } });
   });
 
@@ -186,7 +189,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(w.find('.mk-card__meta').text()).not.toContain('个会话');
     // 组头读 adminCounts（非窗口行数）
     expect(w.find('.ss-group__count').text()).toContain('100 个会话');
-    expect(w.find('.ss-group__count').text()).toContain('93 个活跃');
+    expect(w.find('.ss-group__count').text()).toContain('活跃 93');
     // 页码器分母 = 行窗口（30），note 标明全量活跃 93——两个数不同源，各自标口径
     // （2026-10-14 文案批：「后端全量活跃」→「全部活跃」，去后端视角）
     expect(pagerText(w)).toContain('共 30 条');
@@ -201,16 +204,32 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(w.find('.pagination-note').exists()).toBe(false);
   });
 
-  it('「下线全部」条数 = 全量活跃 + 未撤销已过期（后端 revoke-all 真实作用域），当前标签页除外', async () => {
+  it('「下线全部」只数活跃会话（当前标签页除外），历史另走「清理历史」', async () => {
     const sessions = Array.from({ length: 12 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions, {
       counts: { total: 505, active: 467, expired: 33, revoked: 5 },
       adminCounts: [{ adminId: 'admin-1', total: 505, active: 467, expired: 33, revoked: 5 }],
       window: { limit: 100, returned: 12 }
     });
-    // admin-1 即当前管理员：467 活跃 + 33 过期 - 1 当前标签页 = 499
-    const btn = w.findAll('button').find((b) => b.text().includes('下线全部'));
-    expect(btn?.text()).toContain('499');
+    // admin-1 即当前管理员：467 活跃 - 1 当前标签页 = 466；33 过期 + 5 已撤销 = 38 条历史
+    const revokeBtn = w.findAll('button').find((b) => b.text().includes('下线全部'));
+    expect(revokeBtn?.text()).toContain('466');
+    const cleanupBtn = w.findAll('button').find((b) => b.text().includes('清理历史'));
+    expect(cleanupBtn?.text()).toContain('38');
+  });
+
+  it('「清理历史」按 adminId 删除已结束会话，完成后重取列表', async () => {
+    const sessions = Array.from({ length: 3 }, (_, i) => fakeSession(i + 1));
+    const w = await mountSS(sessions, {
+      counts: { total: 9, active: 3, expired: 4, revoked: 2 },
+      adminCounts: [{ adminId: 'admin-1', total: 9, active: 3, expired: 4, revoked: 2 }],
+      window: { limit: 100, returned: 3 }
+    });
+    const cleanupBtn = w.findAll('button').find((b) => b.text().includes('清理历史'))!;
+    await cleanupBtn.trigger('click');
+    await flushPromises();
+    expect(h.cleanup).toHaveBeenCalledWith({ adminId: 'admin-1' });
+    expect(h.getSessions).toHaveBeenCalledTimes(2);
   });
 
   it('24h 内过期的活跃行给出可读剩余时长（F6-5）', async () => {
@@ -256,7 +275,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     const groups = w.findAll('.ss-group');
     expect(groups.length).toBe(2);
     const auditor = groups[1];
-    expect(auditor.find('.ss-group__count').text()).toContain('1 个活跃');
+    expect(auditor.find('.ss-group__count').text()).toContain('活跃 1');
     expect(auditor.find('.ss-tr--empty').text()).toContain('不在本页');
     // 第 2 页：admin-2 的活跃行落位，提示消失
     const next = w.findAll('.mk-pagination__btn').find((b) => b.text() === '下一页')!;
@@ -311,6 +330,6 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     // pill / 组头读数全部来自重取后的 counts（活跃 3、已撤销 1）
     expect(pillCount(w, '活跃')).toBe('3');
     expect(pillCount(w, '已撤销')).toBe('1');
-    expect(w.find('.ss-group__count').text()).toContain('3 个活跃');
+    expect(w.find('.ss-group__count').text()).toContain('活跃 3');
   });
 });

@@ -6,6 +6,8 @@ import {
   updateAdminLastLoginAt,
   createAdminSession,
   revokeAdminSessionByJti,
+  revokeSiblingAdminSessions,
+  trimAdminSessions,
   findCurrentAdminProfile,
 } from '../services/auth/admin-auth-session.repo';
 import { z } from 'zod';
@@ -84,6 +86,10 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
     }
 
     // 写入会话表（fail-open：写库失败不阻塞登录，仅告警；登出/吊销能力随之下线）
+    const sessionIp = clientIP.slice(0, IP_MAX_CHARS);
+    const sessionUserAgent = typeof req.headers['user-agent'] === 'string'
+      ? req.headers['user-agent'].slice(0, USER_AGENT_MAX_CHARS)
+      : null;
     try {
       const issuedAt = new Date();
       await createAdminSession({
@@ -91,10 +97,8 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
           id: randomUUID(),
           adminId: admin.id,
           jti: sessionJti,
-          ip: clientIP.slice(0, IP_MAX_CHARS),
-          userAgent: typeof req.headers['user-agent'] === 'string'
-            ? req.headers['user-agent'].slice(0, USER_AGENT_MAX_CHARS)
-            : null,
+          ip: sessionIp,
+          userAgent: sessionUserAgent,
           remember: !!remember,
           issuedAt,
           expiresAt: new Date(issuedAt.getTime() + (remember ? ADMIN_SESSION_MAX_AGE_MS : ADMIN_SESSION_SHORT_MS)),
@@ -102,6 +106,21 @@ router.post('/login', adminLoginRateLimitMiddleware, async (req: Request, res: R
       });
     } catch (sessionError) {
       logger.warn('管理员会话写入失败（不阻塞登录）:', sessionError);
+    }
+
+    // 同一设备只留最新一条活跃会话：旧 Cookie 已被新登录覆盖，留着只会让会话列表失真
+    // （管理员反复登录会攒出几十条同浏览器会话）。缺 ip/UA 时函数内部直接跳过。
+    try {
+      await revokeSiblingAdminSessions(admin.id, sessionIp, sessionUserAgent, sessionJti);
+    } catch (siblingError) {
+      logger.warn('同设备旧会话清理失败（不阻塞登录）:', siblingError);
+    }
+
+    // 活跃会话总数封顶：不同 UA/设备的会话也最多保留 10 条，超出吊销最旧的
+    try {
+      await trimAdminSessions(admin.id, sessionJti);
+    } catch (trimError) {
+      logger.warn('活跃会话封顶失败（不阻塞登录）:', trimError);
     }
 
     // 写入 HttpOnly Cookie：勾选"记住登录"给 7 天有效期，否则为会话 Cookie

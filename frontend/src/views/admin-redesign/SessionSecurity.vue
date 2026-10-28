@@ -79,17 +79,30 @@
           <div class="ss-group__who">
             <strong>{{ g.adminName }}</strong>
             <span v-if="g.adminEmail" class="ss-group__email mono">{{ g.adminEmail }}</span>
-            <span class="ss-group__count">{{ groupCounts(g).total }} 个会话<template v-if="groupCounts(g).active"> · {{ groupCounts(g).active }} 个活跃</template></span>
+            <span class="ss-group__count">
+              {{ groupCounts(g).total }} 个会话<template v-if="groupCounts(g).active"> · 活跃 {{ groupCounts(g).active }}</template><template v-if="endedCount(g)"> · 已结束 {{ endedCount(g) }}</template>
+            </span>
           </div>
-          <button
-            v-if="revokeCount(g)"
-            type="button"
-            class="mk-btn mk-btn--danger-ghost mk-btn--sm"
-            :title="`下线「${g.adminName}」的全部会话`"
-            @click="revokeAll(g)"
-          >
-            下线全部<template v-if="revokeCount(g) > 1">（{{ revokeCount(g) }}）</template>
-          </button>
+          <div class="ss-group__acts">
+            <button
+              v-if="endedCount(g)"
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :title="`清理「${g.adminName}」已过期 / 已下线的历史会话`"
+              @click="cleanupHistory(g)"
+            >
+              清理历史（{{ endedCount(g) }}）
+            </button>
+            <button
+              v-if="revokeCount(g)"
+              type="button"
+              class="mk-btn mk-btn--danger-ghost mk-btn--sm"
+              :title="`下线「${g.adminName}」的全部活跃会话`"
+              @click="revokeAll(g)"
+            >
+              下线全部<template v-if="revokeCount(g) > 1">（{{ revokeCount(g) }}）</template>
+            </button>
+          </div>
         </div>
 
         <!-- 活跃会话表（行分页：页码器在卡脚，跨组统一计数） -->
@@ -436,12 +449,17 @@ function fullHistorical(g: SessionGroup): number {
   return c.expired + c.revoked
 }
 
-/** 「下线全部」实际会下线的会话数：后端 revoke-all 的作用域是 `revokedAt: null`（全量、无 limit），
-    即「活跃 + 未撤销但已过期」两类；excludeCurrent 再剔除请求者当前 jti（活跃会话）。
-    按钮与确认文案同源，且与后端真实作用域一致（B13 F6-1：原实现只数活跃行，低估作用域）。 */
+/** 已结束会话（过期 + 已撤销）：「清理历史」的条数，删的是这些行 */
+function endedCount(g: SessionGroup): number {
+  return fullHistorical(g)
+}
+
+/** 「下线全部」实际会下线的会话数：后端 revoke-all 只作用于仍活跃的会话
+    （`revokedAt: null` + `expiresAt > now`）；excludeCurrent 再剔除请求者当前 jti。
+    已过期会话不再重复标记，由「清理历史」删除。 */
 function revokeCount(g: SessionGroup): number {
   const c = groupCounts(g)
-  const n = c.active + c.expired
+  const n = c.active
   if (g.adminId === myId.value && currentId.value) return Math.max(0, n - 1)
   return n
 }
@@ -619,8 +637,8 @@ async function revoke(s: AdminSessionRow) {
 
 async function revokeAll(g: SessionGroup) {
   const confirmed = await askConfirm({
-    title: '下线该管理员全部会话',
-    message: `将强制下线「${g.adminName}」的全部未撤销会话（含未在列表中显示的会话，共 ${revokeCount(g)} 个，当前登录标签页除外），确定吗？`,
+    title: '下线该管理员全部活跃会话',
+    message: `将强制下线「${g.adminName}」的全部活跃会话（共 ${revokeCount(g)} 个，当前登录标签页除外），确定吗？`,
     confirmText: '全部下线',
     busy: true,
   })
@@ -633,6 +651,28 @@ async function revokeAll(g: SessionGroup) {
     doneConfirm()
   } catch (e) {
     toast.error(`下线失败：${errMsg(e)}`)
+    failConfirm()
+  }
+}
+
+/** 清理已结束会话（已过期 / 已下线）：只删历史行，登录审计在 login_attempts 不受影响 */
+async function cleanupHistory(g: SessionGroup) {
+  const count = endedCount(g)
+  const confirmed = await askConfirm({
+    title: '清理该管理员的历史会话',
+    message: `将删除「${g.adminName}」的 ${count} 条已结束会话记录（已过期或已下线），登录审计记录保留。此操作不可撤销，确定吗？`,
+    confirmText: '清理历史',
+    danger: true,
+    busy: true,
+  })
+  if (!confirmed) return
+  try {
+    const res = await adminSessionsApi.cleanupAdminSessions({ adminId: g.adminId })
+    toast.success(`已清理 ${res.data?.data?.count ?? count} 条历史会话`)
+    await applyFilters()
+    doneConfirm()
+  } catch (e) {
+    toast.error(`清理失败：${errMsg(e)}`)
     failConfirm()
   }
 }
@@ -716,6 +756,7 @@ onMounted(async () => {
 .ss-group__who strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .ss-group__email { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .ss-group__count { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ss-group__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* 表格内自定义单元格 */
 .ss-tr--current td { background: var(--mk-blue-bg); }
