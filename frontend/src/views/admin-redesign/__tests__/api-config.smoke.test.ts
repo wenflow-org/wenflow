@@ -668,11 +668,20 @@ describe('ApiConfig P1 修复批', () => {
     expect(card.findAll('.ac-policy__unit').map((u) => u.text())).toEqual(['次', '毫秒', '次/分']);
     const labels = card.findAll('.ac-policy__fields .mk-field__label').map((l) => l.text());
     expect(labels).toEqual(['最大重试', '重试间隔', 'RPM 上限']);
-    // 2026-10-27 解释型文案清掉：「全站共享 / 所有供应商共用」这类口径说明不再上屏，
-    // 只留「0 = 不限」与虚拟学习者出口。
-    expect(card.find('.ac-policy__fields').text()).not.toContain('所有供应商共用');
-    expect(card.find('.ac-policy__fields').text()).toContain('0 = 不限');
-    expect(card.find('.ac-policy__fields a.mk-link').attributes('href')).toBe('/admin/virtual-learners');
+    // 2026-10-27 解释型文案清掉：「全站共享 / 所有供应商共用」这类口径说明不再上屏。
+    // 2026-10-28 用户「文案不要」：字段下的两句口径（总尝试上限 / 0 = 不限 + 虚拟学习者
+    // 出口）整行撤掉；必要语义收进标签 title，屏上只剩标签、数值与单位。
+    const fieldsText = card.find('.ac-policy__fields').text();
+    expect(fieldsText).not.toContain('所有供应商共用');
+    expect(fieldsText).not.toContain('总尝试上限');
+    expect(fieldsText).not.toContain('0 = 不限');
+    expect(fieldsText).not.toContain('虚拟学习者');
+    expect(card.findAll('.ac-policy__hint')).toHaveLength(0);
+    expect(card.find('.ac-policy__fields a.mk-link').exists()).toBe(false);
+    const labelTitle = (i: number) =>
+      card.findAll('.ac-policy__fields .mk-field__label')[i].attributes('title');
+    expect(labelTitle(0)).toContain('总尝试上限');
+    expect(labelTitle(2)).toContain('0 = 不限');
     expect(wrapper.text()).not.toContain('传输重试');
     expect(wrapper.text()).not.toContain('Retry-After');
     expect(wrapper.text()).not.toContain('随机抖动');

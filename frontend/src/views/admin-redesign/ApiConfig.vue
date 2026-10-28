@@ -117,12 +117,11 @@
               </div>
               <div v-if="reliability" class="ac-policy__fields">
                 <label class="mk-field">
-                  <span class="mk-field__label">最大重试</span>
+                  <span class="mk-field__label" title="总尝试上限，含首次调用与改用备用模型">最大重试</span>
                   <span class="ac-policy__control">
                     <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
                     <em class="ac-policy__unit">次</em>
                   </span>
-                  <span class="ac-policy__hint">总尝试上限，含首次调用与改用备用模型</span>
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">重试间隔</span>
@@ -132,14 +131,10 @@
                   </span>
                 </label>
                 <label class="mk-field">
-                  <span class="mk-field__label">RPM 上限</span>
+                  <span class="mk-field__label" title="0 = 不限，超出后排队等待">RPM 上限</span>
                   <span class="ac-policy__control">
                     <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
                     <em class="ac-policy__unit">次/分</em>
-                  </span>
-                  <span class="ac-policy__hint">
-                    0 = 不限，超出后排队等待。
-                    <a class="mk-link" href="/admin/virtual-learners" @click.prevent="goVirtualLearners">虚拟学习者上限单独设 →</a>
                   </span>
                 </label>
               </div>
@@ -324,10 +319,6 @@ function onFetchClick() {
 const platformConnRef = ref<HTMLElement | null>(null)
 function focusPlatformConnection() {
   platformConnRef.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
-}
-/** 全站 RPM 与虚拟学习者上限是两条独立上限：容量设置只在该页改，这里只给出入口 */
-function goVirtualLearners() {
-  void router.push('/admin/virtual-learners')
 }
 
 /** 注册表读数（只读总览回传）：上游清单与「已添加」的对照只用 models 这一段。
@@ -1014,9 +1005,9 @@ function discardAll() {
 .ac-fallback-alert { margin: 0; }
 
 /* ===== 调用策略（2026-10-28 收敛：只留参数）=====
-   三个字段一行，各自带一句口径；两处「共享 / 单独设」的边界写在字段下面，
-   不另开一段长注解。调用读数不在这张卡里：健康读数归健康中心，跑批读数在
-   虚拟学习者页，本页只负责把三个参数写清楚。 */
+   三个字段一行，屏上只有标签、数值与单位；口径说明不再上屏（2026-10-28 用户
+   「文案不要」），必要语义（总尝试上限 / 0 = 不限）收进标签 title。
+   调用读数不在这张卡里：健康读数归健康中心，跑批读数在虚拟学习者页。 */
 .ac-policy {
   display: grid;
   gap: 18px;
@@ -1051,14 +1042,6 @@ function discardAll() {
   white-space: nowrap;
   flex: none;
 }
-/* 字段口径：说完就走，不再堆成一段长注解 */
-.ac-policy__hint {
-  font-size: var(--mk-fs-micro);
-  line-height: 1.5;
-  color: var(--mk-faint);
-  font-weight: 400;
-}
-.ac-policy__hint .mk-link { white-space: nowrap; }
 
 /* 内容区不足 1100px：三列参数回落两列，再窄回落单列 */
 @media (max-width: 1100px) {
