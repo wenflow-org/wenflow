@@ -32,69 +32,119 @@
           >{{ saving ? '保存中…' : '保存策略' }}</button>
         </div>
         <div class="ac-body">
-          <div class="ac-group__title">访问来源模式</div>
-          <div class="ac-radio-row" role="radiogroup" aria-label="访问来源模式" @keydown="onAccessKeydown">
-            <span
-              v-for="(opt, i) in accessOptions"
-              :key="opt.id"
-              :ref="(el) => setAccessRef(el, i)"
-              class="ac-radio"
-              :class="{ 'ac-radio--disabled': opt.disabled }"
-              role="radio"
-              :tabindex="policy.adminAccessMode === opt.id ? 0 : -1"
-              :aria-checked="policy.adminAccessMode === opt.id"
-              :aria-disabled="opt.disabled || undefined"
-              @click="setAccessMode(opt.id)"
-              @keydown.enter.prevent="setAccessMode(opt.id)"
-              @keydown.space.prevent="setAccessMode(opt.id)"
-            >
-              <span class="ac-radio__mark" aria-hidden="true">{{ policy.adminAccessMode === opt.id ? '●' : '○' }}</span>
-              <span class="ac-radio__text">
-                <span class="ac-radio__title">{{ opt.label }}</span>
-                <span v-if="opt.sub" class="ac-radio__sub">{{ opt.sub }}</span>
-              </span>
-            </span>
-          </div>
-          <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">公网开放 · 入口无访问限制</span>
-          <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
-            <span class="mk-field__label">额外允许的客户端 IP</span>
-            <textarea
-              class="mk-field__textarea ac-textarea"
-              rows="2"
-              :value="policy.adminAllowedIps.join('\n')"
-              @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty()"
-              placeholder="203.0.113.10"
-            ></textarea>
-          </label>
+          <!-- 入站：三张可选卡（图标 + 一句话后果），选中态蓝边 + 右上单选点。
+               2026-10-27 用户「重新设计一下」：原 ○/● 行内单选看不出选中面积，也读不出各档差异。 -->
+          <section class="ac-section">
+            <div class="ac-section__head">
+              <h4 class="ac-section__title">谁能连接后台</h4>
+              <span class="ac-section__hint">按来源地址限制管理端入口</span>
+            </div>
+            <div class="ac-modes" role="radiogroup" aria-label="访问来源模式" @keydown="onAccessKeydown">
+              <button
+                v-for="(opt, i) in accessOptions"
+                :key="opt.id"
+                :ref="(el) => setAccessRef(el, i)"
+                type="button"
+                role="radio"
+                class="ac-mode"
+                :class="{ 'ac-mode--on': policy.adminAccessMode === opt.id, 'ac-mode--disabled': opt.disabled }"
+                :tabindex="policy.adminAccessMode === opt.id ? 0 : -1"
+                :aria-checked="policy.adminAccessMode === opt.id"
+                :aria-disabled="opt.disabled || undefined"
+                @click="setAccessMode(opt.id)"
+              >
+                <span class="ac-mode__icon" aria-hidden="true">
+                  <component :is="opt.icon" :size="17" :stroke-width="1.8" />
+                </span>
+                <span class="ac-mode__text">
+                  <span class="ac-mode__title">
+                    {{ opt.label }}
+                    <span v-if="opt.recommended" class="ac-mode__badge">推荐</span>
+                  </span>
+                  <span class="ac-mode__desc">{{ opt.desc }}</span>
+                </span>
+                <span class="ac-mode__dot" aria-hidden="true"></span>
+              </button>
+            </div>
+            <p v-if="policy.adminAccessMode === 'any'" class="ac-risk" role="alert">
+              <TriangleAlert :size="15" :stroke-width="2" aria-hidden="true" />
+              公网开放：任何能访问到本服务的人都能进入后台，仅建议临时调试时使用。
+            </p>
+            <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
+              <span class="mk-field__label">额外允许的客户端 IP</span>
+              <textarea
+                class="mk-field__textarea ac-textarea"
+                rows="2"
+                :value="policy.adminAllowedIps.join('\n')"
+                @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty()"
+                placeholder="203.0.113.10"
+              ></textarea>
+              <span class="ac-field-hint">每行一个，留空表示只按私有网段判断。</span>
+            </label>
+          </section>
 
-          <div class="ac-group__title ac-group__title--sep">服务端出站白名单</div>
-          <div class="mk-seg" role="group" aria-label="服务端出站白名单">
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': policy.allowPrivateNetwork }"
-              :aria-pressed="policy.allowPrivateNetwork"
-              @click="policy.allowPrivateNetwork = true; markDirty()"
-            >允许</button>
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': !policy.allowPrivateNetwork }"
-              :aria-pressed="!policy.allowPrivateNetwork"
-              @click="policy.allowPrivateNetwork = false; markDirty()"
-            >仅白名单</button>
-          </div>
-          <label v-if="!policy.allowPrivateNetwork" class="mk-field">
-            <span class="mk-field__label">允许的 Host / IP</span>
-            <textarea
-              class="mk-field__textarea ac-textarea"
-              rows="2"
-              :value="policy.privateNetworkHosts.join('\n')"
-              @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty()"
-              placeholder="192.168.1.20"
-            ></textarea>
-          </label>
-          <span v-if="outboundEmptyWarn" class="ac-policy__warn">名单为空：服务端将无法请求任何内网地址</span>
+          <!-- 出站：两档改成并列卡，写清「允许 = 任意内网」这一容易读反的语义 -->
+          <section class="ac-section">
+            <div class="ac-section__head">
+              <h4 class="ac-section__title">服务端能访问哪些内网地址</h4>
+              <span class="ac-section__hint">模型上游、MCP 服务等出站请求的目标范围</span>
+            </div>
+            <div class="ac-outs" role="radiogroup" aria-label="服务端出站白名单" @keydown="onOutboundKeydown">
+              <button
+                :ref="(el) => setOutboundRef(el, 0)"
+                type="button"
+                role="radio"
+                class="ac-mode"
+                :class="{ 'ac-mode--on': policy.allowPrivateNetwork }"
+                :tabindex="policy.allowPrivateNetwork ? 0 : -1"
+                :aria-checked="policy.allowPrivateNetwork"
+                @click="setOutbound(true)"
+              >
+                <span class="ac-mode__icon" aria-hidden="true">
+                  <Network :size="17" :stroke-width="1.8" />
+                </span>
+                <span class="ac-mode__text">
+                  <span class="ac-mode__title">允许全部内网</span>
+                  <span class="ac-mode__desc">服务端可请求任意内网地址（默认）</span>
+                </span>
+                <span class="ac-mode__dot" aria-hidden="true"></span>
+              </button>
+              <button
+                :ref="(el) => setOutboundRef(el, 1)"
+                type="button"
+                role="radio"
+                class="ac-mode"
+                :class="{ 'ac-mode--on': !policy.allowPrivateNetwork }"
+                :tabindex="!policy.allowPrivateNetwork ? 0 : -1"
+                :aria-checked="!policy.allowPrivateNetwork"
+                @click="setOutbound(false)"
+              >
+                <span class="ac-mode__icon" aria-hidden="true">
+                  <ShieldCheck :size="17" :stroke-width="1.8" />
+                </span>
+                <span class="ac-mode__text">
+                  <span class="ac-mode__title">仅白名单</span>
+                  <span class="ac-mode__desc">只允许下面列出的 Host / IP</span>
+                </span>
+                <span class="ac-mode__dot" aria-hidden="true"></span>
+              </button>
+            </div>
+            <label v-if="!policy.allowPrivateNetwork" class="mk-field">
+              <span class="mk-field__label">允许的 Host / IP</span>
+              <textarea
+                class="mk-field__textarea ac-textarea"
+                rows="2"
+                :value="policy.privateNetworkHosts.join('\n')"
+                @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty()"
+                placeholder="192.168.1.20"
+              ></textarea>
+              <span class="ac-field-hint">每行一个，支持域名、IP 或 host:port。</span>
+            </label>
+            <p v-if="outboundEmptyWarn" class="ac-risk" role="alert">
+              <TriangleAlert :size="15" :stroke-width="2" aria-hidden="true" />
+              白名单为空：保存后服务端将无法请求任何内网地址。
+            </p>
+          </section>
         </div>
       </section>
 
@@ -155,6 +205,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
+import { Globe, Laptop, Network, ShieldCheck, TriangleAlert } from 'lucide-vue-next'
 import { toast } from '@/utils/toast'
 import { authAPI } from '@/api/auth'
 import {
@@ -228,12 +279,28 @@ const saveBlocked = computed(() => outboundEmptyWarn.value)
 /** 生产环境后端拒绝「不限制」来源，选项就地置灰并写原因 */
 const isProduction = import.meta.env.PROD
 const accessOptions = computed(() => [
-  { id: 'loopback' as const, label: '仅本机', sub: '', disabled: false },
-  { id: 'private' as const, label: '私有网段（推荐）', sub: '', disabled: false },
+  {
+    id: 'loopback' as const,
+    label: '仅本机',
+    desc: '只允许 127.0.0.1 访问',
+    icon: Laptop,
+    recommended: false,
+    disabled: false,
+  },
+  {
+    id: 'private' as const,
+    label: '私有网段',
+    desc: '允许内网地址，可补充客户端 IP',
+    icon: Network,
+    recommended: true,
+    disabled: false,
+  },
   {
     id: 'any' as const,
     label: '不限制',
-    sub: isProduction ? '生产环境不可选 · 请用私有网段 + IP 白名单' : '',
+    desc: isProduction ? '生产环境不可选，请改用私有网段 + IP 白名单' : '任何访问者都能进入后台',
+    icon: Globe,
+    recommended: false,
     disabled: isProduction,
   },
 ])
@@ -270,6 +337,25 @@ function onAccessKeydown(e: KeyboardEvent): void {
   if (opts[next].disabled) return
   setAccessMode(opts[next].id)
   void nextTick(() => accessEls.value[next]?.focus())
+}
+
+/* 出站两档同样走 radio 语义：roving tabindex + 方向键切换 */
+function setOutbound(allow: boolean): void {
+  if (policy.allowPrivateNetwork === allow) return
+  policy.allowPrivateNetwork = allow
+  markDirty()
+}
+const outboundEls = ref<(HTMLElement | null)[]>([])
+function setOutboundRef(el: unknown, i: number): void {
+  outboundEls.value[i] = (el as HTMLElement) || null
+}
+function onOutboundKeydown(e: KeyboardEvent): void {
+  const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  e.preventDefault()
+  const next = e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Home' ? 0 : 1
+  setOutbound(next === 0)
+  void nextTick(() => outboundEls.value[next]?.focus())
 }
 
 async function savePolicy(): Promise<void> {
@@ -444,40 +530,111 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 @media (max-width: 1100px) {
   .acl-grid { grid-template-columns: minmax(0, 1fr); }
 }
-.ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
+.ac-body { display: grid; gap: 18px; padding: 4px 16px 18px; }
 .ac-body .mk-field { margin: 0; min-width: 0; }
-.ac-policy__warn { font-size: var(--mk-fs-micro); color: var(--mk-red); font-weight: 600; }
+.ac-field-hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 
-/* 访问来源模式：radio 卡片（三选一，带一行口径副文） */
-.ac-radio-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.ac-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+/* 两段设置（入站 / 出站）：段标题 + 一句范围说明，段间用分隔线而不是猜间距 */
+.ac-section { display: grid; gap: 10px; min-width: 0; }
+.ac-section + .ac-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--mk-line);
+}
+.ac-section__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ac-section__title { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
+.ac-section__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+
+/* 可选卡（三档入站 / 两档出站共用）：整卡可点，选中蓝边 + 右上单选点 */
+.ac-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ac-outs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) {
+  .ac-modes { grid-template-columns: minmax(0, 1fr); }
+  .ac-outs { grid-template-columns: minmax(0, 1fr); }
+}
+.ac-mode {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-md);
   background: var(--mk-surface);
-  cursor: pointer;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
   color: var(--mk-ink);
-  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
-.ac-radio:hover { border-color: var(--mk-blue); }
-.ac-radio:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
-.ac-radio[aria-checked='true'] {
+.ac-mode:hover { border-color: var(--mk-blue); background: var(--mk-hover-surface); }
+.ac-mode:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
+.ac-mode--on {
   border-color: var(--mk-blue);
-  background: color-mix(in srgb, var(--mk-blue) 8%, transparent);
+  background: color-mix(in srgb, var(--mk-blue) 7%, var(--mk-surface));
+  box-shadow: inset 0 0 0 1px var(--mk-blue);
+}
+.ac-mode--disabled { cursor: not-allowed; opacity: 0.55; }
+.ac-mode--disabled:hover { border-color: var(--mk-line); background: var(--mk-surface); }
+.ac-mode__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+}
+.ac-mode--on .ac-mode__icon {
+  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
   color: var(--mk-blue);
 }
-.ac-radio--disabled { cursor: not-allowed; opacity: 0.55; }
-.ac-radio--disabled:hover { border-color: var(--mk-line); }
-.ac-radio__mark { flex: none; line-height: 1; }
-.ac-radio__text { display: grid; gap: 0; min-width: 0; }
-.ac-radio__title { font-weight: 600; }
-.ac-radio__sub { color: var(--mk-muted); font-weight: 500; }
-.ac-radio[aria-checked='true'] .ac-radio__sub { color: inherit; opacity: 0.82; }
+.ac-mode__text { display: grid; gap: 2px; min-width: 0; padding-right: 14px; }
+.ac-mode__title { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-body); font-weight: 600; }
+.ac-mode__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.45; }
+.ac-mode--on .ac-mode__desc { color: var(--mk-ink); opacity: 0.82; }
+.ac-mode__badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
+  color: var(--mk-blue);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  line-height: 1.4;
+}
+.ac-mode__dot {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--mk-faint);
+  border-radius: 50%;
+  background: var(--mk-surface);
+}
+.ac-mode--on .ac-mode__dot { border-color: var(--mk-blue); }
+.ac-mode--on .ac-mode__dot::after {
+  content: '';
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 50%;
+  background: var(--mk-blue);
+}
+
+/* 风险提示（公网开放 / 白名单为空）：整条落在该段下方，不是一行小字 */
+.ac-risk {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--mk-radius-md);
+  background: color-mix(in srgb, var(--mk-red) 8%, transparent);
+  color: var(--mk-red);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.ac-risk svg { flex: none; margin-top: 1px; }
 
 /* 注册卡两行：开关 + 数字 + 保存 */
 .ac-reg-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -486,8 +643,5 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 .ac-quota-field .mk-field__input { width: 76px; text-align: center; font-variant-numeric: tabular-nums; }
 .ac-quota-field em { font-style: normal; color: var(--mk-faint); }
 
-.ac-group__title { font-size: var(--mk-fs-emphasis); font-weight: 700; color: var(--mk-ink); }
-/* 第二段（出站）与第一段（入站）之间加一条分隔，同卡两域不靠间距猜 */
-.ac-group__title--sep { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--mk-line); }
 .ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); min-height: 0; }
 </style>

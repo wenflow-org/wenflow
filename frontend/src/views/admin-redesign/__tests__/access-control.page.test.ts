@@ -144,15 +144,15 @@ describe('访问与注册（拆页后的独立页）', () => {
     const titles = w.findAll('.mk-card__title').map((t) => t.text());
     // 入站来源与出站白名单同属「一次保存」的策略组，同卡两段；注册单独一卡在右列
     expect(titles).toEqual(['后台访问来源', '注册']);
-    expect(w.text()).toContain('访问来源模式');
-    expect(w.text()).toContain('服务端出站白名单');
-    expect(w.findAll('.ac-radio')).toHaveLength(3);
+    expect(w.text()).toContain('谁能连接后台');
+    expect(w.text()).toContain('服务端能访问哪些内网地址');
+    expect(w.findAll('.ac-modes .ac-mode')).toHaveLength(3);
     w.unmount();
   });
 
   it('访问来源模式是 radio 组：选中项 aria-checked=true 且只有它可 Tab 进入', async () => {
     const w = await mountPage();
-    const radios = w.findAll('.ac-radio');
+    const radios = w.findAll('.ac-modes .ac-mode');
     const checked = radios.filter((r) => r.attributes('aria-checked') === 'true');
     expect(checked).toHaveLength(1);
     expect(checked[0].text()).toContain('私有网段');
@@ -164,7 +164,7 @@ describe('访问与注册（拆页后的独立页）', () => {
     const w = await mountPage();
     expect(saveButton(w).attributes('disabled')).toBeDefined();
 
-    const anyRadio = w.findAll('.ac-radio').find((r) => r.text().includes('不限制'))!;
+    const anyRadio = w.findAll('.ac-modes .ac-mode').find((r) => r.text().includes('不限制'))!;
     await anyRadio.trigger('click');
     await nextTick();
     expect(saveButton(w).attributes('disabled')).toBeUndefined();
@@ -182,7 +182,7 @@ describe('访问与注册（拆页后的独立页）', () => {
 
   it('仅白名单 + 名单为空：禁用保存并写明后果', async () => {
     const w = await mountPage();
-    const seg = w.findAll('.mk-seg__item').find((b) => b.text() === '仅白名单')!;
+    const seg = w.findAll('.ac-outs .ac-mode').find((b) => b.text().includes('仅白名单'))!;
     await seg.trigger('click');
     await nextTick();
     expect(w.text()).toContain('服务端将无法请求任何内网地址');
@@ -258,7 +258,7 @@ describe('访问与注册（拆页后的独立页）', () => {
   it('注册开关与配额在加载完成前不渲染（null = 未加载，不伪装成关）', async () => {
     const w = await mountPage();
     expect(w.findAll('.mk-card__title').map((t) => t.text())).toEqual(['后台访问来源']);
-    expect(w.text()).toContain('服务端出站白名单');
+    expect(w.text()).toContain('服务端能访问哪些内网地址');
     w.unmount();
   });
 
