@@ -108,6 +108,29 @@ function normalizeConceptName(value: unknown): string {
 }
 
 /**
+ * 代码判对、模型却否定作答的护栏（2026-10-28 f3 实拍）。
+ *
+ * 实测：checkpoint 答案键是 A，学生选 A，`checkpointHistory.passed=true`，
+ * 但模型回复「这道不对——A 还是没答到点上」，随后逼学生重写三行。
+ * 这不是判卷出错，是模型没遵守 passed=true 的裁决；提示词软约束压不住，
+ * 命中即整段换成确定性确认（保留原回复里最后一个问句，维持推进）。
+ */
+const NEGATIVE_VERDICT_OPENING =
+  /^[\s「"“]*(?:(?:这道|这题|这一题|这次|这个)(?:题|答案|选项)?|答案|选项)?\s*(?:不对|错了|答错|选错|填错|没答对|没答到|没选对)/;
+
+export function repairContradictedPassedVerdict(reply: unknown): string {
+  if (typeof reply !== 'string') return reply as string;
+  const value = reply;
+  const text = value.trim();
+  if (!text || !NEGATIVE_VERDICT_OPENING.test(text)) return value;
+  const questions = [...text.matchAll(/[^。！？\n]{0,80}[？?]/g)];
+  const question = questions.length ? questions[questions.length - 1][0].trim() : '';
+  return question
+    ? `对，这道答对了。${question}`
+    : '对，这道答对了。说说你判断的依据，我们往下走。';
+}
+
+/**
  * 失败检查点概念的**后续回合**肯定语护栏判定（#84，2026-10-19 实证）。
  *
  * 提交回合的硬门只在「本次提交判错」的那一轮生效；实测（zhongkao-streaming 2026-10-18 批，

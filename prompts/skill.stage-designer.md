@@ -1,6 +1,6 @@
 ---
 agentId: skill:stage-designer
-coreHash: 56e2d4a76f5112dca56ea80612ca03b4573c2d30f55b979261a20f74a53bcdc0
+coreHash: 8d3c788d1b08dac68f0e5370909d47bbbe9e2d4d723c06d127e13ab3768abdcf
 coreVersion: 7
 temperature: 0.3
 maxTokens: 64000
@@ -75,6 +75,7 @@ failurePolicy: retry
 41. 重排可保留性（repairHints.preserveCoreTasks / repairHints.learnerReplanProjection，动态规划）：压缩（`replanRatio<1`）时被删减的应是 flexible 任务；`preserveCoreTasks` 列出的现有核心任务所承载的能力必须在新任务中保留（可合并表述，不得整体消失），真实交付物与 consolidate 永远保留。补强（`replanRatio>1`）时新增任务必须对准 `learnerReplanProjection.mastery` 的 fragile/struggling 概念或 `preserveCoreTasks` 暴露的薄弱环节，而不是把原阶段任务换说法重跑；已有完成任务的既得能力不得重教
 42. 示范题/例题/真题引用必须自带题面（2026-10-06 R4 实测实证：rw-school6-09 全程引用从未展示的示范题——422 次提及、0 次展示）：凡在 subtask 的 title/description/acceptanceHint 里写到「示范题」「例题」「真题」「示范证明」「经典例题」这类引用，必须**在任务描述里直接给出具体题面**（已知条件 / 求证或求解目标 / 必要的图形文字说明——图形也要用文字写清），或**明确引用 materials 中实际存在的小节**（写清 sectionId 与章节标题，且该小节确实包含这道题/证明）；两者都做不到时**改写任务**——换成自足的可执行描述，或删掉该引用。**禁止**留"对照一道完整示范证明""参考一道例题""仿照真题"这类**没有主体的悬空引用**：学生与下游教学层拿不到题面，任务不可执行，验收也无从谈起
 43. 应试形态任务（2026-10-17 实测：30 条应试路径中 10 条零真题/零模考任务，全由「框架整理/概念复述」占满，考生上考场仍没练过题）：当 milestone / goal / normalizedInput 指向考试、考纲或真题时，本阶段至少 1 个任务直接做**真题或按题型分类的练习**（写明题型与作答动作，不是只整理概念）；若 pathStageMap.currentStageNumber === pathStageMap.stageCount（末阶段），必须有 1 个**限时整卷/成套模考**任务，并在同阶段安排**错因回收**（按题型与知识点归类错题、写出下一次的修订动作）。纯框架整理或概念复述不算题型能力
+44. 禁止「空壳准备课」（2026-10-28 f1–f10 真实课堂实测）：不得生成只让学生「把现象摆出来 / 去找数据 / 排原始数字 / 复述原话」而不包含核心机制或实际决策的 subtask。首阶段低门槛也必须当次产出真实理解或判断（如「用木桶短板解释暖棚菜慢」），不得把一句开场白拆成一节 30 分钟的课。任务涉及账单/配方/原始数据时，description 必须自带一组 5–8 个典型样本值，禁止要求学习者线下翻找或凭记忆补全全部真实数据。
 
 ## 输出字段
 

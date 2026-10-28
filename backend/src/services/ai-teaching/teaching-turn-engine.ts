@@ -81,7 +81,7 @@ import { learningStateService, type LearningStateMetrics } from '../learning/lea
 import type { TeachingSessionMessage } from './TeachingSessionRepository';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
-import { shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
+import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
@@ -505,6 +505,31 @@ export async function processStudentMessage(
       if (screened.applied) {
         rawTeachingOutput = { ...rawTeachingOutput, reply: screened.reply };
       }
+    }
+  }
+  // 检查点反馈硬门（对称方向，2026-10-28 f3 实拍）：代码判对、模型却否定作答。
+  // 实测答案键 A / 学生选 A / checkpointHistory.passed=true，模型仍说「这道不对」并逼学生重写三行。
+  // 命中即换成确定性确认（保留原回复最后一个问句），并单列遥测；不阻断课堂。
+  if (rawTeachingOutput?.reply && submittedCheckpoint
+    && options.checkpointJudgement?.judgedBy === 'code'
+    && options.checkpointJudgement.passed === true) {
+    const repaired = repairContradictedPassedVerdict(rawTeachingOutput.reply);
+    if (repaired !== rawTeachingOutput.reply) {
+      logger.warn('[AITeaching] 检查点判对但回复否定作答（反馈硬门·对称）', {
+        sessionId: session.id,
+        checkpointId: submittedCheckpoint.id,
+        before: String(rawTeachingOutput.reply).slice(0, 120),
+        after: repaired.slice(0, 120),
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-engine',
+        faultCategory: 'MODEL_NEGATION_ON_PASSED_CHECKPOINT',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['teachingReply.verdict', `task:${context.taskId}`],
+        mitigationApplied: 'replace-with-deterministic-confirmation',
+        rootCauseMessage: String(rawTeachingOutput.reply).slice(0, 200),
+      });
+      rawTeachingOutput = { ...rawTeachingOutput, reply: repaired };
     }
   }
   // 失败检查点概念的**后续回合**肯定语护栏（#84，2026-10-19 实证）：提交轮硬门只管当轮——

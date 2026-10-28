@@ -643,6 +643,27 @@ describe('悬空图引用剥离（hasDanglingFigureReference / stripDanglingFigu
     expect(hasDanglingFigureReference(null)).toBe(false);
   });
 
+  it('识别「摆成图了/图上/照着图/箭头」等真实课堂变体（2026-10-28 f6/f7/f9 实拍）', () => {
+    expect(hasDanglingFigureReference('这条链我摆成图了，你对着箭头上的字核一遍就行。')).toBe(true);
+    expect(hasDanglingFigureReference('三处的先后看图，你只需盯住最后那个还没填的空。')).toBe(true);
+    expect(hasDanglingFigureReference('图上两个问号，就是这条关系在两侧各占的位置。')).toBe(true);
+    expect(hasDanglingFigureReference('你照着图，用自己的话说一遍整条。')).toBe(true);
+  });
+
+  it('真实变体剥离后不再出现「图/箭头」指代，且保留后续指令', () => {
+    const samples = [
+      '这条链我摆成图了，你对着箭头上的字核一遍就行。核完选一下下面这道：',
+      '三处的先后看图，你只需盯住最后那个还没填的空。把它的行号补给我。',
+      '图上两个问号，就是这条关系在两侧各占的位置。下面这道小题你选一下。',
+      '图里这条关系已经摆好了：同一个温度轴，往上往下各占一边。你照着图，用自己的话说一遍整条。',
+    ];
+    for (const sample of samples) {
+      const out = stripDanglingFigureReferences(sample);
+      expect(out).not.toMatch(/[看对照顾盯按]着?图|图上|图里|箭头/);
+      expect(out.length).toBeGreaterThan(8);
+    }
+  });
+
   it('剥离后不留悬空括号/重复标点（D10 逐字稿样本）', () => {
     const sample = '为了帮你把这张图看得更清楚，我画了一个结构示意（见图），你对照一下自己刚填好的三条线。';
     const out = stripDanglingFigureReferences(sample);

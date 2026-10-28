@@ -29,6 +29,8 @@ const baseUrl = argOf('base-url', 'http://127.0.0.1:3011');
 const only = argOf('only', '');
 const skipExisting = argv.includes('--skip-existing');
 const baseDaysAgo = argOf('base-days-ago', '14');
+const suffix = argOf('suffix', '');
+const label = argOf('label', suffix);
 
 const config = JSON.parse(readFileSync(resolve(here, 'learner-cases-10.json'), 'utf8'));
 const wanted = new Set(only ? only.split(',').map((s) => s.trim()).filter(Boolean) : []);
@@ -36,7 +38,7 @@ const cases = config.cases.filter((c) => !wanted.size || wanted.has(c.id));
 
 const runOne = (c) =>
   new Promise((resolveRun) => {
-    const state = resolve(outDir, `${c.id}-state.json`);
+    const state = resolve(outDir, `${c.id}${suffix}-state.json`);
     const logPath = resolve(outDir, `${c.id}.run.log`);
     const log = createWriteStream(logPath, { flags: 'a' });
     const p = c.public;
@@ -45,7 +47,7 @@ const runOne = (c) =>
       '--transpile-only',
       'src/scripts/simulate-learner-e2e.ts',
       `--base-url=${baseUrl}`,
-      `--name=${p.learnerName}`,
+      `--name=${p.learnerName}${label ? `（${label}）` : ''}`,
       `--goal=${p.learningGoal}`,
       `--days=${days}`,
       `--base-days-ago=${baseDaysAgo}`,
@@ -78,7 +80,7 @@ const runOne = (c) =>
 
 let failed = 0;
 for (const c of cases) {
-  const state = resolve(outDir, `${c.id}-state.json`);
+  const state = resolve(outDir, `${c.id}${suffix}-state.json`);
   if (skipExisting && existsSync(state)) {
     console.log(`[${c.id}] 已有状态，跳过`);
     continue;

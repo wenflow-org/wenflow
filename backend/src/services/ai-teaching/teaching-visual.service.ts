@@ -187,6 +187,24 @@ export function detectExerciseLeakInReply(reply: string | null | undefined): boo
  */
 const DANGLING_FIGURE_PARENTHETICAL = /[（(]\s*(?:详见|参见|见|如|如下图|见下图)?\s*(?:上|下|左|右|本)?图(?:示|解|表)?\s*[）)]/g;
 const DANGLING_FIGURE_CLAIM = /我(?:给(?:你|您))?画(?:了|好|上)(?:[一二两三四五几]|张|幅|个)?[^，。；！？\n]{0,8}?(?:示意图|结构图|结构示意|示意图|图|示意)/g;
+/**
+ * 板书/课堂图指代（2026-10-28 真实课堂实测）：模型在没有图的回合里仍会说
+ * 「这条链我摆成图了」「图上两个问号」「你照着图说一遍」。旧正则只认
+ * 「（见图）」和「我画了…图」，拦不住这些变体，学生界面上就是对着空气喊看图。
+ */
+const DANGLING_FIGURE_DEIXIS =
+  /(?:看|对|照|盯|按|比|顺着|沿着)(?:着|下|一下)?(?:上面|下面|左边|右边|这张|那张|刚才)?(?:图|箭头)|图(?:上|里|中)|(?:摆成|画成|做成|整理成)(?:了)?[^，。；！？\n]{0,6}图|箭头(?:上|里|中)?的?(?:字|方向)|两个问号/;
+
+/** 把指代不存在的图的话换成不依赖图的说法（尽量保留教学推进）。 */
+const DANGLING_FIGURE_REWRITES: Array<[RegExp, string]> = [
+  [/(?:这条|这个|这)?(?:链|关系|结构|东西)?我(?:已经)?(?:把|给)?[^，。；！？\n]{0,12}?(?:摆成|画成|做成|整理成)了?[^，。；！？\n]{0,6}?图/g, '我已经按刚才的顺序整理了一遍'],
+  [/我(?:已经)?把[^，。；！？\n]{0,12}?(?:摆成|画成|做成|整理成)了?[^，。；！？\n]{0,6}?图/g, '我已经按刚才的顺序整理了一遍'],
+  [/你(?:就)?(?:对着|照着|看着|按着|顺着|沿着)?(?:图|箭头)(?:上|里|中)?的?[^，。；！？\n]{0,10}?(?:核|看|说|走|找|对|填)/g, '你按刚才的顺序核'],
+  [/图(?:上|里|中)(?:的)?[^，。；！？\n]{0,10}?(?:两个问号|问号|空|两条|这条|关系)/g, '刚才那两处'],
+  [/三处的先后看图/g, '三处的先后按刚才的顺序'],
+  [/(?:直接)?看图|照着图|看着图/g, '按刚才的顺序'],
+  [/(?:顺着|沿着|对着)箭头(?:上|里|中)?的?(?:字|方向)?/g, '按刚才的顺序'],
+];
 
 /** 回复里是否存在指向「本轮并不存在的图」的悬空引用。 */
 export function hasDanglingFigureReference(reply: string | null | undefined): boolean {
@@ -194,7 +212,9 @@ export function hasDanglingFigureReference(reply: string | null | undefined): bo
   if (!text) return false;
   DANGLING_FIGURE_PARENTHETICAL.lastIndex = 0;
   DANGLING_FIGURE_CLAIM.lastIndex = 0;
-  return DANGLING_FIGURE_PARENTHETICAL.test(text) || DANGLING_FIGURE_CLAIM.test(text);
+  return DANGLING_FIGURE_PARENTHETICAL.test(text)
+    || DANGLING_FIGURE_CLAIM.test(text)
+    || DANGLING_FIGURE_DEIXIS.test(text);
 }
 
 /**
@@ -204,9 +224,13 @@ export function hasDanglingFigureReference(reply: string | null | undefined): bo
 export function stripDanglingFigureReferences(reply: string | null | undefined): string {
   const text = String(reply ?? '');
   if (!text) return text;
-  return text
+  let out = text
     .replace(DANGLING_FIGURE_PARENTHETICAL, '')
-    .replace(DANGLING_FIGURE_CLAIM, '')
+    .replace(DANGLING_FIGURE_CLAIM, '');
+  for (const [pattern, replacement] of DANGLING_FIGURE_REWRITES) {
+    out = out.replace(pattern, replacement);
+  }
+  return out
     .replace(/\s+([，。；！？、：])/g, '$1')
     .replace(/([，。；！？、：])\1+/g, '$1')
     .replace(/[ \t]{2,}/g, ' ')
