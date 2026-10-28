@@ -49,7 +49,7 @@
         </div>
       </div>
       <div class="mk-card__head">
-        <div class="mk-filter">
+        <div class="ss-head-left">
           <MkPillSelect
             v-model="statusSelect"
             label="状态"
@@ -57,16 +57,31 @@
             :options="statusSelectOptions"
             :active="!!statusFilter"
           />
-        </div>
-        <div class="mk-card__head-right">
           <!-- 口径 meta 只说 pills 表达不了的事实（2026-10-26 动线收口）：
                「54 个会话 · 活跃 54」此前把左侧 pill 的读数原样复述了一遍（同一数字同屏三处：
                pill 计数、本 meta、组头），而 54 = 活跃 54 + 已过期 0 + 已撤销 0，是 pills 的和。
                现在只留「行窗口截断」这条 pills 与页码器都说不出的事实。 -->
           <span v-if="truncated" class="mk-card__meta" :title="countsTitle">行列表仅含最近 {{ sessions.length }} 条</span>
-          <!-- 原顶部说明条里唯一的动作（2026-10-27 用户「这文案没用吧，操作区换个位置」）：
-               登录审计跳转留在卡头右组，说明文字删除。 -->
+        </div>
+        <!-- 操作区（2026-10-27 用户「挪到这里，这里的内容不要二了」）：
+             审计跳转与两枚批量动作统一收到卡头右组，组头只留身份与计数，不再重复一套按钮。
+             动作作用域：审计深链指定用户时只作用于该用户，否则覆盖全部管理员。 -->
+        <div class="mk-card__head-right ss-head-acts">
           <button type="button" class="mk-link ss-audit-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
+          <button
+            v-if="bulkCleanupCount"
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :title="`清理${bulkScope.label}已过期 / 已下线的历史会话`"
+            @click="cleanupAllHistory"
+          >清理历史（{{ bulkCleanupCount }}）</button>
+          <button
+            v-if="bulkRevokeCount"
+            type="button"
+            class="mk-btn mk-btn--danger-ghost mk-btn--sm"
+            :title="`下线${bulkScope.label}的全部活跃会话`"
+            @click="revokeAllSessions"
+          >下线全部<template v-if="bulkRevokeCount > 1">（{{ bulkRevokeCount }}）</template></button>
         </div>
       </div>
 
@@ -82,26 +97,6 @@
             <span class="ss-group__count">
               {{ groupCounts(g).total }} 个会话<template v-if="groupCounts(g).active"> · 活跃 {{ groupCounts(g).active }}</template><template v-if="endedCount(g)"> · 已结束 {{ endedCount(g) }}</template>
             </span>
-          </div>
-          <div class="ss-group__acts">
-            <button
-              v-if="endedCount(g)"
-              type="button"
-              class="mk-btn mk-btn--sm"
-              :title="`清理「${g.adminName}」已过期 / 已下线的历史会话`"
-              @click="cleanupHistory(g)"
-            >
-              清理历史（{{ endedCount(g) }}）
-            </button>
-            <button
-              v-if="revokeCount(g)"
-              type="button"
-              class="mk-btn mk-btn--danger-ghost mk-btn--sm"
-              :title="`下线「${g.adminName}」的全部活跃会话`"
-              @click="revokeAll(g)"
-            >
-              下线全部<template v-if="revokeCount(g) > 1">（{{ revokeCount(g) }}）</template>
-            </button>
           </div>
         </div>
 
@@ -464,6 +459,32 @@ function revokeCount(g: SessionGroup): number {
   return n
 }
 
+/* 卡头批量动作（2026-10-27 从组头收口）：作用域跟当前视图——审计深链指定用户时只作用于
+   该用户，否则覆盖全部管理员（后端 adminId 缺省即全部）。条数读后端全量 adminCounts，
+   缺失（旧响应 / mock）时回落可见分组窗口计数。 */
+const bulkScope = computed<{ adminId: string; label: string }>(() => {
+  const ids = deepLinkUser.value ? groups.value.map((g) => g.adminId) : [...adminCounts.value.keys()]
+  if (ids.length === 1) {
+    const g = groups.value.find((x) => x.adminId === ids[0])
+    return { adminId: ids[0], label: g ? `「${g.adminName}」` : '该管理员' }
+  }
+  return { adminId: '', label: '全部管理员' }
+})
+const bulkCleanupCount = computed(() => {
+  if (!deepLinkUser.value && adminCounts.value.size) {
+    return [...adminCounts.value.values()].reduce((n, c) => n + c.expired + c.revoked, 0)
+  }
+  return groups.value.reduce((n, g) => n + endedCount(g), 0)
+})
+const bulkRevokeCount = computed(() => {
+  if (!deepLinkUser.value && adminCounts.value.size) {
+    const n = [...adminCounts.value.values()].reduce((sum, c) => sum + c.active, 0)
+    // 当前标签页自身的会话不可下线（与后端 excludeCurrent 一致）
+    return currentId.value ? Math.max(0, n - 1) : n
+  }
+  return groups.value.reduce((n, g) => n + revokeCount(g), 0)
+})
+
 /** 卡头口径 title：窗口截断时说明行列表只含最近 N 条，统计仍为全量 */
 const countsTitle = computed(() =>
   truncated.value
@@ -635,18 +656,23 @@ async function revoke(s: AdminSessionRow) {
   }
 }
 
-async function revokeAll(g: SessionGroup) {
+async function revokeAllSessions() {
+  const count = bulkRevokeCount.value
+  const scope = bulkScope.value
   const confirmed = await askConfirm({
-    title: '下线该管理员全部活跃会话',
-    message: `将强制下线「${g.adminName}」的全部活跃会话（共 ${revokeCount(g)} 个，当前登录标签页除外），确定吗？`,
+    title: `下线${scope.label}全部活跃会话`,
+    message: `将强制下线${scope.label}的全部活跃会话（共 ${count} 个，当前登录标签页除外），确定吗？`,
     confirmText: '全部下线',
     busy: true,
   })
   if (!confirmed) return
   try {
-    const res = await adminSessionsApi.revokeAllAdminSessions({ adminId: g.adminId, excludeCurrent: true })
-    const count = res.data?.data?.count ?? revokeCount(g)
-    toast.success(`已下线 ${count} 个会话`)
+    const res = await adminSessionsApi.revokeAllAdminSessions({
+      ...(scope.adminId ? { adminId: scope.adminId } : {}),
+      excludeCurrent: true,
+    })
+    const revoked = res.data?.data?.count ?? count
+    toast.success(`已下线 ${revoked} 个会话`)
     await applyFilters()
     doneConfirm()
   } catch (e) {
@@ -656,18 +682,19 @@ async function revokeAll(g: SessionGroup) {
 }
 
 /** 清理已结束会话（已过期 / 已下线）：只删历史行，登录审计在 login_attempts 不受影响 */
-async function cleanupHistory(g: SessionGroup) {
-  const count = endedCount(g)
+async function cleanupAllHistory() {
+  const count = bulkCleanupCount.value
+  const scope = bulkScope.value
   const confirmed = await askConfirm({
-    title: '清理该管理员的历史会话',
-    message: `将删除「${g.adminName}」的 ${count} 条已结束会话记录（已过期或已下线），登录审计记录保留。此操作不可撤销，确定吗？`,
+    title: `清理${scope.label}的历史会话`,
+    message: `将删除${scope.label}的 ${count} 条已结束会话记录（已过期或已下线），登录审计记录保留。此操作不可撤销，确定吗？`,
     confirmText: '清理历史',
     danger: true,
     busy: true,
   })
   if (!confirmed) return
   try {
-    const res = await adminSessionsApi.cleanupAdminSessions({ adminId: g.adminId })
+    const res = await adminSessionsApi.cleanupAdminSessions(scope.adminId ? { adminId: scope.adminId } : {})
     toast.success(`已清理 ${res.data?.data?.count ?? count} 条历史会话`)
     await applyFilters()
     doneConfirm()
@@ -738,12 +765,14 @@ onMounted(async () => {
 
 .ss-body { display: grid; gap: var(--mk-space-4); }
 
+/* 卡头左组：状态筛选 + 行窗口口径；右组：审计跳转 + 两枚批量动作（2026-10-27 操作区收口） */
+.ss-head-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.ss-head-acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 /* 分组卡走全局 .mk-card / .mk-card__head（原型 card 词汇），页面只保留组头内的身份排版 */
 .ss-group__who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
 .ss-group__who strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .ss-group__email { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .ss-group__count { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.ss-group__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* 表格内自定义单元格 */
 .ss-tr--current td { background: var(--mk-blue-bg); }

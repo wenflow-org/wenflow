@@ -333,11 +333,18 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(w.find('.ss-group__count').text()).toContain('活跃 3');
   });
 
-  it('顶部说明条已撤：审计日志跳转归位到卡头右组（不再单占一行）', async () => {
-    const w = await mountSS([fakeSession(1)]);
+  it('顶部说明条已撤；审计跳转与批量动作统一收在卡头右组，组头不再重复一套按钮', async () => {
+    const w = await mountSS([fakeSession(1)], {
+      counts: { total: 9, active: 3, expired: 4, revoked: 2 },
+      adminCounts: [{ adminId: 'admin-1', total: 9, active: 3, expired: 4, revoked: 2 }]
+    });
     expect(w.find('.ss-note').exists()).toBe(false);
     const headRight = w.find('.mk-card__head-right');
     expect(headRight.find('.ss-audit-link').text()).toContain('审计日志 · 登录审计');
+    // 当前标签页 #1 不计入下线：活跃 3 - 1 = 2；历史 4 + 2 = 6
+    expect(headRight.text()).toContain('清理历史（6）');
+    expect(headRight.text()).toContain('下线全部（2）');
+    expect(w.find('.ss-group__acts').exists()).toBe(false);
     w.unmount();
   });
 
