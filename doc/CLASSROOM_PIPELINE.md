@@ -306,7 +306,7 @@ prompts/core/teaching-turn.yaml   ← 唯一真相源（83 条 rules，单行 ` 
 
 - 不是导出遗漏：`teaching_session_messages.payload` 与 `virtual_session_logs.details.output` 里都没有 `figures`/`figure` 键；后端也没有任何图闸拒绝日志。也就是说**模型根本没有提出过图**，不是被 10 道闸挡掉。
 - `buildVisualOpportunity` 只在特定线索（ASCII 结构、位置描述、时序描述等）出现时给 hint；这批对话大多没有命中。命中也不是强制出图，最终仍要模型自己输出 `figure`。
-- 因此：探针里的白板裁剪/换板修复**没有进入真实课堂**——`board-intent/board-state/board-controller` 仍未接 `teaching-turn-engine`。这 10 份记录是生产现状基线，不是本轮修复的验收。
+- 因此（**2026-10-28 接线前**）：探针里的白板裁剪/换板修复没有进入真实课堂——`board-intent/board-state/board-controller` 仍未接 `teaching-turn-engine`。这 10 份记录是生产现状基线，不是白板修复的验收。接线后的结果见本节末尾。
 - 第二个结构性观察：`--days=1` 时每案例都完成 1 节、第 2 节停在 active。课节确实在推进，但「一节课上完」与「一天结束」不是同一件事，报告里两种情况都保留。
 
 **v19 复跑（2026-10-28，f3/f10 各 1 天）**：提示词升到 teaching-turn v19、stage-designer v9，并加了两处代码护栏（悬空图指代、`passed=true` 却被否定）。对比：
@@ -318,7 +318,14 @@ prompts/core/teaching-turn.yaml   ← 唯一真相源（83 条 rules，单行 ` 
 | v18 | f10 | 排 37 个原始数字 | 21 | 4 | 1 | 0 | 13 |
 | v19 | f10 | 一笔充值流水的记账时点 | **9** | 0 | 0 | 0 | 0 |
 
-**仍未解决**：真实课堂依然 0 张图，因为 board-designer 还没接进 `teaching-turn-engine.ts`；v19 只是让老师不再对空气喊「看图」。完整记录见 `doc/OVERHAUL_LOG.md` §10。
+**白板接线复跑（2026-10-28，f3/f10 各 1 天）**：`board-designer` 已接进 `teaching-turn-engine.ts`（首轮板先行、后续轮同轮刷新、`sessionArtifacts.board` 持久化）。首节 completed 课：
+
+| 案例 | 状态 | 消息（师/生） | 出板消息 | 板版本 | 图型 | 悬空看图指代 | 判对却否定 |
+|---|---|---|---|---|---|---|---|
+| f3 | completed | 5（3/2） | 2 | 1→2 | split-compare | 0 | 0 |
+| f10 | completed | 11（6/5） | 5 | 1→4 | split-compare | 0 | 0 |
+
+真实课堂不再 0 张图；老师回指「白板左边那栏、第 2 步」时板上确实有对应内容。f10 的三次刷新分别对应「5 笔/3 人」「26000/约六成」等新数据。接线细节、两次失败与修复、残留（换板触发词偏宽、白板每轮重发、板型语义偏弱）见 `doc/OVERHAUL_LOG.md` §11。
 
 ---
 

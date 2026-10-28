@@ -83,6 +83,10 @@ import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
 import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
+import { decideBoardIntent, numbersOnBoard } from './board-intent';
+import { applyBoardOp } from './board-controller';
+import { boardFigureForRender, describeBoardForTeacher, openBoard, type BoardState } from './board-state';
+import { designBoard } from './board-designer.service';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import {
@@ -234,7 +238,9 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
  */
 async function figureGateSnapshot(sessionId: string, kind: unknown) {
   const key = String(kind || 'position-line');
-  const figures = await teachingSessionRepository.listFigures(sessionId);
+  // 共享白板是任务级持久板书，不是「一次性配图」：不计入会话图配额，也不参与同骨架去重。
+  const figures = (await teachingSessionRepository.listFigures(sessionId))
+    .filter((figure) => (figure as { board?: boolean }).board !== true);
   const kindCount = figures.reduce(
     (n, figure) => n + (String((figure as { kind?: string })?.kind || 'position-line') === key ? 1 : 0),
     0,
@@ -370,6 +376,48 @@ export async function processStudentMessage(
     now: simulatedNowOr(),
   });
 
+  // 共享白板（2026-10-28 接线）：任务级持久板书，不是一次性配图。
+  // 首轮先建板、再把「板上真实有什么」送进老师输入；后续轮老师先说、同轮刷新板（方案 A）。
+  // 开课消息（analysis.openingMode）是系统欢迎语，不是教学回合：首课首轮时它已经在历史里，
+  // 按「assistant 消息数 === 0」判首轮会永远不成立，白板整节课都建不起来。
+  const previousTeachingAssistantCount = session.messages.filter(
+    (m) => m.role === 'assistant' && !(m.analysis as { openingMode?: unknown } | undefined)?.openingMode,
+  ).length;
+  const storedBoard = (sessionArtifacts as { board?: BoardState | null }).board ?? null;
+  const taskChanged = !!storedBoard && storedBoard.taskId !== String(session.taskId);
+  let board: BoardState | null = storedBoard && !taskChanged ? storedBoard : null;
+  const isFirstTurnOfTask = previousTeachingAssistantCount === 0 || taskChanged;
+  const visualOpportunity = buildVisualOpportunity(updatedMessages, session.topic);
+  if (!board && isFirstTurnOfTask) {
+    const intent = decideBoardIntent({
+      taskType: context.taskType,
+      kind: visualOpportunity?.kindHint ?? null,
+      studentText: message,
+      lastTeacherText: null,
+      boardNumbers: [],
+    });
+    const designed = await designBoard({
+      task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
+      scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
+      studentSays: message,
+      kindHint: visualOpportunity?.kindHint ?? null,
+      questionIntent: intent,
+      lastTeacherReply: null,
+      instruction:
+        '画出这张白板的完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。标题只点题，不写结论。'
+        + intent.instruction,
+    }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
+    if (designed.figure) {
+      board = openBoard(String(session.taskId), designed.figure, { conceal: 'takeaway', intent });
+    } else {
+      logger.warn('[AITeaching] 首轮白板未生成（fail-open，纯文字继续）', {
+        sessionId,
+        taskId: session.taskId,
+        reason: designed.reason,
+      });
+    }
+  }
+
   const turnInput = await buildTeachingTurnInput({
     ...session,
     // B2/Q14：喂给模型前对学习者消息做输入围栏（正常文本原样；疑似注入被打标为不可信数据）。
@@ -396,9 +444,12 @@ export async function processStudentMessage(
   // 教学配图时机（代码裁决 → **显式**送进本轮输入）：上一轮画了字符结构 / 学生在描述位置 /
   // 当前任务本身就是结构化关系 → 本轮给模型一次出图机会。
   // 为什么必须显式送：实测埋在 2 万字 system prompt 里的规则会被忽略，写进本轮输入才生效。
-  const visualOpportunity = buildVisualOpportunity(updatedMessages, session.topic);
   if (visualOpportunity) {
     (turnInput as { visualOpportunity?: typeof visualOpportunity }).visualOpportunity = visualOpportunity;
+  }
+  // 白板描述：只有板真实存在时才注入；提示词据此允许/禁止「看图」指代。
+  if (board) {
+    (turnInput as { boardContext?: string | null }).boardContext = describeBoardForTeacher(board);
   }
   // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
   // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
@@ -924,7 +975,15 @@ export async function processStudentMessage(
 
   // 位置线图（2026-09-27 双通道重构 Scope B，同一条防答案泄漏硬闸）：
   // 追及/相遇题里"学生自己画位置线"正是练习本体——本轮布置了这类练习就不能给图，给了等于把答案摆出来。
-  if (teachingOutput.figure) {
+  if (teachingOutput.figure && board) {
+    // 板书层接管视觉后，老师本轮再出一张一次性配图会盖掉常驻白板（下方 board 分支只在
+    // assistantMessage.figures 为空时挂板）。白板是任务级现场，优先级高于临时配图。
+    logger.info('[AITeaching] 已有共享白板，跳过老师本轮一次性配图', {
+      sessionId,
+      taskId: session.taskId,
+      kind: teachingOutput.figure.kind,
+    });
+  } else if (teachingOutput.figure) {
     // 课中图不挂结论注（用户 2026-10-23 硬指令）：caption / note 在实测里几乎只在替学生答题。
     const deReviewed = stripInLessonAnnotations(teachingOutput.figure);
     // 读图/复述题不扣图，改为脱敏：把被问的答案从图上挖掉，结构照常给学生看（外部讨论定案）
@@ -1019,6 +1078,67 @@ export async function processStudentMessage(
     }
   }
 
+  // 共享白板（方案 A，2026-10-28 接线）：老师先说完 → 识别「换了例子/条件」→ 同轮刷新板 →
+  // 随本轮消息下发。首轮的板已在调用老师前建好；这里只处理后续轮。
+  if (board && !isFirstTurnOfTask) {
+    const intent = decideBoardIntent({
+      taskType: context.taskType,
+      kind: board.figure?.kind ?? null,
+      studentText: message,
+      lastTeacherText: teachingOutput.reply,
+      boardNumbers: numbersOnBoard(board.figure?.maskedSpec),
+    });
+    if (intent.exampleChange !== 'none') {
+      const designed = await designBoard({
+        task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
+        scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
+        studentSays: message,
+        kindHint: board.figure?.kind ?? null,
+        questionIntent: intent,
+        lastTeacherReply: teachingOutput.reply,
+        instruction:
+          (intent.exampleChange === 'scene'
+            ? '老师这一轮换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
+            : '老师这一轮换了例子/条件。把同一结构的板换成**老师这一轮给的例子**（该换的词、数值、单位全换，旧例子不要留）。')
+          + '结构、图型、副标注写法不变。' + intent.instruction,
+      }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
+      if (designed.figure) {
+        board = applyBoardOp(board, { type: 'update', reason: 'new-example' }, designed.figure) ?? board;
+      } else {
+        logger.warn('[AITeaching] 换板绘图被拒（保持旧板）', {
+          sessionId,
+          taskId: session.taskId,
+          kind: board.figure?.kind ?? null,
+          intent: `${intent.askAbout}/${intent.exampleChange}`,
+          reason: designed.reason,
+        });
+      }
+    }
+  }
+  if (board && !assistantMessage.figures?.length && !detectExerciseLeakInReply(teachingOutput.reply)) {
+    const rendered = boardFigureForRender(board);
+    if (rendered) {
+      assistantMessage.figures = [{
+        engine: 'svg',
+        kind: rendered.kind,
+        // 与一次性配图同一套学科盖章：白板换学科时色相/材质跟着换，几何与语义不动
+        palette: paletteOfSubject(session.subject),
+        spec: rendered.spec,
+        caption: null,
+        // 标记为白板：不计入一次性配图的会话配额/同骨架去重
+        board: true,
+        boardRevision: board.revision,
+      }];
+      assistantMessage.figureSource = {
+        trigger: 'board',
+        reason: null,
+        kindHint: board.figure?.kind ?? null,
+        ruleWhy: '任务级共享白板（方案 A：首轮板先行，后续老师先说、同轮刷新）',
+        matched: [],
+      };
+    }
+  }
+
   // D10（A/B 报告 2026-10-13）：回复里出现"（见图）/我画了一个结构示意"这类指向附图的指引，
   // 但本轮实际没有任何 images/diagrams/figures（老师声称画了、图上却没有）→ 悬空引用，学生
   // 看到的是一句指向虚空的话。此时剥离该引用（回退到"文本脱离图仍成立"的原则，不阻断课堂）。
@@ -1104,6 +1224,8 @@ export async function processStudentMessage(
     lastPeerRuntimeEnvelope: peerRuntimeEnvelope,
     sessionArtifacts: {
       ...parseSessionArtifacts(session.teachingState),
+      // 共享白板：任务级持久板书（跨轮保留；换任务时由上方 load 逻辑丢弃）
+      board: board ?? null,
       initialKnowledgeState: effectiveInitialKnowledgeState,
       // 课内温故：① 标记"模型真的问出来了"（含 review/pending——问过 ≠ 有结果）
       // ② 合并实测结果；计划其余部分原样保留（含负担预算与积压计数）

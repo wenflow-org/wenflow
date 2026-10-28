@@ -333,6 +333,11 @@ export interface TeachingTurnInput {
     /** 给模型的显式、正向要求（原样进入载荷） */
     instruction: string;
   } | null;
+  /**
+   * 当前白板的文本描述（2026-10-28 接线）：只在白板真实存在时注入。
+   * 模型据此知道「板上写了什么、哪里还空着」；没有 boardContext 时禁止任何看图指代。
+   */
+  boardContext?: string | null;
 }
 
 export interface TeachingTurnOutput {
@@ -3005,6 +3010,8 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
       // 教学配图时机（逐回合变化 → 必须放**载荷尾部**，避免打断 KV 前缀缓存；见 buildPromptInput 注释）
       ...(input.visualOpportunity?.suggested ? { visualOpportunity: input.visualOpportunity } : {}),
+      // 当前白板描述（逐回合变化，同样放载荷尾部）：没有它时模型不得说「看图/图上」
+      ...(input.boardContext ? { boardContext: input.boardContext } : {}),
       // 教师补充材料（逐回合变化 → 同样放载荷尾部）：上一轮 control.supplement 的入库成果
       ...(scenarioSupplementaryMaterial ? { supplementaryMaterial: scenarioSupplementaryMaterial } : {}),
       // 温故计划（逐回合被消费合并 → 载荷尾部；模板引用路径已同步为顶层 memoryWarmup）

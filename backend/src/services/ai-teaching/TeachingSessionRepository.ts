@@ -124,7 +124,7 @@ export interface TeachingSessionMessage {
    * 模型自己给的理由在 `figure.why`，两者互不替代。
    */
   figureSource?: {
-    trigger: 'model' | 'opportunity';
+    trigger: 'model' | 'opportunity' | 'board';
     reason: 'ascii-structure' | 'position-description' | 'time-order' | 'structure-content' | 'task-structure' | 'recap-cadence' | null;
     /** 编排层建议的图型（模型可改） */
     kindHint: string | null;
@@ -186,6 +186,10 @@ export interface TeachingFigure {
   /** 模型自己给的一句话出图理由（≤60 字，归一化保留）：为什么用这张图 / 为什么这个形状 */
   why?: string | null;
   caption: string | null;
+  /** 2026-10-28 接线：这是任务级共享白板的快照，不是一次性配图；不计入会话图配额/同骨架去重 */
+  board?: boolean;
+  /** 白板版本号（同一块板 update 时递增，便于前端/复盘识别） */
+  boardRevision?: number;
 }
 
 export interface TeachingKnowledgePointState {
