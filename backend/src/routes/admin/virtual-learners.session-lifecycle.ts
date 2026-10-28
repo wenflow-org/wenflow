@@ -22,6 +22,7 @@ import { findTeachingSessionsByPathId } from '../../services/admin/session-conso
 import { teachingSessionHistoryOf } from './session-console';
 import { signProjectionToken } from '../../utils/projection-token';
 import { autopilotService } from '../../virtual-lab/autopilot.service';
+import { parseSessionAutopilotOption, startSessionAutopilot } from '../../virtual-lab/session-autopilot';
 import { classifySessionRunPhase } from '../../services/virtual-lab/session-run-phase';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { simulatedDayService } from '../../services/virtual-lab/simulated-day.service';
@@ -774,14 +775,9 @@ router.post('/:id/start-session', async (req: Request, res) => {
     if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
       return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
     }
-    // 2026-10-26 新增 autopilot 档位（用户拍板）：'final'（默认，2026-10-21 口径不变）| 'off'。
-    // 'off' = 只建会话不开自动驾驶——goal 对话由 /step 人工驱动，路径生成在 goal 确认链路里
-    // 自动触发，均不依赖自动驾驶；评测/批量场景只需要路径就绪，不需要它随后自动「上课」
-    // （实证：golden-eval 跑完 4 个样本后 autopilot 循环持续调 teaching-turn 烧模型额度）。
-    // 'path-ready' 档暂不做：需动 autopilot 循环内部阶段边界，off + 驾驶舱手动启停已覆盖。
-    const skipAutopilot = autopilotOption === 'off';
-    if (autopilotOption !== undefined && !skipAutopilot && autopilotOption !== 'final') {
-      return res.status(400).json({ success: false, error: "autopilot 只支持 'off' | 'final'" });
+    const autopilotChoice = parseSessionAutopilotOption(autopilotOption);
+    if (autopilotChoice.error) {
+      return res.status(400).json({ success: false, error: autopilotChoice.error });
     }
     const session = await createSessionForProfile(id, { storyId, storyIndex, frictionBudget });
     if (!session) {
@@ -791,17 +787,7 @@ router.post('/:id/start-session', async (req: Request, res) => {
        此前只建会话（status=created）就返回，前端再跳画像页——列表里这一行仍是「已停止」，
        点完像什么都没发生。现在建完就开跑（并发满会进排队，不算失败）。
        2026-10-26：autopilot='off' 时只建会话（驾驶舱可随时手动启动）。 */
-    let autopilot: 'started' | 'queued' | 'failed' | 'off' = 'failed';
-    if (skipAutopilot) {
-      autopilot = 'off';
-    } else {
-      try {
-        const started = await autopilotService.start(session.id, { target: 'final' });
-        autopilot = started.queued ? 'queued' : 'started';
-      } catch (error) {
-        logger.warn('会话已创建，但自动驾驶启动失败', { sessionId: session.id, error: (error as Error)?.message });
-      }
-    }
+    const autopilot = await startSessionAutopilot(session.id, autopilotChoice.skip);
     res.json({ success: true, data: { ...session, autopilot } });
   } catch (error) {
     const status = Number(error?.status) || 500;

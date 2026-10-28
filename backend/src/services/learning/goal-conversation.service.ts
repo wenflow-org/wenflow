@@ -33,6 +33,7 @@ import {
   type ResponseTriageEnforcementMode,
 } from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
+import { buildCompletedConversationResult, buildHardBlockResult } from './goal-conversation.exit';
 import learningService from './learning.service';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -469,15 +470,6 @@ class GoalConversationService {
     };
   }
 
-  /**
-   * 硬阻断终止文案：不生成路径，但保留「补充信息后可重新判断」的出口。
-   * 与 advisory 的提示文案共用 buildTriageAdvisoryLine，避免两套口径。
-   */
-  private buildHardBlockMessage(triage: ResponseTriage | null | undefined): string {
-    const line = buildTriageAdvisoryLine(triage).trim();
-    return `${line}\n\n这类目标我不会生成学习路径。如果情况有变化（例如外部条件已解决，或目标改成平台可练习的具体技能），补充说明后我会重新判断。`;
-  }
-
   /** 并发确认的落败方：读最新状态，返回赢家已绑定的路径（不再创建/绑定任何新路径） */
   private async resolveConcurrentConfirmation(conversationId: string, fallbackData: Record<string, any>) {
     const latest = await prisma.goal_conversations.findUnique({ where: { id: conversationId } });
@@ -603,67 +595,12 @@ async continueConversation(
 
         // 如果已经完成，直接返回
         if (conversation.status === 'completed') {
-          const data = JSON.parse(conversation.collectedData);
-          const completedTriage = resolveResponseTriageFromCollectedData(data);
-          // 硬阻断终止态：completed 但没有路径——不能谎称「学习路径已经生成」。
-          if (!conversation.learningPathId && isHardBlockResponseTriage(completedTriage, data.understanding)) {
-            return {
-              userVisible: this.buildHardBlockMessage(completedTriage),
-              internal: {
-                core: {
-                  conversationId,
-                  stage: 'completed',
-                  confidence: data.confidence || 0,
-                  isCompleted: true,
-                  learningPath: null,
-                },
-                ext: {
-                  goalConversation: {
-                    understanding: data.understanding || {},
-                    nextQuestions: [],
-                    quickReplies: [],
-                    collected: data.collected || {},
-                    responseTriage: completedTriage,
-                  },
-                },
-              },
-            };
-          }
-          let learningPath = null;
-          
-          // 查询学习路径状态
-          if (conversation.learningPathId) {
-            const path = await prisma.learning_paths.findFirst({
-              where: { id: conversation.learningPathId }
-            });
-            if (path) {
-              learningPath = {
-                id: path.id,
-                status: path.status
-              };
-            }
-          }
-          
-          return {
-            userVisible: '学习路径已经生成，可以去查看啦！',
-            internal: {
-              core: {
-                conversationId,
-                stage: 'completed',
-                confidence: data.confidence || 0,
-                isCompleted: true,
-                learningPath
-              },
-              ext: {
-                goalConversation: {
-                  understanding: data.understanding || {},
-                  nextQuestions: [],
-                  quickReplies: [],
-                  collected: data.collected || {}
-                }
-              }
-            }
-          };
+          return buildCompletedConversationResult({
+            conversationId,
+            collectedData: conversation.collectedData,
+            learningPathId: conversation.learningPathId,
+            findPath: (id) => prisma.learning_paths.findFirst({ where: { id } }),
+          });
         }
 
         // 确认双通道（2026-09-27 绕圈缺陷修复）：①UI 显式标志（首选，优先级不变）；
@@ -738,27 +675,10 @@ async continueConversation(
               confidence: hardBlockTriage.confidence,
               platformJudgment: (understanding as any)?.platform_judgment ?? (understanding as any)?.platformJudgment ?? null,
             });
-            return {
-              userVisible: this.buildHardBlockMessage(hardBlockTriage),
-              internal: {
-                core: {
-                  conversationId,
-                  stage: 'completed',
-                  confidence: data.confidence || 0,
-                  isCompleted: true,
-                  learningPath: null,
-                },
-                ext: {
-                  goalConversation: {
-                    understanding,
-                    nextQuestions: [],
-                    quickReplies: [],
-                    collected: data.collected || {},
-                    responseTriage: hardBlockTriage,
-                  },
-                },
-              },
-            };
+            return buildHardBlockResult(
+              { conversationId, understanding, confidence: data.confidence || 0, collected: data.collected || {} },
+              hardBlockTriage
+            );
           }
 
           if (triageMode === 'gated'

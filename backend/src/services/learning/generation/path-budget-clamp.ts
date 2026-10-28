@@ -8,6 +8,7 @@
  * 纪律：只下压不上抬；sum > target×1.15 时按 target/sum 等比缩放（每阶段保底 0.5h）。
  * target 缺失/0 时零行为变化。
  */
+import { logger } from '../../../utils/logger';
 
 /** 从生成入参里取目标总学时（planningHints 在定帧快照或编排快照里，两处都兼容）。 */
 export function resolveTargetTotalHoursFromData(data: any): number | null {
@@ -41,4 +42,22 @@ export function clampMilestoneHoursToBudget<T extends Record<string, any>>(
   }));
   const after = scaled.reduce((acc, m) => acc + (Number(m?.estimatedHours) || 0), 0);
   return { milestones: scaled as T[], info: { before: round1(sum), after: round1(after), scaled: true } };
+}
+
+/** persistGeneratedPath 用的一体化入口：按 data 里的目标学时夹取并留痕（调用点保持一行）。 */
+export function clampMilestonesWithLog<T>(milestones: T[], data: any, runId?: string): T[] {
+  const targetTotalHours = resolveTargetTotalHoursFromData(data);
+  const result = clampMilestoneHoursToBudget(
+    milestones as unknown as Record<string, any>[],
+    targetTotalHours,
+  );
+  if (result.info?.scaled) {
+    logger.warn('[path-budget-clamp] core 里程碑学时超目标，已等比夹取', {
+      runId,
+      beforeHours: result.info.before,
+      afterHours: result.info.after,
+      targetHours: targetTotalHours,
+    });
+  }
+  return result.milestones as unknown as T[];
 }

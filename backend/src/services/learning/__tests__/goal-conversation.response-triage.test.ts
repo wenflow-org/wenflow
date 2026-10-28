@@ -409,7 +409,7 @@ describe('gated 模式：非学习路径不自动推进', () => {
 
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     expect(result.internal.core.stage).toBe('completed');
-    expect(result.internal.core.learningPath).toBeNull();
+    expect((result.internal.core as { learningPath?: unknown }).learningPath).toBeNull();
     expect(result.userVisible).toContain('不会生成学习路径');
     const persisted = JSON.parse(conversationRecord.collectedData);
     expect(persisted.responseTriagePending).toBeUndefined();
