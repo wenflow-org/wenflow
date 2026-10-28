@@ -5,16 +5,17 @@
     <div class="user-settings-page">
       <!-- 状态条（P3-45，设计评审）：撤「已启用/未启用」徽章——标题是唯一状态句。
            开关绑的是 apiConfig.enabled（自定义模型服务是否启用），标签必须写明它真正控制的对象，
-           不再用裸「启用/禁用」贴在标题右侧（会被读成「平台默认模型服务 禁用」）——走查 2026-10-08 #10 -->
+           不再用裸「启用/禁用」贴在标题右侧（会被读成「内置模型服务 禁用」）——走查 2026-10-08 #10 -->
       <div class="settings-status">
         <div class="settings-status__left">
           <div>
-            <strong>{{ apiConfig.enabled ? '使用自定义模型服务' : '使用平台默认模型服务' }}</strong>
+            <strong>{{ apiConfig.enabled ? '使用自定义模型服务' : '使用内置模型服务' }}</strong>
             <p>对话模型 {{ apiConfig.chatModel || 'deepseek-v4.1-flash' }} · 推理模型 {{ apiConfig.reasoningModel || 'deepseek-v4.1-flash' }}</p>
           </div>
         </div>
         <label class="uc-switch" :class="{ 'uc-switch--off': !apiConfig.enabled }">
           <input
+            ref="enabledSwitchEl"
             type="checkbox"
             v-model="apiConfig.enabled"
             :disabled="busy"
@@ -73,15 +74,28 @@
             <div class="api-form__grid">
               <label class="uc-field">
                 <span class="uc-field__label">对话模型</span>
-                <input v-model="apiConfig.chatModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4.1-flash" :disabled="busy" />
+                <MkModelPicker
+                  v-model="apiConfig.chatModel"
+                  :options="modelPickerOptions"
+                  compact
+                  allow-custom
+                  aria-label="对话模型"
+                  placeholder="deepseek-v4.1-flash"
+                  :disabled="busy"
+                />
               </label>
               <label class="uc-field">
                 <span class="uc-field__label">推理模型</span>
-                <input v-model="apiConfig.reasoningModel" class="uc-field__input" list="api-model-options" placeholder="deepseek-v4.1-flash" :disabled="busy" />
+                <MkModelPicker
+                  v-model="apiConfig.reasoningModel"
+                  :options="modelPickerOptions"
+                  compact
+                  allow-custom
+                  aria-label="推理模型"
+                  placeholder="deepseek-v4.1-flash"
+                  :disabled="busy"
+                />
               </label>
-              <datalist id="api-model-options">
-                <option v-for="m in modelOptions" :key="m" :value="m" />
-              </datalist>
             </div>
             <div v-if="modelOptions.length" class="model-options-hint">
               来自端点的可用模型：<span v-for="m in modelOptions.slice(0, 6)" :key="m" class="model-chip">{{ m }}</span>
@@ -115,7 +129,7 @@
             </div>
             <ul class="help-list">
               <li><strong>自带模型服务</strong><span>接入你自己购买的模型服务（DeepSeek / OpenAI / 兼容端点），学习对话将使用你的模型</span></li>
-              <li><strong>平台默认</strong><span>不配置时使用平台内置模型，无需任何操作</span></li>
+              <li><strong>内置模型</strong><span>不配置时使用内置模型，无需任何操作</span></li>
               <li><strong>密钥安全</strong><span>API Key 加密存储，仅用于平台调用你的模型服务</span></li>
             </ul>
             <div class="help-tip">
@@ -240,17 +254,21 @@
           <div class="api-form__grid">
             <label class="uc-field">
               <span class="uc-field__label">连接方式</span>
-              <select v-model="mcpForm.transport" class="uc-field__input">
-                <option value="http">HTTP 接口</option>
-                <option value="mcp">MCP 服务</option>
-              </select>
+              <MkSelect
+                v-model="mcpForm.transport"
+                :options="MCP_TRANSPORT_OPTIONS"
+                aria-label="连接方式"
+                block
+              />
             </label>
             <label class="uc-field">
               <span class="uc-field__label">状态</span>
-              <select v-model="mcpForm.enabled" class="uc-field__input">
-                <option :value="true">启用</option>
-                <option :value="false">停用</option>
-              </select>
+              <MkSelect
+                v-model="mcpForm.enabled"
+                :options="MCP_ENABLED_OPTIONS"
+                aria-label="状态"
+                block
+              />
             </label>
           </div>
           <label class="uc-field">
@@ -290,6 +308,8 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
+import MkModelPicker from '@/components/mk/MkModelPicker.vue';
+import MkSelect from '@/components/mk/MkSelect.vue';
 import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm';
 import { toast } from '../../utils/toast';
 import request from '@/utils/api';
@@ -321,7 +341,12 @@ const hasSavedApiKey = ref(false);
 const showKey = ref(false);
 const loadingModels = ref(false);
 const modelOptions = ref<string[]>([]);
+/** 端点返回的模型 id → MkModelPicker 候选（2026-10-27 取代原生 datalist 弹层） */
+const modelPickerOptions = computed(() => modelOptions.value.map((m) => ({ value: m, label: m })));
 const busy = computed(() => loading.value || saving.value || testing.value || disabling.value || loadingModels.value);
+/** 开关原生元素：拒绝启用/保存失败时要显式回写 checked——
+    模型值 false→false 时 Vue 不会重绘，DOM 会停在用户点出来的「开」 */
+const enabledSwitchEl = ref<HTMLInputElement | null>(null);
 
 // 单配置模式
 const apiConfig = reactive({
@@ -475,7 +500,7 @@ const saveApiConfig = async (): Promise<boolean> => {
 const disableConfig = async () => {
   const ok = await askConfirm({
     title: '禁用自定义 API',
-    message: '禁用后将立即改用平台默认模型，已保存的端点和 API Key 会保留。确认继续吗？',
+    message: '禁用后将立即改用内置模型，已保存的端点和 API Key 会保留。确认继续吗？',
     confirmText: '确认禁用',
     danger: true,
     busy: true
@@ -485,7 +510,7 @@ const disableConfig = async () => {
   try {
     await disableUserApiConfig();
     apiConfig.enabled = false;
-    toast.success('已禁用自定义 API，将使用平台默认配置');
+    toast.success('已禁用自定义 API，将使用内置模型配置');
     doneConfirm();
   } catch (error: any) {
     apiConfig.enabled = true;
@@ -496,18 +521,25 @@ const disableConfig = async () => {
   }
 };
 
+/** 模型值没有翻转时 Vue 不会重绘 checked（false→false），必须显式把 DOM 拉回模型值 */
+const syncSwitchDom = () => {
+  if (enabledSwitchEl.value) enabledSwitchEl.value.checked = apiConfig.enabled
+}
+
 const handleEnabledChange = () => {
   const enabled = apiConfig.enabled
   if (!enabled) {
     /* 开关 UI 已翻到 false：先回滚为 true 保持「UI=服务端」一致，用户确认禁用后才由
        disableConfig 真正置 false —— 否则取消确认后开关/徽章/服务端三者失同步 */
     apiConfig.enabled = true
+    syncSwitchDom()
     void disableConfig();
     return;
   }
 
   if (!apiConfig.endpoint || !isValidEndpoint(apiConfig.endpoint) || (!hasSavedApiKey.value && !apiConfig.apiKey)) {
     apiConfig.enabled = false;
+    syncSwitchDom()
     toast.info('请先填写模型端点和 API Key，保存后再启用');
     return;
   }
@@ -516,6 +548,7 @@ const handleEnabledChange = () => {
   void saveApiConfig().then((saved) => {
     if (!saved) {
       apiConfig.enabled = false;
+      syncSwitchDom()
     }
   });
 };
@@ -535,6 +568,15 @@ const mcpFormHadKey = ref(false);
 const mcpTestingId = ref('');
 /** 每个 MCP server 的测试工具名（用于拼 serverId:toolName 寻址） */
 const mcpToolName = reactive<Record<string, string>>({});
+/* MCP 表单下拉选项（2026-10-27 原生 select → MkSelect 自绘弹层），文案与原 option 逐字一致 */
+const MCP_TRANSPORT_OPTIONS: ReadonlyArray<{ value: 'http' | 'mcp'; label: string }> = [
+  { value: 'http', label: 'HTTP 接口' },
+  { value: 'mcp', label: 'MCP 服务' },
+];
+const MCP_ENABLED_OPTIONS: ReadonlyArray<{ value: boolean; label: string }> = [
+  { value: true, label: '启用' },
+  { value: false, label: '停用' },
+];
 const mcpForm = reactive({
   id: '',
   name: '',

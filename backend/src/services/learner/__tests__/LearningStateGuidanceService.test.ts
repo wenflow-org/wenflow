@@ -66,6 +66,21 @@ describe('LearningStateGuidanceService', () => {
     expect(payload?.source).toBe('fallback')
   })
 
+  it('新学习者没有 learnerSnapshot：返回 null，不进入摘要/投影（避免 dynamicState 空引用）', async () => {
+    ;(assembleLearningState as jest.Mock).mockResolvedValue({
+      paths: [],
+      sessions: [],
+      primaryPath: null,
+      learnerSnapshot: null,
+      learningState: null,
+      warnings: [],
+      sessionWrapup: null,
+    })
+
+    await expect(learningStateGuidanceService.refresh('u-new')).resolves.toBeNull()
+    expect(buildFallback).not.toHaveBeenCalled()
+  })
+
   /**
    * 走查（2026-09-24）实测网关慢调用到过 113.9s > 前端 60s 超时：同步刷新会把已有建议整段
    * 吞掉、页面回落成"完成第一次学习后…"（对已有学习记录的学员是错误信息）。

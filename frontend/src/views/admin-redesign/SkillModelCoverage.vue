@@ -22,33 +22,47 @@
            「对多个技能套用同一份…配置：」是表单自身的用途，输入框占位与按钮已说明。
            原 p 的 title 还挂着一条 2026-09-28 的研发事故记录，属实现历史，不该出现在界面上。 -->
       <!-- 可筛选的来源视图（2026-10-20 走查）：此前只有一张不可筛的矩阵，
-           看不出「多少 Skill 在用平台默认、多少独立配置」。计数取全量口径，不随其它筛选变化。 -->
+           看不出「多少 Skill 在用平台默认、多少独立配置」。计数取全量口径，不随其它筛选变化。
+           2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
+           来源是单选视图（含「全部」），备用模型是可叠加的开关 → 独立「标志筛选」组 + 激活前缀勾。 -->
       <div class="skc__filters">
-        <div class="mk-pills" role="group" aria-label="按路由来源筛选">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'all' }" :aria-pressed="sourceFilter === 'all'" @click="sourceFilter = 'all'">全部<span class="mk-pill__count">{{ counts.all }}</span></button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'platform-default' }" :aria-pressed="sourceFilter === 'platform-default'" @click="sourceFilter = 'platform-default'">继承平台默认<span class="mk-pill__count">{{ counts.platformDefault }}</span></button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'skill-model-only' }" :aria-pressed="sourceFilter === 'skill-model-only'" @click="sourceFilter = 'skill-model-only'">技能覆盖<span class="mk-pill__count">{{ counts.skillModelOnly }}</span></button>
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': sourceFilter === 'skill-channel' }" :aria-pressed="sourceFilter === 'skill-channel'" @click="sourceFilter = 'skill-channel'">独立通道<span class="mk-pill__count">{{ counts.skillChannel }}</span></button>
-        </div>
-        <div class="mk-pills" role="group" aria-label="按备用模型筛选">
-          <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyFallback }" :aria-pressed="onlyFallback" @click="onlyFallback = !onlyFallback">自定义备用模型<span class="mk-pill__count">{{ counts.fallback }}</span></button>
-        </div>
-        <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-        <!-- 2026-10-24：把「默认」还原成继承，而不是再写一遍同样的模型值。
+          <MkPillSelect
+            v-model="sourceSelect"
+            label="来源"
+            aria-label="按来源筛选"
+            :options="sourceOptions"
+            :active="sourceFilter !== 'all'"
+          />
+        <MkPillSelect
+          v-model="fallbackSelect"
+          label="备用模型"
+          aria-label="按备用模型筛选"
+          :options="fallbackSelectOptions"
+          :active="onlyFallback"
+        />        <!-- 2026-10-26：原「把默认还原成继承」的按钮改口「用平台默认」——
+             这个动作的结果就是「本 Skill 不再单独指定模型，改用平台默认那个」，
+             直接说结果，不引入「继承」这层中间概念。
              只清 model，通道/思考/参数/备用链保持原样；放筛选行右端，不挤占通道套用那一行。 -->
         <button
           type="button"
           class="mk-btn mk-btn--sm skc__inherit"
           :disabled="bulkSaving || !selected.length"
-          title="清空所选技能的模型覆盖。通道、思考、参数与备用链保持不变"
+          title="清空所选技能单独指定的模型，改用平台默认模型。通道、思考、参数与备用链保持不变"
           @click="clearModelOverride"
-        >跟随平台默认</button>
+        >用平台默认模型</button>
       </div>
 
       <div class="skc__apply">
         <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（必填，http://host:30001）" :class="{ 'is-err': bulkErr }" />
         <input v-model="bulk.apiKey" class="mk-input mono" type="password" placeholder="apiKey（必填）" :class="{ 'is-err': bulkErr }" />
-        <input v-model="bulk.model" class="mk-input mono" placeholder="model（留空则不覆盖）" list="skc-model-options" />
+        <MkModelPicker
+          v-model="bulk.model"
+          :options="pickerOptions"
+          compact
+          allow-custom
+          aria-label="批量套用的模型"
+          placeholder="model（留空则不覆盖）"
+        />
         <button type="button" class="mk-btn mk-btn--primary" :disabled="bulkSaving || !selected.length" @click="applyBulk">
           {{ bulkSaving ? '套用中…' : `套用到 ${selected.length} 个技能` }}
         </button>
@@ -110,20 +124,24 @@
             <tr v-for="s in visibleRows" :key="s.skillId">
               <td><input v-model="selected" type="checkbox" :value="s.skillId" :aria-label="`选择技能 ${s.skillId}`" /></td>
               <td>
-                <button type="button" class="mk-link skc__name" :title="s.skillId" @click="emit('open-skill', s.skillId)">{{ props.skillNames[s.skillId] || s.skillId }}</button>
+                <!-- 英文主行（2026-10-25 用户「以英文为主」）：与 Skills 列表、详情 hero 同口径——
+                     canonical id 是身份，中文 displayName 降为副行别名 -->
+                <button type="button" class="mk-link skc__name mono" :title="nameTitleOf(s.skillId)" @click="emit('open-skill', s.skillId)">{{ s.skillId }}</button>
+                <span v-if="aliasOf(s.skillId)" class="skc__alias" :title="aliasOf(s.skillId)">{{ aliasOf(s.skillId) }}</span>
                 <span class="skc__agent" :title="props.agentLabels[s.skillId] || 'Skill 目录中无归属信息'">{{ props.agentLabels[s.skillId] || '—' }}</span>
               </td>
               <td>
                 <span class="mk-badge" :class="s.source === 'platform-default' ? 'mk-badge--muted' : 'mk-badge--ok'">
-                  {{ s.source === 'platform-default' ? '继承平台默认' : s.source === 'skill-channel' ? '独立通道' : '技能覆盖' }}
+                  {{ s.source === 'platform-default' ? '用平台默认' : s.source === 'skill-channel' ? '独立通道' : '技能覆盖' }}
                 </span>
               </td>
               <!-- 模型/参数/备用链三格的值可能是中文（未配置 / 平台默认），走正文；对齐靠 tabular-nums。
                    2026-10-24 用户「还 chat 上了，没有这种了」：tier 是技能自己的档位字段，
                    不是模型名的一部分；对话档是全站默认，挂在模型后面只会被读成
                    「deepseek-v4.1-flash chat」这种不存在的模型名。只保留有用的推理档提示。
-                   同日「默认不物化成覆盖」：没写 model 就显示继承到的平台默认，并标「继承」，
-                   不再把空值读成「未配置」——那会让人以为没生效。 -->
+                   2026-10-26 用户「不太想走继承这个说法」：徽章由「继承」改为「平台默认」——
+                   这一格说的是「本 Skill 没单独指定，实际跑的是平台那个模型」，
+                   而模型 id 就在左边写着，说「平台默认」比说「继承」更直接。 -->
               <td>
                 <span class="skc__model">
                   <template v-if="s.model">
@@ -132,7 +150,7 @@
                   </template>
                   <template v-else>
                     <span class="skc__model-id skc__model-id--inherit">{{ inheritedModelOf(s) }}</span>
-                    <span class="mk-badge mk-badge--muted" :title="inheritTitleOf(s)">继承</span>
+                    <span class="mk-badge mk-badge--muted" :title="inheritTitleOf(s)">平台默认</span>
                     <span v-if="s.tier === 'reasoning'" class="mk-badge mk-badge--muted" title="推理档：未配模型时走平台推理默认">推理</span>
                   </template>
                 </span>
@@ -174,16 +192,13 @@
       <MkEmptyState
         v-else-if="!loading"
         title="暂无技能覆盖数据"
-        description="技能目录为空。可点击「刷新」重新拉取。"
         action-text="刷新"
         @action="load"
       />
     </div>
 
-    <!-- 模型目录候选（File-as-Truth llm-providers.json；带「供应商 · tier」标注） -->
-    <datalist id="skc-model-options">
-      <option v-for="o in catalogOptions" :key="`cat-${o.value}`" :value="o.value" :label="o.label" />
-    </datalist>
+    <!-- 模型目录候选（File-as-Truth llm-providers.json）已由 MkModelPicker 直接消费，
+         datalist 不再需要（2026-10-27 原生弹层收口） -->
   </div>
 </template>
 
@@ -194,6 +209,8 @@ import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
+import MkModelPicker from '@/components/mk/MkModelPicker.vue'
 import { askConfirm } from './useConfirm'
 import { useTableSort } from './useTableSort'
 
@@ -234,7 +251,7 @@ const props = withDefaults(defineProps<{
 
 const NOT_IN_RECON_TITLE = '一致性核查清单中没有此 Skill（不是故障）'
 
-const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
+const { pickerOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
 
 interface Row {
@@ -252,6 +269,17 @@ const rows = ref<Row[]>([])
 type SourceFilter = 'all' | Row['source']
 const keyword = ref('')
 const sourceFilter = ref<SourceFilter>('all')
+/** 卡头「来源」下拉的字符串代理（sourceFilter 是 SourceFilter 联合） */
+const sourceSelect = computed({
+  get: () => sourceFilter.value,
+  set: (v: string) => { sourceFilter.value = (v as SourceFilter) }
+})
+const sourceOptions = computed(() => [
+  { value: 'all', label: `全部（${counts.value.all}）` },
+  { value: 'platform-default', label: `用平台默认（${counts.value.platformDefault}）` },
+  { value: 'skill-model-only', label: `技能覆盖（${counts.value.skillModelOnly}）` },
+  { value: 'skill-channel', label: `独立通道（${counts.value.skillChannel}）` }
+])
 const onlyFallback = ref(false)
 const counts = computed(() => {
   const out = { all: rows.value.length, platformDefault: 0, skillModelOnly: 0, skillChannel: 0, fallback: 0 }
@@ -263,6 +291,15 @@ const counts = computed(() => {
   }
   return out
 })
+/** 备用模型维度（2026-10-27 统一）：从常驻 chip 迁入下拉，计数只在 option 文案里。 */
+const fallbackSelect = computed<string>({
+  get: () => (onlyFallback.value ? 'fallback' : ''),
+  set: (v) => { onlyFallback.value = v === 'fallback' }
+})
+const fallbackSelectOptions = computed(() => [
+  { value: '', label: '全部备用模型' },
+  { value: 'fallback', label: `自定义备用模型（${counts.value.fallback}）` }
+])
 const isFiltered = computed(() => sourceFilter.value !== 'all' || onlyFallback.value || !!keyword.value.trim())
 function clearFilters(): void {
   sourceFilter.value = 'all'
@@ -282,6 +319,15 @@ const { sortState: covSortState, toggle: toggleCovSort, sortRows: sortCovRows } 
   },
   storageKey: 'wf_skc_sort'
 })
+/** 中文别名（displayName）：主行是英文 id，别名只在它与 id 不同时进副行（2026-10-25 英文为主） */
+function aliasOf(skillId: string): string {
+  const alias = String(props.skillNames[skillId] || '').trim()
+  return alias && alias !== skillId ? alias : ''
+}
+function nameTitleOf(skillId: string): string {
+  const alias = aliasOf(skillId)
+  return alias ? `${skillId} · ${alias}` : skillId
+}
 /** 参数覆盖单元格：只给项数（原文在 title）；整串 JSON 在列里读不出「覆盖了几项」 */
 function overrideText(p: Record<string, number> | null): string {
   const n = p ? Object.keys(p).length : 0
@@ -296,10 +342,10 @@ function inheritedModelOf(row: Row): string {
 }
 function inheritTitleOf(row: Row): string {
   const model = inheritedModelOf(row)
-  if (model === '—') return '跟随平台默认（平台默认模型暂未加载）'
+  if (model === '—') return '本 Skill 没有单独指定模型，用平台默认模型（平台默认模型暂未加载）'
   return row.tier === 'reasoning'
-    ? `未单独配置模型，跟随平台推理默认：${model}`
-    : `未单独配置模型，跟随平台默认：${model}`
+    ? `本 Skill 没有单独指定模型，实际用平台推理默认：${model}`
+    : `本 Skill 没有单独指定模型，实际用平台默认：${model}`
 }
 const sortedRows = computed(() => sortCovRows(rows.value))
 const visibleRows = computed(() => {
@@ -308,8 +354,8 @@ const visibleRows = computed(() => {
     if (sourceFilter.value !== 'all' && r.source !== sourceFilter.value) return false
     if (onlyFallback.value && !(r.fallbackChain && r.fallbackChain.length)) return false
     if (!q) return true
-    // 展示名也能搜到；id / 模型 / endpoint 保持原口径
-    return [props.skillNames[r.skillId], r.skillId, r.model, r.endpoint].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))
+    // 别名也能搜到（主行是英文 id，运营常按中文名找）；id / 模型 / endpoint 保持原口径
+    return [aliasOf(r.skillId), r.skillId, r.model, r.endpoint].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))
   })
 })
 const loading = ref(false)
@@ -356,15 +402,16 @@ async function load() {
   }
 }
 
-/** 跟随平台默认：只把 model 置空，其余配置不动（后端 clearModel 契约） */
+/** 用平台默认模型：只把 model 置空，其余配置不动（后端 clearModel 契约） */
 async function clearModelOverride() {
   if (bulkSaving.value || !selected.value.length) return
   const count = selected.value.length
   const ok = await askConfirm({
-    title: '跟随平台默认',
-    message: `将清空选中的 ${count} 个技能的模型覆盖，改为继承平台默认。\n通道、思考、参数覆盖与备用链保持不变，可随时在 Skill 运行时重新指定模型。确定继续？`,
+    title: '用平台默认模型',
+    message: `将清空选中的 ${count} 个技能单独指定的模型，改用平台默认模型。通道、参数覆盖与备用链保持不变，可随时在 Skill 运行时重新指定模型。`,
     confirmText: '清空模型覆盖',
     busy: true,
+    danger: false,
   })
   if (!ok) return
   bulkSaving.value = true
@@ -380,8 +427,8 @@ async function clearModelOverride() {
     const applied = data?.applied ?? 0
     bulkErr.value = failed.length > 0
     bulkMsg.value = failed.length
-      ? `已改为继承 ${applied} 个，失败 ${failed.length} 个：${failed.map((f) => `${f.skillId}（${f.error}）`).join('；')}`
-      : `已改为继承平台默认 ${applied} 个`
+      ? `已改为用平台默认 ${applied} 个，失败 ${failed.length} 个：${failed.map((f) => `${f.skillId}（${f.error}）`).join('；')}`
+      : `已改为用平台默认模型 ${applied} 个`
     await load()
     emit('applied')
   } catch (e) {
@@ -467,9 +514,11 @@ onMounted(load)
 .skc__filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 /* 右端常驻的批量动作：与左侧筛选分开，避免被误读成一种筛选 */
 .skc__inherit { margin-left: auto; }
-.skc__name { font-family: inherit; text-align: left; }
+.skc__name { font-family: var(--mk-mono); text-align: left; }
+/* 中文别名：主行是英文 id，别名降为副行（2026-10-25 英文为主） */
+.skc__alias { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.4; }
 /* 归属 Agent：Skill 名下副行（原只读路由表的列，合并后不另占一列） */
-.skc__agent { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.4; }
+.skc__agent { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.4; }
 .skc__model { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .skc__model-id { overflow-wrap: break-word; }
 /* 继承值：弱化色，和「技能覆盖」的实值区分开（值是真的，来源不是本行） */

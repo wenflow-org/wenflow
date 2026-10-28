@@ -236,6 +236,32 @@ describe('card-import：卡墙索引映射（buildCardWallEntries，2026-10-05 �
     expect(a.userId).toBe('user-1');
   });
 
+  /* 2026-10-27 用户「内部的信息密度也不高」：卡面此前没有任何「这张卡能开几节课」的读数，
+     而创建实例时恰恰要按任务勾选——任务数从故事池直接数，与派生前勾任务的同源。 */
+  it('taskCount 取故事池长度（卡面读数）；无故事池 / 坏 JSON 记 0 不抛', () => {
+    const withPool = buildCardWallEntries([row({
+      profile: JSON.stringify({
+        personaSeed: { nameHint: '有故事' },
+        storyPool: [{ id: 'story-1', title: '亏了三万的那只基金' }, { id: 'story-2', title: 'B' }, { id: 'story-3', title: 'C' }],
+      }),
+    })])[0];
+    expect(withPool.taskCount).toBe(3);
+    // 首个任务标题：卡面上真正会被开的那节课（目标抽象、任务具体）
+    expect(withPool.firstTaskTitle).toBe('亏了三万的那只基金');
+    const noPool = buildCardWallEntries([row({ profile: JSON.stringify({ personaSeed: { nameHint: '无故事' } }) })])[0];
+    expect(noPool.taskCount).toBe(0);
+    expect(noPool.firstTaskTitle).toBeNull();
+    // 无标题的故事不编造占位文案
+    const untitled = buildCardWallEntries([row({
+      profile: JSON.stringify({ storyPool: [{ id: 's1' }] }),
+    })])[0];
+    expect(untitled.taskCount).toBe(1);
+    expect(untitled.firstTaskTitle).toBeNull();
+    const bad = buildCardWallEntries([row({ profile: '{oops' })])[0];
+    expect(bad.taskCount).toBe(0);
+    expect(bad.firstTaskTitle).toBeNull();
+  });
+
   it('name 回退链：nameHint → displayName → cardKey → email；坏 JSON 降级占位不抛', () => {
     const noHint = buildCardWallEntries([row({ profile: JSON.stringify({ personaSeed: { scenarioCard: { cardKey: 'k-1' } } }) })])[0];
     expect(noHint.name).toBe('小陈');

@@ -291,14 +291,12 @@ html, body {
 
 /* 按钮基础归零：v2 页 button 去掉浏览器默认样式（边框/背景/内边距/字体），
    外观统一由各 class（btn-primary/link-muted 等）定义，避免「今天休息」类文本按钮
-   残留默认边框与灰底 */
-/* 按钮基础归零：v2 页 button 去掉浏览器默认样式（边框/背景/内边距/字体），
-   外观统一由各 class（btn-primary/link-muted 等）定义，避免「今天休息」类文本按钮
    残留默认边框与灰底。:where() 使本规则特异性与元素选择器同级，不会压过组件 class。
    排除 uc-btn 系列（用户中心组件库自带完整样式：渐变主按钮/边框/背景），
    否则 .v2-page 的类+元素特异性 (0,1,1) 会压过 .uc-btn--primary 的 (0,1,0)，
-   导致个人中心按钮渐变/背景被清空 */
-.v2-page button:where(:not(.el-button):not(.uc-btn)) {
+   导致个人中心按钮渐变/背景被清空；同样排除全局样式的 MK 下拉触发器
+   （MkSelect 的样式在 mk-select.css，裸 class 只有 (0,1,0)，会被这条归零清成透明底）。 */
+.v2-page button:where(:not(.el-button):not(.uc-btn):not(.mk-select__trigger):not(.mk-pillselect)) {
   font: inherit;
   letter-spacing: inherit;
   line-height: inherit;
@@ -308,6 +306,23 @@ html, body {
   padding: 0;
   margin: 0;
   cursor: pointer;
+}
+
+/* 表单语境里的自绘下拉（2026-10-28）：MkSelect 默认 32px/6px 是工具条形态，
+   放进 .uc-field 或调用日志的筛选行，会和 44px 的 .uc-field__input 错位。
+   这里统一成用户侧输入框的高度与圆角；工具条（资料库排序等）保持紧凑形态。 */
+.v2-page .uc-field .mk-select__trigger,
+.v2-page .filter-select .mk-select__trigger {
+  height: 42px;
+  padding: 0 12px;
+  border-radius: var(--mk-radius-xl);
+  font-size: 14px;
+}
+.v2-page .uc-field .mk-mp--compact .mk-mp__control {
+  min-height: 42px;
+  padding: 9px 34px 9px 14px;
+  border-radius: var(--mk-radius-xl);
+  font-size: 14px;
 }
 
 .v2-page > main {

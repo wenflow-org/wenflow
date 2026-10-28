@@ -15,17 +15,17 @@ const read = (file: string) => readFileSync(resolve(__dirname, '..', file), 'utf
 
 const PAGES = [
   { file: 'TeachingSessions.vue', prefix: 'ts-c-', minWidthCols: 10 },
-  { file: 'GoalConversations.vue', prefix: 'gc-c-', minWidthCols: 8 },
+  { file: 'GoalConversations.vue', prefix: 'gc-c-', minWidthCols: 7 },
   { file: 'OpsContent.vue', prefix: 'oc-c-', minWidthCols: 7 },
   { file: 'Users.vue', prefix: 'u-c-', minWidthCols: 7 },
-  { file: 'Skills.vue', prefix: 'sk-c-', minWidthCols: 10 },
+  // Skills.vue 2026-10-28 改为列表（无表头/列宽类），不在此守卫生效范围
   { file: 'ExecLogs.vue', prefix: 'ex-c-', minWidthCols: 6 },
   { file: 'AuditLogs.vue', prefix: 'al-c-', minWidthCols: 8 },
   { file: 'MemoryReviewOverview.vue', prefix: 'mr-c-', minWidthCols: 7 },
   { file: 'VirtualLearners.vue', prefix: 'vl-c-', minWidthCols: 9 },
   { file: 'LearnerCenter.vue', prefix: 'lc-c-', minWidthCols: 7 },
-  { file: 'Feedback.vue', prefix: 'fb-c-', minWidthCols: 8 },
-  { file: 'OpsAchievements.vue', prefix: 'ach-c-', minWidthCols: 6 }
+  { file: 'Feedback.vue', prefix: 'fb-c-', minWidthCols: 7 },
+  { file: 'OpsAchievements.vue', prefix: 'ach-c-', minWidthCols: 5 }
 ]
 
 describe('表格列宽稳定性', () => {
@@ -33,7 +33,7 @@ describe('表格列宽稳定性', () => {
     it(`${file}：表格 fixed + 每个表头都带宽度类`, () => {
       const src = read(file)
       expect(src).toContain('mk-table--fixed')
-      const widthCols = src.match(new RegExp(`\\.${prefix}[a-z-]+ \\{ width:`, 'g')) || []
+      const widthCols = src.match(new RegExp(`\\.${prefix}[a-z0-9-]+ \\{ width:`, 'g')) || []
       expect(widthCols.length).toBeGreaterThanOrEqual(minWidthCols)
       // 固定表的每个 <th> 都必须带宽度类：漏一个该列就退回平分剩余，仍会被文本撑开。
       // 按 </table> 切段，只检查挂了 mk-table--fixed 的表（同页可能还有弹层小表）。
@@ -42,7 +42,8 @@ describe('表格列宽稳定性', () => {
       for (const seg of tables) {
         const ths = seg.match(/<th\b[^>]*>/g) || []
         expect(ths.length).toBeGreaterThanOrEqual(4)
-        expect(ths.filter((th) => !th.includes(prefix))).toEqual([])
+        // 操作列统一走全局 .mk-c-act（2026-10-27），其余列仍用页面前缀宽度类
+        expect(ths.filter((th) => !th.includes(prefix) && !th.includes('mk-c-act'))).toEqual([])
       }
     })
   }

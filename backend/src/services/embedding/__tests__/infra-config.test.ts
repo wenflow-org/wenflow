@@ -11,6 +11,7 @@ import {
   DEFAULT_INFRA_TIMEOUT_MS,
   defaultInfraModelsConfig,
   mergeInfraModelsConfig,
+  resolveInfraEndpoint,
   validateInfraModelsConfig,
 } from '../infra-config';
 
@@ -80,11 +81,50 @@ describe('infra-config 校验', () => {
     expect(errors.join('\n')).toContain('密钥环境变量名');
   });
 
+  it('允许只配置其中一个：另一个地址为空 = 未配置，不再拦截首配', () => {
+    const config = defaultInfraModelsConfig({} as NodeJS.ProcessEnv)
+    config.embedding.endpoint = 'https://gw.example/v1/embeddings'
+    config.rerank.endpoint = ''
+    expect(validateInfraModelsConfig(config)).toEqual([])
+
+    // 反过来只配重排同样合法
+    config.embedding.endpoint = ''
+    config.rerank.endpoint = 'https://gw.example/v1/rerank'
+    expect(validateInfraModelsConfig(config)).toEqual([])
+  })
+
   it('维度为空允许，非整数或越界拒绝', () => {
     const config = defaultInfraModelsConfig(ENV);
     config.embedding.dimensions = 1024;
     expect(validateInfraModelsConfig(config)).toEqual([]);
     config.embedding.dimensions = -1;
     expect(validateInfraModelsConfig(config).join('\n')).toContain('向量维度');
+  });
+
+  it('inherit 模式不要求服务地址与环境变量名', () => {
+    const config = defaultInfraModelsConfig({} as NodeJS.ProcessEnv);
+    config.embedding.connectionMode = 'inherit';
+    config.embedding.endpoint = '';
+    expect(validateInfraModelsConfig(config)).toEqual([]);
+  });
+});
+
+describe('resolveInfraEndpoint', () => {
+  it('裸域名补 /v1 与类型路径', () => {
+    expect(resolveInfraEndpoint('https://gw.example', 'embedding'))
+      .toBe('https://gw.example/v1/embeddings');
+    expect(resolveInfraEndpoint('https://gw.example/', 'rerank'))
+      .toBe('https://gw.example/v1/rerank');
+  });
+
+  it('已带 /v1 时只补类型路径', () => {
+    expect(resolveInfraEndpoint('https://gw.example/v1', 'embedding'))
+      .toBe('https://gw.example/v1/embeddings');
+    expect(resolveInfraEndpoint('https://gw.example/v1/', 'rerank'))
+      .toBe('https://gw.example/v1/rerank');
+  });
+
+  it('空地址返回空串', () => {
+    expect(resolveInfraEndpoint('', 'embedding')).toBe('');
   });
 });

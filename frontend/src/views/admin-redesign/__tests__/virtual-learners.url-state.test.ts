@@ -11,6 +11,7 @@ import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import VirtualLearners from '../VirtualLearners.vue';
 import { liveVirtuals } from '../live';
+import { filterValue, chooseFilter } from './filter-controls';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -68,35 +69,50 @@ async function mountVl(url: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/:page?', component: { template: '<div />' } }] });
   await router.push(url);
   await router.isReady();
-  const wrapper = mount(VirtualLearners, { global: { plugins: [router] } });
+  const wrapper = mount(VirtualLearners, { global: { plugins: [router] }, attachTo: document.body });
   await flushPromises();
   await nextTick();
   return { wrapper, router };
 }
 
-function pill(wrapper: ReturnType<typeof mount>, label: string) {
-  const b = wrapper.findAll('button.mk-pill').find((x) => x.text().startsWith(label));
-  if (!b) throw new Error(`pill not found: ${label}`);
-  return b;
+/** 容量设置抽屉（Teleport 到 body）：从页头「维护」菜单打开 */
+async function openSettingsDrawer(wrapper: ReturnType<typeof mount>) {
+  const maint = wrapper.findAll('button').find((b) => b.text() === '维护');
+  if (!maint) throw new Error('页头没有「维护」菜单');
+  await maint.trigger('click');
+  await nextTick();
+  const item = [...document.querySelectorAll('.mk-menu__item')].find((el) =>
+    el.textContent?.includes('容量与实验环境')
+  ) as HTMLElement | undefined;
+  if (!item) throw new Error('维护菜单里没有「容量与实验环境」');
+  item.click();
+  await flushPromises();
+  await nextTick();
+}
+
+function closeSettingsDrawer() {
+  (document.querySelector('.mk-drawer__close') as HTMLElement | null)?.click();
 }
 
 describe('VirtualLearners · 筛选 ↔ URL', () => {
-  /* 2026-10-24 修正：容量治理（并发上限 / VL 专属 RPM / 日期模拟）2026-10-21 已迁到
-     「模型与接入 · 虚拟学习者」页签；旧深链 tab=routing 会落到调用策略/调用健康，目标控件不在屏上。 */
-  it('并发 / 速率 KPI 点击 → 跳「模型与接入 · 虚拟学习者」页签', async () => {
+  /* 2026-10-26：并发 / 速率两张 KPI 卡撤出数字栅格，读数并进「容量与实验环境」的输入行。 */
+  it('并发 / 速率读数并进容量卡：不再有跨页跳转的 KPI 卡', async () => {
     const { wrapper, router } = await mountVl('/admin/virtual-learners');
-    const kpi = (label: string) => wrapper.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text().trim() === label)!;
-    await kpi('并发').trigger('click');
-    await flushPromises();
-    expect(router.currentRoute.value.path).toBe('/admin/api-config');
-    expect(router.currentRoute.value.query.tab).toBe('virtual');
+    const labels = wrapper.findAll('.mk-kpi .mk-kpi__label').map((l) => l.text().trim());
+    expect(labels).not.toContain('并发');
+    expect(labels).not.toContain('速率');
+    // 2026-10-26：读数并进容量抽屉（页头「维护」→ 右侧抽屉），不再占列表下方版面
+    expect(wrapper.find('.vl-settings-card').exists()).toBe(false);
+    await openSettingsDrawer(wrapper);
+    expect(document.body.textContent || '').toContain('在跑');
+    closeSettingsDrawer();
+    expect(router.currentRoute.value.path).toBe('/admin/virtual-learners');
     wrapper.unmount();
   });
 
-  it('深链 ?pill=stalled 落位：该 pill 高亮（刷新 / 收藏还原）', async () => {
+  it('深链 ?pill=stalled 落位：生命周期下拉当前值为停滞（刷新 / 收藏还原）', async () => {
     const { wrapper } = await mountVl('/admin/virtual-learners?pill=stalled');
-    expect(pill(wrapper, '停滞').classes()).toContain('mk-pill--active');
-    expect(pill(wrapper, '全部').classes()).not.toContain('mk-pill--active');
+    expect(filterValue(wrapper as never, '状态')).toBe('stalled');
     wrapper.unmount();
   });
 
@@ -129,7 +145,7 @@ describe('VirtualLearners · 筛选 ↔ URL', () => {
 
   it('点回「全部」→ URL 删掉 pill（缺省值不留在地址栏）', async () => {
     const { wrapper, router } = await mountVl('/admin/virtual-learners?pill=stalled');
-    await pill(wrapper, '全部').trigger('click');
+    await chooseFilter(wrapper as never, '状态', '全部');
     await flushPromises();
     expect(router.currentRoute.value.query.pill).toBeUndefined();
     wrapper.unmount();
@@ -146,18 +162,17 @@ describe('VirtualLearners · 筛选 ↔ URL', () => {
 })
 
 describe('VirtualLearners · KPI 三态（2026-10-14 KPI 审计：失败不得伪装成健康）', () => {
-  it('列表拉取失败时「并发」显不可用 + bad 调，不把初值画成 0/10 的 ok 绿', async () => {
+  it('列表拉取失败时容量卡读数显「不可用」，不把初值画成 0/10', async () => {
     // 并发数由**列表** GET 写入（live.ts:1642），列表失败时它保持初值 {used:0,limit:10}；
-    // 若该卡不判三态，就会渲染成「0/10」+ ok 绿调 = 假健康。statsState 已并入
-    // liveFailures.virtuals 正是为这一类兜底，本用例锁住「卡确实接上了它」。
+    // 不判三态就会渲染成「0/10」= 假健康。2026-10-26 读数已并进容量卡，同一条守卫接在卡上。
     const live = await import('../live');
     (live.liveFailures as { value: Record<string, string> }).value = { virtuals: 'boom' };
     const { wrapper } = await mountVl('/admin/virtual-learners');
-    const kpi = wrapper.findAll('.mk-kpi').find((k) => k.text().includes('并发'));
-    expect(kpi, '并发 KPI 未渲染').toBeTruthy();
-    expect(kpi!.text()).toContain('不可用');
-    expect(kpi!.text()).not.toContain('0/10');
-    expect(kpi!.classes()).toContain('mk-kpi--bad');
+    await openSettingsDrawer(wrapper);
+    const readout = document.body.textContent || '';
+    expect(readout).toContain('读数不可用');
+    expect(readout).not.toContain('0 / 10');
+    closeSettingsDrawer();
     (live.liveFailures as { value: Record<string, string> }).value = {};
     wrapper.unmount();
   });

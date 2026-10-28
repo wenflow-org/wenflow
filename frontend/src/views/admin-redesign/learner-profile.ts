@@ -199,6 +199,12 @@ export interface ListQueryState {
    * 免得为每个开关各加一个具名槽位。
    */
   extra?: readonly ListQueryExtra[]
+  /**
+   * 已退役的旧参数名（页面不再受理）：仍纳入「本组合式管理的键」，从 URL 摘掉。
+   * 例：Skills 列表的 ?cat=（类别筛选随该列一起撤，2026-10-24）——留着它等于地址栏
+   * 写着一个页面已经无法呈现的筛选状态，刷新/分享都会让人以为还有这一轴。
+   */
+  retired?: readonly string[]
 }
 
 /** 附加筛选轴：key = URL 参数名；get 返回 '' 表示缺省（不写 URL） */
@@ -259,9 +265,10 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
   const allowedPills = state.allowedPills
   const defaultSize = state.defaultPageSize ?? 15
   const extras = state.extra ?? []
+  const retired = state.retired ?? []
   const hasKeyword = !!state.keyword
   const managed = (): string[] =>
-    [K.pill, ...(hasKeyword ? [K.keyword] : []), K.page, ...(state.pageSize ? [K.pageSize] : []), ...(state.bin ? [K.bin] : []), ...extras.map((e) => e.key)]
+    [K.pill, ...(hasKeyword ? [K.keyword] : []), K.page, ...(state.pageSize ? [K.pageSize] : []), ...(state.bin ? [K.bin] : []), ...extras.map((e) => e.key), ...retired]
   const str = (v: unknown): string => (typeof v === 'string' ? v : '')
   const posInt = (v: unknown, fallback: number): number => {
     const n = Number(str(v))

@@ -99,6 +99,8 @@ const LearningPaths = asyncPage(() => import('./OpsContent.vue'));
 const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
 const VirtualLearnerCards = asyncPage(() => import('./VirtualLearnerCards.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
+// Prompt 评估（2026-10-25 用户拍板从 skills 宿主页签拆回独立页，归入侧栏 Skill 组）
+const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
 const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
 // 2026-09-29 拆回独立页：成本分析从执行日志宿主释放
@@ -153,13 +155,15 @@ const components: Record<string, unknown> = {
   'orchestrator': Orchestrator,
   // 外挂能力（2026-10-19 从 api-config 宿主拆回独立场景，侧栏 Skill 组）
   'addons': Addons,
-  // 「Prompt 评估」2026-10-04 下线（折入 skills 宿主「Prompt 评估」页签；
-  // 组件更名 PromptEvalPanel 由 Skills 异步加载）；旧 URL 在 router 重定向 ?tab=cases|runs → ?peTab=
+  // Prompt 评估（2026-10-25 从 skills 宿主页签拆回独立场景，侧栏 Skill 组）：
+  // 面板 PromptEvalPanel 由本页异步加载；旧 /admin/skills?tab=prompt-eval 在 Skills 页改投
+  'prompt-eval': PromptEval,
   'execution-logs': ExecLogs,
   'token-cost': TokenCost,
   'memory-review': MemoryReview,
   'audit-logs': AuditLogs,
   'api-config': ApiConfig,
+  // 访问与注册 2026-10-27 并入运营中心宿主 tab（场景下线，URL 重定向兼容）
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
   // 健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,
@@ -373,13 +377,18 @@ watch(
 // scene → URL（侧栏/意图跳转）；push 保留历史，浏览器后退可回到上一页面
 // 门闩 bootstrapped：挂载完成前不主动 push，避免初始化瞬态把深链 URL 改写掉（QA ISSUE-001）
 let bootstrapped = false;
+/* 跨页跳转携带的目标页预筛（侧栏角标点进执行日志即 ?range=week&status=err 等）。
+   与 intent 并存：intent 是模块级共享的排查动线，这里是「这一次导航」的一次性 query，
+   push 落定即清空，不残留到下一次侧栏点击。 */
+let pendingSceneQuery: Record<string, string> | null = null
 watch(scene, (s) => {
   const cur = typeof route.params.page === 'string' ? route.params.page : ''
   if (bootstrapped && cur !== s) {
     /* 排查动线（P0）：intent 筛选随跳转进 URL——执行日志「已过滤故障视图」
        可刷新/分享/前进后退还原（ExecLogs 侧做 URL↔筛选双向同步）。
        只带 intent 参数、不透传当前页 query（避免把 ?view=&id= 等二级页状态漏进目标页） */
-    const q = intentQueryParams(s)
+    const q = { ...intentQueryParams(s), ...(pendingSceneQuery || {}) }
+    pendingSceneQuery = null
     if (Object.keys(q).length) void router.push({ path: `/admin/${s}`, query: q })
     else void router.push(`/admin/${s}`)
     subPage.value = null;
@@ -422,12 +431,16 @@ watch(
   }
 );
 
-function navigate(id: string) {
+function navigate(id: string, query?: Record<string, string>) {
   // 相同 scene 再点击：scene watch 不会触发，这里显式清空 subPage 返回列表
   if (id === scene.value) {
     subPage.value = null;
+    /* 带预筛的同页点击（如已在执行日志再点角标）：直接 replace 到该筛选，
+       否则「点了没反应」。 */
+    if (query) void router.push({ path: `/admin/${id}`, query })
     return;
   }
+  pendingSceneQuery = query || null
   scene.value = id;
 }
 
@@ -520,7 +533,11 @@ onMounted(() => {
 .ac-error__card span { font-size: var(--mk-fs-body); color: var(--mk-muted); }
 .ac-error__actions { display: flex; gap: 10px; margin-top: 6px; }
 .ac-error__diag { max-width: 460px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ac-error__diag summary { cursor: pointer; }
+.ac-error__diag summary { cursor: pointer; list-style: none; }
+/* 系统三角退役：与全站 details（.mk-section__summary）同用自绘 ▸ */
+.ac-error__diag summary::-webkit-details-marker { display: none; }
+.ac-error__diag summary::before { content: '▸'; display: inline-block; margin-right: 6px; transition: transform 0.12s ease; }
+.ac-error__diag[open] summary::before { transform: rotate(90deg); }
 .ac-error__diag code {
   display: block;
   margin-top: 6px;

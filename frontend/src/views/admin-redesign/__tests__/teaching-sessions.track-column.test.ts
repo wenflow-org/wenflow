@@ -56,7 +56,7 @@ async function mountTs() {
 /** 从「列」菜单把默认隐藏的列打开（2026-10-22 起完成方式/消息/知识点/关注默认收起） */
 async function showColumn(wrapper: ReturnType<typeof mount>, label: string) {
   if (!wrapper.find('.mk-cols__menu').exists()) {
-    const colsBtn = wrapper.findAll('button').find((b) => b.text() === '列');
+    const colsBtn = wrapper.find('.mk-cols__trigger');
     expect(colsBtn).toBeTruthy();
     await colsBtn!.trigger('click');
   }
@@ -86,7 +86,7 @@ describe('教学会话完成方式列（#105，2026-10-21 只留通道）', () =
     expect(all).not.toContain('轨道');
   });
 
-  it('格内只出通道词；轨道（真实/虚拟/未标记）不再上屏，只在悬停说明里给（右上角视角已表达该维度）', async () => {
+  it('格内只出通道词；轨道（真实/虚拟/未标记）不再上屏，也不挂解释型悬停', async () => {
     listMock.mockResolvedValue({
       data: {
         data: {
@@ -110,12 +110,11 @@ describe('教学会话完成方式列（#105，2026-10-21 只留通道）', () =
     expect(tracks[2].find('.ts-track__mode').text()).toBe('未记录');
     // 与右上角「真实 / 测试」视角重复的轨道徽章已撤
     expect(wrapper.find('.ts-track .mk-badge').exists()).toBe(false);
-    // 轨道仍可在悬停说明里查到（不是丢数据，只是不占屏）
-    expect(tracks[0].attributes('title')).toContain('记在：真实学习者');
-    expect(tracks[0].attributes('title')).toContain('完成方式：课堂完成');
+    // 2026-10-26 文案收口：解释型悬停说明（记在谁头上）已删，通道词本身自明
+    tracks.forEach((t) => expect(t.attributes('title')).toBeUndefined());
   });
 
-  it('无完成记录：整格给中性「—」+ 悬停说明，不用用户身份回填', async () => {
+  it('无完成记录：整格给中性「—」，不用用户身份回填', async () => {
     listMock.mockResolvedValue({
       data: { data: { items: [makeItem('none', { isVirtualLearner: true, closure: null })], total: 1 } }
     });
@@ -127,7 +126,7 @@ describe('教学会话完成方式列（#105，2026-10-21 只留通道）', () =
     expect(cell.text()).toBe('—');
     expect(cell.find('.mk-badge').exists()).toBe(false); // 虚拟用户也不猜轨道
     expect(cell.find('.ts-track__mode').exists()).toBe(false);
-    expect(cell.attributes('title')).toContain('无完成记录');
+    expect(cell.attributes('title')).toBeUndefined();
   });
 });
 
@@ -164,7 +163,8 @@ describe('教学会话「互动」拆成时长 / 消息 / 知识点三列（2026
 
     const cells = wrapper.findAll('.ts-ia');
     expect(cells[0].text()).toBe('25 分钟');
-    expect(cells[0].find('.ts-ia__dur--long').exists()).toBe(true); // ≥25 分钟长时标琥珀
+    // 2026-10-27 用户「时长还有两种颜色，简化一下」：不再按长时阈值染琥珀
+    expect(cells[0].find('.ts-ia__dur--long').exists()).toBe(false);
     expect(cells[1].text()).toBe('4 条');
     expect(cells[2].text()).toBe('2 个');
   });

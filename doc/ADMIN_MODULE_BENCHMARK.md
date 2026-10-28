@@ -237,7 +237,7 @@ GitHub Settings(2026-09 官方资料与对比评测)。
 
 | 步骤 | 内容 | 改动面 | 状态 |
 |---|---|---|---|
-| 1 | **保存视图**(执行日志优先):高级筛选组合存 localStorage + 筛选 pills 一键恢复;AuditLogs 跟进 | 纯前端 | ✅ 2026-09-22 完成(共享 useSavedViews + SavedViewsBar,同名覆盖/上限12/命中高亮/URL 同键快照;浏览器实测 8 维恢复、跨 tab 恢复、Esc 取消、× 删除) |
+| 1 | **保存视图**(执行日志优先):高级筛选组合存 localStorage + 筛选 pills 一键恢复;AuditLogs 跟进 | 纯前端 | ✅ 2026-09-22 完成(共享 useSavedViews + SavedViewsBar,同名覆盖/上限12/命中高亮/URL 同键快照;浏览器实测 8 维恢复、跨 tab 恢复、Esc 取消、× 删除)；2026-10-27 用户要求下线（入口、组件与 useSavedViews 一并删除） |
 | 2 | **成本预算告警**:设置日/月预算(TokenCost 或 settings),TokenCost 展示预算线;超限 → 运营中心待办 + 总览行动卡 | 后端+前端 | 待做 |
 | 3 | **评估对比视图**:PromptEval 选两次评估历史 → 按用例并排通过率/耗时 diff;失败用例标红 | 前端为主 | 待做 |
 

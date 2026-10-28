@@ -39,8 +39,6 @@ vi.mock('@/api/adminApi', () => ({
   adminSkillsApi: apiObject(),
   adminAnnouncementsApi: apiObject(),
   adminPlatformSettingsApi: apiObject(),
-  adminCapabilityProbeApi: apiObject(),
-  adminSystemApi: apiObject(),
   adminGoalConversationsApi: apiObject(),
   adminTeachingSessionsApi: apiObject(),
   adminUsersApi: apiObject(),
@@ -93,7 +91,7 @@ async function settle() {
 
 /**
  * 点击视图切换 tab（原型 .tabs 下划线页签，非胶囊；2026-10-04 起 People 页签随拆页退役，此助手仅 OpsHub 在用）。
- * tab 文本带计数角标（如「站内通知」），按 .tab 定位 + includes 匹配标签。
+ * tab 文本按 .tab 定位 + includes 匹配标签（2026-10-27 起页签不再带计数角标）。
  */
 async function clickTab(w: ReturnType<typeof mount>, label: string) {
   const btn = w.findAll('.tab').find((b) => b.text().includes(label));
@@ -194,11 +192,10 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     const labels = w.findAll('.mk-kpi-grid .mk-kpi__label').map((c) => c.text());
     expect(labels).toContain('调用成本');
     expect(labels).toContain('总 Token');
-    // 页头承担身份 + 口径（newui/admin pagehead 形态），状态条退役；不复述 KPI 数字
-    // 页名对齐原型「成本分析」（2026-10-01 页头对齐批，原「Token 成本」）
+    // 页头只有页名 + 动作区（时间窗 / 读数时刻 / 导出）；不再挂解释型副文
     const headText = w.find('.mk-pagehead').text();
     expect(headText).toContain('成本分析');
-    expect(headText).toContain('按模型、Skill 与时间维度追踪模型调用成本');
+    expect(w.find('.mk-pagehead__sub').exists()).toBe(false);
     expect(headText).not.toContain('次调用');
     w.unmount();
 
@@ -221,21 +218,21 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     subPage.value = null;
     const w = mount(LearnerCenter);
     await settle();
-    // ①统计五卡（共享 .mk-kpi-grid，2026-10-04 拆到页级；2026-10-23 撤疲劳高/趋势下降）
+    // ①统计六卡（共享 .mk-kpi-grid，2026-10-04 拆到页级；2026-10-23 撤疲劳高/趋势下降；
+    //   2026-10-26 补「观察」：KPI 即筛选入口，卡头同名 pill 已撤）
     const kpiLabels = w.findAll('.lc-kpi .mk-kpi__label').map((c) => c.text().trim());
-    expect(kpiLabels).toEqual(['学习者账号', '需关注', '低置信学习者', '平均置信度', '数据覆盖率']);
-    // ②置信分布带已退役（2026-10-17）：置信口径由「低置信」chip 与可排序的「置信」列承载
+    expect(kpiLabels).toEqual(['用户账号', '需关注', '观察', '低置信用户', '平均置信度', '数据覆盖率']);
+    // ②置信分布带已退役（2026-10-17）：置信口径由「低置信」KPI 与可排序的「置信」列承载
     expect(w.find('.mk-distband').exists()).toBe(false);
     // 低置信卡与「低置信」筛选同口径：丙（无任务、confidence 0）不计入（外部评审「274 vs 高分区 7」型接缝的护栏）
     const lowKpi = w.findAll('.lc-kpi .mk-kpi').find((c) => c.text().includes('低置信'));
     expect(lowKpi!.find('.mk-kpi__num').text()).toBe('1'); // 乙（0.32）；丙无任务不计
-    // 点「低置信」chip → 只剩乙（无任务的丙不出现）；点「全部」→ 恢复 3 行（pills 是单选，非开关）
-    const lowChip = w.findAll('.mk-pill').find((p) => p.text().includes('低置信'))!;
-    await lowChip.trigger('click');
+    // 点「低置信」KPI → 只剩乙（无任务的丙不出现）；再点同一张卡 → 取消筛选，恢复 3 行
+    await lowKpi!.trigger('click');
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(1);
     expect(w.find('tbody tr').text()).toContain('乙');
-    await w.findAll('.mk-pill').find((p) => p.text().startsWith('全部'))!.trigger('click');
+    await lowKpi!.trigger('click');
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(3);
     expect(w.findAll('.lc-rankrow').length).toBe(0);

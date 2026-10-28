@@ -39,8 +39,9 @@ describe('Shell 导航', () => {
   it('导航分组齐全且顺序稳定（总览为置顶入口，不进分组）', () => {
     const wrapper = mountShell();
     // 分组标题自 2026-09-27 起降级为纯文字标签（.mshell__caption），不再是可折叠按钮
+    // 2026-10-27：账号与接入组撤销，组内页面并入运营
     const groups = wrapper.findAll('.mshell__caption').map((n) => n.text());
-    expect(groups).toEqual(['教学', '虚拟实验', 'Skill', '观测', '系统', '运营']);
+    expect(groups).toEqual(['运营', '学习', '仿真', 'Skill', '观测与排查']);
   });
 
   it('置顶入口（pinned）渲染在分组上方且无组标题', () => {
@@ -59,16 +60,37 @@ describe('Shell 导航', () => {
     const wrapper = mountShell({ current: 'skills' });
     const active = wrapper.findAll('.mshell__item--active');
     expect(active).toHaveLength(1);
-    expect(active[0]!.text()).toContain('Skill 与提示词');
+    expect(active[0]!.text()).toContain('Skill 目录');
   });
 
   it('点击菜单项 emit navigate(id)', async () => {
     const wrapper = mountShell();
     const skills = wrapper
       .findAll('.mshell__item')
-      .find((n) => n.text().includes('Skill 与提示词'))!;
+      .find((n) => n.text().includes('Skill 目录'))!;
     await skills.trigger('click');
     expect(wrapper.emitted('navigate')?.[0]).toEqual(['skills']);
+  });
+
+  it('页面搜索匹配检索词（keywords）：搜「密钥」命中插件与模型与接入', async () => {
+    const wrapper = mountShell();
+    await wrapper.find('.mshell__search-input').setValue('密钥');
+    const hits = wrapper.findAll('.mshell__search-hit-label').map((n) => n.text());
+    expect(hits).toContain('插件');
+    expect(hits).toContain('模型与接入');
+  });
+
+  it('执行日志角标点进带落地筛选（角标口径=近 7 天失败，落地页默认是今天）', async () => {
+    const { liveNavBadges } = await import('../live');
+    // 本文件把 live 域整体 mock 成可写 ref（真实模块里是 computed，类型上只读）
+    const badges = liveNavBadges as unknown as { value: Record<string, string> };
+    badges.value = { 'execution-logs': '3' };
+    const wrapper = mountShell({ current: 'overview' });
+    const badge = wrapper.find('.mshell__item-badge');
+    expect(badge.exists()).toBe(true);
+    await badge.trigger('click');
+    expect(wrapper.emitted('navigate')?.[0]).toEqual(['execution-logs', { range: 'week', status: 'err' }]);
+    badges.value = {};
   });
 
   it('release 模式下展示账户区（userchip + 退出菜单）', async () => {

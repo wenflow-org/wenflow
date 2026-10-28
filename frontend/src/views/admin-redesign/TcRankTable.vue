@@ -4,27 +4,22 @@
     <div class="tc-table__head" role="row">
       <span class="tc-c tc-c--rk" role="columnheader">#</span>
       <span class="tc-c tc-c--name" role="columnheader">{{ nameLabel }}</span>
-      <span class="tc-c tc-c--num" role="columnheader">调用</span>
-      <span class="tc-c tc-c--num" role="columnheader">失败</span>
+      <span class="tc-c tc-c--num" role="columnheader">调用次数</span>
+      <span class="tc-c tc-c--num" role="columnheader">失败次数</span>
       <span class="tc-c tc-c--tok" role="columnheader">Token 用量</span>
       <!-- 成本列（审核 #112）：接口 RankEntry 已带成本桶，此前 user/model 排行未渲染，与页头
            「按模型、Skill 与时间维度追踪模型调用成本」承诺不符 -->
       <span class="tc-c tc-c--cost" role="columnheader">成本</span>
       <!-- 排行表占比 = Token 占比（成本另有独立列），与导出 CSV 的 Token占比% 对齐 -->
-      <span class="tc-c tc-c--share" role="columnheader" title="Token 用量占比（金额占比在成本列单独统计）">Token 占比</span>
+      <span class="tc-c tc-c--share" role="columnheader">Token 占比</span>
     </div>
 
     <div
       v-for="(r, i) in items"
       :key="r.key"
       class="tc-table__row"
-      :class="{ 'tc-table__row--clickable': clickable }"
-      :role="clickable ? 'button' : 'row'"
-      :tabindex="clickable ? 0 : undefined"
-      :title="clickable ? `${rowTitle(r)}。点击到执行日志查该维度调用` : rowTitle(r)"
-      @click="clickable && emit('select', r)"
-      @keydown.enter="clickable && emit('select', r)"
-      @keydown.space.prevent="clickable && emit('select', r)"
+      role="row"
+      :title="rowTitle(r)"
     >
       <!-- 排名徽章：1/2/3 实心蓝（前三），其余中性 -->
       <span class="tc-c tc-c--rk" role="cell">
@@ -111,12 +106,9 @@ const props = withDefaults(
         本组件不再提供 skill 档——审核 #132 删除无消费者的死分支） */
     variant: 'user' | 'model'
     totalTokens: number
-    /** 整行可点：到执行日志按该用户 / 模型筛调用明细（2026-10-24 成本下钻对称） */
-    clickable?: boolean
   }>(),
-  { totalTokens: 0, clickable: false }
+  { totalTokens: 0 }
 )
-const emit = defineEmits<{ select: [row: RankRow] }>()
 
 const nameLabel = computed(() => (props.variant === 'user' ? '用户' : '模型'))
 
@@ -207,17 +199,19 @@ function rowTitle(r: RankRow): string {
 .tc-table--user .tc-table__row,
 .tc-table--model .tc-table__head,
 .tc-table--model .tc-table__row {
-  grid-template-columns: 26px minmax(140px, 1fr) 52px 46px minmax(180px, 1fr) minmax(96px, 0.7fr) 100px;
+  grid-template-columns: 26px minmax(140px, 1fr) 74px 68px minmax(180px, 1fr) minmax(96px, 0.7fr) 100px;
 }
 /* 审核 #129：≤1599 时 TokenCost 的 .tc-ranks 回落单列全宽（卡内 ~1110px），而上面的双 fr 模板
    把 836px 余量平摊给名称/Token 两列（各 ~418px），数据列仅 52/46px——文本列大片空转。
-   单列档改用带上限的列模板（合计 ~1100px 贴合卡宽），两文本列不再无限膨胀 */
+   单列档改用带上限的列模板（合计 ~1100px 贴合卡宽），两文本列不再无限膨胀。
+   2026-10-24「调用次数 / 失败次数」四字表头把两数字列加宽 30px，从 Token 列上限扣回，
+   合计仍 ~1100px：26+300+76+68+330+140+100 + 6×10 = 1100 */
 @media (max-width: 1599px) {
   .tc-table--user .tc-table__head,
   .tc-table--user .tc-table__row,
   .tc-table--model .tc-table__head,
   .tc-table--model .tc-table__row {
-    grid-template-columns: 26px minmax(160px, 300px) 60px 54px minmax(200px, 360px) minmax(96px, 140px) 100px;
+    grid-template-columns: 26px minmax(160px, 300px) 76px 68px minmax(200px, 330px) minmax(96px, 140px) 100px;
   }
 }
 
@@ -229,6 +223,10 @@ function rowTitle(r: RankRow): string {
   font-weight: 600;
   letter-spacing: 0.05em;
   color: var(--mk-faint);
+  /* 表头一律不折行：列宽是定值（占比 100px、成本 minmax(96px,·)），而中文表头加 0.05em
+     字距后「Token 占比」在 86px 可用宽里会折成三行（实测高 64px，其它表头 21px），
+     同一行表头高低不齐（2026-10-26 有数据走查实见）。 */
+  white-space: nowrap;
 }
 /* 表头右缘对齐数值右缘：占比表头与行内 40px 数字槽同列右对齐；
    成本列同理（否则表头文字与金额各站一边） */
@@ -242,8 +240,6 @@ function rowTitle(r: RankRow): string {
   transition: background 0.12s;
 }
 .tc-table__row:last-child { border-bottom: none; }
-.tc-table__row--clickable { cursor: pointer; }
-.tc-table__row--clickable:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .tc-table__row:hover { background: var(--mk-table-row-hover-bg); }
 
 .tc-c { min-width: 0; }

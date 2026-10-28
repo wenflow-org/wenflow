@@ -289,14 +289,6 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     }
   }
 
-  // 未被任何别名引用的模型（提示：可能已下线或漏配别名）
-  const referenced = new Set(aliases.flatMap((item) => item.members));
-  for (const model of AVAILABLE_MODELS) {
-    if (!referenced.has(model.id)) {
-      warnings.push(`模型「${model.id}」未被任何别名引用（只能通过具体 id 使用）。`);
-    }
-  }
-
   // 遗留表检测:agent_model_configs 已于 2026-10-08 摘出路由解析链（doc/MODEL_GATEWAY_DESIGN.md
   // §422 决定），遗留行不再影响路由——只提示清理，不再说「优先级高于平台默认」。
   try {

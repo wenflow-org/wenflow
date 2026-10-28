@@ -59,7 +59,7 @@ async function mountOverview() {
 }
 
 function closureCard(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAll('button.mk-kpi').find((x) => x.text().includes('完课量'));
+  return wrapper.findAll('.mk-kpi').find((x) => x.text().includes('完课量'));
 }
 
 beforeEach(() => {
@@ -97,7 +97,7 @@ describe('总览完课量 KPI（#105）', () => {
     const wrapper = await mountOverview();
 
     const title = closureCard(wrapper)!.attributes('title') || '';
-    expect(title).toContain('与上方真实口径 KPI 不同源');
+    expect(title).toContain('与真实用户 KPI 不同源');
     expect(title).not.toContain('不回填');
     expect(title).not.toContain('通道构成');
   });
@@ -108,8 +108,7 @@ describe('总览完课量 KPI（#105）', () => {
     await closureCard(wrapper)!.trigger('click');
     expect(intent.scene).toBe('teaching-sessions');
   });
-
-  it('读数失败不伪造 0：值给「—」、hint 如实呈报', async () => {
+  it('读数失败不伪造 0：值给「—」、hint 如实呈报，并在卡内给重试', async () => {
     closureSummaryMock.mockImplementation(async () => {
       throw new Error('boom');
     });
@@ -119,5 +118,21 @@ describe('总览完课量 KPI（#105）', () => {
     expect(card!.text()).toContain('—');
     expect(card!.text()).toContain('读数加载失败');
     expect(card!.text()).not.toContain('未标记');
+    // 2026-10-26：失败态卡不可点（读数不可信），卡内自带重试，不再只能靠整页重试
+    expect(card!.classes()).not.toContain('mk-kpi--clickable');
+    const retry = card!.findAll('button').find((b) => b.text() === '重试');
+    expect(retry).toBeTruthy();
+    expect(closureSummaryMock.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it('加载中不把「读数加载中…」写成卡面文案', async () => {
+    closureSummaryMock.mockImplementation(() => new Promise(() => {}) as never);
+    const wrapper = mount(Overview);
+    await nextTick();
+
+    const card = closureCard(wrapper);
+    expect(card).toBeTruthy();
+    expect(card!.text()).not.toContain('读数加载中');
+    wrapper.unmount();
   });
 });

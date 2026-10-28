@@ -10,6 +10,7 @@ import { nextTick } from 'vue';
 import VirtualLearners from '../VirtualLearners.vue';
 import { liveVirtuals, liveVirtualSessionStats, liveVirtualRunStats } from '../live';
 import { MOCK_SCENES } from '../manifest';
+import { filterOption } from './filter-controls';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -78,20 +79,18 @@ beforeEach(() => {
 });
 
 describe('虚拟学习者定位（D1）', () => {
-  it('状态条已退役：筛选 chips 住卡头工具栏，计数全 0（无「创建中」旧叫法）', async () => {
+  it('状态条已退役：生命周期筛选在卡头维度下拉，计数全 0（无「创建中」旧叫法）', async () => {
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
     // 2026-10-04 页头状态条整体退役（教学会话同款判例）：复读的「共 N 人」随条删除
     expect(wrapper.find('.mk-status').exists()).toBe(false);
-    // 筛选 chips 与「运行状态」列同源（2026-10-21 逻辑重整：三档对齐，「曾失败」迁到异常列）
-    // 按卡定位到列表卡：页内另有压测参数卡头（2026-10-08 加了标题），取「第一个 .mk-card__head」会取错
-    const head = wrapper.find('.mk-card--fill .mk-card__head');
-    const countOf = (label: string) =>
-      head.findAll('.mk-pill').find((p) => p.text().replace(/\s/g, '').startsWith(label))?.find('.mk-pill__count').text();
-    expect(countOf('运行中')).toBe('0');
-    expect(countOf('停滞')).toBe('0');
-    expect(countOf('已停止')).toBe('0');
+    // 2026-10-27 统一：生命周期是维度下拉，计数在 option 文案里
+    const countOf = (label: string) => filterOption(wrapper as never, '状态', label).text()
+    expect(countOf('进行中')).toBe('进行中（0）')
+    expect(countOf('停滞')).toBe('停滞（0）')
+    expect(countOf('已停止')).toBe('已停止（0）')
+    expect(wrapper.find('.mk-card--fill .mk-card__head .mk-pills').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('曾失败');
     expect(wrapper.text()).not.toContain('创建中');
     wrapper.unmount();
@@ -106,18 +105,18 @@ describe('虚拟学习者定位（D1）', () => {
     /* 活动会话 = running 2 + created 1 = 3：原状态条读数先迁进完成率卡 hint，2026-10-19
        用户走查「KPI hint 在报读数」后再往下沉一级——读数进 title 长释，副行留口径短语 */
     expect(wrapper.find('.mk-status').exists()).toBe(false);
-    const completion = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === '完成率');
+    const completion = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === '完成率（全部会话）');
     expect(completion!.find('.mk-kpi__hint').exists()).toBe(false);
     expect(completion!.attributes('title')).toContain('活动会话 3');
     wrapper.unmount();
   });
 
-  it('manifest 导航中虚拟实验组收敛为两个职责页（实例 + 身份池；批量实验 2026-10-04 下线）', () => {
+  it('manifest 导航中仿真组收敛为两个职责页（实例 + 身份池；批量实验 2026-10-04 下线）', () => {
     const scene = MOCK_SCENES.find((s) => s.id === 'virtual-learners');
     expect(scene).toBeDefined();
-    // 2026-10-24 组名与首项解耦：组＝虚拟实验，避免侧栏两行「虚拟学习者」
-    expect(scene!.group).toBe('虚拟实验');
-    const groupIds = MOCK_SCENES.filter((s) => s.group === '虚拟实验').map((s) => s.id);
+    // 2026-10-26 组名与总览状态条同词（「仿真 · 仿真空闲」）
+    expect(scene!.group).toBe('仿真');
+    const groupIds = MOCK_SCENES.filter((s) => s.group === '仿真').map((s) => s.id);
     expect(groupIds).toEqual(['virtual-learners', 'virtual-learner-cards']);
     expect(MOCK_SCENES.find((s) => s.id === 'batch-experiments')).toBeUndefined();
   });

@@ -42,6 +42,7 @@ import {
   PLATFORM_PROVIDER_ID,
   RegistryEditError,
   addModel,
+  addModels,
   buildProvidersView,
   clearProviderKey,
   createProvider,
@@ -243,6 +244,26 @@ describe('模型', () => {
     await expectEditError(() => addModel('custom', { id: 'cm/1', tier: 'chat' }), 400, '只能用字母');
     await expectEditError(() => addModel('custom', { id: 'cm-2', tier: 'chat', fallbacks: ['ghost'] }), 400, '不在任何供应商目录中');
     await expectEditError(() => addModel('custom', { id: 'cm-3', tier: 'chat', supportsReasoningEffort: true }), 400, '必须同时支持思考模式');
+  });
+
+  it('批量引入：一次写入多个模型并带上推断出的能力标签', async () => {
+    const result = await addModels(PLATFORM_PROVIDER_ID, [
+      { id: 'm-bulk-1', supportsThinking: true, supportsReasoningEffort: true },
+      { id: 'm-bulk-2', vision: true }
+    ]);
+    expect(result.modelIds).toEqual(['m-bulk-1', 'm-bulk-2']);
+    const models = readFile().providers.platform.models;
+    expect(models['m-bulk-1']).toMatchObject({ tier: 'chat', supportsThinking: true, supportsReasoningEffort: true });
+    expect(models['m-bulk-2']).toMatchObject({ tier: 'chat', vision: true });
+  });
+
+  it('批量引入是整批语义：任一 id 已存在则一个都不写', async () => {
+    await expectEditError(
+      () => addModels(PLATFORM_PROVIDER_ID, [{ id: 'm-bulk-new' }, { id: 'm-chat' }]),
+      409,
+      '已有模型'
+    );
+    expect(readFile().providers.platform.models['m-bulk-new']).toBeUndefined();
   });
 
   it('图片理解是独立能力：随模型写入、改回 false 也落盘，视图按布尔回读', async () => {

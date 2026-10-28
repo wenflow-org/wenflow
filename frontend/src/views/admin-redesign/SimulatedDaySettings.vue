@@ -1,12 +1,9 @@
 <template>
-  <!-- 压测参数卡·日期模拟页签体（2026-10-05 重排）：tab 承担了披露职责，原折叠头
-       （标题/▸/收起摘要/v-show）退役，表单在页签内常驻；「启用日期模拟」开关升到页签体首行
-       （原在折叠头上，摘折叠后必须有新家）。loadFailed 守卫不变：设置未加载时禁保存防覆盖 -->
+  <!-- 日期模拟设置体。两种形态：
+       - 默认（独立）：自带「保存日期模拟设置」按钮，自己提交；
+       - managed（由宿主 VirtualLabLoadSettings 管保存）：只出字段，脏态与失败态上抛宿主。 -->
   <div class="sd-settings">
-    <label
-      class="sd-switch sd-settings__enable"
-      :title="form.enabled ? '已开启：允许按自然日推进虚拟学习' : '默认关闭，不影响真实用户'"
-    >
+    <label class="sd-switch sd-settings__enable">
       <!-- 可访问名（审核 #181）：label 唯一文本是状态词，读屏只听到「已关闭 复选框」不知在开关
            什么；给 input 补 aria-label 而不动 span 文案（该 span 是可见状态字，单测亦锁定其文本） -->
       <input v-model="form.enabled" type="checkbox" aria-label="启用日期模拟" @change="onToggleEnabled" />
@@ -34,14 +31,13 @@
         <span class="mk-field__label">每天安排几节</span>
         <input v-model.number="form.lessonsPerDay" type="number" min="1" max="10" class="mk-field__input" @input="dirty = true" />
       </label>
-      <label class="sd-switch" title="开启后按课表自动推进">
+      <label class="sd-switch">
         <input v-model="form.autoAdvanceEnabled" type="checkbox" @change="dirty = true" />
         <span>允许自动推进</span>
       </label>
     </div>
-    <div class="sd-settings__foot">
-      <span v-if="loadFailed" class="sd-settings__hint sd-settings__hint--bad" title="设置加载失败，当前展示的是默认值。为避免用默认值覆盖已保存的配置，保存已禁用，请刷新页面重试">设置未加载，保存已禁用（请刷新重试）</span>
-      <span v-else class="sd-settings__hint">默认关闭，只对虚拟学习者生效，不影响真实用户。</span>
+    <p v-if="loadFailed && !managed" class="sd-settings__hint sd-settings__hint--bad">设置未加载，保存已禁用（请刷新重试）</p>
+    <div v-if="!managed" class="sd-settings__foot">
       <button type="button" class="mk-btn mk-btn--primary" :disabled="!dirty || saving || loadFailed" @click="save">
         {{ saving ? '保存中…' : '保存日期模拟设置' }}
       </button>
@@ -55,8 +51,17 @@ import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import { errMsg } from './live'
 
+const props = withDefaults(defineProps<{
+  /** 宿主统一保存：不出自带保存钮，脏态 / 失败态 / 提交载荷交给宿主 */
+  managed?: boolean
+}>(), { managed: false })
+
 /** enabled 上抛宿主（2026-10-05）：压测参数卡页签标签的「已开启」徽标数据源 */
-const emit = defineEmits<{ (e: 'enabled', v: boolean): void }>()
+const emit = defineEmits<{
+  (e: 'enabled', v: boolean): void
+  (e: 'dirty', v: boolean): void
+  (e: 'failed', v: boolean): void
+}>()
 
 const DEFAULT = {
   enabled: false,
@@ -89,6 +94,8 @@ function onToggleEnabled() {
 
 /* enabled 任何来源的变化（手动开关/服务端回填）都同步页签徽标 */
 watch(() => form.enabled, (v) => emit('enabled', v), { immediate: true })
+watch(dirty, (v) => emit('dirty', v), { immediate: true })
+watch(loadFailed, (v) => emit('failed', v), { immediate: true })
 
 function apply(raw: Partial<typeof DEFAULT> | null | undefined) {
   form.enabled = raw?.enabled === true
@@ -114,22 +121,34 @@ async function load() {
   }
 }
 
+/** 规范化后的提交载荷（宿主统一保存时取这份，越界夹紧规则只有这一处） */
+function payload() {
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(Number(v) || min)))
+  return {
+    enabled: form.enabled,
+    defaultPaceDaysPerAdvance: clamp(form.defaultPaceDaysPerAdvance, 1, 30),
+    maxSimulatedDays: clamp(form.maxSimulatedDays, 1, 365),
+    courseWeekdays: [...form.courseWeekdays].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b),
+    lessonsPerDay: clamp(form.lessonsPerDay, 1, 10),
+    autoAdvanceEnabled: form.autoAdvanceEnabled,
+  }
+}
+
+/** 宿主保存成功：回填服务端值并清脏态 */
+function markSaved(saved: Partial<typeof DEFAULT> | null | undefined) {
+  if (saved) apply(saved)
+  dirty.value = false
+}
+
 async function save() {
+  if (props.managed) return
   saving.value = true
   try {
-    const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(Number(v) || min)))
-    const payload = {
-      enabled: form.enabled,
-      defaultPaceDaysPerAdvance: clamp(form.defaultPaceDaysPerAdvance, 1, 30),
-      maxSimulatedDays: clamp(form.maxSimulatedDays, 1, 365),
-      courseWeekdays: [...form.courseWeekdays].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b),
-      lessonsPerDay: clamp(form.lessonsPerDay, 1, 10),
-      autoAdvanceEnabled: form.autoAdvanceEnabled,
-    }
-    const res = await adminVirtualLearnersApi.updateVirtualLabSettings({ dateSimulation: payload })
+    const body = payload()
+    const res = await adminVirtualLearnersApi.updateVirtualLabSettings({ dateSimulation: body })
     apply((res.data?.data ?? res.data)?.settings?.dateSimulation)
     dirty.value = false
-    toast.success(payload.enabled ? '日期模拟已开启' : '日期模拟已关闭')
+    toast.success(body.enabled ? '日期模拟已开启' : '日期模拟已关闭')
   } catch (e) {
     toast.error(errMsg(e) || '保存失败')
   } finally {
@@ -137,7 +156,8 @@ async function save() {
   }
 }
 
-// 挂载即拉设置：页签体 v-show 常驻挂载（非 v-if），开卡即取服务端配置供页签徽标与表单
+defineExpose({ payload, markSaved })
+
 onMounted(load)
 </script>
 
@@ -152,7 +172,7 @@ onMounted(load)
 .sd-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; }
 .sd-weekdays { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: var(--mk-fs-micro); }
 .sd-weekday { display: flex; align-items: center; gap: 4px; cursor: pointer; }
-.sd-settings__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sd-settings__foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .sd-settings__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sd-settings__hint--bad { color: var(--mk-red, #dc2626); }
 .sd-switch { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); cursor: pointer; }

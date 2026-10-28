@@ -84,7 +84,7 @@
       </section>
 
       <!-- 2. 概念归并审计：可写动作（勾选执行 / 单条确认 / 驳回 / 回滚），默认观察模式。
-           R7 概念本体治理批：三组建议（归并 / 需人工看 / 散键清理）全部给出入口——
+           R7 概念本体治理批：三组建议（归并 / 需人工确认 / 散键清理）全部给出入口——
            此前 dropCandidates 只在类型里声明计数（审计 CC-2）、ambiguous 无操作位； -->
       <section class="mk-card">
         <div class="mk-card__head">
@@ -123,7 +123,7 @@
             <b>{{ detail.audit.stats.autoApplicable }}</b><span>可自动</span>
           </div>
           <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': mrAmbiguousCount > 0 }">
-            <b>{{ mrAmbiguousCount }}</b><span>需人工看</span>
+            <b>{{ mrAmbiguousCount }}</b><span>需人工确认</span>
           </div>
           <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': mrDropCount > 0 }">
             <b>{{ mrDropCount }}</b><span>散键清理</span>
@@ -197,7 +197,7 @@
               <tr>
                 <th class="mr__th-check">选择</th>
                 <th>归并目标</th><th>证据（别名 · 理由）</th><th class="mk-num">置信度</th><th class="mk-num">名称相似度</th>
-                <th>可自动执行</th><th class="mk-th--right">操作</th>
+                <th>可自动执行</th><th class="mk-th--right mk-c-act">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -229,7 +229,7 @@
                   </span>
                 </td>
                 <td>
-                  <!-- 词面闸门结果用胶囊（原型记忆域 pill 状态词汇；与上方审计队列「可自动/需人工看」同标签） -->
+                  <!-- 词面闸门结果用胶囊（原型记忆域 pill 状态词汇；与上方审计队列「可自动/需人工确认」同标签） -->
                   <span
                     class="mk-badge"
                     :class="proposal.autoApplicable ? 'mk-badge--ok' : 'mk-badge--warn'"
@@ -260,7 +260,7 @@
           <p v-else class="mr__sub">本次没有达到置信度阈值的归并建议。</p>
 
           <h4 class="mr__h4">
-            需人工看（不会自动执行）
+            需人工确认（不会自动执行）
             <span class="mr__sub-inline">置信度不足，需人工确认</span>
           </h4>
           <div v-if="detail.audit.ambiguous.length" class="mk-table-scroll">
@@ -276,7 +276,7 @@
             <!-- 表头补明「候选 A / B 是概念键」（2026-10-06 审核 #62）：原表头只写 A / B
                  两个单字母；A/B 两列是无人类可读 label 的裸 conceptKey，与另三表同降 .mr__sub 档。
                  R7：补 选择/操作 两列——此前这组建议只可看不可动（审计 CC-2） -->
-            <thead><tr><th class="mr__th-check">选择</th><th>归并目标（候选 A）</th><th>并入（候选 B）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check">选择</th><th>归并目标（候选 A）</th><th>并入（候选 B）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
             <tbody>
               <tr v-for="(item, index) in detail.audit.ambiguous" :key="`${item.a}-${item.b}-${index}`">
                 <td>
@@ -290,7 +290,10 @@
                 </td>
                 <td class="mr__sub">{{ item.a }}</td>
                 <td class="mr__sub">{{ item.b }}</td>
-                <td class="mr__sub">{{ item.reason || '—' }}</td>
+                <td class="mr__sub">
+                  <template v-if="item.reason">{{ item.reason }}</template>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td>
                   <div class="mk-actions">
                     <button
@@ -328,7 +331,7 @@
               <col />
               <col style="width: 132px" />
             </colgroup>
-            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念标识）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念标识）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
             <tbody>
               <tr v-for="(drop, index) in detail.audit.dropCandidates" :key="`${drop.conceptKey}-${index}`">
                 <td>
@@ -341,7 +344,10 @@
                   />
                 </td>
                 <td class="mr__sub">{{ drop.conceptKey }}</td>
-                <td class="mr__sub">{{ drop.reason || '—' }}</td>
+                <td class="mr__sub">
+                  <template v-if="drop.reason">{{ drop.reason }}</template>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td>
                   <div class="mk-actions">
                     <button
@@ -797,7 +803,7 @@ const detail = ref<ReviewDetail | null>(null)
 const detailLoading = ref(false)
 /** 勾选状态（R7：三组建议共用一套「选中 → 执行」，组内 key 唯一）；归并建议默认只勾「可自动执行」的 */
 const selected = ref<Record<string, boolean>>({})
-/** 需人工看对的勾选（key = `${a} => ${b}`）；散键清理的勾选（key = conceptKey）默认不勾 */
+/** 需人工确认对的勾选（key = `${a} => ${b}`）；散键清理的勾选（key = conceptKey）默认不勾 */
 const selectedAmbiguous = ref<Record<string, boolean>>({})
 const selectedDrops = ref<Record<string, boolean>>({})
 
@@ -810,11 +816,11 @@ const selectedNeedsReview = computed(() => {
   })
 })
 
-/** 需人工看对的勾选键（同序渲染用同一把 key） */
+/** 需人工确认对的勾选键（同序渲染用同一把 key） */
 function ambiguousKey(item: { a: string; b: string }): string {
   return `${item.a} => ${item.b}`
 }
-/** 勾中的「需人工看」对（执行时随确认列表上送） */
+/** 勾中的「需人工确认」对（执行时随确认列表上送） */
 const selectedAmbiguousPairs = computed(() =>
   (detail.value?.audit?.ambiguous ?? [])
     .filter((item) => selectedAmbiguous.value[ambiguousKey(item)] === true)
@@ -857,13 +863,13 @@ const bulkHintText = computed(() =>
 const bulkWarnText = computed(() => {
   const parts = [
     selectedNeedsReview.value.length ? `${selectedNeedsReview.value.length} 条属于「需人工确认」` : '',
-    selectedAmbiguousPairs.value.length ? `${selectedAmbiguousPairs.value.length} 条「需人工看」对` : ''
+    selectedAmbiguousPairs.value.length ? `${selectedAmbiguousPairs.value.length} 条「需人工确认」对` : ''
   ].filter(Boolean)
   return parts.length ? `选中项里 ${parts.join('、')}，执行前请核对证据` : ''
 })
 /** 散键清理建议计数（审计队列格 + 列表空态分支共用） */
 const mrDropCount = computed(() => (detail.value?.audit?.dropCandidates ?? []).length)
-/** 需人工看的对数：取渲染行而非 stats.ambiguous——真实接口不返回该字段，格子会成空读数 */
+/** 需人工确认的对数：取渲染行而非 stats.ambiguous——真实接口不返回该字段，格子会成空读数 */
 const mrAmbiguousCount = computed(() => detail.value?.audit?.ambiguous.length ?? 0)
 
 function resetSelection(audit?: ReviewDetail['audit']) {

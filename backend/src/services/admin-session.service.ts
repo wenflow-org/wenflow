@@ -87,6 +87,52 @@ export function revokeAdminSessions(where: Record<string, unknown>) {
   });
 }
 
+/** 删除已结束会话（已吊销或已过期）：只清历史行，登录事件仍由 login_attempts 留存 */
+export function deleteEndedAdminSessions(where: Record<string, unknown>, now: Date) {
+  return prisma.admin_sessions.deleteMany({
+    where: {
+      ...where,
+      OR: [
+        { revokedAt: { not: null } },
+        { revokedAt: null, expiresAt: { lte: now } },
+      ],
+    },
+  });
+}
+
+/**
+ * 历史保留期：已过期 / 已吊销的会话行保留 14 天，之后惰性删除。
+ * 管理员每次登录都会写一行，若一直不清理，历史量会随登录次数无限增长
+ * （2026-10-28 用户「怎么这么多」：本地 261 行里 57 活跃、204 已结束）。
+ * 登录审计在 login_attempts，不受这里影响。
+ */
+const ADMIN_SESSION_RETENTION_DAYS = 14;
+const ADMIN_SESSION_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
+let lastPruneAt = 0;
+
+export async function pruneAdminSessions(
+  retentionDays = ADMIN_SESSION_RETENTION_DAYS,
+): Promise<number> {
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  const result = await prisma.admin_sessions.deleteMany({
+    where: {
+      OR: [
+        { revokedAt: { not: null, lt: cutoff } },
+        { revokedAt: null, expiresAt: { lt: cutoff } },
+      ],
+    },
+  });
+  return result.count;
+}
+
+/** 列表请求顺带清理：每小时最多执行一次，避免每次加载都扫表 */
+export async function pruneAdminSessionsIfDue(): Promise<number> {
+  const now = Date.now();
+  if (now - lastPruneAt < ADMIN_SESSION_PRUNE_INTERVAL_MS) return 0;
+  lastPruneAt = now;
+  return pruneAdminSessions();
+}
+
 /** 批量取管理员名称（admin_sessions.adminId 为纯列，与 admin_audit_logs 同约定） */
 export async function resolveAdminNames(
   adminIds: string[],

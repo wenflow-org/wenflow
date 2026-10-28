@@ -462,6 +462,10 @@ export interface CardWallEntry {
   email: string | null;
   /** 派生来源模板名（2026-10-16 卡=身份模板）：非空即「已派生实例」，空为身份池里的模板卡 */
   derivedFrom: string | null;
+  /** 故事池任务数（2026-10-27 卡面密度）：创建实例时要勾任务，卡面先给出「这张卡能开几节课」 */
+  taskCount: number;
+  /** 首个任务标题（2026-10-27）：卡面上真正会被开的那节课叫什么，比抽象的学习目标更能判断要不要用 */
+  firstTaskTitle: string | null;
 }
 
 /**
@@ -489,6 +493,8 @@ export function buildCardWallEntries(
     let opening: string | null = null;
     let sourceKind: string | null = null;
     let derivedFrom: string | null = null;
+    let taskCount = 0;
+    let firstTaskTitle: string | null = null;
     try {
       const p = JSON.parse(r.profile || '{}') as Record<string, unknown>;
       const seed = (p.personaSeed || {}) as Record<string, unknown>;
@@ -500,6 +506,11 @@ export function buildCardWallEntries(
       opening = (sc.opening as string) || null;
       sourceKind = (sc.sourceKind as string) || null;
       derivedFrom = ((p.derivedFrom as Record<string, unknown> | undefined)?.name as string) || null;
+      const pool = Array.isArray(p.storyPool) ? (p.storyPool as Array<Record<string, unknown>>) : [];
+      taskCount = pool.length;
+      const first = pool[0];
+      firstTaskTitle =
+        first && typeof first.title === 'string' && first.title.trim() ? first.title.trim() : null;
     } catch {
       /* 坏 JSON：占位展示（名称回退 email/cardKey），不阻断整面卡墙 */
     }
@@ -518,6 +529,8 @@ export function buildCardWallEntries(
       sourceKind,
       email,
       derivedFrom,
+      taskCount,
+      firstTaskTitle,
     };
   });
 }

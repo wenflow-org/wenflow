@@ -22,17 +22,15 @@
       <button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
       <button type="button" class="mk-link ss-deeplink__clear" @click="clearDeepLink">× 清除筛选</button>
     </div>
-    <!-- 常驻分工说明（无深链时） -->
-    <div v-else class="ss-note">
-      <span>展示登录成功产生的会话（可管理/强制下线），登录事件的完整历史（含失败尝试）见</span>
-      <button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
-    </div>
+    <!-- 常驻分工说明已撤（2026-10-27 用户「这文案没用吧」）：登录成功/失败的口径从页面文案
+         看得出，唯一有动作的是审计日志跳转，已归位到卡头右组，不再单占一行。 -->
 
     <!-- 加载失败错误态：仅「整页无数据可显示」时走整页错误（审核 #179：原判据只有 loadError，
          刷新失败会把已渲染的会话表整个顶掉——用户只是想更新数据却丢掉整屏。有旧行时改走
          下方卡内行内 alert 并保留表格，与同单元 DayTimeline「操作失败不顶掉已渲染内容」同口径） -->
     <MkEmptyState
       v-if="loadError && !sessions.length"
+      min
       icon="◌"
       tone="error"
       title="会话列表加载失败"
@@ -52,24 +50,32 @@
       </div>
       <div class="mk-card__head">
         <div class="mk-filter">
-          <div class="mk-pills">
-            <button
-              v-for="p in statusPills"
-              :key="p.id"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': statusFilter === p.id }"
-              :aria-pressed="statusFilter === p.id"
-              :title="`只看${p.label}会话`"
-              @click="statusFilter = statusFilter === p.id ? '' : p.id"
-            >
-              {{ p.label }}<span v-if="countOf(p.id) > 0" class="mk-pill__count">{{ countOf(p.id) }}</span>
-            </button>
-          </div>
-          <button v-if="statusFilter" type="button" class="mk-link" @click="statusFilter = ''">清除筛选</button>
+          <MkPillSelect
+            v-model="statusSelect"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusSelectOptions"
+            :active="!!statusFilter"
+          />
         </div>
-        <div class="mk-card__head-right">
-          <span class="mk-card__meta" :title="countsTitle">{{ totalCount }} 个会话<template v-if="activeCount"> · 活跃 {{ activeCount }}</template><template v-if="truncated"> · 行列表仅含最近 {{ sessions.length }} 条</template></span>
+        <!-- 操作区（2026-10-27 用户「挪到这里，这里的内容不要二了」；随后「这两个不要了」
+             再撤掉行窗口口径与审计跳转）：右组只留两枚批量动作，组头不再重复一套按钮。
+             动作作用域：审计深链指定用户时只作用于该用户，否则覆盖全部管理员。 -->
+        <div class="mk-card__head-right ss-head-acts">
+          <button
+            v-if="bulkCleanupCount"
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :title="`清理${bulkScope.label}已过期 / 已下线的历史会话`"
+            @click="cleanupAllHistory"
+          >清理历史（{{ bulkCleanupCount }}）</button>
+          <button
+            v-if="bulkRevokeCount"
+            type="button"
+            class="mk-btn mk-btn--danger-ghost mk-btn--sm"
+            :title="`下线${bulkScope.label}的全部活跃会话`"
+            @click="revokeAllSessions"
+          >下线全部<template v-if="bulkRevokeCount > 1">（{{ bulkRevokeCount }}）</template></button>
         </div>
       </div>
 
@@ -78,21 +84,16 @@
     <!-- 按管理员分组的标准表格 -->
     <div v-else-if="groups.length" class="ss-body">
       <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="mk-card ss-group">
-        <div class="mk-card__head">
+        <!-- 组头（2026-10-27 用户「这个也不要了」）：单管理员是常态，身份/计数与卡头动作重复，
+             整行撤除让表格直接起读；多管理员时仍保留一行用于区分是谁的会话。 -->
+        <div v-if="groups.length > 1" class="mk-card__head">
           <div class="ss-group__who">
             <strong>{{ g.adminName }}</strong>
             <span v-if="g.adminEmail" class="ss-group__email mono">{{ g.adminEmail }}</span>
-            <span class="ss-group__count">{{ groupCounts(g).total }} 个会话<template v-if="groupCounts(g).active"> · {{ groupCounts(g).active }} 个活跃</template></span>
+            <span class="ss-group__count">
+              {{ groupCounts(g).total }} 个会话<template v-if="groupCounts(g).active"> · 活跃 {{ groupCounts(g).active }}</template><template v-if="endedCount(g)"> · 已结束 {{ endedCount(g) }}</template>
+            </span>
           </div>
-          <button
-            v-if="revokeCount(g)"
-            type="button"
-            class="mk-btn mk-btn--danger-ghost mk-btn--sm"
-            :title="`下线「${g.adminName}」的全部会话`"
-            @click="revokeAll(g)"
-          >
-            下线全部<template v-if="revokeCount(g) > 1">（{{ revokeCount(g) }}）</template>
-          </button>
         </div>
 
         <!-- 活跃会话表（行分页：页码器在卡脚，跨组统一计数） -->
@@ -115,7 +116,7 @@
                 <th>最后活跃</th>
                 <th>过期时间</th>
                 <th>状态</th>
-                <th class="mk-th--right">操作</th>
+                <th class="mk-th--right mk-c-act">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -198,7 +199,7 @@
                   <th>最后活跃</th>
                   <th>过期时间</th>
                   <th>状态</th>
-                  <th class="mk-th--right">操作</th>
+                  <th class="mk-th--right mk-c-act">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -246,7 +247,9 @@
          MkEmptyState 的 icon 属性只吃字符，SVG 走 #icon 具名插槽（组件注释里的既定分工） -->
     <MkEmptyState
       v-else
+      min
       :title="statusFilter ? '当前筛选无会话' : '暂无会话记录'"
+      :description="statusFilter ? '当前状态下没有会话，可清除筛选查看全部。' : '还没有管理员登录会话记录。有人登录后台后，会话会按活跃状态列在这里。'"
       :action-text="statusFilter ? '清除筛选' : ''"
       @action="statusFilter = ''"
     >
@@ -281,6 +284,7 @@ import { Lock } from 'lucide-vue-next'
 import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 
 /** 嵌入模式：作为「运营中心」页「会话安全」tab 渲染（仅去掉外层状态条；宿主承载域计数与刷新）。
     count 事件：会话总数上报（宿主「会话 N」徽章） */
@@ -395,6 +399,16 @@ const statusPills: Array<{ id: SessionStatus; label: string }> = [
   { id: 'revoked', label: '已撤销' },
 ]
 
+/** 卡头「状态」下拉的字符串代理（statusFilter 是 '' | SessionStatus） */
+const statusSelect = computed({
+  get: () => statusFilter.value,
+  set: (v: string) => { statusFilter.value = (v as '' | SessionStatus) }
+})
+const statusSelectOptions = computed(() => [
+  { value: '', label: '全部状态' },
+  ...statusPills.map((p) => ({ value: p.id, label: `${p.label}（${countOf(p.id)}）` }))
+])
+
 function statusOf(s: AdminSessionRow): SessionStatus {
   if (s.revokedAt) return 'revoked'
   if (new Date(s.expiresAt).getTime() <= Date.now()) return 'expired'
@@ -426,22 +440,46 @@ function fullHistorical(g: SessionGroup): number {
   return c.expired + c.revoked
 }
 
-/** 「下线全部」实际会下线的会话数：后端 revoke-all 的作用域是 `revokedAt: null`（全量、无 limit），
-    即「活跃 + 未撤销但已过期」两类；excludeCurrent 再剔除请求者当前 jti（活跃会话）。
-    按钮与确认文案同源，且与后端真实作用域一致（B13 F6-1：原实现只数活跃行，低估作用域）。 */
+/** 已结束会话（过期 + 已撤销）：「清理历史」的条数，删的是这些行 */
+function endedCount(g: SessionGroup): number {
+  return fullHistorical(g)
+}
+
+/** 「下线全部」实际会下线的会话数：后端 revoke-all 只作用于仍活跃的会话
+    （`revokedAt: null` + `expiresAt > now`）；excludeCurrent 再剔除请求者当前 jti。
+    已过期会话不再重复标记，由「清理历史」删除。 */
 function revokeCount(g: SessionGroup): number {
   const c = groupCounts(g)
-  const n = c.active + c.expired
+  const n = c.active
   if (g.adminId === myId.value && currentId.value) return Math.max(0, n - 1)
   return n
 }
 
-/** 卡头口径 title：窗口截断时说明行列表只含最近 N 条，统计仍为全量 */
-const countsTitle = computed(() =>
-  truncated.value
-    ? `统计为全部会话。列表仅含最近 ${sessions.value.length} 条`
-    : '统计与列表均为全部会话'
-)
+/* 卡头批量动作（2026-10-27 从组头收口）：作用域跟当前视图——审计深链指定用户时只作用于
+   该用户，否则覆盖全部管理员（后端 adminId 缺省即全部）。条数读后端全量 adminCounts，
+   缺失（旧响应 / mock）时回落可见分组窗口计数。 */
+const bulkScope = computed<{ adminId: string; label: string }>(() => {
+  const ids = deepLinkUser.value ? groups.value.map((g) => g.adminId) : [...adminCounts.value.keys()]
+  if (ids.length === 1) {
+    const g = groups.value.find((x) => x.adminId === ids[0])
+    return { adminId: ids[0], label: g ? `「${g.adminName}」` : '该管理员' }
+  }
+  return { adminId: '', label: '全部管理员' }
+})
+const bulkCleanupCount = computed(() => {
+  if (!deepLinkUser.value && adminCounts.value.size) {
+    return [...adminCounts.value.values()].reduce((n, c) => n + c.expired + c.revoked, 0)
+  }
+  return groups.value.reduce((n, g) => n + endedCount(g), 0)
+})
+const bulkRevokeCount = computed(() => {
+  if (!deepLinkUser.value && adminCounts.value.size) {
+    const n = [...adminCounts.value.values()].reduce((sum, c) => sum + c.active, 0)
+    // 当前标签页自身的会话不可下线（与后端 excludeCurrent 一致）
+    return currentId.value ? Math.max(0, n - 1) : n
+  }
+  return groups.value.reduce((n, g) => n + revokeCount(g), 0)
+})
 
 /** 全量统计四口径：后端 counts 缺失（旧响应/mock）时回落窗口内计数。
     有值时统计条 / pills / 组头 / 批量下线按钮都读它，保证「全量」自称成立。 */
@@ -607,22 +645,50 @@ async function revoke(s: AdminSessionRow) {
   }
 }
 
-async function revokeAll(g: SessionGroup) {
+async function revokeAllSessions() {
+  const count = bulkRevokeCount.value
+  const scope = bulkScope.value
   const confirmed = await askConfirm({
-    title: '下线该管理员全部会话',
-    message: `将强制下线「${g.adminName}」的全部未撤销会话（含未在列表中显示的会话，共 ${revokeCount(g)} 个，当前登录标签页除外），确定吗？`,
+    title: `下线${scope.label}全部活跃会话`,
+    message: `将强制下线${scope.label}的全部活跃会话（共 ${count} 个，当前登录标签页除外），确定吗？`,
     confirmText: '全部下线',
     busy: true,
   })
   if (!confirmed) return
   try {
-    const res = await adminSessionsApi.revokeAllAdminSessions({ adminId: g.adminId, excludeCurrent: true })
-    const count = res.data?.data?.count ?? revokeCount(g)
-    toast.success(`已下线 ${count} 个会话`)
+    const res = await adminSessionsApi.revokeAllAdminSessions({
+      ...(scope.adminId ? { adminId: scope.adminId } : {}),
+      excludeCurrent: true,
+    })
+    const revoked = res.data?.data?.count ?? count
+    toast.success(`已下线 ${revoked} 个会话`)
     await applyFilters()
     doneConfirm()
   } catch (e) {
     toast.error(`下线失败：${errMsg(e)}`)
+    failConfirm()
+  }
+}
+
+/** 清理已结束会话（已过期 / 已下线）：只删历史行，登录审计在 login_attempts 不受影响 */
+async function cleanupAllHistory() {
+  const count = bulkCleanupCount.value
+  const scope = bulkScope.value
+  const confirmed = await askConfirm({
+    title: `清理${scope.label}的历史会话`,
+    message: `将删除${scope.label}的 ${count} 条已结束会话记录（已过期或已下线），登录审计记录保留。此操作不可撤销，确定吗？`,
+    confirmText: '清理历史',
+    danger: true,
+    busy: true,
+  })
+  if (!confirmed) return
+  try {
+    const res = await adminSessionsApi.cleanupAdminSessions(scope.adminId ? { adminId: scope.adminId } : {})
+    toast.success(`已清理 ${res.data?.data?.count ?? count} 条历史会话`)
+    await applyFilters()
+    doneConfirm()
+  } catch (e) {
+    toast.error(`清理失败：${errMsg(e)}`)
     failConfirm()
   }
 }
@@ -666,22 +732,7 @@ onMounted(async () => {
 /* 状态条走全局 mk-status 体系（shared.css）；此处不再 scoped 覆盖，
    避免遮蔽全局升级（此前重定义导致 mk-status__actions 等新类不生效） */
 
-/* 审计日志分工说明 / 深链横幅 */
-/* 常驻分工说明（原型 .note：次级表面底 + muted 字，无描边） */
-.ss-note {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px 14px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface-2);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
-/* 链接在 --mk-surface-2 底上仅 4.39:1（<4.5 AA）：加深到 --mk-accent-deep（亮色 #1f57cc，
-   对 #eef2fa 实测 5.68:1；暗色自动翻转），与 .mk-badge--self 同款 */
-.ss-note .mk-link { color: var(--mk-accent-deep, #1f57cc); }
+/* 审计日志深链横幅（常驻说明条与卡头审计跳转均已撤，2026-10-27） */
 /* 深链横幅：底色/字色/圆角由 .mk-alert--info 承担，这里只补行内布局 */
 .ss-deeplink {
   display: flex;
@@ -701,6 +752,8 @@ onMounted(async () => {
 
 .ss-body { display: grid; gap: var(--mk-space-4); }
 
+/* 卡头右组：两枚批量动作（2026-10-27 操作区收口） */
+.ss-head-acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 /* 分组卡走全局 .mk-card / .mk-card__head（原型 card 词汇），页面只保留组头内的身份排版 */
 .ss-group__who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
 .ss-group__who strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
@@ -712,8 +765,9 @@ onMounted(async () => {
 .ss-tr--current:hover td { background: color-mix(in srgb, var(--mk-blue-bg) 75%, var(--mk-line)); }
 /* 当前行次要文字用 muted 而非 faint：暗色下 faint 叠 16% 蓝行底仅 4.22:1（<4.5 AA） */
 .ss-tr--current .mk-cell-sub { color: var(--mk-muted); }
+/* 表内空行（colspan 单行）：行高走 .mk-table td 的统一档位，不写纵向硬值
+   ——26px 硬值会在紧凑密度档里比数据行还高，空态比有数据更占地。 */
 .ss-tr--empty td {
-  padding: 26px 14px;
   text-align: center;
   color: var(--mk-faint);
   font-size: var(--mk-fs-micro);

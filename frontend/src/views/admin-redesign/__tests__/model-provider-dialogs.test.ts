@@ -8,6 +8,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ProviderEditorDialog from '../ProviderEditorDialog.vue'
 import ModelEditorDialog from '../ModelEditorDialog.vue'
+import { chooseMkSelect, mkSelectValue } from '@/components/mk/__tests__/mkSelect'
 
 const { createMock, updateMock, addModelMock, updateModelMock } = vi.hoisted(() => ({
   createMock: vi.fn(),
@@ -133,10 +134,9 @@ describe('ProviderEditorDialog', () => {
       baseUrl: 'https://gw.acme.com/v1', keyHint: null, supportsSystemRole: false,
     })
     await flushPromises()
-    const select = w.find('select.mk-field__input')
-    expect((select.element as HTMLSelectElement).value).toBe('fold')
+    expect(mkSelectValue(w, '系统提示词')).toBe('fold')
 
-    await select.setValue('keep')
+    await chooseMkSelect(w, '系统提示词', 'keep')
     updateMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
@@ -149,7 +149,7 @@ describe('ProviderEditorDialog', () => {
       baseUrl: 'https://gw.acme.com/v1', keyHint: null, supportsSystemRole: null,
     })
     await flushPromises()
-    expect((w2.find('select.mk-field__input').element as HTMLSelectElement).value).toBe('auto')
+    expect(mkSelectValue(w2, '系统提示词')).toBe('auto')
   })
 })
 
@@ -163,9 +163,9 @@ describe('ModelEditorDialog', () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: ['platform/m-chat'] }, ...mountOptions })
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
-    await w.find('input[placeholder="deepseek-v4.1-flash"]').setValue('acme-chat')
-    await w.find('.med-adv-body select.mk-field__select').setValue('reasoning')
-    await w.find('input[placeholder="131072"]').setValue('65536')
+    await w.find('.med-modal .med-two input').setValue('acme-chat')
+    await chooseMkSelect(w, '用途', 'reasoning')
+    await w.findAll('.med-adv-body .med-two')[1].findAll('input')[0].setValue('65536')
 
     addModelMock.mockResolvedValue({ data: { success: true, warnings: ['备用链写了 2 条…'] } })
     await btn(w, '保存').trigger('click')
@@ -180,6 +180,23 @@ describe('ModelEditorDialog', () => {
     }))
     // 告警随 saved 事件回传面板（不在弹层里常驻展示）
     expect(w.emitted('saved')?.[0]?.[0]).toEqual({ modelId: 'acme-chat', warnings: ['备用链写了 2 条…'] })
+  })
+
+  it('高级设置：用途只留下拉，能力压成三个紧凑标签（思考 / 推理强度 / 读图）', async () => {
+    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    w.vm.openWith({ providerId: 'acme-gateway', model: null })
+    await flushPromises()
+    // 2026-10-28 用户「不要这个，后面的能力也改一下」：用途提示与能力说明都不再上屏
+    expect(w.text()).not.toContain('推理档用于长思考与复杂判断')
+    expect(w.text()).not.toContain('只勾模型实际支持的能力')
+    expect(w.text()).not.toContain('先思考再回答')
+    expect(w.text()).not.toContain('可调节思考深度')
+    expect(w.text()).not.toContain('可读图与截图')
+    const caps = w.findAll('.med-cap')
+    expect(caps).toHaveLength(3)
+    expect(caps.map((c) => c.text())).toEqual(['思考', '推理强度', '读图'])
+    // 用途仍保留：它决定模型进「对话」还是「推理」分组
+    expect(mkSelectValue(w, '用途')).toBe('chat')
   })
 
   it('勾了推理强度没勾思考：保存时就地拦下并说明依赖（不发请求）', async () => {
@@ -253,7 +270,7 @@ describe('ModelEditorDialog', () => {
     await flushPromises()
     // 占位符随已下线模型归一（deepseek-v4-flash → v4.1-flash）；
     // 「创建后不改」提示已在本次 UI 改造中从对话框移除，断言同步删除
-    expect(w.find('input[placeholder="deepseek-v4.1-flash"]').attributes('disabled')).toBeDefined()
+    expect(w.find('.med-modal .med-two input').attributes('disabled')).toBeDefined()
     updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
@@ -269,13 +286,13 @@ describe('ModelEditorDialog', () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
     w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-gen' })
     await flushPromises()
-    const selects = w.findAll('.med-gen select')
-    expect(selects).toHaveLength(3)
-    expect(selects.map((s) => (s.element as HTMLSelectElement).value)).toEqual(['default', 'default', 'default'])
+    expect(mkSelectValue(w, '思考模式')).toBe('default')
+    expect(mkSelectValue(w, '推理强度')).toBe('default')
+    expect(mkSelectValue(w, '输出格式')).toBe('default')
 
-    await selects[0].setValue('disabled')
-    await selects[1].setValue('max')
-    await selects[2].setValue('json_object')
+    await chooseMkSelect(w, '思考模式', 'disabled')
+    await chooseMkSelect(w, '推理强度', 'max')
+    await chooseMkSelect(w, '输出格式', 'json_object')
     addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
@@ -290,7 +307,7 @@ describe('ModelEditorDialog', () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
     w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-one' })
     await flushPromises()
-    const id = w.find('input[placeholder="deepseek-v4.1-flash"]')
+    const id = w.find('.med-modal .med-two input')
     const label = w.find('input[placeholder="默认跟随模型 ID"]')
     expect((label.element as HTMLInputElement).value).toBe('m-one')
 

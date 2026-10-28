@@ -71,19 +71,18 @@
       />
       <div class="ld-scope" role="group" aria-label="路径范围">
         <label class="ld-scope__label" for="ld-scope-path">路径范围</label>
-        <select
-          id="ld-scope-path"
-          class="mk-filter__select ld-scope__select"
-          :value="scopePathId"
-          :disabled="pathOptionsLoading || !pathOptions.length"
-          @change="scopePathId = ($event.target as HTMLSelectElement).value"
-        >
-          <option v-if="!pathOptionsLoading && !pathOptions.length" value="" disabled>该学习者暂无学习路径</option>
-          <option v-for="p in pathOptions" :key="p.id" :value="p.id">
-            {{ p.title }}（{{ pathStatusText(p.status) }}）{{ p.id === learnerCurrentPathId ? ' · 当前' : '' }}
-          </option>
-        </select>
-        <!-- 路径选项加载态走共享原语（select 内放不下组件），转圈挂在其后：select 不被挤位 -->
+        <div class="ld-scope__select">
+          <MkSelect
+            id="ld-scope-path"
+            v-model="scopePathId"
+            :options="scopeSelectOptions"
+            placeholder="该学习者暂无学习路径"
+            aria-label="路径范围"
+            block
+            :disabled="pathOptionsLoading || !pathOptions.length"
+          />
+        </div>
+        <!-- 路径选项加载态走共享原语，转圈挂在选择器之后：选择器不被挤位 -->
         <MkLoading v-if="pathOptionsLoading" inline min />
       </div>
     </div>
@@ -786,7 +785,9 @@
           </div>
         </div>
         <div v-if="ldSessionRowsFiltered.length" class="mk-table-scroll">
-          <table class="mk-table">
+          <!-- 行整行可点（打开只读座舱）：挂 --click 才有 pointer 光标；键盘入口由主题格的原生
+               button 承担（审核 #20），行本身不设 tabindex，避免与按钮重复落在 Tab 序里。 -->
+          <table class="mk-table mk-table--click">
             <thead>
               <!-- 列方言对齐平台页（2026-10-06 审核 #39「三行并两行」同法），并按用户走查
                    把「阶段」拆回独立列（里程碑是被 阶段切换器 直接筛选的维度，混在身份副行里
@@ -987,6 +988,7 @@ import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from '@/components/mk/MkChart.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import MkGraphExplorer from '@/components/mk/MkGraphExplorer.vue'
 import type { MkGraphConceptFacts } from '@/components/mk/MkGraph.vue'
 import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
@@ -1167,6 +1169,13 @@ async function loadPathOptions(userId: string) {
     pathOptionsLoading.value = false
   }
 }
+/** 作用域下拉的选项：路径标题 + 状态，当前路径额外标注（原原生 option 文案逐字保留） */
+const scopeSelectOptions = computed(() =>
+  pathOptions.value.map((p) => ({
+    value: p.id,
+    label: `${p.title}（${pathStatusText(p.status)}）${p.id === learnerCurrentPathId.value ? ' · 当前' : ''}`
+  }))
+)
 /** 作用域读数：'' = 未定（后端按「当前 active 路径」回落，不是跨路径聚合）→ 也标「当前路径」 */
 const scopeNote = computed(() => {
   const title = pathOptions.value.find((p) => p.id === scopePathId.value)?.title || ''
@@ -1625,7 +1634,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
   // 落点来源：?tab=（列表条目带进来的落点页签，或读者自己切过的页签）> 轴默认。
   // 2026-10-11 曾统一为「概览」；2026-10-18 改为按列表主题落点（学习状态→证据、
   // 记忆与复习→记忆与复习），由列表页带 ?tab=（映射单点在 store 的 LEARNER_DETAIL_LANDING）。
-  // 2026-10-24：账号轴（view=user，从「用户与学习者」进）默认落「账号与许可」——
+  // 2026-10-24：账号轴（view=user，从「用户账号」进）默认落「账号与许可」——
   // 注册表一直这么写，但实现只对空账号才切，有学习数据的账号会落到概览，账号编辑要再切页签。
   const axisDefault: LdTab = subPage.value?.view === 'user' ? 'account' : 'overview'
   tab.value = urlTab ? normalizeLdTab(urlTab) : axisDefault
@@ -1704,7 +1713,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
       if (accountIsVirtual) {
         // 继续按稀疏详情渲染（name 由账号记录兜底，见 liveDetail）
       } else if (subPage.value?.view === 'user') {
-        // 账号轴入口（用户与学习者）且无任何学习侧数据（测试账号常态）：落「账号与许可」
+        // 账号轴入口（用户账号）且无任何学习侧数据（测试账号常态）：落「账号与许可」
         // ——UserAccountPane 自取用户记录、自带错误态与软删恢复入口（原 ?view=user 默认落点语义）
         tab.value = 'account'
       } else {
@@ -3054,10 +3063,8 @@ const snapshotHint = computed(() =>
    纵向：共享档 height:32 + 上下 7px 内衬后内容区只剩 16px，而行高 1.4≈20px，
    中文字形底部会被切；本控件压缩上下内衬并收紧行高，保持 32px 外观高度。 */
 .ld-scope__select {
+  /* 只定宽：触发器视觉由 MkSelect 承担；360 上限避免长路径名把页签行挤折 */
   max-width: min(360px, 100%);
-  padding-top: 4px;
-  padding-bottom: 4px;
-  line-height: 1.2;
 }
 /* 表格不做全出血：末行底边此前贴死卡底（实测仅剩 1px 边框），补 12px 收尾（同卡头下节奏） */
 #ld-panel-sessions .mk-table-scroll,

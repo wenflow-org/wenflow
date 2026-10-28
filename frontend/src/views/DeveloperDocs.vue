@@ -294,7 +294,7 @@ prompts/                     # 仓库根，与 backend/ 同级
             <div class="mini"><strong>Prompt Dry Run</strong><p>候选编译三视图（产物/候选/diff）+ 字段契约编辑。</p></div>
             <div class="mini"><strong>日志三件套</strong><p>执行日志（重试时间线/导出）、Prompt 调用、事件中心 + Trace 瀑布。</p></div>
             <div class="mini"><strong>虚拟学习者</strong><p>辅助模拟/仿真、一键快速代学、传播报告。</p></div>
-            <div class="mini"><strong>连接与安全</strong><p>模型接入、网络策略、可靠性预算、能力健康探测。</p></div>
+            <div class="mini"><strong>连接与安全</strong><p>模型接入、网络策略、可靠性预算与调用读数。</p></div>
           </div>
         </section>
 
@@ -319,7 +319,6 @@ prompts/                     # 仓库根，与 backend/ 同级
             <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/skills · /skills/:name/effective-prompt</code><span>Skill 注册表与生效 Prompt</span></div>
             <div class="api__row"><span class="api__m api__m--post">POST</span><code class="mono">/skills/:name/test</code><span>Skill 在线试跑</span></div>
             <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/agent-prompts · /agent-prompts/compare</code><span>Prompt 版本与对比</span></div>
-            <div class="api__row"><span class="api__m api__m--get">GET</span><code class="mono">/system/capabilities</code><span>AI 能力健康快照</span></div>
           </div>
 
           <div class="callout">

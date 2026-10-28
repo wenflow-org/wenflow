@@ -1,6 +1,6 @@
 /**
  * Skills.vue P1 修复批冒烟：
- * 1. 目录表完成度列（复用对账 completion：live 渲染五档徽章，demo/无对账显示 —）
+ * 1. 对账 completion 只喂「已上线」KPI（列表的完成度列 2026-10-24 已撤：实测全 live，零区分度）
  * 2. 对账面板「仅看异常」切换（未注册/缺 ACTIVE 行过滤；完成度非 live 归「完成度」域，不再并入对账异常）
  * 3. 折叠 pill 口径标注（户口簿全量 vs 目录排除外挂能力）
  */
@@ -9,6 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import Skills from '../Skills.vue';
+import { chooseFilter, filterOption } from './filter-controls';
 import SkillReconciliation from '../SkillReconciliation.vue';
 import { dataSource, liveSkillStatsMap } from '../store';
 import { liveSkillProfiles } from '../live';
@@ -38,8 +39,6 @@ vi.mock('@/api/adminApi', () => ({
   adminGlossaryApi: apiObject(),
   adminAnnouncementsApi: apiObject(),
   adminPlatformSettingsApi: apiObject(),
-  adminCapabilityProbeApi: apiObject(),
-  adminSystemApi: apiObject(),
   adminAuditApi: apiObject(),
   adminFieldRoutingsApi: apiObject(),
   adminPromptWorkbenchApi: apiObject(),
@@ -163,7 +162,7 @@ describe('Skill 目录 P1 修复批', () => {
     liveSkillStatsMap.value = null;
   });
 
-  it('live 模式：目录表渲染完成度五档徽章（复用对账数据）', async () => {
+  it('live 模式：对账数据只喂「已上线」KPI，目录表不再出完成度列', async () => {
     getReconciliationMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     liveSkillProfiles.value = [
       { id: 'live-a', name: 'Live A', category: 'analysis', agentId: 'goal-agent', agentName: '目标 Agent' },
@@ -177,11 +176,13 @@ describe('Skill 目录 P1 修复批', () => {
     };
     const wrapper = await mountSkills();
     expect(getReconciliationMock).toHaveBeenCalled();
-    // 目录表完成度徽章：live → 已上线，draft → 草稿；无对账行 → —
-    expect(wrapper.find('.sk-table tbody .mk-badge--rec-live').exists()).toBe(true);
-    expect(wrapper.find('.sk-table tbody .mk-badge--rec-draft').exists()).toBe(true);
-    expect(wrapper.text()).toContain('已上线');
-    expect(wrapper.text()).toContain('草稿');
+    // 2026-10-24「完成度有什么实际意义吗」：列已撤；2026-10-28 目录改为列表，不再有表格列
+    expect(wrapper.find('.sk-list .mk-badge--rec-live').exists()).toBe(false);
+    expect(wrapper.find('.sk-table').exists()).toBe(false);
+    expect(wrapper.findAll('th')).toHaveLength(0);
+    // 数据没白拉：仍按对账 status=live 计「已上线」KPI（3 行档案里 1 行 live）
+    const live = wrapper.findAll('.mk-kpi').find((k) => k.text().includes('已上线'))!;
+    expect(live.find('.mk-kpi__num').text()).toBe('1');
     wrapper.unmount();
   });
 
@@ -201,13 +202,12 @@ describe('Skill 目录 P1 修复批', () => {
     const wrapper = await mountRecon();
     // 整卡折叠已退役（2026-10-05，details 包壳撤）：面板常开，无需展开步骤
     await flushPromises();
-    const pills = wrapper.findAll('.sk-rec-tools .mk-pill');
-    expect(pills.some((p) => p.text() === '仅看异常')).toBe(true);
+    expect(filterOption(wrapper as never, '范围', '仅看异常')).toBeTruthy();
     const rowsBefore = wrapper.findAll('.sk-rec-table tbody tr.sk-row').length;
     expect(rowsBefore).toBeGreaterThan(2);
     // 点击「仅看异常」→ 仅保留 diff 行（未注册/无生效版本）；live 行与「非 live 但无差集」的草稿行都隐藏
     // （2026-10-07 F6-3：完成度非 live 归「完成度」页签/第 4 张 KPI，不再并入对账异常口径）
-    await pills.find((p) => p.text() === '仅看异常')!.trigger('click');
+    await chooseFilter(wrapper as never, '范围', '仅看异常');
     await nextTick();
     await flushPromises();
     const rowsAfter = wrapper.findAll('.sk-rec-table tbody tr.sk-row').length;
@@ -232,7 +232,7 @@ describe('Skill 目录 P1 修复批', () => {
     expect(wrapper.text()).toContain('失效注册 1');
     expect(wrapper.find('.sk-rec-orphans').text()).toContain('triage-judge');
     // 点「仅看异常」→ 0 行（残留无户口簿行），空态必须披露残留而非「全部对账一致」
-    await wrapper.findAll('.sk-rec-tools .mk-pill').find((p) => p.text() === '仅看异常')!.trigger('click');
+    await chooseFilter(wrapper as never, '范围', '仅看异常');
     await nextTick();
     await flushPromises();
     expect(wrapper.findAll('.sk-rec-table tbody tr.sk-row').length).toBe(0);
@@ -244,9 +244,10 @@ describe('Skill 目录 P1 修复批', () => {
 });
 
 /* 2026-09-29 用户拍板：健康检查/漂移/对账三 tab 退役——三者本是同一份报表的三刀，
-   合一后独立成 /admin/health-center（系统组）。2026-10-04 Prompt 评估由独立场景折入。
+   合一后独立成 /admin/health-center（系统组）。2026-10-04 Prompt 评估由独立场景折入，
+   2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」又拆回独立页 /admin/prompt-eval。
    2026-10-24「模型路由」页签退役（与 Skill 详情「运行时」重复），改为页头弹窗：
-   Skills 现为 Skill 运行 / Prompt 评估两页签。 */
+   Skills 现为单一目录视图，无视图切换。 */
 async function mountHost(path: string) {
   dataSource.value = 'live';
   const router = createRouter({
@@ -254,6 +255,7 @@ async function mountHost(path: string) {
     routes: [
       { path: '/admin/:page?', component: { template: '<div />' } },
       { path: '/admin/health-center', component: { template: '<div />' } },
+      { path: '/admin/prompt-eval', component: { template: '<div />' } },
     ],
   });
   await router.push(path);
@@ -273,13 +275,15 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     liveSkillStatsMap.value = null;
   });
 
-  it('两个页签：Skill 运行 / Prompt 评估，且不再渲染健康中心', async () => {
+  it('单一目录视图：不再有视图切换页签，也不渲染健康中心（Prompt 评估已拆为独立页）', async () => {
     const { wrapper } = await mountHost('/admin/skills');
-    const tabs = wrapper.findAll('.skills-tabs .tab');
-    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', 'Prompt 评估']);
+    expect(wrapper.findAll('.skills-tabs .tab')).toHaveLength(0);
     expect(wrapper.find('.hc-embedded').exists()).toBe(false);
-    // 运行视图在位：KPI 卡带走 run 分支（无档案时 Skill 卡显 0；2026-10-04 状态条已退役）
+    // 目录在位：KPI 卡带（无档案时 Skill 卡显 0；2026-10-04 状态条已退役）
     expect(wrapper.find('.mk-kpi-grid').exists()).toBe(true);
+    // 页头只剩「批量模型配置」——「批量跑评估」随评估页搬走
+    const actions = wrapper.findAll('.mk-pagehead__actions button').map((b) => b.text());
+    expect(actions).toEqual(['批量模型配置']);
     wrapper.unmount();
   });
 
@@ -293,22 +297,19 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     }
   });
 
-  it('点击「Prompt 评估」切换 tab 并同步 ?tab=prompt-eval', async () => {
-    const { wrapper, router } = await mountHost('/admin/skills');
-    await wrapper.findAll('.skills-tabs .tab').find((t) => t.text() === 'Prompt 评估')!.trigger('click');
-    await flushPromises();
-    expect(router.currentRoute.value.query.tab).toBe('prompt-eval');
-    // 离开运行视图后：运行统计带随页签消失（评估页签有自己的读数带）
-    const runRateCard = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '成功率');
-    expect(runRateCard).toBeUndefined();
-    expect(wrapper.text()).not.toContain('仅看需关注');
+  it('老深链 ?tab=prompt-eval 改投独立页 /admin/prompt-eval（?peTab= 原样带走）', async () => {
+    const { wrapper, router } = await mountHost('/admin/skills?tab=prompt-eval&peTab=runs');
+    expect(router.currentRoute.value.path).toBe('/admin/prompt-eval');
+    expect(router.currentRoute.value.query.peTab).toBe('runs');
+    // 宿主键不跟着搬：新页没有 ?tab= 语义，留着只会和页内键混淆
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
     wrapper.unmount();
   });
 
   it('页头「批量模型配置」打开覆盖矩阵弹窗（原「模型路由」页签的替代落点）', async () => {
     const { wrapper } = await mountHost('/admin/skills');
     const btn = wrapper.findAll('.mk-pagehead__actions button').find((b) => b.text() === '批量模型配置');
-    expect(btn, '运行页签页头应有「批量模型配置」').toBeTruthy();
+    expect(btn, '目录页页头应有「批量模型配置」').toBeTruthy();
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
     await btn!.trigger('click');
     await flushPromises();
@@ -321,10 +322,8 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     wrapper.unmount();
   });
 
-  it('老深链 ?tab=model-routing 落到运行页签、打开弹窗并把地址收敛为 ?tab=run', async () => {
+  it('老深链 ?tab=model-routing 打开弹窗并把地址收敛为 ?tab=run', async () => {
     const { wrapper, router } = await mountHost('/admin/skills?tab=model-routing');
-    const selected = wrapper.findAll('.skills-tabs .tab').find((t) => t.attributes('aria-selected') === 'true');
-    expect(selected!.text()).toBe('Skill 运行');
     expect(router.currentRoute.value.query.tab).toBe('run');
     const dialog = wrapper.find('[role="dialog"]');
     expect(dialog.exists()).toBe(true);

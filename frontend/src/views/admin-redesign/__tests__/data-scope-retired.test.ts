@@ -59,7 +59,9 @@ vi.mock('../live', async () => {
     totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / Math.max(1, pageSize))),
     isPageCacheFresh: () => false,
     markPageFetched: vi.fn(),
-    clearPageCache: vi.fn()
+    clearPageCache: vi.fn(),
+    // 顶栏刷新广播（TeachingSessions / GoalConversations 均 watch 它）
+    liveRefreshSeq: ref(0)
   };
 });
 

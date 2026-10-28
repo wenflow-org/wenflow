@@ -124,6 +124,7 @@
             type="button"
             class="composer__send composer__send--stop"
             aria-label="停止生成"
+            :title="STOP_WAIT_HINT"
             @click="live.stop()"
           >
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
@@ -283,7 +284,7 @@
             <div class="msg__content">
               <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
               <!-- 收窄后的 live region：只播报等待文案，不再让整条消息流进读屏队列 -->
-              <div class="msg__meta" aria-live="polite">{{ chatWaitText }}</div>
+              <div class="msg__meta" aria-live="polite">{{ chatWaitMeta }}</div>
             </div>
           </div>
 
@@ -293,7 +294,7 @@
             <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__content msg__content--actions">
               <div class="msg__bubble msg__bubble--html msg__bubble--streaming" v-html="formatMessage(live.streamingText)"></div>
-              <div class="msg__meta">问流 · {{ chatWaitText }}</div>
+              <div class="msg__meta">问流 · {{ chatWaitMeta }}</div>
             </div>
           </div>
 
@@ -367,6 +368,7 @@
               type="button"
               class="composer__send composer__send--stop"
               aria-label="停止生成"
+              :title="STOP_WAIT_HINT"
               @click="live.stop()"
             >
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
@@ -592,6 +594,8 @@ const INPUT_MAX = 4096;
 const CONNECT_FAIL_MSG = '连接失败，没能开始对话。';
 const ATTACH_HINT = '添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框';
 const SEND_SHORTCUT_HINT = 'Enter 发送 · Shift+Enter 换行';
+/** 生成中发送键变成停止方块：补一句 hover 说明，纯图标按钮不靠自己猜 */
+const STOP_WAIT_HINT = '停止等待回复';
 const CLOSE_ESC_HINT = '关闭（Esc 可随时关闭）';
 /* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */
 const entryPlaceholder = computed(() => isNarrow.value ? '先说说你想解决什么…' : '先说说你最近想解决什么，或现在卡在哪里…');
@@ -883,6 +887,10 @@ function stageText(stages: Array<[number, string]>) {
 }
 const chatWaitText = computed(() => stageText(CHAT_WAIT_STAGES));
 const genWaitText = computed(() => stageText(GEN_WAIT_STAGES));
+/** 等待 5 秒后才显示已等待秒数：短回合不闪数字，长回合用户能看到确实在走 */
+const chatWaitMeta = computed(() =>
+  waitTick.value >= 5 ? `${chatWaitText.value} · 已等待 ${waitTick.value}s` : chatWaitText.value
+);
 const supplementMode = ref(false);
 const supplementText = ref('');
 /* 用户消息内联编辑（仅最后一条用户消息可编辑） */

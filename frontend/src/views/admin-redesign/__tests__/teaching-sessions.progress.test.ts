@@ -11,6 +11,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import TeachingSessions from '../TeachingSessions.vue';
 import { dataSource, subPage, closeSubPage } from '../store';
 import { clearPageCache } from '../live';
+import { chooseFilter, filterOptions, filterTrigger, filterValue } from './filter-controls';
 
 const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 
@@ -61,7 +62,7 @@ async function mountLive() {
 }
 
 describe('TeachingSessions 低参与标注（拍板 #1：completed 且用户消息 <2 条，显示口径）', () => {
-  it('completed + messageCount<2 → 状态列出「低参与」badge；≥2 条不出', async () => {
+  it('completed + messageCount<2 → 状态格 title 含「低参与」；≥2 条不出', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -76,15 +77,18 @@ describe('TeachingSessions 低参与标注（拍板 #1：completed 且用户消�
     });
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
-    expect(rows[0].find('.ts-status').text()).toContain('低参与');
-    expect(rows[1].find('.ts-status').text()).not.toContain('低参与');
-    expect(rows[2].find('.ts-status').text()).not.toContain('低参与');
+    const title = (i: number) => rows[i].find('.ts-status').attributes('title') || '';
+    expect(title(0)).toContain('低参与');
+    expect(title(1)).not.toContain('低参与');
+    expect(title(2)).not.toContain('低参与');
+    // 行内只留状态徽章，不再铺备注文本
+    expect(rows[0].find('.ts-status').text()).toBe('已完成');
     wrapper.unmount();
   });
 });
 
 describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后区分「任务完成」与「用户结束」）', () => {
-  it('completed + manual-end → 「手动结束」徽章；task-completed 与缺失不猜', async () => {
+  it('completed + manual-end → 状态格 title 含「手动结束」；task-completed 与缺失不猜', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -104,21 +108,17 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     });
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
-    expect(rows[0].find('.ts-status').text()).toContain('已完成');
-    expect(rows[0].find('.ts-status').text()).toContain('手动结束');
-    expect(rows[0].text()).toContain('停在 1/4');
-    // 徽章 title 不把 manual-end 一律说成用户动作：后台收束悬挂会话也写同一个原因
-    const badge = rows[0].findAll('.ts-status .mk-badge--sm').find((b) => b.text() === '手动结束');
-    const t = badge!.attributes('title') || '';
-    expect(t).toContain('任务未必做完');
-    expect(t).not.toContain('用户主动结束');
-    expect(rows[1].find('.ts-status').text()).not.toContain('手动结束');
-    expect(rows[1].text()).toContain('停在 4/4');
-    expect(rows[2].find('.ts-status').text()).not.toContain('手动结束');
+    const title = (i: number) => rows[i].find('.ts-status').attributes('title') || '';
+    expect(rows[0].find('.ts-status').text()).toBe('已完成');
+    expect(title(0)).toContain('手动结束');
+    expect(title(0)).toContain('第 1 个任务（共 4 个）');
+    expect(title(1)).not.toContain('手动结束');
+    expect(title(1)).toContain('第 4 个任务（共 4 个）');
+    expect(title(2)).not.toContain('手动结束');
     wrapper.unmount();
   });
 
-  it('状态列徽章：主状态徽章带 ts-status__main（68px 定宽），标注徽章不受定宽牵连', async () => {
+  it('状态格：行内只有一枚主状态徽章，结束方式与进度都在 title', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -130,10 +130,10 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     const wrapper = await mountLive();
     const main = wrapper.find('.ts-status .ts-status__main');
     expect(main.exists()).toBe(true);
-    // 低参与 + 手动结束两枚标注徽章都按内容宽（模板里不再落到 .ts-status .mk-badge 那条定宽规则）
-    const sm = wrapper.findAll('.ts-status .mk-badge--sm');
-    expect(sm).toHaveLength(2);
-    sm.forEach((b) => expect(b.classes()).not.toContain('ts-status__main'));
+    // 2026-10-27 用户「还是太多数据了」：格内只留状态徽章，副行文本下线
+    expect(wrapper.findAll('.ts-status .mk-badge')).toHaveLength(1);
+    const title = wrapper.find('.ts-status').attributes('title') || '';
+    expect(title).toContain('手动结束 · 低参与');
     wrapper.unmount();
   });
 });
@@ -149,7 +149,7 @@ afterEach(() => {
 });
 
 describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）', () => {
-  it('live：已完成会话 → 状态/进度列显「停在 x/y」（不渲染进度条），title 保留历史进度', async () => {
+  it('live：已完成会话 → 状态格 title 给「阶段 + 任务位置」，行内只留徽章、不渲染进度条', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -165,19 +165,19 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     });
     const wrapper = await mountLive();
     const headers = wrapper.findAll('th').map((th) => th.text());
-    expect(headers).toContain('状态 / 进度');
+    expect(headers).toContain('状态');
+    expect(headers).not.toContain('状态 / 进度');
     const row = wrapper.find('tbody tr');
-    const prog = row.find('.ts-prog');
-    expect(prog.exists()).toBe(true);
-    // 2026-10-23：生命周期由徽章表达，位置只说「停在 x/y」，不复述结果
-    expect(prog.text()).toBe('停在 2/5');
+    const cell = row.find('.ts-status');
+    // 2026-10-27 用户「还是太多数据了」：进度不再上屏，只进 title
+    expect(cell.text()).toBe('已完成');
+    expect(cell.attributes('title')).toBe('阶段 2/4 · 第 2 个任务（共 5 个）');
     expect(row.find('.mk-minibar').exists()).toBe(false);
-    expect(row.text()).not.toContain('任务 2/5');
-    expect(prog.attributes('title')).toContain('阶段 2/4 · 第 2 个任务（共 5 个）');
+    expect(row.text()).not.toContain('2/5');
     wrapper.unmount();
   });
 
-  it('live：失败/超时中断态 → 状态徽章 + 「停在 x/y」', async () => {
+  it('live：失败/超时中断态 → 状态徽章，进度在 title', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -198,9 +198,9 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
     expect(rows[0].text()).toContain('失败');
-    expect(rows[0].text()).toContain('停在 3/4');
+    expect(rows[0].find('.ts-status').attributes('title')).toContain('第 3 个任务（共 4 个）');
     expect(rows[1].text()).toContain('超时');
-    expect(rows[1].text()).toContain('停在 1/2');
+    expect(rows[1].find('.ts-status').attributes('title')).toContain('第 1 个任务（共 2 个）');
     // 合并后不再有进度条：结果着色只由状态徽章承担
     expect(rows[0].find('.mk-minibar').exists()).toBe(false);
     wrapper.unmount();
@@ -223,12 +223,12 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const row = wrapper.find('tbody tr');
     expect(row.text()).toContain('已被替代');
-    expect(row.text()).toContain('停在 2/4');
+    expect(row.find('.ts-status').attributes('title')).toContain('第 2 个任务（共 4 个）');
     expect(row.find('.ts-status__main').classes()).toContain('mk-badge--warn');
     wrapper.unmount();
   });
 
-  it('live：老数据无 progress → 进度列显示 —', async () => {
+  it('live：老数据无 progress → 状态格 title 为空，不留占位符', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -236,13 +236,13 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
       }
     });
     const wrapper = await mountLive();
-    const row = wrapper.find('tbody tr');
-    expect(row.text()).toContain('—');
-    expect(row.find('.ts-prog').exists()).toBe(false);
+    const cell = wrapper.find('tbody tr .ts-status');
+    expect(cell.text()).toBe('进行中');
+    expect(cell.attributes('title') || '').toBe('');
     wrapper.unmount();
   });
 
-  it('live：终态但 totalTasks=0 → 出灰色「—」，不套绿色终态样式（绿色破折号会被读成「第 0 格也算完成」）', async () => {
+  it('live：终态但 totalTasks=0 → 不把 0/0 或 — 冒充进度', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -252,14 +252,13 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
       }
     });
     const wrapper = await mountLive();
-    const row = wrapper.find('tbody tr');
-    expect(row.find('.ts-prog--done').exists()).toBe(false);
-    // 合并列内仍是「—」守卫（不再有独立的进度格）
-    expect(row.find('.ts-status .mk-na').text()).toBe('—');
+    const cell = wrapper.find('tbody tr .ts-status');
+    expect(cell.text()).toBe('已完成');
+    expect(cell.attributes('title') || '').not.toContain('/0');
     wrapper.unmount();
   });
 
-  it('live：taskIndex=0（结束时还没定位到任务）→ title 说「未进入具体任务」，不说「第 1 个」（与可见的 0/4 自相矛盾）', async () => {
+  it('live：taskIndex=0（结束时还没定位到任务）→ title 说「未进入具体任务」，不说「第 1 个」', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -269,9 +268,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
       }
     });
     const wrapper = await mountLive();
-    const prog = wrapper.find('tbody tr').find('.ts-prog');
-    expect(prog.text()).toBe('停在 0/4');
-    const title = prog.attributes('title') || '';
+    const title = wrapper.find('tbody tr .ts-status').attributes('title') || '';
     expect(title).toContain('未进入具体任务（共 4 个）');
     expect(title).not.toContain('第 1 个任务');
     wrapper.unmount();
@@ -279,7 +276,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
 });
 
 describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对照）', () => {
-  it('KPI 面板（2026-10-17 分布带退役后四卡）：需关注 / 缺总结 / 有建议 / 完结率，chips 显命中数（2026-10-11 统一判例）', async () => {
+  it('KPI 五卡：需关注 / 异常 / 缺总结 / 有建议 / 完结率；卡头不再常驻任何 chip', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -287,20 +284,18 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    // 三运维关注量 + 完结率住 MkKpi 卡带（值 = attentionCount / missingWrapupCount / advisoryCount / 1-已完成占比）
+    // 四运维关注量 + 完结率住 MkKpi 卡带（值 = attentionCount / abnormal / missing / advisory / 已完成占比）
     const tiles = wrapper.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议', '完结率', '异常终态']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0', '0%', '1']);
-    // KPI 孪生 chips 去计数（学习状态判例）：pill 退为纯筛选开关
-    const chip = (label: string) =>
-      wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
-    expect(chip('需关注').find('.mk-pill__count').exists()).toBe(true);
-    expect(chip('缺总结').find('.mk-pill__count').exists()).toBe(true);
-    expect(wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill .mk-pill__count').exists()).toBe(true);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '异常', '缺总结', '有建议', '完结率']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '1', '0', '0%']);
+    /* 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：KPI 是读数唯一出处，
+       也是快捷筛选入口；卡头不再有常驻 chip 组——筛选生效时只出现「已应用」胶囊。 */
+    expect(wrapper.find('.mk-card__head .mk-pills').exists()).toBe(false);
+    expect(wrapper.find('.mk-card__head .ts-view-chip').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it('状态条退役（2026-10-04）：需关注 / 缺总结住焦点 chips 且显命中数，点选即筛选', async () => {
+  it('「需关注」KPI 可点：点卡 = 打开视图（以可移除胶囊出现），再点关闭', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -308,24 +303,48 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    // 页头状态条整体退役：需关注 / 缺总结与 chips 同源同数、异常与分布条「异常终态」段同源同数
-    expect(wrapper.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
-    const chip = (label: string) =>
-      wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
-    // 「全部」不显数 = 卡头 meta 的已加载行数（同 People 页判例：同一数字不两处渲染）
-    expect(chip('全部').find('.mk-pill__count').exists()).toBe(false);
-    expect(chip('需关注').text()).toBe('需关注1');
-    expect(chip('缺总结').text()).toBe('缺总结1');
-    // 点选 = 既有「需关注」筛选口径（attention !== low）：只剩失败行
-    await chip('需关注').trigger('click');
-    expect(chip('需关注').attributes('aria-pressed')).toBe('true');
-    const rows = wrapper.findAll('tbody tr');
-    expect(rows).toHaveLength(1);
-    expect(rows[0].text()).toContain('用户a');
+    const tile = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '需关注')!;
+    expect(tile.element.tagName).toBe('BUTTON');
+    await tile.trigger('click');
+    await nextTick();
+    /* 视图不是维度：Polaris 判例——派生视图以「已应用 + 可移除」chip 表达，激活才占位。
+       筛选行里因此看得见「现在看的是需关注」，不必再养一组单选胶囊。 */
+    const viewChip = wrapper.find('.mk-card__head .ts-view-chip');
+    expect(viewChip.exists()).toBe(true);
+    expect(viewChip.text()).toContain('需关注');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1);
+    // 就地清除（Carbon：已应用的筛选必须能不打开容器就清掉）
+    await viewChip.trigger('click');
+    await nextTick();
+    expect(wrapper.find('.mk-card__head .ts-view-chip').exists()).toBe(false);
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2);
     wrapper.unmount();
   });
 
-  it('异常堆积告警（原 tsDashTone bad 档）：失败/收尾失败/超时合计 ≥ 10 → 「异常」chip 转红 + title 披露阈值', async () => {
+  it('同一维度只有一处入口：进行中 = 状态下拉，缺总结 = 总结下拉（点 KPI 卡落到它）', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: { items: [makeItem('a', { status: 'failed' }), makeItem('b', { status: 'active' })] }
+      }
+    });
+    const wrapper = await mountLive();
+    expect(wrapper.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
+    // 卡头不再有「全部 / 进行中 / 需关注 / 缺总结」这组单选胶囊
+    expect(wrapper.find('.mk-card__head .mk-pills[aria-label="焦点筛选"]').exists()).toBe(false);
+    // 「进行中」归状态下拉
+    expect(filterOptions(wrapper as never, '状态')).toContain('进行中');
+    // 「缺总结」归总结下拉：点 KPI 卡 → 下拉落到 missing，整枚胶囊激活，列表只剩缺总结行
+    const missingTile = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '缺总结')!;
+    await missingTile.trigger('click');
+    await nextTick();
+    expect(filterValue(wrapper as never, '总结')).toBe('missing');
+    expect(wrapper.find('.mk-filter button.mk-pill--active').text()).toContain('缺总结');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('异常堆积告警：失败/收尾失败/超时合计 ≥ 10 → 「异常」KPI 转红 + hint 披露阈值', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -333,15 +352,15 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const abn = wrapper.find('.ts-abn-chip');
-    expect(abn.exists()).toBe(true);
-    expect(abn.classes()).toContain('ts-abn-chip--heap');
+    const abn = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '异常')!;
+    expect(abn.classes()).toContain('mk-kpi--bad');
+    expect(abn.find('.mk-kpi__hint').text()).toBe('异常堆积');
     expect(abn.attributes('title')).toContain('≥ 10');
     expect(abn.attributes('title')).toContain('失败 / 收尾失败 / 超时');
     wrapper.unmount();
   });
 
-  it('卡头「有建议」开关可点穿：服务端 onlyWithAdvisory 过滤 toggle（再点取消）；建议徽章读运营口径', async () => {
+  it('「有建议」KPI 可点穿：服务端 onlyWithAdvisory 过滤 toggle；卡头出现可移除胶囊', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -365,33 +384,38 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const link = wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill');
-    expect(link.text()).toBe('有建议1');
-    expect(link.attributes('aria-pressed')).toBe('false');
-    // 徽章 = 运营视角状态（待确认），不是学员端「建议先确认路径调整」原句
-    const adv = wrapper.find('.ts-adv-badge');
-    expect(adv.text()).toBe('待确认调整');
-    expect(adv.classes()).toContain('mk-badge--bad');
-    const title = adv.attributes('title') || '';
+    // 2026-10-27 用户「还是太多数据了」：建议处置不再占行内位置，只进总结格 title
+    expect(wrapper.find('.ts-adv-note').exists()).toBe(false);
+    const out = wrapper.find('tbody tr .ts-out');
+    // 进行中会话没有总结：行内只显示空值占位，建议细节在 title
+    expect(out.text()).toBe('—');
+    const title = out.attributes('title') || '';
+    expect(title).toContain('未生成');
     expect(title).toContain('高优先级');
     expect(title).toContain('影响后续路径');
     expect(title).toContain('触发原因：前置缺口');
     expect(title).toContain('建议动作：先补强再推进');
     expect(title).toContain('处置：未处置');
     expect(title).not.toContain('不会覆盖你已完成的内容');
-    // 点击 → 服务端过滤（onlyWithAdvisory: true），再点 → 取消（参数收敛）
-    await link.trigger('click');
+    // 点击 KPI 卡 → 服务端过滤（onlyWithAdvisory: true），卡头出现「有建议」已应用胶囊
+    const tile = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '有建议')!;
+    expect(tile.attributes('aria-pressed')).toBe('false');
+    await tile.trigger('click');
     await flushPromises();
     expect(listMock).toHaveBeenLastCalledWith(expect.objectContaining({ onlyWithAdvisory: true, limit: 1000 }));
-    expect(wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').attributes('aria-pressed')).toBe('true');
-    await wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').trigger('click');
+    expect(tile.attributes('aria-pressed')).toBe('true');
+    const viewChip = wrapper.find('.mk-card__head .ts-view-chip');
+    expect(viewChip.text()).toContain('有建议');
+    // 胶囊就地清除 → 取消服务端过滤
+    await viewChip.trigger('click');
     await flushPromises();
     const lastArg = listMock.mock.calls[listMock.mock.calls.length - 1][0];
     expect(lastArg.onlyWithAdvisory).toBeUndefined();
+    expect(wrapper.find('.mk-card__head .ts-view-chip').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it('建议已被学习者「保持原计划」→ 徽章退为中性与已决态，title 记处置动作', async () => {
+  it('建议已被学习者「保持原计划」→ 行内不铺建议标记，title 记处置动作', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -414,15 +438,40 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const adv = wrapper.find('.ts-adv-badge');
-    expect(adv.text()).toBe('已保持计划');
-    expect(adv.classes()).toContain('mk-badge--muted');
-    expect(adv.classes()).not.toContain('mk-badge--bad');
-    expect(adv.attributes('title')).toContain('处置：学员选择保持原计划');
+    const out = wrapper.find('tbody tr .ts-out');
+    expect(out.text()).toBe('—');
+    expect(out.attributes('title')).toContain('处置：学员选择保持原计划');
     wrapper.unmount();
   });
 
-  it('卡头「异常」开关可点穿：失败/收尾失败/超时 状态多选筛选 toggle；计数由分布条红段单源承载', async () => {
+  it('课后总结：有总结 / 缺总结都用徽章（绿实心 / 琥珀虚线），未生成按空值', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('done', { status: 'completed', wrapup: { status: 'complete', summary: { topicSummary: '总结' } } }),
+            makeItem('miss', { status: 'completed', wrapup: null }),
+            makeItem('active', { status: 'active', wrapup: null })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const rows = wrapper.findAll('tbody tr');
+    const ok = rows[0].find('.ts-out .mk-badge');
+    expect(ok.text()).toBe('有总结');
+    expect(ok.classes()).toContain('mk-badge--ok');
+    const missing = rows[1].find('.ts-out .mk-badge');
+    expect(missing.text()).toBe('缺总结');
+    expect(missing.classes()).toContain('mk-badge--warn');
+    expect(rows[2].find('.ts-out .mk-na').text()).toBe('—');
+    // 旧的灰色文字档位下线，两档统一走徽章
+    expect(wrapper.find('.ts-out__text').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('「异常」KPI 可点即筛：落到状态下拉的「异常」档，再点取消；与下拉同一状态', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -436,17 +485,20 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const abn = wrapper.find('.ts-abn-chip');
-    // 2026-10-11 统一判例：chip 显命中数（失败 / 收尾失败 / 超时合计）
-    expect(abn.text()).toBe('异常2');
+    const abn = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '异常')!;
+    expect(abn.find('.mk-kpi__num').text()).toBe('2');
     expect(abn.attributes('aria-pressed')).toBe('false');
     await abn.trigger('click');
     await nextTick();
     expect(wrapper.findAll('tbody tr')).toHaveLength(2);
-    expect(wrapper.find('.ts-abn-chip').attributes('aria-pressed')).toBe('true');
-    await wrapper.find('.ts-abn-chip').trigger('click');
+    /* KPI 卡与「状态」下拉共用 statusFilter：点卡后下拉的当前值也必须是 abnormal，
+       不再维护第二套 abnormalOnly 开关（同一维度只有一处状态）。 */
+    expect(filterValue(wrapper as never, '状态')).toBe('abnormal');
+    expect(abn.attributes('aria-pressed')).toBe('true');
+    await abn.trigger('click');
     await nextTick();
     expect(wrapper.findAll('tbody tr')).toHaveLength(3);
+    expect(filterValue(wrapper as never, '状态')).toBe('');
     wrapper.unmount();
   });
 
@@ -468,7 +520,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('时长按分钟解释（后端 duration 单位是分钟）：90 → 1 小时 30 分、1600 → 26 小时 40 分；长时阈值进 title；未知任务类型回退「—」+ title 原文', async () => {
+  it('时长按分钟解释（后端 duration 单位是分钟）：90 → 1 小时 30 分、1600 → 26 小时 40 分；title 只给读数，不再标长时；未知任务类型回退「—」+ title 原文', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -486,11 +538,12 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(rows[1].text()).toContain('26 小时 40 分');
     expect(rows[0].text()).toContain('—');
     expect(rows[0].find('td .mk-cell-sub').attributes('title')).toBe('任务类型原文：weird_type');
-    expect(rows[1].find('.ts-ia').attributes('title')).toContain('≥ 25 分钟按长时标注');
+    expect(rows[1].find('.ts-ia').attributes('title')).toContain('时长 26 小时 40 分');
+    expect(rows[1].find('.ts-ia').attributes('title')).not.toContain('长时标注');
     wrapper.unmount();
   });
 
-  it('筛选：一行到底——chips 全在卡头，状态下拉与时间下拉收进「筛选」弹层', async () => {
+  it('筛选：一行到底——一维一枚胶囊下拉，标志用单组 chips，无隐藏弹层', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -500,29 +553,36 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const wrapper = await mountLive();
     // 表前只有一行：快筛条 .ts-toolbar 退役（chips 并回卡头，2026-10-04）
     expect(wrapper.find('.ts-toolbar').exists(), '快筛条已并回卡头一行').toBe(false);
-    // 状态 / 时间 = 筛选弹层里的 select（枚举 = 全部状态 + statusOptions 10 档）
-    await wrapper.find('.mk-adv .mk-btn').trigger('click');
-    const sel = wrapper.find('.mk-adv__pop select[aria-label="按状态筛选"]');
-    expect(sel.exists()).toBe(true);
-    expect(sel.findAll('option').map((o) => o.text())).toEqual([
-      '全部状态', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
+    // 2026-10-27：卡头维度下拉统一为 MkPillSelect（描边胶囊触发器 + 自绘 listbox），
+    // 原生 select 已退役——option 文案与选择结果不变，查询走 filter-controls。
+    expect(filterTrigger(wrapper as never, '状态').exists()).toBe(true);
+    expect(filterOptions(wrapper as never, '状态')).toEqual([
+      '全部状态', '异常（失败 · 超时）', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
     ]);
-    expect(wrapper.find('.mk-adv__pop select[aria-label="按开始时间筛选"]').exists()).toBe(true);
-    // 卡头两组 chips：焦点（单选，全部不显数）+ 快捷（两个独立开关）
-    const groups = wrapper.findAll('.mk-card__head .mk-pills');
-    expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['焦点筛选', '快捷筛选']);
-    expect(wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
-      '全部', '进行中', '需关注', '缺总结'
-    ]);
-    expect(wrapper.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
-      '有建议', '异常'
-    ]);
-    await sel.setValue('failed');
+    // 总结三档筛选（总览「评估失败 / 降级总结」的落地入口）也在主栏
+    expect(filterOptions(wrapper as never, '总结')).toEqual(['全部总结', '降级总结', '评估失败', '缺总结']);
+    /* 2026-10-27：课型 / 开始时间从「筛选」弹层提到主栏——Carbon 的筛选模式明确
+       「多个类别不得收进菜单/下拉」；卡头不再有弹层触发器，维度一维一枚胶囊下拉。 */
+    expect(wrapper.find('.mk-adv').exists()).toBe(false);
+    expect(filterOptions(wrapper as never, '课型')).toEqual(['全部课型', '正课', '复习课', '延伸课']);
+    expect(filterOptions(wrapper as never, '开始时间')).toEqual(['全部时间', '近 7 天', '近 30 天']);
+    // 卡头不再有常驻 chip 组：KPI 是读数与入口，筛选区只留维度下拉 + 已应用视图胶囊
+    expect(wrapper.find('.mk-card__head .mk-pills').exists()).toBe(false);
+    expect(wrapper.find('.mk-card__head .ts-view-chip').exists()).toBe(false);
+    await chooseFilter(wrapper as never, '状态', '失败');
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
-    // 弹层里生效的筛选数标在触发钮上（收起来也不丢状态）
-    expect(wrapper.find('.mk-adv .mk-btn .mk-pill__count').text()).toBe('1');
+    /* 2026-10-27 用户「清除筛选也不想要」：工具条不再挂文字链，每个维度自己复位
+       （下拉选回「全部…」），不再有第三个重复入口 */
+    expect(wrapper.findAll('.mk-filter .mk-link').some((b) => b.text() === '清除筛选')).toBe(false);
+    await chooseFilter(wrapper as never, '开始时间', '近 7 天');
+    expect(filterValue(wrapper as never, '开始时间')).toBe('7d');
+    await chooseFilter(wrapper as never, '状态', '全部状态');
+    await chooseFilter(wrapper as never, '开始时间', '全部时间');
+    expect(filterValue(wrapper as never, '状态')).toBe('');
+    expect(filterValue(wrapper as never, '开始时间')).toBe('');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2);
     wrapper.unmount();
   });
 

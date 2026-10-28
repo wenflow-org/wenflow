@@ -544,11 +544,14 @@
             </div>
             <div v-if="adjustScope === 'from'" class="adjust-scope__picker">
               <span>从第</span>
-              <select v-model.number="adjustFromStage" class="adjust-scope__select">
-                <option v-for="(opt, oi) in reshapeFromOptions" :key="oi" :value="opt.stageNumber">
-                  {{ opt.stageNumber }} 阶段{{ opt.title ? ` · ${opt.title}` : '' }}
-                </option>
-              </select>
+              <div class="adjust-scope__select">
+                <MkSelect
+                  v-model="adjustFromStage"
+                  :options="reshapeFromStageOptions"
+                  aria-label="起始阶段"
+                  block
+                />
+              </div>
               <span>阶段起，调整到路径结束</span>
             </div>
             <p v-if="adjustScope !== 'next' && !reshapeFromOptions.length" class="adjust-form__warn">
@@ -659,6 +662,7 @@ import {
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
+import MkSelect from '@/components/mk/MkSelect.vue';
 import { retryOnceOnTransient } from '@/utils/retry';
 
 /* 调整闭环里的失败/清理提示多处复用，收成单源避免改一处漏一处 */
@@ -1058,6 +1062,14 @@ const reshapeFromOptions = computed(() => stages.value
       && !tasks.some((t) => t.status === 'in_progress');
   })
   .map((s) => ({ stageNumber: stageNo(s, 0), title: s.title || s.name || `第 ${stageNo(s, 0)} 阶段` })));
+
+/** MkSelect 选项：label 与原 option 文案逐字一致，value 保留 stageNumber（number，不做字符串化） */
+const reshapeFromStageOptions = computed<ReadonlyArray<{ value: number | null; label: string }>>(() =>
+  reshapeFromOptions.value.map((opt) => ({
+    value: opt.stageNumber,
+    label: `${opt.stageNumber} 阶段${opt.title ? ` · ${opt.title}` : ''}`,
+  }))
+);
 
 /** 第一个未完成阶段号（用作「从当前起」默认选项） */
 const firstOpenStageNo = computed(() => {
@@ -2288,14 +2300,10 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--muted);
 }
+/* 包裹层只限宽，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉） */
 .adjust-scope__select {
   max-width: 300px;
-  padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-md);
-  background: var(--surface);
-  font-size: 12px;
-  color: var(--ink);
+  min-width: 0;
 }
 /* AI 诊断建议卡（auto 场景） */
 .ai-advice {

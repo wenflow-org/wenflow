@@ -8,6 +8,7 @@ import {
   PLATFORM_PROVIDER_ID,
   RegistryEditError,
   addModel,
+  addModels,
   buildProvidersView,
   clearProviderKey,
   createProvider,
@@ -118,6 +119,21 @@ router.post('/:id/models', async (req, res) => {
     setAuditAction(res, 'model-provider-model-add', { targetType: 'model-provider', targetId: req.params.id });
     setAuditAfter(res, { ...req.body, modelId: result.modelId });
     await okWithView(res, result.warnings, `模型「${result.modelId}」已添加`);
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.post('/:id/models/bulk', async (req, res) => {
+  try {
+    const models = Array.isArray(req.body?.models) ? req.body.models : [];
+    const result = await addModels(req.params.id, models);
+    setAuditAction(res, 'model-provider-model-bulk-add', {
+      targetType: 'model-provider',
+      targetId: req.params.id,
+    });
+    setAuditAfter(res, { modelIds: result.modelIds });
+    await okWithView(res, result.warnings, `已引入 ${result.modelIds.length} 个模型`);
   } catch (error) {
     fail(res, error);
   }

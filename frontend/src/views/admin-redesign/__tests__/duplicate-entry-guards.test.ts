@@ -18,7 +18,9 @@ describe('重复操作入口守卫', () => {
     const src = read('Users.vue')
     expect(src).not.toContain('menuRole')
     expect(src).not.toContain('设为管理员')
-    expect(src).toContain('<span class="mk-field__label">角色</span>')
+    // 表单已抽成 UserFormDialog（列表行与详情页卡头共用一份），角色字段随之搬家
+    expect(src).toContain('UserFormDialog')
+    expect(read('UserFormDialog.vue')).toContain('<span class="mk-field__label">角色</span>')
   })
 
   it('虚拟画像：学习详情只在页头右缘留一处，⋯ 菜单不再重复', () => {
@@ -40,17 +42,18 @@ describe('重复操作入口守卫', () => {
     expect(host).not.toContain('adminSkillsApi.testSkill')
   })
 
-  it('运行时配置只有一个保存钮（卡头，脏时才出）', () => {
+  it('运行时配置只有配置弹层里一颗保存钮，卡头不再有分段保存', () => {
     const src = read('skill-design/runtime-tab.vue')
-    const buttons = src.match(/@click="saveRuntime"/g) || []
-    expect(buttons.length).toBe(1)
-    expect(src).toContain('v-if="dirtyNow"')
+    expect(src.match(/@click="saveRuntime"/g) ?? []).toHaveLength(1)
+    expect(src).not.toContain('sdp-card__save')
+    expect(src).toContain('@click="openConfig"')
   })
 
-  it('接入页：单组脏且保存钮在本页签时不出整页保存条（切走 / 多组才出）', () => {
+  it('接入页：连接与策略只在连接设置弹层里有一颗保存钮，不再有整页保存条', () => {
     const src = read('ApiConfig.vue')
-    expect(src).toContain('v-if="showSaveBar" class="ac-save"')
-    expect(src).toContain('const showSaveBar = computed')
+    expect(src).not.toContain('class="ac-save"')
+    expect(src).not.toContain('showSaveBar')
+    expect(src.match(/@click="saveConnModal"/g) ?? []).toHaveLength(1)
   })
 
   it('供应商设置弹窗不再重复行内的启用开关与密钥输入（仅创建时出现）', () => {
@@ -71,11 +74,21 @@ describe('重复操作入口守卫', () => {
     expect(src).not.toContain('按会话归组查看')
   })
 
-  it('审计日志时间范围 chip 只回显，不再与「筛选」钮同开弹层', () => {
+  it('审计日志：时间范围与动作都在主栏，卡头不再有「筛选」弹层', () => {
     const src = read('AuditLogs.vue')
-    // 只留「筛选」钮一个触发点
-    expect((src.match(/advOpen = !advOpen/g) || []).length).toBe(1)
-    expect(src).toMatch(/<span\s+class="mk-pill al-range"/)
+    /* 2026-10-27：动作维度从弹层上提到主栏后，这一页没有弹层了——
+       同类别的多个筛选不得收进菜单/下拉（Carbon），只装一项的弹层更是纯隐藏。 */
+    expect(src).not.toContain('advOpen')
+    expect(src).not.toContain('mk-adv')
+    // 2026-10-24 用户「时间范围和筛选重新设计一下」：胶囊里是真 select，不再是不可点的 <span>
+    // 2026-10-26 卡头统一：形态收进共享 MkPillSelect（.mk-pill + 透明 select）
+    expect(src).toContain('<MkPillSelect')
+    expect(src).toContain('v-model="timeRange"')
+    expect(src).toContain('aria-label="按动作筛选"')
+    // 页内不再自带 .al-range 私有类（三页逐字重复的同一段 CSS 已删）
+    expect(src).not.toMatch(/^\.al-range/m)
+    expect(src).not.toContain('class="mk-pill al-range"')
+    expect(src).not.toContain('<span class="mk-cell-sub">时间范围</span>')
   })
 
   it('运营中心：公告卡不再重复「全部公告」入口；嵌入空态不给第二颗主钮', () => {
@@ -102,15 +115,19 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain("'orchestration-steps',")
   })
 
-  it('目标对话：路径列只报生成状态，下钻只有「详情」一个入口', () => {
-    // 2026-10-22 用户「查看路径和详细重复了」：两者都开 session-real 座舱，
-    // 差别只是落 Path 页签还是默认页签。保留「详情」（座舱内切页签），路径列回到状态徽章。
+  it('目标对话：行点击进座舱，路径页签入口只留在 ⋯ 菜单', () => {
+    // 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
+    // 行点击已落默认页签，操作列不再重复「详情」；路径页签入口收进 ⋯ 菜单，
+    // 操作列只留溢出菜单，不再出现整行可见的文本链接。
     const src = read('GoalConversations.vue')
-    expect(src).not.toMatch(/查看路径</)
-    expect(src).not.toContain('openPathPage')
-    expect(src).not.toContain("stage: 'path'")
-    expect(src).toContain('@click.stop="openDetail(r)"')
     expect(src).toContain('@click="openDetail(r)"')
+    expect(src).not.toContain('>详情</button>')
+    expect(src).not.toContain('@click.stop="openDetail(r)"')
+    expect(src).toContain('>查看路径</button>')
+    expect(src).toContain('menuOpenPath(r)')
+    expect(src).not.toContain('@click.stop="openPathStage(r)"')
+    expect(src).toContain('function openPathStage')
+    expect(src).toContain("openSubPage('session-real', r.id, { stage: 'path' })")
   })
 
   it('路径治理：重试生成只服务 failed 行（停滞信号已退役）', () => {

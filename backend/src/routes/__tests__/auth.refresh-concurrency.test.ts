@@ -52,10 +52,6 @@ jest.mock('../../services/platform-settings.service', () => ({
   getPlatformSettings: jest.fn()
 }))
 
-jest.mock('../../services/ai-capability-health.service', () => ({
-  aiCapabilityHealthService: { isCapabilityBlocked: jest.fn() }
-}))
-
 jest.mock('../../services/auth/register-quota.service', () => ({
   registerQuotaService: {
     assertWithinDailyQuota: jest.fn(),

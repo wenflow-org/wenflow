@@ -7,6 +7,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 import Settings from '../Settings.vue';
 
 const {
@@ -120,7 +121,7 @@ describe('Settings 我的 MCP 工具', () => {
     const inputs = form.findAll<HTMLInputElement>('input.uc-field__input');
     await inputs[0].setValue('new-server');      // ID
     await inputs[1].setValue('新服务');           // 名称
-    await form.findAll('select')[0].setValue('mcp'); // 连接方式
+    await chooseMkSelect(w, '连接方式', 'mcp');   // 连接方式
     await inputs[2].setValue('https://new.example/mcp'); // Endpoint
 
     await form.find('button.uc-btn--primary').trigger('click');

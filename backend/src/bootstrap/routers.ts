@@ -48,7 +48,6 @@ import adminSessionConsoleRoutes from '../routes/admin/session-console';
 import adminBatchExperimentsRoutes from '../routes/admin/batch-experiments';
 import adminProjectionAccessGrantsRoutes from '../routes/admin/projection-access-grants';
 import adminFeedbackRoutes from '../routes/admin/feedback';
-import adminSystemStatusRoutes from '../routes/admin/system-status';
 import adminMcpRoutes from '../routes/admin/mcp';
 import adminPluginsRoutes from '../routes/admin/plugins';
 import adminHealthCenterRoutes from '../routes/admin/health-center';
@@ -198,7 +197,6 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/batch-experiments', ...adminRouteMiddleware, adminBatchExperimentsRoutes);
   app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
   app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
-  app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
   app.use('/api/admin/health-center', ...adminRouteMiddleware, adminHealthCenterRoutes);
   app.use('/api/admin/glossary', ...adminRouteMiddleware, adminGlossaryRoutes);
   // 运维工具（时间推进模拟 / outbox 死信重放）：路由内部自带 /devtools 前缀，直接挂载到 /api/admin

@@ -91,6 +91,10 @@ class LearningStateGuidanceService {
       // 共享聚合（去冗余）：四表查询/统计/learningState 构造统一走 assembleLearningState
       const assembled = await assembleLearningState(userId, { snapshotScope: 'global', pathsTake: 3 });
       if (!assembled) return null;
+      /* 新学习者还没有快照：下游摘要/投影都按「有 snapshot」构造，直接访问 dynamicState
+         会抛错并在日志里留下 refresh failed。没有快照就没有可给的建议，静默返回 null，
+         由前端展示「完成第一次学习后…」的静态空态。 */
+      if (!assembled.learnerSnapshot) return null;
 
       const { paths, sessions, primaryPath, learnerSnapshot, learningState, warnings, sessionWrapup } = assembled;
 

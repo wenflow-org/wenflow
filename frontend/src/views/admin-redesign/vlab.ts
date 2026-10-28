@@ -4,6 +4,24 @@
  * （质量徽章提取 extractQuality 已随裁判独立面移除——2026-09-27 拍板，VL 页面不再展示裁判/保真分。）
  */
 
+/**
+ * 学生对抗度（frictionBudget）的唯一中文词表：启动弹层、提示词试跑、画像页默认难度共用。
+ * 同一个后端枚举在两处两套词（「无摩擦 / 压力测试」vs「配合 / 极端」）会被读成两个参数。
+ */
+export const FRICTION_OPTIONS = [
+  { value: 'none', label: '配合' },
+  { value: 'low', label: '犹豫' },
+  { value: 'normal', label: '正常' },
+  { value: 'high', label: '难缠' },
+  { value: 'stress_test', label: '极端' }
+] as const
+
+export type FrictionBudget = (typeof FRICTION_OPTIONS)[number]['value']
+
+export function frictionLabel(value: string | null | undefined): string {
+  return FRICTION_OPTIONS.find((o) => o.value === value)?.label || '正常'
+}
+
 /* ---------- 会话阶段推进（V2：Goal → Path → Learn → Wrapup） ---------- */
 
 export const VLAB_STAGES = ['goal', 'path', 'learn', 'wrapup'] as const

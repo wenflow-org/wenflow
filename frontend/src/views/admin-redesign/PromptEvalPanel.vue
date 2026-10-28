@@ -1,23 +1,23 @@
 <template>
-  <!-- 面板（2026-10-04 独立场景下线，折入 Skills 宿主「Prompt 评估」页签）。多根片段（2026-10-06 审核
-       #87）：KPI 带移到宿主页签卡外，与 run 页签同构（KPI 在卡外、卡内只放页签+工具栏+表格），
+  <!-- 面板（2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」：拆回独立页 PromptEval.vue，
+       侧栏 Skill 组；2026-10-04 曾折入 Skills 宿主页签）。多根片段（2026-10-06 审核
+       #87）：KPI 带在卡外，卡内只放页签+工具栏+表格，
        不再把 KPI/页签/筛选/表格全塞进同一张 .mk-card--fill（ADMIN_VISUAL_LAYER_SPEC §163）。
-       原页头退役——主操作「批量跑评估」上移宿主页头（defineExpose 供宿主驱动）。 -->
-  <!-- 运行中常显条（#86）：批量/试跑是真 LLM 调用且跨页签存活（标志模块级），
-       切到别的页签再回来仍能看到「还在跑」，不再只靠常驻 toast -->
+       本面板仍无页头——主操作「批量跑评估」在宿主页页头（defineExpose 供宿主驱动）。 -->
+  <!-- 运行中常显条（#86）：批量/试跑是真 LLM 调用且跨页面存活（标志模块级），
+       切到别的页面再回来仍能看到「还在跑」，不再只靠常驻 toast -->
   <div v-if="running" class="mk-alert mk-alert--row mk-alert--info pe-running" role="status" aria-live="polite">
     <span class="mk-alert__msg">{{ runningInfo || '评估运行中…' }}</span>
   </div>
-  <!-- KPI 带 2026-10-15 迁回宿主读数槽位（用户走查「位置不对」）：宿主 Skills 的槽位是
-       「页头之下、页签栏之上」（Skill 运行 / Prompt 评估两条带都在那），本带此前留在面板根片段里
-       即落在页签栏之下——同页签切一下读数带就换位置。现由宿主 v-if="tab==='prompt-eval'" 渲染，
+  <!-- KPI 带由宿主页渲染在「页头之下、面板之上」的槽位（2026-10-15 用户走查「位置不对」；
+       2026-10-25 宿主由 Skills 页签换成独立页，槽位关系不变）。本面板不再自己渲染，
        数据经 defineExpose 的 kpiView 供出（与 runBatch 同法）。 -->
 
   <div class="mk-card mk-card--fill pe">
     <!-- 卡内主视图切换（原型 renderPromptEval card > .tabs 页签 + 工具栏 + 页签体；
          对齐 Users.vue / ExecLogs.vue / AuditLogs.vue 卡内页签判例。内层页签寻址用
-         ?peTab=（宿主 ?tab= 归 Skills 页签所有，二者不共键） -->
-    <!-- 主视图切换（全局 .tabs/.tab 原语，判例 Skills.vue:58-62）：
+         ?peTab=——本页唯一的页签键 -->
+    <!-- 主视图切换（全局 .tabs/.tab 原语，判例 Skills.vue 的目录工具条）：
            2026-10-06 审核收口——此前页内自搓 .pe-tabs/.pe-tab 是全仓最后一份 scoped 拷贝，
            与全局逐字重复且缺 transition（hover/激活硬切）。弹窗内两组改用 MkSubTabs -->
       <div class="tabs" role="tablist" aria-label="评估视图切换" @keydown="onTabKeydown">
@@ -28,25 +28,31 @@
       <!-- 筛选/工具栏行（两页签共用 agent 筛选；原型 cases 工具栏右侧的 primary sm
            「新建用例」落在同行最右，仅用例页签可见） -->
       <div class="pe-filter">
-        <!-- onAgentFilterChange：用例与历史共用该筛选，切换时两边都重拉（原只刷用例） -->
-        <select v-model="agentFilter" class="mk-filter__select" aria-label="按 Agent 筛选" @change="onAgentFilterChange">
-          <option value="">全部 Agent</option>
-          <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
-        </select>
+        <!-- onAgentFilterChange：用例与历史共用该筛选，切换时两边都重拉（原只刷用例）
+             2026-10-26 卡头统一：维度筛选走共享 MkPillSelect（与全站列表页同形态） -->
+        <MkPillSelect
+          v-model="agentFilter"
+          label="归属"
+          aria-label="按 Agent 筛选"
+          :options="agentSelectOptions"
+          :active="!!agentFilter"
+          @update:model-value="onAgentFilterChange"
+        />
         <!-- 原「用例驱动：为 goal-conversation 等 Agent 维护评估集…」说明行已删
              （2026-10-17 用户走查「这种文案清理掉」）：页头副文、两个页签名、
              空态正文与「新建用例 / 批量跑评估」按钮已经把同一件事说了四遍，
              且句中硬编码了一个 Agent id，Agent 目录一变就是过期示例。 -->
-        <button v-if="tab === 'cases'" type="button" class="mk-btn mk-btn--sm mk-btn--primary pe-filter__action" @click="openCreate">新建用例</button>
+        <!-- 2026-10-26 评审：空库时隐藏工具栏这颗「新建用例」，只留空态中央那颗（同文案同动作） -->
+        <button v-if="tab === 'cases' && cases.length" type="button" class="mk-btn mk-btn--sm mk-btn--primary pe-filter__action" @click="openCreate">新建用例</button>
       </div>
 
     <!-- 用例 Tab -->
     <div v-if="tab === 'cases'" id="pe-panel-cases" role="tabpanel" aria-labelledby="pe-tab-cases" class="pe-panel">
-      <MockSkeletonTable v-if="casesLoading && !cases.length" :cols="6" />
+      <MockSkeletonTable v-if="casesLoading && !cases.length" :cols="7" />
       <div v-else-if="cases.length" class="mk-table-scroll pe-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容；
              长内容（用例名/期望摘要）由 mk-cell-main 上限与 pe-expect 截断兜底 -->
-        <table class="mk-table mk-table--click">
+        <table class="mk-table mk-table--click mk-table--nowrap">
           <thead>
             <tr>
               <th
@@ -80,20 +86,20 @@
                 :aria-sort="caseSortState('updated')"
                 @click="toggleCaseSort('updated')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleCaseSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
-            <!-- 原型 2105：用例行 data-action="open-skill" → 点击/回车打开对应 Skill 详情；
-                 行内按钮一律 stop，键盘冒泡在 openCaseSkill 内按 target 守卫 -->
+            <!-- 2026-10-26 评审：行点击开该用例的编辑弹窗（行内已有「编辑」，原点击却把人带去
+                 Skill 详情——想看这例的输入/期望却离开了本页）。「去 Skill」只留在 ⋯ 菜单与运行详情 -->
             <tr
               v-for="c in sortedCases"
               :key="c.id"
               tabindex="0"
               role="button"
-              :aria-label="`查看用例 ${c.name} 对应的 Skill 详情`"
-              @click="openCaseSkill(c)"
-              @keydown.enter="openCaseSkill(c, $event)"
+              :aria-label="`编辑用例 ${c.name}`"
+              @click="openEdit(c)"
+              @keydown.enter="openCaseEdit(c, $event)"
             >
               <td>
                 <div class="mk-cell-main">
@@ -104,7 +110,7 @@
               <td><span class="mk-badge mk-badge--info" :title="agentLabel(c.agentId)">{{ agentLabel(c.agentId) }}</span></td>
               <!-- P3（设计评审 4.3-19）：「消息」列头下放的是模式词「模拟」，列头与内容错位——
                    列头改「消息数」；模拟用例该格改 mk-badge--muted 徽章与数量值视觉区分（title 保留原解释） -->
-              <td class="mk-num" :title="c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟用例：学生话由模拟器生成，无需手写消息' : ''">
+              <td class="mk-num">
                 <span v-if="c.messages.length === 0 && c.expectations?.mode === 'simulated'" class="mk-badge mk-badge--muted">模拟</span>
                 <template v-else>{{ c.messages.length }}</template>
               </td>
@@ -114,11 +120,12 @@
               </td>
               <td>
                 <span class="mk-badge" :class="c.enabled ? 'mk-badge--ok' : 'mk-badge--muted'">{{ c.enabled ? '启用' : '停用' }}</span>
-                <span
+                <button
                   v-if="c.personaMissing"
+                  type="button"
                   class="mk-badge mk-badge--warn pe-persona-missing"
-                  title="引用的虚拟学习者已被删除：批量评估会跳过该用例，请重选学生人设或改用场景描述"
-                >人设失效</span>
+                  @click.stop="openEdit(c, true)"
+                >人设失效</button>
               </td>
               <td :title="fmtDate(c.updatedAt)">{{ timeAgo(c.updatedAt) }}</td>
               <td>
@@ -129,7 +136,7 @@
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === c.id" @click.stop="toggleMenu(c.id)">⋯</button>
                     <div v-if="openMenu === c.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" @click="menuEdit(c)">编辑用例</button>
+                      <button type="button" class="mk-menu__item" @click="menuGoSkill(c)">查看该 Skill</button>
                       <button type="button" class="mk-menu__item" :disabled="running" @click="menuRunSingle(c)">单条试跑</button>
                       <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuDelete(c)">删除</button>
                     </div>
@@ -142,10 +149,10 @@
       </div>
       <MkEmptyState
         v-else-if="casesFailed"
+        min
         tone="error"
         icon="!"
         title="评估用例加载失败"
-        description="无法从服务读取用例列表。"
         action-text="重试"
         @action="reloadCases"
       />
@@ -154,7 +161,6 @@
         icon="◌"
         min
         title="还没有评估用例"
-        description="为 Agent 维护输入消息与期望，跑评估验证 prompt 改动是否达标。"
         action-text="新建用例"
         @action="openCreate"
       />
@@ -204,7 +210,7 @@
                 :aria-sort="runSortState('created')"
                 @click="toggleRunSort('created')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleRunSort('created')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              <th class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -225,7 +231,7 @@
                 <div class="mk-cell-main">
                   <strong>{{ runRateText(r) }} · {{ r.caseCount }} 例 × {{ r.summary.repeatCount ?? 1 }} 次</strong>
                   <span class="mk-cell-sub">{{ agentLabel(r.agentId) }} · {{ timeAgo(r.createdAt) }}</span>
-                  <span class="mk-cell-sub" :title="`run id ${r.id}`">#{{ shortId(r.id, 8, 4) }} · {{ modeText(r.mode) }} · {{ promptSourceText(r.promptSource) }} v{{ r.promptVersion ?? '—' }}</span>
+                  <span class="mk-cell-sub" :title="r.id">#{{ shortId(r.id, 8, 4) }} · {{ modeText(r.mode) }} · {{ promptSourceText(r.promptSource) }} v{{ r.promptVersion ?? '—' }}</span>
                 </div>
               </td>
               <td><span class="mk-badge mk-badge--info">{{ agentLabel(r.agentId) }}</span></td>
@@ -251,10 +257,10 @@
       </div>
       <MkEmptyState
         v-else-if="runsFailed"
+        min
         tone="error"
         icon="!"
         title="评估历史加载失败"
-        description="无法从服务读取评估历史。"
         action-text="重试"
         @action="reloadRuns"
       />
@@ -281,9 +287,14 @@
             <div class="pe-form-grid">
               <label class="mk-field" :class="{ 'mk-field--error': errors.agentId }">
                 <span class="mk-field__label">助手能力 <em class="mk-field__req">*</em></span>
-                <select v-model="form.agentId" class="mk-field__select" :disabled="!!editingId">
-                  <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
-                </select>
+                <MkSelect
+                  v-model="form.agentId"
+                  :options="AGENT_OPTIONS"
+                  aria-label="助手能力"
+                  block
+                  :disabled="!!editingId"
+                  :error="!!errors.agentId"
+                />
                 <span class="mk-field__hint">{{ agentDesc }}</span>
                 <span v-if="errors.agentId" class="mk-field__err">{{ errors.agentId }}</span>
               </label>
@@ -309,10 +320,12 @@
                 <template v-if="form.inputSource === 'manual'">
                   <div class="pe-msgs">
                     <div v-for="(m, i) in form.messages" :key="i" class="pe-msg">
-                      <select v-model="m.role" class="mk-input pe-msg__role">
-                        <option value="user">学生</option>
-                        <option value="assistant">助手</option>
-                      </select>
+                      <MkSelect
+                        v-model="m.role"
+                        :options="MESSAGE_ROLE_OPTIONS"
+                        aria-label="角色"
+                        block
+                      />
                       <input v-model="m.content" class="mk-input pe-msg__content"
                         :placeholder="m.role === 'user' ? '例如：我想考英语，帮帮我' : '助手历史回复（可选，模拟多轮）'" />
                       <button type="button" class="mk-link mk-link--danger" :disabled="form.messages.length <= 1" @click="form.messages.splice(i, 1)">✕</button>
@@ -328,14 +341,15 @@
                     <textarea v-model="form.scenario" class="mk-field__textarea" rows="2"
                       placeholder="例如：我想考英语，每周只能挤两次一小时" />
                     <span v-if="errors.scenario" class="mk-field__err">{{ errors.scenario }}</span>
-                    <span class="mk-field__hint">一句话描述学生是谁、想干什么。跑评估时虚拟学习者按此扮演学生，说得更真实。</span>
                   </div>
                   <label class="mk-field">
                     <span class="mk-field__label">学生人设 <span class="mk-field__opt">（可选）</span></span>
-                    <select v-model="form.personaId" class="mk-field__select">
-                      <option value="">为这个场景新建（自动生成学生人设）</option>
-                      <option v-for="v in virtualLearners" :key="v.id" :value="v.id">{{ v.label }}</option>
-                    </select>
+                    <MkSelect
+                      v-model="form.personaId"
+                      :options="personaSelectOptions"
+                      aria-label="学生人设"
+                      block
+                    />
                   </label>
                   <!-- 模拟参数：一行内联，不折叠（收敛门禁字段为进阶配置，挪入下方「高级校验」折叠） -->
                   <div class="pe-params">
@@ -345,13 +359,12 @@
                     </label>
                     <label class="pe-param">
                       <span class="pe-param__label">学生对抗度</span>
-                      <select v-model="form.frictionBudget" class="mk-input">
-                        <option value="none">none · 配合</option>
-                        <option value="low">low · 犹豫</option>
-                        <option value="normal">normal · 正常</option>
-                        <option value="high">high · 难缠</option>
-                        <option value="stress_test">stress · 极端</option>
-                      </select>
+                      <MkSelect
+                        v-model="form.frictionBudget"
+                        :options="FRICTION_BUDGET_OPTIONS"
+                        aria-label="学生对抗度"
+                        block
+                      />
                     </label>
                   </div>
                 </template>
@@ -365,7 +378,6 @@
                 <label class="mk-field">
                   <span class="mk-field__label">必须做到 <span class="mk-field__opt">（人话，逗号分隔）</span></span>
                   <input v-model="form.mustContain" class="mk-field__input" :placeholder="agentMustContainPlaceholder" />
-                  <span class="mk-field__hint">回复必须包含这些内容才算通过，例如：{{ agentMustContainExample }}</span>
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">不能出现</span>
@@ -376,23 +388,19 @@
                 <summary>高级校验</summary>
                 <div v-if="form.agentId === 'skill:goal-conversation'" class="mk-field">
                   <span class="mk-field__label">期望输出阶段</span>
-                  <input v-model="form.expectedStage" class="mk-field__input mono" placeholder="understanding / proposal / confirmed" />
-                  <span class="mk-field__hint">助手内部应进入的阶段（选填）。</span>
+                  <input v-model="form.expectedStage" class="mk-field__input mono" />
                 </div>
                 <div v-if="form.agentId === 'skill:path-planning'" class="mk-field">
                   <span class="mk-field__label">期望里程碑数</span>
                   <input v-model.number="form.expectedMilestones" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：3" />
-                  <span class="mk-field__hint">助手必须拆出恰好这么多阶段里程碑。</span>
                 </div>
                 <div v-if="form.agentId === 'skill:stage-designer'" class="mk-field">
                   <span class="mk-field__label">期望子任务数</span>
                   <input v-model.number="form.expectedSubtaskCount" type="number" min="1" max="8" class="mk-field__input mono" placeholder="例如：4" />
-                  <span class="mk-field__hint">助手必须拆出恰好这么多子任务。</span>
                 </div>
                 <label class="mk-field">
                   <span class="mk-field__label">输出结构字段 <span class="mk-field__opt">（进阶）</span></span>
                   <input v-model="form.mustInclude" class="mk-field__input mono" :placeholder="`例如：${agentFieldHint}`" />
-                  <span class="mk-field__hint">{{ agentLabel(form.agentId) }} 的合法输出字段：{{ agentFieldHint }}。只在想精确卡结构时填。</span>
                 </label>
                 <div v-if="isStructuredSkill(form.agentId)" class="mk-field">
                   <span class="mk-field__label">完整输入结构（JSON，一般不用填）</span>
@@ -405,7 +413,6 @@
                 <div v-if="form.inputSource === 'simulated'" class="mk-field">
                   <span class="mk-field__label">对话收尾条件 <span class="mk-field__opt">（进阶）</span></span>
                   <input v-model="form.convergeRequires" class="mk-field__input mono" placeholder="real_problem,confirmedProposal" />
-                  <span class="mk-field__hint">模拟对话收集齐这些信息才算聊完，一般保持默认即可。</span>
                 </div>
               </details>
               <label class="mk-field">
@@ -416,7 +423,7 @@
 
             <label class="mk-field mk-field--switch">
               <input v-model="form.enabled" type="checkbox" />
-              <span class="mk-field__label" style="margin:0">参与批量评估（不勾就只单独试跑时用）</span>
+              <span class="mk-field__label" style="margin:0">参与批量评估</span>
             </label>
             <div v-if="formError" class="mk-alert" role="alert">{{ formError }}</div>
           </div>
@@ -448,7 +455,7 @@
               <!-- 首段徽章行（原型 .ovl__body 首段 pills）：通过率 / 通过数为 summary 行上已有字段；
                    passRate 缺失显「—」+ title「暂无评测数据」（不 `?? 0` 伪装全挂）；阈值披露于 title -->
               <div class="pe-detail__pills">
-                <span class="mk-badge" :class="passTone(runDetail.summary)" :title="detailPassRateText === '—' ? '暂无评测数据：该运行未回传通过率' : RATE_THRESHOLD_NOTE">通过率 {{ detailPassRateText }}</span>
+                <span class="mk-badge" :class="passTone(runDetail.summary)" :title="RATE_THRESHOLD_NOTE">通过率 {{ detailPassRateText }}</span>
                 <span class="mk-badge mk-badge--muted">通过 {{ runDetail.summary.passedCount ?? '—' }} / {{ runDetail.summary.totalRuns ?? '—' }}</span>
               </div>
               <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：summary 数值不再用页面级 MkKpi 卡 -->
@@ -469,7 +476,7 @@
                       <strong>{{ res.caseName }} <span class="mk-na">({{ res.caseId }})</span></strong>
                       <span class="mk-badge" :class="res.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ res.passed ? '通过' : '未通过' }}</span>
                       <!-- 失败用例就近跳转（评审「失败用例无『去改 Prompt』链路」）：openCaseSkill 同口径剥 skill: 前缀进 Skill 详情 -->
-                      <button v-if="!res.passed && runDetail?.agentId" type="button" class="mk-link" title="打开该用例对应的 Skill 详情（改 Prompt 前先看上下文）" @click="goCaseSkill(runDetail.agentId)">查看该 Skill</button>
+                      <button v-if="!res.passed && runDetail?.agentId" type="button" class="mk-link" @click="goCaseSkill(runDetail.agentId)">查看该 Skill</button>
                       <span class="pe-result-row__meta">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
                     </div>
                     <div v-if="!res.passed" class="pe-result-row__checks">
@@ -578,7 +585,7 @@
                 </table>
               </div>
             </template>
-            <MkEmptyState v-else compact title="无可对比的用例明细" />
+            <MkEmptyState v-else compact title="两次运行没有共同用例" />
           </div>
           <footer class="mk-drawer__foot">
             <button type="button" class="mk-btn" @click="closeCompare">关闭</button>
@@ -593,8 +600,8 @@
 /* 模块级共享状态（与 <script setup> 编译进同一模块，故用命名空间导入避免 ref 重名） */
 import * as vue from 'vue'
 
-/* 运行互斥标志提到模块级（#86）：宿主 Skills.vue 用 v-else-if 挂载本面板，切页签即卸载实例——
-   实例内的 running 随卸载消失，切回后按钮恢复可点，可再发起第二批真实 LLM 调用（并发烧 token）。
+/* 运行互斥标志提到模块级（#86）：宿主页 PromptEval.vue 挂载本面板，离开页面即卸载实例——
+   实例内的 running 随卸载消失，回来按钮恢复可点，可再发起第二批真实 LLM 调用（并发烧 token）。
    模块级 ref 跨挂载存活，任何实例都读同一枚标志。 */
 const sharedRunning = vue.ref(false)
 /** 运行中条文案（用例数 / 试跑名）：模块级同样跨卸载存活 */
@@ -620,6 +627,8 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 interface EvalCase {
   id: string
@@ -686,10 +695,32 @@ const AGENT_META: Record<string, { label: string; desc: string; fields: string; 
   },
 }
 const agents = Object.entries(AGENT_META).map(([id, m]) => ({ id, label: m.label }))
+/** 助手能力下拉选项（旧原生 select 的 v-for 选项，文案不变） */
+const AGENT_OPTIONS = agents.map((a) => ({ value: a.id, label: a.label }))
+/** 消息角色：值与旧原生 select 一致（user / assistant） */
+const MESSAGE_ROLE_OPTIONS: Array<{ value: 'user' | 'assistant'; label: string }> = [
+  { value: 'user', label: '学生' },
+  { value: 'assistant', label: '助手' }
+]
+/** 学生对抗度档位（文案与旧原生 select 逐字一致） */
+const FRICTION_BUDGET_OPTIONS: Array<{
+  value: 'none' | 'low' | 'normal' | 'high' | 'stress_test'
+  label: string
+}> = [
+  { value: 'none', label: '配合' },
+  { value: 'low', label: '犹豫' },
+  { value: 'normal', label: '正常' },
+  { value: 'high', label: '难缠' },
+  { value: 'stress_test', label: '极端' }
+]
+/** 胶囊内嵌下拉的选项（空值 = 全部 Agent） */
+const agentSelectOptions = [
+  { value: '', label: '全部 Agent' },
+  ...agents.map((a) => ({ value: a.id, label: a.label }))
+]
 const agentLabel = (id: string) => AGENT_META[id]?.label || id
 const agentDesc = computed(() => AGENT_META[form.value.agentId]?.desc || '')
 const agentFieldHint = computed(() => AGENT_META[form.value.agentId]?.fields || '')
-const agentMustContainExample = computed(() => AGENT_META[form.value.agentId]?.mustContainExample || '')
 const agentMustContainPlaceholder = computed(() => `例如：${AGENT_META[form.value.agentId]?.mustContainExample || ''}`)
 
 const tab = ref<'cases' | 'runs'>('cases')
@@ -747,7 +778,8 @@ const RUN_SORT_FIELD: Record<string, string> = {
   created: 'createdAt'
 }
 
-/* URL ↔ 内层页签双向同步：键用 ?peTab=（宿主 ?tab= 归 Skills 页签所有，不共键）。
+/* URL ↔ 内层页签双向同步：键用 ?peTab=（2026-10-25 拆页后它是本页唯一的页签键；
+   旧 ?tab=cases|runs 由宿主 PromptEval.vue 在挂载时就地改写过来）。
    immediate 首跑兼作唯一挂载加载入口（原先 setup 末尾还有一组裸 reload，深链 ?peTab=runs 时会双拉，
    且该 watch 必须放在 cases/runs 等 ref 声明之后，否则 immediate 回调会撞 TDZ） */
 let bootstrapped = false
@@ -801,8 +833,7 @@ const lastPassRateText = computed(() => {
   if (lastRunEmpty.value) return '暂无通过数据（0 次执行）'
   return formatRate(latestRun.value?.summary?.passRate) ?? '—'
 })
-/* 2026-10-21 用户「不要了」：通过率卡不再挂比例式分母，分子分母与口径全部进 lastRateTitle；
-   卡面副行只在「0 次执行」这种读不出通过率的状态下出现 */
+/* 通过率卡副行只在「0 次执行」这种读不出通过率的状态下出现 */
 const lastRateBase = computed(() => (lastRunEmpty.value ? '0 次执行' : ''))
 /** KPI tone（2026-10-04 状态条退役，原 lastRateCls 类名着色翻译成 MkKpi tone）：
     阈值纪律走 rate-utils 单点不变；muted（缺 passRate）与 0 次执行不着色 */
@@ -811,38 +842,8 @@ const lastRateTone = computed(() => {
   const tone = rateToneOf(latestRun.value?.summary?.passRate)
   return tone === 'muted' ? '' : tone
 })
-/** 通过率卡 hint（2026-10-04 状态条退役）：只留比例式分母；agent 筛选限定词于 2026-10-21
-    撤除（顶部筛选已表达，口径在 title 里） */
+/** 通过率卡 hint：只在读不出通过率时出现（0 次执行） */
 const lastRateHint = computed(() => lastRateBase.value)
-const lastRateTitle = computed(() => {
-  if (!runs.value.length) return '暂无评测数据'
-  if (lastRunEmpty.value) return '最近一次评估 0 次执行（用例全部被跳过或未运行），无通过率可显示'
-  if (lastPassRateText.value === '—') return '暂无评测数据：该运行未回传通过率'
-  const s = latestRun.value?.summary
-  const base = s && typeof s.passedCount === 'number' && typeof s.totalRuns === 'number'
-    ? `最近一次评估通过 ${s.passedCount} / 执行 ${s.totalRuns} 例。`
-    : ''
-  return `${base}最近一次评估通过率；${RATE_THRESHOLD_NOTE}`
-})
-/* 评估历史卡副行 = 口径（2026-10-19 用户走查「hint 在报读数」）：原先副行是「上次 3 小时前」
-   这个时刻读数，改成窗口加载口径，时刻随长释进 title（P3 的「最近」异义消歧仍成立——
-   title 里写明是「上次评测」的时刻，副行不再有第二个「最近」）。 */
-const runsKpiHint = computed(() => `按最近 ${RUNS_LIMIT} 次窗口加载`)
-/** 评估历史卡 title（2026-10-04 状态条退役；2026-10-18 用户走查去掉分号堆叠）：
-    窗口上限口径 + agent 筛选限定 + 上次评测时刻。最近一次通过率、着色阈值另有
-    「最近评测通过率」卡承载，不在本卡重复。 #88：数字随 agent 筛选收窄，限定词一并披露 */
-const runsKpiTitle = computed(() =>
-  `按最近 ${RUNS_LIMIT} 次窗口加载，上限并非总数${agentFilter.value ? ` · 仅 ${agentLabel(agentFilter.value)}` : ''} · ${
-    latestRun.value ? `上次评测 ${timeAgo(latestRun.value.createdAt)}` : '暂无评估记录'
-  }`
-)
-/* #88：用例/历史两张 KPI 的数字随顶部 agent 筛选收窄（reloadCases/reloadRuns 都带 agentFilter），
-   口径披露只留在 title——卡面副行不再复述筛选状态（2026-10-21 判例） */
-const casesKpiTitle = computed(() =>
-  agentFilter.value
-    ? `当前 agent 筛选「${agentLabel(agentFilter.value)}」下的评估用例数（非全站总数）`
-    : '全部 Agent 的评估用例数（可按顶部 Agent 筛选收窄）'
-)
 
 function fmtDate(iso: string): string {
   if (!iso) return '—'
@@ -1035,11 +1036,16 @@ const expectSummary = computed(() => {
   if (mc) parts.push(`必须做到 ${mc} 项`)
   if (mn) parts.push(`不能出现 ${mn} 项`)
   if (adv) parts.push('已配高级校验')
-  return parts.length ? `已设置：${parts.join(' · ')}` : '可选，跳过也能试跑'
+  return parts.length ? `已设置：${parts.join(' · ')}` : ''
 })
 
 /** 已有虚拟学习者列表（复用其 persona + 故事池） */
 const virtualLearners = ref<Array<{ id: string; label: string }>>([])
+/** 学生人设下拉：首项 = 新建（空值），其余 = 已加载的虚拟学习者 */
+const personaSelectOptions = computed(() => [
+  { value: '', label: '为这个场景新建（自动生成学生人设）' },
+  ...virtualLearners.value.map((v) => ({ value: v.id, label: v.label }))
+])
 const virtualLearnersLoading = ref(false)
 async function loadVirtualLearners() {
   if (virtualLearners.value.length || virtualLearnersLoading.value) return
@@ -1114,7 +1120,8 @@ function openCreate() {
   void loadVirtualLearners()
 }
 
-function openEdit(c: EvalCase) {
+/** 打开编辑弹窗；focusPersona = 从「人设失效」徽章进来，直接落在「模拟学生」区块 */
+function openEdit(c: EvalCase, focusPersona = false) {
   editingId.value = c.id
   const e = c.expectations || {}
   // path/stage 结构化输入：从 previousState/inputPayload 回填（DB 用例的 previousStateJson 同时承载）
@@ -1154,6 +1161,8 @@ function openEdit(c: EvalCase) {
   // 编辑时：已有期望配置则自动展开期望折叠
   const e2 = c.expectations || {}
   expectOpen.value = !!(e2.mustIncludeFields?.length || e2.mustContainText?.length || e2.mustNotInclude?.length || e2.expectedStage || e2.expectedMilestones != null || e2.expectedSubtaskCount != null)
+  // 「人设失效」入口：模拟学生区块就是要改的地方，打开即落在这里
+  if (focusPersona) setInputSource('simulated')
   void loadVirtualLearners()
 }
 
@@ -1268,17 +1277,22 @@ async function saveAndRun() {
 
 /* 行操作 */
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
-function menuEdit(c: EvalCase) { closeMenu(); openEdit(c) }
 function menuDelete(c: EvalCase) { closeMenu(); void removeCase(c) }
 async function menuRunSingle(c: EvalCase) { closeMenu(); await runSingle(c) }
+/** ⋯ → 查看该 Skill（用例 agentId 形如 skill:goal-conversation，落点收裸 id） */
+function menuGoSkill(c: EvalCase) { closeMenu(); openCaseSkill(c) }
 
-/* 用例行点击 → 对应 Skill 详情（原型 2105：data-action="open-skill"）。
-   用例 agentId 形如 skill:goal-conversation，而 openSkillDrawer 收的是裸 skill id
-   （store 原样存进 subPage.id，SkillDetail 再自行补 skill: 前缀；判例 live.ts:180 同样剥前缀），
-   故必须剥掉 skill: ——直接透传会落到 SkillDetail「未注册或 ID 有误」错误态。
-   e 存在（键盘触发）时，行内按钮/菜单上的回车会冒泡到行：target 非行本身则忽略（判例 ExecLogs.toggleRowOpen）。 */
-function openCaseSkill(c: EvalCase, e?: Event) {
+/* 用例行点击 → 该用例的编辑弹窗（行内「编辑」同一动作）。键盘触发时行内按钮的回车会冒泡到行，
+   target 非行本身则忽略（判例 ExecLogs.toggleRowOpen）。 */
+function openCaseEdit(c: EvalCase, e?: Event) {
   if (e && e.target !== e.currentTarget) return
+  openEdit(c)
+}
+
+/* 「去 Skill」：用例 agentId 形如 skill:goal-conversation，而 openSkillDrawer 收的是裸 skill id
+   （store 原样存进 subPage.id，SkillDetail 再自行补 skill: 前缀；判例 live.ts:180 同样剥前缀），
+   故必须剥掉 skill: ——直接透传会落到 SkillDetail「未注册或 ID 有误」错误态。 */
+function openCaseSkill(c: EvalCase) {
   const skillId = c.agentId.replace(/^skill:/, '')
   if (skillId) openSkillDrawer(skillId)
 }
@@ -1317,7 +1331,7 @@ async function toggleEnabled(c: EvalCase) {
 /** 批量跑评估：对当前 agentFilter 下所有启用用例跑（走 DB caseIds） */
 const canRunBatch = computed(() => cases.value.some((c) => c.enabled))
 /* 运行互斥：批量/试跑都是真实 LLM 调用，运行期间禁用全部入口，防止并发多批重复烧 token。
-   running 为模块级 ref（见文件头 <script> 块）：面板被宿主切页签卸载后标志仍在，切回不可再发起 */
+   running 为模块级 ref（见文件头 <script> 块）：面板被宿主页卸载后标志仍在，回来不可再发起 */
 const running = sharedRunning
 const runningInfo = sharedRunningInfo
 async function runBatch() {
@@ -1342,6 +1356,7 @@ async function runBatch() {
     let passed = 0
     let totalRuns = 0
     const skippedAll: string[] = []
+    const runIds: string[] = []
     for (const [agentId, list] of groups) {
       const res = await adminPromptOpsApi.runEval({
         agentId,
@@ -1352,16 +1367,22 @@ async function runBatch() {
       const summary = data?.summary || {}
       passed += Number(summary.passedCount ?? 0)
       totalRuns += Number(summary.totalRuns ?? 0)
+      if (data?.runId) runIds.push(String(data.runId))
       const skipped = Array.isArray(data?.skipped) ? data.skipped : []
       for (const s of skipped) skippedAll.push(`[${agentLabel(agentId)}] ${String((s as any)?.reason || '未知原因')}`)
     }
     toast.close(busy)
-    const passRate = totalRuns > 0 ? Math.round((passed / totalRuns) * 100) : 0
-    toast.success(`批量完成 ${totalCases} 个用例：${passed}/${totalRuns} 通过（${passRate}%）`)
+    const passRate = totalRuns > 0 ? formatRate((passed / totalRuns) * 100) : null
+    toast.success(`批量完成 ${totalCases} 个用例：${passed}/${totalRuns} 通过${passRate ? `（${passRate}）` : ''}`)
     if (skippedAll.length) {
       toast.info(`跳过 ${skippedAll.length} 个用例：${skippedAll.join('；')}`, 0)
     }
-    void reloadRuns()
+    /* 跑完直接落到结果（2026-10-26 评审）：停在用例页会让使用者以为没跑成，
+       再点一次批量就是重复的真实 LLM 调用。单批时顺手打开这次运行的详情。 */
+    await reloadRuns()
+    switchTab('runs')
+    const latest = runIds.length === 1 ? runs.value.find((r) => r.id === runIds[0]) : undefined
+    if (latest) void openRunDetail(latest)
   } catch (e) {
     toast.close(busy)
     toast.error(`批量评估失败：${errMsg(e)}`)
@@ -1563,31 +1584,20 @@ watch(agentFilter, () => { compareIds.value = [] })
 
 // 挂载加载统一走上方 watch 的 immediate 首跑（bootstrapped 分支），此处不再裸拉一遍
 
-/* 宿主协作面：批量跑评估上移 Skills 宿主页头（本面板无页头），宿主经模板 ref 驱动——
-   running/canRunBatch 供禁用态，runBatch 供点击（ref 上 ref 自动解包，宿主读布尔值即可）；
-   kpiView = KPI 带三卡的全部取值（computed 顶层被 expose 代理解包 → 宿主直接读 .passRateText）。
+/* 宿主协作面：主操作在宿主页页头（本面板无页头），宿主经模板 ref 驱动——
+   running/canRunBatch 供主操作随状态走，runBatch / openCreate 供点击
+   （ref 上 ref 自动解包，宿主读布尔值即可）；kpiView 供读数带。
    tone 在面板内是 '' as const 的字面量联合，供出前放宽为 MkKpi 的入参类型。 */
 const kpiView = computed(() => ({
   passRateText: lastPassRateText.value,
   passRateTone: lastRateTone.value as 'ok' | 'warn' | 'bad' | 'muted' | '',
   passRateHint: lastRateHint.value,
-  passRateTitle: lastRateTitle.value,
-  // #72：加载失败不能落成 0（读不到 ≠ 没有）——三卡统一显「—」，失败原因进 title
-  caseCount: casesFailed.value ? ('—' as const) : cases.value.length,
-  // 2026-10-21：agent 筛选复述（「仅 X / 全部 Agent」）撤出卡面，只留加载失败态
-  casesHint: casesFailed.value ? '用例列表加载失败' : '',
-  casesTitle: casesFailed.value ? '评估用例加载失败：计数不可用（不代表没有用例）' : casesKpiTitle.value,
-  enabledCaseCount: casesFailed.value
-    ? ('—' as const)
-    : cases.value.filter((c) => c.enabled !== false).length,
-  disabledCaseCount: casesFailed.value
-    ? ('—' as const)
-    : cases.value.filter((c) => c.enabled === false).length,
-  runCount: runsFailed.value ? ('—' as const) : runs.value.length,
-  runsHint: runsFailed.value ? '评估历史加载失败' : runsKpiHint.value,
-  runsTitle: runsFailed.value ? '评估历史加载失败：计数与最近一次时间不可用' : runsKpiTitle.value,
+  // 用例分母（原「评估用例 / 启用用例」两卡撤除后的唯一去处）：加载失败显 —，不落 0
+  casesNote: casesFailed.value
+    ? '用例未加载'
+    : `用例 ${cases.value.length} · 启用 ${cases.value.filter((c) => c.enabled !== false).length}`,
 }))
-defineExpose({ running, canRunBatch, runBatch, kpiView })
+defineExpose({ running, canRunBatch, runBatch, openCreate, kpiView })
 </script>
 
 <style scoped>
@@ -1607,11 +1617,9 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
 .pe-delta--fast { color: var(--mk-green); font-weight: 700; }
 /* 列表高度：空态占位交给 mk-empty--min，有数据时表格自然高度（不再硬撑满屏） */
 .pe-list { min-height: 0; }
-/* 原型 .tbl td：nowrap（自动布局下列宽随内容；长内容由 mk-cell-main 上限与 pe-expect 截断兜底，
-   不换行撑行高） */
-.pe-list .mk-table td { white-space: nowrap; }
 .pe-expect { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.pe-persona-missing { margin-left: 6px; }
+/* 「人设失效」是可点的修复入口（打开编辑弹窗并落在模拟学生区块）：复位按钮外观，沿用 warn 徽章配色 */
+.pe-persona-missing { margin-left: 6px; border: 1px solid transparent; font: inherit; font-size: var(--mk-fs-micro); font-weight: 600; cursor: pointer; }
 .pe-result { display: grid; gap: 3px; justify-items: start; }
 .pe-result strong { font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; }
 .pe-result span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
@@ -1643,11 +1651,15 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
 
 /* .mk-field__opt（字段标签内的「（可选）」次级提示）已提升为全局，见 shared.css */
 
-/* ===== 宿主 fill 内滚（2026-10-04 折入 Skills 页签）：原独立页整页滚，折入 .mk-card--fill
-   后由面板接管纵向滚动——fill 卡只给「直接子」.mk-table-scroll 授权内滚，pe-panel 不是
+/* ===== 宿主 fill 内滚（2026-10-25 独立页复用同一形态）：页面整页不滚，由面板 .mk-card--fill
+   接管纵向滚动——fill 卡只给「直接子」.mk-table-scroll 授权内滚，pe-panel 不是
    直接子，须自补同一套 flex:1 + min-height:0 + overflow-y（判例 .orch-handoff .mk-table-scroll）。
    KPI 带/页签/筛选行钉在卡顶，仅页签体滚 ===== */
-.pe > .pe-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pe > .pe-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+/* 面板内整页空态：吃掉页签体剩余高度并居中（2026-10-24 全站空态收齐）。
+   面板是内滚容器、不是卡片直子，共享的 .mk-card--fill > .mk-empty--min 匹配不到，
+   不补这条，空态会退回视口常量、在被裁的内滚区里露出一截滚动条。 */
+.pe-panel > .mk-empty--min { flex: 1; min-height: 0; }
 
 /* ===== 页签（主视图切换走全局 .tabs/.tab 原语；弹窗内学生输入方式走共享 MkSubTabs）。
    2026-10-06 审核收口：删除 .pe-tabs/.pe-tab 全仓最后一份 scoped 拷贝（与 mk-primitives.css

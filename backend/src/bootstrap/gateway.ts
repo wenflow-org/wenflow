@@ -2,7 +2,7 @@
  * EduClaw Gateway 装配（架构审计 §5 行动 #3：index.ts 拆分）
  *
  * 职责：创建 Gateway、启动期 manifest / skills.yaml 户口簿校验、注册官方 Agent 与核心 Skill、
- * 清理退役 Skill 残留、同步能力探针开关。
+ * 清理退役 Skill 残留。
  */
 import prisma from '../config/database';
 import systemPrisma from '../config/system-database';
@@ -13,8 +13,6 @@ import { allSkillDefinitions, skillHandlers } from '../skills';
 import { PURGED_SKILLS } from '../skills/retired-skills';
 import { validateManifest, listTopLevelAgents } from '../services/agent-manifest.service';
 import { loadSkillsFile } from '../services/skill-registry/skills-file';
-import { aiCapabilityHealthService } from '../services/ai-capability-health.service';
-import { getRuntimeCapabilityProbeEnabled } from '../services/capability-probe-settings.service';
 import { loadInfraModelConfig } from '../services/embedding/infra-config.service';
 import { loadPluginProviderConfig } from '../services/plugin-providers.service';
 
@@ -131,19 +129,3 @@ export async function purgeRetiredSkills(): Promise<void> {
   });
 }
 
-/**
- * 能力探针开关统管自动探测：关闭时不启动定时轮询。
- * 启动金丝雀已移除：健康快照由周期探测（开关开启时）或手动「立即探测」生成，
- * 不再在每次进程启动时向模型服务发一轮真实请求（dev 热重载下尤其浪费）。
- */
-export async function syncCapabilityProbeSettings(): Promise<void> {
-  const probeEnabled = await getRuntimeCapabilityProbeEnabled();
-  await aiCapabilityHealthService.setEnabled(probeEnabled);
-  if (!probeEnabled) {
-    logger.info('[ai-capability] 探测定时器已禁用（默认关闭 / 连接与安全开关关闭），跳过 start()');
-    return;
-  }
-  // 默认关闭是产品约束（2026-10-18）：只有 DB 里被人显式打开才会走到这里。
-  // 打一条醒目的警告，避免误开后周期性真实请求悄悄烧额度。
-  logger.warn('[ai-capability] 测活探针已开启（platform_settings.aiCapabilityProbeEnabled=true），将周期性向模型服务发真实请求');
-}

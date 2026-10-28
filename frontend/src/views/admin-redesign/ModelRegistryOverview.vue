@@ -32,21 +32,25 @@
                   <td class="mono">{{ alias.alias }}</td>
                   <td>
                     <span class="mk-badge" :class="alias.source === 'db-override' ? 'mk-badge--warn' : 'mk-badge--muted'">
-                      {{ alias.source === 'db-override' ? '平台覆盖' : '平台内置' }}
+                      {{ alias.source === 'db-override' ? '界面覆盖' : '内置默认' }}
                     </span>
                   </td>
                   <td class="mono">{{ alias.members.length ? alias.members.join(' → ') : '（无可用模型）' }}</td>
-                  <td class="mono">{{ alias.selected ?? '—' }}</td>
+                  <td class="mono">
+                    <template v-if="alias.selected">{{ alias.selected }}</template>
+                    <span v-else class="mk-na">—</span>
+                  </td>
                   <td>
-                    <span class="mono">{{ alias.selectedWhenRequiringThinking ?? '—' }}</span>
+                    <span v-if="alias.selectedWhenRequiringThinking" class="mono">{{ alias.selectedWhenRequiringThinking }}</span>
+                    <span v-else class="mk-na">—</span>
                     <span v-if="alias.degradedWhenRequiringThinking" class="mk-badge mk-badge--warn ac-mr-badge" title="候选模型都不支持思考，已退回该别名的第一个模型。发起请求时会自动去掉思考参数">降级</span>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="这些别名以平台配置为准">
-            平台覆盖的别名：
+          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="这些别名以界面配置为准">
+            界面覆盖的别名：
             <span v-for="alias in data.aliases.filter((a) => a.dbMembers)" :key="`db-${alias.alias}`" class="mono ac-mr-note__item">
               {{ alias.alias }} = {{ alias.dbMembers?.join(', ') }}
             </span>
@@ -127,16 +131,31 @@
                       >⚠</span>
                     </td>
                     <!-- 档位列：表头有「档位」而此前缺这一格，整行会右移、数值与标签错配 -->
-                    <td><span class="mk-badge mk-badge--muted">{{ model.tier || '—' }}</span></td>
+                    <td>
+                      <span v-if="model.tier" class="mk-badge mk-badge--muted">{{ model.tier }}</span>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td>
                       <span class="mk-badge" :class="model.capabilities.supportsThinking ? 'mk-badge--ok' : 'mk-badge--muted'">
                         {{ model.capabilities.supportsThinking ? '支持' : '不支持' }}
                       </span>
                     </td>
-                    <td>{{ model.capabilities.supportsReasoningEffort ? '支持' : '—' }}</td>
-                    <td class="mono">{{ model.limits.maxOutputTokens ?? '—' }}</td>
-                    <td class="mono">{{ model.limits.defaultMaxTokens ?? '—' }}</td>
-                    <td class="mono">{{ model.limits.reasoningReserveTokens || '—' }}</td>
+                    <td>
+                      <span v-if="model.capabilities.supportsReasoningEffort">支持</span>
+                      <span v-else class="mk-na">—</span>
+                    </td>
+                    <td class="mono">
+                      <template v-if="model.limits.maxOutputTokens != null">{{ model.limits.maxOutputTokens }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
+                    <td class="mono">
+                      <template v-if="model.limits.defaultMaxTokens != null">{{ model.limits.defaultMaxTokens }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
+                    <td class="mono">
+                      <template v-if="model.limits.reasoningReserveTokens != null">{{ model.limits.reasoningReserveTokens }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td class="mono">{{ model.limits.maxParallelRequests ?? '不限' }}</td>
                     <td class="mono">
                       <template v-if="model.fallbacks.length">
@@ -447,9 +466,10 @@ defineExpose({ refresh })
 /* 模型供应商组（2026-10-15 合并块）：供应商=组头行，其模型=组内能力行。
    组头沿用 mrow 词汇（方块徽标 + 名/用途 + id/承载/端点 + 状态徽标），但进水表格后
    去掉卡片描边/底色，改由行分隔线与缩进承担层级。 */
+/* 分组行不覆写内边距：跟随 .mk-table td 的档位节奏（同 SkillReconciliation 判例，
+   低于 SPEC §3 的 40px 行高下限即视为不合规）。 */
 .ac-mr-pgroup > td {
   background: var(--mk-surface-2);
-  padding: 8px 12px;
 }
 .ac-mr-pgroup .ac-mr-mrow--flat {
   padding: 0;

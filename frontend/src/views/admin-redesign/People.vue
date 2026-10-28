@@ -1,12 +1,9 @@
 <template>
   <div class="mk-page mk-page--fill pp-host">
-    <!-- 页头（newui pageTitle 复刻）：页名 + 副题 + 主操作。
+    <!-- 页头（newui pageTitle 复刻）：页名 + 主操作。
          2026-10-04 用户拍板：学习状态 tab 拆出独立页 /admin/learner-state（同教学三页拆页先例），
          本页回归单视图（用户账号管理），旧 ?tab=state 深链在下方 watch 重定向兼容 -->
-    <MkPageHead
-      title="用户与学习者"
-      sub="管理用户账号、角色与登录状态"
-    >
+    <MkPageHead title="用户账号">
       <template #actions>
         <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
              列表 = 全部非虚拟账号，测试/审计账号行内备注；虚拟学习者归自己的域 -->
@@ -14,94 +11,17 @@
       </template>
     </MkPageHead>
 
-    <!-- 账号 KPI（2026-10-05 用户纠偏升 MkKpi 卡带；2026-10-10 统一两档卡型；
-         2026-10-11 用户拍板换读数：测试视角「真实用户」结构性恒 0 → 换「运行中仿真」，
-         两档「30 分钟在线」→「近 7 天活跃」，真实视角管理员卡并入真实卡 hint。
-         MkBuckets 构成带已退役（与教学组卡带两套视觉语言） -->
-    <section v-if="ppKpi.length" class="mk-kpi-grid" aria-label="账号概览">
-      <MkKpi
-        v-for="k in ppKpi"
-        :key="k.label"
-        :label="k.label"
-        :value="k.value"
-        :hint="k.hint"
-        :tone="k.tone"
-        :title="k.title"
-      />
-    </section>
-
     <Users ref="usersRef" embedded />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import Users from './Users.vue'
-import { liveUsers, liveUsersTotal } from './live'
 
 const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
-
-/* 账号构成桶（2026-10-04 教学组统一 buckets）：真实 / 虚拟 / 测试 = 同一整体的互斥构成
-   （徽章同款互斥判据：虚拟 > 测试 > 其余真实）；管理员数作真实用户桶 foot（角色属真实域细分）。
-   管理员数是运营要看的角色分布，不单独立桶（角色与账号性质非同一整体，混桶=假比例）。
-   D18：默认「仅真实」口径下后端已把虚拟/测试排除，三分桶会结构性恒 100/0/0（两桶死档）——
-   审核 #7（2026-10-06）：默认档不出构成带（下方 return []，原页内单桶分支是死代码：
-   卡带 gate 为 length > 1，且 D18 明确「单桶假构成不再渲染」）；未纳入口径由 KPI hint
-   「虚拟 / 测试账号未纳入」承载，切到「含测试」后才展示三桶互斥构成。 */
-/* 账号 KPI（2026-10-05 统一面板设计；2026-10-11 用户拍板换读数；2026-10-21 用户拍板剔除虚拟）：
-   真实视角 4 张：真实用户（管理员数在 title）/ 近 7 天活跃 / 近 7 日新增 / 从未登录；
-   测试视角 4 张：同一组读数，但集合是测试/审计账号（标题改用「测试账号」）。
-   虚拟学习者不在本页任何一档——它没有凭据、没有登录（角色/最后登录列对它无意义），
-   教与学在「虚拟学习者」域看；2026-10-21 用户走查：测试档里的虚拟行点进去是账号+学习档案，
-   与虚拟学习者详情是两个页，同一实体两处细节。
-   口径：活跃 = lastLoginAt 在 7 天内，按各档自己的集合算；数据 = live 域已加载行
-   （后端总数在 liveUsersTotal，超上限截断时 title 注明）。
-   走查 F1-1（2026-10-07）：判据统一收口到 learner-profile.ts 单点——本页 KPI 与
-   下方 Users 列表 pill 计数同一口径。 */
-type PpKpiTile = { label: string; value: number; hint?: string; tone: '' | 'ok' | 'warn' | 'bad'; title: string }
-/** 近 7 天活跃：lastLoginAt 在 7 天内（7 天窗口是运营常态读数，原 30 分钟窗口恒 0 无区分度） */
-const active7dOf = (rows: Array<{ lastLoginAt: string | null }>) =>
-  rows.filter((u) => !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 7 * 86400000).length
-/* 账号 KPI 单套（2026-10-21 用户拍板「没有测试，测试只是备注」）：集合 = 全部非虚拟账号。
-   测试/审计账号照常计入，行内以「测试」备注标识；虚拟学习者不在本页（它有自己的域）。 */
-const ppKpi = computed<PpKpiTile[]>(() => {
-  const rows = liveUsers.value
-  if (!rows.length) return []
-  const scope = `当前显示 ${rows.length} 个账号 · 全部共 ${liveUsersTotal.value} 个`
-  const admins = rows.filter((u) => u.isAdmin).length
-  return [
-    {
-      label: '账号',
-      value: rows.length,
-      tone: '',
-      // 与「学习状态 · 学习者账号」「记忆与复习 · 有记忆痕迹的用户」同源不同名：这里按账号全集，
-      // 另外两页分别按“有快照 / 有记忆痕迹”的自然子集（2026-10-24 口径互注）
-      title: `${scope}${rows.length ? ` · 管理员 ${admins}` : ''}。执行虚拟学习者不在本页（见「虚拟实验」组）`,
-    },
-    { label: '近 7 天活跃', value: active7dOf(rows), tone: '', title: scope },
-    {
-      label: '近 7 日新增',
-      value: rows.filter((u) => !!u.createdAt && Date.now() - new Date(u.createdAt).getTime() < 7 * 86400000).length,
-      tone: '',
-      title: `${scope}。按创建时间`,
-    },
-    {
-      label: '从未登录',
-      value: rows.filter((u) => !u.lastLoginAt).length,
-      tone: '',
-      title: `${scope}。按最后登录判断`,
-    },
-  ]
-})
-
-/* 账号构成桶（MkBuckets）已退役：两档各自 4 张 MkKpi，读数同构、集合随视角走。
-   历史沿革：2026-10-04 三分桶（真实/虚拟/测试构成）；10-05 KPI 升卡带；
-   10-10 收敛单带、统一卡型；10-11 测试档换虚拟域读数（运行中仿真/虚拟学习者）；
-   2026-10-21 拍板剔除虚拟——测试档回到「测试/审计账号」本义，虚拟学习者的
-   运行读数归虚拟学习者页，本页不再跨域取数。 */
 
 const route = useRoute()
 const router = useRouter()

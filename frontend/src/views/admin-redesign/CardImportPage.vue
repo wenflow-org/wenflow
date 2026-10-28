@@ -109,7 +109,10 @@
             <tr v-for="(r, i) in importResult.results" :key="(r.cardKey || 'row') + i">
               <td><span class="ci-key">{{ r.cardKey || '（无卡号）' }}</span></td>
               <td><span class="mk-badge" :class="actionBadge(r.action)">{{ actionText(r.action) }}</span></td>
-              <td><span class="ci-reason" :title="r.reason || ''">{{ r.reason || '—' }}</span></td>
+              <td>
+                <span v-if="r.reason" class="ci-reason" :title="r.reason">{{ r.reason }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
             </tr>
           </tbody>
         </table>

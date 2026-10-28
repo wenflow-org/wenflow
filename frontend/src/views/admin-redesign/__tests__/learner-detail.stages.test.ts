@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
+import { chooseMkSelect, mkSelectLabels } from '@/components/mk/__tests__/mkSelect';
 
 const listSessions = vi.hoisted(() => vi.fn());
 const listGoals = vi.hoisted(() => vi.fn());
@@ -598,9 +599,8 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
 
   it('选择器列出名下每条路径，当前路径被标出', async () => {
     const w = await mountLd([]);
-    const sel = w.find('#ld-scope-path');
-    expect(sel.exists()).toBe(true);
-    const opts = sel.findAll('option').map((o) => o.text());
+    expect(w.find('#ld-scope-path').exists()).toBe(true);
+    const opts = mkSelectLabels(w as never, '路径范围');
     expect(opts[0]).toContain('测试路径');
     expect(opts[0]).toContain('学习中'); // 路径域文案，不是全局字典的「进行中」
     expect(opts[0]).toContain('当前');
@@ -613,7 +613,7 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
 
   it('不给「全部路径」档：学习者模型快照没有跨路径聚合口径（不传 pathId 是回落到当前路径）', async () => {
     const w = await mountLd([]);
-    const texts = w.find('#ld-scope-path').findAll('option').map((o) => o.text());
+    const texts = mkSelectLabels(w as never, '路径范围');
     expect(texts.some((t) => t.includes('全部路径'))).toBe(false);
   });
 
@@ -644,7 +644,7 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
 
   it('切到非当前路径：标注用所选路径名（不说「当前路径」），请求带该 pathId', async () => {
     const w = await mountLd([]);
-    await w.find('#ld-scope-path').setValue('lp2');
+    await chooseMkSelect(w as never, '路径范围', 'lp2');
     await flushPromises();
     expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ pathId: 'lp2' }));
     const meta = w.find('#ld-panel-sessions .mk-card__meta');
@@ -675,9 +675,9 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     }));
     try {
       const w = await mountLd([]);
-      await w.find('#ld-scope-path').setValue('lp2');
+      await chooseMkSelect(w as never, '路径范围', 'lp2');
       await flushPromises();
-      const opts = w.find('#ld-scope-path').findAll('option').map((o) => o.text());
+      const opts = mkSelectLabels(w as never, '路径范围');
       expect(opts[0]).toContain('· 当前');
       expect(opts[1]).not.toContain('· 当前');
       // 读数也必须说这是「所选路径」而不是「当前路径」
@@ -699,7 +699,7 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
       },
     ]);
     const w = await mountLd([]);
-    await w.find('#ld-scope-path').setValue('lp2');
+    await chooseMkSelect(w as never, '路径范围', 'lp2');
     await flushPromises();
     const meta = w.find('#ld-panel-memory .mk-card__meta');
     expect(meta.text()).toContain('跨全部路径');

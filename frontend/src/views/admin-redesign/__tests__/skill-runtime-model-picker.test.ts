@@ -84,6 +84,15 @@ async function mountTab() {
   return w
 }
 
+/** 2026-10-28：模型 / 参数 / 容错收进「配置」弹层，先打开再断言。 */
+async function openConfig(w: Awaited<ReturnType<typeof mountTab>>) {
+  const btn = w.findAll('button').find((b) => b.text() === '配置')
+  expect(btn, '卡头应有配置入口').toBeTruthy()
+  await btn!.trigger('click')
+  await flushPromises()
+  await w.vm.$nextTick()
+}
+
 async function openPicker(w: Awaited<ReturnType<typeof mountTab>>, selector: string) {
   await w.find(selector).trigger('click')
   await w.vm.$nextTick()
@@ -98,18 +107,21 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     vi.clearAllMocks()
   })
 
-  it('主模型显示当前目录条目；继承是显式选项', async () => {
+  it('主模型显示当前目录条目；「用平台默认模型」是显式选项', async () => {
     const w = await mountTab()
+    expect(w.find('.sdp-summary').text()).toContain('deepseek-v4.1-flash')
+    await openConfig(w)
     const control = w.find('.sdp-form__grid .mk-mp')
     expect(control.text()).toContain('deepseek-v4.1-flash')
 
     await openPicker(w, '.sdp-form__grid .mk-mp .mk-mp__control')
-    expect(optionIds(w)[0]).toBe('跟随平台默认')
+    expect(optionIds(w)[0]).toBe('用平台默认模型')
     w.unmount()
   })
 
   it('选到 reasoning 模型时层级自动带出（不再单独选模型层级）', async () => {
     const w = await mountTab()
+    await openConfig(w)
     expect(w.text()).not.toContain('模型层级')
 
     await openPicker(w, '.sdp-form__grid .mk-mp .mk-mp__control')
@@ -125,25 +137,25 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     w.unmount()
   })
 
-  it('分节导航：默认「模型」，可切到「请求与容错」，面板互斥', async () => {
+  it('卡面只留摘要，配置弹层含模型 / 生成参数 / 请求容错三段；模型测试常驻', async () => {
     const w = await mountTab()
-    const nav = w.findAll('.sdp-nav__item')
-    expect(nav.map((n) => n.find('.sdp-nav__name').text())).toEqual(['模型', '生成参数', '请求与容错', '模型测试'])
-    expect(nav[0].classes()).toContain('is-on')
-    expect(nav[0].find('.sdp-nav__meta').text()).toContain('deepseek-v4.1-flash')
-    expect(w.find('#sdp-panel-model').attributes('style') || '').not.toContain('display: none')
-    expect(w.find('#sdp-panel-request').attributes('style') || '').toContain('display: none')
+    expect(w.find('.sdp-nav').exists()).toBe(false)
+    expect(w.find('.sdp-summary').exists()).toBe(true)
+    expect(w.find('#sdp-panel-test').exists()).toBe(true)
+    // 未打开弹层时，详细配置不在卡面
+    expect(w.find('#sdp-panel-model').exists()).toBe(false)
 
-    await nav[2].trigger('click')
-    await w.vm.$nextTick()
-    expect(nav[2].classes()).toContain('is-on')
-    expect(w.find('#sdp-panel-model').attributes('style') || '').toContain('display: none')
-    expect(w.find('#sdp-panel-request').attributes('style') || '').not.toContain('display: none')
+    await openConfig(w)
+    const panels = w.findAll('.sdp-sections > .sdp-panel')
+    expect(panels.map((p) => p.find('h4').text())).toEqual(['模型', '生成参数', '请求与容错'])
+    expect(w.find('#sdp-panel-params .sdp-panel__state').text()).toContain('T=')
+    expect(w.find('#sdp-panel-request .sdp-panel__state').text()).toContain('重试')
     w.unmount()
   })
 
   it('备用链只列同供应商、同层级，并排除主模型', async () => {
     const w = await mountTab()
+    await openConfig(w)
     await openPicker(w, '.sdp-fallback .mk-mp__control')
     const ids = optionIds(w)
     expect(ids).toEqual(['agnes-3.0-flash'])
@@ -154,6 +166,7 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
 
   it('选中备用后进入有序链；再次打开不再列出已选项', async () => {
     const w = await mountTab()
+    await openConfig(w)
     await openPicker(w, '.sdp-fallback .mk-mp__control')
     await w.findAll('.mk-mp__opt')[0].trigger('click')
     await flushPromises()

@@ -84,9 +84,13 @@
               </label>
               <label class="sdp-pwform__field">
                 <span>outputMedia</span>
-                <select v-model="coreForm.outputMedia" class="mk-input" @change="markDirty">
-                  <option v-for="m in CORE_OUTPUT_MEDIA" :key="m" :value="m">{{ m }}</option>
-                </select>
+                <MkSelect
+                  v-model="coreForm.outputMedia"
+                  :options="CORE_OUTPUT_MEDIA_OPTIONS"
+                  aria-label="输出媒体"
+                  block
+                  @change="markDirty"
+                />
               </label>
             </div>
             </div>
@@ -146,9 +150,13 @@
               </div>
               <div v-for="(f, i) in coreForm.fields" :key="i" class="sdp-pwform__fieldrow">
                 <input v-model="f.name" class="mk-input mono" placeholder="fieldName" @input="markDirty" />
-                <select v-model="f.baseType" class="mk-input" @change="markDirty">
-                  <option v-for="t in CORE_FIELD_TYPES" :key="t" :value="t">{{ t }}</option>
-                </select>
+                <MkSelect
+                  v-model="f.baseType"
+                  :options="CORE_FIELD_TYPE_OPTIONS"
+                  aria-label="type"
+                  block
+                  @change="markDirty"
+                />
                 <input v-model="f.optional" type="checkbox" aria-label="可选" @change="markDirty" />
                 <input v-model="f.desc" class="mk-input" placeholder="功能描述" @input="markDirty" />
                 <input v-model="f.turn" type="checkbox" aria-label="turn（回合输出）" @change="markDirty" />
@@ -195,9 +203,13 @@
               </label>
               <label class="sdp-pwform__field">
                 <span>failurePolicy</span>
-                <select v-model="coreForm.params.failurePolicy" class="mk-input" @change="markDirty">
-                  <option v-for="p in CORE_FAILURE_POLICIES" :key="p" :value="p">{{ p }}</option>
-                </select>
+                <MkSelect
+                  v-model="coreForm.params.failurePolicy"
+                  :options="CORE_FAILURE_POLICY_OPTIONS"
+                  aria-label="失败策略"
+                  block
+                  @change="markDirty"
+                />
               </label>
             </div>
             </div>
@@ -374,6 +386,7 @@ import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
 import { coreEditorState, coreShortHash, errText, toFormField, toCoreFieldPayload, type CoreFormField } from './sdp-shared'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 hljs.registerLanguage('yaml', yaml)
 
@@ -387,6 +400,11 @@ const AUX_CONTRACT_NA_TEXT = '该 Skill 为辅助类（无编排阶段归属）�
 const CORE_FIELD_TYPES = ['string', 'number', 'boolean', 'enum', 'object', 'object[]', 'string[]'] as const
 const CORE_FAILURE_POLICIES = ['retry', 'fallback', 'propagate'] as const
 const CORE_OUTPUT_MEDIA = ['json', 'markdown', 'text'] as const
+
+/* 下拉选项（MkSelect）：值 = 原 option 的 :value，文案 = 原 option 文本（逐字） */
+const CORE_FIELD_TYPE_OPTIONS: { value: string; label: string }[] = CORE_FIELD_TYPES.map((t) => ({ value: t, label: t }))
+const CORE_FAILURE_POLICY_OPTIONS: { value: string; label: string }[] = CORE_FAILURE_POLICIES.map((p) => ({ value: p, label: p }))
+const CORE_OUTPUT_MEDIA_OPTIONS: { value: string; label: string }[] = CORE_OUTPUT_MEDIA.map((m) => ({ value: m, label: m }))
 
 interface CoreFormState {
   identity: string

@@ -98,13 +98,14 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 澄清中 08-13');
     /* 教学组列序统一（2026-10-16）：身份 → 用户 → 状态 → 过程 → 时间 → 操作。
        原先把「最近活动」紧跟状态列（当状态伴侣），与同组其它页「时间列在过程之后」不一致；
-       现移到路径列之后、创建时间之前，两列时间收在表尾。约束条件默认隐藏（MkCols），不进可见表头。 */
+       现移到澄清轮次之后、创建时间之前，两列时间收在表尾。约束条件默认隐藏（MkCols），不进可见表头。
+       2026-10-27：路径列并入状态列（已完成即已生成），可见表头再少一列。 */
     const ths = wrapper.findAll('thead th').map((t) => t.text());
-    expect(ths.slice(0, 6)).toEqual(['目标摘要', '用户', '状态', '澄清轮次', '路径', '最近活动']);
+    expect(ths.slice(0, 6)).toEqual(['目标摘要', '用户', '状态', '澄清轮次', '最近活动', '操作']);
     expect(ths.at(-1)).toBe('操作');
     // 2026-10-22 默认收起创建时间与约束条件（列菜单仍可开）
     expect(ths).not.toContain('创建时间');
-    const colsBtn = wrapper.findAll('button').find((b) => b.text() === '列')!;
+    const colsBtn = wrapper.find('.mk-cols__trigger');
     await colsBtn.trigger('click');
     const menu = wrapper.findAll('.mk-cols__item').map((x) => x.text());
     expect(menu).toContain('创建时间');

@@ -114,7 +114,7 @@ vi.mock('@/api/adminApi', () => ({
           thinkingMode: 'default',
           reasoningEffort: 'default',
           requestTimeoutMs: 30000,
-          // 生效值胶囊的来源词：后端给的是枚举码，页面须人话化（callParamSourceLabel）
+          // 生成参数来源词：后端给的是枚举码（active-prompt 等），页面须人话化（callParamSourceLabel）
           generationParams: {
             model: 'gpt-4o-mini',
             temperature: 0.4,
@@ -132,8 +132,6 @@ vi.mock('@/api/adminApi', () => ({
   adminGlossaryApi: apiObject(),
   adminAnnouncementsApi: apiObject(),
   adminPlatformSettingsApi: apiObject(),
-  adminCapabilityProbeApi: apiObject(),
-  adminSystemApi: apiObject(),
   adminAuditApi: apiObject(),
   adminFieldRoutingsApi: apiObject({
     getSkillRoutings: vi.fn(async () => ({
@@ -415,23 +413,39 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     await settle();
   }
 
-  it('运行时 tab：生效值用真实配置（不是硬编码展示）', async () => {
+  it('运行时 tab：卡面只留摘要，详细配置进「配置」弹层', async () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '运行时');
-    // 2026-10-19 重排：「运行时限制」独立卡退役（该页唯一可能出现的限制就是请求超时，
-    // 它既是下面的可编辑字段、又已在生效值胶囊里）。真实值改从生效值胶囊取。
-    const chips = wrapper.find('.sdp-chips');
-    expect(chips.exists()).toBe(true);
-    expect(chips.text()).toContain('超时');
-    expect(chips.text()).toContain('30s');   // mock 的 requestTimeoutMs = 30000
-    expect(chips.text()).toContain('逻辑重试');
-    // 来源词人话化：后端枚举码不得直接露给运营（挂映射前这里渲染的是 active-prompt）
-    expect(chips.text()).toContain('Prompt 文件声明');
-    // 2026-10-24：模型来源不再笼统写「路由表」——技能自己配了就叫技能配置，留空才是平台默认
-    expect(chips.text()).toContain('技能配置');
-    expect(chips.text()).toContain('未设');   // topP 的 source = none
-    expect(chips.text()).not.toContain('active-prompt');
-    expect(chips.text()).not.toContain('route-fallback');
+    // 2026-10-28 用户「skill 详情的模型也改一下」：卡面先给当前值，表单收进弹层
+    const order = wrapper.find('.sdp-order');
+    expect(order.exists()).toBe(true);
+    expect(order.text()).toContain('取值顺序');
+    expect(order.text()).toContain('本 Skill 设置');
+    expect(order.text()).toContain('Prompt 文件声明');
+    expect(order.text()).toContain('平台默认');
+
+    const summary = wrapper.find('.sdp-summary');
+    expect(summary.exists()).toBe(true);
+    expect(summary.text()).toContain('gpt-4o-mini');
+    // 真实值仍取自配置：mock requestTimeoutMs=30000 / T=0.4
+    expect(summary.find('.sdp-summary__line').text()).toContain('30s');
+    expect(summary.find('.sdp-summary__line').text()).toContain('T=0.4');
+    expect(wrapper.find('.sdp-nav').exists()).toBe(false);
+
+    // 详细分段只在弹层里；打开后当前值仍读段头
+    expect(wrapper.find('#sdp-panel-request').exists()).toBe(false);
+    const configBtn = wrapper.find('.sdp-pane').findAll('button').find((b) => b.text() === '配置')!;
+    await configBtn.trigger('click');
+    await settle();
+    const modal = document.body.querySelector('.sdp-config-modal') as HTMLElement;
+    expect(modal, '配置弹层应已打开').toBeTruthy();
+    expect(modal.querySelector('#sdp-panel-request .sdp-panel__state')?.textContent).toContain('30s');
+    const paramsHead = modal.querySelector('#sdp-panel-params .sdp-panel__state');
+    expect(paramsHead?.textContent).toContain('T=0.4');
+    // 来源词人话化：后端枚举码不得直接露给运营
+    expect(paramsHead?.textContent).toContain('Prompt 文件声明');
+    expect(wrapper.text()).not.toContain('active-prompt');
+    expect(wrapper.text()).not.toContain('route-fallback');
     wrapper.unmount();
   });
 

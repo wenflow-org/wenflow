@@ -8,7 +8,7 @@
     <!-- 身份以**英文 canonical id** 为主（用户拍板 2026-10-14：中文名只是别名，且代码注册表与声明源
          实测 17/34 不同名，拿中文当身份会认错技能——如当时显示的「学习路径规划」并不是声明源里的名字）；
          中文名降为副行别名，只出现一次。 -->
-    <MkDetailHero avatar="S" :title="view.id" :sub="heroSub">
+    <MkDetailHero avatar="S" :title="view.id" :sub="heroSub" :desc="heroDesc">
       <template #pills>
         <!-- 健康徽标：带窗口词（「N 次失败」不带窗口会被读成全量，评审「窗口冒充全量」）且可点
              → 运行时页签（健康+证据先于配置，评审「结论埋深」） -->
@@ -17,7 +17,7 @@
         <span class="mk-badge mk-badge--muted" :title="`类别：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</span>
         <!-- 2026-10-24 用户「还是重复部分」：生效模型只在运行时「生效值」里出现一次（带来源），
              hero 不再重复一枚模型徽标——同一页同一事实两处读数。 -->
-        <span v-if="promptVersionText" class="mk-badge mk-badge--info">线上生效 {{ promptVersionText }}</span>
+        <span v-if="promptVersionText" class="mk-badge mk-badge--info" :title="promptVersionTitle">线上生效 {{ promptVersionText }}</span>
       </template>
       <!-- 2026-10-23：详情各域跟随顶栏刷新广播（liveRefreshSeq → load(true)），hero 不再出刷新钮 -->
     </MkDetailHero>
@@ -167,7 +167,7 @@
               </div>
             </div>
             <div class="skd-tablewrap">
-              <table v-if="versions.length" class="mk-table">
+              <table v-if="versions.length" class="mk-table mk-table--nowrap">
                 <thead>
                   <tr>
                     <th>版本</th>
@@ -182,9 +182,15 @@
                 <tbody>
                   <tr v-for="v in versions" :key="v.id">
                     <td class="mono">v{{ v.version }}</td>
-                    <td>{{ v.name || '—' }}</td>
+                    <td>
+                      <template v-if="v.name">{{ v.name }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td v-if="hasVersionMeta" class="mono">{{ fmtDate(v.createdAt) }}</td>
-                    <td v-if="hasVersionMeta">{{ v.createdBy || '—' }}</td>
+                    <td v-if="hasVersionMeta">
+                      <template v-if="v.createdBy">{{ v.createdBy }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td v-if="hasVersionMeta" class="skd-td-wrap" :title="versionDescTitle(v)">{{ versionDescText(v) }}</td>
                     <td><span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span></td>
                   </tr>
@@ -228,7 +234,9 @@
               <MkKpi label="平均耗时" :value="stat.calls ? fmtMs(stat.avgMs) : '—'" />
             </section>
           </div>
-          <p v-if="statsNote" class="mk-card__note">统计来源：{{ statsNote }}</p>
+          <!-- 「统计来源：Skill 执行日志」说明行 2026-10-25 撤除（用户「文案去掉」）：
+               这行只是把指标从哪张日志表聚合出来的实现细节报给运营，KPI 卡头已有窗口词；
+               来源字段仍在「工程」页签的工程信息里可查（排查口径时才需要）。 -->
           <!-- 运行时限制 / 模型配置 / 模型测试三张卡 2026-10-19 从本页删除：
                它们与下方 RuntimeTab（设计区块）渲染的是同一套配置的第二份可编辑副本
                （同一份 skill_model_configs、两个独立表单各自保存），页面上同题两遍，
@@ -253,6 +261,9 @@
               <button v-for="s in recent" :key="s.id" type="button" class="skd-call" :title="recentRowTitle(s)" @click="goTrace(s.traceId)">
                 <span class="skd-dot" :class="`is-${s.status}`" role="img" :aria-label="statusDotLabel(s.status)" :title="statusDotLabel(s.status)"></span>
                 <span class="skd-call__title">{{ recentRowText(s) }}</span>
+                <!-- 发生时间（2026-10-24 用户「最近调用可以加上调用时间」）：同日只给时:分，
+                     跨天带月-日；完整时刻在 title -->
+                <span v-if="s.ts" class="mono skd-call__time" :title="callTimeFull(s.ts)">{{ callTimeLabel(s.ts) }}</span>
                 <span class="mono skd-call__ms">{{ fmtMs(s.durationMs) }}</span>
               </button>
               <p v-if="!recent.length" class="mk-empty--line">近 7 天暂无该 Skill 的调用记录。指标由统计接口聚合，统计范围与列表不同，以指标卡为准。</p>
@@ -296,7 +307,7 @@
               </div>
             </div>
             <div class="skd-tablewrap">
-              <table v-if="routingRows.length" class="mk-table">
+              <table v-if="routingRows.length" class="mk-table mk-table--nowrap">
                 <thead>
                   <tr>
                     <th>字段</th><th>角色</th><th class="skd-th-wrap">说明</th><th>流向</th><th>渲染</th><th>属性</th>
@@ -307,7 +318,10 @@
                   <tr v-for="r in routingRows" :key="`${r.agentId}:${r.fieldId}`">
                     <td class="mono">{{ r.fieldId }}</td>
                     <td><span v-if="r.roleLabel" class="mk-badge" :class="r.roleCls">{{ r.roleLabel }}</span><span v-else class="mk-na">—</span></td>
-                    <td class="skd-td-wrap">{{ r.desc || '—' }}</td>
+                    <td class="skd-td-wrap">
+                      <template v-if="r.desc">{{ r.desc }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td class="mono">{{ r.handoffText }}</td>
                     <td><span class="mk-badge" :class="r.render === 'visible' ? 'mk-badge--render-visible' : 'mk-badge--render-hidden'">{{ r.render === 'visible' ? '可见' : '隐藏' }}</span></td>
                     <td>
@@ -477,9 +491,9 @@ const tab = ref(DEFAULT_TAB)
 
 /* ?skdTab= 写/读（tab 路由化，判例 LearnerDetail P0-2 / Orchestrator ?stage=&tab=）：
    深链/刷新/前进后退保持所在页签——此前页签不写 URL，刷新即回协议页。
-   #133：键必须与宿主列表页 Skills 的 ?tab=（run/prompt-eval）分开——
-   本页在 /admin/skills?view=skill&id=… 上，与列表共用一个 ?tab= 会互相覆盖
-   （详情内切页签 → 列表键被写成 versions → Esc 关闭后列表被静默重置为「Skill 运行」）。 */
+   #133：键必须与宿主列表页 Skills 的 ?tab= 分开（列表已无页签，但 ?tab=run|model-routing
+   等兼容键仍在）——本页在 /admin/skills?view=skill&id=… 上，与列表共用一个 ?tab= 会互相覆盖
+   （详情内切页签 → 列表键被写成 versions → Esc 关闭后列表被静默重置）。 */
 const tabRoute = useRoute()
 const TAB_KEYS = new Set(TABS.map((t) => t.key))
 /** #149：旧深链别名——本页「字段路由」历史键 fields（设计页键是 routing），
@@ -504,7 +518,7 @@ function readTabFromQuery(): string {
   return DEFAULT_TAB
 }
 /** 写回键（#133）：URL 上已有「本页页签键」的 ?tab= 时属旧深链，继续写回同一键（向后兼容）；
-    否则一律写本页独立键 skdTab，绝不动宿主列表的 run/prompt-eval */
+    否则一律写本页独立键 skdTab，绝不动宿主列表的 ?tab=（run / model-routing 兼容键） */
 function useLegacyTabKey(): boolean {
   const t = tabRoute?.query?.tab
   // 旧别名（fields）同样视为本页键；routing 归编排图，不认领（见上）
@@ -667,11 +681,11 @@ const skillId = computed(() => (subPage.value?.view === 'skill' ? subPage.value.
 /** 类别权威源（#138）：live 技能列表接口（与 Skills 列表同源）优先——同一技能在两个接口返回
     不同枚举（live category='generation' / workbench meta category='teaching'），此前静默合成
     导致同页不同加载时刻显示两种类别。现显式披露来源，避免无解释的跳变。 */
-interface SkillIdentity { id: string; name: string; category: string; categorySource: string; agentId: string; agentName: string }
+interface SkillIdentity { id: string; name: string; category: string; categorySource: string; agentId: string; agentName: string; description: string }
 /** workbench meta 松散契约（后端字段可选并持续新增；按已知键读取，不硬造展示） */
 interface WorkbenchMeta {
   parentAgent?: { id?: string; name?: string }
-  skill?: { id?: string; name?: string; category?: string }
+  skill?: { id?: string; name?: string; category?: string; description?: string }
   modelConfig?: { model?: string; tier?: string; llmRequest?: { model?: string; source?: string } }
   /** stats.source 枚举 = 后端 UnifiedSkillStats.source（skill-runtime-contract.service.ts:27）；
       'none' 由 skills.ts:975 在无统计行时落为字面量（truthy，非「未返回」） */
@@ -697,7 +711,9 @@ const view = computed<SkillIdentity | null>(() => {
       // #138：类别权威源 = live 技能列表（与 Skills 列表同源），显式披露
       categorySource: '技能列表 /admin/skills',
       agentId: lp.agentId || '',
-      agentName: lp.agentName || String(meta.value?.parentAgent?.name || '')
+      agentName: lp.agentName || String(meta.value?.parentAgent?.name || ''),
+      // 功能简介只来自 workbench-meta（live 档案不带 description）：meta 未回来时为空，不编造
+      description: String(meta.value?.skill?.description || '')
     }
   }
   const m = meta.value
@@ -708,7 +724,8 @@ const view = computed<SkillIdentity | null>(() => {
       category: m.skill?.category || '—',
       categorySource: 'workbench-meta（备用：已上线档案未就绪）',
       agentId: m.parentAgent?.id || '',
-      agentName: m.parentAgent?.name || m.parentAgent?.id || ''
+      agentName: m.parentAgent?.name || m.parentAgent?.id || '',
+      description: String(m.skill?.description || '')
     }
   }
   return null
@@ -722,8 +739,13 @@ const heroSub = computed(() => {
   const who = v.agentName || v.agentId || '—'
   // 类别走人话（Skills.vue 同字段判例）：裸枚举 teaching → 「教学」
   // 中文名是**别名**（标题已是英文 canonical id），故排在副行首位、不再进标题与面包屑
-  return `${v.name} · ${who} · ${categoryText(v.category)}`
+  // 别名与 id 相同时（目录未登记中文名）不重复占位（2026-10-25 英文为主）
+  const alias = v.name && v.name !== v.id ? v.name : ''
+  return [alias, who, categoryText(v.category)].filter(Boolean).join(' · ')
 })
+/** 功能简介（2026-10-25 用户「这个功能简介，可以做到详情页里面」）：列表副行只留身份，
+    这句「这个 Skill 做什么」搬进详情 hero。空则不渲染（不占一行空白）。 */
+const heroDesc = computed(() => String(view.value?.description || '').trim())
 
 /* ===== hero pills ===== */
 const stat = computed(() =>
@@ -746,20 +768,40 @@ const healthBadge = computed<{ cls: string; text: string; title: string }>(() =>
 })
 
 /* ===== 生效 Prompt（协议页签 System Prompt 卡 + hero 版本 pill + 弹层预填） ===== */
-interface EffectivePrompt { prompt?: { version?: number | string; name?: string; systemPrompt?: string } }
+interface EffectivePrompt {
+  /** db-active = 线上生效的 DB 版本；code-fallback / generated-default = 无 DB 版本 */
+  source?: string
+  prompt?: { version?: number | string; name?: string; systemPrompt?: string }
+}
 const prompt = ref<EffectivePrompt | null>(null)
 const promptFailed = ref(false)
 /** 请求是否已返回（区分「加载中」与「成功但无生效版本」——此前空数据永久停留「加载中…」） */
 const promptLoaded = ref(false)
+/**
+ * hero 的版本读数（2026-10-24 用户「什么是版本，单一源头」）：
+ * 「版本」= 线上生效的 Prompt 版本号，与 Skill 列表「Prompt 版本」列同一条规则
+ * （ACTIVE 基线最高版本）。Prompt 名字（v4-default-skill.x）不再拼进徽标——
+ * 名字里本来就带着版本号，两句并排会把「v4 · v4-…」读成两个版本。
+ */
 const promptVersionText = computed(() => {
   const p = prompt.value?.prompt
-  if (!p) return ''
-  return [p.version != null ? `v${String(p.version)}` : '', String(p.name || '')].filter(Boolean).join(' · ')
+  if (!p || p.version == null) return ''
+  return `v${String(p.version)}`
+})
+const promptVersionTitle = computed(() => {
+  const name = prompt.value?.prompt?.name
+  return name
+    ? `线上生效 Prompt：${name} · 可在「版本」页签回滚`
+    : '线上生效 Prompt 版本 · 可在「版本」页签回滚'
 })
 const promptStateText = computed(() => {
   if (promptFailed.value) return '加载失败'
-  if (promptLoaded.value && !promptVersionText.value) return '暂无生效版本'
-  return promptVersionText.value ? `生效版本 ${promptVersionText.value}` : '生效版本加载中…'
+  if (!promptLoaded.value) return '生效版本加载中…'
+  if (promptVersionText.value) return `生效版本 ${promptVersionText.value}`
+  /* 无 DB 版本不是「坏」：代码内置兜底与按定义生成都是合法状态，分开说清 */
+  if (prompt.value?.source === 'code-fallback') return '代码内置 Prompt（无 DB 版本）'
+  if (prompt.value?.source === 'generated-default') return '按定义生成（无 DB 版本）'
+  return '暂无生效版本'
 })
 const systemPromptText = computed(() => String(prompt.value?.prompt?.systemPrompt || ''))
 /** 页内截断上限与 SkillDrawer 一致（slice(0, 1200)），完整内容在设计页 */
@@ -1126,6 +1168,18 @@ function recentRowTitle(s: TraceSpan): string {
   }
   return parts.join('\n')
 }
+/** 最近调用的发生时间：今天只给时:分，跨天带月-日（等宽数字，避免行内抖动） */
+function callTimeLabel(ts: number): string {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  const hm = `${p(d.getHours())}:${p(d.getMinutes())}`
+  const now = new Date()
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  return sameDay ? hm : `${p(d.getMonth() + 1)}-${p(d.getDate())} ${hm}`
+}
+function callTimeFull(ts: number): string {
+  return new Date(ts).toLocaleString('zh-CN', { hour12: false })
+}
 
 /* 模型配置 / 模型测试的状态与动作 2026-10-19 迁出本页：
    宿主原本自己维护一份 rtForm/probeForm 并渲染同名的两张卡，与设计区块 RuntimeTab 构成
@@ -1338,7 +1392,6 @@ useEscape(
 
 /* ===== 版本 / 字段路由表格（原型 .tbl 包壳） ===== */
 .skd-tablewrap { overflow-x: auto; }
-.skd-tablewrap .mk-table td { white-space: nowrap; }
 .skd-tablewrap .mk-table .skd-td-wrap { white-space: normal; min-width: 160px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .skd-tablewrap .mk-table th.skd-th-wrap { white-space: normal; }
 
@@ -1353,7 +1406,7 @@ useEscape(
 /* ===== 运行时：最近调用行（SkillDrawer msk__row 迁入：状态点 + 标题 + 耗时） ===== */
 .skd-call {
   display: grid;
-  grid-template-columns: 8px 1fr auto;
+  grid-template-columns: 8px 1fr auto auto;
   gap: 10px;
   align-items: center;
   padding: 8px 0;
@@ -1373,6 +1426,7 @@ useEscape(
 .skd-dot.is-warn { background: var(--mk-amber); }
 .skd-dot.is-err { background: var(--mk-red); }
 .skd-call__title { font-weight: 500; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skd-call__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .skd-call__ms { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
 
 /* ===== 说明行 / 卡内空态：复用共享原语（.mk-card__note / .mk-empty--line），

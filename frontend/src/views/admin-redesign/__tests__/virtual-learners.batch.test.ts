@@ -9,8 +9,9 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import VirtualLearners from '../VirtualLearners.vue';
 import Confirm from '../Confirm.vue';
-import { liveVirtuals, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats, liveAutopilotConcurrency } from '../live';
+import { liveVirtuals, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats, liveAutopilotConcurrency, refreshLiveVirtuals } from '../live';
 import { settleConfirm, confirmState } from '../useConfirm';
+import { filterOption } from './filter-controls';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -62,14 +63,28 @@ vi.mock('../store', async () => {
   };
 });
 
-const { terminateMock, reclaimMock, openSubPageMock } = vi.hoisted(() => ({
+/* 页头「从卡库派生」走 vue-router（本页不再自己建号，见 2026-10-25 口径） */
+const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: pushMock }) }));
+
+const { terminateMock, reclaimMock, openSubPageMock, cardsIndexMock, cardsTasksMock, cardsCloneMock } = vi.hoisted(() => ({
   terminateMock: vi.fn(async () => ({ data: { data: { dryRun: false, terminated: 2, skippedTerminal: 1 } } })),
   /* 干跑响应形状用 Record<string, unknown> 放宽：B8-F4-2 后新增 scanned/skippedSessions/batchLimit，
      逐字段标注会让「旧响应缺新字段」的既有用例无法复用同一 mock */
   reclaimMock: vi.fn(async (): Promise<{ data: { data: Record<string, unknown> } }> => ({
     data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [] as Array<Record<string, unknown>> } }
   })),
-  openSubPageMock: vi.fn()
+  openSubPageMock: vi.fn(),
+  /* 「从卡库派生」同页弹层：卡墙索引 + 任务 + 创建 */
+  cardsIndexMock: vi.fn(async () => ({
+    data: { data: { cards: [{ profileId: 'p1', name: '高一学生小陈' }], summary: { total: 1, builtin: 0, custom: 1, derived: 0 } } }
+  })),
+  cardsTasksMock: vi.fn(async () => ({
+    data: { data: { groups: [{ profileId: 'p1', name: '高一学生小陈', tasks: [{ id: 'story-1', title: '函数补差', opening: null }] }] } }
+  })),
+  cardsCloneMock: vi.fn(async (items: Array<{ profileId: string }>) => ({
+    data: { data: { created: items.map((it) => ({ profileId: `new-${it.profileId}`, userId: 'u', name: 'n', cardKey: 'k', taskCount: 1 })), failed: [] } }
+  }))
 }));
 
 vi.mock('@/api/adminApi', () => ({
@@ -81,6 +96,9 @@ vi.mock('@/api/adminApi', () => ({
     /* P1#20 速率卡：上限分母只认已保存值（getVirtualLabSettings 回执） */
     getVirtualLabSettings: vi.fn(async () => ({ data: { data: { settings: { virtualLearnerRpmLimit: 200 }, rpm: { rpm: 120, inFlight: 3, queued: 0 } } } })),
     updateVirtualLabSettings: vi.fn(async () => ({ data: { data: { rpm: { rpm: 200, inFlight: 3, queued: 0 } } } })),
+    cardsIndex: cardsIndexMock,
+    cardsTasks: cardsTasksMock,
+    cardsClone: cardsCloneMock,
     terminateVirtualSessions: terminateMock,
     reclaimStaleVirtualSessions: reclaimMock
   }
@@ -121,10 +139,30 @@ async function mountPage() {
      先把已存隐藏集置空把所有列打开；默认隐藏本身另有专测。 */
   localStorage.setItem('wf_vl_hidden_cols_v2', JSON.stringify([]));
   localStorage.setItem('wf_vl_hidden_cols_v3', JSON.stringify([]));
-  const w = mount(VirtualLearners);
+  const w = mount(VirtualLearners, { attachTo: document.body });
   await flushPromises();
   await nextTick();
   return w;
+}
+
+/** 容量设置抽屉（Teleport 到 body）：从页头「维护」菜单打开，读/关都走 document */
+async function openSettingsDrawer(w: ReturnType<typeof mount>) {
+  const maint = w.findAll('button').find((b) => b.text() === '维护');
+  if (!maint) throw new Error('页头没有「维护」菜单');
+  await maint.trigger('click');
+  await nextTick();
+  const item = [...document.querySelectorAll('.mk-menu__item')].find((el) =>
+    el.textContent?.includes('容量与实验环境')
+  ) as HTMLElement | undefined;
+  if (!item) throw new Error('维护菜单里没有「容量与实验环境」');
+  item.click();
+  await flushPromises();
+  await nextTick();
+}
+
+function closeSettingsDrawer() {
+  const close = document.querySelector('.mk-drawer__close') as HTMLElement | null;
+  close?.click();
 }
 
 /** 默认隐藏专测用：清掉本地记录，走 MkCols 首访 defaultHidden 路径 */
@@ -171,6 +209,10 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     reclaimMock.mockReset();
     reclaimMock.mockImplementation(async () => ({ data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [] } } }));
     openSubPageMock.mockClear();
+    pushMock.mockClear();
+    cardsIndexMock.mockClear();
+    cardsTasksMock.mockClear();
+    cardsCloneMock.mockClear();
   });
 
   it('状态条已退役：分区筛选计数迁卡头 chips + 活动会话进完成率 hint + 已截断提示保留', async () => {
@@ -190,22 +232,19 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.find('.mk-status').exists()).toBe(false);
     /* 会话口径：活动 = running 2 + created 3 → 完成率卡。2026-10-19 用户走查「KPI hint
        在报读数」后读数下沉：副行只留口径短语，活动会话数住 title 长释（同一会话漏斗） */
-    const completion = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完成率');
+    const completion = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完成率（全部会话）');
     expect(completion!.find('.mk-kpi__hint').exists()).toBe(false);
     expect(completion!.attributes('title')).toContain('活动会话 5');
-    // 筛选 chips 与「运行状态」列同源（runPhaseOf 三档），「曾失败」已迁到异常列表头
-    // 按卡定位到列表卡（.mk-card--fill）：页内还有压测参数等其它卡头，取「第一个 .mk-card__head」会取错
-    const head = w.find('.mk-card--fill .mk-card__head');
-    const countOf = (label: string) =>
-      head.findAll('.mk-pill').find((p) => p.text().replace(/\s/g, '').startsWith(label))?.find('.mk-pill__count').text();
-    expect(countOf('运行中')).toBe('1');
-    expect(countOf('停滞')).toBe('2');
-    expect(countOf('已停止')).toBe('0');
+    // 生命周期是维度下拉（2026-10-27 统一），计数在 option 文案里，与「运行状态」列同源
+    const countOf = (label: string) => filterOption(w as never, '状态', label).text()
+    expect(countOf('进行中')).toBe('进行中（1）')
+    expect(countOf('已暂停')).toBe('已暂停（1）')
+    expect(countOf('停滞')).toBe('停滞（1）')
+    expect(countOf('已停止')).toBe('已停止（0）')
+    expect(w.find('.mk-card--fill .mk-card__head .mk-pills').exists()).toBe(false)
     expect(w.text()).not.toContain('需关注');
     // 截断提示迁卡头 meta（与行数同格）；单位与分页器同词（位学习者），并说明「本次载入」而非再报一个「共」
     expect(w.text()).toContain('共 80 位学习者 · 本次载入');
-    // 回收无响应收进「维护」菜单，信号改挂在触发钮的角标上
-    expect(w.find('.vl-headmenu__badge').text()).toBe('2');
   });
 
   it('P1#19 运行统计三态：stats 拉取失败 → KPI「不可用」弱红可点重试（不再 0% 假绿）', async () => {
@@ -215,8 +254,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const kpiNum = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
     // 数字不渲染（防 0% 假绿），错误档显「不可用」+ hint 给动作出口
-    expect(kpiNum('完成率')).toBe('不可用');
-    expect(kpiNum('系统失败率')).toBe('不可用');
+    expect(kpiNum('完成率（全部会话）')).toBe('不可用');
+    expect(kpiNum('系统失败率（全部会话）')).toBe('不可用');
     expect(kpiNum('今日调用')).toBe('不可用');
     expect(w.text()).toContain('统计不可用 · 点击重试');
     expect(w.find('.mk-kpi--bad').exists()).toBe(true);
@@ -231,8 +270,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const w = await mountPage();
     const kpiNum = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
-    expect(kpiNum('完成率')).toBe('…');
-    expect(kpiNum('系统失败率')).toBe('…');
+    expect(kpiNum('完成率（全部会话）')).toBe('…');
+    expect(kpiNum('系统失败率（全部会话）')).toBe('…');
     expect(w.text()).toContain('统计加载中');
   });
 
@@ -251,9 +290,9 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const kpiNum = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
     // 1/26 = 3.846… → 4%；系统失败率 / 合计同为整数百分号
-    expect(kpiNum('完成率')).toBe('4%');
-    expect(kpiNum('系统失败率')).toBe('19%');
-    expect(w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率')?.attributes('title')).toContain('两类合计占 69%');
+    expect(kpiNum('完成率（全部会话）')).toBe('4%');
+    expect(kpiNum('系统失败率（全部会话）')).toBe('19%');
+    expect(w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率（全部会话）')?.attributes('title')).toContain('两类合计占 69%');
     expect(w.text()).not.toMatch(/3\.8461538/);
   });
 
@@ -263,27 +302,30 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const w = await mountPage();
     const kpiNum = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
-    expect(kpiNum('完成率')).toBe('<1%');
+    expect(kpiNum('完成率（全部会话）')).toBe('<1%');
   });
 
-  it('P2 并发「已满」：琥珀（资源状态非故障），不再红档', async () => {
+  it('并发读数并进容量抽屉：KPI 带不再有「并发」卡，读数与上限输入同行', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     liveAutopilotConcurrency.value = { used: 10, limit: 10, queued: 0 };
     const w = await mountPage();
-    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '并发')!;
-    expect(card.text()).toContain('已满');
-    expect(card.classes()).not.toContain('mk-kpi--bad');
-    expect(card.classes()).toContain('mk-kpi--warn');
+    expect(w.findAll('.mk-kpi').some((c) => c.find('.mk-kpi__label').text() === '并发')).toBe(false);
+    // 2026-10-26：容量设置移入页头「维护」菜单 → 右侧抽屉，读数要在抽屉打开后才在 DOM 里
+    await openSettingsDrawer(w);
+    const readout = document.body.textContent || '';
+    expect(readout).toContain('在跑 10 / 上限 10');
+    expect(readout).toContain('已满');
+    closeSettingsDrawer();
   });
 
-  it('P1#20 速率卡：值「在途 / 上限」+ hint 口径，分母用已保存回执值（不吃输入框脏值）', async () => {
+  it('速率读数并进容量抽屉：在途 / 上限（已保存回执值）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '速率')!;
     // getVirtualLabSettings 回执：limit=200 / inFlight=3
-    // 2026-10-03：值与口径分栏——整串「在途 3 · 上限 200/分」在卡宽内必换行，把整排 KPI 拉伸到 180px
-    expect(card.find('.mk-kpi__num').text()).toBe('3 / 200/分');
-    expect(card.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(w.findAll('.mk-kpi').some((c) => c.find('.mk-kpi__label').text() === '速率')).toBe(false);
+    await openSettingsDrawer(w);
+    expect(document.body.textContent || '').toContain('在途 3 / 上限 200/分');
+    closeSettingsDrawer();
   });
 
   it('P1#20 创建列：相对时间配绝对时间 title', async () => {
@@ -327,47 +369,57 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('系统失败率');
     expect(w.text()).toContain('30%');
     /* 副行必须写明分母与「人为终止另计」，读数（三项分解）与合计失败率（40%）随长释进 title——
-       运营不再把 30% 读成全部失败占比。
-       2026-10-08 走查 #3：分母由裸「全部」改为「全部会话」——同一张卡上方是会话口径、
-       下方表格是学习者口径（行数 = 虚拟学习者），裸「全部」会被读成同一个分母。 */
-    const failure = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率');
+       运营不再把 30% 读成全部失败占比。 */
+    const failure = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率（全部会话）');
     expect(failure!.find('.mk-kpi__hint').exists()).toBe(false);
     const failureTitle = failure!.attributes('title') || '';
     expect(failureTitle).toContain('系统失败 3');
     expect(failureTitle).toContain('人为终止 1');
     expect(failureTitle).toContain('两类合计占 40%');
     expect(failureTitle).toContain('已完成 6 · 共 10 场');
-    // 表格分页的计数单位直接写「位学习者」，不再用一句「行数=学习者数」解释口径
-    expect(w.find('.mk-pagination__total').text()).toContain('位学习者');
+    // 单页（1 行 ≤ 15）不渲染页码器：此前 2 条数据也占一行全禁用的页码器
+    expect(w.find('.mk-pagination').exists()).toBe(false);
     expect(w.text()).not.toContain('行数为虚拟学习者数');
   });
 
-  it('无会话数据时完成率/系统失败率显示 0%（共享 KPI 卡常驻）', async () => {
+  it('分页器：单页不渲染，多页出现且单位是「位学习者」', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    const one = await mountPage();
+    expect(one.find('.mk-pagination').exists()).toBe(false);
+    one.unmount();
+
+    liveVirtuals.value = Array.from({ length: 16 }, (_, i) => makeVirtual(i + 1));
+    const many = await mountPage();
+    expect(many.find('.mk-pagination__total').text()).toContain('位学习者');
+    many.unmount();
+  });
+
+  it('没有会话数据时完成率/系统失败率显示「—」（0% 会被读成跑过但全没完成）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
     // 按卡片结构断言而非拼接文本（MkKpi 里 label 与数字是相邻元素，text() 无空格）
     const kpiNum = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
-    expect(kpiNum('完成率')).toBe('0%');
-    expect(kpiNum('系统失败率')).toBe('0%');
+    expect(kpiNum('完成率（全部会话）')).toBe('—');
+    expect(kpiNum('系统失败率（全部会话）')).toBe('—');
     // 防回归：这一页的运行指标必须挂在共享 .mk-kpi-grid 下（2026-09-29 归一，原 MkStatStrip 自由条）
     expect(w.find('.vl-kpi .mk-kpi-grid').exists()).toBe(true);
-    expect(w.findAll('.mk-kpi')).toHaveLength(6);
+    expect(w.findAll('.mk-kpi')).toHaveLength(4);
   });
 
-  it('压测参数卡已迁出（2026-10-13）：本页不再有写控件，只留只读读数', async () => {
+  it('容量与实验环境不再占版面：只在维护菜单里，默认不渲染', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    // 卡片连同写控件（速率/最高并发/日期模拟）整体迁往「模型与接入 → 虚拟学习者」页签，
-    // 卡内结构回归见 virtual-lab-load-settings.test.ts
-    expect(w.find('.vl-settings').exists()).toBe(false);
-    expect(w.find('.vl-rpm__input').exists()).toBe(false);
-    expect(w.find('.sd-settings').exists()).toBe(false);
-    // 只读读数保留：并发 / 速率 仍在 KPI 带里（运营仍可任意启动，上限由设置页统一管控）
-    const kpiText = w.find('.vl-kpi').text();
-    expect(kpiText).toContain('并发');
-    expect(kpiText).toContain('速率');
-    expect(w.findAll('.vl-kpi .mk-kpi')).toHaveLength(6);
+    // 2026-10-26 用户「功能看看放在右上角维护？」：低频设置不再占列表下方整行
+    expect(w.find('.vl-settings-card').exists()).toBe(false);
+    expect(w.text()).not.toContain('容量与实验环境');
+    // 维护菜单里有入口
+    const maint = w.findAll('button').find((b) => b.text() === '维护');
+    expect(maint, '页头应有「维护」菜单').toBeTruthy();
+    await maint!.trigger('click');
+    const item = [...document.querySelectorAll('.mk-menu__item')].find((el) => el.textContent?.includes('容量与实验环境'));
+    expect(item, '维护菜单应有「容量与实验环境」').toBeTruthy();
+    closeSettingsDrawer();
   });
 
   /* 2026-10-16 用户拍板「kpi 面板内部进度条不要出现」：完成率/并发两张卡原先各挂一根
@@ -390,41 +442,39 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).not.toContain('已截断');
   });
 
-  /** 2026-10-18 用户走查「多选还是不要先显示」：勾选列默认不出，
-   *  批量入口保留在「列」菜单（选择框（批量操作）），需要时自己打开。 */
-  it('选择框列默认隐藏：首访无全选、无行内勾选，列菜单仍可找回', async () => {
+  /** 2026-10-18 用户走查「多选还是不要先显示」：勾选列默认不出（2026-10-17 拍板保留）。
+   *  2026-10-26：入口从「列」菜单挪到卡头「批量」按钮——列菜单读作列设置，读不出这页能批量跑。 */
+  it('选择框列默认隐藏：首访无全选、无行内勾选，卡头「批量」按钮可打开', async () => {
     liveVirtuals.value = [makeVirtual(1), makeVirtual(2)];
     const w = await mountPageFreshCols();
     expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(false);
     expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(0);
     expect(w.text()).not.toContain('已选');
 
-    await findBtn(w, '列').trigger('click');
-    await nextTick();
-    const labels = w.findAll('.mk-cols__item').map((x) => x.text());
-    expect(labels.some((t) => t.includes('选择框'))).toBe(true);
-
-    // 打开后可勾选并出批量条（入口是活的，不是只删了列）
-    const item = w.findAll('.mk-cols__item').find((x) => x.text().includes('选择框'))!;
-    await item.find('input[type="checkbox"]').setValue(true);
+    // 卡头「批量」按钮直接进入多选态
+    await findBtn(w, '批量').trigger('click');
     await nextTick();
     expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(2);
     await w.findAll<HTMLInputElement>('tbody input[type="checkbox"]')[0].setValue(true);
     await nextTick();
     expect(w.text()).toContain('已选 1 人');
+
+    // 再点一次退出多选态并清掉选中
+    await findBtn(w, '批量').trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(0);
+    expect(w.text()).not.toContain('已选');
   });
 
-  /** 2026-10-19 运营走查「批量能力默认不存在」：默认隐藏保留（2026-10-18 拍板不动），
-   *  但页头补一枚直接入口 —— 两个默认叠加（列隐藏 + 批量条要选中才出）后，首访看不到
-   *  任何批量动作，运营会以为只能一个个点。 */
-  it('页头不再放「批量操作」：勾选列的入口只有列菜单一处', async () => {
+  /** 2026-10-26：列菜单只做列显隐，批量入口在卡头。 */
+  it('批量入口在卡头：列菜单不再承担「打开勾选列」', async () => {
     liveVirtuals.value = [makeVirtual(1), makeVirtual(2)];
     const w = await mountPageFreshCols();
-    expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(0);
-    // 2026-10-21 逻辑重整：页头只留新建与维护；「打开勾选列」是列设置，回到列菜单
     const header = w.find('.mk-pagehead__actions');
     expect(header.text()).not.toContain('批量操作');
-    await findBtn(w, '列').trigger('click');
+    const cardHead = w.find('.mk-card--fill .mk-card__head');
+    expect(cardHead.text()).toContain('批量');
+    await w.find('.mk-cols__trigger').trigger('click');
     await nextTick();
     const item = w.findAll('.mk-cols__item').find((x) => x.text().includes('选择框'))!;
     await item.find('input[type="checkbox"]').setValue(true);
@@ -434,21 +484,19 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(JSON.parse(localStorage.getItem('wf_vl_hidden_cols_v3') || '[]')).not.toContain('check');
   });
 
-  it('并发/速率 KPI 可点直达容量设置，指引不再指向已撤的页签名', async () => {
-    liveVirtuals.value = [makeVirtual(1)];
+  it('「无响应候选」KPI 常可点：点击打开回收预览（不再只在失败态可点）', async () => {
+    liveVirtualStaleCount.value = 2;
+    liveVirtuals.value = [makeVirtual(1, { stalledCount: 2 })];
+    reclaimMock.mockResolvedValueOnce({
+      data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [] } }
+    });
     const w = await mountPage();
-    const kpi = (label: string) => w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text().trim() === label)!;
-    const concurrency = kpi('并发');
-    const rate = kpi('速率');
-    // 渲染成真 button（MkKpi clickable）→ 键盘可达
-    expect(concurrency.element.tagName).toBe('BUTTON');
-    expect(rate.element.tagName).toBe('BUTTON');
-    expect(concurrency.classes()).toContain('mk-kpi--clickable');
-    expect(rate.classes()).toContain('mk-kpi--clickable');
-    // 去向：容量治理 2026-10-21 迁到「模型与接入 · 虚拟学习者」页签（2026-10-24 修死链）
-    expect(concurrency.attributes('title')).toContain('虚拟学习者');
-    expect(rate.attributes('title')).toContain('虚拟学习者');
-    expect(rate.attributes('title')).not.toContain('调用与健康');
+    const kpi = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '无响应候选')!;
+    expect(kpi.element.tagName).toBe('BUTTON');
+    await kpi.trigger('click');
+    await flushPromises();
+    expect(reclaimMock).toHaveBeenCalledWith({ dryRun: true });
+    w.unmount();
   });
 
   it('复选框勾选后出现批量条：已选数量 + 取消选择', async () => {
@@ -640,46 +688,58 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w2.findAll('tbody .vl-abn')).toHaveLength(0);
   });
 
-  it('「新建」触发新建弹窗（批量实验已下线，列表页「新建/批量新建」是唯一创建入口）', async () => {
+  it('页头主操作是「从卡库派生」：同页弹层选卡，不再跳卡库', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    const createBtn = w.findAll('button').find((b) => b.text() === '新建')!;
-    await createBtn.trigger('click');
-    await nextTick();
-    // 2026-10-21：新建变成菜单（新建一个人 / 批量新建），主按钮不再直接开表单
-    const items = w.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
-    expect(items).toContain('新建一个人');
-    expect(items).toContain('批量新建');
-    await w.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '新建一个人')!.trigger('click');
-    await nextTick();
-    await nextTick();
-    expect(document.body.textContent).toContain('新建虚拟学习者');
+    // 建号只在卡库：列表页没有「新建 / 批量新建」菜单，也没有新建弹窗
+    expect(w.findAll('button').map((b) => b.text())).not.toContain('新建');
+    expect(w.text()).not.toContain('新建一个人');
+    expect(w.text()).not.toContain('批量新建');
+    const deriveBtn = w.findAll('button').find((b) => b.text() === '从卡库派生')!;
+    expect(deriveBtn, '页头缺少派生入口').toBeTruthy();
+    await deriveBtn.trigger('click');
+    await flushPromises();
+    // 2026-10-26：不再跳卡库（创建完人停在卡墙），改在本页弹层里选卡
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('创建虚拟学习者');
+    expect(cardsIndexMock).toHaveBeenCalled();
     w.unmount();
   });
 
-  it('「新建」仍是 learners 语境：提交后跳画像页（与卡库「平台生产」同表单、落点不同）', async () => {
+  it('派生创建成功：回刷列表并高亮新行（实例落在本页首位）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    await w.findAll('button').find((b) => b.text() === '新建')!.trigger('click');
+    cardsIndexMock.mockResolvedValueOnce({
+      data: { data: { cards: [{ profileId: 'p1', name: '高一学生小陈' }], summary: { total: 1, builtin: 0, custom: 1, derived: 0 } } }
+    });
+    await findBtn(w, '从卡库派生').trigger('click');
+    await flushPromises();
+    // 选卡步 → 勾一张 → 下一步
+    const cardPick = document.body.querySelector('.cdd-card__pick input') as HTMLInputElement;
+    cardPick.checked = true;
+    cardPick.dispatchEvent(new Event('change'));
     await nextTick();
-    await w.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '新建一个人')!.trigger('click');
-    await nextTick();
-    await nextTick();
-    // 弹窗走 Teleport 到 body：字段与按钮都在 document.body 上操作
-    const setField = (sel: string, value: string) => {
-      const el = document.body.querySelector(sel) as HTMLInputElement | HTMLTextAreaElement;
-      el.value = value;
-      el.dispatchEvent(new Event('input'));
-    };
-    expect(document.body.textContent).toContain('新建虚拟学习者');
-    setField('.mk-modal__panel input.mk-field__input', '考研二战的小李');
-    setField('.mk-modal__panel textarea.mk-field__textarea', '二战考研，逻辑还行但总在数学上丢分，晚上效率低。');
-    await nextTick();
-    const submit = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === '创建虚拟学习者') as HTMLButtonElement;
+    const next = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('下一步'))!;
+    next.dispatchEvent(new Event('click'));
+    await flushPromises();
+    expect(cardsTasksMock).toHaveBeenCalledWith(['p1']);
+    const submit = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('个虚拟学习者'))!;
     submit.dispatchEvent(new Event('click'));
     await flushPromises();
-    // learners 语境维护原行为：建完跳画像页去生成故事（库语境才留在卡库）
-    expect(openSubPageMock).toHaveBeenCalledWith('virtual', 'vl-new');
+    expect(cardsCloneMock).toHaveBeenCalledWith([{ profileId: 'p1', storyIds: ['story-1'] }], undefined);
+    // 创建成功后回刷列表（实例不在这面卡墙上，创建完要能在本页看到）
+    expect(refreshLiveVirtuals).toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it('空态：没有派生实例时指向卡库（不再说「新建后生成故事」）', async () => {
+    liveVirtuals.value = [];
+    const w = await mountPage();
+    const empty = w.find('.mk-empty');
+    expect(empty.exists()).toBe(true);
+    expect(empty.text()).toContain('还没有派生过虚拟学习者');
+    expect(empty.text()).toContain('卡库');
+    expect(empty.text()).not.toContain('新建虚拟学习者');
     w.unmount();
   });
 
@@ -689,7 +749,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const row = w.find('.mk-card--fill tbody tr');
     expect(row.exists()).toBe(true);
     // 2026-10-12 外部批评采纳（操作密度）：行内 = 运行 / ⋯；测试（低频诊断）与跨页导航都进 ⋯ 菜单
-    expect(row.findAll('.mk-actions > .mk-btn').map((b) => b.text())).toEqual(['运行']);
+    expect(row.findAll('.mk-actions > .mk-link').map((b) => b.text())).toEqual(['运行']);
     await row.find('.mk-menu__btn').trigger('click');
     await nextTick();
     const itemOf = (text: string) => row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === text);
@@ -716,7 +776,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     liveVirtuals.value = [makeVirtual(1, { runningCount: 1, runningSessionIds: ['r-1'] })];
     const w = await mountPage();
     const row = w.find('.mk-card--fill tbody tr');
-    expect(row.find('.mk-actions > .mk-btn').text()).toBe('暂停');
+    expect(row.find('.mk-actions > .mk-link').text()).toBe('暂停');
     await row.find('.mk-menu__btn').trigger('click');
     await nextTick();
     const items = row.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
@@ -740,9 +800,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const cell = w.find('tbody tr td[title^="故事池"]');
     expect(cell.exists(), '缺少故事 / 路径列').toBe(true);
     expect(cell.text().replace(/\s+/g, '')).toBe('2/5');
-    // 一个故事可衍生多条路径：路径数大于故事数不是数据错，title 必须交代设计语义
+    // 两个读数并置；title 只说两个数，不再解释「一个故事可衍生多条路径」这类设计语义
     expect(cell.attributes('title')).toContain('已生成路径 5 条');
-    expect(cell.attributes('title')).toContain('一个故事可衍生多条路径');
     // 2026-10-21 晚：状态列不再逐条展开运行，只出「运行中 / 停滞 / 已停止」
     expect(w.find('.vl-histline').exists()).toBe(false);
     expect(w.find('.vl-state-cell').text()).toBe('已停止');

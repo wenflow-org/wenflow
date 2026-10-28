@@ -7,8 +7,6 @@ const getConfig = jest.fn()
 const updateConfig = jest.fn()
 const testConnection = jest.fn()
 const safeHttpRequest = jest.fn()
-const refresh = jest.fn()
-const getRuntimeCapabilityProbeEnabled = jest.fn()
 
 jest.mock('express', () => ({
   Router: () => ({
@@ -37,14 +35,6 @@ jest.mock('../../utils/safe-http', () => ({ safeHttpRequest }))
 jest.mock('../../services/runtime-network-policy.service', () => ({
   getRuntimeNetworkPolicy: jest.fn(() => ({})),
   updateRuntimeNetworkPolicy: jest.fn()
-}))
-
-jest.mock('../../services/ai-capability-health.service', () => ({
-  aiCapabilityHealthService: { refresh }
-}))
-
-jest.mock('../../services/capability-probe-settings.service', () => ({
-  getRuntimeCapabilityProbeEnabled
 }))
 
 require('../admin/api-config')
@@ -85,8 +75,27 @@ describe('Admin API 配置 Secret 绑定', () => {
     jest.clearAllMocks()
     getConfig.mockResolvedValue(currentConfig)
     updateConfig.mockResolvedValue(currentConfig)
-    refresh.mockResolvedValue({})
-    getRuntimeCapabilityProbeEnabled.mockResolvedValue(true)
+  })
+
+  it('通道测试留空密钥时沿用已保存密钥（地址未变）', async () => {
+    testConnection.mockResolvedValue({ success: true, modelsCount: 3, models: ['a', 'b', 'c'] })
+    const req: any = { body: { apiUrl: currentConfig.apiUrl, apiKey: '' } }
+    const res = createResponse()
+
+    await routes['POST /test'](req, res)
+
+    expect(testConnection).toHaveBeenCalledWith(currentConfig.apiUrl, 'saved-secret')
+    expect(res.statusCode).toBe(200)
+  })
+
+  it('通道测试换了地址且密钥留空时，不把旧密钥发给新端点', async () => {
+    testConnection.mockResolvedValue({ success: false, error: '缺少密钥' })
+    const req: any = { body: { apiUrl: 'https://other-provider.example/v1', apiKey: '' } }
+    const res = createResponse()
+
+    await routes['POST /test'](req, res)
+
+    expect(testConnection).toHaveBeenCalledWith('https://other-provider.example/v1', '')
   })
 
   it('更换主 Endpoint 时不能复用掩码后的平台密钥', async () => {

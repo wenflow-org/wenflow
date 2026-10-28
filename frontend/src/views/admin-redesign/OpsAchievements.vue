@@ -45,11 +45,19 @@
         v-else-if="defsFailed"
         icon="!"
         title="成就定义加载失败"
+        description="无法读取成就定义清单，读数可能不完整。"
         action-text="重试"
         @action="loadDefs"
       />
       <!-- 原先缺 v-else 兜底：后端返回空数组时卡内什么都不渲染（审计 附 A #10） -->
-      <MkEmptyState v-else icon="◌" title="暂无成就定义" action-text="刷新" @action="loadDefs" />
+      <MkEmptyState
+        v-else
+        icon="◌"
+        title="暂无成就定义"
+        description="还没有配置任何成就。定义来自成就目录，配置后学习者达成时自动发放。"
+        action-text="刷新"
+        @action="loadDefs"
+      />
     </div>
 
     <!-- 解锁记录 -->
@@ -85,7 +93,7 @@
                 :aria-sort="achSortState('earnedAt')"
                 @click="toggleAchSort('earnedAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAchSort('earnedAt')">解锁时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right ach-c-act">操作</th>
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -101,9 +109,8 @@
               </td>
               <td>
                 <div class="mk-cell-main">
-                  <strong>
-                    {{ r.user?.name || '—' }}
-                  </strong>
+                  <strong v-if="r.user?.name">{{ r.user.name }}</strong>
+                  <span v-else class="mk-na">—</span>
                   <span class="mk-cell-sub" :title="r.user?.email || r.userId">{{ r.user?.email || r.userId }}</span>
                 </div>
               </td>
@@ -121,8 +128,10 @@
       </div>
       <MkEmptyState
         v-else-if="recordsFailed"
+        min
         icon="!"
         title="解锁记录加载失败"
+        description="无法读取解锁记录，读数可能不完整。"
         action-text="重试"
         @action="reloadRecords"
       />
@@ -350,7 +359,7 @@ const {
   sortKey: achSortKey,
   sortDir: achSortDir,
   toggle: toggleAchSort,
-  sortState: achSortState
+  sortState: achSortState,
 } = useTableSort({
   keys: ['earnedAt', 'xpReward'],
   defaultKey: 'earnedAt',
@@ -544,7 +553,6 @@ onMounted(() => {
 .ach-c-type { width: 120px; }
 .ach-c-xp { width: 90px; }
 .ach-c-earned { width: 140px; }
-.ach-c-act { width: 140px; }
 
 /* 嵌入模式（运营中心宿主 flex 列内）：根挂 .mk-page--fill（模板）与反馈/公告/通知三页签同形——
    记录卡 .mk-card--fill 由此拿到确定高度，「卡片内滚动区接管纵向滚动、Pagination 吸底」契约生效。

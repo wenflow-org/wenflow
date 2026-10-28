@@ -66,7 +66,7 @@
         </label>
         <!-- 注册时自动生成 @wenflow.local 本地邮箱且当前只有 console 邮件通道；先说清楚，避免用户白等邮件 -->
         <p class="reset__hint">
-          注册时自动生成的 @wenflow.local 邮箱无法接收邮件；当前环境未配置邮件发送，如需找回密码请联系管理员。
+          注册时自动生成的 @wenflow.local 邮箱无法接收邮件。当前环境未配置邮件发送，如需找回密码请联系管理员。
         </p>
       </template>
 
@@ -147,7 +147,7 @@ async function submit() {
       // 保留账号存在条件以避免账号枚举；只有真实邮件通道可用时才承诺“已发送”。
       notice.value = result.mailDeliveryAvailable === true
         ? '若该账号存在，重置链接会发送到注册邮箱，请查收（含垃圾邮件箱）。'
-        : '若该账号存在，系统会生成重置链接；当前环境未配置邮件发送，请联系管理员重置密码。';
+        : '若该账号存在，系统会生成重置链接。当前环境未配置邮件发送，请联系管理员重置密码。';
     }
   } catch (error: unknown) {
     const message = error && typeof error === 'object' && 'message' in error

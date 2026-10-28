@@ -5,7 +5,7 @@
 
 stage: goal
 order: 1
-displayName: Goal 阶段
+displayName: 澄清阶段
 description: 目标对话：澄清目标、收集背景、收敛到方向方案
 
 contracts:

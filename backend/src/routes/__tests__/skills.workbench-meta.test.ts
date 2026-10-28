@@ -105,7 +105,21 @@ jest.mock('../../config/system-database', () => ({
 
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
 
-jest.mock('../../gateway', () => ({ getGateway: jest.fn(() => null) }));
+jest.mock('../../gateway', () => ({
+  getGateway: jest.fn(() => ({
+    getSkill: jest.fn((name: string) =>
+      name === 'goal-conversation'
+        ? {
+            definition: {
+              name,
+              // 与 /admin/skills 列表同一句（src/skills/index.ts）：详情 hero 必须印这句
+              description: '与学习者多轮对话，收集学习目标并收敛到第一版学习方向',
+            },
+          }
+        : undefined,
+    ),
+  })),
+}));
 
 import router from '../admin/skills';
 
@@ -168,10 +182,27 @@ describe('workbench-meta：404 降级与 completion 扩展', () => {
     expect(body.success).toBe(true);
     expect(body.data.skill.id).toBe('skill:goal-conversation');
     expect(body.data.completion.status).toBe('live');
+    // 功能简介单一来源（2026-10-25 用户「这个功能简介，可以做到详情页里面」）：详情 hero 印的
+    // 必须是列表那一句（注册表 definition.description），不是 manifest 里更短的人工摘要
+    expect(body.data.skill.description).toBe('与学习者多轮对话，收集学习目标并收敛到第一版学习方向');
     expect(mockGetSkillCompletion).toHaveBeenCalledWith(
       'goal-conversation',
       expect.objectContaining({ activePromptIds: expect.any(Set) }),
     );
+  });
+
+  it('注册表未注册该 Skill（外挂能力 / scaffold 期）→ 简介回落 manifest', async () => {
+    const { getAgentManifest: mockGetAgentManifest } = require('../../services/agent-manifest.service');
+    mockGetAgentManifest.mockReturnValueOnce({
+      ...manifestFixture,
+      id: 'skill:not-in-registry',
+      name: '未注册 Skill',
+      description: 'manifest 里的人工摘要',
+    });
+    mockGetSkillCompletion.mockResolvedValue(completionFixture);
+    const res = await callWorkbenchMeta('not-in-registry');
+    const body = res.json.mock.calls[0][0];
+    expect(body.data.skill.description).toBe('manifest 里的人工摘要');
   });
 
   it('manifest kind=agent → 400（Agent 编排器不用 Skill 工作台）', async () => {

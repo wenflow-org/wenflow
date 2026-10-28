@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { listActiveAgentPrompts } from '../../services/agent-prompt.service';
+import { listActiveAgentPrompts, pickActivePromptPerAgent } from '../../services/agent-prompt.service';
 import { listPromptCallLogs } from '../../services/prompt-call-log.service';
 import {
   listAgentManifest,
@@ -62,7 +62,9 @@ router.get('/agents', async (_req: Request, res: Response) => {
 
   const agentIds = skillEntries.map((entry) => entry.id);
   const activePrompts = await listActiveAgentPrompts(agentIds);
-  const promptMap = new Map(activePrompts.map((item) => [item.agentId, item]));
+  // 单一来源：一个 skill 一行「线上生效版本」（ACTIVE 基线里版本最高的那行），
+  // 不把 A/B 实验臂当成生效版本（2026-10-24）。
+  const promptMap = pickActivePromptPerAgent(activePrompts);
 
   res.json({
     success: true,

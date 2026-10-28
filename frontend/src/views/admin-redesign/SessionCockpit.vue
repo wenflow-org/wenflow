@@ -83,6 +83,9 @@
           <!-- 学习者详情入口（2026-10-18）：目标对话 / 学习路径 / 教学会话三处此前都没有
                去学习者详情的按钮；返回靠 subPage.from 记住本座舱页签 -->
           <button v-if="learner" type="button" class="mk-btn" :title="learnerTitle('查看学习者详情')" @click="openLearnerDetail">查看学习者</button>
+          <!-- 异常会话的唯一排查出口（2026-10-26）：列表侧不摆第二颗钮（2026-10-19 决定），
+               出口放在座舱里，按 sessionId 落到执行日志的 Trace 归组。 -->
+          <button type="button" class="mk-btn" @click="goExecLogs">执行日志</button>
           <button type="button" class="mk-btn" :title="backTip" @click="goBack">← {{ backLabel }}</button>
         </template>
         <!-- 动作区只放真实能力（原型「导出日志」假钮不搬）：会话生命周期控制（vlab-controls 统一模型）
@@ -991,7 +994,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { subPage, closeSubPage, openSubPage, setSubPageLabel, asSubPageStage } from './store'
+import { subPage, closeSubPage, openSession, openSubPage, setSubPageLabel, asSubPageStage } from './store'
 import { errMsg, liveApiConfig, liveRefreshSeq } from './live'
 import { askConfirm } from './useConfirm'
 import { useMaskClose, useOverlay } from './useOverlay'
@@ -1314,6 +1317,11 @@ function openLearnerDetail() {
       ...(stage ? { stage } : {})
     }
   })
+}
+
+/** 执行日志（按 sessionId 归组）：真实会话在列表里只有只读座舱，异常排查面放在座舱里 */
+function goExecLogs() {
+  if (sessionId.value) openSession(sessionId.value)
 }
 
 /** 真实会话的教学建议（advisory）：接口字段为松类型，仅取有效档位渲染。
@@ -3487,7 +3495,11 @@ async function copyRawJson() {
 .cp-log__jump:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; border-radius: var(--mk-radius-xs); }
 .cp-log__dur { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cp-log__raw { font-size: var(--mk-fs-micro); flex-basis: 100%; }
-.cp-log__raw summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; user-select: none; }
+.cp-log__raw summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; user-select: none; list-style: none; }
+/* 系统三角退役：与全站 details 同用自绘 ▸（2026-10-27 收口） */
+.cp-log__raw summary::-webkit-details-marker { display: none; }
+.cp-log__raw summary::before { content: '▸'; display: inline-block; margin-right: 5px; transition: transform 0.12s ease; }
+.cp-log__raw[open] summary::before { transform: rotate(90deg); }
 .cp-log__raw pre {
   margin: 4px 0 0; padding: 6px 8px; border-radius: 6px; background: var(--mk-code-bg);
   color: var(--mk-code-fg); font: var(--mk-fs-micro)/1.5 var(--mk-mono); white-space: pre-wrap;
