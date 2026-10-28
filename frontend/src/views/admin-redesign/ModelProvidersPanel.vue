@@ -60,131 +60,12 @@
       <!-- 2026-10-27 用户「这个区域不要了」：撤掉左栏通道清单。这一页就是平台通道本身，
            一栏列表只为一个通道占 260px，还把模型表挤到断行；自建通道改由配置文件/接口维护。 -->
       <div v-if="selected" class="mpp-detail">
-        <!-- 2026-10-27 用户「把 tab 解散了」：二级页签撤除，按接入顺序平铺成四段——
-             连接与鉴权 → 模型 → 基础设施 → 平台默认与别名。所有内容常驻 DOM，
-             不再有「要点一下才出现」的区域。 -->
+        <!-- 接入 API 段：只剩服务地址与密钥（2026-10-27 用户「一块负责 api 一块配置」）。
+             模型清单、基础设施与生成默认都在下面第二张「平台配置」卡里。 -->
         <div id="mpp-platform-panel-conn">
           <slot name="platform-detail" />
         </div>
 
-        <div
-          id="mpp-platform-panel-models"
-          class="mpp-block mpp-models"
-        >
-          <div class="mpp-models__head">
-            <!-- 平台详情只有一页：标题直接给模型计数（原页签计数随页签一起退役）。
-                 上游清单状态与计数同一行（2026-10-24 走查）：原先是表头之上独立一条，
-                 读起来像一行空记录。 -->
-            <div class="mpp-models__title">
-              <span class="mpp-sec">已接入 {{ selected.models.length }} 个模型</span>
-              <slot name="models-meta" />
-            </div>
-            <span class="mpp-models__acts">
-              <!-- 拉取结果收进浮窗（2026-10-24）：清单不在详情里铺开，勾选后再逐个配置。
-                   拉取过一次就保留入口，关掉浮窗还能回来再选。 -->
-              <button v-if="pullableCount" type="button" class="mk-link" @click="openPull">
-                选择要添加的（{{ pullableCount }}）
-              </button>
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openManualAdd">＋ 添加模型</button>
-            </span>
-          </div>
-
-          <!-- 上游清单不再铺在详情里（2026-10-24 用户「拉取作为浮窗」）：拉取只拿到清单，
-               勾选与用途分流都在 PullModelsDialog 里做——详情区只留已登记模型这张表。 -->
-
-          <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么 -->
-          <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
-            <div class="mpp-setup__text">
-              <strong>还没有登记模型</strong>
-              <span>先配置服务地址与 API Key，再拉取上游模型，或手动添加模型 ID。</span>
-            </div>
-            <button
-              type="button"
-              class="mk-btn mk-btn--sm"
-              @click="scrollToConn"
-            >去配置连接</button>
-          </div>
-
-          <div v-if="selected.models.length || !selected.enabled" class="mk-table-scroll">
-            <table class="mk-table mk-table--dense mk-table--fixed mpp-table">
-              <colgroup>
-                <col style="width: 38%" /><col style="width: 26%" /><col style="width: 16%" /><col style="width: 20%" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>模型</th>
-                  <th>功能</th>
-                  <th>状态</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- 按用途分组（2026-10-21 用户「按功能区分一下」）：同一张表里用分组行切段，
-                     不拆多张表——列宽与对齐保持一处。组内再按能力标「功能」列，运营一眼看得出
-                     哪个模型能思考、能调推理强度、能读图。 -->
-                <template v-for="g in modelGroups" :key="g.tier">
-                  <tr class="mpp-group">
-                    <td colspan="4">
-                      <span class="mpp-group__name">{{ g.label }}</span>
-                      <span class="mpp-group__count">{{ g.models.length }} 个</span>
-                    </td>
-                  </tr>
-                  <tr v-for="m in g.models" :key="m.id">
-                  <td class="mpp-model">
-                    <span class="mono mpp-model__id" :title="m.id">{{ m.id }}</span>
-                    <span v-if="m.label && m.label !== m.id" class="mpp-desc" :title="m.label">{{ m.label }}</span>
-                    <span
-                      v-if="testResults[m.id]"
-                      class="mpp-rowtest"
-                      :class="{ 'mpp-rowtest--bad': !testResults[m.id].ok }"
-                      :title="testResults[m.id].text"
-                    >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
-                  </td>
-                  <td class="mpp-fn">
-                    <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
-                    <span v-if="!functionTags(m).length" class="mpp-fn__none">基础对话</span>
-                  </td>
-                  <td>
-                    <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
-                    <span v-else class="mk-badge mk-badge--ok">● 健康</span>
-                    <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
-                  </td>
-                  <td class="mpp-rowacts">
-                    <!-- 高频两枚平铺（测试 / 编辑）；删除是低频且不可撤销，收进 ⋯ 菜单
-                         ——与公告、账号、虚拟学习者同一套行内操作层级（useRowMenu 同源） -->
-                    <button type="button" class="mk-link" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
-                    <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
-                    <div class="mk-menu">
-                      <button
-                        type="button"
-                        class="mk-menu__btn"
-                        aria-label="更多操作"
-                        aria-haspopup="menu"
-                        :aria-expanded="openMenu === m.id"
-                        @click.stop="toggleMenu(m.id)"
-                      >⋯</button>
-                      <div v-if="openMenu === m.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                        <button
-                          type="button"
-                          class="mk-menu__item mk-menu__item--danger"
-                          role="menuitem"
-                          :disabled="busy || registry?.readOnly"
-                          @click="removeModel(m)"
-                        >删除</button>
-                      </div>
-                    </div>
-                  </td>
-                  </tr>
-                </template>
-                <tr v-if="!selected.models.length">
-                  <td colspan="4" class="mpp-empty">
-                    这条通道当前停用，模型不参与路由。
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
       </div>
       <MkEmptyState v-else compact title="还没有接入通道" />
     </div>
@@ -207,12 +88,131 @@
   </section>
 
   <!-- 2026-10-27 用户「没有本地模型，都属于基础设施模型，一块负责 api 一块配置」：
-     第一张卡管接入 API（地址、密钥、模型清单），第二张卡管平台配置（向量化 / 重排、生成默认）。 -->
+     第一张卡只管接入 API（地址、密钥）；模型清单、向量化 / 重排与生成默认都在这里配。 -->
   <section v-if="selected" class="mk-card mpp-config">
     <div class="mk-card__head">
       <h3 class="mk-card__title">平台配置</h3>
     </div>
     <div class="mpp-config__body">
+      <div
+        id="mpp-platform-panel-models"
+        class="mpp-block mpp-models"
+      >
+        <div class="mpp-models__head">
+          <!-- 平台详情只有一页：标题直接给模型计数（原页签计数随页签一起退役）。
+               上游清单状态与计数同一行（2026-10-24 走查）：原先是表头之上独立一条，
+               读起来像一行空记录。 -->
+          <div class="mpp-models__title">
+            <span class="mpp-sec">已接入 {{ selected.models.length }} 个模型</span>
+            <slot name="models-meta" />
+          </div>
+          <span class="mpp-models__acts">
+            <!-- 拉取结果收进浮窗（2026-10-24）：清单不在详情里铺开，勾选后再逐个配置。
+                 拉取过一次就保留入口，关掉浮窗还能回来再选。 -->
+            <button v-if="pullableCount" type="button" class="mk-link" @click="openPull">
+              选择要添加的（{{ pullableCount }}）
+            </button>
+            <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openManualAdd">＋ 添加模型</button>
+          </span>
+        </div>
+
+        <!-- 上游清单不再铺在详情里（2026-10-24 用户「拉取作为浮窗」）：拉取只拿到清单，
+             勾选与用途分流都在 PullModelsDialog 里做——详情区只留已登记模型这张表。 -->
+
+        <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么 -->
+        <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
+          <div class="mpp-setup__text">
+            <strong>还没有登记模型</strong>
+            <span>先配置服务地址与 API Key，再拉取上游模型，或手动添加模型 ID。</span>
+          </div>
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm"
+            @click="scrollToConn"
+          >去配置连接</button>
+        </div>
+
+        <div v-if="selected.models.length || !selected.enabled" class="mk-table-scroll">
+          <table class="mk-table mk-table--dense mk-table--fixed mpp-table">
+            <colgroup>
+              <col style="width: 38%" /><col style="width: 26%" /><col style="width: 16%" /><col style="width: 20%" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>模型</th>
+                <th>功能</th>
+                <th>状态</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- 按用途分组（2026-10-21 用户「按功能区分一下」）：同一张表里用分组行切段，
+                   不拆多张表——列宽与对齐保持一处。组内再按能力标「功能」列，运营一眼看得出
+                   哪个模型能思考、能调推理强度、能读图。 -->
+              <template v-for="g in modelGroups" :key="g.tier">
+                <tr class="mpp-group">
+                  <td colspan="4">
+                    <span class="mpp-group__name">{{ g.label }}</span>
+                    <span class="mpp-group__count">{{ g.models.length }} 个</span>
+                  </td>
+                </tr>
+                <tr v-for="m in g.models" :key="m.id">
+                <td class="mpp-model">
+                  <span class="mono mpp-model__id" :title="m.id">{{ m.id }}</span>
+                  <span v-if="m.label && m.label !== m.id" class="mpp-desc" :title="m.label">{{ m.label }}</span>
+                  <span
+                    v-if="testResults[m.id]"
+                    class="mpp-rowtest"
+                    :class="{ 'mpp-rowtest--bad': !testResults[m.id].ok }"
+                    :title="testResults[m.id].text"
+                  >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
+                </td>
+                <td class="mpp-fn">
+                  <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
+                  <span v-if="!functionTags(m).length" class="mpp-fn__none">基础对话</span>
+                </td>
+                <td>
+                  <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
+                  <span v-else class="mk-badge mk-badge--ok">● 健康</span>
+                  <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
+                </td>
+                <td class="mpp-rowacts">
+                  <!-- 高频两枚平铺（测试 / 编辑）；删除是低频且不可撤销，收进 ⋯ 菜单
+                       ——与公告、账号、虚拟学习者同一套行内操作层级（useRowMenu 同源） -->
+                  <button type="button" class="mk-link" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
+                  <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
+                  <div class="mk-menu">
+                    <button
+                      type="button"
+                      class="mk-menu__btn"
+                      aria-label="更多操作"
+                      aria-haspopup="menu"
+                      :aria-expanded="openMenu === m.id"
+                      @click.stop="toggleMenu(m.id)"
+                    >⋯</button>
+                    <div v-if="openMenu === m.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                      <button
+                        type="button"
+                        class="mk-menu__item mk-menu__item--danger"
+                        role="menuitem"
+                        :disabled="busy || registry?.readOnly"
+                        @click="removeModel(m)"
+                      >删除</button>
+                    </div>
+                  </div>
+                </td>
+                </tr>
+              </template>
+              <tr v-if="!selected.models.length">
+                <td colspan="4" class="mpp-empty">
+                  这条通道当前停用，模型不参与路由。
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div id="mpp-platform-panel-infra">
         <slot name="platform-infra" />
       </div>
@@ -573,8 +573,8 @@ defineExpose({ refresh, openPull, openHostPull })
 }
 /* 2026-10-27 用户「这个区域不要了」：左栏通道清单撤掉后，详情独占整卡宽度。
    2026-10-27 拆成两张卡后组件有多个根，宿主页的 `.ac-conn-body > .mpp` 不再命中原语，
-   卡片自身给出内容下限与不收缩，避免接入卡被配置卡挤成一条线。 */
-.mpp { display: flex; flex-direction: column; flex: none; min-height: 360px; }
+   卡片自身给「不收缩」；接入卡只剩地址与密钥，高度随内容。 */
+.mpp { display: flex; flex-direction: column; flex: none; }
 .mpp-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -584,16 +584,15 @@ defineExpose({ refresh, openPull, openHostPull })
   min-height: 0;
 }
 .mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
-/* 2026-10-27 页签解散后，四段平铺：连接 → 模型 → 基础设施 → 平台默认。
-   每段自带一条发丝线分隔，连接段紧跟头部，不再重复顶线。 */
+/* 接入卡里只剩连接段：紧跟卡头，不再重复顶线。 */
 .mpp-detail > #mpp-platform-panel-conn > .ac-conn { margin-top: 0; padding-top: 0; border-top: 0; }
-.mpp-detail > .mpp-models { margin-top: 14px; }
 
-/* 2026-10-27 两张卡：接入 API（连接 + 模型清单）/ 平台配置（基础设施 + 生成默认）。
-   配置卡不再沿用详情内滚动，按内容自然撑高。 */
+/* 2026-10-27 两张卡：接入 API（连接）/ 平台配置（模型清单 + 基础设施 + 生成默认）。
+   配置卡按内容自然撑高；模型清单作为第一段，不再自带顶线。 */
 .mpp-config { flex: none; }
 .mpp-config__body { display: grid; gap: 18px; padding: 12px 16px 16px; }
 .mpp-config__body > div { min-width: 0; }
+.mpp-config__body > #mpp-platform-panel-models { margin-top: 0; padding-top: 0; border-top: 0; }
 /* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
 .mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
 .mpp-block:first-of-type { margin-top: 10px; }
