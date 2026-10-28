@@ -870,9 +870,6 @@ function discardAll() {
   overflow-y: auto;
   overflow-x: hidden;
 }
-.ac-conn-body > .mpp { flex: none; }
-/* 供应商面板给一个内容下限，避免模型只有一两行时详情区塌成一条 */
-.ac-conn-body > .mpp { min-height: 360px; }
 /* 「调用」页默认生成参数卡内的注册表切片（别名映射）：外层是 details，
    这里让分区直接成为 details 的子项，不出现内外双滚动容器。 */
 .ac-registry--aliases { display: contents; }

@@ -654,7 +654,8 @@ describe('ApiConfig P1 修复批', () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
 
-    const cards = wrapper.findAll('#ac-panel-access > .mk-card').filter((c) => !c.classes('mpp'));
+    const cards = wrapper.findAll('#ac-panel-access > .mk-card')
+      .filter((c) => !c.classes('mpp') && !c.classes('mpp-config'));
     expect(cards.map((c) => c.find('.mk-card__title').text())).toEqual(['全站调用策略']);
 
     const card = cards[0];

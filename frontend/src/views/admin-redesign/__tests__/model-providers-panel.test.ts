@@ -135,8 +135,8 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mk-card__head').text()).not.toContain('一条通道 =')
     // 状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
     expect(w.find('.mk-card__head').findAll('.mk-badge')).toHaveLength(0)
-    // 模型表列：本地模型 / 上游模型名 / 功能 / 状态 / 操作
-    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['本地模型', '上游模型名', '功能', '状态', ''])
+    // 模型表列：模型 / 功能 / 状态 / 操作（没有本地/上游两套名字）
+    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '功能', '状态', ''])
     expect(w.text()).toContain('2 个')
   })
 
@@ -165,22 +165,6 @@ describe('ModelProvidersPanel', () => {
     // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
     expect(w.findAll('.mpp .mk-card__head .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()
-  })
-
-  it('上游模型名：与本地名相同时只标「同本地名」，有独立映射才显示上游名', async () => {
-    const platform = providerView({ id: 'platform', name: '平台', models: [{ id: 'local-a' }, { id: 'local-b' }] })
-    platform.models = (platform.models as Array<Record<string, unknown>>).map((m, i) => (
-      i === 0 ? { ...m, upstreamModelId: 'upstream-b' } : m
-    ))
-    seedView({ providers: [platform] })
-    const w = await mountPanel()
-    const cells = w.findAll('.mpp-upstream')
-    expect(cells).toHaveLength(2)
-    // 有映射：显示上游名
-    expect(cells[0].text()).toBe('upstream-b')
-    // 无映射：不复读本地名字符串，只标「同本地名」（窄列不再断行）
-    expect(cells[1].text()).toBe('同本地名')
-    expect(cells[1].find('.mono').exists()).toBe(false)
   })
 
   it('按功能区分：按用途分组（对话 / 推理），能力（思考 / 推理强度 / 读图）单独成列', async () => {

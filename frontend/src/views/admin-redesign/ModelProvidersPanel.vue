@@ -108,12 +108,11 @@
           <div v-if="selected.models.length || !selected.enabled" class="mk-table-scroll">
             <table class="mk-table mk-table--dense mk-table--fixed mpp-table">
               <colgroup>
-                <col style="width: 26%" /><col style="width: 17%" /><col style="width: 21%" /><col style="width: 14%" /><col style="width: 22%" />
+                <col style="width: 38%" /><col style="width: 26%" /><col style="width: 16%" /><col style="width: 20%" />
               </colgroup>
               <thead>
                 <tr>
-                  <th>本地模型</th>
-                  <th title="当前版本本地名即上游模型名，后续支持独立映射">上游模型名</th>
+                  <th>模型</th>
                   <th>功能</th>
                   <th>状态</th>
                   <th></th>
@@ -125,7 +124,7 @@
                      哪个模型能思考、能调推理强度、能读图。 -->
                 <template v-for="g in modelGroups" :key="g.tier">
                   <tr class="mpp-group">
-                    <td colspan="5">
+                    <td colspan="4">
                       <span class="mpp-group__name">{{ g.label }}</span>
                       <span class="mpp-group__count">{{ g.models.length }} 个</span>
                     </td>
@@ -140,12 +139,6 @@
                       :class="{ 'mpp-rowtest--bad': !testResults[m.id].ok }"
                       :title="testResults[m.id].text"
                     >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
-                  </td>
-                  <td class="mpp-upstream">
-                    <!-- 本地名即上游名时不复读一遍字符串：窄列里长名会断成两行，
-                         反而看不清「到底映射到谁」。只有真正存在差异时才显示上游名。 -->
-                    <span v-if="upstreamNameOf(m) === m.id" class="mpp-upstream__same" :title="upstreamNameOf(m)">同本地名</span>
-                    <span v-else class="mono" :title="upstreamNameOf(m)">{{ upstreamNameOf(m) }}</span>
                   </td>
                   <td class="mpp-fn">
                     <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
@@ -184,35 +177,13 @@
                   </tr>
                 </template>
                 <tr v-if="!selected.models.length">
-                  <td colspan="5" class="mpp-empty">
+                  <td colspan="4" class="mpp-empty">
                     这条通道当前停用，模型不参与路由。
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </div>
-
-        <!-- 基础设施（向量化 / 重排）：平台这条供应商自己的能力，接在模型表后面平铺。
-             2026-10-26 用户「这个地方就可以配置重排序嵌入模型」——此前它是页面最下方一张
-             独立卡，和「平台」分成两处，改个嵌入模型得往下滚过整个模型表。 -->
-        <div
-          id="mpp-platform-panel-infra"
-          class="mpp-block mpp-infra"
-        >
-          <slot name="platform-infra" />
-        </div>
-
-        <!-- 生成参数（思考模式 / 思考强度 / 输出格式）：模型级的生成默认。
-             2026-10-26 用户「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得
-             可以和前面的合并了」——它此前是接入页最下方一张独立卡，叫「平台默认生成参数」；
-             可它就是「这些模型默认怎么生成」，属于平台这条供应商，与模型表同一个对象。
-             模型级覆盖优先（ModelEditorDialog 的「用平台默认」），这里兜底。 -->
-        <div
-          id="mpp-platform-panel-generation"
-          class="mpp-block mpp-generation"
-        >
-          <slot name="platform-generation" />
         </div>
       </div>
       <MkEmptyState v-else compact title="还没有接入通道" />
@@ -232,6 +203,22 @@
     <div v-if="configureQueue.length" class="mpp-queue" role="status">
       <span>还剩 {{ configureQueue.length }} 个模型未配置</span>
       <button type="button" class="mk-link" @click="skipRemaining">跳过剩余</button>
+    </div>
+  </section>
+
+  <!-- 2026-10-27 用户「没有本地模型，都属于基础设施模型，一块负责 api 一块配置」：
+     第一张卡管接入 API（地址、密钥、模型清单），第二张卡管平台配置（向量化 / 重排、生成默认）。 -->
+  <section v-if="selected" class="mk-card mpp-config">
+    <div class="mk-card__head">
+      <h3 class="mk-card__title">平台配置</h3>
+    </div>
+    <div class="mpp-config__body">
+      <div id="mpp-platform-panel-infra">
+        <slot name="platform-infra" />
+      </div>
+      <div id="mpp-platform-panel-generation">
+        <slot name="platform-generation" />
+      </div>
     </div>
   </section>
 </template>
@@ -340,10 +327,6 @@ function providerName(p: ProviderView): string {
 /** 通道类型：内置 / 自建。接入通道 = 一个服务地址 + 一套凭据 + 模型清单。 */
 function providerTypeLabel(p: ProviderView): string {
   return p.id === 'platform' ? '内置' : '自建'
-}
-/** 上游物理模型名：P2 独立映射落地前就是本地 id */
-function upstreamNameOf(m: ModelLike): string {
-  return (m.upstreamModelId || '').trim() || m.id
 }
 const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m.id) ?? []))
 /** 上游模型清单：平台通道的清单来自连接设置（宿主注入） */
@@ -588,8 +571,10 @@ defineExpose({ refresh, openPull, openHostPull })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-/* 2026-10-27 用户「这个区域不要了」：左栏通道清单撤掉后，详情独占整卡宽度 */
-.mpp { display: flex; flex-direction: column; min-height: 0; }
+/* 2026-10-27 用户「这个区域不要了」：左栏通道清单撤掉后，详情独占整卡宽度。
+   2026-10-27 拆成两张卡后组件有多个根，宿主页的 `.ac-conn-body > .mpp` 不再命中原语，
+   卡片自身给出内容下限与不收缩，避免接入卡被配置卡挤成一条线。 */
+.mpp { display: flex; flex-direction: column; flex: none; min-height: 360px; }
 .mpp-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -604,6 +589,11 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-detail > #mpp-platform-panel-conn > .ac-conn { margin-top: 0; padding-top: 0; border-top: 0; }
 .mpp-detail > .mpp-models { margin-top: 14px; }
 
+/* 2026-10-27 两张卡：接入 API（连接 + 模型清单）/ 平台配置（基础设施 + 生成默认）。
+   配置卡不再沿用详情内滚动，按内容自然撑高。 */
+.mpp-config { flex: none; }
+.mpp-config__body { display: grid; gap: 18px; padding: 12px 16px 16px; }
+.mpp-config__body > div { min-width: 0; }
 /* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
 .mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
 .mpp-block:first-of-type { margin-top: 10px; }
@@ -657,11 +647,6 @@ defineExpose({ refresh, openPull, openHostPull })
 /* 模型格承载 id + 显示名 + 最近一次测试结果 */
 .mpp-model { min-width: 180px; }
 .mpp-model__id { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 上游模型名：本地名即上游名时只标「同本地名」（字符串不重复），出现独立映射后才显示差异。
-   窄列不断行——截断交给 ellipsis，完整值在 title 里核对。 */
-.mpp-upstream { white-space: nowrap; }
-.mpp-upstream .mono { display: block; overflow: hidden; text-overflow: ellipsis; }
-.mpp-upstream__same { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .mpp-rowtest { display: block; margin-top: 2px; color: var(--mk-green); font-size: var(--mk-fs-micro); }
 .mpp-rowtest--bad { color: var(--mk-red); }
 /* 空模型时的下一步：一句话 + 一个动作，不丢一张只有表头的空表 */
