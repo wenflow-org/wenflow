@@ -1,40 +1,29 @@
 /**
- * 供应商与模型编辑面板（ModelProvidersPanel，BYOK 2026-10-18）：
- * 两栏结构、即时保存（开关/密钥/增删改）、后端人话原因可见、只读降级、上游清单登记、
- * 运行面读数（冷却/告警）与上游未登记折叠。
+ * 接入通道面板（ModelProvidersPanel，BYOK 2026-10-18；2026-10-27 收敛为单通道）：
+ * 平台通道详情（页签 / 模型表 / 增删改）、后端人话原因可见、只读降级、上游清单登记、
+ * 运行面读数（冷却/告警）。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ModelProvidersPanel from '../ModelProvidersPanel.vue'
-import { confirmState, settleConfirm } from '../useConfirm'
 
 const {
-  getMock, updateMock, removeMock, removeKeyMock, addModelMock, removeModelMock, updateModelMock, testMock, pullMock, getModelRegistryMock
+  getMock, addModelMock, updateModelMock, testMock, getModelRegistryMock
 } = vi.hoisted(() => ({
   getMock: vi.fn(),
-  updateMock: vi.fn(),
-  removeMock: vi.fn(),
-  removeKeyMock: vi.fn(),
   addModelMock: vi.fn(),
-  removeModelMock: vi.fn(),
   updateModelMock: vi.fn(),
   testMock: vi.fn(),
-  pullMock: vi.fn(),
   getModelRegistryMock: vi.fn()
 }))
 
 vi.mock('@/api/adminApi', () => ({
   adminModelProvidersApi: {
     get: getMock,
-    update: updateMock,
-    remove: removeMock,
-    removeKey: removeKeyMock,
     addModel: addModelMock,
     updateModel: updateModelMock,
-    removeModel: removeModelMock,
-    test: testMock,
-    pullModels: pullMock
+    test: testMock
   },
   adminApiConfigApi: { getModelRegistry: getModelRegistryMock }
 }))
@@ -112,13 +101,6 @@ async function mountPanel(props: Record<string, unknown> = {}) {
   return wrapper
 }
 
-/** 选中左栏某个供应商（详情跟着换） */
-async function pick(wrapper: Awaited<ReturnType<typeof mountPanel>>, name: string) {
-  const item = wrapper.findAll('.mpp-item').find((i) => i.text().includes(name))!
-  await item.trigger('click')
-  await flushPromises()
-}
-
 function btn(wrapper: Awaited<ReturnType<typeof mountPanel>>, text: string) {
   return wrapper.findAll('button').find((b) => b.text().includes(text))
 }
@@ -131,33 +113,30 @@ function shown(wrapper: Awaited<ReturnType<typeof mountPanel>>, selector: string
 describe('ModelProvidersPanel', () => {
   beforeEach(() => {
     getMock.mockReset()
-    updateMock.mockReset()
-    removeMock.mockReset()
-    removeKeyMock.mockReset()
     addModelMock.mockReset()
-    removeModelMock.mockReset()
     updateModelMock.mockReset()
     testMock.mockReset()
-    pullMock.mockReset()
     getModelRegistryMock.mockReset()
     getModelRegistryMock.mockResolvedValue({ data: { data: { models: [], cooldowns: [], warnings: [], runtime: { maxModelCandidates: 2 } } } })
     seedView()
   })
 
-  it('两栏结构：左列表平铺一份接入通道清单（不按来历分组），默认选中平台通道', async () => {
+  it('单通道详情：左栏通道清单已撤，页面直接呈现平台通道', async () => {
     const w = await mountPanel()
-    // 2026-10-19 用户「就不分区」：原「平台提供 / 自行接入」两组与详情头「平台提供」徽标都撤了
-    expect(w.findAll('.mpp-group__title')).toHaveLength(0)
-    expect(w.text()).not.toContain('平台提供')
-    expect(w.text()).not.toContain('自行接入')
-    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['平台通道', 'Acme 网关'])
-    // 列表行给「类型 + N 个模型」，不露注册表 id（id 在详情头）
-    expect(w.findAll('.mpp-item__meta').map((el) => el.text())).toEqual(['平台内置 · 2 个模型', '自建通道 · 2 个模型'])
-    expect(w.find('.mpp-item--on').text()).toContain('平台通道')
-    // 平台通道详情：状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
+    // 2026-10-27 用户「这个区域不要了」：不再有左栏清单，也没有通道切换/停用入口
+    expect(w.find('.mpp-list').exists()).toBe(false)
+    expect(w.find('.mpp-item').exists()).toBe(false)
+    // 自建通道仍在注册表里，但这一页不再提供它的入口
+    expect(w.text()).not.toContain('Acme 网关')
+    expect(w.text()).not.toContain('显示已停用')
+    // 详情头：平台通道 + 平台内置 + 一条通道的构成说明
     expect(w.find('.mpp-detail__head').text()).toContain('平台通道')
     expect(w.find('.mpp-detail__head').find('.mpp-type').text()).toBe('平台内置')
+    expect(w.find('.mpp-detail__head').text()).toContain('一条通道 = 服务地址 + 凭据 + 模型清单')
+    // 状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
     expect(w.find('.mpp-detail__head').findAll('.mk-badge')).toHaveLength(0)
+    // 模型表列：本地模型 / 上游模型名 / 功能 / 状态 / 操作
+    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['本地模型', '上游模型名', '功能', '状态', ''])
     expect(w.text()).toContain('2 个')
   })
 
@@ -174,29 +153,7 @@ describe('ModelProvidersPanel', () => {
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
   })
 
-  it('供应商列表按 tab 语义走 roving tabindex：只有选中项占 Tab 位，方向键/Home/End 移动选中', async () => {
-    const w = await mountPanel()
-    const tabs = () => w.findAll('.mpp-item')
-    expect(tabs().map((t) => t.attributes('tabindex'))).toEqual(['0', '-1'])
-
-    await w.find('.mpp-list').trigger('keydown', { key: 'ArrowDown' })
-    await flushPromises()
-    expect(w.find('.mpp-item--on').text()).toContain('Acme 网关')
-    expect(tabs().map((t) => t.attributes('tabindex'))).toEqual(['-1', '0'])
-
-    // 末尾再按下越界回到第一项（循环），Home 直接回第一项
-    await w.find('.mpp-list').trigger('keydown', { key: 'ArrowDown' })
-    await flushPromises()
-    expect(w.find('.mpp-item--on').text()).toContain('平台通道')
-    await w.find('.mpp-list').trigger('keydown', { key: 'End' })
-    await flushPromises()
-    expect(w.find('.mpp-item--on').text()).toContain('Acme 网关')
-    await w.find('.mpp-list').trigger('keydown', { key: 'Home' })
-    await flushPromises()
-    expect(w.find('.mpp-item--on').text()).toContain('平台通道')
-  })
-
-  it('平台详情分「模型 / 连接与鉴权 / 基础设施 / 平台默认与别名」四页签：连接与默认由宿主经插槽内联注入，平台不再有「设置」钮', async () => {
+  it('平台详情分「模型 / 连接与鉴权 / 基础设施 / 平台默认与别名」四页签：连接与默认由宿主经插槽内联注入', async () => {
     const w = await mountPanel()
     // 2026-10-26：平台详情有二级页签，默认落在「模型」
     const tabs = w.findAll('.mpp-subtabs .mk-subtab').map((t) => t.text())
@@ -220,41 +177,6 @@ describe('ModelProvidersPanel', () => {
     await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '平台默认与别名')!.trigger('click')
     expect(shown(w, '#mpp-platform-panel-generation')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-infra')).toBe(false)
-
-    // 切到自定义供应商：没有二级页签（基础设施只属于平台），切回平台时归位到「模型」
-    const acmeTab = w.findAll('.mpp-item').find((i) => i.text().includes('Acme 网关'))!
-    await acmeTab.trigger('click')
-    await flushPromises()
-    expect(w.findAll('.mpp-subtabs')).toHaveLength(0)
-    await w.findAll('.mpp-item').find((i) => i.text().includes('平台通道'))!.trigger('click')
-    await flushPromises()
-    expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('模型2')
-
-    // 自定义供应商：设置仍打开注册表编辑弹层
-    const acme = w.findAll('.mpp-item').find((i) => i.text().includes('Acme 网关'))!
-    await acme.trigger('click')
-    await flushPromises()
-    await w.findAll('.mpp-detail__acts .mk-btn').find((b) => b.text() === '设置')!.trigger('click')
-    await flushPromises()
-    expect(w.find('[aria-label="供应商设置"]').exists()).toBe(true)
-    expect(w.emitted('focus-platform-connection')).toBeUndefined()
-  })
-
-  it('自带端点的供应商：详情显示服务地址、密钥三件套（掩码 + 显示切换 + 留空沿用）与模型清单', async () => {
-    const w = await mountPanel()
-    await pick(w, 'Acme 网关')
-    expect(w.find('.mpp-endpoint__value').text()).toBe('https://gw.acme.com/v1')
-    const keyInput = w.find('.mpp-endpoint__key input')
-    expect(keyInput.attributes('type')).toBe('password')
-    expect(keyInput.attributes('placeholder')).toBe('已配置 ····9xQv，留空 = 沿用')
-    await btn(w, '显示')!.trigger('click')
-    expect(w.find('.mpp-endpoint__key input').attributes('type')).toBe('text')
-    // 模型表：本地模型 / 上游模型名 / 功能 / 状态 / 操作（用途分组行 + 能力标签见下一条用例）
-    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['本地模型', '上游模型名', '功能', '状态', ''])
-    const rows = modelRows(w)
-    expect(rows).toHaveLength(2)
-    expect(rows[0].text()).toContain('acme-chat')
-    expect(rows[1].text()).toContain('acme-chat-2')
   })
 
   it('上游模型名：与本地名相同时只标「同本地名」，有独立映射才显示上游名', async () => {
@@ -301,50 +223,6 @@ describe('ModelProvidersPanel', () => {
     expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['读图'])
   })
 
-  it('停用开关先确认再写盘，成功后给回执（误触不会让上游直接退出路由）', async () => {
-    const w = await mountPanel()
-    updateMock.mockResolvedValue({
-      data: {
-        data: {
-          registry: view.registry,
-          providers: view.providers.map((p) => (p.id === 'acme-gateway' ? { ...p, enabled: false, status: 'disabled' } : p))
-        }
-      }
-    })
-    const acmeSwitch = w.findAll('.mpp-item')[1].find('.mk-switch')
-    // 2026-10-23 UI 审查：开关只有 aria-checked、没有可访问名，读屏只念「开关」
-    expect(acmeSwitch.attributes('aria-label')).toBe('启用通道 Acme 网关')
-    await acmeSwitch.trigger('click')
-    await nextTick()
-    // 停用要二次确认；取消则一次都不写
-    expect(confirmState.open).toBe(true)
-    settleConfirm(false)
-    await flushPromises()
-    expect(updateMock).not.toHaveBeenCalled()
-
-    await acmeSwitch.trigger('click')
-    await nextTick()
-    settleConfirm(true)
-    await flushPromises()
-    expect(updateMock).toHaveBeenCalledWith('acme-gateway', { enabled: false })
-    // 停用条目默认收起：清单只剩平台通道，底部给出「显示已停用」入口
-    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['平台通道'])
-    expect(w.text()).toContain('显示已停用（1）')
-    await w.find('.mpp-show-disabled').trigger('click')
-    await flushPromises()
-    expect(w.find('.mpp-item__dot--disabled').exists()).toBe(true)
-  })
-
-  it('写失败时把后端人话原因显示出来（不静默、不假装保存成功）', async () => {
-    const w = await mountPanel()
-    updateMock.mockRejectedValue({ response: { data: { error: '默认对话模型「deepseek-v4-flash」解析不到已启用通道提供的模型，保存会让全平台默认路由落空。' } } })
-    await w.findAll('.mpp-item')[1].find('.mk-switch').trigger('click')
-    await nextTick()
-    settleConfirm(true)
-    await flushPromises()
-    expect(w.find('.mpp-alert').text()).toContain('解析不到已启用通道提供的模型')
-  })
-
   it('只读（配置文件不可写）：写入口全部禁用并给出说明', async () => {
     seedView({ readOnly: true })
     const w = await mountPanel()
@@ -362,36 +240,6 @@ describe('ModelProvidersPanel', () => {
     const removeItem = w.findAll('.mpp-rowacts .mk-menu__item').find((b) => b.text() === '删除')!
     expect(removeItem.exists()).toBe(true)
     expect(removeItem.attributes('disabled')).toBeDefined()
-  })
-
-  it('同步上游模型 → 浮窗勾选：不再铺内联清单，勾选后带模型 id 打开编辑弹层', async () => {
-    const w = await mountPanel()
-    await pick(w, 'Acme 网关')
-    pullMock.mockResolvedValue({ data: { data: { models: ['acme-chat', 'acme-chat-2', 'acme-pro'] } } })
-    await btn(w, '同步上游模型')!.trigger('click')
-    await flushPromises()
-    expect(w.find('.mpp-fetch').exists()).toBe(false)
-    const dialog = w.find('.pmd')
-    expect(dialog.exists()).toBe(true)
-    expect(dialog.text()).toContain('已拉取 3 个')
-    const rows = dialog.findAll('.pmd-row')
-    expect(rows).toHaveLength(3)
-    // 已登记的只读「已添加」，勾选框禁用
-    const registered = rows.find((r) => r.text().includes('acme-chat') && !r.text().includes('acme-chat-2'))!
-    expect(registered.text()).toContain('已添加')
-    expect(registered.find('input').attributes('disabled')).toBeDefined()
-    // 未登记的勾选后点「配置」，模型 id 预填进编辑弹层
-    const target = rows.find((r) => r.text().includes('acme-pro'))!
-    await target.find('input').setValue(true)
-    await flushPromises()
-    const liveDialog = w.find('.pmd')
-    const confirm = liveDialog.findAll('button').find((b) => b.text().includes('配置选中的 1 个'))!
-    await confirm.trigger('click')
-    await flushPromises()
-    expect(w.find('.pmd').exists()).toBe(false)
-    const idInput = w.find('.med-modal .med-two input')
-    expect(idInput.exists()).toBe(true)
-    expect((idInput.element as HTMLInputElement).value).toBe('acme-pro')
   })
 
   it('勾选多个后逐个配置：保存一个自动进下一个，标题带进度', async () => {
@@ -418,27 +266,12 @@ describe('ModelProvidersPanel', () => {
     expect(addModelMock).toHaveBeenCalledTimes(1)
   })
 
-  it('删除供应商要二次确认；确认后调删除接口', async () => {
-    const w = await mountPanel()
-    await pick(w, 'Acme 网关')
-    removeMock.mockResolvedValue({ data: { success: true, data: view, warnings: [] } })
-    const del = btn(w, '删除')!
-    await del.trigger('click')
-    await nextTick()
-    expect(confirmState.open).toBe(true)
-    expect(confirmState.message).toContain('2 个模型')
-    settleConfirm(true)
-    await flushPromises()
-    expect(removeMock).toHaveBeenCalledWith('acme-gateway')
-  })
-
   it('单模型测试走真实调用，结果回显在该模型行内', async () => {
     const w = await mountPanel()
-    await pick(w, 'Acme 网关')
-    testMock.mockResolvedValue({ data: { data: { model: 'acme-chat', durationMs: 1234, content: '可以' } } })
+    testMock.mockResolvedValue({ data: { data: { model: 'deepseek-v4-flash', durationMs: 1234, content: '可以' } } })
     await btn(w, '测试')!.trigger('click')
     await flushPromises()
-    expect(testMock).toHaveBeenCalledWith('acme-gateway', { modelId: 'acme-chat' })
+    expect(testMock).toHaveBeenCalledWith('platform', { modelId: 'deepseek-v4-flash' })
     const result = w.find('.mpp-rowtest')
     expect(result.text()).toContain('调用通过')
     expect(result.text()).toContain('1234ms')
@@ -447,10 +280,9 @@ describe('ModelProvidersPanel', () => {
 
   it('运行面读数：冷却中的模型标「冷却中」，空态是「健康」', async () => {
     getModelRegistryMock.mockResolvedValue({
-      data: { data: { models: [], cooldowns: [{ providerId: 'acme-gateway', model: 'acme-chat', remainingMs: 30000 }], warnings: [], runtime: { maxModelCandidates: 2 } } }
+      data: { data: { models: [], cooldowns: [{ providerId: 'platform', model: 'deepseek-v4-flash', remainingMs: 30000 }], warnings: [], runtime: { maxModelCandidates: 2 } } }
     })
     const w = await mountPanel()
-    await pick(w, 'Acme 网关')
     const rows = modelRows(w)
     expect(rows[0].text()).toContain('冷却中')
     expect(rows[1].text()).toContain('健康')
@@ -462,13 +294,12 @@ describe('ModelProvidersPanel', () => {
         data: {
           models: [],
           cooldowns: [],
-          warnings: ['模型「acme-chat」未被任何别名引用（只能通过具体 id 使用）。'],
+          warnings: ['模型「deepseek-v4-flash」未被任何别名引用（只能通过具体 id 使用）。'],
           runtime: { maxModelCandidates: 2 }
         }
       }
     })
     const w = await mountPanel()
-    await pick(w, 'Acme 网关')
     const badge = modelRows(w)[0].find('.mpp-label')
     expect(badge.text()).toContain('未被引用')
     expect(badge.attributes('title')).toContain('未被任何别名引用')

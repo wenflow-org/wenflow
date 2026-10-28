@@ -358,7 +358,7 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('接入与模型 = 供应商两栏面板：左列表平铺一份清单 + 右详情（2026-10-19 去分区）', async () => {
+  it('接入与模型 = 单通道详情（2026-10-27 撤掉左栏清单）', async () => {
     const wrapper = await mountApiConfig();
     await openPlatformSettings(wrapper);
     // 单页：供应商面板随页面一起挂载（原一级页签需点击才挂）
@@ -369,13 +369,13 @@ describe('ApiConfig P1 修复批', () => {
     const panel = wrapper.find('.mpp');
     expect(panel.exists()).toBe(true);
     expect(panel.text()).toContain('接入通道');
-    // 2026-10-19 用户「就不分区，不要做什么平台提供…自行接入又是什么意义呢」：
-    // 分组标题与来历词都不再出现，只剩一份平铺清单（平台通道排最前）
-    expect(wrapper.findAll('.mpp-group__title')).toHaveLength(0);
-    expect(wrapper.text()).not.toContain('平台提供');
-    expect(wrapper.text()).not.toContain('自行接入');
-    const items = wrapper.findAll('.mpp-item__name').map((el) => el.text());
-    expect(items).toEqual(['平台通道', 'Acme 网关']);
+    // 2026-10-27 用户「这个区域不要了」：左栏通道清单整块撤掉，页面直接是平台通道详情
+    expect(wrapper.find('.mpp-list').exists()).toBe(false);
+    expect(wrapper.findAll('.mpp-item')).toHaveLength(0);
+    expect(panel.text()).not.toContain('Acme 网关');
+    const detail = wrapper.find('.mpp-detail__head');
+    expect(detail.text()).toContain('平台通道');
+    expect(detail.find('.mpp-type').text()).toBe('平台内置');
     // 平台连接表单内联在详情里（2026-10-25 撤掉「平台设置」浮窗）
     expect(wrapper.find('.ac-conn').exists()).toBe(true);
     expect(wrapper.find('.ac-ps').exists()).toBe(false);
@@ -387,7 +387,7 @@ describe('ApiConfig P1 修复批', () => {
     // 连通性验证在连接表单里（上面那段「运行测试」），不在下面再挂第二枚检测钮
     const acts = wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text());
     expect(acts).toEqual(['＋ 添加模型']);
-    // 只读能力表已从本页退役；别名映射在「生成参数」页签内（默认页签下不可见）
+    // 只读能力表已从本页退役；别名映射在「平台默认与别名」页签内（默认页签下不可见）
     expect(wrapper.find('.ac-registry--aliases').exists()).toBe(true);
     expect((wrapper.find('#mpp-platform-panel-generation').attributes('style') || '')).toContain('display: none');
     expect(wrapper.text()).not.toContain('接入通道与能力限额');

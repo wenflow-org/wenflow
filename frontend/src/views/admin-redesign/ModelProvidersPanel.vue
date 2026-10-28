@@ -45,73 +45,19 @@
     />
 
     <div v-else class="mpp-body">
-      <!-- 左：供应商列表（启用中的平铺一份清单，当前通道在最前；停用条目默认收起）
-           2026-10-28 用户「不应该出现新建供应商，走两家供应商的事情」：撤掉「添加供应商」。
-           新人只需要把当前通道配好；停用的示例条目不再占据第一屏，需要时再展开。 -->
-      <aside class="mpp-list" role="tablist" aria-label="接入通道" @keydown="onTablistKeydown">
-        <div
-          v-for="p in orderedProviders"
-          :key="p.id"
-          class="mpp-item"
-          :class="{ 'mpp-item--on': p.id === selectedId, 'mpp-item--off': !p.enabled }"
-          role="tab"
-          :aria-selected="p.id === selectedId"
-          :data-provider="p.id"
-          :tabindex="p.id === selectedId ? 0 : -1"
-          @click="select(p.id)"
-          @keydown.enter.prevent="select(p.id)"
-          @keydown.space.prevent="select(p.id)"
-        >
-          <span class="mpp-item__dot" :class="`mpp-item__dot--${p.status}`" :title="statusLabel(p)" aria-hidden="true"></span>
-          <span class="mpp-item__grow">
-            <span class="mpp-item__name">{{ providerName(p) }}</span>
-            <span class="mpp-item__meta">{{ providerTypeLabel(p) }} · {{ p.models.length }} 个模型<template v-if="!p.enabled"> · 已停用</template></span>
-          </span>
-          <MkSwitch
-            :model-value="p.enabled"
-            :disabled="busy"
-            :aria-label="`启用通道 ${providerName(p)}`"
-            @update:model-value="(v: boolean) => toggleEnabled(p, v)"
-          />
-        </div>
-        <button
-          v-if="disabledCount"
-          type="button"
-          class="mk-link mpp-show-disabled"
-          @click="showDisabled = !showDisabled"
-        >{{ showDisabled ? '收起已停用' : `显示已停用（${disabledCount}）` }}</button>
-      </aside>
-
-      <!-- 右：详情 -->
+      <!-- 2026-10-27 用户「这个区域不要了」：撤掉左栏通道清单。这一页就是平台通道本身，
+           一栏列表只为一个通道占 260px，还把模型表挤到断行；自建通道改由配置文件/接口维护。 -->
       <div v-if="selected" class="mpp-detail">
         <div class="mpp-detail__head">
           <div class="mpp-detail__id">
             <strong class="mpp-detail__name">{{ providerName(selected) }}</strong>
-            <span class="mpp-type" :class="{ 'mpp-type--platform': selected.id === 'platform' }">{{ providerTypeLabel(selected) }}</span>
-            <span v-if="selected.id !== 'platform'" class="mono mpp-detail__code">{{ selected.id }}</span>
-            <span v-else class="mpp-detail__code">一条通道 = 服务地址 + 凭据 + 模型清单</span>
+            <span class="mpp-type mpp-type--platform">{{ providerTypeLabel(selected) }}</span>
+            <span class="mpp-detail__code">一条通道 = 服务地址 + 凭据 + 模型清单</span>
             <!-- 状态徽标只出「能不能用」；当前通道（endpointSource=inherit）不出徽标——
                  它用不用得了由下面「连接」段的连接徽标回答，同屏两处说同一件事是复读 -->
             <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
           </div>
-          <div class="mpp-detail__acts">
-            <button
-              v-if="selected.id !== 'platform'"
-              type="button"
-              class="mk-btn mk-btn--sm"
-              :disabled="busy || registry?.readOnly"
-              @click="openSettings(selected)"
-            >设置</button>
-            <button
-              v-if="selected.id !== 'platform'"
-              type="button"
-              class="mk-btn mk-btn--sm mk-btn--danger"
-              :disabled="busy || registry?.readOnly"
-              @click="removeProvider(selected)"
-            >删除</button>
-          </div>
         </div>
-        <p v-if="selected.description && selected.id !== 'platform'" class="mpp-detail__desc">{{ selected.description }}</p>
 
         <!-- 平台详情二级页签（2026-10-26）：模型 / 连接 / 基础设施 / 生成参数。
              用户「这个地方就可以配置重排序嵌入模型」「我不知为啥还要有默认设置。不就是配置的模型吗」——
@@ -140,62 +86,11 @@
           <slot name="platform-detail" />
         </div>
 
-        <template v-if="selected.id !== 'platform'">
-          <div class="mpp-block">
-            <div class="mpp-block__head">
-              <span class="mpp-sec">连接与鉴权</span>
-              <!-- 2026-10-27 P1：同步上游模型绑在这条通道的地址与密钥上，就地闭环 -->
-              <button
-                type="button"
-                class="mk-btn mk-btn--sm"
-                :disabled="pulling || !selected.keyHint"
-                :title="selected.keyHint ? '用这条通道的地址与密钥拉取 /models' : '先保存密钥'"
-                @click="pullModels(selected)"
-              >{{ pulling ? '同步中…' : pulled.length ? '重新同步上游模型' : '同步上游模型' }}</button>
-            </div>
-          <div class="mpp-endpoint">
-            <div class="mpp-endpoint__row">
-              <span class="mpp-endpoint__label">服务地址</span>
-              <span class="mono mpp-endpoint__value">{{ selected.baseUrl }}</span>
-            </div>
-            <div class="mpp-endpoint__row">
-              <span class="mpp-endpoint__label">API Key</span>
-              <span class="mpp-endpoint__key">
-                <input
-                  v-model="keyDraft"
-                  class="mk-field__input"
-                  :type="keyVisible ? 'text' : 'password'"
-                  autocomplete="new-password"
-                  :placeholder="selected.keyHint ? `已配置 ${selected.keyHint}，留空 = 沿用` : '输入 API Key'"
-                  :disabled="registry?.readOnly"
-                />
-                <button
-                  v-if="selected.keyHint || keyDraft"
-                  type="button"
-                  class="mpp-key-toggle"
-                  :title="keyVisible ? '隐藏' : '显示'"
-                  @click="keyVisible = !keyVisible"
-                >{{ keyVisible ? '隐藏' : '显示' }}</button>
-              </span>
-              <span class="mpp-endpoint__acts">
-                <button
-                  type="button"
-                  class="mk-btn mk-btn--sm mk-btn--primary"
-                  :disabled="busy || !keyDraft.trim() || registry?.readOnly"
-                  @click="saveKey(selected)"
-                >保存密钥</button>
-                <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="clearKey(selected)">移除密钥</button>
-              </span>
-            </div>
-          </div>
-          </div>
-        </template>
-
         <div
-          v-show="selected.id !== 'platform' || platformTab === 'models'"
-          :id="selected.id === 'platform' ? 'mpp-platform-panel-models' : undefined"
-          :role="selected.id === 'platform' ? 'tabpanel' : undefined"
-          :aria-labelledby="selected.id === 'platform' ? 'mpp-platform-tab-models' : undefined"
+          v-show="platformTab === 'models'"
+          id="mpp-platform-panel-models"
+          role="tabpanel"
+          aria-labelledby="mpp-platform-tab-models"
           class="mpp-block mpp-models"
         >
           <div class="mpp-models__head">
@@ -204,7 +99,7 @@
                  读起来像一行空记录。 -->
             <div class="mpp-models__title">
               <span class="mpp-sec">模型<span class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
-              <slot v-if="selected.id === 'platform'" name="models-meta" />
+              <slot name="models-meta" />
             </div>
             <span class="mpp-models__acts">
               <!-- 拉取结果收进浮窗（2026-10-24）：清单不在详情里铺开，勾选后再逐个配置。
@@ -226,18 +121,10 @@
               <span>先配置服务地址与 API Key，再拉取上游模型，或手动添加模型 ID。</span>
             </div>
             <button
-              v-if="selected.id === 'platform'"
               type="button"
               class="mk-btn mk-btn--sm"
               @click="platformTab = 'conn'"
             >去配置连接</button>
-            <button
-              v-else
-              type="button"
-              class="mk-btn mk-btn--sm"
-              :disabled="busy || registry?.readOnly"
-              @click="openManualAdd"
-            >添加模型</button>
           </div>
 
           <div v-if="selected.models.length || !selected.enabled" class="mk-table-scroll">
@@ -333,7 +220,6 @@
              2026-10-26 用户「这个地方就可以配置重排序嵌入模型」——此前它是页面最下方一张
              独立卡，和「平台」分成两处，改个嵌入模型得往下滚过整个模型表。 -->
         <div
-          v-if="selected.id === 'platform'"
           v-show="platformTab === 'infra'"
           id="mpp-platform-panel-infra"
           role="tabpanel"
@@ -349,7 +235,6 @@
              可它就是「这些模型默认怎么生成」，属于平台这条供应商，与模型表同一个对象。
              模型级覆盖优先（ModelEditorDialog 的「用平台默认」），这里兜底。 -->
         <div
-          v-if="selected.id === 'platform'"
           v-show="platformTab === 'generation'"
           id="mpp-platform-panel-generation"
           role="tabpanel"
@@ -371,7 +256,6 @@
       @confirm="startConfigure"
       @navigate="onPullNavigate"
     />
-    <ProviderEditorDialog ref="providerEditor" @saved="onProviderSaved" />
     <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" @closed="onEditorClosed" />
     <!-- 逐个配置队列：常驻进度与「跳过剩余」，中途关掉模型弹窗也能知道还剩几个 -->
     <div v-if="configureQueue.length" class="mpp-queue" role="status">
@@ -382,24 +266,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
-import MkSwitch from '@/components/mk/MkSwitch.vue'
-import ProviderEditorDialog, { type ProviderLike } from './ProviderEditorDialog.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
 import PullModelsDialog from './PullModelsDialog.vue'
 import { modelKindOf } from './platformModelKind'
 import { askConfirm } from './useConfirm'
 import { useRowMenu } from './useRowMenu'
 import { errMsg } from './live'
-import { toast } from '@/utils/toast'
 
 /** 注册表编辑视图（后端 services/admin/model-providers.service.ts 的 ProviderRegistryView） */
-interface ProviderView extends ProviderLike {
+interface ProviderView {
   id: string
   name: string
   description: string | null
@@ -449,21 +330,13 @@ const errorText = ref('')
 const busy = ref(false)
 const actionError = ref('')
 const writeWarnings = ref<string[]>([])
-const selectedId = ref('')
-/** 已停用供应商默认收起：新人第一眼只看到正在用的通道，示例/停用条目不占清单 */
-const showDisabled = ref(false)
-const keyDraft = ref('')
-const keyVisible = ref(false)
 const testingId = ref('')
-const pulling = ref(false)
 /** 单模型测试结果（按模型 id 落在行内，不再用卡上方一条全局结果条） */
 const testResults = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
-const pulled = ref<string[]>([])
 const router = useRouter()
 /** 行内 ⋯ 菜单（低频/危险操作）：与公告、账号、虚拟学习者同一套实现 */
 const { openMenu, toggleMenu, popStyle } = useRowMenu()
 
-const providerEditor = ref<InstanceType<typeof ProviderEditorDialog> | null>(null)
 const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
 const pullDialog = ref<InstanceType<typeof PullModelsDialog> | null>(null)
 /** 勾选后逐个配置的待办队列（保存一个进下一个；数量用于弹层标题 2/5） */
@@ -473,12 +346,13 @@ const configureTotal = ref(0)
 const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
 const registry = computed(() => view.value?.registry ?? null)
-const selected = computed(() => providers.value.find((p) => p.id === selectedId.value) ?? null)
+/** 这一页只呈现平台通道（2026-10-27 用户「这个区域不要了」）：自建通道不再在页面里切换 */
+const selected = computed(() => providers.value.find((p) => p.id === 'platform') ?? null)
 /* 平台详情的二级页签（2026-10-26 用户「这个地方就可以配置重排序嵌入模型」+
    「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得可以和前面的合并了」）：
    向量化 / 重排 / 生成默认都是平台这条供应商自己的能力，原来各自独立成卡挂在页面别处，
-   与「当前通道」是两处；现在收进通道详情，和连接、模型并列。页签只对平台出现——
-   示例供应商没有基础设施与平台级生成默认。用组件内状态不写 URL：二级写键会与一级抢。 */
+   与「当前通道」是两处；现在收进通道详情，和连接、模型并列。用组件内状态不写 URL：
+   二级写键会与一级抢。 */
 const platformTab = ref<'models' | 'conn' | 'infra' | 'generation'>('models')
 const platformTabs = computed(() => [
   { key: 'models', label: '模型', count: selected.value?.models.length },
@@ -488,8 +362,8 @@ const platformTabs = computed(() => [
 ])
 /* 当前页签回传宿主：连接与生成参数的分段保存钮只在该页签可见，
    宿主据此决定单组脏时要不要出底部保存条（否则切走页签就没有保存入口）。 */
-watch([platformTab, selectedId], () => {
-  emit('platformTab', selected.value?.id === 'platform' ? platformTab.value : '')
+watch(platformTab, () => {
+  emit('platformTab', platformTab.value)
 }, { immediate: true })
 
 /* 2026-10-21 用户「不要了」：卡头 meta 只留可写/只读这个会改变操作的结论，
@@ -521,18 +395,9 @@ function providerTypeLabel(p: ProviderView): string {
 function upstreamNameOf(m: ModelLike): string {
   return (m.upstreamModelId || '').trim() || m.id
 }
-/** 平铺一份清单：当前通道在最前；停用条目默认不出现，由清单底部一行展开 */
-const disabledCount = computed(() => providers.value.filter((p) => !p.enabled).length)
-const orderedProviders = computed(() => {
-  const list = showDisabled.value ? providers.value : providers.value.filter((p) => p.enabled)
-  return [...list.filter((p) => p.id === 'platform'), ...list.filter((p) => p.id !== 'platform')]
-})
-
 const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m.id) ?? []))
-/** 上游模型清单：平台通道来自连接设置（宿主注入），自带端点来自本页「获取模型列表」 */
-const fetchableModels = computed(() =>
-  selected.value?.endpointSource === 'inherit' ? props.upstream : pulled.value
-)
+/** 上游模型清单：平台通道的清单来自连接设置（宿主注入） */
+const fetchableModels = computed(() => props.upstream)
 /** 还能登记进模型清单的对话模型数：拉取结果里已添加的不再计入 */
 const pullableCount = computed(() =>
   fetchableModels.value.filter((name) => modelKindOf(name) === 'chat' && !registeredIds.value.has(name)).length
@@ -547,12 +412,6 @@ function emitRegistered(): void {
   emit('registered', providers.value.flatMap((p) => p.models.map((m) => m.id)))
 }
 
-function statusLabel(p: ProviderView): string {
-  if (p.status === 'disabled') return '已停用'
-  if (p.status === 'inherit') return '用连接设置里的地址与密钥'
-  if (p.status === 'unconfigured') return '还没配置密钥'
-  return '可用'
-}
 /** 详情头徽标：只出「能不能用」。「用连接设置」这一档返回 null——那句话由下面「连接」段
     的连接徽标回答（同屏一处事实一个控件）。 */
 function statusBadge(p: ProviderView): { cls: string; label: string } | null {
@@ -598,50 +457,6 @@ function functionTags(m: ModelLike): string[] {
   if (m.vision) tags.push('读图')
   return tags
 }
-/** 列表是一组 role=tab：按 WAI-ARIA 走 roving tabindex + 方向键，避免 N 个供应商占 N 个 Tab 位 */
-function onTablistKeydown(e: KeyboardEvent): void {
-  const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
-  if (!keys.includes(e.key)) return
-  const items = orderedProviders.value
-  if (!items.length) return
-  e.preventDefault()
-  const cur = items.findIndex((p) => p.id === selectedId.value)
-  const next = e.key === 'Home' ? 0
-    : e.key === 'End' ? items.length - 1
-      : e.key === 'ArrowDown' ? (cur < 0 ? 0 : (cur + 1) % items.length)
-        : (cur < 0 ? items.length - 1 : (cur - 1 + items.length) % items.length)
-  select(items[next].id)
-  nextTick(() => {
-    const host = e.currentTarget as HTMLElement | null
-    host?.querySelector<HTMLElement>(`[data-provider="${items[next].id}"]`)?.focus()
-  })
-}
-
-function select(id: string): void {
-  selectedId.value = id
-  /* 切供应商时二级页签归位到「模型」：从平台切到示例供应商再切回来，不该停在上一家的页签 */
-  platformTab.value = 'models'
-  keyDraft.value = ''
-  keyVisible.value = false
-  testResults.value = {}
-  pulled.value = []
-  configureQueue.value = []
-  configureTotal.value = 0
-}
-
-/** 选中项被删/首次加载后归位：优先当前通道，其次第一个可见供应商。
-    停用条目默认收起，选中项若刚被停用也要让位，避免详情停在一个清单里看不到的供应商。 */
-function ensureSelection(): void {
-  const visible = showDisabled.value ? providers.value : providers.value.filter((p) => p.enabled)
-  if (visible.some((p) => p.id === selectedId.value)) return
-  const first = visible.find((p) => p.id === 'platform') ?? visible[0]
-  selectedId.value = first?.id ?? ''
-}
-/** 收起已停用时，详情不能停在一个已经不在清单里的供应商 */
-watch(showDisabled, () => {
-  if (!showDisabled.value) ensureSelection()
-})
-
 async function refresh(force = false): Promise<void> {
   if (view.value && !force) return
   loading.value = true
@@ -653,7 +468,6 @@ async function refresh(force = false): Promise<void> {
     ])
     view.value = (providersRes?.data?.data ?? null) as ProvidersView | null
     health.value = registryRes
-    ensureSelection()
     emitRegistered()
   } catch (e) {
     failed.value = true
@@ -681,88 +495,10 @@ function adopt(payload: unknown, warnings: string[]): void {
   const data = (payload as { data?: unknown })?.data ?? payload
   if (data && typeof data === 'object' && 'providers' in (data as object)) {
     view.value = data as ProvidersView
-    ensureSelection()
     emitRegistered()
   }
   writeWarnings.value = warnings
   emit('changed')
-}
-
-async function toggleEnabled(p: ProviderView, value: boolean): Promise<void> {
-  if (!value) {
-    const ok = await askConfirm({
-      title: `停用通道「${providerName(p)}」`,
-      message: `停用后它的 ${p.models.length} 个模型立即退出路由。`,
-      confirmText: '停用',
-      danger: true,
-    })
-    if (!ok) return
-  }
-  busy.value = true
-  actionError.value = ''
-  try {
-    const res = await adminModelProvidersApi.update(p.id, { enabled: value })
-    adopt(res?.data, res?.data?.warnings ?? [])
-    toast.success(value ? `「${providerName(p)}」已启用` : `「${providerName(p)}」已停用，模型退出路由`)
-  } catch (e) {
-    actionError.value = errMsg(e)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function saveKey(p: ProviderView): Promise<void> {
-  if (!keyDraft.value.trim()) return
-  busy.value = true
-  actionError.value = ''
-  try {
-    const res = await adminModelProvidersApi.update(p.id, { apiKey: keyDraft.value.trim() })
-    adopt(res?.data, res?.data?.warnings ?? [])
-    keyDraft.value = ''
-  } catch (e) {
-    actionError.value = errMsg(e)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function clearKey(p: ProviderView): Promise<void> {
-  const ok = await askConfirm({
-    title: '移除已保存的密钥',
-    message: `移除「${p.name}」当前保存的密钥后，运行时会回落到服务器环境变量 ${p.apiKeyEnv || '（未配置）'}。若两处都没有，它的模型会直接报错。`,
-    confirmText: '移除密钥'
-  })
-  if (ok !== true) return
-  busy.value = true
-  actionError.value = ''
-  try {
-    const res = await adminModelProvidersApi.removeKey(p.id)
-    adopt(res?.data, res?.data?.warnings ?? [])
-  } catch (e) {
-    actionError.value = errMsg(e)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function removeProvider(p: ProviderView): Promise<void> {
-  const ok = await askConfirm({
-    title: `删除通道「${p.name}」`,
-    message: `将从模型目录里删掉这条通道和它下面的 ${p.models.length} 个模型，并清除已保存的密钥。删掉后引用这些模型的默认路由与别名会失效（系统会拦下那种情况）。`,
-    confirmText: '删除通道'
-  })
-  if (ok !== true) return
-  busy.value = true
-  actionError.value = ''
-  try {
-    const res = await adminModelProvidersApi.remove(p.id)
-    select('')
-    adopt(res?.data, res?.data?.warnings ?? [])
-  } catch (e) {
-    actionError.value = errMsg(e)
-  } finally {
-    busy.value = false
-  }
 }
 
 async function removeModel(m: ModelLike): Promise<void> {
@@ -784,13 +520,10 @@ async function removeModel(m: ModelLike): Promise<void> {
   }
 }
 
-function onProviderSaved(payload: { providerId: string; warnings: string[] }): void {
-  void reloadAfterDialog(payload.providerId, payload.warnings)
-}
 async function onModelSaved(payload: { modelId: string; warnings: string[] }): Promise<void> {
   const fromQueue = configureQueue.value.length > 0
   if (fromQueue) configureQueue.value = configureQueue.value.filter((id) => id !== payload.modelId)
-  await reloadAfterDialog(null, payload.warnings)
+  await reloadAfterDialog(payload.warnings)
   if (fromQueue) openNextConfigure()
 }
 
@@ -798,8 +531,7 @@ async function onModelSaved(payload: { modelId: string; warnings: string[] }): P
  * 弹层保存后：写接口的回吐在弹层里被吃掉了，这里重新拉一次视图（唯一需要再拉一次的场景），
  * 并把告警透传到面板顶部。
  */
-async function reloadAfterDialog(providerId: string | null, warnings: string[]): Promise<void> {
-  if (providerId) selectedId.value = providerId
+async function reloadAfterDialog(warnings: string[]): Promise<void> {
   await refresh(true)
   writeWarnings.value = warnings
   emit('changed')
@@ -821,21 +553,6 @@ async function testModel(p: ProviderView, modelId: string): Promise<void> {
   }
 }
 
-async function pullModels(p: ProviderView): Promise<void> {
-  pulling.value = true
-  actionError.value = ''
-  try {
-    const res = await adminModelProvidersApi.pullModels(p.id)
-    pulled.value = (res?.data?.data?.models ?? []) as string[]
-    if (pulled.value.length) openPull()
-    else actionError.value = '通道返回了空清单：确认这个服务地址是否提供 /models'
-  } catch (e) {
-    actionError.value = errMsg(e)
-  } finally {
-    pulling.value = false
-  }
-}
-
 /** 打开拉取结果浮窗：清单只用于勾选，不再在详情里铺开 */
 function openPull(): void {
   if (!selected.value) return
@@ -846,9 +563,8 @@ function openPull(): void {
   pullDialog.value?.openWith()
 }
 
-/** 平台通道同步上游清单后直接弹浮窗；顺便把选中项归位到平台通道 */
+/** 平台通道同步上游清单后直接弹浮窗 */
 function openHostPull(): void {
-  if (selectedId.value !== 'platform') select('platform')
   openPull()
 }
 
@@ -894,19 +610,13 @@ function onEditorClosed(): void {
   configureTotal.value = 0
 }
 
-/** 非对话模型的去向：基础设施在同页「基础设施模型」卡，生图/决策在插件页 */
+/** 非对话模型的去向：向量化 / 重排在本页「基础设施」页签，生图/决策在插件页 */
 function onPullNavigate(target: 'infra' | 'plugins'): void {
   if (target === 'plugins') {
     void router.push('/admin/addons')
     return
   }
-  if (selectedId.value !== 'platform') select('platform')
-  document.getElementById('ac-infra')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-/** 供应商「设置」：打开注册表编辑弹层（平台通道的按钮已撤，连接表单就在详情下方） */
-function openSettings(p: ProviderView): void {
-  providerEditor.value?.openWith(p)
+  platformTab.value = 'infra'
 }
 
 onMounted(() => {
@@ -923,65 +633,15 @@ defineExpose({ refresh, openPull, openHostPull })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-/* 2026-10-20 走查：接入页是一张满高工作台——卡片撑满页签剩余高度，左列表 / 右详情各自内滚，
-   不在长屏上留出整屏空白（此前卡随内容高度，1920×1080 下方空 300+px）。 */
+/* 2026-10-27 用户「这个区域不要了」：左栏通道清单撤掉后，详情独占整卡宽度 */
 .mpp { display: flex; flex-direction: column; min-height: 0; }
 .mpp-body {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
   border-top: 1px solid var(--mk-line);
   flex: 1 1 auto;
   min-height: 0;
-}
-@media (max-width: 900px) {
-  .mpp-body { grid-template-columns: minmax(0, 1fr); }
-  .mpp-list { border-right: 0; border-bottom: 1px solid var(--mk-line); }
-}
-.mpp-list {
-  padding: 10px;
-  border-right: 1px solid var(--mk-line);
-  overflow-y: auto;
-  min-height: 0;
-}
-.mpp-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 6px;
-  border-radius: var(--mk-radius-md);
-  cursor: pointer;
-}
-.mpp-item:hover { background: var(--mk-surface-2); }
-.mpp-item--on { background: var(--mk-surface-2); box-shadow: inset 2px 0 0 var(--mk-accent-deep); }
-.mpp-item__dot {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--mk-muted);
-}
-.mpp-item__dot--ready { background: var(--mk-green); }
-.mpp-item__dot--unconfigured { background: var(--mk-amber); }
-.mpp-item__dot--disabled { background: var(--mk-muted); }
-.mpp-item__dot--inherit { background: var(--mk-accent-deep); }
-.mpp-item__grow { min-width: 0; flex: 1 1 auto; }
-.mpp-item__name { display: block; font-size: var(--mk-fs-body); }
-.mpp-item__meta {
-  display: block;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mpp-item--off { opacity: 0.72; }
-.mpp-show-disabled {
-  display: block;
-  width: 100%;
-  margin-top: 6px;
-  padding: 6px;
-  text-align: left;
 }
 .mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
 /* 平台详情二级页签（模型 / 连接 / 基础设施 / 生成参数）：页签条下已有分隔线，面板不再自带一条 */
@@ -1020,40 +680,6 @@ defineExpose({ refresh, openPull, openHostPull })
   background: color-mix(in srgb, var(--mk-blue) 10%, transparent);
   color: var(--mk-blue);
 }
-.mpp-detail__acts { display: inline-flex; gap: 6px; }
-.mpp-detail__desc {
-  margin: 6px 0 0;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
-.mpp-endpoint {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-lg);
-}
-.mpp-endpoint__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.mpp-endpoint__row + .mpp-endpoint__row { margin-top: 8px; }
-.mpp-endpoint__label {
-  flex: 0 0 72px;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
-.mpp-endpoint__value { min-width: 0; overflow-wrap: anywhere; font-size: var(--mk-fs-body); }
-.mpp-endpoint__key { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 auto; }
-.mpp-key-toggle {
-  background: none;
-  border: 0;
-  padding: 2px 6px;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  cursor: pointer;
-}
-.mpp-endpoint__acts { display: inline-flex; gap: 6px; flex: 0 0 auto; }
 .mpp-models { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
 .mpp-models__head {
   display: flex;
