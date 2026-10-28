@@ -218,6 +218,9 @@ describe('R2：运维工具死信告警随死信卡呈现（状态条已按原�
     expect(warn.exists(), '死信积压要显式 warn 徽标（迁入死信卡头）').toBe(true)
     expect(warn.text()).toContain('3')
     expect(w.find('.mk-status').exists(), '本面板无状态条').toBe(false)
+    // 计数 > 0 但窗口无行：不得落成「全部已送达」健康态
+    expect(w.find('.stp-ok').exists()).toBe(false)
+    expect(w.text()).toContain('当前窗口没有返回失败记录')
     // 无效类名不得再出现（它曾让告警静默失效）
     expect(w.find('.is-bad').exists()).toBe(false)
 

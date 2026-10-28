@@ -4,30 +4,49 @@
        2026-10-28：只保留「事件投递失败」——后台任务没送达时的重发入口；
        时间推进 / 内容抽检退役，批量吞吐迁到「模型与接入」。 -->
   <div class="stp-body">
-    <!-- Outbox 死信：运营待办「事件投递失败 → 去处理」落在这里，首屏就是重发入口。 -->
-    <section class="mk-card">
+    <!-- Outbox 死信：运营待办「事件投递失败 → 去处理」落在这里。
+         2026-10-27 重做：零死信不再是一张「空表格 + 禁用按钮」，改为健康态摘要；
+         有积压时卡头才出现重发主操作，正文补一条副作用提醒。 -->
+    <section class="mk-card stp-card">
       <div class="mk-card__head">
-        <h4 class="mk-card__title">事件投递失败</h4>
-        <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn——
-             零值与加载中不得伪装成「确认无死信」 -->
-        <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
-        <span v-else-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重发</span>
+        <div class="stp-head">
+          <h4 class="mk-card__title">事件投递失败</h4>
+          <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn，
+               零值只有成功加载后才显示「全部已送达」——加载中不得伪装成确认无死信 -->
+          <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
+          <span v-else-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重发</span>
+          <span v-else-if="deadLoaded" class="mk-badge mk-badge--ok">全部已送达</span>
+        </div>
         <div class="mk-card__head-right">
-          <!-- P3（2026-10-04 全站评审）：空态不给假动作——0 死信时禁点 -->
-          <!-- 清单加载失败时作用域未知，禁用重发（否则确认框按 deadCount=0 生成假读数） -->
+          <!-- 空态不给假动作：0 死信时不渲染重发钮；加载失败时作用域未知，也不给 -->
           <button
+            v-if="!deadFailed && deadCount > 0"
             type="button"
             class="mk-btn mk-btn--sm"
-            :disabled="requeueBusy || deadFailed || (!deadLoading && deadCount === 0)"
+            :disabled="requeueBusy || deadLoading"
             @click="requeueAll"
           >
             {{ requeueBusy ? '重发中…' : '重新发送全部' }}
           </button>
         </div>
       </div>
-      <p class="stp-intro">后台任务（更新学习画像、发放成就等）第一次没送达时，会先记在这里。确认问题已修好后重新发送，这些任务会再跑一次。</p>
+      <p class="stp-intro">后台任务（更新学习画像、发放成就等）第一次投递失败会记在这里，确认根因修复后可重发。</p>
+
       <MkLoading v-if="deadLoading" />
+      <MkEmptyState
+        v-else-if="deadFailed"
+        tone="error"
+        icon="!"
+        title="事件清单加载失败"
+        action-text="重试"
+        compact
+        @action="loadDead"
+      />
       <template v-else-if="deadItems.length">
+        <p class="stp-warn">
+          <TriangleAlert :size="15" :stroke-width="2" aria-hidden="true" />
+          重发会再次执行对应业务动作，可能产生重复副作用。请先确认根因已修复。
+        </p>
         <div class="mk-table-scroll">
           <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
                单元格 nowrap、列按内容自然分宽；事件类型 / 错误信息两处长内容列 max-width 截断兜底 -->
@@ -77,21 +96,26 @@
           <button type="button" class="mk-link" @click="loadDead">刷新</button>
         </div>
       </template>
-      <!-- 失败态走 tone=error（红系图标 + role=alert），与页内另两处错误态同口径 -->
+      <!-- 计数 > 0 但窗口没返回行：如实说窗口为空，不冒充「全部送达」 -->
       <MkEmptyState
-        v-else-if="deadFailed"
-        tone="error"
-        icon="!"
-        title="事件清单加载失败"
-        action-text="重试"
+        v-else-if="deadCount > 0"
+        title="当前窗口没有返回失败记录"
+        :description="`共 ${deadCount} 条待重发，刷新后再看。`"
+        action-text="刷新"
         compact
         @action="loadDead"
       />
-      <MkEmptyState
-        v-else
-        title="没有投递失败的事件"
-        compact
-      />
+      <!-- 健康态：不是「空表格」，而是一句可确认的结论 + 一条刷新出口 -->
+      <div v-else class="stp-ok">
+        <span class="stp-ok__icon" aria-hidden="true">
+          <CircleCheck :size="22" :stroke-width="1.9" />
+        </span>
+        <div class="stp-ok__text">
+          <strong>没有投递失败的事件</strong>
+          <span>学习画像更新、成就发放等后台任务都已正常送达。</span>
+        </div>
+        <button type="button" class="mk-link stp-ok__refresh" @click="loadDead">刷新</button>
+      </div>
     </section>
   </div>
 </template>
@@ -104,6 +128,7 @@ import { adminDevtoolsApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import { CircleCheck, TriangleAlert } from 'lucide-vue-next'
 
 /* 运维工具（原「系统工具」页 Tab1 整体迁入，2026-10-16）：现在只剩「事件投递失败」的重发入口。
    时间推进（虚拟学习者仿真）、内容抽检（已下线）已退役，批量吞吐迁到「模型与接入」。 */
@@ -241,11 +266,54 @@ defineExpose({ refresh, reload: loadDead })
 /* 工具卡的用途说明（2026-10-28 用户「写法理解成本比较高」）：
    用运营能看懂的话讲清「这些记录从哪来、点按钮会发生什么」。 */
 .stp-intro {
-  margin: -2px 16px 10px;
+  margin: -2px 16px 12px;
   font-size: var(--mk-fs-micro);
   line-height: 1.5;
   color: var(--mk-muted);
 }
+/* 卡头左组：标题 + 状态徽标同一行 */
+.stp-head { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+
+/* 有积压时的副作用提醒：重发会产生真实业务动作，提醒必须成条出现 */
+.stp-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 16px 12px;
+  padding: 8px 12px;
+  border-radius: var(--mk-radius-md);
+  background: color-mix(in srgb, var(--mk-amber) 9%, transparent);
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-micro);
+  line-height: 1.5;
+}
+.stp-warn svg { flex: none; margin-top: 1px; color: var(--mk-amber); }
+
+/* 健康态：一句可确认的结论 + 一句范围说明 + 刷新出口，替代「空表格里放一句没有数据」 */
+.stp-ok {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 16px 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--mk-green) 22%, var(--mk-line));
+  border-radius: var(--mk-radius-md);
+  background: color-mix(in srgb, var(--mk-green) 7%, var(--mk-surface));
+}
+.stp-ok__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--mk-green) 14%, transparent);
+  color: var(--mk-green);
+}
+.stp-ok__text { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.stp-ok__text strong { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
+.stp-ok__text span { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
+.stp-ok__refresh { flex: none; }
 /* 死信表（自动布局）：事件类型长名截断（title 全值）。nowrap 走表级 .mk-table--nowrap */
 .stp-ev {
   display: inline-block;

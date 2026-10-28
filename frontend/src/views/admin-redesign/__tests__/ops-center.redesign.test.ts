@@ -98,7 +98,7 @@ async function mountWithRouter(component: unknown, route = '/admin/ops-hub') {
 describe('运维工具面板（原系统工具 Tab1）', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('只剩事件投递失败一张卡；批量吞吐已迁走、内容抽检已退役，零死信时重发钮禁用', async () => {
+  it('只剩事件投递失败一张卡；批量吞吐已迁走、内容抽检已退役，零死信显示健康态而不给假动作', async () => {
     const w = await mountWithRouter(ServerToolsPanel)
     const titles = w.findAll('.mk-card__title').map((t) => t.text())
     expect(titles).toEqual(['事件投递失败'])
@@ -107,9 +107,40 @@ describe('运维工具面板（原系统工具 Tab1）', () => {
     expect(w.text()).not.toContain('内容抽检')
     // 卡片保留一句白话说明（这些记录从哪来、点按钮会发生什么）
     expect(w.findAll('.stp-intro')).toHaveLength(1)
+    // 2026-10-27 重做：0 死信不再渲染禁用重发钮，改健康态摘要 + 刷新出口
     const requeue = w.findAll('button').find((b) => b.text() === '重新发送全部')
-    expect(requeue, '零死信也要有重发入口（禁用态）').toBeTruthy()
-    expect(requeue!.attributes('disabled')).toBeDefined()
+    expect(requeue, '零死信不渲染假动作').toBeFalsy()
+    expect(w.find('.stp-ok').exists()).toBe(true)
+    expect(w.find('.stp-ok').text()).toContain('没有投递失败的事件')
+    expect(w.find('.mk-card__head .mk-badge--ok').text()).toContain('全部已送达')
+    w.unmount()
+  })
+
+  it('有积压：卡头才出现重发主操作，正文给副作用提醒与清单', async () => {
+    apiObject.adminDevtoolsApi.getOutboxDead.mockResolvedValueOnce({
+      data: {
+        data: {
+          deadCount: 1,
+          items: [
+            {
+              id: 'dead-1',
+              eventType: 'teaching.session.completed',
+              userId: 'user-1',
+              aggregateId: 'sess-1',
+              attemptCount: 3,
+              lastError: 'upstream timeout',
+              occurredAt: new Date().toISOString()
+            }
+          ]
+        }
+      }
+    })
+    const w = await mountWithRouter(ServerToolsPanel)
+    expect(w.find('.mk-card__head .mk-badge--warn').text()).toContain('1 条待重发')
+    expect(w.findAll('button').some((b) => b.text() === '重新发送全部')).toBe(true)
+    expect(w.find('.stp-warn').text()).toContain('重复副作用')
+    expect(w.find('.stp-dead-table').text()).toContain('teaching.session.completed')
+    expect(w.find('.stp-ok').exists()).toBe(false)
     w.unmount()
   })
 })
