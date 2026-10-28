@@ -16,12 +16,11 @@
        把「这个模型现在能不能用」也算在这里会让两个接口互相复述。 -->
   <section class="mk-card mpp">
     <div class="mk-card__head">
-      <h3 class="mk-card__title">模型供应商</h3>
+      <h3 class="mk-card__title">接入通道</h3>
       <span class="mk-card__meta" :title="registryPathTitle">{{ registryMeta }}</span>
       <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
         只读
       </button>
-      <slot name="card-actions" />
     </div>
 
     <div v-if="actionError" class="mk-alert mk-alert--row mpp-alert" role="alert">
@@ -35,11 +34,11 @@
       注册表文件所在目录当前不可写，页面只能查看。请由部署侧开放写权限后再编辑。
     </p>
 
-    <MkLoading v-if="loading && !view" inline text="读取供应商…" />
+    <MkLoading v-if="loading && !view" inline text="读取接入通道…" />
     <MkEmptyState
       v-else-if="failed"
       tone="error"
-      title="供应商读取失败"
+      title="接入通道读取失败"
       :description="errorText"
       action-text="重试"
       @action="refresh(true)"
@@ -49,7 +48,7 @@
       <!-- 左：供应商列表（启用中的平铺一份清单，当前通道在最前；停用条目默认收起）
            2026-10-28 用户「不应该出现新建供应商，走两家供应商的事情」：撤掉「添加供应商」。
            新人只需要把当前通道配好；停用的示例条目不再占据第一屏，需要时再展开。 -->
-      <aside class="mpp-list" role="tablist" aria-label="模型供应商" @keydown="onTablistKeydown">
+      <aside class="mpp-list" role="tablist" aria-label="接入通道" @keydown="onTablistKeydown">
         <div
           v-for="p in orderedProviders"
           :key="p.id"
@@ -66,12 +65,12 @@
           <span class="mpp-item__dot" :class="`mpp-item__dot--${p.status}`" :title="statusLabel(p)" aria-hidden="true"></span>
           <span class="mpp-item__grow">
             <span class="mpp-item__name">{{ providerName(p) }}</span>
-            <span class="mpp-item__meta">{{ p.models.length }} 个模型<template v-if="!p.enabled"> · 已停用</template></span>
+            <span class="mpp-item__meta">{{ providerTypeLabel(p) }} · {{ p.models.length }} 个模型<template v-if="!p.enabled"> · 已停用</template></span>
           </span>
           <MkSwitch
             :model-value="p.enabled"
             :disabled="busy"
-            :aria-label="`启用供应商 ${providerName(p)}`"
+            :aria-label="`启用通道 ${providerName(p)}`"
             @update:model-value="(v: boolean) => toggleEnabled(p, v)"
           />
         </div>
@@ -88,8 +87,9 @@
         <div class="mpp-detail__head">
           <div class="mpp-detail__id">
             <strong class="mpp-detail__name">{{ providerName(selected) }}</strong>
+            <span class="mpp-type" :class="{ 'mpp-type--platform': selected.id === 'platform' }">{{ providerTypeLabel(selected) }}</span>
             <span v-if="selected.id !== 'platform'" class="mono mpp-detail__code">{{ selected.id }}</span>
-            <span v-else class="mpp-detail__code">这个部署实际调用的模型服务</span>
+            <span v-else class="mpp-detail__code">继承平台端点 · 一条通道 = 服务地址 + 凭据 + 模型清单</span>
             <!-- 状态徽标只出「能不能用」；当前通道（endpointSource=inherit）不出徽标——
                  它用不用得了由下面「连接」段的连接徽标回答，同屏两处说同一件事是复读 -->
             <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
@@ -143,7 +143,15 @@
         <template v-if="selected.id !== 'platform'">
           <div class="mpp-block">
             <div class="mpp-block__head">
-              <span class="mpp-sec">连接</span>
+              <span class="mpp-sec">连接与鉴权</span>
+              <!-- 2026-10-27 P1：同步上游模型绑在这条通道的地址与密钥上，就地闭环 -->
+              <button
+                type="button"
+                class="mk-btn mk-btn--sm"
+                :disabled="pulling || !selected.keyHint"
+                :title="selected.keyHint ? '用这条通道的地址与密钥拉取 /models' : '先保存密钥'"
+                @click="pullModels(selected)"
+              >{{ pulling ? '同步中…' : pulled.length ? '重新同步上游模型' : '同步上游模型' }}</button>
             </div>
           <div class="mpp-endpoint">
             <div class="mpp-endpoint__row">
@@ -204,14 +212,6 @@
               <button v-if="pullableCount" type="button" class="mk-link" @click="openPull">
                 选择要添加的（{{ pullableCount }}）
               </button>
-              <button
-                v-if="selected.endpointSource === 'own'"
-                type="button"
-                class="mk-btn mk-btn--sm"
-                :disabled="pulling || !selected.keyHint"
-                :title="selected.keyHint ? undefined : '先保存密钥'"
-                @click="pullModels(selected)"
-              >{{ pulling ? '拉取中…' : pulled.length ? '重新拉取' : '获取模型列表' }}</button>
               <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openManualAdd">＋ 添加模型</button>
             </span>
           </div>
@@ -243,11 +243,12 @@
           <div v-if="selected.models.length || !selected.enabled" class="mk-table-scroll">
             <table class="mk-table mk-table--dense mpp-table">
               <colgroup>
-                <col style="width: 46%" /><col style="width: 24%" /><col style="width: 15%" /><col style="width: 15%" />
+                <col style="width: 30%" /><col style="width: 21%" /><col style="width: 20%" /><col style="width: 14%" /><col style="width: 15%" />
               </colgroup>
               <thead>
                 <tr>
-                  <th>模型</th>
+                  <th>本地模型</th>
+                  <th title="当前版本本地名即上游模型名，后续支持独立映射">上游模型名</th>
                   <th>功能</th>
                   <th>状态</th>
                   <th></th>
@@ -259,7 +260,7 @@
                      哪个模型能思考、能调推理强度、能读图。 -->
                 <template v-for="g in modelGroups" :key="g.tier">
                   <tr class="mpp-group">
-                    <td colspan="4">
+                    <td colspan="5">
                       <span class="mpp-group__name">{{ g.label }}</span>
                       <span class="mpp-group__count">{{ g.models.length }} 个</span>
                       <span class="mpp-group__hint">{{ g.hint }}</span>
@@ -275,6 +276,10 @@
                       :class="{ 'mpp-rowtest--bad': !testResults[m.id].ok }"
                       :title="testResults[m.id].text"
                     >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
+                  </td>
+                  <td class="mpp-upstream">
+                    <span class="mono" :title="upstreamNameOf(m)">{{ upstreamNameOf(m) }}</span>
+                    <span v-if="upstreamNameOf(m) === m.id" class="mpp-desc">同本地名</span>
                   </td>
                   <td class="mpp-fn">
                     <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
@@ -313,8 +318,8 @@
                   </tr>
                 </template>
                 <tr v-if="!selected.models.length">
-                  <td colspan="4" class="mpp-empty">
-                    这个供应商当前停用，模型不参与路由。
+                  <td colspan="5" class="mpp-empty">
+                    这条通道当前停用，模型不参与路由。
                   </td>
                 </tr>
               </tbody>
@@ -352,12 +357,12 @@
           <slot name="platform-generation" />
         </div>
       </div>
-      <MkEmptyState v-else compact title="还没有供应商" />
+      <MkEmptyState v-else compact title="还没有接入通道" />
     </div>
 
     <PullModelsDialog
       ref="pullDialog"
-      :provider-name="selected?.name ?? ''"
+      :provider-name="selected ? providerName(selected) : ''"
       :provider-id="selected?.id ?? ''"
       :models="fetchableModels"
       :registered="[...registeredIds]"
@@ -475,9 +480,9 @@ const selected = computed(() => providers.value.find((p) => p.id === selectedId.
 const platformTab = ref<'models' | 'conn' | 'infra' | 'generation'>('models')
 const platformTabs = computed(() => [
   { key: 'models', label: '模型', count: selected.value?.models.length },
-  { key: 'conn', label: '连接' },
+  { key: 'conn', label: '连接与鉴权' },
   { key: 'infra', label: '基础设施' },
-  { key: 'generation', label: '生成参数' },
+  { key: 'generation', label: '平台默认与别名' },
 ])
 /* 当前页签回传宿主：连接与生成参数的分段保存钮只在该页签可见，
    宿主据此决定单组脏时要不要出底部保存条（否则切走页签就没有保存入口）。 */
@@ -504,7 +509,15 @@ const registryPathTitle = computed(() => {
 /** 供应商展示名：文件里的 dev 默认名「平台」不带到界面上——没有平台默认这回事，
     它就是「这个部署当前实际调用的通道」。别的部署给 platform 起了真名就照实显示。 */
 function providerName(p: ProviderView): string {
-  return p.id === 'platform' && p.name === '平台' ? '当前通道' : p.name
+  return p.id === 'platform' && p.name === '平台' ? '平台通道' : p.name
+}
+/** 通道类型：平台内置 / 自建。接入通道 = 一个服务地址 + 一套凭据 + 模型清单。 */
+function providerTypeLabel(p: ProviderView): string {
+  return p.id === 'platform' ? '平台内置' : '自建通道'
+}
+/** 上游物理模型名：P2 独立映射落地前就是本地 id */
+function upstreamNameOf(m: ModelLike): string {
+  return (m.upstreamModelId || '').trim() || m.id
 }
 /** 平铺一份清单：当前通道在最前；停用条目默认不出现，由清单底部一行展开 */
 const disabledCount = computed(() => providers.value.filter((p) => !p.enabled).length)
@@ -676,7 +689,7 @@ function adopt(payload: unknown, warnings: string[]): void {
 async function toggleEnabled(p: ProviderView, value: boolean): Promise<void> {
   if (!value) {
     const ok = await askConfirm({
-      title: `停用供应商「${providerName(p)}」`,
+      title: `停用通道「${providerName(p)}」`,
       message: `停用后它的 ${p.models.length} 个模型立即退出路由。`,
       confirmText: '停用',
       danger: true,
@@ -732,9 +745,9 @@ async function clearKey(p: ProviderView): Promise<void> {
 
 async function removeProvider(p: ProviderView): Promise<void> {
   const ok = await askConfirm({
-    title: `删除供应商「${p.name}」`,
-    message: `将从模型目录里删掉这个供应商和它下面的 ${p.models.length} 个模型，并清除已保存的密钥。删掉后引用这些模型的默认路由与别名会失效（系统会拦下那种情况）。`,
-    confirmText: '删除供应商'
+    title: `删除通道「${p.name}」`,
+    message: `将从模型目录里删掉这条通道和它下面的 ${p.models.length} 个模型，并清除已保存的密钥。删掉后引用这些模型的默认路由与别名会失效（系统会拦下那种情况）。`,
+    confirmText: '删除通道'
   })
   if (ok !== true) return
   busy.value = true
@@ -813,7 +826,7 @@ async function pullModels(p: ProviderView): Promise<void> {
     const res = await adminModelProvidersApi.pullModels(p.id)
     pulled.value = (res?.data?.data?.models ?? []) as string[]
     if (pulled.value.length) openPull()
-    else actionError.value = '供应商返回了空清单：确认这个服务地址是否提供 /models'
+    else actionError.value = '通道返回了空清单：确认这个服务地址是否提供 /models'
   } catch (e) {
     actionError.value = errMsg(e)
   } finally {
@@ -831,7 +844,7 @@ function openPull(): void {
   pullDialog.value?.openWith()
 }
 
-/** 宿主（页头「连接并拉取」）拉到平台清单后直接弹浮窗；顺便把选中项归位到平台通道 */
+/** 平台通道同步上游清单后直接弹浮窗；顺便把选中项归位到平台通道 */
 function openHostPull(): void {
   if (selectedId.value !== 'platform') select('platform')
   openPull()
@@ -991,6 +1004,20 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-detail__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mpp-detail__name { font-size: var(--mk-fs-emphasis); }
 .mpp-detail__code { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 通道类型：平台内置 / 自建通道 */
+.mpp-type {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.mpp-type--platform {
+  background: color-mix(in srgb, var(--mk-blue) 10%, transparent);
+  color: var(--mk-blue);
+}
 .mpp-detail__acts { display: inline-flex; gap: 6px; }
 .mpp-detail__desc {
   margin: 6px 0 0;
@@ -1063,6 +1090,8 @@ defineExpose({ refresh, openPull, openHostPull })
 /* 模型格承载 id + 显示名 + 最近一次测试结果 */
 .mpp-model { min-width: 220px; }
 .mpp-model__id { overflow-wrap: anywhere; }
+/* 上游模型名：当前版本与本地名相同，后续独立映射后在此显示差异 */
+.mpp-upstream .mono { overflow-wrap: anywhere; }
 .mpp-rowtest { display: block; margin-top: 2px; color: var(--mk-green); font-size: var(--mk-fs-micro); }
 .mpp-rowtest--bad { color: var(--mk-red); }
 /* 空模型时的下一步：一句话 + 一个动作，不丢一张只有表头的空表 */

@@ -134,7 +134,7 @@ describe('运维工具面板（原系统工具 Tab1）', () => {
           ]
         }
       }
-    })
+    } as never)
     const w = await mountWithRouter(ServerToolsPanel)
     expect(w.find('.mk-card__head .mk-badge--warn').text()).toContain('1 条待重发')
     expect(w.findAll('button').some((b) => b.text() === '重新发送全部')).toBe(true)

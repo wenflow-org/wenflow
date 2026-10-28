@@ -144,23 +144,24 @@ describe('ModelProvidersPanel', () => {
     seedView()
   })
 
-  it('两栏结构：左列表平铺一份供应商清单（不按来历分组），默认选中当前通道', async () => {
+  it('两栏结构：左列表平铺一份接入通道清单（不按来历分组），默认选中平台通道', async () => {
     const w = await mountPanel()
     // 2026-10-19 用户「就不分区」：原「平台提供 / 自行接入」两组与详情头「平台提供」徽标都撤了
     expect(w.findAll('.mpp-group__title')).toHaveLength(0)
     expect(w.text()).not.toContain('平台提供')
     expect(w.text()).not.toContain('自行接入')
-    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['当前通道', 'Acme 网关'])
-    // 列表行只给「N 个模型」，不露注册表 id（id 在详情头）
-    expect(w.findAll('.mpp-item__meta').map((el) => el.text())).toEqual(['2 个模型', '2 个模型'])
-    expect(w.find('.mpp-item--on').text()).toContain('当前通道')
+    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['平台通道', 'Acme 网关'])
+    // 列表行给「类型 + N 个模型」，不露注册表 id（id 在详情头）
+    expect(w.findAll('.mpp-item__meta').map((el) => el.text())).toEqual(['平台内置 · 2 个模型', '自建通道 · 2 个模型'])
+    expect(w.find('.mpp-item--on').text()).toContain('平台通道')
     // 平台通道详情：状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
-    expect(w.find('.mpp-detail__head').text()).toContain('当前通道')
+    expect(w.find('.mpp-detail__head').text()).toContain('平台通道')
+    expect(w.find('.mpp-detail__head').find('.mpp-type').text()).toBe('平台内置')
     expect(w.find('.mpp-detail__head').findAll('.mk-badge')).toHaveLength(0)
     expect(w.text()).toContain('2 个')
   })
 
-  it('模型为空时给下一步：当前通道直接去配置连接，不铺一张空表', async () => {
+  it('模型为空时给下一步：平台通道直接去配置连接，不铺一张空表', async () => {
     seedView({ providers: [providerView({ id: 'platform', name: '平台', models: [] })] })
     const w = await mountPanel()
     const setup = w.find('.mpp-setup')
@@ -186,20 +187,20 @@ describe('ModelProvidersPanel', () => {
     // 末尾再按下越界回到第一项（循环），Home 直接回第一项
     await w.find('.mpp-list').trigger('keydown', { key: 'ArrowDown' })
     await flushPromises()
-    expect(w.find('.mpp-item--on').text()).toContain('当前通道')
+    expect(w.find('.mpp-item--on').text()).toContain('平台通道')
     await w.find('.mpp-list').trigger('keydown', { key: 'End' })
     await flushPromises()
     expect(w.find('.mpp-item--on').text()).toContain('Acme 网关')
     await w.find('.mpp-list').trigger('keydown', { key: 'Home' })
     await flushPromises()
-    expect(w.find('.mpp-item--on').text()).toContain('当前通道')
+    expect(w.find('.mpp-item--on').text()).toContain('平台通道')
   })
 
-  it('平台详情分「模型 / 连接 / 基础设施 / 生成参数」四页签：连接与生成参数由宿主经插槽内联注入，平台不再有「设置」钮', async () => {
+  it('平台详情分「模型 / 连接与鉴权 / 基础设施 / 平台默认与别名」四页签：连接与默认由宿主经插槽内联注入，平台不再有「设置」钮', async () => {
     const w = await mountPanel()
     // 2026-10-26：平台详情有二级页签，默认落在「模型」
     const tabs = w.findAll('.mpp-subtabs .mk-subtab').map((t) => t.text())
-    expect(tabs).toEqual(['模型2', '连接', '基础设施', '生成参数'])
+    expect(tabs).toEqual(['模型2', '连接与鉴权', '基础设施', '平台默认与别名'])
     expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('模型2')
     expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
@@ -209,14 +210,14 @@ describe('ModelProvidersPanel', () => {
     expect(w.findAll('.mpp-detail__acts .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()
 
-    // 切到「连接」页签：连接表单可见、模型表隐藏；再切「基础设施」
-    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '连接')!.trigger('click')
+    // 切到「连接与鉴权」页签：连接表单可见、模型表隐藏；再切「基础设施」
+    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '连接与鉴权')!.trigger('click')
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-models')).toBe(false)
     await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '基础设施')!.trigger('click')
     expect(shown(w, '#mpp-platform-panel-infra')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
-    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '生成参数')!.trigger('click')
+    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '平台默认与别名')!.trigger('click')
     expect(shown(w, '#mpp-platform-panel-generation')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-infra')).toBe(false)
 
@@ -225,7 +226,7 @@ describe('ModelProvidersPanel', () => {
     await acmeTab.trigger('click')
     await flushPromises()
     expect(w.findAll('.mpp-subtabs')).toHaveLength(0)
-    await w.findAll('.mpp-item').find((i) => i.text().includes('当前通道'))!.trigger('click')
+    await w.findAll('.mpp-item').find((i) => i.text().includes('平台通道'))!.trigger('click')
     await flushPromises()
     expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('模型2')
 
@@ -248,8 +249,8 @@ describe('ModelProvidersPanel', () => {
     expect(keyInput.attributes('placeholder')).toBe('已配置 ····9xQv，留空 = 沿用')
     await btn(w, '显示')!.trigger('click')
     expect(w.find('.mpp-endpoint__key input').attributes('type')).toBe('text')
-    // 模型表：模型 / 功能 / 单价 / 状态 / 操作（用途分组行 + 能力标签见下一条用例）
-    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '功能', '状态', ''])
+    // 模型表：本地模型 / 上游模型名 / 功能 / 状态 / 操作（用途分组行 + 能力标签见下一条用例）
+    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['本地模型', '上游模型名', '功能', '状态', ''])
     const rows = modelRows(w)
     expect(rows).toHaveLength(2)
     expect(rows[0].text()).toContain('acme-chat')
@@ -296,7 +297,7 @@ describe('ModelProvidersPanel', () => {
     })
     const acmeSwitch = w.findAll('.mpp-item')[1].find('.mk-switch')
     // 2026-10-23 UI 审查：开关只有 aria-checked、没有可访问名，读屏只念「开关」
-    expect(acmeSwitch.attributes('aria-label')).toBe('启用供应商 Acme 网关')
+    expect(acmeSwitch.attributes('aria-label')).toBe('启用通道 Acme 网关')
     await acmeSwitch.trigger('click')
     await nextTick()
     // 停用要二次确认；取消则一次都不写
@@ -310,8 +311,8 @@ describe('ModelProvidersPanel', () => {
     settleConfirm(true)
     await flushPromises()
     expect(updateMock).toHaveBeenCalledWith('acme-gateway', { enabled: false })
-    // 停用条目默认收起：清单只剩当前通道，底部给出「显示已停用」入口
-    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['当前通道'])
+    // 停用条目默认收起：清单只剩平台通道，底部给出「显示已停用」入口
+    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['平台通道'])
     expect(w.text()).toContain('显示已停用（1）')
     await w.find('.mpp-show-disabled').trigger('click')
     await flushPromises()
@@ -320,19 +321,19 @@ describe('ModelProvidersPanel', () => {
 
   it('写失败时把后端人话原因显示出来（不静默、不假装保存成功）', async () => {
     const w = await mountPanel()
-    updateMock.mockRejectedValue({ response: { data: { error: '默认对话模型「deepseek-v4-flash」解析不到已启用供应商提供的模型，保存会让全平台默认路由落空。' } } })
+    updateMock.mockRejectedValue({ response: { data: { error: '默认对话模型「deepseek-v4-flash」解析不到已启用通道提供的模型，保存会让全平台默认路由落空。' } } })
     await w.findAll('.mpp-item')[1].find('.mk-switch').trigger('click')
     await nextTick()
     settleConfirm(true)
     await flushPromises()
-    expect(w.find('.mpp-alert').text()).toContain('解析不到已启用供应商提供的模型')
+    expect(w.find('.mpp-alert').text()).toContain('解析不到已启用通道提供的模型')
   })
 
   it('只读（配置文件不可写）：写入口全部禁用并给出说明', async () => {
     seedView({ readOnly: true })
     const w = await mountPanel()
     expect(w.text()).toContain('注册表文件所在目录当前不可写')
-    // 2026-10-28 新人视角：不再从清单里「新建供应商」，只编辑当前通道
+    // 2026-10-28 新人视角：不再从清单里「新建供应商」，只编辑平台通道
     expect(w.text()).not.toContain('添加供应商')
     // 模型行的写入口（编辑 / 删除）一并禁用；「测试」是只读动作，仍可用
     const rowBtn = (text: string) => w.findAll('.mpp-rowacts .mk-link').find((b) => b.text() === text)!
@@ -347,11 +348,11 @@ describe('ModelProvidersPanel', () => {
     expect(removeItem.attributes('disabled')).toBeDefined()
   })
 
-  it('获取模型列表 → 浮窗勾选：不再铺内联清单，勾选后带模型 id 打开编辑弹层', async () => {
+  it('同步上游模型 → 浮窗勾选：不再铺内联清单，勾选后带模型 id 打开编辑弹层', async () => {
     const w = await mountPanel()
     await pick(w, 'Acme 网关')
     pullMock.mockResolvedValue({ data: { data: { models: ['acme-chat', 'acme-chat-2', 'acme-pro'] } } })
-    await btn(w, '获取模型列表')!.trigger('click')
+    await btn(w, '同步上游模型')!.trigger('click')
     await flushPromises()
     expect(w.find('.mpp-fetch').exists()).toBe(false)
     const dialog = w.find('.pmd')

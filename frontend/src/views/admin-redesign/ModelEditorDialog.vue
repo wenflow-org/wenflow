@@ -247,6 +247,8 @@ import { useMaskClose, useOverlay } from './useOverlay'
 export interface ModelLike {
   id: string
   label: string
+  /** 上游物理模型名（P2 映射落地前缺省 = 本地 id）；P1 只读展示，不写回 */
+  upstreamModelId?: string
   tier: 'chat' | 'reasoning'
   supportsThinking: boolean
   supportsReasoningEffort: boolean

@@ -3,10 +3,6 @@
     <MkPageHead title="模型与接入">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" @click="providersRef?.refresh?.(true)">刷新注册表</button>
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="fetching || !providersReady" @click="onFetchClick">
-          <MkLoading v-if="fetching" inline text="拉取中…" />
-          <span v-else>{{ !providersReady ? '读取配置中…' : models.length ? '重新拉取' : '连接并拉取' }}</span>
-        </button>
       </template>
     </MkPageHead>
     <!-- 页首 KPI 带已撤（2026-10-14 用户拍板「模型与接入的 kpi 也不要了」）：原两处带
@@ -34,11 +30,6 @@
         @registered="onProvidersRegistered"
         @platform-tab="platformTabKey = $event"
       >
-        <template #card-actions>
-          <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="resetting" @click="resetConfig">
-            {{ resetting ? '重置中…' : '重置接入配置' }}
-          </button>
-        </template>
         <!-- 平台通道的连接：服务地址 / 密钥 / 连通性验证。它属于「平台」这条供应商本身，
              不再是弹窗里的一个分区。2026-10-26 起它是平台详情的「连接」页签，块头不再复述
              「连接」二字（页签已说明区域），只留状态徽标与保存钮。 -->
@@ -46,13 +37,26 @@
           <div ref="platformConnRef" class="ac-conn mpp-block">
             <div class="mpp-block__head">
               <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
-              <button
-                v-if="dirty.has('conn')"
-                type="button"
-                class="ac-sec__save"
-                :disabled="saving"
-                @click="saveGroups(['conn'])"
-              >{{ saving ? '保存中…' : '保存连接' }}</button>
+              <div class="ac-conn__acts">
+                <!-- 2026-10-27 P1：「同步上游模型」从页头收进当前通道；它绑定的是这条通道的
+                     服务地址与密钥，拉取即顺带验证连通性。 -->
+                <button
+                  type="button"
+                  class="mk-btn mk-btn--sm"
+                  :disabled="fetching || !providersReady"
+                  @click="onFetchClick"
+                >
+                  <MkLoading v-if="fetching" inline text="同步中…" />
+                  <span v-else>{{ models.length ? '重新同步上游模型' : '同步上游模型' }}</span>
+                </button>
+                <button
+                  v-if="dirty.has('conn')"
+                  type="button"
+                  class="ac-sec__save"
+                  :disabled="saving"
+                  @click="saveGroups(['conn'])"
+                >{{ saving ? '保存中…' : '保存连接' }}</button>
+              </div>
             </div>
             <div class="ac-body ac-conn2">
               <div class="ac-conn2__col">
@@ -113,10 +117,23 @@
               </div>
             </div>
             <!-- 换服务商是新人最容易卡住的一步（2026-10-28）：保存连接只是换端点，
-                 新模型清单还要拉一次，旧模型要自己删——把这条路径写在表单下面。 -->
+                 新模型清单还要同步一次，旧模型要自己删——把这条路径写在表单下面。 -->
             <p class="ac-conn__hint">
-              换服务商时：保存连接后点「连接并拉取」拿到新模型清单。旧模型不再使用的话，到「模型」页签逐行删除。
+              换服务商时：保存连接后点「同步上游模型」拿到新模型清单。旧模型不再使用的话，到「模型」页签逐行删除。
             </p>
+            <!-- 高危动作（2026-10-27 P1）：从页头移入通道详情，写明作用域与后果，避免误触 -->
+            <div class="ac-conn__danger">
+              <div class="ac-conn__danger-text">
+                <strong>重置此通道的接入配置</strong>
+                <span>删除服务地址、API Key、模型清单与平台默认值，不可撤销。登录审计与访问策略不受影响。</span>
+              </div>
+              <button
+                type="button"
+                class="mk-btn mk-btn--sm mk-btn--danger-ghost"
+                :disabled="resetting"
+                @click="resetConfig"
+              >{{ resetting ? '重置中…' : '重置此通道' }}</button>
+            </div>
           </div>
         </template>
 
@@ -145,13 +162,13 @@
              别名映射表是这些默认的解析结果，一并跟过来。 -->
         <template #platform-generation>
           <div class="mpp-block__head">
-            <span class="mpp-sec">生成参数</span>
+            <span class="mpp-sec">平台默认与别名</span>
             <span v-if="runtimeDefaultInfo" class="ac-gen-default__inline">
               <span class="ac-gen-default__sep" aria-hidden="true">·</span>
               默认模型 <b class="mono">{{ runtimeDefaultInfo.model || '—' }}</b>
               <span class="mk-badge" :class="runtimeDefaultInfo.source === '环境变量' ? 'mk-badge--warn' : 'mk-badge--muted'">{{ runtimeDefaultInfo.source }}</span>
             </span>
-            <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存生成参数' }}</button>
+            <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存平台默认' }}</button>
           </div>
           <div class="ac-gen-body">
             <div class="ac-cols">
@@ -219,8 +236,8 @@
            跑批读数已在虚拟学习者页，这里只保留参数本身。 -->
       <section v-if="isLive && (reliability || configLoadFailed)" class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">调用策略</h3>
-          <span class="mk-card__meta">重试与全站出站速率</span>
+          <h3 class="mk-card__title">全站调用策略</h3>
+          <span class="mk-card__meta">网关层 · 所有通道共用</span>
           <button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button>
         </div>
         <div class="ac-body ac-policy">
@@ -341,7 +358,7 @@ const router = useRouter()
 const providersRef = ref<{ refresh?: (force?: boolean) => void; openHostPull?: () => void } | null>(null)
 /** 已登记模型 id（面板回传）：上游清单的关系句与折叠共用这一次计算 */
 const registeredModelIds = ref<string[]>([])
-/** 供应商面板首次回传即视为注册表已就绪：页头拉取钮此前按 apiUrl 判禁用，首屏地址未回填时点不动 */
+/** 供应商面板首次回传即视为注册表已就绪：同步按钮按 apiUrl 判禁用，首屏地址未回填时点不动 */
 const providersLoaded = ref(false)
 function onProvidersRegistered(ids: string[]) {
   registeredModelIds.value = ids
@@ -357,7 +374,7 @@ function onFetchClick() {
   void fetchModels()
 }
 /* 平台连接表单已内联进供应商详情（2026-10-25 撤掉「平台设置」浮窗）：
-   页头拉取钮在地址未就绪时把视线带到这段表单。 */
+   2026-10-27 P1 起「同步上游模型」也在这一页签里，地址未就绪时就地提示。 */
 const platformConnRef = ref<HTMLElement | null>(null)
 function focusPlatformConnection() {
   platformConnRef.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
@@ -456,9 +473,9 @@ const fetchedModels = ref<string[]>([])
 const keySet = ref(false)
 const keyVisible = ref(false)
 const connectionStatus = ref('unknown')
-/** 本次会话内「连接并拉取」成功的时刻（connBadge「N 前」的时间源优先级高于 DB 落库值） */
+/** 本次会话内「同步上游模型」成功的时刻（connBadge「N 前」的时间源优先级高于 DB 落库值） */
 const connCheckedAt = ref('')
-/** 最近一次「连接并拉取」的失败原因：展示在模型清单空态，避免错误上下文丢失（刷新即消失） */
+/** 最近一次「同步上游模型」的失败原因：展示在模型清单空态，避免错误上下文丢失（刷新即消失） */
 const fetchError = ref('')
 /** 曾成功拉取过模型列表（含从已保存配置载入）：此后提交才携带 availableModels，避免空数组清空后端列表 */
 const modelsFetchedOnce = ref(false)
@@ -476,11 +493,11 @@ function markDirty(group: string) {
   dirty.value = new Set([...dirty.value, group])
 }
 
-/** 脏位分域标注：保存条列出具体未保存组（连接 / 生成参数 / 调用策略 / 探测） */
+/** 脏位分域标注：保存条列出具体未保存组（连接 / 平台默认 / 全站策略） */
 const DIRTY_GROUP_LABELS: Record<string, string> = {
   conn: '连接',
-  route: '生成参数',
-  reliability: '调用策略'
+  route: '平台默认',
+  reliability: '全站策略'
 }
 const dirtyGroups = computed(() => [...dirty.value].map((g) => DIRTY_GROUP_LABELS[g] || g))
 /** 平台详情当前二级页签（面板回传）：'' = 当前选的不是平台 */
@@ -721,7 +738,7 @@ const connBadge = computed(() => {
 const connBadgeTitle = computed(() => {
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
   const when = at ? `上次验证：${new Date(at).toLocaleString('zh-CN', { hour12: false })}` : '尚无验证记录'
-  return `${when}（「连接并拉取」成功/失败时更新）。连接状态为上次拉取的结果，非实时检测结果`
+  return `${when}（「同步上游模型」成功/失败时更新）。连接状态为上次拉取的结果，非实时检测结果`
 })
 
 /** 已配置密钥但改了服务地址且 Key 留空：密钥不会随地址迁移，需提示重新输入 */
@@ -901,13 +918,13 @@ function saveAll() {
 }
 
 /* 重置接入配置：后端 POST /admin/api-config/reset 只删 platform_api_configs 一行
-   （服务地址 / 密钥 / 模型清单 / 生成参数默认值），不动调用策略与访问策略。高风险不可撤销，走二次确认。 */
+   （服务地址 / 密钥 / 模型清单 / 平台默认生成参数），不动全站策略与访问策略。高风险不可撤销，走二次确认。 */
 const resetting = ref(false)
 async function resetConfig() {
   if (resetting.value) return
   const ok = await askConfirm({
-    title: '重置接入配置',
-    message: '将删除已保存的服务地址、API Key、模型清单与生成参数默认值。此操作不可撤销。',
+    title: '重置平台通道的接入配置',
+    message: '将删除平台通道已保存的服务地址、API Key、模型清单与平台默认生成参数。此操作不可撤销。',
     confirmText: '确认重置'
   })
   if (!ok) return
@@ -982,6 +999,21 @@ function discardAll() {
   line-height: 1.5;
   color: var(--mk-faint);
 }
+/* 连接块头右组：同步上游模型 + 分段保存 */
+.ac-conn__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* 高危重置：从页头移入通道详情，整条给出作用域与后果，按钮弱化 */
+.ac-conn__danger {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mk-line);
+}
+.ac-conn__danger-text { display: grid; gap: 2px; flex: 1 1 260px; min-width: 0; }
+.ac-conn__danger-text strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); }
+.ac-conn__danger-text span { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
 
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
