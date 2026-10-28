@@ -129,10 +129,10 @@ describe('ModelProvidersPanel', () => {
     // 自建通道仍在注册表里，但这一页不再提供它的入口
     expect(w.text()).not.toContain('Acme 网关')
     expect(w.text()).not.toContain('显示已停用')
-    // 详情头：平台通道 + 平台内置 + 一条通道的构成说明
+    // 详情头只留「平台通道 + 平台内置」，不再解释通道由什么组成
     expect(w.find('.mpp-detail__head').text()).toContain('平台通道')
     expect(w.find('.mpp-detail__head').find('.mpp-type').text()).toBe('平台内置')
-    expect(w.find('.mpp-detail__head').text()).toContain('一条通道 = 服务地址 + 凭据 + 模型清单')
+    expect(w.find('.mpp-detail__head').text()).not.toContain('一条通道 =')
     // 状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
     expect(w.find('.mpp-detail__head').findAll('.mk-badge')).toHaveLength(0)
     // 模型表列：本地模型 / 上游模型名 / 功能 / 状态 / 操作
@@ -150,33 +150,21 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mpp-table').exists()).toBe(false)
     await btn(w, '去配置连接')!.trigger('click')
     await flushPromises()
-    expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
+    expect(w.find('#mpp-platform-panel-conn').exists()).toBe(true)
   })
 
-  it('平台详情按接入流程排页签：连接与鉴权 → 模型 → 基础设施 → 平台默认与别名，默认落在连接', async () => {
+  it('页签已解散：连接 / 模型 / 基础设施 / 平台默认四段平铺，全部常驻可见', async () => {
     const w = await mountPanel()
-    // 2026-10-27：流程是「填地址和 key → 获取模型 → 勾选 → 配置」，连接排在模型前面
-    const tabs = w.findAll('.mpp-subtabs .mk-subtab').map((t) => t.text())
-    expect(tabs).toEqual(['连接与鉴权', '模型2', '基础设施', '平台默认与别名'])
-    expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('连接与鉴权')
+    // 2026-10-27 用户「把 tab 解散了」：没有二级页签，四段全在 DOM 里且都可见
+    expect(w.findAll('.mpp-subtabs').length).toBe(0)
+    expect(w.find('[role="tab"]').exists()).toBe(false)
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
-    expect(shown(w, '#mpp-platform-panel-models')).toBe(false)
-    expect(shown(w, '#mpp-platform-panel-generation')).toBe(false)
-
+    expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
+    expect(shown(w, '#mpp-platform-panel-infra')).toBe(true)
+    expect(shown(w, '#mpp-platform-panel-generation')).toBe(true)
     // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
     expect(w.findAll('.mpp-detail__acts .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()
-
-    // 切到「模型」：模型表可见、连接表单隐藏；再切「基础设施」
-    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text().includes('模型'))!.trigger('click')
-    expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
-    expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
-    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '基础设施')!.trigger('click')
-    expect(shown(w, '#mpp-platform-panel-infra')).toBe(true)
-    expect(shown(w, '#mpp-platform-panel-models')).toBe(false)
-    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '平台默认与别名')!.trigger('click')
-    expect(shown(w, '#mpp-platform-panel-generation')).toBe(true)
-    expect(shown(w, '#mpp-platform-panel-infra')).toBe(false)
   })
 
   it('上游模型名：与本地名相同时只标「同本地名」，有独立映射才显示上游名', async () => {

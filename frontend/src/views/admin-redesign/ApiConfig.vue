@@ -28,7 +28,6 @@
         :upstream="models"
         @changed="onProvidersChanged"
         @registered="onProvidersRegistered"
-        @platform-tab="platformTabKey = $event"
       >
         <!-- 平台通道的连接：服务地址 / 密钥 / 连通性验证。它属于「平台」这条供应商本身，
              不再是弹窗里的一个分区。2026-10-26 起它是平台详情的「连接」页签，块头不再复述
@@ -116,11 +115,6 @@
                 </div>
               </div>
             </div>
-            <!-- 接入流程的顺序写在表单下面（2026-10-27 用户「先填链接和 key，然后获取模型，
-                 选择模型，配置模型」）：获取即保存，勾选后逐个配置。 -->
-            <p class="ac-conn__hint">
-              先填服务地址与 API Key，再点「获取模型」。连接通过就保存，并列出上游模型供勾选，勾选后逐个配置。旧模型不再使用的话，到「模型」页签逐行删除。
-            </p>
             <!-- 高危动作（2026-10-27 P1）：从页头移入通道详情，写明作用域与后果，避免误触 -->
             <div class="ac-conn__danger">
               <div class="ac-conn__danger-text">
@@ -237,7 +231,6 @@
       <section v-if="isLive && (reliability || configLoadFailed)" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">全站调用策略</h3>
-          <span class="mk-card__meta">网关层 · 所有通道共用</span>
           <button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button>
         </div>
         <div class="ac-body ac-policy">
@@ -265,27 +258,19 @@
                   <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
                   <em class="ac-policy__unit">毫秒</em>
                 </span>
-                <span class="ac-policy__hint">两次尝试之间的基础等待</span>
               </label>
               <label class="mk-field">
-                <span class="mk-field__label">
-                  RPM 上限
-                  <span class="mk-badge mk-badge--muted">全站共享</span>
-                </span>
+                <span class="mk-field__label">RPM 上限</span>
                 <span class="ac-policy__control">
                   <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
                   <em class="ac-policy__unit">次/分</em>
                 </span>
                 <span class="ac-policy__hint">
-                  所有供应商共用，超出后排队等待，0 = 不限。
+                  0 = 不限，超出后排队等待。
                   <a class="mk-link" href="/admin/virtual-learners" @click.prevent="goVirtualLearners">虚拟学习者上限单独设 →</a>
                 </span>
               </label>
             </div>
-            <!-- 没露出的细项仍生效、仍随保存原样回传，只留一句免得被读成「已关闭」 -->
-            <p v-if="reliability" class="ac-policy__note">
-              其余超时与退避细项沿用现有配置，保存时原样保留。
-            </p>
           </div>
         </div>
       </section>
@@ -500,24 +485,9 @@ const DIRTY_GROUP_LABELS: Record<string, string> = {
   reliability: '全站策略'
 }
 const dirtyGroups = computed(() => [...dirty.value].map((g) => DIRTY_GROUP_LABELS[g] || g))
-/** 平台详情当前二级页签（面板回传）：'' = 当前选的不是平台 */
-const platformTabKey = ref('')
-/** 脏组的分段保存钮此刻是否在屏上：在屏则由它承担保存，不出底部条（避免同屏两颗保存钮）。
-    单页后「连接 / 生成参数」藏在平台详情的二级页签里——只有停在该页签时它的保存钮才可见，
-    切走后必须由底部条接手，否则单组脏没有任何保存入口。 */
-const DIRTY_GROUP_TAB: Record<string, string> = {
-  conn: 'conn',
-  route: 'generation',
-  reliability: 'page',
-}
-const showSaveBar = computed(() => {
-  if (dirty.value.size > 1) return true
-  if (dirty.value.size !== 1) return false
-  const [group] = [...dirty.value]
-  const home = DIRTY_GROUP_TAB[group]
-  if (home === 'page') return false
-  return platformTabKey.value !== home
-})
+/** 2026-10-27 页签解散后，连接与平台默认的分段保存钮都常驻屏上：
+    单组脏由分段保存钮承担，只有跨组（两组及以上）才出底部条。 */
+const showSaveBar = computed(() => dirty.value.size > 1)
 
 /* AI 可靠性（live 加载） */
 interface Reliability {
@@ -1003,14 +973,7 @@ function discardAll() {
    状态徽标与「保存连接」收进一条细条，右侧一句说明这段表单管什么。 */
 /* 槽位已在供应商详情的内衬里：连接块自身的 .ac-body 不再补一层 16px 边 */
 .ac-conn .ac-body { padding: 0; }
-/* 换服务商的下一步：一句路径说明，跟随连接表单，不另开卡片 */
-.ac-conn__hint {
-  margin: 10px 0 0;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.5;
-  color: var(--mk-faint);
-}
-/* 连接块头右组：同步上游模型 + 分段保存 */
+/* 连接块头右组：获取模型 + 分段保存 */
 .ac-conn__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 /* 高危重置：从页头移入通道详情，整条给出作用域与后果，按钮弱化 */
 .ac-conn__danger {
@@ -1217,12 +1180,6 @@ function discardAll() {
   font-weight: 400;
 }
 .ac-policy__hint .mk-link { white-space: nowrap; }
-.ac-policy__note {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.7;
-  color: var(--mk-faint);
-}
 
 /* 内容区不足 1100px：三列参数回落两列，再窄回落单列 */
 @media (max-width: 1100px) {

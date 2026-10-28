@@ -52,45 +52,21 @@
           <div class="mpp-detail__id">
             <strong class="mpp-detail__name">{{ providerName(selected) }}</strong>
             <span class="mpp-type mpp-type--platform">{{ providerTypeLabel(selected) }}</span>
-            <span class="mpp-detail__code">一条通道 = 服务地址 + 凭据 + 模型清单</span>
             <!-- 状态徽标只出「能不能用」；当前通道（endpointSource=inherit）不出徽标——
                  它用不用得了由下面「连接」段的连接徽标回答，同屏两处说同一件事是复读 -->
             <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
           </div>
         </div>
 
-        <!-- 平台详情二级页签（2026-10-26）：模型 / 连接 / 基础设施 / 生成参数。
-             用户「这个地方就可以配置重排序嵌入模型」「我不知为啥还要有默认设置。不就是配置的模型吗」——
-             向量化与重排、生成默认都是平台这条供应商自己的能力，原先各自独立成卡挂在页面
-             别处，与「平台」分成两处看。内容用 v-show 不用 v-if：切页签不重建表单，
-             基础设施面板的已加载状态也留着。 -->
-        <MkSubTabs
-          v-if="selected.id === 'platform'"
-          v-model="platformTab"
-          :tabs="platformTabs"
-          id-base="mpp-platform"
-          class="mpp-subtabs"
-        />
-
-        <!-- 平台通道的连接（服务地址 / 密钥 / 连通性验证）由宿主经 #platform-detail 就地注入：
-             2026-10-25 用户「这个组整个页面我觉得做的不好」——它此前藏在「平台设置」弹窗里，
-             改个地址要先点「设置」，而它本身就是「平台」这条供应商的连接属性，
-             和右侧模型表属于同一个对象的两面。 -->
-        <div
-          v-if="selected.id === 'platform'"
-          v-show="platformTab === 'conn'"
-          id="mpp-platform-panel-conn"
-          role="tabpanel"
-          aria-labelledby="mpp-platform-tab-conn"
-        >
+        <!-- 2026-10-27 用户「把 tab 解散了」：二级页签撤除，按接入顺序平铺成四段——
+             连接与鉴权 → 模型 → 基础设施 → 平台默认与别名。所有内容常驻 DOM，
+             不再有「要点一下才出现」的区域。 -->
+        <div id="mpp-platform-panel-conn">
           <slot name="platform-detail" />
         </div>
 
         <div
-          v-show="platformTab === 'models'"
           id="mpp-platform-panel-models"
-          role="tabpanel"
-          aria-labelledby="mpp-platform-tab-models"
           class="mpp-block mpp-models"
         >
           <div class="mpp-models__head">
@@ -123,7 +99,7 @@
             <button
               type="button"
               class="mk-btn mk-btn--sm"
-              @click="platformTab = 'conn'"
+              @click="scrollToConn"
             >去配置连接</button>
           </div>
 
@@ -216,14 +192,11 @@
           </div>
         </div>
 
-        <!-- 基础设施（向量化 / 重排）：平台这条供应商自己的能力，收进详情第三个页签。
+        <!-- 基础设施（向量化 / 重排）：平台这条供应商自己的能力，接在模型表后面平铺。
              2026-10-26 用户「这个地方就可以配置重排序嵌入模型」——此前它是页面最下方一张
              独立卡，和「平台」分成两处，改个嵌入模型得往下滚过整个模型表。 -->
         <div
-          v-show="platformTab === 'infra'"
           id="mpp-platform-panel-infra"
-          role="tabpanel"
-          aria-labelledby="mpp-platform-tab-infra"
           class="mpp-block mpp-infra"
         >
           <slot name="platform-infra" />
@@ -235,10 +208,7 @@
              可它就是「这些模型默认怎么生成」，属于平台这条供应商，与模型表同一个对象。
              模型级覆盖优先（ModelEditorDialog 的「用平台默认」），这里兜底。 -->
         <div
-          v-show="platformTab === 'generation'"
           id="mpp-platform-panel-generation"
-          role="tabpanel"
-          aria-labelledby="mpp-platform-tab-generation"
           class="mpp-block mpp-generation"
         >
           <slot name="platform-generation" />
@@ -266,12 +236,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
-import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
 import PullModelsDialog from './PullModelsDialog.vue'
 import { modelKindOf } from './platformModelKind'
@@ -317,9 +286,6 @@ const emit = defineEmits<{
   changed: []
   /** 已登记的模型 id（宿主用它算「上游还有几个没登记」的关系句，避免两处各算一遍） */
   registered: [ids: string[]]
-  /** 平台详情当前页签（宿主据此判断「连接 / 生成参数」的分段保存钮是否在屏上，
-      不在屏时由底部保存条接手，否则单组脏会没有保存入口） */
-  platformTab: [key: string]
 }>()
 
 const view = ref<ProvidersView | null>(null)
@@ -348,22 +314,6 @@ const providers = computed(() => view.value?.providers ?? [])
 const registry = computed(() => view.value?.registry ?? null)
 /** 这一页只呈现平台通道（2026-10-27 用户「这个区域不要了」）：自建通道不再在页面里切换 */
 const selected = computed(() => providers.value.find((p) => p.id === 'platform') ?? null)
-/* 平台详情的二级页签（2026-10-26 起收进通道详情；2026-10-27 按配置顺序排）：
-   接入流程是「填地址和密钥 → 获取模型 → 勾选 → 逐个配置」，所以连接排在模型前面，
-   进页先落在连接页签；基础设施与平台默认是配好之后的设置，排在后面。
-   用组件内状态不写 URL：二级写键会与一级抢。 */
-const platformTab = ref<'conn' | 'models' | 'infra' | 'generation'>('conn')
-const platformTabs = computed(() => [
-  { key: 'conn', label: '连接与鉴权' },
-  { key: 'models', label: '模型', count: selected.value?.models.length },
-  { key: 'infra', label: '基础设施' },
-  { key: 'generation', label: '平台默认与别名' },
-])
-/* 当前页签回传宿主：连接与生成参数的分段保存钮只在该页签可见，
-   宿主据此决定单组脏时要不要出底部保存条（否则切走页签就没有保存入口）。 */
-watch(platformTab, () => {
-  emit('platformTab', platformTab.value)
-}, { immediate: true })
 
 /* 2026-10-21 用户「不要了」：卡头 meta 只留可写/只读这个会改变操作的结论，
    数据来源（来自模型目录文件）与生效方式进 title */
@@ -575,14 +525,17 @@ function openManualAdd(): void {
   modelEditor.value?.openWith({ providerId: selected.value.id, model: null })
 }
 
-/** 浮窗确认：按勾选顺序逐个打开模型设置，保存一个自动进下一个。
-    流程走到这里已经完成「获取 → 勾选」，落到模型页签，配完就能看到刚接入的表。 */
+/** 浮窗确认：按勾选顺序逐个打开模型设置，保存一个自动进下一个 */
 function startConfigure(ids: string[]): void {
   if (!selected.value || !ids.length) return
-  platformTab.value = 'models'
   configureQueue.value = [...ids]
   configureTotal.value = ids.length
   openNextConfigure()
+}
+
+/** 连接段常驻在模型表上方：空态里的「去配置连接」滚过去，不再需要切页签 */
+function scrollToConn(): void {
+  document.getElementById('mpp-platform-panel-conn')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
 function openNextConfigure(): void {
@@ -611,13 +564,13 @@ function onEditorClosed(): void {
   configureTotal.value = 0
 }
 
-/** 非对话模型的去向：向量化 / 重排在本页「基础设施」页签，生图/决策在插件页 */
+/** 非对话模型的去向：向量化 / 重排在本页「基础设施」段，生图/决策在插件页 */
 function onPullNavigate(target: 'infra' | 'plugins'): void {
   if (target === 'plugins') {
     void router.push('/admin/addons')
     return
   }
-  platformTab.value = 'infra'
+  document.getElementById('mpp-platform-panel-infra')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
 onMounted(() => {
@@ -645,14 +598,10 @@ defineExpose({ refresh, openPull, openHostPull })
   min-height: 0;
 }
 .mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
-/* 平台详情二级页签（模型 / 连接 / 基础设施 / 生成参数）：页签条下已有分隔线，面板不再自带一条 */
-.mpp-subtabs { margin-top: 4px; }
-.mpp-detail > .mpp-models { margin-top: 0; padding-top: 0; border-top: 0; }
-.mpp-detail > .mpp-infra { margin-top: 0; padding-top: 0; border-top: 0; }
-.mpp-detail > .mpp-generation { margin-top: 0; padding-top: 0; border-top: 0; }
-.mpp-infra, .mpp-generation { margin-top: 14px; }
-/* 连接页签里的 #platform-detail 自带 .mpp-block 节奏（含顶部发丝线），页签下再压一条会双线 */
-.mpp-detail > div[role='tabpanel'] > .ac-conn { margin-top: 0; padding-top: 0; border-top: 0; }
+/* 2026-10-27 页签解散后，四段平铺：连接 → 模型 → 基础设施 → 平台默认。
+   每段自带一条发丝线分隔，连接段紧跟头部，不再重复顶线。 */
+.mpp-detail > #mpp-platform-panel-conn > .ac-conn { margin-top: 0; padding-top: 0; border-top: 0; }
+.mpp-detail > .mpp-models { margin-top: 14px; }
 
 /* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
 .mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
@@ -666,7 +615,6 @@ defineExpose({ refresh, openPull, openHostPull })
 }
 .mpp-detail__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mpp-detail__name { font-size: var(--mk-fs-emphasis); }
-.mpp-detail__code { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 /* 通道类型：平台内置 / 自建通道 */
 .mpp-type {
   padding: 1px 7px;

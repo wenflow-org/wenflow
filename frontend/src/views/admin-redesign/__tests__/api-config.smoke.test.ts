@@ -256,12 +256,9 @@ describe('ApiConfig P1 修复批', () => {
     getReliabilityMock.mockResolvedValue({ data: { data: { settings: { maxUpstreamAttempts: 3, maxTransportRetries: 1, maxLogicalRetries: 1, defaultRequestTimeoutMs: 600000, retryBaseDelayMs: 2000, maxRetryAfterMs: 30000, jitterEnabled: true } } } });
   });
 
-  /** 2026-10-26 单页后本页不再有一级页签：调用策略常驻屏上，
-   *  「连接 / 生成参数」收进平台详情的二级页签，按 .mpp-subtabs .mk-subtab 定位。 */
-  async function gotoPlatformTab(wrapper: ReturnType<typeof mountApiConfig> extends Promise<infer W> ? W : never, label: string) {
-    const tab = wrapper.findAll('.mpp-subtabs .mk-subtab').find((b) => b.text().includes(label));
-    expect(tab, `应存在平台详情「${label}」页签`).toBeTruthy();
-    await tab!.trigger('click');
+  /** 2026-10-27 用户「把 tab 解散了」：连接 / 模型 / 基础设施 / 平台默认四段常驻屏上，
+   *  不再需要切页签——保留这个 helper 只为等一轮渲染，调用点的语义变成「读到该段」。 */
+  async function gotoPlatformTab(_wrapper: ReturnType<typeof mountApiConfig> extends Promise<infer W> ? W : never, _label: string) {
     await flushPromises();
   }
 
@@ -297,30 +294,20 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-26 单页后「连接 / 平台默认」藏在平台详情的二级页签里：单组脏时，
-     只有停在该页签（分段保存钮在屏）才不出底部条；切走后必须由底部条接手。 */
-  it('脏位分域：单组脏且分段保存钮在屏时不出底部条，切走页签后由底部条接手', async () => {
+  /* 2026-10-27 页签解散后，连接与平台默认的分段保存钮都常驻屏上：
+     单组脏由分段保存钮承担，跨组才由底部条接手。 */
+  it('脏位分域：单组脏由分段保存钮承担，跨组才出底部条', async () => {
     const wrapper = await mountApiConfig();
-    // 2026-10-27 流程调整后默认落在「连接与鉴权」：先切到「模型」页签再改地址，
-    // 「保存连接」不在屏 → 底部条接手
-    await gotoPlatformTab(wrapper, '模型');
     const urlInput = wrapper.find('input[placeholder="https://api.example.com/v1"]');
     await urlInput.setValue('https://new.example.com/v1');
     await nextTick();
-    const bar = wrapper.find('.ac-save');
-    expect(bar.exists()).toBe(true);
-    expect(bar.text()).toContain('连接');
-    expect(bar.text()).toContain('放弃');
-
-    // 切回「连接与鉴权」：分段保存钮在屏，底部条收起（不叠两颗保存钮）
-    await gotoPlatformTab(wrapper, '连接与鉴权');
+    // 单组脏：「保存连接」就在屏上，不另起底部条
     expect(wrapper.find('.ac-save').exists()).toBe(false);
     expect(wrapper.text()).toContain('保存连接');
     expect(wrapper.text()).not.toContain('保存平台默认');
 
-    // 再改平台默认 → 两组脏，底部条恒出并列出两组
-    await gotoPlatformTab(wrapper, '平台默认与别名');
-    expect(wrapper.find('.ac-cols__side .mk-select').exists(), '平台默认页签应有「输出格式」下拉').toBe(true);
+    // 再改平台默认 → 两组脏，底部条接手并列出两组
+    expect(wrapper.find('.ac-cols__side .mk-select').exists(), '平台默认段应有「输出格式」下拉').toBe(true);
     await chooseMkSelect(wrapper as never, '输出格式', 'json_object');
     await nextTick();
     expect(wrapper.find('.ac-save').text()).toContain('连接 + 平台默认 · 2 组未保存变更');
@@ -389,9 +376,8 @@ describe('ApiConfig P1 修复批', () => {
     // 连通性验证在连接表单里（上面那段「运行测试」），不在下面再挂第二枚检测钮
     const acts = wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text());
     expect(acts).toEqual(['＋ 添加模型']);
-    // 只读能力表已从本页退役；别名映射在「平台默认与别名」页签内（默认页签下不可见）
+    // 只读能力表已从本页退役；别名映射在「平台默认与别名」段内
     expect(wrapper.find('.ac-registry--aliases').exists()).toBe(true);
-    expect((wrapper.find('#mpp-platform-panel-generation').attributes('style') || '')).toContain('display: none');
     expect(wrapper.text()).not.toContain('接入通道与能力限额');
     wrapper.unmount();
   });
@@ -405,10 +391,8 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-26 用户「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得可以和
-     前面的合并了」：一级页签「接入 / 调用」撤除；「平台默认生成参数」并进平台详情第四个
-     页签（生成参数），与模型表同一个对象。 */
-  it('单页：无一级页签，连接与平台默认都在平台详情里', async () => {
+  /* 2026-10-27 用户「把 tab 解散了」：平台详情不再分二级页签，四段按接入顺序平铺。 */
+  it('单页：无一级页签，连接 / 模型 / 基础设施 / 平台默认四段常驻', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     // 一级页签已撤；供应商面板与调用策略同屏
@@ -416,21 +400,19 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.mpp').exists()).toBe(true);
     expect(wrapper.text()).toContain('全站调用策略');
     expect(wrapper.find('.ac-policy').exists()).toBe(true);
-    // 2026-10-27 按接入流程排序：连接与鉴权在模型前面，默认落在连接
-    expect(wrapper.findAll('.mpp-subtabs .mk-subtab').map((b) => b.text())).toEqual([
-      '连接与鉴权', '模型2', '基础设施', '平台默认与别名',
-    ]);
-    expect(wrapper.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('连接与鉴权');
-    // 连接 / 基础设施 / 生成参数的内容都在 DOM 里（v-show 保留），但只有「模型」可见
+    // 二级页签也撤了：没有 tab 控件，四段内容全部常驻
+    expect(wrapper.findAll('.mpp-subtabs').length).toBe(0);
+    expect(wrapper.findAll('.mk-subtab').length).toBe(0);
     expect(wrapper.find('#mpp-platform-panel-conn').exists()).toBe(true);
+    expect(wrapper.find('#mpp-platform-panel-models').exists()).toBe(true);
     expect(wrapper.find('#mpp-platform-panel-infra').exists()).toBe(true);
     expect(wrapper.find('#mpp-platform-panel-generation').exists()).toBe(true);
-    expect((wrapper.find('#mpp-platform-panel-generation').attributes('style') || '')).toContain('display: none');
+    for (const id of ['conn', 'models', 'infra', 'generation']) {
+      expect((wrapper.find(`#mpp-platform-panel-${id}`).attributes('style') || '')).not.toContain('display: none');
+    }
     // 旧的独立基础设施卡与「平台默认生成参数」卡都已撤
     expect(wrapper.find('#ac-infra').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('平台默认生成参数');
-
-    await gotoPlatformTab(wrapper, '平台默认与别名');
     expect(wrapper.text()).toContain('默认思考');
     expect(wrapper.text()).toContain('结构化输出');
     expect(wrapper.findAll('.ac-registry')).toHaveLength(1);
@@ -719,10 +701,11 @@ describe('ApiConfig P1 修复批', () => {
     expect(card.findAll('.ac-policy__fields > .mk-field')).toHaveLength(3);
     expect(card.findAll('.ac-policy__unit').map((u) => u.text())).toEqual(['次', '毫秒', '次/分']);
     const labels = card.findAll('.ac-policy__fields .mk-field__label').map((l) => l.text());
-    expect(labels).toEqual(['最大重试', '重试间隔', 'RPM 上限 全站共享']);
-    // 2026-10-28 用户「rpm 全站共享，虚拟学习者单独设置最高 rpm 就行了」：
-    // 本页只说清共享口径并给出虚拟学习者出口，不再把两套上限摆在一起。
-    expect(card.find('.ac-policy__fields').text()).toContain('所有供应商共用');
+    expect(labels).toEqual(['最大重试', '重试间隔', 'RPM 上限']);
+    // 2026-10-27 解释型文案清掉：「全站共享 / 所有供应商共用」这类口径说明不再上屏，
+    // 只留「0 = 不限」与虚拟学习者出口。
+    expect(card.find('.ac-policy__fields').text()).not.toContain('所有供应商共用');
+    expect(card.find('.ac-policy__fields').text()).toContain('0 = 不限');
     expect(card.find('.ac-policy__fields a.mk-link').attributes('href')).toBe('/admin/virtual-learners');
     expect(wrapper.text()).not.toContain('传输重试');
     expect(wrapper.text()).not.toContain('Retry-After');
