@@ -880,8 +880,16 @@ function discardAll() {
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
 /* 连接表单（2026-10-27）：只剩地址与密钥两行，竖向排；不跟着详情宽度拉满。
-   测试入口移到模型表每行，不再在连接段做独立的连通性验证。 */
-.ac-conn-form { max-width: 560px; }
+   测试入口移到模型表每行，不再在连接段做独立的连通性验证。
+   2026-10-28 用户「重新设计」：卡面近千像素宽，两行字段只占左侧 560px，右半张全空，
+   卡片又被撑得过高。地址与密钥改为并排各占一格，整行铺满，高度收一档。 */
+.ac-conn-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+}
+@media (max-width: 900px) {
+  .ac-conn-form { grid-template-columns: minmax(0, 1fr); }
+}
 .ac-row { display: grid; gap: 14px; align-items: end; }
 .ac-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 2026-10-06 审核 #159：四个配置页签的字段控件统一走 .mk-field__input/__select/__textarea
