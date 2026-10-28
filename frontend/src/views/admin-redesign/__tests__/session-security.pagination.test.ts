@@ -174,7 +174,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
 
   /* B13 F6-1：全量口径与行窗口分离。后端 counts/adminCounts 是作用域全量，
      页面统计/组头/批量下线条数读它；行窗口（sessions）只决定渲染哪些行。 */
-  it('统计条/组头/批量下线条数读后端全量 counts，页码器读行窗口并用 note 披露口径', async () => {
+  it('批量动作条数读后端全量 counts，页码器读行窗口并用 note 披露口径', async () => {
     const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions, {
       counts: { total: 100, active: 93, expired: 7, revoked: 0 },
@@ -186,9 +186,10 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(pillCount(w, '已过期')).toBe('7');
     // 卡头不再复述行窗口口径（2026-10-27 用户「这两个不要了」）：截断信息只由页码器 note 披露
     expect(w.find('.mk-card__meta').exists()).toBe(false);
-    // 组头读 adminCounts（非窗口行数）
-    expect(w.find('.ss-group__count').text()).toContain('100 个会话');
-    expect(w.find('.ss-group__count').text()).toContain('活跃 93');
+    // 批量动作条数读 adminCounts（非窗口行数）：历史 7，活跃 93 - 当前标签页 1 = 92
+    const acts = w.find('.ss-head-acts').text();
+    expect(acts).toContain('清理历史（7）');
+    expect(acts).toContain('下线全部（92）');
     // 页码器分母 = 行窗口（30），note 标明全量活跃 93——两个数不同源，各自标口径
     // （2026-10-14 文案批：「后端全量活跃」→「全部活跃」，去后端视角）
     expect(pagerText(w)).toContain('共 30 条');
@@ -326,13 +327,15 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     await revokeBtn.trigger('click');
     await flushPromises();
     await flushPromises();
-    // pill / 组头读数全部来自重取后的 counts（活跃 3、已撤销 1）
+    // pill 与批量动作读数全部来自重取后的 counts（活跃 3、已撤销 1）
     expect(pillCount(w, '活跃')).toBe('3');
     expect(pillCount(w, '已撤销')).toBe('1');
-    expect(w.find('.ss-group__count').text()).toContain('活跃 3');
+    const acts = w.find('.ss-head-acts').text();
+    expect(acts).toContain('清理历史（1）');
+    expect(acts).toContain('下线全部（2）');
   });
 
-  it('顶部说明条与卡头审计跳转均已撤；批量动作收在卡头右组，组头不再重复一套按钮', async () => {
+  it('顶部说明条与卡头审计跳转均已撤；单管理员不渲染组头，批量动作收在卡头右组', async () => {
     const w = await mountSS([fakeSession(1)], {
       counts: { total: 9, active: 3, expired: 4, revoked: 2 },
       adminCounts: [{ adminId: 'admin-1', total: 9, active: 3, expired: 4, revoked: 2 }]
@@ -343,6 +346,8 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     // 当前标签页 #1 不计入下线：活跃 3 - 1 = 2；历史 4 + 2 = 6
     expect(headRight.text()).toContain('清理历史（6）');
     expect(headRight.text()).toContain('下线全部（2）');
+    // 单管理员的组头整行已撤（2026-10-27 用户「这个也不要了」）
+    expect(w.find('.ss-group .mk-card__head').exists()).toBe(false);
     expect(w.find('.ss-group__acts').exists()).toBe(false);
     w.unmount();
   });

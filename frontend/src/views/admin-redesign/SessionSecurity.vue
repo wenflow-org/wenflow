@@ -84,7 +84,9 @@
     <!-- 按管理员分组的标准表格 -->
     <div v-else-if="groups.length" class="ss-body">
       <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="mk-card ss-group">
-        <div class="mk-card__head">
+        <!-- 组头（2026-10-27 用户「这个也不要了」）：单管理员是常态，身份/计数与卡头动作重复，
+             整行撤除让表格直接起读；多管理员时仍保留一行用于区分是谁的会话。 -->
+        <div v-if="groups.length > 1" class="mk-card__head">
           <div class="ss-group__who">
             <strong>{{ g.adminName }}</strong>
             <span v-if="g.adminEmail" class="ss-group__email mono">{{ g.adminEmail }}</span>
