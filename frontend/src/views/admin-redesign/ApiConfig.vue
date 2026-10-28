@@ -1017,8 +1017,11 @@ function discardAll() {
 
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
-/* 接入卡左右双列（2026-10-15 用户重组）：左=地址/密钥，右=连通性验证；≤1100 回落整行 */
-.ac-conn2 { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+/* 接入卡左右双列（2026-10-15 用户重组）：左=地址/密钥，右=连通性验证；≤1100 回落整行。
+   2026-10-27 左栏清单撤掉后详情变宽，表单不再跟着拉满——地址框超过 400px 就只是空。 */
+.ac-conn2 { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; max-width: 820px; }
+/* 块头（连接状态 + 同步/保存）与表单同宽，按钮不飘到卡片最右边 */
+.ac-conn > .mpp-block__head { max-width: 820px; }
 .ac-conn2__col { display: grid; gap: 14px; align-content: start; min-width: 0; }
 .ac-conn2__col--test { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
 .ac-row { display: grid; gap: 14px; align-items: end; }
