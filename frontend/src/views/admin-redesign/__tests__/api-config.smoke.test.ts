@@ -297,11 +297,13 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-26 单页后「连接 / 生成参数」藏在平台详情的二级页签里：单组脏时，
+  /* 2026-10-26 单页后「连接 / 平台默认」藏在平台详情的二级页签里：单组脏时，
      只有停在该页签（分段保存钮在屏）才不出底部条；切走后必须由底部条接手。 */
   it('脏位分域：单组脏且分段保存钮在屏时不出底部条，切走页签后由底部条接手', async () => {
     const wrapper = await mountApiConfig();
-    // 停在默认的「模型」页签改服务地址 → 连接组脏，但「保存连接」不在屏 → 底部条接手
+    // 2026-10-27 流程调整后默认落在「连接与鉴权」：先切到「模型」页签再改地址，
+    // 「保存连接」不在屏 → 底部条接手
+    await gotoPlatformTab(wrapper, '模型');
     const urlInput = wrapper.find('input[placeholder="https://api.example.com/v1"]');
     await urlInput.setValue('https://new.example.com/v1');
     await nextTick();
@@ -310,15 +312,15 @@ describe('ApiConfig P1 修复批', () => {
     expect(bar.text()).toContain('连接');
     expect(bar.text()).toContain('放弃');
 
-    // 切到「连接」页签：分段保存钮在屏，底部条收起（不叠两颗保存钮）
+    // 切回「连接与鉴权」：分段保存钮在屏，底部条收起（不叠两颗保存钮）
     await gotoPlatformTab(wrapper, '连接与鉴权');
     expect(wrapper.find('.ac-save').exists()).toBe(false);
     expect(wrapper.text()).toContain('保存连接');
     expect(wrapper.text()).not.toContain('保存平台默认');
 
-    // 再改生成参数 → 两组脏，底部条恒出并列出两组
+    // 再改平台默认 → 两组脏，底部条恒出并列出两组
     await gotoPlatformTab(wrapper, '平台默认与别名');
-    expect(wrapper.find('.ac-cols__side .mk-select').exists(), '生成参数页签应有「输出格式」下拉').toBe(true);
+    expect(wrapper.find('.ac-cols__side .mk-select').exists(), '平台默认页签应有「输出格式」下拉').toBe(true);
     await chooseMkSelect(wrapper as never, '输出格式', 'json_object');
     await nextTick();
     expect(wrapper.find('.ac-save').text()).toContain('连接 + 平台默认 · 2 组未保存变更');
@@ -406,7 +408,7 @@ describe('ApiConfig P1 修复批', () => {
   /* 2026-10-26 用户「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得可以和
      前面的合并了」：一级页签「接入 / 调用」撤除；「平台默认生成参数」并进平台详情第四个
      页签（生成参数），与模型表同一个对象。 */
-  it('单页：无一级页签，生成参数是平台详情的第四页签', async () => {
+  it('单页：无一级页签，连接与平台默认都在平台详情里', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     // 一级页签已撤；供应商面板与调用策略同屏
@@ -414,11 +416,11 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.mpp').exists()).toBe(true);
     expect(wrapper.text()).toContain('全站调用策略');
     expect(wrapper.find('.ac-policy').exists()).toBe(true);
-    // 平台详情四个二级页签，默认「模型」
+    // 2026-10-27 按接入流程排序：连接与鉴权在模型前面，默认落在连接
     expect(wrapper.findAll('.mpp-subtabs .mk-subtab').map((b) => b.text())).toEqual([
-      '模型2', '连接与鉴权', '基础设施', '平台默认与别名',
+      '连接与鉴权', '模型2', '基础设施', '平台默认与别名',
     ]);
-    expect(wrapper.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('模型2');
+    expect(wrapper.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('连接与鉴权');
     // 连接 / 基础设施 / 生成参数的内容都在 DOM 里（v-show 保留），但只有「模型」可见
     expect(wrapper.find('#mpp-platform-panel-conn').exists()).toBe(true);
     expect(wrapper.find('#mpp-platform-panel-infra').exists()).toBe(true);
@@ -440,11 +442,11 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /** F8-2（运营走查）：「连通性验证」拉取结果只写本页内存——
+  /** F8-2（运营走查）+ 2026-10-27 接入流程：
    *  ① 已保存过清单时下拉应直接可用（不要求进页先拉一次）；
-   *  ② 未保存的本次拉取必须显式说明「仅本页有效，保存后其他页面/下次进入才可见」；
-   *  ③ 保存连接后说明消失（清单已落盘，且请求携带 availableModels）。 */
-  it('F8-2：已保存清单下拉直接可用；拉取未保存给出「仅本页有效」说明，保存后消失', async () => {
+   *  ② 获取模型即把地址/密钥/清单一起落盘（流程第 2 步），不再要求先点「保存连接」；
+   *  ③ 落盘后不出现「未保存」徽标，下拉立即可用。 */
+  it('F8-2：已保存清单下拉直接可用；获取模型即保存连接，不残留未保存徽标', async () => {
     const savedCfg = {
       apiUrl: 'https://api.example.com/v1',
       apiKeyConfigured: true,
@@ -467,7 +469,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(saved.text()).not.toContain('本次拉取未保存');
     saved.unmount();
 
-    // ② 未保存清单：拉取后出现说明；③ 保存连接后说明消失且请求携带清单
+    // ② 未保存清单：获取模型即落盘（不再有独立保存步骤）
     liveApiConfig.value = { ...savedCfg, availableModels: [] };
     let persisted: string[] = [];
     getConfigMock.mockImplementation(async () => ({
@@ -485,31 +487,53 @@ describe('ApiConfig P1 修复批', () => {
     await openPlatformSettings(wrapper);
     expect((wrapper.find('.ac-test__model .mk-select__trigger').element as HTMLButtonElement).disabled).toBe(true);
 
-    const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('同步上游模型'))!;
+    const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('获取模型'))!;
     await fetchBtn.trigger('click');
     await flushPromises();
     await nextTick();
-
-    /* 2026-10-21：清单块只报数字；本次拉取是否落盘由块头的「未保存」徽标承担 */
-    expect(wrapper.find('.ac-models__line').text()).toContain('已拉取 2 个');
-    expect(wrapper.find('.ac-models-meta').text()).toContain('未保存');
-    // 拉取后下拉立即可用（本页内联动不回归）
-    expect((wrapper.find('.ac-test__model .mk-select__trigger').element as HTMLButtonElement).disabled).toBe(false);
-
-    const saveBtn = wrapper.find('.ac-sec__save');
-    expect(saveBtn.text()).toBe('保存连接');
-    await saveBtn.trigger('click');
-    await flushPromises();
-    await nextTick();
     await flushPromises();
 
+    // 获取即保存：请求带上了地址/密钥/清单与连接状态
     expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({
       availableModels: ['m-1', 'm-2'],
       // 拉取结果随连接域落盘，刷新后「连接正常 · N 前」不再回退到旧时间
       connectionStatus: 'connected',
       lastCheckedAt: expect.any(String)
     }));
+    // ③ 不再有「保存连接」分段按钮与「未保存」徽标
+    expect(wrapper.find('.ac-sec__save').exists()).toBe(false);
     expect(wrapper.find('.ac-models-meta').text()).not.toContain('未保存');
+    expect(wrapper.find('.ac-models__line').text()).toContain('已拉取 2 个');
+    // 拉取后下拉立即可用（本页内联动不回归）
+    expect((wrapper.find('.ac-test__model .mk-select__trigger').element as HTMLButtonElement).disabled).toBe(false);
+    wrapper.unmount();
+  });
+
+  /* 2026-10-27 流程：第 1 步要求「填链接和 key」。换了地址却没重填密钥时，
+     不能拿旧密钥去试新端点，也不能把旧密钥存到新地址上。 */
+  it('流程：换地址但没重填 API Key 时，获取模型被拦下', async () => {
+    liveApiConfig.value = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKeyConfigured: true,
+      availableModels: ['model-a'],
+      defaultModel: 'model-a',
+      defaultReasoningModel: 'model-a',
+      defaultEvaluationModel: 'model-a',
+      defaultThinkingMode: 'default' as const,
+      defaultReasoningEffort: 'default' as const,
+      connectionStatus: 'connected',
+      lastCheckedAt: '2026-08-13T09:00:00.000Z',
+      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
+    };
+    const wrapper = await mountApiConfig();
+    await flushPromises();
+    await wrapper.find('input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
+    await nextTick();
+    const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('获取模型'))!;
+    await fetchBtn.trigger('click');
+    await flushPromises();
+    expect(testConnectionMock).not.toHaveBeenCalled();
+    expect(updateConfigMock).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
@@ -562,15 +586,15 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-27 P1：拉取与重置都绑定到当前通道，页头只保留注册表刷新 */
-  it('P1：页头只留刷新；同步上游模型与重置都在平台通道详情内', async () => {
+  /* 2026-10-27 P1：获取与重置都绑定到当前通道，页头只保留注册表刷新 */
+  it('P1：页头只留刷新；获取模型与重置都在平台通道详情内', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     const headBtns = wrapper.findAll('.mk-pagehead__actions > button').map((b) => b.text())
     expect(headBtns).toEqual(['刷新注册表'])
     expect(wrapper.text()).not.toContain('连接并拉取')
     await gotoPlatformTab(wrapper, '连接与鉴权')
-    expect(wrapper.find('.ac-conn__acts').text()).toContain('同步上游模型')
+    expect(wrapper.find('.ac-conn__acts').text()).toContain('获取模型')
     expect(wrapper.find('.ac-conn__danger').text()).toContain('重置此通道的接入配置')
     wrapper.unmount()
   })

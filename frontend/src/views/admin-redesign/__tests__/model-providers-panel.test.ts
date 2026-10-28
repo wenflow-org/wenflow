@@ -153,27 +153,27 @@ describe('ModelProvidersPanel', () => {
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
   })
 
-  it('平台详情分「模型 / 连接与鉴权 / 基础设施 / 平台默认与别名」四页签：连接与默认由宿主经插槽内联注入', async () => {
+  it('平台详情按接入流程排页签：连接与鉴权 → 模型 → 基础设施 → 平台默认与别名，默认落在连接', async () => {
     const w = await mountPanel()
-    // 2026-10-26：平台详情有二级页签，默认落在「模型」
+    // 2026-10-27：流程是「填地址和 key → 获取模型 → 勾选 → 配置」，连接排在模型前面
     const tabs = w.findAll('.mpp-subtabs .mk-subtab').map((t) => t.text())
-    expect(tabs).toEqual(['模型2', '连接与鉴权', '基础设施', '平台默认与别名'])
-    expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('模型2')
-    expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
-    expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
+    expect(tabs).toEqual(['连接与鉴权', '模型2', '基础设施', '平台默认与别名'])
+    expect(w.find('.mpp-subtabs .mk-subtab[aria-selected="true"]').text()).toBe('连接与鉴权')
+    expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
+    expect(shown(w, '#mpp-platform-panel-models')).toBe(false)
     expect(shown(w, '#mpp-platform-panel-generation')).toBe(false)
 
     // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
     expect(w.findAll('.mpp-detail__acts .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()
 
-    // 切到「连接与鉴权」页签：连接表单可见、模型表隐藏；再切「基础设施」
-    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '连接与鉴权')!.trigger('click')
-    expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
-    expect(shown(w, '#mpp-platform-panel-models')).toBe(false)
+    // 切到「模型」：模型表可见、连接表单隐藏；再切「基础设施」
+    await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text().includes('模型'))!.trigger('click')
+    expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
+    expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
     await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '基础设施')!.trigger('click')
     expect(shown(w, '#mpp-platform-panel-infra')).toBe(true)
-    expect(shown(w, '#mpp-platform-panel-conn')).toBe(false)
+    expect(shown(w, '#mpp-platform-panel-models')).toBe(false)
     await w.findAll('.mpp-subtabs .mk-subtab').find((t) => t.text() === '平台默认与别名')!.trigger('click')
     expect(shown(w, '#mpp-platform-panel-generation')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-infra')).toBe(false)

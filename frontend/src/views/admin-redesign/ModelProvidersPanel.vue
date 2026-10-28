@@ -348,15 +348,14 @@ const providers = computed(() => view.value?.providers ?? [])
 const registry = computed(() => view.value?.registry ?? null)
 /** 这一页只呈现平台通道（2026-10-27 用户「这个区域不要了」）：自建通道不再在页面里切换 */
 const selected = computed(() => providers.value.find((p) => p.id === 'platform') ?? null)
-/* 平台详情的二级页签（2026-10-26 用户「这个地方就可以配置重排序嵌入模型」+
-   「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得可以和前面的合并了」）：
-   向量化 / 重排 / 生成默认都是平台这条供应商自己的能力，原来各自独立成卡挂在页面别处，
-   与「当前通道」是两处；现在收进通道详情，和连接、模型并列。用组件内状态不写 URL：
-   二级写键会与一级抢。 */
-const platformTab = ref<'models' | 'conn' | 'infra' | 'generation'>('models')
+/* 平台详情的二级页签（2026-10-26 起收进通道详情；2026-10-27 按配置顺序排）：
+   接入流程是「填地址和密钥 → 获取模型 → 勾选 → 逐个配置」，所以连接排在模型前面，
+   进页先落在连接页签；基础设施与平台默认是配好之后的设置，排在后面。
+   用组件内状态不写 URL：二级写键会与一级抢。 */
+const platformTab = ref<'conn' | 'models' | 'infra' | 'generation'>('conn')
 const platformTabs = computed(() => [
-  { key: 'models', label: '模型', count: selected.value?.models.length },
   { key: 'conn', label: '连接与鉴权' },
+  { key: 'models', label: '模型', count: selected.value?.models.length },
   { key: 'infra', label: '基础设施' },
   { key: 'generation', label: '平台默认与别名' },
 ])
@@ -576,9 +575,11 @@ function openManualAdd(): void {
   modelEditor.value?.openWith({ providerId: selected.value.id, model: null })
 }
 
-/** 浮窗确认：按勾选顺序逐个打开模型设置，保存一个自动进下一个 */
+/** 浮窗确认：按勾选顺序逐个打开模型设置，保存一个自动进下一个。
+    流程走到这里已经完成「获取 → 勾选」，落到模型页签，配完就能看到刚接入的表。 */
 function startConfigure(ids: string[]): void {
   if (!selected.value || !ids.length) return
+  platformTab.value = 'models'
   configureQueue.value = [...ids]
   configureTotal.value = ids.length
   openNextConfigure()

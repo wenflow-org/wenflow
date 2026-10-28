@@ -38,16 +38,16 @@
             <div class="mpp-block__head">
               <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
               <div class="ac-conn__acts">
-                <!-- 2026-10-27 P1：「同步上游模型」从页头收进当前通道；它绑定的是这条通道的
-                     服务地址与密钥，拉取即顺带验证连通性。 -->
+                <!-- 接入流程第 2 步：用上面这条通道的地址与密钥获取模型。
+                     成功后连接一并落盘，不再要求先点「保存连接」。 -->
                 <button
                   type="button"
                   class="mk-btn mk-btn--sm"
                   :disabled="fetching || !providersReady"
                   @click="onFetchClick"
                 >
-                  <MkLoading v-if="fetching" inline text="同步中…" />
-                  <span v-else>{{ models.length ? '重新同步上游模型' : '同步上游模型' }}</span>
+                  <MkLoading v-if="fetching" inline text="获取中…" />
+                  <span v-else>{{ models.length ? '重新获取模型' : '获取模型' }}</span>
                 </button>
                 <button
                   v-if="dirty.has('conn')"
@@ -116,10 +116,10 @@
                 </div>
               </div>
             </div>
-            <!-- 换服务商是新人最容易卡住的一步（2026-10-28）：保存连接只是换端点，
-                 新模型清单还要同步一次，旧模型要自己删——把这条路径写在表单下面。 -->
+            <!-- 接入流程的顺序写在表单下面（2026-10-27 用户「先填链接和 key，然后获取模型，
+                 选择模型，配置模型」）：获取即保存，勾选后逐个配置。 -->
             <p class="ac-conn__hint">
-              换服务商时：保存连接后点「同步上游模型」拿到新模型清单。旧模型不再使用的话，到「模型」页签逐行删除。
+              先填服务地址与 API Key，再点「获取模型」。连接通过就保存，并列出上游模型供勾选，勾选后逐个配置。旧模型不再使用的话，到「模型」页签逐行删除。
             </p>
             <!-- 高危动作（2026-10-27 P1）：从页头移入通道详情，写明作用域与后果，避免误触 -->
             <div class="ac-conn__danger">
@@ -783,6 +783,11 @@ watch(models, (ms) => {
 
 async function fetchModels() {
   if (fetching.value || !form.apiUrl) return
+  /* 流程第 1 步要求「填链接和 key」：换地址却没重填密钥时，不能拿旧密钥去试新端点 */
+  if (keyHintNeeded.value) {
+    toast.error('更换服务地址后需重新输入 API Key')
+    return
+  }
   fetching.value = true
   try {
     const list = await liveFetchModels(form.apiUrl, form.apiKey)
@@ -792,9 +797,13 @@ async function fetchModels() {
     connectionStatus.value = 'connected'
     connCheckedAt.value = new Date().toISOString()
     fetchError.value = ''
+    /* 获取即保存：用户流程是「填地址和 key → 获取模型」，不该再要求点一次保存。
+       保存失败时不再往下走——连接没落盘，配好的模型也用不上。 */
     markDirty('conn')
-    toast.info(list.length ? `已获取 ${list.length} 个模型，记得保存` : '连接成功，但服务未返回模型列表')
-    // 拉到的清单直接进入勾选浮窗（2026-10-24 用户「拉取作为浮窗」）：先等 upstream 传进面板
+    const saved = await saveGroups(['conn'], { silent: true })
+    if (!saved) return
+    toast.success(list.length ? `已保存连接，获取到 ${list.length} 个模型` : '已保存连接，但服务未返回模型列表')
+    // 拉到的清单直接进入勾选浮窗：选模型 → 逐个配置
     if (list.length) {
       await nextTick()
       providersRef.value?.openHostPull?.()
@@ -837,10 +846,10 @@ async function runTest() {
 
 /** 按域保存：只提交传入且处于脏状态的域，不动其他未保存改动。
     UI 在每个分段的标题上挂「保存」，调用方传该段对应的域。 */
-async function saveGroups(groups: string[]) {
-  if (saving.value) return
+async function saveGroups(groups: string[], opts: { silent?: boolean } = {}): Promise<boolean> {
+  if (saving.value) return false
   const set = new Set(groups.filter((g) => dirty.value.has(g)))
-  if (!set.size) return
+  if (!set.size) return true
   saving.value = true
   savingGroups.value = set
   try {
@@ -904,9 +913,11 @@ async function saveGroups(groups: string[]) {
     }
     // 只清除本次已保存的域，保留其他未保存改动（探针为热生效开关，不走统一保存条）
     dirty.value = new Set([...dirty.value].filter((g) => !set.has(g)))
-    toast.success('配置已保存并生效')
+    if (!opts.silent) toast.success('配置已保存并生效')
+    return true
   } catch (e) {
     toast.error(`保存失败：${errMsg(e)}`)
+    return false
   } finally {
     saving.value = false
     savingGroups.value = new Set()
