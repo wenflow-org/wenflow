@@ -9,9 +9,9 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ApiConfig from '../ApiConfig.vue';
 import { dataSource } from '../store';
-import { liveApiConfig, pickChatTestModel } from '../live';
+import { liveApiConfig } from '../live';
 import { confirmState, settleConfirm } from '../useConfirm';
-import { chooseMkSelect, mkSelectLabels, mkSelectValue } from '@/components/mk/__tests__/mkSelect';
+import { chooseMkSelect, mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 
 const { getConfigMock, getReliabilityMock, updateReliabilityMock, getModelRegistryMock, getModelProvidersMock, getInfraModelsMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
@@ -373,7 +373,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.mpp-models__head .ac-models-meta').exists()).toBe(true);
     expect(wrapper.find('.ac-conn .ac-models-meta').exists()).toBe(false);
     // 平台通道没有自带端点：模型清单只给增改，不给「获取模型列表」（那是自带端点才有的动作）；
-    // 连通性验证在连接表单里（上面那段「运行测试」），不在下面再挂第二枚检测钮
+    // 测试入口在模型表每一行，不在连接段另挂检测钮
     const acts = wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text());
     expect(acts).toEqual(['＋ 添加模型']);
     // 只读能力表已从本页退役；别名映射在「平台默认与别名」段内
@@ -425,10 +425,10 @@ describe('ApiConfig P1 修复批', () => {
   });
 
   /** F8-2（运营走查）+ 2026-10-27 接入流程：
-   *  ① 已保存过清单时下拉应直接可用（不要求进页先拉一次）；
+   *  ① 已保存过清单时「已拉取 N 个」直接可见（不要求进页先拉一次）；
    *  ② 获取模型即把地址/密钥/清单一起落盘（流程第 2 步），不再要求先点「保存连接」；
-   *  ③ 落盘后不出现「未保存」徽标，下拉立即可用。 */
-  it('F8-2：已保存清单下拉直接可用；获取模型即保存连接，不残留未保存徽标', async () => {
+   *  ③ 落盘后不出现「未保存」徽标。 */
+  it('F8-2：已保存清单直接可见；获取模型即保存连接，不残留未保存徽标', async () => {
     const savedCfg = {
       apiUrl: 'https://api.example.com/v1',
       apiKeyConfigured: true,
@@ -442,13 +442,12 @@ describe('ApiConfig P1 修复批', () => {
       lastCheckedAt: '2026-08-13T09:00:00.000Z',
       networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
     };
-    // ① 已保存清单（liveApiConfig 播种）：下拉直接可用，无未保存提示
+    // ① 已保存清单（liveApiConfig 播种）：读数直接可见，无未保存提示
     liveApiConfig.value = savedCfg;
     const saved = await mountApiConfig();
     await openPlatformSettings(saved);
-    expect((saved.find('.ac-test__model .mk-select__trigger').element as HTMLButtonElement).disabled).toBe(false);
-    expect(mkSelectLabels(saved as never, '测试模型')).toEqual(['model-a', 'model-b']);
-    expect(saved.text()).not.toContain('本次拉取未保存');
+    expect(saved.find('.ac-models__line').text()).toContain('已拉取 2 个');
+    expect(saved.find('.ac-models-meta').text()).not.toContain('未保存');
     saved.unmount();
 
     // ② 未保存清单：获取模型即落盘（不再有独立保存步骤）
@@ -467,8 +466,6 @@ describe('ApiConfig P1 修复批', () => {
 
     const wrapper = await mountApiConfig();
     await openPlatformSettings(wrapper);
-    expect((wrapper.find('.ac-test__model .mk-select__trigger').element as HTMLButtonElement).disabled).toBe(true);
-
     const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('获取模型'))!;
     await fetchBtn.trigger('click');
     await flushPromises();
@@ -486,8 +483,6 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.ac-sec__save').exists()).toBe(false);
     expect(wrapper.find('.ac-models-meta').text()).not.toContain('未保存');
     expect(wrapper.find('.ac-models__line').text()).toContain('已拉取 2 个');
-    // 拉取后下拉立即可用（本页内联动不回归）
-    expect((wrapper.find('.ac-test__model .mk-select__trigger').element as HTMLButtonElement).disabled).toBe(false);
     wrapper.unmount();
   });
 
@@ -519,52 +514,14 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 回归（2026-10-22 走查）：上游清单按字母排序，首个是向量模型 BAAI/bge-large-en-v1.5；
-     默认选它再点「运行测试」，chat 端点只会回「Model does not exist」，看着像配置错了。 */
-  it('测试模型默认选配置里的对话模型，而不是清单第一个（向量/重排序模型）', async () => {
-    liveApiConfig.value = {
-      apiUrl: 'https://api.example.com/v1',
-      apiKeyConfigured: true,
-      availableModels: ['BAAI/bge-large-en-v1.5', 'Qwen3-Reranker-0.6B', 'deepseek-v4.1-flash'],
-      defaultModel: 'deepseek-v4.1-flash',
-      defaultReasoningModel: 'deepseek-v4.1-flash',
-      defaultEvaluationModel: 'deepseek-v4.1-flash',
-      defaultThinkingMode: 'default' as const,
-      defaultReasoningEffort: 'default' as const,
-      defaultResponseFormat: 'none' as const,
-      connectionStatus: 'connected',
-      lastCheckedAt: '2026-08-13T09:00:00.000Z',
-      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
-    };
+  /* 2026-10-27 用户「不再做独立的连通性验证，针对能配置的模型测试就行」：
+     连接段不再有测试模型下拉与运行测试，测试入口在模型表每一行。 */
+  it('连接段不再有独立连通性验证：没有测试模型下拉与运行测试', async () => {
     const wrapper = await mountApiConfig();
-    await openPlatformSettings(wrapper);
-    expect(mkSelectValue(wrapper as never, '测试模型')).toBe('deepseek-v4.1-flash');
-    // D7（2026-10-22 拍板 B）：非对话模型保留在下拉里，但必须自带「不适用」标注。
-    const optionTexts = mkSelectLabels(wrapper as never, '测试模型');
-    expect(optionTexts).toContain('BAAI/bge-large-en-v1.5（向量模型 · chat 测试不适用）');
-    expect(optionTexts).toContain('Qwen3-Reranker-0.6B（重排模型 · chat 测试不适用）');
-    expect(optionTexts).toContain('deepseek-v4.1-flash');
-    wrapper.unmount();
-  });
-
-  it('配置里的默认模型不在清单里时，退到第一个非嵌入/重排序模型', async () => {
-    liveApiConfig.value = {
-      apiUrl: 'https://api.example.com/v1',
-      apiKeyConfigured: true,
-      availableModels: ['BAAI/bge-m3', 'agnes-3.0-flash'],
-      defaultModel: '已下线的模型',
-      defaultReasoningModel: '已下线的模型',
-      defaultEvaluationModel: '已下线的模型',
-      defaultThinkingMode: 'default' as const,
-      defaultReasoningEffort: 'default' as const,
-      defaultResponseFormat: 'none' as const,
-      connectionStatus: 'connected',
-      lastCheckedAt: '2026-08-13T09:00:00.000Z',
-      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
-    };
-    const wrapper = await mountApiConfig();
-    await openPlatformSettings(wrapper);
-    expect(mkSelectValue(wrapper as never, '测试模型')).toBe('agnes-3.0-flash');
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('连通性验证');
+    expect(wrapper.text()).not.toContain('运行测试');
+    expect(wrapper.find('.ac-test').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -751,23 +708,5 @@ describe('ApiConfig P1 修复批', () => {
       jitterEnabled: true,
     });
     wrapper.unmount();
-  });
-});
-
-describe('pickChatTestModel（#131 连通性测试默认模型）', () => {
-  const upstreamList = [
-    'BAAI/bge-large-en-v1.5',
-    'BAAI/bge-reranker-v2-m3',
-    'agnes-3.0-flash',
-    'deepseek-v4.1-flash',
-  ];
-
-  it('配置默认对话模型在清单里 → 直接选中它', () => {
-    expect(pickChatTestModel(upstreamList, 'deepseek-v4.1-flash')).toBe('deepseek-v4.1-flash');
-  });
-
-  it('默认模型不在/为空 → 退到第一个非嵌入/重排序模型，不再选 BAAI 向量模型', () => {
-    expect(pickChatTestModel(upstreamList, 'not-in-list')).toBe('agnes-3.0-flash');
-    expect(pickChatTestModel(upstreamList)).toBe('agnes-3.0-flash');
   });
 });

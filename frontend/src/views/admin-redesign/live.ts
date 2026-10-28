@@ -1912,16 +1912,6 @@ export async function liveGetVirtualDetail(id: string): Promise<Record<string, u
 }
 
 /* ================= API 配置 ================= */
-/** chat 连通性测试不适用于向量/重排序模型（上游回 Model does not exist，#131） */
-export const NON_CHAT_MODEL_PATTERN = /embedding|rerank|bge-/i
-
-/** 连通性测试默认模型：配置默认对话模型 → 第一个非嵌入/重排序模型 → 清单首个 */
-export function pickChatTestModel(models: string[], preferred?: string): string {
-  const list = (models || []).filter((m) => typeof m === 'string' && m.trim())
-  if (preferred && list.includes(preferred)) return preferred
-  const chatCandidate = list.find((m) => !NON_CHAT_MODEL_PATTERN.test(m))
-  return chatCandidate || list[0] || ''
-}
 export interface LiveApiConfig {
   apiUrl: string
   apiKeyConfigured: boolean
@@ -1992,28 +1982,6 @@ export async function liveSaveApiConfig(data: {
 }): Promise<void> {
   await adminApiConfigApi.updateConfig(data)
   await fetchLiveApiConfig()
-}
-
-export async function liveRunModelTest(data: {
-  apiUrl?: string
-  apiKey?: string
-  model: string
-  prompt: string
-}): Promise<{ text: string; latencyMs?: number; usage?: string }> {
-  const res = await adminApiConfigApi.testModel({
-    ...data,
-    temperature: 0.2,
-    maxTokens: 64
-  })
-  const d = res.data?.data ?? res.data ?? {}
-  const usage = d.usage
-    ? `输入 ${d.usage.prompt_tokens ?? 0} / 输出 ${d.usage.completion_tokens ?? 0} / 共 ${d.usage.total_tokens ?? 0}`
-    : undefined
-  return {
-    text: String(d.text || d.output || d.content || '（无文本输出）'),
-    latencyMs: d.latencyMs ?? d.durationMs,
-    usage
-  }
 }
 
 export async function liveSaveNetworkPolicy(p: LiveApiConfig['networkPolicy']): Promise<void> {

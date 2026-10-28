@@ -29,9 +29,8 @@
         @changed="onProvidersChanged"
         @registered="onProvidersRegistered"
       >
-        <!-- 平台通道的连接：服务地址 / 密钥 / 连通性验证。它属于「平台」这条供应商本身，
-             不再是弹窗里的一个分区。2026-10-26 起它是平台详情的「连接」页签，块头不再复述
-             「连接」二字（页签已说明区域），只留状态徽标与保存钮。 -->
+        <!-- 平台通道的连接：服务地址 / 密钥。它属于「平台」这条供应商本身，
+             不再是弹窗里的一个分区。块头只留连接状态与动作组。 -->
         <template #platform-detail>
           <div ref="platformConnRef" class="ac-conn mpp-block">
             <div class="mpp-block__head">
@@ -64,63 +63,37 @@
                 >{{ resetting ? '重置中…' : '重置此通道' }}</button>
               </div>
             </div>
-            <div class="ac-body ac-conn2">
-              <div class="ac-conn2__col">
-                <label class="mk-field">
-                  <span class="mk-field__label">服务地址</span>
-                  <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
-                </label>
-                <label class="mk-field">
-                  <span class="mk-field__label">API Key</span>
-                  <span class="ac-key-wrap">
-                    <span class="ac-key-input-row">
-                      <input
-                        class="mk-field__input"
-                        :type="keyVisible ? 'text' : 'password'"
-                        v-model="form.apiKey"
-                        autocomplete="new-password"
-                        :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
-                        @input="markDirty('conn')"
-                      />
-                      <button
-                        v-if="keySet || form.apiKey"
-                        type="button"
-                        class="ac-key-toggle"
-                        :title="keyVisible ? '隐藏' : '显示'"
-                        @click="keyVisible = !keyVisible"
-                      ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
-                        <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
-                    </span>
-                    <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
-                  </span>
-                </label>
-              </div>
-              <div class="ac-conn2__col ac-conn2__col--test">
-                <span class="ac-sec__title">连通性验证</span>
-                <div class="ac-test">
-                  <label class="mk-field ac-test__model">
-                    <span class="mk-field__label">测试模型</span>
-                    <!-- 2026-10-27 原生 select → MkSelect：选项随上游清单动态生成；
-                         非对话模型的提示已并入可见 label（MkSelect 选项无逐项 title）。 -->
-                    <MkSelect
-                      v-model="testModel"
-                      :options="testModelOptions"
-                      aria-label="测试模型"
-                      :disabled="!models.length"
-                      block
+            <!-- 2026-10-27 用户「不再做独立的连通性验证，针对能配置的模型测试就行」：
+                 连接段只留地址与密钥；测试入口在模型表每一行（已保存的通道 + 具体模型）。 -->
+            <div class="ac-body ac-conn-form">
+              <label class="mk-field">
+                <span class="mk-field__label">服务地址</span>
+                <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">API Key</span>
+                <span class="ac-key-wrap">
+                  <span class="ac-key-input-row">
+                    <input
+                      class="mk-field__input"
+                      :type="keyVisible ? 'text' : 'password'"
+                      v-model="form.apiKey"
+                      autocomplete="new-password"
+                      :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
+                      @input="markDirty('conn')"
                     />
-                  </label>
-                  <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
-                    <MkLoading v-if="testing" inline text="测试中…" />
-                    <span v-else>运行测试</span>
-                  </button>
-                  <span v-if="testResult" class="ac-test__result">
-                    <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
-                    <span class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
-                    <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }" :title="testResult.text">「{{ testResult.text }}」</span>
+                    <button
+                      v-if="keySet || form.apiKey"
+                      type="button"
+                      class="ac-key-toggle"
+                      :title="keyVisible ? '隐藏' : '显示'"
+                      @click="keyVisible = !keyVisible"
+                    ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
+                      <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
                   </span>
-                </div>
-              </div>
+                  <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
+                </span>
+              </label>
             </div>
           </div>
         </template>
@@ -299,7 +272,6 @@ import {
   liveApiConfig as cfg,
   liveFetchModels,
   liveSaveApiConfig,
-  liveRunModelTest,
   timeAgo,
   errMsg,
   liveFailures,
@@ -353,7 +325,7 @@ function onFetchClick() {
   void fetchModels()
 }
 /* 平台连接表单已内联进供应商详情（2026-10-25 撤掉「平台设置」浮窗）：
-   2026-10-27 P1 起「同步上游模型」也在这一页签里，地址未就绪时就地提示。 */
+   「获取模型」在连接段头部的动作组里，地址未就绪时就地滚回表单。 */
 const platformConnRef = ref<HTMLElement | null>(null)
 function focusPlatformConnection() {
   platformConnRef.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
@@ -452,9 +424,9 @@ const fetchedModels = ref<string[]>([])
 const keySet = ref(false)
 const keyVisible = ref(false)
 const connectionStatus = ref('unknown')
-/** 本次会话内「同步上游模型」成功的时刻（connBadge「N 前」的时间源优先级高于 DB 落库值） */
+/** 本次会话内「获取模型」成功的时刻（connBadge「N 前」的时间源优先级高于 DB 落库值） */
 const connCheckedAt = ref('')
-/** 最近一次「同步上游模型」的失败原因：展示在模型清单空态，避免错误上下文丢失（刷新即消失） */
+/** 最近一次「获取模型」的失败原因：展示在模型清单空态，避免错误上下文丢失（刷新即消失） */
 const fetchError = ref('')
 /** 曾成功拉取过模型列表（含从已保存配置载入）：此后提交才携带 availableModels，避免空数组清空后端列表 */
 const modelsFetchedOnce = ref(false)
@@ -689,8 +661,8 @@ function setEffort(v: string) {
 /* 2026-10-04 状态条退役：页头红/黄/绿基调 statusTone 随状态条整块删除（读取失败信号由
    接入卡内 mk-alert + KPI 卡「—」读数承载，不再有整页基调色） */
 const connBadge = computed(() => {
-  // 附「N 前」时间戳（P1#32 子集）：连接状态是上次连通性验证的结果，无时间的「连接正常」
-  // 会把陈旧快照读成实时健康。时间源 = 本次会话刚拉取成功的时刻，否则退回 DB lastCheckedAt
+  // 附「N 前」时间戳（P1#32 子集）：连接状态是上次获取模型的结果，无时间的「连接正常」
+  // 会把陈旧快照读成实时健康。时间源 = 本次会话刚获取成功的时刻，否则退回 DB lastCheckedAt
   // （与 connectionStatus 同源；不用健康快照 checkedAt——那是能力探测时间，语义不同）
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
   const suffix = at ? ` · ${timeAgo(at)}` : ''
@@ -702,7 +674,7 @@ const connBadge = computed(() => {
 const connBadgeTitle = computed(() => {
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
   const when = at ? `上次验证：${new Date(at).toLocaleString('zh-CN', { hour12: false })}` : '尚无验证记录'
-  return `${when}（「同步上游模型」成功/失败时更新）。连接状态为上次拉取的结果，非实时检测结果`
+  return `${when}（「获取模型」成功/失败时更新）。连接状态为上次拉取的结果，非实时检测结果`
 })
 
 /** 已配置密钥但改了服务地址且 Key 留空：密钥不会随地址迁移，需提示重新输入 */
@@ -712,38 +684,7 @@ const keyHintNeeded = computed(
 
 /* ---------- 操作 ---------- */
 const fetching = ref(false)
-const testing = ref(false)
 const saving = ref(false)
-const testModel = ref('')
-const testResult = ref<{ ok: boolean; text: string; latency?: string; usage?: string } | null>(null)
-
-/** 测试模型默认选中项：优先配置里的默认对话模型，其次第一个非嵌入/重排序模型。
- *  不能直接取 ms[0]——上游清单是按字母排的，首个是 `BAAI/bge-large-en-v1.5`（向量模型），
- *  用 chat 端点测它只会回「Model does not exist. Please check it carefully.」，
- *  看着像配置写错了（2026-10-22 走查实测）。 */
-const NON_CHAT_MODEL_PATTERN = /embedding|rerank|bge-/i
-/** D7（2026-10-22 拍板 B）：非对话模型仍留在下拉里（可验证「它确实不能 chat」），
-    但选项文案必须自带提示，避免运营误选后把预期失败读成配置错误。 */
-const RERANK_MODEL_PATTERN = /rerank/i
-function modelTestLabel(m: string): string {
-  if (!NON_CHAT_MODEL_PATTERN.test(m)) return m
-  return `${m}（${RERANK_MODEL_PATTERN.test(m) ? '重排' : '向量'}模型 · chat 测试不适用）`
-}
-/** 测试模型下拉的选项（2026-10-27 原生 select → MkSelect）：清单为空时保留原占位项。
-    原 `<option :title="modelTestHint(m)">` 的逐项提示在 MkSelect 里不可表达——可见 label
-    已写明「chat 测试不适用」，故不再单独保留 modelTestHint。 */
-const testModelOptions = computed(() =>
-  models.value.length
-    ? models.value.map((m) => ({ value: m, label: modelTestLabel(m) }))
-    : [{ value: '', label: '无可用模型（等待拉取）' }]
-)
-watch(models, (ms) => {
-  if (!ms.length) return
-  if (testModel.value && ms.includes(testModel.value)) return
-  const configured = form.defaultModel && ms.includes(form.defaultModel) ? form.defaultModel : ''
-  const chatLike = ms.find((m) => !NON_CHAT_MODEL_PATTERN.test(m))
-  testModel.value = configured || chatLike || ms[0]
-}, { immediate: true })
 
 async function fetchModels() {
   if (fetching.value || !form.apiUrl) return
@@ -779,32 +720,6 @@ async function fetchModels() {
     toast.error(`连接失败：${errMsg(e)}`)
   } finally {
     fetching.value = false
-  }
-}
-
-async function runTest() {
-  if (testing.value || !testModel.value) return
-  testing.value = true
-  testResult.value = null
-  const started = Date.now()
-  try {
-    const r = await liveRunModelTest({
-      apiUrl: form.apiUrl,
-      apiKey: form.apiKey,
-      model: testModel.value,
-      prompt: '用一句话介绍你自己。'
-    })
-    testResult.value = {
-      ok: true,
-      /* 原文全量保留（截断只由 .ac-test__text 的 CSS 承担）：title 可核对完整回文（审核 #162） */
-      text: r.text,
-      latency: r.latencyMs ? `${r.latencyMs}ms` : `${Date.now() - started}ms`,
-      usage: r.usage
-    }
-  } catch (e) {
-    testResult.value = { ok: false, text: errMsg(e) }
-  } finally {
-    testing.value = false
   }
 }
 
@@ -972,13 +887,11 @@ function discardAll() {
 
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
-/* 接入卡左右双列（2026-10-15 用户重组）：左=地址/密钥，右=连通性验证；≤1100 回落整行。
-   2026-10-27 左栏清单撤掉后详情变宽，表单不再跟着拉满——地址框超过 400px 就只是空。 */
-.ac-conn2 { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; max-width: 820px; }
-/* 块头（连接状态 + 同步/保存）与表单同宽，按钮不飘到卡片最右边 */
-.ac-conn > .mpp-block__head { max-width: 820px; }
-.ac-conn2__col { display: grid; gap: 14px; align-content: start; min-width: 0; }
-.ac-conn2__col--test { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
+/* 连接表单（2026-10-27）：只剩地址与密钥两行，竖向排；不跟着详情宽度拉满。
+   测试入口移到模型表每行，不再在连接段做独立的连通性验证。 */
+.ac-conn-form { max-width: 560px; }
+/* 块头（连接状态 + 动作组）与表单同宽，按钮不飘到卡片最右边 */
+.ac-conn > .mpp-block__head { max-width: 560px; }
 .ac-row { display: grid; gap: 14px; align-items: end; }
 .ac-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 2026-10-06 审核 #159：四个配置页签的字段控件统一走 .mk-field__input/__select/__textarea
@@ -1012,27 +925,6 @@ function discardAll() {
   white-space: normal;
 }
 
-/* 连通性验证（卡内末段，横向内联：模型 + 按钮 + 结果） */
-.ac-test {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.ac-test__model { min-width: 240px; max-width: 320px; margin: 0; }
-.ac-test__result { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 6px; min-width: 0; }
-.ac-test__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
-.ac-test__text {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 320px;
-}
-.ac-test__text--bad { color: var(--mk-red); }
-.ac-test__btn { align-self: flex-end; }
-
 /* 上游清单关系句（2026-10-16 用户走查重排）：原 30+ 枚模型胶囊（.ac-models/.ac-model）退役——
    与下方登记表并列成两份模型名单，被读成「同一件事说两遍」。现在只说关系，逐个名字在登记表折叠里。 */
 .ac-models__line { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
@@ -1053,7 +945,7 @@ function discardAll() {
 /* 访问来源模式：radio 单选卡片（复刻原型 index.html:1793-1798 .radio-row/.radio，
    原型 .radio[aria-checked="true"] = brand 描边 + brand 底 + brand 字 + 600 字重）。
    描边/圆角/选中态全走 --mk-* token，暗色随 token 自动适配 */
-/* 分段小标题（连接 / 路由默认 / 默认思考 / 连通性验证 / 默认思考与结构化输出）：
+/* 分段小标题（默认思考 / 结构化输出 / 别名映射）：
    统一简洁粗体灰字——不放大写、不加横线后缀，用留白分区（与全站表单一致） */
 .ac-sec__title {
   display: flex;
