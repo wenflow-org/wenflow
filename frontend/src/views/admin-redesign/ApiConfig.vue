@@ -26,7 +26,6 @@
       <ModelProvidersPanel
         ref="providersRef"
         :upstream="models"
-        @changed="onProvidersChanged"
         @registered="onProvidersRegistered"
       >
         <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：通道身份、连接状态与动作
@@ -157,79 +156,6 @@
         <template #models-infra>
           <InfraModelsPanel />
         </template>
-        <!-- 生成参数（思考模式 / 思考强度 / 输出格式 + 别名映射）：平台这条供应商的生成默认，
-             收进平台详情第四个页签。2026-10-26 用户「我不知为啥还要有默认设置。不就是配置的
-             模型吗，这个页面我觉得可以和前面的合并了」——此前它是本页最上方一张独立卡，
-             叫「平台默认生成参数」，读起来像另一套设置；其实它就是「这些模型默认怎么生成」，
-             与模型表同一个对象。模型级覆盖优先（模型编辑里的「用平台默认」），这里兜底。
-             别名映射表是这些默认的解析结果，一并跟过来。 -->
-        <template #platform-generation>
-          <div class="mpp-block__head">
-            <span class="mpp-sec">平台默认与别名</span>
-            <span v-if="runtimeDefaultInfo" class="ac-gen-default__inline">
-              <span class="ac-gen-default__sep" aria-hidden="true">·</span>
-              默认模型 <b class="mono">{{ runtimeDefaultInfo.model || '—' }}</b>
-              <span class="mk-badge" :class="runtimeDefaultInfo.source === '环境变量' ? 'mk-badge--warn' : 'mk-badge--muted'">{{ runtimeDefaultInfo.source }}</span>
-            </span>
-            <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存平台默认' }}</button>
-          </div>
-          <div class="ac-gen-body">
-            <div class="ac-cols">
-              <div class="ac-cols__main">
-                <div class="ac-sec__title">默认思考</div>
-                <div class="ac-row ac-row--2 ac-think">
-                  <label class="mk-field">
-                    <span class="mk-field__label">思考模式</span>
-                    <!-- 2026-10-27 原生 select → MkSelect -->
-                    <MkSelect
-                      v-model="form.defaultThinkingMode"
-                      :options="THINKING_MODE_OPTIONS"
-                      aria-label="思考模式"
-                      @change="setThinkingMode"
-                      block
-                    />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">思考强度</span>
-                    <!-- 2026-10-27 原生 select → MkSelect -->
-                    <MkSelect
-                      v-model="form.defaultReasoningEffort"
-                      :options="EFFORT_OPTIONS"
-                      aria-label="思考强度"
-                      :disabled="!thinkingOn"
-                      @change="setEffort"
-                      block
-                    />
-                  </label>
-                </div>
-              </div>
-              <div class="ac-cols__side">
-                <div class="ac-sec__title">结构化输出</div>
-                <div class="ac-row ac-row--2">
-                  <label class="mk-field">
-                    <span class="mk-field__label">输出格式</span>
-                    <!-- 2026-10-27 原生 select → MkSelect：v-model 保留联合值类型，
-                         change 只负责标脏 -->
-                    <MkSelect
-                      v-model="form.defaultResponseFormat"
-                      :options="RESPONSE_FORMAT_OPTIONS"
-                      aria-label="输出格式"
-                      @change="markDirty('route')"
-                      block
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-            <details class="ac-fold">
-              <summary class="ac-fold__bar">
-                <span class="ac-fold__title">内置别名映射表</span>
-                <span class="ac-fold__mark" aria-hidden="true"></span>
-              </summary>
-              <ModelRegistryOverview ref="registryRef" class="ac-registry ac-registry--aliases" :parts="['aliases']" @defaults="registryDefaults = $event" />
-            </details>
-          </div>
-        </template>
       </ModelProvidersPanel>
 
     </div>
@@ -253,7 +179,6 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { Eye, EyeOff } from 'lucide-vue-next'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
-import ModelRegistryOverview from './ModelRegistryOverview.vue'
 import ModelProvidersPanel from './ModelProvidersPanel.vue'
 import InfraModelsPanel from './InfraModelsPanel.vue'
 import { splitUpstreamByRegistry } from './modelNameMatch'
@@ -270,7 +195,6 @@ import { adminPlatformSettingsApi, adminApiConfigApi } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
-import MkSelect from '@/components/mk/MkSelect.vue'
 import { toast } from '@/utils/toast'
 
 /* ---------- 宿主：单页（2026-10-26 用户「我不知为啥还要有默认设置。不就是配置的模型吗，
@@ -322,26 +246,6 @@ function focusPlatformConnection() {
 
 /** 注册表读数（只读总览回传）：上游清单与「已添加」的对照只用 models 这一段。
     与生成参数页签的别名映射是同一份接口，不重复请求。 */
-interface RegistryDefaults {
-  models: Array<{ id: string; providerId: string; fallbacks: string[] }>
-  /** 运行时实际默认与来源（2026-10-24）：平台没配时可能来自 env 兜底，界面必须能说清 */
-  runtimeDefaults?: {
-    model: string | null
-    source: 'ui' | 'env' | 'none'
-    reasoningModel: string | null
-    reasoningSource: 'ui' | 'env' | 'none'
-  }
-}
-const registryDefaults = ref<RegistryDefaults | null>(null)
-/** 运行时默认模型（只读）：平台配了 → 界面配置；平台没配、运行时落 env → 环境变量 */
-const runtimeDefaultInfo = computed(() => {
-  const r = registryDefaults.value?.runtimeDefaults
-  if (!r) return null
-  const source = r.source === 'ui' ? '界面配置' : r.source === 'env' ? '环境变量' : '未配置'
-  return { model: r.model, source }
-})
-/** 别名映射切片：供应商面板改完注册表后在同一页签内就地重取，避免读旧表 */
-const registryRef = ref<{ refresh?: (force?: boolean) => Promise<void> | void } | null>(null)
 watch(
   () => route?.query?.tab,
   (t) => {
@@ -377,33 +281,12 @@ const apiConfigFailed = computed(() => !!liveFailures.value.apiConfig)
 function retryApiConfigLoad() {
   void loadLiveData()
 }
-/* 2026-10-27 原生 select → MkSelect：选项文案与原 <option> 逐字一致；
-   `as const` 让值保持联合类型，v-model 不改写 form 的字段类型。 */
-const THINKING_MODE_OPTIONS = [
-  { value: 'default', label: '跟随模型默认' },
-  { value: 'enabled', label: '强制开启' },
-  { value: 'disabled', label: '关闭' }
-] as const
-const EFFORT_OPTIONS = [
-  { value: 'default', label: '跟随模型默认' },
-  { value: 'low', label: '低（low）' },
-  { value: 'high', label: '高（high）' },
-  { value: 'max', label: '最高（max）' }
-] as const
-const RESPONSE_FORMAT_OPTIONS = [
-  { value: 'none', label: '关闭（默认行为）' },
-  { value: 'json_object', label: 'JSON 对象' }
-] as const
+/* 2026-10-28 用户「这一块彻底不要了」：平台默认与别名（思考模式 / 思考强度 / 输出格式 /
+   别名映射）整块撤出。模型级生成参数仍在模型编辑里，平台不再提供一份兜底默认。 */
 
 const form = reactive({
   apiUrl: '',
   apiKey: '',
-  defaultModel: '',
-  defaultReasoningModel: '',
-  defaultEvaluationModel: '',
-  defaultThinkingMode: 'default' as 'default' | 'enabled' | 'disabled',
-  defaultReasoningEffort: 'default' as 'default' | 'low' | 'high' | 'max',
-  defaultResponseFormat: 'none' as 'none' | 'json_object'
 })
 const fetchedModels = ref<string[]>([])
 const keySet = ref(false)
@@ -429,15 +312,14 @@ function markDirty(group: string) {
   dirty.value = new Set([...dirty.value, group])
 }
 
-/** 脏位分域标注：保存条列出具体未保存组（连接 / 平台默认 / 全站策略） */
+/** 脏位分域标注：保存条列出具体未保存组（连接 / 全站策略） */
 const DIRTY_GROUP_LABELS: Record<string, string> = {
   conn: '连接',
-  route: '平台默认',
   reliability: '全站策略'
 }
 const dirtyGroups = computed(() => [...dirty.value].map((g) => DIRTY_GROUP_LABELS[g] || g))
-/** 2026-10-27 页签解散后，连接与平台默认的分段保存钮都常驻屏上：
-    单组脏由分段保存钮承担，只有跨组（两组及以上）才出底部条。 */
+/** 2026-10-28 平台默认整块撤出后，连接与全站策略各有一颗分段保存钮常驻：
+    单组脏由分段保存钮承担，只有两组同时脏才出底部条。 */
 const showSaveBar = computed(() => dirty.value.size > 1)
 
 /* AI 可靠性（live 加载） */
@@ -509,12 +391,6 @@ function applyLiveConfig() {
   if (!cfg.value) return
   form.apiUrl = cfg.value.apiUrl
   form.apiKey = ''
-  form.defaultModel = cfg.value.defaultModel
-  form.defaultReasoningModel = cfg.value.defaultReasoningModel
-  form.defaultEvaluationModel = cfg.value.defaultEvaluationModel
-  form.defaultThinkingMode = cfg.value.defaultThinkingMode || 'default'
-  form.defaultReasoningEffort = cfg.value.defaultReasoningEffort || 'default'
-  form.defaultResponseFormat = cfg.value.defaultResponseFormat === 'json_object' ? 'json_object' : 'none'
   fetchedModels.value = [...cfg.value.availableModels]
   fetchedModelsEndpoint.value = cfg.value.apiUrl
   keySet.value = cfg.value.apiKeyConfigured
@@ -573,27 +449,15 @@ const models = computed(() => fetchedModels.value)
 /**
  * 上游清单 ↔ 平台登记表的对齐（2026-10-16 用户走查）：连接卡只说关系（上游几个、对上几个），
  * 逐个名字的清单由模型清单的「上游未登记」折叠承载。
- * 登记 id 有两个来源、都来自同一份注册表读数：接入页由 ModelProvidersPanel 经 @registered 回传，
- * 路由页由 ModelRegistryOverview 经 @defaults 回传——谁在屏上用谁，未到时按 null 算
+ * 登记 id 由 ModelProvidersPanel 经 @registered 回传；未到时按 null 算
  * （此时只说「上游返回 N 个」，不说对上几个，避免「对上 0 个」这种假话）。
  */
-const registeredIds = computed<string[] | null>(() => {
-  if (registeredModelIds.value.length) return registeredModelIds.value
-  const fromRegistry = registryDefaults.value?.models
-  return fromRegistry ? fromRegistry.map((m) => m.id) : null
-})
+const registeredIds = computed<string[] | null>(() =>
+  registeredModelIds.value.length ? registeredModelIds.value : null
+)
 const upstreamSplit = computed(() => splitUpstreamByRegistry(models.value, registeredIds.value ?? []))
 /** 登记表是否已回来：未回来时只说「上游 N 个」 */
 const upstreamReady = computed(() => registeredIds.value !== null)
-
-/**
- * 供应商面板改过注册表（增删改或改密钥）：别名映射与上游对照都是上一次读数的快照，
- * 先作废并就地重取，避免同一页签里读到旧表。接入页自己的登记 id 由面板当场回传。
- */
-function onProvidersChanged() {
-  registryDefaults.value = null
-  void registryRef.value?.refresh?.(true)
-}
 
 /** 上游清单与登记表的读数（空串 = 无清单可谈，模板走空态分支）：只报数字，不写解释句。
     2026-10-24「平台模型分几种」：上游清单是多模态混排，先报其中的对话候选数——
@@ -618,27 +482,9 @@ const hasUnsavedModels = computed(() => {
   return models.value.length !== saved.length || models.value.some((m, i) => m !== saved[i])
 })
 
-/** 思考是否非关闭态（`defaultThinkingMode !== 'disabled'`）——只作「思考强度」的可用性判据。
-    2026-10-14：原「启用思考」开关（setThinkingOn）已删，它与「思考模式」下拉是同一字段的两个控件：
-    开关关掉 ⇔ 下拉选「关闭」，且勾上只能落到「跟随模型默认」，表达不了「强制开启」（有损视图）。 */
-const thinkingOn = computed(() => form.defaultThinkingMode !== 'disabled')
-
-function setThinkingMode(v: string) {
-  if (v === 'default' || v === 'enabled' || v === 'disabled') {
-    form.defaultThinkingMode = v
-    if (v === 'disabled') form.defaultReasoningEffort = 'default'
-    markDirty('route')
-  }
-}
-function setEffort(v: string) {
-  if (v === 'default' || v === 'low' || v === 'high' || v === 'max') {
-    form.defaultReasoningEffort = v
-    markDirty('route')
-  }
-}
-
 /* 2026-10-21 用户走查：平台模型按 Skill 配置，默认路由三行退役（含解析读数与「未登记」警示）。
-   本卡只保留 Skill 未覆盖时仍会继承的思考 / 结构化输出默认。 */
+   2026-10-28 用户「这一块彻底不要了」：平台默认 / 思考 / 结构化输出整块也撤出，
+   生成参数只保留在单个模型的编辑里。 */
 /* modelListTitle / routeTitle 两个说明 computed 随页首 KPI 带一并删除（2026-10-14）：
    它们只喂过那三块 MkKpi 的 title。对应的诚实性提示改由卡内承接——模型清单卡的
    「本次拉取未保存」徽标 + 持久化说明行、路由行的逐条 title。 */
@@ -739,14 +585,6 @@ async function saveGroups(groups: string[], opts: { silent?: boolean } = {}): Pr
         payload.lastCheckedAt = connCheckedAt.value
       }
       await liveSaveApiConfig(payload as Parameters<typeof liveSaveApiConfig>[0])
-    }
-    if (set.has('route')) {
-      // 模型按 Skill 配置：本页只保存生成默认，不再写平台三档模型字段（partial 合并保留库中原值）
-      await liveSaveApiConfig({
-        defaultThinkingMode: form.defaultThinkingMode,
-        defaultReasoningEffort: form.defaultReasoningEffort,
-        defaultResponseFormat: form.defaultResponseFormat
-      } as Parameters<typeof liveSaveApiConfig>[0])
     }
     if (set.has('reliability') && reliability.value) {
       // 空值容错:v-model.number 清空后是字符串,后端要求全整数字段(400 且不定位)。
@@ -855,9 +693,6 @@ function discardAll() {
   overflow-y: auto;
   overflow-x: hidden;
 }
-/* 「调用」页默认生成参数卡内的注册表切片（别名映射）：外层是 details，
-   这里让分区直接成为 details 的子项，不出现内外双滚动容器。 */
-.ac-registry--aliases { display: contents; }
 /* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
 /* 平台通道那条详情的连接块（2026-10-18 从独立「连接」卡搬进供应商详情）：外层卡头没了，
@@ -880,8 +715,6 @@ function discardAll() {
 @media (max-width: 900px) {
   .ac-conn-form { grid-template-columns: minmax(0, 1fr); }
 }
-.ac-row { display: grid; gap: 14px; align-items: end; }
-.ac-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 2026-10-06 审核 #159：四个配置页签的字段控件统一走 .mk-field__input/__select/__textarea
    （与 MCP 弹窗、加字段向导同原语）——原「.mk-field 下 .mk-filter__input 补 100% 宽」的补偿规则
    随控件换原语一并删除（字段原语自身即 width:100%） */
@@ -927,22 +760,9 @@ function discardAll() {
 }
 /* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
 
-/* 默认思考：模式 + 强度，同一行两列字段（2026-10-14 删冗余「启用思考」开关后由三列改两列） */
-
 /* 访问来源模式：radio 单选卡片（复刻原型 index.html:1793-1798 .radio-row/.radio，
    原型 .radio[aria-checked="true"] = brand 描边 + brand 底 + brand 字 + 600 字重）。
    描边/圆角/选中态全走 --mk-* token，暗色随 token 自动适配 */
-/* 分段小标题（默认思考 / 结构化输出 / 别名映射）：
-   统一简洁粗体灰字——不放大写、不加横线后缀，用留白分区（与全站表单一致） */
-.ac-sec__title {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-muted);
-}
 /* 分段保存（方向 A）：该段有未保存改动时才出现；与底部统一保存条并存 */
 .ac-sec__save {
   margin-left: auto;
@@ -959,48 +779,6 @@ function discardAll() {
 .ac-sec__save:hover { background: color-mix(in srgb, var(--mk-blue) 16%, transparent); }
 .ac-sec__save:disabled { opacity: 0.6; cursor: not-allowed; }
 /* 分段控件走 .mk-seg（shared.css） */
-
-/* 策略 IP 列表：走字段原语 .mk-field__textarea（审核 #159）；rows=2 的紧凑清单不需要
-   原语默认 96px 最小高，覆写回 0 保持原视觉高度 */
-.ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); min-height: 0; }
-
-/* 内置别名映射表：默认收起的折叠条（查证用参考表，不必每次进页都占屏） */
-.ac-fold { display: block; }
-.ac-fold__bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-  cursor: pointer;
-  list-style: none;
-  font-size: var(--mk-fs-micro);
-}
-.ac-fold__bar::-webkit-details-marker { display: none; }
-.ac-fold__bar:hover { border-color: var(--mk-blue); }
-.ac-fold__title { font-weight: 700; color: var(--mk-ink); }
-.ac-fold__mark { margin-left: auto; color: var(--mk-faint); flex: none; }
-.ac-fold__mark::before { content: '▸'; }
-.ac-fold[open] .ac-fold__mark::before { content: '▾'; }
-.ac-fold[open] .ac-fold__bar { border-radius: var(--mk-radius-xl) var(--mk-radius-xl) 0 0; border-bottom-color: transparent; }
-/* 平台详情「生成参数」页签：外层块头已由面板给，这里只排字段与折叠表 */
-.ac-gen-body { display: grid; gap: 14px; }
-/* 块头里的默认模型（只读披露）：与标题同一行，省掉一整条底衬横条 */
-.ac-gen-default__inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
-.ac-gen-default__sep { color: var(--mk-faint); }
-/* 生成参数页签的两列（左=默认思考，右=结构化输出）：两列各自立栅、同节奏；
-   分隔线沿用卡内原 dashed 方言（与调用策略右栏同一种分隔）。 */
-.ac-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-.ac-cols__main, .ac-cols__side { display: grid; gap: 12px; align-content: start; min-width: 0; padding: 0; }
-.ac-cols__side { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
 .ac-fallback-alert { margin: 0; }
 
 /* ===== 调用策略（2026-10-28 收敛：只留参数）=====
@@ -1078,17 +856,6 @@ function discardAll() {
 .ac-save__primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 
-/* 侧栏占 208px，断点需按视口 1100px 触发（内容区 ≈ 892px）：满宽构图回落单列 */
-@media (max-width: 1100px) {
-  .ac-conn-body, .ac-cols { grid-template-columns: 1fr; }
-  .ac-cols__side { border-left: none; padding-left: 0; margin-top: 6px; }
-}
-@media (max-width: 800px) {
-  /* 三列栅格在窄屏回落单列：此前漏掉这条，390 下「服务地址 | API Key」
-     仍强行并排，服务地址输入框被 180px 下限撑破、压掉 API Key（审计 P1 2.2） */
-  .ac-row--2 { grid-template-columns: 1fr; }
-}
-
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .ac-body { gap: 16px; padding: 6px 18px 18px; }
@@ -1096,10 +863,6 @@ function discardAll() {
 
   .mk-seg { border-radius: 12px; }
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 8px 14px; }
-  .ac-textarea { font-size: var(--mk-fs-micro); }
-  .ac-sec__title { font-size: var(--mk-fs-micro); }
-  .ac-cols__main { padding: 0; }
-  .ac-cols__side { padding: 0; }
   .ac-policy__fields { grid-template-columns: repeat(3, minmax(0, 220px)); gap: 22px; }
   .ac-save { padding: 11px 14px 11px 18px; }
 }
@@ -1109,10 +872,6 @@ function discardAll() {
   .mk-field__label { font-size: var(--mk-fs-micro); }
 
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 9px 16px; }
-  .ac-textarea { font-size: var(--mk-fs-micro); }
-  .ac-sec__title { font-size: var(--mk-fs-micro); }
-  .ac-cols__main { padding: 0; }
-  .ac-cols__side { padding: 0; }
   .ac-policy__fields { grid-template-columns: repeat(3, minmax(0, 250px)); gap: 24px; }
   .ac-save { padding: 13px 16px 13px 20px; }
 }
@@ -1122,10 +881,6 @@ function discardAll() {
   .mk-field__label { font-size: var(--mk-fs-body); }
 
   .mk-seg__item { font-size: var(--mk-fs-body); padding: 11px 19px; }
-  .ac-textarea { font-size: var(--mk-fs-body); }
-  .ac-sec__title { font-size: var(--mk-fs-body); }
-  .ac-cols__main { padding: 0; }
-  .ac-cols__side { padding: 0; }
   .ac-policy__fields { grid-template-columns: repeat(3, minmax(0, 290px)); gap: 28px; }
   .ac-save { padding: 15px 18px 15px 24px; }
 }

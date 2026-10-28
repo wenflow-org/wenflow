@@ -1,7 +1,7 @@
 /**
  * ApiConfig.vue 冒烟：
- * 1. 供应商面板（模型 / 连接 / 基础设施 / 生成参数四个二级页签）
- * 2. 脏位分域标注（连接 / 生成参数 / 调用策略）
+ * 1. 供应商面板（连接 / 模型表 / 基础设施行）
+ * 2. 脏位分域标注（连接 / 调用策略）
  * 3. 调用策略卡：参数三组（读数已撤出，归健康中心与虚拟学习者页）
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -11,7 +11,6 @@ import ApiConfig from '../ApiConfig.vue';
 import { dataSource } from '../store';
 import { liveApiConfig } from '../live';
 import { confirmState, settleConfirm } from '../useConfirm';
-import { chooseMkSelect, mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 
 const { getConfigMock, getReliabilityMock, updateReliabilityMock, getModelRegistryMock, getModelProvidersMock, getInfraModelsMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
@@ -259,12 +258,6 @@ describe('ApiConfig P1 修复批', () => {
     getReliabilityMock.mockResolvedValue({ data: { data: { settings: { maxUpstreamAttempts: 3, maxTransportRetries: 1, maxLogicalRetries: 1, defaultRequestTimeoutMs: 600000, retryBaseDelayMs: 2000, maxRetryAfterMs: 30000, jitterEnabled: true } } } });
   });
 
-  /** 2026-10-27 用户「把 tab 解散了」：连接 / 模型 / 基础设施 / 平台默认四段常驻屏上，
-   *  不再需要切页签——保留这个 helper 只为等一轮渲染，调用点的语义变成「读到该段」。 */
-  async function gotoPlatformTab(_wrapper: ReturnType<typeof mountApiConfig> extends Promise<infer W> ? W : never, _label: string) {
-    await flushPromises();
-  }
-
   /* 2026-10-28 用户「这个直接不要了，调用健康没必要在这里出现，后台跑在虚拟学习者那边已经实现了」：
      调用策略卡只留参数；429 读数归健康中心，跑批读数归虚拟学习者页。 */
   it('调用策略卡只留参数：不再出现调用健康 / 后台跑批读数', async () => {
@@ -278,26 +271,23 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 输出格式是生成参数的一部分：改完保存必须随 route 组提交并回显，否则刷新后静默回默认值。 */
-  it('输出格式随生成参数保存与回显', async () => {
+  /* 2026-10-28 用户「这一块彻底不要了」：平台默认与别名整块撤出，
+     分段保存只覆盖「连接」与「全站策略」。 */
+  it('生成参数整块退役：默认思考 / 结构化输出 / 别名映射都不再上屏', async () => {
     const wrapper = await mountApiConfig();
-    await gotoPlatformTab(wrapper, '平台默认与别名');
-    // 2026-10-27 原生 select → MkSelect：闭合态无 option，按 aria-label 展开后点选
-    await chooseMkSelect(wrapper as never, '输出格式', 'json_object');
-    expect(mkSelectValue(wrapper as never, '输出格式')).toBe('json_object');
-    await nextTick();
-    const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存平台默认');
-    expect(saveBtn, '改输出格式后应出现「保存平台默认」').toBeTruthy();
-    updateConfigMock.mockResolvedValue({ data: { data: {} } });
-    await saveBtn!.trigger('click');
     await flushPromises();
-    expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({
-      defaultResponseFormat: 'json_object'
-    }));
+    expect(wrapper.text()).not.toContain('平台默认与别名');
+    expect(wrapper.text()).not.toContain('默认思考');
+    expect(wrapper.text()).not.toContain('思考模式');
+    expect(wrapper.text()).not.toContain('结构化输出');
+    expect(wrapper.text()).not.toContain('输出格式');
+    expect(wrapper.text()).not.toContain('内置别名映射表');
+    expect(wrapper.find('.ac-registry--aliases').exists()).toBe(false);
+    expect(wrapper.find('#mpp-platform-panel-generation').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  /* 2026-10-27 页签解散后，连接与平台默认的分段保存钮都常驻屏上：
+  /* 2026-10-28 平台默认整块撤出后，连接与全站策略的分段保存钮常驻：
      单组脏由分段保存钮承担，跨组才由底部条接手。 */
   it('脏位分域：单组脏由分段保存钮承担，跨组才出底部条', async () => {
     const wrapper = await mountApiConfig();
@@ -307,14 +297,14 @@ describe('ApiConfig P1 修复批', () => {
     // 单组脏：「保存连接」就在屏上，不另起底部条
     expect(wrapper.find('.ac-save').exists()).toBe(false);
     expect(wrapper.text()).toContain('保存连接');
-    expect(wrapper.text()).not.toContain('保存平台默认');
 
-    // 再改平台默认 → 两组脏，底部条接手并列出两组
-    expect(wrapper.find('.ac-cols__side .mk-select').exists(), '平台默认段应有「输出格式」下拉').toBe(true);
-    await chooseMkSelect(wrapper as never, '输出格式', 'json_object');
+    // 再改全站策略 → 两组脏，底部条接手并列出两组
+    const retry = wrapper.find('.ac-policy__fields input[type="number"]');
+    expect(retry.exists(), '全站策略应有「最大重试」输入').toBe(true);
+    await retry.setValue('6');
     await nextTick();
-    expect(wrapper.find('.ac-save').text()).toContain('连接 + 平台默认 · 2 组未保存变更');
-    expect(wrapper.text()).toContain('保存平台默认');
+    expect(wrapper.find('.ac-save').text()).toContain('连接 + 全站策略 · 2 组未保存变更');
+    expect(wrapper.text()).toContain('保存参数');
     wrapper.unmount();
   });
 
@@ -380,8 +370,8 @@ describe('ApiConfig P1 修复批', () => {
     // 测试入口在模型表每一行，不在连接段另挂检测钮
     const acts = wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text());
     expect(acts).toEqual(['＋ 添加模型']);
-    // 只读能力表已从本页退役；别名映射在「平台默认与别名」段内
-    expect(wrapper.find('.ac-registry--aliases').exists()).toBe(true);
+    // 只读能力表与别名映射都已从本页退役
+    expect(wrapper.find('.ac-registry--aliases').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('接入通道与能力限额');
     wrapper.unmount();
   });
@@ -396,8 +386,8 @@ describe('ApiConfig P1 修复批', () => {
   });
 
   /* 2026-10-27 用户「把 tab 解散了」：平台详情不再分二级页签，按接入顺序平铺；
-     2026-10-28 基础设施并入模型表，不再自成一段。 */
-  it('单页：无页签，连接 / 模型表（含基础设施）/ 平台默认常驻', async () => {
+     2026-10-28 基础设施并入模型表、平台默认整块撤出。 */
+  it('单页：无页签，连接 / 模型表（含基础设施）常驻', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     // 一级页签已撤；供应商面板与调用策略同屏
@@ -405,14 +395,14 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.mpp').exists()).toBe(true);
     expect(wrapper.text()).toContain('全站调用策略');
     expect(wrapper.find('.ac-policy').exists()).toBe(true);
-    // 二级页签也撤了：没有 tab 控件，四段内容全部常驻
+    // 二级页签也撤了：没有 tab 控件，内容常驻
     expect(wrapper.findAll('.mpp-subtabs').length).toBe(0);
     expect(wrapper.findAll('.mk-subtab').length).toBe(0);
     expect(wrapper.find('#mpp-platform-panel-conn').exists()).toBe(true);
     expect(wrapper.find('#mpp-platform-panel-models').exists()).toBe(true);
     expect(wrapper.find('#mpp-platform-panel-infra').exists()).toBe(true);
-    expect(wrapper.find('#mpp-platform-panel-generation').exists()).toBe(true);
-    for (const id of ['conn', 'models', 'infra', 'generation']) {
+    expect(wrapper.find('#mpp-platform-panel-generation').exists()).toBe(false);
+    for (const id of ['conn', 'models', 'infra']) {
       expect((wrapper.find(`#mpp-platform-panel-${id}`).attributes('style') || '')).not.toContain('display: none');
     }
     // 2026-10-28 用户「按照对话的样子拆散了，并到对话列表里去，文案不要了」：
@@ -426,17 +416,14 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.text()).not.toContain('基础设施模型');
     expect(wrapper.text()).not.toContain('平台必需');
     expect(wrapper.text()).not.toContain('资料语义召回');
-    // 旧的独立基础设施卡与「平台默认生成参数」卡都已撤
+    // 旧的独立基础设施卡、「平台默认生成参数」与平台默认块都已撤
     expect(wrapper.find('#ac-infra').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('平台默认生成参数');
-    expect(wrapper.text()).toContain('默认思考');
-    expect(wrapper.text()).toContain('结构化输出');
-    expect(wrapper.findAll('.ac-registry')).toHaveLength(1);
-    expect(wrapper.find('.ac-registry--aliases').text()).toContain('别名映射');
-    const foldBar = wrapper.find('.ac-fold__bar');
-    expect(foldBar.exists()).toBe(true);
-    expect(foldBar.text()).toContain('内置别名映射表');
-    expect(wrapper.find('.ac-fold').attributes('open')).toBeUndefined();
+    expect(wrapper.text()).not.toContain('平台默认与别名');
+    expect(wrapper.text()).not.toContain('默认思考');
+    expect(wrapper.text()).not.toContain('结构化输出');
+    expect(wrapper.findAll('.ac-registry')).toHaveLength(0);
+    expect(wrapper.find('.ac-fold').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -548,7 +535,6 @@ describe('ApiConfig P1 修复批', () => {
     const headBtns = wrapper.findAll('.mk-pagehead__actions > button').map((b) => b.text())
     expect(headBtns).toEqual(['刷新注册表'])
     expect(wrapper.text()).not.toContain('连接并拉取')
-    await gotoPlatformTab(wrapper, '连接与鉴权')
     expect(wrapper.find('.ac-conn__acts').text()).toContain('获取模型')
     // 2026-10-27 文案清空：重置不再带一段说明，按钮与其他连接动作同排
     expect(wrapper.find('.ac-conn__acts').text()).toContain('重置此通道')
@@ -559,7 +545,6 @@ describe('ApiConfig P1 修复批', () => {
   /* #13：后端 POST /admin/api-config/reset 能力早已存在；2026-10-27 P1 从页头收进通道详情 */
   it('#13：重置入口在平台通道详情，确认后调用 reset API；取消则不调用', async () => {
     const wrapper = await mountApiConfig();
-    await gotoPlatformTab(wrapper, '连接与鉴权');
     const btn = wrapper.findAll('button').find((b) => b.text() === '重置此通道');
     expect(btn, '连接段应有重置入口').toBeTruthy();
     expect(wrapper.find('.ac-conn__acts').text()).toContain('重置此通道');
@@ -592,71 +577,18 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* #19：保存请求在途时，实时配置会因这次保存而回显并触发守卫 watch，而脏位要到请求返回才清——
-     不把「正在保存」的域排除出「未保存」，就会在保存成功那一刻弹「丢弃未保存的配置修改」，
-     把成功呈现成未保存（更坏是点「覆盖」丢改动）。 */
-  it('#19：保存平台默认在途时配置回显不弹「丢弃未保存的配置修改」', async () => {
-    const baseCfg = {
-      apiUrl: 'https://api.example.com/v1',
-      apiKeyConfigured: true,
-      availableModels: ['model-a'],
-      defaultModel: 'model-a',
-      defaultReasoningModel: 'model-a',
-      defaultEvaluationModel: 'model-a',
-      defaultThinkingMode: 'default' as const,
-      defaultReasoningEffort: 'default' as const,
-      connectionStatus: 'connected',
-      lastCheckedAt: '2026-08-13T09:00:00.000Z',
-      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
-    };
-    liveApiConfig.value = baseCfg;
-    const wrapper = await mountApiConfig();
-    await flushPromises();
-    await gotoPlatformTab(wrapper, '平台默认与别名');
-    expect(confirmState.open).toBe(false);
-
-    // 改动默认思考 → 出现分段保存入口
-    await chooseMkSelect(wrapper as never, '思考模式', 'enabled');
-    await nextTick();
-    const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存平台默认');
-    expect(saveBtn, '改生成参数后应出现「保存平台默认」').toBeTruthy();
-
-    // 保存请求挂起，制造「已发出、响应未回」的窗口
-    let release: (v: unknown) => void = () => {};
-    updateConfigMock.mockImplementation(() => new Promise((r) => { release = r; }));
-    await saveBtn!.trigger('click');
-    await nextTick();
-    // 窗口内配置回显（这正是保存引起的刷新）→ 守卫不得弹确认框
-    liveApiConfig.value = { ...baseCfg, defaultThinkingMode: 'enabled' };
-    await nextTick();
-    await flushPromises();
-    expect(confirmState.open, '保存在途时不应弹「丢弃未保存的配置修改」').toBe(false);
-    // 回显不覆盖正在保存的表单值
-    expect(mkSelectValue(wrapper as never, '思考模式')).toBe('enabled');
-
-    release({ data: { data: {} } });
-    await flushPromises();
-    await nextTick();
-    await flushPromises();
-    // 保存完成：脏位清空（不再有「保存平台默认」分段入口），且全程未弹过丢弃确认
-    expect(wrapper.text()).not.toContain('保存平台默认');
-    expect(confirmState.open).toBe(false);
-    wrapper.unmount();
-  });
-
   /* 2026-10-21 用户走查：「平台现在没有这三类分了吧其实，都是按 skill 配置的模型」。
-     默认路由三行退役，生成参数收进平台详情的二级页签。 */
-  it('默认路由三行已退役：不再出现对话/推理/评估默认模型选择器', async () => {
+     2026-10-28 用户「这一块彻底不要了」：生成参数整块也撤出，本页不再有默认模型三行。 */
+  it('默认路由三行与平台默认块都已退役', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
-    await gotoPlatformTab(wrapper, '平台默认与别名');
     expect(wrapper.find('.ac-route').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('对话默认');
     expect(wrapper.text()).not.toContain('推理默认');
     expect(wrapper.text()).not.toContain('评估默认');
-    expect(wrapper.text()).toContain('平台默认与别名');
-    expect(wrapper.text()).toContain('默认思考');
-    expect(wrapper.text()).toContain('结构化输出');
+    expect(wrapper.text()).not.toContain('平台默认与别名');
+    expect(wrapper.text()).not.toContain('默认思考');
+    expect(wrapper.text()).not.toContain('结构化输出');
     wrapper.unmount();
   });
 

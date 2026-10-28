@@ -155,18 +155,19 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('#mpp-platform-panel-conn').exists()).toBe(true)
   })
 
-  it('页签已解散：连接 / 模型表（含基础设施行）/ 平台默认常驻，全部可见', async () => {
-    // 2026-10-28 基础设施不再自成一段，作为模型表里的行由宿主注入
+  it('页签已解散：连接 / 模型表（含基础设施行）常驻，全部可见', async () => {
+    // 2026-10-28 基础设施不再自成一段，作为模型表里的行由宿主注入；
+    // 平台默认与别名整块撤出，面板不再有 generation 段
     const w = await mountPanel({}, {
       'models-infra': '<tr id="mpp-platform-panel-infra" class="mpp-group"><td colspan="4">基础设施</td></tr>',
     })
-    // 2026-10-27 用户「把 tab 解散了」：没有二级页签，四段全在 DOM 里且都可见
+    // 2026-10-27 用户「把 tab 解散了」：没有二级页签，内容全在 DOM 里且都可见
     expect(w.findAll('.mpp-subtabs').length).toBe(0)
     expect(w.find('[role="tab"]').exists()).toBe(false)
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
     expect(w.find('.mpp-table #mpp-platform-panel-infra').exists()).toBe(true)
-    expect(shown(w, '#mpp-platform-panel-generation')).toBe(true)
+    expect(w.find('#mpp-platform-panel-generation').exists()).toBe(false)
     // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
     expect(w.findAll('.mpp .mk-card__head .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()

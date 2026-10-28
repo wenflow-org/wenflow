@@ -217,10 +217,6 @@
           </table>
         </div>
       </div>
-
-      <div id="mpp-platform-panel-generation">
-        <slot name="platform-generation" />
-      </div>
     </div>
   </section>
 </template>
@@ -598,7 +594,6 @@ defineExpose({ refresh, openPull, openHostPull })
 /* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
 .mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
 .mpp-block:first-of-type { margin-top: 10px; }
-.mpp-block__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 /* 卡头左组：通道名 + 类型 + 连接状态（2026-10-27 由详情头并入卡头） */
 .mpp-head__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 /* 通道类型：平台内置 / 自建通道 */
