@@ -184,9 +184,8 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     // 全量口径住在状态 pills（2026-10-26：卡头 meta 不再复述 pills 已有的数字）
     expect(pillCount(w, '活跃')).toBe('93');
     expect(pillCount(w, '已过期')).toBe('7');
-    // 卡头只留 pills 与页码器都说不出的事实：行窗口截断
-    expect(w.find('.mk-card__meta').text()).toContain('行列表仅含最近 30 条');
-    expect(w.find('.mk-card__meta').text()).not.toContain('个会话');
+    // 卡头不再复述行窗口口径（2026-10-27 用户「这两个不要了」）：截断信息只由页码器 note 披露
+    expect(w.find('.mk-card__meta').exists()).toBe(false);
     // 组头读 adminCounts（非窗口行数）
     expect(w.find('.ss-group__count').text()).toContain('100 个会话');
     expect(w.find('.ss-group__count').text()).toContain('活跃 93');
@@ -333,14 +332,14 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(w.find('.ss-group__count').text()).toContain('活跃 3');
   });
 
-  it('顶部说明条已撤；审计跳转与批量动作统一收在卡头右组，组头不再重复一套按钮', async () => {
+  it('顶部说明条与卡头审计跳转均已撤；批量动作收在卡头右组，组头不再重复一套按钮', async () => {
     const w = await mountSS([fakeSession(1)], {
       counts: { total: 9, active: 3, expired: 4, revoked: 2 },
       adminCounts: [{ adminId: 'admin-1', total: 9, active: 3, expired: 4, revoked: 2 }]
     });
     expect(w.find('.ss-note').exists()).toBe(false);
+    expect(w.find('.ss-audit-link').exists()).toBe(false);
     const headRight = w.find('.mk-card__head-right');
-    expect(headRight.find('.ss-audit-link').text()).toContain('审计日志 · 登录审计');
     // 当前标签页 #1 不计入下线：活跃 3 - 1 = 2；历史 4 + 2 = 6
     expect(headRight.text()).toContain('清理历史（6）');
     expect(headRight.text()).toContain('下线全部（2）');

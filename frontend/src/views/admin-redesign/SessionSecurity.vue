@@ -49,7 +49,7 @@
         </div>
       </div>
       <div class="mk-card__head">
-        <div class="ss-head-left">
+        <div class="mk-filter">
           <MkPillSelect
             v-model="statusSelect"
             label="状态"
@@ -57,17 +57,11 @@
             :options="statusSelectOptions"
             :active="!!statusFilter"
           />
-          <!-- 口径 meta 只说 pills 表达不了的事实（2026-10-26 动线收口）：
-               「54 个会话 · 活跃 54」此前把左侧 pill 的读数原样复述了一遍（同一数字同屏三处：
-               pill 计数、本 meta、组头），而 54 = 活跃 54 + 已过期 0 + 已撤销 0，是 pills 的和。
-               现在只留「行窗口截断」这条 pills 与页码器都说不出的事实。 -->
-          <span v-if="truncated" class="mk-card__meta" :title="countsTitle">行列表仅含最近 {{ sessions.length }} 条</span>
         </div>
-        <!-- 操作区（2026-10-27 用户「挪到这里，这里的内容不要二了」）：
-             审计跳转与两枚批量动作统一收到卡头右组，组头只留身份与计数，不再重复一套按钮。
+        <!-- 操作区（2026-10-27 用户「挪到这里，这里的内容不要二了」；随后「这两个不要了」
+             再撤掉行窗口口径与审计跳转）：右组只留两枚批量动作，组头不再重复一套按钮。
              动作作用域：审计深链指定用户时只作用于该用户，否则覆盖全部管理员。 -->
         <div class="mk-card__head-right ss-head-acts">
-          <button type="button" class="mk-link ss-audit-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
           <button
             v-if="bulkCleanupCount"
             type="button"
@@ -485,13 +479,6 @@ const bulkRevokeCount = computed(() => {
   return groups.value.reduce((n, g) => n + revokeCount(g), 0)
 })
 
-/** 卡头口径 title：窗口截断时说明行列表只含最近 N 条，统计仍为全量 */
-const countsTitle = computed(() =>
-  truncated.value
-    ? `统计为全部会话。列表仅含最近 ${sessions.value.length} 条`
-    : '统计与列表均为全部会话'
-)
-
 /** 全量统计四口径：后端 counts 缺失（旧响应/mock）时回落窗口内计数。
     有值时统计条 / pills / 组头 / 批量下线按钮都读它，保证「全量」自称成立。 */
 const activeCount = computed(() => (counts.value ? counts.value.active : sessions.value.filter((s) => statusOf(s) === 'active').length))
@@ -743,9 +730,7 @@ onMounted(async () => {
 /* 状态条走全局 mk-status 体系（shared.css）；此处不再 scoped 覆盖，
    避免遮蔽全局升级（此前重定义导致 mk-status__actions 等新类不生效） */
 
-/* 审计日志分工说明 / 深链横幅 */
-/* 卡头右组的审计跳转：窄屏不换行（与截断 meta 并列时优先保动作完整） */
-.ss-audit-link { white-space: nowrap; }
+/* 审计日志深链横幅（常驻说明条与卡头审计跳转均已撤，2026-10-27） */
 /* 深链横幅：底色/字色/圆角由 .mk-alert--info 承担，这里只补行内布局 */
 .ss-deeplink {
   display: flex;
@@ -765,8 +750,7 @@ onMounted(async () => {
 
 .ss-body { display: grid; gap: var(--mk-space-4); }
 
-/* 卡头左组：状态筛选 + 行窗口口径；右组：审计跳转 + 两枚批量动作（2026-10-27 操作区收口） */
-.ss-head-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+/* 卡头右组：两枚批量动作（2026-10-27 操作区收口） */
 .ss-head-acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 /* 分组卡走全局 .mk-card / .mk-card__head（原型 card 词汇），页面只保留组头内的身份排版 */
 .ss-group__who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
