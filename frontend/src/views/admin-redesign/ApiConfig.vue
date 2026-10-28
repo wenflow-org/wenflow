@@ -98,6 +98,53 @@
               </label>
             </div>
           </div>
+
+          <!-- 2026-10-27 用户「这个合并到最上面的平台通道卡片里面」：
+               全站调用策略并进通道卡，作为连接段之后的第二个分区。 -->
+          <div v-if="isLive && (reliability || configLoadFailed)" class="ac-policy ac-policy--inline">
+            <div class="ac-policy__head">
+              <span class="ac-policy__title">全站调用策略</span>
+              <button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button>
+            </div>
+            <div class="ac-policy__form">
+              <div v-if="configLoadFailed && !reliability" class="mk-alert mk-alert--row ac-config-error" role="alert">
+                <span class="mk-alert__msg">配置读取失败</span>
+                <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
+              </div>
+              <!-- 不变式违例升格为段级告警：三个数字里最该先读的一句 -->
+              <div v-if="reliability && fallbackDisabled" class="mk-alert mk-alert--row ac-fallback-alert" role="alert">
+                <span class="mk-alert__msg">当前重试预算下「模型降级」永远不会触发：同模型重试会先耗尽尝试次数，请把「最大重试」调大</span>
+              </div>
+              <div v-if="reliability" class="ac-policy__fields">
+                <label class="mk-field">
+                  <span class="mk-field__label">最大重试</span>
+                  <span class="ac-policy__control">
+                    <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
+                    <em class="ac-policy__unit">次</em>
+                  </span>
+                  <span class="ac-policy__hint">总尝试上限，含首次调用与改用备用模型</span>
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">重试间隔</span>
+                  <span class="ac-policy__control">
+                    <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
+                    <em class="ac-policy__unit">毫秒</em>
+                  </span>
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">RPM 上限</span>
+                  <span class="ac-policy__control">
+                    <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
+                    <em class="ac-policy__unit">次/分</em>
+                  </span>
+                  <span class="ac-policy__hint">
+                    0 = 不限，超出后排队等待。
+                    <a class="mk-link" href="/admin/virtual-learners" @click.prevent="goVirtualLearners">虚拟学习者上限单独设 →</a>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
         </template>
 
         <!-- 上游清单状态（只报读数，逐条清单由面板渲染） -->
@@ -190,58 +237,6 @@
           </div>
         </template>
       </ModelProvidersPanel>
-
-      <!-- ===== 调用策略（2026-10-28 收敛）=====
-           用户「rpm 全站共享，虚拟学习者单独设置最高 rpm 就行了」：这里只有一份
-           全站额度（所有供应商共用），虚拟学习者另有自己的上限，在本页不重复设置，
-           只给一个出口。读数（调用健康 / 后台跑批）不再放在这一页：调用健康归健康中心，
-           跑批读数已在虚拟学习者页，这里只保留参数本身。 -->
-      <section v-if="isLive && (reliability || configLoadFailed)" class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">全站调用策略</h3>
-          <button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button>
-        </div>
-        <div class="ac-body ac-policy">
-          <div class="ac-policy__form">
-            <div v-if="configLoadFailed && !reliability" class="mk-alert mk-alert--row ac-config-error" role="alert">
-              <span class="mk-alert__msg">配置读取失败</span>
-              <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
-            </div>
-            <!-- 不变式违例升格为卡级告警：三个数字里最该先读的一句 -->
-            <div v-if="reliability && fallbackDisabled" class="mk-alert mk-alert--row ac-fallback-alert" role="alert">
-              <span class="mk-alert__msg">当前重试预算下「模型降级」永远不会触发：同模型重试会先耗尽尝试次数，请把「最大重试」调大</span>
-            </div>
-            <div v-if="reliability" class="ac-policy__fields">
-              <label class="mk-field">
-                <span class="mk-field__label">最大重试</span>
-                <span class="ac-policy__control">
-                  <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
-                  <em class="ac-policy__unit">次</em>
-                </span>
-                <span class="ac-policy__hint">总尝试上限，含首次调用与改用备用模型</span>
-              </label>
-              <label class="mk-field">
-                <span class="mk-field__label">重试间隔</span>
-                <span class="ac-policy__control">
-                  <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
-                  <em class="ac-policy__unit">毫秒</em>
-                </span>
-              </label>
-              <label class="mk-field">
-                <span class="mk-field__label">RPM 上限</span>
-                <span class="ac-policy__control">
-                  <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
-                  <em class="ac-policy__unit">次/分</em>
-                </span>
-                <span class="ac-policy__hint">
-                  0 = 不限，超出后排队等待。
-                  <a class="mk-link" href="/admin/virtual-learners" @click.prevent="goVirtualLearners">虚拟学习者上限单独设 →</a>
-                </span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </section>
 
     </div>
     <!-- 底部保存条（脏位跨分段不丢）：多组脏恒出；单组脏仅当该组的分段保存钮不在当前
@@ -1019,6 +1014,15 @@ function discardAll() {
   gap: 18px;
   padding-top: 14px;
 }
+/* 2026-10-27 并进平台通道卡后：段级分隔 + 标题行，不再有独立卡头 */
+.ac-policy--inline {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mk-line);
+  gap: 10px;
+}
+.ac-policy__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ac-policy__title { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
 .ac-policy__form { display: grid; gap: 12px; min-width: 0; }
 .ac-policy__fields {
   display: grid;

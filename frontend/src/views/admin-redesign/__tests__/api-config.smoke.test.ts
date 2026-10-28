@@ -648,17 +648,19 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线；2026-10-28 读数整块撤出，
-     调用面 = 供应商卡 + 一张只含参数的策略卡。 */
-  it('调用面只剩一张策略卡（只留参数），探针与细项都已下线', async () => {
+  /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线；2026-10-28 读数整块撤出；
+     2026-10-27 用户「这个合并到最上面的平台通道卡片里面」：策略不再单开卡，并进平台通道卡。 */
+  it('调用策略并入平台通道卡：只留参数，不再有独立的策略卡', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
 
-    const cards = wrapper.findAll('#ac-panel-access > .mk-card')
+    // 页面上只有接入卡与配置卡两张业务卡，策略块在平台通道卡内
+    const extraCards = wrapper.findAll('#ac-panel-access > .mk-card')
       .filter((c) => !c.classes('mpp') && !c.classes('mpp-config'));
-    expect(cards.map((c) => c.find('.mk-card__title').text())).toEqual(['全站调用策略']);
+    expect(extraCards).toHaveLength(0);
+    expect(wrapper.find('.mpp .ac-policy--inline').exists()).toBe(true);
 
-    const card = cards[0];
+    const card = wrapper.find('.mpp .ac-policy--inline');
     /* 2026-10-26 用户「不用写那么详细，分那么多，就最大重试、间隔、rpm 就够了」：
        三个字段一行，单位跟在输入框后面；细项（传输重试 / 逻辑重试 / Retry-After /
        单次超时 / 随机抖动）不再占版面。 */
