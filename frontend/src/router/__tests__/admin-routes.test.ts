@@ -157,13 +157,20 @@ describe('Admin 路由重定向', () => {
 
   it('改名/拆页后的旧深链仍在路由层改投：api-config?tab=security / skills?tab=prompt-eval', async () => {
     await router.push('/admin/api-config?tab=security');
-    expect(router.currentRoute.value.path).toBe('/admin/access-control');
-    expect(router.currentRoute.value.query.tab).toBeUndefined();
+    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.query.tab).toBe('access');
 
     await router.push('/admin/skills?tab=prompt-eval&peTab=runs');
     expect(router.currentRoute.value.path).toBe('/admin/prompt-eval');
     expect(router.currentRoute.value.query.tab).toBeUndefined();
     expect(router.currentRoute.value.query.peTab).toBe('runs');
+  });
+
+  it('访问与注册独立页深链改投运营中心 access 页签', async () => {
+    await router.push('/admin/access-control?foo=bar');
+    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.query.tab).toBe('access');
+    expect(router.currentRoute.value.query.foo).toBe('bar');
   });
 
   it('/admin/memory-review?userId= → 学习者详情「记忆调度」页签（路由级改投，页面不必先挂载转发）', async () => {

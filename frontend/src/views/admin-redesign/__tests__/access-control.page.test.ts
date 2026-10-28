@@ -261,4 +261,17 @@ describe('访问与注册（拆页后的独立页）', () => {
     expect(w.text()).toContain('服务端出站白名单');
     w.unmount();
   });
+
+  it('嵌入运营中心：不出页头，保存钮跟到策略卡头，根节点接管页签面板滚动', async () => {
+    const w = mount(AccessControl, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+    expect(w.find('.mk-pagehead').exists()).toBe(false);
+    expect(w.classes()).toContain('acl-host--embedded');
+    const head = w.find('.mk-card__head');
+    expect(head.find('.mk-card__title').text()).toBe('后台访问来源');
+    expect(head.find('button').text()).toBe('保存策略');
+    expect(head.find('button').attributes('disabled')).toBeDefined();
+    w.unmount();
+  });
 });

@@ -56,6 +56,9 @@
       <button type="button" class="tab" role="tab" id="oh-tab-tools" :ref="(el) => setTabRef(el, 5)" :tabindex="tab === 'tools' ? 0 : -1" aria-controls="oh-panel-tools" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
       <button type="button" class="tab" role="tab" id="oh-tab-export" :ref="(el) => setTabRef(el, 6)" :tabindex="tab === 'export' ? 0 : -1" aria-controls="oh-panel-export" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
       <button type="button" class="tab" role="tab" id="oh-tab-security" :ref="(el) => setTabRef(el, 7)" :tabindex="tab === 'security' ? 0 : -1" aria-controls="oh-panel-security" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全</button>
+      <!-- 访问与注册（2026-10-27 由独立场景迁入）：与「会话安全」同属后台入口的访问面，
+           紧排其后；侧栏不再单列该页。 -->
+      <button type="button" class="tab" role="tab" id="oh-tab-access" :ref="(el) => setTabRef(el, 8)" :tabindex="tab === 'access' ? 0 : -1" aria-controls="oh-panel-access" :aria-selected="tab === 'access'" @click="switchTab('access')">访问与注册</button>
     </div>
 
     <!-- ===== Tab1: 运营待办 =====
@@ -152,11 +155,24 @@
     <!-- ===== Tab8: 会话安全（SessionSecurity embedded；原「系统工具」页 Tab3） =====
          role=tabpanel/aria-labelledby 透传到 SessionSecurity 根 div（单根组件） -->
     <SessionSecurity
-      v-else
+      v-else-if="tab === 'security'"
       id="oh-panel-security"
       role="tabpanel"
       aria-labelledby="oh-tab-security"
       ref="securityRef"
+      embedded
+    />
+
+    <!-- ===== Tab9: 访问与注册（AccessControl embedded；原独立场景） =====
+         懒挂载 + v-show：首次切到本页签才挂载，之后切走不销毁——策略表单的未保存改动
+         与脏标记跨页签保留（v-if 会在切走时丢掉整份编辑态）。 -->
+    <AccessControl
+      v-if="accessMounted"
+      v-show="tab === 'access'"
+      id="oh-panel-access"
+      role="tabpanel"
+      aria-labelledby="oh-tab-access"
+      ref="accessRef"
       embedded
     />
   </div>
@@ -176,18 +192,21 @@ import Notifications from './Notifications.vue'
 import ServerToolsPanel from './ServerToolsPanel.vue'
 import DataExportPanel from './DataExportPanel.vue'
 import SessionSecurity from './SessionSecurity.vue'
+import AccessControl from './AccessControl.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import { CheckCircle2 } from 'lucide-vue-next'
 
-/* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知 · 运维工具 · 数据导出 · 会话安全 =====
+/* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知 · 运维工具 · 数据导出 · 会话安全 · 访问与注册 =====
    低频页折入 tab 宿主；?tab= 双向同步，深链/刷新/前进后退可寻址（对齐消息/用户宿主约定）。
    2026-10-16 用户拍板：「系统工具」（ops-center）场景解散并入本页——它是「发现→去处理」的
    动作枢纽（事件投递失败已作为运营待办项挂在这里），而健康中心是只读报表，落这边更顺。
    原三页签整体迁入为 tools/export/security，旧深链 /admin/devtools|export-data|session-security
-   在 router 重定向到对应 tab。 */
-const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp', 'tools', 'export', 'security'] as const
+   在 router 重定向到对应 tab。
+   2026-10-27 用户「这个页面转移到运营中心，作为一个 tab 页面」：访问与注册（原独立场景
+   access-control）并入为 access 页签，旧深链 /admin/access-control 重定向过来。 */
+const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp', 'tools', 'export', 'security', 'access'] as const
 
 type OhTab = (typeof OH_TABS)[number]
 const tab = ref<OhTab>('todo')
@@ -203,6 +222,9 @@ const announceRef = ref<{ refresh?: () => void; openCreate?: () => void } | null
 const notifRef = ref<{ reload?: () => void; openSend?: () => void } | null>(null)
 const toolsRef = ref<{ refresh?: () => void } | null>(null)
 const securityRef = ref<{ refresh?: () => void } | null>(null)
+const accessRef = ref<{ reload?: () => void } | null>(null)
+/* 访问与注册懒挂载：首次进入才挂载，之后常驻（v-show）以保留未保存的策略编辑 */
+const accessMounted = ref(false)
 const refreshing = ref(false)
 /* 顶栏刷新广播：与旧页头刷新钮同一入口（当前页签面板 + 待办读数带） */
 watch(liveRefreshSeq, () => { void refreshActive() })
@@ -217,10 +239,11 @@ async function refreshActive() {
     else if (tab.value === 'inapp') notifRef.value?.reload?.()
     else if (tab.value === 'tools') toolsRef.value?.refresh?.()
     else if (tab.value === 'security') securityRef.value?.refresh?.()
-    /* 页级读数带在 8 个页签都可见（2026-10-18），所以待办域始终可刷：
+    else if (tab.value === 'access') accessRef.value?.reload?.()
+    /* 页级读数带在 9 个页签都可见（2026-10-18），所以待办域始终可刷：
        todo / export 无本页签面板，直接刷读数带；其它页签在刷本面板之后再补一次待办域
        ——失败态下页头钮是「重试」，点它必须真的重拉读数带，不能刷成别的面板。 */
-    /* 页级读数带常驻 8 个页签，任何页签刷新都要重拉它（2026-10-24 修「切走页签后读数带陈旧」） */
+    /* 页级读数带常驻 9 个页签，任何页签刷新都要重拉它（2026-10-24 修「切走页签后读数带陈旧」） */
     await loadWorkbench()
   } finally {
     refreshing.value = false
@@ -234,6 +257,14 @@ watch(
     const v = typeof t === 'string' && (OH_TABS as readonly string[]).includes(t) ? (t as OhTab) : null
     if (v && v !== tab.value) tab.value = v
     else if (!v && tab.value !== 'todo') tab.value = 'todo'
+  },
+  { immediate: true }
+)
+/* 访问与注册：任一进入路径（点页签 / ?tab= 深链 / intent）到达后即永久挂载 */
+watch(
+  tab,
+  (t) => {
+    if (t === 'access') accessMounted.value = true
   },
   { immediate: true }
 )

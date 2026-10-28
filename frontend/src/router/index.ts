@@ -395,6 +395,11 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'security' } })
   },
   {
+    // 访问与注册并入「运营中心」宿主 tab（2026-10-27 由独立场景迁入）
+    path: '/admin/access-control',
+    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'access' } })
+  },
+  {
     // 管理控制台：/admin/:page 反映当前页面（深链/前进后退），动态段置于静态路由之后
     path: '/admin/:page?',
     name: 'AdminConsole',
@@ -524,12 +529,12 @@ router.beforeEach(async (to, _from, next) => {
     next({ path: '/admin/addons', query });
     return;
   }
-  /* 安全与访问 2026-10-25 拆为独立页：/admin/api-config?tab=security 路由级改投，
-     不再等控制台挂载后由 ApiConfig 的 MOVED_TABS 兜。 */
+  /* 安全与访问 2026-10-25 拆为独立页、2026-10-27 再并入运营中心：老深链直接落到
+     access 页签，不再经 /admin/access-control 二次重定向。 */
   if (to.path === '/admin/api-config' && to.query.tab === 'security') {
     const query = { ...to.query };
     delete query.tab;
-    next({ path: '/admin/access-control', query });
+    next({ path: '/admin/ops-hub', query: { ...query, tab: 'access' } });
     return;
   }
   /* 复习积压的单用户明细（?userId=）是学习者详情的「记忆调度」页签：

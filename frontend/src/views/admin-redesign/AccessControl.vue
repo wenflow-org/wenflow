@@ -1,6 +1,6 @@
 <template>
-  <div class="mk-page acl-host">
-    <MkPageHead title="访问与注册">
+  <div :class="embedded ? 'acl-host acl-host--embedded' : 'mk-page acl-host'">
+    <MkPageHead v-if="!embedded" title="访问与注册">
       <template #actions>
         <button
           type="button"
@@ -22,6 +22,14 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">后台访问来源</h3>
+          <!-- 嵌入运营中心时页头由宿主承担，保存钮跟着它要保存的那张卡 -->
+          <button
+            v-if="embedded"
+            type="button"
+            class="mk-btn mk-btn--sm mk-btn--primary"
+            :disabled="!policyDirty || saving || saveBlocked"
+            @click="savePolicy"
+          >{{ saving ? '保存中…' : '保存策略' }}</button>
         </div>
         <div class="ac-body">
           <div class="ac-group__title">访问来源模式</div>
@@ -164,6 +172,9 @@ import {
 import { isLive } from './store'
 import { askConfirm } from './useConfirm'
 
+/* 嵌入运营中心时页头由宿主承担 */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+
 /* 文案单源（R6 复读单源化）：卡标题与开关标签共用一份 */
 const IP_QUOTA_TITLE = '单 IP 每日注册配额'
 const router = useRouter()
@@ -196,6 +207,17 @@ function splitLines(s: string): string[] {
 function retryLoad(): void {
   void loadLiveData()
 }
+
+/* 宿主刷新（运营中心顶栏）：策略表单有未保存改动时不动它——重取 cfg 会 applyPolicy
+   覆盖草稿；此时只刷新与表单无关的注册状态。无改动时按原「重试」语义整域重取。 */
+function reload(): void {
+  if (policyDirty.value) {
+    if (isLive.value) void loadRegistrationStatus()
+    return
+  }
+  retryLoad()
+}
+defineExpose({ reload })
 
 /** 仅白名单且名单为空：保存后服务端请求不到任何内网地址（含内网模型上游） */
 const outboundEmptyWarn = computed(
@@ -398,6 +420,19 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 </script>
 
 <style scoped>
+/* 嵌入运营中心（2026-10-27）：宿主承担页头与页面内边距，本页只做页签面板——
+   占满剩余高度并自管纵向滚动，与 tools/export 面板同判例 */
+.acl-host--embedded {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+@media (max-width: 900px) {
+  .acl-host--embedded { flex: none; overflow: visible; }
+}
 /* 左「入站 + 出站」（一次保存）、右「注册」（两个独立开关）：按对象分列，窄屏回落单列 */
 .acl-grid {
   display: grid;

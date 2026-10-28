@@ -320,7 +320,7 @@ import { toast } from '@/utils/toast'
    这个页面我觉得可以和前面的合并了」）----------
    一级页签「接入 / 调用」撤除，本页自上而下两段：供应商面板 / 调用策略。
    平台那条供应商的详情里再分二级页签：模型 / 连接 / 基础设施 / 生成参数。
-   已迁出：虚拟学习者容量 → /admin/virtual-learners；安全与访问 → /admin/access-control；
+   已迁出：虚拟学习者容量 → /admin/virtual-learners；安全与访问 → 运营中心「访问与注册」页签；
    外挂能力 → /admin/addons（2026-10-19）。旧深链一律由 TAB_ALIAS / 路由改投。 */
 
 /** 旧页签键别名归一：站内「配置 →」与量测脚本曾用 ?tab=model / ?tab=registry / ?tab=model-routing。

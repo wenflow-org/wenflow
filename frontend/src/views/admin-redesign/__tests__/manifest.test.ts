@@ -39,11 +39,11 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-10-27 收口）：5 分组 + 置顶总览，20 个可见场景与目标 IA 一致', () => {
+  it('导航（2026-10-27 收口）：5 分组 + 置顶总览，19 个可见场景与目标 IA 一致', () => {
     // 隐藏场景（hidden: true，如运营术语表）不占侧栏席位：由顶栏帮助按钮跳转，单独断言
     const visible = MOCK_SCENES.filter((s) => !s.hidden);
-    expect(MOCK_SCENES).toHaveLength(21);
-    expect(visible).toHaveLength(20);
+    expect(MOCK_SCENES).toHaveLength(20);
+    expect(visible).toHaveLength(19);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = visible.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '运营', '学习', '仿真', 'Skill', '观测与排查']);
@@ -52,8 +52,9 @@ describe('AdminConsole 页面注册表', () => {
     expect(byGroup).toEqual({
       总览: ['overview'],
       // 运营中心紧跟总览：日循环是「总览看待办 → 运营中心处置」；
-      // 模型与接入 / 访问与注册 / 用户账号 2026-10-27 从「账号与接入」并入，追加在组尾
-      运营: ['ops-hub', 'api-config', 'access-control', 'people'],
+      // 模型与接入 / 用户账号 2026-10-27 从「账号与接入」并入，追加在组尾
+      // （访问与注册同日并入运营中心宿主 tab，不再单列）
+      运营: ['ops-hub', 'api-config', 'people'],
       // 排列＝学习流程：Goal 目标对话 → Path 学习路径 → Learn 教学会话 → 学习状态（工作台）→ 复习积压
       学习: ['goal-conversations', 'learning-paths', 'teaching-sessions', 'learner-state', 'memory-review'],
       // 组名与总览状态条同词（「仿真 · 仿真空闲」）：实例 + 身份池
