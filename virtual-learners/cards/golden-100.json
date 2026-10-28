@@ -1,0 +1,5008 @@
+{
+  "version": 1,
+  "cards": [
+    {
+      "cardKey": "golden-macro-econ-01",
+      "version": 1,
+      "nickname": "想搞懂宏观经济学主流流派在争什么、背后的逻辑脉络",
+      "account": {
+        "displayName": "想搞懂宏观经济学主流流派在争什么、背后的逻辑脉络",
+        "emailPrefix": "golden-macro-econ-01"
+      },
+      "persona": {
+        "nameHint": "想搞懂宏观经济学主流流派在争什么、背后的逻辑脉络",
+        "background": "「系统搞懂宏观经济学主流流派在争什么、背后的逻辑脉络」诉求的虚拟学习者（系统掌握型）。 起点与卡点：零基础，只零散看过科普短视频；单看每个流派都觉得有道理，放一起就乱，不知道它们针对的历史背景和前提假设有什么区别",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "系统搞懂宏观经济学主流流派在争什么、背后的逻辑脉络",
+        "visibleOpening": "我平时看财经新闻经常看到「凯恩斯主义」「货币主义」「奥地利学派」，每次央行降息或者发国债大家吵成一团。我没学过经济学，想系统搞懂这几个主流宏观流派到底在争什么、背后的逻辑脉络是什么，不为考试。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：零基础，只零散看过科普短视频；单看每个流派都觉得有道理，放一起就乱，不知道它们针对的历史背景和前提假设有什么区别）",
+          "这次希望拿到什么结果？——按「系统搞懂宏观经济学主流流派在争什么、背后的逻辑脉络」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "系统搞懂宏观经济学主流流派在争什么、背后的逻辑脉络",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "零基础，只零散看过科普短视频；单看每个流派都觉得有道理，放一起就乱，不知道它们针对的历史背景和前提假设有什么区别",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "macro-econ-01",
+        "note": "Golden-100 · macro-econ-01（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-macro-econ-01"
+      ],
+      "notes": "Golden-100 · macro-econ-01（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-cog-memory-02",
+      "version": 1,
+      "nickname": "想搞懂认知科学如何研究工作记忆与长时记忆",
+      "account": {
+        "displayName": "想搞懂认知科学如何研究工作记忆与长时记忆",
+        "emailPrefix": "golden-cog-memory-02"
+      },
+      "persona": {
+        "nameHint": "想搞懂认知科学如何研究工作记忆与长时记忆",
+        "background": "「系统了解认知科学如何研究工作记忆与长时记忆，建立科学的底层认知」诉求的虚拟学习者（系统掌握型）。 起点与卡点：知道「艾宾浩斯遗忘曲线」这个词，但不知道现代认知心理学的多重记忆模型；常把「划重点、反复重读」当成有效学习",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "系统了解认知科学如何研究工作记忆与长时记忆，建立科学的底层认知",
+        "visibleOpening": "我想系统了解认知科学是怎么研究「人是怎么记住和遗忘东西」的，比如工作记忆、长时记忆、认知负荷这些概念是怎么串起来的，想建立一套科学的底层认知。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：知道「艾宾浩斯遗忘曲线」这个词，但不知道现代认知心理学的多重记忆模型；常把「划重点、反复重读」当成有效学习）",
+          "这次希望拿到什么结果？——按「系统了解认知科学如何研究工作记忆与长时记忆，建立科学的底层认知」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "系统了解认知科学如何研究工作记忆与长时记忆，建立科学的底层认知",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "知道「艾宾浩斯遗忘曲线」这个词，但不知道现代认知心理学的多重记忆模型；常把「划重点、反复重读」当成有效学习",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "cog-memory-02",
+        "note": "Golden-100 · cog-memory-02（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-cog-memory-02"
+      ],
+      "notes": "Golden-100 · cog-memory-02（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-phil-sci-03",
+      "version": 1,
+      "nickname": "想搞懂科学哲学主线",
+      "account": {
+        "displayName": "想搞懂科学哲学主线",
+        "emailPrefix": "golden-phil-sci-03"
+      },
+      "persona": {
+        "nameHint": "想搞懂科学哲学主线",
+        "background": "「系统梳理科学哲学主线：人类如何界定什么是科学」诉求的虚拟学习者（系统掌握型）。 起点与卡点：理工科背景做工程，没读过哲学；觉得哲学名词太绕，希望用具体科学史案例串起来",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "系统梳理科学哲学主线：人类如何界定什么是科学",
+        "visibleOpening": "我经常听人说「这不科学」或者「可证伪性」，想系统梳理一下科学哲学的主线：人类到底是怎么界定什么是「科学」的？从培根、休谟到波普尔、库恩，这帮人是怎么一步步推翻前人的？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：理工科背景做工程，没读过哲学；觉得哲学名词太绕，希望用具体科学史案例串起来）",
+          "这次希望拿到什么结果？——按「系统梳理科学哲学主线：人类如何界定什么是科学」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "系统梳理科学哲学主线：人类如何界定什么是科学",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "理工科背景做工程，没读过哲学；觉得哲学名词太绕，希望用具体科学史案例串起来",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "phil-sci-03",
+        "note": "Golden-100 · phil-sci-03（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-phil-sci-03"
+      ],
+      "notes": "Golden-100 · phil-sci-03（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A04-lin-alg-concepts",
+      "version": 1,
+      "nickname": "想搞懂为同济版线代前四章建立概念地图",
+      "account": {
+        "displayName": "想搞懂为同济版线代前四章建立概念地图",
+        "emailPrefix": "golden-A04-lin-alg-concepts"
+      },
+      "persona": {
+        "nameHint": "想搞懂为同济版线代前四章建立概念地图",
+        "background": "「为同济版线代前四章建立概念地图，弄懂秩、线性相关性这些概念为什么存在」诉求的虚拟学习者（系统掌握型）。 起点与卡点：期末统考在即、后续还有新课；行列式矩阵会按步骤算，但秩与线性相关只有定义没有图像，证明题无从下笔，概念之间串不起来",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "为同济版线代前四章建立概念地图，弄懂秩、线性相关性这些概念为什么存在",
+        "visibleOpening": "大一下在学线代，同济版教材，行列式和矩阵我按步骤还算得对，可一到向量组就像一堆定义砸脸上：线性相关、秩、极大无关组，完全不知道这些东西为什么存在、算出来干嘛用，遇到证明题直接没思路。期末是全校统考，后面还有特征值和二次型两章新课。我不想只背题型混过考试，想真弄懂这套概念是怎么搭起来的。每周能抽三个晚上，每次40分钟。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：期末统考在即、后续还有新课；行列式矩阵会按步骤算，但秩与线性相关只有定义没有图像，证明题无从下笔，概念之间串不起来）",
+          "这次希望拿到什么结果？——按「为同济版线代前四章建立概念地图，弄懂秩、线性相关性这些概念为什么存在」的实际交付来",
+          "时间上怎么安排？——105天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "为同济版线代前四章建立概念地图，弄懂秩、线性相关性这些概念为什么存在",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "105天内",
+            "horizonDays": 105,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "期末统考在即、后续还有新课；行列式矩阵会按步骤算，但秩与线性相关只有定义没有图像，证明题无从下笔，概念之间串不起来",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A04-lin-alg-concepts",
+        "note": "Golden-100 · A04-lin-alg-concepts（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A04-lin-alg-concepts"
+      ],
+      "notes": "Golden-100 · A04-lin-alg-concepts（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A05-phys-calc-bridge",
+      "version": 1,
+      "nickname": "想搞懂微积分工具与大学物理质点力学接起来",
+      "account": {
+        "displayName": "想搞懂微积分工具与大学物理质点力学接起来",
+        "emailPrefix": "golden-A05-phys-calc-bridge"
+      },
+      "persona": {
+        "nameHint": "想搞懂微积分工具与大学物理质点力学接起来",
+        "background": "「把微积分工具与大学物理质点力学接起来，能读懂并用微积分表述物理问题」诉求的虚拟学习者（系统掌握型）。 起点与卡点：大物进度领先高数约三章，老师默认微积分已会；高中常量物理思维遇上变力做功、变力问题的积分表述完全接不上",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "把微积分工具与大学物理质点力学接起来，能读懂并用微积分表述物理问题",
+        "visibleOpening": "大一工科，大学物理讲到质点动力学，老师张口就是「对时间求个导」「这边做个积分」，可我高数才学到极限，根本接不上。用的是马文蔚《物理学》第六版，期末闭卷统考。高中物理我学得一般，也没怎么用过微积分，现在变力做功这种题完全无从下手。想每周抽四个晚上、每次45分钟给大物，先把要用的数学工具和物理图像接上，别掉队。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：大物进度领先高数约三章，老师默认微积分已会；高中常量物理思维遇上变力做功、变力问题的积分表述完全接不上）",
+          "这次希望拿到什么结果？——按「把微积分工具与大学物理质点力学接起来，能读懂并用微积分表述物理问题」的实际交付来",
+          "时间上怎么安排？——105天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "把微积分工具与大学物理质点力学接起来，能读懂并用微积分表述物理问题",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "105天内",
+            "horizonDays": 105,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "大物进度领先高数约三章，老师默认微积分已会；高中常量物理思维遇上变力做功、变力问题的积分表述完全接不上",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A05-phys-calc-bridge",
+        "note": "Golden-100 · A05-phys-calc-bridge（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A05-phys-calc-bridge"
+      ],
+      "notes": "Golden-100 · A05-phys-calc-bridge（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A06-pre-physics-math",
+      "version": 1,
+      "nickname": "想搞懂转物理所需的数学工具最小集",
+      "account": {
+        "displayName": "想搞懂转物理所需的数学工具最小集",
+        "emailPrefix": "golden-A06-pre-physics-math"
+      },
+      "persona": {
+        "nameHint": "想搞懂转物理所需的数学工具最小集",
+        "background": "「搭起转物理所需的数学工具最小集：求导、积分、简单微分方程与矢量代数」诉求的虚拟学习者（系统掌握型）。 起点与卡点：转专业考试高数是硬门槛；高考数学刚及格，导数积分矢量全部陌生，不知道物理要求的工具最小集合是什么、按什么顺序补",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "搭起转物理所需的数学工具最小集：求导、积分、简单微分方程与矢量代数",
+        "visibleOpening": "大一文科专业，想下学期转去物理。直接翻大学物理教材发现通篇是微积分，我高考数学刚及格，导数忘得差不多了，积分没学过，矢量运算也陌生。转专业考试要考高数和大学物理，高数是硬门槛。想在这学期剩下的四个月里，每天晚自习挤40分钟，把物理要用得到的求导、积分和矢量工具先补出来，来得及吗？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：转专业考试高数是硬门槛；高考数学刚及格，导数积分矢量全部陌生，不知道物理要求的工具最小集合是什么、按什么顺序补）",
+          "这次希望拿到什么结果？——按「搭起转物理所需的数学工具最小集：求导、积分、简单微分方程与矢量代数」的实际交付来",
+          "时间上怎么安排？——120天内，每天约 40 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "搭起转物理所需的数学工具最小集：求导、积分、简单微分方程与矢量代数",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "120天内",
+            "horizonDays": 120,
+            "dailyMinutes": 40,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "转专业考试高数是硬门槛；高考数学刚及格，导数积分矢量全部陌生，不知道物理要求的工具最小集合是什么、按什么顺序补",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A06-pre-physics-math",
+        "note": "Golden-100 · A06-pre-physics-math（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A06-pre-physics-math"
+      ],
+      "notes": "Golden-100 · A06-pre-physics-math（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A07-prob-zero-base",
+      "version": 1,
+      "nickname": "想搞懂为浙大版概率论前五章建立概念主线",
+      "account": {
+        "displayName": "想搞懂为浙大版概率论前五章建立概念主线",
+        "emailPrefix": "golden-A07-prob-zero-base"
+      },
+      "persona": {
+        "nameHint": "想搞懂为浙大版概率论前五章建立概念主线",
+        "background": "「为浙大版概率论前五章建立概念主线，弄清从随机试验到随机变量分布的递进逻辑」诉求的虚拟学习者（系统掌握型）。 起点与卡点：期末前四周覆盖前五章；古典概型能跟，一到分布函数就断链，分不清是高中排列组合的底子问题还是随机变量概念本身没建立",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "为浙大版概率论前五章建立概念主线，弄清从随机试验到随机变量分布的递进逻辑",
+        "visibleOpening": "文科专业被安排了概率论与数理统计，我高中排列组合就没学明白，现在听课像听天书：浙大版教材前两章全是符号，古典概型还勉强能跟，一讲到一维随机变量的分布函数就彻底不懂了。期末还有四周，考前五章。每天能挤40分钟，但我分不清问题出在高中底子还是这门课本身，更不知道该从哪个知识点补起。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：期末前四周覆盖前五章；古典概型能跟，一到分布函数就断链，分不清是高中排列组合的底子问题还是随机变量概念本身没建立）",
+          "这次希望拿到什么结果？——按「为浙大版概率论前五章建立概念主线，弄清从随机试验到随机变量分布的递进逻辑」的实际交付来",
+          "时间上怎么安排？——28天内，每天约 40 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "为浙大版概率论前五章建立概念主线，弄清从随机试验到随机变量分布的递进逻辑",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "28天内",
+            "horizonDays": 28,
+            "dailyMinutes": 40,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "期末前四周覆盖前五章；古典概型能跟，一到分布函数就断链，分不清是高中排列组合的底子问题还是随机变量概念本身没建立",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A07-prob-zero-base",
+        "note": "Golden-100 · A07-prob-zero-base（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A07-prob-zero-base"
+      ],
+      "notes": "Golden-100 · A07-prob-zero-base（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A08-micro-econ-framework",
+      "version": 1,
+      "nickname": "想搞懂高鸿业微观经济学的概念递进链",
+      "account": {
+        "displayName": "想搞懂高鸿业微观经济学的概念递进链",
+        "emailPrefix": "golden-A08-micro-econ-framework"
+      },
+      "persona": {
+        "nameHint": "想搞懂高鸿业微观经济学的概念递进链",
+        "background": "「建立高鸿业微观经济学的概念递进链：供求、弹性、消费者行为、生产成本到市场结构」诉求的虚拟学习者（系统掌握型）。 起点与卡点：期末三周闭卷统考、占绩点大头；机会成本边际等词认识但供求曲线画不出、弹性不会算，概念没有形成从消费者到市场结构的递进链条",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "建立高鸿业微观经济学的概念递进链：供求、弹性、消费者行为、生产成本到市场结构",
+        "visibleOpening": "大一经管类，微观经济学前面听不懂就没怎么去上课，现在高鸿业教材前三章一窍不通：机会成本、边际这些词认识，供给需求曲线画不出来，弹性计算更别提。期末还有三周，闭卷统考，绩点还占奖学金评定大头。每天晚上能挤45分钟，周末再加一点。我想先把这门课的概念顺序理出来，而不是上来就刷题。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：期末三周闭卷统考、占绩点大头；机会成本边际等词认识但供求曲线画不出、弹性不会算，概念没有形成从消费者到市场结构的递进链条）",
+          "这次希望拿到什么结果？——按「建立高鸿业微观经济学的概念递进链：供求、弹性、消费者行为、生产成本到市场结构」的实际交付来",
+          "时间上怎么安排？——21天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立高鸿业微观经济学的概念递进链：供求、弹性、消费者行为、生产成本到市场结构",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "21天内",
+            "horizonDays": 21,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "期末三周闭卷统考、占绩点大头；机会成本边际等词认识但供求曲线画不出、弹性不会算，概念没有形成从消费者到市场结构的递进链条",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A08-micro-econ-framework",
+        "note": "Golden-100 · A08-micro-econ-framework（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A08-micro-econ-framework"
+      ],
+      "notes": "Golden-100 · A08-micro-econ-framework（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A09-sd-vs-sem",
+      "version": 1,
+      "nickname": "想搞懂标准差与标准误的语义分工",
+      "account": {
+        "displayName": "想搞懂标准差与标准误的语义分工",
+        "emailPrefix": "golden-A09-sd-vs-sem"
+      },
+      "persona": {
+        "nameHint": "想搞懂标准差与标准误的语义分工",
+        "background": "「分清标准差与标准误的语义分工，知道论文表格里何时报哪个、为什么」诉求的虚拟学习者（系统掌握型）。 起点与卡点：论文表格一直报SD被导师要求改报SEM；分不清描述数据波动与估计均值精度两层语义，也不理解为什么SE=SD/√n随n变化而SD不变",
+        "availableTime": "abundant",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "分清标准差与标准误的语义分工，知道论文表格里何时报哪个、为什么",
+        "visibleOpening": "我研二，写论文做数据分析，跑回归、出表都很熟了，导师却让我把表里的标准差改成标准误，我当场懵住：这两个不都是描述波动吗？为什么n越大标准误越小、标准差却不变？表里到底该标SD还是SEM？离考研还有三个月，我每天排了两小时复习，但这半个月真正缠着我不放的，其实就这一组概念——越想越觉得统计地基有个洞。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：论文表格一直报SD被导师要求改报SEM；分不清描述数据波动与估计均值精度两层语义，也不理解为什么SE=SD/√n随n变化而SD不变）",
+          "这次希望拿到什么结果？——按「分清标准差与标准误的语义分工，知道论文表格里何时报哪个、为什么」的实际交付来",
+          "时间上怎么安排？——90天内，每天约 120 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "分清标准差与标准误的语义分工，知道论文表格里何时报哪个、为什么",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "90天内",
+            "horizonDays": 90,
+            "dailyMinutes": 120,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "论文表格一直报SD被导师要求改报SEM；分不清描述数据波动与估计均值精度两层语义，也不理解为什么SE=SD/√n随n变化而SD不变",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A09-sd-vs-sem",
+        "note": "Golden-100 · A09-sd-vs-sem（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A09-sd-vs-sem"
+      ],
+      "notes": "Golden-100 · A09-sd-vs-sem（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A10-grounded-coding",
+      "version": 1,
+      "nickname": "想搞懂扎根理论三级编码的完整操作路径与饱和判定",
+      "account": {
+        "displayName": "想搞懂扎根理论三级编码的完整操作路径与饱和判定",
+        "emailPrefix": "golden-A10-grounded-coding"
+      },
+      "persona": {
+        "nameHint": "想搞懂扎根理论三级编码的完整操作路径与饱和判定",
+        "background": "「掌握扎根理论三级编码的完整操作路径与饱和判定，把访谈稿从标签走到范畴」诉求的虚拟学习者（系统掌握型）。 起点与卡点：三十万字访谈稿贴满标签却无法归类；同名异标、归属模糊，二级三级编码和理论饱和的判定完全没有操作程序",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "掌握扎根理论三级编码的完整操作路径与饱和判定，把访谈稿从标签走到范畴",
+        "visibleOpening": "我攒了二十多份访谈录音，转出来快三十万字，毕业论文要用扎根理论。一级编码我懂，就是贴标签，可贴完回看全是乱的：明明一个事儿起了三个名字，有的句子到底归哪个标签也说不清。网上教程一开口就是「不断比较」「理论饱和」，越看越玄。每天晚上能安排45分钟，就想找个具体例子，拿一小段文本把一级二级三级编码从头到尾走一遍。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：三十万字访谈稿贴满标签却无法归类；同名异标、归属模糊，二级三级编码和理论饱和的判定完全没有操作程序）",
+          "这次希望拿到什么结果？——按「掌握扎根理论三级编码的完整操作路径与饱和判定，把访谈稿从标签走到范畴」的实际交付来",
+          "时间上怎么安排？——100天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "掌握扎根理论三级编码的完整操作路径与饱和判定，把访谈稿从标签走到范畴",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "100天内",
+            "horizonDays": 100,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "三十万字访谈稿贴满标签却无法归类；同名异标、归属模糊，二级三级编码和理论饱和的判定完全没有操作程序",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A10-grounded-coding",
+        "note": "Golden-100 · A10-grounded-coding（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A10-grounded-coding"
+      ],
+      "notes": "Golden-100 · A10-grounded-coding（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A11-thesis-proposal-reading",
+      "version": 1,
+      "nickname": "想搞懂「文献到研究缺口再到可行题目」的开题方法",
+      "account": {
+        "displayName": "想搞懂「文献到研究缺口再到可行题目」的开题方法",
+        "emailPrefix": "golden-A11-thesis-proposal-reading"
+      },
+      "persona": {
+        "nameHint": "想搞懂「文献到研究缺口再到可行题目」的开题方法",
+        "background": "「建立「文献到研究缺口再到可行题目」的开题方法，知道文献读到什么程度算够」诉求的虚拟学习者（系统掌握型）。 起点与卡点：导师放养只说多读文献；不知道读到什么程度算够、如何从文献里长出题目，中期检查临近仍无选题",
+        "availableTime": "abundant",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "建立「文献到研究缺口再到可行题目」的开题方法，知道文献读到什么程度算够",
+        "visibleOpening": "大四上，毕设导师是学院里有名的乐天派，开学就说「不用急，多读文献」。三个月过去，我每周找他，他都说读了吧、文献看够了自然就有题目。可我根本不知道读到什么程度算够，本科没进过实验室，连这个方向有哪几个小分支都说不全，同组同学图表都画了三张了。现在只有晚上和周末能坐下来一个半小时，想把「读文献」变成能落题的路。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：导师放养只说多读文献；不知道读到什么程度算够、如何从文献里长出题目，中期检查临近仍无选题）",
+          "这次希望拿到什么结果？——按「建立「文献到研究缺口再到可行题目」的开题方法，知道文献读到什么程度算够」的实际交付来",
+          "时间上怎么安排？——120天内，每天约 90 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立「文献到研究缺口再到可行题目」的开题方法，知道文献读到什么程度算够",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "120天内",
+            "horizonDays": 120,
+            "dailyMinutes": 90,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "导师放养只说多读文献；不知道读到什么程度算够、如何从文献里长出题目，中期检查临近仍无选题",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A11-thesis-proposal-reading",
+        "note": "Golden-100 · A11-thesis-proposal-reading（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A11-thesis-proposal-reading"
+      ],
+      "notes": "Golden-100 · A11-thesis-proposal-reading（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A12-lit-review-writing",
+      "version": 1,
+      "nickname": "想搞懂从文献整理到综述成文的方法",
+      "account": {
+        "displayName": "想搞懂从文献整理到综述成文的方法",
+        "emailPrefix": "golden-A12-lit-review-writing"
+      },
+      "persona": {
+        "nameHint": "想搞懂从文献整理到综述成文的方法",
+        "background": "「掌握从文献整理到综述成文的方法：分类、主题化组织与问题意识」诉求的虚拟学习者（系统掌握型）。 起点与卡点：两百篇文献只看摘要堆在Zotero里；综述写成「张三认为李四提出」的罗列，没有主题结构与问题意识，开题报告下月要交",
+        "availableTime": "abundant",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "掌握从文献整理到综述成文的方法：分类、主题化组织与问题意识",
+        "visibleOpening": "文科研一，导师让我下个月交开题报告。文献下了两百多篇躺在Zotero里没分类，每篇只看过摘要；问他综述怎么写，就一句「回去自己理」。我对着空白文档坐一晚，写出来还是「张三认为……李四提出……」，被批是一锅粥。本科没受过科研训练，检索只会知网关键词。现在每晚九点后能写一个半小时，想要一条从整理文献到综述成文、能落地的路。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：两百篇文献只看摘要堆在Zotero里；综述写成「张三认为李四提出」的罗列，没有主题结构与问题意识，开题报告下月要交）",
+          "这次希望拿到什么结果？——按「掌握从文献整理到综述成文的方法：分类、主题化组织与问题意识」的实际交付来",
+          "时间上怎么安排？——60天内，每天约 90 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "掌握从文献整理到综述成文的方法：分类、主题化组织与问题意识",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "60天内",
+            "horizonDays": 60,
+            "dailyMinutes": 90,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "两百篇文献只看摘要堆在Zotero里；综述写成「张三认为李四提出」的罗列，没有主题结构与问题意识，开题报告下月要交",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A12-lit-review-writing",
+        "note": "Golden-100 · A12-lit-review-writing（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A12-lit-review-writing"
+      ],
+      "notes": "Golden-100 · A12-lit-review-writing（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A13-game-theory-equilibrium",
+      "version": 1,
+      "nickname": "想搞懂纳什均衡、支配策略、重复博弈等核心概念的真实…",
+      "account": {
+        "displayName": "想搞懂纳什均衡、支配策略、重复博弈等核心概念的真实…",
+        "emailPrefix": "golden-A13-game-theory-equilibrium"
+      },
+      "persona": {
+        "nameHint": "想搞懂纳什均衡、支配策略、重复博弈等核心概念的真实…",
+        "background": "「弄清纳什均衡、支配策略、重复博弈等核心概念的真实含义与适用边界」诉求的虚拟学习者（系统掌握型）。 起点与卡点：看得懂囚徒困境的教科书结局，却解释不了现实中的普遍合作；把一次性博弈的结论外推到现实，混淆了纳什均衡与理想结果",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "弄清纳什均衡、支配策略、重复博弈等核心概念的真实含义与适用边界",
+        "visibleOpening": "我转行学数据分析，最近在读博弈论科普。囚徒困境那章我看懂了：两个理性人的结局是互相背叛。可回头一看现实——同事长期合作、商家维护口碑、国家签贸易协定，合作明明到处都是。再看到「不合作是囚徒困境中唯一的纳什均衡」的提问，我彻底乱了：纳什均衡是说现实注定互坑吗？接下来两个月，我通勤加睡前每天也就20分钟，想把这套概念的底细弄清楚。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：看得懂囚徒困境的教科书结局，却解释不了现实中的普遍合作；把一次性博弈的结论外推到现实，混淆了纳什均衡与理想结果）",
+          "这次希望拿到什么结果？——按「弄清纳什均衡、支配策略、重复博弈等核心概念的真实含义与适用边界」的实际交付来",
+          "时间上怎么安排？——60天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "弄清纳什均衡、支配策略、重复博弈等核心概念的真实含义与适用边界",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "60天内",
+            "horizonDays": 60,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "看得懂囚徒困境的教科书结局，却解释不了现实中的普遍合作；把一次性博弈的结论外推到现实，混淆了纳什均衡与理想结果",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A13-game-theory-equilibrium",
+        "note": "Golden-100 · A13-game-theory-equilibrium（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A13-game-theory-equilibrium"
+      ],
+      "notes": "Golden-100 · A13-game-theory-equilibrium（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A14-network-layering",
+      "version": 1,
+      "nickname": "想搞懂分层模型的正确心智",
+      "account": {
+        "displayName": "想搞懂分层模型的正确心智",
+        "emailPrefix": "golden-A14-network-layering"
+      },
+      "persona": {
+        "nameHint": "想搞懂分层模型的正确心智",
+        "background": "「建立分层模型的正确心智：分层是封装结构与处理视角，不是数据包的分类标签」诉求的虚拟学习者（系统掌握型）。 起点与卡点：背熟七层口诀但第一次抓包就懵；把分层当成包的分类标签，无法回答「这个包属于哪一层」",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "建立分层模型的正确心智：分层是封装结构与处理视角，不是数据包的分类标签",
+        "visibleOpening": "我转行准备运维面试，OSI七层口诀背得滚瓜烂熟。昨天第一次跟着教程用抓包工具，随便抓一个HTTP请求，展开却同时有以太网帧、IP头、TCP头和HTTP数据四段信息。我愣住了：这个包到底属于哪一层？书上说每层只管自己的事，为什么所有层叠在同一个包里？离面试还有五周，每天通勤背知识点的20分钟里，我想先把这一件事想明白。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：背熟七层口诀但第一次抓包就懵；把分层当成包的分类标签，无法回答「这个包属于哪一层」）",
+          "这次希望拿到什么结果？——按「建立分层模型的正确心智：分层是封装结构与处理视角，不是数据包的分类标签」的实际交付来",
+          "时间上怎么安排？——35天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立分层模型的正确心智：分层是封装结构与处理视角，不是数据包的分类标签",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "35天内",
+            "horizonDays": 35,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "背熟七层口诀但第一次抓包就懵；把分层当成包的分类标签，无法回答「这个包属于哪一层」",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A14-network-layering",
+        "note": "Golden-100 · A14-network-layering（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A14-network-layering"
+      ],
+      "notes": "Golden-100 · A14-network-layering（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A15-immune-timeline",
+      "version": 1,
+      "nickname": "想搞懂以免疫应答时间线为主轴重组免疫学核心概念",
+      "account": {
+        "displayName": "想搞懂以免疫应答时间线为主轴重组免疫学核心概念",
+        "emailPrefix": "golden-A15-immune-timeline"
+      },
+      "persona": {
+        "nameHint": "想搞懂以免疫应答时间线为主轴重组免疫学核心概念",
+        "background": "「以免疫应答时间线为主轴重组免疫学核心概念，让散落的名词各就各位」诉求的虚拟学习者（系统掌握型）。 起点与卡点：实验熟练但教材叙述顺序与应答真实顺序倒置、章节循环定义；脑中没有应答时间线做坐标，几十个名词只能硬背、越读越迷",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "以免疫应答时间线为主轴重组免疫学核心概念，让散落的名词各就各位",
+        "visibleOpening": "我在体外诊断行业做了几年，抗原抗体结合的实验天天做，算熟手了。最近回头系统补医学免疫学，却发现教材把一个连续的应答过程拆成抗原、抗体、补体、MHC、细胞因子几十个孤立章节，前面章节用的概念要到后面才定义，越读越迷。每周三个晚上、每次40分钟，我想先在脑子里立起一条免疫应答的时间线，把散落的名词一个个挂上去，而不是再硬背一遍。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：实验熟练但教材叙述顺序与应答真实顺序倒置、章节循环定义；脑中没有应答时间线做坐标，几十个名词只能硬背、越读越迷）",
+          "这次希望拿到什么结果？——按「以免疫应答时间线为主轴重组免疫学核心概念，让散落的名词各就各位」的实际交付来",
+          "时间上怎么安排？——90天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "以免疫应答时间线为主轴重组免疫学核心概念，让散落的名词各就各位",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "90天内",
+            "horizonDays": 90,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "实验熟练但教材叙述顺序与应答真实顺序倒置、章节循环定义；脑中没有应答时间线做坐标，几十个名词只能硬背、越读越迷",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A15-immune-timeline",
+        "note": "Golden-100 · A15-immune-timeline（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A15-immune-timeline"
+      ],
+      "notes": "Golden-100 · A15-immune-timeline（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A16-central-dogma",
+      "version": 1,
+      "nickname": "想搞懂中心法则从流程图落到酶学机制",
+      "account": {
+        "displayName": "想搞懂中心法则从流程图落到酶学机制",
+        "emailPrefix": "golden-A16-central-dogma"
+      },
+      "persona": {
+        "nameHint": "想搞懂中心法则从流程图落到酶学机制",
+        "background": "「把中心法则从流程图落到酶学机制，理解复制、转录、翻译关键差异为何存在」诉求的虚拟学习者（系统掌握型）。 起点与卡点：三张流程图背了就混，答不出复制需引物而转录不需要；只记住信息流向图，没落到两种聚合酶生化性质的差异",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "把中心法则从流程图落到酶学机制，理解复制、转录、翻译关键差异为何存在",
+        "visibleOpening": "大一生物相关专业，复习中心法则：复制、转录、翻译三张流程图长得差不多，聚合酶、模板、引物、合成方向背了就混。做题碰到「为什么DNA复制需要引物而转录不需要」直接空着，对答案也只有一句「DNA聚合酶不能从头合成」——为什么RNA聚合酶就可以？这学期还剩十二周，我每天晚自习留20分钟，就想把这半页流程图背后到底差在哪弄明白。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：三张流程图背了就混，答不出复制需引物而转录不需要；只记住信息流向图，没落到两种聚合酶生化性质的差异）",
+          "这次希望拿到什么结果？——按「把中心法则从流程图落到酶学机制，理解复制、转录、翻译关键差异为何存在」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "把中心法则从流程图落到酶学机制，理解复制、转录、翻译关键差异为何存在",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "三张流程图背了就混，答不出复制需引物而转录不需要；只记住信息流向图，没落到两种聚合酶生化性质的差异",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A16-central-dogma",
+        "note": "Golden-100 · A16-central-dogma（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A16-central-dogma"
+      ],
+      "notes": "Golden-100 · A16-central-dogma（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A17-comm-theory-map",
+      "version": 1,
+      "nickname": "想搞懂传播理论的效果层级坐标系",
+      "account": {
+        "displayName": "想搞懂传播理论的效果层级坐标系",
+        "emailPrefix": "golden-A17-comm-theory-map"
+      },
+      "persona": {
+        "nameHint": "想搞懂传播理论的效果层级坐标系",
+        "background": "「建立传播理论的效果层级坐标系，知道每个理论的适用条件与作用层面」诉求的虚拟学习者（系统掌握型）。 起点与卡点：名词解释能写三百字，热点分析题却不知选哪个理论；缺「作用层面与适用条件」的坐标系，理论套用成了轮盘赌",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "建立传播理论的效果层级坐标系，知道每个理论的适用条件与作用层面",
+        "visibleOpening": "我新传考研，议程设置、沉默的螺旋、培养理论的名词解释背得滚瓜烂熟，一条能写三百字。可一做热点分析真题就瘫住：短视频平台集中推送某社会事件，这算媒体设置了公众议程，还是算法营造意见气候的沉默螺旋？感觉每个理论都能往上套，又都没把握。离初试还有四个月，我从每天的专业课复习里划出40分钟，只想先治好「理论乱套」这个病，不然背得越多越乱。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：名词解释能写三百字，热点分析题却不知选哪个理论；缺「作用层面与适用条件」的坐标系，理论套用成了轮盘赌）",
+          "这次希望拿到什么结果？——按「建立传播理论的效果层级坐标系，知道每个理论的适用条件与作用层面」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立传播理论的效果层级坐标系，知道每个理论的适用条件与作用层面",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "名词解释能写三百字，热点分析题却不知选哪个理论；缺「作用层面与适用条件」的坐标系，理论套用成了轮盘赌",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A17-comm-theory-map",
+        "note": "Golden-100 · A17-comm-theory-map（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A17-comm-theory-map"
+      ],
+      "notes": "Golden-100 · A17-comm-theory-map（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A18-fallacy-detection",
+      "version": 1,
+      "nickname": "想搞懂常见非形式谬误的判定程序",
+      "account": {
+        "displayName": "想搞懂常见非形式谬误的判定程序",
+        "emailPrefix": "golden-A18-fallacy-detection"
+      },
+      "persona": {
+        "nameHint": "想搞懂常见非形式谬误的判定程序",
+        "background": "「掌握常见非形式谬误的判定程序：回到论证结构逐环检查，而非对号入座贴标签」诉求的虚拟学习者（系统掌握型）。 起点与卡点：指认对方稻草人反被指稻草人，各执一词无法裁决；谬误清单只有标签没有判定程序，滑坡与正常推理的界线说不清",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "掌握常见非形式谬误的判定程序：回到论证结构逐环检查，而非对号入座贴标签",
+        "visibleOpening": "我大学辩论队的，读完《学会提问》和一摞谬误清单。上次模辩我指对方「歪曲我的观点，这是稻草人」，对方回一句「你断章取义地指责我，你才是稻草人」，两人各执一词，裁判也和稀泥。我还发现「再这样下去社会就要完蛋」式的论证，单看每个因果环节似乎都说得通。滑坡谬误和正常推理的界线到底在哪？每天午休20分钟，想补一套判定程序，而不是只会贴标签。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：指认对方稻草人反被指稻草人，各执一词无法裁决；谬误清单只有标签没有判定程序，滑坡与正常推理的界线说不清）",
+          "这次希望拿到什么结果？——按「掌握常见非形式谬误的判定程序：回到论证结构逐环检查，而非对号入座贴标签」的实际交付来",
+          "时间上怎么安排？——60天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "掌握常见非形式谬误的判定程序：回到论证结构逐环检查，而非对号入座贴标签",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "60天内",
+            "horizonDays": 60,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "指认对方稻草人反被指稻草人，各执一词无法裁决；谬误清单只有标签没有判定程序，滑坡与正常推理的界线说不清",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A18-fallacy-detection",
+        "note": "Golden-100 · A18-fallacy-detection（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A18-fallacy-detection"
+      ],
+      "notes": "Golden-100 · A18-fallacy-detection（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A19-p-value-meaning",
+      "version": 1,
+      "nickname": "想搞懂p值与置信区间的频率学派语义",
+      "account": {
+        "displayName": "想搞懂p值与置信区间的频率学派语义",
+        "emailPrefix": "golden-A19-p-value-meaning"
+      },
+      "persona": {
+        "nameHint": "想搞懂p值与置信区间的频率学派语义",
+        "background": "「正确理解p值与置信区间的频率学派语义，在汇报中不出错地解读检验结果」诉求的虚拟学习者（系统掌握型）。 起点与卡点：把p=0.04讲成「96%概率更好」被当场纠正；p值的条件方向与直觉相反，频率学派语义一直用反",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "正确理解p值与置信区间的频率学派语义，在汇报中不出错地解读检验结果",
+        "visibleOpening": "我从运营转做增长分析，第一次独立跑A/B实验，p=0.04，兴奋地在周会上宣布「新版本有96%的概率更好」，被数据科学同事当场纠正。回家重学才发现p值既不是「原假设为真的概率」也不是「结果是碰巧的概率」——做了三年数据分析，这个词我一直用反。接下来八周，我每天午休留25分钟，把统计语义这块补上，公司不催，但我不想再在会上翻车。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：把p=0.04讲成「96%概率更好」被当场纠正；p值的条件方向与直觉相反，频率学派语义一直用反）",
+          "这次希望拿到什么结果？——按「正确理解p值与置信区间的频率学派语义，在汇报中不出错地解读检验结果」的实际交付来",
+          "时间上怎么安排？——56天内，每天约 25 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "正确理解p值与置信区间的频率学派语义，在汇报中不出错地解读检验结果",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "56天内",
+            "horizonDays": 56,
+            "dailyMinutes": 25,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "把p=0.04讲成「96%概率更好」被当场纠正；p值的条件方向与直觉相反，频率学派语义一直用反",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A19-p-value-meaning",
+        "note": "Golden-100 · A19-p-value-meaning（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A19-p-value-meaning"
+      ],
+      "notes": "Golden-100 · A19-p-value-meaning（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A20-epsilon-delta",
+      "version": 1,
+      "nickname": "想搞懂ε-δ定义的逻辑语法",
+      "account": {
+        "displayName": "想搞懂ε-δ定义的逻辑语法",
+        "emailPrefix": "golden-A20-epsilon-delta"
+      },
+      "persona": {
+        "nameHint": "想搞懂ε-δ定义的逻辑语法",
+        "background": "「读懂ε-δ定义的逻辑语法，理解它如何把「无限接近」的动态直觉翻译成可验证的不等式」诉求的虚拟学习者（系统掌握型）。 起点与卡点：「无限接近」的直觉版一听就懂，ε-δ套娃句式看三晚不懂；没意识到「无限」本身未被定义，缺动态直觉与静态逻辑之间的翻译",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "读懂ε-δ定义的逻辑语法，理解它如何把「无限接近」的动态直觉翻译成可验证的不等式",
+        "visibleOpening": "大一新生学高数，前面函数图像还能靠直觉撑着，直到极限的ε-δ定义：「x无限接近a时f(x)无限接近b」明明一听就懂，为什么非要写成「任意ε>0，存在δ>0」这种套娃句式？对着符号看了三个晚上，连课本这一节想让我「会做什么」都没搞明白，证明题只会照抄格式。这学期还长，我每天晚自习抽40分钟，想先把这个定义的语法真正读懂。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：「无限接近」的直觉版一听就懂，ε-δ套娃句式看三晚不懂；没意识到「无限」本身未被定义，缺动态直觉与静态逻辑之间的翻译）",
+          "这次希望拿到什么结果？——按「读懂ε-δ定义的逻辑语法，理解它如何把「无限接近」的动态直觉翻译成可验证的不等式」的实际交付来",
+          "时间上怎么安排？——100天内，每天约 40 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "读懂ε-δ定义的逻辑语法，理解它如何把「无限接近」的动态直觉翻译成可验证的不等式",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "100天内",
+            "horizonDays": 100,
+            "dailyMinutes": 40,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "「无限接近」的直觉版一听就懂，ε-δ套娃句式看三晚不懂；没意识到「无限」本身未被定义，缺动态直觉与静态逻辑之间的翻译",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A20-epsilon-delta",
+        "note": "Golden-100 · A20-epsilon-delta（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A20-epsilon-delta"
+      ],
+      "notes": "Golden-100 · A20-epsilon-delta（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A21-falsifiability-limit",
+      "version": 1,
+      "nickname": "想搞懂可证伪性标准受到的两层夹击（迪昂-蒯因整体论…",
+      "account": {
+        "displayName": "想搞懂可证伪性标准受到的两层夹击（迪昂-蒯因整体论…",
+        "emailPrefix": "golden-A21-falsifiability-limit"
+      },
+      "persona": {
+        "nameHint": "想搞懂可证伪性标准受到的两层夹击（迪昂-蒯因整体论…",
+        "background": "「弄清可证伪性标准受到的两层夹击（迪昂-蒯因整体论、概率命题）与库恩的替代图景」诉求的虚拟学习者（系统掌握型）。 起点与卡点：把可证伪性当拿来就用的单条判据被反问语塞；不知迪昂-蒯因整体论让证伪之箭射不准单个命题，也不知波普尔与库恩两套图景的差异",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "弄清可证伪性标准受到的两层夹击（迪昂-蒯因整体论、概率命题）与库恩的替代图景",
+        "visibleOpening": "我是程序员，平时爱用「不可证伪所以不是科学」反驳星座和养生谣言，挺顺手。直到有人反问：概率命题也可能是科学的，你这个可证伪性标准自己可证伪吗？我去查文献，发现迪昂-蒯因问题说实验失败不能定位是哪个假设错了，库恩又说旧范式不是被证伪推翻的。我这把用熟的刀原来自身难保。每周三个晚上各40分钟，想把自己这套口头武器的前提重修一遍。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：把可证伪性当拿来就用的单条判据被反问语塞；不知迪昂-蒯因整体论让证伪之箭射不准单个命题，也不知波普尔与库恩两套图景的差异）",
+          "这次希望拿到什么结果？——按「弄清可证伪性标准受到的两层夹击（迪昂-蒯因整体论、概率命题）与库恩的替代图景」的实际交付来",
+          "时间上怎么安排？——90天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "弄清可证伪性标准受到的两层夹击（迪昂-蒯因整体论、概率命题）与库恩的替代图景",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "90天内",
+            "horizonDays": 90,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "把可证伪性当拿来就用的单条判据被反问语塞；不知迪昂-蒯因整体论让证伪之箭射不准单个命题，也不知波普尔与库恩两套图景的差异",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A21-falsifiability-limit",
+        "note": "Golden-100 · A21-falsifiability-limit（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A21-falsifiability-limit"
+      ],
+      "notes": "Golden-100 · A21-falsifiability-limit（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A22-legal-subsumption",
+      "version": 1,
+      "nickname": "想搞懂规范涵摄的完整步骤",
+      "account": {
+        "displayName": "想搞懂规范涵摄的完整步骤",
+        "emailPrefix": "golden-A22-legal-subsumption"
+      },
+      "persona": {
+        "nameHint": "想搞懂规范涵摄的完整步骤",
+        "background": "「掌握规范涵摄的完整步骤：解释大前提、拆解构成要件要素、逐格比对事实」诉求的虚拟学习者（系统掌握型）。 起点与卡点：案例分析连续被批没有涵摄过程；把涵摄当成机械三段论套用，不理解要件要素需先解释才能逐格比对事实",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "掌握规范涵摄的完整步骤：解释大前提、拆解构成要件要素、逐格比对事实",
+        "visibleOpening": "我在职备考法考，做刑法案例分析总被批「直接跳到结论、没有涵摄过程」。参考答案写「逐一检验构成要件要素」，可我想不通：「未经同意骑走别人的车」是不是「窃取」，这不是一眼能看出来的事吗？到底怎么「套」才算规范的涵摄？离客观题还有四个月，工作日时间碎，只有周末能坐下来，一次一个半小时。我想先用几次整块时间把涵摄的地基打好，比多刷十道题都管用。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：案例分析连续被批没有涵摄过程；把涵摄当成机械三段论套用，不理解要件要素需先解释才能逐格比对事实）",
+          "这次希望拿到什么结果？——按「掌握规范涵摄的完整步骤：解释大前提、拆解构成要件要素、逐格比对事实」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "掌握规范涵摄的完整步骤：解释大前提、拆解构成要件要素、逐格比对事实",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "案例分析连续被批没有涵摄过程；把涵摄当成机械三段论套用，不理解要件要素需先解释才能逐格比对事实",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A22-legal-subsumption",
+        "note": "Golden-100 · A22-legal-subsumption（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A22-legal-subsumption"
+      ],
+      "notes": "Golden-100 · A22-legal-subsumption（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A23-spaced-repetition-science",
+      "version": 1,
+      "nickname": "想搞懂间隔重复背后的三层证据（遗忘曲线、测试效应、…",
+      "account": {
+        "displayName": "想搞懂间隔重复背后的三层证据（遗忘曲线、测试效应、…",
+        "emailPrefix": "golden-A23-spaced-repetition-science"
+      },
+      "persona": {
+        "nameHint": "想搞懂间隔重复背后的三层证据（遗忘曲线、测试效应、…",
+        "background": "「搞清间隔重复背后的三层证据（遗忘曲线、测试效应、间隔效应），据此决定复习系统怎么改」诉求的虚拟学习者（系统掌握型）。 起点与卡点：Anki卡片积压到两千张开始怀疑方法；把间隔重复当黑箱，分不清遗忘曲线、测试效应、间隔效应三层证据，方法一带来痛苦就怀疑科学性",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "搞清间隔重复背后的三层证据（遗忘曲线、测试效应、间隔效应），据此决定复习系统怎么改",
+        "visibleOpening": "我备考职业证书，装了Anki，听说间隔重复「科学」，用了一个月卡片堆到两千张，每天复习两小时还越积越多。我开始打退堂鼓：艾宾浩斯遗忘曲线是一百多年前的实验，「快忘记时复习」到底有没有严格依据？为什么主动回想一遍比反复看书管用？说不出机制，就只能半信半疑地机械打卡。接下来三个月，我把通勤来回的30分钟拆成两段让给它，先弄清这套方法的证据，再决定卡片池怎么砍。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：Anki卡片积压到两千张开始怀疑方法；把间隔重复当黑箱，分不清遗忘曲线、测试效应、间隔效应三层证据，方法一带来痛苦就怀疑科学性）",
+          "这次希望拿到什么结果？——按「搞清间隔重复背后的三层证据（遗忘曲线、测试效应、间隔效应），据此决定复习系统怎么改」的实际交付来",
+          "时间上怎么安排？——90天内，每天约 30 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "搞清间隔重复背后的三层证据（遗忘曲线、测试效应、间隔效应），据此决定复习系统怎么改",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "90天内",
+            "horizonDays": 90,
+            "dailyMinutes": 30,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "Anki卡片积压到两千张开始怀疑方法；把间隔重复当黑箱，分不清遗忘曲线、测试效应、间隔效应三层证据，方法一带来痛苦就怀疑科学性",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A23-spaced-repetition-science",
+        "note": "Golden-100 · A23-spaced-repetition-science（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A23-spaced-repetition-science"
+      ],
+      "notes": "Golden-100 · A23-spaced-repetition-science（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A24-vaccine-two-layers",
+      "version": 1,
+      "nickname": "想搞懂疫苗保护的两层机制",
+      "account": {
+        "displayName": "想搞懂疫苗保护的两层机制",
+        "emailPrefix": "golden-A24-vaccine-two-layers"
+      },
+      "persona": {
+        "nameHint": "想搞懂疫苗保护的两层机制",
+        "background": "「分清疫苗保护的两层机制：循环抗体防感染与记忆细胞防重症」诉求的虚拟学习者（系统掌握型）。 起点与卡点：三针疫苗后仍感染于是怀疑疫苗；默认疫苗=抗体=防感染的单链，不知道循环抗体与记忆细胞对应两种「有用」，混成一个指标就看不懂科普",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "分清疫苗保护的两层机制：循环抗体防感染与记忆细胞防重症",
+        "visibleOpening": "我打了三针疫苗还是感染了，开始怀疑「疫苗到底有没有用」。去查资料，又看到「接种后抗体水平会降到保护所需水平以下」「免疫记忆能否防病取决于潜伏期」，彻底看不懂：疫苗防的到底是感染还是重症？抗体降了是不是等于白打？家里老人也总拿这个问我，我答不上来。每天睡前有20分钟刷手机的时间，想把这层窗户纸捅破，至少能给人讲明白。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：三针疫苗后仍感染于是怀疑疫苗；默认疫苗=抗体=防感染的单链，不知道循环抗体与记忆细胞对应两种「有用」，混成一个指标就看不懂科普）",
+          "这次希望拿到什么结果？——按「分清疫苗保护的两层机制：循环抗体防感染与记忆细胞防重症」的实际交付来",
+          "时间上怎么安排？——30天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "分清疫苗保护的两层机制：循环抗体防感染与记忆细胞防重症",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "30天内",
+            "horizonDays": 30,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "三针疫苗后仍感染于是怀疑疫苗；默认疫苗=抗体=防感染的单链，不知道循环抗体与记忆细胞对应两种「有用」，混成一个指标就看不懂科普",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A24-vaccine-two-layers",
+        "note": "Golden-100 · A24-vaccine-two-layers（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A24-vaccine-two-layers"
+      ],
+      "notes": "Golden-100 · A24-vaccine-two-layers（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-A25-psych-intro-map",
+      "version": 1,
+      "nickname": "想搞懂心理学导论教材级的概念框架",
+      "account": {
+        "displayName": "想搞懂心理学导论教材级的概念框架",
+        "emailPrefix": "golden-A25-psych-intro-map"
+      },
+      "persona": {
+        "nameHint": "想搞懂心理学导论教材级的概念框架",
+        "background": "「过完心理学导论教材级的概念框架，能识别大众心理学内容里的伪科学成分」诉求的虚拟学习者（系统掌握型）。 起点与卡点：刷短视频越刷越焦虑，读《乌合之众》觉得不对劲却说不清；缺教材级概念框架，无法区分正经结论与伪科学断言",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "过完心理学导论教材级的概念框架，能识别大众心理学内容里的伪科学成分",
+        "visibleOpening": "我27岁，做用户运营，刷了太多心理学短视频，越刷越焦虑。买的《乌合之众》翻了几十页，觉得哪里不对劲又说不清哪不对——原生家庭决定一切、NLP读心术，我怀疑是断章取义，但拿不出反驳依据。我清楚自己缺的是教材级的系统框架，不考研，就想分清哪些是正经结论、哪些是伪科学，顺便看懂身边人的行为。下班后每天有半小时多一点，想过完一门正经导论课的体系。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：刷短视频越刷越焦虑，读《乌合之众》觉得不对劲却说不清；缺教材级概念框架，无法区分正经结论与伪科学断言）",
+          "这次希望拿到什么结果？——按「过完心理学导论教材级的概念框架，能识别大众心理学内容里的伪科学成分」的实际交付来",
+          "时间上怎么安排？——180天内，每天约 35 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "过完心理学导论教材级的概念框架，能识别大众心理学内容里的伪科学成分",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "180天内",
+            "horizonDays": 180,
+            "dailyMinutes": 35,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "刷短视频越刷越焦虑，读《乌合之众》觉得不对劲却说不清；缺教材级概念框架，无法区分正经结论与伪科学断言",
+          "expect": "path",
+          "group": "A"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "A25-psych-intro-map",
+        "note": "Golden-100 · A25-psych-intro-map（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "A",
+        "mastery",
+        "golden-A25-psych-intro-map"
+      ],
+      "notes": "Golden-100 · A25-psych-intro-map（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-sql-perf-05",
+      "version": 1,
+      "nickname": "想搞懂SQL 慢查询诊断与索引调优",
+      "account": {
+        "displayName": "想搞懂SQL 慢查询诊断与索引调优",
+        "emailPrefix": "golden-sql-perf-05"
+      },
+      "persona": {
+        "nameHint": "想搞懂SQL 慢查询诊断与索引调优",
+        "background": "「学会 SQL 慢查询诊断与索引调优」诉求的虚拟学习者（系统掌握型）。 起点与卡点：会写常规 CRUD 和多表关联；不懂 B+ 树索引在磁盘上怎么查找，看不懂 EXPLAIN 输出里的 Using filesort / Using temporary，不知道什么时候索引会失效",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "学会 SQL 慢查询诊断与索引调优",
+        "visibleOpening": "我是初级后端开发，平时写 SELECT ... JOIN ... GROUP BY 没问题，但最近线上有个报表接口查询要 8 秒，DBA 让我看 EXPLAIN 调一下索引，我看那一堆 type、key、Extra 完全不知道从哪下手，每次都是瞎加索引碰运气。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：会写常规 CRUD 和多表关联；不懂 B+ 树索引在磁盘上怎么查找，看不懂 EXPLAIN 输出里的 Using filesort / Us）",
+          "这次希望拿到什么结果？——按「学会 SQL 慢查询诊断与索引调优」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "学会 SQL 慢查询诊断与索引调优",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "会写常规 CRUD 和多表关联；不懂 B+ 树索引在磁盘上怎么查找，看不懂 EXPLAIN 输出里的 Using filesort / Using temporary，不知道什么时候索引会失效",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "sql-perf-05",
+        "note": "Golden-100 · sql-perf-05（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-sql-perf-05"
+      ],
+      "notes": "Golden-100 · sql-perf-05（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-git-dag-06",
+      "version": 1,
+      "nickname": "想搞懂Git 指针心智模型",
+      "account": {
+        "displayName": "想搞懂Git 指针心智模型",
+        "emailPrefix": "golden-git-dag-06"
+      },
+      "persona": {
+        "nameHint": "想搞懂Git 指针心智模型",
+        "background": "「建立 Git 指针心智模型，能处理协作冲突与误操作救援」诉求的虚拟学习者（系统掌握型）。 起点与卡点：把 Git 当网盘备份工具，脑中没有提交节点图（DAG）和分支指针概念；看到 detached HEAD 或冲突标记就想去删文件夹重拉",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "建立 Git 指针心智模型，能处理协作冲突与误操作救援",
+        "visibleOpening": "我刚进团队实习，自己一个人写代码时只会 git add / commit / push 三板斧。现在几个人一起改同一个仓库，一遇到让我 rebase、解冲突、或者我不小心把代码提交错了分支，我就慌得不行，生怕把同事代码搞丢了。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：把 Git 当网盘备份工具，脑中没有提交节点图（DAG）和分支指针概念；看到 detached HEAD 或冲突标记就想去删文件夹重拉）",
+          "这次希望拿到什么结果？——按「建立 Git 指针心智模型，能处理协作冲突与误操作救援」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立 Git 指针心智模型，能处理协作冲突与误操作救援",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "把 Git 当网盘备份工具，脑中没有提交节点图（DAG）和分支指针概念；看到 detached HEAD 或冲突标记就想去删文件夹重拉",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "git-dag-06",
+        "note": "Golden-100 · git-dag-06（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-git-dag-06"
+      ],
+      "notes": "Golden-100 · git-dag-06（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-py-clean-07",
+      "version": 1,
+      "nickname": "想搞懂Pandas 向量化思维",
+      "account": {
+        "displayName": "想搞懂Pandas 向量化思维",
+        "emailPrefix": "golden-py-clean-07"
+      },
+      "persona": {
+        "nameHint": "想搞懂Pandas 向量化思维",
+        "background": "「建立 Pandas 向量化思维，能完成多源数据对齐与聚合」诉求的虚拟学习者（系统掌握型）。 起点与卡点：已掌握 Python 基础语法；卡在从逐行循环思维转不到列向量化思维，以及 merge 时一对多膨胀、groupby 索引层级混乱",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "建立 Pandas 向量化思维，能完成多源数据对齐与聚合",
+        "visibleOpening": "我学过一点 Python 基础（懂变量、列表、字典和 for 循环），现在想学用 Pandas 处理业务报表。但我一写 Pandas 就忍不住用 for 循环一行行遍历 DataFrame，代码又慢又臭，遇到多张表合并和分组汇总总是报错或者行数莫名其妙变多。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：已掌握 Python 基础语法；卡在从逐行循环思维转不到列向量化思维，以及 merge 时一对多膨胀、groupby 索引层级混乱）",
+          "这次希望拿到什么结果？——按「建立 Pandas 向量化思维，能完成多源数据对齐与聚合」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立 Pandas 向量化思维，能完成多源数据对齐与聚合",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "已掌握 Python 基础语法；卡在从逐行循环思维转不到列向量化思维，以及 merge 时一对多膨胀、groupby 索引层级混乱",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "py-clean-07",
+        "note": "Golden-100 · py-clean-07（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-py-clean-07"
+      ],
+      "notes": "Golden-100 · py-clean-07（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B04-sql-cast",
+      "version": 1,
+      "nickname": "想搞懂MySQL EXPLAIN 执行计划",
+      "account": {
+        "displayName": "想搞懂MySQL EXPLAIN 执行计划",
+        "emailPrefix": "golden-B04-sql-cast"
+      },
+      "persona": {
+        "nameHint": "想搞懂MySQL EXPLAIN 执行计划",
+        "background": "「看懂 MySQL EXPLAIN 执行计划，能定位隐式类型转换导致的索引失效并给出改法」诉求的虚拟学习者（系统掌握型）。 起点与卡点：手机号被当数字比较触发隐式类型转换，索引失效走全表扫描；能认出 type=ALL、key=NULL，却判断不了该改 SQL 写法还是重建索引",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "看懂 MySQL EXPLAIN 执行计划，能定位隐式类型转换导致的索引失效并给出改法",
+        "visibleOpening": "我是电商后端，用户表几十万行，手机号查询接口从毫秒掉到 3 秒。phone 明明建了索引，EXPLAIN 一跑 type 是 ALL、key 是 NULL——全表扫描。我认得出这几列，却说不清优化器为何弃用索引；唯一改过的是把手机号当数字传，重启和 ANALYZE 都没用。三个月不赶时间，每周 6 小时，就想把 EXPLAIN 那几列看懂，判断该改写法还是重建索引。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：手机号被当数字比较触发隐式类型转换，索引失效走全表扫描；能认出 type=ALL、key=NULL，却判断不了该改 SQL 写法还是重建索引）",
+          "这次希望拿到什么结果？——按「看懂 MySQL EXPLAIN 执行计划，能定位隐式类型转换导致的索引失效并给出改法」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "看懂 MySQL EXPLAIN 执行计划，能定位隐式类型转换导致的索引失效并给出改法",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "手机号被当数字比较触发隐式类型转换，索引失效走全表扫描；能认出 type=ALL、key=NULL，却判断不了该改 SQL 写法还是重建索引",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B04-sql-cast",
+        "note": "Golden-100 · B04-sql-cast（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B04-sql-cast"
+      ],
+      "notes": "Golden-100 · B04-sql-cast（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B05-pandas-memory",
+      "version": 1,
+      "nickname": "想搞懂pandas 读大 CSV 的内存控制手段（…",
+      "account": {
+        "displayName": "想搞懂pandas 读大 CSV 的内存控制手段（…",
+        "emailPrefix": "golden-B05-pandas-memory"
+      },
+      "persona": {
+        "nameHint": "想搞懂pandas 读大 CSV 的内存控制手段（…",
+        "background": "「掌握 pandas 读大 CSV 的内存控制手段（dtype/usecols/chunksize/分块落盘）」诉求的虚拟学习者（系统掌握型）。 起点与卡点：几百 MB 的 CSV 全量 read_csv 直接 MemoryError；不知道默认类型推断导致内存放大数倍，分块读取、指定类型、换 parquet 之间的边界不清楚",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "掌握 pandas 读大 CSV 的内存控制手段（dtype/usecols/chunksize/分块落盘）",
+        "visibleOpening": "我做用户行为日志分析快一年，几十万行的表都顺手。这次一份几百 MB 的埋点 CSV，pd.read_csv 一读 Jupyter kernel 直接 died，换 32G 机器照样爆。才知道 pandas 默认把列推成 int64/object，内存放大好几倍，死在读的那步，读后删列来不及，chunksize、dtype 我没碰过。接下来两周每天午休 25 分钟，把分块与指定类型的边界搞清楚。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：几百 MB 的 CSV 全量 read_csv 直接 MemoryError；不知道默认类型推断导致内存放大数倍，分块读取、指定类型、换 p）",
+          "这次希望拿到什么结果？——按「掌握 pandas 读大 CSV 的内存控制手段（dtype/usecols/chunksize/分块落盘）」的实际交付来",
+          "时间上怎么安排？——14天内，每天约 25 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "掌握 pandas 读大 CSV 的内存控制手段（dtype/usecols/chunksize/分块落盘）",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "14天内",
+            "horizonDays": 14,
+            "dailyMinutes": 25,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "几百 MB 的 CSV 全量 read_csv 直接 MemoryError；不知道默认类型推断导致内存放大数倍，分块读取、指定类型、换 parquet 之间的边界不清楚",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B05-pandas-memory",
+        "note": "Golden-100 · B05-pandas-memory（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B05-pandas-memory"
+      ],
+      "notes": "Golden-100 · B05-pandas-memory（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B06-reflog-rescue",
+      "version": 1,
+      "nickname": "想搞懂git reset 三种模式的影响范围",
+      "account": {
+        "displayName": "想搞懂git reset 三种模式的影响范围",
+        "emailPrefix": "golden-B06-reflog-rescue"
+      },
+      "persona": {
+        "nameHint": "想搞懂git reset 三种模式的影响范围",
+        "background": "「搞懂 git reset 三种模式的影响范围，能用 reflog 找回误删提交并分清哪些改动真救不回」诉求的虚拟学习者（系统掌握型）。 起点与卡点：reset --hard 后 git log 看不到提交，不知道对象仍在本地对象库、reflog 可查；分不清已 commit 的能救、未 commit 的改动真丢",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "搞懂 git reset 三种模式的影响范围，能用 reflog 找回误删提交并分清哪些改动真救不回",
+        "visibleOpening": "我实习三个月，git 只会 add、commit、push。昨天提交时提示要先和远程同步，我顺手敲了 git reset --hard，刚 commit 的内容和暂存区全没了，git log 里也看不见那些提交，吓得不敢跟导师说。听说提交对象还在本地、reflog 能找回，但我不懂哪些救得回、哪些真丢了。每天下班前 20 分钟，一周内想在沙盒仓库把救援流程练熟。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：reset --hard 后 git log 看不到提交，不知道对象仍在本地对象库、reflog 可查；分不清已 commit 的能救、未 ）",
+          "这次希望拿到什么结果？——按「搞懂 git reset 三种模式的影响范围，能用 reflog 找回误删提交并分清哪些改动真救不回」的实际交付来",
+          "时间上怎么安排？——7天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "搞懂 git reset 三种模式的影响范围，能用 reflog 找回误删提交并分清哪些改动真救不回",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "7天内",
+            "horizonDays": 7,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "reset --hard 后 git log 看不到提交，不知道对象仍在本地对象库、reflog 可查；分不清已 commit 的能救、未 commit 的改动真丢",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B06-reflog-rescue",
+        "note": "Golden-100 · B06-reflog-rescue（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B06-reflog-rescue"
+      ],
+      "notes": "Golden-100 · B06-reflog-rescue（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B07-regex-lazy",
+      "version": 1,
+      "nickname": "想搞懂贪婪量词的回溯回吐机制",
+      "account": {
+        "displayName": "想搞懂贪婪量词的回溯回吐机制",
+        "emailPrefix": "golden-B07-regex-lazy"
+      },
+      "persona": {
+        "nameHint": "想搞懂贪婪量词的回溯回吐机制",
+        "background": "「理解贪婪量词的回溯回吐机制，能用懒惰量词与否定字符类设计多段提取正则」诉求的虚拟学习者（系统掌握型）。 起点与卡点：.* 吞到串尾回吐导致捕获跨段错位；知道 .*? 却说不清何时匹配不到何时漏配，靠试错碰运气",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "理解贪婪量词的回溯回吐机制，能用懒惰量词与否定字符类设计多段提取正则",
+        "visibleOpening": "我刚接手爬虫维护的活儿，要解析 [a,1][b,2][c,3] 这种标记串，用 \\[(.*),(.*)\\] 逐对提取，结果贪婪的 .* 吞到串尾再回吐，第一组捕获变成 a,1][b,2][c，后面全错位。我知道 .*? 是懒惰模式，可加上有时匹配不到、有时又漏配，基本靠改了再跑碰运气。每天通勤 20 分钟，这周想把贪婪量词回吐字符的回溯顺序搞懂，写出一次就对的提取模式。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：.* 吞到串尾回吐导致捕获跨段错位；知道 .*? 却说不清何时匹配不到何时漏配，靠试错碰运气）",
+          "这次希望拿到什么结果？——按「理解贪婪量词的回溯回吐机制，能用懒惰量词与否定字符类设计多段提取正则」的实际交付来",
+          "时间上怎么安排？——7天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "理解贪婪量词的回溯回吐机制，能用懒惰量词与否定字符类设计多段提取正则",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "7天内",
+            "horizonDays": 7,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": ".* 吞到串尾回吐导致捕获跨段错位；知道 .*? 却说不清何时匹配不到何时漏配，靠试错碰运气",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B07-regex-lazy",
+        "note": "Golden-100 · B07-regex-lazy（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B07-regex-lazy"
+      ],
+      "notes": "Golden-100 · B07-regex-lazy（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B08-load-vs-cpu",
+      "version": 1,
+      "nickname": "想搞懂load average 的统计口径",
+      "account": {
+        "displayName": "想搞懂load average 的统计口径",
+        "emailPrefix": "golden-B08-load-vs-cpu"
+      },
+      "persona": {
+        "nameHint": "想搞懂load average 的统计口径",
+        "background": "「理解 load average 的统计口径，建立从 load 现象到 IO/D 状态根因的完整排查顺序」诉求的虚拟学习者（系统掌握型）。 起点与卡点：4 核机器 load 8+ 而 CPU 内存都不高；不知道 load 含 D 状态进程，没查过 D 进程、%util 与 swap，没有排查顺序只有重启",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "理解 load average 的统计口径，建立从 load 现象到 IO/D 状态根因的完整排查顺序",
+        "visibleOpening": "我在小公司兼职管三台服务器，平时只会 top 看 CPU 内存。上周一台很怪：CPU 内存都不高，SSH 敲命令一顿一顿，4 核机器 load 冲到 8 多。确认过没有大量 IO，卡了几天只能重启顶着。后来听说 load 统计的不只是 CPU，还有 D 状态进程，但 ps、iostat、查 swap 我从没跑过。接下来两个月每周 3 小时，把这套排查顺序练成本能。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：4 核机器 load 8+ 而 CPU 内存都不高；不知道 load 含 D 状态进程，没查过 D 进程、%util 与 swap，没有排查）",
+          "这次希望拿到什么结果？——按「理解 load average 的统计口径，建立从 load 现象到 IO/D 状态根因的完整排查顺序」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "理解 load average 的统计口径，建立从 load 现象到 IO/D 状态根因的完整排查顺序",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "4 核机器 load 8+ 而 CPU 内存都不高；不知道 load 含 D 状态进程，没查过 D 进程、%util 与 swap，没有排查顺序只有重启",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B08-load-vs-cpu",
+        "note": "Golden-100 · B08-load-vs-cpu（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B08-load-vs-cpu"
+      ],
+      "notes": "Golden-100 · B08-load-vs-cpu（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B09-docker-localhost",
+      "version": 1,
+      "nickname": "想搞懂容器独立网络命名空间",
+      "account": {
+        "displayName": "想搞懂容器独立网络命名空间",
+        "emailPrefix": "golden-B09-docker-localhost"
+      },
+      "persona": {
+        "nameHint": "想搞懂容器独立网络命名空间",
+        "background": "「理解容器独立网络命名空间，掌握容器访问宿主机服务的跨平台标准写法」诉求的虚拟学习者（系统掌握型）。 起点与卡点：容器里的 localhost 不是宿主机的 localhost；内网 IP 硬编码换环境失效，host.docker.internal 在 Linux 缺失，网桥 IP 时通时不通取决于服务绑定地址",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "理解容器独立网络命名空间，掌握容器访问宿主机服务的跨平台标准写法",
+        "visibleOpening": "我把组里跑了三年的 Web 服务容器化，容器里连宿主机的 Postgres 一直 Connection refused——数据库就在本机，localhost 和 127.0.0.1 都试了。换内网 IP 能通，换网络环境又失效；host.docker.internal 在 Linux 不存在，网桥 IP 时通时不通。网络命名空间这套道理一直没啃透。每天早上 20 分钟，一周内把标准姿势定下来。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：容器里的 localhost 不是宿主机的 localhost；内网 IP 硬编码换环境失效，host.docker.internal 在 ）",
+          "这次希望拿到什么结果？——按「理解容器独立网络命名空间，掌握容器访问宿主机服务的跨平台标准写法」的实际交付来",
+          "时间上怎么安排？——7天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "理解容器独立网络命名空间，掌握容器访问宿主机服务的跨平台标准写法",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "7天内",
+            "horizonDays": 7,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "容器里的 localhost 不是宿主机的 localhost；内网 IP 硬编码换环境失效，host.docker.internal 在 Linux 缺失，网桥 IP 时通时不通取决于服务绑定地址",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B09-docker-localhost",
+        "note": "Golden-100 · B09-docker-localhost（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B09-docker-localhost"
+      ],
+      "notes": "Golden-100 · B09-docker-localhost（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B10-async-block",
+      "version": 1,
+      "nickname": "想搞懂事件循环阻塞机理",
+      "account": {
+        "displayName": "想搞懂事件循环阻塞机理",
+        "emailPrefix": "golden-B10-async-block"
+      },
+      "persona": {
+        "nameHint": "想搞懂事件循环阻塞机理",
+        "background": "「理解事件循环阻塞机理，掌握定位并替换 async 代码中同步调用的系统方法」诉求的虚拟学习者（系统掌握型）。 起点与卡点：async 路由里调用 requests 等同步库把事件循环挂住，QPS 掉到 4；不知道 Debug 模式怎么开、怎样系统性找出阻塞调用点",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "理解事件循环阻塞机理，掌握定位并替换 async 代码中同步调用的系统方法",
+        "visibleOpening": "我写了两三年 Flask，上周迁 FastAPI 提速：路由全标了 async，一处 time.sleep 都没有。ab 压测 10 并发 QPS 只有 4，50 个请求跑了 12 秒——服务在串行干活。后来才知道是 async 路由里调了 requests 同步库，事件循环被挂住。听说 asyncio Debug 模式能抓阻塞，不会开。每周两个晚上各一个半小时，两周内想学会定位哪一行在阻塞。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：async 路由里调用 requests 等同步库把事件循环挂住，QPS 掉到 4；不知道 Debug 模式怎么开、怎样系统性找出阻塞调用点）",
+          "这次希望拿到什么结果？——按「理解事件循环阻塞机理，掌握定位并替换 async 代码中同步调用的系统方法」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "理解事件循环阻塞机理，掌握定位并替换 async 代码中同步调用的系统方法",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "async 路由里调用 requests 等同步库把事件循环挂住，QPS 掉到 4；不知道 Debug 模式怎么开、怎样系统性找出阻塞调用点",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B10-async-block",
+        "note": "Golden-100 · B10-async-block（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B10-async-block"
+      ],
+      "notes": "Golden-100 · B10-async-block（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B11-redis-hotkey",
+      "version": 1,
+      "nickname": "想搞懂Redis 热 key 的成因、低风险识别手…",
+      "account": {
+        "displayName": "想搞懂Redis 热 key 的成因、低风险识别手…",
+        "emailPrefix": "golden-B11-redis-hotkey"
+      },
+      "persona": {
+        "nameHint": "想搞懂Redis 热 key 的成因、低风险识别手…",
+        "background": "「掌握 Redis 热 key 的成因、低风险识别手段与本地缓存/打散/限流的选型依据」诉求的虚拟学习者（系统掌握型）。 起点与卡点：哈希分片下热 key 无法迁走，扩容与加副本无效；monitor/--hotkeys 有性能风险，三种方案之间没有选型依据",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "掌握 Redis 热 key 的成因、低风险识别手段与本地缓存/打散/限流的选型依据",
+        "visibleOpening": "我在大促保障组。去年一个爆款详情把 Redis 单个分片的 CPU 和带宽打满，其余分片闲着，接口超时。扩容加完节点，单分片压力纹丝不动——按 key 哈希分片，热 key 永远落在同一实例，加副本、调 maxmemory 都没用。本地缓存、随机后缀、降级限流吵了两天没定，也没人敢在线上跑 --hotkeys。今年大促前，每周三晚 40 分钟、四周，把热 key 识别与选型一次做对。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：哈希分片下热 key 无法迁走，扩容与加副本无效；monitor/--hotkeys 有性能风险，三种方案之间没有选型依据）",
+          "这次希望拿到什么结果？——按「掌握 Redis 热 key 的成因、低风险识别手段与本地缓存/打散/限流的选型依据」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "掌握 Redis 热 key 的成因、低风险识别手段与本地缓存/打散/限流的选型依据",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "哈希分片下热 key 无法迁走，扩容与加副本无效；monitor/--hotkeys 有性能风险，三种方案之间没有选型依据",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B11-redis-hotkey",
+        "note": "Golden-100 · B11-redis-hotkey（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B11-redis-hotkey"
+      ],
+      "notes": "Golden-100 · B11-redis-hotkey（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B12-idempotent-token",
+      "version": 1,
+      "nickname": "想搞懂HTTP 幂等语义与 token/setnx…",
+      "account": {
+        "displayName": "想搞懂HTTP 幂等语义与 token/setnx…",
+        "emailPrefix": "golden-B12-idempotent-token"
+      },
+      "persona": {
+        "nameHint": "想搞懂HTTP 幂等语义与 token/setnx…",
+        "background": "「厘清 HTTP 幂等语义与 token/setnx/唯一索引三种方案的适用边界，设计资金接口幂等键」诉求的虚拟学习者（系统掌握型）。 起点与卡点：超时重试导致重复扣款；token 方案先删后执行与先执行后删各有一个失败窗口，说不清三种方案分别防哪类重复",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "厘清 HTTP 幂等语义与 token/setnx/唯一索引三种方案的适用边界，设计资金接口幂等键",
+        "visibleOpening": "我负责支付回调链路。上个月网络抖动，接口超时自动重试 3 次，一笔订单被扣两次款，工单炸了——排查发现没有幂等保护。上防重 token 又掉进两难：先删 token 再执行业务，超时重试就被拒；先执行再删，并发窗口第二笔又能验过。唯一索引能兜底，但说不清和 token、setnx 各防哪种重复。想对着 RFC 9110 钉死幂等语义，再定幂等键放哪层。每周三次午休各 40 分钟，一个月出方案。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：超时重试导致重复扣款；token 方案先删后执行与先执行后删各有一个失败窗口，说不清三种方案分别防哪类重复）",
+          "这次希望拿到什么结果？——按「厘清 HTTP 幂等语义与 token/setnx/唯一索引三种方案的适用边界，设计资金接口幂等键」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "厘清 HTTP 幂等语义与 token/setnx/唯一索引三种方案的适用边界，设计资金接口幂等键",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "超时重试导致重复扣款；token 方案先删后执行与先执行后删各有一个失败窗口，说不清三种方案分别防哪类重复",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B12-idempotent-token",
+        "note": "Golden-100 · B12-idempotent-token（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B12-idempotent-token"
+      ],
+      "notes": "Golden-100 · B12-idempotent-token（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B13-tab-race",
+      "version": 1,
+      "nickname": "想搞懂「后发必须覆盖先发」竞态的两种通用解法（Ab…",
+      "account": {
+        "displayName": "想搞懂「后发必须覆盖先发」竞态的两种通用解法（Ab…",
+        "emailPrefix": "golden-B13-tab-race"
+      },
+      "persona": {
+        "nameHint": "想搞懂「后发必须覆盖先发」竞态的两种通用解法（Ab…",
+        "background": "「掌握「后发必须覆盖先发」竞态的两种通用解法（AbortController 与请求序号）及卸载清理」诉求的虚拟学习者（系统掌握型）。 起点与卡点：慢响应晚归覆盖新数据；防抖只减少重叠不消灭重叠，两条解法在多组件复用与卸载清理上没有抽象",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "掌握「后发必须覆盖先发」竞态的两种通用解法（AbortController 与请求序号）及卸载清理",
+        "visibleOpening": "我们设备管控页切 Tab 偶现数据错乱：TabA 请求要 3 秒，用户很快切到 TabB，1 秒的 B 先回来，3 秒后 A 回来把 B 整个覆盖。防抖和置灰都被产品否了，测试环境还难复现。写过四年 Vue，这种竞态第一次卡住我：AbortController 和请求序号都听说过，但卸载怎么统一 abort、序号方案多处怎么抽象，没谱。每周二四晚各 40 分钟，三周内要一个能一次做对的通用模式。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：慢响应晚归覆盖新数据；防抖只减少重叠不消灭重叠，两条解法在多组件复用与卸载清理上没有抽象）",
+          "这次希望拿到什么结果？——按「掌握「后发必须覆盖先发」竞态的两种通用解法（AbortController 与请求序号）及卸载清理」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "掌握「后发必须覆盖先发」竞态的两种通用解法（AbortController 与请求序号）及卸载清理",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "慢响应晚归覆盖新数据；防抖只减少重叠不消灭重叠，两条解法在多组件复用与卸载清理上没有抽象",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B13-tab-race",
+        "note": "Golden-100 · B13-tab-race（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B13-tab-race"
+      ],
+      "notes": "Golden-100 · B13-tab-race（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B14-c-pointer",
+      "version": 1,
+      "nickname": "想搞懂C 指针与内存模型心智",
+      "account": {
+        "displayName": "想搞懂C 指针与内存模型心智",
+        "emailPrefix": "golden-B14-c-pointer"
+      },
+      "persona": {
+        "nameHint": "想搞懂C 指针与内存模型心智",
+        "background": "「建立 C 指针与内存模型心智，能独立写出指针相关的完整小程序」诉求的虚拟学习者（系统掌握型）。 起点与卡点：课本语法题会做、完整程序写不出；指针解引用与取地址混用，内存图画不明白，VC6.0 报错看不懂",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "建立 C 指针与内存模型心智，能独立写出指针相关的完整小程序",
+        "visibleOpening": "大一非科班也要学 C，学校自编教材刚讲到指针我就懵了：* 和 & 什么时候用哪个分不清，内存图也画不明白，课本例题看着懂，一到自己写完整小程序就卡住，只能抄室友改改变量名。期末有上机考试，还有三个来月，我不赶时间，宿舍每晚能练一小时，就想把指针和内存模型这关过了——后面结构体和链表全靠它打底。打算以课本为主线，配 K&R《C 程序设计语言》第 2 版的指针章节对照啃。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：课本语法题会做、完整程序写不出；指针解引用与取地址混用，内存图画不明白，VC6.0 报错看不懂）",
+          "这次希望拿到什么结果？——按「建立 C 指针与内存模型心智，能独立写出指针相关的完整小程序」的实际交付来",
+          "时间上怎么安排？——85天内，每天约 60 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立 C 指针与内存模型心智，能独立写出指针相关的完整小程序",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "85天内",
+            "horizonDays": 85,
+            "dailyMinutes": 60,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "课本语法题会做、完整程序写不出；指针解引用与取地址混用，内存图画不明白，VC6.0 报错看不懂",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B14-c-pointer",
+        "note": "Golden-100 · B14-c-pointer（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B14-c-pointer"
+      ],
+      "notes": "Golden-100 · B14-c-pointer（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B15-py2-exam",
+      "version": 1,
+      "nickname": "想搞懂《全国计算机等级考试二级 Python 语言…",
+      "account": {
+        "displayName": "想搞懂《全国计算机等级考试二级 Python 语言…",
+        "emailPrefix": "golden-B15-py2-exam"
+      },
+      "persona": {
+        "nameHint": "想搞懂《全国计算机等级考试二级 Python 语言…",
+        "background": "「按《全国计算机等级考试二级 Python 语言程序设计考试大纲（2022 年版）》系统过考点，稳过操作题」诉求的虚拟学习者（系统掌握型）。 起点与卡点：零基础连环境都装不利索；不知道考纲考点怎么分布、选择题与操作题的时间怎么配比、题库按什么顺序刷",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "按《全国计算机等级考试二级 Python 语言程序设计考试大纲（2022 年版）》系统过考点，稳过操作题",
+        "visibleOpening": "我大一，专业和编程不沾边，看同学都报计算机二级就跟着选了 Python，说比 C 简单。真上手才发现连装环境、配环境变量都卡了一下午，跟着视频敲了三天循环。现在是十月底，明年三月底考试，还有五个来月，每天晚自习后 45 分钟精学、周末再刷两次题。我目标不高：一次过，顺便能学明白点编程。想严格按官方考纲（2022 年版那份）来排复习顺序，题库怎么刷、操作题占大头时选择题怎么平衡，心里完全没数。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：零基础连环境都装不利索；不知道考纲考点怎么分布、选择题与操作题的时间怎么配比、题库按什么顺序刷）",
+          "这次希望拿到什么结果？——按「按《全国计算机等级考试二级 Python 语言程序设计考试大纲（2022 年版）》系统过考点，稳过操作题」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "按《全国计算机等级考试二级 Python 语言程序设计考试大纲（2022 年版）》系统过考点，稳过操作题",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "零基础连环境都装不利索；不知道考纲考点怎么分布、选择题与操作题的时间怎么配比、题库按什么顺序刷",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B15-py2-exam",
+        "note": "Golden-100 · B15-py2-exam（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B15-py2-exam"
+      ],
+      "notes": "Golden-100 · B15-py2-exam（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B16-msoffice-func",
+      "version": 1,
+      "nickname": "想搞懂二级高频 Excel 函数拆到参数级并补齐公…",
+      "account": {
+        "displayName": "想搞懂二级高频 Excel 函数拆到参数级并补齐公…",
+        "emailPrefix": "golden-B16-msoffice-func"
+      },
+      "persona": {
+        "nameHint": "想搞懂二级高频 Excel 函数拆到参数级并补齐公…",
+        "background": "「把二级高频 Excel 函数拆到参数级并补齐公共基础选择题，第三次一定过」诉求的虚拟学习者（系统掌握型）。 起点与卡点：两次挂科都差在公共基础选择题与 Excel 函数混用；函数靠背套路不理解参数，换条件就错",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "把二级高频 Excel 函数拆到参数级并补齐公共基础选择题，第三次一定过",
+        "visibleOpening": "二级 MS Office 我挂了两次，都栽在选择题差几分，Excel 函数是重灾区：VLOOKUP、SUMIFS、MID 一到操作题就混，真题做一套错一摞。这次报了明年三月的，毕业硬门槛卡这个证，说啥也得过。离考试五个来月，我不赶时间：每天课后只抽 20 分钟专攻函数，弄清每个参数在算什么而不是背套路，周末去机房上模拟系统练整卷、捡公共基础选择题。光刷真题不系统过函数，第三次还是碰运气。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：两次挂科都差在公共基础选择题与 Excel 函数混用；函数靠背套路不理解参数，换条件就错）",
+          "这次希望拿到什么结果？——按「把二级高频 Excel 函数拆到参数级并补齐公共基础选择题，第三次一定过」的实际交付来",
+          "时间上怎么安排？——150天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "把二级高频 Excel 函数拆到参数级并补齐公共基础选择题，第三次一定过",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "150天内",
+            "horizonDays": 150,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "两次挂科都差在公共基础选择题与 Excel 函数混用；函数靠背套路不理解参数，换条件就错",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B16-msoffice-func",
+        "note": "Golden-100 · B16-msoffice-func（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B16-msoffice-func"
+      ],
+      "notes": "Golden-100 · B16-msoffice-func（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B17-da-portfolio",
+      "version": 1,
+      "nickname": "想搞懂SQL+Python 做出两个可验证的分析项…",
+      "account": {
+        "displayName": "想搞懂SQL+Python 做出两个可验证的分析项…",
+        "emailPrefix": "golden-B17-da-portfolio"
+      },
+      "persona": {
+        "nameHint": "想搞懂SQL+Python 做出两个可验证的分析项…",
+        "background": "「用 SQL+Python 做出两个可验证的分析项目，并补齐面试所需的统计底子」诉求的虚拟学习者（系统掌握型）。 起点与卡点：网课三个月全是输入没有产出；概率分布与假设检验一知半解，不知道公司数据如何合规地落成作品",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "用 SQL+Python 做出两个可验证的分析项目，并补齐面试所需的统计底子",
+        "visibleOpening": "31 岁，制造业生产管理干了 6 年，年初铁了心转数据分析。SQL 和 Python 网课跟了三个月，投了 60 多份简历全卡在「无相关经验」。现在每晚 8 点到 10 点半雷打不动学，越学越虚：概率分布一知半解，项目凑不出一段像样的。我不缺执行力，缺的是把学的落成两三个项目和够面试的统计底子。统计学补到什么程度、公司生产数据的分析算不算项目，一点谱都没有。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：网课三个月全是输入没有产出；概率分布与假设检验一知半解，不知道公司数据如何合规地落成作品）",
+          "这次希望拿到什么结果？——按「用 SQL+Python 做出两个可验证的分析项目，并补齐面试所需的统计底子」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "用 SQL+Python 做出两个可验证的分析项目，并补齐面试所需的统计底子",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "网课三个月全是输入没有产出；概率分布与假设检验一知半解，不知道公司数据如何合规地落成作品",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B17-da-portfolio",
+        "note": "Golden-100 · B17-da-portfolio（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B17-da-portfolio"
+      ],
+      "notes": "Golden-100 · B17-da-portfolio（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B18-fpa-excel",
+      "version": 1,
+      "nickname": "想搞懂从 VLOOKUP+透视表进阶到 Power…",
+      "account": {
+        "displayName": "想搞懂从 VLOOKUP+透视表进阶到 Power…",
+        "emailPrefix": "golden-B18-fpa-excel"
+      },
+      "persona": {
+        "nameHint": "想搞懂从 VLOOKUP+透视表进阶到 Power…",
+        "background": "「从 VLOOKUP+透视表进阶到 Power Query 与建模函数，独立搭出第一张预算模型表」诉求的虚拟学习者（系统掌握型）。 起点与卡点：只会 VLOOKUP 和透视表；财务建模的 Excel 功底为零，不知道从哪套案例入手练",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "从 VLOOKUP+透视表进阶到 Power Query 与建模函数，独立搭出第一张预算模型表",
+        "visibleOpening": "27 岁核算会计，每月结账加到凌晨。想转 FP&A，JD 里的「财务建模」完全没碰过——Excel 只会 VLOOKUP 和透视表，Power Query 都没打开过。每天下班有 1 到 2 小时。我先不求业务伙伴思维，就想把建模要用的 Excel 进阶功（多表汇总、动态看板、假设分析）练到手，照着真实预算案例做出第一张能跑的模型表。CMA 先放一边，工具这关过了再说转岗。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：只会 VLOOKUP 和透视表；财务建模的 Excel 功底为零，不知道从哪套案例入手练）",
+          "这次希望拿到什么结果？——按「从 VLOOKUP+透视表进阶到 Power Query 与建模函数，独立搭出第一张预算模型表」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "从 VLOOKUP+透视表进阶到 Power Query 与建模函数，独立搭出第一张预算模型表",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "只会 VLOOKUP 和透视表；财务建模的 Excel 功底为零，不知道从哪套案例入手练",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B18-fpa-excel",
+        "note": "Golden-100 · B18-fpa-excel（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B18-fpa-excel"
+      ],
+      "notes": "Golden-100 · B18-fpa-excel（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B19-powerbi-ledger",
+      "version": 1,
+      "nickname": "想搞懂Power BI 建模与 DAX 基础",
+      "account": {
+        "displayName": "想搞懂Power BI 建模与 DAX 基础",
+        "emailPrefix": "golden-B19-powerbi-ledger"
+      },
+      "persona": {
+        "nameHint": "想搞懂Power BI 建模与 DAX 基础",
+        "background": "「掌握 Power BI 建模与 DAX 基础，产出一张能向老板汇报的销售费用月度分析看板」诉求的虚拟学习者（系统掌握型）。 起点与卡点：DAX 的 CALCULATE 看不懂、SQL 只会 SELECT；有全盘账务经验但拿不出一个能用的分析看板",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "掌握 Power BI 建模与 DAX 基础，产出一张能向老板汇报的销售费用月度分析看板",
+        "visibleOpening": "我做总账会计 5 年，月薪 8 千卡了两年。公司上了 ERP，老板要经营分析，我只会透视表，眼看会 Power BI 的同事成了红人。跟 B 站做完了 Power Query 案例，DAX 的 CALCULATE 至今看不懂，SQL 只会 SELECT。财务总监发话：要看到能用的看板。我打算拿公司销售费用数据做一张月度分析页，每晚 8 点半后学 45 分钟、周末加一块，三个月内拿下内部转岗。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：DAX 的 CALCULATE 看不懂、SQL 只会 SELECT；有全盘账务经验但拿不出一个能用的分析看板）",
+          "这次希望拿到什么结果？——按「掌握 Power BI 建模与 DAX 基础，产出一张能向老板汇报的销售费用月度分析看板」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "掌握 Power BI 建模与 DAX 基础，产出一张能向老板汇报的销售费用月度分析看板",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "DAX 的 CALCULATE 看不懂、SQL 只会 SELECT；有全盘账务经验但拿不出一个能用的分析看板",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B19-powerbi-ledger",
+        "note": "Golden-100 · B19-powerbi-ledger（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B19-powerbi-ledger"
+      ],
+      "notes": "Golden-100 · B19-powerbi-ledger（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B20-batch-summary",
+      "version": 1,
+      "nickname": "想搞懂pandas 跑通多 Excel 批量读取、…",
+      "account": {
+        "displayName": "想搞懂pandas 跑通多 Excel 批量读取、…",
+        "emailPrefix": "golden-B20-batch-summary"
+      },
+      "persona": {
+        "nameHint": "想搞懂pandas 跑通多 Excel 批量读取、…",
+        "background": "「用 pandas 跑通多 Excel 批量读取、分组统计与一键出图的科研数据处理流程」诉求的虚拟学习者（系统掌握型）。 起点与卡点：手动复制粘贴已贴错一次数据；groupby/merge 一知半解，列名带空格与索引不对齐两类报错定位半天",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "用 pandas 跑通多 Excel 批量读取、分组统计与一键出图的科研数据处理流程",
+        "visibleOpening": "我材料学研二，拉伸实验每组五个试样，一个月攒了四十多个 Excel 表，汇总全靠手动复制粘贴，上个月还贴错过一次。师兄劝我改 pandas 批量合并，环境装好了只会照抄 read_excel，groupby 和 merge 一知半解，报错半天找不到原因。离论文数据处理启动还有 45 天，我不赶时间，每晚 7 点后在工位学 25 分钟，目标就三个：批量合并、按批次分组算均值标准差、一键出图。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：手动复制粘贴已贴错一次数据；groupby/merge 一知半解，列名带空格与索引不对齐两类报错定位半天）",
+          "这次希望拿到什么结果？——按「用 pandas 跑通多 Excel 批量读取、分组统计与一键出图的科研数据处理流程」的实际交付来",
+          "时间上怎么安排？——45天内，每天约 25 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "用 pandas 跑通多 Excel 批量读取、分组统计与一键出图的科研数据处理流程",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "45天内",
+            "horizonDays": 45,
+            "dailyMinutes": 25,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "手动复制粘贴已贴错一次数据；groupby/merge 一知半解，列名带空格与索引不对齐两类报错定位半天",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B20-batch-summary",
+        "note": "Golden-100 · B20-batch-summary（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B20-batch-summary"
+      ],
+      "notes": "Golden-100 · B20-batch-summary（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B21-qa-to-sdet",
+      "version": 1,
+      "nickname": "想搞懂从零学 Python 与 pytest/Se…",
+      "account": {
+        "displayName": "想搞懂从零学 Python 与 pytest/Se…",
+        "emailPrefix": "golden-B21-qa-to-sdet"
+      },
+      "persona": {
+        "nameHint": "想搞懂从零学 Python 与 pytest/Se…",
+        "background": "「从零学 Python 与 pytest/Selenium，为现有项目回归搭起一套能跑的最小自动化集」诉求的虚拟学习者（系统掌握型）。 起点与卡点：四年手工测试零代码；上次自学卡死在面向对象，不知道语言学到几分就该转框架实操",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "从零学 Python 与 pytest/Selenium，为现有项目回归搭起一套能跑的最小自动化集",
+        "visibleOpening": "26 岁，功能测试做了四年，用例写得比谁都细。可招聘软件里测试岗清一色要自动化，我的技能表是空的，投了三十份简历只有三个面试还全挂。上次自学 Python 坚持二十天，卡在面向对象就放弃了。这次铁了心换学法：工作日晚 8 点半到 10 点、周末上午再挤一块，每块不超 45 分钟。目标半年内用 pytest 加 Selenium 给手上项目的核心回归用例搭起能跑的自动化，先让简历上有一行真东西。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：四年手工测试零代码；上次自学卡死在面向对象，不知道语言学到几分就该转框架实操）",
+          "这次希望拿到什么结果？——按「从零学 Python 与 pytest/Selenium，为现有项目回归搭起一套能跑的最小自动化集」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "从零学 Python 与 pytest/Selenium，为现有项目回归搭起一套能跑的最小自动化集",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "四年手工测试零代码；上次自学卡死在面向对象，不知道语言学到几分就该转框架实操",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B21-qa-to-sdet",
+        "note": "Golden-100 · B21-qa-to-sdet（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B21-qa-to-sdet"
+      ],
+      "notes": "Golden-100 · B21-qa-to-sdet（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B22-stm32-entry",
+      "version": 1,
+      "nickname": "想搞懂跑通 STM32 外设到 FreeRTOS …",
+      "account": {
+        "displayName": "想搞懂跑通 STM32 外设到 FreeRTOS …",
+        "emailPrefix": "golden-B22-stm32-entry"
+      },
+      "persona": {
+        "nameHint": "想搞懂跑通 STM32 外设到 FreeRTOS …",
+        "background": "「跑通 STM32 外设到 FreeRTOS 任务的最小项目链路，完成温湿度采集上云小项目」诉求的虚拟学习者（系统掌握型）。 起点与卡点：例程能跟、独立写就卡；外设与 RTOS 实战为零，不知道怎么把例程拼成完整项目",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "跑通 STM32 外设到 FreeRTOS 任务的最小项目链路，完成温湿度采集上云小项目",
+        "visibleOpening": "我在注塑机厂做了 6 年机械工程师，月薪 9 千看不到头，想转嵌入式。大学 C 语言捡起来了，电路图会看，正点原子 F103 点亮了 LED，串口和中断跟着例程敲完了——可一到自己写就卡住，拿得出手的项目一个没有。目标六个月后投本地智能硬件公司的初级岗。我不赶时间，每晚 8 点后和周末都有整块，单次能坐一个半小时。第一个里程碑：把温湿度采集走 ESP8266 上云跑通，当简历第一个项目。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：例程能跟、独立写就卡；外设与 RTOS 实战为零，不知道怎么把例程拼成完整项目）",
+          "这次希望拿到什么结果？——按「跑通 STM32 外设到 FreeRTOS 任务的最小项目链路，完成温湿度采集上云小项目」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "跑通 STM32 外设到 FreeRTOS 任务的最小项目链路，完成温湿度采集上云小项目",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "例程能跟、独立写就卡；外设与 RTOS 实战为零，不知道怎么把例程拼成完整项目",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B22-stm32-entry",
+        "note": "Golden-100 · B22-stm32-entry（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B22-stm32-entry"
+      ],
+      "notes": "Golden-100 · B22-stm32-entry（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B23-rag-agent",
+      "version": 1,
+      "nickname": "想搞懂搭一个带离线评测的 RAG 问答项目",
+      "account": {
+        "displayName": "想搞懂搭一个带离线评测的 RAG 问答项目",
+        "emailPrefix": "golden-B23-rag-agent"
+      },
+      "persona": {
+        "nameHint": "想搞懂搭一个带离线评测的 RAG 问答项目",
+        "background": "「搭一个带离线评测的 RAG 问答项目，跑通召回率与幻觉指标并交付上 GitHub」诉求的虚拟学习者（系统掌握型）。 起点与卡点：概念看了很多但拼不成工程闭环；切片粒度、召回评估、prompt 组织没有可验证的做法，判断不了「做到什么程度算能交付」",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "搭一个带离线评测的 RAG 问答项目，跑通召回率与幻觉指标并交付上 GitHub",
+        "visibleOpening": "32 岁，PHP 和 Java 后端写了快 9 年，全是 CRUD。想转 AI 应用开发，每晚能挤 2 小时。RAG、Agent 的资料看了一堆，真上手搭就懵：切片切多细、召回率怎么量、prompt 怎么组织，全是零散的点，怕学成只会调 API 的半吊子。每周四个晚上各一个半小时，四个月内交付一个带评测的 RAG 问答小项目挂 GitHub，把召回和幻觉指标真跑一遍。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：概念看了很多但拼不成工程闭环；切片粒度、召回评估、prompt 组织没有可验证的做法，判断不了「做到什么程度算能交付」）",
+          "这次希望拿到什么结果？——按「搭一个带离线评测的 RAG 问答项目，跑通召回率与幻觉指标并交付上 GitHub」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "搭一个带离线评测的 RAG 问答项目，跑通召回率与幻觉指标并交付上 GitHub",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "概念看了很多但拼不成工程闭环；切片粒度、召回评估、prompt 组织没有可验证的做法，判断不了「做到什么程度算能交付」",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B23-rag-agent",
+        "note": "Golden-100 · B23-rag-agent（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B23-rag-agent"
+      ],
+      "notes": "Golden-100 · B23-rag-agent（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B24-repro-env",
+      "version": 1,
+      "nickname": "想搞懂读报错、管依赖版本（conda/pip）与核…",
+      "account": {
+        "displayName": "想搞懂读报错、管依赖版本（conda/pip）与核…",
+        "emailPrefix": "golden-B24-repro-env"
+      },
+      "persona": {
+        "nameHint": "想搞懂读报错、管依赖版本（conda/pip）与核…",
+        "background": "「学会读报错、管依赖版本（conda/pip）与核对 CUDA 版本矩阵，独立跑通论文代码环境」诉求的虚拟学习者（系统掌握型）。 起点与卡点：报错类型都分不出来、搜都不知道搜什么；CUDA 驱动/cuDNN/框架版本矩阵完全没概念，依赖互相打架",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "学会读报错、管依赖版本（conda/pip）与核对 CUDA 版本矩阵，独立跑通论文代码环境",
+        "visibleOpening": "研一刚进组，导师扔来一篇顶会论文让我复现。Git clone 下来就傻眼：依赖装一半报错，一会儿 CUDA 版本对不上，一会儿满屏 stack trace，连报错说什么都看不懂，更别说搜关键词。本科只上过 C 和 Python 两门课，Linux 命令都没正儿八经敲过，师兄一周跑通，我卡了三周，下周组会要交进展。这学期每天有一小时整块，想把环境排障基本功补起来：看懂报错、隔离依赖、对上版本。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：报错类型都分不出来、搜都不知道搜什么；CUDA 驱动/cuDNN/框架版本矩阵完全没概念，依赖互相打架）",
+          "这次希望拿到什么结果？——按「学会读报错、管依赖版本（conda/pip）与核对 CUDA 版本矩阵，独立跑通论文代码环境」的实际交付来",
+          "时间上怎么安排？——90天内，每天约 60 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "学会读报错、管依赖版本（conda/pip）与核对 CUDA 版本矩阵，独立跑通论文代码环境",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "90天内",
+            "horizonDays": 90,
+            "dailyMinutes": 60,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "报错类型都分不出来、搜都不知道搜什么；CUDA 驱动/cuDNN/框架版本矩阵完全没概念，依赖互相打架",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B24-repro-env",
+        "note": "Golden-100 · B24-repro-env（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B24-repro-env"
+      ],
+      "notes": "Golden-100 · B24-repro-env（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-B25-scratch-parent",
+      "version": 1,
+      "nickname": "想搞懂Scratch 基本积木与循环事件机制",
+      "account": {
+        "displayName": "想搞懂Scratch 基本积木与循环事件机制",
+        "emailPrefix": "golden-B25-scratch-parent"
+      },
+      "persona": {
+        "nameHint": "想搞懂Scratch 基本积木与循环事件机制",
+        "background": "「学会 Scratch 基本积木与循环事件机制，能看懂并陪改孩子的作品」诉求的虚拟学习者（系统掌握型）。 起点与卡点：零基础家长怕三分钟热度；目标是看懂与陪改，不知道从哪套小练习起步才不丢人也不劝退",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "学会 Scratch 基本积木与循环事件机制，能看懂并陪改孩子的作品",
+        "visibleOpening": "儿子二年级学校开了编程兴趣班，他挺来劲，回家老问我「角色」「积木」「循环」是什么，我做行政的答不上来，场面一度尴尬。想着自己先学点 Scratch，起码能陪他折腾，别把他的兴趣耽误在我的无知上。我完全零基础，数学也就是高中水平还多年没碰，家里旧笔记本装软件没问题。每天晚上只有半小时到四十分钟。成功标准放得很低：他兴冲冲给我看作品时，我能看懂他在干嘛、接得上话，偶尔一起改个参数就知足。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：零基础家长怕三分钟热度；目标是看懂与陪改，不知道从哪套小练习起步才不丢人也不劝退）",
+          "这次希望拿到什么结果？——按「学会 Scratch 基本积木与循环事件机制，能看懂并陪改孩子的作品」的实际交付来",
+          "时间上怎么安排？——42天内，每天约 30 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "学会 Scratch 基本积木与循环事件机制，能看懂并陪改孩子的作品",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "42天内",
+            "horizonDays": 42,
+            "dailyMinutes": 30,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "零基础家长怕三分钟热度；目标是看懂与陪改，不知道从哪套小练习起步才不丢人也不劝退",
+          "expect": "path",
+          "group": "B"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "B25-scratch-parent",
+        "note": "Golden-100 · B25-scratch-parent（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "B",
+        "mastery",
+        "golden-B25-scratch-parent"
+      ],
+      "notes": "Golden-100 · B25-scratch-parent（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-eng-syntax-04",
+      "version": 1,
+      "nickname": "想搞懂外刊长难句主干剥离与速读能力",
+      "account": {
+        "displayName": "想搞懂外刊长难句主干剥离与速读能力",
+        "emailPrefix": "golden-eng-syntax-04"
+      },
+      "persona": {
+        "nameHint": "想搞懂外刊长难句主干剥离与速读能力",
+        "background": "「掌握外刊长难句主干剥离与速读能力」诉求的虚拟学习者（系统掌握型）。 起点与卡点：认识单词也知道从句名词，但实战阅读是逐词线性翻译，找不到句子主干，遇到后置定语、分词短语插在主谓之间就断链",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "掌握外刊长难句主干剥离与速读能力",
+        "visibleOpening": "我词汇量大概有六千，四六级都过了，但现在看《经济学人》或者英文行业报告，遇到那种三四行一个句号的长难句就完全懵，每个单词都认识，连在一起不知道谁动作谁，得反复回读三四遍。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：认识单词也知道从句名词，但实战阅读是逐词线性翻译，找不到句子主干，遇到后置定语、分词短语插在主谓之间就断链）",
+          "这次希望拿到什么结果？——按「掌握外刊长难句主干剥离与速读能力」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "掌握外刊长难句主干剥离与速读能力",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "认识单词也知道从句名词，但实战阅读是逐词线性翻译，找不到句子主干，遇到后置定语、分词短语插在主谓之间就断链",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "eng-syntax-04",
+        "note": "Golden-100 · eng-syntax-04（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-eng-syntax-04"
+      ],
+      "notes": "Golden-100 · eng-syntax-04（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C02-triangle-congruence",
+      "version": 1,
+      "nickname": "想搞懂全等三角形证明的辅助线思路",
+      "account": {
+        "displayName": "想搞懂全等三角形证明的辅助线思路",
+        "emailPrefix": "golden-C02-triangle-congruence"
+      },
+      "persona": {
+        "nameHint": "想搞懂全等三角形证明的辅助线思路",
+        "background": "「吃透全等三角形证明的辅助线思路，期中几何证明题独立拿分」诉求的虚拟学习者（系统掌握型）。 起点与卡点：判定条件背得出但不会选：读题拆不出已知条件对应哪个判定，辅助线没有添加方向，考试遇到新题推理链条直接断路",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "吃透全等三角形证明的辅助线思路，期中几何证明题独立拿分",
+        "visibleOpening": "我初二，人教版数学刚讲完全等三角形。上课老师推辅助线我看得懂，作业对着答案也明白，一到考试碰上新证明题就没思路，不知道该从哪条线连。11月上旬期中，几何占大头，月考两道证明大题就扣了14分。SSS、SAS这些判定条件我都背得出，就是不知道什么时候该用哪个。我每天晚自习能匀出40分钟，是先把课本例题重做一遍，还是直接刷题？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：判定条件背得出但不会选：读题拆不出已知条件对应哪个判定，辅助线没有添加方向，考试遇到新题推理链条直接断路）",
+          "这次希望拿到什么结果？——按「吃透全等三角形证明的辅助线思路，期中几何证明题独立拿分」的实际交付来",
+          "时间上怎么安排？——40天内，每天约 40 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "吃透全等三角形证明的辅助线思路，期中几何证明题独立拿分",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "40天内",
+            "horizonDays": 40,
+            "dailyMinutes": 40,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "判定条件背得出但不会选：读题拆不出已知条件对应哪个判定，辅助线没有添加方向，考试遇到新题推理链条直接断路",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C02-triangle-congruence",
+        "note": "Golden-100 · C02-triangle-congruence（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C02-triangle-congruence"
+      ],
+      "notes": "Golden-100 · C02-triangle-congruence（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C03-function-property",
+      "version": 1,
+      "nickname": "想搞懂函数单调性奇偶性从听懂变成会做",
+      "account": {
+        "displayName": "想搞懂函数单调性奇偶性从听懂变成会做",
+        "emailPrefix": "golden-C03-function-property"
+      },
+      "persona": {
+        "nameHint": "想搞懂函数单调性奇偶性从听懂变成会做",
+        "background": "「把函数单调性奇偶性从听懂变成会做，大题能独立下手」诉求的虚拟学习者（系统掌握型）。 起点与卡点：上课听懂例题、一到新题就懵：抽象函数与性质综合题找不到第一步，十字相乘等初中底子要现想，指数对数新课还在往前赶",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "把函数单调性奇偶性从听懂变成会做，大题能独立下手",
+        "visibleOpening": "高一，人教A版必修一刚讲完函数的单调性和奇偶性，下周就进指数函数。上课听懂、例题看得懂，自己动手做题就没思路，第一次月考数学只考了72（满分150），班均90多。带星号的作业只能抄同学，第二天听讲评又懂了。晚自习有一小时能给数学，怎么安排才能把函数这块补上，还不掉新课的进度？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：上课听懂例题、一到新题就懵：抽象函数与性质综合题找不到第一步，十字相乘等初中底子要现想，指数对数新课还在往前赶）",
+          "这次希望拿到什么结果？——按「把函数单调性奇偶性从听懂变成会做，大题能独立下手」的实际交付来",
+          "时间上怎么安排？——115天内，每天约 60 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "把函数单调性奇偶性从听懂变成会做，大题能独立下手",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "115天内",
+            "horizonDays": 115,
+            "dailyMinutes": 60,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "上课听懂例题、一到新题就懵：抽象函数与性质综合题找不到第一步，十字相乘等初中底子要现想，指数对数新课还在往前赶",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C03-function-property",
+        "note": "Golden-100 · C03-function-property（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C03-function-property"
+      ],
+      "notes": "Golden-100 · C03-function-property（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C04-counting-principle",
+      "version": 1,
+      "nickname": "想搞懂开新课前一周把排列组合易错题型的分类底子压牢",
+      "account": {
+        "displayName": "想搞懂开新课前一周把排列组合易错题型的分类底子压牢",
+        "emailPrefix": "golden-C04-counting-principle"
+      },
+      "persona": {
+        "nameHint": "想搞懂开新课前一周把排列组合易错题型的分类底子压牢",
+        "background": "「开新课前一周把排列组合易错题型的分类底子压牢」诉求的虚拟学习者（系统掌握型）。 起点与卡点：公式会背但分类程序是空的：至少型不会正难则反，捆绑插空认不出题型特征，古典概型的底子还漏风",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "开新课前一周把排列组合易错题型的分类底子压牢",
+        "visibleOpening": "高二，学校还没开计数原理，我古典概型就不牢，排列组合的「至少」问题总重复或漏数，相邻捆绑和插空也分不清。人教A版选必三下周就开第六章，我不想等开了新课再懵。每天晚自习能固定40分钟，是先把排列组合公式自己推一遍，还是直接刷典型题？提前学要刷到什么程度，底子才算压牢了？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：公式会背但分类程序是空的：至少型不会正难则反，捆绑插空认不出题型特征，古典概型的底子还漏风）",
+          "这次希望拿到什么结果？——按「开新课前一周把排列组合易错题型的分类底子压牢」的实际交付来",
+          "时间上怎么安排？——7天内，每天约 40 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "开新课前一周把排列组合易错题型的分类底子压牢",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "7天内",
+            "horizonDays": 7,
+            "dailyMinutes": 40,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "公式会背但分类程序是空的：至少型不会正难则反，捆绑插空认不出题型特征，古典概型的底子还漏风",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C04-counting-principle",
+        "note": "Golden-100 · C04-counting-principle（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C04-counting-principle"
+      ],
+      "notes": "Golden-100 · C04-counting-principle（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C05-derivative-final-q",
+      "version": 1,
+      "nickname": "想搞懂导数大题第二问从常年空着到稳定写出得分步骤",
+      "account": {
+        "displayName": "想搞懂导数大题第二问从常年空着到稳定写出得分步骤",
+        "emailPrefix": "golden-C05-derivative-final-q"
+      },
+      "persona": {
+        "nameHint": "想搞懂导数大题第二问从常年空着到稳定写出得分步骤",
+        "background": "「导数大题第二问从常年空着到稳定写出得分步骤」诉求的虚拟学习者（系统掌握型）。 起点与卡点：110分瓶颈卡在压轴：第一问求单调性多数能对，第二问恒成立、零点方向一上来没章法，分类讨论漏情况；解析几何也常崩，精力不敢全押",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "导数大题第二问从常年空着到稳定写出得分步骤",
+        "visibleOpening": "高二，人教A版选必二第五章刚学导数。简单求导、求切线我会，但卷子最后一道导数大题的第二问常年空着，含参数讨论还经常漏情况。数学现在110分左右（满分150），想稳到125以上。离期末还有一百来天，我想把晚自习40分钟固定砸在导数第二问这一个点上，其他板块先不动，这样打值得吗？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：110分瓶颈卡在压轴：第一问求单调性多数能对，第二问恒成立、零点方向一上来没章法，分类讨论漏情况；解析几何也常崩，精力不敢全押）",
+          "这次希望拿到什么结果？——按「导数大题第二问从常年空着到稳定写出得分步骤」的实际交付来",
+          "时间上怎么安排？——100天内，每天约 40 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "导数大题第二问从常年空着到稳定写出得分步骤",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "100天内",
+            "horizonDays": 100,
+            "dailyMinutes": 40,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "110分瓶颈卡在压轴：第一问求单调性多数能对，第二问恒成立、零点方向一上来没章法，分类讨论漏情况；解析几何也常崩，精力不敢全押",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C05-derivative-final-q",
+        "note": "Golden-100 · C05-derivative-final-q（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C05-derivative-final-q"
+      ],
+      "notes": "Golden-100 · C05-derivative-final-q（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C06-emf-lenz-law",
+      "version": 1,
+      "nickname": "想搞懂楞次定律判断感应电流方向不再错",
+      "account": {
+        "displayName": "想搞懂楞次定律判断感应电流方向不再错",
+        "emailPrefix": "golden-C06-emf-lenz-law"
+      },
+      "persona": {
+        "nameHint": "想搞懂楞次定律判断感应电流方向不再错",
+        "background": "「楞次定律判断感应电流方向不再错，把力学断层一起补上」诉求的虚拟学习者（系统掌握型）。 起点与卡点：两套定则混用说明物理图景没建立；前置的传送带、板块模型摩擦力方向判断反，力学综合题基本不得分",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "楞次定律判断感应电流方向不再错，把力学断层一起补上",
+        "visibleOpening": "高二，人教版选择性必修二刚开始讲电磁感应，楞次定律判断感应电流方向我总错。口诀「增反减同」我知道，但做题不知道什么时候看磁通量变化、什么时候用右手定则看导体棒切割，两套混着。根子其实在力学——高一传送带模型就糊，摩擦力方向老定反，上次月考满分100只考58。期中要考电磁感应加力学综合，我每天能留45分钟，是先回头补力学，还是跟着新课练？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：两套定则混用说明物理图景没建立；前置的传送带、板块模型摩擦力方向判断反，力学综合题基本不得分）",
+          "这次希望拿到什么结果？——按「楞次定律判断感应电流方向不再错，把力学断层一起补上」的实际交付来",
+          "时间上怎么安排？——40天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "楞次定律判断感应电流方向不再错，把力学断层一起补上",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "40天内",
+            "horizonDays": 40,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "两套定则混用说明物理图景没建立；前置的传送带、板块模型摩擦力方向判断反，力学综合题基本不得分",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C06-emf-lenz-law",
+        "note": "Golden-100 · C06-emf-lenz-law（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C06-emf-lenz-law"
+      ],
+      "notes": "Golden-100 · C06-emf-lenz-law（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C07-classical-chinese",
+      "version": 1,
+      "nickname": "想搞懂文言文翻译从2-3分提到6分以上",
+      "account": {
+        "displayName": "想搞懂文言文翻译从2-3分提到6分以上",
+        "emailPrefix": "golden-C07-classical-chinese"
+      },
+      "persona": {
+        "nameHint": "想搞懂文言文翻译从2-3分提到6分以上",
+        "background": "「文言文翻译从2-3分提到6分以上，断句题稳住」诉求的虚拟学习者（系统掌握型）。 起点与卡点：实词积累几乎为零只能靠猜，断句靠语感蒙；课内能翻课外就懵，20分钟早读不知道背什么才不算白背",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "文言文翻译从2-3分提到6分以上，断句题稳住",
+        "visibleOpening": "高三，文言文翻译8分我常年只拿2-3分，实词看不懂只能瞎猜，断句三道选择能错俩。课内《劝学》《师说》还行，一上课外人物传记就懵。12月市一模，一轮复习的文言专题11月底才轮到。我早读能挤出20分钟，就想把这点时间全花在实词、断句和翻译上，怎么补最划算？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：实词积累几乎为零只能靠猜，断句靠语感蒙；课内能翻课外就懵，20分钟早读不知道背什么才不算白背）",
+          "这次希望拿到什么结果？——按「文言文翻译从2-3分提到6分以上，断句题稳住」的实际交付来",
+          "时间上怎么安排？——72天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "文言文翻译从2-3分提到6分以上，断句题稳住",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "72天内",
+            "horizonDays": 72,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "实词积累几乎为零只能靠猜，断句靠语感蒙；课内能翻课外就懵，20分钟早读不知道背什么才不算白背",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C07-classical-chinese",
+        "note": "Golden-100 · C07-classical-chinese（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C07-classical-chinese"
+      ],
+      "notes": "Golden-100 · C07-classical-chinese（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C08-yuwen-round-one",
+      "version": 1,
+      "nickname": "想搞懂一轮把现代文采分点逻辑和文言实词同时补上",
+      "account": {
+        "displayName": "想搞懂一轮把现代文采分点逻辑和文言实词同时补上",
+        "emailPrefix": "golden-C08-yuwen-round-one"
+      },
+      "persona": {
+        "nameHint": "想搞懂一轮把现代文采分点逻辑和文言实词同时补上",
+        "background": "「一轮把现代文采分点逻辑和文言实词同时补上，主观题扣分减半」诉求的虚拟学习者（系统掌握型）。 起点与卡点：能读懂但答不到点上：赏析题抄原文、作用题漏角度；模板套了还扣分，两段碎片时间没有分配策略，背了就忘",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "一轮把现代文采分点逻辑和文言实词同时补上，主观题扣分减半",
+        "visibleOpening": "高三，语文一百零几。现代文阅读主观题总答不到采分点，问赏析就抄原文，问作用就漏角度；文言实词积累几乎为零，翻译只知道个大概。一轮复习按板块推，老师让整理答题模板，我用了还是扣分。每天早读20分钟加睡前25分钟，这两小段该怎么分给实词积累和阅读练习，才不至于背完一轮忘到前面？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：能读懂但答不到点上：赏析题抄原文、作用题漏角度；模板套了还扣分，两段碎片时间没有分配策略，背了就忘）",
+          "这次希望拿到什么结果？——按「一轮把现代文采分点逻辑和文言实词同时补上，主观题扣分减半」的实际交付来",
+          "时间上怎么安排？——90天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "一轮把现代文采分点逻辑和文言实词同时补上，主观题扣分减半",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "90天内",
+            "horizonDays": 90,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "能读懂但答不到点上：赏析题抄原文、作用题漏角度；模板套了还扣分，两段碎片时间没有分配策略，背了就忘",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C08-yuwen-round-one",
+        "note": "Golden-100 · C08-yuwen-round-one（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C08-yuwen-round-one"
+      ],
+      "notes": "Golden-100 · C08-yuwen-round-one（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C09-essay-argument",
+      "version": 1,
+      "nickname": "想搞懂高考议论文从48分磨到54分档",
+      "account": {
+        "displayName": "想搞懂高考议论文从48分磨到54分档",
+        "emailPrefix": "golden-C09-essay-argument"
+      },
+      "persona": {
+        "nameHint": "想搞懂高考议论文从48分磨到54分档",
+        "background": "「高考议论文从48分磨到54分档：审题不偏、结构有层次、素材不重样」诉求的虚拟学习者（系统掌握型）。 起点与卡点：48分瓶颈：结构和素材重复是重灾区，学校老师只批语言不改结构，写完不知道差在哪、下次照旧",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "高考议论文从48分磨到54分档：审题不偏、结构有层次、素材不重样",
+        "visibleOpening": "高三，作文48分（满分60）稳但上不去：审题总偏一点，素材翻来覆去就那几个，结构也没新意。每次自己写着觉得挺顺，发下来就42。离高考还有两百天左右，我不打算动其他板块，就想用每天半小时练片段，把审题、结构、素材这一个板块修上去，从48磨到54以上。这现实吗？该先攒素材还是先练结构？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：48分瓶颈：结构和素材重复是重灾区，学校老师只批语言不改结构，写完不知道差在哪、下次照旧）",
+          "这次希望拿到什么结果？——按「高考议论文从48分磨到54分档：审题不偏、结构有层次、素材不重样」的实际交付来",
+          "时间上怎么安排？——200天内，每天约 30 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "高考议论文从48分磨到54分档：审题不偏、结构有层次、素材不重样",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "200天内",
+            "horizonDays": 200,
+            "dailyMinutes": 30,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "48分瓶颈：结构和素材重复是重灾区，学校老师只批语言不改结构，写完不知道差在哪、下次照旧",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C09-essay-argument",
+        "note": "Golden-100 · C09-essay-argument（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C09-essay-argument"
+      ],
+      "notes": "Golden-100 · C09-essay-argument（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C10-eng-cloze-round-one",
+      "version": 1,
+      "nickname": "想搞懂语法填空非谓语从句不再丢分",
+      "account": {
+        "displayName": "想搞懂语法填空非谓语从句不再丢分",
+        "emailPrefix": "golden-C10-eng-cloze-round-one"
+      },
+      "persona": {
+        "nameHint": "想搞懂语法填空非谓语从句不再丢分",
+        "background": "「语法填空非谓语从句不再丢分，完形错题压到两个以内」诉求的虚拟学习者（系统掌握型）。 起点与卡点：词汇过关但语法体系是空的：非谓语与三大从句混考就失分，长句一读就乱，一轮快节奏下没有自己的消化节奏",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "语法填空非谓语从句不再丢分，完形错题压到两个以内",
+        "visibleOpening": "高三，3500词背完了，可完形填空还是错四五个，语法填空里非谓语和从句混着考就没分，月考英语103。一轮复习刚开始，老师语法过得飞快，根本跟不上记。我每天早读20分钟加晚自习25分钟：是先专攻语法填空，还是每天保持完形阅读的手感？非谓语和定语从句一放进长句里，我读着读着就乱了。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：词汇过关但语法体系是空的：非谓语与三大从句混考就失分，长句一读就乱，一轮快节奏下没有自己的消化节奏）",
+          "这次希望拿到什么结果？——按「语法填空非谓语从句不再丢分，完形错题压到两个以内」的实际交付来",
+          "时间上怎么安排？——120天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "语法填空非谓语从句不再丢分，完形错题压到两个以内",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "120天内",
+            "horizonDays": 120,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "词汇过关但语法体系是空的：非谓语与三大从句混考就失分，长句一读就乱，一轮快节奏下没有自己的消化节奏",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C10-eng-cloze-round-one",
+        "note": "Golden-100 · C10-eng-cloze-round-one（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C10-eng-cloze-round-one"
+      ],
+      "notes": "Golden-100 · C10-eng-cloze-round-one（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C11-cet4-listening",
+      "version": 1,
+      "nickname": "想搞懂十周拿下四级425",
+      "account": {
+        "displayName": "想搞懂十周拿下四级425",
+        "emailPrefix": "golden-C11-cet4-listening"
+      },
+      "persona": {
+        "nameHint": "想搞懂十周拿下四级425",
+        "background": "「十周拿下四级425：听力从跟不上语速到稳对一半以上」诉求的虚拟学习者（系统掌握型）。 起点与卡点：吃高考老本：四级语速听不惯、词汇背了就放，90分钟整块时间没有分配方案，真题一直没敢开",
+        "availableTime": "abundant",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "十周拿下四级425：听力从跟不上语速到稳对一半以上",
+        "visibleOpening": "大一，12月中旬第一次考四级，还有十周多。高考英语110多（满分150），听力是弱项，词汇也吃老本，买的真题一套没动，单词书背了A开头几页就放着了。辅导员天天催，宿舍里其他人都报了12月的。我每天晚上能拿出一个半小时整块时间，是先刷真题还是先背单词？听力要单独怎么练？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：吃高考老本：四级语速听不惯、词汇背了就放，90分钟整块时间没有分配方案，真题一直没敢开）",
+          "这次希望拿到什么结果？——按「十周拿下四级425：听力从跟不上语速到稳对一半以上」的实际交付来",
+          "时间上怎么安排？——75天内，每天约 90 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "十周拿下四级425：听力从跟不上语速到稳对一半以上",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "75天内",
+            "horizonDays": 75,
+            "dailyMinutes": 90,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "吃高考老本：四级语速听不惯、词汇背了就放，90分钟整块时间没有分配方案，真题一直没敢开",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C11-cet4-listening",
+        "note": "Golden-100 · C11-cet4-listening（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C11-cet4-listening"
+      ],
+      "notes": "Golden-100 · C11-cet4-listening（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C12-arithmetic-check",
+      "version": 1,
+      "nickname": "想搞懂帮女儿把计算错率压下来",
+      "account": {
+        "displayName": "想搞懂帮女儿把计算错率压下来",
+        "emailPrefix": "golden-C12-arithmetic-check"
+      },
+      "persona": {
+        "nameHint": "想搞懂帮女儿把计算错率压下来",
+        "background": "「帮女儿把计算错率压下来：抄错数、进退位、不验算三关全过」诉求的虚拟学习者（系统掌握型）。 起点与卡点：「细心点」是无效指令：错的是抄数、进位忘加、退位忘减这类流程漏洞，孩子没有一套可执行的检查动作",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "帮女儿把计算错率压下来：抄错数、进退位、不验算三关全过",
+        "visibleOpening": "闺女三年级，苏教版。口算比赛全班就她没拿满星，竖式总能抄错数，96抄成69，进位忘加、减法忘退位，说了无数次「细心点」也没用，月考计算扣了11分。讲完当时懂，下次还犯。每天晚饭后七点十分到七点半能固定练20分钟，我陪着。除了说细心点，这20分钟到底该练什么、验算怎么落成动作，才真能把错率压下来？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：「细心点」是无效指令：错的是抄数、进位忘加、退位忘减这类流程漏洞，孩子没有一套可执行的检查动作）",
+          "这次希望拿到什么结果？——按「帮女儿把计算错率压下来：抄错数、进退位、不验算三关全过」的实际交付来",
+          "时间上怎么安排？——35天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "帮女儿把计算错率压下来：抄错数、进退位、不验算三关全过",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "35天内",
+            "horizonDays": 35,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "「细心点」是无效指令：错的是抄数、进位忘加、退位忘减这类流程漏洞，孩子没有一套可执行的检查动作",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C12-arithmetic-check",
+        "note": "Golden-100 · C12-arithmetic-check（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C12-arithmetic-check"
+      ],
+      "notes": "Golden-100 · C12-arithmetic-check（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C13-jiaozi-writtens",
+      "version": 1,
+      "nickname": "想搞懂从零过教资小学科目二",
+      "account": {
+        "displayName": "想搞懂从零过教资小学科目二",
+        "emailPrefix": "golden-C13-jiaozi-writtens"
+      },
+      "persona": {
+        "nameHint": "想搞懂从零过教资小学科目二",
+        "background": "「从零过教资小学科目二：人物理论理得清、简答背得住、辨析会下笔」诉求的虚拟学习者（系统掌握型）。 起点与卡点：零基础撞上记忆型科目：人物理论成对出现就混乱，简答背了就忘、辨析找不到判断句式，每天只有1.5小时",
+        "availableTime": "abundant",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "从零过教资小学科目二：人物理论理得清、简答背得住、辨析会下笔",
+        "visibleOpening": "非师范出身，行政前台做第三年，想转小学教师才考的教资。9月笔试科目一感觉能过，科目二《教育教学知识与能力》一页书没看，直接没敢进考场。现在认真备明年3月的两科，下班后只有1.5小时，周末3小时。科目二里那些教育学人物和理论看得一头雾水，简答题背了就忘，辨析题完全不知道怎么下笔，从零开始怎么排？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：零基础撞上记忆型科目：人物理论成对出现就混乱，简答背了就忘、辨析找不到判断句式，每天只有1.5小时）",
+          "这次希望拿到什么结果？——按「从零过教资小学科目二：人物理论理得清、简答背得住、辨析会下笔」的实际交付来",
+          "时间上怎么安排？——168天内，每天约 90 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "从零过教资小学科目二：人物理论理得清、简答背得住、辨析会下笔",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "168天内",
+            "horizonDays": 168,
+            "dailyMinutes": 90,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "零基础撞上记忆型科目：人物理论成对出现就混乱，简答背了就忘、辨析找不到判断句式，每天只有1.5小时",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C13-jiaozi-writtens",
+        "note": "Golden-100 · C13-jiaozi-writtens（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C13-jiaozi-writtens"
+      ],
+      "notes": "Golden-100 · C13-jiaozi-writtens（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C14-jiaozi-interview",
+      "version": 1,
+      "nickname": "想搞懂七个多月备一场十分钟试讲",
+      "account": {
+        "displayName": "想搞懂七个多月备一场十分钟试讲",
+        "emailPrefix": "golden-C14-jiaozi-interview"
+      },
+      "persona": {
+        "nameHint": "想搞懂七个多月备一场十分钟试讲",
+        "background": "「七个多月备一场十分钟试讲：结构化张得了嘴、试讲流程走得完」诉求的虚拟学习者（系统掌握型）。 起点与卡点：零上台经验：流程拼不起来、开口就断，每天一小时不知练什么才算有效，纠结报班还是自拍复盘",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "七个多月备一场十分钟试讲：结构化张得了嘴、试讲流程走得完",
+        "visibleOpening": "非师范应届，教资笔试两科一次过了，面试排在明年五月，还有七个多月。我从没上过台讲过课，结构化问答听都没听过；试讲十分钟，导入、新授、练习、小结，脑子里有词就是张不开嘴。每天能练一小时，室友假装学生听我讲。要不要报班？自己拿手机录视频复盘有用吗？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：零上台经验：流程拼不起来、开口就断，每天一小时不知练什么才算有效，纠结报班还是自拍复盘）",
+          "这次希望拿到什么结果？——按「七个多月备一场十分钟试讲：结构化张得了嘴、试讲流程走得完」的实际交付来",
+          "时间上怎么安排？——230天内，每天约 60 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "七个多月备一场十分钟试讲：结构化张得了嘴、试讲流程走得完",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "230天内",
+            "horizonDays": 230,
+            "dailyMinutes": 60,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "零上台经验：流程拼不起来、开口就断，每天一小时不知练什么才算有效，纠结报班还是自拍复盘",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C14-jiaozi-interview",
+        "note": "Golden-100 · C14-jiaozi-interview（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C14-jiaozi-interview"
+      ],
+      "notes": "Golden-100 · C14-jiaozi-interview（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C15-xingce-data-reasoning",
+      "version": 1,
+      "nickname": "想搞懂行测从58提70",
+      "account": {
+        "displayName": "想搞懂行测从58提70",
+        "emailPrefix": "golden-C15-xingce-data-reasoning"
+      },
+      "persona": {
+        "nameHint": "想搞懂行测从58提70",
+        "background": "「行测从58提70：资料分析提速、图推建方法、数量会挑会舍」诉求的虚拟学习者（系统掌握型）。 起点与卡点：资料会做但太慢、图推数量没方法是三种不同的病：提速要练运算管道，图推要从零建特征库，晚上的一个半小时必须切开用",
+        "availableTime": "abundant",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "行测从58提70：资料分析提速、图推建方法、数量会挑会舍",
+        "visibleOpening": "二线互联网运营，每天到家八九点。报了明年三月省考，行测模考58：资料分析能对十二个但每题磨三分钟，数量关系全靠懵，图形推理没思路；申论大作文一写就抄材料。晚上十二点前有一个半小时，通勤一小时戴耳机听申论素材。目标行测70申论65，进面就行——先补资料提速，还是先抢判断推理？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：资料会做但太慢、图推数量没方法是三种不同的病：提速要练运算管道，图推要从零建特征库，晚上的一个半小时必须切开用）",
+          "这次希望拿到什么结果？——按「行测从58提70：资料分析提速、图推建方法、数量会挑会舍」的实际交付来",
+          "时间上怎么安排？——165天内，每天约 120 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "行测从58提70：资料分析提速、图推建方法、数量会挑会舍",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "165天内",
+            "horizonDays": 165,
+            "dailyMinutes": 120,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "资料会做但太慢、图推数量没方法是三种不同的病：提速要练运算管道，图推要从零建特征库，晚上的一个半小时必须切开用",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C15-xingce-data-reasoning",
+        "note": "Golden-100 · C15-xingce-data-reasoning（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C15-xingce-data-reasoning"
+      ],
+      "notes": "Golden-100 · C15-xingce-data-reasoning（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C16-zhuanan-tech-base",
+      "version": 1,
+      "nickname": "想搞懂两年窗口先啃下中级注安技术基础",
+      "account": {
+        "displayName": "想搞懂两年窗口先啃下中级注安技术基础",
+        "emailPrefix": "golden-C16-zhuanan-tech-base"
+      },
+      "persona": {
+        "nameHint": "想搞懂两年窗口先啃下中级注安技术基础",
+        "background": "「两年窗口先啃下中级注安技术基础，给案例主观题打好地基」诉求的虚拟学习者（系统掌握型）。 起点与卡点：有现场经验但缺考试化知识：技术基础完全陌生且是案例的地基，倒班时间碎，四科齐推必全崩，要先打地基",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "两年窗口先啃下中级注安技术基础，给案例主观题打好地基",
+        "visibleOpening": "我在化工厂做安全员第三年，安全总监要求两年内拿中级注安，定的是明年10月首考四科全报。法规和日常工作贴得近问题不大，管理也还行，技术基础的特种设备、电气那些是真陌生，案例主观题完全没底。我倒班四班两运转，白班晚上7点到9点能学，夜班当天基本歇。这个窗口我想先只把技术基础这门啃下来，行得通吗？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：有现场经验但缺考试化知识：技术基础完全陌生且是案例的地基，倒班时间碎，四科齐推必全崩，要先打地基）",
+          "这次希望拿到什么结果？——按「两年窗口先啃下中级注安技术基础，给案例主观题打好地基」的实际交付来",
+          "时间上怎么安排？——380天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "两年窗口先啃下中级注安技术基础，给案例主观题打好地基",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "380天内",
+            "horizonDays": 380,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "有现场经验但缺考试化知识：技术基础完全陌生且是案例的地基，倒班时间碎，四科齐推必全崩，要先打地基",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C16-zhuanan-tech-base",
+        "note": "Golden-100 · C16-zhuanan-tech-base（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C16-zhuanan-tech-base"
+      ],
+      "notes": "Golden-100 · C16-zhuanan-tech-base（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C17-kaoyan-math-one",
+      "version": 1,
+      "nickname": "想搞懂数学一最后八十天从一战82分的坑里抢到110…",
+      "account": {
+        "displayName": "想搞懂数学一最后八十天从一战82分的坑里抢到110…",
+        "emailPrefix": "golden-C17-kaoyan-math-one"
+      },
+      "persona": {
+        "nameHint": "想搞懂数学一最后八十天从一战82分的坑里抢到110…",
+        "background": "「数学一最后八十天从一战82分的坑里抢到110+：级数线代证明补上、取舍明确」诉求的虚拟学习者（系统掌握型）。 起点与卡点：二战时间紧：五小时看着满，但强化、复盘、错题三件事不成回流体系，级数线代证明没章法，真题模拟卷的优先级没定",
+        "availableTime": "abundant",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "数学一最后八十天从一战82分的坑里抢到110+：级数线代证明补上、取舍明确",
+        "visibleOpening": "考研二战，一战数学一82，级数和线代证明题差。八月底毕业的事全处理完才全力开始，之前只过高数一轮。现在早八晚十点半，每天五小时给数学：三小时强化题、一小时复盘、一小时错题。真题从哪年开刷？模拟卷做李林还是合工大？最后八十多天，数学目标110+不追140，取舍怎么定？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：二战时间紧：五小时看着满，但强化、复盘、错题三件事不成回流体系，级数线代证明没章法，真题模拟卷的优先级没定）",
+          "这次希望拿到什么结果？——按「数学一最后八十天从一战82分的坑里抢到110+：级数线代证明补上、取舍明确」的实际交付来",
+          "时间上怎么安排？——85天内，每天约 300 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "数学一最后八十天从一战82分的坑里抢到110+：级数线代证明补上、取舍明确",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "85天内",
+            "horizonDays": 85,
+            "dailyMinutes": 300,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "二战时间紧：五小时看着满，但强化、复盘、错题三件事不成回流体系，级数线代证明没章法，真题模拟卷的优先级没定",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C17-kaoyan-math-one",
+        "note": "Golden-100 · C17-kaoyan-math-one（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C17-kaoyan-math-one"
+      ],
+      "notes": "Golden-100 · C17-kaoyan-math-one（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C18-fakao-subjective",
+      "version": 1,
+      "nickname": "想搞懂20天把刑法案例说理写成涵摄句",
+      "account": {
+        "displayName": "想搞懂20天把刑法案例说理写成涵摄句",
+        "emailPrefix": "golden-C18-fakao-subjective"
+      },
+      "persona": {
+        "nameHint": "想搞懂20天把刑法案例说理写成涵摄句",
+        "background": "「20天把刑法案例说理写成涵摄句：结论之外把分拿全」诉求的虚拟学习者（系统掌握型）。 起点与卡点：二战差16分全差在输出：会判断不会涵摄，大前提小前提与事实脱节，说理段写不满得分点；商法空白要定弃保",
+        "availableTime": "abundant",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "20天把刑法案例说理写成涵摄句：结论之外把分拿全",
+        "visibleOpening": "去年客观210、主观102，差16分没上岸，今年卷土重来。在职非法本，行政岗。现在最大的问题是刑法案例题结论能判断对，但说理写不到位——构成要件和案件事实对不上号，翻法条也不熟。离主观题只剩20天，早上6点写案例1小时，晚上3小时，周末全天，求个冲刺安排。商法没看，选做题弃商保行政可行吗？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：二战差16分全差在输出：会判断不会涵摄，大前提小前提与事实脱节，说理段写不满得分点；商法空白要定弃保）",
+          "这次希望拿到什么结果？——按「20天把刑法案例说理写成涵摄句：结论之外把分拿全」的实际交付来",
+          "时间上怎么安排？——21天内，每天约 240 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "20天把刑法案例说理写成涵摄句：结论之外把分拿全",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "21天内",
+            "horizonDays": 21,
+            "dailyMinutes": 240,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "二战差16分全差在输出：会判断不会涵摄，大前提小前提与事实脱节，说理段写不满得分点；商法空白要定弃保",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C18-fakao-subjective",
+        "note": "Golden-100 · C18-fakao-subjective（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C18-fakao-subjective"
+      ],
+      "notes": "Golden-100 · C18-fakao-subjective（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C19-phd-qualify-retake",
+      "version": 1,
+      "nickname": "想搞懂四个月补考一次过",
+      "account": {
+        "displayName": "想搞懂四个月补考一次过",
+        "emailPrefix": "golden-C19-phd-qualify-retake"
+      },
+      "persona": {
+        "nameHint": "想搞懂四个月补考一次过",
+        "background": "「四个月补考一次过：把宏微观模型的来龙去脉补成自己的推导链」诉求的虚拟学习者（系统掌握型）。 起点与卡点：上课听得懂例题、下课不会做题：中宏中微地基缺失，模型推导只会照抄步骤、不知假设与结论的因果链，主考点范围也摸不清",
+        "availableTime": "abundant",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "四个月补考一次过：把宏微观模型的来龙去脉补成自己的推导链",
+        "visibleOpening": "硕博连读第二年，第一年资格考挂了宏微观，系里只给一次补考机会，就在学期末，还有四个月。考卷全是模型推导和证明，我本科没上过真正的中宏中微，上课听得懂例题、下课不会做题，缺的是模型之间的来龙去脉和一套复习框架。同届早复习完了，晚上七点到十点是我的固定时段。这四个月我就干补考这一件事，先刷题还是先啃书？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：上课听得懂例题、下课不会做题：中宏中微地基缺失，模型推导只会照抄步骤、不知假设与结论的因果链，主考点范围也摸不清）",
+          "这次希望拿到什么结果？——按「四个月补考一次过：把宏微观模型的来龙去脉补成自己的推导链」的实际交付来",
+          "时间上怎么安排？——120天内，每天约 90 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "四个月补考一次过：把宏微观模型的来龙去脉补成自己的推导链",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "120天内",
+            "horizonDays": 120,
+            "dailyMinutes": 90,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "上课听得懂例题、下课不会做题：中宏中微地基缺失，模型推导只会照抄步骤、不知假设与结论的因果链，主考点范围也摸不清",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C19-phd-qualify-retake",
+        "note": "Golden-100 · C19-phd-qualify-retake（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C19-phd-qualify-retake"
+      ],
+      "notes": "Golden-100 · C19-phd-qualify-retake（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-C20-mandarin-level-2a",
+      "version": 1,
+      "nickname": "想搞懂30天从二乙冲二甲",
+      "account": {
+        "displayName": "想搞懂30天从二乙冲二甲",
+        "emailPrefix": "golden-C20-mandarin-level-2a"
+      },
+      "persona": {
+        "nameHint": "想搞懂30天从二乙冲二甲",
+        "background": "「30天从二乙冲二甲：n/l、平翘舌、儿化音逐个过，命题说话不卡壳」诉求的虚拟学习者（系统掌握型）。 起点与卡点：发音缺陷成系统：n/l、平翘舌、儿化各有病灶，命题说话一紧张就卡壳；半小时不知道怎么拆才有效",
+        "availableTime": "minimal",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "30天从二乙冲二甲：n/l、平翘舌、儿化音逐个过，命题说话不卡壳",
+        "visibleOpening": "教资笔试面试都过了，认定卡在普通话二甲。南方人，n/l不分、平翘舌混，儿化音发不出来。机考四题，命题说话三分钟最怕，一紧张就卡。上次裸考差0.8分到二甲。每天下班后能挤出半小时，我想拆成跟读和自录两小段练。三十天从二乙冲二甲现实吗？APP跟读有用吗，还是考前找个老师纠两节课？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：发音缺陷成系统：n/l、平翘舌、儿化各有病灶，命题说话一紧张就卡壳；半小时不知道怎么拆才有效）",
+          "这次希望拿到什么结果？——按「30天从二乙冲二甲：n/l、平翘舌、儿化音逐个过，命题说话不卡壳」的实际交付来",
+          "时间上怎么安排？——30天内，每天约 30 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "30天从二乙冲二甲：n/l、平翘舌、儿化音逐个过，命题说话不卡壳",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "30天内",
+            "horizonDays": 30,
+            "dailyMinutes": 30,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "发音缺陷成系统：n/l、平翘舌、儿化各有病灶，命题说话一紧张就卡壳；半小时不知道怎么拆才有效",
+          "expect": "path",
+          "group": "C"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "C20-mandarin-level-2a",
+        "note": "Golden-100 · C20-mandarin-level-2a（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "C",
+        "mastery",
+        "golden-C20-mandarin-level-2a"
+      ],
+      "notes": "Golden-100 · C20-mandarin-level-2a（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-pbl-ubd-08",
+      "version": 1,
+      "nickname": "想搞懂逆向教学设计（UbD）设计真正能让学生掌握核…",
+      "account": {
+        "displayName": "想搞懂逆向教学设计（UbD）设计真正能让学生掌握核…",
+        "emailPrefix": "golden-pbl-ubd-08"
+      },
+      "persona": {
+        "nameHint": "想搞懂逆向教学设计（UbD）设计真正能让学生掌握核…",
+        "background": "「学会用逆向教学设计（UbD）设计真正能让学生掌握核心概念的 PBL 课程」诉求的虚拟学习者（系统掌握型）。 起点与卡点：有 3 年传统讲授课经验，熟悉教材知识点；卡在「先想好玩的活动，再往里硬塞知识点」，导致活动与核心概念脱节，过程性评价只会打参与分",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "学会用逆向教学设计（UbD）设计真正能让学生掌握核心概念的 PBL 课程",
+        "visibleOpening": "我是一线初中科学老师，学校要求这学期开发一门 3 周的项目式学习（PBL）课。我上学期试着带学生做过一次「制作水火箭」项目，结果学生玩得很嗨、手工做得挺热闹，但一考背后的力学和气压原理全不会，完全变成了手工劳技课。我想学会怎么设计出真正能让学生掌握核心概念的 PBL 课程。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：有 3 年传统讲授课经验，熟悉教材知识点；卡在「先想好玩的活动，再往里硬塞知识点」，导致活动与核心概念脱节，过程性评价只会打参与分）",
+          "这次希望拿到什么结果？——按「学会用逆向教学设计（UbD）设计真正能让学生掌握核心概念的 PBL 课程」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "学会用逆向教学设计（UbD）设计真正能让学生掌握核心概念的 PBL 课程",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "有 3 年传统讲授课经验，熟悉教材知识点；卡在「先想好玩的活动，再往里硬塞知识点」，导致活动与核心概念脱节，过程性评价只会打参与分",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "pbl-ubd-08",
+        "note": "Golden-100 · pbl-ubd-08（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "mastery",
+        "golden-pbl-ubd-08"
+      ],
+      "notes": "Golden-100 · pbl-ubd-08（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-llm-eval-09",
+      "version": 1,
+      "nickname": "想搞懂搭建大模型应用的确定性控制与离线评测体系",
+      "account": {
+        "displayName": "想搞懂搭建大模型应用的确定性控制与离线评测体系",
+        "emailPrefix": "golden-llm-eval-09"
+      },
+      "persona": {
+        "nameHint": "想搞懂搭建大模型应用的确定性控制与离线评测体系",
+        "background": "「学会搭建大模型应用的确定性控制与离线评测体系」诉求的虚拟学习者（系统掌握型）。 起点与卡点：全栈开发背景，会调 LLM API、懂 JSON Schema；卡在把所有逻辑塞进一个超长 Prompt，且没有建立结构化的离线基准测试集和分层判读器",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "学会搭建大模型应用的确定性控制与离线评测体系",
+        "visibleOpening": "我正在独立开发一个基于大模型的垂直应用，现在最头疼的是「按下葫芦浮起瓢」——为了修好一个用户的 Badcase 改了一句 Prompt，结果之前跑得挺好的另外十几个场景全崩了。我现在每次改完只能自己肉眼试聊三五个例子，根本不敢随便发版，想系统学一下怎么搭一套靠谱的工程化控制和评测（Eval）体系。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：全栈开发背景，会调 LLM API、懂 JSON Schema；卡在把所有逻辑塞进一个超长 Prompt，且没有建立结构化的离线基准测试集和）",
+          "这次希望拿到什么结果？——按「学会搭建大模型应用的确定性控制与离线评测体系」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "学会搭建大模型应用的确定性控制与离线评测体系",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "全栈开发背景，会调 LLM API、懂 JSON Schema；卡在把所有逻辑塞进一个超长 Prompt，且没有建立结构化的离线基准测试集和分层判读器",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "llm-eval-09",
+        "note": "Golden-100 · llm-eval-09（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "mastery",
+        "golden-llm-eval-09"
+      ],
+      "notes": "Golden-100 · llm-eval-09（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-power-train-10",
+      "version": 1,
+      "nickname": "想搞懂功率区间训练体系",
+      "account": {
+        "displayName": "想搞懂功率区间训练体系",
+        "emailPrefix": "golden-power-train-10"
+      },
+      "persona": {
+        "nameHint": "想搞懂功率区间训练体系",
+        "background": "「建立功率区间训练体系，突破 FTP 平台期」诉求的虚拟学习者（系统掌握型）。 起点与卡点：有半年规律运动习惯与功率计心率带数据；卡在每次都骑在不高不低的灰色区间（3-4 区混杂），既没有攒够有氧底座，也没给够高强度刺激，还不懂看效率因子和解耦率",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "建立功率区间训练体系，突破 FTP 平台期",
+        "visibleOpening": "我买了功率计和智能骑行台，坚持每天骑车训练快半年了，但最近两个月 FTP（功能性阈值功率）一直卡在 210W 死活涨不上去，而且每次骑完第二天都很累。我平时就是上去使劲踩一小时，不知道怎么科学看那些功率区间、心率漂移和疲劳数据来排每周的训练计划。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：有半年规律运动习惯与功率计心率带数据；卡在每次都骑在不高不低的灰色区间（3-4 区混杂），既没有攒够有氧底座，也没给够高强度刺激，还不懂看效）",
+          "这次希望拿到什么结果？——按「建立功率区间训练体系，突破 FTP 平台期」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立功率区间训练体系，突破 FTP 平台期",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "有半年规律运动习惯与功率计心率带数据；卡在每次都骑在不高不低的灰色区间（3-4 区混杂），既没有攒够有氧底座，也没给够高强度刺激，还不懂看效率因子和解耦率",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "power-train-10",
+        "note": "Golden-100 · power-train-10（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "mastery",
+        "golden-power-train-10"
+      ],
+      "notes": "Golden-100 · power-train-10（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D04-saas-nextday-churn",
+      "version": 1,
+      "nickname": "想解决新用户次留下滑的分群归因与假设验证框架",
+      "account": {
+        "displayName": "想解决新用户次留下滑的分群归因与假设验证框架",
+        "emailPrefix": "golden-D04-saas-nextday-churn"
+      },
+      "persona": {
+        "nameHint": "想解决新用户次留下滑的分群归因与假设验证框架",
+        "background": "「建立新用户次留下滑的分群归因与假设验证框架」诉求的虚拟学习者（问题修复型）。 起点与卡点：归因链条断裂：砍功能这个「合理」动作让留存更差，说明「功能太杂」的归因很可能是错的；访谈指向的「没感知价值」又太抽象，不知道下一步验证什么、用什么数据验证",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立新用户次留下滑的分群归因与假设验证框架",
+        "visibleOpening": "我是一家协作 SaaS 的增长负责人，新用户次留六周从 38% 跌到 24%。流失用户里六成只用过一次产品，访谈一半人说「没看懂这产品是干嘛的」。我们第一轮把低频功能全砍了想突出核心，次留反而接着掉。老板要我两周内给结论。未来两个月我每周能挤 5 小时，但只想先把次留归因这一件事搞清楚：到底该列哪些假设，拿已发生的六周数据怎么逐个验证。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：归因链条断裂：砍功能这个「合理」动作让留存更差，说明「功能太杂」的归因很可能是错的；访谈指向的「没感知价值」又太抽象，不知道下一步验证什么、）",
+          "这次希望拿到什么结果？——按「建立新用户次留下滑的分群归因与假设验证框架」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立新用户次留下滑的分群归因与假设验证框架",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "归因链条断裂：砍功能这个「合理」动作让留存更差，说明「功能太杂」的归因很可能是错的；访谈指向的「没感知价值」又太抽象，不知道下一步验证什么、用什么数据验证",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D04-saas-nextday-churn",
+        "note": "Golden-100 · D04-saas-nextday-churn（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D04-saas-nextday-churn"
+      ],
+      "notes": "Golden-100 · D04-saas-nextday-churn（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D05-ads-roi-funnel",
+      "version": 1,
+      "nickname": "想解决漏斗拆解定位直通车 ROI 下跌的病因环节",
+      "account": {
+        "displayName": "想解决漏斗拆解定位直通车 ROI 下跌的病因环节",
+        "emailPrefix": "golden-D05-ads-roi-funnel"
+      },
+      "persona": {
+        "nameHint": "想解决漏斗拆解定位直通车 ROI 下跌的病因环节",
+        "background": "「学会用漏斗拆解定位直通车 ROI 下跌的病因环节」诉求的虚拟学习者（问题修复型）。 起点与卡点：降出价是最差动作：不知道 ROI 下跌要先做漏斗拆解，分不清是点击率下滑触发质量分下降、点击单价被动上涨，还是点击没少但转化率塌了——三个方向的对策完全不同",
+        "availableTime": "minimal",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "学会用漏斗拆解定位直通车 ROI 下跌的病因环节",
+        "visibleOpening": "我开淘宝店四年，双 11 预热这两周直通车 ROI 从 3.2 掉到 1.8，我一慌先降了出价，展现量跟着腰斩，订单更少。后台一堆指标：点击率、点击单价、转化率、收藏加购，我不知道该先查哪一环，也分不清是竞品抢排名还是自己的链接出了问题。每天睡前能挤 20 分钟，想先把过去两周的后台数据拆开，学会定位到底塌的是哪一环再动手，别再做降出价这种最差的动作。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：降出价是最差动作：不知道 ROI 下跌要先做漏斗拆解，分不清是点击率下滑触发质量分下降、点击单价被动上涨，还是点击没少但转化率塌了——三个方）",
+          "这次希望拿到什么结果？——按「学会用漏斗拆解定位直通车 ROI 下跌的病因环节」的实际交付来",
+          "时间上怎么安排？——18天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "学会用漏斗拆解定位直通车 ROI 下跌的病因环节",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "18天内",
+            "horizonDays": 18,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "降出价是最差动作：不知道 ROI 下跌要先做漏斗拆解，分不清是点击率下滑触发质量分下降、点击单价被动上涨，还是点击没少但转化率塌了——三个方向的对策完全不同",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D05-ads-roi-funnel",
+        "note": "Golden-100 · D05-ads-roi-funnel（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D05-ads-roi-funnel"
+      ],
+      "notes": "Golden-100 · D05-ads-roi-funnel（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D06-lec-risk-calibration",
+      "version": 1,
+      "nickname": "想解决LEC 作业条件危险性分级的取值校准依据与隐…",
+      "account": {
+        "displayName": "想解决LEC 作业条件危险性分级的取值校准依据与隐…",
+        "emailPrefix": "golden-D06-lec-risk-calibration"
+      },
+      "persona": {
+        "nameHint": "想解决LEC 作业条件危险性分级的取值校准依据与隐…",
+        "background": "「建立 LEC 作业条件危险性分级的取值校准依据与隐患整改闭环验收框架」诉求的虚拟学习者（问题修复型）。 起点与卡点：LEC 三个因子全是主观打分，没有校准依据时 L=3 和 L=1 谁也说不服谁；隐患整改停在「回复了」而非「验证了」，验收标准和留痕要求缺失",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立 LEC 作业条件危险性分级的取值校准依据与隐患整改闭环验收框架",
+        "visibleOpening": "我新入职一家制造企业做安全员，给车间做 JHA+LEC 分级就碰钉子：同一处登高车作业，我评 L=3、D=126 定为较大风险要停用，干了二十年的班组长评 L=1、D=42，说「干一辈子没出过事」，拒绝签字。上月 43 项隐患车间报表全写已整改，我抽查一半只是买了器材没装。师傅让我先学透《安全生产法》和 LEC 法。周末能凑半天，我想弄明白 L、E 取值拿什么校准，隐患闭环的验收留痕标准怎么定。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：LEC 三个因子全是主观打分，没有校准依据时 L=3 和 L=1 谁也说不服谁；隐患整改停在「回复了」而非「验证了」，验收标准和留痕要求缺失）",
+          "这次希望拿到什么结果？——按「建立 LEC 作业条件危险性分级的取值校准依据与隐患整改闭环验收框架」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立 LEC 作业条件危险性分级的取值校准依据与隐患整改闭环验收框架",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "LEC 三个因子全是主观打分，没有校准依据时 L=3 和 L=1 谁也说不服谁；隐患整改停在「回复了」而非「验证了」，验收标准和留痕要求缺失",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D06-lec-risk-calibration",
+        "note": "Golden-100 · D06-lec-risk-calibration（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D06-lec-risk-calibration"
+      ],
+      "notes": "Golden-100 · D06-lec-risk-calibration（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D07-sprint-delay-attribution",
+      "version": 1,
+      "nickname": "想解决历史工时数据把迭代延期定量归因到病因子（估点…",
+      "account": {
+        "displayName": "想解决历史工时数据把迭代延期定量归因到病因子（估点…",
+        "emailPrefix": "golden-D07-sprint-delay-attribution"
+      },
+      "persona": {
+        "nameHint": "想解决历史工时数据把迭代延期定量归因到病因子（估点…",
+        "background": "「建立用历史工时数据把迭代延期定量归因到病因子（估点失准/需求蔓延/插入中断）的方法」诉求的虚拟学习者（问题修复型）。 起点与卡点：「估点失准」要练估算、「需求蔓延」要管入口，改进动作完全不同但一直分不清；燃尽图能看趋势却回答不了插入需求占比这个病因子",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立用历史工时数据把迭代延期定量归因到病因子（估点失准/需求蔓延/插入中断）的方法",
+        "visibleOpening": "我是 12 人研发团队的 Scrum Master，连续三个迭代延期 30% 以上，每次复盘结论都是「估点不准，多留 buffer」，下个迭代照样延期。翻燃尽图发现每期都有两个临时插入的线上 bug 和一个老板口头需求，占掉约四成工时，这数从没进过任何一版迭代计划。下个月起每周能安排 5 小时，但只想解决延期归因这一个事：用过去三个迭代已发生的工时流水把病因定量拆出来，让复盘别再开成猜谜会。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：「估点失准」要练估算、「需求蔓延」要管入口，改进动作完全不同但一直分不清；燃尽图能看趋势却回答不了插入需求占比这个病因子）",
+          "这次希望拿到什么结果？——按「建立用历史工时数据把迭代延期定量归因到病因子（估点失准/需求蔓延/插入中断）的方法」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立用历史工时数据把迭代延期定量归因到病因子（估点失准/需求蔓延/插入中断）的方法",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "「估点失准」要练估算、「需求蔓延」要管入口，改进动作完全不同但一直分不清；燃尽图能看趋势却回答不了插入需求占比这个病因子",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D07-sprint-delay-attribution",
+        "note": "Golden-100 · D07-sprint-delay-attribution（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D07-sprint-delay-attribution"
+      ],
+      "notes": "Golden-100 · D07-sprint-delay-attribution（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D08-b2b-decision-chain",
+      "version": 1,
+      "nickname": "想解决决策链角色支持度的证据化判断框架",
+      "account": {
+        "displayName": "想解决决策链角色支持度的证据化判断框架",
+        "emailPrefix": "golden-D08-b2b-decision-chain"
+      },
+      "persona": {
+        "nameHint": "想解决决策链角色支持度的证据化判断框架",
+        "background": "「建立决策链角色支持度的证据化判断框架，能区分「客气」与「强力支持」」诉求的虚拟学习者（问题修复型）。 起点与卡点：把「技术验收通过」当成成单信号，对每个人的支持度从没做过客观验证；分不清「客气」和「强力支持」，预算何时松动全程无感知，复盘只能靠感觉",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立决策链角色支持度的证据化判断框架，能区分「客气」与「强力支持」",
+        "visibleOpening": "我做 ToB 销售第六年，上季度一个国企招标项目，售前把评委技术问题全答上、方案分最高，最后还是丢了单。复盘会上老板问客户关系哪一层出了问题，我只说得出「感觉对方项目经理挺支持我们」。跟了三个月的 MES 项目也一样：POC 技术验收通过后客户口头说流程在走，接着预算削减、对接人调岗，彻底沉默。每晚下班后 40 分钟，我想拿这两个已丢的单当标本，学一套用证据而不是感觉判断决策链各方真实立场的方法。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：把「技术验收通过」当成成单信号，对每个人的支持度从没做过客观验证；分不清「客气」和「强力支持」，预算何时松动全程无感知，复盘只能靠感觉）",
+          "这次希望拿到什么结果？——按「建立决策链角色支持度的证据化判断框架，能区分「客气」与「强力支持」」的实际交付来",
+          "时间上怎么安排？——9天内，每天约 40 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立决策链角色支持度的证据化判断框架，能区分「客气」与「强力支持」",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "9天内",
+            "horizonDays": 9,
+            "dailyMinutes": 40,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "把「技术验收通过」当成成单信号，对每个人的支持度从没做过客观验证；分不清「客气」和「强力支持」，预算何时松动全程无感知，复盘只能靠感觉",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D08-b2b-decision-chain",
+        "note": "Golden-100 · D08-b2b-decision-chain（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D08-b2b-decision-chain"
+      ],
+      "notes": "Golden-100 · D08-b2b-decision-chain（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D09-pbl-labor-diagnosis",
+      "version": 1,
+      "nickname": "想解决对已有 PBL 项目的病根诊断框架（驱动问题…",
+      "account": {
+        "displayName": "想解决对已有 PBL 项目的病根诊断框架（驱动问题…",
+        "emailPrefix": "golden-D09-pbl-labor-diagnosis"
+      },
+      "persona": {
+        "nameHint": "想解决对已有 PBL 项目的病根诊断框架（驱动问题…",
+        "background": "「建立对已有 PBL 项目的病根诊断框架（驱动问题/知识承载/评价对齐三层定位）」诉求的虚拟学习者（问题修复型）。 起点与卡点：做了一学期四个项目都在重复同样的病：判断不了是驱动问题没设计好还是知识被项目切碎打包，两种病因对应的改进动作完全不同",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立对已有 PBL 项目的病根诊断框架（驱动问题/知识承载/评价对齐三层定位）",
+        "visibleOpening": "我是小学科学教研组长，学校要把 PBL 做成特色，一学期排四个项目。做下来越来越像劳技课：学生大量时间在裁剪粘贴组装，探究论证压缩成最后十分钟汇报，期末家长问「孩子科学知识学到了什么」，我答不上来。我不缺做项目的经验，缺诊断能力：分不清病根是驱动问题没设计好，还是知识被项目切碎打包——如果是后者，加探究环节也没用。每周教研能凑 3 小时，想先把已做完的四个项目逐个解剖定位病根，再定下学期怎么改。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：做了一学期四个项目都在重复同样的病：判断不了是驱动问题没设计好还是知识被项目切碎打包，两种病因对应的改进动作完全不同）",
+          "这次希望拿到什么结果？——按「建立对已有 PBL 项目的病根诊断框架（驱动问题/知识承载/评价对齐三层定位）」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立对已有 PBL 项目的病根诊断框架（驱动问题/知识承载/评价对齐三层定位）",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "做了一学期四个项目都在重复同样的病：判断不了是驱动问题没设计好还是知识被项目切碎打包，两种病因对应的改进动作完全不同",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D09-pbl-labor-diagnosis",
+        "note": "Golden-100 · D09-pbl-labor-diagnosis（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D09-pbl-labor-diagnosis"
+      ],
+      "notes": "Golden-100 · D09-pbl-labor-diagnosis（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D10-llm-eval-online-gap",
+      "version": 1,
+      "nickname": "想解决离线评测与线上表现不一致时的分布验证与双跑判…",
+      "account": {
+        "displayName": "想解决离线评测与线上表现不一致时的分布验证与双跑判…",
+        "emailPrefix": "golden-D10-llm-eval-online-gap"
+      },
+      "persona": {
+        "nameHint": "想解决离线评测与线上表现不一致时的分布验证与双跑判…",
+        "background": "「建立离线评测与线上表现不一致时的分布验证与双跑判断方法」诉求的虚拟学习者（问题修复型）。 起点与卡点：离线集和线上请求分布对不上且无法证明；不知道双跑该持续多久、看多少量才能下结论——样本少怕巧合，跑久了成本扛不住",
+        "availableTime": "minimal",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立离线评测与线上表现不一致时的分布验证与双跑判断方法",
+        "visibleOpening": "我在客服机器人团队，上周改了一版 prompt，离线跑自己攒的 80 条测试集，人工抽查 20 条明显变好就放了线上。结果一周后人工升级率反而涨了 3 个点，老板问「离线明明涨了为什么线上掉了」，没人能解释。我猜是离线集和线上真实请求分布对不上，但拿不出证据，也不知道新版该和旧版双跑多久、看多少量才敢下结论。每天通勤加午休能凑 25 分钟，想用已发生的线上请求日志回放验证，定出双跑时长与样本标准。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：离线集和线上请求分布对不上且无法证明；不知道双跑该持续多久、看多少量才能下结论——样本少怕巧合，跑久了成本扛不住）",
+          "这次希望拿到什么结果？——按「建立离线评测与线上表现不一致时的分布验证与双跑判断方法」的实际交付来",
+          "时间上怎么安排？——15天内，每天约 25 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立离线评测与线上表现不一致时的分布验证与双跑判断方法",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "15天内",
+            "horizonDays": 15,
+            "dailyMinutes": 25,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "离线集和线上请求分布对不上且无法证明；不知道双跑该持续多久、看多少量才能下结论——样本少怕巧合，跑久了成本扛不住",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D10-llm-eval-online-gap",
+        "note": "Golden-100 · D10-llm-eval-online-gap（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D10-llm-eval-online-gap"
+      ],
+      "notes": "Golden-100 · D10-llm-eval-online-gap（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D11-sysreview-prisma-start",
+      "version": 1,
+      "nickname": "想解决对照 PRISMA 2020 与 Cochr…",
+      "account": {
+        "displayName": "想解决对照 PRISMA 2020 与 Cochr…",
+        "emailPrefix": "golden-D11-sysreview-prisma-start"
+      },
+      "persona": {
+        "nameHint": "想解决对照 PRISMA 2020 与 Cochr…",
+        "background": "「对照 PRISMA 2020 与 Cochrane 手册完成系统综述的检索式设计、方案与前瞻注册」诉求的虚拟学习者（问题修复型）。 起点与卡点：第一次做循证综述，检索式、偏倚工具、注册材料全空白；担心筛选标准前后不一致被人挑刺，不知道每一步该对照什么规范文件",
+        "availableTime": "minimal",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "对照 PRISMA 2020 与 Cochrane 手册完成系统综述的检索式设计、方案与前瞻注册",
+        "visibleOpening": "我临床医学专硕转博，导师希望做一个术后康复方向的系统综述。我之前没做过循证医学，只在方法课上听过 PICOS 这些概念，检索策略怎么写、偏倚风险用什么工具、系统综述注册要准备哪些材料一概不清楚。导师说「先把注册做了，别到时候被人说没前瞻注册」，可我连注册表的字段都看不懂。白天手术日连饭都吃不上，能用的就是整块半小时。我想从第一步就对照 PRISMA 2020 清单把流程走正规，不留返工隐患。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：第一次做循证综述，检索式、偏倚工具、注册材料全空白；担心筛选标准前后不一致被人挑刺，不知道每一步该对照什么规范文件）",
+          "这次希望拿到什么结果？——按「对照 PRISMA 2020 与 Cochrane 手册完成系统综述的检索式设计、方案与前瞻注册」的实际交付来",
+          "时间上怎么安排？——180天内，每天约 30 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "对照 PRISMA 2020 与 Cochrane 手册完成系统综述的检索式设计、方案与前瞻注册",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "180天内",
+            "horizonDays": 180,
+            "dailyMinutes": 30,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "第一次做循证综述，检索式、偏倚工具、注册材料全空白；担心筛选标准前后不一致被人挑刺，不知道每一步该对照什么规范文件",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D11-sysreview-prisma-start",
+        "note": "Golden-100 · D11-sysreview-prisma-start（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D11-sysreview-prisma-start"
+      ],
+      "notes": "Golden-100 · D11-sysreview-prisma-start（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D12-tester-career-roi",
+      "version": 1,
+      "nickname": "想解决转岗方向的 ROI 比较框架（可迁移资产、市…",
+      "account": {
+        "displayName": "想解决转岗方向的 ROI 比较框架（可迁移资产、市…",
+        "emailPrefix": "golden-D12-tester-career-roi"
+      },
+      "persona": {
+        "nameHint": "想解决转岗方向的 ROI 比较框架（可迁移资产、市…",
+        "background": "「建立转岗方向的 ROI 比较框架（可迁移资产、市场供需、时间成本三账合一）」诉求的虚拟学习者（问题修复型）。 起点与卡点：三个方向的教程都收藏了，但每条路的胜率、时间成本和自身可迁移资产从没放到一起算过；海投 5000 个招呼 0 面试说明策略错了而不是努力不够",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立转岗方向的 ROI 比较框架（可迁移资产、市场供需、时间成本三账合一）",
+        "visibleOpening": "27 岁，做了 4 年功能测试，公司去年黄了，5000 个招呼 0 个面试。白天投简历，晚上挤 2 小时学习，却不知道该学什么：补 Python 自动化转测开？拿流程经验转项目助理？还是做实施？身上背着房贷，每空窗一个月慌一个月。之前只会闷头海投加收藏教程，从没算过账。未来两个月每周能拿出 10 小时，但只想先定「选哪条路」这一件事：把三条路的胜率、投入和我的可迁移资产摆到一张表上算清楚。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：三个方向的教程都收藏了，但每条路的胜率、时间成本和自身可迁移资产从没放到一起算过；海投 5000 个招呼 0 面试说明策略错了而不是努力不够）",
+          "这次希望拿到什么结果？——按「建立转岗方向的 ROI 比较框架（可迁移资产、市场供需、时间成本三账合一）」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立转岗方向的 ROI 比较框架（可迁移资产、市场供需、时间成本三账合一）",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "三个方向的教程都收藏了，但每条路的胜率、时间成本和自身可迁移资产从没放到一起算过；海投 5000 个招呼 0 面试说明策略错了而不是努力不够",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D12-tester-career-roi",
+        "note": "Golden-100 · D12-tester-career-roi（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D12-tester-career-roi"
+      ],
+      "notes": "Golden-100 · D12-tester-career-roi（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D13-ops-swing-decision",
+      "version": 1,
+      "nickname": "想解决多向转岗的期望值比较与决策框架",
+      "account": {
+        "displayName": "想解决多向转岗的期望值比较与决策框架",
+        "emailPrefix": "golden-D13-ops-swing-decision"
+      },
+      "persona": {
+        "nameHint": "想解决多向转岗的期望值比较与决策框架",
+        "background": "「建立多向转岗的期望值比较与决策框架，终结半年摇摆」诉求的虚拟学习者（问题修复型）。 起点与卡点：纠结半年的根子是没有比较框架：两条路的技能重合度、市场供需、个人适配信号从未放到同一张表上，每次比较都从零开始焦虑",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立多向转岗的期望值比较与决策框架，终结半年摇摆",
+        "visibleOpening": "25 岁，中厂用户运营干满两年，一直下不了决心：转产品要学 PRD、竞品分析、画原型，转数据分析要啃 SQL、Python、统计学，两边教程收藏一堆，学两周产品又觉得数据更抗周期，来回横跳到现在啥都没沉淀。内部转岗的路我也没摸清楚。再晃一年，市场对运营岗只会更狠。我不想再听「跟随内心」这种话，我想把这笔纠结了半年的账算清楚：六周时间，每周 4 小时，只解决「转哪边」这一个决策。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：纠结半年的根子是没有比较框架：两条路的技能重合度、市场供需、个人适配信号从未放到同一张表上，每次比较都从零开始焦虑）",
+          "这次希望拿到什么结果？——按「建立多向转岗的期望值比较与决策框架，终结半年摇摆」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立多向转岗的期望值比较与决策框架，终结半年摇摆",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "纠结半年的根子是没有比较框架：两条路的技能重合度、市场供需、个人适配信号从未放到同一张表上，每次比较都从零开始焦虑",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D13-ops-swing-decision",
+        "note": "Golden-100 · D13-ops-swing-decision（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D13-ops-swing-decision"
+      ],
+      "notes": "Golden-100 · D13-ops-swing-decision（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D14-key-account-upgrade",
+      "version": 1,
+      "nickname": "想解决大客户经营方法论（客户分层、行业洞察、高层对…",
+      "account": {
+        "displayName": "想解决大客户经营方法论（客户分层、行业洞察、高层对…",
+        "emailPrefix": "golden-D14-key-account-upgrade"
+      },
+      "persona": {
+        "nameHint": "想解决大客户经营方法论（客户分层、行业洞察、高层对…",
+        "background": "「建立大客户经营方法论（客户分层、行业洞察、高层对话）替代喝酒式关系打法」诉求的虚拟学习者（问题修复型）。 起点与卡点：五年固化了酒桌式打法：客户全在采购层，方案套模板、行业报告看不进去；不知道大客户经营该学什么、先从哪几层客户开始改",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立大客户经营方法论（客户分层、行业洞察、高层对话）替代喝酒式关系打法",
+        "visibleOpening": "30 岁，B 端销售五年了，不转行也不嫌这行，就是觉得自己一直在「卖货」层面打转：客户是采购，关系靠酒桌，人家一提战略我就接不上。同事能跟客户总监聊行业趋势，一单顶我半年。CRM 里两百个客户名单，能聊战略的一个没有。我不想换赛道，想把手上这摊活升个维：每天 45 分钟，四个月，搞清楚大客户经营到底该怎么分层经营、行业洞察要补到什么深度、跟客户高层对话从哪开口。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：五年固化了酒桌式打法：客户全在采购层，方案套模板、行业报告看不进去；不知道大客户经营该学什么、先从哪几层客户开始改）",
+          "这次希望拿到什么结果？——按「建立大客户经营方法论（客户分层、行业洞察、高层对话）替代喝酒式关系打法」的实际交付来",
+          "时间上怎么安排？——120天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立大客户经营方法论（客户分层、行业洞察、高层对话）替代喝酒式关系打法",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "120天内",
+            "horizonDays": 120,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "五年固化了酒桌式打法：客户全在采购层，方案套模板、行业报告看不进去；不知道大客户经营该学什么、先从哪几层客户开始改",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D14-key-account-upgrade",
+        "note": "Golden-100 · D14-key-account-upgrade（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D14-key-account-upgrade"
+      ],
+      "notes": "Golden-100 · D14-key-account-upgrade（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D15-kitchen-sop",
+      "version": 1,
+      "nickname": "想解决手感经验转成可复现 SOP 的量化建档方法（…",
+      "account": {
+        "displayName": "想解决手感经验转成可复现 SOP 的量化建档方法（…",
+        "emailPrefix": "golden-D15-kitchen-sop"
+      },
+      "persona": {
+        "nameHint": "想解决手感经验转成可复现 SOP 的量化建档方法（…",
+        "background": "「建立把手感经验转成可复现 SOP 的量化建档方法（配方量化、流程卡、验收标准）」诉求的虚拟学习者（问题修复型）。 起点与卡点：十年手感无法翻译成参数：不知道标准化该从配方表还是流程卡切入、量化到什么颗粒度才不走样，也没有判断「做对了没」的验收标准",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立把手感经验转成可复现 SOP 的量化建档方法（配方量化、流程卡、验收标准）",
+        "visibleOpening": "34 岁，社会餐饮厨师长，带八个徒弟，出品全凭手感。老板要开分店，让我把菜「写下来」，我写了两天写不出来：盐少许是多少克，火候几分是几度。以前嫌师傅留一手，现在轮到自己，反而不知道怎么系统地「不留一手」。我不想转行，就想把标准化这件事做深：每天收档后 40 分钟，三个月，先把店里点击率前十的菜建出经得起复制的标准档案，让徒弟照着能做出一模一样的味。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：十年手感无法翻译成参数：不知道标准化该从配方表还是流程卡切入、量化到什么颗粒度才不走样，也没有判断「做对了没」的验收标准）",
+          "这次希望拿到什么结果？——按「建立把手感经验转成可复现 SOP 的量化建档方法（配方量化、流程卡、验收标准）」的实际交付来",
+          "时间上怎么安排？——90天内，每天约 40 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立把手感经验转成可复现 SOP 的量化建档方法（配方量化、流程卡、验收标准）",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "90天内",
+            "horizonDays": 90,
+            "dailyMinutes": 40,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "十年手感无法翻译成参数：不知道标准化该从配方表还是流程卡切入、量化到什么颗粒度才不走样，也没有判断「做对了没」的验收标准",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D15-kitchen-sop",
+        "note": "Golden-100 · D15-kitchen-sop（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D15-kitchen-sop"
+      ],
+      "notes": "Golden-100 · D15-kitchen-sop（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D16-dev-to-em-diagnosis",
+      "version": 1,
+      "nickname": "想解决技术管理者的问题诊断框架（人的问题/流程的问…",
+      "account": {
+        "displayName": "想解决技术管理者的问题诊断框架（人的问题/流程的问…",
+        "emailPrefix": "golden-D16-dev-to-em-diagnosis"
+      },
+      "persona": {
+        "nameHint": "想解决技术管理者的问题诊断框架（人的问题/流程的问…",
+        "background": "「建立技术管理者的问题诊断框架（人的问题/流程的问题/自己的问题三分归因）」诉求的虚拟学习者（问题修复型）。 起点与卡点：十一年代码思维遇到管理失灵：把人的问题当 bug 修，分不清躺平是激励问题还是任务分配问题、越级汇报是自己授权不清还是下属越界",
+        "availableTime": "moderate",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立技术管理者的问题诊断框架（人的问题/流程的问题/自己的问题三分归因）",
+        "visibleOpening": "35 岁，写了十一年代码，最近带一个小项目做负责人，才发现技术好不等于带得好：两个下属一个躺平一个越级汇报，需求评审被产品经理绕进去，复盘会没人说话。我一直用 debug 的思路管人——出问题就找根因修掉，可人的问题根本没日志可查。领导暗示明年可以竞聘技术经理。每天下班后 45 分钟，三个月，我想先学一套判断框架：遇到管理症状先分清是人的问题、流程的问题还是我自己造成的，再决定动哪里。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：十一年代码思维遇到管理失灵：把人的问题当 bug 修，分不清躺平是激励问题还是任务分配问题、越级汇报是自己授权不清还是下属越界）",
+          "这次希望拿到什么结果？——按「建立技术管理者的问题诊断框架（人的问题/流程的问题/自己的问题三分归因）」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立技术管理者的问题诊断框架（人的问题/流程的问题/自己的问题三分归因）",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "十一年代码思维遇到管理失灵：把人的问题当 bug 修，分不清躺平是激励问题还是任务分配问题、越级汇报是自己授权不清还是下属越界",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D16-dev-to-em-diagnosis",
+        "note": "Golden-100 · D16-dev-to-em-diagnosis（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D16-dev-to-em-diagnosis"
+      ],
+      "notes": "Golden-100 · D16-dev-to-em-diagnosis（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D17-grade4-learning-diagnosis",
+      "version": 1,
+      "nickname": "想解决只用已有试卷与作业就能分层定位学习问题的诊断…",
+      "account": {
+        "displayName": "想解决只用已有试卷与作业就能分层定位学习问题的诊断…",
+        "emailPrefix": "golden-D17-grade4-learning-diagnosis"
+      },
+      "persona": {
+        "nameHint": "想解决只用已有试卷与作业就能分层定位学习问题的诊断…",
+        "background": "「建立只用已有试卷与作业就能分层定位学习问题的诊断框架（知识/习惯/考试技能）」诉求的虚拟学习者（问题修复型）。 起点与卡点：各科均匀的中游是最难诊断的形态：作业会做考试掉分，说明问题可能不在知识层；没有框架时只能听「再仔细点」，无从下手",
+        "availableTime": "minimal",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立只用已有试卷与作业就能分层定位学习问题的诊断框架（知识/习惯/考试技能）",
+        "visibleOpening": "四年级家长。娃成绩中游，每科都八十来分，哪个都不差哪个也不突出，问她想补啥她说不知道。学校不排名，我在家看作业都会做，一考试就掉分，老师只说「还行，再仔细点」。我不急着报班，想先搞明白她到底哪里有问题：是知识没吃透、习惯问题还是考试技能欠缺。每天放学后 20 分钟翻她这学期已经考过的试卷和做过的作业本，一个月内做出一张问题定位表，再决定补什么、不补什么。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：各科均匀的中游是最难诊断的形态：作业会做考试掉分，说明问题可能不在知识层；没有框架时只能听「再仔细点」，无从下手）",
+          "这次希望拿到什么结果？——按「建立只用已有试卷与作业就能分层定位学习问题的诊断框架（知识/习惯/考试技能）」的实际交付来",
+          "时间上怎么安排？——30天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立只用已有试卷与作业就能分层定位学习问题的诊断框架（知识/习惯/考试技能）",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "30天内",
+            "horizonDays": 30,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "各科均匀的中游是最难诊断的形态：作业会做考试掉分，说明问题可能不在知识层；没有框架时只能听「再仔细点」，无从下手",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D17-grade4-learning-diagnosis",
+        "note": "Golden-100 · D17-grade4-learning-diagnosis（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D17-grade4-learning-diagnosis"
+      ],
+      "notes": "Golden-100 · D17-grade4-learning-diagnosis（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D18-family-policy-audit",
+      "version": 1,
+      "nickname": "想解决家庭保单的保障诊断框架（险种识别、责任拆解、…",
+      "account": {
+        "displayName": "想解决家庭保单的保障诊断框架（险种识别、责任拆解、…",
+        "emailPrefix": "golden-D18-family-policy-audit"
+      },
+      "persona": {
+        "nameHint": "想解决家庭保单的保障诊断框架（险种识别、责任拆解、…",
+        "background": "「建立家庭保单的保障诊断框架（险种识别、责任拆解、重复与缺口定位）」诉求的虚拟学习者（问题修复型）。 起点与卡点：看不懂保险责任与责任免除、分不清主险附加险；老保单健康告知是二十年前填的，瑕疵说不准；全家只有自己较真，没人配合",
+        "availableTime": "minimal",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立家庭保单的保障诊断框架（险种识别、责任拆解、重复与缺口定位）",
+        "visibleOpening": "收拾屋子翻出一摞父母买的保单：我爸名下六七份，有病种重复的，有交完钱不知道保啥的，还有一份一年交两万的「理财+保障」分红险，收益说得天花乱坠；我妈买过一种「什么都保」的卡单，更糊涂。我想趁年底把全家保单盘一遍：每个人到底有哪些保障、重复在哪、缺口在哪，别再听风就是雨地续费——可我爸还护着卖保险的熟人。每天 20 分钟，两个多月，学会自己看条款，把每份保单压成一张纸。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：看不懂保险责任与责任免除、分不清主险附加险；老保单健康告知是二十年前填的，瑕疵说不准；全家只有自己较真，没人配合）",
+          "这次希望拿到什么结果？——按「建立家庭保单的保障诊断框架（险种识别、责任拆解、重复与缺口定位）」的实际交付来",
+          "时间上怎么安排？——75天内，每天约 20 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立家庭保单的保障诊断框架（险种识别、责任拆解、重复与缺口定位）",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "75天内",
+            "horizonDays": 75,
+            "dailyMinutes": 20,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "看不懂保险责任与责任免除、分不清主险附加险；老保单健康告知是二十年前填的，瑕疵说不准；全家只有自己较真，没人配合",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D18-family-policy-audit",
+        "note": "Golden-100 · D18-family-policy-audit（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D18-family-policy-audit"
+      ],
+      "notes": "Golden-100 · D18-family-policy-audit（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D19-cbti-late-sleep",
+      "version": 1,
+      "nickname": "想解决CBT-I（失眠认知行为疗法）的核心机制诊断…",
+      "account": {
+        "displayName": "想解决CBT-I（失眠认知行为疗法）的核心机制诊断…",
+        "emailPrefix": "golden-D19-cbti-late-sleep"
+      },
+      "persona": {
+        "nameHint": "想解决CBT-I（失眠认知行为疗法）的核心机制诊断…",
+        "background": "「用 CBT-I（失眠认知行为疗法）的核心机制诊断自己熬夜类型并建立前移方案」诉求的虚拟学习者（问题修复型）。 起点与卡点：「道理全懂做不到」：分不清自己属于睡眠驱动不足、昼夜节律后移还是心理补偿性熬夜，试过的手段（褪黑素、硬关机、早睡闹钟）全是零散招式所以全失败",
+        "availableTime": "minimal",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "用 CBT-I（失眠认知行为疗法）的核心机制诊断自己熬夜类型并建立前移方案",
+        "visibleOpening": "又熬到两点半。明知道第二天有早会，就是舍不得睡，躺床上刷短视频越刷越清醒。白天靠美式续命，周末补觉补到下午，起来反而更累。体检报告写着过劳肥、心率快，医生让我规律作息。道理全懂就是做不到。我不想再被灌鸡汤，也不想再试褪黑素。每天 15 分钟，一个月，想先搞清楚熬夜背后到底是什么机制在起作用——是睡眠压力不够、昼夜节律后移还是补偿心理——然后只挑两三个有依据的杠杆动作执行。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：「道理全懂做不到」：分不清自己属于睡眠驱动不足、昼夜节律后移还是心理补偿性熬夜，试过的手段（褪黑素、硬关机、早睡闹钟）全是零散招式所以全失败）",
+          "这次希望拿到什么结果？——按「用 CBT-I（失眠认知行为疗法）的核心机制诊断自己熬夜类型并建立前移方案」的实际交付来",
+          "时间上怎么安排？——30天内，每天约 15 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "用 CBT-I（失眠认知行为疗法）的核心机制诊断自己熬夜类型并建立前移方案",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "30天内",
+            "horizonDays": 30,
+            "dailyMinutes": 15,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "「道理全懂做不到」：分不清自己属于睡眠驱动不足、昼夜节律后移还是心理补偿性熬夜，试过的手段（褪黑素、硬关机、早睡闹钟）全是零散招式所以全失败",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D19-cbti-late-sleep",
+        "note": "Golden-100 · D19-cbti-late-sleep（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D19-cbti-late-sleep"
+      ],
+      "notes": "Golden-100 · D19-cbti-late-sleep（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-D20-homework-autonomy",
+      "version": 1,
+      "nickname": "想解决陪写作业的分工与习惯养成框架（家长管什么、不…",
+      "account": {
+        "displayName": "想解决陪写作业的分工与习惯养成框架（家长管什么、不…",
+        "emailPrefix": "golden-D20-homework-autonomy"
+      },
+      "persona": {
+        "nameHint": "想解决陪写作业的分工与习惯养成框架（家长管什么、不…",
+        "background": "「建立陪写作业的分工与习惯养成框架（家长管什么、不管什么、何时撤出）」诉求的虚拟学习者（问题修复型）。 起点与卡点：陪学动作全是应激反应：吼、盯、奖励轮番上但互相抵消；分不清磨蹭里哪些是注意力能力问题、哪些是流程与分工的系统问题，所以每个招都撑不过一周",
+        "availableTime": "minimal",
+        "intentType": "repair"
+      },
+      "story": {
+        "title": "建立陪写作业的分工与习惯养成框架（家长管什么、不管什么、何时撤出）",
+        "visibleOpening": "每天晚上陪四年级儿子写作业都像打仗：一道数学题抠半小时，一吼他就哭，他妈过来护着，三人吵成一团作业还没写完。昨天他跟我说「爸爸我害怕」，我才意识到再这样下去父子情分都要磨没了。番茄钟、写完玩平板都试过，撑不了一周。到学期末还有三个多月，每天晚饭后半小时，我想学一套不靠吼的陪学框架：我该管什么、不管什么、什么时候能逐步撤出，让他自己坐住四十分钟。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：陪学动作全是应激反应：吼、盯、奖励轮番上但互相抵消；分不清磨蹭里哪些是注意力能力问题、哪些是流程与分工的系统问题，所以每个招都撑不过一周）",
+          "这次希望拿到什么结果？——按「建立陪写作业的分工与习惯养成框架（家长管什么、不管什么、何时撤出）」的实际交付来",
+          "时间上怎么安排？——100天内，每天约 30 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "建立陪写作业的分工与习惯养成框架（家长管什么、不管什么、何时撤出）",
+          "intentType": "repair",
+          "budget": {
+            "horizon": "100天内",
+            "horizonDays": 100,
+            "dailyMinutes": 30,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "陪学动作全是应激反应：吼、盯、奖励轮番上但互相抵消；分不清磨蹭里哪些是注意力能力问题、哪些是流程与分工的系统问题，所以每个招都撑不过一周",
+          "expect": "path",
+          "group": "D"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "D20-homework-autonomy",
+        "note": "Golden-100 · D20-homework-autonomy（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "D",
+        "repair",
+        "golden-D20-homework-autonomy"
+      ],
+      "notes": "Golden-100 · D20-homework-autonomy（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E01-cpa-window",
+      "version": 1,
+      "nickname": "想搞懂CPA 专业阶段成绩五年有效期的起算规则与滚…",
+      "account": {
+        "displayName": "想搞懂CPA 专业阶段成绩五年有效期的起算规则与滚…",
+        "emailPrefix": "golden-E01-cpa-window"
+      },
+      "persona": {
+        "nameHint": "想搞懂CPA 专业阶段成绩五年有效期的起算规则与滚…",
+        "background": "「搞清 CPA 专业阶段成绩五年有效期的起算规则与滚动作废逻辑，能据此排出自己的三年报考节奏」诉求的虚拟学习者（系统掌握型）。 起点与卡点：首次报名，对成绩有效期规则零了解；报名页只给一句「五年内通过六科」，网上说法互相矛盾，怕自己排出一个会作废科目的报考计划",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "搞清 CPA 专业阶段成绩五年有效期的起算规则与滚动作废逻辑，能据此排出自己的三年报考节奏",
+        "visibleOpening": "我今年第一次报CPA，计划三年考完专业阶段六科。但报名页面反复提五年，我心里没底：这五年是从我今年报名就算，还是从通过第一科那年才开始算？要是我第一年报了三科只过一科，那没过的那科算不算在五年里？到底几年内必须考完才不白考？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：首次报名，对成绩有效期规则零了解；报名页只给一句「五年内通过六科」，网上说法互相矛盾，怕自己排出一个会作废科目的报考计划）",
+          "这次希望拿到什么结果？——按「搞清 CPA 专业阶段成绩五年有效期的起算规则与滚动作废逻辑，能据此排出自己的三年报考节奏」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "搞清 CPA 专业阶段成绩五年有效期的起算规则与滚动作废逻辑，能据此排出自己的三年报考节奏",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "首次报名，对成绩有效期规则零了解；报名页只给一句「五年内通过六科」，网上说法互相矛盾，怕自己排出一个会作废科目的报考计划",
+          "expect": "path",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E01-cpa-window",
+        "note": "Golden-100 · E01-cpa-window（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E01-cpa-window"
+      ],
+      "notes": "Golden-100 · E01-cpa-window（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E02-cap-quarter",
+      "version": 1,
+      "nickname": "想搞懂CAP 定理这一件事",
+      "account": {
+        "displayName": "想搞懂CAP 定理这一件事",
+        "emailPrefix": "golden-E02-cap-quarter"
+      },
+      "persona": {
+        "nameHint": "想搞懂CAP 定理这一件事",
+        "background": "「彻底搞懂 CAP 定理这一件事：它到底在约束什么、为什么三选二、PJ 分支各自的真实代价」诉求的虚拟学习者（系统掌握型）。 起点与卡点：会写业务代码但分布式原理是黑盒；看过 CAP 名词解释仍说不清它到底禁除了什么；想用充裕窗口把单个定理吃透而不是蜻蜓点水过全书",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "彻底搞懂 CAP 定理这一件事：它到底在约束什么、为什么三选二、PJ 分支各自的真实代价",
+        "visibleOpening": "我写了好几年业务代码，懂 HTTP 和数据库，但分布式这些中间件对我一直是念咒语。下个季度项目不忙，我跟自己约好：每周六上午固定两小时补底层原理，三个月下来能有二十多个小时。但我不想摊开通识书从头过——这三个月只啃 CAP 定理这一块：它到底约束了什么、为什么网络分区时一致性和可用性只能选一个、AP 和 CP 系统各自死在哪。Raft、选举这些先一概不碰，先把这一个定理的心智模型建扎实。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：会写业务代码但分布式原理是黑盒；看过 CAP 名词解释仍说不清它到底禁除了什么；想用充裕窗口把单个定理吃透而不是蜻蜓点水过全书）",
+          "这次希望拿到什么结果？——按「彻底搞懂 CAP 定理这一件事：它到底在约束什么、为什么三选二、PJ 分支各自的真实代价」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "彻底搞懂 CAP 定理这一件事：它到底在约束什么、为什么三选二、PJ 分支各自的真实代价",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "会写业务代码但分布式原理是黑盒；看过 CAP 名词解释仍说不清它到底禁除了什么；想用充裕窗口把单个定理吃透而不是蜻蜓点水过全书",
+          "expect": "path",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E02-cap-quarter",
+        "note": "Golden-100 · E02-cap-quarter（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E02-cap-quarter"
+      ],
+      "notes": "Golden-100 · E02-cap-quarter（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E03-catti-ce-only",
+      "version": 1,
+      "nickname": "想搞懂CATTI 三笔实务只攻汉译英（CE）一个方…",
+      "account": {
+        "displayName": "想搞懂CATTI 三笔实务只攻汉译英（CE）一个方…",
+        "emailPrefix": "golden-E03-catti-ce-only"
+      },
+      "persona": {
+        "nameHint": "想搞懂CATTI 三笔实务只攻汉译英（CE）一个方…",
+        "background": "「CATTI 三笔实务只攻汉译英（CE）一个方向：把中式英语的根源问题解决，能稳定译出及格线以上的 CE」诉求的虚拟学习者（系统掌握型）。 起点与卡点：综合已过、EC 稳定，失分集中在 CE：中式英语直译腔、政经文本不会拆句重组；上次 55 分差 5 分，判断单项补强即可过线",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "CATTI 三笔实务只攻汉译英（CE）一个方向：把中式英语的根源问题解决，能稳定译出及格线以上的 CE",
+        "visibleOpening": "翻译专业应届，去年 6 月三笔综合 71 过了、实务 55 差 5 分，翻车的全是汉译英——考官批我中式英语，政府工作报告那类材料翻出来全是直译腔。今年 11 月初只补考实务。好在时间特别宽裕：还有五个多月，我每周日全天 3 小时雷打不动。我不想 EC、CE 摊开练：英译汉我稳得住，这五个月只攻汉译英一个方向——中式英语的病根在哪、政经类文本的句子怎么拆了重组、怎么落笔才能像人话。EC 一篇都不练。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：综合已过、EC 稳定，失分集中在 CE：中式英语直译腔、政经文本不会拆句重组；上次 55 分差 5 分，判断单项补强即可过线）",
+          "这次希望拿到什么结果？——按「CATTI 三笔实务只攻汉译英（CE）一个方向：把中式英语的根源问题解决，能稳定译出及格线以上的 CE」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "CATTI 三笔实务只攻汉译英（CE）一个方向：把中式英语的根源问题解决，能稳定译出及格线以上的 CE",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "综合已过、EC 稳定，失分集中在 CE：中式英语直译腔、政经文本不会拆句重组；上次 55 分差 5 分，判断单项补强即可过线",
+          "expect": "path",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E03-catti-ce-only",
+        "note": "Golden-100 · E03-catti-ce-only（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E03-catti-ce-only"
+      ],
+      "notes": "Golden-100 · E03-catti-ce-only（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E04-circuit-basics",
+      "version": 1,
+      "nickname": "想搞懂只攻初三电学的第一个底座",
+      "account": {
+        "displayName": "想搞懂只攻初三电学的第一个底座",
+        "emailPrefix": "golden-E04-circuit-basics"
+      },
+      "persona": {
+        "nameHint": "想搞懂只攻初三电学的第一个底座",
+        "background": "「只攻初三电学的第一个底座：看懂串并联——给你一张混联电路图能稳定说清谁和谁并联、电流走哪条路」诉求的虚拟学习者（系统掌握型）。 起点与卡点：电路图一复杂（电表+滑动变阻器）就分不清串并联，导致后续欧姆定律全盘卡死；判断「只补识别底座」即可解锁后面内容，主动收窄不碰计算综合题",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "只攻初三电学的第一个底座：看懂串并联——给你一张混联电路图能稳定说清谁和谁并联、电流走哪条路",
+        "visibleOpening": "我初三，人教版物理刚进九年级电学，电流和电路那几节我就没听懂，现在更吃亏：题目里多两个电表、一个滑动变阻器，我就分不清哪段和哪段并联，上次月考 80 分只拿了 41。好在离期中还有整整九周，我晚自习每天能挤 40 分钟。我跟自己说好这次不贪多：欧姆定律综合题、电学计算先统统不碰，这九周只把「电路识别」这一个底座打牢——给我任何一张图，能稳定说清电流怎么走、谁串谁并，就行。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：电路图一复杂（电表+滑动变阻器）就分不清串并联，导致后续欧姆定律全盘卡死；判断「只补识别底座」即可解锁后面内容，主动收窄不碰计算综合题）",
+          "这次希望拿到什么结果？——按「只攻初三电学的第一个底座：看懂串并联——给你一张混联电路图能稳定说清谁和谁并联、电流走哪条路」的实际交付来",
+          "时间上怎么安排？——9天内，每天约 40 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "只攻初三电学的第一个底座：看懂串并联——给你一张混联电路图能稳定说清谁和谁并联、电流走哪条路",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "9天内",
+            "horizonDays": 9,
+            "dailyMinutes": 40,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "电路图一复杂（电表+滑动变阻器）就分不清串并联，导致后续欧姆定律全盘卡死；判断「只补识别底座」即可解锁后面内容，主动收窄不碰计算综合题",
+          "expect": "path",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E04-circuit-basics",
+        "note": "Golden-100 · E04-circuit-basics（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E04-circuit-basics"
+      ],
+      "notes": "Golden-100 · E04-circuit-basics（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E05-zotero-resubmission",
+      "version": 1,
+      "nickname": "想搞懂让 Zotero AMA 样式插入 Word…",
+      "account": {
+        "displayName": "想搞懂让 Zotero AMA 样式插入 Word…",
+        "emailPrefix": "golden-E05-zotero-resubmission"
+      },
+      "persona": {
+        "nameHint": "想搞懂让 Zotero AMA 样式插入 Word…",
+        "background": "「让 Zotero AMA 样式插入 Word 后与预览一致：修复悬挂缩进丢失、作者列表格式、页码卷期错误」诉求的虚拟学习者（系统掌握型）。 起点与卡点：会装会川 Zotero 与 Word 插件，但不懂样式文件与 Word 域刷新机制的关系：手动改格式会被插件刷新覆盖，根因在样式与域刷新流程，不在逐条手调",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "让 Zotero AMA 样式插入 Word 后与预览一致：修复悬挂缩进丢失、作者列表格式、页码卷期错误",
+        "visibleOpening": "周一中午就是 resubmission 的死线，杂志要 AMA 格式。我在 Zotero 里预览明明每条都规规矩矩，一插进 Word 全乱了套：悬挂缩进丢了、三个以上的作者还一个个列、页码和卷期也对不上。我自己手动调了快俩钟头，一点刷新又给我打回原形，真的想砸键盘。就想问下有没有不改代码、不重装软件，能让插进 Word 后跟预览一致的办法？急，在线等。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：会装会川 Zotero 与 Word 插件，但不懂样式文件与 Word 域刷新机制的关系：手动改格式会被插件刷新覆盖，根因在样式与域刷新流程）",
+          "这次希望拿到什么结果？——按「让 Zotero AMA 样式插入 Word 后与预览一致：修复悬挂缩进丢失、作者列表格式、页码卷期错误」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "让 Zotero AMA 样式插入 Word 后与预览一致：修复悬挂缩进丢失、作者列表格式、页码卷期错误",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "会装会川 Zotero 与 Word 插件，但不懂样式文件与 Word 域刷新机制的关系：手动改格式会被插件刷新覆盖，根因在样式与域刷新流程，不在逐条手调",
+          "expect": "path",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E05-zotero-resubmission",
+        "note": "Golden-100 · E05-zotero-resubmission（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E05-zotero-resubmission"
+      ],
+      "notes": "Golden-100 · E05-zotero-resubmission（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E06-interview-sprint",
+      "version": 1,
+      "nickname": "想搞懂三天六小时内完成外资数据岗面试的英语问答突击",
+      "account": {
+        "displayName": "想搞懂三天六小时内完成外资数据岗面试的英语问答突击",
+        "emailPrefix": "golden-E06-interview-sprint"
+      },
+      "persona": {
+        "nameHint": "想搞懂三天六小时内完成外资数据岗面试的英语问答突击",
+        "background": "「三天六小时内完成外资数据岗面试的英语问答突击：能完整讲清简历项目经历并接住常见行为问题」诉求的虚拟学习者（系统掌握型）。 起点与卡点：四级 520 能读不能说；没有成型的项目英文讲述稿，也没有行为问题的应答框架；6 小时只够打磨少数几个高频问答块，不能摊开练口语",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "三天六小时内完成外资数据岗面试的英语问答突击：能完整讲清简历项目经历并接住常见行为问题",
+        "visibleOpening": "这周五有个外资公司的数据岗面试，今天周二，满打满算 3 天，每天下班能准备 2 小时，总共 6 小时。岗位是数据分析，面试是 30 分钟视频，其中 10 分钟要用英语：让我讲简历里的项目经历，还会问行为问题。我英语底子四级 520，能读但开口卡，一紧张就蹦单词。这 6 小时我想全砸在英语问答突击上，不求流利，求关键时刻能把句子说完整。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：四级 520 能读不能说；没有成型的项目英文讲述稿，也没有行为问题的应答框架；6 小时只够打磨少数几个高频问答块，不能摊开练口语）",
+          "这次希望拿到什么结果？——按「三天六小时内完成外资数据岗面试的英语问答突击：能完整讲清简历项目经历并接住常见行为问题」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "三天六小时内完成外资数据岗面试的英语问答突击：能完整讲清简历项目经历并接住常见行为问题",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "四级 520 能读不能说；没有成型的项目英文讲述稿，也没有行为问题的应答框架；6 小时只够打磨少数几个高频问答块，不能摊开练口语",
+          "expect": "path",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E06-interview-sprint",
+        "note": "Golden-100 · E06-interview-sprint（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E06-interview-sprint"
+      ],
+      "notes": "Golden-100 · E06-interview-sprint（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E07-momentum-90min",
+      "version": 1,
+      "nickname": "想搞懂90 分钟内理顺动量与动能的选用逻辑",
+      "account": {
+        "displayName": "想搞懂90 分钟内理顺动量与动能的选用逻辑",
+        "emailPrefix": "golden-E07-momentum-90min"
+      },
+      "persona": {
+        "nameHint": "想搞懂90 分钟内理顺动量与动能的选用逻辑",
+        "background": "「90 分钟内理顺动量与动能的选用逻辑：物理意义与公式的区别、碰撞题先想哪个定理」诉求的虚拟学习者（系统掌握型）。 起点与卡点：把动量和动能当成一回事（都是 m 和 v 凑出来的）；不知道矢量/标量差异对应到「碰撞题选动量守恒、问能量再联动能」的判断顺序，做题靠蒙",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "90 分钟内理顺动量与动能的选用逻辑：物理意义与公式的区别、碰撞题先想哪个定理",
+        "visibleOpening": "我高二，明天第二节就是物理随堂考，只带动量动能这一章。今晚满打满算只有 1.5 小时，还得拆开用：晚饭后 30 分钟、睡前 30 分钟，明早通勤再过 20 分钟笔记。我不想刷整套卷子，只想搞清一件事——动量 p=mv 和动能 ½mv² 到底差在哪，碰到碰撞题先想动量守恒还是先想动能定理，什么信号提醒我该用哪个。现在我做起综合题还是凭感觉挑公式，这次只想把「选用逻辑」这一件事在 90 分钟内理顺。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：把动量和动能当成一回事（都是 m 和 v 凑出来的）；不知道矢量/标量差异对应到「碰撞题选动量守恒、问能量再联动能」的判断顺序，做题靠蒙）",
+          "这次希望拿到什么结果？——按「90 分钟内理顺动量与动能的选用逻辑：物理意义与公式的区别、碰撞题先想哪个定理」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "90 分钟内理顺动量与动能的选用逻辑：物理意义与公式的区别、碰撞题先想哪个定理",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "把动量和动能当成一回事（都是 m 和 v 凑出来的）；不知道矢量/标量差异对应到「碰撞题选动量守恒、问能量再联动能」的判断顺序，做题靠蒙",
+          "expect": "path",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E07-momentum-90min",
+        "note": "Golden-100 · E07-momentum-90min（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E07-momentum-90min"
+      ],
+      "notes": "Golden-100 · E07-momentum-90min（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E08-vlog-rhythm",
+      "version": 1,
+      "nickname": "想搞懂vlog 剪辑",
+      "account": {
+        "displayName": "想搞懂vlog 剪辑",
+        "emailPrefix": "golden-E08-vlog-rhythm"
+      },
+      "persona": {
+        "nameHint": "想搞懂vlog 剪辑",
+        "background": "「学会 vlog 剪辑，把素材剪成节奏流畅、音乐卡点舒服的成片」诉求的虚拟学习者（系统掌握型）。 起点与卡点：诉求本体是视频节奏与卡点的视听审美判断，成片好坏依赖反复观看和手感反馈，文本化学习路径无法裁判练习效果；软件操作只是表层，核心越出可文本化学习边界。分诊预期：not_judgeable，应诚实划出边界（可收窄到叙事结构等可文本化部分），不得编造「剪完发我看效果」类假反馈任务",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "学会 vlog 剪辑，把素材剪成节奏流畅、音乐卡点舒服的成片",
+        "visibleOpening": "工作后想把自己拍的一堆素材剪成vlog，剪映就会个切开加字幕。剪出来自己都看不下去，节奏特别平，音乐卡点全靠运气。剪辑教程收藏了几十个，越看越乱。每天下班能练半小时，我想先把剪映玩明白——要不要直接上PR？到底该按什么顺序练？",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：诉求本体是视频节奏与卡点的视听审美判断，成片好坏依赖反复观看和手感反馈，文本化学习路径无法裁判练习效果；软件操作只是表层，核心越出可文本化学）",
+          "这次希望拿到什么结果？——按「学会 vlog 剪辑，把素材剪成节奏流畅、音乐卡点舒服的成片」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "学会 vlog 剪辑，把素材剪成节奏流畅、音乐卡点舒服的成片",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "诉求本体是视频节奏与卡点的视听审美判断，成片好坏依赖反复观看和手感反馈，文本化学习路径无法裁判练习效果；软件操作只是表层，核心越出可文本化学习边界。分诊预期：not_judgeable，应诚实划出边界（可收窄到叙事结构等可文本化部分），不得编造「剪完发我看效果」类假反馈任务",
+          "expect": "triage",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E08-vlog-rhythm",
+        "note": "Golden-100 · E08-vlog-rhythm（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E08-vlog-rhythm",
+        "negative"
+      ],
+      "notes": "Golden-100 · E08-vlog-rhythm（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E09-phone-photography",
+      "version": 1,
+      "nickname": "想搞懂手机摄影的构图和后期",
+      "account": {
+        "displayName": "想搞懂手机摄影的构图和后期",
+        "emailPrefix": "golden-E09-phone-photography"
+      },
+      "persona": {
+        "nameHint": "想搞懂手机摄影的构图和后期",
+        "background": "「系统练好手机摄影的构图和后期，让拍娃照片能进年底的家庭相册」诉求的虚拟学习者（系统掌握型）。 起点与卡点：诉求本体是构图审美与修图手感，好坏取决于成片的视觉判断，无法用文本化学习路径裁判「拍得更好看没有」；扫街实战与修图练习都发生在文本对话之外。分诊预期：not_judgeable，应诚实划出边界（可收窄到构图原则等可文本化知识），不得生成假点评类实操任务",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "系统练好手机摄影的构图和后期，让拍娃照片能进年底的家庭相册",
+        "visibleOpening": "娃一岁半，天天拍娃，相册几千张全是糊的，亲戚要看照片我都拿不出手。想系统练练手机摄影的构图和后期，不想再全靠一键滤镜。周末能出门扫街实战，晚上睡前娃睡了能修图半小时。目标很朴素：年底做一本家庭相册，能拿得出手。想问构图和修图到底该按什么顺序练，每天睡前那半小时干点什么最值。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：诉求本体是构图审美与修图手感，好坏取决于成片的视觉判断，无法用文本化学习路径裁判「拍得更好看没有」；扫街实战与修图练习都发生在文本对话之外。）",
+          "这次希望拿到什么结果？——按「系统练好手机摄影的构图和后期，让拍娃照片能进年底的家庭相册」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "系统练好手机摄影的构图和后期，让拍娃照片能进年底的家庭相册",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "诉求本体是构图审美与修图手感，好坏取决于成片的视觉判断，无法用文本化学习路径裁判「拍得更好看没有」；扫街实战与修图练习都发生在文本对话之外。分诊预期：not_judgeable，应诚实划出边界（可收窄到构图原则等可文本化知识），不得生成假点评类实操任务",
+          "expect": "triage",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E09-phone-photography",
+        "note": "Golden-100 · E09-phone-photography（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E09-phone-photography",
+        "negative"
+      ],
+      "notes": "Golden-100 · E09-phone-photography（设计情景，非真实外部链接）"
+    },
+    {
+      "cardKey": "golden-E10-excel-oneoff",
+      "version": 1,
+      "nickname": "想搞懂两张表头不一样的月度表拼成一张能交差的总表",
+      "account": {
+        "displayName": "想搞懂两张表头不一样的月度表拼成一张能交差的总表",
+        "emailPrefix": "golden-E10-excel-oneoff"
+      },
+      "persona": {
+        "nameHint": "想搞懂两张表头不一样的月度表拼成一张能交差的总表",
+        "background": "「今天把两张表头不一样的月度表拼成一张能交差的总表」诉求的虚拟学习者（系统掌握型）。 起点与卡点：一次性操作任务：无学习成分、无可沉淀的能力目标、今天交付即结束；用户明确拒绝体系化教学。分诊预期：oneoff_operation，应直接给出操作步骤（Power Query/复制粘贴对齐/去重），不得生成分阶段学习路径",
+        "availableTime": "moderate",
+        "intentType": "mastery"
+      },
+      "story": {
+        "title": "今天把两张表头不一样的月度表拼成一张能交差的总表",
+        "visibleOpening": "领导让我把门店系统和电商后台导出的两张月度表拼成一张总表，今天下班前就要交。表头对不上：一张叫「销售额」，一张叫「销量金额」，列的顺序也不一样，加起来一百多行。我会一点 VLOOKUP，但每次拼完不是多出重复行就是漏行。别跟我讲什么数据清洗体系、长期技能提升，我就想今天赶紧把这张表交上去，教我几步马上能用的操作就行。",
+        "followUps": [
+          "你现在卡在哪一步？——（补充：一次性操作任务：无学习成分、无可沉淀的能力目标、今天交付即结束；用户明确拒绝体系化教学。分诊预期：oneoff_operation，应直接给）",
+          "这次希望拿到什么结果？——按「今天把两张表头不一样的月度表拼成一张能交差的总表」的实际交付来",
+          "时间上怎么安排？——8天内，每天约 45 分钟，总投入约 6 小时"
+        ],
+        "goalSeed": {
+          "domain": "今天把两张表头不一样的月度表拼成一张能交差的总表",
+          "intentType": "mastery",
+          "budget": {
+            "horizon": "8天内",
+            "horizonDays": 8,
+            "dailyMinutes": 45,
+            "expectedHours": 6
+          },
+          "schoolAnchor": null,
+          "focus": "一次性操作任务：无学习成分、无可沉淀的能力目标、今天交付即结束；用户明确拒绝体系化教学。分诊预期：oneoff_operation，应直接给出操作步骤（Power Query/复制粘贴对齐/去重），不得生成分阶段学习路径",
+          "expect": "triage",
+          "group": "E"
+        }
+      },
+      "source": {
+        "kind": "synthetic",
+        "ref": "E10-excel-oneoff",
+        "note": "Golden-100 · E10-excel-oneoff（设计情景，非真实外部链接）"
+      },
+      "tags": [
+        "golden-100",
+        "E",
+        "mastery",
+        "golden-E10-excel-oneoff",
+        "negative"
+      ],
+      "notes": "Golden-100 · E10-excel-oneoff（设计情景，非真实外部链接）"
+    }
+  ]
+}
