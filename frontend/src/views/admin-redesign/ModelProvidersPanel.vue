@@ -15,12 +15,24 @@
        运行面读数（冷却/健康/配置漂移告警）另取 GET /admin/model-registry：编辑面只有配置值，
        把「这个模型现在能不能用」也算在这里会让两个接口互相复述。 -->
   <section class="mk-card mpp">
+    <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：卡头承接通道身份与状态——
+         平台通道 + 平台内置 + 连接状态，右侧是写盘状态与本页动作；详情里不再单起一行标题。 -->
     <div class="mk-card__head">
-      <h3 class="mk-card__title">接入通道</h3>
-      <span class="mk-card__meta" :title="registryPathTitle">{{ registryMeta }}</span>
-      <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
-        只读
-      </button>
+      <div class="mpp-head__id">
+        <h3 class="mk-card__title">{{ selected ? providerName(selected) : '接入通道' }}</h3>
+        <span v-if="selected" class="mpp-type mpp-type--platform">{{ providerTypeLabel(selected) }}</span>
+        <!-- 宿主注入的连接状态（「连接正常 · N 前」）：与通道身份同一行 -->
+        <slot v-if="selected" name="head-status" />
+        <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
+      </div>
+      <div class="mk-card__head-right">
+        <span class="mk-card__meta" :title="registryPathTitle">{{ registryMeta }}</span>
+        <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
+          只读
+        </button>
+        <!-- 宿主动作（获取模型 / 保存连接 / 重置此通道）：与通道状态同一行 -->
+        <slot v-if="selected" name="head-actions" />
+      </div>
     </div>
 
     <div v-if="actionError" class="mk-alert mk-alert--row mpp-alert" role="alert">
@@ -48,16 +60,6 @@
       <!-- 2026-10-27 用户「这个区域不要了」：撤掉左栏通道清单。这一页就是平台通道本身，
            一栏列表只为一个通道占 260px，还把模型表挤到断行；自建通道改由配置文件/接口维护。 -->
       <div v-if="selected" class="mpp-detail">
-        <div class="mpp-detail__head">
-          <div class="mpp-detail__id">
-            <strong class="mpp-detail__name">{{ providerName(selected) }}</strong>
-            <span class="mpp-type mpp-type--platform">{{ providerTypeLabel(selected) }}</span>
-            <!-- 状态徽标只出「能不能用」；当前通道（endpointSource=inherit）不出徽标——
-                 它用不用得了由下面「连接」段的连接徽标回答，同屏两处说同一件事是复读 -->
-            <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
-          </div>
-        </div>
-
         <!-- 2026-10-27 用户「把 tab 解散了」：二级页签撤除，按接入顺序平铺成四段——
              连接与鉴权 → 模型 → 基础设施 → 平台默认与别名。所有内容常驻 DOM，
              不再有「要点一下才出现」的区域。 -->
@@ -606,14 +608,8 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
 .mpp-block:first-of-type { margin-top: 10px; }
 .mpp-block__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-.mpp-detail__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.mpp-detail__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mpp-detail__name { font-size: var(--mk-fs-emphasis); }
+/* 卡头左组：通道名 + 类型 + 连接状态（2026-10-27 由详情头并入卡头） */
+.mpp-head__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 /* 通道类型：平台内置 / 自建通道 */
 .mpp-type {
   padding: 1px 7px;

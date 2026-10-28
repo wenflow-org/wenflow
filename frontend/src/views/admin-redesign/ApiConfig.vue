@@ -29,40 +29,42 @@
         @changed="onProvidersChanged"
         @registered="onProvidersRegistered"
       >
-        <!-- 平台通道的连接：服务地址 / 密钥。它属于「平台」这条供应商本身，
-             不再是弹窗里的一个分区。块头只留连接状态与动作组。 -->
+        <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：通道身份、连接状态与动作
+             统一收到卡头一行；详情里只留地址与密钥表单。 -->
+        <template #head-status>
+          <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
+        </template>
+        <template #head-actions>
+          <div class="ac-conn__acts">
+            <!-- 接入流程第 2 步：用这条通道的地址与密钥获取模型。
+                 成功后连接一并落盘，不再要求先点「保存连接」。 -->
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :disabled="fetching || !providersReady"
+              @click="onFetchClick"
+            >
+              <MkLoading v-if="fetching" inline text="获取中…" />
+              <span v-else>{{ models.length ? '重新获取模型' : '获取模型' }}</span>
+            </button>
+            <button
+              v-if="dirty.has('conn')"
+              type="button"
+              class="ac-sec__save"
+              :disabled="saving"
+              @click="saveGroups(['conn'])"
+            >{{ saving ? '保存中…' : '保存连接' }}</button>
+            <!-- 重置是低频不可逆动作：用危险色标出，确认框再交代范围 -->
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm mk-btn--danger-ghost"
+              :disabled="resetting"
+              @click="resetConfig"
+            >{{ resetting ? '重置中…' : '重置此通道' }}</button>
+          </div>
+        </template>
         <template #platform-detail>
           <div ref="platformConnRef" class="ac-conn mpp-block">
-            <div class="mpp-block__head">
-              <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
-              <div class="ac-conn__acts">
-                <!-- 接入流程第 2 步：用上面这条通道的地址与密钥获取模型。
-                     成功后连接一并落盘，不再要求先点「保存连接」。 -->
-                <button
-                  type="button"
-                  class="mk-btn mk-btn--sm"
-                  :disabled="fetching || !providersReady"
-                  @click="onFetchClick"
-                >
-                  <MkLoading v-if="fetching" inline text="获取中…" />
-                  <span v-else>{{ models.length ? '重新获取模型' : '获取模型' }}</span>
-                </button>
-                <button
-                  v-if="dirty.has('conn')"
-                  type="button"
-                  class="ac-sec__save"
-                  :disabled="saving"
-                  @click="saveGroups(['conn'])"
-                >{{ saving ? '保存中…' : '保存连接' }}</button>
-                <!-- 重置是低频不可逆动作：收进同一行动作组、用危险色标出，确认框再交代范围 -->
-                <button
-                  type="button"
-                  class="mk-btn mk-btn--sm mk-btn--danger-ghost"
-                  :disabled="resetting"
-                  @click="resetConfig"
-                >{{ resetting ? '重置中…' : '重置此通道' }}</button>
-              </div>
-            </div>
             <!-- 2026-10-27 用户「不再做独立的连通性验证，针对能配置的模型测试就行」：
                  连接段只留地址与密钥；测试入口在模型表每一行（已保存的通道 + 具体模型）。 -->
             <div class="ac-body ac-conn-form">
@@ -890,8 +892,6 @@ function discardAll() {
 /* 连接表单（2026-10-27）：只剩地址与密钥两行，竖向排；不跟着详情宽度拉满。
    测试入口移到模型表每行，不再在连接段做独立的连通性验证。 */
 .ac-conn-form { max-width: 560px; }
-/* 块头（连接状态 + 动作组）与表单同宽，按钮不飘到卡片最右边 */
-.ac-conn > .mpp-block__head { max-width: 560px; }
 .ac-row { display: grid; gap: 14px; align-items: end; }
 .ac-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 2026-10-06 审核 #159：四个配置页签的字段控件统一走 .mk-field__input/__select/__textarea

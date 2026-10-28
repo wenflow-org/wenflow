@@ -130,11 +130,11 @@ describe('ModelProvidersPanel', () => {
     expect(w.text()).not.toContain('Acme 网关')
     expect(w.text()).not.toContain('显示已停用')
     // 详情头只留「平台通道 + 平台内置」，不再解释通道由什么组成
-    expect(w.find('.mpp-detail__head').text()).toContain('平台通道')
-    expect(w.find('.mpp-detail__head').find('.mpp-type').text()).toBe('平台内置')
-    expect(w.find('.mpp-detail__head').text()).not.toContain('一条通道 =')
+    expect(w.find('.mk-card__head').text()).toContain('平台通道')
+    expect(w.find('.mk-card__head').find('.mpp-type').text()).toBe('平台内置')
+    expect(w.find('.mk-card__head').text()).not.toContain('一条通道 =')
     // 状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
-    expect(w.find('.mpp-detail__head').findAll('.mk-badge')).toHaveLength(0)
+    expect(w.find('.mk-card__head').findAll('.mk-badge')).toHaveLength(0)
     // 模型表列：本地模型 / 上游模型名 / 功能 / 状态 / 操作
     expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['本地模型', '上游模型名', '功能', '状态', ''])
     expect(w.text()).toContain('2 个')
@@ -163,7 +163,7 @@ describe('ModelProvidersPanel', () => {
     expect(shown(w, '#mpp-platform-panel-infra')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-generation')).toBe(true)
     // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
-    expect(w.findAll('.mpp-detail__acts .mk-btn').some((b) => b.text() === '设置')).toBe(false)
+    expect(w.findAll('.mpp .mk-card__head .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()
   })
 

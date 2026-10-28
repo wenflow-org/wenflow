@@ -169,7 +169,10 @@ async function mountApiConfig() {
 /** 平台连接表单（2026-10-25 撤掉「平台设置」浮窗后内联在平台详情里）：
     表单常驻 DOM，平台详情不再有「设置」钮（点了画面几乎不动），helper 直接等一拍。 */
 async function openPlatformSettings(wrapper: Awaited<ReturnType<typeof mountApiConfig>>) {
-  expect(wrapper.find('.mpp-detail__acts .mk-btn').exists(), '平台详情不再有「设置」').toBe(false);
+  expect(
+    wrapper.findAll('.mpp .mk-card__head .mk-btn').some((b) => b.text() === '设置'),
+    '平台详情不再有「设置」'
+  ).toBe(false);
   await nextTick();
   await flushPromises();
 }
@@ -357,12 +360,13 @@ describe('ApiConfig P1 修复批', () => {
     expect(getModelProvidersMock).toHaveBeenCalled();
     const panel = wrapper.find('.mpp');
     expect(panel.exists()).toBe(true);
-    expect(panel.text()).toContain('接入通道');
+    // 2026-10-27 卡头承接通道身份：标题就是「平台通道」，不再另起详情标题行
+    expect(panel.find('.mk-card__head .mk-card__title').text()).toBe('平台通道');
     // 2026-10-27 用户「这个区域不要了」：左栏通道清单整块撤掉，页面直接是平台通道详情
     expect(wrapper.find('.mpp-list').exists()).toBe(false);
     expect(wrapper.findAll('.mpp-item')).toHaveLength(0);
     expect(panel.text()).not.toContain('Acme 网关');
-    const detail = wrapper.find('.mpp-detail__head');
+    const detail = wrapper.find('.mpp .mk-card__head');
     expect(detail.text()).toContain('平台通道');
     expect(detail.find('.mpp-type').text()).toBe('平台内置');
     // 平台连接表单内联在详情里（2026-10-25 撤掉「平台设置」浮窗）
