@@ -104,11 +104,12 @@ describe('结构容量缺口 capacityDeficit', () => {
 /**
  * 用户口径修正（2026-09-29）：「没有数据支撑学习者每天不能学八小时，学校里的学生就是这样」。
  *
- * 据此去掉两处无实证的收紧：① 单课上界的 0.8×会话系数（白吃 20% 结构容量）；
- * ② 课数反推里额外的 90 封顶（与容量报告用的分钟档不一致 → 两张皮）。
+ * 据此去掉单课上界的 0.8×会话系数（白吃 20% 结构容量）。
+ * 2026-10-27 R8 外部审查重新引入 90 分钟「单任务原子硬顶」（一次坐 2 小时 ≠ 单个任务
+ * 2 小时；100-120 分钟巨型单课实证），故现行口径为 min(用户自述会话时长, 90)。
  * 保留：课 ≤ 用户自述会话时长（rw-school-15 实证）、每阶段 30 课（防 filler 复读，有实证）。
  */
-describe('单课分钟档 = 用户自述会话时长（去 0.8 系数）', () => {
+describe('单课分钟档 = min(用户自述会话时长, 90 原子硬顶)', () => {
   /** CPA 实测输入：自述一次 2h，goal 层锚 416h / 5 阶段 */
   const cpa = () => derivePlanningHints(
     null, '每天2小时', null, null, [],
@@ -116,15 +117,15 @@ describe('单课分钟档 = 用户自述会话时长（去 0.8 系数）', () =>
     null, null, null,
   );
 
-  it('单课上界取会话时长本身（120），不再打 0.8 折（96）', () => {
-    expect(cpa().subtaskMinutesRange[1]).toBe(120);
+  it('单课上界取 min(会话时长 120, 90) = 90，不再打 0.8 折（96）', () => {
+    expect(cpa().subtaskMinutesRange[1]).toBe(90);
   });
 
-  it('结构容量随之抬升：240h → 300h（对 416h 目标缺口 42% → 28%）', () => {
+  it('结构容量随 90 原子粒度回落：240h → 225h（对 416h 目标缺口 46%）', () => {
     const r = cpa().capacityDeficit!;
-    expect(r.capacityHours).toBeCloseTo(300, 0);
-    expect(r.deficitRatio).toBeLessThan(0.3);
-    expect(r.deficitRatio).toBeGreaterThan(0.2);
+    expect(r.capacityHours).toBeCloseTo(225, 0);
+    expect(r.deficitRatio).toBeLessThan(0.5);
+    expect(r.deficitRatio).toBeGreaterThan(0.4);
   });
 
   it('课数反推与容量报告用同一个分钟档（去掉 90 封顶后的同源契约）', () => {

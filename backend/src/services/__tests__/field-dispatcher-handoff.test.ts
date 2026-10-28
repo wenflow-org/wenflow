@@ -51,6 +51,13 @@ function buildGoalSkillOutput(overrides: Record<string, any> = {}) {
             block_type_evidence: '汇报被追问后卡壳',
             support_need: '需要框架模板与陪练',
             school_anchor: { textbook: '自选材料', exam_form: '工作汇报', progress: '有若干次未通过经历' },
+            // R8 起新增的可判定性/能力边界字段（与 goal.yaml 声明同步）
+            skill_nature: 'cognitive_internalized',
+            skill_nature_evidence: '需要自己组织汇报逻辑，AI 不能代跑',
+            platform_judgment: 'judgeable_output',
+            platform_judgment_evidence: '汇报稿与结构图可提交对照',
+            sensor_readouts: [],
+            needsMaterial: { kind: 'standard', title: '内部汇报规范', why: '需要原文对照结构要求', queries: [], origin: 'private' },
             prerequisiteDiagnostics: [{ concept: '汇报结构', mastery: 'weak' }],
             prerequisiteCheckResults: [{ questionId: 'q1', correct: true }],
           },
