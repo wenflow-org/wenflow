@@ -89,7 +89,7 @@
             <strong class="mpp-detail__name">{{ providerName(selected) }}</strong>
             <span class="mpp-type" :class="{ 'mpp-type--platform': selected.id === 'platform' }">{{ providerTypeLabel(selected) }}</span>
             <span v-if="selected.id !== 'platform'" class="mono mpp-detail__code">{{ selected.id }}</span>
-            <span v-else class="mpp-detail__code">继承平台端点 · 一条通道 = 服务地址 + 凭据 + 模型清单</span>
+            <span v-else class="mpp-detail__code">一条通道 = 服务地址 + 凭据 + 模型清单</span>
             <!-- 状态徽标只出「能不能用」；当前通道（endpointSource=inherit）不出徽标——
                  它用不用得了由下面「连接」段的连接徽标回答，同屏两处说同一件事是复读 -->
             <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
@@ -241,9 +241,9 @@
           </div>
 
           <div v-if="selected.models.length || !selected.enabled" class="mk-table-scroll">
-            <table class="mk-table mk-table--dense mpp-table">
+            <table class="mk-table mk-table--dense mk-table--fixed mpp-table">
               <colgroup>
-                <col style="width: 30%" /><col style="width: 21%" /><col style="width: 20%" /><col style="width: 14%" /><col style="width: 15%" />
+                <col style="width: 26%" /><col style="width: 17%" /><col style="width: 21%" /><col style="width: 14%" /><col style="width: 22%" />
               </colgroup>
               <thead>
                 <tr>
@@ -268,7 +268,7 @@
                   </tr>
                   <tr v-for="m in g.models" :key="m.id">
                   <td class="mpp-model">
-                    <span class="mono mpp-model__id">{{ m.id }}</span>
+                    <span class="mono mpp-model__id" :title="m.id">{{ m.id }}</span>
                     <span v-if="m.label && m.label !== m.id" class="mpp-desc" :title="m.label">{{ m.label }}</span>
                     <span
                       v-if="testResults[m.id]"
@@ -278,8 +278,10 @@
                     >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
                   </td>
                   <td class="mpp-upstream">
-                    <span class="mono" :title="upstreamNameOf(m)">{{ upstreamNameOf(m) }}</span>
-                    <span v-if="upstreamNameOf(m) === m.id" class="mpp-desc">同本地名</span>
+                    <!-- 本地名即上游名时不复读一遍字符串：窄列里长名会断成两行，
+                         反而看不清「到底映射到谁」。只有真正存在差异时才显示上游名。 -->
+                    <span v-if="upstreamNameOf(m) === m.id" class="mpp-upstream__same" :title="upstreamNameOf(m)">同本地名</span>
+                    <span v-else class="mono" :title="upstreamNameOf(m)">{{ upstreamNameOf(m) }}</span>
                   </td>
                   <td class="mpp-fn">
                     <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
@@ -1088,10 +1090,13 @@ defineExpose({ refresh, openPull, openHostPull })
   white-space: nowrap;
 }
 /* 模型格承载 id + 显示名 + 最近一次测试结果 */
-.mpp-model { min-width: 220px; }
-.mpp-model__id { overflow-wrap: anywhere; }
-/* 上游模型名：当前版本与本地名相同，后续独立映射后在此显示差异 */
-.mpp-upstream .mono { overflow-wrap: anywhere; }
+.mpp-model { min-width: 180px; }
+.mpp-model__id { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 上游模型名：本地名即上游名时只标「同本地名」（字符串不重复），出现独立映射后才显示差异。
+   窄列不断行——截断交给 ellipsis，完整值在 title 里核对。 */
+.mpp-upstream { white-space: nowrap; }
+.mpp-upstream .mono { display: block; overflow: hidden; text-overflow: ellipsis; }
+.mpp-upstream__same { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .mpp-rowtest { display: block; margin-top: 2px; color: var(--mk-green); font-size: var(--mk-fs-micro); }
 .mpp-rowtest--bad { color: var(--mk-red); }
 /* 空模型时的下一步：一句话 + 一个动作，不丢一张只有表头的空表 */
