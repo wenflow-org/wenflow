@@ -22,6 +22,7 @@
 import 'dotenv/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ensureFixtureMaterialsForVirtualSession } from '../virtual-lab/fixture-materials';
 
 const BASE_URL = process.env.GOLDEN_EVAL_BASE_URL || 'http://127.0.0.1:3002';
 const ORIGIN = 'http://localhost:5173'; // 必须在 .env CORS_ORIGIN 白名单内（CSRF 写请求校验）
@@ -31,7 +32,19 @@ const CALL_TIMEOUT_MS = 5 * 60_000;
 const PATH_WAIT_MS = 20 * 60_000;
 const BACKOFF_MS = [5_000, 15_000, 45_000, 45_000, 45_000];
 
-const DB_PATH = path.resolve(__dirname, '..', 'prisma', 'dev.db');
+// tsx 直跑时 __dirname 是 backend/src/scripts，'..' 落到 backend/src（无 prisma/dev.db），
+// stageDone() 会永久读库失败 → 每个样本都干等满 PATH_WAIT_MS 再误标 path-timeout。
+// 优先环境变量；否则按 cwd / __dirname 候选路径取第一个真实存在的库。
+const DB_PATH = (() => {
+  if (process.env.GOLDEN_EVAL_DB_PATH) return path.resolve(process.env.GOLDEN_EVAL_DB_PATH);
+  const candidates = [
+    path.resolve(process.cwd(), 'prisma', 'dev.db'),
+    path.resolve(__dirname, '..', '..', 'prisma', 'dev.db'),
+    path.resolve(__dirname, '..', 'prisma', 'dev.db'),
+    path.resolve(process.cwd(), 'backend', 'prisma', 'dev.db'),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) || candidates[0];
+})();
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -45,6 +58,8 @@ interface Spec {
   story: { id: string; title: string; visibleOpening: string; goalSeed: { surfaceGoal: string; realProblem: string }; triggerEvent: string };
   budget: Record<string, unknown>; outOfScope: string[]; expectedStages: number;
   bucket?: string; expect?: 'path' | 'triage'; negativeType?: string;
+  /** 附件夹具（仓库相对路径）：开局前注入为该 VL 用户的已上传资料，验证 materialRefs 链 */
+  fixtureMaterials?: Array<{ file: string; note?: string | null }> | null;
 }
 
 const arg = (key: string): string | null => {
@@ -202,6 +217,15 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
         scenario: spec.realProblem,
         note: `golden-eval: ${key}`,
         storyPool: [spec.story],
+        // R4 外部评审：把 spec 的场景预算写进 profile，让 simulation.path-phase 的
+        // scenarioBudget 锚生效（否则 goal 的自由估会把 3.5h 估成 6h/32h）。
+        scenarioCard: {
+          budget: (spec.budget && typeof spec.budget === 'object' ? spec.budget : null)
+            ?? ((spec.story as any)?.budget ?? null),
+        },
+        ...(Array.isArray(spec.fixtureMaterials) && spec.fixtureMaterials.length
+          ? { fixtureMaterials: spec.fixtureMaterials }
+          : {}),
       },
       tags: ['golden-eval', key],
       notes: `auto-created by golden-eval-run (${key}); safe to delete`,
@@ -223,6 +247,20 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
   }
 
   // 3) 驱动 goal（step 自动应答）；负样本 6 步封顶
+  // 3.0) 附件夹具注入：必须在 goal 之前，让 material-collector 能读到「已上传资料」
+  if (Array.isArray(spec.fixtureMaterials) && spec.fixtureMaterials.length && entry.userId && entry.profileId && !entry.fixtures) {
+    try {
+      const injected = await ensureFixtureMaterialsForVirtualSession({
+        userId: entry.userId,
+        virtualProfileId: entry.profileId,
+      });
+      entry.fixtures = injected;
+      saveState(state);
+      log(`${key} 夹具注入 uploaded=${injected.uploaded.length} skipped=${injected.skipped.length} errors=${injected.errors.length}`);
+    } catch (e) {
+      log(`${key} 夹具注入失败（继续）: ${String((e as Error).message).slice(0, 120)}`);
+    }
+  }
   const stepCap = isTriage ? TRIAGE_MAX_STEPS : GOAL_MAX_STEPS;
   let steps = entry.goalSteps || 0;
   while (steps < stepCap) {

@@ -283,11 +283,37 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
   const painPoints = pickStringArray(understanding, ['painPoints', 'pain_points']);
   const supportNeed = normalizeSupportNeed(pickString(understanding, ['supportNeed', 'support_need']));
 
+  // 不可判定 × 实体内化技能覆盖（2026-10-28 Frontier R2 实证 F96/F97）：
+  // goal 已判 platform_judgment=not_judgeable + skill_nature=physical_internalized，
+  // 但 primary_block_type 仍常写成 capability，下游按 capability 会开学习路径。
+  // 平台闻不到/看不到/摸不到，只能给原理说明或转线下；一律走 referral 负向出口。
+  const platformJudgment = pickString(understanding, ['platformJudgment', 'platform_judgment']);
+  const skillNature = pickString(understanding, ['skillNature', 'skill_nature']);
+  const surfaceGoal = pickString(understanding, ['surfaceGoal', 'surface_goal']);
+  // skill_nature 分类会漂移（R5 实测 F96 手冲咖啡被写成 cognitive_internalized）。
+  // 平台判不了、文本又明显是感官通道（喝/闻/尝/听/手感/笔锋…）时，按实体内化处理，
+  // 避免同一条「咖啡风味」在 referral/learning_path 之间随机跳。
+  const sensoryText = [
+    surfaceGoal,
+    realProblem,
+    evidence,
+    ...painPoints,
+  ].filter(Boolean).join('；');
+  const sensoryInternalized = skillNature === 'cognitive_internalized'
+    && /(喝|尝|闻|嗅|口感|风味|气味|味觉|嗅觉|听|音色|手感|笔锋|触感|摸)/.test(sensoryText);
+  if (platformJudgment === 'not_judgeable'
+    && (skillNature === 'physical_internalized' || sensoryInternalized)) {
+    return {
+      mode: 'referral',
+      confidence: 'high',
+      reasons: ['平台不可判定（not_judgeable）× 纯感官/肢体内化技能：转线下真人指导，不建学习路径'],
+    };
+  }
+
   // 即时微操作覆盖（2026-10-27 外部审查，R8 冒烟 E10 实证）：
   // surface_goal 带当日死线词且 objectiveScopeHours ≤ 1.5 时，对话里「以后每个月还会遇到」
   // 这类随口话会把 primary_block_type 带成 capability → 误开学习路径。
   // 「今天就要交的东西」不是学习路径的对象，一律按 oneoff_operation 分诊。
-  const surfaceGoal = pickString(understanding, ['surfaceGoal', 'surface_goal']);
   const objectiveHours = Number(
     (asObject((understanding as any)?.time_dimensions) as any)?.objectiveScopeHours
       ?? (understanding as any)?.objectiveScopeHours,
@@ -296,7 +322,11 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     && /(今天|今晚|马上|立刻|小时内|半小时后|下班前|等下|待会儿?)/.test(surfaceGoal);
   const immediateOneoff =
     immediateDelivery && Number.isFinite(objectiveHours) && objectiveHours > 0 && objectiveHours <= 1.5;
-  const effectiveBlockType = immediateOneoff ? 'oneoff_operation' : blockType;
+  // 情绪/关系为主时不走「当日一次性操作」覆盖：R5 F100（今晚跟家人说被裁）
+  // 被 one-off 改写成 combination 后仍生成 1.5h 路径，情绪场景应保持 emotional_support。
+  const effectiveBlockType = immediateOneoff && blockType !== 'emotion_relationship'
+    ? 'oneoff_operation'
+    : blockType;
 
   if (isUnknownBlockType(effectiveBlockType)) {
     // 阻塞类型缺失（模型证据不足）：若已明确表达支持需求，仍按需求出负向出口；否则不拦截。
@@ -351,6 +381,28 @@ interface BlockTypeContext {
   painPoints: string[];
   urgency: string | null;
   constraints: string[];
+}
+
+/**
+ * 负向出口硬阻断（2026-10-28 Frontier R4 外部评审，R5 全量收紧）：
+ * 只拦「平台根本无法判定结果」的 referral（not_judgeable / 实体内化/感官技能）与
+ * emotional_support。**不拦普通 referral**——F15《网络数据安全管理条例》自查属于
+ * judgeable_output + 外部审批/数据阻塞，仍应允许用户确认后生成路径；一律拦 referral
+ * 会把合法的合规任务误判成 path-timeout。
+ */
+export function isHardBlockResponseTriage(
+  triage: ResponseTriage | null | undefined,
+  understanding: unknown
+): boolean {
+  if (!triage) return false;
+  const u = asObject(understanding);
+  const platformJudgment = pickString(u, ['platformJudgment', 'platform_judgment']);
+  const skillNature = pickString(u, ['skillNature', 'skill_nature']);
+  // 旧数据可能把这条确定性规则写成 learning_path；底层判定仍须硬阻断。
+  if (platformJudgment === 'not_judgeable' && skillNature === 'physical_internalized') return true;
+  if (triage.mode === 'emotional_support') return true;
+  if (triage.mode !== 'referral') return false;
+  return platformJudgment === 'not_judgeable' || skillNature === 'physical_internalized';
 }
 
 /** 第一轴：仅按 primary_block_type（"要学什么"）决定基础模式；support_need 由 applySupportNeed 叠加。 */

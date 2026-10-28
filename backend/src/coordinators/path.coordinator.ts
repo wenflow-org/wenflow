@@ -16,8 +16,9 @@ import {
 import { readMaterial, type MaterialRecord } from '../services/materials/material-store';
 import { materialRecordHasPhraseHit, selectMaterialsRanked } from '../services/materials/material-selection.service';
 import { applyMaterialRerankGate } from '../services/materials/material-rerank.service';
+import { partitionMaterialNeeds } from '../services/materials/material-need-origin';
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
-import { patchPathsWithAsyncMaterials } from '../services/materials/material-async-collect.service';
+import { patchPathsWithAsyncMaterials, type AsyncMaterialPatch } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
 import type { ResponseTriage } from '../services/learning/response-triage';
 import {
@@ -60,15 +61,17 @@ function isSemanticMaterialPackEnabled(): boolean {
  */
 function resolveMaterialCollectionTimeoutMs(): number {
   const raw = Number(process.env.MATERIAL_COLLECTION_TIMEOUT_MS);
-  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 120_000);
-  return 90_000;
+  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 180_000);
+  // 2026-10-28 R4 外部评审：c20 下 90s 有 34/77 次采集超时；用户已接受路径生成变慢，
+  // 同步注入把默认预算提到 150s（仍为 fail-open，超时后路径照常生成）。
+  return 150_000;
 }
 
 /** 单次生成最多采集几条 need（防批量/恶意大量声明拖慢 path 生成）。 */
 const MATERIAL_COLLECTION_MAX_NEEDS = 3;
 
-/** 后台采集预算（活的 path 批次 B）：脱离 20s 关键路径后放宽——实测书籍类场景 20s 不够。 */
-const MATERIAL_COLLECT_ASYNC_BUDGET_MS = 90_000;
+/** 后台采集预算（活的 path 批次 B）：与同步预算同档，脱离关键路径后仍保留 fail-open。 */
+const MATERIAL_COLLECT_ASYNC_BUDGET_MS = 150_000;
 /** 占位 marker（与 material-async-collect.service 的 prefix 必须一致；回填按 marker 原位替换）。 */
 const ASYNC_COLLECT_MARKER = '__async_collect__';
 
@@ -535,10 +538,22 @@ class PathCoordinator {
     const needs = (Array.isArray(needsMaterial) ? needsMaterial : [needsMaterial])
       .slice(0, MATERIAL_COLLECTION_MAX_NEEDS) as MaterialNeed[];
 
+    // 来源域分流（2026-10-28 Frontier R1/R2：私有材料 26 次联网 0 成功）：
+    // private 不发起检索（公网注定搜不到），由 goal 请用户上传；public 才交给 material-collector。
+    const { publicNeeds, privateNeeds } = partitionMaterialNeeds(needs);
+    if (privateNeeds.length > 0) {
+      logger.info('[path-coordinator] 私有资料跳过联网采集（等待用户上传/按手上原文设计）', {
+        userId: collectorUserId || null,
+        privateTitles: privateNeeds.map((need) => need?.title).filter(Boolean),
+        publicCount: publicNeeds.length,
+      });
+    }
+    if (publicNeeds.length === 0) return null;
+
     // 库优先：已入库的联网资料直接复用（零网络、零 LLM），只对未命中的 need 采集
     const results: MaterialPackResult[] = [];
     const pendingNeeds: MaterialNeed[] = [];
-    for (const need of needs) {
+    for (const need of publicNeeds) {
       const libraryRecord = collectorUserId ? findWebRecordByTitle(collectorUserId, String(need?.title || '')) : null;
       if (libraryRecord) {
         const cached = await this.buildWebRecordPackQuietly(libraryRecord);
@@ -626,31 +641,59 @@ class PathCoordinator {
           () => undefined
         );
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         logger.warn('[path-coordinator] 后台联网采集失败（fail-open，资料下次生成经库优先补齐）', {
           userId,
           needs: needs.map((need) => need?.title).filter(Boolean),
           durationMs: Date.now() - startedAt,
-          error: error instanceof Error ? error.message : String(error),
+          error: message,
         });
+        // 2026-10-28 R4 外部评审：失败也回填 not_found，否则占位永远停在「采集中」
+        // （本轮 34 次 90s 超时 → 46 条 pending 长期挂起）。回填后学习者至少能看到
+        // 「没采到 + 原因」，下次生成走库优先重试。
+        const failedPatches: AsyncMaterialPatch[] = needs
+          .map((need) => ({
+            needTitle: String(need?.title || '').trim(),
+            result: {
+              status: 'not_found' as const,
+              pack: null,
+              provenance: [],
+              coverage: { covered: [], missing: [String(need?.title || '').trim()].filter(Boolean) },
+              notes: [`后台联网采集失败（fail-open）：${message}`],
+            },
+          }))
+          .filter((patch) => patch.needTitle);
+        if (failedPatches.length > 0) {
+          await this.patchPathsWithAsyncMaterials(userId, failedPatches);
+        }
         return;
       }
       if (!Array.isArray(collected)) return;
-      const readyPacks = collected.filter((pack) => pack.pack);
-      if (readyPacks.length === 0) {
-        logger.info('[path-coordinator] 后台联网采集未获可用资料（fail-open）', {
+      // not_found 也要回填：否则 pending 占位永远停在「资料采集中」，
+      // 学习者与后续分析都无法区分「还在采」与「没采到」。
+      const patches = collected
+        .map((result, index) => ({ needTitle: String(needs[index]?.title || '').trim(), result }))
+        .filter((patch) => patch.needTitle);
+      if (patches.length === 0) {
+        logger.info('[path-coordinator] 后台联网采集无结果可回填（fail-open）', {
           userId,
           durationMs: Date.now() - startedAt,
         });
         return;
       }
-      await this.patchPathsWithAsyncMaterials(userId, readyPacks);
+      logger.info('[path-coordinator] 后台联网采集完成，回填结果', {
+        userId,
+        statuses: patches.map((patch) => patch.result?.status),
+        durationMs: Date.now() - startedAt,
+      });
+      await this.patchPathsWithAsyncMaterials(userId, patches);
     });
   }
 
   /** 回填走 materials 域 service（coordinator 无 DB 直连边界）；失败已在其内部 fail-open。 */
-  private async patchPathsWithAsyncMaterials(userId: string, readyPacks: MaterialPackResult[]): Promise<void> {
+  private async patchPathsWithAsyncMaterials(userId: string, patches: AsyncMaterialPatch[]): Promise<void> {
     try {
-      await patchPathsWithAsyncMaterials(userId, readyPacks);
+      await patchPathsWithAsyncMaterials(userId, patches);
     } catch (error) {
       logger.warn('[path-coordinator] 后台资料回填失败（fail-open）', {
         userId,
@@ -972,8 +1015,12 @@ class PathCoordinator {
 
   private async normalizeGoalRequest(input: GoalPathRequest): Promise<PathGenerationInput> {
     const config = await getPathAgentInputConfig();
-    // 生产入口走 async：path 不等联网（批次 B），preview 保持 sync（探针诊断口径不变）
-    return this.buildNormalizedGoalInput(input, config, 'async');
+    // 2026-10-28 R4 外部评审：生产链路原先走 async，公开资料永远在路径生成后才回填，
+    // stage-designer 拿不到正文（公开路径 materialRefs 恒为 0）。用户已明确接受
+    // 路径生成变慢，故默认改 sync：先采后生成，让 pack 真正进入 resources.materials。
+    // 需要旧行为时设 MATERIAL_COLLECTION_MODE=async（保留回滚口）。
+    const mode: 'sync' | 'async' = process.env.MATERIAL_COLLECTION_MODE === 'async' ? 'async' : 'sync';
+    return this.buildNormalizedGoalInput(input, config, mode);
   }
 
   async generate(input: PathGenerationInput) {

@@ -6,6 +6,7 @@
  */
 import {
   DEFAULT_RESPONSE_TRIAGE_ENFORCEMENT,
+  isHardBlockResponseTriage,
   RESPONSE_TRIAGE_KEY,
   buildTriageAdvisoryLine,
   normalizeResponseTriageEnforcementMode,
@@ -297,5 +298,79 @@ describe('问题结构轴：coupling/stakes 静默推断 + 三条件测试', () 
     });
     expect(r.mode).not.toBe('learning_path');
     expect(r.reasons.some((x) => x.includes('三条件测试'))).toBe(false);
+  });
+});
+
+
+describe('isHardBlockResponseTriage（硬阻断出口）', () => {
+  it('referral + not_judgeable 硬阻断', () => {
+    expect(isHardBlockResponseTriage(
+      { mode: 'referral', confidence: 'high', reasons: [] },
+      { platform_judgment: 'not_judgeable' },
+    )).toBe(true);
+  });
+
+  it('普通 referral（judgeable_output）不硬阻断，留给 gated/advisory', () => {
+    expect(isHardBlockResponseTriage(
+      { mode: 'referral', confidence: 'medium', reasons: [] },
+      { platform_judgment: 'judgeable_output', skill_nature: 'knowledge_structure' },
+    )).toBe(false);
+  });
+
+  it('emotional_support 硬阻断', () => {
+    const t = triageGoalResponse({ primary_block_type: 'emotion_relationship' });
+    expect(t.mode).toBe('emotional_support');
+    expect(isHardBlockResponseTriage(t, {})).toBe(true);
+  });
+
+  it('not_judgeable × physical_internalized 即使分诊结论被旧数据写成 learning_path 也硬阻断', () => {
+    expect(isHardBlockResponseTriage(
+      { mode: 'learning_path', confidence: 'high', reasons: [] },
+      { platform_judgment: 'not_judgeable', skill_nature: 'physical_internalized' },
+    )).toBe(true);
+  });
+
+  it('learning_path / combination 不硬阻断', () => {
+    expect(isHardBlockResponseTriage(
+      { mode: 'learning_path', confidence: 'high', reasons: [] },
+      { platform_judgment: 'judgeable_output', skill_nature: 'knowledge_structure' },
+    )).toBe(false);
+    expect(isHardBlockResponseTriage(
+      { mode: 'combination', confidence: 'medium', reasons: [] },
+      { platform_judgment: 'judgeable_output', skill_nature: 'tool_operation' },
+    )).toBe(false);
+  });
+});
+
+describe('感官技能分类漂移兜底（R5 F96）', () => {
+  it('not_judgeable + cognitive_internalized + 咖啡风味文本 → referral', () => {
+    const t = triageGoalResponse({
+      surface_goal: '用四周时间学会喝一口手冲咖啡就分辨烘焙焦苦、萃取过度还是生豆瑕疵',
+      primary_block_type: 'capability',
+      platform_judgment: 'not_judgeable',
+      skill_nature: 'cognitive_internalized',
+    });
+    expect(t.mode).toBe('referral');
+  });
+
+  it('not_judgeable + cognitive_internalized 但文本无感官词 → 仍按原规则', () => {
+    const t = triageGoalResponse({
+      surface_goal: '理解一个抽象数学定理的证明结构',
+      primary_block_type: 'capability',
+      platform_judgment: 'not_judgeable',
+      skill_nature: 'cognitive_internalized',
+    });
+    expect(t.mode).toBe('learning_path');
+  });
+});
+
+describe('情绪场景不被当日一次性操作覆盖（R5 F100）', () => {
+  it('emotion_relationship + 今晚死线 + 体量≤1.5h → emotional_support，不是 combination', () => {
+    const t = triageGoalResponse({
+      surface_goal: '今晚回家跟老婆说公司把我裁了，怎么开口',
+      primary_block_type: 'emotion_relationship',
+      time_dimensions: { objectiveScopeHours: 1 },
+    });
+    expect(t.mode).toBe('emotional_support');
   });
 });

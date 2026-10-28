@@ -186,7 +186,7 @@ fields:
     promptRole: hidden-inference
     valueType: object
     pathInRawOutput: internal.ext.goalConversation.understanding.needsMaterial
-    description: 外部权威资料需求 {kind,title,why,queries[]}；无需求留空（下游 material-collector 消费）
+    description: 资料需求 {kind,title,why,origin(public|private),queries[]}；origin=private 表示内部/私有资料，下游跳过联网、等待用户上传；无需求留空（下游 material-collector 消费）
   - fieldId: understanding.prerequisiteDiagnostics
     promptRole: soft-info
     valueType: array<object>

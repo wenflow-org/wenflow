@@ -25,7 +25,7 @@ import {
   getSessionFrictionBudget,
   getSessionPromptOverrides,
   isPathReviewAlreadyAcceptedForCurrentPath,
-  buildTimeDimensionsFromBudget,
+  mergeScenarioBudgetIntoTimeDimensions,
   mergeLearnerState,
   parseProfileData,
   parseStageResultsPayload,
@@ -146,16 +146,23 @@ export function buildGoalPathRequest(
     : {}) as Record<string, unknown>;
   {
     const scenarioBudget = resolveScenarioBudget(personaData);
-    const timeDimensionsFromBudget = scenarioBudget ? buildTimeDimensionsFromBudget(scenarioBudget) : null;
-    const existingTimeDimensions = (understandingForSummary.time_dimensions && typeof understandingForSummary.time_dimensions === 'object'
-      ? understandingForSummary.time_dimensions
-      : null) as Record<string, unknown> | null;
-    const llmAlreadyEstimated = existingTimeDimensions && Number(existingTimeDimensions.estimatedHours) > 0;
-    if (timeDimensionsFromBudget && !llmAlreadyEstimated) {
-      understandingForSummary.time_dimensions = {
-        ...(existingTimeDimensions || {}),
-        ...timeDimensionsFromBudget,
-      };
+    if (scenarioBudget) {
+      // 场景卡预算是虚拟学习者的 ground truth：R4 外部评审实证 goal 会把
+      // 7 天×30 分钟估成 32h（F88），也会把 9.5h 的 PK 案例压成 1.5h（F71）。
+      // 评测链路以卡上的 expectedHours 为 objective 锚，保证体量可比；
+      // 真实用户链路不经过此函数。
+      const beforeObjective = (understandingForSummary.time_dimensions as any)?.objectiveScopeHours ?? null;
+      const merged = mergeScenarioBudgetIntoTimeDimensions(
+        (understandingForSummary.time_dimensions as Record<string, unknown> | null) || null,
+        scenarioBudget
+      );
+      if (merged) understandingForSummary.time_dimensions = merged;
+      logger.info('[sim-path] 场景预算锚定', {
+        sessionId: session.id,
+        budget: scenarioBudget,
+        beforeObjective,
+        afterObjective: merged?.objectiveScopeHours ?? null,
+      });
     }
   }
   const request: GoalPathRequest = {

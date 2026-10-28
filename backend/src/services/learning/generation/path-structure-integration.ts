@@ -10,7 +10,7 @@ import {
   type PathAuditKcAnnotation,
   type PathAuditResult,
 } from './path-structure-audit';
-import { remapStageTaskReferences } from '../path-planning-hints';
+import { remapStageTaskReferences, repairForwardReferences } from '../path-planning-hints';
 
 export interface PathStructureStage {
   stageNumber: number;
@@ -31,7 +31,9 @@ export function reorderStageTasks(
     const ordered = reorderTasksForPrerequisites(stage.subtasks, kcAnnotation);
     if (!ordered.changed) continue;
     const remapped = remapStageTaskReferences(before as any[], ordered.tasks as any[]) as typeof stage.subtasks;
-    stage.subtasks.splice(0, stage.subtasks.length, ...remapped);
+    const repaired = repairForwardReferences(remapped as any[]);
+    const finalTasks = (repaired.repaired.length > 0 ? repaired.tasks : remapped) as typeof stage.subtasks;
+    stage.subtasks.splice(0, stage.subtasks.length, ...finalTasks);
     reorderedEdges += ordered.reorderedEdges;
   }
   return reorderedEdges;

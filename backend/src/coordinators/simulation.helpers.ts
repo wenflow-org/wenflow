@@ -365,6 +365,39 @@ export function buildTimeDimensionsFromBudget(budget: ScenarioBudgetShape): {
   };
 }
 
+/**
+ * 虚拟学习者评测：把场景卡预算合并进 goal 的 time_dimensions，并把
+ * `objectiveScopeHours` 锚到卡上的 expectedHours（R4 外部评审 P0）。
+ *
+ * 为什么必须覆盖而不是「LLM 有值就不动」：R4 实测 F88 的场景卡是 7 天×30 分钟
+ * （expectedHours=3.5），goal 却按 5 个阶段估成 32h，路径合法地排到 27.5h；
+ * F71 反过来从 9.5h 塌到 1.5h。场景卡预算是虚拟学习者的 ground truth，评测链路
+ * 以它为准才能让体量指标可比。真实用户链路不调用本函数。
+ */
+export function mergeScenarioBudgetIntoTimeDimensions(
+  existing: Record<string, unknown> | null | undefined,
+  budget: ScenarioBudgetShape | null | undefined
+): Record<string, unknown> | null {
+  if (!budget) return existing ?? null;
+  const dailyMinutes = budget.dailyMinutes;
+  const capacityHours = budget.expectedHours
+    ?? (dailyMinutes !== null && budget.horizonDays !== null
+      ? (dailyMinutes * budget.horizonDays) / 60
+      : null);
+  if (capacityHours === null || !(capacityHours > 0)) return existing ?? null;
+  const mapped = dailyMinutes !== null
+    ? buildTimeDimensionsFromBudget({ ...budget, expectedHours: capacityHours })
+    : null;
+  return {
+    ...(existing || {}),
+    ...(mapped || {}),
+    // 场景卡预算就是本次评测的总量契约；允许按内容微调由后续 stage 容量夹处理，
+    // 但 objective 不再被 LLM 的自由估放大/压塌。
+    objectiveScopeHours: Math.max(0.1, Math.round(capacityHours * 10) / 10),
+    estimatedHours: Math.max(0.1, Math.round(capacityHours * 10) / 10),
+  };
+}
+
 export function resolveOverloadBehaviorText(
   profile: { overloadReaction?: unknown; cognitiveLoadTolerance?: unknown } | null | undefined
 ): string {

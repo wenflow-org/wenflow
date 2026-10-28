@@ -20,6 +20,7 @@ import {
   ONE_SITTING_MAX_HOURS,
   orderStageTasksByTopology,
   remapStageTaskReferences,
+  repairForwardReferences,
 } from '../path-planning-hints';
 import {
   appendDescriptionNote,
@@ -27,6 +28,7 @@ import {
   reconcileDeliveryConservation,
 } from './path-fill-note';
 import { auditStageBudget } from './stage-budget-invariant';
+import { resolveTargetTotalHoursFromData } from './path-budget-clamp';
 import { auditGeneratedPath, reorderStageTasks } from './path-structure-integration';
 import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
@@ -715,6 +717,17 @@ async function enrichLearningPathWithAndersonInner(
         // （2026-10-26 实测：重排后 5/10 条路径被判 prerequisiteGap，根因全是编号失配）。
         stageTasks = remapStageTaskReferences(stageTasks as any[], orderedTasks as any[]) as typeof stageTasks;
       }
+      // 拓扑重排只改编号，语义上的「T3 基于任务4」仍会指向后面的任务：
+      // acquire 安全前移；其余跨档前向引用改写为标题，避免留下会再次失配的数字指针。
+      const forwardRepair = repairForwardReferences(stageTasks as any[]);
+      if (forwardRepair.repaired.length > 0) {
+        logger.warn('[stage-topology] 前向任务引用已修复', {
+          pathId: learningPath.id,
+          stageNumber: milestone.stageNumber,
+          repaired: forwardRepair.repaired,
+        });
+        stageTasks = forwardRepair.tasks as typeof stageTasks;
+      }
       // 阶段分钟预算确定性夹（2026-10-25 承诺二次违约修复）：模型对 hints 的分钟锚
       // 遵从率低（实证 uqcit3l：hints 全对——总量 2h/阶段 0.7h/每任务 20 分钟/区间 9-30，
       // 模型仍排出 80+60+113=253 分钟 ≈ 承诺 2.1 倍）。提示词规则之外再加一道代码夹，
@@ -1247,6 +1260,56 @@ async function enrichLearningPathWithAndersonInner(
             }
           });
         }
+      }
+      // 终局预算夹（Frontier-100 R1 实证 F81：目标 3h，core 骨架 3h，stageDesign 按任务分钟
+      // 回写后 4.5h）：core 夹只作用于骨架，逐阶段 1.25× 容差累加仍可把总量放大到目标 1.5×。
+      // 全路径生成收尾时按目标等比缩放任务分钟与阶段学时，避免「夹在 core、涨在 stage」。
+      const isFullPathRun = !appendOnly && !progressive && !restrictMilestoneIds;
+      const finalTargetHours = (() => {
+        const fromHints = resolveTargetTotalHoursFromData(data);
+        if (fromHints) return fromHints;
+        const fromConservation = Number((parsedTemplate as any)?.budgetConservation?.target);
+        if (Number.isFinite(fromConservation) && fromConservation > 0) return fromConservation;
+        const fromPlanning = Number((normalizedInput as any)?.planningHints?.targetTotalHours);
+        return Number.isFinite(fromPlanning) && fromPlanning > 0 ? fromPlanning : null;
+      })();
+      if (isFullPathRun && finalTargetHours && pathNormalizedHours > finalTargetHours * 1.15) {
+        const beforeHours = Math.round(pathNormalizedHours * 10) / 10;
+        const beforeMinutes = pathTotalMinutes;
+        const scale = finalTargetHours / pathNormalizedHours;
+        let scaledTotalMinutes = 0;
+        for (const milestone of learningPath.milestones) {
+          const tasks = await tx.subtasks.findMany({
+            where: { milestoneId: milestone.id },
+            select: { id: true, estimatedMinutes: true },
+          });
+          let stageMinutes = 0;
+          for (const task of tasks) {
+            const raw = Number(task.estimatedMinutes) || 0;
+            if (raw <= 0) continue;
+            const next = Math.max(5, Math.min(90, Math.round(raw * scale)));
+            await tx.subtasks.update({ where: { id: task.id }, data: { estimatedMinutes: next } });
+            stageMinutes += next;
+          }
+          if (tasks.length > 0) {
+            const nextHours = Math.max(0.1, Math.round((stageMinutes / 60) * 10) / 10);
+            await tx.milestones.update({ where: { id: milestone.id }, data: { estimatedHours: nextHours } });
+            const audit = stageHoursForAudit.find((item) => item.stageNumber === milestone.stageNumber);
+            if (audit) audit.estimatedHours = nextHours;
+          }
+          scaledTotalMinutes += stageMinutes;
+        }
+        pathTotalMinutes = scaledTotalMinutes;
+        pathNormalizedHours = Math.max(0.1, Math.round((scaledTotalMinutes / 60) * 10) / 10);
+        logger.warn('[path-budget-final-clamp] 任务实排超目标，已按目标等比缩放', {
+          runId,
+          pathId: learningPath.id,
+          targetHours: finalTargetHours,
+          beforeHours,
+          afterHours: pathNormalizedHours,
+          beforeMinutes,
+          afterMinutes: scaledTotalMinutes,
+        });
       }
       // 容量对表（2026-09-30 b3 评审实证：rw-school5-62 每天 60 分钟 × 25 天 = 25h 容量，
       // 路径却排了 41h——总量超容量 1.64 倍且没有任何环节拦截，学习者问「每天一小时够吗」

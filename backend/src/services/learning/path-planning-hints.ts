@@ -610,6 +610,66 @@ export function remapStageTaskReferences<T extends { title?: string; description
 }
 
 /**
+ * 前向引用修复（2026-10-28 R4 外部评审）：
+ * 拓扑重排只改编号、不理解语义，实测留下「T3 说基于任务4」「T1 说用任务2的底稿」
+ * 这类指向后面任务的引用。这里做两件保守的事：
+ *   1) 若被引用任务在本阶段更靠后且类型是 acquire → 把它前移到引用方之前
+ *      （建立档前置是安全方向，且能从根上修好 F68 的「先拆后采」）；
+ *   2) 其余仍指向后方的「任务 N」改写为「被引用任务标题」——不再留一个会随
+ *      后续重排再次失配的数字指针；跨档依赖（model 引用 refine / deconstruct
+ *      引用 diagnose）不强行换序，避免把收束档顶到建立档前面。
+ * 移动过任务后先重映射一次编号，再改写剩余前向引用。
+ */
+export function repairForwardReferences<
+  T extends { title?: string; type?: string; description?: string; acceptanceHint?: string; acceptanceCriteria?: string }
+>(tasks: T[]): { tasks: T[]; repaired: string[] } {
+  if (!Array.isArray(tasks) || tasks.length < 2) return { tasks, repaired: [] };
+  const original = [...tasks];
+  let list = [...tasks];
+  const repaired: string[] = [];
+
+  // Pass 1：被引用的是更靠后的 acquire → 前移 acquire（安全方向）
+  for (let guard = 0; guard < list.length; guard += 1) {
+    let moved = false;
+    for (let i = 0; i < list.length && !moved; i += 1) {
+      const desc = String((list[i] as any)?.description || '');
+      const refs = [...desc.matchAll(/任务\s*(\d+)/g)];
+      for (const ref of refs) {
+        const j = Number(ref[1]) - 1;
+        if (!Number.isFinite(j) || j <= i || j >= list.length) continue;
+        if (String((list[j] as any)?.type || '').trim() !== 'acquire') continue;
+        const [item] = list.splice(j, 1);
+        list.splice(i, 0, item);
+        repaired.push(`move-acquire:${String((item as any)?.title || '')}`);
+        moved = true;
+        break;
+      }
+    }
+    if (!moved) break;
+  }
+  if (repaired.length > 0) {
+    list = remapStageTaskReferences(original as any[], list as any[]) as T[];
+  }
+
+  // Pass 2：剩余前向「任务 N」改成标题引用（标题不随重排变化）
+  const afterMove = list;
+  list = afterMove.map((task, index) => {
+    const desc = String((task as any)?.description || '');
+    if (!desc) return task;
+    const next = desc.replace(/任务\s*(\d+)/g, (match, digits: string) => {
+      const j = Number(digits) - 1;
+      if (!Number.isFinite(j) || j <= index || j >= afterMove.length) return match;
+      const title = String((afterMove[j] as any)?.title || '').trim();
+      if (!title) return match;
+      repaired.push(`rewrite-forward:${String((task as any)?.title || '')}->${title}`);
+      return `「${title}」`;
+    });
+    return next === desc ? task : ({ ...task, description: next } as T);
+  });
+  return { tasks: list, repaired };
+}
+
+/**
  * 把任意已算好的 hints 收到「一节课」量级（只收上界，不拍死数字；区间不塌成单点）。
  * 两个调用方：① Goal 层 triage 判定（derivePlanningHints 内）；② Path 层自检后，
  * 给 stage-designer 用的 hints（path 产出 ≤1 小时 ⇒ 任务数/分钟一并收紧，否则学时仍会被

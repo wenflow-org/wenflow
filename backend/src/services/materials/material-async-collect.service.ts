@@ -35,14 +35,22 @@ const ASYNC_COLLECT_MARKER_PREFIX = '__async_collect__';
 
 /**
  * 等活跃 generation run 进入终态，然后把 userId 名下（时间窗内、template 带 marker 的）
- * 路径里与 readyPacks 标题匹配的 pending 占位原位替换为真实 pack。
+ * 路径里与 needTitle 匹配的 pending 占位原位替换为采集结果（ok/partial 带 pack；
+ * not_found 也替换——否则占位永远停在「采集中」）。
  *
  * 注意等待条件是「run 终态」而非「指针为 null」：成功完成后 activeGenerationRunId
  * 保留最后 run 引用不被清空（run-lifecycle 只在失败/回滚时动它）。
  */
+export interface AsyncMaterialPatch {
+  /** goal 声明的资料名（占位 marker 用同一归一标题） */
+  needTitle: string;
+  /** 采集结果：ok/partial 带 pack；not_found 无 pack（也必须回填，否则占位永远 pending） */
+  result: MaterialPackResult;
+}
+
 export async function patchPathsWithAsyncMaterials(
   userId: string,
-  readyPacks: MaterialPackResult[]
+  patches: AsyncMaterialPatch[]
 ): Promise<number> {
   const since = new Date(Date.now() - PATH_WINDOW_MS);
   const candidates = await prisma.learning_paths.findMany({
@@ -79,11 +87,11 @@ export async function patchPathsWithAsyncMaterials(
         const item = materials[index];
         const needTitle = extractAsyncCollectMarker(item?.notes);
         if (!needTitle) continue;
-        const match = readyPacks.find(
-          (pack) => pack.pack && normalizeTitleForMatch(String(pack.pack.title)) === needTitle
+        const match = patches.find(
+          (patch) => normalizeTitleForMatch(patch.needTitle) === needTitle
         );
         if (match) {
-          materials[index] = match;
+          materials[index] = match.result;
           changed = true;
         }
       }

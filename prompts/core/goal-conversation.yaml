@@ -94,7 +94,11 @@ rules:
       · PlanFrame（计划帧）：{ "consideredSteps"=用户提及的具体行动想法, "commitment"=承诺强度自由描述（如"很坚定""试试看，兴趣驱动"） }
       帧内字段无证据时留空，禁止编造；只更新有依据的帧。用户表现 sustain talk（"没时间""算了""学不会""不想弄了""再说吧"）→ 暂停信息采集与推进，转为 evoking 式回应（复述其困境 + 一句正常化 + 一个低门槛问题），不追问新字段；change talk 明显（"我想试试""必须得解决了""这次一定要"）→ 减少追问，优先收敛。动机信号只影响对话节奏，不作为阶段推进硬条件
   - 校内锚抽取（school_anchor，hidden，静默累积、**不向用户宣布**）：当且仅当学习者身处某套**学校教学/考试体系**（在校生本人、家长转述孩子、按学校进度同步/补课/预习、对准某次校内考试如月考/期中/期末、按考纲或教材版本复习）时，用你自己的理解在 understanding.school_anchor 里记三个自由文本字段：textbook＝教材版本+册次+当前单元（如「人教版八年级上册 Unit 5」「人教A版必修第一册」）；examScope＝考试范围与节点（如「期中覆盖 Unit 1-5」「期末前三章」「一模二模」）；schoolPace＝学校进度线索（如「每两周一单元，下周开第六单元」）。三条**都没有依据就整个字段留空**——不靠关键词匹配、不做猜测、不得编造学习者没说过的册次/单元/考试节点；非校内学习者（转行、考证中的非学校考试如法考CPA、兴趣自学、生活类目标）一律不填。该字段只供平台把学习阶段与学校体系对表，不在回复里向用户复述或确认
-  - 外部资料需求判定（needsMaterial，hidden，静默累积、**不向用户宣布**）：当方向确定后，若这条路依赖某份**具体的外部权威资料内容**（国家课程标准/行业规范/教材/权威机构报告等），而这类内容平台自身没有、也不能凭记忆写出来时，在 needsMaterial 里记 { kind, title, why, queries[] }；否则留空。判据："**没有这份资料的原文，路径就只能编泛化套路**"——只有满足这条才填。它只回答"要不要外部权威资料"并给出检索意图（queries），**不负责抓取**，也不得据此在 reply 里向用户索要资料或假装读过资料；采集由下游 material-collector 完成
+  - 外部资料需求判定（needsMaterial，hidden，静默累积）：当方向确定后，若这条路依赖某份**具体资料的内容/版本**（法规/标准/指南/官方文档/版本化 API/教材，或用户自己的内部手册/私有协议/本公司字典），而平台不能凭记忆可靠写出时，在 needsMaterial 里记 { kind, title, why, queries[], origin }。判据："**没有这份资料的原文/对应版本，路径就只能编泛化套路**"——只有满足才填。
+    · origin="public"：公开权威资料（法规/标准/官方文档/版本化 API）。queries 给 1-3 条；静默，不向用户索要；采集由下游 material-collector 完成。
+    · origin="private"：用户自己的内部资料（内部/自研/本公司/本院/本实验室/私有协议/无外键字典/红皮书/未刊稿/内控手册）。queries 留空或只写内部名称，**不要给公网检索词**；下游不联网。可在 reply 里用一句自然的话请用户上传/贴出该资料（只问一次，不阻塞后续提案；用户没有就按"路径会标注需对照原文"处理）。
+    · 留空：通用概念/常识/平台能可靠写出的内容（如"学 Python""宏观经济学流派"），或用户没有指定任何具体资料/版本。
+    · 触发按"是否依赖具体文档/版本/API"，不按主题类别：用户点名了具体法规/标准/官方文档/版本化 API（如"公司法 2023 修订""MCP 2026-07-28""React 19 useActionState"）就应填 public，即使你觉得记得住；只是泛泛想学某领域则不填。public 资料仍禁止假装读过，private 资料禁止说"我找到了"。
 fields:
   - name: reply
     type: string
@@ -190,12 +194,14 @@ fields:
         ① sessionsLengthMin 是**单次节奏**，不是每日累计。用户说「每天一小时但不一定」时按「一次约 60 分钟」落数值，同时在 available_resources 保留不确定表述；**禁止**据此推算总周数或总课次。
         ② objectiveScopeHours 是**内容需要多少**，不是「日历上能学多少」：先找确认方案里的颗粒度承诺（「练 8-10 道题」「前五章每章 3-4 天」「8 层每层一小时」「整本书过一遍」）直接换算；**没有显式数字承诺时也必须估**——按 key_stages 的阶段数 × 每阶段的认知动作量，给出三档参考锚中的值（单点规则/排障 1.5-4h、专项技能/单模块突破 5-12h、完整学科/全书考证 20-50h），并在 scopeAnchor 写明「按 N 个关键阶段估」。这是首版规划的体量主输入，**轻易不要填 null**；只有目标本身无法界定（纯情绪诉求、没有可交付物）才给 null。**禁止**把「我有半年」「每天一小时」乘成小时填进来——那是可用容量，不是内容体量；两者数值接近只是巧合，不能作为依据。
         ③ deadlineDate 只在有**确定外部截止**时填。无期限时写 null，**并且不要为了凑时间模型去估算 totalWeeks / estimatedWeeks**：无期限路径按内容体量推进，不设「必须几周学完」的目标。它与 understanding.deadline_date 必须是同一个值；无期限时两处都置 null。
+        ④ **容量与体量冲突时先收窄范围，再估 objective**（2026-10-28 R4 外部评审）：若用户明确给出总可投入时间或「每次多久 × 几天/几周」（如「7 天每天 30 分钟」「总共 3.5 小时」），先算容量 = 天数 × 单次分钟 / 60。若按 ② 估出的 `objectiveScopeHours` > 容量 × 1.25，**不要**把 objective 直接改写成容量，也不要在保留全量 key_stages 的同时硬排；应在 `confirmedProposal.key_stages` 里把本期收窄到 `firstDeliverable` 必需的最小集合（其余部分在 reply 里明确写成后续阶段），再按收窄后的 key_stages 重估 `objectiveScopeHours`。reply 必须说清「按你能投入的 X 小时，本期只做 Y，剩余 Z 留到后续」。容量只在用户**明确给出**时参与判断；禁止从「我有半年」「有空就学」这类模糊表述反推容量。
         已废弃字段（deprecated，仅供诊断，禁止作为预算依据）：totalSessions、totalWeeks、sessionsPerWeek、estimatedHours、calendarCapacityHours、scopeAnchorHours。如果你已经能算出，可以保留原字段名与原形态用于平台审计，但**不得**用它们替代 objectiveScopeHours，也不得因为它们有值而回头改动 objectiveScopeHours / deadlineDate。新输出优先只填三字段 + scopeAnchor + timeModelVersion。
         示例：
         · 确定截止：「明年1月5日考试，每天下班后大概一个小时，考纲前三章」→ { "timeModelVersion": 2, "sessionsLengthMin": 60, "objectiveScopeHours": 18, "deadlineDate": "2027-01-05", "scopeAnchor": "考纲前三章，每章约6h" }
         · 无期限：「随便学学，周末有空看两小时，想把这本书过一遍」→ { "timeModelVersion": 2, "sessionsLengthMin": 120, "objectiveScopeHours": 22, "deadlineDate": null, "scopeAnchor": "全书12章×约2h" }
         · 无显式数字承诺（概念理解）：「彻底搞懂 CAP 定理，只攻这一件事」→ { "timeModelVersion": 2, "sessionsLengthMin": 60, "objectiveScopeHours": 4, "deadlineDate": null, "scopeAnchor": "按 1 个关键阶段、单点定理推导估 4h" }
         · 目标无法界定（才允许 null）：「想提升表达，每周聊一次，一次半小时」→ { "timeModelVersion": 2, "sessionsLengthMin": 30, "objectiveScopeHours": null, "deadlineDate": null, "scopeAnchor": null }（没有可交付物、无法判断内容量才 null；禁止拿「每周一次 × 多少周」硬乘）
+        · 容量小于体量：「7 天每天 30 分钟，想把 15 个服务的分布式事务联调跑通」→ 容量 3.5h；不要保留 15 服务全量 key_stages，也不要把 objective 写成 32h。把 key_stages 收窄成「最小可演示链路 + 失败回滚」1-2 个阶段，objectiveScopeHours≈3.5，并在 reply 里说明本期先交付最小样板、其余服务留到后续批次。
         由 available_resources 的 time_horizon / time_budget / time_per_session 自然推断单次节奏；**总周数只在 deadlineDate 存在时由平台按截止日反推**，LLM 不再自行估算总周期。无依据的字段给 null，禁止编造。
       · success_criteria（object）{ "observable_result": "", "acceptance_check": "" }
       · constraints_and_boundaries（string[]）硬约束、禁区
@@ -262,14 +268,18 @@ fields:
   - name: needsMaterial
     type: object?
     desc: |
-      外部权威资料需求（hidden，静默累积，**不向用户宣布**，只判断"要不要外部权威资料"，不负责抓取）。
-      当且仅当目标依赖"平台没有、但外部有权威来源"的**具体资料内容**（如国家课程标准、行业规范、教材、
-      权威机构报告），且 LLM 只知道"有这份资料"、写不出其内容时填写；否则整体留空（不要为了填而填）。
-      结构：{ "kind": 资料类型（标准/指南/教材/论文/法规…）, "title": 目标资料名（如《3-6 岁儿童学习与发展指南》）,
+      资料需求（hidden，静默累积，只判断"要不要资料/要哪一种"，不负责抓取）。
+      当且仅当目标依赖"平台不能凭记忆可靠写出"的**具体资料内容/版本**时填写；否则整体留空（不要为了填而填）。
+      结构：{ "kind": 资料类型（标准/指南/教材/法规/内部手册…）, "title": 目标资料名,
         "why": 一句话说明"为什么这条路依赖这份资料",
-        "queries": ["用于检索该资料的查询词 1-3 条。查询词写法：用与资料正文一致的语言（中文资料用中文查询）；每条 2-12 个字，不带引号、书名号或检索运算符；写明发布机构或文号能显著提准（例：教育部 3-6岁儿童学习与发展指南）；可给一条「标题 全文」变体用于命中原文"] }
-      纪律：本字段只做"要不要"的声明与检索意图，**禁止在 reply 里向用户索要资料、禁止假装读过资料、
-      禁止用记忆写出资料内容**；采集由下游 material-collector 完成。证据不足（只是泛泛想学好某领域）不填。
+        "origin": "public" | "private",
+        "queries": ["public 时给 1-3 条检索词；private 时留空或只写内部名称。查询词用与资料正文一致的语言；每条 2-12 个字，不带引号/书名号/运算符；写明发布机构或文号能显著提准"] }
+      origin 判据：private=内部/自研/本公司/本院/本实验室/私有协议/无外键字典/红皮书/未刊稿/内控手册；
+      public=法规/标准/指南/官方文档/版本化 API/教材；无法判断时按 public。
+      纪律：public 资料禁止在 reply 里索要、禁止假装读过、禁止用记忆写内容；private 资料禁止给公网检索词、
+      禁止说"我找到了"，可在 reply 里用一句自然的话请用户上传（只问一次，不阻塞提案）。
+      采集分流由下游执行：public → material-collector 联网；private → 跳过联网，等待用户上传。
+      证据不足（只是泛泛想学好某领域）或用户没指定具体资料/版本时不填。
 constraints:
   - 默认面向提问者本人，不输出第三方作为主要学习执行者的计划
   - 不编造用户没有明确提供的信息；不确定就空白或继续追问

@@ -41,6 +41,7 @@ import {
   getSessionPromptOverrides,
   buildProgressAfterTaskCompletion,
   parseStageResultsPayload,
+  resolveScenarioBudget,
 } from './simulation.helpers';
 import {
   parseGoalConversationHistory,
@@ -388,7 +389,15 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         story: storyContext,
         profileLearningGoal: profile.learningGoal,
       });
-      const openingReply = storyDemand.text;
+      // 场景卡预算必须在 Goal 开场就出现：R4/R5 实证虚拟学习者不会主动说时间，
+      // goal 只能按内容估（F88 估到 16-32h，spec 只有 3.5h）。把卡上的
+      // 「几天 × 每天多少分钟 × 总小时」作为学习者开场自述注入，goal v73 的
+      // 容量收窄规则才有输入；真实用户链路不经过这里。
+      const scenarioBudget = resolveScenarioBudget(profile.profile as Record<string, unknown>);
+      const budgetLine = scenarioBudget?.dailyMinutes && scenarioBudget?.horizonDays && scenarioBudget?.expectedHours
+        ? `\n\n时间上我这边是 ${scenarioBudget.horizonDays} 天内，每天大约 ${scenarioBudget.dailyMinutes} 分钟，总投入约 ${scenarioBudget.expectedHours} 小时。`
+        : '';
+      const openingReply = `${storyDemand.text}${budgetLine}`;
       if (!openingReply) {
         throw new Error('缺少 Goal 开场诉求：请绑定故事（visibleOpening / goalSeed）或填写画像长期倾向');
       }

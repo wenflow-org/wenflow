@@ -388,13 +388,13 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
 });
 
 describe('gated 模式：非学习路径不自动推进', () => {
-  it('mode !== learning_path 时改为待确认项，不调用 runGoalAsync', async () => {
+  it('referral 直接硬阻断（即使 gated 也不写待确认项、不调 runGoalAsync）', async () => {
     mockPlatformSettingFindUnique.mockResolvedValue({ key: 'responseTriageMode', value: 'gated' });
     seedConversation({
       stage: 'proposing',
       collectedData: JSON.stringify({
         messages: [],
-        understanding: { real_problem: '没权限，走不通审批' },
+        understanding: { real_problem: '没权限，走不通审批', platform_judgment: 'not_judgeable', skill_nature: 'physical_internalized' },
         confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
         responseTriage: { mode: 'referral', confidence: 'medium', reasons: [] },
       }),
@@ -408,22 +408,71 @@ describe('gated 模式：非学习路径不自动推进', () => {
     );
 
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
-    expect(result.internal.core.stage).toBe('proposing');
-    expect(result.userVisible).toContain('系统判断');
+    expect(result.internal.core.stage).toBe('completed');
+    expect(result.internal.core.learningPath).toBeNull();
+    expect(result.userVisible).toContain('不会生成学习路径');
     const persisted = JSON.parse(conversationRecord.collectedData);
-    expect(persisted.responseTriagePending).toEqual(expect.objectContaining({ mode: 'referral' }));
+    expect(persisted.responseTriagePending).toBeUndefined();
   });
 
-  it('再次确认（已有待确认项）即放行，照常推进路径', async () => {
+  it('再次确认 referral 仍硬阻断（不允许二次确认放行）', async () => {
     mockPlatformSettingFindUnique.mockResolvedValue({ key: 'responseTriageMode', value: 'gated' });
     seedConversation({
       stage: 'proposing',
       collectedData: JSON.stringify({
         messages: [],
-        understanding: { real_problem: '没权限，走不通审批' },
+        understanding: { real_problem: '没权限，走不通审批', platform_judgment: 'not_judgeable', skill_nature: 'physical_internalized' },
         confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
         responseTriage: { mode: 'referral', confidence: 'medium', reasons: [] },
         responseTriagePending: { mode: 'referral', confidence: 'medium', reasons: [] },
+      }),
+    });
+
+    await goalConversationService.continueConversation(
+      'conv-1',
+      '仍然生成',
+      'user-1',
+      { confirmProposal: true }
+    );
+
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+  });
+
+  it('combination 仍走 gated：首次确认只写待确认项，不调 runGoalAsync', async () => {
+    mockPlatformSettingFindUnique.mockResolvedValue({ key: 'responseTriageMode', value: 'gated' });
+    seedConversation({
+      stage: 'proposing',
+      collectedData: JSON.stringify({
+        messages: [],
+        understanding: { real_problem: '没权限但自己能补材料' },
+        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        responseTriage: { mode: 'combination', confidence: 'medium', reasons: [] },
+      }),
+    });
+
+    const result = await goalConversationService.continueConversation(
+      'conv-1',
+      '就按这个来',
+      'user-1',
+      { confirmProposal: true }
+    );
+
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(result.internal.core.stage).toBe('proposing');
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.responseTriagePending).toEqual(expect.objectContaining({ mode: 'combination' }));
+  });
+
+  it('combination 再次确认即放行，照常推进路径', async () => {
+    mockPlatformSettingFindUnique.mockResolvedValue({ key: 'responseTriageMode', value: 'gated' });
+    seedConversation({
+      stage: 'proposing',
+      collectedData: JSON.stringify({
+        messages: [],
+        understanding: { real_problem: '没权限但自己能补材料' },
+        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        responseTriage: { mode: 'combination', confidence: 'medium', reasons: [] },
+        responseTriagePending: { mode: 'combination', confidence: 'medium', reasons: [] },
       }),
     });
 
@@ -459,5 +508,33 @@ describe('executeSkill 会话 envelope（非流式路径 conversationId 双写�
       sessionId: 'conv-1',
       conversationId: 'conv-1',
     }));
+  });
+});
+
+
+describe('普通 referral 仍走 gated（F15 合规自查不能被硬阻断）', () => {
+  it('judgeable_output 的 referral 首次确认只待确认，不直接终止', async () => {
+    mockPlatformSettingFindUnique.mockResolvedValue({ key: 'responseTriageMode', value: 'gated' });
+    seedConversation({
+      stage: 'proposing',
+      collectedData: JSON.stringify({
+        messages: [],
+        understanding: { real_problem: '要按条例自查上报，但部门不配合', platform_judgment: 'judgeable_output', skill_nature: 'knowledge_structure' },
+        confirmedProposal: { learning_direction: '合规自查', key_stages: ['S1'] },
+        responseTriage: { mode: 'referral', confidence: 'medium', reasons: [] },
+      }),
+    });
+
+    const result = await goalConversationService.continueConversation(
+      'conv-1',
+      '就按这个来',
+      'user-1',
+      { confirmProposal: true }
+    );
+
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(result.internal.core.stage).toBe('proposing');
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.responseTriagePending).toEqual(expect.objectContaining({ mode: 'referral' }));
   });
 });

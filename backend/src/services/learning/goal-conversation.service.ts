@@ -25,6 +25,7 @@ import {
   RESPONSE_TRIAGE_PENDING_KEY,
   RESPONSE_TRIAGE_SETTING_KEY,
   buildTriageAdvisoryLine,
+  isHardBlockResponseTriage,
   normalizeResponseTriageEnforcementMode,
   resolveResponseTriageFromCollectedData,
   triageGoalResponse,
@@ -468,6 +469,15 @@ class GoalConversationService {
     };
   }
 
+  /**
+   * 硬阻断终止文案：不生成路径，但保留「补充信息后可重新判断」的出口。
+   * 与 advisory 的提示文案共用 buildTriageAdvisoryLine，避免两套口径。
+   */
+  private buildHardBlockMessage(triage: ResponseTriage | null | undefined): string {
+    const line = buildTriageAdvisoryLine(triage).trim();
+    return `${line}\n\n这类目标我不会生成学习路径。如果情况有变化（例如外部条件已解决，或目标改成平台可练习的具体技能），补充说明后我会重新判断。`;
+  }
+
   /** 并发确认的落败方：读最新状态，返回赢家已绑定的路径（不再创建/绑定任何新路径） */
   private async resolveConcurrentConfirmation(conversationId: string, fallbackData: Record<string, any>) {
     const latest = await prisma.goal_conversations.findUnique({ where: { id: conversationId } });
@@ -594,6 +604,31 @@ async continueConversation(
         // 如果已经完成，直接返回
         if (conversation.status === 'completed') {
           const data = JSON.parse(conversation.collectedData);
+          const completedTriage = resolveResponseTriageFromCollectedData(data);
+          // 硬阻断终止态：completed 但没有路径——不能谎称「学习路径已经生成」。
+          if (!conversation.learningPathId && isHardBlockResponseTriage(completedTriage, data.understanding)) {
+            return {
+              userVisible: this.buildHardBlockMessage(completedTriage),
+              internal: {
+                core: {
+                  conversationId,
+                  stage: 'completed',
+                  confidence: data.confidence || 0,
+                  isCompleted: true,
+                  learningPath: null,
+                },
+                ext: {
+                  goalConversation: {
+                    understanding: data.understanding || {},
+                    nextQuestions: [],
+                    quickReplies: [],
+                    collected: data.collected || {},
+                    responseTriage: completedTriage,
+                  },
+                },
+              },
+            };
+          }
           let learningPath = null;
           
           // 查询学习路径状态
@@ -683,6 +718,49 @@ async continueConversation(
           const triageMode = await this.resolveResponseTriageEnforcementMode();
           const storedTriage = resolveResponseTriageFromCollectedData(data);
           const triagePending = (data as Record<string, unknown>)[RESPONSE_TRIAGE_PENDING_KEY];
+
+          // ── 硬阻断（2026-10-28 R4 外部评审 P0）：referral / emotional_support /
+          //    not_judgeable×physical_internalized 三类结论，不依赖 advisory/gated、也不允许
+          //    「再次确认」放行。否则 F96/F97 会在分诊判 referral 后仍生成 5.3h/26.4h 路径。
+          const hardBlockTriage = storedTriage ?? triageGoalResponse(understanding);
+          if (isHardBlockResponseTriage(hardBlockTriage, understanding)) {
+            await this.updateConversationLifecycle(conversationId, 'completed', {
+              status: 'completed',
+              appendMessage: { role: 'user', content: userReply },
+              mutateCollectedData: (currentData) => {
+                currentData[RESPONSE_TRIAGE_KEY] = hardBlockTriage;
+                delete currentData[RESPONSE_TRIAGE_PENDING_KEY];
+              },
+            });
+            logger.info('[goal-conversation] 分诊硬阻断：不生成学习路径', {
+              conversationId,
+              mode: hardBlockTriage.mode,
+              confidence: hardBlockTriage.confidence,
+              platformJudgment: (understanding as any)?.platform_judgment ?? (understanding as any)?.platformJudgment ?? null,
+            });
+            return {
+              userVisible: this.buildHardBlockMessage(hardBlockTriage),
+              internal: {
+                core: {
+                  conversationId,
+                  stage: 'completed',
+                  confidence: data.confidence || 0,
+                  isCompleted: true,
+                  learningPath: null,
+                },
+                ext: {
+                  goalConversation: {
+                    understanding,
+                    nextQuestions: [],
+                    quickReplies: [],
+                    collected: data.collected || {},
+                    responseTriage: hardBlockTriage,
+                  },
+                },
+              },
+            };
+          }
+
           if (triageMode === 'gated'
             && storedTriage
             && storedTriage.mode !== 'learning_path'
