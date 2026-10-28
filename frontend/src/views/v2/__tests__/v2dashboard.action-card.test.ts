@@ -70,6 +70,11 @@ describe('学习台：说明文字与路径卡底边', () => {
     expect(decl(ruleAfter('.path__foot'), 'margin-top')).toBe('auto');
   });
 
+  it('整页失败按状态码给原因：429 不再伪装成网络问题', () => {
+    expect(source, '缺少按状态码生成失败文案').toContain('describeRequestError(firstRejected?.reason)');
+    expect(source, '失败态仍写死网络文案').toContain(':description="loadErrorDescription"');
+  });
+
   it('调控建议标题放宽到两行（单行会把路径名切在中间）', () => {
     // 390 档这项只有 239px，「去处理」占掉右侧后路径名被切在中间 —— 用户口径是不压窄文案
     const text = ruleAfter('.action__control-text');

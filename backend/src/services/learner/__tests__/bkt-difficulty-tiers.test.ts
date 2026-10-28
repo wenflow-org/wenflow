@@ -67,10 +67,12 @@ describe('难度分档对信念更新的实际影响', () => {
 describe('applyObservations：按观测自带的档位参数更新，并记录所用档位', () => {
   function build() {
     const stored: any[] = [];
-    // 只替换落库与读取，BKT 公式仍走真实实现（避免把逻辑测成替身）
-    jest.spyOn(conceptBeliefService, 'getBeliefs').mockResolvedValue(null);
-    jest.spyOn(learnerProjections, 'upsert').mockImplementation((async (args: any) => {
-      stored.push(JSON.parse(args.create.payload));
+    // 只替换落库与读取，BKT 公式仍走真实实现（避免把逻辑测成替身）。
+    // 2026-10-24：落库从 upsert 改为首建 create（乐观锁重构），spy 同步换目标；
+    // findUnique 一并 mock——否则会读到测试库残留行、走 update 分支，用例即不再密封。
+    jest.spyOn(learnerProjections, 'findUnique').mockResolvedValue(null);
+    jest.spyOn(learnerProjections, 'create').mockImplementation((async (args: any) => {
+      stored.push(JSON.parse(args.data.payload));
       return {};
     }) as any);
     return { service: conceptBeliefService, stored };

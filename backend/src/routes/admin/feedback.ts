@@ -15,9 +15,9 @@ const listQuerySchema = z.object({
   status: z.enum(['new', 'triaged', 'resolved', 'dismissed']).optional(),
   userId: z.string().trim().min(1).optional(),
   taskId: z.string().trim().min(1).optional(),
-  // 用户域视角（2026-10-10「真实/测试」互斥拍板）：默认真实；testOnly=true 只看虚拟学习者与测试账号
-  includeTest: z.string().optional(),
-  testOnly: z.string().optional()
+  // includeTest=true 是按 id 直查虚拟账号的逃生口（不是页面视角）；
+  // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注）
+  includeTest: z.string().optional()
 });
 
 const updateBodySchema = z.object({
@@ -49,8 +49,7 @@ router.get('/', async (req, res) => {
       status: query.status,
       userId: query.userId,
       taskId: query.taskId,
-      includeTest: query.includeTest === 'true',
-      testOnly: query.testOnly === 'true'
+      includeTest: query.includeTest === 'true'
     });
     return res.json({
       success: true,

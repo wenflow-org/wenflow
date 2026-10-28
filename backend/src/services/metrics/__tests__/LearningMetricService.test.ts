@@ -92,6 +92,25 @@ describe('LearningMetricService task completion persistence', () => {
     await expect(deriveMetrics(null)).resolves.toEqual(expect.objectContaining({ timestamp: occurredAt }))
   })
 
+  it('无主观难度且无显式 LSS → 不落 task-completion 占位行（P2 写侧收口）', async () => {
+    await reconcileTaskCompletionMetric({
+      id: 'event-no-difficulty',
+      type: 'task:completed',
+      schemaVersion: 1,
+      aggregateType: 'task',
+      aggregateId: 'task-1',
+      userId: 'user-1',
+      source: 'test',
+      data: {
+        taskId: 'task-1',
+        actualMinutes: 45,
+      },
+      occurredAt: new Date('2026-07-19T08:30:00.000Z'),
+    })
+
+    expect(mockCommitDerivedDisplayMetrics).not.toHaveBeenCalled()
+  })
+
   it('派生回调输出 display 刻度（0-100），落库时再收敛到 internal-10（KTL/LF EWMA）', async () => {
     const asOf = new Date('2026-07-19T08:30:00.000Z')
     mockPrisma.teaching_sessions.findMany.mockResolvedValue([])

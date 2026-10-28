@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
+import { logger } from '../utils/logger'
 import type { SyntheticCapability } from '../utils/projection-token'
 import prisma from '../config/database'
 
@@ -43,6 +44,14 @@ export async function enforceSyntheticProjectionAccess(req: Request, res: Respon
 
     const required = getRequiredSyntheticCapability(req.method, req.originalUrl)
     if (!required || !projection.capabilities?.includes(required)) {
+      // 2026-10-22（机械过滤审计 A 类）：ROUTE_RULES 漏登记新端点时这里只会静默 403，
+      // 黑盒仿真链路表现为「不允许访问该接口」无从排查——补原因日志（route_unregistered=漏登记信号）。
+      logger.warn('[synthetic-projection] 合成用户访问被拒', {
+        reason: required ? 'capability_missing' : 'route_unregistered',
+        method: req.method,
+        path: req.originalUrl.split('?')[0],
+        capabilities: projection.capabilities,
+      })
       res.status(403).json({
         success: false,
         error: { message: required ? `合成用户缺少 capability: ${required}` : '合成用户不允许访问该接口' }

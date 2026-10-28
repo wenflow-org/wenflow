@@ -11,7 +11,6 @@
       v-if="state === 'resolving'"
       icon="◌"
       title="正在打开该路径所在的学习会话…"
-      description="路径内容在会话座舱的「路径」阶段页签中查看。"
     />
     <MkEmptyState
       v-else-if="state === 'error'"
@@ -26,10 +25,11 @@
       v-else
       icon="◌"
       title="该路径没有关联的目标对话"
-      description="返回列表后可下线或删除该路径。"
       action-text="返回列表"
       @action="closeSubPage"
-    />
+    >
+      <button type="button" class="mk-link pdx-alt" @click="goGoalConversations">去目标对话</button>
+    </MkEmptyState>
   </div>
 </template>
 
@@ -38,7 +38,7 @@
  *  - 「重规划」按钮原型有而管理侧无任何可达能力，按「宁缺勿假」未搬（2026-10-01 核查）；
  *  - 「导出」是原型假按钮，未搬。
  *  内容体（阶段全展开/任务弹层/重试生成/下线恢复）现居 PathJourneyPanel.vue。 */
-import { onMounted, ref } from 'vue'
+import { getCurrentInstance, onMounted, ref } from 'vue'
 import { subPage, openSubPage, closeSubPage } from './store'
 import { errMsg } from './live'
 import { adminLearningContentApi } from '@/api/adminApi'
@@ -46,6 +46,15 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
 const state = ref<'resolving' | 'error' | 'orphan'>('resolving')
 const errorMsg = ref('')
+/* 无 Router 上下文（单测直挂）时不注入，避免 useRouter 打警告 */
+const router = getCurrentInstance()?.appContext.config.globalProperties.$router as
+  | { push: (to: string) => Promise<unknown> }
+  | undefined
+
+/** 孤儿路径的第二个出口：回链路起点（目标对话）重新确认这条学习目标 */
+function goGoalConversations() {
+  if (router) void router.push('/admin/goal-conversations')
+}
 
 async function resolve() {
   const pid = subPage.value?.id || ''
@@ -77,4 +86,6 @@ onMounted(() => { void resolve() })
 
 <style scoped>
 .pdx { align-content: start; }
+/* 空态里的第二出口：主按钮已是「返回列表」，这条是并列的文字出口 */
+.pdx-alt { margin-top: 2px; }
 </style>

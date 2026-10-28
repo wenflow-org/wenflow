@@ -13,14 +13,23 @@ import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
-import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
-import { buildStageFillNote } from './stage-fill-note';
+import {
+  clampHintsToOneSitting,
+  clampStageMinutesToBudget,
+  clampStageTasksToHints,
+  ONE_SITTING_MAX_HOURS,
+  orderStageTasksByTopology,
+  remapStageTaskReferences,
+  repairForwardReferences,
+} from '../path-planning-hints';
 import {
   appendDescriptionNote,
   buildPathFillNote,
   reconcileDeliveryConservation,
 } from './path-fill-note';
 import { auditStageBudget } from './stage-budget-invariant';
+import { resolveTargetTotalHoursFromData } from './path-budget-clamp';
+import { auditGeneratedPath, reorderStageTasks } from './path-structure-integration';
 import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
@@ -47,6 +56,7 @@ import { conceptRegistryService } from '../../learner/concept-registry.service';
 import { conceptGraphService } from '../../learner/concept-graph.service';
 import { normalizeConceptKey } from '../../memory/concept-key';
 import {
+  buildConceptMap,
   generateDisplayLabel,
   getSceneFramingNormalizedInput,
   normalizePathTaskType,
@@ -105,6 +115,9 @@ export async function pruneSupersededStageItems(
   });
   return Number(result?.count) || 0;
 }
+
+import { detectUnjudgeableAcceptance, type UnjudgeableAcceptanceViolation } from './stage-acceptance-guard';
+export { detectUnjudgeableAcceptance, type UnjudgeableAcceptanceViolation } from './stage-acceptance-guard';
 
 export async function enrichLearningPathWithAnderson(
   pathId: string,
@@ -329,11 +342,20 @@ async function enrichLearningPathWithAndersonInner(
       });
     }
 
-    // 阶段任务设计并发度：串行 M 次 LLM 是纯时钟浪费；
-    // 限流 2 路，兼顾 LLM 速率限制与 SQLite 写入串行化。
-    const STAGE_DESIGN_CONCURRENCY = 2;
+    // 阶段任务设计并发度：2026-10-26 起固定为 1（串行）——外部评审悖论1实证：
+    // 上一阶段真实任务清单（previousMilestone.tasks）只有在前一阶段**完成后**才存在，
+    // 并行批次里 Stage 2 拿不到 Stage 1 的产物，跨阶段衔接/去重规则形同虚设
+    // （power-train 三阶段连排「下周强度表」即此因）。单阶段 10-90 秒，串行总时长
+    // ≈ 阶段数 × 单阶段时长，可接受；进度心跳照常逐阶段上报。
+    const STAGE_DESIGN_CONCURRENCY = 1;
     inFlightStageItemIds = new Set<string>();
     let completedStageCount = 0;
+    // 已完成阶段的任务摘要（按 stageIndex，2026-10-26 幽灵通道修复）：提示词规则 13 承诺
+    // 「上一阶段的产物作为本阶段首个操作任务的输入上下文」，但代码从未注入过任务清单
+    // （旧 previousMilestone 只有 title/coreConcept 两个骨架字段，previousMilestoneContext
+    // 这个键在代码里根本不存在）——跨阶段衔接与去重规则长期空转。串行下 Stage N 完成后
+    // 存摘要，Stage N+1 注入 previousMilestone.tasks。
+    const stageTaskSummaries = new Map<number, Array<{ title: string; type: string | null; estimatedMinutes: number | null }>>();
 
     /**
      * 逐阶段任务锚（2026-09-28 去等分）：按**本阶段实际学时**反推该阶段该出几个任务，
@@ -351,9 +373,26 @@ async function enrichLearningPathWithAndersonInner(
         || Number(baseHints.subtaskMinutesRange?.[1])
         || 60;
       const cap = Number(baseHints.subtasksPerStageRange?.[1]) || 14;
+      const stageAnchorMinutes = Math.round(stageHours * 60);
+      // 阶段分钟上界（2026-10-25 方向改造：uqcit3l 实证承诺为顶把 target 压到 2h 后，
+      // 阶段锚 0.6h/36 分钟仍被 max(2,...) 抬成 2 个任务 × 30 分钟 = 60 分钟（1.67×），
+      // 四阶段累计 227 分钟 vs 计划 132 分钟，承诺在 stageDesign 层二次违约）。
+      // 传给 stage-designer 一个显式上限：本阶段任务分钟总和不得超过阶段锚的 1.25 倍
+      // （超出部分说明该阶段装不下，应减任务/缩分钟，而不是把承诺撑破）。
+      const targetSubtasks = Math.max(2, Math.min(cap, Math.round(stageAnchorMinutes / anchorMinutes)));
+      // 预算下限必须 ≥ 最小任务数 × 单任务下限，否则「预算比最小任务量还小」——
+      // 模型只能二选一：超预算或把任务缩到不可执行（2026-10-26 迭代 2 实证 phil-sci：
+      // 阶段锚 0.5h → 预算 20 分钟，但 2 个任务 × 9 分钟下限 = 18 分钟起，
+      // 模型给 2×15=30 分钟即超预算 50%，最终实排/标称比值掉到 0.51）。
+      const minTaskMinutes = Number(baseHints.subtaskMinutesRange?.[0]) || 9;
+      const stageMinutesBudget = Math.max(
+        Math.round(stageAnchorMinutes * 1.25),
+        targetSubtasks * minTaskMinutes,
+      );
       return {
         ...baseHints,
-        targetSubtasksForStage: Math.max(2, Math.min(cap, Math.round((stageHours * 60) / anchorMinutes))),
+        targetSubtasksForStage: targetSubtasks,
+        stageMinutesBudget,
       };
     };
 
@@ -455,6 +494,10 @@ async function enrichLearningPathWithAndersonInner(
             stageNumber: previousMilestone.stageNumber,
             title: previousMilestone.title,
             coreConcept: previousMilestone.coreConceptId || null,
+            // 幽灵通道修复（2026-10-26）：上一阶段真实任务清单（串行生成后才存在）。
+            // 提示词规则 13 的「previousMilestoneContext」从来不存在，跨阶段衔接/去重
+            // 规则此前只能靠阶段标题猜；现在首操作任务能真正「用上一阶段刚产出的东西」。
+            ...(stageTaskSummaries.get(stageIndex - 1) ? { tasks: stageTaskSummaries.get(stageIndex - 1) } : {}),
           } : null),
         } : {}),
         ...stageDesignerBaseInput,
@@ -473,6 +516,28 @@ async function enrichLearningPathWithAndersonInner(
             estimatedHours: m.estimatedHours || null,
           })),
         },
+        // 全部前序阶段任务标题（2026-10-27 R1 夜批实证：previousMilestone.tasks 只给上一阶段，
+        // 阶段 N≥3 看不到更早阶段，跨阶段重复仍占 12/95（duplicateTask 第二大 flag；
+        // D14 三个阶段各排一次「回放被岔开的对话」）。标题体积小（≤60 条），全量注入。
+        ...(stageIndex > 1 ? {
+          allPreviousStageTasks: (() => {
+            const stages = learningPath.milestones
+              .slice(0, stageIndex)
+              .map((m, i) => ({
+                stageNumber: m.stageNumber,
+                tasks: (stageTaskSummaries.get(i) || []).map((t) => t.title),
+              }))
+              .filter((s) => s.tasks.length > 0);
+            // 注入留痕（2026-10-27）：agent_call_logs 输入截断无法验证，显式打日志供夜批核对
+            logger.info('[stage-dedup-source] allPreviousStageTasks 已注入', {
+              pathId: learningPath.id,
+              stageNumber: milestone.stageNumber,
+              sourceStages: stages.length,
+              sourceTasks: stages.reduce((n, s) => n + s.tasks.length, 0),
+            });
+            return stages;
+          })(),
+        } : {}),
         // 渐进式（批次 D）：上一阶段的学习者账本信号——脆弱/挣扎概念、先修缺口、
         // wrapup 里仍未掌握的点。stage-designer 据此调整下一阶段的坡度与回补任务。
         ...(progressive && options.previousStageOutcome
@@ -494,9 +559,11 @@ async function enrichLearningPathWithAndersonInner(
       // 但模型惯性仍用长课时顶掉课数（法考案例：每阶段要 30 课、8 阶段 7 个只给 5-10 课，
       // 实交付 0.18×自述预算）。不足锚的 70% 时做**一次**补课调用，补的是清单外的新方向；
       // 同阶段标题近似的换皮课一律丢弃（评审实证：强填产同质化）。补不齐留缺口账，不硬塞。
+      // 2026-10-26 双条件（外部评审悖论4）：课数不足**且**分钟未饱和（<75% 预算）才补——
+      // 2×30 分钟扎实装满 60 分钟预算而锚是 3 课时，强补只会压薄每课或产凑数任务。
       const wantedLessons = Number((stageHints as any)?.targetSubtasksForStage);
       let supplementAudit: Record<string, unknown> | null = null;
-      if (needsLessonSupplement(stageTasks, wantedLessons)) {
+      if (needsLessonSupplement(stageTasks, wantedLessons, (stageHints as any)?.stageMinutesBudget)) {
         const initialCount = stageTasks.length;
         const supplementRequest = buildSupplementRequest(
           stageTasks,
@@ -544,6 +611,106 @@ async function enrichLearningPathWithAndersonInner(
         }
       }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
+      // 验收越界拦截（2026-10-26 外部评审 #4/#5）：platformJudgment=not_judgeable 时，
+      // 验收词必须落在「学习者文字自述 + 可记录练习事实」上——平台是纯文本的，琴声/手型
+      // 进不了系统，「声音清晰无闷响」「手型标准」这类判据给了下游 teaching 判官一个
+      // 永远无法执行的标准，只能放水（学习者复述形容词即通关）。这里确定性检测越界验收，
+      // 命中则带 repairHints.acceptanceFixes 重调**一次**；重调仍越界则放行并留审计
+      // （不阻塞、不改写文本——自动拼接前缀会改写语义，比越界更糟）。
+      const stagePlatformJudgment = (stageNormalizedInput as any)?.learnerProfile?.platformJudgment;
+      if (stagePlatformJudgment === 'not_judgeable') {
+        const violations = detectUnjudgeableAcceptance(stageTasks as Array<Record<string, unknown>>);
+        if (violations.length > 0) {
+          logger.warn('[stage-judgeability] not_judgeable 验收越界，带修复提示重调一次', {
+            pathId: learningPath.id,
+            stageNumber: milestone.stageNumber,
+            violations: violations.map((v) => v.taskTitle),
+          });
+          const retryResult = await executeSkill(stageDesignerDefinition, {
+            ...stageDesignerInput,
+            repairHints: {
+              acceptanceFixes: {
+                reason: '以下任务的验收标准要求平台判定它看不到/听不到的身体动作或声音属性，平台只能依据学习者的文字记录判断',
+                rules: '验收必须改写为「学习者在对话框提交的文字记录」可判定的形式：写了什么练习事实（练了几遍/录了音/哪里卡）、自评归因（可能是什么原因）、下一步改哪一处；禁止把声音/动作质量（干净、清晰、标准、不闷）作为达标判据',
+                tasks: violations,
+              },
+            },
+          } as any).catch((error: unknown) => {
+            logger.warn('[stage-judgeability] 验收修复重调失败，保留原产出', {
+              pathId: learningPath.id,
+              stageNumber: milestone.stageNumber,
+              error: String(error).slice(0, 200),
+            });
+            return null;
+          });
+          const retryTasks = Array.isArray((retryResult as any)?.subtasks) ? (retryResult as any).subtasks as Array<Record<string, unknown>> : [];
+          if (retryTasks.length > 0) {
+            const remaining = detectUnjudgeableAcceptance(retryTasks);
+            if (remaining.length < violations.length) {
+              stageTasks = clampStageTasksToHints(retryTasks, stageHints || (normalizedInput as any)?.planningHints);
+              logger.warn('[stage-judgeability] 验收修复重调采纳', {
+                pathId: learningPath.id,
+                stageNumber: milestone.stageNumber,
+                before: violations.length,
+                after: remaining.length,
+              });
+            }
+          }
+        }
+      }
+      // 阶段内认知动作拓扑序（2026-10-25 外部评审实证）：prompt 规则 65 要求
+      // 「建立 → 应用 → 收束」，但只是软约束。实证倒挂：py-clean S5 先 refine(复查脚本)
+      // 后 model(写脚本)、eng-syntax S4 先 consolidate(产出流程卡) 后 model(才练嵌套句)、
+      // power-train S1 先 execute(踩五档功率) 后 diagnose(定恢复放行判据，用户腿酸未恢复)。
+      // 稳定排序，同档内保留模型给的相对顺序；已是正序时恒等变换（零行为变化）。
+      const orderedTasks = orderStageTasksByTopology(stageTasks as Array<{ type?: string }>);
+      if (orderedTasks.some((task, index) => task !== stageTasks[index])) {
+        logger.warn('[stage-topology] 阶段内认知动作顺序倒挂，已确定性重排', {
+          pathId: learningPath.id,
+          stageNumber: milestone.stageNumber,
+          before: (stageTasks as any[]).map((t) => String(t?.type || '?')),
+          after: orderedTasks.map((t) => String(t?.type || '?')),
+        });
+        // 重排必须同步改写描述里的「任务 N」引用，否则原「沿用任务 1」会变成自指
+        // （2026-10-26 实测：重排后 5/10 条路径被判 prerequisiteGap，根因全是编号失配）。
+        stageTasks = remapStageTaskReferences(stageTasks as any[], orderedTasks as any[]) as typeof stageTasks;
+      }
+      // 拓扑重排只改编号，语义上的「T3 基于任务4」仍会指向后面的任务：
+      // acquire 安全前移；其余跨档前向引用改写为标题，避免留下会再次失配的数字指针。
+      const forwardRepair = repairForwardReferences(stageTasks as any[]);
+      if (forwardRepair.repaired.length > 0) {
+        logger.warn('[stage-topology] 前向任务引用已修复', {
+          pathId: learningPath.id,
+          stageNumber: milestone.stageNumber,
+          repaired: forwardRepair.repaired,
+        });
+        stageTasks = forwardRepair.tasks as typeof stageTasks;
+      }
+      // 阶段分钟预算确定性夹（2026-10-25 承诺二次违约修复）：模型对 hints 的分钟锚
+      // 遵从率低（实证 uqcit3l：hints 全对——总量 2h/阶段 0.7h/每任务 20 分钟/区间 9-30，
+      // 模型仍排出 80+60+113=253 分钟 ≈ 承诺 2.1 倍）。提示词规则之外再加一道代码夹，
+      // 在所有补课/置换之后、落库之前执行；只治注水方向，未超预算零变化。
+      const stageBudgetMinutes = Number((stageHints as any)?.stageMinutesBudget);
+      if (Number.isFinite(stageBudgetMinutes) && stageBudgetMinutes > 0) {
+        const beforeMinutes = stageTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+        const clampedTasks = clampStageMinutesToBudget(stageTasks, stageBudgetMinutes, {
+          minMinutes: Number((stageHints as any)?.subtaskMinutesRange?.[0]) || 5,
+          maxMinutes: Number((stageHints as any)?.subtaskMinutesRange?.[1]) || 30,
+        });
+        const afterMinutes = clampedTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+        if (afterMinutes !== beforeMinutes || clampedTasks.length !== stageTasks.length) {
+          logger.warn('[stage-budget-clamp] 阶段分钟超承诺预算，已确定性压缩', {
+            pathId: learningPath.id,
+            stageNumber: milestone.stageNumber,
+            budgetMinutes: stageBudgetMinutes,
+            beforeMinutes,
+            afterMinutes,
+            tasksBefore: stageTasks.length,
+            tasksAfter: clampedTasks.length,
+          });
+        }
+        stageTasks = clampedTasks;
+      }
       // 引用覆盖守卫（2026-10-17）：有资料却零引用 = 本阶段任务没有长在资料上
       //（20 goal 复核实证：cpa/mbsr 末阶段）。缺口可见化之后**定向补课**（#119 优化项 1，2026-10-19）：
       // 在路径级闸（每路径最多 1 次调用）下再调一次 stage-designer，只收「带引用且 sectionId
@@ -669,6 +836,12 @@ async function enrichLearningPathWithAndersonInner(
         stageNumber: milestone.stageNumber,
         subtasks: stageTasks,
       });
+      // 幽灵通道修复：记录本阶段任务摘要，供下一阶段 previousMilestone.tasks 注入
+      stageTaskSummaries.set(stageIndex, stageTasks.slice(0, 12).map((task: any) => ({
+        title: String(task?.title || '').slice(0, 80),
+        type: typeof task?.type === 'string' ? task.type : null,
+        estimatedMinutes: Number.isFinite(Number(task?.estimatedMinutes)) ? Number(task.estimatedMinutes) : null,
+      })));
       const stageFinishedAt = new Date();
       await prisma.path_generation_stage_items.update({
         where: { id: stageItemId },
@@ -820,6 +993,12 @@ async function enrichLearningPathWithAndersonInner(
     });
     }
 
+    // 同阶段前置重排（2026-10-24）：只把同阶段内排在后继之后的前置任务稳定前移。
+    if (kcAnnotation) {
+      const reorderedEdges = reorderStageTasks(stageDesignOutputs, kcAnnotation);
+      if (reorderedEdges > 0) logger.info('[stage-enrichment] 同阶段前置任务已重排', { pathId, reorderedEdges });
+    }
+
     // 任务级资料引用收集（key = subtaskId；写进模板 JSON，不新增表列）
     const materialRefsByTask: Record<string, any[]> = {};
     // 任务级迷思预判收集（key = subtaskId；同 sidecar 模式，2026-09-26 课前注入）
@@ -830,6 +1009,9 @@ async function enrichLearningPathWithAndersonInner(
 
     // 概念身份预解析（canonical，best-effort）：**必须在事务外**——SQLite 下事务持有写锁，
     // 事务内再写 concepts/aliases 会撞锁。设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4
+    //
+    // 概念 Map 建一次，供本函数全部 resolveTaskConcept 调用复用（旧口径每任务重建整张 Map）
+    const taskConceptMap = buildConceptMap(pathCognitiveDesign);
     //
     // 键必须与写入侧一致：写入用的是 `resolveTaskConcept(...).linkedConceptName`（命中认知设计时
     // 取**设计里的概念名**，非原始 linkedConcept 文本），故这里复用同一个解析函数取同一个值。
@@ -843,7 +1025,7 @@ async function enrichLearningPathWithAndersonInner(
         .flatMap((s) => s.subtasks)
         .map((t: any) => {
           const linked = typeof t?.linkedConcept === 'string' ? t.linkedConcept : null;
-          const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked);
+          const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked, taskConceptMap);
           return resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null;
         })
         .filter((name): name is string => !!name && !!name.trim());
@@ -902,7 +1084,11 @@ async function enrichLearningPathWithAndersonInner(
         // 阶段估时回写：以本阶段任务分钟汇总为准（ceil 到整小时），供各处展示与路径汇总使用
         const stageTotalMinutes = (stageTasks as Array<{ estimatedMinutes?: number }>)
           .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
-        const stageNormalizedHours = stageTasks.length > 0 ? Math.max(1, Math.ceil(stageTotalMinutes / 60)) : null;
+        // 2026-10-26 迭代 1：ceil 改保留一位小数（见下方 stageHours 同源修复说明）；
+        // 下限同为 0.1 而非 1（短课路径不该被抬到 1 小时，见下方说明）。
+        const stageNormalizedHours = stageTasks.length > 0
+          ? Math.max(0.1, Math.round((stageTotalMinutes / 60) * 10) / 10)
+          : null;
 
         for (let j = 0; j < stageTasks.length; j++) {
           const taskData = stageTasks[j];
@@ -910,6 +1096,7 @@ async function enrichLearningPathWithAndersonInner(
             typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
             pathCognitiveDesign,
             typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
+            taskConceptMap,
           );
           const displayLabel = generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
             || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
@@ -986,14 +1173,23 @@ async function enrichLearningPathWithAndersonInner(
         (sum, milestone) => sum + (Number(milestone.estimatedHours) || 0),
         0,
       );
-      let stageFillNoteCount = 0;
       for (const milestone of learningPath.milestones) {
         const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
         const stageTasks = stageOutput?.subtasks || [];
         const stageTotalMinutes = (stageTasks as Array<{ estimatedMinutes?: number }>)
           .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
         pathTotalMinutes += stageTotalMinutes;
-        const stageHours = stageTasks.length > 0 ? Math.max(1, Math.ceil(stageTotalMinutes / 60)) : null;
+        // 阶段学时回写（2026-10-26 迭代 1）：此前用 Math.ceil 向上取整，N 个阶段各取整一次，
+        // 累积误差让「路径标称」永远比「任务实排」高 5–13%（20 条实测：中位比值 0.90，
+        // eng-syntax 最差 0.61——标 10h 实排 6.1h）。改为保留一位小数，标称与实排同口径；
+        // 展示层如需整数由前端格式化，不在数据层制造偏差。
+        // 下限（2026-10-26 修复 5 副作用）：原为硬编码 1 小时，对「一次 20 分钟」的短课路径
+        // 会把每阶段 0.3-0.6h 抬到 1h，5 个阶段累计虚增 3h（实测 phil-sci 标 5h 实排 2.1h，
+        // 比值 0.43）。下限应服从单次可用时间：锚到本阶段任务的真实分钟，仅保留「不能为 0」
+        // 这一条底线。
+        const stageHours = stageTasks.length > 0
+          ? Math.max(0.1, Math.round((stageTotalMinutes / 60) * 10) / 10)
+          : null;
         stageHoursForAudit.push({
           stageNumber: milestone.stageNumber,
           title: milestone.title ?? null,
@@ -1001,22 +1197,10 @@ async function enrichLearningPathWithAndersonInner(
         });
         if (stageHours !== null) {
           pathNormalizedHours += stageHours;
-          // R3 欠 fill 诚实声明：锚必须在回写前读（回写后 estimatedHours 即任务汇总，锚丢失）
-          const fillNote = buildStageFillNote(
-            Number(milestone.estimatedHours) || null,
-            stageHours,
-            (milestone as { description?: string | null }).description,
-          );
-          if (fillNote) {
-            stageFillNoteCount += 1;
-            logger.info('[stage-enrichment] 阶段课时欠 fill，已追加容量说明', {
-              pathId: learningPath.id,
-              milestoneId: milestone.id,
-              stageNumber: milestone.stageNumber,
-              anchorHours: Number(milestone.estimatedHours) || null,
-              stageHours,
-            });
-          }
+          // 阶段级「时间说明」拼接已下线（2026-10-25 方向改造）：实证它把内部预算口径差
+          // （锚 13h vs 任务 6h）裸露给学习者；预算链「承诺为顶」重锚后锚≈任务，触发源
+          // 消失。真欠交付由路径级 buildPathFillNote 声明 + delivery 审计对账（delivery-ratio
+          // 仍识别存量行的时间说明/容量说明）。存量数据不改写。
           // 阶段目标锚补齐（b3 评审）：模型自发引用率 ~30%（抽签），缺锚时确定性追加对照括注
           const anchorNote = buildAnchorGoalNote(pathSchoolAnchor, String(milestone.goal || ''));
           const anchorGoalBase = anchorNote
@@ -1030,11 +1214,60 @@ async function enrichLearningPathWithAndersonInner(
             data: {
               estimatedHours: stageHours,
               ...(anchorNote && anchorGoalBase !== null ? { goal: `${anchorGoalBase}${anchorNote}` } : {}),
-              ...(fillNote ? { description: fillNote } : {}),
               updatedAt: new Date(),
             }
           });
         }
+      }
+      // 终局预算夹（Frontier-100 R1 实证 F81：目标 3h，core 骨架 3h，stageDesign 按任务分钟
+      // 回写后 4.5h）：core 夹只作用于骨架，逐阶段 1.25× 容差累加仍可把总量放大到目标 1.5×。
+      // 全路径生成收尾时按目标等比缩放任务分钟与阶段学时，避免「夹在 core、涨在 stage」。
+      const isFullPathRun = !appendOnly && !progressive && !restrictMilestoneIds;
+      const finalTargetHours = (() => {
+        const fromHints = resolveTargetTotalHoursFromData(data);
+        if (fromHints) return fromHints;
+        const fromConservation = Number((parsedTemplate as any)?.budgetConservation?.target);
+        if (Number.isFinite(fromConservation) && fromConservation > 0) return fromConservation;
+        const fromPlanning = Number((normalizedInput as any)?.planningHints?.targetTotalHours);
+        return Number.isFinite(fromPlanning) && fromPlanning > 0 ? fromPlanning : null;
+      })();
+      if (isFullPathRun && finalTargetHours && pathNormalizedHours > finalTargetHours * 1.15) {
+        const beforeHours = Math.round(pathNormalizedHours * 10) / 10;
+        const beforeMinutes = pathTotalMinutes;
+        const scale = finalTargetHours / pathNormalizedHours;
+        let scaledTotalMinutes = 0;
+        for (const milestone of learningPath.milestones) {
+          const tasks = await tx.subtasks.findMany({
+            where: { milestoneId: milestone.id },
+            select: { id: true, estimatedMinutes: true },
+          });
+          let stageMinutes = 0;
+          for (const task of tasks) {
+            const raw = Number(task.estimatedMinutes) || 0;
+            if (raw <= 0) continue;
+            const next = Math.max(5, Math.min(90, Math.round(raw * scale)));
+            await tx.subtasks.update({ where: { id: task.id }, data: { estimatedMinutes: next } });
+            stageMinutes += next;
+          }
+          if (tasks.length > 0) {
+            const nextHours = Math.max(0.1, Math.round((stageMinutes / 60) * 10) / 10);
+            await tx.milestones.update({ where: { id: milestone.id }, data: { estimatedHours: nextHours } });
+            const audit = stageHoursForAudit.find((item) => item.stageNumber === milestone.stageNumber);
+            if (audit) audit.estimatedHours = nextHours;
+          }
+          scaledTotalMinutes += stageMinutes;
+        }
+        pathTotalMinutes = scaledTotalMinutes;
+        pathNormalizedHours = Math.max(0.1, Math.round((scaledTotalMinutes / 60) * 10) / 10);
+        logger.warn('[path-budget-final-clamp] 任务实排超目标，已按目标等比缩放', {
+          runId,
+          pathId: learningPath.id,
+          targetHours: finalTargetHours,
+          beforeHours,
+          afterHours: pathNormalizedHours,
+          beforeMinutes,
+          afterMinutes: scaledTotalMinutes,
+        });
       }
       // 容量对表（2026-09-30 b3 评审实证：rw-school5-62 每天 60 分钟 × 25 天 = 25h 容量，
       // 路径却排了 41h——总量超容量 1.64 倍且没有任何环节拦截，学习者问「每天一小时够吗」
@@ -1111,7 +1344,9 @@ async function enrichLearningPathWithAndersonInner(
         ? reconcileDeliveryConservation({
             conservation: (parsedTemplate as any)?.budgetConservation,
             deliveredHours: pathNormalizedHours,
-            declaration: pathFillNote ? 'path' : stageFillNoteCount > 0 ? 'stage' : 'none',
+            // 阶段级声明已下线（2026-10-25）：仅路径级【课时说明】计 path，其余 none；
+            // 存量行的阶段级声明由 delivery-ratio 审计侧识别，不在此重复记账
+            declaration: pathFillNote ? 'path' : 'none',
           })
         : null;
       if (pathSchoolAnchor && anchorGoalNotes > 0) {
@@ -1122,7 +1357,11 @@ async function enrichLearningPathWithAndersonInner(
           totalStages: learningPath.milestones.length,
         });
       }
-      const pathHoursToWrite = pathNormalizedHours > 0 ? pathNormalizedHours : undefined;
+      // 浮点收尾（2026-10-27 R8 冒烟实证 A13=6.600000000000001）：阶段小时逐项累加会带 IEEE754 尾巴，
+      // 写路径总学时前统一保留一位小数（下界 0.1），与标称/展示口径一致。
+      const pathHoursToWrite = pathNormalizedHours > 0
+        ? Math.max(0.1, Math.round(pathNormalizedHours * 10) / 10)
+        : undefined;
 
       // #56 阶段预算不变量：阶段预算必须按内容反推，不能恒等复制上游总量（等分/全等于总量
       // 都是退化形态）。这里只做可见化：判成 violations → warn + 落 aiPromptTemplate，
@@ -1142,6 +1381,35 @@ async function enrichLearningPathWithAndersonInner(
         });
       }
 
+      // 结构确定性审计（2026-10-24）：前置缺口 / 重复任务 / 课时偏差。只记录不重排，
+      // 写入 aiPromptTemplate.pathAudit 供离线评审与后续生成修复消费。
+      // 2026-10-25 排序修复：stageDesignOutputs 按批次并发完成序 push（并发=2），
+      // 直接喂审计会把 stage-1 任务编到 stage-2 之后，制造虚假 lateCrossStage 告警
+      // （离线评审实证：uqcit3l/yng73ae/n9qzgpm 的「前置 KC 第 N 个」编号全部错位）。
+      // 审计与消费方一律按 stageNumber 排序，DB 里程碑顺序不受影响。
+      const stagesInOrder = [...stageDesignOutputs].sort((a, b) => a.stageNumber - b.stageNumber);
+      const structureAudit = kcAnnotation
+        ? auditGeneratedPath({
+            stages: stagesInOrder,
+            kcAnnotation,
+            totalMinutes: pathTotalMinutes,
+            afterHours: Number((parsedTemplate as any)?.budgetConservation?.after) || null,
+            delivery: (reconciledConservation as { delivery?: string } | null)?.delivery ?? null,
+          })
+        : null;
+      // kc-mapper 失败此前静默降级（kcAnnotation=null → 审计整个不跑，路径照样 success，
+      // 离线评审才发现 3 条路径 KC/审计双双丢失）。落显式标记：可见、可统计、可告警。
+      const auditDisabledReason = kcAnnotation
+        ? null
+        : (progressive ? 'kc-mapper-failed' : 'kc-mapper-persist-failed');
+      if (structureAudit && structureAudit.issues.length > 0) {
+        logger.warn('[stage-enrichment] 路径结构审计发现问题（只记录，不重排）', {
+          pathId: learningPath.id,
+          issues: structureAudit.issues.slice(0, 8).map((issue) => issue.kind),
+          stats: structureAudit.stats,
+        });
+      }
+
       await tx.learning_paths.update({
         where: { id: learningPath.id },
         data: {
@@ -1154,6 +1422,8 @@ async function enrichLearningPathWithAndersonInner(
             ...(capacityOverload ? { capacityOverload } : {}),
             ...(reconciledConservation ? { budgetConservation: reconciledConservation } : {}),
             ...(stageBudgetAudit.ok ? {} : { stageBudgetAudit: stageBudgetAudit.violations }),
+            ...(structureAudit && structureAudit.issues.length > 0 ? { pathAudit: structureAudit } : {}),
+            ...(auditDisabledReason ? { pathAuditDisabled: auditDisabledReason } : {}),
             ...(Object.keys(materialRefsByTask).length
               ? {
                   materialRefs: {

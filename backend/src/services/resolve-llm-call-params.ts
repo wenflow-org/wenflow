@@ -32,6 +32,8 @@ export interface LlmGenerationParams {
   temperature?: number;
   topP?: number;
   maxTokens?: number;
+  /** 单次 prompt 调用的最大尝试次数（含首次）；缺省由 skill 的 retryStrategy/code 默认决定 */
+  maxAttempts?: number;
   /** 'json_object' = 请求附 response_format（解码层强制 JSON；仅 json 媒介技能生效，composer 把关） */
   responseFormat?: 'none' | 'json_object';
 }
@@ -66,6 +68,7 @@ export interface ResolveLlmGenerationParamsInput {
     temperature?: number | null;
     topP?: number | null;
     maxTokens?: number | null;
+    maxAttempts?: number | null;
     /** 'json_object' = 强制 JSON；'none'/缺省 = 用通道默认 */
     responseFormat?: string | null;
   } | null;
@@ -97,6 +100,7 @@ export interface ResolveLlmGenerationParamsInput {
       temperature?: number | null;
       topP?: number | null;
       maxTokens?: number | null;
+      maxAttempts?: number | null;
       responseFormat?: string | null;
     } | null;
   } | null;
@@ -241,6 +245,9 @@ export function resolveLlmGenerationParams(
     temperature: temperature.value,
     topP: topP.value,
     maxTokens: maxTokens.value,
+    ...(typeof skillOverride?.maxAttempts === 'number' && Number.isInteger(skillOverride.maxAttempts)
+      ? { maxAttempts: Math.min(5, Math.max(1, skillOverride.maxAttempts)) }
+      : {}),
     responseFormat: responseFormat.value ?? 'none',
     sources: {
       model: model.source,
@@ -331,7 +338,7 @@ export async function resolveLlmCallParams(
         temperature: route.temperature,
         maxTokens: route.maxTokens,
         // 通道级结构化输出默认（platform_api_configs.defaultResponseFormat）
-        responseFormat: (route as any).responseFormat ?? null,
+        responseFormat: route.responseFormat ?? null,
         // skill 级覆盖（paramOverrides JSON）经 ResolvedRoute 透传，供 skill-override 层
         skillParamOverrides: (route as any).skillParamOverrides ?? null,
       };

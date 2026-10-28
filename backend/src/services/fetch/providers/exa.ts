@@ -14,6 +14,7 @@
  */
 
 import { safeHttpRequest } from '../../../utils/safe-http';
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import { FetchError } from '../types';
 import type {
   FetchCallOptions,
@@ -40,8 +41,8 @@ export interface ExaFetchConfig {
 export function readExaFetchConfig(): ExaFetchConfig {
   const timeout = Number(process.env.FETCH_TIMEOUT_MS || process.env.SEARCH_TIMEOUT_MS);
   return {
-    endpoint: (process.env.EXA_CONTENTS_URL || '').trim() || DEFAULT_ENDPOINT,
-    apiKey: (process.env.EXA_API_KEY || '').trim(),
+    endpoint: readPluginProviderField('web', 'exa', 'fetchEndpoint') || DEFAULT_ENDPOINT,
+    apiKey: readPluginProviderSecret('web', 'exa'),
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : DEFAULT_TIMEOUT_MS,
   };
 }

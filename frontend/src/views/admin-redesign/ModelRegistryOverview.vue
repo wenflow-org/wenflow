@@ -32,21 +32,25 @@
                   <td class="mono">{{ alias.alias }}</td>
                   <td>
                     <span class="mk-badge" :class="alias.source === 'db-override' ? 'mk-badge--warn' : 'mk-badge--muted'">
-                      {{ alias.source === 'db-override' ? '平台覆盖' : '平台内置' }}
+                      {{ alias.source === 'db-override' ? '界面覆盖' : '内置默认' }}
                     </span>
                   </td>
                   <td class="mono">{{ alias.members.length ? alias.members.join(' → ') : '（无可用模型）' }}</td>
-                  <td class="mono">{{ alias.selected ?? '—' }}</td>
+                  <td class="mono">
+                    <template v-if="alias.selected">{{ alias.selected }}</template>
+                    <span v-else class="mk-na">—</span>
+                  </td>
                   <td>
-                    <span class="mono">{{ alias.selectedWhenRequiringThinking ?? '—' }}</span>
+                    <span v-if="alias.selectedWhenRequiringThinking" class="mono">{{ alias.selectedWhenRequiringThinking }}</span>
+                    <span v-else class="mk-na">—</span>
                     <span v-if="alias.degradedWhenRequiringThinking" class="mk-badge mk-badge--warn ac-mr-badge" title="候选模型都不支持思考，已退回该别名的第一个模型。发起请求时会自动去掉思考参数">降级</span>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="这些别名以平台配置为准">
-            平台覆盖的别名：
+          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="这些别名以界面配置为准">
+            界面覆盖的别名：
             <span v-for="alias in data.aliases.filter((a) => a.dbMembers)" :key="`db-${alias.alias}`" class="mono ac-mr-note__item">
               {{ alias.alias }} = {{ alias.dbMembers?.join(', ') }}
             </span>
@@ -59,17 +63,10 @@
         <section v-if="shows('providers')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型供应商与能力限额</h3>
-            <span class="mk-card__meta" title="模型目录来自配置文件，改动后自动生效，此处只读。降级时只更换模型，连接地址与密钥不变">
-              只读 · 来自配置文件
+            <span class="mk-card__meta">
+              只读
             </span>
           </div>
-          <!-- 这张卡决定什么（2026-10-16 用户走查：「下面那个卡片是设计意义是什么」）。
-               原卡头只写「只读 · 来自配置文件」，读者拿不到「所以呢」——限额到底是摆设还是真在生效。
-               一句说清它的三类作用，长了反而没人读。 -->
-          <p class="ac-mr-lead">
-            平台会路由的模型只有下面登记的这些。档位决定走对话还是推理通道，限额决定单次输出长度、思考参数与并发，
-            降级时只在模型之间切换，连接地址与密钥不动。
-          </p>
           <p v-if="data.registry?.source === 'embedded-fallback'" class="ac-mr-note">
             未读到配置文件，当前为内置默认目录：{{ data.registry?.path }}
           </p>
@@ -134,16 +131,31 @@
                       >⚠</span>
                     </td>
                     <!-- 档位列：表头有「档位」而此前缺这一格，整行会右移、数值与标签错配 -->
-                    <td><span class="mk-badge mk-badge--muted">{{ model.tier || '—' }}</span></td>
+                    <td>
+                      <span v-if="model.tier" class="mk-badge mk-badge--muted">{{ model.tier }}</span>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td>
                       <span class="mk-badge" :class="model.capabilities.supportsThinking ? 'mk-badge--ok' : 'mk-badge--muted'">
                         {{ model.capabilities.supportsThinking ? '支持' : '不支持' }}
                       </span>
                     </td>
-                    <td>{{ model.capabilities.supportsReasoningEffort ? '支持' : '—' }}</td>
-                    <td class="mono">{{ model.limits.maxOutputTokens ?? '—' }}</td>
-                    <td class="mono">{{ model.limits.defaultMaxTokens ?? '—' }}</td>
-                    <td class="mono">{{ model.limits.reasoningReserveTokens || '—' }}</td>
+                    <td>
+                      <span v-if="model.capabilities.supportsReasoningEffort">支持</span>
+                      <span v-else class="mk-na">—</span>
+                    </td>
+                    <td class="mono">
+                      <template v-if="model.limits.maxOutputTokens != null">{{ model.limits.maxOutputTokens }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
+                    <td class="mono">
+                      <template v-if="model.limits.defaultMaxTokens != null">{{ model.limits.defaultMaxTokens }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
+                    <td class="mono">
+                      <template v-if="model.limits.reasoningReserveTokens != null">{{ model.limits.reasoningReserveTokens }}</template>
+                      <span v-else class="mk-na">—</span>
+                    </td>
                     <td class="mono">{{ model.limits.maxParallelRequests ?? '不限' }}</td>
                     <td class="mono">
                       <template v-if="model.fallbacks.length">
@@ -272,6 +284,13 @@ interface ModelRegistryOverviewData {
     defaultEvaluationModelResolved?: string | null
     defaultEvaluationModelSource?: 'alias' | 'concrete' | 'unset'
   }
+  /** 运行时实际默认（含 env 兜底来源）；defaults 只报平台行上配了什么 */
+  runtimeDefaults?: {
+    model: string | null
+    source: 'ui' | 'env' | 'none'
+    reasoningModel: string | null
+    reasoningSource: 'ui' | 'env' | 'none'
+  }
   fallbackChains: Array<{
     model: string
     fallbacks: string[]
@@ -285,7 +304,7 @@ interface ModelRegistryOverviewData {
 }
 
 /* 分区裁剪（2026-10-14 用户拍板；2026-10-15 合并后收敛为两片）：宿主按域挂本组件的切片——
-   「别名映射」是路由域事实，归「路由与调用」页签；「providers」= 供应商与能力限额合并块，
+   「别名映射」是路由域事实，归「调用与健康」页签；「providers」= 供应商与能力限额合并块，
    留「接入与模型」。切片只裁剪渲染范围，数据仍是一次 getModelRegistry。 */
 type MrPart = 'aliases' | 'providers'
 /* 默认值就地写死（不能引用本地常量：defineProps 会被提升到 setup 之外，编译器会拦下） */
@@ -301,7 +320,7 @@ const emit = defineEmits<{
   aliases: [aliases: string[]]
   /** 路由解析结果回传宿主（2026-10-15「所配即所得」）：宿主在三条角色行下展示
    *  「实际生效 / 来源 / 降级备用」，原解析结果表退役 */
-  defaults: [payload: { defaults: ModelRegistryOverviewData['defaults']; models: ModelRegistryOverviewData['models']; runtime?: ModelRegistryOverviewData['runtime'] }]
+  defaults: [payload: { defaults: ModelRegistryOverviewData['defaults']; models: ModelRegistryOverviewData['models']; runtime?: ModelRegistryOverviewData['runtime']; runtimeDefaults?: ModelRegistryOverviewData['runtimeDefaults'] }]
 }>()
 
 const data = ref<ModelRegistryOverviewData | null>(null)
@@ -390,7 +409,12 @@ async function refresh(force = false): Promise<void> {
     emit('aliases', (data.value?.aliases ?? []).map((a) => a.alias).filter(Boolean))
     // 路由解析结果回传宿主（「所配即所得」行内展示；即使只渲染 aliases 切片也照发——数据同源）
     if (data.value) {
-      emit('defaults', { defaults: data.value.defaults, models: data.value.models, runtime: data.value.runtime })
+      emit('defaults', {
+        defaults: data.value.defaults,
+        models: data.value.models,
+        runtime: data.value.runtime,
+        runtimeDefaults: data.value.runtimeDefaults
+      })
     }
   } catch (error: unknown) {
     failed.value = true
@@ -421,14 +445,6 @@ defineExpose({ refresh })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-/* 卡首一句「这张表决定什么」（2026-10-16 用户走查）：比正文轻一档、比表尾注重一档，
-   读者扫一眼卡头就知道限额是真在生效的东西，不是摆设。 */
-.ac-mr-lead {
-  margin: 8px 14px 0;
-  color: var(--mk-ink);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.65;
-}
 /* 上游未登记折叠：默认收起（只在排查「某模型为什么用不了」时展开） */
 .ac-mr-upstream { margin: 4px 0 0; }
 .ac-mr-upstream__body {
@@ -450,9 +466,10 @@ defineExpose({ refresh })
 /* 模型供应商组（2026-10-15 合并块）：供应商=组头行，其模型=组内能力行。
    组头沿用 mrow 词汇（方块徽标 + 名/用途 + id/承载/端点 + 状态徽标），但进水表格后
    去掉卡片描边/底色，改由行分隔线与缩进承担层级。 */
+/* 分组行不覆写内边距：跟随 .mk-table td 的档位节奏（同 SkillReconciliation 判例，
+   低于 SPEC §3 的 40px 行高下限即视为不合规）。 */
 .ac-mr-pgroup > td {
   background: var(--mk-surface-2);
-  padding: 8px 12px;
 }
 .ac-mr-pgroup .ac-mr-mrow--flat {
   padding: 0;

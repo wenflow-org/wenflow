@@ -35,6 +35,10 @@
     "prompts:sync-core": "npm run runtime:validate && ts-node src/scripts/ensure-core-agent-prompts.ts --sync",
     "constants:check": "ts-node src/scripts/check-constants-provenance.ts",
     "constants:report": "ts-node src/scripts/report-unregistered-constants.ts",
+    "preset:invariants": "ts-node --transpile-only scripts/audit-preset-invariants.ts",
+    "preset:invariants:db": "ts-node --transpile-only scripts/audit-preset-invariants.ts --with-db",
+    "offline:eval": "node scripts/offline-eval/run.mjs --target=all",
+    "offline:eval:selftest": "node scripts/offline-eval/run.mjs --selftest",
     "prompts:lint": "ts-node src/scripts/lint-prompts.ts",
     "prompts:check-handoff": "ts-node src/scripts/check-input-handoffs.ts",
     "prompts:snapshots": "ts-node src/scripts/generate-agent-snapshots.ts",
@@ -50,8 +54,9 @@
     "prompts:fields-sync:check": "ts-node src/scripts/check-core-fields-sync.ts --report",
     "prompts:payload-prefix:check": "ts-node src/scripts/check-payload-prefix-stability.ts",
     "prompts:payload-prefix:check:strict": "ts-node src/scripts/check-payload-prefix-stability.ts --strict",
+    "prompts:threshold-coupling:check": "ts-node src/scripts/check-prompt-threshold-coupling.ts",
     "prompts:orchestration:sync": "ts-node src/scripts/field-routing-orchestration-sync.ts",
-    "prompts:check:all": "npm run prompts:lint && npm run prompts:check-handoff:strict && npm run prompts:snapshots:check && npm run prompts:drift-check && npm run retired:check && npm run prompts:skills:check && npm run prompts:data-source:check && npm run prompts:yaml:check && npm run prompts:fields-sync:check && npm run prompts:payload-prefix:check:strict",
+    "prompts:check:all": "npm run prompts:lint && npm run prompts:check-handoff:strict && npm run prompts:snapshots:check && npm run prompts:drift-check && npm run retired:check && npm run prompts:skills:check && npm run prompts:data-source:check && npm run prompts:yaml:check && npm run prompts:fields-sync:check && npm run prompts:payload-prefix:check:strict && npm run prompts:threshold-coupling:check",
     "prompts:check-handoff:strict": "ts-node src/scripts/check-input-handoffs.ts --strict",
     "prompts:core:check": "npm run runtime:validate && ts-node src/scripts/check-core-hash-parity.ts",
     "prompts:runtime-contract:check": "npm run runtime:validate && ts-node src/scripts/check-prompt-runtime-contract-metadata-parity.ts",
@@ -119,7 +124,7 @@
   "author": "老哥",
   "license": "MIT",
   "engines": {
-    "node": ">=20.17.0"
+    "node": ">=22.23.4"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -164,6 +169,8 @@
     "typescript": "^5.3.3"
   },
   "overrides": {
-    "tar": ">=7.5.21"
+    "tar": ">=7.5.21",
+    "follow-redirects": "^1.16.1",
+    "ip-address": "^10.7.4"
   }
 }

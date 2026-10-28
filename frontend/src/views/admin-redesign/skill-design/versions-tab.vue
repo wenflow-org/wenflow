@@ -6,7 +6,7 @@
       <header class="mk-section__head">
         <h4>在线变体（A/B 实验）</h4>
         <span class="sdp-sec-meta">
-          按用户分流，同一用户恒定进同一变体 · 指标为近 7 天 · 新变体内容克隆自既有版本
+          指标为近 7 天
         </span>
       </header>
       <p v-if="variantMsg" class="sdp-versions-msg" :class="{ 'is-err': variantErr }">{{ variantMsg }}</p>
@@ -89,10 +89,11 @@
         </label>
         <label class="sdp-var__field">
           源版本
-          <select v-model.number="variantNewSource" class="sdp-var__sel">
-            <option :value="variantBaseline.version">当前基线 v{{ variantBaseline.version }}</option>
-            <option v-for="v in variantSourceOptions" :key="v.version" :value="Number(v.version)">v{{ v.version }}</option>
-          </select>
+          <MkSelect
+            v-model="variantNewSource"
+            :options="variantSourceSelectOptions"
+            aria-label="源版本"
+          />
         </label>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="variantCreating" @click="createVariant">
           {{ variantCreating ? '创建中…' : '创建变体' }}
@@ -101,7 +102,7 @@
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="variantCorePublishing || !variantNewKey"
-          title="需先在协议页签保存核心文件。发布前的检查照常执行，不替换基线、不改技能源文件"
+          title="需先在协议页签保存核心文件"
           @click="publishCoreAsVariant"
         >
           {{ variantCorePublishing ? '发布中…' : '把当前核心文件改动发布为变体' }}
@@ -236,6 +237,7 @@ import { toast } from '@/utils/toast'
 import { coreShortHash, errText } from './sdp-shared'
 import { versionStatusText } from '../statusText'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 const emit = defineEmits<{ (e: 'core-rolled-back'): void; (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
@@ -263,6 +265,20 @@ const variantNewSource = ref<number | null>(null)
 
 const baselineRemainder = computed(() => Math.max(0, 100 - variantArms.value.reduce((a, v) => a + (Number(v.trafficWeight) || 0), 0)))
 const variantSourceOptions = computed(() => promptVersions.value.filter((v) => Number(v.version) !== variantBaseline.value?.version))
+/** 源版本下拉（MkSelect）：基线 + 其他 Prompt 版本；值保留 number */
+const variantSourceSelectOptions = computed<Array<{ value: number; label: string }>>(() => {
+  const options: Array<{ value: number; label: string }> = []
+  if (variantBaseline.value) {
+    options.push({
+      value: variantBaseline.value.version,
+      label: `当前基线 v${variantBaseline.value.version}`
+    })
+  }
+  for (const v of variantSourceOptions.value) {
+    options.push({ value: Number(v.version), label: `v${v.version}` })
+  }
+  return options
+})
 /** 下一个可用变体键：A→B→C→D 里挑未占用的（loadVariants 与脏态基线共用） */
 const nextAvailableKey = computed(() => {
   const used = new Set(variantArms.value.map((v) => v.variant))
@@ -709,7 +725,6 @@ watch(() => props.skillId, () => {
 /* 权重非法（空/越界）：字段级红边提示（#117） */
 .sdp-var__w--err { border-color: var(--mk-red); background: var(--mk-red-bg); }
 .sdp-var__key { width: 56px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
-.sdp-var__sel { max-width: 180px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
 .sdp-var__create { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 10px; border: 1px dashed var(--mk-line); border-radius: 12px; background: var(--mk-surface); }
 .sdp-var__field { display: inline-flex; gap: 6px; align-items: center; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 

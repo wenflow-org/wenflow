@@ -68,6 +68,13 @@ describe('core-compiler：compileCoreFile 确定性渲染', () => {
     expect(prompt).toMatch(/^- dialogue：/m);
   });
 
+  it('使用通道：stateAdvance=false 时 state 显式标注不推进（控制语义不得静默丢失）', () => {
+    const core = { ...loadSample(), stateAdvance: false };
+    const { prompt } = compileCoreFile(core);
+    expect(prompt).toMatch(/^- state（不推进）：/m);
+    expect(prompt).not.toMatch(/^- state（可推进）：/m);
+  });
+
   it('输出字段表：三要素渲染 + 当轮标记', () => {
     const { prompt } = compileCoreFile(loadSample());
     expect(prompt).toContain('- reply · string — 本轮回复，口语化，一次只问一个问题（当轮）');

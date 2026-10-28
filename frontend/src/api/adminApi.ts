@@ -8,11 +8,6 @@ const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
    负载下可超默认 30s 被 axios abort——走查 F8-3 的 net::ERR_ABORTED @30007ms）。
    分析页非操作面，单点放宽到 2min；其余 admin 请求保持 30s 默认不变。 */
 const TOKEN_COST_REQUEST_TIMEOUT_MS = 120000;
-/* 能力探针（POST /admin/system/capabilities/probe）是管理端唯一会「同步串行跑多组 LLM 连通性检查」的接口：
-   服务端每组金丝雀预算 CANARY_TIMEOUT_MS=60s，最多 5 组按路由指纹分组串行 → 最坏 ~300s。
-   管理端 axios 默认 30s 会先 abort，用户看到的是「按钮恢复、结果原样不动、无失败提示」的假静默。
-   此处单独放宽到服务端预算上限 + 余量，让客户端等到服务端结论（含 failureCode）。 */
-const CAPABILITY_PROBE_REQUEST_TIMEOUT_MS = 310000;
 
 /**
  * 管理员会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
@@ -303,7 +298,11 @@ export const adminUsersApi = {
   /**
    * 获取用户列表
    */
-  getUsers: async (params?: { page?: number; limit?: number; search?: string; role?: string; status?: string; includeTest?: boolean }) => {
+  getUsers: async (params?: {
+    page?: number; limit?: number; search?: string; role?: string; status?: string;
+    includeTest?: boolean;
+    /** 保留参数（口径开关已退役，2026-10-21）：默认 = 全部非虚拟账号 */
+  }) => {
     return adminAxios.get('/admin/users', { params });
   },
 
@@ -380,6 +379,7 @@ export const adminLearnerModelsApi = {
     riskOnly?: boolean;
     excludeTest?: boolean;
     includeTest?: boolean;
+    /** 保留参数（口径开关已退役，2026-10-21）：默认 = 全部非虚拟账号 */
     page?: number;
     limit?: number;
   }) => {
@@ -421,7 +421,7 @@ export const adminMemoryTracesApi = {
     userId?: string;
     limit?: number;
     includeVirtual?: boolean;
-    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只看虚拟学习者 + 测试/审计账号 */
+    /** 保留参数（口径开关已退役，2026-10-21）：只看非虚拟账号 */
     testOnly?: boolean;
   }) => {
     return adminAxios.get('/admin/memory-traces', { params });
@@ -437,7 +437,12 @@ export const adminMemoryTracesApi = {
 export const adminMemoryReviewApi = {
   /** 跨用户总览。sort/order = 服务端排序（name / traces / due / weak / strength / lastReviewed），
    *  在切片之前生效（分页列表只在当前页排会误导）。 */
-  overview: async (params?: { limit?: number; offset?: number; includeVirtual?: boolean; testOnly?: boolean; sort?: string; order?: 'asc' | 'desc' }) => {
+  overview: async (params?: {
+    limit?: number; offset?: number;
+    includeVirtual?: boolean;
+    /** 保留参数（口径开关已退役，2026-10-21）：默认 = 全部非虚拟账号 */
+    sort?: string; order?: 'asc' | 'desc';
+  }) => {
     return adminAxios.get('/admin/memory-review', { params });
   },
   /**
@@ -471,7 +476,7 @@ export const adminMemoryReviewApi = {
     canonicals: string[],
     options?: {
       includeNeedsReview?: boolean;
-      /** 确认执行的「需人工看」对（a ← b） */
+      /** 确认执行的「需人工确认」对（a ← b） */
       ambiguous?: Array<{ a: string; b: string }>;
       /** 确认清理的散键（dropCandidates.conceptKey） */
       drops?: string[];
@@ -494,7 +499,7 @@ export const adminMemoryReviewApi = {
     payload: {
       /** 驳回的归并建议（proposals.canonical） */
       canonicals?: string[];
-      /** 驳回的「需人工看」对（ambiguous 的 a/b） */
+      /** 驳回的「需人工确认」对（ambiguous 的 a/b） */
       ambiguous?: Array<{ a: string; b: string }>;
       /** 驳回的散键清理建议（dropCandidates.conceptKey） */
       drops?: string[];
@@ -520,11 +525,14 @@ export const adminTeachingSessionsApi = {
     /** 按路径收窄（学习者详情页的路径作用域选择器）：teaching_sessions.learningPathId 单列直连 */
     pathId?: string;
     status?: string;
+    /** 课堂类型：tutor=正课 / review=复习课 / extension=延伸课（后两者不结算任务） */
+    mode?: 'tutor' | 'review' | 'extension';
     onlyWithAdvisory?: boolean;
     onlyMissingWrapup?: boolean;
     includeTest?: boolean;
-    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的会话 */
+    /** 保留参数（口径开关已退役）：默认全部非虚拟账号 */
     testOnly?: boolean;
+    qaOnly?: boolean;
   }) => {
     return adminAxios.get('/admin/teaching-sessions', { params });
   }
@@ -835,6 +843,10 @@ export const adminModelProvidersApi = {
   addModel: async (providerId: string, data: Record<string, unknown>) =>
     adminAxios.post(`/admin/model-providers/${encodeURIComponent(providerId)}/models`, data),
 
+  /** 批量引入（模型选择器确认）：一次写盘，任一 id 冲突整批拒绝 */
+  addModels: async (providerId: string, models: Array<Record<string, unknown>>) =>
+    adminAxios.post(`/admin/model-providers/${encodeURIComponent(providerId)}/models/bulk`, { models }),
+
   updateModel: async (providerId: string, modelId: string, data: Record<string, unknown>) =>
     adminAxios.patch(`/admin/model-providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}`, data),
 
@@ -853,6 +865,7 @@ export const adminModelProvidersApi = {
 export interface InfraModelEntryView {
   kind: 'embedding' | 'rerank';
   provider: 'bge';
+  connectionMode: 'inherit' | 'own';
   endpoint: string;
   model: string;
   apiKeyEnv: string;
@@ -861,12 +874,14 @@ export interface InfraModelEntryView {
   dimensions: number | null;
   configured: boolean;
   configSource: 'db' | 'env';
-  keySource: 'db' | 'env' | 'inherit' | 'none';
+  keySource: 'db' | 'env' | 'inherit' | 'platform' | 'none';
   keyHint: string | null;
 }
 
 export interface InfraModelsView {
   required: boolean;
+  /** 平台通道地址（沿用连接时展示「复用主通道」） */
+  platformBaseUrl: string;
   embedding: InfraModelEntryView;
   rerank: InfraModelEntryView;
   warnings: string[];
@@ -894,33 +909,6 @@ export const adminInfraModelsApi = {
   test: async (kind: 'embedding' | 'rerank') => adminAxios.post('/admin/infra-models/test', { kind })
 };
 
-/**
- * AI 能力探测设置（开关 + 间隔；默认关闭）
- */
-export const adminCapabilityProbeApi = {
-  getSettings: async () => {
-    return adminAxios.get('/admin/settings/capability-probe');
-  },
-  updateSettings: async (payload: { enabled?: boolean; intervalMs?: number }) => {
-    return adminAxios.put('/admin/settings/capability-probe', payload);
-  }
-};
-
-/**
- * AI 能力健康快照（5 个核心能力 + 主动探测）
- */
-export const adminSystemApi = {
-  getCapabilities: async () => {
-    return adminAxios.get('/admin/system/capabilities');
-  },
-  probeCapabilities: async () => {
-    // 见 CAPABILITY_PROBE_REQUEST_TIMEOUT_MS：与服务端金丝雀串行预算对齐，不用默认 30s
-    return adminAxios.post('/admin/system/capabilities/probe', undefined, {
-      timeout: CAPABILITY_PROBE_REQUEST_TIMEOUT_MS,
-    });
-  }
-};
-
 // ============================================================
 // 健康中心（漂移/健康提醒聚合，编排图页顶部健康区数据源）
 // 契约：GET /api/admin/health-center（60s 缓存，refresh=1 强制）、
@@ -941,7 +929,9 @@ export type HealthCenterItemId =
   | 'w2-registration'
   | 'w3-wiring'
   | 'override-record'
-  | 'runtime-prompt';
+  | 'runtime-prompt'
+  | 'runtime-degradation'
+  | 'runtime-outbox-dead';
 
 /** 基准元数据：谁是真源（DRIFT_BASELINE_SURVEY §4.1） */
 export type HealthCenterBase =
@@ -1132,9 +1122,8 @@ export const adminFeedbackApi = {
     status?: 'new' | 'triaged' | 'resolved' | 'dismissed';
     userId?: string;
     taskId?: string;
-    /** 用户域视角（2026-10-10「真实/测试」互斥拍板）：默认真实；testOnly=true 只看虚拟学习者与测试账号 */
+    /** includeTest=true 是按 id 直查虚拟账号的逃生口（不是页面视角）；默认全部非虚拟账号 */
     includeTest?: boolean;
-    testOnly?: boolean;
   }) => {
     return adminAxios.get('/admin/feedback', { params });
   },
@@ -1194,7 +1183,11 @@ export const adminTokenCostApi = {
  * Goal 会话管理（目标对话 → 路径生成源头）
  */
 export const adminGoalConversationsApi = {
-  list: async (params?: { page?: number; limit?: number; status?: string; userId?: string; includeTest?: boolean; testOnly?: boolean }) => {
+  list: async (params?: {
+    page?: number; limit?: number; status?: string; userId?: string;
+    includeTest?: boolean;
+    /** 保留参数（口径开关已退役，2026-10-21）：默认 = 全部非虚拟账号 */
+  }) => {
     return adminAxios.get('/admin/goal-conversations', { params });
   },
   getDetail: async (id: string) => {
@@ -1207,8 +1200,10 @@ export const adminGoalConversationsApi = {
     // LLM 上游调用（Path 重生成）：放宽到 AI 请求超时
     return adminAxios.post(`/admin/goal-conversations/${encodeURIComponent(id)}/regenerate-path`, undefined, { timeout: AI_REQUEST_TIMEOUT });
   },
-  getStats: async (includeTest?: boolean, testOnly?: boolean) => {
-    return adminAxios.get('/admin/goal-conversations/stats/overview', { params: { includeTest, testOnly: testOnly || undefined } });
+  getStats: async (includeTest?: boolean, testOnly?: boolean, qaOnly?: boolean) => {
+    return adminAxios.get('/admin/goal-conversations/stats/overview', {
+      params: { includeTest, testOnly: testOnly || undefined, qaOnly: qaOnly || undefined },
+    });
   }
 };
 
@@ -1259,6 +1254,38 @@ export const adminMcpApi = {
   listMcpTools: async (id: string, refresh = false) => {
     return adminAxios.get(`/admin/mcp/tools/${encodeURIComponent(id)}/mcp-tools`, {
       params: refresh ? { refresh: 1 } : undefined
+    });
+  }
+};
+
+/**
+ * 插件启停（2026-10-24）：插件 = 能力 bundle，停用后成员 Skill 在统一分发点被拦截。
+ * 状态落 platform_settings.pluginStates；缺省全启用。
+ */
+export const adminPluginsApi = {
+  list: async () => {
+    return adminAxios.get('/admin/plugins');
+  },
+  setEnabled: async (pluginId: string, enabled: boolean) => {
+    return adminAxios.put(`/admin/plugins/${encodeURIComponent(pluginId)}`, { enabled });
+  },
+  /**
+   * 插件外部服务配置（2026-10-24「联网是配置模型吗」）：
+   * 联网 = 搜索 / 抓取 provider；决策 = 判定模型端点；生图 = 生图端点与模型。
+   * 与 Skill 的 LLM 模型绑定无关。
+   */
+  getConfig: async () => {
+    return adminAxios.get('/admin/plugins/config');
+  },
+  saveConfig: async (
+    pluginId: string,
+    providers: Record<string, Record<string, string | null> & { clearKey?: boolean }>,
+    /** 通道优先级（channelId → providerId 顺序）；不传 = 不动已保存的顺序 */
+    orders?: Record<string, string[]>
+  ) => {
+    return adminAxios.put(`/admin/plugins/config/${encodeURIComponent(pluginId)}`, {
+      providers,
+      ...(orders ? { orders } : {})
     });
   }
 };
@@ -1320,12 +1347,14 @@ export const adminSkillsApi = {
   /** 批量套用同一份通道/模型/参数/兜底配置到多个 skill */
   bulkApplySkillModelConfig: async (data: {
     skillIds: string[];
-    endpoint: string;
-    apiKey: string;
+    endpoint?: string;
+    apiKey?: string;
     model?: string;
     tier?: string;
     paramOverrides?: Record<string, number> | null;
     fallbackChain?: string[] | null;
+    /** 只清空模型覆盖（改为跟随平台默认），其余字段保持不变；与套用字段互斥 */
+    clearModel?: boolean;
   }) => {
     return adminAxios.post('/admin/skill-model-configs/bulk-apply', data);
   },
@@ -1488,7 +1517,12 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/${id}/projection-token`, data || {});
   },
 
-  draftVirtualLearnerStories: async (id: string, data?: { /** 样本类型：'student' 生成传统学生故事 */ sampleType?: string }) => {
+  draftVirtualLearnerStories: async (id: string, data?: {
+    /** 样本类型：'student' 生成传统学生故事 */
+    sampleType?: string;
+    /** 生成方向（可选）：具体学科 / 考试节点 / 情境，后端转成 scenario-designer 约束 */
+    direction?: string;
+  }) => {
     // LLM 上游调用（scenario-designer skill）：放宽到 AI 请求超时
     return adminAxios.post(`/admin/virtual-learners/${id}/draft-stories`, data || {}, { timeout: AI_REQUEST_TIMEOUT });
   },
@@ -1713,16 +1747,8 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/wrapup`);
   },
 
-  /* ===== 批量新建（服务端队列） ===== */
-  batchCreateLearners: async (data: { rows: Array<{ name: string; storyCount: number }>; cohort?: string; note?: string }) => {
-    return adminAxios.post('/admin/virtual-learners/batch-create', data);
-  },
-  batchCreateJob: async (batchId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/batch-create/${batchId}`);
-  },
-  batchCreateRetry: async (batchId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/batch-create/${batchId}/retry`);
-  },
+  /* 批量新建（服务端队列）2026-10-25 退役：建号只在卡库（导入卡 / 平台生产 / 预置一键加载），
+     虚拟学习者页只做「选角 → 派生」（cardsClone）。端点与组件同步删除，不留死接口。 */
 
   updateSessionSimulationConfig: async (
     sessionId: string,
@@ -1730,6 +1756,12 @@ export const adminVirtualLearnersApi = {
       frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
       model?: string | null;
       simulationClock?: { baseDate?: string; enabled?: boolean; autoAdvance?: boolean };
+      /** #85 双臂标签；null 清除 */
+      experimentArm?: 'A' | 'B' | null;
+      /** 延伸学探针（#124）；null 清除 */
+      extensionProbe?: boolean | null;
+      /** 建议处置采样；null 清除 */
+      advisoryResponse?: 'keep' | 'later' | 'preview' | null;
     }
   ) => {
     return adminAxios.put(`/admin/virtual-learners/sessions/${sessionId}/simulation-config`, data);
@@ -2195,9 +2227,14 @@ export const adminSessionsApi = {
     return adminAxios.delete(`/admin/sessions/${encodeURIComponent(sessionId)}`);
   },
 
-  /** 批量吊销：指定 adminId（缺省为全部）的未吊销会话；excludeCurrent=true 保留请求者当前会话 */
+  /** 批量吊销：指定 adminId（缺省为全部）的活跃会话；excludeCurrent=true 保留请求者当前会话 */
   revokeAllAdminSessions: async (payload: { adminId?: string; excludeCurrent?: boolean }) => {
     return adminAxios.post('/admin/sessions/revoke-all', payload);
+  },
+
+  /** 清理已结束会话（已吊销 / 已过期）：只删历史行，登录审计不受影响 */
+  cleanupAdminSessions: async (payload: { adminId?: string }) => {
+    return adminAxios.post('/admin/sessions/cleanup', payload);
   },
 };
 
@@ -2337,8 +2374,9 @@ export const adminLearningContentApi = {
     /** 按学习者收窄（学习者详情页的路径作用域选择器要列出「这个人名下的路径」） */
     userId?: string;
     includeTest?: boolean;
-    /** 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的路径 */
+    /** 保留参数（口径开关已退役）：默认全部非虚拟账号 */
     testOnly?: boolean;
+    qaOnly?: boolean;
   }) => {
     return adminAxios.get<{ success: boolean; data: { paths: LearningPathRow[]; pagination: { total: number; page: number; limit: number } } }>(
       '/admin/learning-content/paths',
@@ -2364,9 +2402,9 @@ export const adminLearningContentApi = {
   deletePath: async (id: string) => {
     return adminAxios.delete(`/admin/learning-content/paths/${encodeURIComponent(id)}`);
   },
-  getStats: async (includeTest?: boolean, testOnly?: boolean) => {
+  getStats: async (includeTest?: boolean, testOnly?: boolean, qaOnly?: boolean) => {
     return adminAxios.get<{ success: boolean; data: LearningContentStats }>('/admin/learning-content/stats', {
-      params: { includeTest, testOnly: testOnly || undefined },
+      params: { includeTest, testOnly: testOnly || undefined, qaOnly: qaOnly || undefined },
     });
   },
 };
@@ -2389,9 +2427,9 @@ export const adminDevtoolsApi = {
     );
   },
 
-  /** 死信重放（eventType 可选；缺省全部） */
-  requeueOutboxDead: async (eventType?: string) => {
-    return adminAxios.post('/admin/devtools/outbox/requeue-dead', { eventType });
+  /** 死信重放（eventType 可选；缺省全部；force 用于确认根因已修复后放行毒丸） */
+  requeueOutboxDead: async (eventType?: string, force?: boolean) => {
+    return adminAxios.post('/admin/devtools/outbox/requeue-dead', { eventType, ...(force ? { force: true } : {}) });
   },
 };
 
@@ -2427,3 +2465,63 @@ export const adminNotificationsApi = {
     return adminAxios.delete(`/admin/notifications/${encodeURIComponent(id)}`);
   },
 };
+
+/* ===== 运营可观测（2026-10-21）：批量吞吐 / 洞察可靠性 / 内容抽检 ===== */
+
+export interface ThroughputReportLike {
+  windowMinutes: number
+  minRpm: number
+  totalCalls: number
+  avgRpm: number
+  lowMinutes: number
+  longestLowRun: number
+  worstRpm: number
+  alert: boolean
+  alertReason: string | null
+  /** 是否有运行中的批次/会话；false 时空闲不告警（rpm 仍展示） */
+  idle?: boolean
+  activeSessions?: number
+  activeBatches?: number
+  activeLeases?: number
+}
+
+export interface ContentReviewItem {
+  messageId: number
+  sessionId: string
+  userId: string
+  content: string
+  label: { verdict: string; note?: string; labeledAt?: string } | null
+}
+
+export const adminOpsApi = {
+  throughput: async (params?: { window?: number; minRpm?: number }) => {
+    return adminAxios.get<{ success: boolean; data: ThroughputReportLike }>('/admin/ops/throughput', { params })
+  },
+  insightReliability: async (userId: string, pathId?: string) => {
+    return adminAxios.get<{ success: boolean; data: { n: number; hits: number; misses: number; hitRate: number | null } }>(
+      '/admin/ops/insight-reliability',
+      { params: { userId, ...(pathId ? { pathId } : {}) } }
+    )
+  },
+}
+
+export const adminContentReviewApi = {
+  list: async (params?: { days?: number; rate?: number; realOnly?: boolean; limit?: number }) => {
+    return adminAxios.get<{ success: boolean; data: {
+      windowDays: number
+      rate: number
+      sampled: number
+      labeled: number
+      coverage: number
+      incorrect: number
+      unsure: number
+      correct: number
+      errorRate: number | null
+      outsideSample: number
+      items: ContentReviewItem[]
+    } }>('/admin/content-review', { params })
+  },
+  label: async (payload: { messageId: number; verdict: 'correct' | 'incorrect' | 'unsure'; note?: string }) => {
+    return adminAxios.post('/admin/content-review/label', payload)
+  },
+}

@@ -10,8 +10,9 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { logger } from '../utils/logger';
+import { parseAllowedOrigins } from '../config/allowed-origins';
 import { resolveTrustProxySetting, assessAdminAllowlistRisk } from '../utils/trust-proxy';
-import { adminApiLimiter, globalApiLimiter } from '../middleware/api-rate-limit.middleware';
+import { adminApiLimiter, globalApiLimiter, writeApiLimiter } from '../middleware/api-rate-limit.middleware';
 import { csrfMiddleware } from '../middleware/csrf.middleware';
 import type { ApplicationLifecycle } from '../services/application-lifecycle.service';
 import type { ReadinessService } from '../services/readiness.service';
@@ -77,9 +78,7 @@ export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): exp
     logger.warn('[http-app] 生产环境未配置 CORS_ORIGIN，CORS/CSRF 白名单回退到 localhost 开发值，请尽快补配');
   }
   const corsOptions = {
-    origin: process.env.CORS_ORIGIN
-      ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
-      : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+    origin: parseAllowedOrigins(process.env.CORS_ORIGIN),
     credentials: true,
     optionsSuccessStatus: 200,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -112,6 +111,8 @@ export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): exp
 
   // 应用全局限流到 API 路由（admin 路径由 globalApiLimiter 跳过，走 adminApiLimiter 专属额度）
   app.use('/api/', globalApiLimiter);
+  // 写额度独立：读接口打满不会连带锁死发言/提交；admin 与健康检查不占用户写额度
+  app.use('/api/', writeApiLimiter);
   app.use('/api/admin/', adminApiLimiter);
 
   // 应用 CSRF 保护

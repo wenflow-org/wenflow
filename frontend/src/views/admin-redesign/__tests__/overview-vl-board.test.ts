@@ -124,7 +124,7 @@ beforeEach(() => {
 });
 
 describe('总览 row3 第三卡：虚拟学习者看板', () => {
-  it('row3 三栏：第三张卡是虚拟学习者，口径写明「仅虚拟学习者与测试账号」', async () => {
+  it('row3 三栏：第三张卡是虚拟学习者（卡名自明，不再复述「仅虚拟学习者与测试账号」）', async () => {
     const wrapper = await mountOverview();
 
     const row3 = wrapper.find('.row3');
@@ -132,7 +132,8 @@ describe('总览 row3 第三卡：虚拟学习者看板', () => {
     const card = vlCard(wrapper);
     expect(card.exists()).toBe(true);
     expect(card.find('.mk-card__title').text()).toBe('虚拟学习者');
-    expect(card.find('.mk-card__meta').text()).toContain('仅虚拟学习者与测试账号');
+    // 2026-10-21：卡名已说明这是虚拟学习者读数，卡头不再挂口径副文
+    expect(card.find('.mk-card__meta').exists()).toBe(false);
   });
 
   it('读的是本页已加载的 live 同源数据（六格读数全部是真读数）', async () => {
@@ -140,15 +141,16 @@ describe('总览 row3 第三卡：虚拟学习者看板', () => {
     const wrapper = await mountOverview();
 
     const text = vlCard(wrapper).text();
-    for (const label of ['学习者', '在跑会话', '自动驾驶并发', '无响应会话', '完成率', '系统失败率']) {
+    for (const label of ['学习者', '在跑运行', '自动驾驶并发', '无响应运行', '完成率', '系统失败率']) {
       expect(text).toContain(label);
     }
     expect(text).toContain('42'); // 学习者
-    expect(text).toContain('3'); // 在跑会话
+    expect(text).toContain('3'); // 在跑运行
     expect(text).toContain('2/10'); // 并发 used/limit
     expect(text).toContain('91%'); // 完成率取整
-    expect(text).toContain('今日调用 77 次'); // 卡底当日读数
-    expect(text).toContain('排队 1'); // 排队非零才出现
+    // 2026-10-22 用户：卡底「今日调用 N 次 / 排队 N」这类解释性文案不要，已删
+    expect(text).not.toContain('今日调用 77 次');
+    expect(text).not.toContain('排队 1');
   });
 
   it('加载中不给数字：六格显「…」，不把未加载渲染成 0', async () => {

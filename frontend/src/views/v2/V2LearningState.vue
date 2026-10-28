@@ -34,7 +34,7 @@
           <section class="card band">
             <div class="band__head">
               <div class="band__title">
-                <strong>掌握趋势 · 疲劳度 · 整体状态</strong>
+                <strong>训练负荷 · 疲劳度 · 整体状态</strong>
                 <!-- 空态不报「近 N 天」：无数据时没有跨度可言，写「近 10 天」会先承诺一张不存在的图 -->
                 <span v-if="hasAnyLoad" class="band__meta">{{ drawnSpanLabel }}</span>
               </div>
@@ -52,7 +52,7 @@
             <div class="band__body">
             <!-- 空态（无任何学习状态数据）：不渲染「当前状态四项」与图例——它们是为一张还没画出来的图
                  准备的注脚，先摆出来只会让人以为下面有图（2026-10-15 走查）。空态只留一块说明。
-                 当前状态四项（原体检卡 vitals：整体状态主指标 + 学习压力/掌握趋势/疲劳程度）：
+                 当前状态四项（原体检卡 vitals：整体状态主指标 + 学习压力/训练负荷/疲劳程度）：
                  原型该屏只认三张 KPI 卡（连续天数/本周分钟/已掌握知识点），这四项不删、
                  降级为趋势卡内的状态 meta 行——图里画的就是这四个指标，放这里口径自洽 -->
             <div v-if="hasAnyLoad" class="vitals vitals--meta">
@@ -77,7 +77,7 @@
                  2026-10-08 走查：两条阈值线原本在图内右侧浮着文字（自带 surface 底「压住曲线」），
                  窄屏下那段文字正好压在最陡的一段曲线上 —— 文字移到图例，图内只留虚线本体） -->
             <div v-if="hasAnyLoad" class="ff-legend">
-              <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
+              <span><i class="ff-dot ff-dot--fitness"></i>训练负荷</span>
               <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度</span>
               <span><i class="ff-dot ff-dot--lsb"></i>整体状态</span>
               <span v-if="zoneLines.length" class="ff-legend__zone">
@@ -104,7 +104,7 @@
                 </svg>
               </span>
               <strong>学习状态正在积累中</strong>
-              <p>完成第一个学习任务后开始记录。连续学习约 3 天，这里会出现你的掌握趋势、疲劳度与整体状态曲线。</p>
+              <p>完成第一个学习任务后开始记录。连续学习约 3 天，这里会出现你的训练负荷、疲劳度与整体状态曲线。</p>
               <router-link to="/learning-paths" class="chart__empty-cta">去开始学习</router-link>
             </div>
             <template v-else>
@@ -272,7 +272,7 @@
 
             <!-- 主次双按钮（原型 wf-advisory__actions）：采用建议 = primary 蓝渐变，保持原计划 = ghost。
                  调整策略禁用 replan 时「采用建议」禁用并在下方给原因 -->
-            <div class="advisory__actions">
+            <div v-if="hasKpiData && hasAdvisoryAction" class="advisory__actions">
               <button
                 type="button"
                 class="adv-btn adv-btn--primary"
@@ -282,7 +282,7 @@
               >采用建议</button>
               <button type="button" class="adv-btn adv-btn--ghost" :disabled="replanBusy" @click="keepSuggestion">保持原计划</button>
             </div>
-            <p v-if="adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，「采用建议」暂不可用。</p>
+            <p v-if="hasKpiData && hasAdvisoryAction && adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，「采用建议」暂不可用。</p>
             <!-- 回执行（原型 wf-advisory__done）：采用 / 保持成功后就地播报，不靠 toast 一次性带过 -->
             <p v-if="advisoryDone" class="advisory__done" role="status">{{ advisoryDone }}</p>
 
@@ -471,10 +471,10 @@
             </div>
             <div class="band__body">
             <ul class="legend">
-              <li><b class="dot dot--blue"></b>掌握趋势：长期学习积累的掌握水平，变化平缓</li>
+              <li><b class="dot dot--blue"></b>训练负荷：长期学习压力的累积，越高说明负荷越重，变化平缓</li>
               <li><b class="dot dot--purple"></b>疲劳度：近期学习压力的累积，变化较快</li>
-              <li><b class="dot dot--green"></b>整体状态＝掌握 − 疲劳：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
-              <li><b class="dot dot--amber"></b>保持规律学习让掌握趋势稳步上升。疲劳偏高时安排休息，避免长期处于低状态区</li>
+              <li><b class="dot dot--green"></b>整体状态＝训练负荷 − 疲劳：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
+              <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
             </ul>
             </div><!-- /band__body -->
           </section>
@@ -499,6 +499,7 @@ import request from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { metricsAPI } from '@/api/metrics';
 import { learningAPI } from '@/api/learning';
+import { aiTeachingAPI } from '@/api/aiTeaching';
 import { adjustmentModeBlockReason, replanModeForRecommendation, type PathAdjustmentPolicyLike } from '@/utils/replanSignal';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -527,14 +528,17 @@ const reviewOpen = ref(false);
 const metricOptions: Array<{ key: MetricKey; label: string }> = [
   { key: 'lsb', label: '整体状态' },
   { key: 'lss', label: '学习压力' },
-  { key: 'ktl', label: '掌握趋势' },
+  { key: 'ktl', label: '训练负荷' },
   { key: 'lf', label: '疲劳程度' }
 ];
 
-function toneOf(key: MetricKey, v: number): { tone: string; color: string; note: string } {
+function toneOf(key: MetricKey, v: number, mature?: boolean): { tone: string; color: string; note: string } {
   if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: 'var(--muted)', note: '积累中' };
   if (key === 'lsb') {
-    // LSB = KTL - LF（-100 ~ +100），分档对齐后端 <0/<20/<40/≥40 与状态分档文案
+    // 后端 mature=false：PMC 冷启动爬升期（KTL 基座未成熟）form<0 属正常，
+    // 不能按「严重疲劳」展示——与 /state/warnings、建议引擎同判据。
+    if (mature === false) return { tone: 'blue', color: 'var(--blue-deep)', note: '积累中' };
+    // LSB = KTL - LF（-100 ~ +100），分档对齐后端相对量判据与状态分档文案
     if (v < 0) return { tone: 'red', color: 'var(--red-ink)', note: '严重疲劳，优先休息' };
     if (v >= 40) return { tone: 'green', color: 'var(--green-ink)', note: '精力充沛' };
     if (v >= 20) return { tone: 'blue', color: 'var(--blue-deep)', note: '最优训练区' };
@@ -565,7 +569,7 @@ const metricCards = computed(() =>
       return { ...m, value: '—', unit: m.key === 'lsb' ? '' : '分', tone: 'red', color: 'var(--red-ink)', note: '读取失败' };
     }
     const v = current.value?.[m.key];
-    const t = toneOf(m.key, v);
+    const t = toneOf(m.key, v, current.value?.mature);
     return { ...m, value: v ?? '—', unit: m.key === 'lsb' ? '' : '分', ...t };
   })
 );
@@ -590,9 +594,10 @@ interface Zone {
 interface TrendPoint {
   date: string;
   label: string;
-  ktl: number | null;   // 掌握趋势
+  ktl: number | null;   // 长期训练负荷
   lf: number | null;    // 疲劳
   lsb: number | null;   // 整体状态 = KTL − LF
+  mature?: boolean;     // 该日 PMC 基座是否成熟（未成熟时不做疲劳分区）
   minutes: number;      // 当日时长（仅展示背景柱，不参与状态计算）
   zone: Zone | null;
   x: number;
@@ -605,11 +610,12 @@ interface TrendPoint {
 }
 
 const dailyLoad = ref<Array<{ date: string; minutes: number }>>([]);
-const stateTrends = ref<Array<{ date: string; ktl: number | null; lf: number | null; lsb: number | null }>>([]);
+const stateTrends = ref<Array<{ date: string; ktl: number | null; lf: number | null; lsb: number | null; mature?: boolean }>>([]);
 
 /** 分区基于 LSB（对齐 learning-state.service：LSB = KTL − LF，0-100） */
-function zoneOfLsb(lsb: number | null): Zone | null {
+function zoneOfLsb(lsb: number | null, mature?: boolean): Zone | null {
   if (lsb === null) return null;
+  if (mature === false) return { cls: 'optimal', label: '积累中' };
   if (lsb >= 40) return { cls: 'fresh', label: '精力充沛' };
   if (lsb >= 20) return { cls: 'optimal', label: '最优训练区' };
   if (lsb >= 0) return { cls: 'risk', label: '需要休息' };
@@ -652,8 +658,9 @@ const series = computed<Array<Omit<TrendPoint, 'x' | 'ky' | 'ly' | 'sy' | 'bx' |
       ktl: t?.ktl ?? null,
       lf: t?.lf ?? null,
       lsb,
+      mature: t?.mature,
       minutes: loadMap.get(key) ?? 0,
-      zone: zoneOfLsb(lsb)
+      zone: zoneOfLsb(lsb, t?.mature)
     });
   }
   return days;
@@ -782,7 +789,7 @@ const zoneLines = computed(() => {
 /** 读屏出口：SVG 本体 aria-hidden，纵轴口径写进容器的 aria-label（原型 1965） */
 const trendAriaLabel = computed(
   () =>
-    `近 ${activeSeries.value.length} 天的掌握趋势、疲劳度与整体状态曲线，柱为当日学习时长，纵轴标注状态阈值 40 精力充沛 / 20 最优训练区`
+    `近 ${activeSeries.value.length} 天的训练负荷、疲劳度与整体状态曲线，柱为当日学习时长，纵轴标注状态阈值 40 精力充沛 / 20 最优训练区`
 );
 
 /** 单线路径：跳过 null 断点（无数据日不连线） */
@@ -1045,14 +1052,15 @@ async function loadTrends() {
     // 权威口径：后端 /state/trends（LSS/KTL/LF/LSB，与指标卡同源），替代前端自算 EWMA
     const trendRes = await request.get('/state/trends', { params: { days: range.value, range: 'recent' } });
     if (seq !== trendSeq) return;
-    const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }> }>(trendRes);
+    const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null; mature?: boolean }> }>(trendRes);
     stateTrends.value = (trendData?.trends || []).map((t) => ({
       // 后端回的是本地零点 Date 的 ISO 序列化（UTC），必须按本地时区还原，
       // 否则 UTC+8 会整体前移一天（与 V2LearningHistory 同一口径问题）
       date: localDateKeyFromIso(String(t.date)),
       ktl: typeof t.ktl === 'number' ? t.ktl : null,
       lf: typeof t.lf === 'number' ? t.lf : null,
-      lsb: typeof t.lsb === 'number' ? t.lsb : null
+      lsb: typeof t.lsb === 'number' ? t.lsb : null,
+      mature: typeof t.mature === 'boolean' ? t.mature : undefined
     }));
     trendError.value = false;
   } catch {
@@ -1110,6 +1118,7 @@ interface DecisionCard {
   at: string | null;
   pathId?: string | null;
   pathTitle?: string | null;
+  sessionId?: string | null;
   recommendation?: string | null;
   body?: string;
   options?: DecisionOption[];
@@ -1223,6 +1232,10 @@ async function confirmAdjust(card: DecisionCard) {
       evidence: { advisoryAction: card.recommendation || 'reinforce', advisory: card.advisory || null }
     });
     toast.success(`已调整「${card.pathTitle || '当前路径'}」的${advisory.scope === 'downstream_path' ? '后续阶段' : '下一阶段'}`);
+    // P1-7：真执行也回写处置埋点，漏斗才不只看到「保留/稍后/预览」。
+    if (card.sessionId) {
+      void aiTeachingAPI.recordAdvisoryResponse(card.sessionId, 'adopt').catch(() => { /* 埋点失败静默 */ });
+    }
     // 卡头双按钮的回执行（原型 wf-advisory__done）：确认成功后就地留一行，不只靠 toast 一闪而过
     advisoryDone.value = `已采用建议：「${card.pathTitle || '当前路径'}」的后续阶段已调整，已完成内容保留不变。`;
     dismissDecision(card);
@@ -1346,6 +1359,12 @@ const guideActions = computed(() => {
     })
     .slice(0, 1);
 });
+
+/** 有可执行的待确认调整或今日动作时才显示主次按钮；
+    空态下按钮点了没有落点，只会让用户怀疑“点了没反应”。 */
+const hasAdvisoryAction = computed(() =>
+  pendingAdjust.value.length > 0 || guideActions.value.length > 0
+);
 
 /* 预警行（skill 模式下追加展示） */
 const warningRows = computed(() =>
@@ -1517,7 +1536,7 @@ function loadGuidance() {
 
 /* ---------- 状态四项 meta（原体检卡 vitals 的去向） ----------
    原型该屏只认三张 KPI 卡（连续天数 / 本周分钟 / 已掌握知识点），原 1.25fr+3×1fr 的体检卡撤掉：
-   整体状态 / 学习压力 / 掌握趋势 / 疲劳程度不删，降级成趋势卡内的单行状态条（卡内 meta）——
+   整体状态 / 学习压力 / 训练负荷 / 疲劳程度不删，降级成趋势卡内的单行状态条（卡内 meta）——
    图里画的就是这四个指标，放这张卡里口径自洽；分档胶囊与失败态沿用原 .metric__note 语言。 */
 .vitals--meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;

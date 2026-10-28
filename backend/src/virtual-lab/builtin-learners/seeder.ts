@@ -53,7 +53,19 @@ export interface EnsureBuiltinLearnersResult {
   drifted: string[];
   /** 实例版本高于定义（定义回退）而跳过刷新的 presetKey（见文件头策略表） */
   versionAhead: string[];
+  /** scope=out_of_scope 而**不 seed** 的 presetKey（#91 决策：越界样本不进实例层） */
+  outOfScope: string[];
   errors: Array<{ presetKey: string; message: string }>;
+}
+
+/**
+ * 可运行语义（#91 / P-67 决策，2026-10-23）：`out_of_scope` 只是**定义侧标记**，
+ * 不 seed、不生成路径。理由：语料里没有 Goal 诚实拒绝 rubric 时，
+ * “标记越界却照常建实例/跑路径”会把闸门变成假闸门；等拒绝 rubric 落地后，
+ * 这类条目应以定义级测试（Goal 入口拒绝）消费，而不是进模拟器。
+ */
+export function isRunnablePreset(preset: Pick<BuiltinLearnerPreset, 'scope'>): boolean {
+  return preset.scope !== 'out_of_scope';
 }
 
 /** 版本关系判据（表见文件头）：只比较版本号，不涉及内容哈希 */
@@ -213,6 +225,7 @@ export async function ensureBuiltinVirtualLearners(
     skipped: [],
     drifted: [],
     versionAhead: [],
+    outOfScope: [],
     errors: [],
   };
 
@@ -225,6 +238,10 @@ export async function ensureBuiltinVirtualLearners(
   }
 
   for (const preset of loaded.presets) {
+    if (!isRunnablePreset(preset)) {
+      result.outOfScope.push(preset.presetKey);
+      continue;
+    }
     try {
       const outcome = await syncOnePreset(client, preset);
       if (outcome === 'created') result.created.push(preset.presetKey);
@@ -251,6 +268,7 @@ export async function ensureBuiltinVirtualLearners(
     skipped: result.skipped.length,
     drifted: result.drifted.length,
     versionAhead: result.versionAhead.length,
+    outOfScope: result.outOfScope.length,
     errors: result.errors.length,
   });
 

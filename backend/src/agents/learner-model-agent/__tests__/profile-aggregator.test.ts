@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 测试桩动态访问私有方法，形状随实现演进 */
 /**
  * ProfileAggregator 回归用例。
  *
@@ -175,5 +176,21 @@ describe('互动历史真实计数', () => {
     expect(profile.history.totalMessages).toBe(0);
     expect(mockMessageGroupBy).not.toHaveBeenCalled();
     expect(mockMisconceptionFindMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('P1-2 画像已掌握概念不得吃 KT 幽灵痕', () => {
+  it('查询条件带 extractionCount>0，只把真正提取过的痕迹当掌握证据', async () => {
+    mockMemoryFindMany.mockResolvedValue([{ label: '真实提取过的概念' }]);
+
+    const labels = await (new ProfileAggregator() as any).fetchMasteredConcepts('u1');
+    const query = mockMemoryFindMany.mock.calls.at(-1)![0] as { where: Record<string, unknown> };
+
+    expect(labels).toEqual(['真实提取过的概念']);
+    expect(query.where).toMatchObject({
+      userId: 'u1',
+      masteryScore: { gte: 0.8 },
+      extractionCount: { gt: 0 },
+    });
   });
 });

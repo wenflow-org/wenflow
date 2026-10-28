@@ -44,6 +44,8 @@ export interface LearningDecisionCard {
       让学习状态页可以直达确认（此前卡是纯日志，无 pathId 无动作） */
   pathId?: string | null;
   pathTitle?: string | null;
+  /** 来源课堂会话：学习状态页采用建议后回写 advisory.learnerResponse='adopt'（P1-7 漏斗） */
+  sessionId?: string | null;
   recommendation?: string | null;
   body?: string;
   options?: LearningDecisionOption[];
@@ -53,6 +55,7 @@ export interface LearningDecisionCard {
 }
 
 interface SessionLike {
+  id?: string | null;
   status?: string | null;
   endTime?: Date | null;
   updatedAt?: Date | null;
@@ -152,6 +155,7 @@ export class LearningDecisionFeedService {
         at: sessionAt,
         pathId: session.learningPathId || sessionPath?.id || null,
         pathTitle: sessionPath?.title || null,
+        sessionId: session.id || null,
         recommendation: advisory.recommendation || null,
         body: advisory?.ui?.body || '',
         options: Array.isArray(advisory?.ui?.options) ? advisory.ui.options : [],

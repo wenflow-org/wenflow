@@ -52,15 +52,28 @@ export interface MergeSupplementResult<T extends SupplementTask> {
   dropReasons: { duplicate: number; typeRepeat: number; noType: number; invalid: number };
 }
 
-/** 补课触发判据：有锚、已有产出、且不足锚的 70%（留 30% 容差，避免为 1-2 节课烧一次调用） */
+/**
+ * 补课触发判据：有锚、已有产出、且不足锚的 70%（留 30% 容差，避免为 1-2 节课烧一次调用）。
+ * 双条件与（2026-10-26 外部评审悖论4）：课数不足 **且** 分钟未饱和才补——
+ * `stageMinutesBudget` 是本阶段分钟硬上限（=锚×1.25），任务总分钟已吃满其 75% 时说明内容
+ * 已饱和（如预算 60 分钟装了 2×30 分钟的扎实任务、锚却是 3 课），再按课数强补只会压薄
+ * 每课分钟或产出凑数任务。分钟预算缺省（无锚）时退回纯课数判据，行为不变。
+ */
 export function needsLessonSupplement<T extends SupplementTask>(
   tasks: T[],
   targetSubtasksForStage: number | null | undefined,
+  stageMinutesBudget: number | null | undefined,
 ): boolean {
   const wanted = Number(targetSubtasksForStage);
   if (!Number.isFinite(wanted) || wanted < 2) return false;
   if (!Array.isArray(tasks) || tasks.length === 0) return false;
-  return tasks.length < Math.ceil(wanted * 0.7);
+  if (tasks.length >= Math.ceil(wanted * 0.7)) return false;
+  const budget = Number(stageMinutesBudget);
+  if (Number.isFinite(budget) && budget > 0) {
+    const totalMinutes = tasks.reduce((sum, task) => sum + (Number(task.estimatedMinutes) || 0), 0);
+    if (totalMinutes >= budget * 0.75) return false;
+  }
+  return true;
 }
 
 /**

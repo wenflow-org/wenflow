@@ -33,4 +33,31 @@ describe('路径评审的目标上下文（P1⑥）', () => {
   it('空/空白目标描述归一为 null', () => {
     expect(buildPathReviewerGoalContext({ description: '   ' }).surfaceGoal).toBeNull();
   });
+
+  /**
+   * R8（2026-10-27）：Practicality 规则引用 `goalContext.timeDimensions.objectiveScopeHours`。
+   * 构造器必须把与 path-planning 同一份定帧结果里的 timeDimensions 带过去，否则审查规则仍是死引用。
+   */
+  it('从 normalizedInput 取 timeDimensions（objectiveScopeHours/deadlineDate 同源）', () => {
+    const ctx = buildPathReviewerGoalContext({
+      description: '只攻 SQL 执行计划',
+      analysis: {
+        sceneFraming: {
+          normalizedInput: {
+            timeDimensions: {
+              timeModelVersion: 2,
+              objectiveScopeHours: 18,
+              deadlineDate: '2027-01-05',
+              calendarCapacityHours: 120,
+            },
+          },
+        },
+      },
+    });
+    expect(ctx.timeDimensions).toMatchObject({
+      objectiveScopeHours: 18,
+      deadlineDate: '2027-01-05',
+      calendarCapacityHours: 120,
+    });
+  });
 });

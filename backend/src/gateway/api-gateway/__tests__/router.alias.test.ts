@@ -103,4 +103,64 @@ describe('APIRouter 逻辑别名解析（chat / reasoning / light）', () => {
     const route = await new APIRouter().resolve({})
     expect(route.model).toBe('deepseek-v4.1-flash')
   })
+
+  /* 2026-10-24：推理档此前只在技能自己写了模型时生效；未写模型就退回对话默认，
+     平台的 defaultReasoningModel 在运行时没有消费者。 */
+  it('tier=reasoning 且未配模型 → 继承平台推理默认（而不是对话默认）', async () => {
+    platformConfigFindFirst.mockResolvedValue({
+      ...BASE_PLATFORM,
+      defaultModel: 'agnes-3.0-flash',
+      defaultReasoningModel: 'deepseek-v4.1-flash'
+    })
+    skillConfigFindFirst.mockResolvedValue({
+      endpoint: null,
+      apiKey: null,
+      model: null,
+      tier: 'reasoning',
+      thinkingMode: null,
+      reasoningEffort: null,
+      requestTimeoutMs: null
+    })
+    const route = await new APIRouter().resolve({ skillId: 'reasoning-skill' })
+    expect(route.model).toBe('deepseek-v4.1-flash')
+    expect(route.modelExplicit).toBe(false)
+  })
+
+  it('tier=chat 且未配模型 → 仍走平台对话默认', async () => {
+    platformConfigFindFirst.mockResolvedValue({
+      ...BASE_PLATFORM,
+      defaultModel: 'agnes-3.0-flash',
+      defaultReasoningModel: 'deepseek-v4.1-flash'
+    })
+    skillConfigFindFirst.mockResolvedValue({
+      endpoint: null,
+      apiKey: null,
+      model: null,
+      tier: 'chat',
+      thinkingMode: null,
+      reasoningEffort: null,
+      requestTimeoutMs: null
+    })
+    const route = await new APIRouter().resolve({ skillId: 'chat-skill' })
+    expect(route.model).toBe('agnes-3.0-flash')
+  })
+
+  it('平台没配推理默认 → 推理档沿用基础路由，不凭空改模型', async () => {
+    platformConfigFindFirst.mockResolvedValue({
+      ...BASE_PLATFORM,
+      defaultModel: 'agnes-3.0-flash',
+      defaultReasoningModel: null
+    })
+    skillConfigFindFirst.mockResolvedValue({
+      endpoint: null,
+      apiKey: null,
+      model: null,
+      tier: 'reasoning',
+      thinkingMode: null,
+      reasoningEffort: null,
+      requestTimeoutMs: null
+    })
+    const route = await new APIRouter().resolve({ skillId: 'reasoning-skill' })
+    expect(route.model).toBe('agnes-3.0-flash')
+  })
 })

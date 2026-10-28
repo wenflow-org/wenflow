@@ -8,11 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import SessionSecurity from '../SessionSecurity.vue';
+import { chooseFilter, filterOption } from './filter-controls';
+import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 
 const h = vi.hoisted(() => ({
   getMe: vi.fn(),
   getSessions: vi.fn(),
-  revoke: vi.fn()
+  revoke: vi.fn(),
+  cleanup: vi.fn()
 }));
 
 const { apiObject } = vi.hoisted(() => ({
@@ -27,7 +30,7 @@ const { apiObject } = vi.hoisted(() => ({
 
 vi.mock('@/api/adminApi', () => ({
   adminAuthApi: { getMe: h.getMe },
-  adminSessionsApi: { getAdminSessions: h.getSessions, revokeAdminSession: h.revoke, revokeAllAdminSessions: vi.fn() },
+  adminSessionsApi: { getAdminSessions: h.getSessions, revokeAdminSession: h.revoke, revokeAllAdminSessions: vi.fn(), cleanupAdminSessions: h.cleanup },
   adminAgentsApi: apiObject(),
   adminDashboardApi: apiObject(),
   adminSkillsApi: apiObject(),
@@ -93,12 +96,19 @@ function pagerText(w: Awaited<ReturnType<typeof mountSS>>) {
   return w.find('.mk-pagination').text();
 }
 
+/** 状态 pill 的计数徽章（全量口径的唯一可见位置，2026-10-26 起卡头 meta 不再复述） */
+function pillCount(w: Awaited<ReturnType<typeof mountSS>>, label: string) {
+  return filterOption(w as never, '状态', label).text().match(/（(\d+)）$/)?.[1] ?? '';
+}
+
 describe('SessionSecurity 分页（标准页码器）', () => {
   beforeEach(() => {
     h.getMe.mockReset();
     h.getSessions.mockReset();
     h.revoke.mockReset();
     h.revoke.mockResolvedValue({ data: {} });
+    h.cleanup.mockReset();
+    h.cleanup.mockResolvedValue({ data: { data: { count: 38 } } });
     h.getMe.mockResolvedValue({ data: { data: { id: 'admin-1' } } });
   });
 
@@ -129,8 +139,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
   it('切换每页条数下拉 → 行数与页码器同步', async () => {
     const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions);
-    const select = w.find('.mk-pagination__size');
-    await select.setValue('30');
+    await chooseMkSelect(w as never, '每页条数', '30');
     await flushPromises();
     expect(w.findAll('.ss-tr').length).toBe(30);
     expect(pagerText(w)).toContain('第 1 / 1 页');
@@ -158,32 +167,33 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     await flushPromises();
     expect(pagerText(w)).toContain('第 2 / 2 页');
     // 「只看活跃」→ statusFilter 由 '' 变为 'active'
-    const pill = w.findAll('.mk-pill').find((p) => p.text().startsWith('活跃'))!;
-    await pill.trigger('click');
+    await chooseFilter(w as never, '状态', '活跃');
     await flushPromises();
     expect(pagerText(w)).toContain('第 1 / 2 页');
   });
 
   /* B13 F6-1：全量口径与行窗口分离。后端 counts/adminCounts 是作用域全量，
      页面统计/组头/批量下线条数读它；行窗口（sessions）只决定渲染哪些行。 */
-  it('统计条/组头/批量下线条数读后端全量 counts，页码器读行窗口并用 note 披露口径', async () => {
+  it('批量动作条数读后端全量 counts，页码器读行窗口并用 note 披露口径', async () => {
     const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions, {
       counts: { total: 100, active: 93, expired: 7, revoked: 0 },
       adminCounts: [{ adminId: 'admin-1', total: 100, active: 93, expired: 7, revoked: 0 }],
       window: { limit: 100, returned: 30 }
     });
-    // 卡头全量口径 + 窗口截断披露（93 活跃 > 窗口内 30 行）
-    expect(w.find('.mk-card__meta').text()).toContain('100 个会话');
-    expect(w.find('.mk-card__meta').text()).toContain('活跃 93');
-    expect(w.find('.mk-card__meta').text()).toContain('行列表仅含最近 30 条');
-    // 组头读 adminCounts（非窗口行数）
-    expect(w.find('.ss-group__count').text()).toContain('100 个会话');
-    expect(w.find('.ss-group__count').text()).toContain('93 个活跃');
-    // 页码器分母 = 行窗口（30），note 标明全量活跃 93——两个数不同源，各自标口径
-    // （2026-10-14 文案批：「后端全量活跃」→「全部活跃」，去后端视角）
+    // 全量口径住在状态 pills（2026-10-26：卡头 meta 不再复述 pills 已有的数字）
+    expect(pillCount(w, '活跃')).toBe('93');
+    expect(pillCount(w, '已过期')).toBe('7');
+    // 卡头不再复述行窗口口径（2026-10-27 用户「这两个不要了」）：截断信息只由页码器 note 披露
+    expect(w.find('.mk-card__meta').exists()).toBe(false);
+    // 批量动作条数读 adminCounts（非窗口行数）：历史 7，活跃 93 - 当前标签页 1 = 92
+    const acts = w.find('.ss-head-acts').text();
+    expect(acts).toContain('清理历史（7）');
+    expect(acts).toContain('下线全部（92）');
+    // 页码器分母 = 行窗口（30），note 同时标出全站活跃数与已加载数——两个数不同源，各自标口径
+    // （2026-10-26 视觉验收：只说「全部活跃 93」会被读成与「共 30 条」矛盾）
     expect(pagerText(w)).toContain('共 30 条');
-    expect(w.find('.pagination-note').text()).toContain('全部活跃 93 条');
+    expect(w.find('.pagination-note').text()).toContain('全站活跃 93 条（已加载 30 条）');
   });
 
   it('未截断时不出现口径 note（避免同屏复读）', async () => {
@@ -194,16 +204,32 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(w.find('.pagination-note').exists()).toBe(false);
   });
 
-  it('「下线全部」条数 = 全量活跃 + 未撤销已过期（后端 revoke-all 真实作用域），当前标签页除外', async () => {
+  it('「下线全部」只数活跃会话（当前标签页除外），历史另走「清理历史」', async () => {
     const sessions = Array.from({ length: 12 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions, {
       counts: { total: 505, active: 467, expired: 33, revoked: 5 },
       adminCounts: [{ adminId: 'admin-1', total: 505, active: 467, expired: 33, revoked: 5 }],
       window: { limit: 100, returned: 12 }
     });
-    // admin-1 即当前管理员：467 活跃 + 33 过期 - 1 当前标签页 = 499
-    const btn = w.findAll('button').find((b) => b.text().includes('下线全部'));
-    expect(btn?.text()).toContain('499');
+    // admin-1 即当前管理员：467 活跃 - 1 当前标签页 = 466；33 过期 + 5 已撤销 = 38 条历史
+    const revokeBtn = w.findAll('button').find((b) => b.text().includes('下线全部'));
+    expect(revokeBtn?.text()).toContain('466');
+    const cleanupBtn = w.findAll('button').find((b) => b.text().includes('清理历史'));
+    expect(cleanupBtn?.text()).toContain('38');
+  });
+
+  it('「清理历史」按 adminId 删除已结束会话，完成后重取列表', async () => {
+    const sessions = Array.from({ length: 3 }, (_, i) => fakeSession(i + 1));
+    const w = await mountSS(sessions, {
+      counts: { total: 9, active: 3, expired: 4, revoked: 2 },
+      adminCounts: [{ adminId: 'admin-1', total: 9, active: 3, expired: 4, revoked: 2 }],
+      window: { limit: 100, returned: 3 }
+    });
+    const cleanupBtn = w.findAll('button').find((b) => b.text().includes('清理历史'))!;
+    await cleanupBtn.trigger('click');
+    await flushPromises();
+    expect(h.cleanup).toHaveBeenCalledWith({ adminId: 'admin-1' });
+    expect(h.getSessions).toHaveBeenCalledTimes(2);
   });
 
   it('24h 内过期的活跃行给出可读剩余时长（F6-5）', async () => {
@@ -249,7 +275,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     const groups = w.findAll('.ss-group');
     expect(groups.length).toBe(2);
     const auditor = groups[1];
-    expect(auditor.find('.ss-group__count').text()).toContain('1 个活跃');
+    expect(auditor.find('.ss-group__count').text()).toContain('活跃 1');
     expect(auditor.find('.ss-tr--empty').text()).toContain('不在本页');
     // 第 2 页：admin-2 的活跃行落位，提示消失
     const next = w.findAll('.mk-pagination__btn').find((b) => b.text() === '下一页')!;
@@ -295,14 +321,54 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     const w = mount(SessionSecurity, { global: { plugins: [router] } });
     await flushPromises();
     await flushPromises();
-    expect(w.find('.mk-card__meta').text()).toContain('活跃 4');
+    expect(pillCount(w, '活跃')).toBe('4');
     // sess-1 是当前标签页（后端 isCurrent 标记），首枚「强制下线」即 sess-2
     const revokeBtn = w.findAll('button').find((b) => b.text().trim() === '强制下线')!;
     await revokeBtn.trigger('click');
     await flushPromises();
     await flushPromises();
-    // 卡头/组头/批量下线读数全部来自重取后的 counts（活跃 3、已撤销 1）
-    expect(w.find('.mk-card__meta').text()).toContain('活跃 3');
-    expect(w.find('.ss-group__count').text()).toContain('3 个活跃');
+    // pill 与批量动作读数全部来自重取后的 counts（活跃 3、已撤销 1）
+    expect(pillCount(w, '活跃')).toBe('3');
+    expect(pillCount(w, '已撤销')).toBe('1');
+    const acts = w.find('.ss-head-acts').text();
+    expect(acts).toContain('清理历史（1）');
+    expect(acts).toContain('下线全部（2）');
+  });
+
+  it('顶部说明条与卡头审计跳转均已撤；单管理员不渲染组头，批量动作收在卡头右组', async () => {
+    const w = await mountSS([fakeSession(1)], {
+      counts: { total: 9, active: 3, expired: 4, revoked: 2 },
+      adminCounts: [{ adminId: 'admin-1', total: 9, active: 3, expired: 4, revoked: 2 }]
+    });
+    expect(w.find('.ss-note').exists()).toBe(false);
+    expect(w.find('.ss-audit-link').exists()).toBe(false);
+    const headRight = w.find('.mk-card__head-right');
+    // 当前标签页 #1 不计入下线：活跃 3 - 1 = 2；历史 4 + 2 = 6
+    expect(headRight.text()).toContain('清理历史（6）');
+    expect(headRight.text()).toContain('下线全部（2）');
+    // 单管理员的组头整行已撤（2026-10-27 用户「这个也不要了」）
+    expect(w.find('.ss-group .mk-card__head').exists()).toBe(false);
+    expect(w.find('.ss-group__acts').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('审计深链横幅仍保留：横幅内同样有审计跳转与清除筛选', async () => {
+    h.getSessions.mockResolvedValue({
+      data: { data: { sessions: [fakeSession(1)], counts: { total: 1, active: 1, expired: 0, revoked: 0 } } }
+    });
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
+    });
+    await router.push('/admin/session-security?user=admin');
+    await router.isReady();
+    const w = mount(SessionSecurity, { global: { plugins: [router] } });
+    await flushPromises();
+    await flushPromises();
+    const banner = w.find('.ss-deeplink');
+    expect(banner.exists()).toBe(true);
+    expect(banner.findAll('button').map((b) => b.text()).join(' ')).toContain('审计日志 · 登录审计');
+    expect(banner.text()).toContain('清除筛选');
+    w.unmount();
   });
 });

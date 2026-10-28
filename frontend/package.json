@@ -22,19 +22,20 @@
     "copy:check": "node scripts/check-ui-copy.mjs",
     "copy:list": "node scripts/check-ui-copy.mjs --list",
     "copy:baseline": "node scripts/check-ui-copy.mjs --update",
+    "copy:dump": "node scripts/dump-ui-copy.mjs",
     "mobile:spec": "node scripts/check-mobile-spec.mjs",
     "format": "prettier --write src/"
   },
   "dependencies": {
     "axios": "^1.18.1",
     "dayjs": "^1.11.10",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.17",
     "echarts": "^6.1.0",
     "highlight.js": "^11.11.1",
     "html2canvas-pro": "^2.0.2",
     "katex": "^0.19.0",
     "lucide-vue-next": "^1.0.0",
-    "markdown-it": "^14.3.0",
+    "markdown-it": "^14.3.3",
     "markdown-it-texmath": "^1.0.0",
     "mermaid": "^12.2.0",
     "pinia": "^2.1.7",
@@ -59,5 +60,8 @@
     "vitest": "^4.1.12",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^2.2.12"
+  },
+  "overrides": {
+    "follow-redirects": "^1.16.1"
   }
 }

@@ -24,7 +24,7 @@
 
 环境要求：
 
-- Node.js >= 20.17.0
+- Node.js >= 22.23.4
 - Windows + PowerShell 5.1+ 或 Linux/macOS + bash 均可；`npm run dev` 会按平台自动选择 `start-dev.ps1` / `start-dev.sh`
 
 ```bash

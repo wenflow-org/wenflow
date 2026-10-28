@@ -19,6 +19,7 @@ import { simulatedNowOr } from '../../services/virtual-lab/simulation-clock-cont
 import type { SimulationLogEntry } from '../../coordinators/simulation.types';
 import type { StageResults, VirtualSessionRow } from '../../virtual-lab/vlab-types';
 import { parseJson, ensureProfileStoryPool, isSameStory } from '../../virtual-lab/session-factory';
+import { canReadTeachingSession } from './virtual-learners.teaching-detail-access';
 
 // ===== 原 virtual-learners.ts L263–L767 =====
 export function parseStoryContext(session: VirtualSessionRow) {
@@ -713,22 +714,32 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: Request, res) => 
     const teachingHistory = Array.isArray(learningProgress.teachingSessionHistory)
       ? learningProgress.teachingSessionHistory
       : [];
-    const archivedTeachingSessionIds = new Set(
+    const archivedTeachingSessionIds = new Set<string>(
       teachingHistory
-        .map((entry) => typeof entry?.teachingSessionId === 'string' ? entry.teachingSessionId : '')
+        .map((entry) => typeof entry?.teachingSessionId === 'string' ? String(entry.teachingSessionId) : '')
         .filter(Boolean)
     );
     const teachingSessionId = requestedTeachingSessionId || currentTeachingSessionId;
     if (!teachingSessionId) {
       return res.status(404).json({ success: false, error: '当前虚拟会话尚未绑定 Learn 会话' });
     }
-    if (requestedTeachingSessionId && requestedTeachingSessionId !== currentTeachingSessionId && !archivedTeachingSessionIds.has(requestedTeachingSessionId)) {
-      return res.status(403).json({ success: false, error: '该授课会话不属于当前虚拟会话的教学历史' });
-    }
 
     const teachingSession = await teachingSessionRepository.getById(String(teachingSessionId));
     if (!teachingSession) {
       return res.status(404).json({ success: false, error: '授课会话不存在' });
+    }
+    /* 延伸课/复习课不会进 stageResults.teachingSessionHistory，但同一虚拟会话同一路径下
+       的课堂仍是本会话的真实课堂（#124 实测：按 teachingSessionId 打开延伸课曾 403）。 */
+    if (!canReadTeachingSession({
+      requestedId: String(teachingSessionId),
+      currentId: currentTeachingSessionId,
+      archivedIds: archivedTeachingSessionIds,
+      requestedPathId: teachingSession.learningPathId,
+      sessionPathId: session.learningPathId,
+      requestedUserId: teachingSession.userId,
+      sessionUserId: session.userId,
+    })) {
+      return res.status(403).json({ success: false, error: '该授课会话不属于当前虚拟会话的教学历史' });
     }
 
     res.json({
@@ -742,6 +753,8 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: Request, res) => 
         endTime: teachingSession.endTime,
         duration: teachingSession.duration,
         status: teachingSession.status,
+        /** 课堂类型（tutor/review/extension）：座舱需与正课区分，复习/延伸课不结算任务 */
+        mode: teachingSession.mode,
         messages: teachingSession.messages,
         state: teachingSession.teachingState || {},
         knowledgePoints: teachingSession.knowledgeState,

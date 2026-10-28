@@ -15,18 +15,16 @@ export function buildLessonWrapup(detail: Record<string, unknown> | null) {
   const evidence = (w.evidence || {}) as Record<string, unknown>
   const progress = (w.progress || {}) as Record<string, unknown>
   const learner = (w.learner || {}) as Record<string, unknown>
-  const knowledgeItems = Array.isArray(summary.knowledgeItems) ? summary.knowledgeItems as Array<{ name: string; status: string; progress: number; evidence: string }> : []
+  // evidenceUnverified：wrapup skill 找不到回链证据时给该点打的标记（#134——此前全库零读取方）
+  const knowledgeItems = Array.isArray(summary.knowledgeItems) ? summary.knowledgeItems as Array<{ name: string; status: string; progress: number; evidence: string; evidenceUnverified?: boolean }> : []
   const confusionPoints = Array.isArray(evidence.topConfusionPoints) ? evidence.topConfusionPoints as string[] : []
   const highlights = (summary.evaluationHighlights || {}) as Record<string, unknown>
   const emotions = (evidence.emotionalSignals || {}) as Record<string, unknown>
-  const sources = (w.sources || {}) as Record<string, unknown>
   const status = String(w.status || '')
   const rawPracticeAdvice = String(summary.practiceAdvice || '')
   // 降级总结：超时/收束失败兜底（summary-only）的 practiceAdvice 是面向学习者的
   // 「重新开始本节…」占位，后台原样展示像在要求管理员重新学习 → 标记降级并隐藏该占位。
-  const degraded = status === 'summary-only'
-    || String(sources.summary || '').includes('fallback')
-    || /重新开始本节|重新完成一次完整的学习/.test(rawPracticeAdvice)
+  const degraded = isDegradedWrapup(w, rawPracticeAdvice)
   return {
     status,
     degraded,
@@ -135,4 +133,23 @@ export function useCockpitWrapup(
     hasWrapup, wrapupObject, wrapupSections, wrapupFieldCards,
     wrapupSourceBadge, wrapupStatusBadge, wrapupEmptyHint
   }
+}
+
+/** 降级兜底文案指纹（后端写死文案 teaching-session-ops.ts；单源在此，三页共用） */
+const DEGRADED_ADVICE_RE = /重新开始本节|重新完成一次完整的学习/
+
+/**
+ * 课时 wrapup 是否为降级产物（2026-10-22 单源化：此前同判定在 cockpitWrapup /
+ * LearnerDetail / TeachingSessions 三处各写一份正则——后端改兜底文案要改三处，漏一
+ * 处就静默失配）。结构化口径（status/sources）优先，文案指纹只作旧数据兜底。
+ */
+export function isDegradedWrapup(
+  wrapup: Record<string, unknown> | null | undefined,
+  practiceAdvice?: unknown,
+): boolean {
+  if (!wrapup || typeof wrapup !== 'object') return false
+  if (wrapup.status === 'summary-only') return true
+  const sources = (wrapup.sources || {}) as Record<string, unknown>
+  if (String(sources.summary || '').includes('fallback')) return true
+  return DEGRADED_ADVICE_RE.test(String(practiceAdvice ?? ''))
 }

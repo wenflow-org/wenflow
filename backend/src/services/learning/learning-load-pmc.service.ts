@@ -101,15 +101,35 @@ export interface UserPmcSeries {
  *   从 0 重放即可还原真实 PMC（日负荷求和的累加才会真正发生）。设为 true 时用首日的旧模型值
  *   **反解**前值（stepPmc(prior,load0)==old0），仅供审计脚本做"同一前值下的增量差异"比对——
  *   它会让首日输出等于旧值，**不是**生产口径。
+ * - `seed`（架构优化批 2b，2026-10-24）：从**滚动 checkpoint**（该日收盘态）继续重放——
+ *   `dayKey` 及之前的行已被吸收进种子，必须剔除（本函数防御性再滤一次）；序列从
+ *   `dayKey+1` 起铺（空日以 0 参与 = 延续空闲回落），latestLesson 回退到种子携带值。
+ *   与 `seedFromFirstRow` 互斥（seed 优先）。
  */
+export interface PmcReplaySeed {
+  /** checkpoint 覆盖到的最后一天（YYYY-MM-DD，应用时区日键） */
+  dayKey: string;
+  ktl: number;
+  lf: number;
+  latestLessonLss?: number | null;
+  latestLessonAt?: Date | null;
+}
+
 export function replayDailyPmc(
   rows: ReadonlyArray<PmcSourceRow>,
-  options: { seedFromFirstRow?: boolean; until?: Date } = {},
+  options: { seedFromFirstRow?: boolean; until?: Date; seed?: PmcReplaySeed } = {},
 ): UserPmcSeries {
   const byDay = new Map<string, { load: number; lessons: number; oldKtl: number; oldLf: number }>();
   // 跨家族去重（session-wrapup 权威行优先于 task-completion 占位行）——否则一节课被计两次，日负荷翻倍
   const deduped = dedupeLessonRows(rows);
-  const ordered = [...deduped].sort((a, b) => a.calculatedAt.getTime() - b.calculatedAt.getTime());
+  const seed = options.seed ?? null;
+  const ordered = [...deduped]
+    .filter((r) => {
+      if (!seed) return true;
+      const key = dayKeyOf(r.calculatedAt);
+      return !key || key > seed.dayKey; // checkpoint 日及之前已被种子吸收
+    })
+    .sort((a, b) => a.calculatedAt.getTime() - b.calculatedAt.getTime());
   for (const r of ordered) {
     const key = dayKeyOf(r.calculatedAt);
     if (!key) continue;
@@ -121,8 +141,35 @@ export function replayDailyPmc(
     byDay.set(key, cur);
   }
   const keys = [...byDay.keys()].sort();
-  if (keys.length === 0) {
+  const seedLatestPoint = seed
+    ? { dayLoad: 0, ktl: seed.ktl, lf: seed.lf, lsb: seed.ktl - seed.lf }
+    : null;
+  if (keys.length === 0 && !seed) {
     return { daily: [], pmc: [], latest: null, latestForm: null, latestLessonLss: null, latestLessonAt: null };
+  }
+  // 种子但无后续行：latest = 种子收盘态；空日回落仍需铺到 until（否则停课后读值不衰减）
+  if (keys.length === 0 && seed) {
+    const untilKey = options.until ? dayKeyOf(options.until) : seed.dayKey;
+    if (!untilKey || untilKey <= seed.dayKey) {
+      return {
+        daily: [], pmc: [],
+        latest: seedLatestPoint,
+        latestForm: deriveFormState(seedLatestPoint),
+        latestLessonLss: seed.latestLessonLss ?? null,
+        latestLessonAt: seed.latestLessonAt ?? null,
+      };
+    }
+    const idleSeries = buildDailyLoadSeries(new Map(), addDaysToDayKey(seed.dayKey, 1), untilKey, addDaysToDayKey);
+    const idlePmc = replayDailySeries(idleSeries.map((s) => s.load), { ktl: seed.ktl, lf: seed.lf });
+    const idleLatest = idlePmc[idlePmc.length - 1];
+    return {
+      daily: idleSeries.map((s) => ({ dayKey: s.dayKey, load: 0, lessons: 0, oldKtl: null, oldLf: null })),
+      pmc: idlePmc,
+      latest: idleLatest,
+      latestForm: idleLatest ? deriveFormState(idleLatest) : null,
+      latestLessonLss: seed.latestLessonLss ?? null,
+      latestLessonAt: seed.latestLessonAt ?? null,
+    };
   }
   const lastRow = ordered[ordered.length - 1] ?? null;
   const loadMap = new Map<string, number>();
@@ -133,10 +180,14 @@ export function replayDailyPmc(
     const untilKey = dayKeyOf(options.until);
     if (untilKey && untilKey > toKey) toKey = untilKey;
   }
-  const series = buildDailyLoadSeries(loadMap, keys[0], toKey, addDaysToDayKey);
+  // 有种子时序列从 dayKey+1 起铺（种子日的负荷已在收盘态里）
+  const fromKey = seed ? addDaysToDayKey(seed.dayKey, 1) : keys[0];
+  const series = buildDailyLoadSeries(loadMap, fromKey, toKey, addDaysToDayKey);
 
   let prior: PmcState | undefined;
-  if (options.seedFromFirstRow) {
+  if (seed) {
+    prior = { ktl: seed.ktl, lf: seed.lf };
+  } else if (options.seedFromFirstRow) {
     const first = byDay.get(keys[0])!;
     prior = {
       ktl: Math.max(0, (first.oldKtl - (1 - PMC_KTL_LAMBDA) * first.load) / PMC_KTL_LAMBDA),
@@ -183,21 +234,16 @@ export async function computeUserPmcSeries(
     where: {
       userId,
       metricType: 'learning_state',
+      // 2026-10-24 架构优化批 2a：committed 走实列（迁移回填后与旧 metadata JSON 过滤等价；
+      // synthetic 行保留——重放内 dedupeLessonRows 按权威行折叠，冷启动占位行仍参与）
       ...(options.pathId ? { pathId: options.pathId } : {}),
+      committed: true,
       calculatedAt: { lte: asOf },
     },
-    select: { calculatedAt: true, lss: true, ktl: true, lf: true, metadata: true, sourceKey: true, taskId: true },
+    select: { calculatedAt: true, lss: true, ktl: true, lf: true, sourceKey: true, taskId: true },
     orderBy: { calculatedAt: 'asc' },
   });
-  const committed = rows.filter((r) => {
-    try {
-      const m = r.metadata ? JSON.parse(String(r.metadata)) : null;
-      return m && m.committed === true;
-    } catch {
-      return false;
-    }
-  });
-  return replayDailyPmc(committed, { until: asOf });
+  return replayDailyPmc(rows, { until: asOf });
 }
 
 export const learningLoadPmcService = { replayDailyPmc, computeUserPmcSeries };

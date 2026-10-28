@@ -23,7 +23,7 @@ jest.mock('../../../virtual-lab/learner-memory', () => ({
 }));
 jest.mock('../../../utils/logger', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
 
-import { growStoryChapter, onTeachingSessionCompleted, STORY_POOL_MAX } from '../story-chapter.service';
+import { growStoryChapter, onTeachingSessionCompleted, STORY_POOL_MAX, buildStoryDirectionHints, STORY_DIRECTION_MAX } from '../story-chapter.service';
 import { executeSkill } from '../../../skills';
 
 function profileWith(pool: any[]) {
@@ -124,5 +124,28 @@ describe('onTeachingSessionCompleted', () => {
     const saved = savedPool();
     // story_b 已有前驱 story_a，故「未完结头」= story_b（无续章），在其后长 story_c
     expect(saved.some((s: any) => s.id === 'story_c' && s.progressesFrom === 'story_b')).toBe(true);
+  });
+});
+
+describe('buildStoryDirectionHints（生成方向 → 故事约束）', () => {
+  it('空值 / 非字符串 / 纯空白 → 不注入提示', () => {
+    expect(buildStoryDirectionHints(undefined)).toEqual([]);
+    expect(buildStoryDirectionHints(null)).toEqual([]);
+    expect(buildStoryDirectionHints(42)).toEqual([]);
+    expect(buildStoryDirectionHints('   ')).toEqual([]);
+  });
+
+  it('正常方向 → 一条约束，保留用户原文并限定落到具体情境', () => {
+    const hints = buildStoryDirectionHints('  化学实验误差分析  ');
+    expect(hints).toHaveLength(1);
+    expect(hints[0]).toContain('化学实验误差分析');
+    expect(hints[0]).toContain('具体学科');
+  });
+
+  it('超长输入 → 截断到上限，不整单拒绝', () => {
+    const hints = buildStoryDirectionHints('学'.repeat(STORY_DIRECTION_MAX + 30));
+    expect(hints).toHaveLength(1);
+    expect(hints[0]).toContain('学'.repeat(STORY_DIRECTION_MAX));
+    expect(hints[0]).not.toContain('学'.repeat(STORY_DIRECTION_MAX + 1));
   });
 });

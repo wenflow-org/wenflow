@@ -1,6 +1,6 @@
 /**
  * 卡详情二级页（2026-10-06 抽屉退役）：?view=card&id=<profileId> 标准二级页，
- * 全字段可视（概览事实/人设/故事池/资料/标签备注），「到虚拟学习者」切画像二级页。
+ * 全字段可视（概览事实/人设/故事池/资料/标签备注）；卡=静态身份模板，只提供「创建虚拟学习者」。
  */
 import { describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -20,13 +20,29 @@ vi.mock('../store', async () => {
   };
 });
 
-const { cardsTasksMock, cardsCloneMock } = vi.hoisted(() => ({ cardsTasksMock: vi.fn(), cardsCloneMock: vi.fn() }));
+const { cardsTasksMock, cardsCloneMock, getVirtualsMock } = vi.hoisted(() => ({
+  cardsTasksMock: vi.fn(),
+  cardsCloneMock: vi.fn(),
+  /* 本卡派生出的实例数：列表接口每行的 profile.derivedFrom.profileId 指向来源卡 */
+  getVirtualsMock: vi.fn(async () => ({
+    data: {
+      data: {
+        profiles: [
+          { id: 'i1', profile: { derivedFrom: { profileId: 'p1' } } },
+          { id: 'i2', profile: { derivedFrom: { profileId: 'p1' } } },
+          { id: 'i3', profile: { derivedFrom: { profileId: 'other' } } },
+        ],
+      },
+    },
+  })),
+}));
 
 vi.mock('@/api/adminApi', () => ({
   adminVirtualLearnersApi: {
     /* 创建面板（CardDeriveDialog）走这两个端点 */
     cardsTasks: cardsTasksMock,
     cardsClone: cardsCloneMock,
+    getVirtualLearners: getVirtualsMock,
     cardsDetail: vi.fn(async () => ({
       data: {
         data: {
@@ -44,7 +60,11 @@ vi.mock('@/api/adminApi', () => ({
 }));
 
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
-vi.mock('../live', () => ({ errMsg: (e: unknown) => String(e) }));
+vi.mock('../live', async () => {
+  const { ref } = await import('vue');
+  return { liveRefreshSeq: ref(0), errMsg: (e: unknown) => String(e) };
+});
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import CardDetailPage from '../CardDetailPage.vue';
 
@@ -77,9 +97,9 @@ describe('CardDetailPage（卡详情二级页）', () => {
 
     const act = w.findAll('button').find((b) => b.text().includes('创建虚拟学习者'))!;
     expect(act, 'hero 缺创建主操作').toBeTruthy();
-    // 主操作是它，切画像降为次按钮
+    // 卡是静态身份模板：hero 只留创建，不提供运行/记忆视图入口（2026-10-24 用户拍板）
     expect(act.classes()).toContain('mk-btn--primary');
-    expect(w.findAll('button').find((b) => b.text().includes('到虚拟学习者'))!.classes()).not.toContain('mk-btn--primary');
+    expect(w.find('.mk-hero__actions').text()).not.toContain('运行与记忆');
 
     await act.trigger('click');
     await flushPromises();
@@ -89,15 +109,25 @@ describe('CardDetailPage（卡详情二级页）', () => {
     w.unmount();
   });
 
-  it('「到虚拟学习者」= openSubPage virtual + profileId 且带 from=本卡（双向互链，返回落回卡详情）', async () => {
+  it('卡库是静态模板：页内不出现「运行与记忆」等运行入口', async () => {
     const w = mount(CardDetailPage);
     await flushPromises();
-    const go = w.findAll('button').find((b) => b.text().includes('到虚拟学习者'))!;
-    await go.trigger('click');
-    expect(openSubPageMock).toHaveBeenCalledWith('virtual', 'p1', {
-      // from.label 用视图名：卡与画像同一实体同名，用卡名会拼出「郑凯 / 郑凯」
-      from: { view: 'card', id: 'p1', label: '学习者卡' }
-    });
+    // 整页（含概览卡头/人设/故事池）都不提供切到运行视图的按钮
+    expect(w.text()).not.toContain('运行与记忆');
+    expect(w.findAll('button').some((b) => b.text().includes('到虚拟学习者'))).toBe(false);
+    expect(openSubPageMock).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  /** 2026-10-26：KPI 只说「已创建 2」，卡墙上任何一张卡都不显示是哪张建的——
+   *  实例数落到单卡粒度，入口就在概览卡头。 */
+  it('概览卡头给出「已创建 N 个实例」：按 derivedFrom.profileId 归到本卡', async () => {
+    const w = mount(CardDetailPage);
+    await flushPromises();
+    expect(getVirtualsMock).toHaveBeenCalled();
+    const head = w.findAll('.mk-card__head').find((h) => h.text().includes('概览'))!;
+    expect(head.text()).toContain('已创建 2 个实例');
+    w.unmount();
   });
 
   it('#16：hero 的 hash: 标签走 shortHashTag 截断、完整值进 title（不再整串溢出被裁）', async () => {

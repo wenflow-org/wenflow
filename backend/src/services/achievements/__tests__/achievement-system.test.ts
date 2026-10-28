@@ -51,4 +51,43 @@ describe('achievement statistics', () => {
       percentage: 100,
     });
   });
+
+  it('掌握类成就按已掌握知识点数解锁，不再读 KTL', () => {
+    const mastery = ACHIEVEMENTS.filter(item => item.id.startsWith('ktl_'));
+    expect(mastery.map(item => item.requirement)).toEqual([
+      { type: 'mastered_concepts', value: 3 },
+      { type: 'mastered_concepts', value: 5 },
+      { type: 'mastered_concepts', value: 10 },
+    ]);
+
+    const base = {
+      completedTasks: 0,
+      currentStreak: 0,
+      completedPaths: 0,
+      totalPaths: 0,
+    };
+    const unlockedAt = (masteredConcepts: number) =>
+      AchievementSystem.checkAchievements({ ...base, masteredConcepts })
+        .filter(item => item.id.startsWith('ktl_'))
+        .map(item => item.name);
+
+    expect(unlockedAt(2)).toEqual([]);
+    expect(unlockedAt(3)).toEqual(['知识小成']);
+    expect(unlockedAt(5)).toEqual(['知识小成', '知识大成']);
+    expect(unlockedAt(10)).toEqual(['知识小成', '知识大成', '知识宗师']);
+  });
+
+  it('掌握类成就进度用知识点计数，不用高=坏的 KTL 数值', () => {
+    const achievement = ACHIEVEMENTS.find(item => item.id === 'ktl_7');
+    expect(achievement).toBeDefined();
+
+    expect(AchievementSystem.getAchievementProgress(achievement!, {
+      masteredConcepts: 4,
+      ktl: 9,
+    })).toEqual({
+      current: 4,
+      total: 5,
+      percentage: 80,
+    });
+  });
 });

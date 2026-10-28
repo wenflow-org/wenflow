@@ -4,8 +4,8 @@
        同款；唯一的例外是平台通道的地址与密钥，那些在连接设置里按脏位保存。
        平台通道不出「服务地址/密钥」字段：它的端点在 platform_api_configs，两个写源会互相打架。 -->
   <Teleport v-if="open" to="body">
-    <div class="mk-modal">
-      <div class="mk-modal__panel" role="dialog" aria-label="供应商设置">
+    <div ref="maskRef" class="mk-modal">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="供应商设置">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ isCreate ? '添加供应商' : `供应商设置 · ${provider?.name || provider?.id}` }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -50,8 +50,8 @@
               />
             </label>
 
-            <label class="mk-field">
-              <span class="mk-field__label">{{ isCreate ? 'API Key' : 'API Key（留空 = 沿用已配置）' }}</span>
+            <label v-if="isCreate" class="mk-field">
+              <span class="mk-field__label">API Key</span>
               <input
                 v-model="form.apiKey"
                 class="mk-field__input"
@@ -65,14 +65,15 @@
 
           <label class="mk-field">
             <span class="mk-field__label">系统提示词</span>
-            <select v-model="form.supportsSystemRole" class="mk-field__input">
-              <option value="auto">自动（按端点来源）</option>
-              <option value="keep">保留 system 消息</option>
-              <option value="fold">合并进用户消息</option>
-            </select>
+            <MkSelect
+              v-model="form.supportsSystemRole"
+              :options="SUPPORTS_SYSTEM_ROLE_OPTIONS"
+              aria-label="系统提示词"
+              block
+            />
           </label>
 
-          <label class="mk-field mk-field--switch">
+          <label v-if="isCreate" class="mk-field mk-field--switch">
             <input v-model="form.enabled" type="checkbox" />
             <span>{{ enabledLabel }}</span>
           </label>
@@ -93,6 +94,9 @@
 import { computed, reactive, ref } from 'vue'
 import { adminModelProvidersApi } from '@/api/adminApi'
 import { errMsg } from './live'
+import MkSelect from '@/components/mk/MkSelect.vue'
+import { useEscape } from './useEscape'
+import { useMaskClose, useOverlay } from './useOverlay'
 
 /** 打开弹层所需的最小供应商形状（宿主传注册表条目，也可以是「新建」的空壳） */
 export interface ProviderLike {
@@ -113,12 +117,21 @@ const busy = ref(false)
 const error = ref('')
 const isCreate = ref(true)
 const provider = ref<ProviderLike | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
 
 const form = reactive({
   id: '', name: '', description: '', baseUrl: '', apiKey: '', enabled: true,
   /** auto = 未声明（跟随端点来源）；keep/fold = 显式声明 */
   supportsSystemRole: 'auto' as 'auto' | 'keep' | 'fold'
 })
+
+/* 系统提示词三态：文案与旧原生 select 逐字一致 */
+const SUPPORTS_SYSTEM_ROLE_OPTIONS: Array<{ value: 'auto' | 'keep' | 'fold'; label: string }> = [
+  { value: 'auto', label: '自动（按端点来源）' },
+  { value: 'keep', label: '保留 system 消息' },
+  { value: 'fold', label: '合并进用户消息' }
+]
 
 const isPlatform = computed(() => !isCreate.value && provider.value?.id === 'platform')
 /** 平台通道停用是允许的（整团队改用自建网关时的正当操作），后端会拦住「全平台无路可走」那种 */
@@ -160,6 +173,10 @@ function close(): void {
   if (busy.value) return
   open.value = false
 }
+
+useEscape(() => open.value, close)
+useOverlay(open, panelRef)
+useMaskClose(maskRef, close)
 
 async function submit(): Promise<void> {
   busy.value = true

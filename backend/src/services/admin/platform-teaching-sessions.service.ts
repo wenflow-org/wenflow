@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { isTestAccountUser } from '../../utils/test-account';
-import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
+import { buildNonVirtualUserWhere } from '../../utils/test-account';
 import { deriveTeachingSessionProgress } from '../teaching-session-progress.service';
 import { parseClosureObservation, type ClosureObservation } from '../learning/closure-observability';
 
@@ -109,27 +109,25 @@ export async function listTeachingSessionsDebug(params: {
   /** 按路径收窄（学习者详情页的路径作用域选择器）：teaching_sessions.learningPathId 单列直连，无需 join */
   pathId?: string;
   status?: string;
+  /** 课堂类型（tutor/review/extension）：复习课与延伸课不结算任务，列表需按类型可辨、可筛 */
+  mode?: string;
   onlyWithAdvisory: boolean;
   onlyMissingWrapup: boolean;
+  /** 按 id 直查虚拟账号时置 true（学习者详情），不是页面视角 */
   includeTest: boolean;
-  /** 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：只看虚拟学习者 + 测试账号 */
-  testOnly?: boolean;
 }): Promise<unknown> {
-  const { page, limit, userId, pathId, status, onlyWithAdvisory, onlyMissingWrapup, includeTest, testOnly } = params;
+  const { page, limit, userId, pathId, status, mode, onlyWithAdvisory, onlyMissingWrapup, includeTest } = params;
   const where: any = {
     ...(userId ? { userId } : {}),
     ...(pathId ? { learningPathId: pathId } : {}),
     ...(status ? { status } : {}),
+    ...(mode ? { mode } : {}),
     ...(onlyWithAdvisory ? { advisory: { not: null } } : {}),
     // wrapup 为 JSON 文本列：缺失 = 无记录或内容中不含 topicSummary
     ...(onlyMissingWrapup
       ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }
       : {}),
-    ...(testOnly
-      ? { users: await buildTestUserWhere() }
-      : includeTest
-        ? {}
-        : { users: await buildRealUserWhere() }),
+    ...(includeTest ? {} : { users: await buildNonVirtualUserWhere() }),
   };
 
   const [total, sessions] = await Promise.all([
@@ -150,6 +148,7 @@ export async function listTeachingSessionsDebug(params: {
         subject: true,
         topic: true,
         taskType: true,
+        mode: true,
         status: true,
         startTime: true,
         endTime: true,
@@ -195,12 +194,16 @@ export async function listTeachingSessionsDebug(params: {
       subject: session.subject,
       topic: session.topic,
       taskType: session.taskType,
+      /** 课堂类型：tutor=正课 / review=复习课 / extension=延伸课（后两者不结算任务） */
+      mode: session.mode,
       status: session.status,
       /** 收束原因：manual-end（用户主动结束）/ task-completed / learner-abandoned；老会话 null */
       endReason,
       startTime: session.startTime,
       endTime: session.endTime,
-      duration: session.duration,
+      /* 历史超时会话的 duration 列是空的（超时收尾此前只把活跃时长写进 wrapup.duration），
+         列上留空会让「停在 x/y」旁边显示「—」。列优先，缺了再取兜底总结里的同口径读数。 */
+      duration: session.duration || (typeof wrapup?.duration === 'number' ? wrapup.duration : 0),
       messageCount: facts?.userCount ?? 0,
       knowledgePointCount: Array.isArray(knowledgePoints) ? knowledgePoints.length : 0,
       progress: progressById.get(session.id) || null,

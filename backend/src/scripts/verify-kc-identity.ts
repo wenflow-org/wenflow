@@ -33,6 +33,13 @@ interface Report {
         idIntersection: number | null; idCoverage: number | null };
   a3: { subtaskRows: number; withCanonicalConceptId: number | null; withLocalRef: number; canonicalCoverage: number | null };
   a4: { subtaskConcepts: number | null; traceConcepts: number | null; shared: number | null; bridgeRate: number | null };
+  a4b: {
+    traceConcepts: number | null;
+    anchored: number | null;
+    bridged: number | null;
+    anchorRate: number | null;
+    bridgeRate: number | null;
+  };
   a5: { misconceptionConcepts: number | null; shared: number | null; bridgeRate: number | null };
   a9: {
     kcGraphEdgesTotal: number;
@@ -158,8 +165,83 @@ async function main() {
   // 多出的 11 条端点不在 stored nodes 中 → 来自被覆盖的那一版），此时行数 > stored 是正常的。
   const paths = await prisma.learning_paths.findMany({
     where: scope === 'virtual' ? { users: { isVirtualLearner: true } } : {},
-    select: { id: true, aiPromptTemplate: true },
+    select: { id: true, userId: true, aiPromptTemplate: true },
   });
+
+  // ── 断言 4b：计划↔痕迹贯通（经 kcAnchor 桥接）──────────────────────
+  // A4 直接对 conceptId 取交集，实际是**跨粒度**比较：`subtasks.conceptId` 是核心概念级
+  // （`cognitiveCore.coreConcepts`），`memory_traces.conceptId` 是 KC 级
+  // （`kcAnnotation.conceptKcs[].kcs[]`）——两者本就不该相等，低交集不代表身份空间断裂。
+  // 真实桥接链（只读复算）：
+  //   trace 概念 → `concept_aliases` 的 `kc:<pathId>:<kcId>` 锚 → kcAnnotation.conceptKcs
+  //   （kcId 属于哪个核心概念）→ 该核心概念在 subtasks 的 canonical conceptId。
+  // 这里只统计「痕迹的 KC 身份能否落到计划里的核心概念」，不写任何表。
+  const annByPath = new Map<string, {
+    userId: string;
+    kcToCore: Map<string, string>;
+    planCanonByCore: Map<string, Set<string>>;
+  }>();
+  for (const p of paths) {
+    const ann = parsePathPromptTemplate(p.aiPromptTemplate)?.kcAnnotation as
+      { conceptKcs?: Array<{ conceptId?: string; kcs?: Array<{ kcId?: string }> }> } | undefined;
+    const kcToCore = new Map<string, string>();
+    for (const group of Array.isArray(ann?.conceptKcs) ? ann!.conceptKcs! : []) {
+      const core = typeof group?.conceptId === 'string' ? group.conceptId.trim() : '';
+      if (!core) continue;
+      for (const kc of Array.isArray(group?.kcs) ? group.kcs : []) {
+        const kcId = typeof kc?.kcId === 'string' ? kc.kcId.trim() : '';
+        if (kcId) kcToCore.set(kcId, core);
+      }
+    }
+    annByPath.set(p.id, { userId: p.userId, kcToCore, planCanonByCore: new Map() });
+  }
+  if (subtaskConceptId) {
+    const planRows = await prisma.$queryRawUnsafe<Array<{ pathId: string; local: string | null; conceptId: string | null }>>(
+      `select m.learningPathId pathId, s.linkedConceptId local, s.conceptId conceptId
+         from subtasks s join milestones m on m.id = s.milestoneId
+        where s.conceptId is not null${userFilter(scope, 's.userId')}`);
+    for (const r of planRows) {
+      const entry = annByPath.get(r.pathId);
+      const local = typeof r.local === 'string' ? r.local.trim() : '';
+      const canon = typeof r.conceptId === 'string' ? r.conceptId.trim() : '';
+      if (!entry || !local || !canon) continue;
+      const set = entry.planCanonByCore.get(local) ?? new Set<string>();
+      set.add(canon);
+      entry.planCanonByCore.set(local, set);
+    }
+  }
+  const anchorRows = aliasesTable
+    ? await prisma.$queryRawUnsafe<Array<{ conceptId: string; userId: string; aliasRaw: string }>>(
+        `select conceptId, userId, aliasRaw from concept_aliases where aliasRaw like 'kc:%'`)
+    : [];
+  const anchorPrefixes = paths.map((p) => [`kc:${p.id}:`, p.id] as const);
+  const anchoredTraceConcepts = new Set<string>();
+  const bridgedTraceConcepts = new Set<string>();
+  for (const row of anchorRows) {
+    const raw = String(row.aliasRaw || '');
+    const hit = anchorPrefixes.find(([prefix]) => raw.startsWith(prefix));
+    if (!hit) continue;
+    const pathId = hit[1];
+    const entry = annByPath.get(pathId);
+    if (!entry || entry.userId !== row.userId) continue;
+    const conceptId = String(row.conceptId || '');
+    if (!conceptId) continue;
+    anchoredTraceConcepts.add(conceptId);
+    const kcId = raw.slice(hit[0].length);
+    const core = entry.kcToCore.get(kcId);
+    if (core && (entry.planCanonByCore.get(core)?.size ?? 0) > 0) bridgedTraceConcepts.add(conceptId);
+  }
+  // 只统计「真实落库的痕迹概念」，锚表里可能残留已删痕迹的锚
+  const traceConceptList = memoryTraceConceptId
+    ? (await prisma.$queryRawUnsafe<Array<{ conceptId: string }>>(
+        `select distinct conceptId from memory_traces where conceptId is not null${userFilter(scope)}`
+      )).map((r) => String(r.conceptId))
+    : [];
+  const traceConceptSet = new Set(traceConceptList);
+  const anchoredHits = [...anchoredTraceConcepts].filter((id) => traceConceptSet.has(id)).length;
+  const bridgedHits = [...bridgedTraceConcepts].filter((id) => traceConceptSet.has(id)).length;
+  const traceConceptTotal = traceConceptSet.size;
+
   let kcGraphEdgesTotal = 0;
   const storedByPath = new Map<string, number>();
   for (const p of paths) {
@@ -222,6 +304,13 @@ async function main() {
       subtaskConcepts: stConcepts, traceConcepts: trConcepts, shared: stShared,
       bridgeRate: stConcepts && stConcepts > 0 && stShared !== null ? Number((stShared / stConcepts).toFixed(3)) : null,
     },
+    a4b: {
+      traceConcepts: memoryTraceConceptId ? traceConceptTotal : null,
+      anchored: memoryTraceConceptId ? anchoredHits : null,
+      bridged: memoryTraceConceptId ? bridgedHits : null,
+      anchorRate: memoryTraceConceptId && traceConceptTotal > 0 ? Number((anchoredHits / traceConceptTotal).toFixed(3)) : null,
+      bridgeRate: memoryTraceConceptId && anchoredHits > 0 ? Number((bridgedHits / anchoredHits).toFixed(3)) : null,
+    },
     a5: {
       misconceptionConcepts: misIds, shared: misShared,
       bridgeRate: misIds && misIds > 0 && misShared !== null ? Number((misShared / misIds).toFixed(3)) : null,
@@ -243,6 +332,8 @@ async function main() {
     ` ｜ id覆盖率=${report.a2.idCoverage ?? 'n/a'}`);
   console.log(`[A3 子任务可解析] 子任务=${num(st.total)} 有canonicalId=${stCanonical ?? 'n/a'} 有局部ref=${num(st.local)} 覆盖率=${report.a3.canonicalCoverage ?? 'n/a'}`);
   console.log(`[A4 计划↔痕迹贯通] subtask概念=${stConcepts ?? 'n/a'} trace概念=${trConcepts ?? 'n/a'} 共享=${stShared ?? 'n/a'} 贯通率=${report.a4.bridgeRate ?? 'n/a'}`);
+  console.log(`[A4b 经 kcAnchor 桥接] trace概念=${report.a4b.traceConcepts ?? 'n/a'} 有锚=${report.a4b.anchored ?? 'n/a'} 落到计划核心概念=${report.a4b.bridged ?? 'n/a'}` +
+    ` 锚覆盖率=${report.a4b.anchorRate ?? 'n/a'} 桥接率=${report.a4b.bridgeRate ?? 'n/a'}`);
   console.log(`[A5 误解↔痕迹贯通] 误解概念=${misIds ?? 'n/a'} 共享=${misShared ?? 'n/a'} 贯通率=${report.a5.bridgeRate ?? 'n/a'}`);
   console.log(`[A9 边物化一致] stored kcGraph.edges=${kcGraphEdgesTotal} 物化(kc-mapper)=${conceptEdges ?? 'n/a'}` +
     ` 未漏=${report.a9.consistent ?? 'n/a'}（漏的路径=${report.a9.missingSides ?? 'n/a'} 多出=${report.a9.surplusEdges ?? 'n/a'}）` +

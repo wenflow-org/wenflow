@@ -86,6 +86,13 @@ export interface ModelRegistryOverview {
     defaultEvaluationModelResolved: string | null;
     defaultEvaluationModelSource: 'alias' | 'concrete' | 'unset';
   };
+  /** 运行时实际默认（2026-10-24）：平台没配时可能落 env，界面需要说清来源 */
+  runtimeDefaults: {
+    model: string | null;
+    source: 'ui' | 'env' | 'none';
+    reasoningModel: string | null;
+    reasoningSource: 'ui' | 'env' | 'none';
+  };
   fallbackChains: Array<{
     model: string;
     fallbacks: string[];
@@ -94,6 +101,12 @@ export interface ModelRegistryOverview {
   }>;
   runtime: { maxModelCandidates: number; fallbackSwapsModelOnly: boolean };
   cooldowns: CooldownSnapshot[];
+  /** D12（2026-10-22）：近 1 小时上游限流与当前冷却读数，供「调用与健康」一眼判断是否在挨 429 */
+  rateLimit: {
+    windowMinutes: number;
+    count429: number;
+    coolingDown: number;
+  };
   /** 配置漂移 / 待清理项 */
   warnings: string[];
   /** ACTIVE prompt 上仍残留的、已废弃的 model 副本数量（见 §4.9） */
@@ -248,7 +261,7 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     description: model.description
   }));
 
-  // 运行时有效链:executor 只允许主模型 + 1 跳 fallback(MAX_MODEL_CANDIDATES),
+  // 运行时有效链:executor 只允许主模型 + 最多 2 跳 fallback(MAX_MODEL_CANDIDATES),
   // 声明链更长也只生效前 N 个候选——展示层必须与运行时一致,避免「看着 3 层保险实际 1 层」
   const runtimeMaxCandidates = MAX_MODEL_CANDIDATES;
   const fallbackChains = models
@@ -276,14 +289,6 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     }
   }
 
-  // 未被任何别名引用的模型（提示：可能已下线或漏配别名）
-  const referenced = new Set(aliases.flatMap((item) => item.members));
-  for (const model of AVAILABLE_MODELS) {
-    if (!referenced.has(model.id)) {
-      warnings.push(`模型「${model.id}」未被任何别名引用（只能通过具体 id 使用）。`);
-    }
-  }
-
   // 遗留表检测:agent_model_configs 已于 2026-10-08 摘出路由解析链（doc/MODEL_GATEWAY_DESIGN.md
   // §422 决定），遗留行不再影响路由——只提示清理，不再说「优先级高于平台默认」。
   try {
@@ -306,6 +311,28 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       `有 ${deprecatedPromptModelCount} 条 ACTIVE prompt 仍带 model 副本（已废弃，运行时仅作最后兜底，模型绑定以路由层为准）。`
     );
   }
+
+  /* D12（2026-10-22 拍板 B）：把「最近是否在挨上游 429」变成可读的运营读数。
+     两处来源与页面语义一致：429 计数看调用日志（按 HTTP 状态码），冷却数看部署健康快照。
+     读日志失败不影响总览本身（该接口是只读诊断面），失败时按 0 展示并在 warnings 说明。 */
+  const rateWindowMinutes = 60;
+  let count429 = 0;
+  try {
+    const callLogs = (systemPrisma as unknown as {
+      agent_call_logs?: { count: (args: unknown) => Promise<number> };
+    }).agent_call_logs;
+    count429 = callLogs
+      ? await callLogs.count({
+          where: {
+            calledAt: { gte: new Date(Date.now() - rateWindowMinutes * 60_000) },
+            statusCode: 429
+          }
+        })
+      : 0;
+  } catch {
+    warnings.push('近 1 小时 429 计数读取失败，当前显示 0，不代表没有限流。');
+  }
+  const cooldowns = listCoolingDowns();
 
   return {
     generatedAt: new Date().toISOString(),
@@ -330,9 +357,23 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       defaultEvaluationModelResolved: evaluationSelection?.model ?? evaluationModel,
       defaultEvaluationModelSource: evaluationModel ? (evaluationSelection ? 'alias' : 'concrete') : 'unset'
     },
+    /* 运行时真正用的默认（2026-10-24）：台面上的 defaults 只报「平台配了什么」（unset 就是没配），
+       但运行时还会落 env AI_MODEL / AI_MODEL_REASONING。来源必须能被界面说清，否则
+       「没配默认为什么还有模型」只能靠猜。 */
+    runtimeDefaults: {
+      model: chatSelection?.model ?? defaultModel ?? ((process.env.AI_MODEL || '').trim() || null),
+      source: defaultModel ? 'ui' : ((process.env.AI_MODEL || '').trim() ? 'env' : 'none'),
+      reasoningModel: reasoningSelection?.model ?? reasoningModel ?? ((process.env.AI_MODEL_REASONING || '').trim() || null),
+      reasoningSource: reasoningModel ? 'ui' : ((process.env.AI_MODEL_REASONING || '').trim() ? 'env' : 'none')
+    },
     fallbackChains,
     runtime,
-    cooldowns: listCoolingDowns(),
+    cooldowns,
+    rateLimit: {
+      windowMinutes: rateWindowMinutes,
+      count429,
+      coolingDown: cooldowns.length
+    },
     warnings,
     deprecatedPromptModelCount
   };

@@ -25,6 +25,7 @@ function build(over: Partial<Record<keyof Deps, ComputedRef<unknown>>> = {}) {
     stageResults: computed(() => ({}) as Record<string, unknown>),
     isTerminal: computed(() => false),
     isFailedTerminal: computed(() => false),
+    isInterruptedTerminal: computed(() => false),
     hasWrapup: computed(() => false),
     goalConversationMessages: computed(() => [] as Array<{ role: string; content: string }>),
     pathStatusPath: computed(() => ({}) as Record<string, unknown>),
@@ -51,7 +52,7 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'path'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => true),
+      isInterruptedTerminal: computed(() => true),
       learnLessons: computed(() => untouchedLessons(6))
     });
 
@@ -64,11 +65,11 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'path'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => true)
+      isInterruptedTerminal: computed(() => true)
     });
 
     expect(s.stageDone('goal')).toBe(true);
-    // 终止点所在阶段由 isFailedTerminal 拦住，不伪装成完成
+    // 终止点所在阶段由 isInterruptedTerminal 拦住，不伪装成完成
     expect(s.stageDone('path')).toBe(false);
   });
 
@@ -76,7 +77,7 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'learning'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => true)
+      isInterruptedTerminal: computed(() => true)
     });
 
     expect(s.stageDone('learning')).toBe(false);
@@ -88,7 +89,7 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'learning'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => false)
+      isInterruptedTerminal: computed(() => false)
     });
 
     expect(s.stageDone('learning')).toBe(true);
@@ -123,12 +124,31 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'goal'),
       isTerminal: computed(() => true),
-      isFailedTerminal: computed(() => true)
+      isInterruptedTerminal: computed(() => true)
     });
 
     expect(s.stageDone('path')).toBe(false);
     expect(s.stageDone('learning')).toBe(false);
   });
+
+  /* #135：timeout/finalization_failed/discarded/superseded 同为中断终态——
+     isFailedTerminal 只覆盖 failed/abandoned，其余终止态此前会把当前阶段打勾。 */
+  it.each(['timeout', 'finalization_failed', 'discarded', 'superseded'] as const)(
+    '%s 停在当前阶段：当前阶段不判完成',
+    (via) => {
+      const s = build({
+        currentStage: computed(() => 'learning'),
+        isTerminal: computed(() => true),
+        isFailedTerminal: computed(() => false),
+        isInterruptedTerminal: computed(() => true)
+      });
+      void via;
+
+      expect(s.stageDone('learning')).toBe(false);
+      // 已走过的阶段仍判完成（不误伤）
+      expect(s.stageDone('goal')).toBe(true);
+    }
+  );
 });
 
 /**

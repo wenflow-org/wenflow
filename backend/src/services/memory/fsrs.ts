@@ -51,7 +51,9 @@ export const FSRS_MIN_STABILITY = S_MIN;
  * - mastered + progress≥100 → Easy：完全掌握且达标
  * - mastered → Good：已掌握
  * - review → Hard：到期复习点（尚不稳固，按困难处理）
- * - learning / pending → Again：尚未掌握
+ * - learning → Hard：本节课有推进但尚未掌握；这是「费力回忆出来了」，
+ *   不是「完全没回忆出来」（2026-10-22 审计：99/133 课末证据记 Again，系统性压低 stability）
+ * - pending → Again：尚未开始/无进度（无证据路径实际会被证据门返回 null）
  */
 export function fsrsGradeFromStatus(
   status: 'pending' | 'learning' | 'mastered' | 'review',
@@ -64,6 +66,7 @@ export function fsrsGradeFromStatus(
     case 'review':
       return Rating.Hard;
     case 'learning':
+      return Rating.Hard;
     case 'pending':
     default:
       return Rating.Again;
@@ -83,7 +86,7 @@ export function fsrsGradeFromStatus(
  * |---|---|---|
  * | pending | **无**：本节课未开始该概念（12911 条 pending 中 12854 条 progress≤0）。写 Again 等于把"没学"记成"复习失败"（Review 态还会 lapses+1） | null |
  * | review | **无**：到期复习点的成绩由复习事件链单一写入（ReviewCompletedConsumer，见 memory-trace.service.ts 末尾注释）；仍停留在 review 的点=未响应的待办，不是"复习过但困难" | null |
- * | learning，progress>0 | 有：本节课有进度 | Again（尚未掌握） |
+ * | learning，progress>0 | 有：本节课有进度 | Hard（有推进但未掌握） |
  * | mastered，progress>0 | 有：本节课判定掌握 | progress≥100 → Easy，否则 Good |
  * | learning / mastered，progress≤0 | **无**：无进度变化 | null |
  * | 其他（缺失/非法） | 无状态 | null |

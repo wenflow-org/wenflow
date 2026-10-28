@@ -69,7 +69,9 @@ function teachingSessionRow(overrides: Record<string, unknown> = {}) {
       { name: '作用域', status: 'learning', progress: 0.6 },
       { name: '默认参数', status: 'mastered', progress: 1 },
     ]),
-    teachingState: null,
+    teachingState: JSON.stringify({
+      extensionRuntime: { active: true, turns: 2, maxTurns: 5 },
+    }),
     wrapup: JSON.stringify({
       status: 'complete',
       summary: {
@@ -80,6 +82,9 @@ function teachingSessionRow(overrides: Record<string, unknown> = {}) {
       },
       sources: { summary: 'model' },
       generatedAt: '2026-08-12T15:00:00.000Z',
+      extensionObservability: {
+        kind: 'extension', phase: 'observation', turnCount: 3, sessionLss: 6, sessionLf: 2.5, learnedConcepts: ['作用域'],
+      },
     }),
     advisory: JSON.stringify({ shouldSuggest: true, priority: 'medium', rationale: '建议复习', ui: { title: '复习', body: '建议下课前插入图例复盘。' } }),
     startTime: new Date('2026-08-12T14:00:00.000Z'),
@@ -231,6 +236,11 @@ describe('GET /api/admin/session-console/:sessionId', () => {
     expect(data.teaching.taskTitle).toBe('参数与返回值');
     expect(data.teaching.messageCount).toBe(1);
     expect(data.teaching.wrapup.summary.learningEvaluation).toContain('通过');
+    // 延伸课观测必须透出：视图裁剪曾把它砍掉，座舱「延伸学观测」条对真实会话不可达
+    expect(data.teaching.wrapup.extensionObservability).toMatchObject({ turnCount: 3, sessionLss: 6, sessionLf: 2.5 });
+    // 延伸进行中：实时回合进度从 teachingState 透出（真人延伸课座舱「延伸中」条）
+    expect(data.stageResults.teaching.extensionRuntime).toEqual({ active: true, turns: 2, maxTurns: 5 });
+    expect(data.teaching.extensionRuntime).toEqual({ active: true, turns: 2, maxTurns: 5 });
     expect(data.runtime.currentStage).toBe('wrapup');
     expect(data.runtime.bindings.currentTaskId).toBe('task_1');
     expect(data.runtime.stageStatus.learning.wrapup).toBeTruthy();

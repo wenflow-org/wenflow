@@ -20,7 +20,7 @@
  *   const { sortKey, sortDir, toggle, sortState } = useTableSort({ keys: ['calledAt', 'durationMs'], defaultKey: 'calledAt' })
  *   watch([sortKey, sortDir], () => reload({ sort: sortKey.value, order: sortDir.value }))
  */
-import { ref, type Ref } from 'vue'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
 export type SortDir = 'asc' | 'desc'
 export type SortValue = string | number | boolean | null | undefined
@@ -46,7 +46,7 @@ export interface UseTableSortOptions<T> {
 export interface UseTableSort<T> {
   sortKey: Ref<string>
   sortDir: Ref<SortDir>
-  /** 点击表头：同列切换升/降序，换列用默认方向 */
+  /** 点击表头：换列用默认方向；同列反序；再点一次回默认序（第三次点击即复位） */
   toggle: (key: string) => void
   /** 仅翻转方向（配合下拉式选择字段使用） */
   toggleDir: () => void
@@ -57,6 +57,10 @@ export interface UseTableSort<T> {
   sortRows: (rows: T[]) => T[]
   /** 回到默认排序（或原始顺序） */
   reset: () => void
+  /** 当前是否仍在默认序（含方向）。排序态写 localStorage 后本来需要工具条给复位出口；
+   *  2026-10-27 起由 `toggle` 的第三次点击承担（见 toggle 注释），本字段保留给需要
+   *  显示「默认序提示」的页面。 */
+  isDefault: ComputedRef<boolean>
 }
 
 interface SortSnapshot {
@@ -111,13 +115,28 @@ export function useTableSort<T>(options: UseTableSortOptions<T>): UseTableSort<T
     return keys.includes(key)
   }
 
+  /** 该列的默认方向（换列首击与复位共用） */
+  function defaultDirOf(key: string): SortDir {
+    return options.defaultDirOf?.[key] ?? options.defaultDir ?? 'desc'
+  }
+
+  /**
+   * 点击表头：换列 → 该列默认方向；同列 → 反序；再点一次 → 回默认序。
+   *
+   * 第三次点击承担「恢复默认序」（2026-10-27 用户「恢复默认序太丑」后去掉工具条文字链）：
+   * 排序态写 localStorage 后原本必须有一个回默认序的出口，现在由表头自己闭环，
+   * 不再在筛选行里多挂一条蓝色文字链。
+   */
   function toggle(key: string) {
     if (!isSortable(key)) return
-    if (sortKey.value === key) {
+    if (sortKey.value !== key) {
+      sortKey.value = key
+      sortDir.value = defaultDirOf(key)
+    } else if (sortDir.value === defaultDirOf(key)) {
       sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
     } else {
-      sortKey.value = key
-      sortDir.value = options.defaultDirOf?.[key] ?? options.defaultDir ?? 'desc'
+      reset()
+      return
     }
     persist()
   }
@@ -152,9 +171,14 @@ export function useTableSort<T>(options: UseTableSortOptions<T>): UseTableSort<T
     sortKey.value = validDefault
     // 回到默认列时方向也要取该列的默认方向：否则“重置”会得到一个从未出现过的组合
     // （例：记忆强度首击升序，重置后变降序，最弱的排到末尾——与列头自己声明的口径相反）
-    sortDir.value = (validDefault ? options.defaultDirOf?.[validDefault] : undefined) ?? options.defaultDir ?? 'desc'
+    sortDir.value = defaultDirOf(validDefault)
     persist()
   }
 
-  return { sortKey, sortDir, toggle, toggleDir, isSortable, sortState, sortRows, reset }
+  const isDefault = computed(
+    () => sortKey.value === validDefault
+      && sortDir.value === ((validDefault ? options.defaultDirOf?.[validDefault] : undefined) ?? options.defaultDir ?? 'desc')
+  )
+
+  return { sortKey, sortDir, toggle, toggleDir, isSortable, sortState, sortRows, reset, isDefault }
 }

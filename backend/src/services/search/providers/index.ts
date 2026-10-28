@@ -8,6 +8,7 @@
 
 import { SearchError } from '../types';
 import type { SearchProvider, SearchProviderId } from '../types';
+import { readPluginChannelOrder } from '../../plugin-providers.service';
 import { TinyFishSearchProvider } from './tinyfish';
 import { TavilySearchProvider } from './tavily';
 import { ExaSearchProvider } from './exa';
@@ -26,10 +27,19 @@ export function createSearchProviders(): Partial<Record<SearchProviderId, Search
 }
 
 /**
- * 解析 provider 顺序（SEARCH_PROVIDER，逗号分隔 = 降级链）。
- * 未配置时退回已实现 provider 的默认顺序；配置了未知 id 直接报错，避免静默走错 provider。
+ * 解析 provider 顺序（逗号分隔 = 降级链）。
+ *
+ * 无显式入参时走「平台配置 → 环境变量 → 默认」：管理员在「插件 · 联网」里排的优先级
+ * （platform_settings.pluginProviderOrders）必须优先于部署环境变量，否则界面上的顺序只是摆设。
+ * 显式入参（测试 / 内部编排）保持原语义：只按传入串解析，未知 id 直接报错。
  */
-export function resolveProviderOrder(serialized: string = process.env.SEARCH_PROVIDER || ''): SearchProviderId[] {
+export function resolveProviderOrder(serialized?: string): SearchProviderId[] {
+  if (serialized === undefined) {
+    const configured = readPluginChannelOrder('web', 'search').filter(
+      (id): id is SearchProviderId => KNOWN_PROVIDERS.includes(id as SearchProviderId)
+    );
+    return configured.length ? configured : [...IMPLEMENTED_PROVIDERS];
+  }
   const raw = serialized.trim();
   if (!raw) return [...IMPLEMENTED_PROVIDERS];
 

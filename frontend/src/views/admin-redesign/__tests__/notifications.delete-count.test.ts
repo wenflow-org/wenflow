@@ -66,7 +66,12 @@ describe('站内通知：删除后徽标计数重取（#12）', () => {
     await flushPromises();
     const before = w.emitted('count')!;
     expect(before[before.length - 1]).toEqual([1]);
-    const delBtn = w.findAll('button').find((b) => b.text().trim() === '删除')!;
+    // 主操作归位卡头右组（2026-10-26 用户「重新设计一下」）：嵌入态同样有可见入口
+    expect(w.find('.mk-card__head-right').text()).toContain('发送通知');
+    // 2026-10-26：删除收进行尾 ⋯（原先每行一颗红删除，20 行连成一片红）
+    await w.find('tbody tr .mk-menu__btn').trigger('click');
+    const delBtn = w.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text().trim() === '删除')!;
+    expect(delBtn).toBeTruthy();
     await delBtn.trigger('click');
     await flushPromises();
     await nextTick();

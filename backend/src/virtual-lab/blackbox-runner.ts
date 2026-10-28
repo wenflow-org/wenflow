@@ -1786,7 +1786,7 @@ export class BlackboxVirtualLearnerRunner {
     let taskResult: PlatformInteractionResult | null = null
     if (checkpoint.status !== 'task_completed') {
       try {
-        taskResult = await adapter.completeTask(taskId)
+        taskResult = await adapter.completeTask(taskId, teachingSessionId, checkpoint.teachingRevision)
         // 任务真正结算后：虚拟学习者记忆回写（画像概念 + 成果物登记），best-effort
         await this.persistLearnerMemoryAfterTask(session, taskId, teachingSessionId, state)
       } catch (error: unknown) {

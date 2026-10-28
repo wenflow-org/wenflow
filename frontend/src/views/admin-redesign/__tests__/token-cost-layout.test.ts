@@ -22,6 +22,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { nextTick } from 'vue';
 import TokenCost from '../TokenCost.vue';
+import { liveRefreshSeq } from '../live';
 import TcRankTable from '../TcRankTable.vue';
 import OvBars from '../OvBars.vue';
 
@@ -108,7 +109,8 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     const w = await mountTokenCost();
     const heads = w.findAll('.tc-skilltable__head > span').map((s) => s.text());
     // 输入/输出（原 Prompt/Completion，2026-10-16 用户：「那就输入输出就行了，不要搞那么多」）
-    expect(heads).toEqual(['Skill', '调用', 'Token 用量', '输入', '输出', '均次 Token', '成本', '占比']);
+    // 调用 → 调用次数（2026-10-24 用户「调用次数就写调用次数就可以了」：列名用可数的全名）
+    expect(heads).toEqual(['Skill', '调用次数', 'Token 用量', '输入', '输出', '均次 Token', '成本', '占比']);
     const rows = w.findAll('.tc-skilltable__row');
     expect(rows).toHaveLength(2);
     const priced = rows[0].find('.tc-st__cost');
@@ -117,23 +119,22 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     const unpriced = rows[1].find('.tc-st__cost');
     expect(unpriced.text()).toBe('—');
     expect(unpriced.classes()).toContain('tc-st__cost--none');
-    // 原因改由行 title 承担（占位符自身不带原因，若 title 也不说就是净丢信息）
-    expect(rows[1].attributes('title')).toContain('单价未配置');
+    // 行内不再挂解释型 title（占位符只说「没有金额」，原因在卡头徽章与调用成本卡）
+    expect(rows[1].attributes('title')).toBeUndefined();
     // 拆分与派生列真的算出来了（不是空列占位）
     expect(rows[0].findAll('.tc-st__num--dim').map((c) => c.text())).toEqual(['9.5M', '500.0K', '100.0K']);
     w.unmount();
   });
 
-  it('成本口径不占卡面：公式与原因只留在卡标题悬停（2026-10-19 用户「不需要注释型文案」）', async () => {
+  it('成本口径不占卡面，标题也不再挂公式与原因', async () => {
     const w = await mountTokenCost();
     expect(w.find('.tc-card--skill .tc-card__note').exists()).toBe(false);
     const title = w.find('.tc-card--skill .mk-card__title');
-    expect(title.attributes('title')).toContain('成本＝已定价调用的金额合计（美元）');
-    expect(title.attributes('title')).toContain('占比按金额算，没有已定价金额时改按 Token 算');
-    expect(title.attributes('title')).toContain('未配置单价');
-    expect(title.attributes('title')).toContain('不计入成本合计');
-    // 卡头徽章仍承担可见的「未定价」状态与原因
-    expect(w.find('.tc-card--skill .mk-badge').attributes('title')).toContain('不计入成本合计');
+    expect(title.attributes('title')).toBeUndefined();
+    // 卡头「N 个未配置单价」是可点动作（与调用成本卡同落点），不再挂解释型 title
+    const unpriced = w.find('.tc-card--skill .tc-unpriced');
+    expect(unpriced.element.tagName).toBe('BUTTON');
+    expect(unpriced.attributes('title')).toBeUndefined();
     w.unmount();
   });
 
@@ -181,12 +182,13 @@ describe('成本页 · 布局数值契约', () => {
     const tmpl = read('TcRankTable.vue')
       .match(/\.tc-table--user \.tc-table__row,[\s\S]{0,120}?grid-template-columns:\s*([^;]+);/)?.[1];
     expect(tmpl, '找不到排行表列模板（双列档）').toBeTruthy();
-    // 26+140+52+46+180+96+100 = 640，+6 个 10px 间隙 = 700
+    // 26+140+74+68+180+96+100 = 684，+6 个 10px 间隙 = 744
+    // （2026-10-24「调用次数 / 失败次数」四字表头把 52/46 两列加宽到 74/68）
     const tokens = tmpl!.replace(/,\s+/g, ',').trim().split(/\s+/);
     const need = tokens.reduce((sum, tk) => sum + Number(tk.match(/^(?:minmax\()?(\d+)px/)?.[1] ?? 0), 0)
       + (tokens.length - 1) * 10;
-    expect(need).toBe(700);
-    // 每卡需要 need + 表左右内衬 28 = 728 → 内容列 ≥ 1470 → 视口 ≥ 1754（内容列 = 视口 − 284）
+    expect(need).toBe(744);
+    // 每卡需要 need + 表左右内衬 28 = 772 → 内容列 ≥ 1544 → 视口 ≥ 1842（内容列 = 视口 − 284）
     const vpFloor = (need + 28) * 2 + 14 + 284;
     const mq = read('TokenCost.vue').match(/@media \(max-width: (\d+)px\) \{\s*\.tc-ranks/);
     expect(mq, '找不到 .tc-ranks 单列回落断点').toBeTruthy();
@@ -241,6 +243,37 @@ describe('OvBars · 数值贴柱顶', () => {
   });
 });
 
+describe('成本页 · 下钻口径（2026-10-26 评审）', () => {
+  it('Skill 行下钻带当前时间窗（执行日志默认「今天」，不带窗会落到另一个窗口）', async () => {
+    const { intent } = await import('../store');
+    intent.timeRange = '';
+    const w = await mountTokenCost();
+    await w.find('.tc-skilltable__row').trigger('click');
+    expect(intent.timeRange).toBe('week');
+    expect(intent.agentFilter).toBe('teaching-turn');
+    expect(intent.scene).toBe('execution-logs');
+    w.unmount();
+  });
+
+  it('用户 / 模型排行不可点（执行日志尚无 user / model 筛选，点了会落到空表）', async () => {
+    const { adminTokenCostApi } = await import('@/api/adminApi');
+    vi.mocked(adminTokenCostApi.getByUser).mockResolvedValueOnce({
+      data: { data: { items: [{ key: 'u1', display: 'u1', name: '甲', tokens: 60, calls: 3, failed: 0 }] } }
+    } as never);
+    vi.mocked(adminTokenCostApi.getByModel).mockResolvedValueOnce({
+      data: { data: { items: [{ key: 'm1', display: 'm1', tokens: 60, calls: 3, failed: 0 }] } }
+    } as never);
+    const w = await mountTokenCost();
+    const rows = w.findAll('.tc-table__row');
+    expect(rows.length).toBe(2);
+    for (const r of rows) {
+      expect(r.attributes('tabindex')).toBeUndefined();
+      expect(r.attributes('role')).toBe('row');
+    }
+    w.unmount();
+  });
+});
+
 describe('成本页 · 失败三态（#72 P-47）', () => {
   it('刷新失败保留旧数时：显式提示「以下为上次结果」，失败数与总 Token 不落成 0', async () => {
     const { adminTokenCostApi } = await import('@/api/adminApi');
@@ -248,14 +281,14 @@ describe('成本页 · 失败三态（#72 P-47）', () => {
     expect(w.find('.tc-error').exists()).toBe(false);
 
     vi.mocked(adminTokenCostApi.getSummary).mockRejectedValueOnce(new Error('network down'));
-    const refresh = w.findAll('button').find((b) => b.text() === '刷新')!;
-    await refresh.trigger('click');
+    // 2026-10-23 页头刷新钮撤除：顶栏刷新经 liveRefreshSeq 广播到本页（同一入口）
+    liveRefreshSeq.value += 1;
     await flushPromises();
     await nextTick();
 
     expect(w.find('.tc-error').exists()).toBe(true);
     expect(w.find('.tc-error').text()).toContain('上次加载结果');
-    const failed = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '失败调用')!;
+    const failed = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '失败')!;
     const tokens = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '总 Token')!;
     // 旧 summary 里 failed=0，刷新失败后必须显示「—」而不是沿用 0 冒充健康
     expect(failed.find('.mk-kpi__num').text()).toBe('—');

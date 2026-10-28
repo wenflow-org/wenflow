@@ -3,6 +3,7 @@ import type {
   SimulationMilestone,
   SimulationTask,
   StageResults,
+  StuckClosureAttributionRecord,
   TeachingState
 } from '../virtual-lab/vlab-types';
 import type {
@@ -109,6 +110,30 @@ export function evaluateStuckClosure(params: {
   if (masteryDelta > epsilon) return { stuck: false, reason: null, masteryDelta, judgeFalseCount };
   if (judgeFalseCount < judgeFalseMin) return { stuck: false, reason: null, masteryDelta, judgeFalseCount };
   return { stuck: true, reason: 'non-convergence', masteryDelta, judgeFalseCount };
+}
+
+/** 卡死归因的 append-only 落点上限（stageResults.stuckAttributions）。 */
+export const STUCK_ATTRIBUTION_CAP = 20;
+
+/**
+ * 追加一条卡死归因（纯函数，供单测）。
+ *
+ * 背景：归因原先只写 taskRuntime.closureAttribution 与 session log，二者都会被
+ * 下一次 `restart-learning` 的整包重写清掉——2026-10-21 实测当天 8 次非收敛，
+ * DB 里只剩课堂记录的 `endReason='non-convergence'`，无法回答「为什么判卡死」。
+ * 改为写到 stageResults 根部的 append-only 数组（reset 只删指定键，不动它）。
+ * 容错：历史值不是数组 / 元素不是对象时忽略，不抛错。
+ */
+export function appendStuckAttributionEntry(
+  prior: unknown,
+  entry: StuckClosureAttributionRecord,
+  cap: number = STUCK_ATTRIBUTION_CAP,
+): StuckClosureAttributionRecord[] {
+  const list = Array.isArray(prior)
+    ? prior.filter((item): item is StuckClosureAttributionRecord => !!item && typeof item === 'object')
+    : [];
+  const limit = Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : STUCK_ATTRIBUTION_CAP;
+  return [...list, entry].slice(-limit);
 }
 
 type ExtensionRuntimeLike = {

@@ -369,6 +369,14 @@ body {
   background: var(--neutral-500);
 }
 
+/* Firefox / 新版标准属性：两条都是继承属性，放在根上即可覆盖全站；
+   局部 `scrollbar-width: none/thin` 的容器仍按自己的声明走。
+   此前只有 WebKit 规则，Firefox 的弹层/表格滚动条完全原生（2026-10-27 走查）。 */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-400) transparent;
+}
+
 /* ==========================================
    选择文本样式
    ========================================== */

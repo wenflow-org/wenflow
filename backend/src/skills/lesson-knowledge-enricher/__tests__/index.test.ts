@@ -30,6 +30,21 @@ describe('lesson-knowledge-enricher 失败显式传播', () => {
   });
 });
 
+describe('lesson-knowledge-enricher 非 JSON 重试', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('一次有界重试 + 纠偏话术（此前 maxAttempts=1，一次散文即整条失败）', async () => {
+    mockCallPrompt.mockResolvedValue({ success: true, output: {}, debug: { durationMs: 1 } });
+
+    await lessonKnowledgeEnricher(input);
+
+    const spec = mockCallPrompt.mock.calls[0][0];
+    expect(spec.retryStrategy?.maxAttempts).toBe(2);
+    expect(spec.retryStrategy?.onValidationFail({ failureReason: 'response does not contain valid JSON object' }))
+      .toContain('JSON');
+  });
+});
+
 describe('lesson-knowledge-enricher normalize（不注入伪值）', () => {
   beforeEach(() => jest.clearAllMocks());
 

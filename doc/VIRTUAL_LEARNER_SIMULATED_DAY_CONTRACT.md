@@ -15,8 +15,9 @@
 
 - 写入：把"第 dayIndex 天"的业务时间戳写成 `timestamp = baseDate + dayIndex`（`updateLearningMetrics({timestamp})`、`subtasks.completedAt`、`teaching_sessions.startTime/endTime`、`learner_evidence.occurredAt`）。
 - 读取：一律按 `asOf = endOfDayUtc(baseDate + dayIndex)` 读回。
-- **日历锚点在过去**：`baseDate = now - horizon`（或会话创建日），推进到末尾 ≈ 今天，**不进入未来**。
-- **隔离**：只对 `isVirtualLearner = 1`；`asOf` 上界（`calculatedAt <= asOf`）天然排除真实行。
+- **模拟日可进入真实未来**（产品拍板 2026-10-07）：`baseDate + dayIndex` 允许超过真实 `now`，用于跨日/长程模拟；原「未来日拒绝」护栏已移除。
+- **真实时间窗统计必须设上界**：任何面向真人运维/学习者的「近 N 天/今日」查询，除下界外还必须带 `lte: now`（或用 `asOf` 读回），不得把未来模拟日的完成记录当成已发生事实。
+- **隔离**：只对 `isVirtualLearner = 1`；`asOf` 上界（`calculatedAt <= asOf`）天然排除真实行。VL 数据进入真实时间窗时以 `now` 为上界。
 - **推进顺序向前**（day0→day1→…）；审计/运维列（`createdAt/updatedAt`）保持真墙钟。
 
 依据：`learning-state.service.ts:399-401`（窗口 `lte: asOf`）、`scripts/simulate-learner-days.ts`（6 条断言已在跑）、commit `9c3fd45`。

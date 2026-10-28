@@ -209,18 +209,34 @@ export async function reconcileTaskCompletionMetric(
   const taskId = typeof data.taskId === 'string' ? data.taskId : event.aggregateId;
   if (!taskId) throw new Error('任务完成事件缺少 taskId');
 
-  await updateLearningMetrics({
-    userId: event.userId,
-    taskId,
-    // 事件体自带 pathId（learning.service 的 task:completed）；缺失保持 null，不阻断
-    pathId: typeof data.pathId === 'string' ? data.pathId : null,
-    durationMinutes: typeof data.actualMinutes === 'number' ? data.actualMinutes : 30,
-    subjectiveDifficulty: typeof data.subjectiveDifficulty === 'number'
-      ? data.subjectiveDifficulty
-      : undefined,
-    completed: true,
-    timestamp: event.occurredAt
-  });
+  const subjectiveDifficulty = typeof data.subjectiveDifficulty === 'number'
+    ? data.subjectiveDifficulty
+    : undefined;
+  const explicitLss = typeof data.lssScore === 'number' ? data.lssScore : undefined;
+
+  // 写侧收口（2026-10-22 审计 P2）：无主观难度、也无显式 LSS 时不再落
+  // task-completion:<taskId> 占位行（LSS 恒按默认难度 5 合成）。这类行与同课
+  // session-wrapup 真实行并存会把日负荷算成两倍，此前靠三道读侧 dedupe 事后补救。
+  // 真实的课前/课后负载由 session-wrapup 权威行承载；任务侧无测量就不写。
+  if (subjectiveDifficulty === undefined && explicitLss === undefined) {
+    logger.debug('[LearningMetrics] 任务完成无主观难度，跳过占位指标行', {
+      userId: event.userId,
+      taskId,
+      pathId: typeof data.pathId === 'string' ? data.pathId : null,
+    });
+  } else {
+    await updateLearningMetrics({
+      userId: event.userId,
+      taskId,
+      // 事件体自带 pathId（learning.service 的 task:completed）；缺失保持 null，不阻断
+      pathId: typeof data.pathId === 'string' ? data.pathId : null,
+      durationMinutes: typeof data.actualMinutes === 'number' ? data.actualMinutes : 30,
+      subjectiveDifficulty,
+      ...(explicitLss !== undefined ? { lssScore: explicitLss } : {}),
+      completed: true,
+      timestamp: event.occurredAt
+    });
+  }
 
   // 校准闭环回写（fire-and-forget）：任务完成后对照预测器的历史预测，统计实证命中率
   void predictionCalibrationService.resolveFromTaskCompletion(event.userId, taskId)

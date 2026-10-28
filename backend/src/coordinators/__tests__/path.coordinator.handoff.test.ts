@@ -231,4 +231,15 @@ describe('path.coordinator normalizedInputV1 配置式装配', () => {
       'understanding.real_problem': 'HANDOFF 版本的真问题',
     })
   })
+
+  it('goal 层 confidenceScores 透传到 path 输入的 userProfile', async () => {
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+      confidenceScores: { overall: 0.86, surfaceGoal: 0.9 },
+    } as any)
+
+    expect(result.userProfile.confidenceScores).toEqual({ overall: 0.86, surfaceGoal: 0.9 })
+  })
 })

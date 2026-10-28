@@ -9,18 +9,16 @@
 
     <!-- 吸顶工具条：搜索 + 分类（计数跟随过滤，与原抽屉同口径） -->
     <div class="mg__toolbar">
-      <input v-model="keyword" type="search" class="mk-input mg__search" placeholder="搜索术语 / 英文标识 / 定义" />
-      <div class="mk-pills">
-        <button
-          v-for="c in categories"
-          :key="c.id"
-          type="button"
-          class="mk-pill"
-          :class="{ 'mk-pill--active': category === c.id }"
-          :aria-pressed="category === c.id"
-          @click="category = c.id"
-        >{{ c.label }}（{{ countOf(c.id) }}）</button>
-      </div>
+      <input v-model="keyword" type="search" class="mk-input mg__search" placeholder="搜索术语 / 英文标识 / 定义" aria-label="搜索术语 / 英文标识 / 定义" />
+      <!-- 2026-10-27 用户「需要统一调整」：分类是单选维度 → 胶囊下拉；
+           原先一排常驻 chip 在窄屏折成多行，且与全站维度筛选不是同一控件。 -->
+      <MkPillSelect
+        v-model="categorySelect"
+        label="分类"
+        aria-label="按术语分类筛选"
+        :options="categorySelectOptions"
+        :active="category !== 'all'"
+      />
     </div>
 
     <!-- 加载失败：给原因 + 重试（接口失败不能伪装成「无匹配词条」） -->
@@ -51,7 +49,8 @@
           <h4 class="mg__section-title">状态：完成度五档</h4>
           <div class="mg__grid">
             <div v-for="m in filteredCompletion" :key="m.status" class="mg__term">
-              <span class="mg__term-name">{{ m.label }}<span class="mg__term-en mono">{{ m.status }}</span></span>
+              <!-- 状态是中文词（已生效 / 未使用），不走等宽 -->
+              <span class="mg__term-name">{{ m.label }}<span class="mg__term-en">{{ m.status }}</span></span>
               <span class="mg__term-def">{{ m.hint }}</span>
             </div>
           </div>
@@ -117,14 +116,15 @@
  * 运营术语表（整页版，2026-10-10 用户拍板：替换 AdminGlossaryDrawer 抽屉）。
  * 数据源不变：GET /api/admin/glossary（后端真源）+ glossaryMeta 兜底。
  * 与抽屉的差异只在呈现层：整页阅读宽度、词条卡片双列栅格、吸顶搜索、URL 可深链
- * （/admin/glossary?cat=&q= 与场景路由双向同步由 AdminConsole 既有机制承担）。
+ * （/admin/glossary?cat=&q= 在本页双向同步：挂载读取、筛选变化 replace 回写）。
  */
-import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { adminGlossaryApi } from '@/api/adminApi'
 import { COMPLETION_META, SEMANTICS_META, type GlossaryTerm } from './glossaryMeta'
 import { errMsg } from './live'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 
 interface PromptRoleMeta { id: string; label: string; hint: string }
 interface StageMeta { id: string; label: string; hint: string }
@@ -167,6 +167,14 @@ const categories: Array<{ id: CategoryId; label: string }> = [
   { id: 'health', label: '健康' },
   { id: 'stage', label: '阶段' },
 ]
+/** 分类维度（2026-10-27 统一）：计数进 option 文案，不再由一排 chip 承载。 */
+const categorySelect = computed<CategoryId>({
+  get: () => category.value,
+  set: (v) => { category.value = v },
+})
+const categorySelectOptions = computed(() =>
+  categories.map((c) => ({ value: c.id, label: `${c.label}（${countOf(c.id)}）` }))
+)
 
 function showCategory(id: string) {
   // 全部视图 = 所有分区；单分类 = 只留命中那一格
@@ -242,12 +250,49 @@ async function retryLoad() {
 }
 
 const route = useRoute()
+const router = useRouter()
+
+function readCategory(value: unknown): CategoryId {
+  return categories.some((c) => c.id === value) ? (value as CategoryId) : 'all'
+}
+
+/** URL → 视图：挂载与浏览器前进/后退共用，非法分类回落「全部」 */
+function applyQuery() {
+  const q = typeof route.query.q === 'string' ? route.query.q : ''
+  const cat = readCategory(route.query.cat)
+  if (keyword.value !== q) keyword.value = q
+  if (category.value !== cat) category.value = cat
+}
+
+let queryTimer: ReturnType<typeof setTimeout> | undefined
+/** 视图 → URL：键盘输入去抖 250ms；分类切换即时（同一去抖窗口内合并） */
+function syncQueryToUrl() {
+  if (queryTimer) clearTimeout(queryTimer)
+  queryTimer = setTimeout(() => {
+    const q = keyword.value.trim()
+    const cat = category.value
+    const currentQ = typeof route.query.q === 'string' ? route.query.q : ''
+    if (q === currentQ && cat === readCategory(route.query.cat)) return
+    const query: Record<string, string> = {}
+    for (const [key, value] of Object.entries(route.query)) {
+      if (key !== 'q' && key !== 'cat' && typeof value === 'string') query[key] = value
+    }
+    if (q) query.q = q
+    if (cat !== 'all') query.cat = cat
+    void router.replace({ query })
+  }, 250)
+}
+
+watch([keyword, category], syncQueryToUrl)
+watch(() => [route.query.q, route.query.cat], applyQuery)
+onBeforeUnmount(() => {
+  if (queryTimer) clearTimeout(queryTimer)
+})
 
 onMounted(() => {
-  /* 深链 ?q=<术语>（成就卡术语链接 / 外部分享）→ 预填搜索，落点即所查词条；
-     分类保持「全部」，避免词条被当前分类格隐藏 */
-  const q = route.query.q
-  if (typeof q === 'string' && q.trim()) keyword.value = q.trim()
+  /* 深链 ?q=<术语>&cat=<分类>（成就卡术语链接 / 外部分享）：搜索词与分类一起恢复，
+     之后两侧双向同步，刷新/复制链接不丢筛选。 */
+  applyQuery()
   void load()
 })
 </script>
@@ -272,7 +317,6 @@ onMounted(() => {
   border-bottom: 1px solid var(--mk-line);
 }
 .mg__search { flex: 0 1 320px; min-width: 200px; }
-.mk-pills { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .mg__error {
   display: flex;
@@ -313,7 +357,8 @@ onMounted(() => {
 .mg__term-name { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .mg__term-en { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
 .mg__term-def { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-.mg__term-where { font-style: normal; color: var(--mk-blue); }
+/* 出处 chip 在浅蓝底上：--mk-blue 只有 4.39:1，改 accent-deep（亮色 5.68 / 暗色自动翻转） */
+.mg__term-where { font-style: normal; color: var(--mk-accent-deep); }
 .mg__empty { margin: 4px 0 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .mg__global-empty {
   margin: 32px 0;

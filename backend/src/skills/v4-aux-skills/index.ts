@@ -12,6 +12,7 @@
  *     __onFailure: 'throw' | 'fallback'，覆盖 core 声明的默认策略（用于必须保持既有抛出契约的调用点）。
  */
 import { callPrompt } from '../../composers/prompt-composer';
+import { JSON_OUTPUT_RETRY_STRATEGY } from '../json-output-retry';
 import { currentTeachingSessionId } from '../../services/ai-teaching/teaching-session-context';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import type { PromptCallContext } from '../../composers/types';
@@ -165,7 +166,9 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
       ...(opts.coerceParse
         ? { coerceParsedForContract: (parsed: any) => opts.coerceParse!(parsed) }
         : {}),
-      ...(opts.retryStrategy ? { retryStrategy: opts.retryStrategy } : {}),
+      // 默认给一次有界 JSON 重试：这些 aux skill 此前 maxAttempts=1，一次散文即整条失败。
+      // 调用方显式声明时保留其 maxAttempts，但若没写纠偏话术则补上统一回灌语。
+      retryStrategy: { ...JSON_OUTPUT_RETRY_STRATEGY, ...(opts.retryStrategy || {}) },
       validateParsedOutput: opts.validate || ((parsed) => parsed !== undefined && parsed !== null
         ? { valid: true }
         : { valid: false, failureReason: `${opts.meta.skillId.toUpperCase().replace(/-/g, '_')}_OUTPUT_EMPTY` }),

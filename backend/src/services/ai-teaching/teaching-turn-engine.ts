@@ -34,7 +34,7 @@ import {
   checkpointForMessageResult,
   getPendingCheckpoint,
   inheritTeachingState,
-  isDuplicateCheckpointQuestion,
+  isDuplicateCheckpointQuestion, normalizeCheckpointWithTelemetry,
   recordAnchorProbeResult,
   recordCheckpointAttemptEvidence,
   recordCheckpointResultEvidence,
@@ -1363,14 +1363,14 @@ export async function processStudentMessage(
     if (pendingBeforeTurn && checkpointCandidate?.question) {
       const changedQuestion = normalizeForKeywordMatch(pendingBeforeTurn.question) !== normalizeForKeywordMatch(checkpointCandidate.question);
       if (changedQuestion && !isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate)) {
-        teachingState.pendingCheckpoint = {
+        teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
           ...pendingBeforeTurn,
           question: checkpointCandidate.question,
           ...(checkpointCandidate.options ? { options: checkpointCandidate.options } : {}),
           ...(checkpointCandidate.correctOptionIds ? { correctOptionIds: checkpointCandidate.correctOptionIds } : {}),
           ...(checkpointCandidate.expectedKeywords ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
           ...(checkpointCandidate.hint ? { hint: checkpointCandidate.hint } : {}),
-        };
+        }, pendingBeforeTurn.type);
       }
     }
     // 同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺陷②）：候选题面与本会话**已出过**的题面
@@ -1414,7 +1414,7 @@ export async function processStudentMessage(
         ? null
         : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint)
           ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name);
-      teachingState.pendingCheckpoint = {
+      teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
         id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: checkpointCandidate.type,
         title: checkpointTitle,
@@ -1446,7 +1446,7 @@ export async function processStudentMessage(
                 : {}),
             }
           : {}),
-      };
+      }, checkpointCandidate.type);
       teachingState.lastCheckpointTurn = updatedMessages.length;
     }
 
@@ -1661,6 +1661,9 @@ export async function processStudentMessage(
           conceptKey,
           ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
           mastery: c.mastery,
+          // #133（2026-10-22）：模型自报证据窗（skill 侧已截 200 字）随行透传落
+          // memory_traces.ktEvidence——此前在此被丢弃，事后检查器只能拿二手转述核对。
+          ...(typeof c.evidence === 'string' && c.evidence.trim() ? { evidence: c.evidence.trim() } : {}),
         }];
       });
       if (ktItems.length > 0) {

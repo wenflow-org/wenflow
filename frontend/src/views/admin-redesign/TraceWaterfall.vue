@@ -32,7 +32,7 @@
          原来 7 个控件平铺一行、无主次，按语法分两组后左侧可折行、右侧稳定贴右） -->
     <div class="wf-tracepick">
       <div class="wf-tracepick__left">
-      <span v-if="sessionIds.length" class="mk-pills wf-mode">
+      <span v-if="sessionIds.length" class="mk-pills wf-mode" role="group" aria-label="链路视图">
         <button
           type="button"
           class="mk-pill"
@@ -48,21 +48,20 @@
           @click="viewMode = 'session'"
         >会话</button>
       </span>
-      <span class="wf-filter">
-        <button
-          type="button"
-          class="mk-pill"
-          :class="{ 'mk-pill--active': failuresOnly }"
-          :aria-pressed="failuresOnly"
-          :title="`只显示失败的 span 行，当前样本共 ${errorTotal} 个失败 span（「N 条链路含失败」计的是链路数，两者单位不同）`"
-          @click="failuresOnly = !failuresOnly"
-        >仅失败{{ errorTotal > 0 ? ` ${errorTotal}` : '' }}</button>
-        <select v-model="sortMode" class="wf-sort mono" aria-label="排序方式" title="按耗时排序">
-          <option value="time">默认（时间序）</option>
-          <option value="dur-desc">耗时 ↓</option>
-          <option value="dur-asc">耗时 ↑</option>
-        </select>
-      </span>
+      <div class="wf-filter">
+        <!-- 2026-10-27 用户「需要统一调整」：失败筛选归维度下拉（计数进 option），
+             常驻 chip 退场；链路/会话是视图模式，不是筛选维度，保留分段按钮。 -->
+        <MkPillSelect
+          v-model="resultSelect"
+          label="结果"
+          aria-label="按结果筛选"
+          :options="resultSelectOptions"
+          :active="failuresOnly"
+        />
+        <span class="wf-sort" title="按耗时排序">
+          <MkSelect v-model="sortMode" :options="SORT_OPTIONS" aria-label="排序方式" mono />
+        </span>
+      </div>
         <!-- 链路 ID 搜索属左组（全站卡头语法：快筛 chips → 搜索框） -->
         <input
           v-if="viewMode === 'trace'"
@@ -87,16 +86,12 @@
           {{ locateLabel }}
         </button>
         <span class="wf-tracepick__count">{{ viewMode === 'session' ? `${sessionIds.length} 个会话` : `${traceIds.length} 条链路` }}</span>
-        <select v-if="viewMode === 'session'" class="wf-tracepick__select mono" v-model="activeSession" aria-label="选择会话">
-          <option v-for="s in sessionIds" :key="s" :value="s" :title="s">
-            {{ sessionLabel(s) }}
-          </option>
-        </select>
-        <select v-else class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
-          <option v-for="t in traceIds" :key="t" :value="t" :title="t">
-            {{ traceLabel(t) }}
-          </option>
-        </select>
+        <div v-if="viewMode === 'session'" class="wf-tracepick__select">
+          <MkSelect v-model="activeSession" :options="sessionOptions" aria-label="选择会话" mono block />
+        </div>
+        <div v-else class="wf-tracepick__select">
+          <MkSelect v-model="activeTrace" :options="traceOptions" aria-label="选择链路" mono block />
+        </div>
       </div>
     </div>
 
@@ -110,7 +105,7 @@
          达上限时「加载更多样本」入口随之消失，若无任何说明就像按钮丢了/没数据了。
          这里常驻 wf-notice 说清「为什么不再有更多样本 + 怎么继续看」 -->
     <div v-if="embedded && waterfallCapReached" class="wf-notice" role="alert">
-      <span>已达本地样本上限 {{ WATERFALL_MAX_SPANS }} 条，为保持流畅已停止追加。要看更多链路，请输入完整链路 ID 回车直达。</span>
+      <span>已达样本上限 {{ WATERFALL_MAX_SPANS }} 条</span>
     </div>
 
     <!-- 链路概要卡 -->
@@ -135,7 +130,7 @@
         </div>
         <div class="wf-summary__item wf-summary__models"><span>模型</span><b class="mono">{{ traceSummary.models.join(' / ') }}</b></div>
       </template>
-      <span v-else class="wf-summary__note" title="这条链路只有网关 / 模拟类 span，没有 LLM 调用，因此没有 Token、成本与模型读数">无 LLM 调用</span>
+      <span v-else class="wf-summary__note">无 LLM 调用</span>
     </div>
 
     <div v-if="activeSpans.length" class="wf" ref="wfRoot">
@@ -291,8 +286,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { spans, intent, openSkillDrawer, dataSource, type TraceSpan } from './store'
 
-/** 嵌入模式：作为执行日志「Trace 链路」tab 渲染（隐藏页面外壳/状态条） */
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+/* 嵌入模式：作为执行日志「Trace 链路」tab 渲染（隐藏页面外壳/状态条）。
+   failuresOnly 由宿主 v-model 控制时与日志页签的「失败」同源；独立页自持 */
+const props = withDefaults(defineProps<{ embedded?: boolean; failuresOnly?: boolean }>(), { embedded: false, failuresOnly: undefined })
 import {
   livePromptIndex,
   loadPromptIndex,
@@ -316,6 +312,8 @@ import { prettyPayload } from './payload-format'
 import { estimateTraceCostUsd, loadModelPrices, type PriceMap } from './traceCost'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 
 /* 估算成本的单价表（接入页登记的单价，进程内缓存一次）：概要卡按它逐 span 算金额。
    读不到就保持 null——此时成本格显「—」，title 说明是读不到还是没配。 */
@@ -335,9 +333,34 @@ const notice = ref('')
 /* 会话视图：跨 trace 按业务会话归组（sessionId 链路已注入，数据积累后自动出现） */
 const viewMode = ref<'trace' | 'session'>('trace')
 const activeSession = ref('')
-/* W4：失败聚焦 + 耗时排序（作用于当前视图的行） */
-const failuresOnly = ref(false)
-const sortMode = ref<'time' | 'dur-desc' | 'dur-asc'>('time')
+/* W4：失败聚焦 + 耗时排序（作用于当前视图的行）。
+   宿主传了 failuresOnly 就以宿主为准（执行日志页签与日志页签的「失败」同源） */
+const emit = defineEmits<{ 'update:failuresOnly': [value: boolean] }>()
+const failuresOnlyLocal = ref(false)
+const failuresOnly = computed({
+  get: () => props.failuresOnly ?? failuresOnlyLocal.value,
+  set: (v: boolean) => {
+    failuresOnlyLocal.value = v
+    emit('update:failuresOnly', v)
+  }
+})
+/** 结果维度（2026-10-27 统一）：失败筛选从 chip 迁入下拉，计数只在 option 文案里；
+    执行日志嵌入态通过 v-model:failures-only 与宿主「失败」保持同源。 */
+const resultSelect = computed<string>({
+  get: () => (failuresOnly.value ? 'failed' : ''),
+  set: (v) => { failuresOnly.value = v === 'failed' }
+})
+const resultSelectOptions = computed(() => [
+  { value: '', label: '全部 span' },
+  { value: 'failed', label: errorTotal.value > 0 ? `仅失败（${errorTotal.value}）` : '仅失败' }
+])
+type SortMode = 'time' | 'dur-desc' | 'dur-asc'
+const SORT_OPTIONS: ReadonlyArray<{ value: SortMode; label: string }> = [
+  { value: 'time', label: '默认（时间序）' },
+  { value: 'dur-desc', label: '耗时 ↓' },
+  { value: 'dur-asc', label: '耗时 ↑' }
+]
+const sortMode = ref<SortMode>('time')
 
 /* W1：瀑布样本源 = 服务端可扩充集合（boot 快照 + 追加页 + 直达重查） */
 const baseSpans = computed<TraceSpan[]>(() => waterfallSpans.value ?? spans.value)
@@ -492,6 +515,9 @@ const traceIds = computed(() => {
   if (!q) return allTraceIds.value
   return allTraceIds.value.filter((t) => t.toLowerCase().includes(q))
 })
+/* MkSelect 选项表：label 仍是原来的 traceLabel/sessionLabel 文案（逐字不变），
+   完整 ID 保存在 value（触发器 data-value），不再借 option 的 title 承载。 */
+const traceOptions = computed(() => traceIds.value.map((t) => ({ value: t, label: traceLabel(t) })))
 /** 默认链路选择：span 数多 → 含失败 → 总耗时最长（避开探测型单 span 链路）。
  *  排序语义不变（V8 sort 稳定，键序 count ↓ / 含失败 ↓ / maxEnd ↓）；
  *  分数改读预聚合 traceAggMap——此前每次比较全量 filter 两次，O(t·log t·n)。 */
@@ -547,6 +573,7 @@ const sessionIds = computed(() => {
   }
   return [...order.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id)
 })
+const sessionOptions = computed(() => sessionIds.value.map((s) => ({ value: s, label: sessionLabel(s) })))
 function sessionOf(id: string) {
   /* 读预聚合 sessionAggMap（此前每次调用对 baseSpans 全量 filter/reduce） */
   const a = sessionAggMap.value.get(id)
@@ -632,6 +659,16 @@ const locateLabel = computed(() => `${failedTraceIds.value.length} 条链路含�
 function locateFailure() {
   const ids = failedTraceIds.value
   if (!ids.length) return
+  /* 会话视图的选择器绑 activeSession：只改 activeTrace 时画面不会变，
+     用户会以为「定位」没反应。按失败 span 找到所属会话并切过去。 */
+  if (viewMode.value === 'session') {
+    const failedSession = baseSpans.value.find((s) => s.status === 'err' && s.sessionId
+      && sessionIds.value.includes(s.sessionId))?.sessionId
+    if (failedSession) {
+      activeSession.value = failedSession
+      return
+    }
+  }
   if (!ids.includes(activeTrace.value)) activeTrace.value = ids[0]
 }
 
@@ -818,7 +855,7 @@ const wfEmpty = computed(() => {
   if (failuresOnly.value && !raw.some((s) => s.status === 'err')) {
     return {
       title: '当前视图没有失败 span',
-      description: '「仅失败」筛选下没有失败记录，可关闭筛选查看当前视图的全部 span。',
+      description: '',
       actionText: '关闭仅失败',
       action: () => { failuresOnly.value = false }
     }
@@ -827,7 +864,7 @@ const wfEmpty = computed(() => {
   if (q && !traceIds.value.length) {
     return {
       title: '没有匹配的链路',
-      description: `筛选「${q}」未匹配到任何链路 ID，可清除筛选，或输入完整链路 ID 后回车查找。`,
+      description: '',
       actionText: '清除链路筛选',
       action: () => { traceKeyword.value = '' }
     }
@@ -835,14 +872,14 @@ const wfEmpty = computed(() => {
   if (viewMode.value === 'session' && !sessionIds.value.length) {
     return {
       title: '暂无会话数据',
-      description: '教学 / 目标对话等业务调用产生后，这里按会话 ID 自动跨链路归组。',
+      description: '',
       actionText: '',
       action: () => {}
     }
   }
   return {
     title: '暂无链路数据',
-    description: '有真实调用发生后，这里按 Trace 展开完整链路。',
+    description: '',
     actionText: '',
     action: () => {}
   }
@@ -919,16 +956,11 @@ const verdictText = computed(() => {
   align-items: center;
   gap: 6px;
 }
+/* 包裹层只做排布；描边/内衬/字号由 MkSelect 原语承担（2026-10-27 自绘下拉） */
 .wf-sort {
-  padding: 6px 8px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-ink);
-  outline: none;
+  display: inline-flex;
+  align-items: center;
 }
-.wf-sort:focus { border-color: var(--mk-blue); }
 
 /* 跳转目标不在当前加载样本内的提示条（琥珀色，与失败/漂移徽章同族） */
 .wf-notice {
@@ -1015,14 +1047,10 @@ const verdictText = computed(() => {
   outline: none;
 }
 .wf-tracepick__search:focus { border-color: var(--mk-blue); }
+/* 包裹层只限宽，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉） */
 .wf-tracepick__select {
   max-width: 320px;
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-ink);
+  min-width: 0;
 }
 
 .wf-ruler {
@@ -1271,7 +1299,7 @@ const verdictText = computed(() => {
 @media (min-width: 2000px) {
   .wf-tracepick__count { font-size: var(--mk-fs-micro); }
   .wf-tracepick__search { font-size: var(--mk-fs-micro); padding: 8px 12px; width: 150px; }
-  .wf-tracepick__select { font-size: var(--mk-fs-micro); padding: 8px 12px; max-width: 380px; }
+  .wf-tracepick__select { max-width: 380px; }
   .wf-ruler { grid-template-columns: 340px 1fr; padding: 10px 16px; }
   .wf-ruler__label { font-size: var(--mk-fs-micro); }
   .wf-row__main { grid-template-columns: 340px 1fr auto; }
@@ -1287,7 +1315,7 @@ const verdictText = computed(() => {
   /* zoom 1.15 档：字号沿用 2000px 档 */
   .wf-tracepick__count { font-size: var(--mk-fs-micro); }
   .wf-tracepick__search { font-size: var(--mk-fs-micro); padding: 10px 14px; width: 180px; }
-  .wf-tracepick__select { font-size: var(--mk-fs-micro); padding: 10px 14px; max-width: 460px; }
+  .wf-tracepick__select { max-width: 460px; }
   .wf-ruler { grid-template-columns: 400px 1fr; padding: 10px 16px; }
   .wf-ruler__label { font-size: var(--mk-fs-micro); }
   .wf-row__main { grid-template-columns: 400px 1fr auto; }
@@ -1308,7 +1336,7 @@ const verdictText = computed(() => {
   .wf-row__stage-id { font-size: var(--mk-fs-micro); }
   .wf-row__dur { font-size: var(--mk-fs-body); }
   .wf-tracepick__search { font-size: var(--mk-fs-body); padding: 12px 16px; width: 210px; }
-  .wf-tracepick__select { font-size: var(--mk-fs-body); padding: 12px 16px; max-width: 540px; }
+  .wf-tracepick__select { max-width: 540px; }
   .wf-detail-label { font-size: var(--mk-fs-body); }
   .wf-payload { font-size: var(--mk-fs-body); }
   .wf-verdict strong { font-size: var(--mk-fs-emphasis); }

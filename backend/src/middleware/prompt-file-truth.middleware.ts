@@ -1,9 +1,12 @@
 import { Request, Response, NextFunction } from 'express'
+import { logger } from '../utils/logger'
 
 export const PROMPT_READ_ONLY_CODE = 'PROMPT_FILE_AS_TRUTH_READ_ONLY'
 const PROMPT_READ_ONLY_MESSAGE = 'Prompt 采用 File-as-Truth，只能通过 prompts/*.md、Git 审核和部署同步修改'
 
 export function rejectPromptMutation(req: Request, res: Response, _next: NextFunction) {
+  // 2026-10-22（机械过滤审计 A 类）：只读守卫补拦截日志（对外 code/message 不变）。
+  logger.warn('[prompt-file-truth] Prompt 运行时改写被拒（File-as-Truth 只读）', { method: req.method, path: req.path })
   return res.status(409).json({
     success: false,
     code: PROMPT_READ_ONLY_CODE,

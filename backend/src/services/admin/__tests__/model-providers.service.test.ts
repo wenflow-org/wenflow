@@ -42,6 +42,7 @@ import {
   PLATFORM_PROVIDER_ID,
   RegistryEditError,
   addModel,
+  addModels,
   buildProvidersView,
   clearProviderKey,
   createProvider,
@@ -233,7 +234,7 @@ describe('模型', () => {
       'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'maxOutputTokens', 'fallbacks'
     ]);
     expect(entry.fallbacks).toEqual(['m-chat', 'custom/cm-1', 'm-reason']);
-    expect(result.warnings.join(' ')).toContain('运行时最多用到第 1 条');
+    expect(result.warnings.join(' ')).toContain('运行时最多用到第 2 条');
     expect(result.warnings.join(' ')).toContain('属于别的供应商');
   });
 
@@ -243,6 +244,84 @@ describe('模型', () => {
     await expectEditError(() => addModel('custom', { id: 'cm/1', tier: 'chat' }), 400, '只能用字母');
     await expectEditError(() => addModel('custom', { id: 'cm-2', tier: 'chat', fallbacks: ['ghost'] }), 400, '不在任何供应商目录中');
     await expectEditError(() => addModel('custom', { id: 'cm-3', tier: 'chat', supportsReasoningEffort: true }), 400, '必须同时支持思考模式');
+  });
+
+  it('批量引入：一次写入多个模型并带上推断出的能力标签', async () => {
+    const result = await addModels(PLATFORM_PROVIDER_ID, [
+      { id: 'm-bulk-1', supportsThinking: true, supportsReasoningEffort: true },
+      { id: 'm-bulk-2', vision: true }
+    ]);
+    expect(result.modelIds).toEqual(['m-bulk-1', 'm-bulk-2']);
+    const models = readFile().providers.platform.models;
+    expect(models['m-bulk-1']).toMatchObject({ tier: 'chat', supportsThinking: true, supportsReasoningEffort: true });
+    expect(models['m-bulk-2']).toMatchObject({ tier: 'chat', vision: true });
+  });
+
+  it('批量引入是整批语义：任一 id 已存在则一个都不写', async () => {
+    await expectEditError(
+      () => addModels(PLATFORM_PROVIDER_ID, [{ id: 'm-bulk-new' }, { id: 'm-chat' }]),
+      409,
+      '已有模型'
+    );
+    expect(readFile().providers.platform.models['m-bulk-new']).toBeUndefined();
+  });
+
+  it('图片理解是独立能力：随模型写入、改回 false 也落盘，视图按布尔回读', async () => {
+    await addModel('custom', { id: 'cm-vision', label: 'CM Vision', tier: 'chat', vision: true });
+    expect(readFile().providers.custom.models['cm-vision'].vision).toBe(true);
+    // 字段顺序按 MODEL_KEY_ORDER：vision 紧跟能力开关，排在限额之前
+    expect(Object.keys(readFile().providers.custom.models['cm-vision'])).toEqual(['label', 'tier', 'vision']);
+
+    await updateModel('custom', 'cm-vision', { vision: false });
+    expect(readFile().providers.custom.models['cm-vision'].vision).toBe(false);
+
+    const view = await buildProvidersView();
+    const model = view.providers.find((p) => p.id === 'custom')!.models.find((m) => m.id === 'cm-vision')!;
+    expect(model.vision).toBe(false);
+    expect(view.providers.find((p) => p.id === PLATFORM_PROVIDER_ID)!.models.every((m) => m.vision === false)).toBe(true);
+  });
+
+  it('模型级生成参数：写入、视图回读、default/清空即删除', async () => {
+    await addModel('custom', {
+      id: 'cm-gen',
+      label: 'CM Gen',
+      tier: 'chat',
+      defaultThinkingMode: 'disabled',
+      defaultReasoningEffort: 'max',
+      defaultResponseFormat: 'json_object'
+    });
+    const entry = readFile().providers.custom.models['cm-gen'];
+    expect(Object.keys(entry)).toEqual(['label', 'tier', 'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat']);
+    expect(entry.defaultThinkingMode).toBe('disabled');
+
+    let view = await buildProvidersView();
+    let model = view.providers.find((p) => p.id === 'custom')!.models.find((m) => m.id === 'cm-gen')!;
+    expect(model.defaultThinkingMode).toBe('disabled');
+    expect(model.defaultReasoningEffort).toBe('max');
+    expect(model.defaultResponseFormat).toBe('json_object');
+
+    // 选「跟随平台默认」/ 清空 → 从文件删掉，视图回到 null
+    await updateModel('custom', 'cm-gen', {
+      defaultThinkingMode: 'default',
+      defaultReasoningEffort: null,
+      defaultResponseFormat: 'default'
+    });
+    const after = readFile().providers.custom.models['cm-gen'];
+    expect(after.defaultThinkingMode).toBeUndefined();
+    expect(after.defaultReasoningEffort).toBeUndefined();
+    expect(after.defaultResponseFormat).toBeUndefined();
+    view = await buildProvidersView();
+    model = view.providers.find((p) => p.id === 'custom')!.models.find((m) => m.id === 'cm-gen')!;
+    expect(model.defaultThinkingMode).toBeNull();
+    expect(model.defaultReasoningEffort).toBeNull();
+    expect(model.defaultResponseFormat).toBeNull();
+
+    // 非法枚举被拒
+    await expectEditError(
+      () => updateModel('custom', 'cm-gen', { defaultThinkingMode: 'on' }),
+      400,
+      '思考模式只能是'
+    );
   });
 
   it('改模型：不允许改名、不允许档位乱填、限额必须正数', async () => {

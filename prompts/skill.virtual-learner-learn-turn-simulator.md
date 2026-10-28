@@ -16,7 +16,7 @@ failurePolicy: propagate
 
 - learner：学习者画像投影（长期特征）
 - dialogue：当前输入与近期对话切片（用于语境理解，不充当状态载体）
-- state：平台维护的主记忆快照（当前值，含 stage）
+- state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 - task：当前任务 / 场景 / 控制指令
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 

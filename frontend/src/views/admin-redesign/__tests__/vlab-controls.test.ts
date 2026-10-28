@@ -110,6 +110,44 @@ describe('vlabControlsFor（状态 × 操作守卫）', () => {
     expect(keys('completed')).toEqual(expect.arrayContaining(['delete', 'cockpit']))
     expect(keys('completed')).not.toContain('retry')
   })
+
+  /* #130：pause 只有 teaching 自动循环消费，goal/path 给了也是 409 */
+  it('传 stage 时：goal/path 无暂停；teaching/learn/teach 有暂停', () => {
+    for (const stage of ['goal', 'path']) {
+      expect(vlabControlsFor('running', { stage }).map((c) => c.key)).not.toContain('pause')
+    }
+    for (const stage of ['teaching', 'learn', 'teach']) {
+      expect(vlabControlsFor('running', { stage }).map((c) => c.key)).toContain('pause')
+    }
+  })
+  it('不传 stage：保持旧行为（running 全集含暂停，兼容旧调用点）', () => {
+    expect(vlabControlsFor('running').map((c) => c.key)).toContain('pause')
+  })
+})
+
+describe('vlabControlsFor（阶段能力收窄）', () => {
+  const keys = (state: Parameters<typeof vlabControlsFor>[0], stage: string | null) =>
+    vlabControlsFor(state, { stage }).map((c) => c.key)
+
+  /* 回归（2026-10-22 走查）：goal/path 阶段顶栏仍给「暂停」，点下去后端 409
+     「仅教学（teaching）阶段支持暂停」——控制项按阶段能力收窄，别让用户点一次才知道。 */
+  it('running + goal/path：不给暂停，其余运行期操作照旧', () => {
+    for (const stage of ['goal', 'path']) {
+      const ks = keys('running', stage)
+      expect(ks).not.toContain('pause')
+      expect(ks).toEqual(expect.arrayContaining(['auto', 'step', 'stop', 'cockpit']))
+    }
+  })
+
+  it('running + teaching / learn / teach：恢复给暂停', () => {
+    for (const stage of ['teaching', 'learn', 'teach']) {
+      expect(keys('running', stage)).toContain('pause')
+    }
+  })
+
+  it('不传阶段（无阶段信息的调用点）：保持旧的按状态全集', () => {
+    expect(vlabControlsFor('running').map((c) => c.key)).toContain('pause')
+  })
 })
 
 describe('危险操作必须带确认（统一文案）', () => {

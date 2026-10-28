@@ -37,6 +37,22 @@
 | `understanding.goal_orientation` | string | goal-agent |
 | `understanding.learning_signal` | string | goal-agent |
 | `understanding.cognitive_bandwidth` | string | goal-agent |
+| `understanding.deadline_date` | string | goal-agent |
+| `understanding.time_dimensions` | object | goal-agent |
+| `understanding.primary_block_type` | string | goal-agent |
+| `understanding.recurrence` | string | goal-agent |
+| `understanding.block_type_evidence` | string | goal-agent |
+| `understanding.support_need` | string | goal-agent |
+| `understanding.school_anchor` | object | goal-agent |
+| `understanding.skill_nature` | string | goal-agent, path |
+| `understanding.skill_nature_evidence` | string | path |
+| `understanding.platform_judgment` | string | goal-agent, path |
+| `understanding.platform_judgment_evidence` | string | path |
+| `understanding.sensor_readouts` | array<string> | path |
+| `understanding.needsMaterial` | object | path |
+| `understanding.prerequisiteDiagnostics` | array<object> | goal-agent |
+| `understanding.prerequisiteCheckResults` | array<object> | goal-agent |
+| `proposalQuality` | object? | goal-agent |
 | `structuredData` | object? | goal-agent |
 | `confirmedProposal.learning_direction` | string | goal-agent |
 | `confirmedProposal.first_deliverable` | string | goal-agent |
@@ -74,16 +90,21 @@ sandbox:goal-agent.understanding.background_experience
 sandbox:goal-agent.understanding.constraints_and_boundaries
 sandbox:goal-agent.understanding.current_baseline.evidence
 sandbox:goal-agent.understanding.current_baseline.level
+sandbox:goal-agent.understanding.deadline_date
 sandbox:goal-agent.understanding.deadline_text
 sandbox:goal-agent.understanding.goal_orientation
 sandbox:goal-agent.understanding.learning_signal
 sandbox:goal-agent.understanding.motivation
 sandbox:goal-agent.understanding.pain_points
+sandbox:goal-agent.understanding.primary_block_type
 sandbox:goal-agent.understanding.real_problem
+sandbox:goal-agent.understanding.recurrence
 sandbox:goal-agent.understanding.scenario
+sandbox:goal-agent.understanding.school_anchor
 sandbox:goal-agent.understanding.success_criteria.acceptance_check
 sandbox:goal-agent.understanding.success_criteria.observable_result
 sandbox:goal-agent.understanding.surface_goal
+sandbox:goal-agent.understanding.time_dimensions
 sandbox:goal-agent.understanding.urgency
 ```
 
@@ -151,10 +172,23 @@ sandbox:goal-agent.understanding.urgency
 | `subtasks.knowledgeType` | string | path-agent |
 | `subtasks.cognitiveLevel` | string | path-agent |
 | `subtasks.transferable` | boolean | path-agent |
+| `subtasks.icapLevel` | string | path-agent |
+| `subtasks.description` | string | path-agent |
+| `subtasks.materialRefs` | array<object> | path-agent |
+| `score` | number | path-agent |
+| `dimensions` | object | path-agent |
+| `issues` | object[] | path-agent |
+| `passed` | boolean | path-agent |
+| `replanInstructions` | string? | path-agent, skill:path-planning |
+| `conceptKcs` | object[] | path-agent |
+| `taskKcLinks` | object[] | path-agent |
+| `kcGraph` | object | path-agent |
+| `gapCoverage` | object? | path-agent |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 
 ```
+sandbox:path-agent.allPreviousStageTasks
 sandbox:path-agent.cognitiveCore
 sandbox:path-agent.materials
 sandbox:path-agent.milestones
@@ -217,6 +251,18 @@ sandbox:path-agent.supplementRequest
 | `analysis.confusionPoints` | array<string> | teaching-agent |
 | `analysis.engagement` | number | teaching-agent |
 | `analysis.emotionalState` | string | teaching-agent |
+| `analysis.loadIndex` | number | teaching-agent |
+| `analysis.loadBasis` | string | teaching-agent |
+| `analysis.misconceptions` | array<object> | teaching-agent |
+| `analysis.ktEstimate` | object | teaching-agent |
+| `analysis.selfAssessmentSignal` | string | teaching-agent |
+| `analysis.helpSeekingType` | string | teaching-agent |
+| `analysis.rsmAttempts` | array<object> | teaching-agent |
+| `knowledge.confirmCheck` | object | teaching-agent |
+| `control.warmupOutcomes` | array<object> | teaching-agent |
+| `control.supplement` | object | teaching-agent |
+| `diagram` | object? | teaching-agent |
+| `figure` | object? | teaching-agent |
 | `analysis.cognitiveLevel` | string | teaching-agent, skill:peer-reinforcement |
 | `analysis.understanding` | number | teaching-agent, skill:peer-reinforcement |
 | `knowledge.currentPoint` | string | teaching-agent |
@@ -243,9 +289,9 @@ sandbox:path-agent.supplementRequest
 | `summary.evaluationHighlights` | object | teaching-agent |
 | `summary.metricInterpretation` | object | teaching-agent |
 | `summary.summaryVersion` | string | teaching-agent |
-| `evaluation.sessionLss` | number | teaching-agent |
-| `evaluation.sessionKtl` | number | teaching-agent |
-| `evaluation.sessionLf` | number | teaching-agent |
+| `evaluation.sessionLss` | object | teaching-agent |
+| `evaluation.sessionKtl` | object | teaching-agent |
+| `evaluation.sessionLf` | object | teaching-agent |
 | `evaluation.confidence` | number | teaching-agent |
 | `evaluation.reasoning` | string | teaching-agent |
 
@@ -253,6 +299,8 @@ sandbox:path-agent.supplementRequest
 
 ```
 sandbox:teaching-agent.analysis.confusionPoints
+sandbox:teaching-agent.analysis.ktEstimate
+sandbox:teaching-agent.analysis.misconceptions
 sandbox:teaching-agent.analysis.understanding
 sandbox:teaching-agent.classroomContext
 sandbox:teaching-agent.classroomEventContext

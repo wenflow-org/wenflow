@@ -738,9 +738,11 @@ export class AutopilotService {
       // 分片边界（回合上限）：不是失败。用进度指纹判断这一片是否真的推进了东西，
       // 有进展 → 继续下一片；连续 N 片零净进展 → 判定卡死（疑似教学死循环）才停止。
       if (!learnResult.success && String(learnResult.error || '').includes('auto_turn_cap_exhausted')) {
+        // 指纹不含 currentTaskId：任务间打转（A,B,A,B）时每片都换任务但零净进展，
+        // 含「当前任务」会让看门狗被永久绕过（2026-10-24 修正，见 session-budget.ts）
         const signature = computeLearnProgressSignature(
           after ? parseStageResults(after.stageResults) : null,
-          { completedTasks: after?.completedTasks, currentTaskId: after?.currentTaskId }
+          { completedTasks: after?.completedTasks }
         )
         if (signature !== lastProgressSignature) {
           lastProgressSignature = signature

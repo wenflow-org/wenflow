@@ -6,6 +6,7 @@
  */
 import {
   DEFAULT_RESPONSE_TRIAGE_ENFORCEMENT,
+  isHardBlockResponseTriage,
   RESPONSE_TRIAGE_KEY,
   buildTriageAdvisoryLine,
   normalizeResponseTriageEnforcementMode,
@@ -215,5 +216,161 @@ describe('collectedData 承载读取与模式归一化', () => {
     expect(normalizeResponseTriageEnforcementMode('gated')).toBe('gated');
     expect(normalizeResponseTriageEnforcementMode('GATED')).toBe('gated');
     expect(normalizeResponseTriageEnforcementMode('weird')).toBe('advisory');
+  });
+});
+
+/**
+ * 问题结构轴（2026-10-25 方向改造，静默推断）：coupling/stakes 从已有文本确定性识别，
+ * 与 recurrence 合成三条件测试调制 learning_path 置信度；禁止向用户追问（纯推断，无新增交互）。
+ */
+describe('问题结构轴：coupling/stakes 静默推断 + 三条件测试', () => {
+  it('排班型：recurring + stakes 高（排班失误流失客户）→ 置信 high + 轴落库', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'capability',
+      recurrence: 'recurring',
+      real_problem: '排班失误导致周末高峰顾客流失，人手不够',
+    });
+    expect(r.mode).toBe('learning_path');
+    expect(r.confidence).toBe('high');
+    expect(r.stakes).toBe('high');
+    expect(r.reasons.some((x) => x.includes('三条件测试'))).toBe(true);
+  });
+
+  it('时好时坏型：耦合词命中 → coupling=high，单独不抬 confidence（1/3 命中）', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'capability',
+      real_problem: '门店客流时好时坏，分不清是天气还是促销的影响',
+    });
+    expect(r.coupling).toBe('high');
+    expect(r.mode).toBe('learning_path');
+    // 1/3 命中：不升不降
+    expect(r.confidence).toBe('medium');
+  });
+
+  it('一次性低耦合低代价：三条件 0/3 → 置信降档 + reasons 标注路径可能过重', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'capability',
+      real_problem: '想把这个视频剪辑导出的格式设置对',
+    });
+    expect(r.coupling).toBe('low');
+    expect(r.stakes).toBe('low');
+    expect(r.confidence).toBe('low');
+    expect(r.reasons.some((x) => x.includes('一次性解答场景'))).toBe(true);
+  });
+
+  it('无文本字段 → 轴不输出（undefined），行为与旧版一致', () => {
+    const r = triageGoalResponse({ primary_block_type: 'capability' });
+    expect(r.coupling).toBeUndefined();
+    expect(r.stakes).toBeUndefined();
+    expect(r.mode).toBe('learning_path');
+  });
+
+  it('R8 即时微操作覆盖：当日死线 + objective ≤1.5h ⇒ oneoff，不误开学习路径（E10 实证）', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'capability',
+      recurrence: 'recurring',
+      surface_goal: '今天把两张表头不一样的月度表拼成一张能交差的总表',
+      time_dimensions: { objectiveScopeHours: 0.8 },
+    });
+    expect(r.mode).toBe('combination');
+    expect(r.reasons[0]).toContain('一次性微操作');
+  });
+
+  it('R8 覆盖不误伤：无死线词或体量大 ⇒ 保持 capability 原判', () => {
+    const big = triageGoalResponse({
+      primary_block_type: 'capability',
+      surface_goal: '今天开始准备三个月后的考试',
+      time_dimensions: { objectiveScopeHours: 45 },
+    });
+    expect(big.mode).toBe('learning_path');
+    const noDeadline = triageGoalResponse({
+      primary_block_type: 'capability',
+      surface_goal: '把两张表拼成一张总表',
+      time_dimensions: { objectiveScopeHours: 0.8 },
+    });
+    expect(noDeadline.mode).toBe('learning_path');
+  });
+
+  it('非 learning_path 模式不应用三条件（emotional_support 原样）', () => {
+    const r = triageGoalResponse({
+      primary_block_type: 'emotion_relationship',
+      real_problem: '排班失误顾客流失后不敢再改排班，压力大',
+    });
+    expect(r.mode).not.toBe('learning_path');
+    expect(r.reasons.some((x) => x.includes('三条件测试'))).toBe(false);
+  });
+});
+
+
+describe('isHardBlockResponseTriage（硬阻断出口）', () => {
+  it('referral + not_judgeable 硬阻断', () => {
+    expect(isHardBlockResponseTriage(
+      { mode: 'referral', confidence: 'high', reasons: [] },
+      { platform_judgment: 'not_judgeable' },
+    )).toBe(true);
+  });
+
+  it('普通 referral（judgeable_output）不硬阻断，留给 gated/advisory', () => {
+    expect(isHardBlockResponseTriage(
+      { mode: 'referral', confidence: 'medium', reasons: [] },
+      { platform_judgment: 'judgeable_output', skill_nature: 'knowledge_structure' },
+    )).toBe(false);
+  });
+
+  it('emotional_support 硬阻断', () => {
+    const t = triageGoalResponse({ primary_block_type: 'emotion_relationship' });
+    expect(t.mode).toBe('emotional_support');
+    expect(isHardBlockResponseTriage(t, {})).toBe(true);
+  });
+
+  it('not_judgeable × physical_internalized 即使分诊结论被旧数据写成 learning_path 也硬阻断', () => {
+    expect(isHardBlockResponseTriage(
+      { mode: 'learning_path', confidence: 'high', reasons: [] },
+      { platform_judgment: 'not_judgeable', skill_nature: 'physical_internalized' },
+    )).toBe(true);
+  });
+
+  it('learning_path / combination 不硬阻断', () => {
+    expect(isHardBlockResponseTriage(
+      { mode: 'learning_path', confidence: 'high', reasons: [] },
+      { platform_judgment: 'judgeable_output', skill_nature: 'knowledge_structure' },
+    )).toBe(false);
+    expect(isHardBlockResponseTriage(
+      { mode: 'combination', confidence: 'medium', reasons: [] },
+      { platform_judgment: 'judgeable_output', skill_nature: 'tool_operation' },
+    )).toBe(false);
+  });
+});
+
+describe('感官技能分类漂移兜底（R5 F96）', () => {
+  it('not_judgeable + cognitive_internalized + 咖啡风味文本 → referral', () => {
+    const t = triageGoalResponse({
+      surface_goal: '用四周时间学会喝一口手冲咖啡就分辨烘焙焦苦、萃取过度还是生豆瑕疵',
+      primary_block_type: 'capability',
+      platform_judgment: 'not_judgeable',
+      skill_nature: 'cognitive_internalized',
+    });
+    expect(t.mode).toBe('referral');
+  });
+
+  it('not_judgeable + cognitive_internalized 但文本无感官词 → 仍按原规则', () => {
+    const t = triageGoalResponse({
+      surface_goal: '理解一个抽象数学定理的证明结构',
+      primary_block_type: 'capability',
+      platform_judgment: 'not_judgeable',
+      skill_nature: 'cognitive_internalized',
+    });
+    expect(t.mode).toBe('learning_path');
+  });
+});
+
+describe('情绪场景不被当日一次性操作覆盖（R5 F100）', () => {
+  it('emotion_relationship + 今晚死线 + 体量≤1.5h → emotional_support，不是 combination', () => {
+    const t = triageGoalResponse({
+      surface_goal: '今晚回家跟老婆说公司把我裁了，怎么开口',
+      primary_block_type: 'emotion_relationship',
+      time_dimensions: { objectiveScopeHours: 1 },
+    });
+    expect(t.mode).toBe('emotional_support');
   });
 });

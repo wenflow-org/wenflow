@@ -9,6 +9,7 @@
  * 缺省不放进 provider 顺序，作为零成本兜底显式启用。
  */
 
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import type { DecisionCallOptions, DecisionProvider, DecisionProviderResult, DecisionRequest } from '../types';
 import { postDecision } from './shared';
 
@@ -23,9 +24,9 @@ export interface OpencodeDecisionConfig {
 
 export function readOpencodeDecisionConfig(): OpencodeDecisionConfig {
   return {
-    url: (process.env.SYSTEMONE_BASE_URL || DEFAULT_URL).trim(),
-    apiKey: (process.env.SYSTEMONE_API_KEY || 'public').trim(),
-    model: (process.env.SYSTEMONE_MODEL || DEFAULT_MODEL).trim(),
+    url: readPluginProviderField('decision', 'opencode', 'url') || DEFAULT_URL,
+    apiKey: readPluginProviderSecret('decision', 'opencode'),
+    model: readPluginProviderField('decision', 'opencode', 'model') || DEFAULT_MODEL,
   };
 }
 

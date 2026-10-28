@@ -35,6 +35,7 @@ describe('safe-http SSRF policy', () => {
     process.env.NODE_ENV = 'test'
     delete process.env.SAFE_HTTP_PRIVATE_HOSTS
     delete process.env.SAFE_HTTP_NAT64_PREFIXES
+    delete process.env.SAFE_HTTP_TRUSTED_HOSTS
     canAccessPrivateNetworkMock.mockReset()
     canAccessPrivateNetworkMock.mockReturnValue(true)
     lookupMock.mockReset()
@@ -80,6 +81,20 @@ describe('safe-http SSRF policy', () => {
     await expect(validateExternalUrl('https://internal.example.com')).resolves.toEqual(expect.objectContaining({
       address: '10.0.0.8'
     }))
+  })
+
+  it('解析到 fake-IP 段时提示白名单配置，加入 SAFE_HTTP_TRUSTED_HOSTS 后放行', async () => {
+    lookupMock.mockResolvedValue([{ address: '198.18.0.5', family: 4 }])
+    await expect(validateExternalUrl('https://newapi.example.com')).rejects.toThrow('SAFE_HTTP_TRUSTED_HOSTS')
+
+    process.env.SAFE_HTTP_TRUSTED_HOSTS = 'newapi.example.com'
+    try {
+      await expect(validateExternalUrl('https://newapi.example.com')).resolves.toEqual(expect.objectContaining({
+        address: '198.18.0.5'
+      }))
+    } finally {
+      delete process.env.SAFE_HTTP_TRUSTED_HOSTS
+    }
   })
 
   it('public-only 调用不继承平台私网放行策略', async () => {

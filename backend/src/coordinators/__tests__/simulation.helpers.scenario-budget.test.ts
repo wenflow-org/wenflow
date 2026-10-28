@@ -1,4 +1,4 @@
-import { resolveScenarioBudget, buildTimeDimensionsFromBudget } from '../simulation.helpers';
+import { resolveScenarioBudget, buildTimeDimensionsFromBudget, mergeScenarioBudgetIntoTimeDimensions } from '../simulation.helpers';
 
 /**
  * 场景卡预算锚（XIAOCHEN-REVIEW-20261002 P0-2）：
@@ -56,5 +56,36 @@ describe('buildTimeDimensionsFromBudget（预算 → time_dimensions 映射）',
   it('缺 horizonDays 时 totalWeeks 为 null 但仍有课次锚', () => {
     const result = buildTimeDimensionsFromBudget({ dailyMinutes: 30, horizonDays: null, expectedHours: 10 });
     expect(result).toEqual({ totalSessions: 20, sessionsLengthMin: 30, totalWeeks: null, estimatedHours: 10 });
+  });
+});
+
+describe('mergeScenarioBudgetIntoTimeDimensions（R4 体量漂移修复）', () => {
+  it('objective 被 LLM 放大到 32h 时，按场景卡 3.5h 收回', () => {
+    const merged = mergeScenarioBudgetIntoTimeDimensions(
+      { objectiveScopeHours: 32, sessionsLengthMin: 90, deadlineDate: null },
+      { dailyMinutes: 30, horizonDays: 7, expectedHours: 3.5 },
+    );
+    expect(merged?.objectiveScopeHours).toBe(3.5);
+    expect(merged?.sessionsLengthMin).toBe(30);
+    expect(merged?.totalSessions).toBe(7);
+    expect(merged?.estimatedHours).toBe(3.5);
+    expect(merged?.deadlineDate).toBeNull();
+  });
+
+  it('objective 被 LLM 压塌到 1.5h 时，按场景卡 9.5h 拉回', () => {
+    const merged = mergeScenarioBudgetIntoTimeDimensions(
+      { objectiveScopeHours: 1.5, sessionsLengthMin: 45 },
+      { dailyMinutes: 45, horizonDays: 14, expectedHours: 9.5 },
+    );
+    expect(merged?.objectiveScopeHours).toBe(9.5);
+    expect(merged?.totalSessions).toBe(13);
+  });
+
+  it('无 expectedHours 时用 dailyMinutes×horizonDays 推算', () => {
+    const merged = mergeScenarioBudgetIntoTimeDimensions(
+      { objectiveScopeHours: 20 },
+      { dailyMinutes: 30, horizonDays: 7, expectedHours: null },
+    );
+    expect(merged?.objectiveScopeHours).toBe(3.5);
   });
 });

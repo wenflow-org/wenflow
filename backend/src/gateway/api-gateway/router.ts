@@ -6,7 +6,7 @@ import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.s
 import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
 import { endpointsMatch } from '../../utils/endpoint-identity';
 import { selectModelForAlias } from './model-alias';
-import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision } from '../../config/models.config';
+import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision, getModelGenerationDefaults } from '../../config/models.config';
 import { resolveProviderApiKey } from '../../services/provider-secrets.service';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
@@ -24,10 +24,10 @@ interface Config {
   reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
   reasoningEffort?: 'default' | 'low' | 'high' | 'max';
-  temperature: number;
-  maxTokens: number;
   /** 通道级结构化输出默认（user-provider 继承 platform 通道设置；skill paramOverrides 仍可覆盖） */
   responseFormat?: 'none' | 'json_object';
+  temperature: number;
+  maxTokens: number;
   privateNetworkPolicy: ResolvedRoute['privateNetworkPolicy'];
 }
 
@@ -37,7 +37,7 @@ interface Config {
  * 路径/评估/收尾链技能按 skill_model_configs 绑定走 ds（好 key、质量锚定——path 生成
  * 质量锚定整条学习路径）。
  */
-const LEARN_DIALOGUE_SKILLS = new Set([
+export const LEARN_DIALOGUE_SKILLS = new Set([
   'teaching-turn',
   'virtual-learner-learn-turn-simulator',
   'virtual-learner-epistemic-grounding',
@@ -68,15 +68,22 @@ function parseSkillParamOverrides(raw: unknown): ResolvedRoute['skillParamOverri
   const temperature = num(b.temperature);
   const topP = num(b.topP);
   const maxTokens = num(b.maxTokens);
+  const maxAttempts = typeof b.maxAttempts === 'number'
+    && Number.isInteger(b.maxAttempts)
+    && b.maxAttempts >= 1
+    && b.maxAttempts <= 5
+    ? b.maxAttempts
+    : undefined;
   // 'json_object' = 强制 JSON；'none' = 显式关掉通道默认（null 语义不适用，字符串枚举）
   const responseFormat = typeof b.responseFormat === 'string' && ['json_object', 'none'].includes(b.responseFormat.trim().toLowerCase())
     ? b.responseFormat.trim().toLowerCase()
     : undefined;
-  if (temperature === undefined && topP === undefined && maxTokens === undefined && responseFormat === undefined) return null;
+  if (temperature === undefined && topP === undefined && maxTokens === undefined && maxAttempts === undefined && responseFormat === undefined) return null;
   return {
     ...(temperature !== undefined ? { temperature } : {}),
     ...(topP !== undefined ? { topP } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
+    ...(maxAttempts !== undefined ? { maxAttempts } : {}),
     ...(responseFormat !== undefined ? { responseFormat } : {}),
   };
 }
@@ -158,6 +165,18 @@ export class APIRouter {
     }
     // reasoning 别名按能力过滤：优先 supportsThinking 的成员（require_parameters 思路）
     return selectModelForAlias(model, { overrides: aliasOverrides, requireThinking: true })?.model ?? model;
+  }
+
+  /** 推理档技能未单独配模型时的继承值：平台推理默认 → 基础路由模型。
+   *  平台没有配推理默认就保持原来的继承结果，不拿 env 值悄悄改写基础路由。 */
+  private resolveSkillReasoningDefault(
+    platformRecord: { defaultReasoningModel?: string | null } | null,
+    aliasOverrides: Record<string, string[]> | null,
+    inheritedModel: string
+  ): string {
+    const configured = (platformRecord?.defaultReasoningModel || '').trim();
+    if (!configured) return inheritedModel;
+    return this.resolveReasoningModel(configured, aliasOverrides);
   }
 
   /** platform_api_configs 的别名覆盖（此前为只回显的死字段，现作为别名映射的动态来源）。 */
@@ -281,14 +300,29 @@ export class APIRouter {
       const platformRecord = await this.getPlatformConfigRecord();
       const overrides = platformRecord ? this.platformAliasOverrides(platformRecord) : null;
       const userModelWins = inheritedUserEndpoint && LEARN_DIALOGUE_SKILLS.has(skillId);
+      // 2026-10-24：推理档此前只在「技能自己写了模型」时生效，未写模型就退回对话默认，
+      // 平台的 defaultReasoningModel 在运行时没有任何消费者。现补上继承分支：
+      // tier=reasoning 且未单独配模型 → 用平台推理默认；平台没配推理默认（或读不到平台行）
+      // 时仍沿用基础路由，不凭空改模型。
+      const reasoningInherited = !config.model && isReasoning && !userModelWins
+        ? this.resolveSkillReasoningDefault(platformRecord, overrides, inheritedRoute.model)
+        : inheritedRoute.model;
       const model = userModelWins
         ? inheritedRoute.model
         : config.model
           ? (isReasoning
             ? this.resolveReasoningModel(config.model, overrides)
             : this.resolveModel(config.model, overrides))
-          : inheritedRoute.model;
-
+          : reasoningInherited;
+      // 生成参数优先级（2026-10-24）：Skill 显式配置 > 最终模型的模型默认 > 平台默认。
+      // 平台默认这里直接读平台行，不再用 inheritedRoute——后者可能带着「平台默认模型」的
+      // 模型级默认，技能换过模型时会张冠李戴。
+      const modelDefaults = getModelGenerationDefaults(model);
+      const platformThinking = platformRecord ? (platformRecord.defaultThinkingMode || 'default') : inheritedRoute.thinkingMode;
+      const platformEffort = platformRecord ? (platformRecord.defaultReasoningEffort || 'default') : inheritedRoute.reasoningEffort;
+      const platformResponse = platformRecord
+        ? this.normalizeResponseFormat(platformRecord.defaultResponseFormat)
+        : inheritedRoute.responseFormat;
       return {
         ...inheritedRoute,
         providerId: `skill:${skillId}`,
@@ -301,8 +335,11 @@ export class APIRouter {
         // 标记 skill 级是否显式指定了模型（供 resolve-llm-call-params 决定优先级）；
         // 用户自有端点上学习对话链的模型由用户的 chatModel 决定，skill 绑定未生效 → 不标 explicit
         modelExplicit: Boolean(config.model) && !userModelWins,
-        thinkingMode: this.normalizeThinkingMode(config.thinkingMode || inheritedRoute.thinkingMode),
-        reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || inheritedRoute.reasoningEffort),
+        thinkingMode: this.normalizeThinkingMode(config.thinkingMode || modelDefaults.thinkingMode || platformThinking),
+        reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || modelDefaults.reasoningEffort || platformEffort),
+        responseFormat: modelDefaults.responseFormat
+          ? this.normalizeResponseFormat(modelDefaults.responseFormat)
+          : platformResponse,
         // 2026-09-28 配置体系优化：skill 级参数覆盖（paramOverrides JSON）与兜底链
         // （fallbackChain JSON）经路由透传；temperature/maxTokens 列本身仍是 deprecated 占位。
         // 上层字段级优先级见 services/resolve-llm-call-params.ts 头注释。
@@ -426,9 +463,9 @@ export class APIRouter {
         reasoningModel: config.reasoningModel ? this.resolveModel(config.reasoningModel) : undefined,
         thinkingMode,
         reasoningEffort,
+        responseFormat,
         temperature: 0.7,
         maxTokens: 2000,
-        responseFormat,
         // 用户自有 provider：开发者自选端点（内网/外网都可以），跟随管理员网络策略
         // （allowPrivateNetwork / privateNetworkHosts 白名单），不再写死 public-only。
         // 2026-10-08 拍板：模拟真实情景——开发者自己决定走什么网络。
@@ -459,6 +496,9 @@ export class APIRouter {
         chatModels: true,
         reasoningModels: true,
         lightModels: true,
+        defaultThinkingMode: true,
+        defaultReasoningEffort: true,
+        defaultResponseFormat: true,
       }
     });
   }
@@ -524,15 +564,18 @@ export class APIRouter {
       }
 
       const platformModel = this.resolveModel(config.defaultModel, this.platformAliasOverrides(config));
+      // 模型级生成默认优先于平台默认（2026-10-24）：模型编辑里显式设过就用它，
+      // 未设（'default'/缺省）仍走平台 defaultThinkingMode / defaultReasoningEffort / defaultResponseFormat。
+      const modelDefaults = getModelGenerationDefaults(platformModel);
       return {
         providerId: 'platform',
         endpoint: config.apiUrl || this.resolveBaseEndpoint(),
         apiKey: this.resolvePlatformApiKey(config, config.apiUrl || this.resolveBaseEndpoint()),
         model: platformModel,
         vision: supportsVision(platformModel),
-        thinkingMode: this.normalizeThinkingMode(config.defaultThinkingMode || 'default'),
-        reasoningEffort: this.normalizeReasoningEffort(config.defaultReasoningEffort || 'default'),
-        responseFormat: this.normalizeResponseFormat(config.defaultResponseFormat),
+        thinkingMode: this.normalizeThinkingMode(modelDefaults.thinkingMode || config.defaultThinkingMode || 'default'),
+        reasoningEffort: this.normalizeReasoningEffort(modelDefaults.reasoningEffort || config.defaultReasoningEffort || 'default'),
+        responseFormat: this.normalizeResponseFormat(modelDefaults.responseFormat ?? config.defaultResponseFormat),
         temperature: config.defaultTemperature ?? 0.7,
         maxTokens: config.defaultMaxTokens ?? 2000,
         privateNetworkPolicy: 'runtime',

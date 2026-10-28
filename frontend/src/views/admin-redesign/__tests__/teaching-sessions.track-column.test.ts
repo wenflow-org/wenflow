@@ -53,22 +53,40 @@ async function mountTs() {
   return wrapper;
 }
 
+/** 从「列」菜单把默认隐藏的列打开（2026-10-22 起完成方式/消息/知识点/关注默认收起） */
+async function showColumn(wrapper: ReturnType<typeof mount>, label: string) {
+  if (!wrapper.find('.mk-cols__menu').exists()) {
+    const colsBtn = wrapper.find('.mk-cols__trigger');
+    expect(colsBtn).toBeTruthy();
+    await colsBtn!.trigger('click');
+  }
+  const item = wrapper.findAll('.mk-cols__item').find((l) => l.text().includes(label));
+  expect(item, label).toBeTruthy();
+  await item!.find('input').setValue(true);
+  await nextTick();
+}
+
 beforeEach(() => {
   listMock.mockReset();
 });
 
-describe('教学会话完成来源 / 完成方式两列（#105，2026-10-19 拆列）', () => {
-  it('表头拆成「完成来源」「完成方式」两列，不再出现「轨道」这个内部词（1440+ 档；jsdom matchMedia 恒 false → 非窄档）', async () => {
+describe('教学会话完成方式列（#105，2026-10-21 只留通道）', () => {
+  it('只有一列「完成方式」，不再有「完成来源」「完成归属」「轨道」三个说法（1440+ 档；jsdom matchMedia 恒 false → 非窄档）', async () => {
     listMock.mockResolvedValue({ data: { data: { items: [makeItem('a')], total: 1 } } });
     const wrapper = await mountTs();
 
+    // 2026-10-22 默认收起（噪点治理）：表头不占位，但列菜单里可随时打开
     const headers = wrapper.findAll('thead th').map((th) => th.text());
-    expect(headers).toContain('完成来源');
-    expect(headers).toContain('完成方式');
-    expect(headers).not.toContain('轨道');
+    expect(headers).not.toContain('完成方式');
+    await showColumn(wrapper, '完成方式');
+    expect(wrapper.findAll('thead th').map((th) => th.text())).toContain('完成方式');
+    const all = wrapper.text();
+    expect(all).not.toContain('完成来源');
+    expect(all).not.toContain('完成归属');
+    expect(all).not.toContain('轨道');
   });
 
-  it('有收束记录：来源徽章与方式文案各占一列；历史（legacy）行中性「未标记」', async () => {
+  it('格内只出通道词；轨道（真实/虚拟/未标记）不再上屏，也不挂解释型悬停', async () => {
     listMock.mockResolvedValue({
       data: {
         data: {
@@ -82,49 +100,52 @@ describe('教学会话完成来源 / 完成方式两列（#105，2026-10-19 拆�
       }
     });
     const wrapper = await mountTs();
+    await showColumn(wrapper, '完成方式');
 
-    const tracks = wrapper.findAll('.ts-track:not(.ts-track--mode)');
-    const modes = wrapper.findAll('.ts-track--mode');
+    const tracks = wrapper.findAll('.ts-track');
     expect(tracks).toHaveLength(3);
-    expect(modes).toHaveLength(3);
 
-    expect(tracks[0].text()).toBe('真实');
-    expect(modes[0].text()).toBe('课堂完成');
-    expect(tracks[1].text()).toBe('虚拟');
-    expect(modes[1].text()).toBe('虚拟黑盒');
-    expect(tracks[2].text()).toBe('未标记');
-    expect(modes[2].text()).toBe('未记录');
-    // 未标记是中性档（muted），不是绿/红的状态色
-    expect(tracks[2].find('.mk-badge').classes()).toContain('mk-badge--muted');
-    // 两列同源同一份收束记录，悬停说明一致
-    expect(tracks[0].attributes('title')).toBe(modes[0].attributes('title'));
+    expect(tracks[0].find('.ts-track__mode').text()).toBe('课堂完成');
+    expect(tracks[1].find('.ts-track__mode').text()).toBe('虚拟黑盒');
+    expect(tracks[2].find('.ts-track__mode').text()).toBe('未记录');
+    // 与右上角「真实 / 测试」视角重复的轨道徽章已撤
+    expect(wrapper.find('.ts-track .mk-badge').exists()).toBe(false);
+    // 2026-10-26 文案收口：解释型悬停说明（记在谁头上）已删，通道词本身自明
+    tracks.forEach((t) => expect(t.attributes('title')).toBeUndefined());
   });
 
-  it('无完成记录：两列都给中性「—」+ 悬停说明，不用用户身份回填', async () => {
+  it('无完成记录：整格给中性「—」，不用用户身份回填', async () => {
     listMock.mockResolvedValue({
       data: { data: { items: [makeItem('none', { isVirtualLearner: true, closure: null })], total: 1 } }
     });
     const wrapper = await mountTs();
+    await showColumn(wrapper, '完成方式');
 
     const cell = wrapper.find('.ts-track');
     expect(cell.exists()).toBe(true);
-    expect(cell.text()).toContain('—');
+    expect(cell.text()).toBe('—');
     expect(cell.find('.mk-badge').exists()).toBe(false); // 虚拟用户也不猜轨道
-    expect(cell.attributes('title')).toContain('无完成记录');
-    expect(wrapper.find('.ts-track--mode').text()).toBe('—');
+    expect(cell.find('.ts-track__mode').exists()).toBe(false);
+    expect(cell.attributes('title')).toBeUndefined();
   });
 });
 
 describe('教学会话「互动」拆成时长 / 消息 / 知识点三列（2026-10-19 用户走查）', () => {
-  it('表头是「时长」「消息」「知识点」，没有叠词的「互动」', async () => {
+  it('默认只留「时长」；「消息」「知识点」进列菜单，没有叠词的「互动」', async () => {
     listMock.mockResolvedValue({ data: { data: { items: [makeItem('a')], total: 1 } } });
     const wrapper = await mountTs();
 
     const headers = wrapper.findAll('thead th').map((th) => th.text());
     expect(headers).toContain('时长');
-    expect(headers).toContain('消息');
-    expect(headers).toContain('知识点');
+    expect(headers).not.toContain('消息');
+    expect(headers).not.toContain('知识点');
     expect(headers).not.toContain('互动');
+    await showColumn(wrapper, '消息');
+    await showColumn(wrapper, '知识点');
+    const after = wrapper.findAll('thead th').map((th) => th.text());
+    expect(after).toContain('消息');
+    expect(after).toContain('知识点');
+    expect(after).not.toContain('互动');
   });
 
   it('三个读数各占一格：时长按分钟格式化、消息带「条」、知识点带「个」', async () => {
@@ -137,10 +158,13 @@ describe('教学会话「互动」拆成时长 / 消息 / 知识点三列（2026
       }
     });
     const wrapper = await mountTs();
+    await showColumn(wrapper, '消息');
+    await showColumn(wrapper, '知识点');
 
     const cells = wrapper.findAll('.ts-ia');
     expect(cells[0].text()).toBe('25 分钟');
-    expect(cells[0].find('.ts-ia__dur--long').exists()).toBe(true); // ≥25 分钟长时标琥珀
+    // 2026-10-27 用户「时长还有两种颜色，简化一下」：不再按长时阈值染琥珀
+    expect(cells[0].find('.ts-ia__dur--long').exists()).toBe(false);
     expect(cells[1].text()).toBe('4 条');
     expect(cells[2].text()).toBe('2 个');
   });

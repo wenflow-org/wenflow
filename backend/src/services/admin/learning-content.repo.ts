@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
-import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
+import { buildNonVirtualUserWhere } from '../../utils/test-account';
 import { withTransaction } from '../../utils/with-transaction';
 
 /**
@@ -196,12 +196,10 @@ export function deleteLearningPath(id: string) {
 
 /** 内容统计（治理页顶部：总数 / 按状态 / 按学科 / 里程碑与任务总量）。
  *  口径随列表页「真实/测试」视角开关联动（2026-10-10 用户拍板互斥视角）：
- *  默认真实视角（buildRealUserWhere）；测试视角（testOnly）= buildTestUserWhere，
+ *  默认 = 全部非虚拟账号（buildNonVirtualUserWhere）；includeTest 只看全量（按 id 直查用），
  *  与 GET /paths 的分支同一判据（否则 KPI/分布条与列表不同源）。 */
-export async function getLearningContentStats(includeTest = false, testOnly = false) {
-  const userWhere = testOnly
-    ? { users: await buildTestUserWhere() }
-    : includeTest ? {} : { users: await buildRealUserWhere() };
+export async function getLearningContentStats(includeTest = false) {
+  const userWhere = includeTest ? {} : { users: await buildNonVirtualUserWhere() };
   return Promise.all([
     prisma.learning_paths.count({ where: userWhere }),
     prisma.learning_paths.groupBy({ by: ['status'], _count: { _all: true }, where: userWhere }),

@@ -345,7 +345,6 @@ export async function callPrompt<TInput, TOutput>(
     // 本请求内首个 markdown/text 调用消费 delta 通道；同请求的后续调用自动降级整包
     streamRequest.consumed = true;
   }
-  const maxAttempts = Math.max(1, spec.retryStrategy?.maxAttempts || 1);
   const startTime = Date.now();
   let lastRaw = '';
   let lastExtractedJson: string | null = null;
@@ -372,6 +371,14 @@ export async function callPrompt<TInput, TOutput>(
   const currentMaxTokens = generationResolution.maxTokens;
   // max_tokens 已由 resolve-llm-call-params 统一抬到 128k 全局下限（2026-09-03 定案）；
   // 重试时不再将 maxTokens ×2 放大（见 validation_failed 分支注释），故无需 tokenCeiling 上界。
+  // 最大尝试次数：skill 级 maxAttempts（admin 可配）优先；未配时 json 媒介默认 2，其余 1。
+  // 再受平台/技能逻辑重试预算与 5 次硬上限夹一次——admin 调小立即生效，调大也不会越过预算。
+  const codeMaxAttempts = spec.retryStrategy?.maxAttempts
+    || (promptContract?.output?.media === 'json' ? 2 : 1);
+  const maxAttempts = Math.max(
+    1,
+    Math.min(generationResolution.maxAttempts ?? codeMaxAttempts, 5, logicalRetryLimit + 1)
+  );
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {

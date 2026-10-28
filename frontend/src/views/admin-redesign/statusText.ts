@@ -2,6 +2,12 @@
  * Admin 统一状态/阶段/类别本地化字典
  * 后端枚举（snake_case / camelCase / 英文）→ 中文展示
  */
+import {
+  getReplanPriorityText,
+  getReplanRecommendationText,
+  getReplanReasonCodeLabels,
+  getReplanScopeText,
+} from '@/utils/replanSignal'
 
 const STATUS_TEXT: Record<string, string> = {
   completed: '已完成',
@@ -352,7 +358,7 @@ export function closureTrackText(track: string | null | undefined): string {
   return CLOSURE_TRACK_TEXT[key] || '未知'
 }
 
-/** 轨道徽章色板：真实=蓝 / 虚拟=紫（与 MkVariantBadge 同源）/ 未标记与未知=中性灰 */
+/** 轨道徽章色板：真实=蓝 / 虚拟=紫 / 未标记与未知=中性灰 */
 export function closureTrackBadgeCls(track: string | null | undefined): string {
   const key = String(track || '')
   return key === 'human' ? 'mk-badge--info' : key === 'virtual-learner' ? 'mk-badge--virtual' : 'mk-badge--muted'
@@ -474,7 +480,18 @@ const ACTION_TEXT: Record<string, string> = {
   'virtual-session-stale-reclaim': '回收无响应会话',
   'virtual-session-batch-terminate': '批量终止虚拟会话',
   'virtual-cascade-delete': '级联删除虚拟数据',
+  /* 2026-10-26 视觉复核：BYOK 写审计后动作列直接印英文键（如 model-provider-model-add），
+     审计筛选 chip 里也出现了 virtual-batch-delete——口径与后端 admin-audit 的 action 一一对应 */
+  'model-provider-create': '添加模型供应商',
+  'model-provider-update': '修改模型供应商',
+  'model-provider-delete': '删除模型供应商',
+  'model-provider-key-clear': '移除供应商密钥',
+  'model-provider-model-add': '添加供应商模型',
+  'model-provider-model-update': '修改供应商模型',
+  'model-provider-model-delete': '删除供应商模型',
+  'virtual-batch-delete': '批量删除虚拟学习者',
   // P2-16：配置/观测类高频接口语义名（避免动作列显示原始 HTTP 串）
+  // 能力探针已下线（2026-10-26）：映射保留，历史审计行仍要读得懂
   'capability-probe': '探测模型能力',
   'reliability-update': '修改可靠性配置',
   'capability-probe-update': '修改能力探针设置',
@@ -488,7 +505,7 @@ const ACTION_TEXT: Record<string, string> = {
   'skill-author-draft': ACT_SKILL_AUTHOR_DRAFT,
   'achievement-grant': '授予成就',
   // 低频虚拟学习者/配置类接口（P2-16 补齐）
-  'virtual-batch-create': '批量创建虚拟学习者',
+  'virtual-card-clone': '卡派生虚拟学习者',
   'virtual-draft-profile': '生成虚拟人设画像',
   'virtual-projection-token': '生成虚拟投影令牌',
   'virtual-session-start-learning': '开始虚拟会话学习',
@@ -497,7 +514,9 @@ const ACTION_TEXT: Record<string, string> = {
   'virtual-session-auto-learning': '虚拟会话自动学习',
   'virtual-session-run-full': '虚拟会话全量运行',
   'virtual-session-blackbox-action': '虚拟会话黑盒操作',
-  'projection-access-token': '生成投影访问令牌'
+  'projection-access-token': '生成投影访问令牌',
+  // 2026-10-24 审计走查：插件开关此前落成英文键 plugin-toggle，动作列直接印出来
+  'plugin-toggle': '启停插件'
 }
 
 /**
@@ -519,8 +538,12 @@ const PATH_ACTION_RULES: Array<[RegExp, string]> = [
   [/\/virtual-learners\/[^/]+\/draft-profile$/, '生成虚拟人设画像'],
   [/\/virtual-learners\/[^/]+\/stories\/[^/]+$/, '编辑虚拟故事'],
   [/\/virtual-learners\/[^/]+\/projection-token$/, '生成虚拟投影令牌'],
+  // 2026-10-24 审计走查：卡库的四种批量操作此前落成原始 /api/... 路径
+  [/\/virtual-learners\/cards\/clone$/, '卡派生虚拟学习者'],
+  [/\/virtual-learners\/cards\/validate$/, '校验学习者卡'],
+  [/\/virtual-learners\/cards\/import$/, '导入学习者卡'],
+  [/\/virtual-learners\/cards\/export$/, '导出学习者卡'],
   [/\/virtual-learners\/batch-delete$/, '批量删除虚拟学习者'],
-  [/\/virtual-learners\/batch-create$/, '批量创建虚拟学习者'],
   // 虚拟学习者 · 会话
   [/\/virtual-learners\/sessions\/reclaim-stale$/, '回收无响应会话'],
   [/\/virtual-learners\/sessions\/terminate$/, '批量终止虚拟会话'],
@@ -554,7 +577,15 @@ const METHOD_PATH_ACTION_RULES: Array<{ method: string; re: RegExp; name: string
   { method: 'PUT', re: /\/virtual-learners\/[^/]+$/, name: '更新虚拟画像' },
   { method: 'PATCH', re: /\/virtual-learners\/[^/]+$/, name: '更新虚拟画像' },
   { method: 'DELETE', re: /\/announcements\/[^/]+$/, name: '删除公告' },
-  { method: 'PUT', re: /\/announcements\/[^/]+$/, name: '更新公告' }
+  { method: 'PUT', re: /\/announcements\/[^/]+$/, name: '更新公告' },
+  /* 管理侧写入（2026-10-23 运营视角）：这几类老审计行的 action 存的是原始
+     `METHOD /api/admin/...`，动作列此前直接印接口路径（/api/admin/api-config · PUT）。
+     频次来自本机审计库实测：字段路由、Prompt 字段、Skill 试跑、模型接入保存。 */
+  { method: 'PUT', re: /\/api-config$/, name: '修改模型接入配置' },
+  { method: 'PATCH', re: /\/field-routings\/routings\//, name: '修改字段路由' },
+  { method: 'PATCH', re: /\/prompt-lab\/core\//, name: '修改 Prompt 字段' },
+  { method: 'POST', re: /\/skills\/[^/]+\/test$/, name: '测试 Skill' },
+  { method: 'POST', re: /\/api-config\/test(-model)?$/, name: '测试模型连通性' }
 ]
 
 export function pathActionText(path: string | null | undefined, method?: string | null): string {
@@ -578,7 +609,11 @@ const TARGET_TEXT: Record<string, string> = {
   announcement: '公告',
   session: '会话',
   'virtual-learner': '虚拟学习者',
-  'virtual-session': '虚拟会话'
+  'virtual-session': '虚拟会话',
+  // 2026-10-24：插件启停写审计后，目标类型此前回退成英文 plugin
+  plugin: '插件',
+  // 2026-10-26：模型供应商的增删改审计此前把 model-provider 原样印在「目标类型」列
+  'model-provider': '模型供应商'
 }
 
 export function targetTypeText(s: string | null | undefined): string {
@@ -755,4 +790,76 @@ export function ipText(ip?: string | null): string {
   const bare = v.replace(/^::ffff:/i, '')
   if (bare === '::1' || bare === '127.0.0.1' || bare === 'localhost') return '127.0.0.1（本机）'
   return bare
+}
+
+/* ===== 课堂类型（2026-10-21）：tutor / review / extension =====
+   复习课与延伸课不结算任务，此前在「教学会话」列表与学习者详情里与正课无法区分。
+   文案/徽章单源在这里，平台页与学习者详情页共用；未知值回落原文、不猜。 */
+export function sessionModeText(mode: string | null | undefined): string {
+  const m = String(mode || 'tutor')
+  if (m === 'tutor') return '正课'
+  if (m === 'review') return '复习课'
+  if (m === 'extension') return '延伸课'
+  return m
+}
+
+export function sessionModeBadgeCls(mode: string | null | undefined): string {
+  const m = String(mode || 'tutor')
+  if (m === 'review') return 'mk-badge--info'
+  if (m === 'extension') return 'mk-badge--ok'
+  return 'mk-badge--muted'
+}
+
+/** 课堂类型悬停长释：说清「为什么不结算、为什么完成来源为空」 */
+export function sessionModeTitle(mode: string | null | undefined): string {
+  const m = String(mode || 'tutor')
+  if (m === 'review') return '复习课：注入到期复习点，只完成复习流程，不结算任务（所以完成来源/完成方式通常为空）'
+  if (m === 'extension') return '延伸课：正课达标后基于同一任务继续陪学，只完成延伸流程，不结算任务（所以完成来源/完成方式通常为空）'
+  return '正课：正常课堂，完成后结算任务并产生完成来源/完成方式'
+}
+
+/* ---------- 路径调整建议：运营视角读法 ----------
+   后端 advisory.ui.{title,body} 是发给学习者的文案（「建议先确认路径调整」「不会覆盖你已完成
+   的内容」），直接搬进运营列表就变成对着学习者说话的句子。运营关心的是另三件事：这条建议处
+   置到哪一步、因为什么触发、影响多大范围——学员端的建议标题只留作兜底。 */
+export interface OpsAdvisoryLike {
+  priority?: string | null
+  recommendation?: string | null
+  scope?: string | null
+  reasonCodes?: string[] | null
+  rationale?: string | null
+  learnerResponse?: { action?: string | null; at?: string | null } | null
+  ui?: { title?: string | null; body?: string | null } | null
+}
+
+const ADVISORY_RESPONSE_LABEL: Record<string, string> = {
+  keep: '学员选择保持原计划',
+  later: '学员选择稍后再看',
+  preview: '学员已查看建议、未确认',
+}
+
+/** 行内徽章：只在「仍需人看」与「学习者已决定保持原计划」两态之间分叉 */
+export function advisoryOpsText(a: OpsAdvisoryLike | null | undefined): string {
+  return a?.learnerResponse?.action === 'keep' ? '已保持计划' : '待确认调整'
+}
+
+export function advisoryOpsBadgeCls(a: OpsAdvisoryLike | null | undefined): string {
+  if (a?.learnerResponse?.action === 'keep') return 'mk-badge--muted'
+  return a?.priority === 'high' ? 'mk-badge--bad' : a?.priority === 'medium' ? 'mk-badge--warn' : 'mk-badge--info'
+}
+
+/** 悬停：优先级 · 影响范围 · 触发原因 · 建议动作 · 处置 —— 学员端长句退到末尾当证据 */
+export function advisoryOpsTitle(a: OpsAdvisoryLike | null | undefined): string {
+  if (!a) return '路径调整建议'
+  const parts: string[] = [
+    getReplanPriorityText(a.priority as never),
+    getReplanScopeText(a.scope as never),
+  ]
+  const reasons = getReplanReasonCodeLabels(Array.isArray(a.reasonCodes) ? a.reasonCodes.map(String) : [])
+  if (reasons.length) parts.push(`触发原因：${reasons.join('、')}`)
+  if (a.recommendation) parts.push(`建议动作：${getReplanRecommendationText(a.recommendation as never)}`)
+  const response = a.learnerResponse?.action ? ADVISORY_RESPONSE_LABEL[a.learnerResponse.action] : ''
+  parts.push(`处置：${response || '未处置'}`)
+  const detail = a.rationale || a.ui?.body || ''
+  return detail ? `${parts.join(' · ')}。${detail}` : parts.join(' · ')
 }

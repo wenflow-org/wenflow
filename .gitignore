@@ -228,6 +228,8 @@ doc/re_test/*
 !doc/re_test/ADMIN_UI_WALKTHROUGH.md
 # 例外：管理端视觉层规范（守卫规则 10/11/12 与巡检脚本按路径引用它作为判据）
 !doc/ADMIN_VISUAL_LAYER_SPEC.md
+# 例外：文案语义审查标准（copy:dump 的审阅依据，代码注释与脚本引用）
+!doc/ADMIN_COPY_SEMANTIC_AUDIT.md
 # 例外：Prompt 缓存优化技术文档（缓存口径与运维配置的权威引用）
 !doc/PROMPT_CACHE_OPTIMIZATION.md
 !doc/SKILL_PROTOCOL_V4.md
@@ -352,3 +354,15 @@ newui/
 # 通配同时覆盖解压目录与压缩包两种形态（.rar / .zip 都可能被再次放进来）
 WenFlow-Design-System*
 !doc/DIAGRAM_PEDAGOGY_RESEARCH.md
+
+# 本地跑批/实验产物（日志、状态 JSON、备份）
+outputs/
+
+# 单实例锁文件（架构优化批 #3：backend/.runtime/）
+backend/.runtime/
+
+# 后台走查的运行时证据（DOM 探针 / 截图，2026-10-26）
+.audit-probe/
+.audit-probe-data/
+.audit-shots/
+.audit-shots-after/

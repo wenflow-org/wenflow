@@ -349,6 +349,8 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         timePerSession: normalizePromptString(resources.timePerSession),
         timeHorizon: normalizePromptString(resources.timeHorizon),
         deadlineText: normalizePromptString(resources.deadlineText),
+        // R8：绝对截止日（与 timeDimensions.deadlineDate 同源），供提示词直接读。
+        deadlineDate: normalizePromptString(resources.deadlineDate),
         // 资料包（用户附件在前、联网采集在后）：**必须进提示词**，否则规则"路径必须长在资料上"
         // 永远拿不到资料（2026-09-22 实测：装配层送达了、投影层却把它裁掉 ⇒ 模型看不见）。
         // 无资料时不出现该键，冷启动行为不变。
@@ -378,8 +380,13 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         subtasksPerStageRange: Array.isArray(planningHints.subtasksPerStageRange) ? planningHints.subtasksPerStageRange : null,
         subtaskMinutesRange: Array.isArray(planningHints.subtaskMinutesRange) ? planningHints.subtaskMinutesRange : null,
         maxWeeks: typeof planningHints.maxWeeks === 'number' ? planningHints.maxWeeks : null,
+        maxWeeksSource: typeof planningHints.maxWeeksSource === 'string' ? planningHints.maxWeeksSource : null,
         targetMilestones: typeof planningHints.targetMilestones === 'number' ? planningHints.targetMilestones : null,
         targetSubtasksPerStage: typeof planningHints.targetSubtasksPerStage === 'number' ? planningHints.targetSubtasksPerStage : null,
+        // R8：守恒规则已引用这三个锚，但此前投影漏字段 ⇒ 死引用；必须进提示词。
+        targetTotalHours: typeof planningHints.targetTotalHours === 'number' ? planningHints.targetTotalHours : null,
+        targetHoursPerMilestone: typeof planningHints.targetHoursPerMilestone === 'number' ? planningHints.targetHoursPerMilestone : null,
+        targetMinutesPerTask: typeof planningHints.targetMinutesPerTask === 'number' ? planningHints.targetMinutesPerTask : null,
       } : null,
       prerequisiteCheckResults: Array.isArray(normalizedInput.prerequisiteCheckResults)
         ? normalizedInput.prerequisiteCheckResults.map((item: any) => ({
@@ -395,6 +402,13 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
             estimatedHours: Number.isFinite(normalizedInput.timeDimensions.estimatedHours) ? normalizedInput.timeDimensions.estimatedHours : null,
             sessionsPerWeek: Number.isFinite(normalizedInput.timeDimensions.sessionsPerWeek) ? normalizedInput.timeDimensions.sessionsPerWeek : null,
             sessionsLengthMin: Number.isFinite(normalizedInput.timeDimensions.sessionsLengthMin) ? normalizedInput.timeDimensions.sessionsLengthMin : null,
+            totalSessions: Number.isFinite(normalizedInput.timeDimensions.totalSessions) ? normalizedInput.timeDimensions.totalSessions : null,
+            calendarCapacityHours: Number.isFinite(normalizedInput.timeDimensions.calendarCapacityHours) ? normalizedInput.timeDimensions.calendarCapacityHours : null,
+            scopeAnchorHours: Number.isFinite(normalizedInput.timeDimensions.scopeAnchorHours) ? normalizedInput.timeDimensions.scopeAnchorHours : null,
+            // R8 权威字段：必须进提示词，否则 path LLM 看不到内容体量锚 / 截止日。
+            objectiveScopeHours: Number.isFinite(normalizedInput.timeDimensions.objectiveScopeHours) ? normalizedInput.timeDimensions.objectiveScopeHours : null,
+            deadlineDate: typeof normalizedInput.timeDimensions.deadlineDate === 'string' ? normalizedInput.timeDimensions.deadlineDate : null,
+            timeModelVersion: Number.isFinite(normalizedInput.timeDimensions.timeModelVersion) ? normalizedInput.timeDimensions.timeModelVersion : null,
           }
         : null,
       // 学习证据（规则 53 的唯一依据）：无学习历史时**不出现该键**，冷启动行为与原先完全一致

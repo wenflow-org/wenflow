@@ -69,6 +69,21 @@ export interface GoalConversationInternal {
   };
 }
 
+/**
+ * #132 兜底：promptResult.output 理论上恒由 normalizeOutput 产出（必带 internal），
+ * 但执行日志里实测 48 次 internal 为 undefined（另一条 success/降级产物直通了输出）。
+ * renderHints/metadata 不能因为缺 internal 再抛一次 internal 错。
+ */
+export function goalInternalQuickReplies(internal: GoalConversationInternal | null | undefined): QuickReply[] {
+  const quickReplies = internal?.ext?.goalConversation?.quickReplies;
+  return Array.isArray(quickReplies) ? quickReplies : [];
+}
+
+export function goalInternalConfidence(internal: GoalConversationInternal | null | undefined): number {
+  const confidence = internal?.core?.confidence;
+  return typeof confidence === 'number' && Number.isFinite(confidence) ? confidence : 0.2;
+}
+
 export interface GoalConversationAgentResult {
   userVisible: string;
   internal: GoalConversationInternal;
@@ -953,6 +968,7 @@ function buildRetryNotice(prevFailureType: string, prevViolations: string[]): st
   lines.push('- 若把 nextQuestions 嵌进 state.nextQuestions，请改为放到顶层');
   lines.push('- 不要使用 goalConversation 包装层；quickReplies / understanding / nextQuestions 等字段直接放在顶层');
   lines.push('- state 必须包含 stage / confidence / done 三个字段，不要把 understanding 塞进 state');
+  lines.push('- time_dimensions 只填 sessionsLengthMin/sessionLengthMin、objectiveScopeHours、deadlineDate；数值字段必须是 number，deadlineDate 用 YYYY-MM-DD 或 null');
   lines.push('- 起草时严格按 system prompt 的输出规格，参考但不要照搬输入 payload 的嵌套形态');
   return lines.join('\n');
 }
@@ -1118,24 +1134,35 @@ export async function goalConversationAgentHandler(
 
     if (promptResult.success && promptResult.output) {
       const result = promptResult.output;
+      /* #132（2026-10-22 走查）：历史失败 48 次都是 `internal` 缺失后读 `.ext` 抛
+         `Cannot read properties of undefined`。normalizeOutput 本应恒返回 internal，
+         缺失说明输出来自别的路径。这里把「数据形态坏了」说清（带可用键名），
+         不做静默兜底——先让失败可定位，再决定修复点。 */
+      const internal = result.internal as GoalConversationInternal | undefined;
+      if (!internal?.core || !internal?.ext?.goalConversation) {
+        throw new Error(
+          `[goal-conversation] 结构化输出缺少 internal.core / internal.ext.goalConversation`
+          + `（success=true，可用键：${Object.keys(result || {}).join(',') || '无'}）`
+        );
+      }
       return {
         success: true,
         userVisible: result.userVisible,
-        internal: result.internal,
+        internal,
         runtimeEnvelope: promptResult.runtimeEnvelope || buildGoalRuntimeEnvelope(result, {
           contract: runtimeContract,
           status: 'succeeded',
         }),
         renderHints: {
           component: 'goal-conversation',
-          quickReplies: result.internal.ext.goalConversation.quickReplies || [],
+          quickReplies: internal.ext.goalConversation.quickReplies || [],
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'skill:goal-conversation',
           agentName: '目标对话 Skill',
           agentType: 'custom',
-          confidence: result.internal.core.confidence,
+          confidence: internal.core.confidence,
           generatedAt: new Date().toISOString(),
         },
         debug: {
@@ -1189,14 +1216,14 @@ export async function goalConversationAgentHandler(
         }),
         renderHints: {
           component: 'goal-conversation',
-          quickReplies: observedResult.internal.ext.goalConversation.quickReplies || [],
+          quickReplies: goalInternalQuickReplies(observedResult.internal),
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'skill:goal-conversation',
           agentName: '目标对话 Skill',
           agentType: 'custom',
-          confidence: observedResult.internal.core.confidence,
+          confidence: goalInternalConfidence(observedResult.internal),
           generatedAt: new Date().toISOString(),
         },
         debug: {

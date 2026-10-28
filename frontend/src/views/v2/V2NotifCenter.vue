@@ -25,13 +25,14 @@
     <Transition name="nc-pop">
       <div v-if="open" ref="panelRef" class="nc__panel" role="dialog" aria-modal="true" aria-label="通知与 AI 任务" tabindex="-1">
         <!-- Tab 切换 -->
-        <div class="nc__tabs" role="tablist">
+        <div class="nc__tabs" role="tablist" aria-label="通知与任务" @keydown="onTabKeydown">
           <button
             type="button"
             role="tab"
             class="nc__tab"
             :class="{ 'nc__tab--on': tab === 'notif' }"
             :aria-selected="tab === 'notif'"
+            :tabindex="tab === 'notif' ? 0 : -1"
             @click="tab = 'notif'"
           >通知<template v-if="unread"> · {{ unread }}</template></button>
           <button
@@ -40,6 +41,7 @@
             class="nc__tab"
             :class="{ 'nc__tab--on': tab === 'tasks' }"
             :aria-selected="tab === 'tasks'"
+            :tabindex="tab === 'tasks' ? 0 : -1"
             @click="tab = 'tasks'"
           >AI 任务<template v-if="busyItems.length"> · {{ busyItems.length }} 进行中</template></button>
         </div>
@@ -206,6 +208,7 @@ import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { getAgentLogs } from '@/api/userCustom';
 import { agentLabelOf } from './agent-labels';
+import { onTabRowKeydown } from '@/utils/rovingTablist';
 
 const router = useRouter();
 
@@ -224,6 +227,11 @@ interface FeedEvent {
 
 /* ---------- 面板状态 ---------- */
 const open = ref(false);
+/** 通知 / AI 任务两枚页签：方向键在行内切换并移动焦点 */
+function onTabKeydown(e: KeyboardEvent): void {
+  onTabRowKeydown(e, (i) => { tab.value = i === 0 ? 'notif' : 'tasks' })
+}
+
 const tab = ref<'notif' | 'tasks'>('notif');
 const rootRef = ref<HTMLElement | null>(null);
 const bellRef = ref<HTMLButtonElement | null>(null);

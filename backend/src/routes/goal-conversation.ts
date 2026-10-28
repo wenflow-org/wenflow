@@ -49,6 +49,20 @@ const writeSseEvent = (res: Response, event: string, data: unknown) => {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 };
 
+/**
+ * SSE 心跳：goal 规划回合（尤其首条消息触发全量规划）出首个字节可远超 90s，
+ * 每 15s 写一条注释行喂客户端传输层空闲计时与上层停滞看门狗（#129——连接层
+ * 此前对「已连接但整段无字节」与「真死连接」不可区分，慢回合被误判）。
+ */
+const SSE_HEARTBEAT_INTERVAL_MS = 15_000;
+const startSseHeartbeat = (res: Response) => {
+  const timer = setInterval(() => {
+    if (!res || res.destroyed || res.writableEnded) return;
+    res.write(': hb\n\n');
+  }, SSE_HEARTBEAT_INTERVAL_MS);
+  return () => clearInterval(timer);
+};
+
 /** 统一错误映射（SSE 场景复用；422 恢复信封随 error 事件 data 下发） */
 const resolveGoalError = (error: any, req: Request): { status: number; code: string; message: string; data?: any } => {
   if (error?.status === 422 && error?.code === 'STRUCTURED_OUTPUT_INVALID' && error?.result) {
@@ -114,6 +128,7 @@ const handleStreamingGoal = async (
     conversationId: (req as any).params?.conversationId || undefined,
     sourceEntry: 'platform',
   });
+  const stopHeartbeat = startSseHeartbeat(res);
 
   try {
     const result = await task();
@@ -128,6 +143,7 @@ const handleStreamingGoal = async (
       ...(data !== undefined ? { data } : {})
     });
   } finally {
+    stopHeartbeat();
     if (!res.destroyed && !res.writableEnded) res.end();
   }
 };

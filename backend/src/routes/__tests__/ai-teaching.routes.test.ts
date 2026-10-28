@@ -802,8 +802,8 @@ describe('ai-teaching routes', () => {
     }));
   });
 
-  describe('调整建议处置埋点（#35：保留/稍后再看/预览）', () => {
-    it('keep/later/preview 透传落库并回写 learnerResponse', async () => {
+  describe('调整建议处置埋点（#35：保留/稍后再看/预览/已采用）', () => {
+    it('keep/later/preview/adopt 透传落库并回写 learnerResponse', async () => {
       mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({
         status: 'ok',
         advisory: {
@@ -830,7 +830,28 @@ describe('ai-teaching routes', () => {
       }));
     });
 
-    it('非法动作（如真调整 confirm）→ 400 且不触达 repository', async () => {
+    it('adopt（真执行）也允许落库，供 P1-7 漏斗统计执行档', async () => {
+      mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({
+        status: 'ok',
+        advisory: {
+          shouldSuggest: true,
+          recommendation: 'reinforce',
+          learnerResponse: { action: 'adopt', at: '2026-10-22T00:00:00.000Z' },
+        },
+      });
+      const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'adopt' } }, res);
+
+      expect(mockTeachingSessionRepository.recordAdvisoryResponse).toHaveBeenCalledWith('session-1', 'user-1', 'adopt');
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({ action: 'adopt' }),
+      }));
+    });
+
+    it('非法动作（如未经执行链的 confirm）→ 400 且不触达 repository', async () => {
       const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
       const res = createResponse();
 

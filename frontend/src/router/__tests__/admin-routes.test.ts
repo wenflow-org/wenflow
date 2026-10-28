@@ -62,16 +62,16 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.path).toBe('/admin/skill-workbench');
   });
 
-  it('/admin/topology → /admin/orchestrator?tab=topology（阶段 2D 拓扑降级并入编排页兼容重定向）', async () => {
+  it('/admin/topology → /admin/orchestrator（旧拓扑页改投总览，不再带 ?tab=topology 掉进某阶段旅程）', async () => {
     await router.push('/admin/topology');
     expect(router.currentRoute.value.path).toBe('/admin/orchestrator');
-    expect(router.currentRoute.value.query.tab).toBe('topology');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
   });
 
-  it('/admin/agent-registry/:id → /admin/orchestrator?tab=topology（旧注册表路由兼容）', async () => {
+  it('/admin/agent-registry/:id → /admin/orchestrator（旧注册表路由兼容，不带页签）', async () => {
     await router.push('/admin/agent-registry/goal-agent');
     expect(router.currentRoute.value.path).toBe('/admin/orchestrator');
-    expect(router.currentRoute.value.query.tab).toBe('topology');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
   });
 
   it('/admin/skill-workbench/:agentId → Skill 详情二级页（旧工作台详情深链兼容；设计页已平铺）', async () => {
@@ -153,6 +153,44 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
     expect(router.currentRoute.value.query.tab).toBe('security');
     expect(router.currentRoute.value.query.user).toBe('admin');
+  });
+
+  it('改名/拆页后的旧深链仍在路由层改投：api-config?tab=security / skills?tab=prompt-eval', async () => {
+    await router.push('/admin/api-config?tab=security');
+    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.query.tab).toBe('access');
+
+    await router.push('/admin/skills?tab=prompt-eval&peTab=runs');
+    expect(router.currentRoute.value.path).toBe('/admin/prompt-eval');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
+    expect(router.currentRoute.value.query.peTab).toBe('runs');
+  });
+
+  it('访问与注册独立页深链改投运营中心 access 页签', async () => {
+    await router.push('/admin/access-control?foo=bar');
+    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.query.tab).toBe('access');
+    expect(router.currentRoute.value.query.foo).toBe('bar');
+  });
+
+  it('/admin/memory-review?userId= → 学习者详情「记忆调度」页签（路由级改投，页面不必先挂载转发）', async () => {
+    await router.push('/admin/memory-review?userId=user_abc');
+    expect(router.currentRoute.value.path).toBe('/admin/learner-state');
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'learner', id: 'user_abc', tab: 'memory-ops' });
+    expect(router.currentRoute.value.query.userId).toBeUndefined();
+  });
+
+  it('/admin/ops-hub?status= 只认当前页签枚举，非法值丢弃（反馈的 new 落到公告会筛成空表）', async () => {
+    await router.push('/admin/ops-hub?tab=announce&status=new');
+    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.query.tab).toBe('announce');
+    expect(router.currentRoute.value.query.status).toBeUndefined();
+
+    await router.push('/admin/ops-hub?tab=announce&status=published');
+    expect(router.currentRoute.value.query.status).toBe('published');
+
+    await router.push('/admin/ops-hub?tab=feedback&status=new');
+    expect(router.currentRoute.value.query.status).toBe('new');
   });
 });
 

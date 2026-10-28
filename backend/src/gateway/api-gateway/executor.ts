@@ -59,7 +59,7 @@ export function resolveCacheSessionKey(context: ExecutionContext): string {
 }
 /** 降级链最多候选数（主模型 + N 个 fallback），用于限制质量漂移与成本（见 §4.5） */
 /** 运行时模型候选上限（含主模型）：fallback 链超过部分静默截断，registry 据此展示有效链 */
-export const MAX_MODEL_CANDIDATES = 2;
+export const MAX_MODEL_CANDIDATES = 3;
 
 interface RequestResult {
   response: ChatResponse;
@@ -376,23 +376,31 @@ export class APIExecutor {
       attemptTelemetryComplete,
       maxAttempts
     );
-    // 降级：主候选在「值得换部署」的错误上耗尽重试 → 换 fallback 模型重跑（限一跳）。
+    // 降级：主候选在「值得换部署」的错误上耗尽重试 → 换 fallback 模型重跑。
     // 见 doc/MODEL_GATEWAY_DESIGN.md §4.5（成熟参照：LiteLLM fallbacks + deployment cooldown）。
     // 链来源优先级：skill 级声明（skill_model_configs.fallbackChain）> 模型注册表全局链。
-    const fallbackModel = this.resolveModelCandidates(primaryModel, route.skillFallbackChain)[1];
+    // 支持最多 2 跳（MAX_MODEL_CANDIDATES=3）；fallbackTrail 防环并限制总尝试次数。
+    const fallbackTrail = normalizedContext.fallbackTrail || [];
+    const triedModels = new Set([...fallbackTrail, primaryModel]);
+    const fallbackModel = (fallbackTrail.length < MAX_MODEL_CANDIDATES - 1)
+      ? this.resolveModelCandidates(primaryModel, route.skillFallbackChain)
+          .find((candidate) => (
+            candidate !== primaryModel
+            && !triedModels.has(candidate)
+            && !isCoolingDown(deploymentKey({
+              providerId: route.providerId,
+              endpoint: route.endpoint,
+              model: candidate
+            }))
+          ))
+      : undefined;
     const terminalError = lastError as GatewayExecutionError | null;
     if (
-      !normalizedContext.fallbackFrom
-      && fallbackModel
+      fallbackModel
       && !streamStarted
       && terminalError
       && isFallbackWorthyCategory(terminalError.category)
       && retryBudget.used.upstreamAttempts < retryBudget.limits.maxUpstreamAttempts
-      && !isCoolingDown(deploymentKey({
-        providerId: route.providerId,
-        endpoint: route.endpoint,
-        model: fallbackModel
-      }))
     ) {
       markCoolingDown(primaryHealthKey);
       logger.warn('[api-gateway] 主候选耗尽，降级到 fallback 模型', {
@@ -400,6 +408,7 @@ export class APIExecutor {
         llmRequestId,
         primaryModel,
         fallbackModel,
+        fallbackDepth: fallbackTrail.length + 1,
         errorCategory: terminalError.category,
         statusCode: lastStatusCode
       });
@@ -409,6 +418,7 @@ export class APIExecutor {
         {
           ...normalizedContext,
           fallbackFrom: primaryModel,
+          fallbackTrail: [...fallbackTrail, primaryModel],
           // 链来源记账：skill 级声明链 vs 模型注册表全局链（便于回看「空气兜底」治理效果）
           fallbackChainSource: route.skillFallbackChain ? 'skill' : 'registry',
         }
@@ -681,6 +691,19 @@ export class APIExecutor {
               {
                 category: 'protocol', code: 'INVALID_STREAM_RESPONSE', statusCode,
                 requestUrl, contentType, retryable: false
+              }
+            );
+          }
+          if (!String(state.content || '').trim()) {
+            // D3（2026-10-22 拍板 A）：流式 200 但一个内容增量都没有（实测 99.4s、completion_tokens=0）
+            // 不能当成功返回——下游会拿到空 userVisible，用户体感是「等了很久没回复」。
+            // 归为 TRUNCATED_EMPTY_OUTPUT：走既有重试链，并在重试时关闭思考
+            // （reasoning 吃掉输出预算是最常见成因）；失败文案带 finish_reason 与用量便于排查。
+            throw new GatewayExecutionError(
+              `API returned empty stream content (no assistant text) from ${requestUrl}. finish_reason=${state.finishReason || 'unknown'}, completion_tokens=${state.usage?.completion_tokens ?? 0}. Body preview: ${this.truncate(fullText, 300)}`,
+              {
+                category: 'protocol', code: 'TRUNCATED_EMPTY_OUTPUT', statusCode,
+                requestUrl, contentType, retryable: true
               }
             );
           }
@@ -1116,6 +1139,7 @@ export class APIExecutor {
         executionMode,
         // 降级记账：本次调用是作为 fallback 发起时的来源模型（P1，见 §4.5）
         fallbackFrom: context.fallbackFrom || null,
+        fallbackTrail: context.fallbackTrail || null,
         fallbackChainSource: context.fallbackChainSource || null,
         skillId: context.skillId || null, agentId: context.agentId || null,
         sessionId: context.sessionId || null,

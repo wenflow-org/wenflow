@@ -25,6 +25,7 @@ import {
   RESPONSE_TRIAGE_PENDING_KEY,
   RESPONSE_TRIAGE_SETTING_KEY,
   buildTriageAdvisoryLine,
+  isHardBlockResponseTriage,
   normalizeResponseTriageEnforcementMode,
   resolveResponseTriageFromCollectedData,
   triageGoalResponse,
@@ -32,6 +33,7 @@ import {
   type ResponseTriageEnforcementMode,
 } from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
+import { buildCompletedConversationResult, buildHardBlockResult } from './goal-conversation.exit';
 import learningService from './learning.service';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -99,7 +101,8 @@ function buildGoalNormalizedState(data: any): GoalNormalizedStateV1 {
     constraints: {
       availableTime: typeof understanding?.background?.available_time === 'string' ? understanding.background.available_time : null,
       deadlineText: typeof understanding?.deadline_text === 'string' ? understanding.deadline_text : null,
-      deadlineDate: normalizeDeadlineDate(understanding?.deadline_date),
+      deadlineDate: normalizeDeadlineDate(understanding?.deadline_date)
+        ?? normalizeDeadlineDate(understanding?.time_dimensions?.deadlineDate),
     },
     successCriteria: {
       observableResult: typeof understanding?.success_criteria?.observable_result === 'string'
@@ -592,42 +595,12 @@ async continueConversation(
 
         // 如果已经完成，直接返回
         if (conversation.status === 'completed') {
-          const data = JSON.parse(conversation.collectedData);
-          let learningPath = null;
-          
-          // 查询学习路径状态
-          if (conversation.learningPathId) {
-            const path = await prisma.learning_paths.findFirst({
-              where: { id: conversation.learningPathId }
-            });
-            if (path) {
-              learningPath = {
-                id: path.id,
-                status: path.status
-              };
-            }
-          }
-          
-          return {
-            userVisible: '学习路径已经生成，可以去查看啦！',
-            internal: {
-              core: {
-                conversationId,
-                stage: 'completed',
-                confidence: data.confidence || 0,
-                isCompleted: true,
-                learningPath
-              },
-              ext: {
-                goalConversation: {
-                  understanding: data.understanding || {},
-                  nextQuestions: [],
-                  quickReplies: [],
-                  collected: data.collected || {}
-                }
-              }
-            }
-          };
+          return buildCompletedConversationResult({
+            conversationId,
+            collectedData: conversation.collectedData,
+            learningPathId: conversation.learningPathId,
+            findPath: (id) => prisma.learning_paths.findFirst({ where: { id } }),
+          });
         }
 
         // 确认双通道（2026-09-27 绕圈缺陷修复）：①UI 显式标志（首选，优先级不变）；
@@ -682,6 +655,32 @@ async continueConversation(
           const triageMode = await this.resolveResponseTriageEnforcementMode();
           const storedTriage = resolveResponseTriageFromCollectedData(data);
           const triagePending = (data as Record<string, unknown>)[RESPONSE_TRIAGE_PENDING_KEY];
+
+          // ── 硬阻断（2026-10-28 R4 外部评审 P0）：referral / emotional_support /
+          //    not_judgeable×physical_internalized 三类结论，不依赖 advisory/gated、也不允许
+          //    「再次确认」放行。否则 F96/F97 会在分诊判 referral 后仍生成 5.3h/26.4h 路径。
+          const hardBlockTriage = storedTriage ?? triageGoalResponse(understanding);
+          if (isHardBlockResponseTriage(hardBlockTriage, understanding)) {
+            await this.updateConversationLifecycle(conversationId, 'completed', {
+              status: 'completed',
+              appendMessage: { role: 'user', content: userReply },
+              mutateCollectedData: (currentData) => {
+                currentData[RESPONSE_TRIAGE_KEY] = hardBlockTriage;
+                delete currentData[RESPONSE_TRIAGE_PENDING_KEY];
+              },
+            });
+            logger.info('[goal-conversation] 分诊硬阻断：不生成学习路径', {
+              conversationId,
+              mode: hardBlockTriage.mode,
+              confidence: hardBlockTriage.confidence,
+              platformJudgment: (understanding as any)?.platform_judgment ?? (understanding as any)?.platformJudgment ?? null,
+            });
+            return buildHardBlockResult(
+              { conversationId, understanding, confidence: data.confidence || 0, collected: data.collected || {} },
+              hardBlockTriage
+            );
+          }
+
           if (triageMode === 'gated'
             && storedTriage
             && storedTriage.mode !== 'learning_path'
@@ -1260,6 +1259,8 @@ async continueConversation(
       ...(goalHandoffFields ? { goalHandoffFields: goalHandoffFields.fields } : {}),
       // goal skill 产出的结构化画像透传（learner.identity/learning_context 等），供 path-planning scenario 判定
       structuredData: (data as any)?.structuredData || null,
+      // goal skill 置信度评分：此前 goal 侧存了但 path 侧恒 null（审计 P2 契约断裂）
+      confidenceScores: goalExt.confidenceScores ?? (data as any)?.confidenceScores ?? null,
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
       // 虚拟学习者负荷画像（会话创建时写入 collectedData）；真实用户缺失 → null，

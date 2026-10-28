@@ -9,6 +9,7 @@ import {
   getRunnableTasks,
   countTaskProgress,
   findTaskInPath,
+  resolveStaleTaskRecovery,
   buildProgressAfterTaskCompletion,
   buildDefaultLearnerState,
   buildStoryBehaviorBias,
@@ -134,6 +135,25 @@ describe('findTaskInPath', () => {
     expect(findTaskInPath(milestones, 'nope')).toBeNull()
     expect(findTaskInPath(milestones, null)).toBeNull()
     expect(findTaskInPath(milestones, undefined)).toBeNull()
+  })
+})
+
+describe('resolveStaleTaskRecovery', () => {
+  it('保留仍存在于当前路径的任务指针', () => {
+    expect(resolveStaleTaskRecovery(milestones, 't2')).toEqual({ stale: false, taskId: 't2' })
+  })
+
+  it('重排后旧任务已不存在 → 报告 stale，并给出新路径第一个未完成任务', () => {
+    expect(resolveStaleTaskRecovery(milestones, 'st_removed_by_replan')).toEqual({ stale: true, taskId: 't2' })
+  })
+
+  it('没有指针或路径已无未完成任务时安全返回', () => {
+    expect(resolveStaleTaskRecovery(milestones, null)).toEqual({ stale: false, taskId: null })
+    const allDone = milestones.map((m) => ({
+      ...m,
+      subtasks: m.subtasks.map((t) => ({ ...t, status: 'completed' })),
+    }))
+    expect(resolveStaleTaskRecovery(allDone, 'st_removed_by_replan')).toEqual({ stale: true, taskId: null })
   })
 })
 

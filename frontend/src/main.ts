@@ -238,4 +238,4 @@ window.addEventListener('storage', (event) => {
   }
 });
 
-app.mount('#app');
+app.mount('#root');

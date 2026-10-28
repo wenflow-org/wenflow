@@ -22,6 +22,13 @@
       </div>
 
       <template v-else-if="path">
+        <!-- 已下线：内容治理下架。列表已不返回，旧链接/书签直达时明确表态并禁掉开课 -->
+        <section v-if="pathOffline" class="genbar card genbar--muted">
+          <div class="genbar__text">
+            <strong>该学习路径已下线</strong>
+            <p>管理员已将其下架，暂不可继续学习。如需恢复请联系管理员。</p>
+          </div>
+        </section>
         <!-- 生成中/失败横幅 -->
         <section v-if="lifecycle && lifecycle.phase !== 'ready'" class="genbar card" :class="`genbar--${lifecycleFailed ? 'failed' : 'working'}`">
           <template v-if="lifecycleFailed">
@@ -537,11 +544,14 @@
             </div>
             <div v-if="adjustScope === 'from'" class="adjust-scope__picker">
               <span>从第</span>
-              <select v-model.number="adjustFromStage" class="adjust-scope__select">
-                <option v-for="(opt, oi) in reshapeFromOptions" :key="oi" :value="opt.stageNumber">
-                  {{ opt.stageNumber }} 阶段{{ opt.title ? ` · ${opt.title}` : '' }}
-                </option>
-              </select>
+              <div class="adjust-scope__select">
+                <MkSelect
+                  v-model="adjustFromStage"
+                  :options="reshapeFromStageOptions"
+                  aria-label="起始阶段"
+                  block
+                />
+              </div>
               <span>阶段起，调整到路径结束</span>
             </div>
             <p v-if="adjustScope !== 'next' && !reshapeFromOptions.length" class="adjust-form__warn">
@@ -652,6 +662,7 @@ import {
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
+import MkSelect from '@/components/mk/MkSelect.vue';
 import { retryOnceOnTransient } from '@/utils/retry';
 
 /* 调整闭环里的失败/清理提示多处复用，收成单源避免改一处漏一处 */
@@ -853,7 +864,10 @@ watch(
 const lifecycleFailed = computed(() => lifecycle.value && (lifecycle.value.status === 'failed' || lifecycle.value.status === 'stale'));
 /** 生成中（phase 未到 ready）：阶段/课程尚未备好，hero 指标与横幅口径需对齐（EG24） */
 const lifecyclePreparing = computed(() => !!lifecycle.value && lifecycle.value.phase !== 'ready');
-const canLearn = computed(() => !lifecycle.value || lifecycle.value.phase === 'ready');
+/* 已下线：管理员在内容治理里下架了这条路径。学习端列表已不再返回，
+   但旧链接/书签仍可能直达详情，这里明确表态并禁掉开课（后端也会拒绝）。 */
+const pathOffline = computed(() => path.value?.status === 'archived');
+const canLearn = computed(() => !pathOffline.value && (!lifecycle.value || lifecycle.value.phase === 'ready'));
 
 // ---- 重排回退（R8 选项 B：调整前安排自动留存，一键回退） ----
 const rollbackAvailable = ref(false);
@@ -870,7 +884,13 @@ async function refreshRollbackAvailability() {
 
 async function confirmRollback() {
   if (rollingBack.value) return;
-  if (!window.confirm('回退到最近一次调整前的安排？已开始的课堂进度不会被倒退，重排后新增的任务会被移除。')) return;
+  // 与全站一致：走设计内的确认弹层（焦点管理/Esc/busy 防重），不用原生 window.confirm
+  const ok = await askConfirm({
+    title: '回退本次调整',
+    message: '回退到最近一次调整前的安排？已开始的课堂进度不会被倒退，重排后新增的任务会被移除。',
+    confirmText: '回退'
+  });
+  if (!ok) return;
   rollingBack.value = true;
   try {
     const r = await learningAPI.rollbackPathReplan(pathId.value);
@@ -1042,6 +1062,14 @@ const reshapeFromOptions = computed(() => stages.value
       && !tasks.some((t) => t.status === 'in_progress');
   })
   .map((s) => ({ stageNumber: stageNo(s, 0), title: s.title || s.name || `第 ${stageNo(s, 0)} 阶段` })));
+
+/** MkSelect 选项：label 与原 option 文案逐字一致，value 保留 stageNumber（number，不做字符串化） */
+const reshapeFromStageOptions = computed<ReadonlyArray<{ value: number | null; label: string }>>(() =>
+  reshapeFromOptions.value.map((opt) => ({
+    value: opt.stageNumber,
+    label: `${opt.stageNumber} 阶段${opt.title ? ` · ${opt.title}` : ''}`,
+  }))
+);
 
 /** 第一个未完成阶段号（用作「从当前起」默认选项） */
 const firstOpenStageNo = computed(() => {
@@ -1620,11 +1648,13 @@ watch(sceneProblemBackground, () => { bgExpanded.value = false; });
 
 /* ---------- 展示辅助 ---------- */
 const badgeText = computed(() => {
+  if (pathOffline.value) return '已下线';
   if (lifecycle.value && lifecycle.value.phase !== 'ready') return lifecycleFailed.value ? '需要处理' : '生成中';
   if (allDone.value) return '已完成';
   return '进行中';
 });
 const badgeCls = computed(() => {
+  if (pathOffline.value) return 'badge--muted';
   if (lifecycle.value && lifecycle.value.phase !== 'ready') return lifecycleFailed.value ? 'badge--red' : 'badge--cyan';
   if (allDone.value) return 'badge--green';
   return 'badge--blue';
@@ -1712,6 +1742,7 @@ onBeforeUnmount(() => {
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
 .badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
 .badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.badge--muted { color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent); }
 
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 26px 28px; align-items: center; }
 .hero__tags { display: flex; align-items: center; gap: 10px; }
@@ -1999,6 +2030,7 @@ onBeforeUnmount(() => {
   padding: 16px 20px;
 }
 .genbar--failed { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
+.genbar--muted { border-color: var(--line); }
 .genbar__text { flex: 1; }
 .genbar__text strong { font-size: 14px; }
 .genbar__text p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
@@ -2268,14 +2300,10 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--muted);
 }
+/* 包裹层只限宽，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉） */
 .adjust-scope__select {
   max-width: 300px;
-  padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-md);
-  background: var(--surface);
-  font-size: 12px;
-  color: var(--ink);
+  min-width: 0;
 }
 /* AI 诊断建议卡（auto 场景） */
 .ai-advice {

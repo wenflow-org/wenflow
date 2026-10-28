@@ -6,10 +6,12 @@
  */
 import {
   appendClosureTrace,
+  appendStuckAttributionEntry,
   evaluateStuckClosure,
   LEARN_STUCK_MASTERY_EPSILON,
   LEARN_STUCK_MIN_TURNS,
   LEARN_STUCK_TRACE_WINDOW,
+  STUCK_ATTRIBUTION_CAP,
   type ClosureTraceEntry,
 } from '../simulation.learn.steps';
 
@@ -80,5 +82,41 @@ describe('appendClosureTrace', () => {
   it('丢弃坏条目，不影响追加', () => {
     const next = appendClosureTrace([{ nope: 1 } as unknown as ClosureTraceEntry], entry(5, false, true, 0.2));
     expect(next).toEqual([entry(5, false, true, 0.2)]);
+  });
+});
+
+/**
+ * 卡死归因的 append-only 落点（2026-10-21）：此前只写 taskRuntime/session log，
+ * 下一次 restart-learning 整包重写 teaching 后归因全丢（当晚 8 次非收敛只剩 endReason）。
+ */
+describe('appendStuckAttributionEntry', () => {
+  const record = (at: string): Parameters<typeof appendStuckAttributionEntry>[1] => ({
+    at,
+    taskId: 'task-1',
+    taskTitle: '任务',
+    turns: 9,
+    reason: 'non-convergence',
+    masteryDelta: 0.01,
+    judgeFalseCount: 2,
+    trace: [entry(9, false, true, 0.4)],
+  });
+
+  it('空/非法 prior → 只保留新条目', () => {
+    expect(appendStuckAttributionEntry(null, record('t1'))).toEqual([record('t1')]);
+    expect(appendStuckAttributionEntry({ not: 'array' }, record('t1'))).toEqual([record('t1')]);
+    expect(appendStuckAttributionEntry([42, 'x', null], record('t1'))).toEqual([record('t1')]);
+  });
+
+  it('按时间追加，保留最近 cap 条', () => {
+    let list: ReturnType<typeof appendStuckAttributionEntry> = [];
+    for (let i = 0; i < 25; i += 1) list = appendStuckAttributionEntry(list, record(`t${i}`));
+    expect(list).toHaveLength(STUCK_ATTRIBUTION_CAP);
+    expect(list[0].at).toBe('t5');
+    expect(list[list.length - 1].at).toBe('t24');
+  });
+
+  it('自定义 cap 生效（非法 cap 回落默认）', () => {
+    expect(appendStuckAttributionEntry([record('t1')], record('t2'), 1).map((x) => x.at)).toEqual(['t2']);
+    expect(appendStuckAttributionEntry([record('t1')], record('t2'), 0)).toHaveLength(2);
   });
 });

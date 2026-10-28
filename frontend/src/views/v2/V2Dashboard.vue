@@ -49,7 +49,7 @@
         v-else-if="loadError"
         tone="error"
         title="学习台加载失败"
-        description="网络似乎不太稳定，检查连接后可以重试。"
+        :description="loadErrorDescription"
         action-text="重试"
         @action="loadAll"
       />
@@ -415,6 +415,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
+import { describeRequestError } from '@/utils/httpError';
 import { computeStreakDays } from './streak';
 import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
@@ -512,6 +513,9 @@ const reviewFooterHint = computed(() => {
 });
 const todaySchedule = ref<Record<string, any> | null>(null);
 const loadError = ref(false);
+/** 整页失败原因：429 明说限流并给等待秒数，不再一律写成“网络不稳定” */
+const NETWORK_FALLBACK = '网络似乎不太稳定，检查连接后可以重试。';
+const loadErrorDescription = ref(NETWORK_FALLBACK);
 /** 各数据源失败标记：区块级降级提示（不整页失败，也不伪装成空态） */
 const sourceFailed = ref<Record<string, boolean>>({
   budget: false,
@@ -552,6 +556,7 @@ async function loadAll() {
     loadError.value = false;
     sourceFailed.value = { budget: false, review: false, week: false };
   }
+  loadErrorDescription.value = NETWORK_FALLBACK;
   const { start: winStart, end: winEnd } = sessionWindowDates();
   const fastGroup = await Promise.allSettled([
     learningAPI.getStats(),
@@ -566,6 +571,12 @@ async function loadAll() {
   // 有快照时保留旧内容静默失败（不闪错误态，下一次进入再重试）
   if (fastGroup.every((r) => r.status === 'rejected')) {
     if (!snap) {
+      // 取第一个失败原因：429 显示「请求过于频繁 + Retry-After」，5xx 显示服务不可用，
+      // 只有真正的传输层错误才保留“网络不稳定”的措辞。
+      const firstRejected = fastGroup.find(
+        (r): r is PromiseRejectedResult => r.status === 'rejected'
+      );
+      loadErrorDescription.value = describeRequestError(firstRejected?.reason);
       loading.value = false;
       loadError.value = true;
     }
@@ -891,18 +902,17 @@ const nearestAchievement = computed(() => {
   if (!locked.length) return null;
   const nearest = locked.sort((a, b) => (b.progress?.percentage ?? 0) - (a.progress?.percentage ?? 0))[0];
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString());
-  /* P3-38（设计评审）：「KTL达到7.0（4.6/7）」目标与进度无缝拼接，读作两个互相矛盾的 KTL 值——
+  /* P3-38（设计评审）：「掌握 5 个知识点（4/5）」目标与进度无缝拼接，读作两个互相矛盾的数字——
      补衔接词分家：「目标 <描述> · 进度 c/t」（description 缺失时只说进度） */
   const prog = `${fmt(nearest.progress?.current ?? 0)}/${fmt(nearest.progress?.total ?? 1)}`;
   return {
     iconUrl: typeof nearest.icon === 'string' && nearest.icon.startsWith('http') ? nearest.icon : '',
     name: nearest.name,
     achieved: (nearest.progress?.current ?? 0) >= (nearest.progress?.total ?? 1),
-    // 走查 2026-10-08 #75：服务端成就条件含内部缩写 KTL，直出会与成就页
-    // 「知识掌握度（KTL）」（V2Achievements.descText）口径不一致且本页无处可查。
-    // 这里做同样的展开，两页文案对齐。
+    // 成就条件由服务端提供可直接展示的中文描述；掌握类自 2026-10-23 起为知识点数，
+    // 不再含 KTL 缩写，无需在前端二次展开。
     hint: nearest.description
-      ? `目标 ${String(nearest.description).replace(/KTL/g, '知识掌握度')} · 进度 ${prog}`
+      ? `目标 ${nearest.description} · 进度 ${prog}`
       : `进度 ${prog}`
   };
 });

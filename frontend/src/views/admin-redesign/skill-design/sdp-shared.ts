@@ -49,6 +49,31 @@ const CALL_PARAM_SOURCES: Record<string, string> = {
 export const callParamSourceLabel = (raw?: string | null): string =>
   raw ? CALL_PARAM_SOURCES[raw] ?? raw : '—'
 
+/**
+ * 思考配置与模型能力的冲突提示（2026-10-24）。
+ *
+ * 能力声明是唯一事实源（llm-providers.json 的 supportsThinking / supportsReasoningEffort）：
+ * 网关按能力裁剪请求体，不支持思考的模型不会收到 thinking / reasoning_effort 字段。
+ * 但裁剪是静默的——页面写「开启」、上游没收到，运营无从判断。这里把冲突说在配置处。
+ * cap 为 null = 模型不在目录（自定义通道/历史值），不猜，也不提示。
+ */
+export interface ThinkingCapability { thinking: boolean; reasoning: boolean }
+export function thinkingCapabilityNotice(
+  intent: { thinkingMode?: string | null; reasoningEffort?: string | null },
+  cap: ThinkingCapability | null | undefined
+): string {
+  if (!cap) return ''
+  const mode = String(intent.thinkingMode || 'default')
+  const effort = String(intent.reasoningEffort || 'default')
+  if (mode === 'enabled' && !cap.thinking) {
+    return '当前模型不支持思考，开启后不会发送思考参数'
+  }
+  if (mode !== 'disabled' && effort !== 'default' && !cap.reasoning) {
+    return '当前模型不支持推理强度，该档位不会发送'
+  }
+  return ''
+}
+
 /** core.yaml 输入声明（试跑默认载荷只读 name/type 两个字段） */
 export interface TrialInputDecl {
   name?: string

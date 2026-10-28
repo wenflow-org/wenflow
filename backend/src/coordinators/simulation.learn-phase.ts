@@ -15,6 +15,7 @@ import prisma from '../config/database';
 import learningService from '../services/learning/learning.service';
 import { assertPathMutationSafe } from '../services/learning/path-mutation-safety';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingCoordinator';
+import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { executeSkill, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerEpistemicGroundingDefinition } from '../skills';
 import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-wrapup';
@@ -40,6 +41,7 @@ import {
   parseStageResultsPayload,
   parseStoryContextFromStageResults,
   mergeLearnerState,
+  resolveStaleTaskRecovery,
 } from './simulation.helpers';
 import { decideControlledError } from '../skills/virtual-learner-shared/schemas';
 import { findMisconceptionFor } from '../config/misconception-corpus';
@@ -425,11 +427,18 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     await ctx.clearTeachingPauseMarker(sessionId);
 
     const stageResults: StageResults = parseStageResultsPayload(session.stageResults)
+    const simulationConfig = (stageResults.simulationConfig as Record<string, unknown> | undefined) || {}
     // 冻结考卷双臂协议（#85）：A 臂 = 护栏前口径（关闭 #84 后续回合肯定语护栏），B/缺省 = 现行口径。
     // 臂标签只影响对照实验，不改变任何默认行为。
-    const experimentArm = String(
-      (stageResults.simulationConfig as Record<string, unknown> | undefined)?.experimentArm || ''
-    ).toUpperCase()
+    const experimentArm = String(simulationConfig.experimentArm || '').toUpperCase()
+    // 延伸学探针（2026-10-21）：模拟器的 learnerFeedback.wantsExtension 实测 5017/5017 全为 false，
+    // assisted 轨的延伸课因此从未开出来（0 节）——功能有通路却没有任何样本可验证。
+    // 打开本开关后，本会话**第一次**正课收束时强制开一节延伸课（不论模型是否表达意愿），
+    // 用来验证链路与采样；默认关，不改变常规批跑语义。
+    const extensionProbe = simulationConfig.extensionProbe === true
+    // 建议处置采样（2026-10-21）：VL 产出的重排建议此前 learnerResponse 恒空（无处置通道）。
+    // 显式配置处置动作后，收束带回的建议走与真人同一端点的记账语义（只留痕，不执行重排）。
+    const advisoryResponse = String(simulationConfig.advisoryResponse || '').toLowerCase()
 
     const learningState = (stageResults.teaching || {}) as TeachingState;
     if (learningState.manualStop || session.status === 'failed' || session.status === 'abandoned') {
@@ -478,6 +487,104 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         taskRuntime,
         logs
       );
+    }
+
+    // 路径重排会替换/删除下游任务，而会话仍可能拿着旧 currentTaskId。
+    // 不先对账就会在 startLearningPhase 撞「指定任务不存在」，并被 harness 误判为路径未就绪。
+    const stalePointer = resolveStaleTaskRecovery(
+      milestones,
+      typeof learningState.currentTaskId === 'string' ? learningState.currentTaskId : null
+    );
+    if (stalePointer.stale) {
+      if (!stalePointer.taskId) {
+        await ctx.finalizePathCompletion(sessionId, logs);
+        return {
+          success: true,
+          isPathCompleted: true,
+          milestoneProgress: { completed: milestones.length, total: milestones.length },
+          logs
+        };
+      }
+      const recoveredTask = findTaskInPath(milestones, stalePointer.taskId);
+      logs.push({
+        timestamp: new Date().toISOString(),
+        phase: 'stage-transition',
+        details: {
+          output: {
+            reason: 'stale-current-task-after-replan',
+            previousTaskId: learningState.currentTaskId,
+            recoveredTaskId: stalePointer.taskId,
+            recoveredTask: recoveredTask?.task.title || null
+          }
+        }
+      });
+      const recoveredStart = await ctx.startLearningPhase(sessionId, { taskId: stalePointer.taskId });
+      if (!recoveredStart.success) {
+        return {
+          success: false,
+          logs,
+          error: recoveredStart.error || '路径重排后恢复下一学习任务失败'
+        };
+      }
+      return {
+        success: true,
+        taskCompleted: false,
+        currentTaskStopped: false,
+        milestoneProgress: {
+          currentMilestone: recoveredTask ? recoveredTask.milestoneIdx + 1 : null,
+          totalMilestones: milestones.length,
+          currentTask: recoveredTask?.task.title || null
+        },
+        logs
+      };
+    }
+
+    // 上一节课的失败态（abort/timeout/stale-revision）可能残留在 taskRuntime，
+    // 但 currentTaskId 已被推进到下一课。此时继续复用旧课堂只会反复撞同一错误，
+    // 应先清掉旧课堂绑定，再按新任务开课。
+    const runtimeTaskId = typeof taskRuntime.taskId === 'string' ? taskRuntime.taskId : null;
+    const runtimeStatus = String(taskRuntime.status || '');
+    if (
+      runtimeTaskId
+      && learningState.currentTaskId
+      && runtimeTaskId !== learningState.currentTaskId
+      && ['error', 'timeout'].includes(runtimeStatus)
+    ) {
+      const nextTask = findTaskInPath(milestones, learningState.currentTaskId);
+      if (nextTask) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'stage-transition',
+          details: {
+            output: {
+              reason: 'stale-task-runtime-after-failure',
+              previousTaskId: runtimeTaskId,
+              nextTaskId: learningState.currentTaskId,
+              nextTask: nextTask.task.title
+            }
+          }
+        });
+        await ctx.updateTeachingStatePreservingControlFlags(sessionId, {
+          ...learningState,
+          teachingSessionId: null,
+          taskRuntime: undefined,
+        });
+        const restarted = await ctx.startLearningPhase(sessionId, { taskId: learningState.currentTaskId });
+        if (!restarted.success) {
+          return { success: false, logs, error: restarted.error || '恢复下一学习任务失败' };
+        }
+        return {
+          success: true,
+          taskCompleted: false,
+          currentTaskStopped: false,
+          milestoneProgress: {
+            currentMilestone: nextTask.milestoneIdx + 1,
+            totalMilestones: milestones.length,
+            currentTask: nextTask.task.title
+          },
+          logs
+        };
+      }
     }
 
     if (
@@ -1204,6 +1311,23 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             },
           };
           await ctx.updateTeachingStatePreservingControlFlags(sessionId, stuckLearningState);
+          // 归因留痕（append-only）：teaching 会被下一次 restart 整包重写，
+          // 只写 taskRuntime 的话当晚就会丢（实测 8 次非收敛只剩 endReason）。
+          try {
+            await ctx.appendStuckAttribution(sessionId, {
+              at: new Date().toISOString(),
+              ...attribution,
+            });
+          } catch (error: unknown) {
+            logger.warn('[simulation-coordinator] 卡死归因留痕失败（不影响收口）', {
+              sessionId,
+              error: asErrorLike(error).message
+            });
+          }
+          logger.warn('[simulation-coordinator] 卡死判定收课', {
+            sessionId,
+            ...attribution
+          });
           logs.push({
             timestamp: new Date().toISOString(),
             phase: 'closure-attribution',
@@ -1323,11 +1447,90 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           );
           teachingRevision = endResult.revision;
 
+          // 建议处置采样（2026-10-21）：收束带回的重排建议会挂在本节课堂的 advisory 上，
+          // 真人侧由前端「保留/稍后再看/预览/已采用」调用同一 repository 方法记账；VL 此前没有通道，
+          // 336 条建议的 learnerResponse 全空。显式配置后才记录；keep/later/preview 只留痕，
+          // adopt 走与真人相同的 replan 成功后才记账（否则执行档永远是 0，无法评估漏斗）。
+          if (endResult.advisory?.shouldSuggest === true && advisoryResponse) {
+            try {
+              if (['keep', 'later', 'preview'].includes(advisoryResponse)) {
+                await teachingSessionRepository.recordAdvisoryResponse(
+                  teachingSessionId,
+                  session.userId,
+                  advisoryResponse as 'keep' | 'later' | 'preview'
+                );
+              } else if (advisoryResponse === 'adopt') {
+                const advisory = endResult.advisory as Record<string, any>;
+                const recommendation = String(advisory.recommendation || 'reinforce');
+                const targetStage = Number(advisory.targetStageNumber);
+                const stageParams = Number.isFinite(targetStage) && targetStage > 0
+                  ? (advisory.scope === 'downstream_path'
+                    ? { fromStageNumber: targetStage }
+                    : { stageNumber: targetStage })
+                  : {};
+                // 同一路径已有后台重排在跑时，再发一次只会撞 PATH_REPLAN_SNAPSHOT_CHANGED
+                // （跑批实测 4 次），并把正在学习的任务指针一起改乱。此时只记处置，
+                // 让在途重排覆盖这次建议；等它结束后的下一次收束再按新路径判断。
+                //
+                // 注意不能看 learning_paths.activeGenerationRunId：它在成功收尾时不会清空，
+                // 跑批实测三条路径都残留着已 succeeded 的 run，导致 adopt 全被跳过、
+                // replanReason 恒 null。以运行表中真正 queued/processing 且租约未过期的行为准。
+                const activeReplan = await prisma.path_generation_runs.findFirst({
+                  where: {
+                    learningPathId: session.learningPathId,
+                    status: { in: ['queued', 'processing'] },
+                    OR: [
+                      { leaseExpiresAt: null },
+                      { leaseExpiresAt: { gt: new Date() } },
+                    ],
+                  },
+                  select: { id: true },
+                }).catch(() => null);
+                if (activeReplan) {
+                  await teachingSessionRepository.recordAdvisoryResponse(
+                    teachingSessionId,
+                    session.userId,
+                    'adopt'
+                  );
+                } else {
+                  const replanResult = await learningService.requestPathReplan({
+                    pathId: session.learningPathId,
+                    userId: session.userId,
+                    triggerSource: 'ai-teaching',
+                    reason: `虚拟学习者按建议调整后续阶段（${recommendation}）`,
+                    mode: recommendation === 'accelerate' ? 'compress' : 'overwrite',
+                    requireConfirmation: false,
+                    ...stageParams,
+                    evidence: { advisoryAction: recommendation, advisory }
+                  });
+                  // 与前端同口径：只有真正执行（未被转成待确认）才记 adopt。
+                  if (replanResult?.status !== 'awaiting-confirmation' && replanResult?.enabled !== false) {
+                    await teachingSessionRepository.recordAdvisoryResponse(
+                      teachingSessionId,
+                      session.userId,
+                      'adopt'
+                    );
+                  }
+                }
+              }
+            } catch (error: unknown) {
+              logger.warn('[simulation-coordinator] 建议处置留痕/执行失败（不影响收束）', {
+                sessionId,
+                teachingSessionId,
+                action: advisoryResponse,
+                error: asErrorLike(error).message || String(error)
+              });
+            }
+          }
+
           // 延伸学（#124 assisted 轨）：正课收束时学员明确表达过延伸意愿 → 本任务暂不结算，
           // 先另起一节 extension 课堂陪学一段（有界回合），跑满后再回到这里的结算链路。
           // 每个任务只尝试一次（sourceTaskId 兼作已延伸标记）；开课失败 fail-open，不阻塞任务结算。
+          // 2026-10-21：模型从不表达延伸意愿（5017/5017 false），加 extensionProbe —— 每会话一次强制开课。
           const extensionAlreadyForTask = learningState.extensionRuntime?.sourceTaskId === currentTask.id;
-          if (!extensionActive && !extensionAlreadyForTask && currentLearnerFeedback?.wantsExtension === true) {
+          const extensionProbePending = extensionProbe && learningState.extensionProbeUsed !== true;
+          const wantsExtensionForTask = currentLearnerFeedback?.wantsExtension === true;
+          if (!extensionActive && !extensionAlreadyForTask && (wantsExtensionForTask || extensionProbePending)) {
             try {
               const extensionSession = await aiTeachingOrchestrator.startSession({
                 userId: session.userId,
@@ -1340,14 +1543,26 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                 teachingSessionId: extensionSession.sessionId,
                 teachingRevision: extensionSession.revision,
                 latestLearnerFeedback: currentLearnerFeedback,
+                ...(extensionProbePending ? { extensionProbeUsed: true } : {}),
                 extensionRuntime: {
                   active: true,
+                  extensionSessionId: extensionSession.sessionId,
                   sourceSessionId: teachingSessionId,
                   sourceTaskId: currentTask.id,
                   turns: 0,
                   maxTurns: LEARN_EXTENSION_MAX_TURNS,
                   startedAt: extensionStartedAt,
                 },
+                teachingSessionHistory: [
+                  ...(Array.isArray(learningState.teachingSessionHistory) ? learningState.teachingSessionHistory : []),
+                  {
+                    teachingSessionId: extensionSession.sessionId,
+                    taskId: currentTask.id,
+                    taskTitle: currentTask.title,
+                    status: 'extension',
+                    startedAt: extensionStartedAt,
+                  },
+                ],
                 taskRuntime: {
                   ...taskRuntime,
                   status: 'extension_running',
@@ -1378,7 +1593,10 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                     lessonSessionId: teachingSessionId,
                     extensionSessionId: extensionSession.sessionId,
                     maxTurns: LEARN_EXTENSION_MAX_TURNS,
-                    message: '学员表达延伸意愿，正课收束后进入延伸陪学（本任务暂不结算）',
+                    probe: extensionProbePending && !wantsExtensionForTask,
+                    message: extensionProbePending && !wantsExtensionForTask
+                      ? '延伸学探针：正课收束后强制进入延伸陪学（本任务暂不结算）'
+                      : '学员表达延伸意愿，正课收束后进入延伸陪学（本任务暂不结算）',
                   }
                 }
               });
@@ -1830,7 +2048,7 @@ async function finalizeManualStopIfNeeded(
   if (teaching?.manualStop !== true) return null;
   const status = String(session.status);
   if (status === 'completed' || status === 'failed' || status === 'abandoned') return null;
-  await ctx.updateSessionStatus(sessionId, 'abandoned', 'teaching').catch(() => {});
+  await ctx.updateSessionStatus(sessionId, 'abandoned').catch(() => {});
   await ctx.addSessionLog(sessionId, {
     timestamp: new Date().toISOString(),
     phase: 'error',
@@ -2106,7 +2324,10 @@ export async function emergencyStopLearning(ctx: SimulationOrchestrator, session
 
     // 人为终止统一记 abandoned（拍板 2026-08-21）：failed 只留给系统/上游失败，
     // 避免管理员主动停止污染失败率口径。abandoned 仍可经「重启学习」恢复
-    await ctx.updateSessionStatus(sessionId, 'abandoned', 'teaching');
+    // 不改 currentStage：终止可以发生在 goal / path / teaching 任一阶段，写死 'teaching'
+    // 会让「在目标阶段被终止」的会话自称进过课堂——阶段推进把未发生的 Path 标成已完成、
+    // deriveRunProgress 判 learnStarted、goalReadiness 抬到 0.86 三处读数一起失真。
+    await ctx.updateSessionStatus(sessionId, 'abandoned');
 
     await ctx.addSessionLog(sessionId, {
       timestamp: new Date().toISOString(),

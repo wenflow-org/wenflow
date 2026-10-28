@@ -619,9 +619,9 @@ const handleAdvisoryAction = async (action: string) => {
   const advisory = detail?.advisory;
   if (!detail || !advisory?.shouldSuggest) return;
 
-  // 轻埋点：保留/稍后/预览此前零服务端记录（审计无法区分「没处置」与「点了保留」）。
+  // 轻埋点：保留/稍后/预览/已采用此前零服务端记录（审计无法区分「没处置」与「点了保留」）。
   // 失败不影响提示与主流程，静默降级。
-  const reportAdvisoryResponse = (a: 'keep' | 'later' | 'preview') => {
+  const reportAdvisoryResponse = (a: 'keep' | 'later' | 'preview' | 'adopt') => {
     const sid = sessionId.value;
     if (!sid) return;
     void aiTeachingAPI.recordAdvisoryResponse(sid, a).catch(() => { /* 埋点失败静默 */ });
@@ -693,6 +693,8 @@ const handleAdvisoryAction = async (action: string) => {
     if (replanRes?.status === 'awaiting-confirmation' || replanRes?.enabled === false) {
       toast.warning('调整方案已生成，需在路径页确认后生效');
     } else {
+      // P1-7：真执行也是漏斗的一档，此前只记保留/稍后/预览，执行永远显示为 0。
+      reportAdvisoryResponse('adopt');
       toast.success('已调整当前路径的后续阶段');
     }
   } catch (err: any) {

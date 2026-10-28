@@ -274,6 +274,8 @@ export interface WrapupArtifact {
     ktl: number;
     lf: number;
     lsb: number;
+    /** PMC 基座是否成熟（false = 冷启动爬升期，LSB<0 不按「失衡」展示） */
+    mature?: boolean;
   } | null;
   duration?: number;
   summarySource?: 'model' | 'fallback';
@@ -475,7 +477,7 @@ export const aiTeachingAPI = {
     sessionId: string,
     message: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal; idempotencyKey?: string },
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string },
     meta?: InteractionMeta
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
@@ -490,11 +492,13 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, {
         signal: handlers.signal,
+        onActivity: handlers.onActivity,
         // 教学回合为 JSON 输出、final 前可以整段无字节（实测 2~3 分钟），60s 空闲默认会把
-        // 慢回合误判成死连接并触发非流式重发（双倍回合）。放到 120s：上层 90s 停滞看门狗
-        // 先出手（有可见的超时气泡、不重发），这里只兜真正的死连接。
-        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('msg') },
+        // 慢回合误判成死连接并触发非流式重发（双倍回合）。放到 120s：服务端 15s 心跳注释行
+        // 会持续喂狗（sse.ts onActivity），此处只兜「连心跳都断了」的真死连接；上层看门狗
+        // 收到心跳也续命，总闸（上层 5min）负责最终止损。
         idleTimeoutMs: 120_000,
+        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('msg') },
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {
             receivedAnything = true;
@@ -546,7 +550,7 @@ export const aiTeachingAPI = {
   async streamContinueSession(
     sessionId: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal; idempotencyKey?: string }
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string }
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
       let result: MessageResult | null = null;
@@ -560,6 +564,7 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/continue`, { revision }, {
         signal: handlers.signal,
+        onActivity: handlers.onActivity,
         headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('cont') },
         idleTimeoutMs: 120_000,
         onEvent: (event, data) => {
@@ -680,10 +685,10 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
-  /** 调整建议处置埋点（保留/稍后再看/预览）：只记账不执行，见后端 advisory-response 端点 */
+  /** 调整建议处置埋点（保留/稍后再看/预览/已采用）：只记账不执行，见后端 advisory-response 端点 */
   async recordAdvisoryResponse(
     sessionId: string,
-    action: 'keep' | 'later' | 'preview'
+    action: 'keep' | 'later' | 'preview' | 'adopt'
   ): Promise<void> {
     await api.post(`/ai-teaching/sessions/${sessionId}/advisory-response`, { action });
   },
@@ -730,6 +735,11 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
+  /**
+   * @param onProgress 每次拿到服务端结算状态时回调（首个响应 + 每轮轮询）。结算链
+   *   （自动关课 → wrapup LLM → 任务结算）实测量级可达数十秒到数分钟，调用方需要
+   *   据此展示阶段进度，而不是只拿一个长时间静默的 Promise（#115 复测：60s 零反馈）。
+   */
   async finalizeSessionReliably(
     sessionId: string,
     payload: {
@@ -738,7 +748,8 @@ export const aiTeachingAPI = {
       actualMinutes?: number;
       subjectiveDifficulty?: number;
       reason?: 'manual-end' | 'learner-abandoned' | 'task-completed';
-    }
+    },
+    onProgress?: (result: FinalizationResult) => void
   ): Promise<FinalizationResult> {
     let result: FinalizationResult;
     try {
@@ -769,11 +780,17 @@ export const aiTeachingAPI = {
        走到这里时窗口只剩 60s 旧值，于是「服务端 6 分钟后成功、前端 1 分钟就报尚未完成」。
        窗口放到 11 分钟（8min wrapup + 90s 归因 + 落库余量）。 */
     const deadline = Date.now() + 660_000;
+    const reportProgress = (state: FinalizationResult) => {
+      // 进度回调只服务于展示，不能反过来打断结算（回调里抛错就吞掉继续轮询）
+      try { onProgress?.(state); } catch { /* ignore */ }
+    };
     const pollUntilSettled = async (initial: FinalizationResult): Promise<FinalizationResult> => {
       let current = initial;
+      reportProgress(current);
       while (current.status === 'processing' && Date.now() < deadline) {
         await wait(current.pollAfterMs || 1500);
         current = await this.getFinalization(sessionId);
+        reportProgress(current);
       }
       return current;
     };

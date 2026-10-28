@@ -12,6 +12,7 @@ import { logger } from '../../utils/logger';
 import { findTestAccountUserIds } from '../../utils/test-account';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { conceptRegistryService } from '../learner/concept-registry.service';
+import { kcAnchorKey } from '../learner/kc-anchor';
 import {
   reviewIntervalDays,
   clamp01,
@@ -59,13 +60,8 @@ import {
  * 纪律：锚定与登记都是 best-effort（失败只告警、不阻断写入，更不改回落语义）；
  * 没有 kcId 时**一次额外的表访问都不发生**（旧行为零开销）。
  */
-/** kcId 锚键：`kc:<pathId>:<kcId>`（无 pathId 时 `kc:<kcId>`）——path 前缀不可省：kcId 是路径内局部序号 */
-export function kcAnchorKey(kcId: unknown, pathId?: string | null): string {
-  const id = typeof kcId === 'string' ? kcId.trim() : '';
-  if (!id) return '';
-  const path = typeof pathId === 'string' ? pathId.trim() : '';
-  return path ? `kc:${path}:${id}` : `kc:${id}`;
-}
+/** kcId 锚键实现已上移到 concept-registry（计划侧与痕迹侧共用同一命名空间）；此处保留导出以兼容既有引用。 */
+export { kcAnchorKey };
 
 export async function resolveConceptIdSafe(
   userId: string,
@@ -292,7 +288,10 @@ class MemoryTraceService {
     // #109：路径骨架 concept-N 不是概念身份——不 upsert 痕迹、不建概念。
     // 本守卫同时覆盖 recordSessionOutcome（它经由本方法落痕）；改挂/丢弃由调用方
     // （teaching-turn-engine ktEstimate 分流）负责，这里只做最后一道防线。
-    if (isPlaceholderConceptKey(conceptKey)) return;
+    if (isPlaceholderConceptKey(conceptKey)) {
+      logger.warn('[memory-trace] 占位概念键被最后一道防线丢弃（不建痕/不建概念）', { site: 'upsertTrace', conceptKey });
+      return;
+    }
     const masteryScore = clamp01(input.masteryScore);
     const stability = ALLOWED_STABILITY.includes(input.stability as MemoryStability)
       ? (input.stability as MemoryStability)
@@ -430,7 +429,10 @@ class MemoryTraceService {
     for (const item of items) {
       if (!item?.name || !String(item.name).trim()) continue;
       // #109：占位键连证据行也不落（证据的 conceptKey 会被下游当作概念身份回源）。
-      if (isPlaceholderConceptKey(normalizeConceptKey(item.name))) continue;
+      if (isPlaceholderConceptKey(normalizeConceptKey(item.name))) {
+        logger.warn('[memory-trace] 占位概念键被丢弃（不落证据行）', { site: 'recordSessionOutcome', conceptKey: String(item.name).slice(0, 60) });
+        continue;
+      }
       const conceptKey = String(item.name).trim();
       const { masteryScore, stability } = mapKnowledgeStatusToMastery(item.status, item.progress, calibrationBias);
       // 证据门：有证据 → 原生 FSRS 排程；无证据 → 不传 grade（走 recordExtraction 既有无 grade 路径）
@@ -540,11 +542,14 @@ class MemoryTraceService {
     // 老数据（dueAt 为 null）在下方按 FSRS 保留率跌破阈值惰性判定，而非 SQL 物化到期。
     const [materialized, legacy] = await Promise.all([
       prisma.memory_traces.findMany({
-        where: { userId, dueAt: { lte: now } },
+        // KT 幽灵痕（source=kt-estimate、extractionCount=0）即使已 seed dueAt，
+        // 也从未被真正提取过，不得进入复习队列（否则学习者会看到「没学过却该复习」）。
+        where: { userId, dueAt: { lte: now }, extractionCount: { gt: 0 } },
         orderBy: { dueAt: 'asc' },
       }),
       prisma.memory_traces.findMany({
-        where: { userId, dueAt: null },
+        // 同一道防线覆盖惰性判定分支：从未提取的 KT 幽灵痕不参与到期复习。
+        where: { userId, dueAt: null, extractionCount: { gt: 0 } },
         orderBy: { lastSeenAt: 'desc' },
       }),
     ]);
@@ -635,7 +640,7 @@ class MemoryTraceService {
    */
   async applyKtEstimate(
     userId: string,
-    items: Array<{ conceptKey: string; kcId?: string | null; mastery: number }>,
+    items: Array<{ conceptKey: string; kcId?: string | null; mastery: number; evidence?: string | null }>,
     pathId: string | null = null,
   ): Promise<void> {
     if (!items || items.length === 0) return;
@@ -645,23 +650,46 @@ class MemoryTraceService {
       const key = normalizeConceptKey(item.conceptKey);
       if (!key) continue;
       // #109：占位键既不建痕也不建概念（模型把路径骨架序号回填进 ktEstimate 的历史缺口）。
-      if (isPlaceholderConceptKey(key)) continue;
+      if (isPlaceholderConceptKey(key)) {
+        logger.warn('[memory-trace] 占位概念键被丢弃（ktEstimate 不建痕/不建概念）', { site: 'applyKtEstimate', conceptKey: key });
+        continue;
+      }
       const mastery = Number.isFinite(item.mastery) ? Math.max(0, Math.min(1, item.mastery)) : null;
       if (mastery === null) continue;
+      // #133（2026-10-22）：模型自报证据窗随 EMA 落库（此前在 engine 已被丢弃，检查器
+      // 只能拿二手转述核对）。与 ktMasteryEma 同口径=只留最新一次估计的证据，不累积历史。
+      const evidence = typeof item.evidence === 'string' && item.evidence.trim()
+        ? item.evidence.trim().slice(0, 200)
+        : null;
       const conceptId = await resolveConceptIdSafe(userId, key, pathId, item.kcId ?? null);
       const existing = await this.getTrace(userId, key);
       if (existing) {
         const prev = existing.ktMasteryEma ?? existing.masteryScore;
         const ema = Number.isFinite(prev) ? ALPHA * mastery + (1 - ALPHA) * (prev as number) : mastery;
+        // KT 幽灵痕（extractionCount=0 且从未排程）补一次初始 FSRS 状态：
+        // 此前这类行 fsrsStability/dueAt 均为 null，既不在任何排程里、首次真实提取时
+        // 也只能回退 fsrsStateFromLegacy 代理。只补空值——已排程的痕迹一律不动，
+        // 不覆盖真实复习算出的间隔。
+        const isUnscheduledGhost = (Number(existing.extractionCount) || 0) === 0
+          && (existing.fsrsStability === null || existing.fsrsStability === undefined);
+        const ghostSeed = isUnscheduledGhost ? this.seedKtInitialSchedule(mastery, now) : null;
         await prisma.memory_traces.updateMany({
           where: { userId, conceptKey: key },
-          data: { ktMasteryEma: ema, ...(conceptId !== null ? { conceptId } : {}) },
+          data: {
+            ktMasteryEma: ema,
+            ...(conceptId !== null ? { conceptId } : {}),
+            ktEvidence: evidence,
+            ...(ghostSeed ?? {}),
+          },
         });
       } else {
         // 无痕迹也记录 EMA（独立于 ACT-R/FSRS 调度的知识状态通道）。
         // #59/#60 第 3 条：masteryScore 不再硬编码 0.3（会把「没学过」冒充成「学过一半」，
         // 并被 fragile 判定当成低分证据）——落 KT 估计值本身；extractionCount=0 仍如实标着
         // 「从未提取」，读侧据此把他当幽灵痕排除在掌握聚合外。
+        // 2026-10-21：幽灵痕同样写入初始 FSRS 状态与 dueAt（估算即排程基线），
+        // 但 extractionCount 保持 0——复习队列仍只收「真正提取过」的点。
+        const initialSchedule = this.seedKtInitialSchedule(mastery, now);
         await prisma.memory_traces.create({
           data: {
             id: `mt_${now.getTime()}_${Math.random().toString(36).slice(2, 10)}`,
@@ -671,13 +699,34 @@ class MemoryTraceService {
             masteryScore: mastery,
             stability: 'unknown',
             ktMasteryEma: mastery,
+            ktEvidence: evidence,
             extractionCount: 0,
             source: 'kt-estimate',
             pathId,
+            ...initialSchedule,
           },
         });
       }
     }
+  }
+
+  /**
+   * 为 KT 估算痕迹生成初始 FSRS 排程（纯确定性，无 LLM）：
+   * stability = mastery × 10 天（下限 1 天，fsrsStateFromLegacy 口径），difficulty 中性 5，
+   * reps/lapses 从 0 起；dueAt 走与 recordExtraction 相同的活跃窗口锚定。
+   */
+  private seedKtInitialSchedule(mastery: number, now: Date): {
+    fsrsStability: number; fsrsDifficulty: number; fsrsLapses: number; fsrsReps: number; dueAt: Date;
+  } {
+    const initial = fsrsStateFromLegacy(mastery, 0, now);
+    const rawDue = new Date(now.getTime() + initial.stability * DAY_MS);
+    return {
+      fsrsStability: initial.stability,
+      fsrsDifficulty: initial.difficulty,
+      fsrsLapses: initial.lapses,
+      fsrsReps: initial.reps,
+      dueAt: this.snapToActiveWindow(rawDue, now, false),
+    };
   }
 
   // 注：复习结果的 FSRS 写入自 2026-09-17 起是**单一写入者** = `ReviewCompletedConsumer`

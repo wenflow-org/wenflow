@@ -43,6 +43,8 @@ const { stableVirtualApi, apiObject } = vi.hoisted(() => {
     restartVirtualLearning: vi.fn(),
     executeBlackboxVirtualAction: vi.fn(),
     rerunBlackboxVirtualSession: vi.fn(),
+    autopilotStart: vi.fn(),
+    autopilotStop: vi.fn(),
     getVirtualSessionSimulationClock: vi.fn()
   };
   const apiObject = (): Record<string, unknown> =>
@@ -221,10 +223,8 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(w.find('.mk-hero__avatar').text()).toBe('S');
     // 主标题 = 会话主题（teaching.topic）：截断裸 ID 不再做 24px/700 主标题（2026-10-04 全站评审 P2-7）
     expect(w.find('.mk-hero__title').text()).toBe('函数');
-    // 会话 ID 降为 pills 行 meta（mono 小字，title 带全量 ID）
-    const idMeta = w.find('.cp-hero__id');
-    expect(idMeta.text()).toBe('ts_re_1');
-    expect(idMeta.attributes('title')).toBe('会话 ID：ts_re_1');
+    // 2026-10-23 走查：截断会话 ID 也从 pills 行撤下（完整 ID 在 URL / 数据包 / 日志里）
+    expect(w.find('.cp-hero__id').exists()).toBe(false);
     const sub = w.find('.mk-hero__sub').text();
     expect(sub).toContain('Python 入门');
     expect(sub).toContain('开始于');
@@ -234,14 +234,15 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(pills[0]).toBe('进行中');
     expect(pills[1]).toBe('学习');
     // 只读声明（原顶栏 meta 迁入，2026-10-11 走查：真实会话不再渲染 .cp-topbar）
-    expect(pills[2]).toBe('真实会话 · 只读监控');
+    expect(pills[2]).toBe('真实课堂 · 只读监控');
     expect(pills).toHaveLength(3);
 
     // 真实会话只读：hero 动作区只剩确定性出口——刷新已收归顶栏一颗（2026-10-19 用户走查
     // 「刷新重复了吧」，页内改为 watch liveRefreshSeq 接住顶栏刷新），无生命周期控制、
-    // 原型假钮（导出日志）与危险动作（中断会话）不出现
+    // 原型假钮（导出日志）与危险动作（中断会话）不出现。
+    // 2026-10-26：异常会话的唯一排查出口「执行日志」放在座舱里（列表侧不摆第二颗钮）。
     const acts = w.findAll('.mk-hero__actions button').map((b) => b.text());
-    expect(acts).toEqual(['← 会话列表']);
+    expect(acts).toEqual(['执行日志', '← 教学会话列表']);
     expect(w.text()).not.toContain('导出日志');
     expect(w.text()).not.toContain('中断会话');
 
@@ -290,18 +291,78 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     assisted.unmount();
   });
 
-  it('「每课回合上限」写明是本屏临时覆盖（2026-10-19 运营走查：title 原写「按 1 或 100 保存」，实际刷新即回到画像默认值）', async () => {
+  it.each(['timeout', 'finalization_failed', 'discarded', 'superseded'])(
+    '异常终态 %s 也按终态处理：当前阶段写「中断」，自动驾驶按钮禁用（D8 扩展）',
+    async (status) => {
+      const payload = virtualLearningPayload();
+      payload.data.status = status;
+      payload.data.currentStage = 'path';
+      payload.data.runtime.status = status;
+      payload.data.runtime.currentStage = 'path';
+      payload.data.stageResults.path = {};
+      payload.data.runtime.stageStatus.path = { learningPathId: 'lp_v1', generated: true };
+      stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
+      const w = await mountCockpit('session', 'vs_1');
+      const steps = w.findAll('.cp-stp');
+      expect(steps[1].classes()).toContain('cp-stp--active');
+      expect(steps[1].find('.cp-stp__meta').text()).toBe('中断');
+      const ap = w.findAll('button').find((b) => b.text() === '自动驾驶');
+      expect(ap, '终态会话不再提供可点的自动驾驶').toBeTruthy();
+      expect(ap!.attributes('disabled')).toBeDefined();
+      w.unmount();
+    }
+  );
+
+  it('已放弃会话停在 Path：当前阶段副标为「中断」，不再写「进行中」（D8）', async () => {
+    const payload = virtualLearningPayload();
+    payload.data.status = 'abandoned';
+    payload.data.currentStage = 'path';
+    payload.data.runtime.status = 'abandoned';
+    payload.data.runtime.currentStage = 'path';
+    payload.data.stageResults.path = {};
+    payload.data.runtime.stageStatus.path = { learningPathId: 'lp_v1', generated: true };
+    stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
+    const w = await mountCockpit('session', 'vs_1');
+    const steps = w.findAll('.cp-stp');
+    expect(steps[1].classes()).toContain('cp-stp--active');
+    expect(steps[1].find('.cp-stp__meta').text()).toBe('中断');
+    w.unmount();
+  });
+
+  it('自动驾驶启动前二次确认：说清终点/回合上限/预算，取消则不调用后端（D9）', async () => {
+    stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
+    const w = await mountCockpit('session', 'vs_1');
+    const btn = w.findAll('.cp-console__actions button').find((b) => b.text() === '自动驾驶')!;
+    expect(btn).toBeTruthy();
+    await btn.trigger('click');
+    await settle();
+    expect(confirmState.open).toBe(true);
+    expect(confirmState.title).toBe('启动自动驾驶');
+    expect(confirmState.message).toContain('路径全部完成');
+    expect(confirmState.message).toContain('成本护栏');
+    expect(stableVirtualApi.autopilotStart).not.toHaveBeenCalled();
+    settleConfirm(false);
+    await settle();
+    expect(stableVirtualApi.autopilotStart).not.toHaveBeenCalled();
+    await btn.trigger('click');
+    await settle();
+    settleConfirm(true);
+    await settle();
+    expect(stableVirtualApi.autopilotStart).toHaveBeenCalledWith('vs_1', { maxTurns: expect.any(Number) });
+    w.unmount();
+  });
+
+  it('「每课回合上限」只声明本屏临时值与越界处理（不再解释机制、不再指路画像）', async () => {
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
     await w.findAll('.cp-stp')[2].trigger('click'); // Learn 页签（回合上限只在这一页出现）
     await settle();
     const cap = w.find('.cp-turn-cap');
     expect(cap.exists()).toBe(true);
-    // 输入框：不许再出现「保存」；必须说明是临时值 + 长期值在哪
     expect(cap.attributes('title')).not.toContain('保存');
-    expect(cap.attributes('title')).toContain('本屏是临时值');
-    expect(cap.attributes('title')).toContain('运行预算');
-    expect(w.find('.cp-turn-cap-label').attributes('title')).toContain('画像「运行预算 · 每课回合上限」');
+    expect(cap.attributes('title')).toContain('本屏临时值');
+    expect(cap.attributes('title')).not.toContain('运行预算');
+    expect(w.find('.cp-turn-cap-label').attributes('title')).toContain('只作用于接下来这一次推进');
     w.unmount();
   });
 
@@ -419,9 +480,9 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(rows[1].find('.mk-badge').text()).toBe('虚拟学习者');
     expect(rows[2].find('.mk-badge').text()).toBe('教师');
     expect(w.text()).toContain('3 条对话 · 目标与课堂两段');
-    // 合并规则 hover 可得（卡头 title），不再占读数行
+    // 2026-10-22 用户裁定：装配自述句整类撤除，卡头也不再挂合并规则
     const meta = w.findAll('.mk-card__meta').find((m) => m.text().includes('目标与课堂两段'))!;
-    expect(meta.attributes('title')).toContain('按发生顺序合并展示');
+    expect(meta.attributes('title')).toBeUndefined();
 
     w.unmount();
   });

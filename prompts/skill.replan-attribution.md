@@ -17,7 +17,7 @@ failurePolicy: propagate
 - learner：学习者画像投影（长期特征）
 - path：路径与确认方案上下文
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
-- state：平台维护的主记忆快照（当前值，含 stage）
+- state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「replanSignal（object）」`sandbox:profile.snapshot.replanSignal`（编排注入） — 阈值召回（reasonCodes/priority/recommendation/scope/rationale）——归因必须在它允许的方向内选

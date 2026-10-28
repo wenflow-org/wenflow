@@ -135,7 +135,12 @@ export async function assertTaskReadyForLearning(
   );
 
   if (!accessState.canStartLearning) {
-    throw new Error(accessState.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
+    // 带上 409 与稳定 code：路径已下线/仍在准备都是「当前状态不可开课」，
+    // 让教学路由的 resolveTeachingError 原样回给用户，而不是吞成 500。
+    const error = new Error(accessState.learningBlockedReason || '学习内容还在准备中，暂不能开始学习');
+    (error as { code?: string; status?: number }).code = 'PATH_NOT_STARTABLE';
+    (error as { code?: string; status?: number }).status = 409;
+    throw error;
   }
 }
 

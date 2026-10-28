@@ -149,9 +149,23 @@ const CONTROLS_BY_STATE: Record<VsLifecycleState, VsControlKey[]> = {
   completed: ['delete', 'cockpit']
 }
 
-/** 按状态取可用操作定义（页面渲染唯一入口） */
-export function vlabControlsFor(state: VsLifecycleState): VsControlDef[] {
-  return (CONTROLS_BY_STATE[state] || []).map((k) => VS_CONTROL_DEFS[k])
+/** 后端 currentStage 的「教学」枚举（历史日志里还有 learn/teach 别名） */
+const TEACHING_STAGES = new Set(['teaching', 'learn', 'teach'])
+
+/** 按状态取可用操作定义（页面渲染唯一入口）
+ *
+ *  `stage` 传入后端 currentStage 时，会按阶段能力收窄：pause 只在教学阶段有意义——
+ *  后端 `/sessions/:id/pause` 对 goal/path 直接 409「仅教学（teaching）阶段支持暂停」
+ *  （paused 标志只有 learn 自动循环消费）。不传 stage 时保持旧的按状态全集，
+ *  供没有阶段信息的调用点使用。 */
+export function vlabControlsFor(
+  state: VsLifecycleState,
+  opts: { stage?: string | null } = {}
+): VsControlDef[] {
+  const stage = String(opts.stage || '').toLowerCase()
+  return (CONTROLS_BY_STATE[state] || [])
+    .filter((k) => !(k === 'pause' && stage && !TEACHING_STAGES.has(stage)))
+    .map((k) => VS_CONTROL_DEFS[k])
 }
 
 /** 从会话字段推导生命周期状态（前端统一口径；paused 由 teaching.paused 派生）

@@ -1,4 +1,4 @@
-import { evaluateSessionClosable } from '../teaching-closure'
+import { appendClosureFollowUp, buildClosureAudit, evaluateSessionClosable } from '../teaching-closure'
 
 /**
  * #51 P-25：endSession 前机械门禁。放弃/异常终态豁免；检查点到顶后允许带错收束。
@@ -86,5 +86,98 @@ describe('evaluateSessionClosable', () => {
         teachingState: { pendingCheckpoint: { id: 'cp-1' } },
       }).closable).toBe(true)
     }
+  })
+})
+
+// 2026-10-24 离线评审基线（85% 课堂未答收口）：end_only 可以放开收束，但必须留下
+// 「待验证」事实，不能把会话结束读成任务完成。
+describe('buildClosureAudit / appendClosureFollowUp', () => {
+  const openMessages = [
+    { role: 'user', content: '我做完了' },
+    { role: 'assistant', content: '算得不错。那这一步为什么要先乘？' },
+  ]
+
+  it('末问未答 → openQuestion=true，记录原因码与原问题', () => {
+    const audit = buildClosureAudit({ messages: openMessages, teachingState: { completionDeferrals: 2 } })
+    expect(audit.openQuestion).toBe(true)
+    expect(audit.code).toBe('FINALIZATION_OPEN_QUESTION')
+    expect(audit.question).toContain('为什么要先乘')
+    expect(audit.deferredTimes).toBe(2)
+  })
+
+  it('学生已答 → openQuestion=false', () => {
+    const audit = buildClosureAudit({
+      messages: [
+        { role: 'assistant', content: '那这一步为什么要先乘？' },
+        { role: 'user', content: '因为有括号' },
+      ],
+      teachingState: {},
+    })
+    expect(audit.openQuestion).toBe(false)
+    expect(audit.question).toBeNull()
+  })
+
+  it('未答检查点 → 原因码为 FINALIZATION_PENDING_CHECKPOINT', () => {
+    const audit = buildClosureAudit({
+      messages: [{ role: 'assistant', content: '开始吧' }],
+      teachingState: { pendingCheckpoint: { id: 'cp-1' } },
+    })
+    expect(audit.openQuestion).toBe(true)
+    expect(audit.code).toBe('FINALIZATION_PENDING_CHECKPOINT')
+  })
+
+  it('异常终态不算未答收口缺陷', () => {
+    const audit = buildClosureAudit({
+      messages: openMessages,
+      teachingState: {},
+      endReason: 'learner-abandoned',
+    })
+    expect(audit.openQuestion).toBe(false)
+  })
+
+  it('appendClosureFollowUp 把待验证置顶且可重复调用不重复', () => {
+    const audit = buildClosureAudit({ messages: openMessages, teachingState: {} })
+    const summary = { actionPlan: ['继续练习', '待验证：旧项'], topicSummary: 'x' }
+    const once = appendClosureFollowUp(summary, audit)
+    const twice = appendClosureFollowUp(once, audit)
+    expect(once.actionPlan[0]).toContain('待验证：')
+    expect(once.actionPlan[0]).toContain('为什么要先乘')
+    expect(once.actionPlan.filter((item) => String(item).startsWith('待验证：'))).toHaveLength(1)
+    expect(twice.actionPlan).toEqual(once.actionPlan)
+  })
+
+  it('无问号但要求提交/回答 → 仍判未闭合（离线评审实测漏网）', () => {
+    const submit = buildClosureAudit({
+      messages: [
+        { role: 'user', content: '标签都填好了' },
+        { role: 'assistant', content: '核对完成。请更新后的 8 行标签发给我做最后确认。' },
+      ],
+      teachingState: {},
+    })
+    expect(submit.openQuestion).toBe(true)
+    expect(submit.code).toBe('FINALIZATION_OPEN_QUESTION')
+    expect(submit.question).toContain('发给我')
+
+    const answer = buildClosureAudit({
+      messages: [
+        { role: 'user', content: '上午4周，下午2周，晚上3周' },
+        { role: 'assistant', content: '数据很清晰。现在请回答下面的快速题，确认我们对忙闲倾向的判断：' },
+      ],
+      teachingState: {},
+    })
+    expect(answer.openQuestion).toBe(true)
+    expect(answer.question).toContain('请回答')
+  })
+
+  it('课后建议/下一节预告不算未闭合请求', () => {
+    const audit = buildClosureAudit({
+      messages: [
+        { role: 'user', content: '好，我记下了' },
+        { role: 'assistant', content: '课内诊断闭环已完成，可以收尾了。课后建议：把这套排查逻辑整理成简短记录，下次遇到类似情况直接对照检查。' },
+      ],
+      teachingState: {},
+    })
+    expect(audit.openQuestion).toBe(false)
+    expect(audit.question).toBeNull()
   })
 })

@@ -18,29 +18,16 @@
 
     <template v-else>
 
-      <!-- 面板栏：调度口径摘要 + 重新观察（原独立页状态条的两件事；返回/复制深链随页退役——
-           深链即学习者详情 URL，返回交给页签） -->
-      <div class="mr-panels__bar">
-        <strong class="mr-panels__title">记忆调度与治理</strong>
-        <span
-          class="mr-panels__meta"
-          title="到期 = 到该复习而未复习。同族重复 = 含义相同、措辞不同的记录。从未提取 = 从未被安排复习过。有强度数据 = 带完整记忆模型参数的记录，其中旧记录按掌握度回退估算。到期占比 ≥20% 或 ≥5 条时标为需关注"
-        >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有强度数据 {{ detail.summary.withFsrsState }}</span>
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm"
-          :disabled="recomputing"
-          title="重新跑一次该用户的记忆复盘，结果实时刷新"
-          @click="recompute"
-        >{{ recomputing ? '观察中…' : '重新观察' }}</button>
-      </div>
-
+      <!-- 2026-10-23 用户「有什么意义吗下面表格都有了」：原面板栏「记忆调度与治理 + 痕迹/到期/
+           同族重复/从未提取/有强度数据」整条撤除——五个数全由下面各卡的表格/空态表达，栏名又与
+           页签名「记忆调度」重复。唯一有动作价值的「重新观察」并入概念归并审计卡头（结果就长在那张卡里）。 -->
       <div class="mr__detail mr__detail--embed">
       <!-- 1. 课内温故计划：本节该接几个 + 每个记忆点的负担与来源 -->
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">课内温故计划</h3>
-          <span class="mk-card__meta" title="负担单位按学习者状态动态校准。排队中 = 尚未排进本节队列的到期记录">本节该接几个 · 按负担预算排队</span>
+          <!-- 2026-10-23 用户走查「还有后面的这几种文案」：撤掉「本节该接几个 · 按负担预算排队」——
+               下面指标条已逐项给出负担预算/已占用/本节接几个/排队中，卡头再说一遍规则是复述 -->
         </div>
 
         <!-- 温故计划整块按 detail.reviewPlan 有无渲染：reviewPlan=null 时原来只剩一个裸标题 -->
@@ -67,7 +54,7 @@
                 </td>
                 <td>{{ reasonText(item.reason) }}</td>
                 <td class="mk-num">{{ item.load }}</td>
-                <td class="mr__sub">{{ item.loadFactors.join('、') || '—' }}</td>
+                <td class="mr__sub">{{ loadFactorText(item.loadFactors) }}</td>
                 <td>
                   <!-- 来源路径可点（2026-10-12 走查「记忆与复习的跳转」）：记忆的出处此前是死文本，
                        openSubPage('path') 走适配层反查会话进路径座舱；from 带上所属学习者详情，
@@ -97,16 +84,22 @@
       </section>
 
       <!-- 2. 概念归并审计：可写动作（勾选执行 / 单条确认 / 驳回 / 回滚），默认观察模式。
-           R7 概念本体治理批：三组建议（归并 / 需人工看 / 散键清理）全部给出入口——
+           R7 概念本体治理批：三组建议（归并 / 需人工确认 / 散键清理）全部给出入口——
            此前 dropCandidates 只在类型里声明计数（审计 CC-2）、ambiguous 无操作位； -->
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">概念归并审计</h3>
-          <!-- 来源（任务书 B：每条建议可见来源——同组建议同源，来源挂在卡头不逐行复读） -->
-          <span class="mk-card__meta">
-            <template v-if="detail.audit">来源：概念归并观察（{{ detail.audit.mode === 'apply' ? '自动执行' : '观察' }}模式）· {{ timeAgo(detail.audit.generatedAt) }}</template>
-            <template v-else>尚未观察（点「重新观察」跑一次）</template>
-          </span>
+          <!-- 来源（任务书 B：每条建议可见来源——同组建议同源，来源挂在卡头不逐行复读）。
+               未观察状态不放卡头（2026-10-23 用户「这几种文案」）：改为卡内一行空态，卡头只报来源 -->
+          <span v-if="detail.audit" class="mk-card__meta">来源：概念归并观察（{{ detail.audit.mode === 'apply' ? '自动执行' : '观察' }}模式）· {{ timeAgo(detail.audit.generatedAt) }}</span>
+          <!-- 重新观察：原面板栏唯一有动作价值的一项，跟着它产出的建议走（未观察时也是这张卡的动作） -->
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :disabled="recomputing"
+            title="重新跑一次该用户的记忆复盘，结果实时刷新"
+            @click="recompute"
+          >{{ recomputing ? '观察中…' : '重新观察' }}</button>
           <!-- 已执行历史入口（R7 任务书 B：mode=apply 审计一个入口可见）：默认展开保持既有可达性，
                可收起给三组建议让出主视觉；aria-expanded 供读屏 -->
           <button
@@ -130,7 +123,7 @@
             <b>{{ detail.audit.stats.autoApplicable }}</b><span>可自动</span>
           </div>
           <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': mrAmbiguousCount > 0 }">
-            <b>{{ mrAmbiguousCount }}</b><span>需人工看</span>
+            <b>{{ mrAmbiguousCount }}</b><span>需人工确认</span>
           </div>
           <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': mrDropCount > 0 }">
             <b>{{ mrDropCount }}</b><span>散键清理</span>
@@ -139,6 +132,9 @@
             <b>{{ detail.audit.stats.applied }}<i>/{{ detail.audit.stats.deleted }}</i></b><span>已执行 / 删除</span>
           </div>
         </div>
+
+        <!-- 未观察：卡内一行空态（动作钮「重新观察」在面板栏，那里是唯一入口） -->
+        <p v-if="!detail.audit" class="mr__sub">尚未观察过这个用户的记忆归并。</p>
 
         <template v-if="detail.audit">
           <!-- 归并处理条（2026-10-19 用户走查「这个重新设计一下」）：原实现是三枚小按钮飘在
@@ -183,10 +179,6 @@
 
           <h4 class="mr__h4">
             归并建议（将别名并入主概念）
-            <span class="mr__sub-inline">
-              默认只勾选可自动执行的。
-              执行后保留备份，可回滚。
-            </span>
           </h4>
           <div v-if="detail.audit.proposals.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -205,7 +197,7 @@
               <tr>
                 <th class="mr__th-check">选择</th>
                 <th>归并目标</th><th>证据（别名 · 理由）</th><th class="mk-num">置信度</th><th class="mk-num">名称相似度</th>
-                <th>可自动执行</th><th class="mk-th--right">操作</th>
+                <th>可自动执行</th><th class="mk-th--right mk-c-act">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -237,7 +229,7 @@
                   </span>
                 </td>
                 <td>
-                  <!-- 词面闸门结果用胶囊（原型记忆域 pill 状态词汇；与上方审计队列「可自动/需人工看」同标签） -->
+                  <!-- 词面闸门结果用胶囊（原型记忆域 pill 状态词汇；与上方审计队列「可自动/需人工确认」同标签） -->
                   <span
                     class="mk-badge"
                     :class="proposal.autoApplicable ? 'mk-badge--ok' : 'mk-badge--warn'"
@@ -268,7 +260,7 @@
           <p v-else class="mr__sub">本次没有达到置信度阈值的归并建议。</p>
 
           <h4 class="mr__h4">
-            需人工看（不会自动执行）
+            需人工确认（不会自动执行）
             <span class="mr__sub-inline">置信度不足，需人工确认</span>
           </h4>
           <div v-if="detail.audit.ambiguous.length" class="mk-table-scroll">
@@ -284,7 +276,7 @@
             <!-- 表头补明「候选 A / B 是概念键」（2026-10-06 审核 #62）：原表头只写 A / B
                  两个单字母；A/B 两列是无人类可读 label 的裸 conceptKey，与另三表同降 .mr__sub 档。
                  R7：补 选择/操作 两列——此前这组建议只可看不可动（审计 CC-2） -->
-            <thead><tr><th class="mr__th-check">选择</th><th>归并目标（候选 A）</th><th>并入（候选 B）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check">选择</th><th>归并目标（候选 A）</th><th>并入（候选 B）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
             <tbody>
               <tr v-for="(item, index) in detail.audit.ambiguous" :key="`${item.a}-${item.b}-${index}`">
                 <td>
@@ -298,7 +290,10 @@
                 </td>
                 <td class="mr__sub">{{ item.a }}</td>
                 <td class="mr__sub">{{ item.b }}</td>
-                <td class="mr__sub">{{ item.reason || '—' }}</td>
+                <td class="mr__sub">
+                  <template v-if="item.reason">{{ item.reason }}</template>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td>
                   <div class="mk-actions">
                     <button
@@ -336,7 +331,7 @@
               <col />
               <col style="width: 132px" />
             </colgroup>
-            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念标识）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念标识）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
             <tbody>
               <tr v-for="(drop, index) in detail.audit.dropCandidates" :key="`${drop.conceptKey}-${index}`">
                 <td>
@@ -349,7 +344,10 @@
                   />
                 </td>
                 <td class="mr__sub">{{ drop.conceptKey }}</td>
-                <td class="mr__sub">{{ drop.reason || '—' }}</td>
+                <td class="mr__sub">
+                  <template v-if="drop.reason">{{ drop.reason }}</template>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td>
                   <div class="mk-actions">
                     <button
@@ -445,9 +443,9 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">到期清单预览</h3>
-          <!-- 口径随实际生效的排序走（后端回显 dueSort）：不把「排序只在预览的 20 条里换过序」
-               说成「按掌握排序」——排序在后端截断之前生效，取的是全量到期痕迹里该口径的前 20 条 -->
-          <span class="mk-card__meta" :title="duePreviewMetaTitle">前 20 · {{ dueSortText }}</span>
+          <!-- 2026-10-23 用户走查：排序状态归列头 caret / aria-sort，卡头只说真正影响读数含义的一件事
+               ——这里只预览前 20 条（不写「记忆强度升序」及排序/回退估算的机制解释） -->
+          <span class="mk-card__meta" title="全部到期痕迹里只预览 20 条，排序在截断之前完成">仅前 20 条</span>
         </div>
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -456,7 +454,7 @@
             <th
               scope="col"
               class="mk-num mk-th--sortable"
-              title="由记忆模型计算的记住概率，旧记录按掌握度回退估算。点列头排序：升序 = 越靠前越该先复习"
+              :title="dueStrengthTitle"
               :aria-sort="dueSortState('retention')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleDueSort('retention')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
@@ -512,14 +510,14 @@
           </tbody>
         </table>
         </div>
-        <MkEmptyState v-else title="当前没有到期点" :description="`该用户的记忆痕迹都还没到复习时间；到期后会按「${dueSortText}」列在这里（前 20 条）。`" />
+        <MkEmptyState v-else title="当前没有到期点" description="该用户的记忆痕迹都还没到复习时间；到期后会在这里列出前 20 条。" />
       </section>
 
       <!-- 4. 同族重复：措辞不同、说的是同一件事（归并的输入） -->
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">同族重复</h3>
-          <span class="mk-card__meta" title="措辞不同但含义相同的记录">措辞不同、含义相同的记录</span>
+          <!-- 2026-10-23：撤掉「措辞不同、含义相同的记录」——卡名已是这件事，下面每一行就是同义成员本身 -->
         </div>
         <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
         <div v-else class="mk-table-scroll">
@@ -553,7 +551,7 @@ import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import { askConfirm } from './useConfirm'
-import { useTableSort, type SortDir } from './useTableSort'
+import { useTableSort } from './useTableSort'
 import { openSubPage, subPage } from './store'
 import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo } from './live'
@@ -690,24 +688,12 @@ const {
   defaultKey: 'retention',
   defaultDir: 'asc'
 })
-const DUE_SORT_LABEL: Record<string, string> = { retention: '记忆强度', mastery: '掌握', extractions: '提取次数', due: '到期' }
-/** 卡头口径：键名 + 方向；「到期」的升降序读作逾期先后更实（各列含义写在列头 title） */
-const DUE_ORDER_LABEL: Record<string, Record<SortDir, string>> = {
-  retention: { asc: '升序', desc: '降序' },
-  mastery: { asc: '升序', desc: '降序' },
-  extractions: { asc: '升序', desc: '降序' },
-  due: { asc: '逾期最久在前', desc: '最近到期在前' }
-}
-/** 实际生效的排序以响应回显为准（参数非法时后端回落默认，界面不得把默认序说成用户选的那档） */
-const appliedDueSort = computed(() => detail.value?.dueSort ?? { key: dueSortKey.value, order: dueSortDir.value as SortDir })
-const dueSortText = computed(
-  () => `${DUE_SORT_LABEL[appliedDueSort.value.key] ?? appliedDueSort.value.key}${DUE_ORDER_LABEL[appliedDueSort.value.key]?.[appliedDueSort.value.order as SortDir] ?? ''}`
-)
-/** 卡头长释：把「排序在前 20 之后还是之前」讲清楚（这决定读者能不能拿它当全量排序用） */
-const duePreviewMetaTitle = computed(
+/** 记忆强度列头：口径 + 本页回退估算条数（2026-10-23 卡头长释撤除，数据质量就地下钻到这一列） */
+const dueStrengthTitle = computed(
   () =>
-    `在全部到期痕迹里按「${dueSortText.value}」排好序再取前 20 条（排序在截断之前，不是只排这 20 条）。` +
-    `记忆强度升序 = 越靠前越该先复习。旧记录的强度按掌握度回退估算${duePreviewLegacyCount.value ? `（本页 ${duePreviewLegacyCount.value} 条为回退估算）` : ''}`
+    '由记忆模型计算的记住概率' +
+    (duePreviewLegacyCount.value ? `（本页 ${duePreviewLegacyCount.value} 条为旧记录回退估算）` : '') +
+    '。点列头排序：升序 = 越靠前越该先复习'
 )
 
 const busy = ref(false)
@@ -757,12 +743,25 @@ const REASON_ZH: Record<string, string> = {
 }
 const SOURCE_ZH: Record<string, string> = {
   derived: '概念派生',
+  'kt-estimate': 'KT 估算',
   'review-event': '复习事件',
   manual: '人工添加',
   consolidated: '归并合并'
 }
 const reasonText = (r?: string | null) => (r ? REASON_ZH[r] || r : '—')
 const sourceText = (s?: string | null) => (s ? SOURCE_ZH[s] || s : '—')
+/* 负担因子码（review-plan / concept-load 的内部键）→ 运营词：
+   2026-10-23 走查「负担因子列在写 granularity:compound」——枚举码不得直出界面。 */
+const LOAD_FACTOR_ZH: Record<string, string> = {
+  'granularity:long': '表述过长',
+  'granularity:compound': '复合概念',
+  'type:process': '过程型',
+  'llm:cluster': '技能簇',
+  'llm:procedural': '过程型',
+  'llm:hard': '难度高'
+}
+const loadFactorText = (factors: string[] | undefined) =>
+  (factors || []).map((f) => LOAD_FACTOR_ZH[f] || f).join('、') || '—'
 
 /** 日期时间格式化（#66）：与最近复习列同参（zh-CN 24 小时制带分组），
  *  避免同屏两处时间格式不同（执行时间列原用无参 toLocaleString，随浏览器 locale 变） */
@@ -804,7 +803,7 @@ const detail = ref<ReviewDetail | null>(null)
 const detailLoading = ref(false)
 /** 勾选状态（R7：三组建议共用一套「选中 → 执行」，组内 key 唯一）；归并建议默认只勾「可自动执行」的 */
 const selected = ref<Record<string, boolean>>({})
-/** 需人工看对的勾选（key = `${a} => ${b}`）；散键清理的勾选（key = conceptKey）默认不勾 */
+/** 需人工确认对的勾选（key = `${a} => ${b}`）；散键清理的勾选（key = conceptKey）默认不勾 */
 const selectedAmbiguous = ref<Record<string, boolean>>({})
 const selectedDrops = ref<Record<string, boolean>>({})
 
@@ -817,11 +816,11 @@ const selectedNeedsReview = computed(() => {
   })
 })
 
-/** 需人工看对的勾选键（同序渲染用同一把 key） */
+/** 需人工确认对的勾选键（同序渲染用同一把 key） */
 function ambiguousKey(item: { a: string; b: string }): string {
   return `${item.a} => ${item.b}`
 }
-/** 勾中的「需人工看」对（执行时随确认列表上送） */
+/** 勾中的「需人工确认」对（执行时随确认列表上送） */
 const selectedAmbiguousPairs = computed(() =>
   (detail.value?.audit?.ambiguous ?? [])
     .filter((item) => selectedAmbiguous.value[ambiguousKey(item)] === true)
@@ -864,13 +863,13 @@ const bulkHintText = computed(() =>
 const bulkWarnText = computed(() => {
   const parts = [
     selectedNeedsReview.value.length ? `${selectedNeedsReview.value.length} 条属于「需人工确认」` : '',
-    selectedAmbiguousPairs.value.length ? `${selectedAmbiguousPairs.value.length} 条「需人工看」对` : ''
+    selectedAmbiguousPairs.value.length ? `${selectedAmbiguousPairs.value.length} 条「需人工确认」对` : ''
   ].filter(Boolean)
   return parts.length ? `选中项里 ${parts.join('、')}，执行前请核对证据` : ''
 })
 /** 散键清理建议计数（审计队列格 + 列表空态分支共用） */
 const mrDropCount = computed(() => (detail.value?.audit?.dropCandidates ?? []).length)
-/** 需人工看的对数：取渲染行而非 stats.ambiguous——真实接口不返回该字段，格子会成空读数 */
+/** 需人工确认的对数：取渲染行而非 stats.ambiguous——真实接口不返回该字段，格子会成空读数 */
 const mrAmbiguousCount = computed(() => detail.value?.audit?.ambiguous.length ?? 0)
 
 function resetSelection(audit?: ReviewDetail['audit']) {
@@ -1065,6 +1064,13 @@ async function load(opts: { quietSort?: boolean } = {}) {
     // 载荷归一：data:null（该用户无记忆数据）不得经 ?? res.data 兜成缺 summary 的空壳对象
     const body = (res.data?.data ?? res.data) ?? null
     detail.value = body && typeof body === 'object' && 'summary' in body ? (body as ReviewDetail) : null
+    /* 生效排序以响应回显为准（参数非法时后端回落默认）：卡头不再写排序文字后，
+       列头 caret / aria-sort 是唯一口径，必须跟回显走。回显与本地一致时不触发 value watch。 */
+    const echo = detail.value?.dueSort
+    if (echo) {
+      if (echo.key !== dueSortKey.value) dueSortKey.value = echo.key
+      if (echo.order !== dueSortDir.value) dueSortDir.value = echo.order
+    }
     resetSelection(detail.value?.audit)
   } catch (e) {
     if (seq !== detailSeq) return
@@ -1124,10 +1130,7 @@ async function recompute() {
 .mr-panels > *,
 .mr__detail > * { min-width: 0; }
 
-/* 面板栏：调度口径摘要 + 重新观察（原独立页状态条收敛为一行） */
-.mr-panels__bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.mr-panels__title { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
-.mr-panels__meta { flex: 1 1 auto; min-width: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow-wrap: anywhere; }
+/* 面板栏样式已随「记忆调度与治理」条撤除（2026-10-23）：重新观察并入概念归并审计卡头 */
 .mr-panels__empty { margin: 0; }
 
 /* 卡内小节标题（归并审计卡里的三段子列表）：左右 16px 与卡头对齐 */

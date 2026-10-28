@@ -32,6 +32,7 @@ import type { LeaseClientLike } from '../virtual-lab/vlab-types';
 import type {
   SimulationMilestone,
   StageResults,
+  StuckClosureAttributionRecord,
   VirtualSessionWithProfile
 } from '../virtual-lab/vlab-types';
 import type { 
@@ -93,6 +94,7 @@ import {
   generateWrapupForSession as learnPhaseGenerateWrapupForSession,
 } from './simulation.learn-phase';
 import { isTeachingTurnHiccupError } from './simulation.learn-phase';
+import { appendStuckAttributionEntry } from './simulation.learn.steps';
 import {
   completeCheckpointedSimulationTask as execPhaseCompleteCheckpointedSimulationTask,
   executeSingleStep as execPhaseExecuteSingleStep,
@@ -910,6 +912,28 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
           stageResults: JSON.stringify(stageResults),
           updatedAt: new Date()
         }
+      });
+    });
+  }
+
+  /**
+   * 卡死探针归因的 append-only 落点（stageResults.stuckAttributions）。
+   * 为什么不放 teaching：restart-learning 整包重写 teaching，归因会被覆盖；
+   * resetSessionRuntime 只删显式列出的键，根部数组能活下来。
+   */
+  async appendStuckAttribution(sessionId: string, entry: StuckClosureAttributionRecord) {
+    await this.assertCurrentSessionLeaseOwned(sessionId);
+    await withTransaction(async (tx) => {
+      const session = await tx.virtual_sessions.findUnique({
+        where: { id: sessionId },
+        select: { stageResults: true }
+      });
+      if (!session) return;
+      const stageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
+      stageResults.stuckAttributions = appendStuckAttributionEntry(stageResults.stuckAttributions, entry);
+      await tx.virtual_sessions.update({
+        where: { id: sessionId },
+        data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() }
       });
     });
   }

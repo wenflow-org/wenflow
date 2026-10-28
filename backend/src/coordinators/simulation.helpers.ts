@@ -187,6 +187,28 @@ export function findTaskInPath(milestones: SimulationMilestone[], taskId?: strin
   return null;
 }
 
+/**
+ * 会话任务指针与当前路径对账。
+ *
+ * 路径重排（尤其是课堂收束后按建议触发的后台重排）会替换/删除下游任务，
+ * 而虚拟会话仍可能拿着旧 currentTaskId；下一次开课就会撞「指定任务不存在」，
+ * 被跑批 harness 当成「路径未就绪」空等到超时。这里把「指针已失效」
+ * 从「路径还没生成」里拆出来，并给出新路径上第一个可运行任务。
+ */
+export function resolveStaleTaskRecovery(
+  milestones: SimulationMilestone[],
+  currentTaskId?: string | null
+): { stale: boolean; taskId: string | null } {
+  if (!currentTaskId) return { stale: false, taskId: null };
+  if (findTaskInPath(milestones, currentTaskId)) {
+    return { stale: false, taskId: currentTaskId };
+  }
+  const next = milestones
+    .flatMap((milestone) => milestone?.subtasks || [])
+    .find((task) => task.status !== 'completed');
+  return { stale: true, taskId: next?.id ?? null };
+}
+
 export function buildProgressAfterTaskCompletion(milestones: SimulationMilestone[], completedTaskId: string) {
   const flattenedTasks = milestones.flatMap((milestone: SimulationMilestone, milestoneIdx: number) =>
     (milestone?.subtasks || []).map((task: SimulationTask) => ({ milestone, milestoneIdx, task }))
@@ -340,6 +362,39 @@ export function buildTimeDimensionsFromBudget(budget: ScenarioBudgetShape): {
     sessionsLengthMin: dailyMinutes,
     totalWeeks: budget.horizonDays !== null ? Math.max(1, Math.ceil(budget.horizonDays / 7)) : null,
     estimatedHours: budget.expectedHours,
+  };
+}
+
+/**
+ * 虚拟学习者评测：把场景卡预算合并进 goal 的 time_dimensions，并把
+ * `objectiveScopeHours` 锚到卡上的 expectedHours（R4 外部评审 P0）。
+ *
+ * 为什么必须覆盖而不是「LLM 有值就不动」：R4 实测 F88 的场景卡是 7 天×30 分钟
+ * （expectedHours=3.5），goal 却按 5 个阶段估成 32h，路径合法地排到 27.5h；
+ * F71 反过来从 9.5h 塌到 1.5h。场景卡预算是虚拟学习者的 ground truth，评测链路
+ * 以它为准才能让体量指标可比。真实用户链路不调用本函数。
+ */
+export function mergeScenarioBudgetIntoTimeDimensions(
+  existing: Record<string, unknown> | null | undefined,
+  budget: ScenarioBudgetShape | null | undefined
+): Record<string, unknown> | null {
+  if (!budget) return existing ?? null;
+  const dailyMinutes = budget.dailyMinutes;
+  const capacityHours = budget.expectedHours
+    ?? (dailyMinutes !== null && budget.horizonDays !== null
+      ? (dailyMinutes * budget.horizonDays) / 60
+      : null);
+  if (capacityHours === null || !(capacityHours > 0)) return existing ?? null;
+  const mapped = dailyMinutes !== null
+    ? buildTimeDimensionsFromBudget({ ...budget, expectedHours: capacityHours })
+    : null;
+  return {
+    ...(existing || {}),
+    ...(mapped || {}),
+    // 场景卡预算就是本次评测的总量契约；允许按内容微调由后续 stage 容量夹处理，
+    // 但 objective 不再被 LLM 的自由估放大/压塌。
+    objectiveScopeHours: Math.max(0.1, Math.round(capacityHours * 10) / 10),
+    estimatedHours: Math.max(0.1, Math.round(capacityHours * 10) / 10),
   };
 }
 

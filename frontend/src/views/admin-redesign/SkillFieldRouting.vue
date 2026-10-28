@@ -22,7 +22,7 @@
         <span v-else class="mk-badge mk-badge--muted">core 文件缺失</span>
         <span class="sfr__status-actions">
           <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!canAdd" @click="openWizard">＋ 加字段</button>
-          <button type="button" class="mk-btn mk-btn--sm" @click="goOrchestration">→ 编排图页（{{ data.stage }}）</button>
+          <button type="button" class="mk-btn mk-btn--sm" @click="goOrchestration">→ 字段流转页（{{ data.stage }}）</button>
         </span>
       </div>
 
@@ -93,11 +93,11 @@
       <!-- 搜索 -->
       <div class="mk-filter sfr__filter">
         <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色 / 移交" />
-        <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色过滤">
-          <option value="">全部角色</option>
-          <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
-        </select>
-        <button v-if="filterActive" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
+        <MkSelect
+          v-model="roleFilter"
+          :options="roleFilterOptions"
+          aria-label="按角色过滤"
+        />
         <span v-if="filterActive" class="sfr__filter-count">命中 {{ rows.length }} / {{ data.routings.length }} 行</span>
       </div>
 
@@ -110,7 +110,7 @@
         <!-- 原型 .tbl：自动布局（去 mk-table--fixed 与 <colgroup>），
              单元格 nowrap；长文本列（含义）走 wrap 列，长标识列 max-width+ellipsis 截断 -->
         <div v-if="rows.length" class="sfr__scroll mk-table-scroll">
-          <table class="mk-table mk-table--dense sfr__table">
+          <table class="mk-table mk-table--dense mk-table--nowrap sfr__table">
             <thead>
               <tr>
                 <th scope="col">字段</th>
@@ -124,7 +124,7 @@
                 <th scope="col">存储字段名</th>
                 <th scope="col">锁定</th>
                 <th scope="col">core 状态</th>
-                <th scope="col" class="mk-th--right">操作</th>
+                <th scope="col" class="mk-th--right mk-c-act">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -169,7 +169,7 @@
           v-else
           compact
           :title="data.routings.length ? '无匹配行' : '该 skill 暂无产出行'"
-          :description="data.routings.length ? '试试调整搜索关键词或角色过滤。' : '该 skill 无编排路由声明。可用「加字段」补全，或先到编排文件声明产出字段。'"
+          :description="data.routings.length ? '试试调整搜索关键词或角色过滤。' : '该 skill 无编排路由声明。'"
           :action-text="emptyActionText"
           @action="onEmptyAction"
         />
@@ -209,6 +209,7 @@ import { useRouter } from 'vue-router'
 import { adminFieldRoutingsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import FieldAddWizard from './FieldAddWizard.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { askConfirm } from './useConfirm'
@@ -278,6 +279,10 @@ const fieldMap = computed(() => new Map((data.value?.fields || []).map((f) => [f
 const coreFieldNames = computed(() => new Set((data.value?.core.fields || []).map((f) => f.name)))
 const syncReport = computed(() => data.value?.core.sync ?? null)
 const roleMeta = computed(() => data.value?.promptRoleMeta || [])
+const roleFilterOptions = computed(() => [
+  { value: '', label: '全部角色' },
+  ...roleMeta.value.map((m) => ({ value: m.id, label: `${m.label}（${m.id}）` }))
+])
 
 const syncToneTone = computed(() => {
   const s = syncReport.value
@@ -591,7 +596,9 @@ async function onDelete(row: Record<string, any>) {
 
 function goOrchestration() {
   if (!data.value) return
-  void router.push({ path: '/admin/orchestrator', query: { stage: data.value.stage, tab: 'field-routings' } })
+  // 落编排图的「字段路由」子页签：键与编排图白名单同词（routing），不再用只在本页出现过的
+  // field-routings ——那个值编排图不认，点了会静默落回总览。
+  void router.push({ path: '/admin/orchestrator', query: { stage: data.value.stage, tab: 'routing' } })
 }
 
 onMounted(() => void load())
@@ -648,8 +655,6 @@ onMounted(() => void load())
 .sfr__scroll { overflow-x: auto; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); background: var(--mk-surface); }
 /* 窄屏最小宽度挂页面前缀类（页面 scoped 不得定义 mk- 类） */
 @media (max-width: 860px) { .sfr__table { min-width: 1180px; } }
-/* 原型 .tbl td nowrap：自动布局下单元格单行，列按内容自然分宽 */
-.sfr__table td { white-space: nowrap; }
 .sfr__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
 .sfr__field { display: block; min-width: 0; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sfr__fieldpath { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

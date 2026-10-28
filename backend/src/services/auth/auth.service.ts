@@ -105,11 +105,21 @@ class AuthService {
 
       // 创建用户（自动生成 email）；ID 用密码学随机 UUID，避免可预测/碰撞
       const userId = `user_${randomUUID()}`;
+      // 软删账号不占用用户名（上方查重跳过 deletedAt），但其 email 仍占唯一索引——
+      // 同名重注册会在 create 撞 P2002。被占用时用 UUID 片段做后缀，仍可读且唯一。
+      const baseEmail = `${data.name}@wenflow.local`;
+      const emailTaken = await prisma.users.findFirst({
+        where: { email: baseEmail },
+        select: { id: true },
+      });
+      const email = emailTaken
+        ? `${data.name}.${userId.slice(5, 13)}@wenflow.local`
+        : baseEmail;
       const user = await prisma.users.create({
         data: {
           id: userId,
           name: data.name,
-          email: `${data.name}@wenflow.local`,
+          email,
           password: hashedPassword,
           // 注册即登录：与 login 一致记录最后登录时间，避免「注册后走完整流程」的用户页仍显示「从未」
           lastLoginAt: new Date(),
@@ -168,6 +178,16 @@ class AuthService {
       // 测试/审计账号（qa_audit_/e2e_/@test.local 等命名约定）不允许登录用户侧：
       // 与 admin 侧真实账号口径同源识别（utils/test-account.ts），返回与凭据错误一致的 401，防枚举。
       if (!user || !isValidPassword || isTestAccount) {
+        // 2026-10-22（机械过滤审计 P2）：名单拒绝与密码错误对外同码（防枚举），但服务端
+        // 日志必须区分——否则「管理员重置了测试账号密码、登录仍 401」会被当密码错排查
+        // （#117 两例 + 2026-10-22 t8ux 实测）。不落密码。
+        if (user && isTestAccount && isValidPassword) {
+          logger.warn('[auth] 登录被测试账号名单拒绝（非密码错误）', {
+            userId: user.id,
+            email: user.email,
+            name: String(user.name || '').slice(0, 64),
+          });
+        }
         throw new InvalidCredentialsError();
       }
 

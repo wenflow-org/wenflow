@@ -17,6 +17,9 @@ const FILTER = arg('filter', '');
 const LIMIT = Number(arg('limit', '0'));
 const CONC = Math.max(1, Number(arg('concurrency', '4')));
 const ENRICH = !process.argv.includes('--no-enrich');
+// --refresh：已存在的卡不跳过，改为刷新元数据（focus/expect/group/webSource/privateMaterialBrief）。
+// 用于 Frontier 卡先入库、联网来源分批补齐后原地沉淀，不重建、不重跑富化。
+const REFRESH = process.argv.includes('--refresh');
 const RUN_DATE = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`; })();
 const OUT = path.join(ROOT, 'doc/local/runs', RUN_DATE, 'vl-import-summary.jsonl');
 
@@ -85,6 +88,12 @@ function cardToVl(card) {
           horizonDays: b.horizonDays || null,
           dailyMinutes: b.dailyMinutes || null,
           expectedHours: b.expectedHours || null,
+          // 2026-10-27：卡库沉淀压测点与预期分诊（Frontier/Golden 卡）
+          focus: card.focus || null,
+          expect: card.expect || 'path',
+          group: card.group || null,
+          // 2026-10-27：联网核验来源一并沉淀（Frontier 卡）
+          ...(card.webSource ? { webSource: card.webSource } : {}),
         },
         budget: b,
       }],
@@ -94,10 +103,19 @@ function cardToVl(card) {
       followUps: card.followUps || [],
       schoolAnchor: card.schoolAnchor || null,
       sourceRef: card.source?.ref || null,
-      scenarioOrigin: 'paradigm-eval-wave' + wave,
+      // 私有材料类卡片（Frontier F46–F65）：记录需上传的资料摘要，跑批前挂附件
+      ...(card.privateMaterialBrief ? { privateMaterialBrief: card.privateMaterialBrief } : {}),
+      // 2026-10-27：联网核验来源沉淀（sourceUrl/verifiedFacts/corrections/versionCaution）
+      ...(card.webSource ? { webSource: card.webSource } : {}),
+      scenarioOrigin: card.personaId.startsWith('frontier-') ? 'frontier-100'
+        : card.personaId.startsWith('golden-') ? 'golden-100'
+        : 'paradigm-eval-wave' + wave,
     },
-    tags: [wave === '6' ? 'w6' : 'w' + wave, card.personaId, card.domain, card.intentType],
-    notes: `source: ${card.source?.ref || 'n/a'}`,
+    tags: [wave === '6' ? 'w6' : 'w' + wave, card.personaId, card.domain, card.intentType,
+      ...(card.group ? [card.group] : []),
+      ...(card.expect === 'triage' ? ['negative'] : []),
+      ...(card.webSource?.sourceKind ? ['src-' + card.webSource.sourceKind] : [])],
+    notes: `source: ${card.source?.ref || 'n/a'}${card.focus ? '; focus: ' + String(card.focus).slice(0, 160) : ''}${card.webSource?.sourceUrl ? '; web: ' + card.webSource.sourceUrl : ''}`,
   };
 }
 
@@ -111,24 +129,76 @@ const record = (o) => fs.appendFileSync(OUT, JSON.stringify(o) + '\n');
 // 幂等：翻页直到空页（列表接口忽略 pageSize，步长假设会漏页——2026-10-01 踩坑），tags 分段精确匹配
 await adminLogin();
 const tagStrings = [];
+// personaId → vlId（--refresh 原地更新用）
+const idByPersona = new Map();
 try {
   let page = 1;
   for (; page < 200; page++) {
     const list = await api('GET', `/api/admin/virtual-learners?page=${page}&pageSize=100`);
     const d = list.data || {};
     const items = d.profiles || d.items || [];
-    for (const p of items) tagStrings.push(String(p.tags || ''));
+    for (const p of items) {
+      const t = String(p.tags || '');
+      tagStrings.push(t);
+      const tags = t.split(',').map((s) => s.trim());
+      const pid = tags.find((s) => /^(frontier|golden)-/.test(s));
+      if (pid && p.id) idByPersona.set(pid, p.id);
+    }
     if (!items.length) break;
   }
-  console.log('现有 VL tags 条数:', tagStrings.length, '（翻页', page, '）');
+  console.log('现有 VL tags 条数:', tagStrings.length, '（翻页', page, '）', '可定位 personaId:', idByPersona.size);
 } catch (e) { console.log('列表拉取失败（继续，逐卡查重兜底）:', String(e.message).slice(0, 80)); }
 const already = (personaId) => tagStrings.some((t) => t.split(',').map((s) => s.trim()).includes(personaId));
+
+/** 刷新已存在卡的元数据：只覆盖本脚本负责的字段，其余画像字段原样保留。 */
+async function refreshCard(card, vlId) {
+  const detail = await api('GET', `/api/admin/virtual-learners/${vlId}`);
+  const profile = detail.data?.profile && typeof detail.data.profile === 'object'
+    ? detail.data.profile
+    : JSON.parse(detail.data?.profile || '{}');
+  const next = { ...profile };
+  if (card.focus || card.expect || card.group || card.webSource) {
+    const pool = Array.isArray(next.storyPool) && next.storyPool.length ? [...next.storyPool] : [{ id: 'story-1' }];
+    const first = { ...(pool[0] || {}) };
+    const seed = { ...(first.goalSeed || {}) };
+    if (card.focus) seed.focus = card.focus;
+    if (card.expect) seed.expect = card.expect;
+    if (card.group) seed.group = card.group;
+    if (card.webSource) seed.webSource = card.webSource;
+    first.goalSeed = seed;
+    pool[0] = first;
+    next.storyPool = pool;
+  }
+  if (card.webSource) next.webSource = card.webSource;
+  if (card.privateMaterialBrief) next.privateMaterialBrief = card.privateMaterialBrief;
+  await api('PUT', `/api/admin/virtual-learners/${vlId}`, {
+    profile: next,
+    notes: `source: ${card.source?.ref || 'n/a'}${card.focus ? '; focus: ' + String(card.focus).slice(0, 160) : ''}${card.webSource?.sourceUrl ? '; web: ' + card.webSource.sourceUrl : ''}`,
+    tags: cardToVl(card).tags,
+  });
+}
 
 let done = 0, skip = 0, fail = 0;
 const failed = [];
 async function importCard(card) {
   const b = card.budget || {};
-  if (already(card.personaId)) { skip++; record({ id: card.personaId, ok: true, skipped: 'exists' }); return; }
+  if (already(card.personaId)) {
+    if (REFRESH && idByPersona.has(card.personaId)) {
+      try {
+        await refreshCard(card, idByPersona.get(card.personaId));
+        done++;
+        record({ id: card.personaId, ok: true, refreshed: true });
+        console.log(`[${done + skip}] ${card.personaId} 刷新 ok`);
+      } catch (e) {
+        fail++;
+        failed.push(card.personaId);
+        record({ id: card.personaId, ok: false, err: 'refresh: ' + String(e.message || e).slice(0, 160) });
+        console.log(`[${done + skip}] ${card.personaId} 刷新 FAIL: ${String(e.message || e).slice(0, 100)}`);
+      }
+      return;
+    }
+    skip++; record({ id: card.personaId, ok: true, skipped: 'exists' }); return;
+  }
   const payload = cardToVl(card);
   try {
     const created = await api('POST', '/api/admin/virtual-learners', payload);

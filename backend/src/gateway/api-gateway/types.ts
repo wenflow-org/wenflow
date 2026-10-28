@@ -67,6 +67,8 @@ export interface ResolvedRoute {
     temperature?: number | null;
     topP?: number | null;
     maxTokens?: number | null;
+    /** 单次 prompt 调用的最大尝试次数（含首次）；1..5，受平台逻辑重试预算再夹一次 */
+    maxAttempts?: number | null;
     /** 'json_object'=强制 JSON；'none'=显式关闭通道默认（解析时白名单校验） */
     responseFormat?: string;
   } | null;
@@ -150,6 +152,8 @@ export interface ExecutionContext {
   abortSignal?: AbortSignal;
   /** 降级来源模型：本次请求是作为 fallback 被发起的（不发给上游，仅用于遥测/日志） */
   fallbackFrom?: string;
+  /** 已尝试过的模型轨迹（含首跳主模型）；用于允许最多 2 跳 fallback 且防环 */
+  fallbackTrail?: string[];
   /** 流式模式下逐段透传内容增量；与 request.stream 配合启用流式执行路径 */
   onStreamChunk?: (delta: string) => void;
   /**

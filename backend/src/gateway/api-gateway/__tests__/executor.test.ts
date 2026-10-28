@@ -720,6 +720,31 @@ describe('APIExecutor P1：降级链 + 截断空输出', () => {
     expect(fallbackMeta.fallbackFrom).toBe('test-model')
   })
 
+  it('两跳 fallbackChain：第一跳仍失败时继续第二跳，并记录完整轨迹', async () => {
+    fallbacksMock.mockReturnValue(['fallback-1', 'fallback-2'])
+    definitionMock.mockImplementation((id: string) => (id.startsWith('fallback-') ? { id } : undefined))
+    safeHttpRequestMock
+      .mockResolvedValueOnce(jsonResponse(429, { error: 'primary limited' }))
+      .mockResolvedValueOnce(jsonResponse(429, { error: 'fallback-1 limited' }))
+      .mockResolvedValueOnce(jsonResponse(200, {
+        id: 'completion-fallback-2',
+        model: 'fallback-2',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'from-second-fallback' }, finish_reason: 'stop' }]
+      }))
+
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }] },
+      { traceId: 'trace-fallback-2', retryBudget: createRetryBudget({ maxTransportRetries: 0, maxUpstreamAttempts: 4 }) }
+    )
+
+    expect(response.choices[0].message.content).toBe('from-second-fallback')
+    expect(safeHttpRequestMock.mock.calls.map((call) => call[1].body.model))
+      .toEqual(['test-model', 'fallback-1', 'fallback-2'])
+    const fallbackMeta = JSON.parse(agentLogCreate.mock.calls.at(-1)![0].data.metadata)
+    expect(fallbackMeta.fallbackTrail).toEqual(['test-model', 'fallback-1'])
+  })
+
   it('不可降级的错误类（如 protocol）不会触发 fallback', async () => {
     fallbacksMock.mockReturnValue(['fallback-model'])
     definitionMock.mockImplementation((id: string) => (id === 'fallback-model' ? { id } : undefined))

@@ -230,6 +230,11 @@ function sanitizeInteractionMeta(raw: unknown): InteractionMetaRecord | undefine
 const requireIdempotencyKey = (value: unknown): string => {
   const key = typeof value === 'string' ? value.trim() : '';
   if (!key || key.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(key)) {
+    // 2026-10-22（机械过滤审计 A 类）：格式拒绝补日志（旧客户端带中文/#/超长的 key 一眼可见）。
+    logger.warn('[ai-teaching] Idempotency-Key 格式拒绝', {
+      reason: !key ? 'missing' : key.length > 128 ? 'too_long' : 'invalid_chars',
+      sample: typeof value === 'string' ? value.slice(0, 32) : typeof value,
+    });
     const error = new Error('缺少有效的 Idempotency-Key');
     (error as any).code = 'FINALIZATION_IDEMPOTENCY_KEY_REQUIRED';
     throw error;
@@ -375,6 +380,20 @@ const writeSseEvent = (res: any, event: string, data: unknown) => {
 };
 
 /**
+ * SSE 心跳：LLM 长生成期间（teaching-turn 为 JSON 输出，final 前可整段无字节，实测 2~3 分钟）
+ * 每 15s 写一条注释行。SSE 注释对事件解析不可见，但任何字节都会喂客户端传输层空闲计时
+ * 与上层停滞看门狗（#128：健康慢回合此前在 90s 被看门狗整段误杀，CALLER_ABORTED）。
+ */
+const SSE_HEARTBEAT_INTERVAL_MS = 15_000;
+const startSseHeartbeat = (res: any) => {
+  const timer = setInterval(() => {
+    if (!res || res.destroyed || res.writableEnded) return;
+    res.write(': hb\n\n');
+  }, SSE_HEARTBEAT_INTERVAL_MS);
+  return () => clearInterval(timer);
+};
+
+/**
  * 是否随消息响应下发 prompt 调试信封（`promptDebug` / `peerDebug`，含完整 systemPrompt）。
  *
  * 默认**关**（18 号报告衍生观察项）：`/messages` 面向学习者，而 `promptDebug` 里是 ~18k 的教学提示词；
@@ -487,6 +506,7 @@ const handleStreamingMessage = async (
   };
   // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
   setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
+  const stopHeartbeat = startSseHeartbeat(res);
 
   try {
     const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision, interactionMeta, idempotencyKey });
@@ -514,6 +534,7 @@ const handleStreamingMessage = async (
     const { status, code, message: errorMessage } = resolveTeachingError(error, '处理消息失败');
     writeSseEvent(res, 'error', { status, code, message: errorMessage });
   } finally {
+    stopHeartbeat();
     if (!res.destroyed && !res.writableEnded) res.end();
   }
 };
@@ -550,6 +571,7 @@ const handleStreamingSession = async (
   };
   // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
   setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
+  const stopHeartbeat = startSseHeartbeat(res);
 
   try {
     if (prelude) await prelude((event, data) => writeSseEvent(res, event, data));
@@ -560,6 +582,7 @@ const handleStreamingSession = async (
     const { status, code, message: errorMessage } = resolveTeachingError(error, '处理失败');
     writeSseEvent(res, 'error', { status, code, message: errorMessage });
   } finally {
+    stopHeartbeat();
     if (!res.destroyed && !res.writableEnded) res.end();
   }
 };
@@ -801,7 +824,7 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
 
     const { sessionId } = req.params;
     const action = String(req.body?.action || '');
-    if (!['keep', 'later', 'preview'].includes(action)) {
+    if (!['keep', 'later', 'preview', 'adopt'].includes(action)) {
       return res.status(400).json({
         success: false,
         error: { message: '无效的建议处置动作', code: 'INVALID_ADVISORY_ACTION' },
@@ -811,7 +834,7 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
     const result = await teachingSessionRepository.recordAdvisoryResponse(
       sessionId,
       userId,
-      action as 'keep' | 'later' | 'preview'
+      action as 'keep' | 'later' | 'preview' | 'adopt'
     );
     if (result.status === 'not_found') {
       return res.status(404).json({
@@ -1147,6 +1170,9 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit/stream', asyn
     requestHash: teachingOperationRequestHash(`checkpoint:${checkpointId}`, {
       selectedOptionIds: selectedOptionIds ?? null,
       answerText: answerText ?? null,
+      // 流式端点不支持 skip；固定写 false 与非流式普通作答的 hash 口径对齐。
+      // 此前流式缺该字段，同 key 从非流式切到流式重试会被判「同 key 不同请求」必 409。
+      skip: false,
       revision,
     }),
   });

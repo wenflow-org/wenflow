@@ -1,12 +1,13 @@
 const mockGetActivePrompt = jest.fn()
 const mockGatewayExecute = jest.fn()
+const mockGatewayResolveRoute = jest.fn()
 const mockPromptCallCreate = jest.fn()
 
 jest.mock('../../services/agentConfig.service', () => ({
   agentConfigService: { getActivePrompt: mockGetActivePrompt }
 }))
 jest.mock('../../gateway/api-gateway', () => ({
-  getAPIGateway: () => ({ execute: mockGatewayExecute })
+  getAPIGateway: () => ({ execute: mockGatewayExecute, resolveRoute: mockGatewayResolveRoute })
 }))
 jest.mock('../../config/database', () => ({
   __esModule: true,
@@ -41,6 +42,9 @@ const ACTIVE_METADATA_RUNTIME_CONTRACT = {
 describe('callPrompt runtime overrides', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    // 默认无路由回退（resolveRoute 抛错 → routeFallback=null），与既有用例的基线一致；
+    // 需要 response_format 链路的用例自行 mockResolvedValue。
+    mockGatewayResolveRoute.mockRejectedValue(new Error('no route in test'))
     mockPromptCallCreate.mockResolvedValue({})
     mockGatewayExecute.mockResolvedValue({
       id: 'completion-1',
@@ -51,6 +55,11 @@ describe('callPrompt runtime overrides', () => {
 
   it('冻结 Prompt 可在 ACTIVE 配置缺失时运行并覆盖模型参数与路由', async () => {
     mockGetActivePrompt.mockResolvedValue(null)
+    // 通道级结构化输出默认（路由回退层）打开：json 媒介请求应附 response_format
+    mockGatewayResolveRoute.mockResolvedValue({
+      model: 'route-model', temperature: 0.7, maxTokens: 2000,
+      responseFormat: 'json_object', skillParamOverrides: null
+    })
     const result = await runWithContext({
       promptRuntimeOverride: {
         systemPromptOverride: 'frozen prompt',
@@ -83,6 +92,7 @@ describe('callPrompt runtime overrides', () => {
       model: 'frozen-model',
       max_tokens: 321,
       temperature: 0.15,
+      response_format: { type: 'json_object' },
       stream: true
     }, { skillId: 'test' }, expect.objectContaining({
       userId: 'admin-original',

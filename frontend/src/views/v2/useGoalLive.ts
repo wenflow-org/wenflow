@@ -341,6 +341,11 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
   started.value = true;
 }
 
+/** 发送停滞阈值：90s 无任何传输活动（delta/服务端心跳）即判死 */
+const GOAL_SEND_STALL_TIMEOUT_MS = 90_000;
+/** 单次发送总闸：心跳只证明传输活着，总闸保证永挂任务最终有超时出口 */
+const GOAL_SEND_TOTAL_TIMEOUT_MS = 600_000;
+
 async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: string, meta?: InteractionMeta) {
   const gen = generation;
   sending.value = true;
@@ -351,25 +356,57 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
   // 展示原始模型文本作为「正在思考」的可见反馈，final 到达后以官方消息为准替换。
   streamingText.value = '';
   userStopped = false;
-  const onDelta = (t: string) => {
-    if (gen === generation) streamingText.value += t;
+  // 停滞看门狗 + 总闸（#129）：此前本页对「请求未达服务端/连接挂起」没有任何超时出口——
+  // sse.ts 连接超时与空闲超时触发后 abort 会被标成 cancelled，而这里把它当「离页中止」
+  // 静默吞掉，sending 复位但无任何失败提示（实测一次卡 25 分钟）。现在 delta/心跳都续命，
+  // 90s 无传输活动或 10min 总闸到点即中止，给「回复超时」失败气泡 + 重试入口。
+  let timedOut = false;
+  let watchdog = 0;
+  let deadlineTimer = 0;
+  const killTurn = () => {
+    timedOut = true;
+    abortRef?.abort();
+  };
+  const armWatchdog = () => {
+    if (watchdog) window.clearTimeout(watchdog);
+    watchdog = window.setTimeout(killTurn, GOAL_SEND_STALL_TIMEOUT_MS);
   };
   const abort = new AbortController();
+  const abortRef = abort;
+  deadlineTimer = window.setTimeout(killTurn, GOAL_SEND_TOTAL_TIMEOUT_MS);
+  armWatchdog();
+  const onDelta = (t: string) => {
+    if (gen === generation) streamingText.value += t;
+    armWatchdog();
+  };
   currentAbort = abort;
   try {
     let env: GoalConversationEnvelope | null = null;
     try {
       if (action === 'start') {
-        env = await streamStartGoalConversation(text, { meta }, { onDelta, signal: abort.signal });
+        env = await streamStartGoalConversation(text, { meta }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else if (action === 'confirm') {
-        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true }, { onDelta, signal: abort.signal });
+        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else if (action === 'supplement') {
-        env = await streamRegenerateGoalConversation(conversationId.value, text, { onDelta, signal: abort.signal });
+        env = await streamRegenerateGoalConversation(conversationId.value, text, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else {
-        env = await streamReplyGoalConversation(conversationId.value, text, { meta }, { onDelta, signal: abort.signal });
+        env = await streamReplyGoalConversation(conversationId.value, text, { meta }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       }
     } catch (streamError) {
       const e = streamError as { cancelled?: boolean; transport?: boolean; recoveryEnvelope?: GoalConversationEnvelope };
+      // 看门狗/总闸判死：给「回复超时」失败气泡 + 重试入口。必须先于 cancelled 分支——
+      // abort 触发的错误会被 sse.ts 标成 cancelled，不拦住就会被当「离页中止」静默吞掉。
+      if (timedOut) {
+        if (gen !== generation) return;
+        failed.value = action;
+        const partial = streamingText.value.trim();
+        if (partial) {
+          pushMessage({ role: 'ai', content: partial, time: nowTime(), failed: true });
+        } else if (action !== 'start' && action !== 'supplement') {
+          pushMessage({ role: 'ai', content: '回复超时，已停止等待。可以重试，或直接输入新内容继续。', time: nowTime(), failed: true });
+        }
+        return;
+      }
       // 用户主动停止：stopped 置位（视图显示「已停止」而非「连接失败」），
       // failed 仍置位提供重试入口；已收到的流式部分落成消息，
       // 否则 finally 清空 streamingText 后用户读到一半的答案直接消失
@@ -442,6 +479,8 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
     }
     throw e;
   } finally {
+    if (watchdog) window.clearTimeout(watchdog);
+    window.clearTimeout(deadlineTimer);
     // 仅当前代次负责收尾 sending，避免过期 run 的 finally 打断新会话的进行中状态
     if (gen === generation) {
       sending.value = false;
@@ -531,7 +570,13 @@ async function resumeById(cid: string): Promise<boolean> {
   sending.value = true;
   try {
     const env = await getGoalConversation(cid);
-    if (gen === generation) resumeErrorStatus.value = null;
+    if (gen === generation) {
+      resumeErrorStatus.value = null;
+      // 恢复请求的会话 id 是权威：即使服务端信封暂时缺少 internal.core.conversationId，
+      // 也必须沿用 cid。否则恢复后下一条消息会走 start 分支，新建一个 gc_xxx 会话。
+      conversationId.value = cid;
+      setGoalConversationCid(cid);
+    }
     applyEnvelope(env, { replaceMessages: true }, gen);
     if (gen === generation && messages.value.length === 0) {
       const cached = getGoalConversationMsgs();

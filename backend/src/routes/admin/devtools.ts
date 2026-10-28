@@ -123,18 +123,23 @@ router.post('/devtools/outbox/requeue-dead', async (req: Request, res: Response)
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
-    const body = (req.body || {}) as { eventType?: string };
+    const body = (req.body || {}) as { eventType?: string; force?: boolean };
     const eventType = typeof body.eventType === 'string' && body.eventType.trim() ? body.eventType.trim() : undefined;
+    const force = body.force === true;
 
-    const requeued = await requeueDeadOutboxEvents(eventType);
+    const requeued = await requeueDeadOutboxEvents(eventType, { force });
     return res.json({
       success: true,
-      data: { requeued, eventType: eventType || 'all' }
+      data: { requeued, eventType: eventType || 'all', force }
     });
   } catch (error: any) {
-    return res.status(500).json({
+    const status = error?.code === 'OUTBOX_DEAD_LETTER_ROOT_CAUSE' ? 409 : 500;
+    return res.status(status).json({
       success: false,
-      error: { message: error.message || '死信重置失败' }
+      error: {
+        message: error.message || '死信重置失败',
+        ...(error?.code ? { code: error.code } : {}),
+      }
     });
   }
 });

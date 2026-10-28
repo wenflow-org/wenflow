@@ -56,7 +56,7 @@ export const MAX_CANDIDATES = 60;
 export const MIN_CONFIDENCE = 0.8;
 /** 词面相似度闸门：达到才允许 P2 自动执行（否则只记录、需人工看） */
 export const MIN_LEXICAL_SIMILARITY = 0.5;
-/** 观察/执行节流：同一指纹在该小时内不重复调用 LLM */
+/** 观察/执行节流：同一指纹在该小时数（12h）内不重复调用 LLM */
 export const THROTTLE_HOURS = 12;
 /** 审计里最多保留多少条建议（滚动） */
 export const MAX_AUDIT_PROPOSALS = 200;
@@ -502,9 +502,9 @@ export type ProposalTrack = 'auto' | 'review';
  */
 export function classifyProposals(proposals: ConceptMergeProposal[]): Array<ConceptMergeProposal & { track: ProposalTrack }> {
   return (proposals ?? []).map((proposal) => {
+    const canonicalForm = conceptFormKey(proposal.canonical);
     const sameForm = (proposal.aliases ?? []).length > 0
-      && (proposal.aliases ?? []).every((alias) =>
-        conceptFormKey(alias) === conceptFormKey(proposal.canonical));
+      && (proposal.aliases ?? []).every((alias) => conceptFormKey(alias) === canonicalForm);
     return { ...proposal, track: (proposal.autoApplicable && sameForm ? 'auto' : 'review') as ProposalTrack };
   });
 }
@@ -935,14 +935,15 @@ class ConceptConsolidatorService {
     // 闸门：归并后仍有**阻断性**同形残余 → 本轮不调 LLM（确定性残余不该花模型调用）。
     // 「阻断性」= 该组的同形对并非全部挂在人审队列——挂队对是「留人工的决定」而非失败残余，
     // 不阻断 observe（否则人工出队前该用户 observe 全部停摆）；预闸门也不会碰它们。
-    const residualGroups = findSameFormGroups(candidates).filter((group) =>
-      group.variants.some((variant, index) =>
-        group.variants.slice(index + 1).some((other) => {
-          const fv = conceptFormKey(variant);
-          const fo = conceptFormKey(other);
+    const residualGroups = findSameFormGroups(candidates).filter((group) => {
+      // 组内 form key 一次性预计算（旧口径每对比较重复算 2 次）
+      const forms = group.variants.map((variant) => conceptFormKey(variant));
+      return forms.some((fv, index) =>
+        forms.slice(index + 1).some((fo) => {
           const pairKey = fv < fo ? `${fv}\u0001${fo}` : `${fo}\u0001${fv}`;
           return !preGate.queuedPairKeys.has(pairKey);
-        })));
+        }));
+    });
     if (residualGroups.length > 0) {
       logger.warn('[concept-consolidator] 预闸门：同形残余未清零，本轮不调 LLM', {
         userId,
@@ -2381,16 +2382,27 @@ class ConceptConsolidatorService {
     const executable = proposals.filter((item) => options.includeNeedsReview || item.autoApplicable);
     if (executable.length === 0) return applied;
 
+    // 行快照只取一次、循环内随写同步（旧口径每条建议全量拉取该用户全部 traces——
+    // P 条建议 = P 次全表抓取，planMerge 再在内存里按 family 过滤）。同一用户有 inflight
+    // 去重锁、循环期间无并发写者，updateTrace/deleteTraces 的效果直接反映到快照，
+    // 与逐次重取语义等价；异常路径（revertMerge 回滚）下一轮整表重取，不做增量镜像。
+    // 仍整行抓取：回滚快照要完整（dueAt/FSRS 状态/知识状态 EMA 都要能还原）。
+    let traceRows = (await this.deps.findTraces({ where: { userId } })) as TraceRow[];
     for (const proposal of executable) {
       try {
-        // 整行抓取：回滚快照要完整（dueAt/FSRS 状态/知识状态 EMA 都要能还原）
-        const rows = await this.deps.findTraces({ where: { userId } });
-        const plan = planMerge(rows as TraceRow[], proposal.canonical, proposal.aliases);
+        const plan = planMerge(traceRows, proposal.canonical, proposal.aliases);
         if (!plan) continue;
 
         await this.deps.updateTrace({ where: { id: plan.winnerId }, data: plan.mergedFields });
         if (plan.deletedRows.length > 0) {
           await this.deps.deleteTraces({ where: { id: { in: plan.deletedRows.map((row) => row.id) } } });
+        }
+        // 快照与库同步：winner 吸收 mergedFields、别名行移除
+        const winnerRow = traceRows.find((row) => row.id === plan.winnerId);
+        if (winnerRow) Object.assign(winnerRow, plan.mergedFields);
+        if (plan.deletedRows.length > 0) {
+          const deletedIds = new Set(plan.deletedRows.map((row) => row.id));
+          traceRows = traceRows.filter((row) => !deletedIds.has(row.id));
         }
         const appliedAt = new Date().toISOString();
         const merge: AppliedConceptMerge = {
@@ -2419,6 +2431,8 @@ class ConceptConsolidatorService {
           canonical: proposal.canonical,
           error: error instanceof Error ? error.message : String(error),
         });
+        // 本条可能已发生部分写入（含 revertMerge 回滚）：整表重取快照，不让下一条基于脏快照规划
+        traceRows = (await this.deps.findTraces({ where: { userId } })) as TraceRow[];
       }
     }
     return applied;

@@ -11,7 +11,9 @@
           <!-- 账号轴的状态与账户操作归「账户信息」卡头（2026-10-08 重做）：沿用全站卡头语法，
                标题吃剩余宽度、尾部元素贴右（「头内成组」规则）。 -->
           <div class="mk-card__head">
-            <h3 class="mk-card__title">账户与许可</h3>
+            <!-- 2026-10-23 走查：标题原为「账户与许可」，页签叫「账号与许可」——同屏两个词；
+                 统一跟页签用「账号」（本卡字段也叫「账号类型」「账号操作」） -->
+            <h3 class="mk-card__title">账号与许可</h3>
             <div class="mk-card__head-right">
               <span class="mk-badge" :class="isDeleted ? 'mk-badge--deleted' : 'mk-badge--ok'">
                 {{ isDeleted ? '已删除' : '正常' }}
@@ -19,10 +21,11 @@
               <button v-if="isDeleted" type="button" class="mk-btn mk-btn--sm" :disabled="restoring" @click="doRestore">
                 {{ restoring ? '恢复中…' : '恢复用户' }}
               </button>
+              <button v-else type="button" class="mk-btn mk-btn--sm" @click="openEdit">编辑</button>
               <div v-if="canDelete" class="mk-menu">
-                <button type="button" class="mk-menu__btn" aria-label="账户操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
+                <button type="button" class="mk-menu__btn" aria-label="账号操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
                 <div v-if="openMenu === 'account'" class="mk-menu__pop" :style="popStyle" @click.stop>
-                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
+                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留" @click="menuDelete">删除账号…</button>
                 </div>
               </div>
             </div>
@@ -67,6 +70,8 @@
           <div v-if="grantMsgTone === 'error'" class="mk-alert ud-grant-row__notice">{{ grantMessage }}</div>
         </section>
     </div>
+    <!-- 与账号列表行内「编辑」同一份表单：改昵称 / 邮箱 / 角色、重置密码 -->
+    <UserFormDialog v-model:open="editOpen" :user="editUser" @saved="onEdited" />
   </div>
 
   <div v-else-if="detailError" class="ud-root">
@@ -94,7 +99,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
-import { liveUsers, timeAgo, errMsg, shortId } from './live'
+import UserFormDialog, { type EditableUser } from './UserFormDialog.vue'
+import { liveUsers, timeAgo, errMsg, shortId, refreshLiveUsers } from './live'
+import { isLive } from './store'
 import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
@@ -247,6 +254,21 @@ async function openDebugStation() {
   if (!id || grantStatus.value !== 'active' || !projectionGrant.value?.id) return
   // 打开前先校验并清掉过期残留：本地不留已被服务端拒收的旧 token（本次会重新签发）
   purgeExpiredProjectionToken()
+  /* 先同步占位开窗再签发 token：window.open 在 await 之后会丢掉用户手势而被弹窗拦截。
+     失败时关掉空白窗并回传错误，不留白页。 */
+  const win = window.open('', '_blank')
+  if (!win) {
+    grantMessage.value = '打开失败：浏览器拦截了新标签页，请允许本站弹窗后重试'
+    grantMsgTone.value = 'error'
+    return
+  }
+  try {
+    win.opener = null
+    win.document.title = '正在打开调试站…'
+    win.document.body.textContent = '正在验证协助许可…'
+  } catch {
+    /* 同源窗口正常可写；受限浏览器忽略占位文案 */
+  }
   grantOpening.value = true
   try {
     const response = await adminUsersApi.createProjectionTokenFromGrant(projectionGrant.value.id, {
@@ -271,8 +293,9 @@ async function openDebugStation() {
     // 与 token 同步落过期时刻：先有 token 后有期限，避免出现无法清理的孤儿 token
     localStorage.setItem(PROJECTION_TOKEN_EXPIRES_KEY, String(expiresAt))
     projectionTokenExpiresAt.value = expiresAt
-    window.open('/admin/console', '_blank')
+    win.location.replace('/admin/console')
   } catch (e) {
+    win.close()
     grantMessage.value = `打开失败：${errMsg(e)}`
     grantMsgTone.value = 'error'
   } finally {
@@ -320,6 +343,29 @@ async function menuDelete() {
   closeMenu()
   await doDelete()
 }
+
+/* 编辑：与账号列表行内「编辑」共用 UserFormDialog（改昵称 / 邮箱 / 角色、重置密码） */
+const editOpen = ref(false)
+const editUser = computed<EditableUser | null>(() => {
+  const d0 = liveDetail.value
+  if (!d0) return null
+  return { id: uid.value, name: d0.name, email: d0.email, admin: d0.role === '管理员' }
+})
+function openEdit() {
+  editOpen.value = true
+}
+function onEdited(p: { mode: 'create' } | { mode: 'edit'; id: string; name: string; email: string; admin: boolean }) {
+  if (p.mode !== 'edit') return
+  // 详情与列表同源：本页改完，列表里的同一行也要同步（列表数据在 live 域）
+  const base = liveUsers.value.find((u) => u.id === p.id)
+  if (base) {
+    base.name = p.name
+    base.email = p.email
+    base.isAdmin = p.admin
+  }
+  void loadDetail()
+}
+
 async function doDelete() {
   const id = uid.value
   const name = liveDetail.value?.name || id
@@ -337,6 +383,12 @@ async function doDelete() {
     doneConfirm()
     // 停在本页：重拉后 isDeleted 翻真，删除入口被「恢复用户」顶替，详情态与后端一致
     void loadDetail()
+    // 列表同源：不重拉 live 域的话，从详情返回列表这一行还在、还显示正常
+    if (isLive.value) {
+      await refreshLiveUsers().catch(() => {
+        toast.error('用户已删除，但列表刷新失败，请手动刷新')
+      })
+    }
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
     failConfirm()
@@ -362,6 +414,12 @@ async function doRestore() {
     toast.success('用户已恢复，可重新登录')
     isDeleted.value = false
     void loadDetail()
+    // 列表同源：与列表页恢复后 refreshLiveUsers 同一口径
+    if (isLive.value) {
+      await refreshLiveUsers().catch(() => {
+        toast.error('用户已恢复，但列表刷新失败，请手动刷新')
+      })
+    }
   } catch (e) {
     toast.error(`恢复失败：${errMsg(e)}`)
   } finally {
@@ -421,7 +479,7 @@ async function loadDetail() {
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* 账号类型（2026-10-11 深设计）：这一页的主语标签——数据隔离/排查先要知道看的是谁。
-   口径与列表徽章（MkVariantBadge 判例）、live.ts 的 isVirtualLearner/isTestAccount 一致 */
+   口径与列表身份徽章（虚拟 / 测试两类备注）、live.ts 的 isVirtualLearner/isTestAccount 一致 */
 const acctType = computed(() => {
   const base = liveUsers.value.find((u) => u.id === uid.value)
   if (!base) return '—'

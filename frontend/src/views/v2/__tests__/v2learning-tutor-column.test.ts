@@ -69,6 +69,7 @@ const EXEMPT: Record<string, string> = {
   'tutor__jump-bottom': 'absolute 浮标，自身 translateX(-50%) 居中',
   composer: '通栏输入条，内层 .composer__box 已完成 760 居中',
   finish: '整卡完成浮层，刻意铺满',
+  settle: '整卡结算进度浮层，刻意铺满',
 };
 
 /** 选择器边界匹配：`.tutor > .checkpoint-xxx` 不算覆盖到 `.checkpoint`（子串匹配会放过它） */

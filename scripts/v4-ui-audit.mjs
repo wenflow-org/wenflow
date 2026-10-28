@@ -102,8 +102,8 @@ const ADMIN_PAGES = [
   ['skills-model-routing', '/admin/skills?tab=model-routing'],
   ['skills-health', '/admin/skills?tab=health'],
   ['skills-drift', '/admin/skills?tab=drift'],
-  // Prompt 评估已折入 skills 宿主页签（旧 /admin/prompt-eval 走重定向；直接给目标 URL）
-  ['prompt-eval', '/admin/skills?peTab=cases'],
+  // Prompt 评估 2026-10-25 拆回独立页（侧栏 Skill 组）；旧 /admin/skills?tab=prompt-eval 由 Skills 页改投
+  ['prompt-eval', '/admin/prompt-eval?peTab=cases'],
   ['prompt-workbench', '/admin/prompt-workbench'],
   ['exec-logs', '/admin/execution-logs?tab=logs'],
   ['exec-trace', '/admin/execution-logs?tab=trace'],

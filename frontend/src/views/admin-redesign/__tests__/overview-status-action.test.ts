@@ -10,6 +10,10 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { intent, investigateAgent, investigateTodayFailures, intentQueryParams, statusActionOf } from '../store';
 
 describe('statusActionOf（结论行动作归属）', () => {
+  it('结论只有「需要关注」→ 去执行日志排查（失败数已下移到明细行）', () => {
+    expect(statusActionOf('需要关注')).toBe('investigate-today');
+  });
+
   it('讲「今日失败」→ 去执行日志排查', () => {
     expect(statusActionOf('需要关注：今日失败 17 次')).toBe('investigate-today');
   });

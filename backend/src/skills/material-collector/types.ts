@@ -42,6 +42,13 @@ export interface MaterialNeed {
   version?: string | null;
   /** 期望的发布机构（可选） */
   publisher?: string | null;
+  /**
+   * 资料来源域（2026-10-28 Frontier R1/R2 实证）：
+   * - public  = 公开权威资料（法规/标准/官方文档/版本化 API），交给 material-collector 联网检索；
+   * - private = 内部/自研/本公司/本院私有资料，联网注定搜不到，跳过采集，由 goal 请用户上传；
+   * - 缺失时由 inferMaterialOrigin 兜底（见 services/materials/material-need-origin.ts）。
+   */
+  origin?: 'public' | 'private' | null;
 }
 
 export interface MaterialSection {

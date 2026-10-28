@@ -92,4 +92,17 @@ describe('Announcements 列表布局（P1：空白灰区消除）', () => {
     expect(w.find('.mk-empty').exists()).toBe(true);
     w.unmount();
   });
+
+  /** 2026-10-26 用户「重新设计一下」：主操作曾独占页签条下面一整行、靠右浮在卡片之外 */
+  it('「新建公告」在卡头右组（不再有卡外工具行，状态条也不再重复一个入口）', async () => {
+    liveAnnouncements.value = [makeAnnouncement('a1')];
+    const w = await mountAnnouncements();
+    const right = w.find('.mk-card__head-right');
+    expect(right.exists()).toBe(true);
+    expect(right.text()).toContain('新建公告');
+    expect(right.find('.mk-btn--primary').exists()).toBe(true);
+    expect(w.find('.an-toolbar').exists()).toBe(false);
+    expect(w.findAll('.mk-status__actions')).toHaveLength(0);
+    w.unmount();
+  });
 });

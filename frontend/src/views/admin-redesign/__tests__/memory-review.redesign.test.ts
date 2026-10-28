@@ -86,6 +86,26 @@ describe('MemoryReview 面板（学习者详情页签内）', () => {
     failed.unmount();
   });
 
+  /** 2026-10-23 用户「还有后面的这几种文案」：卡头的机制/指路句撤除，
+   *  未观察状态落成卡内一行空态（动作钮「重新观察」在面板栏）。 */
+  it('卡头不再复述机制：课内温故计划/同族重复无 meta，归并审计未观察只给一行空态', async () => {
+    const w = await mountPanels(makeDetail({ audit: null }));
+    const cardOf = (title: string) =>
+      w.findAll('section.mk-card').find((c) => c.find('.mk-card__title').text() === title)!;
+    expect(cardOf('课内温故计划').find('.mk-card__meta').exists()).toBe(false);
+    expect(cardOf('同族重复').find('.mk-card__meta').exists()).toBe(false);
+    const audit = cardOf('概念归并审计');
+    expect(audit.find('.mk-card__meta').exists()).toBe(false);
+    expect(audit.text()).toContain('尚未观察过这个用户的记忆归并');
+    // 2026-10-23 用户「有什么意义吗下面表格都有了」：顶部摘要条整条撤除，重新观察并入审计卡头
+    expect(w.find('.mr-panels__bar').exists()).toBe(false);
+    expect(w.text()).not.toContain('有强度数据');
+    expect(audit.findAll('.mk-card__head button').map((b) => b.text())).toContain('重新观察');
+    expect(w.text()).not.toContain('点「重新观察」跑一次');
+    expect(w.text()).not.toContain('按负担预算排队');
+    w.unmount();
+  });
+
   /** 2026-10-18 用户走查「排序呢」：到期预览列头可排序，且排序是**服务端**的
    *  （卡片只发前 20 条，客户端只会在那 20 条里换序——useTableSort 头注明的截断列表禁用判例）。 */
   it('到期预览列表头排序：排序键当请求参数下发（服务端截断前排序），caret 与卡头口径跟随', async () => {
@@ -102,19 +122,20 @@ describe('MemoryReview 面板（学习者详情页签内）', () => {
     /* 卡头口径取「到期清单预览」这张卡的 meta（同页多张卡，不能用 .mk-card__head 选中第一张） */
     const dueMetaOf = (wrapper: ReturnType<typeof mount>) =>
       wrapper.findAll('section.mk-card').find((c) => c.find('.mk-card__title').text() === '到期清单预览')!.find('.mk-card__meta');
-    // 默认口径 = 记忆强度升序（后端默认，卡头如实写）
+    // 默认口径 = 记忆强度升序（后端默认）：状态由列头 aria-sort 表达
     expect(thOf('记忆强度').attributes('aria-sort')).toBe('ascending');
     expect(thOf('掌握').attributes('aria-sort')).toBe('none');
-    expect(dueMetaOf(w).text()).toContain('记忆强度升序');
+    // 卡头只说截断（2026-10-23 用户「这几种文案」：排序/机制文字已撤）
+    expect(dueMetaOf(w).text()).toBe('仅前 20 条');
+    expect(dueMetaOf(w).text()).not.toContain('升序');
 
-    // 点「掌握」→ 以该键重取（截断前排序），caret 与卡头同时跟到新口径
+    // 点「掌握」→ 以该键重取（截断前排序），caret 跟到新口径
     detail.mockClear();
     await thOf('掌握').find('button').trigger('click');
     await flushPromises();
     expect(detail).toHaveBeenLastCalledWith('u1', { dueSort: 'mastery', dueOrder: 'asc' });
     expect(thOf('掌握').attributes('aria-sort')).toBe('ascending');
     expect(thOf('记忆强度').attributes('aria-sort')).toBe('none');
-    expect(dueMetaOf(w).text()).toContain('掌握升序');
 
     // 再点同列 → 翻转方向
     detail.mockClear();
@@ -122,22 +143,24 @@ describe('MemoryReview 面板（学习者详情页签内）', () => {
     await flushPromises();
     expect(detail).toHaveBeenLastCalledWith('u1', { dueSort: 'mastery', dueOrder: 'desc' });
     expect(thOf('掌握').attributes('aria-sort')).toBe('descending');
-    // 「到期」列的方向另有一套人话（逾期先后），不写升降序
+    // 「到期」列同款：方向由 aria-sort 表达，卡头不再写「逾期最久在前」
     detail.mockClear();
     await thOf('到期').find('button').trigger('click');
     await flushPromises();
     expect(detail).toHaveBeenLastCalledWith('u1', { dueSort: 'due', dueOrder: 'asc' });
-    expect(dueMetaOf(w).text()).toContain('到期逾期最久在前');
+    expect(thOf('到期').attributes('aria-sort')).toBe('ascending');
+    expect(dueMetaOf(w).text()).toBe('仅前 20 条');
 
-    // 卡头长释把「排序在截断之前」讲清楚（读者据此才知道能不能当全量排序用）
+    // 截断口径仍可悬停读到（排序在截断之前完成）
     expect(dueMetaOf(w).attributes('title')).toContain('排序在截断之前');
 
-    // 后端回显才是生效口径：接口回落默认时，卡头不得说是本地选的那档
+    // 后端回显才是生效口径：接口回 mastery/desc 时列头跟回显走（本地默认是记忆强度升序）
     const echoed = await mountPanels(makeDetail({
-      dueSort: { key: 'retention', order: 'asc' },
+      dueSort: { key: 'mastery', order: 'desc' },
       duePreview: [{ conceptKey: 'k1', label: '甲', retention: 0.4, masteryScore: 0.2, extractionCount: 1, source: null, dueAt: at(-3) }],
     }));
-    expect(dueMetaOf(echoed).text()).toContain('记忆强度升序');
+    expect(echoed.findAll('.mr__detail th.mk-th--sortable').find((th) => th.text().includes('掌握'))!.attributes('aria-sort')).toBe('descending');
+    expect(echoed.findAll('.mr__detail th.mk-th--sortable').find((th) => th.text().includes('记忆强度'))!.attributes('aria-sort')).toBe('none');
   });
 
   /** P1#13：到期清单预览的到期列改相对表达 + 逾期着色（绝对时刻进 title） */

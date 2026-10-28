@@ -14,6 +14,7 @@ function makeDeps() {
   const aliasToId = new Map<string, string>();
   const edges = new Map<string, { fromConceptId: string; toConceptId: string; relation: string; scope: string; pathId: string | null }>();
   const calls = { resolve: 0, upsert: 0 };
+  const anchors: Array<{ userId: string; pathId: string; kcId: string; conceptId: string }> = [];
   let seq = 0;
 
   const deps: ConceptGraphDeps = {
@@ -49,8 +50,9 @@ function makeDeps() {
     },
     async listTraceMastery() { return []; },
     async listPathTitles(pathIds) { return pathIds.map((id) => ({ id, title: `路径 ${id}` })); },
+    async registerKcAnchor(data) { anchors.push(data); },
   };
-  return { deps, concepts, edges, calls, idOf: (label: string) => aliasToId.get(`u1\u0000${label}`)! };
+  return { deps, concepts, edges, calls, anchors, idOf: (label: string) => aliasToId.get(`u1\u0000${label}`)! };
 }
 
 const annotation = {
@@ -142,6 +144,28 @@ describe('materializePathGraph（图物化）', () => {
     const svc = new ConceptGraphService(deps);
     expect(await svc.materializePathGraph({ userId: 'u1', pathId: 'p1', kcAnnotation: null })).toEqual({ prerequisite: 0, partOf: 0, prerequisiteConcept: 0, prerequisiteUser: 0, skipped: 0 });
     expect(await svc.materializePathGraph({ userId: 'u1', pathId: '', kcAnnotation: annotation })).toEqual({ prerequisite: 0, partOf: 0, prerequisiteConcept: 0, prerequisiteUser: 0, skipped: 0 });
+  });
+
+  // #94：计划侧写入先登记 kcId 稳定键，痕迹侧按同一锚键解析，不再依赖首条痕迹的措辞。
+  it('#94：物化时把 kcId 锚登记到对应 KC 的 canonical 身份上', async () => {
+    const { deps, anchors, idOf } = makeDeps();
+    const svc = new ConceptGraphService(deps);
+    await svc.materializePathGraph({ userId: 'u1', pathId: 'p1', kcAnnotation: annotation, cognitiveCore: core });
+
+    expect(anchors).toEqual([
+      { userId: 'u1', pathId: 'p1', kcId: 'kc-1a', conceptId: idOf('识别列名差异') },
+      { userId: 'u1', pathId: 'p1', kcId: 'kc-1b', conceptId: idOf('按公共键对齐拼接') },
+    ]);
+  });
+
+  it('#94：锚登记抛错不影响边物化（best-effort）', async () => {
+    const { deps } = makeDeps();
+    deps.registerKcAnchor = async () => { throw new Error('alias write failed'); };
+    const svc = new ConceptGraphService(deps);
+    const r = await svc.materializePathGraph({ userId: 'u1', pathId: 'p1', kcAnnotation: annotation, cognitiveCore: core });
+
+    expect(r.partOf).toBe(2);
+    expect(r.prerequisite).toBe(1);
   });
 });
 

@@ -24,6 +24,13 @@ import { getSkillCompletion } from '../skill-registry/skill-completion.service';
 import { loadSkillsBookRaw } from '../skill-registry/skills-file';
 import { listRawManifestEntries } from '../agent-manifest.service';
 
+jest.mock('../../skills/degradation-telemetry', () => ({
+  readDegradationEvents: jest.fn(async () => []),
+}));
+jest.mock('../../events/outbox.worker', () => ({
+  getDeadOutboxSummary: jest.fn(async () => ({ deadCount: 0, items: [] })),
+}));
+
 const EMPTY_DB: HealthCenterDbAdapter = {
   agent_prompts: { findMany: jest.fn().mockResolvedValue([]) },
   skill_registrations: { findMany: jest.fn().mockResolvedValue([]) },
@@ -46,6 +53,8 @@ describe('巡检聚合（health-center/summary）', () => {
 
     // health：13 项全量 + 汇总
     expect(report.health.items.length).toBeGreaterThanOrEqual(13);
+    expect(report.health.items.some((item) => item.id === 'runtime-degradation')).toBe(true);
+    expect(report.health.items.some((item) => item.id === 'runtime-outbox-dead')).toBe(true);
     expect(report.health.summary.total).toBe(report.health.items.length);
     expect(report.health.abnormal).toBe(
       report.health.items.filter((i) => i.severity === 'error' || i.severity === 'warn').length,
@@ -86,7 +95,9 @@ describe('巡检聚合（health-center/summary）', () => {
       buildHealthCenterReport(EMPTY_DB),
     ]);
 
-    expect(summary.health.items.length).toBe(healthCenter.items.length);
+    // summary 比基础报告多两项运行时读数（degradation_events / outbox 死信），
+    // 其余仓库级检查项逐项 count 必须一致。
+    expect(summary.health.items.length).toBe(healthCenter.items.length + 2);
     const summaryById = new Map(summary.health.items.map((i) => [i.id, i]));
     for (const item of healthCenter.items) {
       const mine = summaryById.get(item.id);
@@ -95,7 +106,10 @@ describe('巡检聚合（health-center/summary）', () => {
       expect(mine!.status).toBe(item.status);
       expect(mine!.severity).toBe(item.severity);
     }
-    expect(summary.health.summary).toEqual(healthCenter.summary);
+    expect(summary.health.summary).toEqual({
+      ...healthCenter.summary,
+      total: healthCenter.summary.total + 2,
+    });
   });
 
   it('与现有端点一致：reconciliation 与 /skills/readiness 同源计数一致', async () => {

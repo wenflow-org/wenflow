@@ -10,8 +10,6 @@ import {
   getRuntimeNetworkPolicy,
   updateRuntimeNetworkPolicy
 } from '../../services/runtime-network-policy.service';
-import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
-import { getRuntimeCapabilityProbeEnabled } from '../../services/capability-probe-settings.service';
 import { endpointsMatch, resolveEndpointBoundSecret } from '../../utils/endpoint-identity';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
@@ -124,7 +122,9 @@ router.put('/', async (req, res) => {
       lightEndpoint,
       chatModels,
       reasoningModels,
-      lightModels
+      lightModels,
+      connectionStatus,
+      lastCheckedAt
     } = req.body;
 
     const currentConfig = await apiConfigService.getConfig();
@@ -180,6 +180,20 @@ router.put('/', async (req, res) => {
       ? parsedModelsArray
       : currentConfig.availableModels;
 
+    // 连接域可随保存一起落盘（前端「连接并拉取 / 重新拉取」的真实结果）。
+    // 只认三态字符串与合法时间戳，防止把任意 body 写成连接状态。
+    const connectionUpdate: { connectionStatus?: string; lastCheckedAt?: Date } = {};
+    if (typeof connectionStatus === 'string') {
+      const normalized = connectionStatus.trim().toLowerCase();
+      connectionUpdate.connectionStatus = ['connected', 'failed', 'unknown'].includes(normalized)
+        ? normalized
+        : 'unknown';
+    }
+    if (typeof lastCheckedAt === 'string' && lastCheckedAt.trim()) {
+      const parsed = new Date(lastCheckedAt);
+      if (!Number.isNaN(parsed.getTime())) connectionUpdate.lastCheckedAt = parsed;
+    }
+
     const updatedConfig = await apiConfigService.updateConfig({
       apiUrl: finalApiUrl,
       apiKey: resolvedApiKey,
@@ -202,17 +216,13 @@ router.put('/', async (req, res) => {
       lightEndpoint: finalLightEndpoint,
       chatModels: chatModels || currentConfig.chatModels,
       reasoningModels: reasoningModels || currentConfig.reasoningModels,
-      lightModels: lightModels || currentConfig.lightModels
+      lightModels: lightModels || currentConfig.lightModels,
+      ...connectionUpdate
     });
     // 操作审计：保存后快照新配置（脱敏由审计中间件完成）
     setAuditAfter(res, updatedConfig);
 
     getAPIGateway().invalidateCache();
-    // 配置变更后校准连接状态。能力探针关闭时不自动探测（与探针开关语义一致，避免关闭后仍发 LLM 请求）。
-    if (await getRuntimeCapabilityProbeEnabled()) {
-      void aiCapabilityHealthService.refresh().catch(() => undefined);
-    }
-
     res.json({
       success: true,
       data: {
@@ -246,8 +256,17 @@ router.put('/', async (req, res) => {
 router.post('/test', async (req, res) => {
   try {
     const { apiUrl, apiKey } = req.body;
-    
-    const result = await apiConfigService.testConnection(apiUrl, apiKey);
+
+    /* 「测试连通性」不要求重敲密钥：地址没换且留空时沿用已保存的那把。
+       地址一变就不回退——不能把旧密钥发给一个还没验证过的新端点。 */
+    const url = String(apiUrl || '').trim();
+    let key = String(apiKey || '').trim();
+    if (!key && url) {
+      const saved = await apiConfigService.getConfig();
+      if (url === String(saved.apiUrl || '').trim()) key = saved.apiKey;
+    }
+
+    const result = await apiConfigService.testConnection(url, key);
     
     if (result.success) {
       res.json({
@@ -359,11 +378,6 @@ router.post('/reset', async (req, res) => {
   try {
     await apiConfigService.resetConfig();
     getAPIGateway().invalidateCache();
-    // 重置后校准连接状态；能力探针关闭时不自动探测（尊重探针开关）
-    if (await getRuntimeCapabilityProbeEnabled()) {
-      void aiCapabilityHealthService.refresh().catch(() => undefined);
-    }
-
     res.json({
       success: true,
       message: '配置已重置为默认值'

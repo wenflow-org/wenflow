@@ -19,37 +19,21 @@
     <div class="filters">
       <label class="filter-item">
         <span class="filter-label">Agent</span>
-        <select v-model="filters.agentId" class="uc-field__input filter-select">
-          <option value="">全部</option>
-          <option value="skill:path-planning">Path Agent</option>
-          <!-- 两个 id 都是授课（新 teaching-agent / 旧 ai-teaching-agent），展示名统一「AI 授课」；
-               旧 id 只服务历史数据，保留独立筛选项 -->
-          <option value="teaching-agent">AI 授课</option>
-          <option value="ai-teaching-agent">AI 授课（legacy）</option>
-          <option value="learner-model-agent">Learner State Hub</option>
-        </select>
+        <div class="filter-select">
+          <MkSelect v-model="filters.agentId" :options="AGENT_OPTIONS" aria-label="Agent" block />
+        </div>
       </label>
       <label class="filter-item">
         <span class="filter-label">活动类型</span>
-        <select v-model="filters.capabilityType" class="uc-field__input filter-select">
-          <option value="">全部</option>
-          <option value="goal">目标对话</option>
-          <option value="path">路径规划</option>
-          <option value="teaching">教学讲解</option>
-          <option value="tutoring">辅导答疑</option>
-          <!-- 与下方 getCapabilityTypeLabel 的 profile 标签同词（能力列显示「学习者模型」），
-               此前筛选项叫「学习画像更新」、表格里叫「学习者模型」，同一类两条名 -->
-          <option value="profile">学习者模型</option>
-          <option value="system">系统底层调用</option>
-        </select>
+        <div class="filter-select">
+          <MkSelect v-model="filters.capabilityType" :options="CAPABILITY_OPTIONS" aria-label="活动类型" block />
+        </div>
       </label>
       <label class="filter-item">
         <span class="filter-label">状态</span>
-        <select v-model="filters.success" class="uc-field__input filter-select">
-          <option :value="undefined">全部</option>
-          <option :value="true">成功</option>
-          <option :value="false">失败</option>
-        </select>
+        <div class="filter-select">
+          <MkSelect v-model="filters.success" :options="SUCCESS_OPTIONS" aria-label="状态" block />
+        </div>
       </label>
       <label class="filter-item">
         <span class="filter-label">时间范围</span>
@@ -140,7 +124,7 @@
               </span></td>
               <td class="uc-table__muted">{{ row.durationMs ?? '-' }}</td>
               <td class="uc-table__muted">{{ row.tokensUsed ?? '-' }}</td>
-              <td class="uc-table__muted">{{ getModelSourceInfo(row).label }}</td>
+              <td class="uc-table__muted" :title="`来源：${getModelSourceInfo(row).label}`">{{ getModelSourceInfo(row).display }}</td>
               <td class="uc-table__muted logs-error-cell">{{ row.error || '-' }}</td>
               <td class="uc-table__muted">{{ formatDate(row.calledAt) }}</td>
               <td class="uc-table__right">
@@ -155,12 +139,16 @@
       <!-- 手作分页 -->
       <div class="pagination">
         <span class="pagination__total">共 {{ pagination.total }} 条</span>
-        <select v-model.number="pagination.limit" class="uc-field__input pagination__size" @change="onLimitChange">
-          <option :value="10">10条/页</option>
-          <option :value="20">20条/页</option>
-          <option :value="50">50条/页</option>
-          <option :value="100">100条/页</option>
-        </select>
+        <div class="pagination__size">
+          <MkSelect
+            v-model="pagination.limit"
+            :options="LIMIT_OPTIONS"
+            aria-label="每页条数"
+            size="sm"
+            block
+            @change="onLimitChange"
+          />
+        </div>
         <div class="pagination__nav">
           <button type="button" class="uc-btn uc-btn--sm" :disabled="pagination.page <= 1 || loading" @click="goPage(pagination.page - 1)">上一页</button>
           <span class="pagination__page">第 {{ pagination.page }} / {{ totalPages }} 页</span>
@@ -255,6 +243,7 @@ import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCust
 import { useEscape } from '@/views/admin-redesign/useEscape';
 import { useOverlay } from '@/views/admin-redesign/useOverlay';
 import dayjs from 'dayjs';
+import MkSelect from '@/components/mk/MkSelect.vue';
 import '@/components/user/uc.css';
 
 interface AgentLogItem {
@@ -270,6 +259,8 @@ interface AgentLogItem {
   sourceEntry?: string | null;
   callerAgent?: string | null;
   logSource?: string;
+  /** 实际模型名（折叠会话由后端从组内网关 span 提取） */
+  model?: string | null;
   input?: unknown;
   output?: unknown;
   metadata?: unknown;
@@ -317,6 +308,40 @@ const pagination = reactive({
   limit: 20,
   total: 0
 });
+
+/* 筛选/分页下拉的选项表（2026-10-27 原生 select → MkSelect 自绘弹层）。
+   文案与原 option 逐字一致；success 三态保留 undefined，不能归一成空串。 */
+const AGENT_OPTIONS = [
+  { value: '', label: '全部' },
+  { value: 'skill:path-planning', label: 'Path Agent' },
+  /* 两个 id 都是授课（新 teaching-agent / 旧 ai-teaching-agent），展示名统一「AI 授课」；
+     旧 id 只服务历史数据，保留独立筛选项 */
+  { value: 'teaching-agent', label: 'AI 授课' },
+  { value: 'ai-teaching-agent', label: 'AI 授课（legacy）' },
+  { value: 'learner-model-agent', label: 'Learner State Hub' }
+];
+const CAPABILITY_OPTIONS = [
+  { value: '', label: '全部' },
+  { value: 'goal', label: '目标对话' },
+  { value: 'path', label: '路径规划' },
+  { value: 'teaching', label: '教学讲解' },
+  { value: 'tutoring', label: '辅导答疑' },
+  /* 与 getCapabilityTypeLabel 的 profile 标签同词（能力列显示「学习者模型」），
+     此前筛选项叫「学习画像更新」、表格里叫「学习者模型」，同一类两条名 */
+  { value: 'profile', label: '学习者模型' },
+  { value: 'system', label: '系统底层调用' }
+];
+const SUCCESS_OPTIONS: Array<{ value: boolean | undefined; label: string }> = [
+  { value: undefined, label: '全部' },
+  { value: true, label: '成功' },
+  { value: false, label: '失败' }
+];
+const LIMIT_OPTIONS = [
+  { value: 10, label: '10 条/页' },
+  { value: 20, label: '20 条/页' },
+  { value: 50, label: '50 条/页' },
+  { value: 100, label: '100 条/页' }
+];
 
 // 统计口径与表格一致：基于 displayLogs（客户端能力过滤后的当前页）。
 // 此前用未过滤的 logs，筛选「学习者模型」时成功率/耗时仍是全页的，数字对不上表。
@@ -697,13 +722,22 @@ const parseMetadata = (metadata: unknown): Record<string, unknown> => {
   return metadata as Record<string, unknown>;
 };
 
+const MODEL_SOURCE_LABELS = { user: '用户 AI API', platform: '内置模型' } as const;
+
 const getModelSourceInfo = (log: AgentLogItem | null) => {
   const metadata = parseMetadata(log?.metadata);
   const usesUserProvider = !!metadata.usesUserProvider;
+  const modelName = (typeof log?.model === 'string' ? log.model : '')
+    || (typeof metadata.model === 'string' ? metadata.model : '')
+    || '';
+  const trimmedModelName = modelName.trim();
+  const sourceLabel = usesUserProvider ? MODEL_SOURCE_LABELS.user : MODEL_SOURCE_LABELS.platform;
 
   return {
     usesUserProvider,
-    label: usesUserProvider ? '用户 AI API' : '平台默认模型',
+    label: sourceLabel,
+    /* 表格「模型」列优先给实际模型名（如 deepseek-v4.1-flash）；日志未带模型时退回来源标签 */
+    display: trimmedModelName || sourceLabel,
     providerName: metadata.providerName || 'platform-default',
     providerBaseUrl: metadata.providerBaseUrl || '-',
     providerId: metadata.providerId || 'platform-default'
@@ -797,6 +831,24 @@ const copyText = async (text: string, successMessage: string) => {
 
 .filter-dates input {
   width: 130px;
+  height: 42px;
+}
+/* 日期输入的日历钮是浏览器自绘：压到与其它图标同一灰度，悬停再提亮；
+   color-scheme 让弹出的日历跟随明暗主题，不出现白底日历压在暗色页上。 */
+.filter-dates input[type='date'] {
+  color-scheme: light;
+  cursor: pointer;
+}
+.filter-dates input[type='date']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+.filter-dates input[type='date']:hover::-webkit-calendar-picker-indicator {
+  opacity: 0.9;
+}
+html[data-theme='dark'] .filter-dates input[type='date'] {
+  color-scheme: dark;
 }
 
 .filter-dates__sep {
@@ -904,12 +956,8 @@ const copyText = async (text: string, successMessage: string) => {
 }
 
 .pagination__size {
+  /* 包裹层只定宽，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉） */
   width: 110px;
-  padding: 6px 10px;
-  font-size: 12.5px;
-  /* 33px → 36px（mobile:spec 的 lt36 门禁）：它和其它 .uc-btn--sm 同排，
-     高矮不齐一眼可见 */
-  min-height: 36px;
 }
 
 .pagination__nav {

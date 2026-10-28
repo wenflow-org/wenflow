@@ -17,7 +17,9 @@ export async function getPlatformActivityFeed(params: {
     ? await buildRealUserWhere()
     : { isVirtualLearner: false };
   // 动态时间窗：仅近 24h（前端卡片标注「近 24h」；7 天前旧条目不再混入）
-  const activityWindowStart = new Date(Date.now() - 24 * 3600000);
+  // 上界 now：VL 模拟日允许进入真实未来，不能把未来完成记录当已发生。
+  const activityWindowEnd = new Date();
+  const activityWindowStart = new Date(activityWindowEnd.getTime() - 24 * 3600000);
 
   // 最近的学习会话
   // 列裁剪（2026-10-01 性能实测）：无 select 时整行返回含 messages 大列
@@ -28,7 +30,7 @@ export async function getPlatformActivityFeed(params: {
     orderBy: { startTime: 'desc' },
     where: {
       users: ACTIVITY_USER_WHERE,
-      startTime: { gte: activityWindowStart },
+      startTime: { gte: activityWindowStart, lte: activityWindowEnd },
     },
     select: {
       id: true,
@@ -61,7 +63,7 @@ export async function getPlatformActivityFeed(params: {
     orderBy: { createdAt: 'desc' },
     where: {
       ...(excludeTest ? await buildRealUserWhere() : { deletedAt: null }),
-      createdAt: { gte: activityWindowStart },
+      createdAt: { gte: activityWindowStart, lte: activityWindowEnd },
     },
     select: {
       id: true,
@@ -77,7 +79,7 @@ export async function getPlatformActivityFeed(params: {
     where: {
       status: 'completed',
       users: ACTIVITY_USER_WHERE,
-      completedAt: { gte: activityWindowStart },
+      completedAt: { gte: activityWindowStart, lte: activityWindowEnd },
     },
     orderBy: { completedAt: 'desc' },
     include: {
@@ -92,7 +94,7 @@ export async function getPlatformActivityFeed(params: {
   const recentFailures = await prisma.agent_call_logs.findMany({
     take: 10,
     where: {
-      calledAt: { gte: activityWindowStart },
+      calledAt: { gte: activityWindowStart, lte: activityWindowEnd },
       success: false,
       // sourceEntry 非空（String @default("platform")）：直接 not 过滤，勿用 { sourceEntry: null }
       sourceEntry: { not: 'system-canary' },

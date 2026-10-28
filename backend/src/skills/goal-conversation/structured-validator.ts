@@ -29,8 +29,54 @@ export interface StructuredValidationResult {
 // JSON 提取核心（3 级策略 + 不完整 JSON 修复 + 对话文本拆分）已提升至 composers/json-extractor.ts（2026-08 去重合并）
 import { extractStructuredPayloadWithDialogue } from '../../composers/json-extractor';
 import type { StructuredPayloadParseResult } from '../../composers/json-extractor';
+import { normalizeDeadlineDate } from '../../services/learning/deadline-date';
 
 export type { StructuredPayloadParseResult };
+
+/**
+ * R8：time_dimensions 的硬校验范围。
+ * 只硬校验新权威字段（写错会导致预算静默走兜底，必须 retry）；
+ * legacy 字段不阻断（可继续落库供诊断），非法值由归一层丢弃。
+ */
+const R8_NUMERIC_TIME_FIELDS: ReadonlyArray<{ key: string; min: number; max: number }> = [
+  { key: 'sessionsLengthMin', min: 1, max: 480 },
+  { key: 'sessionLengthMin', min: 1, max: 480 }, // 兼容单数拼写
+  { key: 'objectiveScopeHours', min: 0.1, max: 2000 },
+];
+
+function collectTimeDimensionViolations(payload: any): string[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const raw = payload.understanding?.time_dimensions
+    ?? payload.goalConversation?.understanding?.time_dimensions
+    ?? payload.state?.understanding?.time_dimensions;
+  if (raw === undefined || raw === null) return [];
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return ['understanding.time_dimensions 必须是对象'];
+  }
+  const violations: string[] = [];
+  for (const { key, min, max } of R8_NUMERIC_TIME_FIELDS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      violations.push(`understanding.time_dimensions.${key} 必须是数字`);
+      continue;
+    }
+    if (value < min || value > max) {
+      violations.push(`understanding.time_dimensions.${key} 超出合理范围 [${min}, ${max}]`);
+    }
+  }
+  const deadline = (raw as Record<string, unknown>).deadlineDate;
+  if (deadline !== undefined && deadline !== null && !normalizeDeadlineDate(deadline)) {
+    violations.push('understanding.time_dimensions.deadlineDate 必须是 YYYY-MM-DD 或 null');
+  }
+  const version = (raw as Record<string, unknown>).timeModelVersion;
+  if (version !== undefined && version !== null) {
+    if (typeof version !== 'number' || version < 1 || version > 2) {
+      violations.push('understanding.time_dimensions.timeModelVersion 必须是 1 或 2');
+    }
+  }
+  return violations;
+}
 
 /**
  * 从 LLM 原始响应中提取结构化 JSON 与对话正文。
@@ -161,6 +207,19 @@ export function validateGoalConversationStructuredOutput(
       dialogueText,
       failureType: 'missing_required_fields',
       violations: ['缺少 nextQuestions 数组 (查找位置：顶层 | goalConversation.nextQuestions | state.nextQuestions)']
+    };
+  }
+
+  // R8：新时间模型字段类型/范围校验（不合法 → invalid_goal_payload，触发既有 retry notice）
+  const timeDimensionViolations = collectTimeDimensionViolations(payload);
+  if (timeDimensionViolations.length > 0) {
+    return {
+      valid: false,
+      parseMode,
+      parsedJson,
+      dialogueText,
+      failureType: 'invalid_goal_payload',
+      violations: timeDimensionViolations,
     };
   }
 

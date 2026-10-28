@@ -26,16 +26,27 @@ describe('VirtualProfile · 学习日程卡文案', () => {
   it('没有会话时只留空态：不报 0 个会话、不解释口径', () => {
     const block = timelineBlock()
     expect(block).toContain('v-if="!timelineSessionOptions.length"')
-    expect(block).toContain('这个虚拟学习者还没有会话。运行一个故事后，这里会按天显示日程。')
+    expect(block).toContain('这个虚拟学习者还没有运行记录。跑一个故事后，这里会按天显示日程。')
     expect(block).not.toContain('该虚拟人')
     // 徽章与说明都挂在「有会话」分支上
     expect(block).toContain('<span v-if="timelineSessionOptions.length" class="mk-badge')
     expect(block).not.toContain('暂无可查看的会话')
   })
 
+  it('选运行收进卡头右组：紧凑下拉，不再整行 label + 全宽 select', () => {
+    const block = timelineBlock()
+    expect(block).toContain('mk-card__head-right')
+    expect(block).toContain('vp-timeline__select')
+    // 整行的字段壳退役：label「运行」+ 全宽下拉会把一次选择撑成一行
+    expect(block).not.toContain('vp-timeline__picker')
+    expect(block).not.toContain('<span class="mk-field__label">运行</span>')
+    // 只有一次运行时不出下拉（单选项的下拉没有意义），改为一句 meta
+    expect(block).toContain('timelineSessionOptions.length > 1')
+  })
+
   it('口径只说一句「按自然日汇总」，不再复述只读与开关默认值', () => {
     const block = timelineBlock()
-    expect(block).toContain('按自然日汇总所选会话的学习负担、学习状态、系统干预与难度调整。')
+    expect(block).toContain('按自然日汇总所选运行的学习负担、学习状态、系统干预与难度调整。')
     expect(block).not.toContain('日期模拟默认关闭')
     expect(block).not.toContain('（只读）')
   })

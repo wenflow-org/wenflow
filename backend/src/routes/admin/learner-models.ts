@@ -2,6 +2,7 @@ import express from 'express';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
+import { findCalibrationEvidence } from '../../services/admin/learner-models.repo';
 import learningStateService from '../../services/learning/learning-state.service';
 import { dayKeyOf } from '../../services/time/day-boundary';
 import { checkIsAdmin } from '../../services/admin-access.service';
@@ -30,18 +31,16 @@ router.get('/', async (req, res) => {
       return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
     }
 
-    // 默认排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）；
-    // includeTest=true 时显式包含（管理需要可查虚拟数据，只改默认视图不删数据）
+    // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注，不再单列视角）；
+    // includeTest=true 是按 id 直查虚拟账号的逃生口（学习者详情），只改默认视图不删数据
     const includeTest = String(req.query.includeTest || '') === 'true';
-    const excludeTest = includeTest ? false : String(req.query.excludeTest || '') !== 'false';
 
     const data = await learnerSnapshotRefreshService.listForAdmin({
       userId: req.query.userId as string | undefined,
       pathId: req.query.pathId as string | undefined,
       staleOnly: req.query.staleOnly === 'true',
       riskOnly: req.query.riskOnly === 'true',
-      excludeTest,
-      testOnly: String(req.query.testOnly || '') === 'true',
+      includeTest,
       page: req.query.page ? Number(req.query.page) : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
     });
@@ -192,12 +191,56 @@ router.get('/:userId/evidence', async (req, res) => {
       // 压力趋势不可用（如用户无任何指标）时返回空数组，前端显示空态
     }
 
+    // 校准/复习明细（2026-10-21）：checkpoint:result 带判分前预测（predictedMastery/predictionSource），
+    // review:completed 带逐概念 rating——此前只在 learner_evidence.payload 里，管理端任何页面都读不到。
+    // 这里给一份人读摘要（不搬整包 payload），供证据页「校准明细」卡直接展示。
+    let calibrationDetails: Array<{
+      type: string;
+      detail: string;
+      sessionId?: string;
+      taskId?: string;
+      conceptKey?: string;
+      happenedAt: string;
+    }> = [];
+    try {
+      const rows = await findCalibrationEvidence(req.params.userId);
+      calibrationDetails = rows.map((row) => {
+        const payload = safeJsonParse<Record<string, any>>(row.payload) || {};
+        let detail = '';
+        if (row.evidenceType === 'checkpoint:result') {
+          const predicted = Number(payload.predictedMastery);
+          const source = String(payload.predictionSource || '');
+          const predictedText = Number.isFinite(predicted)
+            ? `预测 ${Math.round(predicted * 100)}%${source === 'kt-estimate' ? '（KT 估算）' : source === 'knowledge-state' ? '（知识状态）' : ''}`
+            : '无预测';
+          detail = `${predictedText} · 实际 ${payload.passed === true ? '通过' : '未通过'}${payload.detail ? `（${String(payload.detail)}）` : ''}`;
+        } else if (row.evidenceType === 'review:completed') {
+          const ratingZh: Record<string, string> = { again: '重来', hard: '困难', good: '良好', easy: '轻松' };
+          detail = `复习「${String(payload.conceptKey || '未命名概念')}」→ ${ratingZh[String(payload.rating)] || String(payload.rating || '—')}（掌握 ${Math.round(Number(payload.masteryScore ?? 0) * 100)}%）`;
+        } else {
+          const dirZh: Record<string, string> = { up: '升档', down: '降档', keep: '维持' };
+          detail = `难度 ${dirZh[String(payload.direction)] || String(payload.direction || '—')}：${payload.baseline ?? '—'} → ${payload.adjusted ?? '—'}${payload.applied === false ? '（未生效）' : ''}`;
+        }
+        return {
+          type: row.evidenceType,
+          detail,
+          sessionId: row.sessionId || undefined,
+          taskId: row.taskId || undefined,
+          conceptKey: typeof payload.conceptKey === 'string' ? payload.conceptKey : undefined,
+          happenedAt: row.occurredAt.toISOString(),
+        };
+      });
+    } catch {
+      calibrationDetails = [];
+    }
+
     return res.json({
       success: true,
       data: {
         items: teachingItems,
         domain: domainEvidence,
         loadCurve,
+        calibrationDetails,
       },
     });
   } catch (error: any) {

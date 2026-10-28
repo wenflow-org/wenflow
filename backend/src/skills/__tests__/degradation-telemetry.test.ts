@@ -16,9 +16,25 @@ import {
   resetDegradationCounters,
   degradationCause,
 } from '../degradation-telemetry';
+import prisma from '../../config/database';
 
 describe('degradation-telemetry（允许降级，不允许未打标降级）', () => {
-  beforeEach(() => resetDegradationCounters());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetDegradationCounters();
+  });
+
+  it('Jest 运行时不落库（避免测试污染 dev.db 造成健康中心幽灵异常）', () => {
+    recordDegradation({
+      source: 'test/db-isolation',
+      faultCategory: 'DB_READ_FAILED',
+      severity: 'P2_DEGRADED',
+      impactedDimensions: ['snapshot'],
+      mitigationApplied: 'return-empty',
+    });
+
+    expect((prisma.$executeRaw as unknown as jest.Mock)).not.toHaveBeenCalled();
+  });
 
   it('记录遥测并按 source 计数', () => {
     const record = recordDegradation({

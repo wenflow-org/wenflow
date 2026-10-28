@@ -26,6 +26,8 @@ import {
 import { loadCoreFile } from './prompt-lab/core-file-loader';
 import { listRawManifestEntries } from './agent-manifest.service';
 import type { SkillsBook } from './skill-registry/skills-file';
+import { readDegradationEvents } from '../skills/degradation-telemetry';
+import { getDeadOutboxSummary } from '../events/outbox.worker';
 
 // ============================================================
 // 类型（响应契约：分组清晰、计数字段稳定，前端一页式工作台直接可用）
@@ -117,6 +119,57 @@ export async function buildHealthCenterSummaryReport(
   // 与 /health-center 共用单次扫描（一次 fs 扫描 + 一次 DB 查询 + 一轮纯函数分析）
   const data = await collectHealthCenterScan(db, options);
   const items = assembleHealthCenterItems(data);
+
+  // 运行时降级读数（2026-10-22 审计 P2）：degradation_events 此前只写不读，
+  // 管理端看不到最频繁的运行时降级。作为 runtime-info 项并入健康清单（只读，不计入异常）。
+  const degradationEvents = await readDegradationEvents(Date.now() - 7 * 86400000).catch(() => null);
+  const degradationCounts = new Map<string, number>();
+  for (const event of degradationEvents ?? []) {
+    const key = `${event.source}/${event.faultCategory}`;
+    degradationCounts.set(key, (degradationCounts.get(key) ?? 0) + 1);
+  }
+  const topDegradation = [...degradationCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([key, count]) => `${key} × ${count}`);
+  items.push({
+    id: 'runtime-degradation',
+    label: '运行时降级事件（近 7 天）',
+    base: 'runtime',
+    semantics: 'runtime-info',
+    severity: degradationEvents === null
+      ? 'info'
+      : degradationEvents.length > 0 ? 'warn' : 'ok',
+    status: degradationEvents === null ? 'unavailable' : 'recorded',
+    count: degradationEvents?.length ?? 0,
+    detail: degradationEvents === null
+      ? ['degradation_events 读取失败或表尚未创建；不能据此判定「没有降级」']
+      : topDegradation,
+    cause: '降级遥测落库（degradation_events，保留 30 天）',
+    action: 'none',
+    fixHint: '按 source/category 用 audit-degradation-rate 或执行日志查根因；本项只读',
+    source: 'degradation_events',
+  });
+
+  // outbox 死信（P1-5）：dead 是终态，worker 不再拾取；此前只有 OpsHub 待办可见。
+  const deadOutbox = await getDeadOutboxSummary().catch(() => null);
+  items.push({
+    id: 'runtime-outbox-dead',
+    label: '事件投递死信',
+    base: 'runtime',
+    semantics: 'runtime-info',
+    severity: deadOutbox === null ? 'info' : deadOutbox.deadCount > 0 ? 'warn' : 'ok',
+    status: deadOutbox === null ? 'unavailable' : deadOutbox.deadCount > 0 ? 'dead-letters' : 'clear',
+    count: deadOutbox?.deadCount ?? 0,
+    detail: deadOutbox === null
+      ? ['死信读取失败；不能据此判定「没有死信」']
+      : deadOutbox.items.slice(0, 5).map((item) => `${item.eventType}｜${item.lastError || '无错误信息'}`),
+    cause: 'domain_event_outbox.status=dead（重试耗尽）',
+    action: 'none',
+    fixHint: '到运营中心 → 运维工具查看死信；先修根因再重放（毒丸默认拦截，确认后可 force）',
+    source: 'domain_event_outbox',
+  });
+
   const byItemId = new Map(items.map((item) => [item.id, item]));
 
   const healthSummary: HealthCenterSummary = {

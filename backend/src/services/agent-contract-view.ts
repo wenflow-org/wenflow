@@ -89,6 +89,10 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // 动态规划（2026-10-17）：上一阶段真实学习信号（渐进式设计/阶段推进时由 stage 链注入）。
     // stage-designer 提示词按它调整坡度与补强位置，必须登记，否则 strict 对账恒红。
     'previousStageOutcome',
+    // 跨阶段去重事实源（2026-10-27 外部审查结清）：stage-designer 声明
+    // ref: sandbox:path.allPreviousStageTasks，但此前未登记 ⇒ 编译门 advisory 恒在。
+    // 编排层直接注入（stage-enrichment），登记后声明三方一致。
+    'allPreviousStageTasks',
   ],
   'teaching-agent': [
     'session.messages',

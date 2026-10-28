@@ -30,22 +30,56 @@
     <div class="cp-run__foot">
       <label v-if="!isBlackbox" class="cp-run__budget">
         难度
-        <select v-model="frictionValue" class="mk-filter__select" :disabled="frictionSaving" @change="emit('saveFriction')">
-          <option value="none">无</option>
-          <option value="low">低</option>
-          <option value="normal">正常</option>
-          <option value="high">高</option>
-          <option value="stress_test">压力测试</option>
-        </select>
+        <MkSelect
+          v-model="frictionValue"
+          :options="FRICTION_OPTIONS"
+          :disabled="frictionSaving"
+          aria-label="难度"
+          @change="emit('saveFriction')"
+        />
       </label>
       <label v-if="!isBlackbox" class="cp-run__budget">
         模型
-        <select v-model="simModelValue" class="mk-filter__select" :disabled="simModelSaving" @change="emit('saveModel')">
-          <option value="">默认（系统分配）</option>
-          <option v-for="m in availableModels" :key="m" :value="m">{{ m }}</option>
-        </select>
+        <MkSelect
+          v-model="simModelValue"
+          :options="modelOptions"
+          :disabled="simModelSaving"
+          aria-label="模型"
+          @change="emit('saveModel')"
+        />
         <span class="cp-run__budget-hint" title="模型在会话启动时已确定，中途修改不生效，需重跑或新建会话">重跑生效</span>
       </label>
+      <!-- 实验/采样开关（2026-10-21）：此前只存在于驱动脚本的 API 调用里，管理端无处可设。
+           三项都不改默认行为：臂标签只做对照，延伸探针每会话一次，建议处置只留痕。 -->
+      <label v-if="!isBlackbox" class="cp-run__budget">
+        实验臂
+        <MkSelect
+          v-model="armValue"
+          :options="ARM_OPTIONS"
+          :disabled="flagsSaving"
+          aria-label="实验臂"
+          title="冻结考卷双臂协议（#85）：A=护栏前统计方式 / B=现行统计方式 / 默认=不加标签"
+          @change="emit('saveFlags')"
+        />
+      </label>
+      <label v-if="!isBlackbox" class="cp-run__budget">
+        延伸探针
+        <input v-model="probeValue" type="checkbox" :disabled="flagsSaving" title="下一次正课完成时强制开一节延伸课（每会话一次），用于验证延伸学链路。默认关">
+      </label>
+      <label v-if="!isBlackbox" class="cp-run__budget">
+        建议处置
+        <MkSelect
+          v-model="advValue"
+          :options="ADV_OPTIONS"
+          :disabled="flagsSaving"
+          aria-label="建议处置"
+          title="完成时带回重排建议时，按学员视角记录的处置动作（只留痕，不执行重排）"
+          @change="emit('saveFlags')"
+        />
+      </label>
+      <button v-if="!isBlackbox" type="button" class="mk-btn mk-btn--sm" :disabled="flagsSaving" @click="emit('saveFlags')">
+        {{ flagsSaving ? '保存中…' : '保存实验设置' }}
+      </button>
       <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
     </div>
   </div>
@@ -55,6 +89,8 @@
 import { computed } from 'vue'
 import { stageFlow, type StageKey } from '../cockpitStages'
 import type { AutopilotDriverLine } from '../cockpitAutopilot'
+import MkSelect from '@/components/mk/MkSelect.vue'
+import type { SelectValue } from '@/components/mk/useListbox'
 
 const props = defineProps<{
   autopilotResultText: string
@@ -76,23 +112,70 @@ const props = defineProps<{
   frictionSaving: boolean
   simModel: string
   simModelSaving: boolean
+  /** 实验臂（#85）：''=不加标签 */
+  experimentArm: '' | 'A' | 'B'
+  /** 延伸学探针（#124）：每会话一次强制开延伸课 */
+  extensionProbe: boolean
+  /** 建议处置采样：''=不记录 */
+  advisoryResponse: '' | 'keep' | 'later' | 'preview'
+  flagsSaving: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'saveFriction'): void
   (e: 'saveModel'): void
+  (e: 'saveFlags'): void
   (e: 'update:frictionBudget', v: 'none' | 'low' | 'normal' | 'high' | 'stress_test'): void
   (e: 'update:simModel', v: string): void
+  (e: 'update:experimentArm', v: '' | 'A' | 'B'): void
+  (e: 'update:extensionProbe', v: boolean): void
+  (e: 'update:advisoryResponse', v: '' | 'keep' | 'later' | 'preview'): void
 }>()
 
-/* v-model 双向（显式 computed 而非 defineModel：emit 类型收窄成非 undefined，宿主 ref<string> 直接可接） */
-const frictionValue = computed({
+/* v-model 双向（显式 computed 而非 defineModel：emit 类型收窄成非 undefined，宿主 ref<string> 直接可接）。
+   MkSelect 的泛型值是 SelectValue，setter 在这里一次性收回本组件的窄联合。 */
+const FRICTION_OPTIONS = [
+  { value: 'none', label: '无' },
+  { value: 'low', label: '低' },
+  { value: 'normal', label: '正常' },
+  { value: 'high', label: '高' },
+  { value: 'stress_test', label: '压力测试' },
+]
+const ARM_OPTIONS = [
+  { value: '', label: '默认' },
+  { value: 'A', label: 'A 臂' },
+  { value: 'B', label: 'B 臂' },
+]
+const ADV_OPTIONS = [
+  { value: '', label: '不记录' },
+  { value: 'keep', label: '保留' },
+  { value: 'later', label: '稍后再看' },
+  { value: 'preview', label: '预览' },
+]
+const modelOptions = computed(() => [
+  { value: '', label: '默认（系统分配）' },
+  ...props.availableModels.map((m) => ({ value: m, label: m })),
+])
+
+const frictionValue = computed<SelectValue>({
   get: () => props.frictionBudget,
-  set: (v: 'none' | 'low' | 'normal' | 'high' | 'stress_test') => emit('update:frictionBudget', v),
+  set: (v) => emit('update:frictionBudget', v as typeof props.frictionBudget),
 })
-const simModelValue = computed({
+const simModelValue = computed<SelectValue>({
   get: () => props.simModel,
-  set: (v: string) => emit('update:simModel', v),
+  set: (v) => emit('update:simModel', v as string),
+})
+const armValue = computed<SelectValue>({
+  get: () => props.experimentArm,
+  set: (v) => emit('update:experimentArm', v as typeof props.experimentArm),
+})
+const probeValue = computed({
+  get: () => props.extensionProbe,
+  set: (v: boolean) => emit('update:extensionProbe', v),
+})
+const advValue = computed<SelectValue>({
+  get: () => props.advisoryResponse,
+  set: (v) => emit('update:advisoryResponse', v as typeof props.advisoryResponse),
 })
 </script>
 

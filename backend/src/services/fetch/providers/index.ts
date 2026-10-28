@@ -8,6 +8,7 @@
 
 import { FetchError } from '../types';
 import type { FetchProvider, FetchProviderId } from '../types';
+import { readPluginChannelOrder } from '../../plugin-providers.service';
 import { TinyFishFetchProvider } from './tinyfish';
 import { TavilyFetchProvider } from './tavily';
 import { ExaFetchProvider } from './exa';
@@ -26,10 +27,16 @@ export function createFetchProviders(): Partial<Record<FetchProviderId, FetchPro
 }
 
 /**
- * 解析 provider 顺序（FETCH_PROVIDER，逗号分隔 = 降级链）。
- * 未配置时退回已实现 provider 的默认顺序；配置了未知 id 直接报错，避免静默走错 provider。
+ * 解析 provider 顺序（逗号分隔 = 降级链）。
+ * 与 search 同判例：无显式入参走「平台配置 → 环境变量 → 默认」，显式入参保持原语义。
  */
-export function resolveFetchProviderOrder(serialized: string = process.env.FETCH_PROVIDER || ''): FetchProviderId[] {
+export function resolveFetchProviderOrder(serialized?: string): FetchProviderId[] {
+  if (serialized === undefined) {
+    const configured = readPluginChannelOrder('web', 'fetch').filter(
+      (id): id is FetchProviderId => KNOWN_PROVIDERS.includes(id as FetchProviderId)
+    );
+    return configured.length ? configured : [...IMPLEMENTED_PROVIDERS];
+  }
   const raw = serialized.trim();
   if (!raw) return [...IMPLEMENTED_PROVIDERS];
 

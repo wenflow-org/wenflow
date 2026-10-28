@@ -19,7 +19,7 @@
       <p v-if="error" class="library__error">{{ error }}</p>
 
       <div v-if="items.length" class="library__tools">
-        <div class="library__tabs" role="tablist" aria-label="资料筛选">
+        <div class="library__tabs" role="tablist" aria-label="资料筛选" @keydown="onFilterKeydown">
           <button
             v-for="tab in tabs"
             :key="tab.key"
@@ -28,6 +28,7 @@
             class="library__tab"
             :class="{ 'library__tab--active': filter === tab.key }"
             :aria-selected="filter === tab.key"
+            :tabindex="filter === tab.key ? 0 : -1"
             @click="filter = tab.key"
           >
             {{ tab.label }} <b>{{ tab.count }}</b>
@@ -42,19 +43,12 @@
 
         <label class="library__usage">
           <span>使用状态</span>
-          <select v-model="usageFilter" aria-label="使用状态筛选">
-            <option value="all">全部</option>
-            <option value="used">已用于路径</option>
-            <option value="unused">未用于路径</option>
-          </select>
+          <MkSelect v-model="usageFilter" :options="USAGE_OPTIONS" aria-label="使用状态筛选" />
         </label>
 
         <label class="library__sort">
           <span>排序</span>
-          <select v-model="sort" aria-label="资料排序">
-            <option value="recent">最近上传</option>
-            <option value="name">名称</option>
-          </select>
+          <MkSelect v-model="sort" :options="SORT_OPTIONS" aria-label="资料排序" />
         </label>
       </div>
 
@@ -176,7 +170,9 @@ import { Eye, Search, Trash2, Upload, X } from 'lucide-vue-next';
 import V2Nav from './V2Nav.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
+import MkSelect from '@/components/mk/MkSelect.vue';
 import { useEscape } from '@/views/admin-redesign/useEscape';
+import { onTabRowKeydown } from '@/utils/rovingTablist';
 import {
   getMaterialLibrary,
   readMaterial,
@@ -190,6 +186,17 @@ import { toast } from '@/utils/toast';
 type FilterKey = 'all' | 'upload' | 'web';
 type SortKey = 'recent' | 'name';
 type UsageFilterKey = 'all' | 'used' | 'unused';
+
+/* 下拉选项（2026-10-27 原生 select → MkSelect 自绘弹层），文案与原 option 逐字一致 */
+const SORT_OPTIONS: ReadonlyArray<{ value: SortKey; label: string }> = [
+  { value: 'recent', label: '最近上传' },
+  { value: 'name', label: '名称' }
+];
+const USAGE_OPTIONS: ReadonlyArray<{ value: UsageFilterKey; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'used', label: '已用于路径' },
+  { value: 'unused', label: '未用于路径' }
+];
 
 const ACCEPT = '.pdf,.docx,.pptx,.xlsx,.txt,.md,.markdown,.csv';
 const PREVIEW_LIMIT = 60_000;
@@ -230,6 +237,14 @@ const preview = reactive<{
 
 const pendingDelete = ref<UploadedMaterial | null>(null);
 const deleting = ref(false);
+
+/** 资料筛选页签：方向键在行内切换并移动焦点 */
+function onFilterKeydown(e: KeyboardEvent): void {
+  onTabRowKeydown(e, (i) => {
+    const t = tabs.value[i]
+    if (t) filter.value = t.key
+  })
+}
 
 const tabs = computed<Array<{ key: FilterKey; label: string; count: number }>>(() => [
   { key: 'all', label: '全部', count: stats.value.total },
@@ -588,18 +603,6 @@ onMounted(load);
   font-size: var(--mk-fs-micro);
 }
 
-.library__sort select,
-.library__usage select {
-  min-height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-}
-
 .library__loading {
   padding: 8px 0;
 }
@@ -904,7 +907,8 @@ onMounted(load);
 .lib-preview__text {
   margin: 0;
   color: var(--ink);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 资料正文预览是阅读文本，跟全站无衬线；等宽只留给代码/ID（2026-10-23 全站字体检查） */
+  font-family: var(--mk-sans);
   font-size: 12.5px;
   line-height: 1.75;
   white-space: pre-wrap;

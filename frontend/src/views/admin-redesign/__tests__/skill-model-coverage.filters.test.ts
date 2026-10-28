@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import SkillModelCoverage from '../SkillModelCoverage.vue'
+import { chooseFilter, filterOption, filterOptions } from './filter-controls';
 
 const ROWS = [
   { skillId: 'stage-designer', endpoint: null, model: null, tier: 'chat', source: 'platform-default', paramOverrides: null, fallbackChain: null },
@@ -20,11 +21,12 @@ const ROWS = [
 ]
 
 const getSkillModelCoverage = vi.fn(async () => ({ data: { data: { skills: ROWS } } }))
+const bulkApplyMock = vi.fn(async (_payload: { skillIds: string[]; clearModel?: boolean; endpoint?: string }) => ({ data: { data: { applied: 0, failed: 0, results: [] } } }))
 
 vi.mock('@/api/adminApi', () => ({
   adminSkillsApi: {
     getSkillModelCoverage: (...args: unknown[]) => getSkillModelCoverage(...(args as [])),
-    bulkApplySkillModelConfig: vi.fn(async () => ({ data: { data: { applied: 0, failed: 0, results: [] } } }))
+    bulkApplySkillModelConfig: (...args: Parameters<typeof bulkApplyMock>) => bulkApplyMock(...args)
   },
   adminApiConfigApi: {
     getModelCatalog: vi.fn(async () => ({ data: { data: { models: [] } } }))
@@ -32,16 +34,15 @@ vi.mock('@/api/adminApi', () => ({
 }))
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }))
 
-async function mountCoverage() {
-  const w = mount(SkillModelCoverage)
+async function mountCoverage(props: Record<string, unknown> = {}) {
+  const w = mount(SkillModelCoverage, {
+    props: { platformDefaultModel: 'deepseek-v4.1-flash', platformDefaultReasoningModel: 'deepseek-v4.1-flash', ...props }
+  })
   await flushPromises()
   await flushPromises()
   return w
 }
 
-function pill(w: Awaited<ReturnType<typeof mountCoverage>>, label: string) {
-  return w.findAll('.mk-pill').find((p) => p.text().startsWith(label))
-}
 function skillIds(w: Awaited<ReturnType<typeof mountCoverage>>): string[] {
   return w.findAll('.skc__name').map((b) => b.text())
 }
@@ -51,23 +52,39 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     vi.clearAllMocks()
   })
 
-  it('计数取全量口径：平台默认 / 仅技能模型 / 独立通道 / 有备用模型', async () => {
+  it('计数取全量口径：用平台默认 / 技能覆盖 / 独立通道 / 有备用模型', async () => {
     const w = await mountCoverage()
-    expect(pill(w, '全部')?.text()).toBe('全部4')
-    expect(pill(w, '平台默认')?.text()).toBe('平台默认2')
-    expect(pill(w, '仅技能模型')?.text()).toBe('仅技能模型1')
-    expect(pill(w, '独立通道')?.text()).toBe('独立通道1')
-    expect(pill(w, '自定义备用模型')?.text()).toBe('自定义备用模型2')
+    const opt = (label: string) => filterOption(w as never, '来源', label).text()
+    expect(opt('全部')).toBe('全部（4）')
+    expect(opt('用平台默认')).toBe('用平台默认（2）')
+    expect(opt('技能覆盖')).toBe('技能覆盖（1）')
+    expect(opt('独立通道')).toBe('独立通道（1）')
+    expect(w.findAll('.mk-pills').length).toBe(0)
+    expect(filterOptions(w as never, '备用模型')).toEqual(['全部备用模型', '自定义备用模型（2）'])
     expect(skillIds(w)).toHaveLength(4)
+    w.unmount()
+  })
+
+  it('筛选语法：来源与备用模型都是维度下拉，备用模型选中后只剩有备用链的行', async () => {
+    const w = await mountCoverage()
+    // 2026-10-27 用户「需要统一调整」：常驻 chip 组退场，两个维度都走 MkPillSelect
+    expect(w.findAll('.mk-pills').length).toBe(0)
+    expect(filterOptions(w as never, '来源')).toEqual([
+      '全部（4）', '用平台默认（2）', '技能覆盖（1）', '独立通道（1）'
+    ])
+    expect(filterOptions(w as never, '备用模型')).toEqual(['全部备用模型', '自定义备用模型（2）'])
+    await chooseFilter(w as never, '备用模型', '自定义备用模型')
+    expect(skillIds(w)).toEqual(['session-wrapup', 'path-planner'])
+    expect(filterOption(w as never, '备用模型', '自定义备用模型').text()).toBe('自定义备用模型（2）')
     w.unmount()
   })
 
   it('来源 pill 收窄表格；计数保持不变（筛的是视图不是数据）', async () => {
     const w = await mountCoverage()
-    await pill(w, '独立通道')!.trigger('click')
+    await chooseFilter(w as never, '来源', '独立通道')
     expect(skillIds(w)).toEqual(['session-wrapup'])
     expect(w.find('.mk-card__meta').text()).toContain('命中 1 / 共 4')
-    expect(pill(w, '平台默认')?.text()).toBe('平台默认2')
+    expect(filterOption(w as never, '来源', '用平台默认').text()).toBe('用平台默认（2）')
 
     // 叠加搜索：独立通道 ∧ 命中关键字
     await w.find('.mk-filter__input').setValue('agnes')
@@ -80,7 +97,7 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
   it('筛空保留筛选控件与清除入口', async () => {
     const w = await mountCoverage()
     await w.find('.mk-filter__input').setValue('不存在的技能')
-    expect(w.find('.mk-pills').exists()).toBe(true)
+    expect(w.findAll('.mk-pillselect-wrap').length).toBe(2)
     expect(w.text()).toContain('没有符合筛选的技能')
     const clear = w.findAll('button').find((b) => b.text() === '清除筛选')
     expect(clear).toBeTruthy()
@@ -91,12 +108,12 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
 
   it('全选只选当前可见行', async () => {
     const w = await mountCoverage()
-    await pill(w, '独立通道')!.trigger('click')
+    await chooseFilter(w as never, '来源', '独立通道')
     await w.find('thead input[type="checkbox"]').setValue(true)
     expect(w.find('.skc__apply .mk-btn--primary').text()).toBe('套用到 1 个技能')
 
     // 切回全部：已选的那行保留，全选框不是「全选」态
-    await pill(w, '全部')!.trigger('click')
+    await chooseFilter(w as never, '来源', '全部')
     expect((w.find('thead input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false)
     expect(w.find('.skc__apply .mk-btn--primary').text()).toBe('套用到 1 个技能')
     w.unmount()
@@ -109,11 +126,41 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     w.unmount()
   })
 
-  it('model 单元格带层级徽标（按能力核对）', async () => {
+  it('model 单元格只给模型名：chat 档不挂内部枚举，推理档才带中文徽标', async () => {
     const w = await mountCoverage()
-    const modelCell = w.findAll('tbody tr')[1].find('.skc__model')
-    expect(modelCell.text()).toContain('deepseek-v4.1-flash')
-    expect(modelCell.text()).toContain('chat')
+    const rowOf = (id: string) => w.findAll('tbody tr').find((r) => r.text().includes(id))!
+    const chatCell = rowOf('teaching-turn').find('.skc__model')
+    // 2026-10-24 用户「还 chat 上了，没有这种了」：tier 是档位字段，不是模型名后缀
+    expect(chatCell.text()).not.toContain('chat')
+    expect(chatCell.find('.mk-badge').exists()).toBe(false)
+    // 推理档仍要给提示（未配模型时它决定走哪条平台默认链），且用中文
+    expect(rowOf('path-planner').find('.skc__model').text()).toContain('推理')
+    w.unmount()
+  })
+
+  it('未配模型的技能显示实际用到的平台默认并标「平台默认」（默认不物化成覆盖）', async () => {
+    const w = await mountCoverage({ platformDefaultModel: 'agnes-3.0-flash', platformDefaultReasoningModel: 'deepseek-v4.1-flash' })
+    const cells = w.findAll('.skc__model')
+    const inherited = cells.filter((c) => c.text().includes('平台默认'))
+    // stage-designer（chat）与 path-planner（reasoning）两行都用平台默认
+    expect(inherited).toHaveLength(2)
+    expect(inherited[0].text()).toContain('agnes-3.0-flash')
+    // 推理档用平台推理默认，而不是对话默认
+    expect(inherited[1].text()).toContain('deepseek-v4.1-flash')
+    w.unmount()
+  })
+
+  it('「用平台默认模型」只发 clearModel，不重复写模型/通道', async () => {
+    const w = await mountCoverage()
+    await w.find('thead input[type="checkbox"]').setValue(true)
+    const btn = w.findAll('button').find((b) => b.text() === '用平台默认模型')
+    expect(btn, '批量区应有「用平台默认模型」').toBeTruthy()
+    await btn!.trigger('click')
+    await flushPromises()
+    const payload = bulkApplyMock.mock.calls[0]?.[0] as { skillIds: string[]; clearModel?: boolean; endpoint?: string }
+    expect(payload.clearModel).toBe(true)
+    expect(payload.skillIds).toHaveLength(4)
+    expect(payload.endpoint).toBeUndefined()
     w.unmount()
   })
 })

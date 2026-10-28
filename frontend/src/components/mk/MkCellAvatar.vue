@@ -12,6 +12,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { avatarInitial } from './avatarName'
 
 const props = defineProps<{
   /** 取首字母；空名回落「用」 */
@@ -21,7 +22,10 @@ const props = defineProps<{
   size?: number
 }>()
 
-const initial = computed(() => (props.name || '用').trim().charAt(0) || '用')
+/* 首字与 Users.vue 的昵称输出共用同一清洗/降级函数（avatarName.ts）：
+   孤立代理项 / U+FFFD 等在首字位会渲染成乱码方框，不能直接 charAt(0)；
+   Array.from 按码点取字，避免把合法 emoji 劈成半个代理项。 */
+const initial = computed(() => avatarInitial(props.name))
 </script>
 
 <style scoped>

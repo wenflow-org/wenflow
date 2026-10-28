@@ -39,74 +39,69 @@
       <div class="mk-card mk-card--fill">
         <div class="mk-card__head">
           <div class="mk-filter">
-            <!-- 搜索槽位归一（2026-10-11 卡头走查）：pills 之后，对齐卡头统一语法 -->
-            <div class="mk-pills">
-              <button
-                v-for="p in statusPills"
-                :key="p.id"
-                type="button"
-                class="mk-pill"
-                :class="{ 'mk-pill--active': statusFilter === p.id }"
-                :aria-pressed="statusFilter === p.id"
-                @click="statusFilter = statusFilter === p.id ? '' : p.id"
-              >
-                {{ p.label }}<span class="mk-pill__count">{{ p.count }}</span>
-              </button>
-            </div>
-            <div class="mk-pills">
-              <button
-                type="button"
-                class="mk-pill"
-                :class="{ 'mk-pill--active': lowOnly }"
-                :aria-pressed="lowOnly"
-                @click="lowOnly = !lowOnly"
-              >
-                仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
-              </button>
-            </div>
-            <!-- 真实/测试互斥视角（2026-10-10 拍板方言；2026-10-15 反馈列表接入——
-                 后端默认口径改为仅真实，测试视角显式切换，与运营待办/内容管理同判据） -->
-            <DataScopeToggle v-model="includeTest" />
-            <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+            <!-- 2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
+                 状态一组单选、标志一组多选开关（激活前缀勾），两组各有 aria-label。 -->
+          <MkPillSelect
+            v-model="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusSelectOptions"
+            :active="!!statusFilter"
+          />
+          <!-- 2026-10-27 用户「需要统一调整」：低分也归维度下拉——评分是一个维度，
+               常驻 chip 组退场，计数进 option 文案（同一读数只出现一处）。 -->
+          <MkPillSelect
+            v-model="scoreSelect"
+            label="评分"
+            aria-label="按评分筛选"
+            :options="scoreSelectOptions"
+            :active="lowOnly"
+          />
+            <!-- 真实/测试互斥视角由宿主运营中心的页级开关统一承载（2026-10-23 走查：
+                 卡内开关与页级开关同屏并列、却只各管一半——页级动 KPI、卡内动列表）。
+                 这里不再放第二枚开关，视图随 :include-test 联动。 -->
           </div>
           <span class="mk-card__head-right">
             <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 评论 / 任务" />
             <!-- 口径（真实/测试）由左侧开关自明，meta 只报「筛选命中 / 本页行数」这一个事实
-                 （2026-10-19 用户走查「这个小文案不要」删掉前置的（真实）复读） -->
-            <span class="mk-card__meta" title="筛选命中条数 / 已载入条数">命中 {{ filtered.length }} / {{ rows.length }} 条</span>
+                 （2026-10-19 用户走查「这个小文案不要」删掉前置的（真实）复读）。
+                 2026-10-26 动线收口：只在真筛过（命中 < 已载入）时才出——未筛时它与分页器
+                 「共 N 条」同数同源，同屏两个一样的数字。 -->
+            <span v-if="filtered.length < rows.length" class="mk-card__meta" title="筛选命中条数 / 已载入条数">命中 {{ filtered.length }} / {{ rows.length }} 条</span>
           </span>
         </div>
 
         <div v-if="filtered.length" class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap；
-             评论/节点/策略列由 fb- 局部 max-width 截断兜底（全文在 title） -->
-        <table class="mk-table">
+        <!-- 固定列宽（2026-10-22 与教学组三表同判例）：用户/评论两列在 auto 布局下按当页最长
+             内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。长评论仍由
+             fb- 局部 max-width 截断兜底（全文在 title） -->
+        <table class="mk-table mk-table--click mk-table--fixed mk-table--nowrap fb-table">
           <thead>
             <tr>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable fb-c-user"
                 :aria-sort="fbSortState('user')"
                 @click="toggleFbSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 scope="col"
-                class="mk-th--right mk-th--sortable"
+                class="mk-th--right mk-th--sortable fb-c-rating"
                 :aria-sort="fbSortState('rating')"
                 @click="toggleFbSort('rating')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('rating')">评分<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>评论</th>
-              <th>节点</th>
-              <th>策略</th>
+              <th scope="col" class="fb-c-comment">评论</th>
+              <th scope="col" class="fb-c-node">节点</th>
+              <th scope="col" class="fb-c-strategy">策略</th>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable fb-c-status"
                 :aria-sort="fbSortState('status')"
                 @click="toggleFbSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleFbSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th>时间</th>
-              <th class="mk-th--right">操作</th>
+              <th scope="col" class="fb-c-time">时间</th>
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -125,9 +120,18 @@
                   <b class="mono">{{ r.rating }}</b>
                 </span>
               </td>
-              <td><span class="fb-comment" :title="r.comment">{{ r.comment || '—' }}</span></td>
-              <td><span class="mono fb-agent">{{ r.agentId || '—' }}</span></td>
-              <td><span class="fb-strategy">{{ r.strategy || '—' }}</span></td>
+              <td>
+                <span v-if="r.comment" class="fb-comment" :title="r.comment">{{ r.comment }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
+              <td>
+                <span v-if="r.agentId" class="mono fb-agent">{{ r.agentId }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
+              <td>
+                <span v-if="r.strategy" class="fb-strategy">{{ r.strategy }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
               <td><span class="mk-cell-sub" :title="fmtDateTime(r.createdAtRaw)">{{ r.createdAt }}</span></td>
               <td>
@@ -146,7 +150,7 @@
           icon="◌"
           min
           :title="isFiltered ? '当前筛选无匹配' : '暂无反馈'"
-          :description="isFiltered ? '放宽筛选条件试试。' : '学习者评分与评论出现后会在这里汇总，低分反馈会自动标记「待处理」。'"
+          :description="isFiltered ? '放宽筛选条件试试。' : ''"
           :action-text="isFiltered ? '清除筛选' : '刷新'"
           @action="isFiltered ? clearFilters() : load(true)"
         />
@@ -246,14 +250,16 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
 /** 嵌入模式：作为运营中心「反馈」tab 渲染（仅去掉外层状态条；宿主承载域计数）。
-    count 事件：反馈总数上报（宿主「反馈 N」徽章） */
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+    count 事件：反馈总数上报（宿主「反馈 N」徽章）。
+    includeTest：真实/测试视角由宿主页级开关下发（v-model:include-test），
+    列表数据范围与宿主 KPI 同源，不再各用一份本地状态。 */
+const props = withDefaults(defineProps<{ embedded?: boolean; includeTest?: boolean }>(), { embedded: false, includeTest: false })
 const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'status', status: string): void }>()
 
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
@@ -296,17 +302,19 @@ const total = ref(0)
 const pendingCount = ref(0)
 const recent30 = ref<number | null>(null)
 
-/** 宿主域计数徽章（embedded 才消费）：总数就绪/变化即上报 */
-watch(total, (n) => {
-  emit('count', n)
+/** 宿主域计数徽章（embedded 才消费）：只报「待处理」——角标位天然被读作待办量，
+    此前报总数（含已解决/已忽略），与运营待办的「待处理反馈」不同源。 */
+watch([pendingCount, total], ([pending]) => {
+  emit('count', pending)
 }, { immediate: true })
 const keyword = ref('')
 const statusFilter = ref('')
 const lowOnly = ref(false)
-/* 真实/测试互斥视角（2026-10-10 拍板方言）：默认真实——后端列表口径同步改为仅真实，
-   测试视角显式切换（与运营待办/内容管理同判据）；切换强制重拉（绕过页缓存） */
-const includeTest = ref(false)
-watch(includeTest, () => {
+/* 真实/测试互斥视角（2026-10-10 拍板方言）：默认真实——后端列表口径同步改为仅真实。
+   2026-10-23 起由宿主页级开关下发（见 props），本组件不再保留第二份本地状态；
+   切换仍强制重拉（绕过页缓存）。 */
+const scopeProp = computed(() => props.includeTest ?? false)
+watch(scopeProp, () => {
   void load(true)
 })
 const detail = ref<Detail | null>(null)
@@ -331,8 +339,23 @@ const statusPills = computed(() => {
     { id: 'dismissed', label: '已忽略', count: all.filter((r) => r.status === 'dismissed').length }
   ]
 })
+/** 卡头「状态」下拉：计数取当前已载入行 */
+const statusSelectOptions = computed(() => [
+  { value: '', label: '全部状态' },
+  ...statusPills.value.map((p) => ({ value: p.id, label: `${p.label}（${p.count}）` }))
+])
+
 /** 低分（≤2）条数：供「仅低分」pill 计数 */
 const lowCount = computed(() => rows.value.filter((r) => r.rating <= 2).length)
+/** 评分维度（2026-10-27 统一）：低分从常驻 chip 迁入下拉，计数只在 option 文案里。 */
+const scoreSelect = computed<string>({
+  get: () => (lowOnly.value ? 'low' : ''),
+  set: (v) => { lowOnly.value = v === 'low' }
+})
+const scoreSelectOptions = computed(() => [
+  { value: '', label: '全部评分' },
+  { value: 'low', label: `低分 ≤2（${lowCount.value}）` }
+])
 
 const statusLabel = (s: string) =>
   ({ new: '待处理', triaged: '已分流', resolved: '已解决', dismissed: '已忽略' })[s] || s || '—'
@@ -369,7 +392,9 @@ function mapRow(f: Record<string, unknown>): Row {
 }
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
-const { toggle: toggleFbSort, sortState: fbSortState, sortRows: sortFbRows } = useTableSort<Row>({
+const {
+  toggle: toggleFbSort, sortState: fbSortState, sortRows: sortFbRows,
+} = useTableSort<Row>({
   accessors: {
     user: (r) => r.userName,
     rating: (r) => r.rating,
@@ -431,7 +456,7 @@ async function load(force?: boolean) {
   loading.value = true
   loadFailed.value = false
   try {
-    const scope = { includeTest: includeTest.value || undefined, testOnly: includeTest.value || undefined }
+    const scope = { includeTest: props.includeTest || undefined, testOnly: props.includeTest || undefined }
     const [listRes, newRes, trendRes] = await Promise.all([
       adminFeedbackApi.list({ limit: 1000, ...scope }),
       adminFeedbackApi.list({ limit: 1, status: 'new', ...scope }).catch(() => null),
@@ -522,6 +547,18 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 固定列宽（2026-10-22 与教学组三表同判例）：用户/评论两列在 auto 布局下按当页最长
+   内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 校准，1200 无横滚。 */
+.fb-c-user { width: 170px; }
+.fb-c-rating { width: 76px; }
+.fb-c-comment { width: 220px; }
+.fb-c-node { width: 120px; }
+.fb-c-strategy { width: 60px; }
+.fb-c-status { width: 84px; }
+.fb-c-time { width: 80px; }
+/* fixed 档列宽即契约：评论格 320px 上限会顶出本列，改成随列收缩 + 省略号 */
+.fb-table .fb-comment { max-width: 100%; }
+
 /* 嵌入模式（运营中心宿主 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .fb-embedded { flex: 1; min-height: 0; overflow: hidden; }
 .fb-row { cursor: pointer; }
@@ -537,8 +574,6 @@ onMounted(() => {
   vertical-align: bottom;
   color: var(--mk-muted);
 }
-/* 原型 .tbl td：nowrap（长内容由下方 fb- 截断与 mk-cell-main 全局 max-width 兜底） */
-.fb-row td { white-space: nowrap; }
 .fb-agent {
   display: inline-block;
   max-width: 160px;

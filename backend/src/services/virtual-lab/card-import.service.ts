@@ -462,6 +462,10 @@ export interface CardWallEntry {
   email: string | null;
   /** 派生来源模板名（2026-10-16 卡=身份模板）：非空即「已派生实例」，空为身份池里的模板卡 */
   derivedFrom: string | null;
+  /** 故事池任务数（2026-10-27 卡面密度）：创建实例时要勾任务，卡面先给出「这张卡能开几节课」 */
+  taskCount: number;
+  /** 首个任务标题（2026-10-27）：卡面上真正会被开的那节课叫什么，比抽象的学习目标更能判断要不要用 */
+  firstTaskTitle: string | null;
 }
 
 /**
@@ -489,6 +493,8 @@ export function buildCardWallEntries(
     let opening: string | null = null;
     let sourceKind: string | null = null;
     let derivedFrom: string | null = null;
+    let taskCount = 0;
+    let firstTaskTitle: string | null = null;
     try {
       const p = JSON.parse(r.profile || '{}') as Record<string, unknown>;
       const seed = (p.personaSeed || {}) as Record<string, unknown>;
@@ -500,6 +506,11 @@ export function buildCardWallEntries(
       opening = (sc.opening as string) || null;
       sourceKind = (sc.sourceKind as string) || null;
       derivedFrom = ((p.derivedFrom as Record<string, unknown> | undefined)?.name as string) || null;
+      const pool = Array.isArray(p.storyPool) ? (p.storyPool as Array<Record<string, unknown>>) : [];
+      taskCount = pool.length;
+      const first = pool[0];
+      firstTaskTitle =
+        first && typeof first.title === 'string' && first.title.trim() ? first.title.trim() : null;
     } catch {
       /* 坏 JSON：占位展示（名称回退 email/cardKey），不阻断整面卡墙 */
     }
@@ -518,26 +529,28 @@ export function buildCardWallEntries(
       sourceKind,
       email,
       derivedFrom,
+      taskCount,
+      firstTaskTitle,
     };
   });
 }
 
-/** 卡墙索引聚合（GET /cards/index 数据源）：卡列表 + 预置/自建分计 */
+/** 卡墙索引聚合（GET /cards/index 数据源）：身份卡列表 + 预置/自建分计。
+ *  2026-10-24 层级收口：卡库＝身份池，只列未派生的身份卡（克隆实例归虚拟学习者列表）；derived 仍披露实例数。 */
 export async function getCardWallIndex() {
   const rows = await findProfilesForCardWall();
-  const cards = buildCardWallEntries(rows);
+  const all = buildCardWallEntries(rows);
+  const cards = all.filter((c) => !c.derivedFrom);
   return {
     cards,
     summary: {
       total: cards.length,
       builtin: cards.filter((c) => c.preset).length,
       custom: cards.filter((c) => !c.preset).length,
-      /** 已派生实例（带 derivedFrom 的卡）：卡库=身份池，此数说明池里有多少条已派生出虚拟学习者 */
-      derived: cards.filter((c) => c.derivedFrom).length,
+      derived: all.length - cards.length, // 已派生实例数：不在这面墙上，点 KPI 去虚拟学习者列表看
     },
   };
 }
-
 /* ============ 卡 → 虚拟学习者（2026-10-16 用户拍板：卡=身份模板，派生=建运行实例） ============
    卡库是「身份池」：一张卡 = 一份身份模板（人设 + 若干任务），虚拟学习者 = 用某张模板派生的实例。
    派生取「身份克隆」而非「引用」语义——同一张卡可反复派生多个独立实例，源卡留在池里。

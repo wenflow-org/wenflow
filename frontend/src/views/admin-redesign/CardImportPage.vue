@@ -2,7 +2,7 @@
   <!-- 导入卡二级页（2026-10-06 抽屉退役：导入从 mk-drawer 迁标准二级页 ?view=card-import）。
        表单/拖拽/校验/导入报告逻辑自卡库页原样随迁；导入成功后卡墙在返回时重挂载自动刷新。 -->
   <div class="mk-page">
-    <MkDetailHero avatar="＋" title="导入卡文档" sub="YAML / JSON 的 { cards: [...] }。一张卡 = 一个虚拟学习者账号 + 档案 + 故事池">
+    <MkDetailHero avatar="＋" title="导入卡文档" sub="YAML / JSON 的 { cards: [...] }">
       <template #actions>
         <button type="button" class="mk-btn" @click="closeSubPage()">返回卡墙</button>
       </template>
@@ -52,7 +52,7 @@
             {{ importing ? '导入中…' : '导入' }}
           </button>
           <span class="ci-format">识别格式：{{ formatHint }}</span>
-          <span v-if="imported" class="mk-link ci-back" role="button" tabindex="0" @click="closeSubPage()">导入完成 · 返回卡墙 →</span>
+          <button v-if="imported" type="button" class="mk-link ci-back" @click="closeSubPage()">导入完成 · 返回卡墙 →</button>
         </div>
       </div>
     </section>
@@ -109,7 +109,10 @@
             <tr v-for="(r, i) in importResult.results" :key="(r.cardKey || 'row') + i">
               <td><span class="ci-key">{{ r.cardKey || '（无卡号）' }}</span></td>
               <td><span class="mk-badge" :class="actionBadge(r.action)">{{ actionText(r.action) }}</span></td>
-              <td><span class="ci-reason" :title="r.reason || ''">{{ r.reason || '—' }}</span></td>
+              <td>
+                <span v-if="r.reason" class="ci-reason" :title="r.reason">{{ r.reason }}</span>
+                <span v-else class="mk-na">—</span>
+              </td>
             </tr>
           </tbody>
         </table>

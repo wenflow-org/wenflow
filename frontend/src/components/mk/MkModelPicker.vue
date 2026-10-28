@@ -2,9 +2,9 @@
   <!-- 模型选择器（2026-10-20 走查：借鉴 OpenRouter / LiteLLM / Dify 的做法）。
        此前路由与 Skill 运行时都是「手填模型 ID + datalist」，运营必须记得住 id 才能配；
        成熟产品的共同形态是：可搜索、按供应商分组、每行带层级与能力徽标、价格可见。
-       本组件只管选择与展示；「继承上层」由 allowInherit 提供一条显式选项，
+       本组件只管选择与展示；「不单独指定、用平台默认」由 allowInherit 提供一条显式选项，
        不再依赖空输入框的隐含语义。 -->
-  <div ref="rootEl" class="mk-mp" :class="{ 'mk-mp--open': open, 'mk-mp--up': openUp, 'mk-mp--disabled': disabled }">
+  <div ref="rootEl" class="mk-mp" :class="{ 'mk-mp--open': open, 'mk-mp--up': openUp, 'mk-mp--disabled': disabled, 'mk-mp--compact': compact }">
     <button
       v-bind="$attrs"
       type="button"
@@ -63,7 +63,7 @@
             </span>
             <span class="mk-mp__meta">
               <span class="mk-mp__tags">
-                <span v-if="row.opt.tier" class="mk-badge mk-badge--muted">{{ row.opt.tier }}</span>
+                <span v-if="row.opt.tier" class="mk-badge mk-badge--muted">{{ tierText(row.opt.tier) }}</span>
                 <span v-if="row.opt.thinking" class="mk-badge mk-badge--muted" title="支持思考模式">思考</span>
                 <span v-if="row.opt.reasoning" class="mk-badge mk-badge--muted" title="支持推理强度">强度</span>
                 <span v-if="row.opt.vision" class="mk-badge mk-badge--muted" title="支持图片输入">视觉</span>
@@ -131,15 +131,18 @@ const props = withDefaults(
     /** 不可选的模型 ID（主模型、已选备用） */
     exclude?: string[]
     disabled?: boolean
+    /** 紧凑档（32px）：与 `.mk-input` / `.mk-select` 同排时不再高出 8px */
+    compact?: boolean
   }>(),
   {
     placeholder: '选择模型',
     allowInherit: false,
-    inheritLabel: '继承上层默认',
+    inheritLabel: '用平台默认模型',
     allowCustom: true,
     tier: null,
     exclude: () => [],
-    disabled: false
+    disabled: false,
+    compact: false
   }
 )
 
@@ -200,6 +203,12 @@ function priceText(o: MkModelOption): string {
   const hasOut = typeof o.priceOut === 'number'
   if (!hasIn && !hasOut) return ''
   return `入 ${hasIn ? o.priceIn : '—'} / 出 ${hasOut ? o.priceOut : '—'}`
+}
+
+/** 层级是后端枚举码（chat / reasoning），上屏走中文；未知值原样保留，避免硬造词 */
+const TIER_TEXT: Record<string, string> = { chat: '对话', reasoning: '推理' }
+function tierText(t?: string): string {
+  return t ? TIER_TEXT[t] ?? t : ''
 }
 
 /** 过滤后的候选（继承行不参与过滤，始终置顶） */
@@ -355,10 +364,12 @@ onBeforeUnmount(() => {
   text-align: left;
   cursor: pointer;
 }
-.mk-mp__control:hover { background: var(--mk-surface-2); }
-.mk-mp__control:focus-visible { border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); outline: none; }
+.mk-mp__control:hover { background: var(--mk-surface-2); }.mk-mp__control:focus-visible { border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); outline: none; }
 .mk-mp--open .mk-mp__control { border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); }
 .mk-mp__control:disabled { opacity: 0.55; cursor: not-allowed; }
+/* 紧凑档：与 32px 的 .mk-input / .mk-select 并排（批量套用行、设置表单） */
+.mk-mp--compact .mk-mp__control { min-height: 32px; padding: 6px 32px 6px 9px; font-size: var(--mk-fs-micro); }
+.mk-mp--compact .mk-mp__clear { right: 22px; font-size: var(--mk-fs-micro); }
 .mk-mp__value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mk-mp__value--empty { color: var(--mk-faint); font-family: inherit; }
 .mk-mp__clear {

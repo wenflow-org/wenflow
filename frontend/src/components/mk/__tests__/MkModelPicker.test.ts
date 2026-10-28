@@ -67,12 +67,12 @@ describe('MkModelPicker', () => {
     empty.unmount()
   })
 
-  it('打开后按供应商分组，继承行置顶，选中继承清空值', async () => {
+  it('打开后按供应商分组，平台默认行置顶，选中它清空值', async () => {
     const w = mountPicker({ modelValue: 'agnes-3.0-flash', allowInherit: true })
     await openPicker(w)
     expect(w.findAll('.mk-mp__group').map((g) => g.text())).toEqual(['平台', 'Acme 网关'])
     const labels = w.findAll('.mk-mp__opt').map((o) => o.find('.mk-mp__id').text())
-    expect(labels).toEqual(['继承上层默认', 'deepseek-v4.1-flash', 'agnes-3.0-flash', 'acme-vision'])
+    expect(labels).toEqual(['用平台默认模型', 'deepseek-v4.1-flash', 'agnes-3.0-flash', 'acme-vision'])
 
     await w.findAll('.mk-mp__opt')[0].trigger('click')
     expect(w.emitted('update:modelValue')?.[0]).toEqual([''])
