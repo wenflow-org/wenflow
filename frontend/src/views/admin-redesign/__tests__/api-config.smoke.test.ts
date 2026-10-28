@@ -577,17 +577,19 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.text()).not.toContain('连接并拉取')
     await gotoPlatformTab(wrapper, '连接与鉴权')
     expect(wrapper.find('.ac-conn__acts').text()).toContain('获取模型')
-    expect(wrapper.find('.ac-conn__danger').text()).toContain('重置此通道的接入配置')
+    // 2026-10-27 文案清空：重置不再带一段说明，按钮与其他连接动作同排
+    expect(wrapper.find('.ac-conn__acts').text()).toContain('重置此通道')
+    expect(wrapper.find('.ac-conn__danger').exists()).toBe(false)
     wrapper.unmount()
   })
 
   /* #13：后端 POST /admin/api-config/reset 能力早已存在；2026-10-27 P1 从页头收进通道详情 */
-  it('#13：重置入口在平台通道详情（范围写明），确认后调用 reset API；取消则不调用', async () => {
+  it('#13：重置入口在平台通道详情，确认后调用 reset API；取消则不调用', async () => {
     const wrapper = await mountApiConfig();
     await gotoPlatformTab(wrapper, '连接与鉴权');
     const btn = wrapper.findAll('button').find((b) => b.text() === '重置此通道');
-    expect(btn, '连接与鉴权页签应有重置入口').toBeTruthy();
-    expect(wrapper.find('.ac-conn__danger').text()).toContain('重置此通道的接入配置');
+    expect(btn, '连接段应有重置入口').toBeTruthy();
+    expect(wrapper.find('.ac-conn__acts').text()).toContain('重置此通道');
 
     // 取消 → 不触发
     await btn!.trigger('click');

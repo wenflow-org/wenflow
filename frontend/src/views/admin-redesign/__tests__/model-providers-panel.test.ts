@@ -197,10 +197,10 @@ describe('ModelProvidersPanel', () => {
     seedView({ providers: [platform] })
     const w = await mountPanel()
     const groups = w.findAll('.mpp-group')
-    // 两个用途各一段，组头写清功能与条数（空组不渲染）
+    // 两个用途各一段，组头只留「分组名 + 条数」（2026-10-27 去掉说明句，空组不渲染）
     expect(groups.map((g) => g.find('.mpp-group__name').text())).toEqual(['对话', '推理'])
     expect(groups.map((g) => g.find('.mpp-group__count').text())).toEqual(['2 个', '1 个'])
-    expect(groups[0].text()).toContain('常规教学、工具调用与高频 Skill')
+    expect(groups.map((g) => g.text())).toEqual(['对话2 个', '推理1 个'])
 
     const rows = modelRows(w)
     const fn = (i: number) => rows[i].find('.mpp-fn').text()

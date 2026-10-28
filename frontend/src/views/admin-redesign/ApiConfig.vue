@@ -55,6 +55,13 @@
                   :disabled="saving"
                   @click="saveGroups(['conn'])"
                 >{{ saving ? '保存中…' : '保存连接' }}</button>
+                <!-- 重置是低频不可逆动作：收进同一行动作组、用危险色标出，确认框再交代范围 -->
+                <button
+                  type="button"
+                  class="mk-btn mk-btn--sm mk-btn--danger-ghost"
+                  :disabled="resetting"
+                  @click="resetConfig"
+                >{{ resetting ? '重置中…' : '重置此通道' }}</button>
               </div>
             </div>
             <div class="ac-body ac-conn2">
@@ -114,19 +121,6 @@
                   </span>
                 </div>
               </div>
-            </div>
-            <!-- 高危动作（2026-10-27 P1）：从页头移入通道详情，写明作用域与后果，避免误触 -->
-            <div class="ac-conn__danger">
-              <div class="ac-conn__danger-text">
-                <strong>重置此通道的接入配置</strong>
-                <span>删除服务地址、API Key、模型清单与平台默认值，不可撤销。登录审计与访问策略不受影响。</span>
-              </div>
-              <button
-                type="button"
-                class="mk-btn mk-btn--sm mk-btn--danger-ghost"
-                :disabled="resetting"
-                @click="resetConfig"
-              >{{ resetting ? '重置中…' : '重置此通道' }}</button>
             </div>
           </div>
         </template>
@@ -973,21 +967,8 @@ function discardAll() {
    状态徽标与「保存连接」收进一条细条，右侧一句说明这段表单管什么。 */
 /* 槽位已在供应商详情的内衬里：连接块自身的 .ac-body 不再补一层 16px 边 */
 .ac-conn .ac-body { padding: 0; }
-/* 连接块头右组：获取模型 + 分段保存 */
+/* 连接块头右组：获取模型 + 分段保存 + 重置 */
 .ac-conn__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-/* 高危重置：从页头移入通道详情，整条给出作用域与后果，按钮弱化 */
-.ac-conn__danger {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--mk-line);
-}
-.ac-conn__danger-text { display: grid; gap: 2px; flex: 1 1 260px; min-width: 0; }
-.ac-conn__danger-text strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); }
-.ac-conn__danger-text span { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
 
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }

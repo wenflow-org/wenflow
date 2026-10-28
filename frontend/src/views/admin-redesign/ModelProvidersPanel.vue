@@ -126,7 +126,6 @@
                     <td colspan="5">
                       <span class="mpp-group__name">{{ g.label }}</span>
                       <span class="mpp-group__count">{{ g.models.length }} 个</span>
-                      <span class="mpp-group__hint">{{ g.hint }}</span>
                     </td>
                   </tr>
                   <tr v-for="m in g.models" :key="m.id">
@@ -388,8 +387,8 @@ function warningLabel(m: ModelLike): string {
 }
 /** 未配单价 = 成本分析页这个模型的金额会显示「—」，是可在模型编辑高级设置里补的配置缺口 */
 const MODEL_GROUPS = [
-  { tier: 'chat' as const, label: '对话', hint: '常规教学、工具调用与高频 Skill' },
-  { tier: 'reasoning' as const, label: '推理', hint: '长思考与复杂判断' }
+  { tier: 'chat' as const, label: '对话' },
+  { tier: 'reasoning' as const, label: '推理' }
 ]
 /** 按用途（对话 / 推理）分组；空组不渲染，单组时也保留组头——它就是这个模型的功能归属 */
 const modelGroups = computed(() => {
@@ -690,16 +689,15 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-setup__text { display: grid; gap: 4px; min-width: 0; }
 .mpp-setup__text strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
 .mpp-setup__text span { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
-/* 功能分组行：一张表里切段（对话 / 推理），组内不再复述用途。
-   不覆写内边距：6px 纵向曾把单行小字单元格压到 30px，低于 SPEC §3 的 40px 行高下限
-   （SkillReconciliation 同款判例）。跟随 .mk-table td 的档位节奏。 */
-.mpp-group td {
+/* 功能分组行：一张表里切段（对话 / 推理）。2026-10-27 去掉说明句后压成一条窄带，
+   只留「分组名 + 条数」——它是分节线，不该占一个正文行的高度（仍守住 40px 下限）。 */
+.mpp-table tbody .mpp-group td {
+  height: 40px;
   background: var(--mk-surface-2);
   border-top: 1px solid var(--mk-line);
 }
 .mpp-group__name { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
 .mpp-group__count { margin-left: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-.mpp-group__hint { margin-left: 10px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 功能列：能力标签；「基础对话」是缺省态，弱化成正文色不抢眼。
    标签允许换行——窄档功能列只有百来像素，nowrap 会把整表宽度顶出去。 */
 .mpp-fn { white-space: normal; min-width: 88px; }
