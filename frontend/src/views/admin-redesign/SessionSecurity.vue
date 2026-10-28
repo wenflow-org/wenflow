@@ -265,7 +265,7 @@
       v-model:pageSize="pageSize"
       :total="activeFlat.length"
       :loading="loading"
-      :note="truncated ? `全部活跃 ${activeCount} 条` : ''"
+      :note="truncated ? `全站活跃 ${activeCount} 条（已加载 ${activeFlat.length} 条）` : ''"
     />
     </div>
   </div>

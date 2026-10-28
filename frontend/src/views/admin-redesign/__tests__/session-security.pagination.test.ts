@@ -190,10 +190,10 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     const acts = w.find('.ss-head-acts').text();
     expect(acts).toContain('清理历史（7）');
     expect(acts).toContain('下线全部（92）');
-    // 页码器分母 = 行窗口（30），note 标明全量活跃 93——两个数不同源，各自标口径
-    // （2026-10-14 文案批：「后端全量活跃」→「全部活跃」，去后端视角）
+    // 页码器分母 = 行窗口（30），note 同时标出全站活跃数与已加载数——两个数不同源，各自标口径
+    // （2026-10-26 视觉验收：只说「全部活跃 93」会被读成与「共 30 条」矛盾）
     expect(pagerText(w)).toContain('共 30 条');
-    expect(w.find('.pagination-note').text()).toContain('全部活跃 93 条');
+    expect(w.find('.pagination-note').text()).toContain('全站活跃 93 条（已加载 30 条）');
   });
 
   it('未截断时不出现口径 note（避免同屏复读）', async () => {

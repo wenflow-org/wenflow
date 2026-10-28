@@ -1520,6 +1520,24 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
    ≤1100 单列后 feed 失去柱图列定高，重新给它上限防长事件流无限拉高 */
 @media (max-width: 1100px) {
   .row2 { grid-template-columns: 1fr; }
+  /* row3 同样收单列：两列时卡片内宽仅 ~360，扣掉 264px 定宽列后 Skill 名只剩几十像素 */
+  .row3 { grid-template-columns: minmax(0, 1fr); }
   .feed--capped { max-height: 300px; }
+}
+/* 1101–1599（含 1280 笔记本）：三列会让 Top 5 的名称列被压到 20px 以下
+   （序号 20 + 进度条 64 + 调用 76 + 失败 64 + 间距 40 = 264px 定宽），
+   降为两列，把名称列拉回可读宽度；第三张虚拟学习者参考卡自然落到第二行。
+   1600 起三列可容纳 ~120px 名称列，恢复原布局。 */
+@media (min-width: 1101px) and (max-width: 1599px) {
+  .row3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* ≤700 手机：单列后卡片内宽仍只有 ~300px，同样扣不动 264px 定宽列。
+   收起占比条（纯视觉辅助，名次与调用数已编码差距），并把两列数字收到表头四字宽；
+   名称列回到 ~150px。 */
+@media (max-width: 700px) {
+  .rankrow__bar { display: none; }
+  .rankrow__calls { width: 60px; }
+  .rankrow__failed,
+  .rankrow__col-failed { width: 48px; }
 }
 </style>

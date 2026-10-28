@@ -23,9 +23,9 @@ const MODELS = [
   'step-fun/step-1v',
 ]
 
-function mountDialog(registered: string[] = ['deepseek-v4.1-flash'], providerId = '') {
+function mountDialog(registered: string[] = ['deepseek-v4.1-flash'], providerId = '', models = MODELS) {
   return mount(PullModelsDialog, {
-    props: { providerName: '平台', providerId, models: MODELS, registered },
+    props: { providerName: '平台', providerId, models, registered },
     global: { stubs: { teleport: true } },
   })
 }
@@ -104,6 +104,14 @@ describe('PullModelsDialog', () => {
     expect(w.findAll('.pmd-row').map((r) => r.text())).toHaveLength(2)
     expect(w.text()).toContain('gpt-4o')
     expect(w.text()).toContain('step-1v')
+  })
+
+  it('分类页签 0 命中时隐藏，并说明能力标签可能为空', async () => {
+    const w = mountDialog([], '', ['agnes-3.0-flash'])
+    await open(w)
+    expect(w.findAll('.pmd-tab').map((t) => t.text())).toEqual(['全部 (1)'])
+    expect(w.text()).toContain('推断不出的留空')
+    expect(rowOf(w, 'agnes-3.0-flash').text()).toContain('—')
   })
 
   it('全选作用于当前分类里可添加的对话模型，已添加与向量/重排不勾', async () => {

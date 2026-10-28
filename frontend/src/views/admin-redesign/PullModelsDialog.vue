@@ -17,7 +17,7 @@
           <div class="pmd-toolbar">
             <div class="pmd-tabs" role="tablist" aria-label="模型分类" @keydown="onTabKeydown">
               <button
-                v-for="tab in tabs"
+                v-for="tab in visibleTabs"
                 :key="tab.key"
                 type="button"
                 class="pmd-tab"
@@ -95,7 +95,7 @@
           </div>
 
           <div class="pmd-hint">
-            <span>勾选后会按模型名自动带上能力标签，添加后可再逐个编辑。</span>
+            <span>勾选后按模型名推断能力标签，推断不出的留空，可在添加后编辑。</span>
             <label class="pmd-all">
               <input
                 type="checkbox"
@@ -210,6 +210,10 @@ const tabs = computed(() => [
   { key: 'reasoning' as const, label: '深度思考/推理', count: rows.value.filter((r) => r.inference.supportsThinking).length },
   { key: 'vision' as const, label: '多模态读图', count: rows.value.filter((r) => r.inference.vision).length },
 ])
+
+/** 0 命中的分类不占位：上游名称推断不出能力时（如第三方 agnes-*），
+    两个空页签只会让用户以为筛选坏了；有命中时再出现。 */
+const visibleTabs = computed(() => tabs.value.filter((tab) => tab.key === 'all' || tab.count > 0))
 
 const visibleRows = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -437,4 +441,12 @@ defineExpose({ openWith })
 .pmd-manual { margin-right: auto; font-size: var(--mk-fs-micro); }
 .pmd-foot__count { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .pmd-foot__count b { color: var(--mk-ink); }
+/* ≤640：底栏四项在手机宽度放不下一行，flex 会把按钮压到竖排换字。
+   手动录入独占一行，已选数靠左、两个按钮靠右，按钮不收缩。 */
+@media (max-width: 640px) {
+  .pmd-foot { flex-wrap: wrap; row-gap: 8px; }
+  .pmd-manual { width: 100%; margin-right: 0; }
+  .pmd-foot__count { margin-right: auto; }
+  .pmd-foot .mk-btn { flex: none; white-space: nowrap; }
+}
 </style>
