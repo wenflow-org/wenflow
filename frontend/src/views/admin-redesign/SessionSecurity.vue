@@ -22,11 +22,8 @@
       <button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
       <button type="button" class="mk-link ss-deeplink__clear" @click="clearDeepLink">× 清除筛选</button>
     </div>
-    <!-- 常驻分工说明（无深链时） -->
-    <div v-else class="ss-note">
-      <span>展示登录成功产生的会话（可管理/强制下线），登录事件的完整历史（含失败尝试）见</span>
-      <button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
-    </div>
+    <!-- 常驻分工说明已撤（2026-10-27 用户「这文案没用吧」）：登录成功/失败的口径从页面文案
+         看得出，唯一有动作的是审计日志跳转，已归位到卡头右组，不再单占一行。 -->
 
     <!-- 加载失败错误态：仅「整页无数据可显示」时走整页错误（审核 #179：原判据只有 loadError，
          刷新失败会把已渲染的会话表整个顶掉——用户只是想更新数据却丢掉整屏。有旧行时改走
@@ -67,6 +64,9 @@
                pill 计数、本 meta、组头），而 54 = 活跃 54 + 已过期 0 + 已撤销 0，是 pills 的和。
                现在只留「行窗口截断」这条 pills 与页码器都说不出的事实。 -->
           <span v-if="truncated" class="mk-card__meta" :title="countsTitle">行列表仅含最近 {{ sessions.length }} 条</span>
+          <!-- 原顶部说明条里唯一的动作（2026-10-27 用户「这文案没用吧，操作区换个位置」）：
+               登录审计跳转留在卡头右组，说明文字删除。 -->
+          <button type="button" class="mk-link ss-audit-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
         </div>
       </div>
 
@@ -717,21 +717,8 @@ onMounted(async () => {
    避免遮蔽全局升级（此前重定义导致 mk-status__actions 等新类不生效） */
 
 /* 审计日志分工说明 / 深链横幅 */
-/* 常驻分工说明（原型 .note：次级表面底 + muted 字，无描边） */
-.ss-note {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px 14px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface-2);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
-/* 链接在 --mk-surface-2 底上仅 4.39:1（<4.5 AA）：加深到 --mk-accent-deep（亮色 #1f57cc，
-   对 #eef2fa 实测 5.68:1；暗色自动翻转），与 .mk-badge--self 同款 */
-.ss-note .mk-link { color: var(--mk-accent-deep, #1f57cc); }
+/* 卡头右组的审计跳转：窄屏不换行（与截断 meta 并列时优先保动作完整） */
+.ss-audit-link { white-space: nowrap; }
 /* 深链横幅：底色/字色/圆角由 .mk-alert--info 承担，这里只补行内布局 */
 .ss-deeplink {
   display: flex;

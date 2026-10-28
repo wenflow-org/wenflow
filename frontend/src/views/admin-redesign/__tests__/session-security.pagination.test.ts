@@ -332,4 +332,32 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(pillCount(w, '已撤销')).toBe('1');
     expect(w.find('.ss-group__count').text()).toContain('活跃 3');
   });
+
+  it('顶部说明条已撤：审计日志跳转归位到卡头右组（不再单占一行）', async () => {
+    const w = await mountSS([fakeSession(1)]);
+    expect(w.find('.ss-note').exists()).toBe(false);
+    const headRight = w.find('.mk-card__head-right');
+    expect(headRight.find('.ss-audit-link').text()).toContain('审计日志 · 登录审计');
+    w.unmount();
+  });
+
+  it('审计深链横幅仍保留：横幅内同样有审计跳转与清除筛选', async () => {
+    h.getSessions.mockResolvedValue({
+      data: { data: { sessions: [fakeSession(1)], counts: { total: 1, active: 1, expired: 0, revoked: 0 } } }
+    });
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
+    });
+    await router.push('/admin/session-security?user=admin');
+    await router.isReady();
+    const w = mount(SessionSecurity, { global: { plugins: [router] } });
+    await flushPromises();
+    await flushPromises();
+    const banner = w.find('.ss-deeplink');
+    expect(banner.exists()).toBe(true);
+    expect(banner.findAll('button').map((b) => b.text()).join(' ')).toContain('审计日志 · 登录审计');
+    expect(banner.text()).toContain('清除筛选');
+    w.unmount();
+  });
 });
