@@ -132,7 +132,8 @@
           >去配置连接</button>
         </div>
 
-        <div v-if="selected.models.length || !selected.enabled" class="mk-table-scroll">
+        <!-- 模型表常驻：基础设施行也在这张表里，没有对话模型时不能把表整张藏掉 -->
+        <div class="mk-table-scroll">
           <table class="mk-table mk-table--dense mk-table--fixed mpp-table">
             <colgroup>
               <col style="width: 38%" /><col style="width: 26%" /><col style="width: 16%" /><col style="width: 20%" />
@@ -203,19 +204,20 @@
                 </td>
                 </tr>
               </template>
-              <tr v-if="!selected.models.length">
+              <tr v-if="!selected.enabled">
                 <td colspan="4" class="mpp-empty">
                   这条通道当前停用，模型不参与路由。
                 </td>
               </tr>
+              <!-- 基础设施（向量化 / 重排）也在这张表里，由宿主经 #models-infra 注入两组行：
+                   与对话模型同一套分组行、列宽与行内动作（2026-10-28 用户「按照对话的样子
+                   拆散了，并到对话列表里去」）。 -->
+              <slot name="models-infra" />
             </tbody>
           </table>
         </div>
       </div>
 
-      <div id="mpp-platform-panel-infra">
-        <slot name="platform-infra" />
-      </div>
       <div id="mpp-platform-panel-generation">
         <slot name="platform-generation" />
       </div>

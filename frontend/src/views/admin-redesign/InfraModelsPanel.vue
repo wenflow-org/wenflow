@@ -1,84 +1,53 @@
 <template>
-  <section class="infra-card" :class="props.embedded ? 'infra-card--embedded' : 'mk-card'">
-    <div v-if="!props.embedded" class="mk-card__head">
-      <h3 class="mk-card__title">
-        基础设施模型
-        <span class="mk-badge mk-badge--info">平台必需</span>
-      </h3>
-      <button type="button" class="mk-link" :disabled="loading" @click="load">
-        {{ loading ? '刷新中…' : '刷新' }}
-      </button>
-    </div>
-    <div v-else class="infra-embedded__head">
-      <span class="infra-embedded__title">
-        基础设施模型
-        <span class="mk-badge mk-badge--info">平台必需</span>
-      </span>
-      <button type="button" class="mk-link" :disabled="loading" @click="load">
-        {{ loading ? '刷新中…' : '刷新' }}
-      </button>
-    </div>
-
-    <div v-if="failed" class="mk-alert mk-alert--row infra-alert" role="alert">
-      <span class="mk-alert__msg">{{ failed }}</span>
-      <button type="button" class="mk-alert__btn" @click="load">重试</button>
-    </div>
-
-    <MkLoading v-if="loading && !view" inline text="基础设施配置加载中…" />
-
-    <template v-else-if="view">
-      <div v-if="view.warnings.length" class="mk-alert mk-alert--row infra-alert" role="alert">
-        <span class="mk-alert__msg">
-          <span v-for="(warning, index) in view.warnings" :key="index" class="infra-alert__line">{{ warning }}</span>
-        </span>
-      </div>
-
-      <div class="infra-grid">
-        <article v-for="entry in entries" :key="entry.kind" class="infra-item">
-          <div class="infra-item__head">
-            <div class="infra-item__id">
-              <strong>{{ entry.kind === 'embedding' ? '向量化' : '重排' }}</strong>
-            </div>
-            <span class="mk-badge" :class="entry.configured ? 'mk-badge--ok' : 'mk-badge--bad'">
-              {{ entry.configured ? '已配置' : '未配置' }}
-            </span>
-          </div>
-
-          <dl class="infra-kv">
-            <div><dt>模型</dt><dd class="mono" :title="entry.model">{{ entry.model || '—' }}</dd></div>
-            <div><dt>服务地址</dt><dd class="mono" :title="entry.endpoint">{{ entry.endpoint || '—' }}</dd></div>
-            <div><dt>密钥</dt><dd>{{ keyText(entry) }}</dd></div>
-            <div><dt>超时</dt><dd>{{ entry.timeoutMs }} ms</dd></div>
-            <div v-if="entry.kind === 'embedding'"><dt>批量</dt><dd>{{ entry.batchSize ?? '—' }}</dd></div>
-            <div v-if="entry.dimensions"><dt>维度</dt><dd>{{ entry.dimensions }}</dd></div>
-          </dl>
-
-          <div class="infra-item__foot">
-            <span class="infra-item__source">{{ sourceText(entry) }}</span>
-            <div class="mk-actions">
-              <button type="button" class="mk-btn mk-btn--sm" @click="openEdit(entry)">编辑</button>
-              <button
-                type="button"
-                class="mk-link"
-                :disabled="testing[entry.kind]"
-                @click="test(entry.kind)"
-              >{{ testing[entry.kind] ? '测试中…' : '测试连接' }}</button>
-            </div>
-          </div>
-
-          <div
-            v-if="testResults[entry.kind]"
-            class="infra-test"
-            :class="testResults[entry.kind]!.ok ? 'is-ok' : 'is-bad'"
-          >
-            <span class="mk-badge" :class="testResults[entry.kind]!.ok ? 'mk-badge--ok' : 'mk-badge--bad'">
-              {{ testResults[entry.kind]!.ok ? '测试通过' : '测试失败' }}
-            </span>
-            <span class="infra-test__text">{{ testText(entry.kind) }}</span>
-          </div>
-        </article>
-      </div>
-    </template>
+  <!-- 2026-10-28 用户「把这个按照对话的样子拆散了，并到对话列表里去，文案不要了」：
+       基础设施不再自成区块，向量化 / 重排作为模型表里的两组行，沿用同一套分组行、
+       状态徽标与行内动作；服务地址、密钥、超时等细节收进编辑弹层。未配置的降级
+       说明不再上屏，状态徽标与测试结果已能表达。 -->
+  <tr v-if="view" id="mpp-platform-panel-infra" class="mpp-group">
+    <td colspan="4">
+      <span class="mpp-group__name">基础设施</span>
+      <span class="mpp-group__count">{{ entries.length }} 个</span>
+    </td>
+  </tr>
+  <tr v-if="loading && !view">
+    <td colspan="4" class="mpp-empty">基础设施读取中…</td>
+  </tr>
+  <tr v-else-if="failed">
+    <td colspan="4" class="mpp-empty">
+      {{ failed }}
+      <button type="button" class="mk-link" @click="load">重试</button>
+    </td>
+  </tr>
+  <tr v-for="entry in view ? entries : []" :key="entry.kind">
+    <td class="mpp-model">
+      <span class="mono mpp-model__id" :title="entry.model">{{ entry.model || '—' }}</span>
+      <span
+        v-if="testResults[entry.kind]"
+        class="mpp-rowtest"
+        :class="{ 'mpp-rowtest--bad': !testResults[entry.kind]!.ok }"
+        :title="testResults[entry.kind]!.text"
+      >{{ testResults[entry.kind]!.ok ? '调用通过' : '调用失败' }}<template v-if="testResults[entry.kind]!.text"> · {{ testResults[entry.kind]!.text }}</template></span>
+    </td>
+    <td class="mpp-fn">
+      <span class="mpp-fn__chip">{{ kindLabel(entry.kind) }}</span>
+    </td>
+    <td>
+      <span
+        class="mk-badge"
+        :class="entry.configured ? 'mk-badge--ok' : 'mk-badge--bad'"
+        :title="sourceText(entry)"
+      >{{ entry.configured ? '已配置' : '未配置' }}</span>
+    </td>
+    <td class="mpp-rowacts">
+      <button
+        type="button"
+        class="mk-link"
+        :disabled="testing[entry.kind]"
+        @click="test(entry.kind)"
+      >{{ testing[entry.kind] ? '测试中…' : '测试' }}</button>
+      <button type="button" class="mk-link" @click="openEdit(entry)">编辑</button>
+    </td>
+  </tr>
 
     <Teleport to="body">
       <div v-if="editKind" ref="maskRef" class="mk-modal">
@@ -154,7 +123,6 @@
         </div>
       </div>
     </Teleport>
-  </section>
 </template>
 
 <script setup lang="ts">
@@ -170,14 +138,8 @@ import { errMsg } from './live'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
-import MkLoading from '@/components/mk/MkLoading.vue'
 
 type InfraKind = 'embedding' | 'rerank'
-
-const props = withDefaults(defineProps<{
-  /** 嵌入平台详情时去掉外层卡片与重复大标题，只留一条紧凑块头 */
-  embedded?: boolean
-}>(), { embedded: false })
 
 const loading = ref(false)
 const failed = ref('')
@@ -190,18 +152,12 @@ const entries = computed<InfraModelEntryView[]>(() =>
 const testing = ref<Record<InfraKind, boolean>>({ embedding: false, rerank: false })
 const testResults = ref<Record<InfraKind, { ok: boolean; text: string } | null>>({ embedding: null, rerank: null })
 
-function keyText(entry: InfraModelEntryView): string {
-  if (entry.keySource === 'none') return '未配置'
-  if (entry.keySource === 'inherit') return `沿用向量化密钥${entry.keyHint ? `（${entry.keyHint}）` : ''}`
-  return `${entry.keySource === 'db' ? '平台密文' : '环境变量'}${entry.keyHint ? `（${entry.keyHint}）` : ''}`
+function kindLabel(kind: InfraKind): string {
+  return kind === 'embedding' ? '向量化' : '重排'
 }
 
 function sourceText(entry: InfraModelEntryView): string {
   return entry.configSource === 'db' ? '配置来源：平台配置' : '配置来源：环境变量回落'
-}
-
-function testText(kind: InfraKind): string {
-  return testResults.value[kind]?.text || ''
 }
 
 async function load() {
@@ -234,7 +190,10 @@ async function test(kind: InfraKind) {
     testResults.value[kind] = data.ok
       ? {
           ok: true,
-          text: `${data.model || '—'} · ${data.latencyMs ?? '—'}ms${data.dimensions ? ` · ${data.dimensions} 维` : ''}`,
+          text: [
+            data.latencyMs != null ? `${data.latencyMs}ms` : '',
+            data.dimensions ? `${data.dimensions} 维` : '',
+          ].filter(Boolean).join(' · '),
         }
       : { ok: false, text: data.error || data.code || '调用失败' }
   } catch (e) {
@@ -328,60 +287,34 @@ onMounted(load)
 </script>
 
 <style scoped>
-.infra-card { container-type: inline-size; }
-.infra-card--embedded { display: grid; gap: 12px; }
-.infra-embedded__head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
+/* 行样式与模型表同源：父组件的 scoped 样式进不到子组件内部，这里补齐分组行、
+   模型格、功能胶囊与行内动作的同一套观感。 */
+.mpp-group td {
+  height: 40px;
+  background: var(--mk-surface-2);
+  border-top: 1px solid var(--mk-line);
+}
+.mpp-group__name { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
+.mpp-group__count { margin-left: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.mpp-model { min-width: 180px; }
+.mpp-model__id { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mpp-rowtest { display: block; margin-top: 2px; color: var(--mk-green); font-size: var(--mk-fs-micro); }
+.mpp-rowtest--bad { color: var(--mk-red); }
+.mpp-fn { white-space: normal; min-width: 88px; }
+.mpp-fn__chip {
+  display: inline-block;
+  margin-right: 4px;
   margin-bottom: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--mk-blue-bg);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  color: var(--mk-blue);
+  white-space: nowrap;
 }
-.infra-embedded__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--mk-fs-emphasis);
-  font-weight: 600;
-  color: var(--mk-ink);
-}
-.infra-embedded__head .mk-link { margin-left: auto; }
-.infra-card--embedded .infra-alert { margin: 0; }
-.infra-card--embedded .infra-grid { padding: 0; }
-.infra-alert { margin: 12px 16px 0; }
-.infra-alert__line { display: block; }
-.infra-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 12px;
-  padding: 4px 16px 12px;
-}
-.infra-item {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-}
-.infra-item__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.infra-item__id { display: grid; gap: 2px; min-width: 0; }
-.infra-item__id strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
-.infra-kv { display: grid; gap: 5px; margin: 0; }
-.infra-kv > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: baseline; }
-.infra-kv dt { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.infra-kv dd { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.infra-item__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.infra-item__source { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.infra-test { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--mk-fs-micro); }
-.infra-test.is-ok { color: var(--mk-green); }
-.infra-test.is-bad { color: var(--mk-red); }
-.infra-test__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mpp-rowacts { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .infra-formrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .infra-check { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-@container (max-width: 420px) {
-  .infra-grid { grid-template-columns: minmax(0, 1fr); }
-  .infra-formrow { grid-template-columns: minmax(0, 1fr); }
-}
 </style>

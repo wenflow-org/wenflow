@@ -395,8 +395,9 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-27 用户「把 tab 解散了」：平台详情不再分二级页签，四段按接入顺序平铺。 */
-  it('单页：无一级页签，连接 / 模型 / 基础设施 / 平台默认四段常驻', async () => {
+  /* 2026-10-27 用户「把 tab 解散了」：平台详情不再分二级页签，按接入顺序平铺；
+     2026-10-28 基础设施并入模型表，不再自成一段。 */
+  it('单页：无页签，连接 / 模型表（含基础设施）/ 平台默认常驻', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     // 一级页签已撤；供应商面板与调用策略同屏
@@ -414,6 +415,17 @@ describe('ApiConfig P1 修复批', () => {
     for (const id of ['conn', 'models', 'infra', 'generation']) {
       expect((wrapper.find(`#mpp-platform-panel-${id}`).attributes('style') || '')).not.toContain('display: none');
     }
+    // 2026-10-28 用户「按照对话的样子拆散了，并到对话列表里去，文案不要了」：
+    // 向量化 / 重排成为模型表里的行，独立块头、平台必需徽标与降级说明都不再上屏
+    const tableText = wrapper.find('.mpp-table').text();
+    expect(tableText).toContain('基础设施');
+    expect(tableText).toContain('BAAI/bge-m3');
+    expect(tableText).toContain('BAAI/bge-reranker-v2-m3');
+    expect(tableText).toContain('向量化');
+    expect(tableText).toContain('重排');
+    expect(wrapper.text()).not.toContain('基础设施模型');
+    expect(wrapper.text()).not.toContain('平台必需');
+    expect(wrapper.text()).not.toContain('资料语义召回');
     // 旧的独立基础设施卡与「平台默认生成参数」卡都已撤
     expect(wrapper.find('#ac-infra').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('平台默认生成参数');

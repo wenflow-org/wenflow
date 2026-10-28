@@ -1,10 +1,11 @@
 /**
- * 基础设施模型卡冒烟：
- * 1. 平台必需标识与 embedding/rerank 两卡渲染；
- * 2. 配置来源与密钥来源可读；
- * 3. 「测试连接」走真实接口并回显结果。
+ * 基础设施模型行冒烟（2026-10-28 从独立卡片并入模型表）：
+ * 1. 向量化 / 重排作为模型表里的两组行，不再有独立区块与说明文案；
+ * 2. 配置来源收进状态徽标 title；
+ * 3. 「测试」走真实接口并回显结果。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { h } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import InfraModelsPanel from '../InfraModelsPanel.vue';
 
@@ -56,6 +57,17 @@ function view() {
   };
 }
 
+/** 组件根节点是 <tr>，挂到真实表格里避免浏览器表外节点重排 */
+function mountRows() {
+  return mount({
+    render: () => h('table', [h('tbody', [h(InfraModelsPanel)])]),
+  });
+}
+
+function bodyRows(wrapper: ReturnType<typeof mountRows>) {
+  return wrapper.findAll('tr').filter((r) => !r.classes('mpp-group'));
+}
+
 describe('InfraModelsPanel', () => {
   beforeEach(() => {
     getMock.mockReset();
@@ -66,39 +78,68 @@ describe('InfraModelsPanel', () => {
     });
   });
 
-  it('渲染平台必需标识、两卡与密钥来源', async () => {
-    const wrapper = mount(InfraModelsPanel);
+  it('并成模型表里的两行：分组行 + 用途 + 状态 + 编辑/测试，不再有独立区块', async () => {
+    const wrapper = mountRows();
     await flushPromises();
-    expect(wrapper.text()).toContain('基础设施模型');
-    expect(wrapper.text()).toContain('平台必需');
-    expect(wrapper.text()).toContain('向量化');
-    expect(wrapper.text()).toContain('重排');
-    expect(wrapper.text()).toContain('BAAI/bge-m3');
-    expect(wrapper.text()).toContain('沿用向量化密钥');
-    expect(wrapper.text()).toContain('配置来源：平台配置');
+
+    // 独立卡壳、块头与「平台必需」徽标都随区块撤掉
+    expect(wrapper.find('.infra-card').exists()).toBe(false);
+    expect(wrapper.find('.infra-item').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('基础设施模型');
+    expect(wrapper.text()).not.toContain('平台必需');
+
+    const group = wrapper.find('tr.mpp-group');
+    expect(group.exists()).toBe(true);
+    expect(group.text()).toContain('基础设施');
+    expect(group.find('.mpp-group__count').text()).toBe('2 个');
+
+    const rows = bodyRows(wrapper);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].text()).toContain('BAAI/bge-m3');
+    expect(rows[0].text()).toContain('向量化');
+    expect(rows[0].text()).toContain('已配置');
+    expect(rows[1].text()).toContain('BAAI/bge-reranker-v2-m3');
+    expect(rows[1].text()).toContain('重排');
+    expect(rows[0].find('.mpp-rowacts').findAll('button').map((b) => b.text())).toEqual(['测试', '编辑']);
     wrapper.unmount();
   });
 
-  it('embedded 模式不套第二层卡壳，只留紧凑块头', async () => {
-    const wrapper = mount(InfraModelsPanel, { props: { embedded: true } });
+  it('配置来源收进状态徽标 title，不上屏', async () => {
+    const wrapper = mountRows();
     await flushPromises();
-    expect(wrapper.find('.mk-card').exists()).toBe(false);
-    expect(wrapper.find('.infra-embedded__head').exists()).toBe(true);
-    expect(wrapper.text()).toContain('基础设施模型');
-    expect(wrapper.text()).toContain('平台必需');
-    expect(wrapper.findAll('.infra-item')).toHaveLength(2);
+    const badge = bodyRows(wrapper)[0].find('.mk-badge');
+    expect(badge.attributes('title')).toBe('配置来源：平台配置');
+    expect(wrapper.text()).not.toContain('配置来源');
     wrapper.unmount();
   });
 
-  it('测试连接调用接口并回显结果', async () => {
-    const wrapper = mount(InfraModelsPanel);
+  it('后端 warnings 不再上屏（未配置的降级说明整段撤掉）', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        data: {
+          ...view(),
+          warnings: ['向量化未配置：资料语义召回会退回结构化路径。'],
+        },
+      },
+    });
+    const wrapper = mountRows();
     await flushPromises();
-    const button = wrapper.findAll('button').find((item) => item.text().includes('测试连接'));
+    expect(wrapper.text()).not.toContain('资料语义召回');
+    wrapper.unmount();
+  });
+
+  it('测试调用接口并在行内回显结果', async () => {
+    const wrapper = mountRows();
+    await flushPromises();
+    const button = bodyRows(wrapper)[0]
+      .findAll('button')
+      .find((item) => item.text() === '测试');
     expect(button).toBeTruthy();
     await button!.trigger('click');
     await flushPromises();
     expect(testMock).toHaveBeenCalledWith('embedding');
-    expect(wrapper.text()).toContain('测试通过');
+    expect(bodyRows(wrapper)[0].find('.mpp-rowtest').text()).toContain('调用通过');
+    expect(bodyRows(wrapper)[0].find('.mpp-rowtest').text()).toContain('120ms');
     wrapper.unmount();
   });
 });
