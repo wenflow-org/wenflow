@@ -174,7 +174,7 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     await flushPromises();
     await nextTick();
     const cases: Array<[string, string, string]> = [
-      ['在跑的人', '运行中', 'vl-runstate--running'],
+      ['在跑的人', '进行中', 'vl-runstate--running'],
       ['停滞的人', '停滞', 'vl-runstate--stalled'],
       ['暂停的人', '已暂停', 'vl-runstate--paused'],
       ['停过的人', '已停止', 'vl-runstate--stopped'],
@@ -207,7 +207,7 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     await flushPromises();
     await nextTick();
     const row = rowByName(w, '在跑的人');
-    expect(row.find('.vl-state-cell').text()).toBe('运行中');
+    expect(row.find('.vl-state-cell').text()).toBe('进行中');
     // 路径名、阶段词、任务数、终态词都不该出现
     for (const word of ['函数与导数', '立体几何', '任务', '学习', '已放弃', '已完成']) {
       expect(row.text()).not.toContain(word);

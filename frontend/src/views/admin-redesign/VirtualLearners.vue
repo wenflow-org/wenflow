@@ -410,6 +410,7 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
+import { statusText } from './statusText'
 import { useListQueryState } from './learner-profile'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import VirtualLearnerRunningBar from './VirtualLearnerRunningBar.vue'
@@ -546,7 +547,8 @@ function runPhaseOf(s: Sample): RunPhase {
 }
 
 const RUN_PHASE_LABEL: Record<RunPhase, string> = {
-  running: '运行中',
+  /* running 统一走 statusText 单源（「进行中」）；本页的「运行」是启动动作，不是状态译名 */
+  running: statusText('running'),
   paused: '已暂停',
   stalled: '停滞',
   stopped: '已停止'
@@ -605,7 +607,7 @@ const stateFilterOptions = computed(() => {
   const byPhase = (p: RunPhase) => samples.value.filter((s) => runPhaseOf(s) === p).length
   return [
     { key: 'all', label: '全部', count: n(samples.value.length) },
-    { key: 'running', label: '运行中', count: n(byPhase('running')) },
+    { key: 'running', label: RUN_PHASE_LABEL.running, count: n(byPhase('running')) },
     { key: 'paused', label: '已暂停', count: n(byPhase('paused')) },
     { key: 'stalled', label: '停滞', count: n(byPhase('stalled')) },
     { key: 'stopped', label: '已停止', count: n(byPhase('stopped')) },

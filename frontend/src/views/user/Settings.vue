@@ -15,6 +15,7 @@
         </div>
         <label class="uc-switch" :class="{ 'uc-switch--off': !apiConfig.enabled }">
           <input
+            ref="enabledSwitchEl"
             type="checkbox"
             v-model="apiConfig.enabled"
             :disabled="busy"
@@ -343,6 +344,9 @@ const modelOptions = ref<string[]>([]);
 /** 端点返回的模型 id → MkModelPicker 候选（2026-10-27 取代原生 datalist 弹层） */
 const modelPickerOptions = computed(() => modelOptions.value.map((m) => ({ value: m, label: m })));
 const busy = computed(() => loading.value || saving.value || testing.value || disabling.value || loadingModels.value);
+/** 开关原生元素：拒绝启用/保存失败时要显式回写 checked——
+    模型值 false→false 时 Vue 不会重绘，DOM 会停在用户点出来的「开」 */
+const enabledSwitchEl = ref<HTMLInputElement | null>(null);
 
 // 单配置模式
 const apiConfig = reactive({
@@ -517,18 +521,25 @@ const disableConfig = async () => {
   }
 };
 
+/** 模型值没有翻转时 Vue 不会重绘 checked（false→false），必须显式把 DOM 拉回模型值 */
+const syncSwitchDom = () => {
+  if (enabledSwitchEl.value) enabledSwitchEl.value.checked = apiConfig.enabled
+}
+
 const handleEnabledChange = () => {
   const enabled = apiConfig.enabled
   if (!enabled) {
     /* 开关 UI 已翻到 false：先回滚为 true 保持「UI=服务端」一致，用户确认禁用后才由
        disableConfig 真正置 false —— 否则取消确认后开关/徽章/服务端三者失同步 */
     apiConfig.enabled = true
+    syncSwitchDom()
     void disableConfig();
     return;
   }
 
   if (!apiConfig.endpoint || !isValidEndpoint(apiConfig.endpoint) || (!hasSavedApiKey.value && !apiConfig.apiKey)) {
     apiConfig.enabled = false;
+    syncSwitchDom()
     toast.info('请先填写模型端点和 API Key，保存后再启用');
     return;
   }
@@ -537,6 +548,7 @@ const handleEnabledChange = () => {
   void saveApiConfig().then((saved) => {
     if (!saved) {
       apiConfig.enabled = false;
+      syncSwitchDom()
     }
   });
 };

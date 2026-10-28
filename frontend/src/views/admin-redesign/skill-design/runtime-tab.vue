@@ -22,13 +22,15 @@
           :title="overrideTitle"
           class="sdp-head__switch"
         />
+        <!-- 2026-10-28 用户「skill 详情的模型也改一下」：卡面只留当前配置摘要，
+             模型 / 生成参数 / 请求容错收进「配置」弹层，一次保存。 -->
         <button
-          v-if="dirtyNow"
           type="button"
-          class="sdp-card__save"
-          :disabled="rtSaving"
-          @click="saveRuntime"
-        >{{ rtSaving ? '保存中…' : '保存配置' }}</button>
+          class="mk-btn mk-btn--sm"
+          :disabled="!rtForm.enabled"
+          :title="rtForm.enabled ? '编辑模型与路由' : '先开启覆盖平台默认'"
+          @click="openConfig"
+        >配置</button>
       </div>
       <!-- 卡头只保留标题/开关/保存；旧「Prompt 里声明了 model 时，本页模型不参与」已删：
            与运行时契约相反（route 优先于 prompt.model）。 -->
@@ -45,11 +47,36 @@
           <span class="sdp-order__chain">本 Skill 设置 → Prompt 文件声明 → 代码默认 → 平台默认</span>
         </p>
 
-        <!-- 一页纵向铺开（2026-10-25 用户「作为一个页面，不分 tab」）：
-             原左分节导航 / 右当前分节要来回点才能看全「这个 Skill 到底怎么配的」，
-             且导航副文与分节页头报的是同一批当前值（复读）。现四段顺序铺开、各带小标题，
-             滚动即全貌；每段页头右侧仍报该段当前值（切段前也能看到全貌的那点信息不丢）。 -->
-        <div class="sdp-sections">
+        <!-- 当前配置摘要（2026-10-28）：模型、生成参数、超时/重试、备用链各一句，
+             编辑动作统一收进「配置」弹层，卡面不再铺表单。 -->
+        <div class="sdp-summary">
+          <div class="sdp-summary__head">
+            <span class="mono sdp-summary__id" :title="summaryModel">{{ summaryModel }}</span>
+            <span class="sdp-chip">{{ rtForm.tier }}</span>
+            <span v-for="cap in summaryCaps" :key="cap" class="sdp-chip">{{ cap }}</span>
+            <span v-if="!rtForm.enabled" class="sdp-chip">用平台默认</span>
+          </div>
+          <p v-if="summaryMeta" class="sdp-summary__meta">{{ summaryMeta }}</p>
+          <p class="sdp-summary__line">
+            生成参数 {{ thinkingLabel }} · T={{ generationParams?.temperature ?? INHERIT_PROMPT_LABEL }}
+            · 超时 {{ rtForm.requestTimeoutMs ? `${Math.round(rtForm.requestTimeoutMs / 1000)}s` : '平台默认' }}
+            · 重试 {{ effectiveLogicalRetries }} 次 · 备用 {{ fallbackChain.length ? `${fallbackChain.length} 个` : '平台默认' }}
+          </p>
+          <p v-if="!rtForm.enabled" class="sdp-summary__note">
+            覆盖已关闭：模型与超时按平台默认，生成参数仍按 Prompt 文件声明取值。
+          </p>
+        </div>
+
+        <!-- 配置弹层：模型 / 生成参数 / 请求与容错三段，底部一颗保存。 -->
+        <Teleport to="body">
+          <div v-if="configOpen" ref="configMaskRef" class="mk-modal">
+            <div ref="configPanelRef" class="mk-modal__panel sdp-config-modal" role="dialog" aria-label="配置模型与路由">
+              <div class="mk-modal__head">
+                <h3 class="mk-modal__title">配置模型与路由</h3>
+                <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
+              </div>
+              <div class="mk-modal__body">
+                <div class="sdp-sections">
           <section id="sdp-panel-model" class="sdp-panel">
           <header class="sdp-panel__head">
             <h4>模型</h4>
@@ -211,8 +238,21 @@
                 </div>
               </div>
             </section>
+                </div>
+              </div>
+              <div class="mk-modal__foot sdp-config-modal__foot">
+                <button type="button" class="mk-btn mk-btn--sm mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
+                <span class="sdp-config-modal__spacer"></span>
+                <button type="button" class="mk-btn" @click="closeConfig">取消</button>
+                <button type="button" class="mk-btn mk-btn--primary" :disabled="rtSaving" @click="saveRuntime">
+                  {{ rtSaving ? '保存中…' : '保存' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Teleport>
 
-            <section id="sdp-panel-test" class="sdp-panel">
+        <section id="sdp-panel-test" class="sdp-panel sdp-panel--test">
               <header class="sdp-panel__head">
                 <h4>模型测试</h4>
                 <span class="sdp-panel__state">直发上游，不留记录</span>
@@ -267,14 +307,10 @@
                 </div>
               </div>
             </section>
-        </div>
       </div>
 
-      <div class="sdp-form__footer">
-        <p v-if="rtMsg" class="sdp-form__msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
-        <!-- 2026-10-23 走查：卡内「刷新」与页头「刷新」同屏两颗、各刷一半（页头刷新会经
-             refreshTick 触发本组件重拉）——撤卡内这颗，页头刷新即全量来源。 -->
-        <button type="button" class="mk-btn mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
+      <div v-if="rtMsg" class="sdp-form__footer">
+        <p class="sdp-form__msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
       </div>
     </section>
 
@@ -289,6 +325,8 @@
 import { computed, ref, watch } from 'vue'
 import { adminPlatformSettingsApi, adminSkillsApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
+import { useEscape } from '../useEscape'
+import { useOverlay, useMaskClose } from '../useOverlay'
 import { errText, fmtMs, callParamSourceLabel, thinkingCapabilityNotice, type ThinkingCapability } from './sdp-shared'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
@@ -409,6 +447,28 @@ const inheritedModelText = computed(() => {
   const model = String(generationParams.value?.model || '')
   return model ? `当前使用平台默认：${model}` : ''
 })
+/** 卡面摘要：当前到底跑哪个模型、有哪些能力（2026-10-28） */
+const summaryModel = computed(() => {
+  if (rtForm.value.enabled && rtForm.value.model) return rtForm.value.model
+  return String(generationParams.value?.model || '平台默认模型')
+})
+const summaryCaps = computed(() => {
+  const opt = primaryOption.value
+  const cap = effectiveModelCap.value
+  return [
+    cap?.thinking ? '思考' : '',
+    cap?.reasoning ? '推理强度' : '',
+    opt?.vision ? '读图' : ''
+  ].filter(Boolean)
+})
+const summaryMeta = computed(() => {
+  const opt = primaryOption.value
+  if (!opt) return inheritedModelText.value
+  const price = opt.priceIn != null || opt.priceOut != null
+    ? `入 ${opt.priceIn ?? '—'} / 出 ${opt.priceOut ?? '—'}`
+    : ''
+  return [opt.providerName, price].filter(Boolean).join(' · ')
+})
 /** 生效模型的能力声明（注册表）：选中模型优先；继承时用侧栏解析出的生效模型查目录 */
 const effectiveModelCap = computed<ThinkingCapability | null>(() => {
   const id = String(rtForm.value.enabled && rtForm.value.model ? rtForm.value.model : generationParams.value?.model || '')
@@ -512,7 +572,7 @@ const primaryOption = computed(() => pickerOptions.value.find((o) => o.value ===
 const primaryMetaText = computed(() => {
   const o = primaryOption.value
   if (!o) return ''
-  const caps = [o.thinking ? '思考' : '', o.reasoning ? '强度' : '', o.vision ? '视觉' : ''].filter(Boolean).join(' / ')
+  const caps = [o.thinking ? '思考' : '', o.reasoning ? '推理强度' : '', o.vision ? '读图' : ''].filter(Boolean).join(' / ')
   const price = o.priceIn != null || o.priceOut != null
     ? `入 ${o.priceIn ?? '—'} / 出 ${o.priceOut ?? '—'}`
     : ''
@@ -581,6 +641,63 @@ function resetRtForm() {
   probeMsg.value = ''
   probeErr.value = false
 }
+
+/* ---------- 配置弹层（2026-10-28）：取消回滚，保存一次提交 ---------- */
+const configOpen = ref(false)
+const configPanelRef = ref<HTMLElement | null>(null)
+const configMaskRef = ref<HTMLElement | null>(null)
+interface ConfigBackup {
+  form: RuntimeForm
+  logicalRetryMode: 'inherit' | 'disabled' | 'custom'
+  customLogicalRetries: number
+  paramT: ParamField
+  paramTopP: ParamField
+  paramMax: ParamField
+  paramAttempts: ParamField
+  fallbackChain: string[]
+  fallbackTouched: boolean
+  hadParamOverrides: boolean
+}
+let configBackup: ConfigBackup | null = null
+
+function openConfig() {
+  if (!rtForm.value.enabled) return
+  configBackup = {
+    form: { ...rtForm.value },
+    logicalRetryMode: logicalRetryMode.value,
+    customLogicalRetries: customLogicalRetries.value,
+    paramT: { ...paramT.value },
+    paramTopP: { ...paramTopP.value },
+    paramMax: { ...paramMax.value },
+    paramAttempts: { ...paramAttempts.value },
+    fallbackChain: [...fallbackChain.value],
+    fallbackTouched: fallbackTouched.value,
+    hadParamOverrides: hadParamOverrides.value
+  }
+  configOpen.value = true
+}
+
+function closeConfig() {
+  if (configBackup) {
+    rtForm.value = { ...configBackup.form }
+    logicalRetryMode.value = configBackup.logicalRetryMode
+    customLogicalRetries.value = configBackup.customLogicalRetries
+    paramT.value = { ...configBackup.paramT }
+    paramTopP.value = { ...configBackup.paramTopP }
+    paramMax.value = { ...configBackup.paramMax }
+    paramAttempts.value = { ...configBackup.paramAttempts }
+    fallbackChain.value = [...configBackup.fallbackChain]
+    fallbackTouched.value = configBackup.fallbackTouched
+    hadParamOverrides.value = configBackup.hadParamOverrides
+  }
+  configBackup = null
+  configOpen.value = false
+  reportDirty()
+}
+
+useEscape(() => configOpen.value, closeConfig)
+useOverlay(configOpen, configPanelRef)
+useMaskClose(configMaskRef, closeConfig)
 
 async function loadRuntime() {
   const id = props.skillId
@@ -689,6 +806,8 @@ async function saveRuntime() {
     rtMsg.value = '已更新（生成参数与备用模型一起保存）'
     fallbackTouched.value = false
     await loadRuntime()
+    configOpen.value = false
+    configBackup = null
   } catch (e) {
     rtErr.value = true
     rtMsg.value = `保存失败：${errText(e)}`
@@ -712,6 +831,8 @@ async function resetRuntime() {
     rtErr.value = false
     rtMsg.value = '已恢复默认（用平台默认）'
     await loadRuntime()
+    configOpen.value = false
+    configBackup = null
   } catch (e) {
     rtErr.value = true
     rtMsg.value = `恢复失败：${errText(e)}`
@@ -724,6 +845,8 @@ async function resetRuntime() {
 watch(
   [() => props.skillId, () => props.refreshTick],
   () => {
+    configOpen.value = false
+    configBackup = null
     resetRtForm()
     resetProbe()
     generationParams.value = null
@@ -789,6 +912,27 @@ watch(() => props.skillId, () => {
 .sdp-order__k { font-weight: 700; color: var(--mk-ink); }
 .sdp-order__chain { color: var(--mk-muted); }
 
+/* 当前配置摘要：卡面第一眼回答「跑的是哪个模型、参数/超时/备用怎么配」 */
+.sdp-summary {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface-2);
+}
+.sdp-summary__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.sdp-summary__id { color: var(--mk-ink); font-weight: 600; overflow-wrap: anywhere; }
+.sdp-summary__meta { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.sdp-summary__line { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
+.sdp-summary__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber); line-height: 1.6; }
+
+/* 模型测试常驻卡面；配置三段收进弹层 */
+.sdp-panel--test { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--mk-line); }
+.sdp-config-modal { width: min(720px, 96vw); }
+.sdp-config-modal__foot { display: flex; align-items: center; gap: 8px; }
+.sdp-config-modal__spacer { flex: 1 1 auto; }
+
 /* 一页纵向铺开（2026-10-25）：四段按「模型 → 生成参数 → 请求与容错 → 模型测试」顺序排列，
    段间用发丝线分隔；不再有左导航，所以也不需要 shell/detail 的两栏容器。 */
 .sdp-sections { display: grid; gap: 0; }
@@ -834,22 +978,9 @@ watch(() => props.skillId, () => {
 .sdp-fallback__chain b { color: var(--mk-faint); font-weight: 700; }
 .sdp-fallback__probe { justify-self: start; }
 .mk-link--danger { color: var(--mk-red, #b3372f); }
-/* 卡头：覆盖开关与保存钮同处右组；标题左，动作右 */
+/* 卡头：覆盖开关与配置入口同处右组；标题左，动作右 */
 .sdp-card__head { flex-wrap: wrap; }
 .sdp-head__switch { margin-left: auto; }
-/* 卡头分段保存钮（模型与接入的 .ac-sec__save 同款：只在脏位出现） */
-.sdp-card__save {
-  margin-left: 0;
-  padding: 5px 12px;
-  border: 1px solid color-mix(in srgb, var(--mk-blue) 45%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--mk-blue) 10%, transparent);
-  color: var(--mk-blue);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  cursor: pointer;
-}
-.sdp-card__save:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .sdp-form__grid {
   display: grid;

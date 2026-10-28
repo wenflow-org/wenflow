@@ -843,6 +843,10 @@ export const adminModelProvidersApi = {
   addModel: async (providerId: string, data: Record<string, unknown>) =>
     adminAxios.post(`/admin/model-providers/${encodeURIComponent(providerId)}/models`, data),
 
+  /** 批量引入（模型选择器确认）：一次写盘，任一 id 冲突整批拒绝 */
+  addModels: async (providerId: string, models: Array<Record<string, unknown>>) =>
+    adminAxios.post(`/admin/model-providers/${encodeURIComponent(providerId)}/models/bulk`, { models }),
+
   updateModel: async (providerId: string, modelId: string, data: Record<string, unknown>) =>
     adminAxios.patch(`/admin/model-providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}`, data),
 
@@ -861,6 +865,7 @@ export const adminModelProvidersApi = {
 export interface InfraModelEntryView {
   kind: 'embedding' | 'rerank';
   provider: 'bge';
+  connectionMode: 'inherit' | 'own';
   endpoint: string;
   model: string;
   apiKeyEnv: string;
@@ -869,12 +874,14 @@ export interface InfraModelEntryView {
   dimensions: number | null;
   configured: boolean;
   configSource: 'db' | 'env';
-  keySource: 'db' | 'env' | 'inherit' | 'none';
+  keySource: 'db' | 'env' | 'inherit' | 'platform' | 'none';
   keyHint: string | null;
 }
 
 export interface InfraModelsView {
   required: boolean;
+  /** 平台通道地址（沿用连接时展示「复用主通道」） */
+  platformBaseUrl: string;
   embedding: InfraModelEntryView;
   rerank: InfraModelEntryView;
   warnings: string[];

@@ -213,7 +213,7 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     const w = mount(Skills, { global: { plugins: [router] } })
     await settle()
 
-    const row = w.find('.sk-row')
+    const row = w.find('.sk-item')
     expect(row.exists()).toBe(true)
     await row.trigger('click')
     await settle()
@@ -559,9 +559,10 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.text()).toContain('模型与路由')
     // 2026-10-24 用户「什么叫独立配置」：开关改称「覆盖平台默认」，说出独立于谁
     expect(w.text()).toContain('覆盖平台默认')
-    // 保存钮只在表单变脏后出现在卡头（footer 的同名副本已撤）
+    // 2026-10-28：保存与「恢复默认」都收进配置弹层；卡面只有摘要 + 配置入口
     expect(w.findAll('.sdp-card__save').length).toBe(0)
-    expect(w.text()).toContain('恢复默认')
+    expect(w.find('.sdp-summary').exists()).toBe(true)
+    expect(w.findAll('button').some((b) => b.text() === '配置')).toBe(true)
     // 2026-10-24 用户「生效值没意义，拿掉」：只读摘要删掉，换成一行取值顺序（谁压谁）
     expect(w.text()).not.toContain('只读 · 当前实际生效')
     expect(w.find('.sdp-order').text()).toContain('取值顺序')

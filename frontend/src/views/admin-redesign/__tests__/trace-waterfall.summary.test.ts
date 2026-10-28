@@ -229,3 +229,24 @@ describe('瀑布行行尾耗时', () => {
     w.unmount();
   });
 });
+
+describe('失败定位（会话视图）', () => {
+  it('点“定位”切换到含失败 span 的会话，而不是只改链路选择器', async () => {
+    const w = mountWith([
+      span({ id: 'ok', traceId: 'tr-a', sessionId: 'sess-a', status: 'ok' }),
+      span({ id: 'bad', traceId: 'tr-b', sessionId: 'sess-b', status: 'err' })
+    ]);
+    await w.vm.$nextTick();
+
+    const sessionTab = w.findAll('button').find((b) => b.text().trim() === '会话');
+    expect(sessionTab).toBeTruthy();
+    await sessionTab!.trigger('click');
+    expect(mkSelectValue(w, '选择会话')).toBe('sess-a');
+
+    const locate = w.findAll('button').find((b) => b.text().includes('定位 →'));
+    expect(locate).toBeTruthy();
+    await locate!.trigger('click');
+    expect(mkSelectValue(w, '选择会话')).toBe('sess-b');
+    w.unmount();
+  });
+});

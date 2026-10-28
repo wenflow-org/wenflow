@@ -413,12 +413,10 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     await settle();
   }
 
-  it('运行时 tab：当前值落在分节里，顶部只留一行取值顺序', async () => {
+  it('运行时 tab：卡面只留摘要，详细配置进「配置」弹层', async () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '运行时');
-    // 2026-10-24 用户「生效值没意义，拿掉」：只读摘要把三个分节里的当前值又抄一遍，已删。
-    // 顶部只保留「谁压谁」一行（架构顺序），当前值去导航副文 / 分节页头看。
-    expect(wrapper.find('.sdp-summary').exists()).toBe(false);
+    // 2026-10-28 用户「skill 详情的模型也改一下」：卡面先给当前值，表单收进弹层
     const order = wrapper.find('.sdp-order');
     expect(order.exists()).toBe(true);
     expect(order.text()).toContain('取值顺序');
@@ -426,14 +424,26 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(order.text()).toContain('Prompt 文件声明');
     expect(order.text()).toContain('平台默认');
 
-    // 真实值仍取自配置而非硬编码：mock requestTimeoutMs=30000 / T=0.4
-    // 2026-10-25 用户「作为一个页面，不分 tab」：左导航退役，各段当前值读段头
+    const summary = wrapper.find('.sdp-summary');
+    expect(summary.exists()).toBe(true);
+    expect(summary.text()).toContain('gpt-4o-mini');
+    // 真实值仍取自配置：mock requestTimeoutMs=30000 / T=0.4
+    expect(summary.find('.sdp-summary__line').text()).toContain('30s');
+    expect(summary.find('.sdp-summary__line').text()).toContain('T=0.4');
     expect(wrapper.find('.sdp-nav').exists()).toBe(false);
-    expect(wrapper.find('#sdp-panel-request .sdp-panel__state').text()).toContain('30s');
-    const paramsHead = wrapper.find('#sdp-panel-params .sdp-panel__state');
-    expect(paramsHead.text()).toContain('T=0.4');
-    // 来源词人话化：后端枚举码不得直接露给运营（挂映射前这里渲染的是 active-prompt）
-    expect(paramsHead.text()).toContain('Prompt 文件声明');
+
+    // 详细分段只在弹层里；打开后当前值仍读段头
+    expect(wrapper.find('#sdp-panel-request').exists()).toBe(false);
+    const configBtn = wrapper.find('.sdp-pane').findAll('button').find((b) => b.text() === '配置')!;
+    await configBtn.trigger('click');
+    await settle();
+    const modal = document.body.querySelector('.sdp-config-modal') as HTMLElement;
+    expect(modal, '配置弹层应已打开').toBeTruthy();
+    expect(modal.querySelector('#sdp-panel-request .sdp-panel__state')?.textContent).toContain('30s');
+    const paramsHead = modal.querySelector('#sdp-panel-params .sdp-panel__state');
+    expect(paramsHead?.textContent).toContain('T=0.4');
+    // 来源词人话化：后端枚举码不得直接露给运营
+    expect(paramsHead?.textContent).toContain('Prompt 文件声明');
     expect(wrapper.text()).not.toContain('active-prompt');
     expect(wrapper.text()).not.toContain('route-fallback');
     wrapper.unmount();

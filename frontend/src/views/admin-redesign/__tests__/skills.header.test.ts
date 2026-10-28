@@ -116,7 +116,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
   beforeEach(() => {
     liveSkillProfiles.value = []
     liveSkillStatsMap.value = {}
-    localStorage.removeItem('wf_skills_hidden_cols')
+    localStorage.removeItem('wf_skills_list_sort')
     getReconciliationMock.mockReset()
     getReconciliationMock.mockResolvedValue({ data: { data: { items: [], completion: {} } } })
   })
@@ -224,23 +224,22 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
       },
     })
     const w = await mountSkills()
-    // 主表表头不再有这两列（「批量模型配置」弹窗里另有一张 completion 表，只查主表）
-    const mainThs = w.find('.sk-table').findAll('th').map((t) => t.text())
-    expect(mainThs).not.toContain('完成度')
-    expect(mainThs).not.toContain('类别')
-    expect(mainThs).not.toContain('状态')
+    // 2026-10-28 目录改为列表：不再有表头/列，「完成度」「类别」不会以列形式出现
+    expect(w.find('.sk-table').exists()).toBe(false)
+    expect(w.findAll('th')).toHaveLength(0)
+    expect(w.find('.sk-list').text()).not.toContain('完成度')
     // 对账数据没白拉：仍驱动「已上线」KPI（2 行里 1 行 live）
     const live = kpiOf(w, '已上线')!
     expect(live.find('.mk-kpi__num').text()).toBe('1')
     w.unmount()
   })
 
-  it('失败行「查失败」：挂在 Skill 名副行，携 agent+status intent 深链执行日志', async () => {
+  it('失败行「查失败」：挂在 Skill 身份副行，携 agent+status intent 深链执行日志', async () => {
     const w = await mountSkills()
     // 默认按失败数降序：第一行 = skill:a（30 失败）
-    const rowBtns = w.findAll('.sk-table tbody tr')[0].findAll('button').map((b) => b.text())
+    const rowBtns = w.findAll('.sk-list .sk-item')[0].findAll('button').map((b) => b.text())
     expect(rowBtns).toContain('查失败')
-    const failBtn = w.findAll('.sk-table tbody tr')[0].findAll('button').find((b) => b.text() === '查失败')!
+    const failBtn = w.findAll('.sk-list .sk-item')[0].findAll('button').find((b) => b.text() === '查失败')!
     expect(failBtn.classes()).toContain('sk-fail-link')
     await failBtn.trigger('click')
     expect(intent.scene).toBe('execution-logs')
@@ -252,34 +251,47 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     intent.statusFilter = ''
   })
 
-  it('Skill 主行 id 是可点的蓝色链接（整行仍可点），操作列已撤', async () => {
+  it('Skill 主行 id 是可点的蓝色链接（整行仍可点），不再有操作列', async () => {
     const w = await mountSkills()
-    const row = w.findAll('.sk-table tbody tr')[0]
+    const row = w.findAll('.sk-list .sk-item')[0]
     const link = row.find('.sk-name-link')
     expect(link.exists()).toBe(true)
     expect(link.element.tagName).toBe('BUTTON')
     expect(link.text()).toBe('skill:a')
-    // 操作列（100px 整列空白）已撤：表头不再有「操作」
-    expect(w.find('.sk-table thead').text()).not.toContain('操作')
+    // 操作列与表头一起退役：列表没有 thead
+    expect(w.find('.sk-table').exists()).toBe(false)
+    expect(w.find('thead').exists()).toBe(false)
     w.unmount()
   })
 
-  it('P95 列默认隐藏（恒「—」无信息量）：首访不含该表头，可在「列」菜单开启', async () => {
+  it('列表不再保留表格列（P95 等占位列随宽表一起退役）', async () => {
     const w = await mountSkills()
-    const ths = w.findAll('th').map((t) => t.text())
-    expect(ths).not.toContain('P95')
+    expect(w.find('.sk-table').exists()).toBe(false)
+    expect(w.findAll('th')).toHaveLength(0)
+    expect(w.find('.sk-list').exists()).toBe(true)
     w.unmount()
   })
 
-  it('运行表补齐版本 / 路由模型 / 最近调用排序；批量模型配置弹窗只有一张表', async () => {
-    localStorage.removeItem('wf_skills_sort')
+  it('排序下拉：字段切换按直觉方向复位，方向按钮可翻转；批量模型配置弹窗只有一张表', async () => {
+    localStorage.removeItem('wf_skills_list_sort')
     const w = await mountSkills()
-    const runSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
-    expect(runSortable).toEqual(expect.arrayContaining(['Prompt 版本', '路由模型', '最近调用']))
-    const versionTh = w.findAll('th.mk-th--sortable').find((t) => t.text().includes('版本'))
-    expect(versionTh!.attributes('aria-sort')).toBe('none')
-    await versionTh!.find('button').trigger('click')
-    expect(versionTh!.attributes('aria-sort')).toBe('descending')
+    const sort = w.find('.mk-card__head .mk-select')
+    expect(sort.exists()).toBe(true)
+    const optionTexts = sort.findAll('.mk-listbox-opt').map((o) => o.text())
+    expect(optionTexts).toEqual(expect.arrayContaining(['需关注优先', '调用次数', '成功率', '最近调用', 'Skill 名称', '归属 Agent']))
+
+    await sort.find('button.mk-select__trigger').trigger('click')
+    const rateOpt = sort.findAll('.mk-listbox-opt').find((o) => o.text() === '成功率')!
+    await rateOpt.trigger('click')
+    expect((w.vm as any).sortKey).toBe('rate')
+    expect((w.vm as any).sortDir).toBe('desc')
+    // 2026-10-28 实际走查：下拉字段切换必须走 useTableSort.toggle 的持久化单点
+    expect(JSON.parse(localStorage.getItem('wf_skills_list_sort')!)).toMatchObject({ key: 'rate', dir: 'desc' })
+
+    const dirBtn = w.findAll('.mk-card__head-right .mk-btn').find((b) => b.text() === '降序')!
+    await dirBtn.trigger('click')
+    expect((w.vm as any).sortDir).toBe('asc')
+    expect(JSON.parse(localStorage.getItem('wf_skills_list_sort')!)).toMatchObject({ key: 'rate', dir: 'asc' })
 
     // 2026-10-24：原「模型路由」页签收进页头弹窗；弹窗内原「只读路由表 + 覆盖矩阵」
     // 两张表已合成一张，只剩覆盖矩阵
@@ -296,8 +308,8 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
-  it('「Prompt 版本」列 = 线上生效版本（与详情 hero 同源）：无 ACTIVE Prompt 显示「—」', async () => {
-    localStorage.removeItem('wf_skills_sort')
+  it('「Prompt 版本」= 线上生效版本（与详情 hero 同源）：无 ACTIVE Prompt 显示「—」', async () => {
+    localStorage.removeItem('wf_skills_list_sort')
     getSkillsMock.mockResolvedValueOnce({
       data: {
         data: {
@@ -310,38 +322,27 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
       },
     })
     const w = await mountSkills()
-    const cells = w.findAll('td.sk-c-version .mono')
+    const cells = w.findAll('.sk-list .sk-version-link')
     expect(cells.map((c) => c.text())).toEqual(['v4', '—', 'v7'])
     expect(cells[0].attributes('title')).toContain('v4-default-skill.a')
     expect(cells[1].attributes('title')).toContain('暂无线上生效 Prompt')
     w.unmount()
   })
 
-  it('表头排序：点击「成功率」在 none → descending → ascending 间切换 aria-sort', async () => {    localStorage.removeItem('wf_skills_sort')
-    const w = await mountSkills()
-    const th = w.findAll('th.mk-th--sortable').find((t) => t.text().includes('成功率'))
-    expect(th).toBeTruthy()
-    expect(th!.attributes('aria-sort')).toBe('none')
-    await th!.find('button').trigger('click')
-    expect(th!.attributes('aria-sort')).toBe('descending')
-    await th!.find('button').trigger('click')
-    expect(th!.attributes('aria-sort')).toBe('ascending')
-  })
-
   it('Skill 名英文为主（2026-10-25 用户「以英文为主」）：主行 canonical id，中文别名进副行', async () => {
-    localStorage.removeItem('wf_skills_sort')
+    localStorage.removeItem('wf_skills_list_sort')
     // 目录给中文 displayName（name），列表主行必须仍是 id——与详情 hero 同一身份口径
     const w = await mountSkills({
       profiles: [{ id: 'goal-conversation', name: '目标对话 Skill', agentId: 'goal-agent', agentName: '目标 Agent', category: 'teaching' }],
       stats: { 'goal-conversation': { calls: 10, errors: 0, avgMs: 100, lastAt: '刚刚' } },
     })
-    const row = w.find('.sk-table tbody tr')
+    const row = w.find('.sk-list .sk-item')
     const main = row.find('.sk-name-main')
     expect(main.text()).toBe('goal-conversation')
     expect(main.classes()).toContain('sk-name-main--id')
     // 副行只留身份（中文别名）——功能简介已搬进详情 hero（同日「这个功能简介，可以做到详情页里面」）
-    expect(row.find('.sk-sub').text()).toBe('目标对话 Skill')
-    expect(row.find('.sk-sub').text()).not.toContain('与学习者多轮对话')
+    expect(row.find('.sk-alias').text()).toBe('目标对话 Skill')
+    expect(row.find('.sk-alias').text()).not.toContain('与学习者多轮对话')
     // 悬停给全：id + 别名（description 也在，来自 meta 端点）
     expect(main.attributes('title')).toContain('goal-conversation')
     expect(main.attributes('title')).toContain('目标对话 Skill')
@@ -350,15 +351,15 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
-  it('目录没有中文别名时不重复占位：副行只留 description', async () => {
-    localStorage.removeItem('wf_skills_sort')
+  it('目录没有中文别名时不重复占位：不渲染别名', async () => {
+    localStorage.removeItem('wf_skills_list_sort')
     const w = await mountSkills({
       profiles: [{ id: 'teaching-turn', name: 'teaching-turn', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching' }],
       stats: { 'teaching-turn': { calls: 5, errors: 0, avgMs: 100, lastAt: '刚刚' } },
     })
-    const row = w.find('.sk-table tbody tr')
+    const row = w.find('.sk-list .sk-item')
     expect(row.find('.sk-name-main').text()).toBe('teaching-turn')
-    expect(row.find('.sk-sub').exists()).toBe(false)
+    expect(row.find('.sk-alias').exists()).toBe(false)
     w.unmount()
   })
 })

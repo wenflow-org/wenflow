@@ -768,8 +768,50 @@ export async function addModel(providerId: string, input: ModelInput): Promise<E
   return { modelId, warnings: finalWarnings };
 }
 
-export async function updateModel(providerId: string, modelId: string, input: ModelInput): Promise<EditOutcome> {
+/**
+ * 批量登记（模型选择器「确认引入」）：一次读、一次写，避免 N 个模型触发 N 次文件保存。
+ * 任意一个 id 非法/已存在则整批拒绝——半批成功会让运营分不清哪些已加。
+ */
+export async function addModels(
+  providerId: string,
+  inputs: ModelInput[],
+): Promise<EditOutcome & { modelIds: string[] }> {
+  const list = Array.isArray(inputs) ? inputs : [];
+  if (!list.length) throw new RegistryEditError('至少选择一个模型。', 400, 'invalid');
   const { root } = readRegistryFile();
+  const entry = requireProvider(root, providerId);
+  const existing = (entry.models ?? {}) as Record<string, Record<string, unknown>>;
+  const next = cloneRoot(root);
+  const target = requireProvider(next, providerId);
+  const models = (target.models ?? {}) as Record<string, Record<string, unknown>>;
+
+  const ids: string[] = [];
+  for (const input of list) {
+    const modelId = String(input?.id ?? '').trim();
+    assertModelId(modelId, `供应商「${providerId}」`);
+    if (existing[modelId] || ids.includes(modelId)) {
+      throw new RegistryEditError(`供应商「${providerId}」下已有模型「${modelId}」。`, 409, 'conflict');
+    }
+    ids.push(modelId);
+  }
+
+  const warnings: string[] = [];
+  for (const input of list) {
+    const modelId = String(input.id ?? '').trim();
+    const image = buildModelEntry({ ...input, id: modelId }, null);
+    if (image.label === undefined) image.label = modelId;
+    if (image.tier === undefined) image.tier = 'chat';
+    if (Array.isArray(image.fallbacks) && image.fallbacks.length) {
+      warnings.push(...checkFallbacks(providerId, image.fallbacks as string[], next));
+    }
+    models[modelId] = image;
+  }
+  target.models = models;
+  const finalWarnings = saveRegistry(next, warnings);
+  return { modelIds: ids, warnings: finalWarnings };
+}
+
+export async function updateModel(providerId: string, modelId: string, input: ModelInput): Promise<EditOutcome> {  const { root } = readRegistryFile();
   const entry = requireProvider(root, providerId);
   const current = ((entry.models ?? {}) as Record<string, Record<string, unknown>>)[modelId];
   if (!current) throw new RegistryEditError(`供应商「${providerId}」下没有模型「${modelId}」。`, 404, 'not-found');

@@ -116,7 +116,11 @@
             <span class="hc-fixlog__time">{{ f.time }}</span>
             <span class="hc-fixlog__item">{{ f.label }}</span>
             <span v-if="f.backupDir" class="hc-fixlog__path">{{ f.backupDir }}</span>
-            <span v-else class="hc-fixlog__path hc-fixlog__path--none">无备份目录</span>
+            <span
+              v-else
+              class="hc-fixlog__path hc-fixlog__path--none"
+              title="该修复只写数据库、不产生文件产物，审计记录已保留"
+            >无需文件备份</span>
             <button v-if="f.backupDir" type="button" class="mk-link" @click="copyBackupDir(f.backupDir)">复制</button>
             <button
               v-if="f.auditId"
@@ -206,6 +210,7 @@ import {
   type HealthReconciliationSummary,
 } from '@/api/adminApi'
 import { SEMANTICS_META } from './glossaryMeta'
+import { TERMS } from './terms'
 import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -445,7 +450,7 @@ const SERVICE_GROUP_NAMES: Record<HealthCenterItem['base'], string> = {
   'file:manifest': '契约清单',
   'file:orchestration': '编排声明',
   'file:skills.yaml': '技能登记册',
-  bidirectional: '双向一致性核查',
+  bidirectional: `双向${TERMS.reconcile}`,
   'db:managed': '数据库托管',
   runtime: '运行时遥测',
 }

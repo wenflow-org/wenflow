@@ -514,7 +514,8 @@ const reviewFooterHint = computed(() => {
 const todaySchedule = ref<Record<string, any> | null>(null);
 const loadError = ref(false);
 /** 整页失败原因：429 明说限流并给等待秒数，不再一律写成“网络不稳定” */
-const loadErrorDescription = ref('网络似乎不太稳定，检查连接后可以重试。');
+const NETWORK_FALLBACK = '网络似乎不太稳定，检查连接后可以重试。';
+const loadErrorDescription = ref(NETWORK_FALLBACK);
 /** 各数据源失败标记：区块级降级提示（不整页失败，也不伪装成空态） */
 const sourceFailed = ref<Record<string, boolean>>({
   budget: false,
@@ -555,7 +556,7 @@ async function loadAll() {
     loadError.value = false;
     sourceFailed.value = { budget: false, review: false, week: false };
   }
-  loadErrorDescription.value = '网络似乎不太稳定，检查连接后可以重试。';
+  loadErrorDescription.value = NETWORK_FALLBACK;
   const { start: winStart, end: winEnd } = sessionWindowDates();
   const fastGroup = await Promise.allSettled([
     learningAPI.getStats(),

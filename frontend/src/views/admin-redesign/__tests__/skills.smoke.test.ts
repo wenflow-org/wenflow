@@ -176,9 +176,10 @@ describe('Skill 目录 P1 修复批', () => {
     };
     const wrapper = await mountSkills();
     expect(getReconciliationMock).toHaveBeenCalled();
-    // 2026-10-24「完成度有什么实际意义吗」：列已撤——表内不再有对账徽章，也不再有该表头
-    expect(wrapper.find('.sk-table tbody .mk-badge--rec-live').exists()).toBe(false);
-    expect(wrapper.find('.sk-table').findAll('th').map((t) => t.text())).not.toContain('完成度');
+    // 2026-10-24「完成度有什么实际意义吗」：列已撤；2026-10-28 目录改为列表，不再有表格列
+    expect(wrapper.find('.sk-list .mk-badge--rec-live').exists()).toBe(false);
+    expect(wrapper.find('.sk-table').exists()).toBe(false);
+    expect(wrapper.findAll('th')).toHaveLength(0);
     // 数据没白拉：仍按对账 status=live 计「已上线」KPI（3 行档案里 1 行 live）
     const live = wrapper.findAll('.mk-kpi').find((k) => k.text().includes('已上线'))!;
     expect(live.find('.mk-kpi__num').text()).toBe('1');

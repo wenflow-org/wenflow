@@ -10,12 +10,14 @@
  * timeout/batch，和 LLM 模型配置同类。
  */
 import systemPrisma from '../../config/system-database';
+import apiConfigService from '../apiConfig.service';
 import { logger } from '../../utils/logger';
 import {
   INFRA_PROVIDER_IDS,
   INFRA_SETTING_KEY,
   defaultInfraModelsConfig,
   mergeInfraModelsConfig,
+  resolveInfraEndpoint,
   toPersistedInfraModelsConfig,
   validateInfraModelsConfig,
   type InfraModelEntry,
@@ -44,12 +46,14 @@ export interface InfraModelView extends InfraModelEntry {
   kind: InfraModelKind;
   configured: boolean;
   configSource: 'db' | 'env';
-  keySource: 'db' | 'env' | 'inherit' | 'none';
+  keySource: 'db' | 'env' | 'inherit' | 'platform' | 'none';
   keyHint: string | null;
 }
 
 export interface InfraModelsView {
   required: boolean;
+  /** 平台通道地址：沿用连接时卡片用它展示「复用主通道」。 */
+  platformBaseUrl: string;
   embedding: InfraModelView;
   rerank: InfraModelView;
   warnings: string[];
@@ -156,15 +160,36 @@ export async function loadInfraModelConfig(): Promise<InfraModelsRuntimeConfig> 
     lastConfigErrors = stored.errors;
   }
 
+  const platform = await apiConfigService.getConfig().catch(() => null);
+  const platformBase = platform?.apiUrl || '';
+  const platformKey = platform?.apiKey || '';
+  const embeddingInherit = config.embedding.connectionMode === 'inherit';
+  const rerankInherit = config.rerank.connectionMode === 'inherit';
+  /* 沿用平台连接：端点按类型从平台 base URL 推导，密钥用平台密钥；
+     own 模式保持原解析顺序（DB 密文 → 环境变量 → 重排回落向量 key）。 */
+  const runtimeConfig: InfraModelsConfig = {
+    ...config,
+    embedding: embeddingInherit
+      ? { ...config.embedding, endpoint: resolveInfraEndpoint(platformBase, 'embedding') }
+      : config.embedding,
+    rerank: rerankInherit
+      ? { ...config.rerank, endpoint: resolveInfraEndpoint(platformBase, 'rerank') }
+      : config.rerank,
+  };
+
   const [embeddingSecret, rerankSecret] = await Promise.all([
     resolveProviderApiKey(INFRA_PROVIDER_IDS.embedding, config.embedding.apiKeyEnv),
     resolveProviderApiKey(INFRA_PROVIDER_IDS.rerank, config.rerank.apiKeyEnv),
   ]);
-  const embeddingKey = embeddingSecret?.apiKey || envKey(config.embedding.apiKeyEnv);
+  const embeddingKey = embeddingInherit
+    ? platformKey
+    : (embeddingSecret?.apiKey || envKey(config.embedding.apiKeyEnv));
   // 当前 BGE 网关两接口共用一把 key：独立 key 缺失时沿用 embedding key
-  const rerankKey = rerankSecret?.apiKey || envKey(config.rerank.apiKeyEnv) || embeddingKey;
+  const rerankKey = rerankInherit
+    ? (platformKey || embeddingKey)
+    : (rerankSecret?.apiKey || envKey(config.rerank.apiKeyEnv) || embeddingKey);
 
-  runtimeCache = buildRuntime(config, source, embeddingKey, rerankKey);
+  runtimeCache = buildRuntime(runtimeConfig, source, embeddingKey, rerankKey);
   if (config.required) {
     const missing = missingOf(runtimeCache);
     if (missing.length) {
@@ -219,6 +244,7 @@ async function toView(
   return {
     kind,
     provider: entry.provider,
+    connectionMode: entry.connectionMode,
     endpoint: entry.endpoint,
     model: entry.model,
     apiKeyEnv: entry.apiKeyEnv,
@@ -227,24 +253,35 @@ async function toView(
     dimensions: entry.dimensions,
     configured: isConfigured(entry),
     configSource: runtime.source,
-    keySource: inherited ? 'inherit' : ownSummary.keySource,
-    keyHint: ownSummary.keyHint || (inherited ? embeddingSummary?.keyHint ?? null : null),
+    keySource: entry.connectionMode === 'inherit'
+      ? 'platform'
+      : (inherited ? 'inherit' : ownSummary.keySource),
+    keyHint: entry.connectionMode === 'inherit'
+      ? null
+      : (ownSummary.keyHint || (inherited ? embeddingSummary?.keyHint ?? null : null)),
   };
 }
 
 /** 管理端 GET：配置 + 密钥来源 + 必需项缺口 */
 export async function getInfraModelsView(): Promise<InfraModelsView> {
   const runtime = await loadInfraModelConfig();
-  const [embedding, rerank] = await Promise.all([
+  const [embedding, rerank, platform] = await Promise.all([
     toView(runtime, 'embedding'),
     toView(runtime, 'rerank'),
+    apiConfigService.getConfig().catch(() => null),
   ]);
   const warnings = [...lastConfigErrors];
   if (runtime.required) {
     if (!embedding.configured) warnings.push('向量化未配置：资料语义召回会退回结构化路径。');
     if (!rerank.configured) warnings.push('重排未配置：语义召回会退回余弦序。');
   }
-  return { required: runtime.required, embedding, rerank, warnings };
+  return {
+    required: runtime.required,
+    platformBaseUrl: platform?.apiUrl ?? '',
+    embedding,
+    rerank,
+    warnings,
+  };
 }
 
 /** 管理端 PUT：只写非密钥配置到 platform_settings，密钥写 provider_secrets 密文 */

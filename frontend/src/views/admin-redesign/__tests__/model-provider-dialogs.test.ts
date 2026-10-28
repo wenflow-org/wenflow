@@ -182,6 +182,23 @@ describe('ModelEditorDialog', () => {
     expect(w.emitted('saved')?.[0]?.[0]).toEqual({ modelId: 'acme-chat', warnings: ['备用链写了 2 条…'] })
   })
 
+  it('高级设置：用途只留下拉，能力压成三个紧凑标签（思考 / 推理强度 / 读图）', async () => {
+    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    w.vm.openWith({ providerId: 'acme-gateway', model: null })
+    await flushPromises()
+    // 2026-10-28 用户「不要这个，后面的能力也改一下」：用途提示与能力说明都不再上屏
+    expect(w.text()).not.toContain('推理档用于长思考与复杂判断')
+    expect(w.text()).not.toContain('只勾模型实际支持的能力')
+    expect(w.text()).not.toContain('先思考再回答')
+    expect(w.text()).not.toContain('可调节思考深度')
+    expect(w.text()).not.toContain('可读图与截图')
+    const caps = w.findAll('.med-cap')
+    expect(caps).toHaveLength(3)
+    expect(caps.map((c) => c.text())).toEqual(['思考', '推理强度', '读图'])
+    // 用途仍保留：它决定模型进「对话」还是「推理」分组
+    expect(mkSelectValue(w, '用途')).toBe('chat')
+  })
+
   it('勾了推理强度没勾思考：保存时就地拦下并说明依赖（不发请求）', async () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
     w.vm.openWith({
@@ -270,11 +287,11 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-gen' })
     await flushPromises()
     expect(mkSelectValue(w, '思考模式')).toBe('default')
-    expect(mkSelectValue(w, '思考强度')).toBe('default')
+    expect(mkSelectValue(w, '推理强度')).toBe('default')
     expect(mkSelectValue(w, '输出格式')).toBe('default')
 
     await chooseMkSelect(w, '思考模式', 'disabled')
-    await chooseMkSelect(w, '思考强度', 'max')
+    await chooseMkSelect(w, '推理强度', 'max')
     await chooseMkSelect(w, '输出格式', 'json_object')
     addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')

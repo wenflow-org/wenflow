@@ -659,6 +659,16 @@ const locateLabel = computed(() => `${failedTraceIds.value.length} 条链路含�
 function locateFailure() {
   const ids = failedTraceIds.value
   if (!ids.length) return
+  /* 会话视图的选择器绑 activeSession：只改 activeTrace 时画面不会变，
+     用户会以为「定位」没反应。按失败 span 找到所属会话并切过去。 */
+  if (viewMode.value === 'session') {
+    const failedSession = baseSpans.value.find((s) => s.status === 'err' && s.sessionId
+      && sessionIds.value.includes(s.sessionId))?.sessionId
+    if (failedSession) {
+      activeSession.value = failedSession
+      return
+    }
+  }
   if (!ids.includes(activeTrace.value)) activeTrace.value = ids[0]
 }
 

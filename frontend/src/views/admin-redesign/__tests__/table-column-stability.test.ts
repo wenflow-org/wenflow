@@ -18,9 +18,7 @@ const PAGES = [
   { file: 'GoalConversations.vue', prefix: 'gc-c-', minWidthCols: 7 },
   { file: 'OpsContent.vue', prefix: 'oc-c-', minWidthCols: 7 },
   { file: 'Users.vue', prefix: 'u-c-', minWidthCols: 7 },
-  // 撤「完成度」「类别」「操作」三列后（2026-10-24 / 10-26）剩 8 个宽度类：
-  // Skill / 归属 / 版本 / 路由 / 调用 / P95 / 成功率 / 最近调用
-  { file: 'Skills.vue', prefix: 'sk-c-', minWidthCols: 8 },
+  // Skills.vue 2026-10-28 改为列表（无表头/列宽类），不在此守卫生效范围
   { file: 'ExecLogs.vue', prefix: 'ex-c-', minWidthCols: 6 },
   { file: 'AuditLogs.vue', prefix: 'al-c-', minWidthCols: 8 },
   { file: 'MemoryReviewOverview.vue', prefix: 'mr-c-', minWidthCols: 7 },

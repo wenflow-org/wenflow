@@ -1241,7 +1241,7 @@ hex 随之 1114 → 1032（死规则里带的硬编码一并清掉）。真机�
 | `muted` | 空值 / 未知 | 无数据或不适用（**不是 ok**） |
 
 页面接线三处：页头 `:class="`mk-status--${headerHealth}`"`、`.cp-aside-card__dot.is-bad { background: var(--mk-red) }`（补上缺档）、「运行状态」点改用 `runHealthTone(autopilotHealthState)`（自动驾驶终态优先，无自动驾驶状态时回到会话生命周期；失败/未完成/收尾失败 → bad，与同一张卡里 `.cp-run__autopilot-result--bad` 的判定一致）。
-顺带**复活了一处死代码**：`pathGenerationFailed`（原定义后从未被引用）现在驱动「预生成 Path」点的红档。`sessionStatusLabel` 补上兜底 `statusText(st)`（**沿用共享字典、不改既有措辞** —— `running` 仍是「运行中」）。
+顺带**复活了一处死代码**：`pathGenerationFailed`（原定义后从未被引用）现在驱动「预生成 Path」点的红档。`sessionStatusLabel` 补上兜底 `statusText(st)`（**沿用共享字典** —— `running` 统一为「进行中」；虚拟学习者列表的自动驾驶状态同源，2026-10-28 对齐）。
 
 **核验**：`statusText.test.ts` 32 → **37 测试**（新增 5 组覆盖 4 档 + 与 `runStateTone` 同源）；真机（座舱 Learn 阶段）：
 - 页头 `mk-status mk-status--warn` + 点色 `rgb(180,83,9)`（`--mk-amber`）+ hover 提示 **「需关注」**（原为「暂无数据」）✓

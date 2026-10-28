@@ -256,8 +256,17 @@ router.put('/', async (req, res) => {
 router.post('/test', async (req, res) => {
   try {
     const { apiUrl, apiKey } = req.body;
-    
-    const result = await apiConfigService.testConnection(apiUrl, apiKey);
+
+    /* 「测试连通性」不要求重敲密钥：地址没换且留空时沿用已保存的那把。
+       地址一变就不回退——不能把旧密钥发给一个还没验证过的新端点。 */
+    const url = String(apiUrl || '').trim();
+    let key = String(apiKey || '').trim();
+    if (!key && url) {
+      const saved = await apiConfigService.getConfig();
+      if (url === String(saved.apiUrl || '').trim()) key = saved.apiKey;
+    }
+
+    const result = await apiConfigService.testConnection(url, key);
     
     if (result.success) {
       res.json({

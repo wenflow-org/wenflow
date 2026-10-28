@@ -87,7 +87,7 @@ describe('虚拟学习者定位（D1）', () => {
     expect(wrapper.find('.mk-status').exists()).toBe(false);
     // 2026-10-27 统一：生命周期是维度下拉，计数在 option 文案里
     const countOf = (label: string) => filterOption(wrapper as never, '状态', label).text()
-    expect(countOf('运行中')).toBe('运行中（0）')
+    expect(countOf('进行中')).toBe('进行中（0）')
     expect(countOf('停滞')).toBe('停滞（0）')
     expect(countOf('已停止')).toBe('已停止（0）')
     expect(wrapper.find('.mk-card--fill .mk-card__head .mk-pills').exists()).toBe(false)

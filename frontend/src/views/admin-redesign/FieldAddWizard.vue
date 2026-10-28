@@ -47,11 +47,11 @@
             </label>
 
             <label class="mk-field">
-              <span class="mk-field__label">类型（core 侧） <em class="mk-field__req">*</em></span>
+              <span class="mk-field__label">{{ TYPE_LABEL }} <em class="mk-field__req">*</em></span>
               <!-- enum 仅 core 侧可声明（编排侧无对应 valueType 写法），置灰防误选；存量 enum 编辑仍回显，由 formProblems 拦提交 -->
               <!-- 2026-10-27 原生 select → MkSelect：MkSelect 无逐项 disabled，enum 只在已是当前值时出现
                    （等价于原「置灰不可选」：一旦切走就不能再选回） -->
-              <MkSelect v-model="form.type" :options="coreTypeOptions" aria-label="类型（core 侧）" block />
+              <MkSelect v-model="form.type" :options="coreTypeOptions" :aria-label="TYPE_LABEL" block />
               <span class="mk-field__hint" :class="typeHintCls">{{ typeHint }}</span>
             </label>
 
@@ -209,6 +209,8 @@ const emit = defineEmits<{ saved: []; close: [] }>()
 /** enum 只能在 core 文件声明（编排侧无对应写法），选择器中置灰并注明（见 typeHint / formProblems） */
 const CORE_TYPES = ['string', 'number', 'boolean', 'enum', 'object', 'object[]', 'string[]'] as const
 const STAGE_NAMES = ['goal', 'path', 'teaching', 'profile', 'simulation']
+/** 标签与下拉可访问名同源：两处各写一遍会被文案门禁记「同文件复读」 */
+const TYPE_LABEL = '类型（core 侧）'
 /** core → 编排 valueType 归一（与后端 yaml-vocabulary coreTypeToValueType 同源） */
 function valueTypeOf(raw: string): string | undefined {
   const base = raw.replace(/\?$/, '').trim()

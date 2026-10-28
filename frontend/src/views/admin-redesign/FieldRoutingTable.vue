@@ -41,84 +41,56 @@
             <span class="mk-card__meta frt__agentdesc">{{ agent.description }}</span>
             <span class="mk-badge mk-badge--muted">{{ filteredOf(agent.agentId).length }}<template v-if="filterActive"> / {{ routingsOf(agent.agentId).length }}</template> 行</span>
           </div>
-          <div v-if="rowsOf(agent.agentId).length" class="frt__scroll mk-table-scroll">
-            <!-- 审核 #98：原自动布局（去 mk-table--fixed 与 <colgroup>）导致 5 张并列分组表同名列
-                 跨组不同宽（字段列 153/107/50/136/125px），最窄组字段名被截成 2 字符。改 fixed + colgroup
-                 固定列宽契约（字段/落库键 --frt-col-key、移交 --frt-col-hop、含义 --frt-col-text、
-                 类型 --frt-col-type、角色/可见性/内部/累积/锁定 --mk-col-badge），五组同名列像素级对齐。
-                 2026-10-13 列宽重配（走查 1080p）：原三列共用共享 --mk-col-id(128)，实测只剩 179px，
-                 而字段名/落库键最长 ~300px → 68 处截断。含义列会换行（.frt__wrap），收窄不丢内容，
-                 把宽度让给会截断的标识列；移交列内容短（阶段名），同步收窄。合计 1575 ≤ 容器 1592。 -->
-            <table class="mk-table mk-table--dense mk-table--fixed mk-table--nowrap frt__table">
-              <colgroup>
-                <col style="width:var(--frt-col-key)" />
-                <col style="width:var(--frt-col-text)" />
-                <col style="width:var(--frt-col-type)" />
-                <col style="width:var(--mk-col-badge)" />
-                <col style="width:var(--mk-col-badge)" />
-                <col style="width:var(--frt-col-hop)" />
-                <col style="width:var(--mk-col-badge)" />
-                <col style="width:var(--mk-col-badge)" />
-                <col style="width:var(--frt-col-key)" />
-                <col style="width:var(--mk-col-badge)" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th scope="col">字段</th>
-                  <th scope="col" class="frt__wrap">含义</th>
-                  <th scope="col">类型</th>
-                  <th scope="col">角色</th>
-                  <th scope="col">可见性</th>
-                  <th scope="col">移交</th>
-                  <th scope="col">内部</th>
-                  <th scope="col">累积</th>
-                  <th scope="col">存储字段名</th>
-                  <th scope="col">锁定</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in rowsOf(agent.agentId)" :key="row.id">
-                  <td class="frt__fieldcell">
-                    <span class="mono frt__field" :title="row.fieldId">{{ row.fieldId }}</span>
-                    <span v-if="pathParts(row.fieldId).length > 1" class="frt__fieldpath" :title="row.fieldId">{{ pathParts(row.fieldId).join(' · ') }}</span>
-                    <span v-if="pathOf(row.fieldId)" class="frt__fieldpath" :title="`抽取路径：${pathOf(row.fieldId)}`">抽取 → {{ String(pathOf(row.fieldId)).split('.').pop() }}</span>
-                  </td>
-                  <td class="frt__meaning">
-                    <span class="frt__meaning-text" :title="meaningTitle(row)">{{ descOf(row.fieldId) || '—' }}</span>
-                  </td>
-                  <td class="mono">{{ typeOf(row.fieldId) }}</td>
-                  <td>
-                    <span
-                      v-if="roleMetaOf(row.fieldId)"
-                      class="mk-badge"
-                      :class="`mk-badge--role-${roleMetaOf(row.fieldId)!.id}`"
-                      :title="roleMetaOf(row.fieldId)!.hint"
-                    >{{ roleMetaOf(row.fieldId)!.label }}</span>
-                    <span v-else class="mk-na">—</span>
-                  </td>
-                  <td>
+          <div v-if="rowsOf(agent.agentId).length" class="frt__scroll">
+            <!-- 2026-10-28 用户「既然是个列表，就遵守列表的设计」：字段路由本质是一组字段条目，
+                 不是需要横向对齐的宽表。撤掉表头与列布局，按站内列表范式一行一个字段：
+                 左列角色（lead）、主区字段名 + 含义 + 元信息、右列可见性/内部/累积。 -->
+            <ul class="frt__list" role="list">
+              <li v-for="row in rowsOf(agent.agentId)" :key="row.id" class="frt__item">
+                <span class="frt__role">
+                  <span
+                    v-if="roleMetaOf(row.fieldId)"
+                    class="mk-badge"
+                    :class="`mk-badge--role-${roleMetaOf(row.fieldId)!.id}`"
+                    :title="roleMetaOf(row.fieldId)!.hint"
+                  >{{ roleMetaOf(row.fieldId)!.label }}</span>
+                  <span v-else class="mk-na">—</span>
+                </span>
+                <div class="frt__itemmain">
+                  <div class="frt__itemhead">
+                    <span class="mono frt__field" :title="fieldTitle(row)">{{ row.fieldId }}</span>
+                    <span class="frt__itemspacer" aria-hidden="true"></span>
                     <span
                       class="mk-badge"
                       :class="`mk-badge--render-${row.render}`"
                       :title="renderHint(row)"
                     >{{ renderText(row.render) }}</span>
-                  </td>
-                  <td><span class="mono frt__handoff" :title="handoffTitle(row)">{{ formatHandoff(row.handoff) }}</span></td>
-                  <td>{{ row.internal ? '是' : '否' }}</td>
-                  <td>{{ row.accumulate ? '是' : '否' }}</td>
-                  <td>
+                    <span v-if="row.internal" class="mk-badge mk-badge--muted">内部</span>
+                    <span v-if="row.accumulate" class="mk-badge mk-badge--muted">累积</span>
+                  </div>
+                  <p class="frt__meaning" :title="meaningTitle(row)">{{ descOf(row.fieldId) || '—' }}</p>
+                  <div class="frt__metaline">
+                    <span class="mono frt__type">{{ typeOf(row.fieldId) }}</span>
                     <span
-                      class="mono frt__persist"
-                      :class="{ 'frt__persist--alias': persistKeyOf(row) !== row.fieldId }"
-                      :title="persistKeyOf(row) === row.fieldId
-                        ? '存储字段名与字段名一致'
-                        : `值实际保存到 ${persistKeyOf(row)}`"
-                    >{{ persistKeyOf(row) }}</span>
-                  </td>
-                  <td><span class="mk-badge" :class="`mk-badge--lock-${row.locks?.level || 'editable'}`" :title="lockHint(row.locks?.level)">{{ lockLabel(row.locks?.level) }}</span></td>
-                </tr>
-              </tbody>
-            </table>
+                      v-if="formatHandoff(row.handoff)"
+                      class="mono frt__handoff"
+                      :title="handoffTitle(row)"
+                    >移交 → {{ formatHandoff(row.handoff) }}</span>
+                    <span
+                      v-if="persistKeyOf(row) !== row.fieldId"
+                      class="frt__alias"
+                      :title="`值实际保存到 ${persistKeyOf(row)}`"
+                    >存为 {{ persistKeyOf(row) }}</span>
+                    <span
+                      v-if="row.locks?.level === 'system-locked' || row.locks?.level === 'structure-locked'"
+                      class="mk-badge frt__lockchip"
+                      :class="`mk-badge--lock-${row.locks?.level}`"
+                      :title="lockHint(row.locks?.level)"
+                    >{{ lockLabel(row.locks?.level) }}</span>
+                  </div>
+                </div>
+              </li>
+            </ul>
           </div>
           <!-- 空态带 CTA：筛选无命中 → 清除筛选；否则仅说明 -->
           <MkEmptyState
@@ -332,7 +304,6 @@ function roleMetaOf(fieldId: string) {
   const meta = roleMeta.value.find((m) => m.id === role);
   return meta || { id: role, label: role, hint: role };
 }
-function pathParts(fieldId: string) { return fieldId.split('.'); }
 function routingsOf(agentId: string) { return routings.value.filter((r) => r.agentId === agentId); }
 
 const filterActive = computed(() => Boolean(keyword.value.trim() || roleFilter.value));
@@ -410,6 +381,11 @@ function persistKeyOf(row: RoutingItem) {
 /** 字段值在产出方原始输出里的物理抽取路径（pathInRawOutput，可空） */
 function pathOf(fieldId: string) {
   return fieldMap.value.get(fieldId)?.pathInRawOutput || '';
+}
+/** 字段名 tooltip：嵌套字段补原始抽取路径；路径与字段名相同时不重复 */
+function fieldTitle(row: RoutingItem) {
+  const path = pathOf(row.fieldId);
+  return path && path !== row.fieldId ? `${row.fieldId}\n抽取路径：${path}` : row.fieldId;
 }
 /** render 枚举 → 中文（原始值保留在 title 的 renderHint）；未知取值回显原值，避免被误标为「可见」 */
 function renderText(render: string) {
@@ -715,49 +691,69 @@ html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
 .frt__agentname { font-weight: 700; }
 /* 描述作为 sub：单行截断，不与右侧行数徽章抢位 */
 .frt__agentdesc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 表格本体已并入 mk-table mk-table--dense：仅保留滚动容器（限高 + 粘性表头生效） */
-/* 本表列宽（2026-10-13 走查重配）：标识列（字段/落库键）需要宽度——它们单行 ellipsis，
-   窄了就丢字；含义列会换行（.frt__wrap），收窄只增行数不丢内容。移交列内容短（阶段名）。
-   用表内私有变量而不是改共享 --mk-col-id/--mk-col-text：那两个 token 全站表格共用。 */
-.frt__table {
-  --frt-col-key: 300px;
-  --frt-col-hop: 130px;
-  --frt-col-text: 250px;
-  --frt-col-type: 150px;
+/* 字段列表（2026-10-28 用户「既然是个列表，就遵守列表的设计」）：一行一个字段条目，
+   不再用宽表 + 列头。首行字段名/角色/状态，次行含义，末行类型与路由元信息。
+   列表随页面滚动，不设内部 max-height（列表页不需要表头吸顶，也就不需要嵌套滚动）。 */
+.frt__scroll { overflow: visible; }
+.frt__list { margin: 0; padding: 0; list-style: none; }
+.frt__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--mk-line);
 }
-/* 横向+纵向滚动容器（滚动修复 #1）：表头 sticky 吸顶，容器限高内部滚动，页面本体不被撑长 */
-.frt__scroll { overflow: auto; max-height: 62vh; }
-@media (max-width: 860px) {
-  .frt__table { min-width: 1060px; }
-}
+.frt__item:last-child { border-bottom: none; }
 
-/* 字段列：点分名 + 层级分段小字。
-   行高统一修复：fieldId 由 word-break:break-all 改单行 ellipsis（不再折行撑高）
-   （审核 #98：列宽已由 colgroup 的 --mk-col-id 决定，撤原 max-width:300px 自动布局残留） */
-.frt__fieldcell { display: grid; gap: 2px; min-width: 0; }
-.frt__field { display: block; min-width: 0; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.frt__fieldpath {
+/* 左列角色：固定槽宽，主区（字段名/含义）跨行对齐；无角色的行留破折号，不塌槽 */
+.frt__role { flex: none; width: 66px; display: flex; padding-top: 1px; }
+.frt__itemmain { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.frt__itemhead { display: flex; align-items: center; gap: 6px; min-width: 0; line-height: 1.35; }
+.frt__field {
+  min-width: 0;
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-body);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.frt__itemhead .mk-badge { flex: none; }
+.frt__itemspacer { flex: 1; min-width: 8px; }
+
+/* 含义：列表副行单行省略，完整文案在 title；保证每行等高、扫读节奏一致 */
+.frt__meaning {
+  margin: 0;
+  color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
+  line-height: 1.5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* 含义是长文本列 → 换行不截断（完整文案仍在 title）；列宽由 colgroup 的 --mk-col-text 决定 */
-.frt__table th.frt__wrap, .frt__table td.frt__wrap { white-space: normal; }
-.frt__meaning-text {
-  display: block;
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  color: var(--mk-muted);
+/* 元信息行：类型 / 抽取路径 / 移交 / 存储别名 / 锁定，均可换行 */
+.frt__metaline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
   line-height: 1.5;
 }
-
-/* 落库键列：截断上限随列宽（fixed 布局下列宽 = colgroup --mk-col-id，用 100% 防内层 span 越出单元格） */
-.frt__persist { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.frt__persist--alias { color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: var(--mk-radius-sm); padding: 0 5px; }
+/* 元信息之间补中点分隔；高亮 chip（存为 / 锁定）自身成块，不再加分隔 */
+.frt__metaline > span + span::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--mk-faint);
+}
+.frt__metaline > .frt__alias::before,
+.frt__metaline > .mk-badge::before { content: none; }
+.frt__type { color: var(--mk-muted); }
+.frt__alias { color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: var(--mk-radius-sm); padding: 0 5px; }
+.frt__handoff { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frt__lockchip { font-size: var(--mk-fs-micro); padding: 0 5px; line-height: 1.5; }
 
 /* 编排弹窗值域速查条：视觉走 .note--info，本类只留排版 */
 .frt__orch-quick {
@@ -771,8 +767,6 @@ html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
 .frt__orch-quick-title { font-weight: 800; color: var(--mk-blue); }
 .frt__orch-quick-item b { margin-right: 4px; color: var(--mk-ink); }
 
-.frt__handoff { max-width: 100%; color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
 @media (min-width: 2000px) {
   .frt__filter-count { font-size: var(--mk-fs-micro); }
   .frt__orch-summary { font-size: var(--mk-fs-micro); }
@@ -780,8 +774,6 @@ html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
   .frt__orch-msg { font-size: var(--mk-fs-micro); }
   .frt__orch-quick { font-size: var(--mk-fs-micro); }
   .frt__agentdesc { font-size: var(--mk-fs-micro); }
-  .frt__fieldpath { font-size: var(--mk-fs-micro); }
-  .frt__persist { font-size: var(--mk-fs-micro); }
   }
 
 @media (min-width: 2800px) {
@@ -791,8 +783,6 @@ html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
   .frt__orch-msg { font-size: var(--mk-fs-micro); }
   .frt__orch-quick { font-size: var(--mk-fs-micro); }
   .frt__agentdesc { font-size: var(--mk-fs-micro); }
-  .frt__fieldpath { font-size: var(--mk-fs-micro); }
-  .frt__persist { font-size: var(--mk-fs-micro); }
 }
 
 /* 暗色模式：色值全部走 --mk-* token（surface/line/blue-bg/faint/bg 随主题自动翻转），

@@ -9,10 +9,11 @@ import { nextTick } from 'vue'
 import ModelProvidersPanel from '../ModelProvidersPanel.vue'
 
 const {
-  getMock, addModelMock, updateModelMock, testMock, getModelRegistryMock
+  getMock, addModelMock, addModelsMock, updateModelMock, testMock, getModelRegistryMock
 } = vi.hoisted(() => ({
   getMock: vi.fn(),
   addModelMock: vi.fn(),
+  addModelsMock: vi.fn(),
   updateModelMock: vi.fn(),
   testMock: vi.fn(),
   getModelRegistryMock: vi.fn()
@@ -22,6 +23,7 @@ vi.mock('@/api/adminApi', () => ({
   adminModelProvidersApi: {
     get: getMock,
     addModel: addModelMock,
+    addModels: addModelsMock,
     updateModel: updateModelMock,
     test: testMock
   },
@@ -89,9 +91,9 @@ function seedView(extra?: Partial<{ readOnly: boolean; providers: Array<Record<s
   getMock.mockResolvedValue({ data: { data: view } })
 }
 
-/** 模型行（排除「对话 / 推理」功能分组行） */
+/** 对话模型行（列表行，不是列头表格） */
 function modelRows(wrapper: Awaited<ReturnType<typeof mountPanel>>) {
-  return wrapper.findAll('.mpp-table tbody tr').filter((r) => !r.classes('mpp-group'))
+  return wrapper.findAll('.mpp-model-row')
 }
 
 async function mountPanel(props: Record<string, unknown> = {}, slots: Record<string, string> = {}) {
@@ -114,6 +116,7 @@ describe('ModelProvidersPanel', () => {
   beforeEach(() => {
     getMock.mockReset()
     addModelMock.mockReset()
+    addModelsMock.mockReset()
     updateModelMock.mockReset()
     testMock.mockReset()
     getModelRegistryMock.mockReset()
@@ -129,15 +132,16 @@ describe('ModelProvidersPanel', () => {
     // 自建通道仍在注册表里，但这一页不再提供它的入口
     expect(w.text()).not.toContain('Acme 网关')
     expect(w.text()).not.toContain('显示已停用')
-    // 卡头只留「平台通道 + 内置」，不再解释通道由什么组成
-    expect(w.find('.mk-card__head').text()).toContain('平台通道')
-    expect(w.find('.mk-card__head').find('.mpp-type').text()).toBe('内置')
+    // 卡头是能力卡身份：对话与推理模型 + LLM，连接状态由宿主注入
+    expect(w.find('.mk-card__head').text()).toContain('对话与推理模型')
+    expect(w.find('.mk-card__head').find('.mpp-type').text()).toBe('LLM')
     expect(w.find('.mk-card__head').text()).not.toContain('一条通道 =')
     // 状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
     expect(w.find('.mk-card__head').findAll('.mk-badge')).toHaveLength(0)
-    // 模型表列：模型 / 功能 / 状态 / 操作（没有本地/上游两套名字）
-    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '功能', '状态', ''])
-    expect(w.text()).toContain('2 个')
+    // 挂载模型区：区名 + 条数，列表不再有列头表格
+    expect(w.find('.mpp-models__head').text()).toContain('挂载模型')
+    expect(w.find('.mpp-models__count').text()).toBe('2 个')
+    expect(w.findAll('.mpp-model-row')).toHaveLength(2)
   })
 
   it('模型为空时给下一步：平台通道直接去配置连接，不铺一张空表', async () => {
@@ -147,33 +151,30 @@ describe('ModelProvidersPanel', () => {
     expect(setup.exists()).toBe(true)
     expect(setup.text()).toContain('还没有登记模型')
     expect(setup.text()).toContain('先配置服务地址与 API Key')
-    // 2026-10-28 模型表常驻（基础设施行也在表里），空态只收起对话行
-    expect(w.find('.mpp-table').exists()).toBe(true)
-    expect(w.findAll('.mpp-table tbody tr')).toHaveLength(0)
+    // 2026-10-28 对话模型为空时不铺空列表；向量 / 重排已拆成宿主的独立能力卡
+    expect(w.find('.mpp-models__list').exists()).toBe(false)
+    expect(w.findAll('.mpp-model-row')).toHaveLength(0)
     await btn(w, '去配置连接')!.trigger('click')
     await flushPromises()
     expect(w.find('#mpp-platform-panel-conn').exists()).toBe(true)
   })
 
-  it('页签已解散：连接 / 模型表（含基础设施行）常驻，全部可见', async () => {
-    // 2026-10-28 基础设施不再自成一段，作为模型表里的行由宿主注入；
-    // 平台默认与别名整块撤出，面板不再有 generation 段
-    const w = await mountPanel({}, {
-      'models-infra': '<tr id="mpp-platform-panel-infra" class="mpp-group"><td colspan="4">基础设施</td></tr>',
-    })
+  it('本卡只负责对话与推理：连接与挂载模型常驻，向量 / 重排已拆到宿主', async () => {
+    const w = await mountPanel()
     // 2026-10-27 用户「把 tab 解散了」：没有二级页签，内容全在 DOM 里且都可见
     expect(w.findAll('.mpp-subtabs').length).toBe(0)
     expect(w.find('[role="tab"]').exists()).toBe(false)
     expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
-    expect(w.find('.mpp-table #mpp-platform-panel-infra').exists()).toBe(true)
     expect(w.find('#mpp-platform-panel-generation').exists()).toBe(false)
+    // 2026-10-28 三卡重构：向量 / 重排不再嵌在对话卡里
+    expect(w.find('#mpp-platform-panel-infra').exists()).toBe(false)
     // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
     expect(w.findAll('.mpp .mk-card__head .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()
   })
 
-  it('按功能区分：按用途分组（对话 / 推理），能力（思考 / 推理强度 / 读图）单独成列', async () => {
+  it('对话模型区平铺：不再按用途切小组，能力标签跟在模型 ID 后面', async () => {
     const platform = providerView({ id: 'platform', name: '平台', models: [
       { id: 'chat-plain' },
       { id: 'chat-read' },
@@ -186,17 +187,17 @@ describe('ModelProvidersPanel', () => {
     })
     seedView({ providers: [platform] })
     const w = await mountPanel()
-    const groups = w.findAll('.mpp-group')
-    // 两个用途各一段，组头只留「分组名 + 条数」（2026-10-27 去掉说明句，空组不渲染）
-    expect(groups.map((g) => g.find('.mpp-group__name').text())).toEqual(['对话', '推理'])
-    expect(groups.map((g) => g.find('.mpp-group__count').text())).toEqual(['2 个', '1 个'])
-    expect(groups.map((g) => g.text())).toEqual(['对话2 个', '推理1 个'])
+    // 区标题只留「区名 + 条数」，添加入口在本区标题行
+    expect(w.find('.mpp-models__head').text()).toContain('挂载模型')
+    expect(w.find('.mpp-models__count').text()).toBe('3 个')
+    expect(w.findAll('.mpp-group')).toHaveLength(0)
 
     const rows = modelRows(w)
-    const fn = (i: number) => rows[i].find('.mpp-fn').text()
-    expect(fn(0)).toBe('基础对话')
-    expect(fn(1)).toBe('读图')
-    expect(fn(2)).toBe('思考推理强度')
+    expect(rows).toHaveLength(3)
+    const caps = (i: number) => rows[i].findAll('.mpp-fn__chip').map((c) => c.text())
+    expect(caps(0)).toEqual([])
+    expect(caps(1)).toEqual(['读图'])
+    expect(caps(2)).toEqual(['思考', '推理强度'])
     // 能力标签有可读文本，不只靠颜色
     expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['读图'])
   })
@@ -220,28 +221,30 @@ describe('ModelProvidersPanel', () => {
     expect(removeItem.attributes('disabled')).toBeDefined()
   })
 
-  it('勾选多个后逐个配置：保存一个自动进下一个，标题带进度', async () => {
+  it('选择器确认后批量引入：能力标签随模型名推断，不再逐个弹配置框', async () => {
+    addModelsMock.mockResolvedValue({ data: { data: {} } })
     const w = await mountPanel({ upstream: ['mimo-v2.5-flash', 'step-3.5-flash'] })
     ;(w.vm as unknown as { openPull: () => void }).openPull()
     await nextTick()
-    const boxes = w.findAll('.pmd-sec .pmd-row input')
+    const boxes = w.findAll('.pmd-list .pmd-row input')
     await boxes[0].setValue(true)
     await nextTick()
-    await w.findAll('.pmd-sec .pmd-row input')[1].setValue(true)
+    await w.findAll('.pmd-list .pmd-row input')[1].setValue(true)
     await nextTick()
     await w.findAll('.pmd .mk-modal__foot .mk-btn--primary')[0].trigger('click')
-    await nextTick()
-    const title = () => w.find('.med-modal .mk-modal__title').text()
-    const idValue = () => (w.find('.med-modal .med-two input').element as HTMLInputElement).value
-    expect(title()).toBe('添加模型 · 1/2')
-    expect(idValue()).toBe('mimo-v2.5-flash')
-    addModelMock.mockResolvedValue({ data: { data: {}, warnings: [] } })
-    await w.find('.med-modal .mk-modal__foot .mk-btn--primary').trigger('click')
     await flushPromises()
-    await nextTick()
-    expect(title()).toBe('添加模型 · 2/2')
-    expect(idValue()).toBe('step-3.5-flash')
-    expect(addModelMock).toHaveBeenCalledTimes(1)
+
+    expect(addModelsMock).toHaveBeenCalledTimes(1)
+    const [providerId, models] = addModelsMock.mock.calls[0]
+    expect(providerId).toBe('platform')
+    expect(models).toEqual([
+      { id: 'mimo-v2.5-flash', supportsThinking: false, supportsReasoningEffort: false, vision: false },
+      { id: 'step-3.5-flash', supportsThinking: false, supportsReasoningEffort: false, vision: false }
+    ])
+    // 引入后不再自动弹模型编辑弹层
+    expect(w.find('.med-modal').exists()).toBe(false)
+    // 选择器确认后关闭
+    expect(w.find('.pmd').exists()).toBe(false)
   })
 
   it('单模型测试走真实调用，结果回显在该模型行内', async () => {
@@ -297,30 +300,21 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mpp-chip').exists()).toBe(false)
   })
 
-  it('上游按用途分流：浮窗里向量/生图/决策不提供勾选，改去对应配置', async () => {
-    const w = await mountPanel({
-      upstream: ['deepseek-v4-flash', 'BAAI/bge-m3', 'agnes-image-2.5-flash', 'jev-latest', 'agnes-video-2.5']
-    })
+  it('上游清单按用途给出建议：向量 / 重排模型置灰并指向对应能力卡', async () => {
+    const upstream = ['deepseek-v4-flash', 'BAAI/bge-m3', 'agnes-image-2.5-flash', 'jev-latest', 'agnes-video-2.5']
+    const w = await mountPanel({ upstream })
     ;(w.vm as unknown as { openPull: () => void }).openPull()
     await nextTick()
-    const chatRows = w.findAll('.pmd-sec:not(.pmd-sec--other) .pmd-row')
-    expect(chatRows).toHaveLength(1)
-    expect(chatRows[0].text()).toContain('deepseek-v4-flash')
-
-    const otherRows = w.findAll('.pmd-row--other')
-    expect(otherRows).toHaveLength(4)
-    const rowText = (needle: string) => otherRows.find((r) => r.text().includes(needle))!
-    expect(rowText('BAAI/bge-m3').text()).toContain('向量')
-    expect(rowText('BAAI/bge-m3').find('button').text()).toBe('基础设施配置')
-    expect(rowText('agnes-image-2.5-flash').text()).toContain('生图')
-    expect(rowText('agnes-image-2.5-flash').find('button').text()).toBe('插件配置')
-    expect(rowText('jev-latest').text()).toContain('决策')
-    expect(rowText('agnes-video-2.5').text()).toContain('暂未接入')
-    expect(rowText('agnes-video-2.5').find('button').exists()).toBe(false)
-
-    // 基础设施配置 → 同页滚到模型表里的基础设施分组行（2026-10-25 不再开弹窗；
-    // 2026-10-28 区块并入模型表）
-    await rowText('BAAI/bge-m3').find('button').trigger('click')
-    expect(w.emitted('open-platform-settings')).toBeUndefined()
+    const rows = w.findAll('.pmd-row')
+    expect(rows).toHaveLength(upstream.length)
+    expect(rows.every((r) => r.find('input[type="checkbox"]').exists())).toBe(true)
+    const embedding = rows.find((r) => r.text().includes('BAAI/bge-m3'))!
+    expect(embedding.text()).toContain('建议归入向量模型')
+    expect(embedding.find('input').attributes('disabled')).toBeDefined()
+    const chat = rows.find((r) => r.text().includes('agnes-image-2.5-flash'))!
+    expect(chat.find('input').attributes('disabled')).toBeUndefined()
+    expect(w.text()).not.toContain('基础设施配置')
+    expect(w.text()).not.toContain('插件配置')
+    expect(w.text()).not.toContain('暂未接入')
   })
 })

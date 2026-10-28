@@ -107,7 +107,7 @@ describe('表格方言回归门禁', () => {
       const src = stripComments(readFileSync(join(dir, page), 'utf8'))
       // 逐表切段（不能用固定字符窗口：长表会超窗漏检，LearnerDetail 就因此漏过一次）
       for (const m of src.matchAll(/<table([^>]*)>([\s\S]*?)<\/table>/g)) {
-        const cls = (m[1].match(/class="([^"]*)"/) || [, ''])[1]
+        const cls = (m[1].match(/class="([^"]*)"/) || ['', ''])[1]
         const clickable = /<tr[^>]*(?:tabindex="0"|@click=)/.test(m[2])
         if (clickable && !cls.includes('mk-table--click')) {
           offenders.push(`${page}: class="${cls}"`)
@@ -118,5 +118,23 @@ describe('表格方言回归门禁', () => {
       offenders,
       '行带 tabindex/@click 时表必须挂 .mk-table--click，否则鼠标无 pointer、键盘聚焦无描边',
     ).toEqual([])
+  })
+
+  /* 2026-10-28 用户「既然是个列表，就遵守列表的设计」：字段路由是字段条目清单，
+     不是需要横向对齐的宽表。锁死列表形态，防止下一次改动又退回列头 + 横向滚动。 */
+  it('字段路由保持列表形态，不回退成宽表', () => {
+    const src = stripComments(readFileSync(join(dir, 'FieldRoutingTable.vue'), 'utf8'))
+    expect(src).not.toMatch(/<table[\s>]/)
+    expect(src).toMatch(/<ul class="frt__list"/)
+    expect(src).toMatch(/<li[^>]*class="frt__item"/)
+  })
+
+  /* Skill 目录同为条目清单（2026-10-28 重新设计）：一行一个 Skill。
+     批量模型配置弹窗里的对照表在子组件 SkillModelCoverage 内，不属本页主列表。 */
+  it('Skill 目录保持列表形态，主区不回退成宽表', () => {
+    const src = stripComments(readFileSync(join(dir, 'Skills.vue'), 'utf8'))
+    expect(src).not.toMatch(/<table[\s>]/)
+    expect(src).toMatch(/<div[^>]*class="sk-list"/)
+    expect(src).toMatch(/<div[^>]*class="sk-item"/)
   })
 })

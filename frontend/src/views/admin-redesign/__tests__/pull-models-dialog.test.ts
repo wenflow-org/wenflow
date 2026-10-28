@@ -1,7 +1,6 @@
 /**
- * 拉取结果浮窗（PullModelsDialog，2026-10-24 用户「拉取作为浮窗」）：
- * 勾选对话候选、已添加只读、筛选与全选、非对话模型去对应配置、
- * 就地测试（2026-10-26 用户「拉取模型那里可以测试了」）。
+ * 模型资产选择器（2026-10-28 用户「应用商店级的选择弹窗」）：
+ * 单一入口、搜索与分类页签、能力标签推断、向量/重排建议分流、手动录入兜底。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -18,9 +17,10 @@ const MODELS = [
   'agnes-3.0-flash',
   'mimo-v2.5-flash',
   'BAAI/bge-m3',
-  'agnes-image-2.5-flash',
-  'jev-latest',
-  'agnes-video-2.5',
+  'BAAI/bge-reranker-v2-m3',
+  'deepseek-r1',
+  'gpt-4o',
+  'step-fun/step-1v',
 ]
 
 function mountDialog(registered: string[] = ['deepseek-v4.1-flash'], providerId = '') {
@@ -36,73 +36,117 @@ async function open(wrapper: ReturnType<typeof mountDialog>) {
   await flushPromises()
 }
 
+function rowOf(wrapper: ReturnType<typeof mountDialog>, needle: string) {
+  return wrapper.findAll('.pmd-row').find((r) => r.text().includes(needle))!
+}
+
 describe('PullModelsDialog', () => {
   beforeEach(() => { testMock.mockReset() })
 
-  it('按用途分组：对话候选可勾，其他用途给配置入口或「暂未接入」', async () => {
+  it('按模型名推断能力与用途：思考 / 读图 / 向量 / 重排各有标签与去向提示', async () => {
     const w = mountDialog()
     await open(w)
-    const chatRows = w.findAll('.pmd-sec:not(.pmd-sec--other) .pmd-row')
-    expect(chatRows).toHaveLength(3)
-    expect(w.findAll('.pmd-row--other')).toHaveLength(4)
+    expect(w.findAll('.pmd-row')).toHaveLength(MODELS.length)
+    expect(w.find('.mk-modal__title').text()).toBe('添加对话模型')
 
-    const rowText = (needle: string) => w.findAll('.pmd-row').find((r) => r.text().includes(needle))!
-    expect(rowText('deepseek-v4.1-flash').text()).toContain('已添加')
-    expect(rowText('deepseek-v4.1-flash').find('input').attributes('disabled')).toBeDefined()
-    expect(rowText('BAAI/bge-m3').find('button').text()).toBe('基础设施配置')
-    expect(rowText('agnes-image-2.5-flash').find('button').text()).toBe('插件配置')
-    expect(rowText('agnes-video-2.5').text()).toContain('暂未接入')
-    expect(rowText('agnes-video-2.5').find('button').exists()).toBe(false)
-    // 段头两个数不一致时写清「可添加」：3 个候选里有 1 个已登记
-    const head = w.find('.pmd-sec__head')
-    expect(head.text()).toContain('3')
-    expect(head.text()).toContain('可添加 2')
+    const r1 = rowOf(w, 'deepseek-r1')
+    expect(r1.text()).toContain('思考')
+    expect(r1.text()).toContain('推理强度')
+    expect(r1.text()).toContain('新发现')
+
+    const gpt = rowOf(w, 'gpt-4o')
+    expect(gpt.text()).toContain('读图')
+
+    const embedding = rowOf(w, 'BAAI/bge-m3')
+    expect(embedding.text()).toContain('建议归入向量模型')
+    expect(embedding.find('input').attributes('disabled')).toBeDefined()
+
+    const rerank = rowOf(w, 'BAAI/bge-reranker-v2-m3')
+    expect(rerank.text()).toContain('建议归入重排模型')
+    expect(rerank.find('input').attributes('disabled')).toBeDefined()
+
+    const added = rowOf(w, 'deepseek-v4.1-flash')
+    expect(added.text()).toContain('已添加')
+    expect(added.find('input').attributes('disabled')).toBeDefined()
   })
 
-  it('勾选后确认：只回传勾中的对话模型', async () => {
+  it('勾选后确认：按勾选顺序回传，按钮文案带已选数量', async () => {
     const w = mountDialog()
     await open(w)
-    await w.findAll('.pmd-sec:not(.pmd-sec--other) .pmd-row')[1].find('input').setValue(true)
+    await rowOf(w, 'agnes-3.0-flash').find('input').setValue(true)
     await nextTick()
-    await w.findAll('.pmd-sec:not(.pmd-sec--other) .pmd-row')[2].find('input').setValue(true)
+    await rowOf(w, 'mimo-v2.5-flash').find('input').setValue(true)
     await nextTick()
     expect(w.find('.pmd-foot__count').text()).toContain('2')
 
-    const confirm = w.findAll('button').find((b) => b.text().includes('配置选中的 2 个'))!
+    const confirm = w.findAll('button').find((b) => b.text().includes('确认引入（已选 2）'))!
     await confirm.trigger('click')
     expect(w.emitted('confirm')?.[0]).toEqual([['agnes-3.0-flash', 'mimo-v2.5-flash']])
   })
 
-  it('全选只作用于当前筛选出的可添加模型，已添加的不勾', async () => {
+  it('分类页签：思考与读图只留推断命中的模型', async () => {
+    const w = mountDialog()
+    await open(w)
+    const tab = (label: string) => w.findAll('.pmd-tab').find((t) => t.text().startsWith(label))!
+
+    expect(tab('全部').text()).toContain('8')
+    expect(tab('深度思考/推理').text()).toContain('1')
+    expect(tab('多模态读图').text()).toContain('2')
+    expect(w.text()).not.toContain('推荐预设')
+
+    await tab('深度思考/推理').trigger('click')
+    await nextTick()
+    expect(w.findAll('.pmd-row')).toHaveLength(1)
+    expect(w.findAll('.pmd-row')[0].text()).toContain('deepseek-r1')
+
+    await tab('多模态读图').trigger('click')
+    await nextTick()
+    expect(w.findAll('.pmd-row').map((r) => r.text())).toHaveLength(2)
+    expect(w.text()).toContain('gpt-4o')
+    expect(w.text()).toContain('step-1v')
+  })
+
+  it('全选作用于当前分类里可添加的对话模型，已添加与向量/重排不勾', async () => {
     const w = mountDialog(['deepseek-v4.1-flash', 'agnes-3.0-flash'])
     await open(w)
     await w.find('.pmd-filter').setValue('flash')
     await nextTick()
-    const all = w.find('.pmd-all input')
-    await all.setValue(true)
+    const rows = w.findAll('.pmd-row')
+    expect(rows).toHaveLength(3)
+    await w.find('.pmd-all input').setValue(true)
     await nextTick()
-    const rows = w.findAll('.pmd-sec:not(.pmd-sec--other) .pmd-row')
-    expect(rows.map((r) => (r.find('input').element as HTMLInputElement).checked)).toEqual([false, false, true])
+    // 勾选后列表会重绘，旧 DOMWrapper 失效：重新查询再读 checked
+    const checks = w
+      .findAll('.pmd-row')
+      .map((r) => (r.find('input').element as HTMLInputElement).checked)
+    expect(checks).toEqual([false, false, true])
     expect(w.find('.pmd-foot__count').text()).toContain('1')
   })
 
-  it('非对话模型的配置入口回传去向并关闭浮窗', async () => {
+  it('手动录入是兜底出口：点链接只发事件，不携带勾选', async () => {
     const w = mountDialog()
     await open(w)
-    const infra = w.findAll('.pmd-row--other button').find((b) => b.text() === '基础设施配置')!
-    await infra.trigger('click')
-    expect(w.emitted('navigate')?.[0]).toEqual(['infra'])
-    expect(w.find('.pmd').exists()).toBe(false)
+    await w.find('.pmd-manual').trigger('click')
+    expect(w.emitted('manual')).toHaveLength(1)
+    expect(w.emitted('confirm')).toBeUndefined()
   })
 
-  it('没有对话模型时给出空态，全选禁用', async () => {
+  it('全部不可添加时全选禁用；空清单给空态', async () => {
     const w = mount(PullModelsDialog, {
-      props: { providerName: '平台', models: ['BAAI/bge-m3'], registered: [] },
+      props: { providerName: '平台', models: ['BAAI/bge-m3'], registered: ['BAAI/bge-m3'] },
       global: { stubs: { teleport: true } },
     })
     await open(w)
-    expect(w.find('.pmd-empty').text()).toContain('没有拉取到对话模型')
+    expect(w.findAll('.pmd-row')).toHaveLength(1)
     expect(w.find('.pmd-all input').attributes('disabled')).toBeDefined()
+
+    const empty = mount(PullModelsDialog, {
+      props: { providerName: '平台', models: [], registered: [] },
+      global: { stubs: { teleport: true } },
+    })
+    await open(empty)
+    expect(empty.find('.pmd-empty').text()).toContain('没有拉取到模型')
+    expect(empty.find('.pmd-all input').attributes('disabled')).toBeDefined()
   })
 
   /* 2026-10-26 用户「拉取模型那里可以测试了」：勾选前就地验一次，
@@ -111,22 +155,19 @@ describe('PullModelsDialog', () => {
     testMock.mockResolvedValueOnce({ data: { data: { durationMs: 845, content: '好的' } } })
     const w = mountDialog([], 'platform')
     await open(w)
-    /** 每次重新查：结果写入后列表会整列重绘，旧 DOMWrapper 会失效 */
-    const rowOf = (needle: string) => w.findAll('.pmd-row').find((r) => r.text().includes(needle))!
 
-    await rowOf('deepseek-v4.1-flash').find('.pmd-row__test').trigger('click')
+    await rowOf(w, 'deepseek-v4.1-flash').find('.pmd-row__test').trigger('click')
     await flushPromises()
     expect(testMock).toHaveBeenCalledWith('platform', { modelId: 'deepseek-v4.1-flash' })
-    const okRes = rowOf('deepseek-v4.1-flash').find('.pmd-row__res')
+    const okRes = rowOf(w, 'deepseek-v4.1-flash').find('.pmd-row__res')
     expect(okRes.text()).toBe('已连通 · 845ms')
     expect(okRes.classes()).toContain('is-ok')
-    // 点测试不是点勾选
-    expect((rowOf('deepseek-v4.1-flash').find('input').element as HTMLInputElement).checked).toBe(false)
+    expect((rowOf(w, 'deepseek-v4.1-flash').find('input').element as HTMLInputElement).checked).toBe(false)
 
     testMock.mockRejectedValueOnce({ message: 'HTTP 401' })
-    await rowOf('agnes-3.0-flash').find('.pmd-row__test').trigger('click')
+    await rowOf(w, 'agnes-3.0-flash').find('.pmd-row__test').trigger('click')
     await flushPromises()
-    const bad = rowOf('agnes-3.0-flash').find('.pmd-row__res')
+    const bad = rowOf(w, 'agnes-3.0-flash').find('.pmd-row__res')
     expect(bad.text()).toBe('连接失败')
     expect(bad.classes()).toContain('is-bad')
     expect(bad.attributes('title')).toContain('401')

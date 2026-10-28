@@ -93,6 +93,8 @@ interface LaunchTarget {
 }
 
 const launchTarget = ref<LaunchTarget | null>(null)
+/** 两处入口（打开前/加载后）同一句提示，写成常量避免同文件复读 */
+const NO_STORY_HINT = '还没有故事，先去画像页生成'
 const launchForm = ref({
   storyId: '',
   mode: 'assisted' as 'assisted' | 'blackbox',
@@ -124,7 +126,7 @@ useEscape(() => !!launchTarget.value, () => { if (!launchBusy.value) launchTarge
 /** 父页面触发：加载故事并打开启动弹窗 */
 async function open(s: LaunchTarget) {
   if (s.storyCount === 0 && isLive.value) {
-    toast.error('还没有故事，先去画像页生成')
+    toast.error(NO_STORY_HINT)
     openSubPage('virtual', s.id)
     return
   }
@@ -149,7 +151,7 @@ async function open(s: LaunchTarget) {
       }
     })
     if (!launchStories.value.length) {
-      toast.error('还没有故事，先去画像页生成')
+      toast.error(NO_STORY_HINT)
       launchTarget.value = null
       openSubPage('virtual', s.id)
       return

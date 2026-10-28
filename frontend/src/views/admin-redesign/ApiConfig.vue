@@ -29,7 +29,7 @@
         @registered="onProvidersRegistered"
       >
         <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：通道身份、连接状态与动作
-             统一收到卡头一行；详情里只留地址与密钥表单。 -->
+             统一收到卡头一行。2026-10-28：连接编辑收进弹层，卡头只留「获取模型」。 -->
         <template #head-status>
           <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
         </template>
@@ -46,129 +46,138 @@
               <MkLoading v-if="fetching" inline text="获取中…" />
               <span v-else>{{ models.length ? '重新获取模型' : '获取模型' }}</span>
             </button>
-            <button
-              v-if="dirty.has('conn')"
-              type="button"
-              class="ac-sec__save"
-              :disabled="saving"
-              @click="saveGroups(['conn'])"
-            >{{ saving ? '保存中…' : '保存连接' }}</button>
-            <!-- 重置是低频不可逆动作：用危险色标出，确认框再交代范围 -->
+          </div>
+        </template>
+        <template #platform-detail>
+          <!-- 卡面不再裸露连接表单：一行摘要回答「连的是哪、密钥有没有、重试怎么配」，
+               所有编辑进「连接设置」弹层，一次保存。 -->
+          <div class="ac-conn-summary">
+            <span class="ac-conn-summary__url mono" :title="form.apiUrl">{{ form.apiUrl || '未配置服务地址' }}</span>
+            <span class="mk-badge" :class="keySet ? 'mk-badge--ok' : 'mk-badge--warn'">
+              {{ keySet ? '密钥已配置' : '未配置密钥' }}
+            </span>
+            <span v-if="reliability" class="ac-conn-summary__policy" :title="policyTitle">
+              重试 {{ reliability.maxUpstreamAttempts }} 次 · 间隔 {{ reliability.retryBaseDelayMs }}ms · RPM {{ reliability.platformRpmLimit || '不限' }}
+            </span>
+            <button type="button" class="mk-link ac-conn-summary__edit" @click="openConnModal">连接设置</button>
+          </div>
+
+          <!-- 调用策略读取失败仍在卡面提示；重试预算告警跟着参数走，只在连接设置弹层里出现 -->
+          <div v-if="isLive && configLoadFailed && !reliability" class="ac-policy ac-policy--inline">
+            <div class="mk-alert mk-alert--row ac-config-error" role="alert">
+              <span class="mk-alert__msg">配置读取失败</span>
+              <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- 上游读数不常驻（2026-10-28 用户「文案不要」）：只留异常与未保存两种需要处理的状态 -->
+        <template #models-meta>
+          <p v-if="(fetchError && !models.length) || hasUnsavedModels" class="ac-models-meta ac-models__line">
+            <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">获取失败，请检查服务地址与密钥</span>
+            <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">未保存</span>
+          </p>
+        </template>
+      </ModelProvidersPanel>
+
+      <!-- 2026-10-28 用户「按能力角色拆成三个独立卡片」：向量 / 重排不再嵌在对话卡里，
+           各自一张卡、各自一套连接（默认复用主通道，也可独立端点）。 -->
+      <InfraModelsPanel />
+
+    </div>
+
+    <!-- 连接设置：地址 / 密钥 / 重试 / RPM 全部收进弹层，卡面只留摘要。
+         一次「保存」同时写连接与调用策略，不再有分段保存钮。 -->
+    <Teleport to="body">
+      <div v-if="connOpen" ref="connMaskRef" class="mk-modal">
+        <div ref="connPanelRef" class="mk-modal__panel ac-conn-modal" role="dialog" aria-label="连接设置">
+          <div class="mk-modal__head">
+            <h3 class="mk-modal__title">连接设置</h3>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="cancelConnModal">✕</button>
+          </div>
+          <div class="mk-modal__body">
+            <label class="mk-field">
+              <span class="mk-field__label">服务地址</span>
+              <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">API Key</span>
+              <span class="ac-key-wrap">
+                <span class="ac-key-input-row">
+                  <input
+                    class="mk-field__input"
+                    :type="keyVisible ? 'text' : 'password'"
+                    v-model="form.apiKey"
+                    autocomplete="new-password"
+                    :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
+                    @input="markDirty('conn')"
+                  />
+                  <button
+                    v-if="keySet || form.apiKey"
+                    type="button"
+                    class="ac-key-toggle"
+                    :title="keyVisible ? '隐藏' : '显示'"
+                    @click="keyVisible = !keyVisible"
+                  ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
+                    <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
+                </span>
+                <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
+              </span>
+            </label>
+
+            <template v-if="isLive && reliability">
+              <div class="ac-conn-modal__policy">
+                <label class="mk-field">
+                  <span class="mk-field__label" title="总尝试上限，含首次调用与改用备用模型">最大重试</span>
+                  <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">重试间隔（毫秒）</span>
+                  <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label" title="0 = 不限，超出后排队等待">RPM 上限</span>
+                  <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
+                </label>
+              </div>
+            </template>
+
+            <div class="ac-conn-modal__test">
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="channelTesting" @click="testChannel">
+                {{ channelTesting ? '测试中…' : '测试连通性' }}
+              </button>
+              <span
+                v-if="channelResult && channelTestedUrl === form.apiUrl.trim()"
+                class="ac-conn__testres"
+                :class="{ 'is-bad': !channelResult.ok }"
+                :title="channelResult.text"
+              >{{ channelResult.ok ? `连通 · ${channelResult.text}` : '连接失败' }}</span>
+            </div>
+
+            <div v-if="configLoadFailed && !reliability" class="mk-alert mk-alert--row" role="alert">
+              <span class="mk-alert__msg">调用策略读取失败</span>
+              <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
+            </div>
+            <div v-if="reliability && fallbackDisabled" class="mk-alert mk-alert--row" role="alert">
+              <span class="mk-alert__msg">当前重试预算下「模型降级」永远不会触发：同模型重试会先耗尽尝试次数，请把「最大重试」调大</span>
+            </div>
+          </div>
+          <div class="mk-modal__foot ac-conn-modal__foot">
             <button
               type="button"
               class="mk-btn mk-btn--sm mk-btn--danger-ghost"
               :disabled="resetting"
               @click="resetConfig"
             >{{ resetting ? '重置中…' : '重置此通道' }}</button>
+            <span class="ac-conn-modal__spacer"></span>
+            <button type="button" class="mk-btn" @click="cancelConnModal">取消</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="saveConnModal">
+              {{ saving ? '保存中…' : '保存' }}
+            </button>
           </div>
-        </template>
-        <template #platform-detail>
-          <div ref="platformConnRef" class="ac-conn mpp-block">
-            <!-- 2026-10-27 用户「不再做独立的连通性验证，针对能配置的模型测试就行」：
-                 连接段只留地址与密钥；测试入口在模型表每一行（已保存的通道 + 具体模型）。 -->
-            <div class="ac-body ac-conn-form">
-              <label class="mk-field">
-                <span class="mk-field__label">服务地址</span>
-                <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
-              </label>
-              <label class="mk-field">
-                <span class="mk-field__label">API Key</span>
-                <span class="ac-key-wrap">
-                  <span class="ac-key-input-row">
-                    <input
-                      class="mk-field__input"
-                      :type="keyVisible ? 'text' : 'password'"
-                      v-model="form.apiKey"
-                      autocomplete="new-password"
-                      :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
-                      @input="markDirty('conn')"
-                    />
-                    <button
-                      v-if="keySet || form.apiKey"
-                      type="button"
-                      class="ac-key-toggle"
-                      :title="keyVisible ? '隐藏' : '显示'"
-                      @click="keyVisible = !keyVisible"
-                    ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
-                      <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
-                  </span>
-                  <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 2026-10-27 用户「这个合并到最上面的平台通道卡片里面」：
-               全站调用策略并进通道卡，作为连接段之后的第二个分区。 -->
-          <div v-if="isLive && (reliability || configLoadFailed)" class="ac-policy ac-policy--inline">
-            <div class="ac-policy__head">
-              <span class="ac-policy__title">全站调用策略</span>
-              <button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button>
-            </div>
-            <div class="ac-policy__form">
-              <div v-if="configLoadFailed && !reliability" class="mk-alert mk-alert--row ac-config-error" role="alert">
-                <span class="mk-alert__msg">配置读取失败</span>
-                <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
-              </div>
-              <!-- 不变式违例升格为段级告警：三个数字里最该先读的一句 -->
-              <div v-if="reliability && fallbackDisabled" class="mk-alert mk-alert--row ac-fallback-alert" role="alert">
-                <span class="mk-alert__msg">当前重试预算下「模型降级」永远不会触发：同模型重试会先耗尽尝试次数，请把「最大重试」调大</span>
-              </div>
-              <div v-if="reliability" class="ac-policy__fields">
-                <label class="mk-field">
-                  <span class="mk-field__label" title="总尝试上限，含首次调用与改用备用模型">最大重试</span>
-                  <span class="ac-policy__control">
-                    <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">次</em>
-                  </span>
-                </label>
-                <label class="mk-field">
-                  <span class="mk-field__label">重试间隔</span>
-                  <span class="ac-policy__control">
-                    <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">毫秒</em>
-                  </span>
-                </label>
-                <label class="mk-field">
-                  <span class="mk-field__label" title="0 = 不限，超出后排队等待">RPM 上限</span>
-                  <span class="ac-policy__control">
-                    <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
-                    <em class="ac-policy__unit">次/分</em>
-                  </span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </template>
-
-        <!-- 上游清单状态（只报读数，逐条清单由面板渲染） -->
-        <template #models-meta>
-          <p class="ac-models-meta ac-models__line">
-            <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">获取失败，请检查服务地址与密钥</span>
-            <span v-else-if="models.length">{{ upstreamSummary }}</span>
-            <span v-else>还没获取模型清单</span>
-            <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">未保存</span>
-          </p>
-        </template>
-
-        <!-- 基础设施（向量化 / 重排）：2026-10-28 用户「按照对话的样子拆散了，并到对话列表
-             里去」——不再自成区块，作为模型表里的两组行由 InfraModelsPanel 渲染。 -->
-        <template #models-infra>
-          <InfraModelsPanel />
-        </template>
-      </ModelProvidersPanel>
-
-    </div>
-    <!-- 底部保存条（脏位跨分段不丢）：多组脏恒出；单组脏仅当该组的分段保存钮不在当前
-         可见区域时出——否则同屏两颗保存钮。 -->
-    <div v-if="showSaveBar" class="ac-save">
-      <span class="ac-save__dot"></span>
-      <span>{{ dirtyGroups.join(' + ') }} · {{ dirty.size }} 组未保存变更</span>
-      <button type="button" class="mk-link" :disabled="saving" @click="discardAll">放弃</button>
-      <button type="button" class="ac-save__primary" :disabled="saving" @click="saveAll">
-        {{ saving ? '保存中…' : '保存变更' }}
-      </button>
-    </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -181,7 +190,6 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
 import ModelProvidersPanel from './ModelProvidersPanel.vue'
 import InfraModelsPanel from './InfraModelsPanel.vue'
-import { splitUpstreamByRegistry } from './modelNameMatch'
 import {
   liveApiConfig as cfg,
   liveFetchModels,
@@ -193,6 +201,8 @@ import {
 } from './live'
 import { adminPlatformSettingsApi, adminApiConfigApi } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
+import { useEscape } from './useEscape'
+import { useOverlay, useMaskClose } from './useOverlay'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { toast } from '@/utils/toast'
@@ -220,12 +230,9 @@ const route = useRoute()
 const router = useRouter()
 /** 供应商面板（BYOK）：页头「刷新注册表」与写后重取都走它的 refresh */
 const providersRef = ref<{ refresh?: (force?: boolean) => void; openHostPull?: () => void } | null>(null)
-/** 已登记模型 id（面板回传）：上游清单的关系句与折叠共用这一次计算 */
-const registeredModelIds = ref<string[]>([])
 /** 供应商面板首次回传即视为注册表已就绪：同步按钮按 apiUrl 判禁用，首屏地址未回填时点不动 */
 const providersLoaded = ref(false)
-function onProvidersRegistered(ids: string[]) {
-  registeredModelIds.value = ids
+function onProvidersRegistered() {
   providersLoaded.value = true
 }
 /** 注册表已就绪：面板首次回传，或 live 配置已到（首屏未回填地址时按钮不该点不动） */
@@ -237,11 +244,10 @@ function onFetchClick() {
   }
   void fetchModels()
 }
-/* 平台连接表单已内联进供应商详情（2026-10-25 撤掉「平台设置」浮窗）：
-   「获取模型」在连接段头部的动作组里，地址未就绪时就地滚回表单。 */
-const platformConnRef = ref<HTMLElement | null>(null)
+/* 2026-10-28 用户「表单不要直接裸露」：连接编辑收进弹层，卡面只留一行摘要。
+   「获取模型」在地址未就绪时直接打开连接设置。 */
 function focusPlatformConnection() {
-  platformConnRef.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+  openConnModal()
 }
 
 /** 注册表读数（只读总览回传）：上游清单与「已添加」的对照只用 models 这一段。
@@ -318,9 +324,6 @@ const DIRTY_GROUP_LABELS: Record<string, string> = {
   reliability: '全站策略'
 }
 const dirtyGroups = computed(() => [...dirty.value].map((g) => DIRTY_GROUP_LABELS[g] || g))
-/** 2026-10-28 平台默认整块撤出后，连接与全站策略各有一颗分段保存钮常驻：
-    单组脏由分段保存钮承担，只有两组同时脏才出底部条。 */
-const showSaveBar = computed(() => dirty.value.size > 1)
 
 /* AI 可靠性（live 加载） */
 interface Reliability {
@@ -447,30 +450,6 @@ onBeforeUnmount(() => {
 const models = computed(() => fetchedModels.value)
 
 /**
- * 上游清单 ↔ 平台登记表的对齐（2026-10-16 用户走查）：连接卡只说关系（上游几个、对上几个），
- * 逐个名字的清单由模型清单的「上游未登记」折叠承载。
- * 登记 id 由 ModelProvidersPanel 经 @registered 回传；未到时按 null 算
- * （此时只说「上游返回 N 个」，不说对上几个，避免「对上 0 个」这种假话）。
- */
-const registeredIds = computed<string[] | null>(() =>
-  registeredModelIds.value.length ? registeredModelIds.value : null
-)
-const upstreamSplit = computed(() => splitUpstreamByRegistry(models.value, registeredIds.value ?? []))
-/** 登记表是否已回来：未回来时只说「上游 N 个」 */
-const upstreamReady = computed(() => registeredIds.value !== null)
-
-/** 上游清单与登记表的读数（空串 = 无清单可谈，模板走空态分支）：只报数字，不写解释句。
-    2026-10-24「平台模型分几种」：上游清单是多模态混排，先报其中的对话候选数——
-    向量 / 重排 / 生图 / 决策不登记进 LLM 目录。 */
-const upstreamSummary = computed(() => {
-  const total = models.value.length
-  if (!total) return ''
-  if (!upstreamReady.value) return `已获取 ${total} 个模型`
-  const matched = upstreamSplit.value.registered.length
-  return `已获取 ${total} 个 · ${matched} 个已接入`
-})
-
-/**
  * 当前清单是否已落盘（F8-2）：拉取只写本页内存 ref，只有随「保存连接」进 availableModels 才持久化。
  * 判定条件与 saveGroups 的归属规则（`fetchedModelsEndpoint === form.apiUrl` 才携带）严格对齐——
  * 即「下一次保存连接会落盘、但后端现值还不是它」时才提示，避免改地址未拉取时误报。
@@ -516,6 +495,95 @@ const keyHintNeeded = computed(
 /* ---------- 操作 ---------- */
 const fetching = ref(false)
 const saving = ref(false)
+
+/* 通道级连通性测试：只回答「这个地址与密钥通不通」，与模型测试分开口径。
+   密钥留空时后端会用已保存的那把（地址未变才回落），前端不接触明文。 */
+const channelTesting = ref(false)
+const channelResult = ref<{ ok: boolean; text: string } | null>(null)
+const channelTestedUrl = ref('')
+
+async function testChannel(): Promise<void> {
+  if (channelTesting.value) return
+  const apiUrl = form.apiUrl.trim()
+  if (!apiUrl) {
+    toast.error('先填写服务地址')
+    focusPlatformConnection()
+    return
+  }
+  if (keyHintNeeded.value) {
+    toast.error('地址已更换，请先重填 API Key')
+    return
+  }
+  channelTesting.value = true
+  channelResult.value = null
+  try {
+    const res = await adminApiConfigApi.testConnection({ apiUrl, apiKey: form.apiKey.trim() })
+    const data = res.data?.data ?? {}
+    const count = Number(data.modelsCount ?? 0)
+    channelResult.value = { ok: true, text: count ? `${count} 个模型` : '服务可达' }
+    channelTestedUrl.value = apiUrl
+  } catch (e) {
+    channelResult.value = { ok: false, text: errMsg(e) }
+    channelTestedUrl.value = apiUrl
+  } finally {
+    channelTesting.value = false
+  }
+}
+
+/* ---------- 连接设置弹层：一次保存连接 + 调用策略 ---------- */
+const connOpen = ref(false)
+const connPanelRef = ref<HTMLElement | null>(null)
+const connMaskRef = ref<HTMLElement | null>(null)
+const connBackup = ref<{ apiUrl: string; apiKey: string; reliability: Reliability | null } | null>(null)
+
+useEscape(() => connOpen.value, cancelConnModal)
+useOverlay(connOpen, connPanelRef)
+useMaskClose(connMaskRef, cancelConnModal)
+
+const policyTitle = computed(() => {
+  const r = reliability.value
+  if (!r) return ''
+  return `最大重试 ${r.maxUpstreamAttempts} 次（含首次与备用模型）· 间隔 ${r.retryBaseDelayMs}ms · RPM 上限 ${r.platformRpmLimit || '不限'}`
+})
+
+function openConnModal(): void {
+  channelResult.value = null
+  channelTestedUrl.value = ''
+  connBackup.value = {
+    apiUrl: form.apiUrl,
+    apiKey: form.apiKey,
+    reliability: reliability.value ? { ...reliability.value } : null
+  }
+  connOpen.value = true
+}
+
+/** 取消即回滚：弹层里的改动没有旁路，关掉就回到已保存状态。 */
+function cancelConnModal(): void {
+  const backup = connBackup.value
+  if (backup) {
+    form.apiUrl = backup.apiUrl
+    form.apiKey = backup.apiKey
+    if (reliability.value && backup.reliability) Object.assign(reliability.value, backup.reliability)
+  }
+  dirty.value = new Set([...dirty.value].filter((g) => g !== 'conn' && g !== 'reliability'))
+  connOpen.value = false
+  connBackup.value = null
+}
+
+async function saveConnModal(): Promise<void> {
+  if (!form.apiUrl.trim()) {
+    toast.error('服务地址不能为空')
+    return
+  }
+  if (keyHintNeeded.value) {
+    toast.error('请先重填 API Key 再保存')
+    return
+  }
+  const ok = await saveGroups(['conn', 'reliability'])
+  if (!ok) return
+  connOpen.value = false
+  connBackup.value = null
+}
 
 async function fetchModels() {
   if (fetching.value || !form.apiUrl) return
@@ -626,10 +694,6 @@ async function saveGroups(groups: string[], opts: { silent?: boolean } = {}): Pr
   }
 }
 
-function saveAll() {
-  return saveGroups([...dirty.value])
-}
-
 /* 重置接入配置：后端 POST /admin/api-config/reset 只删 platform_api_configs 一行
    （服务地址 / 密钥 / 模型清单 / 平台默认生成参数），不动全站策略与访问策略。高风险不可撤销，走二次确认。 */
 const resetting = ref(false)
@@ -647,6 +711,8 @@ async function resetConfig() {
     await loadLiveData(true)
     await loadReliability()
     dirty.value = new Set()
+    connOpen.value = false
+    connBackup.value = null
     toast.success('配置已重置为默认值')
   } catch (e) {
     toast.error(`重置失败：${errMsg(e)}`)
@@ -655,17 +721,6 @@ async function resetConfig() {
   }
 }
 
-function discardAll() {
-  /* 配置域读取失败（cfg 为空）时 applyLiveConfig 直接 return：脏位不清、表单不回滚，
-     不能假报「已放弃」——否则用户以为改动已撤。显式提示先重试。 */
-  if (!cfg.value) {
-    toast.error('配置尚未读取成功，表单无法回滚，请先点顶部「重试」')
-    return
-  }
-  applyLiveConfig()
-  void loadReliability()
-  toast.info('已放弃未保存的变更')
-}
 </script>
 
 <style scoped>
@@ -695,30 +750,42 @@ function discardAll() {
 }
 /* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
-/* 平台通道那条详情的连接块（2026-10-18 从独立「连接」卡搬进供应商详情）：外层卡头没了，
-   状态徽标与「保存连接」收进一条细条，右侧一句说明这段表单管什么。 */
-/* 槽位已在供应商详情的内衬里：连接块自身的 .ac-body 不再补一层 16px 边 */
-.ac-conn .ac-body { padding: 0; }
-/* 连接块头右组：获取模型 + 分段保存 + 重置 */
+/* 卡面连接摘要（2026-10-28 用户「表单不要直接裸露」）：一行回答连到哪、密钥是否就绪、
+   重试怎么配；地址 / 密钥 / 策略的编辑都在「连接设置」弹层里，一次保存。 */
+.ac-conn-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 0 2px;
+  font-size: var(--mk-fs-micro);
+}
+.ac-conn-summary__url {
+  color: var(--mk-ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ac-conn-summary__policy { color: var(--mk-muted); }
+.ac-conn-summary__edit { margin-left: auto; }
+/* 连接块头右组：获取模型 */
 .ac-conn__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
-/* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
-.ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
-/* 连接表单（2026-10-27）：只剩地址与密钥两行，竖向排；不跟着详情宽度拉满。
-   测试入口移到模型表每行，不再在连接段做独立的连通性验证。
-   2026-10-28 用户「重新设计」：卡面近千像素宽，两行字段只占左侧 560px，右半张全空，
-   卡片又被撑得过高。地址与密钥改为并排各占一格，整行铺满，高度收一档。 */
-.ac-conn-form {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 20px;
+/* 连接设置弹层 */
+.ac-conn-modal { width: min(560px, 94vw); }
+.ac-conn-modal__policy {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
-@media (max-width: 900px) {
-  .ac-conn-form { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 640px) {
+  .ac-conn-modal__policy { grid-template-columns: minmax(0, 1fr); }
 }
-/* 2026-10-06 审核 #159：四个配置页签的字段控件统一走 .mk-field__input/__select/__textarea
-   （与 MCP 弹窗、加字段向导同原语）——原「.mk-field 下 .mk-filter__input 补 100% 宽」的补偿规则
-   随控件换原语一并删除（字段原语自身即 width:100%） */
-.ac-body .mk-field { margin: 0; min-width: 0; }
+.ac-conn-modal__test { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ac-conn-modal__foot { display: flex; align-items: center; gap: 8px; }
+.ac-conn-modal__spacer { flex: 1 1 auto; }
+
 .ac-key-wrap { display: grid; gap: 4px; min-width: 0; }
 .ac-key-input-row { display: flex; align-items: center; gap: 6px; }
 .ac-key-input-row .mk-field__input { flex: 1; min-width: 0; }
@@ -745,6 +812,12 @@ function discardAll() {
   font-style: normal;
   white-space: normal;
 }
+.ac-conn__testres {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-green);
+  white-space: nowrap;
+}
+.ac-conn__testres.is-bad { color: var(--mk-red); font-weight: 600; }
 
 /* 上游清单关系句（2026-10-16 用户走查重排）：原 30+ 枚模型胶囊（.ac-models/.ac-model）退役——
    与下方登记表并列成两份模型名单，被读成「同一件事说两遍」。现在只说关系，逐个名字在登记表折叠里。 */
@@ -758,141 +831,40 @@ function discardAll() {
   gap: 8px;
   margin: 0;
 }
-/* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
-
-/* 访问来源模式：radio 单选卡片（复刻原型 index.html:1793-1798 .radio-row/.radio，
-   原型 .radio[aria-checked="true"] = brand 描边 + brand 底 + brand 字 + 600 字重）。
-   描边/圆角/选中态全走 --mk-* token，暗色随 token 自动适配 */
-/* 分段保存（方向 A）：该段有未保存改动时才出现；与底部统一保存条并存 */
-.ac-sec__save {
-  margin-left: auto;
-  padding: 2px 10px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--mk-blue) 30%, transparent);
-  background: color-mix(in srgb, var(--mk-blue) 8%, transparent);
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  cursor: pointer;
-}
-.ac-sec__save:hover { background: color-mix(in srgb, var(--mk-blue) 16%, transparent); }
-.ac-sec__save:disabled { opacity: 0.6; cursor: not-allowed; }
-/* 分段控件走 .mk-seg（shared.css） */
-.ac-fallback-alert { margin: 0; }
-
-/* ===== 调用策略（2026-10-28 收敛：只留参数）=====
-   三个字段一行，屏上只有标签、数值与单位；口径说明不再上屏（2026-10-28 用户
-   「文案不要」），必要语义（总尝试上限 / 0 = 不限）收进标签 title。
-   调用读数不在这张卡里：健康读数归健康中心，跑批读数在虚拟学习者页。 */
+/* 调用策略异常（只在真有问题时出现） */
 .ac-policy {
   display: grid;
   gap: 18px;
   padding-top: 14px;
 }
-/* 2026-10-27 并进平台通道卡后：段级分隔 + 标题行，不再有独立卡头 */
 .ac-policy--inline {
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--mk-line);
   gap: 10px;
 }
-.ac-policy__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ac-policy__title { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.ac-policy__form { display: grid; gap: 12px; min-width: 0; }
-.ac-policy__fields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
-  align-items: start;
-}
-.ac-policy__control { display: flex; align-items: center; gap: 8px; max-width: 220px; }
-.ac-policy__control .mk-field__input {
-  width: 100%;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-.ac-policy__unit {
-  font-style: normal;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  white-space: nowrap;
-  flex: none;
-}
-
-/* 内容区不足 1100px：三列参数回落两列，再窄回落单列 */
-@media (max-width: 1100px) {
-  .ac-policy__fields { grid-template-columns: repeat(2, minmax(0, 200px)); }
-}
-@media (max-width: 800px) {
-  .ac-policy__fields { grid-template-columns: minmax(0, 1fr); }
-}
-.ac-save {
-  position: sticky;
-  bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: fit-content;
-  margin: 4px auto 0;
-  padding: 9px 12px 9px 16px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--mk-blue) 24%, transparent);
-  background: var(--mk-surface);
-  box-shadow: var(--mk-shadow-pop);
-  font-weight: 600;
-}
-.ac-save__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-amber); }
-.ac-save__primary {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 0;
-  background: var(--mk-blue);
-  color: var(--mk-on-fill);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-.ac-save__primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
-  .ac-body { gap: 16px; padding: 6px 18px 18px; }
   .mk-field__label { font-size: var(--mk-fs-micro); }
-
   .mk-seg { border-radius: 12px; }
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 8px 14px; }
-  .ac-policy__fields { grid-template-columns: repeat(3, minmax(0, 220px)); gap: 22px; }
-  .ac-save { padding: 11px 14px 11px 18px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号继续放大 */
-  .ac-body { gap: 18px; padding: 8px 22px 22px; }
   .mk-field__label { font-size: var(--mk-fs-micro); }
-
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 9px 16px; }
-  .ac-policy__fields { grid-template-columns: repeat(3, minmax(0, 250px)); gap: 24px; }
-  .ac-save { padding: 13px 16px 13px 20px; }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
-  .ac-body { gap: 20px; padding: 10px 26px 26px; }
   .mk-field__label { font-size: var(--mk-fs-body); }
-
   .mk-seg__item { font-size: var(--mk-fs-body); padding: 11px 19px; }
-  .ac-policy__fields { grid-template-columns: repeat(3, minmax(0, 290px)); gap: 28px; }
-  .ac-save { padding: 15px 18px 15px 24px; }
 }
-
-/* ================= 平台设置浮窗（2026-10-24）：连接 / 基础设施 / 平台默认 ================= */
 
 /* ================= 暗色模式（D1 补完）：模型与接入 ================= */
 html[data-theme='dark'] {
   .ac-key-toggle:hover { background: color-mix(in srgb, var(--wf-color-primary) 14%, transparent); }
-  /* 审核 #163：原 .mk-seg 覆写 #232325 对卡面 #202124 仅 3 个 sRGB 级台阶（<6），
-     轨道几乎与卡面同色——删除覆写，回到 token（--mk-pills-bg 暗色 #27282c，7/8 级） */
-  .ac-save { background: #19191a; border-color: var(--wf-border-light); }
   /* 补漏：密钥切换钮浅底（模型胶囊随清单胶囊退役，2026-10-16） */
   .ac-key-toggle { background: #232325; color: var(--mk-muted); }
 }

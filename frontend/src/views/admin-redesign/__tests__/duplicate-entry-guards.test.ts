@@ -42,17 +42,18 @@ describe('重复操作入口守卫', () => {
     expect(host).not.toContain('adminSkillsApi.testSkill')
   })
 
-  it('运行时配置只有一个保存钮（卡头，脏时才出）', () => {
+  it('运行时配置只有配置弹层里一颗保存钮，卡头不再有分段保存', () => {
     const src = read('skill-design/runtime-tab.vue')
-    const buttons = src.match(/@click="saveRuntime"/g) || []
-    expect(buttons.length).toBe(1)
-    expect(src).toContain('v-if="dirtyNow"')
+    expect(src.match(/@click="saveRuntime"/g) ?? []).toHaveLength(1)
+    expect(src).not.toContain('sdp-card__save')
+    expect(src).toContain('@click="openConfig"')
   })
 
-  it('接入页：单组脏且保存钮在本页签时不出整页保存条（切走 / 多组才出）', () => {
+  it('接入页：连接与策略只在连接设置弹层里有一颗保存钮，不再有整页保存条', () => {
     const src = read('ApiConfig.vue')
-    expect(src).toContain('v-if="showSaveBar" class="ac-save"')
-    expect(src).toContain('const showSaveBar = computed')
+    expect(src).not.toContain('class="ac-save"')
+    expect(src).not.toContain('showSaveBar')
+    expect(src.match(/@click="saveConnModal"/g) ?? []).toHaveLength(1)
   })
 
   it('供应商设置弹窗不再重复行内的启用开关与密钥输入（仅创建时出现）', () => {

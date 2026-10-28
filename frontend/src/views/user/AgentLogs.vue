@@ -124,7 +124,7 @@
               </span></td>
               <td class="uc-table__muted">{{ row.durationMs ?? '-' }}</td>
               <td class="uc-table__muted">{{ row.tokensUsed ?? '-' }}</td>
-              <td class="uc-table__muted">{{ getModelSourceInfo(row).label }}</td>
+              <td class="uc-table__muted" :title="`来源：${getModelSourceInfo(row).label}`">{{ getModelSourceInfo(row).display }}</td>
               <td class="uc-table__muted logs-error-cell">{{ row.error || '-' }}</td>
               <td class="uc-table__muted">{{ formatDate(row.calledAt) }}</td>
               <td class="uc-table__right">
@@ -259,6 +259,8 @@ interface AgentLogItem {
   sourceEntry?: string | null;
   callerAgent?: string | null;
   logSource?: string;
+  /** 实际模型名（折叠会话由后端从组内网关 span 提取） */
+  model?: string | null;
   input?: unknown;
   output?: unknown;
   metadata?: unknown;
@@ -720,13 +722,22 @@ const parseMetadata = (metadata: unknown): Record<string, unknown> => {
   return metadata as Record<string, unknown>;
 };
 
+const MODEL_SOURCE_LABELS = { user: '用户 AI API', platform: '内置模型' } as const;
+
 const getModelSourceInfo = (log: AgentLogItem | null) => {
   const metadata = parseMetadata(log?.metadata);
   const usesUserProvider = !!metadata.usesUserProvider;
+  const modelName = (typeof log?.model === 'string' ? log.model : '')
+    || (typeof metadata.model === 'string' ? metadata.model : '')
+    || '';
+  const trimmedModelName = modelName.trim();
+  const sourceLabel = usesUserProvider ? MODEL_SOURCE_LABELS.user : MODEL_SOURCE_LABELS.platform;
 
   return {
     usesUserProvider,
-    label: usesUserProvider ? '用户 AI API' : '内置模型',
+    label: sourceLabel,
+    /* 表格「模型」列优先给实际模型名（如 deepseek-v4.1-flash）；日志未带模型时退回来源标签 */
+    display: trimmedModelName || sourceLabel,
     providerName: metadata.providerName || 'platform-default',
     providerBaseUrl: metadata.providerBaseUrl || '-',
     providerId: metadata.providerId || 'platform-default'

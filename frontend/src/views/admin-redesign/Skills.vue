@@ -71,13 +71,12 @@
             :options="focusOptions"
             :active="onlyAttention"
           />
-          <!-- 2026-10-05 卡头统一弹层法：归属 Agent 下拉收进右侧「筛选」弹层
-              （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）。 -->
         </div>
+        <!-- 卡头右组（全站列表页语法）：搜索 → 归属 → 窗口 → 排序。
+             2026-10-28 用户「重新设计」：本页是 Skill 条目清单，不再用可点表头排序，
+             排序改下拉 + 方向按钮；「列」菜单随宽表一起退役（列表没有可隐藏的列）。 -->
         <div class="mk-card__head-right">
-          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID" />
-          <!-- 归属 Agent 筛选（2026-10-26 评审：从「筛选」弹层移回卡头一行，选中值直接显示 Agent 名） -->
           <MkPillSelect
             v-model="agentFilter"
             label="归属"
@@ -92,14 +91,19 @@
             :options="statsRangeOptions"
             :active="statsRange !== '7d'"
           />
-          <MkCols
-            :col-defs="menuColDefs"
-            :storage-key="SK_COLS_KEY"
-            v-model:hidden="hiddenCols"
-            :default-hidden="SK_COLS_DEFAULT_HIDDEN"
+          <span class="sk-sort-label">排序</span>
+          <MkSelect
+            v-model="sortSelect"
+            :options="SORT_OPTIONS"
+            aria-label="排序字段"
           />
-          <!-- 卡头不再出「筛选后 N 个」命中数：与分页器「共 N 条」同屏复读，计数单源交分页器
-               （2026-10-05 CP1 判例 Users.vue:26-29） -->
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :disabled="!sortKey"
+            title="切换排序方向"
+            @click="toggleDir"
+          >{{ sortDir === 'asc' ? '升序' : '降序' }}</button>
         </div>
       </div>
 
@@ -110,133 +114,45 @@
         <button type="button" class="mk-alert__btn" @click="retrySkills">重试</button>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="7" />
+      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="3" />
       <template v-else>
-      <!-- 列表视图：列对齐 + 排序，问题浮顶。
-           0 行时不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃掉整卡高度，
-           把下面的空态顶到卡底（实测文案上方 608px 空白）。 -->
-      <div v-if="filtered.length" class="mk-table-scroll">
-        <!-- 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：自动布局下
-             Skill / 归属 / 路由模型三列按当页最长名称分宽，翻页整表跳动；改 fixed + 逐列
-             表头宽度，余量按权重摊开。长名称仍由 --mk-cell-main-max 截断兜底 -->
-        <table v-if="filtered.length" class="mk-table mk-table--click mk-table--fixed mk-table--nowrap sk-table">
-          <!-- P1① 列结构对齐原型 renderSkillHub 1662-1706 的 8 列：
-               Skill / 归属 Agent / 版本 / 路由模型 / 24h 调用 / P95 / 通过率 / 完成度。
-               数据来源核查见脚本「路由 · 版本元数据」小节；P95 接口缺失 → 恒「—」且默认隐藏。
-               原型里的「完成度」与不在原型里的「类别」均已撤（见下方表头处说明，
-               2026-10-24 用户「有什么实际意义吗」）：现列 = 原型 8 列去掉完成度，
-               加「最近调用」，操作列收尾。 -->
-          <thead>
-            <tr>
-              <th
-                scope="col"
-                class="mk-th--sortable sk-c-skill"
-                :aria-sort="sortState('skill')"
-                @click="toggleSort('skill')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('skill')">Skill<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                v-if="showCol('agent')"
-                scope="col"
-                class="mk-th--sortable sk-c-agent"
-                :aria-sort="sortState('agent')"
-                @click="toggleSort('agent')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('agent')">归属 Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <!-- 版本 = 线上生效的 Prompt 版本（2026-10-24 用户「什么是版本，单一源头」）：
-                   与详情 hero、运行时定义同一条规则；definition.version（代码语义版本）不再上这一列 -->
-              <th
-                v-if="showCol('version')"
-                scope="col"
-                class="mk-th--sortable sk-c-version"
-                :aria-sort="sortState('version')"
-                @click="toggleSort('version')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('version')">Prompt 版本<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <!-- 路由模型：skill-model-configs/coverage 的生效 model；未配置 → 「平台默认」 -->
-              <th
-                v-if="showCol('routing')"
-                scope="col"
-                class="mk-th--sortable sk-c-routing"
-                :aria-sort="sortState('routing')"
-                @click="toggleSort('routing')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('routing')">路由模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <!-- 原型「24h 调用」：本页窗口由「统计窗口」下拉决定（默认近 7 天），故列名取中性「调用」，口径随窗口 -->
-              <th
-                v-if="showCol('calls')"
-                scope="col"
-                class="mk-th--right mk-th--sortable sk-c-calls"
-                :aria-sort="sortState('calls')"
-                @click="toggleSort('calls')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('calls')">调用次数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <!-- P95 占位：后端仅日志聚合提供 p50/p99，无技能级 P95；不编造数字。
-                   整列恒「—」无信息量（评审 P3）→ 默认隐藏，「列」菜单可手动开启 -->
-              <th v-if="showCol('p95')" scope="col" class="mk-th--right sk-c-p95">P95</th>
-              <th
-                v-if="showCol('rate')"
-                scope="col"
-                class="mk-th--right mk-th--sortable sk-c-rate"
-                :aria-sort="sortState('rate')"
-                @click="toggleSort('rate')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="RATE_THRESHOLD_NOTE">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <!-- 「完成度」「类别」两列已撤（2026-10-24 用户「有什么实际意义吗」）：
-                   完成度 = 对账 completion（草稿→入口→core→字段→已上线），实测 37 条对账
-                   全为 live，列表 30 行里 29 行显示「已上线」、1 行无对账行显示「—」——零区分度，
-                   排序也只是把那 1 个空行挑出来。它是工程侧的构建审计，判断依据全是代码/文件
-                   状态，运营没有动作能改它；门槛依据与失败档文本在健康中心对账明细里。
-                   类别 = Skill 定义声明的 category（本页实际只有「生成」「分析」两桶，36 条
-                   分布 18/14/3/1），不参与任何运行时行为，详情 hero 已显示同一枚徽标。 -->
-              <th
-                v-if="showCol('last')"
-                scope="col"
-                class="mk-th--sortable sk-c-last"
-                :aria-sort="sortState('last')"
-                @click="toggleSort('last')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('last')">最近调用<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- 2026-10-14 方案 B：行点击直达 Skill 详情（原「设计」小钮的同一落点）。
-                 2026-10-15 设计页退役平铺进详情页后，行点击 = 详情页（自带设计能力），
-                 与编排图节点下钻同一落点。 -->
-            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.id} 详情`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
-              <td>
-                <div class="sk-cell">
-                  <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
-                  <div class="mk-cell-main">
-                    <!-- 英文主行（2026-10-25 用户「以英文为主」）：canonical id 是身份，中文 displayName
-                         只是别名——与详情页 hero 同一口径（标题=id、中文名进副行）。
-                         2026-10-26 评审：id 做成蓝色链接，让「打开详情」有可见入口（整行仍可点）。 -->
-                    <button type="button" class="sk-name-main sk-name-main--id sk-name-link mk-ellipsis" :title="nameTitleOf(s)" @click.stop="openDesign(s.id)">{{ s.id }}</button>
-                    <!-- 副行 = 中文别名 + 排障入口；<1600 时「最近调用」列收进副行（showCol 同源） -->
-                    <span class="sk-subline">
-                      <span v-if="sublineOf(s)" class="sk-sub" :title="nameTitleOf(s)">{{ sublineOf(s) }}</span>
-                      <button v-if="s.errors > 0" type="button" class="mk-link sk-fail-link" @click.stop="investigateAgent(s.id)">查失败</button>
-                      <span v-if="!showCol('last')" class="sk-recent">{{ s.lastAt }}</span>
-                    </span>
-                  </div>
-                </div>
-              </td>
-              <td v-if="showCol('agent')">
-                <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId">{{ s.agentName || s.agentId }}</span>
-                <!-- 无归属不用裸文本「工具类」：与同列有归属的胶囊同构，弱化灰徽标（2026-10-24） -->
-                <span v-else class="mk-badge mk-badge--sm mk-badge--muted">未归属</span>
-              </td>
-              <td v-if="showCol('version')" class="sk-c-version"><button type="button" class="mono sk-version-link" :title="versionTitleOf(s.id)" @click.stop="openVersions(s.id)">{{ versionOf(s.id) }}</button></td>
-              <!-- 路由口径是中文词（「平台默认」），不走等宽；版本号仍是机器串 -->
-              <td v-if="showCol('routing')"><span class="sk-model" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
-              <!-- 调用/P95/成功率三格挂 mk-num（2026-10-15 用户走查）：表头 mk-th--right 右对齐，
-                   值格此前无 mk-num 左对齐，头与值各站一边；mk-num 同时补齐 mono/tabular 方言 -->
-              <td v-if="showCol('calls')" class="mk-num">{{ s.calls }}</td>
-              <td v-if="showCol('p95')" class="mk-num"><span class="mk-na">—</span></td>
-              <td v-if="showCol('rate')" class="mk-num">
-                <!-- 2026-10-15 用户拍板：成功率列只留百分比，比例条撤（数字+条双元素读作装饰噪音；
-                     精度/阈值/兜底仍走 rate-utils 单点，tone 着色保留在数字上） -->
-                <div class="sk-rate" :class="rateTone(s)" :title="rowRateTitle(s)">
-                  <b>{{ successRateText(s.calls, s.errors) || '—' }}</b>
-                </div>
-              </td>
-              <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 列表视图（2026-10-28 重新设计）：一行一个 Skill，不再用列头宽表。
+           左：健康点；中：canonical id + 中文别名 + 归属/路由；右：调用次数 + 成功率。
+           行点击直达详情（与编排图节点、批量弹窗同名入口同一落点）。
+           容器不挂 role=list：每行本身就是 role=button，混用会得到无 listitem 的伪列表。 -->
+      <div v-if="filtered.length" class="sk-list">
+        <div
+          v-for="s in paged"
+          :key="s.id"
+          class="sk-item"
+          role="button"
+          tabindex="0"
+          :aria-label="`打开 ${s.id} 详情`"
+          @click="openDesign(s.id)"
+          @keydown.enter.self.prevent="openDesign(s.id)"
+          @keydown.space.self.prevent="openDesign(s.id)"
+        >
+          <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
+          <div class="sk-itemmain">
+            <div class="sk-titleline">
+              <!-- 英文主行（2026-10-25 用户「以英文为主」）：canonical id 是身份，中文 displayName 是别名 -->
+              <button type="button" class="sk-name-main sk-name-main--id sk-name-link mk-ellipsis" :title="nameTitleOf(s)" @click.stop="openDesign(s.id)">{{ s.id }}</button>
+              <span v-if="sublineOf(s)" class="sk-alias" :title="nameTitleOf(s)">{{ sublineOf(s) }}</span>
+              <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId">{{ s.agentName || s.agentId }}</span>
+              <span v-else class="mk-badge mk-badge--sm mk-badge--muted">未归属</span>
+              <span class="sk-model-chip" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span>
+            </div>
+            <div class="sk-meta">
+              <button type="button" class="mono sk-version-link" :title="versionTitleOf(s.id)" @click.stop="openVersions(s.id)">{{ versionOf(s.id) }}</button>
+              <span class="sk-recent" :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span>
+              <button v-if="s.errors > 0" type="button" class="mk-link sk-fail-link" @click.stop="investigateAgent(s.id)">查失败</button>
+            </div>
+          </div>
+          <div class="sk-stats">
+            <span class="sk-stat" :title="`${rangeLabel}内调用 ${s.calls} 次`"><b>{{ s.calls }}</b> 次</span>
+            <span class="sk-stat sk-rate" :class="rateTone(s)" :title="rowRateTitle(s)">{{ successRateText(s.calls, s.errors) || '—' }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- 整页空态（加载失败 / 筛选无匹配）：min 吃掉卡内剩余高度并居中 -->
@@ -325,12 +241,11 @@ import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures
 import { completionMetaOf } from './glossaryMeta'
 import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneOf } from './rate-utils'
 import MockSkeletonTable from './SkeletonTable.vue'
-import MkCols from '@/components/mk/MkCols.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import Pagination from './Pagination.vue'
-import { useIsNarrow } from './useIsNarrow'
 import { useTableSort } from './useTableSort'
 import { useListQueryState } from './learner-profile'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -461,44 +376,8 @@ const keyword = ref('')
 /** 归属 Agent 筛选（P1②）：'' = 全部；'__none__' = 无归属 */
 const agentFilter = ref('')
 
-/* D3 表格增强：列显隐（持久化 / 点击外部与 Esc 关闭由共享 MkCols 组件承担；Skill 列固定）。 */
-const SK_COLS_KEY = 'wf_skills_hidden_cols'
-/** P95 整列恒「—」（后端无技能级 P95）→ 默认隐藏（MkCols defaultHidden：仅首访生效，已存配置尊重用户） */
-const SK_COLS_DEFAULT_HIDDEN = ['p95'] as const
-const skColDefs = [
-  { key: 'agent', label: '归属 Agent', title: '所属顶层 Agent' },
-  { key: 'version', label: '版本', title: 'Skill 定义里声明的版本号' },
-  { key: 'routing', label: '路由模型', title: '生效模型。未单独配置时用平台默认，无配置数据时显示 —' },
-  { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
-  { key: 'p95', label: 'P95', title: '暂无数据' },
-  { key: 'rate', label: '成功率', title: '窗口内成功率' },
-  { key: 'last', label: '最近调用', title: '最近调用时间' },
-] as const
-const hiddenCols = ref<Set<string>>(new Set())
-
-/* 移动端仅保留核心列：隐藏版本/路由/调用/P95/最近调用，减少横向滚动 */
-const isNarrow = useIsNarrow()
-/* 中宽档（<1600）：「最近调用」列收进 Skill 名副行——本表 1440 自然宽超容器 136px（布局量测），裁掉最次要列即收回 */
-const isMid = useIsNarrow(1600)
-/* 小宽档（<1320，Users 判例）：再收「版本」列——1280 带仍余 48px 容器级横滚（LAYOUT-12） */
-const isSmall = useIsNarrow(1320)
-const MOBILE_HIDDEN_COLS = new Set(['version', 'routing', 'calls', 'p95', 'last'])
-const SMALL_HIDDEN_COLS = new Set(['version'])
-const showCol = (key: string) =>
-  !hiddenCols.value.has(key) &&
-  !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key)) &&
-  !(isMid.value && key === 'last') &&
-  !(isSmall.value && SMALL_HIDDEN_COLS.has(key))
-/* 列菜单同源：被档位强制收起的列不出现在菜单里（菜单可勾却不见 = 说谎）；
-   三档强制收起与 showCol 逐档同源（≤720 移动档此前漏了 MOBILE_HIDDEN_COLS，
-   菜单里四项勾着也不显示，正是本注释自己禁止的形态） */
-const menuColDefs = computed<ReadonlyArray<{ key: string; label: string; title: string }>>(() => {
-  let list: ReadonlyArray<{ key: string; label: string; title: string }> = skColDefs
-  if (isNarrow.value) list = list.filter((c) => !MOBILE_HIDDEN_COLS.has(c.key))
-  if (isMid.value) list = list.filter((c) => c.key !== 'last')
-  if (isSmall.value) list = list.filter((c) => !SMALL_HIDDEN_COLS.has(c.key))
-  return list
-})
+/* 列表行（2026-10-28 重新设计）：一行一个 Skill，不再有列显隐。
+   排序走工具条下拉，键与方向仍由 useTableSort 单点持久化。 */
 const statsRange = liveSkillStatsRange
 
 /** 归属 Agent 下拉选项（P1② 原型 toolbar）：按 agentId 聚合 + 计数；无归属归「未归属」 */
@@ -629,28 +508,43 @@ const coverageById = ref<Map<string, SkillRouteEntry>>(new Map())
 /** coverage 是否成功拉到（空列表也算就绪）：区分「没拉到」与「确实无模型配置」 */
 const coverageReady = ref(false)
 
-/* 表格排序：默认失败数优先（问题浮顶，保持既有行为），表头可点切换。
-   #107：默认键 errors 不在可见列里（表无「失败数」列），初始行序无可见列可解释，
-   点过别的表头后回默认序的出口由表头第三次点击承担（useTableSort.toggle），
-   工具条不再挂文字链。
+/* 列表排序（2026-10-28 重设计：列表没有表头，排序走工具条下拉 + 方向按钮）。
+   默认「需关注优先」= 失败数降序（问题浮顶，保持既有行为）。
    数据为 live 注册表全量（有界）→ 客户端排序是诚实的；截断/服务端分页列表不适用本机制。 */
-const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir } = useTableSort<SkillRow>({
+const { sortRows, sortKey, sortDir, toggle, toggleDir } = useTableSort<SkillRow>({
   accessors: {
     errors: (s) => s.errors,
-    /* 主行是 canonical id（2026-10-25 英文为主）：排序也按 id，否则视觉序与点击的列对不上 */
+    /* 主行是 canonical id（2026-10-25 英文为主）：排序也按 id，与可见身份一致 */
     skill: (s) => s.id,
     agent: (s) => s.agentName || s.agentId || '',
     calls: (s) => s.calls,
     rate: (s) => successRateOf(s.calls, s.errors),
-    /* 2026-10-17 用户走查补列：此前这三列头不可点。版本按段补零比较（v10 不排在 v9 前）；
-       最近调用用原始时间戳（lastAt 是「2 天前」文案，字符串比较无意义） */
-    version: (s) => versionSortKey(s.id),
-    routing: (s) => routingOf(s.id),
+    /* 最近调用用原始时间戳（lastAt 是「2 天前」文案，字符串比较无意义） */
     last: (s) => (s.lastCalledAt ? Date.parse(s.lastCalledAt) : null)
   },
   defaultKey: 'errors',
   defaultDir: 'desc',
-  storageKey: 'wf_skills_sort'
+  /* 名称/归属按 A→Z 读，其余指标按「大在前」读 */
+  defaultDirOf: { skill: 'asc', agent: 'asc' },
+  storageKey: 'wf_skills_list_sort'
+})
+
+/* 排序下拉：换字段走 useTableSort.toggle（同时按该字段的直觉方向复位并持久化）。
+   2026-10-28 实际走查：此前直接改 sortKey/sortDir，绕过 persist——选完字段切页再回来
+   会恢复成上一次持久化的方向；改走 toggle 后下拉与方向按钮共用同一持久化单点。 */
+const SORT_OPTIONS = [
+  { value: 'errors', label: '需关注优先' },
+  { value: 'calls', label: '调用次数' },
+  { value: 'rate', label: '成功率' },
+  { value: 'last', label: '最近调用' },
+  { value: 'skill', label: 'Skill 名称' },
+  { value: 'agent', label: '归属 Agent' },
+]
+const sortSelect = computed({
+  get: () => sortKey.value,
+  set: (key: string) => {
+    if (key !== sortKey.value) toggle(key)
+  },
 })
 
 /* 覆盖矩阵复用运行表的路由上下文（2026-10-24 合并两张重复表）：
@@ -995,12 +889,6 @@ function versionTitleOf(skillId: string): string {
     : `线上生效 Prompt v${entry.promptVersion}`
 }
 
-/** 版本排序键：按 Prompt 版本号数值（10 > 9），缺版本返回 null（恒排末尾） */
-function versionSortKey(skillId: string): string | null {
-  const v = skillMetaById.value.get(skillId)?.promptVersion
-  return typeof v === 'number' ? String(v).padStart(6, '0') : null
-}
-
 /** 路由模型列：coverage 有行 → 生效 model（空=平台默认）；无行/未加载 → 「—」，不伪装成平台默认 */
 function routingOf(skillId: string): string {
   if (!coverageReady.value) return '—'
@@ -1126,45 +1014,90 @@ const fallbackPolicyText = computed(() => {
 /* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
    （mk-primitives.css），本页不再私持拷贝。 */
 
-/* 列表视图（行可点：cursor/行内焦点环由共享 .mk-table--click 提供，不再私持拷贝） */
 /* 批量模型配置弹窗（2026-10-24）：对照表 + 套用表单列多，走宽档面板；
    body 允许内部横滚，不让宽表把面板撑破 */
 .skills-bulk { width: min(var(--mk-modal-w-wide-xxl, 1160px), 100%); }
 .skills-bulk .mk-modal__body { min-width: 0; }
 /* 统计刷新失败条：卡内位置 + 不参与 fill 伸缩 */
 .sk-live-err { flex: none; margin: 10px 16px 0; }
-/* Skill 格 min-width：本表约 9 列固定布局，Skill 名列会被调用/通过率等数字列挤窄
-   （2026-10-02 视觉核对实测主行截成 4 字）——给内容格兜底宽度 */
-.sk-cell { display: flex; align-items: center; gap: 10px; min-width: 200px; }
-/* 原型 .tbl：自动布局 + 单元格 nowrap（列按内容自然分宽，不再 colgroup 定宽） */
-/* 固定列宽（2026-10-22）：Skill/归属/路由模型三列在 auto 布局下按当页最长名称分宽，
-   翻页跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。
-   2026-10-24 撤「完成度」「类别」两列后腾出的 154px 归 Skill 名（220→300，主行原本最挤）
-   与「最近调用」（90→110），总量仍小于撤列前，横滚性质不变。 */
-.sk-c-skill { width: 300px; }
-.sk-c-agent { width: 140px; }
-.sk-c-version { width: 96px; }
-.sk-c-routing { width: 170px; }
-/* 调用列宽按四字表头「调用次数」定（2026-10-24 用户「调用次数就写调用次数就可以了」） */
-.sk-c-calls { width: 84px; }
-.sk-c-p95 { width: 56px; }
-.sk-c-rate { width: 70px; }
-.sk-c-last { width: 110px; }
-/* fixed 档列宽即契约：200px 兜底会把 Skill 名顶出单元格。nowrap 走表级 .mk-table--nowrap */
-.sk-table .sk-cell { min-width: 0; }
-/* 可点 KPI 的选中态（需关注 Skill ↔ 仅看需关注）：蓝只给交互与选中，
-   与 MemoryReview .mr-kpi--on / LearnerCenter .lc-kpi--on / GoalConversations .gc-kpi--on 同判例 */
-.sk-kpi--on { border-color: var(--mk-blue); }
-/* 中文名主行（正文重色）；副行 = description（原型 .sub），缺失回落 skill id（等宽）。
-   截断上限统一引用 token（--mk-cell-main-max）：自动布局下防长 Skill 名/长副行独吃列宽 */
-.sk-name-main {
-  font-weight: 700;
-  max-width: var(--mk-cell-main-max);
+/* ===== 列表（2026-10-28 重新设计） =====
+   一行一个 Skill：左健康点、中身份/路由、右调用与成功率。
+   卡内滚动、分页器吸底，沿用 .mk-card--fill 的列表页约定。 */
+.sk-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.sk-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--mk-line);
+  cursor: pointer;
+}
+.sk-item:last-child { border-bottom: none; }
+.sk-item:hover { background: var(--mk-surface-2); }
+.sk-item:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
+.sk-itemmain { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.sk-titleline { display: flex; align-items: center; gap: 8px; min-width: 0; line-height: 1.35; }
+.sk-alias {
+  min-width: 0;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.4;
+  color: var(--mk-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 主行是 canonical id（2026-10-25 英文为主）：机器串走等宽，与版本/路由模型列同一语义 */
+/* 路由模型：与归属 Agent 的胶囊同层，长模型名省略、全名走 title */
+.sk-model-chip {
+  flex: none;
+  max-width: 180px;
+  padding: 1px 7px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 元信息行：版本 / 最近调用 / 查失败，中点分隔 */
+.sk-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; min-width: 0; line-height: 1.5; }
+.sk-meta > * + *::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--mk-faint);
+}
+/* 右列读数：调用次数 + 成功率；百分比的阈值着色走 .sk-rate--bad/--warn */
+.sk-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex: none;
+  align-self: center;
+  padding-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.sk-stat { min-width: 56px; text-align: right; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sk-stat b { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
+/* 排序工具条：字段下拉 + 方向按钮 */
+.sk-sort-label { flex: none; font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
+/* 可点 KPI 的选中态（需关注 Skill ↔ 仅看需关注）：蓝只给交互与选中，
+   与 MemoryReview .mr-kpi--on / LearnerCenter .lc-kpi--on / GoalConversations .gc-kpi--on 同判例 */
+.sk-kpi--on { border-color: var(--mk-blue); }
+/* 主行 canonical id（正文重色 + 等宽）：与详情 hero 同一身份口径 */
+.sk-name-main {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 主行是 canonical id（2026-10-25 英文为主）：机器串走等宽 */
 .sk-name-main--id { font-family: var(--mk-mono); }
 /* 主行 id 是可点的入口（蓝 = 可交互）；按钮复位成文本排版，行高与纯文本行一致 */
 .sk-name-link {
@@ -1172,36 +1105,18 @@ const fallbackPolicyText = computed(() => {
   color: var(--mk-blue); cursor: pointer; font-size: inherit;
 }
 .sk-name-link:hover { text-decoration: underline; }
-/* 版本格 → 详情「版本」页签（回滚入口与读数同格） */
+/* 版本 → 详情「版本」页签（回滚入口与读数同格） */
 .sk-version-link {
+  flex: none;
   padding: 0; border: 0; background: none; cursor: pointer;
   color: var(--mk-blue); font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
 }
 .sk-version-link:hover { text-decoration: underline; }
-/* 副行里的排障入口（原操作列 100px 整列空白撤除后并入副行） */
-.sk-fail-link { flex: none; font-size: var(--mk-fs-micro); white-space: nowrap; }
-.sk-sub {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  line-height: 1.5;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* 副行容器：<1600 最近调用列收进来（.sk-recent），消掉 1440 的表格横向滚动 */
-.sk-subline { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: var(--mk-cell-main-max); }
-.sk-subline .sk-sub { flex: 0 1 auto; max-width: none; }
+/* 元信息里的最近调用与排障入口 */
 .sk-recent { flex: none; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-/* 路由模型名较长（deepseek-v4.1-flash ~180px）：中宽档封顶省略，全名走 title
-   （1440 收掉「最近调用」列后仍差 ~40px 横滚，此处补齐） */
-.sk-model { display: inline-block; max-width: 148px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
-/* 中宽档单元格水平 padding 16→12（9 列回收 72px）：收掉「最近调用」列后仍余 ~20px
-   min-content 赤本、操作列被裁；削列宽是打地鼠，padding 档一次收净 */
-@media (max-width: 1599px) {
-  .sk-cell .mk-cell-main { max-width: 200px; }
-}
-.sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sk-fail-link { flex: none; padding: 0; font-size: var(--mk-fs-micro); line-height: 1.5; white-space: nowrap; }
+.sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; align-self: flex-start; margin-top: 7px; }
 .sk-dot--ok { background: var(--mk-green); }
 .sk-dot--idle { background: #c3cede; }
 /* P2（2026-10-04 全站评审）：琥珀「有失败」中间档（errors>0 但成功率 ≥90%）；
@@ -1212,17 +1127,17 @@ const fallbackPolicyText = computed(() => {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
-/* 指标阈值着色 */
-.sk-rate--bad { color: var(--mk-red); font-weight: 700; }
-.sk-rate--warn { color: var(--mk-amber); font-weight: 700; }
-/* 列表成功率列：只留百分比（2026-10-15 用户拍板撤比例条），阈值着色（bad 红/warn 琥珀）在数字上 */
-.sk-rate b { font-variant-numeric: tabular-nums; }
+/* 指标阈值着色（成功率数字；比例条 2026-10-15 已撤） */
+.sk-rate { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-muted); }
+.sk-rate--bad { color: var(--mk-red); }
+.sk-rate--warn { color: var(--mk-amber); }
 
 /* 归属 Agent 标签 */
 .sk-agent-tag {
   display: inline-flex;
   align-items: center;
-  max-width: 128px; /* 中宽档省略（全名走 title）：1440 收净横滚的最后一档 */
+  flex: none;
+  max-width: 128px; /* 长 Agent 名省略（全名走 title） */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1232,7 +1147,6 @@ const fallbackPolicyText = computed(() => {
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
-  white-space: nowrap;
 }
 .sk-agent-tag::before {
   content: '';
@@ -1242,6 +1156,15 @@ const fallbackPolicyText = computed(() => {
   background: var(--mk-blue, #2f6ae0);
   margin-right: 6px;
   flex-shrink: 0;
+}
+
+/* 窄档让位：先收路由模型，再收归属胶囊；身份与读数始终保留 */
+@media (max-width: 1100px) {
+  .sk-model-chip { display: none; }
+}
+@media (max-width: 900px) {
+  .sk-agent-tag { display: none; }
+  .sk-stats { gap: 10px; }
 }
 
 /* 工具条「归属 Agent」label（原型 toolbar 1667）：12px 重字，与下拉同排 */

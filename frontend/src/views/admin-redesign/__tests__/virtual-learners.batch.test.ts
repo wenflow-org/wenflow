@@ -237,7 +237,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(completion!.attributes('title')).toContain('活动会话 5');
     // 生命周期是维度下拉（2026-10-27 统一），计数在 option 文案里，与「运行状态」列同源
     const countOf = (label: string) => filterOption(w as never, '状态', label).text()
-    expect(countOf('运行中')).toBe('运行中（1）')
+    expect(countOf('进行中')).toBe('进行中（1）')
     expect(countOf('已暂停')).toBe('已暂停（1）')
     expect(countOf('停滞')).toBe('停滞（1）')
     expect(countOf('已停止')).toBe('已停止（0）')

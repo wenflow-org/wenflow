@@ -16,21 +16,22 @@
        把「这个模型现在能不能用」也算在这里会让两个接口互相复述。 -->
   <section class="mk-card mpp">
     <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：卡头承接通道身份与状态——
-         平台通道 + 平台内置 + 连接状态，右侧是写盘状态与本页动作；详情里不再单起一行标题。 -->
+         平台通道 + 平台内置 + 连接状态，右侧是写盘状态与本页动作；详情里不再单起一行标题。
+         2026-10-28 三卡重构：本卡只负责「对话与推理模型」这一类能力，连接参数仍是平台通道。 -->
     <div class="mk-card__head">
       <div class="mpp-head__id">
-        <h3 class="mk-card__title">{{ selected ? providerName(selected) : '接入通道' }}</h3>
-        <span v-if="selected" class="mpp-type mpp-type--platform">{{ providerTypeLabel(selected) }}</span>
+        <h3 class="mk-card__title">对话与推理模型</h3>
+        <span class="mpp-type mpp-type--platform" :title="registryPathTitle">LLM</span>
         <!-- 宿主注入的连接状态（「连接正常 · N 前」）：与通道身份同一行 -->
         <slot v-if="selected" name="head-status" />
+        <slot name="models-meta" />
         <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
       </div>
       <div class="mk-card__head-right">
-        <span class="mk-card__meta" :title="registryPathTitle">{{ registryMeta }}</span>
         <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
           只读
         </button>
-        <!-- 宿主动作（获取模型 / 保存连接 / 重置此通道）：与通道状态同一行 -->
+        <!-- 宿主动作（获取模型）：与通道状态同一行 -->
         <slot v-if="selected" name="head-actions" />
       </div>
     </div>
@@ -61,11 +62,99 @@
            一栏列表只为一个通道占 260px，还把模型表挤到断行；自建通道改由配置文件/接口维护。 -->
       <div v-if="selected" class="mpp-detail">
         <!-- 接入 API 段：只剩服务地址与密钥（2026-10-27 用户「一块负责 api 一块配置」）。
-             模型清单、基础设施与生成默认都在下面第二张「平台配置」卡里。 -->
+             模型清单与下方向量 / 重排配置区在同一张卡的下半段，见 mpp-models。 -->
         <div id="mpp-platform-panel-conn">
           <slot name="platform-detail" />
         </div>
 
+        <!-- 2026-10-28 用户「两个卡片合成一个卡片」：模型清单并入平台通道卡，
+             连接段与模型表之间只留一条发丝线，不再另起「平台配置」卡。 -->
+        <div
+          id="mpp-platform-panel-models"
+          class="mpp-block mpp-models"
+        >
+          <!-- 2026-10-28 用户「合并为一个强动作入口」：不再并列「选择要添加」与「添加模型」，
+               上游有待选时按钮直接带上数量；没有上游清单时才落到手动录入。 -->
+          <div class="mpp-models__head">
+            <div class="mpp-models__title">
+              <span class="mpp-sec">挂载模型</span>
+              <span class="mpp-models__count">{{ selected.models.length }} 个</span>
+            </div>
+            <span class="mpp-models__acts">
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openAdd">
+                ＋ 添加模型<template v-if="pullableCount">（上游有 {{ pullableCount }} 个待选）</template>
+              </button>
+            </span>
+          </div>
+
+          <!-- 上游清单不再铺在详情里（2026-10-24 用户「拉取作为浮窗」）：拉取只拿到清单，
+               勾选在 PullModelsDialog 里做——详情区只留已登记模型这张表。 -->
+
+          <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么 -->
+          <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
+            <div class="mpp-setup__text">
+              <strong>还没有登记模型</strong>
+              <span>先配置服务地址与 API Key，再拉取上游模型，或手动添加模型 ID。</span>
+            </div>
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              @click="scrollToConn"
+            >去配置连接</button>
+          </div>
+
+          <!-- 对话模型列表（2026-10-28 用户「喜欢下面的设计」）：与向量 / 重排区同一套
+               「身份 + 状态 + 行内动作」语言，不再用带列头的表格。 -->
+          <div v-if="selected.models.length" class="mpp-models__list">
+            <div v-for="m in selected.models" :key="m.id" class="mpp-model-row">
+              <div class="mpp-model-row__main">
+                <div class="mpp-model-row__idline">
+                  <span class="mono mpp-model-row__id" :title="m.id">{{ m.id }}</span>
+                  <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
+                </div>
+                <span
+                  v-if="testResults[m.id]"
+                  class="mpp-rowtest"
+                  :class="{ 'mpp-rowtest--bad': !testResults[m.id].ok }"
+                  :title="testResults[m.id].text"
+                >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
+              </div>
+              <div class="mpp-model-row__status">
+                <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
+                <span v-else class="mk-badge mk-badge--ok">● 健康</span>
+                <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
+              </div>
+              <div class="mpp-rowacts">
+                <!-- 高频两枚平铺（测试 / 编辑）；删除是低频且不可撤销，收进 ⋯ 菜单
+                     ——与公告、账号、虚拟学习者同一套行内操作层级（useRowMenu 同源） -->
+                <button type="button" class="mk-link" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
+                <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
+                <div class="mk-menu">
+                  <button
+                    type="button"
+                    class="mk-menu__btn"
+                    aria-label="更多操作"
+                    aria-haspopup="menu"
+                    :aria-expanded="openMenu === m.id"
+                    @click.stop="toggleMenu(m.id)"
+                  >⋯</button>
+                  <div v-if="openMenu === m.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                    <button
+                      type="button"
+                      class="mk-menu__item mk-menu__item--danger"
+                      role="menuitem"
+                      :disabled="busy || registry?.readOnly"
+                      @click="removeModel(m)"
+                    >删除</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p v-if="!selected.enabled" class="mpp-empty">
+            这条通道当前停用，模型不参与路由。
+          </p>
+        </div>
       </div>
       <MkEmptyState v-else compact title="还没有接入通道" />
     </div>
@@ -76,163 +165,25 @@
       :provider-id="selected?.id ?? ''"
       :models="fetchableModels"
       :registered="[...registeredIds]"
-      @confirm="startConfigure"
-      @navigate="onPullNavigate"
+      @confirm="addSelected"
+      @manual="openManualAdd"
     />
-    <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" @closed="onEditorClosed" />
-    <!-- 逐个配置队列：常驻进度与「跳过剩余」，中途关掉模型弹窗也能知道还剩几个 -->
-    <div v-if="configureQueue.length" class="mpp-queue" role="status">
-      <span>还剩 {{ configureQueue.length }} 个模型未配置</span>
-      <button type="button" class="mk-link" @click="skipRemaining">跳过剩余</button>
-    </div>
-  </section>
-
-  <!-- 2026-10-27 用户「没有本地模型，都属于基础设施模型，一块负责 api 一块配置」：
-     第一张卡只管接入 API（地址、密钥）；模型清单、向量化 / 重排与生成默认都在这里配。 -->
-  <section v-if="selected" class="mk-card mpp-config">
-    <div class="mk-card__head">
-      <h3 class="mk-card__title">平台配置</h3>
-    </div>
-    <div class="mpp-config__body">
-      <div
-        id="mpp-platform-panel-models"
-        class="mpp-block mpp-models"
-      >
-        <div class="mpp-models__head">
-          <!-- 平台详情只有一页：标题直接给模型计数（原页签计数随页签一起退役）。
-               上游清单状态与计数同一行（2026-10-24 走查）：原先是表头之上独立一条，
-               读起来像一行空记录。 -->
-          <div class="mpp-models__title">
-            <span class="mpp-sec">已接入 {{ selected.models.length }} 个模型</span>
-            <slot name="models-meta" />
-          </div>
-          <span class="mpp-models__acts">
-            <!-- 拉取结果收进浮窗（2026-10-24）：清单不在详情里铺开，勾选后再逐个配置。
-                 拉取过一次就保留入口，关掉浮窗还能回来再选。 -->
-            <button v-if="pullableCount" type="button" class="mk-link" @click="openPull">
-              选择要添加的（{{ pullableCount }}）
-            </button>
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openManualAdd">＋ 添加模型</button>
-          </span>
-        </div>
-
-        <!-- 上游清单不再铺在详情里（2026-10-24 用户「拉取作为浮窗」）：拉取只拿到清单，
-             勾选与用途分流都在 PullModelsDialog 里做——详情区只留已登记模型这张表。 -->
-
-        <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么 -->
-        <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
-          <div class="mpp-setup__text">
-            <strong>还没有登记模型</strong>
-            <span>先配置服务地址与 API Key，再拉取上游模型，或手动添加模型 ID。</span>
-          </div>
-          <button
-            type="button"
-            class="mk-btn mk-btn--sm"
-            @click="scrollToConn"
-          >去配置连接</button>
-        </div>
-
-        <!-- 模型表常驻：基础设施行也在这张表里，没有对话模型时不能把表整张藏掉 -->
-        <div class="mk-table-scroll">
-          <table class="mk-table mk-table--dense mk-table--fixed mpp-table">
-            <colgroup>
-              <col style="width: 38%" /><col style="width: 26%" /><col style="width: 16%" /><col style="width: 20%" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>模型</th>
-                <th>功能</th>
-                <th>状态</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- 按用途分组（2026-10-21 用户「按功能区分一下」）：同一张表里用分组行切段，
-                   不拆多张表——列宽与对齐保持一处。组内再按能力标「功能」列，运营一眼看得出
-                   哪个模型能思考、能调推理强度、能读图。 -->
-              <template v-for="g in modelGroups" :key="g.tier">
-                <tr class="mpp-group">
-                  <td colspan="4">
-                    <span class="mpp-group__name">{{ g.label }}</span>
-                    <span class="mpp-group__count">{{ g.models.length }} 个</span>
-                  </td>
-                </tr>
-                <tr v-for="m in g.models" :key="m.id">
-                <td class="mpp-model">
-                  <span class="mono mpp-model__id" :title="m.id">{{ m.id }}</span>
-                  <span v-if="m.label && m.label !== m.id" class="mpp-desc" :title="m.label">{{ m.label }}</span>
-                  <span
-                    v-if="testResults[m.id]"
-                    class="mpp-rowtest"
-                    :class="{ 'mpp-rowtest--bad': !testResults[m.id].ok }"
-                    :title="testResults[m.id].text"
-                  >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
-                </td>
-                <td class="mpp-fn">
-                  <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
-                  <span v-if="!functionTags(m).length" class="mpp-fn__none">基础对话</span>
-                </td>
-                <td>
-                  <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
-                  <span v-else class="mk-badge mk-badge--ok">● 健康</span>
-                  <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
-                </td>
-                <td class="mpp-rowacts">
-                  <!-- 高频两枚平铺（测试 / 编辑）；删除是低频且不可撤销，收进 ⋯ 菜单
-                       ——与公告、账号、虚拟学习者同一套行内操作层级（useRowMenu 同源） -->
-                  <button type="button" class="mk-link" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
-                  <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
-                  <div class="mk-menu">
-                    <button
-                      type="button"
-                      class="mk-menu__btn"
-                      aria-label="更多操作"
-                      aria-haspopup="menu"
-                      :aria-expanded="openMenu === m.id"
-                      @click.stop="toggleMenu(m.id)"
-                    >⋯</button>
-                    <div v-if="openMenu === m.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                      <button
-                        type="button"
-                        class="mk-menu__item mk-menu__item--danger"
-                        role="menuitem"
-                        :disabled="busy || registry?.readOnly"
-                        @click="removeModel(m)"
-                      >删除</button>
-                    </div>
-                  </div>
-                </td>
-                </tr>
-              </template>
-              <tr v-if="!selected.enabled">
-                <td colspan="4" class="mpp-empty">
-                  这条通道当前停用，模型不参与路由。
-                </td>
-              </tr>
-              <!-- 基础设施（向量化 / 重排）也在这张表里，由宿主经 #models-infra 注入两组行：
-                   与对话模型同一套分组行、列宽与行内动作（2026-10-28 用户「按照对话的样子
-                   拆散了，并到对话列表里去」）。 -->
-              <slot name="models-infra" />
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" />
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
 import PullModelsDialog from './PullModelsDialog.vue'
-import { modelKindOf } from './platformModelKind'
+import { inferModelCapabilities } from './modelCapabilityInference'
 import { askConfirm } from './useConfirm'
 import { useRowMenu } from './useRowMenu'
 import { errMsg } from './live'
+import { toast } from '@/utils/toast'
 
 /** 注册表编辑视图（后端 services/admin/model-providers.service.ts 的 ProviderRegistryView） */
 interface ProviderView {
@@ -285,15 +236,11 @@ const writeWarnings = ref<string[]>([])
 const testingId = ref('')
 /** 单模型测试结果（按模型 id 落在行内，不再用卡上方一条全局结果条） */
 const testResults = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
-const router = useRouter()
 /** 行内 ⋯ 菜单（低频/危险操作）：与公告、账号、虚拟学习者同一套实现 */
 const { openMenu, toggleMenu, popStyle } = useRowMenu()
 
 const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
 const pullDialog = ref<InstanceType<typeof PullModelsDialog> | null>(null)
-/** 勾选后逐个配置的待办队列（保存一个进下一个；数量用于弹层标题 2/5） */
-const configureQueue = ref<string[]>([])
-const configureTotal = ref(0)
 
 const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
@@ -301,14 +248,7 @@ const registry = computed(() => view.value?.registry ?? null)
 /** 这一页只呈现平台通道（2026-10-27 用户「这个区域不要了」）：自建通道不再在页面里切换 */
 const selected = computed(() => providers.value.find((p) => p.id === 'platform') ?? null)
 
-/* 2026-10-21 用户「不要了」：卡头 meta 只留可写/只读这个会改变操作的结论，
-   数据来源（来自模型目录文件）与生效方式进 title */
-const registryMeta = computed(() => {
-  const r = view.value?.registry
-  if (!r) return ''
-  if (r.readOnly) return '只读'
-  return '保存即生效'
-})
+/* 2026-10-21 用户「不要了」：卡头不再挂数据来源 / 生效方式；路径与最近错误进 LLM 徽标 title */
 const registryPathTitle = computed(() => {
   const r = view.value?.registry
   if (!r) return ''
@@ -322,16 +262,12 @@ const registryPathTitle = computed(() => {
 function providerName(p: ProviderView): string {
   return p.id === 'platform' && p.name === '平台' ? '平台通道' : p.name
 }
-/** 通道类型：内置 / 自建。接入通道 = 一个服务地址 + 一套凭据 + 模型清单。 */
-function providerTypeLabel(p: ProviderView): string {
-  return p.id === 'platform' ? '内置' : '自建'
-}
 const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m.id) ?? []))
 /** 上游模型清单：平台通道的清单来自连接设置（宿主注入） */
 const fetchableModels = computed(() => props.upstream)
-/** 还能登记进模型清单的对话模型数：拉取结果里已添加的不再计入 */
+/** 还能登记进模型清单的模型数：拉取结果里已添加的不再计入（不再按名字筛用途） */
 const pullableCount = computed(() =>
-  fetchableModels.value.filter((name) => modelKindOf(name) === 'chat' && !registeredIds.value.has(name)).length
+  fetchableModels.value.filter((name) => !registeredIds.value.has(name)).length
 )
 
 const fallbackOptions = computed(() =>
@@ -369,18 +305,7 @@ function warningLabel(m: ModelLike): string {
   return ws.length && ws.every((w) => w.includes('未被任何别名引用')) ? '未被引用' : '告警'
 }
 /** 未配单价 = 成本分析页这个模型的金额会显示「—」，是可在模型编辑高级设置里补的配置缺口 */
-const MODEL_GROUPS = [
-  { tier: 'chat' as const, label: '对话' },
-  { tier: 'reasoning' as const, label: '推理' }
-]
-/** 按用途（对话 / 推理）分组；空组不渲染，单组时也保留组头——它就是这个模型的功能归属 */
-const modelGroups = computed(() => {
-  const models = selected.value?.models ?? []
-  return MODEL_GROUPS
-    .map((g) => ({ ...g, models: models.filter((m) => m.tier === g.tier) }))
-    .filter((g) => g.models.length > 0)
-})
-/** 模型能力标签：功能列只列「有没有」，用途由分组行表达，不在此复述 */
+/** 模型能力标签：能力列只列「有没有」，类型不在这张表里猜 */
 function functionTags(m: ModelLike): string[] {
   const tags: string[] = []
   if (m.supportsThinking) tags.push('思考')
@@ -452,10 +377,7 @@ async function removeModel(m: ModelLike): Promise<void> {
 }
 
 async function onModelSaved(payload: { modelId: string; warnings: string[] }): Promise<void> {
-  const fromQueue = configureQueue.value.length > 0
-  if (fromQueue) configureQueue.value = configureQueue.value.filter((id) => id !== payload.modelId)
   await reloadAfterDialog(payload.warnings)
-  if (fromQueue) openNextConfigure()
 }
 
 /**
@@ -484,6 +406,12 @@ async function testModel(p: ProviderView, modelId: string): Promise<void> {
   }
 }
 
+/** 单一添加入口：上游有待选就开选择器，否则直接手动录入。 */
+function openAdd(): void {
+  if (pullableCount.value > 0) openPull()
+  else openManualAdd()
+}
+
 /** 打开拉取结果浮窗：清单只用于勾选，不再在详情里铺开 */
 function openPull(): void {
   if (!selected.value) return
@@ -499,60 +427,43 @@ function openHostPull(): void {
   openPull()
 }
 
-/** 手动新增：清掉勾选队列，避免保存后误跳到上一个批次的下一个模型 */
+/** 手动新增（选择器底部的兜底通道） */
 function openManualAdd(): void {
   if (!selected.value) return
-  configureQueue.value = []
-  configureTotal.value = 0
   modelEditor.value?.openWith({ providerId: selected.value.id, model: null })
 }
 
-/** 浮窗确认：按勾选顺序逐个打开模型设置，保存一个自动进下一个 */
-function startConfigure(ids: string[]): void {
+/**
+ * 选择器确认：批量引入，能力标签按模型名推断后随写入落盘。
+ * 不再逐个弹配置框——运营勾完即可在列表里直接测试。
+ */
+async function addSelected(ids: string[]): Promise<void> {
   if (!selected.value || !ids.length) return
-  configureQueue.value = [...ids]
-  configureTotal.value = ids.length
-  openNextConfigure()
+  busy.value = true
+  actionError.value = ''
+  try {
+    const models = ids.map((id) => {
+      const inferred = inferModelCapabilities(id)
+      return {
+        id,
+        supportsThinking: inferred.supportsThinking,
+        supportsReasoningEffort: inferred.supportsReasoningEffort,
+        vision: inferred.vision
+      }
+    })
+    const res = await adminModelProvidersApi.addModels(selected.value.id, models)
+    adopt(res?.data, res?.data?.warnings ?? [])
+    toast.success(`已引入 ${ids.length} 个模型`)
+  } catch (e) {
+    actionError.value = errMsg(e)
+  } finally {
+    busy.value = false
+  }
 }
 
 /** 连接段常驻在模型表上方：空态里的「去配置连接」滚过去，不再需要切页签 */
 function scrollToConn(): void {
   document.getElementById('mpp-platform-panel-conn')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-}
-
-function openNextConfigure(): void {
-  const id = configureQueue.value[0]
-  if (!id || !selected.value) {
-    configureQueue.value = []
-    configureTotal.value = 0
-    return
-  }
-  const step = configureTotal.value > 1
-    ? { index: configureTotal.value - configureQueue.value.length + 1, total: configureTotal.value }
-    : undefined
-  modelEditor.value?.openWith({ providerId: selected.value.id, model: null, presetId: id, step })
-}
-
-/** 跳过剩余：队列清空，已保存的模型保持原样 */
-function skipRemaining(): void {
-  configureQueue.value = []
-  configureTotal.value = 0
-  modelEditor.value?.close?.()
-}
-
-/** 模型弹窗被关掉（取消/ESC/遮罩）：队列没有续接入口，直接清空避免「还剩 N 个」常挂 */
-function onEditorClosed(): void {
-  configureQueue.value = []
-  configureTotal.value = 0
-}
-
-/** 非对话模型的去向：向量化 / 重排在本页「基础设施」段，生图/决策在插件页 */
-function onPullNavigate(target: 'infra' | 'plugins'): void {
-  if (target === 'plugins') {
-    void router.push('/admin/addons')
-    return
-  }
-  document.getElementById('mpp-platform-panel-infra')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
 onMounted(() => {
@@ -570,8 +481,7 @@ defineExpose({ refresh, openPull, openHostPull })
   font-size: var(--mk-fs-micro);
 }
 /* 2026-10-27 用户「这个区域不要了」：左栏通道清单撤掉后，详情独占整卡宽度。
-   2026-10-27 拆成两张卡后组件有多个根，宿主页的 `.ac-conn-body > .mpp` 不再命中原语，
-   卡片自身给「不收缩」；接入卡只剩地址与密钥，高度随内容。 */
+   2026-10-28 用户「两个卡片合成一个卡片」：接入与模型清单同卡，卡片按内容自然撑高。 */
 .mpp { display: flex; flex-direction: column; flex: none; }
 .mpp-body {
   display: grid;
@@ -582,15 +492,7 @@ defineExpose({ refresh, openPull, openHostPull })
   min-height: 0;
 }
 .mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
-/* 接入卡里只剩连接段：紧跟卡头，不再重复顶线。 */
-.mpp-detail > #mpp-platform-panel-conn > .ac-conn { margin-top: 0; padding-top: 0; border-top: 0; }
 
-/* 2026-10-27 两张卡：接入 API（连接）/ 平台配置（模型清单 + 基础设施 + 生成默认）。
-   配置卡按内容自然撑高；模型清单作为第一段，不再自带顶线。 */
-.mpp-config { flex: none; }
-.mpp-config__body { display: grid; gap: 18px; padding: 12px 16px 16px; }
-.mpp-config__body > div { min-width: 0; }
-.mpp-config__body > #mpp-platform-panel-models { margin-top: 0; padding-top: 0; border-top: 0; }
 /* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
 .mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
 .mpp-block:first-of-type { margin-top: 10px; }
@@ -611,6 +513,7 @@ defineExpose({ refresh, openPull, openHostPull })
   color: var(--mk-blue);
 }
 .mpp-models { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
+/* 对话模型区标题行：区名 + 条数在左，添加入口在右（2026-10-28 用户「三个区域各自入口」） */
 .mpp-models__head {
   display: flex;
   align-items: center;
@@ -619,30 +522,30 @@ defineExpose({ refresh, openPull, openHostPull })
   gap: 12px;
   margin-bottom: 8px;
 }
-/* 计数与上游清单状态同一行：两个都弱化，动作按钮仍独占右侧 */
-.mpp-models__title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
-.mpp-models__acts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.mpp-models__title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .mpp-sec { font-size: var(--mk-fs-body); }
-/* 上游清单已移入 PullModelsDialog（2026-10-24 用户「拉取作为浮窗」），详情区只留已登记模型表 */
-.mpp-table { width: 100%; }
+/* 对话模型区标题行的添加入口 */
+.mpp-models__acts { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mpp-label {
   margin-left: 6px;
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-.mpp-desc {
-  display: block;
-  margin-top: 2px;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* 对话模型列表：与向量 / 重排配置区同一套「身份 + 状态 + 行内动作」语言，不用列头表格 */
+.mpp-models__list { display: grid; }
+.mpp-model-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mk-line);
 }
-/* 模型格承载 id + 显示名 + 最近一次测试结果 */
-.mpp-model { min-width: 180px; }
-.mpp-model__id { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mpp-model-row:last-child { border-bottom: 0; }
+.mpp-model-row__main { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.mpp-model-row__idline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.mpp-model-row__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mpp-model-row__status { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .mpp-rowtest { display: block; margin-top: 2px; color: var(--mk-green); font-size: var(--mk-fs-micro); }
 .mpp-rowtest--bad { color: var(--mk-red); }
 /* 空模型时的下一步：一句话 + 一个动作，不丢一张只有表头的空表 */
@@ -661,34 +564,15 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-setup__text { display: grid; gap: 4px; min-width: 0; }
 .mpp-setup__text strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
 .mpp-setup__text span { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
-/* 功能分组行：一张表里切段（对话 / 推理）。2026-10-27 去掉说明句后压成一条窄带，
-   只留「分组名 + 条数」——它是分节线，不该占一个正文行的高度（仍守住 40px 下限）。 */
-.mpp-table tbody .mpp-group td {
-  height: 40px;
-  background: var(--mk-surface-2);
-  border-top: 1px solid var(--mk-line);
-}
-.mpp-group__name { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
-.mpp-group__count { margin-left: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-/* 功能列：能力标签；「基础对话」是缺省态，弱化成正文色不抢眼。
-   标签允许换行——窄档功能列只有百来像素，nowrap 会把整表宽度顶出去。 */
-.mpp-fn { white-space: normal; min-width: 88px; }
+/* 对话模型区计数：与区名同一基线，弱化处理 */
+.mpp-models__count { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+/* 能力标签：跟在模型 ID 后面；没有额外能力时留空，不写占位文案 */
 .mpp-fn__chip {
   display: inline-block; margin-right: 4px; margin-bottom: 2px; padding: 1px 7px;
   border-radius: 999px; background: var(--mk-blue-bg);
   font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
   white-space: nowrap;
 }
-.mpp-fn__none { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .mpp-rowacts { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.mpp-queue {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  border-top: 1px solid var(--mk-line);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
 </style>

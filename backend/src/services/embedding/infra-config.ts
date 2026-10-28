@@ -11,6 +11,8 @@
 
 export type InfraModelKind = 'embedding' | 'rerank';
 export type InfraProvider = 'bge';
+/** inherit = 沿用平台通道的 base URL 与密钥；own = 本条目独立配置地址与密钥 */
+export type InfraConnectionMode = 'inherit' | 'own';
 
 export const INFRA_SETTING_KEY = 'infraModels';
 
@@ -22,6 +24,8 @@ export const INFRA_PROVIDER_IDS: Record<InfraModelKind, string> = {
 
 export interface InfraModelEntry {
   provider: InfraProvider;
+  /** 连接方式；inherit 时 endpoint 仅作切换回 own 的留档，运行时不使用 */
+  connectionMode: InfraConnectionMode;
   endpoint: string;
   model: string;
   apiKeyEnv: string;
@@ -47,6 +51,18 @@ export const MAX_INFRA_TIMEOUT_MS = 120_000;
 export const MAX_EMBEDDING_BATCH_SIZE = 128;
 export const MAX_EMBEDDING_DIMENSIONS = 16_384;
 
+/**
+ * 沿用平台连接时，按类型从平台 base URL 推导端点。
+ * 与对话侧同一套 `/v1` 约定：`.../v1` 只补类型路径，裸域名补 `/v1/...`。
+ * 非标准网关请切到 own 模式直接填完整地址。
+ */
+export function resolveInfraEndpoint(baseUrl: string, kind: InfraModelKind): string {
+  const base = String(baseUrl || '').trim().replace(/\/+$/, '');
+  if (!base) return '';
+  const suffix = kind === 'embedding' ? '/embeddings' : '/rerank';
+  return /\/v1$/i.test(base) ? `${base}${suffix}` : `${base}/v1${suffix}`;
+}
+
 function positiveInt(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
@@ -57,6 +73,7 @@ export function defaultInfraModelsConfig(env: NodeJS.ProcessEnv = process.env): 
   return {
     embedding: {
       provider: 'bge',
+      connectionMode: 'own',
       endpoint: (env.EMBEDDING_API_URL || '').trim(),
       model: (env.EMBEDDING_MODEL || '').trim() || DEFAULT_EMBEDDING_MODEL,
       apiKeyEnv: 'EMBEDDING_API_KEY',
@@ -66,6 +83,7 @@ export function defaultInfraModelsConfig(env: NodeJS.ProcessEnv = process.env): 
     },
     rerank: {
       provider: 'bge',
+      connectionMode: 'own',
       endpoint: (env.RERANK_API_URL || '').trim(),
       model: (env.RERANK_MODEL || '').trim() || DEFAULT_RERANK_MODEL,
       // 当前 BGE 网关两接口共用一把 key；独立 key 用 RERANK_API_KEY，缺省回落 embedding key
@@ -91,6 +109,9 @@ function mergeEntry(kind: InfraModelKind, base: InfraModelEntry, input: Partial<
   if (!input) return base;
   return {
     provider: input.provider === 'bge' ? 'bge' : base.provider,
+    connectionMode: input.connectionMode === 'inherit' || input.connectionMode === 'own'
+      ? input.connectionMode
+      : base.connectionMode,
     endpoint: mergeText(base.endpoint, input.endpoint),
     model: mergeText(base.model, input.model),
     apiKeyEnv: mergeText(base.apiKeyEnv, input.apiKeyEnv),
@@ -122,16 +143,23 @@ export function validateInfraModelsConfig(config: InfraModelsConfig): string[] {
     if (entry.provider !== 'bge') {
       errors.push(`${where}：当前只支持 bge provider`);
     }
-    if (!entry.endpoint) {
-      errors.push(`${where}：服务地址不能为空`);
-    } else if (!/^https?:\/\//i.test(entry.endpoint)) {
-      errors.push(`${where}：服务地址必须以 http:// 或 https:// 开头`);
+    /* 未填服务地址 = 尚未配置，是合法状态：两个基础设施模型各自独立可选，
+       允许先配向量化、之后再配重排（消费方对缺失项 fail-open）。
+       沿用平台连接时不要求地址；own 模式仍按原规则校验。 */
+    const inherit = entry.connectionMode === 'inherit';
+    if (!inherit && !entry.endpoint) {
+      continue;
     }
     if (!entry.model) {
       errors.push(`${where}：模型 id 不能为空`);
     }
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.apiKeyEnv)) {
-      errors.push(`${where}：密钥环境变量名只能包含字母、数字和下划线`);
+    if (!inherit) {
+      if (!/^https?:\/\//i.test(entry.endpoint)) {
+        errors.push(`${where}：服务地址必须以 http:// 或 https:// 开头`);
+      }
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.apiKeyEnv)) {
+        errors.push(`${where}：密钥环境变量名只能包含字母、数字和下划线`);
+      }
     }
     if (!Number.isInteger(entry.timeoutMs) || entry.timeoutMs < 1_000 || entry.timeoutMs > MAX_INFRA_TIMEOUT_MS) {
       errors.push(`${where}：超时必须是 1000-${MAX_INFRA_TIMEOUT_MS} 之间的整数毫秒`);
