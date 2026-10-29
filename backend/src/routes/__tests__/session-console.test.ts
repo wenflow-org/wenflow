@@ -337,6 +337,56 @@ describe('GET /api/admin/session-console/:sessionId', () => {
     expect(data2.runtime.stageStatus.goal.ready).toBe(false);
   });
 
+  // 2026-10-28 数据审计回归：R8 时间模型 / R5 材料需求 / 成功标准与约束此前只在
+  // 「查看原始数据」的整包 JSON 里；goal.understanding 视图必须把它们带出，
+  // 且无可映射字段时裁成 null（前端不渲染占位）。路径截止日同批带出（库里 17 条有值）。
+  it('goal.understanding / path.deadline：R8 时间模型与 R5 材料需求带出；全空返回 null', async () => {
+    const understanding = {
+      time_dimensions: { timeModelVersion: 2, objectiveScopeHours: 20, sessionsLengthMin: 60, deadlineDate: '2026-12-31', scopeAnchor: '按 4 个阶段估' },
+      needsMaterial: { kind: '官方考试信息', title: '健康管理师报考要求', why: '地区差异大', queries: ['济南 健康管理师'], origin: 'public' },
+      success_criteria: { observable_result: '能讲清流派与实验', acceptance_check: '不看资料连成一条线' },
+      constraints_and_boundaries: ['非应试', '不排固定日程'],
+      available_resources: { time_budget: '每周 5 小时', time_horizon: '3 个月' },
+    };
+    mockPrisma.goal_conversations.findUnique.mockResolvedValue(
+      goalConversationRow({ collectedData: JSON.stringify({ messages: [], confidence: 0.8, understanding }) })
+    );
+    mockPrisma.learning_paths.findUnique.mockResolvedValue({
+      id: 'lp_1',
+      title: '婚礼弹唱准备',
+      status: 'active',
+      totalMilestones: 1,
+      completedMilestones: 0,
+      deadline: new Date('2027-01-10T00:00:00.000Z'),
+      deadlineText: '距明年 1 月 10 号婚礼约三个月',
+      createdAt: new Date('2026-08-11T11:00:00.000Z'),
+    });
+    mockPrisma.milestones.findMany.mockResolvedValue([]);
+    mockPrisma.teaching_sessions.findMany.mockResolvedValue([]);
+    mockPrisma.learner_evidence.findMany.mockResolvedValue([]);
+
+    const handler = getRouteHandler('/:sessionId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'gc_1' } }, res);
+    const data = res.json.mock.calls[0][0].data;
+    expect(data.goal.understanding).toMatchObject({
+      timeDimensions: { timeModelVersion: 2, objectiveScopeHours: 20, sessionsLengthMin: 60, deadlineDate: '2026-12-31', scopeAnchor: '按 4 个阶段估' },
+      needsMaterial: { kind: '官方考试信息', title: '健康管理师报考要求', queries: ['济南 健康管理师'], origin: 'public' },
+      successCriteria: { observableResult: '能讲清流派与实验', acceptanceCheck: '不看资料连成一条线' },
+      constraints: ['非应试', '不排固定日程'],
+      availableResources: { timeBudget: '每周 5 小时', timeHorizon: '3 个月' },
+    });
+    expect(data.path.deadlineText).toBe('距明年 1 月 10 号婚礼约三个月');
+    // 测试桩的 res.json 不做 JSON 序列化（Date 原样透出）；生产路径 res.json 会转 ISO 字符串
+    expect(new Date(data.path.deadline as string).toISOString()).toContain('2027-01-10');
+
+    // 旧格式（understanding 只有未映射字段）→ null，前端不渲染
+    mockPrisma.goal_conversations.findUnique.mockResolvedValue(goalConversationRow());
+    const res2 = createResponse();
+    await handler({ params: { sessionId: 'gc_1' } }, res2);
+    expect(res2.json.mock.calls[0][0].data.goal.understanding).toBeNull();
+  });
+
   // 2026-10-11 走查回归：侧表权威的会话（全库 827/827 都有侧表行）课堂消息一度恒为 0 条
   // —— 水合把 messages 列覆写成数组后，teachingMessages 仍按 JSON 字符串解析，parse 抛错被兜底吞成 []。
   it('侧表有行（messages 列已置 null）→ 水合后的数组仍被读成课堂消息', async () => {

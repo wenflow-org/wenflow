@@ -18,15 +18,25 @@
           <!-- 选卡步：只有 openPicker 进来才有 -->
           <template v-if="pickerCards.length">
             <p class="cdd-lead">已选 {{ pickerPicked.length }} 张身份卡</p>
-            <ul class="cdd-cards">
-              <li v-for="c in pickerCards" :key="c.profileId">
+            <!-- 选卡搜索（M-4，2026-10-29 夜审）：卡库一次给全（实测 286+ 张），找特定卡
+                 只能滚动长列表。按卡名 / 卡 id / 目标过滤，与卡库页同款搜索框与命中计数。 -->
+            <div class="cdd-picker-bar">
+              <MkFilterSearch v-model="pickerKeyword" placeholder="搜索名称 / 卡号 / 目标" />
+              <span class="cdd-picker__meta">
+                <template v-if="pickerKeyword.trim()">命中 {{ filteredPickerCards.length }} / 共 {{ pickerCards.length }} 张</template>
+                <template v-else>共 {{ pickerCards.length }} 张</template>
+              </span>
+            </div>
+            <MkEmptyState v-if="!filteredPickerCards.length" min title="没有命中的卡" />
+            <ul v-else class="cdd-cards">
+              <li v-for="c in filteredPickerCards" :key="c.profileId">
                 <label class="mk-field mk-field--switch cdd-card__pick">
                   <input
                     type="checkbox"
                     :checked="pickerPicked.includes(c.profileId)"
                     @change="togglePickCard(c.profileId)"
                   />
-                  <span class="cdd-task__title">{{ c.name }}</span>
+                  <span class="cdd-task__title" :title="c.goal || c.name">{{ c.name }}</span>
                 </label>
               </li>
             </ul>
@@ -118,8 +128,9 @@
 import { computed, ref } from 'vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import { errMsg } from './live'
+import { errMsg, markVirtualsMutated } from './live'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 import { toast } from '@/utils/toast'
@@ -141,9 +152,20 @@ const failed = ref<Array<{ profileId: string; name: string; reason: string }>>([
 const note = ref('')
 /** profileId → 勾中的任务 id（默认全选：一张卡的任务通常都要跑，取消个别才是少数派操作） */
 const picked = ref<Record<string, string[]>>({})
-/** 选卡步（openPicker 才有）：候选卡 + 已勾的卡 id */
-const pickerCards = ref<Array<{ profileId: string; name: string }>>([])
+/** 选卡步（openPicker 才有）：候选卡 + 已勾的卡 id（goal 供搜索命中，2026-10-29 M-4） */
+const pickerCards = ref<Array<{ profileId: string; name: string; goal?: string }>>([])
 const pickerPicked = ref<string[]>([])
+/** 选卡搜索：卡多时（实测 286+ 张）平铺长列表找不到特定卡，按名称 / 卡 id / 目标过滤 */
+const pickerKeyword = ref('')
+const filteredPickerCards = computed(() => {
+  const kw = pickerKeyword.value.trim().toLowerCase()
+  if (!kw) return pickerCards.value
+  return pickerCards.value.filter((c) =>
+    [c.name, c.profileId, c.goal]
+      .filter(Boolean)
+      .some((v) => String(v).toLowerCase().includes(kw))
+  )
+})
 
 /** 至少留了 1 个任务的卡才会被创建（0 任务的卡后端也会拒，挡在前面省一轮往返） */
 const derivable = computed(() => groups.value.filter((g) => pickedCount(g.profileId) > 0))
@@ -190,6 +212,7 @@ function openWith(profileIds: string[]) {
   if (!profileIds.length) return
   pickerCards.value = []
   pickerPicked.value = []
+  pickerKeyword.value = ''
   groups.value = profileIds.map((id) => ({ profileId: id, name: id, tasks: [] }))
   failed.value = []
   note.value = ''
@@ -198,10 +221,11 @@ function openWith(profileIds: string[]) {
 }
 
 /** 选卡 → 选任务：候选卡一次给全，勾中的卡进入下一步 */
-function openPicker(cards: Array<{ profileId: string; name: string }>) {
+function openPicker(cards: Array<{ profileId: string; name: string; goal?: string }>) {
   if (!cards.length) return
   pickerCards.value = cards
   pickerPicked.value = []
+  pickerKeyword.value = ''
   groups.value = []
   failed.value = []
   note.value = ''
@@ -234,6 +258,9 @@ async function submit() {
     const rawFailed = d?.failed ?? []
     const nameOf = (pid: string) => groups.value.find((g) => g.profileId === pid)?.name || pid
     if (created.length) {
+      // 虚拟学习者域多了一份 boot 快照之外的新实例：打变更时间戳，「虚拟学习者」列表
+      // 挂载时据此单域重拉（M-6，2026-10-29 夜审），不吃旧数据
+      markVirtualsMutated()
       emit('created', created)
     }
     if (rawFailed.length) {
@@ -261,6 +288,15 @@ defineExpose({ openWith, openPicker })
   color: var(--mk-muted);
   line-height: 1.6;
 }
+/* 选卡搜索行：搜索框吃满剩余宽度，命中计数随右（与卡墙卡头同构） */
+.cdd-picker-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.cdd-picker-bar > :first-child { flex: 1 1 auto; min-width: 0; }
+.cdd-picker__meta { flex: none; font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
 .cdd-group {
   display: grid;
   gap: 6px;

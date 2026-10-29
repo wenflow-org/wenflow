@@ -51,6 +51,16 @@ export function findSessionsForStoryUsage(profileId: string) {
   });
 }
 
+/** 画像最近一条会话（2026-10-29 审计 M-16）：管理端记忆池解析「该实例当前模拟钟」的锚点——
+ *  会话级时钟（stageResults.simulationClock，advance-day 推进落在这里）优先取自它。 */
+export function findLatestSessionForProfile(profileId: string) {
+  return prisma.virtual_sessions.findFirst({
+    where: { virtualProfileId: profileId },
+    orderBy: { updatedAt: 'desc' },
+    select: { id: true, stageResults: true, createdAt: true },
+  });
+}
+
 /** runDayLearning 前置探测：当前阶段与状态 */
 export function findSessionStageFields(sessionId: string) {
   return prisma.virtual_sessions.findUnique({

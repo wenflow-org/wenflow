@@ -52,6 +52,7 @@ vi.mock('../live', async () => {
   const { ref } = await import('vue');
   return {
     errMsg: (e: unknown) => String(e),
+    markVirtualsMutated: vi.fn(),
     liveCreateVirtual: liveCreateVirtualMock,
     /* 顶栏刷新广播（2026-10-26 本页接上 watch(liveRefreshSeq)） */
     liveRefreshSeq: ref(0),

@@ -35,6 +35,7 @@ import {
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import { buildCompletedConversationResult, buildHardBlockResult } from './goal-conversation.exit';
 import learningService from './learning.service';
+import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
 
@@ -437,6 +438,26 @@ class GoalConversationService {
   }
 
   /**
+   * 死路修复的依赖注入（2026-10-29 抽取，见 goal-conversation-rejudge.ts）：补充说明重判流程与
+   * 确认共用段被抽到独立模块，本服务用到的私有方法以回调（.bind(this)）注入，避免模块反向依赖。
+   */
+  private rejudgeDeps(): GoalConversationRejudgeDeps {
+    return {
+      createGeneratingPlaceholderPath: this.createGeneratingPlaceholderPath.bind(this),
+      updateConversationLifecycle: this.updateConversationLifecycle.bind(this),
+      buildGoalPathRequest: this.buildGoalPathRequest.bind(this),
+      callAI: this.callAI.bind(this),
+      withConversationId: this.withConversationId.bind(this),
+      getStructuredOutputValid: this.getStructuredOutputValid.bind(this),
+      throwStructuredOutputInvalid: this.throwStructuredOutputInvalid.bind(this),
+      saveMessage: this.saveMessage.bind(this),
+      getGoalExt: this.getGoalExt.bind(this),
+      updateCollectedData: this.updateCollectedData.bind(this),
+      buildConfirmedResult: this.buildConfirmedResult.bind(this),
+    };
+  }
+
+  /**
    * 确认完成后的对外信封（幂等复用 / 并发落败方复用赢家结果时使用）。
    * 注意：路径仍在生成时与已完成时的文案不同。
    */
@@ -595,6 +616,14 @@ async continueConversation(
 
         // 如果已经完成，直接返回
         if (conversation.status === 'completed') {
+          // 硬阻断终局的补充说明重判（2026-10-29 H-1/H-2、M-10/M-11 修复）：
+          // 存档分诊为硬阻断且尚未绑定路径的 completed 会话，/reply 的新消息不再 0 秒重放旧文案，
+          // 而是追加进对话并对「原目标 + 补充说明」重新分诊，解除硬阻断则按确认链路生成路径。
+          // 其余形态（已绑路径 / 非硬阻断终局）保持原行为，不回归。
+          if (!conversation.learningPathId) {
+            const rejudged = await rejudgeHardBlockedCompletion(this.rejudgeDeps(), conversation, userReply, userId, options);
+            if (rejudged) return rejudged;
+          }
           return buildCompletedConversationResult({
             conversationId,
             collectedData: conversation.collectedData,
@@ -725,39 +754,14 @@ async continueConversation(
           }
 
           try {
-            const seedResult = {
-              userVisible: '',
-              internal: {
-                core: {
-                  stage: 'ready',
-                  confidence: data.confidence || 0.9,
-                  isCompleted: true
-                },
-                ext: {
-                  goalConversation: {
-                    understanding,
-                    nextQuestions: [],
-                    collected: data.collected || {}
-                  }
-                }
-              }
-            };
-
-            const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, seedResult);
-            const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
-
-            // 原子确认（审计 §1.4）：以 revision 条件把「确认权 + 占位路径」一次性绑定。
-            // 并发/重试的落败方 CAS 失配：不写库、不推进对话，并作废自己刚建的占位路径。
-            const confirmed = await this.updateConversationLifecycle(conversationId, 'completed', {
-              status: 'completed',
-              completedAt: new Date(),
-              learningPathId: placeholderPath.id,
-              learningPath: { id: placeholderPath.id, status: 'generating' },
+            const { bound, placeholderPath, runId, seedResult } = await bindGeneratingPath(this.rejudgeDeps(), {
+              conversation,
+              data,
               appendMessage: { role: 'user', content: userReply },
               expectedRevision: conversation.revision,
               // 同意计量落库（拍板 #2，2026-10-08）：flag=按钮通道 / text=自然语言确认；
               // 计数口径 SELECT json_extract(collectedData,'$.lastConfirmation.channel'), COUNT(*)
-              mutateCollectedData: (currentData) => {
+              onBound: (currentData) => {
                 this.recordConfirmationMetering(
                   currentData,
                   options?.confirmProposal === true ? 'flag' : 'text',
@@ -767,7 +771,7 @@ async continueConversation(
               }
             });
 
-            if (!confirmed) {
+            if (!bound) {
               // 落败方：标记占位路径 failed（不会被生成恢复/自动重试），并复用赢家已绑定的路径
               await learningService
                 .markActiveGenerationFailed(placeholderPath.id, new Error('并发确认，本条占位路径作废'), runId)
@@ -775,23 +779,13 @@ async continueConversation(
               return this.resolveConcurrentConfirmation(conversationId, data);
             }
 
-            pathOrchestrator.runGoalAsync(
-              {
-                ...await this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
-                generationRunId: runId,
-                createdPlaceholder: true
-              },
-              {
-                onSuccess: () => {
-                  logger.info('硬规则触发：异步学习路径生成成功', { conversationId, pathId: placeholderPath.id });
-                },
-                onError: async (pathError) => {
-                  logger.error('硬规则触发：异步学习路径生成失败', { conversationId, pathId: placeholderPath.id, error: String(pathError) });
-                  await learningService.markActiveGenerationFailed(placeholderPath.id, pathError, runId);
-                }
-              }
-            );
-
+            await kickPathGeneration(this.rejudgeDeps(), {
+              conversation,
+              seedResult,
+              pathId: placeholderPath.id,
+              runId,
+              systemPromptOverrides: options?.systemPromptOverrides
+            });
             return {
               userVisible: '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
               internal: {

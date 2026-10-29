@@ -24,7 +24,10 @@
           @drop.prevent="onDrop"
         >
           <span class="ci-drop__title">{{ isDragOver ? '松开导入卡文档' : (fileName || '拖入或点击选择 .yaml / .json 卡文档') }}</span>
+          <!-- 系统卡默认位置提示（2026-10-28 数据审计）：仓库自带 200 张系统卡，
+               此前 UI 不提示路径，部署者不知道从哪导入 -->
           <span class="ci-drop__hint">{{ isDragOver ? '松开后将读取并填入文本框' : '也可以直接粘贴到文本框' }}</span>
+          <span class="ci-drop__hint" title="从部署仓库选择该文件上传即可导入 200 张系统卡">系统卡默认文件：virtual-learners/cards/virtual-learners-200.json（200 张，随仓库分发）</span>
         </div>
         <textarea
           v-model="rawText"

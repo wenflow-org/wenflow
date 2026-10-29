@@ -136,7 +136,7 @@ describe('状态条结论取最差子项（今日 0 调用不得输出「系统�
     };
   }
 
-  it('今日无调用但有待办 → 结论写待办条数与近 7 天失败数，tone 转 bad', async () => {
+  it('今日无调用但有待办 → 结论写待办条数与真实学习者近 7 天失败数，tone 转 bad', async () => {
     const w = await mountOverview();
     seedTodayIdleWithTodos();
     await nextTick();
@@ -144,7 +144,7 @@ describe('状态条结论取最差子项（今日 0 调用不得输出「系统�
     const title = w.find('.mk-status__title').text();
     expect(title).not.toContain('系统空闲');
     expect(title).toContain('1 项待处理');
-    expect(title).toContain('近 7 天失败 8 次');
+    expect(title).toContain('真实学习者近 7 天失败 8 次');
     expect(w.find('.mk-status').classes()).toContain('mk-status--bad');
   });
 

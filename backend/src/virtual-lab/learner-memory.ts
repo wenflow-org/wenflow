@@ -423,7 +423,7 @@ async function writeProfileConceptsAfterLessonLocked(
  */
 export async function buildLearnerMemorySnapshot(
   userId: string,
-  options: { limit?: number } = {},
+  options: { limit?: number; now?: Date } = {},
 ): Promise<LearnerMemorySnapshot> {
   const limit = Number.isFinite(options.limit) ? Math.max(1, Math.min(30, Math.round(Number(options.limit) || 8))) : 8;
   const empty: LearnerMemorySnapshot = {
@@ -448,7 +448,10 @@ export async function buildLearnerMemorySnapshot(
       }));
       return null;
     }),
-    memoryTraceService.getDueTraces(userId, { limit }).catch((error: unknown) => {
+    // now 显式下传（2026-10-29 审计 M-16）：管理端读侧不在模拟钟 AsyncLocalStorage 上下文内，
+    // getDueTraces 的 simulatedNowOr() 会回落真实墙钟——调用方解析出实例模拟钟时必须显式传入。
+    // 未传（undefined）时 getDueTraces 维持现行为（simulatedNowOr()）。
+    memoryTraceService.getDueTraces(userId, { limit, now: options.now }).catch((error: unknown) => {
       degraded.push(recordDegradation({
         source: 'virtual-lab/learner-memory',
         faultCategory: 'DB_READ_FAILED',

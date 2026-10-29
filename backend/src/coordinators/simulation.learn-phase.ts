@@ -1847,20 +1847,43 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         }
       }
     } else {
-      learningStepError = '当前 Learn 没有绑定教学会话';
-      aiResponse = '当前 Learn 没有绑定教学会话，请先重新开始当前 task。';
+      // H-3（夜间审计）：本步没有可驱动的教学会话。典型场景：并行的上一步刚按 non-convergence
+      // 收课（endSession + teachingSessionId=null，设计内保留现场等 restart-learning），本步随后
+      // 进来。「无绑定教学会话」是收课后的正常中间态，不是上游失败——不能像下方 learningStepError
+      // 那样把整个虚拟会话终态化为 failed（F07 实锤：会话被并发步误判终态 → autopilot 同步
+      // 终态化、首轮 wrapup 缺失，只能人工 restart-learning）。处理：跳过本步干净返回
+      // （对齐本文件「恢复下一学习任务失败」同款 success:false + currentTaskStopped 信号形态），
+      // 零会话状态写入；error 保留「没有绑定教学会话」字样——batch 驱动
+      // （batch-experiment.service）靠它命中既有 regex 重置 learningStarted 走重启恢复。
+      const unboundSessionMessage = '当前 Learn 没有绑定教学会话';
+      aiResponse = '当前 Learn 没有绑定教学会话：上一课堂已收束解绑（保留现场等待 restart-learning 续课），本步已跳过，不影响会话状态。';
+      logger.warn('[simulation-coordinator] Learn 无绑定教学会话，跳过本步（非终局，不写 failed）', {
+        sessionId,
+        currentTask: currentTask.title
+      });
       logs.push({
         timestamp: new Date().toISOString(),
-        phase: 'error',
+        // 复用「非终局中断」phase（类型白名单），以 action 区分跳过语义
+        phase: 'teaching-interrupted',
         details: {
-          error: '当前 Learn 没有绑定教学会话',
+          error: unboundSessionMessage,
           output: {
             currentTask: currentTask.title,
             currentMilestone: currentMilestone.title,
-            action: 'teaching-step-stopped'
+            action: 'teaching-step-skipped-unbound-classroom',
+            retryable: true
           }
         }
       });
+      await ctx.addSessionLogs(sessionId, logs);
+      return {
+        success: false,
+        userMessage: virtualReplyResult.userVisible,
+        aiResponse,
+        logs,
+        error: unboundSessionMessage,
+        currentTaskStopped: true
+      };
     }
 
     // 新发现问题 #3：教学回合模型抖动 → 非终局暂停。此处**提前返回**，不进入
@@ -1926,7 +1949,10 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           output: {
             from: 'teaching',
             to: 'failed',
-            message: 'Learn 上游调用重试耗尽，保留当前 task 供重启 Learn 恢复',
+            // 文案修正（H-3 审计）：能走到这里的只剩「教学回合抛错且不属于中止/模型抖动/
+            // 上游突发」的不可恢复类失败——旧文案「上游调用重试耗尽」与实际分诊不符
+            // （可重试的上游突发早已在上方走非终局暂停分支）。
+            message: 'Learn 教学回合失败（不可恢复类错误），会话终态化为 failed，保留当前 task 供重启 Learn 恢复',
             currentTaskId: currentTask.id
           }
         }

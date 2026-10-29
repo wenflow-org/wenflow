@@ -817,13 +817,25 @@ watch([runSortKey, runSortDir], () => {
    改为按 createdAt 现取最新（同刻保留原序）。精度/阈值/兜底走 rate-utils 单点：
    passRate 缺失显「—」+ title「暂无评测数据」（不 ?? 0 伪装 0%）。
    P2（2026-10-04 全站评审）：totalRuns=0（用例全部被跳过）也不是「0% 通过」失败态——红字
-   配绿点同条打架；无分母走中性句，红档只留给真跑过且未达标的运行（后端在空跑时仍持久化 passRate=0）。 */
-const latestRun = computed<EvalRun | null>(() => {
+   配绿点同条打架；无分母走中性句，红档只留给真跑过且未达标的运行（后端在空跑时仍持久化 passRate=0）。
+   M-5（2026-10-29 夜审）：头卡此前取 createdAt 最新一次运行，最新若是 0 例空跑
+   （totalRuns=0）整卡被钉在「暂无通过数据」——历史 20 次运行 15 次 100% 同屏被读成
+   「从未跑过评估」。改为取最新「有执行（totalRuns>0）」的运行作头卡数据；最新一次
+   确为空跑时在副行加一句如实说明，不冒充「从未跑过」。 */
+const latestRawRun = computed<EvalRun | null>(() => {
   let best: EvalRun | null = null
   for (const r of runs.value) {
     if (!best || Date.parse(r.createdAt) > Date.parse(best.createdAt)) best = r
   }
   return best
+})
+const latestRun = computed<EvalRun | null>(() => {
+  let best: EvalRun | null = null
+  for (const r of runs.value) {
+    if ((r.summary?.totalRuns ?? 0) <= 0) continue
+    if (!best || Date.parse(r.createdAt) > Date.parse(best.createdAt)) best = r
+  }
+  return best ?? latestRawRun.value
 })
 const lastRunEmpty = computed(() => {
   const s = latestRun.value?.summary
@@ -835,6 +847,13 @@ const lastPassRateText = computed(() => {
 })
 /* 通过率卡副行只在「0 次执行」这种读不出通过率的状态下出现 */
 const lastRateBase = computed(() => (lastRunEmpty.value ? '0 次执行' : ''))
+/** 头卡改取「最新一次有执行」后，createdAt 最新的运行若其实是空跑，副行如实说明
+    （读数与最新一次运行不同源这件事不能只靠历史表自己看出来） */
+const lastRunSkippedNote = computed(() => {
+  const raw = latestRawRun.value
+  if (!raw || !latestRun.value || raw.id === latestRun.value.id) return ''
+  return '最近一次运行为空跑，读数取自最近一次有执行的运行'
+})
 /** KPI tone（2026-10-04 状态条退役，原 lastRateCls 类名着色翻译成 MkKpi tone）：
     阈值纪律走 rate-utils 单点不变；muted（缺 passRate）与 0 次执行不着色 */
 const lastRateTone = computed(() => {
@@ -842,8 +861,8 @@ const lastRateTone = computed(() => {
   const tone = rateToneOf(latestRun.value?.summary?.passRate)
   return tone === 'muted' ? '' : tone
 })
-/** 通过率卡 hint：只在读不出通过率时出现（0 次执行） */
-const lastRateHint = computed(() => lastRateBase.value)
+/** 通过率卡 hint：读不出通过率（0 次执行）或最新一次为空跑的说明（M-5） */
+const lastRateHint = computed(() => lastRateBase.value || lastRunSkippedNote.value)
 
 function fmtDate(iso: string): string {
   if (!iso) return '—'

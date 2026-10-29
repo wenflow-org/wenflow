@@ -36,8 +36,8 @@
          整条消失会让下面的页签与明细卡整体上跳。 -->
     <section class="mk-kpi-grid" aria-label="执行读数">
       <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" />
-      <MkKpi label="耗时 P50" :value="latencyP50" />
-      <MkKpi label="耗时 P99" :value="latencyP99" />
+      <MkKpi label="耗时 P50" :value="latencyP50" :title="latencyTitle" />
+      <MkKpi label="耗时 P99" :value="latencyP99" :title="latencyTitle" />
     </section>
 
     <!-- 视图切换（2026-10-14 用户评审：此前贴在表格卡顶、通栏一条下划线，读起来像表格的表头）：
@@ -1048,15 +1048,32 @@ const successRate = computed(() => {
 const successRateText = computed(() => (successRate.value === '—' ? '—' : `${successRate.value}%`))
 
 /* B3 观测深度：延迟分位（P50/P99，仅成功日志；对标 Langfuse 观测台核心指标）。
-   用后端 stats（含 latencyPercentiles 时优先），否则样本计算 */
+   M-3（2026-10-29 夜审）：与全窗口成功率并排的读数必须同窗——stats 带 latencyPercentiles
+   （全窗聚合、毫秒，空窗时为 null）时优先服务端值；stats 未带该字段或字段为 null 时
+   才回退当前页样本估算，此时卡面 title 注明「按当前页样本估算」，不冒充全窗读数。 */
+const backendP50 = computed(() => liveStats.value?.latencyPercentiles?.p50 ?? null)
+const backendP99 = computed(() => liveStats.value?.latencyPercentiles?.p99 ?? null)
+/** 当前展示的 P50/P99 是否为当前页样本估算（决定 KPI title 的口径披露） */
+const latencyEstimated = computed(() =>
+  backendP50.value == null
+  && backendP99.value == null
+  && !statsPending.value
+  && logs.value.some((l) => l.status === 'ok')
+)
+const latencyTitle = computed(() => (latencyEstimated.value
+  ? '按当前页样本估算，翻页或筛选后随之变化'
+  : '按当前筛选的整窗成功调用统计，与成功率同一窗口'))
 const latencyP50 = computed(() => {
-  const st = liveStats.value
-  if (st && st.latencyPercentiles?.p50 != null) return fmtMs(st.latencyPercentiles.p50)
+  const v = backendP50.value
+  if (v != null) return fmtMs(v)
+  // 读数作废在途与成功率同纪律：不用上一窗口的表格样本冒充当前窗口读数（B22/F8-1）
+  if (statsPending.value) return '—'
   return percentileOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.5)
 })
 const latencyP99 = computed(() => {
-  const st = liveStats.value
-  if (st && st.latencyPercentiles?.p99 != null) return fmtMs(st.latencyPercentiles.p99)
+  const v = backendP99.value
+  if (v != null) return fmtMs(v)
+  if (statsPending.value) return '—'
   return percentileOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.99)
 })
 function percentileOf(durations: number[], q: number): string {

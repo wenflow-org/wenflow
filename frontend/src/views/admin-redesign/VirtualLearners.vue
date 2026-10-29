@@ -389,10 +389,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, watch, onUnmounted } from 'vue'
+import { computed, ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { CirclePlay, Filter, Pause, Play } from 'lucide-vue-next'
 import { openSubPage, intent, isLive } from './store'
-import { liveVirtuals, refreshLiveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats } from './live'
+import { liveVirtuals, refreshLiveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats, virtualsStaleAfterMutation } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useRowMenu } from './useRowMenu'
 import { pauseAutopilotOf, resumeAutopilotOf, terminateRunsOf } from './virtualRunControl'
@@ -777,7 +777,7 @@ const isCompact = useIsNarrow(1279)
    原实现跳 /admin/virtual-learner-cards：创建完人停在卡墙，实例不在那面墙上，
    还得自己想到回本页、也认不出刚建的是哪一条。 ===== */
 const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)
-const deriveCards = ref<Array<{ profileId: string; name: string }>>([])
+const deriveCards = ref<Array<{ profileId: string; name: string; goal?: string }>>([])
 /** 刚创建的实例 id（短暂高亮） */
 const freshIds = ref<string[]>([])
 
@@ -785,8 +785,9 @@ async function openDerivePicker() {
   headMenu.value = ''
   try {
     const res = await adminVirtualLearnersApi.cardsIndex()
-    const d = (res.data?.data ?? res.data) as { cards?: Array<{ profileId: string; name: string }> }
-    deriveCards.value = (d?.cards ?? []).map((c) => ({ profileId: c.profileId, name: c.name }))
+    const d = (res.data?.data ?? res.data) as { cards?: Array<{ profileId: string; name: string; goal?: string }> }
+    /* goal 随卡带出：弹窗选卡搜索要按目标命中（M-4），与卡库页搜索同一组字段 */
+    deriveCards.value = (d?.cards ?? []).map((c) => ({ profileId: c.profileId, name: c.name, goal: c.goal || '' }))
   } catch (e) {
     toast.error(errMsg(e) || '卡库加载失败')
     return
@@ -809,6 +810,14 @@ function onDerived(created: Array<{ profileId: string }>) {
   freshTimer = setTimeout(() => { freshIds.value = [] }, 4000)
 }
 onUnmounted(() => { if (freshTimer) clearTimeout(freshTimer) })
+
+/* M-6（2026-10-29 夜审）：本列表吃 AdminConsole boot() 的一次性数据，组件挂载不重拉——
+   卡库派生成功后点「去虚拟学习者」跳过来，新实例要手动刷新才出现，第一眼读作「创建失败」。
+   挂载时若列表数据早于最近一次创建（CardDeriveDialog 落库即 markVirtualsMutated），
+   单域重拉一次；无创建标记时命中 live 层 TTL 语义不重复请求，也不引入轮询。 */
+onMounted(() => {
+  if (virtualsStaleAfterMutation()) void refreshLiveVirtuals()
+})
 
 /* 列显隐（2026-10-05 卡头统一补「列」按钮）：次要列可勾选；名称/运行状态/操作是
    身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显

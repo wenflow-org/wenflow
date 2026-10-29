@@ -986,9 +986,8 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     };
 
     /* 行与统计都走进程内缓存（2026-10-04 性能批三段/四段）：失败行拉取读 7k+ 行 error 文本、
-       200 行样本要读 metadata 大列；夜批持续冲刷页缓存使「页热」不可靠。
-       缓存键覆盖全部影响取数的筛选参数（行键含 page/limit/sort）；读路径 SWR，冷键才阻塞。 */
-    const [logs, [total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount]] = await Promise.all([
+       200 行样本读 metadata 大列，夜批冲刷页缓存使「页热」不可靠；键覆盖全部筛选参数（行键含 page/limit/sort），读路径 SWR。 */
+    const [logs, [total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount, byAgentErrors, latencyPercentiles]] = await Promise.all([
       getExecLogsRowsCached(execLogsRowsKey(req.query as Record<string, unknown>), () =>
         fetchAgentLogRows({ where, skip, limitNum, logOrderBy })
       ),
@@ -1071,8 +1070,9 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
           timeout: timeoutCount,
           error: errorCount,
           bySource,
-          // 测试（金丝雀）日志计数（默认视图排除 canary，行内数不到；驱动前端「测试 N」入口）
           canary: canaryCount,
+          // 全量 by-agent 失败 Top5（error 口径，2026-10-28 审计 P1）；全窗延迟分位（2026-10-29 审计 M-3，与成功率同窗同源）
+          byAgentErrors, latencyPercentiles,
         },
         pagination: {
           total,

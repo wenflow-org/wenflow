@@ -463,9 +463,15 @@ export interface LiveLogStats {
   bySource?: Record<string, number>
   /** 测试（金丝雀）日志数：默认视图已排除 canary，后端按同筛选口径单独计数（驱动「测试 N」入口显隐） */
   canary?: number
+  /** 全量 by-agent 失败 Top5（error 口径，2026-10-28 数据审计 P1）：总览待办与侧栏角标
+   *  改用它，与执行日志页「失败（N）」同源；旧后端缺该字段时消费方回退 200 行采样并如实标注 */
+  byAgentErrors?: Array<{ agentId: string; count: number }>
   /** 延迟分位（毫秒）：后端 stats 提供时优先（P50/P99 对标 Langfuse 观测台核心指标）。
-      p90 供延迟分级（琥珀档）用——后端给则优先，缺则样本内取 0.9 分位（2026-10-06 审核 #105）。 */
-  latencyPercentiles?: { p50?: number; p90?: number; p99?: number }
+      p90 供延迟分级（琥珀档）用——后端给则优先，缺则样本内取 0.9 分位（2026-10-06 审核 #105）。
+      M-3（2026-10-29 夜审）：P50/P99 与全窗口成功率必须同窗——后端为全窗聚合，可能对
+      空窗/无成功样本回 null，字段值放宽为可空，消费方判 null 后才回退样本估算，
+      且此时须在卡面注明「按当前页样本估算」。 */
+  latencyPercentiles?: { p50?: number | null; p90?: number | null; p99?: number | null }
 }
 /**
  * 执行日志页读数的唯一数据源（页首 pills / 成功率 KPI / 告警条 / 「测试 N」入口）：
@@ -477,7 +483,9 @@ export interface LiveLogStats {
  */
 export const liveLogStats = ref<LiveLogStats | null>(null)
 
-/** 壳层 boot 采样（近 7 天 · 200 行）同请求返回的 stats：**只喂瀑布「样本 N / 全量 M」口径**，
+/** 壳层 boot 采样（近 7 天 · 200 行）同请求返回的 stats：**全量口径**（stats 按 where 全窗聚合，
+ *  与行的 limit 无关）。喂两处：瀑布「样本 N / 全量 M」口径，以及总览待办/侧栏角标的
+ *  by-agent 失败与失败总数（2026-10-28 数据审计 P1，替代采样数）。
  *  不写 liveLogStats——壳层周数字不得冒充执行日志页的当前窗口读数（B22/F8-1） */
 const liveBootLogStats = ref<LiveLogStats | null>(null)
 
@@ -1097,22 +1105,33 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     if (!feedDeduped.has(f.text)) feedDeduped.set(f.text, f)
   }
 
-  /* 待办：失败最多的节点。P1#1 口径诚实化：liveSpans 是「近 7 天 · 200 条采样」窗口
-     （后端暂无全量 by-agent 失败聚合），数字不得暗示全量——但写法走标准后台文案
-     （「按最近 N 条调用统计」放副行），不再把「采样窗口/条采样」等实现词亮在界面上 */
-  const byAgent = new Map<string, number>()
-  for (const s of liveSpans.value || []) {
-    if (s.status === 'err') byAgent.set(s.agent, (byAgent.get(s.agent) || 0) + 1)
-  }
-  const actions = [...byAgent.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 2)
-    .map(([agentId, count]) => ({
-      text: `${agentId} 近 7 天失败 ${count} 次（按最近 ${LIVE_SPANS_SAMPLE_LIMIT} 条调用统计）`,
-      link: '排查执行日志',
-      tone: 'bad' as const,
-      agentId
-    }))
+  /* 待办：失败最多的节点。2026-10-28 数据审计 P1：改用后端全量 by-agent 失败聚合
+     （/agents/logs stats.byAgentErrors，与执行日志页「失败（N）」、角标落地页同源）——
+     此前 200 行采样把 goal-conversation 报成 18（全量 66）、api-gateway 报成 3（全量 1789）。
+     旧后端没有该字段时回退采样口径，且必须带「按最近 N 条」标注，不得冒充全量。 */
+  const fullByAgent = liveBootLogStats.value?.byAgentErrors ?? []
+  const actions = fullByAgent.length
+    ? fullByAgent.slice(0, 2).map((a) => ({
+        text: `${a.agentId} 近 7 天失败 ${a.count} 次`,
+        link: '排查执行日志',
+        tone: 'bad' as const,
+        agentId: a.agentId
+      }))
+    : (() => {
+        const byAgent = new Map<string, number>()
+        for (const s of liveSpans.value || []) {
+          if (s.status === 'err') byAgent.set(s.agent, (byAgent.get(s.agent) || 0) + 1)
+        }
+        return [...byAgent.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 2)
+          .map(([agentId, count]) => ({
+            text: `${agentId} 近 7 天失败 ${count} 次（按最近 ${LIVE_SPANS_SAMPLE_LIMIT} 条调用统计）`,
+            link: '排查执行日志',
+            tone: 'bad' as const,
+            agentId
+          }))
+      })()
 
   /* KPI 行：纯真实用户口径（R4：总览回归「真实用户看板」，虚拟/模拟数据不混入；
      真实 0 显示 0，非数值才显示 —；0 原因给一句导航提示，不展示虚拟数字）。
@@ -1739,9 +1758,25 @@ export function retryLiveVirtualStats(): Promise<void> {
 export async function refreshLiveVirtuals(): Promise<void> {
   try {
     await fetchLiveVirtuals()
+    // 单域刷新成功同样刷新域时间戳：VirtualLearners 挂载时的「早于最近一次创建」判断
+    // 以它为准（virtualsStaleAfterMutation），否则每次进页都会把已新鲜的数据再拉一遍
+    liveFetchAt.virtuals = Date.now()
   } catch {
     /* 单域刷新失败不打断交互：列表下一次全量刷新会补上 */
   }
+}
+
+/* M-6（2026-10-29 夜审）：卡库派生 VL 成功后，virtuals 域还停留在 boot() 的一次性快照，
+   「虚拟学习者」列表挂载不重拉——新实例要手动刷新才出现，第一眼读作「创建失败」。
+   变更方（CardDeriveDialog）落成即打时间戳，列表挂载时据此单域重拉一次（无轮询）。 */
+const virtualsMutatedAt = ref(0)
+/** 变更方调用：虚拟学习者域刚发生过创建（列表数据从此过期） */
+export function markVirtualsMutated(): void {
+  virtualsMutatedAt.value = Date.now()
+}
+/** 列表域数据是否早于最近一次变更（挂载方据此决定重拉一次） */
+export function virtualsStaleAfterMutation(): boolean {
+  return virtualsMutatedAt.value > (liveFetchAt.virtuals || 0)
 }
 
 async function fetchLiveVirtuals(): Promise<void> {
@@ -2219,8 +2254,13 @@ export const liveNavBadges = computed<Record<string, string>>(() => {
   // 公告已折入运营中心 tab（阶段 1 导航收敛）：徽章挂到 ops-hub（messages 场景下线）
   const published = liveAnnouncements.value.filter((a) => a.status === 'published').length
   if (published > 0) out['ops-hub'] = String(published)
-  // 事故信号：近 7 天失败数（>0 时侧栏亮红）
-  const failed = (liveSpans.value || []).filter((s) => s.status === 'err').length
+  // 事故信号：近 7 天失败数（>0 时侧栏亮红）。2026-10-28 数据审计 P1：用后端全量
+  // stats.error（与角标落地页 ?range=week&status=err 的「失败（N）」同源）；旧后端
+  // 无 stats 时回退 200 行采样（Shell 的 title 会如实标注）
+  const bootErrorCount = liveBootLogStats.value?.error
+  const failed = typeof bootErrorCount === 'number' && bootErrorCount > 0
+    ? bootErrorCount
+    : (liveSpans.value || []).filter((s) => s.status === 'err').length
   if (failed > 0) out['execution-logs'] = String(failed)
   return out
 })

@@ -30,7 +30,7 @@
         label="已上线"
         :value="recLoading ? '…' : recError ? '?' : liveCount"
         :tone="!recLoading && !recError && liveCount === 0 ? 'bad' : ''"
-        :title="recLoading ? '上线状态加载中' : recError ? `上线状态加载失败：${recError}` : ''"
+        :title="recLoading ? '上线状态加载中' : recError ? `上线状态加载失败：${recError}` : '目录不含外挂能力 Skill（在插件页）与仅注册 handler 的技能。健康中心的完成度统计按含这些的全量计算，两处数字不同源'"
       />
       <MkKpi
         label="成功率"

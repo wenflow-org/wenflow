@@ -45,6 +45,9 @@ vi.mock('../live', async () => {
     liveDeleteVirtual: vi.fn(async () => {}),
     loadLiveData: vi.fn(async () => {}),
     refreshLiveVirtuals: vi.fn(async () => {}),
+    // M-6（2026-10-29 夜审）：挂载重入刷新判断（组件 onMounted 消费）
+    virtualsStaleAfterMutation: vi.fn(() => false),
+    markVirtualsMutated: vi.fn(),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => String(e),
     shortId: (id: string) => id.slice(0, 8),

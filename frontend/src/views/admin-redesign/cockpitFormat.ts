@@ -46,6 +46,28 @@ export function formatTime(value?: string | null) {
   return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString('zh-CN', { hour12: false })
 }
 
+/**
+ * 路径截止日展示视图（M-7，2026-10-29 夜审；纯函数便于单测）。
+ * 同一结构化 deadline 的 deadlineText 原文在库里并存互相矛盾的版本（「约三个月」vs
+ * 「约 15 个月」，LLM 生成时落库的原样透传），座舱按原文渲染会让同一日期配出相差 5 倍的
+ * 相对时长。展示改为优先结构化 deadline 的格式化日期（本地时区 YYYY-MM-DD），原文降级
+ * 进 title 悬停；结构化缺失（无值/不可解析）时回退原文展示。
+ * 结构化 deadline 两种落库形态都收：epoch 毫秒数 / 数值串，以及 ISO 日期串。
+ */
+export function pathDeadlineView(rawDeadline: unknown, deadlineText: unknown): { dateText: string; text: string } {
+  const text = firstText(deadlineText)
+  const ms = typeof rawDeadline === 'number'
+    ? rawDeadline
+    : typeof rawDeadline === 'string'
+      ? (/^\d+$/.test(rawDeadline.trim()) ? Number(rawDeadline.trim()) : Date.parse(rawDeadline))
+      : NaN
+  const date = Number.isFinite(ms) && ms > 0 ? new Date(ms) : null
+  const dateText = date && !Number.isNaN(date.getTime())
+    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    : ''
+  return { dateText, text }
+}
+
 export function stageLabel(st: string) {
   return {
     goal: '目标',

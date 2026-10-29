@@ -286,6 +286,19 @@ describe('buildLearnerMemorySnapshot', () => {
     expect(memory.dueReview).toEqual([]);
     expect(memory.degraded?.some((d) => d.impactedDimensions.includes('dueReview'))).toBe(true);
   });
+
+  it('M-16：显式 now 下传 getDueTraces；不传时不下发 now 键（现行为不变）', async () => {
+    mockFindUnique.mockResolvedValue(profileRow({ knownConcepts: [], struggleConcepts: [], recentCompleted: [] }));
+    mockGetDueTraces.mockResolvedValue([]);
+
+    const simulatedNow = new Date('2026-10-23T15:59:59.999Z');
+    await buildLearnerMemorySnapshot('u1', { limit: 12, now: simulatedNow });
+    expect(mockGetDueTraces).toHaveBeenCalledWith('u1', { limit: 12, now: simulatedNow });
+
+    await buildLearnerMemorySnapshot('u1', { limit: 12 });
+    // now 为 undefined：getDueTraces 侧走 simulatedNowOr() 回落，调用方不下发该键
+    expect(mockGetDueTraces).toHaveBeenLastCalledWith('u1', { limit: 12, now: undefined });
+  });
 });
 
 describe('recordCompletedArtifact', () => {

@@ -168,6 +168,25 @@ export function statusActionOf(headline: string): 'investigate-today' | 'health'
   return /需要关注|今日失败|今日成功率/.test(headline || '') ? 'investigate-today' : 'health'
 }
 
+/**
+ * 总览状态条结论文案合成（纯函数，便于单测；M-1，2026-10-29 夜审）。
+ * base = live 头部结论（运行平稳 / 系统空闲 / 需要关注…），reasons = 健康检查与仿真
+ * 子项事实（「1 项异常」「2 项需关注」「仿真需关注」）。此前直接拼 `${base}（${reasons}）`，
+ * 会产出「运行平稳（1 项异常）」——取色跟 error 级事实走（红点），措辞却还是「平稳」，
+ * 同屏再摆几条红色待办就是三个互相打架的结论。
+ * 规则：hasErrorFact（健康检查 error / 仿真 bad / error 级待办任一在场）时，平稳/空闲类
+ * 措辞一律改口「需要关注」；仅 warn 档事实保留 base 只括注数量（2026-10-24 行为不变）；
+ * base 已是「需要关注」时不重复括注。
+ */
+export function mergeStatusHeadline(input: { base: string; reasons: string[]; hasErrorFact: boolean }): string {
+  const { base, reasons, hasErrorFact } = input
+  if (!base || base.includes('需要关注')) return base
+  if (!reasons.length) return hasErrorFact ? '需要关注' : base
+  const calm = /平稳|空闲|暂无/.test(base)
+  const head = hasErrorFact && calm ? '需要关注' : base
+  return `${head}（${reasons.join(' · ')}）`
+}
+
 /** 任意位置点 Trace → 执行日志页的 Trace tab（预填该链路） */
 export function openTrace(traceId: string) {
   intent.traceId = traceId

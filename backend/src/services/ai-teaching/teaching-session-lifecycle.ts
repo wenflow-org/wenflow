@@ -77,6 +77,7 @@ import { memoryTraceService } from '../memory/memory-trace.service';
 import { reviewQuotaService } from '../memory/review-quota.service';
 import { reviewPlanService } from '../memory/review-plan.service';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
+import { runBackgroundTask } from '../background-task-tracker.service';
 import type {
   SessionOpeningScene,
   SessionResumeMode,
@@ -1211,23 +1212,20 @@ export async function endSession(
       pathId: session.learningPathId ?? undefined,
       completedTaskId: session.taskId ?? undefined,
     }));
-    // 多故事续章（2026-10-11 人物立体化接线）：本节真课完课 → 为当前故事生成下一章，让虚拟学习者
-    // 的叙事宇宙随学习生长（诊断：storyPool 只在创建期注水 → 91/98 单故事 → 人物扁平）。
-    // always best-effort：动态 import 避环依赖 + 彻底吞错，绝不阻断课堂收尾；非虚拟学习者/无可靠
-    // wrapup 由钩子内部静默跳过（见 story-chapter.service.ts onTeachingSessionCompleted）。
+    // 多故事续章（2026-10-11 人物立体化接线）：本节真课完课 → 为当前故事生成下一章；best-effort：
+    // 动态 import 避环依赖，非虚拟学习者/无可靠 wrapup 由钩子内部静默跳过（story-chapter.service）。
+    // M-18：续章是课后即发即忘语义，必须经 runBackgroundTask 剥离请求级 abortSignal——acp-context
+    // 把 res('close') 接到 abort，HTTP 响应一结束还在跑的 scenario-designer LLM 调用就被连带取消
+    // （CALLER_ABORTED，周窗 188 条）；上方 aux 刷新链已由各服务内部 runBackgroundTask 兜底。
     const wrapupReliable = (finalWrapup as any)?.summarySource === 'model';
-    void import('../virtual-lab/story-chapter.service')
-      .then((m) => m.onTeachingSessionCompleted({
+    runBackgroundTask('story-chapter.on-session-completed', async () => {
+      const m = await import('../virtual-lab/story-chapter.service');
+      await m.onTeachingSessionCompleted({
         userId: session.userId,
         learningPathId: session.learningPathId ?? null,
         wrapupReliable,
-      }))
-      .catch((error) => {
-        logger.warn('[AITeaching] 故事续章生长失败', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
       });
+    }, { userId: session.userId, sessionId });
     return {
       status: 'completed',
       operationId,

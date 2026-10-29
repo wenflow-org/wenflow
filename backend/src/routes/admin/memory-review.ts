@@ -319,7 +319,18 @@ router.get('/', async (req, res) => {
     // 跨用户合计的碎片率（2026-10-09 从零走查 F1：前端 KPI 行按 totals.fragmentation 契约绑定，
     // 此前只平铺 pendingReview/unattachedScatterKeys 两个值 → 三格 KPI 恒显「—」）。
     // duplicateLabelRatio 为痕迹加权全局比率（Σ重复痕迹/Σ痕迹），与前端 tooltip 的「痕迹占比」口径一致。
-    const globalFrag = computeFragmentationMetrics(traceAggRows);
+    // 2026-10-28 数据审计修复：traceAggRows 只含当前页用户时（排序键非 weak/strength/lastReviewed），
+    // 全局碎片率会随 limit 变化（实测 limit≤5 得 0、limit≥10 得 0.12）——totals 级指标必须覆盖
+    // ranked 全体；页外用户的痕迹补一次拉取（仅分页窗口小于全量时发生，与强度三列取数互不影响）。
+    let fragRows = traceAggRows;
+    if (!allTraceRows) {
+      const pageUserSet = new Set(userIds);
+      const missingUserIds = ranked.map((row) => row.userId).filter((id) => !pageUserSet.has(id));
+      if (missingUserIds.length > 0) {
+        fragRows = traceAggRows.concat(await findTracesForStrengthAgg(missingUserIds));
+      }
+    }
+    const globalFrag = computeFragmentationMetrics(fragRows);
 
     const totals = {
       users: ranked.length,

@@ -17,11 +17,14 @@
         </div>
       </template>
       <template v-else>
-        <MkKpi label="路径总数" :value="stats?.total ?? '—'" />
+        <!-- 口径标注（2026-10-28 数据审计）：本页含测试账号（列表能看到 e2e 行），
+             平台总览的路径读数是仅真实用户口径——两页数字差 1 时给出解释，不让人猜 -->
+        <MkKpi label="路径总数" :value="stats?.total ?? '—'" title="含测试账号，与列表同源。平台总览的路径读数仅算真实用户，两处数字不同源" />
         <MkKpi
           label="学习中"
           :value="stats ? byStatus('active') : '—'"
           clickable
+          title="status=active，含测试账号。总览「路径规划 N 进行中」按「有未完成任务且仅真实用户」统计，两处数字不同源"
           :class="{ 'oc-kpi--on': statusFilter === 'active' }"
           :aria-pressed="statusFilter === 'active'"
           @click="selectStatus('active')"

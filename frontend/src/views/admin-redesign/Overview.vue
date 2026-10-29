@@ -242,7 +242,7 @@
                 <!-- 待办行首复用状态条 bad/warn 圆点（2026-10-24 视觉修复）：
                      此前一行异常只靠文字，扫读时读不出「这条和状态条同一档告警」 -->
                 <span class="todo-dot" :class="`todo-dot--${t.tone === 'bad' ? 'bad' : t.tone === 'warn' ? 'warn' : 'muted'}`" aria-hidden="true"></span>
-                <span class="todo-text" :title="t.text">{{ t.main }}</span>
+                <span class="todo-text" :title="t.title || t.text">{{ t.main }}</span>
               </div>
               <!-- 动作默认文字链态（评审 2026-10-10）：整排同款胶囊按钮是视觉噪声，
                    降为蓝字轻链、悬浮再起底色 -->
@@ -366,7 +366,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue';
-import { overviewHealth, investigateAgent, investigateTodayFailures, statusActionOf, intent, dataSource, openSubPage } from './store';
+import { overviewHealth, investigateAgent, investigateTodayFailures, statusActionOf, mergeStatusHeadline, intent, dataSource, openSubPage } from './store';
 import {
   liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing,
   liveVirtualRunStats, liveVirtualStatsError, liveVirtualStatsLoaded, liveVirtualStatsLoading,
@@ -564,11 +564,15 @@ function refreshNow() {
 interface KpiCard { key?: string; label: string; value: string; valueNote?: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }
 /** 目标对话卡报的是「进行中 + 已完成 + 已取消」总量，与闭环阶段 1 的「N 进行中」同名不同量：
  *  卡名与数值行都标出总量口径，避免两处读成同一指标。 */
+/* A1-2（2026-10-29 夜审）：KPI 数值落定前显「—」。live 里的总览快照跨页常驻（boot 旧值、
+   后端冷启动 0），首帧直接渲染会先出 0/旧值、1-2s 后被本轮刷新跳成真实值。数值卡在本次
+   挂载内完成首次成功刷新前不渲染数值（与完课量卡三态同一纪律），不显示假 0。 */
+const kpisSettled = ref(false);
 const kpiCards = computed<KpiCard[]>(() =>
   (data.value?.kpis ?? []).map((k) => ({
     key: k.key,
     label: k.key === 'goalConversations' ? '累计目标对话' : k.label,
-    value: k.value,
+    value: kpisSettled.value ? k.value : '—',
     valueNote: k.key === 'goalConversations' ? '总量' : undefined,
     foot: k.foot,
     hint: k.hint,
@@ -626,7 +630,7 @@ const closureKpi = computed(() => {
   const unmarkedLabel = closureTrackText('legacy')
   const hintParts = [`真实 ${human}`, `虚拟 ${virtual}`]
   if (unmarked > 0) hintParts.push(`${unmarkedLabel} ${unmarked}`)
-  const title = '本卡含虚拟学习者与测试账号，与真实用户 KPI 不同源。'
+  const title = `本卡含虚拟学习者与测试账号，与真实用户 KPI 不同源。整条路径完成 ${s.pathCompletions} 次（统计单位不同，未计入任务完课量）。`
   return {
     label: '完课量',
     value: `${s.total}`,
@@ -766,6 +770,14 @@ const todayCalls = computed(() => {
 const failed7d = computed(() => Number(data.value?.usage?.failed7d ?? 0))
 /** 今日无调用 ≠ 没事：同屏待办与近 7 天失败是唯一要求动手的事实，结论先报它 */
 const todoTakesOver = computed(() => todayCalls.value === 0 && todoItems.value.length > 0)
+/** error 级事实在场（M-1，2026-10-29 夜审）：健康检查 error、仿真 bad、待办里的 error 级条目
+    （api-gateway 失败、课后总结失败等）。任一在场即不允许「平稳/空闲」措辞与红点并存——
+    取色与结论文案共用同一事实源，不再各判各的。 */
+const hasErrorFact = computed(() => {
+  if (healthState.value === 'ready' && healthCheck.value && healthCheck.value.error > 0) return true
+  if (simTone.value === 'bad') return true
+  return todoItems.value.some((t) => t.tone === 'bad')
+})
 const statusTone = computed<Tone>(() => {
   const rank: Record<Tone, number> = { muted: 0, ok: 1, warn: 2, bad: 3 }
   const tones: Tone[] = [health.value.tone]
@@ -775,21 +787,24 @@ const statusTone = computed<Tone>(() => {
   // 仿真「加载中 / 空闲」是 muted，不参与降级；只有已就绪且判定出 warn/bad 才计入
   if (simTone.value !== 'muted') tones.push(simTone.value)
   if (todayFailed.value > 0) tones.push('warn')
+  // error 级待办此前只在这页 0 调用（todoTakesOver）时才降色——有调用时红待办与绿点
+  // 并存同样矛盾，并入取色（M-1）
+  if (hasErrorFact.value) tones.push('bad')
   if (todoTakesOver.value) {
     tones.push(todoItems.value.some((t) => t.tone === 'bad') ? 'bad' : 'warn')
   }
   return tones.reduce<Tone>((worst, t) => (rank[t] > rank[worst] ? t : worst), 'muted')
 })
 /** 结论文案：健康清单有异常/需关注时把数量并入结论，避免「系统空闲」或「运行平稳」
-    与明细行的红/琥珀读数读成互相矛盾；结论本身已是「需要关注」时不重复追加。 */
+    与明细行的红/琥珀读数读成互相矛盾；error 级事实在场时平稳措辞改口「需要关注」
+    （合成规则单点在 store.mergeStatusHeadline，M-1）。 */
 const statusHeadline = computed(() => {
   const base = health.value.headline
   if (todoTakesOver.value) {
     const parts = [`${todoItems.value.length} 项待处理`]
-    if (failed7d.value > 0) parts.push(`近 7 天失败 ${failed7d.value} 次`)
+    if (failed7d.value > 0) parts.push(`真实学习者近 7 天失败 ${failed7d.value} 次`)
     return parts.join(' · ')
   }
-  if (!base || base.includes('需要关注')) return base
   const hc = healthCheck.value
   const reasons: string[] = []
   if (healthState.value === 'ready' && hc) {
@@ -797,7 +812,7 @@ const statusHeadline = computed(() => {
     else if (hc.warn > 0) reasons.push(`${hc.warn} 项需关注`)
   }
   if (simTone.value === 'bad' && liveVirtualStatsLoaded.value) reasons.push('仿真需关注')
-  return reasons.length ? `${base}（${reasons.join(' · ')}）` : base
+  return mergeStatusHeadline({ base, reasons, hasErrorFact: hasErrorFact.value })
 })
 
 /* ===================== row3 第三卡：虚拟学习者看板 =====================
@@ -1093,7 +1108,7 @@ const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls
     都按注册表裸 id 取数——直接透传前缀会让子视图全线 404/400/500、指标恒 0（FN8）。
     定义位置见文件上方「Skill 标签三件套」：必须早于 feedRows（TDZ）。 */
 
-interface TodoItem { key: string; text: string; main: string; tone: Tone; actLabel: string; action: () => void }
+interface TodoItem { key: string; text: string; main: string; tone: Tone; actLabel: string; action: () => void; title?: string }
 /** 去掉末尾括号口径（完整句仍进 title）：可见行只留动作本身 */
 function splitTodoMain(text: string): string {
   const m = text.match(/^(.*?)\s*[（(]([^（）()]+)[）)]\s*$/)
@@ -1111,6 +1126,9 @@ const todoItems = computed<TodoItem[]>(() => {
       key: 'health',
       text: `健康检查 ${n} 项${label}`,
       main: `健康检查 ${n} 项${label}`,
+      /* 2026-10-28 数据审计：本行只数 error 档；健康中心 KPI 的「检查异常 N」另含 warn 档，
+         两页数字不同时给出解释，避免被读成数据不一致 */
+      title: `只计「${label}」档（error）。健康中心的「检查异常」另含「需关注」（warn）档`,
       tone: (hc.error > 0 ? 'bad' : 'warn') as Tone,
       actLabel: '健康中心',
       action: () => jump('health-center'),
@@ -1152,6 +1170,8 @@ async function refreshOverviewTracked(force = false): Promise<boolean> {
   }
   if (liveOverviewFull.value !== before) {
     overviewStale.value = false
+    // 本轮真实拉到数据 → KPI 数值落定（A1-2：落定前显「—」，不渲 0/旧值）
+    kpisSettled.value = true
     return true
   }
   if (liveRefreshing.value || liveLoading.value) return false

@@ -43,7 +43,7 @@ vi.mock('@/api/adminApi', () => ({
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
-  return { errMsg: (e: unknown) => String(e), liveCreateVirtual: vi.fn(), liveRefreshSeq: ref(0) };
+  return { errMsg: (e: unknown) => String(e), liveCreateVirtual: vi.fn(), liveRefreshSeq: ref(0), markVirtualsMutated: vi.fn() };
 });
 
 import VirtualLearnerCards from '../VirtualLearnerCards.vue';

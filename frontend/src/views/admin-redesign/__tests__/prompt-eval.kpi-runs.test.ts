@@ -206,3 +206,74 @@ describe('Prompt 评估「评估历史」首屏读数与列表同源（F7-2）',
     wrapper.unmount();
   });
 });
+
+/**
+ * M-5（2026-10-29 夜审）：头卡此前只取 createdAt 最新一次运行，最新若是 0 例空跑
+ * （totalRuns=0）整卡被钉在「暂无通过数据」，历史 20 次运行 15 次 100% 同屏被读成
+ * 「从未跑过评估」。钉住：头卡取最新「有执行」的运行；最新一次确为空跑时副行如实说明。
+ */
+describe('Prompt 评估头卡跳过 0 例空跑（M-5）', () => {
+  beforeEach(() => {
+    getEvalCasesMock.mockReset();
+    getEvalRunsMock.mockReset();
+    toastErrorMock.mockReset();
+    getEvalCasesMock.mockResolvedValue({ data: { data: [] } });
+  });
+
+  function run(id: string, daysAgo: number, totalRuns: number, passRate: number | undefined) {
+    return {
+      id,
+      agentId: 'skill:goal-conversation',
+      promptVersion: 3,
+      promptSource: 'active',
+      mode: 'eval-set',
+      caseCount: totalRuns,
+      totalRuns,
+      summary: passRate === undefined
+        ? { passRate: 0, passedCount: 0, totalRuns: 0 }
+        : { passRate, passedCount: totalRuns, totalRuns },
+      durationMs: 1200,
+      createdAt: new Date(Date.now() - daysAgo * 86400000).toISOString(),
+    };
+  }
+
+  it('最新一次为空跑而历史有数据：头卡读历史数据，副行注明最近一次为空跑', async () => {
+    // 最新（1 天前）是 0 例空跑；2 天前那次是真跑且 100%
+    getEvalRunsMock.mockResolvedValue({
+      data: { data: [run('empty-latest', 1, 0, undefined), run('real-older', 2, 2, 100)] }
+    });
+    const wrapper = await mountPanel();
+    const kpiView = (wrapper.vm as unknown as {
+      kpiView: { passRateText: string; passRateHint: string };
+    }).kpiView;
+    expect(kpiView.passRateText).toBe('100%');
+    expect(kpiView.passRateHint).toContain('最近一次运行为空跑');
+    wrapper.unmount();
+  });
+
+  it('全部为空跑：维持「暂无通过数据（0 次执行）」原语义，不误报历史', async () => {
+    getEvalRunsMock.mockResolvedValue({
+      data: { data: [run('e1', 1, 0, undefined), run('e2', 2, 0, undefined)] }
+    });
+    const wrapper = await mountPanel();
+    const kpiView = (wrapper.vm as unknown as {
+      kpiView: { passRateText: string; passRateHint: string };
+    }).kpiView;
+    expect(kpiView.passRateText).toBe('暂无通过数据（0 次执行）');
+    expect(kpiView.passRateHint).toBe('0 次执行');
+    wrapper.unmount();
+  });
+
+  it('最新一次确有执行：副行不出空跑说明（说明只在错位时出现）', async () => {
+    getEvalRunsMock.mockResolvedValue({
+      data: { data: [run('real-latest', 1, 2, 50), run('empty-older', 5, 0, undefined)] }
+    });
+    const wrapper = await mountPanel();
+    const kpiView = (wrapper.vm as unknown as {
+      kpiView: { passRateText: string; passRateHint: string };
+    }).kpiView;
+    expect(kpiView.passRateText).toBe('50%');
+    expect(kpiView.passRateHint).toBe('');
+    wrapper.unmount();
+  });
+});

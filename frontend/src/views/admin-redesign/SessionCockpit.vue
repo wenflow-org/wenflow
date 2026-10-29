@@ -282,7 +282,12 @@
             <!-- 右组：meta + 面板治理动作（⋯）的落点。动作逻辑留在面板里，位置收到卡头右缘，
                  不在内容区另起一行——否则只剩一颗 ⋯ 会让卡头与首个阶段之间出现整条空白。 -->
             <span class="cp-path-head-right">
-              <span class="mk-card__meta">{{ pathDetailMeta || '等待路径生成' }}</span>
+              <!-- 截止日（2026-10-28 数据审计）：库里 17 条路径带 deadline/deadlineText，
+                   此前任何管理页都不显示，带截止与无截止的路径在界面上无法区分 -->
+              <span
+                class="mk-card__meta"
+                :title="pathDeadlineTitle"
+              >{{ pathHeadMeta }}</span>
               <span v-if="hasPath && pathId" class="cp-path-acts" data-path-acts></span>
             </span>
           </div>
@@ -305,6 +310,52 @@
               {{ !session ? '' : goalConversationMessages.length ? `${goalConversationMessages.length} 条已记录` : '暂无记录' }}
               <template v-if="session && goalConverged"> · 已确认</template>
             </span>
+          </div>
+          <!-- 目标理解（2026-10-28 数据审计）：R8 时间模型（time_dimensions）/ R5 材料需求
+               （needsMaterial）/ 成功标准与约束此前只存在于「会话数据包 → 查看原始数据」的
+               整包 JSON 里，运营没有可读落点。字段由后端 goalUnderstandingView 空裁剪，
+               这里缺什么不渲染什么，绝不硬造。 -->
+          <div v-if="goalUnderstanding" class="cp-cardbody cp-goal-u">
+            <div class="mk-facts">
+              <div v-if="goalUnderstanding.timeDimensions?.objectiveScopeHours != null">
+                <span title="R8 时间模型：客观内容体量小时（权威预算依据）">客观体量</span>
+                <strong>{{ goalUnderstanding.timeDimensions.objectiveScopeHours }} 小时</strong>
+              </div>
+              <div v-if="goalUnderstanding.timeDimensions?.sessionsLengthMin != null">
+                <span title="R8 时间模型：单次学习分钟（原子任务 90 分钟封顶的换算输入）">单次时长</span>
+                <strong>{{ goalUnderstanding.timeDimensions.sessionsLengthMin }} 分钟</strong>
+              </div>
+              <div v-if="goalUnderstanding.timeDimensions?.deadlineDate">
+                <span title="R8 时间模型：绝对截止日（无期限为空，不要求总周数）">截止日</span>
+                <strong>{{ goalUnderstanding.timeDimensions.deadlineDate }}</strong>
+              </div>
+              <div v-if="goalUnderstanding.availableResources?.timeBudget">
+                <span>时间预算</span>
+                <strong>{{ goalUnderstanding.availableResources.timeBudget }}</strong>
+              </div>
+              <div v-if="goalUnderstanding.availableResources?.timeHorizon">
+                <span>时间范围</span>
+                <strong>{{ goalUnderstanding.availableResources.timeHorizon }}</strong>
+              </div>
+            </div>
+            <p v-if="goalUnderstanding.timeDimensions?.scopeAnchor" class="cp-goal-u__line">
+              <span class="cp-goal-u__tag">换算依据</span>{{ goalUnderstanding.timeDimensions.scopeAnchor }}
+            </p>
+            <p v-if="goalUnderstanding.needsMaterial" class="cp-goal-u__line">
+              <span class="cp-goal-u__tag">所需材料</span>
+              <span>
+                <b v-if="goalUnderstanding.needsMaterial.title">{{ goalUnderstanding.needsMaterial.title }}</b><template v-if="goalUnderstanding.needsMaterial.kind">（{{ goalUnderstanding.needsMaterial.kind }}<template v-if="goalUnderstanding.needsMaterial.origin"> · {{ goalUnderstanding.needsMaterial.origin === 'private' ? '私有' : '公有' }}</template>）</template><template v-if="goalUnderstanding.needsMaterial.why"> —— {{ goalUnderstanding.needsMaterial.why }}</template><template v-if="goalUnderstanding.needsMaterial.queries?.length">，检索词：{{ goalUnderstanding.needsMaterial.queries.join('、') }}</template>
+              </span>
+            </p>
+            <p v-if="goalUnderstanding.successCriteria?.observableResult" class="cp-goal-u__line">
+              <span class="cp-goal-u__tag">可交付</span>{{ goalUnderstanding.successCriteria.observableResult }}
+            </p>
+            <p v-if="goalUnderstanding.successCriteria?.acceptanceCheck" class="cp-goal-u__line">
+              <span class="cp-goal-u__tag">验收</span>{{ goalUnderstanding.successCriteria.acceptanceCheck }}
+            </p>
+            <p v-if="goalUnderstanding.constraints?.length" class="cp-goal-u__line">
+              <span class="cp-goal-u__tag">边界</span>{{ goalUnderstanding.constraints.join('；') }}
+            </p>
           </div>
           <div class="cp-transcripts">
             <!-- 未加载先骨架，不把「尚未加载」当「确实为空」（2026-10-06 审核 #47） -->
@@ -1019,7 +1070,7 @@ import { parseLogEntry, virtualLogPhaseZh } from './sessionLog'
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
   asRecord, normalized, firstText, boolValue, numberValue,
-  conversationMessages, formatTime, stageLabel, wrapupCardIcon
+  conversationMessages, formatTime, stageLabel, wrapupCardIcon, pathDeadlineView
 } from './cockpitFormat'
 import { useCockpitTraces, timelineKindLabel } from './cockpitTraces'
 import { useCockpitLogs, LOG_WINDOW } from './useCockpitLogs'
@@ -1477,6 +1528,13 @@ const pathReview = computed(() => asRecord(stageResults.value.path_review || sta
 const learningResult = computed(() => asRecord(stageResults.value.teaching))
 const conversations = computed(() => asRecord(session.value?.conversations))
 const goalConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.goal).messages))
+/* 目标理解摘要（2026-10-28 数据审计）：session-console 的 goal.understanding 新增视图——
+   R8 时间模型 / R5 材料需求 / 成功标准与约束此前只在「查看原始数据」的整包 JSON 里。
+   后端已做空裁剪（全空返回 null），这里再兜一次空对象。 */
+const goalUnderstanding = computed<Record<string, any> | null>(() => {
+  const u = asRecord(asRecord(session.value?.goal).understanding)
+  return Object.keys(u).length ? u : null
+})
 const fallbackLearnConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.learning).messages))
 const teachingSessionHistory = computed(() => {
   const history = learningResult.value.teachingSessionHistory
@@ -1682,6 +1740,22 @@ const pathMilestones = computed(() => collectPathMilestones(pathStatusPath.value
    getPathDetail 全量行）；本处只保留页签 meta（难度/预计/里程碑数）与 wrapup 卡引用的标题。 */
 const pathDetailTitle = computed(() => buildPathDetailTitle(pathStatusPath.value, stageResults.value.path))
 const pathDetailMeta = computed(() => buildPathDetailMeta(hasPath.value, pathStatusPath.value, stageResults.value.path, pathMilestones.value.length))
+/* 路径截止日（2026-10-28 数据审计）：session-console 的 path 视图带出 deadline/deadlineText
+   （库里 17 条路径有值），拼进页签 meta——此前带截止与无截止的路径在界面上无法区分。
+   M-7（2026-10-29 夜审）：展示优先结构化 deadline 的格式化日期，deadlineText 原文
+   （同日期在库里并存互相矛盾的相对时长版本）降级进 title 悬停；结构化缺失回退原文。 */
+const pathDeadline = computed(() => pathDeadlineView(asRecord(session.value?.path).deadline, asRecord(session.value?.path).deadlineText))
+const pathHeadMeta = computed(() => {
+  const base = pathDetailMeta.value || '等待路径生成'
+  if (pathDeadline.value.dateText) return `${base} · 截止 ${pathDeadline.value.dateText}`
+  return pathDeadline.value.text ? `${base} · 截止 ${pathDeadline.value.text}` : base
+})
+/** 截止日 title：结构化日期为主读数，原文留档；无结构化时不出 title（正文已是原文） */
+const pathDeadlineTitle = computed(() => {
+  const { dateText, text } = pathDeadline.value
+  if (!dateText) return undefined
+  return text ? `截止时间：${dateText}（原文：${text}）` : `截止时间：${dateText}`
+})
 const pathMilestonesView = computed(() => buildPathMilestonesView(pathMilestones.value, firstText(bindings.value.currentTaskId)))
 /* 面包屑名（2026-10-12）：路径统一在座舱打开后，控制台的 subPage 不再有详情页替它回写
    可读名，深链/列表进来面包屑会露裸会话 id。本处只在 pathStatus/stageResults 带真标题时
@@ -3513,6 +3587,22 @@ async function copyRawJson() {
   font-weight: 600; color: var(--mk-red); padding: 7px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-red-bg);
 }
 .cp-degrade .mk-link { font-size: var(--mk-fs-micro); }
+
+/* 目标理解卡（2026-10-28 数据审计）：R8 时间模型 / R5 材料需求 / 成功标准与约束的
+   可读落点。栅格走共享 .mk-facts 原语；行式字段（换算依据/材料/验收/边界）自绘轻行 */
+.cp-goal-u {
+  display: grid; gap: 10px; padding: 10px 16px 14px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.cp-goal-u__line {
+  margin: 0; display: flex; gap: 8px; align-items: baseline; min-width: 0;
+  font-size: var(--mk-fs-micro); color: var(--mk-muted);
+}
+.cp-goal-u__tag {
+  flex: none; padding: 1px 7px; border-radius: 999px;
+  background: var(--mk-surface-2); color: var(--mk-faint);
+  font-weight: 700; font-size: var(--mk-fs-micro);
+}
 
 /* Transcripts */
 /* 内滚动上限（2026-10-12 走查）：Goal 转录与课堂对话都随内容长到两千 px 把整页拉长、

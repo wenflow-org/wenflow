@@ -36,6 +36,8 @@ import { resolveConceptIdSafe } from '../memory/memory-trace.service';
 import { isPlaceholderConceptKey, normalizeConceptKey } from '../memory/concept-key';
 import { getActiveForConcepts } from './misconception-ledger.service';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
+import { getSimulatedAsOf, runWithSimulatedClock } from '../virtual-lab/simulation-clock-context';
+import { resolveUserSimulatedNow } from '../virtual-lab/simulation-clock-resolver';
 
 const CONSUMER_ID = 'review-completed-consumer-v1';
 
@@ -100,9 +102,22 @@ export function mapReviewStatusToRating(
 }
 
 export class ReviewCompletedConsumer {
+  /**
+   * M-15（夜间审计）：消费者跑在 outbox worker 后台上文，无模拟钟 ALS。本消费者自身
+   * 全部按 event.occurredAt 落库（C4 纪律），但事件载荷不带模拟日/实例钟信息——这里按
+   * 实例（userId）当前模拟时刻叠绑 ALS 上下文，保证消费链内任何 now 类读取（含未来
+   * 新增写入点与链上 helper）与实例的模拟口径一致。未启用日期模拟的实例解析为 null
+   * → 原样直调，真实用户/未开启日期模拟行为零变化；已在模拟钟上下文内不覆盖。
+   */
   async handle(event: DurableDomainEvent): Promise<void> {
     if (!event.userId) return;
+    if (getSimulatedAsOf()) return this.applyReview(event);
+    const asOf = await resolveUserSimulatedNow(event.userId);
+    if (!asOf) return this.applyReview(event);
+    await runWithSimulatedClock(asOf, () => this.applyReview(event));
+  }
 
+  async applyReview(event: DurableDomainEvent): Promise<void> {
     const data = (event.data || {}) as ReviewCompletedPayload;
     const items = Array.isArray(data.reviewItems) ? data.reviewItems : [];
     if (items.length === 0) return;

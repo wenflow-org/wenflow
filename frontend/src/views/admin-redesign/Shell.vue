@@ -544,13 +544,15 @@ const BADGE_MEANING: Record<string, string> = {
   'virtual-learners': '虚拟学习者数量',
   skills: 'Skill 数量',
   'ops-hub': '已发布公告数量',
-  'execution-logs': '近 7 天执行失败次数（采样窗口）',
+  'execution-logs': '近 7 天执行失败次数',
 }
 function badgeTitle(item: MockSceneDef): string {
   const count = badgeOf(item)
   if (!count) return ''
   if (alarmNavBadges.has(item.id)) {
-    return `近 7 天执行失败 ${count} 次（近 200 条日志内统计）`
+    /* 2026-10-28 数据审计 P1：角标改读全量 stats.error，与落地页 ?range=week&status=err 的
+       「失败（N）」同源（旧口径是 200 行采样，28 vs 3662 同屏打架） */
+    return `近 7 天执行失败 ${count} 次（与执行日志页同源）`
   }
   return `${BADGE_MEANING[item.id] || item.label}：${count}`
 }

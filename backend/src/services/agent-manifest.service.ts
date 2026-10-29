@@ -224,6 +224,22 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
+  // 2026-10-29 数据审计 M-20：此前漏登记 manifest，/agents/logs 按监测组筛选时该 Skill
+  // （教学开场白生成，周窗 604 行/36 错）不归属任何组、教学环节统计系统性漏计。
+  // 教学主链第 2 步（ai-teaching.definition step 2 opening-generation），模型参数对齐
+  // prompts/core/teaching-opening-generator.yaml params。
+  {
+    id: 'skill:teaching-opening-generator',
+    name: '课堂开场交互生成器 Skill',
+    description: '生成教学 Session 的开场 message、question 与 quickReplies',
+    category: 'teaching',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Teaching',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.4, maxTokens: 64000 }
+  },
 
   // ============ Profile 下辖 Skills ============
   {
