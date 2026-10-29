@@ -1,9 +1,9 @@
 /**
  * WenFlow 后端进程入口（架构审计 §5 行动 #3：index.ts 拆分后的编排层）
  *
- * 职责仅剩：环境装配 → 应用骨架 → 路由注册 → startServer 按阶段编排
- * （数据库连接 / 调度器 / 安全策略 / seed / Gateway / outbox / 恢复 / 监听）→ 优雅关闭。
- * 各阶段实现见 src/bootstrap/。
+ * 职责仅剩：环境装配 → 应用骨架 → 路由注册 → startServer 按阶段编排 → 优雅关闭。
+ * 启动序列（单实例锁 → 连库 → **先绑端口** → seeds/初始化 → markReady）见 bootstrap/startup-sequence.ts
+ * （#143：端口不可用时零写库副作用退出；初始化完成前 /readyz 报 not_ready）。
  */
 import type { Server } from 'http';
 import prisma from './config/database';
@@ -23,10 +23,14 @@ import { autopilotService } from './virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from './virtual-lab/session-reclaim.service';
 import { stopBatchExperimentScheduler } from './services/virtual-lab/batch-experiment.service';
 import { bootstrapEnvironment } from './bootstrap/env';
-import { acquireInstanceLock, InstanceConflictError, type InstanceLockHandle } from './utils/instance-lock';
+import { acquireInstanceLock, InstanceConflictError } from './utils/instance-lock';
 import { createHttpApp, registerErrorHandlers } from './bootstrap/http-app';
 import { registerRoutes } from './bootstrap/routers';
 import { initializeGateway, purgeRetiredSkills } from './bootstrap/gateway';
+import {
+  runStartupSequence,
+  type StartupHandles,
+} from './bootstrap/startup-sequence';
 import {
   runPromptFileSeed,
   runFieldRoutingSeed,
@@ -45,8 +49,6 @@ import {
   runAdminPageColdWarmup,
   runTokenCostCacheWarmup,
 } from './bootstrap/schedulers';
-import type { EduClawGateway } from './gateway';
-import type { DurableOutboxWorker } from './events/outbox.worker';
 
 // 环境与安全配置装配（保持原 import 期 fail-fast 语义：缺少/弱 JWT_SECRET 直接终止进程）
 bootstrapEnvironment();
@@ -61,75 +63,68 @@ const app = createHttpApp({ lifecycle, readinessService });
 registerRoutes(app);
 registerErrorHandlers(app);
 
-let outboxWorker: DurableOutboxWorker | null = null;
-let httpServer: Server | null = null;
-let gateway: EduClawGateway | null = null;
-let stopEnrichmentRetry: (() => void) | null = null;
-let instanceLock: InstanceLockHandle | null = null;
+// 运行期句柄（#143 后由 bootstrap/startup-sequence 按进度写入，shutdown 据此清理已启动的部分）
+const handles: StartupHandles = {
+  outboxWorker: null,
+  httpServer: null,
+  gateway: null,
+  stopEnrichmentRetry: null,
+  instanceLock: null,
+};
 
 function assertStartupActive() {
   if (lifecycle.isDraining()) throw new Error('服务已进入关闭流程，终止后续启动');
 }
 
+/** 建 HTTP server 并 listen；成功 resolve 已绑定端口的服务器，失败（EADDRINUSE 等）reject。 */
+function bindHttpServer(): Promise<Server> {
+  return new Promise<Server>((resolveServer, reject) => {
+    const onError = (error: Error) => reject(error);
+    const server = app.listen(PORT, () => {
+      server.off('error', onError);
+      resolveServer(server);
+    });
+    // 长程同步请求（/auto 多轮、教学回合最长 300s）需要比 Node 默认 5 分钟更宽的服务端超时，
+    // 否则合法长请求会被拦腰截断（报告 #59：304s 时 http=0，在途教学轮被取消）
+    applyServerTimeouts(server);
+    handles.httpServer = server;
+    server.once('error', onError);
+  });
+}
+
 // 启动服务器
 export async function startServer() {
   try {
-    assertStartupActive();
-    // 单实例断言（架构优化批 #3）：SQLite 单写者 + 进程内限流/调度/互斥全假设单实例，
-    // 换端口起第二个进程共享同一主库会造成限流失效与数据竞争 → 以主库路径为键持锁拒起。
-    // 冲突时给出在跑实例的 PID/端口；豁免通道 WENFLOW_ALLOW_MULTI_INSTANCE=1（仅调试）。
-    instanceLock = acquireInstanceLock(process.env.DATABASE_URL || '', { port: PORT });
-    logger.info('Connecting to main and System databases...');
-    await Promise.all([prisma.$connect(), systemPrisma.$connect()]);
-    assertStartupActive();
-    logger.info('✅ Main and System databases connected successfully');
-    startMaintenanceSchedulers(lifecycle);
-    await runVirtualLabStartupRecovery();
-    assertStartupActive();
-    // 应用日界口径（所有"按天归组/比较"）：从平台设置加载时区，失败保持默认 Asia/Shanghai
-    const appTz = await refreshAppTimeZoneFromSettings();
-    logger.info(`[startup] 应用日界时区 = ${appTz}`);
-
-    await auditSensitiveStoragePermissions(assertStartupActive);
-    assertStartupActive();
-    await refreshNetworkPolicyBootstrap();
-    assertStartupActive();
-
-    await runPromptFileSeed(assertStartupActive);
-    await runFieldRoutingSeed(assertStartupActive);
-    await runAdminSeed(assertStartupActive);
-    // 预制 VL 启动播种已退役（2026-10-09 架构改版：卡库选角，空白项目零 VL 起步；
-    // 需要时显式调 runBuiltinVirtualLearnersSeed，见 bootstrap/seeds.ts）
-
-    await purgeRetiredSkills();
-    await runSkillModelConfigSeed();
-    gateway = await initializeGateway();
-    assertStartupActive();
-
-    outboxWorker = startOutboxWorker();
-
-    await runLearningStartupRecovery(assertStartupActive);
-    stopEnrichmentRetry = startEnrichmentRetryLoop();
-    runDashboardGuidanceBackfill();
-    runTokenCostCacheWarmup();
-    runOverviewStatsCacheWarmup();
-    runAdminPageColdWarmup();
-
-    assertStartupActive();
-    await new Promise<void>((resolveServer, reject) => {
-      const onError = (error: Error) => reject(error);
-      const server = app.listen(PORT, () => {
-        server.off('error', onError);
-        resolveServer();
-      });
-      // 长程同步请求（/auto 多轮、教学回合最长 300s）需要比 Node 默认 5 分钟更宽的服务端超时，
-      // 否则合法长请求会被拦腰截断（报告 #59：304s 时 http=0，在途教学轮被取消）
-      applyServerTimeouts(server);
-      httpServer = server;
-      server.once('error', onError);
-    });
-    assertStartupActive();
-    lifecycle.markReady();
+    // #143：启动序列抽到 bootstrap/startup-sequence（可单测）——
+    // 顺序：单实例锁 → 连库 → 绑定端口 → seeds/初始化（失败则关服退出）→ markReady。
+    // 端口不可用时在零写库副作用的时点失败；初始化完成前 /readyz 报 not_ready。
+    await runStartupSequence({
+      assertStartupActive,
+      acquireLock: () => acquireInstanceLock(process.env.DATABASE_URL || '', { port: PORT }),
+      connectDatabases: async () => {
+        await Promise.all([prisma.$connect(), systemPrisma.$connect()]);
+      },
+      bindHttpServer,
+      startMaintenanceSchedulers: () => startMaintenanceSchedulers(lifecycle),
+      runVirtualLabStartupRecovery,
+      refreshAppTimeZone: () => refreshAppTimeZoneFromSettings(),
+      auditSensitiveStoragePermissions: () => auditSensitiveStoragePermissions(assertStartupActive),
+      refreshNetworkPolicyBootstrap,
+      runPromptFileSeed: () => runPromptFileSeed(assertStartupActive),
+      runFieldRoutingSeed: () => runFieldRoutingSeed(assertStartupActive),
+      runAdminSeed: () => runAdminSeed(assertStartupActive),
+      purgeRetiredSkills,
+      runSkillModelConfigSeed,
+      initializeGateway,
+      startOutboxWorker,
+      runLearningStartupRecovery: () => runLearningStartupRecovery(assertStartupActive),
+      startEnrichmentRetryLoop,
+      runDashboardGuidanceBackfill,
+      runTokenCostCacheWarmup,
+      runOverviewStatsCacheWarmup,
+      runAdminPageColdWarmup,
+      markReady: () => lifecycle.markReady(),
+    }, handles);
     logger.info(`🚀 Server is running on port ${PORT}`);
     logger.info(`📚 API Documentation: http://localhost:${PORT}/api`);
     logger.info(`🤖 EduClaw Gateway: Agent-Driven Architecture`);
@@ -153,10 +148,10 @@ export async function shutdown(signal: string) {
   // 避免与下方 prisma $disconnect 竞争产生无谓的写入失败告警
   await telemetryWriter.flush().catch(() => {});
   const report = await lifecycle.shutdown(signal, {
-    httpServer,
+    httpServer: handles.httpServer,
     stopSchedulers: async () => {
-      if (stopEnrichmentRetry) stopEnrichmentRetry();
-      stopEnrichmentRetry = null;
+      if (handles.stopEnrichmentRetry) handles.stopEnrichmentRetry();
+      handles.stopEnrichmentRetry = null;
       await logRetentionService.stop();
       await auditCleanupService.stop();
       await virtualSessionReclaimService.stop();
@@ -165,12 +160,12 @@ export async function shutdown(signal: string) {
     },
     teaching: aiTeachingOrchestrator,
     backgroundTaskTracker,
-    outbox: outboxWorker,
-    gateway,
+    outbox: handles.outboxWorker,
+    gateway: handles.gateway,
     databases: [systemPrisma, prisma]
   }, shutdownDeadlineMs);
-  instanceLock?.release();
-  instanceLock = null;
+  handles.instanceLock?.release();
+  handles.instanceLock = null;
   logger.info('Server shutdown completed', report);
   return report;
 }

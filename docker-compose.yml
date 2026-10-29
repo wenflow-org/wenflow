@@ -40,6 +40,8 @@ services:
       - TRUST_PROXY=${WENFLOW_NGINX_PROXY_IP:-172.29.0.10}
       - ADMIN_ACCESS_MODE=private
       - LOG_DIR=/app/data/logs
+      # #141：单实例锁目录指向数据卷（镜像内默认已设同值，这里显式透出便于覆盖排查）
+      - WENFLOW_RUNTIME_DIR=/app/data/.runtime
       - PROMPTS_DIR=/app/prompts
       - CORE_FILES_DIR=/app/prompts/core
       - SKILLS_FILE=/app/prompts/skills.yaml

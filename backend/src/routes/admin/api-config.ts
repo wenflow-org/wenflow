@@ -3,6 +3,7 @@ import apiConfigService from '../../services/apiConfig.service';
 import { getAPIGateway } from '../../gateway/api-gateway';
 import { resolveChatCompletionsUrl } from '../../gateway/api-gateway/chat-protocol-adapter';
 import { safeHttpRequest } from '../../utils/safe-http';
+import { isPlaceholderApiKey } from '../../utils/api-key-placeholder';
 import { z } from 'zod';
 import { isIP } from 'net';
 import {
@@ -258,9 +259,11 @@ router.post('/test', async (req, res) => {
     const { apiUrl, apiKey } = req.body;
 
     /* 「测试连通性」不要求重敲密钥：地址没换且留空时沿用已保存的那把。
-       地址一变就不回退——不能把旧密钥发给一个还没验证过的新端点。 */
+       地址一变就不回退——不能把旧密钥发给一个还没验证过的新端点。
+       #142：文档占位值（sk-your-api-key 等）等同留空——按未配置给出明确报错，
+       而不是发给上游换回一句难排查的 401。 */
     const url = String(apiUrl || '').trim();
-    let key = String(apiKey || '').trim();
+    let key = isPlaceholderApiKey(apiKey) ? '' : String(apiKey || '').trim();
     if (!key && url) {
       const saved = await apiConfigService.getConfig();
       if (url === String(saved.apiUrl || '').trim()) key = saved.apiKey;
@@ -304,9 +307,11 @@ router.post('/test-model', async (req, res) => {
 
     const currentConfig = await apiConfigService.getConfig();
     const resolvedUrl = String(apiUrl || currentConfig.apiUrl || '').trim();
+    // #142：占位 key 等同未提供（走 resolveEndpointBoundSecret 的沿用/未配置路径）
+    const bodyApiKey = isPlaceholderApiKey(apiKey) ? '' : apiKey;
     const resolvedKey = resolveEndpointBoundSecret(
       resolvedUrl,
-      apiKey,
+      bodyApiKey,
       currentConfig.apiUrl,
       currentConfig.apiKey
     );

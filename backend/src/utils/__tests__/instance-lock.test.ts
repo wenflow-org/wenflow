@@ -86,4 +86,55 @@ describe('instance-lock（单实例断言）', () => {
     bypass.release();
     holder.release();
   });
+
+  describe('WENFLOW_RUNTIME_DIR 锁目录覆盖（#141 Docker 部署）', () => {
+    const originalRuntimeDir = process.env.WENFLOW_RUNTIME_DIR;
+    let tmpRoot: string;
+
+    beforeEach(() => {
+      tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'instance-lock-runtime-'));
+    });
+
+    afterEach(() => {
+      if (originalRuntimeDir === undefined) delete process.env.WENFLOW_RUNTIME_DIR;
+      else process.env.WENFLOW_RUNTIME_DIR = originalRuntimeDir;
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    });
+
+    it('env 覆盖生效：锁文件落到 <WENFLOW_RUNTIME_DIR>/.runtime/，获取/释放照常工作', () => {
+      process.env.WENFLOW_RUNTIME_DIR = tmpRoot;
+      const lockPath = resolveLockFilePath('file:./prisma/dev.db');
+      expect(lockPath).toBe(path.join(tmpRoot, '.runtime', path.basename(lockPath)));
+
+      const lock = acquireInstanceLock('file:./prisma/dev.db', { port: 3001 });
+      expect(fs.existsSync(lockPath)).toBe(true);
+      lock.release();
+      expect(fs.existsSync(lockPath)).toBe(false);
+    });
+
+    it('env 覆盖只改锁文件落点，不改锁键（同库在默认与覆盖下键一致）', () => {
+      const defaultPath = resolveLockFilePath('file:./prisma/dev.db');
+      process.env.WENFLOW_RUNTIME_DIR = tmpRoot;
+      const overridePath = resolveLockFilePath('file:./prisma/dev.db');
+      expect(path.basename(overridePath)).toBe(path.basename(defaultPath));
+      expect(path.dirname(path.dirname(overridePath))).toBe(tmpRoot);
+    });
+
+    it('env 未设或纯空白 → 默认行为不变（backend 包根/.runtime）', () => {
+      delete process.env.WENFLOW_RUNTIME_DIR;
+      const backendRoot = path.resolve(__dirname, '..', '..', '..');
+      expect(resolveLockFilePath('file:./prisma/dev.db')).toContain(path.join(backendRoot, '.runtime', 'instance-'));
+
+      process.env.WENFLOW_RUNTIME_DIR = '   ';
+      expect(resolveLockFilePath('file:./prisma/dev.db')).toContain(path.join(backendRoot, '.runtime', 'instance-'));
+    });
+
+    it('env 指向不存在目录 → mkdir recursive 自动创建', () => {
+      const nested = path.join(tmpRoot, 'data', 'runtime');
+      process.env.WENFLOW_RUNTIME_DIR = nested;
+      const lock = acquireInstanceLock('file:./prisma/dev.db', { port: 3001 });
+      expect(fs.existsSync(path.join(nested, '.runtime'))).toBe(true);
+      lock.release();
+    });
+  });
 });

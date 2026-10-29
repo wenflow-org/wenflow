@@ -9,8 +9,9 @@
  * 测试/CI 实例互不阻塞），冲突时携带在跑实例的 PID/端口拒启。
  *
  * 语义：
- * - 获取：`file:./xxx.db` 解析为绝对路径 → sha1 → `backend/.runtime/instance-<hash>.lock`
- *   （内容 = {pid, port, startedAt}）；`wx` 独占创建，成功即持有。
+ * - 获取：`file:./xxx.db` 解析为绝对路径 → sha1 → `<锁目录锚点>/.runtime/instance-<hash>.lock`
+ *   （锚点默认 backend 包根；容器部署用 WENFLOW_RUNTIME_DIR 覆盖到可写数据卷，见 #141）；
+ *   内容 = {pid, port, startedAt}；`wx` 独占创建，成功即持有。
  * - 陈旧锁：持有进程已死（PID 探活失败）或内容不可解析 → 回收重试一次（最多 2 轮）。
  *   PID 复用是尽力而为的启发式（无跨平台命令行校验），冲突信息里带 startedAt 供人工判断。
  * - 释放：优雅关闭时 unlink；进程被 kill -9 时残留文件由下次启动的陈旧锁回收兜底。
@@ -31,6 +32,18 @@ const MAX_ACQUIRE_ROUNDS = 2;
  * 实例算出不同键、静默绕过断言（2026-10-24 实测发现的口径洞）。
  */
 const BACKEND_ROOT = path.resolve(__dirname, '..', '..');
+
+/**
+ * 锁目录锚点（#141 Docker 部署）：默认 backend 包根（本地开发不变，仍 backend/.runtime）；
+ * 容器内包根（/app）归 root、进程以非 root 运行时 mkdir 必然 EACCES——部署侧用
+ * WENFLOW_RUNTIME_DIR 把锁目录指到已可写的数据卷（如 /app/data/.runtime，随数据卷持久）。
+ * 只影响锁文件落点；锁键（主库路径解析）仍锚定包根，不受该变量影响。
+ */
+function resolveLockDirRoot(): string {
+  const configured = String(process.env.WENFLOW_RUNTIME_DIR || '').trim();
+  if (configured) return path.resolve(configured);
+  return BACKEND_ROOT;
+}
 
 export interface InstanceLockHandle {
   /** 释放锁（幂等；优雅关闭路径调用） */
@@ -70,10 +83,10 @@ export function resolveLockKey(databaseUrl: string): string {
   return raw;
 }
 
-/** 锁键 → 锁文件路径（backend/.runtime/instance-<hash>.lock）。 */
+/** 锁键 → 锁文件路径（`<锁目录锚点>/.runtime/instance-<hash>.lock`；锚点默认 backend 包根，可被 WENFLOW_RUNTIME_DIR 覆盖）。 */
 export function resolveLockFilePath(databaseUrl: string): string {
   const keyHash = createHash('sha1').update(resolveLockKey(databaseUrl)).digest('hex').slice(0, 16);
-  return path.join(BACKEND_ROOT, LOCK_DIR_NAME, `instance-${keyHash}.lock`);
+  return path.join(resolveLockDirRoot(), LOCK_DIR_NAME, `instance-${keyHash}.lock`);
 }
 
 function readLockContent(lockPath: string): { pid: number | null; port: string | null; startedAt: string | null } {

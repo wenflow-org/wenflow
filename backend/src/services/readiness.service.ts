@@ -1,4 +1,5 @@
 import { decryptSecret } from '../utils/secret-crypto';
+import { isPlaceholderApiKey } from '../utils/api-key-placeholder';
 import { FIELD_ROUTING_SEED_MANIFEST, detectFieldRoutingDrift } from './field-routing-bootstrap.service';
 import { checkSkillsReadiness } from './skills-readiness.service';
 import { logger } from '../utils/logger';
@@ -200,6 +201,9 @@ export class ReadinessService {
     } catch {
       return false;
     }
+    // #142：文档占位 key（sk-your-api-key 等）按「未配置」报 warning——旧判据只看非空，
+    // 首部署照抄 .env.example 会把占位值报成 ok，而真实调用全部 401。
+    if (isPlaceholderApiKey(apiKey)) return false;
     const model = String(config?.defaultModel || process.env.AI_MODEL || '').trim();
     if (!endpoint || !apiKey || !model) return false;
 

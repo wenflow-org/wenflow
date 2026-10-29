@@ -142,6 +142,16 @@ export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): exp
         timestamp: new Date().toISOString()
       });
     }
+    // #143：端口先于 seeds/初始化绑定，启动中就可达——在 markReady 之前一律报未就绪。
+    // 只靠 DB 巡检不够：重启场景下旧数据已就位，DB 检查可能全绿但初始化（seed/网关/outbox）
+    // 尚未完成，此时对外宣称 ready 会让流量打到半初始化实例上。
+    if (lifecycle.getState() !== 'ready') {
+      return res.status(503).json({
+        status: 'not_ready',
+        reason: 'starting',
+        timestamp: new Date().toISOString()
+      });
+    }
     const result = await readinessService.check();
     res.status(result.ready ? 200 : 503).json({
       status: result.ready ? 'ready' : 'not_ready',

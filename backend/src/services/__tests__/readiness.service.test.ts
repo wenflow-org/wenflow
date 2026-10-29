@@ -111,6 +111,52 @@ describe('ReadinessService', () => {
     expect(result.checks.aiConfiguration).toBe('warning')
   })
 
+  it('#142：平台 key 为文档占位值（sk-your-api-key）时报 warning 而非 ok', async () => {
+    const { main, system } = createDatabases()
+    system.platform_api_configs.findFirst.mockResolvedValue({
+      apiUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-your-api-key',
+      defaultModel: 'test-model'
+    })
+    const result = await new ReadinessService(main, system).check()
+
+    expect(result.ready).toBe(true)
+    expect(result.checks.aiConfiguration).toBe('warning')
+  })
+
+  it('#142：平台 key 密文为文档占位值时同样报 warning', async () => {
+    process.env.SECRET_ENCRYPTION_KEYS = `test:${Buffer.alloc(32, 7).toString('base64')}`
+    process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID = 'test'
+    const { main, system } = createDatabases()
+    system.platform_api_configs.findFirst.mockResolvedValue({
+      apiUrl: 'https://api.example.com/v1',
+      apiKey: encryptSecret('sk-your-api-key', 'system.platform_api_configs.apiKey'),
+      defaultModel: 'test-model'
+    })
+
+    const result = await new ReadinessService(main, system).check()
+
+    expect(result.ready).toBe(true)
+    expect(result.checks.aiConfiguration).toBe('warning')
+  })
+
+  it('#142：env 兜底 AI_API_KEY 为占位值时报 warning，真实 key 仍报 ok', async () => {
+    const { main, system } = createDatabases()
+    system.platform_api_configs.findFirst.mockResolvedValue({
+      apiUrl: 'https://api.example.com/v1',
+      apiKey: '',
+      defaultModel: 'test-model'
+    })
+
+    process.env.AI_API_KEY = 'sk-your-api-key'
+    const placeholderResult = await new ReadinessService(main, system).check()
+    expect(placeholderResult.checks.aiConfiguration).toBe('warning')
+
+    process.env.AI_API_KEY = 'sk-real-abc123def456'
+    const realResult = await new ReadinessService(main, system).check()
+    expect(realResult.checks.aiConfiguration).toBe('ok')
+  })
+
   it('平台 API Key 加密后仍会验证其可解密性', async () => {
     process.env.SECRET_ENCRYPTION_KEYS = `test:${Buffer.alloc(32, 7).toString('base64')}`
     process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID = 'test'
