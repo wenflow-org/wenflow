@@ -47,6 +47,7 @@ export interface StartupSequenceDeps {
   runPromptFileSeed(): Promise<void>;
   runFieldRoutingSeed(): Promise<void>;
   runAdminSeed(): Promise<void>;
+  runLearnerCardsSeed(): Promise<void>;
   purgeRetiredSkills(): Promise<void>;
   runSkillModelConfigSeed(): Promise<void>;
   initializeGateway(): Promise<EduClawGateway>;
@@ -92,8 +93,10 @@ export async function runStartupSequence(
   await deps.runPromptFileSeed();
   await deps.runFieldRoutingSeed();
   await deps.runAdminSeed();
-  // 预制 VL 启动播种已退役（2026-10-09 架构改版：卡库选角，空白项目零 VL 起步；
-  // 需要时显式调 runBuiltinVirtualLearnersSeed，见 bootstrap/seeds.ts）
+  // 默认卡库播种（2026-10-29 用户拍板：新部署开箱即有 200 张默认金标/边界卡；仅卡库为空时播种）。
+  // 卡库选角原则不变（2026-10-09）：播种的是「卡」，空白项目仍零 VL 实例起步；
+  // 预制 VL 实例播种保持退役，需要时显式调 runBuiltinVirtualLearnersSeed，见 bootstrap/seeds.ts。
+  await deps.runLearnerCardsSeed();
 
   await deps.purgeRetiredSkills();
   await deps.runSkillModelConfigSeed();

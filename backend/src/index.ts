@@ -35,6 +35,7 @@ import {
   runPromptFileSeed,
   runFieldRoutingSeed,
   runAdminSeed,
+  runLearnerCardsSeed,
   runSkillModelConfigSeed,
 } from './bootstrap/seeds';
 import { auditSensitiveStoragePermissions, refreshNetworkPolicyBootstrap } from './bootstrap/runtime-policy';
@@ -113,6 +114,7 @@ export async function startServer() {
       runPromptFileSeed: () => runPromptFileSeed(assertStartupActive),
       runFieldRoutingSeed: () => runFieldRoutingSeed(assertStartupActive),
       runAdminSeed: () => runAdminSeed(assertStartupActive),
+      runLearnerCardsSeed: () => runLearnerCardsSeed(assertStartupActive),
       purgeRetiredSkills,
       runSkillModelConfigSeed,
       initializeGateway,

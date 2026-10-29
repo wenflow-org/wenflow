@@ -30,6 +30,7 @@ function makeDeps(order: string[], overrides: Partial<StartupSequenceDeps> = {})
     runPromptFileSeed: asyncRecord('runPromptFileSeed'),
     runFieldRoutingSeed: asyncRecord('runFieldRoutingSeed'),
     runAdminSeed: asyncRecord('runAdminSeed'),
+    runLearnerCardsSeed: asyncRecord('runLearnerCardsSeed'),
     purgeRetiredSkills: asyncRecord('purgeRetiredSkills'),
     runSkillModelConfigSeed: asyncRecord('runSkillModelConfigSeed'),
     initializeGateway: (async () => {
@@ -64,6 +65,7 @@ const INIT_STEPS = [
   'runPromptFileSeed',
   'runFieldRoutingSeed',
   'runAdminSeed',
+  'runLearnerCardsSeed',
   'purgeRetiredSkills',
   'runSkillModelConfigSeed',
   'initializeGateway',
@@ -112,6 +114,7 @@ describe('startup-sequence（#143 端口先绑定，零写库副作用失败）'
     ]);
     expect(order).not.toContain('runPromptFileSeed');
     expect(order).not.toContain('runAdminSeed');
+    expect(order).not.toContain('runLearnerCardsSeed');
     expect(order).not.toContain('startOutboxWorker');
     expect(order).not.toContain('startMaintenanceSchedulers');
     expect(order).not.toContain('markReady');
