@@ -217,16 +217,18 @@ export function findAllProfilesForCardIndex() {
   });
 }
 
-/** 导出用：自建卡（presetKey 为空） */
+/** 导出用：自建卡（presetKey 为空）。
+ *  id 必带：纯档案模板卡没有 userId，随卡资料按 `card-<id>` 归属键读取（2026-10-29）。 */
 export function findCustomCardsForExport() {
   return prisma.virtual_learner_profiles.findMany({
     where: { presetKey: null },
-    select: { profile: true, learningGoal: true, knowledgeLevel: true, tags: true, notes: true, userId: true },
+    select: { id: true, profile: true, learningGoal: true, knowledgeLevel: true, tags: true, notes: true, userId: true },
   });
 }
 
 /** 卡墙索引取数（2026-10-05 卡库改版）：全部卡（预置+自建）带展示列与账号信息，新卡在前。
- *  known/struggleConcepts 供「卡 → 虚拟学习者」派生时随身份带走（2026-10-16）。 */
+ *  known/struggleConcepts 供「卡 → 虚拟学习者」派生时随身份带走（2026-10-16）。
+ *  2026-10-29：模板卡是纯档案，userId/users 均为空——展示名走档案内字段，不依赖账号。 */
 export function findProfilesForCardWall() {
   return prisma.virtual_learner_profiles.findMany({
     select: {

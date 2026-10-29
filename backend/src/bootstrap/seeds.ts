@@ -121,7 +121,7 @@ export interface LearnerCardsSeedDeps {
  * - 仅当卡库为空（virtual_learner_profiles 零行）时播种：已有库一律不动——部署方
  *   删掉的卡不会被重启复活，手工导入/ curated 过的库不会被覆盖。
  * - 幂等：importCards 按 cardKey 去重，走与手工导入完全相同的服务路径
- *   （enrich=false，零 LLM 调用；一张卡=系统账号+档案+故事池原子创建）。
+ *   （enrich=false，零 LLM 调用；一张卡=一份纯档案+故事池，不建账号——2026-10-29 拍板）。
  * - 卡库选角原则不变（2026-10-09）：播种的是「卡」，不产生任何 VL 实例。
  * - 可用 WENFLOW_SEED_LEARNER_CARDS=false 显式关闭；文件缺失（精简部署）不阻断启动。
  * - 失败不阻断启动（与内置预制同步同款 best-effort）。注意：若批次中部分卡失败，

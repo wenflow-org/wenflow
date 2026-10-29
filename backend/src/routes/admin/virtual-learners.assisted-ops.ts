@@ -481,7 +481,7 @@ router.post('/cards/validate', async (req: Request, res) => {
 });
 
 /**
- * 学习者卡库：导入（一张卡 = 账号 + 档案 + 故事池，结构化落库，不经编译链）
+ * 学习者卡库：导入（一张卡 = 纯档案 + 故事池，不建账号；结构化落库，不经编译链）
  * POST /api/admin/virtual-learners/cards/import
  * body: { content: string, format?: 'yaml' | 'json', enrich?: boolean, update?: boolean }
  */
@@ -521,7 +521,8 @@ router.get('/cards/export', async (_req: Request, res) => {
 
 /**
  * 卡墙索引（2026-10-05 卡库改版）：全部卡（预置+自建）的展示摘要。
- * 卡=账号拍板不变；「从卡库选人」= openSubPage('virtual', userId) 直达该学习者画像。
+ * 2026-10-29 卡库=身份池/纯档案（导入不建账号）：模板卡的 userId 为 null；
+ * 派生实例才有账号，前端按 profileId 派生/进详情，不再依赖卡片 userId 直达画像。
  * GET /api/admin/virtual-learners/cards/index
  */
 router.get('/cards/index', async (_req: Request, res) => {

@@ -1070,7 +1070,10 @@ model password_reset_tokens {
 
 model virtual_learner_profiles {
   id                    String             @id @default(uuid())
-  userId                String             @unique
+  // 卡库档案归属（2026-10-29 拍板：卡库不是账号，只是档案）：
+  // - 模板卡（导入/自建）= 纯档案，userId 为空，随卡资料存 card-<profileId> 目录；
+  // - 只有派生实例 / 预置实例才建账号（isVirtualLearner）。
+  userId                String?            @unique
   profile               String
   learningGoal          String
   knowledgeLevel        String
@@ -1090,7 +1093,7 @@ model virtual_learner_profiles {
   presetVersion         Int?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
-  users                 users              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  users                 users?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions              virtual_sessions[]
 
   @@index([userId])

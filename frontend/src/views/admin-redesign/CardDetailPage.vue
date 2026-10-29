@@ -50,7 +50,7 @@
       <div class="cd-pad">
         <div class="mk-facts mk-facts--rows">
           <div><span>学习目标</span><strong>{{ d.goal || '—' }}</strong></div>
-          <div><span>账号</span><strong class="mono">{{ d.email || '—' }}</strong></div>
+          <div><span>账号</span><strong class="mono">{{ d.email || '—（纯档案卡，无账号）' }}</strong></div>
           <div><span>创建时间</span><strong>{{ fmtDate(d.createdAt) }}</strong></div>
           <div><span>来源</span><strong>
             <template v-if="d.sourceRef"><a :href="d.sourceRef" target="_blank" rel="noopener" class="mk-link">{{ d.sourceRef }}</a></template>
@@ -71,7 +71,7 @@
         <div v-if="d.personaFacts.length" class="mk-facts mk-facts--rows">
           <div v-for="f in d.personaFacts" :key="f.label"><span>{{ f.label }}</span><strong>{{ personaValue(f.label, f.value) }}</strong></div>
         </div>
-        <p v-if="!d.background && !d.personaFacts.length" class="mk-empty--line">这张卡没有人设字段（可能是批次运行产物，仅有账号与目标）。</p>
+        <p v-if="!d.background && !d.personaFacts.length" class="mk-empty--line">这张卡没有人设字段（可能是批次运行产物，仅有目标）。</p>
       </div>
     </section>
 
@@ -156,7 +156,8 @@ const PRESET_SYNC_NOTE = '平台预置角色（卡库内「一键加载」同步
 
 interface CardDetail {
   profileId: string
-  userId: string
+  /** 模板卡是纯档案（2026-10-29），没有账号 → null */
+  userId: string | null
   cardKey: string | null
   name: string
   goal: string

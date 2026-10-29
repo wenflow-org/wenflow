@@ -147,7 +147,7 @@ const components: Record<string, unknown> = {
   'goal-conversations': GoalConversations,
   'learning-paths': LearningPaths,
   'virtual-learners': VirtualLearners,
-  // 学习者卡库（2026-10-01）：角色卡结构化导入/导出，卡=账号+档案+故事池，不经编译链
+  // 学习者卡库（2026-10-01，2026-10-29 修正）：角色卡结构化导入/导出，卡=纯档案+故事池（不建账号），不经编译链
   'virtual-learner-cards': VirtualLearnerCards,
   // 「批量实验」2026-10-04 下线（运行态并入 virtual-learners、资产输入归卡库；
   // 建页至今 batch_experiments 两表 0 行）；旧 URL 在 router 重定向到 /admin/virtual-learners

@@ -9,6 +9,7 @@ const mockProfileDelete = jest.fn()
 const mockUserDelete = jest.fn()
 const mockTransaction = jest.fn()
 const mockAuditCreate = jest.fn()
+const mockPurgeOwnerMaterials = jest.fn()
 const mockDeleteMany = (table: string) => jest.fn()
 
 const db: Record<string, { deleteMany: jest.Mock }> = {}
@@ -36,6 +37,11 @@ const tables = [
 for (const table of tables) {
   db[table] = { deleteMany: mockDeleteMany(table) }
 }
+
+jest.mock('../../../services/materials/material-store', () => ({
+  __esModule: true,
+  purgeOwnerMaterials: (ownerKey: string) => mockPurgeOwnerMaterials(ownerKey),
+}))
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -76,6 +82,7 @@ describe('VirtualCleanupService.cascadeDeleteProfile', () => {
     mockProfileDelete.mockResolvedValue({ id: 'profile-1' })
     mockUserDelete.mockResolvedValue({ id: 'user-1' })
     mockAuditCreate.mockResolvedValue({ id: 'audit-1' })
+    mockPurgeOwnerMaterials.mockReturnValue(0)
     for (const table of tables) {
       db[table].deleteMany.mockResolvedValue({ count: 0 })
     }
@@ -143,6 +150,7 @@ describe('VirtualCleanupService.cascadeDeleteProfile', () => {
     expect(JSON.parse(auditCall.beforeJson)).toEqual({
       profileId: 'profile-1',
       userId: 'user-1',
+      hasAccount: true,
       userName: 'virtual_a',
       userEmail: 'virtual_a@test.local'
     })
@@ -184,5 +192,32 @@ describe('VirtualCleanupService.cascadeDeleteProfile', () => {
     await expect(service.cascadeDeleteProfile('profile-1')).rejects.toThrow('database is locked')
     expect(mockAuditCreate).not.toHaveBeenCalled()
     expect(mockUserDelete).not.toHaveBeenCalled()
+  })
+
+  /* 2026-10-29 卡库不是账号：模板卡是纯档案（userId=null），删除时只删档案 + 卡归属键资料目录 */
+  it('无账号纯档案卡：删档案 + 清理卡归属键资料目录，不删 users、不触发真实用户保护', async () => {
+    mockProfileFindUnique.mockResolvedValue({ id: 'profile-1', userId: null, users: null })
+    mockPurgeOwnerMaterials.mockReturnValue(3)
+
+    const manifest = await service.cascadeDeleteProfile('profile-1', { adminId: 'admin-1' })
+
+    expect(manifest.userId).toBeNull()
+    expect(manifest.accountDeleted).toBe(false)
+    expect(manifest.materialsDeleted).toBe(3)
+    expect(mockProfileDelete).toHaveBeenCalledWith({ where: { id: 'profile-1' } })
+    expect(mockUserDelete).not.toHaveBeenCalled()
+    expect(mockPurgeOwnerMaterials).toHaveBeenCalledWith('card-profile-1')
+    // 无 userId 时不做任何 userId 维度的清库（避免 where userId:null 误伤）
+    expect(db.teaching_sessions.deleteMany).not.toHaveBeenCalled()
+    expect(db.learning_paths.deleteMany).not.toHaveBeenCalled()
+    expect(mockSessionDeleteMany).toHaveBeenCalledWith({ where: { virtualProfileId: 'profile-1' } })
+    expect(mockAuditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+      action: 'virtual-cascade-delete',
+      targetId: 'profile-1',
+      success: true
+    }) })
+    const after = JSON.parse((mockAuditCreate.mock.calls[0][0] as any).data.afterJson)
+    expect(after.deletedMaterials).toBe(3)
+    expect(after.accountDeleted).toBe(false)
   })
 })

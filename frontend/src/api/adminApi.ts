@@ -1830,7 +1830,7 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post('/admin/virtual-learners/cards/validate', data);
   },
 
-  /** 学习者卡库：导入卡文档（一张卡 = 账号 + 档案 + 故事池；enrich 走 persona-designer 富化） */
+  /** 学习者卡库：导入卡文档（一张卡 = 纯档案 + 故事池，不建账号；enrich 走 persona-designer 富化） */
   cardsImport: async (data: { content: string; format?: 'yaml' | 'json'; enrich?: boolean; update?: boolean }) => {
     // enrich=true 时逐卡调用 persona-designer skill，上游慢：放宽到 AI 请求超时
     return adminAxios.post('/admin/virtual-learners/cards/import', data, { timeout: AI_REQUEST_TIMEOUT });

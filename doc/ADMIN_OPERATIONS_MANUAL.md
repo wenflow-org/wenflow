@@ -42,7 +42,7 @@
 | 教学 | `/admin/learning-paths` | 学习路径 | 路径治理：下线/恢复/删除、状态分布 | `OpsContent.vue` |
 | 教学 | `/admin/memory-review` | 记忆与复习 | FSRS 到期积压、课内温故计划、概念归并审计 | `MemoryReview.vue` |
 | 虚拟学习者 | `/admin/virtual-learners` | 虚拟学习者 | 合成画像压测教学闭环、运行/批量新建/回收 | `VirtualLearners.vue` |
-| 虚拟学习者 | `/admin/virtual-learner-cards` | 学习者卡库 | 角色卡（账号+档案+故事池）导入导出 | `VirtualLearnerCards.vue` |
+| 虚拟学习者 | `/admin/virtual-learner-cards` | 学习者卡库 | 角色卡（纯档案+故事池，不建账号）导入导出 | `VirtualLearnerCards.vue` |
 | Skill | `/admin/orchestrator` | 编排图 | 顶层 Agent 数据流转、字段血缘、治理 | `Orchestrator.vue` |
 | Skill | `/admin/skills` | Skill 与提示词 | Skill 运行、Prompt 评估（批量模型配置在页头弹窗） | `Skills.vue` |
 | 观测 | `/admin/execution-logs` | 执行日志 | Skill 执行日志 + Trace 链路、失败定位 | `ExecLogs.vue` |
@@ -414,7 +414,7 @@
 | 页面 | 路由 | 职责 | 关键口径（代码） |
 |---|---|---|---|
 | 虚拟学习者 | `/admin/virtual-learners` | 合成画像运行/批量新建/回收 | KPI：完成率、失败率、并发、今日调用、速率（`VirtualLearners.vue:34-71`）。「活动会话」= 进行中 + 创建中（含卡死），全库口径。「回收卡死（N）」先干跑确认清单再把卡死会话批量标失败（写操作）（`VirtualLearners.vue:13-17, 624-637`） |
-| 学习者卡库 | `/admin/virtual-learner-cards` | 角色卡导入/导出（账号+档案+故事池，不经编译链） | 卡库导出接口计数「当前自建卡 N 张」；YAML 卡片表单（`VirtualLearnerCards.vue:5-47`） |
+| 学习者卡库 | `/admin/virtual-learner-cards` | 角色卡导入/导出（纯档案+故事池，不建账号，不经编译链） | 卡库导出接口计数「当前自建卡 N 张」；YAML 卡片表单（`VirtualLearnerCards.vue:5-47`） |
 | 编排图 | `/admin/orchestrator` | 顶层 Agent 数据流转/字段血缘/治理 | 页签：总览 / 字段旅程 / 字段路由 / 治理（`?tab=` 兼容）。KPI：阶段、Skill、阶段交接、未解析、哈希漂移（`Orchestrator.vue:15-33, 271-276`） |
 | Skill 与提示词 | `/admin/skills` | Skill 目录 | 单视图，无页签（2026-10-25 Prompt 评估拆为独立页）。旧 `?tab=model-routing` 打开页头「批量模型配置」弹窗并收敛为 `?tab=run`；旧 `?tab=prompt-eval` 改投 `/admin/prompt-eval`。KPI：Skill 数、live 数、成功率、平均耗时、空闲（`Skills.vue`） |
 | Prompt 评估 | `/admin/prompt-eval` | 提示词质量评测：用例集 + 历史运行 | 页签：`cases` / `runs`（`?peTab=`；旧 `?tab=cases|runs` 就地改写为 `?peTab=`）。页头「批量跑评估」经面板 `defineExpose` 驱动。KPI：最近评测通过率、评估用例、启用用例、评估历史（`PromptEval.vue`） |

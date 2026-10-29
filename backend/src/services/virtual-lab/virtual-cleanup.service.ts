@@ -6,6 +6,8 @@
  *
  * 设计决策（VLAB_DATA_SURVEY R3 方案 a：虚拟数据可再生成，级联删除）：
  * - 仅限 isVirtualLearner 用户；真实用户数据一律不触碰（409 保护）。
+ *   2026-10-29 卡库不是账号：无账号的纯档案模板卡（userId=null）不触发该保护——
+ *   只删档案 + 卡归属键（card-<profileId>）资料目录，不删 users 行。
  * - 显式删除无 users 外键的孤儿表（learner_evidence / learner_projections / memory_traces /
  *   agent_call_logs / prompt_call_logs / llm_execution_attempts / goal_scheduling_ledger /
  *   domain_event_outbox / virtual_quick_learn_runs / prediction_records /
@@ -19,10 +21,17 @@ import prisma from '../../config/database';
 import type { PrismaClient } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import { runWithTransaction } from '../../utils/with-transaction';
+import { purgeOwnerMaterials } from '../materials/material-store';
+import { cardOwnerKey } from './card-owner-key';
 
 export interface CascadeDeleteManifest {
   profileId: string;
-  userId: string;
+  /** 账号 id：纯档案模板卡（2026-10-29 卡库不是账号）为 null */
+  userId: string | null;
+  /** 是否真的删掉了一个 users 行（无账号 / 非虚拟账号保护时为 false） */
+  accountDeleted: boolean;
+  /** 清理掉的随卡/账号资料文件数（正文 + 记录 + 向量侧车） */
+  materialsDeleted: number;
   virtualSessions: string[];
   teachingSessions: number;
   learningPaths: number;
@@ -99,7 +108,7 @@ export class VirtualCleanupService {
   }
 
   /**
-   * 删除虚拟学习者（profile + user）并级联清理其全部虚拟数据。
+   * 删除虚拟学习者（profile + user；纯档案卡只有 profile）并级联清理其全部虚拟数据。
    * 返回清理清单（各表删除量 + 会话 id 列表），写审计记录。
    */
   async cascadeDeleteProfile(
@@ -116,8 +125,9 @@ export class VirtualCleanupService {
 
     const userId = profile.userId;
     const user = profile.users;
-    // 硬约束：级联删除仅限 isVirtualLearner，真实用户不可删
-    if (!user?.isVirtualLearner) {
+    // 硬约束：级联删除仅限 isVirtualLearner，真实用户不可删。
+    // 2026-10-29：无账号的纯档案模板卡（userId=null）不触发该保护——它本来就没有账号可删。
+    if (userId && user && !user.isVirtualLearner) {
       logger.warn('[virtual-cleanup] 拒绝删除非虚拟学习者', {
         profileId,
         userId,
@@ -134,6 +144,7 @@ export class VirtualCleanupService {
     const before = {
       profileId,
       userId,
+      hasAccount: Boolean(user),
       userName: user?.name ?? null,
       userEmail: user?.email ?? null
     };
@@ -147,6 +158,8 @@ export class VirtualCleanupService {
       const result: CascadeDeleteManifest = {
         profileId,
         userId,
+        accountDeleted: false,
+        materialsDeleted: 0,
         virtualSessions: sessions.map(s => s.id),
         teachingSessions: 0,
         learningPaths: 0,
@@ -169,42 +182,63 @@ export class VirtualCleanupService {
         llmExecutionAttempts: 0
       };
 
-      // 1) 无 users 外键的孤儿表：按 userId 显式清理
-      result.learnerEvidence = (await tx.learner_evidence.deleteMany({ where: { userId } })).count;
-      result.learnerProjections = (await tx.learner_projections.deleteMany({ where: { userId } })).count;
-      result.memoryTraces = (await tx.memory_traces.deleteMany({ where: { userId } })).count;
-      result.predictionRecords = (await tx.prediction_records.deleteMany({ where: { userId } })).count;
-      result.misconceptionLedger = (await tx.misconception_ledger.deleteMany({ where: { userId } })).count;
-      result.quickLearnRuns = (await tx.virtual_quick_learn_runs.deleteMany({ where: { userId } })).count;
-      result.goalSchedulingLedger = (await tx.goal_scheduling_ledger.deleteMany({ where: { userId } })).count;
-      result.domainEventOutbox = (await tx.domain_event_outbox.deleteMany({ where: { userId } })).count;
-      result.agentCallLogs = (await tx.agent_call_logs.deleteMany({ where: { userId } })).count;
-      result.promptCallLogs = (await tx.prompt_call_logs.deleteMany({ where: { userId } })).count;
-      result.llmExecutionAttempts = (await tx.llm_execution_attempts.deleteMany({ where: { userId } })).count;
+      // 以下按 userId 清理的步骤只对「有账号」的档案执行：
+      // 纯档案模板卡（userId=null）没有账号，也不会有关联的学习数据；跳过避免 where userId:null 误伤。
+      if (userId) {
+        // 1) 无 users 外键的孤儿表：按 userId 显式清理
+        result.learnerEvidence = (await tx.learner_evidence.deleteMany({ where: { userId } })).count;
+        result.learnerProjections = (await tx.learner_projections.deleteMany({ where: { userId } })).count;
+        result.memoryTraces = (await tx.memory_traces.deleteMany({ where: { userId } })).count;
+        result.predictionRecords = (await tx.prediction_records.deleteMany({ where: { userId } })).count;
+        result.misconceptionLedger = (await tx.misconception_ledger.deleteMany({ where: { userId } })).count;
+        result.quickLearnRuns = (await tx.virtual_quick_learn_runs.deleteMany({ where: { userId } })).count;
+        result.goalSchedulingLedger = (await tx.goal_scheduling_ledger.deleteMany({ where: { userId } })).count;
+        result.domainEventOutbox = (await tx.domain_event_outbox.deleteMany({ where: { userId } })).count;
+        result.agentCallLogs = (await tx.agent_call_logs.deleteMany({ where: { userId } })).count;
+        result.promptCallLogs = (await tx.prompt_call_logs.deleteMany({ where: { userId } })).count;
+        result.llmExecutionAttempts = (await tx.llm_execution_attempts.deleteMany({ where: { userId } })).count;
+      }
 
-      // 2) 虚拟会话（实验租约/命令经 FK 级联一并清除）
+      // 2) 虚拟会话（按 profileId；实验租约/命令经 FK 级联一并清除）——有账号/无账号都要清
       await tx.virtual_sessions.deleteMany({ where: { virtualProfileId: profileId } });
 
-      // 3) 教学会话（虚拟数据无业务保留价值，方案 a 级联删除；finalization 操作经 FK 级联）
-      result.teachingSessions = (await tx.teaching_sessions.deleteMany({ where: { userId } })).count;
+      if (userId) {
+        // 3) 教学会话（虚拟数据无业务保留价值，方案 a 级联删除；finalization 操作经 FK 级联）
+        result.teachingSessions = (await tx.teaching_sessions.deleteMany({ where: { userId } })).count;
 
-      // 4) 学习路径（milestones → subtasks / generation runs → stage items 经 FK 级联）
-      result.learningPaths = (await tx.learning_paths.deleteMany({ where: { userId } })).count;
+        // 4) 学习路径（milestones → subtasks / generation runs → stage items 经 FK 级联）
+        result.learningPaths = (await tx.learning_paths.deleteMany({ where: { userId } })).count;
 
-      // 5) 其余有 users FK 的学习数据
-      result.goalConversations = (await tx.goal_conversations.deleteMany({ where: { userId } })).count;
-      result.learningGoals = (await tx.learning_goals.deleteMany({ where: { userId } })).count;
-      result.learningMetrics = (await tx.learning_metrics.deleteMany({ where: { userId } })).count;
-      result.achievements = (await tx.achievements.deleteMany({ where: { userId } })).count;
-      result.contentFeedback = (await tx.content_feedback.deleteMany({ where: { userId } })).count;
-      result.projectionAccessGrants = (await tx.projection_access_grants.deleteMany({ where: { userId } })).count;
+        // 5) 其余有 users FK 的学习数据
+        result.goalConversations = (await tx.goal_conversations.deleteMany({ where: { userId } })).count;
+        result.learningGoals = (await tx.learning_goals.deleteMany({ where: { userId } })).count;
+        result.learningMetrics = (await tx.learning_metrics.deleteMany({ where: { userId } })).count;
+        result.achievements = (await tx.achievements.deleteMany({ where: { userId } })).count;
+        result.contentFeedback = (await tx.content_feedback.deleteMany({ where: { userId } })).count;
+        result.projectionAccessGrants = (await tx.projection_access_grants.deleteMany({ where: { userId } })).count;
+      }
 
-      // 6) 画像 + 用户本体（subtasks 已随 learning_paths 级联删除，usersId NoAction 外键不残留）
+      // 6) 画像必删；用户本体只在确实有虚拟账号时删（纯档案卡无 users 行）
       await tx.virtual_learner_profiles.delete({ where: { id: profileId } });
-      await tx.users.delete({ where: { id: userId } });
+      if (userId && user?.isVirtualLearner) {
+        await tx.users.delete({ where: { id: userId } });
+        result.accountDeleted = true;
+      }
 
       return result;
     });
+
+    // 7) 资料目录（文件系统，事务外）：有账号清理账号目录；纯档案卡清理卡归属键目录
+    try {
+      manifest.materialsDeleted = purgeOwnerMaterials(userId ?? cardOwnerKey(profileId));
+    } catch (error) {
+      // 资料目录清理失败不阻断档案删除（与审计写入同约定：仅告警）
+      logger.warn('[virtual-cleanup] 资料目录清理失败', {
+        profileId,
+        ownerKey: userId ?? cardOwnerKey(profileId),
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
 
     await this.writeAudit(operator, profileId, before, manifest);
     logger.info('[virtual-cleanup] 虚拟学习者级联删除完成', {
@@ -231,7 +265,9 @@ export class VirtualCleanupService {
       deletedPredictionRecords: manifest.predictionRecords,
       deletedMisconceptions: manifest.misconceptionLedger,
       deletedLogs: manifest.agentCallLogs + manifest.promptCallLogs,
-      deletedLlmAttempts: manifest.llmExecutionAttempts
+      deletedLlmAttempts: manifest.llmExecutionAttempts,
+      deletedMaterials: manifest.materialsDeleted,
+      accountDeleted: manifest.accountDeleted
     };
     try {
       await this.database.admin_audit_logs.create({

@@ -2,7 +2,8 @@
   <div :class="embedded ? 'vlc-embedded' : 'mk-page'">
     <!-- 页头（mk-pagehead 标准形态）：标题+口径副文+导出+导入。
          2026-10-05 卡库改版（用户「有卡啊得，导入是功能，卡展示也是，方便从卡库选人到虚拟学习者」）：
-         页面主体=卡墙——卡=账号拍板不变（导入即建号），卡墙只列身份卡（实例归虚拟学习者）。
+         页面主体=卡墙——卡库是身份池/纯档案（2026-10-29：导入只建档案，不建账号），
+         卡墙只列身份卡（实例归虚拟学习者）；从卡库派生时才建立账号。
          2026-10-06 二级页化（用户不喜欢抽屉设计）：点卡=卡详情二级页（?view=card&id=<profileId>）、
          导入=卡导入二级页（?view=card-import），本页两个 mk-drawer 全退役，走 SkillDetail/PathDetail
          家族的标准二级页机制（detailComponents 全局渲染，跨 scene 可用）。 -->
@@ -235,7 +236,8 @@ function goInstances() {
 
 interface CardWallEntry {
   profileId: string
-  userId: string
+  /** 模板卡是纯档案（2026-10-29），没有账号 → null */
+  userId: string | null
   cardKey: string | null
   name: string
   goal: string

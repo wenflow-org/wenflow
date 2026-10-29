@@ -1,4 +1,4 @@
-import { parseCardDocument, validateCard, resolveCardKey, ensureCardKey, buildCardWallEntries, buildCardTaskGroups, storyIdOf, cleanDisplayName, deriveCardNickname, stripWaveTags, mergeEnrichedPersonaSeed, type LearnerCard } from '../card-import.service';
+import { parseCardDocument, validateCard, resolveCardKey, ensureCardKey, buildCardWallEntries, buildCardTaskGroups, storyIdOf, cleanDisplayName, deriveCardNickname, stripWaveTags, mergeEnrichedPersonaSeed, cardOwnerKey, type LearnerCard } from '../card-import.service';
 
 function emptyIndex() {
   return { byKey: new Map<string, string>(), refs: new Map<string, string[]>(), seenInDoc: new Set<string>() };
@@ -299,6 +299,42 @@ describe('card-import：卡墙索引映射（buildCardWallEntries，2026-10-05 �
   it('预置卡 preset=true', () => {
     const [p] = buildCardWallEntries([row({ presetKey: 'retiree-photography' })]);
     expect(p.preset).toBe(true);
+  });
+
+  /* 2026-10-29 卡库不是账号：模板卡 userId=null、users 关联为 null，展示名不得依赖账号 */
+  it('users=null 的纯档案卡：展示链走 nickname → nameHint → cardKey，userId 原样为 null', () => {
+    const [byNickname] = buildCardWallEntries([row({
+      userId: null,
+      users: null,
+      profile: JSON.stringify({ personaSeed: { nickname: '想啃西瓜书的研究生', nameHint: '研究生' }, cardKey: 'k-nick' }),
+    })]);
+    expect(byNickname.userId).toBeNull();
+    expect(byNickname.name).toBe('想啃西瓜书的研究生');
+    expect(byNickname.email).toBeNull();
+
+    const [byHint] = buildCardWallEntries([row({
+      userId: null,
+      users: null,
+      profile: JSON.stringify({ personaSeed: { nameHint: '高一学生' }, cardKey: 'k-hint' }),
+    })]);
+    expect(byHint.name).toBe('高一学生');
+
+    // 无 nickname / nameHint：回退 cardKey；坏 JSON 也从 tags 兜底出 key
+    const [byKey] = buildCardWallEntries([row({
+      userId: null,
+      users: null,
+      profile: JSON.stringify({ cardKey: 'k-only-key' }),
+    })]);
+    expect(byKey.name).toBe('k-only-key');
+
+    const [badJson] = buildCardWallEntries([row({ userId: null, users: null, profile: '{oops' })]);
+    expect(badJson.cardKey).toBe('w6-math-01');
+    expect(badJson.name).toBe('w6-math-01');
+    expect(badJson.email).toBeNull();
+  });
+
+  it('cardOwnerKey：card-<profileId>（material-store 会清洗非法字符，uuid 安全）', () => {
+    expect(cardOwnerKey('ab12cd34-1111-2222-3333-444455556666')).toBe('card-ab12cd34-1111-2222-3333-444455556666');
   });
 });
 
