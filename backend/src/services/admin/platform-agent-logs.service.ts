@@ -89,7 +89,9 @@ export async function fetchAgentLogStats(params: {
      结果随 stats 进程内缓存，代价被 SWR 摊平。取 where（canaryFiltered 时显式补 canary 排除）
      与下方失败行拉取同构：两种调用形态（路由默认视图/预热）下 where 均已含排除子句，
      与 statsWhere 的主口径逐行等价。 */
-  const latencyWhere: any = { ...where, success: true, durationMs: { not: null } };
+  // durationMs 是非空列（schema: Int @default(0)）——不能用 `not: null`（真实 Prisma 会抛
+  // Argument `not` must not be null，整条 stats 500）；gte: 0 与前端样本口径的「非负」一致。
+  const latencyWhere: any = { ...where, success: true, durationMs: { gte: 0 } };
   if (canaryFiltered) {
     latencyWhere.AND = [...(Array.isArray(latencyWhere.AND) ? latencyWhere.AND : []), { sourceEntry: { not: canarySourceEntry } }];
   }

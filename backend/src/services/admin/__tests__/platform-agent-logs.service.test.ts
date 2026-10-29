@@ -137,7 +137,9 @@ describe('fetchAgentLogStats：latencyPercentiles（全窗延迟分位，M-3）'
     const latencyArgs = durationFindMany.mock.calls[0][0]
     expect(latencyArgs.select).toEqual({ durationMs: true })
     expect(latencyArgs.where.success).toBe(true)
-    expect(latencyArgs.where.durationMs).toEqual({ not: null })
+    // 回归钉死（2026-10-29 线上 500）：durationMs 是非空列，`not: null` 会让真实 Prisma
+    // 抛 Argument `not` must not be null（mock 单测测不出），必须用 gte: 0 表达「非负」。
+    expect(latencyArgs.where.durationMs).toEqual({ gte: 0 })
     expect(latencyArgs.where.calledAt).toEqual({ gte: new Date('2026-10-29T00:00:00Z') })
     expect(latencyArgs.where.AND).toEqual([{ sourceEntry: { not: 'system-canary' } }, { sourceEntry: { not: 'system-canary' } }])
   })
