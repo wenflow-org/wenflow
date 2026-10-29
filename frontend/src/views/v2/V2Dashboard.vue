@@ -142,16 +142,16 @@
             </div>
           </section>
 
-          <!-- 生成中：等待态（区别于失败红卡，禁用重试） -->
+          <!-- 生成中：等待态（区别于失败红卡，禁用重试）。
+               状态只在标题讲一次：原眉标「路径生成中」+ 标题「路径正在生成」+ 青色 tag「正在生成」
+               是三处同义（2026-10-29 全站副文审计）；眉标只留来源路径。 -->
           <section v-else-if="pageState === 'generating'" class="card action action--gen">
             <div class="action__eyebrow">
-              <span>路径生成中</span>
               <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
             </div>
             <h2 class="action__title">路径正在生成，稍等一下</h2>
-            <p class="action__desc">生成一般需要几分钟。模型重试时会更久。这一页会自动检查进度，完成后直接出现今日行动。你也可以先去别的页面看看。</p>
+            <p class="action__desc">生成一般需要几分钟，完成后会直接出现今日行动。你也可以先去别的页面看看。</p>
             <div class="action__meta">
-              <span class="tag tag--cyan">正在生成</span>
               <span class="tag">信息已保留</span>
             </div>
             <div class="action__footer">
@@ -960,7 +960,8 @@ const agendaMeta = computed(() => {
 /** 激励行（原 side-stack mini 卡内容压平）：天数已在问候栏 pill，这里只给行动建议 */
 const streakNote = computed(() => {
   if (streakDays.value > 0) return todayMinutes.value > 0 ? '连续记录保住了，继续保持' : '今天还没点亮 · 学一会儿就能续上';
-  return '今天学 10 分钟，开始连续记录';
+  // 0 天时用条件句，避免「今天学 10 分钟」被读成「今天已学 10 分钟」与 0 分钟打架
+  return `今日学满 10 分钟，即可点亮第 1 天连续记录（当前 ${Math.min(todayMinutes.value, 10)}/10 分钟）`;
 });
 /* P1-6（2026-10-04）：「还剩约 N 分钟」句尾已撤（0/30 镜像复读且 nowrap 下把「去处理」推出视口），
    todayRemaining 计算随之退役 */
@@ -1434,7 +1435,6 @@ onMounted(loadAll);
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
 .tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); border-color: color-mix(in srgb, var(--blue) 30%, transparent); color: var(--blue-deep); }
-.tag--cyan { background: color-mix(in srgb, var(--cyan) 12%, transparent); border-color: color-mix(in srgb, var(--cyan) 35%, transparent); color: var(--cyan-ink); }
 .tag--red { background: color-mix(in srgb, var(--wf-color-danger) 10%, transparent); border-color: color-mix(in srgb, var(--wf-color-danger) 35%, transparent); color: var(--red-ink); }
 .action__footer { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
 /* 行动卡 foot（原型 wf-action__foot 345-349）：grid，今日进度行在按钮行**上方**。
@@ -1497,11 +1497,9 @@ onMounted(loadAll);
 }
 
 /* ---------- 路径进度卡 ---------- */
-/* 走查 2026-10-08 #73：.dash__grid-main 是 align-items:stretch 的等高双列，路径卡
-   内容比左侧行动卡短，被拉到同高后中部留出 130–158px 纯空白，读起来像没加载完。
-   align-self:start 让本卡按内容定高，不再被左卡撑高（.path__foot 的 margin-top:auto
-   在自然高下不再产生内部空档）。 */
-.path { padding: 16px; display: flex; flex-direction: column; gap: 14px; align-self: start; }
+/* 双列等高：右侧路径卡随左卡拉齐底边，避免下方留 100px+ 凹陷（2026-10-29 外部评审）。
+   卡内用 space-between 把尾部动作压到底部，空白集中在中段而不是页面上。 */
+.path { padding: 16px; display: flex; flex-direction: column; gap: 14px; align-self: stretch; justify-content: space-between; }
 .path__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .path__title strong { font-size: 16px; }
 .path__sub { display: block; margin-top: 3px; font-size: 12px; color: var(--faint); }

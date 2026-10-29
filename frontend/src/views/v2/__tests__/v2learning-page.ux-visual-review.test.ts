@@ -107,9 +107,10 @@ describe('检查点标题不再重复截断题干（#18）', () => {
     expect(fn, '没有用 startsWith 判定前缀').toContain('question.startsWith(stem)');
   });
 
-  it('模板只渲染去重后的标题与题干', () => {
-    expect(source).toContain('{{ checkpointHeading }}');
+  it('模板只渲染去重后的标题与题干，题干走 markdown', () => {
+    expect(source).toContain('v-html="formatMessage(checkpointHeading)"');
     expect(source).toContain('v-if="checkpointDetail"');
+    expect(source).toContain('v-html="formatMessage(checkpointDetail)"');
   });
 });
 

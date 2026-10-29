@@ -72,7 +72,9 @@
       <div class="mk-card__head">
         <div class="oh-wb-head">
           <h4 class="mk-card__title">待办</h4>
-          <span class="mk-card__meta">{{ wbLoading && !stats ? '正在拉取待办…' : todoConclusion }}</span>
+          <!-- 卡头只留空态没有的结论（待处理件数 / 加载失败）；全清零时留空——
+               页级四个 0 与下方空态已经把「都处理完了」讲清，第三次上屏只是复读。 -->
+          <span v-if="todoHeadMeta" class="mk-card__meta">{{ todoHeadMeta }}</span>
         </div>
       </div>
       <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="3" />
@@ -97,8 +99,8 @@
         <div v-else class="oh-queue__empty">
           <CheckCircle2 :size="20" :stroke-width="1.8" aria-hidden="true" />
           <div>
+            <!-- 只留结论：清零的是哪四类，页级读数带四张 0 卡已经写明，不再逐项复述 -->
             <strong>没有待处理项</strong>
-            <span>反馈、路径、事件和公告都已处理完。</span>
           </div>
         </div>
         <!-- 清零项压缩成一行，保留「哪些已经没事」的信息 -->
@@ -454,7 +456,9 @@ const activeTodo = computed(() =>
 const clearedTodo = computed(() => todoItems.value.filter((t) => !t.failed && t.count === 0))
 const clearedNames = computed(() => clearedTodo.value.map((t) => t.label).join(' · '))
 
-/** 卡头结论句：三态纪律——首屏未拉回前不得渲染「全部已清零」（取不到 ≠ 没事） */
+/** 卡头结论句：三态纪律——首屏未拉回前不得渲染「全部已清零」（取不到 ≠ 没事）。
+ *  全清零返回空串：结论由页级四个 0 与卡内空态承担，卡头不再第三次复读
+ *  （2026-10-29 冗余副文审计：同一屏曾出现「四个 0 + 全部已清零 + 没有待处理项 + 四类点名」）。 */
 const todoConclusion = computed(() => {
   const pendingItems = todoItems.value.filter((t) => t.count > 0 && !t.failed)
   const pending = pendingItems.length
@@ -462,9 +466,13 @@ const todoConclusion = computed(() => {
   if (wbHasError.value) {
     return pending ? `${pending} 类 · ${total} 件待处理。另有部分待办加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
   }
-  if (!pending) return '运营待办全部已清零'
+  if (!pending) return ''
   return `${pending} 项待处理（${pending} 类 · ${total} 件）`
 })
+/** 卡头可见副文：加载注记优先，其余交给 todoConclusion（空串 = 不渲染）。 */
+const todoHeadMeta = computed(() =>
+  wbLoading.value && !stats.value ? '正在拉取待办…' : todoConclusion.value
+)
 
 /**
  * 待办读数的值色分档：按事项严重度分档，不把 bad/warn 压成一个布尔——

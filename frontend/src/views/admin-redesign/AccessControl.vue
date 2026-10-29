@@ -36,8 +36,9 @@
                2026-10-27 用户「重新设计一下」：原 ○/● 行内单选看不出选中面积，也读不出各档差异。 -->
           <section class="ac-section">
             <div class="ac-section__head">
+              <!-- 段标题已是一个问题，下面三张卡的描述各自给出后果；再补一句「按来源地址限制」
+                   只是把「来源」换种说法讲一遍（2026-10-29 冗余副文审计） -->
               <h4 class="ac-section__title">谁能连接后台</h4>
-              <span class="ac-section__hint">按来源地址限制管理端入口</span>
             </div>
             <div class="ac-modes" role="radiogroup" aria-label="访问来源模式" @keydown="onAccessKeydown">
               <button

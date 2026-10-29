@@ -139,7 +139,8 @@
               </label>
             </div>
             <label v-if="editKind === 'embedding'" class="mk-field">
-              <span class="mk-field__label">向量维度（可选）</span>
+              <!-- 非必填不补「（可选）」：占位符「留空由上游返回」已说明留空后果 -->
+              <span class="mk-field__label">向量维度</span>
               <input v-model.number="form.dimensions" class="mk-field__input" type="number" min="1" max="16384" placeholder="留空由上游返回" />
             </label>
           </div>

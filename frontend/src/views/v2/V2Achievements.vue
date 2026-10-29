@@ -1,6 +1,8 @@
 <template>
-  <CapabilityShell title="成就" description="查看你的学习里程碑，每一次小进步都算数。">
-    <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题 + 说明） -->
+  <!-- 页头副文「查看你的学习里程碑，每一次小进步都算数。」已撤（2026-10-29 全站副文审计）：
+       标题「成就」+ 概览行的 N/M 与成就卡本身就说明了这页是什么，副文只是再讲一遍 -->
+  <CapabilityShell title="成就">
+    <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题） -->
     <div class="ach__body">
       <!-- 加载中 -->
       <div v-if="loading" class="ach__loading">

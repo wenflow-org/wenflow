@@ -342,13 +342,15 @@
               <span class="mk-field__label">单步最大重试</span>
               <input v-model.number="budgetForm.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" @input="budgetDirty = true" />
               <span v-if="budgetErrors.maxRetriesPerStep" class="mk-field__err">{{ budgetErrors.maxRetriesPerStep }}</span>
-              <span class="mk-field__hint">每次模型调用失败后的自动重试次数（一个教学回合包含多次模型调用）</span>
+              <!-- 提示只留填入这个数要知道的事：单步重试的计数单位由标签与上限表达，
+                   不再解释「一个教学回合包含多次调用」这类机制（2026-10-29 冗余副文审计） -->
+              <span class="mk-field__hint">每次模型调用失败后的自动重试次数</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.maxRetriesTotal }">
               <span class="mk-field__label">{{ BUDGET_TOTAL_LABEL }}</span>
               <input v-model.number="budgetForm.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" @input="budgetDirty = true" />
               <span v-if="budgetErrors.maxRetriesTotal" class="mk-field__err">{{ budgetErrors.maxRetriesTotal }}</span>
-              <span class="mk-field__hint">单个运行累计 AI 调用（含重试）达到上限即终止，防止无限跑下去。故事可单独覆盖</span>
+              <span class="mk-field__hint">单个运行累计 AI 调用（含重试）达到上限即终止，故事可单独覆盖</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.turnCapPerLesson }">
               <span class="mk-field__label">每课回合上限</span>
@@ -849,7 +851,9 @@
           <button type="button" class="mk-modal__close" aria-label="关闭" :disabled="genBusy" @click="genOpen = false">✕</button>
         </div>
         <div class="mk-modal__body">
-          <p class="vp-gen__intro">基于「{{ d?.name }}」的画像、最近运行与学习记忆生成。生成后直接进入故事池，可立即运行。</p>
+          <!-- 只留「生成依据」这一条会改变判断的事实；「生成后进入故事池、可立即运行」
+               是生成完成后一眼可见的结果，不再预言（2026-10-29 冗余副文审计） -->
+          <p class="vp-gen__intro">基于「{{ d?.name }}」的画像、最近运行与学习记忆生成。</p>
 
           <div class="vp-gen__group" role="radiogroup" aria-label="故事样本">
             <span class="mk-field__label">故事样本</span>
@@ -880,7 +884,8 @@
           </div>
 
           <label class="mk-field">
-            <span class="mk-field__label">生成方向（可选）</span>
+            <!-- 非必填不补「（可选）」：占位符已举出方向示例，留空规则写在下方提示 -->
+            <span class="mk-field__label">生成方向</span>
             <input
               v-model="genForm.direction"
               class="mk-field__input"

@@ -1,5 +1,5 @@
 <template>
-  <figure class="teaching-diagram">
+  <figure class="teaching-diagram" :class="{ 'teaching-diagram--dark': isDark }">
     <button
       type="button"
       ref="hostRef"
@@ -15,7 +15,7 @@
     <!-- 放大层：宽图在窄卡里按原尺寸横向滚动仍嫌小，点开满屏可读 -->
     <Teleport to="body">
       <div v-if="zoomed" class="diagram-zoom" role="dialog" aria-modal="true" aria-label="结构图放大" @click="closeZoom">
-        <div ref="zoomRef" class="diagram-zoom__canvas" :class="{ 'diagram-zoom__canvas--fit': zoomFit }" @click.stop></div>
+        <div ref="zoomRef" class="diagram-zoom__canvas" :class="{ 'diagram-zoom__canvas--fit': zoomFit, 'diagram-zoom__canvas--dark': isDark }" @click.stop></div>
         <div class="diagram-zoom__bar" @click.stop>
           <button type="button" class="diagram-zoom__btn" :aria-pressed="zoomFit" @click="zoomFit = !zoomFit">
             {{ zoomFit ? '原尺寸' : '适应屏幕' }}
@@ -38,6 +38,11 @@
  * 加载策略：mermaid 体积大，动态 import 单例懒加载；模块级串行队列防并发 run（对齐 MarkdownRenderer 先例）。
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useIsDark } from '@/composables/useIsDark';
+import { normalizeMermaidLabels } from '@/utils/mermaidCode';
+import { ensureMermaidConfig } from '@/utils/mermaidTheme';
+
+const isDark = useIsDark();
 
 const props = defineProps<{
   code: string;
@@ -52,32 +57,20 @@ const zoomed = ref(false);
 const zoomFit = ref(true);
 
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
-function loadMermaid() {
+async function loadMermaid() {
   if (!mermaidPromise) {
     mermaidPromise = import('mermaid')
-      .then((mod) => {
-        const mermaid = mod.default;
-        // 结构图通常浅底深线：neutral 主题在白卡上最清晰；课堂容器给浅色底（见样式）
-        // useMaxWidth:false —— 图按自然尺寸出，窄卡里横向滚动（默认 true 会把宽图整幅缩到看不清）
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: 'neutral',
-          securityLevel: 'strict',
-          flowchart: { useMaxWidth: false },
-          sequence: { useMaxWidth: false },
-          class: { useMaxWidth: false },
-          state: { useMaxWidth: false },
-          er: { useMaxWidth: false },
-        });
-        return mermaid;
-      })
+      .then((mod) => mod.default)
       .catch((error) => {
         // 加载失败重置 promise 允许下次重试（弱网首屏失败不永久报废）
         mermaidPromise = null;
         throw error;
       });
   }
-  return mermaidPromise;
+  const mermaid = await mermaidPromise;
+  // 结构图按自然尺寸出（useMaxWidth:false），宽图由容器横向滚动；暗色用 dark 主题。
+  ensureMermaidConfig(mermaid, { dark: isDark.value, lightTheme: 'neutral', naturalSize: true });
+  return mermaid;
 }
 
 // 串行化渲染：消息批量恢复/快速切换时避免并发 run 操作同批节点
@@ -115,7 +108,7 @@ async function renderDiagram() {
     el.textContent = '';
     const node = document.createElement('div');
     node.className = 'mermaid';
-    node.textContent = props.code;
+    node.textContent = normalizeMermaidLabels(props.code);
     el.appendChild(node);
     try {
       const mermaid = await loadMermaid();
@@ -136,6 +129,10 @@ onMounted(renderDiagram);
 watch(() => props.code, (next) => {
   closeZoom();
   if (!next) return;
+  renderDiagram();
+});
+watch(isDark, () => {
+  closeZoom();
   renderDiagram();
 });
 
@@ -177,6 +174,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   border-radius: var(--mk-radius-lg);
   overflow-x: auto;
 }
+/* 暗色不再是"亮白教具纸"：换深色画布 + Mermaid dark 主题（见 loadMermaid） */
+.teaching-diagram--dark {
+  background: var(--mk-surface-2);
+  border-color: var(--mk-line);
+}
+.teaching-diagram--dark .teaching-diagram__hint {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--mk-muted);
+}
+/* Mermaid dark 主题默认给节点加浅灰 drop-shadow；深色纸面上会变成一圈发白的光晕。
+   暗色下改为 1px 描边（节点 border 由 themeVariables 提供），去掉像素阴影。 */
+.teaching-diagram--dark :deep(svg .node rect),
+.teaching-diagram--dark :deep(svg .node polygon),
+.teaching-diagram--dark :deep(svg .node path),
+.teaching-diagram--dark :deep(svg .node circle) {
+  filter: none !important;
+}
 .teaching-diagram__canvas {
   display: block;
   width: 100%;
@@ -197,6 +211,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   display: block;
   max-width: none;
   height: auto;
+}
+/* 手机档没有横向拖拽的余量：按卡宽等比缩到 100%，否则宽图右侧被裁、点开放大又太重。
+   桌面仍按自然尺寸横向滚动，保证标签可读。 */
+@media (max-width: 640px) {
+  .teaching-diagram__canvas { overflow-x: auto; }
+  .teaching-diagram__canvas :deep(svg) { max-width: 100%; }
 }
 .teaching-diagram__fallback {
   margin: 0;
@@ -247,6 +267,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   background: #ffffff;
   border-radius: var(--mk-radius-xl);
   cursor: default;
+}
+.diagram-zoom__canvas--dark {
+  background: var(--mk-surface-2);
 }
 .diagram-zoom__canvas :deep(svg) {
   display: block;

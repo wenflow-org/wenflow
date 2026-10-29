@@ -1,6 +1,8 @@
 <template>
-  <CapabilityShell title="学习历史" description="按时间回看你的学习会话：学了什么、学多久、完成情况。">
-    <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题 + 说明） -->
+  <!-- 页头副文「按时间回看你的学习会话：学了什么、学多久、完成情况。」已撤
+       （2026-10-29 全站副文审计）：它把下方会话卡的表头逐项念了一遍，属自述装配 -->
+  <CapabilityShell title="学习历史">
+    <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题） -->
     <div class="history__body">
       <!-- 统计行（批19）：三个数字合并为一行内联统计，不再三张等权卡片。
            接口失败时整行隐藏——显 0 会让学习者误以为「没学过」。

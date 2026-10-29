@@ -7,7 +7,7 @@
  * 转义后的可见文本（如 &lt;script&gt;）不算注入，字符串包含检查会误报。
  */
 import { describe, expect, it } from 'vitest';
-import { renderAiMessageHtml } from '../sanitize';
+import { renderAiMessageHtml, renderAiMessageHtmlWithMermaid } from '../sanitize';
 
 function doc(html: string): Document {
   return new DOMParser().parseFromString(html, 'text/html');
@@ -94,5 +94,19 @@ describe('renderAiMessageHtml 功能存活', () => {
     expect(renderAiMessageHtml('')).toBe('');
     expect(renderAiMessageHtml(null)).toBe('');
     expect(renderAiMessageHtml(undefined)).toBe('');
+  });
+
+  it('普通消息面保留 mermaid 代码块（没有运行器，不能变成裸 div）', () => {
+    const out = renderAiMessageHtml('```mermaid\nflowchart TD\n  A --> B\n```');
+    expect(doc(out).querySelector('pre code.language-mermaid')).not.toBeNull();
+    expect(doc(out).querySelector('.mermaid')).toBeNull();
+  });
+
+  it('课堂专用渲染把 mermaid 变成占位并修正括号标签', () => {
+    const out = renderAiMessageHtmlWithMermaid('```mermaid\nflowchart TD\n  B[pd.read_excel(路径)] --> C[df.columns]\n```');
+    const placeholder = doc(out).querySelector('.mermaid');
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.textContent).toContain('B["pd.read_excel(路径)"]');
+    expect(doc(out).querySelector('pre code.language-mermaid')).toBeNull();
   });
 });

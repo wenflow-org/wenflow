@@ -9,7 +9,9 @@
       <div class="mk-card__head">
         <div class="exp-head">
           <h4 class="mk-card__title">数据导出</h4>
-          <span class="mk-card__meta">选择要导出的数据表，每张表生成一个 CSV 文件</span>
+          <!-- 下半句是产物格式（导出前要知道会拿到什么）；上半句「选择要导出的数据表」
+               是勾选卡本身就在做的事，删（2026-10-29 冗余副文审计） -->
+          <span class="mk-card__meta">每张表生成一个 CSV 文件</span>
         </div>
       </div>
 

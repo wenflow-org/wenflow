@@ -99,7 +99,8 @@
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">说明</span>
-                  <input v-model="form.description" class="mk-field__input" placeholder="选填" />
+                  <!-- 占位符不写「选填」：非必填由没有 * 表达，占位符只该给示例 -->
+                  <input v-model="form.description" class="mk-field__input" />
                 </label>
               </div>
 
@@ -193,20 +194,21 @@
               <div>
                 <div class="med-subrow">
                   <h5 class="med-sub">价格</h5>
-                  <span class="med-sub__hint">USD / 1M tokens，选填，只影响成本分析</span>
+                  <!-- 单位与作用范围留一次；「选填」不写——三格各自再标一遍是同一提示四次上屏 -->
+                  <span class="med-sub__hint">USD / 1M tokens · 只影响成本分析</span>
                 </div>
                 <div class="med-price">
                   <label class="mk-field">
                     <span class="mk-field__label">输入</span>
-                    <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
+                    <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" />
                   </label>
                   <label class="mk-field">
                     <span class="mk-field__label">缓存命中</span>
-                    <input v-model.number="form.cachedInputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
+                    <input v-model.number="form.cachedInputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" />
                   </label>
                   <label class="mk-field">
                     <span class="mk-field__label">输出</span>
-                    <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
+                    <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" />
                   </label>
                 </div>
               </div>

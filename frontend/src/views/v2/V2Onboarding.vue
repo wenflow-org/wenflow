@@ -6,9 +6,12 @@
       </router-link>
 
       <section class="ob__card">
-        <!-- 步骤进度（4 段）：对读屏可感知——当前步标 aria-current（走查 2026-09-27 P3） -->
+        <!-- 步骤进度（4 段）：对读屏可感知——当前步标 aria-current（走查 2026-09-27 P3）。
+             第 1 屏是「总览」，正文只列 3 个能力步；这里补 1 / 4 文案，避免「下面 1-2-3 写完了，
+             上面还有 3 格没走」的误读。 -->
         <div class="ob__progress">
           <span v-for="i in totalSteps" :key="i" :class="{ 'is-on': i <= step }" :aria-current="i === step ? 'step' : undefined"></span>
+          <small class="ob__progress-label">第 {{ step }} / {{ totalSteps }} 步</small>
         </div>
 
         <Transition name="ob-swap" mode="out-in">
@@ -307,7 +310,15 @@ async function goDashboard() {
   display: flex;
   gap: 6px;
   justify-content: center;
+  align-items: center;
   margin-bottom: 20px;
+}
+.ob__progress-label {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
 }
 .ob__progress span {
   width: 34px; height: 4px;

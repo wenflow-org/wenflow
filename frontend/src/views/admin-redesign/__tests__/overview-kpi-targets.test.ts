@@ -105,8 +105,9 @@ describe('总览 KPI 跳转目标', () => {
     expect(intent.scene).toBe('people');
     await kpiCard(w, '累计目标对话').trigger('click');
     expect(intent.scene).toBe('goal-conversations');
-    // 目标对话卡报的是总量：数值行标出「总量」口径，避免与闭环阶段 1 的「N 进行中」读成同一指标
-    expect(kpiCard(w, '累计目标对话').find('.mk-kpi__num-note').text()).toBe('总量');
+    /* 2026-10-29 全站副文审计：卡名「累计」已标出总量口径，数值行不再补「总量」——
+       同一张卡上「累计…总量」是把同一口径说两遍。闭环阶段 1 的区分仍由卡名承担。 */
+    expect(kpiCard(w, '累计目标对话').find('.mk-kpi__num-note').exists()).toBe(false);
   });
 
   it('页头「运营中心」入口 → ops-hub', async () => {

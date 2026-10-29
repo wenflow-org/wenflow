@@ -9,7 +9,7 @@
       <div class="settings-status">
         <div class="settings-status__left">
           <div>
-            <strong>{{ apiConfig.enabled ? '使用自定义模型服务' : '使用内置模型服务' }}</strong>
+            <strong>{{ apiConfig.enabled ? '自定义模型服务已启用' : '内置模型服务已启用' }}</strong>
             <p>对话模型 {{ apiConfig.chatModel || 'deepseek-v4.1-flash' }} · 推理模型 {{ apiConfig.reasoningModel || 'deepseek-v4.1-flash' }}</p>
           </div>
         </div>
@@ -38,17 +38,26 @@
         </div>
       </div>
 
-      <div v-else-if="!loadError" class="settings-cols">
-        <!-- 左：配置表单 -->
-        <article class="uc-card">
+      <div v-else-if="!loadError" class="settings-cols" :class="{ 'settings-cols--off': !apiConfig.enabled }">
+        <!-- 左：配置表单（关闭态只显示一张紧凑说明卡 + 「展开配置」；展开后仍可先填端点/密钥再开开关） -->
+        <article class="uc-card" :class="{ 'settings-off': !apiConfig.enabled }">
           <div class="uc-card__head">
             <div>
               <!-- P2-32：页名改「设置」后，「API 接入」降为第一个分区的 H3 名 -->
               <h3>API 接入</h3>
               <p>填写兼容 OpenAI 协议的自定义模型端点</p>
             </div>
+            <button
+              v-if="!apiConfig.enabled"
+              type="button"
+              class="uc-btn uc-btn--sm"
+              @click="settingsFormOpen = !settingsFormOpen"
+            >{{ settingsFormOpen ? '收起配置' : '展开配置' }}</button>
           </div>
-          <div class="api-form">
+          <p v-if="!apiConfig.enabled" class="settings-off__hint">
+            当前使用内置模型服务，无需填写端点或密钥。
+          </p>
+          <div v-show="apiConfig.enabled || settingsFormOpen" class="api-form">
             <label class="uc-field">
               <span class="uc-field__label">端点</span>
               <input v-model="apiConfig.endpoint" class="uc-field__input" placeholder="例如 https://api.openai.com/v1" :disabled="busy" />
@@ -119,8 +128,8 @@
           </div>
         </article>
 
-        <!-- 右：说明卡 -->
-        <aside class="settings-side">
+        <!-- 右：说明卡（仅自定义服务开启时显示，关闭态只留一张紧凑说明） -->
+        <aside v-if="apiConfig.enabled" class="settings-side">
           <article class="uc-card">
             <div class="uc-card__head">
               <div>
@@ -339,6 +348,8 @@ const loadError = ref('');
 const disabling = ref(false);
 const hasSavedApiKey = ref(false);
 const showKey = ref(false);
+/** 关闭态下用户主动展开配置表单（默认保持单卡紧凑） */
+const settingsFormOpen = ref(false);
 const loadingModels = ref(false);
 const modelOptions = ref<string[]>([]);
 /** 端点返回的模型 id → MkModelPicker 候选（2026-10-27 取代原生 datalist 弹层） */
@@ -858,6 +869,8 @@ const handleDeactivate = async () => {
   gap: 16px;
   align-items: start;
 }
+/* 关闭态只留一张说明卡，不再保留空着的右栏和帮助长文 */
+.settings-cols--off { grid-template-columns: minmax(0, 1fr); }
 
 @media (max-width: 1100px) {
   .settings-cols {
@@ -884,10 +897,9 @@ const handleDeactivate = async () => {
 }
 
 /* ===== 账号安全（自 Profile.vue 账户段迁入的两张双栏卡） ===== */
-/* 双栏沿用 .settings-cols 的栅格与断点，仅把对齐从 start 改回 stretch：
-   两卡等高，改密按钮由 foot 的 margin-top:auto 压到与注销卡同一底线 */
+/* 两卡不再强制等高：注销卡内容短，拉齐会留下约 130px 空洞，按内容自然收口 */
 .settings-cols--security {
-  align-items: stretch;
+  align-items: start;
 }
 
 .uc-card--pwd {
@@ -1195,4 +1207,11 @@ const handleDeactivate = async () => {
   padding: 1px 5px;
   border-radius: 4px;
 }
+.settings-off__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.uc-btn--sm { height: 36px; padding: 0 12px; font-size: 12px; }
 </style>

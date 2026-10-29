@@ -971,6 +971,9 @@ function goExport() {
 .al-c-ip { width: 134px; }
 .al-c-expand { width: 34px; }
 .al-c-reason { width: 280px; }
+/* 登录审计：操作列在 fixed 布局里被挤到 67px，95px 的「查看会话 →」会顶出表格右缘 23px。
+   锁定最小宽后由固定布局从其他列回收空间，1920 下不再横向溢出。 */
+.al-login-table .mk-c-act { width: 116px !important; }
 /* fixed 档列宽即契约：行内 max-width 会顶出单元格，改成随列收缩 + 省略号 */
 .al-table .log-target, .al-table .log-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* td 上的 text-overflow 在表格单元里不生效（2026-10-22 实测仍切字）：内层 span 承担截断 */

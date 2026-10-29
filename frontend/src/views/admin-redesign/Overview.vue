@@ -563,13 +563,13 @@ function refreshNow() {
    退到悬停 tooltip（hint），foot 只留 超时/失败/新增 与基线说明。 */
 interface KpiCard { key?: string; label: string; value: string; valueNote?: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }
 /** 目标对话卡报的是「进行中 + 已完成 + 已取消」总量，与闭环阶段 1 的「N 进行中」同名不同量：
- *  卡名与数值行都标出总量口径，避免两处读成同一指标。 */
+ *  卡名用「累计」标出口径即可——数值行不再补一个「总量」，那是把「累计」换个词再说一遍
+ *  （2026-10-29 全站副文审计：卡面曾读作「累计目标对话 5 总量」）。 */
 const kpiCards = computed<KpiCard[]>(() =>
   (data.value?.kpis ?? []).map((k) => ({
     key: k.key,
     label: k.key === 'goalConversations' ? '累计目标对话' : k.label,
     value: k.value,
-    valueNote: k.key === 'goalConversations' ? '总量' : undefined,
     foot: k.foot,
     hint: k.hint,
     note: k.note,

@@ -103,7 +103,7 @@
 
       <div id="sec-next" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Compass /></span>下一步建议</h4>
-        <ol v-if="actionPlan.length" class="ordered-list"><li v-for="(item, idx) in actionPlan" :key="`${idx}-${item}`">{{ item }}</li></ol>
+        <ol v-if="actionPlan.length" class="ordered-list"><li v-for="(item, idx) in actionPlan" :key="`${idx}-${item}`"><MarkdownRenderer :content="item" /></li></ol>
         <div v-else class="section-content"><MarkdownRenderer :content="summary.practiceAdvice" /></div>
       </div>
 
@@ -117,7 +117,7 @@
       </div>
     </div>
 
-    <div class="completion-actions">
+    <div v-if="!blocked" class="completion-actions">
       <!-- 三个动作的后果写清楚：用户反馈「又是继续、又是返回、又是完成，不知道什么意思」 -->
       <p class="completion-actions__hint">完成任务会推进路径进度，其余不会。</p>
       <div class="completion-actions__row">
@@ -174,6 +174,8 @@ const props = defineProps<{
   advisory?: ReplanAdvisory | null;
   busy?: boolean;
   taskId?: string;
+  /** 结算门禁：末问/小测未完成时隐藏常规动作栏，只保留下方恢复卡 */
+  blocked?: boolean;
 }>();
 
 const emit = defineEmits<{ action: [action: 'end' | 'continue-task' | 'complete-task']; 'advisory-action': [action: string] }>();
@@ -420,6 +422,8 @@ const tagClass = (type: string) => ({
 .knowledge-evidence { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .ordered-list { margin: 0; padding-left: 0; list-style-position: inside; list-style-type: decimal; font-size: 13px; line-height: 1.6; color: var(--ink); }
 .ordered-list li { margin: 0 0 6px; overflow-wrap: anywhere; }
+.ordered-list li :deep(.markdown-renderer) { display: inline; }
+.ordered-list li :deep(.markdown-renderer > p) { display: inline; margin: 0; }
 .ordered-list li:last-child { margin-bottom: 0; }
 .evaluation-block { display: grid; gap: 8px; }
 .evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); }

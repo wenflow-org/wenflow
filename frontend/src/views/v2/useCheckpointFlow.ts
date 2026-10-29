@@ -223,13 +223,13 @@ export function useCheckpointFlow(
       checkpointSubmitting.value = true;
       clearDraft();
       if (r.passed) {
-        // 答对：3s 后自动收起；延长自 1.6s，避免「刚看到答对了就消失」
+        // 答对：短暂显示「回答正确」后立即收起，把讲解归档进聊天流并释放小测占用的高度
         window.clearTimeout(checkpointCloseTimer);
         checkpointCloseTimer = window.setTimeout(() => {
           checkpoint.value = null;
           checkpointFeedback.value = '';
           checkpointSubmitting.value = false;
-        }, 3000);
+        }, 1200);
       }
       // 答错：保留卡片让用户读完纠正，由「继续 ›」/Esc 收起（不再提供重交入口）
     } catch (e: any) {

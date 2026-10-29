@@ -195,7 +195,8 @@
             <span v-if="errors.body" class="mk-field__err">{{ errors.body }}</span>
           </label>
           <label class="mk-field">
-            <span class="mk-field__label">过期时间（可选）</span>
+            <!-- 必填项已带 *，非必填不再追加「（可选）」：标签后半句只是把「没有 *」再说一遍 -->
+            <span class="mk-field__label">过期时间</span>
             <input v-model="form.expiresAt" type="datetime-local" class="mk-field__input" />
           </label>
           <!-- 仅新建态显示：编辑走「保存修改」，saveEdit 不读 publishNow（发布由行内「发布」按钮负责），
