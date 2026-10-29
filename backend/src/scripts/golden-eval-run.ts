@@ -55,7 +55,7 @@ try {
 interface Spec {
   id: string; name: string; learningGoal: string; knowledgeLevel: string;
   opening: string; surfaceGoal: string; realProblem: string;
-  story: { id: string; title: string; visibleOpening: string; goalSeed: { surfaceGoal: string; realProblem: string }; triggerEvent: string };
+  story: { id: string; title: string; visibleOpening: string; goalSeed: { surfaceGoal: string; realProblem: string }; triggerEvent: string; budget?: Record<string, unknown> | null };
   budget: Record<string, unknown>; outOfScope: string[]; expectedStages: number;
   bucket?: string; expect?: 'path' | 'triage'; negativeType?: string;
   /** 附件夹具（仓库相对路径）：开局前注入为该 VL 用户的已上传资料，验证 materialRefs 链 */
@@ -80,7 +80,14 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const rec = (v: unknown): Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
-async function apiOnce(method: string, urlPath: string, body?: unknown, timeoutMs = CALL_TIMEOUT_MS): Promise<{ status: number; body: any }> {
+/** HTTP 响应体边界：JSON 形状内在动态，统一按对象字典收口（非对象由 rec() 兜底成 {}） */
+type ApiResponseBody = Record<string, unknown> | null;
+interface ApiResponse {
+  status: number;
+  body: ApiResponseBody;
+}
+
+async function apiOnce(method: string, urlPath: string, body?: unknown, timeoutMs = CALL_TIMEOUT_MS): Promise<ApiResponse> {
   try {
     const res = await fetch(`${BASE_URL}${urlPath}`, {
       method,
@@ -88,8 +95,8 @@ async function apiOnce(method: string, urlPath: string, body?: unknown, timeoutM
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(timeoutMs),
     });
-    let parsed: any = null;
-    try { parsed = await res.json(); } catch { parsed = null; }
+    let parsed: ApiResponseBody = null;
+    try { parsed = (await res.json()) as ApiResponseBody; } catch { parsed = null; }
     return { status: res.status, body: parsed };
   } catch (e) {
     return { status: 0, body: { error: String((e as Error).message).slice(0, 160) } };
@@ -97,8 +104,8 @@ async function apiOnce(method: string, urlPath: string, body?: unknown, timeoutM
 }
 
 /** 429/5xx/传输错误指数退避；其余状态原样返回（业务失败由调用方判定） */
-async function api(method: string, urlPath: string, body?: unknown, timeoutMs = CALL_TIMEOUT_MS): Promise<{ status: number; body: any }> {
-  let last: { status: number; body: any } = { status: 0, body: {} };
+async function api(method: string, urlPath: string, body?: unknown, timeoutMs = CALL_TIMEOUT_MS): Promise<ApiResponse> {
+  let last: ApiResponse = { status: 0, body: {} };
   for (let attempt = 0; attempt <= BACKOFF_MS.length; attempt++) {
     last = await apiOnce(method, urlPath, body, timeoutMs);
     if (last.status === 429 || last.status >= 500 || last.status === 0) {
@@ -127,7 +134,7 @@ async function login(): Promise<void> {
   if (!res.ok || !cookie) throw new Error(`管理员登录失败 http=${res.status}`);
 }
 
-const sessionFields = (body: any) => {
+const sessionFields = (body: ApiResponseBody) => {
   const d = rec(body?.data ?? body);
   return {
     status: String(d.status ?? ''),
@@ -168,11 +175,11 @@ function dumpTriage(sessionId: string): Record<string, unknown> | null {
       ).get(sessionId) as { collectedData?: string; messages?: string } | undefined;
       db.close();
       if (!row) return null;
-      let collected: any = {}; let lastAi = '';
-      try { collected = JSON.parse(row.collectedData || '{}'); } catch { /* */ }
+      let collected: Record<string, unknown> = {}; let lastAi = '';
+      try { collected = JSON.parse(row.collectedData || '{}') as Record<string, unknown>; } catch { /* */ }
       try {
-        const msgs = JSON.parse(row.messages || '[]');
-        const ai = msgs.filter((m: any) => (m.role === 'assistant' || m.role === 'ai'));
+        const msgs = JSON.parse(row.messages || '[]') as Array<Record<string, unknown>>;
+        const ai = msgs.filter((m) => (m.role === 'assistant' || m.role === 'ai'));
         lastAi = ai.length ? String(ai[ai.length - 1].content || ai[ai.length - 1].text || '').slice(0, 400) : '';
       } catch { /* */ }
       const u = (collected?.understanding ?? {}) as Record<string, unknown>;
@@ -221,7 +228,7 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
         // scenarioBudget 锚生效（否则 goal 的自由估会把 3.5h 估成 6h/32h）。
         scenarioCard: {
           budget: (spec.budget && typeof spec.budget === 'object' ? spec.budget : null)
-            ?? ((spec.story as any)?.budget ?? null),
+            ?? (spec.story.budget ?? null),
         },
         ...(Array.isArray(spec.fixtureMaterials) && spec.fixtureMaterials.length
           ? { fixtureMaterials: spec.fixtureMaterials }
@@ -282,7 +289,7 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
     entry.phase = 'triage-done';
     entry.seconds = Math.round((Date.now() - t0) / 1000);
     saveState(state);
-    log(`${key} [triage] platform_judgment=${(entry.triage as any)?.platform_judgment} primary_block_type=${(entry.triage as any)?.primary_block_type}`);
+    log(`${key} [triage] platform_judgment=${entry.triage?.platform_judgment} primary_block_type=${entry.triage?.primary_block_type}`);
     return;
   }
 

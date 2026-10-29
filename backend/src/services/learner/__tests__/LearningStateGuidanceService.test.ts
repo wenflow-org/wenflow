@@ -67,7 +67,7 @@ describe('LearningStateGuidanceService', () => {
   })
 
   it('新学习者没有 learnerSnapshot：返回 null，不进入摘要/投影（避免 dynamicState 空引用）', async () => {
-    ;(assembleLearningState as jest.Mock).mockResolvedValue({
+    (assembleLearningState as jest.Mock).mockResolvedValue({
       paths: [],
       sessions: [],
       primaryPath: null,

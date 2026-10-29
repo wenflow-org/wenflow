@@ -8,7 +8,10 @@ import { derivePlanningHints, inferWeeksUntilDeadline } from '../path-planning-h
  * 日历权威，无期限时不生成总周数要求（maxWeeks 只受 52 周结构硬顶约束）。
  * objectiveScopeHours 缺失时完整回退 R7 的锚污染/双证据兜底逻辑。
  */
-function hintsOf(td: Record<string, any> | null, keyStages = 3, narrowScopeSignal?: boolean, timePerSession: string | null = null) {
+/** 与 derivePlanningHints 的 timeDimensions 入参同形（单一事实源，避免测试桩类型漂移） */
+type TimeDimensionsArg = NonNullable<Parameters<typeof derivePlanningHints>[5]>;
+
+function hintsOf(td: TimeDimensionsArg | null, keyStages = 3, narrowScopeSignal?: boolean, timePerSession: string | null = null) {
   return derivePlanningHints(
     null,
     timePerSession,

@@ -30,9 +30,9 @@ export function reorderStageTasks(
     const before = [...stage.subtasks];
     const ordered = reorderTasksForPrerequisites(stage.subtasks, kcAnnotation);
     if (!ordered.changed) continue;
-    const remapped = remapStageTaskReferences(before as any[], ordered.tasks as any[]) as typeof stage.subtasks;
-    const repaired = repairForwardReferences(remapped as any[]);
-    const finalTasks = (repaired.repaired.length > 0 ? repaired.tasks : remapped) as typeof stage.subtasks;
+    const remapped = remapStageTaskReferences(before, ordered.tasks);
+    const repaired = repairForwardReferences(remapped);
+    const finalTasks = repaired.repaired.length > 0 ? repaired.tasks : remapped;
     stage.subtasks.splice(0, stage.subtasks.length, ...finalTasks);
     reorderedEdges += ordered.reorderedEdges;
   }

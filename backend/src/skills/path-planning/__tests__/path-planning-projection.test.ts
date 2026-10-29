@@ -29,7 +29,7 @@ describe('R8 · path-planning 提示词投影必须带内容体量锚 / 截止�
         calendarCapacityHours: 120,
         totalSessions: 30,
       },
-    }) as any;
+    });
     const td = built.normalizedInput.timeDimensions;
     expect(td.objectiveScopeHours).toBe(18);
     expect(td.deadlineDate).toBe('2027-01-05');
@@ -45,7 +45,7 @@ describe('R8 · path-planning 提示词投影必须带内容体量锚 / 截止�
       ...base,
       resources: { deadlineDate: '2027-01-05' },
       timeDimensions: { timeModelVersion: 2, deadlineDate: '2027-01-05' },
-    }) as any;
+    });
     expect(built.normalizedInput.resources.deadlineDate).toBe('2027-01-05');
   });
 
@@ -67,7 +67,7 @@ describe('R8 · path-planning 提示词投影必须带内容体量锚 / 截止�
         targetHoursPerMilestone: 9,
         targetMinutesPerTask: 45,
       },
-    }) as any;
+    });
     const hints = built.normalizedInput.planningHints;
     expect(hints.targetTotalHours).toBe(27);
     expect(hints.targetHoursPerMilestone).toBe(9);

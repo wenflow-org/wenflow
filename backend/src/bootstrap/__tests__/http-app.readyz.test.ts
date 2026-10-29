@@ -24,13 +24,20 @@ function buildApp(lifecycle: ApplicationLifecycle, check: jest.Mock) {
   return createHttpApp({ lifecycle, readinessService: { check } as unknown as ReadinessService });
 }
 
-async function requestReadyz(app: ReturnType<typeof createHttpApp>): Promise<{ status: number; body: any }> {
+/** /readyz 响应体（只声明断言用到的字段；多余字段由 toMatchObject 容忍） */
+interface ReadyzResponseBody {
+  status?: string;
+  reason?: string;
+  checks?: ReadinessResult['checks'];
+}
+
+async function requestReadyz(app: ReturnType<typeof createHttpApp>): Promise<{ status: number; body: ReadyzResponseBody }> {
   const server = app.listen(0);
   await new Promise<void>(resolve => server.once('listening', () => resolve()));
   const { port } = server.address() as AddressInfo;
   try {
     const response = await fetch(`http://127.0.0.1:${port}/readyz`);
-    return { status: response.status, body: await response.json() };
+    return { status: response.status, body: (await response.json()) as ReadyzResponseBody };
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }

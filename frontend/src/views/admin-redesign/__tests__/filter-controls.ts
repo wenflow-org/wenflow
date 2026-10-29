@@ -1,3 +1,4 @@
+import type { ComponentPublicInstance } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 
 /**
@@ -13,7 +14,7 @@ import type { VueWrapper } from '@vue/test-utils';
  */
 
 /** 某维的包裹层（含触发器与弹层）：按可见维度名定位 */
-function filterWrap(w: VueWrapper<any>, dimLabel: string) {
+function filterWrap<T extends ComponentPublicInstance>(w: VueWrapper<T>, dimLabel: string) {
   const wrap = w
     .findAll('.mk-pillselect-wrap')
     .find((x) => x.find('.mk-pillselect__k').text() === dimLabel);
@@ -22,12 +23,12 @@ function filterWrap(w: VueWrapper<any>, dimLabel: string) {
 }
 
 /** 触发器本身（`data-value` 携带当前值，等价于旧原生 select 的 .value） */
-export function filterTrigger(w: VueWrapper<any>, dimLabel: string) {
+export function filterTrigger<T extends ComponentPublicInstance>(w: VueWrapper<T>, dimLabel: string) {
   return filterWrap(w, dimLabel).find('button.mk-pillselect');
 }
 
 /** 菜单节点：优先组件子树（测试默认挂载），再按 aria-controls 到 document 上兜底 */
-function filterMenu(w: VueWrapper<any>, dimLabel: string): HTMLElement {
+function filterMenu<T extends ComponentPublicInstance>(w: VueWrapper<T>, dimLabel: string): HTMLElement {
   const wrap = filterWrap(w, dimLabel);
   const inTree = wrap.find('ul.mk-listbox-pop');
   if (inTree.exists()) return inTree.element as HTMLElement;
@@ -38,12 +39,12 @@ function filterMenu(w: VueWrapper<any>, dimLabel: string): HTMLElement {
 }
 
 /** 当前选中值；未选任何档时为空串（「全部…」的 value 由页面给） */
-export function filterValue(w: VueWrapper<any>, dimLabel: string): string {
+export function filterValue<T extends ComponentPublicInstance>(w: VueWrapper<T>, dimLabel: string): string {
   return filterTrigger(w, dimLabel).attributes('data-value') ?? '';
 }
 
 /** 全部选项文案（v-show 只改 display，选项始终在 DOM 里，无需先展开） */
-export function filterOptions(w: VueWrapper<any>, dimLabel: string): string[] {
+export function filterOptions<T extends ComponentPublicInstance>(w: VueWrapper<T>, dimLabel: string): string[] {
   return Array.from(filterMenu(w, dimLabel).querySelectorAll('.mk-listbox-opt')).map(
     (o) => o.textContent?.trim() ?? ''
   );
@@ -55,8 +56,8 @@ export interface FilterOptionHandle {
 }
 
 /** 取某维某档的 option（文案含计数，按前缀匹配）。 */
-export function filterOption(
-  w: VueWrapper<any>,
+export function filterOption<T extends ComponentPublicInstance>(
+  w: VueWrapper<T>,
   dimLabel: string,
   optionLabelPrefix: string
 ): FilterOptionHandle {
@@ -68,8 +69,8 @@ export function filterOption(
 }
 
 /** 展开下拉并点选某档 —— 等价于真实用户的开弹层 + 点选项。 */
-export async function chooseFilter(
-  w: VueWrapper<any>,
+export async function chooseFilter<T extends ComponentPublicInstance>(
+  w: VueWrapper<T>,
   dimLabel: string,
   optionLabelPrefix: string
 ): Promise<void> {

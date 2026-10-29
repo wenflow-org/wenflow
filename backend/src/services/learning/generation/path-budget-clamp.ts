@@ -10,9 +10,19 @@
  */
 import { logger } from '../../../utils/logger';
 
+/** 生成入参里与本函数相关的最小形状（planningHints 可能出现在三处；其余字段不关心，缺字段容忍）。 */
+interface TargetHoursPlanningInput {
+  planningHints?: { targetTotalHours?: unknown } | null;
+}
+interface TargetHoursProfile {
+  normalizedInput?: TargetHoursPlanningInput | null;
+  pathSceneFraming?: { normalizedInput?: TargetHoursPlanningInput | null } | null;
+  pathSceneFramingInput?: TargetHoursPlanningInput | null;
+}
+
 /** 从生成入参里取目标总学时（planningHints 在定帧快照或编排快照里，两处都兼容）。 */
-export function resolveTargetTotalHoursFromData(data: any): number | null {
-  const profile: any = data?.userProfile || {};
+export function resolveTargetTotalHoursFromData(data: unknown): number | null {
+  const profile = (data as { userProfile?: TargetHoursProfile | null } | null | undefined)?.userProfile || {};
   const candidates = [
     profile?.normalizedInput?.planningHints?.targetTotalHours,
     profile?.pathSceneFraming?.normalizedInput?.planningHints?.targetTotalHours,
@@ -25,7 +35,7 @@ export function resolveTargetTotalHoursFromData(data: any): number | null {
   return null;
 }
 
-export function clampMilestoneHoursToBudget<T extends Record<string, any>>(
+export function clampMilestoneHoursToBudget<T extends { estimatedHours?: unknown }>(
   milestones: T[],
   targetTotalHours: number | null,
 ): { milestones: T[]; info: { before: number; after: number; scaled: boolean } | null } {
@@ -45,10 +55,10 @@ export function clampMilestoneHoursToBudget<T extends Record<string, any>>(
 }
 
 /** persistGeneratedPath 用的一体化入口：按 data 里的目标学时夹取并留痕（调用点保持一行）。 */
-export function clampMilestonesWithLog<T>(milestones: T[], data: any, runId?: string): T[] {
+export function clampMilestonesWithLog<T>(milestones: T[], data: unknown, runId?: string): T[] {
   const targetTotalHours = resolveTargetTotalHoursFromData(data);
   const result = clampMilestoneHoursToBudget(
-    milestones as unknown as Record<string, any>[],
+    milestones as unknown as Array<{ estimatedHours?: unknown }>,
     targetTotalHours,
   );
   if (result.info?.scaled) {

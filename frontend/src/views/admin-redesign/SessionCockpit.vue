@@ -1531,6 +1531,7 @@ const goalConversationMessages = computed(() => conversationMessages(asRecord(co
 /* 目标理解摘要（2026-10-28 数据审计）：session-console 的 goal.understanding 新增视图——
    R8 时间模型 / R5 材料需求 / 成功标准与约束此前只在「查看原始数据」的整包 JSON 里。
    后端已做空裁剪（全空返回 null），这里再兜一次空对象。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 后端 understanding 视图形状内在动态，模板按可选字段逐个判空（对齐 ANY_FROZEN 同类载荷先例）
 const goalUnderstanding = computed<Record<string, any> | null>(() => {
   const u = asRecord(asRecord(session.value?.goal).understanding)
   return Object.keys(u).length ? u : null

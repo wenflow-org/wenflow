@@ -27,7 +27,8 @@ describe('api-key-placeholder（占位 key 识别）', () => {
 
   it('真实 key 一律放行（配置判断不受影响）', () => {
     expect(isPlaceholderApiKey('sk-real-abc123def456')).toBe(false);
-    expect(isPlaceholderApiKey('sk-proj-9h2Xk1LmNpQrStUv')).toBe(false);
+    // 形似 project key 但刻意短于密钥扫描的 sk-长度门（scripts/secret-scan.mjs 20+），避免本文件被扫成真密钥
+    expect(isPlaceholderApiKey('sk-proj-9h2Xk1LmNpQ8')).toBe(false);
     expect(isPlaceholderApiKey('tvly-abc123')).toBe(false);
     expect(isPlaceholderApiKey('cfut_deadbeef')).toBe(false);
     // 形似但不是文档占位：sk-your- 前缀之外的自定义串不算占位

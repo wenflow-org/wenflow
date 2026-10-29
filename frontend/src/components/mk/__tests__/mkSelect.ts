@@ -1,3 +1,4 @@
+import type { ComponentPublicInstance } from 'vue'
 import type { VueWrapper } from '@vue/test-utils'
 
 /**
@@ -11,7 +12,7 @@ import type { VueWrapper } from '@vue/test-utils'
  * 是定位键（$attrs 落在 button 上）。
  */
 
-export function mkSelectBox(w: VueWrapper<any>, ariaLabel: string) {
+export function mkSelectBox<T extends ComponentPublicInstance>(w: VueWrapper<T>, ariaLabel: string) {
   const box = w.findAll('.mk-select').find((el) => {
     const btn = el.find('button')
     return btn.exists() && btn.attributes('aria-label') === ariaLabel
@@ -21,7 +22,7 @@ export function mkSelectBox(w: VueWrapper<any>, ariaLabel: string) {
 }
 
 /** 菜单节点：优先组件子树（测试默认挂载），再按 aria-controls 到 document 上兜底 */
-export function mkSelectMenu(w: VueWrapper<any>, ariaLabel: string): HTMLElement {
+export function mkSelectMenu<T extends ComponentPublicInstance>(w: VueWrapper<T>, ariaLabel: string): HTMLElement {
   const box = mkSelectBox(w, ariaLabel)
   const inTree = box.find('ul.mk-listbox-pop')
   if (inTree.exists()) return inTree.element as HTMLElement
@@ -32,22 +33,22 @@ export function mkSelectMenu(w: VueWrapper<any>, ariaLabel: string): HTMLElement
 }
 
 /** 全部选项元素（v-show 只改 display，选项始终在 DOM 里） */
-export function mkSelectOptions(w: VueWrapper<any>, ariaLabel: string): HTMLElement[] {
+export function mkSelectOptions<T extends ComponentPublicInstance>(w: VueWrapper<T>, ariaLabel: string): HTMLElement[] {
   return Array.from(mkSelectMenu(w, ariaLabel).querySelectorAll('.mk-listbox-opt'))
 }
 
-export function mkSelectLabels(w: VueWrapper<any>, ariaLabel: string): string[] {
+export function mkSelectLabels<T extends ComponentPublicInstance>(w: VueWrapper<T>, ariaLabel: string): string[] {
   return mkSelectOptions(w, ariaLabel).map((o) => o.textContent?.trim() ?? '')
 }
 
 /** 当前值（`data-value`；undefined / null 有各自的哨兵串） */
-export function mkSelectValue(w: VueWrapper<any>, ariaLabel: string): string | undefined {
+export function mkSelectValue<T extends ComponentPublicInstance>(w: VueWrapper<T>, ariaLabel: string): string | undefined {
   return mkSelectBox(w, ariaLabel).find('button').attributes('data-value')
 }
 
 /** 展开并点选某档（按 `data-value` 精确匹配） */
-export async function chooseMkSelect(
-  w: VueWrapper<any>,
+export async function chooseMkSelect<T extends ComponentPublicInstance>(
+  w: VueWrapper<T>,
   ariaLabel: string,
   value: string
 ): Promise<HTMLElement> {

@@ -30,7 +30,9 @@ describe('pathDeadlineView（截止日结构化日期优先）', () => {
   });
 
   it('ISO 日期串 → 本地日期', () => {
-    expect(pathDeadlineView('2027-01-10T00:00:00+08:00', '').dateText).toBe('2027-01-10');
+    // 本地正午构造时刻：构造与展示同用本机时区，任意 CI 时区下都格式化回同一天（UTC runner 实证过 +08 深夜串会差一天）
+    const instant = new Date(2027, 0, 10, 12, 0, 0).toISOString();
+    expect(pathDeadlineView(instant, '').dateText).toBe('2027-01-10');
   });
 
   it('结构化缺失/不可解析 → dateText 空，回退原文展示', () => {

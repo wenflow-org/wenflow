@@ -110,10 +110,9 @@ export function orderStageTasksByTopology<T extends { type?: string }>(tasks: T[
  * （重排前引用的任务恰好被换到本任务位置）改写为「本任务上一步的产出」这类不依赖编号的表述，
  * 避免产生新的自指。
  */
-export function remapStageTaskReferences<T extends { title?: string; description?: string; acceptanceHint?: string; acceptanceCriteria?: string }>(
-  originalOrder: T[],
-  ordered: T[],
-): T[] {
+export function remapStageTaskReferences<
+  T extends { title?: unknown; description?: unknown; acceptanceHint?: unknown; acceptanceCriteria?: unknown }
+>(originalOrder: T[], ordered: T[]): T[] {
   if (!Array.isArray(ordered) || ordered.length < 2) return ordered;
   if (originalOrder.length !== ordered.length) return ordered;
   // 旧位次(1-based) → 新位次(1-based)
@@ -145,7 +144,7 @@ export function remapStageTaskReferences<T extends { title?: string; description
   const rewriteRelativeRefs = (text: string | undefined, selfOldIndex: number): string | undefined => {
     if (typeof text !== 'string' || !text || selfOldIndex < 2) return text;
     const previousTask = originalOrder[selfOldIndex - 2];
-    const previousTitle = typeof (previousTask as any)?.title === 'string' ? String((previousTask as any).title).trim() : '';
+    const previousTitle = typeof previousTask?.title === 'string' ? previousTask.title.trim() : '';
     if (!previousTitle) return text;
     return text.replace(RELATIVE_REF_RE, `「${previousTitle}」`);
   };
@@ -154,20 +153,20 @@ export function remapStageTaskReferences<T extends { title?: string; description
     const selfNewIndex = index + 1;
     const selfOldIndex = oldIndexByTask.get(task) ?? selfNewIndex;
     const moved = selfNewIndex !== selfOldIndex;
-    const next: any = { ...task };
-    if (typeof (task as any).description === 'string') {
-      next.description = rewriteText((task as any).description, selfNewIndex);
-      if (moved) next.description = rewriteRelativeRefs(next.description, selfOldIndex);
+    const next: T = { ...task };
+    if (typeof task.description === 'string') {
+      const rewritten = rewriteText(task.description, selfNewIndex);
+      next.description = moved ? rewriteRelativeRefs(rewritten, selfOldIndex) : rewritten;
     }
-    if (typeof (task as any).acceptanceHint === 'string') {
-      next.acceptanceHint = rewriteText((task as any).acceptanceHint, selfNewIndex);
-      if (moved) next.acceptanceHint = rewriteRelativeRefs(next.acceptanceHint, selfOldIndex);
+    if (typeof task.acceptanceHint === 'string') {
+      const rewritten = rewriteText(task.acceptanceHint, selfNewIndex);
+      next.acceptanceHint = moved ? rewriteRelativeRefs(rewritten, selfOldIndex) : rewritten;
     }
-    if (typeof (task as any).acceptanceCriteria === 'string') {
-      next.acceptanceCriteria = rewriteText((task as any).acceptanceCriteria, selfNewIndex);
-      if (moved) next.acceptanceCriteria = rewriteRelativeRefs(next.acceptanceCriteria, selfOldIndex);
+    if (typeof task.acceptanceCriteria === 'string') {
+      const rewritten = rewriteText(task.acceptanceCriteria, selfNewIndex);
+      next.acceptanceCriteria = moved ? rewriteRelativeRefs(rewritten, selfOldIndex) : rewritten;
     }
-    return next as T;
+    return next;
   });
 }
 
@@ -183,7 +182,7 @@ export function remapStageTaskReferences<T extends { title?: string; description
  * 移动过任务后先重映射一次编号，再改写剩余前向引用。
  */
 export function repairForwardReferences<
-  T extends { title?: string; type?: string; description?: string; acceptanceHint?: string; acceptanceCriteria?: string }
+  T extends { title?: unknown; type?: unknown; description?: unknown; acceptanceHint?: unknown; acceptanceCriteria?: unknown }
 >(tasks: T[]): { tasks: T[]; repaired: string[] } {
   if (!Array.isArray(tasks) || tasks.length < 2) return { tasks, repaired: [] };
   const original = [...tasks];
@@ -194,15 +193,15 @@ export function repairForwardReferences<
   for (let guard = 0; guard < list.length; guard += 1) {
     let moved = false;
     for (let i = 0; i < list.length && !moved; i += 1) {
-      const desc = String((list[i] as any)?.description || '');
+      const desc = String(list[i]?.description || '');
       const refs = [...desc.matchAll(/任务\s*(\d+)/g)];
       for (const ref of refs) {
         const j = Number(ref[1]) - 1;
         if (!Number.isFinite(j) || j <= i || j >= list.length) continue;
-        if (String((list[j] as any)?.type || '').trim() !== 'acquire') continue;
+        if (String(list[j]?.type || '').trim() !== 'acquire') continue;
         const [item] = list.splice(j, 1);
         list.splice(i, 0, item);
-        repaired.push(`move-acquire:${String((item as any)?.title || '')}`);
+        repaired.push(`move-acquire:${String(item?.title || '')}`);
         moved = true;
         break;
       }
@@ -210,20 +209,20 @@ export function repairForwardReferences<
     if (!moved) break;
   }
   if (repaired.length > 0) {
-    list = remapStageTaskReferences(original as any[], list as any[]) as T[];
+    list = remapStageTaskReferences(original, list);
   }
 
   // Pass 2：剩余前向「任务 N」改成标题引用（标题不随重排变化）
   const afterMove = list;
   list = afterMove.map((task, index) => {
-    const desc = String((task as any)?.description || '');
+    const desc = String(task?.description || '');
     if (!desc) return task;
     const next = desc.replace(/任务\s*(\d+)/g, (match, digits: string) => {
       const j = Number(digits) - 1;
       if (!Number.isFinite(j) || j <= index || j >= afterMove.length) return match;
-      const title = String((afterMove[j] as any)?.title || '').trim();
+      const title = String(afterMove[j]?.title || '').trim();
       if (!title) return match;
-      repaired.push(`rewrite-forward:${String((task as any)?.title || '')}->${title}`);
+      repaired.push(`rewrite-forward:${String(task?.title || '')}->${title}`);
       return `「${title}」`;
     });
     return next === desc ? task : ({ ...task, description: next } as T);

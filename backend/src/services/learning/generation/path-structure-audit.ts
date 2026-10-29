@@ -243,7 +243,7 @@ export function reorderTasksForPrerequisites<T extends { title?: unknown; type?:
   // 无守卫时 R6 实测 14/14 条路径的收束档（refine/consolidate）被边重排又拉回建立档之前。
   // 只拦一个方向：收束档不得被前移到建立/应用档之前；反向（建立档前移）照常放行。
   const closingRank = (task: T): number =>
-    ['refine', 'consolidate'].includes(String((task as any)?.type || '').trim()) ? 1 : 0;
+    ['refine', 'consolidate'].includes(String(task?.type || '').trim()) ? 1 : 0;
 
   const taskIndexByTitle = new Map<string, number>();
   original.forEach((task, index) => {
@@ -283,8 +283,8 @@ export function reorderTasksForPrerequisites<T extends { title?: unknown; type?:
     // （model/execute/diagnose/refine/consolidate）前移到它们之前。
     // 实证：R6 B17 S4 execute→deconstruct→acquire；R8 B19 S3 写同比(T1) 在排名单(T2 deconstruct) 之前
     // ——阶段里没有 acquire 时，旧的 acquire 守卫护不住 deconstruct。
-    const fromType = String((original[fromIndex] as any)?.type || '').trim();
-    const toType = String((original[toIndex] as any)?.type || '').trim();
+    const fromType = String(original[fromIndex]?.type || '').trim();
+    const toType = String(original[toIndex]?.type || '').trim();
     const isFoundation = (t: string): boolean => t === 'acquire' || t === 'deconstruct';
     if (isFoundation(toType) && !isFoundation(fromType)) continue;
     constraints.push([fromKey, toKey]);

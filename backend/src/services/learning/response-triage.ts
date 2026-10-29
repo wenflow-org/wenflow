@@ -315,8 +315,8 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
   // 这类随口话会把 primary_block_type 带成 capability → 误开学习路径。
   // 「今天就要交的东西」不是学习路径的对象，一律按 oneoff_operation 分诊。
   const objectiveHours = Number(
-    (asObject((understanding as any)?.time_dimensions) as any)?.objectiveScopeHours
-      ?? (understanding as any)?.objectiveScopeHours,
+    asObject(understanding.time_dimensions).objectiveScopeHours
+      ?? understanding.objectiveScopeHours,
   );
   const immediateDelivery = !!surfaceGoal
     && /(今天|今晚|马上|立刻|小时内|半小时后|下班前|等下|待会儿?)/.test(surfaceGoal);

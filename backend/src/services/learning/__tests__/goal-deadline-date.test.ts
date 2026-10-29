@@ -241,8 +241,8 @@ describe('R8 · time_dimensions.deadlineDate 镜像源', () => {
           deadlineDate: '2027-01-05',
         },
       },
-    } as any);
-    const normalized = (result.userProfile as any)?.normalizedInput;
+    } as Parameters<typeof pathOrchestrator.previewNormalizedGoalInput>[0]);
+    const normalized = result.userProfile?.normalizedInput;
     expect(normalized?.timeDimensions?.objectiveScopeHours).toBe(18);
     expect(normalized?.timeDimensions?.deadlineDate).toBe('2027-01-05');
     expect(normalized?.timeDimensions?.timeModelVersion).toBe(2);
@@ -263,8 +263,8 @@ describe('R8 · time_dimensions.deadlineDate 镜像源', () => {
           deadlineDate: null,
         },
       },
-    } as any);
-    const normalized = (result.userProfile as any)?.normalizedInput;
+    } as Parameters<typeof pathOrchestrator.previewNormalizedGoalInput>[0]);
+    const normalized = result.userProfile?.normalizedInput;
     expect(normalized?.timeDimensions?.objectiveScopeHours).toBe(20);
     expect(normalized?.timeDimensions?.deadlineDate).toBeNull();
     expect(result.deadline).toBeUndefined();

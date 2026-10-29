@@ -73,7 +73,7 @@ describe('卡头工具条形态', () => {
     const offenders: string[] = []
     for (const file of LIST_PAGES) {
       const src = read(file)
-      const head = src.match(/<div class="mk-card__head"[^>]*>([\s\S]*?)\n      <\/div>/)
+      const head = src.match(/<div class="mk-card__head"[^>]*>([\s\S]*?)\n {6}<\/div>/)
       if (!head) continue
       // 卡头区内出现带 .mk-filter__select 的 <select> = 裸下拉（.mk-adv 弹层内的除外）
       const advIdx = head[1].indexOf('mk-adv')
@@ -99,7 +99,7 @@ describe('卡头工具条形态', () => {
     const offenders: string[] = []
     for (const file of LIST_PAGES) {
       const src = read(file)
-      const head = src.match(/<div class="mk-card__head"[^>]*>([\s\S]*?)\n      <\/div>/)
+      const head = src.match(/<div class="mk-card__head"[^>]*>([\s\S]*?)\n {6}<\/div>/)
       if (!head) continue
       /* 只看卡头区：弹窗里的收件人搜索（发放成就 / 发送通知）是表单字段，
          走 .mk-field__input 是正确的，不属于列表工具条。 */
@@ -188,7 +188,7 @@ describe('卡头工具条形态', () => {
     const offenders: string[] = []
     for (const file of LIST_PAGES) {
       const src = read(file)
-      const head = src.match(/<div class="mk-card__head"[^>]*>([\s\S]*?)\n      <\/div>/)
+      const head = src.match(/<div class="mk-card__head"[^>]*>([\s\S]*?)\n {6}<\/div>/)
       if (!head) continue
       const body = head[1]
       const firstSelect = body.indexOf('<MkPillSelect')

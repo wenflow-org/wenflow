@@ -23,7 +23,7 @@ describe('reorderStageTasks（边重排 + 二次引用重映射）', () => {
         { taskTitle: '模型化', linkedKCs: ['kc-m'] },
       ],
     };
-    const edges = reorderStageTasks(stages as any[], annotation as any);
+    const edges = reorderStageTasks(stages, annotation);
     expect(edges).toBeGreaterThan(0);
     // 建立从第 3 位前移到第 1 位 → [建立, 模型化, 收束]
     expect(stages[0].subtasks.map((task) => task.title)).toEqual(['建立', '模型化', '收束']);
@@ -48,7 +48,7 @@ describe('reorderStageTasks（边重排 + 二次引用重映射）', () => {
         { taskTitle: '写一遍接收路径', linkedKCs: ['kc-deconstruct'] },
       ],
     };
-    const edges = reorderStageTasks(stages as any[], annotation as any);
+    const edges = reorderStageTasks(stages, annotation);
     expect(edges).toBe(0);
     expect(stages[0].subtasks.map((task) => task.title)).toEqual(['写一遍接收路径', '复述整条解封装路径']);
     expect(stages[0].subtasks[0].description).toBe('用任务2标好的边界');

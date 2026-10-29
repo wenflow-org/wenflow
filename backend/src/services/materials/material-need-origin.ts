@@ -71,7 +71,7 @@ function textOf(need: MaterialNeed | null | undefined): string {
 
 /** goal 显式 origin 优先；否则按文本启发式；都无法判断时默认 public。 */
 export function inferMaterialOrigin(need: MaterialNeed | null | undefined): MaterialOrigin {
-  const explicit = String((need as any)?.origin || '').trim().toLowerCase();
+  const explicit = String(need?.origin || '').trim().toLowerCase();
   if (explicit === 'private') return 'private';
   if (explicit === 'public') return 'public';
 
