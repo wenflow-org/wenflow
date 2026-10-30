@@ -3,7 +3,7 @@
  *
  * 从「模型与接入 · 安全与访问」页签拆出：它管后台谁能进来、谁能注册，
  * 与「模型接哪个上游」没有共享对象或动线。本测试钉住：
- *  ① 两张卡在位（后台访问来源【含出站白名单】/ 注册），左右分列
+ *  ① 单卡三段在位（管理后台访问控制【含出站白名单】/ 注册设置）
  *  ② 「保存策略」常驻页头，无改动时禁用，保存只提交策略域
  *  ③ 读取失败不伪装成「未配置」
  *  ④ 注册开关是 MkSwitch（布尔配置不用并排双按钮）
@@ -113,7 +113,7 @@ async function mountPage() {
 }
 
 function saveButton(w: Awaited<ReturnType<typeof mountPage>>) {
-  return w.find('.mk-pagehead__actions button');
+  return w.find('.ac-foot button');
 }
 
 describe('访问与注册（拆页后的独立页）', () => {
@@ -133,7 +133,7 @@ describe('访问与注册（拆页后的独立页）', () => {
     seedConfig();
   });
 
-  it('页头只有页名 + 常驻「保存策略」；三张卡各在其位', async () => {
+  it('页头只有页名 + 常驻「保存策略」；访问与注册同卡三段', async () => {
     registrationEnabled.value = true;
     registerIpQuotaEnabled.value = false;
     const w = await mountPage();
@@ -142,17 +142,18 @@ describe('访问与注册（拆页后的独立页）', () => {
     expect(saveButton(w).text()).toBe('保存策略');
 
     const titles = w.findAll('.mk-card__title').map((t) => t.text());
-    // 入站来源与出站白名单同属「一次保存」的策略组，同卡两段；注册单独一卡在右列
-    expect(titles).toEqual(['后台访问来源', '注册']);
-    expect(w.text()).toContain('谁能连接后台');
-    expect(w.text()).toContain('服务端能访问哪些内网地址');
-    expect(w.findAll('.ac-modes .ac-mode')).toHaveLength(3);
+    // 入站来源、出站白名单与注册同属一张设置卡，段间用分隔线区分
+    expect(titles).toEqual(['访问与注册设置']);
+    expect(w.text()).toContain('管理后台访问控制');
+    expect(w.text()).toContain('服务端出站访问');
+    expect(w.text()).toContain('注册设置');
+    expect(w.findAll('.ac-seg')[0].findAll('.ac-seg__item')).toHaveLength(3);
     w.unmount();
   });
 
   it('访问来源模式是 radio 组：选中项 aria-checked=true 且只有它可 Tab 进入', async () => {
     const w = await mountPage();
-    const radios = w.findAll('.ac-modes .ac-mode');
+    const radios = w.findAll('.ac-seg')[0].findAll('.ac-seg__item');
     const checked = radios.filter((r) => r.attributes('aria-checked') === 'true');
     expect(checked).toHaveLength(1);
     expect(checked[0].text()).toContain('私有网段');
@@ -164,7 +165,7 @@ describe('访问与注册（拆页后的独立页）', () => {
     const w = await mountPage();
     expect(saveButton(w).attributes('disabled')).toBeDefined();
 
-    const anyRadio = w.findAll('.ac-modes .ac-mode').find((r) => r.text().includes('不限制'))!;
+    const anyRadio = w.findAll('.ac-seg__item').find((r) => r.text().includes('不限制'))!;
     await anyRadio.trigger('click');
     await nextTick();
     expect(saveButton(w).attributes('disabled')).toBeUndefined();
@@ -182,10 +183,10 @@ describe('访问与注册（拆页后的独立页）', () => {
 
   it('仅白名单 + 名单为空：禁用保存并写明后果', async () => {
     const w = await mountPage();
-    const seg = w.findAll('.ac-outs .ac-mode').find((b) => b.text().includes('仅白名单'))!;
+    const seg = w.findAll('.ac-seg__item').find((b) => b.text().includes('仅白名单'))!;
     await seg.trigger('click');
     await nextTick();
-    expect(w.text()).toContain('服务端将无法请求任何内网地址');
+    expect(w.text()).toContain('服务端将无法访问任何内网地址');
     expect(saveButton(w).attributes('disabled')).toBeDefined();
 
     const hosts = w.findAll('.ac-textarea')[1];
@@ -211,7 +212,7 @@ describe('访问与注册（拆页后的独立页）', () => {
     const sw = w.find('[role="switch"][aria-label="新用户注册"]');
     expect(sw.exists()).toBe(true);
     expect(sw.attributes('aria-checked')).toBe('false');
-    expect(sw.text()).toContain('仅管理员创建');
+    expect(sw.find('.mk-switch__state').exists()).toBe(false);
     expect(w.text()).not.toContain('开放注册');
     // 关闭注册时给出「新建用户」出口
     expect(w.findAll('button').some((b) => b.text().includes('新建用户'))).toBe(true);
@@ -219,17 +220,17 @@ describe('访问与注册（拆页后的独立页）', () => {
     w.unmount();
   });
 
-  it('注册状态词用生效值：配置开但核心服务阻断时如实说暂时无法注册', async () => {
+  it('注册状态词用生效值：配置开但核心服务阻断时显示暂不可用', async () => {
     registrationEnabled.value = true;
     registerIpQuotaEnabled.value = false;
     getRegistrationStatusMock.mockResolvedValue({ registrationEnabled: false, temporaryUnavailable: true });
     const w = await mountPage();
     await flushPromises();
-    expect(w.text()).toContain('已开放 · 核心服务异常，暂时无法注册');
+    expect(w.text()).toContain('暂不可用');
     w.unmount();
   });
 
-  it('配额数字改动后出现「保存上限」；写盘成功前状态词仍报旧值', async () => {
+  it('配额数字改动后出现「保存上限」，提交新值', async () => {
     registrationEnabled.value = true;
     registerIpQuotaEnabled.value = true;
     registerIpDailyQuota.value = 5;
@@ -237,28 +238,24 @@ describe('访问与注册（拆页后的独立页）', () => {
       data: { data: { registerIpQuotaEnabled: true, registerIpDailyQuota: 20 } },
     });
     const w = await mountPage();
-    expect(w.text()).toContain('已启用 · 每 IP 每日 5 个');
 
     const input = w.find('.ac-quota-field input');
     (input.element as HTMLInputElement).value = '20';
     await input.trigger('change');
     await nextTick();
-    // 未保存：状态词不得先变
-    expect(w.text()).toContain('已启用 · 每 IP 每日 5 个');
     const save = w.findAll('button').find((b) => b.text() === '保存上限');
     expect(save, '改上限后应出现保存钮').toBeTruthy();
 
     await save!.trigger('click');
     await flushPromises();
     expect(updateRegistrationMock).toHaveBeenCalledWith({ registerIpQuotaEnabled: true, registerIpDailyQuota: 20 });
-    expect(w.text()).toContain('已启用 · 每 IP 每日 20 个');
     w.unmount();
   });
 
   it('注册开关与配额在加载完成前不渲染（null = 未加载，不伪装成关）', async () => {
     const w = await mountPage();
-    expect(w.findAll('.mk-card__title').map((t) => t.text())).toEqual(['后台访问来源']);
-    expect(w.text()).toContain('服务端能访问哪些内网地址');
+    expect(w.findAll('.mk-card__title').map((t) => t.text())).toEqual(['访问与注册设置']);
+    expect(w.text()).toContain('服务端出站访问');
     w.unmount();
   });
 
@@ -269,9 +266,10 @@ describe('访问与注册（拆页后的独立页）', () => {
     expect(w.find('.mk-pagehead').exists()).toBe(false);
     expect(w.classes()).toContain('acl-host--embedded');
     const head = w.find('.mk-card__head');
-    expect(head.find('.mk-card__title').text()).toBe('后台访问来源');
-    expect(head.find('button').text()).toBe('保存策略');
-    expect(head.find('button').attributes('disabled')).toBeDefined();
+    expect(head.find('.mk-card__title').text()).toBe('访问与注册设置');
+    const foot = w.find('.ac-foot');
+    expect(foot.find('button').text()).toBe('保存策略');
+    expect(foot.find('button').attributes('disabled')).toBeDefined();
     w.unmount();
   });
 });

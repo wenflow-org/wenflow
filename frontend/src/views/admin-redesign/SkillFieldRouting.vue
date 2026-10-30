@@ -73,10 +73,8 @@
               <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-internal">内部</span><span class="sfr__legend-hint">内部：仅供平台内部使用，不进业务状态</span></li>
               <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-accumulate">累积</span><span class="sfr__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span></li>
             </ul>
-            <h5 class="sfr__legend-title">存储字段名</h5>
-            <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="sfr__legend-hint">字段值实际保存的键路径，与字段名不一致时单独标注（一致时默认显示字段名）</span></li>
-            </ul>
+            <!-- 「存储字段名」图例段撤除（2026-10-29 冗余副文审计）：它没有图表号可解释，
+                 只是把表格同名列的表头与单元格（同字段名 / 别名，且带 title）再说一遍 -->
             <h5 class="sfr__legend-title">锁定 / core 状态</h5>
             <ul class="sfr__legend-list">
               <li class="sfr__legend-item"><span class="mk-badge mk-badge--lock-system">平台锁定</span><span class="sfr__legend-hint">平台自动生成，admin 不可直接改（需改编排文件）</span></li>

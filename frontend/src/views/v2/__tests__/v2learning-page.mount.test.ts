@@ -220,6 +220,33 @@ describe('V2LearningPage 挂载回归', () => {
     w.unmount();
   });
 
+  it('检查点题干里的 Markdown 加粗渲染为 strong，不出现原始星号', async () => {
+    api.startSession.mockResolvedValue({
+      sessionId: 's_resumed_markdown',
+      revision: 2,
+      mode: 'resumed',
+      scene: { kind: 'resume', title: '接着上次的表头口径' },
+    });
+    api.getSessionDetail.mockResolvedValue({
+      revision: 3,
+      messages: [{ role: 'assistant', content: '继续。', peer: false }],
+      pendingCheckpoint: {
+        ...PENDING_CP,
+        title: '**不能**直接拼接',
+        question: '下面哪种情况**不能**直接拼？',
+      },
+    });
+
+    const w = await mountPage();
+
+    const head = w.find('.checkpoint__head');
+    expect(head.text()).not.toContain('**');
+    expect(head.find('strong strong').text()).toBe('不能');
+    expect(head.text()).toContain('不能直接拼接');
+
+    w.unmount();
+  });
+
   it('恢复续课分级：短中断（<30min）不弹大卡，走细条幅并给出「接着讲」入口', async () => {
     api.startSession.mockResolvedValue({
       sessionId: 's_resumed_fresh',

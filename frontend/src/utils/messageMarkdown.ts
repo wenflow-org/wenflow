@@ -6,9 +6,10 @@
  * 注意：缓存按「对象引用」键控（消息对象稳定），流式文本（字符串字面量）
  * 不适合此缓存——直接用 renderAiMessageHtml。
  */
-import { renderAiMessageHtml } from '@/utils/sanitize';
+import { renderAiMessageHtml, renderAiMessageHtmlWithMermaid } from '@/utils/sanitize';
 
 const htmlCache = new WeakMap<object, { text: string; html: string }>();
+const mermaidHtmlCache = new WeakMap<object, { text: string; html: string }>();
 
 /** 按消息对象取缓存 HTML；内容变化（编辑/流式追加）时重渲染 */
 export function cachedMessageHtml(m: { text: string }): string {
@@ -19,7 +20,21 @@ export function cachedMessageHtml(m: { text: string }): string {
   return html;
 }
 
+/** 课堂气泡用：额外把 mermaid 代码块转成异步占位（见 renderAiMessageHtmlWithMermaid） */
+export function cachedMessageHtmlWithMermaid(m: { text: string }): string {
+  const hit = mermaidHtmlCache.get(m);
+  if (hit && hit.text === m.text) return hit.html;
+  const html = renderAiMessageHtmlWithMermaid(m.text);
+  mermaidHtmlCache.set(m, { text: m.text, html });
+  return html;
+}
+
 /** 无缓存直渲染（适合流式文本/一次性内容） */
 export function plainMessageHtml(text: string | null | undefined): string {
   return renderAiMessageHtml(text);
+}
+
+/** 无缓存直渲染 + mermaid 占位（课堂小测讲解/伴学气泡） */
+export function plainMessageHtmlWithMermaid(text: string | null | undefined): string {
+  return renderAiMessageHtmlWithMermaid(text);
 }

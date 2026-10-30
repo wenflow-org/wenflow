@@ -215,7 +215,9 @@
                    补 title 全值——被截掉的部分不再无处可查 -->
               <div class="mk-cell-main lc-task">
                 <strong class="progress-title" :title="r.task || '未开始'">{{ r.task || '未开始' }}</strong>
-                <span class="mk-cell-sub" :title="r.path || '尚未开始学习'">{{ r.path || '尚未开始学习' }}</span>
+                <!-- 副行只放路径真值：任务为空时主行已写「未开始」，副行再补一句「尚未开始学习」
+                     等于同一状态写两遍（2026-10-29 冗余副文审计） -->
+                <span v-if="r.path" class="mk-cell-sub" :title="r.path">{{ r.path }}</span>
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('status')">

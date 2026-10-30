@@ -10,8 +10,9 @@
       <div ref="panelRef" class="mk-drawer__panel" role="dialog" aria-label="容量与实验环境">
         <header class="mk-drawer__head">
           <div class="mk-drawer__heading">
+            <!-- 副题「并发与出站速率上限，以及日期模拟」就是抽屉内三个字段的自述；
+                 抽屉一打开就能看到它们，副题不再逐项点名（2026-10-29 冗余副文审计） -->
             <h3 class="mk-drawer__title">容量与实验环境</h3>
-            <span class="mk-drawer__sub">自动驾驶的并发与出站速率上限，以及日期模拟</span>
           </div>
           <button type="button" class="mk-drawer__close" aria-label="关闭" @click="close">✕</button>
         </header>

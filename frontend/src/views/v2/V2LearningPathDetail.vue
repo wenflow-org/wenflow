@@ -142,9 +142,11 @@
           <div class="stages-col">
           <div class="stages">
             <section v-if="!stages.length" class="stages__empty card">
+              <!-- kicker「路径准备中」+ 主行「还没有阶段与任务」已是完整结论；原第三行
+                   「生成后…请稍后刷新页面查看」既复述状态、又与本页自动刷新相矛盾
+                   （2026-10-29 全站副文审计） -->
               <span class="kicker">路径准备中</span>
               <strong>还没有阶段与任务</strong>
-              <p>阶段与任务生成后，会在这里展示学习计划。请稍后刷新页面查看。</p>
             </section>
             <section v-for="(stage, si) in stages" :key="stage.id || si" class="stage card" :class="`stage--${stageStatus(stage, si)}`">
               <button type="button" class="stage__head" :aria-expanded="openStages.includes(si)" @click="toggleStage(si)">
@@ -265,7 +267,7 @@
                   <span class="tag tag--blue">{{ currentTask.estimatedMinutes ? `约 ${currentTask.estimatedMinutes} 分钟` : '—' }}</span>
                   <span class="tag">{{ taskKindText(currentTask) }}</span>
                 </div>
-                <button type="button" v-if="canLearn" class="btn-primary btn-primary--block" @click="goLearn(currentTask.id)">
+                <button type="button" v-if="canLearn" class="btn-ghost btn-primary--block" @click="goLearn(currentTask.id)">
                   {{ currentTask.status === 'in_progress' ? '继续当前任务' : '开始学习' }}
                 </button>
               </template>
@@ -1824,13 +1826,6 @@ onBeforeUnmount(() => {
   color: var(--ink);
 }
 
-.stages__empty p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--muted);
-}
-
 .stage { overflow: hidden; }
 .stage__head {
   display: grid; grid-template-columns: 34px 1fr auto 24px;
@@ -1886,8 +1881,9 @@ onBeforeUnmount(() => {
 }
 /* #64 P-39：任务微调入口（只在校验通过的任务上出现；第 4 列在无按钮的行自动塌成 0 宽） */
 .task__edit {
-  font: inherit; font-size: 12px; color: var(--faint);
-  background: none; border: 0; padding: 12px 4px; min-height: 44px;
+  font: inherit; font-size: 12px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 11px; min-height: 36px;
   cursor: pointer;
 }
 .task__edit:hover, .task__edit[aria-expanded="true"] { color: var(--blue); }
@@ -1925,10 +1921,11 @@ onBeforeUnmount(() => {
 .task__body strong { display: block; font-size: 13.5px; }
 .task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 .task__cta {
-  min-height: 40px;
-  font-size: 12px; font-weight: 800; color: var(--text-on-primary);
-  /* 实色 --blue（原蓝渐变 + 25% 发光一并退役） */
-  background: var(--blue);
+  min-height: 36px;
+  font-size: 12px; font-weight: 800; color: var(--blue-deep);
+  /* 主区 hero 已有唯一实心 CTA；任务行这颗降为描边，和相邻「微调」同高同圆角 */
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, var(--line));
   padding: 6px 13px; border-radius: 8px; /* 圆角阶梯：控件 */
   cursor: pointer;
   transition: transform 0.16s ease, background 0.16s ease;

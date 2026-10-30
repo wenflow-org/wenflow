@@ -343,7 +343,8 @@
                     <span v-if="errors.scenario" class="mk-field__err">{{ errors.scenario }}</span>
                   </div>
                   <label class="mk-field">
-                    <span class="mk-field__label">学生人设 <span class="mk-field__opt">（可选）</span></span>
+                    <!-- 同屏必填字段已带 *，非必填不补「（可选）」次级标签 -->
+                    <span class="mk-field__label">学生人设</span>
                     <MkSelect
                       v-model="form.personaId"
                       :options="personaSelectOptions"
@@ -416,7 +417,7 @@
                 </div>
               </details>
               <label class="mk-field">
-                <span class="mk-field__label">备注（可选）</span>
+                <span class="mk-field__label">备注</span>
                 <textarea v-model="form.description" class="mk-field__textarea" rows="2" placeholder="这个用例想验证什么（例如：学生只说一句话也要能引导出目标）" />
               </label>
             </details>

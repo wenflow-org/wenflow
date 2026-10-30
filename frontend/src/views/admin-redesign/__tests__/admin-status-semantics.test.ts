@@ -129,7 +129,10 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(w.find('.oh-queue__empty').exists()).toBe(true)
     expect(w.find('.oh-queue__empty').text()).toContain('没有待处理项')
     expect(w.find('.oh-queue__cleared').exists()).toBe(false)
-    expect(w.text()).toContain('运营待办全部已清零')
+    /* 2026-10-29 冗余副文审计：全清零时卡头不再复述结论、空态不再点名四类待办——
+       同一事实只由页级四个 0 与「没有待处理项」承担（此前一屏说了四遍）。 */
+    expect(w.find('.mk-card__meta').exists()).toBe(false)
+    expect(w.find('.oh-queue__empty').text()).not.toContain('都已处理完')
 
     w.unmount()
   })

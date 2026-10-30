@@ -13,8 +13,9 @@
           </div>
 
           <div class="head">
+            <!-- 标题已说明这是管理员登录；「登录后管理用户、日志与系统配置」只是把标题换个说法
+                 （右侧栏已列出四个域），不再上屏（2026-10-29 冗余副文审计） -->
             <h1>管理员登录</h1>
-            <p>登录后管理用户、日志与系统配置。</p>
           </div>
 
           <form class="form" :aria-busy="loading" @submit.prevent="handleLogin">
@@ -354,12 +355,6 @@ onMounted(() => {
 .head :is(h1, h2) {
   margin: 0;
   font-size: 22px;
-}
-
-.head p {
-  margin: 0;
-  font-size: var(--mk-fs-body);
-  color: var(--muted);
 }
 
 .form {

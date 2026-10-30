@@ -35,7 +35,8 @@
 
           <label class="mk-field">
             <span class="mk-field__label">用途说明</span>
-            <input v-model="form.description" class="mk-field__input" placeholder="选填" @input="error = ''" />
+            <!-- 占位符不写「选填」：非必填由没有 * 表达 -->
+            <input v-model="form.description" class="mk-field__input" @input="error = ''" />
           </label>
 
           <template v-if="!isPlatform">

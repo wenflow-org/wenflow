@@ -108,10 +108,12 @@
               <code class="mono">user:path</code>（用户/平台，绿灯）。保存/发布时核对（skill→移交、sandbox→沙盘注册表、user→通过）。
             </p>
             <div v-for="(input, i) in coreForm.inputs" :key="i" class="sdp-pwform__inputrow">
-              <input v-model="input.name" class="mk-input" placeholder="别名 name（可选）" @input="markDirty" />
-              <input v-model="input.type" class="mk-input" placeholder="类型 type（可选）" @input="markDirty" />
+              <!-- 占位符只给字段名（name/type/ref/desc 就是要填的键），不追「（可选）」：
+                   ref 已用真实示例演示取值格式，可选性由「只有 ref 是必填」的校验提示表达 -->
+              <input v-model="input.name" class="mk-input" placeholder="别名 name" @input="markDirty" />
+              <input v-model="input.type" class="mk-input" placeholder="类型 type" @input="markDirty" />
               <input v-model="input.ref" class="mk-input mono" placeholder="skill:path-planning.milestones | sandbox:path.normalizedInput | user:latestMessage" @input="markDirty" />
-              <input v-model="input.desc" class="mk-input" placeholder="用途说明 desc（可选）" @input="markDirty" />
+              <input v-model="input.desc" class="mk-input" placeholder="用途说明 desc" @input="markDirty" />
               <button type="button" class="mk-link mk-link--danger" @click="removeInput(i)">删除</button>
             </div>
             <button type="button" class="mk-link" @click="addInput">+ 添加输入声明</button>

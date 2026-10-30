@@ -18,6 +18,7 @@
          失败必须显式落地：取不到 ≠ 没事（原实现把失败写成 0，页面伪装成「全部已清零」） -->
     <!-- 失败态的重试出口不放页头（顶栏已有刷新，页头第二颗钮重复）：失败时本行就地给重试
          2026-10-23，与记忆与复习总览的失败条同一形态 -->
+    <template v-if="showTodoReadings">
     <div v-if="wbHasError" class="mk-alert mk-alert--row" role="alert">
       <span class="mk-alert__msg">待办数据加载失败，对应计数不可信：{{ wbErrorText }}</span>
       <button type="button" class="mk-alert__btn" :disabled="refreshing" @click="refreshActive">{{ refreshing ? '重试中…' : '重试' }}</button>
@@ -37,6 +38,7 @@
         @click="m.failed ? undefined : m.action()"
       />
     </section>
+    </template>
 
     <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签。
@@ -72,7 +74,9 @@
       <div class="mk-card__head">
         <div class="oh-wb-head">
           <h4 class="mk-card__title">待办</h4>
-          <span class="mk-card__meta">{{ wbLoading && !stats ? '正在拉取待办…' : todoConclusion }}</span>
+          <!-- 卡头只留空态没有的结论（待处理件数 / 加载失败）；全清零时留空——
+               页级四个 0 与下方空态已经把「都处理完了」讲清，第三次上屏只是复读。 -->
+          <span v-if="todoHeadMeta" class="mk-card__meta">{{ todoHeadMeta }}</span>
         </div>
       </div>
       <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="3" />
@@ -97,8 +101,8 @@
         <div v-else class="oh-queue__empty">
           <CheckCircle2 :size="20" :stroke-width="1.8" aria-hidden="true" />
           <div>
+            <!-- 只留结论：清零的是哪四类，页级读数带四张 0 卡已经写明，不再逐项复述 -->
             <strong>没有待处理项</strong>
-            <span>反馈、路径、事件和公告都已处理完。</span>
           </div>
         </div>
         <!-- 清零项压缩成一行，保留「哪些已经没事」的信息 -->
@@ -210,6 +214,9 @@ const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp', 'tools
 
 type OhTab = (typeof OH_TABS)[number]
 const tab = ref<OhTab>('todo')
+/** 系统级页签与运营待办四域无关：隐藏页级读数带，别用四个 0 占掉配置页首屏 */
+const SYSTEM_TABS: readonly OhTab[] = ['tools', 'security', 'access']
+const showTodoReadings = computed(() => !SYSTEM_TABS.includes(tab.value))
 const route = useRoute()
 const router = useRouter()
 
@@ -454,7 +461,9 @@ const activeTodo = computed(() =>
 const clearedTodo = computed(() => todoItems.value.filter((t) => !t.failed && t.count === 0))
 const clearedNames = computed(() => clearedTodo.value.map((t) => t.label).join(' · '))
 
-/** 卡头结论句：三态纪律——首屏未拉回前不得渲染「全部已清零」（取不到 ≠ 没事） */
+/** 卡头结论句：三态纪律——首屏未拉回前不得渲染「全部已清零」（取不到 ≠ 没事）。
+ *  全清零返回空串：结论由页级四个 0 与卡内空态承担，卡头不再第三次复读
+ *  （2026-10-29 冗余副文审计：同一屏曾出现「四个 0 + 全部已清零 + 没有待处理项 + 四类点名」）。 */
 const todoConclusion = computed(() => {
   const pendingItems = todoItems.value.filter((t) => t.count > 0 && !t.failed)
   const pending = pendingItems.length
@@ -462,9 +471,13 @@ const todoConclusion = computed(() => {
   if (wbHasError.value) {
     return pending ? `${pending} 类 · ${total} 件待处理。另有部分待办加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
   }
-  if (!pending) return '运营待办全部已清零'
+  if (!pending) return ''
   return `${pending} 项待处理（${pending} 类 · ${total} 件）`
 })
+/** 卡头可见副文：加载注记优先，其余交给 todoConclusion（空串 = 不渲染）。 */
+const todoHeadMeta = computed(() =>
+  wbLoading.value && !stats.value ? '正在拉取待办…' : todoConclusion.value
+)
 
 /**
  * 待办读数的值色分档：按事项严重度分档，不把 bad/warn 压成一个布尔——

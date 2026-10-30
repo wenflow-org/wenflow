@@ -174,10 +174,12 @@
           </table>
         </div>
 
-        <!-- 过期/已撤销历史（默认收起；「已撤销」筛选时自动展开）：折叠头走全局 .mk-section__summary -->
+        <!-- 已结束会话（过期/已撤销，默认收起；「已撤销」筛选时自动展开）：折叠头走全局 .mk-section__summary。
+             标题只报总数，过期/撤销分解放右侧 meta——原「已过期 · 已撤销（42） 过期 0 · 已撤销 42」
+             括号内外两个 42 同屏重复，读数像出错（2026-10-30 人工复查）。 -->
         <details v-if="g.historical.length" class="ss-hist" :open="statusFilter !== ''">
           <summary class="mk-section__summary ss-hist__summary">
-            <span class="ss-hist__title">已过期 · 已撤销（{{ g.historical.length }}<template v-if="fullHistorical(g) > g.historical.length"> / 全量 {{ fullHistorical(g) }}</template>）</span>
+            <span class="ss-hist__title">已结束会话（{{ g.historical.length }}<template v-if="fullHistorical(g) > g.historical.length"> / 全量 {{ fullHistorical(g) }}</template>）</span>
             <span class="ss-hist__meta">过期 {{ groupCounts(g).expired }} · 已撤销 {{ groupCounts(g).revoked }}</span>
           </summary>
           <div class="mk-table-scroll">
@@ -752,6 +754,11 @@ onMounted(async () => {
 
 .ss-body { display: grid; gap: var(--mk-space-4); }
 
+/* 分组卡在 fill 布局里被拉到可用高度：活跃表在上，历史折叠条作为卡脚贴底。
+   否则折叠条紧跟活跃行、其下留 300+px 空白，像表格里混进了一条无主行（2026-10-30 人工复查）。 */
+.ss-group { display: flex; flex-direction: column; }
+.ss-group > .mk-table-scroll { flex: none; }
+
 /* 卡头右组：两枚批量动作（2026-10-27 操作区收口） */
 .ss-head-acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 /* 分组卡走全局 .mk-card / .mk-card__head（原型 card 词汇），页面只保留组头内的身份排版 */
@@ -829,7 +836,7 @@ onMounted(async () => {
 
 /* 过期/已撤销折叠组（默认收起，summary 行可点击展开）
    折叠头形态走全局 .mk-section__summary（▸ 指示 + open 旋转 + hover），此处只覆配色/内衬 */
-.ss-hist { border-top: 1px solid var(--mk-line); }
+.ss-hist { border-top: 1px solid var(--mk-line); margin-top: auto; }
 .ss-hist__summary {
   display: flex;
   align-items: center;

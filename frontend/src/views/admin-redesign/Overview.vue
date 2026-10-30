@@ -3,14 +3,6 @@
     <!-- 页头（原型 pageTitle）：面包屑管「我在哪」，页头管「这页是什么 + 主操作」 -->
     <MkPageHead title="平台总览" :sub="headSub">
       <template #actions>
-        <!-- 运营入口（2026-10-24 层级审计）：总览是登录落点，但运营域只在侧栏一组里；
-             待处理反馈/草稿公告/失败事件都要先想到去运营中心。这里给一个常驻出口，
-             读的是本页已有的失败/闭环事实，不新增取数。 -->
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm"
-          @click="goOpsHub"
-        >运营中心</button>
         <!-- 刷新状态独立于副文：副文只放事实段（运行全景/数据截至/最近活动），
              避免长句在页头副文盒内断词换行（视觉走查 2026-10-03）。
              本页 10s 轮询，手动「刷新」钮与之重复（对齐执行日志/健康中心先例：轮询页不放刷新钮）。
@@ -563,7 +555,8 @@ function refreshNow() {
    退到悬停 tooltip（hint），foot 只留 超时/失败/新增 与基线说明。 */
 interface KpiCard { key?: string; label: string; value: string; valueNote?: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }
 /** 目标对话卡报的是「进行中 + 已完成 + 已取消」总量，与闭环阶段 1 的「N 进行中」同名不同量：
- *  卡名与数值行都标出总量口径，避免两处读成同一指标。 */
+ *  卡名用「累计」标出口径即可——数值行不再补一个「总量」，那是把「累计」换个词再说一遍
+ *  （2026-10-29 全站副文审计：卡面曾读作「累计目标对话 5 总量」）。 */
 /* A1-2（2026-10-29 夜审）：KPI 数值落定前显「—」。live 里的总览快照跨页常驻（boot 旧值、
    后端冷启动 0），首帧直接渲染会先出 0/旧值、1-2s 后被本轮刷新跳成真实值。数值卡在本次
    挂载内完成首次成功刷新前不渲染数值（与完课量卡三态同一纪律），不显示假 0。 */
@@ -573,7 +566,6 @@ const kpiCards = computed<KpiCard[]>(() =>
     key: k.key,
     label: k.key === 'goalConversations' ? '累计目标对话' : k.label,
     value: kpisSettled.value ? k.value : '—',
-    valueNote: k.key === 'goalConversations' ? '总量' : undefined,
     foot: k.foot,
     hint: k.hint,
     note: k.note,
@@ -944,9 +936,6 @@ function jumpToKpi(k: KpiCard) {
   const t = (k.key ? KPI_TARGETS[k.key] : undefined) ?? KPI_TARGET_BY_LABEL[k.label] ?? { scene: 'execution-logs' }
   if (t.query) { openSceneWith(t.scene, t.query); return }
   jump(t.scene, t.tab, { statusFilter: t.statusFilter, timeRange: t.timeRange })
-}
-function goOpsHub() {
-  jump('ops-hub')
 }
 
 /* KPI 卡面副行 = 口径短语（随数据来，live.ts kpis.hint）；数值类（趋势 / 分解 / 对照 / foot）

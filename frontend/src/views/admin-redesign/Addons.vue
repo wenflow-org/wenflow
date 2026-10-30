@@ -176,7 +176,8 @@
             <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
           </label>
           <label class="mk-field">
-            <span class="mk-field__label">描述（可选）</span>
+            <!-- 必填项已带 *，非必填不再追加「（可选）」 -->
+            <span class="mk-field__label">描述</span>
             <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2"></textarea>
           </label>
         </div>

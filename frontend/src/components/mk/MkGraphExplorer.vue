@@ -152,7 +152,12 @@
                   :style="{ borderTop: `${legendLines.part.width}px ${legendLines.part.type} ${legendLines.part.color}` }"
                 />属于（知识组件 → 核心概念）
               </span>
-              <span class="mk-ge__legend-group mk-ge__legend-hint">圆点=核心概念 · 方块=知识组件 · 拖动/滚轮可缩放</span>
+              <span class="mk-ge__legend-group mk-ge__legend-hint">
+                圆点=核心概念 · 方块=知识组件 ·
+                <span class="mk-ge__legend-desktop">拖动/滚轮可缩放</span>
+                <span class="mk-ge__legend-mobile">双指可缩放</span>
+                <span class="mk-ge__legend-tap"> · 点节点看名称</span>
+              </span>
             </div>
           </div>
 
@@ -224,7 +229,38 @@
                 </ul>
               </div>
             </template>
-            <p v-else class="mk-ge__side-hint">点图中任意节点，这里显示它的掌握度与前后关系。</p>
+            <div v-else class="mk-ge__overview">
+              <h4 class="mk-ge__side-title">图谱概览</h4>
+              <p class="mk-ge__side-hint">点图中节点，查看掌握度与前后关系。</p>
+              <!-- 未选中时侧栏不能只剩一句提示、把 800px 高的右栏留空（2026-10-29
+                   像素级走查）：先给分布，再给最多 5 个「最该先看」的概念，点名字等同
+                   点画布节点，侧栏即刻切到详情。 -->
+              <div class="mk-ge__overview-stats">
+                <div class="mk-ge__overview-stat">
+                  <b>{{ counts.unknown }}</b><span>待学习</span>
+                </div>
+                <div class="mk-ge__overview-stat">
+                  <b>{{ counts.fragile }}</b><span>记忆偏弱</span>
+                </div>
+                <div class="mk-ge__overview-stat">
+                  <b>{{ counts.learning }}</b><span>进行中</span>
+                </div>
+                <div class="mk-ge__overview-stat">
+                  <b>{{ counts.stable }}</b><span>已掌握</span>
+                </div>
+              </div>
+              <template v-if="suggestedNodes.length">
+                <p class="mk-ge__overview-label">建议先看</p>
+                <ul class="mk-ge__overview-list">
+                  <li v-for="n in suggestedNodes" :key="n.id">
+                    <button type="button" class="mk-ge__overview-item" @click="focusNode(n.id)">
+                      <span>{{ n.label }}</span>
+                      <span class="mk-badge" :class="STATUS_BADGE[statusKeyOf(n)]">{{ STATUS_LABEL[statusKeyOf(n)] }}</span>
+                    </button>
+                  </li>
+                </ul>
+              </template>
+            </div>
           </aside>
         </div>
       </div>
@@ -714,6 +750,14 @@ const counts = computed(() => {
   return out
 })
 
+/** 未选中节点时的侧栏建议：先弱后生，最多 5 个；已掌握的不再占位 */
+const suggestedNodes = computed(() =>
+  [...levelNodes.value]
+    .filter((n) => statusKeyOf(n) !== 'stable')
+    .sort((a, b) => (a.masteryScore ?? 0) - (b.masteryScore ?? 0))
+    .slice(0, 5)
+)
+
 const selectedStatus = computed(() => {
   const key = statusKeyOf(selected.value)
   return { key, label: STATUS_LABEL[key], badge: STATUS_BADGE[key] }
@@ -1072,7 +1116,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: var(--mk-space-4);
-  align-items: start;
+  align-items: stretch;
 }
 .mk-ge__canvas {
   min-width: 0;
@@ -1108,13 +1152,24 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 }
 /* 线色不再写死在 CSS：图例与画布同源取 relationStyleOf（见 script legendLines） */
 .mk-ge__legend-hint {
+  display: block;
   opacity: 0.8;
+}
+/* 窄屏密集图不常显标签（见 MkGraph labelWorthy），补一句操作提示，避免用户以为图没名字 */
+.mk-ge__legend-tap { display: none; white-space: nowrap; }
+.mk-ge__legend-mobile { display: none; }
+@media (max-width: 900px) {
+  .mk-ge__legend-desktop { display: none; }
+  .mk-ge__legend-mobile { display: inline; }
+  .mk-ge__legend-tap { display: inline; }
 }
 .mk-ge__side {
   padding: var(--mk-space-3);
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-md);
   background: var(--mk-surface);
+  height: 100%;
+  box-sizing: border-box;
 }
 .mk-ge__side-title {
   margin: 0 0 var(--mk-space-2);
@@ -1139,6 +1194,78 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
   color: var(--mk-muted);
+}
+/* 未选中态的概览：把原先把 800px 右栏留空的单句提示，换成分布 + 建议入口 */
+.mk-ge__overview {
+  display: grid;
+  gap: var(--mk-space-3);
+  align-content: start;
+}
+.mk-ge__overview-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mk-space-2);
+}
+.mk-ge__overview-stat {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+}
+.mk-ge__overview-stat b {
+  font-size: 20px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.mk-ge__overview-stat span {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+}
+.mk-ge__overview-label {
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  color: var(--mk-muted);
+}
+.mk-ge__overview-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mk-ge__overview-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mk-space-2);
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--mk-radius-md);
+  background: none;
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  text-align: left;
+  cursor: pointer;
+}
+.mk-ge__overview-item:hover {
+  border-color: var(--mk-line);
+  background: var(--mk-surface-2);
+}
+.mk-ge__overview-item > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 状态徽章是固定两字，不能被长概念名挤成「待学 / 习」 */
+.mk-ge__overview-item > .mk-badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 /* 掌握程度卡（原型 wf-card + wf-card__head：strong 标题 / 12px「近 30 天」meta） */
 .mk-ge__mastery {
@@ -1312,6 +1439,10 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   .mk-ge__body {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* 图例后多留 32px：首屏底边原先正好切在「图谱概览」标题腰部，只露出半截字。
+     把下一张卡整体推到首屏之外，避免假半截卡；滚动后卡片完整出现。 */
+  .mk-ge__canvas { padding-bottom: calc(var(--mk-space-2) + 24px); }
+  .mk-ge__side { height: auto; }
   /* 视图分段控件（全部/核心概念/知识组件）只有 27px 高，触屏上它是最常用的过滤器 */
   .mk-ge__seg-btn {
     min-height: 36px;

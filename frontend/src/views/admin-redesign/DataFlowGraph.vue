@@ -120,7 +120,7 @@
                 :title="`前往 ${flow.entryFrom?.stageName}（${flow.entryFrom?.stageId}-agent），看这些字段在那边是怎么产出的`"
                 @click="switchStage(flow.entryFrom!.stageId)"
               >入口 · 来自 {{ flow.entryFrom?.stageName }}<span class="dfg-gate__jump">↗</span></button>
-              <span class="dfg-gate__sub">{{ entryVisible.length }} 个字段经 {{ flow.entryFrom?.stageId }}-agent 移交进入本阶段</span>
+              <span class="dfg-gate__sub" :title="`${entryVisible.length} 个字段经 ${flow.entryFrom?.stageId}-agent 移交进入本阶段`">{{ entryVisible.length }} 个字段经 {{ flow.entryFrom?.stageId }}-agent 移交本阶段</span>
             </div>
             <span class="dfg-gate__count">{{ entryVisible.length }} 字段</span>
             <button type="button" v-for="p in farPorts['__entry__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
@@ -329,7 +329,7 @@
                 :title="`前往 ${flow.exitTo?.stageName}（${flow.exitTo?.stageId}-agent），看这些字段在那边是怎么被消费的`"
                 @click="switchStage(flow.exitTo!.stageId)"
               >出口 · 交给 {{ flow.exitTo?.stageName }}<span class="dfg-gate__jump">↗</span></button>
-              <span class="dfg-gate__sub">{{ flow.agentId }} 汇总 {{ flow.exit.length }} 个字段，整体移交下一阶段</span>
+              <span class="dfg-gate__sub" :title="`${flow.agentId} 汇总 ${flow.exit.length} 个字段，整体移交下一阶段`">{{ flow.agentId }} 汇总 {{ flow.exit.length }} 个字段移交下一阶段</span>
             </div>
             <span class="dfg-gate__count">{{ flow.exit.length }} 字段</span>
             <button type="button" v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></button>
@@ -494,7 +494,8 @@
                 </div>
                 <div class="dfg-field">
                   <label class="dfg-field__label" for="dfg-edit-notes">备注</label>
-                  <input id="dfg-edit-notes" v-model="editDraft.notes" class="dfg-edit__input" placeholder="备注（可选）" spellcheck="false" />
+                  <!-- 占位符不复述标签，也不写「（可选）」：非必填由没有 * 表达 -->
+                  <input id="dfg-edit-notes" v-model="editDraft.notes" class="dfg-edit__input" spellcheck="false" />
                 </div>
                 <p v-if="editMsg" class="dfg-edit__msg" :class="{ 'is-error': editError }">{{ editMsg }}</p>
               </div>

@@ -137,7 +137,7 @@ npm run dev</code></pre>
           </div>
 
           <div class="callout callout--warn">
-            <strong>「Agent」已是历史概念。</strong> 现在的 LLM 能力单元是 <strong>Skill</strong>，全部位于 <code>backend/src/skills/</code>；<code>agents/</code> 仅余事件驱动的 <code>learner-model-agent</code>、仿真编排与 plugins 等遗留目录。文档与旧代码中的 Agent 字样大多指 Skill。
+            <strong>「Agent」是旧称，当前能力单元叫 Skill。</strong> 现在的 LLM 能力单元是 <strong>Skill</strong>，全部位于 <code>backend/src/skills/</code>；<code>agents/</code> 仅余事件驱动的 <code>learner-model-agent</code>、仿真编排与 plugins 等遗留目录。后台部分历史筛选器与归属标签仍沿用 Agent 作为分组名，后续会统一为 Skill；看到 Agent 时请按 Skill 理解。
           </div>
         </section>
 
@@ -275,7 +275,7 @@ prompts/                     # 仓库根，与 backend/ 同级
               <span class="steps__no">6</span>
               <div>
                 <strong>控制台验证</strong>
-                <p><a href="/admin/console" target="_blank" rel="noopener noreferrer">/admin/console</a>：字段流转图看字段流转与调用用量 → Skill 抽屉试跑 → <code>/admin/skills?view=skill&amp;id=my-skill</code> Skill 详情页看生效 Prompt 与版本。</p>
+                <p><a href="/admin/orchestrator" target="_blank" rel="noopener noreferrer">/admin/orchestrator</a>：字段流转图看编排与调用用量 → Skill 抽屉试跑 → <code>/admin/skills?view=skill&amp;id=my-skill</code> Skill 详情页看生效 Prompt 与版本；平台总览在 <a href="/admin/overview" target="_blank" rel="noopener noreferrer">/admin/overview</a>。</p>
               </div>
             </li>
           </ol>
@@ -284,7 +284,7 @@ prompts/                     # 仓库根，与 backend/ 同级
         <!-- ================= 控制台 ================= -->
         <section id="console" class="docs-sec">
           <h2>控制台</h2>
-          <p class="docs-lead"><a href="/admin/console" target="_blank" rel="noopener noreferrer">/admin/console</a> 是运维与调试主入口（管理员登录）：</p>
+          <p class="docs-lead"><a href="/admin/overview" target="_blank" rel="noopener noreferrer">/admin/overview</a> 是运维与调试主入口（管理员登录）：</p>
 
           <div class="mini-grid">
             <div class="mini"><strong>平台总览</strong><p>健康简报、24h 调用脉搏、待办。</p></div>

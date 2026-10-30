@@ -202,7 +202,8 @@
               <span v-if="errors.title" class="mk-field__err">{{ errors.title }}</span>
             </label>
             <label class="mk-field">
-              <span class="mk-field__label">正文（可选）</span>
+              <!-- 标题带 * 已是唯一必填标记，非必填不再追加「（可选）」 -->
+              <span class="mk-field__label">正文</span>
               <textarea v-model="form.body" class="mk-field__textarea" rows="3" placeholder="通知正文" />
             </label>
             <label class="mk-field">

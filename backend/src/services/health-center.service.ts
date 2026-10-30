@@ -660,7 +660,9 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
     }),
     // ============ override-record（覆盖层，info 只读） ============
     buildItem('override-record', {
-      label: '覆盖行（覆盖权高于文件基准）',
+      /* label 只给名字：它的括号解释与下面 cause 首句同义，检查行上会连着读两遍
+         （2026-10-29 冗余副文审计）。覆盖权口径留在 cause 与术语表。 */
+      label: '覆盖行',
       base: 'db:managed',
       semantics: 'override-record',
       severity: 'info',
@@ -679,7 +681,9 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
     }),
     // ============ runtime-info（运行时观测，info 只读） ============
     buildItem('runtime-prompt', {
-      label: '运行时漂移（遥测：代码侧 prompt vs DB ACTIVE）',
+      /* label 去掉「（遥测：代码侧 prompt vs DB ACTIVE）」：它和 cause 首句逐字同义，
+         检查行渲染成「名字 + 解释」两行时会连着读两遍（2026-10-29 冗余副文审计）。 */
+      label: '运行时漂移',
       base: 'runtime',
       semantics: 'runtime-info',
       severity: 'info',

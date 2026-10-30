@@ -15,6 +15,9 @@ RUN npx prisma generate
 COPY backend/src/ ./src/
 RUN npx prisma generate --schema=prisma/system/schema.prisma
 
+# src/config/misconception-corpus.ts imports ../../config/misconception-corpus.json,
+# so the JSON config dir must exist before tsc runs.
+COPY backend/config/ ./config/
 COPY backend/tsconfig.json backend/tsconfig.build.json ./
 COPY backend/scripts/clean-dist.js backend/scripts/copy-system-prisma-client.js ./scripts/
 # #139：src/config/misconception-corpus.ts 编译期静态 import ../../config/misconception-corpus.json，

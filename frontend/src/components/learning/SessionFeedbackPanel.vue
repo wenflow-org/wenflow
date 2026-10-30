@@ -71,7 +71,8 @@
         </fieldset>
 
         <label class="session-feedback__comment">
-          <span>补充说明，可选</span>
+          <!-- 反馈里唯一的自由文本，本来就不是必填；「，可选」是把可以留空再说一遍 -->
+          <span>补充说明</span>
           <div class="feedback-textarea">
             <textarea
               v-model="comment"

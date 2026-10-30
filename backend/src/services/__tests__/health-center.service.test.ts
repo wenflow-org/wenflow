@@ -221,6 +221,10 @@ describe('健康中心聚合（基准体系版）', () => {
     expect(w4.label).toContain('W4 漂移');
     const runtime = byId.get('runtime-prompt')!;
     expect(runtime.label).toContain('运行时漂移');
+    /* 2026-10-29 冗余副文审计：检查行渲染成「label + cause」两行，label 里再挂一句机制说明
+       会与 cause 首句同义复读。label 只留名字 → 用精确断言锁住（不再放括号解释）。 */
+    expect(runtime.label).toBe('运行时漂移');
+    expect(byId.get('override-record')!.label).toBe('覆盖行');
     // 三个漂移语义各自有独立 label，不合并
     const labels = new Set([contractItem.label, w4.label, runtime.label]);
     expect(labels.size).toBe(3);

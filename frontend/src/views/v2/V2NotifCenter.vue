@@ -15,8 +15,8 @@
         <path d="M6 8a6 6 0 0 1 12 0c0 7 2 9 2 9H4s2-2 2-9" />
         <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
       </svg>
-      <!-- AI 任务运行中：脉冲环 -->
-      <span v-if="busyItems.length" class="nc__pulse-ring" aria-hidden="true"></span>
+      <!-- AI 任务运行中：右下角小蓝点（原 44px 脉冲环在截图里会被冻结成一圈大描边） -->
+      <span v-if="busyItems.length" class="nc__busy-dot" aria-hidden="true"></span>
       <!-- 通知未读：红点徽标（原型 wf-bell__dot 形态；具体条数在 aria-label 与面板 tab 里） -->
       <span v-if="unread > 0" class="nc__dot" aria-hidden="true"></span>
     </button>
@@ -502,19 +502,17 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* AI 任务运行中脉冲环 */
-.nc__pulse-ring {
+/* AI 任务运行中：右下角 8px 蓝点，不再用整圈描边 */
+.nc__busy-dot {
   position: absolute;
-  inset: -2px;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--blue) 60%, transparent);
-  animation: nc-pulse 1.6s ease-out infinite;
+  background: var(--blue);
+  box-shadow: 0 0 0 1.5px var(--surface);
   pointer-events: none;
-}
-@keyframes nc-pulse {
-  0% { transform: scale(0.9); opacity: 0.9; }
-  70% { transform: scale(1.35); opacity: 0; }
-  100% { transform: scale(1.35); opacity: 0; }
 }
 
 /* ================= 面板 ================= */

@@ -84,23 +84,16 @@
         <section class="uc-card">
           <ul class="profile-menu">
             <li>
-              <router-link to="/user/achievements" class="profile-menu__item">
-                <Trophy :size="18" :stroke-width="1.75" aria-hidden="true" />
-                <span>我的成就</span>
+              <router-link to="/library" class="profile-menu__item">
+                <BookOpen :size="18" :stroke-width="1.75" aria-hidden="true" />
+                <span>资料库</span>
                 <span class="profile-menu__chev" aria-hidden="true">›</span>
               </router-link>
             </li>
             <li>
-              <router-link to="/user/learning-history" class="profile-menu__item">
-                <History :size="18" :stroke-width="1.75" aria-hidden="true" />
-                <span>学习历史</span>
-                <span class="profile-menu__chev" aria-hidden="true">›</span>
-              </router-link>
-            </li>
-            <li>
-              <router-link to="/user/settings" class="profile-menu__item">
-                <Settings :size="18" :stroke-width="1.75" aria-hidden="true" />
-                <span>设置</span>
+              <router-link to="/user/agent-logs" class="profile-menu__item">
+                <ScrollText :size="18" :stroke-width="1.75" aria-hidden="true" />
+                <span>调用日志</span>
                 <span class="profile-menu__chev" aria-hidden="true">›</span>
               </router-link>
             </li>
@@ -116,7 +109,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { History, Settings, Trophy } from 'lucide-vue-next'
+import { BookOpen, ScrollText } from 'lucide-vue-next'
 import CapabilityShell from '@/components/user/CapabilityShell.vue'
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue'
 import { toast } from '@/utils/toast'

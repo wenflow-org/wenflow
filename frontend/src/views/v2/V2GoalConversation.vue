@@ -348,6 +348,7 @@
               rows="1"
               :maxlength="INPUT_MAX"
               :placeholder="chatPlaceholder"
+              :disabled="startFailed"
               @keydown.enter.exact.prevent="doSend"
             ></textarea>
             <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
@@ -356,8 +357,8 @@
               v-if="!live.sending"
               type="button"
               class="composer__send"
-              :class="{ 'composer__send--off': !input.trim() }"
-              :disabled="!input.trim()"
+              :class="{ 'composer__send--off': startFailed || !input.trim() }"
+              :disabled="startFailed || !input.trim()"
               aria-label="发送"
               @click="doSend"
             >
@@ -472,7 +473,7 @@
 
         <div class="proposal__note">
           <span v-if="materialCount">已上传 {{ materialCount }} 份资料，生成路径时按目标相关性选用，其余保留在资料库。</span>
-          <span>确认后在本页生成，通常几分钟。模型重试时会更久。失败可原地重试，信息不会丢。</span>
+          <span>确认后在本页生成，通常几分钟。失败可原地重试，信息不会丢。</span>
           <AiContentNote />
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
@@ -501,7 +502,9 @@
       <div v-else-if="phase === 'generating'" class="proposal proposal--center">
         <span class="spinner"></span>
         <h2 class="proposal__title">正在生成你的路径…</h2>
-        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，通常几分钟。模型重试时会更久。超过 5 分钟可以离开本页，完成后会出现在路径列表。</p>
+        <!-- 等待态只讲两件事：还要多久、完成后去哪看。「可以离开」由下方的
+             proposal__note 单独承担，同一屏不再说两遍（2026-10-29 全站副文审计） -->
+        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，通常几分钟。完成后会出现在路径列表。</p>
         <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
         <!-- 生成阶段模型输出是 JSON（对用户不可读）：delta 阶段给中性进度文案，不直出原始流（P3） -->
         <div class="proposal__stream">
@@ -531,7 +534,9 @@
              「主结构生成中，一般 1-2 分钟内完成…」并置矛盾（实为主结构已创建、生成刚启动）。
              改为与事实一致的「已创建 + 正在生成」两段式。 -->
         <h2 class="proposal__title">路径已创建</h2>
-        <p class="proposal__generating-note">路径正在生成，可以进入「我的路径」查看阶段与任务的准备进度。</p>
+        <!-- 只保留「还在生成」这一条会改变预期的事实；去哪看进度由正下方的
+             「查看我的路径」按钮表达，不再在句子里指一次路（2026-10-29 全站副文审计） -->
+        <p class="proposal__generating-note">阶段与任务还在生成中。</p>
         <div class="proposal__actions proposal__actions--center">
           <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
           <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->
@@ -597,9 +602,15 @@ const SEND_SHORTCUT_HINT = 'Enter 发送 · Shift+Enter 换行';
 /** 生成中发送键变成停止方块：补一句 hover 说明，纯图标按钮不靠自己猜 */
 const STOP_WAIT_HINT = '停止等待回复';
 const CLOSE_ESC_HINT = '关闭（Esc 可随时关闭）';
+/* 首轮 start 失败且尚无任何 AI 回复：底部输入框不能继续「假装能问」，否则用户会再次失败 */
+const startFailed = computed(() => live.failed === 'start' && !live.stopped);
 /* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */
 const entryPlaceholder = computed(() => isNarrow.value ? '先说说你想解决什么…' : '先说说你最近想解决什么，或现在卡在哪里…');
-const chatPlaceholder = computed(() => isNarrow.value ? '回答问题，或补充基础、时间…' : '回答上面的问题，或补充你的基础、时间和限制…');
+const chatPlaceholder = computed(() => {
+  // 不写「上方」：输入框与重试按钮同屏，点哪儿由位置自明（文案门禁 R2）
+  if (startFailed.value) return '首轮对话失败，请先重试';
+  return isNarrow.value ? '回答问题，或补充基础、时间…' : '回答导师的问题，或补充你的基础、时间和限制…';
+});
 function togglePanel() {
   if (!isNarrow.value) return;
   panelOpen.value = !panelOpen.value;
@@ -1085,6 +1096,7 @@ async function doSend(e?: unknown) {
   // 点击调用无事件载荷，自然跳过守卫
   const ke = e as KeyboardEvent | undefined;
   if (ke && (ke.isComposing || ke.keyCode === 229)) return;
+  if (startFailed.value) return;
   const t = input.value.trim();
   if (!t || live.sending) return;
   input.value = '';
@@ -2152,6 +2164,10 @@ function shuffleScenes() {
 .probe__opt:disabled { cursor: default; opacity: .92; }
 .proposal__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .proposal__actions--center { justify-content: center; }
+/* 完成态双按钮等宽：原「查看我的路径」按内容撑到 ~360px，「留在本页」只有 ~80px，
+   视觉重心左偏；等分后两个出口权重一致。 */
+.proposal__actions--center .btn-primary,
+.proposal__actions--center .btn-ghost { flex: 1 1 0; justify-content: center; min-width: 0; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 11px 22px; border-radius: var(--mk-radius-xl);

@@ -138,7 +138,7 @@
               <!-- 英文主行（2026-10-25 用户「以英文为主」）：canonical id 是身份，中文 displayName 是别名 -->
               <button type="button" class="sk-name-main sk-name-main--id sk-name-link mk-ellipsis" :title="nameTitleOf(s)" @click.stop="openDesign(s.id)">{{ s.id }}</button>
               <span v-if="sublineOf(s)" class="sk-alias" :title="nameTitleOf(s)">{{ sublineOf(s) }}</span>
-              <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId">{{ s.agentName || s.agentId }}</span>
+              <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId"><span class="sk-agent-tag__text">{{ s.agentName || s.agentId }}</span></span>
               <span v-else class="mk-badge mk-badge--sm mk-badge--muted">未归属</span>
               <span class="sk-model-chip" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span>
             </div>
@@ -1138,15 +1138,18 @@ const fallbackPolicyText = computed(() => {
   align-items: center;
   flex: none;
   max-width: 128px; /* 长 Agent 名省略（全名走 title） */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   padding: 2px 9px;
   border-radius: 999px;
   background: var(--mk-line);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
+}
+.sk-agent-tag__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sk-agent-tag::before {
   content: '';

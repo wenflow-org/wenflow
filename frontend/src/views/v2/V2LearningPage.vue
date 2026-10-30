@@ -1,13 +1,24 @@
 <template>
-  <div class="learn v2-page">
+  <div class="learn v2-page" :class="{ 'learn--quiz': !!checkpoint }">
     <!-- 沉浸式头部 -->
     <header class="learn__head">
-      <button type="button" class="learn__back" @click="goBack">‹ 返回路径详情</button>
+      <button type="button" class="learn__back" @click="goBack">
+        <span class="learn__back-arrow" aria-hidden="true">‹</span>
+        <span class="learn__back-text">返回路径详情</span>
+      </button>
       <div class="learn__title">
         <strong>{{ taskTitle || '课堂' }}</strong>
         <small>{{ pathName }}</small>
       </div>
       <div class="learn__head-right">
+        <!-- 显式结课入口：不再只藏在 ⋯ 菜单里；知识点未全掌握时仍允许计入进度 -->
+        <button
+          v-if="!extensionMode && !completed && msgs.length > 1"
+          type="button"
+          class="learn__finishbtn"
+          :title="finishHint"
+          @click="completeAndSettle"
+        >完成本节</button>
         <!-- 知识点入口：原型单列无侧栏 → 常驻左栏降级为头部入口 + 浮窗（功能不删） -->
         <button
           v-if="knowledgePoints.length"
@@ -19,14 +30,14 @@
           aria-controls="learn-kp-panel"
           @click="toggleKp"
         >知识点 <b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
-        <span class="learn__live learn__live--head" :class="{ 'learn__live--err': !!initError }">{{ liveState }}</span>
+        <span class="learn__live learn__live--head" :class="{ 'learn__live--err': !!initError && !isLocked, 'learn__live--locked': isLocked }">{{ liveState }}</span>
         <ImmersiveMenu>
           <!-- 窄屏把连接态收进 ⋯ 菜单（2026-10-08 用户侧走查：头部「学习中」与标题抢宽度，
                12 字任务名被挤成「11 字 + 末字孤行」）。桌面仍在头部常驻，见 .learn__live--head。 -->
           <div class="learn__menu-status">
             <div class="learn__menu-group">
               <span class="learn__menu-label">本节课状态</span>
-              <span class="learn__menu-state" :class="{ 'learn__live--err': !!initError }">{{ liveState }}</span>
+              <span class="learn__menu-state" :class="{ 'learn__live--err': !!initError && !isLocked, 'learn__live--locked': isLocked }">{{ liveState }}</span>
             </div>
             <div class="learn__menu-sep"></div>
           </div>
@@ -103,7 +114,8 @@
                 :nodes="graphNodes"
                 :edges="graphEdges"
                 :theme="kpGraphTheme"
-                height="320px"
+                :highlight-ids="kpHighlightIds"
+                height="360px"
                 @select="kpSelected = $event"
               />
               <p v-if="graphMeta" class="kp__hint">
@@ -159,16 +171,23 @@
         <h2>本节暂时开不了课</h2>
         <p>{{ friendlyError }}</p>
         <div class="stage-card__actions">
-          <button type="button" class="btn-primary" @click="boot">重新尝试</button>
-          <button type="button" class="btn-ghost" @click="goBack">返回路径详情</button>
-          <router-link to="/learning-paths" class="btn-ghost">查看路径列表</router-link>
+          <template v-if="isLocked">
+            <button type="button" class="btn-primary" @click="goBack">返回路径详情</button>
+            <button type="button" class="btn-ghost" @click="boot">重新尝试</button>
+            <router-link to="/learning-paths" class="btn-ghost">查看路径列表</router-link>
+          </template>
+          <template v-else>
+            <button type="button" class="btn-primary" @click="boot">重新尝试</button>
+            <button type="button" class="btn-ghost" @click="goBack">返回路径详情</button>
+            <router-link to="/learning-paths" class="btn-ghost">查看路径列表</router-link>
+          </template>
         </div>
       </div>
     </div>
 
     <div v-else class="learn__body">
       <!-- 中：导师对话。知识点浮窗相对页头定位，绝对定位不占用对话区高度。 -->
-      <section class="tutor">
+      <section class="tutor" :class="{ 'tutor--kp-open': kpOpen }">
         <!-- 恢复进度横幅：续上历史时可见（短中断刷新场景取代大卡），「接着讲」触发无输入续讲回合 -->
         <div v-if="resumedNotice" class="tutor__resume">
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13 2 4.5 13.5H11L9.5 22 19 9.5h-6.5L13 2z"/></svg>
@@ -183,34 +202,43 @@
           </button>
         </div>
 
-        <!-- 开场景卡片：resumed / 接续 / 重学 / 复习 的结构化开场（取代模板双气泡的空转重复） -->
-        <div v-if="openingScene && !openingSceneDone" class="oscene" :class="`oscene--${openingScene.kind || 'first'}`">
-          <div class="oscene__tag">{{ sceneTag }}</div>
-          <h3 class="oscene__title">{{ openingScene.title || sceneDefaultTitle }}</h3>
-          <p v-if="sceneLead" class="oscene__lead">{{ sceneLead }}</p>
-          <div v-if="openingScene.recap?.summary" class="oscene__summary">{{ openingScene.recap.summary }}</div>
-          <div v-if="sceneUnresolved.length" class="oscene__chips">
-            <span class="oscene__chip-label">上次还没完全掌握</span>
-            <span v-for="(u, ui) in sceneUnresolved" :key="ui" class="oscene__chip">{{ u }}</span>
-          </div>
-          <div v-if="sceneMasteryWarn.length" class="oscene__warn">
-            <span>前序基础提醒：</span>{{ sceneMasteryWarn }}
-          </div>
-          <div class="oscene__actions">
-            <button type="button" class="btn-primary" :disabled="typing || actionBusy" @click="startFromScene">
-              <span v-if="typing" class="spinner spinner--sm"></span>
-              {{ scenePrimaryText }}
-            </button>
-          </div>
-          <!-- 破坏性出口降级为角落小字链接：不与主行动并排抢点击（确认弹窗仍兜底，2026-10-09 用户反馈）。
-               「先看看」已删：卡片非模态，历史与快选在其后本来可见，不点主按钮的自然状态就是先看看 -->
-          <button
-            v-if="openingScene.kind === 'resume'"
-            type="button"
-            class="oscene__restart"
-            :disabled="typing || actionBusy"
-            @click="restart"
-          >重新开始（清空当前进度）</button>
+        <!-- 开场景卡片：resumed / 接续 / 重学 / 复习 的结构化开场（取代模板双气泡的空转重复）。
+             学员一旦开始互动/进入小测，大卡折叠成 40px 摘要条，把垂直空间还给对话流。 -->
+        <div v-if="openingScene && !openingSceneDone && sceneCollapsed"
+             class="oscene oscene--compact" :class="`oscene--${openingScene.kind || 'first'}`">
+          <span class="oscene__tag">{{ sceneTag }}</span>
+          <span class="oscene__compact-title">{{ openingScene.title || sceneDefaultTitle }}</span>
+          <span v-if="sceneUnresolved.length" class="oscene__compact-note">上次待巩固：{{ sceneUnresolved.join('、') }}</span>
+          <button type="button" class="oscene__expand" @click="sceneCollapsed = false">展开详情 ▾</button>
+        </div>
+        <div v-else-if="openingScene && !openingSceneDone"
+             class="oscene" :class="`oscene--${openingScene.kind || 'first'}`">
+            <div class="oscene__tag">{{ sceneTag }}</div>
+            <h3 class="oscene__title">{{ openingScene.title || sceneDefaultTitle }}</h3>
+            <p v-if="sceneLead" class="oscene__lead">{{ sceneLead }}</p>
+            <div v-if="openingScene.recap?.summary" class="oscene__summary">{{ openingScene.recap.summary }}</div>
+            <div v-if="sceneUnresolved.length" class="oscene__chips">
+              <span class="oscene__chip-label">上次还没完全掌握</span>
+              <span v-for="(u, ui) in sceneUnresolved" :key="ui" class="oscene__chip">{{ u }}</span>
+            </div>
+            <div v-if="sceneMasteryWarn.length" class="oscene__warn">
+              <span>前序基础提醒：</span>{{ sceneMasteryWarn }}
+            </div>
+            <div class="oscene__actions">
+              <button type="button" class="btn-primary" :disabled="typing || actionBusy" @click="startFromScene">
+                <span v-if="typing" class="spinner spinner--sm"></span>
+                {{ scenePrimaryText }}
+              </button>
+            </div>
+            <!-- 破坏性出口降级为角落小字链接：不与主行动并排抢点击（确认弹窗仍兜底，2026-10-09 用户反馈）。
+                 「先看看」已删：卡片非模态，历史与快选在其后本来可见，不点主按钮的自然状态就是先看看 -->
+            <button
+              v-if="openingScene.kind === 'resume'"
+              type="button"
+              class="oscene__restart"
+              :disabled="typing || actionBusy"
+              @click="restart"
+            >重新开始（清空当前进度）</button>
         </div>
 
         <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
@@ -320,7 +348,7 @@
 
         <!-- 回到底部浮标：用户上翻看旧内容期间显示，点击回到最新消息 -->
         <button
-          v-if="!nearBottom && msgs.length > 3"
+          v-if="!nearBottom && msgs.length > 3 && !checkpoint"
           type="button"
           class="tutor__jump-bottom"
           aria-label="回到底部"
@@ -372,14 +400,15 @@
 
         <!-- 检查点 -->
         <Transition name="cp">
-          <div v-if="checkpoint && !completed" ref="checkpointEl" class="checkpoint">
+          <div v-if="checkpoint && !completed" ref="checkpointEl" class="checkpoint" :class="{ 'checkpoint--attention': checkpointAttention }">
           <div class="checkpoint__head">
             <span class="checkpoint__badge">小测</span>
-            <strong>{{ checkpointHeading }}</strong>
+            <strong v-html="formatMessage(checkpointHeading)"></strong>
             <!-- 服务端下发的 title 是「题干截 20 字 + 省略号」（teaching-turn-engine.ts），
                  与紧随其后的完整题干重复；只在 title 不是题干前缀时才单独渲染（见 checkpointTitlePair）。
-                 否则用户第一眼看到的是「日志里秒数写成一位数时（如 14:23:…」这样断了半截的一句话。 -->
-            <p v-if="checkpointDetail">{{ checkpointDetail }}</p>
+                 否则用户第一眼看到的是「日志里秒数写成一位数时（如 14:23:…」这样断了半截的一句话。
+                 题干/选项与导师气泡同走 plainMessageHtml，避免 **不能** 这类行内标记原样漏出。 -->
+            <p v-if="checkpointDetail" v-html="formatMessage(checkpointDetail)"></p>
           </div>
           <template v-if="checkpoint.options?.length">
             <label
@@ -401,7 +430,7 @@
                 @change="toggleOption(opt.id)"
               />
               <span class="checkpoint__key" aria-hidden="true">{{ optionLetter(oi) }}</span>
-              <span class="checkpoint__text">{{ opt.text }}</span>
+              <span class="checkpoint__text" v-html="formatMessage(opt.text)"></span>
             </label>
           </template>
           <textarea v-else v-model="answerText" class="checkpoint__input" rows="3" :disabled="checkpointPending || checkpointSubmitting" placeholder="写下你的答案…"></textarea>
@@ -418,9 +447,9 @@
               :class="{ 'btn-primary--off': checkpointPending }"
               role="button"
               :tabindex="checkpointPending ? -1 : 0"
-              @click="submitCheckpoint"
-              @keydown.enter="submitCheckpoint"
-              @keydown.space.prevent="submitCheckpoint"
+              @click="submitCheckpointFromUi"
+              @keydown.enter="submitCheckpointFromUi"
+              @keydown.space.prevent="submitCheckpointFromUi"
             >{{ checkpointPending ? '判定中…' : '提交' }}</span>
             <span
               v-if="checkpoint.allowSkip !== false && !checkpointPending && !checkpointSubmitting"
@@ -441,6 +470,12 @@
               @keydown.space.prevent="dismissCheckpoint"
             >继续 ›</span>
             <span v-else-if="checkpointStreaming" class="checkpoint__streaming">导师正在讲解…</span>
+            <button
+              v-if="!peerOpen"
+              type="button"
+              class="checkpoint__peer"
+              @click="openPeerByUser"
+            >问小启</button>
           </div>
           </div>
         </Transition>
@@ -501,7 +536,7 @@
               rows="1"
               maxlength="800"
               :disabled="completed"
-              placeholder="随时提问，或说说你的理解…"
+              :placeholder="checkpoint && !completed ? '答完小测后也可以提问…' : '随时提问，或说说你的理解…'"
               @input="interactionMeta.onInput(input.length)"
               @keydown.enter.exact.prevent="send"
             ></textarea>
@@ -553,9 +588,9 @@
               <span v-for="(s, i) in finishStats" :key="i"><b>{{ s.value }}</b>{{ s.label }}</span>
             </div>
             <div class="finish__actions">
-              <span class="btn-primary" role="button" tabindex="0" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack">回到路径详情</span>
+              <span v-if="evaluationUrl" class="btn-primary" role="button" tabindex="0" @click="goEvaluation" @keydown.enter="goEvaluation" @keydown.space.prevent="goEvaluation">查看学习反馈</span>
               <span v-if="!isReviewMode && !extensionMode" class="btn-ghost" role="button" tabindex="0" @click="startExtension" @keydown.enter="startExtension" @keydown.space.prevent="startExtension">延伸学习</span>
-              <span v-if="evaluationUrl" class="btn-ghost" role="button" tabindex="0" @click="goEvaluation" @keydown.enter="goEvaluation" @keydown.space.prevent="goEvaluation">查看学习反馈</span>
+              <span :class="evaluationUrl ? 'btn-ghost' : 'btn-primary'" role="button" tabindex="0" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack">回到路径详情</span>
             </div>
             <!-- 手动结算成功后自动进入反馈（用户复测：结算完停在原地，误以为没反应）。
                  保留倒计时与「留在此页」，延伸学习等出口不被自动跳转吃掉。 -->
@@ -570,6 +605,7 @@
     </div>
 
     <!-- 伴学浮窗：小启（独立角色，暖橙系）；不占主对话区，可回复、可收起成悬浮球 -->
+    <div v-if="peerOpen && peerItems.length" class="peer-backdrop" aria-hidden="true" @click="minimizePeer"></div>
     <Transition name="peer-pop">
       <div v-if="peerOpen && peerItems.length" class="peerdock" role="dialog" aria-label="小启伴学" aria-live="polite">
         <div class="peerdock__head">
@@ -631,11 +667,14 @@
       v-if="!peerOpen && peerItems.length"
       type="button"
       class="peerfab"
+      :class="{ 'peerfab--quiz': !!checkpoint }"
       aria-label="打开小启伴学"
       @click="openPeerByUser"
     >
       <span class="peerfab__q" aria-hidden="true">Q</span>
+      <span class="peerfab__label" aria-hidden="true">伴学</span>
       <i v-if="peerUnread" class="peerfab__dot"></i>
+      <span v-if="peerUnread" class="peerfab__hint" role="status">卡住了？找小启聊聊</span>
     </button>
     <!-- 教师补充材料弹层（批次 E） -->
     <div v-if="supplementPreview.open" class="supmodal" @click.self="closeSupplement">
@@ -662,8 +701,68 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useIsDark } from '@/composables/useIsDark';
+import { ensureMermaidConfig } from '@/utils/mermaidTheme';
 
 const isDark = useIsDark();
+
+/* AI 气泡里的 ```mermaid 由 renderAiMessageHtml 转成 .mermaid 占位；v-html 不会等异步渲染，
+   故在消息 DOM 更新后由本页批量跑一次 mermaid.run。模块级单例 + 300ms 防抖：
+   流式期间内容不断变化，等稳定后再渲染，避免半截源码反复报错。 */
+type MermaidNode = HTMLElement & { __mermaidSrc?: string };
+let mermaidPromise: Promise<{ run: (opts: { nodes: HTMLElement[] }) => Promise<void>; initialize: (config: unknown) => void }> | null = null;
+let mermaidTimer: number | null = null;
+async function loadMermaid() {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid')
+      .then((mod) => mod.default as unknown as { run: (opts: { nodes: HTMLElement[] }) => Promise<void>; initialize: (config: unknown) => void })
+      .catch((error) => {
+        mermaidPromise = null;
+        throw error;
+      });
+  }
+  const mermaid = await mermaidPromise;
+  // 深色课堂里 Markdown 图也必须用 dark 主题；否则节点是浅色纸面，和气泡形成白块。
+  // 配置签名由 ensureMermaidConfig 统一去重，避免覆盖 TeachingDiagram 的自然尺寸配置。
+  ensureMermaidConfig(mermaid, { dark: isDark.value, lightTheme: 'default' });
+  return mermaid;
+}
+/** 课堂里所有 Markdown mermaid 占位（排除 TeachingDiagram 自己管理的结构图） */
+function mermaidNodes(): MermaidNode[] {
+  const host = document.querySelector('.tutor');
+  if (!host) return [];
+  return Array.from(host.querySelectorAll<MermaidNode>('.mermaid')).filter((node) => !node.closest('.teaching-diagram'));
+}
+/** 明暗切换后 Mermaid 不会自己换色：把源码放回占位节点，等下一轮重新 run */
+function resetMermaidNodes() {
+  for (const node of mermaidNodes()) {
+    if (!node.__mermaidSrc) continue;
+    node.removeAttribute('data-processed');
+    node.textContent = node.__mermaidSrc;
+  }
+}
+async function renderMermaidBubbles() {
+  const nodes = mermaidNodes().filter((node) => !node.hasAttribute('data-processed'));
+  if (!nodes.length) return;
+  for (const node of nodes) {
+    if (!node.__mermaidSrc) node.__mermaidSrc = node.textContent || '';
+  }
+  try {
+    const mermaid = await loadMermaid();
+    await mermaid.run({ nodes });
+  } catch (error) {
+    console.warn('Mermaid render failed:', error);
+  }
+}
+function scheduleMermaidRender() {
+  if (mermaidTimer) window.clearTimeout(mermaidTimer);
+  mermaidTimer = window.setTimeout(() => {
+    void nextTick().then(renderMermaidBubbles);
+  }, 300);
+}
+watch(isDark, () => {
+  resetMermaidNodes();
+  scheduleMermaidRender();
+});
 
 /* 菜单项与确认弹窗标题共用同一句，收成单源避免改一处漏一处 */
 const END_WITHOUT_FINISH_LABEL = '结束学习（不计入完成）';
@@ -680,7 +779,7 @@ import TeachingDiagram from '@/components/TeachingDiagram.vue';
 import TeachingFigure from '@/components/TeachingFigure.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
-import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
+import { cachedMessageHtmlWithMermaid, plainMessageHtmlWithMermaid } from '@/utils/messageMarkdown';
 /* 代码块语法高亮（原型 .wf-code）：本页 AI 气泡走 htmlFor → renderAiMessageHtml（markdown-it），
    与 MarkdownRenderer 同一套 highlight.js，按需注册教学常用语言（避免全量语言包 ~1MB）。
    样式不引 hljs 主题 CSS——代码面板恒深，token 配色在本文件 :deep 里按原型 --tok-* 上色。 */
@@ -988,6 +1087,8 @@ function scheduleEvaluationRedirect() {
   }, 1000)
 }
 
+const isLocked = computed(() => /尚未解锁|未解锁|前置阶段|locked/i.test(initError.value || ''));
+
 const friendlyError = computed(() => {
   const raw = initError.value || '';
   if (/429|Insufficient|insufficient|余额|额度|quota/i.test(raw)) {
@@ -1005,11 +1106,18 @@ const friendlyError = computed(() => {
    失败显式（三态纪律）：错误态改红字「连接失败」；点「重新尝试」成功（initError 清空）
    自动回到「连接中/学习中」流转。 */
 const liveState = computed(() => {
-  if (initError.value) return '连接失败';
+  if (initError.value) return isLocked.value ? '未解锁' : '连接失败';
   return session.value ? '学习中' : '连接中';
 });
 
 const msgs = ref<ChatMsg[]>([]);
+// mermaid 占位渲染：等消息内容稳定 300ms 后再跑（见文件上方 scheduleMermaidRender）。
+// 必须放在 msgs 声明之后：watch 的 getter 会同步求值，提前注册会撞上 TDZ。
+watch(
+  () => msgs.value.map((m) => `${m.id}:${String(m.text || '').length}`).join('|'),
+  scheduleMermaidRender,
+  { flush: 'post' }
+);
 let msgSeq = 0;
 function pushMsg(m: ChatMsg): ChatMsg {
   const withId: ChatMsg = { ...m, id: m.id ?? `lm_${Date.now().toString(36)}_${++msgSeq}` };
@@ -1088,6 +1196,11 @@ const quickReplies = ref<string[]>([]);
 const openingQuestion = ref('');
 /** 开场景卡片（后端 session.scene）：resumed/new 的恢复·接续·重学·复习信息，取代模板双气泡 */
 const openingScene = ref<Record<string, any> | null>(null);
+/** 学员开始互动/进入小测后，把开场大卡折叠成一行摘要，避免挤压对话与小测 */
+const sceneCollapsed = ref(false);
+function collapseOpeningScene() {
+  if (openingScene.value && !openingSceneDone.value) sceneCollapsed.value = true;
+}
 /** 卡片已被用户处理（点主按钮/关闭）后不再展示 */
 const openingSceneDone = ref(false);
 const knowledgePoints = ref<Array<Record<string, any>>>([]);
@@ -1130,6 +1243,7 @@ watch(checkpoint, (now) => {
 /* 结算门禁提示随条件解除：检查点卡片收起（作答 / 跳过 / 已处理）即撤掉，不再要求手动关 */
 watch(checkpoint, (cp) => {
   if (!cp && settleBlock.value?.action === 'checkpoint') settleBlock.value = null
+  if (cp) collapseOpeningScene()
 })
 /** 检查点选项前缀（A/B/C/D…）：原型 .wf-cp__opt 里是字母小方块 + 文本两段 */
 function optionLetter(i: number): string {
@@ -1275,6 +1389,7 @@ async function continueFromScene() {
 }
 const wrapupText = ref('');
 const finishStats = ref<Array<{ label: string; value: string | number }>>([]);
+const lessonStartedAt = ref(Date.now());
 const evaluationUrl = ref('');
 
 const input = ref('');
@@ -1282,6 +1397,14 @@ const scrollEl = ref<HTMLElement | null>(null);
 /** 结算门禁提示的去向锚点：输入区 / 检查点卡片 */
 const composerEl = ref<HTMLTextAreaElement | null>(null);
 const checkpointEl = ref<HTMLElement | null>(null);
+const checkpointAttention = ref(false);
+let checkpointAttentionTimer = 0;
+function pulseCheckpoint() {
+  checkpointAttention.value = true;
+  window.clearTimeout(checkpointAttentionTimer);
+  checkpointAttentionTimer = window.setTimeout(() => { checkpointAttention.value = false; }, 1600);
+  checkpointEl.value?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
 
 /* ---------- 伴学浮窗（角色「小启」，dock 式不占主对话区） ---------- */
 const {
@@ -1290,7 +1413,16 @@ const {
   pushPeerItem, sendPeer, sendPeerDirect, resetPeer, restorePeerHistory, abortPeer
 } = usePeerAssistant(session)
 
-const formatMessage = (text: string) => plainMessageHtml(text);
+const formatMessage = (text: string) => plainMessageHtmlWithMermaid(text);
+
+/* 恢复进度横幅只用于「刚续上、还没开始互动」这一小段；用户一旦打字或作答就自动收起，
+   避免它长期占据聊天区顶部、还让「重新开始」这类高副作用入口一直可误触。 */
+function submitCheckpointFromUi() {
+  resumedNotice.value = false
+  submitCheckpoint()
+}
+watch(input, (value) => { if (value.trim()) resumedNotice.value = false })
+watch(selectedOptions, () => { resumedNotice.value = false }, { deep: true })
 
 /* ---------- 代码块（原型 .wf-code：语言头 + 复制 + 语法高亮） ----------
    markdown-it 只吐 <pre><code class="language-x">，头部条/复制键/token 上色都在这里补齐：
@@ -1350,7 +1482,7 @@ async function onCodeCopy(e: MouseEvent) {
  *  流式渲染记忆化：直接调渲染函数会在每个 delta 触发全列表重渲染 + 全部历史消息重跑
  *  markdown/DOMPurify（50 条消息 × 每秒数十 delta 开销显著）。 */
 const htmlFor = (m: { text: string }) => {
-  const raw = cachedMessageHtml(m);
+  const raw = cachedMessageHtmlWithMermaid(m);
   if (typeof document === 'undefined' || raw.indexOf('<pre') === -1) return raw;
   const hit = codeBlockCache.get(m);
   if (hit && hit.text === m.text) return hit.html;
@@ -1376,18 +1508,49 @@ async function scrollDown() {
   }
 }
 
+/**
+ * 小测出现时不要把上一条教学结构图截成半张：
+ * 滚动区高度扣掉小测卡后往往只有 400px 左右，直接钉到底会让 370px 的结构图只剩上半截。
+ * 若最后一条 AI 消息带结构图，优先把结构图顶部滚到滚动区顶部（图高 < 视口时可完整显示）；
+ * 没有结构图仍按原逻辑贴底。
+ */
+async function revealLastTeachingBlock() {
+  await nextTick();
+  // Mermaid 是异步渲染的；等一帧再量高度，避免按占位空节点计算滚动位置。
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 320));
+  const pin = () => {
+    const el = scrollEl.value;
+    if (!el) return;
+    const diagrams = el.querySelectorAll<HTMLElement>('.msg--ai .teaching-diagram');
+    const diagram = diagrams[diagrams.length - 1];
+    if (!diagram) {
+      el.scrollTop = el.scrollHeight;
+      nearBottom.value = true;
+      return;
+    }
+    const elRect = el.getBoundingClientRect();
+    const diagramRect = diagram.getBoundingClientRect();
+    const diagramTop = diagramRect.top - elRect.top + el.scrollTop;
+    el.scrollTop = Math.max(0, Math.min(diagramTop - 8, el.scrollHeight - el.clientHeight));
+    nearBottom.value = false;
+  };
+  await nextTick();
+  pin();
+  // Mermaid 可能在 320ms 后才把 SVG 高度撑开；高度变化会把刚算好的目标顶偏，再量一次。
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 900));
+  pin();
+}
+
 function jumpToBottom() {
   scrollDown();
 }
 
 /* 窄屏课堂（#7）：检查点/快捷块是消息滚动区之后的 flex 兄弟，出现时会压缩滚动区，
    其下边界会把正在讲解的代码块拦腰截断、末行紧贴检查点卡上边框，得手动再滚一次才读全。
-   用户本就贴着底读最新内容（被截断的那行就在视野底部 → nearBottom 为真）时，把滚动区
-   重新钉到底，让代码块完整落入视野；用户上翻看历史时不打断（尊重既成的「贴底跟随」语义）。
-   不改 DOM 结构：把检查点搬进滚动区会牵动 scrollEl 指向 / >1100 宽度规则 / 桌面「检查点
-   常驻输入条上方」的既有口径，回归面远大于这个低危项本身。 */
+   用户本就贴着底读最新内容（被截断的那行就在视野底部 → nearBottom 为真）时，
+   优先把最后一张教学结构图完整露出；没有结构图再按原逻辑钉底。 */
 watch(checkpoint, (now, prev) => {
-  if (now && !prev && nearBottom.value) void scrollDown();
+  if (now && !prev && nearBottom.value) void revealLastTeachingBlock();
 });
 
 /* ---------- 在途消息留痕（#6 流式中途刷新静默丢失） ----------
@@ -1472,6 +1635,7 @@ async function boot() {
     // 首课（first）不需要卡片：AI 真实开场白已足够，避免双重介绍
     openingScene.value = sceneRaw && sceneRaw.kind !== 'first' ? sceneRaw : null;
     openingSceneDone.value = !openingScene.value;
+    sceneCollapsed.value = false;
     const openingText = s.opening?.message || s.welcomeMessage;
     if (s.mode === 'resumed') {
       // 恢复：不再 push 模板双气泡（"已恢复…我们继续"），由场景卡片承接；
@@ -1681,12 +1845,14 @@ async function send(e?: unknown) {
   input.value = '';
   assessTarget.value = null; // 用户已表态/新回合开始，快选确认清除
   confirmCheck.value = null;
+  collapseOpeningScene();
   await doSend(t);
 }
 
 async function sendDirect(text: string) {
   if (typing.value || !session.value || completed.value || finalizing.value) return;
   assessTarget.value = null; // 点击快选确认/开场建议即表态，清除待确认
+  collapseOpeningScene();
   await doSend(text);
 }
 
@@ -1990,11 +2156,21 @@ async function finish(
       wrapup?.summary?.learningEvaluation ||
       wrapup?.summary?.practiceAdvice ||
       wrapup?.summary?.knowledgeSummary ||
-      '';
+      (knowledgePoints.value.length
+        ? `本次课堂已记录：掌握 ${masteredCount.value}/${knowledgePoints.value.length} 个知识点。详细总结可在学习反馈中查看。`
+        : '本次课堂已记录，详细总结可在学习反馈中查看。');
     const stats: Array<{ label: string; value: string | number }> = [];
     if (wrapup?.progress?.newlyMastered?.length) stats.push({ label: '新掌握知识点', value: wrapup.progress.newlyMastered.length });
     if (wrapup?.evaluation?.duration) stats.push({ label: '分钟', value: Math.round(wrapup.evaluation.duration) });
     if (wrapup?.evaluation?.messageCount) stats.push({ label: '次对话', value: wrapup.evaluation.messageCount });
+    // 总结退化/缺失时仍给可用信息：本次停留时长、发言轮次、当前知识点掌握度
+    if (!stats.length) {
+      const minutes = Math.max(1, Math.round((Date.now() - lessonStartedAt.value) / 60000));
+      stats.push({ label: '分钟', value: minutes });
+      const userTurns = msgs.value.filter((m) => m.role === 'user').length;
+      if (userTurns) stats.push({ label: '轮对话', value: userTurns });
+      if (knowledgePoints.value.length) stats.push({ label: '知识点', value: `${masteredCount.value}/${knowledgePoints.value.length}` });
+    }
     finishStats.value = stats;
     evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
     // 只有用户主动「完成/结束」才自动进反馈；模型判定完课的收尾别把用户从最后一条讲解上拽走
@@ -2036,6 +2212,12 @@ async function completeAndSettle() {
   // 延伸课不结算任务（服务端也会 409）；入口在延伸模式下已隐藏，这里防程序化调用
   if (extensionMode.value) return;
   if (actionBusy.value) return;
+  // 前端已知还有未作答小测：直接亮页内门禁并定位到小测，不再让用户先走一遍「确认→被拒」的假动作
+  if (checkpoint.value && !checkpointPassed.value) {
+    showSettleGate('FINALIZATION_PENDING_CHECKPOINT', '还有一道题没有作答，先完成这道题再结束课堂');
+    pulseCheckpoint();
+    return;
+  }
   const ok = await askConfirm({
     title: '完成并结算任务',
     message: '确认当前任务已学完？将结算任务并计入里程碑与路径进度，同时生成本次学习总结。',
@@ -2212,6 +2394,18 @@ const graphMeta = ref<{ nodeCount: number; edgeCount: number; totalConcepts: num
 const graphLoading = ref(false)
 const graphError = ref('')
 const kpSelected = ref<MkGraphNode | null>(null)
+/** 迷你图谱常显并高亮的本节知识点：按概念名匹配图节点（后端 KP 只有 name/status/progress） */
+const kpHighlightIds = computed(() => {
+  const names = new Set(
+    knowledgePoints.value
+      .map((kp) => String(kp.name || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+  )
+  if (!names.size) return []
+  return graphNodes.value
+    .filter((node) => names.has(String(node.label || '').replace(/\s+/g, ' ').trim()))
+    .map((node) => node.id)
+})
 /** 跟随站点主题（v2 与 admin 共用 documentElement.dataset.theme） */
 const kpGraphTheme = computed<'light' | 'dark'>(() =>
   typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -2339,6 +2533,7 @@ function onVisibilityChange() {
 
 onMounted(() => {
   boot();
+  scheduleMermaidRender();
   window.addEventListener('keydown', onPageKeydown);
   window.addEventListener('pagehide', onPageHide);
   document.addEventListener('visibilitychange', onVisibilityChange);
@@ -2346,6 +2541,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onPageKeydown);
+  if (mermaidTimer) window.clearTimeout(mermaidTimer);
   window.clearTimeout(initStuckTimer);
   stopSettleProgress();
   cancelEvaluationRedirect();
@@ -2378,7 +2574,8 @@ onBeforeUnmount(() => {
 }
 /* min-height 36：返回路径详情是这一屏唯一的鼠标出口，13px 字行高下热区只有 87×20
    （2026-10-08 用户侧走查 #62/#70）。文字仍垂直居中，页头高度由 44px 的 ⋯ 决定、不受影响。 */
-.learn__back { font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; background: none; border: 0; padding: 0; min-height: 36px; display: inline-flex; align-items: center; font-family: inherit; }
+.learn__back { font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; background: none; border: 0; padding: 0; min-height: 36px; display: inline-flex; align-items: center; gap: 4px; font-family: inherit; }
+.learn__back-arrow { font-size: 18px; line-height: 1; }
 .learn__back:hover { color: var(--blue-deep); }
 .learn__title { display: grid; gap: 3px; min-width: 0; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2410,6 +2607,14 @@ onBeforeUnmount(() => {
 }
 .learn__kpbtn:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); border-color: color-mix(in srgb, var(--blue) 44%, transparent); }
 .learn__kpbtn b { font-weight: 800; font-variant-numeric: tabular-nums; }
+/* 结课入口：常驻头部、低于知识点入口权重；副文案在 title 里给「可计入进度」 */
+.learn__finishbtn {
+  font: inherit; font-size: 12px; font-weight: 800; line-height: 1.4;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  padding: 5px 12px; min-height: 36px; cursor: pointer; white-space: nowrap;
+}
+.learn__finishbtn:hover { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); color: var(--blue-deep); }
 /* 连接态：降为纯文字（原型顶栏只有一行状态字，不再挂绿胶囊） */
 .learn__live {
   font-size: 12px; font-weight: 700; color: var(--green-ink);
@@ -2420,6 +2625,8 @@ onBeforeUnmount(() => {
 /* boot 失败态 (P2-25 核查 2026-10-04)：红字显式失败——正文已显「本节暂时开不了课」，
    顶栏不再绿显「连接中」假装还在连接 */
 .learn__live--err { color: var(--red-ink); }
+.learn__live--locked { color: var(--amber-ink); }
+.learn__menu-state.learn__live--locked { color: var(--amber-ink); }
 /* ---------- 布局（原型 .wf-screen：单列、gap 14、≥1024 定宽 880 居中） ----------
    原型的课堂屏没有左侧栏：知识点从常驻列降级成「头部入口 + 浮窗」。 */
 .learn__body {
@@ -2526,7 +2733,7 @@ onBeforeUnmount(() => {
   border: 2px dashed color-mix(in srgb, var(--blue) 15%, var(--line));
   display: grid; place-items: center;
 }
-.kp__item--done .kp__mark { background: var(--green); border: 0; color: #fff; }
+.kp__item--done .kp__mark { background: var(--green); border: 0; color: var(--mk-on-fill); }
 .kp__item--current .kp__mark { border: 2px solid var(--blue); border-style: solid; }
 .kp__name strong { display: block; font-size: 13px; line-height: 1.45; }
 .kp__name small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
@@ -2618,6 +2825,30 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
 }
 .oscene--review { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
+/* 学员已开始互动/进入小测：开场卡折叠为一行摘要，不再挤压对话流 */
+.oscene--compact {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 40px;
+  padding: 6px 12px;
+  margin: 8px 14px 0;
+}
+.oscene--compact .oscene__tag { flex: 0 0 auto; }
+.oscene__compact-title {
+  flex: 0 0 auto; max-width: 42%;
+  font-size: 13px; font-weight: 700; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.oscene__compact-note {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 12px; color: var(--faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.oscene__expand {
+  flex: 0 0 auto; margin-left: auto;
+  border: 0; background: none; padding: 4px 2px;
+  font: inherit; font-size: 12px; font-weight: 700; color: var(--blue);
+  cursor: pointer;
+}
 .oscene__tag {
   justify-self: start;
   font-size: 12px; font-weight: 800;
@@ -2660,7 +2891,9 @@ onBeforeUnmount(() => {
 .oscene__actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 /* 暗色：底色/描边已全部令牌化，自动翻转，原逐条暗色字面量覆写退役 */
 .tutor__jump-bottom {
-  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  /* 锚在输入区上方：原来 bottom:16px 是相对 .tutor 的底部，会压到输入框下方的
+     「Enter 发送 · Shift+Enter 换行」提示。 */
+  position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%);
   z-index: 5;
   padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
   background: var(--surface); color: var(--muted);
@@ -2881,9 +3114,11 @@ onBeforeUnmount(() => {
   /* chip 放在 grid 布局的 msg__content 里时必须跨全列，否则被挤进窄列竖排 */
   grid-column: 1 / -1;
 }
-.msg__chip--confuse { color: var(--amber-ink); background: color-mix(in srgb, var(--wf-color-warning) 12%, transparent); border: 1px solid color-mix(in srgb, var(--wf-color-warning) 20%, transparent); margin-top: 6px; }
+.msg__chip--confuse { color: var(--amber-ink); background: color-mix(in srgb, var(--wf-color-warning) 12%, transparent); border: 1px solid color-mix(in srgb, var(--wf-color-warning) 20%, transparent); margin-top: 6px; margin-bottom: 8px; }
 
 /* ---------- 伴学浮窗（角色「小启」· 暖橙系，dock 式不占主对话区） ---------- */
+/* 移动端浮窗遮罩：只在小屏出现，盖住主课堂输入区，避免双输入框/双免责声明叠罗汉 */
+.peer-backdrop { display: none; }
 .peerdock {
   position: fixed; right: 22px; bottom: 132px; z-index: 60;
   /* bottom 抬升避开底部输入区（composer ≈104px + 间距 28px），
@@ -2949,16 +3184,21 @@ onBeforeUnmount(() => {
    开窗后只能用鼠标收起）；热区 36px（原 24px 对拇指偏小）。视觉仍是 12px 图标。 */
 .peerdock__min {
   flex: 0 0 auto;
-  width: 36px; height: 36px; border-radius: var(--mk-radius-md);
+  width: 32px; height: 32px; border-radius: 50%;
   display: grid; place-items: center;
-  border: 0; background: transparent; padding: 0;
+  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 26%, var(--line));
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  padding: 0;
   color: var(--muted); cursor: pointer;
 }
-.peerdock__min:hover { background: color-mix(in srgb, var(--wf-color-warning) 12%, transparent); color: var(--ink); }
+.peerdock__min:hover { background: color-mix(in srgb, var(--wf-color-warning) 14%, transparent); color: var(--ink); }
 .peerdock__scroll {
-  overflow-y: auto; padding: 12px;
+  overflow-y: auto; padding: 14px 12px 12px;
   display: grid; gap: 10px; align-content: start;
   background: var(--canvas);
+  /* 顶部 8px 渐隐：滚到底时上一条消息不会被硬切成半截 */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
 }
 .peerdock__msg { display: grid; gap: 3px; justify-items: start; max-width: 100%; }
 .peerdock__msg--me { justify-items: end; }
@@ -3047,7 +3287,7 @@ onBeforeUnmount(() => {
    按钮文字 12.5px/700 属小字，必须按 AA 正文 4.5:1 判，不能按大字 3:1 放行。
    这是一处**规范缺口**：--wf-color-efficient 族缺一档「可配白字的实底色」。
    已登记待体系包补档，补后此处改回令牌引用。 */
-  color: #fff; background: #d97706;
+  color: var(--mk-on-fill); background: #d97706;
   cursor: pointer;
   transition: filter 0.15s ease;
 }
@@ -3056,13 +3296,15 @@ onBeforeUnmount(() => {
 /* 小启悬浮球：暖橙 Q（区别于导师品牌蓝紫） */
 .peerfab {
   position: fixed; right: 22px; bottom: 22px; z-index: 59;
-  width: 52px; height: 52px; border: 0; border-radius: 50%;
+  min-width: 52px; height: 52px; padding: 0 14px 0 10px;
+  border: 0; border-radius: 999px;
   background: #d97706;   /* 批次 D：135deg 橙渐变 → 纯色（白字 4.52:1，AA） */
   /* 原 0 14px 32px rgba(239,125,31,.4) 橙色发光改为 overlay 中性档：
      FAB 常驻压在滚动内容之上，确实需要抬升才能读出来，这是规范允许的例外；
      但颜色必须中性，彩色光晕一律不行。 */
   box-shadow: var(--wf-shadow-overlay);
-  display: grid; place-items: center; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer;
   transition: transform 0.18s ease;
 }
 /* hover 不再抬升也不换投影（两态已无差别），按压反馈留给 :active */
@@ -3072,17 +3314,64 @@ onBeforeUnmount(() => {
   font-family: Georgia, 'Times New Roman', serif;
   line-height: 1;
 }
+.peerfab__label {
+  color: #fff; font-size: 12.5px; font-weight: 800; letter-spacing: 0.02em;
+  line-height: 1;
+}
 .peerfab__dot {
   position: absolute; top: 1px; right: 1px;
   width: 13px; height: 13px; border-radius: 50%;
   background: var(--red); border: 2px solid #fff;
 }
+.peerfab__hint {
+  position: absolute; right: calc(100% + 8px); top: 50%;
+  transform: translateY(-50%);
+  max-width: 190px;
+  padding: 6px 10px;
+  border-radius: var(--mk-radius-md);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
+  box-shadow: var(--wf-shadow-raised);
+  color: var(--ink); font-size: 12px; font-weight: 700; line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.peerfab__hint::after {
+  content: ''; position: absolute; right: -5px; top: 50%; transform: translateY(-50%) rotate(45deg);
+  width: 8px; height: 8px; background: var(--surface);
+  border-top: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
+  border-right: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
+}
 @media (max-width: 640px) {
   /* 小启整体抬到 composer 上方（composer ≈90px 高）——此前 fab bottom:14 正压在发送键上、
      dock 展开盖住整个输入区（2026-09-26 用户：「挡住了发送按钮」）；面板限高收一档 */
-  .peerdock { right: 12px; left: 12px; bottom: 104px; width: auto; max-height: 52dvh; }
-  .peerfab { right: 14px; bottom: 104px; width: 44px; height: 44px; }
+  .peer-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 78;
+    background: color-mix(in srgb, #000 42%, transparent);
+  }
+  .peerdock {
+    left: 0; right: 0; bottom: 0; width: auto; z-index: 80;
+    max-height: 78dvh;
+    border-radius: var(--mk-radius-xl) var(--mk-radius-xl) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .peerfab { right: 12px; bottom: calc(104px + env(safe-area-inset-bottom, 0px)); height: 44px; min-width: 44px; padding: 0 12px 0 9px; z-index: 79; }
+  /* 小测待答时不再让悬浮球抢卡片宽度：入口收进小测操作行（问小启），
+     卡片恢复满宽，桌面端仍保留右下角浮窗入口 */
+  .peerfab--quiz { display: none; }
+  .checkpoint__actions .checkpoint__peer {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 36px; padding: 0 12px;
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+    border-radius: var(--mk-radius-pill);
+    background: transparent; color: var(--accent);
+    font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .checkpoint__actions .checkpoint__peer:active { transform: scale(.98); }
+  /* 最后一条消息给右下角伴学球留出空间，避免压住复制键/输入框上沿 */
+  .tutor__scroll { padding-bottom: 78px; }
   .peerfab__q { font-size: 20px; }
+  .peerfab__hint { max-width: 150px; }
 }
 /* 窄屏（平板/小窗）：dock 收窄并抬高，避免与底部输入区重叠（长消息上探场景） */
 @media (min-width: 641px) and (max-width: 1100px) {
@@ -3129,7 +3418,7 @@ onBeforeUnmount(() => {
 .kp-btn:active { transform: scale(0.98); }
 .kp-btn__icon { font-size: 14px; line-height: 1; }
 .kp-btn--mastered {
-  color: #fff;
+  color: var(--mk-on-fill);
   /* 批次 D：135deg 绿渐变 → 纯色 #15803d。
      不用 --wf-color-success-dark（#28965a，白字 3.75:1 不足 AA）：
      #15803d 对白字 6.13:1 达标，且它就是本仓既有的 --mk-green / --mk-green-fill
@@ -3198,12 +3487,21 @@ onBeforeUnmount(() => {
 
 /* ---------- 检查点（原型 .wf-checkpoint：紫框卡 + 11.5px 标签 + 44px 选项 + 对/错态） ---------- */
 .checkpoint {
-  margin: 0 14px;
+  /* 与上方「发现卡点」chip 留出呼吸位：小测卡紧贴时会把 chip 下沿压掉一截 */
+  margin: 8px 14px 0;
   padding: 13px 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
   background: color-mix(in srgb, var(--accent) 5%, var(--surface));
   border-radius: var(--mk-radius-modal);
   display: grid; gap: 8px;
+}
+.checkpoint--attention {
+  animation: cp-attention 1.6s ease;
+  border-color: color-mix(in srgb, var(--wf-color-warning) 60%, transparent);
+}
+@keyframes cp-attention {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--wf-color-warning) 0%, transparent); }
+  35% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--wf-color-warning) 28%, transparent); }
 }
 .checkpoint__head { display: grid; gap: 6px; }
 .checkpoint__head strong { font-size: 13.5px; line-height: 1.5; }
@@ -3226,7 +3524,8 @@ onBeforeUnmount(() => {
   background: var(--surface);
 }
 .checkpoint__input:focus { border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
-.checkpoint__actions { display: flex; gap: 10px; }
+.checkpoint__actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.checkpoint__peer { display: none; }
 
 /* ---------- 完课入口 ----------
    整宽 .lesson-cta（原型 #wfFinishLesson：快捷回复之后、输入条之前）2026-10-06 退役：
@@ -3476,7 +3775,18 @@ onBeforeUnmount(() => {
     padding: 8px 10px 10px;
     gap: 10px;
   }
-  .learn__back { display: none; }
+  .oscene__compact-title { max-width: 58%; }
+  .oscene__compact-note { display: none; }
+  .learn__back {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; min-height: 36px; padding: 0;
+    border-radius: 50%; flex: 0 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+  .learn__back:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
+  .learn__back-text { display: none; }
+  .learn__back-arrow { font-size: 24px; }
   /* 移动端 tutor 撑满可用高度：聊天区内部滚动、composer 吸底，消除滚动到底的底部空白 */
   .tutor { max-height: none; min-height: 0; flex: 1 1 auto; }
   /* overscroll-behavior:contain 隔断滚动链——消息列表滚到边缘时不再触发整页橡皮筋
@@ -3495,12 +3805,12 @@ onBeforeUnmount(() => {
   .composer__hint { flex-wrap: nowrap; justify-content: center; }
   /* 移动端头部：单行紧凑 —— 返回隐藏、标题占主列可截断，右侧「学习中」+「⋯」同行，不再换行占第二行 */
   .learn__head {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto;
-    gap: 0 10px;
-    padding: 8px 14px;
+    gap: 0 8px;
+    padding: 8px 10px;
   }
-  .learn__title { grid-column: 1; grid-row: 1; min-width: 0; }
+  .learn__title { grid-column: 2; grid-row: 1; min-width: 0; }
   /* 窄屏标题放宽到两行（2026-10-08 用户侧走查）：单行截断下 24 字任务名实测需要 390px、
      只分到 178px，页头只能读到「解剖自己做过的那个功…」，而页头没有别的完整标题入口。
      用户口径是「宁可多占一行，也不要把文案压到读不全」，故两行后仍读不完才截断。
@@ -3516,7 +3826,7 @@ onBeforeUnmount(() => {
   .learn__title small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* 知识点浮窗仅绝对定位，不占用头部/消息区布局高度；窄屏保持视口内滚动。 */
   .kp { width: min(380px, calc(100vw - 28px)); max-height: min(72dvh, 620px); }
-  .learn__head-right { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; flex-shrink: 0; position: relative; }
+  .learn__head-right { grid-column: 3; grid-row: 1; display: flex; align-items: center; gap: 6px; flex-shrink: 0; position: relative; }
   .learn__live, .learn__state-link { white-space: nowrap; flex-shrink: 0; }
   .learn__live { font-size: 12px; }
   /* 窄屏头部三件套（知识点入口 / 连接态 / ⋯）：入口与状态压到最小占位，⋯ 保持 44 触区 */
@@ -3642,7 +3952,14 @@ onBeforeUnmount(() => {
   padding: 1px 5px; border-radius: var(--mk-radius-sm); font-size: 12.5px;
 }
 .checkpoint__feedback :deep(strong) { font-weight: 800; }
-.msg__retry { margin-left: 8px; color: var(--red-ink); font-weight: 800; text-decoration: underline; cursor: pointer; border: 0; background: none; padding: 0; font: inherit; }
+.msg__retry {
+  margin-left: 8px; padding: 2px 8px;
+  color: var(--red-ink); font-weight: 800; text-decoration: none;
+  cursor: pointer; border: 1px solid color-mix(in srgb, var(--red) 28%, var(--line));
+  border-radius: var(--mk-radius-pill);
+  background: color-mix(in srgb, var(--red) 7%, transparent);
+  font: inherit; font-size: 12px;
+}
 .msg__bubble--html :deep(p) { margin: 0 0 8px; }
 .msg__bubble--html :deep(p:last-child) { margin-bottom: 0; }
 .msg__bubble--html :deep(ul), .msg__bubble--html :deep(ol) { margin: 4px 0; padding-left: 18px; }
@@ -3663,6 +3980,18 @@ onBeforeUnmount(() => {
   --tok-num: #f78c6c;
   --tok-var: #e8eefc;
   --tok-comment: #7b8399;
+}
+/* mermaid 由宿主在消息 DOM 更新后异步替换为 SVG：窄屏横向滚动，不撑破气泡 */
+.msg__bubble--html :deep(.mermaid) {
+  margin: 8px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.msg__bubble--html :deep(.mermaid svg) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
 }
 .msg__bubble--html :deep(pre) {
   margin: 0;
@@ -3702,7 +4031,7 @@ onBeforeUnmount(() => {
   padding: 5px 8px; border-radius: 6px; min-height: 26px;
   transition: background .14s ease, color .14s ease;
 }
-.msg__bubble--html :deep(.codeblock__copy:hover) { background: color-mix(in srgb, #ffffff 12%, transparent); color: #fff; }
+.msg__bubble--html :deep(.codeblock__copy:hover) { background: color-mix(in srgb, #ffffff 12%, transparent); color: var(--mk-on-fill); }
 /* 语法高亮 token（highlight.js 类名 → 原型 --tok-* 四色） */
 .msg__bubble--html :deep(.hljs-keyword),
 .msg__bubble--html :deep(.hljs-selector-tag),
@@ -3769,7 +4098,7 @@ onBeforeUnmount(() => {
 /* ---------- 快捷回复（原型 .wf-replies：裸按钮列表，无白面板、无面板头） ---------- */
 .replies {
   display: flex; flex-direction: column; gap: 8px;
-  margin: 4px 14px 0;
+  margin: 8px 14px 0;
   padding: 0;
   border: 0;
   background: none;
@@ -3898,7 +4227,7 @@ onBeforeUnmount(() => {
    同权重下先出现的会被覆盖）。原型快捷回复没有移动端变体，这里只收紧间距与外边距，
    不再给它套白面板（基础规则已是裸按钮列表）。 */
 @media (max-width: 900px) {
-  .replies { margin: 4px 14px 0; }
+  .replies { margin: 8px 14px 0; }
   .replies__question { margin-bottom: 2px; padding: 6px 9px; font-size: 12px; }
   .replies__row { gap: 6px; }
   .reply { padding: 9px 12px; }
@@ -3984,5 +4313,56 @@ onBeforeUnmount(() => {
     padding-left: max(16px, calc((100% - 760px) / 2));
     padding-right: max(16px, calc((100% - 760px) / 2));
   }
+}
+/* 1024–1279：正文列封顶 880（含 30px 内边距），页头仍按 24px 贴视口，导致标题比正文
+   左移约 80–100px。页头内边距按正文内容列反算，两边回到同一条竖线；≥1280 的阅读列
+   规则随后覆盖。 */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .learn__head {
+    padding-left: max(24px, calc((100% - 820px) / 2));
+    padding-right: max(24px, calc((100% - 820px) / 2));
+  }
+}
+/* ≥1280：把「放大版手机聊天框」拉成桌面阅读列。顶栏与内容同宽（不再 1920 满宽贴边），
+   消息/小测/输入盒从 760 提到 1000，左右死区从约 475px 收到约 320px。 */
+@media (min-width: 1280px) {
+  .learn__head {
+    /* 用 100%（父级布局宽度）而不是 100vw：1600–1999 档全局 zoom:1.08 下 vw 不随 zoom
+       缩放，按 100vw 算出来的内边距比 .learn__body 的实际左缘多出约 76px（1920 实测
+       顶栏内容 464 / 正文列 388）。100% 与正文列满宽一致，两边才对得齐。 */
+    padding-left: max(24px, calc((100% - 1060px) / 2));
+    padding-right: max(24px, calc((100% - 1060px) / 2));
+  }
+  .learn__body { max-width: 1120px; }
+  .tutor__scroll > *,
+  .composer__box { max-width: 1000px; }
+  .tutor > .oscene,
+  .tutor > .tutor__resume,
+  .tutor > .replies,
+  .tutor > .gate,
+  .tutor > .checkpoint {
+    max-width: 1000px;
+  }
+  .tutor > .kp-actions {
+    padding-left: max(16px, calc((100% - 1000px) / 2));
+    padding-right: max(16px, calc((100% - 1000px) / 2));
+  }
+  /* 知识点浮窗展开时给右侧留出 420px，不与消息列叠字。只在桌面阅读列生效：
+     浮窗 410px 锚在页头右侧，正文列右缘退到浮窗左侧，聊天气泡/小测/输入盒一起收缩。 */
+  .tutor--kp-open { padding-right: 420px; }
+  .peerdock { width: min(360px, calc(100vw - 32px)); max-height: 560px; }
+}
+/* 小测出现后消息区被小测卡压短，移动端整幅结构图比可视区高，底部分支节点会被截在小测卡上沿。
+   缩到 80% 后图高约降 20%，df.columns / df.head 两个节点能完整落在小测卡上方；桌面不受影响。 */
+@media (max-width: 640px) {
+  .learn--quiz :deep(.msg--ai .teaching-diagram__canvas svg) {
+    width: 80%;
+    max-width: 80%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* 缩放后右上角的「点击放大」会压住第 3 列节点顶边；小测态下让图面保持干净，
+     小测卡本身已占据触屏主视线，放大入口不是这一屏的主操作。 */
+  .learn--quiz :deep(.teaching-diagram__hint) { display: none; }
 }
 </style>

@@ -93,9 +93,11 @@ describe('学习台连续记录药丸（走查 2026-10-08 #56）', () => {
   });
 });
 
-describe('学习台路径卡空白（走查 2026-10-08 #73）', () => {
-  it('.path 不再被等高网格拉高（align-self:start）', () => {
-    expect(decl(ruleAfter('.path {'), 'align-self')).toBe('start');
+describe('学习台双列对齐（2026-10-29 外部评审覆盖 #73）', () => {
+  it('.path 与左卡等高，空白由 space-between 吸收', () => {
+    const rule = ruleAfter('.path {');
+    expect(decl(rule, 'align-self')).toBe('stretch');
+    expect(decl(rule, 'justify-content')).toBe('space-between');
   });
 });
 

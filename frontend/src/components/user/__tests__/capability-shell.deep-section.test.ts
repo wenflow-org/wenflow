@@ -97,17 +97,25 @@ describe('CapabilityShell 深页分段器选中态（走查 2026-10-08 #52）', 
     expect(w.find('.uc__deeptitle').exists()).toBe(false);
   });
 
-  it.each(['/user/settings', '/user/agent-logs'])('深页 %s：「账户」段保持选中胶囊，且只是所属分区', (path) => {
-    const w = mountShell(path);
-    const account = accountSeg(w);
+  it('/user/settings：第四段「设置」是当前页，账户段不点亮', () => {
+    const w = mountShell('/user/settings');
+    const settings = segButtons(w)[3];
 
-    expect(account.classes(), `${path} 三段全无选中`).toContain('uc__seg__btn--on');
-    expect(account.attributes('aria-current'), '深页的当前页是页内 h1，父段只能是「所属分区」').toBe('true');
+    expect(settings.classes(), '/user/settings 没有选中「设置」段').toContain('uc__seg__btn--on');
+    expect(settings.attributes('aria-current')).toBe('page');
+    expect(accountSeg(w).classes()).not.toContain('uc__seg__btn--on');
 
-    // 其余两段不得被点亮
-    expect(segButtons(w)[1].classes()).not.toContain('uc__seg__btn--on');
-    expect(segButtons(w)[2].classes()).not.toContain('uc__seg__btn--on');
-    expect(segButtons(w)[1].attributes('aria-current')).toBeUndefined();
+    // 设置已是一级分段，页名由选中的分段承载，不再重复可见 h1
+    expect(w.find('.uc__deeptitle').exists()).toBe(false);
+  });
+
+  it('/user/agent-logs：归属「设置」段，账户段不点亮', () => {
+    const w = mountShell('/user/agent-logs');
+    const settings = segButtons(w)[3];
+
+    expect(settings.classes(), '/user/agent-logs 三段全无选中').toContain('uc__seg__btn--on');
+    expect(settings.attributes('aria-current'), '深页的当前页是页内 h1，父段只能是「所属分区」').toBe('true');
+    expect(accountSeg(w).classes()).not.toContain('uc__seg__btn--on');
 
     // 深页仍保留可见页名（不是 sr-only）
     expect(w.find('.uc__deeptitle h1').exists()).toBe(true);

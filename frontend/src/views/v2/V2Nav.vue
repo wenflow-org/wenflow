@@ -4,12 +4,12 @@
        窄屏左槽亮品牌 logo 与学习台先例一致 -->
   <header class="v2nav-bar" :data-notitle="titleHidden || undefined">
     <div class="v2nav-bar__left">
-      <button v-if="showBack" type="button" class="v2nav-back" aria-label="返回上一页" @click="goBack">
-        <ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" />
-      </button>
       <router-link to="/dashboard" class="v2nav-bar__brand" aria-label="问流 WenFlow，返回工作台">
         <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-bar__logo" />
       </router-link>
+      <button v-if="showBack" type="button" class="v2nav-back" aria-label="返回上一页" @click="goBack">
+        <ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" />
+      </button>
       <strong v-if="pageTitle" class="v2nav-bar__title">{{ pageTitle }}</strong>
     </div>
 
@@ -149,7 +149,7 @@ function isActive(item: { to: string; match: string[] }) {
 
 /* 原型壳语义：5 个 tab 屏不带返回钮，其余（路径详情/个人中心等）带 */
 const onTabSection = computed(() => items.some((item) => route.path.startsWith(item.to)));
-const showBack = computed(() => !onTabSection.value);
+const showBack = computed(() => !onTabSection.value && !route.path.startsWith('/learning-path/'));
 /**
  * 顶栏标题隐藏集合（P2-23 2026-10-04 全站评审 confirmed）：页内已有可见 H1 的 tab 屏，
  * 顶栏 17px 标题与之同屏复读。集合从 dashboard 扩到 dashboard+knowledge-map——
@@ -247,6 +247,10 @@ onUnmounted(() => {
   cursor: pointer; transition: background 0.14s ease;
 }
 .v2nav-back:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
+/* 桌面端已有主导航与页内面包屑，Logo 右侧的孤立返回箭头会被读成「收起侧栏」；仅移动端保留 */
+@media (min-width: 1024px) {
+  .v2nav-back { display: none; }
+}
 .v2nav-bar__brand { display: flex; align-items: center; flex: none; }
 .v2nav-bar__logo { height: 38px; width: auto; object-fit: contain; display: block; }
 .v2nav-bar__title {
