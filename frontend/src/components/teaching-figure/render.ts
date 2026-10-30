@@ -322,7 +322,35 @@ function fitText(str: unknown, maxW: number, size: number): string {
 
 /* ---------------- 一、网格（二维排布，每格是内容） ---------------- */
 
-function renderGrid({ title, cells = [], rows, cols, rowLabels = [], colLabels = [], note, focus }: any): RenderedFigure {
+/**
+ * 各图型的输入形状（2026-10-30 类型化）：spec 来自后端 JSON、天然松散，
+ * 做法是「已知字段按渲染实际用法具体化，其余保持 unknown」。叶子字段大量走
+ * esc/est/text 这类 unknown 入参（不引入任何新的运行时收窄），只有进算术、
+ * Map 键、白名单索引（TONE/GLYPH）的字段才收成 number/string。
+ */
+type GridCell = {
+  r?: number;
+  c?: number;
+  text?: unknown;
+  mask?: unknown;
+  ghost?: unknown;
+  hl?: unknown;
+  mark?: unknown;
+  markColor?: unknown;
+};
+
+type GridSpec = {
+  title?: string;
+  cells?: GridCell[];
+  rows: number;
+  cols: number;
+  rowLabels?: string[];
+  colLabels?: string[];
+  note?: string;
+  focus?: { row?: number; col?: number };
+};
+
+function renderGrid({ title, cells = [], rows, cols, rowLabels = [], colLabels = [], note, focus }: GridSpec): RenderedFigure {
   const labelW = rowLabels.length ? Math.max(44, Math.ceil(Math.max(...rowLabels.map((l: string) => est(l, 12)))) + 16) : 0;
   const headH = colLabels.length ? 30 : 0;
   const titleH = title ? T.fontTitle + 18 : 0;
@@ -352,10 +380,10 @@ function renderGrid({ title, cells = [], rows, cols, rowLabels = [], colLabels =
 
   const ox = Math.round((w - gridW) / 2) + 12 + labelW;
   const oy = 12 + titleH + headH;
-  const map = new Map(cells.map((c: any) => [`${c.r},${c.c}`, c]));
+  const map = new Map(cells.map((c) => [`${c.r},${c.c}`, c]));
   const parts: string[] = [...titleBlock(title)];
-  const focusRow = Number.isInteger(focus?.row) ? focus.row : null;
-  const focusCol = Number.isInteger(focus?.col) ? focus.col : null;
+  const focusRow = Number.isInteger(focus?.row) ? focus?.row ?? null : null;
+  const focusCol = Number.isInteger(focus?.col) ? focus?.col ?? null : null;
 
   colLabels.forEach((lab: string, c: number) => {
     const cwi = colWAt(c);
@@ -380,7 +408,7 @@ function renderGrid({ title, cells = [], rows, cols, rowLabels = [], colLabels =
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const cell: any = map.get(`${r},${c}`);
+      const cell = map.get(`${r},${c}`);
       const cwi = colWAt(c);
       const x = ox + colX(c);
       const y = oy + r * ch;
@@ -451,14 +479,41 @@ const GLYPH: Record<string, string> = {
   p: '兵',
 };
 
-function renderBoard({ title, pieces = [], files = [], arrows = [], marks = [], note, size = 46, panelLabel }: any): RenderedFigure {
+type BoardPoint = { col: number; rank: number };
+type BoardPiece = { col: number; rank: number; key: string; hl?: unknown };
+type BoardFile = { col: number; label?: unknown; tone?: unknown };
+type BoardArrow = {
+  a1?: BoardPoint;
+  a2?: BoardPoint;
+  label?: unknown;
+  tone?: unknown;
+  dash?: unknown;
+  col: number;
+  from: number;
+  to: number;
+  side?: unknown;
+};
+type BoardMark = { col: number; rank: number; color?: unknown };
+
+type BoardSpec = {
+  title?: string;
+  pieces?: BoardPiece[];
+  files?: BoardFile[];
+  arrows?: BoardArrow[];
+  marks?: BoardMark[];
+  note?: string;
+  size?: number;
+  panelLabel?: string;
+};
+
+function renderBoard({ title, pieces = [], files = [], arrows = [], marks = [], note, size = 46, panelLabel }: BoardSpec): RenderedFigure {
   const padL = 30;
   const padR = 30;
   const sizeCjk = T.fontSmall;
   const headH = title || panelLabel ? T.fontTitle + 20 : 10;
   const padT = headH + Math.round(size * 0.52) + 8;
   const bottomLabelExtra = (arrows || []).some(
-    (a: any) => a.a1 && a.a2 && a.a1.rank === a.a2.rank && Math.max(a.a1.rank, a.a2.rank) >= 8 && a.label,
+    (a) => a.a1 && a.a2 && a.a1.rank === a.a2.rank && Math.max(a.a1.rank, a.a2.rank) >= 8 && a.label,
   )
     ? 34
     : 0;
@@ -621,7 +676,39 @@ const COMPARE_TONES: Record<string, { color: string; soft: string; ink: string }
  * 边界上的序号就是跳数；省掉一次共识的那一栏，边界上就少一个序号、节点里多一枚「内置·合一」。
  * 差异因此落在**线段和节点**上，而不是飘在两栏中间的一句气泡里。
  */
-function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTone = 'accent', focus }: any): RenderedFigure {
+/** compare 链路侧栏：chain 节点 / items / 徽标都是模型给的松散 JSON。 */
+type CompareChainNode = {
+  label?: unknown;
+  sub?: unknown;
+  merged?: unknown;
+  from?: unknown;
+  rtt?: unknown;
+  /** 直接进 COMPARE_TONES 白名单索引，所以收成 string */
+  tone: string;
+};
+
+type CompareSide = {
+  head?: unknown;
+  sub?: unknown;
+  badge?: unknown;
+  badgeTone: string;
+  client?: unknown;
+  boundaryLabel?: unknown;
+  items: string[];
+  chain?: CompareChainNode[];
+};
+
+type CompareChainSpec = {
+  title?: string;
+  left: CompareSide;
+  right: CompareSide;
+  note?: string;
+  leftTone?: string;
+  rightTone?: string;
+  focus?: string;
+};
+
+function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTone = 'accent', focus }: CompareChainSpec): RenderedFigure {
   const panelW = 330;
   const gap = 16;
   const padX = 14;
@@ -638,18 +725,18 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
   const nodePad = 26;
   const nodeW = panelW - nodeXOff - nodePad * 2;
 
-  const nodesOf = (side: any): any[] => (Array.isArray(side?.chain) ? side.chain : []);
-  const itemsOf = (side: any): string[] => (Array.isArray(side?.items) ? side.items : []);
+  const nodesOf = (side: CompareSide): CompareChainNode[] => (Array.isArray(side?.chain) ? side.chain : []);
+  const itemsOf = (side: CompareSide): string[] => (Array.isArray(side?.items) ? side.items : []);
   // 每张卡按自己的文字量取高：统一高度会让只有两行字的卡空出半张脸，
   // 而三行字的卡又贴到边框——卡片高度跟内容走，两栏各自堆叠。
-  const measureNode = (node: any) => {
+  const measureNode = (node: CompareChainNode) => {
     const textW = nodeW - 24;
     const labelLines = wrapLines(String(node?.label || ''), textW, T.fontBody).slice(0, 2).length;
     const subLines = node?.sub ? wrapLines(String(node.sub), textW, T.fontMicro).slice(0, 2).length : 0;
     // 合一徽标固定在卡片底部一行：它会占掉 18px，但不抢标题宽度（否则长名字会被挤成两行半）
     return 22 + labelLines * 17 + subLines * 14 + (node?.merged ? 18 : 0);
   };
-  const layoutOf = (side: any) => {
+  const layoutOf = (side: CompareSide) => {
     const nodes = nodesOf(side);
     const heights = nodes.map(measureNode);
     const offsets: number[] = [];
@@ -670,7 +757,7 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
 
   const parts: string[] = [...titleBlock(title, padX)];
 
-  const panel = (side: any, layout: { heights: number[]; offsets: number[]; total: number }, x: number, toneName: string, sideKey: 'left' | 'right') => {
+  const panel = (side: CompareSide, layout: { heights: number[]; offsets: number[]; total: number }, x: number, toneName: string, sideKey: 'left' | 'right') => {
     const tone = COMPARE_TONES[toneName] || COMPARE_TONES.neutral;
     const nodes = nodesOf(side);
     const items = itemsOf(side);
@@ -683,7 +770,7 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
 
     // 边界：客户端画在框**外**，箭头穿过边框 = 一次跨界往返。
     // 标签由内容决定（架构=集群边界；同进程请求链=组件异步边界），默认保持旧文案。
-    const boundaryLabel = String((side as { boundaryLabel?: unknown }).boundaryLabel || '集群边界');
+    const boundaryLabel = String(side.boundaryLabel || '集群边界');
     const borderX = x + nodeXOff;
     const borderW = panelW - nodeXOff;
     parts.push(rect(borderX, bodyTop, borderW, borderH, {
@@ -710,15 +797,15 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
     // 每一跳从客户端出发穿过边界：第 1 跳直连，第 2 跳起走左侧竖干再横进。
     // 缺省即串联（2026-10-22）：真课 10 张链路图 47 跳**没有一跳**写 from，
     // 结果每跳都从客户端并联射出，「响应回来」也画成往外发。要并联扇出必须显式写 from:'client'。
-    const isSerial = (node: any, i: number) => i > 0 && (node?.from === 'prev' || node?.from == null);
+    const isSerial = (node: CompareChainNode, i: number) => i > 0 && (node?.from === 'prev' || node?.from == null);
     const trunkX = clientX + clientW + 8;
-    const directIdx = nodes.map((n: any, i: number) => (isSerial(n, i) ? -1 : i)).filter((i: number) => i >= 0);
+    const directIdx = nodes.map((n, i) => (isSerial(n, i) ? -1 : i)).filter((i: number) => i >= 0);
     const lastDirect = directIdx.length ? directIdx[directIdx.length - 1] : 0;
     const lastCy = stackTop + layout.offsets[lastDirect] + (layout.heights[lastDirect] || 60) / 2;
     if (directIdx.length > 1) {
       parts.push(`<line x1="${trunkX}" y1="${firstCy}" x2="${trunkX}" y2="${lastCy}" stroke="${tone.color}" stroke-width="1.4" opacity="0.55"/>`);
     }
-    nodes.forEach((node: any, i: number) => {
+    nodes.forEach((node, i) => {
       const nh = layout.heights[i] || 60;
       const ny = stackTop + layout.offsets[i];
       const cy = ny + nh / 2;
@@ -737,7 +824,7 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
         // 跳数标在**边界上**：数一眼边界上的序号，就是这条路径跨了几次集群。
         // 先垫一圈白底：边界线到徽标前就断开，读作「线上的一次跨集群」，而不是数字压着线。
         const bx = borderX;
-        const hopNo = nodes.slice(0, i + 1).filter((n: any, k: number) => !isSerial(n, k)).length;
+        const hopNo = nodes.slice(0, i + 1).filter((n, k) => !isSerial(n, k)).length;
         parts.push(`<circle cx="${bx}" cy="${cy}" r="11.5" fill="${T.surface}"/>`);
         parts.push(`<circle cx="${bx}" cy="${cy}" r="8.5" fill="${T.surface}" stroke="${tone.color}" stroke-width="1.6"/>`);
         parts.push(text(bx, cy + 3.6, String(hopNo), 't-micro', 'middle', `fill="${tone.ink}"`));
@@ -793,7 +880,18 @@ function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTo
   return { svg: wrap(parts.join('\n'), W, h), width: W, height: h };
 }
 
-function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rightTone = 'accent', focus }: any): RenderedFigure {
+type CompareSpec = {
+  title?: string;
+  left: CompareSide;
+  right: CompareSide;
+  divider?: string;
+  note?: string;
+  leftTone?: string;
+  rightTone?: string;
+  focus?: string;
+};
+
+function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rightTone = 'accent', focus }: CompareSpec): RenderedFigure {
   // 两侧给了请求链路 → 走拓扑模式：跳数由边界上的序号和箭头本身表达
   if ((Array.isArray(left?.chain) && left.chain.length) || (Array.isArray(right?.chain) && right.chain.length)) {
     return renderCompareChain({ title, left, right, note, leftTone, rightTone, focus });
@@ -805,7 +903,7 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
   // 条目允许三行：两行时 19 字的因果句仍会被截掉最后一个动作（2026-10-22 夜间跑批 #269）
   const itemTextW = colW - 46;
   const rows = Math.max(left.items.length, right.items.length);
-  const itemLineCount = (side: any) =>
+  const itemLineCount = (side: CompareSide) =>
     (Array.isArray(side?.items) ? side.items : []).reduce(
       (max: number, it: unknown) => Math.max(max, Math.min(3, wrapLines(String(it ?? ''), itemTextW, T.fontBody).length)),
       1,
@@ -817,8 +915,8 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
     if (raw.length <= maxLines) return raw;
     return [...raw.slice(0, maxLines - 1), fitText(raw.slice(maxLines - 1).join(''), maxW, size)];
   };
-  const headLinesOf = (side: any) => wrapMax(side?.head ?? '', colW - 24, T.fontKey, 2);
-  const subLinesOf = (side: any) => (side?.sub ? wrapMax(side.sub, colW - 24, T.fontMicro, 2) : []);
+  const headLinesOf = (side: CompareSide) => wrapMax(side?.head ?? '', colW - 24, T.fontKey, 2);
+  const subLinesOf = (side: CompareSide) => (side?.sub ? wrapMax(side.sub, colW - 24, T.fontMicro, 2) : []);
   const headH = 36 + (Math.max(headLinesOf(left).length, headLinesOf(right).length) - 1) * 18;
   const TONES: Record<string, { color: string; soft: string; ink: string }> = {
     ok: { color: T.ok, soft: T.okSoft, ink: T.ok },
@@ -904,7 +1002,21 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
 
 /* ---------------- 四、二分连线图（多对多关系） ---------------- */
 
-function renderBipartite({ title, left, right, edges = [], note, width = 640, focus }: any): RenderedFigure {
+type BiNode = { id: string; label?: unknown; tone?: string };
+type BiSide = { nodes: BiNode[]; head?: unknown };
+type BiEdge = { from: string; to: string; tone?: string; dash?: unknown };
+
+type BipartiteSpec = {
+  title?: string;
+  left: BiSide;
+  right: BiSide;
+  edges?: BiEdge[];
+  note?: string;
+  width?: number;
+  focus?: unknown;
+};
+
+function renderBipartite({ title, left, right, edges = [], note, width = 640, focus }: BipartiteSpec): RenderedFigure {
   const TONE: Record<string, { color: string; soft: string }> = {
     accent: { color: T.accent, soft: T.accentSoft },
     ok: { color: T.ok, soft: T.okSoft },
@@ -920,7 +1032,7 @@ function renderBipartite({ title, left, right, edges = [], note, width = 640, fo
   const rx = width - 24 - rw;
   const rows = Math.max(left.nodes.length, right.nodes.length);
   const noteLines = note ? wrapLines(note, width - 24, T.fontSmall) : [];
-  const hasDashedEdge = edges.some((e: any) => dash(e.dash));
+  const hasDashedEdge = edges.some((e) => dash(e.dash));
   const legendH = hasDashedEdge ? 18 : 0;
   const h = titleH + headH + rows * rowH + (noteLines.length ? noteLines.length * 18 + 12 : 0) + legendH + 12;
 
@@ -931,9 +1043,9 @@ function renderBipartite({ title, left, right, edges = [], note, width = 640, fo
 
   const top = titleH + headH;
   const nodeY = (i: number) => top + i * rowH;
-  const byId = new Map<string, { n: any; side: 'L' | 'R'; i: number }>();
-  left.nodes.forEach((n: any, i: number) => byId.set(n.id, { n, side: 'L', i }));
-  right.nodes.forEach((n: any, i: number) => byId.set(n.id, { n, side: 'R', i }));
+  const byId = new Map<string, { n: BiNode; side: 'L' | 'R'; i: number }>();
+  left.nodes.forEach((n, i) => byId.set(n.id, { n, side: 'L', i }));
+  right.nodes.forEach((n, i) => byId.set(n.id, { n, side: 'R', i }));
   const focusIds = new Set<string>(Array.isArray(focus) ? focus.map((f: unknown) => String(f)) : []);
 
   // 连线画在节点下面：交叉处干净
@@ -957,7 +1069,7 @@ function renderBipartite({ title, left, right, edges = [], note, width = 640, fo
     );
   }
 
-  const node = (n: any, i: number, x: number) => {
+  const node = (n: BiNode, i: number, x: number) => {
     const t = TONE[n.tone || 'neutral'] || TONE.neutral;
     const y = nodeY(i);
     const isFocus = focusIds.has(String(n.id));
@@ -973,8 +1085,8 @@ function renderBipartite({ title, left, right, edges = [], note, width = 640, fo
       text(x + rw / 2, y + nodeH / 2 + 4.5, n.label, isFocus || n.tone ? 't-key' : 't-label', 'middle', n.tone ? `fill="${t.color}"` : ''),
     );
   };
-  left.nodes.forEach((n: any, i: number) => node(n, i, lx));
-  right.nodes.forEach((n: any, i: number) => node(n, i, rx));
+  left.nodes.forEach((n, i) => node(n, i, lx));
+  right.nodes.forEach((n, i) => node(n, i, rx));
 
   noteLines.forEach((ln: string, i: number) =>
     parts.push(text(12, h - 8 - legendH - (noteLines.length - 1 - i) * 18, ln, 't-small', 'start')),
@@ -984,8 +1096,9 @@ function renderBipartite({ title, left, right, edges = [], note, width = 640, fo
   if (hasDashedEdge) {
     const ly = h - 8;
     const right = width - 12;
-    parts.push(text(right, ly, '虚线 = 次要 / 附带关系', 't-tiny', 'end'));
-    const labelW = est('虚线 = 次要 / 附带关系', T.fontMicro);
+    const dashLegend = '虚线 = 次要 / 附带关系';
+    parts.push(text(right, ly, dashLegend, 't-tiny', 'end'));
+    const labelW = est(dashLegend, T.fontMicro);
     const dashX = right - labelW - 30;
     parts.push(`<path d="M${dashX} ${ly - 4} h18" stroke="${T.lineStrong}" stroke-width="1.4" stroke-dasharray="4 3"/>`);
     parts.push(`<path d="M${dashX - 34} ${ly - 4} h18" stroke="${T.lineStrong}" stroke-width="1.4"/>`);
@@ -996,7 +1109,18 @@ function renderBipartite({ title, left, right, edges = [], note, width = 640, fo
 
 /* ---------------- 五、四象限 ---------------- */
 
-function renderQuadrant({ title, colLabels = [], rowLabels = [], cells = [], note }: any): RenderedFigure {
+type QuadRowLabel = { label?: unknown; sub?: unknown };
+type QuadCell = { tone?: string; icon?: { kind?: unknown; dots?: number[][] }; title?: unknown; body?: string[] };
+
+type QuadrantSpec = {
+  title?: string;
+  colLabels?: string[];
+  rowLabels?: QuadRowLabel[];
+  cells?: QuadCell[];
+  note?: string;
+};
+
+function renderQuadrant({ title, colLabels = [], rowLabels = [], cells = [], note }: QuadrantSpec): RenderedFigure {
   const TONE: Record<string, { color: string; soft: string }> = {
     ok: { color: T.ok, soft: T.okSoft },
     warn: { color: T.warn, soft: T.warnSoft },
@@ -1016,12 +1140,12 @@ function renderQuadrant({ title, colLabels = [], rowLabels = [], cells = [], not
   const parts: string[] = [...titleBlock(title)];
   const xs = [padL + 8, padL + 8 + cw + gapX];
   colLabels.forEach((lab: string, c: number) => parts.push(text(xs[c] + cw / 2, titleH + 50, fitText(lab, cw - 8, T.fontSmall), 't-small')));
-  rowLabels.forEach((lab: any, r: number) => {
+  rowLabels.forEach((lab, r: number) => {
     parts.push(text(padL, titleH + top + r * (chh + gapY) + chh / 2 - 2, lab.label, 't-key', 'end'));
     if (lab.sub) parts.push(text(padL, titleH + top + r * (chh + gapY) + chh / 2 + 15, lab.sub, 't-tiny', 'end'));
   });
 
-  cells.forEach((cell: any, idx: number) => {
+  cells.forEach((cell, idx: number) => {
     const x = xs[idx % 2];
     const y = titleH + top + Math.floor(idx / 2) * (chh + gapY);
     const t = TONE[cell.tone || 'neutral'] || TONE.neutral;
@@ -1049,7 +1173,20 @@ function renderQuadrant({ title, colLabels = [], rowLabels = [], cells = [], not
 
 /* ---------------- 六、对照表（2D 命中矩阵） ---------------- */
 
-function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], focus }: any): RenderedFigure {
+type MatrixCell = { r?: number; c?: number; tone?: string };
+type MatrixLegendItem = { text?: unknown; fill?: unknown; stroke?: unknown };
+
+type MatrixSpec = {
+  title?: string;
+  rowLabels: string[];
+  colLabels: string[];
+  cells: MatrixCell[];
+  note?: string;
+  legend?: MatrixLegendItem[];
+  focus?: { row?: number; col?: number };
+};
+
+function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], focus }: MatrixSpec): RenderedFigure {
   const labelW = Math.max(...rowLabels.map((l: string) => est(l, 12))) + 22;
   /** 列宽先看清列标题要多少（8 字以上按 94px 就装不下），再夹在 94–190 之间 */
   const cwLabel = colLabels.reduce(
@@ -1063,7 +1200,7 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
   const matrixW = 14 + labelW + colLabels.length * cw + 14;
   const titleW = title ? 12 + est(title, T.fontTitle) + 12 : 0;
   const noteW = note ? 12 + est(note, T.fontSmall) + 12 : 0;
-  const legendW = legend.reduce((sum: number, l: any) => sum + 15 + est(l.text, T.fontMicro) + 16, 12);
+  const legendW = legend.reduce((sum: number, l: MatrixLegendItem) => sum + 15 + est(l.text, T.fontMicro) + 16, 12);
   const w = Math.ceil(Math.max(matrixW, titleW, noteW, legendW));
 
   const h = (title ? T.fontTitle + 18 : 0) + headH + rowLabels.length * ch + 26 + (note ? 22 : 0) + (legend.length ? 22 : 0);
@@ -1076,8 +1213,8 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
   }
 
   const ox = Math.round((w - matrixW) / 2) + 14;
-  const focusRow = Number.isInteger(focus?.row) ? focus.row : null;
-  const focusCol = Number.isInteger(focus?.col) ? focus.col : null;
+  const focusRow = Number.isInteger(focus?.row) ? focus?.row ?? null : null;
+  const focusCol = Number.isInteger(focus?.col) ? focus?.col ?? null : null;
 
   // 焦点行/列：表头用强调色 + 底色 + 左侧强调轨；非焦点文字降为次级色（层次靠「退后」，不靠加大）
   if (focusRow !== null) {
@@ -1126,10 +1263,10 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
     );
   });
 
-  const map = new Map(cells.map((c: any) => [`${c.r},${c.c}`, c]));
+  const map = new Map(cells.map((c) => [`${c.r},${c.c}`, c]));
   for (let r = 0; r < rowLabels.length; r++) {
     for (let c = 0; c < colLabels.length; c++) {
-      const cell: any = map.get(`${r},${c}`);
+      const cell = map.get(`${r},${c}`);
       const x = ox + labelW + c * cw;
       const y = oy + headH + r * ch;
       const tone = cell?.tone;
@@ -1177,12 +1314,17 @@ function renderMatrix({ title, rowLabels, colLabels, cells, note, legend = [], f
  */
 function binsItemWidth(item: unknown): number {
   const isObj = item !== null && typeof item === 'object';
-  const label = isObj ? (item as any).label : item;
-  const mark = isObj ? (item as any).mark : null;
+  const label = isObj ? (item as { label?: unknown }).label : item;
+  const mark = isObj ? (item as { mark?: unknown }).mark : null;
   return 66 + est(label, T.fontBody) + (mark ? est(mark, T.fontMicro) : 0);
 }
 
-function renderBins({ title, bins = [], note, focus }: any): RenderedFigure {
+type BinEntry = string | { label?: unknown; mark?: unknown };
+type Bin = { label?: unknown; tone?: string; items?: BinEntry[] };
+
+type BinsSpec = { title?: string; bins?: Bin[]; note?: string; focus?: number };
+
+function renderBins({ title, bins = [], note, focus }: BinsSpec): RenderedFigure {
   const binGap = 18;
   const padX = 14;
   const headH = 34;
@@ -1191,9 +1333,9 @@ function renderBins({ title, bins = [], note, focus }: any): RenderedFigure {
 
   const binW = Math.max(
     150,
-    ...bins.map((b: any) => Math.max(est(b.label, T.fontKey) + 44, ...(b.items || []).map(binsItemWidth), 120)),
+    ...bins.map((b) => Math.max(est(b.label, T.fontKey) + 44, ...(b.items || []).map(binsItemWidth), 120)),
   );
-  const maxItems = Math.max(1, ...bins.map((b: any) => (b.items || []).length));
+  const maxItems = Math.max(1, ...bins.map((b) => (b.items || []).length));
   const bodyH = maxItems * (chipH + chipGap) + 14;
   const titleH = title ? T.fontTitle + 20 : 0;
   // note 的可用宽度是画布减去两侧内衬；此前用「分箱宽 + 单侧内衬」，末行会捅出右边界
@@ -1207,7 +1349,7 @@ function renderBins({ title, bins = [], note, focus }: any): RenderedFigure {
   const sid = shadowId();
   parts.push(shadowDef(sid));
 
-  bins.forEach((bin: any, bi: number) => {
+  bins.forEach((bin, bi: number) => {
     const x = padX + bi * (binW + binGap);
     const y = titleH;
     const tone =
@@ -1224,7 +1366,7 @@ function renderBins({ title, bins = [], note, focus }: any): RenderedFigure {
     parts.push(`<rect x="${x + 1}" y="${y + 1}" width="${binW - 2}" height="${headH - 1}" rx="11" fill="${tone.soft}"/>`);
     parts.push(text(x + binW / 2, y + 22, bin.label, 't-key', 'middle', `fill="${tone.color}"`));
 
-    (bin.items || []).forEach((item: any, i: number) => {
+    (bin.items || []).forEach((item, i: number) => {
       const label = typeof item === 'string' ? item : item.label;
       const mark = typeof item === 'object' ? item.mark : null;
       const iy = y + headH + 8 + i * (chipH + chipGap);
@@ -1251,7 +1393,18 @@ function renderBins({ title, bins = [], note, focus }: any): RenderedFigure {
  * 几何要点：托盘从横梁端点**竖绳吊下**，随梁一起升降（真实天平的样子）；
  * 若把两个托盘画在同一水平线上、只把绳子画斜，看起来像 A 字架而不是天平。
  */
-function renderBalance({ title, left, right, pivotLabel, note, focus }: any): RenderedFigure {
+type BalanceSide = { head?: unknown; sub?: unknown; weight?: number; items?: string[] };
+
+type BalanceSpec = {
+  title?: string;
+  left: BalanceSide;
+  right: BalanceSide;
+  pivotLabel?: string;
+  note?: string;
+  focus?: string;
+};
+
+function renderBalance({ title, left, right, pivotLabel, note, focus }: BalanceSpec): RenderedFigure {
   const W = 620;
   const padX = 20;
   const titleH = title ? T.fontTitle + 20 : 0;
@@ -1278,7 +1431,7 @@ function renderBalance({ title, left, right, pivotLabel, note, focus }: any): Re
   const panTopR = rightY + rope;
 
   // 每侧的条目装进一张浅卡片：卡宽随内容走（托盘宽是最小值），但不得探进中间的支架
-  const layout = (data: any, x: number, beamY: number, panTop: number, tone: string, soft: string, isFocus: boolean) => {
+  const layout = (data: BalanceSide, x: number, beamY: number, panTop: number, tone: string, soft: string, isFocus: boolean) => {
     const items: string[] = data.items || [];
     const need = Math.max(0, ...items.map((it) => est(it, T.fontSmall) + 34));
     const cardW = Math.min(Math.max(panW, need), 280);
@@ -1363,10 +1516,14 @@ function renderBalance({ title, left, right, pivotLabel, note, focus }: any): Re
  * ladder：从左下往右上的台阶，每级一个阶段。`state` 决定实心/描边/虚线。
  * 与 matrix 的区别：不比较两维，只表达「先到哪、再到哪」——层级与进度的形状。
  */
-function renderLadder({ title, steps = [], note, focus }: any): RenderedFigure {
+type LadderStep = { label?: unknown; sub?: unknown; state?: string };
+
+type LadderSpec = { title?: string; steps?: LadderStep[]; note?: string; focus?: number };
+
+function renderLadder({ title, steps = [], note, focus }: LadderSpec): RenderedFigure {
   // 步名长度决定卡片宽度：此前固定 150px，九字以上直接捅出边框（外审实拍 #3/#4）。
   // 超过两行的步名收到两行 + 省略号，卡片高度同步加一行。
-  const labelLines: string[][] = steps.map((step: any) => {
+  const labelLines: string[][] = steps.map((step) => {
     const lines = wrapLines(step.label, 200, T.fontKey);
     if (lines.length <= 2) return lines;
     return [lines[0], fitText(lines.slice(1).join(''), 200, T.fontKey)];
@@ -1375,7 +1532,7 @@ function renderLadder({ title, steps = [], note, focus }: any): RenderedFigure {
   const stepW = Math.min(240, Math.max(150, widest + 30));
   // 子标题单行时会被截断（「卡在______，手当时没有下一个动作…」），允许两行并按行数加高。
   // 底高 68 而不是 62：62 时步名与子标题的基线只差 10px，两行 bbox 会压在一起（夜间跑批 #58/#503）。
-  const subLines: string[][] = steps.map((step: any) => {
+  const subLines: string[][] = steps.map((step) => {
     if (!step.sub) return [];
     const lines = wrapLines(step.sub, stepW - 24, T.fontMicro);
     if (lines.length <= 2) return lines;
@@ -1396,7 +1553,7 @@ function renderLadder({ title, steps = [], note, focus }: any): RenderedFigure {
   const sid = shadowId();
   parts.push(shadowDef(sid));
 
-  steps.forEach((step: any, i: number) => {
+  steps.forEach((step, i: number) => {
     const x = padX + i * (stepW + 8);
     const y = baseY - stepH - i * rise;
     const state = step.state || (focus === i ? 'current' : 'todo');
@@ -1467,9 +1624,13 @@ function slotRect(x: number, y: number, w: number, h: number): string[] {
  * 与 ladder 的区别：ladder 说「先到哪、再到哪」（终点明确），cycle 说「走完要回到起点」（闭环）。
  * 用于 PBL 四部件、行动研究、迭代流程这类「每一轮都回到同一个问题」的结构。
  */
-function renderCycle({ title, center, nodes = [], note }: any): RenderedFigure {
+type CycleNode = { label?: unknown; sub?: unknown; tone?: string; mask?: boolean };
+
+type CycleSpec = { title?: string; center?: string; nodes?: CycleNode[]; note?: string };
+
+function renderCycle({ title, center, nodes = [], note }: CycleSpec): RenderedFigure {
   const n = Math.max(3, nodes.length);
-  const pillW = Math.max(132, ...nodes.map((x: any) => est(x.label, T.fontKey) + 34), ...nodes.map((x: any) => est(x.sub, T.fontMicro) + 28));
+  const pillW = Math.max(132, ...nodes.map((x) => est(x.label, T.fontKey) + 34), ...nodes.map((x) => est(x.sub, T.fontMicro) + 28));
   const pillH = 56;
   const R = Math.max(128, Math.ceil((pillW + 30) / (2 * Math.sin(Math.PI / n))));
   const pad = 24;
@@ -1480,7 +1641,7 @@ function renderCycle({ title, center, nodes = [], note }: any): RenderedFigure {
   const noteLines = note ? wrapLines(note, W - pad * 2, T.fontSmall) : [];
   const h = Math.ceil(cy + R + pillH / 2 + pad + (noteLines.length ? noteLines.length * 18 + 14 : 0));
 
-  const pts = nodes.map((node: any, i: number) => {
+  const pts = nodes.map((node, i: number) => {
     const a = -Math.PI / 2 + (i * 2 * Math.PI) / nodes.length;
     return { node, x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
   });
@@ -1561,12 +1722,16 @@ function renderCycle({ title, center, nodes = [], note }: any): RenderedFigure {
  * 与 bins 的区别：bins 是「把东西放进已有的箱子」（容器隐喻），tree 是「一个总概念长出哪些子概念」（派生隐喻）。
  * 用于五大领域、词根词缀、分类体系这类「先有根、再有枝」的内容。
  */
-function renderTree({ title, root, branches = [], note }: any): RenderedFigure {
+type TreeNode = { label?: unknown; sub?: unknown; tone?: string; mask?: boolean; items?: string[] };
+
+type TreeSpec = { title?: string; root?: TreeNode; branches?: TreeNode[]; note?: string };
+
+function renderTree({ title, root, branches = [], note }: TreeSpec): RenderedFigure {
   const itemsMax = 2;
   const branchW = Math.max(
     148,
-    ...branches.map((b: any) => est(b.label, T.fontKey) + 32),
-    ...branches.map((b: any) => Math.max(0, ...(b.items || []).slice(0, itemsMax).map((it: string) => est(it, T.fontMicro))) + 24),
+    ...branches.map((b) => est(b.label, T.fontKey) + 32),
+    ...branches.map((b) => Math.max(0, ...(b.items || []).slice(0, itemsMax).map((it: string) => est(it, T.fontMicro))) + 24),
   );
   const branchH = 44;
   const rootW = Math.max(140, est(root?.label, T.fontKey) + 34);
@@ -1590,7 +1755,7 @@ function renderTree({ title, root, branches = [], note }: any): RenderedFigure {
   const sid = shadowId();
   parts.push(shadowDef(sid));
 
-  const pts = branches.map((b: any, i: number) => {
+  const pts = branches.map((b, i: number) => {
     // 单数/两个分支时从左右张开，其余均匀铺满一圈
     const a = n === 2 ? (i === 0 ? Math.PI : 0) : -Math.PI / 2 + (i * 2 * Math.PI) / n;
     return { b, x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
@@ -1654,7 +1819,11 @@ function renderTree({ title, root, branches = [], note }: any): RenderedFigure {
  * 与 compare 的区别：compare 是「左右两栏对照」（互斥），venn 是「哪部分重叠、哪部分各自独有」。
  * 用于易混概念（社会 vs 健康、艺术 vs 语言）、同一动作词落在两个领域这类「边界」问题。
  */
-function renderVenn({ title, left, right, overlap, note }: any): RenderedFigure {
+type VennGroup = { head?: string; items?: string[] };
+
+type VennSpec = { title?: string; left?: VennGroup; right?: VennGroup; overlap?: VennGroup; note?: string };
+
+function renderVenn({ title, left, right, overlap, note }: VennSpec): RenderedFigure {
   const r = 130;
   // 圆心距 0.52r：透镜区约 0.96r 宽、两侧独有区约 1.04r，三块宽度接近，长标签也不打架
   const d = Math.round(r * 0.52);
@@ -1730,13 +1899,24 @@ function renderVenn({ title, left, right, overlap, note }: any): RenderedFigure 
  * 「信度×效度」这类内容的第一性问题就是几何分布，把它做成独立图型，模型只需要给点坐标。
  * 点坐标取 [-1,1] 归一化（0,0 = 靶心），由模型给、代码换算，避免像素级坐标进入提示词。
  */
-function renderBullseye({ title, colLabels = [], rowLabels = [], cells = [], note }: any): RenderedFigure {
+type BullRowLabel = { label?: unknown; sub?: unknown };
+type BullCell = { tone?: string; dots?: number[][]; title?: unknown; desc?: unknown };
+
+type BullseyeSpec = {
+  title?: string;
+  colLabels?: string[];
+  rowLabels?: BullRowLabel[];
+  cells?: BullCell[];
+  note?: string;
+};
+
+function renderBullseye({ title, colLabels = [], rowLabels = [], cells = [], note }: BullseyeSpec): RenderedFigure {
   const cellW = 300;
   const cellH = 152;
   const gapX = 16;
   const gapY = 18;
   // V6 修复（外盲评：行标签「低」被裁掉）：padL 按最长行标签动态给
-  const rowLabelW = Math.max(0, ...rowLabels.map((lab: any) => est(lab?.label ?? String(lab), T.fontKey)));
+  const rowLabelW = Math.max(0, ...rowLabels.map((lab) => est(lab?.label ?? String(lab), T.fontKey)));
   const padL = Math.max(104, Math.ceil(rowLabelW) + 26);
   const pad = 18;
   const titleH = title ? T.fontTitle + 20 : 0;
@@ -1750,13 +1930,13 @@ function renderBullseye({ title, colLabels = [], rowLabels = [], cells = [], not
   colLabels.forEach((lab: string, c: number) =>
     parts.push(text(xs[c] + cellW / 2, titleH + 30, fitText(lab, cellW - 10, T.fontKey), 't-key')),
   );
-  rowLabels.forEach((lab: any, r: number) => {
+  rowLabels.forEach((lab, r: number) => {
     const y = top + r * (cellH + gapY) + cellH / 2;
     parts.push(text(padL - 18, y - 2, fitText(lab?.label ?? String(lab), padL - 26, T.fontKey), 't-key', 'end'));
     if (lab?.sub) parts.push(text(padL - 18, y + 16, lab.sub, 't-tiny', 'end'));
   });
 
-  cells.slice(0, 4).forEach((cell: any, idx: number) => {
+  cells.slice(0, 4).forEach((cell, idx: number) => {
     const x = xs[idx % 2];
     const y = top + Math.floor(idx / 2) * (cellH + gapY);
     const tone = cell.tone === 'ok' ? T.ok : cell.tone === 'warn' ? T.warn : cell.tone === 'accent' ? T.accent : T.muted;
@@ -1803,7 +1983,12 @@ function renderBullseye({ title, colLabels = [], rowLabels = [], cells = [], not
  * 横着画在日期轴上会被读成「周二到周六 = 0.7 个点」——量纲错位。这里让每组有独立轨道，
  * 共同的数值域只决定横向对齐，不冒充时间。
  */
-function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): RenderedFigure | null {
+type RangeRow = { from?: number; to?: number; label?: unknown; tone: string };
+type RangeMark = { at?: number; label?: unknown };
+
+type RangeBarSpec = { title?: string; unit?: string; rows?: RangeRow[]; marks?: RangeMark[]; note?: string };
+
+function renderRangeBar({ title, unit, rows = [], marks = [], note }: RangeBarSpec): RenderedFigure | null {
   // 至少两条区间才有「并排比较」的意义；单条区间退回文字讲
   if (!Array.isArray(rows) || rows.length < 2) return null;
   const padX = 16;
@@ -1822,7 +2007,7 @@ function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): Rend
   const noteH = noteLines.length ? noteLines.length * 18 + 8 : 0;
   const h = axisY + 24 + noteH;
 
-  const values = rows.flatMap((r: any) => [Number(r.from), Number(r.to)]).concat(marks.map((m: any) => Number(m.at)));
+  const values = rows.flatMap((r) => [Number(r.from), Number(r.to)]).concat(marks.map((m) => Number(m.at)));
   const lo = Math.min(...values);
   const hi = Math.max(...values);
   const pad = hi > lo ? (hi - lo) * 0.08 : Math.max(Math.abs(hi) * 0.1, 1);
@@ -1843,7 +2028,7 @@ function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): Rend
 
   const parts: string[] = [...titleBlock(title, padX)];
 
-  rows.forEach((row: any, i: number) => {
+  rows.forEach((row, i: number) => {
     const y = top + i * rowH;
     const tone = TONE[row.tone] || TONE.accent;
     const x1 = xOf(Number(row.from));
@@ -1869,7 +2054,7 @@ function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): Rend
   parts.push(text(plotX + plotW, axisY + 16, `${fmt(max)}${unit || ''}`, 't-tiny', 'end'));
 
   // 参考点（如「汇报的均值差」）：虚线穿过所有轨道
-  marks.forEach((mark: any) => {
+  marks.forEach((mark) => {
     const x = xOf(Number(mark.at));
     parts.push(`<line x1="${x}" y1="${top}" x2="${x}" y2="${axisY}" stroke="${T.accent}" stroke-width="1" stroke-dasharray="4 4"/>`);
     if (mark.label) parts.push(text(x, top - 4, mark.label, 't-tiny', 'middle', `fill="${T.accentInk}"`));
@@ -1901,7 +2086,49 @@ function fmtNum(v: number): string {
  * 横轴 x、纵轴 y、曲线、等时刻辅助线。模型只给轴域、表达式/数据点、辅助线与箭头，
  * 采样与排版全部由这里确定性完成（同一份 spec 永远画出同一张图）。
  */
-function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands = [], areas = [], vectors = [], marks = [] }: any): RenderedFigure | null {
+type Pt = [number, number];
+type FigAxis = { min?: number; max?: number; label?: unknown; ticks?: number[] };
+type FigSeries = {
+  name?: string;
+  tone: string;
+  axis?: string;
+  form?: string;
+  a?: number;
+  b?: number;
+  c?: number;
+  k?: number;
+  points?: Pt[];
+  dots?: boolean;
+  dotPoints?: Pt[];
+};
+type FigGuide = { axis?: string; at?: number; label?: unknown };
+type FigBand = { from?: number; to?: number; tone: string; label?: unknown };
+type FigArea = {
+  series: string;
+  series2?: string;
+  from?: number;
+  to?: number;
+  tone: string;
+  label?: unknown;
+  baseline?: number;
+};
+type FigVector = { at: Pt; dx?: number; dy?: number; label?: unknown };
+type FigMark = { at: Pt; tone: string; label?: unknown };
+
+type CartesianSpec = {
+  title?: string;
+  x: FigAxis;
+  y: FigAxis;
+  y2: FigAxis;
+  series?: FigSeries[];
+  guides?: FigGuide[];
+  bands?: FigBand[];
+  areas?: FigArea[];
+  vectors?: FigVector[];
+  marks?: FigMark[];
+};
+
+function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands = [], areas = [], vectors = [], marks = [] }: CartesianSpec): RenderedFigure | null {
   if (!x || !y || !(Number(x.max) > Number(x.min)) || !(Number(y.max) > Number(y.min))) {
     if (process.env.FIG_DEBUG) console.error('[cartesian] 轴域缺失');
     return null;
@@ -1915,7 +2142,7 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
   // V7（外盲评：y 轴标题被截成「降水 /10…」）：左侧让位给轴标题，按实际文字宽度给
   const padL = Math.max(62, Math.ceil(est(y.label ?? '', T.fontMicro)) + 44);
   // V6 双轴（外盲评：气温降水同轴把气温压进 1/6 高度）：y2 有效且存在右轴系列时才启用
-  const hasRight = Array.isArray(series) && series.some((sv: any) => sv?.axis === 'right');
+  const hasRight = Array.isArray(series) && series.some((sv) => sv?.axis === 'right');
   const y2ok = !!y2 && Number(y2.max) > Number(y2.min) && hasRight;
   const rightAxisW = y2ok ? 34 + (y2.label ? 12 : 0) : 0;
   // 右侧留出辅助线标签栏（写在画布外侧，绝不压在数据上）；宽度按最长标签动态给
@@ -1923,7 +2150,7 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
     24,
     Math.min(
       130,
-      14 + Math.max(0, ...(Array.isArray(guides) ? guides.map((g: any) => (g.label ? est(g.label, T.fontMicro) : 0)) : [])),
+      14 + Math.max(0, ...(Array.isArray(guides) ? guides.map((g) => (g.label ? est(g.label, T.fontMicro) : 0)) : [])),
     ),
   ) + rightAxisW;
   const padB = 44;
@@ -1966,7 +2193,7 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
   if (series.length > 1) {
     let lx = padL;
     let ly = legendY;
-    series.forEach((s: any) => {
+    series.forEach((s) => {
       const need = 13 + est(s.name, T.fontSmall) + 18;
       if (lx + need > padL + plotW) {
         lx = padL;
@@ -2027,7 +2254,7 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
   const clipId = `tfx-clip-${uid}`;
   parts.push(`<defs><clipPath id="${clipId}"><rect x="${padL}" y="${top}" width="${plotW}" height="${plotH}"/></clipPath></defs>`);
 
-  const drawSeries = (s: any): string[] => {
+  const drawSeries = (s: FigSeries): string[] => {
     const tone = TONE[s.tone] || T.accent;
     const out: string[] = [];
     // 右轴系列用右轴的域与映射；左轴系列不变
@@ -2053,7 +2280,7 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
         [x1, k * x1 + b],
       ];
     } else {
-      pts = (Array.isArray(s.points) ? s.points : []).map((p: any) => [Number(p[0]), Number(p[1])] as [number, number]);
+      pts = (Array.isArray(s.points) ? s.points : []).map((p) => [Number(p[0]), Number(p[1])]);
     }
     if (!pts.length) return out;
     // 只画落在轴域里的点：曲线冲出轴域时断成多段，不把坐标画到画布外
@@ -2115,7 +2342,7 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
   // 面积先画（垫在曲线下面）：v-t 图里的位移、曲线围出的剩余，本身就是答案
   // 在 [lo, hi] 区间内按曲线取样：表达式类曲线两端各取一次/均匀取点，
   // 不能用「整段定义域的两个端点再筛」——轴域比面积区间宽时会被筛成一个点（2026-10-23 实拍：面积没画出来）
-  const sampleCurveInRange = (s: any, lo: number, hi: number): Array<[number, number]> => {
+  const sampleCurveInRange = (s: FigSeries | undefined, lo: number, hi: number): Array<[number, number]> => {
     if (!s) return [];
     const a0 = Math.max(lo, x0);
     const a1 = Math.min(hi, x1);
@@ -2127,7 +2354,7 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
       const n = 24;
       return Array.from({ length: n + 1 }, (_, i) => {
         const vx = a0 + ((a1 - a0) * i) / n;
-        return [vx, a * vx * vx + b * vx + c] as [number, number];
+        return [vx, a * vx * vx + b * vx + c];
       });
     }
     if (s.form === 'linear') {
@@ -2136,10 +2363,10 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
       return [[a0, k * a0 + b], [a1, k * a1 + b]];
     }
     return (Array.isArray(s.points) ? s.points : [])
-      .map((p: any) => [Number(p[0]), Number(p[1])] as [number, number])
-      .filter(([vx]) => vx >= a0 - 1e-9 && vx <= a1 + 1e-9);
+      .map((p): Pt => [Number(p[0]), Number(p[1])])
+      .filter(([vx]: [number, number]) => vx >= a0 - 1e-9 && vx <= a1 + 1e-9);
   };
-  const curveOf = (name: string) => series.find((s: any) => s.name === name) || series[0];
+  const curveOf = (name: string) => series.find((s) => s.name === name) || series[0];
 
   parts.push(`<g clip-path="url(#${clipId})">`);
   // xBand：纵向高亮带垫在最底层——「看这一段」用色块说话，不靠文字标签硬指
@@ -2209,8 +2436,8 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
   // 等时刻辅助线：横向虚线 + 右侧时刻标签（就是「同一时刻两球同高」的证据）。
   // 若同一高度已经有带标签的落点标注，虚线不再重复印字（两个标签贴在一起会压字）。
   const markLabelYs = (Array.isArray(marks) ? marks : [])
-    .filter((m: any) => m?.label)
-    .map((m: any) => py(Number(m.at[1])));
+    .filter((m) => m?.label)
+    .map((m) => py(Number(m.at[1])));
   for (const g of guides) {
     if (g.axis === 'y') {
       const gy = py(Number(g.at));
@@ -2227,7 +2454,7 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
   // 点上的矢量箭头：初速度、落地速度这类分量，箭头长度即大小
   const vectorLabelY: number[] = [];
   for (const v of vectors) {
-    const [vx, vy] = v.at as [number, number];
+    const [vx, vy] = v.at;
     const tx = px(vx + Number(v.dx));
     const ty = py(vy + Number(v.dy));
     parts.push(arrow(px(vx), py(vy), tx, ty, { color: T.lineStrong, sw: 1.8 }));
@@ -2243,7 +2470,7 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
   // 关键点标注（落点等）：实心点 + 标签。
   // 点在轴上时标签要抬到点上方——贴轴下方会与刻度数字打架（2026-10-23 首张样例实拍）。
   for (const m of marks) {
-    const [mx, my] = m.at as [number, number];
+    const [mx, my] = m.at;
     const tone = TONE[m.tone] || T.ink;
     const cx = px(mx);
     const cy = py(my);
@@ -2275,7 +2502,19 @@ function renderCartesianPlot({ title, x, y, y2, series = [], guides = [], bands 
  * `placeholder:'none'`（2026-10-27 减负口径）：这块板是参考板不是考卷，
  * 一侧缺行时不补「?」空框——否则白板又变成一张挂着问号的题。
  */
-function renderSplitCompare({ title, left, right, delta, placeholder }: any): RenderedFigure | null {
+type SplitRow = { label?: unknown; sub?: unknown };
+type SplitSide = { rows: SplitRow[]; tone: string; head?: unknown };
+type SplitDelta = { at?: number; label?: unknown };
+
+type SplitCompareSpec = {
+  title?: string;
+  left: SplitSide;
+  right: SplitSide;
+  delta?: SplitDelta;
+  placeholder?: string;
+};
+
+function renderSplitCompare({ title, left, right, delta, placeholder }: SplitCompareSpec): RenderedFigure | null {
   // 契约与归一化一致：两栏都必须有至少一行——空栏不是对比
   if (!left || !right || !Array.isArray(left.rows) || !left.rows.length || !Array.isArray(right.rows) || !right.rows.length) return null;
   const W = 620;
@@ -2284,7 +2523,7 @@ function renderSplitCompare({ title, left, right, delta, placeholder }: any): Re
   const gapMid = 56;
   const colW = Math.round((W - padX * 2 - gapMid) / 2);
   // 栏头允许折两行（英语栏头「现在完成时 have finished」单行放不下，硬截会变成歧义半句）
-  const headLinesOf = (col: any) => balancedWrap(String(col?.head ?? ''), colW - 24, T.fontKey).slice(0, 2);
+  const headLinesOf = (col: SplitSide) => balancedWrap(String(col?.head ?? ''), colW - 24, T.fontKey).slice(0, 2);
   const headH = 12 + Math.max(1, headLinesOf(left).length, headLinesOf(right).length) * (T.fontKey + 3);
   const TONE: Record<string, { color: string; soft: string; ink: string }> = {
     ok: { color: T.ok, soft: T.okSoft, ink: T.ok },
@@ -2297,8 +2536,8 @@ function renderSplitCompare({ title, left, right, delta, placeholder }: any): Re
   const rowCount = Math.max(left.rows.length, right.rows.length);
   // 行高按两栏同一行取大（行行对齐是这张图的语义核心）：
   // label 可折三行（英文句子 40 字符放不进 238px 单行），sub 再占一行
-  const labelWrap = (row: any) => (row ? balancedWrap(String(row.label ?? ''), colW - 24, T.fontLabel).slice(0, 3) : []);
-  const subWrap = (row: any) => (row && row.sub ? balancedWrap(row.sub, colW - 24, T.fontMicro).slice(0, 1) : []);
+  const labelWrap = (row?: SplitRow) => (row ? balancedWrap(String(row.label ?? ''), colW - 24, T.fontBody).slice(0, 3) : []);
+  const subWrap = (row?: SplitRow) => (row && row.sub ? balancedWrap(row.sub, colW - 24, T.fontMicro).slice(0, 1) : []);
   const rowHs: number[] = [];
   for (let i = 0; i < rowCount; i += 1) {
     const a = left.rows[i];
@@ -2314,7 +2553,7 @@ function renderSplitCompare({ title, left, right, delta, placeholder }: any): Re
   const parts: string[] = [...titleBlock(title)];
   const colTop = titleH + 6;
 
-  const drawCol = (col: any, x: number, tone: { color: string; soft: string; ink: string }) => {
+  const drawCol = (col: SplitSide, x: number, tone: { color: string; soft: string; ink: string }) => {
     parts.push(rect(x, colTop, colW, headH + bodyH + 4, { r: T.radius, fill: T.surface, stroke: T.line }));
     parts.push(rect(x, colTop, colW, headH, { r: T.radius, fill: tone.soft, stroke: 'none', sw: 0 }));
     // 圆角头部：盖一块矩形把下沿两个圆角补直
@@ -2394,7 +2633,11 @@ function renderSplitCompare({ title, left, right, delta, placeholder }: any): Re
  * state-strip（2026-10-26）：状态条带——不回头的进程分帧速写。
  * 布局：2~5 帧横排，帧间箭头「下一步」；每帧头部条 + 状态要点若干行（折行）。
  */
-function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | null {
+type StripFrame = { label?: unknown; tone: string; items?: unknown[] };
+
+type StateStripSpec = { title?: string; frames?: StripFrame[]; note?: string };
+
+function renderStateStrip({ title, frames = [], note }: StateStripSpec): RenderedFigure | null {
   if (!Array.isArray(frames) || frames.length < 2) return null;
   const W = 620;
   const padX = 20;
@@ -2404,7 +2647,7 @@ function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | n
   const fw = Math.round((W - padX * 2 - (n - 1) * gap) / n);
   // 帧名可能比帧宽长（4 帧 × 年号/长地名时必超）：按帧宽折行，帧头高度随行数长高。
   // 不折行时标签会横穿相邻帧，并在右边缘被裁掉（2026-10-27 盲评实拍）。
-  const labelLines: string[][] = frames.map((f: any) =>
+  const labelLines: string[][] = frames.map((f) =>
     balancedWrap(String(f.label ?? ''), fw - 18, T.fontKey).slice(0, 2),
   );
   const maxLabelLines = Math.max(1, ...labelLines.map((ls) => ls.length));
@@ -2416,8 +2659,8 @@ function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | n
     neutral: { color: T.muted, soft: T.soft, ink: T.muted },
   };
   // 每帧行数（items 折行后的总行数），帧高按最高帧对齐
-  const frameLines: string[][] = frames.map((f: any) => {
-    const items: string[] = Array.isArray(f.items) ? f.items.filter((x: any) => typeof x === 'string' && x.trim()).slice(0, 3) : [];
+  const frameLines: string[][] = frames.map((f) => {
+    const items: string[] = Array.isArray(f.items) ? f.items.filter((x): x is string => typeof x === 'string' && Boolean(x.trim())).slice(0, 3) : [];
     const out: string[] = [];
     for (const it of items) {
       const lines = balancedWrap(it, fw - 20, T.fontSmall);
@@ -2448,7 +2691,7 @@ function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | n
     }
   }
 
-  frames.forEach((f: any, i: number) => {
+  frames.forEach((f, i: number) => {
     const tone = TONE[f.tone] || TONE.neutral;
     const x = padX + i * (fw + gap);
     parts.push(rect(x, top, fw, frameH, { r: T.radius, fill: T.surface, stroke: i === n - 1 ? T.lineStrong : T.line }));
@@ -2481,9 +2724,15 @@ function renderStateStrip({ title, frames = [], note }: any): RenderedFigure | n
   return { svg: wrap(parts.join('\n'), W, h), width: W, height: h };
 }
 
-function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): RenderedFigure | null {
+type CgPos = { x: number; y: number; w: number; h: number; cx: number; cy: number };
+type CgNode = { id?: unknown; label?: unknown; sub?: unknown; tone: string; layer?: unknown };
+type CgEdge = { from?: unknown; to?: unknown; tone: string; label: string; dash?: unknown };
+
+type ConceptMapSpec = { title?: string; nodes?: CgNode[]; edges?: CgEdge[]; takeaway?: string };
+
+function renderConceptMap({ title, nodes = [], edges = [], takeaway }: ConceptMapSpec): RenderedFigure | null {
   if (!Array.isArray(nodes) || nodes.length < 2 || !Array.isArray(edges) || !edges.length) return null;
-  const byId = new Map<string, any>(nodes.map((n: any) => [String(n.id), n]));
+  const byId = new Map<string, CgNode>(nodes.map((n): [string, CgNode] => [String(n.id), n]));
 
   // 分层：显式 layer 优先，否则按最长路径（有环时退回已算出的最大值，不追求完美）
   const depth = new Map<string, number>();
@@ -2492,19 +2741,19 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
     if (node && Number.isInteger(node.layer)) return Math.max(0, Math.min(3, Number(node.layer)));
     if (depth.has(id)) return depth.get(id)!;
     if (guard > 12) return 0;
-    const parents = edges.filter((e: any) => String(e.to) === id && byId.has(String(e.from)));
-    const d = parents.length ? Math.max(...parents.map((e: any) => resolveDepth(String(e.from), guard + 1))) + 1 : 0;
+    const parents = edges.filter((e) => String(e.to) === id && byId.has(String(e.from)));
+    const d = parents.length ? Math.max(...parents.map((e) => resolveDepth(String(e.from), guard + 1))) + 1 : 0;
     depth.set(id, d);
     return d;
   };
-  nodes.forEach((n: any) => resolveDepth(String(n.id)));
-  const maxDepth = Math.max(...nodes.map((n: any) => depth.get(String(n.id)) ?? 0));
-  const layers: any[][] = Array.from({ length: maxDepth + 1 }, () => []);
-  nodes.forEach((n: any) => layers[depth.get(String(n.id)) ?? 0].push(n));
+  nodes.forEach((n) => resolveDepth(String(n.id)));
+  const maxDepth = Math.max(...nodes.map((n) => depth.get(String(n.id)) ?? 0));
+  const layers: CgNode[][] = Array.from({ length: maxDepth + 1 }, () => []);
+  nodes.forEach((n) => layers[depth.get(String(n.id)) ?? 0].push(n));
 
   // 每层最多 4 个一排，超了就折到下一排——环形概念图（5~8 个节点同层）靠这一条才不叠字
   const MAX_PER_ROW = 4;
-  const rows: Array<{ nodes: any[]; depth: number }> = [];
+  const rows: Array<{ nodes: CgNode[]; depth: number }> = [];
   layers.forEach((layer, d) => {
     for (let i = 0; i < layer.length; i += MAX_PER_ROW) {
       rows.push({ nodes: layer.slice(i, i + MAX_PER_ROW), depth: d });
@@ -2519,21 +2768,21 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
   // 分层的树状版面会把「循环」读成「先后」，恰好是这类概念最容易被误解的地方。
   const inDeg = new Map<string, number>();
   const outDeg = new Map<string, number>();
-  nodes.forEach((n: any) => { inDeg.set(String(n.id), 0); outDeg.set(String(n.id), 0); });
-  edges.forEach((e: any) => {
+  nodes.forEach((n) => { inDeg.set(String(n.id), 0); outDeg.set(String(n.id), 0); });
+  edges.forEach((e) => {
     if (!byId.has(String(e.from)) || !byId.has(String(e.to))) return;
     outDeg.set(String(e.from), (outDeg.get(String(e.from)) || 0) + 1);
     inDeg.set(String(e.to), (inDeg.get(String(e.to)) || 0) + 1);
   });
   // 判环放宽：只要六成以上节点「既被推动又推动别人」，整张就按环形画——
   // 工业革命里「工厂生产」是汇点、水循环里「太阳辐射」是源点，按旧判据它们会把整张图拖回纵向瀑布（外审 #16/#17 的教训）
-  const bothDeg = nodes.filter((n: any) => (inDeg.get(String(n.id)) || 0) >= 1 && (outDeg.get(String(n.id)) || 0) >= 1).length;
+  const bothDeg = nodes.filter((n) => (inDeg.get(String(n.id)) || 0) >= 1 && (outDeg.get(String(n.id)) || 0) >= 1).length;
   const cyclic = nodes.length >= 3 && edges.length >= nodes.length && bothDeg * 5 >= nodes.length * 3;
 
   if (cyclic) {
     const titleH = title ? T.fontTitle + 18 : 0;
-    const boxH = (n: any) => (n.sub ? 48 : 38);
-    const boxW = (n: any) => Math.min(190, Math.max(112, Math.max(est(n.label, T.fontKey) + 22, est(n.sub ?? '', T.fontMicro) + 18)));
+    const boxH = (n: CgNode) => (n.sub ? 48 : 38);
+    const boxW = (n: CgNode) => Math.min(190, Math.max(112, Math.max(est(n.label, T.fontKey) + 22, est(n.sub ?? '', T.fontMicro) + 18)));
     const maxW = Math.max(...nodes.map(boxW));
     const maxH = Math.max(...nodes.map(boxH));
     const r = Math.max(118, Math.round(maxW * 0.92));
@@ -2545,14 +2794,14 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
     const h = cy0 + r + maxH / 2 + 46 + (takeawayLinesR.length ? 12 + takeawayLinesR.length * 18 : 0);
     const parts: string[] = [...titleBlock(title, padX)];
     const pos = new Map<string, { x: number; y: number; w: number; h: number; cx: number; cy: number }>();
-    nodes.forEach((n: any, i: number) => {
+    nodes.forEach((n, i: number) => {
       const angle = -Math.PI / 2 + (i * 2 * Math.PI) / nodes.length;
       const nx = cx0 + r * Math.cos(angle);
       const ny = cy0 + r * Math.sin(angle);
       pos.set(String(n.id), { x: nx - boxW(n) / 2, y: ny - boxH(n) / 2, w: boxW(n), h: boxH(n), cx: nx, cy: ny });
     });
     const labels: string[] = [];
-    const nodeRectsR = nodes.map((n: any) => pos.get(String(n.id))).filter(Boolean) as Array<{ x: number; y: number; w: number; h: number }>;
+    const nodeRectsR = nodes.map((n) => pos.get(String(n.id))).filter((q): q is CgPos => Boolean(q));
     for (const e of edges) {
       const a = pos.get(String(e.from));
       const b = pos.get(String(e.to));
@@ -2609,21 +2858,21 @@ function renderConceptMap({ title, nodes = [], edges = [], takeaway }: any): Ren
 
   const titleH = title ? T.fontTitle + 18 : 0;
   const gapY = 56;
-  const boxH = (n: any) => (n.sub ? 48 : 38);
-  const boxW = (n: any) => Math.min(190, Math.max(112, Math.max(est(n.label, T.fontKey) + 22, est(n.sub ?? '', T.fontMicro) + 18)));
+  const boxH = (n: CgNode) => (n.sub ? 48 : 38);
+  const boxW = (n: CgNode) => Math.min(190, Math.max(112, Math.max(est(n.label, T.fontKey) + 22, est(n.sub ?? '', T.fontMicro) + 18)));
   const rowIndexOf = new Map<string, number>();
-  rows.forEach((row, ri) => row.nodes.forEach((n: any) => rowIndexOf.set(String(n.id), ri)));
+  rows.forEach((row, ri) => row.nodes.forEach((n) => rowIndexOf.set(String(n.id), ri)));
   const positionsPreview = rowIndexOf;
-  const rowW = (row: any[]) => row.reduce((sum, n: any) => sum + boxW(n) + 14, -14);
+  const rowW = (row: CgNode[]) => row.reduce((sum, n) => sum + boxW(n) + 14, -14);
   const maxRowW = Math.max(...rows.map((r) => rowW(r.nodes)));
   // 有跨层/回环边时，右侧要留出车道 + 标签的位置，否则标签会被画布切掉（2026-10-23 实拍）
-  const hasLaneEdges = edges.some((e: any) => {
+  const hasLaneEdges = edges.some((e) => {
     const a = positionsPreview.get(String(e.from));
     const b = positionsPreview.get(String(e.to));
-    return a && b && !(b.row > a.row && b.row === a.row + 1);
+    return a !== undefined && b !== undefined && b > a && b === a + 1;
   });
   // 每条回环边一条独立车道：三条因果线挤同一个 x 上时标签必然叠字（2026-10-23 历史概念图实拍）
-  const laneEdgeCount = edges.filter((e: any) => {
+  const laneEdgeCount = edges.filter((e) => {
     const a = positionsPreview.get(String(e.from));
     const b = positionsPreview.get(String(e.to));
     return a !== undefined && b !== undefined && !(b === a + 1);
@@ -2745,41 +2994,41 @@ export function renderSpecFigure(
   try {
     switch (kind) {
       case 'grid':
-        return renderGrid(spec);
+        return renderGrid(spec as GridSpec);
       case 'matrix':
-        return renderMatrix(spec);
+        return renderMatrix(spec as MatrixSpec);
       case 'compare':
-        return renderCompare(spec);
+        return renderCompare(spec as CompareSpec);
       case 'quadrant':
-        return renderQuadrant(spec);
+        return renderQuadrant(spec as QuadrantSpec);
       case 'bipartite':
-        return renderBipartite(spec);
+        return renderBipartite(spec as BipartiteSpec);
       case 'board':
-        return renderBoard(spec);
+        return renderBoard(spec as BoardSpec);
       case 'bins':
-        return renderBins(spec);
+        return renderBins(spec as BinsSpec);
       case 'balance':
-        return renderBalance(spec);
+        return renderBalance(spec as BalanceSpec);
       case 'ladder':
-        return renderLadder(spec);
+        return renderLadder(spec as LadderSpec);
       case 'cycle':
-        return renderCycle(spec);
+        return renderCycle(spec as CycleSpec);
       case 'tree':
-        return renderTree(spec);
+        return renderTree(spec as TreeSpec);
       case 'venn':
-        return renderVenn(spec);
+        return renderVenn(spec as VennSpec);
       case 'bullseye':
-        return renderBullseye(spec);
+        return renderBullseye(spec as BullseyeSpec);
       case 'range-bar':
-        return renderRangeBar(spec);
+        return renderRangeBar(spec as RangeBarSpec);
       case 'cartesian-plot':
-        return renderCartesianPlot(spec);
+        return renderCartesianPlot(spec as CartesianSpec);
       case 'concept-map':
-        return renderConceptMap(spec);
+        return renderConceptMap(spec as ConceptMapSpec);
       case 'split-compare':
-        return renderSplitCompare(spec);
+        return renderSplitCompare(spec as SplitCompareSpec);
       case 'state-strip':
-        return renderStateStrip(spec);
+        return renderStateStrip(spec as StateStripSpec);
       default:
         return null;
     }

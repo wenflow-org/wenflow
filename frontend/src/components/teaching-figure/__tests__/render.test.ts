@@ -402,7 +402,7 @@ describe('几何隐喻图元（2026-10-20：形状要承载关系，不是白框
   });
 });
 
-describe('compare 链路形态（客户端 → 集群边界 → 节点）', () => {  const chainFigure = (spec: any = {}) => ({
+describe('compare 链路形态（客户端 → 集群边界 → 节点）', () => {  const chainFigure = (spec: Record<string, unknown> = {}) => ({
     engine: 'svg' as const,
     kind: 'compare' as const,
     palette: 'tech' as const,
@@ -431,7 +431,7 @@ describe('compare 链路形态（客户端 → 集群边界 → 节点）', () =
   });
 
   it('画出了集群边界、两端客户端与两条跳数序号', () => {
-    const { svg } = renderSpecFigure('compare', chainFigure().spec) as any;
+    const { svg } = renderSpecFigure('compare', chainFigure().spec) as { svg: string };
     expect(svg).toContain('集群边界');
     expect((svg.match(/客户端/g) || []).length).toBe(2);
     // 左栏两跳、右栏一跳：边界上的序号 1 与 2 各出现一次
@@ -440,15 +440,15 @@ describe('compare 链路形态（客户端 → 集群边界 → 节点）', () =
   });
 
   it('「省掉」落在节点上（合一徽标），不再用中间悬浮的气泡表达', () => {
-    const { svg } = renderSpecFigure('compare', chainFigure().spec) as any;
+    const { svg } = renderSpecFigure('compare', chainFigure().spec) as { svg: string };
     expect(svg).toContain('内置·合一');
     // 卡片形态才有的分割线气泡不应出现在链路形态里
     expect(svg).not.toContain('同一个确认');
   });
 
   it('两侧路径条数不同时，边界序号数量跟着变（箭头数就是跳数）', () => {
-    const { svg: two } = renderSpecFigure('compare', chainFigure().spec) as any;
-    const { svg: one } = renderSpecFigure('compare', chainFigure({ left: { head: '只一跳', chain: [{ label: '直连状态机' }], items: [] } }).spec) as any;
+    const { svg: two } = renderSpecFigure('compare', chainFigure().spec) as { svg: string };
+    const { svg: one } = renderSpecFigure('compare', chainFigure({ left: { head: '只一跳', chain: [{ label: '直连状态机' }], items: [] } }).spec) as { svg: string };
     const countNumbers = (s: string) => (s.match(/r="8.5"/g) || []).length;
     expect(countNumbers(two)).toBe(3); // 2 + 1
     expect(countNumbers(one)).toBe(2); // 1 + 1
@@ -466,7 +466,7 @@ describe('compare 链路形态（客户端 → 集群边界 → 节点）', () =
           items: [],
         },
       }).spec,
-    ) as any;
+    ) as { svg: string };
     expect(svg).toContain('组件异步边界');
     // 右栏没给 boundaryLabel → 保持旧默认，架构图观感不变
     expect(svg).toContain('集群边界');
@@ -488,7 +488,7 @@ describe('compare 链路形态：顺序段不占跳数', () => {
         items: ['每段都要单独重试'],
       },
       right: { head: '同进程', badge: '1 次跨集群', chain: [{ label: '单模块', merged: true }] },
-    }) as any;
+    }) as { svg: string };
     // 左栏 3 张卡，但只有第一条跨集群 → 边界上只有 1 个序号；右栏也只有 1 个 → 共 2 个
     expect((svg.match(/r="8.5"/g) || []).length).toBe(2);
     // 卡间竖箭头（顺序段）存在两条
@@ -524,7 +524,7 @@ describe('range-bar（数值区间并排，2026-10-21）', () => {
 });
 
 describe('compare 链路：缺省 from 即串联（2026-10-22 真课 47 跳全缺 from）', () => {
-  const render = (chain: any[]) =>
+  const render = (chain: Record<string, unknown>[]) =>
     renderSpecFigure('compare', {
       left: { head: '外置协调', client: '客户端', chain },
       right: { head: '内置共识', items: ['省一次往返'] },
