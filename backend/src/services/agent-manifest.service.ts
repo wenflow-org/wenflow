@@ -253,6 +253,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'Teaching',
+    noPromptFile: true,
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.2, maxTokens: 16000 }
   },
