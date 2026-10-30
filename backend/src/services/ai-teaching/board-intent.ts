@@ -234,11 +234,25 @@ export function guardTitleAgainstContent<T>(spec: T): T {
  * 错法栏保留原样——对照的语义还在；只把答案从板上拿掉，不把整张图变成卷子。
  * 只在 split-compare 上生效；正确栏按 tone 判断（ok / 非 warn）。
  */
+/** split-compare 单栏（left/right）的最小形状视图 */
+interface BoardSideSpec {
+  head?: unknown;
+  tone?: unknown;
+  rows?: unknown;
+}
+
+/** maskForkAnswer / neutraliseForkHeads 需要读写的最小形状视图 */
+interface BoardForkSpec {
+  left?: BoardSideSpec | null;
+  right?: BoardSideSpec | null;
+  [key: string]: unknown;
+}
+
 function maskForkAnswer<T extends Record<string, unknown>>(spec: T): T {
-  const s = spec as any;
+  const s = spec as BoardForkSpec;
   if (!s?.left?.rows || !s?.right?.rows) return spec;
-  const leftRows: any[] = Array.isArray(s.left.rows) ? s.left.rows : [];
-  const rightRows: any[] = Array.isArray(s.right.rows) ? s.right.rows : [];
+  const leftRows = Array.isArray(s.left.rows) ? (s.left.rows as Array<Record<string, unknown>>) : [];
+  const rightRows = Array.isArray(s.right.rows) ? (s.right.rows as Array<Record<string, unknown>>) : [];
   const correctKey = s.right.tone === 'warn' && s.left.tone !== 'warn' ? 'left' : 'right';
   const rows = correctKey === 'right' ? rightRows : leftRows;
   if (rows.length < 2) return spec;
@@ -259,7 +273,7 @@ function maskForkAnswer<T extends Record<string, unknown>>(spec: T): T {
   if (eqAt >= 0) {
     const label = String(rows[eqAt].label);
     const eq = label.lastIndexOf('=');
-    const next = { ...rows[eqAt], label: `${label.slice(0, eq + 1).trimEnd()} ?` };
+    const next: Record<string, unknown> = { ...rows[eqAt], label: `${label.slice(0, eq + 1).trimEnd()} ?` };
     delete next.sub;
     nextRows = rows.map((r, i) => (i === eqAt ? next : r));
     return { ...s, [correctKey]: { ...s[correctKey], rows: nextRows } } as T;
@@ -269,7 +283,7 @@ function maskForkAnswer<T extends Record<string, unknown>>(spec: T): T {
   if (!last || last.label === '?' || last.label === '？' || /=\s*\?$/.test(String(last.label))) {
     return { ...s, [correctKey]: { ...s[correctKey], rows: nextRows } } as T;
   }
-  const masked = { ...last, label: '?' };
+  const masked: Record<string, unknown> = { ...last, label: '?' };
   delete masked.sub;
   return {
     ...s,
@@ -285,9 +299,9 @@ function maskForkAnswer<T extends Record<string, unknown>>(spec: T): T {
  * 只在 fork 轮清理「填 X」这个片段；清理后太短就保留原栏头（避免把栏头清空）。
  */
 function neutraliseForkHeads<T extends Record<string, unknown>>(spec: T): T {
-  const s = spec as any;
+  const s = spec as BoardForkSpec;
   if (!s?.left || !s?.right) return spec;
-  const FILL = /(?:应该?|应|请)?填\s*[A-Za-z][A-Za-z'’\-]*(?:\s+[A-Za-z][A-Za-z'’\-]*)*/;
+  const FILL = /(?:应该?|应|请)?填\s*[A-Za-z][A-Za-z'’-]*(?:\s+[A-Za-z][A-Za-z'’-]*)*/;
   const strip = (head: unknown): unknown => {
     if (typeof head !== 'string' || !FILL.test(head)) return head;
     const next = head.replace(FILL, '').replace(/[：:]\s*$/, '').trim();
@@ -297,7 +311,7 @@ function neutraliseForkHeads<T extends Record<string, unknown>>(spec: T): T {
   const left = strip(s.left.head);
   const right = strip(s.right.head);
   if (left === s.left.head && right === s.right.head) return spec;
-  return { ...s, left: { ...s.left, head: left }, right: { ...s.right, head: right } } as T;
+  return { ...s, left: { ...s.left, head: left }, right: { ...s.right, head: right } } as unknown as T;
 }
 
 /**
@@ -327,11 +341,11 @@ export function applyBoardIntent<T extends Record<string, unknown>>(spec: T, int
 const HYPOTHETICAL_CUE = /(未加|未受|只发|实发|仅发|假设|假如|倒过来|反过来|并非|没给|不认账)/;
 
 function markHypothetical<T extends Record<string, unknown>>(spec: T): T {
-  const s = spec as any;
+  const s = spec as Record<string, unknown>;
   if (!s || typeof s !== 'object') return spec;
   const out: Record<string, unknown> = { ...s };
   if (Array.isArray(out.frames)) {
-    out.frames = out.frames.map((frame: any) => {
+    out.frames = (out.frames as Array<Record<string, unknown>>).map((frame) => {
       if (!frame || typeof frame !== 'object') return frame;
       const label = String(frame.label ?? '');
       const text = `${label} ${Array.isArray(frame.items) ? frame.items.join(' ') : ''}`;

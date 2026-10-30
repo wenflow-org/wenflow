@@ -585,7 +585,7 @@ describe('课中图不挂结论注（stripInLessonAnnotations，2026-10-23 用�
       caption: '两个球同时落地',
       spec: { x: { min: 0, max: 3 }, y: { min: 0, max: 1 }, note: '竖直方向完全相同，水平方向才随速度变', series: [{ name: 'a', points: [[0, 1], [1, 0]] }] },
     };
-    const out = stripInLessonAnnotations(figure) as any;
+    const out = stripInLessonAnnotations(figure);
     expect(out.caption).toBeUndefined();
     expect(out.spec.note).toBeUndefined();
     expect(out.spec.series).toHaveLength(1);
@@ -982,9 +982,9 @@ describe('读图题脱敏不扣图（maskFigureForQuestion，2026-10-24 外部�
   };
 
   it('读图题：点标签挖空成？，带数值的辅助线标签挖掉数值，曲线照常', () => {
-    const out = maskFigureForQuestion(plot, '现在请你指着图告诉我：曲线和 x 轴交在哪两个数上？') as any;
+    const out = maskFigureForQuestion(plot, '现在请你指着图告诉我：曲线和 x 轴交在哪两个数上？');
     expect(out).not.toBeNull();
-    expect(out.spec.marks.map((m: any) => m.label)).toEqual(['？', '？']);
+    expect(out.spec.marks.map((m) => m.label)).toEqual(['？', '？']);
     expect(out.spec.series).toHaveLength(1);
     expect(out.spec.guides[0].label).not.toMatch(/\d/);
     expect(out.spec.guides[1].label).toBe('同高参照');
@@ -996,7 +996,7 @@ describe('读图题脱敏不扣图（maskFigureForQuestion，2026-10-24 外部�
 
   it('concept-map 复述题：关系名挖空成？，结构照常', () => {
     const cm = { kind: 'concept-map', spec: { nodes: [{ id: 'a', label: '市场' }], edges: [{ from: 'a', to: 'b', label: '需求拉动' }] } };
-    const out = maskFigureForQuestion(cm, '从海面出发把这几个环节按顺序说一遍，谁推动谁？') as any;
+    const out = maskFigureForQuestion(cm, '从海面出发把这几个环节按顺序说一遍，谁推动谁？');
     expect(out.spec.edges[0].label).toBe('？');
     expect(out.spec.nodes[0].label).toBe('市场');
   });
@@ -1010,7 +1010,7 @@ describe('读图题脱敏不扣图（maskFigureForQuestion，2026-10-24 外部�
         delta: { label: '分叉在第一步：先换算', at: 1 },
       },
     };
-    const out = maskFigureForQuestion(sc, '两栏在哪一步分岔？为什么是那一步？') as any;
+    const out = maskFigureForQuestion(sc, '两栏在哪一步分岔？为什么是那一步？');
     expect(out).not.toBeNull();
     expect(out.spec.delta.label).toBe('？');
     expect(out.spec.delta.at).toBe(1);
@@ -1027,7 +1027,7 @@ describe('读图题脱敏不扣图（maskFigureForQuestion，2026-10-24 外部�
         ],
       },
     };
-    const out = maskFigureForQuestion(st, '看图说：每一步双方的状态分别是什么？') as any;
+    const out = maskFigureForQuestion(st, '看图说：每一步双方的状态分别是什么？');
     expect(out).not.toBeNull();
     expect(out.spec.frames[0].label).toBe('SYN');
     expect(out.spec.frames[1].items).toEqual(['？']);
@@ -1042,7 +1042,7 @@ describe('读图题脱敏不扣图（maskFigureForQuestion，2026-10-24 外部�
         delta: { label: '分叉在时态选择', at: 1 },
       },
     };
-    const out = maskFigureForQuestion(sc, '轮到你了：把右栏的正确句子改出来，错在哪一步？') as any;
+    const out = maskFigureForQuestion(sc, '轮到你了：把右栏的正确句子改出来，错在哪一步？');
     expect(out).not.toBeNull();
     expect(out.spec.right.rows[0].label).toBe('？');
     expect(out.spec.left.rows[0].label).toBe('I have been to Shanghai last year');

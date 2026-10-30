@@ -24,13 +24,33 @@ import { simulationAgentRuntimeDefinition } from '../../coordinators/simulation.
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const PROMPTS_DIR = path.join(ROOT, 'prompts');
 
-const ORCHESTRATORS = [
+/** coordinators/*.definition.ts 里 steps 条目的最小形状视图（运行时编排声明；type 别名带隐式索引签名，可直接入 Record<string, unknown>[]） */
+type OrchestratorStep = {
+  step?: number;
+  agentId?: string;
+  kind?: string;
+  impl?: string;
+  role?: string;
+  condition?: string;
+  loopOver?: string;
+}
+
+/** coordinators/*.definition.ts 的最小形状视图（运行时编排声明） */
+interface OrchestratorDefinition {
+  id: string;
+  displayName: string;
+  description: string;
+  variableGraph?: Record<string, string[]>;
+  steps?: OrchestratorStep[];
+}
+
+const ORCHESTRATORS: Array<OrchestratorDefinition> = [
   goalAgentRuntimeDefinition,
   pathAgentRuntimeDefinition,
   AITeachingCoordinatorRuntimeDefinition,
   learnerAgentRuntimeDefinition,
   simulationAgentRuntimeDefinition,
-] as Array<Record<string, any>>;
+];
 
 /** 阶段 → Agent：一个阶段一个主 Agent（profile 为横切，simulation 为旁路） */
 const STAGE_AGENT: Record<string, string> = {
@@ -73,8 +93,57 @@ const CODE_ENTRY: Record<string, Array<{ label: string; file: string }>> = {
   ],
 };
 
-function readYaml(file: string): any {
-  return yaml.load(fs.readFileSync(file, 'utf8')) || {};
+/** prompts/core/*.yaml（提示词正文与契约）的最小形状视图 */
+interface CoreDoc {
+  skillId?: string;
+  identity?: unknown;
+  channels?: string[];
+  inputs?: unknown[];
+  fields?: unknown[];
+  params?: Record<string, unknown>;
+  rules?: unknown[];
+  constraints?: unknown[];
+  baseVersion?: number;
+}
+
+/** manifest promptContract 段的最小形状视图 */
+interface ManifestPromptContract {
+  executionMode?: string;
+  artifactKind?: string;
+  interactionMode?: string;
+  fields?: Record<string, unknown>;
+}
+
+/** manifest runtimeContract 段的最小形状视图 */
+interface ManifestRuntimeContract {
+  contextMode?: string;
+  businessState?: { phases?: string[] };
+}
+
+/** prompts/manifests/*.yaml（契约清单）的最小形状视图 */
+interface ManifestDoc {
+  skillId?: string;
+  agentId?: string;
+  description?: string;
+  __file?: string;
+  promptContract?: ManifestPromptContract;
+  runtimeContract?: ManifestRuntimeContract;
+}
+
+/** prompts/skills.yaml 户口簿条目的最小形状视图 */
+interface SkillRegistryEntry {
+  skillId: string;
+  stage?: string;
+  parentAgent?: string;
+  coordinator?: { agentId?: string };
+  kind?: string;
+  displayName?: string;
+  description?: string;
+  coreFile?: string;
+}
+
+function readYaml(file: string): Record<string, unknown> {
+  return (yaml.load(fs.readFileSync(file, 'utf8')) as Record<string, unknown>) || {};
 }
 
 function listYaml(dir: string): string[] {
@@ -91,7 +160,7 @@ function oneLine(text: unknown, max = 90): string {
 
 const CONDITIONAL_RULE_LEAD = /^(?:若输入提供|如果输入提供|若 classroomEventContext)/;
 
-function identityLine(core: any): string {
+function identityLine(core: CoreDoc): string {
   const raw = String(core?.identity || '').trim();
   if (!raw) return '';
   const first = raw.split('\n').map((x) => x.trim()).find(Boolean) || '';
@@ -188,28 +257,28 @@ export interface PipelineMap {
 
 export function buildPipelineMap(): PipelineMap {
   const registry = readYaml(path.join(PROMPTS_DIR, 'skills.yaml'));
-  const skills: any[] = Array.isArray(registry.skills) ? registry.skills : [];
+  const skills: SkillRegistryEntry[] = Array.isArray(registry.skills) ? (registry.skills as SkillRegistryEntry[]) : [];
 
-  const cores = new Map<string, any>();
+  const cores = new Map<string, CoreDoc>();
   for (const f of listYaml(path.join(PROMPTS_DIR, 'core'))) {
-    const core = readYaml(path.join(PROMPTS_DIR, 'core', f));
+    const core = readYaml(path.join(PROMPTS_DIR, 'core', f)) as CoreDoc;
     cores.set(core.skillId || f.replace(/\.ya?ml$/, ''), core);
   }
-  const manifests = new Map<string, any>();
+  const manifests = new Map<string, ManifestDoc>();
   for (const f of listYaml(path.join(PROMPTS_DIR, 'manifests'))) {
-    const man = readYaml(path.join(PROMPTS_DIR, 'manifests', f));
+    const man = readYaml(path.join(PROMPTS_DIR, 'manifests', f)) as ManifestDoc;
     manifests.set(man.skillId || f.replace(/\.ya?ml$/, ''), { ...man, __file: `prompts/manifests/${f}` });
   }
 
   const skillById = new Map(skills.map((s) => [s.skillId, s]));
   const promptFor = (skillId: string): PipelinePrompt => {
-    const s = skillById.get(skillId) || {};
+    const s = skillById.get(skillId) || ({} as SkillRegistryEntry);
     const core = cores.get(skillId);
     const man = manifests.get(skillId);
     const coreFile = s.coreFile || (core ? `prompts/core/${skillId}.yaml` : null);
     const manifestFile = man?.__file || null;
-    const pc = man?.promptContract || {};
-    const rc = man?.runtimeContract || {};
+    const pc: ManifestPromptContract = man?.promptContract || {};
+    const rc: ManifestRuntimeContract = man?.runtimeContract || {};
     return {
       skillId,
       stage: s.stage || null,
@@ -248,13 +317,15 @@ export function buildPipelineMap(): PipelineMap {
     const stage = String(o.stage || f.replace(/\.ya?ml$/, ''));
     const agentId = STAGE_AGENT[stage];
     const orchestrator = ORCHESTRATORS.find((x) => x.id === agentId);
-    const steps: Array<Record<string, any>> = Array.isArray(orchestrator?.steps) ? orchestrator.steps : [];
-    const stepBySkill = new Map<string, Record<string, any>>();
+    const steps: OrchestratorStep[] = Array.isArray(orchestrator?.steps) ? orchestrator.steps : [];
+    const stepBySkill = new Map<string, OrchestratorStep>();
     for (const st of steps) {
       const m = String(st.agentId || '').match(/^skill:(.+)$/);
       if (m) stepBySkill.set(m[1], st);
     }
-    const contracts: string[] = (o.contracts || []).map((c: any) => String(c.agentId || '')).filter(Boolean);
+    const contracts: string[] = ((o.contracts || []) as Array<{ agentId?: unknown }>)
+      .map((c) => String(c.agentId || ''))
+      .filter(Boolean);
     const contractSkills = contracts
       .map((c) => c.replace(/^skill:/, ''))
       .filter((id) => skillById.has(id));

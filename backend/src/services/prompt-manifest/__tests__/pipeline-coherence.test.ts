@@ -8,8 +8,8 @@ import yaml from 'js-yaml';
 
 const CORE_DIR = path.resolve(process.cwd(), '..', 'prompts', 'core');
 
-function readCore(skillId: string): any {
-  return yaml.load(fs.readFileSync(path.join(CORE_DIR, `${skillId}.yaml`), 'utf8')) || {};
+function readCore(skillId: string): Record<string, unknown> {
+  return (yaml.load(fs.readFileSync(path.join(CORE_DIR, `${skillId}.yaml`), 'utf8')) as Record<string, unknown>) || {};
 }
 
 function rulesOf(skillId: string): string[] {
@@ -38,7 +38,7 @@ describe('teaching-turn 契约收口', () => {
   });
 
   it('figure.kind 枚举包含 split-compare，且给出 normalizer 认的 spec 字段', () => {
-    const figure = (readCore('teaching-turn').fields || []).find((f: any) => f.name === 'figure');
+    const figure = ((readCore('teaching-turn').fields || []) as Array<{ name?: unknown; desc?: unknown }>).find((f) => f.name === 'figure');
     const desc = String(figure?.desc || '');
     expect(desc).toContain('split-compare');
     // 只加枚举不够：模型会自创 lines/branch，normalizer 按 head/rows/delta 校验后整图丢弃
@@ -96,7 +96,7 @@ describe('VL 判决链', () => {
 
   it('判决器 inputs 声明了 pendingCheckpoint', () => {
     const core = readCore('virtual-learner-epistemic-grounding');
-    expect((core.inputs || []).some((i: any) => i.name === 'pendingCheckpoint')).toBe(true);
+    expect(((core.inputs || []) as Array<{ name?: unknown }>).some((i) => i.name === 'pendingCheckpoint')).toBe(true);
   });
 });
 
@@ -105,7 +105,7 @@ describe('maxTokens 预算', () => {
   // 分档会让长输出在截断处静默丢字段，且各 Skill 的实际输出长度无法静态保证。
   it('所有 core 统一 64000', () => {
     for (const file of fs.readdirSync(CORE_DIR).filter((f) => f.endsWith('.yaml'))) {
-      const core = yaml.load(fs.readFileSync(path.join(CORE_DIR, file), 'utf8')) as any;
+      const core = yaml.load(fs.readFileSync(path.join(CORE_DIR, file), 'utf8')) as { params?: { maxTokens?: unknown } };
       expect({ file, maxTokens: core?.params?.maxTokens }).toEqual({
         file,
         maxTokens: 64000,
@@ -118,7 +118,7 @@ describe('pipeline map 分类（不把直调/孤儿 prompt 静默当主链）', 
   it('board-designer 归 compiled-only；无 core 的孤儿 prompt 单列', () => {
     const mapPath = path.resolve(process.cwd(), '..', 'doc', 'pipeline-map.json');
     const map = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
-    const ids = (rows: any[]) => rows.map((row) => row.skillId || row.id || row.name);
+    const ids = (rows: Array<Record<string, unknown>>) => rows.map((row) => row.skillId || row.id || row.name);
     expect(ids(map.compiledOnlyPrompts)).toContain('board-designer');
     expect(ids(map.orphanPrompts)).toEqual(
       expect.arrayContaining(['concept-priority', 'path-adjustment-generator']),
@@ -134,9 +134,9 @@ describe('pipeline map 输入声明覆盖', () => {
     // core 的 inputs schema 要求 ref（skill/sandbox/user），没有 truthful 的 ref 可声明。
     // 其余 mainline 若 inputs=0，视为契约缺失（新 Skill 漏声明）。
     const runtimeInputMainline = new Set(['learning-predictor']);
-    const missing = map.prompts
-      .filter((p: any) => p.kind === 'mainline' && p.inputs === 0)
-      .map((p: any) => p.skillId)
+    const missing = (map.prompts as Array<{ kind?: unknown; inputs?: unknown; skillId: string }>)
+      .filter((p) => p.kind === 'mainline' && p.inputs === 0)
+      .map((p) => p.skillId)
       .filter((id: string) => !runtimeInputMainline.has(id));
     expect(missing).toEqual([]);
   });

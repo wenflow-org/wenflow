@@ -635,11 +635,11 @@ function shapeSignature(figure: unknown): string | null {
     }
     return out;
   };
-  const spec = (f?.spec || {}) as Record<string, any>;
+  const spec = (f?.spec || {}) as Record<string, unknown>;
   const parts: string[] = [kind];
-  if (Array.isArray(spec.bins)) parts.push(...spec.bins.map((b: any) => norm(b?.label)));
-  else if (spec.left && spec.right) parts.push(norm(spec.left.head), norm(spec.right.head));
-  else if (Array.isArray(spec.nodes)) parts.push(...spec.nodes.map((n: any) => norm(n?.label)));
+  if (Array.isArray(spec.bins)) parts.push(...(spec.bins as Array<{ label?: unknown }>).map((b) => norm(b?.label)));
+  else if (spec.left && spec.right) parts.push(norm((spec.left as { head?: unknown }).head), norm((spec.right as { head?: unknown }).head));
+  else if (Array.isArray(spec.nodes)) parts.push(...(spec.nodes as Array<{ label?: unknown }>).map((n) => norm(n?.label)));
   else if (spec.center || spec.root) parts.push(norm(spec.center || spec.root));
   return parts.join('|');
 }
@@ -854,7 +854,7 @@ export function stripInLessonAnnotations<T extends { spec?: unknown }>(figure: T
   const spec = figure?.spec;
   const rest = spec && typeof spec === 'object' ? { ...(spec as Record<string, unknown>) } : null;
   if (rest) delete rest.note;
-  const { caption: _caption, ...withoutCaption } = figure as Record<string, unknown>;
+  const { caption: _caption, ...withoutCaption } = figure as Record<string, unknown>; void _caption;
   return { ...(withoutCaption as T), ...(rest ? { spec: rest } : {}) };
 }
 
@@ -900,7 +900,7 @@ export function figureRestatesReply(figure: unknown, reply: string | null | unde
   if (figureNumbers.some((n) => !replyNumbers.has(n))) return false;
 
   const bigrams = (value: string) => {
-    const clean = value.replace(/[\s　-〿＀-￯]/g, '');
+    const clean = value.replace(/[\s\u3000-\u303f\uff00-\uffef]/g, '');
     const set = new Set<string>();
     for (let i = 0; i < clean.length - 1; i += 1) set.add(clean.slice(i, i + 2));
     return set;

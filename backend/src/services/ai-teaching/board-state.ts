@@ -421,7 +421,7 @@ function describeByKind(kind: string, spec: Record<string, unknown>): string[] {
       const o = (a ?? {}) as Record<string, unknown>;
       return `${name}∈[${o.min ?? '?'},${o.max ?? '?'}]${o.label ? `（${String(o.label)}）` : ''}`;
     };
-    out.push(`- 坐标：${axis(spec.x, 'x')} ${axis(spec.y, 'y')}${spec.y2 ? `，右轴∈[${(spec.y2 as any).min},${(spec.y2 as any).max}]` : ''}`);
+    out.push(`- 坐标：${axis(spec.x, 'x')} ${axis(spec.y, 'y')}${spec.y2 ? `，右轴∈[${(spec.y2 as Record<string, unknown>).min},${(spec.y2 as Record<string, unknown>).max}]` : ''}`);
     const series = Array.isArray(spec.series) ? (spec.series as Array<Record<string, unknown>>) : [];
     if (series.length) out.push(`- 曲线：${series.map((s) => String(s.name ?? '')).join(' / ')}`);
     const marks = Array.isArray(spec.marks) ? (spec.marks as Array<Record<string, unknown>>) : [];
