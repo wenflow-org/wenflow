@@ -5,7 +5,7 @@
 > 需要时以 doc/ 根目录现行文档与代码为准。
 > **登记门禁（2026-09-28 起）**：新文档入库三件套 = 白名单 + 本表登记 + 状态头；实现与「不做」声明相悖须同提交改文档。
 
-## 总索引（doc/ 根 40 篇 · 全覆盖 · 2026-10-22）
+## 总索引（doc/ 根 42 篇 · 全覆盖 · 2026-10-29）
 
 > 每篇文档头部有状态行（📌 类型｜最后核验）。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
 
@@ -17,6 +17,8 @@
 | PROMPT_ADJUSTMENT_GUIDE.md | 活规范 | 提示词调整操作指南 |
 | SKILL_DEVELOPMENT_GUIDE.md | 活规范 | 新建/改造 Skill 指南（§2 CLI 优先） |
 | AGENT_SKILL_MANUAL.md | 活规范 | Agent/Skill 全景 why |
+| PIPELINE_MAP.md | 生成物 | 场景→Agent→Prompt 全管线索引（`pipeline:map` 生成，勿手改） |
+| PIPELINE_PROMPTS.md | 生成物 | 全部提示词原文汇编，按场景归档（同上） |
 | KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md | 活规范 | KC 概念身份+图（95%） |
 | KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md | 活规范 | KC 多路径+学习者信号（§2 结论仍成立） |
 | LEARNER_CENTER_AND_STATE_FUSION.md | 活规范 | 学习者中心/状态融合（§3.3 已接线） |
@@ -62,6 +64,9 @@
 - [`AGENT_SKILL_MANUAL.md`](./AGENT_SKILL_MANUAL.md)
   - Agent / Skill 全景与缘由（开发者向）：每个顶层 Agent 与 Skill 的**为什么**（功能缘由 / 设计意图 / 边界 / 五阶段数据旅程）
   - 与自动生成的 `prompts/AGENTS_SELF_INTRO.md`（机械附录，只有 what）互补，是 "how-to" 开发指南前面的 "why"；**开发文档，不是平台功能/能力说明**
+- [`PIPELINE_MAP.md`](./PIPELINE_MAP.md) / [`PIPELINE_PROMPTS.md`](./PIPELINE_PROMPTS.md)
+  - 自动生成的全管线视图：场景为一级轴、Agent 为二级轴、Prompt 为三级轴；后者逐篇嵌入 `prompts/core/*.yaml` 原文
+  - 改管线后运行 `npm --prefix backend run pipeline:map` 刷新，`pipeline:map:check` 做漂移校验
 
 ## 架构与治理
 

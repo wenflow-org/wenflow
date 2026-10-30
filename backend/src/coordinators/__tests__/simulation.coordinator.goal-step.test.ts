@@ -89,7 +89,6 @@ jest.mock('../../utils/logger', () => ({
 }))
 
 import { SimulationOrchestrator, VirtualSessionLeaseLostError } from '../simulation.coordinator'
-import { virtualLearnerGoalDialogueSimulatorDefinition } from '../../skills'
 
 function deferred() {
   let resolve!: () => void
@@ -198,14 +197,8 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
       currentStage: 'goal',
       goalReady: false
     }))
-    // 模拟者拿到的只有可见上下文（开场时为空）
-    expect(mockExecuteSkill).toHaveBeenCalledWith(
-      virtualLearnerGoalDialogueSimulatorDefinition,
-      expect.objectContaining({
-        currentPhase: 'opening',
-        visibleContext: { history: [], lastGoalAgentMessage: '' }
-      })
-    )
+    // 开场不再额外调用模拟者（外部审计 P2-10：reply 被丢弃、只留一个与开场不自洽的状态）
+    expect(mockExecuteSkill).not.toHaveBeenCalled()
     expect(mockStartConversation).toHaveBeenCalledWith(
       'user-1',
       '我想学会数据分析',
@@ -234,8 +227,8 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
 
     await coordinator.executeSingleStep({ sessionId: 'simulation-1', userId: 'user-1', mode: 'single-step' })
 
-    // mockExecuteSkill 的第二次调用即回复分支：previousLearnerState 必须非 null
-    const replyCall = mockExecuteSkill.mock.calls[1][1]
+    // 开场不再调用模拟者，第一次 executeSkill 即回复分支：previousLearnerState 必须非 null
+    const replyCall = mockExecuteSkill.mock.calls[0][1]
     expect(replyCall.previousLearnerState).toBeTruthy()
     expect(replyCall.previousLearnerState).toEqual(expect.objectContaining({ goalReadiness: expect.any(Number) }))
   })
@@ -493,6 +486,12 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
 
   it('回合中途租约失效：runLeasedExclusive 以 VirtualSessionLeaseLostError 拒绝，且未发生会话写', async () => {
     jest.useFakeTimers({ now: new Date('2026-07-19T00:00:00.000Z') })
+    // 开场分支不再调用模拟者（P2-10），改用回复分支产生 in-flight 的 skill 调用
+    sessionRecord.goalConversationId = 'conv-1'
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'conv-1',
+      collectedData: JSON.stringify({ stage: 'understanding', messages: [], understanding: {} })
+    })
     let leaseHealthy = true
     mockLeaseUpdateMany.mockImplementation(async ({ where }) => {
       if (!where.ownerId) return { count: 0 } // acquire：无可接管的过期租约 → 走 create

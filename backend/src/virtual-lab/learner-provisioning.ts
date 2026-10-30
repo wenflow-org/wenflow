@@ -107,7 +107,7 @@ export function ensurePersonaFallbacks(
   if (!Array.isArray(seed.struggleConcepts) || !seed.struggleConcepts.length) seed.struggleConcepts = ['方法不清晰'];
   if (!Array.isArray(seed.emotionalTriggers) || !seed.emotionalTriggers.length) seed.emotionalTriggers = ['遇到挫折'];
   if (!Array.isArray(seed.failurePatterns) || !seed.failurePatterns.length) seed.failurePatterns = ['半途而废'];
-  if (!['internal', 'external', 'both', 'none'].includes(String(seed.motivationType || ''))) seed.motivationType = 'internal';
+  if (!['career', 'interest', 'necessity', 'social'].includes(String(seed.motivationType || ''))) seed.motivationType = 'career';
   if (!['minimal', 'moderate', 'abundant'].includes(String(seed.availableTime || ''))) seed.availableTime = 'moderate';
 
   return seed;

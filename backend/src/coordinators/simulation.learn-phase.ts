@@ -22,11 +22,13 @@ import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-w
 import simulatedDayService from '../services/virtual-lab/simulated-day.service';
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
+import { writeProfileConceptsAfterLesson } from '../virtual-lab/learner-memory';
 import type { SimulationMilestone, StageResults, TeachingState } from '../virtual-lab/vlab-types';
 import type { SimulationContext, SimulationLogEntry, ConversationHistoryItem } from './simulation.types';
 import { LEARN_AUTO_TURN_CAP } from './simulation.constants';
 import {
   buildLearningProgressSnapshot,
+  buildLessonOpeningHistory,
   buildProgressAfterTaskCompletion,
   countTaskProgress,
   findTaskInPath,
@@ -63,7 +65,6 @@ import {
   auditGroundingCompliance,
   clampLearnerStateToJudgment,
   reconcileKnowledgeBoardWithJudgment,
-  demoteProfileKnownConcepts,
   type LearningClosureDecision,
 } from './simulation.learn.steps';
 import { VirtualSessionLeaseBusyError } from './simulation.errors';
@@ -71,7 +72,6 @@ import { acquireSessionLease, releaseSessionLease } from './simulation.lease';
 import {
   buildAssistedMemoryRecall,
   persistKnowledgeState,
-  persistProfileConcepts,
 } from './simulation.memory';
 import type { PendingTeachingCheckpoint } from './simulation.coordinator';
 import type { SimulationOrchestrator } from './simulation.coordinator';
@@ -285,6 +285,17 @@ export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId:
       teachingSessionId: teachingSession.sessionId,
       teachingRevision: teachingSession.revision,
       classroomMode: options.mode === 'review' ? 'review' : 'tutor',
+      // 开场白必须进入学习者可见历史：旧实现只写日志，学习者第一轮看不到老师开场，
+      // 续跑/重开时还会继承上一课 conversationHistory（外部审计 P0-1）。
+      conversationHistory: buildLessonOpeningHistory(teachingSession.welcomeMessage),
+      // 新课堂不继承上一课的主观状态/收束判决/延迟计数
+      learnerState: undefined,
+      latestLearnerFeedback: null,
+      closureDecision: null,
+      closureTrace: null,
+      completionDeferrals: 0,
+      lessonKnowledgePoints: undefined,
+      lessonDowngradedConcepts: undefined,
       ...buildLearningProgressSnapshot(learningPath.milestones, firstMilestoneIdx, firstTaskIdx)
     });
 
@@ -365,41 +376,8 @@ export async function finalizePathCompletion(ctx: SimulationOrchestrator, sessio
 }
 
 /**
- * P1-6 实际看板闭环：把判决对账的降级项从画像 knownConcepts 中移除（并保留到 struggleConcepts）。
- * 背景：persistProfileConcepts 只做 `knownConcepts ∪ mastered`，永不移除；而下一轮
- * knowledgeSnapshot 的 mastered 正是由 buildLearnerMemorySnapshot 从 profile.knownConcepts 读出
- * （learner-memory.ts:388/394-397）。不执行本步，降级只改 memory_traces 与 struggle，看板仍显示
- * mastered。best-effort——失败只告警不阻断教学回合。
+ * 执行一个学习回合：模拟学习者 → （可选）认知判决 → 教师回合 → 收束/任务结算。
  */
-async function demoteProfileConceptsForJudgment(
-  userId: string,
-  downgraded: Array<{ name: string; from: string; to: string }>
-): Promise<void> {
-  if (!userId || !Array.isArray(downgraded) || !downgraded.length) return;
-  try {
-    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId } });
-    if (!profile) return;
-    const profileData = safeJsonParse<Record<string, unknown>>(profile.profile, {});
-    const next = demoteProfileKnownConcepts(profileData, downgraded);
-    const knownConcepts = Array.isArray(next.knownConcepts) ? next.knownConcepts : [];
-    const struggleConcepts = Array.isArray(next.struggleConcepts) ? next.struggleConcepts : [];
-    await prisma.virtual_learner_profiles.update({
-      where: { userId },
-      data: {
-        profile: JSON.stringify(next),
-        knownConcepts: JSON.stringify(knownConcepts),
-        struggleConcepts: JSON.stringify(struggleConcepts),
-        updatedAt: new Date(),
-      },
-    });
-  } catch (error) {
-    logger.warn('[simulation-coordinator] 判决对账降级画像概念失败（不阻断教学回合）', {
-      userId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
 export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId: string, options: { turnBudget?: number } = {}): Promise<{
   success: boolean;
   userMessage?: string;
@@ -774,6 +752,16 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       const skipLearningState = {
         ...learningState,
         teachingRevision: taskRuntime.teachingRevision ?? learningState.teachingRevision,
+        // 延伸段属于被跳过的这一课：不在这里关掉，结算快照会带着 active=true 进入下一课，
+        // 新课第一回合就被当成延伸段收尾并挂到旧课堂结算（独立评审 P0）。
+        ...(learningState.extensionRuntime
+          ? {
+              extensionRuntime: {
+                ...(learningState.extensionRuntime as NonNullable<TeachingState['extensionRuntime']>),
+                active: false,
+              },
+            }
+          : {}),
         taskRuntime: skipTaskRuntime
       };
       await ctx.updateTeachingStatePreservingControlFlags(sessionId, skipLearningState);
@@ -864,8 +852,29 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     const { knowledgeSnapshot, learnerMemoryForSimulator } = await loadTeachTurnKnowledgeAssets(
       session.userId,
       currentTask,
-      currentMilestone
+      currentMilestone,
+      Array.isArray(learningState.lessonKnowledgePoints)
+        ? (learningState.lessonKnowledgePoints as Array<{ name: string; status: string; progress: number }>)
+        : []
     );
+    // 教学检查点消费（assisted 链路）：先取当前课堂（答案键已被 getSessionDetail 剥离）。
+    // 判决器与模拟器必须看到同一份题面；教师 reply 正文不再打印选项（2026-10-28），
+    // 因此这里必须在判决之前取到 pendingCheckpoint。
+    const teachingSessionId = learningState.teachingSessionId;
+    let pendingCheckpoint: PendingTeachingCheckpoint | null = null;
+    if (teachingSessionId) {
+      try {
+        const teachingDetail = await aiTeachingOrchestrator.getSessionDetail(teachingSessionId, session.userId);
+        pendingCheckpoint = (teachingDetail?.pendingCheckpoint as unknown as PendingTeachingCheckpoint | null) || null;
+      } catch (checkpointDetailError) {
+        logger.warn('[simulation-coordinator] 读取待答理解检查点失败（按无检查点继续）', {
+          sessionId,
+          teachingSessionId,
+          error: asErrorLike(checkpointDetailError).message || String(checkpointDetailError),
+        });
+      }
+    }
+
     // 阶段1：认知判决（BEAGLE 物理两阶段第一段；失败降级 null，不阻断叙事）
     // 受控错误（2026-10-02 小陈案例 P1-3）：概率在编排层采样（与 friction 同范式），
     // 命中时把硬指令传给判决器 + 判决器失败时直接合成判错判决——
@@ -873,6 +882,23 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     const controlledError = decideControlledError({
       frictionBudget: getSessionFrictionBudget(session),
       struggleConcepts: profile.struggleConcepts,
+      // 受控错误必须落在本轮正在教的概念上：旧实现只要 struggle 列表非空就按轮转取，
+      // 会把别的技能/上节课的卡点硬塞进本轮（外部审计 P1-5）。
+      currentTaskConcepts: [
+        currentTask.title,
+        currentTask.linkedConcept,
+        currentTask.coreConcept,
+        currentTask.acceptanceCriteria,
+        currentMilestone.title,
+        // 只用本课看板（learningState 传递），不要用 knowledgeSnapshot：
+        // 后者含画像 mastered/struggling/dueReview，会把旧课卡点重新算进"本轮概念域"，
+        // 使 P1-5 的域过滤在 assisted/blackbox 两条链路都失效（独立评审）。
+        ...(Array.isArray(learningState.lessonKnowledgePoints)
+          ? (learningState.lessonKnowledgePoints as Array<{ name?: unknown }>)
+              .map((point) => point?.name)
+              .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+          : []),
+      ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0),
       turnIndex: Number(taskRuntime.turns) || 0,
       // 真人误区语料库（2026-10-21）：命中就按有出处的具体误区演，没命中回退即兴卡点
       resolveMisconception: (concept) => {
@@ -914,17 +940,20 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         },
         knowledgeSnapshot,
         visibleContext: judgeVisibleContext,
+        ...(pendingCheckpoint ? { pendingCheckpoint } : {}),
         previousLearnerState: mergedLearnerState,
         ...(controlledError.forced ? { forcedCorrectness: controlledError } : {}),
       });
       epistemicGrounding = groundingRaw?.output?.epistemicGrounding || groundingRaw?.epistemicGrounding || null;
-      // 判决器忽略编排层指令（比如旧版本 prompt 未同步）时兜底覆写，保证采样语义可测量
+      // 判决器忽略编排层指令（比如旧版本 prompt 未同步）时兜底覆写，保证采样语义可测量。
+      // targetConcept 为空时保留判决器自己定位的卡点/错误模式，别把具体性抹掉。
       if (controlledError.forced && epistemicGrounding?.sampledCorrectness !== false) {
         epistemicGrounding = {
           ...(epistemicGrounding || {}),
           sampledCorrectness: false,
-          blockedConcept: controlledError.targetConcept,
+          blockedConcept: controlledError.targetConcept ?? epistemicGrounding?.blockedConcept ?? null,
           errorPattern: controlledError.targetMisconception?.statement
+            ?? epistemicGrounding?.errorPattern
             ?? (controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null),
           masteryProb: 0.15,
         };
@@ -955,22 +984,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       Number(temporalContext?.dayIndex) || 0
     ).catch(() => []);
 
-    // 教学检查点消费（assisted 链路）：先取当前课堂（答案键已被 getSessionDetail 剥离）。
-    // 仅当存在待答检查点时注入模拟器输入；读取失败/无检查点一律按原路径继续，不阻断学习。
-    const teachingSessionId = learningState.teachingSessionId;
-    let pendingCheckpoint: PendingTeachingCheckpoint | null = null;
-    if (teachingSessionId) {
-      try {
-        const teachingDetail = await aiTeachingOrchestrator.getSessionDetail(teachingSessionId, session.userId);
-        pendingCheckpoint = (teachingDetail?.pendingCheckpoint as unknown as PendingTeachingCheckpoint | null) || null;
-      } catch (checkpointDetailError) {
-        logger.warn('[simulation-coordinator] 读取待答理解检查点失败（按无检查点继续）', {
-          sessionId,
-          teachingSessionId,
-          error: asErrorLike(checkpointDetailError).message || String(checkpointDetailError),
-        });
-      }
-    }
+    // 教学检查点消费（assisted 链路）：已在判决前取到 pendingCheckpoint，这里直接复用。
 
     const virtualReplyOutput = await ctx.retryLearnUpstream(sessionId, 'simulate-teaching-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
       // 同上：扮演身份 = VL 本人（接通 agnes 独立 RPM 桶）
@@ -1077,6 +1091,22 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     });
     
     let aiResponse = '';
+    // 本轮写入学习者可见历史的用户消息：检查点提交时与 payload 对齐（P0-4），
+    // 普通聊天就是模拟器原话。
+    let learnerVisibleMessage = '';
+    // 本课知识看板（随 learningState 传递，不写画像基线；课后统一回写）
+    let lessonKnowledgePoints: Array<{ name: string; status: string; progress: number }> =
+      Array.isArray(learningState.lessonKnowledgePoints)
+        ? (learningState.lessonKnowledgePoints as Array<{ name: string; status: string; progress: number }>)
+        : [];
+    // 本课被判错降级的看板概念（mastered → learning）。必须在任务结算的画像回写里
+    // 显式移除，否则 knownConcepts 的 union-only 语义会让降级在下一课被读回 mastered。
+    let lessonDowngradedConcepts: Array<{ name: string; from: string; to: string }> =
+      Array.isArray(learningState.lessonDowngradedConcepts)
+        ? (learningState.lessonDowngradedConcepts as Array<{ name: string; from: string; to: string }>)
+            .filter((item) => item && typeof item.name === 'string' && item.name.trim())
+            .map((item) => ({ name: String(item.name).trim(), from: String(item.from || 'mastered'), to: String(item.to || 'learning') }))
+        : [];
     // 本轮教师配图（#123）：教学回合产出后随教师消息进学习者可见上下文（模拟学习者"看得见图"）
     let teacherImages: ConversationHistoryItem['images'] | undefined;
     const nextTaskIdx = currentTaskIdx;
@@ -1114,6 +1144,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         teachingRevision = aiResult.revision;
         
         aiResponse = aiResult.aiResponse || '';
+        learnerVisibleMessage = aiResult.learnerVisibleMessage || virtualReplyResult.userVisible;
         teacherImages = Array.isArray(aiResult.images) && aiResult.images.length > 0
           ? aiResult.images.map((image) => ({ url: image.url, caption: image.caption ?? null }))
           : undefined;
@@ -1127,12 +1158,29 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         );
         // 记忆引擎：教学回合后增量写 memory_traces（知识看板状态 → 内化强度）
         persistKnowledgeState(session.userId, boardReconciliation.points as Array<{ name: string; status: string; progress: number }>, sessionId);
-        // 画像回写：掌握 → knownConcepts，仍在学/需复习 → struggleConcepts
-        await persistProfileConcepts(sessionId, session.userId, boardReconciliation.points as Array<{ name: string; status: string; progress: number }>);
-        // P1-6 闭环：persistProfileConcepts 对 knownConcepts 是 union-only（不移除），单把当前点改成
-        // learning 仍会让 stale knownConcepts 在下一轮被 buildLearnerMemorySnapshot 读回 mastered。
-        // 这里在画像回写之后执行 demotion，使「看板降级」真正落到下一轮 knowledgeSnapshot。
-        await demoteProfileConceptsForJudgment(session.userId, boardReconciliation.downgraded);
+        // 画像基线隔离（外部审计 P2-9）：旧实现在每个教学回合把看板 union 进画像
+        // knownConcepts/struggleConcepts，人设的"先验掌握/易卡"被本课进度污染，
+        // 下一课甚至同一课后续轮次的判决器/受控错误都读到被改写过的先验。
+        // 本课看板改为随 learningState 传递（lessonKnowledgePoints），
+        // 画像只在课后由 persistAssistedLearnerMemory + curator 统一回写。
+        // 检查点提交回合的 knowledgePoints 恒为空（submit 结果不携带看板），
+        // 此时必须保留上一回合看板，否则下一回合的判决/受控错误退回画像先验。
+        if (Array.isArray(aiResult.knowledgePoints) && aiResult.knowledgePoints.length > 0) {
+          lessonKnowledgePoints = boardReconciliation.points
+            .filter((point) => point && typeof point.name === 'string' && point.name.trim())
+            .map((point) => ({
+              name: String(point.name),
+              status: String(point.status),
+              progress: Number.isFinite(Number(point.progress)) ? Number(point.progress) : 0,
+            }));
+        }
+        // 降级跨回合累积：同一概念最终被重新掌握时，画像回写里 mastered 会把它重新并回去，
+        // 因此这里只记录"本课发生过降级"，不在这里判定最终状态。
+        if (boardReconciliation.downgraded.length > 0) {
+          const merged = new Map(lessonDowngradedConcepts.map((item) => [item.name, item]));
+          for (const item of boardReconciliation.downgraded) merged.set(item.name, item);
+          lessonDowngradedConcepts = Array.from(merged.values());
+        }
         
         closureDecision = computeClosureDecision(
           aiResult.closureSignal,
@@ -1301,6 +1349,21 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             ...learningState,
             teachingSessionId: null,
             closureTrace,
+            lessonKnowledgePoints,
+            lessonDowngradedConcepts,
+            // 卡死也是本课的最后一回合：对话与主观状态必须落库，否则离线评审/逐字稿
+            // 会看到少一轮的课堂（学员最后一问、老师最后一答都不在）。
+            latestLearnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
+            closureDecision,
+            conversationHistory: [
+              ...(learningState.conversationHistory || []),
+              { role: 'user', content: learnerVisibleMessage || virtualReplyResult.userVisible },
+              {
+                role: 'assistant',
+                content: aiResponse,
+                ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
+              }
+            ],
             taskRuntime: {
               ...(taskRuntime as Record<string, unknown>),
               status: 'timeout',
@@ -1342,7 +1405,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           await ctx.addSessionLogs(sessionId, logs);
           return {
             success: true,
-            userMessage: virtualReplyResult.userVisible,
+            userMessage: learnerVisibleMessage || virtualReplyResult.userVisible,
             aiResponse,
             milestoneProgress: {
               currentMilestone: nextMilestoneIdx + 1,
@@ -1384,7 +1447,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             }
             const reviewConversationHistory = [
               ...(learningState.conversationHistory || []),
-              { role: 'user', content: virtualReplyResult.userVisible },
+              { role: 'user', content: learnerVisibleMessage || virtualReplyResult.userVisible },
               {
                 role: 'assistant',
                 content: aiResponse,
@@ -1393,6 +1456,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             ];
             const reviewLearningState = {
               ...learningState,
+              ...learningState,lessonKnowledgePoints,lessonDowngradedConcepts,
               // 课堂已结束：清掉绑定，避免下一次误在已完结课堂里继续推回合
               teachingSessionId: null,
               teachingRevision: null,
@@ -1410,6 +1474,14 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
               conversationHistory: reviewConversationHistory
             };
             await ctx.updateTeachingStatePreservingControlFlags(sessionId, reviewLearningState);
+            // 复习课不结算任务，因此不会走 completeCheckpointedSimulationTask 的记忆回写；
+            // 判决降级必须在这里单独落画像，否则复习课里判错的概念永远停留在 mastered。
+            if (lessonDowngradedConcepts.length > 0) {
+              await writeProfileConceptsAfterLesson(session.userId, [], {
+                source: 'assisted-review',
+                downgraded: lessonDowngradedConcepts,
+              });
+            }
             logs.push({
               timestamp: reviewFinalizedAt,
               phase: 'stage-transition',
@@ -1427,7 +1499,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             await ctx.addSessionLogs(sessionId, logs);
             return {
               success: true,
-              userMessage: virtualReplyResult.userVisible,
+              userMessage: learnerVisibleMessage || virtualReplyResult.userVisible,
               aiResponse,
               milestoneProgress: {
                 currentMilestone: nextMilestoneIdx + 1,
@@ -1540,6 +1612,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
               const extensionStartedAt = new Date().toISOString();
               const extensionLearningState = {
                 ...learningState,
+                ...learningState,lessonKnowledgePoints,lessonDowngradedConcepts,
                 teachingSessionId: extensionSession.sessionId,
                 teachingRevision: extensionSession.revision,
                 latestLearnerFeedback: currentLearnerFeedback,
@@ -1574,7 +1647,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                 },
                 conversationHistory: [
                   ...(learningState.conversationHistory || []),
-                  { role: 'user', content: virtualReplyResult.userVisible },
+                  { role: 'user', content: learnerVisibleMessage || virtualReplyResult.userVisible },
                   {
                     role: 'assistant',
                     content: aiResponse,
@@ -1603,7 +1676,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
               await ctx.addSessionLogs(sessionId, logs);
               return {
                 success: true,
-                userMessage: virtualReplyResult.userVisible,
+                userMessage: learnerVisibleMessage || virtualReplyResult.userVisible,
                 aiResponse,
                 milestoneProgress: {
                   currentMilestone: nextMilestoneIdx + 1,
@@ -1644,7 +1717,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           );
           const checkpointConversationHistory = [
             ...(learningState.conversationHistory || []),
-            { role: 'user', content: virtualReplyResult.userVisible },
+            { role: 'user', content: learnerVisibleMessage || virtualReplyResult.userVisible },
             // 教师配图同上（#123）：结课检查点快照也保住配图
             {
               role: 'assistant',
@@ -1675,6 +1748,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           };
           const checkpointLearningState = {
             ...learningState,
+            ...learningState,lessonKnowledgePoints,lessonDowngradedConcepts,
             teachingRevision,
             learnerState: checkpointLearnerState,
             latestLearnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
@@ -1749,7 +1823,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
 
           return {
             ...taskCompletionResult,
-            userMessage: virtualReplyResult.userVisible,
+            userMessage: learnerVisibleMessage || virtualReplyResult.userVisible,
             aiResponse,
             logs
           };
@@ -1895,6 +1969,9 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       teachingSessionId,
       aiResponse,
       teacherImages,
+      learnerVisibleMessage,
+      lessonKnowledgePoints,
+      lessonDowngradedConcepts,
       // 延伸段回合计数：本步已完成一个延伸回合（未收尾时），下次进来按新计数判上限
       extensionRuntime: isExtensionActive(learningState.extensionRuntime)
         ? {
@@ -1941,7 +2018,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     
     return {
       success: !learningStepError && !learningStepInterrupted,
-      userMessage: virtualReplyResult.userVisible,
+      userMessage: learnerVisibleMessage || virtualReplyResult.userVisible,
       aiResponse,
       milestoneProgress: {
         currentMilestone: isPathCompleted

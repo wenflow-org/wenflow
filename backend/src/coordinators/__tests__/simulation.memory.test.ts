@@ -99,8 +99,11 @@ describe('P1-1：executeSkill 已解包，不得再检查 .success', () => {
       memoryDelta: '这课我掌握了剪辑节奏，调色还不行。',
     })
 
-    const curated = await runAssistedMemoryCurator(assistedSession(), { conversationHistory: [] }, task)
-
+    const curated = await runAssistedMemoryCurator(
+      assistedSession(),
+      { conversationHistory: [{ role: 'learner', content: '我按教程剪了一段' }] },
+      task
+    )
     expect(curated).not.toBeNull()
     expect(curated!.masteredConcepts.map((m) => m.name)).toEqual(['剪辑节奏'])
     expect(curated!.struggleConcepts.map((s) => s.name)).toEqual(['调色'])
@@ -109,7 +112,11 @@ describe('P1-1：executeSkill 已解包，不得再检查 .success', () => {
 
   it('executeSkill 返回 null 时才走 fallback（return null）', async () => {
     mockExecuteSkill.mockResolvedValue(null)
-    const curated = await runAssistedMemoryCurator(assistedSession(), { conversationHistory: [] }, task)
+    const curated = await runAssistedMemoryCurator(
+      assistedSession(),
+      { conversationHistory: [{ role: 'learner', content: '我还是不太会' }] },
+      task
+    )
     expect(curated).toBeNull()
   })
 })
@@ -219,5 +226,115 @@ describe('P2-32：evidence/confidence/severity 随名单落库', () => {
     expect(arg.memoryCurated.struggling[0]).toEqual(expect.objectContaining({
       name: '调色', blocker: '白平衡搞不定', severity: 'high',
     }))
+  })
+})
+describe('P2-9：本课看板通过 learningState 传递，不依赖逐回合画像回写', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('buildAssistedKnowledgeSnapshot 合并 lessonKnowledgePoints（同名以本课为准）', async () => {
+    const { buildAssistedKnowledgeSnapshot } = await import('../simulation.memory')
+    const snapshot = await buildAssistedKnowledgeSnapshot(
+      'u1',
+      { id: 't1', title: '一页宽', linkedConcept: '设置一页宽缩放' } as any,
+      null,
+      [
+        { name: '设置一页宽缩放', status: 'mastered', progress: 95 },
+        { name: '识别叠字版面', status: 'learning', progress: 40 },
+      ]
+    )
+    expect(snapshot).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: '设置一页宽缩放', status: 'mastered', progress: 95 }),
+      expect.objectContaining({ name: '识别叠字版面', status: 'learning', progress: 40 }),
+    ]))
+    // 锚点仍在，且同名概念不重复
+    expect(snapshot.filter((item) => item.name === '设置一页宽缩放')).toHaveLength(1)
+  })
+
+  it('画像 mastered 不得覆盖本课看板的降级状态（独立评审 P1：Map last-wins 方向反了）', async () => {
+    const prisma = (await import('../../config/database')).default as any
+    prisma.virtual_learner_profiles.findUnique.mockResolvedValueOnce({
+      profile: JSON.stringify({ knownConcepts: ['识别叠字版面'], struggleConcepts: [] }),
+    })
+    const { buildAssistedKnowledgeSnapshot } = await import('../simulation.memory')
+    const snapshot = await buildAssistedKnowledgeSnapshot(
+      'u1',
+      { id: 't1', title: '一页宽', linkedConcept: '设置一页宽缩放' } as any,
+      null,
+      [{ name: '识别叠字版面', status: 'learning', progress: 40 }]
+    )
+    expect(snapshot.find((item) => item.name === '识别叠字版面')).toEqual({
+      name: '识别叠字版面', status: 'learning', progress: 40,
+    })
+  })
+})
+
+describe('记忆回写不把任务标题当概念名（画像先验卫生）', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('无 linkedConcept + curator 失败 → conceptName 为 null，不写任务标题', async () => {
+    mockExecuteSkill.mockResolvedValue(null)
+    const taskWithoutConcept = {
+      ...task,
+      linkedConcept: undefined,
+      title: '把三个导出层入口写成照着点就行的极简清单',
+    }
+    await persistAssistedLearnerMemory('vs1', assistedSession(), taskWithoutConcept as any)
+
+    const arg = mockWriteProfileConcepts.mock.calls[0][2] as any
+    expect(arg.selfState.conceptName).toBeNull()
+  })
+
+  it('有 linkedConcept → 用知识点名，不用任务标题', async () => {
+    mockExecuteSkill.mockResolvedValue(null)
+    const taskWithConcept = {
+      ...task,
+      linkedConcept: '设置一页宽缩放',
+      title: '把三个导出层入口写成照着点就行的极简清单',
+    }
+    await persistAssistedLearnerMemory('vs1', assistedSession(), taskWithConcept as any)
+
+    const arg = mockWriteProfileConcepts.mock.calls[0][2] as any
+    expect(arg.selfState.conceptName).toBe('设置一页宽缩放')
+  })
+})
+
+describe('结算回写使用最新 learningState（独立评审 P1）', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('显式传入的 freshLearningState 覆盖旧 session.stageResults 快照', async () => {
+    mockExecuteSkill.mockResolvedValue(null)
+    // 旧快照里学习者是「没完成、还要帮助」；收束轮刚写入的最新状态是「已完成」
+    const fresh = {
+      teachingSessionId: 'teach1',
+      learnerState: { conceptualMastery: 0.9, taskUnderstanding: 0.9, wantsHint: false },
+      latestLearnerFeedback: { selfReportedTaskDone: true, confidence: 0.9, wantsMoreHelp: false, remainingBlockers: [] },
+      conversationHistory: [{ role: 'learner', content: '这次我能自己剪完了' }],
+      lessonDowngradedConcepts: [{ name: '剪辑节奏', from: 'mastered', to: 'learning' }],
+    }
+
+    await persistAssistedLearnerMemory('vs1', assistedSession(), task, fresh)
+
+    const arg = mockWriteProfileConcepts.mock.calls[0][2] as any
+    // 降级名单透传到画像回写（否则 knownConcepts 的 union-only 语义会让降级失效）
+    expect(arg.downgraded).toEqual([{ name: '剪辑节奏', from: 'mastered', to: 'learning' }])
+    expect(arg.selfState.selfReportedTaskDone).toBe(true)
+  })
+
+  it('空学习者窗口不调用 curator（避免空 turnSequence 凭空编造证据）', async () => {
+    mockExecuteSkill.mockResolvedValue({
+      masteredConcepts: [{ name: '编造概念', evidence: '', confidence: 0.9 }],
+      struggleConcepts: [],
+      selfCalibration: '',
+      memoryDelta: '',
+    })
+
+    const curated = await runAssistedMemoryCurator(
+      assistedSession(),
+      { conversationHistory: [{ role: 'assistant', content: '今天我们学…' }] },
+      task
+    )
+
+    expect(curated).toBeNull()
+    expect(mockExecuteSkill).not.toHaveBeenCalled()
   })
 })

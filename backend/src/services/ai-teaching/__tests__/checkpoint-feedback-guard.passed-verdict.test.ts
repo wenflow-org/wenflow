@@ -31,6 +31,31 @@ describe('repairContradictedPassedVerdict', () => {
     expect(repairContradictedPassedVerdict(reply)).toBe(reply);
   });
 
+  it('句首垫话后否决也要修（独立评审 P2：开头锚定会漏）', () => {
+    const reply = '好的，这道题不对——A 还是没答到点上。再想想「暖风一直吹」暗示了什么？';
+    const out = repairContradictedPassedVerdict(reply);
+    expect(out).toContain('对，这道答对了');
+    expect(out).not.toContain('这道题不对');
+    expect(out).toContain('暗示了什么？');
+  });
+
+  it('首句是问句时不修（「答错了吗？」是提问不是否决）', () => {
+    const reply = '我看看，你答错了吗？我们再核对一遍选项。';
+    expect(repairContradictedPassedVerdict(reply)).toBe(reply);
+  });
+
+  it('否定词前有「没/不」时不算否决（「没答错」「没选错」是肯定）', () => {
+    const first = '很好，这道题你没答错，思路很清楚。';
+    const second = '对，这次没选错。接下来看第二组。';
+    expect(repairContradictedPassedVerdict(first)).toBe(first);
+    expect(repairContradictedPassedVerdict(second)).toBe(second);
+  });
+
+  it('后面句子里的否决不误判（只检查首句）', () => {
+    const reply = '对，这道答对了。如果不对，我们再看第二组。';
+    expect(repairContradictedPassedVerdict(reply)).toBe(reply);
+  });
+
   it('退化输入原样返回', () => {
     expect(repairContradictedPassedVerdict('')).toBe('');
     expect(repairContradictedPassedVerdict(null)).toBe(null);

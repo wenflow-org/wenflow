@@ -35,6 +35,8 @@
     "prompts:sync-core": "npm run runtime:validate && ts-node src/scripts/ensure-core-agent-prompts.ts --sync",
     "constants:check": "ts-node src/scripts/check-constants-provenance.ts",
     "constants:report": "ts-node src/scripts/report-unregistered-constants.ts",
+    "pipeline:map": "ts-node src/scripts/export-pipeline-map.ts",
+    "pipeline:map:check": "ts-node src/scripts/export-pipeline-map.ts --check",
     "preset:invariants": "ts-node --transpile-only scripts/audit-preset-invariants.ts",
     "preset:invariants:db": "ts-node --transpile-only scripts/audit-preset-invariants.ts --with-db",
     "offline:eval": "node scripts/offline-eval/run.mjs --target=all",

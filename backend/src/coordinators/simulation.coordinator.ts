@@ -62,7 +62,8 @@ import {
   isRequestAborted,
   boundTaskCompletionError,
   parseStageResultsPayload,
-  buildGoalVisibleContext
+  buildGoalVisibleContext,
+  buildLessonOpeningHistory
 } from './simulation.helpers';
 import {
   detectStaleRunningSession,
@@ -229,6 +230,12 @@ export function resolveCheckpointSubmitAction(params: {
  */
 export interface NormalizedTeachingTurn {
   aiResponse: string;
+  /**
+   * 本轮写入学习者可见历史的用户消息。普通聊天 = 模拟器原话；检查点提交 = 与实际提交
+   * payload 对齐的作答（外部审计 P0-4：旧实现把模拟器 reply 写进历史，老师收到的却是
+   * checkpointAnswer，两条轨道的作答可能不一致）。
+   */
+  learnerVisibleMessage?: string;
   /** 本轮教师配图（#123）：随学习者可见上下文回流，模拟学习者"看得见"课堂配图 */
   images?: Array<{ url: string; caption?: string | null }>;
   revision: number;
@@ -289,6 +296,36 @@ export function normalizeProcessTeachingTurn(result: ProcessTeachingTurnResult):
 }
 
 /**
+ * 把检查点提交 payload 反写成学习者可见的一句作答，作为写入 conversationHistory 的用户消息。
+ * 优先沿用模拟器原话（如果它已经提到所选选项/答案文本），否则用提交 payload 生成，
+ * 保证「历史里写的」= 「老师实际批改的」。
+ */
+export function buildCheckpointLearnerVisibleMessage(
+  checkpoint: PendingTeachingCheckpoint | null,
+  payload: CheckpointSubmitPayloadLike | null,
+  simulatorReply: string
+): string {
+  const selected = Array.isArray(payload?.selectedOptionIds) ? payload!.selectedOptionIds! : [];
+  const labels = selected.map((id) => {
+    const option = (checkpoint?.options || []).find((item) => item.id === id);
+    return option ? `${id}. ${option.text}` : id;
+  });
+  const answerText = typeof payload?.answerText === 'string' ? payload.answerText.trim() : '';
+  const canonical = labels.length
+    ? `我的答案：${labels.join('、')}`
+    : answerText
+      ? `我的答案：${answerText}`
+      : '';
+  if (!canonical) return simulatorReply;
+  const reply = String(simulatorReply || '').trim();
+  if (!reply) return canonical;
+  const mentionsSelection = labels.some((label) => reply.includes(label))
+    || selected.some((id) => new RegExp(`(^|[^A-Za-z0-9])${id}([^A-Za-z0-9]|$)`).test(reply))
+    || (answerText.length >= 2 && reply.includes(answerText));
+  return mentionsSelection ? reply : canonical;
+}
+
+/**
  * 检查点提交结果 → 归一化结果。
  *
  * `CheckpointSubmitResult` 只暴露 `{ passed, feedback, hint, revision }`，
@@ -296,9 +333,21 @@ export function normalizeProcessTeachingTurn(result: ProcessTeachingTurnResult):
  * 未透出）。这里如实降为「未收束」并只带代码裁决诊断，绝不伪造教师收束信号——
  * 宁可不在本回合结束 task，也不让检查点提交误触发收束。
  */
-export function normalizeCheckpointSubmitTurn(result: CheckpointSubmitOutcome): NormalizedTeachingTurn {
+export function normalizeCheckpointSubmitTurn(
+  result: CheckpointSubmitOutcome,
+  context?: {
+    checkpoint?: PendingTeachingCheckpoint | null;
+    payload?: CheckpointSubmitPayloadLike | null;
+    simulatorReply?: string | null;
+  }
+): NormalizedTeachingTurn {
   return {
     aiResponse: result.feedback || '',
+    learnerVisibleMessage: buildCheckpointLearnerVisibleMessage(
+      context?.checkpoint || null,
+      context?.payload || null,
+      context?.simulatorReply || ''
+    ),
     revision: result.revision,
     knowledgePoints: [],
     isCompletion: false,
@@ -631,6 +680,22 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       ...nextProgress.progress,
       teachingSessionId: nextTeachingSession.sessionId,
       teachingRevision: nextTeachingSession.revision,
+      // 新 task = 新课堂：上一课的可见对话、学习者主观状态与收束判决不得跨课继承。
+      // 旧实现只做浅拷贝，conversationHistory 原样带入 → 学习者在新课开场就"记得"
+      // 上一课的操作细节与收束状态（外部审计 P0-1）。开场白此前只写日志、从不进入
+      // 可见历史，学习者第一轮看不到老师开场。
+      conversationHistory: buildLessonOpeningHistory(nextTeachingSession.welcomeMessage),
+      learnerState: undefined,
+      latestLearnerFeedback: null,
+      closureDecision: null,
+      closureTrace: null,
+      completionDeferrals: 0,
+      // 课内看板只属于上一课；新课从当前任务锚点重新建板
+      lessonKnowledgePoints: undefined,
+      // 降级名单同样按课隔离：跨课继承会在下一课结算时把已重新掌握的概念从画像里删掉
+      lessonDowngradedConcepts: undefined,
+      // 延伸段属于上一课（有界陪学）：不清掉会让新任务被误判成延伸段并挂到旧课堂结算
+      extensionRuntime: undefined,
       taskRuntime: {
         status: 'active',
         taskId: nextProgress.currentTask.id,
@@ -698,7 +763,11 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
             { ...(params.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}) }
           )
         );
-        return normalizeCheckpointSubmitTurn(submitResult);
+        return normalizeCheckpointSubmitTurn(submitResult, {
+          checkpoint: params.pendingCheckpoint,
+          payload: action.payload,
+          simulatorReply: params.learnerMessage,
+        });
       } catch (checkpointError) {
         logger.warn('[simulation-coordinator] 提交理解检查点失败，回退到普通教学回合', {
           sessionId: params.sessionId,

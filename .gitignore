@@ -233,6 +233,10 @@ doc/re_test/*
 # 例外：Prompt 缓存优化技术文档（缓存口径与运维配置的权威引用）
 !doc/PROMPT_CACHE_OPTIMIZATION.md
 !doc/SKILL_PROTOCOL_V4.md
+# 例外：全管线索引（pipeline:map 生成、pipeline:map:check 校验）
+!doc/PIPELINE_MAP.md
+!doc/PIPELINE_PROMPTS.md
+!doc/pipeline-map.json
 !doc/README.md
 !doc/README.en.md
 !doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md

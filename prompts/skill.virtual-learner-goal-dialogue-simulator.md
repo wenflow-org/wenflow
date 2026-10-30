@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-goal-dialogue-simulator
-coreHash: 24bb8957fb4f89ebf937c874971d2fb0c8dfed61765945d1e0c2cd319283fabd
+coreHash: 7a3505772510a1f44300a1cbee52544fe3b390620a828b20744237851839216b
 coreVersion: 1
 temperature: 0.8
 maxTokens: 64000
@@ -30,6 +30,7 @@ failurePolicy: propagate
 · dueReview（string[]）到期复习点（学过但快忘了）
 · struggling（string[]）仍在学/易混淆概念
 · recentCompleted（string[]）最近完成的事项（成果物标题）
+· recentDetails（object[]）最近事项的具身细节：{title, deliverable, memoryDelta, mastered[], struggling[]}——用于说出具体做过什么，而不是只复述概念名
 - 「task（object）」`sandbox:simulation.task`（编排注入） — 结构化任务说明（goal 澄清会话）
 
 ## 执行规则

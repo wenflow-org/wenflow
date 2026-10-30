@@ -78,6 +78,14 @@ describe('evaluateSessionClosable', () => {
     }).closable).toBe(true)
   })
 
+  it('allowOpenQuestion（end_only 主动退出）→ 最后一道题答错也不拦（退出通道不被答题挡住）', () => {
+    expect(evaluateSessionClosable({
+      ...base,
+      teachingState: { checkpointHistory: [{ passed: false, attempts: 1 }] },
+      allowOpenQuestion: true,
+    }).closable).toBe(true)
+  })
+
   it('放弃/异常终态一律放行（未答完不等于缺陷）', () => {
     for (const endReason of ['learner-abandoned', 'timeout', 'error']) {
       expect(evaluateSessionClosable({

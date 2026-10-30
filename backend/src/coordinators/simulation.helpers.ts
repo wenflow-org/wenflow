@@ -826,6 +826,16 @@ export function inferDisclosedGoalConcerns(reply: string, concernPool: GoalConce
   return Array.from(next);
 }
 
+/**
+ * 新课堂的初始可见历史：只含老师开场白。
+ * 外部审计 P0-1：切课/重开时旧实现浅拷贝 learningState，上一课对话原样带进新课；
+ * 而开场白只写日志、从不进入历史，学习者第一轮看不到老师开场。
+ */
+export function buildLessonOpeningHistory(welcomeMessage?: string | null): ConversationHistoryItem[] {
+  const content = typeof welcomeMessage === 'string' ? welcomeMessage.trim() : '';
+  return content ? [{ role: 'assistant', content }] : [];
+}
+
 export function buildLearningProgressSnapshot(milestones: SimulationMilestone[], milestoneIdx: number, taskIdx: number) {
   const milestone = milestones[milestoneIdx];
   const tasks = getRunnableTasks(milestone?.subtasks || []);

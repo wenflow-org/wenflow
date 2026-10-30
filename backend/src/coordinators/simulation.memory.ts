@@ -55,6 +55,14 @@ export async function buildAssistedLearnerMemory(
   dueReview: string[];
   struggling: string[];
   recentCompleted: string[];
+  recentDetails: Array<{
+    title: string;
+    deliverable: string | null;
+    memoryDelta: string | null;
+    selfCalibration: string | null;
+    mastered: string[];
+    struggling: string[];
+  }>;
 } | null> {
   const memory = await buildLearnerMemorySnapshot(userId, { limit: 8 }).catch(() => null);
   if (!memory) return null;
@@ -63,6 +71,19 @@ export async function buildAssistedLearnerMemory(
     dueReview: memory.dueReview.map((item) => item.name),
     struggling: memory.struggling.map((item) => item.name),
     recentCompleted: memory.recentTaskTitles,
+    // 外部审计 P1-7：只传标题会让跨课记忆退化成"我学过 XX"；把成果物/记忆增量
+    // 一并带上，学习者才能自然说出"上次我把报价单压到一页宽"这类具体操作。
+    recentDetails: memory.recentCompleted
+      .filter((item) => !!item.title)
+      .slice(0, 4)
+      .map((item) => ({
+        title: item.title,
+        deliverable: item.deliverable || null,
+        memoryDelta: item.memoryDelta || null,
+        selfCalibration: item.selfCalibration || null,
+        mastered: item.masteredEvidence.map((evidence) => evidence.name).slice(0, 4),
+        struggling: item.struggleConcepts.slice(0, 4),
+      })),
   };
 }
 
@@ -93,17 +114,32 @@ export async function buildAssistedMemoryRecall(
 export async function buildAssistedKnowledgeSnapshot(
   userId: string,
   currentTask: SimulationTask | null,
-  currentMilestone: SimulationMilestone | null
+  currentMilestone: SimulationMilestone | null,
+  lessonKnowledgePoints: Array<{ name: string; status: string; progress: number }> = []
 ): Promise<Array<{ name: string; status: string; progress: number }>> {
   const memory = await buildLearnerMemorySnapshot(userId, { limit: 6 }).catch(() => null);
-  const result: Array<{ name: string; status: string; progress: number }> = [];
   const anchor = currentTask?.linkedConcept || currentMilestone?.coreConceptId
     || currentTask?.title || currentMilestone?.title || '当前任务概念';
-  result.push({ name: String(anchor), status: 'learning', progress: 40 });
-  for (const item of memory?.mastered || []) result.push({ name: item.name, status: 'mastered', progress: 100 });
-  for (const item of memory?.dueReview || []) result.push({ name: item.name, status: 'review', progress: item.progress });
-  for (const item of memory?.struggling || []) result.push({ name: item.name, status: 'learning', progress: 30 });
-  return result.slice(0, 8);
+  const lessonItems = lessonKnowledgePoints.filter(
+    (item) => item && typeof item.name === 'string' && item.name.trim()
+  );
+  // 优先级：本课看板 > 当前任务锚点 > 画像先验。先放高优先级项占位（同时锁定排序位置），
+  // 画像项只在同名键缺席时补位——Map.set 的 last-wins 语义在这里会把降级后的
+  // 「learning/40」覆盖回画像的「mastered/100」，判决器与模拟器就看不到本课对账结果。
+  const deduped = new Map<string, { name: string; status: string; progress: number }>();
+  const keyOf = (item: { name: string }) => String(item.name).trim().toLowerCase();
+  deduped.set(keyOf({ name: String(anchor) }), { name: String(anchor), status: 'learning', progress: 40 });
+  for (const item of lessonItems) deduped.set(keyOf(item), item);
+  const priorItems = [
+    ...(memory?.mastered || []).map((item) => ({ name: item.name, status: 'mastered', progress: 100 })),
+    ...(memory?.dueReview || []).map((item) => ({ name: item.name, status: 'review', progress: item.progress })),
+    ...(memory?.struggling || []).map((item) => ({ name: item.name, status: 'learning', progress: 30 })),
+  ];
+  for (const item of priorItems) {
+    const key = keyOf(item);
+    if (!deduped.has(key)) deduped.set(key, item);
+  }
+  return Array.from(deduped.values()).slice(0, 8);
 }
 
 /**
@@ -113,11 +149,19 @@ export async function buildAssistedKnowledgeSnapshot(
 export async function persistAssistedLearnerMemory(
   sessionId: string,
   session: VirtualSessionWithProfile,
-  task: SimulationTask
+  task: SimulationTask,
+  /**
+   * 本回合刚写库的最新 teaching state。session.stageResults 是读取时的旧快照，
+   * 直接用它会让最后一次收束轮的 learnerState/latestLearnerFeedback/降级记录全部丢失
+   * （检查点提交后立即结算时尤其明显）。
+   */
+  freshLearningState?: Record<string, unknown> | null
 ): Promise<void> {
   try {
     const stageResults = parseStageResultsPayload(session.stageResults);
-    const learningState = (stageResults.teaching || {}) as Record<string, unknown>;
+    const learningState = (freshLearningState
+      || stageResults.teaching
+      || {}) as Record<string, unknown>;
     const teachingSessionId = typeof learningState.teachingSessionId === 'string' ? learningState.teachingSessionId : null;
     let knowledgePoints: LessonKnowledgePoint[] = [];
     if (teachingSessionId) {
@@ -128,13 +172,22 @@ export async function persistAssistedLearnerMemory(
           )
         : [];
     }
+    // 授课会话已解绑/读取失败时退回本课看板（随 learningState 传递的那一份），
+    // 否则画像回写会静默丢掉整节课的掌握证据。
+    if (knowledgePoints.length === 0 && Array.isArray(learningState.lessonKnowledgePoints)) {
+      knowledgePoints = (learningState.lessonKnowledgePoints as LessonKnowledgePoint[]).filter(
+        (kp) => kp && typeof kp.name === 'string' && kp.name.trim()
+      );
+    }
     // 内部提炼：用模拟器自述状态（assisted 的收束轮 learnerState + learnerFeedback）
     const learnerState = (learningState.learnerState && typeof learningState.learnerState === 'object'
       ? learningState.learnerState : {}) as Record<string, unknown>;
     const feedback = (learningState.latestLearnerFeedback && typeof learningState.latestLearnerFeedback === 'object'
       ? learningState.latestLearnerFeedback : {}) as Record<string, unknown>;
     const selfState: SelfReportedLearnerState | null = {
-      conceptName: task.linkedConcept || task.title || null,
+      // 概念名只认 linkedConcept（真正的知识点身份）。任务标题是动作句/整句目标，
+      // 写进 knownConcepts 会把画像先验污染成"任务名列表"，判决器与受控错误都会误用。
+      conceptName: task.linkedConcept || null,
       conceptualMastery: typeof learnerState.conceptualMastery === 'number' ? learnerState.conceptualMastery : null,
       taskUnderstanding: typeof learnerState.taskUnderstanding === 'number' ? learnerState.taskUnderstanding : null,
       proceduralMastery: typeof learnerState.proceduralMastery === 'number' ? learnerState.proceduralMastery : null,
@@ -151,7 +204,7 @@ export async function persistAssistedLearnerMemory(
       ? deriveCuratedSelfState(selfState, {
           mastered: curated.masteredConcepts,
           struggle: curated.struggleConcepts,
-          fallbackConcept: task.title || null,
+          fallbackConcept: task.linkedConcept || null,
         })
       : selfState;
     await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, {
@@ -159,6 +212,11 @@ export async function persistAssistedLearnerMemory(
       selfState: effectiveSelfState,
       curatedConcepts: curated
         ? { mastered: curated.masteredConcepts.map((m) => m.name), struggling: curated.struggleConcepts.map((s) => s.name) }
+        : null,
+      // 判决降级（P1-6 收口）：把本课被判错降级的概念从画像 knownConcepts 移除，
+      // 否则 union-only 回写会让降级只在"本课看板"生效，下一课又读回 mastered。
+      downgraded: Array.isArray(learningState.lessonDowngradedConcepts)
+        ? (learningState.lessonDowngradedConcepts as Array<{ name: string; from?: string; to?: string }>)
         : null,
     });
     await recordCompletedArtifact({
@@ -213,11 +271,21 @@ export async function runAssistedMemoryCurator(
       ? learningState.learnerState : {}) as Record<string, unknown>;
     const closingFeedback = (learningState.latestLearnerFeedback && typeof learningState.latestLearnerFeedback === 'object'
       ? learningState.latestLearnerFeedback : {}) as Record<string, unknown>;
-    const window = history.slice(-24);
+    // 只取学习者自己的消息（外部审计 P1-6）：旧实现把 assistant/teacher 消息也当成
+    // "学习者的 reply"送进提炼器，且把收束状态挂到窗口最后一条消息上——最后一条通常是
+    // 老师的收尾话，等于用老师的嘴给学习者做自评。
+    const window = history
+      .filter((message: Record<string, unknown>) =>
+        message?.role === 'user' || message?.role === 'learner')
+      .slice(-24);
+    // 空窗口（历史被裁剪/异常重置）直接走确定性 fallback：把空 turnSequence 交给 LLM
+    // 只会让它凭空编造掌握证据，反而污染画像。
+    if (window.length === 0) return null;
     // P2-32：assisted 链的 learningState.conversationHistory 上游已被 trimLearningConversationHistory
     // 截到 ≤6 条（simulation.helpers.ts:561-566），**没有绝对轮号可用**——这里的 turn 就是
     // 所提供窗口内的序号（从 1 起）。yaml 输入契约已声明该语义，模型不得当作跨课绝对轮次。
     const turnSequence = window.map((m: Record<string, unknown>, index: number) => {
+      // 收束轮 = 学习者最后一条发言（不是窗口最后一条消息）
       const isClosingTurn = index === window.length - 1;
       return {
         turn: index + 1,
@@ -234,7 +302,6 @@ export async function runAssistedMemoryCurator(
           wantsMoreHelp: typeof closingFeedback.wantsMoreHelp === 'boolean' ? closingFeedback.wantsMoreHelp : undefined,
           remainingBlockers: Array.isArray(closingFeedback.remainingBlockers) ? closingFeedback.remainingBlockers : undefined,
         } : undefined,
-        role: m.role || 'learner',
       };
     });
     const existing = await buildLearnerMemorySnapshot(session.userId, { limit: 30 }).catch(() => null);

@@ -31,7 +31,8 @@ import {
   isTransientUpstreamLearnError,
   isPathReviewAlreadyAcceptedForCurrentPath,
   parseProfileData,
-  resolveLearnerLoadProfile
+  resolveLearnerLoadProfile,
+  buildLessonOpeningHistory
 } from '../simulation.helpers'
 import type { VirtualLearnerProfile } from '../simulation.types'
 import type { VirtualLearnerProfileRow } from '../../virtual-lab/vlab-types'
@@ -702,3 +703,17 @@ describe('resolveLearnerLoadProfile（I-13：负荷画像字段层级容错）',
       .toEqual({ availableTime: null, loadTolerance: null })
   })
 })
+
+describe('buildLessonOpeningHistory（P0-1 切课开场白进入可见历史）', () => {
+  it('有开场白 → 只含一条 teacher 消息（不带上一课历史）', () => {
+    expect(buildLessonOpeningHistory('这节课我们学一页宽缩放。')).toEqual([
+      { role: 'assistant', content: '这节课我们学一页宽缩放。' },
+    ]);
+  })
+
+  it('无开场白/空白 → 空数组', () => {
+    expect(buildLessonOpeningHistory('')).toEqual([]);
+    expect(buildLessonOpeningHistory('   ')).toEqual([]);
+    expect(buildLessonOpeningHistory(null)).toEqual([]);
+  });
+});

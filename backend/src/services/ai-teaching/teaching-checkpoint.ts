@@ -778,6 +778,9 @@ export function stripCheckpointAnswerKeys<T extends Record<string, any> | null |
     return rest;
   };
   if (clone.pendingCheckpoint) clone.pendingCheckpoint = stripOne(clone.pendingCheckpoint);
+  if (Array.isArray(clone.checkpointHistory)) {
+    clone.checkpointHistory = clone.checkpointHistory.map(stripOne);
+  }
   if (clone.sessionArtifacts && typeof clone.sessionArtifacts === 'object' && clone.sessionArtifacts.pendingCheckpoint) {
     clone.sessionArtifacts = { ...clone.sessionArtifacts, pendingCheckpoint: stripOne(clone.sessionArtifacts.pendingCheckpoint) };
   }

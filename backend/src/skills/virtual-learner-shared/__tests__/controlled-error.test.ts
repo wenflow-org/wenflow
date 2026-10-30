@@ -156,3 +156,41 @@ describe('decideControlledError × 真人误区语料库（2026-10-21）', () =>
     expect(result.targetMisconception).toBeNull();
   });
 });
+
+describe('decideControlledError × 当前 task 概念域（外部审计 P1-5）', () => {
+  it('画像卡点与当前 task 无关时不加权、也不拿它当卡点', () => {
+    // normal 基准 0.12；旧实现有 struggle 就 ×2 = 0.24，这里 0.2 会误命中
+    const result = decideControlledError({
+      frictionBudget: 'normal',
+      struggleConcepts: ['上节课的调色', '另一门课的排版'],
+      currentTaskConcepts: ['设置一页宽缩放', '识别叠字版面'],
+      turnIndex: 5,
+      random: () => 0.2,
+    });
+    expect(result.forced).toBe(false);
+  });
+
+  it('卡点命中当前 task 概念时按 struggleBoost 加权，并只在该概念上演', () => {
+    const result = decideControlledError({
+      frictionBudget: 'normal',
+      struggleConcepts: ['上节课的调色', '识别叠字版面'],
+      currentTaskConcepts: ['设置一页宽缩放', '识别叠字版面'],
+      turnIndex: 5,
+      random: () => 0.2,
+    });
+    expect(result.forced).toBe(true);
+    expect(result.targetConcept).toBe('识别叠字版面');
+  });
+
+  it('无卡点交集但命中基线概率时，卡点落在本轮概念而不是别的课的旧卡点', () => {
+    const result = decideControlledError({
+      frictionBudget: 'normal',
+      struggleConcepts: ['上节课的调色'],
+      currentTaskConcepts: ['设置一页宽缩放', '识别叠字版面'],
+      turnIndex: 2,
+      random: () => 0.05,
+    });
+    expect(result.forced).toBe(true);
+    expect(result.targetConcept).toBe('设置一页宽缩放');
+  });
+});

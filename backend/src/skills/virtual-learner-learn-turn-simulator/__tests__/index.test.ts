@@ -71,6 +71,32 @@ describe('virtual-learner-learn-turn-simulator normalize', () => {
     expect(out.reply.endsWith('…')).toBe(true)
     expect(out.reply.length).toBeLessThanOrEqual(96)
   })
+
+  // P0-3（外部审计）：老师明确要求列举/分点/总结时，1-2 句的默认上限必须让位，
+  // 否则多步清单任务永远只说第一项。
+  it('老师要求「分别/列出/总结」时保留多句（P0-3）', () => {
+    const teacherAsksList = {
+      ...input,
+      visibleContext: {
+        history: [],
+        lastTeacherMessage: '把这三件事分别说清楚：你点的是哪、填了什么、预览还叠不叠。'
+      }
+    }
+    const threeSentences = '我点的是页面布局里的缩放栏。缩放填的是 1 页宽。预览里价格和产品名还叠着。'
+    const out = normalizeOutput({ reply: threeSentences }, teacherAsksList)
+    // 句子拼接会补空格，按去空白比较
+    expect(out.reply.replace(/\s+/g, '')).toBe(threeSentences.replace(/\s+/g, ''))
+  })
+
+  it('老师没要求列举时仍保持 1-2 句（不因修复而全面变长）', () => {
+    const brief = {
+      ...input,
+      visibleContext: { history: [], lastTeacherMessage: '你点的是哪？' }
+    }
+    const fourSentences = '我点的是页面布局。缩放填的是 1 页宽。预览里还叠着。下一步我想收窄列宽。'
+    const out = normalizeOutput({ reply: fourSentences }, brief)
+    expect(out.reply).toBe('我点的是页面布局。 缩放填的是 1 页宽。')
+  })
 })
 
 describe('virtual-learner-learn-turn-simulator 失败显式传播', () => {

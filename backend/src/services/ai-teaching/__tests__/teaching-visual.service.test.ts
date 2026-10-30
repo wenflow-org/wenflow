@@ -648,6 +648,8 @@ describe('悬空图引用剥离（hasDanglingFigureReference / stripDanglingFigu
     expect(hasDanglingFigureReference('三处的先后看图，你只需盯住最后那个还没填的空。')).toBe(true);
     expect(hasDanglingFigureReference('图上两个问号，就是这条关系在两侧各占的位置。')).toBe(true);
     expect(hasDanglingFigureReference('你照着图，用自己的话说一遍整条。')).toBe(true);
+    expect(hasDanglingFigureReference('下面这张图把 b 固定成同一个值，只让 k 变号。')).toBe(true);
+    expect(hasDanglingFigureReference('白板上已经有这条直线了，y = 2x + 1。')).toBe(true);
   });
 
   it('真实变体剥离后不再出现「图/箭头」指代，且保留后续指令', () => {
@@ -656,12 +658,26 @@ describe('悬空图引用剥离（hasDanglingFigureReference / stripDanglingFigu
       '三处的先后看图，你只需盯住最后那个还没填的空。把它的行号补给我。',
       '图上两个问号，就是这条关系在两侧各占的位置。下面这道小题你选一下。',
       '图里这条关系已经摆好了：同一个温度轴，往上往下各占一边。你照着图，用自己的话说一遍整条。',
+      '我把两条对比画在图里了，你先只看一眼：它们 b 一样、k 一个正一个负。',
     ];
     for (const sample of samples) {
       const out = stripDanglingFigureReferences(sample);
       expect(out).not.toMatch(/[看对照顾盯按]着?图|图上|图里|箭头/);
       expect(out.length).toBeGreaterThan(8);
     }
+  });
+
+  it('「下面这张图/白板上」等无动词指代也被剥离（2026-10-29 真 LLM 实测变体）', () => {
+    const out = stripDanglingFigureReferences('下面这张图把 b 固定成同一个值，只让 k 从正变到负。');
+    expect(out).not.toContain('图');
+    expect(out).toContain('b 固定成同一个值');
+  });
+
+  it('「我把 X 画在图里了」也被剥离，且保留对比对象（2026-10-29 真 LLM 实测变体）', () => {
+    const out = stripDanglingFigureReferences('我把两条对比画在图里了，你先只看一眼：它们 b 一样、k 一个正一个负。');
+    expect(out).not.toContain('图里');
+    expect(out).toContain('两条对比');
+    expect(out).toContain('一个正一个负');
   });
 
   it('剥离后不留悬空括号/重复标点（D10 逐字稿样本）', () => {

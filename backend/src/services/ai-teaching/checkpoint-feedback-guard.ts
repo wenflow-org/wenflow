@@ -117,12 +117,28 @@ function normalizeConceptName(value: unknown): string {
  */
 const NEGATIVE_VERDICT_OPENING =
   /^[\s「"“]*(?:(?:这道|这题|这一题|这次|这个)(?:题|答案|选项)?|答案|选项)?\s*(?:不对|错了|答错|选错|填错|没答对|没答到|没选对)/;
+// 句中否决（P2，独立评审）：实测模型常先垫一句「好的/明白了，这道题不对——」，
+// 开头锚定会漏修。改为只看首句（到第一个句末标点），且首句本身是问句时不修
+// （「答错了吗？」是提问，不是给已判对的答案盖章）。
+// 否定词前有「没/不/未」时不算否决：「你没答错」「这次没选错」是肯定。
+const NEGATIVE_VERDICT_IN_SENTENCE =
+  /(?:(?:这道|这题|这一题|这次|这个)(?:题|答案|选项)?|答案|选项)?\s*(?:不对|(?<!没)(?<!不)(?<!未)错了|(?<!没)(?<!不)(?<!未)答错|(?<!没)(?<!不)(?<!未)选错|(?<!没)(?<!不)(?<!未)填错|没答对|没答到|没选对)/;
+
+/** 首句（含句末标点）；无标点时整段即首句。 */
+function leadingSentence(text: string): string {
+  const match = text.match(/^[\s\S]*?[。！!？?\n]/);
+  return match ? match[0] : text;
+}
 
 export function repairContradictedPassedVerdict(reply: unknown): string {
   if (typeof reply !== 'string') return reply as string;
   const value = reply;
   const text = value.trim();
-  if (!text || !NEGATIVE_VERDICT_OPENING.test(text)) return value;
+  if (!text) return value;
+  const head = leadingSentence(text);
+  const contradicted = NEGATIVE_VERDICT_OPENING.test(text)
+    || (NEGATIVE_VERDICT_IN_SENTENCE.test(head) && !/[？?]\s*$/.test(head));
+  if (!contradicted) return value;
   const questions = [...text.matchAll(/[^。！？\n]{0,80}[？?]/g)];
   const question = questions.length ? questions[questions.length - 1][0].trim() : '';
   return question

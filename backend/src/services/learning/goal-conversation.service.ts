@@ -9,7 +9,7 @@ import { collectGoalUploadedMaterialSummaries } from './goal-material-summaries.
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 import { normalizeDeadlineDate } from './deadline-date';
-import { derivePlannedOutline, type LearnerLoadProfile } from './path-planning-hints';
+import { derivePlannedOutline, deriveTriageHint, type LearnerLoadProfile, type TriageHint } from './path-planning-hints';
 import {
   normalizeLearnerLoadProfile,
   resolveLearnerLoadProfileFromCollectedData,
@@ -1219,6 +1219,12 @@ async continueConversation(
     // 响应分诊（纯函数）：透传进 GoalPathRequest.responseTriage（仅类型/透传，不改 path 生成逻辑）。
     const responseTriage = resolveResponseTriageFromCollectedData(data)
       || triageGoalResponse(understanding);
+    // 路径体量分诊（2026-10-29）：把 understanding 的阻塞类型 × 复现性翻译成 Path 层
+    // 真正消费的 `{ transferable, recurrence }`。此前只算 responseTriage（mode 轴），
+    // triage 永不为空但 hints 永远收不到 ⇒「低可迁移 × 一次性」钳制在生产链路空转。
+    const triageHint: TriageHint | null = deriveTriageHint(
+      goalExt.understanding || data.understanding || null,
+    );
     const conversationHistory = Array.isArray(data.messages)
       ? data.messages
           .map((message: any) => ({
@@ -1271,6 +1277,9 @@ async continueConversation(
       prerequisiteCheckResults: resolvePrerequisiteCheckResultsFromUnderstanding(understanding),
       // 响应分诊结论（advisory 默认；path 侧仅类型透传，不改变生成逻辑）
       responseTriage,
+      // 体量分诊（transferable × recurrence）：path.coordinator 写进 normalizedInput.triage，
+      // 由 derivePlanningHints 消费；缺失时下游行为与今天完全一致。
+      triageHint,
       systemPromptOverrides: systemPromptOverrides?.pathAgent
         ? { pathAgent: systemPromptOverrides.pathAgent }
         : undefined,

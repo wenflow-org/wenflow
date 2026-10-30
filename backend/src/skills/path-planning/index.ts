@@ -564,7 +564,13 @@ interface PathOutput {
 export function validatePathPlanningOutput(
   parsed: any,
   expectedMilestones?: number | null,
-  expectedMilestoneRange?: [number, number] | null
+  expectedMilestoneRange?: [number, number] | null,
+  /**
+   * planningHints.targetMilestones 的强制值（2026-10-29 提示词口径对齐）：
+   * 存在时它优先于 milestoneRange——否则 prompt 说「强制」而 validator 按区间放行，
+   * 模型会稳定输出区间内的数（实测 target=2/range=[4,6] → 模型出 4，校验通过）。
+   */
+  forcedMilestones?: number | null
 ) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { valid: false as const, failureReason: 'PATH_PLANNING_OUTPUT_NOT_OBJECT' };
@@ -654,10 +660,20 @@ export function validatePathPlanningOutput(
     }
   }
 
-  // 里程碑数量：方案乙——**区间校验**（数量由 LLM 在区间内决定），仅越界才阻断；
-  // 未提供区间时保留旧的精确校验（向后兼容，如 replan 只给单点）。
+  // 里程碑数量：targetMilestones 是**强制值**（与 prompt 规则 46 同口径）；
+  // 它缺失时才用区间（数量由 LLM 在区间内决定），再无区间则退回精确校验。
   const milestoneCount = parsed.milestones.length;
-  if (Array.isArray(expectedMilestoneRange) && expectedMilestoneRange.length === 2) {
+  const forcedCount = typeof forcedMilestones === 'number' && Number.isInteger(forcedMilestones) && forcedMilestones >= 1
+    ? forcedMilestones
+    : null;
+  if (forcedCount !== null) {
+    if (milestoneCount !== forcedCount) {
+      return {
+        valid: false as const,
+        failureReason: `PATH_PLANNING_MILESTONE_COUNT_MISMATCH(expected=${forcedCount}, got=${milestoneCount})`,
+      };
+    }
+  } else if (Array.isArray(expectedMilestoneRange) && expectedMilestoneRange.length === 2) {
     const [lo, hi] = expectedMilestoneRange;
     if (Number.isInteger(lo) && Number.isInteger(hi) && (milestoneCount < lo || milestoneCount > hi)) {
       return {
@@ -1002,13 +1018,14 @@ async function generatePath(
       : (confirmedStages.length > 0
           ? [Math.min(8, Math.max(2, confirmedStages.length)), Math.min(8, Math.max(2, confirmedStages.length))]
           : null);
-  const expectedMilestones: number | null = Number.isInteger(
+  const forcedMilestones: number | null = Number.isInteger(
     (framingNormalizedInput?.planningHints as any)?.targetMilestones
   )
     ? (framingNormalizedInput?.planningHints as any).targetMilestones
-    : confirmedStages.length > 0
-      ? Math.min(8, Math.max(2, confirmedStages.length))
-      : null;
+    : null;
+  const expectedMilestones: number | null = forcedMilestones ?? (confirmedStages.length > 0
+    ? Math.min(8, Math.max(2, confirmedStages.length))
+    : null);
   const promptFriendlySceneFraming = buildPromptFriendlyNormalizedInput(framingNormalizedInput);
 
   const userPayload = `原始学习目标：${input.goal}
@@ -1171,7 +1188,7 @@ ${replan ? renderReplanSection(replan) : ''}
       };
     },
     coerceParsedForContract: (parsed: any) => coercePathPlanningParsed(parsed, promptMaterials),
-    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange),
+    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange, forcedMilestones),
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
       artifact: output,

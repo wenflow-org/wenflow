@@ -89,7 +89,7 @@ export async function completeCheckpointedSimulationTask(
       ...(isSimulatedClockActive() ? { asOf: simulatedNowOr() } : {}),
     });
     // 记忆回写：画像概念 + 成果物登记（best-effort，失败不阻断）
-    await persistAssistedLearnerMemory(sessionId, session, taskMatch.task);
+    await persistAssistedLearnerMemory(sessionId, session, taskMatch.task, learningState);
     // 收束授课会话（best-effort）：endSession 走 finalization 生成 wrapup 并把会话置 completed。
     // 此前恢复路径只 completeTask 不 endSession → wrapup 永不落库、授课会话恒 active
     // （2026-10-02 端到端实证；与 checkpoint 路径、timebox-skip 路径行为对齐）
@@ -403,29 +403,12 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
       }
 
       const openingStart = Date.now();
-      // 开场模拟者调用同样计入会话 AI 调用预算（此前旁路漏计，管理员手动
-      // 「推进一步」开新 Goal 对话时每次白嫖 1 次调用）
-      const openingResult = await ctx.retryLearnUpstream(input.sessionId, 'simulate-goal-opening', () =>
-        ctx.simulateGoalLearnerReply({
-          profile,
-          storyContext,
-          conversationHistory: [],
-          lastAssistantMessage: '',
-          currentPhase: 'opening',
-          previousLearnerState: undefined,
-          goalState: undefined,
-          userId: input.userId,
-          frictionBudget: getSessionFrictionBudget(session)
-        })
-      );
-
-      // P1-12/GD-2：opening 轮也落 stageResults.goal.learnerState，否则下一轮
-      // previousLearnerState（下方回复分支读取 stageResults.goal?.learnerState）断链为
-      // undefined，学习者失去上一轮主观状态。reply 仍旁路（description 固定用
-      // storyDemand.text），砍调用属产品决策，此处不改。
+      // 外部审计 P2-10：开场 reply 固定用 storyDemand.text（保证需求原样传递），
+      // 旧实现在此额外调用一次模拟者，reply 被丢弃、只留下一个描述"另一句话"的 learnerState，
+      // 既白烧一次 LLM 调用，又让状态与实际开场不自洽。开场主观状态改为从画像确定性推导。
       const openingLearnerState = finalizeGoalLearnerState(
         profile,
-        resolveSimLearnerState(openingResult.output, openingResult.learnerStateFromEnvelope || {}),
+        {},
         storyContext,
         'understanding'
       );
@@ -437,15 +420,10 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         details: {
           output: {
             reply: openingReply,
-            thoughtProcess: openingResult.output?.debug?.stateChangeReason,
             learnerState: openingLearnerState,
-            emotion: openingResult.output?.emotion,
-            runtimeEnvelope: openingResult.runtimeEnvelope || openingResult.output?.runtimeEnvelope || null,
             opening: true,
             storyDemandSource: storyDemand.source,
             storyId: storyDemand.storyId,
-            // 模拟者开场仅作旁路观测，不进入 description
-            simulatorOpeningReply: openingResult.output?.reply || null,
           }
         }
       });

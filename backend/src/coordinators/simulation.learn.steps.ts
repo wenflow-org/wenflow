@@ -270,7 +270,8 @@ export function buildTeachingTurnContext(params: {
 export async function loadTeachTurnKnowledgeAssets(
   userId: string,
   currentTask: SimulationTask,
-  currentMilestone: SimulationMilestone
+  currentMilestone: SimulationMilestone,
+  lessonKnowledgePoints: Array<{ name: string; status: string; progress: number }> = []
 ): Promise<{
   knowledgeSnapshot: Array<{ name: string; status: string; progress: number }>;
   learnerMemoryForSimulator: {
@@ -278,13 +279,22 @@ export async function loadTeachTurnKnowledgeAssets(
     dueReview: string[];
     struggling: string[];
     recentCompleted: string[];
+    recentDetails: Array<{
+      title: string;
+      deliverable: string | null;
+      memoryDelta: string | null;
+      selfCalibration: string | null;
+      mastered: string[];
+      struggling: string[];
+    }>;
   } | null;
 }> {
   // 知识看板快照：当前任务概念为锚 + 学习者记忆（已掌握/到期复习/易混淆/最近成果）
   const knowledgeSnapshot = await buildAssistedKnowledgeSnapshot(
     userId,
     currentTask,
-    currentMilestone
+    currentMilestone,
+    lessonKnowledgePoints
   );
   const learnerMemoryForSimulator = await buildAssistedLearnerMemory(userId);
   return { knowledgeSnapshot, learnerMemoryForSimulator };
@@ -616,6 +626,12 @@ export function buildNextLearningState(params: {
   teacherImages?: ConversationHistoryItem['images'];
   /** 延伸学（#124）：本轮结束后的延伸运行时（回合计数/收尾），缺省沿用 learningState */
   extensionRuntime?: TeachingState['extensionRuntime'];
+  /** 本轮写入可见历史的用户消息（检查点提交时与 payload 对齐）；缺省用虚拟学习者原话 */
+  learnerVisibleMessage?: string | null;
+  /** 本课知识看板（P2-9：随 learningState 传递，不写画像基线） */
+  lessonKnowledgePoints?: Array<{ name: string; status: string; progress: number }>;
+  /** 本课被判错降级的看板概念（任务结算画像回写时从 knownConcepts 移除） */
+  lessonDowngradedConcepts?: Array<{ name: string; from: string; to: string }>;
 }): Record<string, unknown> {
   const {
     learningState,
@@ -633,13 +649,18 @@ export function buildNextLearningState(params: {
     teachingSessionId,
     aiResponse,
     teacherImages,
-    extensionRuntime
+    extensionRuntime,
+    learnerVisibleMessage,
+    lessonKnowledgePoints,
+    lessonDowngradedConcepts
   } = params;
 
   return {
     ...learningState,
     teachingRevision,
     ...(extensionRuntime !== undefined ? { extensionRuntime } : {}),
+    ...(lessonKnowledgePoints !== undefined ? { lessonKnowledgePoints } : {}),
+    ...(lessonDowngradedConcepts !== undefined ? { lessonDowngradedConcepts } : {}),
     ...(isPathCompleted
       ? {
           currentMilestone: milestones.length,
@@ -684,7 +705,7 @@ export function buildNextLearningState(params: {
     },
     conversationHistory: [
       ...(learningState.conversationHistory || []),
-      { role: 'user', content: virtualReply.userVisible },
+      { role: 'user', content: learnerVisibleMessage || virtualReply.userVisible },
       // 教师配图随教师消息回流（#123）：下一轮模拟学习者请求组装时转 image_url 内容块
       {
         role: 'assistant',

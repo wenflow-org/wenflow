@@ -100,6 +100,42 @@ import {
 } from './teaching-turn-shared';
 
 /**
+ * 检查点题面只存在 pendingCheckpoint 里，教师回复正文不打印题面时，学员可见历史会出现
+ * "回答了一道从未出现过的题"。把题面补进本轮可见回复（已包含则原样返回）。
+ */
+export function ensureCheckpointQuestionVisible(reply: string, question: string): string {
+  const trimmedQuestion = String(question || '').trim();
+  if (!trimmedQuestion) return reply;
+  const normalizedReply = normalizeForKeywordMatch(reply);
+  const normalizedQuestion = normalizeForKeywordMatch(trimmedQuestion);
+  if (normalizedQuestion && normalizedReply.includes(normalizedQuestion)) return reply;
+  // 老师已经用自己的措辞问过同一道题时不要再贴一遍——实测会出现
+  // "…该到哪儿？\n\n…应该是哪一段？" 这种同题复读。用字二元组近似判重。
+  if (isNearDuplicateQuestion(reply, trimmedQuestion)) return reply;
+  const trimmedReply = String(reply || '').trim();
+  return trimmedReply ? `${trimmedReply}\n\n${trimmedQuestion}` : trimmedQuestion;
+}
+
+function charBigrams(text: string): Set<string> {
+  const normalized = String(text || '').replace(/\s+/g, '');
+  const grams = new Set<string>();
+  for (let i = 0; i < normalized.length - 1; i += 1) grams.add(normalized.slice(i, i + 2));
+  return grams;
+}
+
+function isNearDuplicateQuestion(reply: string, question: string): boolean {
+  const tail = String(reply || '').slice(-200);
+  if (!/[？?]/.test(tail)) return false;
+  const replyGrams = charBigrams(tail);
+  const questionGrams = charBigrams(question);
+  if (replyGrams.size === 0 || questionGrams.size === 0) return false;
+  let intersection = 0;
+  for (const gram of questionGrams) if (replyGrams.has(gram)) intersection += 1;
+  const union = replyGrams.size + questionGrams.size - intersection;
+  return union > 0 && intersection / union >= 0.32;
+}
+
+/**
  * 软收口知识地板（2026-09-25 训练局 P1）：老师语义明确收课且无 pending 点时，
  * 平均目标进度达到此值即允许完成。低于硬门禁（80）但高于"刚起步"（30 上下）——
  * 轻量任务（单知识点）常停在 70，硬门禁永远够不着，课就永远收不了。
@@ -703,21 +739,31 @@ export async function processStudentMessage(
     && noPendingPoints
     && avgTargetProgress >= SOFT_COMPLETION_PROGRESS_FLOOR
     && (modelRequestedCompletion || replySignalsClosing);
-  // 收口闭合门禁（teaching-closure.ts，H3 回测立项）：完成信号与本回合新抛问题/未答检查点
-  // 同回合出现时，学员永远轮不到作答课就 completed（26.5% 完结课残留此形态且三窗稳定，
-  // 提示词与强制消费均不触及）。此处延迟一轮收束：先让学员答完末问，下一回合再走收口。
-  const closureGate = shouldDeferCompletionForClosure({
-    reply: teachingOutput.reply || '',
-    pendingCheckpoint: previousTeachingState.pendingCheckpoint,
-    checkpointEmittedThisTurn: !!teachingOutput.control?.checkpoint,
-    priorDeferrals: Number(previousTeachingState.completionDeferrals) || 0,
-  });
   // 延伸学（#124）：延伸课不产生「完成」终态——它不是任务结算课，教师可一直陪学到学员主动结束
   // （finalize 仅允许 end_only）。任务完成判据仍照常计算并留痕，只是不把完成信号发出去。
   const extensionMode = session.mode === 'extension';
-  const completionReady = !extensionMode
-    && (targetsConsolidated || backstopReady || softCompletionReady)
-    && !closureGate.defer;
+  // 只有「本轮本来会发完成信号」时，收口门禁才有意义。此前无论是否会完成，
+  // 只要回复带问号就 +1，长课里前 6 个普通提问就把绝对上限/唯一宽限消耗光，
+  // 课末真正的新末问反而被直接收掉（外部独立评审 P0）。
+  const wouldComplete = !extensionMode
+    && (targetsConsolidated || backstopReady || softCompletionReady);
+  const closureGate = wouldComplete
+    ? shouldDeferCompletionForClosure({
+        reply: teachingOutput.reply || '',
+        pendingCheckpoint: previousTeachingState.pendingCheckpoint,
+        checkpointEmittedThisTurn: !!teachingOutput.control?.checkpoint,
+        emittedCheckpointQuestion: typeof teachingOutput.control?.checkpoint?.question === 'string'
+          ? teachingOutput.control.checkpoint.question
+          : null,
+        priorDeferrals: Number(previousTeachingState.completionDeferrals) || 0,
+        previousDeferredQuestion: typeof previousTeachingState.completionDeferralQuestion === 'string'
+          ? previousTeachingState.completionDeferralQuestion
+          : null,
+        priorDeferralsForSameQuestion: Number(previousTeachingState.completionDeferralQuestionCount) || 0,
+        capGraceUsed: previousTeachingState.completionCapGraceUsed === true,
+      })
+    : { defer: false, reason: null as null, questionKey: null as string | null };
+  const completionReady = wouldComplete && !closureGate.defer;
   if (closureGate.defer) {
     logger.info('[AITeaching] 收口闭合门禁：完成信号延迟一轮（末问未答，先让学员作答）', {
       sessionId: session.id,
@@ -957,6 +1003,21 @@ export async function processStudentMessage(
       messages: updatedMessages,
     });
     if (image) assistantMessage.images = [image];
+  }
+
+  // 无 boardContext ⇒ 本轮没有任何可指代的图（2026-10-29 契约）：
+  // prompt 已要求不输出 figure/diagram，但真 LLM 实测仍会输出（学生一句"画个图"就能触发）。
+  // 图闸在 reply 之后才拦，若这里不丢，reply 会留下「看这张图」而界面无图；直接删字段，
+  // 后续 D10 悬空引用剥离再兜住正文指代。
+  if (!board && (teachingOutput.figure || teachingOutput.diagram)) {
+    logger.info('[AITeaching] 本轮无 boardContext，丢弃模型输出的 figure/diagram', {
+      sessionId,
+      taskId: session.taskId,
+      figureKind: teachingOutput.figure?.kind ?? null,
+      hasDiagram: Boolean(teachingOutput.diagram),
+    });
+    delete teachingOutput.figure;
+    delete teachingOutput.diagram;
   }
 
   // 课堂结构图（2026-09-27 双通道重构，owner 终审：扩散生图停用、结构类走代码渲染）：
@@ -1340,9 +1401,18 @@ export async function processStudentMessage(
     // checkpointHistory 会在每次重建时丢失（18 号报告 N2）。
     const teachingState: Record<string, any> = inheritTeachingState(previousTeachingState, turnState);
 
-    // 收口闭合门禁计数：延迟发生时 +1（跨回合继承），供 COMPLETION_DEFERRAL_CAP 活力兜底
+    // 收口闭合门禁计数：延迟发生时 +1（跨回合继承）。
+    // 计数分两口：全会话累计（绝对上限）+ 同一题累计（同题重复上限）。换新题时重置同题计数，
+    // 避免早期旧题耗尽预算后，后面新抛出的末问被直接收掉（外部审计 P0-2）。
     if (closureGate.defer) {
+      const sameQuestion = !!closureGate.questionKey
+        && closureGate.questionKey === String(previousTeachingState.completionDeferralQuestion || '');
       teachingState.completionDeferrals = (Number(previousTeachingState.completionDeferrals) || 0) + 1;
+      teachingState.completionDeferralQuestion = closureGate.questionKey;
+      teachingState.completionDeferralQuestionCount = sameQuestion
+        ? (Number(previousTeachingState.completionDeferralQuestionCount) || 0) + 1
+        : 1;
+      if (closureGate.capGrace) teachingState.completionCapGraceUsed = true;
     }
 
     // #48 P-22：掌握下降计数跨回合累加（本轮 0 次也保留上一轮计数，不清零）
@@ -1354,6 +1424,17 @@ export async function processStudentMessage(
 
     // 检查点产生：teaching-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
     const checkpointCandidate = teachingOutput.control.checkpoint;
+    // 题面可见性（外部审计 P0-4）：检查点题面只存在 pendingCheckpoint，不写进教师回复时，
+    // 学习者历史/逐字稿里会出现「学生回答了一道从未出现过的题」。所有会更新 pendingCheckpoint
+    // 的路径（新出题 / 答错重出题）都必须把题面补进本轮可见回复，已包含则不重复。
+    const applyCheckpointQuestionVisibility = (question: string | null | undefined) => {
+      if (!question) return;
+      const visibleWithQuestion = ensureCheckpointQuestionVisible(assistantMessage.content, question);
+      if (visibleWithQuestion === assistantMessage.content) return;
+      assistantMessage.content = visibleWithQuestion;
+      teachingOutput.reply = visibleWithQuestion;
+      effectiveTeachingOutput.reply = visibleWithQuestion;
+    };
     // 出题节奏分档（拍板 #10）：与提示词闸共用同一口径（理解度<0.6 → 2 条消息优先探测），
     // 防两处数值漂移；理解度取上一轮分析（与 shouldEmitCheckpoint 的 gate 同基准），无读数按常规节奏。
     const previousTurnAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
@@ -1371,6 +1452,8 @@ export async function processStudentMessage(
           ...(checkpointCandidate.expectedKeywords ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
           ...(checkpointCandidate.hint ? { hint: checkpointCandidate.hint } : {}),
         }, pendingBeforeTurn.type);
+        // 重出题同样要保证新题面在可见回复里（否则学员下一轮答的是一道历史里没有的题）
+        applyCheckpointQuestionVisibility(checkpointCandidate.question);
       }
     }
     // 同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺陷②）：候选题面与本会话**已出过**的题面
@@ -1448,6 +1531,10 @@ export async function processStudentMessage(
           : {}),
       }, checkpointCandidate.type);
       teachingState.lastCheckpointTurn = updatedMessages.length;
+      // 题面可见性（外部审计 P0-4）：检查点题面只存在 pendingCheckpoint，不写进教师回复，
+      // 于是学习者历史/课程逐字稿里出现「学生回答了一道从未出现过的题」。这里把题面
+      // 补进本轮可见回复（已包含则不重复），保证学员、模拟器、导出逐字稿看到同一道题。
+      applyCheckpointQuestionVisibility(checkpointCandidate.question);
     }
 
     let checkpointResolution: { passed: boolean; understanding: number; judgedBy: 'code' | 'model-reference' } | undefined;
@@ -1465,6 +1552,11 @@ export async function processStudentMessage(
       const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
         ? [...teachingState.checkpointHistory]
         : [];
+      // 同一 cpId 的累计作答次数（含本次）：既驱动重答上限，也写进 history 行，
+      // 让收束门禁（evaluateSessionClosable）能判断「最后一道题还有没有重答机会」。
+      const sameCheckpointAttempts = checkpointHistory.filter(
+        (row) => row?.checkpointId === submittedCheckpoint.id
+      ).length + 1;
       checkpointHistory.push({
         checkpointId: submittedCheckpoint.id,
         // title/type 一并留档（2026-09-17）：此前只记 id/passed，读侧无法知道"没通过的是什么题"
@@ -1473,8 +1565,21 @@ export async function processStudentMessage(
         // 同题复问抑制所需（TONIGHT-BROAD-2026-10-07）：落完整题面供归一比对；
         // 历史旧行可能只有 ≤20 字 title，判重时 isDuplicateCheckpointQuestion 回退读 title。
         question: submittedCheckpoint.question,
+        // 选项/答案键/学员选择一并留档（2026-10-29 导出补齐）：
+        // 此前历史行只留题干，课后报告无法还原 A/B/C/D 与学员选了哪一项。
+        // 答案键仍属服务端数据，读侧由 stripCheckpointAnswerKeys 统一剥离，不下发客户端。
+        ...(submittedCheckpoint.options?.length
+          ? { options: submittedCheckpoint.options.map((option) => ({ id: option.id, text: option.text })) }
+          : {}),
+        ...(submittedCheckpoint.correctOptionIds?.length
+          ? { correctOptionIds: submittedCheckpoint.correctOptionIds.map(String) }
+          : {}),
+        ...(options.checkpointSubmission?.selectedOptionIds?.length
+          ? { selectedOptionIds: options.checkpointSubmission.selectedOptionIds.map(String) }
+          : {}),
         submittedAt: new Date().toISOString(),
         passed,
+        attempts: sameCheckpointAttempts,
         judgedBy,
         understanding,
         // 概念归属（F1 修复轮 a/b）：掌握聚合仲裁按归属概念消费 code 负证据——
@@ -1513,9 +1618,6 @@ export async function processStudentMessage(
       // 重答上限（2026-10-03 完结课堂裸审计 P1）：同一 cpId 累计答错达到 CHECKPOINT_MAX_ATTEMPTS
       // 即强制消费——否则同一道题被逐轮原样重发（实测最极端 36 次/节），课堂在同一个确认点上
       // 空转直到 LEARN_AUTO_TURN_CAP 才停。到顶后清掉 pendingCheckpoint，老师可换表征出新题/推进。
-      const sameCheckpointAttempts = checkpointHistory.filter(
-        (row) => row?.checkpointId === submittedCheckpoint.id
-      ).length;
       const { consume: consumeCheckpoint, exhausted: attemptsExhausted } =
         resolveCheckpointConsumption(passed, sameCheckpointAttempts);
       if (consumeCheckpoint) {
