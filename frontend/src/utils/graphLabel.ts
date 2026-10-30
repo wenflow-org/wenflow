@@ -4,7 +4,7 @@
  * 画布标签固定两行：优先按自然词边界折，英文单词/标识符不拆断；
  * 只有超过两行时才在第二行末尾加省略号，第一行不加。
  */
-const WORD_CHAR = /[A-Za-z0-9_./:%+\-]/;
+const WORD_CHAR = /[A-Za-z0-9_./:%+-]/;
 
 /** ASCII 按 1 个宽度单位，中文/全角按 2 个；perLine 以「中文字数」计。 */
 function charUnits(ch: string): number {
@@ -58,7 +58,7 @@ export function wrapGraphLabel(text: string, perLine: number): string {
   for (const token of tokenize(value)) {
     const tokenUnits = textUnits(token);
     const nextIsCjk = token.charCodeAt(0) > 0xff;
-    const prevIsLatin = /[A-Za-z0-9_./:%+\-]$/.test(line);
+    const prevIsLatin = /[A-Za-z0-9_./:%+-]$/.test(line);
     if (line && prevIsLatin && nextIsCjk && used >= maxUnits - 3) {
       lines.push(line);
       line = '';
