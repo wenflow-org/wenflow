@@ -1,0 +1,12 @@
+{
+  "label": "V5 · 2026-10-27",
+  "date": "2026-10-27",
+  "items": "frontend/figure-out/v5-final-items.json",
+  "review": "outputs/e2e/v5-review.json",
+  "html": "outputs/v5-review.html",
+  "changes": [
+    {"title": "split-compare 留白按轮意图分流", "detail": "V4 的「留白只留一步」与留白关冲突（leak 20% 回弹根因）：示范对照轮正确栏写全、纠错产出轮答案行必须留 ?", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "纠错产出轮脱敏进路", "detail": "readOff 补纠错句式（你来改/轮到你/错在哪/分岔在哪）——触发后 split-compare 正确栏挖 ?，错误栏保留当事实骨架不空壳", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "vectors 量纲语义", "detail": "dx/dy 是坐标域单位，速度/力箭头只示意方向、长度不按数值比例（V4 评审：按 0.4m 画却标 4m/s）；GUIDE 补 bars 用法（气温降水柱）", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]}
+  ]
+}

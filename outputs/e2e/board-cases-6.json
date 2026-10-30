@@ -1,0 +1,134 @@
+[
+ {
+  "id": "b1-math-pace",
+  "course": "七年级数学·一元一次应用 第2课",
+  "subject": "数学",
+  "topic": "单位换算与配速",
+  "taskTitle": "配速换算纠错",
+  "taskDescription": "学生计算跑步配速出现单位换算错误，需要用两栏对照找出分叉步骤",
+  "taskType": "diagnose",
+  "acceptance": "学生能说出错在哪一步、为什么错",
+  "expectKind": "split-compare",
+  "turns": [
+   {
+    "student": "老师，我算的配速是 60 除以 400 等于 0.15，也就是 0.15 分钟每千米，怎么感觉越跑越快了？哪里容易错啊？"
+   },
+   {
+    "student": "我想了一下，400 米要先变成 0.4 千米，所以应该是 60 ÷ 0.4 = 150 秒每千米，也就是 2.5 分钟每千米。分叉就在单位换算那一步。"
+   },
+   {
+    "student": "那如果改成 800 米跑，用时还是一分钟，配速是多少？我是不是也先换算再除？"
+   }
+  ]
+ },
+ {
+  "id": "b2-phys-buoyancy",
+  "course": "初二物理·浮力 第1课",
+  "subject": "物理",
+  "topic": "浮力决定因素",
+  "taskTitle": "浮力大小由什么决定",
+  "taskDescription": "辨析浮力与液体密度、排开体积的关系，以及深度、物体重量是否影响",
+  "taskType": "deconstruct",
+  "acceptance": "学生能说出两个决定因素并排除两个无关因素",
+  "expectKind": "concept-map",
+  "turns": [
+   {
+    "student": "浮力到底跟什么有关？我猜跟浸进去的深度有关，越深应该越大吧？还跟物体自己的重量有关吗？"
+   },
+   {
+    "student": "我明白了，浮力只跟液体的密度和排开液体的体积有关。深度不影响，因为压强虽然变大但上下表面的差没变；物体自己的重量也不影响浮力大小。"
+   },
+   {
+    "student": "那同一个铁球，在水里和在水银里受到的浮力一样吗？为什么？"
+   }
+  ]
+ },
+ {
+  "id": "b3-hist-shangyang",
+  "course": "初二历史·战国变法 第1课",
+  "subject": "历史",
+  "topic": "商鞅变法推行",
+  "taskTitle": "变法怎么落地",
+  "taskDescription": "理解商鞅变法从立木为信到两次变法推行的阶段推进与因果",
+  "taskType": "acquire",
+  "acceptance": "学生能按顺序说出推行步骤并解释立木为信的作用",
+  "expectKind": "state-strip",
+  "turns": [
+   {
+    "student": "商鞅变法是一下子全面推开的吗？我听说他先在城南门立了一根木头，这跟变法有什么关系？"
+   },
+   {
+    "student": "立木为信是为了让百姓相信官府说话算数，赏金真的会给。先取信于民，后面的法令才推得动。然后才是颁布新法、太子犯法也照罚。"
+   },
+   {
+    "student": "那为什么秦国人一开始不愿意变法？如果百姓不信任官府，新法会怎么样？"
+   }
+  ]
+ },
+ {
+  "id": "c1-chem-filter",
+  "course": "初三化学·基本操作 第1课",
+  "subject": "化学",
+  "topic": "过滤操作的顺序与要点",
+  "taskTitle": "过滤实验的步骤",
+  "taskDescription": "学生记混过滤操作顺序，需要按步骤拆解并说明每步为什么不能颠倒",
+  "taskType": "execute",
+  "acceptance": "学生能按顺序说出过滤步骤，并说明每步的作用",
+  "expectKind": "state-strip",
+  "turns": [
+   {
+    "student": "老师，过滤实验的步骤我老是记混：到底先放滤纸还是先倒液体？一贴二低三靠又是什么？"
+   },
+   {
+    "student": "我理了一下：先折叠滤纸、放进漏斗，用水润湿让它贴紧；然后漏斗下端管口要紧靠烧杯内壁，液面低于滤纸边缘，玻璃棒靠在三层滤纸那边引流。这样滤液才不会溅出来，也不会从滤纸和漏斗之间漏下去。"
+   },
+   {
+    "student": "那如果滤纸没有贴紧、中间有气泡，过滤会变成什么样？我是不是要重新做一遍？"
+   }
+  ]
+ },
+ {
+  "id": "c2-eng-tense",
+  "course": "初二英语·现在完成时 第2课",
+  "subject": "英语",
+  "topic": "现在完成时与一般过去时的区别",
+  "taskTitle": "时态选择纠错",
+  "taskDescription": "学生把现在完成时和一般过去时混用，需要用两栏对照找出判断依据",
+  "taskType": "diagnose",
+  "acceptance": "学生能说出两种时态各自的使用条件，并改对句子",
+  "expectKind": "split-compare",
+  "turns": [
+   {
+    "student": "老师，这句为什么不能用一般过去时？I have finished my homework yesterday. 我觉得昨天发生的事就该用过去时啊。"
+   },
+   {
+    "student": "我明白了：yesterday 是明确过去时间，不能和现在完成时连用，所以应该改成 I finished my homework yesterday. 现在完成时强调的是到现在为止的结果，不跟具体过去时间状语。"
+   },
+   {
+    "student": "那如果我把句子改成 I have already finished my homework，没有 yesterday，是不是就对了？如果换成 last night 呢？"
+   }
+  ]
+ },
+ {
+  "id": "c3-bio-photosynthesis",
+  "course": "初一生物·绿色植物 第1课",
+  "subject": "生物",
+  "topic": "光合作用的原料与条件",
+  "taskTitle": "影响光合作用强弱的因素",
+  "taskDescription": "学生把光照、二氧化碳、温度对光合作用的影响混在一起，需要分清条件与原料",
+  "taskType": "acquire",
+  "acceptance": "学生能区分光合作用的原料、条件和产物，并说明某个因素变化时的影响",
+  "expectKind": "concept-map",
+  "turns": [
+   {
+    "student": "老师，光合作用到底需要什么？光照越强是不是就一定越好？温度和二氧化碳又各管什么？"
+   },
+   {
+    "student": "我分清楚了：二氧化碳和水是原料，光照是条件，产物是有机物和氧气。光照增强能提高光合速率，但太强会灼伤叶片；温度影响酶的活性，过高过低都不行。"
+   },
+   {
+    "student": "那如果在温室里把二氧化碳浓度提高一倍、光照不变，光合速率会一直往上走吗？温度再升高十度呢？"
+   }
+  ]
+ }
+]

@@ -76,6 +76,24 @@ const DISPOSABLE_STORY = {
   triggerEvent: '上个月排班失误，周末高峰连续两天顾客流失',
 };
 
+/** 允许按案例覆盖故事/人设（不放进 HarnessArgs，避免影响既有跑数参数契约） */
+function cliValue(name: string, fallback: string): string {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.slice(name.length + 3).trim() || fallback : fallback;
+}
+function storyFor(args: HarnessArgs) {
+  return {
+    id: 'story_e2e_disposable',
+    title: cliValue('story-title', DISPOSABLE_STORY.title),
+    visibleOpening: cliValue('story-opening', DISPOSABLE_STORY.visibleOpening),
+    goalSeed: {
+      surfaceGoal: args.learningGoal,
+      realProblem: cliValue('story-problem', DISPOSABLE_STORY.goalSeed.realProblem),
+    },
+    triggerEvent: cliValue('story-trigger', DISPOSABLE_STORY.triggerEvent),
+  };
+}
+
 interface ApiResult {
   status: number;
   body: Record<string, unknown> | null;
@@ -377,7 +395,12 @@ async function cleanupLearner(args: HarnessArgs, state: RunState): Promise<void>
 }
 
 async function main(): Promise<void> {
-  const args = parseHarnessArgs(process.argv.slice(2), process.env);
+  // 故事/人设覆盖参数由本脚本消费（cliValue），不进 run-harness 的参数契约
+  const EXTRA_ARG = /^--(story-(title|opening|problem|trigger)|profile-(role|scenario))=/;
+  const args = parseHarnessArgs(
+    process.argv.slice(2).filter((a) => !EXTRA_ARG.test(a)),
+    process.env,
+  );
   if (!args.adminPassword) {
     throw new Error('缺少管理员密码：请设置 E2E_ADMIN_PASSWORD（或让 .env 里有 INIT_ADMIN_PASSWORD）');
   }
@@ -415,11 +438,11 @@ async function main(): Promise<void> {
       learningGoal: args.learningGoal,
       knowledgeLevel: 'beginner',
       profile: {
-        role: '可丢弃跑数学习者',
-        scenario: '端到端验证日期模拟与多日上课',
+        role: cliValue('profile-role', '可丢弃跑数学习者'),
+        scenario: cliValue('profile-scenario', '端到端验证日期模拟与多日上课'),
         note: '由 simulate-learner-e2e 自动创建，跑完自删',
         // 手写故事：避免为"故事生成"多花一次 LLM，并满足 start-session 的 STORY_REQUIRED
-        storyPool: [DISPOSABLE_STORY],
+        storyPool: [storyFor(args)],
       },
       tags: ['e2e', 'disposable'],
       notes: 'auto-created by simulate-learner-e2e; safe to delete',

@@ -310,6 +310,8 @@ export interface ControlledErrorDecision {
 export function decideControlledError(params: {
   frictionBudget?: FrictionBudget | string | null;
   struggleConcepts?: unknown;
+  /** 当前 task 的概念域（标题/验收标准/看板/里程碑）；提供时只在命中域内取卡点 */
+  currentTaskConcepts?: unknown;
   turnIndex?: number;
   enabled?: boolean;
   random?: () => number;
@@ -327,10 +329,35 @@ export function decideControlledError(params: {
   const struggleConcepts = Array.isArray(params.struggleConcepts)
     ? params.struggleConcepts.filter((item): item is string => typeof item === 'string' && !!item.trim())
     : [];
-  const targetConcept = struggleConcepts.length > 0
-    ? struggleConcepts[turnIndex % struggleConcepts.length].trim()
+  // 当前 task 概念域：只在这些概念里挑卡点，避免把「上周学的别的技能」硬塞进本轮
+  // （外部审计 P1-5：旧实现 struggleBoost 只要列表非空就生效，和本轮教什么无关）。
+  const taskConcepts = Array.isArray(params.currentTaskConcepts)
+    ? params.currentTaskConcepts.filter((item): item is string => typeof item === 'string' && !!item.trim())
+    : [];
+  const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, '');
+  const inCurrentTask = (concept: string): boolean => {
+    if (!taskConcepts.length) return false;
+    const normalized = normalize(concept);
+    if (!normalized) return false;
+    return taskConcepts.some((taskConcept) => {
+      const normalizedTask = normalize(taskConcept);
+      return normalizedTask.includes(normalized) || normalized.includes(normalizedTask);
+    });
+  };
+  const matchedStruggle = taskConcepts.length
+    ? struggleConcepts.filter(inCurrentTask)
+    : struggleConcepts;
+  // 卡点优先取"画像 struggle ∩ 本轮概念"；没有交集时退到本轮概念本身
+  // （受控错误演的是"这一步做错"，不是"把别的课的旧卡点塞进来"）。
+  const fallbackTaskConcept = taskConcepts.length
+    ? taskConcepts[turnIndex % taskConcepts.length].trim()
     : null;
-  const probability = Math.min(0.6, table.wrongProbability * (targetConcept ? table.struggleBoost : 1));
+  const targetConcept = matchedStruggle.length > 0
+    ? matchedStruggle[turnIndex % matchedStruggle.length].trim()
+    : fallbackTaskConcept;
+  // 画像卡点命中本轮概念才加权；不命中则按基线概率（宁可不演，也不演错题）
+  const struggleBoostApplies = matchedStruggle.length > 0 || (taskConcepts.length === 0 && targetConcept !== null);
+  const probability = Math.min(0.6, table.wrongProbability * (struggleBoostApplies ? table.struggleBoost : 1));
   const random = params.random ?? Math.random;
   if (random() >= probability) return notForced;
   let targetMisconception: ControlledErrorMisconception | null = null;

@@ -5,9 +5,12 @@
 import type { Router, Request } from 'express';
 import { logger } from '../../utils/logger';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
-import { findSessionById, updateSessionStageResults } from '../../services/virtual-lab/virtual-session.repo';
+import { findSessionById } from '../../services/virtual-lab/virtual-session.repo';
 import { sendVirtualSessionError } from './virtual-session-http';
 import {
+  clearSessionStageResultsKey,
+  mergeSessionStageResults,
+  mergeSessionTeachingFlags,
   parseSimulationLimit,
   runAssistedSessionMutationWithSimClock,
 } from './virtual-learners.assisted-shared';
@@ -228,16 +231,8 @@ router.post('/sessions/:sessionId/pause', async (req: Request, res) => {
     if (session.currentStage !== 'teaching') {
       return res.status(409).json({ success: false, error: { message: `当前阶段为 ${session.currentStage}，仅教学（teaching）阶段支持暂停` } });
     }
-    const stageResults = typeof session.stageResults === 'string'
-      ? JSON.parse(session.stageResults || '{}')
-      : (session.stageResults || {});
-    if (stageResults.teaching && typeof stageResults.teaching === 'object') {
-      stageResults.teaching.paused = true;
-    } else {
-      stageResults.teaching = { ...(stageResults.teaching || {}), paused: true };
-    }
-
-    await updateSessionStageResults(sessionId, JSON.stringify(stageResults));
+    // 只合并 paused 标志本身：整列回写会用旧快照覆盖正在进行的教学回合写入。
+    await mergeSessionTeachingFlags(sessionId, { paused: true });
 
     logger.info('[admin] 会话已暂停', { sessionId });
     res.json({ success: true, data: { sessionId, status: 'running', paused: true } });
@@ -263,15 +258,8 @@ router.post('/sessions/:sessionId/resume', async (req: Request, res) => {
       return res.status(409).json({ success: false, error: { message: `会话状态为 ${session.status}，仅运行中可恢复` } });
     }
 
-    // 清 paused 标志
-    const stageResults = typeof session.stageResults === 'string'
-      ? JSON.parse(session.stageResults || '{}')
-      : (session.stageResults || {});
-    if (stageResults.teaching && typeof stageResults.teaching === 'object') {
-      stageResults.teaching.paused = false;
-    }
-
-    await updateSessionStageResults(sessionId, JSON.stringify(stageResults));
+    // 清 paused 标志（原子合并，不覆盖并发的教学回合写入）
+    await mergeSessionTeachingFlags(sessionId, { paused: false });
 
     logger.info('[admin] 会话已恢复', { sessionId });
     res.json({ success: true, data: { sessionId, status: 'running', paused: false } });
@@ -302,15 +290,12 @@ router.post('/sessions/:sessionId/hold', async (req: Request, res) => {
     if (session.status !== 'running' && session.status !== 'created') {
       return res.status(409).json({ success: false, error: { message: `会话状态为 ${session.status}，仅运行中/创建中可 hold` } });
     }
-    const stageResults = typeof session.stageResults === 'string'
-      ? JSON.parse(session.stageResults || '{}')
-      : (session.stageResults || {});
-    stageResults.hold = { by: 'admin', reason, ...(until ? { until } : {}), at: new Date().toISOString() };
-
-    await updateSessionStageResults(sessionId, JSON.stringify(stageResults));
+    const hold = { by: 'admin', reason, ...(until ? { until } : {}), at: new Date().toISOString() };
+    // 原子合并顶层键：hold 也允许在运行中声明，不能回滚并发的教学写入。
+    await mergeSessionStageResults(sessionId, { hold });
 
     logger.info('[admin] 会话已声明 hold', { sessionId, reason, until: until || null });
-    res.json({ success: true, data: { sessionId, status: session.status, hold: stageResults.hold } });
+    res.json({ success: true, data: { sessionId, status: session.status, hold } });
   } catch (error) {
     logger.error('声明 hold 失败:', error);
     sendVirtualSessionError(res, error, '声明 hold 失败');
@@ -328,12 +313,7 @@ router.post('/sessions/:sessionId/unhold', async (req: Request, res) => {
     if (!session) {
       return res.status(404).json({ success: false, error: { message: '会话不存在' } });
     }
-    const stageResults = typeof session.stageResults === 'string'
-      ? JSON.parse(session.stageResults || '{}')
-      : (session.stageResults || {});
-    delete stageResults.hold;
-
-    await updateSessionStageResults(sessionId, JSON.stringify(stageResults));
+    await clearSessionStageResultsKey(sessionId, 'hold');
 
     logger.info('[admin] 会话已解除 hold', { sessionId });
     res.json({ success: true, data: { sessionId, hold: null } });

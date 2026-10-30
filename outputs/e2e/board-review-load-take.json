@@ -1,0 +1,162 @@
+{
+ "label": "LOAD-TAKE",
+ "rubric": "load",
+ "generatedAt": "2026-10-27T10:44:19.713Z",
+ "model": "deepseek-v4.1-flash",
+ "total": 9,
+ "judged": 9,
+ "errors": 0,
+ "verdicts": {
+  "keep": 4,
+  "fix": 5,
+  "drop": 0
+ },
+ "meanUsefulness": 0,
+ "meanGeometry": 0,
+ "leakShare": 0,
+ "redundantShare": 0,
+ "meanRelief": 2.78,
+ "meanSelfExplain": 2.33,
+ "preAnswerShare": 33,
+ "meanReadability": 2.33,
+ "metaShare": 0,
+ "byKind": {
+  "split-compare": {
+   "n": 3,
+   "keep": 1,
+   "drop": 0,
+   "relief": 2.67
+  },
+  "concept-map": {
+   "n": 3,
+   "keep": 0,
+   "drop": 0,
+   "relief": 2.67
+  },
+  "state-strip": {
+   "n": 3,
+   "keep": 3,
+   "drop": 0,
+   "relief": 3
+  }
+ },
+ "results": [
+  {
+   "i": 0,
+   "user": "b1-math-pace·第1轮",
+   "kind": "split-compare",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": true,
+   "meta": false,
+   "readability": 3,
+   "verdict": "fix",
+   "oneLine": "把错法与正解的每一步单位换算并排摊开，替学生扛住两条计算链的对比负担。",
+   "worstIssue": "delta 和右栏第 2 步直接写出『先换成千米』，等于替学生回答了老师要问的『长度还是时间』。"
+  },
+  {
+   "i": 1,
+   "user": "b1-math-pace·第2轮",
+   "kind": "split-compare",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": true,
+   "meta": false,
+   "readability": 3,
+   "verdict": "fix",
+   "oneLine": "这张白板把同一道旧题的两条换算链并排展开（60 s ÷ 400 m 与 60 s ÷ 0.4 km），并标明 s/m 被读成 min/km 的错位；学生不必在脑中同时记住 400、0.4、150、2.5 和单位名称。",
+   "worstIssue": "分叉说明和正确列副标注直接写明「先换成千米/分叉在第 2 步」，等于替学生说出了本轮要问的「先动哪一步」；建议把分叉处改成问句或只留问号，不要写成结论。"
+  },
+  {
+   "i": 2,
+   "user": "b1-math-pace·第3轮",
+   "kind": "split-compare",
+   "relief": 2,
+   "selfExplain": 3,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "把两条四步换算链锁在同一组 800 m、60 s 数据上左右对齐，学生不必在脑子里同时压住错法与正法的每一步和单位。",
+   "worstIssue": "真正分叉的第二步（直接相除还是先换成 km）在板面上没有额外标记，只有中间的 VS 徽标和虚线，两栏对应关系仍靠学生自己对行。"
+  },
+  {
+   "i": 3,
+   "user": "b2-phys-buoyancy·第1轮",
+   "kind": "concept-map",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": true,
+   "meta": false,
+   "readability": 2,
+   "verdict": "fix",
+   "oneLine": "把浮力的多个影响因素和 h 的条件关系摊成关系图，替学生扛住多变量对比的工作记忆。",
+   "worstIssue": "h→F 那条边已经写死「同 V排 时不变」，把老师要学生自己推出的读法先说了；应先留空或只标条件，等学生答完再补。"
+  },
+  {
+   "i": 4,
+   "user": "b2-phys-buoyancy·第2轮",
+   "kind": "concept-map",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 2,
+   "verdict": "fix",
+   "oneLine": "把「哪些量决定浮力、哪些量不影响」一次摊在板面上，学生核对铁块和铝块时，就不必在脑中同时记住 ρ液、V排、g、h、G物 这五个量的关系。",
+   "worstIssue": "物体重力 G物 被放在图正中间、位于上游各因素和「浮力 F浮」之间，并且用一条指向 F浮 的实线箭头标注「不进入 F浮 式」；箭头方向和文字自相矛盾，还挡住中间的连线，容易被学生读成「G物 也是算出 F浮 的一环」。应把它改成虚线或阻断边，或者挪到侧边的「不影响区」，不要画成汇入 F浮 的通路。"
+  },
+  {
+   "i": 5,
+   "user": "b2-phys-buoyancy·第3轮",
+   "kind": "concept-map",
+   "relief": 2,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 2,
+   "verdict": "fix",
+   "oneLine": "把 F浮 的三个决定因素、一个无关因素（h）和一个不进入公式的量（G物）一次摊在同一张图上，替学生省掉在脑中同时压住五个量及其关系的负担。",
+   "worstIssue": "G物 节点被摆在 ρ液/V排/g/h 通往 F浮 的连线正中间，箭头穿过它，视觉上读成「液体密度、排开体积决定物体重力」，而且中部的「决定：正比」「比例系数」「不进入 F浮 式」几处标签挤在一起、有压线；应把 G物 挪到侧边独立分支，并把连线绕开它、标签错开。"
+  },
+  {
+   "i": 6,
+   "user": "b3-hist-shangyang·第1轮",
+   "kind": "state-strip",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 2,
+   "verdict": "keep",
+   "oneLine": "把「朝议—徙木—第一次变法—第二次变法」摊成一条带年份节点的推进链，替学生记住了前后相隔七年、每段各自包含哪几项措施这些原本要在脑里同时压住的时间与内容。",
+   "worstIssue": "最右帧文字换行生硬：「开阡/陌」被拆行、「丈尺」单独成行，末行贴近框底，略显拥挤"
+  },
+  {
+   "i": 7,
+   "user": "b3-hist-shangyang·第2轮",
+   "kind": "state-strip",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 2,
+   "verdict": "keep",
+   "oneLine": "把朝议、徙木、两次变法的时间、地点和具体措施摊在一条线上，学生不必在脑中同时压着四段内容，就能腾出精力去推「如果只给十金会怎样」。",
+   "worstIssue": "最右一帧文字换行断在顿号上（「平斗桶、权衡／、丈尺」），「废井田、开阡陌」也被拦腰拆开，读起来会卡一下。"
+  },
+  {
+   "i": 8,
+   "user": "b3-hist-shangyang·第3轮",
+   "kind": "state-strip",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 2,
+   "verdict": "keep",
+   "oneLine": "把「前359 朝议→前356 南门→前356 一次变法→前350 二次变法」四个节点连同各节点的人与举措一起排成时间轴，学生不必在脑中同时记住年份、地点、反对者与法令清单。",
+   "worstIssue": "第四帧断行把「开阡陌」拆成「开阡／陌」，并把「、丈尺」的顿号顶到行首，影响排版。"
+  }
+ ]
+}

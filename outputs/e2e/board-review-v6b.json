@@ -1,0 +1,126 @@
+{
+ "label": "BOARD6B",
+ "generatedAt": "2026-10-27T08:18:18.826Z",
+ "model": "deepseek-v4.1-flash",
+ "total": 6,
+ "judged": 6,
+ "errors": 0,
+ "verdicts": {
+  "keep": 0,
+  "fix": 2,
+  "drop": 4
+ },
+ "meanUsefulness": 0.83,
+ "meanGeometry": 0.83,
+ "meanReadability": 2.67,
+ "metaShare": 0,
+ "leakShare": 17,
+ "redundantShare": 50,
+ "byKind": {
+  "split-compare": {
+   "n": 2,
+   "keep": 0,
+   "drop": 1,
+   "usefulness": 1
+  },
+  "concept-map": {
+   "n": 2,
+   "keep": 0,
+   "drop": 2,
+   "usefulness": 0.5
+  },
+  "state-strip": {
+   "n": 2,
+   "keep": 0,
+   "drop": 1,
+   "usefulness": 1
+  }
+ },
+ "results": [
+  {
+   "i": 0,
+   "user": "b1-math-pace·提问态",
+   "kind": "split-compare",
+   "usefulness": 1,
+   "geometry": 0,
+   "meta": false,
+   "leak": false,
+   "readability": 3,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "并排列出错误算式和空白的正确做法，试图把注意力引到‘读成 0.15 分钟/千米’这一步。",
+   "worstIssue": "右栏全是“?”，没有把 60 s、400 m 的单位和结果单位“秒/米”对照出来，学生仍看不出 0.15 为什么不是“分钟/千米”。"
+  },
+  {
+   "i": 1,
+   "user": "b1-math-pace·揭晓态",
+   "kind": "split-compare",
+   "usefulness": 1,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "readability": 2,
+   "redundant": false,
+   "verdict": "drop",
+   "oneLine": "把上一题（60 s 跑 400 m）的错法与正法并排复述一遍，指出分叉在第二步的单位换算。",
+   "worstIssue": "内容对应的是已经解决、且刚上板的旧题（400 m/60 s），而本轮要学生动手的是新数据 800 m/4 min；图与当下任务错位，学生看着它无法推进新题，只是重复已知结论。"
+  },
+  {
+   "i": 2,
+   "user": "b2-phys-buoyancy·提问态",
+   "kind": "concept-map",
+   "usefulness": 0,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "readability": 3,
+   "redundant": true,
+   "verdict": "drop",
+   "oneLine": "把液体密度、排开体积、浸入深度、物体重量四个候选因素并列指向浮力的待填概念图",
+   "worstIssue": "没有呈现“完全浸没后继续下沉，h 增大但 V排 不变”这一本轮关键对比，反而把 h 与 V排、G 并列为同级箭头。"
+  },
+  {
+   "i": 3,
+   "user": "b2-phys-buoyancy·揭晓态",
+   "kind": "concept-map",
+   "usefulness": 1,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "readability": 3,
+   "redundant": true,
+   "verdict": "drop",
+   "oneLine": "浮力概念图：ρ液和V排决定浮力，深度与物重无关。",
+   "worstIssue": "内容只是复述学生刚说出的定性结论，没有把“密度变为0.8倍、V排不变”转成浮力变为0.8倍的定量对比，帮不到当前这道题。"
+  },
+  {
+   "i": 4,
+   "user": "b3-hist-shangyang·提问态",
+   "kind": "state-strip",
+   "usefulness": 1,
+   "geometry": 1,
+   "meta": false,
+   "leak": true,
+   "readability": 3,
+   "redundant": true,
+   "verdict": "drop",
+   "oneLine": "把「立木为信→第一次变法（前356年）→第二次变法（前350年）」排成一条三步时间条，每步留三个空槽。",
+   "worstIssue": "第一格标签和标题里已经写出「取信」，而老师恰恰在问「他真正想先拿到的是什么」——学生不用判断，照抄标签即可。",
+   "score": 0
+  },
+  {
+   "i": 5,
+   "user": "b3-hist-shangyang·揭晓态",
+   "kind": "state-strip",
+   "usefulness": 1,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "readability": 2,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "这张图把商鞅变法按「取信→第一次变法→第二次变法」串成三帧时间条，列出各阶段措施。",
+   "worstIssue": "图里没有「太子犯法、刑其傅」这一关键节点，学生无法把老师追问的条件接入时间线，判断「哪一环先出问题」时缺少落点。"
+  }
+ ]
+}

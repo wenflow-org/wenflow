@@ -62,6 +62,18 @@ export interface LearnLearnerSimulationInput {
     dueReview?: string[];
     struggling?: string[];
     recentCompleted?: string[];
+    /**
+     * 最近完成事项的具身细节（外部审计 P1-7）：只有标题不够，学习者跨课要能说出
+     * "上次我把报价单压到一页宽"这种具体操作，而不是只记得概念名。
+     */
+    recentDetails?: Array<{
+      title?: string;
+      deliverable?: string | null;
+      memoryDelta?: string | null;
+      selfCalibration?: string | null;
+      mastered?: string[];
+      struggling?: string[];
+    }>;
   } | null;
   /** 本轮认知判决（物理两阶段第一段产出，硬约束） */
   epistemicGrounding?: EpistemicGrounding | null;
@@ -225,21 +237,46 @@ const CLAUSE_BREAK_CHARS = '，、；：,;:';
  *  ② 只有子句分隔符 → 收在子句边界并**补省略号**（明示未完，不再冒充完整句）；
  *  ③ 通篇无标点 → 硬截断 + 省略号。
  */
-function cropReply(reply: string, phase: LearnLearnerPhase) {
+function cropReply(
+  reply: string,
+  phase: LearnLearnerPhase,
+  options: { teacherMessage?: string | null; hasCheckpoint?: boolean } = {}
+) {
   const normalized = sanitizeVisibleContent(reply);
   if (!normalized) return '';
   const parts = normalized.split(/(?<=[。！？!?])\s*|\n+/).map((item) => item.trim()).filter(Boolean);
-  const sentenceLimit = phase === 'ready_to_close' ? 1 : 2;
-  const charLimit = phase === 'ready_to_close' ? 48 : phase === 'blocked' ? 80 : 96;
-  const shortened = parts.slice(0, sentenceLimit).join(' ');
-  if (shortened.length <= charLimit) return shortened;
-  const head = shortened.slice(0, charLimit);
+  const limit = resolveReplyBudget(phase, options);
+  const shortened = parts.slice(0, limit.sentences).join(' ');
+  if (shortened.length <= limit.chars) return shortened;
+  const head = shortened.slice(0, limit.chars);
   const MIN_CUT = 16;
   const sentenceBoundary = Math.max(...SENTENCE_END_CHARS.split('').map((char) => head.lastIndexOf(char)));
   if (sentenceBoundary >= MIN_CUT) return head.slice(0, sentenceBoundary + 1).trim();
   const clauseBoundary = Math.max(...CLAUSE_BREAK_CHARS.split('').map((char) => head.lastIndexOf(char)));
-  const cutAt = clauseBoundary >= MIN_CUT ? head.slice(0, clauseBoundary) : head.slice(0, Math.max(24, charLimit - 1));
+  const cutAt = clauseBoundary >= MIN_CUT ? head.slice(0, clauseBoundary) : head.slice(0, Math.max(24, limit.chars - 1));
   return `${cutAt.trim()}…`;
+}
+
+/**
+ * 老师明确要求列举/总结/分步骤时，1-2 句的默认上限必须让位——否则会稳定产出
+ * "三件事只说了第一件"的截断回复（外部审计 P0-3：多步清单任务永远完不成）。
+ * 只认老师最后一条消息里的显式请求，避免所有回复都变长。
+ */
+const EXTENDED_REPLY_REQUEST = /(列出|列举|列一下|写下来|写出来|说出来|讲一遍|说一遍|分点|逐条|依次|分别|逐一|各自|总结|概述|概括|复述|完整地|步骤|流程|排序|排一下|(回我|告诉我|说出|说明|解释)[^。！？!?\n]{0,14}([一二三四五六七八九十两\d]+|几)(件|点|条|句|步|个|项|方面))/;
+
+function resolveReplyBudget(
+  phase: LearnLearnerPhase,
+  options: { teacherMessage?: string | null; hasCheckpoint?: boolean }
+): { sentences: number; chars: number } {
+  if (EXTENDED_REPLY_REQUEST.test(String(options.teacherMessage || ''))) {
+    return { sentences: 6, chars: 360 };
+  }
+  if (options.hasCheckpoint) {
+    return { sentences: 3, chars: 160 };
+  }
+  return phase === 'ready_to_close'
+    ? { sentences: 1, chars: 48 }
+    : { sentences: 2, chars: phase === 'blocked' ? 80 : 96 };
 }
 
 function buildFallback(input: LearnLearnerSimulationInput): LearnLearnerSimulationOutput {
@@ -269,7 +306,10 @@ function buildFallback(input: LearnLearnerSimulationInput): LearnLearnerSimulati
   };
 
   return {
-    reply: cropReply(reply, phaseFocus),
+    reply: cropReply(reply, phaseFocus, {
+      teacherMessage: input.visibleContext?.lastTeacherMessage,
+      hasCheckpoint: !!input.pendingCheckpoint,
+    }),
     emotion: phaseFocus === 'blocked' ? 'confused' : 'neutral',
     learnerState,
     learnerFeedback: buildFeedbackFromState(learnerState, '模型输出不可用时的保守自评'),
@@ -361,7 +401,10 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
   return {
     // 「理解检查：」模板前缀剥离（2026-10-10 逐字稿评审）：作答检查点时模型会整段回显题面
     // 模板，该前缀属 harness 工件，不应出现在学生可见消息里（评审 6 节逐字稿中 3 节可见）。
-    reply: cropReply(stripCheckpointEchoPrefix(parsed?.reply || fallback.reply), phaseFocus),
+    reply: cropReply(stripCheckpointEchoPrefix(parsed?.reply || fallback.reply), phaseFocus, {
+      teacherMessage: input.visibleContext?.lastTeacherMessage,
+      hasCheckpoint: !!input.pendingCheckpoint,
+    }),
     emotion: safeText(parsed?.emotion) || fallback.emotion,
     learnerState,
     learnerFeedback: {
@@ -511,6 +554,20 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
           recentCompleted: Array.isArray(input.learnerMemory.recentCompleted)
             ? input.learnerMemory.recentCompleted.slice(0, 5)
             : [],
+          ...(Array.isArray(input.learnerMemory.recentDetails) && input.learnerMemory.recentDetails.length
+            ? {
+                recentDetails: input.learnerMemory.recentDetails
+                  .filter((item) => item && typeof item.title === 'string' && item.title.trim())
+                  .slice(0, 4)
+                  .map((item) => ({
+                    title: item.title,
+                    ...(item.deliverable ? { deliverable: item.deliverable } : {}),
+                    ...(item.memoryDelta ? { memoryDelta: item.memoryDelta } : {}),
+                    ...(Array.isArray(item.mastered) && item.mastered.length ? { mastered: item.mastered.slice(0, 4) } : {}),
+                    ...(Array.isArray(item.struggling) && item.struggling.length ? { struggling: item.struggling.slice(0, 4) } : {}),
+                  }))
+              }
+            : {}),
         }
       : null,
     epistemicGrounding: input.epistemicGrounding || null,

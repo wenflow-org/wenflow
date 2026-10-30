@@ -285,6 +285,11 @@ export async function writeProfileConceptsAfterLesson(
     selfState?: SelfReportedLearnerState | null;
     /** curator 输出的全量概念名单（P1-2：全量遍历，不再只吃单 conceptName） */
     curatedConcepts?: CuratedConceptLists | null;
+    /**
+     * 本课判决对账降级的概念（mastered → learning）：写回前从画像 knownConcepts 移除，
+     * 否则 knownConcepts 的 union-only 语义会让降级在下一课被读回 mastered（独立评审 P1）。
+     */
+    downgraded?: Array<{ name: string; from?: string; to?: string }> | null;
   } = {},
 ): Promise<void> {
   if (!userId) return;
@@ -302,6 +307,7 @@ async function writeProfileConceptsAfterLessonLocked(
     source?: string;
     selfState?: SelfReportedLearnerState | null;
     curatedConcepts?: CuratedConceptLists | null;
+    downgraded?: Array<{ name: string; from?: string; to?: string }> | null;
   } = {},
 ): Promise<void> {
   try {
@@ -350,15 +356,30 @@ async function writeProfileConceptsAfterLessonLocked(
       }
     }
 
+    // 判决降级：先从画像 knownConcepts 移除，再把同名概念落进 struggle——只删不加会让
+    // 概念同时从两张表消失（curator 未单独列它时），学员模型直接丢点（独立评审 P2）。
+    const downgradedNames = new Set(
+      (Array.isArray(options.downgraded) ? options.downgraded : [])
+        .map((item) => String(item?.name || '').trim())
+        .filter(Boolean)
+    );
+    for (const name of downgradedNames) {
+      if (!mastered.has(name)) struggling.add(name);
+    }
+
     // 跨表去重（最终防线）：任何路径下同名概念都不得双表共存
     for (const name of mastered) struggling.delete(name);
 
-    if (mastered.size === 0 && struggling.size === 0) return;
+    // 纯降级（无新掌握/新卡点）也必须落库，否则 knownConcepts 的移除永远写不进去
+    if (mastered.size === 0 && struggling.size === 0 && downgradedNames.size === 0) return;
 
     const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
     const existingKnown = Array.isArray(profileData.knownConcepts) ? profileData.knownConcepts : [];
     const existingStruggle = Array.isArray(profileData.struggleConcepts) ? profileData.struggleConcepts : [];
-    const knownConcepts = Array.from(new Set([...existingKnown, ...mastered]));
+    const survivingKnown = downgradedNames.size > 0
+      ? existingKnown.filter((name: unknown) => !downgradedNames.has(String(name).trim()))
+      : existingKnown;
+    const knownConcepts = Array.from(new Set([...survivingKnown, ...mastered]));
     // 跨表去重（最终防线）：同名概念不得同时进 known 与 struggle（pcl_f9826524 同名双表实录）
     const knownSet = new Set<string>(knownConcepts.map((name) => String(name).trim()));
     const struggleConcepts = Array.from(

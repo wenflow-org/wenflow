@@ -233,6 +233,10 @@ doc/re_test/*
 # 例外：Prompt 缓存优化技术文档（缓存口径与运维配置的权威引用）
 !doc/PROMPT_CACHE_OPTIMIZATION.md
 !doc/SKILL_PROTOCOL_V4.md
+# 例外：全管线索引（pipeline:map 生成、pipeline:map:check 校验）
+!doc/PIPELINE_MAP.md
+!doc/PIPELINE_PROMPTS.md
+!doc/pipeline-map.json
 !doc/README.md
 !doc/README.en.md
 !doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md
@@ -353,6 +357,7 @@ newui/
 # 设计体系交接包（2026-10-17 用户拍板「不需要进入 git」：本地只读参考，含 PNG/2.7MB zip）
 # 通配同时覆盖解压目录与压缩包两种形态（.rar / .zip 都可能被再次放进来）
 WenFlow-Design-System*
+!doc/DIAGRAM_PEDAGOGY_RESEARCH.md
 
 # 本地跑批/实验产物（日志、状态 JSON、备份）
 outputs/

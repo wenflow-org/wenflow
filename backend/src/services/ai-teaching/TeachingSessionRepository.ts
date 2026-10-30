@@ -118,6 +118,21 @@ export interface TeachingSessionMessage {
    * "把文字关系摆成一条位置线"，这类空间关系 mermaid 的节点-边表达不了。
    */
   figures?: TeachingFigure[];
+  /**
+   * 出图来源与动机（2026-10-21）：区分「模型自己判断要画」与「编排层给了出图时机」，
+   * 并记下编排层的判定理由。评审时靠它回答「这张图为什么出现」；
+   * 模型自己给的理由在 `figure.why`，两者互不替代。
+   */
+  figureSource?: {
+    trigger: 'model' | 'opportunity' | 'board';
+    reason: 'ascii-structure' | 'position-description' | 'time-order' | 'structure-content' | 'task-structure' | 'recap-cadence' | null;
+    /** 编排层建议的图型（模型可改） */
+    kindHint: string | null;
+    /** 代码判据的一句话说明（谁让它画的） */
+    ruleWhy?: string | null;
+    /** 命中的原文片段（凭什么判它是出图时机） */
+    matched?: string[];
+  } | null;
 }
 
 /**
@@ -168,7 +183,13 @@ export interface TeachingFigure {
   guides?: Array<{ at: number; label: string | null }>;
   /** 其余图型的规格（kind≠'position-line' 时存在） */
   spec?: Record<string, unknown>;
+  /** 模型自己给的一句话出图理由（≤60 字，归一化保留）：为什么用这张图 / 为什么这个形状 */
+  why?: string | null;
   caption: string | null;
+  /** 2026-10-28 接线：这是任务级共享白板的快照，不是一次性配图；不计入会话图配额/同骨架去重 */
+  board?: boolean;
+  /** 白板版本号（同一块板 update 时递增，便于前端/复盘识别） */
+  boardRevision?: number;
 }
 
 export interface TeachingKnowledgePointState {
@@ -554,6 +575,49 @@ export class TeachingSessionRepository {
 
     // 始终水合：claim 的消息快照基线必须取自权威侧表
     return record ? mapRecordHydrated(record) : null;
+  }
+
+  /**
+   * 本会话已落库的图（按图型计数）。
+   *
+   * 图型上限的判据必须取自**库**：2026-10-21 真课实测，会话上限 4 的一节课出了 6 张，
+   * 上限与「同骨架」两道闸门一次都没触发——回合内存里的消息快照不可靠，侧表才是权威。
+   */
+  async countFiguresByKind(sessionId: string): Promise<Record<string, number>> {
+    const rows = await prisma.teaching_session_messages.findMany({
+      where: { sessionId },
+      select: { payload: true },
+    });
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      const message = parseJsonSafe<TeachingSessionMessage | null>(row.payload, null);
+      const figures = Array.isArray(message?.figures) ? message.figures : [];
+      for (const figure of figures) {
+        const kind = String((figure as { kind?: string })?.kind || 'position-line');
+        counts[kind] = (counts[kind] || 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  /**
+   * 本会话已落库的图（原样返回 spec）。
+   *
+   * 会话上限与会话级去重也必须读这里，理由同上：回合内存里的消息快照在真课里与库不一致，
+   * 2026-10-22 复核 744 张图发现会话上限 4 一次未触发（单课最多 12 张）。
+   */
+  async listFigures(sessionId: string): Promise<TeachingFigure[]> {
+    const rows = await prisma.teaching_session_messages.findMany({
+      where: { sessionId },
+      select: { payload: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const figures: TeachingFigure[] = [];
+    for (const row of rows) {
+      const message = parseJsonSafe<TeachingSessionMessage | null>(row.payload, null);
+      if (Array.isArray(message?.figures)) figures.push(...message.figures);
+    }
+    return figures;
   }
 
   async assertOwnership(sessionId: string, userId: string): Promise<TeachingSessionRecord> {

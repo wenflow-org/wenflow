@@ -157,6 +157,16 @@ describe('stripCheckpointAnswerKeys：答案键绝不下发', () => {
   const state = {
     pendingCheckpoint: { id: 'cp1', question: 'Q', correctOptionIds: ['B'], expectedKeywords: ['事实'] },
     sessionArtifacts: { pendingCheckpoint: { id: 'cp1', correctOptionIds: ['B'] }, other: 1 },
+    checkpointHistory: [
+      {
+        checkpointId: 'cp0',
+        question: '历史题',
+        options: [{ id: 'A', text: '选项 A' }, { id: 'B', text: '选项 B' }],
+        selectedOptionIds: ['B'],
+        correctOptionIds: ['B'],
+        passed: true,
+      },
+    ],
     other: 'kept',
   };
 
@@ -168,9 +178,22 @@ describe('stripCheckpointAnswerKeys：答案键绝不下发', () => {
     expect(safe.other).toBe('kept');
   });
 
+  it('checkpointHistory 也剥离答案键，但保留选项与学员选择（课后报告需要）', () => {
+    const safe = stripCheckpointAnswerKeys(state)!;
+    expect(safe.checkpointHistory[0]).toEqual({
+      checkpointId: 'cp0',
+      question: '历史题',
+      options: [{ id: 'A', text: '选项 A' }, { id: 'B', text: '选项 B' }],
+      selectedOptionIds: ['B'],
+      passed: true,
+    });
+    expect(safe.checkpointHistory[0].correctOptionIds).toBeUndefined();
+  });
+
   it('不修改原对象（纯函数）', () => {
     stripCheckpointAnswerKeys(state);
     expect(state.pendingCheckpoint.correctOptionIds).toEqual(['B']);
+    expect(state.checkpointHistory[0].correctOptionIds).toEqual(['B']);
   });
 
   it('空/非对象输入原样返回', () => {

@@ -410,6 +410,33 @@ describe('P1-2：写回遍历 curator 全量名单 + 跨表去重', () => {
     expect(JSON.parse(data.knownConcepts)).toEqual(['剪辑节奏']);
     expect(JSON.parse(data.struggleConcepts)).toEqual(['调色', '曲线']);
   });
+
+  it('判决降级：known → struggle，且纯降级（无新掌握/新卡点）也会落库', async () => {
+    mockFindUnique.mockResolvedValue(profileRow({
+      knownConcepts: ['剪辑节奏', '转场'],
+      struggleConcepts: [],
+    }));
+    await writeProfileConceptsAfterLesson('u1', [], {
+      downgraded: [{ name: '剪辑节奏', from: 'mastered', to: 'learning' }],
+    });
+    const data = mockUpdate.mock.calls[0][0].data;
+    expect(JSON.parse(data.knownConcepts)).toEqual(['转场']);
+    expect(JSON.parse(data.struggleConcepts)).toEqual(['剪辑节奏']);
+  });
+
+  it('降级后本课又重新掌握 → 以 mastered 为准，不进 struggle', async () => {
+    mockFindUnique.mockResolvedValue(profileRow({
+      knownConcepts: ['剪辑节奏', '转场'],
+      struggleConcepts: [],
+    }));
+    await writeProfileConceptsAfterLesson('u1', [], {
+      curatedConcepts: { mastered: ['剪辑节奏'], struggling: [] },
+      downgraded: [{ name: '剪辑节奏' }],
+    });
+    const data = mockUpdate.mock.calls[0][0].data;
+    expect(JSON.parse(data.knownConcepts)).toEqual(['转场', '剪辑节奏']);
+    expect(JSON.parse(data.struggleConcepts)).toEqual([]);
+  });
 });
 
 describe('P1-2：deriveCuratedSelfState（mastery 来自 curator confidence，不写死 0.85）', () => {

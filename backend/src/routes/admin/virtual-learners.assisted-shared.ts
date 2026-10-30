@@ -211,6 +211,52 @@ export async function mergeSessionStageResults(sessionId: string, patch: Record<
   }, { label: 'virtual-learners.mergeSessionStageResults' });
 }
 
+/** 原子删除 stageResults 顶层键（unhold 等控制面用；同样避免旧快照整列回写）。 */
+export async function clearSessionStageResultsKey(sessionId: string, key: string): Promise<void> {
+  await withTransaction(async (tx) => {
+    const current = await tx.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      select: { stageResults: true },
+    });
+    const stageResults = parseJson<Record<string, unknown>>(current?.stageResults, {});
+    delete stageResults[key];
+    await tx.virtual_sessions.update({
+      where: { id: sessionId },
+      data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() },
+    });
+  }, { label: 'virtual-learners.clearSessionStageResultsKey' });
+}
+
+/**
+ * 原子合并 stageResults.teaching 内的若干标志（读-改-写同一事务）。
+ *
+ * pause/resume/hold 这类"随时可点"的控制面不能拿请求开始时的快照整列回写：
+ * 教学回合正在写 conversationHistory / pendingCheckpoint / lessonKnowledgePoints 时，
+ * 整列回写会把整节课的最新状态回滚成用户点按钮那一刻的旧值（独立评审 P1）。
+ */
+export async function mergeSessionTeachingFlags(
+  sessionId: string,
+  flags: Record<string, unknown>
+): Promise<void> {
+  await withTransaction(async (tx) => {
+    const current = await tx.virtual_sessions.findUnique({
+      where: { id: sessionId },
+      select: { stageResults: true },
+    });
+    const stageResults = parseJson<Record<string, unknown>>(current?.stageResults, {});
+    const teaching = stageResults.teaching && typeof stageResults.teaching === 'object'
+      ? stageResults.teaching as Record<string, unknown>
+      : {};
+    await tx.virtual_sessions.update({
+      where: { id: sessionId },
+      data: {
+        stageResults: JSON.stringify({ ...stageResults, teaching: { ...teaching, ...flags } }),
+        updatedAt: new Date(),
+      },
+    });
+  }, { label: 'virtual-learners.mergeSessionTeachingFlags' });
+}
+
 /**
  * 在模拟时钟上下文里跑"当天"的学习：path→teaching（必要时），按课表每天最多 lessonsPerDay 节。
  * 调用方已在会话租约内（runAssistedSessionMutation），故此处不再自持租约，避免自锁。

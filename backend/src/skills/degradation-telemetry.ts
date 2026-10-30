@@ -31,6 +31,8 @@ export type DegradationFaultCategory =
   | 'MODEL_AFFIRMATION_MISMATCH'
   /** 失败检查点概念的**后续回合**（非提交轮）仍出现肯定语（#84 实证；提交轮口径见 MODEL_AFFIRMATION_MISMATCH） */
   | 'MODEL_AFFIRMATION_AFTER_FAILED_CHECKPOINT'
+  /** 代码裁决判对、老师回复却否定作答（2026-10-28 f3 实拍：答案键 A / 学生选 A / 仍说「这道不对」） */
+  | 'MODEL_NEGATION_ON_PASSED_CHECKPOINT'
   | 'UNKNOWN';
 
 export type DegradationSeverity = 'P1_CRITICAL' | 'P2_DEGRADED' | 'P3_NOTICE';

@@ -5,7 +5,7 @@ import {
   runBackgroundTask
 } from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
-import { buildFramedNormalizedInput, type LearnerLoadProfile } from '../services/learning/path-planning-hints';
+import { buildFramedNormalizedInput, type LearnerLoadProfile, type TriageHint } from '../services/learning/path-planning-hints';
 import {
   buildUploadedMaterialPacks,
   buildUploadedMaterialPacksAsync,
@@ -214,6 +214,11 @@ interface NormalizedPathInputV1 {
    * 由 `derivePlanningHints` 消费以收紧紧预算/低耐受者的里程碑数、单任务分钟与周期。
    */
   learnerLoadProfile?: LearnerLoadProfile | null;
+  /**
+   * 体量分诊（`transferable × recurrence`）：由 Goal 层 understanding 确定性派生。
+   * `buildFramedNormalizedInput` 原样透传并交给 `derivePlanningHints` 收紧体量上界。
+   */
+  triage?: TriageHint | null;
 }
 
 export interface GoalPathRequest {
@@ -243,6 +248,11 @@ export interface GoalPathRequest {
    * 缺失（真实用户/旧会话）⇒ undefined，生成行为与今天完全一致。
    */
   responseTriage?: ResponseTriage | null;
+  /**
+   * 路径体量分诊（goal 层 understanding → `{ transferable, recurrence }`）：
+   * 写进 normalizedInput.triage，由 derivePlanningHints 消费。缺失时不注入、行为不变。
+   */
+  triageHint?: TriageHint | null;
   /** goal 层置信度评分（goal-conversation skill 产出；仅透传，供 path-planning 参考） */
   confidenceScores?: any;
   systemPromptOverrides?: {
@@ -343,7 +353,8 @@ class PathCoordinator {
     handoffFields: Record<string, any> | null,
     visibleSummary: GoalPathVisibleSummary | null | undefined,
     rawGoal: string | null | undefined,
-    learnerLoadProfile: LearnerLoadProfile | null = null
+    learnerLoadProfile: LearnerLoadProfile | null = null,
+    triageHint: TriageHint | null = null
   ): NormalizedPathInputV1 {
     const pick = (handoffKey: string): any => {
       const value = handoffFields?.[handoffKey];
@@ -458,6 +469,10 @@ class PathCoordinator {
       ),
       learnerLoadProfile: learnerLoadProfile && (learnerLoadProfile.availableTime || learnerLoadProfile.loadTolerance)
         ? learnerLoadProfile
+        : null,
+      // 体量分诊：只有真派生出 transferable/recurrence 时才注入；空对象会让下游误判“已声明”。
+      triage: triageHint && (triageHint.transferable !== undefined || triageHint.recurrence)
+        ? triageHint
         : null,
     };
   }
@@ -766,7 +781,8 @@ class PathCoordinator {
       goalFinalPayload.goalHandoffFields || null,
       visibleSummary,
       goalFinalPayload.rawGoal,
-      input.learnerLoadProfile ?? null
+      input.learnerLoadProfile ?? null,
+      input.triageHint ?? null
     );
     if (goalFinalPayload.prerequisiteCheckResults?.length) {
       normalizedInputV1.prerequisiteCheckResults = goalFinalPayload.prerequisiteCheckResults;

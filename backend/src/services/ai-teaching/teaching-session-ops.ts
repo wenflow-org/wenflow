@@ -231,6 +231,13 @@ export async function submitCheckpoint(
         // 完整题面留档（TONIGHT-BROAD-2026-10-07 同题复问抑制）：跳过也算"已出过这道题"，
         // 后续候选同文时被 teaching-turn-engine 的 isDuplicateCheckpointQuestion 抑制。
         question: checkpoint.question,
+        // 跳过的题也要能还原选项与答案键（答案键读侧统一剥离，不下发客户端）
+        ...(checkpoint.options?.length
+          ? { options: checkpoint.options.map((option) => ({ id: option.id, text: option.text })) }
+          : {}),
+        ...(checkpoint.correctOptionIds?.length
+          ? { correctOptionIds: checkpoint.correctOptionIds.map(String) }
+          : {}),
         submittedAt: new Date().toISOString(),
         passed: false,
         skipped: true,

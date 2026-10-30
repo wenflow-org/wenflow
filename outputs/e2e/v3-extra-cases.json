@@ -1,0 +1,3 @@
+[
+  {"id":"v3x-sc-cs-loop","course":"Python入门·循环 第2课","subject":"计算机","topic":"for 与 while 的选择","taskTitle":"循环写法纠错","taskDescription":"学生把已知次数的遍历写成 while 并漏了自增，需要正误对比","taskType":"diagnose","intent":"co-create","acceptance":"学生能指出分叉在「已知次数该用哪个循环」","expectKind":"split-compare","student":"我打印列表用了 while，结果死循环了，列表元素一次都没打出来。这种题容易错在哪？","assistant":"死循环的根子在你选错了循环。把你那版和正确写法并排摆两栏，自己指分叉在哪一步。"}
+]

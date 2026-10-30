@@ -379,10 +379,61 @@ export interface CapacityDeficitReport {
 export interface TriageHint {
   /** 是否存在可跨情境迁移的因果心智（false = 一次性操作/事务） */
   transferable?: boolean | null;
-  /** 会不会反复发生 */
-  recurrence?: 'once' | 'recurring' | null;
+  /** 会不会反复发生（once/oneoff 为同义历史词表，统一兼容） */
+  recurrence?: 'once' | 'oneoff' | 'recurring' | null;
   /** 判定依据（可观测，落库/审计用） */
   evidence?: string | null;
+}
+
+/**
+ * Goal 层 understanding → Path 层 triage hint（生产接线，2026-10-29）。
+ *
+ * 为什么需要：`responseTriage` 只回答「要不要产路径/要不要组合支持」，不含
+ * transferable/recurrence；而路径体量钳制消费的是后两者。此前 Goal 已产出
+ * `primary_block_type` / `recurrence`，但没有写进 normalizedInput.triage ⇒
+ * 「低可迁移 × 一次性 → 一节课量级」只在单测/replay 生效，真实 goal→path 永不触发。
+ *
+ * 映射口径（与 path-planning-hints 的判据同源）：
+ *   capability              → transferable=true
+ *   oneoff_operation / environment_tooling / permission_process / emotion_relationship
+ *                           → transferable=false
+ *   其它/缺失               → null（不猜）
+ * recurrence 只认 once / oneoff / recurring 三个值，其它置 null。
+ * 两者都缺失时返回 null（下游行为与接入前完全一致）。
+ */
+export function deriveTriageHint(understanding: unknown): TriageHint | null {
+  const src = understanding && typeof understanding === 'object'
+    ? understanding as Record<string, unknown>
+    : null;
+  if (!src) return null;
+  const pick = (...keys: string[]): unknown => {
+    for (const key of keys) {
+      const value = src[key];
+      if (value !== undefined && value !== null) return value;
+    }
+    return undefined;
+  };
+  const blockType = normalizeString(pick('primary_block_type', 'primaryBlockType'));
+  const recurrenceRaw = normalizeString(pick('recurrence'));
+  const recurrence: TriageHint['recurrence'] =
+    recurrenceRaw === 'once' || recurrenceRaw === 'oneoff' || recurrenceRaw === 'recurring'
+      ? recurrenceRaw
+      : null;
+  const transferable = blockType === 'capability'
+    ? true
+    : (blockType === 'oneoff_operation'
+      || blockType === 'environment_tooling'
+      || blockType === 'permission_process'
+      || blockType === 'emotion_relationship')
+      ? false
+      : null;
+  if (transferable === null && recurrence === null) return null;
+  const evidence = normalizeString(pick('block_type_evidence', 'blockTypeEvidence'));
+  return {
+    transferable,
+    recurrence,
+    ...(evidence ? { evidence } : {}),
+  };
 }
 
 /**
@@ -549,11 +600,10 @@ export function derivePlanningHints(
         ? scopeConfig!.milestoneRange[1]
         : Math.min(HARD_MILESTONE_CAP, Math.max(scopeConfig!.milestoneRange[1], paceConfig.milestoneRange[1])))
     : Math.min(HARD_MILESTONE_CAP, paceConfig.milestoneRange[1]);
-  // 方案乙：**区间是权威边界，数字由 LLM 定**。
-  //   lo = scope 下界（问题规模参考）；hi = 防膨胀上界（scope/pace 较松者 ∧ 硬上限 8）。
-  //   targetMilestones 退化为「建议值」：供提示词参考，validator 只校验 count ∈ [lo, hi]。
-  //   为什么不再塌成 [t,t]：体量是"这条路径该分几步"的语义判断，属于 LLM 的活；
-  //   代码只该给边界（防压小/防撑大），不该替它拍一个精确数——枚举拍死正是"过于死板"的来源。
+  // 口径（2026-10-29 收口）：**targetMilestones 存在时是强制值**（prompt 规则 46 与
+  // path-planning validator 同口径）；区间是 target 缺失时的边界，用于防压小/防撑大。
+  //   为什么仍保留区间：keyStages / 学时信号都缺失时没有可信的精确数，只能给边界让 LLM 定；
+  //   一旦有 target，就按 target 精确校验，避免「prompt 写强制、validator 按区间放行」的双源。
   let milestoneRange: [number, number] = [scopeMilestoneFloor, milestoneCap];
   // 学时早估（仅用于 keyStages 缺失时的里程碑兜底；与后文 estimatedHoursTotal 同源不同时机）
   const earlyHoursEstimate: number | null = (() => {
@@ -741,7 +791,10 @@ export function derivePlanningHints(
   // 只收紧上界，不拍死数字（数字仍由 LLM 在区间内定）；且**不用单点区间**，
   // 与不变量 A（区间永不为单点，见下方出口收束）兼容：最坏 2 段 × 2 任务 × 15 分钟 = 60 分钟。
   // 缺失 triage 时，本分支不生效，行为与今天完全一致。
-  if (triage && triage.transferable === false && triage.recurrence === 'once') {
+  // 词表兼容：Goal 产出的是 oneoff（goal-conversation.yaml），历史/回放数据用 once，
+  // 两者语义相同；此前只认 once 导致真实 Goal 输出永远命中不了「一节课」钳制。
+  const isOneOff = triage?.recurrence === 'once' || triage?.recurrence === 'oneoff';
+  if (triage && triage.transferable === false && isOneOff) {
     const cap = ONE_SITTING_BOUNDS;
     milestoneRange = [...cap.milestoneRange];
     conceptRange = [...cap.conceptRange];

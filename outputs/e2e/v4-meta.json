@@ -1,0 +1,15 @@
+{
+  "label": "V4 · 2026-10-27",
+  "date": "2026-10-27",
+  "items": "frontend/figure-out/v4-final-items.json",
+  "review": "outputs/e2e/v4-review.json",
+  "html": "outputs/v4-review.html",
+  "changes": [
+    {"title": "评审口径对齐留白关", "detail": "meta 明确「留 ? 空槽不算元认知」（V3 的 6 张 meta 里 4 张是留白槽被连坐）；redundant 判法改为「改成正文会损失什么」，并排对照的对应结构算降维增益", "files": ["outputs/e2e/vision-review.mjs"]},
+    {"title": "token 感知折行", "detail": "balancedWrap 二次重排整词不拆——SYN_SENT 不再被截成 SYN_SE（全图型受益）", "files": ["frontend/src/components/teaching-figure/render.ts"]},
+    {"title": "split-compare 留白只留一步", "detail": "整栏留白禁止——学生看不到「对的样子」等于没有对照（V3 三张 drop 的直接根因）", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "受力/矢量词路由 cartesian", "detail": "力是矢量，并排文字画不出方向（V3 受力题误用 split-compare 被整张 drop）", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "concept-map takeaway 不写推导结论", "detail": "V3「风向就反过来」泄题病灶", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "探针拒因透出", "detail": "归一化拒绝时带出 rawSpec，离线可回答「为什么这张被拒」", "files": ["backend/scripts/versioned-probe.ts"]}
+  ]
+}

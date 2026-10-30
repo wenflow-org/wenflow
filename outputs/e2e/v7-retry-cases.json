@@ -1,0 +1,30 @@
+[
+ {
+  "id": "ss-bio-digest",
+  "course": "七年级生物·消化系统 第1课",
+  "subject": "生物",
+  "topic": "食物消化流程",
+  "taskTitle": "一块肉怎么被消化",
+  "taskDescription": "讲解消化道的分阶段处理流程",
+  "taskType": "acquire",
+  "intent": "demonstrate",
+  "acceptance": "学生能按顺序说出四个阶段的处理动作",
+  "expectKind": "state-strip",
+  "student": "吃下去的肉是怎么一步步变成营养的？口腔、胃、小肠分别干什么？流程能给我摆一下吗？",
+  "assistant": "我们按流程分四帧，每帧看这块肉到了哪一站、被怎么处理。"
+ },
+ {
+  "id": "ss-chem-filter",
+  "course": "初三化学·基本操作 第1课",
+  "subject": "化学",
+  "topic": "过滤操作",
+  "taskTitle": "过滤实验流程",
+  "taskDescription": "讲解过滤操作的分步流程与各步要点",
+  "taskType": "execute",
+  "intent": "demonstrate",
+  "acceptance": "学生能按顺序说出操作步骤",
+  "expectKind": "state-strip",
+  "student": "过滤实验的操作顺序我老记混，到底先做什么后做什么？每一步注意什么？",
+  "assistant": "我们把操作按步骤分帧，一帧一个动作，跟着走一遍。"
+ }
+]

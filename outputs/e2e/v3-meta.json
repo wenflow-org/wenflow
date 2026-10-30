@@ -1,0 +1,14 @@
+{
+  "label": "V3 · 2026-10-26 夜",
+  "date": "2026-10-26",
+  "items": "frontend/figure-out/v3-final-items.json",
+  "review": "outputs/e2e/v3-review.json",
+  "html": "outputs/v3-review.html",
+  "changes": [
+    {"title": "split-compare 空槽对齐", "detail": "一侧缺行画「?」虚线空槽——外盲评「分叉线指到空处」的 drop 病灶；指南补：受力/方向等空间关系禁用本图型", "files": ["frontend/src/components/teaching-figure/render.ts", "backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "cartesian-plot 柱状系列", "detail": "series.form='bars'：气温降水图缺柱（V1/V2 各被点名一次）——每点一根从轴底到值的柱", "files": ["backend/src/skills/teaching-turn/index.ts", "frontend/src/components/teaching-figure/render.ts"]},
+    {"title": "state-strip 帧序自洽 + 目标状态留白", "detail": "帧含时间/序号先自查先后（V2 商鞅变法帧序矛盾 drop）；学生要推导的目标状态留「?」（V2 git 帧4 泄题 drop）", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "concept-map 子机制成节点", "detail": "机制子要素展开为独立节点，不印父节点小字（V2 浮力 drop：压强差只印在小字里）", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "balance 触发词补分配类", "detail": "怎么分/比例/精力分配——V2 时间分配题被 concept-map 的「取决于」虹吸", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]}
+  ]
+}

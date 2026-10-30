@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: ce875d8e5fba8dbd76707a4b39572333a9afe3f615db8ecc5c3b78076826eca7
+coreHash: c40dfbb9e7bbad593d620fb43bd2e5df2f3df658df05163e692043ab7be71972
 coreVersion: 17
 temperature: 0.7
 maxTokens: 64000
@@ -146,7 +146,7 @@ deltaOutput: true
   ② objectiveScopeHours 是**内容需要多少**，不是「日历上能学多少」：先找确认方案里的颗粒度承诺（「练 8-10 道题」「前五章每章 3-4 天」「8 层每层一小时」「整本书过一遍」）直接换算；**没有显式数字承诺时也必须估**——按 key_stages 的阶段数 × 每阶段的认知动作量，给出三档参考锚中的值（单点规则/排障 1.5-4h、专项技能/单模块突破 5-12h、完整学科/全书考证 20-50h），并在 scopeAnchor 写明「按 N 个关键阶段估」。这是首版规划的体量主输入，**轻易不要填 null**；只有目标本身无法界定（纯情绪诉求、没有可交付物）才给 null。**禁止**把「我有半年」「每天一小时」乘成小时填进来——那是可用容量，不是内容体量；两者数值接近只是巧合，不能作为依据。
   ③ deadlineDate 只在有**确定外部截止**时填。无期限时写 null，**并且不要为了凑时间模型去估算 totalWeeks / estimatedWeeks**：无期限路径按内容体量推进，不设「必须几周学完」的目标。它与 understanding.deadline_date 必须是同一个值；无期限时两处都置 null。
   ④ **容量与体量冲突时先收窄范围，再估 objective**（2026-10-28 R4 外部评审）：若用户明确给出总可投入时间或「每次多久 × 几天/几周」（如「7 天每天 30 分钟」「总共 3.5 小时」），先算容量 = 天数 × 单次分钟 / 60。若按 ② 估出的 `objectiveScopeHours` > 容量 × 1.25，**不要**把 objective 直接改写成容量，也不要在保留全量 key_stages 的同时硬排；应在 `confirmedProposal.key_stages` 里把本期收窄到 `firstDeliverable` 必需的最小集合（其余部分在 reply 里明确写成后续阶段），再按收窄后的 key_stages 重估 `objectiveScopeHours`。reply 必须说清「按你能投入的 X 小时，本期只做 Y，剩余 Z 留到后续」。容量只在用户**明确给出**时参与判断；禁止从「我有半年」「有空就学」这类模糊表述反推容量。
-  已废弃字段（deprecated，仅供诊断，禁止作为预算依据）：totalSessions、totalWeeks、sessionsPerWeek、estimatedHours、calendarCapacityHours、scopeAnchorHours。如果你已经能算出，可以保留原字段名与原形态用于平台审计，但**不得**用它们替代 objectiveScopeHours，也不得因为它们有值而回头改动 objectiveScopeHours / deadlineDate。新输出优先只填三字段 + scopeAnchor + timeModelVersion。
+  已废弃字段（deprecated，禁止输出，也禁止作为预算依据）：totalSessions、totalWeeks、sessionsPerWeek、estimatedHours、calendarCapacityHours、scopeAnchorHours。后端不再从新三元组补算这些旧值——下游（path-planning/学习看板）一律读新三元组；历史数据里的旧字段只做兼容读取，不参与新路径预算。你**不要**在输出里生成或保留这些字段，也不得用它们替代 objectiveScopeHours 或回头改动 objectiveScopeHours / deadlineDate。新输出只填三字段 + scopeAnchor + timeModelVersion。
   示例：
   · 确定截止：「明年1月5日考试，每天下班后大概一个小时，考纲前三章」→ { "timeModelVersion": 2, "sessionsLengthMin": 60, "objectiveScopeHours": 18, "deadlineDate": "2027-01-05", "scopeAnchor": "考纲前三章，每章约6h" }
   · 无期限：「随便学学，周末有空看两小时，想把这本书过一遍」→ { "timeModelVersion": 2, "sessionsLengthMin": 120, "objectiveScopeHours": 22, "deadlineDate": null, "scopeAnchor": "全书12章×约2h" }

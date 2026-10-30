@@ -70,6 +70,8 @@ import { buildMemoryRecallHints, type MemoryRecallHint } from './memory-recall'
 
 import { safeJsonParse } from '../utils/safe-json'
 import { bumpFrictionBudget, normalizeFrictionBudget } from '../skills/virtual-learner-shared'
+import { decideControlledError } from '../skills/virtual-learner-shared/schemas'
+import { findMisconceptionFor } from '../config/misconception-corpus'
 import type { SkillDefinition } from '../skills/protocol'
 import { asErrorLike } from './vlab-types'
 import { buildCheckpointAction } from './blackbox-checkpoint'
@@ -974,10 +976,32 @@ export class BlackboxVirtualLearnerRunner {
           const ended = await this.endExtensionSession(session, state, adapter, control)
           return { result: await this.projectPlatformResult(session, state, ended) }
         }
-        const history = this.visibleHistory(state).map((item) => ({
+        const lessonHistory = this.visibleLessonHistory(state)
+        // 与 assisted 链路同口径：模型只看最近 6 条可见消息；turnIndex 仍按本课全量计。
+        const history = lessonHistory.slice(-6).map((item) => ({
           role: item.role === 'platform' ? 'teacher' : 'learner',
           content: item.content
         }))
+        const knowledgeSnapshot = await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask)
+        const lastTeacherMessage = [...history].reverse().find((item) => item.role === 'teacher')?.content || ''
+        // 受控错误（与 assisted 链路同口径，外部审计 P1-5）：旧黑盒链路没有采样，
+        // 画像 struggle 与真人误区语料在 blackbox 实验里完全不生效，学习者永远零失手。
+        const controlledError = decideControlledError({
+          frictionBudget: snapshot.frictionBudget,
+          struggleConcepts: (learner as Record<string, unknown> | null)?.struggleConcepts,
+          currentTaskConcepts: [
+            latest.visibleTask?.title,
+            latest.visibleTask?.linkedConcept,
+            latest.visibleTask?.description,
+            // 不要用 knowledgeSnapshot：它含画像 struggling/dueReview，会把旧课卡点
+            // 重新算进本轮概念域，让受控错误的域过滤失效（独立评审 P1-5）。
+          ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0),
+          turnIndex: lessonHistory.filter((item) => item.role === 'learner').length,
+          resolveMisconception: (concept) => {
+            const hit = findMisconceptionFor(concept)
+            return hit ? { statement: hit.statement, why: hit.why ?? null, source: hit.source ?? null } : null
+          },
+        })
         // 阶段1：认知判决（BEAGLE Strategist 段，物理两阶段第一段；失败降级 null，不阻断叙事）
         let epistemicGrounding: any = null
         try {
@@ -986,18 +1010,44 @@ export class BlackboxVirtualLearnerRunner {
             {
               learner,
               currentTask: latest.visibleTask || null,
-              knowledgeSnapshot: await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask),
+              knowledgeSnapshot,
               previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
+              visibleContext: {
+                history,
+                lastTeacherMessage
+              },
+              ...(latest.visibleCheckpoint ? { pendingCheckpoint: latest.visibleCheckpoint } : {}),
+              ...(controlledError.forced ? { forcedCorrectness: controlledError } : {}),
             },
             snapshot,
             'teaching'
           )
           epistemicGrounding = (groundingOutput as any)?.epistemicGrounding || null
+          if (controlledError.forced && epistemicGrounding?.sampledCorrectness !== false) {
+            epistemicGrounding = {
+              ...(epistemicGrounding || {}),
+              sampledCorrectness: false,
+              blockedConcept: controlledError.targetConcept ?? epistemicGrounding?.blockedConcept ?? null,
+              errorPattern: controlledError.targetMisconception?.statement
+                ?? epistemicGrounding?.errorPattern
+                ?? (controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null),
+              masteryProb: 0.15,
+            }
+          }
         } catch (groundingError) {
           logger.warn('[Blackbox] 认知判决失败（降级为无硬约束叙事）', {
             sessionId,
             error: groundingError instanceof Error ? groundingError.message : String(groundingError),
           })
+          if (controlledError.forced) {
+            epistemicGrounding = {
+              sampledCorrectness: false,
+              blockedConcept: controlledError.targetConcept,
+              errorPattern: controlledError.targetMisconception?.statement
+                ?? (controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null),
+              masteryProb: 0.15,
+            }
+          }
         }
         const output = await this.executeSimulatorSkillWithRetry(
           sessionId,
@@ -1007,12 +1057,12 @@ export class BlackboxVirtualLearnerRunner {
             story,
             visibleContext: {
               history,
-              lastTeacherMessage: [...history].reverse().find((item) => item.role === 'teacher')?.content || ''
+              lastTeacherMessage
             },
             currentPhase: (state.blackbox?.learnerPrivateState?.teaching as Record<string, unknown> | undefined)?.phaseFocus || 'trying',
             previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
             currentTask: latest.visibleTask || null,
-            knowledgeSnapshot: await this.buildLearnerKnowledgeSnapshot(session.userId, latest.visibleTask),
+            knowledgeSnapshot,
             ...(await this.buildLearnerMemoryContextForSimulator(session.userId, sessionId, history.length)),
             epistemicGrounding,
             frictionBudget: snapshot.frictionBudget,
@@ -1054,6 +1104,9 @@ export class BlackboxVirtualLearnerRunner {
           ...output.learnerState,
           learnerFeedback: output.learnerFeedback,
           epistemicGrounding,
+          // 课后记忆提炼器从私有轨迹的 state.reply 取学习者原话（外部审计 P1-6）：
+          // 旧实现只存 learnerState，trace 里 reply 恒空，curator 只能对数值自评做断言。
+          reply: output.reply,
           extensionRequests: priorExtensionRequests + (action.type === 'request_extension' ? 1 : 0)
         }, {
           emotion: output.emotion,
@@ -1874,7 +1927,7 @@ export class BlackboxVirtualLearnerRunner {
         ? deriveCuratedSelfState(selfState, {
             mastered: curated.masteredConcepts,
             struggle: curated.struggleConcepts,
-            fallbackConcept: task?.title || null,
+            fallbackConcept: task?.linkedConcept || null,
           })
         : selfState;
       await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, {
@@ -2010,16 +2063,19 @@ export class BlackboxVirtualLearnerRunner {
         : Array.isArray(raw)
           ? raw
           : [];
-      // P2-32：与主路径同口径，turn 用 messages 里的绝对序号（不是 slice 窗口内序号）
-      const fallbackWindow = messages.slice(-24);
-      const fallbackOffset = Math.max(0, messages.length - fallbackWindow.length);
+      // P2-32：与主路径同口径，turn 用 messages 里的绝对序号（不是 slice 窗口内序号）。
+      // 只取学习者自己的发言：把 assistant/teacher 消息当 reply 送进提炼器，等于用老师的嘴
+      // 给学习者做自评，curator 会从教师讲解里"提炼"出虚假掌握证据（独立评审 P2）。
+      const learnerMessages = messages.filter((m: any) => m?.role === 'user' || m?.role === 'learner');
+      const fallbackWindow = learnerMessages.slice(-24);
+      const fallbackOffset = Math.max(0, learnerMessages.length - fallbackWindow.length);
       return fallbackWindow.map((m: any, index: number) => ({
         turn: fallbackOffset + index + 1,
         reply: typeof m.content === 'string' ? m.content : '',
         emotion: null,
         learnerState: undefined,
         learnerFeedback: undefined,
-        role: m.role || 'learner',
+        role: 'learner',
       }));
     } catch {
       return [];
@@ -2278,6 +2334,25 @@ export class BlackboxVirtualLearnerRunner {
 
   private visibleHistory(state: StageResults): Array<{ role: string; content: string }> {
     return (state.blackbox?.publicTrace || []).flatMap((entry) => entry?.observation?.visibleMessages || [])
+  }
+
+  /**
+   * 当前这一课的学习者可见历史：从最近一次进入 teaching 的观测开始。
+   * publicTrace 是整个实验的累积轨迹（含 Goal/Path/上一课），直接喂给模拟器会让
+   * 学习者"记得"前几节课和 Goal 对话原文，且上下文无界增长（独立评审 P1）。
+   */
+  private visibleLessonHistory(state: StageResults): Array<{ role: string; content: string }> {
+    const trace = state.blackbox?.publicTrace || []
+    let startIdx = 0
+    for (let i = trace.length - 1; i >= 0; i -= 1) {
+      const stage = trace[i]?.observation?.stage
+      const prevStage = i > 0 ? trace[i - 1]?.observation?.stage : null
+      if (stage === 'teaching' && prevStage !== 'teaching') {
+        startIdx = i
+        break
+      }
+    }
+    return trace.slice(startIdx).flatMap((entry) => entry?.observation?.visibleMessages || [])
   }
 
   private latestRefereeReport(state: StageResults) {

@@ -79,8 +79,16 @@ export interface ClosureGateInput {
   pendingCheckpoint: unknown;
   /** 本回合模型是否又输出了新检查题（control.checkpoint） */
   checkpointEmittedThisTurn: boolean;
-  /** 此前已被延迟过几次（teachingState.completionDeferrals） */
+  /** 本回合新检查题题面（用于识别"是不是同一道题"） */
+  emittedCheckpointQuestion?: string | null;
+  /** 此前已被延迟过几次（teachingState.completionDeferrals，全会话累计） */
   priorDeferrals: number;
+  /** 上一次被延迟时压住的题面（teachingState.completionDeferralQuestion） */
+  previousDeferredQuestion?: string | null;
+  /** 同一题面此前已被延迟过几次（teachingState.completionDeferralQuestionCount） */
+  priorDeferralsForSameQuestion?: number;
+  /** 绝对上限用掉后，是否为「最后一问」再放行一轮（teachingState.completionCapGraceUsed） */
+  capGraceUsed?: boolean;
 }
 
 export interface ClosureGateDecision {
@@ -88,23 +96,62 @@ export interface ClosureGateDecision {
   defer: boolean;
   /** 压住原因（日志/观测用），defer=false 时为 null */
   reason: 'pending-checkpoint-unanswered' | 'checkpoint-emitted-this-turn' | 'trailing-question' | null;
+  /** 本回合被压住的题面归一化键（用于同一题识别；无题面时为 null） */
+  questionKey: string | null;
+  /** true = 这是绝对上限后的最后一次宽限延迟（只发生一次） */
+  capGrace?: boolean;
+}
+
+/** 全会话延迟总上限：防止「老师每回合都换一道新题」把课拖到永不收敛 */
+export const COMPLETION_DEFERRAL_ABSOLUTE_CAP = 6;
+
+function normalizeQuestionKey(text: string): string {
+  return String(text || '').toLowerCase().replace(/\s+/g, '').trim();
+}
+
+function resolveClosureQuestionKey(reply: string, pendingCheckpoint: unknown, emittedQuestion?: string | null): string | null {
+  if (emittedQuestion && String(emittedQuestion).trim()) {
+    return normalizeQuestionKey(String(emittedQuestion));
+  }
+  if (pendingCheckpoint && typeof pendingCheckpoint === 'object') {
+    const question = (pendingCheckpoint as { question?: unknown }).question;
+    if (typeof question === 'string' && question.trim()) return normalizeQuestionKey(question);
+  }
+  const lastSentence = tailSentences(reply, 1).join('');
+  return lastSentence ? normalizeQuestionKey(lastSentence) : null;
 }
 
 export function shouldDeferCompletionForClosure(input: ClosureGateInput): ClosureGateDecision {
   const priorDeferrals = Number(input.priorDeferrals) || 0;
-  if (priorDeferrals >= COMPLETION_DEFERRAL_CAP) {
-    return { defer: false, reason: null };
+  const questionKey = resolveClosureQuestionKey(input.reply, input.pendingCheckpoint, input.emittedCheckpointQuestion);
+  const gateReason: ClosureGateDecision['reason'] = input.pendingCheckpoint
+    ? 'pending-checkpoint-unanswered'
+    : input.checkpointEmittedThisTurn
+      ? 'checkpoint-emitted-this-turn'
+      : detectTrailingQuestion(input.reply)
+        ? 'trailing-question'
+        : null;
+  // 活力兜底：全会话延迟总上限到顶即放行（旧实现按"全会话累计 2 次"封顶，
+  // 前两轮的旧题把预算耗尽后，后面新抛出的、从未作答的末问也会被直接收掉——
+  // 实测 22 分钟课在老师刚问完最后一道时结束，学员永远没机会答。外部审计 P0-2。）
+  if (priorDeferrals >= COMPLETION_DEFERRAL_ABSOLUTE_CAP) {
+    // 到顶后若老师刚好又抛了新问题：先给一次"最后一问"宽限，让学员至少答一次；
+    // 宽限只发生一次，下一回合无论是否还有问句都放行（防永不收敛）。
+    if (gateReason && !input.capGraceUsed) {
+      return { defer: true, reason: gateReason, questionKey, capGrace: true };
+    }
+    return { defer: false, reason: null, questionKey };
   }
-  if (input.pendingCheckpoint) {
-    return { defer: true, reason: 'pending-checkpoint-unanswered' };
+  // 同一道题被延迟到上限后放行；换了一道新题则重新获得延迟额度
+  const sameQuestion = !!questionKey && questionKey === normalizeQuestionKey(String(input.previousDeferredQuestion || ''));
+  const sameQuestionDeferrals = sameQuestion ? Number(input.priorDeferralsForSameQuestion) || 0 : 0;
+  if (sameQuestionDeferrals >= COMPLETION_DEFERRAL_CAP) {
+    return { defer: false, reason: null, questionKey };
   }
-  if (input.checkpointEmittedThisTurn) {
-    return { defer: true, reason: 'checkpoint-emitted-this-turn' };
+  if (gateReason) {
+    return { defer: true, reason: gateReason, questionKey };
   }
-  if (detectTrailingQuestion(input.reply)) {
-    return { defer: true, reason: 'trailing-question' };
-  }
-  return { defer: false, reason: null };
+  return { defer: false, reason: null, questionKey };
 }
 
 
@@ -188,7 +235,10 @@ export function evaluateSessionClosable(input: {
       const attempts = Number(entry.attempts);
       // 只有「还能再答」时才拦；到顶（或旧数据没有次数）按既有设计放行，
       // 避免把「记复习清单 → 收课」这条合法收束路径重新焊死。
-      if (Number.isFinite(attempts) && attempts < CLOSURE_CHECKPOINT_MAX_ATTEMPTS) {
+      // allowOpenQuestion（复习课有界收束 / end_only 主动退出）同样放行：
+      // 退出通道不该被「先答题」挡住，否则真人只能关页走 abandoned 豁免。
+      if (!input.allowOpenQuestion
+        && Number.isFinite(attempts) && attempts < CLOSURE_CHECKPOINT_MAX_ATTEMPTS) {
         return {
           closable: false,
           code: 'FINALIZATION_LAST_CHECKPOINT_FAILED',

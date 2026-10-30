@@ -1,0 +1,16 @@
+{
+  "label": "V6 · 2026-10-27",
+  "date": "2026-10-27",
+  "items": "frontend/figure-out/v6-final-items.json",
+  "review": "outputs/e2e/v6-review.json",
+  "html": "outputs/v6-review.html",
+  "changes": [
+    {"title": "cartesian-plot 双轴（y2 右轴）", "detail": "series.axis='right' + y2 域/刻度：气温降水图不再同轴把气温压进 1/6 高度；孤立 y2（无右轴系列）自动丢弃；图例标「（右轴）」", "files": ["backend/src/skills/teaching-turn/index.ts", "frontend/src/components/teaching-figure/render.ts"]},
+    {"title": "venn 折行改 balancedWrap", "detail": "两侧文字不再贪心折行，「人物」不再被拆成孤立单字", "files": ["frontend/src/components/teaching-figure/render.ts"]},
+    {"title": "bullseye 行标签动态让位", "detail": "padL 按最长行标签给 + fitText 兜底（外盲评：「低」字被裁）", "files": ["frontend/src/components/teaching-figure/render.ts"]},
+    {"title": "概念图无关边样式", "detail": "非因果/「无关」的边用 neutral+dash（虚线灰线），与「决定」的实线区分", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "state-strip 帧间动作归属", "detail": "命令/动作写在前一帧 items 末条并「→」开头，不塞帧框（外盲评：学生不知道命令对应哪次流转）", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]},
+    {"title": "图文指代规范", "detail": "reply 指图用图上标签原文，禁用「第 n 行/栏/帧」（模型数不准，学生会找不到）", "files": ["prompts/core/teaching-turn.yaml"]},
+    {"title": "split-compare 两栏同文拒绝", "detail": "两栏内容完全相同 = 不是对比（外盲评：两侧代码一字不差）", "files": ["backend/src/skills/teaching-turn/index.ts"]}
+  ]
+}

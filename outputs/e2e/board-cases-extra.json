@@ -1,0 +1,68 @@
+[
+  {
+    "id": "c1-chem-filter",
+    "course": "初三化学·基本操作 第1课",
+    "subject": "化学",
+    "topic": "过滤操作的顺序与要点",
+    "taskTitle": "过滤实验的步骤",
+    "taskDescription": "学生记混过滤操作顺序，需要按步骤拆解并说明每步为什么不能颠倒",
+    "taskType": "execute",
+    "acceptance": "学生能按顺序说出过滤步骤，并说明每步的作用",
+    "expectKind": "state-strip",
+    "turns": [
+      {
+        "student": "老师，过滤实验的步骤我老是记混：到底先放滤纸还是先倒液体？一贴二低三靠又是什么？"
+      },
+      {
+        "student": "我理了一下：先折叠滤纸、放进漏斗，用水润湿让它贴紧；然后漏斗下端管口要紧靠烧杯内壁，液面低于滤纸边缘，玻璃棒靠在三层滤纸那边引流。这样滤液才不会溅出来，也不会从滤纸和漏斗之间漏下去。"
+      },
+      {
+        "student": "那如果滤纸没有贴紧、中间有气泡，过滤会变成什么样？我是不是要重新做一遍？"
+      }
+    ]
+  },
+  {
+    "id": "c2-eng-tense",
+    "course": "初二英语·现在完成时 第2课",
+    "subject": "英语",
+    "topic": "现在完成时与一般过去时的区别",
+    "taskTitle": "时态选择纠错",
+    "taskDescription": "学生把现在完成时和一般过去时混用，需要用两栏对照找出判断依据",
+    "taskType": "diagnose",
+    "acceptance": "学生能说出两种时态各自的使用条件，并改对句子",
+    "expectKind": "split-compare",
+    "turns": [
+      {
+        "student": "老师，这句为什么不能用一般过去时？I have finished my homework yesterday. 我觉得昨天发生的事就该用过去时啊。"
+      },
+      {
+        "student": "我明白了：yesterday 是明确过去时间，不能和现在完成时连用，所以应该改成 I finished my homework yesterday. 现在完成时强调的是到现在为止的结果，不跟具体过去时间状语。"
+      },
+      {
+        "student": "那如果我把句子改成 I have already finished my homework，没有 yesterday，是不是就对了？如果换成 last night 呢？"
+      }
+    ]
+  },
+  {
+    "id": "c3-bio-photosynthesis",
+    "course": "初一生物·绿色植物 第1课",
+    "subject": "生物",
+    "topic": "光合作用的原料与条件",
+    "taskTitle": "影响光合作用强弱的因素",
+    "taskDescription": "学生把光照、二氧化碳、温度对光合作用的影响混在一起，需要分清条件与原料",
+    "taskType": "acquire",
+    "acceptance": "学生能区分光合作用的原料、条件和产物，并说明某个因素变化时的影响",
+    "expectKind": "concept-map",
+    "turns": [
+      {
+        "student": "老师，光合作用到底需要什么？光照越强是不是就一定越好？温度和二氧化碳又各管什么？"
+      },
+      {
+        "student": "我分清楚了：二氧化碳和水是原料，光照是条件，产物是有机物和氧气。光照增强能提高光合速率，但太强会灼伤叶片；温度影响酶的活性，过高过低都不行。"
+      },
+      {
+        "student": "那如果在温室里把二氧化碳浓度提高一倍、光照不变，光合速率会一直往上走吗？温度再升高十度呢？"
+      }
+    ]
+  }
+]

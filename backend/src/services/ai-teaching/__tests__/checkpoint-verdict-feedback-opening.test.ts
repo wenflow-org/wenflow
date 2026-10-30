@@ -64,7 +64,9 @@ describe('检查点判错反馈：开头先给裁决结论（walkc-j17）', () =
   });
 
   it('既有约束未被顶掉：通过裁决仍「正常确认并推进」、不泄露技术来源', () => {
-    expect(coreRule).toContain('passed=true 时正常确认并推进');
+    // v19 把「正常确认并推进」收紧成「第一句必须明确确认」，语义不变、口径更硬
+    expect(coreRule).toContain('passed=true 时');
+    expect(coreRule).toContain('第一句必须明确确认');
     expect(coreRule).toContain('绝不可');
     expect(coreRule).toContain('checkpointVerdict 缺失时忽略本条');
   });

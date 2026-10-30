@@ -36,9 +36,13 @@ export interface TeachingFigurePayload {
   };
   marks?: Array<{ at: number; label: string; dir?: 'right' | 'left' | 'none' }>;
   spans?: Array<{ from: number; to: number; label: string }>;
+  /** 归类花括号：把轴上连续的一段位置圈成一组（`spans` 是跨度，这里是归组） */
+  group?: { from: number; to: number; label?: string | null } | null;
   guides?: Array<{ at: number; label?: string | null }>;
   /** 非 position-line 图型的规格 */
   spec?: Record<string, unknown>;
+  /** 模型自己给的一句话出图理由（只给复盘/图库看，不渲染给学生） */
+  why?: string | null;
   caption?: string | null;
 }
 

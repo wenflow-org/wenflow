@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- 探针：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 import 'dotenv/config';
 import axios from 'axios';
-const BASE = 'http://localhost:3001/api';
+const BASE = process.env.PROBE_BASE || 'http://localhost:3001/api';
 async function main() {
   // 探针账号从环境变量读取（PROBE_ACCOUNT_NAME / PROBE_ACCOUNT_PASSWORD），不写入源码
   const name = process.env.PROBE_ACCOUNT_NAME || '';

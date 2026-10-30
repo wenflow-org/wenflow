@@ -1,0 +1,12 @@
+{
+  "label": "V7 · 2026-10-27",
+  "date": "2026-10-27",
+  "items": "frontend/figure-out/v7-final-items.json",
+  "review": "outputs/e2e/v7-review.json",
+  "html": "outputs/v7-review.html",
+  "changes": [
+    {"title": "脱敏槽不继承面板色", "detail": "split-compare 待填行（?）一律中性虚线槽——绿色 ok 色调的 ? 看起来像「已完成」", "files": ["frontend/src/components/teaching-figure/render.ts"]},
+    {"title": "y 轴标题动态让位", "detail": "cartesian padL 按 y 轴标题宽度动态（「气温 /℃（点线）· 降水 /10…」不再被截断）", "files": ["frontend/src/components/teaching-figure/render.ts"]},
+    {"title": "六处指南补课", "detail": "split-compare 第 1 行同一起点；bipartite 待连对象也画 '?' 节点；tree 方位只表层级；cartesian ticks 覆盖全域 + 突跃窄域；化学式用 Unicode 下标（H₂O）", "files": ["backend/src/services/ai-teaching/teaching-visual.service.ts"]}
+  ]
+}

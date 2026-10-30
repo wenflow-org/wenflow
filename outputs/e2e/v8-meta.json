@@ -1,0 +1,13 @@
+{
+  "label": "V8 · 2026-10-27",
+  "date": "2026-10-27",
+  "items": "frontend/figure-out/v8-final-items.json",
+  "review": "outputs/e2e/v8-review.json",
+  "html": "outputs/v8-review.html",
+  "changes": [
+    {"title": "图内算式复算（整图拒绝）", "detail": "扫 spec 全部字符串的「数 运算 数 = 数」确定式（≈ 不算），相对误差 >1% 整图拒绝——engine 只查 reply 算式，图内文字此前无人核验", "files": ["backend/src/skills/teaching-turn/index.ts"]},
+    {"title": "概念图并列边合并", "detail": "同 from→to 多条边合并为一条、关系名并成「甲、乙」（外盲评：两条边挤成一条，学生分不清一个关系还是两个）", "files": ["backend/src/skills/teaching-turn/index.ts"]},
+    {"title": "两栏行数差拒绝（>2）", "detail": "差 3+ 行说明行与行比的不是同一件事；差 1~2 由「?」空槽兜住", "files": ["backend/src/skills/teaching-turn/index.ts"]},
+    {"title": "split-compare 英文长句折行", "detail": "row label 18→26 字（英文句子不再被整行丢弃）+ 渲染折两行、行高自适应", "files": ["backend/src/skills/teaching-turn/index.ts", "frontend/src/components/teaching-figure/render.ts"]}
+  ]
+}

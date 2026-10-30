@@ -1,0 +1,105 @@
+{
+ "label": "BOARD4",
+ "generatedAt": "2026-10-27T07:39:40.787Z",
+ "model": "deepseek-v4.1-flash",
+ "total": 6,
+ "judged": 4,
+ "errors": 2,
+ "verdicts": {
+  "keep": 0,
+  "fix": 4,
+  "drop": 0
+ },
+ "meanUsefulness": 1.5,
+ "meanGeometry": 1,
+ "meanReadability": 2.5,
+ "metaShare": 0,
+ "leakShare": 0,
+ "redundantShare": 0,
+ "byKind": {
+  "split-compare": {
+   "n": 2,
+   "keep": 0,
+   "drop": 0,
+   "usefulness": 1.5
+  },
+  "concept-map": {
+   "n": 2,
+   "keep": 0,
+   "drop": 0,
+   "usefulness": 1.5
+  }
+ },
+ "results": [
+  {
+   "i": 0,
+   "user": "b1-math-pace·提问态",
+   "kind": "split-compare",
+   "usefulness": 2,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "readability": 3,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "用左右两栏并排呈现配速换算的常见错法与待补的正确步骤，提示问题出在单位而不是数字。",
+   "worstIssue": "左栏把「0.15 分钟/千米」和「0.15 min/km」重复列成两行，却没有把「60 s ÷ 400 m 应留下 s/m」这个关键单位关系画出来，导致标题说的「分叉在单位」没有真正落在图上。"
+  },
+  {
+   "i": 1,
+   "user": "b1-math-pace·揭晓态",
+   "kind": "split-compare",
+   "usefulness": 1,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "readability": 2,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "把上一题 400 m 跑 60 s 的配速换算拆成两栏对照：错在把 0.15 s/m 直接写成 min/km，正确链是 0.15 s/m→×1000=150 s/km→÷60=2.5 min/km。",
+   "worstIssue": "图里通篇是学生上一轮已经走通的 400 m/60 s，老师这一轮新给的 800 m/3 分 20 秒在图上没有任何落位，连空槽或虚线待填格都没有，学生对着这张图无法开始自己那题。"
+  },
+  {
+   "i": 2,
+   "user": "b2-phys-buoyancy·提问态",
+   "kind": "concept-map",
+   "usefulness": 1,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "redundant": false,
+   "readability": 3,
+   "verdict": "fix",
+   "oneLine": "一张把ρ液、V排、g汇成G排再得到F浮的两层关系图，另挂『浸入深度h』『物体自重G物』两个待查候选——但中间汇合的那个框被错标成了物体自重。",
+   "worstIssue": "汇合节点错位：ρ液、V排、常数g三条箭头汇入的框写着「物体自重 G物」，按图读出来就是『物体自重由液体密度、排液体积和g决定』，学生看到的是与事实相反的因果关系；这个框应是「排开液体重力 G排」，物体自重只该有一条直接指向F浮的虚线。"
+  },
+  {
+   "i": 3,
+   "user": "b2-phys-buoyancy·揭晓态",
+   "kind": "concept-map",
+   "usefulness": 2,
+   "geometry": 1,
+   "readability": 2,
+   "meta": false,
+   "leak": false,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "这张概念图把浮力的来源（ρ液、V排、g 相乘得 G排，再由 G排 得 F浮）与两个“不影响浮力”的干扰量（浸入深度、物体自重）并排对照。",
+   "worstIssue": "“排开液体体积 V排”向下连出的“相乘”线直接穿过“物体自重 G物”方框，并与另外两条相乘线在 G物 下缘汇聚，视觉上让人读成 G物 = ρ液 g V排——把一个正要排除的干扰量摆进了乘法汇聚点，属于会教错关系的构图；同时底部结论说“两条虚线”，图里四条线全是实线，图例与图不符。"
+  },
+  {
+   "i": 4,
+   "user": "b3-hist-shangyang·提问态",
+   "kind": "state-strip",
+   "error": "bad json: We need answer JSON only. Need evaluate. Need be strict. Let's parse.\n\nWe have student question: Was Shang Yang reform all at once? heard he erected a pole at s",
+   "raw": "We need answer JSON only. Need evaluate. Need be strict. Let's parse.\n\nWe have student question: Was Shang Yang reform all at once? heard he erected a pole at south gate, relation? Teacher answers: not all at once, first made people trust, then two stages. Corresponds to panel title \"先取信，再分两步推\". Student asked wood corresponds to ① 立木为信, three slots empty. Teacher asks: don't rush to write laws, return to scene: pole moved, reward paid, bystanders' attitude toward whether government words count, what change in heart? Write one sentence in own words, no jargon.\n\nImage: state-strip with title, three frames: ①立木为信, ②第一次变法, ③第二次变法, each with three ?. Arrows between. This is a sequence/state strip. It visually conveys sequence: trust first, then two stages. The title and frames. But empty slots: 3 slots each. The teacher only asks to fill one sentence in ①? \"三个槽现在还是空的。先别急着写变法的条文，回到南门现场...用你自己的话写一句填进去\" Hmm image has 3 slots in each frame. The teacher says \"① 立木为信 这一格，三个槽现在还是空的\" maybe asks fill one sentence? \"写一句填进去\" could be one of three. The other frames empty. Is image useful? It answers \"not all at once\" by showing sequence and two stages. Student needs see sequence: 先取信, then 第一次, 第二次. Without image, teacher already says that. But image provides scaffold for filling? There are three slots per stage, maybe too many and unspecified. Need judge usefulness 0-3. Geometry 0-3: positions/arrows sequence carries relation (temporal/process order) yes. But frames are boxes with labels; arrows indicate sequence. Does geometry carry subject relation? It shows order and two-step progression, but not much else. Could be 1 or 2. Maybe 2: sequence order via arrows/ frames. But \"先取信，再分两步推\" is in title. The arrows and numbering carry order. So geometry 2. It's not just sentences in boxes? It has numbered frames and arrows. The relation is chronological staging. That's a represented structure. But there are empty slots only. I think 2.\n\nMeta: Does image include meta instructions/checklists? No. \"？\" slots are not meta. Title \"怎么落地\" fine. No meta. false.\n\nLeak: Teacher asks student to produce content: what change in bystanders' hearts? Write own sentence. Image has only ? no answer. So leak false. But maybe image labels reveal stages \"立木为信, 第一次变法, 第二次变法\" which teacher already said. Not leak of answer to what student should produce (trust change). false.\n\nReadability: The image text: title, labels, numbers, ?; maybe left edge has small \"1\" outside? Need check. It reads fully? There is weird tiny \"1\" at left margin maybe artifact? But not problematic. Text all readable. Could be 3. However the question asks \"图里的文字\" and we need verify read full. It is legible. 3.\n\nRedundant: If rewrite all text to prose: \"商鞅变法怎么落地：先取信，再分两步推。①立木为信：？？？ ②第一次变法：？？？ ③第二次变法：？？？\" Does student lose spatial relation? They lose sequence/parallel structure? Actually sequence is in title \"先取信，再分两步推\"; frames with arrows show stages. If converted to prose, still could say first, second, third. But the \"并排对照中的对应结构\" maybe each stage has three slots. The image's layout provides stages in sequence and parallel slot structure. Is that a降维增益? It shows 3 stages linearly with arrows and three prompts per stage. But with all slots empty, what relation is conveyed? Only stage order. Title already states it. The frames add little. But arrows/numbering are geometric. The rubric: redundant false if losing spatial relations/numeric contrast/pattern difference/parallel correspondence structure. Here frames are just boxes with labels; arrows sequence. If rewrite into sentences, \"first, then first reform, then second reform\" same. The three slots per frame: there are three question marks in each frame. Does that correspond to some structure? Not labeled, so seems arbitrary. The image may be a template for filling three aspects? But teacher only asks one sentence. The three empty slots per stage might be misleading. Is it redundant? Hmm.\n\nThe state-strip type maybe specifically for stages. It is not purely decorative? It visually stages the reform. But teacher's answer already says not all at once; first trust then two steps. Title exactly same. The image merely wraps labels in boxes. The arrows indicate sequence, but that's trivial and also stated. The three empty question marks per frame create an expectation to fill three slots, but no categories. This is likely a weak diagram. Usefulness maybe 1: confirms sequence, but no disciplinary content. Geometry 1: arrows/sequence only. Verdict fix or drop? Need \"strict, prefer delete\". Is there enough to keep? It is a template for student to fill. But teacher asks to fill one sentence in ①, not all. The figure includes ② and ③ empty, not asked. It may help situate. But \"学生这一刻需要看见什么\": they need see that trust comes before reforms and that reforms are two stages. The figure shows that. But the teacher's text says that too. Without image, student can understand. So usefulness maybe 1 not 3. But is it pure decoration? It has sequence scaffolding. Maybe 2? Let's weigh.\n\nThe task: judge classroom diagram. It asks \"这张图是否在回答'学生这一刻需要看见什么'；0=纯装饰，3=没有它学生就难懂\". Student's question asks relationship between pole and reform. The teacher explains: trust first, then two stages. Figure visually shows three stages: 立木为信 → 第一次变法 → 第二次变法. That directly answers relationship: pole is precondition/first stage, not reform content. Without figure, text already answers. But figure helps show sequence, but not necessary. So not 3. Usefulness 2? It gives a clear visual sequence. But the three empty slots under each stage are left blank; no content. It is a worksheet skeleton. At this moment teacher asks one sentence. The skeleton maybe useful to prompt"
+  },
+  {
+   "i": 5,
+   "user": "b3-hist-shangyang·揭晓态",
+   "kind": "state-strip",
+   "error": "bad json: {\"usefulness\":1,\"geometry\":1,\"meta\":false,\"leak\":false,\"readability\":3,\"redundant\":true,\"verdict\":\"drop\",\"oneLine\":\"一张把商鞅变法按“立木为信—第一次变法—第二次变法”排成三格的流程条，只列条目，没展开军",
+   "raw": "{\"usefulness\":1,\"geometry\":1,\"meta\":false,\"leak\":false,\"readability\":3,\"redundant\":true,\"verdict\":\"drop\",\"oneLine\":\"一张把商鞅变法按“立木为信—第一次变法—第二次变法”排成三格的流程条，只列条目，没展开军功爵制下贵族子弟与农夫之子各自的前途路径。\",\"worstIssue"
+  }
+ ]
+}

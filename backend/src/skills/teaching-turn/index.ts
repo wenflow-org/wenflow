@@ -333,6 +333,11 @@ export interface TeachingTurnInput {
     /** 给模型的显式、正向要求（原样进入载荷） */
     instruction: string;
   } | null;
+  /**
+   * 当前白板的文本描述（2026-10-28 接线）：只在白板真实存在时注入。
+   * 模型据此知道「板上写了什么、哪里还空着」；没有 boardContext 时禁止任何看图指代。
+   */
+  boardContext?: string | null;
 }
 
 export interface TeachingTurnOutput {
@@ -499,46 +504,86 @@ export interface TeachingTurnOutput {
     caption: string | null;
   } | null;
   /**
-   * 位置线图（2026-09-27 双通道重构 Scope B）：**空间位置关系**的确定性渲染。
+   * 教学图（确定性 SVG 渲染）：**mermaid 画不好的那几类关系**才走这里。
    *
-   * 真实语料实证（小学追及题：把「小明在前、小红在后，两人都往右」摆成一条线）——
-   * 这类内容 mermaid 的节点-边表达不了，需要自由定位原语（线段/箭头/刻度/标注）。
-   * 与 diagram 分工：节点-边类（流程/时序/层级/分类）走 mermaid；**位置/距离/方向**类走本块。
+   * 分工（2026-10-18 扩图型）：
+   * - 节点-边类（流程/时序/层级/分类）→ `diagram`（mermaid），本块不重复承担；
+   * - 位置/距离/方向 → `position-line`；
+   * - 二维对账/命中矩阵 → `matrix`；二维排布但每格是内容 → `grid`；
+   * - 两分支对照 → `compare`；多对多映射 → `bipartite`；2×2 象限 → `quadrant`；棋盘 → `board`。
    *
    * 规则：
-   * - 只画"对话正在用文字描述的空间关系"（谁在哪、朝哪、隔多远），**不要**画抽象结构；
-   * - `at` 用与题意一致的数值（米/格/序号都行，只要同一图内同单位）；不必等比真实比例，但顺序必须对；
-   * - 标签写**学科实指**（甲/乙/小明/起点/追及点），不要写"物体 1"这类占位；
-   * - 若本轮正要布置"由学生自己画位置线"的练习，本轮**不要**输出（答案泄漏）；
-   * - reply 必须脱离图也成立（图是同一关系的更直观呈现）。
+   * - 只画**对话正在处理的**关系，不要画本轮要学生自己产出的答案（答案泄漏）；
+   * - 标签写**学科实指**（甲/乙/评分点原文/概念名），不要写"项目 1"这类占位；
+   * - `caption` 写一句给学生看的话；reply 必须脱离图也成立（图是同一关系的更直观呈现）；
+   * - `position-line` 用顶层字段（axis/marks/spans/guides），其余图型用 `spec`（见各图型说明）。
    */
-  figure?: {
-    /** 渲染引擎；归一化后恒为 'svg'（其他值整块丢弃，见 normalizeFigure） */
-    engine: string;
-    /** 图型；归一化后恒为 'position-line'（v1 唯一图型） */
-    kind: string;
-    /** 轴（数值域 + 单位 + 刻度）；归一化保证存在且覆盖所有取值 */
-    axis: {
-      min: number;
-      max: number;
-      /** 单位（如「米」「格」「秒」）；无单位则 null */
-      unit: string | null;
-      ticks: Array<{ at: number; label: string | null }>;
-    };
-    /** 线上的对象（人物/物/点）；1~6 个，按 at 升序 */
-    marks: Array<{
-      at: number;
-      label: string;
-      /** 朝向箭头：right/left/none（静态点） */
-      dir: 'right' | 'left' | 'none';
-    }>;
-    /** 区间标注（距离/差）；0~3 条，画在轴下方 */
-    spans: Array<{ from: number; to: number; label: string }>;
-    /** 竖直参考线（追及点/相遇点/分界）；0~4 条 */
-    guides: Array<{ at: number; label: string | null }>;
-    /** 图下方一句说明（学生可见）；归一化后恒为 string|null */
-    caption: string | null;
-  } | null;
+  figure?: TeachingFigure | null;
+}
+
+/** 教学图图型：mermaid 表达不了的二维/位置/多对多关系，以及按「关系形状」分的包含/权衡/层级。 */
+export type TeachingFigureKind =
+  | 'position-line'
+  | 'grid'
+  | 'matrix'
+  | 'compare'
+  | 'quadrant'
+  | 'bipartite'
+  | 'board'
+  | 'bins'
+  | 'balance'
+  | 'ladder'
+  | 'cycle'
+  | 'tree'
+  | 'venn'
+  | 'bullseye'
+  | 'range-bar'
+  | 'cartesian-plot'
+  | 'concept-map'
+  | 'split-compare'
+  | 'state-strip';
+
+export interface TeachingFigure {
+  /** 渲染引擎；归一化后恒为 'svg'（其他值整块丢弃，见 normalizeFigure） */
+  engine: string;
+  /** 图型；归一化后恒为上述白名单之一 */
+  kind: TeachingFigureKind;
+  /**
+   * 学科调色板（服务端按学习路径的 subject 盖章；模型不给也行）。
+   * 只影响观感（色相/材质），不改变任何几何与语义。
+   */
+  palette?: 'indigo' | 'earth' | 'tech' | 'warm' | 'violet' | 'mono';
+  /** 图下方一句说明（学生可见）；归一化后恒为 string|null */
+  caption: string | null;
+  /** position-line 专用（kind='position-line' 时由归一化保证存在） */
+  axis?: {
+    min: number;
+    max: number;
+    /** 单位（如「米」「格」「秒」）；无单位则 null */
+    unit: string | null;
+    ticks: Array<{ at: number; label: string | null }>;
+  };
+  /** 位置线上的对象（人物/物/点）；1~6 个，按 at 升序 */
+  marks?: Array<{
+    at: number;
+    label: string;
+    /** 朝向箭头：right/left/none（静态点） */
+    dir: 'right' | 'left' | 'none';
+  }>;
+  /** 区间标注（距离/差）；0~3 条，画在轴下方 */
+  spans?: Array<{ from: number; to: number; label: string }>;
+  /** 竖直参考线（追及点/相遇点/分界）；0~4 条 */
+  guides?: Array<{ at: number; label: string | null }>;
+  /**
+   * 其余图型的规格（kind≠'position-line' 时由归一化保证存在且已逐字段裁剪）：
+   * - grid: {title?, rows, cols, rowLabels?, colLabels?, colWidths?, cells?[{r,c,text,mask?,ghost?,hl?,mark?}], note?}
+   * - matrix: {title?, rowLabels[], colLabels[], cells?[{r,c,tone:'hit'|'miss'|'dup'|'key'}], note?, legend?}
+   * - compare: {title?, left{head,sub?,items[]}, right{...}, divider?, note?, leftTone?, rightTone?}
+   * - quadrant: {title?, colLabels?[2], rowLabels?[{label,sub?}], cells?[4]{title,body[],tone?,icon?}, note?}
+   * - bipartite: {title?, left{head?,nodes[]}, right{head?,nodes[]}, edges?[{from,to,tone?,dash?}], note?, width?}
+   * - board: {title?, pieces[]={col,rank,key}, files?, arrows?, marks?, note?, size?, panelLabel?}
+   */
+  spec?: Record<string, unknown>;
 }
 
 /**
@@ -603,7 +648,8 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
       visual: { type: 'object' },
       // 可选：课堂结构图（mermaid 代码，前端确定性渲染；见 TeachingTurnOutput.diagram）
       diagram: { type: 'object' },
-      // 可选：位置线图（空间位置关系，确定性 SVG 渲染；见 TeachingTurnOutput.figure）
+      // 可选：教学图（确定性 SVG 渲染；kind 见 TeachingTurnOutput.figure）
+      // position-line 用顶层 axis/marks/spans/guides，其余图型用 spec
       figure: { type: 'object' }
     },
     required: ['reply', 'analysis', 'knowledge', 'pedagogy', 'control']
@@ -840,7 +886,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
     },
     ...(normalizeVisual(parsed.visual) ?? {}),
     ...(normalizeDiagram(parsed.diagram) ?? {}),
-    ...(normalizeFigure(parsed.figure) ?? {}),
+    ...(normalizeFigureOrLog(parsed.figure) ?? {}),
   };
 }
 
@@ -852,7 +898,92 @@ const FIGURE_TICKS_MAX = 8;
 const FIGURE_LABEL_MAX = 16;
 const FIGURE_SPAN_LABEL_MAX = 24;
 const FIGURE_CAPTION_MAX = 200;
+/** 出图理由：一句话，按「为什么这里需要图 / 为什么用这个形状」写，超长截断 */
+const FIGURE_WHY_MAX = 60;
 const FIGURE_UNIT_MAX = 8;
+
+/** 图型白名单（2026-10-18 扩图型；flow 不在此列——节点-边类继续走 mermaid）。 */
+const FIGURE_KINDS: ReadonlySet<string> = new Set([
+  'position-line',
+  'grid',
+  'matrix',
+  'compare',
+  'quadrant',
+  'bipartite',
+  'board',
+  // 2026-10-19：按「关系形状」补三种——包含（bins）、权衡（balance）、层级（ladder）。
+  // 它们与 compare 的差别不是外观，而是语义：并排≠包含，并列≠谁压得住，列表≠先后。
+  'bins',
+  'balance',
+  'ladder',
+  // 2026-10-20：按「几何隐喻」补四种——闭环（cycle）、辐射树（tree）、交集（venn）、靶盘（bullseye）。
+  // 用户点名的失败模式：能一眼看出几何差别的结构被压成了白框填字（信效度画成四格文字、
+  // 多对多画成打勾矩阵）。这四种让关系本身有形状，模型只负责给节点和点坐标。
+  'cycle',
+  'tree',
+  'venn',
+  'bullseye',
+  // 2026-10-21：区间条（range-bar）。多组「从 A 到 B」的波动/范围并排比较——
+  // 挤在一维位置线上必然把 ΔY 画成 ΔX（走查 #4~#7/#13~#15 的根因），给它自己的轨道。
+  'range-bar',
+  // 2026-10-23：二维科学坐标图（cartesian-plot）。函数曲线/平抛轨迹/实验数据点——
+  // 手机里那节平抛课该出的「频闪等时轨迹」就是它，此前系统只能拿 grid 表格硬塞。
+  'cartesian-plot',
+  // 2026-10-23 晚：概念图（concept-map）。用户点破方向：要的不是「讲完一处配一张答案图」，
+  // 而是把**概念本身**摆出来——要素有哪些、彼此是什么关系、从哪来、导致什么。
+  'concept-map',
+  // 2026-10-26：正误对比画布（split-compare）。动作诊所节奏的专属图型——
+  // 把「易错做法 vs 正确做法」左右并排，delta 指出分叉在哪一步；
+  // 误区纠错靠嘴说学生只能对号入座，并排一摆差异自己跳出来。
+  'split-compare',
+  // 2026-10-26：状态条带（state-strip）。过程类知识的三/四帧速写——
+  // 每帧一个时刻/阶段，帧内几条要点，帧间箭头表示推进；
+  // cycle 是回到原点的环，state-strip 是不回头的进程（握手、编译、消化、翻案）。
+  'state-strip',
+]);
+
+/**
+ * 已退役图型：仍留在类型与渲染器里（历史消息还要能显示），但**新的出图一律拒绝**。
+ * 用户 2026-10-23 判定这四种「从视觉传达上根本不是图」：grid 是网格表、compare 是双栏列表、
+ * bins 是分栏列表、ladder 是台阶列表——都只是在给句子加圆角边框。
+ */
+const RETIRED_FIGURE_KINDS: ReadonlySet<string> = new Set(['grid', 'compare', 'bins', 'ladder']);
+
+/** 调色板白名单：由服务端按学科盖章，模型不给也行。 */
+const FIGURE_PALETTES: ReadonlySet<string> = new Set(['indigo', 'earth', 'tech', 'warm', 'violet', 'mono']);
+
+/**
+ * 结构图规格上限：单一来源，前后端渲染器也按这个量级出图。
+ * 超过上限不是"截断"而是"丢弃该条"——多出来的一定是模型把段落塞进格子。
+ */
+const SPEC = {
+  rowsMax: 8,
+  colsMax: 6,
+  cellTextMax: 26,
+  cellMarkMax: 4,
+  titleMax: 42,
+  noteMax: 160,
+  labelMax: 18,
+  subMax: 22,
+  // 分叉说明是一句结论（「分叉在第二步：得数单位是 s/m，不是 m/s」），按副标注的 22 字会被切在半句上；
+  // 渲染侧对 delta 整条折行、盒子高度自适应，所以放宽到一句话的长度
+  deltaMax: 44,
+  itemsMax: 8,
+  itemTextMax: 26,
+  nodesMax: 8,
+  edgesMax: 14,
+  piecesMax: 32,
+  arrowsMax: 8,
+  filesMax: 4,
+  legendMax: 4,
+  bodyLinesMax: 4,
+  bodyLineMax: 26,
+  dotsMax: 6,
+} as const;
+
+/** 棋盘棋子：大写黑方 / 小写红方（只认中国象棋七种）。 */
+const BOARD_KEYS = new Set(['R', 'N', 'B', 'A', 'K', 'C', 'P', 'r', 'n', 'b', 'a', 'k', 'c', 'p']);
+
 
 /** 数值字段归一：只认有限数（含数字字符串）；其余 → null */
 function toFiniteNumber(value: unknown): number | null {
@@ -864,13 +995,50 @@ function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
+/** 图内序号字样 → 数字（「第二步」「第 2 行」「第十二步」）。认不出返回 null。 */
+function chineseOrdinal(token: string): number | null {
+  const t = token.trim();
+  if (/^\d+$/.test(t)) return Number(t);
+  const digit: Record<string, number> = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (t === '十') return 10;
+  const m = t.match(/^([一二两三四五六七八九])?十([一二三四五六七八九])?$/);
+  if (m) return (m[1] ? digit[m[1]] : 1) * 10 + (m[2] ? digit[m[2]] : 0);
+  return digit[t] ?? null;
+}
+
 /** 图内文本归一：去控制字符、裁长、空串归 null（用于可选文本：caption/unit） */
 function toFigureText(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
   // 有意匹配控制字符区间替换为空格（文本清洗用途），非残留控制码
   // eslint-disable-next-line no-control-regex
-  const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
+  const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  // 超长必须留痕：直接 slice 会印出「I had dinner, then wat」这种半截句（2026-10-23 外部视觉评审实拍）
+  if (text.length > max) return text.slice(0, Math.max(1, max - 1)) + '…';
   return text || null;
+}
+
+/**
+ * 轴单位归一（2026-10-21 走查 #9）：单位是给学习者看的一个短词，不是注释栏。
+ * 实跑里模型把「（示意，非真实数值）」塞进 unit，被截成半截括号印在左上角。
+ * 只接受短单位（米/天/ms/个百分点/%/°）；含括号、逗号、空格或整句一律丢弃（返回 null）。
+ * 用码点白名单而不是正则：`\uXXXX` 转义在本项目多层工具链里被吃掉过。
+ */
+function normalizeAxisUnit(raw: unknown): string | null {
+  const text = toFigureText(raw, 12);
+  if (!text) return null;
+  if (text.length > 6) return null;
+  const allowed = (ch: string): boolean => {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code >= 0x4e00 && code <= 0x9fa5) return true; // 汉字
+    if (code >= 0x30 && code <= 0x39) return true; // 0-9
+    if (code >= 0x41 && code <= 0x5a) return true; // A-Z
+    if (code >= 0x61 && code <= 0x7a) return true; // a-z
+    return ch === '%' || ch === '°' || ch === '/' || ch === '·' || ch === '.';
+  };
+  for (const ch of text) {
+    if (!allowed(ch)) return null;
+  }
+  return text;
 }
 
 /**
@@ -887,23 +1055,135 @@ function toFigureLabel(value: unknown, max: number): string | null {
 }
 
 /**
- * 归一化老师给的位置线图（契约见 `TeachingTurnOutput.figure`，2026-09-27 Scope B）。
+ * 归一化老师给的教学图（契约见 `TeachingTurnOutput.figure`）。
+ *
+ * 入口只做两件事：**白名单图型** + **交给对应图型的归一化**。
+ * `position-line` 沿用 2026-09-27 的既有契约（顶层 axis/marks/spans/guides）；
+ * 其余图型走 `spec`，每个分支都**重建一个新对象**——模型多给的字段一律不进入渲染层
+ * （前端会把 spec 直接拼进 SVG，白名单是首道防线）。
+ */
+/**
+ * 出口包装：模型给了 figure 但归一化拒绝时**留一条 warn**。
+ * 静默丢弃会让「reply 里写着『这张对照表』、消息里却没有图」变成不可观测的悬空引用——
+ * 2026-10-20 实跑里整节 0 图就是靠这条日志才定位到是块被拒，而不是模型没画。
+ */
+/**
+ * 图内算式复算（2026-10-27 V8）：外盲评多轮抓到图里算式/数值自相矛盾。
+ * engine 的算式校验只覆盖 reply，图内文字此前是无人核验区。
+ * 只认「数字 运算 数字 = 数字」的确定式（用「≈」的不算），相对误差 >1% 判错——
+ * 一张图里出现算错的式子，学生对着它推理只会把错推得更远，整张拒绝比下发更安全。
+ */
+function specArithmeticErrors(value: unknown, out: string[], depth = 0): void {
+  if (depth > 6 || out.length >= 8) return;
+  if (typeof value === 'string') {
+    for (const m of value.matchAll(/(\d+(?:\.\d+)?)\s*([+\-×÷xX*/])\s*(\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)/g)) {
+      const a = Number(m[1]);
+      const b = Number(m[3]);
+      const claimed = Number(m[4]);
+      const op = m[2];
+      const actual = op === '+' ? a + b : op === '-' ? a - b : op === '×' || op === 'x' || op === 'X' || op === '*' ? a * b : a / b;
+      if (!Number.isFinite(actual) || b === 0) continue;
+      const denom = Math.max(Math.abs(actual), 1e-9);
+      if (Math.abs(actual - claimed) / denom > 0.01) out.push(`${m[0]}（应为 ${Math.round(actual * 1000) / 1000}）`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) specArithmeticErrors(item, out, depth + 1);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const v of Object.values(value as Record<string, unknown>)) specArithmeticErrors(v, out, depth + 1);
+  }
+}
+
+function normalizeFigureOrLog(raw: unknown): { figure: NonNullable<TeachingTurnOutput['figure']> } | null {
+  const result = normalizeFigure(raw);
+  if (!result && raw && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>;
+    logger.warn('[teaching-figure] 模型给了 figure 但被归一化拒绝，本轮不出图', {
+      kind: typeof record.kind === 'string' ? record.kind : null,
+      keys: Object.keys(record).slice(0, 12),
+      hasSpec: Boolean(record.spec),
+    });
+  }
+  return result;
+}
+
+function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput['figure']> } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const kindRaw = typeof record.kind === 'string' ? record.kind.trim().toLowerCase() : '';
+  const kind = kindRaw || 'position-line';
+  if (!FIGURE_KINDS.has(kind) || !isFigureKindEnabled(kind)) return null;
+  // 文字装框类图型退役（用户 2026-10-23：「这不叫图，叫制表信息」）。
+  // grid/compare/bins/ladder 的本质是「带边框的排版文字」，学生读的是框里的句子，
+  // 不是几何；这类内容用正文 Markdown 表格更清楚，也不该占掉一节课的出图名额。
+  if (RETIRED_FIGURE_KINDS.has(kind)) {
+    logger.warn('[teaching-figure] 图型已退役（文字装框类），本轮不出图', { kind });
+    return null;
+  }
+  const caption = toFigureText(record.caption, FIGURE_CAPTION_MAX);
+  const why = toFigureText(record.why, FIGURE_WHY_MAX);
+  const paletteRaw = typeof record.palette === 'string' ? record.palette.trim().toLowerCase() : '';
+  const palette = FIGURE_PALETTES.has(paletteRaw) ? (paletteRaw as TeachingFigure['palette']) : null;
+
+  if (kind === 'position-line') {
+    const figure = normalizePositionLineFigure(record);
+    return figure ? { figure: { ...figure, caption, ...(why ? { why } : {}), ...(palette ? { palette } : {}) } } : null;
+  }
+  const specRaw = record.spec && typeof record.spec === 'object' ? (record.spec as Record<string, unknown>) : record;
+  const spec = normalizeFigureSpec(kind as TeachingFigureKind, specRaw);
+  if (!spec) return null;
+  // V8：图内算式复算，算错整张拒绝（见 specArithmeticErrors 注释）
+  const arithmeticErrors: string[] = [];
+  specArithmeticErrors(spec, arithmeticErrors);
+  if (arithmeticErrors.length) {
+    logger.warn('[teaching-turn] 图内算式复算不一致，整图丢弃', { kind, errors: arithmeticErrors.slice(0, 3) });
+    return null;
+  }
+  return { figure: { engine: 'svg', kind: kind as TeachingFigureKind, caption, ...(why ? { why } : {}), spec, ...(palette ? { palette } : {}) } };
+}
+
+/**
+ * 出图归一化的对外入口（探针/离线评测用）。
+ *
+ * 与线上同一条路径：白名单 → 图型开关 → 退役图型拒绝 → 各图型字段校验。
+ * 探针必须走它，否则「模型给图了」和「这张图真的能下发」是两件事。
+ */
+export function normalizeTeachingFigureForProbe(raw: unknown): { figure: TeachingFigure | null; reason: string } {
+  if (!raw || typeof raw !== 'object') return { figure: null, reason: 'no-figure' };
+  const kind = String((raw as Record<string, unknown>).kind ?? '');
+  const before = RETIRED_FIGURE_KINDS.has(kind) ? 'retired-kind' : null;
+  const result = normalizeFigure(raw);
+  if (!result) return { figure: null, reason: before ?? 'rejected-by-normalizer' };
+  return { figure: result.figure, reason: 'ok' };
+}
+
+/** 新图型灰度开关：`TEACHING_FIGURE_SPEC_DISABLED=1` 时只保留位置线（回滚用）。 */
+function isFigureKindEnabled(kind: string): boolean {
+  if (kind === 'position-line') return true;
+  return process.env.TEACHING_FIGURE_SPEC_DISABLED !== '1';
+}
+
+/**
+ * 归一化位置线图（2026-09-27 Scope B 既有契约，2026-10-18 从 normalizeFigure 拆出）。
  *
  * 规则（宁缺毋滥 + 确定性可渲染）：
- * - 只认 `kind: position-line`（缺省视为 position-line；其他图型整块丢弃）；
  * - **必须至少有一个有效 mark**（没有对象就没有位置关系，整块丢弃）；
  * - 数值域由代码统一推导：取 axis/ticks/marks/spans/guides 的全部取值求并集，两端各留 4% 余量——
  *   模型给的 min/max 只作为单位与刻度的来源，**不得把取值挡在域外**（挡了就是画错图）；
  * - marks 按 at 升序、去重（同位置只留第一个）；spans 要求 from≠to；越界/非法项丢弃；
  * - 各数组超上限截断；标签超长丢弃该条（不截断成半句话）。
  */
-function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput['figure']> } | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const record = raw as Record<string, unknown>;
-  const kind = typeof record.kind === 'string' ? record.kind.trim().toLowerCase() : '';
-  if (kind && kind !== 'position-line') return null;
+function normalizePositionLineFigure(record: Record<string, unknown>): Omit<TeachingFigure, 'caption'> | null {
 
   const rawMarks = Array.isArray(record.marks) ? record.marks : [];
+  // 三种「下方标注」的分工（2026-10-20 两轮外部视觉审校定的）：
+  //   spans = 跨度/距离（A 到 B 隔多远）；
+  //   group = 归类/共性（这几个点是同一类）——画成花括号，花括号的语义就是「归在一起」；
+  //   tag   = 单个点的短标签。
+  // 用区间线表达「同一性」会被读成跨度，用重复标签又会被读成「重复的题」——两种都试过，都不行。
   const marks: Array<{ at: number; label: string; dir: 'right' | 'left' | 'none' }> = [];
   for (const item of rawMarks) {
     if (!item || typeof item !== 'object') continue;
@@ -919,7 +1199,15 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
   if (!marks.length) return null;
 
   const axisRecord = record.axis && typeof record.axis === 'object' ? (record.axis as Record<string, unknown>) : null;
-  const unit = toFigureText(axisRecord?.unit, FIGURE_UNIT_MAX);
+  const unit = normalizeAxisUnit(axisRecord?.unit);
+  // 位置线的轴必须是**量**（米/秒/℃/元/百分比）。
+  // 「题/个/条/种/类/项/步」是计数或序号，不是可以排先后远近的量——
+  // 2026-10-20 实跑里模型把「第1/2/3道题」画成了一条位置线，看着像坐标系，其实是三个并列项：
+  // 这类内容该用 bins/compare，不该借位置线的壳。
+  const COUNTER_UNITS = new Set([
+    '题', '题号', '道', '道题', '个', '条', '种', '类', '项', '步', '次', '序号', '排名',
+  ]);
+  if (unit && COUNTER_UNITS.has(unit.trim())) return null;
   const ticks: Array<{ at: number; label: string | null }> = [];
   for (const item of Array.isArray(axisRecord?.ticks) ? (axisRecord?.ticks as unknown[]) : []) {
     if (!item || typeof item !== 'object') continue;
@@ -930,6 +1218,16 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
     if (ticks.length >= FIGURE_TICKS_MAX) break;
   }
 
+  let group: { from: number; to: number; label: string } | null = null;
+  if (record.group && typeof record.group === 'object') {
+    const g = record.group as Record<string, unknown>;
+    const from = toFiniteNumber(g.from);
+    const to = toFiniteNumber(g.to);
+    const label = toFigureText(g.label, FIGURE_SPAN_LABEL_MAX);
+    if (from !== null && to !== null && from !== to && label) {
+      group = { from: Math.min(from, to), to: Math.max(from, to), label };
+    }
+  }
   const spans: Array<{ from: number; to: number; label: string }> = [];
   for (const item of Array.isArray(record.spans) ? (record.spans as unknown[]) : []) {
     if (!item || typeof item !== 'object') continue;
@@ -957,6 +1255,7 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
     ...marks.map((m) => m.at),
     ...ticks.map((t) => t.at),
     ...spans.flatMap((s) => [s.from, s.to]),
+    ...(group ? [group.from, group.to] : []),
     ...guides.map((g) => g.at),
     toFiniteNumber(axisRecord?.min),
     toFiniteNumber(axisRecord?.max),
@@ -971,18 +1270,1082 @@ function normalizeFigure(raw: unknown): { figure: NonNullable<TeachingTurnOutput
   const dedupedMarks = marks
     .sort((a, b) => a.at - b.at)
     .filter((mark, index, list) => index === 0 || mark.at !== list[index - 1].at);
-  const caption = toFigureText(record.caption, FIGURE_CAPTION_MAX);
+
+  /* 铁律 1（2026-10-21 走查 #8~#11）：时间轴上的水平线段天然读作「时长」。
+     拿它去标「数值涨跌幅度」是跨量纲混画——周二到周六会被读成 4 天，而不是 0.7 个点。
+     这类内容该用 range-bar / compare，不该借位置线的壳。 */
+  const TIME_UNITS = new Set(['秒', '毫秒', 'ms', 's', '分', '分钟', '小时', '时', '天', '日', '周', '星期', '月', '年']);
+  const MAGNITUDE_SPAN = /(幅度|涨跌|涨|跌|差值|差距|差额|百分比|个点|转化率|%)/;
+  if (unit && TIME_UNITS.has(unit.trim().toLowerCase()) && spans.some((s) => MAGNITUDE_SPAN.test(s.label))) {
+    return null;
+  }
+
+  /* 铁律 2（走查 #10/#11）：只有「最高/最低」两个锚点、没有真实刻度、还挂一条跨度线——
+     实际是一条伪装成位置线的区间条，图上没有任何可核对的信息，整块丢弃。 */
+  const RANGE_EDGE = /(最高|最低|最大|最小)/;
+  const edgeMarks = dedupedMarks.filter((m) => RANGE_EDGE.test(m.label));
+  if (dedupedMarks.length < 3 && ticks.length === 0 && spans.length >= 1 && edgeMarks.length >= 2) {
+    return null;
+  }
 
   return {
-    figure: {
-      engine: 'svg',
-      kind: 'position-line',
-      axis,
-      marks: dedupedMarks,
-      spans,
-      guides,
-      caption,
-    },
+    engine: 'svg',
+    kind: 'position-line',
+    axis,
+    marks: dedupedMarks,
+    spans,
+    ...(group ? { group } : {}),
+    guides,
+  };
+}
+
+/* ---------------- 结构图规格归一化（2026-10-18 扩图型） ---------------- */
+
+function toBoundedInt(value: unknown, min: number, max: number): number | null {
+  const n = toFiniteNumber(value);
+  if (n === null) return null;
+  const i = Math.trunc(n);
+  return i >= min && i <= max ? i : null;
+}
+
+function toStringList(value: unknown, maxItems: number, maxLen: number): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const item of value) {
+    // 模型常把条目写成 {"label": "…"}（bins/compare 示例就是对象形态）；
+    // 只认字符串会把整栏条目清空，导致整张图被归一化拒绝（2026-10-22 真课丢图）。
+    const raw = item && typeof item === 'object'
+      ? (item as Record<string, unknown>).label ?? (item as Record<string, unknown>).text ?? (item as Record<string, unknown>).value
+      : item;
+    const text = toFigureLabel(raw, maxLen);
+    if (text) out.push(text);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
+/**
+ * 定长标签列表：按声明的列数/行数补空串。
+ * 不能直接用 toStringList —— 它会丢掉缺失项，导致后面的标签整体左移
+ * （2026-10-23 外部视觉评审实拍：3 列表格只给 2 个列标题，第二个标题落到了第一列上）。
+ */
+function toStringListFixed(value: unknown, count: number, maxLen: number): string[] {
+  const filled = toStringList(value, count, maxLen);
+  while (filled.length < count) filled.push('');
+  return filled;
+}
+
+function normalizeTone(value: unknown, allowed: readonly string[]): string | null {
+  const tone = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return allowed.includes(tone) ? tone : null;
+}
+
+/** 颜色只认十六进制：spec 会被前端拼进 SVG 属性，这是首道注入防线。 */
+function normalizeHex(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return /^#[0-9a-fA-F]{3,8}$/.test(value.trim()) ? value.trim() : null;
+}
+
+/** 虚线只认「数字 + 空格/逗号」：同上，属性注入的首道防线。 */
+function normalizeDash(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return /^[0-9][0-9\s,.]{0,18}$/.test(value.trim()) ? value.trim() : null;
+}
+
+function normalizeFigureSpec(kind: TeachingFigureKind, raw: Record<string, unknown>): Record<string, unknown> | null {
+  switch (kind) {
+    case 'matrix':
+      return normalizeMatrixSpec(raw);
+    case 'quadrant':
+      return normalizeQuadrantSpec(raw);
+    case 'bipartite':
+      return normalizeBipartiteSpec(raw);
+    case 'board':
+      return normalizeBoardSpec(raw);
+    case 'balance':
+      return normalizeBalanceSpec(raw);
+    case 'cycle':
+      return normalizeCycleSpec(raw);
+    case 'tree':
+      return normalizeTreeSpec(raw);
+    case 'venn':
+      return normalizeVennSpec(raw);
+    case 'bullseye':
+      return normalizeBullseyeSpec(raw);
+    case 'range-bar':
+      return normalizeRangeBarSpec(raw);
+    case 'cartesian-plot':
+      return normalizeCartesianPlotSpec(raw);
+    case 'concept-map':
+      return normalizeConceptMapSpec(raw);
+    case 'split-compare':
+      return normalizeSplitCompareSpec(raw);
+    case 'state-strip':
+      return normalizeStateStripSpec(raw);
+    default:
+      return null;
+  }
+}
+
+/**
+ * 焦点：只允许「哪一行/哪一列/哪一侧」，不允许模型指定颜色或自由坐标。
+ * `bounds` 是表格的真实行列数（不含上界）：越界焦点会指向不存在的行/列，
+ * 保留下来只会让前端白算一次高亮，直接丢掉。
+ */
+function normalizeFocus(
+  raw: unknown,
+  allowed: readonly string[],
+  bounds?: { rows?: number; cols?: number },
+): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of ['row', 'col'] as const) {
+    if (!allowed.includes(key)) continue;
+    const limit = bounds?.[key === 'row' ? 'rows' : 'cols'];
+    if (limit !== undefined && limit < 1) continue;
+    const n = toBoundedInt(record[key], 0, limit !== undefined ? limit - 1 : 15);
+    if (n !== null) out[key] = n;
+  }
+  const side = normalizeSide(record.side, allowed);
+  if (side) out.side = side;
+  return Object.keys(out).length ? out : null;
+}
+
+function normalizeSide(value: unknown, allowed: readonly string[]): string | null {
+  const side = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return allowed.includes(side) ? side : null;
+}
+
+
+/** balance：两边各自的分量（weight 由代码换算成倾角，模型只给数）。 */
+function normalizeBalanceSide(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  const side = value as Record<string, unknown>;
+  const head = toFigureLabel(side.head, SPEC.labelMax);
+  if (!head) return null;
+  const items = toStringList(side.items, SPEC.itemsMax, SPEC.itemTextMax);
+  const sub = toFigureText(side.sub, SPEC.subMax);
+  const weight = toBoundedInt(side.weight, 0, 10);
+  return { head, items, ...(sub ? { sub } : {}), ...(weight !== null ? { weight } : {}) };
+}
+
+function normalizeBalanceSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const left = normalizeBalanceSide(raw.left);
+  const right = normalizeBalanceSide(raw.right);
+  if (!left || !right) return null;
+  if (!(left.items as unknown[]).length || !(right.items as unknown[]).length) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const pivotLabel = toFigureText(raw.pivotLabel, SPEC.subMax);
+  const focus = normalizeSide(raw.focus, ['left', 'right']);
+  return {
+    left,
+    right,
+    ...(pivotLabel ? { pivotLabel } : {}),
+    ...(focus ? { focus } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/**
+ * split-compare（2026-10-26）：正误并排对比画布。
+ *
+ * 为什么单独一种图型：纠错语境下学生要看的不是「正确的抽象描述」，而是
+ * **自己的做法和正确做法差在哪一步**——左右并排、行行对齐，delta 一句话点破分叉点。
+ * 这是「动作诊所」节奏（diagnose/refine 任务）的专属图型，也是误区预判（misconceptionHints）
+ * 的首选载体；compare 是双栏列表（已退役），split-compare 的两栏是**同一动作的两种走法**，
+ * 行与行之间有对应关系，不是两段文字。
+ *
+ * 约束：left/right 必填（head ≤18 字，rows 1~4，每行 label 必填 ≤18 字、sub 可选 ≤22 字）；
+ * delta 可选（label ≤22 字，at 为 1-based 行号、越界丢弃）；tone 只认四种。
+ */
+function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const normalizePanel = (panelRaw: unknown): Record<string, unknown> | null => {
+    if (!panelRaw || typeof panelRaw !== 'object') return null;
+    const panel = panelRaw as Record<string, unknown>;
+    // 栏头允许到 30 字：渲染侧折两行（14.5px × 2 行），不再把长栏头截成歧义半句
+    const head = toFigureText(panel.head, 30);
+    if (!head) return null;
+    const rows: Array<Record<string, unknown>> = [];
+    const seen = new Set<string>();
+    for (const item of Array.isArray(panel.rows) ? panel.rows : []) {
+      if (!item || typeof item !== 'object' || rows.length >= 4) continue;
+      const row = item as Record<string, unknown>;
+      // 40 字（英文句子按字符计，26 字会把 "I have finished the report yesterday" 截成半句）；
+      // 超长截断加 …，渲染侧折三行
+      const label = toFigureText(row.label, 40);
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      const sub = toFigureText(row.sub, SPEC.subMax);
+      const tone = normalizeTone(row.tone, ['ok', 'warn', 'accent', 'neutral']);
+      rows.push({
+        label,
+        ...(sub ? { sub } : {}),
+        ...(tone ? { tone } : {}),
+      });
+    }
+    if (!rows.length) return null;
+    const tone = normalizeTone(panel.tone, ['ok', 'warn', 'accent', 'neutral']);
+    return { head, rows, ...(tone ? { tone } : {}) };
+  };
+  const left = normalizePanel(raw.left);
+  const right = normalizePanel(raw.right);
+  if (!left || !right) return null;
+  // V8：两栏行数差 >2 = 对照不成立（差 1~2 行由渲染侧「?」空槽兜住，差 3+ 才整图拒绝）
+  const leftLen = (left.rows as unknown[]).length;
+  const rightLen = (right.rows as unknown[]).length;
+  if (Math.abs(leftLen - rightLen) > 2) return null;
+  // 两栏内容完全相同 = 不是对比（外盲评 V4 #2：两侧代码一字不差，学生看不到差异）
+  const leftSeq = (left.rows as Array<Record<string, unknown>>).map((r) => r.label).join('');
+  const rightSeq = (right.rows as Array<Record<string, unknown>>).map((r) => r.label).join('');
+  if (leftSeq === rightSeq) return null;
+  // at 是 1-based 行号，超过两栏最大行数就是指向不存在的行——高亮会落空，直接丢
+  const rowCount = Math.max((left.rows as unknown[]).length, (right.rows as unknown[]).length);
+  let delta: Record<string, unknown> | null = null;
+  if (raw.delta && typeof raw.delta === 'object') {
+    const deltaRaw = raw.delta as Record<string, unknown>;
+    const deltaLabel = toFigureText(deltaRaw.label, SPEC.deltaMax);
+    if (deltaLabel) {
+      let at = toFiniteNumber(deltaRaw.at);
+      // 标签里点名了「第 n 步/行」就按标签落点：模型给的 at 与它自己写的句子打架时
+      // （白板 v4 实拍：标签「分叉在第二步」+ at=1），学生读到的是两句话矛盾，标签才算数
+      const named = deltaLabel.match(/第\s*([0-9一二三四五六七八九十两]+)\s*[步行]/);
+      const namedAt = named ? chineseOrdinal(named[1]) : null;
+      if (namedAt !== null && namedAt !== at && namedAt >= 1 && namedAt <= rowCount) at = namedAt;
+      delta = { label: deltaLabel, ...(at !== null && at >= 1 && at <= rowCount ? { at: Math.floor(at) } : {}) };
+    }
+  }
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  return {
+    left,
+    right,
+    ...(delta ? { delta } : {}),
+    ...(title ? { title } : {}),
+  };
+}
+
+/**
+ * state-strip（2026-10-26）：状态条带——不回头的进程分帧速写。
+ *
+ * 为什么单独一种图型：过程类知识（三次握手、编译四步、消化流程、翻案时间线）的
+ * 本体是「状态随阶段推进」，cycle 画成环会误导（它不回原点），cartesian 又没有
+ * 离散阶段轴。条带帧间箭头就是「下一步」，帧内要点是该时刻的状态快照。
+ *
+ * 约束：frames 2~5（label ≤18 字），每帧 items 0~3 条（≤18 字）；同一条目跨帧
+ * 复用由模型自己重写（渲染不做状态对齐）；note ≤160 字；tone 只认四种。
+ */
+function normalizeStateStripSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const frames: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.frames) ? raw.frames : []) {
+    if (!item || typeof item !== 'object' || frames.length >= 5) continue;
+    const frame = item as Record<string, unknown>;
+    const label = toFigureLabel(frame.label, SPEC.labelMax);
+    if (!label) continue;
+    const items: string[] = [];
+    const seen = new Set<string>();
+    for (const rawItem of Array.isArray(frame.items) ? frame.items : []) {
+      if (items.length >= 3) break;
+      const text = typeof rawItem === 'string' ? toFigureLabel(rawItem, SPEC.labelMax) : null;
+      if (!text || seen.has(text)) continue;
+      seen.add(text);
+      items.push(text);
+    }
+    const tone = normalizeTone(frame.tone, ['ok', 'warn', 'accent', 'neutral']);
+    frames.push({ label, items, ...(tone ? { tone } : {}) });
+  }
+  if (frames.length < 2) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    frames,
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** ladder：2~6 级台阶，state 决定实心/描边/虚线。 */
+/**
+ * range-bar（2026-10-21）：多组「从 A 到 B」的区间并排比较。
+ *
+ * 为什么单独一种图型：位置线只有一根轴，把「新组 3.1~3.8」「旧组 2.9~3.6」「均值差 0.5」
+ * 挤到同一根线上，模型只能把 ΔY 画成 ΔX——落在现实中就是「周二到周六 = 0.7 个点」这种
+ * 数学上自相矛盾的图（外审走查 #4~#7/#13~#15）。区间有自己的轨道：每条一行，长度就是区间。
+ *
+ * 契约：rows 2~4 条（label 必填、from/to 必为数字且不相等，顺序由代码归一）；
+ * unit 走短单位白名单；marks 最多 2 个参考点（如「汇报的均值差」）；tone 只认四种。
+ */
+function normalizeRangeBarSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rows: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.rows) ? raw.rows : []) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const label = toFigureLabel(row.label, SPEC.labelMax);
+    if (!label) continue;
+    const a = toFiniteNumber(row.from);
+    const b = toFiniteNumber(row.to);
+    if (a === null || b === null || a === b) continue;
+    const tone = normalizeTone(row.tone, ['ok', 'warn', 'accent', 'neutral']);
+    rows.push({
+      label,
+      from: Math.min(a, b),
+      to: Math.max(a, b),
+      ...(tone ? { tone } : {}),
+    });
+    if (rows.length >= 4) break;
+  }
+  if (rows.length < 2) return null;
+
+  const marks: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.marks) ? raw.marks : []) {
+    if (!item || typeof item !== 'object') continue;
+    const mark = item as Record<string, unknown>;
+    const at = toFiniteNumber(mark.at);
+    if (at === null) continue;
+    const label = toFigureText(mark.label, SPEC.subMax);
+    marks.push({ at, ...(label ? { label } : {}) });
+    if (marks.length >= 2) break;
+  }
+
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const unit = normalizeAxisUnit(raw.unit);
+  return {
+    rows,
+    ...(marks.length ? { marks } : {}),
+    ...(unit ? { unit } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/**
+ * concept-map：概念图（2026-10-23 用户定调：要概念可视化，不是出题）。
+ *
+ * 与其它图型的区别：节点不是「这一轮提到的对象」，而是**知识结构里的概念要素**
+ * （概念/过程/量/条件），边不是「指向」，而是**有名字的关系**（产生/供给/构成/依赖/导致/对比）。
+ * 学生看图是在建立知识结构，不是在核对某个答案。
+ *
+ * 约束：
+ * - 节点 2~10 个、边 1~14 条；边必须两端都在节点里（悬空边丢弃）；
+ * - 每条边**必须有关系名**（≤10 字）——没有名字的线只是连线，不是知识；
+ * - 允许 layer（0~3）指定层级，缺省由渲染器按最长路径自动分层。
+ */
+function normalizeConceptMapSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const nodes: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+  for (const item of Array.isArray(raw.nodes) ? raw.nodes : []) {
+    if (!item || typeof item !== 'object') continue;
+    const node = item as Record<string, unknown>;
+    const id = toFigureLabel(node.id, 24);
+    const label = toFigureLabel(node.label, SPEC.labelMax);
+    if (!id || !label || seen.has(id)) continue;
+    seen.add(id);
+    const sub = toFigureText(node.sub, SPEC.subMax);
+    const tone = normalizeTone(node.tone, ['accent', 'ok', 'warn', 'neutral']);
+    const layer = toBoundedInt(node.layer, 0, 3);
+    nodes.push({ id, label, ...(sub ? { sub } : {}), ...(tone ? { tone } : {}), ...(layer !== null ? { layer } : {}) });
+    if (nodes.length >= 10) break;
+  }
+  if (nodes.length < 2) return null;
+
+  const edges: Array<Record<string, unknown>> = [];
+  const edgeByKey = new Map<string, number>();
+  for (const item of Array.isArray(raw.edges) ? raw.edges : []) {
+    if (!item || typeof item !== 'object') continue;
+    const edge = item as Record<string, unknown>;
+    const from = toFigureLabel(edge.from, 24);
+    const to = toFigureLabel(edge.to, 24);
+    const label = toFigureLabel(edge.label, 10);
+    if (!from || !to || !label || from === to || !seen.has(from) || !seen.has(to)) continue;
+    // V8（外盲评：两条边挤成一条，学生分不清 A→B 是一个关系还是两个）：同端点合并，
+    // 关系名并成「A、B」——并列关系本来就是一个关系
+    const key = `${from}${to}`;
+    const existing = edgeByKey.get(key);
+    if (existing !== undefined) {
+      const prev = edges[existing];
+      const prevLabel = String(prev.label ?? '');
+      if (!prevLabel.split('、').includes(label) && prevLabel.length + label.length + 1 <= 10) {
+        prev.label = `${prevLabel}、${label}`;
+      }
+      continue;
+    }
+    const tone = normalizeTone(edge.tone, ['accent', 'ok', 'warn', 'neutral']);
+    const dash = normalizeDash(edge.dash);
+    edgeByKey.set(key, edges.length);
+    edges.push({ from, to, label, ...(tone ? { tone } : {}), ...(dash ? { dash } : {}) });
+    if (edges.length >= 14) break;
+  }
+  if (!edges.length) return null;
+
+  // 没有任何边连到的节点是孤岛：概念图里它既不属于结构也不解释什么，剪掉。
+  const used = new Set<string>();
+  for (const e of edges) {
+    used.add(String(e.from));
+    used.add(String(e.to));
+  }
+  const kept = nodes.filter((n) => used.has(String(n.id)));
+  if (kept.length < 2) return null;
+
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const readout = toFigureText(raw.takeaway, SPEC.noteMax);
+  return {
+    nodes: kept,
+    edges,
+    ...(title ? { title } : {}),
+    ...(readout ? { takeaway: readout } : {}),
+  };
+}
+
+/**
+ * cartesian-plot：二维科学坐标图（2026-10-23）。
+ *
+ * 为什么必须补这个图型：平抛课被画成 5 张文字表格、光合曲线被画成网格——
+ * 因为渲染器里没有「横轴 x、纵轴 y、曲线、等时刻辅助线」这套东西，模型只能把公式塞进格子。
+ * 这里不追求通用绘图库，只收课堂上真正需要的四样：曲线（折线/抛物线/一次函数/散点）、
+ * 等值辅助线、点上的矢量箭头、落点标注。
+ *
+ * 约束（与其它图型一致：宁缺毋滥）：
+ * - 轴必须有确定区间（min<max）；刻度由代码生成，模型只给「希望在哪里标」，越界即丢；
+ * - 系列最多 3 条、每条最多 1 个表达式或 40 个点——课堂图不是数据面板；
+ * - 表达式用 a/b/c（抛物线 y=ax²+bx+c）或 k/b（一次函数）承载，由渲染器按轴域采样，
+ *   模型不必（也不许）自己列几十个点，否则它就会开始编数。
+ */
+function normalizeCartesianPlotSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const axisOf = (value: unknown, labelMax: number) => {
+    if (!value || typeof value !== 'object') return null;
+    const axis = value as Record<string, unknown>;
+    const min = toFiniteNumber(axis.min);
+    const max = toFiniteNumber(axis.max);
+    if (min === null || max === null || !(max > min)) return null;
+    const label = toFigureText(axis.label, labelMax);
+    const ticksRaw = Array.isArray(axis.ticks) ? axis.ticks : [];
+    const ticks = ticksRaw
+      .map((t) => toFiniteNumber(t))
+      .filter((t): t is number => t !== null && t >= min && t <= max)
+      .filter((t, i, arr) => arr.indexOf(t) === i)
+      .sort((a, b) => a - b)
+      .slice(0, 8);
+    return { min, max, ...(label ? { label } : {}), ...(ticks.length ? { ticks } : {}) };
+  };
+  const x = axisOf(raw.x, SPEC.labelMax);
+  const y = axisOf(raw.y, SPEC.labelMax);
+  if (!x || !y) return null;
+  // V6 双轴：y2 只在存在 right 轴系列时才生效（孤立 y2 是模型笔误，丢掉）
+  const y2 = axisOf(raw.y2, SPEC.labelMax);
+
+  const series: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.series) ? raw.series : []) {
+    if (!item || typeof item !== 'object') continue;
+    const s = item as Record<string, unknown>;
+    // 系列名是图例，不是几何标签：放宽到 26 字并按 … 截断，而不是整条系列作废。
+    // 2026-10-23 广度扫测：滴定曲线的系列名写成了「0.1 mol/L HCl 用 0.1 mol/L NaOH 滴定」(35 字)，
+    // 18 字上限把整张图判死，学生什么都没看到。
+    const name = toFigureText(s.name, 26);
+    if (!name) continue;
+    const tone = normalizeTone(s.tone, ['accent', 'ok', 'warn', 'neutral']) || undefined;
+    const formRaw = typeof s.form === 'string' ? s.form.trim().toLowerCase() : '';
+    // 频闪点先解析：既可能是附加在曲线上的点，也可能是曲线本身的采样点（只有它没 points 时）
+    const dotPointsEarly: Array<[number, number]> = [];
+    if (Array.isArray(s.dotPoints)) {
+      for (const raw of s.dotPoints) {
+        if (!Array.isArray(raw) || raw.length < 2) continue;
+        const dx = toFiniteNumber(raw[0]);
+        const dy = toFiniteNumber(raw[1]);
+        if (dx === null || dy === null) continue;
+        dotPointsEarly.push([dx, dy]);
+        if (dotPointsEarly.length >= 24) break;
+      }
+    }
+    const out: Record<string, unknown> = { name, form: formRaw === 'scatter' ? 'scatter' : formRaw === 'parabola' ? 'parabola' : formRaw === 'linear' ? 'linear' : formRaw === 'bars' ? 'bars' : 'points' };
+    if (out.form === 'parabola') {
+      const a = toFiniteNumber(s.a);
+      const b = toFiniteNumber(s.b);
+      const c = toFiniteNumber(s.c);
+      if (a === null || b === null || c === null || a === 0) continue;
+      out.a = a;
+      out.b = b;
+      out.c = c;
+    } else if (out.form === 'linear') {
+      const k = toFiniteNumber(s.k);
+      const b = toFiniteNumber(s.b);
+      if (k === null || b === null) continue;
+      out.k = k;
+      out.b = b;
+    } else {
+      const points: Array<[number, number]> = [];
+      for (const p of Array.isArray(s.points) ? s.points : []) {
+        if (!Array.isArray(p) || p.length < 2) continue;
+        const px = toFiniteNumber(p[0]);
+        const py = toFiniteNumber(p[1]);
+        if (px === null || py === null) continue;
+        points.push([px, py]);
+        if (points.length >= 40) break;
+      }
+      // 只给 dotPoints、没给 points 的曲线：把 dotPoints 当作曲线顶点（并保留为频闪点）。
+      // 2026-10-23 广度扫测：滴定曲线把 15 个采样点全写进 dotPoints，模型被整条判死后学生看不到图。
+      if (!points.length && dotPointsEarly.length) {
+        for (const raw of dotPointsEarly) points.push(raw);
+      }
+      const minPoints = out.form === 'scatter' || out.form === 'bars' ? 1 : 2;
+      if (points.length < minPoints) continue;
+      out.points = points;
+      if (s.dots === true) out.dots = true;
+    }
+    // 频闪点：曲线用 form=parabola/linear 表达，等时刻位置另给 dotPoints——
+    // 这样「曲线 + 每一拍的点」仍是**同一个系列**（同一颜色、一条图例），
+    // 不会让学生以为点和线是两回事（外审 2026-10-23：两条同名系列色几乎一样，分不清）。
+    if (Array.isArray(s.dotPoints) && s.dotPoints.length) {
+      const dots: Array<[number, number]> = [];
+      for (const p of s.dotPoints) {
+        if (!Array.isArray(p) || p.length < 2) continue;
+        const dx = toFiniteNumber(p[0]);
+        const dy = toFiniteNumber(p[1]);
+        if (dx === null || dy === null) continue;
+        dots.push([dx, dy]);
+        if (dots.length >= 24) break;
+      }
+      if (dots.length) out.dotPoints = dots;
+    }
+    if (tone) out.tone = tone;
+    // 双轴：只有右侧确实有轴（y2 有效）才保留 axis:'right'，否则退回左轴
+    if (y2 && (s as Record<string, unknown>).axis === 'right') out.axis = 'right';
+    series.push(out);
+    if (series.length >= 3) break;
+  }
+  if (!series.length) return null;
+
+  const guides: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.guides) ? raw.guides : []) {
+    if (!item || typeof item !== 'object') continue;
+    const g = item as Record<string, unknown>;
+    const axis = g.axis === 'x' ? 'x' : g.axis === 'y' ? 'y' : null;
+    const at = toFiniteNumber(g.at);
+    const bounds = axis === 'x' ? x : axis === 'y' ? y : null;
+    if (!axis || at === null || !bounds || at < bounds.min || at > bounds.max) continue;
+    const label = toFigureLabel(g.label, SPEC.subMax);
+    guides.push({ axis, at, ...(label ? { label } : {}) });
+    if (guides.length >= 6) break;
+  }
+
+  const vectors: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.vectors) ? raw.vectors : []) {
+    if (!item || typeof item !== 'object') continue;
+    const v = item as Record<string, unknown>;
+    const at = Array.isArray(v.at) ? v.at : null;
+    const px = at ? toFiniteNumber(at[0]) : null;
+    const py = at ? toFiniteNumber(at[1]) : null;
+    const dx = toFiniteNumber(v.dx);
+    const dy = toFiniteNumber(v.dy);
+    if (px === null || py === null || dx === null || dy === null) continue;
+    if (dx === 0 && dy === 0) continue;
+    const label = toFigureLabel(v.label, SPEC.subMax);
+    vectors.push({ at: [px, py], dx, dy, ...(label ? { label } : {}) });
+    if (vectors.length >= 6) break;
+  }
+
+  // 落点/关键点标注：只标老师这一轮真的要学生看的那一两个点，多了就是贴纸。
+  const marks: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.marks) ? raw.marks : []) {
+    if (!item || typeof item !== 'object') continue;
+    const m = item as Record<string, unknown>;
+    const at = Array.isArray(m.at) ? m.at : null;
+    const px = at ? toFiniteNumber(at[0]) : null;
+    const py = at ? toFiniteNumber(at[1]) : null;
+    const label = toFigureLabel(m.label, SPEC.subMax);
+    if (px === null || py === null || !label) continue;
+    const tone = normalizeTone(m.tone, ['accent', 'ok', 'warn', 'neutral']);
+    marks.push({ at: [px, py], label, ...(tone ? { tone } : {}) });
+    if (marks.length >= 4) break;
+  }
+
+  // 面积：v-t 图下的位移、需求/供给曲线围出的剩余、函数与 x 轴围成的面积——
+  // 这类「面积就是答案」的课没有阴影就只剩一条线（广度扫测 #3 判词：学生要看见的是面积）。
+  const areas: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.areas) ? raw.areas : []) {
+    if (!item || typeof item !== 'object') continue;
+    const a = item as Record<string, unknown>;
+    const from = toFiniteNumber(a.from);
+    const to = toFiniteNumber(a.from2 ?? a.to);
+    if (from === null || to === null || from === to) continue;
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    if (hi <= x.min || lo >= x.max) continue;
+    const seriesName = toFigureText(a.series, SPEC.labelMax);
+    // series2：两条曲线之间的夹心填充（人口出生/死亡率之差、供需剩余）。给了两名就忽略 baseline。
+    const series2Name = toFigureText(a.series2, SPEC.labelMax);
+    const base = series2Name ? null : toFiniteNumber(a.baseline);
+    const label = toFigureLabel(a.label, SPEC.subMax);
+    const tone = normalizeTone(a.tone, ['accent', 'ok', 'warn', 'neutral']);
+    areas.push({
+      from: Math.max(lo, x.min),
+      to: Math.min(hi, x.max),
+      ...(seriesName ? { series: seriesName } : {}),
+      ...(series2Name ? { series2: series2Name } : {}),
+      ...(base !== null ? { baseline: base } : {}),
+      ...(label ? { label } : {}),
+      ...(tone ? { tone } : {}),
+    });
+    if (areas.length >= 3) break;
+  }
+
+  // xBand：纵向高亮带（滴定突跃区间、均衡价格邻域）。给「看这一段」一个色块，
+  // 不再让模型用文字标签硬指——2026-10-24 外审 #5 的修法。
+  const bands: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.bands) ? raw.bands : []) {
+    if (!item || typeof item !== 'object') continue;
+    const bnd = item as Record<string, unknown>;
+    const from = toFiniteNumber(bnd.from);
+    const to = toFiniteNumber(bnd.to);
+    if (from === null || to === null || from === to) continue;
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    if (hi <= x.min || lo >= x.max) continue;
+    const label = toFigureLabel(bnd.label, SPEC.subMax);
+    const tone = normalizeTone(bnd.tone, ['accent', 'ok', 'warn', 'neutral']);
+    bands.push({
+      from: Math.max(lo, x.min),
+      to: Math.min(hi, x.max),
+      ...(label ? { label } : {}),
+      ...(tone ? { tone } : {}),
+    });
+    if (bands.length >= 3) break;
+  }
+
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const rightSeries = series.some((sv) => sv.axis === 'right');
+  return {
+    x,
+    y,
+    ...(y2 && rightSeries ? { y2 } : {}),
+    series,
+    ...(guides.length ? { guides } : {}),
+    ...(bands.length ? { bands } : {}),
+    ...(areas.length ? { areas } : {}),
+    ...(vectors.length ? { vectors } : {}),
+    ...(marks.length ? { marks } : {}),
+    ...(title ? { title } : {}),
+  };
+}
+
+/**
+ * 留白槽位（2026-10-20）：模型只标「这一格留给学生」，不填答案。
+ * 课上直接填好答案的图会把思考步骤替学生做完——用户点名的失败模式。
+ * `?` / `？` / `待定` / `mask:true` 都归一成同一个占位符 `?`，渲染层画成虚线待填。
+ */
+function normalizeSlot(value: unknown, mask: unknown, max: number): string | null {
+  if (mask === true) return '?';
+  const text = toFigureLabel(value, max);
+  if (!text) return null;
+  if (text === '?' || text === '？' || text === '待定' || text === '…') return '?';
+  return text;
+}
+
+/** cycle：3~6 个节点首尾相接（阶段回流），一个可选的环心说明。 */
+function normalizeCycleSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const nodes: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.nodes) ? raw.nodes : []) {
+    if (!item || typeof item !== 'object') continue;
+    const node = item as Record<string, unknown>;
+    const label = normalizeSlot(node.label, node.mask, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(node.sub, SPEC.subMax);
+    const tone = normalizeTone(node.tone, ['accent', 'ok', 'warn']);
+    nodes.push({ label, ...(sub ? { sub } : {}), ...(tone ? { tone } : {}), ...(label === '?' ? { mask: true } : {}) });
+    if (nodes.length >= 6) break;
+  }
+  if (nodes.length < 3) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const center = toFigureText(raw.center, SPEC.subMax);
+  return {
+    nodes,
+    ...(center ? { center } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** tree：一个根长出 2~6 个分支，每个分支最多挂两条要点（第三条一定是在写段落）。 */
+function normalizeTreeSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rootRaw = (raw.root && typeof raw.root === 'object' ? raw.root : {}) as Record<string, unknown>;
+  const rootLabel = toFigureLabel(rootRaw.label, SPEC.labelMax);
+  if (!rootLabel) return null;
+  const rootSub = toFigureText(rootRaw.sub, SPEC.subMax);
+  const branches: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.branches) ? raw.branches : []) {
+    if (!item || typeof item !== 'object') continue;
+    const branch = item as Record<string, unknown>;
+    const label = normalizeSlot(branch.label, branch.mask, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(branch.sub, SPEC.subMax);
+    const tone = normalizeTone(branch.tone, ['accent', 'ok', 'warn']);
+    const items: string[] = [];
+    for (const rawItem of Array.isArray(branch.items) ? branch.items : []) {
+      const text = typeof rawItem === 'string' ? normalizeSlot(rawItem, null, SPEC.itemTextMax) : null;
+      if (text) items.push(text);
+      if (items.length >= 2) break;
+    }
+    branches.push({
+      label,
+      ...(sub ? { sub } : {}),
+      ...(items.length ? { items } : {}),
+      ...(tone ? { tone } : {}),
+      ...(label === '?' ? { mask: true } : {}),
+    });
+    if (branches.length >= 6) break;
+  }
+  if (branches.length < 2) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    root: { label: rootLabel, ...(rootSub ? { sub: rootSub } : {}) },
+    branches,
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** venn：两个概念的重叠区（易混/边界）。两侧各 2~4 条例子，交集最多 2 条短例。 */
+function normalizeVennSide(value: unknown, itemsMax: number): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  const side = value as Record<string, unknown>;
+  const head = toFigureLabel(side.head, SPEC.labelMax);
+  if (!head) return null;
+  const items = toStringList(side.items, itemsMax, SPEC.itemTextMax);
+  return { head, ...(items.length ? { items } : {}) };
+}
+
+function normalizeVennSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const left = normalizeVennSide(raw.left, 4);
+  const right = normalizeVennSide(raw.right, 4);
+  if (!left || !right) return null;
+  const overlap = normalizeVennSide(raw.overlap, 2);
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    left,
+    right,
+    ...(overlap ? { overlap } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/**
+ * bullseye：2×2 靶盘，点坐标取 [-1,1]（0,0 = 靶心）。
+ * 坐标只做一次 clamp：越界的点会被画到靶外，看起来像"数据错了"，不如直接夹回边缘。
+ */
+function normalizeBullseyeSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const colLabels = toStringList(raw.colLabels, 2, SPEC.labelMax);
+  if (colLabels.length < 2) return null;
+  const rowLabels: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.rowLabels) ? raw.rowLabels : []) {
+    const record = (item && typeof item === 'object' ? item : { label: item }) as Record<string, unknown>;
+    const label = toFigureLabel(record.label, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(record.sub, SPEC.subMax);
+    rowLabels.push({ label, ...(sub ? { sub } : {}) });
+    if (rowLabels.length >= 2) break;
+  }
+  if (rowLabels.length < 2) return null;
+  const cells: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.cells) ? raw.cells : []) {
+    if (!item || typeof item !== 'object') continue;
+    const cell = item as Record<string, unknown>;
+    const title = toFigureLabel(cell.title, SPEC.labelMax);
+    if (!title) continue;
+    const desc = toFigureText(cell.desc, SPEC.noteMax);
+    const tone = normalizeTone(cell.tone, ['ok', 'warn', 'accent', 'neutral']);
+    const dots: number[][] = [];
+    for (const dot of Array.isArray(cell.dots) ? cell.dots : []) {
+      if (!Array.isArray(dot) || dot.length < 2) continue;
+      const x = Number(dot[0]);
+      const y = Number(dot[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      dots.push([Math.max(-1, Math.min(1, x)), Math.max(-1, Math.min(1, y))]);
+      if (dots.length >= 12) break;
+    }
+    cells.push({ title, ...(desc ? { desc } : {}), ...(tone ? { tone } : {}), ...(dots.length ? { dots } : {}) });
+    if (cells.length >= 4) break;
+  }
+  if (cells.length < 4) return null;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    colLabels,
+    rowLabels,
+    cells,
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+
+const MATRIX_TONES = ['hit', 'miss', 'dup', 'key'] as const;
+
+/** matrix：二维命中矩阵（✓ / — / 叠 / ≡）——对账类课堂的核心教具。 */
+function normalizeMatrixSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rowLabels = toStringList(raw.rowLabels, SPEC.rowsMax, SPEC.labelMax);
+  const colLabels = toStringList(raw.colLabels, SPEC.colsMax, SPEC.labelMax);
+  if (rowLabels.length < 2 || colLabels.length < 2) return null;
+  const cells: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.cells) ? raw.cells : []) {
+    if (!item || typeof item !== 'object') continue;
+    const cell = item as Record<string, unknown>;
+    const r = toBoundedInt(cell.r, 0, rowLabels.length - 1);
+    const c = toBoundedInt(cell.c, 0, colLabels.length - 1);
+    const tone = normalizeTone(cell.tone, MATRIX_TONES);
+    if (r === null || c === null || !tone) continue;
+    cells.push({ r, c, tone });
+    if (cells.length >= rowLabels.length * colLabels.length) break;
+  }
+  if (!cells.length) return null;
+  const legend: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.legend) ? raw.legend : []) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    const text = toFigureLabel(entry.text, SPEC.labelMax);
+    const fill = normalizeHex(entry.fill);
+    if (!text || !fill) continue;
+    const stroke = normalizeHex(entry.stroke);
+    legend.push({ text, fill, ...(stroke ? { stroke } : {}) });
+    if (legend.length >= SPEC.legendMax) break;
+  }
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const focus = normalizeFocus(raw.focus, ['row', 'col'], { rows: rowLabels.length, cols: colLabels.length });
+  return {
+    rowLabels,
+    colLabels,
+    cells,
+    ...(legend.length ? { legend } : {}),
+    ...(focus ? { focus } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+
+
+/** quadrant：2×2，四格各自有标题（顺序：左上、右上、左下、右下）。 */
+function normalizeQuadrantSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rawCells = Array.isArray(raw.cells) ? raw.cells : [];
+  if (rawCells.length < 4) return null;
+  const cells: Array<Record<string, unknown>> = [];
+  for (const item of rawCells.slice(0, 4)) {
+    if (!item || typeof item !== 'object') return null;
+    const cell = item as Record<string, unknown>;
+    const title = toFigureLabel(cell.title, SPEC.labelMax);
+    if (!title) return null;
+    const body = toStringList(cell.body, SPEC.bodyLinesMax, SPEC.bodyLineMax);
+    const tone = normalizeTone(cell.tone, ['ok', 'warn', 'neutral', 'muted']) || 'neutral';
+    const out: Record<string, unknown> = { title, body, tone };
+    const icon = cell.icon;
+    if (icon && typeof icon === 'object') {
+      const iconRecord = icon as Record<string, unknown>;
+      if (iconRecord.kind === 'target') {
+        const dots: Array<[number, number]> = [];
+        for (const dot of Array.isArray(iconRecord.dots) ? iconRecord.dots : []) {
+          if (!Array.isArray(dot) || dot.length < 2) continue;
+          const dx = toFiniteNumber(dot[0]);
+          const dy = toFiniteNumber(dot[1]);
+          if (dx === null || dy === null || Math.abs(dx) > 28 || Math.abs(dy) > 28) continue;
+          dots.push([dx, dy]);
+          if (dots.length >= SPEC.dotsMax) break;
+        }
+        out.icon = { kind: 'target', dots };
+      }
+    }
+    cells.push(out);
+  }
+  const colLabels = toStringList(raw.colLabels, 2, SPEC.labelMax);
+  const rowLabels: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.rowLabels) ? raw.rowLabels : []) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    const label = toFigureLabel(entry.label, SPEC.labelMax);
+    if (!label) continue;
+    const sub = toFigureText(entry.sub, SPEC.subMax);
+    rowLabels.push({ label, ...(sub ? { sub } : {}) });
+    if (rowLabels.length >= 2) break;
+  }
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  return {
+    cells,
+    ...(colLabels.length ? { colLabels } : {}),
+    ...(rowLabels.length ? { rowLabels } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+function normalizeBipartiteSide(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  const side = value as Record<string, unknown>;
+  const nodes: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(side.nodes) ? side.nodes : []) {
+    if (!item || typeof item !== 'object') continue;
+    const node = item as Record<string, unknown>;
+    const id = toFigureLabel(node.id, 24);
+    const label = toFigureLabel(node.label, SPEC.labelMax);
+    if (!id || !label) continue;
+    const tone = normalizeTone(node.tone, ['accent', 'ok', 'warn', 'neutral']);
+    nodes.push({ id, label, ...(tone ? { tone } : {}) });
+    if (nodes.length >= SPEC.nodesMax) break;
+  }
+  if (!nodes.length) return null;
+  const head = toFigureText(side.head, SPEC.subMax);
+  return { nodes, ...(head ? { head } : {}) };
+}
+
+/** bipartite：左右两列 + 连线（多对多映射；连线交叉本身就是信息）。 */
+function normalizeBipartiteSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const left = normalizeBipartiteSide(raw.left);
+  const right = normalizeBipartiteSide(raw.right);
+  if (!left || !right) return null;
+  const leftIds = new Set((left.nodes as Array<Record<string, unknown>>).map((n) => String(n.id)));
+  const rightIds = new Set((right.nodes as Array<Record<string, unknown>>).map((n) => String(n.id)));
+  const edges: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.edges) ? raw.edges : []) {
+    if (!item || typeof item !== 'object') continue;
+    const edge = item as Record<string, unknown>;
+    const from = toFigureLabel(edge.from, 24);
+    const to = toFigureLabel(edge.to, 24);
+    if (!from || !to) continue;
+    // 允许模型把方向写反：只要一端在左、另一端在右就接受
+    const forward = leftIds.has(from) && rightIds.has(to);
+    const backward = rightIds.has(from) && leftIds.has(to);
+    if (!forward && !backward) continue;
+    const tone = normalizeTone(edge.tone, ['accent', 'ok', 'warn', 'neutral']);
+    const dash = normalizeDash(edge.dash);
+    edges.push({ from, to, ...(tone ? { tone } : {}), ...(dash ? { dash } : {}) });
+    if (edges.length >= SPEC.edgesMax) break;
+  }
+  if (!edges.length) return null;
+  // 没有任何连线的节点是孤岛：外审 #7/#8/#13/#14 四张二分图里，右列内层列表全悬着，
+  // 学生最该看到的"两个槽位共用同一个内层"一条线都没画。连线才是这类图的信息，孤岛一律剪掉；
+  // 剪完某一侧空了就没有对照关系，整张作废。
+  const used = new Set<string>();
+  for (const e of edges) {
+    used.add(String(e.from));
+    used.add(String(e.to));
+  }
+  const pruneSide = (side: Record<string, unknown>) =>
+    (side.nodes as Array<Record<string, unknown>>).filter((n) => used.has(String(n.id)));
+  const leftKept = pruneSide(left);
+  const rightKept = pruneSide(right);
+  if (!leftKept.length || !rightKept.length) return null;
+  left.nodes = leftKept;
+  right.nodes = rightKept;
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const width = toBoundedInt(raw.width, 520, 720) || 640;
+  // focus：只保留两端都存在的节点 id（最多 4 个），避免模型给出不存在的 id 让渲染器画空环
+  const knownIds = new Set([
+    ...(left.nodes as Array<Record<string, unknown>>).map((n) => String(n.id)),
+    ...(right.nodes as Array<Record<string, unknown>>).map((n) => String(n.id)),
+  ]);
+  const focus: string[] = [];
+  for (const item of Array.isArray(raw.focus) ? raw.focus : []) {
+    const id = toFigureLabel(item, 24);
+    if (!id || !knownIds.has(id) || focus.includes(id)) continue;
+    focus.push(id);
+    if (focus.length >= 4) break;
+  }
+  return {
+    left,
+    right,
+    edges,
+    width,
+    ...(focus.length ? { focus } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+function normalizeBoardPoint(value: unknown): { col: number; rank: number } | null {
+  if (!value || typeof value !== 'object') return null;
+  const point = value as Record<string, unknown>;
+  const col = toBoundedInt(point.col, 0, 8);
+  const rank = toBoundedInt(point.rank, 0, 9);
+  if (col === null || rank === null) return null;
+  return { col, rank };
+}
+
+/** board：中国象棋（9 列 × 10 行）；坐标由模型给，越界即丢。 */
+function normalizeBoardSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const pieces: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.pieces) ? raw.pieces : []) {
+    if (!item || typeof item !== 'object') continue;
+    const piece = item as Record<string, unknown>;
+    const point = normalizeBoardPoint(piece);
+    const key = typeof piece.key === 'string' ? piece.key.trim() : '';
+    if (!point || !BOARD_KEYS.has(key)) continue;
+    const hl = normalizeTone(piece.hl, ['accent', 'warn']);
+    pieces.push({ ...point, key, ...(hl ? { hl } : {}) });
+    if (pieces.length >= SPEC.piecesMax) break;
+  }
+  if (pieces.length < 2) return null;
+
+  const files: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.files) ? raw.files : []) {
+    if (!item || typeof item !== 'object') continue;
+    const file = item as Record<string, unknown>;
+    const col = toBoundedInt(file.col, 0, 8);
+    if (col === null) continue;
+    const label = toFigureText(file.label, 10);
+    const tone = normalizeTone(file.tone, ['accent', 'warn', 'ok']);
+    files.push({ col, ...(label ? { label } : {}), ...(tone ? { tone } : {}) });
+    if (files.length >= SPEC.filesMax) break;
+  }
+
+  const arrows: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.arrows) ? raw.arrows : []) {
+    if (!item || typeof item !== 'object') continue;
+    const arrow = item as Record<string, unknown>;
+    const label = toFigureText(arrow.label, 10);
+    const tone = normalizeTone(arrow.tone, ['accent', 'warn', 'ok']);
+    const dash = normalizeDash(arrow.dash);
+    const common = { ...(label ? { label } : {}), ...(tone ? { tone } : {}), ...(dash ? { dash } : {}) };
+    const a1 = normalizeBoardPoint(arrow.a1);
+    const a2 = normalizeBoardPoint(arrow.a2);
+    if (a1 && a2) {
+      arrows.push({ a1, a2, ...common });
+    } else {
+      const col = toBoundedInt(arrow.col, 0, 8);
+      const from = toBoundedInt(arrow.from, 0, 9);
+      const to = toBoundedInt(arrow.to, 0, 9);
+      if (col === null || from === null || to === null || from === to) continue;
+      arrows.push({ col, from, to, ...common });
+    }
+    if (arrows.length >= SPEC.arrowsMax) break;
+  }
+
+  const marks: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.marks) ? raw.marks : []) {
+    const point = normalizeBoardPoint(item);
+    if (!point) continue;
+    const color = normalizeHex((item as Record<string, unknown>)?.color);
+    marks.push({ ...point, ...(color ? { color } : {}) });
+    if (marks.length >= SPEC.arrowsMax) break;
+  }
+
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const panelLabel = toFigureText(raw.panelLabel, 12);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const size = toBoundedInt(raw.size, 38, 56) || 46;
+  return {
+    pieces,
+    size,
+    ...(files.length ? { files } : {}),
+    ...(arrows.length ? { arrows } : {}),
+    ...(marks.length ? { marks } : {}),
+    ...(title ? { title } : {}),
+    ...(panelLabel ? { panelLabel } : {}),
+    ...(note ? { note } : {}),
   };
 }
 
@@ -1680,6 +3043,8 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(input._analysisStage ? { analysisStage: input._analysisStage } : {}),
       // 教学配图时机（逐回合变化 → 必须放**载荷尾部**，避免打断 KV 前缀缓存；见 buildPromptInput 注释）
       ...(input.visualOpportunity?.suggested ? { visualOpportunity: input.visualOpportunity } : {}),
+      // 当前白板描述（逐回合变化，同样放载荷尾部）：没有它时模型不得说「看图/图上」
+      ...(input.boardContext ? { boardContext: input.boardContext } : {}),
       // 教师补充材料（逐回合变化 → 同样放载荷尾部）：上一轮 control.supplement 的入库成果
       ...(scenarioSupplementaryMaterial ? { supplementaryMaterial: scenarioSupplementaryMaterial } : {}),
       // 温故计划（逐回合被消费合并 → 载荷尾部；模板引用路径已同步为顶层 memoryWarmup）

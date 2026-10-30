@@ -36,6 +36,13 @@ export interface EpistemicGroundingInput {
     history?: Array<{ role?: string; content?: string }>;
     lastTeacherMessage?: string | null;
   } | null;
+  /** 当前待作答检查点（不含答案键）；选择题的题干/选项只在这里，教师 reply 不会再打印 */
+  pendingCheckpoint?: {
+    question?: string | null;
+    type?: string | null;
+    options?: Array<{ id?: string; text?: string }>;
+    hint?: string | null;
+  } | null;
 }
 
 function clamp01(value: any, fallback: number): number {
@@ -104,6 +111,7 @@ function buildUserPayload(input: EpistemicGroundingInput) {
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
     previousLearnerState: input.previousLearnerState || null,
     ...(visibleContext ? { visibleContext } : {}),
+    ...(input.pendingCheckpoint ? { pendingCheckpoint: input.pendingCheckpoint } : {}),
     // 编排层硬指令放 payload 尾部（与逐轮变化的概念数组同区，保住稳定画像的前缀缓存）
     ...(input.forcedCorrectness?.forced ? { forcedCorrectness: input.forcedCorrectness } : {}),
   };

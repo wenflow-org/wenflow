@@ -388,6 +388,7 @@ sandbox:simulation-agent.actorProfile
 sandbox:simulation-agent.avoidDomains
 sandbox:simulation-agent.candidateDomains
 sandbox:simulation-agent.candidatePersonas
+sandbox:simulation-agent.conceptProgress
 sandbox:simulation-agent.control
 sandbox:simulation-agent.currentPhase
 sandbox:simulation-agent.currentTask
@@ -399,6 +400,7 @@ sandbox:simulation-agent.forcedCorrectness
 sandbox:simulation-agent.frictionBudget
 sandbox:simulation-agent.goalState
 sandbox:simulation-agent.knowledgeSnapshot
+sandbox:simulation-agent.knownConcepts
 sandbox:simulation-agent.learner
 sandbox:simulation-agent.learnerMemory
 sandbox:simulation-agent.learnerPrivateState
@@ -406,6 +408,7 @@ sandbox:simulation-agent.learnerState
 sandbox:simulation-agent.memoryRecall
 sandbox:simulation-agent.metricCompleteness
 sandbox:simulation-agent.pathProposal
+sandbox:simulation-agent.pendingCheckpoint
 sandbox:simulation-agent.persona
 sandbox:simulation-agent.preferredDomains
 sandbox:simulation-agent.preferredGoalTypes
@@ -419,6 +422,7 @@ sandbox:simulation-agent.recentScenarioHints
 sandbox:simulation-agent.refereeTrace
 sandbox:simulation-agent.story
 sandbox:simulation-agent.storyMeta
+sandbox:simulation-agent.struggleConcepts
 sandbox:simulation-agent.task
 sandbox:simulation-agent.temporalContext
 sandbox:simulation-agent.turnSequence

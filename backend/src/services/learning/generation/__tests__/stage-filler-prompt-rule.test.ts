@@ -43,14 +43,17 @@ describe('R8-1 同题复读禁令：提示词规则已编译进产物', () => {
     expect(/^\d+\./.test(line.trimStart())).toBe(true);
   });
 
-  it('最新追加的规则在末位（应试形态任务，2026-10-17；示范题面此后被后移属预期）', () => {
+  it('最新追加的规则在末位（空壳准备课，2026-10-28；应试形态任务在其前）', () => {
     expect(CORE).toContain('应试形态任务');
     expect(CORE).toContain('示范题/例题/真题引用必须自带题面');
     expect(CORE).toContain('真实交付锚');
     const nums = [...MD.matchAll(/^(\d+)\.\s/gm)].map((m) => Number(m[1]));
     const last = Math.max(...nums);
-    const line = MD.split('\n').find((l) => l.includes('应试形态任务')) || '';
+    const line = MD.split('\n').find((l) => l.includes('禁止「空壳准备课」')) || '';
     expect(line.trimStart().startsWith(`${last}.`)).toBe(true);
+    // 既有的「应试形态任务」仍需带编号，只是不再要求它恒为末位
+    const examLine = MD.split('\n').find((l) => l.includes('应试形态任务')) || '';
+    expect(/^\d+\./.test(examLine.trimStart())).toBe(true);
     // 编号连续：追加不跳号、不夹塞
     expect(nums[last - 1]).toBe(last);
   });
