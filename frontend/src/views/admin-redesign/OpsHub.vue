@@ -18,6 +18,7 @@
          失败必须显式落地：取不到 ≠ 没事（原实现把失败写成 0，页面伪装成「全部已清零」） -->
     <!-- 失败态的重试出口不放页头（顶栏已有刷新，页头第二颗钮重复）：失败时本行就地给重试
          2026-10-23，与记忆与复习总览的失败条同一形态 -->
+    <template v-if="showTodoReadings">
     <div v-if="wbHasError" class="mk-alert mk-alert--row" role="alert">
       <span class="mk-alert__msg">待办数据加载失败，对应计数不可信：{{ wbErrorText }}</span>
       <button type="button" class="mk-alert__btn" :disabled="refreshing" @click="refreshActive">{{ refreshing ? '重试中…' : '重试' }}</button>
@@ -37,6 +38,7 @@
         @click="m.failed ? undefined : m.action()"
       />
     </section>
+    </template>
 
     <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签。
@@ -212,6 +214,9 @@ const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp', 'tools
 
 type OhTab = (typeof OH_TABS)[number]
 const tab = ref<OhTab>('todo')
+/** 系统级页签与运营待办四域无关：隐藏页级读数带，别用四个 0 占掉配置页首屏 */
+const SYSTEM_TABS: readonly OhTab[] = ['tools', 'security', 'access']
+const showTodoReadings = computed(() => !SYSTEM_TABS.includes(tab.value))
 const route = useRoute()
 const router = useRouter()
 

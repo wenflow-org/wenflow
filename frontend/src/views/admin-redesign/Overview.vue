@@ -3,14 +3,6 @@
     <!-- 页头（原型 pageTitle）：面包屑管「我在哪」，页头管「这页是什么 + 主操作」 -->
     <MkPageHead title="平台总览" :sub="headSub">
       <template #actions>
-        <!-- 运营入口（2026-10-24 层级审计）：总览是登录落点，但运营域只在侧栏一组里；
-             待处理反馈/草稿公告/失败事件都要先想到去运营中心。这里给一个常驻出口，
-             读的是本页已有的失败/闭环事实，不新增取数。 -->
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm"
-          @click="goOpsHub"
-        >运营中心</button>
         <!-- 刷新状态独立于副文：副文只放事实段（运行全景/数据截至/最近活动），
              避免长句在页头副文盒内断词换行（视觉走查 2026-10-03）。
              本页 10s 轮询，手动「刷新」钮与之重复（对齐执行日志/健康中心先例：轮询页不放刷新钮）。
@@ -929,9 +921,6 @@ function jumpToKpi(k: KpiCard) {
   const t = (k.key ? KPI_TARGETS[k.key] : undefined) ?? KPI_TARGET_BY_LABEL[k.label] ?? { scene: 'execution-logs' }
   if (t.query) { openSceneWith(t.scene, t.query); return }
   jump(t.scene, t.tab, { statusFilter: t.statusFilter, timeRange: t.timeRange })
-}
-function goOpsHub() {
-  jump('ops-hub')
 }
 
 /* KPI 卡面副行 = 口径短语（随数据来，live.ts kpis.hint）；数值类（趋势 / 分解 / 对照 / foot）

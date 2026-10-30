@@ -1,75 +1,52 @@
 <template>
   <div :class="embedded ? 'acl-host acl-host--embedded' : 'mk-page acl-host'">
-    <MkPageHead v-if="!embedded" title="访问与注册">
-      <template #actions>
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm mk-btn--primary"
-          :disabled="!policyDirty || saving || saveBlocked"
-          @click="savePolicy"
-        >{{ saving ? '保存中…' : '保存策略' }}</button>
-      </template>
-    </MkPageHead>
+    <MkPageHead v-if="!embedded" title="访问与注册" />
 
     <div v-if="configFailed" class="mk-alert mk-alert--row" role="alert">
       <span class="mk-alert__msg">访问策略读取失败：为空不代表未配置</span>
       <button type="button" class="mk-alert__btn" @click="retryLoad">重试</button>
     </div>
 
-    <!-- 左「谁能连进来」（入站来源 + 出站目标，一次保存），右「谁能注册进来」（两个开关）。
-         左右列按对象分组，不再限宽居中：限宽会把 1080P 下的半屏留给空白。 -->
-    <div class="acl-grid">
-      <section class="mk-card">
+    <!-- 单卡承载三组设置（入站 / 出站 / 注册）：原来是「访问来源」与「注册」两张卡并排，
+         右卡只有两行开关，下方留半屏空白，两块卡高度也对不齐（2026-10-30 人工复查
+         「做成一个卡片吧」）。三组之间用分隔线分段；保存钮仍只保存上面两组访问策略，
+         注册两个开关保持逐项即时生效。 -->
+    <section class="mk-card ac-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">后台访问来源</h3>
-          <!-- 嵌入运营中心时页头由宿主承担，保存钮跟着它要保存的那张卡 -->
-          <button
-            v-if="embedded"
-            type="button"
-            class="mk-btn mk-btn--sm mk-btn--primary"
-            :disabled="!policyDirty || saving || saveBlocked"
-            @click="savePolicy"
-          >{{ saving ? '保存中…' : '保存策略' }}</button>
+          <h3 class="mk-card__title">访问与注册设置</h3>
         </div>
         <div class="ac-body">
           <!-- 入站：三张可选卡（图标 + 一句话后果），选中态蓝边 + 右上单选点。
                2026-10-27 用户「重新设计一下」：原 ○/● 行内单选看不出选中面积，也读不出各档差异。 -->
           <section class="ac-section">
             <div class="ac-section__head">
-              <!-- 段标题已是一个问题，下面三张卡的描述各自给出后果；再补一句「按来源地址限制」
-                   只是把「来源」换种说法讲一遍（2026-10-29 冗余副文审计） -->
-              <h4 class="ac-section__title">谁能连接后台</h4>
+              <h4 class="ac-section__title">管理后台访问控制</h4>
             </div>
-            <div class="ac-modes" role="radiogroup" aria-label="访问来源模式" @keydown="onAccessKeydown">
+            <div class="ac-seg" role="radiogroup" aria-label="访问来源模式" @keydown="onAccessKeydown">
               <button
                 v-for="(opt, i) in accessOptions"
                 :key="opt.id"
                 :ref="(el) => setAccessRef(el, i)"
                 type="button"
                 role="radio"
-                class="ac-mode"
-                :class="{ 'ac-mode--on': policy.adminAccessMode === opt.id, 'ac-mode--disabled': opt.disabled }"
+                class="ac-seg__item"
+                :class="{
+                  'ac-seg__item--on': policy.adminAccessMode === opt.id,
+                  'ac-seg__item--disabled': opt.disabled,
+                }"
                 :tabindex="policy.adminAccessMode === opt.id ? 0 : -1"
                 :aria-checked="policy.adminAccessMode === opt.id"
                 :aria-disabled="opt.disabled || undefined"
                 @click="setAccessMode(opt.id)"
               >
-                <span class="ac-mode__icon" aria-hidden="true">
-                  <component :is="opt.icon" :size="17" :stroke-width="1.8" />
-                </span>
-                <span class="ac-mode__text">
-                  <span class="ac-mode__title">
-                    {{ opt.label }}
-                    <span v-if="opt.recommended" class="ac-mode__badge">推荐</span>
-                  </span>
-                  <span class="ac-mode__desc">{{ opt.desc }}</span>
-                </span>
-                <span class="ac-mode__dot" aria-hidden="true"></span>
+                <component :is="opt.icon" :size="15" :stroke-width="1.8" aria-hidden="true" />
+                <span>{{ opt.label }}</span>
+                <span v-if="opt.recommended" class="ac-seg__badge">推荐</span>
               </button>
             </div>
             <p v-if="policy.adminAccessMode === 'any'" class="ac-risk" role="alert">
               <TriangleAlert :size="15" :stroke-width="2" aria-hidden="true" />
-              公网开放：任何能访问到本服务的人都能进入后台，仅建议临时调试时使用。
+              已允许公网访问：任意来源均可进入管理后台，仅建议临时调试时使用。
             </p>
             <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
               <span class="mk-field__label">额外允许的客户端 IP</span>
@@ -80,54 +57,40 @@
                 @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty()"
                 placeholder="203.0.113.10"
               ></textarea>
-              <span class="ac-field-hint">每行一个，留空表示只按私有网段判断。</span>
             </label>
           </section>
 
-          <!-- 出站：两档改成并列卡，写清「允许 = 任意内网」这一容易读反的语义 -->
+          <!-- 出站：两档并列分段，标签本身就是互斥语义 -->
           <section class="ac-section">
             <div class="ac-section__head">
-              <h4 class="ac-section__title">服务端能访问哪些内网地址</h4>
-              <span class="ac-section__hint">模型上游、MCP 服务等出站请求的目标范围</span>
+              <h4 class="ac-section__title">服务端出站访问</h4>
             </div>
-            <div class="ac-outs" role="radiogroup" aria-label="服务端出站白名单" @keydown="onOutboundKeydown">
+            <div class="ac-seg" role="radiogroup" aria-label="服务端出站白名单" @keydown="onOutboundKeydown">
               <button
                 :ref="(el) => setOutboundRef(el, 0)"
                 type="button"
                 role="radio"
-                class="ac-mode"
-                :class="{ 'ac-mode--on': policy.allowPrivateNetwork }"
+                class="ac-seg__item"
+                :class="{ 'ac-seg__item--on': policy.allowPrivateNetwork }"
                 :tabindex="policy.allowPrivateNetwork ? 0 : -1"
                 :aria-checked="policy.allowPrivateNetwork"
                 @click="setOutbound(true)"
               >
-                <span class="ac-mode__icon" aria-hidden="true">
-                  <Network :size="17" :stroke-width="1.8" />
-                </span>
-                <span class="ac-mode__text">
-                  <span class="ac-mode__title">允许全部内网</span>
-                  <span class="ac-mode__desc">服务端可请求任意内网地址（默认）</span>
-                </span>
-                <span class="ac-mode__dot" aria-hidden="true"></span>
+                <Network :size="15" :stroke-width="1.8" aria-hidden="true" />
+                <span>允许全部内网</span>
               </button>
               <button
                 :ref="(el) => setOutboundRef(el, 1)"
                 type="button"
                 role="radio"
-                class="ac-mode"
-                :class="{ 'ac-mode--on': !policy.allowPrivateNetwork }"
+                class="ac-seg__item"
+                :class="{ 'ac-seg__item--on': !policy.allowPrivateNetwork }"
                 :tabindex="!policy.allowPrivateNetwork ? 0 : -1"
                 :aria-checked="!policy.allowPrivateNetwork"
                 @click="setOutbound(false)"
               >
-                <span class="ac-mode__icon" aria-hidden="true">
-                  <ShieldCheck :size="17" :stroke-width="1.8" />
-                </span>
-                <span class="ac-mode__text">
-                  <span class="ac-mode__title">仅白名单</span>
-                  <span class="ac-mode__desc">只允许下面列出的 Host / IP</span>
-                </span>
-                <span class="ac-mode__dot" aria-hidden="true"></span>
+                <ShieldCheck :size="15" :stroke-width="1.8" aria-hidden="true" />
+                <span>仅白名单</span>
               </button>
             </div>
             <label v-if="!policy.allowPrivateNetwork" class="mk-field">
@@ -139,65 +102,69 @@
                 @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty()"
                 placeholder="192.168.1.20"
               ></textarea>
-              <span class="ac-field-hint">每行一个，支持域名、IP 或 host:port。</span>
             </label>
             <p v-if="outboundEmptyWarn" class="ac-risk" role="alert">
               <TriangleAlert :size="15" :stroke-width="2" aria-hidden="true" />
-              白名单为空：保存后服务端将无法请求任何内网地址。
+              白名单为空：保存后服务端将无法访问任何内网地址。
             </p>
           </section>
-        </div>
-      </section>
 
-      <div class="acl-side">
-        <section v-if="isLive && registrationEnabled !== null && registerIpQuotaEnabled !== null" class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">注册</h3>
-          </div>
-          <div class="ac-body">
-            <div class="ac-reg-row">
-              <MkSwitch
-                :model-value="registrationEnabled === true"
-                :busy="registrationBusy"
-                label="新用户注册"
-                :state-text="registrationStateText"
-                @update:model-value="setRegistration"
-              />
-              <button v-if="!registrationEnabled" type="button" class="mk-link" @click="goCreateUser">新建用户 →</button>
+          <!-- 注册：并入同卡第三段，与访问策略只隔一条分隔线；两个开关仍各自即时生效 -->
+          <section v-if="isLive && registrationEnabled !== null && registerIpQuotaEnabled !== null" class="ac-section">
+            <div class="ac-section__head">
+              <h4 class="ac-section__title">注册设置</h4>
             </div>
-            <div class="ac-reg-row">
-              <MkSwitch
-                :model-value="registerIpQuotaEnabled === true"
-                :busy="quotaBusy"
-                :label="IP_QUOTA_TITLE"
-                :state-text="quotaEnabledText"
-                @update:model-value="setQuotaEnabled"
-              />
-              <label v-if="registerIpQuotaEnabled" class="ac-quota-field">
-                <span class="mk-field__label">每日上限</span>
-                <input
-                  type="number"
-                  class="mk-field__input"
-                  min="1"
-                  max="100"
-                  :value="quotaInput"
-                  :disabled="quotaBusy"
-                  @change="onQuotaInput"
+            <div class="ac-reg-rows">
+              <div class="ac-reg-row">
+                <MkSwitch
+                  :model-value="registrationEnabled === true"
+                  :busy="registrationBusy"
+                  label="新用户注册"
+                  :state-text="registrationStateText"
+                  @update:model-value="setRegistration"
                 />
-                <em>个 / IP</em>
-              </label>
-              <button
-                v-if="registerIpQuotaEnabled && quotaDirty"
-                type="button"
-                class="mk-btn mk-btn--sm mk-btn--primary"
-                :disabled="quotaBusy"
-                @click="saveQuota(registerIpQuotaEnabled === true, quotaInput)"
-              >保存上限</button>
+                <button v-if="!registrationEnabled" type="button" class="mk-link" @click="goCreateUser">新建用户 →</button>
+              </div>
+              <div class="ac-reg-row">
+                <MkSwitch
+                  :model-value="registerIpQuotaEnabled === true"
+                  :busy="quotaBusy"
+                  :label="IP_QUOTA_TITLE"
+                  @update:model-value="setQuotaEnabled"
+                />
+                <label class="ac-quota-field">
+                  <span class="mk-field__label">每日上限</span>
+                  <input
+                    type="number"
+                    class="mk-field__input"
+                    min="1"
+                    max="100"
+                    :value="quotaInput"
+                    :disabled="!registerIpQuotaEnabled || quotaBusy"
+                    @change="onQuotaInput"
+                  />
+                  <em>个 / IP</em>
+                </label>
+                <button
+                  v-if="registerIpQuotaEnabled && quotaDirty"
+                  type="button"
+                  class="mk-btn mk-btn--sm mk-btn--primary"
+                  :disabled="quotaBusy"
+                  @click="saveQuota(registerIpQuotaEnabled === true, quotaInput)"
+                >保存上限</button>
+              </div>
             </div>
-          </div>
-        </section>
-      </div>
-    </div>
+          </section>
+        </div>
+        <div class="ac-foot">
+          <button
+            type="button"
+            class="mk-btn mk-btn--primary"
+            :disabled="!policyDirty || saving || saveBlocked"
+            @click="savePolicy"
+          >{{ saving ? '保存中…' : '保存策略' }}</button>
+        </div>
+    </section>
   </div>
 </template>
 
@@ -283,7 +250,6 @@ const accessOptions = computed(() => [
   {
     id: 'loopback' as const,
     label: '仅本机',
-    desc: '只允许 127.0.0.1 访问',
     icon: Laptop,
     recommended: false,
     disabled: false,
@@ -291,7 +257,6 @@ const accessOptions = computed(() => [
   {
     id: 'private' as const,
     label: '私有网段',
-    desc: '允许内网地址，可补充客户端 IP',
     icon: Network,
     recommended: true,
     disabled: false,
@@ -299,7 +264,6 @@ const accessOptions = computed(() => [
   {
     id: 'any' as const,
     label: '不限制',
-    desc: isProduction ? '生产环境不可选，请改用私有网段 + IP 白名单' : '任何访问者都能进入后台',
     icon: Globe,
     recommended: false,
     disabled: isProduction,
@@ -412,11 +376,9 @@ async function loadRegistrationStatus(): Promise<void> {
     registrationTemporaryUnavailable.value = false
   }
 }
-const registrationStateText = computed(() => {
-  if (!registrationEnabled.value) return '仅管理员创建'
-  if (registrationTemporaryUnavailable.value) return '已开放 · 核心服务异常，暂时无法注册'
-  return '任何人均可注册'
-})
+const registrationStateText = computed(() =>
+  registrationTemporaryUnavailable.value ? '暂不可用' : '',
+)
 function goCreateUser(): void {
   void router.push('/admin/people')
 }
@@ -461,9 +423,6 @@ watch(
   { immediate: true },
 )
 const quotaDirty = computed(() => quotaInput.value !== quotaSaved.value)
-const quotaEnabledText = computed(() =>
-  registerIpQuotaEnabled.value ? `已启用 · 每 IP 每日 ${quotaSaved.value} 个` : '未启用（不限制注册数量）',
-)
 /** 配额输入只在 change 时校验：清空/非法值回退最近一次有效值（Number('')=0 会被钳到 1 静默改值） */
 function onQuotaInput(e: Event): void {
   const input = e.target as HTMLInputElement
@@ -520,22 +479,13 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 @media (max-width: 900px) {
   .acl-host--embedded { flex: none; overflow: visible; }
 }
-/* 左「入站 + 出站」（一次保存）、右「注册」（两个独立开关）：按对象分列，窄屏回落单列 */
-.acl-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-.acl-side { display: grid; gap: 16px; }
-@media (max-width: 1100px) {
-  .acl-grid { grid-template-columns: minmax(0, 1fr); }
-}
-.ac-body { display: grid; gap: 18px; padding: 4px 16px 18px; }
+/* 设置卡限宽：表单不随 1920 视口拉满，内容区保持单列可读宽度（2026-10-30 人工复查） */
+.ac-card { width: 100%; max-width: 760px; }
+.ac-reg-rows { display: grid; gap: 12px; }
+.ac-body { display: grid; gap: 18px; padding: 4px 16px 16px; }
 .ac-body .mk-field { margin: 0; min-width: 0; }
-.ac-field-hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 
-/* 两段设置（入站 / 出站）：段标题 + 一句范围说明，段间用分隔线而不是猜间距 */
+/* 三段设置（入站 / 出站 / 注册）：段间用分隔线，不再用大卡占位 */
 .ac-section { display: grid; gap: 10px; min-width: 0; }
 .ac-section + .ac-section {
   padding-top: 16px;
@@ -543,57 +493,43 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 }
 .ac-section__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .ac-section__title { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
-.ac-section__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 
-/* 可选卡（三档入站 / 两档出站共用）：整卡可点，选中蓝边 + 右上单选点 */
-.ac-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.ac-outs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-@media (max-width: 760px) {
-  .ac-modes { grid-template-columns: minmax(0, 1fr); }
-  .ac-outs { grid-template-columns: minmax(0, 1fr); }
-}
-.ac-mode {
-  position: relative;
+/* 互斥枚举：分段器（三档入站 / 两档出站共用），选中态用底色和字色，不用远端单选点 */
+.ac-seg {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
+  gap: 2px;
+  padding: 3px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+}
+.ac-seg__item {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--mk-radius-sm);
+  background: transparent;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-body);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ac-seg__item:hover { color: var(--mk-ink); }
+.ac-seg__item:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
+.ac-seg__item--on {
+  border-color: var(--mk-line);
   background: var(--mk-surface);
   color: var(--mk-ink);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
-.ac-mode:hover { border-color: var(--mk-blue); background: var(--mk-hover-surface); }
-.ac-mode:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
-.ac-mode--on {
-  border-color: var(--mk-blue);
-  background: color-mix(in srgb, var(--mk-blue) 7%, var(--mk-surface));
-  box-shadow: inset 0 0 0 1px var(--mk-blue);
-}
-.ac-mode--disabled { cursor: not-allowed; opacity: 0.55; }
-.ac-mode--disabled:hover { border-color: var(--mk-line); background: var(--mk-surface); }
-.ac-mode__icon {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-}
-.ac-mode--on .ac-mode__icon {
-  background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
-  color: var(--mk-blue);
-}
-.ac-mode__text { display: grid; gap: 2px; min-width: 0; padding-right: 14px; }
-.ac-mode__title { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-body); font-weight: 600; }
-.ac-mode__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.45; }
-.ac-mode--on .ac-mode__desc { color: var(--mk-ink); opacity: 0.82; }
-.ac-mode__badge {
+.ac-seg__item--disabled { cursor: not-allowed; opacity: 0.55; }
+.ac-seg__item--disabled:hover { color: var(--mk-muted); }
+.ac-seg__badge {
   padding: 1px 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
@@ -601,24 +537,6 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   line-height: 1.4;
-}
-.ac-mode__dot {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--mk-faint);
-  border-radius: 50%;
-  background: var(--mk-surface);
-}
-.ac-mode--on .ac-mode__dot { border-color: var(--mk-blue); }
-.ac-mode--on .ac-mode__dot::after {
-  content: '';
-  position: absolute;
-  inset: 2.5px;
-  border-radius: 50%;
-  background: var(--mk-blue);
 }
 
 /* 风险提示（公网开放 / 白名单为空）：整条落在该段下方，不是一行小字 */
@@ -644,5 +562,13 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 .ac-quota-field .mk-field__input { width: 76px; text-align: center; font-variant-numeric: tabular-nums; }
 .ac-quota-field em { font-style: normal; color: var(--mk-faint); }
 
-.ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); min-height: 0; }
+/* 保存归位到表单末尾：改完整张卡，动作就在手边（2026-10-30 人工复查） */
+.ac-foot {
+  display: flex;
+  justify-content: flex-start;
+  padding: 14px 16px 18px;
+  border-top: 1px solid var(--mk-line);
+}
+
+.ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); min-height: 0; width: 100%; max-width: 420px; }
 </style>
