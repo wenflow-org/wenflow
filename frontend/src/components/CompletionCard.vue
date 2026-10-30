@@ -13,7 +13,8 @@
           <span class="attribution-tag">主要因为</span>{{ advisory.attribution.reason }}
         </p>
         <p class="section-hint">确认后会调整后续学习安排，已完成的内容不会改变。</p>
-        <div class="advisory-options">
+        <div v-if="advisoryKept" class="section-hint">你已选择保持原计划，这条建议不会再调整后续安排。</div>
+        <div v-else class="advisory-options">
           <button
             v-for="option in advisory.ui.options"
             :key="option.key"
@@ -184,6 +185,8 @@ const summary = computed(() => props.wrapup.summary);
 const evaluation = computed(() => props.wrapup.evaluation);
 const stateUpdate = computed(() => props.wrapup.stateUpdate || null);
 const advisory = computed(() => props.advisory || null);
+/** 学习者已明确「保持原计划」：建议卡转已决策态，不再给可重复点击的按钮 */
+const advisoryKept = computed(() => advisory.value?.learnerResponse?.action === 'keep');
 const busy = computed(() => props.busy === true);
 const isAdjustmentAction = (action: string) => ['confirm', 'reinforce', 'slow_down', 'resequence', 'accelerate'].includes(action);
 

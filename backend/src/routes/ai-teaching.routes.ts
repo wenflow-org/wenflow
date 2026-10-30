@@ -31,6 +31,7 @@ import {
   reserveTeachingOperation,
   teachingOperationRequestHash,
 } from '../services/ai-teaching/TeachingMessageIdempotencyService';
+import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardGuidanceSnapshotService';
 
 const router = Router();
 
@@ -848,6 +849,10 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
         error: { message: '当前会话没有待处置的调整建议', code: 'ADVISORY_NOT_FOUND' },
       });
     }
+
+    // 处置即刷新仪表盘快照：决策流按 learnerResponse 消账（keep 不再出「去处理」卡），
+    // 快照无 TTL，不在这里触发的话旧卡会一直挂到下一个无关事件（2026-10-31 用户走查）。
+    dashboardGuidanceSnapshotService.refreshInBackground(userId, 'manual');
 
     res.json({ success: true, data: { sessionId, action, advisory: result.advisory } });
   } catch (error: any) {

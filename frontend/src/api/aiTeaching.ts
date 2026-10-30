@@ -310,6 +310,8 @@ export interface ReplanAdvisory {
       description: string;
     }>;
   };
+  /** 学习者处置记录（advisory-response 端点写入）；keep 后建议卡转已决策态、决策流消账 */
+  learnerResponse?: { action: 'keep' | 'later' | 'preview' | 'adopt'; at: string } | null;
 }
 
 export interface SessionSummary {

@@ -664,6 +664,10 @@ const handleAdvisoryAction = async (action: string) => {
 
   if (action === 'keep') {
     toast.success('已保留当前学习计划');
+    // 本地同步已决策态：按钮区立即换成已保持提示，不用等重进页面拉 learnerResponse
+    if (detail.advisory) {
+      detail.advisory.learnerResponse = { action: 'keep', at: new Date().toISOString() };
+    }
     reportAdvisoryResponse('keep');
     return;
   }
