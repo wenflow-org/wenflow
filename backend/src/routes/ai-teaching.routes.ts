@@ -832,11 +832,7 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
       });
     }
 
-    const result = await teachingSessionRepository.recordAdvisoryResponse(
-      sessionId,
-      userId,
-      action as 'keep' | 'later' | 'preview' | 'adopt'
-    );
+    const result = await teachingSessionRepository.recordAdvisoryResponse(sessionId, userId, action as 'keep' | 'later' | 'preview' | 'adopt');
     if (result.status === 'not_found') {
       return res.status(404).json({
         success: false,
@@ -850,8 +846,7 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
       });
     }
 
-    // 处置即刷新仪表盘快照：决策流按 learnerResponse 消账（keep 不再出「去处理」卡），
-    // 快照无 TTL，不在这里触发的话旧卡会一直挂到下一个无关事件（2026-10-31 用户走查）。
+    // 处置即刷新仪表盘快照：决策流按 learnerResponse 消账（快照无 TTL，不触发则旧卡挂到下一个无关事件）
     dashboardGuidanceSnapshotService.refreshInBackground(userId, 'manual');
 
     res.json({ success: true, data: { sessionId, action, advisory: result.advisory } });
