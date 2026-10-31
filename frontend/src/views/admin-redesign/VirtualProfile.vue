@@ -32,10 +32,27 @@
              与 LearnerDetail 的「虚拟档案 →」对称——那边也是 MkDetailHero 的 #actions。
              默认档按钮（hero 位不用 sm，判例 2026-10-20）。 -->
         <div class="mk-entity__actions">
-          <!-- 页面级主操作（2026-10-24 层级收口）：此前启动入口只在「故事池」的故事行里，
-               从学习详情反跳进来的人没有下一步。这里复用列表的启动弹窗（选故事 → 建会话并开跑）。 -->
+          <!-- 页面级主操作（2026-10-31 四轮评审 R4）：已有活跃会话时主位是「打开座舱」——
+               管理员此刻的第一诉求是看进度，蓝色「运行」会诱使误触新建一套重复会话
+               （沈舟/韩磊 故事/路径: 2/1 正是重复运行的产物）；新运行降级为次钮「再开一局」。
+               无活跃会话时维持原样（主位「运行」，复用列表的启动弹窗）。 -->
+          <template v-if="isLive && activeSessionId">
+            <button
+              type="button"
+              class="mk-btn mk-btn--primary"
+              title="打开当前活跃会话的座舱：查看对话、推进/暂停/终止等实时控制"
+              @click="goCockpit()"
+            >打开座舱</button>
+            <button
+              v-if="displayStories.length"
+              type="button"
+              class="mk-btn"
+              title="不影响当前会话：另选故事新开一套运行"
+              @click="openLaunch()"
+            >再开一局</button>
+          </template>
           <button
-            v-if="isLive"
+            v-else-if="isLive"
             type="button"
             class="mk-btn mk-btn--primary"
             :disabled="!displayStories.length"
@@ -221,7 +238,7 @@
                 <div v-if="latestRun" class="vp-lastrun">
                   <div class="vp-lastrun__row">
                     <span class="vp-lastrun__story" :title="latestRun.storyTitle || '未关联故事'">{{ latestRun.storyTitle || '未关联故事' }}</span>
-                    <RunStateBadge :status="latestRun.result" :hint="formatRunResult(latestRun.result)" :pulse="false" />
+                    <RunStateBadge :status="runDisplayState(latestRun)" :hint="formatRunResult(runDisplayState(latestRun))" :pulse="false" />
                   </div>
                   <span
                     v-if="runReadings(latestRun)"
@@ -374,15 +391,9 @@
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
             <div class="mk-card__head-right">
               <span class="mk-card__meta">课后沉淀</span>
-              <!-- 2026-10-31 三轮评审 P2：刷新从空工具行移入卡头（该页签无筛选器，整行只剩刷新读作空容器） -->
-              <button
-                type="button"
-                class="mk-btn mk-btn--sm"
-                :disabled="memoryLoading"
-                title="重新读取记忆池数据"
-                @click="loadMemory(true)"
-              ><MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template></button>
-              <!-- 账号级记忆与复习（2026-10-24）：本页只列本档案的记忆痕迹，跨路径明细在账号详情 -->
+              <!-- 账号级记忆与复习（2026-10-24）：本页只列本档案的记忆痕迹，跨路径明细在账号详情。
+                   2026-10-31 四轮评审 R8：刷新挪到行尾——插在中间会把「课后沉淀 · 账号级记忆与复习 →」
+                   这组词组劈成两半 -->
               <button
                 v-if="d.userId"
                 type="button"
@@ -390,6 +401,13 @@
                 title="打开该账号的学习详情 · 记忆与复习：含跨路径概念与到期明细。两处统计方式不同，数字可能不一致"
                 @click="goMemoryReview()"
               >账号级记忆与复习 →</button>
+              <button
+                type="button"
+                class="mk-btn mk-btn--sm"
+                :disabled="memoryLoading"
+                title="重新读取记忆池数据"
+                @click="loadMemory(true)"
+              ><MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template></button>
             </div>
           </div>
 
@@ -601,13 +619,13 @@
                   </div>
                 </div>
                 <div class="vp-story__ops">
-                  <!-- 2026-10-31 三轮评审 P2：运行中的故事主操作是「打开座舱」而非再起一个 ▶ 运行
-                       （再运行会新开一套任务，与运行中徽章同屏读不通）；非运行态保持 ▶ 运行 -->
+                  <!-- 2026-10-31 三轮/四轮评审：运行中或已暂停（未完结）的故事主操作都是
+                       「打开座舱」——▶ 运行会新开一套重复任务；只有终态故事才给 ▶ 运行 -->
                   <button
-                    v-if="storyRunState(s) === 'running' && s.latestRun?.sessionId"
+                    v-if="['running', 'paused'].includes(storyRunState(s)) && s.latestRun?.sessionId"
                     type="button"
                     class="mk-btn mk-btn--sm"
-                    title="该故事最新运行仍在进行：打开其座舱查看实时进度"
+                    :title="storyRunState(s) === 'paused' ? '该故事最新运行已暂停：打开座舱查看进度或继续' : '该故事最新运行仍在进行：打开其座舱查看实时进度'"
                     @click="openSessionCockpit(String(s.latestRun.sessionId))"
                   >打开座舱</button>
                   <button v-else type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验运行（进入座舱）'" @click="runStory(s, i)">
@@ -706,10 +724,10 @@
                     :title="runReadingsTitle(r)"
                   >{{ runReadings(r) }}</span>
                 </div>
-                <RunStateBadge :status="r.result" :hint="`${formatRunResult(r.result)}${r.pathId ? ' · 关联学习路径' : ''}`" :pulse="false" />
+                <RunStateBadge :status="runDisplayState(r)" :hint="`${formatRunResult(runDisplayState(r))}${r.pathId ? ' · 关联学习路径' : ''}`" :pulse="false" />
                 <RunStageBar
                   :stage="r.stage"
-                  :status="r.result"
+                  :status="runDisplayState(r)"
                   :task-progress="null"
                   :show-task-text="false"
                 />
@@ -1398,8 +1416,10 @@ const storyFilter = ref('')
 const storyFilterOptions = computed(() => {
   const base = stories.value
   const count = (pred: (s: StoryItem) => boolean) => base.filter(pred).length
-  const running = count((s) => (s.runningCount || 0) > 0)
-  const paused = count((s) => !!s.latestRun && ['paused'].includes(String(s.latestRun.status || '').toLowerCase()))
+  const running = count((s) => (s.runningCount || 0) > 0 && !(s.latestRun?.sessionId && pausedSessionIds.value.has(s.latestRun.sessionId)))
+  /* 2026-10-31 四轮评审 R1：已暂停计数与徽章同判据（autopilot 停机也算） */
+  const paused = count((s) => (s.latestRun?.sessionId && pausedSessionIds.value.has(s.latestRun.sessionId))
+    || ['paused'].includes(String(s.latestRun?.status || '').toLowerCase()))
   const failed = count((s) => !!s.latestRun && ['failed', 'abandoned', 'timeout'].includes(String(s.latestRun.status || '').toLowerCase()))
   const completed = count((s) => !!s.latestRun && String(s.latestRun.status || '').toLowerCase() === 'completed')
   return [
@@ -1947,6 +1967,10 @@ async function loadDetail(id?: string, quiet = false) {
           paused: (() => {
             try {
               const sr = typeof s.stageResults === 'string' ? JSON.parse(s.stageResults || '{}') : (s.stageResults || {})
+              /* 2026-10-31 四轮评审 R1：自动驾驶停机（进度保留）也算已暂停——与列表页
+                 pausedSessionIds 同一判据（live.ts stageResults.autopilot.status==='stopped'），
+                 否则列表灰点「已暂停」、详情满屏绿「进行中」两套状态打架 */
+              if (sr?.autopilot?.status === 'stopped') return true
               return !!(sr?.teaching?.paused)
             } catch { return false }
           })(),
@@ -2615,6 +2639,22 @@ const LINE_EMPTY = 'mk-empty--line'
    窗口上限 RUNS_TAB_WINDOW；runsTotal 是详情接口给的原始条数（接口上限 200），
    超出窗口时卡头须披露「已截断」（审核 2026-10-06 低 [96]） */
 const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, RUNS_TAB_WINDOW))
+
+/* 2026-10-31 四轮评审 R1：会话未完结但自动驾驶已停机 = 已暂停（展示态折叠）。
+   列表页按 autopilot 停机态画灰点「已暂停」，详情页此前只看 result==='running'
+   就画绿「进行中」——同一人两页两种状态。此 helper 是画像页所有运行徽章的单一出口。 */
+function runDisplayState(r: Pick<RunItem, 'result' | 'paused'>): string {
+  if ((r.result === 'running' || r.result === 'created') && r.paused) return 'paused'
+  return String(r.result || 'created')
+}
+/** 自动驾驶已停机的会话 id 集：故事池徽章（latestRun 无 stageResults）跨引用用 */
+const pausedSessionIds = computed(() => {
+  const ids = new Set<string>()
+  for (const r of allRuns.value) {
+    if (r.paused && r.sessionId) ids.add(r.sessionId)
+  }
+  return ids
+})
 const runsTruncated = computed(() => (d.value?.runsTotal ?? 0) > allRuns.value.length)
 
 /* ===== 概览 pane / 状态条读数（原型 renderVLearnerDetail index.html:2403-2482）=====
@@ -2888,10 +2928,10 @@ watch(
     的行底 + 单选点表达，避免同屏同名不同义（走查 F4-3）。 */
 /** 故事生命周期 → 中文 + 徽章档位（后端原样回 completed/pending/draft，
     此前直接透出英文，和「草稿」混在一列）。未知值兜底草稿，不裸透内部枚举。
-    2026-10-31 三轮评审 P2：最新运行进行中的故事不得再标「草稿」——同一行右侧
-    RunStateBadge 已是「运行中」，左侧生命周期仍读草稿是自相矛盾；此时改标「运行中」。 */
+    2026-10-31 四轮评审 R7：本徽章只表达故事**模板**生命周期（预置/草稿/就绪），
+    不用运行态覆盖——运行态属于下方 RunStateBadge（已暂停/已完成…），同卡双徽章
+    各说各轴，不再出现两个近义词蓝标相隔 20px。 */
 function storyStatusMeta(s: StoryItem): { text: string; cls: string } {
-  if (storyRunState(s) === 'running') return { text: '运行中', cls: 'mk-badge--info' }
   switch (String(s.status || '')) {
     case 'ready': return { text: '就绪', cls: 'mk-badge--ok' }
     case 'pending': return { text: '待运行', cls: 'mk-badge--info' }
@@ -2951,9 +2991,13 @@ function formatRunResult(result: string) {
  * 其余按 latestRun.status 原样（含 paused/failed/completed/abandoned）
  */
 function storyRunState(s: StoryItem): string {
-  if ((s.runningCount || 0) > 0 && s.latestRun?.status === 'running') return 'running'
   const st = String(s.latestRun?.status || '').toLowerCase()
-  if (['completed', 'incomplete', 'failed', 'abandoned', 'paused', 'created', 'timeout', 'cancelled'].includes(st)) return st
+  /* 终态优先（2026-10-31 四轮评审：停机后被回收为已放弃的会话不得再标「已暂停」） */
+  if (['completed', 'incomplete', 'failed', 'abandoned', 'paused', 'timeout', 'cancelled'].includes(st)) return st
+  /* 2026-10-31 四轮评审 R1：会话未完结但自动驾驶已停机 = 已暂停——latestRun 自身不带
+     stageResults，跨引用画像会话流水的停机 id 集（与列表页同判据） */
+  if (s.latestRun?.sessionId && pausedSessionIds.value.has(s.latestRun.sessionId)) return 'paused'
+  if ((s.runningCount || 0) > 0 && st === 'running') return 'running'
   if (st === 'running') return 'running'
   return st || 'created'
 }
@@ -2975,6 +3019,8 @@ const RUN_FILTERS = [
 ] as const
 const runsFilter = ref('')
 function isRunActive(r: RunItem): boolean {
+  /* 2026-10-31 四轮评审 R1：自动驾驶停机不算「进行中」（落「未完成」桶，行内徽章如实标已暂停） */
+  if (r.paused && (r.result === 'running' || r.result === 'created')) return false
   return r.result === 'running' || r.result === 'created'
 }
 function isRunDone(r: RunItem): boolean {

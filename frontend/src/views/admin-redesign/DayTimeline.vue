@@ -459,7 +459,9 @@ watch(
 /* ===== 日程格：原型 .schgrid/.schcell（544-553）=====
    原型 116px 是「一周仿真日程」的窄格；本页每格承载课量/读数/任务明细，
    故加宽 minmax 到 240px，其余（gap 10、padding 10/12、gap 4、四态底色）原样。 */
-.schgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+/* auto-fill 而非 auto-fit（2026-10-31 四轮评审 R9）：auto-fit 会折叠空轨道，
+   折叠空日后仅剩的「第 1 天」单卡被拉满整行 1500px；auto-fill 保持每卡 ~240px 栏宽 */
+.schgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .schcell {
   display: grid;
   gap: 4px;

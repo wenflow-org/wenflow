@@ -8,7 +8,10 @@
       <div class="mk-status" :class="`mk-status--${headerHealth}`">
         <span class="mk-status__dot" aria-hidden="true"></span>
         <button type="button" class="mk-back" @click="goBack">← {{ backLabel }}</button>
-        <strong class="mk-status__title">只读监控 <span class="cp-title__id mono">{{ shortId }}</span></strong>
+        <!-- 2026-10-31 四轮评审 R5：本顶栏只渲染虚拟会话（真实会话不进此分支），
+             而下方就是继续/暂停/终止/自动驾驶等全套操控——「只读监控」与实际能力相反，
+             改「仿真操控台」；真实会话的只读声明在 hero chip（真实目标对话 · 只读监控） -->
+        <strong class="mk-status__title">仿真操控台 <span class="cp-title__id mono">{{ shortId }}</span></strong>
         <!-- 自动驾驶进行中的状态指示（停止按钮在控制台） -->
         <span v-if="autopilotRunning" class="mk-status__meta cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
         <span class="mk-status__sep"></span>
@@ -181,7 +184,11 @@
         </template>
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'path'">
           <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成路径</button>
-          <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动教学</button>
+          <!-- 教学已启动后本页不再挂「待启动」引导态（2026-10-31 四轮评审 R2）：
+               课堂已在「学习」页签推进（甚至已完成第 1 课），主位让给「进入课堂」；
+               启动教学只在真正未开始时出现 -->
+          <button v-if="hasLearningProgress" type="button" class="cp-btn cp-btn--primary" title="教学已在「学习」页签进行中" @click="selectStageTab('learning')">进入课堂 →</button>
+          <button v-else type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动教学</button>
           <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建路径</button>
         </template>
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'learning'">
@@ -313,7 +320,10 @@
               <template v-if="session && goalConverged"> · 已确认</template>
             </span>
           </div>
-          <div class="cp-transcripts">
+          <!-- 目标对话自然生长（2026-10-31 四轮评审 R10）：固定高度滚动容器把第 9 条消息
+               削掉大半、12 条只露出 8 条——对话是本卡主体，去掉内部滚动让整卡随页面走，
+               全页走查/截图不再丢消息；课堂转录（cp-transcripts 原用法）保持定高滚动 -->
+          <div class="cp-transcripts cp-transcripts--free">
             <!-- 未加载先骨架，不把「尚未加载」当「确实为空」（2026-10-06 审核 #47） -->
             <MkSkeleton v-if="!session" variant="rows" :count="3" :h="36" :radius="8" />
             <template v-else>
@@ -2014,8 +2024,10 @@ const pathReadinessText = computed(() => {
   if (!hasPath.value) return goalConverged.value ? '目标已确认，等待生成路径。' : '等待目标对话确认后生成路径。'
   if (pathGenerationFailed.value) return learningBlockedReason.value || '路径生成失败，请重新生成。'
   if (pathGenerationInProgress.value) return learningBlockedReason.value || '路径正在生成或补全课程，请稍候。'
+  /* 2026-10-31 四轮评审 R2：教学已启动就不再说「可启动或重启教学」（与主位「进入课堂」一致） */
+  if (hasLearningProgress.value) return '教学已启动，课堂在「学习」页签推进中。'
   if (pathStartable.value) return pathReviewAccepted.value
-    ? '路径已就绪，可启动或重启教学。'
+    ? '路径已就绪，可启动教学。'
     : '路径已就绪，可直接启动教学，无需等待评审。'
   return learningBlockedReason.value || '路径已生成，正在确认教学启动条件。'
 })
@@ -2080,11 +2092,11 @@ const heroTitle = computed(() => {
   return shortId.value
 })
 
-/* 面包屑同源穿帮（2026-10-31 三轮评审 P1）：H1 已回退到故事名，面包屑仍挂着 openSubPage
-   带入的裸会话 id。用 hero 标题回写——仅覆写裸 id 标签；泛型名（目标对话/真实课堂）与
-   路径真名各有其主管来源（refresh 泛型兜底 / 上方 pathDetailTitle watch），此处不抢。 */
-watch(heroTitle, (title) => {
-  const sp = subPage.value
+/* 面包屑同源穿帮（2026-10-31 三轮评审 P1；四轮评审 R3 自愈化）：H1 已回退到故事名，
+   面包屑仍可能挂着 openSubPage 带入的裸会话 id。监听 [heroTitle, subPage] 元组——
+   不管是载荷晚到、还是 stage 深链让宿主重建 subPage（覆盖掉已写的 label），
+   只要当前标签还是裸 id 就用 hero 真名补写；已有可读名（泛型/路径/真名）不抢。 */
+watch([heroTitle, subPage], ([title, sp]) => {
   if (!title || title === shortId.value || !sp || sp.id !== sessionId.value) return
   if (sp.label && sp.label !== sp.id) return
   setSubPageLabel(title)
@@ -3516,6 +3528,9 @@ async function copyRawJson() {
 .cp-btn--sm { padding: 5px 10px; font-size: var(--mk-fs-micro); border-radius: 6px; }
 .cp-btn:hover:not(:disabled) { border-color: rgba(47, 106, 224, 0.4); color: var(--mk-blue); }
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 禁用主钮灰化（2026-10-31 四轮评审 R2）：半透明蓝仍读作「可点的主操作」，
+   与 mk-btn 的禁用语义对齐——教学已在进行中时「启动教学」不再像引导态 */
+.cp-btn--primary:disabled { background: var(--mk-surface-3); border-color: var(--mk-line); color: var(--mk-faint); opacity: 1; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
 .cp-btn--primary:hover:not(:disabled) { color: var(--mk-on-fill); opacity: 0.9; }
 /* 危险动作按钮改用 mk 原语 .mk-btn--danger（hero 动作区）；原 .cp-danger-btn 已删 */
@@ -3530,6 +3545,9 @@ async function copyRawJson() {
 
 /* Log line */
 .cp-log { display: flex; align-items: baseline; gap: 6px; font-size: var(--mk-fs-micro); flex-wrap: wrap; }
+/* 条目分割（2026-10-31 四轮评审 R6）：自动跟随滚到中部时，上一条的尾巴（39.9s / ▸ 原文）
+   紧贴下一条的头部（18:31:20 学习者回复），人眼会把耗时读成时间戳——给一条分隔线 */
+.cp-log + .cp-log { border-top: 1px solid var(--mk-line); padding-top: 6px; }
 .cp-log--error { padding: 4px 8px; border-radius: 6px; background: var(--mk-red-bg); }
 .cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: nowrap; padding-top: 1px; }
 .cp-log__phase {
@@ -3586,6 +3604,8 @@ async function copyRawJson() {
   max-height: var(--cp-class-h);
   overscroll-behavior: contain;
 }
+/* 目标对话变体（2026-10-31 四轮评审 R10）：解除定高，对话全文随页面自然生长 */
+.cp-transcripts--free { max-height: none; overflow: visible; }
 .cp-transcript {
   display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
 }
