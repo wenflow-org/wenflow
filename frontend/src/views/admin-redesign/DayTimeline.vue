@@ -258,8 +258,8 @@ const renderedDays = computed(() => {
 })
 const foldedEntries = computed(() => days.value.filter((day) => !renderedDays.value.includes(day)))
 const foldedCount = computed(() => foldedEntries.value.length)
-const foldedFrom = computed(() => foldedEntries.value[0]?.dayIndex + 1 ?? 0)
-const foldedTo = computed(() => foldedEntries.value[foldedEntries.value.length - 1]?.dayIndex + 1 ?? 0)
+const foldedFrom = computed(() => (foldedEntries.value[0]?.dayIndex ?? -1) + 1)
+const foldedTo = computed(() => (foldedEntries.value[foldedEntries.value.length - 1]?.dayIndex ?? -1) + 1)
 
 const loading = ref(false)
 const error = ref('')
