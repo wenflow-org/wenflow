@@ -442,7 +442,7 @@ const ann = announcementCounts
    2026-10-27：页签内改成行动队列——只列失败或仍有计数的事项，每条带一句「为什么」，
    清零项压成底部一行；计数与入口仍以页级读数卡为单源。 */
 const todoReadings = computed(() => [
-  { key: 'feedback', label: '待处理反馈', hint: '用户反馈还没有人回复', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback },
+  { key: 'feedback', label: '未处理反馈', hint: '用户反馈还没有人回复（不看评分高低，只看处理状态）', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback },
   { key: 'paths', label: '生成失败路径', hint: '学习者卡在路径生成，无法进入下一课', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths },
   { key: 'dead', label: '事件投递失败', hint: '画像与成就更新会延迟', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead },
   { key: 'draft', label: '草稿公告', hint: '公告尚未发布', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value },

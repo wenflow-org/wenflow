@@ -123,7 +123,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 护栏：页头状态条已退役
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false)
     expect(w.find('.mk-alert').exists()).toBe(false)
-    // 读数如实显示 0（真实 0 可以显；四卡：待处理反馈/生成失败路径/事件投递失败/草稿公告）
+    // 读数如实显示 0（真实 0 可以显；四卡：未处理反馈/生成失败路径/事件投递失败/草稿公告）
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toEqual(['0', '0', '0', '0'])
     // 2026-10-27：全部清零时不再渲染 4 个空行，改一行空态；清零名单不再需要
@@ -163,9 +163,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     w.unmount()
   })
 
-  /* D7/D16 护栏：live 信封下待处理反馈计数必须从 pagination.total 解析且读数卡可点下钻。
+  /* D7/D16 护栏：live 信封下未处理反馈计数必须从 pagination.total 解析且读数卡可点下钻。
      旧实现 `data?.data?.pagination` 恒 undefined，把真实 10 条显示成「已清零」且不可下钻。 */
-  it('待处理反馈 live 信封（data 数组 + pagination 平级）→ 计数=10、读数卡可点', async () => {
+  it('未处理反馈 live 信封（data 数组 + pagination 平级）→ 计数=10、读数卡可点', async () => {
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [{ id: 'f1', status: 'new' }], pagination: { total: 10 } } })
     h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 0 } } } })
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 0 } } })
@@ -176,8 +176,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 读数如实显示 10（不再解析错位成 0）。
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toContain('10')
-    // 值色分档：待处理反馈的严重度是 warn（琥珀），不是 bad（红）——颜色只承载紧急度。
-    const feedbackCard = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '待处理反馈')!
+    // 值色分档：未处理反馈的严重度是 warn（琥珀），不是 bad（红）——颜色只承载紧急度。
+    const feedbackCard = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '未处理反馈')!
     expect(feedbackCard.classes()).toContain('mk-kpi--warn')
     expect(feedbackCard.find('.mk-kpi__num').text()).toBe('10')
     // 2026-10-26：读数卡自身就是入口（页签内的第二份清单已删）

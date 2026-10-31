@@ -329,6 +329,19 @@ function onOutboundKeydown(e: KeyboardEvent): void {
   void nextTick(() => outboundEls.value[next]?.focus())
 }
 
+const MODE_TEXT: Record<'loopback' | 'private' | 'any', string> = {
+  loopback: '仅本机（127.0.0.1）',
+  private: '私有网段',
+  any: '不限制来源'
+}
+const MODE_RANK: Record<'loopback' | 'private' | 'any', number> = { loopback: 2, private: 1, any: 0 }
+/** 本次保存是「收紧」而不是「放宽」：按档位比较编辑值与服务端现值 */
+function isTightening(): boolean {
+  const saved = cfg.value?.networkPolicy?.adminAccessMode
+  if (!saved) return false
+  return MODE_RANK[policy.adminAccessMode] > MODE_RANK[saved]
+}
+
 async function savePolicy(): Promise<void> {
   if (saving.value || !policyDirty.value || saveBlocked.value) return
   if (policy.adminAccessMode === 'any') {
@@ -336,6 +349,16 @@ async function savePolicy(): Promise<void> {
       title: '开放公网访问',
       message: '你正在将 Admin 后台开放到公网/任意来源访问。\n任何能访问该服务地址的人都能看到管理入口，请确认已了解风险。',
       confirmText: '确认开放',
+    })
+    if (!ok) return
+  } else if (isTightening()) {
+    /* 2026-11-01 外部评审（三轮 P0）：往严收紧同样可能「把自己关在门外」——
+       原来只在开放公网时拦一次，收紧没有任何提示，误选「仅本机」保存后远程管理员直接掉线。 */
+    const ok = await askConfirm({
+      title: '收紧后台访问来源',
+      message: `保存后只接受「${MODE_TEXT[policy.adminAccessMode]}」进来的请求。
+如果你现在不是从这类来源访问后台，保存会立刻把自己挡在门外（要到服务器上改配置才能恢复）。`,
+      confirmText: '我已确认当前来源',
     })
     if (!ok) return
   }

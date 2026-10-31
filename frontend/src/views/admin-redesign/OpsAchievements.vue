@@ -296,7 +296,7 @@ const reqText = (r: AchievementDef['requirement']) => {
   if (t === 'streak_days') return `连续学习 ${r.value} 天`
   if (t === 'path_completion') return `完成 ${r.value} 条路径`
   if (t === 'mastered_concepts') return `掌握 ${r.value} 个知识点`
-  return `自定义条件`
+  return `按后台规则判定`
 }
 /** 术语 → 术语表深链：?q= 由 AdminGlossary 读取并预填搜索，让成就卡里的裸缩写可点可查
     （此前术语解释只塞在 title 悬停里，不可发现也不可点，走查 #32） */
@@ -309,7 +309,7 @@ const reqTitle = (r: AchievementDef['requirement']) => {
   if (r.type === 'task_count') return `累计完成 ${r.value} 个学习任务`
   if (r.type === 'streak_days') return `连续学习天数达到 ${r.value} 天`
   if (r.type === 'path_completion') return `完成 ${r.value} 条学习路径`
-  return '由后台自定义条件判定'
+  return '由后台规则判定（未在本页展开具体阈值）'
 }
 
 async function loadDefs() {
@@ -573,7 +573,7 @@ onMounted(() => {
 /* 成就定义卡片栅格（原型 1890-1893：grid minmax(260px,1fr) + card） */
 .ac-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 12px;
   padding: 16px;
 }

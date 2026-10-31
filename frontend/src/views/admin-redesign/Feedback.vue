@@ -245,8 +245,10 @@
                  解决 = 主按钮；分流 = 次级（处理中）；忽略 = ghost。 -->
             <button type="button" class="mk-btn mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
             <button type="button" class="mk-btn" :disabled="saving" @click="save('triaged')">标记已分流</button>
+            <!-- 备注与状态一起提交：写了内部备注时按钮直说「保存备注并解决」，
+                 免得运营以为备注要另存一次（2026-11-01 外部评审三轮） -->
             <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save('resolved')">
-              {{ saving ? '保存中…' : '标记已解决' }}
+              {{ saving ? '保存中…' : noteDraft.trim() ? '保存备注并解决' : '标记已解决' }}
             </button>
           </footer>
         </aside>

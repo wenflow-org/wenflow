@@ -206,19 +206,26 @@
               <button v-if="form.expiresAt" type="button" class="mk-link" @click="form.expiresAt = ''">清空</button>
             </div>
           </div>
-          <!-- 仅新建态显示：编辑走「保存修改」，saveEdit 不读 publishNow（发布由行内「发布」按钮负责），
-               编辑态留着会是看得见、改了没用的控件 -->
-          <label v-if="!editingId" class="mk-field an-publish-now">
-            <input v-model="form.publishNow" type="checkbox" />
-            <span class="mk-field__label" style="margin:0">创建后立即发布</span>
-          </label>
+          <!-- 2026-11-01 外部评审（三轮）：勾选框「创建后立即发布」与主按钮「创建并发布」是同一件事，
+               按钮文案还跟着勾选变，「取消勾选后按钮会变成什么」全靠猜。改成两个具名出口：
+               存为草稿 / 创建并发布——勾选框撤除。 -->
         </div>
         <div class="mk-modal__foot">
           <!-- 统一关闭路径：提交中禁关（此前绕过 closeCreate，与 Esc/遮罩/✕ 的守卫不一致） -->
           <button type="button" class="mk-btn" @click="closeCreate">取消</button>
-          <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="editingId ? saveEdit() : create()">
-            {{ creating ? '保存中…' : editingId ? '保存修改' : form.publishNow ? '创建并发布' : '创建草稿' }}
-          </button>
+          <template v-if="editingId">
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="saveEdit()">
+              {{ creating ? '保存中…' : '保存修改' }}
+            </button>
+          </template>
+          <template v-else>
+            <button type="button" class="mk-btn" :disabled="creating" @click="create(false)">
+              {{ creating ? '保存中…' : '存为草稿' }}
+            </button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="create(true)">
+              {{ creating ? '保存中…' : '创建并发布' }}
+            </button>
+          </template>
         </div>
       </div>
     </div>
@@ -586,7 +593,7 @@ async function saveEdit() {
   }
 }
 
-async function create() {
+async function create(publishNow: boolean) {
   errors.value = {}
   if (!form.value.title.trim()) errors.value.title = '请输入标题'
   if (!form.value.body.trim()) errors.value.body = '请输入正文'
@@ -598,10 +605,10 @@ async function create() {
       body: form.value.body.trim(),
       severity: form.value.severity,
       expiresAt: toIso(form.value.expiresAt),
-      publishNow: form.value.publishNow
+      publishNow
     })
     createOpen.value = false
-    toast.success(form.value.publishNow ? '公告已创建并发布' : '草稿已创建')
+    toast.success(publishNow ? '公告已创建并发布' : '草稿已创建')
   } catch (e) {
     toast.error(`创建失败：${errMsg(e)}`)
   } finally {
@@ -679,7 +686,6 @@ function expiresLabel(iso: string): string {
 .an-sev--on.an-sev--info { border-color: var(--mk-blue); color: var(--mk-blue); background: var(--mk-blue-bg, #eef5ff); }
 .an-sev--on.an-sev--warning { border-color: var(--mk-amber); color: var(--mk-amber); background: var(--mk-amber-bg); }
 .an-sev--on.an-sev--critical { border-color: var(--mk-red); color: var(--mk-red); background: var(--mk-red-bg); }
-.an-publish-now { display: flex; align-items: center; gap: 8px; }
 /* 下行类动作（下线公告）用危险色，与「编辑」这条日常动作拉开：2026-11-01 外部评审指出
    两者同为蓝字链接，误点即让用户端公告消失（弹窗有二次确认，但颜色仍应先劝退） */
 .an-act--danger { color: var(--mk-amber); }

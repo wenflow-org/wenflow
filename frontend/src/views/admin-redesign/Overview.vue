@@ -35,7 +35,7 @@
         :label="k.label"
         :value="k.value"
         :value-note="k.valueNote"
-        :hint="k.hint"
+        :hint="kpiHint(k)"
         :title="kpiTitle(k)"
         @click="jumpToKpi(k)"
       />
@@ -932,6 +932,16 @@ function jumpToKpi(k: KpiCard) {
    全部下沉到本 tooltip 长释——副行说「这个数怎么算」，tooltip 说「这一窗具体是多少」。
    （2026-10-19 用户走查：「目标对话 ｜ 累计完成 14 个」「用户活跃 ｜ 今日新增 0…」这类
    hint 在报另一个读数，不是口径；目标页由卡片点击直达，见 kpiTargets。） */
+/**
+ * 卡面副行（口径短语）：成功率在「今日没有调用」时值为「—」，副行若继续讲成功率怎么算，
+ * 会被读成「监控坏了」。这种零分母的情况必须在卡面上直说（2026-11-01 外部评审三轮 P0）。
+ */
+function kpiHint(k: KpiCard): string {
+  const rate = k.key === 'todaySuccessRate' || k.label === '今日成功率'
+  if (rate && (k.value === '—' || k.value === '-')) return '今日 00:00 至今还没有调用，成功率没有可算的样本'
+  return k.hint
+}
+
 function kpiTitle(k: KpiCard): string {
   const trend = k.trend ? `较昨日同时刻 ${k.trend.pct}` : ''
   /* foot 里的 baseNote（「较昨日同时刻」/「昨日同时刻无对照」）在有趋势数字时与 trend 重复，

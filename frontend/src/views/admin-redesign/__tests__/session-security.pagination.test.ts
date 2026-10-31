@@ -186,7 +186,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     // 批量动作条数读 adminCounts（非窗口行数）：历史 7，活跃 93 - 当前标签页 1 = 92
     const acts = w.find('.ss-head-acts').text();
     expect(acts).toContain('清理历史（7）');
-    expect(acts).toContain('下线全部（92）');
+    expect(acts).toContain('下线其他会话（92）');
     // 页码器分母 = 行窗口（30），note 同时标出全站活跃数与已加载数——两个数不同源，各自标口径
     // （2026-10-26 视觉验收：只说「全部活跃 93」会被读成与「共 30 条」矛盾）
     expect(pagerText(w)).toContain('共 30 条');
@@ -209,7 +209,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
       window: { limit: 100, returned: 12 }
     });
     // admin-1 即当前管理员：467 活跃 - 1 当前标签页 = 466；33 过期 + 5 已撤销 = 38 条历史
-    const revokeBtn = w.findAll('button').find((b) => b.text().includes('下线全部'));
+    const revokeBtn = w.findAll('button').find((b) => b.text().includes('下线其他会话'));
     expect(revokeBtn?.text()).toContain('466');
     const cleanupBtn = w.findAll('button').find((b) => b.text().includes('清理历史'));
     expect(cleanupBtn?.text()).toContain('38');
@@ -329,7 +329,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(pillCount(w, '已撤销')).toBe('1');
     const acts = w.find('.ss-head-acts').text();
     expect(acts).toContain('清理历史（1）');
-    expect(acts).toContain('下线全部（2）');
+    expect(acts).toContain('下线其他会话（2）');
   });
 
   it('顶部说明条与卡头审计跳转均已撤；单管理员不渲染组头，批量动作收在卡头右组', async () => {
@@ -342,7 +342,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     const headRight = w.find('.mk-card__head-right');
     // 当前标签页 #1 不计入下线：活跃 3 - 1 = 2；历史 4 + 2 = 6
     expect(headRight.text()).toContain('清理历史（6）');
-    expect(headRight.text()).toContain('下线全部（2）');
+    expect(headRight.text()).toContain('下线其他会话（2）');
     // 单管理员的组头整行已撤（2026-10-27 用户「这个也不要了」）
     expect(w.find('.ss-group .mk-card__head').exists()).toBe(false);
     expect(w.find('.ss-group__acts').exists()).toBe(false);
