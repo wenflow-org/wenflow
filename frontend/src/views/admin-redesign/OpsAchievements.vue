@@ -616,6 +616,12 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 .ac-card__grant { font-size: var(--mk-fs-micro); }
+/* 2026-11-01 外部评审（二轮）：14 张卡片 × 一颗蓝字「手动发放」，首屏是一墙高饱和链接，
+   压过了成就本身（名称/条件/已解锁数）。人工发放是例外动作，不是每张卡的主操作：
+   默认走弱色，悬停/键盘聚焦才提亮——可发现，但不抢视线。 */
+.ac-card__grant { color: var(--mk-faint); }
+.ac-card__grant:hover,
+.ac-card__grant:focus-visible { color: var(--mk-blue); }
 
 /* ================= 视图切换（原型 .tabs 下划线页签） =================
    样式 2026-10-05 CM1 收敛到全局 .tabs/.tab（mk-primitives.css），本页不再私持拷贝。

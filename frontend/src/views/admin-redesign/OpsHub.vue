@@ -90,7 +90,9 @@
           >
             <span class="oh-task__bar" aria-hidden="true"></span>
             <div class="oh-task__text">
-              <span class="oh-task__label">{{ t.label }}</span>
+              <!-- 行内带件数（2026-11-01 外部评审二轮）：卡头只说「共 3 件（1 类）」，
+                   行内不写件数时容易被读成「1 条待办」，与读数卡的 3 对不上。 -->
+              <span class="oh-task__label">{{ t.label }}<span v-if="t.count > 0" class="oh-task__n">{{ t.count }}</span></span>
               <span class="oh-task__hint">{{ t.failed ? '数据加载失败，计数不可信' : t.hint }}</span>
             </div>
             <span v-if="t.failed" class="oh-task__state">加载失败</span>
@@ -604,6 +606,17 @@ onMounted(() => {
 .oh-task--failed .oh-task__bar { background: var(--mk-red); }
 .oh-task__text { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
 .oh-task__label { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
+/* 件数贴在被聚合的事项名后：主单位是「件」，不是「条待办」 */
+.oh-task__n {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-hover-surface);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--mk-muted);
+}
 .oh-task__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .oh-task__state { flex: none; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-red); }
 .oh-queue__empty {

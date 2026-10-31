@@ -203,9 +203,9 @@
             <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：三维评分带点阵；id 类格单行省略、全文在 title -->
             <div class="mk-facts">
               <div><span>评分</span><span class="mk-dots" :class="{ 'mk-dots--warn': detail.rating <= 2 }" role="img" :aria-label="`评分 ${detail.rating}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': d <= detail.rating }"></i></span><strong class="mono">{{ detail.rating }}/5</strong></div>
-              <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness ?? '—' }}</strong></div>
-              <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity ?? '—' }}</strong></div>
-              <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty ?? '—' }}</strong></div>
+              <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness != null ? `${detail.helpfulness}/5` : '—' }}</strong></div>
+              <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity != null ? `${detail.clarity}/5` : '—' }}</strong></div>
+              <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty != null ? `${detail.difficulty}/5` : '—' }}</strong></div>
               <div><span>节点</span><strong class="mono" :title="detail.agentId || ''">{{ detail.agentId || '—' }}</strong></div>
               <div><span>策略</span><strong :title="detail.strategy || ''">{{ detail.strategy || '—' }}</strong></div>
               <div><span>任务</span><strong class="mono" :title="detail.taskId || ''">{{ detail.taskId || '—' }}</strong></div>
@@ -240,10 +240,13 @@
           </div>
           <!-- 底部动作（原型 .ovl__foot：取消/忽略在左、主钮最右、常驻滚动区外；同 gc-detail__foot 判例） -->
           <footer class="mk-drawer__foot">
+            <!-- 2026-11-01 外部评审（二轮）：主次倒置——「分流入库」被做成了饱和蓝主按钮，
+                 而真正把反馈处理完的「标记已解决」只是绿描边次级。按动作的终局性排：
+                 解决 = 主按钮；分流 = 次级（处理中）；忽略 = ghost。 -->
             <button type="button" class="mk-btn mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
-            <button type="button" class="mk-btn mk-btn--ok" :disabled="saving" @click="save('resolved')">标记已解决</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save('triaged')">
-              {{ saving ? '保存中…' : '标记已分流' }}
+            <button type="button" class="mk-btn" :disabled="saving" @click="save('triaged')">标记已分流</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save('resolved')">
+              {{ saving ? '保存中…' : '标记已解决' }}
             </button>
           </footer>
         </aside>

@@ -146,6 +146,7 @@
                     @change="onQuotaInput"
                   />
                   <em>个 / IP</em>
+                  <span v-if="!registerIpQuotaEnabled" class="ac-quota-off">当前不限制</span>
                 </label>
                 <button
                   v-if="registerIpQuotaEnabled && quotaDirty"
@@ -568,8 +569,11 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 .ac-quota-field .mk-field__label { margin: 0; }
 .ac-quota-field .mk-field__input { width: 76px; text-align: center; font-variant-numeric: tabular-nums; }
 .ac-quota-field em { font-style: normal; color: var(--mk-faint); }
-/* 配额关闭 = 这组数不生效：整组压暗（含标签与单位），比只换输入框底色可辨得多 */
+/* 配额关闭 = 这组数不生效：整组压暗 + 输入框改虚线边 + 明写「当前不限制」。
+   仅压暗仍被读成「可填」（2026-11-01 外部评审二轮），三重信号一起给才不留歧义。 */
 .ac-quota-field--off { opacity: 0.45; }
+.ac-quota-field--off .mk-field__input { border-style: dashed; }
+.ac-quota-off { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); white-space: nowrap; }
 
 /* 保存归位到表单末尾：改完整张卡，动作就在手边（2026-10-30 人工复查） */
 .ac-foot {

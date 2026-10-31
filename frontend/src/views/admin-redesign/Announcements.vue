@@ -106,7 +106,7 @@
             <td>
               <div class="mk-actions">
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>
-                <button v-if="r.status === 'published'" type="button" class="mk-link" :disabled="r.busy" @click="archive(r)">下线</button>
+                <button v-if="r.status === 'published'" type="button" class="mk-link an-act--danger" :disabled="r.busy" @click="archive(r)">下线</button>
                 <button type="button" class="mk-link" :disabled="r.busy" @click="openEdit(r)">编辑</button>
                 <div class="mk-menu">
                   <!-- aria-expanded 按行判定（审核 #168）：menuOpen 是 useRowMenu 的全局布尔，
@@ -680,6 +680,10 @@ function expiresLabel(iso: string): string {
 .an-sev--on.an-sev--warning { border-color: var(--mk-amber); color: var(--mk-amber); background: var(--mk-amber-bg); }
 .an-sev--on.an-sev--critical { border-color: var(--mk-red); color: var(--mk-red); background: var(--mk-red-bg); }
 .an-publish-now { display: flex; align-items: center; gap: 8px; }
+/* 下行类动作（下线公告）用危险色，与「编辑」这条日常动作拉开：2026-11-01 外部评审指出
+   两者同为蓝字链接，误点即让用户端公告消失（弹窗有二次确认，但颜色仍应先劝退） */
+.an-act--danger { color: var(--mk-amber); }
+.an-act--danger:hover { color: var(--mk-red); }
 /* 过期时间快捷档：与字段同宽左对齐，一颗颗小链接，不抢主操作 */
 .an-exp-quick { display: flex; gap: 14px; margin-top: 2px; }
 .an-exp-quick .mk-link { font-size: var(--mk-fs-micro); }

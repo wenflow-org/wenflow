@@ -30,9 +30,12 @@
       >
         <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：通道身份、连接状态与动作
              统一收到卡头一行。2026-10-28：连接编辑收进弹层，卡头只留「获取模型」。 -->
-        <template #head-status>
-          <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
-        </template>
+        <!-- 2026-11-01 外部评审（二轮）：连接状态原挂在卡头标题旁，读起来像下面模型健康状态的
+             「父级结论」——通道「未做过连接测试」+ 三个模型绿色「健康」被判成父子打架。
+             两者本就不同源（一次「获取模型」的结果 vs 逐模型能力探测），因此把它下移到摘要行，
+             与「密钥已配置 / 重试策略」并排，作为通道自身的一条事实。 -->
+        <template #head-status />
+
         <template #head-actions>
           <div class="ac-conn__acts">
             <!-- 接入流程第 2 步：用这条通道的地址与密钥获取模型。
@@ -56,6 +59,7 @@
             <span class="mk-badge" :class="keySet ? 'mk-badge--ok' : 'mk-badge--warn'">
               {{ keySet ? '密钥已配置' : '未配置密钥' }}
             </span>
+            <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
             <span v-if="reliability" class="ac-conn-summary__policy" :title="policyTitle">
               重试 {{ reliability.maxUpstreamAttempts }} 次 · 间隔 {{ reliability.retryBaseDelayMs }}ms · RPM {{ reliability.platformRpmLimit || '不限' }}
             </span>
@@ -475,13 +479,13 @@ const connBadge = computed(() => {
   // （与 connectionStatus 同源；不用健康快照 checkedAt——那是能力探测时间，语义不同）
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
   if (connectionStatus.value === 'connected') {
-    return { cls: 'mk-badge--ok', text: at ? `${timeAgo(at)}连接成功` : '最近连接成功' }
+    return { cls: 'mk-badge--ok', text: at ? `连接测试：${timeAgo(at)}成功` : '连接测试：最近成功' }
   }
-  if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次连接失败' }
+  if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '连接测试：上次失败' }
   /* 2026-11-01 外部评审：「还没连接过」与右侧三个模型的绿色「健康」同屏，被读成
      「没连通却健康」的自相矛盾。它讲的其实只是「没点过获取模型 / 测试连接」这一动作，
      不是通道与模型的可用性——文案改成描述动作，缺省态不再冒充连通性结论。 */
-  return { cls: 'mk-badge--muted', text: '未做过连接测试' }
+  return { cls: 'mk-badge--muted', text: '连接测试：未做过' }
 })
 /** connBadge 悬停口径：说明「成功/失败」是什么时候、什么动作留下的，不冒充实时探活 */
 const connBadgeTitle = computed(() => {
