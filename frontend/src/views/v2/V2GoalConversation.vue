@@ -2026,8 +2026,8 @@ function shuffleScenes() {
   background: color-mix(in srgb, var(--blue) 8%, var(--surface));
 }
 .proposal-invite__hint {
-  font-size: var(--mk-fs-m, 13px);
-  color: var(--mk-muted, #8b93a3);
+  font-size: var(--mk-fs-body);
+  color: var(--mk-muted);
   min-width: 0;
 }
 .proposal-invite__btn { flex: 0 0 auto; padding: 8px 16px; }
