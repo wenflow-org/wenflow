@@ -629,7 +629,9 @@ function exportSelected() {
 async function removeUser(u: UserRow) {
   const ok = await askConfirm({
     title: '删除用户',
-    message: `确认删除用户「${u.name}」（${u.email}）？\n删除后用户将无法登录，历史数据保留，可在后台恢复。`,
+    /* 邮箱独占一行（2026-11-01 外部评审）：和账号名挤在一句里时，确认框宽度不够，
+       长邮箱会在连字符处被折断成两行，读起来像两个地址。 */
+    message: `确认删除用户「${u.name}」？\n邮箱：${u.email}\n删除后用户将无法登录，历史数据保留，可在后台恢复。`,
     confirmText: '删除',
     busy: true
   })
@@ -651,7 +653,7 @@ async function removeUser(u: UserRow) {
 async function restoreUserRow(u: UserRow) {
   const ok = await askConfirm({
     title: '恢复用户',
-    message: `确认恢复用户「${u.name}」（${u.email}）？\n恢复后该用户可重新登录，历史数据原样保留。`,
+    message: `确认恢复用户「${u.name}」？\n邮箱：${u.email}\n恢复后该用户可重新登录，历史数据原样保留。`,
     confirmText: '恢复',
     danger: false
   })

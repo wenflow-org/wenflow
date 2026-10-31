@@ -185,7 +185,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { liveFailures, errMsg, liveRefreshSeq } from './live'
+import { liveFailures, errMsg, liveRefreshSeq, setLiveOpsPendingCounts } from './live'
 import { intent } from './store'
 import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
 import { announcementCounts } from './opsShared'
@@ -395,6 +395,7 @@ async function loadWorkbench() {
        对齐 Feedback.vue:388 的 `res.data?.pagination?.total`。 */
     const body = feedbackR.value.data ?? {}
     wbPendingFeedback.value = Number(body.pagination?.total ?? 0)
+    setLiveOpsPendingCounts({ feedback: wbPendingFeedback.value })
   } else {
     errors.feedback = errMsg(feedbackR.reason)
   }
@@ -403,6 +404,7 @@ async function loadWorkbench() {
     const s = (statsR.value.data?.data ?? statsR.value.data) as LearningContentStats | null
     stats.value = s
     wbFailedPaths.value = s?.byStatus?.failed ?? 0
+    setLiveOpsPendingCounts({ paths: wbFailedPaths.value })
   } else {
     errors.paths = errMsg(statsR.reason)
   }
@@ -410,6 +412,7 @@ async function loadWorkbench() {
   if (deadR.status === 'fulfilled') {
     const d = deadR.value.data?.data as { deadCount?: number } | null | undefined
     wbDeadLetters.value = Number(d?.deadCount ?? 0)
+    setLiveOpsPendingCounts({ dead: wbDeadLetters.value })
   } else {
     errors.dead = errMsg(deadR.reason)
   }
@@ -469,10 +472,12 @@ const todoConclusion = computed(() => {
   const pending = pendingItems.length
   const total = pendingItems.reduce((n, t) => n + t.count, 0)
   if (wbHasError.value) {
-    return pending ? `${pending} 类 · ${total} 件待处理。另有部分待办加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
+    return pending ? `共 ${total} 件待处理（${pending} 类）。另有部分待办加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
   }
   if (!pending) return ''
-  return `${pending} 项待处理（${pending} 类 · ${total} 件）`
+  /* 主单位用「件」：侧栏角标与四张读数卡都是件数，卡头再以「项」为主会把 1 读成比 3 大
+     （2026-11-01 外部评审：角标 1 / 读数带 3 同屏，两个数各说各话） */
+  return `共 ${total} 件待处理（${pending} 类）`
 })
 /** 卡头可见副文：加载注记优先，其余交给 todoConclusion（空串 = 不渲染）。 */
 const todoHeadMeta = computed(() =>

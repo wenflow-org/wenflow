@@ -44,6 +44,8 @@ vi.mock('../live', async () => {
     liveAnnouncements: ref([]),
     liveFailures: ref({}),
     liveRefreshSeq: ref(0),
+    // 侧栏角标回写（2026-11-01：OpsHub 拉完三域后同步给 live 共享读数）
+    setLiveOpsPendingCounts: () => {},
     loadLiveData: vi.fn(async () => {}),
     errMsg: (e: unknown) => String(e),
     shortId: (s: string) => s,

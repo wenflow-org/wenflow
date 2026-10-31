@@ -540,11 +540,13 @@ function badgeOf(item: MockSceneDef): string {
 }
 
 /* 角标语义说明：红色=告警（近 7 天执行失败数，点击进入执行日志后自动平息）；
-   其余=数据量计数。角标语义 =「数据量」；页面数只在分组悬浮里以「页」表达，两者不混用 */
+   其余=数据量计数。角标语义 =「数据量」；页面数只在分组悬浮里以「页」表达，两者不混用。
+   2026-11-01 外部评审：「运营中心」角标原写「已发布公告数量」——发布越多角标越大，
+   与落地页顶部「待处理反馈 3」同屏打架；已改为待办件数（见 live.ts liveOpsPending）。 */
 const BADGE_MEANING: Record<string, string> = {
   'virtual-learners': '虚拟学习者数量',
   skills: 'Skill 数量',
-  'ops-hub': '已发布公告数量',
+  'ops-hub': '待办件数（待处理反馈 / 生成失败路径 / 事件投递失败 / 草稿公告）',
   'execution-logs': '近 7 天执行失败次数（采样窗口）',
 }
 function badgeTitle(item: MockSceneDef): string {

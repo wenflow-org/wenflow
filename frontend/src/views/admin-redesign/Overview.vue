@@ -414,7 +414,7 @@ type LoopExtraState = 'loading' | 'ready' | 'failed';
 const teachState = ref<LoopExtraState>('loading');
 const memState = ref<LoopExtraState>('loading');
 /** P2 异常→动作闭环：五环各接深链（跳目标页 scene），点击行为与 title 同步披露 */
-interface LoopStage { name: string; val: string; tone: 'active' | 'done' | 'alert'; title?: string; scene: string; sceneQuery?: Record<string, string>; failN?: number; ringFailed?: boolean }
+interface LoopStage { name: string; val: string; tone: 'done' | 'alert'; title?: string; scene: string; sceneQuery?: Record<string, string>; failN?: number; ringFailed?: boolean }
 const loopStages = computed<LoopStage[]>(() => {
   const d = data.value;
   const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
@@ -423,7 +423,10 @@ const loopStages = computed<LoopStage[]>(() => {
   return [
     {
       name: '目标对话',
-      val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'active',
+      /* 2026-11-01 外部评审：本环此前恒蓝框，而同样「N 进行中」的「路径规划」是绿框——
+         蓝被读成「选中/当前」，五环里只有它一个蓝，语义自相矛盾。五环只保留两档：
+         正常（done）/ 有失败（alert），进行中与否由读数本身说明。 */
+      val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'done',
       title: '进行中的目标对话数',
       scene: 'goal-conversations',
     },
@@ -1315,8 +1318,6 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 /* 可点线索：悬停只换边框与底色（全站判例，不做位移），行尾箭头常显 */
 .loop__step:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); background: var(--mk-btn-hover-bg); }
 .loop__step:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
-.loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
-.loop__step--active:hover { background: var(--mk-blue-bg-strong); }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
 /* 阶段号是人话标签（「阶段 1」），不与等宽字体混排 */

@@ -19,7 +19,10 @@ import {
   adminPlatformSettingsApi,
   adminAnnouncementsApi,
   adminGoalConversationsApi,
-  adminRuntimeDefinitionsApi
+  adminRuntimeDefinitionsApi,
+  adminFeedbackApi,
+  adminLearningContentApi,
+  adminDevtoolsApi
 } from '@/api/adminApi'
 import {
   dataSource,
@@ -2222,6 +2225,59 @@ export interface LiveAnnouncement {
 
 export const liveAnnouncements = ref<LiveAnnouncement[]>([])
 
+/**
+ * 运营待办三域读数（反馈 / 失败路径 / 死信）：侧栏「运营中心」角标的唯一来源。
+ *
+ * 2026-11-01 外部评审：角标原先是「已发布公告数」——发得越多角标越大，而落地页顶部
+ * 读数带写「待处理反馈 3」，同屏两个数各说各话，且角标语义（数据量）被读成了待办量。
+ * 改为与运营中心页级读数带同口径的三域之和（草稿公告由 liveAnnouncements 补），
+ * 全 0 时角标不挂（「没有要处理的」不需要一个 0 占着导航）。
+ */
+export const liveOpsPending = ref<{ feedback: number; paths: number; dead: number; loaded: boolean }>({
+  feedback: 0,
+  paths: 0,
+  dead: 0,
+  loaded: false
+})
+
+/** 三域计数并行拉取：任一端点失败只让对应域保持原值，三域全失败才向上抛（角标整体不可信） */
+async function fetchLiveOpsPending(): Promise<void> {
+  const [fr, sr, dr] = await Promise.allSettled([
+    adminFeedbackApi.list({ limit: 1, status: 'new' }),
+    adminLearningContentApi.getStats(),
+    adminDevtoolsApi.getOutboxDead()
+  ])
+  const next = { ...liveOpsPending.value }
+  if (fr.status === 'fulfilled') {
+    // 信封 { success, data: [...], pagination: { total } }：total 与 data 平级（同 OpsHub 口径）
+    const body = (fr.value.data ?? {}) as { pagination?: { total?: number } }
+    next.feedback = Number(body.pagination?.total ?? 0)
+  }
+  if (sr.status === 'fulfilled') {
+    const s = (sr.value.data?.data ?? sr.value.data) as { byStatus?: { failed?: number } } | null
+    next.paths = Number(s?.byStatus?.failed ?? 0)
+  }
+  if (dr.status === 'fulfilled') {
+    const d = (dr.value.data?.data ?? dr.value.data) as { deadCount?: number } | null
+    next.dead = Number(d?.deadCount ?? 0)
+  }
+  const anyOk = [fr, sr, dr].some((r) => r.status === 'fulfilled')
+  liveOpsPending.value = { ...next, loaded: anyOk }
+  if (!anyOk && fr.status === 'rejected') throw fr.reason
+}
+
+/**
+ * 运营中心页自己也在拉这三个域（页级读数带要逐域失败态）：拉到后回写共享读数，
+ * 免得侧栏角标要点两次刷新才跟上页内数字。传 null 表示该域本轮失败、保留旧值。
+ */
+export function setLiveOpsPendingCounts(part: Partial<{ feedback: number | null; paths: number | null; dead: number | null }>): void {
+  const next = { ...liveOpsPending.value }
+  if (part.feedback != null) next.feedback = part.feedback
+  if (part.paths != null) next.paths = part.paths
+  if (part.dead != null) next.dead = part.dead
+  liveOpsPending.value = { ...next, loaded: true }
+}
+
 /** 侧栏导航徽章：live 真实计数（无数据时不显示） */
 export const liveNavBadges = computed<Record<string, string>>(() => {
   const out: Record<string, string> = {}
@@ -2229,9 +2285,11 @@ export const liveNavBadges = computed<Record<string, string>>(() => {
   if (virtuals > 0) out['virtual-learners'] = String(virtuals)
   const skills = liveSkillProfiles.value.length
   if (skills > 0) out.skills = String(skills)
-  // 公告已折入运营中心 tab（阶段 1 导航收敛）：徽章挂到 ops-hub（messages 场景下线）
-  const published = liveAnnouncements.value.filter((a) => a.status === 'published').length
-  if (published > 0) out['ops-hub'] = String(published)
+  // 运营中心角标 = 待办件数（反馈 / 失败路径 / 死信 / 草稿公告），与落地页读数带同一口径
+  const drafts = liveAnnouncements.value.filter((a) => a.status === 'draft').length
+  const p = liveOpsPending.value
+  const pending = p.feedback + p.paths + p.dead + drafts
+  if (pending > 0) out['ops-hub'] = String(pending)
   // 事故信号：近 7 天失败数（>0 时侧栏亮红）
   const failed = (liveSpans.value || []).filter((s) => s.status === 'err').length
   if (failed > 0) out['execution-logs'] = String(failed)
@@ -2363,7 +2421,8 @@ const liveDomainReady: Record<string, () => boolean> = {
   topology: () => liveTopoNodes.value.length > 0,
   catalog: () => liveSkillCatalog.value.length > 0,
   registration: () => registrationEnabled.value !== null,
-  announcements: () => liveAnnouncements.value.length > 0
+  announcements: () => liveAnnouncements.value.length > 0,
+  opsPending: () => liveOpsPending.value.loaded
 }
 
 const liveDomainFresh = (key: string): boolean => {
@@ -2401,7 +2460,8 @@ export async function loadLiveData(force = false) {
     topology: () => fetchLiveTopology(force),
     catalog: fetchLiveSkillCatalog,
     registration: fetchRegistrationSetting,
-    announcements: fetchLiveAnnouncements
+    announcements: fetchLiveAnnouncements,
+    opsPending: fetchLiveOpsPending
   }
 
   // 首屏门闩两笔并行（性能批 2026-09-30）：spans 与 overview 是两个独立 GET，

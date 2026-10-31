@@ -478,12 +478,18 @@ const connBadge = computed(() => {
     return { cls: 'mk-badge--ok', text: at ? `${timeAgo(at)}连接成功` : '最近连接成功' }
   }
   if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次连接失败' }
-  return { cls: 'mk-badge--muted', text: '还没连接过' }
+  /* 2026-11-01 外部评审：「还没连接过」与右侧三个模型的绿色「健康」同屏，被读成
+     「没连通却健康」的自相矛盾。它讲的其实只是「没点过获取模型 / 测试连接」这一动作，
+     不是通道与模型的可用性——文案改成描述动作，缺省态不再冒充连通性结论。 */
+  return { cls: 'mk-badge--muted', text: '未做过连接测试' }
 })
 /** connBadge 悬停口径：说明「成功/失败」是什么时候、什么动作留下的，不冒充实时探活 */
 const connBadgeTitle = computed(() => {
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
-  const when = at ? `上次连接：${new Date(at).toLocaleString('zh-CN', { hour12: false })}` : '还没有连接记录'
+  if (!at) {
+    return '还没有点过「获取模型」或「测试连接」。这里只记这一步的结果，通道能不能用见下方网关地址与密钥；模型的健康状态由能力探测单独给出。'
+  }
+  const when = `上次连接：${new Date(at).toLocaleString('zh-CN', { hour12: false })}`
   return `${when}（点「获取模型」时更新）。展示的是上次结果，不是实时探测。`
 })
 

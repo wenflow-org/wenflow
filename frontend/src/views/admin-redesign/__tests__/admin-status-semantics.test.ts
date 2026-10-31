@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   feedbackList: vi.fn(),
   contentStats: vi.fn(),
   outboxDead: vi.fn(),
+  setOpsPending: vi.fn(),
 }))
 
 vi.mock('@/api/adminApi', () => ({
@@ -41,6 +42,8 @@ vi.mock('../live', async () => {
     liveAnnouncements: ref([]),
     liveFailures: ref({}),
     liveRefreshSeq: ref(0),
+    // 侧栏角标回写（2026-11-01：OpsHub 拉完三域后同步给 live 共享读数）
+    setLiveOpsPendingCounts: h.setOpsPending,
     loadLiveData: vi.fn(async () => {}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
@@ -179,6 +182,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(feedbackCard.find('.mk-kpi__num').text()).toBe('10')
     // 2026-10-26：读数卡自身就是入口（页签内的第二份清单已删）
     expect(feedbackCard.classes()).toContain('mk-kpi--clickable')
+    // 2026-11-01：三域读数同步给侧栏角标（角标口径 = 待办件数，不再是已发布公告数）
+    expect(h.setOpsPending).toHaveBeenCalledWith(expect.objectContaining({ feedback: 10 }))
 
     w.unmount()
   })

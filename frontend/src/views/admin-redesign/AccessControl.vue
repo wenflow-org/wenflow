@@ -132,7 +132,9 @@
                   :label="IP_QUOTA_TITLE"
                   @update:model-value="setQuotaEnabled"
                 />
-                <label class="ac-quota-field">
+                <!-- 2026-11-01 外部评审：开关关闭时输入框只是「暗一档」，在一屏灰字里仍被读成可填；
+                     整组（标签 + 数字 + 单位）一起压暗，才看得出这是「当前不生效的值」 -->
+                <label class="ac-quota-field" :class="{ 'ac-quota-field--off': !registerIpQuotaEnabled }">
                   <span class="mk-field__label">每日上限</span>
                   <input
                     type="number"
@@ -566,6 +568,8 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 .ac-quota-field .mk-field__label { margin: 0; }
 .ac-quota-field .mk-field__input { width: 76px; text-align: center; font-variant-numeric: tabular-nums; }
 .ac-quota-field em { font-style: normal; color: var(--mk-faint); }
+/* 配额关闭 = 这组数不生效：整组压暗（含标签与单位），比只换输入框底色可辨得多 */
+.ac-quota-field--off { opacity: 0.45; }
 
 /* 保存归位到表单末尾：改完整张卡，动作就在手边（2026-10-30 人工复查） */
 .ac-foot {
