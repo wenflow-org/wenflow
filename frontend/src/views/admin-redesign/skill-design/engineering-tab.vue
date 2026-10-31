@@ -11,13 +11,10 @@
           <tr v-if="overview.file?.hash"><th title="file.hash">文件哈希</th><td><code class="mono" :title="overview.file.hash">{{ shortHash(overview.file.hash) }}</code></td></tr>
           <tr v-if="overview.db?.id"><th title="db.id">生效记录 ID</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
           <tr v-if="overview.db?.version"><th title="db.version">生效版本</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
-          <!-- B19-F7-3：本行是生效 Prompt 版本记录自身的计数列（agent_prompts.useCount），
-               与状态条按调用日志聚合的窗口统计口径不同；标签必须带限定词，否则同屏两个
-               「调用次数」会被读成同一事实的两种值。 -->
-          <tr v-if="overview.db?.useCount !== undefined">
-            <th title="agent_prompts.useCount">本版本累计调用</th>
-            <td :title="`本版本自启用以来的累计调用次数`">{{ overview.db.useCount }}</td>
-          </tr>
+          <!-- B19-F7-3：agent_prompts.useCount 列（2026-10-31 四轮评审撤除）——
+               该计数列后端从未递增（全库检索无任何 increment 写点），恒显 0，
+               与运行时 KPI/版本页签的真实调用数（调用日志聚合 191 次）同屏打架。
+               数据列启用前不再上屏「0」，避免把假零读成真没调用。 -->
           <tr v-if="overview.db?.model"><th>默认模型</th><td><code class="mono">{{ overview.db.model }}</code></td></tr>
           <tr v-if="overview.db?.publishedAt"><th>发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
           <tr v-if="overview.drift">
@@ -89,12 +86,16 @@
     <section class="sdp-eng">
       <header class="mk-section__head">
         <h4>Skill 规则总览</h4>
-        <span class="sdp-sec-meta" v-if="rulesOverview?.summary">
+        <!-- 口径拆开说（2026-10-31 四轮评审）：本块是 R-XX-NN 登记表（Agent 提示词规则注册表），
+             与本 Skill core YAML 里的执行规则（协议页签那份）是两个来源；登记表为空时
+             不再裸显「0 规则 · 0 前缀」跟协议页的 83 条规则打架 -->
+        <span class="sdp-sec-meta" v-if="rulesOverview?.summary && (rulesOverview.summary.totalRules ?? 0) > 0">
           {{ rulesOverview.summary.totalRules ?? 0 }} 规则 · {{ rulesOverview.summary.totalPrefixes ?? 0 }} 前缀
           <template v-if="(rulesOverview.summary.conflictPrefixCount ?? 0) > 0">
             · <b class="sdp-warn">{{ rulesOverview.summary.conflictPrefixCount }} 冲突</b>
           </template>
         </span>
+        <span v-else-if="!engLoading" class="sdp-sec-meta">R-XX-NN 登记表当前为空</span>
       </header>
       <div v-if="rulesOverview?.conflictPrefixes?.length" class="sdp-conflict">
         <strong>prefix 冲突：</strong>
@@ -110,6 +111,9 @@
         </div>
       </div>
       <p v-else-if="engRulesFailed" class="sdp-none sdp-bad-text">规则数据加载失败。<button type="button" class="mk-link" @click="retryEngineering">重试</button></p>
+      <p v-else-if="coreRulesCount > 0" class="sdp-none">
+        本节点没有登记 R-XX-NN 规则（登记表当前为空）。本 Skill 的执行规则 {{ coreRulesCount }} 条来自 core YAML，见「协议」页签。
+      </p>
       <p v-else class="sdp-none">本节点没有登记规则。</p>
     </section>
   </div>
@@ -166,6 +170,8 @@ const nodeRules = computed(() => {
 
 /* ---------- 依赖与发布：core YAML inputs 的 skill: / sandbox: 引用即上游依赖边 ---------- */
 const coreInputs = ref<Array<{ ref?: string }>>([])
+/** 本 Skill core YAML 的执行规则条数（与 R-XX-NN 登记表分源说明用，2026-10-31 四轮评审） */
+const coreRulesCount = ref(0)
 const coreDepsFailed = ref(false)
 /** #132 口径照样搬入：ref 取到空白为止（旧正则 `([^.\s]+)` 在首个「.」截断，
     sandbox:teaching.* 会被截成同一条后去重成一，依赖清单与真实数量双错） */
@@ -196,8 +202,9 @@ async function loadEngineering() {
     engProtoFailed.value = !pvOk
     engRulesFailed.value = !roOk
     coreDepsFailed.value = !coreOk
-    const coreBody = (core?.data?.core || null) as { inputs?: Array<{ ref?: string }> } | null
+    const coreBody = (core?.data?.core || null) as { inputs?: Array<{ ref?: string }>; rules?: unknown[] } | null
     coreInputs.value = Array.isArray(coreBody?.inputs) ? coreBody.inputs : []
+    coreRulesCount.value = Array.isArray(coreBody?.rules) ? coreBody.rules.length : 0
     const pBody = pv?.data?.data ?? pv?.data ?? {}
     protocols.value = ((pBody.protocols as Record<string, unknown>[]) || []).map((p) => ({
       id: String(p.id || ''),
@@ -225,6 +232,7 @@ watch(
     protocols.value = []
     rulesOverview.value = null
     coreInputs.value = []
+    coreRulesCount.value = 0
     coreDepsFailed.value = false
     void loadEngineering()
   },

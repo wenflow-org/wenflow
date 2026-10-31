@@ -1591,7 +1591,15 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-input:focus { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-focus-ring); }
 .mk-input:disabled { background: var(--mk-input-disabled-bg); color: var(--mk-faint, #5f6f8c); cursor: not-allowed; }
 /* 字段输入禁用态与 .mk-input:disabled 同基调（原只给了暗色值，亮色下无底色） */
-.mk-field__input:disabled { background: var(--mk-input-disabled-bg); }
+/* 禁用态必须一眼可辨（2026-10-31 四轮评审 P0-3）：底色暗一档 + 字淡 + 光标 not-allowed，
+   边框弱化——此前只换底色，暗色主题下几乎无差，编辑弹窗里的主键字段被当成可改 */
+.mk-field__input:disabled {
+  background: var(--mk-input-disabled-bg);
+  color: var(--mk-faint, #5f6f8c);
+  border-color: var(--mk-line, #e1e8f2);
+  cursor: not-allowed;
+  -webkit-text-fill-color: currentColor;
+}
 textarea.mk-input { line-height: 1.6; resize: vertical; }
 
 /* 按钮 */

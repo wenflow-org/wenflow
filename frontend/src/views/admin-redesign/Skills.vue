@@ -206,9 +206,11 @@
             <section class="mk-kpi-grid" aria-label="Skill 模型路由统计">
               <MkKpi label="承载模型" :value="routeModelCount" />
               <!-- 2026-10-31 三轮评审：本卡 29 与下方覆盖表「共 31 个技能」上下相距 20px，
-                   两个裸数并排读作口径打架。hint 引用覆盖表上报的全量数（31 含未入目录列的
-                   辅助 Skill），29/31 的关系读一行就闭合 -->
-              <MkKpi label="已路由 Skill" :value="routedSkillCount" :hint="coverageReady && coverageTotal ? `覆盖表全量 ${coverageTotal} 个技能，未路由的走平台默认` : ''" />
+                   两个裸数并排读作口径打架。hint 引用覆盖表上报的全量数（31 含未入目录的
+                   辅助 Skill），29/31 的关系读一行就闭合；
+                   2026-10-31 四轮评审补充：说清「多出来的是什么」（平台内部 / 工具类 Skill，
+                   未登记进 Skill 目录），并补齐了它们的展示名与归属（裸 id 行不再出现） -->
+              <MkKpi label="已路由 Skill" :value="routedSkillCount" :hint="coverageReady && coverageTotal ? `覆盖表全量 ${coverageTotal} 个技能（含未入目录的平台内部/工具 Skill），未路由的走平台默认` : ''" />
               <MkKpi label="主模型覆盖" :value="primaryCoverageText" />
               <!-- 降级策略：真实口径 = 自定义兜底链计数；无自定义链时给出 registry 默认链的
                    解析结果（F7-5：空数组=「无（空链）」）。registry 未加载显 —，不伪装 -->
@@ -241,7 +243,7 @@ import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 import { useRoute, useRouter } from 'vue-router'
 import { skillStatOf, isLive, intent, investigateAgent, openSubPage } from './store'
-import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg, liveRefreshSeq } from './live'
+import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg, liveRefreshSeq } from './live'
 import { completionMetaOf } from './glossaryMeta'
 import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneOf } from './rate-utils'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -557,10 +559,18 @@ const sortSelect = computed({
    归属 Agent、完成度、备用链解析都从这里取，矩阵不再另查一份。
    computed 惰性求值，函数声明可后置（fallbackOf / completionBadgeOf 在下方定义）。 */
 const agentLabelsBySkill = computed<Record<string, string>>(() =>
-  Object.fromEntries(cards.value.map((s) => [s.id, agentLabelOf(s)]))
+  Object.fromEntries([
+    ...cards.value.map((s) => [s.id, agentLabelOf(s)]),
+    // 外挂能力 Skill 不在主目录（isExtraSkill 过滤），但覆盖表（31 行）里有它们：
+    // 补上归属文案，避免弹窗里出现「裸 id + —」的行（2026-10-31 四轮评审 P1-5）
+    ...liveExtraProfiles.value.map((p) => [p.id, p.agentName || p.agentId || '工具类'])
+  ])
 )
 const skillNamesBySkill = computed<Record<string, string>>(() =>
-  Object.fromEntries(cards.value.map((s) => [s.id, s.name || s.id]))
+  Object.fromEntries([
+    ...cards.value.map((s) => [s.id, s.name || s.id]),
+    ...liveExtraProfiles.value.map((p) => [p.id, p.name || p.id])
+  ])
 )
 const completionBySkill = computed<Record<string, { text: string; cls: string; title: string }>>(() => {
   const out: Record<string, { text: string; cls: string; title: string }> = {}
@@ -1143,7 +1153,9 @@ const fallbackPolicyText = computed(() => {
   display: inline-flex;
   align-items: center;
   flex: none;
-  max-width: 128px; /* 长 Agent 名省略（全名走 title） */
+  /* 2026-10-31 四轮评审 P2-9：原 128px 会把「虚拟学习者 Agent」截成「虚拟学习者 A…」，
+     而该行右侧到读数区还有 600px+ 富余——无意义的截断。放宽到 240px（长 Agent 名仍省略）。 */
+  max-width: 240px;
   padding: 2px 9px;
   border-radius: 999px;
   background: var(--mk-line);

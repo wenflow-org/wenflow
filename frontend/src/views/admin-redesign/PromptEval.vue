@@ -9,11 +9,13 @@
     <MkPageHead title="Prompt 评估">
       <template #actions>
         <!-- 主操作随状态走（2026-10-26 评审）：没有启用用例时「批量跑评估」点了也只会弹提示，
-             灰按钮让人以为页面坏了；此时页头直接给「新建用例」，与空态中央同一个弹窗。 -->
+             灰按钮让人以为页面坏了；此时页头给「新建用例」，与空态中央同一个弹窗。
+             2026-10-31 四轮评审：空态时页头这颗降为次级——同屏两颗饱和蓝主按钮
+             （页头 + 空态）互相抢注意力，中央那颗才是此刻的唯一主路径。 -->
         <button
           v-if="panel && !panel.canRunBatch"
           type="button"
-          class="mk-btn mk-btn--primary"
+          class="mk-btn"
           @click="panel?.openCreate()"
         >新建用例</button>
         <button

@@ -161,6 +161,7 @@
         icon="◌"
         min
         title="还没有评估用例"
+        description="可手动创建评估用例；批量跑评估需要至少一条启用的用例。"
         action-text="新建用例"
         @action="openCreate"
       />

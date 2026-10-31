@@ -32,34 +32,26 @@
         <!-- ========== 协议（原型 protocol：输入/输出契约 vrow + System Prompt 代码卡） ========== -->
         <div v-if="designTabShown('protocol')" v-show="tab === 'protocol'" class="skd-bloc">
           <div class="skd-grid">
+            <!-- 输入契约（2026-10-31 四轮评审 P0-2 重做）：字段路由的 fields 全部是本 Skill 的
+                 「产出」字段（编排文件注释「=== skill:xxx 产出 ===」），此前把非产出角色的
+                 隐式推断/控制信号误标成「入参」——真实输入契约在 core YAML 的 inputs 声明里
+                 （与协议表单「输入声明」、试跑默认载荷同一份）。 -->
             <section class="mk-card">
               <div class="mk-card__head">
                 <h3 class="mk-card__title">输入契约</h3>
                 <span class="mk-card__meta">{{ contractIns.length }} 字段</span>
               </div>
               <div class="skd-pad skd-rows">
-                <MkLoading v-if="routingsLoading && !routings" inline text="字段契约加载中…" />
-                <template v-else-if="routingsNotApplicable">
-                  <p class="mk-empty--line">{{ AUX_CONTRACT_NA_TEXT }}</p>
-                </template>
-                <template v-else-if="routingsFailed">
-                  <div class="mk-alert mk-alert--row" role="alert">
-                    <span class="mk-alert__msg">字段契约加载失败。</span>
-                    <button type="button" class="mk-alert__btn" @click="load(true)">重试</button>
-                  </div>
-                </template>
+                <MkLoading v-if="coreInputsLoading" inline text="输入声明加载中…" />
                 <template v-else>
-                  <div v-for="f in contractIns" :key="f.fieldId" class="skd-vrow">
-                    <span class="mono skd-vrow__name" :title="f.fieldId">{{ f.fieldId }}</span>
-                    <span class="mk-badge mk-badge--info">入参</span>
-                    <span class="skd-vrow__desc" :title="f.description || ''">{{ f.description || '—' }}</span>
-                    <span class="mono skd-vrow__type">{{ f.valueType || '—' }}</span>
-                    <!-- #131：改用与输出契约同一单源 roleLabel(f.promptRole)，不再用二值
-                         「必填/可选」覆盖真实 promptRole（隐式推断/控制信号等被一律译成「可选」） -->
-                    <span class="mk-badge" :class="roleCls(f.promptRole)">{{ roleLabel(f.promptRole) }}</span>
-                    <span v-if="f.promptRole === 'hard-required'" class="mk-badge mk-badge--warn">必填</span>
+                  <div v-for="(f, i) in contractIns" :key="`${f.ref}-${i}`" class="skd-vrow">
+                    <span class="mono skd-vrow__name" :title="f.name || f.ref">{{ f.name || '—' }}</span>
+                    <span class="mk-badge mk-badge--muted" :title="`来源声明：${f.ref || '—'}`">{{ refSourceLabel(f.ref) }}</span>
+                    <span class="skd-vrow__desc" :title="f.desc || f.note || ''">{{ f.desc || f.note || f.ref || '—' }}</span>
+                    <span class="mono skd-vrow__type">{{ f.type || '—' }}</span>
                   </div>
-                  <p v-if="!contractIns.length" class="mk-empty--line">该 Skill 暂无输入字段声明（无编排路由或全部为产出字段）。</p>
+                  <p v-if="!contractIns.length" class="mk-empty--line">该 Skill 的 core YAML 未声明输入（inputs）。</p>
+                  <p class="mk-card__note" title="来源说明：core YAML 的 inputs 声明（name / type / ref / desc）">输入契约取 core YAML 的 inputs 声明，ref 前缀标来源。可编辑表单在同页签内。</p>
                 </template>
               </div>
             </section>
@@ -80,12 +72,13 @@
                   </div>
                 </template>
                 <template v-else>
+                  <!-- 字段路由 fields 全量 = 本 Skill 的产出字段（含隐式推断/控制信号这类内部出参），
+                       角色徽标走后端 promptRoleMeta 单源人话，不再标「入参/出参」（方向已由卡题表达） -->
                   <div v-for="f in contractOuts" :key="f.fieldId" class="skd-vrow">
                     <span class="mono skd-vrow__name" :title="f.fieldId">{{ f.fieldId }}</span>
-                    <span class="mk-badge mk-badge--ok">出参</span>
+                    <span class="mk-badge" :class="roleCls(f.promptRole)">{{ roleLabel(f.promptRole) }}</span>
                     <span class="skd-vrow__desc" :title="f.description || ''">{{ f.description || '—' }}</span>
                     <span class="mono skd-vrow__type">{{ f.valueType || '—' }}</span>
-                    <span class="mk-badge mk-badge--muted">{{ roleLabel(f.promptRole) }}</span>
                   </div>
                   <p v-if="!contractOuts.length" class="mk-empty--line">该 Skill 暂无产出字段声明。</p>
                 </template>
@@ -828,16 +821,25 @@ const routingsFailed = ref(false)
     分开标记以免把不适用呈现成坏了+重试。 */
 const routingsNotApplicable = ref(false)
 
-/** 输出方向角色（与 Orchestrator.vue 的 OUT_ROLES 同一套语义：对外可见或可供下游消费） */
-const OUT_ROLES = ['proposal-output', 'public-reply', 'derived-presentation']
-const contractIns = computed<FieldRow[]>(() => {
-  const fs = routings.value?.fields || []
-  return fs.filter((f) => !OUT_ROLES.includes(f.promptRole || ''))
+/** 输入契约 = core YAML 的 inputs 声明（2026-10-31 四轮评审 P0-2）：字段路由 fields 全部是
+    产出字段（编排文件单源口径「skill:xxx 产出」），隐式推断/控制信号也是出参——
+    此前按 OUT_ROLES 反选拆「输入契约」把内部出参误标成入参。真实输入在 core inputs。 */
+interface CoreInputRow { name?: string; type?: string; ref?: string; desc?: string; note?: string }
+const coreInputsLoading = ref(false)
+const contractIns = computed<CoreInputRow[]>(() => {
+  const rows = coreSnap.value?.inputs
+  return Array.isArray(rows) ? (rows as CoreInputRow[]) : []
 })
-const contractOuts = computed<FieldRow[]>(() => {
-  const fs = routings.value?.fields || []
-  return fs.filter((f) => OUT_ROLES.includes(f.promptRole || ''))
-})
+const contractOuts = computed<FieldRow[]>(() => routings.value?.fields || [])
+
+/** ref 前缀 → 来源人话（与协议表单「输入声明」注记同一套语义） */
+function refSourceLabel(ref?: string): string {
+  const r = String(ref || '')
+  if (r.startsWith('skill:')) return '上游 Skill'
+  if (r.startsWith('sandbox:')) return '编排注入'
+  if (r.startsWith('user:')) return '用户 / 平台'
+  return '声明'
+}
 
 /** promptRole 人话：后端 yaml-vocabulary 单源下发（promptRoleMeta），前端不再各写一份 */
 const roleLabel = (roleId?: string) => {
@@ -849,10 +851,11 @@ const roleCls = (roleId?: string) => (roleId ? `mk-badge--role-${roleId}` : 'mk-
 
 /** 字段路由表格行（routings 产出行 ∪ fields 段详情） */
 const routingRows = computed(() => {
-  const fieldMap = new Map((routings.value?.fields || []).map((f) => [f.fieldId, f]))
-  return (routings.value?.routings || []).map((r) => {
-    const f = fieldMap.get(r.fieldId)
-    const handoffText = (r.handoff || []).length ? r.handoff.join(' · ') : r.internal ? '内部' : '—'
+    const fieldMap = new Map((routings.value?.fields || []).map((f) => [f.fieldId, f]))
+    return (routings.value?.routings || []).map((r) => {
+      const f = fieldMap.get(r.fieldId)
+      // 流向用有向箭头（2026-10-31 四轮评审）：「 · 」读不出数据流动方向感
+      const handoffText = (r.handoff || []).length ? r.handoff.join(' → ') : r.internal ? '内部' : '—'
     return {
       agentId: r.agentId,
       fieldId: r.fieldId,
@@ -1051,14 +1054,17 @@ async function load(force = false) {
         if (guard(true)) { coreFilePath.value = ''; overviewItem.value = null }
       }
     })(),
-    // core YAML 投影（协议页签状态机/终止条件 + 工程页签依赖；prompt-lab getCore）
+    // core YAML 投影（协议页签输入契约/状态机/终止条件 + 工程页签依赖；prompt-lab getCore）
     (async () => {
+      if (guard(true)) coreInputsLoading.value = true
       try {
         const res = await adminPromptWorkbenchApi.getCore(id)
         if (!guard(true)) return
         coreSnap.value = (res.data?.core ?? null) as CoreSnap | null
       } catch {
         if (guard(true)) coreSnap.value = null
+      } finally {
+        if (guard(true)) coreInputsLoading.value = false
       }
     })()
   ]
@@ -1184,6 +1190,7 @@ watch(
     versionsFailed.value = false
     coreFilePath.value = ''
     coreSnap.value = null
+    coreInputsLoading.value = false
     overviewItem.value = null
     notFound.value = false
     // 深链保持：URL 明确带合法 ?tab= 时尊重它，否则回落运行时（健康+证据先于配置）

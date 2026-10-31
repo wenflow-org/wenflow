@@ -58,7 +58,9 @@
           </div>
           <p v-if="summaryMeta" class="sdp-summary__meta">{{ summaryMeta }}</p>
           <p class="sdp-summary__line">
-            生成参数 {{ thinkingLabel }} · T={{ generationParams?.temperature ?? INHERIT_PROMPT_LABEL }}
+            <!-- 「生成参数 关闭」表意不明（2026-10-31 四轮评审）：那个值来自思考模式档，
+                 写全字段名，不再让读者猜「什么被关闭了」 -->
+            思考模式 {{ thinkingLabel }} · T={{ generationParams?.temperature ?? INHERIT_PROMPT_LABEL }}
             · 超时 {{ rtForm.requestTimeoutMs ? `${Math.round(rtForm.requestTimeoutMs / 1000)}s` : '平台默认' }}
             · 重试 {{ effectiveLogicalRetries }} 次 · 备用 {{ fallbackChain.length ? `${fallbackChain.length} 个` : '平台默认' }}
           </p>
@@ -441,11 +443,16 @@ const orderTitle =
 /** 模型沿用平台默认（开关关闭 或 模型留空）——此时表单里可能还留着上次选的模型值，
  *  但真正在跑的是平台默认模型，模型段要显示后者 */
 const inheritingModel = computed(() => !(rtForm.value.enabled && rtForm.value.model))
-/** 跟随平台默认时实际在跑的模型：补上「平台默认」到底是谁 */
+/** 跟随平台默认时实际在跑的模型：补上「平台默认」到底是谁。
+ *  2026-10-31 四轮评审：开关已开、模型字段留空（继承）时，原句「当前使用平台默认：x」
+ *  与卡头绿色「已开启」同屏读作自相矛盾——说清「覆盖开着、只是模型这一项没单独指定」。 */
 const inheritedModelText = computed(() => {
   if (!inheritingModel.value) return ''
   const model = String(generationParams.value?.model || '')
-  return model ? `当前使用平台默认：${model}` : ''
+  if (!model) return ''
+  return rtForm.value.enabled
+    ? `覆盖已开启，模型未单独指定——当前使用平台默认：${model}`
+    : `覆盖已关闭，当前使用平台默认：${model}`
 })
 /** 卡面摘要：当前到底跑哪个模型、有哪些能力（2026-10-28） */
 const summaryModel = computed(() => {

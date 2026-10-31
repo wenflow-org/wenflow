@@ -103,7 +103,7 @@
                 class="mk-th--sortable"
                 :aria-sort="covSortState('model')"
                 @click="toggleCovSort('model')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('model')">model<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('model')">模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 scope="col"
                 class="mk-th--sortable"
@@ -128,7 +128,9 @@
                      canonical id 是身份，中文 displayName 降为副行别名 -->
                 <button type="button" class="mk-link skc__name mono" :title="nameTitleOf(s.skillId)" @click="emit('open-skill', s.skillId)">{{ s.skillId }}</button>
                 <span v-if="aliasOf(s.skillId)" class="skc__alias" :title="aliasOf(s.skillId)">{{ aliasOf(s.skillId) }}</span>
-                <span class="skc__agent" :title="props.agentLabels[s.skillId] || 'Skill 目录中无归属信息'">{{ props.agentLabels[s.skillId] || '—' }}</span>
+                <!-- 归属：目录外的行（平台守门/工具链 Skill 未登记进 Skill 目录）显式说清，
+                     不再落一个无解释的「—」（2026-10-31 四轮评审 P1-5） -->
+                <span class="skc__agent" :title="agentTitleOf(s.skillId)">{{ agentTextOf(s.skillId) }}</span>
               </td>
               <td>
                 <span class="mk-badge" :class="s.source === 'platform-default' ? 'mk-badge--muted' : 'mk-badge--ok'">
@@ -327,6 +329,16 @@ function aliasOf(skillId: string): string {
 function nameTitleOf(skillId: string): string {
   const alias = aliasOf(skillId)
   return alias ? `${skillId} · ${alias}` : skillId
+}
+/** 归属文案：目录有行 → Agent；目录外（覆盖表多于目录的那几个）→ 明说「平台内部 · 未入目录」，
+    不再用一个「—」把「查不到归属」和「本就没有归属」混成同一格（2026-10-31 四轮评审 P1-5） */
+function agentTextOf(skillId: string): string {
+  return props.agentLabels[skillId] || '平台内部 · 未入目录'
+}
+function agentTitleOf(skillId: string): string {
+  const label = props.agentLabels[skillId]
+  if (label) return `归属 Agent：${label}`
+  return 'Skill 目录中无此条目：该 Skill 为平台内部调用（守门 / 工具链），不参与编排阶段'
 }
 /** 参数覆盖单元格：只给项数（原文在 title）；整串 JSON 在列里读不出「覆盖了几项」 */
 function overrideText(p: Record<string, number> | null): string {
