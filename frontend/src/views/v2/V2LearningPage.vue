@@ -377,6 +377,24 @@
           </div>
         </div>
 
+        <!-- 小测答完后的下一步（2026-10-31 用户走查）：小测收起、讲解入流后页面没有任何
+             续接提示，用户不知道该继续听讲、再练一道还是完课。给两个最常用的续接动作；
+             知识点全掌握时叠加完课提示（完成本节按钮在头部）。 -->
+        <div v-if="!typing && !checkpoint && !completed && postQuizReplies.length" class="replies">
+          <div class="replies__row">
+            <button
+              v-for="q in postQuizReplies"
+              :key="q"
+              type="button"
+              class="reply"
+              @click="sendDirect(q)"
+            >
+              <span class="reply__text">{{ q }}</span>
+            </button>
+          </div>
+          <p v-if="allKpMastered" class="replies__nudge">本节知识点已全部过完，可以点上方「完成本节」收束这节课。</p>
+        </div>
+
         <!-- 知识点确认（动态行动台）：AI 讲完一个点、给出 confirmCheck 时出现 -->
         <div v-if="shouldAskSelfAssess && confirmCheck" class="kp-actions kp-actions--dynamic">
           <div class="kp-actions__head">
@@ -1238,10 +1256,19 @@ watch(checkpoint, (now) => {
   if (now && now.id === pending.checkpointId) return // 同一卡片仍在展示：等真正关闭再落流
   lastSettledReply.value = null
   pushMsg({ role: 'ai', text: pending.text, time: nowTime() })
+  /* 小测收起后的下一步（2026-10-31 用户走查）：讲解入流后页面没有任何续接提示，
+     用户不知道该继续听讲、再练一道还是完课。给两个最常用的续接动作（点击即发送）；
+     知识点全掌握时叠加完课提示。 */
+  postQuizReplies.value = ['继续往下讲', '同类题再练一个']
 })
+
+/** 小测答完后的续接动作（见 watch(checkpoint) 内注释）；发送任意消息即清 */
+const postQuizReplies = ref<string[]>([]);
+const allKpMastered = computed(() => knowledgePoints.value.length > 0 && masteredCount.value >= knowledgePoints.value.length);
 
 /* 结算门禁提示随条件解除：检查点卡片收起（作答 / 跳过 / 已处理）即撤掉，不再要求手动关 */
 watch(checkpoint, (cp) => {
+  if (cp) postQuizReplies.value = [] // 新检查点到达：续接 chips 让位给小测卡
   if (!cp && settleBlock.value?.action === 'checkpoint') settleBlock.value = null
   if (cp) collapseOpeningScene()
 })
@@ -1521,17 +1548,19 @@ async function revealLastTeachingBlock() {
   const pin = () => {
     const el = scrollEl.value;
     if (!el) return;
-    const diagrams = el.querySelectorAll<HTMLElement>('.msg--ai .teaching-diagram');
-    const diagram = diagrams[diagrams.length - 1];
-    if (!diagram) {
+    // 白板图（.teaching-figure，figures 通道）与 mermaid 结构图一样会撑高消息区，
+    // 小测卡压短滚动区时都该完整露出（2026-10-31 用户走查：只顾了 mermaid 漏了白板）。
+    const visuals = el.querySelectorAll<HTMLElement>('.msg--ai .teaching-diagram, .msg--ai .teaching-figure');
+    const visual = visuals[visuals.length - 1];
+    if (!visual) {
       el.scrollTop = el.scrollHeight;
       nearBottom.value = true;
       return;
     }
     const elRect = el.getBoundingClientRect();
-    const diagramRect = diagram.getBoundingClientRect();
-    const diagramTop = diagramRect.top - elRect.top + el.scrollTop;
-    el.scrollTop = Math.max(0, Math.min(diagramTop - 8, el.scrollHeight - el.clientHeight));
+    const visualRect = visual.getBoundingClientRect();
+    const visualTop = visualRect.top - elRect.top + el.scrollTop;
+    el.scrollTop = Math.max(0, Math.min(visualTop - 8, el.scrollHeight - el.clientHeight));
     nearBottom.value = false;
   };
   await nextTick();
@@ -1837,6 +1866,7 @@ async function send(e?: unknown) {
   // IME 组合期守卫：拼音选词回车不发送
   const ke = e as KeyboardEvent | undefined;
   if (ke && (ke.isComposing || ke.keyCode === 229)) return;
+  postQuizReplies.value = []; // 用户主动输入即接管续接
   const t = input.value.trim();
   // 完课后输入即锁：完成候选轮教师常带一个收尾追问，若放行发送，回答会打给已终态化的会话
   // （服务端拒绝、消息不入库、误报失败，且陈旧重试会重复推送同一条用户消息）。
@@ -1851,6 +1881,7 @@ async function send(e?: unknown) {
 
 async function sendDirect(text: string) {
   if (typing.value || !session.value || completed.value || finalizing.value) return;
+  postQuizReplies.value = []; // 点续接动作即接管
   assessTarget.value = null; // 点击快选确认/开场建议即表态，清除待确认
   collapseOpeningScene();
   await doSend(text);
@@ -4103,6 +4134,12 @@ onBeforeUnmount(() => {
   border: 0;
   background: none;
   box-shadow: none;
+}
+/* 小测答后的完课提示行：弱化呈现，只指路不强推（完成本节按钮在头部） */
+.replies__nudge {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--mk-muted);
 }
 /* 面板头（kicker/hint）已随模板降级为 .visually-hidden 的读屏文本，样式只保底 */
 .replies__kicker {
