@@ -77,7 +77,10 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'learning'),
       isTerminal: computed(() => true),
-      isInterruptedTerminal: computed(() => true)
+      isInterruptedTerminal: computed(() => true),
+      /* 2026-10-31 五轮评审 P1：到 Learn 的前提是路径证据存在，夹具补齐
+         （无证据时指针钳制到路径档，属另一条契约） */
+      bindings: computed(() => ({ learningPathId: 'lp_t' }))
     });
 
     expect(s.stageDone('learning')).toBe(false);
@@ -89,7 +92,8 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'learning'),
       isTerminal: computed(() => true),
-      isInterruptedTerminal: computed(() => false)
+      isInterruptedTerminal: computed(() => false),
+      bindings: computed(() => ({ learningPathId: 'lp_t' }))
     });
 
     expect(s.stageDone('learning')).toBe(true);

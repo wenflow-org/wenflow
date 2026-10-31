@@ -34,16 +34,25 @@ export function useCockpitStages(deps: {
   } = deps
 
   /** 进度条索引：优先 currentStage，并用 bindings 兜底（避免 key 不一致时全「未开始」） */
+  /* 路径证据（2026-10-31 五轮评审 P1）：learningPathId / 生成标志 / 里程碑视图任一存在 */
+  const hasPathEvidence = computed(() =>
+    !!(bindings.value.learningPathId || stageStatus.value.path?.generated || pathMilestonesView.value.length)
+  )
   const effectiveStageIndex = computed(() => {
     const raw = currentStage.value
     const idx = stageFlow.indexOf(raw as StageKey)
-    if (idx >= 0) return idx
+    /* 指针不得越过路径档：目标确认后状态机可能把 currentStage 推到 teaching，
+       但路径从未生成——「✓路径已完成 / 学习进行中」与右栏「路径尚未生成」同屏打架。
+       钳制到路径档（当前阶段 = 路径），与右侧/操作栏同一事实。 */
+    if (idx >= 0) return idx >= 2 && !hasPathEvidence.value ? 1 : idx
 
     // 后端偶发非标准 stage 时，用绑定证据推断
-    if (bindings.value.teachingSessionId || bindings.value.currentTaskId) return 2
-    if (bindings.value.learningPathId || stageStatus.value.path?.generated) return 1
-    if (bindings.value.goalConversationId) return 0
-    return 0
+    let cur: number
+    if (bindings.value.teachingSessionId || bindings.value.currentTaskId) cur = 2
+    else if (bindings.value.learningPathId || stageStatus.value.path?.generated) cur = 1
+    else if (bindings.value.goalConversationId) cur = 0
+    else cur = 0
+    return cur >= 2 && !hasPathEvidence.value ? 1 : cur
   })
 
   function stageDone(st: StageKey) {
@@ -52,6 +61,9 @@ export function useCockpitStages(deps: {
 
     // Wrapup 不是会话终态的同义词：只有确实写出总结时才算完成。
     if (st === 'wrapup') return hasWrapup.value
+    /* 路径证据守卫（2026-10-31 五轮评审 P1）：路径从未生成时不得打勾——
+       teachingSessionId 可能已存在（状态机越过路径推进），不能按下游推断路径完成 */
+    if (st === 'path' && !hasPathEvidence.value) return false
     // 中断终态只确认中断点以前的阶段；当前中断阶段不能伪装成完成（#135：timeout/
     // finalization_failed/discarded/superseded 同 failed/abandoned 口径）。
     if ((isFailedTerminal.value || isInterruptedTerminal.value) && idx === cur) return false

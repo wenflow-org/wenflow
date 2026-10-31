@@ -366,7 +366,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
-  it('顶栏按钮簇与状态徽章同源（2026-10-19 运营走查）：自动驾驶已停的会话不再同时给「暂停」', async () => {
+  it('顶栏按钮簇与状态徽章同源（2026-10-19 运营走查；五轮 P7 收紧）：自动驾驶已停的会话不再给「暂停/继续」', async () => {
     // 复现原缺陷：会话 status 仍是 running、autopilot.status 已是 stopped。
     // 修前 lifeStateCockpit 只看 status+isPaused → 判 running → 顶栏给「暂停」，
     // 而同屏状态徽章/运行状态卡按 runLifecycleState 判 paused → 一个会话两个状态词。
@@ -377,7 +377,9 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
     const w = await mountCockpit('session', 'vs_1');
     const heroBtns = w.find('.cp-hero, .mk-hero, .cp').findAll('.mk-btn').map((b) => b.text());
-    expect(heroBtns).toContain('继续');
+    // 2026-10-31 五轮评审 P7：自动驾驶停机（会话未冻结）时 hero「继续」与操作栏主钮
+    // 「自动驾驶」同义——hero 只留 终止，恢复推进统一走操作栏「自动驾驶」
+    expect(heroBtns).not.toContain('继续');
     expect(heroBtns).not.toContain('暂停');
     w.unmount();
   });

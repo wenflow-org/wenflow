@@ -1591,6 +1591,8 @@ export interface LiveVirtual {
   abandonedCount: number
   /** 卡死（running 超 reclaim 阈值无写入）会话数 */
   stalledCount: number
+  /** 2026-10-31 五轮评审 P8：活跃会话自动驾驶最后一次错误（不含进程重启中断这类预期态） */
+  activeError?: string | null
   /** 运行中会话 id（会话样本内；用于「运行中」列直达座舱） */
   runningSessionIds: string[]
   /** 已暂停会话 id（autopilot=stopped） */
@@ -1821,6 +1823,11 @@ async function fetchLiveVirtuals(): Promise<void> {
       failedCount: Number(p.failedCount ?? 0),
       abandonedCount: Number(p.abandonedCount ?? 0),
       stalledCount: Number(p.stalledCount ?? 0),
+      /* 2026-10-31 五轮评审 P8：活跃会话自动驾驶最后一次错误（如僵尸会话自动回收）
+         透传到列表「异常」列——座舱日志已报错而列表异常列为 — 的断链在此接上 */
+      /* 2026-10-31 五轮评审 P8：直接读后端列表新字段 activeError（会话样本已瘦身、
+         不含 stageResults，前端不能从样本二次解析；进程重启中断在后端已按预期态过滤） */
+      activeError: typeof p.activeError === 'string' ? p.activeError : null,
       runningSessionIds: (Array.isArray(p.runningSessionIds) ? p.runningSessionIds : runningSessions.map((s) => String(s.id)))
         .map(String)
         .filter(Boolean),

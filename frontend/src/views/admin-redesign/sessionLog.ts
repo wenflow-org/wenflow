@@ -83,6 +83,8 @@ const VIRTUAL_PHASE_ZH: Record<string, string> = {
   'teaching-response': '课堂响应',
   'teaching-start': '课堂开始',
   'teaching-interrupted': '课堂中断',
+  /* 2026-10-31 五轮评审 P5：筛选胶囊裸露英文枚举（closure-attribution）——补映射 */
+  'closure-attribution': '课堂归因',
   error: '错误'
 }
 

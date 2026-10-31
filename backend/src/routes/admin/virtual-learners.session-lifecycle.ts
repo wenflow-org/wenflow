@@ -330,6 +330,18 @@ router.get('/', async (req: Request, res) => {
       );
       const runningSessions = sessionSample.filter((s) => s.status === 'running' && !autopilotStoppedIds.has(s.id));
       const pausedSessions = sessionSample.filter((s) => s.status === 'running' && autopilotStoppedIds.has(s.id));
+      /* 2026-10-31 五轮评审 P8：活跃会话自动驾驶最后一次错误（如僵尸会话自动回收）透传列表，
+         「异常」列与座舱日志同源；进程重启导致的「自动驾驶已中断」是预期态不算异常 */
+      const activeError = (() => {
+        for (const s of sessionSample) {
+          if (s.status !== 'running') continue;
+          try {
+            const err = JSON.parse(String(s.stageResults || '{}'))?.autopilot?.lastError;
+            if (err && !/进程重启/.test(String(err))) return String(err);
+          } catch { /* 坏 JSON 不阻断列表 */ }
+        }
+        return null;
+      })();
       // 阶段进度（轴 B）：没有活跃会话时回落到最近一次会话（历史进度，前端标「最近」）。
       const latestSession = runningSessions[0] || pausedSessions[0] || sessionSample[0];
       const stageProgress = latestSession ? deriveRunProgress(latestSession) : null;
@@ -403,6 +415,7 @@ router.get('/', async (req: Request, res) => {
         // F20：与 failedCount 分列的人为终止数（/stats 的 abandoned 同口径）
         abandonedCount: abandonedByProfile.get(p.id) ?? 0,
         stalledCount: staleByProfile.get(p.id) ?? 0,
+        activeError,
         currentStage: runningSessions[0]?.currentStage || sessionSample[0]?.currentStage || null,
         runningSessionIds: runningSessions.map((s) => s.id),
         pausedSessionIds: pausedSessions.map((s) => s.id),

@@ -67,7 +67,7 @@
           :title="`路径进度按子任务统计（与「阶段推进」步点同源）：${pathProgressText}`"
         >路径 {{ pathProgressText }}</span>
         <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位） -->
-        <span class="mk-badge mk-badge--info">{{ stageLabel(currentStage) }}</span>
+        <span class="mk-badge mk-badge--info">{{ stageLabel(displayStage) }}</span>
         <!-- 课堂类型 pill（2026-10-21）：正课/复习课/延伸课；后两者不结算任务 -->
         <span v-if="classroomMode" class="mk-badge" :class="classroomModeBadge" :title="classroomModeTitle">{{ classroomModeText }}</span>
         <!-- 只读模式声明（原顶栏 .mk-status__meta 迁入，2026-10-11 走查）：真实会话控制台只读，
@@ -753,7 +753,9 @@
             <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审' }}</span>
           </div>
           <div class="cp-aside-body">
-            <div class="cp-review-panel__actions">
+            <!-- 已接受后动作行整行撤下（2026-10-31 五轮评审 P6）：此前「评审/接受」按钮与
+                 已接受徽章同屏复读 4 遍；决策未落定时才渲染操作 -->
+            <div v-if="pathReviewDecision !== 'accept'" class="cp-review-panel__actions">
               <button type="button" class="cp-btn cp-btn--sm" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审</button>
               <button v-if="acceptPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="acceptPathDisabled" :title="acceptPathTitle" @click="act('acceptPath')">接受</button>
               <button v-if="replanPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="replanPathDisabled" :title="replanPathTitle" @click="act('replanPath')">按意见重规划</button>
@@ -2074,6 +2076,16 @@ const heroSub = computed(() => {
 /* hero 主标题：路径会话 = 学习路径名（2026-10-31 外部评审 P1-1「张冠李戴」：路径详情/目标阶段页
    的 h1 挂着最近一节单课的课名，真正的路径名缩在 12px 灰色副行——主位还给路径名，单课主题下放副文）；
    非路径会话仍用会话主题（2026-10-04 全站评审 P2-7：人类可读主题升 24px/700 主位）；都缺回退 shortId */
+/* 阶段展示口径（2026-10-31 五轮评审 P1）：路径证据缺失时徽章与 stepper 一致钳制到「路径」
+   （raw currentStage 可能已被状态机推到 teaching，但路径本体从未生成） */
+const hasPathEvidenceCockpit = computed(() =>
+  !!(bindings.value.learningPathId || stageStatus.value.path?.generated || pathMilestonesView.value.length)
+)
+const displayStage = computed<string>(() => {
+  const raw = String(currentStage.value || 'goal')
+  const order = ['goal', 'path', 'teaching', 'learning', 'wrapup']
+  return order.indexOf(raw) >= 2 && !hasPathEvidenceCockpit.value ? 'path' : raw
+})
 const heroUsesPathTitle = computed(() => {
   if (!hasPath.value || !pathGeneratedOrReady.value) return false
   const pathTitle = pathDetailTitle.value
@@ -2864,6 +2876,9 @@ const lifeControlsCockpit = computed(() =>
   vlabControlsFor(lifeStateCockpit.value, {
     stage: typeof session.value?.currentStage === 'string' ? session.value.currentStage : undefined
   }).filter((c) => lifeHandlersCockpit[c.key])
+    /* 2026-10-31 五轮评审 P7：自动驾驶停机（会话未冻结）时，hero「继续」与操作栏主钮
+       「自动驾驶」是同一件事的两个入口——只留操作栏那个；teaching 冻结暂停不受影响 */
+    .filter((c) => !(c.key === 'resume' && (autopilot.value.status || '') === 'stopped' && !isPaused.value))
 )
 /** 统一操作入口：需确认的操作（stop/retry）先过模型文案确认，再执行 */
 function runCockpitAction(c: VsControlDef) {
@@ -3481,15 +3496,12 @@ async function copyRawJson() {
 /* 跟随钮的定位容器（滚动容器之外）：按钮 absolute 常驻右上，上翻日志也始终可见（#52） */
 .cp-logs-wrap { position: relative; }
 .cp-logs {
-  max-height: 360px;
-  overflow-y: auto;
-  /* 嵌套滚动隔离（2026-10-06 审核 #72）：同一屏叠了页面/侧栏/日志/课程树多个纵向滚动容器，
-     内层滚到底时不再把滚动链传给外层（否则滚轮滚谁取决于指针落点） */
-  overscroll-behavior: contain;
+  /* 定高滚动窗口的上下边缘永远在硬切文字（2026-10-31 五轮评审 P4：上沿无头残文、
+     下沿半行）——解除定高让日志自然生长（同目标对话 R10 判例）；
+     「最近 60 条」窗口口径与跟随逻辑保持不变（无内滚后恒为跟随态） */
   display: grid;
   gap: 4px;
-  /* 底部呼吸位（2026-10-31 三轮评审 P2）：无 padding 时滚到底最后一行被裁半行 */
-  padding-bottom: 8px;
+  padding: 2px 0 8px;
 }
 .cp-logs-bar { display: flex; justify-content: flex-end; padding-bottom: 4px; }
 .cp-logs__follow {
