@@ -85,7 +85,7 @@ import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stri
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
 import { decideBoardIntent, numbersOnBoard } from './board-intent';
 import { applyBoardOp } from './board-controller';
-import { boardFigureForRender, describeBoardForTeacher, openBoard, type BoardState } from './board-state';
+import { buildBoardFigureAttachment, describeBoardForTeacher, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
@@ -282,26 +282,6 @@ async function figureGateSnapshot(sessionId: string, kind: unknown) {
     0,
   );
   return { figures, total: figures.length, kindCount, kindCap: figureKindCap(key) };
-}
-
-/**
- * 历史里最后一条随消息下发的白板版本（2026-10-31 用户走查防复读）：
- * 共享白板是常驻板书，板没变化就不该随新消息重发——实测同一张板挂在相隔 10 分钟的
- * 两条导师消息下，滚动区被同图刷屏。扫描历史（不含本轮 assistantMessage），
- * 返回最后一条带白板图消息的 boardRevision；没有则 null。导出仅为测试。
- */
-export function getLastSentBoardRevision(
-  messages: ReadonlyArray<{ role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined }>,
-): number | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i] as { role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined };
-    if (m.role !== 'assistant') continue;
-    const boardFigure = (m.figures || []).find((f) => f.board === true);
-    if (boardFigure) {
-      return typeof boardFigure.boardRevision === 'number' ? boardFigure.boardRevision : null;
-    }
-  }
-  return null;
 }
 
 export async function processStudentMessage(
@@ -1198,31 +1178,11 @@ export async function processStudentMessage(
   }
   if (board && !assistantMessage.figures?.length && !detectExerciseLeakInReply(teachingOutput.reply)) {
     // 防复读（2026-10-31 用户走查）：板版本与上次下发一致 ⇒ 板没变，不随本轮消息重发。
-    // 老师文本对「板上」的指代仍成立——板就挂在紧邻的上一条消息里；换板（revision 提升）
-    // 与首轮开板（历史无白板图）照常下发。
-    const lastSentBoardRevision = getLastSentBoardRevision(updatedMessages);
-    if (board.revision !== lastSentBoardRevision) {
-      const rendered = boardFigureForRender(board);
-      if (rendered) {
-        assistantMessage.figures = [{
-          engine: 'svg',
-          kind: rendered.kind,
-          // 与一次性配图同一套学科盖章：白板换学科时色相/材质跟着换，几何与语义不动
-          palette: paletteOfSubject(session.subject),
-          spec: rendered.spec,
-          caption: null,
-          // 标记为白板：不计入一次性配图的会话配额/同骨架去重
-          board: true,
-          boardRevision: board.revision,
-        }];
-        assistantMessage.figureSource = {
-          trigger: 'board',
-          reason: null,
-          kindHint: board.figure?.kind ?? null,
-          ruleWhy: '任务级共享白板（方案 A：首轮板先行，后续老师先说、同轮刷新）',
-          matched: [],
-        };
-      }
+    // 决策与附件构造在 board-state.buildBoardFigureAttachment。
+    const attachment = buildBoardFigureAttachment(board, updatedMessages, paletteOfSubject(session.subject));
+    if (attachment) {
+      assistantMessage.figures = attachment.figures;
+      assistantMessage.figureSource = attachment.figureSource;
     }
   }
 

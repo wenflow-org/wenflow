@@ -3,7 +3,7 @@
  * getLastSentBoardRevision 决定「上次下发的板版本」，引擎据此跳过未变化板的挂载
  * （否则同一张板挂在相隔 10 分钟的两条导师消息下，滚动区被同图刷屏）。
  */
-import { getLastSentBoardRevision } from '../teaching-turn-engine';
+import { getLastSentBoardRevision } from '../board-state';
 
 describe('getLastSentBoardRevision · 白板防复读的版本基线', () => {
   it('历史无白板图 → null（首轮开板照常下发）', () => {

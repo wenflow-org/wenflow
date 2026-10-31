@@ -307,6 +307,80 @@ export function boardFigureForRender(board: BoardState): { kind: string; spec: R
 }
 
 /**
+ * 历史里最后一条随消息下发的白板版本（2026-10-31 用户走查防复读）：
+ * 共享白板是常驻板书，板没变化就不该随新消息重发——实测同一张板挂在相隔 10 分钟的
+ * 两条导师消息下，滚动区被同图刷屏。扫描历史（不含本轮 assistantMessage），
+ * 返回最后一条带白板图消息的 boardRevision；没有则 null。导出仅为测试。
+ */
+export function getLastSentBoardRevision(
+  messages: ReadonlyArray<{ role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined }>,
+): number | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as { role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined };
+    if (m.role !== 'assistant') continue;
+    const boardFigure = (m.figures || []).find((f) => f.board === true);
+    if (boardFigure) {
+      return typeof boardFigure.boardRevision === 'number' ? boardFigure.boardRevision : null;
+    }
+  }
+  return null;
+}
+
+/** 随消息下发的白板附件（挂到 assistantMessage 的两个字段） */
+export interface BoardFigureAttachment {
+  figures: Array<{
+    engine: 'svg';
+    kind: string;
+    palette: string;
+    spec: Record<string, unknown>;
+    caption: null;
+    board: true;
+    boardRevision: number;
+  }>;
+  figureSource: {
+    trigger: 'board';
+    reason: null;
+    kindHint: string | null;
+    ruleWhy: string;
+    matched: never[];
+  };
+}
+
+/**
+ * 本轮消息应挂的白板附件：板存在、本轮没有其他配图、且板版本与上次下发不同
+ * （板没变化 ⇒ 不重发，老师文本对「板上」的指代仍由紧邻上一条消息承接）。
+ * 首轮开板（历史无白板图）与换板（revision 提升）照常下发。返回 null = 本轮不挂。
+ */
+export function buildBoardFigureAttachment(
+  board: BoardState,
+  previousMessages: ReadonlyArray<{ role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined }>,
+  palette: string,
+): BoardFigureAttachment | null {
+  if (board.revision === getLastSentBoardRevision(previousMessages)) return null;
+  const rendered = boardFigureForRender(board);
+  if (!rendered) return null;
+  return {
+    figures: [{
+      engine: 'svg',
+      kind: rendered.kind,
+      palette,
+      spec: rendered.spec,
+      caption: null,
+      // 标记为白板：不计入一次性配图的会话配额/同骨架去重
+      board: true,
+      boardRevision: board.revision,
+    }],
+    figureSource: {
+      trigger: 'board',
+      reason: null,
+      kindHint: board.figure?.kind ?? null,
+      ruleWhy: '任务级共享白板（方案 A：首轮板先行，后续老师先说、同轮刷新）',
+      matched: [],
+    },
+  };
+}
+
+/**
  * 老师可见画面的**文本描述**——这是「图教分离」的关键输入。
  *
  * 设计要点：只描述**板上真实可见**的内容（经归一化裁剪、经脱敏挖空之后的），
