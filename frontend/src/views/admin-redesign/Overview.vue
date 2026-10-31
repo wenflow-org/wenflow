@@ -97,7 +97,7 @@
            2026-10-22 用户：标题只写「需要关注」，今日失败数下移到这里。
            2026-10-26：健康 chip 撤除——同一控件加载中点击会跳走、失败态点击却是就地重试；
            健康只留结论行右端一个出口。 -->
-      <div class="ov-row ov-subs">
+      <div v-if="todayFailed > 0 || simTone === 'bad' || simTone === 'warn'" class="ov-row ov-subs">
         <button
           v-if="todayFailed > 0"
           type="button"
@@ -106,9 +106,10 @@
           @click="investigateTodayFailures"
         >调用 · 今日失败 {{ todayFailed }} 次</button>
         <button
+          v-if="simTone === 'bad' || simTone === 'warn'"
           type="button"
           class="mk-status__meta-link"
-          :class="simTone === 'bad' ? 'mk-status__meta--bad' : simTone === 'warn' ? 'mk-status__meta--warn' : simTone === 'ok' ? 'mk-status__meta--ok' : ''"
+          :class="simTone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
           :title="simTitle"
           @click="jump('virtual-learners')"
         >仿真 · {{ simHeadline }}</button>
@@ -640,7 +641,8 @@ const todayKey = computed(() => {
   const p = (x: number) => String(x).padStart(2, '0');
   return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}`;
 });
-const activeMax = computed(() => Math.max(1, ...(data.value?.growth7d.map((g) => g.activeUsers) || [])));
+/* 分母下限 5：全窗口只有 1 人时柱高不超过 1/5，避免「1 人顶天立地」误读成高峰 */
+const activeMax = computed(() => Math.max(5, ...(data.value?.growth7d.map((g) => g.activeUsers) || [])));
 /** 与 TokenCost.trendCols 同规则：零值不画残影柱（0%），微值保底 6% 可见 */
 const barPct = (v: number, max: number) => (v > 0 ? `${Math.max(Math.round((v / max) * 100), 6)}%` : '0%');
 const barchartCols = computed(() => (data.value?.growth7d || []).map((g) => {

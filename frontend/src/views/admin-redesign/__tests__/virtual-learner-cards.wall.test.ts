@@ -366,7 +366,7 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     }));
     const w = await mountPage();
     const tasks = w.findAll('.vlc-card__task');
-    expect(tasks.map((t) => t.text())).toEqual(['任务亏了三万的那只基金', '任务停在三年前的简历']);
+    expect(tasks.map((t) => t.text())).toEqual(['场景亏了三万的那只基金', '场景停在三年前的简历']);
     // 只有多任务的卡标数量
     const foot = w.findAll('.vlc-card__foot');
     expect(foot[0].text()).not.toContain('个任务');
@@ -399,7 +399,8 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     const w = await mountPage();
     const btn = w.findAll('button').find((b) => b.text() === '导入卡')!;
     await btn.trigger('click');
-    expect(openSubPageMock).toHaveBeenCalledWith('card-import', 'new');
+    /* 2026-10-31 二轮评审 P2：'new' 是路由占位不是文案，入口用 label 覆盖面包屑显示名 */
+    expect(openSubPageMock).toHaveBeenCalledWith('card-import', 'new', { label: '导入卡' });
     expect(w.find('.mk-drawer').exists()).toBe(false);
   });
 

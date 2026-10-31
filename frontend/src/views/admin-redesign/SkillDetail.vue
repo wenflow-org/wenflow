@@ -159,53 +159,6 @@
 
         <!-- ========== 版本（原型 versions：.tbl 表格；日期/作者/变更说明有字段才补列） ========== -->
         <div v-if="designTabShown('versions')" v-show="tab === 'versions'" class="skd-bloc">
-          <section class="mk-card">
-            <div class="mk-card__head">
-              <h3 class="mk-card__title">Prompt 版本</h3>
-              <div class="mk-card__head-right">
-                <span class="mk-card__meta">{{ versionsStateText }}</span>
-              </div>
-            </div>
-            <div class="skd-tablewrap">
-              <table v-if="versions.length" class="mk-table mk-table--nowrap">
-                <thead>
-                  <tr>
-                    <th>版本</th>
-                    <th>名称</th>
-                    <!-- 原型 versions 表含 日期/作者/变更说明（index.html 2344-2346）：列表返回了才补列，空则省略 -->
-                    <th v-if="hasVersionMeta">日期</th>
-                    <th v-if="hasVersionMeta">作者</th>
-                    <th v-if="hasVersionMeta" class="skd-th-wrap">变更说明</th>
-                    <th>状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="v in versions" :key="v.id">
-                    <td class="mono">v{{ v.version }}</td>
-                    <td>
-                      <template v-if="v.name">{{ v.name }}</template>
-                      <span v-else class="mk-na">—</span>
-                    </td>
-                    <td v-if="hasVersionMeta" class="mono">{{ fmtDate(v.createdAt) }}</td>
-                    <td v-if="hasVersionMeta">
-                      <template v-if="v.createdBy">{{ v.createdBy }}</template>
-                      <span v-else class="mk-na">—</span>
-                    </td>
-                    <td v-if="hasVersionMeta" class="skd-td-wrap" :title="versionDescTitle(v)">{{ versionDescText(v) }}</td>
-                    <td><span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span></td>
-                  </tr>
-                </tbody>
-              </table>
-              <div class="skd-pad" v-else>
-                <MkLoading v-if="versionsLoading" inline text="版本加载中…" />
-                <div v-else-if="versionsFailed" class="mk-alert mk-alert--row" role="alert">
-                  <span class="mk-alert__msg">版本列表加载失败。</span>
-                  <button type="button" class="mk-alert__btn" @click="load(true)">重试</button>
-                </div>
-                <p v-else class="mk-empty--line">暂无 Prompt 版本记录。</p>
-              </div>
-            </div>
-          </section>
           <!-- 设计页「版本」内容（在线变体 A/B + 核心文件版本回滚 + Prompt 版本 diff） -->
           <VersionsTab
             :skill-id="skillId"
@@ -266,7 +219,8 @@
                 <span v-if="s.ts" class="mono skd-call__time" :title="callTimeFull(s.ts)">{{ callTimeLabel(s.ts) }}</span>
                 <span class="mono skd-call__ms">{{ fmtMs(s.durationMs) }}</span>
               </button>
-              <p v-if="!recent.length" class="mk-empty--line">近 7 天暂无该 Skill 的调用记录。指标由统计接口聚合，统计范围与列表不同，以指标卡为准。</p>
+              <MkLoading v-if="!recent.length && recentServer === null" inline text="最近调用加载中…" />
+              <p v-if="!recent.length && recentServer !== null" class="mk-empty--line">近 7 天暂无该 Skill 的调用记录（与指标卡同窗口）。</p>
             </div>
           </section>
         </div>
@@ -299,7 +253,24 @@
              列形差异：原型 5 列 = 字段/来源/目标/转换规则/脱敏（index.html 2374-2377）；
              本表 6 列把「来源+目标」并在「流向」、把脱敏并进属性 badges；仅当后端下发 masked 布尔才补「脱敏」列。 ========== -->
         <div v-if="designTabShown('routing')" v-show="tab === 'routing'" class="skd-bloc">
-          <section class="mk-card">
+          <!-- 2026-10-31 外部评审拍板：本页签原有两套 26 行大表同屏堆叠（只读流向表 +
+               设计区块契约表）。两者语义不同不合并，改为页签内视图切换：默认流向视图（只读），
+               「契约编辑」进设计区块（字段血缘 + 加字段向导）。 -->
+          <div class="skd-rswitch" role="group" aria-label="字段路由视图切换">
+            <button
+              type="button"
+              class="skd-rswitch__btn"
+              :class="{ 'skd-rswitch__btn--on': routingView === 'flow' }"
+              @click="routingView = 'flow'"
+            >流向视图</button>
+            <button
+              type="button"
+              class="skd-rswitch__btn"
+              :class="{ 'skd-rswitch__btn--on': routingView === 'contract' }"
+              @click="routingView = 'contract'"
+            >契约编辑</button>
+          </div>
+          <section v-if="routingView === 'flow'" class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">字段路由</h3>
               <div class="mk-card__head-right">
@@ -349,8 +320,9 @@
               <p class="mk-card__note">标注「内部」的字段不进入用户可见回复。</p>
             </div>
           </section>
-          <!-- 设计页「字段路由」内容（字段影响范围血缘 + 加字段向导） -->
-          <RoutingTab :skill-id="skillId" />
+          <!-- 设计页「字段路由」内容（字段影响范围血缘 + 加字段向导）：
+               v-if 按需挂载——契约区块自拉接口，默认流向视图不再拖这次请求 -->
+          <RoutingTab v-if="routingView === 'contract'" :skill-id="skillId" />
         </div>
       </div>
     </section>
@@ -435,10 +407,10 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace, type TraceSpan } from './store'
-import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange, liveRefreshSeq } from './live'
+import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange, liveRefreshSeq, mapLogsToSpans, type RawLog } from './live'
 /* P2-15（设计评审）：版本状态走共享字典（与设计页 versions-tab 同域同词：ARCHIVED→已归档），
    删本页本地 versionStatusText（只映射 ACTIVE/DRAFT，ARCHIVED 直出英文） */
-import { categoryText, errorCategoryText, versionStatusText } from './statusText'
+import { categoryText, errorCategoryText } from './statusText'
 import { errorCodeLabel } from './terms'
 import { successRateText, successRateTone } from './rate-utils'
 import {
@@ -447,7 +419,8 @@ import {
   adminFieldRoutingsApi,
   adminAgentPromptsApi,
   adminPromptOpsApi,
-  adminPromptWorkbenchApi
+  adminPromptWorkbenchApi,
+  adminAgentsApi
 } from '@/api/adminApi'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
@@ -488,6 +461,9 @@ const TABS: Array<{ key: string; label: string }> = [
 ]
 const DEFAULT_TAB = 'runtime'
 const tab = ref(DEFAULT_TAB)
+/* 字段路由页签内视图：流向（只读）/ 契约编辑（设计区块）。默认流向——
+   评审判例：两套大表不再同屏堆叠（2026-10-31 外部评审拍板） */
+const routingView = ref<'flow' | 'contract'>('flow')
 
 /* ?skdTab= 写/读（tab 路由化，判例 LearnerDetail P0-2 / Orchestrator ?stage=&tab=）：
    深链/刷新/前进后退保持所在页签——此前页签不写 URL，刷新即回协议页。
@@ -923,35 +899,6 @@ interface VersionItem {
 const versions = ref<VersionItem[]>([])
 const versionsLoading = ref(false)
 const versionsFailed = ref(false)
-const versionsStateText = computed(() => {
-  if (versionsLoading.value) return '加载中…'
-  if (versionsFailed.value) return '加载失败'
-  // 列表是「最近 12 条」截断窗口（下方 slice(0, 12)）：「共 N 个」冒充全量 → 改窗口词
-  return `最近 ${versions.value.length} 个`
-})
-/* versionStatusText 改用 statusText.ts 共享字典（P2-15）：本地函数已删，历史字面量在字典补键对齐 */
-/** 原型 versions 表含 日期/作者/变更说明（index.html 2344-2346）；三项均空则省略列 */
-const hasVersionMeta = computed(() => versions.value.some((v) => v.createdAt || v.createdBy || v.description))
-/* P2-18（2026-10-04 全站评审）：变更说明列常被冒充——同步占位「从文件 X.md 加载」与
-   prompt-lab 克隆时写入的提示词正文首行（「你是…」开头）都不是变更说明；
-   两种形态显「—」+ title 说明原因，真实说明照旧直出（实测 12 行中 10 行被冒充） */
-const versionDescText = (v: VersionItem): string => {
-  const d = (v.description || '').trim()
-  if (!d || /^从文件 .+\.md 加载$/.test(d) || /^你是/.test(d)) return '—'
-  return d
-}
-const versionDescTitle = (v: VersionItem): string | undefined => {
-  const d = (v.description || '').trim()
-  if (!d) return '版本未附带变更说明'
-  if (/^从文件 .+\.md 加载$/.test(d)) return `同步占位（${d}），非变更说明`
-  if (/^你是/.test(d)) return '该行是提示词正文首行的摘录，非变更说明'
-  return undefined
-}
-const fmtDate = (v?: string) => {
-  if (!v) return '—'
-  const t = new Date(v).getTime()
-  return Number.isNaN(t) ? '—' : new Date(t).toLocaleDateString('zh-CN')
-}
 
 /* ===== core 文件路径（工程页签；prompt-ops agent-overview 真实字段） ===== */
 const coreFilePath = ref('')
@@ -1144,7 +1091,39 @@ function goTrace(traceId: string) {
 }
 
 /* ===== 最近调用（运行时页签；SkillDrawer 概览迁入） ===== */
-const recent = computed(() => (skillId.value ? recentSpansOf(skillId.value) : []))
+/* 服务端自拉（2026-10-31 三轮评审 O04）：recentSpansOf 只读全局采样（执行日志页拉过的
+   近 7 天 200 条），从健康中心/深链直进详情时采样里可能没有该 Skill——KPI 显示 11 次
+   调用、列表却空，排障链路断在第一跳。现按 skillId 直查日志服务端（近 7 天 5 条），
+   与 KPI 同窗口；查询失败或为空再回落采样。agentId 兼容带/不带 skill: 前缀两种落库形态。 */
+const recentServer = ref<TraceSpan[] | null>(null)
+async function loadRecentServer() {
+  const id = skillId.value
+  if (!id) { recentServer.value = null; return }
+  recentServer.value = null
+  const itemsOf = (res: { data?: unknown }) => {
+    const body = (res as { data?: { data?: unknown } })?.data?.data ?? (res as { data?: unknown })?.data ?? {}
+    const b = body as { items?: RawLog[]; logs?: RawLog[] }
+    return Array.isArray(b) ? b : b.items || b.logs || []
+  }
+  try {
+    let res = await adminAgentsApi.getLogs({ agentId: id, timeRange: 'week', limit: 5, page: 1 })
+    let items: RawLog[] = itemsOf(res)
+    if (!items.length) {
+      res = await adminAgentsApi.getLogs({ agentId: `skill:${id}`, timeRange: 'week', limit: 5, page: 1 })
+      items = itemsOf(res)
+    }
+    if (id !== skillId.value) return
+    recentServer.value = mapLogsToSpans(items)
+  } catch {
+    if (id === skillId.value) recentServer.value = []
+  }
+}
+watch(skillId, loadRecentServer, { immediate: true })
+const recent = computed(() => {
+  const local = skillId.value ? recentSpansOf(skillId.value) : []
+  const server = recentServer.value ?? []
+  return server.length ? server : local
+})
 const statusDotLabel = (s: string) => (s === 'ok' ? '成功' : s === 'err' ? '失败' : '超时')
 /** F7-4：失败行的行标题此前直出 span.title（live.ts:193 把引擎异常原文 slice(0,40) 塞进标题），
     列表里读到的是一串截断代码异常，既不可读也不指向动作。现失败行标题 = 错误类别人话
@@ -1330,14 +1309,13 @@ useEscape(
   min-width: 0;
 }
 .skd-vrow:last-child { border-bottom: 0; }
-/* 字段名（行的标识）：原 max-width 220 + 单行 ellipsis，1080p 实测 23 处读不全
-   （最长 understanding.available_resources.time_budget 需 ~420px）。改 300 宽 + 最多两行折行
-   （line-clamp 判例见 MkStatStrip/SessionCockpit）：≤300 的仍单行，更长的折两行不截断。
-   描述列让出 80px——描述本就像句子会换行、且带 title，属次要信息。 */
+/* 字段名（行的标识）：2026-10-31 外部评审复检——line-clamp 两行折行会让
+   control.completionCandidateEvidence 这类无空格标识在末尾单字母处断头（`…Evidenc / e`）。
+   代码字段名绝不能折行：nowrap + ellipsis 截断，完整值在 title 悬停；放宽到 340px
+   兼顾 1080p 常见名完整可读，超长的由悬停承接。 */
 .skd-vrow__name {
-  font-weight: 700; flex: none; max-width: 300px;
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  overflow: hidden; overflow-wrap: anywhere;
+  font-weight: 700; flex: none; max-width: 340px;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
 .skd-vrow__desc { flex: 1; min-width: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skd-vrow__type { flex: none; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
@@ -1394,6 +1372,26 @@ useEscape(
 .skd-tablewrap { overflow-x: auto; }
 .skd-tablewrap .mk-table .skd-td-wrap { white-space: normal; min-width: 160px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .skd-tablewrap .mk-table th.skd-th-wrap { white-space: normal; }
+
+/* 字段路由页签内视图切换（2026-10-31 外部评审）：与协议页 sdp-pw__viewswitch 同语汇 */
+.skd-rswitch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--mk-line);
+  border-radius: 8px;
+  background: var(--mk-surface-2);
+}
+.skd-rswitch__btn {
+  border: 0;
+  background: transparent;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  cursor: pointer;
+}
+.skd-rswitch__btn--on { background: var(--mk-surface); color: var(--mk-ink); font-weight: 700; box-shadow: inset 0 0 0 1px var(--mk-line); }
 
 /* ===== 运行时：指标卡（原型 metricCard 四张独立卡）走共享 MkKpi + .mk-kpi-grid（审核 #146），
    本文件的 .skd-metric* 私有实现已删（含值档与 4K 档覆写，原语自带全档位） ===== */

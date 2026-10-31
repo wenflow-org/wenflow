@@ -173,6 +173,7 @@
   --mk-search-clear-fg: var(--mk-muted);
   --mk-meta-link-on-bg: rgba(47, 106, 224, 0.12);
   --mk-input-disabled-bg: #f4f6fa;
+  --mk-btn-disabled-bg: #eceff4;
   --mk-modal-close-bg: #f0f2f5;
   --mk-modal-close-hover-bg: #f0f2f5; /* 亮色下悬停不变（既有行为）；暗色档才加深 */
   --mk-drawer-close-bg: #f1f5fb;
@@ -563,6 +564,7 @@ html[data-theme='dark'] {
   --mk-search-clear-fg: #afb1b6;
   --mk-meta-link-on-bg: rgba(91, 141, 239, 0.22);
   --mk-input-disabled-bg: #19191a;
+  --mk-btn-disabled-bg: #2c2e33;
   --mk-modal-close-bg: #2a2b2d;
   --mk-modal-close-hover-bg: #343537;
   --mk-drawer-close-bg: #2a2b2d;

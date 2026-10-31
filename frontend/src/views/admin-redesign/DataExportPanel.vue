@@ -231,7 +231,9 @@ async function runExport() {
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s;
 }
-.exp-item:hover { border-color: var(--mk-blue); }
+/* hover 只微抬描边（2026-10-31 外部评审二轮：--mk-muted 全亮灰在暗色下读成「蓝色焦点框/
+   已选中」，截图指针停过就穿帮）——用 line→muted 的中间值，可感知但不抢选中态（蓝框专属） */
+.exp-item:hover { border-color: color-mix(in srgb, var(--mk-muted) 45%, var(--mk-line)); }
 .exp-item--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .exp-item--busy { cursor: default; opacity: 0.7; }
 .exp-item__box {

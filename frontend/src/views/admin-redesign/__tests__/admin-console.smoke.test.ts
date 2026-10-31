@@ -241,13 +241,17 @@ describe('AdminConsole 导航冒烟', () => {
   });
 
   /* 跨页跳转可带目标页预筛（2026-10-26 导航收口）：侧栏角标把「近 7 天失败」的口径带进
-     执行日志的 URL，落地即筛、可刷新可分享。 */
-  it('侧栏导航携带的落地筛选进 URL（执行日志 ?range=week&status=err）', async () => {
+     执行日志，落地即筛、可刷新可分享。2026-10-31 起页面默认档 = 近 7 天，range=week
+     属默认值不再写 URL（filterSnapshot 只存非默认值）；status=err 非默认仍落 URL。 */
+  it('侧栏导航携带的落地筛选进 URL（执行日志 ?status=err；range=week 为默认档不写）', async () => {
     const { wrapper, router } = await mountConsole('/admin/overview');
+    await settle();
+    await nextTick();
     wrapper.findComponent({ name: 'Shell' }).vm.$emit('navigate', 'execution-logs', { range: 'week', status: 'err' });
     await settle();
     expect(router.currentRoute.value.params.page).toBe('execution-logs');
-    expect(router.currentRoute.value.query).toMatchObject({ range: 'week', status: 'err' });
+    expect(router.currentRoute.value.query).toMatchObject({ status: 'err' });
+    expect(router.currentRoute.value.query.range).toBeUndefined();
   });
 
   /* 2026-09-29 功能走查：健康检查行「查看 →」跳 /admin/skill-workbench?skill=<id>，此前抽屉是

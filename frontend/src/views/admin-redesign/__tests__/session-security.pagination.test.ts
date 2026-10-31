@@ -136,24 +136,21 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(w.find('.mk-pagination__num--active').text()).toBe('2');
   });
 
-  it('切换每页条数下拉 → 行数与页码器同步', async () => {
+  it('切换每页条数下拉 → 行数与页码器同步；折成单页后页码器整体隐藏', async () => {
     const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions);
     await chooseMkSelect(w as never, '每页条数', '30');
     await flushPromises();
     expect(w.findAll('.ss-tr').length).toBe(30);
-    expect(pagerText(w)).toContain('第 1 / 1 页');
+    // 2026-10-31 外部评审：仅一页时页码器不再渲染——单页读数挂在「已结束会话」
+    // 折叠组下方会被读成给历史列表分页
+    expect(w.find('.mk-pagination').exists()).toBe(false);
   });
 
-  it('行数不足一页时仍在卡脚显示读数（共 N 条 · 第 1 / 1 页）', async () => {
+  it('行数不足一页时不再渲染分页器（2026-10-31 外部评审：单页读数挂历史组下有歧义）', async () => {
     const w = await mountSS(Array.from({ length: 8 }, (_, i) => fakeSession(i + 1)));
     expect(w.findAll('.ss-tr').length).toBe(8);
-    expect(pagerText(w)).toContain('共 8 条');
-    expect(pagerText(w)).toContain('第 1 / 1 页');
-    // 只有一页：上一页/下一页均禁用
-    for (const b of w.findAll('.mk-pagination__btn')) {
-      expect(b.attributes('disabled')).toBeDefined();
-    }
+    expect(w.find('.mk-pagination').exists()).toBe(false);
   });
 
   it('状态筛选切换 → 回到第 1 页', async () => {
@@ -256,10 +253,10 @@ describe('SessionSecurity 分页（标准页码器）', () => {
       ...Array.from({ length: 11 }, (_, i) => fakeSession(i + 3))
     ];
     const w = await mountSS(sessions);
-    // 13 个会话：2 历史进折叠组，11 活跃；页码器只数活跃行（11，不是 13）
+    // 13 个会话：2 历史进折叠组，11 活跃；活跃行不截断
     expect(w.find('.ss-hist').exists()).toBe(true);
-    expect(pagerText(w)).toContain('共 11 条');
-    // 一页装下 11 活跃 + 2 历史（.ss-tr 同时匹配活跃表行与折叠组内历史表行）
+    // 2026-10-31 外部评审：11 活跃单页装下 → 分页器不渲染（折叠组保持历史唯一入口）
+    expect(w.find('.mk-pagination').exists()).toBe(false);
     expect(w.findAll('.ss-tr').length).toBe(13);
   });
 

@@ -170,16 +170,6 @@
           {{ genBusy ? `生成中 ${genProgress.done}/${genProgress.total}…` : '生成故事' }}
         </button>
       </template>
-      <button
-        v-else-if="activeTab === 'memory'"
-        type="button"
-        class="mk-status__action"
-        :disabled="memoryLoading"
-        title="重新读取记忆池数据"
-        @click="loadMemory(true)"
-      >
-        <MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template>
-      </button>
     </div>
 
     <div class="vp-body">
@@ -350,7 +340,7 @@
               <span class="mk-field__label">{{ BUDGET_TOTAL_LABEL }}</span>
               <input v-model.number="budgetForm.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" @input="budgetDirty = true" />
               <span v-if="budgetErrors.maxRetriesTotal" class="mk-field__err">{{ budgetErrors.maxRetriesTotal }}</span>
-              <span class="mk-field__hint">单个运行累计 AI 调用（含重试）达到上限即终止，故事可单独覆盖</span>
+              <span class="mk-field__hint">单个运行累计 AI 调用（含重试）达到上限即终止。会话实际生效值以座舱额度条为准（故事自带预算优先于画像设置）</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.turnCapPerLesson }">
               <span class="mk-field__label">每课回合上限</span>
@@ -371,7 +361,8 @@
           </div>
           <div class="mk-card__foot">
             <span v-if="budgetSavedAt" class="mk-card__meta">已保存 · {{ budgetSavedAt }}</span>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="budgetSaving" @click="saveBudget">
+            <!-- 未改动置灰（2026-10-31 三轮评审 P3）：与「保存策略」同一脏检规则，pristine 不给可点假象 -->
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="budgetSaving || !budgetDirty" @click="saveBudget">
               {{ budgetSaving ? '保存中…' : '保存预算' }}
             </button>
           </div>
@@ -383,6 +374,14 @@
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
             <div class="mk-card__head-right">
               <span class="mk-card__meta">课后沉淀</span>
+              <!-- 2026-10-31 三轮评审 P2：刷新从空工具行移入卡头（该页签无筛选器，整行只剩刷新读作空容器） -->
+              <button
+                type="button"
+                class="mk-btn mk-btn--sm"
+                :disabled="memoryLoading"
+                title="重新读取记忆池数据"
+                @click="loadMemory(true)"
+              ><MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template></button>
               <!-- 账号级记忆与复习（2026-10-24）：本页只列本档案的记忆痕迹，跨路径明细在账号详情 -->
               <button
                 v-if="d.userId"
@@ -392,7 +391,6 @@
                 @click="goMemoryReview()"
               >账号级记忆与复习 →</button>
             </div>
-            <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
           <MkLoading v-if="isLive && memoryLoading && !memoryData" text="正在读取记忆…" />
@@ -603,7 +601,16 @@
                   </div>
                 </div>
                 <div class="vp-story__ops">
-                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验运行（进入座舱）'" @click="runStory(s, i)">
+                  <!-- 2026-10-31 三轮评审 P2：运行中的故事主操作是「打开座舱」而非再起一个 ▶ 运行
+                       （再运行会新开一套任务，与运行中徽章同屏读不通）；非运行态保持 ▶ 运行 -->
+                  <button
+                    v-if="storyRunState(s) === 'running' && s.latestRun?.sessionId"
+                    type="button"
+                    class="mk-btn mk-btn--sm"
+                    title="该故事最新运行仍在进行：打开其座舱查看实时进度"
+                    @click="openSessionCockpit(String(s.latestRun.sessionId))"
+                  >打开座舱</button>
+                  <button v-else type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验运行（进入座舱）'" @click="runStory(s, i)">
                     {{ running ? '进行中…' : '▶ 运行' }}
                   </button>
                   <!-- 低频操作收进 ⋯ 菜单：卡片只留主操作「运行」 -->
@@ -1147,10 +1154,12 @@ interface Detail {
   runsTotal: number
   aiProfile: { label: string; value: string }[]
   /** V3：最近一次黑盒终局评估（裁判 / 保真分）——已随裁判独立面移除（2026-09-27） */
-  /** LLM 重试预算（以虚拟学习者为单位） */
+  /** LLM 重试预算（以虚拟学习者为单位）。costCeiling = 成本护栏真值（派生链路键），
+      null 表示不限；maxRetriesTotal 为本表单历史键，二者语义相同（resolveSessionBudget 兼容） */
   simulationBudget?: {
     maxRetriesPerStep: number
     maxRetriesTotal: number
+    costCeiling?: number | null
     consumedRetries?: number
   }
   /** 运行偏好（画像级持久，新会话创建时作为 simulationConfig 初始值） */
@@ -1514,9 +1523,14 @@ function fillBudgetForm() {
   if (budgetDirty.value) return
   const b = liveDetail.value?.simulationBudget
   const rp = liveDetail.value?.runtimePrefs
+  /* 成本护栏双键兼容（2026-10-31 三轮评审 P1 根因）：画像/派生链路写 costCeiling，
+     本表单历史键是 maxRetriesTotal——只读后者时，派生画像（costCeiling 1500）会显示
+     兜底 600，与座舱额度条（同一 resolveSessionBudget 单源解析）当屏打架。
+     现优先读 costCeiling；两者皆缺时才是 600 兜底。 */
+  const ceiling = Number(b?.costCeiling ?? b?.maxRetriesTotal ?? 600)
   budgetForm.value = {
     maxRetriesPerStep: b?.maxRetriesPerStep ?? 8,
-    maxRetriesTotal: b?.maxRetriesTotal ?? 600,
+    maxRetriesTotal: Number.isFinite(ceiling) && ceiling > 0 ? ceiling : 600,
     turnCapPerLesson: rp?.turnCapPerLesson ?? 40,
     frictionBudget: rp?.frictionBudget || 'normal'
   }
@@ -1549,7 +1563,9 @@ async function saveBudget() {
   budgetSaving.value = true
   try {
     await adminVirtualLearnersApi.updateVirtualLearner(id, {
-      simulationBudget: { maxRetriesPerStep: perStep, maxRetriesTotal: total },
+      /* 双键同写（2026-10-31 三轮评审 P1）：resolveSessionBudget 优先读 costCeiling
+         （派生画像已带该键），只写 maxRetriesTotal 会被旧 costCeiling 压住、改动静默失效 */
+      simulationBudget: { maxRetriesPerStep: perStep, maxRetriesTotal: total, costCeiling: total },
       runtimePrefs: {
         turnCapPerLesson: turnCap,
         frictionBudget: budgetForm.value.frictionBudget
@@ -1955,10 +1971,14 @@ async function loadDetail(id?: string, quiet = false) {
       ],
       simulationBudget: (() => {
         const b = (p.simulationBudget || {}) as Record<string, unknown>
-        if (!b.maxRetriesPerStep && !b.maxRetriesTotal) return undefined
+        if (!b.maxRetriesPerStep && !b.maxRetriesTotal && b.costCeiling == null) return undefined
+        /* costCeiling 双键透传（2026-10-31 三轮评审 P1 根因）：派生画像的成本护栏真值在
+           costCeiling（如 1500），此前映射层丢弃该键并伪造 maxRetriesTotal 600，
+           表单与座舱额度条（resolveSessionBudget 单源）当屏打架 */
         return {
           maxRetriesPerStep: Number(b.maxRetriesPerStep) || 8,
           maxRetriesTotal: Number(b.maxRetriesTotal) || 600,
+          costCeiling: b.costCeiling == null ? null : Number(b.costCeiling),
           consumedRetries: Number(b.consumedRetries) || 0
         }
       })(),
@@ -2564,9 +2584,10 @@ const tabs = computed(() => {
 })
 /** 操作台是否有内容：主动作（stories 生成故事 / memory 刷新）或视图筛选（stories 状态 / runs 流水）
     存在的 tab 才渲染整行；日程/画像等无操作 tab 不出现空行（账号级 ⋯ 在 tabs 行右端常驻） */
+/* 2026-10-31 三轮评审 P2：memory 不再进工具台——该页签没有筛选器，整行只剩右侧一个
+   刷新，读作「空筛选容器」；刷新移入记忆池卡头（mk-card__head-right）。 */
 const hasToolbar = computed(() =>
   activeTab.value === 'stories'
-  || activeTab.value === 'memory'
   || (activeTab.value === 'runs' && allRuns.value.length > 0)
 )
 const levelLabel = computed(() => ({
@@ -2866,8 +2887,11 @@ watch(
     「已选」只属于卡头勾选计数（selectedStoryKeys）；行选中态由 .is-selected
     的行底 + 单选点表达，避免同屏同名不同义（走查 F4-3）。 */
 /** 故事生命周期 → 中文 + 徽章档位（后端原样回 completed/pending/draft，
-    此前直接透出英文，和「草稿」混在一列）。未知值兜底草稿，不裸透内部枚举。 */
+    此前直接透出英文，和「草稿」混在一列）。未知值兜底草稿，不裸透内部枚举。
+    2026-10-31 三轮评审 P2：最新运行进行中的故事不得再标「草稿」——同一行右侧
+    RunStateBadge 已是「运行中」，左侧生命周期仍读草稿是自相矛盾；此时改标「运行中」。 */
 function storyStatusMeta(s: StoryItem): { text: string; cls: string } {
+  if (storyRunState(s) === 'running') return { text: '运行中', cls: 'mk-badge--info' }
   switch (String(s.status || '')) {
     case 'ready': return { text: '就绪', cls: 'mk-badge--ok' }
     case 'pending': return { text: '待运行', cls: 'mk-badge--info' }
@@ -2996,7 +3020,7 @@ function fmtRunDuration(ms?: number): string {
 function runReadings(r: RunItem): string {
   const parts: string[] = []
   if (r.taskTotal && r.taskTotal > 0) parts.push(`任务 ${r.taskDone ?? 0}/${r.taskTotal}`)
-  if (r.rounds && r.rounds > 0) parts.push(`${r.rounds} 回合`)
+  if (r.rounds && r.rounds > 0) parts.push(`${r.rounds} 次推进`)
   const dur = fmtRunDuration(r.durationMs)
   if (dur) parts.push(dur)
   return parts.join(' · ')
@@ -3007,6 +3031,9 @@ function runReadingsTitle(r: RunItem): string {
   const lines = [runReadings(r)]
   if (r.currentTask) lines.push(`当前任务：${r.currentTask}`)
   lines.push('时长 = 从开始到最后一次活动')
+  /* 2026-10-31 三轮评审 P1：推进 = 自动驾驶步数，与消息条数/发言数不同义——
+     此前「6 回合」撞上座舱「学习者发言 5」，同屏数不同名同 */
+  lines.push('推进 = 自动驾驶推进步数，与消息条数不同义')
   return lines.filter(Boolean).join(String.fromCharCode(10))
 }
 
@@ -3259,7 +3286,9 @@ async function quietReload(id: string) {
   background: var(--mk-blue-bg);
 }
 .vp-goal span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
-.vp-goal strong { color: var(--mk-blue); font-size: var(--mk-fs-body); line-height: 1.45; }
+/* 2026-10-31 三轮评审 P3：蓝底蓝字读作超链接（「二战上岸」被当成可点）——
+   静态陈述回归正文墨色，重点靠加粗与蓝底面板承载，不借链接色 */
+.vp-goal strong { color: var(--mk-ink); font-size: var(--mk-fs-body); line-height: 1.45; }
 
 /* 画像字段键值对（原型 dl.kv 词汇：96px 标签列网格、行间不画线、标签 12px muted、值常规字重；
    __row 以 display:contents 透传，模板不动） */

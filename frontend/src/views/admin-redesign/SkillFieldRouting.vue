@@ -156,7 +156,7 @@
                 </td>
                 <td class="sfr__ops">
                   <button type="button" class="mk-btn mk-btn--sm" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
-                  <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="!canDeleteRow(row)" :title="deleteTitleOf(row)" @click="onDelete(row)">删除</button>
+                  <button type="button" class="mk-link mk-link--danger" :disabled="!canDeleteRow(row)" :title="deleteTitleOf(row)" @click="onDelete(row)">删除</button>
                 </td>
               </tr>
             </tbody>
@@ -653,13 +653,19 @@ onMounted(() => void load())
 .sfr__scroll { overflow-x: auto; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); background: var(--mk-surface); }
 /* 窄屏最小宽度挂页面前缀类（页面 scoped 不得定义 mk- 类） */
 @media (max-width: 860px) { .sfr__table { min-width: 1180px; } }
-.sfr__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
+/* 字段列是本表主键：12 列抢宽时 auto 布局把它压到 ~79px，26 行 23 行截成
+   analys…/contro… 完全无区分度（2026-10-31 三轮评审）。给下限保列宽，
+   公共前缀的区分段（analysis./controls. 后半）就能露出来。 */
+.sfr__fieldcell { min-width: 210px; max-width: 320px; display: grid; gap: 2px; }
 .sfr__field { display: block; min-width: 0; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sfr__fieldpath { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 原型 .tbl td.wrap：含义是长文本列 → 换行不截断（完整文案仍在 title） */
 .sfr__table th.sfr__wrap, .sfr__table td.sfr__wrap { white-space: normal; min-width: 220px; }
 .sfr__meaning { min-width: 220px; }
-.sfr__meaning-text { display: block; max-width: 340px; white-space: normal; overflow-wrap: anywhere; color: var(--mk-muted); line-height: 1.5; }
+/* overflow-wrap: anywhere 会把 confused|bored 这类无空格标识在任意字符处掰断，
+   末尾剩单字母（2026-10-31 外部评审复检）；改 break-word：仅在整词放不下时才断，
+   正常句子里标识符保持完整（确实超长的整词才让位换行） */
+.sfr__meaning-text { display: block; max-width: 340px; white-space: normal; overflow-wrap: break-word; word-break: normal; color: var(--mk-muted); line-height: 1.5; }
 .sfr__handoff { max-width: var(--mk-col-id); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 行内操作钮 = mk-btn--sm 文字钮（编辑/删除），不再覆写尺寸 */
 .sfr__ops { display: flex; gap: 6px; white-space: nowrap; }

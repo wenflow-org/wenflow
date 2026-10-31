@@ -456,7 +456,7 @@ describe('LearnerDetail 压力曲线 x 轴（B 案固定跨度：42/90 档真正
     getLearnerEvidence.mockReset();
   });
 
-  it('B 案固定跨度：轴宽恒等于所选档位（42 天），右端锚到今天、左侧留空', async () => {
+  it('B 案固定跨度：轴宽恒等于所选档位（点 42 天档），右端锚到今天、左侧留空', async () => {
     getLearnerEvidence.mockResolvedValue({
       items: [],
       domain: [],
@@ -466,10 +466,13 @@ describe('LearnerDetail 压力曲线 x 轴（B 案固定跨度：42/90 档真正
       ],
     });
     const w = await mountLd([]);
+    // 默认档 2026-10-31 起为「近 7 天」；本用例验证 42 档的固定跨度，先点 42 档
+    await w.findAll('.mk-seg__item').find((b) => b.text() === '42 天')!.trigger('click');
+    await nextTick();
     const chart = w.findComponent({ name: 'MkChart' });
     expect(chart.exists(), 'evidence 页签应渲染压力曲线').toBe(true);
     const labels = (chart.props('option') as { xAxis: { data: string[] } }).xAxis.data;
-    // 轴宽=42（默认档），右端=today；数据落在右侧 5 天，左侧按档位留空
+    // 轴宽=42（所选档），右端=today；数据落在右侧 5 天，左侧按档位留空
     expect(labels).toHaveLength(42);
     expect(labels[labels.length - 1]).toBe(labelOf(dayKey(0)));
     expect(labels[0]).toBe(labelOf(dayKey(41)));
@@ -482,8 +485,10 @@ describe('LearnerDetail 压力曲线 x 轴（B 案固定跨度：42/90 档真正
       loadCurve: [41, 40, 39].map((o) => ({ date: dayKey(o), lss: 30 + (41 - o), lf: 30, lsb: 20 })),
     });
     let w = await mountLd([]);
+    await w.findAll('.mk-seg__item').find((b) => b.text() === '42 天')!.trigger('click');
+    await nextTick();
     const labels = (w.findComponent({ name: 'MkChart' }).props('option') as { xAxis: { data: string[] } }).xAxis.data;
-    // B 案：轴宽=42（默认档），起点恒为窗口起点
+    // B 案：轴宽=42（所选档），起点恒为窗口起点
     expect(labels[0]).toBe(labelOf(dayKey(41)));
     expect(labels).toHaveLength(42);
 
@@ -505,8 +510,10 @@ describe('LearnerDetail 压力曲线 x 轴（B 案固定跨度：42/90 档真正
       ],
     });
     const w = await mountLd([]);
+    await w.findAll('.mk-seg__item').find((b) => b.text() === '42 天')!.trigger('click');
+    await nextTick();
     const labels = (w.findComponent({ name: 'MkChart' }).props('option') as { xAxis: { data: string[] } }).xAxis.data;
-    // 轴宽=42（默认档），轴末 = 最新模拟日（今天 +7）；未来点不被丢弃
+    // 轴宽=42（所选档），轴末 = 最新模拟日（今天 +7）；未来点不被丢弃
     expect(labels).toHaveLength(42);
     expect(labels[labels.length - 1]).toBe(labelOf(dayKey(-7)));
     expect(labels).toContain(labelOf(dayKey(-3)));

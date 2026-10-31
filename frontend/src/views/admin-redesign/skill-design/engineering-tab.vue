@@ -273,7 +273,8 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   padding: 10px 16px;
   color: #334155;
   border-bottom: 1px solid var(--mk-surface-3);
-  word-break: break-all;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .sdp-kv tr:last-child th, .sdp-kv tr:last-child td { border-bottom: none; }
 .sdp-kv code { font-size: var(--mk-fs-micro); }
@@ -290,7 +291,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 .sdp-protocol header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sdp-protocol strong { font-size: var(--mk-fs-micro); font-weight: 600; color: #223252; }
 .sdp-protocol p { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-.sdp-protocol__sites { font-size: var(--mk-fs-micro); color: var(--mk-faint); word-break: break-all; }
+.sdp-protocol__sites { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: break-word; word-break: normal; }
 .sdp-conflict {
   display: grid;
   gap: 4px;

@@ -1663,7 +1663,18 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 /* 通栏按钮：弹窗底部主操作占满一行。
    此前 VirtualLearners.vue:498 使用但全局零定义 → 按钮未按预期占满（视觉审计 附 A #8）。 */
 .mk-btn--block { display: block; width: 100%; }
-.mk-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+/* 实心按钮禁用态置灰（2026-10-31 二轮评审 P1×2；三轮扩到全部实心档）：
+   65% 透明度只把颜色压暗，暗色下仍读作「亮着可点」（派生弹窗 0 选亮蓝、清理 0 人亮红、
+   批量模型配置 0 选灰蓝难辨）。实心档禁用 = 中性灰底 + 弱文字，透明度归 1 防叠加；
+   幽灵变体（--danger-ghost）无底色可灰，保持淡化。 */
+.mk-btn:disabled { cursor: not-allowed; }
+.mk-btn:disabled:not(.mk-btn--danger-ghost) {
+  background: var(--mk-btn-disabled-bg, var(--mk-input-disabled-bg, #f4f6fa));
+  border-color: transparent;
+  color: var(--mk-faint, #8b97aa);
+  opacity: 1;
+}
+.mk-btn--danger-ghost:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* 按压反馈：按钮/状态条操作/筛选胶囊/链接按钮（SPEC §0.5：:active 只允许
    scale(0.98) 类按压反馈；原 translateY(1px) 下沉属规范外位移，已换成缩放。

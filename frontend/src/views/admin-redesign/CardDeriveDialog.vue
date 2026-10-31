@@ -15,7 +15,8 @@
         </div>
 
         <div class="mk-modal__body">
-          <!-- 选卡步：只有 openPicker 进来才有 -->
+          <!-- 选卡步：只有 openPicker 进来才有。
+               2026-10-31 二轮评审 P1：只列 2 字人名没法区分卡——人名右侧跟卡面目标摘要（浅灰小字）。 -->
           <template v-if="pickerCards.length">
             <p class="cdd-lead">已选 {{ pickerPicked.length }} 张身份卡</p>
             <ul class="cdd-cards">
@@ -26,7 +27,7 @@
                     :checked="pickerPicked.includes(c.profileId)"
                     @change="togglePickCard(c.profileId)"
                   />
-                  <span class="cdd-task__title">{{ c.name }}</span>
+                  <span class="cdd-task__title">{{ c.name }}<span v-if="c.summary" class="cdd-card__summary">{{ c.summary }}</span></span>
                 </label>
               </li>
             </ul>
@@ -141,8 +142,8 @@ const failed = ref<Array<{ profileId: string; name: string; reason: string }>>([
 const note = ref('')
 /** profileId → 勾中的任务 id（默认全选：一张卡的任务通常都要跑，取消个别才是少数派操作） */
 const picked = ref<Record<string, string[]>>({})
-/** 选卡步（openPicker 才有）：候选卡 + 已勾的卡 id */
-const pickerCards = ref<Array<{ profileId: string; name: string }>>([])
+/** 选卡步（openPicker 才有）：候选卡 + 已勾的卡 id；summary = 卡面目标，跟人名一起展示 */
+const pickerCards = ref<Array<{ profileId: string; name: string; summary?: string }>>([])
 const pickerPicked = ref<string[]>([])
 
 /** 至少留了 1 个任务的卡才会被创建（0 任务的卡后端也会拒，挡在前面省一轮往返） */
@@ -284,4 +285,5 @@ defineExpose({ openWith, openPicker })
 .cdd-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 320px; overflow-y: auto; }
 .cdd-card__pick { align-items: flex-start; }
 .cdd-card__pick input[type='checkbox'] { accent-color: var(--mk-blue, #2f6ae0); cursor: pointer; margin-top: 2px; flex: none; }
+.cdd-card__summary { margin-left: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 </style>

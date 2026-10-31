@@ -540,7 +540,26 @@ export function buildCardWallEntries(
 export async function getCardWallIndex() {
   const rows = await findProfilesForCardWall();
   const all = buildCardWallEntries(rows);
-  const cards = all.filter((c) => !c.derivedFrom);
+  /* 每源卡已派生实例数（2026-10-31 三轮评审 P3）：克隆实例的 profile.derivedFrom.profileId
+     指回源档案 id（见下方 cloneCards 的写入），按源 id 聚合计数，卡面得以标「已派生 N」，
+     不再与从未用过的卡在墙上看不出差别。坏 JSON 的行不计数（同占位展示口径，不阻断）。 */
+  const derivedCountBySource = new Map<string, number>();
+  for (const row of rows) {
+    let srcId: string | null = null;
+    try {
+      const df = (JSON.parse(row.profile || '{}') as Record<string, unknown>).derivedFrom as
+        | Record<string, unknown>
+        | undefined;
+      srcId = typeof df?.profileId === 'string' ? df.profileId : null;
+    } catch {
+      srcId = null;
+    }
+    if (!srcId) continue;
+    derivedCountBySource.set(srcId, (derivedCountBySource.get(srcId) || 0) + 1);
+  }
+  const cards = all
+    .filter((c) => !c.derivedFrom)
+    .map((c) => ({ ...c, derivedCount: derivedCountBySource.get(c.profileId) || 0 }));
   return {
     cards,
     summary: {

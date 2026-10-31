@@ -31,7 +31,9 @@
               <td class="mk-num">{{ variantBaseline.metrics.calls }}</td>
               <td class="mk-num">{{ fmtRate(variantBaseline.metrics.successRate) }}</td>
               <td class="mk-num">{{ fmtDur(variantBaseline.metrics.avgDurationMs) }}</td>
-              <td><span class="mk-na">当前生效</span></td>
+              <!-- 操作列留空（2026-10-31 外部评审）：「当前生效」是状态不是操作，
+                   基线徽章已表达，不再在操作列复读 -->
+              <td><span class="mk-na">—</span></td>
             </tr>
             <tr v-for="v in variantArms" :key="v.id">
               <td><span class="mk-badge">{{ v.variant }}</span></td>
@@ -127,7 +129,11 @@
               <td class="mono">v{{ v.version }}</td>
               <td class="mono" :title="v.coreHash ?? undefined">{{ coreShortHash(v.coreHash) }}</td>
               <td class="mono">{{ v.coreVersion ?? '—' }}</td>
-              <td>{{ versionStatusText(v.status) }}</td>
+              <!-- 状态列走胶囊（2026-10-31 外部评审）：与 Prompt 版本表同一语汇，
+                   纯文字「当前生效」读不出主次 -->
+              <td>
+                <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span>
+              </td>
               <td>{{ v.createdBy }}</td>
               <td>
                 <div class="mk-actions">
@@ -174,6 +180,8 @@
               </td>
               <td><span class="sdp-vname" :title="v.name">{{ v.name || '—' }}</span></td>
               <td>
+                <!-- 不可操作行留空（2026-10-31 外部评审）：ACTIVE 的状态词只住状态列胶囊，
+                     不再在操作列复读一遍 -->
                 <div class="mk-actions">
                   <button
                     v-if="v.status !== 'ACTIVE'"
@@ -184,7 +192,6 @@
                   >
                     {{ compareLoading === v.id ? '对比中…' : '对比生效版' }}
                   </button>
-                  <span v-if="v.status === 'ACTIVE'" class="mk-na">当前生效</span>
                 </div>
               </td>
             </tr>

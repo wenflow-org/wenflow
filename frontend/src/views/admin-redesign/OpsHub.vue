@@ -215,7 +215,7 @@ const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp', 'tools
 type OhTab = (typeof OH_TABS)[number]
 const tab = ref<OhTab>('todo')
 /** 系统级页签与运营待办四域无关：隐藏页级读数带，别用四个 0 占掉配置页首屏 */
-const SYSTEM_TABS: readonly OhTab[] = ['tools', 'security', 'access']
+const SYSTEM_TABS: readonly OhTab[] = ['tools', 'export', 'security', 'access']
 const showTodoReadings = computed(() => !SYSTEM_TABS.includes(tab.value))
 const route = useRoute()
 const router = useRouter()

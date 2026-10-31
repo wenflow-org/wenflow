@@ -181,7 +181,9 @@ let ro: ResizeObserver | null = null
 const width = ref(0)
 const isNarrow = computed(() => width.value > 0 && width.value < 420)
 
-/** 只保留有边相连的节点（若全无连接则原样保留，避免空图） */
+/** 可见节点（2026-10-31 二轮评审 P2 修订）：hideIsolated 只裁「未评估的孤立点」——
+ *  已有掌握度读数的孤立概念（进行中/记忆偏弱/已掌握）是真实学习状态，藏掉会让
+ *  「概览页说在学、图谱页说没有」；纯待学习的孤立点继续藏（前置还没生成，画布无意义）。 */
 const visibleNodes = computed<MkGraphNode[]>(() => {
   if (!props.hideIsolated) return props.nodes
   const connected = new Set<string>()
@@ -189,17 +191,22 @@ const visibleNodes = computed<MkGraphNode[]>(() => {
     connected.add(e.fromConceptId)
     connected.add(e.toConceptId)
   }
-  const kept = props.nodes.filter((n) => connected.has(n.id))
+  const kept = props.nodes.filter(
+    (n) => connected.has(n.id) || (n.masteryScore !== null && n.masteryScore !== undefined)
+  )
   return kept.length > 0 ? kept : props.nodes
 })
 const isolatedCount = computed(() => props.nodes.length - visibleNodes.value.length)
 
-/** 掌握度 → 语义色（亮/暗各一套；未评估走中性灰） */
+/** 掌握度 → 语义色（亮/暗各一套；未评估走中性灰）。
+ *  2026-10-31 外部评审 P2-4：原实现漏了「进行中」的琥珀分支——在学节点落到末行橄榄灰，
+ *  读成灰/待学习，图例却承诺黄色（🟡进行中 1 画布上永远找不到黄点）。补琥珀档，
+ *  色值与图例 --mk-amber 同族（亮 #b45309 系 / 暗 #fbbf24 系，做柔化与红/绿拉开）。 */
 function colorOf(node: MkGraphNode, dark: boolean): string {
   if (node.masteryScore === null || node.masteryScore === undefined) return dark ? '#5b5f66' : '#a8adb7'
   if (node.stability === 'fragile' || node.masteryScore < 0.45) return dark ? '#c2726a' : '#b4544a'
   if (node.stability === 'stable' || node.masteryScore >= 0.8) return dark ? '#6f8f86' : '#4f7d70'
-  return dark ? '#8a8f7a' : '#7d8470'
+  return dark ? '#d09a3e' : '#b08020'
 }
 
 /**
@@ -276,6 +283,11 @@ function buildOption(): EChartsCoreOption {
   // 下方详情（MkGraphExplorer 侧栏 / 课堂知识点浮窗的选中行）。
   // 例外：课堂浮窗传入的本节 1–2 个概念必须常显并高亮，否则迷你图没有教学锚点。
   for (const id of highlightSet) labelWorthy.add(id)
+  // 孤立可见节点一律常显名字（2026-10-31 三轮评审）：它没有任何邻边、悬停兜底也指不出
+  // 「正在学的是什么」，且四周全空不存在压字；不标名就成了一颗无名的点。
+  for (const node of nodes) {
+    if (!degree.get(node.id)) labelWorthy.add(node.id)
+  }
   // 供 graphRoam 缩放档回填 label.show 用（buildOption 每次重算，roam 不触发它）
   lastLabelWorthy = labelWorthy
 

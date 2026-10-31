@@ -88,7 +88,7 @@
            + 四态 done/active/skip/idle -->
       <div v-else class="schgrid">
         <div
-          v-for="day in days"
+          v-for="day in renderedDays"
           :key="day.dayIndex"
           class="dt-cell schcell"
           :class="{
@@ -159,10 +159,17 @@
         </div>
       </div>
 
+      <!-- 展示裁剪（2026-10-31 三轮评审 P2）：无读数的空日不再整屏平铺——
+           顶部时钟行已说明「已推进 0/90 天」，下方再渲染 29 张内容相同的未来空卡是噪声；
+           只保留第 0 天（起点锚）、已推进的天与确有读数的天，其余折叠成一条汇总提示 -->
+      <div v-if="foldedCount" class="dt-foldnote">
+        已折叠 {{ foldedCount }} 个无读数空日（第 {{ foldedFrom }}–{{ foldedTo }} 天）：推进日期模拟或产生学习记录后展开。
+      </div>
+
       <!-- 长会话回看：30 天窗口之外按档翻页；到头隐藏对应按钮（窗口尚在数据范围内时即使本档无数据也可翻回） -->
       <div v-if="canPageOlder || canPageNewer" class="dt-pager">
         <button v-if="canPageOlder" type="button" class="mk-link" @click="pageWindow(-1)">更早 30 天</button>
-        <button v-if="canPageNewer" type="button" class="mk-link" @click="pageWindow(1)">更近 30 天</button>
+        <button v-if="canPageNewer" type="button" class="mk-link" @click="pageWindow(1)">往后 30 天</button>
       </div>
     </template>
   </div>
@@ -234,6 +241,25 @@ function pageWindow(dir: -1 | 1) {
   windowTo.value += dir * PAGE_SPAN
   load()
 }
+
+/** 空日折叠：一格算「有读数」的判据——节奏/信号/课量/指标/记忆/温故用量/任务/难度调整任一存在 */
+function dayHasContent(day: DayEntry): boolean {
+  return !!(day.pacing || day.signals.length || day.dayLoad || day.metrics
+    || day.perPath.length > 1 || day.tasks.length || day.difficultyAdjustments.length
+    || day.memory.traceCount || day.reviewQuota.usedLoad > 0)
+}
+/** 展示用天序：第 0 天恒显（起点锚）；时钟开启时已推进的天恒显（读数为 0 也是事实）；其余只显有读数的 */
+const renderedDays = computed(() => {
+  const c = clock.value
+  if (!c) return days.value
+  return days.value.filter(
+    (day) => dayHasContent(day) || day.dayIndex === 0 || (c.enabled && day.dayIndex <= c.dayIndex),
+  )
+})
+const foldedEntries = computed(() => days.value.filter((day) => !renderedDays.value.includes(day)))
+const foldedCount = computed(() => foldedEntries.value.length)
+const foldedFrom = computed(() => foldedEntries.value[0]?.dayIndex + 1 ?? 0)
+const foldedTo = computed(() => foldedEntries.value[foldedEntries.value.length - 1]?.dayIndex + 1 ?? 0)
 
 const loading = ref(false)
 const error = ref('')
@@ -494,5 +520,6 @@ watch(
 
 .dt-paths { display: flex; flex-wrap: wrap; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
+.dt-foldnote { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: center; }
 .dt-pager { display: flex; justify-content: center; gap: 12px; font-size: var(--mk-fs-micro); }
 </style>

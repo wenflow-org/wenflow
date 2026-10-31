@@ -805,6 +805,9 @@ describe('SessionCockpit 双模式', () => {
     payload.data.stageResults.path = null;
     payload.data.stageResults.teaching = { teachingSessionId: null, currentTaskId: null, wrapup: null };
     payload.data.conversations.learning.messages = [];
+    // 无映射数据场景 = 教学记录也全空：检查点是结构化教学数据，留着会让「尚未生成课程」
+    // 的空态被一个真实检查点顶掉（2026-10-31 评审 P1-4 后空态门控包含检查点）。
+    payload.data.teaching.checkpoints = [];
     payload.data.timeline = [];
     getRealSessionConsole.mockResolvedValue(payload);
 

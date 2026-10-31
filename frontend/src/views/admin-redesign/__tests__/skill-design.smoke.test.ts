@@ -287,9 +287,14 @@ describe('Skill 详情页·设计能力平铺冒烟', () => {
     wrapper.unmount();
   });
 
-  it('字段路由 tab：血缘折叠块 + 向导组件同页', async () => {
+  it('字段路由 tab：切「契约编辑」后血缘折叠块 + 向导组件同页', async () => {
     const { wrapper } = await mountPage();
     await tabButtons(wrapper).find((b) => b.text() === '字段路由')!.trigger('click');
+    await settle();
+    // 2026-10-31 外部评审：契约设计区块改为「契约编辑」视图按需挂载（默认流向视图）
+    const contractBtn = wrapper.findAll('.skd-rswitch__btn').find((b) => b.text() === '契约编辑')!;
+    expect(contractBtn).toBeTruthy();
+    await contractBtn.trigger('click');
     await settle();
     const lineage = wrapper.find('.sdp-routing__lineage');
     expect(lineage.exists()).toBe(true);
@@ -501,30 +506,25 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     wrapper.unmount();
   });
 
-  it('协议 tab：输入/输出契约卡按 promptRole 方向拆分，角色词表来自后端下发', async () => {
+  it('协议 tab：不再重复渲染契约与状态机（详情页签顶部已有，2026-10-31 外部评审删底部重复卡）', async () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '协议');
-    const proj = wrapper.find('.sdp-proj');
-    expect(proj.exists()).toBe(true);
-    const cols = proj.findAll('.sdp-proj__col');
-    // 输入契约只收非产出角色（hard-required），输出契约只收 OUT_ROLES
-    expect(cols[0].text()).toContain('输入契约');
-    expect(cols[0].text()).toContain('learnerMessage');
-    expect(cols[0].text()).not.toContain('replyText');
-    expect(cols[0].text()).toContain('必填输入');
-    expect(cols[1].text()).toContain('输出契约');
-    expect(cols[1].text()).toContain('replyText');
-    expect(cols[1].text()).toContain('对外回复');
+    // 底部「状态机与终止条件」投影卡已整体删除：同一页头尾各画一遍的第三处残留清零
+    expect(wrapper.find('.sdp-proj').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('状态机与终止条件');
+    // 输入/输出契约只在页签顶部渲染一遍
+    expect(wrapper.findAll('h3').filter((h) => h.text() === '输入契约').length).toBe(1);
+    expect(wrapper.findAll('h3').filter((h) => h.text() === '输出契约').length).toBe(1);
     wrapper.unmount();
   });
 
   it('协议 tab：回合状态机/终止条件无声明即空态（不硬造状态）', async () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '协议');
-    const proj = wrapper.find('.sdp-proj');
-    expect(proj.text()).toContain('该 Skill 未声明回合状态机。');
-    expect(proj.text()).toContain('该 Skill 未声明终止条件。');
-    expect(wrapper.find('.sdp-proj__step').exists()).toBe(false);
+    // 空态落在页签顶部的详情卡（.skd-steps/.skd-ranklist 容器），不再有底部投影
+    expect(wrapper.text()).toContain('该 Skill 未声明回合状态机。');
+    expect(wrapper.text()).toContain('该 Skill 未声明终止条件。');
+    expect(wrapper.find('.skd-step').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -548,9 +548,9 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     }));
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '协议');
-    const steps = wrapper.findAll('.sdp-proj__step');
+    const steps = wrapper.findAll('.skd-step');
     expect(steps.map((s) => s.text())).toEqual(['1idle', '2asking', '3wrapping']);
-    expect(wrapper.findAll('.sdp-proj__rank').map((r) => r.text())).toEqual(['达成目标', '轮次超限']);
+    expect(wrapper.findAll('.skd-rankrow').map((r) => r.text())).toEqual(['达成目标', '轮次超限']);
     wrapper.unmount();
   });
 

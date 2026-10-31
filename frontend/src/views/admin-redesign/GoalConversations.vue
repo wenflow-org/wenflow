@@ -20,14 +20,19 @@
       />
       <!-- P-49（#74）：停滞会话此前只活在分布带 hint 里；升为卡，0 是健康信号。
            2026-10-26 动线：读数有对应行就得能落到那几行——点卡即筛「停滞」，
-           与学习状态页可点 KPI 同一语法（本页原先只有它是点了没反应的卡）。 -->
+           与学习状态页可点 KPI 同一语法（本页原先只有它是点了没反应的卡）。
+           2026-10-31 外部评审 P2-5：口径上卡（active 且超 7 天未更新）——3 天没动的行
+           不计入是阈值使然不是失效，阈值是否收紧交后续拍板（用户拍板：维持 7 天）。
+           2026-10-31 二轮评审 P1：0 时也要可点——点了筛出空集，展示「当前筛选无匹配」
+           空态，「点击按停滞筛选」的承诺才成立（此前 0 时整卡不可点，承诺落空）。 -->
       <MkKpi
         label="停滞目标对话"
         :value="rows.length ? staleActiveCount : '—'"
         :tone="staleActiveCount ? 'warn' : ''"
-        :clickable="!!rows.length && staleActiveCount > 0"
+        hint="进行中且超过 7 天未更新的对话（列表窗口内统计），点击按停滞筛选"
+        :clickable="!!rows.length"
         :class="{ 'gc-kpi--on': stalledOnly }"
-        :aria-pressed="rows.length && staleActiveCount > 0 ? stalledOnly : undefined"
+        :aria-pressed="rows.length ? stalledOnly : undefined"
         @click="stalledOnly = !stalledOnly"
       />
       <!-- 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：未生成路径原先只有卡头

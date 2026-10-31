@@ -410,6 +410,8 @@
 
   /* ---- 阴影（暗色：同样只有三档） ---- */
   --wf-shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
-  --wf-shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.6);
+  /* overlay 双层（2026-10-31 三轮评审 L05）：纯 40px 大阴影在深底稀释到不可见，
+     弹层切过表格行时读不出「浮在上面」；补 4px 近距层让边缘处立刻压暗 */
+  --wf-shadow-overlay: 0 4px 16px rgba(0, 0, 0, 0.55), 0 16px 40px rgba(0, 0, 0, 0.6);
   --wf-shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.7);
 }

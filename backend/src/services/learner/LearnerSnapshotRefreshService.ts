@@ -109,10 +109,13 @@ export class LearnerSnapshotRefreshService {
     // 软删用户不进入管理端快照列表（列表与总数口径一致）。
     // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注）；
     // includeTest=true 是按 id 直查虚拟账号（学习者详情），不删数据只改默认视图。
+    // 2026-10-31 外部评审 P2-7：纯管理员账号（isAdmin）不是学习主体，不该出现在
+    // 学习状态列表里、更不该对「未开始」的管理员发学习提醒——默认视图排除；
+    // includeTest 按 id 直查不受影响（学习者详情仍可打开任何账号）。
     const userWhere = {
       ...(params?.includeTest
         ? { deletedAt: null }
-        : await buildNonVirtualUserWhere({ deletedAt: null })),
+        : { ...(await buildNonVirtualUserWhere({ deletedAt: null })), isAdmin: false }),
       ...(params?.userId ? { id: params.userId } : {}),
     };
     const total = await prisma.users.count({ where: userWhere });

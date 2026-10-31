@@ -81,7 +81,12 @@ export async function findLearningPathsForAdmin(where: Prisma.learning_pathsWher
       deadline: true,
       users: { select: { id: true, name: true, email: true, isVirtualLearner: true } },
       milestones: {
-        select: { id: true, status: true, title: true },
+        select: {
+          id: true, status: true, title: true,
+          // 子任务状态随行（2026-10-31 外部评审 P1-2）：列表进度要有子任务口径，
+          // 否则学到 1/13 课的路径在列表永远显示 0/4 里程碑 = 0%，与学员概览自相矛盾
+          subtasks: { select: { status: true } },
+        },
       },
       _count: { select: { milestones: true } },
     },

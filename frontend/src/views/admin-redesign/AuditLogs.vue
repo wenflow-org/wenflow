@@ -1160,14 +1160,14 @@ function goExport() {
    2026-10-19 用户走查「旋转后大小不对了」：原先 rotate 直接挂在 <td> 上——格子是 36×41.4 的
    非正方盒，rotate(90deg) 后外接盒变成 42.1×36（实测），箭头连背景一起横向撑出列 6px、纵向缩
    5px，字形还因为绕格心而非自身中心旋转右移约 10px。改法：格子里放 1em 正方、字形居中的内层盒，
-   只转内层——正方盒绕自身中心旋转外接盒不变，字形中心也不动。 */
+   只转内层——正方盒绕自身中心旋转外接盒不变，字形中心也不动。
+   2026-10-31 外部评审复检（展开行右侧深色竖块 100% 复现）：此前 .log-arrow 还带了
+   display:block——td 被踢出单元格布局后，表格按表头算出的末列在该行没有 td 落位，
+   行背景（含 .log-tr--open 的蓝底）盖不到那一格，露出表格底色成「深色竖块」。
+   去掉 display:block/margin（旋转早改在内层盒上，这两个属性已无用），恢复普通单元格。 */
 .mk-table-scroll table th:last-child { width: 36px; }
 .log-arrow {
-  display: block;
   width: 36px;
-  max-width: 36px;
-  min-width: 36px;
-  margin-left: auto;
   /* 水平内衬清零：mk-table 的 td 有 16px 左右内衬，36px 定宽格里内容盒只剩 4px，
      比内容还窄的居中会退化成「贴内容盒左缘」（实测箭头偏列心右 4.25px）。 */
   padding-left: 0;

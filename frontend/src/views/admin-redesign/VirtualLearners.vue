@@ -777,7 +777,7 @@ const isCompact = useIsNarrow(1279)
    原实现跳 /admin/virtual-learner-cards：创建完人停在卡墙，实例不在那面墙上，
    还得自己想到回本页、也认不出刚建的是哪一条。 ===== */
 const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)
-const deriveCards = ref<Array<{ profileId: string; name: string }>>([])
+const deriveCards = ref<Array<{ profileId: string; name: string; summary?: string }>>([])
 /** 刚创建的实例 id（短暂高亮） */
 const freshIds = ref<string[]>([])
 
@@ -785,8 +785,10 @@ async function openDerivePicker() {
   headMenu.value = ''
   try {
     const res = await adminVirtualLearnersApi.cardsIndex()
-    const d = (res.data?.data ?? res.data) as { cards?: Array<{ profileId: string; name: string }> }
-    deriveCards.value = (d?.cards ?? []).map((c) => ({ profileId: c.profileId, name: c.name }))
+    const d = (res.data?.data ?? res.data) as { cards?: Array<{ profileId: string; name: string; goal?: string }> }
+    /* 摘要跟人名一起进选卡列表（2026-10-31 二轮评审 P1）：2 字人名没法区分 9 张卡，
+       卡面目标（goal）就是评审建议的「行测做得完、申论敢下笔」那句。 */
+    deriveCards.value = (d?.cards ?? []).map((c) => ({ profileId: c.profileId, name: c.name, summary: c.goal || '' }))
   } catch (e) {
     toast.error(errMsg(e) || '卡库加载失败')
     return
@@ -809,6 +811,13 @@ function onDerived(created: Array<{ profileId: string }>) {
   freshTimer = setTimeout(() => { freshIds.value = [] }, 4000)
 }
 onUnmounted(() => { if (freshTimer) clearTimeout(freshTimer) })
+
+/* 运行中每 30s 轻刷（2026-10-31 三轮评审 P1）：自动驾驶在后台推进，页面停留时
+   「今日调用」/运行状态/正在运行 chips 若只靠进页取一次，读数会长期停滞在启动前 */
+const runPollTimer = setInterval(() => {
+  if (liveVirtualRunStats.value.running > 0) void refreshLiveVirtuals()
+}, 30000)
+onUnmounted(() => clearInterval(runPollTimer))
 
 /* 列显隐（2026-10-05 卡头统一补「列」按钮）：次要列可勾选；名称/运行状态/操作是
    身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显
@@ -1177,7 +1186,9 @@ function onBatchReclaim(ids: string[]) {
 .vl-th-filter:hover { background: var(--mk-surface-2); color: var(--mk-ink); }
 .vl-th-filter--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
 .vl-headmenu { position: relative; display: inline-flex; }
-.vl-headmenu__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); }
+.vl-headmenu__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); background: rgba(0, 0, 0, 0.4); }
+/* 2026-10-31 二轮评审 P2：菜单底边常落在列表卡工具栏（批量/列）上，半截按钮文字
+   读成「穿透破损」。加低度暗化遮罩，页面明确退为背景层，叠压即成正常前景语义。 */
 .vl-headmenu__pop { z-index: calc(var(--mk-z-menu) + 1); top: calc(100% + 6px); }
 /* 批量态：蓝色只给「选中/可交互」——开着的批量按钮与勾选列同一状态 */
 .vl-batch-toggle--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }

@@ -225,7 +225,10 @@ export function mapLogsToSpans(items: RawLog[], opts: { preserveOrder?: boolean 
       detail: errText,
       payload: errText || undefined,
       execLayer: log.executionLayer,
-      model: log.model,
+      /* 模型与 token 记在网关行（skill 行不落模型名），配对成功时并入——否则概要卡
+         的 Token/模型三格整组误报「无 LLM 调用」（2026-10-31 三轮评审：teaching-turn
+         明明走了 deepseek，span 上却是空）。 */
+      model: log.model || gatewayLog?.model || undefined,
       statusCode: log.statusCode != null ? Number(log.statusCode) : undefined,
       attempts: log.attempts != null ? Number(log.attempts) : undefined,
       maxAttempts: log.maxAttempts != null ? Number(log.maxAttempts) : undefined,
@@ -237,8 +240,8 @@ export function mapLogsToSpans(items: RawLog[], opts: { preserveOrder?: boolean 
       sourceEntry: log.sourceEntry || undefined,
       gatewayDurMs: gatewayLog ? Number(gatewayLog.durationMs || 0) : undefined,
       sessionId: log.sessionId || undefined,
-      promptTokens: log.promptTokens != null ? Number(log.promptTokens) : null,
-      completionTokens: log.completionTokens != null ? Number(log.completionTokens) : null
+      promptTokens: log.promptTokens != null ? Number(log.promptTokens) : (gatewayLog?.promptTokens != null ? Number(gatewayLog.promptTokens) : null),
+      completionTokens: log.completionTokens != null ? Number(log.completionTokens) : (gatewayLog?.completionTokens != null ? Number(gatewayLog.completionTokens) : null)
     }
   }
 
@@ -1739,6 +1742,9 @@ export function retryLiveVirtualStats(): Promise<void> {
 export async function refreshLiveVirtuals(): Promise<void> {
   try {
     await fetchLiveVirtuals()
+    /* 统计一并刷新（2026-10-31 三轮评审 P1）：行内运行/暂停/继续、派生后「今日调用」
+       等仿真 KPI 此前只在进页时取一次，自动驾驶在后台跑起来后读数长期停滞 */
+    await fetchLiveVirtualStats()
   } catch {
     /* 单域刷新失败不打断交互：列表下一次全量刷新会补上 */
   }

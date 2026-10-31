@@ -430,8 +430,8 @@
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" :disabled="saving || savingRun" @click="formOpen = false">取消</button>
-            <button type="button" class="mk-btn" :disabled="saving || savingRun" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || savingRun || running" @click="saveAndRun">{{ savingRun ? '试跑中…' : '保存并立即试跑' }}</button>
+            <button type="button" class="mk-btn" :disabled="saving || savingRun || caseFormInvalid" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || savingRun || running || caseFormInvalid" @click="saveAndRun">{{ savingRun ? '试跑中…' : '保存并立即试跑' }}</button>
           </div>
         </div>
       </div>
@@ -998,6 +998,9 @@ useMaskClose(maskRef, () => { formOpen.value = false })
 
 const editingId = ref('')
 const saving = ref(false)
+/* 必填未填时主按钮置灰（2026-10-31 三轮评审 P2-4，对齐 learn-deep 派生弹窗判例）：
+   名称是唯一文本必填项（agentId 有默认值恒非空） */
+const caseFormInvalid = computed(() => !form.value.name.trim())
 const formError = ref('')
 const form = ref({
   agentId: 'skill:goal-conversation',
@@ -1702,6 +1705,9 @@ defineExpose({ running, canRunBatch, runBatch, openCreate, kpiView })
 
 /* ===== 期望（可选，单层折叠） ===== */
 .pe-expect { border-top: 1px solid var(--mk-line); padding-top: 10px; }
+/* 弹窗内折叠块与列表 cell（1621 行）同名不同物：cell 的 260px 截断上限把 details
+   压成 35% 宽，上边框悬空半截（2026-10-31 三轮评审）。折叠块通栏。 */
+details.pe-expect { max-width: none; }
 .pe-expect summary {
   cursor: pointer;
   list-style: none;

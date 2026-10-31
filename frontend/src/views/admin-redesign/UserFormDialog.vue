@@ -18,7 +18,7 @@
             <span v-if="errors.email" class="mk-field__err">{{ errors.email }}</span>
           </label>
           <label v-if="isLive" class="mk-field" :class="{ 'mk-field--error': errors.password }">
-            <span class="mk-field__label">{{ user ? '重置密码' : '初始密码' }} <em class="mk-field__req">*</em></span>
+            <span class="mk-field__label">{{ user ? '重置密码' : '初始密码' }} <em v-if="!user" class="mk-field__req">*</em></span>
             <input v-model="form.password" type="password" class="mk-field__input" :placeholder="user ? '留空表示不修改' : '至少 8 位，含字母和数字'" />
             <span v-if="errors.password" class="mk-field__err">{{ errors.password }}</span>
           </label>

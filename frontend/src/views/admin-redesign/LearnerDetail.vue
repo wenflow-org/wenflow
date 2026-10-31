@@ -524,8 +524,14 @@
           </div>
           <!-- 明细常驻（2026-10-11 用户走查「折叠干嘛」）：监控窗改内滚后折叠失去职责——
                它挡住的正是视口内的滚动容器，结论行本就常驻其上；撤 details 直接渲染。
-               P2：带 sessionId 的行可点下钻只读座舱（与教学会话 pane 同一 openSessionCockpit） -->
+               P2：带 sessionId 的行可点下钻只读座舱（与教学会话 pane 同一 openSessionCockpit）
+               2026-10-31 外部评审 P2-6：校准明细块与事件列表之间原无小标题，校准块只有一两条时
+               下方首行读成「孤立悬空行」——列表补小节标题（同 ld-calib__head 层级）。 -->
           <div v-if="evidence.length" class="ld-ev-details">
+            <span
+              class="ld-calib__head ld-ev-listhead"
+              title="教学类事件接口侧只取近 20 条，目标与路径类事件全量并入，带会话的行可进只读座舱"
+            >事件时间线 · 最近 {{ evidence.length }} 条</span>
             <div class="ld-evidence">
             <div
               v-for="(e, i) in evidence"
@@ -585,6 +591,7 @@
               <h3 class="mk-card__title">学习压力记录</h3>
               <div class="ld-load__controls">
                 <div class="mk-seg">
+                  <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': loadRange === 7 }" @click="loadRange = 7">近 7 天</button>
                   <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': loadRange === 42 }" @click="loadRange = 42">42 天</button>
                   <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': loadRange === 90 }" @click="loadRange = 90">90 天</button>
                 </div>
@@ -2097,20 +2104,32 @@ const behaviorRows = computed(() =>
   })
 )
 
-/** 画像补充展示：互动历史（history）——运营价值：总盘子与主题分布，判断是否深耕单一主题 */
+/** 画像补充展示：互动历史（history）——运营价值：总盘子与主题分布，判断是否深耕单一主题。
+    「探索主题 / 挣扎过概念」是长列表，留在窄列 KV 里会把同行参数卡拉出半屏空洞
+    （2026-10-31 外部评审拍板：数值暂缓、仅挪这两项）→ 移到下方叙述洞察通栏卡；此处只留数值行 */
 const historyRows = computed(() => {
   const h = (profile.value?.history || null) as Record<string, unknown> | null
   if (!h) return [] as { label: string; value: string }[]
-  const rows = kvRows(h, {
+  return kvRows(h, {
     totalSessions: '总课堂数',
     totalMessages: '总消息数',
     avgSessionDuration: '平均课堂时长（分钟）'
   })
-  const arr = (v: unknown) => (Array.isArray(v) ? v.map(String) : [])
-  if (arr(h.topicsExplored).length) rows.push({ label: '探索主题', value: arr(h.topicsExplored).slice(0, 8).join('、') })
-  if (arr(h.conceptsStruggled).length) rows.push({ label: '挣扎过概念', value: arr(h.conceptsStruggled).slice(0, 8).join('、') })
-  if (arr(h.conceptsMastered).length) rows.push({ label: '已掌握概念', value: arr(h.conceptsMastered).slice(0, 8).join('、') })
-  return rows
+})
+
+/** 叙述洞察追加段：互动历史里的两个长列表（探索主题 / 挣扎过概念）。
+    通栏卡两栏文本流承载长列表，窄列 KV 不再被撑爆；列表顿号连排成一段，
+    与叙述文案同构（条目级 `<p>` 会把 8 个主题排成 8 段） */
+const historyNarrativeSections = computed<{ label: string; items: string[] }[]>(() => {
+  const h = (profile.value?.history || null) as Record<string, unknown> | null
+  if (!h) return []
+  const arr = (v: unknown) => (Array.isArray(v) ? v.map(String).filter((s) => s.trim()).slice(0, 8) : [])
+  const sections: { label: string; items: string[] }[] = []
+  const topics = arr(h.topicsExplored)
+  if (topics.length) sections.push({ label: '探索主题', items: [topics.join('、')] })
+  const struggled = arr(h.conceptsStruggled)
+  if (struggled.length) sections.push({ label: '挣扎过概念', items: [struggled.join('、')] })
+  return sections
 })
 
 /** 画像补充展示：课程控制（curriculumControls）——运营价值：平台侧可执行的粒度/密度/复习策略 */
@@ -2150,18 +2169,24 @@ const NARRATIVE_GROUPS: { label: string; keys: string[] }[] = [
   { label: '卡点与教学适配', keys: ['frictionPatternNote', 'effectiveTeachingPattern', 'supportStyleNote', 'taskGranularityNote'] }
 ]
 const narrativeSections = computed<{ label: string; items: string[] }[]>(() => {
+  const sections: { label: string; items: string[] }[] = []
   const n = profile.value?.narrativeInsights
-  if (!n) return []
-  if (Array.isArray(n)) {
-    const items = n.map(String).filter((s) => s.trim())
-    return items.length ? [{ label: '', items }] : []
+  if (n) {
+    if (Array.isArray(n)) {
+      const items = n.map(String).filter((s) => s.trim())
+      if (items.length) sections.push({ label: '', items })
+    } else {
+      const o = n as Record<string, unknown>
+      const val = (k: string) => {
+        const v = o[k]
+        return v == null ? '' : String(v).trim()
+      }
+      sections.push(...NARRATIVE_GROUPS.map((g) => ({ label: g.label, items: g.keys.map(val).filter((s) => s) })).filter((g) => g.items.length))
+    }
   }
-  const o = n as Record<string, unknown>
-  const val = (k: string) => {
-    const v = o[k]
-    return v == null ? '' : String(v).trim()
-  }
-  return NARRATIVE_GROUPS.map((g) => ({ label: g.label, items: g.keys.map(val).filter((s) => s) })).filter((g) => g.items.length)
+  // 互动历史的两个长列表（探索主题 / 挣扎过概念）并入通栏卡（2026-10-31 外部评审拍板）
+  sections.push(...historyNarrativeSections.value)
+  return sections
 })
 
 /** 叙述洞察的出处：这一卡取自「最近一次已完成目标对话」，不是跨目标聚合——同一学习者可有
@@ -2398,7 +2423,11 @@ const milestoneTasks = computed<{ done: number; total: number } | null>(() => {
 })
 
 /* ---------- 学习压力记录曲线（learning_metrics 真实指标：LSS/LF/LSB 历史趋势） ---------- */
-const loadRange = ref<42 | 90>(42)
+/* 2026-10-31 外部评审 P2-6：新增「近 7 天」档——新学员只有最近两三天数据，42/90 固定跨度
+   左侧全空、三条线挤右缘；固定跨度决策不变（B 案），只是补一个短窗档。
+   2026-10-31 三轮评审：默认档改「近 7 天」——42 天默认下左侧大片空白的观感不变，
+   新档必须成为默认才有意义；看长跨度再点 42/90。 */
+const loadRange = ref<7 | 42 | 90>(7)
 /** 压力趋势点（含坐标）：直接来自 learning_metrics 历史，无分钟 EWMA 推导 */
 type LoadPoint = {
   date: string
@@ -2470,11 +2499,9 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
     },
     yAxis: {
       type: 'value',
-      // min 用回调：数据里出现 < -4 的 LSB（如 KTL=0、LF=10 → −10）时下界跟着走，避免截断
-      min: (e: { min: number }) => Math.min(-4, e.min),
-      // max 同样用回调：接口的 loadCurve 是 0-100 刻度（lss/ktl/lf/lsb），此前写死 12 会把
-      // LSS/LF 两条线整段裁到网格外、只剩一个点。下界保底 12 只服务「全 0」的极端数据。
-      max: (e: { max: number }) => Math.max(12, Math.ceil(e.max ?? 0)),
+      // 刻度取 20 的整数倍：数据极值（如 -29.77）不得直接变成轴刻度
+      min: (e: { min: number }) => Math.floor(Math.min(-4, e.min) / 20) * 20,
+      max: (e: { max: number }) => Math.ceil(Math.max(12, e.max ?? 0) / 20) * 20,
       axisLabel: { fontSize: 11 },
     },
     series: [
@@ -2830,6 +2857,8 @@ const snapshotHint = computed(() =>
 /* 校准明细（2026-10-21）：证据页里的一小块「预测 vs 实际 / 复习 rating / 难度调整」 */
 .ld-calib { display: grid; gap: 6px; margin: 10px 0 14px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: 8px; background: var(--mk-surface-2); }
 .ld-calib__head { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); }
+/* 事件列表小节标题（2026-10-31 外部评审 P2-6）：与校准明细同级的小标题，随列表滚动区外常驻 */
+.ld-ev-listhead { padding: 0 16px 6px; }
 .ld-calib__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .ld-calib__item { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .ld-calib__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

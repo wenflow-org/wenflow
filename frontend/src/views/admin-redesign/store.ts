@@ -226,8 +226,17 @@ export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-
  *  path 视图是深链适配层，解析出对话后原样带走。 */
 export type SubPageStage = 'goal' | 'path' | 'learning' | 'wrapup'
 const SUBPAGE_STAGES: ReadonlySet<string> = new Set(['goal', 'path', 'learning', 'wrapup'])
+/** 旧深链/后端枚举别名：teaching 是后端阶段名，summary 是终局总结旧名 */
+const SUBPAGE_STAGE_ALIAS: Record<string, SubPageStage> = {
+  teaching: 'learning',
+  teach: 'learning',
+  learn: 'learning',
+  summary: 'wrapup',
+}
 export function asSubPageStage(v: unknown): SubPageStage | undefined {
-  return typeof v === 'string' && SUBPAGE_STAGES.has(v) ? (v as SubPageStage) : undefined
+  if (typeof v !== 'string') return undefined
+  if (SUBPAGE_STAGES.has(v)) return v as SubPageStage
+  return SUBPAGE_STAGE_ALIAS[v]
 }
 
 /** 详情内部页签落点：只对 learner 详情有意义（页签 id 见 LearnerDetail 的 LD_TAB_IDS）。
@@ -258,9 +267,12 @@ export interface SubPageFrom {
 
 export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom } | null>(null)
 
-export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom }) {
-  const base: { view: SubPageView; id: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab } =
+export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom; label?: string }) {
+  const base: { view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab } =
     opts?.includeTest ? { view, id, includeTest: true } : { view, id }
+  /* 语义 id（如 card-import 的 'new'）不该直出面包屑：入口可用 label 覆盖显示名
+     （2026-10-31 二轮评审 P2：学习者卡库 / new → 导入卡）。 */
+  if (opts?.label) base.label = opts.label
   if (opts?.stage) base.stage = opts.stage
   if (opts?.tab) base.tab = opts.tab
   /* 来源记忆：二级页 → 三级页都可记来源，返回时回原页（不限 session）。

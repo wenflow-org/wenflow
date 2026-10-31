@@ -475,8 +475,8 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(empty.text()).toContain('没有学习路径');
     expect(empty.text()).not.toContain('还没有生成过学习路径');
     expect(empty.findAll('button').some((b) => b.text() === '去目标对话')).toBe(true);
-    // 翻页器常驻：0 行时仍给「共 0 条」
-    expect(w.find('.mk-pagination').text()).toContain('共 0 条');
+    // 分页器自隐（2026-10-31 三轮评审）：0 行不再挂「共 0 条 · 第 1 / 1 页」
+    expect(w.find('.mk-pagination').exists()).toBe(false);
     w.unmount();
   });
 
