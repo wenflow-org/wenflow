@@ -15,6 +15,7 @@ English Version | [中文版](README.md)
 > Demo only, not for production use, and all accounts and data are periodically purged. Do not store important information.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml/badge.svg?branch=main)](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.23.4-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
@@ -42,7 +43,7 @@ As AI becomes increasingly capable of producing answers, the skills worth cultiv
 
 ## Core Experience Preview
 
-These six screenshots show WenFlow's core experience, from a real problem to a complete learning loop.
+These seven screenshots show WenFlow's core experience, from a real problem to a complete learning loop.
 
 | ① Start from a Real Problem |
 |:---:|
@@ -54,15 +55,20 @@ These six screenshots show WenFlow's core experience, from a real problem to a c
 | ![Clarify the Real Goal](doc/images/goal-clarification.png) | ![Generate a Learning Path](doc/images/learning-path.png) |
 | The AI clarifies the real goal through multi-round questioning | A vague goal becomes phases, tasks, and an actionable first step |
 
-| ④ Enter Round-based Learning | ⑤ Learning Loop Overview |
-|:---:|:---:|
-| ![Enter Round-based Learning](doc/images/round-based-learning.png) | ![Learning Loop Overview](doc/images/learning-loop-overview.png) |
-| The AI teaches, the learner answers, and feedback is immediate; teaching adapts dynamically | A post-session summary and evaluation provide guidance on what to learn next |
-
-| ⑥ Learning State Tracking |
+| ④ Enter Round-based Learning (with the Classroom Whiteboard) |
 |:---:|
-| ![Learning State Tracking](doc/images/learning-state.png) |
-| LSS / KTL / LF / LSB tracked continuously, with rest prompts when fatigue is detected |
+| ![Enter Round-based Learning](doc/images/round-based-learning.png) |
+| While teaching, the AI draws structural content on the whiteboard (mappings, flow loops, comparisons); the board updates as the lesson advances, and answers get immediate feedback |
+
+| ⑤ Post-session Evaluation | ⑥ Learning State Tracking |
+|:---:|:---:|
+| ![Learning Loop Overview](doc/images/learning-loop-overview.png) | ![Learning State Tracking](doc/images/learning-state.png) |
+| A post-session summary with per-knowledge-point evidence and mastery / pressure / fatigue readings, plus next-step advice | LSS / KTL / LF / LSB tracked continuously, with rest prompts when fatigue is detected |
+
+| ⑦ Operations Admin Console |
+|:---:|
+| ![Operations Admin Console](doc/images/admin-overview.png) |
+| 19 scene pages of operations and observability: health, teaching sessions, execution logs, model access, the virtual learner lab |
 
 ---
 
@@ -96,6 +102,8 @@ flowchart TD
 - **It never acts on its own**: generating a path or changing a plan requires the learner's explicit confirmation.
 - **Getting stuck is handled**: after repeated wrong answers or an explicit request for help, the session switches into peer reinforcement and rebuilds the missing prerequisites instead of pushing on.
 - **Memory carries across lessons**: each session feeds the learner profile, so the next lesson picks up from the weak spots and schedules reviews according to memory science.
+- **A whiteboard that draws along**: when the tutor hits structural content, the classroom whiteboard puts a figure on the board (script-line-to-manual-step mappings, flow loops, side-by-side comparisons), moving the cognitive weight of dense text onto the board; the board keeps updating as the lesson advances and can be zoomed in.
+- **Your materials join the conversation**: upload materials for "learning a course / a book" and Embedding/Rerank semantic search brings the right passages into the lesson as references instead of stuffing the whole book into the model; without semantic models configured it falls back to keyword search automatically.
 
 ### 2. Managing cognitive load like physical training load
 
@@ -120,12 +128,12 @@ WenFlow's teaching behaviour is not prompt guesswork; each design point has a th
 
 ### 4. Virtual Learner Lab
 
-To validate teaching quality without a large human sample, the project ships a Virtual Learner Lab: preset learner accounts with different backgrounds and personalities run the full flow — clarify the goal, generate the path, attend the lesson — while an independent judge and a role-fidelity audit score the teaching.
+To validate teaching quality without a large human sample, the project ships a Virtual Learner Lab: the library comes seeded with 200 default golden role cards (different backgrounds and personalities, **pure profiles** — auto-loaded on first start), and an account is only created when a learner is derived from a card. Virtual learners then run the full flow like real users — clarify the goal, generate the path, attend the lesson — while an independent judge and a role-fidelity audit score the teaching.
 
 - **Black-box simulation**: only actions visible through the product UI, no data edits, no reading internal state
 - **Quick Learn**: pick a task, complete one lesson automatically, and get a report for fast regression
 
-### 5. An admin console with 18 scene pages
+### 5. An admin console with 19 scene pages
 
 Beyond the learner app there is a full operations and observability console (`/admin`), all backed by real APIs:
 
@@ -188,8 +196,8 @@ The project will continue to explore how to cultivate five capabilities that mat
 |------|------|
 | **Frontend** | Vue 3 + TypeScript + Vite 6 + in-house Mk* admin primitives + lucide icons + Pinia |
 | **Backend** | Node.js + Express + TypeScript + Prisma |
-| **Database** | SQLite, dual-database architecture (main DB: 51 models + 1 runtime table; system DB: 14 tables), runs with no external database service |
-| **AI Integration** | OpenAI-compatible model gateway (defaults: chat / reasoning / evaluation all use deepseek-v4.1-flash), SSE streaming, retry budget, thinking-mode control |
+| **Database** | SQLite, dual-database architecture (main DB: 54 models; system DB: 15 tables), runs with no external database service |
+| **AI Integration** | Four model families: ① chat / reasoning / evaluation LLMs — OpenAI-compatible gateway (defaults all deepseek-v4.1-flash) with SSE streaming, retry budget, thinking-mode control; ② infrastructure models — Embedding / Rerank (defaults bge-m3 / bge-reranker-v2-m3) powering semantic material search and reranking, fail-open to keyword fallback when unconfigured; ③ decision model (decision-gate, material-quality gate judgements); ④ image generation (text-to-image plugin). Families ②③④ are optional and degrade by documented semantics when unconfigured |
 | **Agent / Skill** | 5 top-level agents (goal / path / teaching / profile / simulation) + Skill execution layer (prompt source `prompts/core/*.yaml` → compiled artifacts → database mirror) + coordinators + persisted event chain |
 | **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API and model overrides |
 | **Virtual Experiment** | Virtual Learner Lab (black-box simulation + Quick Learn) |
@@ -221,7 +229,7 @@ frontend/           Vue 3 + TypeScript + Vite 6 frontend
     api/ · stores/ · router/ · composables/
 prompts/            File-as-Truth prompts: core/*.yaml source → skill.*.md compiled artifacts
 scripts/            repo-root scripts (runs / inspections / demos / gates), index in doc/DEV_SCRIPTS.md
-virtual-learners/   preset virtual-learner material presets.yaml (File-as-Truth)
+virtual-learners/   preset virtual-learner material presets.yaml + golden card library cards/ (200 default golden cards, auto-seeded on first start)
 doc/                documentation index at doc/README.md (process material lives in gitignored doc/local/)
 .github/workflows/  CI gate quality-check.yml
 ```
@@ -256,15 +264,14 @@ The personal centre lives under `/user/*`: account, settings (including API acce
 <details>
 <summary><b>Admin console scenes (click to expand)</b></summary>
 
-The admin console lives at `/admin` with **18 scene pages in 7 groups** (plus one hidden “operations glossary” used only by the header help entry):
+The admin console lives at `/admin` with **19 scene pages in 7 groups** (plus one hidden “operations glossary” used only by the header help entry):
 
 - **Overview**: platform overview with today's health, the models with the highest failure rates, and open items
-- **Teaching**: users and learners, learning state (risk and fatigue, with manual snapshot recompute), teaching sessions, goal conversations, learning paths, memory and review
-- **Virtual Learners**: runtime (concurrency quota / global rate limit / instance stream / batch creation, single-step test), learner card library (structured import and export of role cards)
-- **Skill**: orchestration graph (phase swimlanes + field data journey and logic graph + call usage), Skills and prompts (skill runtime + model routing; prompt evaluation as a host tab; the skill-design sub-page covers protocol editing, compile, gates, publish, rollback, trial run)
-- **Observability**: execution logs (log / trace tabs with retry timeline, auto refresh, export), cost analysis, audit log
-- **System**: health centre, models and access (routing / connectivity / network boundary / retry timeout), system tools (ops tools + data export + session security)
-- **Operations**: operations centre (todo workbench / feedback / achievements / announcements / notifications)
+- **Learning**: goal conversations, learning paths, teaching sessions, learning state (risk and fatigue, with manual snapshot recompute), review backlog
+- **Simulation**: virtual learners (runtime: concurrency quota / global rate limit / instance stream / batch creation, single-step test), learner card library (pure-profile role cards: structured import/export, one-click load of the 200 golden presets; accounts are created only when deriving learners from cards)
+- **Skill**: field flow (phase swimlanes + field data journey and logic graph + call usage), skill catalogue (skill runtime + model routing; prompt evaluation as a tab; the skill-design sub-page covers protocol editing, compile, gates, publish, rollback, trial run), plugins (keys / MCP / web access / decision / image-generation extensions)
+- **Observability & diagnosis**: execution logs (log / trace tabs with retry timeline, auto refresh, export), audit log, cost analysis, health centre, models and access (chat gateway routing / infrastructure models Embedding·Rerank / connectivity / network boundary / retry timeout)
+- **Operations**: operations centre (todo workbench / feedback / achievements / announcements / notifications / data export / session security / ops tools tabs), user accounts
 
 The authoritative scene list is [`frontend/src/views/admin-redesign/manifest.ts`](frontend/src/views/admin-redesign/manifest.ts); the history of pages added, retired, and redirected lives in [`CHANGELOG.md`](CHANGELOG.md).
 

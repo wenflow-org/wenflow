@@ -15,6 +15,7 @@
 > 仅作 Demo 演示，不提供正式服务，会定期清理账号与数据，请勿用于存放重要信息。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml/badge.svg?branch=main)](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.23.4-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
@@ -42,7 +43,7 @@
 
 ## 核心体验预览
 
-这 6 张图按“从真实问题出发，到进入完整学习闭环”的顺序展示 WenFlow 的核心体验。
+这 7 张图按“从真实问题出发，到进入完整学习闭环”的顺序展示 WenFlow 的核心体验。
 
 | ① 从一个问题开始 |
 |:---:|
@@ -54,15 +55,20 @@
 | ![澄清真实目标](doc/images/goal-clarification.png) | ![生成学习路径](doc/images/learning-path.png) |
 | AI 通过多轮追问澄清真实目标 | 将模糊目标拆解为阶段、任务与可立即执行的第一步 |
 
-| ④ 进入回合式学习 | ⑤ 学习闭环总览 |
-|:---:|:---:|
-| ![进入回合式学习](doc/images/round-based-learning.png) | ![学习闭环总览](doc/images/learning-loop-overview.png) |
-| AI 讲解、学习者作答并即时获得反馈，教学过程动态调整 | 课后生成总结与评估，并给出后续学习建议 |
-
-| ⑥ 学习状态追踪 |
+| ④ 进入回合式学习（带课堂白板） |
 |:---:|
-| ![学习状态追踪](doc/images/learning-state.png) |
-| LSS / KTL / LF / LSB 持续追踪学习状态，并在疲劳时予以提醒 |
+| ![进入回合式学习](doc/images/round-based-learning.png) |
+| AI 讲解时把结构性内容画在白板上（映射表、流程回路、对照表），随教学推进更新；学习者作答并即时获得反馈 |
+
+| ⑤ 课后评估 | ⑥ 学习状态追踪 |
+|:---:|:---:|
+| ![学习闭环总览](doc/images/learning-loop-overview.png) | ![学习状态追踪](doc/images/learning-state.png) |
+| 课后生成主题总结、知识点证据与掌握/压力/疲劳读数，并给出后续建议 | LSS / KTL / LF / LSB 持续追踪学习状态，并在疲劳时予以提醒 |
+
+| ⑦ 运营管理后台 |
+|:---:|
+| ![运营管理后台](doc/images/admin-overview.png) |
+| 19 个场景页的运营与可观测后台：健康度、教学会话、执行日志、模型接入、虚拟学习者实验室 |
 
 ---
 
@@ -96,6 +102,8 @@ flowchart TD
 - **不会自作主张**：生成路径、调整计划都要经过学习者的明确确认，系统不会偷偷改你的路线。
 - **卡壳有兜底**：连续答错或明确求助时，课堂会切进“伴学补强”，先补齐前置概念再往下走，而不是硬念下一段。
 - **跨课有记忆**：每节课的掌握情况会沉淀进学习画像，下一节课从你上次的薄弱点自然接上，并按记忆规律安排复习。
+- **白板随讲随画**：老师讲到结构性内容时，课堂白板会同步上墙图示（脚本行↔手工动作映射、流程回路、对照表等），把纯文字造成的认知压力搬到板上；学生盯着的板随教学推进更新，可放大细看。
+- **你的资料接得上话**：上传“学某课 / 学某书”的资料后，Embedding/Rerank 语义检索把对的段落带进课堂引用，而不是整本塞给模型；未配置语义模型时自动回退关键词检索。
 
 ### 2. 像管理体能一样管理脑力负荷
 
@@ -120,12 +128,12 @@ WenFlow 的教学行为不是提示词拍脑袋，每条设计都有对应的理
 
 ### 4. 虚拟学习者实验室
 
-为了在没有大规模真人样本时也能验证教学效果，项目内置 Virtual Learner Lab：预置不同基础与性格的虚拟学习者账号，以真实用户的方式完整跑完“澄清目标 → 生成路径 → 上课答题”，再由独立的裁判与角色保真审计给教学质量打分。
+为了在没有大规模真人样本时也能验证教学效果，项目内置 Virtual Learner Lab：内置 200 张默认金标角色卡（不同基础与性格的**纯档案**，首次启动自动载入卡库），从卡库派生学习者后才创建对应账号；虚拟学习者以真实用户的方式完整跑完“澄清目标 → 生成路径 → 上课答题”，再由独立的裁判与角色保真审计给教学质量打分。
 
 - **黑盒模拟**：只用产品界面能看到的动作，不改数据、不读内部状态
 - **Quick Learn**：挑一个任务自动上完一节课并生成报告，用于快速回归
 
-### 5. 自带 18 个场景页的管理后台
+### 5. 自带 19 个场景页的管理后台
 
 学习端之外还有一套完整的运营与可观测后台（`/admin`），数据全部来自真实 API：
 
@@ -158,6 +166,7 @@ npm run dev
 - 后端接口：http://localhost:3001
 
 > 起不来或行为异常时，先跑 `npm run doctor`：只读、秒级，逐项体检 Node / 依赖 / `.env` / 双库 / CORS / 端口并给出修复建议。
+> 从 0 部署到可用需要配哪些（必需 / 按需增强 / 访问拓扑三档），见 [`DEPLOYMENT.md`](DEPLOYMENT.md) 的「从 0 到可用：必需与可选配置」。
 
 <details>
 <summary><b>首次使用与常见坑（点开）</b></summary>
@@ -188,8 +197,8 @@ WenFlow 由个人独立研发，自 2026 年 4 月首个版本起持续迭代；
 |------|------|
 | **前端** | Vue 3 + TypeScript + Vite 6 + 自研 Mk* 管理端原语 + lucide 图标 + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库** | SQLite 双库架构（主库 51 个模型 + system 库 14 表），零外部数据库依赖即可跑通 |
-| **AI 接入** | OpenAI 兼容模型网关（默认 chat / reasoning / evaluation 均为 deepseek-v4.1-flash），支持 SSE 流式、重试预算与 thinking mode 控制 |
+| **数据库** | SQLite 双库架构（主库 54 个模型 + system 库 15 表），零外部数据库依赖即可跑通 |
+| **AI 接入** | 四层模型家族：① 对话/推理/评测 LLM——OpenAI 兼容网关（默认均为 deepseek-v4.1-flash），支持 SSE 流式、重试预算与 thinking mode 控制；② 基础设施模型——Embedding / Rerank（默认 bge-m3 / bge-reranker-v2-m3，资料语义检索与重排，未配置时 fail-open 回退关键词）；③ 决策模型（decision-gate，资料质量闸门判定）；④ 生图（text-to-image 外挂）。②③④ 均可选，不配置按 documented 语义降级 |
 | **Agent / Skill** | 5 个顶层 Agent（目标 / 路径 / 教学 / 画像 / 仿真）+ Skill 执行层（提示词真源 `prompts/core/*.yaml` → 编译产物 → 数据库镜像）+ 流程编排器 + 持久化事件链 |
 | **模型配置分层** | 环境变量 → 平台默认 → Agent / Skill 级 → 用户自定义 API 与模型覆盖 |
 | **虚拟实验** | Virtual Learner Lab（黑盒模拟 + Quick Learn） |
@@ -221,7 +230,7 @@ frontend/           Vue 3 + TypeScript + Vite 6 前端
     api/ · stores/ · router/ · composables/
 prompts/            File-as-Truth 提示词：core/*.yaml 真源 → skill.*.md 编译产物
 scripts/            仓库根脚本（跑批 / 巡检 / 演示 / 门禁），索引见 doc/DEV_SCRIPTS.md
-virtual-learners/   预制虚拟学习者语料 presets.yaml（File-as-Truth）
+virtual-learners/   预制虚拟学习者语料 presets.yaml + 学习者卡库金标 cards/（200 张默认金标，首次启动自动种子）
 doc/                设计文档总索引 doc/README.md（过程材料在 gitignored 的 doc/local/）
 .github/workflows/  CI 门禁 quality-check.yml
 ```
@@ -256,15 +265,14 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 <details>
 <summary><b>管理端场景（点的展开）</b></summary>
 
-管理后台在 `/admin`，共 **18 个场景页 / 7 个分组**（另有 1 个隐藏的「运营术语表」，仅供页头帮助入口）：
+管理后台在 `/admin`，共 **19 个场景页 / 7 个分组**（另有 1 个隐藏的「运营术语表」，仅供页头帮助入口）：
 
 - **总览**：平台总览，当日系统健康度、失败率最高的模型与待排查事项
-- **教学**：用户与学习者、学习状态（风险与疲劳度，支持手动重算快照）、教学会话、目标对话、学习路径、记忆与复习
-- **虚拟学习者**：运行态（并发配额 / 全局限速 / 实例流水 / 批量新建、单步测试）、学习者卡库（角色卡结构化导入导出）
-- **Skill**：编排图（阶段泳道 + 字段数据旅程 / 逻辑图 + 调用用量）、Skill 与提示词（Skill 运行 + 模型路由；Prompt 评估为宿主内页签；Skill 设计二级页含协议编辑、编译、守门检查、发布、回滚、试跑）
-- **观测**：执行日志（日志 / Trace 双 tab，带重试时间线、自动刷新、导出）、成本分析、审计日志
-- **系统**：健康中心、模型与接入（路由 / 连通性 / 网络边界 / 重试超时）、系统工具（运维工具 + 数据导出 + 会话安全）
-- **运营**：运营中心（待办工作台 / 反馈 / 成就 / 公告 / 站内通知）
+- **学习**：目标对话、学习路径、教学会话、学习状态（风险与疲劳度，支持手动重算快照）、复习积压
+- **仿真**：虚拟学习者（运行态：并发配额 / 全局限速 / 实例流水 / 批量新建、单步测试）、学习者卡库（纯档案角色卡：结构化导入导出、一键加载 200 金标预置，从卡派生学习者才建账号）
+- **Skill**：字段流转（阶段泳道 + 字段数据旅程 / 逻辑图 + 调用用量）、Skill 目录（Skill 运行 + 模型路由；Prompt 评估为页签；Skill 设计二级页含协议编辑、编译、守门检查、发布、回滚、试跑）、插件（密钥 / MCP / 联网 / 决策 / 生图外挂）
+- **观测与排查**：执行日志（日志 / Trace 双 tab，带重试时间线、自动刷新、导出）、审计日志、成本分析、健康中心、模型与接入（对话网关路由 / 基础设施模型 Embedding·Rerank / 连通性 / 网络边界 / 重试超时）
+- **运营**：运营中心（待办工作台 / 反馈 / 成就 / 公告 / 站内通知 / 数据导出 / 会话安全 / 运维工具页签）、用户账号
 
 场景清单以 [`frontend/src/views/admin-redesign/manifest.ts`](frontend/src/views/admin-redesign/manifest.ts) 为准；页面新增、下线与旧链接重定向的历史见 [`CHANGELOG.md`](CHANGELOG.md)。
 
