@@ -244,7 +244,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 <details>
 <summary><b>学习者端（点的展开）</b></summary>
 
-落地页 `/` 与 `/vision`，登录 `/login`、注册 `/register`，登录后进入 V2 壳。
+落地页 `/` 与 `/vision`，登录 `/login`、注册 `/register`，登录后进入学习台。
 
 顶栏 / 底栏五个入口：
 
@@ -258,7 +258,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 
 核心学习流：注册 / 登录 → `/onboarding` 引导 → `/goal-conversation` 澄清目标 → 你确认后生成路径 → `/learning-paths` → `/learning-path/:id` 路径详情 → `/learn/:taskId` 回合式学习 → `/learn/:taskId/evaluation/:sessionId` 课后评估。
 
-个人中心在 `/user/*`：账户、设置（含 API 接入）、调用日志、成就、学习历史。旧的 `/v2/*` 地址会自动重定向到正式路径。
+个人中心在 `/user/*`：账户、设置（含 API 接入）、调用日志、成就、学习历史，页内还可进「资料库」（`/library`，上传学某课 / 学某书的资料供课堂引用）。旧的 `/v2/*` 地址会自动重定向到正式路径。
 
 </details>
 
@@ -270,7 +270,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 - **总览**：平台总览，当日系统健康度、失败率最高的模型与待排查事项
 - **学习**：目标对话、学习路径、教学会话、学习状态（风险与疲劳度，支持手动重算快照）、复习积压
 - **仿真**：虚拟学习者（运行态：并发配额 / 全局限速 / 实例流水 / 批量新建、单步测试）、学习者卡库（纯档案角色卡：结构化导入导出、一键加载 200 金标预置，从卡派生学习者才建账号）
-- **Skill**：字段流转（阶段泳道 + 字段数据旅程 / 逻辑图 + 调用用量）、Skill 目录（Skill 运行 + 模型路由；Prompt 评估为页签；Skill 设计二级页含协议编辑、编译、守门检查、发布、回滚、试跑）、插件（密钥 / MCP / 联网 / 决策 / 生图外挂）
+- **Skill**：字段流转（阶段泳道 + 字段数据旅程 / 逻辑图 + 调用用量）、Skill 目录（Skill 运行 + 模型路由；Skill 设计二级页含协议编辑、编译、守门检查、发布、回滚、试跑）、Prompt 评估（用例集 + 历史运行）、插件（密钥 / MCP / 联网 / 决策 / 生图外挂）
 - **观测与排查**：执行日志（日志 / Trace 双 tab，带重试时间线、自动刷新、导出）、审计日志、成本分析、健康中心、模型与接入（对话网关路由 / 基础设施模型 Embedding·Rerank / 连通性 / 网络边界 / 重试超时）
 - **运营**：运营中心（待办工作台 / 反馈 / 成就 / 公告 / 站内通知 / 数据导出 / 会话安全 / 运维工具页签）、用户账号
 
@@ -359,8 +359,8 @@ npm run prompts:lint && npm run prompts:core:check
 
 | 库 | Schema | 环境变量 | 默认路径 | 表数 |
 |----|--------|----------|----------|------|
-| 主库 | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51（+1 运行期建表） |
-| System DB | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 14 |
+| 主库 | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 54 |
+| System DB | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 15 |
 
 - 迁移与校验：`npm run prisma:migrate:verify-clean`（空库回放）、`npm run prisma:baseline:audit`（只读审计）、`npm --prefix backend run prisma:migrate:deploy:all`
 - 备份与维护：`npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum`

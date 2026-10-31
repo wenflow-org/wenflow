@@ -243,7 +243,7 @@ doc/                documentation index at doc/README.md (process material lives
 <details>
 <summary><b>Learner app (click to expand)</b></summary>
 
-Landing pages `/` and `/vision`, login `/login`, register `/register`, then the V2 shell.
+Landing pages `/` and `/vision`, login `/login`, register `/register`; after signing in you land on the dashboard.
 
 Five entries in the top / bottom navigation:
 
@@ -257,7 +257,7 @@ Five entries in the top / bottom navigation:
 
 Core flow: register / log in → `/onboarding` → `/goal-conversation` → after your confirmation the path is generated → `/learning-paths` → `/learning-path/:id` → `/learn/:taskId` round-based learning → `/learn/:taskId/evaluation/:sessionId` post-session evaluation.
 
-The personal centre lives under `/user/*`: account, settings (including API access), call logs, achievements, learning history. Legacy `/v2/*` URLs redirect to the current paths.
+The personal centre lives under `/user/*`: account, settings (including API access), call logs, achievements, learning history, plus the library (`/library`, upload materials for "learning a course / a book" so lessons can reference them). Legacy `/v2/*` URLs redirect to the current paths.
 
 </details>
 
@@ -269,7 +269,7 @@ The admin console lives at `/admin` with **19 scene pages in 7 groups** (plus on
 - **Overview**: platform overview with today's health, the models with the highest failure rates, and open items
 - **Learning**: goal conversations, learning paths, teaching sessions, learning state (risk and fatigue, with manual snapshot recompute), review backlog
 - **Simulation**: virtual learners (runtime: concurrency quota / global rate limit / instance stream / batch creation, single-step test), learner card library (pure-profile role cards: structured import/export, one-click load of the 200 golden presets; accounts are created only when deriving learners from cards)
-- **Skill**: field flow (phase swimlanes + field data journey and logic graph + call usage), skill catalogue (skill runtime + model routing; prompt evaluation as a tab; the skill-design sub-page covers protocol editing, compile, gates, publish, rollback, trial run), plugins (keys / MCP / web access / decision / image-generation extensions)
+- **Skill**: field flow (phase swimlanes + field data journey and logic graph + call usage), skill catalogue (skill runtime + model routing; the skill-design sub-page covers protocol editing, compile, gates, publish, rollback, trial run), prompt evaluation (case sets + run history), plugins (keys / MCP / web access / decision / image-generation extensions)
 - **Observability & diagnosis**: execution logs (log / trace tabs with retry timeline, auto refresh, export), audit log, cost analysis, health centre, models and access (chat gateway routing / infrastructure models Embedding·Rerank / connectivity / network boundary / retry timeout)
 - **Operations**: operations centre (todo workbench / feedback / achievements / announcements / notifications / data export / session security / ops tools tabs), user accounts
 
@@ -358,8 +358,8 @@ Two SQLite databases; relative URLs resolve against their own schema directory:
 
 | Database | Schema | Env var | Default path | Tables |
 |----|--------|----------|----------|------|
-| Main | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51 (+1 runtime table) |
-| System | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 14 |
+| Main | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 54 |
+| System | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 15 |
 
 - Migrations and checks: `npm run prisma:migrate:verify-clean` (empty-DB replay), `npm run prisma:baseline:audit` (read-only audit), `npm --prefix backend run prisma:migrate:deploy:all`
 - Backup and maintenance: `npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum`
