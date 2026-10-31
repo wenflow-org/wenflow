@@ -19,6 +19,7 @@ const { openSubPageMock, cardsIndexMock, liveCreateVirtualMock, draftStoriesMock
   cardsCloneMock: vi.fn(),
 }));
 
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('../store', async () => {
   const { ref } = await import('vue');
   return {
@@ -47,12 +48,19 @@ vi.mock('@/api/adminApi', () => ({
 }));
 
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
-vi.mock('../live', () => ({
-  errMsg: (e: unknown) => String(e),
-  liveCreateVirtual: liveCreateVirtualMock,
-}));
+vi.mock('../live', async () => {
+  const { ref } = await import('vue');
+  return {
+    errMsg: (e: unknown) => String(e),
+    markVirtualsMutated: vi.fn(),
+    liveCreateVirtual: liveCreateVirtualMock,
+    /* 顶栏刷新广播（2026-10-26 本页接上 watch(liveRefreshSeq)） */
+    liveRefreshSeq: ref(0),
+  };
+});
 
 import VirtualLearnerCards from '../VirtualLearnerCards.vue';
+import Source from '../VirtualLearnerCards.vue?raw';
 import { toast } from '@/utils/toast';
 
 const mountPage = async () => {
@@ -110,12 +118,14 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     (toast.error as unknown as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it('KPI 三卡（预置卡/自建卡/已派生实例；卡总数 2026-10-14 并入卡墙卡头）+ 卡墙渲染全部卡与来源徽章', async () => {
+  it('KPI 两卡（身份卡 / 已创建实例）+ 卡墙渲染身份卡与来源徽章', async () => {
     const w = await mountPage();
     const labels = w.findAll('.mk-kpi .mk-kpi__label').map((x) => x.text());
-    // 卡总数不再立卡：它恒等于下方卡墙行数，卡头「共 N 张」已自报（计数单源在列表）
-    // 「已创建实例」2026-10-16 立卡（2026-10-19 随动作文案统一改名）：卡=身份模板后，池里有多少条已创建出虚拟学习者，列表说不出来
-    expect(labels).toEqual(['预置卡', '自建卡', '已创建实例']);
+    // 2026-10-26：预置 / 自建合成一张「身份卡」，两个数进 hint；
+    // 「已创建实例」只留读数，跳转改卡头链接（可点这件事此前只有悬停才看得出）
+    expect(labels).toEqual(['身份卡', '已创建实例']);
+    expect(w.find('.mk-kpi__hint').text()).toContain('预置 1');
+    expect(w.find('.mk-kpi__hint').text()).toContain('自建 1');
     expect(w.find('.mk-card__meta').text()).toContain('共 2 张');
     const wall = w.findAll('.vlc-card');
     expect(wall).toHaveLength(2);
@@ -124,47 +134,40 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     expect(wall[1].text()).toContain('预置');
   });
 
-  it('身份池快筛（只看还没创建过的身份卡）与实例来源标记', async () => {
+  it('派生实例不进卡墙（卡库＝身份池），只剩身份卡', async () => {
     cardsIndexMock.mockImplementation(async () => ({
       data: {
         data: {
           cards: [
             { profileId: 'p1', userId: 'u1', cardKey: 'w6-math-01', name: '高一学生小陈', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null, derivedFrom: null },
-            { profileId: 'p2', userId: 'u2', cardKey: 'vl-abc', name: '高一学生小陈', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null, derivedFrom: '高一学生小陈' },
+            { profileId: 'p2', userId: 'u2', cardKey: 'vl-abc', name: '高一学生小陈的实例', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null, derivedFrom: '高一学生小陈' },
           ],
-          summary: { total: 2, builtin: 0, custom: 2, derived: 1 },
+          summary: { total: 1, builtin: 0, custom: 2, derived: 1 },
         },
       },
     }));
     const w = await mountPage();
-    // 实例在卡面带来源行（不分标记的话身份池与实例混成一锅）
-    expect(w.findAll('.vlc-card__derived')).toHaveLength(1);
-    expect(w.find('.vlc-card__derived').text()).toContain('源自 高一学生小陈');
-    expect(w.find('.mk-kpi').text()).toBeTruthy();
-    // 快筛收窄到还没创建过的身份卡
-    const pill = w.findAll('.mk-pill').find((p) => p.text().includes('只看身份池'))!;
-    expect(pill.text()).toContain('1');
-    await pill.trigger('click');
-    expect(w.findAll('.vlc-card')).toHaveLength(1);
-    expect(w.find('.vlc-card__derived').exists()).toBe(false);
+    const wall = w.findAll('.vlc-card');
+    expect(wall).toHaveLength(1);
+    expect(wall[0].text()).toContain('高一学生小陈');
+    expect(wall[0].text()).not.toContain('实例');
+    expect(w.findAll('.mk-pill').some((p) => p.text().includes('只看身份池'))).toBe(false);
     w.unmount();
   });
 
-  it('身份池已被派空（快筛后 0 行）：空态说清是快筛收窄，不说成卡库空', async () => {
+  it('身份池已被派空：空态指向虚拟学习者，不说成卡库空', async () => {
     cardsIndexMock.mockImplementation(async () => ({
       data: {
         data: {
-          cards: [
-            { profileId: 'p2', userId: 'u2', cardKey: 'vl-abc', name: '已派生', goal: 'x', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: null, email: null, derivedFrom: '某身份卡' },
-          ],
-          summary: { total: 1, builtin: 0, custom: 1, derived: 1 },
+          cards: [],
+          summary: { total: 0, builtin: 0, custom: 1, derived: 1 },
         },
       },
     }));
     const w = await mountPage();
-    await w.findAll('.mk-pill').find((p) => p.text().includes('只看身份池'))!.trigger('click');
     expect(w.findAll('.vlc-card')).toHaveLength(0);
-    expect(w.text()).toContain('身份池里的卡都已创建出虚拟学习者');
+    expect(w.text()).toContain('身份池已派空');
+    expect(w.text()).toContain('去虚拟学习者');
     expect(w.text()).not.toContain('卡库还是空的');
     w.unmount();
   });
@@ -218,9 +221,9 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     await flushPromises();
 
     expect(cardsCloneMock).toHaveBeenCalledWith([{ profileId: 'p1', storyIds: ['story-1'] }], undefined);
-    expect(toast.success).toHaveBeenCalledWith('已创建 1 个虚拟学习者');
-    // 创建出实例后清勾选并回刷卡墙
+    // 创建出实例后清勾选、回刷卡墙，并在卡墙顶部留一条持久结果条
     expect(w.find('.mk-batchbar').exists()).toBe(false);
+    expect(w.find('.vlc-created').text()).toContain('已创建 1 个虚拟学习者');
     expect(cardsIndexMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     w.unmount();
   });
@@ -239,20 +242,27 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     const submit = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.includes('个虚拟学习者'))!;
     submit.dispatchEvent(new Event('click'));
     await flushPromises();
-    expect(toast.success).toHaveBeenCalledWith('已创建 1 个虚拟学习者');
+    // 创建结果改用卡墙顶部持久结果条（toast 3 秒消失，而实例不在这面墙上）
+    expect(w.find('.vlc-created').text()).toContain('已创建 1 个虚拟学习者');
+    expect(w.find('.vlc-created').text()).toContain('去虚拟学习者');
     const failed = document.body.querySelector('.cdd-failed');
     expect(failed?.textContent).toContain('英语复读生');
     expect(failed?.textContent).toContain('未勾选任何任务');
     w.unmount();
   });
 
-  it('长散键标签（hash:…）显示截为 hash: + 前 8 位，完整值进 title；短标签原样；+N 列全量', async () => {
+  it('卡面只留运营看得懂的「场景 / 目标」：preset:/hash:/版本等内部标记不上墙', async () => {
     const HASH = 'hash:f6c06c0a45c595c1572dc3106721f65b0593f16b8';
     cardsIndexMock.mockImplementation(async () => ({
       data: {
         data: {
           cards: [
-            { profileId: 'p9', userId: 'u9', cardKey: 'builtin', name: '孙浩', goal: '理综提分', opening: null, knowledgeLevel: 'beginner', tags: ['preset:gaokao-science', 'v4', HASH, 'extra'], preset: true, sourceKind: null, email: null },
+            {
+              profileId: 'p9', userId: 'u9', cardKey: 'builtin', name: '孙浩', goal: '理综提分',
+              opening: null, knowledgeLevel: 'beginner',
+              tags: ['preset:gaokao-science', 'v4', HASH, 'study', 'exam_prep', 'in_scope'],
+              preset: true, sourceKind: null, email: null,
+            },
           ],
           summary: { total: 1, builtin: 1, custom: 0 },
         },
@@ -260,15 +270,31 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     }));
     const w = await mountPage();
     const chips = w.findAll('.vlc-card__tags .mk-badge');
-    const hashChip = chips.find((c) => c.text().startsWith('hash:'))!;
-    // 2026-10-12 外部批评采纳：整串 46 字符原样铺满卡宽被 CSS 腰斩 → 显示前 8 位 hex
-    expect(hashChip.text()).toBe('hash:f6c06c0a…');
-    expect(hashChip.attributes('title')).toBe(HASH);
-    // 短标签原样显示，但 title 也给（悬停可看全，任何标签都有出处）
-    const preset = chips.find((c) => c.text().startsWith('preset:'))!;
-    expect(preset.text()).toBe('preset:gaokao-science');
-    expect(preset.attributes('title')).toBe('preset:gaokao-science');
-    expect(w.find('.vlc-card__more').text()).toBe('+1');
+    // 2026-10-24 用户「preset:… 是无意义信息，要加就换点数据」：枚举转中文，内部标记全部撤掉
+    expect(chips.map((c) => c.text())).toEqual(['学习', '考试备战']);
+    // 2026-10-26：标签不再挂「场景类型 / 目标类型」注释型 title
+    expect(chips[0].attributes('title')).toBeUndefined();
+    expect(chips[1].attributes('title')).toBeUndefined();
+    expect(w.find('.vlc-card__tags').text()).not.toContain('preset:');
+    expect(w.find('.vlc-card__tags').text()).not.toContain('hash:');
+    expect(w.find('.vlc-card__more').exists()).toBe(false);
+    expect(w.find('.vlc-card__version').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('自定义卡的未知标签按原样显示，最多两枚，不编造数据', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            { profileId: 'p10', userId: 'u10', cardKey: 'w6-x', name: '小周', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: ['数学', '高一', '人教版'], preset: false, sourceKind: 'web', email: null },
+          ],
+          summary: { total: 1, builtin: 0, custom: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    expect(w.findAll('.vlc-card__tags .mk-badge').map((c) => c.text())).toEqual(['数学', '高一']);
     w.unmount();
   });
 
@@ -277,6 +303,91 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     expect(w.find('.mk-drawer').exists()).toBe(false);
     await w.findAll('.vlc-card')[0].trigger('click');
     expect(openSubPageMock).toHaveBeenCalledWith('card', 'p1');
+  });
+
+  /* 2026-10-27 用户「高度不一样，内部的信息密度也不高」：
+     卡脚钉底（同一行按钮同基线）+ 只印有区分度的信息（builtin 占位卡号 / 全同难度不上卡面）。 */
+  it('卡脚钉底：卡体是纵向 flex，按钮靠 margin-top:auto 落到卡底同一基线', () => {
+    const cardRule = Source.slice(Source.indexOf('.vlc-card {'), Source.indexOf('}', Source.indexOf('.vlc-card {')))
+    expect(cardRule).toContain('display: flex')
+    expect(cardRule).toContain('flex-direction: column')
+    const footRule = Source.slice(Source.indexOf('.vlc-card__foot {'), Source.indexOf('}', Source.indexOf('.vlc-card__foot {')))
+    expect(footRule).toContain('margin-top: auto')
+  });
+
+  it('「builtin」占位卡号不上卡面（预置卡统一值，不区分任何两张卡）', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            { profileId: 'p9', userId: 'u9', cardKey: 'builtin', name: '孙浩', goal: '理综提分', opening: null, knowledgeLevel: 'beginner', tags: [], preset: true, sourceKind: null, email: null },
+            { profileId: 'p10', userId: 'u10', cardKey: 'w6-x', name: '小周', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null },
+          ],
+          summary: { total: 2, builtin: 1, custom: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    expect(w.text()).not.toContain('builtin');
+    // 自定义卡的真实卡号仍有区分度，照常上卡面
+    expect(w.text()).toContain('w6-x');
+    w.unmount();
+  });
+
+  it('难度只在有区分度时上卡面：整面墙同级 → 不印；混级 → 逐卡印', async () => {
+    const card = (id: string, level: string) => ({ profileId: id, userId: 'u' + id, cardKey: 'k-' + id, name: '学习者' + id, goal: '目标', opening: null, knowledgeLevel: level, tags: [], preset: false, sourceKind: null, email: null });
+    cardsIndexMock.mockImplementation(async () => ({
+      data: { data: { cards: [card('a', 'beginner'), card('b', 'beginner')], summary: { total: 2, builtin: 0, custom: 2 } } },
+    }));
+    const same = await mountPage();
+    expect(same.findAll('.vlc-card__level')).toHaveLength(0);
+    same.unmount();
+
+    cardsIndexMock.mockImplementation(async () => ({
+      data: { data: { cards: [card('a', 'beginner'), card('b', 'advanced')], summary: { total: 2, builtin: 0, custom: 2 } } },
+    }));
+    const mixed = await mountPage();
+    expect(mixed.findAll('.vlc-card__level').map((x) => x.text())).toEqual(['入门', '高阶']);
+    mixed.unmount();
+  });
+
+  /* 2026-10-27 密度收口：目标是抽象的，真正会被开的那节课是首个任务。
+     卡面直接给任务标题；「1 个任务」这种全墙同值不印。 */
+  it('首个任务标题上卡面；多任务时才标任务数', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            { profileId: 'p1', userId: 'u1', cardKey: 'k1', name: '郑凯', goal: '回本', opening: null, knowledgeLevel: 'beginner', tags: [], preset: true, sourceKind: null, email: null, taskCount: 1, firstTaskTitle: '亏了三万的那只基金' },
+            { profileId: 'p2', userId: 'u2', cardKey: 'k2', name: '苏晴', goal: '重返职场', opening: null, knowledgeLevel: 'beginner', tags: [], preset: true, sourceKind: null, email: null, taskCount: 3, firstTaskTitle: '停在三年前的简历' },
+          ],
+          summary: { total: 2, builtin: 2, custom: 0 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    const tasks = w.findAll('.vlc-card__task');
+    expect(tasks.map((t) => t.text())).toEqual(['任务亏了三万的那只基金', '任务停在三年前的简历']);
+    // 只有多任务的卡标数量
+    const foot = w.findAll('.vlc-card__foot');
+    expect(foot[0].text()).not.toContain('个任务');
+    expect(foot[1].text()).toContain('3 个任务');
+    w.unmount();
+  });
+
+  it('老接口没有任务字段：不渲染任务行，也不把「不知道」写成 0 个任务', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [{ profileId: 'p1', userId: 'u1', cardKey: 'k1', name: '老卡', goal: '目标', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: null, email: null }],
+          summary: { total: 1, builtin: 0, custom: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    expect(w.find('.vlc-card__task').exists()).toBe(false);
+    expect(w.find('.vlc-card__foot').text()).not.toContain('任务');
+    w.unmount();
   });
 
   it('搜索过滤（名称/Key/目标/标签任一命中）', async () => {
@@ -302,9 +413,9 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     const body = document.body.textContent || '';
     expect(body).toContain('平台生产 · 角色卡');
     expect(body).toContain('生产入库');
-    // 库语境的步骤说清「建卡 + 备好第一个故事」，且落点是到虚拟学习者起跑（不再推去画像页生成故事）
-    expect(body).toContain('生产入库（建卡 + 备好第一个故事）');
-    expect(body).toContain('到虚拟学习者起跑');
+    // 2026-10-22 用户裁定：四步流程说明（逐条复述表单与按钮）整块撤除
+    expect(body).not.toContain('生产入库（建卡 + 备好第一个故事）');
+    expect(body).not.toContain('到虚拟学习者起跑');
     bodyButton('取消')?.dispatchEvent(new Event('click'));
     await flushPromises();
     w.unmount();

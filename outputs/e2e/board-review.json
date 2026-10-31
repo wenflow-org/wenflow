@@ -1,0 +1,118 @@
+{
+ "label": "BOARD",
+ "generatedAt": "2026-10-27T07:13:40.036Z",
+ "model": "deepseek-v4.1-flash",
+ "total": 6,
+ "judged": 5,
+ "errors": 1,
+ "verdicts": {
+  "keep": 0,
+  "fix": 5,
+  "drop": 0
+ },
+ "meanUsefulness": 1.8,
+ "meanGeometry": 1.4,
+ "meanReadability": 2.6,
+ "metaShare": 20,
+ "leakShare": 20,
+ "redundantShare": 0,
+ "byKind": {
+  "split-compare": {
+   "n": 2,
+   "keep": 0,
+   "drop": 0,
+   "usefulness": 1.5
+  },
+  "concept-map": {
+   "n": 1,
+   "keep": 0,
+   "drop": 0,
+   "usefulness": 2
+  },
+  "state-strip": {
+   "n": 2,
+   "keep": 0,
+   "drop": 0,
+   "usefulness": 2
+  }
+ },
+ "results": [
+  {
+   "i": 0,
+   "user": "b1-math-pace·提问态",
+   "kind": "split-compare",
+   "usefulness": 2,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "readability": 2,
+   "worstIssue": "左栏第3行「0.15 分钟/千米」与第4行结论完全重复，左栏把同一句结论写了两遍，还错把学生原话的单位从「分钟每千米」写在除法结果行——哪一步产生哪个单位其实没对齐；右栏四个空槽与左栏四行只是虚线对齐、无连线，对照结构弱",
+   "verdict": "fix",
+   "oneLine": "左右对照：左边列出把秒直接除以米并凭空追加「分钟/千米」标签的错误链条，右边留四个空让学生自己写正确步骤",
+   "redundant": false
+  },
+  {
+   "i": 1,
+   "user": "b1-math-pace·揭晓态",
+   "kind": "split-compare",
+   "usefulness": 1,
+   "geometry": 2,
+   "meta": true,
+   "leak": true,
+   "readability": 2,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "把 60÷400 和 先换单位再相除两条路线并排摆开，指出分叉在第二步。",
+   "worstIssue": "老师刚问“0.15 为什么不能当配速用”，图里左栏“单位标签凭空写”、底栏“分叉在第二步：先换单位，还是直接相除”已经把答案说完了，学生没得想。"
+  },
+  {
+   "i": 2,
+   "user": "b2-phys-buoyancy·提问态",
+   "kind": "concept-map",
+   "usefulness": 2,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "readability": 3,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "一张待填的概念图：从「浸入深度 h」拉一条关系未命名的箭头指向「浮力 F浮」，并给出 F浮=ρ液gV排。",
+   "worstIssue": "几何几乎不承载关系：两个框上下排列、用箭头连接，只画出了「谁指向谁」，没有画出核心的变量分离——深度 h 与决定浮力的 V排 被放在同一个框里并列，图上没有表示「V排 与 h 无关、且 V排 才是决定因素」的结构，学生看图仍然可能误以为 h 直接决定 F浮。"
+  },
+  {
+   "i": 3,
+   "user": "b2-phys-buoyancy·揭晓态",
+   "kind": "concept-map",
+   "error": "bad json: {\"usefulness\":1,\"geometry\":0,\"meta\":false,\"leak\":false,\"readability\":2,\"redundant\":true,\"verdict\":\"drop\",\"oneLine\":\"把「深度与浮力无关」这句话拆成两个方框加一根箭头。\",\"worstIssue\":\"概念图",
+   "raw": "{\"usefulness\":1,\"geometry\":0,\"meta\":false,\"leak\":false,\"readability\":2,\"redundant\":true,\"verdict\":\"drop\",\"oneLine\":\"把「深度与浮力无关」这句话拆成两个方框加一根箭头。\",\"worstIssue\":\"概念图只有两个节点和一根「无关」箭头，箭头本身不表达任何学科关系，几何零信息；学生已完整说清压差抵消的推理，此图是复述而非补充。建议删，或改为显示上下表面压强差随深度同比增大、差值不变的示意。}"
+  },
+  {
+   "i": 4,
+   "user": "b3-hist-shangyang·提问态",
+   "kind": "state-strip",
+   "usefulness": 2,
+   "geometry": 2,
+   "meta": false,
+   "leak": false,
+   "readability": 3,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "把商鞅变法按“变法前—前356—前350—成效”四段排成时间带，四格全留空等学生填。",
+   "worstIssue": "标题写“从立木为信到两次推行”，但四格里没有“立木为信”的位置；学生此刻要谈的立木为信无处安放，只能模糊地归入“变法前”，图上没有任何标记。"
+  },
+  {
+   "i": 5,
+   "user": "b3-hist-shangyang·揭晓态",
+   "kind": "state-strip",
+   "usefulness": 2,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "redundant": false,
+   "readability": 3,
+   "verdict": "fix",
+   "oneLine": "把商鞅变法排成「变法前—第一次—第二次—成效」四格时间条，列出两次变法各自推了什么。",
+   "worstIssue": "时间条"
+  }
+ ]
+}

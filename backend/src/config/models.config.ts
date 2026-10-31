@@ -101,6 +101,14 @@ export interface ModelDefinition {
    */
   pricing?: ModelPricing;
   description?: string;
+  /**
+   * 模型级生成默认（2026-10-24 用户拍板）：模型编辑里可单独设思考模式/强度/输出格式。
+   * 'default' = 跟随平台默认（platform_api_configs 的同名字段）；显式值覆盖平台默认。
+   * 运行时优先级：Skill 显式配置 > 模型默认 > 平台默认。
+   */
+  defaultThinkingMode?: 'default' | 'enabled' | 'disabled';
+  defaultReasoningEffort?: 'default' | 'low' | 'high' | 'max';
+  defaultResponseFormat?: 'default' | 'none' | 'json_object';
 }
 
 /** llm-providers.json 的 provider 条目（含未 enabled 的示例条目，供总览/前端展示全貌）。 */
@@ -115,6 +123,12 @@ export interface ProviderDefinition {
   endpointSource: 'inherit' | 'own';
   baseUrl?: string;
   apiKeyEnv?: string;
+  /**
+   * 上游是否接受原生 `role:'system'`（默认 true = 标准 OpenAI 语义）。
+   * 声明 false 的通道由网关把 system 折叠进首条 user（见 api-gateway/executor 的兼容层）。
+   * 这是**通道能力**，不是全局开关：同一平台可能同时接标准上游与会静默丢弃 system 的聚合网关。
+   */
+  supportsSystemRole?: boolean;
   models: ModelDefinition[];
 }
 
@@ -205,7 +219,8 @@ function buildEmbeddedFallback(): RegistrySnapshot {
     }
   ];
   const platform: ProviderDefinition = {
-    id: 'platform', name: '平台', enabled: true, recommended: true, endpointSource: 'inherit', models
+    // 内置兜底与文件默认一致：平台继承通道历史上是会静默丢弃 system 的聚合网关
+    id: 'platform', name: '平台', enabled: true, recommended: true, endpointSource: 'inherit', supportsSystemRole: false, models
   };
   return {
     models,
@@ -295,6 +310,17 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
   const b = raw as Record<string, unknown>;
   const tier = b.tier === 'reasoning' ? 'reasoning' : b.tier === 'chat' ? 'chat' : null;
   if (!tier) throw new Error(`llm-providers.json：${where} 的 tier 必须是 chat 或 reasoning`);
+  const asEnum = <T extends string>(value: unknown, allowed: readonly T[], field: string): T | undefined => {
+    if (value == null) return undefined;
+    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    if (!allowed.includes(normalized as T)) {
+      throw new Error(`llm-providers.json：${where} 的 ${field} 只能是 ${allowed.join(' / ')}，实际 ${JSON.stringify(value)}`);
+    }
+    return normalized as T;
+  };
+  const defaultThinkingMode = asEnum(b.defaultThinkingMode, ['default', 'enabled', 'disabled'] as const, 'defaultThinkingMode');
+  const defaultReasoningEffort = asEnum(b.defaultReasoningEffort, ['default', 'low', 'high', 'max'] as const, 'defaultReasoningEffort');
+  const defaultResponseFormat = asEnum(b.defaultResponseFormat, ['default', 'none', 'json_object'] as const, 'defaultResponseFormat');
   const def: ModelDefinition = {
     id: modelId,
     label: typeof b.label === 'string' && b.label.trim() ? b.label.trim() : modelId,
@@ -312,7 +338,10 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
     ...(b.maxParallelRequests != null ? { maxParallelRequests: asNumber(b.maxParallelRequests, 'maxParallelRequests', where) } : {}),
     ...(Array.isArray(b.fallbacks) ? { fallbacks: b.fallbacks.map((x) => String(x).trim()).filter(Boolean) } : {}),
     ...(b.pricing != null ? { pricing: asPricing(b.pricing, where) } : {}),
-    ...(typeof b.description === 'string' && b.description.trim() ? { description: b.description.trim() } : {})
+    ...(typeof b.description === 'string' && b.description.trim() ? { description: b.description.trim() } : {}),
+    ...(defaultThinkingMode ? { defaultThinkingMode } : {}),
+    ...(defaultReasoningEffort ? { defaultReasoningEffort } : {}),
+    ...(defaultResponseFormat ? { defaultResponseFormat } : {})
   };
   if (def.supportsReasoningEffort === true && def.supportsThinking !== true) {
     throw new Error(`llm-providers.json：${where} 声明了 supportsReasoningEffort 但未开 supportsThinking（矛盾）`);
@@ -376,6 +405,7 @@ export function parseLlmProvidersConfig(raw: string): RegistrySnapshot {
       endpointSource: baseUrl ? 'own' : 'inherit',
       ...(baseUrl ? { baseUrl } : {}),
       ...(apiKeyEnv ? { apiKeyEnv } : {}),
+      ...(typeof p.supportsSystemRole === 'boolean' ? { supportsSystemRole: p.supportsSystemRole } : {}),
       models
     });
   }
@@ -556,6 +586,36 @@ export function isRetiredModelId(modelId: string): boolean {
 }
 
 /**
+ * 纯能力判定（不读模块状态），便于矩阵测试：
+ * - 显式 `supportsSystemRole` 永远优先；
+ * - 未声明时按端点来源：`inherit`（平台通道）默认折叠，`own`（自带 baseUrl）默认保留 system；
+ * - 无 provider（未登记/用户自有模型）默认保留 system。
+ */
+export function providerAcceptsSystemRole(
+  provider: Pick<ProviderDefinition, 'endpointSource' | 'supportsSystemRole'> | null | undefined
+): boolean {
+  if (!provider) return true;
+  if (typeof provider.supportsSystemRole === 'boolean') return provider.supportsSystemRole;
+  return provider.endpointSource === 'own';
+}
+
+/**
+ * 供应商/通道路由是否接受原生 `role:'system'`（见 ProviderDefinition.supportsSystemRole）。
+ *
+ * 默认值按**端点来源**分：
+ * - `inherit`（沿用平台通道，历史上是会静默丢弃 system 的聚合网关）→ 默认 **false**（折叠）；
+ *   未显式声明的旧注册表/批跑配置因此保持 2026-09-22 事故后的安全行为；
+ * - `own`（供应商自带 baseUrl，标准 OpenAI 兼容）与未登记的 providerId
+ *   （用户自带模型、env 兜底、skill 覆盖）→ 默认 **true**（保留 system 角色）。
+ * 显式 `supportsSystemRole` 永远优先。
+ */
+export function providerSupportsSystemRole(providerId: string): boolean {
+  const id = String(providerId || '').trim();
+  if (!id) return true;
+  return providerAcceptsSystemRole(activeProviders.find((p) => p.id === id));
+}
+
+/**
  * 检查是否为 DeepSeek V4 模型（兼容旧逻辑）。
  * 语义就是「已下线的 v4-flash / v4-pro」——保留旧名供既有调用方使用。
  */
@@ -593,6 +653,29 @@ export function getModelDefinition(modelId: string): ModelDefinition | undefined
 /** 调用方未声明输出预算时的模型级缺省值；未配置返回 null。 */
 export function getModelDefaultMaxTokens(modelId: string): number | null {
   return MODEL_MAP.get(modelId)?.defaultMaxTokens ?? null;
+}
+
+/**
+ * 模型级生成默认（思考模式 / 强度 / 输出格式）。
+ * 未配置或值为 'default' 的字段返回 undefined，交给平台默认；运行时优先级见 ModelDefinition 注释。
+ */
+export function getModelGenerationDefaults(modelId: string): {
+  thinkingMode?: 'enabled' | 'disabled';
+  reasoningEffort?: 'low' | 'high' | 'max';
+  responseFormat?: 'none' | 'json_object';
+} {
+  const def = MODEL_MAP.get(modelId);
+  return {
+    ...(def?.defaultThinkingMode && def.defaultThinkingMode !== 'default'
+      ? { thinkingMode: def.defaultThinkingMode }
+      : {}),
+    ...(def?.defaultReasoningEffort && def.defaultReasoningEffort !== 'default'
+      ? { reasoningEffort: def.defaultReasoningEffort }
+      : {}),
+    ...(def?.defaultResponseFormat && def.defaultResponseFormat !== 'default'
+      ? { responseFormat: def.defaultResponseFormat }
+      : {})
+  };
 }
 
 /** 开启思考时为推理预留的额外 token 预算（与输出预算分离）；未配置返回 0。 */

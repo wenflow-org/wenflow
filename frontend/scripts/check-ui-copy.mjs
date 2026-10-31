@@ -9,6 +9,9 @@
  *   R4 实现外露：内部词、英文枚举、下划线键名、点分路径、接口路径（词典见 ui-copy-terms.json）
  *   R5 emoji：界面文案不使用 emoji（替代=色块+字标 / 线性图标）
  *   R6 同文件重复：同一句文案在同一文件出现 ≥2 次（复读）
+ *   R7 冗余副标：非必填标记「（可选）/ 选填」——必填已用 * 标注，再标「可选」是把
+ *      「没有 *」换一句话说一遍（2026-10-29 冗余副文审计；判定标准见
+ *      doc/ADMIN_COPY_SEMANTIC_AUDIT.md「冗余副文专项」）
  *
  * 用法：
  *   node scripts/check-ui-copy.mjs            # 与基线比对，新增即失败
@@ -55,7 +58,14 @@ const RULES = {
     }
     return null;
   },
-  R5: (s) => (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u.test(s) ? '文案含 emoji' : null)
+  R5: (s) => (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u.test(s) ? '文案含 emoji' : null),
+  /* 只认「非必填标记」这一种写法：括号可选 / 选填。必填侧已有 .mk-field__req（* / 必填），
+     两侧同时标注等于把同一规则写两遍，且每个非必填字段都要多背一个次级标签。
+     不拦「可选能力」这类业务词：命中要求括号或「选填」整词。 */
+  R7: (s) => {
+    const m = s.match(/[（(]可选[）)]|(?<![点勾])选填(?!入)/);
+    return m ? `非必填标记「${m[0]}」（必填已用 * 标注）` : null;
+  }
 };
 
 /* 免检文件：开发者文档 **有意**展示目录树 / 命令 / 字段名，是内容不是文案缺陷。 */
@@ -140,6 +150,9 @@ function scan() {
       if (!m.has(text)) m.set(text, []);
       m.get(text).push(line);
       for (const [rule, fn] of Object.entries(RULES)) {
+        /* R7 只跑管理端：必填 * 与非必填标记并存的是 admin 表单体系；用户侧「（可选）」
+           常是功能名（快速自测（可选）），不属同一条判据。 */
+        if (rule === 'R7' && !rel.startsWith('views/admin-redesign/')) continue;
         const why = fn(text);
         if (why) findings.push({ file: rel, line, rule, why, text: text.slice(0, 120) });
       }

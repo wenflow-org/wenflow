@@ -8,7 +8,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import SessionCockpit from '../SessionCockpit.vue';
-import { subPage } from '../store';
+import { intent, subPage } from '../store';
+import { liveRefreshSeq } from '../live';
 
 /** 后端 /admin/session-console 同构载荷（teaching 会话，含 path/goal/wrapup/evidence/timeline）
  * 返回 any：用例中会按「无映射数据降级」场景就地置 null，结构随端点演化，不必强类型化 fixture */
@@ -223,6 +224,30 @@ describe('SessionCockpit 双模式', () => {
     subPage.value = null;
   });
 
+  it('顶栏刷新（liveRefreshSeq 广播）重拉本页会话载荷——终端会话轮询已停，这是唯一重读入口', async () => {
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    await mountCockpit('session-real', 'ts_real_1');
+    const callsAfterMount = getRealSessionConsole.mock.calls.length;
+
+    liveRefreshSeq.value += 1;
+    await settle();
+
+    expect(getRealSessionConsole.mock.calls.length).toBeGreaterThan(callsAfterMount);
+  });
+
+  it('真实模式 hero 给「执行日志」出口：按 sessionId 落执行日志的 Trace 归组', async () => {
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const btn = wrapper.findAll('.mk-hero__actions button').find((b) => b.text() === '执行日志');
+    expect(btn).toBeTruthy();
+    intent.scene = '';
+    await btn!.trigger('click');
+    await settle();
+    expect(intent.scene).toBe('execution-logs');
+    expect(intent.sessionId).toBe('ts_real_1');
+    wrapper.unmount();
+  });
+
   it('真实模式：同构数据渲染（阶段条/Path 里程碑/时间线日志/wrapup 字段卡 + 来源徽章）', async () => {
     getRealSessionConsole.mockResolvedValue(realTeachingPayload());
 
@@ -231,10 +256,11 @@ describe('SessionCockpit 双模式', () => {
     // 顶栏不渲染（2026-10-11 走查：真实会话的顶栏 ID/刷新与壳层+hero 重复）；
     // 只读声明与出口迁进 hero（模式 badge + 动作区「← 会话列表」）
     expect(wrapper.find('.cp-topbar').exists()).toBe(false);
-    expect(wrapper.text()).toContain('真实会话 · 只读监控');
+    expect(wrapper.text()).toContain('真实课堂 · 只读监控');
+    // 2026-10-19 用户走查「刷新重复了吧」：hero 刷新钮撤，改由顶栏一颗驱动（watch liveRefreshSeq）
     const heroActions = wrapper.find('.mk-hero__actions');
     expect(heroActions.text()).toContain('会话列表');
-    expect(heroActions.text()).toContain('刷新');
+    expect(heroActions.text()).not.toContain('刷新');
 
     // 阶段推进 stepper：4 步 + meta 副标。本夹具 stageResults.path 只给里程碑计数（无任务明细）
     // → 走后端计数兜底「1/2 里程碑」；有任务明细时 Path 步点走子任务动态读数（见 Path 页签用例：
@@ -243,22 +269,35 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('1/2 里程碑');
     expect(wrapper.text()).toContain('学习者发言 1');
 
-    // 时间线日志卡（真实模式由 payload.timeline 承载，会话总结已生成在尾部）
+    // 时间线日志卡（真实模式由 payload.timeline 承载）：
+    // 2026-10-22 起聊天消息折叠为一条读数行（全文在左侧页签），路径/证据/总结事件仍逐条
     const logText = wrapper.find('.cp-logs').text();
     expect(logText).toContain('学习路径已生成');
     expect(logText).toContain('会话总结已生成');
+    expect(logText).toContain('查看全文');
+    expect(logText).not.toContain('我想学 Python');
 
     // wrapup 字段卡 + 来源徽章（模型生成）
     expect(wrapper.text()).toContain('主题摘要');
     expect(wrapper.text()).toContain('围绕函数作用域展开');
     expect(wrapper.text()).toContain('模型生成');
 
-    // 会话数据包（2026-10-18）：主列只留一行读数，整包 JSON 收进弹层（点开才序列化）
+    // 折叠行点按跳左侧页签（第二条 = 课堂折叠行；默认页签是目标对话，课堂面板此时不存在）
+    const jumps = wrapper.findAll('.cp-log__jump');
+    expect(jumps).toHaveLength(2);
+    expect(wrapper.find('#cp-tabpanel-learning').exists()).toBe(false);
+    await jumps[1].trigger('click');
+    await flushPromises();
+    expect(wrapper.find('#cp-tabpanel-learning').exists()).toBe(true);
+
+    // 会话数据包（2026-10-18）：主列只留一行读数，整包 JSON 收进弹层（点开才序列化）；
+    // 2026-10-22 起读数只报时间线条数，消息/阶段/任务数在页签卡头与阶段瓦片已有
     const pkg = wrapper.find('.cp-raw');
     expect(pkg.exists()).toBe(true);
     expect(pkg.text()).toContain('会话数据包');
-    expect(pkg.text()).toContain('教学会话');
-    expect(pkg.text()).toContain('Python 入门学习路径');
+    expect(pkg.text()).toContain('5 条时间线');
+    expect(pkg.text()).not.toContain('教学会话');
+    expect(pkg.text()).not.toContain('Python 入门学习路径');
     expect(pkg.find('pre').exists()).toBe(false);
     const openRawBtn = pkg.findAll('button').find((b) => b.text() === '查看原始数据')!;
     await openRawBtn.trigger('click');
@@ -269,7 +308,7 @@ describe('SessionCockpit 双模式', () => {
     expect(rawView!.textContent).toContain('Python 入门学习路径');
     expect(rawView!.textContent).toContain('函数基础');
     expect(rawView!.textContent).toContain('参数与返回值');
-    ;[...rawView!.querySelectorAll('button')].find((b) => b.textContent === '关闭')?.click();
+    [...rawView!.querySelectorAll('button')].find((b) => b.textContent === '关闭')?.click();
     await flushPromises();
 
     // 黑盒/仿真专属区隐藏：无 act() 按钮、无对抗预算、无删除会话、无评审面板
@@ -283,7 +322,38 @@ describe('SessionCockpit 双模式', () => {
 
     // 只读提示（2026-10-04 批次五 P3#13：「只读监控」声明并入顶栏模式 chip 单源，
     // 控制台条不再对真实会话复读——断言同步新契约：全角间隔号形态）
-    expect(wrapper.text()).toContain('真实会话 · 只读监控');
+    expect(wrapper.text()).toContain('真实课堂 · 只读监控');
+
+    wrapper.unmount();
+  });
+
+  it('真实模式：结构化教学建议（ui.title/body）与学员处置可见；延伸课显示观测条与类型徽章', async () => {
+    const payload = realTeachingPayload();
+    payload.data.teaching.mode = 'extension';
+    payload.data.teaching.advisory = {
+      shouldSuggest: true,
+      priority: 'high',
+      recommendation: 'resequence',
+      ui: { title: '建议先确认路径调整', body: '系统检测到关键概念仍不稳定，建议先确认后续安排。' },
+      learnerResponse: { action: 'later', at: '2026-10-21T10:49:38.658Z' },
+    };
+    payload.data.teaching.wrapup.extensionObservability = {
+      kind: 'extension', phase: 'observation', turnCount: 3, sessionLss: 6, sessionLf: 2.5, learnedConcepts: ['作用域'],
+    };
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+
+    expect(wrapper.find('.mk-hero').text()).toContain('延伸课');
+    const strips = wrapper.findAll('.cp-advisory');
+    const advisory = strips.find((s) => s.text().includes('教学建议'));
+    expect(advisory).toBeTruthy();
+    expect(advisory!.text()).toContain('建议先确认路径调整');
+    expect(advisory!.text()).toContain('学员处置 · 稍后再看');
+    const observability = strips.find((s) => s.text().includes('延伸学观测'));
+    expect(observability).toBeTruthy();
+    expect(observability!.text()).toContain('3 轮');
+    expect(observability!.text()).toContain('LSS 6.0');
 
     wrapper.unmount();
   });
@@ -302,6 +372,10 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.find('#cp-tabpanel-wrapup').exists()).toBe(false);
     const selected = wrapper.find('.cp-stp[aria-selected="true"]');
     expect(selected.attributes('id')).toBe('cp-tab-goal');
+    // 对象标识（2026-10-24）：目标对话不能再被叫成「真实课堂」；面包屑同步补可读名
+    expect(wrapper.text()).toContain('真实目标对话 · 只读监控');
+    expect(wrapper.text()).not.toContain('真实课堂 · 只读监控');
+    expect(subPage.value?.label).toBe('目标对话');
 
     wrapper.unmount();
   });
@@ -591,8 +665,19 @@ describe('SessionCockpit 双模式', () => {
     expect(pane.find('.pd-stage__caret').exists()).toBe(false);
     // 旧出口退役：stepper 的 Path 步点即唯一入口，不再有「打开路径详情页」按钮
     expect(pane.text()).not.toContain('打开路径详情页');
-    // 治理动作保留（真实能力：下线路径）
-    expect(pane.text()).toContain('下线路径');
+    // 治理动作保留，但收进右缘 ⋯ 菜单（2026-10-22 用户「这个位置不合适」）：
+    // 默认不露按钮；展开后才有「下线路径」，且没有第二颗刷新（顶栏刷新覆盖）
+    expect(pane.text()).not.toContain('下线路径');
+    expect(pane.text()).not.toContain('刷新');
+    await pane.find('.mk-menu__btn').trigger('click');
+    await flushPromises();
+    const menuItems = pane.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
+    expect(menuItems).toEqual(['下线路径']);
+    // 顶栏刷新同时驱动面板（面板不再自带刷新钮）
+    const detailCalls = getPathDetailMock.mock.calls.length;
+    liveRefreshSeq.value += 1;
+    await settle();
+    expect(getPathDetailMock.mock.calls.length).toBeGreaterThan(detailCalls);
 
     wrapper.unmount();
   });
@@ -768,6 +853,49 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  it('虚拟会话延伸中：显示回合进度（extensionRuntime 活在编排态）', async () => {
+    const payload = virtualSessionPayload();
+    payload.data.stageResults.teaching.extensionRuntime = { active: true, turns: 2, maxTurns: 5 };
+    getVirtualSession.mockResolvedValue(payload);
+    getVirtualSessionLogs.mockResolvedValue({ data: { logs: [] } });
+
+    const wrapper = await mountCockpit('session', 'vs_1');
+
+    const strip = wrapper.findAll('.cp-advisory').find((s) => s.text().includes('延伸中'));
+    expect(strip).toBeTruthy();
+    expect(strip!.text()).toContain('已进行 2/5 回合');
+    expect(strip!.text()).toContain('本任务暂不结算');
+
+    wrapper.unmount();
+  });
+
+  it('虚拟会话卡死归因：读 turns 字段并翻译原因（真实记录没有 turn 键）', async () => {
+    const payload = virtualSessionPayload();
+    payload.data.stageResults.stuckAttributions = [{
+      at: '2026-10-21T10:00:00.000Z',
+      taskId: 'task_1',
+      taskTitle: '作用域练习',
+      turns: 7,
+      reason: 'non-convergence',
+      masteryDelta: 0,
+      judgeFalseCount: 3,
+      trace: [],
+    }];
+    getVirtualSession.mockResolvedValue(payload);
+    getVirtualSessionLogs.mockResolvedValue({ data: { logs: [] } });
+
+    const wrapper = await mountCockpit('session', 'vs_1');
+
+    const strip = wrapper.findAll('.cp-advisory').find((s) => s.text().includes('无响应归因'));
+    expect(strip).toBeTruthy();
+    expect(strip!.text()).toContain('共 1 次');
+    expect(strip!.text()).toContain('第 7 回合');
+    expect(strip!.text()).toContain('多轮判定未通过');
+    expect(strip!.text()).not.toContain('non-convergence');
+
+    wrapper.unmount();
+  });
+
   it('虚拟模式：黑盒会话黑盒区保留（终局评估/轨迹/放弃实验）+ 三流统一时间线', async () => {
     const payload = virtualSessionPayload();
     payload.data.status = 'completed';
@@ -820,6 +948,10 @@ describe('SessionCockpit 双模式', () => {
     // 聊天逐字稿消息里没有题干（检查点单独渲染，不混进对话气泡）
     const q = '针对「完成5道错题重做」这条建议，它预设的动机状态是什么？';
     expect(wrapper.findAll('.cp-transcript__message').some((m) => m.text().includes(q))).toBe(false);
+    /* 2026-10-19 用户走查「检查点怎么在下方，不符合课堂阅读顺序」期望把检查点按 submittedAt
+       内联进课堂列（.cp-checkpoint--inline）。该断言随 11cfde30 入库，但组件侧的内联实现
+       从未落地（全仓无 .cp-checkpoint--inline 类），故按现状断言末尾汇总块；
+       待内联实现落地后改回：.cp-checkpoints 不存在 + .cp-checkpoint--inline 存在。 */
     const block = wrapper.find('.cp-checkpoints');
     expect(block.exists()).toBe(true);
     expect(block.text()).toContain('检查点');
@@ -827,6 +959,47 @@ describe('SessionCockpit 双模式', () => {
     expect(block.text()).toContain('未通过');
     expect(block.text()).toContain('理解度 75%');
     expect(block.text()).toContain('识别隐含动机假设');
+
+    wrapper.unmount();
+  });
+
+  it('课堂转录按 markdown 渲染（用户「md没渲染」）：代码围栏出 pre，不露 ``` 原文', async () => {
+    const payload = realTeachingPayload();
+    const md = '看这段：\n\n```ts\ntype MyPick<T, K extends keyof T> = { [P in K]: T[P] }\n```\n\n边界在调用处。';
+    payload.data.conversations.learning.messages = [{ role: 'assistant', content: md, time: '2026-08-12T14:00:05.000Z' }];
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await nextTick();
+
+    const pre = wrapper.find('.cp-transcript__content pre code');
+    expect(pre.exists()).toBe(true);
+    expect(pre.text()).toContain('type MyPick<T, K extends keyof T>');
+    expect(wrapper.find('.cp-transcript__content').text()).not.toContain('```');
+
+    wrapper.unmount();
+  });
+
+  it('同一检查点重答（同 checkpointId）归并为一行，标尝试次数', async () => {
+    const payload = realTeachingPayload();
+    payload.data.teaching.checkpoints.push({
+      checkpointId: 'cp_1', type: 'short_answer',
+      question: '针对「完成5道错题重做」这条建议，它预设的动机状态是什么？',
+      passed: true, judgedBy: 'code', understanding: 0.9, conceptName: '识别隐含动机假设'
+    });
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await nextTick();
+
+    expect(wrapper.findAll('.cp-checkpoint')).toHaveLength(1);
+    const block = wrapper.find('.cp-checkpoints');
+    expect(block.text()).toContain('1 个 · 2 次作答');
+    expect(block.text()).toContain('尝试 2 次');
+    // 展示最新一次裁决
+    expect(block.text()).toContain('通过');
 
     wrapper.unmount();
   });
@@ -846,8 +1019,8 @@ describe('SessionCockpit 双模式', () => {
     const pkg = wrapper.find('.cp-raw');
     // 折叠态：页面上没有 JSON 直排（pre），只有一行读数与两个动作
     expect(pkg.find('pre').exists()).toBe(false);
-    expect(pkg.text()).toContain('教学会话');
-    expect(pkg.text()).toContain('条消息');
+    expect(pkg.text()).toContain('条时间线');
+    expect(pkg.text()).not.toContain('条消息');
     expect(pkg.findAll('button').map((b) => b.text())).toEqual(['查看原始数据', '复制 JSON']);
 
     // 打开弹层：完整载荷（无 4000 截断）+ 字符总数

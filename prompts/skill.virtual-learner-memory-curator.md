@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-memory-curator
-coreHash: bae4363fe2296d3616aa93a72ba166282a14a886739a63b2ec27ac920cf51e7a
+coreHash: be6a5a4d82c4f44d7be491f6560ddc48311b8df938315a036b1ee4d37d3c7693
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -18,7 +18,7 @@ failurePolicy: propagate
 
 - learner：学习者画像投影（长期特征）
 - dialogue：当前输入与近期对话切片（用于语境理解，不充当状态载体）
-- state：平台维护的主记忆快照（当前值，含 stage）
+- state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
@@ -35,13 +35,14 @@ failurePolicy: propagate
 3. 从 turnSequence 中找证据：回复内容（"会了/卡住/换个例子"）、learnerState 数值、learnerFeedback 的 blockers。注意 learnerState / learnerFeedback 只在**收束轮**提供，其余轮缺席属正常——缺席时不要臆造，也不要据此下校准结论
 4. masteredConcepts 每项必须给出 evidence（学习者自己的话或自评信号）与 confidence（0-1）
 5. struggleConcepts 每项必须给出 blocker（具体卡在哪）与 severity（low|medium|high）
-6. 不要凭空发明输入里没有的概念；概念名优先取 currentTask.linkedConcept 或任务标题，或对话中学习者明确提到的内容
-7. 若学习者自认完成但自评掌握不足（**< 0.65**，例如 0.5-0.65），按"嘴硬但没真会"处理：归 struggle 或降低 mastered confidence（与代码侧兜底阈值一致：>= 0.65 且非卡住才记 mastered；< 0.4 视为 stuck）
-8. 增量判断：已在 existingKnown 中的概念，本课若无新的掌握证据（新的自评/回复证据）不要重复列入 masteredConcepts；已在 existingStruggle 中且本课仍未突破的概念，可继续列入 struggleConcepts 并在 blocker 里写明本课的新表现
-9. 同一个概念名不得同时出现在 masteredConcepts 与 struggleConcepts 两处；拿不准时只保留一处
-10. selfCalibration 用一句话说明这位学习者本轮的自评可靠度（如"高估倾向，自评需打折"）。该句会被机器解析为校准判决，必须**直陈结论**：需要否定某偏差时改用肯定式表述（如"自评基本准确"），禁止"未见高估""谈不上低估"这类否定/混合句式，也不要同时出现"高估"与"低估"两个方向
-11. memoryDelta 用一句话总结"这课在我的记忆里新增/改变了什么"，供故事与开场引用
-12. 只输出结构化字段，不输出 markdown，不解释
+6. 不要凭空发明输入里没有的概念；概念名优先取 currentTask.linkedConcept。没有 linkedConcept 时，从对话里提炼一个 2-12 字的概念名词（如"列宽比例""打印区域边界"）；**禁止把整句任务标题、动作指令或目标句当概念名**（例如"把三个导出层入口写成照着点就行的极简清单"不是概念，应拆成"导出层入口""清单步骤"）
+7. 概念名必须是可复用的知识点，不是任务/动作：以动词开头的整句（"把…写成…""在…里辨认…"）一律不算概念；宁可不列，也不要污染画像先验
+8. 若学习者自认完成但自评掌握不足（**< 0.65**，例如 0.5-0.65），按"嘴硬但没真会"处理：归 struggle 或降低 mastered confidence（与代码侧兜底阈值一致：>= 0.65 且非卡住才记 mastered；< 0.4 视为 stuck）
+9. 增量判断：已在 existingKnown 中的概念，本课若无新的掌握证据（新的自评/回复证据）不要重复列入 masteredConcepts；已在 existingStruggle 中且本课仍未突破的概念，可继续列入 struggleConcepts 并在 blocker 里写明本课的新表现
+10. 同一个概念名不得同时出现在 masteredConcepts 与 struggleConcepts 两处；拿不准时只保留一处
+11. selfCalibration 用一句话说明这位学习者本轮的自评可靠度（如"高估倾向，自评需打折"）。该句会被机器解析为校准判决，必须**直陈结论**：需要否定某偏差时改用肯定式表述（如"自评基本准确"），禁止"未见高估""谈不上低估"这类否定/混合句式，也不要同时出现"高估"与"低估"两个方向
+12. memoryDelta 用一句话总结"这课在我的记忆里新增/改变了什么"，供故事与开场引用
+13. 只输出结构化字段，不输出 markdown，不解释
 
 ## 输出字段
 

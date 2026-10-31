@@ -11,7 +11,7 @@
  *   只作为降档理由（累了就别再上强度），不区分是哪条路径把它推高的；
  * - **知识证据**：脆弱/挣扎概念、前置缺口 —— 缺基础就该降档。
  *
- * 升档更保守：要求**没有任何降档理由**，且课内状态明确"有余力"。降档最多 2 档，升档最多 1 档。
+ * 升档更保守：要求**没有任何降档理由**，且课内状态明确"有余力"。降档最多 1 档（受 D_floor 口径约束），升档最多 1 档。
  */
 import type { LearnerLearningControlState } from '../../agents/learner-model-agent/types';
 import { classifyLoad } from '../learning/learning-load-verdict';
@@ -279,9 +279,10 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
   const bandAction = input.successBand?.action ?? 'hold';
   if (bandAction === 'downgrade') reasons.push('success_rate_below_band');
   if (bandAction === 'upgrade') reasons.push('success_rate_above_band');
-  // 只有负荷类理由降档（知识类只挡升档）；合计最多 -2；带理由计入降档
+  // 只有负荷类理由降档（知识类只挡升档）；合计最多 -1——与 D_FLOOR_MAX_DROP=1 的地板口径一致，
+  // 多条理由不再叠加（历史上写过 -Math.min(理由数, 2)，但该 -2 分支恒被地板钳回 -1，是死代码）
   const decreaseReasons = reasons.filter((reason) => DECREASE_REASON_SET.has(reason));
-  let delta = -Math.min(decreaseReasons.length, 2);
+  let delta = decreaseReasons.length > 0 ? -1 : 0;
   // 情感（软传感器，§4.5）：连续受挫中 → 不升。**只做减速**：可以延缓升档，不参与升档；
   // 同时也不在这里额外降一档（它已经作为降档理由计入上面的 delta），避免同一份软信号用两次。
   const frustrationActive = (input.recentFrustrationStreak ?? 0) >= FRUSTRATION_DECREASE_MIN_STREAK;

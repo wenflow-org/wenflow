@@ -92,6 +92,73 @@ function goalConfidence(conversation: { collectedData: string | null }): number 
   return value !== null && Number.isFinite(value) ? value : null;
 }
 
+/**
+ * goal_conversations.collectedData.understanding → 运营可读摘要（2026-10-28 数据审计）。
+ * R8 时间模型（time_dimensions）、R5 材料需求（needsMaterial）、成功标准与约束此前
+ * 只存在于「查看原始数据」的整包 JSON 里，管理端没有结构化落点。此处只做视图裁剪
+ * （不猜测、不补默认值）；understanding 缺失或全部字段为空时返回 null，前端不渲染。
+ */
+function goalUnderstandingView(conversation: { collectedData: string | null }) {
+  const data = parseJsonSafe<any>(conversation.collectedData, {});
+  const u = data?.understanding;
+  if (!u || typeof u !== 'object') return null;
+
+  const td = u.time_dimensions && typeof u.time_dimensions === 'object' ? u.time_dimensions : null;
+  const timeDimensions = td
+    ? {
+        timeModelVersion: typeof td.timeModelVersion === 'number' ? td.timeModelVersion : null,
+        objectiveScopeHours: typeof td.objectiveScopeHours === 'number' ? td.objectiveScopeHours : null,
+        sessionsLengthMin: typeof td.sessionsLengthMin === 'number' ? td.sessionsLengthMin : null,
+        deadlineDate: typeof td.deadlineDate === 'string' ? td.deadlineDate : null,
+        scopeAnchor: typeof td.scopeAnchor === 'string' ? td.scopeAnchor : null,
+      }
+    : null;
+
+  const nm = u.needsMaterial && typeof u.needsMaterial === 'object' ? u.needsMaterial : null;
+  const needsMaterial = nm
+    ? {
+        kind: typeof nm.kind === 'string' ? nm.kind : null,
+        title: typeof nm.title === 'string' ? nm.title : null,
+        why: typeof nm.why === 'string' ? nm.why : null,
+        queries: Array.isArray(nm.queries) ? nm.queries.map(String).filter(Boolean) : [],
+        origin: typeof nm.origin === 'string' ? nm.origin : null,
+      }
+    : null;
+
+  const sc = u.success_criteria && typeof u.success_criteria === 'object' ? u.success_criteria : null;
+  const successCriteria = sc
+    ? {
+        observableResult:
+          typeof sc.observable_result === 'string' ? sc.observable_result
+            : (typeof sc.observableResult === 'string' ? sc.observableResult : null),
+        acceptanceCheck:
+          typeof sc.acceptance_check === 'string' ? sc.acceptance_check
+            : (typeof sc.acceptanceCheck === 'string' ? sc.acceptanceCheck : null),
+      }
+    : null;
+
+  const constraints = Array.isArray(u.constraints_and_boundaries)
+    ? u.constraints_and_boundaries.map(String).filter(Boolean)
+    : [];
+
+  const ar = u.available_resources && typeof u.available_resources === 'object' ? u.available_resources : null;
+  const availableResources = ar
+    ? {
+        timeBudget: typeof ar.time_budget === 'string' ? ar.time_budget : null,
+        timeHorizon: typeof ar.time_horizon === 'string' ? ar.time_horizon : null,
+      }
+    : null;
+
+  const hasAny = timeDimensions
+    || needsMaterial
+    || successCriteria
+    || constraints.length > 0
+    || availableResources?.timeBudget
+    || availableResources?.timeHorizon;
+  if (!hasAny) return null;
+  return { timeDimensions, needsMaterial, successCriteria, constraints, availableResources };
+}
+
 function knowledgePointStates(raw: string | null | undefined): Array<Record<string, unknown>> {
   const list = parseJsonSafe<any[]>(raw, []);
   return list.map((item: any) => ({
@@ -109,6 +176,9 @@ function wrapupView(raw: string | null | undefined) {
     summary: wrapup.summary || null,
     sources: wrapup.sources || null,
     generatedAt: wrapup.generatedAt || null,
+    /* 延伸课观测（#124）：延伸段轮数/负荷/学到的概念只存在 wrapup 里，
+       此前被视图裁剪掉，座舱「延伸学观测」条对真实会话永远不可达。 */
+    extensionObservability: wrapup.extensionObservability || null,
   };
 }
 
@@ -131,6 +201,20 @@ function checkpointHistoryView(raw: string | null | undefined) {
       conceptName: cp.conceptName ?? null,
       submittedAt: cp.submittedAt ?? null,
     }));
+}
+
+/** teachingState.extensionRuntime → 控制台视图（只在编排态 active 时给值）。
+ *  延伸进行中的回合进度此前只活在虚拟会话 stageResults，真实会话只透出终态观测；
+ *  真人延伸课若上线，座舱「延伸中」条需要这一跳。 */
+function extensionRuntimeView(raw: string | null | undefined) {
+  const state = parseJsonSafe<any>(raw, null);
+  const runtime = state && typeof state === 'object' ? (state as any).extensionRuntime : null;
+  if (!runtime || runtime.active !== true) return null;
+  return {
+    active: true,
+    turns: Number(runtime.turns || 0),
+    maxTurns: Number(runtime.maxTurns || 0),
+  };
 }
 
 /** 里程碑/子任务 → 与虚拟 path-status 对齐的里程碑视图 */
@@ -177,6 +261,10 @@ async function resolvePathView(path: any) {
     description: path.description || null,
     difficulty: path.difficulty || null,
     estimatedHours: path.estimatedHours ?? null,
+    /* 截止日（2026-10-28 数据审计）：库里 17 条路径带 deadline/deadlineText，
+       此前端视图不带 → 座舱路径头与「无截止」路径无法区分 */
+    deadline: path.deadline || null,
+    deadlineText: path.deadlineText || null,
     status: path.status || null,
     totalMilestones: path.totalMilestones || milestones.length || 0,
     completedMilestones: path.completedMilestones || 0,
@@ -500,6 +588,7 @@ async function buildTeachingConsole(session: any) {
         status: goalConversation.status,
         ready,
         confidence: goalConfidence(goalConversation),
+        understanding: goalUnderstandingView(goalConversation),
         messageCount: goalMessages(goalConversation).length,
       }
     : null;
@@ -528,6 +617,7 @@ async function buildTeachingConsole(session: any) {
       knowledgeState,
       checkpoints: checkpointHistoryView(session.teachingState),
       sessionLoad,
+      extensionRuntime: extensionRuntimeView(session.teachingState),
       wrapup,
       advisory: parseJsonSafe<any>(session.advisory, null),
       messages,
@@ -577,6 +667,7 @@ async function buildTeachingConsole(session: any) {
         teachingSessionId: session.id,
         currentTaskId: session.taskId,
         wrapup,
+        extensionRuntime: extensionRuntimeView(session.teachingState),
         taskRuntime: { status: session.status },
         /* 同路径课堂清单（2026-10-12 走查：Learn 页签要能就地切换课堂看）：
            前端课程树凭它把每节课映射到课堂会话 id（teachingSessionHistory 契约，
@@ -648,6 +739,7 @@ async function buildGoalConsole(conversation: any) {
     status: conversation.status,
     ready,
     confidence: goalConfidence(conversation),
+    understanding: goalUnderstandingView(conversation),
     messageCount: goalMessages(conversation).length,
   };
 
@@ -679,6 +771,7 @@ async function buildGoalConsole(conversation: any) {
           duration: latestTeaching.duration,
           messageCount: messages.filter((m) => m.role === 'user').length,
           knowledgeState: knowledgePointStates(latestTeaching.knowledgeState),
+          extensionRuntime: extensionRuntimeView(latestTeaching.teachingState),
           wrapup,
           advisory: parseJsonSafe<any>(latestTeaching.advisory, null),
           messages,
@@ -733,6 +826,7 @@ async function buildGoalConsole(conversation: any) {
             teachingSessionId: latestTeaching.id,
             currentTaskId: latestTeaching.taskId,
             wrapup,
+            extensionRuntime: extensionRuntimeView(latestTeaching.teachingState),
             taskRuntime: { status: latestTeaching.status },
             /* 同路径课堂清单：前端课程树据此映射每节课的课堂会话 id（Learn 就地切换 / 单课总结） */
             teachingSessionHistory: teachingSessionHistoryOf(teachingSessions),

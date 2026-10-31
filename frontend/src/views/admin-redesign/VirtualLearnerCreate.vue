@@ -1,7 +1,7 @@
 <template>
-  <!-- 新建虚拟学习者 / 平台生产角色卡（同一实体：卡 = 虚拟学习者 = 一条档案记录）。
-       两个入口共用这一份表单，差别只在提交后的落点：learners 语境跳画像页继续走，
-       library 语境留在卡库（建卡入库 + 备好第一个故事）。 -->
+  <!-- 平台生产角色卡（卡库的第二个入卡口；2026-10-25 起这是本组件的唯一语境）。
+       卡 = 身份模板，落库进身份池；虚拟学习者由卡库「选角 → 派生」产生，不在本表单里建。
+       提交分两段：建卡入库（秒回）→ 备好第一个故事（单次 AI 调用），完成后留在卡库。 -->
   <Teleport v-if="render" to="body">
   <div v-if="createOpen" ref="maskRef" class="mk-modal">
     <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="dialogTitle">
@@ -10,13 +10,9 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
       </div>
       <div class="mk-modal__body">
-        <p class="mk-alert mk-alert--info">
-          <template v-if="isLibrary">① 称呼与背景 → ② AI 补全身份（可选）→ ③ 生产入库（建卡 + 备好第一个故事）→ ④ 到虚拟学习者起跑</template>
-          <template v-else>① 称呼与背景 → ② AI 补全身份（可选）→ ③ 创建 → ④ 画像页生成故事 → ⑤ 按故事运行</template>
-        </p>
-        <!-- 生产两阶段进度（library）：建卡秒回即入库，故事是单次 AI 调用，可能要等一会儿。
+        <!-- 生产两阶段进度：建卡秒回即入库，故事是单次 AI 调用，可能要等一会儿。
              故事阶段允许先关弹窗——卡已在库，服务端继续生成，完成后仍会刷新卡墙。 -->
-        <p v-if="isLibrary && creating" class="mk-alert mk-alert--info" role="status">
+        <p v-if="creating" class="mk-alert mk-alert--info" role="status">
           {{ phase === 'card'
             ? '正在建卡入库…'
             : '卡已入库。正在用 AI 备好第一个故事，可先关闭，故事会在服务端继续生成' }}
@@ -33,10 +29,7 @@
             class="mk-field__textarea"
             placeholder="稳定身份：职业处境、性格与长期底色（不写某次学习事件）"
           ></textarea>
-          <span class="mk-field__hint">
-            <template v-if="isLibrary">{{ form.story.length }} {{ STORY_HINT_LIBRARY }}</template>
-            <template v-else>{{ form.story.length }} {{ STORY_HINT_PROFILE }}</template>
-          </span>
+          <span class="mk-field__hint">{{ form.story.length }} {{ STORY_HINT_LIBRARY }}</span>
           <span v-if="errors.story" class="mk-field__err">{{ errors.story }}</span>
         </label>
         <div v-if="isLive" class="vl-ai-row">
@@ -64,7 +57,7 @@
           <button type="button" class="mk-btn mk-btn--ghost vl-ai" :disabled="personaBusy" @click="generatePersona">
             {{ personaBusy ? '生成身份中…' : 'AI 生成身份' }}
           </button>
-          <span class="vl-ai-hint">{{ PERSONA_SKILL_HINT }}{{ sampleType === 'student' ? ' · 学生样本含考试节点与学期节奏' : '' }}</span>
+          <span class="vl-ai-hint">{{ sampleType === 'student' ? '学生样本含考试节点与学期节奏' : '' }}</span>
         </div>
         <p v-if="personaSeed" class="mk-alert mk-alert--ok">{{ PERSONA_BACKFILLED_NOTE }}</p>
         <details class="vl-advanced">
@@ -76,14 +69,13 @@
               class="mk-field__input"
               placeholder="例如：总想补职场工具（留空则由故事的学习需求定义）"
             />
-            <span class="mk-field__hint">{{ ASPIRATION_HINT }}</span>
           </label>
         </details>
       </div>
       <div class="mk-modal__foot">
         <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
         <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="createSample">
-          {{ creating ? (isLibrary ? phase === 'card' ? '建卡中…' : '故事生成中…' : '创建中…') : isLibrary ? '生产入库' : '创建虚拟学习者' }}
+          {{ creating ? (phase === 'card' ? '建卡中…' : '故事生成中…') : '生产入库' }}
         </button>
       </div>
     </div>
@@ -95,34 +87,27 @@
 import { computed, ref } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { liveCreateVirtual, errMsg } from './live'
-import { openSubPage, isLive } from './store'
+import { isLive } from './store'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板就地引用 ---------- */
 const STORY_HINT_LIBRARY = '字 · 建议 ≥ 40 字 · 学习需求由入库后自动生成的故事定义'
-const STORY_HINT_PROFILE = '字 · 建议 ≥ 40 字 · 具体学习需求在画像页用「故事」产生'
-const PERSONA_SKILL_HINT = '人设 Skill · 只补稳定身份，不依赖学习目标，不写会话故事'
 const PERSONA_BACKFILLED_NOTE = '已回填人设，可改称呼/背景后创建'
 const ASPIRATION_SUMMARY = '可选 · 长期学习倾向（不是某次故事的目标）'
-const ASPIRATION_HINT = '写入画像备用，真正驱动学习路径的是故事里的学习需求'
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
-const props = withDefaults(defineProps<{ render?: boolean; context?: 'learners' | 'library' }>(), {
-  render: true,
-  context: 'learners'
-})
-/* 语境只改提交后的落点与文案，不改表单本身：
-   learners=虚拟学习者页「新建」（建卡 → 跳画像页生成故事）；library=卡库「平台生产」（建卡即入库 → 备好第一个故事 → 留库） */
+withDefaults(defineProps<{ render?: boolean }>(), { render: true })
+/* 本表单只做「平台生产角色卡」：建卡即入库 → 备好第一个故事 → 留库。
+   虚拟学习者不再由这里建（2026-10-25 用户「不播种，都派生」）：卡库选角派生才是建实例的入口。 */
 const emit = defineEmits<{ (e: 'produced', id: string): void }>()
-const isLibrary = computed(() => props.context === 'library')
-const dialogTitle = computed(() => (isLibrary.value ? '平台生产 · 角色卡' : '新建虚拟学习者'))
+const dialogTitle = '平台生产 · 角色卡'
 
-/* 新建：人设优先（学习需求由故事产生，不在创建时必填） */
+/* 生产：人设优先（学习需求由故事产生，不在创建时必填） */
 const createOpen = ref(false)
 const creating = ref(false)
-/** 生产阶段（library）：card=建卡中（入库前失败＝整体失败）/ story=备故事中（卡已在库，可先关窗） */
+/** 生产阶段：card=建卡中（入库前失败＝整体失败）/ story=备故事中（卡已在库，可先关窗） */
 const phase = ref<'idle' | 'card' | 'story'>('idle')
 const form = ref({ name: '', story: '', aspiration: '' })
 const errors = ref<{ name?: string; story?: string }>({})
@@ -171,24 +156,14 @@ async function createSample() {
       story: form.value.story.trim(),
       personaSeed: personaSeed.value || undefined
     })
-    if (isLibrary.value) {
-      if (createdId) {
-        await produceCard(name, createdId)
-      } else {
-        createOpen.value = false
-        toast.success('角色卡已创建，但列表刷新失败——请手动刷新卡库查看')
-      }
-      return
-    }
-    createOpen.value = false
     if (createdId) {
-      toast.success('虚拟人已创建。下一步：在画像页生成故事（产生学习需求）')
-      openSubPage('virtual', createdId)
+      await produceCard(name, createdId)
     } else {
-      toast.success('虚拟人已创建，但列表刷新失败——若列表未出现，请手动刷新查看')
+      createOpen.value = false
+      toast.success('角色卡已创建，但列表刷新失败——请手动刷新卡库查看')
     }
   } catch (e) {
-    toast.error(isLibrary.value ? `生产失败：${errMsg(e)}` : `创建失败：${errMsg(e)}`)
+    toast.error(`生产失败：${errMsg(e)}`)
   } finally {
     creating.value = false
     phase.value = 'idle'

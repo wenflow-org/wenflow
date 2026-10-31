@@ -1395,7 +1395,7 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(result.observation.visibleTask.id).toBe('t2')
     expect(adapter.sendTeachingMessage).toHaveBeenCalledWith('teach1', 7, { type: 'chat', text: '我完成了' })
     expect(adapter.endTeaching).not.toHaveBeenCalled()
-    expect(adapter.completeTask).toHaveBeenCalledWith('t1')
+    expect(adapter.completeTask).toHaveBeenCalledWith('t1', 'teach1', 8)
     const firstCheckpoint = JSON.parse(
       (prisma.virtual_sessions.update as jest.Mock).mock.calls[0][0].data.stageResults
     ).blackbox.control.taskCompletionCheckpoint

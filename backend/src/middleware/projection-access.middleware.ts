@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
+import { logger } from '../utils/logger'
 
 type ProjectionAccessMode = 'read-only' | 'write-enabled'
 
@@ -91,6 +92,7 @@ export const projectionAccessPolicy = (options: ProjectionAccessPolicyOptions = 
     }
 
     if (options.denyAccessGrant) {
+      logger.warn('[projection-access] 访问授权视角被拒', { reason: 'access_grant_denied', method: req.method, path: req.path })
       res.status(403).json({
         success: false,
         error: {
@@ -105,6 +107,7 @@ export const projectionAccessPolicy = (options: ProjectionAccessPolicyOptions = 
     const isReadMethod = READ_METHODS.has(req.method.toUpperCase())
 
     if (!isReadMethod && accessMode !== 'write-enabled') {
+      logger.warn('[projection-access] 只读视角写请求被拒', { reason: 'read_only_write', method: req.method, path: req.path })
       res.status(403).json({
         success: false,
         error: {
@@ -117,6 +120,14 @@ export const projectionAccessPolicy = (options: ProjectionAccessPolicyOptions = 
     if (projection.scope === 'dashboard') {
       const allowedPaths = options.dashboardReadPaths || []
       if (!isReadMethod || !matchesAnyPath(allowedPaths, req.path)) {
+        // 2026-10-22（机械过滤审计 A 类）：dashboardReadPaths 漏配一条路径=该功能对投影视角静默 403，
+        // 日志带上命中失败的 path 与名单规模，漏配第一次发生时即可见。
+        logger.warn('[projection-access] 学习台视角路径白名单拒绝', {
+          reason: 'dashboard_path_not_allowed',
+          method: req.method,
+          path: req.path,
+          allowedPathCount: allowedPaths.length,
+        })
         res.status(403).json({
           success: false,
           error: {

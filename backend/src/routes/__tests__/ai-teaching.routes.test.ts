@@ -32,6 +32,9 @@ const mockWrapupRegen = {
   startWrapupRegeneration: jest.fn(),
 };
 
+const mockReserveTeachingOperation = jest.fn();
+const mockListSessionEvents = jest.fn();
+
 jest.mock('../../services/ai-teaching/AITeachingCoordinator', () => ({
   __esModule: true,
   default: mockCoordinator,
@@ -52,7 +55,17 @@ jest.mock('../../middleware/auth.middleware', () => ({
 }));
 jest.mock('../../services/learning/learning-state.service', () => ({ __esModule: true, default: {} }));
 jest.mock('../../services/learning/learning.service', () => ({ __esModule: true, default: mockLearningService }));
+jest.mock('../../services/ai-teaching/TeachingMessageIdempotencyService', () => ({
+  reserveTeachingOperation: (...args: unknown[]) => mockReserveTeachingOperation(...args),
+  completeTeachingOperation: jest.fn(),
+  failTeachingOperation: jest.fn(),
+  teachingOperationRequestHash: jest.fn(() => 'test-request-hash'),
+}));
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
+jest.mock('../../services/ai-teaching/session-events.service', () => ({
+  listSessionEvents: (...args: unknown[]) => mockListSessionEvents(...args),
+  recordSessionEvent: jest.fn(),
+}));
 jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() } }));
 
 import router from '../ai-teaching.routes';
@@ -61,13 +74,25 @@ import { requestContextStorage, runWithContext } from '../../gateway/api-gateway
 function getRouteHandler(path: string, method: 'get' | 'post' = 'post') {
   const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.[method]);
   if (!layer) throw new Error(`Route not found: ${path}`);
-  return layer.route.stack[layer.route.stack.length - 1].handle;
+  const handle = layer.route.stack[layer.route.stack.length - 1].handle;
+  // 2026-10-20 起 /messages、/continue、checkpoint 提交要求 Idempotency-Key：
+  // 测试统一补默认值（个案可覆盖），断言仍按原 req 业务字段。
+  return (req: any, res: any, next?: any) => {
+    const headers = { ...(req?.headers || {}) };
+    // 缺 key 的 400 用例只在 finalize 上验证；其余写路由统一补默认 key。
+    if (!headers['idempotency-key'] && path !== '/sessions/:sessionId/finalize') {
+      headers['idempotency-key'] = 'test-idem-key';
+    }
+    return handle({ ...req, headers }, res, next);
+  };
 }
 
 function createResponse() {
   const res: any = {
     status: jest.fn(),
     json: jest.fn(),
+    setHeader: jest.fn(),
+    end: jest.fn(),
   };
   res.status.mockReturnValue(res);
   res.json.mockReturnValue(res);
@@ -77,6 +102,88 @@ function createResponse() {
 describe('ai-teaching routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockReserveTeachingOperation.mockResolvedValue({ kind: 'reserved' });
+  });
+
+  it('同 key 已完成 → 重放结果，不再跑模型（消息写入幂等）', async () => {
+    mockReserveTeachingOperation.mockResolvedValue({
+      kind: 'replay',
+      result: { aiResponse: '已提交过的那一轮', revision: 9 },
+      revision: 9,
+    });
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      body: { message: '再发一次', revision: 8 },
+      headers: { 'idempotency-key': 'same-key' },
+    }, res);
+
+    expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    // 重放载荷经一次对外白名单投影（旧账本行缺 analysis 时按 null/[] 补齐）
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: expect.objectContaining({ aiResponse: '已提交过的那一轮', revision: 9 }),
+    });
+  });
+
+  it('流式请求命中已完成 key → 只重放 final/done，不再跑模型', async () => {
+    mockReserveTeachingOperation.mockResolvedValue({
+      kind: 'replay',
+      result: { aiResponse: '流式重放内容', revision: 9 },
+      revision: 9,
+    });
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const writes: string[] = [];
+    const res: any = {
+      status: jest.fn(),
+      json: jest.fn(),
+      setHeader: jest.fn(),
+      flushHeaders: jest.fn(),
+      write: jest.fn((chunk: string) => { writes.push(String(chunk)); return true; }),
+      end: jest.fn(),
+      destroyed: false,
+      writableEnded: false,
+    };
+    res.status.mockReturnValue(res);
+    res.json.mockReturnValue(res);
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      body: { message: '再发一次', revision: 8 },
+      headers: { accept: 'text/event-stream', 'idempotency-key': 'stream-key' },
+    }, res);
+
+    expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    expect(res.setHeader).toHaveBeenCalledWith('Idempotency-Replayed', 'true');
+    const payload = writes.join('');
+    expect(payload).toContain('event: final');
+    expect(payload).toContain('流式重放内容');
+    expect(payload).toContain('event: done');
+    expect(res.end).toHaveBeenCalled();
+  });
+
+  it('同 key 仍在途 → 409 TEACHING_MESSAGE_IN_FLIGHT，不再跑模型', async () => {
+    mockReserveTeachingOperation.mockResolvedValue({ kind: 'in_flight', startedAt: new Date('2026-10-20T01:02:03.000Z') });
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      body: { message: '重复点击', revision: 8 },
+      headers: { 'idempotency-key': 'busy-key' },
+    }, res);
+
+    expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      error: expect.objectContaining({ code: 'TEACHING_MESSAGE_IN_FLIGHT', startedAt: '2026-10-20T01:02:03.000Z' }),
+    }));
   });
 
   it('透传消息结束确认与恢复状态', async () => {
@@ -165,7 +272,7 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processStudentMessage).toHaveBeenCalledWith(
       'session-1',
       '我明白了条件类型',
-      { expectedRevision: 7 },
+      { expectedRevision: 7, interactionMeta: undefined, idempotencyKey: 'test-idem-key' },
     );
     expect(res.json).toHaveBeenCalledWith({
       success: true,
@@ -258,7 +365,7 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.submitCheckpoint).toHaveBeenCalledWith('session-1', 'checkpoint-1', {
       selectedOptionIds: ['A'],
       answerText: undefined,
-    }, 4);
+    }, 4, 'test-idem-key');
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: { passed: true, feedback: '回答正确' },
@@ -283,7 +390,7 @@ describe('ai-teaching routes', () => {
       selectedOptionIds: undefined,
       answerText: undefined,
       skip: true,
-    }, 4);
+    }, 4, 'test-idem-key');
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: { passed: false, feedback: '已跳过这个检查点，我们继续。' },
@@ -368,7 +475,7 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processStudentMessage).toHaveBeenCalledWith(
       'session-1',
       '我完成了',
-      { expectedRevision: 3 },
+      { expectedRevision: 3, interactionMeta: undefined, idempotencyKey: 'test-idem-key' },
     );
     const joined = writes.join('');
     expect(joined).toContain('event: final\ndata: {"aiResponse":"继续",');
@@ -695,8 +802,8 @@ describe('ai-teaching routes', () => {
     }));
   });
 
-  describe('调整建议处置埋点（#35：保留/稍后再看/预览）', () => {
-    it('keep/later/preview 透传落库并回写 learnerResponse', async () => {
+  describe('调整建议处置埋点（#35：保留/稍后再看/预览/已采用）', () => {
+    it('keep/later/preview/adopt 透传落库并回写 learnerResponse', async () => {
       mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({
         status: 'ok',
         advisory: {
@@ -723,7 +830,28 @@ describe('ai-teaching routes', () => {
       }));
     });
 
-    it('非法动作（如真调整 confirm）→ 400 且不触达 repository', async () => {
+    it('adopt（真执行）也允许落库，供 P1-7 漏斗统计执行档', async () => {
+      mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({
+        status: 'ok',
+        advisory: {
+          shouldSuggest: true,
+          recommendation: 'reinforce',
+          learnerResponse: { action: 'adopt', at: '2026-10-22T00:00:00.000Z' },
+        },
+      });
+      const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'adopt' } }, res);
+
+      expect(mockTeachingSessionRepository.recordAdvisoryResponse).toHaveBeenCalledWith('session-1', 'user-1', 'adopt');
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({ action: 'adopt' }),
+      }));
+    });
+
+    it('非法动作（如未经执行链的 confirm）→ 400 且不触达 repository', async () => {
       const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
       const res = createResponse();
 
@@ -790,6 +918,59 @@ describe('ai-teaching routes', () => {
 
       expect(res.status).not.toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith({ success: true, data: { started: false, skipped: '刚刚重试过，请稍候再试' } });
+    });
+  });
+
+  describe('会话事件时间线（GET /sessions/:sessionId/events）', () => {
+    it('校验归属、解析 payload、给出增量游标', async () => {
+      mockListSessionEvents.mockResolvedValue([
+        { id: 1, kind: 'session.initialized', actor: 'system', status: 'ok', revision: 1, payload: '{"openingMessages":1}', occurredAt: new Date('2026-10-21T01:00:00Z') },
+        { id: 2, kind: 'turn.committed', actor: 'system', status: 'ok', revision: 2, payload: null, occurredAt: new Date('2026-10-21T01:01:00Z') },
+      ]);
+      const handler = getRouteHandler('/sessions/:sessionId/events', 'get');
+      const res = createResponse();
+
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        query: { limit: '50' },
+      }, res);
+
+      expect(mockTeachingSessionRepository.assertOwnership).toHaveBeenCalledWith('session-1', 'user-1');
+      expect(mockListSessionEvents).toHaveBeenCalledWith('session-1', { limit: 50, sinceId: undefined, kinds: undefined });
+      const payload = res.json.mock.calls[0][0];
+      expect(payload.success).toBe(true);
+      expect(payload.data.events[0]).toEqual(expect.objectContaining({ kind: 'session.initialized', payload: { openingMessages: 1 } }));
+      expect(payload.data.nextSinceId).toBe(2);
+    });
+
+    it('支持 sinceId 与 kinds 过滤', async () => {
+      mockListSessionEvents.mockResolvedValue([]);
+      const handler = getRouteHandler('/sessions/:sessionId/events', 'get');
+      const res = createResponse();
+
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        query: { sinceId: '7', kinds: 'turn.committed,session.completed' },
+      }, res);
+
+      expect(mockListSessionEvents).toHaveBeenCalledWith('session-1', {
+        limit: undefined,
+        sinceId: 7,
+        kinds: ['turn.committed', 'session.completed'],
+      });
+      expect(res.json.mock.calls[0][0].data.nextSinceId).toBeNull();
+    });
+
+    it('坏 payload 不拖垮整个响应（原样返回文本）', async () => {
+      mockListSessionEvents.mockResolvedValue([
+        { id: 3, kind: 'error', actor: null, status: 'failed', revision: null, payload: 'not-json{', occurredAt: new Date() },
+      ]);
+      const handler = getRouteHandler('/sessions/:sessionId/events', 'get');
+      const res = createResponse();
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, query: {} }, res);
+      expect(res.json.mock.calls[0][0].data.events[0].payload).toBe('not-json{');
     });
   });
 });

@@ -111,4 +111,107 @@ describe('aiTeachingAPI.finalizeSessionReliably 幂等键', () => {
     expect(post.mock.calls[1][1].revision).toBe(5)
     expect(result.finalization?.taskCompletion).toBe('completed')
   })
+
+  // #115（2026-10-20）：收束门禁 409「老师刚提了一个问题」曾被吞成
+  // 「课堂结束处理尚未完成」——getFinalization 对进行中会话返回 not_started 且
+  // finalization 为 null，补偿分支不可达、原文丢失，用户在死胡同里反复重试。
+  it('收束门禁 409（如老师末问未回应）原样抛出，不再吞成「课堂结束处理尚未完成」', async () => {
+    post.mockRejectedValueOnce({
+      message: '老师刚提了一个问题，先回答再结束课堂',
+      status: 409,
+      response: { status: 409, data: { error: { code: 'FINALIZATION_OPEN_QUESTION', message: '老师刚提了一个问题，先回答再结束课堂' } } },
+    })
+
+    await expect(aiTeachingAPI.finalizeSessionReliably('sess-4', {
+      action: 'complete_task',
+      revision: 4,
+    })).rejects.toMatchObject({
+      message: '老师刚提了一个问题，先回答再结束课堂',
+      status: 409,
+    })
+    // 明确拒绝不做状态补偿：不查、不重发
+    expect(get).not.toHaveBeenCalled()
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it('非门禁类失败（如超时无 response）仍走状态补偿（保留既有自愈）', async () => {
+    // 超时：拦截器归一化后没有 response 字段
+    post.mockRejectedValueOnce({ message: '请求超时，请稍后重试' })
+    get.mockResolvedValueOnce({
+      data: {
+        status: 'completed',
+        revision: 5,
+        session: { status: 'completed' },
+        finalization: { taskCompletion: 'not_started' },
+      },
+    })
+    post.mockResolvedValueOnce({
+      data: {
+        status: 'completed',
+        revision: 6,
+        session: { status: 'completed' },
+        finalization: { taskCompletion: 'completed' },
+      },
+    })
+
+    const result = await aiTeachingAPI.finalizeSessionReliably('sess-5', {
+      action: 'complete_task',
+      revision: 4,
+    })
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(result.finalization?.taskCompletion).toBe('completed')
+  })
+
+  // #115：结算轮询此前封在 API 内部，页面只拿到一个数十秒静默的 Promise。
+  it('onProgress 按轮询节奏回传处理中→完成，供页面展示阶段进度', async () => {
+    post.mockResolvedValueOnce({
+      data: { status: 'processing', pollAfterMs: 1, revision: 5 },
+    })
+    get.mockResolvedValueOnce({
+      data: {
+        status: 'processing',
+        pollAfterMs: 1,
+        revision: 5,
+        session: { status: 'completed' },
+        finalization: { taskCompletion: 'processing' },
+      },
+    })
+    get.mockResolvedValueOnce({
+      data: {
+        status: 'completed',
+        revision: 5,
+        session: { status: 'completed' },
+        finalization: { taskCompletion: 'completed' },
+      },
+    })
+
+    const seen: string[] = []
+    const result = await aiTeachingAPI.finalizeSessionReliably('sess-6', {
+      action: 'complete_task',
+      revision: 4,
+    }, (state) => {
+      seen.push(String(state.finalization?.taskCompletion || state.status))
+    })
+
+    expect(result.finalization?.taskCompletion).toBe('completed')
+    expect(seen).toEqual(['processing', 'processing', 'completed'])
+  })
+
+  it('onProgress 抛错不影响结算结果', async () => {
+    post.mockResolvedValueOnce({
+      data: {
+        status: 'completed',
+        revision: 5,
+        session: { status: 'completed' },
+        finalization: { taskCompletion: 'completed' },
+      },
+    })
+
+    const result = await aiTeachingAPI.finalizeSessionReliably('sess-7', {
+      action: 'complete_task',
+      revision: 4,
+    }, () => { throw new Error('progress boom') })
+
+    expect(result.finalization?.taskCompletion).toBe('completed')
+  })
 })

@@ -8,6 +8,7 @@
 
 import { ImageError } from '../types';
 import type { ImageProvider, ImageProviderId } from '../types';
+import { readPluginChannelOrder } from '../../plugin-providers.service';
 import { AgnesImageProvider } from './agnes';
 
 export const KNOWN_PROVIDERS: readonly ImageProviderId[] = ['agnes'];
@@ -22,10 +23,16 @@ export function createImageProviders(): Partial<Record<ImageProviderId, ImagePro
 }
 
 /**
- * 解析 provider 顺序（IMAGE_PROVIDER，逗号分隔 = 降级链）。
- * 未配置时退回已实现 provider 的默认顺序；配置了未知 id 直接报错，避免静默走错 provider。
+ * 解析 provider 顺序（逗号分隔 = 降级链）。
+ * 无显式入参走「平台配置 → 环境变量 → 默认」，显式入参保持原语义（未知 id 报错）。
  */
-export function resolveImageProviderOrder(serialized: string = process.env.IMAGE_PROVIDER || ''): ImageProviderId[] {
+export function resolveImageProviderOrder(serialized?: string): ImageProviderId[] {
+  if (serialized === undefined) {
+    const configured = readPluginChannelOrder('image', 'image').filter(
+      (id): id is ImageProviderId => KNOWN_PROVIDERS.includes(id as ImageProviderId)
+    );
+    return configured.length ? configured : [...IMPLEMENTED_PROVIDERS];
+  }
   const raw = serialized.trim();
   if (!raw) return [...IMPLEMENTED_PROVIDERS];
 

@@ -13,8 +13,9 @@
           </div>
 
           <div class="head">
+            <!-- 标题已说明这是管理员登录；「登录后管理用户、日志与系统配置」只是把标题换个说法
+                 （右侧栏已列出四个域），不再上屏（2026-10-29 冗余副文审计） -->
             <h1>管理员登录</h1>
-            <p>登录后管理用户、日志与系统配置。</p>
           </div>
 
           <form class="form" :aria-busy="loading" @submit.prevent="handleLogin">
@@ -116,21 +117,22 @@ import { onMounted, reactive, ref, type Component } from 'vue'
 /* 密码显隐图标：模板用了 <Eye>/<EyeOff> 却从未 import → 按钮点得动但图标空白
    （同 EyeOff 幽灵图标一类，2026-09-29 修） */
 import {
-  Eye, EyeOff, FlaskConical, HeartPulse, Megaphone, ScrollText, Sparkles, Users,
+  Eye, EyeOff, FlaskConical, Megaphone, ScrollText, Sparkles, Users,
 } from 'lucide-vue-next'
 import { useIsDark } from '@/composables/useIsDark';
 
 const isDark = useIsDark();
 
 /* 右侧导览的域清单：分组名与图标与侧栏清单（manifest.ts）同源，是「控制台里有什么」的
-   静态事实，不含任何运行期计数——登录页不展示会过期的数字。 */
+   静态事实，不含任何运行期计数——登录页不展示会过期的数字。
+   2026-10-27 用户「账号与接入组不要了，组内页面移到运营」：侧栏收成 5 组，
+   本清单同步——模型与接入 / 访问与注册 / 用户账号 并入运营组。 */
 const DOMAINS: { label: string; sub: string; icon: Component }[] = [
-  { label: '教学', sub: '用户、路径、会话与复习的日常运营', icon: Users },
-  { label: '虚拟学习者', sub: '模拟学习者的运行与学习者卡库', icon: FlaskConical },
-  { label: 'Skill 与提示词', sub: '编排图与提示词的版本管理', icon: Sparkles },
-  { label: '观测', sub: '执行日志、成本分析与审计', icon: ScrollText },
-  { label: '系统', sub: '健康中心、模型接入与运维工具', icon: HeartPulse },
-  { label: '运营', sub: '运营待办、反馈、成就与公告', icon: Megaphone }
+  { label: '运营', sub: '运营待办、反馈、成就与公告，以及模型与接入、访问与注册、用户账号', icon: Megaphone },
+  { label: '学习', sub: '目标对话、学习路径、教学会话、学习状态与复习积压', icon: Users },
+  { label: '仿真', sub: '虚拟学习者的运行与学习者卡库', icon: FlaskConical },
+  { label: 'Skill', sub: '字段流转、Skill 目录、Prompt 评估与插件', icon: Sparkles },
+  { label: '观测与排查', sub: '执行日志、审计日志、成本分析与健康中心', icon: ScrollText }
 ]
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, markAdminSession } from '@/api/adminApi'
@@ -353,12 +355,6 @@ onMounted(() => {
 .head :is(h1, h2) {
   margin: 0;
   font-size: 22px;
-}
-
-.head p {
-  margin: 0;
-  font-size: var(--mk-fs-body);
-  color: var(--muted);
 }
 
 .form {

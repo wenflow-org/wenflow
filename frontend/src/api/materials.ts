@@ -19,6 +19,24 @@ export interface MaterialAnchor {
   preview: string;
 }
 
+/** 资料使用关系（只读投影）：被哪些学习路径采用/引用。 */
+export interface MaterialUsagePath {
+  pathId: string;
+  pathTitle: string;
+  /** 资料包进入过该路径的生成输入。 */
+  adopted: boolean;
+  /** 该路径里程碑/任务对该资料的引用条数。 */
+  refCount: number;
+  updatedAt: string | null;
+}
+
+export interface MaterialUsage {
+  pathCount: number;
+  adoptedPathCount: number;
+  refCount: number;
+  paths: MaterialUsagePath[];
+}
+
 export interface UploadedMaterial {
   id: string;
   name: string;
@@ -32,6 +50,30 @@ export interface UploadedMaterial {
   anchors: MaterialAnchor[];
   warnings: string[];
   createdAt: string;
+  /** 内容哈希（新上传记录才有）；用于去重。 */
+  contentHash?: string;
+  /** 来源：upload=用户上传；web=联网采集入库。 */
+  origin?: 'upload' | 'web';
+  /** 资料理解摘要（brief）；未生成时缺省/null。 */
+  brief?: {
+    docType: string | null;
+    subject: string | null;
+    audience: string | null;
+    overview: string | null;
+    naturalDivisions: string[];
+    toc: Array<{ title: string; gist: string }>;
+  } | null;
+  briefGeneratedAt?: string | null;
+  /** 仅在 `getMaterialLibrary({ includeUsage: true })` 时返回。 */
+  usage?: MaterialUsage | null;
+}
+
+export interface MaterialLibraryStats {
+  total: number;
+  uploadCount: number;
+  webCount: number;
+  totalBytes: number;
+  quotaBytes: number;
 }
 
 /** 上传单份资料（只支持文本型；失败时 reject 携带后端中文 message）。 */
@@ -52,6 +94,33 @@ export async function listMaterials(): Promise<UploadedMaterial[]> {
     data: { items: UploadedMaterial[] };
   };
   return response.data?.items || [];
+}
+
+/**
+ * 资料库列表 + 容量统计（上传区提示/资源库页共用）。
+ * `includeUsage` 会让后端解析路径模板，返回每份资料被哪些路径采用/引用；
+ * 上传区那类高频调用保持默认关闭。
+ */
+export async function getMaterialLibrary(options: { includeUsage?: boolean } = {}): Promise<{
+  items: UploadedMaterial[];
+  library: MaterialLibraryStats;
+}> {
+  const response = (await api.get(options.includeUsage ? '/materials?usage=1' : '/materials')) as unknown as {
+    success: boolean;
+    data: { items: UploadedMaterial[]; library?: MaterialLibraryStats };
+  };
+  const items = response.data?.items || [];
+  return {
+    items,
+    library:
+      response.data?.library || {
+        total: items.length,
+        uploadCount: items.filter((item) => item.origin !== 'web').length,
+        webCount: items.filter((item) => item.origin === 'web').length,
+        totalBytes: items.reduce((sum, item) => sum + (Number(item.size) || 0), 0),
+        quotaBytes: 0,
+      },
+  };
 }
 
 /** 读取单份资料正文。 */

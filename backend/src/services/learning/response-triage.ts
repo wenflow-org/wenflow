@@ -61,10 +61,21 @@ export const RESPONSE_TRIAGE_MODES = [
 export type ResponseTriageMode = (typeof RESPONSE_TRIAGE_MODES)[number];
 export type ResponseTriageConfidence = 'low' | 'medium' | 'high';
 
+/** 问题结构轴（2026-10-25 方向改造，静默推断——禁止向用户追问，从已有文本字段确定性识别）：
+ *  - coupling（多变量耦合度）：高=输入条件多变/多因素互相影响/时好时坏分不清原因（单次抄答案失效的判据之一）
+ *  - stakes（试错代价）：high=搞错一次有明显业务/金钱/机会损失（需要看得懂推理链才敢拍板的判据之一）
+ *  与 recurrence 合成「三条件测试」：≥2 条成立时单次解答失效、值得学习路径（20 场景框架）。
+ */
+export type ProblemCoupling = 'low' | 'medium' | 'high';
+export type ProblemStakes = 'low' | 'high';
+
 export interface ResponseTriage {
   mode: ResponseTriageMode;
   reasons: string[];
   confidence: ResponseTriageConfidence;
+  /** 静默推断的问题结构轴（缺证据时不输出，消费者须容忍 undefined） */
+  coupling?: ProblemCoupling;
+  stakes?: ProblemStakes;
 }
 
 /** `goal_conversations.collectedData` 中承载分诊结论的顶层键。 */
@@ -163,6 +174,68 @@ function downgrade(confidence: ResponseTriageConfidence): ResponseTriageConfiden
   return CONFIDENCE_ORDER[Math.max(0, index - 1)];
 }
 
+/** coupling 高精度词：多变/多因素/互相影响/时好时坏/分不清原因（宁可漏判不误报）。 */
+const COUPLING_HIGH_PATTERN =
+  /(时好时坏|忽好忽坏|一会儿.{0,8}一会儿|有时.{0,12}有时|不稳定|时准时不准|多个因素|多种因素|互相影响|相互影响|分不清.{0,10}(原因|哪个)|搞不清.{0,10}(原因|哪个)|又.{0,10}又.{0,10}(怕|担心|不行|不准)|连锁)/;
+/** coupling 中置信词：明确的两个以上变量并置（如「受活动和天气影响」）。 */
+const COUPLING_MEDIUM_PATTERN =
+  /(.{2,12}(以及|和|与|跟).{2,12})?(天气|活动|季节|促销|假期|节假日).{0,16}(天气|活动|季节|促销|假期|节假日|影响|变量)/;
+
+/** stakes 高精度词：搞错/白干一次有明确损失。 */
+const STAKES_HIGH_PATTERN =
+  /(流失|亏|赔|损失|白费|白搭|报废|砸了|搞砸|耽误|错过|客诉|投诉|退货|退单|事故|罚款|丢(了)?(客户|单|工作|机会)|没等就走了|排错|排班失误|不敢.{0,8}(改|调|动)|风险)/;
+
+/**
+ * 静默推断 coupling（从 realProblem/evidence/painPoints 的自由文本，确定性、可解释）。
+ * 命中高精度词 → high；仅中置信词 → medium；有文本但都不命中 → low；完全无文本 → null（不输出）。
+ */
+export function inferCoupling(texts: Array<string | null | undefined>): ProblemCoupling | null {
+  const joined = texts.filter((t): t is string => !!t && t.trim().length > 0).join('\n');
+  if (!joined) return null;
+  if (COUPLING_HIGH_PATTERN.test(joined)) return 'high';
+  if (COUPLING_MEDIUM_PATTERN.test(joined)) return 'medium';
+  return 'low';
+}
+
+/** 静默推断 stakes：命中高精度词 → high；有文本不命中 → low；无文本 → null。 */
+export function inferStakes(texts: Array<string | null | undefined>): ProblemStakes | null {
+  const joined = texts.filter((t): t is string => !!t && t.trim().length > 0).join('\n');
+  if (!joined) return null;
+  return STAKES_HIGH_PATTERN.test(joined) ? 'high' : 'low';
+}
+
+/**
+ * 三条件测试（20 场景框架）：recurrence=recurring / coupling≥medium / stakes=high，
+ * 命中 ≥2 → 单次解答大概率失效，学习路径成立；命中 ≤1 且 capability 型 → 一次性解答场景，
+ * 路径可能过重（confidence 降档 + reasons 标注；真正的「即时解答」路由目的地是产品决策，未落地前只降置信不开新 mode）。
+ */
+function applyProblemStructureAxes(
+  base: ResponseTriage,
+  recurrence: string | null,
+  coupling: ProblemCoupling | null,
+  stakes: ProblemStakes | null
+): ResponseTriage {
+  if (base.mode !== 'learning_path') return base;
+  const hits = [
+    recurrence === 'recurring',
+    coupling === 'medium' || coupling === 'high',
+    stakes === 'high',
+  ].filter(Boolean).length;
+  const axes: Record<string, unknown> = {};
+  if (coupling) axes.coupling = coupling;
+  if (stakes) axes.stakes = stakes;
+  const reasons = [...base.reasons];
+  let confidence = base.confidence;
+  if (hits >= 2) {
+    if (confidence !== 'high') confidence = 'high';
+    reasons.push(`三条件测试命中 ${hits}/3（复现×耦合×代价）→ 单次解答失效，学习路径成立`);
+  } else if (hits === 0 && coupling === 'low' && stakes === 'low') {
+    confidence = downgrade(confidence);
+    reasons.push('三条件测试 0/3（低复现×低耦合×低代价）→ 更像一次性解答场景，学习路径可能过重');
+  }
+  return { ...base, ...axes, confidence, reasons };
+}
+
 /** 统一在末尾应用「urgency 极高 + 存在硬约束 → 降一档」。 */
 function finalize(
   base: ResponseTriage,
@@ -210,7 +283,52 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
   const painPoints = pickStringArray(understanding, ['painPoints', 'pain_points']);
   const supportNeed = normalizeSupportNeed(pickString(understanding, ['supportNeed', 'support_need']));
 
-  if (isUnknownBlockType(blockType)) {
+  // 不可判定 × 实体内化技能覆盖（2026-10-28 Frontier R2 实证 F96/F97）：
+  // goal 已判 platform_judgment=not_judgeable + skill_nature=physical_internalized，
+  // 但 primary_block_type 仍常写成 capability，下游按 capability 会开学习路径。
+  // 平台闻不到/看不到/摸不到，只能给原理说明或转线下；一律走 referral 负向出口。
+  const platformJudgment = pickString(understanding, ['platformJudgment', 'platform_judgment']);
+  const skillNature = pickString(understanding, ['skillNature', 'skill_nature']);
+  const surfaceGoal = pickString(understanding, ['surfaceGoal', 'surface_goal']);
+  // skill_nature 分类会漂移（R5 实测 F96 手冲咖啡被写成 cognitive_internalized）。
+  // 平台判不了、文本又明显是感官通道（喝/闻/尝/听/手感/笔锋…）时，按实体内化处理，
+  // 避免同一条「咖啡风味」在 referral/learning_path 之间随机跳。
+  const sensoryText = [
+    surfaceGoal,
+    realProblem,
+    evidence,
+    ...painPoints,
+  ].filter(Boolean).join('；');
+  const sensoryInternalized = skillNature === 'cognitive_internalized'
+    && /(喝|尝|闻|嗅|口感|风味|气味|味觉|嗅觉|听|音色|手感|笔锋|触感|摸)/.test(sensoryText);
+  if (platformJudgment === 'not_judgeable'
+    && (skillNature === 'physical_internalized' || sensoryInternalized)) {
+    return {
+      mode: 'referral',
+      confidence: 'high',
+      reasons: ['平台不可判定（not_judgeable）× 纯感官/肢体内化技能：转线下真人指导，不建学习路径'],
+    };
+  }
+
+  // 即时微操作覆盖（2026-10-27 外部审查，R8 冒烟 E10 实证）：
+  // surface_goal 带当日死线词且 objectiveScopeHours ≤ 1.5 时，对话里「以后每个月还会遇到」
+  // 这类随口话会把 primary_block_type 带成 capability → 误开学习路径。
+  // 「今天就要交的东西」不是学习路径的对象，一律按 oneoff_operation 分诊。
+  const objectiveHours = Number(
+    asObject(understanding.time_dimensions).objectiveScopeHours
+      ?? understanding.objectiveScopeHours,
+  );
+  const immediateDelivery = !!surfaceGoal
+    && /(今天|今晚|马上|立刻|小时内|半小时后|下班前|等下|待会儿?)/.test(surfaceGoal);
+  const immediateOneoff =
+    immediateDelivery && Number.isFinite(objectiveHours) && objectiveHours > 0 && objectiveHours <= 1.5;
+  // 情绪/关系为主时不走「当日一次性操作」覆盖：R5 F100（今晚跟家人说被裁）
+  // 被 one-off 改写成 combination 后仍生成 1.5h 路径，情绪场景应保持 emotional_support。
+  const effectiveBlockType = immediateOneoff && blockType !== 'emotion_relationship'
+    ? 'oneoff_operation'
+    : blockType;
+
+  if (isUnknownBlockType(effectiveBlockType)) {
     // 阻塞类型缺失（模型证据不足）：若已明确表达支持需求，仍按需求出负向出口；否则不拦截。
     if (supportNeed === 'emotional') {
       return {
@@ -233,7 +351,7 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     };
   }
 
-  const base = triageByBlockType(blockType as PrimaryBlockType, {
+  const base = triageByBlockType(effectiveBlockType as PrimaryBlockType, {
     recurrence,
     evidence,
     realProblem,
@@ -241,7 +359,19 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     urgency,
     constraints,
   });
-  return applySupportNeed(base, supportNeed);
+  const withSupport = applySupportNeed(base, supportNeed);
+  if (immediateOneoff) {
+    withSupport.reasons.unshift('当日死线 + 客观体量 ≤1.5h：按一次性微操作分诊（覆盖 primary_block_type）');
+  }
+  // 问题结构轴（静默推断，禁止向用户追问）：与 recurrence 合成三条件测试，
+  // 只调制 learning_path 的置信度与 reasons；轴值随结论落 collectedData 供后续路由消费。
+  const axisTexts = [realProblem, evidence, ...painPoints];
+  return applyProblemStructureAxes(
+    withSupport,
+    recurrence,
+    inferCoupling(axisTexts),
+    inferStakes(axisTexts)
+  );
 }
 
 interface BlockTypeContext {
@@ -251,6 +381,28 @@ interface BlockTypeContext {
   painPoints: string[];
   urgency: string | null;
   constraints: string[];
+}
+
+/**
+ * 负向出口硬阻断（2026-10-28 Frontier R4 外部评审，R5 全量收紧）：
+ * 只拦「平台根本无法判定结果」的 referral（not_judgeable / 实体内化/感官技能）与
+ * emotional_support。**不拦普通 referral**——F15《网络数据安全管理条例》自查属于
+ * judgeable_output + 外部审批/数据阻塞，仍应允许用户确认后生成路径；一律拦 referral
+ * 会把合法的合规任务误判成 path-timeout。
+ */
+export function isHardBlockResponseTriage(
+  triage: ResponseTriage | null | undefined,
+  understanding: unknown
+): boolean {
+  if (!triage) return false;
+  const u = asObject(understanding);
+  const platformJudgment = pickString(u, ['platformJudgment', 'platform_judgment']);
+  const skillNature = pickString(u, ['skillNature', 'skill_nature']);
+  // 旧数据可能把这条确定性规则写成 learning_path；底层判定仍须硬阻断。
+  if (platformJudgment === 'not_judgeable' && skillNature === 'physical_internalized') return true;
+  if (triage.mode === 'emotional_support') return true;
+  if (triage.mode !== 'referral') return false;
+  return platformJudgment === 'not_judgeable' || skillNature === 'physical_internalized';
 }
 
 /** 第一轴：仅按 primary_block_type（"要学什么"）决定基础模式；support_need 由 applySupportNeed 叠加。 */
@@ -414,5 +566,11 @@ export function resolveResponseTriageFromCollectedData(
   const reasons = Array.isArray(candidate.reasons)
     ? candidate.reasons.filter((item): item is string => typeof item === 'string')
     : [];
-  return { mode: mode as ResponseTriageMode, confidence: normalizedConfidence, reasons };
+  // 问题结构轴（2026-10-25）：容忍读回——非法/缺失不输出，消费者须容忍 undefined
+  const coupling = candidate.coupling;
+  const stakes = candidate.stakes;
+  const axes: Pick<ResponseTriage, 'coupling' | 'stakes'> = {};
+  if (coupling === 'low' || coupling === 'medium' || coupling === 'high') axes.coupling = coupling;
+  if (stakes === 'low' || stakes === 'high') axes.stakes = stakes;
+  return { mode: mode as ResponseTriageMode, confidence: normalizedConfidence, reasons, ...axes };
 }

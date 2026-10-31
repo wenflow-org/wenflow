@@ -11,7 +11,7 @@
 import 'dotenv/config';
 import axios from 'axios';
 
-const BASE = 'http://localhost:3001/api';
+const BASE = process.env.PROBE_BASE || 'http://localhost:3001/api';
 
 interface ProbeResult {
   tag: string;

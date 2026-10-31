@@ -33,6 +33,7 @@
 import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 import { chunkMaterialMarkdown, chunkEmbedText } from '../services/materials/material-chunker';
 import { parseDocument } from '../services/materials/document-parser';
 import { normalizeWebTextStructure } from '../services/materials/material-web-structure';
@@ -383,13 +384,58 @@ async function judgeOne(cfg: JudgeConfig, chunk: string, question: string): Prom
 // 用另一个会生成文本的模型（默认 deepseek-v4.1-flash，与做判定的 clef 不同家族）独立作答，
 // 答不出 ⇒ 该配对实际不可答；由此得到 raw（锚点标签）与 clean（模型复核后）两套指标。
 
-const LABEL_URL = process.env.LABEL_API_URL || 'http://101.43.146.102:30001/v1/chat/completions';
+const LABEL_URL = process.env.LABEL_API_URL || 'https://newapi.wenflow.org/v1/chat/completions';
 const LABEL_MODEL = process.env.LABEL_MODEL || 'deepseek-v4.1-flash';
+const LABEL_THINKING = (process.env.LABEL_THINKING || 'enabled').toLowerCase() === 'disabled' ? 'disabled' : 'enabled';
+const LABEL_REASONING_EFFORT = process.env.LABEL_REASONING_EFFORT || 'high';
+const LABEL_MAX_TOKENS = Math.max(256, Number(process.env.LABEL_MAX_TOKENS || 8192));
+const LABEL_CONCURRENCY = Math.max(1, Number(process.env.LABEL_CONCURRENCY || 1));
+const LABEL_DELAY_MS = Math.max(0, Number(process.env.LABEL_DELAY_MS || 2000));
+const LABEL_LIMIT = Math.max(0, Number(process.env.LABEL_LIMIT || 0));
+const LABEL_CACHE_FILE = path.join(OUT_DIR, process.env.LABEL_CACHE_FILE || 'label-cache.jsonl');
+const QWEN_RERANK_URL =
+  process.env.QWEN_RERANK_URL ||
+  'https://ws-j2djr3yj51rhlwmw.cn-beijing.maas.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank';
+const QWEN_RERANK_MODEL = process.env.QWEN_RERANK_MODEL || 'qwen3.7-text-rerank';
 
-async function labelOne(chunk: string, question: string): Promise<boolean | null> {
+interface LabelResult {
+  label: boolean;
+  reasoningTokens: number;
+  completionTokens: number;
+  latencyMs: number;
+}
+
+interface LabelCacheEntry extends LabelResult {
+  key: string;
+  at: string;
+}
+
+function labelKey(chunk: string, question: string): string {
+  return createHash('sha256').update(question).update('\0').update(chunk.slice(0, 4000)).digest('hex');
+}
+
+function loadLabelCache(): Map<string, LabelCacheEntry> {
+  const cache = new Map<string, LabelCacheEntry>();
+  if (!fs.existsSync(LABEL_CACHE_FILE)) return cache;
+  for (const line of fs.readFileSync(LABEL_CACHE_FILE, 'utf8').split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const entry = JSON.parse(line) as LabelCacheEntry;
+      if (entry?.key && typeof entry.label === 'boolean') cache.set(entry.key, entry);
+    } catch {
+      /* 跳过坏行，缓存是加速不是权威 */
+    }
+  }
+  return cache;
+}
+
+let labelFailureSamples = 0;
+
+async function labelOne(chunk: string, question: string): Promise<LabelResult | null> {
   const key = process.env.LABEL_API_KEY || process.env.EMBEDDING_API_KEY || '';
   if (!key) return null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const startedAt = Date.now();
     try {
       const res = await fetch(LABEL_URL, {
         method: 'POST',
@@ -402,20 +448,94 @@ async function labelOne(chunk: string, question: string): Promise<boolean | null
               content: `材料：${chunk}\n\n问题：${question}\n\n只回答答案；如果材料里没有足够信息回答，只回答「无法回答」。`,
             },
           ],
-          max_tokens: 300,
+          // 该网关的 DS 默认先产 reasoning。思考关掉时用 disabled；打开时给足预算，
+          // 否则思维链会吃光 token、content 返回空串（旧报告 180 对里 17 对因此为 null）。
+          thinking: { type: LABEL_THINKING },
+          ...(LABEL_THINKING === 'enabled' ? { reasoning_effort: LABEL_REASONING_EFFORT } : {}),
+          max_tokens: LABEL_MAX_TOKENS,
           temperature: 0,
         }),
       });
-      if (!res.ok) continue;
-      const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      if (!res.ok) {
+        if (labelFailureSamples < 5) {
+          labelFailureSamples += 1;
+          const detail = await res.text().catch(() => '');
+          console.log(`\n[label] HTTP ${res.status}：${detail.slice(0, 160)}`);
+        }
+        // 网关按分组限流（约 40 请求/分钟）；退避后重试。
+        await new Promise((resolve) => setTimeout(resolve, 5000 * (attempt + 1)));
+        continue;
+      }
+      const body = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string; reasoning_content?: string }; finish_reason?: string }>;
+        usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } };
+      };
       const content = String(body?.choices?.[0]?.message?.content ?? '').trim();
-      if (!content) continue;
-      return !/无法回答/.test(content);
-    } catch {
-      /* retry */
+      if (!content) {
+        if (labelFailureSamples < 5) {
+          labelFailureSamples += 1;
+          const finish = body?.choices?.[0]?.finish_reason ?? 'unknown';
+          const reasoning = body?.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+          console.log(`\n[label] 空 content（finish=${finish}, reasoning=${reasoning} tokens），提高预算后重试`);
+        }
+        if (body?.choices?.[0]?.finish_reason === 'length') {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+          continue;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+        continue;
+      }
+      return {
+        label: !/无法回答/.test(content),
+        reasoningTokens: body?.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
+        completionTokens: body?.usage?.completion_tokens ?? 0,
+        latencyMs: Date.now() - startedAt,
+      };
+    } catch (error) {
+      if (labelFailureSamples < 5) {
+        labelFailureSamples += 1;
+        console.log(`\n[label] 请求异常：${error instanceof Error ? error.message : String(error)}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5000 * (attempt + 1)));
     }
   }
   return null;
+}
+
+/** 阿里云 DashScope 原生 rerank 契约：POST 顶层 {model, query, documents} → output.results[index,relevance_score] */
+async function qwenRerank(
+  query: string,
+  documents: string[],
+  model: string = QWEN_RERANK_MODEL
+): Promise<Array<{ index: number; relevanceScore: number }>> {
+  const key = process.env.DASHSCOPE_API_KEY || '';
+  if (!key) throw new Error('缺少 DASHSCOPE_API_KEY');
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const res = await fetch(QWEN_RERANK_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, query, documents }),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${detail.slice(0, 200)}`);
+      }
+      const body = (await res.json()) as {
+        output?: { results?: Array<{ index?: unknown; relevance_score?: unknown }> };
+      };
+      const results = body?.output?.results ?? [];
+      if (!results.length) throw new Error('空 results');
+      return results
+        .map((item) => ({ index: Number(item.index), relevanceScore: Number(item.relevance_score) }))
+        .filter((item) => Number.isInteger(item.index) && Number.isFinite(item.relevanceScore));
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 // ───────────────────────────── 指标 ─────────────────────────────
@@ -484,6 +604,8 @@ async function main(): Promise<void> {
   const perProbe = Math.max(1, Number(arg('pairs') ?? 2));
   const judgeName = arg('judge') ?? 'alibaba';
   const skipCosine = hasFlag('no-cosine');
+  const embeddingModel = arg('embedding-model') || process.env.EMBEDDING_MODEL || 'BAAI/bge-m3';
+  const embeddingQueryPrefix = arg('embedding-query-prefix') || '';
 
   const probes = topicFilter ? PROBES.filter((p) => topicFilter.includes(p.topic)) : PROBES;
   const chunks = await buildChunks(docs);
@@ -497,13 +619,21 @@ async function main(): Promise<void> {
   // 余弦分（按配对逐条算，块也会被重复算，规模可接受）
   const cosineByPair = new Map<number, number>();
   if (!skipCosine) {
-    console.log('[cosine] 计算 bge-m3 余弦…');
+    console.log(
+      `[cosine] 计算 ${embeddingModel} 余弦${embeddingQueryPrefix ? `（query 前缀 ${embeddingQueryPrefix.length} 字）` : ''}…`
+    );
     const uniqueQuestions = [...new Set(pairs.map((p) => p.question))];
-    const qRes = await embedTexts({ input: uniqueQuestions });
+    const qRes = await embedTexts({
+      input: uniqueQuestions.map((q) => `${embeddingQueryPrefix}${q}`),
+      model: embeddingModel,
+    });
     const qVec = new Map<string, number[]>();
     qRes.vectors.forEach((v, i) => qVec.set(uniqueQuestions[i], v.embedding));
     const uniqueChunks = [...new Map(pairs.map((p) => [p.chunk.idx, p.chunk])).values()];
-    const cRes = await embedTexts({ input: uniqueChunks.map((c) => c.embedText.slice(0, 5900)) });
+    const cRes = await embedTexts({
+      input: uniqueChunks.map((c) => c.embedText.slice(0, 5900)),
+      model: embeddingModel,
+    });
     const cVec = new Map<number, number[]>();
     cRes.vectors.forEach((v, i) => cVec.set(uniqueChunks[i].idx, v.embedding));
     pairs.forEach((p, i) => {
@@ -514,15 +644,37 @@ async function main(): Promise<void> {
     console.log(`[cosine] 完成 ${cosineByPair.size}/${pairs.length}`);
   }
 
-  // 打分：默认走决策模型；--ranker=rerank 时改用交叉编码重排器（查询 × 候选成对精排）
-  const useRerank = (arg('ranker') ?? 'judge') === 'rerank';
+  // 打分：默认走决策模型；--ranker=rerank 用交叉编码重排，--ranker=qwen 用 qwen3.7，--ranker=cosine 只看向量余弦
+  const rankerArg = arg('ranker') ?? 'judge';
+  const useCosineOnly = rankerArg === 'cosine';
+  const useQwenRerank = rankerArg === 'qwen' || rankerArg === 'qwen3.7';
+  const useRerank = rankerArg === 'rerank' || useQwenRerank;
   let cfg = buildJudge(judgeName);
   let scored: ScoredPair[];
   let failed = 0;
+  const scoreLabel = useCosineOnly ? '余弦' : useRerank ? '重排' : '决策模型 noul';
 
-  if (useRerank) {
+  if (useCosineOnly) {
+    if (skipCosine) {
+      console.error('[score] --ranker=cosine 不能与 --no-cosine 同时使用');
+      process.exitCode = 1;
+      return;
+    }
+    cfg = { name: `embedding:${embeddingModel}`, url: 'local:cosine', headers: {}, extract: () => null };
+    console.log(`[score] 只用余弦分（${embeddingModel}）`);
+    scored = pairs.map((p, i) => ({
+      ...p,
+      cosine: cosineByPair.get(i) ?? null,
+      judge: cosineByPair.get(i) ?? null,
+    }));
+  } else if (useRerank) {
     // 生产同形：一条 query 带它那几条候选，一次调用拿回逐条精排分（不是逐对请求）
-    cfg = { name: 'reranker:bge-reranker-v2-m3', url: 'local:rerank', headers: {}, extract: () => null };
+    const rerankModel =
+      arg('reranker-model') ||
+      process.env.RERANK_MODEL ||
+      (useQwenRerank ? QWEN_RERANK_MODEL : 'BAAI/bge-reranker-v2-m3');
+    const rankerLabel = rerankModel;
+    cfg = { name: `reranker:${rankerLabel}`, url: 'local:rerank', headers: {}, extract: () => null };
     const byQuestion = new Map<string, number[]>();
     pairs.forEach((p, i) => {
       const list = byQuestion.get(p.question) ?? [];
@@ -530,15 +682,15 @@ async function main(): Promise<void> {
       byQuestion.set(p.question, list);
     });
     const scores = new Array<number | null>(pairs.length).fill(null);
-    console.log(`[reranker] bge-reranker-v2-m3，${byQuestion.size} 条 query（每条带 2~4 个候选）…`);
+    console.log(`[reranker] ${rankerLabel}，${byQuestion.size} 条 query（每条带 2~4 个候选）…`);
     let groups = 0;
     for (const [question, idxs] of byQuestion) {
       try {
-        const res = await rerankDocuments({
-          query: question,
-          documents: idxs.map((i) => pairs[i].chunk.text.slice(0, 1800)),
-        });
-        for (const item of res.results) {
+        const documents = idxs.map((i) => pairs[i].chunk.text.slice(0, 1800));
+        const results = useQwenRerank
+          ? await qwenRerank(question, documents, rerankModel)
+          : (await rerankDocuments({ query: question, documents, model: rerankModel })).results;
+        for (const item of results) {
           const pairIdx = idxs[item.index];
           if (pairIdx !== undefined) scores[pairIdx] = item.relevanceScore;
         }
@@ -575,14 +727,53 @@ async function main(): Promise<void> {
 
   // ── 独立标注复核（--no-label 可跳过） ──
   if (!hasFlag('no-label')) {
-    console.log(`[label] 用 ${LABEL_MODEL} 复核每条配对是否真的可答（并发 8）…`);
+    // 网关按分组限流（约 40 请求/分钟）；默认串行 + 每条间隔 2s，宁可慢也不丢标签。
+    const labelConcurrency = Math.max(1, Number(process.env.LABEL_CONCURRENCY ?? 1));
+    const labelDelayMs = Math.max(0, Number(process.env.LABEL_DELAY_MS ?? 2000));
+    const cache = loadLabelCache();
+    const labelTargets = LABEL_LIMIT > 0 ? scored.slice(0, LABEL_LIMIT) : scored;
+    console.log(
+      `[label] ${LABEL_MODEL} thinking=${LABEL_THINKING}` +
+        `${LABEL_THINKING === 'enabled' ? ` effort=${LABEL_REASONING_EFFORT}` : ''}` +
+        ` budget=${LABEL_MAX_TOKENS} concurrency=${labelConcurrency} delay=${labelDelayMs}ms` +
+        ` cache=${path.basename(LABEL_CACHE_FILE)}（已有 ${cache.size} 条）…`
+    );
     let done2 = 0;
     let failed2 = 0;
-    await mapLimit(scored, 8, async (pair) => {
-      pair.label = await labelOne(pair.chunk.text.slice(0, 4000), pair.question);
-      if (pair.label === null || pair.label === undefined) failed2 += 1;
+    let cacheHits = 0;
+    const labelStartedAt = Date.now();
+    await mapLimit(labelTargets, labelConcurrency, async (pair) => {
+      const chunk = pair.chunk.text.slice(0, 4000);
+      const key = labelKey(chunk, pair.question);
+      const cached = cache.get(key);
+      if (cached) {
+        pair.label = cached.label;
+        cacheHits += 1;
+      } else {
+        const result = await labelOne(chunk, pair.question);
+        if (result) {
+          pair.label = result.label;
+          const entry: LabelCacheEntry = { key, at: new Date().toISOString(), ...result };
+          try {
+            fs.appendFileSync(LABEL_CACHE_FILE, `${JSON.stringify(entry)}\n`);
+            cache.set(key, entry);
+          } catch {
+            /* 缓存写失败不影响本轮标签 */
+          }
+        } else {
+          failed2 += 1;
+        }
+        if (labelDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, labelDelayMs));
+      }
       done2 += 1;
-      if (done2 % 20 === 0 || done2 === scored.length) process.stdout.write(`\r[label] ${done2}/${scored.length}（失败 ${failed2}）`);
+      if (done2 % 10 === 0 || done2 === labelTargets.length) {
+        const elapsedSec = Math.max(1, (Date.now() - labelStartedAt) / 1000);
+        const rate = done2 / elapsedSec;
+        const etaSec = rate > 0 ? Math.round((labelTargets.length - done2) / rate) : 0;
+        process.stdout.write(
+          `\r[label] ${done2}/${labelTargets.length}（缓存 ${cacheHits}，失败 ${failed2}，ETA ${etaSec}s）`
+        );
+      }
     });
     process.stdout.write('\n');
   }
@@ -606,7 +797,7 @@ async function main(): Promise<void> {
 
   console.log('\n════════════════ 可答性判定 ════════════════');
   console.log(`样本：正例 ${pos.length}，难负例 ${hard.length}，易负例 ${easy.length}（judge 失败 ${failed}）`);
-  console.log('\n决策模型 noul：');
+  console.log(`\n${scoreLabel}：`);
   console.log(`  正例  均值 ${mean(pos).toFixed(3)}  最小 ${min(pos).toFixed(3)}`);
   console.log(`  难负例 均值 ${mean(hard).toFixed(3)}  最大 ${max(hard).toFixed(3)}`);
   console.log(`  易负例 均值 ${mean(easy).toFixed(3)}  最大 ${max(easy).toFixed(3)}`);
@@ -636,7 +827,7 @@ async function main(): Promise<void> {
   }
 
   // 分类别看探针类型（direct / paraphrase / inference）
-  console.log('\n按问题类型（决策模型，阈值 0.5）：');
+  console.log(`\n按问题类型（${scoreLabel}，阈值 0.5）：`);
   for (const kind of ['direct', 'paraphrase', 'inference'] as const) {
     const kp = usable.filter((p) => p.kind === 'pos' && p.probeKind === kind).map((p) => p.judge as number);
     const kn = usable.filter((p) => p.kind !== 'pos' && p.probeKind === kind).map((p) => p.judge as number);
@@ -670,7 +861,7 @@ async function main(): Promise<void> {
     const jEasy = easyClean.map((p) => p.judge as number);
     const jAllNeg = [...jHard, ...jEasy];
     console.log(`\n清理后样本：正例 ${jPos.length}，难负例 ${jHard.length}，易负例 ${jEasy.length}`);
-    console.log(`  决策模型 AUC ${auc(jPos, jAllNeg).toFixed(4)}（vs 难负 ${auc(jPos, jHard).toFixed(4)}）`);
+    console.log(`  ${scoreLabel} AUC ${auc(jPos, jAllNeg).toFixed(4)}（vs 难负 ${auc(jPos, jHard).toFixed(4)}）`);
     for (const t of [0.2, 0.3, 0.5, 0.7]) {
       const tpr = jPos.filter((x) => x >= t).length / Math.max(1, jPos.length);
       const tnrHard = jHard.filter((x) => x < t).length / Math.max(1, jHard.length);

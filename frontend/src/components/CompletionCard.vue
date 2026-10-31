@@ -13,7 +13,8 @@
           <span class="attribution-tag">主要因为</span>{{ advisory.attribution.reason }}
         </p>
         <p class="section-hint">确认后会调整后续学习安排，已完成的内容不会改变。</p>
-        <div class="advisory-options">
+        <div v-if="advisoryKept" class="section-hint">你已选择保持原计划，这条建议不会再调整后续安排。</div>
+        <div v-else class="advisory-options">
           <button
             v-for="option in advisory.ui.options"
             :key="option.key"
@@ -103,7 +104,7 @@
 
       <div id="sec-next" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Compass /></span>下一步建议</h4>
-        <ol v-if="actionPlan.length" class="ordered-list"><li v-for="(item, idx) in actionPlan" :key="`${idx}-${item}`">{{ item }}</li></ol>
+        <ol v-if="actionPlan.length" class="ordered-list"><li v-for="(item, idx) in actionPlan" :key="`${idx}-${item}`"><MarkdownRenderer :content="item" /></li></ol>
         <div v-else class="section-content"><MarkdownRenderer :content="summary.practiceAdvice" /></div>
       </div>
 
@@ -117,7 +118,7 @@
       </div>
     </div>
 
-    <div class="completion-actions">
+    <div v-if="!blocked" class="completion-actions">
       <!-- 三个动作的后果写清楚：用户反馈「又是继续、又是返回、又是完成，不知道什么意思」 -->
       <p class="completion-actions__hint">完成任务会推进路径进度，其余不会。</p>
       <div class="completion-actions__row">
@@ -174,6 +175,8 @@ const props = defineProps<{
   advisory?: ReplanAdvisory | null;
   busy?: boolean;
   taskId?: string;
+  /** 结算门禁：末问/小测未完成时隐藏常规动作栏，只保留下方恢复卡 */
+  blocked?: boolean;
 }>();
 
 const emit = defineEmits<{ action: [action: 'end' | 'continue-task' | 'complete-task']; 'advisory-action': [action: string] }>();
@@ -182,13 +185,16 @@ const summary = computed(() => props.wrapup.summary);
 const evaluation = computed(() => props.wrapup.evaluation);
 const stateUpdate = computed(() => props.wrapup.stateUpdate || null);
 const advisory = computed(() => props.advisory || null);
+/** 学习者已明确「保持原计划」：建议卡转已决策态，不再给可重复点击的按钮 */
+const advisoryKept = computed(() => advisory.value?.learnerResponse?.action === 'keep');
 const busy = computed(() => props.busy === true);
 const isAdjustmentAction = (action: string) => ['confirm', 'reinforce', 'slow_down', 'resequence', 'accelerate'].includes(action);
 
 const toFixed = (v: number | undefined) => Number(v || 0).toFixed(1);
 const getSimpleLevel = (v: number, h: number, m: number) => (v >= h ? { level: '高', tone: 'good' } : v >= m ? { level: '中', tone: 'normal' } : { level: '低', tone: 'warn' });
 const getStress = (v: number) => (v >= 70 ? { level: '高', tone: 'warn' } : v >= 40 ? { level: '中', tone: 'normal' } : { level: '低', tone: 'good' });
-const getBalance = (v: number) => (v >= 1 ? { level: '平衡', tone: 'good' } : v >= -2 ? { level: '轻微失衡', tone: 'normal' } : { level: '失衡', tone: 'warn' });
+// display 0-100 刻度（与学习状态页 /state/current 一致）：阈值 10 / -20 对应内部 1 / -2。
+const getBalance = (v: number) => (v >= 10 ? { level: '平衡', tone: 'good' } : v >= -20 ? { level: '轻微失衡', tone: 'normal' } : { level: '失衡', tone: 'warn' });
 
 /* 数字计数动画：0 → 终值（rAF，reduced-motion 直接终值） */
 const prefersReducedMotion = typeof window !== 'undefined'
@@ -269,19 +275,27 @@ const sessionMetricCards = computed(() => {
 
 const longTermMetricCards = computed(() => {
   if (!stateUpdate.value) return [];
-  const { ktl, lsb, lf, lss } = stateUpdate.value;
+  const { ktl, lsb, lf, lss, mature } = stateUpdate.value;
+  // 长期态内部刻度为 0-10（PMC），展示统一到 0-100——与学习状态页的 KTL/LF/LSS/LSB 同刻度，
+  // 避免同一用户在两页看到 10 倍差（2026-10-23 走查：反馈 0.1 vs 状态页 1.2）。
+  const display = (v: number | undefined) => Number(v || 0) * 10;
+  const ktlD = display(ktl);
+  const lsbD = display(lsb);
+  const lfD = display(lf);
+  const lssD = display(lss);
   // 长期态 KTL = 训练负荷（LearningStateMetrics.ktl，LSS 的慢 EWMA，高=负荷重）。
   // 此前用 getSimpleLevel(ktl,7,4)（高=好）并叫它「知识掌握」，与管理端（按后端语义判高=坏、
   // 显示为红）结论相反。现与 LSS/LF 同向走 getStress，标签取自 @/utils/learnerMetrics 单点。
-  const kl = getStress(Number(ktl || 0) * 10);
-  const bl = getBalance(Number(lsb || 0));
-  const fl = getStress(Number(lf || 0) * 10);
-  const sl = getStress(Number(lss || 0) * 10);
+  const kl = getStress(ktlD);
+  // 冷启动（PMC 基座未成熟）form<0 属正常爬升，不按「失衡」警示。
+  const bl = mature === false ? { level: '积累中', tone: 'normal' } : getBalance(lsbD);
+  const fl = getStress(lfD);
+  const sl = getStress(lssD);
   return [
-    { key: 'ktl', label: learnerMetric('ktl').label, value: toFixed(ktl), raw: Number(ktl || 0), level: kl.level, tone: kl.tone, desc: '长期累积的训练负荷，偏高说明学习压力在堆积，宜适时降强度。' },
-    { key: 'lsb', label: '整体状态', value: toFixed(lsb), raw: Number(lsb || 0), level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
-    { key: 'lf', label: '学习疲劳', value: toFixed(lf), raw: Number(lf || 0), level: fl.level, tone: fl.tone, desc: '短期疲劳累计，偏高时建议降强度。' },
-    { key: 'lss', label: '学习压力', value: toFixed(lss), raw: Number(lss || 0), level: sl.level, tone: sl.tone, desc: '整体学习压力水平，持续偏高需节奏调整。' },
+    { key: 'ktl', label: learnerMetric('ktl').label, value: toFixed(ktlD), raw: ktlD, level: kl.level, tone: kl.tone, desc: '长期累积的训练负荷，偏高说明学习压力在堆积，宜适时降强度。' },
+    { key: 'lsb', label: '整体状态', value: toFixed(lsbD), raw: lsbD, level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
+    { key: 'lf', label: '学习疲劳', value: toFixed(lfD), raw: lfD, level: fl.level, tone: fl.tone, desc: '短期疲劳累计，偏高时建议降强度。' },
+    { key: 'lss', label: '学习压力', value: toFixed(lssD), raw: lssD, level: sl.level, tone: sl.tone, desc: '整体学习压力水平，持续偏高需节奏调整。' },
   ];
 });
 
@@ -411,6 +425,8 @@ const tagClass = (type: string) => ({
 .knowledge-evidence { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .ordered-list { margin: 0; padding-left: 0; list-style-position: inside; list-style-type: decimal; font-size: 13px; line-height: 1.6; color: var(--ink); }
 .ordered-list li { margin: 0 0 6px; overflow-wrap: anywhere; }
+.ordered-list li :deep(.markdown-renderer) { display: inline; }
+.ordered-list li :deep(.markdown-renderer > p) { display: inline; margin: 0; }
 .ordered-list li:last-child { margin-bottom: 0; }
 .evaluation-block { display: grid; gap: 8px; }
 .evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); }

@@ -48,7 +48,7 @@ const NOT_READY_POLL_MS = 30_000;
  * 连续"可重试"的总时长预算。不能按次数：会话租约 TTL 为 10 分钟，一次被杀掉的
  * `advance-day` 会留下未过期的租约，后续请求持续 409「会话忙」——必须能等过 TTL。
  */
-const RETRY_BUDGET_MS = 20 * 60_000;
+const RETRY_BUDGET_MS = 90 * 60_000;
 /** 被限流（429）时的等待：限流窗口通常按分钟计，用固定较长等待而非指数短退避 */
 const RATE_LIMIT_WAIT_MS = 60_000;
 /**
@@ -56,8 +56,8 @@ const RATE_LIMIT_WAIT_MS = 60_000;
  * 与 `advance-day` 的「未就绪」不同：失败是确定态，不能无限等；重试仍失败即立即上报失败。
  */
 const MAX_PATH_GENERATION_RETRIES = 2;
-/** 单次 HTTP 请求上限：`advance-day runTasks` 会同步跑完当天课程，实测可达 ~5 分钟 */
-const REQUEST_TIMEOUT_MS = 30 * 60_000;
+/** 单次 HTTP 请求上限：`advance-day runTasks` 会同步跑完当天课程；ds4.1 + 上游限流下单日实测 11–35 分钟 */
+const REQUEST_TIMEOUT_MS = 60 * 60_000;
 const ORIGIN = 'http://localhost:5173';
 
 /**
@@ -75,6 +75,24 @@ const DISPOSABLE_STORY = {
   },
   triggerEvent: '上个月排班失误，周末高峰连续两天顾客流失',
 };
+
+/** 允许按案例覆盖故事/人设（不放进 HarnessArgs，避免影响既有跑数参数契约） */
+function cliValue(name: string, fallback: string): string {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.slice(name.length + 3).trim() || fallback : fallback;
+}
+function storyFor(args: HarnessArgs) {
+  return {
+    id: 'story_e2e_disposable',
+    title: cliValue('story-title', DISPOSABLE_STORY.title),
+    visibleOpening: cliValue('story-opening', DISPOSABLE_STORY.visibleOpening),
+    goalSeed: {
+      surfaceGoal: args.learningGoal,
+      realProblem: cliValue('story-problem', DISPOSABLE_STORY.goalSeed.realProblem),
+    },
+    triggerEvent: cliValue('story-trigger', DISPOSABLE_STORY.triggerEvent),
+  };
+}
 
 interface ApiResult {
   status: number;
@@ -149,7 +167,12 @@ async function api(method: string, urlPath: string, body?: unknown): Promise<Api
     try { parsed = asRecord(await response.json()); } catch { parsed = null; }
     return { status: response.status, body: parsed };
   } catch (error) {
-    log(`  (网络异常：${(error as { code?: string; message?: string }).code || (error as Error).message})`);
+    // AbortSignal.timeout 的 DOMException 是 TimeoutError(code=23)，是客户端掐的，
+    // 不是网络断——按「客户端超时」报，避免误导向"后端重启"。
+    const label = (error as { name?: string }).name === 'TimeoutError'
+      ? `客户端请求超时（${Math.round(REQUEST_TIMEOUT_MS / 60_000)} 分钟）`
+      : String((error as { code?: string }).code || (error as Error).message);
+    log(`  (请求异常：${label})`);
     return { status: 0, body: null };
   }
 }
@@ -372,7 +395,12 @@ async function cleanupLearner(args: HarnessArgs, state: RunState): Promise<void>
 }
 
 async function main(): Promise<void> {
-  const args = parseHarnessArgs(process.argv.slice(2), process.env);
+  // 故事/人设覆盖参数由本脚本消费（cliValue），不进 run-harness 的参数契约
+  const EXTRA_ARG = /^--(story-(title|opening|problem|trigger)|profile-(role|scenario))=/;
+  const args = parseHarnessArgs(
+    process.argv.slice(2).filter((a) => !EXTRA_ARG.test(a)),
+    process.env,
+  );
   if (!args.adminPassword) {
     throw new Error('缺少管理员密码：请设置 E2E_ADMIN_PASSWORD（或让 .env 里有 INIT_ADMIN_PASSWORD）');
   }
@@ -410,11 +438,11 @@ async function main(): Promise<void> {
       learningGoal: args.learningGoal,
       knowledgeLevel: 'beginner',
       profile: {
-        role: '可丢弃跑数学习者',
-        scenario: '端到端验证日期模拟与多日上课',
+        role: cliValue('profile-role', '可丢弃跑数学习者'),
+        scenario: cliValue('profile-scenario', '端到端验证日期模拟与多日上课'),
         note: '由 simulate-learner-e2e 自动创建，跑完自删',
         // 手写故事：避免为"故事生成"多花一次 LLM，并满足 start-session 的 STORY_REQUIRED
-        storyPool: [DISPOSABLE_STORY],
+        storyPool: [storyFor(args)],
       },
       tags: ['e2e', 'disposable'],
       notes: 'auto-created by simulate-learner-e2e; safe to delete',
@@ -439,6 +467,7 @@ async function main(): Promise<void> {
     const baseDate = new Date(Date.now() - args.baseDaysAgo * 86_400_000).toISOString().slice(0, 10);
     const clock = await makeApi(args.baseUrl, 'PUT', `/api/admin/virtual-learners/sessions/${sessionId}/simulation-config`, {
       simulationClock: { enabled: true, baseDate, autoAdvance: false },
+      ...(args.advisoryResponse ? { advisoryResponse: args.advisoryResponse } : {}),
     });
     if (clock.status !== 200) {
       addFinding(state, 'clock-config-failed', `http=${clock.status} ${JSON.stringify(clock.body?.error ?? '')}`.slice(0, 200));

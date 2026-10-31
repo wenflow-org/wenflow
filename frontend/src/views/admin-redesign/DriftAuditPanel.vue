@@ -1,25 +1,10 @@
 <template>
   <div class="fdp">
-    <!-- 新建字段引导（嵌套卡走 mk-card + card__head：原型 .card/.card__head/.card__title 201-215） -->
-    <details class="mk-card fdp__box">
-      <summary class="mk-card__head mk-section__summary">
-        <span class="mk-card__title">新建字段（编辑编排文件）</span>
-      </summary>
-      <div class="fdp__guide">
-        <p class="fdp__guide-text">
-          新建字段请直接编辑编排文件，保存后立即生效（已有行修改见「不一致报告」）。
-        </p>
-        <p class="fdp__guide-file"><span class="mono">prompts/orchestration/{{ stage }}.yaml</span></p>
-        <p class="fdp__guide-text">入口：<strong>「字段路由」页顶部「编排文件」按钮</strong>，在文本框中按现有结构追加
-          <code class="mono">fields:</code> / <code class="mono">routings:</code> 条目后点击「{{ TERMS.saveToFile }}」。</p>
-      </div>
-    </details>
-
     <!-- 漂移报告 -->
     <details class="mk-card fdp__box" open>
       <summary class="mk-card__head mk-section__summary">
         <span class="mk-card__title">不一致报告</span>
-        <span class="mk-card__meta">{{ TERMS.driftContractQualified }}：编排文件 vs 数据库 · admin 编辑行豁免</span>
+        <span class="mk-card__meta">{{ TERMS.driftContractQualified }}</span>
       </summary>
       <div v-if="driftLoading" class="fdp__loading"><MkLoading text="不一致检测中…" inline /></div>
       <MkEmptyState
@@ -31,39 +16,39 @@
         compact
         @action="loadDrift"
       />
-      <!-- 一致（正向后空态）：原型 .empty 词表，图标 + 结论 + 说明 -->
+      <!-- 一致（正向后空态）：原型 .empty 词表，图标 + 结论 -->
       <MkEmptyState
         v-else-if="drift.items.length === 0"
         icon="✓"
         title="无不一致"
-        description="编排文件与数据库一致"
         compact
       />
-      <ul v-else class="fdp__drift-list">
-        <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
-          <span class="mono mk-badge mk-badge--warn fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
-          <span class="mono fdp__drift-key">{{ d.key }}</span>
-          <span class="fdp__drift-field">{{ d.field }}</span>
-          <span class="mono fdp__drift-val fdp__drift-val--seed">声明={{ stringify(d.seedValue) }}</span>
-          <span class="mono fdp__drift-val fdp__drift-val--db">数据库={{ stringify(d.dbValue) }}</span>
-        </li>
-      </ul>
-      <p v-if="drift.totalDriftCount > drift.items.length" class="mk-card__note">（共 {{ drift.totalDriftCount }} 项，当前筛选显示 {{ drift.items.length }}）</p>
+      <template v-else>
+        <ul class="fdp__drift-list">
+          <li v-for="(d, i) in drift.items" :key="i" class="fdp__drift-item">
+            <span class="mk-badge mk-badge--warn fdp__drift-kind">{{ kindLabel(d.kind) }}</span>
+            <span class="mono fdp__drift-key">{{ d.key }}</span>
+            <span class="fdp__drift-field">{{ d.field }}</span>
+            <span class="fdp__drift-val fdp__drift-val--seed">声明=<span class="mono">{{ stringify(d.seedValue) }}</span></span>
+            <span class="fdp__drift-val fdp__drift-val--db">数据库=<span class="mono">{{ stringify(d.dbValue) }}</span></span>
+            <button type="button" class="mk-link fdp__drift-act" @click="emit('open-orchestration')">打开编排文件</button>
+          </li>
+        </ul>
+        <p v-if="drift.totalDriftCount > drift.items.length" class="mk-card__note">（共 {{ drift.totalDriftCount }} 项，当前筛选显示 {{ drift.items.length }}）</p>
+      </template>
     </details>
 
     <!-- 审计 -->
     <details class="mk-card fdp__box">
       <summary class="mk-card__head mk-section__summary">
-        <span class="mk-card__title">最近变更（审计）</span>
+        <span class="mk-card__title">最近变更</span>
         <span v-if="changes.length" class="mk-card__meta">{{ changes.length }} 条</span>
       </summary>
       <ul v-if="changes.length" class="fdp__changes-list">
         <li v-for="(c, i) in changes" :key="i" class="fdp__change">
-          <span class="mk-badge mk-badge--muted fdp__change-kind">{{ String(c.changeType || '—') }}</span>
-          <span class="fdp__change-target">{{ String(c.targetTable || '') }}</span>
+          <span class="mk-badge mk-badge--muted fdp__change-kind">{{ changeTypeText(c.changeType) }}</span>
+          <span class="fdp__change-target">{{ targetTableText(c.targetTable) }}</span>
           <span class="mono">{{ String(c.targetId || '') }}</span>
-          <!-- P2（审核 #81）：「最近变更」此前只有 changeType/表/ID，无法判断是 5 分钟前还是半年前、也无操作人线索；
-               接口逐行已返回 createdAt/actorId/actorRole/reason，这里补时间与操作人两列（完整值与原因走 title） -->
           <span class="fdp__change-time mono" :title="changeTimeFull(c.createdAt)">{{ changeTime(c.createdAt) }}</span>
           <span class="fdp__change-actor" :title="actorTitle(c)">{{ actorText(c) }}</span>
         </li>
@@ -81,23 +66,27 @@
         v-else
         icon="⇄"
         title="暂无变更记录"
-        description="本阶段尚无配置变更审计流水。"
         action-text="刷新"
         compact
         @action="loadChanges"
       />
+      <div v-if="changes.length" class="fdp__changes-foot">
+        <RouterLink class="mk-link" :to="{ path: '/admin/audit-logs' }">在审计日志看全部</RouterLink>
+      </div>
     </details>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import { RouterLink } from 'vue-router';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { TERMS } from './terms';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
 
 const props = defineProps<{ stage: string }>();
+const emit = defineEmits<{ 'open-orchestration': [] }>();
 
 const drift = ref<{ items: Array<Record<string, unknown>>; totalDriftCount: number }>({ items: [], totalDriftCount: 0 });
 const driftLoading = ref(false);
@@ -116,6 +105,24 @@ const driftKindLabels: Record<string, string> = { contract: '契约', field: '�
 function kindLabel(kind: unknown) {
   return driftKindLabels[String(kind || '')] || String(kind || '');
 }
+
+/* 变更动作与对象：后端 changeType / targetTable 是内部枚举与下划线表名，直出运营读不懂 */
+const CHANGE_TYPE_LABELS: Record<string, string> = {
+  'routing-patch': '修改字段路由',
+  'orchestration-save': '保存编排文件',
+  'orchestration-prune': '清理孤儿行',
+  'field-routing-bootstrap-reconcile': '字段路由对账',
+  'health-fix': '健康修复',
+  'skill-field-delete': '删除字段',
+};
+const changeTypeText = (v: unknown) => CHANGE_TYPE_LABELS[String(v || '')] || String(v || '—');
+const TARGET_TABLE_LABELS: Record<string, string> = {
+  agent_field_routings: '字段路由',
+  field_definitions: '字段定义',
+  agent_contracts: '字段契约',
+  node_config_changes: '配置变更',
+};
+const targetTableText = (v: unknown) => TARGET_TABLE_LABELS[String(v || '')] || String(v || '');
 
 /* 审计行时间/操作人（审核 #81）：接口逐行带 createdAt/actorId/actorRole/reason，
    此前未渲染导致「最近变更」看不出新旧与是谁改的。时间行内取「今天 HH:mm / M/D HH:mm」，
@@ -192,23 +199,6 @@ watch(() => props.stage, () => {
 .fdp__box[open] > .mk-section__summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 .fdp__box:not([open]) > .mk-card__head { border-bottom: 0; }
 .fdp__loading { display: flex; justify-content: center; padding: 20px 0; }
-.fdp__guide { display: grid; gap: 8px; padding: 12px 14px; }
-.fdp__guide-text { margin: 0; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); line-height: 1.6; }
-.fdp__guide-file {
-  margin: 0;
-  padding: 8px 12px;
-  border: 1px solid color-mix(in srgb, var(--mk-blue) 35%, var(--mk-line));
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-blue-bg, #eff6ff);
-  /* 蓝 tint 胶囊上的前景用 --mk-badge-info-fg（明暗两态已验）：暗色档 --mk-blue 提亮成
-     #5b8def，压 rgba(91,141,239,.16) 合成底只有 3.96:1（2026-10-06 渲染探针
-     orchestrator-governance 实测 span.mono）。 */
-  color: var(--mk-badge-info-fg, #2f6ae0);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-}
-.fdp__guide-file .mono { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-badge-info-fg, #2f6ae0); }
-.fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-micro); background: var(--mk-surface-3); padding: 1px 6px; border-radius: var(--mk-radius-sm); }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 /* 漂移条目：原型 .note--warn 语义（soft 琥珀底 + 圆角，不再自搓描边盒）——原型 .note 438-439 */
 .fdp__drift-item {
@@ -230,6 +220,7 @@ watch(() => props.stage, () => {
 .fdp__drift-val { font-size: var(--mk-fs-micro); }
 .fdp__drift-val--seed { color: var(--mk-muted, #5b6577); }
 .fdp__drift-val--db { color: var(--mk-blue, #2f6ae0); font-weight: 600; }
+.fdp__drift-act { margin-left: auto; font-size: var(--mk-fs-micro); }
 .fdp__changes-list { margin: 0; padding: 2px 14px 8px; list-style: none; }
 /* 审计行：原型 .rankrow/.vrow 分隔线列表（行间 1px 底线、末行不画，不再逐条描边盒）297-302 */
 .fdp__change {
@@ -247,24 +238,15 @@ watch(() => props.stage, () => {
 /* 时间列等宽数字防跳动；操作人弱化，完整原因/角色在 title（审核 #81） */
 .fdp__change-time { color: var(--mk-faint, var(--mk-muted)); font-variant-numeric: tabular-nums; }
 .fdp__change-actor { color: var(--mk-muted, #5b6577); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.fdp__changes-foot { display: flex; justify-content: flex-end; padding: 4px 14px 12px; }
 
 @media (min-width: 2000px) {
-  .fdp__guide { padding: 14px 17px; }
-  .fdp__guide-text { font-size: var(--mk-fs-body); }
-  .fdp__guide-file { font-size: var(--mk-fs-body); padding: 9px 14px; }
-  .fdp__guide-file .mono { font-size: var(--mk-fs-micro); }
-  .fdp__guide-text code { font-size: var(--mk-fs-micro); }
   .fdp__drift-item { font-size: var(--mk-fs-micro); padding: 9px 14px; }
   .fdp__drift-val { font-size: var(--mk-fs-micro); }
   .fdp__change { font-size: var(--mk-fs-micro); padding: 10px 0; }
 }
 
 @media (min-width: 2800px) {
-  .fdp__guide { padding: 17px 21px; }
-  .fdp__guide-text { font-size: var(--mk-fs-body); }
-  .fdp__guide-file { font-size: var(--mk-fs-body); padding: 11px 17px; }
-  .fdp__guide-file .mono { font-size: var(--mk-fs-micro); }
-  .fdp__guide-text code { font-size: var(--mk-fs-micro); }
   .fdp__drift-item { font-size: var(--mk-fs-micro); padding: 10px 15px; }
   .fdp__drift-val { font-size: var(--mk-fs-micro); }
   .fdp__change { font-size: var(--mk-fs-micro); padding: 11px 0; }

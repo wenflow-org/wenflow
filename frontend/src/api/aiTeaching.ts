@@ -3,21 +3,46 @@ import { streamSsePost } from '../utils/sse';
 import type { InteractionMeta } from '../composables/useInteractionMeta';
 
 /**
- * 位置线图载荷（2026-09-27 双通道重构 Scope B）：空间位置关系的确定性渲染。
- * 数值域由后端归一化保证覆盖全部取值；前端只做坐标映射（TeachingFigure.vue）。
+ * 回合写入幂等键（2026-10-20）。
+ *
+ * 服务端 `/messages`、`/continue`、checkpoint 提交要求 `Idempotency-Key`：同一次逻辑发送的
+ * 所有重试（流式→非流式回退、自动退避重试、刷新后手动重试）必须复用同一个 key，
+ * 否则丢响应后的重发会重复追加用户消息/重复扣费。
+ */
+export function createTeachingIdempotencyKey(scope: string): string {
+  const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  return `${scope}:${uuid}`;
+}
+
+/**
+ * 教学图载荷：确定性 SVG 渲染。
+ * `position-line` 用顶层 axis/marks/spans/guides（2026-09-27 既有契约）；
+ * 其余图型（grid/matrix/compare/quadrant/bipartite/board/bins/balance/ladder）用 `spec`，
+ * 字段由后端归一化逐项裁剪（白名单 + 上限），前端只负责坐标计算。
+ * `palette` 由服务端按学科盖章，只影响色相与材质。
  */
 export interface TeachingFigurePayload {
   engine: string;
   kind: string;
-  axis: {
+  /** 学科调色板；只影响观感，不改变几何与语义 */
+  palette?: 'indigo' | 'earth' | 'tech' | 'warm' | 'violet' | 'mono';
+  axis?: {
     min: number;
     max: number;
     unit?: string | null;
     ticks?: Array<{ at: number; label?: string | null }>;
   };
-  marks: Array<{ at: number; label: string; dir?: 'right' | 'left' | 'none' }>;
+  marks?: Array<{ at: number; label: string; dir?: 'right' | 'left' | 'none' }>;
   spans?: Array<{ from: number; to: number; label: string }>;
+  /** 归类花括号：把轴上连续的一段位置圈成一组（`spans` 是跨度，这里是归组） */
+  group?: { from: number; to: number; label?: string | null } | null;
   guides?: Array<{ at: number; label?: string | null }>;
+  /** 非 position-line 图型的规格 */
+  spec?: Record<string, unknown>;
+  /** 模型自己给的一句话出图理由（只给复盘/图库看，不渲染给学生） */
+  why?: string | null;
   caption?: string | null;
 }
 
@@ -249,6 +274,8 @@ export interface WrapupArtifact {
     ktl: number;
     lf: number;
     lsb: number;
+    /** PMC 基座是否成熟（false = 冷启动爬升期，LSB<0 不按「失衡」展示） */
+    mature?: boolean;
   } | null;
   duration?: number;
   summarySource?: 'model' | 'fallback';
@@ -283,6 +310,8 @@ export interface ReplanAdvisory {
       description: string;
     }>;
   };
+  /** 学习者处置记录（advisory-response 端点写入）；keep 后建议卡转已决策态、决策流消账 */
+  learnerResponse?: { action: 'keep' | 'later' | 'preview' | 'adopt'; at: string } | null;
 }
 
 export interface SessionSummary {
@@ -370,6 +399,21 @@ const finalizationStepCompleted = (result: FinalizationResult, action: FinalizeA
 
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
+/**
+ * 「结算现在不可能成功、重试也无意义」的服务端明确拒绝码（finalizeSessionReliably 不做状态补偿）：
+ * - 三个收束门禁（teaching-closure.ts #51 P-25）：检查点未答 / 老师末问未回应 / 末次检查未过——
+ *   需要用户先回应课内问答，原文有行动指引；
+ * - FINALIZATION_SESSION_NOT_CLOSED：自动关课已跑但 wrapup 未落，原文指引「先结束课堂」；
+ * - TEACHING_SESSION_STALE：revision 已被在途回合推进，原文指引刷新/重试。
+ */
+const FINALIZATION_UNACTIONABLE_ERROR_CODES = new Set([
+  'FINALIZATION_PENDING_CHECKPOINT',
+  'FINALIZATION_OPEN_QUESTION',
+  'FINALIZATION_LAST_CHECKPOINT_FAILED',
+  'FINALIZATION_SESSION_NOT_CLOSED',
+  'TEACHING_SESSION_STALE',
+]);
+
 export const aiTeachingAPI = {
   async startSession(taskId: string, mode?: 'tutor' | 'review'): Promise<TeachingSession> {
     const result = await api.post(
@@ -410,12 +454,16 @@ export const aiTeachingAPI = {
     message: string,
     revision: number,
     meta?: InteractionMeta,
-    options?: { timeout?: number; signal?: AbortSignal }
+    options?: { timeout?: number; signal?: AbortSignal; idempotencyKey?: string }
   ): Promise<MessageResult> {
     const result = await api.post(
       `/ai-teaching/sessions/${sessionId}/messages`,
       { message, revision, ...(meta ? { meta } : {}) },
-      { timeout: options?.timeout ?? AI_REQUEST_TIMEOUT, ...(options?.signal ? { signal: options.signal } : {}) }
+      {
+        timeout: options?.timeout ?? AI_REQUEST_TIMEOUT,
+        ...(options?.signal ? { signal: options.signal } : {}),
+        headers: { 'Idempotency-Key': options?.idempotencyKey || createTeachingIdempotencyKey('msg') },
+      }
     );
     return result.data || result;
   },
@@ -431,7 +479,7 @@ export const aiTeachingAPI = {
     sessionId: string,
     message: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal },
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string },
     meta?: InteractionMeta
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
@@ -446,6 +494,13 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, {
         signal: handlers.signal,
+        onActivity: handlers.onActivity,
+        // 教学回合为 JSON 输出、final 前可以整段无字节（实测 2~3 分钟），60s 空闲默认会把
+        // 慢回合误判成死连接并触发非流式重发（双倍回合）。放到 120s：服务端 15s 心跳注释行
+        // 会持续喂狗（sse.ts onActivity），此处只兜「连心跳都断了」的真死连接；上层看门狗
+        // 收到心跳也续命，总闸（上层 5min）负责最终止损。
+        idleTimeoutMs: 120_000,
+        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('msg') },
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {
             receivedAnything = true;
@@ -497,7 +552,7 @@ export const aiTeachingAPI = {
   async streamContinueSession(
     sessionId: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; signal?: AbortSignal }
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string }
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
       let result: MessageResult | null = null;
@@ -511,6 +566,9 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/continue`, { revision }, {
         signal: handlers.signal,
+        onActivity: handlers.onActivity,
+        headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey('cont') },
+        idleTimeoutMs: 120_000,
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {
             receivedAnything = true;
@@ -581,6 +639,7 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/peer/messages`, { message }, {
         signal: handlers.signal,
+        idleTimeoutMs: 120_000,
         onEvent: (event, data) => {
           if (event === 'final') {
             receivedAnything = true;
@@ -628,10 +687,10 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
-  /** 调整建议处置埋点（保留/稍后再看/预览）：只记账不执行，见后端 advisory-response 端点 */
+  /** 调整建议处置埋点（保留/稍后再看/预览/已采用）：只记账不执行，见后端 advisory-response 端点 */
   async recordAdvisoryResponse(
     sessionId: string,
-    action: 'keep' | 'later' | 'preview'
+    action: 'keep' | 'later' | 'preview' | 'adopt'
   ): Promise<void> {
     await api.post(`/ai-teaching/sessions/${sessionId}/advisory-response`, { action });
   },
@@ -678,6 +737,11 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
+  /**
+   * @param onProgress 每次拿到服务端结算状态时回调（首个响应 + 每轮轮询）。结算链
+   *   （自动关课 → wrapup LLM → 任务结算）实测量级可达数十秒到数分钟，调用方需要
+   *   据此展示阶段进度，而不是只拿一个长时间静默的 Promise（#115 复测：60s 零反馈）。
+   */
   async finalizeSessionReliably(
     sessionId: string,
     payload: {
@@ -686,12 +750,23 @@ export const aiTeachingAPI = {
       actualMinutes?: number;
       subjectiveDifficulty?: number;
       reason?: 'manual-end' | 'learner-abandoned' | 'task-completed';
-    }
+    },
+    onProgress?: (result: FinalizationResult) => void
   ): Promise<FinalizationResult> {
     let result: FinalizationResult;
     try {
       result = await this.finalizeSession(sessionId, payload, finalizationKey());
     } catch (error) {
+      // 「现在根本结不了」的明确拒绝必须原样抛出：吞掉原文换成 getFinalization 的
+      // not_started，用户只会看到无行动指引的「课堂结束处理尚未完成」（#115 稳定复现
+      // 的根因——收束门禁 409「老师刚提了一个问题/检查点未答」被这条补偿分支吃掉）。
+      // 幂等键复用等其他 409 不在此列：服务端可能已收束、只差键不一致，仍走下方补偿。
+      const errorCode = String(
+        (error as { code?: string })?.code
+        || (error as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code
+        || ''
+      );
+      if (FINALIZATION_UNACTIONABLE_ERROR_CODES.has(errorCode)) throw error;
       const recovered = await this.getFinalization(sessionId).catch(() => null);
       // 连结算状态都拿不到：无法安全补偿，原样抛出。
       if (!recovered) throw error;
@@ -707,11 +782,17 @@ export const aiTeachingAPI = {
        走到这里时窗口只剩 60s 旧值，于是「服务端 6 分钟后成功、前端 1 分钟就报尚未完成」。
        窗口放到 11 分钟（8min wrapup + 90s 归因 + 落库余量）。 */
     const deadline = Date.now() + 660_000;
+    const reportProgress = (state: FinalizationResult) => {
+      // 进度回调只服务于展示，不能反过来打断结算（回调里抛错就吞掉继续轮询）
+      try { onProgress?.(state); } catch { /* ignore */ }
+    };
     const pollUntilSettled = async (initial: FinalizationResult): Promise<FinalizationResult> => {
       let current = initial;
+      reportProgress(current);
       while (current.status === 'processing' && Date.now() < deadline) {
         await wait(current.pollAfterMs || 1500);
         current = await this.getFinalization(sessionId);
+        reportProgress(current);
       }
       return current;
     };
@@ -779,8 +860,15 @@ export const aiTeachingAPI = {
     return result.data || null;
   },
 
-  async submitCheckpoint(sessionId: string, checkpointId: string, payload: CheckpointSubmitPayload, revision: number): Promise<CheckpointSubmitResult> {
-    const result = await api.post(`/ai-teaching/sessions/${sessionId}/checkpoints/${checkpointId}/submit`, { ...payload, revision }, { timeout: AI_REQUEST_TIMEOUT });
+  async submitCheckpoint(sessionId: string, checkpointId: string, payload: CheckpointSubmitPayload, revision: number, idempotencyKey?: string): Promise<CheckpointSubmitResult> {
+    const result = await api.post(
+      `/ai-teaching/sessions/${sessionId}/checkpoints/${checkpointId}/submit`,
+      { ...payload, revision },
+      {
+        timeout: AI_REQUEST_TIMEOUT,
+        headers: { 'Idempotency-Key': idempotencyKey || createTeachingIdempotencyKey(`cp-${checkpointId}`) },
+      }
+    );
     return result.data || result;
   },
 
@@ -804,6 +892,7 @@ export const aiTeachingAPI = {
       onDelta?: (text: string) => void;
       onRestart?: () => void;
       signal?: AbortSignal;
+      idempotencyKey?: string;
     } = {}
   ): Promise<CheckpointSubmitResult> {
     return new Promise<CheckpointSubmitResult>((resolve, reject) => {
@@ -816,6 +905,9 @@ export const aiTeachingAPI = {
         { ...payload, revision },
         {
           signal: handlers.signal,
+          // 同 streamSendMessage：讲解回合 final 前可整段无字节，60s 默认会误杀慢回合
+          headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey(`cp-${checkpointId}`) },
+          idleTimeoutMs: 120_000,
           onEvent: (event, data) => {
             if (event === 'judgement') {
               receivedAnything = true;

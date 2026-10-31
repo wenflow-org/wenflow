@@ -34,7 +34,7 @@ import {
   checkpointForMessageResult,
   getPendingCheckpoint,
   inheritTeachingState,
-  isDuplicateCheckpointQuestion,
+  isDuplicateCheckpointQuestion, normalizeCheckpointWithTelemetry,
   recordAnchorProbeResult,
   recordCheckpointAttemptEvidence,
   recordCheckpointResultEvidence,
@@ -42,6 +42,7 @@ import {
   resolveCheckpointConsumption,
   shouldEmitCheckpoint,
   } from './teaching-checkpoint';
+import { resolveCheckpointPrediction } from './checkpoint-prediction';
 import {
   extractWarmupOutcomes,
   markWarmupAsked,
@@ -73,15 +74,19 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, maskFigureForQuestion, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
 import type { TeachingSessionMessage } from './TeachingSessionRepository';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
-import { shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
+import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
+import { decideBoardIntent, numbersOnBoard } from './board-intent';
+import { applyBoardOp } from './board-controller';
+import { boardFigureForRender, describeBoardForTeacher, openBoard, type BoardState } from './board-state';
+import { designBoard } from './board-designer.service';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import {
@@ -93,6 +98,42 @@ import {
   extractTeachingPromptDebug,
   requireTeachingRevision,
 } from './teaching-turn-shared';
+
+/**
+ * 检查点题面只存在 pendingCheckpoint 里，教师回复正文不打印题面时，学员可见历史会出现
+ * "回答了一道从未出现过的题"。把题面补进本轮可见回复（已包含则原样返回）。
+ */
+export function ensureCheckpointQuestionVisible(reply: string, question: string): string {
+  const trimmedQuestion = String(question || '').trim();
+  if (!trimmedQuestion) return reply;
+  const normalizedReply = normalizeForKeywordMatch(reply);
+  const normalizedQuestion = normalizeForKeywordMatch(trimmedQuestion);
+  if (normalizedQuestion && normalizedReply.includes(normalizedQuestion)) return reply;
+  // 老师已经用自己的措辞问过同一道题时不要再贴一遍——实测会出现
+  // "…该到哪儿？\n\n…应该是哪一段？" 这种同题复读。用字二元组近似判重。
+  if (isNearDuplicateQuestion(reply, trimmedQuestion)) return reply;
+  const trimmedReply = String(reply || '').trim();
+  return trimmedReply ? `${trimmedReply}\n\n${trimmedQuestion}` : trimmedQuestion;
+}
+
+function charBigrams(text: string): Set<string> {
+  const normalized = String(text || '').replace(/\s+/g, '');
+  const grams = new Set<string>();
+  for (let i = 0; i < normalized.length - 1; i += 1) grams.add(normalized.slice(i, i + 2));
+  return grams;
+}
+
+function isNearDuplicateQuestion(reply: string, question: string): boolean {
+  const tail = String(reply || '').slice(-200);
+  if (!/[？?]/.test(tail)) return false;
+  const replyGrams = charBigrams(tail);
+  const questionGrams = charBigrams(question);
+  if (replyGrams.size === 0 || questionGrams.size === 0) return false;
+  let intersection = 0;
+  for (const gram of questionGrams) if (replyGrams.has(gram)) intersection += 1;
+  const union = replyGrams.size + questionGrams.size - intersection;
+  return union > 0 && intersection / union >= 0.32;
+}
 
 /**
  * 软收口知识地板（2026-09-25 训练局 P1）：老师语义明确收课且无 pending 点时，
@@ -226,6 +267,23 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
   return buildDeterministicOpening(context);
 }
 
+/**
+ * 出图闸门的库侧快照：会话总数、该图型数、已落库的图。
+ * 判据必须取自库（侧表），不用回合内存快照——2026-10-22 复核 744 张图，
+ * 会话上限 4 与同骨架去重两道闸门在真课里一次都没触发（单课最多 12 张）。
+ */
+async function figureGateSnapshot(sessionId: string, kind: unknown) {
+  const key = String(kind || 'position-line');
+  // 共享白板是任务级持久板书，不是「一次性配图」：不计入会话图配额，也不参与同骨架去重。
+  const figures = (await teachingSessionRepository.listFigures(sessionId))
+    .filter((figure) => (figure as { board?: boolean }).board !== true);
+  const kindCount = figures.reduce(
+    (n, figure) => n + (String((figure as { kind?: string })?.kind || 'position-line') === key ? 1 : 0),
+    0,
+  );
+  return { figures, total: figures.length, kindCount, kindCap: figureKindCap(key) };
+}
+
 export async function processStudentMessage(
   sessionId: string,
   message: string,
@@ -354,6 +412,48 @@ export async function processStudentMessage(
     now: simulatedNowOr(),
   });
 
+  // 共享白板（2026-10-28 接线）：任务级持久板书，不是一次性配图。
+  // 首轮先建板、再把「板上真实有什么」送进老师输入；后续轮老师先说、同轮刷新板（方案 A）。
+  // 开课消息（analysis.openingMode）是系统欢迎语，不是教学回合：首课首轮时它已经在历史里，
+  // 按「assistant 消息数 === 0」判首轮会永远不成立，白板整节课都建不起来。
+  const previousTeachingAssistantCount = session.messages.filter(
+    (m) => m.role === 'assistant' && !(m.analysis as { openingMode?: unknown } | undefined)?.openingMode,
+  ).length;
+  const storedBoard = (sessionArtifacts as { board?: BoardState | null }).board ?? null;
+  const taskChanged = !!storedBoard && storedBoard.taskId !== String(session.taskId);
+  let board: BoardState | null = storedBoard && !taskChanged ? storedBoard : null;
+  const isFirstTurnOfTask = previousTeachingAssistantCount === 0 || taskChanged;
+  const visualOpportunity = buildVisualOpportunity(updatedMessages, session.topic);
+  if (!board && isFirstTurnOfTask) {
+    const intent = decideBoardIntent({
+      taskType: context.taskType,
+      kind: visualOpportunity?.kindHint ?? null,
+      studentText: message,
+      lastTeacherText: null,
+      boardNumbers: [],
+    });
+    const designed = await designBoard({
+      task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
+      scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
+      studentSays: message,
+      kindHint: visualOpportunity?.kindHint ?? null,
+      questionIntent: intent,
+      lastTeacherReply: null,
+      instruction:
+        '画出这张白板的完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。标题只点题，不写结论。'
+        + intent.instruction,
+    }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
+    if (designed.figure) {
+      board = openBoard(String(session.taskId), designed.figure, { conceal: 'takeaway', intent });
+    } else {
+      logger.warn('[AITeaching] 首轮白板未生成（fail-open，纯文字继续）', {
+        sessionId,
+        taskId: session.taskId,
+        reason: designed.reason,
+      });
+    }
+  }
+
   const turnInput = await buildTeachingTurnInput({
     ...session,
     // B2/Q14：喂给模型前对学习者消息做输入围栏（正常文本原样；疑似注入被打标为不可信数据）。
@@ -377,11 +477,15 @@ export async function processStudentMessage(
   if (supplementPromotion.payload) {
     (turnInput.scenario as Record<string, unknown>).supplementaryMaterial = supplementPromotion.payload;
   }
-  // 教学配图时机（S1，代码裁决 → **显式**送进本轮输入）：老师上一轮用字符画了结构 → 本轮要求出图。
+  // 教学配图时机（代码裁决 → **显式**送进本轮输入）：上一轮画了字符结构 / 学生在描述位置 /
+  // 当前任务本身就是结构化关系 → 本轮给模型一次出图机会。
   // 为什么必须显式送：实测埋在 2 万字 system prompt 里的规则会被忽略，写进本轮输入才生效。
-  const visualOpportunity = buildVisualOpportunity(updatedMessages);
   if (visualOpportunity) {
     (turnInput as { visualOpportunity?: typeof visualOpportunity }).visualOpportunity = visualOpportunity;
+  }
+  // 白板描述：只有板真实存在时才注入；提示词据此允许/禁止「看图」指代。
+  if (board) {
+    (turnInput as { boardContext?: string | null }).boardContext = describeBoardForTeacher(board);
   }
   // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
   // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
@@ -490,14 +594,39 @@ export async function processStudentMessage(
       }
     }
   }
+  // 检查点反馈硬门（对称方向，2026-10-28 f3 实拍）：代码判对、模型却否定作答。
+  // 实测答案键 A / 学生选 A / checkpointHistory.passed=true，模型仍说「这道不对」并逼学生重写三行。
+  // 命中即换成确定性确认（保留原回复最后一个问句），并单列遥测；不阻断课堂。
+  if (rawTeachingOutput?.reply && submittedCheckpoint
+    && options.checkpointJudgement?.judgedBy === 'code'
+    && options.checkpointJudgement.passed === true) {
+    const repaired = repairContradictedPassedVerdict(rawTeachingOutput.reply);
+    if (repaired !== rawTeachingOutput.reply) {
+      logger.warn('[AITeaching] 检查点判对但回复否定作答（反馈硬门·对称）', {
+        sessionId: session.id,
+        checkpointId: submittedCheckpoint.id,
+        before: String(rawTeachingOutput.reply).slice(0, 120),
+        after: repaired.slice(0, 120),
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-engine',
+        faultCategory: 'MODEL_NEGATION_ON_PASSED_CHECKPOINT',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['teachingReply.verdict', `task:${context.taskId}`],
+        mitigationApplied: 'replace-with-deterministic-confirmation',
+        rootCauseMessage: String(rawTeachingOutput.reply).slice(0, 200),
+      });
+      rawTeachingOutput = { ...rawTeachingOutput, reply: repaired };
+    }
+  }
   // 失败检查点概念的**后续回合**肯定语护栏（#84，2026-10-19 实证）：提交轮硬门只管当轮——
   // zhongkao-streaming 批实测两次 code failed（缺要点）后，老师在随后自由回合仍称
   // 「你答对了/这一关你走通了」。口径收紧（精度优先）：仅当本回合知识点命中会话内
-  // code 失败概念时剥离；遥测单列一类，不污染切口2 的一致性口径（分子/分母不变）。
+  // code 失败概念时剥离；遥测单列一类，不污染切口2 一致性口径（#85 双臂 A 臂可显式关闭）。
   const judgingFailedThisTurn = !!(submittedCheckpoint
     && options.checkpointJudgement?.judgedBy === 'code'
     && options.checkpointJudgement.passed === false);
-  if (rawTeachingOutput?.reply && !judgingFailedThisTurn) {
+  if (options.failedConceptFollowupGuard !== false && rawTeachingOutput?.reply && !judgingFailedThisTurn) {
     const failedConceptNames = buildCheckpointCodeArbitration(previousTeachingState.checkpointHistory).codeFailedConceptNames;
     if (shouldGuardReplyForFailedConcept({
       currentPoint: rawTeachingOutput.knowledge?.currentPoint,
@@ -610,21 +739,31 @@ export async function processStudentMessage(
     && noPendingPoints
     && avgTargetProgress >= SOFT_COMPLETION_PROGRESS_FLOOR
     && (modelRequestedCompletion || replySignalsClosing);
-  // 收口闭合门禁（teaching-closure.ts，H3 回测立项）：完成信号与本回合新抛问题/未答检查点
-  // 同回合出现时，学员永远轮不到作答课就 completed（26.5% 完结课残留此形态且三窗稳定，
-  // 提示词与强制消费均不触及）。此处延迟一轮收束：先让学员答完末问，下一回合再走收口。
-  const closureGate = shouldDeferCompletionForClosure({
-    reply: teachingOutput.reply || '',
-    pendingCheckpoint: previousTeachingState.pendingCheckpoint,
-    checkpointEmittedThisTurn: !!teachingOutput.control?.checkpoint,
-    priorDeferrals: Number(previousTeachingState.completionDeferrals) || 0,
-  });
   // 延伸学（#124）：延伸课不产生「完成」终态——它不是任务结算课，教师可一直陪学到学员主动结束
   // （finalize 仅允许 end_only）。任务完成判据仍照常计算并留痕，只是不把完成信号发出去。
   const extensionMode = session.mode === 'extension';
-  const completionReady = !extensionMode
-    && (targetsConsolidated || backstopReady || softCompletionReady)
-    && !closureGate.defer;
+  // 只有「本轮本来会发完成信号」时，收口门禁才有意义。此前无论是否会完成，
+  // 只要回复带问号就 +1，长课里前 6 个普通提问就把绝对上限/唯一宽限消耗光，
+  // 课末真正的新末问反而被直接收掉（外部独立评审 P0）。
+  const wouldComplete = !extensionMode
+    && (targetsConsolidated || backstopReady || softCompletionReady);
+  const closureGate = wouldComplete
+    ? shouldDeferCompletionForClosure({
+        reply: teachingOutput.reply || '',
+        pendingCheckpoint: previousTeachingState.pendingCheckpoint,
+        checkpointEmittedThisTurn: !!teachingOutput.control?.checkpoint,
+        emittedCheckpointQuestion: typeof teachingOutput.control?.checkpoint?.question === 'string'
+          ? teachingOutput.control.checkpoint.question
+          : null,
+        priorDeferrals: Number(previousTeachingState.completionDeferrals) || 0,
+        previousDeferredQuestion: typeof previousTeachingState.completionDeferralQuestion === 'string'
+          ? previousTeachingState.completionDeferralQuestion
+          : null,
+        priorDeferralsForSameQuestion: Number(previousTeachingState.completionDeferralQuestionCount) || 0,
+        capGraceUsed: previousTeachingState.completionCapGraceUsed === true,
+      })
+    : { defer: false, reason: null as null, questionKey: null as string | null };
+  const completionReady = wouldComplete && !closureGate.defer;
   if (closureGate.defer) {
     logger.info('[AITeaching] 收口闭合门禁：完成信号延迟一轮（末问未答，先让学员作答）', {
       sessionId: session.id,
@@ -866,6 +1005,21 @@ export async function processStudentMessage(
     if (image) assistantMessage.images = [image];
   }
 
+  // 无 boardContext ⇒ 本轮没有任何可指代的图（2026-10-29 契约）：
+  // prompt 已要求不输出 figure/diagram，但真 LLM 实测仍会输出（学生一句"画个图"就能触发）。
+  // 图闸在 reply 之后才拦，若这里不丢，reply 会留下「看这张图」而界面无图；直接删字段，
+  // 后续 D10 悬空引用剥离再兜住正文指代。
+  if (!board && (teachingOutput.figure || teachingOutput.diagram)) {
+    logger.info('[AITeaching] 本轮无 boardContext，丢弃模型输出的 figure/diagram', {
+      sessionId,
+      taskId: session.taskId,
+      figureKind: teachingOutput.figure?.kind ?? null,
+      hasDiagram: Boolean(teachingOutput.diagram),
+    });
+    delete teachingOutput.figure;
+    delete teachingOutput.diagram;
+  }
+
   // 课堂结构图（2026-09-27 双通道重构，owner 终审：扩散生图停用、结构类走代码渲染）：
   // 不需要生成——skill 出口已归一化/过滤（normalizeDiagram），这里只过防答案泄漏硬闸
   // （与配图同一条 9/24 审计结论：回复在同轮布置"你自己排/画"练习时不得给结构图）。
@@ -882,14 +1036,167 @@ export async function processStudentMessage(
 
   // 位置线图（2026-09-27 双通道重构 Scope B，同一条防答案泄漏硬闸）：
   // 追及/相遇题里"学生自己画位置线"正是练习本体——本轮布置了这类练习就不能给图，给了等于把答案摆出来。
-  if (teachingOutput.figure) {
+  if (teachingOutput.figure && board) {
+    // 板书层接管视觉后，老师本轮再出一张一次性配图会盖掉常驻白板（下方 board 分支只在
+    // assistantMessage.figures 为空时挂板）。白板是任务级现场，优先级高于临时配图。
+    logger.info('[AITeaching] 已有共享白板，跳过老师本轮一次性配图', {
+      sessionId,
+      taskId: session.taskId,
+      kind: teachingOutput.figure.kind,
+    });
+  } else if (teachingOutput.figure) {
+    // 课中图不挂结论注（用户 2026-10-23 硬指令）：caption / note 在实测里几乎只在替学生答题。
+    const deReviewed = stripInLessonAnnotations(teachingOutput.figure);
+    // 读图/复述题不扣图，改为脱敏：把被问的答案从图上挖掉，结构照常给学生看（外部讨论定案）
+    const maskedFigure = maskFigureForQuestion(deReviewed, teachingOutput.reply);
+    let wanted: typeof deReviewed = {
+      ...deReviewed,
+      // 学科调色板在这里盖章（模型不参与）：同一份 spec 换个学科就是另一套色相/材质，
+      // 只影响观感，不改变任何几何与语义。模型自己给了合法 palette 则以它为准。
+      palette: deReviewed.palette || paletteOfSubject(session.subject),
+    };
+    // 库侧快照只在这条出图分支里取：会话上限、同图型配额、同骨架去重共用一次查询
+    const figureGate = await figureGateSnapshot(sessionId, wanted.kind);
     if (detectExerciseLeakInReply(teachingOutput.reply)) {
       logger.info('[AITeaching] 本轮回复布置了由学生自己画的练习，跳过位置线图（防答案泄漏）', {
         sessionId,
         taskId: session.taskId,
       });
+    } else if (figureNumbersFightReply(wanted, teachingOutput.reply)) {
+      // 图文数字打架（2026-10-21 走查 #15）：同一回合里正文说一套数、图上画另一套，学生只会更懵。
+      // 判据是确定性对账：图内标签里的数字一个都没在正文出现（且两边都有多个数字）→ 判为编数，不出图。
+      logger.warn('[AITeaching] 图内数字与正文完全对不上，跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
+        figureNumbers: collectFigureNumbers(wanted).slice(0, 8),
+        replyNumbers: [...collectReplyNumbers(teachingOutput.reply)].slice(0, 8),
+      });
+    } else if (teachingOutput.control?.checkpoint) {
+      // 出题回合不出图（2026-10-23 第五批外审：14 张里 5 张的判词是「老师这一轮让学生自己产出，
+      // 图里已经把答案给出」）。文案层拦不住——模型会在追问句之外顺手把结论画好；
+      // 而「本轮发了检查点」是确定性信号：这一刻学生该动手，不该看见成品图。
+      logger.info('[AITeaching] 本轮发了检查点（学生要自己产出），跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
+      });
+    } else if (figureRestatesReply(wanted, teachingOutput.reply)) {
+      // 「图只是把这段回复抄进框里」不再出图（2026-10-23 外部视觉评审：86% 被判多余）。
+      logger.info('[AITeaching] 图只是复述本轮正文，跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
+      });
+    } else if (figureGate.total >= resolveFigureMaxPerSession()) {
+      // 会话配额是**硬闸**（2026-10-19）：提示词里的"上限"只是建议，模型仍会每轮出图——
+      // 实跑地理课一节课出了 12 张同类图，读起来就是"老师每轮都在摆同一张表"。
+      logger.info('[AITeaching] 本会话图数已达上限，跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
+        count: figureGate.total,
+      });
+    } else if (figureGate.kindCount >= figureGate.kindCap) {
+      // 总量闸门之外再按图型封顶（2026-10-21 真课）：同一节课 10 张位置线，
+      // 其中几张只是换了标签——学生看到的是「老师反复摆同一张图」。
+      // 2026-10-22：配额按证据等级分配（A 4 / B 4 / C 3 / D 2），见 doc/DIAGRAM_PEDAGOGY_RESEARCH.md
+      logger.info('[AITeaching] 本会话该图型已达上限，跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
+        count: figureGate.kindCount,
+        cap: figureGate.kindCap,
+      });
+    } else if (!shouldEmitFigureAmong(figureGate.figures, wanted)) {
+      // 与上一轮同一张图（学生只改了措辞）→ 不再重摆；下方悬空引用清理会把"见下图"一并剥掉
+      logger.info('[AITeaching] 本会话已有同骨架的图（只改了措辞/条目），跳过重复渲染', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
+      });
     } else {
-      assistantMessage.figures = [teachingOutput.figure];
+      // 走完全部闸门才下发。读图/复述题在这里脱敏：把被问的答案挖掉（点/辅助线标签→？，
+      // 关系名→？），结构照常呈现——外部讨论定案：扣图会让学生面对一句悬空的「看图」。
+      if (maskedFigure !== null && maskedFigure !== deReviewed) {
+        wanted = maskedFigure;
+        logger.info('[AITeaching] 本轮是读图/复述题，图已脱敏后下发', {
+          sessionId,
+          taskId: session.taskId,
+          kind: wanted.kind,
+        });
+      }
+      assistantMessage.figures = [wanted];
+      // 出图来源留痕（2026-10-21）：评审要能回答「这张图为什么出现」。
+      // 模型自己给的理由在 figure.why；这里记的是编排层有没有给机会、因为什么给、建议了什么图型。
+      assistantMessage.figureSource = {
+        trigger: visualOpportunity ? 'opportunity' : 'model',
+        reason: visualOpportunity?.reason ?? null,
+        kindHint: visualOpportunity?.kindHint ?? null,
+        ruleWhy: visualOpportunity?.ruleWhy ?? null,
+        matched: visualOpportunity?.matched ?? [],
+      };
+    }
+  }
+
+  // 共享白板（方案 A，2026-10-28 接线）：老师先说完 → 识别「换了例子/条件」→ 同轮刷新板 →
+  // 随本轮消息下发。首轮的板已在调用老师前建好；这里只处理后续轮。
+  if (board && !isFirstTurnOfTask) {
+    const intent = decideBoardIntent({
+      taskType: context.taskType,
+      kind: board.figure?.kind ?? null,
+      studentText: message,
+      lastTeacherText: teachingOutput.reply,
+      boardNumbers: numbersOnBoard(board.figure?.maskedSpec),
+    });
+    if (intent.exampleChange !== 'none') {
+      const designed = await designBoard({
+        task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
+        scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
+        studentSays: message,
+        kindHint: board.figure?.kind ?? null,
+        questionIntent: intent,
+        lastTeacherReply: teachingOutput.reply,
+        instruction:
+          (intent.exampleChange === 'scene'
+            ? '老师这一轮换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
+            : '老师这一轮换了例子/条件。把同一结构的板换成**老师这一轮给的例子**（该换的词、数值、单位全换，旧例子不要留）。')
+          + '结构、图型、副标注写法不变。' + intent.instruction,
+      }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
+      if (designed.figure) {
+        board = applyBoardOp(board, { type: 'update', reason: 'new-example' }, designed.figure) ?? board;
+      } else {
+        logger.warn('[AITeaching] 换板绘图被拒（保持旧板）', {
+          sessionId,
+          taskId: session.taskId,
+          kind: board.figure?.kind ?? null,
+          intent: `${intent.askAbout}/${intent.exampleChange}`,
+          reason: designed.reason,
+        });
+      }
+    }
+  }
+  if (board && !assistantMessage.figures?.length && !detectExerciseLeakInReply(teachingOutput.reply)) {
+    const rendered = boardFigureForRender(board);
+    if (rendered) {
+      assistantMessage.figures = [{
+        engine: 'svg',
+        kind: rendered.kind,
+        // 与一次性配图同一套学科盖章：白板换学科时色相/材质跟着换，几何与语义不动
+        palette: paletteOfSubject(session.subject),
+        spec: rendered.spec,
+        caption: null,
+        // 标记为白板：不计入一次性配图的会话配额/同骨架去重
+        board: true,
+        boardRevision: board.revision,
+      }];
+      assistantMessage.figureSource = {
+        trigger: 'board',
+        reason: null,
+        kindHint: board.figure?.kind ?? null,
+        ruleWhy: '任务级共享白板（方案 A：首轮板先行，后续老师先说、同轮刷新）',
+        matched: [],
+      };
     }
   }
 
@@ -978,6 +1285,8 @@ export async function processStudentMessage(
     lastPeerRuntimeEnvelope: peerRuntimeEnvelope,
     sessionArtifacts: {
       ...parseSessionArtifacts(session.teachingState),
+      // 共享白板：任务级持久板书（跨轮保留；换任务时由上方 load 逻辑丢弃）
+      board: board ?? null,
       initialKnowledgeState: effectiveInitialKnowledgeState,
       // 课内温故：① 标记"模型真的问出来了"（含 review/pending——问过 ≠ 有结果）
       // ② 合并实测结果；计划其余部分原样保留（含负担预算与积压计数）
@@ -1092,9 +1401,18 @@ export async function processStudentMessage(
     // checkpointHistory 会在每次重建时丢失（18 号报告 N2）。
     const teachingState: Record<string, any> = inheritTeachingState(previousTeachingState, turnState);
 
-    // 收口闭合门禁计数：延迟发生时 +1（跨回合继承），供 COMPLETION_DEFERRAL_CAP 活力兜底
+    // 收口闭合门禁计数：延迟发生时 +1（跨回合继承）。
+    // 计数分两口：全会话累计（绝对上限）+ 同一题累计（同题重复上限）。换新题时重置同题计数，
+    // 避免早期旧题耗尽预算后，后面新抛出的末问被直接收掉（外部审计 P0-2）。
     if (closureGate.defer) {
+      const sameQuestion = !!closureGate.questionKey
+        && closureGate.questionKey === String(previousTeachingState.completionDeferralQuestion || '');
       teachingState.completionDeferrals = (Number(previousTeachingState.completionDeferrals) || 0) + 1;
+      teachingState.completionDeferralQuestion = closureGate.questionKey;
+      teachingState.completionDeferralQuestionCount = sameQuestion
+        ? (Number(previousTeachingState.completionDeferralQuestionCount) || 0) + 1
+        : 1;
+      if (closureGate.capGrace) teachingState.completionCapGraceUsed = true;
     }
 
     // #48 P-22：掌握下降计数跨回合累加（本轮 0 次也保留上一轮计数，不清零）
@@ -1106,6 +1424,17 @@ export async function processStudentMessage(
 
     // 检查点产生：teaching-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
     const checkpointCandidate = teachingOutput.control.checkpoint;
+    // 题面可见性（外部审计 P0-4）：检查点题面只存在 pendingCheckpoint，不写进教师回复时，
+    // 学习者历史/逐字稿里会出现「学生回答了一道从未出现过的题」。所有会更新 pendingCheckpoint
+    // 的路径（新出题 / 答错重出题）都必须把题面补进本轮可见回复，已包含则不重复。
+    const applyCheckpointQuestionVisibility = (question: string | null | undefined) => {
+      if (!question) return;
+      const visibleWithQuestion = ensureCheckpointQuestionVisible(assistantMessage.content, question);
+      if (visibleWithQuestion === assistantMessage.content) return;
+      assistantMessage.content = visibleWithQuestion;
+      teachingOutput.reply = visibleWithQuestion;
+      effectiveTeachingOutput.reply = visibleWithQuestion;
+    };
     // 出题节奏分档（拍板 #10）：与提示词闸共用同一口径（理解度<0.6 → 2 条消息优先探测），
     // 防两处数值漂移；理解度取上一轮分析（与 shouldEmitCheckpoint 的 gate 同基准），无读数按常规节奏。
     const previousTurnAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
@@ -1115,14 +1444,16 @@ export async function processStudentMessage(
     if (pendingBeforeTurn && checkpointCandidate?.question) {
       const changedQuestion = normalizeForKeywordMatch(pendingBeforeTurn.question) !== normalizeForKeywordMatch(checkpointCandidate.question);
       if (changedQuestion && !isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate)) {
-        teachingState.pendingCheckpoint = {
+        teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
           ...pendingBeforeTurn,
           question: checkpointCandidate.question,
           ...(checkpointCandidate.options ? { options: checkpointCandidate.options } : {}),
           ...(checkpointCandidate.correctOptionIds ? { correctOptionIds: checkpointCandidate.correctOptionIds } : {}),
           ...(checkpointCandidate.expectedKeywords ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
           ...(checkpointCandidate.hint ? { hint: checkpointCandidate.hint } : {}),
-        };
+        }, pendingBeforeTurn.type);
+        // 重出题同样要保证新题面在可见回复里（否则学员下一轮答的是一道历史里没有的题）
+        applyCheckpointQuestionVisibility(checkpointCandidate.question);
       }
     }
     // 同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺陷②）：候选题面与本会话**已出过**的题面
@@ -1166,7 +1497,7 @@ export async function processStudentMessage(
         ? null
         : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint)
           ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name);
-      teachingState.pendingCheckpoint = {
+      teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
         id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: checkpointCandidate.type,
         title: checkpointTitle,
@@ -1198,13 +1529,18 @@ export async function processStudentMessage(
                 : {}),
             }
           : {}),
-      };
+      }, checkpointCandidate.type);
       teachingState.lastCheckpointTurn = updatedMessages.length;
+      // 题面可见性（外部审计 P0-4）：检查点题面只存在 pendingCheckpoint，不写进教师回复，
+      // 于是学习者历史/课程逐字稿里出现「学生回答了一道从未出现过的题」。这里把题面
+      // 补进本轮可见回复（已包含则不重复），保证学员、模拟器、导出逐字稿看到同一道题。
+      applyCheckpointQuestionVisibility(checkpointCandidate.question);
     }
 
     let checkpointResolution: { passed: boolean; understanding: number; judgedBy: 'code' | 'model-reference' } | undefined;
     if (submittedCheckpoint) {
-      const understanding = Number(teachingOutput.analysis?.understanding ?? 0);
+      const rawUnderstanding = teachingOutput.analysis?.understanding;
+      const understanding = Number(rawUnderstanding ?? 0);
       const currentPoint = effectiveTeachingOutput.knowledge.currentPoint?.trim().toLowerCase();
       const modelDerivedPassed = completionReady || !!currentPoint && mergedKnowledge.some(
         (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'
@@ -1216,6 +1552,11 @@ export async function processStudentMessage(
       const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
         ? [...teachingState.checkpointHistory]
         : [];
+      // 同一 cpId 的累计作答次数（含本次）：既驱动重答上限，也写进 history 行，
+      // 让收束门禁（evaluateSessionClosable）能判断「最后一道题还有没有重答机会」。
+      const sameCheckpointAttempts = checkpointHistory.filter(
+        (row) => row?.checkpointId === submittedCheckpoint.id
+      ).length + 1;
       checkpointHistory.push({
         checkpointId: submittedCheckpoint.id,
         // title/type 一并留档（2026-09-17）：此前只记 id/passed，读侧无法知道"没通过的是什么题"
@@ -1224,8 +1565,21 @@ export async function processStudentMessage(
         // 同题复问抑制所需（TONIGHT-BROAD-2026-10-07）：落完整题面供归一比对；
         // 历史旧行可能只有 ≤20 字 title，判重时 isDuplicateCheckpointQuestion 回退读 title。
         question: submittedCheckpoint.question,
+        // 选项/答案键/学员选择一并留档（2026-10-29 导出补齐）：
+        // 此前历史行只留题干，课后报告无法还原 A/B/C/D 与学员选了哪一项。
+        // 答案键仍属服务端数据，读侧由 stripCheckpointAnswerKeys 统一剥离，不下发客户端。
+        ...(submittedCheckpoint.options?.length
+          ? { options: submittedCheckpoint.options.map((option) => ({ id: option.id, text: option.text })) }
+          : {}),
+        ...(submittedCheckpoint.correctOptionIds?.length
+          ? { correctOptionIds: submittedCheckpoint.correctOptionIds.map(String) }
+          : {}),
+        ...(options.checkpointSubmission?.selectedOptionIds?.length
+          ? { selectedOptionIds: options.checkpointSubmission.selectedOptionIds.map(String) }
+          : {}),
         submittedAt: new Date().toISOString(),
         passed,
+        attempts: sameCheckpointAttempts,
         judgedBy,
         understanding,
         // 概念归属（F1 修复轮 a/b）：掌握聚合仲裁按归属概念消费 code 负证据——
@@ -1234,12 +1588,23 @@ export async function processStudentMessage(
         ...(submittedCheckpoint.conceptKey ? { conceptKey: submittedCheckpoint.conceptKey } : {}),
       });
 
+      // #96 阈值拟合前置：在判分前解析系统对「该概念已掌握」的预测（ktEstimate 优先，
+      // 回落到本回合知识看板），随证据落库；无预测时 null，不猜。
+      const prediction = resolveCheckpointPrediction({
+        conceptName: submittedCheckpoint.conceptName,
+        conceptKey: submittedCheckpoint.conceptKey,
+        knowledgePoints: mergedKnowledge,
+        ktConceptMastery: teachingOutput.analysis?.ktEstimate?.conceptMastery,
+        understanding: Number.isFinite(Number(rawUnderstanding)) ? Number(rawUnderstanding) : null,
+      });
+
       // 检查点结果留痕（learner_evidence）：独立传感器的原始观测，供 §7 P1-1 的成功率带与控制律消费
       void recordCheckpointResultEvidence(session, submittedCheckpoint, {
         passed,
         judgedBy,
         detail: codeJudgement?.detail ?? null,
         submission: { selectedOptionIds: options.checkpointSubmission?.selectedOptionIds },
+        prediction,
       });
 
       // 独立锚题探针（Q13/B4）：仅对带 purpose='anchor' 的检查点、且**代码裁决**（纪律 1）时
@@ -1253,9 +1618,6 @@ export async function processStudentMessage(
       // 重答上限（2026-10-03 完结课堂裸审计 P1）：同一 cpId 累计答错达到 CHECKPOINT_MAX_ATTEMPTS
       // 即强制消费——否则同一道题被逐轮原样重发（实测最极端 36 次/节），课堂在同一个确认点上
       // 空转直到 LEARN_AUTO_TURN_CAP 才停。到顶后清掉 pendingCheckpoint，老师可换表征出新题/推进。
-      const sameCheckpointAttempts = checkpointHistory.filter(
-        (row) => row?.checkpointId === submittedCheckpoint.id
-      ).length;
       const { consume: consumeCheckpoint, exhausted: attemptsExhausted } =
         resolveCheckpointConsumption(passed, sameCheckpointAttempts);
       if (consumeCheckpoint) {
@@ -1293,66 +1655,6 @@ export async function processStudentMessage(
       }
       teachingState.checkpointHistory = checkpointHistory.slice(-20);
       checkpointResolution = { passed, understanding, judgedBy };
-    }
-
-    await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
-      messages: persistedMessages,
-      messagesBaseCount: operationClaim.messagesBaseCount,
-      knowledgeState: mergedKnowledge,
-      teachingState,
-      taskId: session.taskId,
-      userId: session.userId,
-      markTaskInProgress: true,
-    });
-    committed = true;
-
-    // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合。
-    // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的
-    // conceptKey 是路径骨架 concept-N 占位时改挂检查点归属键（发出时带上的当前教学点概念；
-    // 无检查点回合退到当前教学点），真键原样，无归属可挂 → 丢弃（宁缺勿错挂）。
-    // 本回合的概念归属（检查点归属优先，无检查点回落到当前教学点）：误解与 ktEstimate
-    // 两条写入通道共用——占位键的改挂目标必须同源，否则同一回合两处落到不同概念。
-    const checkpointConceptAttribution = (submittedCheckpoint?.conceptKey
-      ? {
-          conceptName: submittedCheckpoint.conceptName ?? '',
-          conceptKey: submittedCheckpoint.conceptKey,
-          conceptSource: submittedCheckpoint.conceptSource ?? ('derived' as const),
-        }
-      : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint));
-    const misconceptions = teachingOutput.analysis?.misconceptions;
-    if (Array.isArray(misconceptions) && misconceptions.length > 0) {
-      void recordMisconceptions(session.userId, sessionId, misconceptions.map((m) => ({
-        conceptKey: rerouteMisconceptionConceptKey(m.conceptKey, checkpointConceptAttribution) || '',
-        hypothesis: m.hypothesis,
-        canonicalLabel: m.canonicalLabel ?? null,
-        confidence: m.confidence,
-        evidence: m.evidence,
-        status: m.status,
-      })).filter((m) => m.conceptKey && m.hypothesis));
-    }
-
-    // θ−d EMA：ktEstimate 跨会话滑动平均（α=0.2），best-effort 不阻断回合
-    // #94：kcId（模型从 scenario.taskKcs 回填的稳定键）随行透传——写入侧优先按它锚定概念身份，
-    // 未命中/缺失回落自由文本名（见 memory-trace.service resolveConceptIdSafe）。
-    const ktConceptMastery = teachingOutput.analysis?.ktEstimate?.conceptMastery;
-    if (Array.isArray(ktConceptMastery) && ktConceptMastery.length > 0) {
-      // #109：模型把路径骨架 concept-N 回填进 conceptKey 时，与误解台账同口径改挂本回合
-      // 概念归属；无归属可挂 → 丢弃（宁缺勿错挂）。此前原样透传 → 写入侧按文本名
-      // 新建 concepts/memory_traces（历史 36 条 kt-estimate 痕迹的生成侧根因）。
-      const ktItems = ktConceptMastery.flatMap((c) => {
-        const conceptKey = rerouteMisconceptionConceptKey(c.conceptKey, checkpointConceptAttribution);
-        if (!conceptKey) return [];
-        return [{
-          conceptKey,
-          ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
-          mastery: c.mastery,
-        }];
-      });
-      if (ktItems.length > 0) {
-        void memoryTraceService.applyKtEstimate(session.userId, ktItems, session.learningPathId ?? null).catch((error) => {
-          logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
-        });
-      }
     }
 
     const baseResult = {
@@ -1395,6 +1697,83 @@ export async function processStudentMessage(
       checkpointResolution,
       revision: session.revision + 1,
     };
+
+    await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
+      messages: persistedMessages,
+      messagesBaseCount: operationClaim.messagesBaseCount,
+      knowledgeState: mergedKnowledge,
+      teachingState,
+      taskId: session.taskId,
+      userId: session.userId,
+      markTaskInProgress: true,
+      // 幂等结算与业务写入同事务（2026-10-21）：此前账本在路由里二次独立提交，
+      // 崩溃窗口内消息已落库而账本仍 processing，同 key 只能拿到 409。
+      ...(options.idempotencyKey
+        ? {
+            settlement: {
+              idempotencyKey: options.idempotencyKey,
+              result: options.settlementResult
+                ? options.settlementResult(baseResult as unknown as Record<string, any>)
+                : baseResult as unknown as Record<string, any>,
+              revision: baseResult.revision,
+            },
+          }
+        : {}),
+    });
+    committed = true;
+
+
+    // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合。
+    // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的
+    // conceptKey 是路径骨架 concept-N 占位时改挂检查点归属键（发出时带上的当前教学点概念；
+    // 无检查点回合退到当前教学点），真键原样，无归属可挂 → 丢弃（宁缺勿错挂）。
+    // 本回合的概念归属（检查点归属优先，无检查点回落到当前教学点）：误解与 ktEstimate
+    // 两条写入通道共用——占位键的改挂目标必须同源，否则同一回合两处落到不同概念。
+    const checkpointConceptAttribution = (submittedCheckpoint?.conceptKey
+      ? {
+          conceptName: submittedCheckpoint.conceptName ?? '',
+          conceptKey: submittedCheckpoint.conceptKey,
+          conceptSource: submittedCheckpoint.conceptSource ?? ('derived' as const),
+        }
+      : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint));
+    const misconceptions = teachingOutput.analysis?.misconceptions;
+    if (Array.isArray(misconceptions) && misconceptions.length > 0) {
+      void recordMisconceptions(session.userId, sessionId, misconceptions.map((m) => ({
+        conceptKey: rerouteMisconceptionConceptKey(m.conceptKey, checkpointConceptAttribution) || '',
+        hypothesis: m.hypothesis,
+        canonicalLabel: m.canonicalLabel ?? null,
+        confidence: m.confidence,
+        evidence: m.evidence,
+        status: m.status,
+      })).filter((m) => m.conceptKey && m.hypothesis));
+    }
+
+    // θ−d EMA：ktEstimate 跨会话滑动平均（α=0.2），best-effort 不阻断回合
+    // #94：kcId（模型从 scenario.taskKcs 回填的稳定键）随行透传——写入侧优先按它锚定概念身份，
+    // 未命中/缺失回落自由文本名（见 memory-trace.service resolveConceptIdSafe）。
+    const ktConceptMastery = teachingOutput.analysis?.ktEstimate?.conceptMastery;
+    if (Array.isArray(ktConceptMastery) && ktConceptMastery.length > 0) {
+      // #109：模型把路径骨架 concept-N 回填进 conceptKey 时，与误解台账同口径改挂本回合
+      // 概念归属；无归属可挂 → 丢弃（宁缺勿错挂）。此前原样透传 → 写入侧按文本名
+      // 新建 concepts/memory_traces（历史 36 条 kt-estimate 痕迹的生成侧根因）。
+      const ktItems = ktConceptMastery.flatMap((c) => {
+        const conceptKey = rerouteMisconceptionConceptKey(c.conceptKey, checkpointConceptAttribution);
+        if (!conceptKey) return [];
+        return [{
+          conceptKey,
+          ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
+          mastery: c.mastery,
+          // #133（2026-10-22）：模型自报证据窗（skill 侧已截 200 字）随行透传落
+          // memory_traces.ktEvidence——此前在此被丢弃，事后检查器只能拿二手转述核对。
+          ...(typeof c.evidence === 'string' && c.evidence.trim() ? { evidence: c.evidence.trim() } : {}),
+        }];
+      });
+      if (ktItems.length > 0) {
+        void memoryTraceService.applyKtEstimate(session.userId, ktItems, session.learningPathId ?? null).catch((error) => {
+          logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
+        });
+      }
+    }
 
     return baseResult;
   } finally {

@@ -1,6 +1,6 @@
 /**
  * R7 概念本体治理批 · adminui 域：记忆与复习面板（原独立页，2026-10-12 并入学习者详情页签）
- * - 三组建议列表（归并 / 需人工看 / 散键清理）渲染：每条带 归并目标/证据/置信度，操作 = 确认 / 驳回
+ * - 三组建议列表（归并 / 需人工确认 / 散键清理）渲染：每条带 归并目标/证据/置信度，操作 = 确认 / 驳回
  * - 批量确认（破坏性操作）：二次确认弹层列明将迁移哪些表；apply 收到三组确认列表
  * - 驳回走 POST reject（三组各自的主键）
  * - 已执行历史（mode=apply 审计）一个入口可见：卡头开关 + alias 式归并凭据渲染
@@ -30,7 +30,7 @@ vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }));
 import MemoryReview from '../MemoryReview.vue';
 import { askConfirm } from '../useConfirm';
 
-/** 三组建议齐全的明细夹具：1 归并建议（可自动）+ 1 需人工看对 + 1 散键清理 */
+/** 三组建议齐全的明细夹具：1 归并建议（可自动）+ 1 需人工确认对 + 1 散键清理 */
 const DETAIL_FULL = () => ({
   user: { name: '小明' },
   summary: { traces: 6, due: 1, duplicatedFamilies: 0, duplicatedTraces: 0, neverExtracted: 0, withFsrsState: 4 },
@@ -63,7 +63,7 @@ describe('MemoryReview R7 页出口：三组建议列表', () => {
     vi.clearAllMocks();
   });
 
-  it('渲染三组建议：归并（目标/证据/置信度）、需人工看、散键清理，各带 确认/驳回 操作位', async () => {
+  it('渲染三组建议：归并（目标/证据/置信度）、需人工确认、散键清理，各带 确认/驳回 操作位', async () => {
     const w = await mountPanels();
     const detailRoot = w.find('.mr__detail');
     const text = detailRoot.text();
@@ -73,7 +73,7 @@ describe('MemoryReview R7 页出口：三组建议列表', () => {
     expect(text).toContain('k-alias');
     expect(text).toContain('同一动作的不同说法');
     expect(text).toContain('92%');
-    // 需人工看对 + 散键清理两组都有行，且每组都有 确认/驳回 按钮
+    // 需人工确认对 + 散键清理两组都有行，且每组都有 确认/驳回 按钮
     expect(text).toContain('k-target');
     expect(text).toContain('k-source');
     expect(text).toContain('k-stray');
@@ -106,7 +106,7 @@ describe('MemoryReview R7 页出口：三组建议列表', () => {
     expect(askConfirm).toHaveBeenCalledWith(expect.objectContaining({ title: '驳回建议', danger: false }));
     expect(reject).toHaveBeenCalledWith('u1', { canonicals: ['k-canonical'] });
 
-    // 需人工看驳回（a/b 对）
+    // 需人工确认驳回（a/b 对）
     const ambiguousReject = detailRoot.findAll('button')
       .filter((b) => b.text() === '驳回')[1];
     await ambiguousReject.trigger('click');
@@ -142,7 +142,7 @@ describe('MemoryReview R7：批量确认调用 API（任务书 D）', () => {
   it('跨三组勾选 → 执行选中：确认弹层列明将整理的内容（记忆记录 / 学习证据 / 概念掌握情况 / 误解记录）', async () => {
     const w = await mountPanels();
 
-    // 可自动归并默认勾选；再勾上 需人工看对 与 散键清理
+    // 可自动归并默认勾选；再勾上 需人工确认对 与 散键清理
     const boxes = w.findAll('.mr__detail input[type="checkbox"]');
     expect(boxes.length).toBe(3);
     expect((boxes[0].element as HTMLInputElement).checked).toBe(true);
@@ -167,7 +167,7 @@ describe('MemoryReview R7：批量确认调用 API（任务书 D）', () => {
     expect(message).toContain('人工确认对 1 条');
     expect(message).toContain('散键清理 1 条');
 
-    // apply 收到三组确认列表（含需人工看对与散键）
+    // apply 收到三组确认列表（含需人工确认对与散键）
     expect(apply).toHaveBeenCalledWith('u1', ['k-canonical'], {
       includeNeedsReview: true,
       ambiguous: [{ a: 'k-target', b: 'k-source' }],
@@ -181,6 +181,48 @@ describe('MemoryReview R7：批量确认调用 API（任务书 D）', () => {
     await w.findAll('button').find((b) => b.text().startsWith('执行选中'))!.trigger('click');
     await flushPromises();
     expect(apply).not.toHaveBeenCalled();
+  });
+});
+
+describe('MemoryReview 归并处理条（2026-10-19 重设计）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('0 选中：只说明怎么开始，不摆一枚永远点不动的禁用按钮', async () => {
+    const body = DETAIL_FULL();
+    body.audit.proposals[0].autoApplicable = false;
+    body.audit.stats.autoApplicable = 0;
+    const w = await mountPanels(body);
+
+    const bar = w.find('.mr-bulk');
+    expect(bar.exists()).toBe(true);
+    expect(bar.text()).toContain('批量处理');
+    expect(bar.text()).toContain('本次没有可自动执行的建议');
+    expect(bar.findAll('button')).toHaveLength(0);
+  });
+
+  it('勾选后：读数写清选了几项与构成，警告独立一行常显', async () => {
+    const w = await mountPanels();
+    // 默认勾选可自动执行的归并建议
+    expect(w.find('.mr-bulk').text()).toContain('已选 1 项');
+    expect(w.find('.mr-bulk').text()).toContain('归并 1');
+
+    const boxes = w.findAll('.mr__detail input[type="checkbox"]');
+    await boxes[1].trigger('change');
+    await boxes[2].trigger('change');
+    await flushPromises();
+
+    const bar = w.find('.mr-bulk');
+    expect(bar.text()).toContain('已选 3 项');
+    expect(bar.text()).toContain('归并 1');
+    expect(bar.text()).toContain('人工确认对 1');
+    expect(bar.text()).toContain('散键 1');
+    expect(bar.text()).toContain('清空');
+    expect(bar.text()).toContain('执行选中（3）');
+    const warn = bar.find('.mr-bulk__warn');
+    expect(warn.exists()).toBe(true);
+    expect(warn.text()).toContain('1 条「需人工确认」对');
   });
 });
 

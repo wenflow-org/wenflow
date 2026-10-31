@@ -45,7 +45,55 @@ fields:
   - fieldId: analysis.emotionalState
     promptRole: hidden-inference
     valueType: string
-    description: 情绪状态推断
+    description: 情绪状态推断（enum positive|neutral|frustrated|confused|bored）
+  - fieldId: analysis.loadIndex
+    promptRole: hidden-inference
+    valueType: number
+    description: 本轮合成认知负荷 0-1（语义挣扎为主，结构/节奏为强化信号；干预路由与课后 session_load 聚合消费）
+  - fieldId: analysis.loadBasis
+    promptRole: hidden-inference
+    valueType: string
+    description: loadIndex 的主要判断依据（enum semantic|structure|pacing|combined|absent；无证据时 loadIndex=0.5/loadBasis=absent）
+  - fieldId: analysis.misconceptions
+    promptRole: hidden-inference
+    valueType: array<object>
+    description: 结构化误解台账 [{conceptKey, hypothesis, canonicalLabel, confidence(0|25|50|75|100 五档), evidence(学生原话), status}]；喂 misconception-ledger 生命周期
+  - fieldId: analysis.ktEstimate
+    promptRole: hidden-inference
+    valueType: object
+    description: 回合级知识状态估计（θ−d 路由信号）：conceptMastery[{conceptKey,kcId,mastery 0-1,evidence}] + currentTaskDifficulty 0-1 + recommendation(consolidate|advance|challenge|scaffold)
+  - fieldId: analysis.selfAssessmentSignal
+    promptRole: hidden-inference
+    valueType: string
+    description: 隐藏自评信号（enum high|medium|low；只从学生自然语言静默提取，无信号不输出；用于后台校准闭环）
+  - fieldId: analysis.helpSeekingType
+    promptRole: hidden-inference
+    valueType: string
+    description: 求助行为自由描述（工具性/执行性/回避性；无求助信号不输出；用于后台统计与拦截）
+  - fieldId: analysis.rsmAttempts
+    promptRole: hidden-inference
+    valueType: array<object>
+    description: PF（productiveFailure）模式下学生解法尝试台账 [{method,outcome(stuck|partial|wrong|success),evidence}]；非 PF 模式不输出
+  - fieldId: knowledge.confirmCheck
+    promptRole: derived-presentation
+    valueType: object
+    description: 知识点表态确认动作组 {prompt, actions[2]（正反两个下一步按钮）}；已有 checkpoint 客观验证时不输出
+  - fieldId: control.warmupOutcomes
+    promptRole: control-signal
+    valueType: array<object>
+    description: 课内温故逐点上报（硬契约：回捞了 planned 点必填）[{conceptKey|itemIndex, recall(unaided|with-hint|failed), evidence?}]；记忆引擎间隔与预算据此更新
+  - fieldId: control.supplement
+    promptRole: control-signal
+    valueType: object
+    description: 补充资料采集请求 {topic, query?}（每 session 至多一次；编排层采集后下一轮注入）
+  - fieldId: diagram
+    promptRole: derived-presentation
+    valueType: object
+    description: 课堂结构图（mermaid 源码，前端确定性渲染；结构类内容唯一图示通道，节点≤9、标签≤12 字）
+  - fieldId: figure
+    promptRole: derived-presentation
+    valueType: object
+    description: 位置线图（空间位置/距离/朝向/先后的确定性渲染；marks 1-6、spans≤3、数值坐标）
   - fieldId: knowledge.currentPoint
     promptRole: derived-presentation
     valueType: string
@@ -71,9 +119,9 @@ fields:
     valueType: object
     description: 检查点（question/type/options/hint），间隔满足时可选输出
   - fieldId: control.completionCandidateEvidence
-    promptRole: hidden-inference
+    promptRole: derived-presentation
     valueType: object
-    description: 完成候选的内部证据（供编排层门禁，不面向前端）
+    description: 完成候选证据（**代码确定性合成**的观测信号，非 LLM 产出：验收词匹配评估结果透传；2026-08-30 起不参与完成门禁，仅用于与 LLM 语义判定比对收敛质量）
 
   # === skill:teaching-turn 输入通道（teaching-agent 编排注入） ===
   # pathInRawOutput 以回合装配源 { session, teachingState, context } 为根
@@ -112,6 +160,8 @@ fields:
     promptRole: public-reply
     valueType: array<string>
     description: 伴学后续追问
+  # 注：definition.ts outputSchema 另有 strategy（required）——那是编排层所选策略的**代码回显**
+  # （core 提示词不要求模型输出该字段），不属 LLM 产出契约，故不在此声明。
 
   # === skill:session-wrapup 产出 ===
   - fieldId: summary.topicSummary
@@ -136,16 +186,16 @@ fields:
     description: 练习建议
   - fieldId: evaluation.sessionLss
     promptRole: hidden-inference
-    valueType: number
-    description: 本次会话 LSS（学习压力评分，8-10 高压力）
+    valueType: object
+    description: 本次会话 LSS 档位对象 {tier=low|mid|high, evidence}——提示词禁止输出 0-10 数字，档位→数值由平台按锚点区间中点（low=2.5/mid=6/high=9）统一映射（session-evaluation-scale 单源）
   - fieldId: evaluation.sessionKtl
     promptRole: hidden-inference
-    valueType: number
-    description: 本次会话 KTL（知识获得质量，8-10 好）
+    valueType: object
+    description: 本次会话 KTL 档位对象 {tier=low|mid|high, evidence}（low=反复卡住 / mid=引导下能推进 / high=独立完成核心任务）；数值由平台档位映射，非模型自报
   - fieldId: evaluation.sessionLf
     promptRole: hidden-inference
-    valueType: number
-    description: 本次会话 LF（疲劳负担，8-10 高疲劳）
+    valueType: object
+    description: 本次会话 LF 档位对象 {tier=low|mid|high, evidence}（low=精力稳定 / mid=一定疲劳 / high=明显疲劳）；数值由平台档位映射，非模型自报
   - fieldId: evaluation.confidence
     promptRole: hidden-inference
     valueType: number
@@ -211,6 +261,96 @@ routings:
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
+  # 2026-10-24 契约同步批：以下字段此前仅存在于提示词与代码消费端，补齐声明层
+  - agentId: skill:teaching-turn
+    fieldId: analysis.loadIndex
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 干预路由（认知负荷三路由）与课后 session_load 聚合消费
+  - agentId: skill:teaching-turn
+    fieldId: analysis.loadBasis
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: skill:teaching-turn
+    fieldId: analysis.misconceptions
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 喂 misconception-ledger（suspected→confirmed→addressed 生命周期）
+  - agentId: skill:teaching-turn
+    fieldId: analysis.ktEstimate
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: θ−d 路由信号（难度感知路由）
+  - agentId: skill:teaching-turn
+    fieldId: analysis.selfAssessmentSignal
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 后台校准闭环（行为投影器）
+  - agentId: skill:teaching-turn
+    fieldId: analysis.helpSeekingType
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 求助拦截（反复直接索要答案不放宽产出要求）
+  - agentId: skill:teaching-turn
+    fieldId: analysis.rsmAttempts
+    render: hidden
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: 仅 PF（productiveFailure）模式
+  - agentId: skill:teaching-turn
+    fieldId: knowledge.confirmCheck
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:teaching-turn
+    fieldId: control.warmupOutcomes
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+    notes: 硬契约：回捞了 planned 点必报，漏报=记忆引擎收不到结果
+  - agentId: skill:teaching-turn
+    fieldId: control.supplement
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+    notes: 每 session 至多一次；编排层采集后下一轮注入
+  - agentId: skill:teaching-turn
+    fieldId: diagram
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+    notes: mermaid 前端确定性渲染（结构类图示唯一通道）
+  - agentId: skill:teaching-turn
+    fieldId: figure
+    render: visible
+    handoff: [teaching-agent]
+    internal: false
+    accumulate: false
+    notes: 位置线图（空间/序关系确定性渲染）
   # cognitiveLevel/understanding 同链交付 peer（peer-reinforcement 消费）
   - agentId: skill:teaching-turn
     fieldId: analysis.cognitiveLevel
@@ -329,6 +469,7 @@ routings:
     handoff: [teaching-agent]
     internal: false
     accumulate: false
+  # strategy（peer 输出里的代码回显）不路由：非 LLM 产出，见 fields 区注记
 
   # session-wrapup 输出
   - agentId: skill:session-wrapup
@@ -453,6 +594,20 @@ routings:
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: pedagogy.strategies
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: teaching-agent
+    fieldId: analysis.misconceptions
+    render: hidden
+    handoff: [profile]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+  - agentId: teaching-agent
+    fieldId: analysis.ktEstimate
     render: hidden
     handoff: [profile]
     internal: false

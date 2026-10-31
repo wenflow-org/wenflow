@@ -20,10 +20,10 @@ export const PAD_TOP = 14
 /** 组级视图：组头下保留的字段预览数量（其余折叠为 +N 更多） */
 export const PREVIEW_N = 2
 
-export const STAGE_ORDER = ['goal', 'path', 'teaching', 'profile', 'simulation'] as const
-export const STAGE_LABELS: Record<string, string> = {
-  goal: '澄清', path: '规划', teaching: '教学', profile: '画像', simulation: '仿真',
-}
+// 2026-10-22 单源化：阶段序/译名此前与 dataFlow.ts 各写一份（改一处漏一处）。
+// dataFlow 是首出处；本模块本地也在用，import + re-export 维持既有引用面不动。
+import { STAGE_ORDER, STAGE_LABELS } from './dataFlow'
+export { STAGE_ORDER, STAGE_LABELS }
 
 /* ================= 类型 ================= */
 export interface FlowField {

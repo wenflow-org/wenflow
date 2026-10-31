@@ -34,6 +34,8 @@ import adminAuditLogsRoutes from '../routes/admin/audit-logs';
 import adminLearnerModelsRoutes from '../routes/admin/learner-models';
 import adminMemoryTracesRoutes from '../routes/admin/memory-traces';
 import adminMemoryReviewRoutes from '../routes/admin/memory-review';
+import adminContentReviewRoutes from '../routes/admin/content-review';
+import adminOpsObservabilityRoutes from '../routes/admin/ops-observability';
 import adminAnnouncementsRoutes from '../routes/admin/announcements';
 import announcementsRoutes from '../routes/announcements';
 import adminVirtualLearnersRoutes from '../routes/admin/virtual-learners';
@@ -41,12 +43,13 @@ import adminPresetsRoutes from '../routes/admin/presets';
 import adminSessionAuditsRoutes from '../routes/admin/session-audits';
 import adminModelRegistryRoutes from '../routes/admin/model-registry';
 import adminModelProvidersRoutes from '../routes/admin/model-providers';
+import adminInfraModelsRoutes from '../routes/admin/infra-models';
 import adminSessionConsoleRoutes from '../routes/admin/session-console';
 import adminBatchExperimentsRoutes from '../routes/admin/batch-experiments';
 import adminProjectionAccessGrantsRoutes from '../routes/admin/projection-access-grants';
 import adminFeedbackRoutes from '../routes/admin/feedback';
-import adminSystemStatusRoutes from '../routes/admin/system-status';
 import adminMcpRoutes from '../routes/admin/mcp';
+import adminPluginsRoutes from '../routes/admin/plugins';
 import adminHealthCenterRoutes from '../routes/admin/health-center';
 import adminGlossaryRoutes from '../routes/admin/glossary';
 import adminDevtoolsRoutes from '../routes/admin/devtools';
@@ -174,9 +177,14 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/audit-logs', adminAccessRestrictMiddleware, adminAuthMiddleware, adminMiddleware, acpContextMiddleware('admin'), adminAuditLogsRoutes);
   app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
   app.use('/api/admin/mcp', ...adminRouteMiddleware, adminMcpRoutes);
+  app.use('/api/admin/plugins', ...adminRouteMiddleware, adminPluginsRoutes);
   app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
   app.use('/api/admin/memory-traces', ...adminRouteMiddleware, adminMemoryTracesRoutes);
   app.use('/api/admin/memory-review', ...adminRouteMiddleware, adminMemoryReviewRoutes);
+  // 内容抽检（#121）：与 CLI 同表同键，管理端只做读写
+  app.use('/api/admin/content-review', ...adminRouteMiddleware, adminContentReviewRoutes);
+  // 运营可观测（2026-10-21）：批量吞吐 rpm / 洞察可靠性读侧
+  app.use('/api/admin/ops', ...adminRouteMiddleware, adminOpsObservabilityRoutes);
   app.use('/api/admin/goal-conversations', ...adminRouteMiddleware, adminGoalConversationsRoutes);
   app.use('/api/admin/virtual-learners', ...adminRouteMiddleware, adminVirtualLearnersRoutes);
   // 平台预置（virtual-learners/presets.yaml）总览 + 一键加载：独立路由域（virtual-learners 正在拆分）
@@ -184,10 +192,11 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/session-audits', ...adminRouteMiddleware, adminSessionAuditsRoutes);
   app.use('/api/admin/model-registry', ...adminRouteMiddleware, adminModelRegistryRoutes);
   app.use('/api/admin/model-providers', ...adminRouteMiddleware, adminModelProvidersRoutes);
+  // 基础设施模型（embedding / rerank）：平台必需配置，不随插件启停
+  app.use('/api/admin/infra-models', ...adminRouteMiddleware, adminInfraModelsRoutes);
   app.use('/api/admin/batch-experiments', ...adminRouteMiddleware, adminBatchExperimentsRoutes);
   app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
   app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);
-  app.use('/api/admin/system', ...adminRouteMiddleware, adminSystemStatusRoutes);
   app.use('/api/admin/health-center', ...adminRouteMiddleware, adminHealthCenterRoutes);
   app.use('/api/admin/glossary', ...adminRouteMiddleware, adminGlossaryRoutes);
   // 运维工具（时间推进模拟 / outbox 死信重放）：路由内部自带 /devtools 前缀，直接挂载到 /api/admin

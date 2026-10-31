@@ -36,6 +36,7 @@ inputs:
       · dueReview（string[]）到期复习点（学过但快忘了）
       · struggling（string[]）仍在学/易混淆概念
       · recentCompleted（string[]）最近完成的事项（成果物标题）
+      · recentDetails（object[]）最近事项的具身细节：{title, deliverable, memoryDelta, mastered[], struggling[]}——用于说出具体做过什么，而不是只复述概念名
   - name: task
     type: object
     ref: sandbox:simulation.task

@@ -12,10 +12,11 @@
  *
  * 只依赖 `material-store`（fs），**不引解析库**，因此可被 path.coordinator 安全静态引入。
  */
-import { listMaterials, readMaterial, type MaterialRecord } from './material-store';
+import { readMaterial, type MaterialRecord } from './material-store';
 import { isProseTextLine, stripLineMarkers } from './document-parser.types';
 import { classifySourceTier } from '../../skills/material-collector';
 import { logger } from '../../utils/logger';
+import { selectMaterials } from './material-selection.service';
 import {
   DEFAULT_SEMANTIC_TIMEOUT_MS,
   ensureMaterialVectorIndex,
@@ -308,8 +309,30 @@ export async function buildPackFromMaterialAsync(
   }
 }
 
+export interface UploadedMaterialPackOptions {
+  /** 目标文本；有值时按相关性选资料，空值退回最近上传。 */
+  query?: string | null;
+  /** 本次最多打包几份；缺省 MAX_UPLOAD_MATERIAL_PACKS。 */
+  limit?: number;
+  /** 调用方已选好的记录；传入后不再重复排序/读取列表。 */
+  records?: MaterialRecord[];
+}
+
+function resolveUploadedRecords(userId: string, options: UploadedMaterialPackOptions): MaterialRecord[] {
+  const limit = Math.max(1, Math.floor(Number(options.limit) || MAX_UPLOAD_MATERIAL_PACKS));
+  if (options.records) {
+    return options.records.filter((record) => record.origin !== 'web').slice(0, limit);
+  }
+  return selectMaterials({
+    userId,
+    query: options.query,
+    limit,
+    includeWeb: false,
+  }).selected;
+}
+
 /**
- * 读取该用户上传的资料并转成资料包（新→旧，最多 MAX_UPLOAD_MATERIAL_PACKS 份）。
+ * 读取该用户上传的资料并转成资料包（按目标相关性选，最多 MAX_UPLOAD_MATERIAL_PACKS 份）。
  * 任何异常都吞掉返回已成功的部分（fail-open：附件读不到不能挡路径生成）。
  *
  * 必须排除 origin='web'（2026-09-26 实测）：联网入库资料有自己的复用通道
@@ -318,19 +341,14 @@ export async function buildPackFromMaterialAsync(
  * ② 它的 materialId 进入 uploadedMaterialIds 后，真联网包在合并处被当作"与附件重复"丢弃——
  * 净效果是第二次生成时联网资料"消失"，只剩一份假冒附件。
  */
-export function buildUploadedMaterialPacks(userId: string): MaterialPackResult[] {
+export function buildUploadedMaterialPacks(
+  userId: string,
+  options: UploadedMaterialPackOptions = {}
+): MaterialPackResult[] {
   if (!userId) return [];
   if (!isUploadMaterialInjectionEnabled()) return [];
 
-  let records: MaterialRecord[] = [];
-  try {
-    records = listMaterials(userId)
-      .filter((record) => record.origin !== 'web')
-      .slice(0, MAX_UPLOAD_MATERIAL_PACKS);
-  } catch {
-    return [];
-  }
-
+  const records = resolveUploadedRecords(userId, options);
   const packs: MaterialPackResult[] = [];
   for (const record of records) {
     try {
@@ -345,19 +363,14 @@ export function buildUploadedMaterialPacks(userId: string): MaterialPackResult[]
 }
 
 /** 同 `buildUploadedMaterialPacks`，但走语义化口径（path 生成用这个）。 */
-export async function buildUploadedMaterialPacksAsync(userId: string): Promise<MaterialPackResult[]> {
+export async function buildUploadedMaterialPacksAsync(
+  userId: string,
+  options: UploadedMaterialPackOptions = {}
+): Promise<MaterialPackResult[]> {
   if (!userId) return [];
   if (!isUploadMaterialInjectionEnabled()) return [];
 
-  let records: MaterialRecord[] = [];
-  try {
-    records = listMaterials(userId)
-      .filter((record) => record.origin !== 'web')
-      .slice(0, MAX_UPLOAD_MATERIAL_PACKS);
-  } catch {
-    return [];
-  }
-
+  const records = resolveUploadedRecords(userId, options);
   const packs: MaterialPackResult[] = [];
   for (const record of records) {
     try {

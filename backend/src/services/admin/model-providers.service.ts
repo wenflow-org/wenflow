@@ -66,6 +66,11 @@ export interface ProviderViewModel {
   keyHint: string | null;
   /** inherit = 端点与密钥在连接设置里；unconfigured = 自带端点但还没密钥 */
   status: 'ready' | 'unconfigured' | 'inherit' | 'disabled';
+  /**
+   * 上游是否接受原生 `role:'system'`。null = 未显式声明，按 endpointSource 推导
+   * （inherit 折叠、own 保留）。见 models.config.ts:providerAcceptsSystemRole。
+   */
+  supportsSystemRole: boolean | null;
   models: ModelViewModel[];
 }
 
@@ -75,6 +80,12 @@ export interface ModelViewModel {
   tier: 'chat' | 'reasoning';
   supportsThinking: boolean;
   supportsReasoningEffort: boolean;
+  /** 声明可接收图片输入（见 models.config.ts ModelDefinition.vision） */
+  vision: boolean;
+  /** 模型级生成默认；null = 跟随平台默认（2026-10-24） */
+  defaultThinkingMode: 'enabled' | 'disabled' | null;
+  defaultReasoningEffort: 'low' | 'high' | 'max' | null;
+  defaultResponseFormat: 'none' | 'json_object' | null;
   maxOutputTokens: number | null;
   defaultMaxTokens: number | null;
   reasoningReserveTokens: number | null;
@@ -105,6 +116,8 @@ export interface ProviderInput {
   apiKeyEnv?: string | null;
   /** 表单里填的明文密钥：落库密文；留空/不传 = 不改动已配置的密钥 */
   apiKey?: string | null;
+  /** true/false = 显式声明；null = 清除声明，回到按端点来源推导 */
+  supportsSystemRole?: boolean | null;
 }
 
 export interface ModelInput {
@@ -113,6 +126,11 @@ export interface ModelInput {
   tier?: string;
   supportsThinking?: boolean;
   supportsReasoningEffort?: boolean;
+  vision?: boolean;
+  /** 'default' / null = 清除模型覆盖，跟随平台默认 */
+  defaultThinkingMode?: string | null;
+  defaultReasoningEffort?: string | null;
+  defaultResponseFormat?: string | null;
   maxOutputTokens?: number | null;
   defaultMaxTokens?: number | null;
   reasoningReserveTokens?: number | null;
@@ -370,6 +388,16 @@ function toModelView(raw: Record<string, unknown>, id: string): ModelViewModel {
     tier: raw.tier === 'reasoning' ? 'reasoning' : 'chat',
     supportsThinking: raw.supportsThinking === true,
     supportsReasoningEffort: raw.supportsReasoningEffort === true,
+    vision: raw.vision === true,
+    defaultThinkingMode: raw.defaultThinkingMode === 'enabled' || raw.defaultThinkingMode === 'disabled'
+      ? raw.defaultThinkingMode
+      : null,
+    defaultReasoningEffort: raw.defaultReasoningEffort === 'low' || raw.defaultReasoningEffort === 'high' || raw.defaultReasoningEffort === 'max'
+      ? raw.defaultReasoningEffort
+      : null,
+    defaultResponseFormat: raw.defaultResponseFormat === 'none' || raw.defaultResponseFormat === 'json_object'
+      ? raw.defaultResponseFormat
+      : null,
     maxOutputTokens: typeof raw.maxOutputTokens === 'number' ? raw.maxOutputTokens : null,
     defaultMaxTokens: typeof raw.defaultMaxTokens === 'number' ? raw.defaultMaxTokens : null,
     reasoningReserveTokens: typeof raw.reasoningReserveTokens === 'number' ? raw.reasoningReserveTokens : null,
@@ -404,6 +432,7 @@ export async function buildProvidersView(): Promise<ProviderRegistryView> {
       keySource: summary.keySource,
       keyHint: summary.keyHint,
       status: !enabled ? 'disabled' : !baseUrl ? 'inherit' : summary.keySource === 'none' ? 'unconfigured' : 'ready',
+      supportsSystemRole: typeof raw.supportsSystemRole === 'boolean' ? raw.supportsSystemRole : null,
       models: Object.entries(modelsRaw).map(([modelId, m]) => toModelView(m ?? {}, modelId))
     });
   }
@@ -506,7 +535,9 @@ function checkFallbacks(providerId: string, fallbacks: string[], root: Root): st
 
 /** 模型条目的规范字段顺序（写回文件的可读性靠它，而不是靠碰巧的插入顺序） */
 const MODEL_KEY_ORDER = [
-  'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'maxOutputTokens', 'defaultMaxTokens',
+  'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'vision',
+  'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat',
+  'maxOutputTokens', 'defaultMaxTokens',
   'reasoningReserveTokens', 'maxParallelRequests', 'fallbacks', 'pricing', 'description'
 ];
 
@@ -525,8 +556,28 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
   }
   if (input.supportsThinking !== undefined) merged.supportsThinking = input.supportsThinking === true;
   if (input.supportsReasoningEffort !== undefined) merged.supportsReasoningEffort = input.supportsReasoningEffort === true;
+  // 图片理解是独立能力：不勾就显式写 false（上游不支持时运行时会拒图，不是静默丢图）
+  if (input.vision !== undefined) merged.vision = input.vision === true;
   if (merged.supportsReasoningEffort === true && merged.supportsThinking !== true) {
     throw new RegistryEditError('勾了「支持推理强度」就必须同时支持思考模式（上游字段依赖该能力）。', 400, 'invalid');
+  }
+  // 模型级生成默认（2026-10-24）：'default' / 空 = 删除覆盖，跟随平台默认
+  const enumFields: Array<[keyof ModelInput, string, readonly string[]]> = [
+    ['defaultThinkingMode', '思考模式', ['default', 'enabled', 'disabled']],
+    ['defaultReasoningEffort', '思考强度', ['default', 'low', 'high', 'max']],
+    ['defaultResponseFormat', '输出格式', ['default', 'none', 'json_object']]
+  ];
+  for (const [key, label, allowed] of enumFields) {
+    if (input[key] === undefined) continue;
+    const raw = typeof input[key] === 'string' ? String(input[key]).trim().toLowerCase() : '';
+    if (!raw || raw === 'default') {
+      delete merged[key as string];
+      continue;
+    }
+    if (!allowed.includes(raw)) {
+      throw new RegistryEditError(`${label}只能是 ${allowed.join(' / ')}。`, 400, 'invalid');
+    }
+    merged[key as string] = raw;
   }
   const numFields: Array<[keyof ModelInput, string]> = [
     ['maxOutputTokens', '输出上限'],
@@ -595,6 +646,7 @@ export async function createProvider(input: ProviderInput): Promise<EditOutcome 
     enabled: input.enabled !== false,
     baseUrl,
     apiKeyEnv,
+    ...(typeof input.supportsSystemRole === 'boolean' ? { supportsSystemRole: input.supportsSystemRole } : {}),
     models: {}
   };
   const warnings = saveRegistry(next, []);
@@ -620,6 +672,10 @@ export async function updateProvider(providerId: string, input: ProviderInput): 
     else delete target.description;
   }
   if (input.enabled !== undefined) target.enabled = input.enabled === true;
+  if (input.supportsSystemRole !== undefined) {
+    if (typeof input.supportsSystemRole === 'boolean') target.supportsSystemRole = input.supportsSystemRole;
+    else delete target.supportsSystemRole;
+  }
   if (input.baseUrl !== undefined) {
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     if (!baseUrl) throw new RegistryEditError('服务地址不能清空（要停用请用「启用」开关）。', 400, 'invalid');
@@ -712,8 +768,50 @@ export async function addModel(providerId: string, input: ModelInput): Promise<E
   return { modelId, warnings: finalWarnings };
 }
 
-export async function updateModel(providerId: string, modelId: string, input: ModelInput): Promise<EditOutcome> {
+/**
+ * 批量登记（模型选择器「确认引入」）：一次读、一次写，避免 N 个模型触发 N 次文件保存。
+ * 任意一个 id 非法/已存在则整批拒绝——半批成功会让运营分不清哪些已加。
+ */
+export async function addModels(
+  providerId: string,
+  inputs: ModelInput[],
+): Promise<EditOutcome & { modelIds: string[] }> {
+  const list = Array.isArray(inputs) ? inputs : [];
+  if (!list.length) throw new RegistryEditError('至少选择一个模型。', 400, 'invalid');
   const { root } = readRegistryFile();
+  const entry = requireProvider(root, providerId);
+  const existing = (entry.models ?? {}) as Record<string, Record<string, unknown>>;
+  const next = cloneRoot(root);
+  const target = requireProvider(next, providerId);
+  const models = (target.models ?? {}) as Record<string, Record<string, unknown>>;
+
+  const ids: string[] = [];
+  for (const input of list) {
+    const modelId = String(input?.id ?? '').trim();
+    assertModelId(modelId, `供应商「${providerId}」`);
+    if (existing[modelId] || ids.includes(modelId)) {
+      throw new RegistryEditError(`供应商「${providerId}」下已有模型「${modelId}」。`, 409, 'conflict');
+    }
+    ids.push(modelId);
+  }
+
+  const warnings: string[] = [];
+  for (const input of list) {
+    const modelId = String(input.id ?? '').trim();
+    const image = buildModelEntry({ ...input, id: modelId }, null);
+    if (image.label === undefined) image.label = modelId;
+    if (image.tier === undefined) image.tier = 'chat';
+    if (Array.isArray(image.fallbacks) && image.fallbacks.length) {
+      warnings.push(...checkFallbacks(providerId, image.fallbacks as string[], next));
+    }
+    models[modelId] = image;
+  }
+  target.models = models;
+  const finalWarnings = saveRegistry(next, warnings);
+  return { modelIds: ids, warnings: finalWarnings };
+}
+
+export async function updateModel(providerId: string, modelId: string, input: ModelInput): Promise<EditOutcome> {  const { root } = readRegistryFile();
   const entry = requireProvider(root, providerId);
   const current = ((entry.models ?? {}) as Record<string, Record<string, unknown>>)[modelId];
   if (!current) throw new RegistryEditError(`供应商「${providerId}」下没有模型「${modelId}」。`, 404, 'not-found');

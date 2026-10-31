@@ -5,6 +5,7 @@ import systemPrisma from '../config/system-database';
 import { getAPIGateway } from '../gateway/api-gateway';
 import { decryptSecret, encryptSecret, SecretCryptoError } from '../utils/secret-crypto';
 import { endpointsMatch, resolveEndpointBoundSecret } from '../utils/endpoint-identity';
+import { isPlaceholderApiKey } from '../utils/api-key-placeholder';
 
 const prisma = systemPrisma;
 
@@ -28,6 +29,9 @@ export interface APIConfig {
   chatModels?: string[];
   reasoningModels?: string[];
   lightModels?: string[];
+  /** 连接健康快照（由管理台「连接并拉取 / 重新拉取」写入，随连接域保存） */
+  connectionStatus?: string;
+  lastCheckedAt?: Date | string | null;
 }
 
 const defaultConfig: APIConfig = {
@@ -49,6 +53,25 @@ const defaultConfig: APIConfig = {
   lightModels: [],
 };
 
+/**
+ * #142：文档占位 key（sk-your-api-key 等）按「未配置」处理——返回空串，
+ * 使 apiKeyConfigured:false、/readyz 报 warning、真实调用走「未配置」失败而非神秘 401。
+ * 非空占位只告警一次（getConfig 是热路径，每次 readyz/请求都打日志会刷屏）；
+ * 只写「占位值」字样，绝不输出 key 内容。空串静默放行（本就是未配置）。
+ */
+let warnedPlaceholderKey = false;
+function normalizeConfiguredApiKey(value: string): string {
+  if (!isPlaceholderApiKey(value)) return value;
+  if (value.trim()) {
+    if (!warnedPlaceholderKey) {
+      warnedPlaceholderKey = true;
+      logger.warn('[api-config] AI_API_KEY 为文档占位值（如 sk-your-api-key），已按「未配置」处理；请填入真实密钥（.env 或管理端）');
+    }
+    return '';
+  }
+  return '';
+}
+
 class APIConfigService {
   /**
    * 获取当前配置（从数据库读取）
@@ -63,12 +86,13 @@ class APIConfigService {
         const configuredEndpoint = (dbConfig.apiUrl || '').trim();
         const apiUrl = configuredEndpoint || defaultConfig.apiUrl;
         const configuredApiKey = decryptSecret(dbConfig.apiKey, 'system.platform_api_configs.apiKey') || '';
+        const resolvedApiKey = configuredEndpoint
+          ? configuredApiKey
+            || (endpointsMatch(configuredEndpoint, defaultConfig.apiUrl) ? defaultConfig.apiKey : '')
+          : defaultConfig.apiKey;
         return {
           apiUrl,
-          apiKey: configuredEndpoint
-            ? configuredApiKey
-              || (endpointsMatch(configuredEndpoint, defaultConfig.apiUrl) ? defaultConfig.apiKey : '')
-            : defaultConfig.apiKey,
+          apiKey: normalizeConfiguredApiKey(resolvedApiKey),
           availableModels: dbConfig.availableModels 
             ? dbConfig.availableModels.split(',').filter(m => m.trim()) 
             : defaultConfig.availableModels,
@@ -88,11 +112,18 @@ class APIConfigService {
         };
       }
 
-      return defaultConfig;
+      return {
+        ...defaultConfig,
+        // #142：env 兜底 key 同样过滤占位值（首部署照抄 .env.example 的主路径）
+        apiKey: normalizeConfiguredApiKey(defaultConfig.apiKey),
+      };
     } catch (error) {
       logger.error('获取 API 配置失败:', error);
       if (error instanceof SecretCryptoError) throw error;
-      return defaultConfig;
+      return {
+        ...defaultConfig,
+        apiKey: normalizeConfiguredApiKey(defaultConfig.apiKey),
+      };
     }
   }
 
@@ -106,6 +137,15 @@ class APIConfigService {
         ...currentConfig,
         ...newConfig,
       };
+      // #142：管理端误存占位值（照抄文档模板）时按空处理——不持久化假 key，
+      // 保存响应的 apiKeyConfigured 也如实报未配置。
+      if (isPlaceholderApiKey(mergedConfig.apiKey)) mergedConfig.apiKey = '';
+      const parsedLastCheckedAt = mergedConfig.lastCheckedAt
+        ? new Date(mergedConfig.lastCheckedAt)
+        : undefined;
+      const validLastCheckedAt = parsedLastCheckedAt && !Number.isNaN(parsedLastCheckedAt.getTime())
+        ? parsedLastCheckedAt
+        : undefined;
 
       await prisma.platform_api_configs.upsert({
         where: { id: 'platform' },
@@ -126,6 +166,10 @@ class APIConfigService {
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
           reasoningModels: mergedConfig.reasoningModels ? JSON.stringify(mergedConfig.reasoningModels) : null,
           lightModels: mergedConfig.lightModels ? JSON.stringify(mergedConfig.lightModels) : null,
+          ...(typeof mergedConfig.connectionStatus === 'string'
+            ? { connectionStatus: mergedConfig.connectionStatus }
+            : {}),
+          ...(validLastCheckedAt ? { lastCheckedAt: validLastCheckedAt } : {}),
           updatedAt: new Date(),
         },
         create: {
@@ -146,6 +190,10 @@ class APIConfigService {
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
           reasoningModels: mergedConfig.reasoningModels ? JSON.stringify(mergedConfig.reasoningModels) : null,
           lightModels: mergedConfig.lightModels ? JSON.stringify(mergedConfig.lightModels) : null,
+          ...(typeof mergedConfig.connectionStatus === 'string'
+            ? { connectionStatus: mergedConfig.connectionStatus }
+            : {}),
+          ...(validLastCheckedAt ? { lastCheckedAt: validLastCheckedAt } : {})
         },
       });
 
@@ -174,10 +222,10 @@ class APIConfigService {
 
       logger.info('API 配置已重置为默认值');
       getAPIGateway().invalidateCache();
-      return defaultConfig;
+      return { ...defaultConfig, apiKey: normalizeConfiguredApiKey(defaultConfig.apiKey) };
     } catch (error) {
       logger.error('重置 API 配置失败:', error);
-      return defaultConfig;
+      return { ...defaultConfig, apiKey: normalizeConfiguredApiKey(defaultConfig.apiKey) };
     }
   }
 

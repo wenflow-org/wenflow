@@ -18,6 +18,8 @@ import blackboxVirtualLearnerRunner from './blackbox-runner'
 import { safeJsonParse } from '../utils/safe-json'
 import { resolveSessionBudget, computeLearnProgressSignature } from './session-budget'
 import { getRuntimeVirtualLabSettings, DEFAULT_AUTOPILOT_CONCURRENCY_LIMIT } from '../services/virtual-lab-settings.service'
+import { resolveSessionSimulatedNow } from '../services/virtual-lab/simulation-clock-resolver'
+import { runWithSimulatedClock } from '../services/virtual-lab/simulation-clock-context'
 import type { VirtualSessionWithProfile } from './vlab-types'
 
 const AUTOPILOT_GOAL_MAX_ROUNDS = 20
@@ -527,15 +529,26 @@ export class AutopilotService {
           sessionId,
           runId
         },
-        () => {
-          if (target === 'stage') {
+        async () => {
+          const drive = () => {
+            if (target === 'stage') {
+              return mode === 'blackbox'
+                ? this.executeBlackboxStageLoop(sessionId, runId)
+                : this.executeAssistedStageLoop(sessionId, runId)
+            }
             return mode === 'blackbox'
-              ? this.executeBlackboxStageLoop(sessionId, runId)
-              : this.executeAssistedStageLoop(sessionId, runId)
+              ? this.executeBlackboxLoop(sessionId, runId)
+              : this.executeAssistedLoop(sessionId, runId)
           }
-          return mode === 'blackbox'
-            ? this.executeBlackboxLoop(sessionId, runId)
-            : this.executeAssistedLoop(sessionId, runId)
+          // M-15（夜间审计）：autopilot 后台链此前无模拟钟 ALS，链内学习步 finalize 的
+          // simulatedNowOr()（memory_traces 回写、review:completed 事件 occurredAt 入队）
+          // 全部落真实墙钟 → memory_traces 同表双钟。这里按当前会话/画像解析模拟时刻，
+          // 与 assisted-shared / advance-day runTasks 同式叠绑上下文；未启用日期模拟的
+          // 实例解析为 null → 不建上下文，行为零变化。
+          const asOf = await resolveSessionSimulatedNow(session, session.virtual_learner_profiles)
+          if (!asOf) return drive()
+          logger.info('[autopilot] 已绑定实例模拟钟', { sessionId, runId, asOf: asOf.toISOString() })
+          return runWithSimulatedClock(asOf, drive)
         }
       )
     } finally {
@@ -738,9 +751,11 @@ export class AutopilotService {
       // 分片边界（回合上限）：不是失败。用进度指纹判断这一片是否真的推进了东西，
       // 有进展 → 继续下一片；连续 N 片零净进展 → 判定卡死（疑似教学死循环）才停止。
       if (!learnResult.success && String(learnResult.error || '').includes('auto_turn_cap_exhausted')) {
+        // 指纹不含 currentTaskId：任务间打转（A,B,A,B）时每片都换任务但零净进展，
+        // 含「当前任务」会让看门狗被永久绕过（2026-10-24 修正，见 session-budget.ts）
         const signature = computeLearnProgressSignature(
           after ? parseStageResults(after.stageResults) : null,
-          { completedTasks: after?.completedTasks, currentTaskId: after?.currentTaskId }
+          { completedTasks: after?.completedTasks }
         )
         if (signature !== lastProgressSignature) {
           lastProgressSignature = signature

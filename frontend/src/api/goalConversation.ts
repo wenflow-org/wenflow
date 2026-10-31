@@ -164,6 +164,8 @@ export type GoalStreamAction = 'start' | 'reply' | 'regenerate';
     goal skill 为 JSON 输出，delta 为原始模型文本；最终以 final envelope 为准。 */
 export interface GoalStreamHandlers {
   onDelta?: (text: string) => void;
+  /** 服务端心跳注释行到达（传输层活动，喂上层停滞看门狗） */
+  onActivity?: () => void;
   signal?: AbortSignal;
 }
 
@@ -173,7 +175,7 @@ async function streamGoalRequest(
   payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; adjustments?: string; meta?: InteractionMeta },
   handlers: GoalStreamHandlers = {}
 ): Promise<GoalConversationEnvelope> {
-  const { onDelta, signal } = handlers;
+  const { onDelta, onActivity, signal } = handlers;
   const url = action === 'start'
     ? '/goal-conversation/start'
     : `/goal-conversation/${conversationId}/${action === 'reply' ? 'reply' : 'regenerate'}`;
@@ -198,6 +200,12 @@ async function streamGoalRequest(
     };
     streamSsePost(url, body, {
       signal,
+      onActivity,
+      // 空闲窗放宽到 5 分钟：sse.ts 的空闲超时修复接线后此参数首次真实生效，而目标回合
+      // （尤其首条消息触发规划）出首个字节可以远超 60s——按默认会误杀慢回合。服务端 15s
+      // 心跳注释行经 onActivity 喂上层看门狗后，此处只兜「连心跳都断了」的真死连接；
+      // 连接阶段另有 sse.ts 的 30s 连接超时兜底（请求未达服务端的黑洞场景，#129）。
+      idleTimeoutMs: 300_000,
       onEvent: (event, data) => {
         if (event === 'final') {
           receivedAnything = true;

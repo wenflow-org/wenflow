@@ -12,12 +12,12 @@ jest.mock('../../../utils/logger', () => ({
 import { LearningStateService } from '../learning-state.service'
 
 /**
- * #71 P-46：合成占位行（metadata.synthetic=true）此前只在写入侧打标，读侧没人消费。
+ * #71 P-46：合成占位行（synthetic）此前只在写入侧打标，读侧没人消费。
  * 这里钉住三条读路径：当前状态快照 / devtools 最近行 / lssHistory 继承，都必须排除占位行。
+ * 2026-10-24 架构优化批 2a：排除条件从 metadata 字符串 LIKE 换为实列过滤（迁移已回填）。
  */
-describe('学习状态读侧排除合成占位行（#71）', () => {
+describe('学习状态读侧排除合成占位行（#71，2a 列化后口径）', () => {
   const service = new LearningStateService()
-  const SYNTHETIC_NOT = { metadata: { contains: '"synthetic":true' } }
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -26,7 +26,7 @@ describe('学习状态读侧排除合成占位行（#71）', () => {
     mockPrisma.teaching_sessions.findMany.mockResolvedValue([])
   })
 
-  it('getCurrentStateSnapshot 的已提交行查询带 synthetic 排除条件', async () => {
+  it('getCurrentStateSnapshot 的已提交行查询走实列（committed/metricVersion/synthetic 排除）', async () => {
     mockPrisma.users.findUnique.mockResolvedValue({ learningStateRevision: 1 })
 
     await service.getCurrentStateSnapshot('u1')
@@ -35,10 +35,15 @@ describe('学习状态读侧排除合成占位行（#71）', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           metricType: 'learning_state',
-          AND: expect.arrayContaining([{ NOT: SYNTHETIC_NOT }]),
+          committed: true,
+          metricVersion: 'state-v2',
+          synthetic: false,
         }),
       })
     )
+    // 不再出现 metadata LIKE（2a 的目标）
+    const call = mockPrisma.learning_metrics.findMany.mock.calls[0][0]
+    expect(JSON.stringify(call.where)).not.toContain('contains')
   })
 
   it('getLatestMetricRecord 只取学习状态行且跳过占位行', async () => {
@@ -48,7 +53,7 @@ describe('学习状态读侧排除合成占位行（#71）', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           metricType: 'learning_state',
-          NOT: SYNTHETIC_NOT,
+          synthetic: false,
         }),
       })
     )
@@ -61,6 +66,7 @@ describe('学习状态读侧排除合成占位行（#71）', () => {
 
     const call = mockPrisma.learning_metrics.findMany.mock.calls[0][0]
     expect(call.where.pathId).toBe('p1')
-    expect(call.where.AND).toEqual(expect.arrayContaining([{ NOT: SYNTHETIC_NOT }]))
+    expect(call.where.committed).toBe(true)
+    expect(call.where.synthetic).toBe(false)
   })
 })

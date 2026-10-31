@@ -144,6 +144,40 @@ describe('users agent log routes', () => {
     expect(teachItems[0].groupItems).toBeUndefined();
   });
 
+  it('折叠会话从同 trace 的网关行提取模型名（业务行本身没有 model）', async () => {
+    const base = {
+      sourceEntry: 'platform',
+      calledAt: new Date('2026-09-04T11:00:00.000Z'),
+      success: true,
+      errorCode: null,
+      durationMs: 1000,
+      traceId: 'trace-shared-model',
+    };
+    agentLogMocks.findMany.mockResolvedValue([
+      {
+        ...base,
+        id: 'b1',
+        agentId: 'skill:goal-conversation',
+        metadata: JSON.stringify({ conversationId: 'gc_model', layer: 'skill-executor' }),
+      },
+      {
+        ...base,
+        id: 'gw1',
+        agentId: 'api-gateway',
+        metadata: JSON.stringify({ conversationId: 'gc_model', model: 'deepseek-v4.1-flash' }),
+      },
+    ]);
+    agentLogMocks.count.mockResolvedValue(2);
+    const req: any = { user: { userId: 'user-1' }, query: { includeSystem: 'true' } };
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs'](req, res, jest.fn());
+
+    const logs = res.body?.data?.logs ?? [];
+    const goal = logs.find((l: any) => String(l.agentId).includes('goal-conversation'));
+    expect(goal.model).toBe('deepseek-v4.1-flash');
+  });
+
   it('列表过滤 userVisible=false 的内部 skill（如 adaptive-guidance-copy）', async () => {
     const mkLog = (id: string, convId: string | null, agentId: string, calledAt: string) => ({
       id,

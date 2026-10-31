@@ -4,7 +4,7 @@
     <details class="sdp-routing__lineage" @toggle="onLineageToggle">
       <summary>字段影响范围（产出字段 → 下游消费者）</summary>
       <MkLoading v-if="lineageLoading" inline text="影响范围加载中…" />
-      <table v-else-if="lineage.length" class="sdp-routing__table">
+      <table v-else-if="lineage.length" class="mk-table mk-table--dense sdp-routing__table">
         <thead><tr><th>字段</th><th>消费者</th></tr></thead>
         <tbody>
           <tr v-for="(entry, i) in lineage" :key="i">
@@ -105,18 +105,9 @@ watch(
   user-select: none;
 }
 .sdp-routing__lineage summary:hover { color: var(--mk-ink); }
-.sdp-routing__table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--mk-fs-micro);
-  margin-top: 8px;
-}
-.sdp-routing__table th, .sdp-routing__table td {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--mk-surface-3);
-}
-.sdp-routing__table th { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
+/* 血缘明细是页内嵌小表：走共享 .mk-table + --dense 密度档，不再自带一套表头/行线/内边距
+   （此前它连 .mk-table 都没挂，是页内第三套表格方言）。 */
+.sdp-routing__table { margin-top: 8px; }
 .sdp-routing__consumer { font-size: var(--mk-fs-micro); color: var(--mk-muted); padding: 1px 0; }
 .sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 血缘加载失败：红字（与同单元 SkillFieldRouting 错误态同语言） */

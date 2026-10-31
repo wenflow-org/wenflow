@@ -224,6 +224,39 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
+  // 2026-10-29 数据审计 M-20：此前漏登记 manifest，/agents/logs 按监测组筛选时该 Skill
+  // （教学开场白生成，周窗 604 行/36 错）不归属任何组、教学环节统计系统性漏计。
+  // 教学主链第 2 步（ai-teaching.definition step 2 opening-generation），模型参数对齐
+  // prompts/core/teaching-opening-generator.yaml params。
+  {
+    id: 'skill:teaching-opening-generator',
+    name: '课堂开场交互生成器 Skill',
+    description: '生成教学 Session 的开场 message、question 与 quickReplies',
+    category: 'teaching',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Teaching',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.4, maxTokens: 64000 }
+  },
+  // （课堂板书设计器，v19 白板的执行体：ai-teaching/board-designer.service 以 agentId
+  // skill:board-designer 写调用日志）与 teaching-opening-generator 同因登记：不登记则
+  // 不归属任何监控组、教学环节统计漏计。模型参数对齐 service 内 generationOverride
+  // （temperature 0.2/重试 0.45、maxTokens 16000，BOARD_DESIGNER_MODEL 可环境覆盖）。
+  {
+    id: 'skill:board-designer',
+    name: '课堂板书设计器 Skill',
+    description: '按本轮教学意图生成课堂白板（认知减负区）的两栏板面 spec',
+    category: 'teaching',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Teaching',
+    noPromptFile: true,
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.2, maxTokens: 16000 }
+  },
 
   // ============ Profile 下辖 Skills ============
   {

@@ -11,6 +11,7 @@ import {
   REPLAN_TASK_COUNT_CAP,
   REPLAN_TASK_RATIO,
   buildReplanTaskCount,
+  resolveAdvisoryAction,
   resolveReplanTaskRatio,
 } from '../path-replan.service';
 
@@ -37,6 +38,24 @@ describe('resolveReplanTaskRatio（两套词汇都要认）', () => {
     expect(resolveReplanTaskRatio('overwrite', null)).toBe(1);
     expect(resolveReplanTaskRatio(null, '未知动作')).toBe(1);
     expect(resolveReplanTaskRatio(null, null)).toBe(1);
+  });
+});
+
+describe('resolveAdvisoryAction（老客户端兼容）', () => {
+  it('显式 advisoryAction 优先', () => {
+    expect(resolveAdvisoryAction({ advisoryAction: 'reinforce', advisory: { recommendation: 'accelerate' } }))
+      .toBe('reinforce');
+  });
+
+  it('只传 advisory.recommendation 时派生动作（accelerate 不再被当等量重排）', () => {
+    expect(resolveAdvisoryAction({ advisory: { recommendation: 'accelerate' } })).toBe('accelerate');
+    expect(resolveReplanTaskRatio('overwrite', resolveAdvisoryAction({ advisory: { recommendation: 'accelerate' } })))
+      .toBe(REPLAN_TASK_RATIO.accelerate);
+  });
+
+  it('两者都缺失 → undefined（等量重排）', () => {
+    expect(resolveAdvisoryAction({})).toBeUndefined();
+    expect(resolveAdvisoryAction(null)).toBeUndefined();
   });
 });
 

@@ -3,7 +3,7 @@
 
 stage: path
 order: 2
-displayName: Path 阶段
+displayName: 规划阶段
 description: 学习路径生成：Framing → Path Planning → Stage Designer → Path Reviewer → KC Mapper
 
 contracts:
@@ -185,6 +185,51 @@ fields:
     promptRole: soft-info
     valueType: array<object>
     description: 任务→资料条目引用（逐字核对后保留的才落库；无资料时不出该键）
+
+  # === skill:stage-designer 产出归属注记（2026-10-24 契约同步批） ===
+  # path-planning 仅产出阶段骨架（milestones 不含 subtask）；subtasks.* 的实际逐阶段产出者是
+  # stage-designer，路由归属见 routings 中既有「stage-designer → path-agent」块
+  # （本批补齐该块缺的 icapLevel/description/materialRefs 三项）。
+
+  # === skill:path-reviewer 产出（CIDDP 质量评审；2026-10-24 契约同步批补齐） ===
+  - fieldId: score
+    promptRole: control-signal
+    valueType: number
+    description: CIDDP 综合评分 0-1（五维度加权平均；低于 0.75 阈值触发重规划）
+  - fieldId: dimensions
+    promptRole: hidden-inference
+    valueType: object
+    description: 五维度分项评分（Clarity/Integrity/Depth/Practicality/Pertinence，各 0-1）
+  - fieldId: issues
+    promptRole: hidden-inference
+    valueType: array<object>
+    description: 评审问题清单（带维度与位置定位）
+  - fieldId: passed
+    promptRole: control-signal
+    valueType: boolean
+    description: 是否通过评审（编排层据此决定采纳或触发 path-planning 修订）
+  - fieldId: replanInstructions
+    promptRole: control-signal
+    valueType: string
+    description: 低于阈值时的重规划指令（回传 path-planning 的修订依据）
+
+  # === skill:kc-mapper 产出（知识组件标注；2026-10-24 契约同步批补齐） ===
+  - fieldId: conceptKcs
+    promptRole: hidden-inference
+    valueType: array<object>
+    description: 概念级 KC 分解 [{conceptId, kcs[{kcId, name, taxonomy(factual|conceptual|procedural|metacognitive), prerequisiteKCs}]}]；每个 coreConcept 2-5 个 KC
+  - fieldId: taskKcLinks
+    promptRole: hidden-inference
+    valueType: array<object>
+    description: 任务↔KC 关联 [{taskTitle, linkedKCs[]}]（字段名逐字契约，代码侧另有别名归一兜底）；每个 subtask 至少关联 1 个 KC
+  - fieldId: kcGraph
+    promptRole: hidden-inference
+    valueType: object
+    description: KC 前置依赖图 {nodes[{kcId,name,taxonomy}], edges[{from,to,relation=prerequisite}]}（知识依赖非讲授顺序、无环）；代码侧物化为概念图供前置闭包查询
+  - fieldId: gapCoverage
+    promptRole: hidden-inference
+    valueType: object
+    description: 前提缺口覆盖报告 {covered[], uncovered[{concept,reason}]}（仅提供 prerequisiteTree 时输出，否则整个字段省略）
 
 routings:
   # path-agent（确定性定帧）→ path-planning + stage-designer
@@ -443,6 +488,27 @@ routings:
     handoff: [path-agent]
     internal: false
     accumulate: false
+  # 2026-10-24 契约同步批：补齐该产出者块缺失的三项
+  - agentId: skill:stage-designer
+    fieldId: subtasks.icapLevel
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+    notes: ICAP 非递减约束（active→constructive→interactive）
+  - agentId: skill:stage-designer
+    fieldId: subtasks.description
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:stage-designer
+    fieldId: subtasks.materialRefs
+    render: visible
+    handoff: [path-agent]
+    internal: false
+    accumulate: false
+    notes: 逐字核对不过的引用会被代码丢弃
 
   # path-agent → learning（聚合 handoff）
   - agentId: path-agent
@@ -480,4 +546,64 @@ routings:
     render: visible
     handoff: [teaching]
     internal: false
+    accumulate: false
+
+  # === skill:path-reviewer（2026-10-24 契约同步批；编排层重排决策输入） ===
+  - agentId: skill:path-reviewer
+    fieldId: score
+    render: hidden
+    handoff: [path-agent]
+    internal: true
+    accumulate: false
+  - agentId: skill:path-reviewer
+    fieldId: dimensions
+    render: hidden
+    handoff: [path-agent]
+    internal: true
+    accumulate: false
+  - agentId: skill:path-reviewer
+    fieldId: issues
+    render: hidden
+    handoff: [path-agent]
+    internal: true
+    accumulate: false
+  - agentId: skill:path-reviewer
+    fieldId: passed
+    render: hidden
+    handoff: [path-agent]
+    internal: true
+    accumulate: false
+  - agentId: skill:path-reviewer
+    fieldId: replanInstructions
+    render: hidden
+    handoff: [path-agent, skill:path-planning]
+    internal: true
+    accumulate: false
+    notes: 评审未过时的修订指令回传
+
+  # === skill:kc-mapper（2026-10-24 契约同步批；代码侧物化为概念图/KC 注册表） ===
+  - agentId: skill:kc-mapper
+    fieldId: conceptKcs
+    render: hidden
+    handoff: [path-agent]
+    internal: true
+    accumulate: false
+  - agentId: skill:kc-mapper
+    fieldId: taskKcLinks
+    render: hidden
+    handoff: [path-agent]
+    internal: true
+    accumulate: false
+  - agentId: skill:kc-mapper
+    fieldId: kcGraph
+    render: hidden
+    handoff: [path-agent]
+    internal: true
+    accumulate: false
+    notes: 物化概念图（prerequisite 闭包 → 教学侧前置缺口查询）
+  - agentId: skill:kc-mapper
+    fieldId: gapCoverage
+    render: hidden
+    handoff: [path-agent]
+    internal: true
     accumulate: false

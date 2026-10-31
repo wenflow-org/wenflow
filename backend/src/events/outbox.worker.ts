@@ -2,8 +2,11 @@ import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { DurableEventConsumerRegistry } from './consumer-registry';
 import { mapOutboxRecord } from './outbox.repository';
+import { setOutboxWakeListener } from './outbox-wake';
 
-const POLL_INTERVAL_MS = 1000;
+/** 兜底轮询区间（架构优化批 #5）：空闲指数退避 1s→30s；入队唤醒/有产出时复位到下限 */
+const POLL_MIN_MS = 1000;
+const POLL_MAX_MS = 30_000;
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 8;
 
@@ -30,6 +33,8 @@ export class DurableOutboxWorker {
   private running = false;
   private stopping = false;
   private inFlight: Promise<void> | null = null;
+  private nextDelayMs = POLL_MIN_MS;
+  private lastTickProductive = false;
   private readonly owner = process.env.INSTANCE_ID || `outbox-${process.pid}`;
 
   constructor(private readonly registry: DurableEventConsumerRegistry) {}
@@ -37,18 +42,35 @@ export class DurableOutboxWorker {
   start(): void {
     if (this.timer) return;
     this.stopping = false;
-    this.timer = setInterval(() => void this.runTickSafely(), POLL_INTERVAL_MS);
-    this.timer.unref?.();
-    void this.runTickSafely();
+    this.nextDelayMs = POLL_MIN_MS;
+    // 入队侧唤醒（outbox-wake）：tick 已在跑则跳过本轮（互斥闸兜底），并把退避复位到下限
+    setOutboxWakeListener(() => {
+      this.nextDelayMs = POLL_MIN_MS;
+      void this.runTickSafely();
+    });
+    // 首轮同步启动（保持旧行为：start 后立即消费一次，不等第一个间隔）
+    void this.runTickSafely().finally(() => this.scheduleNext());
   }
 
   async stop(): Promise<void> {
     this.stopping = true;
-    if (this.timer) clearInterval(this.timer);
+    setOutboxWakeListener(null);
+    if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     await this.inFlight;
   }
 
+  /** 自适应调度：空闲翻倍（封顶 POLL_MAX_MS），有产出（claimed>0）复位到下限 */
+  private scheduleNext(): void {
+    if (this.stopping) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.runTickSafely().finally(() => this.scheduleNext());
+    }, this.nextDelayMs);
+    this.timer.unref?.();
+  }
+
+  /** 供测试/运维直接驱动一轮 */
   async runOnce(): Promise<void> {
     await this.tick();
   }
@@ -72,6 +94,12 @@ export class DurableOutboxWorker {
     } finally {
       this.inFlight = null;
       this.running = false;
+      // 自适应退避：本轮拾取到事件 → 复位下限（队列可能还有）；空转 → 翻倍封顶 30s。
+      // 唤醒路径（outbox-wake）也会把 nextDelayMs 拍回下限——即使唤醒先于事务提交扑空，
+      // 兜底 tick 仍在 1s 内到达（与旧固定轮询同量级）。
+      this.nextDelayMs = this.lastTickProductive
+        ? POLL_MIN_MS
+        : Math.min(POLL_MAX_MS, this.nextDelayMs * 2);
     }
   }
 
@@ -93,6 +121,7 @@ export class DurableOutboxWorker {
   private async processBatch(): Promise<void> {
     const now = new Date();
     const staleLock = new Date(now.getTime() - LOCK_TIMEOUT_MS);
+    this.lastTickProductive = false;
     const records = await prisma.domain_event_outbox.findMany({
       where: {
         availableAt: { lte: now },
@@ -139,6 +168,7 @@ export class DurableOutboxWorker {
         data: { status: 'processing', lockedAt: now, lockOwner: this.owner }
       });
       if (claimed.count !== 1) continue;
+      this.lastTickProductive = true;
 
       try {
         await this.registry.dispatch(mapOutboxRecord(record));
@@ -172,10 +202,35 @@ export class DurableOutboxWorker {
             lastError: error instanceof Error ? error.message : String(error)
           }
         });
-        logger.warn('持久事件消费失败', { eventId: record.id, eventType: record.eventType, attemptCount, dead });
+        if (dead) {
+          // 死信是运维必须介入的终态：用 error 级别，便于日志告警规则直接命中。
+          logger.error('[outbox] 持久事件进入死信，需人工处理', {
+            eventId: record.id,
+            eventType: record.eventType,
+            userId: record.userId,
+            attemptCount,
+            lastError: error instanceof Error ? error.message : String(error),
+          });
+        } else {
+          logger.warn('持久事件消费失败', { eventId: record.id, eventType: record.eventType, attemptCount, dead });
+        }
       }
     }
   }
+}
+
+/**
+ * 死信根因分类（重放闸门）：已知「重放只会再烧 8 次」的毒丸，必须先修数据/代码。
+ * 目前覆盖 FSRS 非法状态（Invalid memory state / difficulty / stability 越界）。
+ */
+export function classifyDeadLetterRootCause(lastError: string | null | undefined): string | null {
+  const message = typeof lastError === 'string' ? lastError.trim() : '';
+  if (!message) return null;
+  if (/invalid memory state/i.test(message)) return 'INVALID_FSRS_STATE';
+  if (/(difficulty|stability)/i.test(message) && /(out of range|invalid|must be|非法|越界)/i.test(message)) {
+    return 'INVALID_FSRS_STATE';
+  }
+  return null;
 }
 
 /**
@@ -184,7 +239,7 @@ export class DurableOutboxWorker {
  */
 export async function getDeadOutboxSummary() {
   const deadCount = await prisma.domain_event_outbox.count({ where: { status: 'dead' } });
-  const items = await prisma.domain_event_outbox.findMany({
+  const rows = await prisma.domain_event_outbox.findMany({
     where: { status: 'dead' },
     orderBy: [{ occurredAt: 'asc' }],
     take: 50,
@@ -198,6 +253,14 @@ export async function getDeadOutboxSummary() {
       occurredAt: true
     }
   });
+  const items = rows.map((row) => {
+    const rootCause = classifyDeadLetterRootCause(row.lastError);
+    return {
+      ...row,
+      rootCause,
+      blocked: rootCause !== null,
+    };
+  });
   return { deadCount, items };
 }
 
@@ -205,12 +268,36 @@ export async function getDeadOutboxSummary() {
  * 死信重置：dead → pending，清零尝试计数并清技术门（availableAt=now）。
  * 背景：dead 是无出口终态（worker 不会再拾取），此前没有任何管理手段把
  * 修复后的死信重新入队。运维修复根因后调用本函数重放。
+ *
+ * 根因闸门（2026-10-22 审计 P1-5）：若死信带已知毒丸根因（如非法 FSRS 状态），
+ * 默认拒绝重放（否则再烧 8 次回死信）；运维确认根因已修复后用 force=true 放行。
+ *
  * #106②：`scheduledAt`（业务排期）刻意不清——排期是业务约束，不由运维重放解除；
  * 且死信只可能产生于「已被拾取过 8 次」的行，其排期早已到点，当前行为不受影响。
- * @param eventType 可选按事件类型过滤（如 'lesson:completed'）；缺省重置全部死信
- * @returns 重置的事件数
  */
-export async function requeueDeadOutboxEvents(eventType?: string): Promise<number> {
+export async function requeueDeadOutboxEvents(
+  eventType?: string,
+  options: { force?: boolean } = {}
+): Promise<number> {
+  if (!options.force) {
+    const blocked = await prisma.domain_event_outbox.findMany({
+      where: {
+        status: 'dead',
+        ...(eventType ? { eventType } : {}),
+        lastError: { not: null },
+      },
+      select: { id: true, lastError: true },
+    });
+    const poisoned = blocked.filter((row) => classifyDeadLetterRootCause(row.lastError) !== null);
+    if (poisoned.length > 0) {
+      const error = new Error(
+        `存在 ${poisoned.length} 条已知根因死信（如非法 FSRS 状态），重放会再次进入死信；先修复根因，或确认后使用 force=true`
+      );
+      (error as Error & { code?: string }).code = 'OUTBOX_DEAD_LETTER_ROOT_CAUSE';
+      throw error;
+    }
+  }
+
   const result = await prisma.domain_event_outbox.updateMany({
     where: {
       status: 'dead',
@@ -225,7 +312,7 @@ export async function requeueDeadOutboxEvents(eventType?: string): Promise<numbe
     }
   });
   if (result.count > 0) {
-    logger.info('[outbox] 死信已重新入队', { requeued: result.count, eventType: eventType || 'all' });
+    logger.info('[outbox] 死信已重新入队', { requeued: result.count, eventType: eventType || 'all', force: options.force === true });
   }
   return result.count;
 }

@@ -66,16 +66,29 @@ const ctx = await b.newContext({ viewport: { width: W, height: H }, storageState
 const p = await ctx.newPage();
 
 /* 登录（失败重试三次；账号环境变量可覆盖） */
+let mobileLoggedIn = false;
 for (let a = 0; a < 3; a++) {
   await p.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(2000);
-  if (!p.url().includes('/login')) break;
+  if (!p.url().includes('/login')) { mobileLoggedIn = true; break; }
   const ins = await p.locator('input:visible').all();
   if (ins.length < 2) { await p.waitForTimeout(6000); continue; }
   await ins[0].fill(USER); await ins[1].fill(PASS);
   await p.click('button:has-text("登录")');
-  if (await p.waitForURL((u) => !String(u).includes('/login'), { timeout: 20000 }).then(() => true).catch(() => false)) break;
+  if (await p.waitForURL((u) => !String(u).includes('/login'), { timeout: 20000 }).then(() => true).catch(() => false)) {
+    mobileLoggedIn = true;
+    break;
+  }
   await p.waitForTimeout(8000);
+}
+/* 前置失败必须快速退出：继续扫只会对未登录页量尺寸，给出看似「通过/越阈值」的假读数。
+   默认 fixture 账号 logocheck2 已于 2026-10-14 软删除；用 SPEC_USER/SPEC_PASS 指定可用账号。 */
+if (!mobileLoggedIn) {
+  console.error(`✖ mobile-spec 前置失败：无法登录 ${BASE}（账号 ${USER}）。`);
+  console.error('  该门禁需要可登录的测试账号与账号名下的路径/课堂 fixture；');
+  console.error('  请设置 SPEC_USER/SPEC_PASS，或先恢复 fixture 账号后再跑。');
+  await b.close();
+  process.exit(2);
 }
 
 async function scan() {

@@ -31,7 +31,7 @@ const arg = (name, fb = null) => {
 };
 const flag = (name) => process.argv.includes(`--${name}`);
 
-const API = process.env.WENFLOW_AUDIT_API || 'http://101.43.146.102:30001/v1/chat/completions';
+const API = process.env.WENFLOW_AUDIT_API || 'https://newapi.wenflow.org/v1/chat/completions';
 const KEY = process.env.WENFLOW_AUDIT_KEY || '';
 const MODEL = arg('model', 'deepseek-v4.1-flash');
 const K = Number(arg('k', 3));
@@ -43,6 +43,17 @@ const SINCE = Number(arg('since', 0)); // epoch ms：只判该时刻之后创建
 const BEFORE = Number(arg('before', 0)); // epoch ms：只判该时刻之前的会话（取同源基线用）
 const MIN_MSGS = Number(arg('min-msgs', 8));
 const SELFTEST = flag('selftest');
+// #85 活体双臂：--ids 清单 [{sid, arm}]，只判清单内会话并按臂做 F1-b 判定
+const IDS_FILE = arg('ids', null);
+const MIN_PER_ARM = Number(arg('min-per-arm', 35));
+const MIN_DROP_PP = Number(arg('min-drop-pp', 10));
+const IDS = (() => {
+  if (!IDS_FILE) return null;
+  const raw = JSON.parse(readFileSync(resolve(IDS_FILE), 'utf8'));
+  const list = Array.isArray(raw) ? raw : raw.classes || [];
+  return new Map(list.map((r) => [String(r.sid || r.id), String(r.arm || '').toUpperCase()]));
+})();
+if (IDS_FILE && (!IDS || IDS.size === 0)) { console.error(`✗ --ids 清单为空：${IDS_FILE}`); process.exit(2); }
 const DB = resolve(arg('db', join(REPO_ROOT, 'backend', 'prisma', 'dev.db')));
 const OUT = resolve(arg('out', join(REPO_ROOT, 'doc', 'local', 'runs', 'class-audit', new Date().toISOString().slice(0, 10))));
 
@@ -227,6 +238,10 @@ for (const r of rows) {
   if (!c || c.msgCount < MIN_MSGS || !c.block.includes('学员:')) continue;
   cases.push({ ...c, uid: r.uid, email: r.email, subject: r.subject, createdAt: r.createdAt, msgRows: r.msgRows });
 }
+if (IDS) {
+  // 只判 --ids 清单内的课堂，并把臂标签带进 verdict（协议§六：同源同题、按臂聚合）
+  cases = cases.filter((c) => IDS.has(c.sid)).map((c) => ({ ...c, arm: IDS.get(c.sid) }));
+}
 if (LIMIT > 0 && cases.length > LIMIT) cases = cases.slice(0, LIMIT);
 console.log(`[sample] 可判分 ${cases.length} 节${EMAIL_LIKE ? `（email like ${EMAIL_LIKE}）` : ''}｜K=${K}｜conc=${CONC}｜计划调用 ≈ ${cases.length * K}`);
 if (SELFTEST) {
@@ -261,6 +276,7 @@ let done = 0;
       }
       const rec = {
         sid: c.sid, uid: c.uid, email: c.email, subject: c.subject, topic: c.topic, createdAt: c.createdAt,
+        arm: c.arm || null,
         msgCount: c.msgCount, msgSource: c.msgSource,
         judgeVersion, samples: samples.length, validSamples: valid.length,
         votes, majority,
@@ -307,8 +323,36 @@ const summary = {
     }
     return m;
   })(),
+  // #85 活体双臂：按臂聚合错答放行率，并按协议§二.4 做 F1-b 判定
+  byArm: (() => {
+    const m = {};
+    for (const r of results) {
+      const a = r.arm || 'unlabeled';
+      m[a] = m[a] || { n: 0, wrongAnswerPassed: 0, rate: 0 };
+      m[a].n++;
+      if (r.majority.wrongAnswerPassed) m[a].wrongAnswerPassed++;
+    }
+    for (const a of Object.keys(m)) m[a].rate = Number((m[a].wrongAnswerPassed / Math.max(1, m[a].n)).toFixed(4));
+    return m;
+  })(),
+  f1b: (() => {
+    if (!IDS) return null;
+    const byArm = {};
+    for (const r of results) {
+      const a = r.arm || 'unlabeled';
+      byArm[a] = byArm[a] || { n: 0, wrong: 0 };
+      byArm[a].n++;
+      if (r.majority.wrongAnswerPassed) byArm[a].wrong++;
+    }
+    const A = byArm.A, B = byArm.B;
+    if (!A || !B || A.n < MIN_PER_ARM || B.n < MIN_PER_ARM) {
+      return { verdict: 'insufficient', minPerArm: MIN_PER_ARM, A: A?.n || 0, B: B?.n || 0 };
+    }
+    const dropPp = Number((((A.wrong / A.n) - (B.wrong / B.n)) * 100).toFixed(1));
+    return { verdict: dropPp >= MIN_DROP_PP ? 'pass' : 'fail', dropPp, minDropPp: MIN_DROP_PP, A: A.n, B: B.n };
+  })(),
 };
-writeFileSync(join(OUT, 'summary.json'), JSON.stringify({ ...summary, rows: results.map((r) => ({ sid: r.sid, email: r.email, majority: r.majority, votes: r.votes, validSamples: r.validSamples })) }, null, 1));
+writeFileSync(join(OUT, 'summary.json'), JSON.stringify({ ...summary, rows: results.map((r) => ({ sid: r.sid, arm: r.arm || null, email: r.email, majority: r.majority, votes: r.votes, validSamples: r.validSamples })) }, null, 1));
 console.log('\n==== 完结课堂审计判分（judge v3 口径）汇总 ====');
 console.log(`条数 ${n}｜judgeVersion ${judgeVersion}`);
 for (const key of KEYS) {
@@ -316,4 +360,8 @@ for (const key of KEYS) {
 }
 console.log(`证据引文无效而降级：${summary.evidenceInvalid} 处｜无有效样本：${summary.invalidSamples} 条`);
 console.log('按域名分组：', JSON.stringify(summary.byEmail));
+if (IDS) {
+  console.log('按臂分组：', JSON.stringify(summary.byArm));
+  console.log('F1-b 判定：', JSON.stringify(summary.f1b));
+}
 console.log(`\n产物 → ${OUT}`);

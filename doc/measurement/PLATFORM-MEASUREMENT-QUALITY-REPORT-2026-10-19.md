@@ -95,3 +95,39 @@ WENFLOW_AUDIT_KEY=… node backend/scripts/measurement-verify/class-audit-judge.
 ```
 
 > 注：B 臂重判当日冻结集仍在 `doc/local/frozen-eval-2026-10-18/`（sha256 同源），2026-10-19 移动入库到现路径；重跑时给新路径即可复现同一集合。
+
+## 六、活体双臂对照：#84 肯定语护栏（2026-10-23 判分）
+
+协议§六的活体对照对：**A 臂 = 关闭 #84「失败检查点概念的后续回合肯定语护栏」**（`experimentArm='A'`），
+**B 臂 = 现行口径（护栏开启）**。臂标签落库在 `virtual_sessions.stageResults.simulationConfig.experimentArm`，
+只影响该会话的教学回合（`executeLearningStep` 显式传 `failedConceptFollowupGuard=false`），其余链路不变。
+
+- 样本来自 2026-10-08 ~ 10-14 的预设学习者会话（同源同题，两臂交错分布在同期）；
+  按 `teachingSessionHistory` 还原 sessionId → arm，筛 completed 且消息数 ≥8：
+  **A 109 节 / B 51 节**（均 ≥35）。
+- 判分器：`judge-v4.1:e67ceef3aace:deepseek-v4.1-flash:t0.2:k3`（两臂同一把尺子；
+  证据引文无效降级 26 处，无有效样本 0 条）。
+- 不复用 §三 的冻结 109 基线：纪元/判分版本不同，按协议不得混算。
+
+| pattern | A（n=109） | B（n=51） |
+|---|---|---|
+| progressInflation | 61（56.0%） | 23（45.1%） |
+| loopStuck | 18（16.5%） | 9（17.6%） |
+| summaryMismatch | 73（67.0%） | 32（62.7%） |
+| **wrongAnswerPassed** | **16（14.7%）** | **5（9.8%）** |
+| unclosedComplete | 70（64.2%） | 33（64.7%） |
+
+**F1-b 判定：fail**。错答放行下降 4.9pp（14.7% → 9.8%），未达 ≥10pp 的协议阈值；样本量已达标，
+因此这是**已裁决的未通过**，不是「样本不足只登记」。
+
+边界：臂标签由既有会话的 `stageResults` 还原，未独立复核当时是否严格 A1/B1 交错；两臂均用 v4.1 判分、
+同一模型与温度，结论只在两臂之间成立，不与冻结基线横比。
+
+复算命令（manifest 可由 `virtual_sessions` 的臂标签 + `teachingSessionHistory` 重建）：
+
+```bash
+node backend/scripts/measurement-verify/class-audit-judge.mjs --selftest --ids=<manifest.json>
+WENFLOW_AUDIT_KEY=… node backend/scripts/measurement-verify/class-audit-judge.mjs \
+  --ids=<manifest.json> --k=3 --conc=8 --out=outputs/ab-judge-v41-full
+```
+

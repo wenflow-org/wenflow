@@ -296,6 +296,8 @@
 **T1 列表页（12）**
 `overview`→T3 · `people` · `sessions` · `virtual-learners` · `skills` · `prompt-eval` · `ops-achievements` · `feedback` · `messages` · `addons` · `session-security` · `execution-logs` · `audit-logs`
 
+> 状态（2026-10-25 校正）：`prompt-eval` 拆回独立场景并归入侧栏 Skill 组（此前 2026-10-04 曾折入 `skills` 宿主页签）。
+
 > 状态（2026-09-19 校正）：名单随导航收敛而变——侧栏已为 14 项 / 7 组；`feedback`/`ops-achievements`/`messages`/`addons`/`session-security`/`health-center` 现为 tab 子页，`memory-review`/`batch-experiments` 为独立场景。详见 §3 T1 校正注。
 > 状态（2026-09-29 校正）：侧栏 18 项 / 7 组；`health-center` 已回独立场景（系统组），不再是 tab 子页；`token-cost` 亦已独立。
 > 状态（2026-10-04 校正）：侧栏 19 项 / 7 组；`batch-experiments` 整体下线（运行态并入 `virtual-learners`，资产输入归 `virtual-learner-cards`，旧 URL 重定向到 `/admin/virtual-learners`），「虚拟学习者」组余 2 项；`learner-state` 于同日从 `people` 宿主拆出独立成页。
@@ -1239,7 +1241,7 @@ hex 随之 1114 → 1032（死规则里带的硬编码一并清掉）。真机�
 | `muted` | 空值 / 未知 | 无数据或不适用（**不是 ok**） |
 
 页面接线三处：页头 `:class="`mk-status--${headerHealth}`"`、`.cp-aside-card__dot.is-bad { background: var(--mk-red) }`（补上缺档）、「运行状态」点改用 `runHealthTone(autopilotHealthState)`（自动驾驶终态优先，无自动驾驶状态时回到会话生命周期；失败/未完成/收尾失败 → bad，与同一张卡里 `.cp-run__autopilot-result--bad` 的判定一致）。
-顺带**复活了一处死代码**：`pathGenerationFailed`（原定义后从未被引用）现在驱动「预生成 Path」点的红档。`sessionStatusLabel` 补上兜底 `statusText(st)`（**沿用共享字典、不改既有措辞** —— `running` 仍是「运行中」）。
+顺带**复活了一处死代码**：`pathGenerationFailed`（原定义后从未被引用）现在驱动「预生成 Path」点的红档。`sessionStatusLabel` 补上兜底 `statusText(st)`（**沿用共享字典** —— `running` 统一为「进行中」；虚拟学习者列表的自动驾驶状态同源，2026-10-28 对齐）。
 
 **核验**：`statusText.test.ts` 32 → **37 测试**（新增 5 组覆盖 4 档 + 与 `runStateTone` 同源）；真机（座舱 Learn 阶段）：
 - 页头 `mk-status mk-status--warn` + 点色 `rgb(180,83,9)`（`--mk-amber`）+ hover 提示 **「需关注」**（原为「暂无数据」）✓

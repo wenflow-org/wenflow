@@ -20,10 +20,18 @@ import {
 } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { startWrapupRegeneration } from '../services/ai-teaching/teaching-wrapup-regen';
+import { listSessionEvents, type SessionEventKind } from '../services/ai-teaching/session-events.service';
 import { reviewPlanService } from '../services/memory/review-plan.service';
 import { learnerExitService } from '../services/learner/LearnerExitService';
 import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 import type { InteractionMetaRecord } from '../services/ai-teaching/TeachingContextBuilder';
+import {
+  completeTeachingOperation,
+  failTeachingOperation,
+  reserveTeachingOperation,
+  teachingOperationRequestHash,
+} from '../services/ai-teaching/TeachingMessageIdempotencyService';
+import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardGuidanceSnapshotService';
 
 const router = Router();
 
@@ -42,6 +50,16 @@ const teachingMessagesUserLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: any) => req.user?.userId || ipKeyGenerator(req.ip, 56),
+});
+
+/**
+ * 会话级归因单点：所有带 :sessionId 的路由在进入处理前把会话 id 注入请求上下文，
+ * 使 prompt_call_logs / llm_execution_attempts / session_events 能按会话直接查询。
+ * 此前只有流式分支手工注入，非流式回合的遥测行 sessionId 为空。
+ */
+router.param('sessionId', (_req, _res, next, sessionId: string) => {
+  if (sessionId) setRequestContext({ sessionId });
+  next();
 });
 
 /**
@@ -213,11 +231,90 @@ function sanitizeInteractionMeta(raw: unknown): InteractionMetaRecord | undefine
 const requireIdempotencyKey = (value: unknown): string => {
   const key = typeof value === 'string' ? value.trim() : '';
   if (!key || key.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(key)) {
+    // 2026-10-22（机械过滤审计 A 类）：格式拒绝补日志（旧客户端带中文/#/超长的 key 一眼可见）。
+    logger.warn('[ai-teaching] Idempotency-Key 格式拒绝', {
+      reason: !key ? 'missing' : key.length > 128 ? 'too_long' : 'invalid_chars',
+      sample: typeof value === 'string' ? value.slice(0, 32) : typeof value,
+    });
     const error = new Error('缺少有效的 Idempotency-Key');
     (error as any).code = 'FINALIZATION_IDEMPOTENCY_KEY_REQUIRED';
     throw error;
   }
   return key;
+};
+
+/**
+ * 回合写入的幂等占位结果处理。返回 true 表示已经把响应写出去（重放或在途），
+ * 调用方应立即 return；false 表示本次请求拿到了处理权，继续执行业务。
+ */
+const resolveIdempotentReservation = (
+  res: any,
+  reservation: Awaited<ReturnType<typeof reserveTeachingOperation>>,
+  wantsStream: boolean,
+  projectReplay?: (result: Record<string, any>) => Record<string, any>
+): boolean => {
+  if (reservation.kind === 'in_flight') {
+    res.setHeader('Retry-After', '2');
+    res.status(409).json({
+      success: false,
+      error: {
+        code: 'TEACHING_MESSAGE_IN_FLIGHT',
+        message: '该请求仍在处理中，请等待完成后重试同一 Idempotency-Key',
+        status: 409,
+        startedAt: reservation.startedAt.toISOString(),
+      },
+    });
+    return true;
+  }
+  if (reservation.kind === 'replay') {
+    // 回合类结果由引擎在提交事务内写入原始载荷（不含 synthetic 投影），重放时补齐一次
+    // 对外白名单，保证虚拟学习者与真人的 replay 载荷与首次响应同形。
+    const result = projectReplay ? projectReplay(reservation.result) : reservation.result;
+    res.setHeader('Idempotency-Replayed', 'true');
+    if (wantsStream) {
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+      writeSseEvent(res, 'final', result);
+      writeSseEvent(res, 'done', {});
+      res.end();
+    } else {
+      res.json({ success: true, data: result });
+    }
+    return true;
+  }
+  return false;
+};
+
+/** 幂等账本写失败不该把已完成的回合变成用户可见错误；记录后放行。 */
+const settleIdempotentOperation = async (
+  action: 'complete' | 'fail',
+  args: { sessionId: string; idempotencyKey: string; result?: Record<string, any>; revision?: number | null; errorCode?: string }
+): Promise<void> => {
+  try {
+    if (action === 'complete') {
+      await completeTeachingOperation({
+        sessionId: args.sessionId,
+        idempotencyKey: args.idempotencyKey,
+        result: args.result || {},
+        revision: args.revision ?? null,
+      });
+    } else {
+      await failTeachingOperation({
+        sessionId: args.sessionId,
+        idempotencyKey: args.idempotencyKey,
+        errorCode: args.errorCode,
+      });
+    }
+  } catch (error) {
+    logger.error('[AITeaching] 幂等账本写入失败（业务结果不受影响）', {
+      sessionId: args.sessionId,
+      action,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 };
 
 const resolveTeachingError = (error: any, fallbackMessage: string): { status: number; code: string; message: string } => {
@@ -284,6 +381,20 @@ const writeSseEvent = (res: any, event: string, data: unknown) => {
 };
 
 /**
+ * SSE 心跳：LLM 长生成期间（teaching-turn 为 JSON 输出，final 前可整段无字节，实测 2~3 分钟）
+ * 每 15s 写一条注释行。SSE 注释对事件解析不可见，但任何字节都会喂客户端传输层空闲计时
+ * 与上层停滞看门狗（#128：健康慢回合此前在 90s 被看门狗整段误杀，CALLER_ABORTED）。
+ */
+const SSE_HEARTBEAT_INTERVAL_MS = 15_000;
+const startSseHeartbeat = (res: any) => {
+  const timer = setInterval(() => {
+    if (!res || res.destroyed || res.writableEnded) return;
+    res.write(': hb\n\n');
+  }, SSE_HEARTBEAT_INTERVAL_MS);
+  return () => clearInterval(timer);
+};
+
+/**
  * 是否随消息响应下发 prompt 调试信封（`promptDebug` / `peerDebug`，含完整 systemPrompt）。
  *
  * 默认**关**（18 号报告衍生观察项）：`/messages` 面向学习者，而 `promptDebug` 里是 ~18k 的教学提示词；
@@ -292,8 +403,20 @@ const writeSseEvent = (res: any, event: string, data: unknown) => {
  */
 const promptDebugEnabled = (): boolean => process.env.PROMPT_DEBUG_ENVELOPE === '1';
 
+/** 事件 payload 是 JSON 字符串；解析失败时原样返回文本，避免读侧因单行脏数据整体 500。 */
+const safeParseJson = (raw: string): unknown => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+};
+
 /** 消息端点统一响应载荷（流式 final 事件与非流式 JSON 共用） */
 const buildMessageResultData = (result: any, synthetic: boolean): Record<string, unknown> => {
+  // 幂等重放可能读到旧账本行（改造前存的是已投影载荷）：这里必须容忍缺字段，
+  // 否则升级后第一次重放旧 key 就 500。
+  const analysis = (result?.analysis && typeof result.analysis === 'object') ? result.analysis : {};
   if (synthetic) {
     return {
       aiResponse: result.aiResponse,
@@ -310,12 +433,12 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
   return {
     aiResponse: result.aiResponse,
     analysis: {
-      cognitiveLevel: result.analysis.cognitiveLevel,
-      levelScore: result.analysis.levelScore,
-      understanding: result.analysis.understanding,
-      confusionPoints: result.analysis.confusionPoints,
-      engagement: result.analysis.engagement,
-      emotionalState: result.analysis.emotionalState,
+      cognitiveLevel: analysis.cognitiveLevel ?? null,
+      levelScore: analysis.levelScore ?? null,
+      understanding: analysis.understanding ?? null,
+      confusionPoints: analysis.confusionPoints ?? [],
+      engagement: analysis.engagement ?? null,
+      emotionalState: analysis.emotionalState ?? null,
     },
     state: {
       // 0-10 内部尺度 → 0-100 展示尺度（与 /api/state/current 一致）
@@ -324,9 +447,9 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
       lf: Math.round((result.currentState?.lf ?? 0) * 10),
       lsb: Math.round((result.currentState?.lsb ?? 0) * 10),
     },
-    strategies: result.strategies,
-    knowledgePoint: result.knowledgePoint,
-    knowledgePoints: result.knowledgePoints,
+    strategies: Array.isArray(result.strategies) ? result.strategies : [],
+    knowledgePoint: result.knowledgePoint ?? null,
+    knowledgePoints: Array.isArray(result.knowledgePoints) ? result.knowledgePoints : [],
     isCompletion: result.isCompletion,
     shouldConfirmEnd: result.shouldConfirmEnd === true,
     endReason: result.endReason || null,
@@ -360,7 +483,8 @@ const handleStreamingMessage = async (
   sessionId: string,
   message: string,
   expectedRevision: number,
-  interactionMeta?: InteractionMetaRecord
+  interactionMeta?: InteractionMetaRecord,
+  idempotencyKey?: string
 ) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -383,16 +507,35 @@ const handleStreamingMessage = async (
   };
   // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
   setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
+  const stopHeartbeat = startSseHeartbeat(res);
 
   try {
-    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision, interactionMeta });
+    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision, interactionMeta, idempotencyKey });
     const synthetic = req.user?.projection?.grantSource === 'synthetic';
-    writeSseEvent(res, 'final', buildMessageResultData(result, synthetic));
+    const data = buildMessageResultData(result, synthetic);
+    // 先落幂等账本再推 final：客户端断开后重发同 key 应拿到同一结果，而不是再跑一轮。
+    if (idempotencyKey) {
+      await settleIdempotentOperation('complete', {
+        sessionId,
+        idempotencyKey,
+        result: data,
+        revision: typeof data.revision === 'number' ? data.revision : null,
+      });
+    }
+    writeSseEvent(res, 'final', data);
     writeSseEvent(res, 'done', {});
   } catch (error: any) {
+    if (idempotencyKey) {
+      await settleIdempotentOperation('fail', {
+        sessionId,
+        idempotencyKey,
+        errorCode: typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED',
+      });
+    }
     const { status, code, message: errorMessage } = resolveTeachingError(error, '处理消息失败');
     writeSseEvent(res, 'error', { status, code, message: errorMessage });
   } finally {
+    stopHeartbeat();
     if (!res.destroyed && !res.writableEnded) res.end();
   }
 };
@@ -429,6 +572,7 @@ const handleStreamingSession = async (
   };
   // 注入业务会话上下文：执行日志/瀑布按 sessionId 归组，链路可追溯
   setRequestContext({ streamRequest, sessionId, sourceEntry: 'platform' });
+  const stopHeartbeat = startSseHeartbeat(res);
 
   try {
     if (prelude) await prelude((event, data) => writeSseEvent(res, event, data));
@@ -439,6 +583,7 @@ const handleStreamingSession = async (
     const { status, code, message: errorMessage } = resolveTeachingError(error, '处理失败');
     writeSseEvent(res, 'error', { status, code, message: errorMessage });
   } finally {
+    stopHeartbeat();
     if (!res.destroyed && !res.writableEnded) res.end();
   }
 };
@@ -680,18 +825,14 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
 
     const { sessionId } = req.params;
     const action = String(req.body?.action || '');
-    if (!['keep', 'later', 'preview'].includes(action)) {
+    if (!['keep', 'later', 'preview', 'adopt'].includes(action)) {
       return res.status(400).json({
         success: false,
         error: { message: '无效的建议处置动作', code: 'INVALID_ADVISORY_ACTION' },
       });
     }
 
-    const result = await teachingSessionRepository.recordAdvisoryResponse(
-      sessionId,
-      userId,
-      action as 'keep' | 'later' | 'preview'
-    );
+    const result = await teachingSessionRepository.recordAdvisoryResponse(sessionId, userId, action as 'keep' | 'later' | 'preview' | 'adopt');
     if (result.status === 'not_found') {
       return res.status(404).json({
         success: false,
@@ -704,6 +845,9 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
         error: { message: '当前会话没有待处置的调整建议', code: 'ADVISORY_NOT_FOUND' },
       });
     }
+
+    // 处置即刷新仪表盘快照：决策流按 learnerResponse 消账（快照无 TTL，不触发则旧卡挂到下一个无关事件）
+    dashboardGuidanceSnapshotService.refreshInBackground(userId, 'manual');
 
     res.json({ success: true, data: { sessionId, action, advisory: result.advisory } });
   } catch (error: any) {
@@ -763,19 +907,48 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
 
     const expectedRevision = requireExpectedRevision(req.body?.revision);
     const wantsStream = String(req.headers?.accept || '').includes('text/event-stream');
+    // 回合写入幂等（2026-10-20）：丢响应后重发同一 Idempotency-Key 只重放结果，不再追加消息/再跑模型。
+    const idempotencyKey = requireIdempotencyKey(req.headers['idempotency-key']);
+    const reservation = await reserveTeachingOperation({
+      sessionId,
+      idempotencyKey,
+      kind: 'message',
+      requestHash: teachingOperationRequestHash('message', {
+        message,
+        revision: expectedRevision,
+        meta: interactionMeta ?? null,
+      }),
+    });
+    const synthetic = req.user?.projection?.grantSource === 'synthetic';
+    if (resolveIdempotentReservation(res, reservation, wantsStream, (r) => buildMessageResultData(r, synthetic))) return;
 
     if (wantsStream) {
-      return handleStreamingMessage(req, res, sessionId, message, expectedRevision, interactionMeta);
+      return handleStreamingMessage(req, res, sessionId, message, expectedRevision, interactionMeta, idempotencyKey);
     }
 
-    const result = await aiTeachingCoordinator.processStudentMessage(
-      sessionId,
-      message,
-      { expectedRevision, interactionMeta }
-    );
+    try {
+      const result = await aiTeachingCoordinator.processStudentMessage(
+        sessionId,
+        message,
+        { expectedRevision, interactionMeta, idempotencyKey }
+      );
 
-    const synthetic = req.user?.projection?.grantSource === 'synthetic';
-    return res.json({ success: true, data: buildMessageResultData(result, synthetic) });
+      const data = buildMessageResultData(result, synthetic);
+      await settleIdempotentOperation('complete', {
+        sessionId,
+        idempotencyKey,
+        result: data,
+        revision: typeof data.revision === 'number' ? data.revision : null,
+      });
+      return res.json({ success: true, data });
+    } catch (error: any) {
+      await settleIdempotentOperation('fail', {
+        sessionId,
+        idempotencyKey,
+        errorCode: typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED',
+      });
+      throw error;
+    }
   } catch (error: any) {
     logger.error('处理消息失败:', error);
     return sendTeachingError(res, error, '处理消息失败');
@@ -799,6 +972,15 @@ router.post('/sessions/:sessionId/continue', async (req: any, res) => {
 
     const expectedRevision = requireExpectedRevision(req.body?.revision);
     const wantsStream = String(req.headers?.accept || '').includes('text/event-stream');
+    const idempotencyKey = requireIdempotencyKey(req.headers['idempotency-key']);
+    const reservation = await reserveTeachingOperation({
+      sessionId,
+      idempotencyKey,
+      kind: 'resume-continue',
+      requestHash: teachingOperationRequestHash('resume-continue', { revision: expectedRevision }),
+    });
+    const synthetic = req.user?.projection?.grantSource === 'synthetic';
+    if (resolveIdempotentReservation(res, reservation, wantsStream, (r) => buildMessageResultData(r, synthetic))) return;
 
     if (wantsStream) {
       // 复用流式通道，但走 resume-continue 无输入模式
@@ -824,11 +1006,24 @@ router.post('/sessions/:sessionId/continue', async (req: any, res) => {
         const result = await aiTeachingCoordinator.processStudentMessage(sessionId, '', {
           expectedRevision,
           kind: 'resume-continue',
+          idempotencyKey,
         });
         const synthetic = req.user?.projection?.grantSource === 'synthetic';
-        writeSseEvent(res, 'final', buildMessageResultData(result, synthetic));
+        const data = buildMessageResultData(result, synthetic);
+        await settleIdempotentOperation('complete', {
+          sessionId,
+          idempotencyKey,
+          result: data,
+          revision: typeof data.revision === 'number' ? data.revision : null,
+        });
+        writeSseEvent(res, 'final', data);
         writeSseEvent(res, 'done', {});
       } catch (error: any) {
+        await settleIdempotentOperation('fail', {
+          sessionId,
+          idempotencyKey,
+          errorCode: typeof error?.code === 'string' ? error.code : 'RESUME_CONTINUE_FAILED',
+        });
         const { status, code, message: errorMessage } = resolveTeachingError(error, '恢复续讲失败');
         writeSseEvent(res, 'error', { status, code, message: errorMessage });
       } finally {
@@ -837,12 +1032,29 @@ router.post('/sessions/:sessionId/continue', async (req: any, res) => {
       return;
     }
 
-    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, '', {
-      expectedRevision,
-      kind: 'resume-continue',
-    });
-    const synthetic = req.user?.projection?.grantSource === 'synthetic';
-    return res.json({ success: true, data: buildMessageResultData(result, synthetic) });
+    try {
+      const result = await aiTeachingCoordinator.processStudentMessage(sessionId, '', {
+        expectedRevision,
+        kind: 'resume-continue',
+        idempotencyKey,
+      });
+      const synthetic = req.user?.projection?.grantSource === 'synthetic';
+      const data = buildMessageResultData(result, synthetic);
+      await settleIdempotentOperation('complete', {
+        sessionId,
+        idempotencyKey,
+        result: data,
+        revision: typeof data.revision === 'number' ? data.revision : null,
+      });
+      return res.json({ success: true, data });
+    } catch (error: any) {
+      await settleIdempotentOperation('fail', {
+        sessionId,
+        idempotencyKey,
+        errorCode: typeof error?.code === 'string' ? error.code : 'RESUME_CONTINUE_FAILED',
+      });
+      throw error;
+    }
   } catch (error: any) {
     logger.error('恢复续讲失败:', error);
     return sendTeachingError(res, error, '恢复续讲失败');
@@ -874,13 +1086,42 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit', async (req:
     }
 
     await teachingSessionRepository.assertOwnership(sessionId, userId);
-    const result = await aiTeachingCoordinator.submitCheckpoint(sessionId, checkpointId, {
-      selectedOptionIds,
-      answerText,
-      ...(skip ? { skip: true } : {}),
-    }, requireExpectedRevision(req.body?.revision));
+    const revision = requireExpectedRevision(req.body?.revision);
+    const idempotencyKey = requireIdempotencyKey(req.headers['idempotency-key']);
+    const reservation = await reserveTeachingOperation({
+      sessionId,
+      idempotencyKey,
+      kind: `checkpoint:${checkpointId}`,
+      requestHash: teachingOperationRequestHash(`checkpoint:${checkpointId}`, {
+        selectedOptionIds: selectedOptionIds ?? null,
+        answerText: answerText ?? null,
+        skip,
+        revision,
+      }),
+    });
+    if (resolveIdempotentReservation(res, reservation, false)) return;
 
-    return res.json({ success: true, data: result });
+    try {
+      const result = await aiTeachingCoordinator.submitCheckpoint(sessionId, checkpointId, {
+        selectedOptionIds,
+        answerText,
+        ...(skip ? { skip: true } : {}),
+      }, revision, idempotencyKey);
+      await settleIdempotentOperation('complete', {
+        sessionId,
+        idempotencyKey,
+        result,
+        revision: typeof (result as any)?.revision === 'number' ? (result as any).revision : null,
+      });
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      await settleIdempotentOperation('fail', {
+        sessionId,
+        idempotencyKey,
+        errorCode: typeof error?.code === 'string' ? error.code : 'CHECKPOINT_SUBMIT_FAILED',
+      });
+      throw error;
+    }
   } catch (error: any) {
     logger.error('提交理解检查失败:', error);
     return sendTeachingError(res, error, '提交理解检查失败');
@@ -921,10 +1162,44 @@ router.post('/sessions/:sessionId/checkpoints/:checkpointId/submit/stream', asyn
     return sendTeachingError(res, error, '无权访问该会话');
   }
 
+  const idempotencyKey = requireIdempotencyKey(req.headers['idempotency-key']);
+  const reservation = await reserveTeachingOperation({
+    sessionId,
+    idempotencyKey,
+    kind: `checkpoint:${checkpointId}`,
+    requestHash: teachingOperationRequestHash(`checkpoint:${checkpointId}`, {
+      selectedOptionIds: selectedOptionIds ?? null,
+      answerText: answerText ?? null,
+      // 流式端点不支持 skip；固定写 false 与非流式普通作答的 hash 口径对齐。
+      // 此前流式缺该字段，同 key 从非流式切到流式重试会被判「同 key 不同请求」必 409。
+      skip: false,
+      revision,
+    }),
+  });
+  if (resolveIdempotentReservation(res, reservation, true)) return;
+
   await handleStreamingSession(
     req,
     res,
-    () => aiTeachingCoordinator.submitCheckpoint(sessionId, checkpointId, { selectedOptionIds, answerText }, revision) as unknown as Promise<Record<string, unknown>>,
+    async () => {
+      try {
+        const data = await aiTeachingCoordinator.submitCheckpoint(sessionId, checkpointId, { selectedOptionIds, answerText }, revision, idempotencyKey) as unknown as Record<string, unknown>;
+        await settleIdempotentOperation('complete', {
+          sessionId,
+          idempotencyKey,
+          result: data,
+          revision: typeof (data as any)?.revision === 'number' ? (data as any).revision : null,
+        });
+        return data;
+      } catch (error: any) {
+        await settleIdempotentOperation('fail', {
+          sessionId,
+          idempotencyKey,
+          errorCode: typeof error?.code === 'string' ? error.code : 'CHECKPOINT_SUBMIT_FAILED',
+        });
+        throw error;
+      }
+    },
     sessionId,
     async (emit) => {
       const early = await aiTeachingCoordinator.judgeCheckpointSubmission(sessionId, checkpointId, { selectedOptionIds, answerText });
@@ -1280,6 +1555,52 @@ router.get('/sessions/:sessionId/detail', async (req: any, res) => {
   } catch (error: any) {
     logger.error('获取会话详情失败:', error);
     return sendTeachingError(res, error, '获取会话详情失败');
+  }
+});
+
+/**
+ * 会话事件时间线（2026-10-21）
+ * GET /api/ai-teaching/sessions/:sessionId/events?limit=&sinceId=
+ *
+ * 统一事件日志的读侧：开课 / 回合提交 / 暂停 / 完成 / 检查点 / 工具 / 错误。
+ * 旧的 `teachingState.classroomEventHistory` 只保留最近 40 条且只服务课堂 UI，
+ * 本端点面向排障与审计（支持增量拉取：传上次最后一条的 id 作 sinceId）。
+ */
+router.get('/sessions/:sessionId/events', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return sendUnauthorized(res);
+    }
+    const { sessionId } = req.params;
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
+
+    const limit = Number.parseInt(String(req.query?.limit ?? ''), 10);
+    const sinceId = Number.parseInt(String(req.query?.sinceId ?? ''), 10);
+    const kinds = String(req.query?.kinds ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean) as SessionEventKind[];
+
+    const events = await listSessionEvents(sessionId, {
+      limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+      sinceId: Number.isFinite(sinceId) && sinceId > 0 ? sinceId : undefined,
+      kinds: kinds.length > 0 ? kinds : undefined,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        events: events.map((event) => ({
+          ...event,
+          payload: event.payload ? safeParseJson(event.payload) : null,
+        })),
+        nextSinceId: events.length > 0 ? events[events.length - 1].id : null,
+      },
+    });
+  } catch (error: any) {
+    logger.error('获取会话事件失败:', error);
+    return sendTeachingError(res, error, '获取会话事件失败');
   }
 });
 

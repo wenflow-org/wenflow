@@ -39,7 +39,19 @@ const TYPE_ZH: Record<string, string> = {
   'path:created': '路径创建',
   'path:generated': '路径生成',
   'path:adjusted': '路径调整',
-  'path:completed': '路径完成'
+  'path:completed': '路径完成',
+  /* 2026-10-21：把 learner_evidence 实际在产的类型补齐（此前只有座舱词表有，学习者详情直出事件码） */
+  'checkpoint:result': '检查点结果',
+  'checkpoint:attempt': '检查点作答',
+  'lesson:completed': '课时完成',
+  'review:completed': '复习完成',
+  'review:warmup': '课内温故',
+  'session:outcome': '学习结果',
+  'session-knowledge-distilled': '知识点提炼',
+  'dialogue-concepts-extracted': '对话概念抽取',
+  'task:difficulty:adjustment': '难度调整',
+  'anchor:result': '锚点结果',
+  'churn:risk': '流失风险'
 }
 
 /** 事件类型 → 来源说明（时间线 hover 用；未知类型给通用描述） */

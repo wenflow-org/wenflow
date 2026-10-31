@@ -1,4 +1,4 @@
-import { clampHintsToOneSitting, derivePlanningHints, type TriageHint, clampStageTasksToHints } from '../path-planning-hints';
+import { clampHintsToOneSitting, derivePlanningHints, deriveTriageHint, type TriageHint, clampStageTasksToHints } from '../path-planning-hints';
 
 /**
  * 体量边界（2026-09-21）：
@@ -42,6 +42,15 @@ describe('分流钳制（出口不变量 B）· Goal 层 triage 触发', () => {
     expect(h.maxWeeks).toBeLessThanOrEqual(1);
     expect(worstMinutes(h)).toBeLessThanOrEqual(60);
     expect(h.targetMilestones ?? 0).toBeLessThanOrEqual(2);
+  });
+
+  it('低可迁移 × oneoff（Goal 实际词表）→ 同样压到一节量级', () => {
+    const h = hintsWith({ transferable: false, recurrence: 'oneoff' });
+    expect(h.milestoneRange[1]).toBeLessThanOrEqual(2);
+    expect(h.subtasksPerStageRange[1]).toBeLessThanOrEqual(2);
+    expect(h.subtaskMinutesRange[1]).toBeLessThanOrEqual(15);
+    expect(h.maxWeeks).toBeLessThanOrEqual(1);
+    expect(worstMinutes(h)).toBeLessThanOrEqual(60);
   });
 
   it('可迁移 → 不钳制（capability 类必须保持原样）', () => {
@@ -177,5 +186,42 @@ describe('hints 硬执行（stage 产出按上界裁剪）', () => {
   it('无 hints 时不动', () => {
     const tasks = [{ estimatedMinutes: 999 }];
     expect(clampStageTasksToHints(tasks, null)).toBe(tasks);
+  });
+});
+
+describe('Goal understanding → triage hint（生产接线）', () => {
+  it('oneoff_operation × once → 不可迁移 + 一次性', () => {
+    expect(deriveTriageHint({
+      primary_block_type: 'oneoff_operation',
+      recurrence: 'once',
+      block_type_evidence: '只想学会把表格另存为 PDF',
+    })).toEqual({
+      transferable: false,
+      recurrence: 'once',
+      evidence: '只想学会把表格另存为 PDF',
+    });
+  });
+
+  it('capability → 可迁移；recurring 保留', () => {
+    expect(deriveTriageHint({ primary_block_type: 'capability', recurrence: 'recurring' }))
+      .toEqual({ transferable: true, recurrence: 'recurring' });
+  });
+
+  it('Goal 实际用 oneoff 词表也能识别', () => {
+    expect(deriveTriageHint({ primary_block_type: 'oneoff_operation', recurrence: 'oneoff' }))
+      .toEqual({ transferable: false, recurrence: 'oneoff' });
+  });
+
+  it('缺字段/非法值 → null（不猜、不改变下游行为）', () => {
+    expect(deriveTriageHint(null)).toBeNull();
+    expect(deriveTriageHint({})).toBeNull();
+    expect(deriveTriageHint({ primary_block_type: 'unknown', recurrence: 'sometimes' })).toBeNull();
+  });
+
+  it('派生的 hint 喂给 derivePlanningHints 会真正压到一节课量级', () => {
+    const triage = deriveTriageHint({ primary_block_type: 'oneoff_operation', recurrence: 'oneoff' });
+    const h = hintsWith(triage);
+    expect(h.targetMilestones ?? 0).toBeLessThanOrEqual(2);
+    expect(worstMinutes(h)).toBeLessThanOrEqual(60);
   });
 });

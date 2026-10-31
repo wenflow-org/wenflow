@@ -25,7 +25,7 @@ import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../../utils/logger';
-import { buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { buildNonVirtualUserWhere, isTestAccountUser } from '../../utils/test-account';
 
 const router = express.Router();
 
@@ -77,18 +77,12 @@ router.get('/', async (req, res, next) => {
     // Phase 2：status=deleted 反转为「仅已删账号」（恢复入口/已删列表）；其余维持默认隐藏
     const where: any = status === 'deleted' ? { deletedAt: { not: null } } : { deletedAt: null };
 
-    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 utils/test-account.ts）；
-    // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）。
-    // 已删除视图不适用（回收站需展示全量账号以恢复）。
-    // testOnly=true（2026-10-10 用户拍板：口径开关改「真实/测试」互斥视角）→ 只看虚拟 + 测试账号
-    const includeTest = String(req.query.includeTest || '') === 'true';
-    const testOnly = String(req.query.testOnly || '') === 'true';
-    if (testOnly && status !== 'deleted') {
-      Object.assign(where, await buildTestUserWhere());
-    } else if (!includeTest && status !== 'deleted') {
-      // 判据用 isTestAccountUser 取 id 排除，不用 Prisma startsWith：SQLite 的 LIKE 会把
-      // 前缀里的 `_` 当通配符，`e2e_` 会连 `e2e.` 开头的真实账号一起滤掉（2026-10-09 修）。
-      Object.assign(where, await buildRealUserWhere());
+    // 账号列表 = 全部非虚拟账号（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+    // 虚拟学习者是无凭据的仿真身份，归虚拟学习者域，不进本页；
+    // 测试/审计账号照常列出，行内以「测试」备注标识，不再有「真实 / 测试」视角开关。
+    // 已删除视图不叠加口径（回收站需展示全量账号以恢复）。
+    if (status !== 'deleted') {
+      Object.assign(where, await buildNonVirtualUserWhere());
     }
 
     // 搜索条件（与测试视角的 OR 块用 AND 组合——直接写 where.OR 会互覆，测试+搜索变全量搜索）

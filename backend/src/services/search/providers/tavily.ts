@@ -12,6 +12,7 @@
  */
 
 import { safeHttpRequest } from '../../../utils/safe-http';
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import { SearchError } from '../types';
 import type {
   SearchCallOptions,
@@ -40,8 +41,8 @@ export interface TavilyProviderConfig {
 export function readTavilyConfig(): TavilyProviderConfig {
   const timeout = Number(process.env.SEARCH_TIMEOUT_MS);
   return {
-    endpoint: (process.env.TAVILY_API_URL || '').trim() || DEFAULT_ENDPOINT,
-    apiKey: (process.env.TAVILY_API_KEY || '').trim(),
+    endpoint: readPluginProviderField('web', 'tavily', 'searchEndpoint') || DEFAULT_ENDPOINT,
+    apiKey: readPluginProviderSecret('web', 'tavily'),
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : DEFAULT_TIMEOUT_MS,
   };
 }

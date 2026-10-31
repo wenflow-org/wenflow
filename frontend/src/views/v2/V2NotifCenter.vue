@@ -15,8 +15,8 @@
         <path d="M6 8a6 6 0 0 1 12 0c0 7 2 9 2 9H4s2-2 2-9" />
         <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
       </svg>
-      <!-- AI 任务运行中：脉冲环 -->
-      <span v-if="busyItems.length" class="nc__pulse-ring" aria-hidden="true"></span>
+      <!-- AI 任务运行中：右下角小蓝点（原 44px 脉冲环在截图里会被冻结成一圈大描边） -->
+      <span v-if="busyItems.length" class="nc__busy-dot" aria-hidden="true"></span>
       <!-- 通知未读：红点徽标（原型 wf-bell__dot 形态；具体条数在 aria-label 与面板 tab 里） -->
       <span v-if="unread > 0" class="nc__dot" aria-hidden="true"></span>
     </button>
@@ -25,13 +25,14 @@
     <Transition name="nc-pop">
       <div v-if="open" ref="panelRef" class="nc__panel" role="dialog" aria-modal="true" aria-label="通知与 AI 任务" tabindex="-1">
         <!-- Tab 切换 -->
-        <div class="nc__tabs" role="tablist">
+        <div class="nc__tabs" role="tablist" aria-label="通知与任务" @keydown="onTabKeydown">
           <button
             type="button"
             role="tab"
             class="nc__tab"
             :class="{ 'nc__tab--on': tab === 'notif' }"
             :aria-selected="tab === 'notif'"
+            :tabindex="tab === 'notif' ? 0 : -1"
             @click="tab = 'notif'"
           >通知<template v-if="unread"> · {{ unread }}</template></button>
           <button
@@ -40,6 +41,7 @@
             class="nc__tab"
             :class="{ 'nc__tab--on': tab === 'tasks' }"
             :aria-selected="tab === 'tasks'"
+            :tabindex="tab === 'tasks' ? 0 : -1"
             @click="tab = 'tasks'"
           >AI 任务<template v-if="busyItems.length"> · {{ busyItems.length }} 进行中</template></button>
         </div>
@@ -206,6 +208,7 @@ import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { getAgentLogs } from '@/api/userCustom';
 import { agentLabelOf } from './agent-labels';
+import { onTabRowKeydown } from '@/utils/rovingTablist';
 
 const router = useRouter();
 
@@ -224,6 +227,11 @@ interface FeedEvent {
 
 /* ---------- 面板状态 ---------- */
 const open = ref(false);
+/** 通知 / AI 任务两枚页签：方向键在行内切换并移动焦点 */
+function onTabKeydown(e: KeyboardEvent): void {
+  onTabRowKeydown(e, (i) => { tab.value = i === 0 ? 'notif' : 'tasks' })
+}
+
 const tab = ref<'notif' | 'tasks'>('notif');
 const rootRef = ref<HTMLElement | null>(null);
 const bellRef = ref<HTMLButtonElement | null>(null);
@@ -494,19 +502,17 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* AI 任务运行中脉冲环 */
-.nc__pulse-ring {
+/* AI 任务运行中：右下角 8px 蓝点，不再用整圈描边 */
+.nc__busy-dot {
   position: absolute;
-  inset: -2px;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--blue) 60%, transparent);
-  animation: nc-pulse 1.6s ease-out infinite;
+  background: var(--blue);
+  box-shadow: 0 0 0 1.5px var(--surface);
   pointer-events: none;
-}
-@keyframes nc-pulse {
-  0% { transform: scale(0.9); opacity: 0.9; }
-  70% { transform: scale(1.35); opacity: 0; }
-  100% { transform: scale(1.35); opacity: 0; }
 }
 
 /* ================= 面板 ================= */

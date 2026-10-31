@@ -87,6 +87,24 @@ describe('path-planning raw validator', () => {
     })
   })
 
+  it('targetMilestones（forced）优先于区间：区间内的数也要打回', () => {
+    const output4 = {
+      ...validOutput,
+      milestones: [
+        { stageNumber: 1, title: 't1', coreConcept: 'concept-1' },
+        { stageNumber: 2, title: 't2', coreConcept: 'concept-1' },
+        { stageNumber: 3, title: 't3', coreConcept: 'concept-1' },
+        { stageNumber: 4, title: 't4', coreConcept: 'concept-1' },
+      ],
+    }
+    // 只看区间时 4 ∈ [4,6] 本就通过；forced=2 必须打回
+    expect(validatePathPlanningOutput(output4, 2, [4, 6])).toEqual({ valid: true })
+    expect(validatePathPlanningOutput(output4, 2, [4, 6], 2)).toEqual({
+      valid: false,
+      failureReason: 'PATH_PLANNING_MILESTONE_COUNT_MISMATCH(expected=2, got=4)',
+    })
+  })
+
   it('reports insufficient hub reuse as warning (non-blocking audit)', () => {
     // 3 个 milestone，hub(concept-1) 只在首阶段出现 → 非首阶段复用 0 次 < 2 → 产生 warning 但 valid 仍为 true
     const sparseHub = {

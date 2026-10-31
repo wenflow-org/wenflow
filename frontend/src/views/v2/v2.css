@@ -291,14 +291,12 @@ html, body {
 
 /* 按钮基础归零：v2 页 button 去掉浏览器默认样式（边框/背景/内边距/字体），
    外观统一由各 class（btn-primary/link-muted 等）定义，避免「今天休息」类文本按钮
-   残留默认边框与灰底 */
-/* 按钮基础归零：v2 页 button 去掉浏览器默认样式（边框/背景/内边距/字体），
-   外观统一由各 class（btn-primary/link-muted 等）定义，避免「今天休息」类文本按钮
    残留默认边框与灰底。:where() 使本规则特异性与元素选择器同级，不会压过组件 class。
    排除 uc-btn 系列（用户中心组件库自带完整样式：渐变主按钮/边框/背景），
    否则 .v2-page 的类+元素特异性 (0,1,1) 会压过 .uc-btn--primary 的 (0,1,0)，
-   导致个人中心按钮渐变/背景被清空 */
-.v2-page button:where(:not(.el-button):not(.uc-btn)) {
+   导致个人中心按钮渐变/背景被清空；同样排除全局样式的 MK 下拉触发器
+   （MkSelect 的样式在 mk-select.css，裸 class 只有 (0,1,0)，会被这条归零清成透明底）。 */
+.v2-page button:where(:not(.el-button):not(.uc-btn):not(.mk-select__trigger):not(.mk-pillselect)) {
   font: inherit;
   letter-spacing: inherit;
   line-height: inherit;
@@ -308,6 +306,23 @@ html, body {
   padding: 0;
   margin: 0;
   cursor: pointer;
+}
+
+/* 表单语境里的自绘下拉（2026-10-28）：MkSelect 默认 32px/6px 是工具条形态，
+   放进 .uc-field 或调用日志的筛选行，会和 44px 的 .uc-field__input 错位。
+   这里统一成用户侧输入框的高度与圆角；工具条（资料库排序等）保持紧凑形态。 */
+.v2-page .uc-field .mk-select__trigger,
+.v2-page .filter-select .mk-select__trigger {
+  height: 42px;
+  padding: 0 12px;
+  border-radius: var(--mk-radius-xl);
+  font-size: 14px;
+}
+.v2-page .uc-field .mk-mp--compact .mk-mp__control {
+  min-height: 42px;
+  padding: 9px 34px 9px 14px;
+  border-radius: var(--mk-radius-xl);
+  font-size: 14px;
 }
 
 .v2-page > main {
@@ -594,13 +609,9 @@ html, body {
      组件内 ≥1500 档自管 1180 */
   .v2-page.goal .work { max-width: 1180px; }
   .v2-page.goal .entry { max-width: 1360px; }
-  /* 课堂是单列（阅读列 760 + 进度卡/对话卡），1680+ 只给 960 的壳，不再给 1600。
-     1600 是「知识点常驻侧栏」时代的遗产：侧栏早已降级为 fixed 抽屉、不占布局，
-     1600 壳里只剩一条 760 阅读列 —— 1920 实测卡片 1663px 而消息/输入框 821px，
-     卡片是内容的 2 倍，输入区看着像贴在巨卡底部的一条独立横带（2026-10-06 用户反馈
-     「输入区割裂」）。960 = 阅读列 + 两侧各 100 呼吸位，卡片与内容的比例回到 1440 档。
-     （原 .learn__body--no-kp 的 960 是同一判断，但那个类模板从未挂过，属死规则，收在此处。） */
-  .v2-page.learn .learn__body { max-width: 960px; }
+  /* 课堂阅读列在 ≥1280 档由页面 scoped 规则拓到 1000；这里的外壳必须同步到 1120，
+     否则旧 960 的高权重选择器会把 scoped 覆盖掉（2026-10-29 实测 body 仅 960）。 */
+  .v2-page.learn .learn__body { max-width: 1120px; }
   .v2-page .v2footer__inner { max-width: 1360px; }
 }
 
@@ -752,6 +763,13 @@ html, body {
     align-items: center;
     justify-content: center;
     gap: 6px;
+  }
+  /* 内层滚动页（知识图谱 / 学习状态）给底部 dock 留呼吸位，最后一张卡不再被贴边裁切。
+     必须带 html 前缀压过上面 `html .v2-page:has(> .v2nav__dock)` 的 padding-bottom:0：
+     两者同权重，否则这条会被前者按源码顺序覆盖（实测 390 下 padding-bottom 仍为 0）。 */
+  html .v2-page.km,
+  html .v2-page.state {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   }
 }
 

@@ -586,6 +586,18 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力——handler 委托 backend/src/services/image（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 IMAGE_PROVIDER / IMAGE_API_URL / IMAGE_API_KEY / IMAGE_MODEL 等环境变量承担，无 DB 直读，dataSource.db 保持空
 
+  - skillId: board-designer
+    kind: handler-only
+    handlerRef: backend/src/services/ai-teaching/board-designer.service.ts
+    registrationPoint: none
+    noPromptFile: true
+    displayName: 课堂板书设计器 Skill
+    description: 按本轮教学意图生成课堂白板（认知减负区）的板面 spec，经 teaching-turn 归一化后上墙
+    dataSource:
+      db: []
+      sandbox: []
+    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是确定性 service（teaching-turn-engine 按轮内意图直调 backend/src/services/ai-teaching/board-designer.service.ts 的 designBoard，不进 skillHandlers 派发表，registrationPoint=none），内含一个 LLM 绘图环节；其 prompt 以独立产物 prompts/skill.board-designer.md 承载（board-probe 跑通的成文，无 core yaml 源，运行时 DB ACTIVE 优先、loadPromptFile 兜底），故户口簿按 F7 登记 handler-only 形态、不填 coreFile；输出经 teaching-turn 归一化（图型白名单 + spec 契约）保证前端渲染安全，失败 fail-open 返回 null 由引擎保持旧板。三条硬规则：标题只点题不写结论 / 减负区画完整形态不留 ? / 只输出一个 figure JSON
+
   # ============ aux（10 条，不进字段路由；v4-aux-skills 注册） ============
   - skillId: teaching-opening-generator
     kind: aux

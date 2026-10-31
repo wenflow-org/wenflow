@@ -57,9 +57,11 @@ const route = useRoute()
    都是「账户」分区的下一层，单独列出才能既选中父段、又不让 /user/account 前缀
    把两者继续漏掉（原来三个 match 只覆盖能力页，深页进页面即三段全无选中）。 */
 const tabs = [
-  { to: '/user/account', label: '账户', match: ['/user/account'], owns: ['/user/settings', '/user/agent-logs'] },
+  { to: '/user/account', label: '账户', match: ['/user/account'], owns: [] },
   { to: '/user/achievements', label: '成就', match: ['/user/achievements'], owns: [] },
-  { to: '/user/learning-history', label: '学习历史', match: ['/user/learning-history'], owns: [] }
+  { to: '/user/learning-history', label: '学习历史', match: ['/user/learning-history'], owns: [] },
+  /* 设置不再「无 tab 可回」：作为一级分段，调用日志归属其下 */
+  { to: '/user/settings', label: '设置', match: ['/user/settings'], owns: ['/user/agent-logs'] }
 ]
 
 function isActive(t: { match: string[]; owns: string[] }) {
@@ -106,7 +108,7 @@ const onCapabilityTab = computed(() => tabs.some((t) => t.match.some((m) => rout
 /* ===== 页头分段器（原型 wf-seg）：整宽三分格 + 白色激活胶囊 ===== */
 .uc__seg {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   background: color-mix(in srgb, var(--line) 45%, transparent);

@@ -119,9 +119,11 @@ describe('执行日志缓存读路径（2026-10-04 性能批四段）', () => {
 
     const res1 = await run(getRouteHandler(platformRouter, '/agents/logs', 'get'), { query: { ...WARM_SHAPE_QUERY } })
     expect(res1.statusCode).toBe(200)
-    // 一次完整取数 = 行 findMany + 失败行 findMany（统计 groupBy 同批）
-    expect(findMany).toHaveBeenCalledTimes(2)
+    // 一次完整取数 = 行 findMany + 失败行 findMany + 分位窄列 findMany（统计 groupBy 同批；M-3）
+    expect(findMany).toHaveBeenCalledTimes(3)
     expect(groupBy).toHaveBeenCalledTimes(1)
+    // stats 挂载全窗延迟分位（mock 行 durationMs=5 → 成功样本 [5]）
+    expect(res1.body.data.stats.latencyPercentiles).toEqual({ p50: 5, p99: 5 })
 
     findMany.mockClear()
     groupBy.mockClear()

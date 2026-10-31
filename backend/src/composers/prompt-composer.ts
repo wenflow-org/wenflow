@@ -196,6 +196,7 @@ export async function callPrompt<TInput, TOutput>(
       durationMs: 0,
       pathId: context.pathId || requestContext.pathId || null,
       userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
       conversationId: context.conversationId || requestContext.conversationId || null,
       pipelineRunId: context.pipelineRunId || null,
       pipelineStepIndex: context.pipelineStepIndex ?? null,
@@ -289,6 +290,7 @@ export async function callPrompt<TInput, TOutput>(
       durationMs: 0,
        pathId,
       userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
        conversationId,
       pipelineRunId: context.pipelineRunId || null,
       pipelineStepIndex: context.pipelineStepIndex ?? null,
@@ -343,7 +345,6 @@ export async function callPrompt<TInput, TOutput>(
     // 本请求内首个 markdown/text 调用消费 delta 通道；同请求的后续调用自动降级整包
     streamRequest.consumed = true;
   }
-  const maxAttempts = Math.max(1, spec.retryStrategy?.maxAttempts || 1);
   const startTime = Date.now();
   let lastRaw = '';
   let lastExtractedJson: string | null = null;
@@ -370,6 +371,14 @@ export async function callPrompt<TInput, TOutput>(
   const currentMaxTokens = generationResolution.maxTokens;
   // max_tokens 已由 resolve-llm-call-params 统一抬到 128k 全局下限（2026-09-03 定案）；
   // 重试时不再将 maxTokens ×2 放大（见 validation_failed 分支注释），故无需 tokenCeiling 上界。
+  // 最大尝试次数：skill 级 maxAttempts（admin 可配）优先；未配时 json 媒介默认 2，其余 1。
+  // 再受平台/技能逻辑重试预算与 5 次硬上限夹一次——admin 调小立即生效，调大也不会越过预算。
+  const codeMaxAttempts = spec.retryStrategy?.maxAttempts
+    || (promptContract?.output?.media === 'json' ? 2 : 1);
+  const maxAttempts = Math.max(
+    1,
+    Math.min(generationResolution.maxAttempts ?? codeMaxAttempts, 5, logicalRetryLimit + 1)
+  );
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
@@ -442,6 +451,9 @@ export async function callPrompt<TInput, TOutput>(
         request: {
           model: generationResolution.model,
           temperature: generationResolution.temperature,
+          // topP 已在 resolve-llm-call-params 按 runtime → skill → prompt → code → route 解析；
+          // 不透传等于「配置了但从不生效」。undefined 时 JSON 序列化自然省略，不改变默认行为。
+          top_p: generationResolution.topP,
           max_tokens: currentMaxTokens ?? generationResolution.maxTokens,
         },
       };
@@ -509,6 +521,7 @@ export async function callPrompt<TInput, TOutput>(
         durationMs: Date.now() - startTime,
          pathId,
         userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
          conversationId,
         pipelineRunId: context.pipelineRunId || null,
         pipelineStepIndex: context.pipelineStepIndex ?? null,
@@ -597,6 +610,34 @@ export async function callPrompt<TInput, TOutput>(
       continue;
     }
 
+    // 软校验（质量要求）：不通过时带反馈重试；最后一次仍不通过则按当前输出继续。
+    // 与上面的硬契约分开：资料引用覆盖度这类“该有但缺失”不应让整条路径失败。
+    const softValidation = spec.softValidateParsedOutput
+      ? spec.softValidateParsedOutput(contractParsed, input)
+      : { valid: true as const };
+    if (!softValidation.valid) {
+      lastFailureReason = softValidation.failureReason || 'parsed output soft validation failed';
+      lastViolations = Array.isArray(softValidation.violations)
+        ? [...softValidation.violations]
+        : [lastFailureReason];
+      if (attempt < maxAttempts) {
+        attempts.push({
+          attempt, rawOutput: rawModelOutput, failureReason: lastFailureReason,
+          violations: lastViolations,
+          status: 'validation_failed', durationMs: Date.now() - attemptStartedAt,
+          llmRequestId: lastLlmRequestId || undefined,
+          transportAttemptCount: gatewayMetadata?.attemptCount
+        });
+        continue;
+      }
+      logger.warn('[callPrompt] 软校验最后一次仍未通过，按当前输出继续', {
+        agentId: spec.agentId,
+        attempt,
+        failureReason: lastFailureReason,
+        violations: lastViolations,
+      });
+    }
+
     // 用归一后的形态（contractParsed）而非原始 parsed：coerceParsedForContract 的语义是
     // "把等价变体收敛到契约形态"，落库/下游消费必须拿到收敛后的结果，否则会出现
     // "校验通过但落库仍是别名字段"的静默断链（2026-09-22 kc-mapper：kcIds/type 落库、下游读 linkedKCs/relation 读空）。
@@ -629,6 +670,7 @@ export async function callPrompt<TInput, TOutput>(
       tokenUsage: JSON.stringify(tokenUsage),
        pathId,
       userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
        conversationId,
       pipelineRunId: context.pipelineRunId || null,
       pipelineStepIndex: context.pipelineStepIndex ?? null,
@@ -679,6 +721,7 @@ export async function callPrompt<TInput, TOutput>(
     durationMs,
      pathId,
     userId: context.userId || requestContext.userId || null,
+      sessionId: context.sessionId || requestContext.sessionId || null,
      conversationId,
     pipelineRunId: context.pipelineRunId || null,
     pipelineStepIndex: context.pipelineStepIndex ?? null,

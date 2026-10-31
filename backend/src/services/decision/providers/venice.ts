@@ -9,6 +9,7 @@
  * 说明密钥与请求体都合法。缺省不放进 provider 顺序，需要显式启用。
  */
 
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import type { DecisionCallOptions, DecisionProvider, DecisionProviderResult, DecisionRequest } from '../types';
 import { postDecision } from './shared';
 
@@ -23,9 +24,9 @@ export interface VeniceDecisionConfig {
 
 export function readVeniceDecisionConfig(): VeniceDecisionConfig {
   return {
-    url: (process.env.VENICE_DECISION_URL || DEFAULT_URL).trim(),
-    apiKey: (process.env.VENICE_API_KEY || '').trim(),
-    model: (process.env.VENICE_DECISION_MODEL || DEFAULT_MODEL).trim(),
+    url: readPluginProviderField('decision', 'venice', 'url') || DEFAULT_URL,
+    apiKey: readPluginProviderSecret('decision', 'venice'),
+    model: readPluginProviderField('decision', 'venice', 'model') || DEFAULT_MODEL,
   };
 }
 

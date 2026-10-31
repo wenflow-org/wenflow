@@ -15,9 +15,6 @@
           </button>
         </span>
       </header>
-      <p class="sdp-pw__hint">
-        core YAML 是业务定义的唯一声明源：保存即编译（dry run 出五块产物与门禁），发布后确定性编译为五块 Prompt（<code class="mono">skill.{{ skillId }}.md</code> + 数据库生效版本），运行时立即生效。
-      </p>
       <div class="sdp-pw__viewswitch">
         <button
           type="button"
@@ -87,9 +84,13 @@
               </label>
               <label class="sdp-pwform__field">
                 <span>outputMedia</span>
-                <select v-model="coreForm.outputMedia" class="mk-input" @change="markDirty">
-                  <option v-for="m in CORE_OUTPUT_MEDIA" :key="m" :value="m">{{ m }}</option>
-                </select>
+                <MkSelect
+                  v-model="coreForm.outputMedia"
+                  :options="CORE_OUTPUT_MEDIA_OPTIONS"
+                  aria-label="输出媒体"
+                  block
+                  @change="markDirty"
+                />
               </label>
             </div>
             </div>
@@ -107,10 +108,12 @@
               <code class="mono">user:path</code>（用户/平台，绿灯）。保存/发布时核对（skill→移交、sandbox→沙盘注册表、user→通过）。
             </p>
             <div v-for="(input, i) in coreForm.inputs" :key="i" class="sdp-pwform__inputrow">
-              <input v-model="input.name" class="mk-input" placeholder="别名 name（可选）" @input="markDirty" />
-              <input v-model="input.type" class="mk-input" placeholder="类型 type（可选）" @input="markDirty" />
+              <!-- 占位符只给字段名（name/type/ref/desc 就是要填的键），不追「（可选）」：
+                   ref 已用真实示例演示取值格式，可选性由「只有 ref 是必填」的校验提示表达 -->
+              <input v-model="input.name" class="mk-input" placeholder="别名 name" @input="markDirty" />
+              <input v-model="input.type" class="mk-input" placeholder="类型 type" @input="markDirty" />
               <input v-model="input.ref" class="mk-input mono" placeholder="skill:path-planning.milestones | sandbox:path.normalizedInput | user:latestMessage" @input="markDirty" />
-              <input v-model="input.desc" class="mk-input" placeholder="用途说明 desc（可选）" @input="markDirty" />
+              <input v-model="input.desc" class="mk-input" placeholder="用途说明 desc" @input="markDirty" />
               <button type="button" class="mk-link mk-link--danger" @click="removeInput(i)">删除</button>
             </div>
             <button type="button" class="mk-link" @click="addInput">+ 添加输入声明</button>
@@ -149,9 +152,13 @@
               </div>
               <div v-for="(f, i) in coreForm.fields" :key="i" class="sdp-pwform__fieldrow">
                 <input v-model="f.name" class="mk-input mono" placeholder="fieldName" @input="markDirty" />
-                <select v-model="f.baseType" class="mk-input" @change="markDirty">
-                  <option v-for="t in CORE_FIELD_TYPES" :key="t" :value="t">{{ t }}</option>
-                </select>
+                <MkSelect
+                  v-model="f.baseType"
+                  :options="CORE_FIELD_TYPE_OPTIONS"
+                  aria-label="type"
+                  block
+                  @change="markDirty"
+                />
                 <input v-model="f.optional" type="checkbox" aria-label="可选" @change="markDirty" />
                 <input v-model="f.desc" class="mk-input" placeholder="功能描述" @input="markDirty" />
                 <input v-model="f.turn" type="checkbox" aria-label="turn（回合输出）" @change="markDirty" />
@@ -198,9 +205,13 @@
               </label>
               <label class="sdp-pwform__field">
                 <span>failurePolicy</span>
-                <select v-model="coreForm.params.failurePolicy" class="mk-input" @change="markDirty">
-                  <option v-for="p in CORE_FAILURE_POLICIES" :key="p" :value="p">{{ p }}</option>
-                </select>
+                <MkSelect
+                  v-model="coreForm.params.failurePolicy"
+                  :options="CORE_FAILURE_POLICY_OPTIONS"
+                  aria-label="失败策略"
+                  block
+                  @change="markDirty"
+                />
               </label>
             </div>
             </div>
@@ -300,7 +311,6 @@
     <section class="sdp-block sdp-proj">
       <header class="sdp-block__head">
         <h4>运行时契约（只读投影）</h4>
-        <span class="sdp-block__meta">字段契约与「字段路由」页签同源 · 状态机 / 终止条件读 core YAML</span>
       </header>
       <div class="sdp-proj__grid">
         <div class="sdp-proj__col">
@@ -378,6 +388,7 @@ import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
 import { coreEditorState, coreShortHash, errText, toFormField, toCoreFieldPayload, type CoreFormField } from './sdp-shared'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 
 hljs.registerLanguage('yaml', yaml)
 
@@ -391,6 +402,11 @@ const AUX_CONTRACT_NA_TEXT = '该 Skill 为辅助类（无编排阶段归属）�
 const CORE_FIELD_TYPES = ['string', 'number', 'boolean', 'enum', 'object', 'object[]', 'string[]'] as const
 const CORE_FAILURE_POLICIES = ['retry', 'fallback', 'propagate'] as const
 const CORE_OUTPUT_MEDIA = ['json', 'markdown', 'text'] as const
+
+/* 下拉选项（MkSelect）：值 = 原 option 的 :value，文案 = 原 option 文本（逐字） */
+const CORE_FIELD_TYPE_OPTIONS: { value: string; label: string }[] = CORE_FIELD_TYPES.map((t) => ({ value: t, label: t }))
+const CORE_FAILURE_POLICY_OPTIONS: { value: string; label: string }[] = CORE_FAILURE_POLICIES.map((p) => ({ value: p, label: p }))
+const CORE_OUTPUT_MEDIA_OPTIONS: { value: string; label: string }[] = CORE_OUTPUT_MEDIA.map((m) => ({ value: m, label: m }))
 
 interface CoreFormState {
   identity: string
@@ -967,13 +983,6 @@ watch(
 .sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sdp-bad-text { color: var(--mk-red); font-weight: 700; }
 
-.sdp-pw__hint {
-  margin: 0 18px 12px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  line-height: 1.7;
-}
-.sdp-pw__hint code { font-size: var(--mk-fs-micro); }
 .sdp-pw__textarea {
   width: 100%;
   min-height: 46vh;
@@ -1318,8 +1327,6 @@ watch(
   .sdp-block__meta { font-size: var(--mk-fs-body); }
   .sdp .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
   .sdp-pw { grid-template-columns: minmax(0, 1fr) 520px; }
-  .sdp-pw__hint { font-size: var(--mk-fs-body); }
-  .sdp-pw__hint code { font-size: var(--mk-fs-body); }
   .sdp-pw__textarea,
   .sdp-codehl__pre { font-size: var(--mk-fs-emphasis); }
   .sdp-pwform .mk-input { font-size: var(--mk-fs-emphasis); min-height: 46px; }

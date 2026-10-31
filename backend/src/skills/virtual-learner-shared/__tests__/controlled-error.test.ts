@@ -106,3 +106,91 @@ describe('decideControlledError（编排层受控错误采样）', () => {
     expect(pick(4)).toBe(STRUGGLE[0]);
   });
 });
+
+
+describe('decideControlledError × 真人误区语料库（2026-10-21）', () => {
+  const STRUGGLE = ['把材料里这句条件，翻译成能写的区位得分点'];
+
+  it('命中语料 → hint 改为「按这条真实误区演」，并透出 targetMisconception', () => {
+    const result = decideControlledError({
+      frictionBudget: 'stress_test',
+      struggleConcepts: STRUGGLE,
+      turnIndex: 5,
+      random: () => 0,
+      resolveMisconception: () => ({
+        statement: '先背模板再套材料，没对应到本题材料条件',
+        why: '判卷按材料条件给分',
+        source: 'https://example.com/a',
+      }),
+    });
+    expect(result.forced).toBe(true);
+    expect(result.targetMisconception?.statement).toContain('先背模板');
+    expect(result.hint).toContain('按这条真实误区演');
+    expect(result.hint).toContain('先背模板');
+  });
+
+  it('语料未命中 → 回退即兴卡点文案，行为不变', () => {
+    const result = decideControlledError({
+      frictionBudget: 'stress_test',
+      struggleConcepts: STRUGGLE,
+      turnIndex: 5,
+      random: () => 0,
+      resolveMisconception: () => null,
+    });
+    expect(result.forced).toBe(true);
+    expect(result.targetMisconception).toBeNull();
+    expect(result.hint).toContain('给出与该卡点一致的具体错误');
+  });
+
+  it('lookup 抛错 → 不影响采样，按未命中处理', () => {
+    const result = decideControlledError({
+      frictionBudget: 'stress_test',
+      struggleConcepts: STRUGGLE,
+      turnIndex: 5,
+      random: () => 0,
+      resolveMisconception: () => {
+        throw new Error('corpus unavailable');
+      },
+    });
+    expect(result.forced).toBe(true);
+    expect(result.targetMisconception).toBeNull();
+  });
+});
+
+describe('decideControlledError × 当前 task 概念域（外部审计 P1-5）', () => {
+  it('画像卡点与当前 task 无关时不加权、也不拿它当卡点', () => {
+    // normal 基准 0.12；旧实现有 struggle 就 ×2 = 0.24，这里 0.2 会误命中
+    const result = decideControlledError({
+      frictionBudget: 'normal',
+      struggleConcepts: ['上节课的调色', '另一门课的排版'],
+      currentTaskConcepts: ['设置一页宽缩放', '识别叠字版面'],
+      turnIndex: 5,
+      random: () => 0.2,
+    });
+    expect(result.forced).toBe(false);
+  });
+
+  it('卡点命中当前 task 概念时按 struggleBoost 加权，并只在该概念上演', () => {
+    const result = decideControlledError({
+      frictionBudget: 'normal',
+      struggleConcepts: ['上节课的调色', '识别叠字版面'],
+      currentTaskConcepts: ['设置一页宽缩放', '识别叠字版面'],
+      turnIndex: 5,
+      random: () => 0.2,
+    });
+    expect(result.forced).toBe(true);
+    expect(result.targetConcept).toBe('识别叠字版面');
+  });
+
+  it('无卡点交集但命中基线概率时，卡点落在本轮概念而不是别的课的旧卡点', () => {
+    const result = decideControlledError({
+      frictionBudget: 'normal',
+      struggleConcepts: ['上节课的调色'],
+      currentTaskConcepts: ['设置一页宽缩放', '识别叠字版面'],
+      turnIndex: 2,
+      random: () => 0.05,
+    });
+    expect(result.forced).toBe(true);
+    expect(result.targetConcept).toBe('设置一页宽缩放');
+  });
+});

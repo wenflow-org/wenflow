@@ -40,7 +40,7 @@
             />
             <button v-if="query" type="button" class="dfg-search__clear" title="清除" @click="clearQuery">✕</button>
           </div>
-          <label class="dfg-switch" title="显示流转中被隐藏的字段（对外不可见，含内部字段与累积字段）">
+          <label class="dfg-switch">
             <input type="checkbox" v-model="showHidden" />
             <span>隐藏字段</span>
           </label>
@@ -120,10 +120,10 @@
                 :title="`前往 ${flow.entryFrom?.stageName}（${flow.entryFrom?.stageId}-agent），看这些字段在那边是怎么产出的`"
                 @click="switchStage(flow.entryFrom!.stageId)"
               >入口 · 来自 {{ flow.entryFrom?.stageName }}<span class="dfg-gate__jump">↗</span></button>
-              <span class="dfg-gate__sub">{{ entryVisible.length }} 个字段经 {{ flow.entryFrom?.stageId }}-agent 移交进入本阶段</span>
+              <span class="dfg-gate__sub" :title="`${entryVisible.length} 个字段经 ${flow.entryFrom?.stageId}-agent 移交进入本阶段`">{{ entryVisible.length }} 个字段经 {{ flow.entryFrom?.stageId }}-agent 移交本阶段</span>
             </div>
             <span class="dfg-gate__count">{{ entryVisible.length }} 字段</span>
-            <span v-for="p in farPorts['__entry__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+            <button type="button" v-for="p in farPorts['__entry__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
           </header>
           <div class="dfg-chips">
             <button
@@ -165,10 +165,9 @@
               <span class="dfg-step__agent mono">{{ step.agentId }}</span>
               <span class="dfg-step__spacer"></span>
               <span class="dfg-step__count">{{ step.outputChips.length }} 字段</span>
-              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+              <button type="button" v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
             </header>
             <div class="dfg-step__body">
-              <p class="dfg-step__note">上游字段在此重命名后分发给内部 Skill</p>
               <div class="dfg-chips" :data-gate-anchor="step.agentId">
                 <button
                   v-for="c in stepShown(step, 'out')"
@@ -208,7 +207,8 @@
               >{{ step.kind === 'service' ? '代码服务' : '跨阶段引用' }}</span>
               <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已注册，但没有声明任何字段的产出与输入，未接入数据流转">无字段路由</span>
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
-              <span v-if="step.fromStage" class="dfg-step__stage mono" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</span>
+              <!-- 阶段名是中文，等宽只留给 agentId 这类机器串 -->
+              <button v-if="step.fromStage" type="button" class="dfg-step__stage" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</button>
               <span v-if="step.role" class="dfg-step__role">{{ step.role }}</span>
               <template v-if="step.kind === 'orphan'">
                 <span class="dfg-step__agent mono">{{ step.agentId }}</span>
@@ -217,7 +217,7 @@
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
               <span v-if="step.kind === 'orphan'" class="dfg-step__count" title="该 Skill 没有字段的路由记录，不参与阶段内数据流转">无字段流转</span>
-              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+              <button type="button" v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
             </header>
           </section>
 
@@ -225,7 +225,15 @@
           <section v-else :data-card-key="step.agentId" class="dfg-step" :class="{ 'has-inputs': step.inputChips.length, 'is-flash': flashKey === step.agentId }" :style="{ '--hz': stepHue(step) }">
             <header class="dfg-step__head">
               <span class="dfg-step__idx">{{ step.index }}</span>
-              <strong class="dfg-step__name">{{ step.name }}</strong>
+              <!-- 卡题即「打开该 Skill 详情」：旅程里看到某步未解析/异常，入口必须和总览节点同一落点 -->
+              <button
+                v-if="step.agentId.startsWith('skill:')"
+                type="button"
+                class="dfg-step__name dfg-step__name--link"
+                :title="step.agentId"
+                @click="openSkill(step.agentId)"
+              >{{ step.name }}</button>
+              <strong v-else class="dfg-step__name">{{ step.name }}</strong>
               <span class="dfg-step__badge">Skill</span>
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
               <span class="dfg-step__agent mono">{{ step.agentId }}</span>
@@ -233,7 +241,7 @@
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
               <span class="dfg-step__count">{{ step.outputChips.length }} 产出</span>
-              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+              <button type="button" v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
             </header>
             <div class="dfg-step__body">
               <!-- 流入 -->
@@ -321,10 +329,10 @@
                 :title="`前往 ${flow.exitTo?.stageName}（${flow.exitTo?.stageId}-agent），看这些字段在那边是怎么被消费的`"
                 @click="switchStage(flow.exitTo!.stageId)"
               >出口 · 交给 {{ flow.exitTo?.stageName }}<span class="dfg-gate__jump">↗</span></button>
-              <span class="dfg-gate__sub">{{ flow.agentId }} 汇总 {{ flow.exit.length }} 个字段，整体移交下一阶段</span>
+              <span class="dfg-gate__sub" :title="`${flow.agentId} 汇总 ${flow.exit.length} 个字段，整体移交下一阶段`">{{ flow.agentId }} 汇总 {{ flow.exit.length }} 个字段移交下一阶段</span>
             </div>
             <span class="dfg-gate__count">{{ flow.exit.length }} 字段</span>
-            <span v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+            <button type="button" v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></button>
           </header>
           <div class="dfg-chips">
             <button
@@ -486,7 +494,8 @@
                 </div>
                 <div class="dfg-field">
                   <label class="dfg-field__label" for="dfg-edit-notes">备注</label>
-                  <input id="dfg-edit-notes" v-model="editDraft.notes" class="dfg-edit__input" placeholder="备注（可选）" spellcheck="false" />
+                  <!-- 占位符不复述标签，也不写「（可选）」：非必填由没有 * 表达 -->
+                  <input id="dfg-edit-notes" v-model="editDraft.notes" class="dfg-edit__input" spellcheck="false" />
                 </div>
                 <p v-if="editMsg" class="dfg-edit__msg" :class="{ 'is-error': editError }">{{ editMsg }}</p>
               </div>
@@ -526,7 +535,7 @@ import {
 import type { StageDetailLike } from './fieldFlowLayout'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import { AGENT_TONES } from './store'
+import { AGENT_TONES, openSubPage } from './store'
 
 /* ================= props / emits（与 FieldFlowGraph 同接口，Orchestrator 无缝替换） ================= */
 const props = defineProps<{ stage: string }>()
@@ -653,6 +662,12 @@ function switchStage(id: string) {
   query.value = ''
   focusId.value = ''
   selected.value = null
+}
+
+/** Skill 步骤卡头 → 该 Skill 详情二级页：与总览节点同一落点（skill: 前缀剥掉） */
+function openSkill(agentId: string) {
+  const id = agentId.replace(/^skill:/, '')
+  if (id) openSubPage('skill', id)
 }
 
 /* ================= 角色词表（后端 promptRoleMeta，多阶段同源） ================= */
@@ -1499,7 +1514,11 @@ function stepHue(step: FlowStep): string {
 .dfg-pipe.is-dimmed { opacity: 1; }
 /* 缩放读数（工具栏右端）：定宽 + 等宽数字，比例变化时按钮与左邻元素不跳 */
 .dfg-zoom__val { min-width: 56px; font-variant-numeric: tabular-nums; }
-.dfg-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; }
+.dfg-edges {
+  position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3;
+  /* 同 .orch-odg-svg：别让 main.css 的全局 max-width:100% 把连线层按容器宽度等比缩放 */
+  max-width: none;
+}
 
 .dfg-edges path.is-hot { stroke-dasharray: 5 4; animation: dfg-flow 0.7s linear infinite; }
 @keyframes dfg-flow { to { stroke-dashoffset: -9; } }
@@ -1511,6 +1530,7 @@ function stepHue(step: FlowStep): string {
   background: var(--mk-graph-port-bg); border: 1px solid var(--mk-graph-port-line); border-radius: 999px;
   padding: 1px 7px; cursor: pointer; max-width: 160px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin: 0; font-family: inherit; line-height: inherit; appearance: none;
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
 .dfg-step__port:hover { background: var(--mk-graph-port-bg-hover); box-shadow: 0 0 0 2px color-mix(in srgb, var(--mk-blue) 18%, transparent); }
@@ -1601,6 +1621,12 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 }
 .dfg-step--gate .dfg-step__idx { border-radius: 50%; }
 .dfg-step__name { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
+/* 卡题可点（进 Skill 详情）：蓝字 = 可交互，其余排版与相邻纯文本卡题一致 */
+.dfg-step__name--link {
+  padding: 0; border: 0; background: none; font-family: inherit; line-height: inherit;
+  color: var(--mk-blue); cursor: pointer; text-align: left;
+}
+.dfg-step__name--link:hover { text-decoration: underline; }
 .dfg-step__badge {
   padding: 1px 7px; border-radius: 999px; background: var(--mk-graph-badge-bg); color: var(--mk-muted);
   font-size: var(--mk-fs-micro); font-weight: 800;
@@ -1624,11 +1650,12 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-step__stage {
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
   cursor: pointer; background: var(--mk-blue-bg); border-radius: 6px; padding: 1px 7px;
+  border: 0; margin: 0; font-family: inherit; line-height: inherit; appearance: none;
 }
 .dfg-step__stage:hover { background: var(--mk-graph-stage-hover-bg); }
 .dfg-step__count { flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .dfg-step__body { padding: 8px 12px 10px; display: grid; gap: 7px; }
-.dfg-step__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+
 .dfg-step__rows { display: grid; gap: 7px; }
 .dfg-step__row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .dfg-step__rowlabel {

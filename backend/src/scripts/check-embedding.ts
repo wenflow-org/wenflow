@@ -1,5 +1,5 @@
 /**
- * embedding:check —— 向量化 / 重排冒烟脚本（验证外挂能力 embedding / rerank 可真实调用）。
+ * embedding:check —— 向量化 / 重排冒烟脚本（验证基础设施模型 embedding / rerank 可真实调用）。
  *
  * 用法：
  *   npm --prefix backend run embedding:check

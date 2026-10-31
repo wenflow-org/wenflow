@@ -41,6 +41,7 @@ import {
   getSessionPromptOverrides,
   buildProgressAfterTaskCompletion,
   parseStageResultsPayload,
+  resolveScenarioBudget,
 } from './simulation.helpers';
 import {
   parseGoalConversationHistory,
@@ -69,6 +70,11 @@ export async function completeCheckpointedSimulationTask(
   let taskCompletionResult: Awaited<ReturnType<typeof learningService.completeTask>> | undefined;
   // 收束授课会话 id 先于结算取出：#105 观测统一要把 sessionId/通道写进完成事件
   const wrapupTeachingSessionId = typeof taskRuntime.teachingSessionId === 'string' ? taskRuntime.teachingSessionId : null;
+  // timebox-skip 路径显式带来源；其余仍是 vl-assisted（保持既有口径）。
+  // 只接受本函数可达的两个值，避免 taskRuntime 的任意字符串污染统计口径。
+  const completionSource = taskRuntime.completionSource === 'timebox-skip'
+    ? 'timebox-skip' as const
+    : 'vl-assisted' as const;
   try {
     await ctx.assertCurrentSessionLeaseOwned(sessionId);
     taskCompletionResult = await learningService.completeTask({
@@ -77,22 +83,26 @@ export async function completeCheckpointedSimulationTask(
       actualMinutes: taskMatch.task.estimatedMinutes || 30,
       notes: '虚拟学习者完成当前 task 的教学会话',
       rating: 5,
-      completionSource: 'vl-assisted',
+      completionSource,
       sessionId: wrapupTeachingSessionId,
       // 日期模拟：台账/streak 落在模拟日（无模拟上下文时不传 → 现网行为不变）
       ...(isSimulatedClockActive() ? { asOf: simulatedNowOr() } : {}),
     });
     // 记忆回写：画像概念 + 成果物登记（best-effort，失败不阻断）
-    await persistAssistedLearnerMemory(sessionId, session, taskMatch.task);
+    await persistAssistedLearnerMemory(sessionId, session, taskMatch.task, learningState);
     // 收束授课会话（best-effort）：endSession 走 finalization 生成 wrapup 并把会话置 completed。
     // 此前恢复路径只 completeTask 不 endSession → wrapup 永不落库、授课会话恒 active
     // （2026-10-02 端到端实证；与 checkpoint 路径、timebox-skip 路径行为对齐）
     if (wrapupTeachingSessionId) {
+      let teachingSessionClosed = false;
+      let closedRevision: number | undefined;
       try {
         const endTeachingRevision = typeof taskRuntime.teachingRevision === 'number'
           ? taskRuntime.teachingRevision
           : (typeof learningState.teachingRevision === 'number' ? learningState.teachingRevision : undefined);
-        await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed', endTeachingRevision);
+        const endResult = await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed', endTeachingRevision);
+        teachingSessionClosed = endResult.status === 'completed';
+        closedRevision = endResult.revision;
       } catch (error: unknown) {
         // #46：快照 revision 常被并发回合推进（TEACHING_SESSION_STALE），旧实现只 warn 就放行，
         // 结果任务 completed、授课会话永久 active（wrapup/证据/FSRS 全缺）。
@@ -106,12 +116,42 @@ export async function completeCheckpointedSimulationTask(
         });
         try {
           const freshTeachingRevision = await ctx.resolveTeachingRevision(wrapupTeachingSessionId, session.userId);
-          await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed', freshTeachingRevision);
+          const retryResult = await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed', freshTeachingRevision);
+          teachingSessionClosed = retryResult.status === 'completed';
+          closedRevision = retryResult.revision;
         } catch (retryError: unknown) {
           logger.warn('[simulation-coordinator] 完课收束 endSession 重试仍失败（孤儿会话待对账）', {
             sessionId,
             teachingSessionId: wrapupTeachingSessionId,
             error: asErrorLike(retryError).message || String(retryError)
+          });
+        }
+      }
+      // P1-3（2026-10-22 审计）：VL 直调 completeTask + endSession 不经过
+      // SessionFinalizationService.complete_task，课堂台账 taskCompletion 会永久停在
+      // not_started（DB 593/597）。任务已完成后补记 complete_task 步骤（不重复执行
+      // completeTask），复用 claim/lease/台账，使结算通道与终态可追溯。
+      if (teachingSessionClosed) {
+        try {
+          const ledgerStatus = await teachingSessionRepository.recordDirectTaskCompletion(
+            wrapupTeachingSessionId,
+            session.userId,
+            completionSource,
+            closedRevision
+          );
+          if (ledgerStatus === 'processing') {
+            logger.warn('[simulation-coordinator] 任务结算台账仍在处理，待收束重试', {
+              sessionId,
+              teachingSessionId: wrapupTeachingSessionId,
+              completionSource,
+            });
+          }
+        } catch (ledgerError: unknown) {
+          logger.warn('[simulation-coordinator] 任务结算台账补记失败（任务已完成，待对账）', {
+            sessionId,
+            teachingSessionId: wrapupTeachingSessionId,
+            completionSource,
+            error: asErrorLike(ledgerError).message || String(ledgerError)
           });
         }
       }
@@ -349,35 +389,26 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         story: storyContext,
         profileLearningGoal: profile.learningGoal,
       });
-      const openingReply = storyDemand.text;
+      // 场景卡预算必须在 Goal 开场就出现：R4/R5 实证虚拟学习者不会主动说时间，
+      // goal 只能按内容估（F88 估到 16-32h，spec 只有 3.5h）。把卡上的
+      // 「几天 × 每天多少分钟 × 总小时」作为学习者开场自述注入，goal v73 的
+      // 容量收窄规则才有输入；真实用户链路不经过这里。
+      const scenarioBudget = resolveScenarioBudget(profile.profile as Record<string, unknown>);
+      const budgetLine = scenarioBudget?.dailyMinutes && scenarioBudget?.horizonDays && scenarioBudget?.expectedHours
+        ? `\n\n时间上我这边是 ${scenarioBudget.horizonDays} 天内，每天大约 ${scenarioBudget.dailyMinutes} 分钟，总投入约 ${scenarioBudget.expectedHours} 小时。`
+        : '';
+      const openingReply = `${storyDemand.text}${budgetLine}`;
       if (!openingReply) {
         throw new Error('缺少 Goal 开场诉求：请绑定故事（visibleOpening / goalSeed）或填写画像长期倾向');
       }
 
       const openingStart = Date.now();
-      // 开场模拟者调用同样计入会话 AI 调用预算（此前旁路漏计，管理员手动
-      // 「推进一步」开新 Goal 对话时每次白嫖 1 次调用）
-      const openingResult = await ctx.retryLearnUpstream(input.sessionId, 'simulate-goal-opening', () =>
-        ctx.simulateGoalLearnerReply({
-          profile,
-          storyContext,
-          conversationHistory: [],
-          lastAssistantMessage: '',
-          currentPhase: 'opening',
-          previousLearnerState: undefined,
-          goalState: undefined,
-          userId: input.userId,
-          frictionBudget: getSessionFrictionBudget(session)
-        })
-      );
-
-      // P1-12/GD-2：opening 轮也落 stageResults.goal.learnerState，否则下一轮
-      // previousLearnerState（下方回复分支读取 stageResults.goal?.learnerState）断链为
-      // undefined，学习者失去上一轮主观状态。reply 仍旁路（description 固定用
-      // storyDemand.text），砍调用属产品决策，此处不改。
+      // 外部审计 P2-10：开场 reply 固定用 storyDemand.text（保证需求原样传递），
+      // 旧实现在此额外调用一次模拟者，reply 被丢弃、只留下一个描述"另一句话"的 learnerState，
+      // 既白烧一次 LLM 调用，又让状态与实际开场不自洽。开场主观状态改为从画像确定性推导。
       const openingLearnerState = finalizeGoalLearnerState(
         profile,
-        resolveSimLearnerState(openingResult.output, openingResult.learnerStateFromEnvelope || {}),
+        {},
         storyContext,
         'understanding'
       );
@@ -389,15 +420,10 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         details: {
           output: {
             reply: openingReply,
-            thoughtProcess: openingResult.output?.debug?.stateChangeReason,
             learnerState: openingLearnerState,
-            emotion: openingResult.output?.emotion,
-            runtimeEnvelope: openingResult.runtimeEnvelope || openingResult.output?.runtimeEnvelope || null,
             opening: true,
             storyDemandSource: storyDemand.source,
             storyId: storyDemand.storyId,
-            // 模拟者开场仅作旁路观测，不进入 description
-            simulatorOpeningReply: openingResult.output?.reply || null,
           }
         }
       });

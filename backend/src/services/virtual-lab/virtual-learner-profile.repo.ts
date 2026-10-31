@@ -124,9 +124,26 @@ export function createVirtualLearnerProfile(args: { data: Prisma.virtual_learner
   return prisma.virtual_learner_profiles.create(args);
 }
 
-/** 列表页：画像 + 会话样本（50 条）+ 会话计数 */
+/**
+ * 虚拟学习者列表的取数范围 = **派生实例**（2026-10-25 拍板「不播种、都派生」）。
+ *
+ * 卡库是身份池（导入卡 / 平台生产 / 预置一键加载都只往池里放**模板卡**），虚拟学习者
+ * 一律由「选角 → 派生」产生（`card-import.service.cloneCardsToLearners`）。二者同一张表，
+ * 唯一年龄可辨的标记是身份克隆时写进 `profile` JSON 的 `derivedFrom`——模板卡从不写这个键
+ * （写入侧只有 cloneCardsToLearners，全仓唯一）。卡墙早已按同一字段反向过滤
+ * （`getCardWallIndex` 的 `!c.derivedFrom`），此处补齐另一半：列表不再把模板卡当人列。
+ *
+ * 该字段在 `profile` JSON 里、没有独立列，故按 JSON 子串判定（不改 schema：本库客户端的
+ * 迁移面受共享生成物约束，见 `prisma/schema.prisma` 的平台数据库说明）。
+ */
+const DERIVED_INSTANCE_WHERE = {
+  profile: { contains: '"derivedFrom"' },
+} satisfies Prisma.virtual_learner_profilesWhereInput
+
+/** 列表页：派生实例 + 会话样本（50 条）+ 会话计数（范围见 DERIVED_INSTANCE_WHERE） */
 export function listProfilesWithSessionSamples(skip: number, limit: number) {
   return prisma.virtual_learner_profiles.findMany({
+    where: DERIVED_INSTANCE_WHERE,
     skip,
     take: limit,
     orderBy: { createdAt: 'desc' },
@@ -164,8 +181,10 @@ export function listProfilesWithSessionSamples(skip: number, limit: number) {
   });
 }
 
+/** 列表分页总数与「实例数」读数同源：只数派生实例（范围与 DERIVED_INSTANCE_WHERE 一致），
+    否则分页器会把身份池里的模板卡也算进来，与列表行数对不上。 */
 export function countProfiles() {
-  return prisma.virtual_learner_profiles.count();
+  return prisma.virtual_learner_profiles.count({ where: DERIVED_INSTANCE_WHERE });
 }
 
 /** 每个画像已生成的路径数（distinct learningPathId）：一个故事可衍生多条路径，
@@ -180,6 +199,15 @@ export function groupPathCountsByProfile(profileIds: string[]) {
   });
 }
 
+/** 学习路径标题（列表「进行中」列按路径归并时要有名字，只回标题不回整条路径） */
+export function findLearningPathTitles(ids: string[]) {
+  if (!ids.length) return Promise.resolve([] as Array<{ id: string; title: string }>);
+  return prisma.learning_paths.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, title: true },
+  });
+}
+
 /* ---------- 卡库（card-import.service）取数 ---------- */
 
 /** 全量卡的查重索引取数：profile JSON + tags（cardKey/同源扫描用） */
@@ -189,16 +217,18 @@ export function findAllProfilesForCardIndex() {
   });
 }
 
-/** 导出用：自建卡（presetKey 为空） */
+/** 导出用：自建卡（presetKey 为空）。
+ *  id 必带：纯档案模板卡没有 userId，随卡资料按 `card-<id>` 归属键读取（2026-10-29）。 */
 export function findCustomCardsForExport() {
   return prisma.virtual_learner_profiles.findMany({
     where: { presetKey: null },
-    select: { profile: true, learningGoal: true, knowledgeLevel: true, tags: true, notes: true, userId: true },
+    select: { id: true, profile: true, learningGoal: true, knowledgeLevel: true, tags: true, notes: true, userId: true },
   });
 }
 
 /** 卡墙索引取数（2026-10-05 卡库改版）：全部卡（预置+自建）带展示列与账号信息，新卡在前。
- *  known/struggleConcepts 供「卡 → 虚拟学习者」派生时随身份带走（2026-10-16）。 */
+ *  known/struggleConcepts 供「卡 → 虚拟学习者」派生时随身份带走（2026-10-16）。
+ *  2026-10-29：模板卡是纯档案，userId/users 均为空——展示名走档案内字段，不依赖账号。 */
 export function findProfilesForCardWall() {
   return prisma.virtual_learner_profiles.findMany({
     select: {

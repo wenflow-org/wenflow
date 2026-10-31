@@ -7,6 +7,7 @@
  */
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { JSON_OUTPUT_RETRY_STRATEGY } from '../json-output-retry';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
@@ -167,7 +168,8 @@ export async function lessonKnowledgeEnricher(input: LessonKnowledgeEnricherInpu
     defaultSystemPrompt: LESSON_KNOWLEDGE_ENRICHER_PROMPT,
     requireActivePrompt: true,
     caller: { skillId: 'lesson-knowledge-enricher' },
-          buildUserPayload: (payload) => payload,
+    retryStrategy: JSON_OUTPUT_RETRY_STRATEGY,
+    buildUserPayload: (payload) => payload,
     normalizeOutput: (parsed, _payload) => {
       const obj = parsed && typeof parsed === 'object' ? parsed : {};
       const ledger = safeArray(obj.conceptLedger)

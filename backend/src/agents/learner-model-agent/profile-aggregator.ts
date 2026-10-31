@@ -453,7 +453,13 @@ export class ProfileAggregator {
   /** 已掌握概念：记忆痕迹中掌握度达阈值的项，按掌握度与最近接触排序。 */
   private async fetchMasteredConcepts(userId: string): Promise<string[]> {
     const rows = await prisma.memory_traces.findMany({
-      where: { userId, masteryScore: { gte: MASTERED_SCORE_THRESHOLD } },
+      // 只把真正提取过的痕迹当「已掌握」证据；KT 幽灵痕（extractionCount=0）
+      // 是模型估计、不是学习证据，不能进入叙事画像的已掌握列表。
+      where: {
+        userId,
+        masteryScore: { gte: MASTERED_SCORE_THRESHOLD },
+        extractionCount: { gt: 0 },
+      },
       orderBy: [{ masteryScore: 'desc' }, { lastSeenAt: 'desc' }],
       take: MAX_HISTORY_LABELS,
       select: { label: true }

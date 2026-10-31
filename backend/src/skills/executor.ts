@@ -15,6 +15,14 @@ import {
   createRuntimeRetryBudget,
   getEffectiveLogicalRetryLimit
 } from '../services/reliability-settings.service';
+import {
+  ToolApprovalRequiredError,
+  isToolApprovalRequired,
+  runAfterToolHooks,
+  runBeforeToolHooks,
+  runErrorToolHooks,
+  type ToolExecutionInfo,
+} from './tool-execution-hooks';
 
 export type SkillHandler = (input: any) => Promise<any>;
 
@@ -228,16 +236,50 @@ export async function executeSkillHandler(
 
     try {
       await assertSkillEnabledForUser(skillId, userId);
-      const rawResult = await handler(input);
+
+      // 工具执行闸门（2026-10-21）：审批命中而未带 approved 时拒绝执行。
+      // 默认审批名单为空 → 与改造前完全一致。
+      if (isToolApprovalRequired(skillId) && options.approved !== true) {
+        throw new ToolApprovalRequiredError(skillId);
+      }
+
+      const hookInfo: ToolExecutionInfo = {
+        skillId,
+        userId,
+        executionLogId,
+        sessionId: executionContext.sessionId,
+        input,
+        inputSummary: summarizeSkillLogPayload(skillId, input, 'input'),
+      };
+      const veto = await runBeforeToolHooks(hookInfo);
+      if (veto) {
+        throw Object.assign(new Error(veto.message), {
+          code: veto.code,
+          status: veto.status,
+          details: veto.details,
+        });
+      }
+
+      const rawResult = options.timeout && options.timeout > 0
+        ? await withSkillTimeout(handler(input), options.timeout, skillId)
+        : await handler(input);
       const durationMs = Date.now() - startedAt;
       const result = normalizeHandlerResult(rawResult, durationMs);
 
       if (!result.success) {
+        // 结构化失败：调用方可按业务语义降级（如把错误回灌给模型/换备用工具）。
+        if (options.allowStructuredFailure === true) {
+          await recordSkillStats(skillId, false, durationMs);
+          await runAfterToolHooks(hookInfo, result);
+          return result;
+        }
         throw Object.assign(new Error(result.error?.message || `Skill ${skillId} execution failed`), {
           code: result.error?.code,
           details: result.error?.details,
         });
       }
+
+      await runAfterToolHooks(hookInfo, result);
 
       await recordSkillStats(skillId, true, durationMs);
       void recordSkillSpan(
@@ -291,8 +333,35 @@ export async function executeSkillHandler(
           ? error?.code || 'MCP_TOOL_EXECUTION_FAILED'
           : error?.message || String(error),
       });
+      await runErrorToolHooks({
+        skillId,
+        userId,
+        executionLogId,
+        sessionId: executionContext.sessionId,
+        input,
+      }, error);
       throw error;
     }
+  });
+}
+
+/**
+ * 工具执行硬超时（2026-10-21）：`SkillExecutionOptions.timeout` 此前从未被读取。
+ * 超时抛 `SKILL_TIMEOUT`，与调用方取消（CALLER_ABORTED）区分开：前者计入失败率，
+ * 后者不计。
+ */
+function withSkillTimeout<T>(promise: Promise<T>, timeoutMs: number, skillId: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(Object.assign(new Error(`Skill ${skillId} exceeded ${timeoutMs}ms timeout`), {
+        code: 'SKILL_TIMEOUT',
+        status: 504,
+      }));
+    }, timeoutMs);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); }
+    );
   });
 }
 

@@ -10,15 +10,18 @@
 import { type Router, type Request } from 'express';
 import type { goal_conversations } from '../../services/prisma-client-types';
 import { findProfileById, findProfileWithRecentSessions, findMemoryTracesByUser } from '../../services/virtual-lab/virtual-learner-profile.repo';
-import { findSessionById } from '../../services/virtual-lab/virtual-session.repo';
+import { findSessionById, findLatestSessionForProfile } from '../../services/virtual-lab/virtual-session.repo';
 import { logger } from '../../utils/logger';
 import { teachingSessionRepository, type TeachingSessionRecord } from '../../services/ai-teaching/TeachingSessionRepository';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
 import { buildRetentionSeriesForConcepts, type RetentionConceptInput } from '../../services/memory/retention-series';
 import { simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
+import { resolveSimulationClock } from '../../services/virtual-lab/simulated-day.service';
+import { getVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
 import type { SimulationLogEntry } from '../../coordinators/simulation.types';
 import type { StageResults, VirtualSessionRow } from '../../virtual-lab/vlab-types';
 import { parseJson, ensureProfileStoryPool, isSameStory } from '../../virtual-lab/session-factory';
+import { canReadTeachingSession } from './virtual-learners.teaching-detail-access';
 
 // ===== 原 virtual-learners.ts L263–L767 =====
 export function parseStoryContext(session: VirtualSessionRow) {
@@ -527,6 +530,40 @@ export function buildSessionSummary(session: VirtualSessionRow) {
   };
 }
 
+/**
+ * 解析画像实例「当前模拟钟时刻」（2026-10-29 审计 M-16）：管理端 HTTP 请求没有模拟钟
+ * AsyncLocalStorage 上下文，simulatedNowOr() 在此恒回落真实墙钟，导致模拟钟场景下
+ * 记忆池 counts.dueReview 恒 0。这里按写侧同一条链路解析（与
+ * virtual-learners.assisted-shared runAssistedSessionMutationWithSimClock 同式：
+ * 会话级 clock > 画像级 clock > 全局 settings），取画像最近一条会话为会话级时钟锚点。
+ * 未启用或时刻非法时返回 null（调用方维持真实墙钟现行为）。
+ */
+async function resolveInstanceSimulatedNow(profile: { id: string; profile: string | null; createdAt: Date }): Promise<Date | null> {
+  try {
+    const [session, settings] = await Promise.all([
+      findLatestSessionForProfile(profile.id).catch(() => null),
+      getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS })),
+    ]);
+    const stageResults = parseJson<Record<string, any>>(session?.stageResults ?? null, {});
+    const profileData = parseJson<Record<string, any>>(profile.profile, {});
+    const clock = resolveSimulationClock({
+      stageResultsClock: (stageResults as any)?.simulationClock ?? null,
+      profileClock: (profileData as any)?.simulationClock ?? null,
+      settings: settings.dateSimulation,
+      sessionCreatedAt: session?.createdAt ?? profile.createdAt,
+    });
+    if (!clock.enabled) return null;
+    const asOf = new Date(clock.simulatedNow);
+    return Number.isNaN(asOf.getTime()) ? null : asOf;
+  } catch (error) {
+    logger.warn('[virtual-learners] 实例模拟钟解析失败（回退真实墙钟）', {
+      profileId: profile.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 export function registerProjectionRoutes(router: Router): void {
 // ===== 原 virtual-learners.ts L826–L1054 =====
 /**
@@ -542,11 +579,17 @@ router.get('/:id/memory', async (req: Request, res) => {
       return res.status(404).json({ success: false, error: '虚拟用户不存在' });
     }
 
-    const memory = await buildLearnerMemorySnapshot(profile.userId, { limit: 12 });
+    // M-16（2026-10-29 审计）：显式解析该实例当前模拟钟时刻下传记忆读取与遗忘曲线 asOf——
+    // 管理端无模拟钟上下文，不传则 dueReview 按真实墙钟判定、模拟场景恒 0。解析不出维持现行为。
+    const clockAsOf = await resolveInstanceSimulatedNow(profile);
+    const memory = await buildLearnerMemorySnapshot(
+      profile.userId,
+      clockAsOf ? { limit: 12, now: clockAsOf } : { limit: 12 },
+    );
 
     // Q2/Q8 记忆看板：在既有聚合之上，补一条纯函数派生的遗忘曲线（只增字段，不改既有形状）。
     // 数据源与排期同源：memory_traces（含 FSRS 状态列），桶分类沿用上面的 mastered/dueReview。
-    const asOf = simulatedNowOr();
+    const asOf = clockAsOf ?? simulatedNowOr();
     const dueNames = new Set(memory.dueReview.map((item) => item.name));
     const masteredNames = new Set(memory.mastered.map((item) => item.name));
     const traces = await findMemoryTracesByUser(profile.userId);
@@ -713,22 +756,32 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: Request, res) => 
     const teachingHistory = Array.isArray(learningProgress.teachingSessionHistory)
       ? learningProgress.teachingSessionHistory
       : [];
-    const archivedTeachingSessionIds = new Set(
+    const archivedTeachingSessionIds = new Set<string>(
       teachingHistory
-        .map((entry) => typeof entry?.teachingSessionId === 'string' ? entry.teachingSessionId : '')
+        .map((entry) => typeof entry?.teachingSessionId === 'string' ? String(entry.teachingSessionId) : '')
         .filter(Boolean)
     );
     const teachingSessionId = requestedTeachingSessionId || currentTeachingSessionId;
     if (!teachingSessionId) {
       return res.status(404).json({ success: false, error: '当前虚拟会话尚未绑定 Learn 会话' });
     }
-    if (requestedTeachingSessionId && requestedTeachingSessionId !== currentTeachingSessionId && !archivedTeachingSessionIds.has(requestedTeachingSessionId)) {
-      return res.status(403).json({ success: false, error: '该授课会话不属于当前虚拟会话的教学历史' });
-    }
 
     const teachingSession = await teachingSessionRepository.getById(String(teachingSessionId));
     if (!teachingSession) {
       return res.status(404).json({ success: false, error: '授课会话不存在' });
+    }
+    /* 延伸课/复习课不会进 stageResults.teachingSessionHistory，但同一虚拟会话同一路径下
+       的课堂仍是本会话的真实课堂（#124 实测：按 teachingSessionId 打开延伸课曾 403）。 */
+    if (!canReadTeachingSession({
+      requestedId: String(teachingSessionId),
+      currentId: currentTeachingSessionId,
+      archivedIds: archivedTeachingSessionIds,
+      requestedPathId: teachingSession.learningPathId,
+      sessionPathId: session.learningPathId,
+      requestedUserId: teachingSession.userId,
+      sessionUserId: session.userId,
+    })) {
+      return res.status(403).json({ success: false, error: '该授课会话不属于当前虚拟会话的教学历史' });
     }
 
     res.json({
@@ -742,6 +795,8 @@ router.get('/sessions/:sessionId/teaching-detail', async (req: Request, res) => 
         endTime: teachingSession.endTime,
         duration: teachingSession.duration,
         status: teachingSession.status,
+        /** 课堂类型（tutor/review/extension）：座舱需与正课区分，复习/延伸课不结算任务 */
+        mode: teachingSession.mode,
         messages: teachingSession.messages,
         state: teachingSession.teachingState || {},
         knowledgePoints: teachingSession.knowledgeState,

@@ -59,27 +59,30 @@ hljs.registerAliases(['c++'], { languageName: 'cpp' });
 hljs.registerAliases(['txt', 'text'], { languageName: 'plaintext' });
 import DOMPurify from 'dompurify';
 import { buildAiContentSanitizeConfig } from '@/utils/sanitize-config';
+import { normalizePipeTables } from '@/utils/markdownTables';
+import { normalizeMermaidLabels } from '@/utils/mermaidCode';
+import { useIsDark } from '@/composables/useIsDark';
+import { ensureMermaidConfig } from '@/utils/mermaidTheme';
 
-// mermaid 体积大且仅在出现图表时才需要，按需动态加载（模块级单例，initialize 只执行一次）。
+const isDark = useIsDark();
+
+// mermaid 体积大且仅在出现图表时才需要，按需动态加载（模块级单例）。
 // 加载失败时重置 promise 允许下次重试，否则 rejected promise 会永久缓存，
 // 后续所有图表渲染全部跳过（弱网首屏失败 = 整场会话图表报废）。
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
 function loadMermaid() {
   if (!mermaidPromise) {
-    mermaidPromise = import('mermaid').then((mod) => {
-      const mermaid = mod.default;
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: 'default',
-        securityLevel: 'strict',
-      });
-      return mermaid;
-    }).catch((error) => {
+    mermaidPromise = import('mermaid').then((mod) => mod.default).catch((error) => {
       mermaidPromise = null;
       throw error;
     });
   }
-  return mermaidPromise;
+  return mermaidPromise.then((mermaid) => {
+    // 与课堂共用同一份配置守卫：明暗切换、以及 TeachingDiagram 的自然尺寸配置
+    // 交替渲染时，都会按完整签名重新 initialize。
+    ensureMermaidConfig(mermaid, { dark: isDark.value, lightTheme: 'default' });
+    return mermaid;
+  });
 }
 
 const props = defineProps<{
@@ -116,25 +119,29 @@ md.use(texmath, { engine: katex, delimiters: ['dollars', 'brackets'] });
 
 function postProcessMermaid(html: string): string {
   return html
-    .replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g, '<div class="mermaid">$1</div>')
-    .replace(/<pre class="mermaid-code">([\s\S]*?)<\/pre>/g, '<div class="mermaid">$1</div>');
+    .replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g, (_m, code: string) => `<div class="mermaid">${normalizeMermaidLabels(code)}</div>`)
+    .replace(/<pre class="mermaid-code">([\s\S]*?)<\/pre>/g, (_m, code: string) => `<div class="mermaid">${normalizeMermaidLabels(code)}</div>`);
 }
 
 // 串行化渲染，避免内容快速变化时并发 mermaid.run 操作同批节点
 let mermaidRunQueue: Promise<void> = Promise.resolve();
 
+type MermaidEl = HTMLElement & { __mermaidSrc?: string };
 async function renderMermaidDiagrams() {
   const host = rendererRef.value;
   if (!host) return;
-  const mermaidElements = host.querySelectorAll('.mermaid');
+  const mermaidElements = Array.from(host.querySelectorAll<MermaidEl>('.mermaid'));
   if (mermaidElements.length === 0) return;
+  for (const el of mermaidElements) {
+    if (!el.__mermaidSrc && el.textContent) el.__mermaidSrc = el.textContent;
+  }
 
   mermaidRunQueue = mermaidRunQueue.then(async () => {
     if (!rendererRef.value) return; // 组件已卸载
     try {
       const mermaid = await loadMermaid();
       if (!rendererRef.value) return;
-      await mermaid.run({ nodes: Array.from(mermaidElements) as HTMLElement[] });
+      await mermaid.run({ nodes: mermaidElements });
     } catch (e) {
       console.warn('Mermaid render failed:', e);
     }
@@ -142,14 +149,31 @@ async function renderMermaidDiagrams() {
   return mermaidRunQueue;
 }
 
+/** 明暗切换：Mermaid 的 SVG 主题不会自动更新，把源码放回占位后重画 */
+async function rerenderForTheme() {
+  const host = rendererRef.value;
+  if (!host) return;
+  for (const el of host.querySelectorAll<MermaidEl>('.mermaid')) {
+    if (!el.__mermaidSrc) continue;
+    el.removeAttribute('data-processed');
+    el.textContent = el.__mermaidSrc;
+  }
+  await nextTick();
+  await renderMermaidDiagrams();
+}
+
 const renderedHtml = computed(() => {
-  const raw = md.render(props.content ?? '');
+  const raw = md.render(normalizePipeTables(props.content ?? ''));
   return sanitizeHtml(postProcessMermaid(raw));
 });
 
 watch(renderedHtml, async () => {
   await nextTick();
   await renderMermaidDiagrams();
+});
+
+watch(isDark, () => {
+  void rerenderForTheme();
 });
 
 onMounted(async () => {
@@ -162,9 +186,11 @@ onMounted(async () => {
 /* 登记例外：本组件是自包含的 GitHub 风格 Markdown 阅读主题（浅色正文 #1f2328 / 发丝线 #d0d7de /
    深色块 #161b22 + 成对的 [data-theme='dark'] 覆写）。字面量为该主题的成对取值，
    改成 --mk-* 会改动全部 AI 内容面的观感（墨色/线色的色相偏移），超出机械合规范围，
-   保留并在此登记；交互色（链接蓝）除外——蓝是全站唯一交互色，已归 --mk-blue。 */
+   保留并在此登记；交互色（链接蓝）除外——蓝是全站唯一交互色，已归 --mk-blue。
+   字体不属该主题登记范围：2026-10-23 用户「全站字体检查」——正文本该跟全站 --mk-sans，
+   代码块跟全站 --mk-mono（此前正文 -apple-system / 代码 SFMono，等于第三、第四套字体）。 */
 .markdown-renderer {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--mk-sans);
   font-size: 16px;
   line-height: 1.8;
   color: #1f2328;
@@ -243,7 +269,7 @@ onMounted(async () => {
   font-size: 100%;
   background-color: transparent;
   color: #e6edf3;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: var(--mk-mono);
 }
 
 .markdown-renderer :deep(code) {
@@ -252,7 +278,7 @@ onMounted(async () => {
   font-size: 85%;
   background-color: rgba(175, 184, 193, 0.2);
   border-radius: var(--mk-radius-sm);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: var(--mk-mono);
 }
 
 .markdown-renderer :deep(blockquote) {

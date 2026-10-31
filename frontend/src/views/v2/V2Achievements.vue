@@ -1,6 +1,8 @@
 <template>
-  <CapabilityShell title="成就" description="查看你的学习里程碑，每一次小进步都算数。">
-    <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题 + 说明） -->
+  <!-- 页头副文「查看你的学习里程碑，每一次小进步都算数。」已撤（2026-10-29 全站副文审计）：
+       标题「成就」+ 概览行的 N/M 与成就卡本身就说明了这页是什么，副文只是再讲一遍 -->
+  <CapabilityShell title="成就">
+    <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题） -->
     <div class="ach__body">
       <!-- 加载中 -->
       <div v-if="loading" class="ach__loading">
@@ -84,7 +86,7 @@
 
             <span class="ach-card__icon" :class="iconCls(a)" aria-hidden="true"><component :is="achIconOf(a)" /></span>
             <strong class="ach-card__name">{{ a.name }}</strong>
-            <p class="ach-card__desc">{{ descText(a) }}</p>
+            <p class="ach-card__desc">{{ a.description }}</p>
             <span class="ach-card__state" :class="{ 'ach-card__state--on': a.unlocked }">
               {{ stateText(a) }}<span v-if="a.unlocked && formatDate(a.earnedAt)" class="ach-card__date"> · {{ formatDate(a.earnedAt) }}</span>
             </span>
@@ -228,11 +230,6 @@ function fmtNum(n: number): string {
 function progressPct(a: Achievement) {
   const p = progressOf(a);
   return p.percentage ?? (p.total ? Math.round((p.current / p.total) * 100) : 0);
-}
-
-/* 服务端成就条件含内部缩写 KTL（知识掌握度），直出前补全中文释义 */
-function descText(a: Achievement): string {
-  return String(a.description || '').replace(/KTL/g, '知识掌握度（KTL）');
 }
 
 const visible = computed(() => {

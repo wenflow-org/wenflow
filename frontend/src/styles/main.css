@@ -13,6 +13,9 @@
 /* 核心设计系统 */
 @import './design-system.css';
 
+/* 自绘下拉：跨 admin / 用户 / V2 三端共用（只含 select/listbox 外壳与 autofill） */
+@import './mk-select.css';
+
 /* Admin 体系 B 兼容映射（admin-surface.css 收敛为 :root 映射，见该文件） */
 @import './admin-surface.css';
 
@@ -382,7 +385,7 @@
   --mk-col-actions-wide: 120px;  /* 操作列：2-3 按钮 / 含 ⋯ 菜单 */
   --mk-col-flex-min: 180px;      /* 弹性列 min（≈12-16 个中文字符） */
   --mk-col-flex-max: 720px;      /* 弹性列 max（宽屏防白区，超出即 ellipsis） */
-  --mk-cell-main-max: 260px;     /* mk-cell-main 主行截断上限（原散落 260px 上移为 token） */
+  --mk-cell-main-max: 300px;     /* mk-cell-main 主行截断上限（2026-10-24 260→300：fixed 列宽下主列被过早截断） */
   --mk-close-bg: #f0f2f5;        /* 抽屉/弹窗关闭按钮背景（原散落在 3 个文件硬编码） */
   --mk-back-color: var(--mk-blue); /* 返回按钮文字色 */
 
@@ -458,8 +461,12 @@
 /* ========================================
    原生控件基座：未显式声明 color 的 <button> 在浅色下取 UA buttontext（纯黑），
    深底不可读；统一继承父级文字色（组件仍可自行覆盖）。
+   字体同理：浏览器给 button/input/select/textarea 默认 `font: 400 13.33px Arial`，
+   不写 font-family 的地方会冒出第三套字体（2026-10-23 用户「全站字体检查」：
+   编排图节点名、Skill 设计页左侧页签、图谱分段钮、toast 关闭钮都中了这一条）。
    ======================================== */
 button { color: inherit; }
+button, input, select, textarea, optgroup { font-family: inherit; }
 html.dark { color-scheme: dark; }
 
 /* ========================================

@@ -87,4 +87,24 @@ describe('模拟时钟接线审计（防退化）', () => {
     expect(read('services/ai-teaching/teaching-classroom-flow.ts'))
       .toMatch(/occurredAt: simulatedNowOr\(\)\.toISOString\(\)/);
   });
+
+  it('后台执行链接线（2026-10-29 审计 M-18/M-15 回归守卫）', () => {
+    // M-18：完课续章是课后即发即忘的后台语义，必须经 runBackgroundTask 剥离请求级
+    // abortSignal（acp-context 把 res('close') 接到 abort，响应一结束 scenario-designer
+    // 调用即被连带取消）；不得退回裸 `void import(...)` 派发。
+    const lifecycle = read('services/ai-teaching/teaching-session-lifecycle.ts');
+    expect(lifecycle).toMatch(/runBackgroundTask\('story-chapter\.on-session-completed'/);
+    expect(lifecycle).not.toMatch(/void import\('\.\.\/virtual-lab\/story-chapter\.service'\)/);
+
+    // M-15①：autopilot 执行主体按会话/画像解析并叠绑模拟钟（否则链内 simulatedNowOr()
+    // ——memory_traces 回写、review:completed 事件 occurredAt 入队——落真实墙钟）
+    const autopilot = read('virtual-lab/autopilot.service.ts');
+    expect(autopilot).toMatch(/resolveSessionSimulatedNow/);
+    expect(autopilot).toMatch(/runWithSimulatedClock/);
+
+    // M-15②：review:completed 消费者按实例当前模拟时刻叠绑模拟钟（未启用 → null 直调）
+    const consumer = read('services/learner/ReviewCompletedConsumer.ts');
+    expect(consumer).toMatch(/resolveUserSimulatedNow/);
+    expect(consumer).toMatch(/runWithSimulatedClock/);
+  });
 });

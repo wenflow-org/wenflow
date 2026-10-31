@@ -2,7 +2,11 @@
 /**
  * 设计系统守卫（ADMIN_PAGE_TEMPLATES.md 阶段 0 门禁）
  *
- * 十九条规则（下列 1–8 逐条展开；9 起为后续增补，其约定集中记在文末段落里）：
+ * 二十条规则（下列 1–8 逐条展开；9 起为后续增补，其约定集中记在文末段落里）：
+ * 20) 页面 scoped 不得把 --min 空态覆写成贴顶（place-content/align-content: start）
+ *     —— 全站空态口径 = 「吃掉所在卡/页剩余高度 + 居中」，共享层给 flex:1 + min-height:0，
+ *        居中由 .mk-empty--min 的 place-content:center 提供；页面把它改成 start 就退回
+ *        「文案贴顶 + 卡底一大片空白」（2026-10-24 逐页审计实测公告页签 上89 / 下545）。
  *  1) mk- 前缀类禁止在页面 scoped 内定义
  *     —— mk- 前缀 = 全局原语，只有 src/styles/*.css（含 mk-primitives.css）与原语组件可以定义。
  *        在页面里定义会让"全局原语"事实上分裂成每页一套（审计 §附 A #13）。
@@ -391,6 +395,7 @@ const overrides = [] // 信息：页面对既有原语的局部覆写
 const nonScopedDefs = [] // 信息：非 scoped 块里定义的 mk- 类
 const ghosts = [] // 规则 2
 const handRolledEmpty = [] // 规则 4
+const emptyMinTopPinned = [] // 规则 20：把 --min 空态覆写成贴顶（2026-10-24 增）
 const handRolledLoading = [] // 规则 5
 const handRolledSkeleton = [] // 规则 6
 const deadClasses = [] // 规则 7
@@ -598,6 +603,20 @@ for (const abs of vueFiles) {
     for (const m of tpl.matchAll(/class="([^"]*\bmk-empty\b[^"]*)"/g)) {
       if (/(^|\s)mk-empty--line(\s|$)/.test(m[1])) continue
       handRolledEmpty.push({ file: relPath, cls: m[1] })
+    }
+    // 规则 20：页面 scoped 不得把 --min 空态覆写成贴顶（2026-10-24 增，硬失败无基线）
+    //   全站空态口径 = 「吃掉所在卡/页的剩余高度 + 居中」：共享层给 flex:1 + min-height:0，
+    //   垂直居中由 .mk-empty--min 的 place-content:center 提供。任何页面的
+    //   `place-content: start` / `align-content: start` 覆写都会让它退回「文案贴顶 + 卡底一大片空白」
+    //   ——2026-10-24 逐页审计实测公告页签被这行覆写成上 89px / 下 545px，与全站形态冲突。
+    //   需要「贴顶」这一形态时改的是共享口径，不是在页面里静默改掉它。
+    for (const { scoped, css } of styleBlocks(text)) {
+      if (!scoped) continue
+      for (const m of css.matchAll(/([^{}]*\bmk-empty--min\b[^{}]*)\{([^}]*)\}/g)) {
+        const [, sel, body] = m
+        const hit = body.match(/(place-content|align-content)\s*:\s*start/)
+        if (hit) emptyMinTopPinned.push({ file: relPath, sel: sel.trim().replace(/\s+/g, ' '), prop: hit[1] })
+      }
     }
     // 规则 5：页面模板不得手写加载态（自建 spinner 容器，或元素内的「加载中…」文案）
     //   文案检测要求前面出现过 '>' 且中间无 '<' → 只认元素文本，不会误伤
@@ -1243,6 +1262,14 @@ if (ghosts.length) {
   console.log(`\n✖ 规则 2：模板引用了零定义的 mk-* 类（${ghosts.length} 处）`)
   console.log('  这些类看起来像设计系统原语，实际渲染成无样式元素。')
   for (const g of ghosts) console.log(`    ${g.file}  .${g.cls}`)
+}
+
+if (emptyMinTopPinned.length) {
+  failed = true
+  console.log(`\n✖ 规则 20：页面把 --min 空态覆写成贴顶（${emptyMinTopPinned.length} 处）`)
+  console.log('  空态口径 = 吃掉所在卡/页剩余高度 + 居中（.mk-empty--min 的 place-content: center）。')
+  console.log('  覆写成 start 会让它退回「文案贴顶 + 卡底一大片空白」。需要新形态请改共享口径。')
+  for (const v of emptyMinTopPinned) console.log(`    ${v.file}  ${v.sel}  → ${v.prop}: start`)
 }
 
 if (handRolledEmpty.length) {

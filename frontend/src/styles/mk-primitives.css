@@ -82,6 +82,24 @@
   overflow-y: auto;
 }
 
+/* 窄屏：fill 布局退回整页滚动（2026-10-21 全 admin 走查）。
+   视口变窄后 KPI 卡会竖排成 4–6 行，把 flex 内的列表卡压到 0 高——卡头与分页器还在，
+   表格行却整块被裁剪（People / 执行日志 / Skill 列表实测卡高 191/183/2px）。
+   窄屏下让页面自身滚动、卡片按内容增高；嵌套的 fill 宿主（People 内嵌 Users、
+   运营中心内嵌各页签）同样解除高度约束，否则内层仍在 0 高窗口里自滚。 */
+@media (max-width: 900px) {
+  /* !important：宿主页（People / ApiConfig / OpsHub）与嵌入子页各自在 scoped CSS 里
+     用同特异度规则锁高度，加载顺序晚于本文件；这里必须压过它们，窄屏才不会留下
+     0 高窗口或整张卡落在可视区外。 */
+  .mk-page--fill { height: auto !important; min-height: 0 !important; overflow-y: auto !important; }
+  .mk-page--fill .mk-page--fill { flex: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
+  .mk-page--fill .mk-card--fill { flex: none !important; min-height: 0 !important; }
+  .mk-card--fill > .mk-table-scroll,
+  .mk-card--fill > .log-body,
+  .mk-card--fill > .ss-body,
+  .mk-card--fill > .sk-grid { flex: none !important; min-height: 0 !important; max-height: none !important; }
+}
+
 /* ----- 状态条（每页开头一行） -----
    例外授权：ExecLogs 终端页自建 .log-status（规格一致的本地副本，内边距略大以容纳筛选区），
    不再回归本类，属登记在案的状态条例外形态 */
@@ -195,6 +213,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
 /* 状态条 meta 语义着色（成功率红/琥珀等；Orchestrator 曾页面私有，全局化） */
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
 .mk-status__meta--warn { color: var(--mk-amber, #d97706); font-weight: 700; }
+.mk-status__meta--ok { color: var(--mk-green, #16a34a); font-weight: 700; }
 /* 状态条内的「筛选生效中」徽章 + 清除按钮（原 ExecLogs 页内私有，收敛为全局：
    结构上它们是 .mk-status 的组成部分，任何带筛选的页头都会需要）。 */
 .mk-status__filter {
@@ -410,7 +429,18 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--mk-line);
-  flex-wrap: wrap;
+  /* 单行工具条（2026-10-27 表头复核）：此前 flex-wrap: wrap 时，筛选多的页（用户 /
+     审计日志）右组被挤到第二行左边缘，右边空一大片（实测卡头 97px vs 其他页 57px）。
+     现在右组恒在同一行贴右，左组自己内部折行（.mk-filter 自带 flex-wrap）。
+     窄屏（≤900）恢复折行，否则右组会被左组挤没。 */
+  flex-wrap: nowrap;
+}
+/* 左组折成两行时（用户 / 审计日志在 1280 有 7 枚 chip），右组不跟着垂直居中——
+   居中会让它悬在两行 chip 的中缝（实测搜索框 y=169，上行 chip 132、下行 180），
+   读起来像第三个孤岛。改为与第一行 chip 同一基线，折下来的 chip 在它下面继续排。 */
+.mk-card__head:has(> .mk-filter) { align-items: flex-start; }
+@media (max-width: 900px) {
+  .mk-card__head { flex-wrap: wrap; }
 }
 /* ----- 列表卡头统一语法（2026-10-05 教学组六页同一槽位序，判例=教学会话；
         2026-10-15 用户拍板「列表统一设计，搜索放右侧」——搜索由左组移到右组首位）-----
@@ -428,7 +458,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
    「完成度分布」因文案更短又落到 x=1009（2026-09-29 走查：位置哪里的都有）。
    首个元素吃掉全部剩余空间后，尾部元素自然贴右且彼此只隔 gap；
    页面在尾部元素上写的 margin-left:auto 变成空操作（无剩余空间可分），无需逐页清理。 */
-.mk-card__head > :first-child { flex: 1 1 auto; }
+.mk-card__head > :first-child { flex: 1 1 auto; min-width: 0; }
 /* 无标题的纯工具栏卡头（如成就解锁记录：头内只有右组）：首个子元素就是 .mk-card__head-right
    时不能被上面的 flex:1 拉伸——否则右组吃满整行、内部搜索/控件退成左对齐（内容贴左，
    与「右组贴右缘」的语义相反）。改为不伸张 + margin-left:auto 顶到右缘。 */
@@ -440,7 +470,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 /* 卡内小字注解（图表/排行无数据时的说明行）。
    此前 TokenCost.vue 4 处使用但全局零定义，渲染成无样式裸 <p>（视觉审计 附 A #7）。 */
 .mk-card__note { margin: 0; padding: 8px 2px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.mk-card__head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.mk-card__head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
 /* 卡头右组的主操作按钮与筛选控件（输入框/下拉/pills）同高：
    原来按钮 34.8px、输入框 41px，同一条工具栏高矮不齐；stretch 到行高即与最高控件齐平。 */
 .mk-card__head-right .mk-btn { align-self: stretch; }
@@ -475,6 +505,17 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   font-variant-numeric: tabular-nums;
   transition: background 0.12s, color 0.12s;
 }
+/* 表头行高统一 44px（2026-10-27 表头复核）：可排序列里含 24px 的排序按钮，
+   非排序列只有文字行盒——同一批页面量出 41 / 45 / 46 三档，切页时表头一跳一跳。
+   固定高度后，有没有排序列都是同一条基线，40px 行盒 + 上下 2px 由内容居中承担。 */
+.mk-table thead th { height: 44px; }
+/* 中宽档统一收单元格内衬（原先目标对话 / 虚拟学习者 / Skill 三页各写一份同样的
+   @media(max-width:1599px) 覆盖，其余页 16px）——表格页同一宽度下左右内衬必须一致，
+   否则同样的列数在不同页里疏密不同。 */
+@media (max-width: 1599px) {
+  .mk-table th,
+  .mk-table td { padding-inline: 12px; }
+}
 
 /* ----- 可排序表头（useTableSort） -----
    整格可点（th 上的 @click）+ 内层按钮负责键盘/AT，箭头由 aria-sort 驱动。
@@ -507,11 +548,13 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
   border-bottom: 5px solid currentColor;
-  /* 非排序列不显示箭头（原型 sortmark 仅活跃列可见）；hover 给 0.35 可发现性 */
-  opacity: 0;
+  /* 可排序列常驻淡箭头（2026-10-27 表头复核）：原为 opacity: 0、只悬停可见 0.35——
+     用户在表头扫一眼看不出哪列能排，只能靠一个个点过去试。成熟体系（Carbon / Ant）
+     都常驻排序指示器：静止即淡显，悬停加重，激活转主色。 */
+  opacity: 0.28;
   transition: opacity 0.12s;
 }
-.mk-table th.mk-th--sortable:hover .mk-th__caret { opacity: 0.35; }
+.mk-table th.mk-th--sortable:hover .mk-th__caret { opacity: 0.6; }
 .mk-table th.mk-th--sortable[aria-sort='ascending'] .mk-th__caret,
 .mk-table th.mk-th--sortable[aria-sort='descending'] .mk-th__caret {
   opacity: 1;
@@ -534,6 +577,13 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 }
 .mk-table tr:last-child td { border-bottom: none; }
 .mk-table tbody tr { transition: background 0.12s; }
+/* 行高下限：主行 + 副行（.mk-cell-main + .mk-cell-sub）是多数表的标准形态，
+   但副行按数据条件渲染——短标题没有副行时整行只剩一行文字，同一张表里相邻行
+   高低差 15px（2026-10-26 有数据走查：目标对话 4 行 49px、11 行 64px，看起来像排版坏了）。
+   给行一个下限，内容多少都不塌；真实多行内容仍可把行撑高。
+   密度档跟随全站：标准 64 / 紧凑 48。 */
+.mk-table tbody td { height: 64px; }
+html[data-density='compact'] .mk-table tbody td { height: 48px; }
 .mk-table tbody tr:hover { background: var(--mk-table-row-hover-bg); }
 .mk-table--click tbody tr { cursor: pointer; }
 /* 行点击契约的键盘半边（此前 GC 页私有 focus-visible 拷贝，2026-10-03 并入）：
@@ -674,11 +724,19 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-table-scroll { overflow-x: auto; }
 .mk-table-scroll .mk-table th { position: sticky; top: 0; z-index: 1; }
 
-.mk-cell-main { display: grid; gap: 1px; min-width: 0; }
+.mk-cell-main { display: grid; gap: 1px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .mk-cell-main strong { display: block; max-width: var(--mk-cell-main-max); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mk-cell-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 数字列：不换行、右对齐、不被挤压（固定列宽规范） */
-.mk-num { font-family: var(--mk-mono); font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
+.mk-cell-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 副行 = 次级标识（邮箱 / 短 id）+ 行内备注（如「测试」）。
+   备注放副行而不放姓名行：窄身份列里它会吃掉 50px 姓名宽度（2026-10-24 用户走查
+   「几个页面的 pill 都把字体压住了」的修法）。 */
+.mk-cell-subline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mk-cell-subline > .mk-cell-sub { min-width: 0; }
+.mk-cell-subline > .mk-badge { flex: none; }
+/* 数字列：不换行、右对齐、不被挤压（固定列宽规范）。
+   字体跟页面正文走——数字对齐由 tabular-nums 保证，不需要第二套等宽字体；
+   等宽只留给 id / 代码 / HTTP 方法这类机器串（2026-10-23 用户走查「整那么多不一样字体」）。 */
+.mk-num { font-size: var(--mk-fs-body); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 48px; }
 /* 数字列表头必须显式右对齐：.mk-table th 的 text-align:left（特异性 0,1,1）压过 .mk-num（0,1,0），
    否则表头靠左、数字靠右各站一边——全站所有 <th class="mk-num"> 都受影响。 */
 .mk-table th.mk-num { text-align: right; }
@@ -687,11 +745,30 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    挤进邻列的 padding——多个数字列并排时列间隙看起来忽宽忽窄。 */
 .mk-table--fixed .mk-num,
 .mk-table--fixed .mk-actions { min-width: 0; }
-.mk-na { color: var(--mk-faint); }
-/* 操作列：不换行、不被挤压 */
-.mk-actions { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; min-width: 72px; }
+/* 空值占位（—）的唯一形态：faint 色、常态字重、继承所在单元格字号。
+   2026-10-27 用户「这种横线都不一样」：此前教学会话的时长空值走 <b>（700 粗体 + 正文色），
+   其它页是单字重 mk-na——同一条横线两种粗细/颜色。空值一律用 .mk-na，不得套 <b>/<strong>，
+   也不得在页面里另写 width/color。 */
+.mk-na {
+  color: var(--mk-faint);
+  font-weight: 400;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+/* 表格里可能落在 <b> / .ul-ps b 内：提高一级特异性，保证空值永远是常态字重 */
+.mk-table .mk-na { font-weight: 400; }
+/* 操作列：全站同一列宽 / 右对齐 / 控件间距（2026-10-27 用户「操作列各自为战」）。
+   页面不再各写 gc-/oc-/lc-/mr-c-act 宽度。 */
+.mk-c-act { width: 140px; }
+/* 操作列：不换行、不被挤压；可见动作与 ⋯ 垂直居中 */
+.mk-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; white-space: nowrap; min-width: 72px; }
+/* 表格行内文字动作：比卡头文字链更紧的内衬（表格里可点区域不宜占满 16px 横距），
+   使「详情 / 干预 / 重试生成」都能落在统一 140px 操作列内。 */
+.mk-actions .mk-link { padding-inline: 6px; }
 .mk-actions--left { justify-content: flex-start; }
 .mk-actions .mk-menu__btn { flex-shrink: 0; }
+/* 带图标的一级文字动作（如虚拟学习者的运行/暂停）：图标与文字保持 4px 间距 */
+.mk-actions .mk-link svg { margin-right: 4px; }
 
 /* ----- 列宽工具类（ADMIN_COLUMN_WIDTH_SPEC §3.1） -----
    只写宽度 + 截断行为；字体/对齐仍归 .mono/.mk-num/.mk-badge，职责不重叠。
@@ -767,6 +844,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-badge--info { background: var(--mk-badge-info-bg); color: var(--mk-badge-info-fg, var(--mk-blue)); }
 /* 紧凑变体：行内小标签（10.5px / 1px 8px），替代各页面散落的 gc-tag/ts-tag/ul-tag */
 .mk-badge--sm { font-size: var(--mk-fs-micro); padding: 1px 8px; letter-spacing: 0.03em; }
+/* 测试/审计账号备注：中性 slate（2026-10-24 语义统一——「测试只是备注」不是告警，
+   原先 amber 与「需关注」同色，列表里整列像在报错；与虚拟学习者的虚线灰用实线边框区分） */
+.mk-badge--test { background: var(--mk-surface-3); color: var(--mk-muted); border: 1px solid var(--mk-line); }
 /* 虚拟学习者标记：slate 灰 + 虚线边框（与测试 amber 区分） */
 .mk-badge--virtual { background: var(--mk-badge-virtual-bg); color: var(--mk-badge-virtual-fg); border: 1px dashed var(--mk-badge-virtual-line); }
 /* 管理员自身标记：蓝色实心 */
@@ -858,7 +938,10 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 }
 .mk-filter__input,
 .mk-filter__select {
-  padding: 7px 11px;
+  /* 上下内衬 5px（原 7px）：32 - 2×(5+1) = 20 ≥ 14px 字号 × 1.4 行高（19.6）。
+     7px 时内容盒只剩 16px，比行盒矮 3.6px，Chrome 对 select 的原生文本渲染会
+     裁掉字形下缘——2026-10-22 用户截图「筛选里面的字体显示不全」即此。 */
+  padding: 5px 11px;
   border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
@@ -887,8 +970,16 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-filter .mk-filter__input,
 .log-advpanel .mk-filter__input { min-width: 180px; }
 /* 2026-10-15 用户拍板：列表卡头搜索统一移到右组（.mk-card__head-right）首位。
-   搜索框不再落在 .mk-filter 语境里，需在此补同一 180px 下限（否则回落到 input 默认 ~20ch 的窄宽）。 */
-.mk-card__head-right .mk-search > .mk-filter__input { min-width: 180px; }
+   搜索框不再落在 .mk-filter 语境里，需在此补同一 180px 下限（否则回落到 input 默认 ~20ch 的窄宽）。
+   2026-10-27 表头复核：固定 180px 会把占位文本裁掉（目标对话页「搜索用户 / 邮箱 / 目标摘要」
+   需要 191px，实际显示成「…目标摘」）。改为按内容自适应（field-sizing: content，Chrome 123+），
+   下限提到 200px 覆盖最长占位、上限 320px 防长占位把工具条撑开；不支持该属性的浏览器
+   仍拿到 200px（比原来宽 20px，最长占位不再被裁）。 */
+.mk-card__head-right .mk-search > .mk-filter__input {
+  min-width: 200px;
+  max-width: 320px;
+  field-sizing: content;
+}
 /* 视图/筛选切换：**独立描边胶囊**（原型 .chips / .chip），不再是灰底分段控件。
    2026-09-26 曾定「顶层切换走分段控件（灰轨+白片）」，本次按 newui「UI-分支优化设计」
    原型改回胶囊：原型里根本没有分段轨道，切换控件一律是描边胶囊（筛选）或下划线页签
@@ -896,6 +987,13 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    容器类名保持不变（25 个页面无需改标记）；页面里对 .mk-pills 写的 padding 随之失效，
    属预期（胶囊行不再有内衬）。 */
 .mk-pills { display: inline-flex; flex-wrap: wrap; gap: var(--mk-space-2); }
+/* 并排的两组胶囊（状态单选 + 标志多选，2026-10-27）：组间距必须明显大于组内间距，
+   否则一排同形胶囊里换组没人看得出来——行为差异只能靠点下去试。
+   发丝竖线是最低成本的边界；勾（✓）仍只在激活的开关上出现。 */
+.mk-pills + .mk-pills {
+  padding-left: 12px;
+  border-left: 1px solid var(--mk-line);
+}
 /* 页签语言分工（2026-09-26 钉死，2026-09-30 按原型修订）：
    ① 顶层视图/筛选切换 → .mk-pills（描边胶囊，如 People/GoalConversations 视图 pills）；
    ② 抽屉/弹窗**内部**内容分区 → 下划线式 tab（MkSubTabs/ts-tabs/pe-tabs 形态：底线+sticky），与胶囊是两种合法 genre，勿互改；
@@ -909,7 +1007,13 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   /* 描边胶囊 = 原型 .chip：底色与卡片同面（--mk-surface），靠 1px 发丝线定形 */
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
-  padding: 5px 12px;
+  /* 与工具条里的输入框/下拉同高（32px）：此前 pill 33px、pillselect 29px、input 32px，
+     同一条工具条上三种高度，行盒跟着最高的走，其余控件看着都在「浮」 */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
   border-radius: 999px;
   font: inherit;
   font-size: var(--mk-fs-micro);
@@ -923,6 +1027,11 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   color: var(--mk-blue);
   border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line));
 }
+/* 胶囊里的图标（多选开关激活时的勾、已应用视图的叉）：文字两侧各留 4px，
+   不靠源码里的空格排版（空格在不同字宽下会挤成 0 或撑开）。
+   计数徽章自己的 margin-left 不受影响。 */
+.mk-pill > svg { margin-right: 4px; }
+.mk-pill > svg:last-child { margin-right: 0; margin-left: 4px; }
 /* 激活 = 筛选生效：浅蓝底 + 主色字 + 主色描边（原型 .chip[aria-pressed=true]），
    不再用内描边单线——胶囊现在自带描边，激活要换的是「底 + 描边色」两个通道 */
 .mk-pill--active {
@@ -937,7 +1046,8 @@ html[data-theme='dark'] .mk-pill--active {
 }
 /* 筛选 pill 内的计数徽章：默认弱化，激活态跟随主色 */
 .mk-pill__count {
-  margin-left: 6px;
+  /* 与胶囊的 gap 4px 相加 = 视觉 6px。此前胶囊非 flex，靠 margin 单独让位 */
+  margin-left: 2px;
   padding: 0 6px;
   border-radius: 999px;
   background: var(--mk-surface-3);
@@ -952,9 +1062,82 @@ html[data-theme='dark'] .mk-pill--active {
 }
 html[data-theme='dark'] .mk-pill__count { background: var(--mk-surface-3); }
 
+/* ----- 胶囊内嵌下拉（.mk-pillselect，2026-10-27 改为自绘 listbox）-----
+   卡头里的「维度下拉」统一形态：外壳是 .mk-pill（描边胶囊），前面一枚浅灰维度名
+   （时间范围 / 节点 / 级别 / 状态），后面是深色粗体当前值 + ▾。
+
+   为什么不用裸 .mk-filter__select：裸下拉看不出「这一维是否偏离默认」——时间范围被改成
+   近 30 天，外观与「今天」一模一样，用户得点开才知道。胶囊内嵌下拉沿用 .mk-pill--active
+   的激活态（浅蓝底 + 主色描边），一维筛过就一眼可见；且与 chips 同为胶囊语言，
+   卡头里不再出现「胶囊 + 方框」两种控件形态。
+
+   为什么不再用透明原生 <select>：原生弹层由浏览器进程绘制，option 只能改文字色/底色，
+   改不了弹层的圆角、描边、行内边距、选中态——点开就是系统默认的蓝底白字菜单，
+   与页面其它浮层（列设置、行菜单）是两套语言（2026-10-27 用户「这个下拉，完全没有设计」）。
+   现在触发器是 button[role=combobox]，弹层是与 MkCols 同参数的自绘 listbox：
+   surface + 1px 发丝线 + shadow-pop + radius-xl，行内 hover、选中行勾选、键盘可操作。 */
+.mk-pillselect-wrap { position: relative; display: inline-flex; }
+.mk-pillselect {
+  /* 内衬比普通 pill 小：左侧维度名只需 2px 让位，右侧值自带 ▾ 的 16px 内衬。
+     高度/行盒继承 .mk-pill（32px），只覆盖左右内衬 */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 11px;
+  /* 整枚上限：长节点名/长动作名不许把胶囊撑成一条长条（值层另有 180px 截断，
+     但 flex 容器会按内容 max-content 撑开，上限必须落在胶囊本身上） */
+  max-width: 260px;
+}
+/* button 复位：.mk-pill 已给 border/background/font，这里只清掉 UA 的居中与最小宽 */
+.mk-pillselect { text-align: left; }
+/* 维度名：浅灰、常规字重——它是标签不是值，不能与右侧当前值抢层级 */
+.mk-pillselect__k { color: var(--mk-faint); flex: none; }
+/* 值盒：定位锚点，箭头绝对定位到右缘 */
+.mk-pillselect__pick { position: relative; display: inline-flex; align-items: center; min-width: 0; flex: 0 1 auto; }
+/* 可见文本层：宽度只由当前值决定，超长值 ellipsis + title 全值。
+   右内衬 16px 给 ▾ 让位。 */
+.mk-pillselect__txt {
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--mk-ink);
+  padding-right: 16px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* 激活态（= 该维偏离默认值）：整枚胶囊走 .mk-pill--active 的浅蓝底；
+   值本身也跟随主色，避免「底变了字没变」的半个激活态 */
+.mk-pill--active > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
+.mk-pillselect:hover .mk-pillselect__txt { color: var(--mk-blue); }
+.mk-pill--active:hover > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
+.mk-pillselect:focus-visible { outline: none; border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+.mk-pillselect__pick > svg {
+  position: absolute;
+  right: 0;
+  color: var(--mk-muted);
+  pointer-events: none;
+  transition: transform 0.15s ease;
+}
+/* 展开时箭头翻转：闭合 ▾ / 展开 ▴，状态不必靠弹层本身提示 */
+.mk-pillselect--open .mk-pillselect__pick > svg { transform: rotate(180deg); }
+
+html[data-density='compact'] .mk-pillselect { padding: 2px 7px 2px 10px; }
+html[data-density='compact'] .mk-pillselect__txt { font-size: 12px; }
+
+/* 卡头次级动作触发器（「筛选」弹层的按钮，2026-10-26 提升为共享）：
+   与「列」同为文字链 + 图标 —— 卡头右组是一排次级工具，同档才成组；
+   描边按钮（.mk-btn）留给页头主操作，两级层次才立得住。
+   提升前 ExecLogs/AuditLogs 各有一份 `.logs-adv-trigger` / `.al-adv-trigger`，
+   TeachingSessions 用的却是描边小按钮——同一语义两种档。 */
+.mk-adv-trigger { display: inline-flex; align-items: center; gap: 4px; }
+
 /* 搜索框清空按钮（输入有值时显示）：包一层 .mk-search 提供定位锚点 */
 .mk-search { position: relative; display: inline-flex; align-items: center; }
-.mk-search > .mk-filter__input { padding-right: 28px; }
+/* 清空按钮的右内衬只在有值时占用：无值时输入文本可多用约 12px 宽（2026-10-24 列表走查）。 */
+.mk-search--filled > .mk-filter__input { padding-right: 28px; }
 .mk-search__clear {
   position: absolute;
   right: 4px;
@@ -1021,7 +1204,12 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-link--muted { opacity: 0.55; }
 /* 表格用户格里的姓名 → 学习者详情（2026-10-18）：继承单元格排版，hover 才上色。
    整列姓名都染蓝会被读成「操作列」，所以常态保持正文色（spec §4：hover 只许变色/底/边）。 */
+/* 2026-10-24 用户走查「几个页面的 pill 都把字体压住了」：姓名是 <button> 时没有截断规则，
+   长名（e2e_long_…）按 max-content 撑出格子，后面的「测试」备注徽章叠在字上。
+   容器改 minmax(0,1fr) + 按钮自身 block/100%/ellipsis，与 .mk-cell-main strong 同契约。 */
 .mk-user-link {
+  display: block;
+  max-width: 100%;
   border: 0;
   background: transparent;
   padding: 0;
@@ -1030,6 +1218,9 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   color: inherit;
   text-align: left;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .mk-user-link:hover { color: var(--mk-blue); }
 /* 图标按钮：操作列高频操作改为 SVG 图标 + tooltip，节省列宽 */
@@ -1057,8 +1248,14 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 /* 右对齐可排序列：caret 绝对定位进 th 右内边距带——表头**文字**右缘与数据右缘对齐
    （判例=用户与学习者「路径 / 会话」：caret 占位使数字越过表头末字 12px，视觉读作错位）。
    锚定在 .mk-th__btn（relative）而非 th——th 在滚动表里是 sticky，改 relative 会碎吸顶 */
-.mk-table th.mk-th--right .mk-th__btn { position: relative; }
-.mk-table th.mk-th--right .mk-th__caret { position: absolute; right: -12px; top: 50%; transform: translateY(-50%); }
+.mk-table th.mk-th--right .mk-th__btn,
+.mk-table th.mk-num .mk-th__btn { position: relative; }
+/* 数字列同样按右对齐处理：隐藏态 caret 原占 8px 布局宽（border 4+4），
+   把表头文字整体左推 8px，与右侧数字错位（2026-10-24 记忆与复习走查）。 */
+/* 右对齐列的 caret 放在文字左侧：若放右侧，隐藏态虽不占布局，可见态仍会伸出
+   数值右缘 12px，读作「表头比数字更靠右」（2026-10-24 记忆与复习复核）。 */
+.mk-table th.mk-th--right .mk-th__caret,
+.mk-table th.mk-num .mk-th__caret { position: absolute; right: auto; left: -12px; top: 50%; transform: translateY(-50%); }
 .mk-empty--compact { padding: 24px 16px; }
 
 /* ----- 页面级视图切换页签（原型 .tabs）-----
@@ -1151,6 +1348,18 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-empty--min {
   min-height: var(--mk-empty-min-h, calc(100dvh - 230px));
   place-content: center;
+}
+/* fill 卡 / fill 页内的空态：直接吃掉剩余高度并在其中居中，不再走上面的视口常量。
+   视口常量按「顶栏 + 状态条 + 页脚 + 内衬」估算（≈230px），卡头/页签/筛选行越高就越不准，
+   窗口一矮就顶破下缘（AuditLogs 审核 #156 实测溢出 5px 被裁）。
+   本规则原是 AuditLogs 的页级补丁，因同一形态在多页复现（Skills/记忆与复习/目标对话/执行日志…）
+   提升为共享口径：宿主已是 flex 列，flex:1 + min-height:0 恒定不溢、也不依赖任何手工常量。
+   例外两处：① Announcements 页明确要求贴顶（用户「太靠下了」），页内覆盖为 start center；
+   ② display:contents 的包装器（ExecLogs 的 .exec-tabpanel）按 DOM 匹配不到本规则，页内自补。 */
+.mk-card--fill > .mk-empty--min,
+.mk-page--fill > .mk-empty--min {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ----- 加载态（统一形态：spinner + 文案）-----
@@ -1760,7 +1969,7 @@ html[data-theme='dark'] {
     --mk-col-actions-wide: 140px;
     --mk-col-flex-min: 220px;
     --mk-col-flex-max: 840px;
-    --mk-cell-main-max: 300px;
+    --mk-cell-main-max: 340px;
   }
   .mk-menu__btn { width: 30px; height: 30px; }
   .mk-filter__input,
@@ -1861,7 +2070,7 @@ html[data-theme='dark'] {
     --mk-col-actions-wide: 168px;
     --mk-col-flex-min: 240px;
     --mk-col-flex-max: 1000px;
-    --mk-cell-main-max: 360px;
+    --mk-cell-main-max: 400px;
   }
   /* 覆盖层专属（页面上不出现，故不占页面文本档位） */
   .mk-modal__panel { width: min(var(--mk-modal-w-xxl, 900px), 100%); }

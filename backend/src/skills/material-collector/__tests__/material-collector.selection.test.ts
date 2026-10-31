@@ -70,8 +70,8 @@ describe('selectDiversifiedSources（同 host cap）', () => {
 
 describe('detectQueryLanguage（检索语言缺省推断）', () => {
   it('CJK ≥2 判 zh；纯 ASCII 词判 en；其余不推断', () => {
-    expect(detectQueryLanguage('3-6岁儿童学习与发展指南')).toBe('zh');
-    expect(detectQueryLanguage('教育部 数学课程标准')).toBe('zh');
+    expect(detectQueryLanguage('3-6岁儿童学习与发展指南')).toBe('zh-CN');
+    expect(detectQueryLanguage('教育部 数学课程标准')).toBe('zh-CN');
     expect(detectQueryLanguage('Common Core State Standards Mathematics')).toBe('en');
     expect(detectQueryLanguage('12345')).toBeUndefined();
     expect(detectQueryLanguage('')).toBeUndefined();

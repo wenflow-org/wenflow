@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import prisma from '../../config/database';
 import { withTransaction } from '../../utils/with-transaction';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
@@ -22,6 +22,8 @@ import {
   TEACHING_OPERATION_LEASE_MS,
   TEACHING_OPERATION_RENEW_MS,
 } from '../../virtual-lab/lease-protocol';
+import { completeTeachingOperation } from './TeachingMessageIdempotencyService';
+import { recordSessionEvent } from './session-events.service';
 
 /**
  * 课堂操作租约（P2）：原为 30 分钟且无心跳——进程重启/请求挂起会把这个会话锁死很久
@@ -116,6 +118,21 @@ export interface TeachingSessionMessage {
    * "把文字关系摆成一条位置线"，这类空间关系 mermaid 的节点-边表达不了。
    */
   figures?: TeachingFigure[];
+  /**
+   * 出图来源与动机（2026-10-21）：区分「模型自己判断要画」与「编排层给了出图时机」，
+   * 并记下编排层的判定理由。评审时靠它回答「这张图为什么出现」；
+   * 模型自己给的理由在 `figure.why`，两者互不替代。
+   */
+  figureSource?: {
+    trigger: 'model' | 'opportunity' | 'board';
+    reason: 'ascii-structure' | 'position-description' | 'time-order' | 'structure-content' | 'task-structure' | 'recap-cadence' | null;
+    /** 编排层建议的图型（模型可改） */
+    kindHint: string | null;
+    /** 代码判据的一句话说明（谁让它画的） */
+    ruleWhy?: string | null;
+    /** 命中的原文片段（凭什么判它是出图时机） */
+    matched?: string[];
+  } | null;
 }
 
 /**
@@ -143,25 +160,36 @@ export interface TeachingDiagram {
 }
 
 /**
- * 位置线图（2026-09-27 双通道重构 Scope B）：空间位置关系的确定性渲染载荷。
- * 数值域由 skill normalizeFigure 统一推导（保证覆盖所有取值），前端只做坐标映射——
+ * 教学图（确定性 SVG 渲染载荷）：位置线 / 二维网格 / 命中矩阵 / 对照 / 象限 / 多对多 / 棋盘。
+ * 规格由 skill normalizeFigure 逐字段裁剪（白名单 + 上限），前端只做坐标计算——
  * 渲染是纯函数，无生成、无乱码、无联网。
  */
 export interface TeachingFigure {
   /** 归一化后恒为 'svg' */
   engine: string;
-  /** 归一化后恒为 'position-line'（v1 唯一图型） */
+  /** 图型：position-line / grid / matrix / compare / quadrant / bipartite / board / bins / balance / ladder */
   kind: string;
-  axis: {
+  /** 学科调色板（服务端按 subject 盖章）：只影响色相与材质，不改变几何与语义 */
+  palette?: string;
+  /** position-line 专用（kind='position-line' 时存在） */
+  axis?: {
     min: number;
     max: number;
     unit: string | null;
     ticks: Array<{ at: number; label: string | null }>;
   };
-  marks: Array<{ at: number; label: string; dir: 'right' | 'left' | 'none' }>;
-  spans: Array<{ from: number; to: number; label: string }>;
-  guides: Array<{ at: number; label: string | null }>;
+  marks?: Array<{ at: number; label: string; dir: 'right' | 'left' | 'none' }>;
+  spans?: Array<{ from: number; to: number; label: string }>;
+  guides?: Array<{ at: number; label: string | null }>;
+  /** 其余图型的规格（kind≠'position-line' 时存在） */
+  spec?: Record<string, unknown>;
+  /** 模型自己给的一句话出图理由（≤60 字，归一化保留）：为什么用这张图 / 为什么这个形状 */
+  why?: string | null;
   caption: string | null;
+  /** 2026-10-28 接线：这是任务级共享白板的快照，不是一次性配图；不计入会话图配额/同骨架去重 */
+  board?: boolean;
+  /** 白板版本号（同一块板 update 时递增，便于前端/复盘识别） */
+  boardRevision?: number;
 }
 
 export interface TeachingKnowledgePointState {
@@ -468,32 +496,56 @@ export class TeachingSessionRepository {
       teachingState: Record<string, any>;
     }
   ): Promise<TeachingSessionRecord> {
-    const updated = await prisma.teaching_sessions.updateMany({
-      where: {
-        id: sessionId,
-        status: 'initializing',
-        operationId,
-        operationKind: 'start'
-      },
-      data: {
-        status: 'active',
-        // 数据还债 B1（2026-10-08）：开场基线不再经 messages 大列中转（原先写列、
-        // 首回合惰性播种搬侧表）——直接落侧表，列保持 reserve 时的空数组不动。
-        knowledgeState: JSON.stringify(payload.knowledgeState),
-        teachingState: JSON.stringify(payload.teachingState),
-        operationId: null,
-        operationKind: null,
-        operationLeaseExpiresAt: null,
-        revision: { increment: 1 },
-        updatedAt: new Date()
+    // 原子化（2026-10-20）：状态转 active 与开场消息落侧表必须同事务——此前先更新行、
+    // 再 append 消息，后一步失败会留下「已开课但没有开场白」的半成品会话。
+    await withTransaction(async (tx) => {
+      const updated = await tx.teaching_sessions.updateMany({
+        where: {
+          id: sessionId,
+          status: 'initializing',
+          operationId,
+          operationKind: 'start'
+        },
+        data: {
+          status: 'active',
+          // 数据还债 B1（2026-10-08）：开场基线不再经 messages 大列中转（原先写列、
+          // 首回合惰性播种搬侧表）——直接落侧表，列保持 reserve 时的空数组不动。
+          knowledgeState: JSON.stringify(payload.knowledgeState),
+          teachingState: JSON.stringify(payload.teachingState),
+          operationId: null,
+          operationKind: null,
+          operationLeaseExpiresAt: null,
+          revision: { increment: 1 },
+          updatedAt: new Date()
+        }
+      });
+      if (updated.count !== 1) {
+        throw new TeachingSessionConflictError('课堂启动状态已变化，请重试', 'TEACHING_SESSION_STATE_CHANGED');
       }
-    });
-    if (updated.count !== 1) {
-      throw new TeachingSessionConflictError('课堂启动状态已变化，请重试', 'TEACHING_SESSION_STATE_CHANGED');
-    }
-    if (payload.messages.length > 0) {
-      await appendTeachingMessages(sessionId, payload.messages);
-    }
+      if (payload.messages.length > 0) {
+        await appendTeachingMessages(
+          sessionId,
+          payload.messages,
+          tx as unknown as TeachingMessageStoreClient
+        );
+      }
+
+      await recordSessionEvent({
+        sessionId,
+        kind: 'session.initialized',
+        actor: 'system',
+        status: 'ok',
+        revision: (await tx.teaching_sessions.findUnique({
+          where: { id: sessionId },
+          select: { revision: true },
+        }))?.revision ?? null,
+        payload: {
+          operationId,
+          openingMessages: payload.messages.length,
+          knowledgePoints: payload.knowledgeState.length,
+        },
+      }, tx as any);
+    }, { label: 'teaching.completeInitialization' });
 
     const session = await this.getById(sessionId);
     if (!session) throw new Error('会话不存在');
@@ -525,6 +577,49 @@ export class TeachingSessionRepository {
     return record ? mapRecordHydrated(record) : null;
   }
 
+  /**
+   * 本会话已落库的图（按图型计数）。
+   *
+   * 图型上限的判据必须取自**库**：2026-10-21 真课实测，会话上限 4 的一节课出了 6 张，
+   * 上限与「同骨架」两道闸门一次都没触发——回合内存里的消息快照不可靠，侧表才是权威。
+   */
+  async countFiguresByKind(sessionId: string): Promise<Record<string, number>> {
+    const rows = await prisma.teaching_session_messages.findMany({
+      where: { sessionId },
+      select: { payload: true },
+    });
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      const message = parseJsonSafe<TeachingSessionMessage | null>(row.payload, null);
+      const figures = Array.isArray(message?.figures) ? message.figures : [];
+      for (const figure of figures) {
+        const kind = String((figure as { kind?: string })?.kind || 'position-line');
+        counts[kind] = (counts[kind] || 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  /**
+   * 本会话已落库的图（原样返回 spec）。
+   *
+   * 会话上限与会话级去重也必须读这里，理由同上：回合内存里的消息快照在真课里与库不一致，
+   * 2026-10-22 复核 744 张图发现会话上限 4 一次未触发（单课最多 12 张）。
+   */
+  async listFigures(sessionId: string): Promise<TeachingFigure[]> {
+    const rows = await prisma.teaching_session_messages.findMany({
+      where: { sessionId },
+      select: { payload: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const figures: TeachingFigure[] = [];
+    for (const row of rows) {
+      const message = parseJsonSafe<TeachingSessionMessage | null>(row.payload, null);
+      if (Array.isArray(message?.figures)) figures.push(...message.figures);
+    }
+    return figures;
+  }
+
   async assertOwnership(sessionId: string, userId: string): Promise<TeachingSessionRecord> {
     const session = await this.getById(sessionId);
     if (!session) {
@@ -537,14 +632,14 @@ export class TeachingSessionRepository {
   }
 
   /**
-   * 调整建议处置埋点：记录学习者对「保留 / 稍后再看 / 预览」的轻动作。
+   * 调整建议处置埋点：记录学习者对「保留 / 稍后再看 / 预览 / 已采用」的动作。
    * 只追加 advisory.learnerResponse，不改任何执行语义（真调整动作走 replan 链）。
-   * 审计口径：建议生成后是「没处置 / 保留 / 推迟 / 预览过 / 真执行」，此前只可见最后一项。
+   * 审计口径：建议生成后是「没处置 / 保留 / 推迟 / 预览过 / 真执行」，此前只可见前四项。
    */
   async recordAdvisoryResponse(
     sessionId: string,
     userId: string,
-    action: 'keep' | 'later' | 'preview'
+    action: 'keep' | 'later' | 'preview' | 'adopt'
   ): Promise<{ status: 'ok' | 'not_found' | 'no_advisory'; advisory?: Record<string, any> }> {
     const session = await this.getById(sessionId);
     if (!session || session.userId !== userId) {
@@ -784,6 +879,16 @@ export class TeachingSessionRepository {
       userId?: string;
       markTaskInProgress?: boolean;
       allowedStatuses?: string[];
+      /**
+       * 幂等结算（2026-10-21）：与回合业务写入同事务把账本标 completed，
+       * 消除「commitTurnState 已提交、completeTeachingOperation 未落」的崩溃窗口。
+       * 由调用方提供对外的 result（重放时原样返回）。
+       */
+      settlement?: {
+        idempotencyKey: string;
+        result: Record<string, any>;
+        revision?: number | null;
+      } | null;
     }
   ): Promise<void> {
     await withTransaction(async (tx) => {
@@ -854,6 +959,30 @@ export class TeachingSessionRepository {
           }
         });
       }
+
+      // 幂等结算与业务同一事务：commitTurnState 与账本 completed 要么都落、要么都不落。
+      if (payload.settlement?.idempotencyKey) {
+        await completeTeachingOperation({
+          sessionId,
+          idempotencyKey: payload.settlement.idempotencyKey,
+          result: payload.settlement.result,
+          revision: payload.settlement.revision ?? null,
+        }, tx as unknown as import('./TeachingMessageIdempotencyService').TeachingOperationLedgerClient);
+      }
+
+      await recordSessionEvent({
+        sessionId,
+        kind: 'turn.committed',
+        actor: 'system',
+        status: 'ok',
+        revision: payload.settlement?.revision ?? null,
+        payload: {
+          messages: payload.messages.length,
+          knowledgePoints: payload.knowledgeState.length,
+          operationId,
+          idempotencyKey: payload.settlement?.idempotencyKey ?? null,
+        },
+      }, tx as any);
     });
   }
 
@@ -962,6 +1091,18 @@ export class TeachingSessionRepository {
     });
     if (updated.count !== 1) {
       throw new TeachingSessionConflictError('课堂状态已变化，请刷新后重试', 'TEACHING_SESSION_STATE_CHANGED');
+    }
+    const lifecycleKind = payload.status === 'paused'
+      ? 'session.paused'
+      : payload.status === 'completed' ? 'session.completed' : null;
+    if (lifecycleKind) {
+      await recordSessionEvent({
+        sessionId,
+        kind: lifecycleKind,
+        actor: 'user',
+        status: 'ok',
+        payload: { operationId, status: payload.status },
+      });
     }
   }
 
@@ -1372,6 +1513,56 @@ export class TeachingSessionRepository {
     });
   }
 
+  /**
+   * 直调 completeTask 后的台账补记（VL assisted/blackbox 共用）。
+   *
+   * 背景（2026-10-22 审计 P1-3）：VL 链先/后直接调 learningService.completeTask，
+   * 不经过 SessionFinalizationService 的 complete_task 分支，导致任务已 completed
+   * 但课堂台账 taskCompletion 永久停在 not_started（DB 593/597）。
+   *
+   * 这里复用正式台账的 claim/lease/completeFinalizationStep：
+   * - 不重复执行 completeTask（任务已完成）；
+   * - 写一条 action=complete_task 的 completed operation，台账与课堂终态一致；
+   * - 幂等键按来源固定，重复调用只会命中 completed。
+   */
+  async recordDirectTaskCompletion(
+    sessionId: string,
+    userId: string,
+    source: string,
+    expectedRevision?: number
+  ): Promise<'completed' | 'processing'> {
+    const session = await prisma.teaching_sessions.findUnique({
+      where: { id: sessionId },
+      select: { id: true, userId: true, revision: true, status: true, wrapup: true },
+    });
+    if (!session) throw new Error('会话不存在');
+    if (session.userId !== userId) {
+      throw new TeachingSessionConflictError('无权操作该课堂', 'TEACHING_SESSION_FORBIDDEN');
+    }
+    if (session.status !== 'completed' || !session.wrapup) {
+      throw new TeachingSessionConflictError('课堂尚未完成收束，无法补记任务结算', 'FINALIZATION_SESSION_NOT_CLOSED');
+    }
+
+    const operationKey = `direct-task-completion:${source}`;
+    const requestJson = JSON.stringify({ action: 'complete_task', source, mode: 'direct-task-completion' });
+    const requestHash = createHash('sha256').update(requestJson).digest('hex');
+    const claim = await this.claimFinalization(
+      sessionId,
+      'complete_task',
+      operationKey,
+      requestHash,
+      requestJson,
+      expectedRevision ?? session.revision
+    );
+    if (claim.status === 'claimed') {
+      await this.completeFinalizationStep(sessionId, operationKey, claim.leaseOwner, 'complete_task', {
+        taskCompletion: { status: 'completed', alreadyCompleted: true, source },
+      });
+      return 'completed';
+    }
+    return claim.status;
+  }
+
   async completeWithEvent(
     sessionId: string,
     idempotencyKey: string,
@@ -1482,6 +1673,19 @@ export class TeachingSessionRepository {
       if (completedOperation.count !== 1) {
         throw new FinalizationOperationError('课堂结束执行租约已失效', 'FINALIZATION_LEASE_LOST', 409, true, 'lease');
       }
+
+      await recordSessionEvent({
+        sessionId,
+        kind: 'session.completed',
+        actor: 'user',
+        status: 'ok',
+        payload: {
+          idempotencyKey,
+          wrapupSource: payload.wrapup ? (payload.wrapup as any).summarySource ?? null : null,
+          duration: payload.duration ?? null,
+          domainEvent: { type: event.type, id: event.id },
+        },
+      }, tx as any);
     });
   }
 

@@ -8,6 +8,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import AuditLogs from '../AuditLogs.vue';
+import { chooseFilter, filterOptions, filterValue } from './filter-controls';
+import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 
 const h = vi.hoisted(() => ({
   getLogs: vi.fn(),
@@ -100,7 +102,7 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(w.text()).not.toContain('user-op-1-1');
   });
 
-  it('翻页失败：清空上一页行并禁用本页导出', async () => {
+  it('翻页失败：清空上一页行；导出只剩运营中心数据导出页一个入口', async () => {
     const w = await mountAudit();
     h.getLogs.mockImplementationOnce(async () => { throw new Error('page unavailable'); });
     await findBtn(w, '下一页').trigger('click');
@@ -108,24 +110,177 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     await nextTick();
     expect(w.text()).toContain('审计日志加载失败');
     expect(w.text()).not.toContain('user-op-1-1');
-    expect(findBtn(w, '导出本页').attributes('disabled')).toBeDefined();
+    // 本页不再自出 JSON：导出统一走运营中心数据导出页
+    expect(w.findAll('button').some((b) => b.text() === '导出本页')).toBe(false);
+    expect(findBtn(w, '导出').exists()).toBe(true);
   });
 
-  it('统计请求失败：失败 TOP 区显示提示并可重试', async () => {
+  it('统计请求失败：失败统计条在主行显示并可重试（不必开筛选弹层）', async () => {
     h.getStats.mockRejectedValue(new Error('stats unavailable'));
     const w = await mountAudit();
     await flushPromises();
-    await findBtn(w, '筛选').trigger('click');
     await nextTick();
-    expect(w.text()).toContain('失败 TOP 统计不可用，无法判断是否存在失败动作。');
+    expect(w.text()).toContain('失败统计不可用');
     expect(findBtn(w, '重试').exists()).toBe(true);
+  });
+
+  it('默认时间范围是「全部」：首屏不带 timeRange，空态也不给出口（已是最宽窗口）', async () => {
+    h.getLogs.mockImplementation(async () => ({
+      data: { data: { logs: [], attempts: [], pagination: { total: 0, page: 1, limit: 30 } } }
+    }));
+    const w = await mountAudit();
+    await nextTick();
+    expect(h.getLogs.mock.calls[0][0]).toMatchObject({ page: 1, limit: 30, scope: 'operation' });
+    expect((h.getLogs.mock.calls[0][0] as Record<string, unknown>).timeRange).toBeUndefined();
+    expect(w.text()).toContain('暂无审计记录');
+    expect(w.find('.mk-empty__action').exists()).toBe(false);
+  });
+
+  it('目标列可点：用户类型跳 ?view=user&id=，其余类型保持纯文本', async () => {
+    h.getLogs.mockResolvedValue({
+      data: {
+        data: {
+          logs: [
+            { id: 'a', adminName: 'admin', action: 'user.delete', targetType: 'user', targetId: 'u-123456789012345678', method: 'DELETE', path: '/api/admin/users/u', statusCode: 200, success: true, createdAt: '2026-10-24T06:56:24' },
+            { id: 'b', adminName: 'admin', action: 'plugin-toggle', targetType: 'plugin', targetId: 'web', method: 'PUT', path: '/api/admin/plugins/web', statusCode: 200, success: true, createdAt: '2026-10-24T09:23:25' }
+          ],
+          pagination: { total: 2, page: 1, limit: 30 }
+        }
+      }
+    });
+    const w = await mountAudit();
+    await nextTick();
+    const links = w.findAll('.al-target-link');
+    expect(links).toHaveLength(1);
+    await links[0].trigger('click');
+    await flushPromises();
+    expect(w.vm.$router.currentRoute.value.path).toBe('/admin/people');
+    expect(w.vm.$router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'u-123456789012345678' });
+    // 插件类型没有二级页：保持纯文本，不出链接
+    expect(w.findAll('.log-target span').some((s) => s.text() === 'web')).toBe(true);
+  });
+
+  it('登录审计失败行给「查该用户名」：点击把该用户名写进关键词重查', async () => {
+    h.getLogs.mockResolvedValue({
+      data: {
+        data: {
+          logs: [],
+          attempts: [{ id: 'l1', scope: 'admin', username: 'alice', ip: '10.0.0.1', success: false, reason: 'invalid_credentials', createdAt: '2026-08-14T09:05:07' }],
+          pagination: { total: 1, page: 1, limit: 30 }
+        }
+      }
+    });
+    const w = await mountAudit();
+    await w.findAll('.tab').find((x) => x.text() === '登录审计')!.trigger('click');
+    await flushPromises();
+    const btn = findBtn(w, '查该用户名');
+    await btn.trigger('click');
+    await flushPromises();
+    expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ page: 1, keyword: 'alice', scope: 'login' });
+  });
+
+  it('动作格单行：HTTP 状态/耗时归结果列，动作格不再叠第二行', async () => {
+    const w = await mountAudit();
+    const row = w.find('.al-table tbody tr.log-tr');
+    expect(row.find('.log-act-meta').exists()).toBe(false);
+    const result = row.find('.log-result-line');
+    expect(result.text()).toContain('成功');
+    expect(result.text()).toContain('200');
+    // 紧凑读数不写 HTTP 前缀，完整口径在 title
+    expect(result.find('.log-result-meta').attributes('title')).toBe('HTTP 200');
+    w.unmount();
+  });
+
+  it('KPI 带在页签之上：先读页面统计，再切操作/登录视图', async () => {
+    const w = await mountAudit();
+    await nextTick();
+    const kpi = w.find('.mk-kpi-grid').element;
+    const tabs = w.find('.tabs').element;
+    expect(kpi.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('KPI 带：总数/失败/失败率/失败动作同屏，失败卡一键下钻，不再有常驻失败胶囊', async () => {
+    h.getStats.mockResolvedValue({
+      data: { data: { stats: { total: 378, failed: 7 }, failureByAction: [{ action: 'user.delete', count: 5 }] } }
+    });
+    const w = await mountAudit();
+    await flushPromises();
+    await nextTick();
+    const kpis = w.findAll('.mk-kpi');
+    expect(kpis).toHaveLength(4);
+    const card = (label: string) => {
+      const found = kpis.find((k) => k.find('.mk-kpi__label').text() === label);
+      if (!found) throw new Error(`kpi not found: ${label}`);
+      return found;
+    };
+    expect(card('记录总数').text()).toContain('378');
+    expect(card('失败记录').text()).toContain('7');
+    expect(card('失败率').text()).toContain('2%');
+    expect(card('失败动作').find('.mk-kpi__num').text()).toBe('1');
+    // 2026-10-27 用户「不要这种说明文字」：KPI 只留 label + 数值，不写脚注
+    expect(w.findAll('.mk-kpi__hint')).toHaveLength(0);
+    // 常驻失败胶囊退役：计数只在 KPI / 下拉选项里
+    expect(w.find('.al-fails').exists()).toBe(false);
+    await card('失败记录').trigger('click');
+    await flushPromises();
+    expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ success: false });
+    expect(filterValue(w, '失败动作')).toBe('');
+    expect(filterOptions(w, '失败动作')).toEqual(['全部失败', 'user.delete 5']);
+  });
+
+  it('失败动作下拉：按动作下钻；清空回「全部失败」而不是退出失败域', async () => {
+    h.getStats.mockResolvedValue({
+      data: { data: { stats: { total: 378, failed: 7 }, failureByAction: [{ action: 'user.delete', count: 5 }] } }
+    });
+    const w = await mountAudit();
+    await flushPromises();
+    await nextTick();
+    expect(filterOptions(w, '失败动作')).toEqual(['不过滤', 'user.delete 5']);
+    await chooseFilter(w, '失败动作', 'user.delete');
+    await flushPromises();
+    expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ success: false, keyword: 'user.delete' });
+    await chooseFilter(w, '失败动作', '全部失败');
+    await flushPromises();
+    const last = h.getLogs.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(last).toMatchObject({ success: false });
+    expect(last.keyword).toBeUndefined();
+  });
+
+  it('登录审计同样有 KPI 带，但不渲染操作审计专属的「失败动作」卡', async () => {
+    const w = await mountAudit();
+    await w.findAll('.tab').find((x) => x.text() === '登录审计')!.trigger('click');
+    await flushPromises();
+    const labels = w.findAll('.mk-kpi .mk-kpi__label').map((x) => x.text());
+    expect(labels).toEqual(['记录总数', '失败记录', '失败率']);
+  });
+
+  it('动作列：未映射接口不再直出 /api/ 路径，插件启停/卡派生显示中文名', async () => {
+    h.getLogs.mockResolvedValue({
+      data: {
+        data: {
+          logs: [
+            { id: 'a', adminName: 'admin', action: 'POST /api/admin/virtual-learners/cards/clone', targetType: null, targetId: null, method: 'POST', path: '/api/admin/virtual-learners/cards/clone', statusCode: 200, success: true, createdAt: '2026-10-24T06:56:24' },
+            { id: 'b', adminName: 'admin', action: 'plugin-toggle', targetType: 'plugin', targetId: 'web', method: 'PUT', path: '/api/admin/plugins/web', statusCode: 200, success: true, createdAt: '2026-10-24T09:23:25' },
+            { id: 'c', adminName: 'admin', action: 'POST /api/admin/mystery/thing', targetType: null, targetId: null, method: 'POST', path: '/api/admin/mystery/thing', statusCode: 200, success: true, createdAt: '2026-10-24T09:10:00' }
+          ],
+          pagination: { total: 3, page: 1, limit: 30 }
+        }
+      }
+    });
+    const w = await mountAudit();
+    const text = w.text();
+    expect(text).toContain('卡派生虚拟学习者');
+    expect(text).toContain('启停插件');
+    expect(text).toContain('管理操作');
+    expect(text).not.toContain('/api/admin/virtual-learners');
+    expect(text).not.toContain('/api/admin/mystery');
   });
 
   it('每页条数变更：回第 1 页并按新 limit 重查（378/50 → 8 页）', async () => {
     const w = await mountAudit();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    await w.find('.mk-pagination__size').setValue('50');
+    await chooseMkSelect(w as never, '每页条数', '50');
     await flushPromises();
     const last = h.getLogs.mock.calls.at(-1)![0];
     expect(last).toMatchObject({ page: 1, limit: 50 });
@@ -237,9 +392,13 @@ describe('AuditLogs 动作快筛 + 负载美化（2026-10-05 重设计）', () =
     mockMixedActions();
     const w = await mountAudit();
     await nextTick();
-    const sel = w.find('select[aria-label="按动作筛选"]');
-    expect(sel.exists()).toBe(true);
-    const options = sel.findAll('option').map((o) => o.text());
+    const trigger = w.find('.mk-pillselect[aria-label="按动作筛选"]');
+    expect(trigger.exists()).toBe(true);
+    // 2026-10-27：动作维度从「筛选」弹层提到主栏（Carbon：类别不得藏进菜单/下拉），
+    // 收起态直接显示当前值；卡头不再有 .mk-adv 弹层
+    expect(trigger.element.closest('.mk-filter')).not.toBeNull();
+    expect(w.find('.mk-adv').exists()).toBe(false);
+    const options = filterOptions(w as never, '动作');
     expect(options).toHaveLength(4); // 全部动作 + 3 个聚合动作
     expect(options[1]).toContain('21'); // 按计数倒序：推进（21）第一
     expect(options[2]).toContain('3');
@@ -249,27 +408,28 @@ describe('AuditLogs 动作快筛 + 负载美化（2026-10-05 重设计）', () =
     // 切登录 tab：动作维度不存在
     await w.findAll('.tab').find((x) => x.text() === '登录审计')!.trigger('click');
     await flushPromises();
-    expect(w.find('select[aria-label="按动作筛选"]').exists()).toBe(false);
+    expect(w.find('.mk-pillselect[aria-label="按动作筛选"]').exists()).toBe(false);
   });
 
   it('选中动作 → keyword=路径稳定尾段（/teaching-step）回第 1 页重查；手动改搜索框后下拉回落「全部动作」', async () => {
     mockMixedActions();
     const w = await mountAudit();
     await nextTick();
-    const sel = w.find('select[aria-label="按动作筛选"]');
-    const restartValue = sel.findAll('option')[2].element.getAttribute('value')!;
-    await sel.setValue(restartValue);
+    // 菜单在组件子树里（fixed 定位）；按 listbox 的 aria-label 定位当前维
+    const opts = w.findAll('ul.mk-listbox-pop[aria-label="按动作筛选"] .mk-listbox-opt');
+    const restartValue = opts[2].attributes('data-value')!;
+    await chooseFilter(w as never, '动作', opts[2].text().replace(/（\d+）$/, ''));
     await flushPromises();
     const last = h.getLogs.mock.calls.at(-1)![0];
     expect(last).toMatchObject({ page: 1, keyword: '/restart-learning' });
     // keyword 单源推导：下拉保持选中态
-    expect((w.find('select[aria-label="按动作筛选"]').element as HTMLSelectElement).value).toBe(restartValue);
+    expect(filterValue(w as never, '动作')).toBe(restartValue);
     // 手动改搜索框（非任何动作的下钻词）→ 下拉回落「全部动作」
     const input = w.find<HTMLInputElement>('.mk-filter__input');
     await input.setValue('admin');
     await input.trigger('keydown.enter');
     await flushPromises();
-    expect((w.find('select[aria-label="按动作筛选"]').element as HTMLSelectElement).value).toBe('');
+    expect(filterValue(w as never, '动作')).toBe('');
   });
 
   it('展开行负载美化：紧凑 JSON 两格缩进（与执行日志同款 prettyPayload）', async () => {

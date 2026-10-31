@@ -44,6 +44,8 @@ export interface LearningDecisionCard {
       让学习状态页可以直达确认（此前卡是纯日志，无 pathId 无动作） */
   pathId?: string | null;
   pathTitle?: string | null;
+  /** 来源课堂会话：学习状态页采用建议后回写 advisory.learnerResponse='adopt'（P1-7 漏斗） */
+  sessionId?: string | null;
   recommendation?: string | null;
   body?: string;
   options?: LearningDecisionOption[];
@@ -53,6 +55,7 @@ export interface LearningDecisionCard {
 }
 
 interface SessionLike {
+  id?: string | null;
   status?: string | null;
   endTime?: Date | null;
   updatedAt?: Date | null;
@@ -124,6 +127,12 @@ export class LearningDecisionFeedService {
       const advisory = parseJsonSafe<any>(session.advisory);
       if (!advisory?.shouldSuggest) continue;
 
+      // 学习者已明确「保持原计划」的不再出卡（2026-10-31 用户走查：keep 只写
+      // advisory.learnerResponse，决策流仍出「去处理」卡 → 仪表盘/学习状态永远挂着
+      // 待确认，与学习者已做的决定矛盾）。later/preview 仍视为待处置；adopt 若已
+      // 真重排会被下方 replan 消账吸收，未重排（待确认）则保留卡片催确认。
+      if (advisory?.learnerResponse?.action === 'keep') continue;
+
       const sessionAt = toIso(session.endTime) || toIso(session.updatedAt);
       const sessionPath = session.learningPathId ? pathById.get(session.learningPathId) : null;
       if (
@@ -152,6 +161,7 @@ export class LearningDecisionFeedService {
         at: sessionAt,
         pathId: session.learningPathId || sessionPath?.id || null,
         pathTitle: sessionPath?.title || null,
+        sessionId: session.id || null,
         recommendation: advisory.recommendation || null,
         body: advisory?.ui?.body || '',
         options: Array.isArray(advisory?.ui?.options) ? advisory.ui.options : [],

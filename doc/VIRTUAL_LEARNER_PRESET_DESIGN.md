@@ -23,7 +23,7 @@ presetKey*       稳定唯一键（幂等加载用）
 version*         版本号
 sourceType*      work | life | study | self_management
 goalType*        problem_driven | foundation_building | project_based | exam_prep | interest_exploration
-scope*           in_scope | out_of_scope   （先留位，本批全部 in_scope）
+scope*           in_scope | out_of_scope   （out_of_scope = 定义侧标记，不 seed/不跑；见遗留清单）
 coverageAxes*    覆盖轴标签（便于统计分布）
 personaSeed      { ...scenario-designer 字段... }
 story            { ...scenario-designer 字段... }
@@ -1394,12 +1394,12 @@ consistencyNotes:
 5. **不含答案键**：不冻结期望结论。本批是固定的评审语料 / 输入种子，用于跨版本可比。
 6. **`scope` 本批全部 `in_scope`**；越界样本（骑车等）留作后续单独一批。
 
-### 遗留（下一阶段再定，本次不做）
+### 遗留（2026-10-23 复核）
 
-- 定义 → 实例的**升级语义细节**（当前：presetVersion 变了才刷定义，保留运行时产物）。
-- 越界（out_of_scope）套件的设计与判定方式。
-- 管理台对预制实例的展示与「一键加载」入口（启动同步已于 2026-10-09 摘除，见落地状态）。
-- ~~判据 / 不变量检查器~~ → **已实现（2026-10-18）**，见落地状态；仍不做答案键。
+- ~~定义 → 实例的**升级语义细节**~~ → **已实现**：`seeder.ts` 三态判据（实例落后覆盖定义 / 同版不写只告警、缺预算时回填 / 实例超前跳过），升级时保留运行时产物；判据表见 `seeder.ts` 文件头。
+- ~~越界（`out_of_scope`）套件的设计与判定方式~~ → **已拍板（2026-10-23）：`out_of_scope` 只是定义侧标记，不 seed、不生成路径**。理由：在没有 Goal 诚实拒绝 rubric 之前，「标记越界却照常建实例/跑路径」会把闸门变成假闸门。实现：`seeder.isRunnablePreset` 在同步循环里直接跳过并记入 `outOfScope`（不建 user/profile）；定义侧不变量仍照常校验 `scope` 枚举。语料暂不新增越界条目——等拒绝 rubric 落地后，这类样本以**定义级测试**（Goal 入口必须诚实拒绝、不得生成 path）消费，而不是进模拟器。
+- ~~管理台对预制实例的展示与「一键加载」入口~~ → **已实现**：`/api/admin/presets`（GET 总览 / POST 加载）+ 卡库页「一键加载」，状态含 `not-loaded / current / upgradable / rolled-back / drifted`。
+- ~~判据 / 不变量检查器~~ → **已实现（2026-10-18）**，见落地状态；2026-10-23 起接入 `npm run preset:invariants`（定义侧，已纳入 `check:quality`），实例侧用 `npm run preset:invariants:db`。仍不做答案键。
 
 ### 落地状态（2026-09-11，已实现）
 

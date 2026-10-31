@@ -221,15 +221,12 @@ describe('ModelRegistryOverview（只读模型总览）', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-16 用户走查：「下面那张卡是干嘛的」。重排后这一块要自己说清两件事——
-     它决定什么（卡首一句），以及上游多出来的名字去哪了（表尾折叠）。 */
-  it('卡首一句说清这张表决定什么（限额不是摆设）', async () => {
+  /* 2026-10-22 用户裁定：卡首定义句整类撤除，只留「只读」状态与登记表本身。 */
+  it('卡首不再摆定义句（档位/限额/降级机制的说明已撤）', async () => {
     getModelRegistryMock.mockResolvedValue({ data: { data: OVERVIEW } });
     const wrapper = await mountOverview();
-    const lead = wrapper.find('.ac-mr-lead').text();
-    expect(lead).toContain('平台会路由的模型只有下面登记的这些');
-    expect(lead).toContain('档位');
-    expect(lead).toContain('限额');
+    expect(wrapper.find('.ac-mr-lead').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('平台会路由的模型只有下面登记的这些');
     wrapper.unmount();
   });
 

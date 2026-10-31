@@ -175,6 +175,34 @@ export interface TeachingState {
   currentTaskIdx?: number
   totalMilestones?: number
   taskRuntime?: Record<string, unknown>
+  /**
+   * 延伸学运行时（#124 assisted 轨）：任务收束后、任务结算前插入的一段有界陪学。
+   * active=true 时 teachingSessionId 指向延伸课（mode=extension），turns 计已进行的延伸回合，
+   * 到 maxTurns 或学员自评结束即收尾并回到正常任务结算。sourceTaskId 兼作「本任务已延伸过」标记。
+   */
+  extensionRuntime?: {
+    active: boolean
+    sourceSessionId: string | null
+    sourceTaskId: string | null
+    turns: number
+    maxTurns: number
+    startedAt?: string | null
+  } | null
+  /**
+   * 当前课堂类型（assisted 轨）：review = 复习课（到期点注入，收束不结算任务）。
+   * 缺省 = tutor（正常课）。
+   */
+  classroomMode?: 'tutor' | 'review' | 'extension' | null
+  /**
+   * 收束轨迹（课堂探针 2026-10-21）：最近几个回合的教师收束信号 / 判决判错 / 掌握度。
+   * 供卡死判定（连续无进展即提前收课）与离线归因（为什么这节没收住）使用；缺省即未采。
+   */
+  closureTrace?: Array<{
+    turn: number
+    teacherReady: boolean
+    judgeFalse: boolean
+    mastery: number | null
+  }> | null
   teachingSessionHistory?: Array<Record<string, unknown>>
   conversationHistory?: Array<{ role: string; content: string }>
   closureDecision?: Record<string, unknown>
@@ -184,9 +212,29 @@ export interface TeachingState {
   [key: string]: unknown
 }
 
+/**
+ * 卡死探针的归因记录（append-only 留在 stageResults 根部）。
+ * 为什么不放 teaching 里：restart-learning 会整包重写 teaching（实测 8 次非收敛只留下
+ * `sessionArtifacts.endReason='non-convergence'`，归因全丢），根部键不会被 reset 清掉。
+ */
+export interface StuckClosureAttributionRecord {
+  at: string
+  taskId: string | null
+  taskTitle: string | null
+  turns: number
+  reason: string | null
+  masteryDelta: number | null
+  judgeFalseCount: number
+  trace: Array<{ turn: number; teacherReady: boolean; judgeFalse: boolean; mastery: number | null }>
+  lastClosureReason?: string | null
+  lastTeacherMessage?: string | null
+}
+
 /** 会话 stageResults JSON 全量（已知段强类型，其余透传） */
 export interface StageResults {
   blackbox?: BlackboxRunState
+  /** 卡死探针归因（append-only，最多保留最近 20 条；restart 不清） */
+  stuckAttributions?: StuckClosureAttributionRecord[]
   experiment?: {
     experimentId: string
     runId: string

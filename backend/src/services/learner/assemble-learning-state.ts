@@ -11,6 +11,7 @@ import stateTrackingService from '../learning/learning-state.service';
 import { normalizeSessionDurationMinutes } from '../learning/learning.helpers';
 import { loadTeachingMessagesForIds } from '../ai-teaching/teaching-session-message-store';
 import { getLevelFromXp } from './level.util';
+import { dayKeyOf } from '../time/day-boundary';
 
 export interface AssembledLearningState {
   user: { id: string; name: string | null; xp: number } | null;
@@ -188,7 +189,7 @@ export async function assembleLearningState(
   const todoSubtasks = subtasks.filter((task: any) => task.status === 'todo');
   const totalEstimatedMinutes = subtasks.reduce((sum: number, task: any) => sum + (task.estimatedMinutes || 0), 0);
   const totalMinutes = timeSessionsHydrated.reduce((sum: number, session: any) => sum + normalizeSessionDurationMinutes(session), 0);
-  const activeLearningDays = new Set(timeSessions.map((session: any) => session.startTime.toISOString().split('T')[0])).size;
+  const activeLearningDays = new Set(timeSessions.map((session: any) => dayKeyOf(session.startTime))).size;
   const avgDailyMinutes = activeLearningDays > 0 ? Number((totalMinutes / activeLearningDays).toFixed(1)) : 0;
 
   const learningState = {

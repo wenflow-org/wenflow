@@ -1,4 +1,4 @@
-import { parseCardDocument, validateCard, resolveCardKey, ensureCardKey, buildCardWallEntries, buildCardTaskGroups, storyIdOf, cleanDisplayName, deriveCardNickname, stripWaveTags, mergeEnrichedPersonaSeed, type LearnerCard } from '../card-import.service';
+import { parseCardDocument, validateCard, resolveCardKey, ensureCardKey, buildCardWallEntries, buildCardTaskGroups, storyIdOf, cleanDisplayName, deriveCardNickname, stripWaveTags, mergeEnrichedPersonaSeed, cardOwnerKey, type LearnerCard } from '../card-import.service';
 
 function emptyIndex() {
   return { byKey: new Map<string, string>(), refs: new Map<string, string[]>(), seenInDoc: new Set<string>() };
@@ -236,6 +236,32 @@ describe('card-import：卡墙索引映射（buildCardWallEntries，2026-10-05 �
     expect(a.userId).toBe('user-1');
   });
 
+  /* 2026-10-27 用户「内部的信息密度也不高」：卡面此前没有任何「这张卡能开几节课」的读数，
+     而创建实例时恰恰要按任务勾选——任务数从故事池直接数，与派生前勾任务的同源。 */
+  it('taskCount 取故事池长度（卡面读数）；无故事池 / 坏 JSON 记 0 不抛', () => {
+    const withPool = buildCardWallEntries([row({
+      profile: JSON.stringify({
+        personaSeed: { nameHint: '有故事' },
+        storyPool: [{ id: 'story-1', title: '亏了三万的那只基金' }, { id: 'story-2', title: 'B' }, { id: 'story-3', title: 'C' }],
+      }),
+    })])[0];
+    expect(withPool.taskCount).toBe(3);
+    // 首个任务标题：卡面上真正会被开的那节课（目标抽象、任务具体）
+    expect(withPool.firstTaskTitle).toBe('亏了三万的那只基金');
+    const noPool = buildCardWallEntries([row({ profile: JSON.stringify({ personaSeed: { nameHint: '无故事' } }) })])[0];
+    expect(noPool.taskCount).toBe(0);
+    expect(noPool.firstTaskTitle).toBeNull();
+    // 无标题的故事不编造占位文案
+    const untitled = buildCardWallEntries([row({
+      profile: JSON.stringify({ storyPool: [{ id: 's1' }] }),
+    })])[0];
+    expect(untitled.taskCount).toBe(1);
+    expect(untitled.firstTaskTitle).toBeNull();
+    const bad = buildCardWallEntries([row({ profile: '{oops' })])[0];
+    expect(bad.taskCount).toBe(0);
+    expect(bad.firstTaskTitle).toBeNull();
+  });
+
   it('name 回退链：nameHint → displayName → cardKey → email；坏 JSON 降级占位不抛', () => {
     const noHint = buildCardWallEntries([row({ profile: JSON.stringify({ personaSeed: { scenarioCard: { cardKey: 'k-1' } } }) })])[0];
     expect(noHint.name).toBe('小陈');
@@ -273,6 +299,42 @@ describe('card-import：卡墙索引映射（buildCardWallEntries，2026-10-05 �
   it('预置卡 preset=true', () => {
     const [p] = buildCardWallEntries([row({ presetKey: 'retiree-photography' })]);
     expect(p.preset).toBe(true);
+  });
+
+  /* 2026-10-29 卡库不是账号：模板卡 userId=null、users 关联为 null，展示名不得依赖账号 */
+  it('users=null 的纯档案卡：展示链走 nickname → nameHint → cardKey，userId 原样为 null', () => {
+    const [byNickname] = buildCardWallEntries([row({
+      userId: null,
+      users: null,
+      profile: JSON.stringify({ personaSeed: { nickname: '想啃西瓜书的研究生', nameHint: '研究生' }, cardKey: 'k-nick' }),
+    })]);
+    expect(byNickname.userId).toBeNull();
+    expect(byNickname.name).toBe('想啃西瓜书的研究生');
+    expect(byNickname.email).toBeNull();
+
+    const [byHint] = buildCardWallEntries([row({
+      userId: null,
+      users: null,
+      profile: JSON.stringify({ personaSeed: { nameHint: '高一学生' }, cardKey: 'k-hint' }),
+    })]);
+    expect(byHint.name).toBe('高一学生');
+
+    // 无 nickname / nameHint：回退 cardKey；坏 JSON 也从 tags 兜底出 key
+    const [byKey] = buildCardWallEntries([row({
+      userId: null,
+      users: null,
+      profile: JSON.stringify({ cardKey: 'k-only-key' }),
+    })]);
+    expect(byKey.name).toBe('k-only-key');
+
+    const [badJson] = buildCardWallEntries([row({ userId: null, users: null, profile: '{oops' })]);
+    expect(badJson.cardKey).toBe('w6-math-01');
+    expect(badJson.name).toBe('w6-math-01');
+    expect(badJson.email).toBeNull();
+  });
+
+  it('cardOwnerKey：card-<profileId>（material-store 会清洗非法字符，uuid 安全）', () => {
+    expect(cardOwnerKey('ab12cd34-1111-2222-3333-444455556666')).toBe('card-ab12cd34-1111-2222-3333-444455556666');
   });
 });
 

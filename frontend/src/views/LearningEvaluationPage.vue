@@ -19,10 +19,10 @@
         </ImmersiveMenu>
       </header>
 
-      <!-- 页内目录：仅 ≥1440 宽显示（报告单列 1080 之外的空地），滚动高亮当前章节 -->
+      <!-- 页内目录：宽屏独立右栏；只列出当前报告真实存在的章节 -->
       <nav class="eval-toc" aria-label="报告目录">
         <button
-          v-for="item in tocItems"
+          v-for="item in visibleTocItems"
           :key="item.id"
           type="button"
           class="eval-toc__link"
@@ -93,14 +93,28 @@
           :wrapup="wrapup"
           :advisory="sessionDetail.advisory || null"
           :busy="completeTaskBusy"
+          :blocked="!!settleBlocked"
           @action="handleAction"
           @advisory-action="handleAdvisoryAction"
         />
 
+        <!-- 结算门禁恢复：会话已结束但老师最后一问未答时，后端会 409 FINALIZATION_OPEN_QUESTION。
+             不能再让「完成任务」按钮静默报错——直接给「回课堂回答」与「先结束」两条明路。 -->
+        <section v-if="settleBlocked" class="settle-block" role="alert">
+          <div>
+            <strong>还不能完成任务</strong>
+            <p>{{ settleBlocked }}</p>
+          </div>
+          <div class="settle-block__actions">
+            <button type="button" class="btn-primary" :disabled="completeTaskBusy" @click="goAnswerLastQuestion">回到课堂回答最后 1 个问题</button>
+            <button type="button" class="btn-ghost" :disabled="completeTaskBusy" @click="handleAction('end')">暂不完成，返回学习路径</button>
+          </div>
+        </section>
+
         <!-- 移动端吸底动作条：卡内动作条在完成卡末尾，滚到反馈/对话区（约 2 屏后）
              就无法直接决策（2026-09-25 移动框架：核心 CTA 不能藏在长内容底部）。
              ≤640 与卡内动作行互斥显示，桌面不受影响；写操作与卡内共用 handleAction -->
-        <div class="evaluation-ctabar">
+        <div v-if="!settleBlocked" class="evaluation-ctabar">
           <button type="button" class="evaluation-ctabar__btn" :disabled="completeTaskBusy" @click="handleAction('continue-task')">继续练习</button>
           <button type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--link" aria-label="返回学习路径" :disabled="completeTaskBusy" @click="handleAction('end')">返回</button>
           <button type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--primary" :disabled="completeTaskBusy" @click="handleAction('complete-task')">完成任务</button>
@@ -124,7 +138,8 @@
             <span class="evaluation-transcript-card__meta">{{ mainDialogueMessages.length }} 条消息</span>
           </div>
 
-          <p class="evaluation-transcript-card__hint">回看本次学习中的对话内容。</p>
+          <!-- 卡头的「本次学习 / 当堂对话 / N 条消息」已经说明这是本次课堂的对话回看，
+               不再补一句同义提要（2026-10-29 全站副文审计） -->
 
           <div v-if="mainDialogueMessages.length" class="evaluation-transcript-list">
             <button
@@ -168,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 // html2canvas 体积大，仅导出图片时动态加载
@@ -209,6 +224,8 @@ const pollTimer = ref<number | null>(null);
 const reportRef = ref<HTMLElement | null>(null);
 const exportingImage = ref(false);
 const completeTaskBusy = ref(false);
+/** 结算门禁（末问未答/小测未闭合）时的可执行提示；空串表示无阻断 */
+const settleBlocked = ref('');
 const subjectiveDifficulty = ref<number | undefined>(undefined);
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 60000;
@@ -589,6 +606,7 @@ const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') =
   if (action === 'complete-task') {
     if (completeTaskBusy.value) return;
     completeTaskBusy.value = true;
+    settleBlocked.value = '';
     try {
       const result = await aiTeachingAPI.finalizeSessionReliably(sessionId.value, {
         action: 'complete_task',
@@ -604,14 +622,31 @@ const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') =
       if (sessionDetail.value && Number.isInteger(recoveredRevision)) {
         sessionDetail.value.revision = recoveredRevision;
       }
-      toast.error(err?.message || '标记任务完成失败');
+      const errorBody = err?.response?.data?.error;
+      const code = String(err?.code || errorBody?.code || err?.finalization?.lastErrorCode || '');
+      const message = String(errorBody?.message || err?.message || '');
+      if (/FINALIZATION_OPEN_QUESTION|FINALIZATION_PENDING_CHECKPOINT|先回答老师的问题|先完成这道小测/.test(code + ' ' + message)) {
+        settleBlocked.value = '本次课堂还有最后 1 个问题或小测没有完成。回到课堂完成它之后，就可以把任务计入路径进度。';
+      } else {
+        toast.error(message || '标记任务完成失败');
+      }
     } finally {
       completeTaskBusy.value = false;
     }
     return;
   }
 
+  settleBlocked.value = '';
   goBackToPath();
+};
+
+/** 结算门禁恢复：回到课堂继续最后一次作答（路径 id 有则带上，返回时仍能回到路径详情） */
+const goAnswerLastQuestion = () => {
+  const pathId = (route.query.pathId as string) || '';
+  router.push({
+    path: `${learnBasePath.value}/${taskId.value}`,
+    query: pathId ? { pathId } : undefined
+  });
 };
 
 const handleAdvisoryAction = async (action: string) => {
@@ -619,9 +654,9 @@ const handleAdvisoryAction = async (action: string) => {
   const advisory = detail?.advisory;
   if (!detail || !advisory?.shouldSuggest) return;
 
-  // 轻埋点：保留/稍后/预览此前零服务端记录（审计无法区分「没处置」与「点了保留」）。
+  // 轻埋点：保留/稍后/预览/已采用此前零服务端记录（审计无法区分「没处置」与「点了保留」）。
   // 失败不影响提示与主流程，静默降级。
-  const reportAdvisoryResponse = (a: 'keep' | 'later' | 'preview') => {
+  const reportAdvisoryResponse = (a: 'keep' | 'later' | 'preview' | 'adopt') => {
     const sid = sessionId.value;
     if (!sid) return;
     void aiTeachingAPI.recordAdvisoryResponse(sid, a).catch(() => { /* 埋点失败静默 */ });
@@ -629,6 +664,10 @@ const handleAdvisoryAction = async (action: string) => {
 
   if (action === 'keep') {
     toast.success('已保留当前学习计划');
+    // 本地同步已决策态：按钮区立即换成已保持提示，不用等重进页面拉 learnerResponse
+    if (detail.advisory) {
+      detail.advisory.learnerResponse = { action: 'keep', at: new Date().toISOString() };
+    }
     reportAdvisoryResponse('keep');
     return;
   }
@@ -693,6 +732,8 @@ const handleAdvisoryAction = async (action: string) => {
     if (replanRes?.status === 'awaiting-confirmation' || replanRes?.enabled === false) {
       toast.warning('调整方案已生成，需在路径页确认后生效');
     } else {
+      // P1-7：真执行也是漏斗的一档，此前只记保留/稍后/预览，执行永远显示为 0。
+      reportAdvisoryResponse('adopt');
       toast.success('已调整当前路径的后续阶段');
     }
   } catch (err: any) {
@@ -763,13 +804,22 @@ const tocItems = [
   { id: 'sec-feedback', label: '你的感受' },
   { id: 'sec-transcript', label: '当堂对话' },
 ];
+/** 只展示当前报告真实渲染的章节：降级总结没有「本节表现 / 长期状态」时不列空锚点 */
+const tocAvailability = ref<Record<string, boolean>>({});
+const visibleTocItems = computed(() => tocItems.filter((item) => tocAvailability.value[item.id]));
+function refreshTocAvailability() {
+  const map: Record<string, boolean> = {};
+  for (const item of tocItems) map[item.id] = !!document.getElementById(item.id);
+  tocAvailability.value = map;
+}
+watch(sessionDetail, () => { void nextTick(refreshTocAvailability); }, { immediate: true });
 const activeToc = ref('');
 function scrollToToc(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function updateTocActive() {
   let current = '';
-  for (const item of tocItems) {
+  for (const item of visibleTocItems.value) {
     const el = document.getElementById(item.id);
     if (el && el.getBoundingClientRect().top <= 130) current = item.id;
   }
@@ -817,10 +867,12 @@ onUnmounted(() => {
 }
 
 /* 宽屏（≥1500px）：1080 报告在 2K/4K 下两侧大片空白、信息密度骤降
-   （手动流程问题测试 2026-09-26）；加宽并同步放宽目录偏移 */
+   （手动流程问题测试 2026-09-26）；只加宽报告，目录在更宽的断点独立定位。 */
 @media (min-width: 1500px) {
-  .evaluation-shell { max-width: 1240px; gap: 24px; }
-  .eval-toc { left: min(calc(50% + 636px), calc(100vw - 172px - 16px)); }
+  .evaluation-shell {
+    max-width: 1240px;
+    gap: 24px;
+  }
 }
 
 /* 入场编排：数据就绪后各块依次上浮出现 */
@@ -988,6 +1040,23 @@ onUnmounted(() => {
   display: flex;
   gap: 10px;
 }
+
+/* 结算门禁恢复提示：会话已结束但末问未答时出现，替代「点完成任务只报错」 */
+.settle-block {
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--amber) 38%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--amber) 8%, var(--surface));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.settle-block strong { display: block; font-size: 14px; color: var(--ink); }
+.settle-block p { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.settle-block__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .spin {
   animation: spin 1s linear infinite;
@@ -1259,13 +1328,6 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-}
-
-.evaluation-transcript-card__hint {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--muted);
 }
 
 .evaluation-transcript-list {
@@ -1702,11 +1764,6 @@ onUnmounted(() => {
     padding: 0 10px;
   }
 
-  .evaluation-transcript-card__hint {
-    font-size: 12.5px;
-    line-height: 1.5;
-  }
-
   .evaluation-transcript-list {
     gap: 10px;
   }
@@ -1827,15 +1884,14 @@ onUnmounted(() => {
   color: var(--text-on-primary);
 }
 
-/* ---------- 页内目录（批10：≥1440 宽屏独占报告右侧空地；窄屏不渲染占位） ---------- */
+/* ---------- 页内目录（≥1680 宽屏固定右缘；窄屏不渲染占位） ---------- */
 .eval-toc { display: none; }
-@media (min-width: 1440px) {
+@media (min-width: 1680px) {
   .eval-toc {
     display: grid;
     gap: 2px;
     position: fixed;
-    /* min() 把右缘夹到视口内：固定偏移在 1440 档会算出 720+556+172=1448 越界 8px，任何宽度都不能溢出。 */
-    left: min(calc(50% + 556px), calc(100vw - 172px - 16px));
+    right: 24px;
     top: 96px;
     width: 172px;
     z-index: 10;

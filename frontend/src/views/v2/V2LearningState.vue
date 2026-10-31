@@ -3,8 +3,14 @@
     <V2Nav />
 
     <main class="state__main">
-      <!-- 页头（原型 1948-1953）：学习状态屏直接以 KPI 三卡开头，无 hero 大标题——
-           原 h1 + 说明句撤掉，「查看学习历史」ghost 降为 KPI 行右侧的小入口 -->
+      <!-- 页头：与学习台/学习路径/知识图谱一致，PC 不再直接从 KPI 卡开头 -->
+      <header class="state__head">
+        <div>
+          <h1>学习状态</h1>
+          <p>训练负荷、疲劳度与掌握进度</p>
+        </div>
+        <router-link to="/user/learning-history" class="btn-ghost">查看学习历史</router-link>
+      </header>
       <div class="kpis">
         <div class="kpis__grid" role="list" aria-label="学习状态概览">
           <div v-if="kpiLoading" class="kpis__loading" role="listitem">
@@ -25,7 +31,6 @@
             </div>
           </template>
         </div>
-        <router-link to="/user/learning-history" class="btn-ghost kpis__link">查看学习历史</router-link>
       </div>
 
       <div class="state__grid">
@@ -34,7 +39,7 @@
           <section class="card band">
             <div class="band__head">
               <div class="band__title">
-                <strong>掌握趋势 · 疲劳度 · 整体状态</strong>
+                <strong>训练负荷 · 疲劳度 · 整体状态</strong>
                 <!-- 空态不报「近 N 天」：无数据时没有跨度可言，写「近 10 天」会先承诺一张不存在的图 -->
                 <span v-if="hasAnyLoad" class="band__meta">{{ drawnSpanLabel }}</span>
               </div>
@@ -52,7 +57,7 @@
             <div class="band__body">
             <!-- 空态（无任何学习状态数据）：不渲染「当前状态四项」与图例——它们是为一张还没画出来的图
                  准备的注脚，先摆出来只会让人以为下面有图（2026-10-15 走查）。空态只留一块说明。
-                 当前状态四项（原体检卡 vitals：整体状态主指标 + 学习压力/掌握趋势/疲劳程度）：
+                 当前状态四项（原体检卡 vitals：整体状态主指标 + 学习压力/训练负荷/疲劳程度）：
                  原型该屏只认三张 KPI 卡（连续天数/本周分钟/已掌握知识点），这四项不删、
                  降级为趋势卡内的状态 meta 行——图里画的就是这四个指标，放这里口径自洽 -->
             <div v-if="hasAnyLoad" class="vitals vitals--meta">
@@ -77,11 +82,11 @@
                  2026-10-08 走查：两条阈值线原本在图内右侧浮着文字（自带 surface 底「压住曲线」），
                  窄屏下那段文字正好压在最陡的一段曲线上 —— 文字移到图例，图内只留虚线本体） -->
             <div v-if="hasAnyLoad" class="ff-legend">
-              <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
+              <span><i class="ff-dot ff-dot--fitness"></i>训练负荷</span>
               <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度</span>
               <span><i class="ff-dot ff-dot--lsb"></i>整体状态</span>
               <span v-if="zoneLines.length" class="ff-legend__zone">
-                <i class="ff-dash"></i>虚线阈值
+                <i class="ff-dash"></i>虚线阈值&nbsp;
                 <!-- 分隔符写成真实文本而不是 ::before（2026-10-08）：CSS 生成内容不进 DOM，
                      读屏只念得到「40 精力充沛20 最优训练区」两声连读。 -->
                 <template v-for="(z, i) in zoneLines" :key="z.v">
@@ -104,7 +109,7 @@
                 </svg>
               </span>
               <strong>学习状态正在积累中</strong>
-              <p>完成第一个学习任务后开始记录。连续学习约 3 天，这里会出现你的掌握趋势、疲劳度与整体状态曲线。</p>
+              <p>完成第一个学习任务后开始记录，随着学习天数增加，训练负荷、疲劳度与整体状态曲线会逐步完整。</p>
               <router-link to="/learning-paths" class="chart__empty-cta">去开始学习</router-link>
             </div>
             <template v-else>
@@ -151,6 +156,12 @@
                     class="ff-bar"
                     :x="p.bx" :y="p.by" :width="barW" :height="p.bh" rx="1.5"
                   />
+                  <!-- 单日/单点数据画不出折线，但至少要把点画出来；否则图例三种状态、图内只有柱子 -->
+                  <template v-for="p in points" :key="`pt-${p.date}`">
+                    <circle v-if="p.ky !== null" class="ff-pt ff-pt--fitness" :cx="p.x" :cy="p.ky" r="2.5" />
+                    <circle v-if="p.ly !== null" class="ff-pt ff-pt--fatigue" :cx="p.x" :cy="p.ly" r="2.5" />
+                    <circle v-if="p.sy !== null" class="ff-pt ff-pt--lsb" :cx="p.x" :cy="p.sy" r="2.5" />
+                  </template>
                   <path v-if="lsbLineD" :d="lsbLineD" class="ff-line ff-line--lsb" />
                   <path v-if="ktlLineD" :d="ktlLineD" class="ff-line ff-line--fitness" />
                   <path v-if="lfLineD" :d="lfLineD" class="ff-line ff-line--fatigue" />
@@ -161,6 +172,14 @@
                     <circle v-if="hoverDay.sy !== null" class="ff-pt ff-pt--lsb" :cx="hoverDay.x" :cy="hoverDay.sy" r="4" />
                   </template>
                 </svg>
+                <!-- X 轴日期：两根时长柱与曲线点各自对应哪一天，桌面/移动都不再只有一个悬停值 -->
+                <div class="ff-xaxis" aria-hidden="true">
+                  <span
+                    v-for="p in points"
+                    :key="`x-${p.date}`"
+                    :style="{ left: `${(p.x / chartW) * 100}%` }"
+                  >{{ p.date.slice(5).replace('-', '/') }}</span>
+                </div>
               </div>
               <!-- 500 条上限的口径说明（2026-09-27）：凑满上限说明大概率被截断，
                    早段日子没有背景柱不是故障，先说清楚 -->
@@ -169,7 +188,7 @@
               <div v-if="displayDay" class="ff-info" aria-live="polite">
                 <b>{{ displayDay.label }}</b>
                 <span>时长 {{ displayDay.minutes }} 分钟</span>
-                <span class="ff-info__fitness">掌握 {{ displayDay.ktl ?? '—' }}</span>
+                <span class="ff-info__fitness">负荷 {{ displayDay.ktl ?? '—' }}</span>
                 <span class="ff-info__fatigue">疲劳 {{ displayDay.lf ?? '—' }}</span>
                 <span>状态 {{ displayDay.lsb ?? '—' }}（{{ displayDay.zone?.label || '暂无' }}）</span>
               </div>
@@ -271,8 +290,8 @@
             </div>
 
             <!-- 主次双按钮（原型 wf-advisory__actions）：采用建议 = primary 蓝渐变，保持原计划 = ghost。
-                 调整策略禁用 replan 时「采用建议」禁用并在下方给原因 -->
-            <div class="advisory__actions">
+                 多于一条待确认时不再在卡头重复同一组动作，改到下方逐条确认，避免 6 个按钮同屏。 -->
+            <div v-if="hasKpiData && hasAdvisoryAction && pendingAdjust.length <= 1" class="advisory__actions">
               <button
                 type="button"
                 class="adv-btn adv-btn--primary"
@@ -282,7 +301,11 @@
               >采用建议</button>
               <button type="button" class="adv-btn adv-btn--ghost" :disabled="replanBusy" @click="keepSuggestion">保持原计划</button>
             </div>
-            <p v-if="adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，「采用建议」暂不可用。</p>
+            <p v-else-if="hasKpiData && hasAdvisoryAction" class="advisory__multi">
+              <!-- 不写「下方」：调整项就在同一张卡里（文案门禁 R2） -->
+              有 {{ pendingAdjust.length }} 条待确认调整，请逐条确认或查看建议。
+            </p>
+            <p v-if="hasKpiData && hasAdvisoryAction && pendingAdjust.length <= 1 && adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，「采用建议」暂不可用。</p>
             <!-- 回执行（原型 wf-advisory__done）：采用 / 保持成功后就地播报，不靠 toast 一次性带过 -->
             <p v-if="advisoryDone" class="advisory__done" role="status">{{ advisoryDone }}</p>
 
@@ -317,7 +340,6 @@
                       @click="confirmingId = card.id"
                     >确认调整</button>
                     <button type="button" class="ctl-btn" :disabled="!card.pathId" @click="jumpToAdjust(card)">查看建议</button>
-                    <button type="button" class="ctl-btn ctl-btn--ghost" @click="dismissDecision(card)">保持原计划</button>
                   </div>
                   <div v-else class="ctl-card__confirm">
                     <span>这会调整该路径的后续阶段安排，已完成内容保留不变。</span>
@@ -432,7 +454,7 @@
                 <p>开始学习路径后，这里会按已掌握 / 进行中 / 待学习分档统计。</p>
               </div>
               <ul v-else class="rlist__rows">
-                <li v-for="row in masteryBuckets.rows" :key="row.key" class="rlist__row">
+                <li v-for="row in masteryBuckets.rows" :key="row.key" class="rlist__row" :class="`rlist__row--${row.key}`">
                   <span class="rlist__name">{{ row.name }}</span>
                   <span class="wf-bar"><i :style="{ width: row.pct + '%' }"></i></span>
                   <span class="rlist__pct">{{ row.count }}</span>
@@ -471,10 +493,10 @@
             </div>
             <div class="band__body">
             <ul class="legend">
-              <li><b class="dot dot--blue"></b>掌握趋势：长期学习积累的掌握水平，变化平缓</li>
+              <li><b class="dot dot--blue"></b>训练负荷：长期学习压力的累积，越高说明负荷越重，变化平缓</li>
               <li><b class="dot dot--purple"></b>疲劳度：近期学习压力的累积，变化较快</li>
-              <li><b class="dot dot--green"></b>整体状态＝掌握 − 疲劳：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
-              <li><b class="dot dot--amber"></b>保持规律学习让掌握趋势稳步上升。疲劳偏高时安排休息，避免长期处于低状态区</li>
+              <li><b class="dot dot--green"></b>整体状态＝训练负荷 − 疲劳：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
+              <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
             </ul>
             </div><!-- /band__body -->
           </section>
@@ -499,6 +521,7 @@ import request from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { metricsAPI } from '@/api/metrics';
 import { learningAPI } from '@/api/learning';
+import { aiTeachingAPI } from '@/api/aiTeaching';
 import { adjustmentModeBlockReason, replanModeForRecommendation, type PathAdjustmentPolicyLike } from '@/utils/replanSignal';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -527,14 +550,17 @@ const reviewOpen = ref(false);
 const metricOptions: Array<{ key: MetricKey; label: string }> = [
   { key: 'lsb', label: '整体状态' },
   { key: 'lss', label: '学习压力' },
-  { key: 'ktl', label: '掌握趋势' },
+  { key: 'ktl', label: '训练负荷' },
   { key: 'lf', label: '疲劳程度' }
 ];
 
-function toneOf(key: MetricKey, v: number): { tone: string; color: string; note: string } {
+function toneOf(key: MetricKey, v: number, mature?: boolean): { tone: string; color: string; note: string } {
   if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: 'var(--muted)', note: '积累中' };
   if (key === 'lsb') {
-    // LSB = KTL - LF（-100 ~ +100），分档对齐后端 <0/<20/<40/≥40 与状态分档文案
+    // 后端 mature=false：PMC 冷启动爬升期（KTL 基座未成熟）form<0 属正常，
+    // 不能按「严重疲劳」展示——与 /state/warnings、建议引擎同判据。
+    if (mature === false) return { tone: 'blue', color: 'var(--blue-deep)', note: '积累中' };
+    // LSB = KTL - LF（-100 ~ +100），分档对齐后端相对量判据与状态分档文案
     if (v < 0) return { tone: 'red', color: 'var(--red-ink)', note: '严重疲劳，优先休息' };
     if (v >= 40) return { tone: 'green', color: 'var(--green-ink)', note: '精力充沛' };
     if (v >= 20) return { tone: 'blue', color: 'var(--blue-deep)', note: '最优训练区' };
@@ -565,7 +591,7 @@ const metricCards = computed(() =>
       return { ...m, value: '—', unit: m.key === 'lsb' ? '' : '分', tone: 'red', color: 'var(--red-ink)', note: '读取失败' };
     }
     const v = current.value?.[m.key];
-    const t = toneOf(m.key, v);
+    const t = toneOf(m.key, v, current.value?.mature);
     return { ...m, value: v ?? '—', unit: m.key === 'lsb' ? '' : '分', ...t };
   })
 );
@@ -590,9 +616,10 @@ interface Zone {
 interface TrendPoint {
   date: string;
   label: string;
-  ktl: number | null;   // 掌握趋势
+  ktl: number | null;   // 长期训练负荷
   lf: number | null;    // 疲劳
   lsb: number | null;   // 整体状态 = KTL − LF
+  mature?: boolean;     // 该日 PMC 基座是否成熟（未成熟时不做疲劳分区）
   minutes: number;      // 当日时长（仅展示背景柱，不参与状态计算）
   zone: Zone | null;
   x: number;
@@ -605,11 +632,12 @@ interface TrendPoint {
 }
 
 const dailyLoad = ref<Array<{ date: string; minutes: number }>>([]);
-const stateTrends = ref<Array<{ date: string; ktl: number | null; lf: number | null; lsb: number | null }>>([]);
+const stateTrends = ref<Array<{ date: string; ktl: number | null; lf: number | null; lsb: number | null; mature?: boolean }>>([]);
 
 /** 分区基于 LSB（对齐 learning-state.service：LSB = KTL − LF，0-100） */
-function zoneOfLsb(lsb: number | null): Zone | null {
+function zoneOfLsb(lsb: number | null, mature?: boolean): Zone | null {
   if (lsb === null) return null;
+  if (mature === false) return { cls: 'optimal', label: '积累中' };
   if (lsb >= 40) return { cls: 'fresh', label: '精力充沛' };
   if (lsb >= 20) return { cls: 'optimal', label: '最优训练区' };
   if (lsb >= 0) return { cls: 'risk', label: '需要休息' };
@@ -652,8 +680,9 @@ const series = computed<Array<Omit<TrendPoint, 'x' | 'ky' | 'ly' | 'sy' | 'bx' |
       ktl: t?.ktl ?? null,
       lf: t?.lf ?? null,
       lsb,
+      mature: t?.mature,
       minutes: loadMap.get(key) ?? 0,
-      zone: zoneOfLsb(lsb)
+      zone: zoneOfLsb(lsb, t?.mature)
     });
   }
   return days;
@@ -782,7 +811,7 @@ const zoneLines = computed(() => {
 /** 读屏出口：SVG 本体 aria-hidden，纵轴口径写进容器的 aria-label（原型 1965） */
 const trendAriaLabel = computed(
   () =>
-    `近 ${activeSeries.value.length} 天的掌握趋势、疲劳度与整体状态曲线，柱为当日学习时长，纵轴标注状态阈值 40 精力充沛 / 20 最优训练区`
+    `近 ${activeSeries.value.length} 天的训练负荷、疲劳度与整体状态曲线，柱为当日学习时长，纵轴标注状态阈值 40 精力充沛 / 20 最优训练区`
 );
 
 /** 单线路径：跳过 null 断点（无数据日不连线） */
@@ -1045,14 +1074,15 @@ async function loadTrends() {
     // 权威口径：后端 /state/trends（LSS/KTL/LF/LSB，与指标卡同源），替代前端自算 EWMA
     const trendRes = await request.get('/state/trends', { params: { days: range.value, range: 'recent' } });
     if (seq !== trendSeq) return;
-    const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }> }>(trendRes);
+    const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null; mature?: boolean }> }>(trendRes);
     stateTrends.value = (trendData?.trends || []).map((t) => ({
       // 后端回的是本地零点 Date 的 ISO 序列化（UTC），必须按本地时区还原，
       // 否则 UTC+8 会整体前移一天（与 V2LearningHistory 同一口径问题）
       date: localDateKeyFromIso(String(t.date)),
       ktl: typeof t.ktl === 'number' ? t.ktl : null,
       lf: typeof t.lf === 'number' ? t.lf : null,
-      lsb: typeof t.lsb === 'number' ? t.lsb : null
+      lsb: typeof t.lsb === 'number' ? t.lsb : null,
+      mature: typeof t.mature === 'boolean' ? t.mature : undefined
     }));
     trendError.value = false;
   } catch {
@@ -1087,8 +1117,8 @@ const reviewCalibration = computed(() => guidance.value?.review?.calibration || 
 const reviewReliabilityText = computed(() => {
   const c = reviewCalibration.value;
   if (!c || !c.n) return '';
-  if (c.hitRate == null) return `AI 诊断 · 参考过往 ${c.n} 次判断（样本偏少）`;
-  return `AI 诊断 · 参考过往 ${c.n} 次判断`;
+  if (c.hitRate == null) return `参考过往 ${c.n} 次判断（样本偏少）`;
+  return `参考过往 ${c.n} 次判断`;
 });
 
 /* ---------- 学习调控（2026-09-27 重构）：待确认 / 已自动处理 / 已执行的调整 ----------
@@ -1110,6 +1140,7 @@ interface DecisionCard {
   at: string | null;
   pathId?: string | null;
   pathTitle?: string | null;
+  sessionId?: string | null;
   recommendation?: string | null;
   body?: string;
   options?: DecisionOption[];
@@ -1223,6 +1254,10 @@ async function confirmAdjust(card: DecisionCard) {
       evidence: { advisoryAction: card.recommendation || 'reinforce', advisory: card.advisory || null }
     });
     toast.success(`已调整「${card.pathTitle || '当前路径'}」的${advisory.scope === 'downstream_path' ? '后续阶段' : '下一阶段'}`);
+    // P1-7：真执行也回写处置埋点，漏斗才不只看到「保留/稍后/预览」。
+    if (card.sessionId) {
+      void aiTeachingAPI.recordAdvisoryResponse(card.sessionId, 'adopt').catch(() => { /* 埋点失败静默 */ });
+    }
     // 卡头双按钮的回执行（原型 wf-advisory__done）：确认成功后就地留一行，不只靠 toast 一闪而过
     advisoryDone.value = `已采用建议：「${card.pathTitle || '当前路径'}」的后续阶段已调整，已完成内容保留不变。`;
     dismissDecision(card);
@@ -1346,6 +1381,12 @@ const guideActions = computed(() => {
     })
     .slice(0, 1);
 });
+
+/** 有可执行的待确认调整或今日动作时才显示主次按钮；
+    空态下按钮点了没有落点，只会让用户怀疑“点了没反应”。 */
+const hasAdvisoryAction = computed(() =>
+  pendingAdjust.value.length > 0 || guideActions.value.length > 0
+);
 
 /* 预警行（skill 模式下追加展示） */
 const warningRows = computed(() =>
@@ -1471,17 +1512,18 @@ function loadGuidance() {
   /* 显式单列轨道：隐式 auto 轨按 min-content 解算，窄屏内容一宽就把容器撑破（#118 同因） */
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px;
 }
-/* hero 已撤（原型 1948-1953：该屏直接以 KPI 开头，无 h1 + 说明句）；
-   .kicker 保留——侧栏两张卡（学习偏好 / 指标说明）还在用 */
+/* 页头：PC 补齐 H1，右侧动作与内容列同宽 */
+.state__head {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+  padding-bottom: 2px;
+}
+.state__head h1 { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); }
+.state__head p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
 
 /* ---------- 顶部三张 KPI（原型 wf-kpis/wf-kpi，748-755）：等权 3 卡、gap 9px、居中排版 ---------- */
-.kpis {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px 12px; flex-wrap: wrap;
-}
+.kpis { display: block; }
 .kpis__grid {
-  flex: 1 1 460px; min-width: 0;
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px;
 }
 .kpis__loading { grid-column: 1 / -1; padding: 2px 0; }
@@ -1499,7 +1541,6 @@ function loadGuidance() {
 /* 原型为 11px → 12px：本仓门禁基础作用域字号下限 12px（同个人中心 KPI 的取舍） */
 .kpi span { font-size: 12px; color: var(--faint); }
 /* 原 hero 的 ghost 按钮降为本行小入口，贴右（放不下时折到第二行右对齐） */
-.kpis__link { flex: 0 0 auto; margin-left: auto; }
 
 .card {
   background: var(--surface);
@@ -1517,7 +1558,7 @@ function loadGuidance() {
 
 /* ---------- 状态四项 meta（原体检卡 vitals 的去向） ----------
    原型该屏只认三张 KPI 卡（连续天数 / 本周分钟 / 已掌握知识点），原 1.25fr+3×1fr 的体检卡撤掉：
-   整体状态 / 学习压力 / 掌握趋势 / 疲劳程度不删，降级成趋势卡内的单行状态条（卡内 meta）——
+   整体状态 / 学习压力 / 训练负荷 / 疲劳程度不删，降级成趋势卡内的单行状态条（卡内 meta）——
    图里画的就是这四个指标，放这张卡里口径自洽；分档胶囊与失败态沿用原 .metric__note 语言。 */
 .vitals--meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;
@@ -1616,6 +1657,7 @@ function loadGuidance() {
 .advisory__head .band__meta { margin-left: auto; font-weight: 600; color: var(--faint); }
 .advisory__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px; }
 .advisory__actions { display: flex; gap: 9px; flex-wrap: wrap; }
+.advisory__multi { margin: 0; font-size: 12.5px; color: var(--muted); }
 .advisory__done { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--green-ink); }
 /* 调整策略禁用「采用建议」的原因行（amber 一档，与预警同色语言） */
 .advisory__blocked { margin: 0; font-size: 12.5px; color: var(--amber-ink, #b45309); }
@@ -1661,6 +1703,8 @@ function loadGuidance() {
 /* 进度条原语（原型 wf-bar 267-268）：6px 轨（--bar-track）+ 蓝→青渐变填充 */
 .wf-bar { height: 6px; border-radius: 999px; background: var(--bar-track, color-mix(in srgb, var(--line) 60%, transparent)); overflow: hidden; }
 .wf-bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+/* 待学习不是“进度”，不能抢已掌握/进行中的高亮蓝；用中性灰表达剩余量 */
+.rlist__row--pending .wf-bar > i { background: var(--line); }
 
 /* ---------- 原侧栏（原型该屏单列流，无 300px 侧栏）：并入主列后不再吸顶——
    单列里 sticky 只会在滚动时把两张说明卡悬在内容上，压住下方的复习/掌握卡 ---------- */
@@ -1865,13 +1909,25 @@ function loadGuidance() {
    曲线之间的差距被压到几乎看不出来。给一个高度下限后窄屏把纵向量出来（宽高比仍随宽度走，
    768/1440 档自然高 223/250px，都不触及这条下限）。刻度与阈值线都按百分比定位，跟着一起对齐。 */
 .ff-chart { position: relative; width: 100%; /* 上下各留 10px：首尾刻度是 translateY(-50%) 居中在 0%/100%，
-   会向外探出半个字高（实测 6px），图例与信息行紧贴时会各撞上 6px（2026-10-08 实测） */ margin: 10px 0; }
+   会向外探出半个字高（实测 6px），图例与信息行紧贴时会各撞上 6px（2026-10-08 实测） */ margin: 10px 0; padding-bottom: 0; }
+/* X 轴日期回到正常文档流：绝对定位贴底会与 Y 轴最低刻度（-35）共享左下角而撞字 */
+.ff-xaxis {
+  position: relative; height: 16px; margin-top: 8px;
+  pointer-events: none;
+}
+.ff-xaxis span {
+  position: absolute; top: 0; transform: translateX(-50%);
+  font-size: var(--mk-fs-micro); line-height: 1; color: var(--faint);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
 .ff-chart svg { display: block; width: 100%; height: auto; min-height: 190px; }
 /* 键盘聚焦（EG22）：图本身不承担视觉容器，聚焦用圆角描边提示可操作 */
 .ff-chart:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; border-radius: var(--mk-radius-md); }
 /* y 轴刻度（原型 wf-trend__yaxis）：贴左侧 AXIS_W 留白（46/760 ≈ 6.05%），
    与 5 条网格线同位、右对齐，正好落在 grid 的 x1=plotX0 之外的空白里 */
-.ff-yaxis { position: absolute; left: 0; top: 0; bottom: 0; width: 6.05%; pointer-events: none; }
+/* bottom 必须扣掉 X 轴占位（16px 高 + 8px 上边距）：否则最低刻度 -35 会落到
+   X 轴日期文字同一底边，和 10/26 的「10」叠在一起。 */
+.ff-yaxis { position: absolute; left: 0; top: 0; bottom: 24px; width: 6.05%; pointer-events: none; }
 /* nowrap 必须写（2026-10-08 用户侧走查）：6.05% 在 1440 档约 45px，够放「-85」；窄屏图表只有
    329px，该列仅 20px（减 right: 6px 后 14px），三字刻度会被折成竖排数字堆（390 实测刻度框
    14×24~36px），整列读不出来。nowrap 后刻度向左伸进卡片左内边距（band__body 16px）里，
@@ -1941,7 +1997,6 @@ function loadGuidance() {
      640 以上（平板/桌面）维持原「KPI 行 + 右侧入口」单行布局不动。 */
   .kpis { flex-direction: column; align-items: stretch; gap: 10px; }
   .kpis__grid { flex: 1 1 auto; width: 100%; }
-  .kpis__link { margin-left: 0; display: flex; justify-content: center; align-items: center; }
 }
 @media (max-width: 1100px) {
   /* 体检卡随原卡结构退役：.vitals__value / .vitals{padding} 两条移动规则已无对应元素（死 CSS 清理），

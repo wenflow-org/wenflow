@@ -19,7 +19,12 @@
  * 说明：无遥测数据（如干净 CI）时跳过，退出码 0。
  */
 import prisma from '../config/database';
-import { PAYLOAD_STABILITY, isFirstKeyStable, validateStabilityMap } from '../services/payload-stability';
+import {
+  PAYLOAD_STABILITY,
+  isFirstKeyStable,
+  isStablePrefix,
+  validateStabilityMap,
+} from '../services/payload-stability';
 
 const TAKE = Number(process.env.PAYLOAD_PREFIX_TAKE || 30);
 
@@ -29,19 +34,32 @@ function firstKeyOfJsonHead(head: string): string | undefined {
   return m ? m[1].replace(/\\(.)/g, '$1') : undefined;
 }
 
-export function firstKeyOf(userPayload: unknown): string | undefined {
+export interface PayloadKeyInfo {
+  keys: string[];
+  /** true = 只能从瘦身 head 还原首键，完整键序不可得 */
+  slim: boolean;
+}
+
+/** 提取 payload 顶层键序；瘦身行只返回首键并标记 slim。 */
+export function keyInfoOf(userPayload: unknown): PayloadKeyInfo | undefined {
   if (typeof userPayload !== 'string' || !userPayload.trim().startsWith('{')) return undefined;
   try {
     const parsed = JSON.parse(userPayload);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
     const record = parsed as Record<string, unknown>;
     if (record.__slim === true) {
-      return typeof record.head === 'string' ? firstKeyOfJsonHead(record.head) : undefined;
+      const first = typeof record.head === 'string' ? firstKeyOfJsonHead(record.head) : undefined;
+      return first ? { keys: [first], slim: true } : undefined;
     }
-    return Object.keys(record)[0];
+    return { keys: Object.keys(record), slim: false };
   } catch {
     return undefined;
   }
+}
+
+/** 兼容旧导出（测试/脚本可能只关心首键）。 */
+export function firstKeyOf(userPayload: unknown): string | undefined {
+  return keyInfoOf(userPayload)?.keys[0];
 }
 
 async function main() {
@@ -65,22 +83,25 @@ async function main() {
       take: TAKE,
       select: { userPayload: true },
     });
-    const firstKeys = rows
-      .map((row) => firstKeyOf(row.userPayload))
-      .filter((key): key is string => typeof key === 'string');
-    if (firstKeys.length === 0) {
+    const infos = rows
+      .map((row) => keyInfoOf(row.userPayload))
+      .filter((info): info is PayloadKeyInfo => Boolean(info));
+    if (infos.length === 0) {
       lines.push(`[payload-prefix] SKIP ${skillId}: 无可用遥测`);
       continue;
     }
     withData += 1;
     const declared = PAYLOAD_STABILITY[skillId].stable;
-    const stableCount = firstKeys.filter((key) => declared.includes(key)).length;
-    const latest = firstKeys[0];
-    const ok = isFirstKeyStable(skillId, latest);
+    const isOk = (info: PayloadKeyInfo) =>
+      info.slim ? isFirstKeyStable(skillId, info.keys[0]) : isStablePrefix(skillId, info.keys);
+    const stableCount = infos.filter(isOk).length;
+    const latest = infos[0];
+    const ok = isOk(latest);
     if (!ok) violations += 1;
+    const expected = latest.slim ? `首键∈{${declared.join(',')}}（瘦身行）` : `前缀=${declared.join('→')}`;
     lines.push(
-      `[payload-prefix] ${ok ? 'OK  ' : 'FAIL'} ${skillId}: 最新首键=${latest}（期望∈{${declared.join(',')}}）` +
-        ` 近${firstKeys.length}条稳定占比=${Math.round((100 * stableCount) / firstKeys.length)}%`
+      `[payload-prefix] ${ok ? 'OK  ' : 'FAIL'} ${skillId}: 最新键序=${latest.keys.slice(0, declared.length + 1).join('→')}` +
+        `（期望 ${expected}） 近${infos.length}条稳定占比=${Math.round((100 * stableCount) / infos.length)}%`
     );
   }
 

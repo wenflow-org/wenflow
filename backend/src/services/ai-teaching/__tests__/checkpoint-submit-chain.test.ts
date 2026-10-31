@@ -190,6 +190,50 @@ beforeEach(() => {
 })
 
 describe('检查点提交链路集成（报告 #15/#16）', () => {
+  it('选择题提交：历史行留档选项、答案键与学员选择（课后报告可还原 A/B/C/D）', async () => {
+    const choice = {
+      ...CHECKPOINT,
+      id: 'cp-choice',
+      type: 'single_choice' as const,
+      question: '报价单压到一页宽后仍叠，说明什么？',
+      expectedKeywords: undefined,
+      options: [
+        { id: 'A', text: '一页宽会自动重排列宽' },
+        { id: 'B', text: '一页宽只是等比压窄，列宽比例没变' },
+      ],
+      correctOptionIds: ['B'],
+    };
+    const session = sessionRecord({
+      teachingState: {
+        pendingCheckpoint: choice,
+        checkpointHistory: [],
+        classroomContext: { stage: { current: 'teaching' } },
+        sessionArtifacts: {},
+      },
+    });
+    mockClaimOperation.mockResolvedValue(claim(session));
+    const judgement = judgeCheckpointAnswer(choice, { selectedOptionIds: ['A'] });
+
+    const result = await processStudentMessage('sess-1', '我的答案：A. 一页宽会自动重排列宽', {
+      operationClaim: claim(session) as never,
+      checkpointId: 'cp-choice',
+      checkpointJudgement: judgement,
+      checkpointSubmission: { selectedOptionIds: ['A'] },
+    });
+
+    expect(result.checkpointResolution?.passed).toBe(false);
+    const committedState = (mockCommitTurnState.mock.calls[0][2] as any).teachingState;
+    expect(committedState.checkpointHistory[0]).toMatchObject({
+      checkpointId: 'cp-choice',
+      question: '报价单压到一页宽后仍叠，说明什么？',
+      options: choice.options,
+      correctOptionIds: ['B'],
+      selectedOptionIds: ['A'],
+      passed: false,
+      judgedBy: 'code',
+    });
+  });
+
   it('答错未到顶（历史 0 次）→ 保留 pendingCheckpoint，可重答；历史留痕 judgedBy=code', async () => {
     const session = sessionRecord();
     mockClaimOperation.mockResolvedValue(claim(session));
@@ -207,7 +251,8 @@ describe('检查点提交链路集成（报告 #15/#16）', () => {
     expect(committedState.pendingCheckpoint).toBeTruthy();
     const history = committedState.checkpointHistory;
     expect(history).toHaveLength(1);
-    expect(history[0]).toEqual(expect.objectContaining({ checkpointId: 'cp-1', passed: false, judgedBy: 'code' }));
+    // attempts 随行落库：收束门禁（evaluateSessionClosable）据此判断「最后一道题还有没有重答机会」
+    expect(history[0]).toEqual(expect.objectContaining({ checkpointId: 'cp-1', passed: false, judgedBy: 'code', attempts: 1 }));
     // 同题复问抑制的写侧：完整题面随作答落进历史（读侧 isDuplicateCheckpointQuestion 据此比对）
     expect(history[0].question).toBe(CHECKPOINT.question);
     // 独立传感器留痕：真实裁决对象原样交给证据层

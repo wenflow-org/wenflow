@@ -89,6 +89,10 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // 动态规划（2026-10-17）：上一阶段真实学习信号（渐进式设计/阶段推进时由 stage 链注入）。
     // stage-designer 提示词按它调整坡度与补强位置，必须登记，否则 strict 对账恒红。
     'previousStageOutcome',
+    // 跨阶段去重事实源（2026-10-27 外部审查结清）：stage-designer 声明
+    // ref: sandbox:path.allPreviousStageTasks，但此前未登记 ⇒ 编译门 advisory 恒在。
+    // 编排层直接注入（stage-enrichment），登记后声明三方一致。
+    'allPreviousStageTasks',
   ],
   'teaching-agent': [
     'session.messages',
@@ -145,6 +149,8 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // simulation.learn-phase 直接注入、无路由行）。此前该 core 文件缺 ref 而 schema 不合法，
     // 全量扫描/编译工具链与 CI prompts:core:check 因此一直红（2026-10-04 修复）。
     'forcedCorrectness',
+    // 判决器在检查点回合需要看到题干/选项（教师 reply 不再打印选项）
+    'pendingCheckpoint',
     'publicTrace',
     'refereeTrace',
     'control',
@@ -165,6 +171,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'candidateDomains',
     'recentScenarioHints',
     'learnerMemory',
+    // 判决器/模拟器的概念先验：原先只塞在 learner 对象里，提示词契约无法显式声明；
+    // payload 实际在顶层/尾部下发，必须登记，否则 prompts:check-handoff:strict 恒红。
+    'knownConcepts',
+    'struggleConcepts',
+    'conceptProgress',
     'temporalContext',
     'memoryRecall',
     'persona',

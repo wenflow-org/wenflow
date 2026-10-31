@@ -1,6 +1,5 @@
 import prisma from '../../config/database';
 import { Prisma } from '@prisma/client';
-import { buildRealUserWhere } from '../../utils/test-account';
 
 /**
  * Admin · Token 成本统计 DB 查询单点。
@@ -13,15 +12,6 @@ import { buildRealUserWhere } from '../../utils/test-account';
  * 改为 SQL 端聚合（json_extract 在 C 层取 skillId，分组基数 ~4k；逐日小窗走
  * calledAt 索引）——纯 IO 查询返回聚合结果，JS 只做装配。
  */
-
-/** 真实用户 id 集合（includeTest=false 时的 userId 过滤源）
- *  判据单点在 utils/test-account.ts（isTestAccountUser），不用 Prisma startsWith：
- *  SQLite 的 LIKE 把前缀里的 `_` 当通配符，会把 `e2e.del@…` 这类真实账号一并滤掉。 */
-export async function resolveRealUserIds(): Promise<string[]> {
-  const where = await buildRealUserWhere({ deletedAt: null });
-  const ids = (await prisma.users.findMany({ where: where as Prisma.usersWhereInput, select: { id: true } })).map((u) => u.id);
-  return ids;
-}
 
 /** 时间窗聚合结果（一次扫描）：calls/failed = 全量行口径；tokens = gateway+tokensUsed>0 口径 */
 export interface WindowAggregate {

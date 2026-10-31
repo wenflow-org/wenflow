@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { hourKeyOf, startOfHour, dayKeyOf, addDaysToDayKey, startOfDay } from '../time/day-boundary';
-import { buildRealUserWhere, findRealUserIds } from '../../utils/test-account';
+import { buildNonVirtualUserWhere, findNonVirtualUserIds } from '../../utils/test-account';
 import { classifyFailureCategory, isTimeoutLog } from './failure-classification';
 import {
   parseClosureObservation,
@@ -338,13 +338,12 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
     // 保证「24h 总数 = 各小时之和」恒成立；活跃 Agent 统计仍用严格 24h 滚动窗口。
     const trendWindowStart = new Date(startOfHour(new Date()).getTime() - 23 * 3600000);
 
-    // 生产统计排除虚拟学习者与测试/审计账号：判据单点在 utils/test-account.ts
-    // （findRealUserIds 内部用 isTestAccountUser，不用 Prisma startsWith——SQLite 的 LIKE
-    //  会把前缀里的 `_` 当通配符，把 `e2e.del@…` 这类真实账号一并滤掉）。
-    const realUserIds = await findRealUserIds();
+    // 生产统计 = 全部非虚拟账号（2026-10-21 用户拍板「没有测试，测试只是备注」）：
+    // 虚拟学习者归自己的域并从统计里剔除，测试/审计账号照常计入。
+    const realUserIds = await findNonVirtualUserIds();
     const realUserSet = new Set(realUserIds);
-    /** 统计用的真实用户 where（同一请求内复用，避免重复扫描 users 表） */
-    const statRealUserWhere = await buildRealUserWhere({ deletedAt: null });
+    /** 统计用的账号 where（同一请求内复用，避免重复扫描 users 表） */
+    const statRealUserWhere = await buildNonVirtualUserWhere({ deletedAt: null });
     // 虚拟/测试账号 = 全部用户 − 真实用户（差集互补，口径严格无遗漏），供「虚拟调用」独立指标；
     // userId 为 NULL 的孤儿行不落入任何口径的「今日虚拟」计数（与原 SQL in 语义一致）
     const virtualUserSet = new Set(

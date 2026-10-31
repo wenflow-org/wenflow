@@ -69,6 +69,21 @@ export interface GoalConversationInternal {
   };
 }
 
+/**
+ * #132 兜底：promptResult.output 理论上恒由 normalizeOutput 产出（必带 internal），
+ * 但执行日志里实测 48 次 internal 为 undefined（另一条 success/降级产物直通了输出）。
+ * renderHints/metadata 不能因为缺 internal 再抛一次 internal 错。
+ */
+export function goalInternalQuickReplies(internal: GoalConversationInternal | null | undefined): QuickReply[] {
+  const quickReplies = internal?.ext?.goalConversation?.quickReplies;
+  return Array.isArray(quickReplies) ? quickReplies : [];
+}
+
+export function goalInternalConfidence(internal: GoalConversationInternal | null | undefined): number {
+  const confidence = internal?.core?.confidence;
+  return typeof confidence === 'number' && Number.isFinite(confidence) ? confidence : 0.2;
+}
+
 export interface GoalConversationAgentResult {
   userVisible: string;
   internal: GoalConversationInternal;
@@ -188,6 +203,12 @@ export interface GoalUploadedMaterialSummary {
   headingCount: number;
   /** 降级目录（brief 未就绪时使用，≤6 个标题）。 */
   headings: string[];
+  /** 本次路径主线（后端按目标相关性选出的前 3 份）；false=资料库里的补充资料。 */
+  selectedForPath?: boolean;
+  /** 资料库总份数（可能大于本清单条数）。 */
+  libraryTotal?: number;
+  /** 未列进本清单的资料份数；>0 时模型不应声称看完全部资料。 */
+  libraryOmitted?: number;
   /** 资料理解摘要（material-brief；未生成/生成失败为 null → 降级 headings）。 */
   brief: {
     docType: string | null;
@@ -204,7 +225,9 @@ export interface GoalUploadedMaterialSummary {
 
 /** 资料清单纪律注记：随清单一起注入 user payload（system prompt 纯静态，不进 prompt 治理管线）。 */
 const UPLOADED_MATERIALS_NOTE =
-  'uploadedMaterials 字段是用户已上传的资料清单及其理解摘要（brief）：已收到，将在路径生成时作为主线依据。'
+  'uploadedMaterials 字段是用户已上传的资料清单及其理解摘要（brief）：已收到，路径生成会按目标相关性从资料库选 3 份作为主线。'
+  + 'selectedForPath=true 的条目是本次路径主线；false 为资料库补充资料，路径不保证打包，但仍可按需引用。'
+  + '若 libraryOmitted>0，说明资料库还有未列出的资料，不要声称已看完全部；需要时请用户指定范围。'
   + '你可基于 brief 的 subject/overview/toc 与用户澄清学习范围（「全面学习整份资料」还是「重点学某些章节」），'
   + '并可参考 naturalDivisions 建议切分维度；除摘要所载信息外，正文细节你尚未读取——'
   + '禁止假装读过或凭记忆引用正文细节；这些资料无需在 needsMaterial 中重复声明（下游会自动使用已上传文件）。';
@@ -251,6 +274,10 @@ export function buildGoalConversationUserPayload(input: {
           ext: material.ext,
           charCount: material.charCount,
           headingCount: material.headingCount,
+          selectedForPath: material.selectedForPath === true,
+          ...(material.libraryTotal !== undefined
+            ? { libraryTotal: material.libraryTotal, libraryOmitted: material.libraryOmitted ?? 0 }
+            : {}),
           // brief 就绪：带理解摘要（目录截 12 条）；未就绪：降级 headings 元信息
           ...(material.brief
             ? {
@@ -284,7 +311,9 @@ export function buildGoalConversationUserPayload(input: {
     conversationContext,
     userInput: input.userInput,
     state: statePayload
-  }, null, 2);
+  });
+  // 紧凑序列化：缩进空白同样计入输入 token，且每轮整份 payload 都会重发；
+  // 键序（而非排版）才是缓存前缀的杠杆，见上方注释。
 
   // supplement 作为 JSON 外前缀文本（不污染 JSON 键集）；无 supplement 时纯 JSON
   return input.supplementText ? `${input.supplementText}\n\n${payloadJson}` : payloadJson;
@@ -939,6 +968,7 @@ function buildRetryNotice(prevFailureType: string, prevViolations: string[]): st
   lines.push('- 若把 nextQuestions 嵌进 state.nextQuestions，请改为放到顶层');
   lines.push('- 不要使用 goalConversation 包装层；quickReplies / understanding / nextQuestions 等字段直接放在顶层');
   lines.push('- state 必须包含 stage / confidence / done 三个字段，不要把 understanding 塞进 state');
+  lines.push('- time_dimensions 只填 sessionsLengthMin/sessionLengthMin、objectiveScopeHours、deadlineDate；数值字段必须是 number，deadlineDate 用 YYYY-MM-DD 或 null');
   lines.push('- 起草时严格按 system prompt 的输出规格，参考但不要照搬输入 payload 的嵌套形态');
   return lines.join('\n');
 }
@@ -1104,24 +1134,35 @@ export async function goalConversationAgentHandler(
 
     if (promptResult.success && promptResult.output) {
       const result = promptResult.output;
+      /* #132（2026-10-22 走查）：历史失败 48 次都是 `internal` 缺失后读 `.ext` 抛
+         `Cannot read properties of undefined`。normalizeOutput 本应恒返回 internal，
+         缺失说明输出来自别的路径。这里把「数据形态坏了」说清（带可用键名），
+         不做静默兜底——先让失败可定位，再决定修复点。 */
+      const internal = result.internal as GoalConversationInternal | undefined;
+      if (!internal?.core || !internal?.ext?.goalConversation) {
+        throw new Error(
+          `[goal-conversation] 结构化输出缺少 internal.core / internal.ext.goalConversation`
+          + `（success=true，可用键：${Object.keys(result || {}).join(',') || '无'}）`
+        );
+      }
       return {
         success: true,
         userVisible: result.userVisible,
-        internal: result.internal,
+        internal,
         runtimeEnvelope: promptResult.runtimeEnvelope || buildGoalRuntimeEnvelope(result, {
           contract: runtimeContract,
           status: 'succeeded',
         }),
         renderHints: {
           component: 'goal-conversation',
-          quickReplies: result.internal.ext.goalConversation.quickReplies || [],
+          quickReplies: internal.ext.goalConversation.quickReplies || [],
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'skill:goal-conversation',
           agentName: '目标对话 Skill',
           agentType: 'custom',
-          confidence: result.internal.core.confidence,
+          confidence: internal.core.confidence,
           generatedAt: new Date().toISOString(),
         },
         debug: {
@@ -1175,14 +1216,14 @@ export async function goalConversationAgentHandler(
         }),
         renderHints: {
           component: 'goal-conversation',
-          quickReplies: observedResult.internal.ext.goalConversation.quickReplies || [],
+          quickReplies: goalInternalQuickReplies(observedResult.internal),
         },
         schemaVersion: 'agent-output-v1',
         metadata: {
           agentId: 'skill:goal-conversation',
           agentName: '目标对话 Skill',
           agentType: 'custom',
-          confidence: observedResult.internal.core.confidence,
+          confidence: goalInternalConfidence(observedResult.internal),
           generatedAt: new Date().toISOString(),
         },
         debug: {

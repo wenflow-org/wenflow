@@ -146,6 +146,7 @@ describe('classifyFailureCategory（调用级失败归因分类）', () => {
   it('空类别 + 限流信号 → rate_limit', () => {
     expect(classifyFailureCategory({ errorCategory: null, errorCode: 'RATE_LIMITED', error: null })).toBe('rate_limit');
     expect(classifyFailureCategory({ errorCategory: null, errorCode: '429', error: null })).toBe('rate_limit');
+    expect(classifyFailureCategory({ errorCategory: null, errorCode: null, error: 'request throttled by upstream' })).toBe('rate_limit');
   });
 
   it('空类别且无已知信号 → internal', () => {

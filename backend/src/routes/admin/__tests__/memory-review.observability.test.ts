@@ -164,9 +164,13 @@ describe('权限', () => {
 })
 
 describe('总览', () => {
-  it('按痕迹倒序 + 到期口径 + 审计汇总 + 排除虚拟学习者 + 碎片率口径', async () => {
+  it('按痕迹倒序 + 到期口径 + 审计汇总 + 只排除虚拟学习者（测试账号照常计入）+ 碎片率口径', async () => {
     usersFindMany
-      .mockResolvedValueOnce([{ id: 'virtual-1' }])
+      // 第 1 次：虚拟学习者 id 清单（默认口径只排除虚拟；测试账号是普通账号，只是行内备注）
+      .mockResolvedValueOnce([
+        { id: 'virtual-1', name: '虚拟甲', email: 'virtual_a@test.local', isVirtualLearner: true },
+      ])
+      // 第 2 次：展示行
       .mockResolvedValueOnce([
         { id: 'u1', name: '小明', email: 'a@b.c', isVirtualLearner: false },
         { id: 'u2', name: '小红', email: 'd@e.f', isVirtualLearner: false },
@@ -201,8 +205,57 @@ describe('总览', () => {
     const dueCall = tracesGroupBy.mock.calls[1][0]
     expect(dueCall.where.extractionCount).toEqual({ gt: 0 })
     expect(dueCall.where.dueAt.lte).toBeInstanceOf(Date)
-    // 默认排除虚拟学习者
+    // 默认口径排除清单＝只有虚拟学习者（2026-10-21 拍板：测试账号照常计入）
     expect(tracesGroupBy.mock.calls[0][0].where.userId).toEqual({ notIn: ['virtual-1'] })
+  })
+
+  it('碎片率与分页无关（2026-10-28 数据审计：duplicateLabelRatio 此前随 limit 变化 0↔0.12）', async () => {
+    const trace = (userId: string, conceptKey: string) => ({
+      userId, conceptKey, label: conceptKey, conceptId: 'cpt-x', masteryScore: 0.6,
+      extractionCount: 3, lastSeenAt: new Date(), dueAt: null,
+      fsrsStability: null, fsrsDifficulty: null, fsrsLapses: null, fsrsReps: null,
+    })
+    // u1 一条独立痕迹；u3 两条同族（重复）痕迹 —— 重复全在「页外用户」上，
+    // 旧实现只聚合当前页（limit=2 时 u3 不在页内）→ 比率被低估成 0
+    const pageRows = [trace('u1', '独立概念')]
+    const offPageRows = [trace('u3', '同族概念'), trace('u3', '同族概念')]
+    const allRows = [...pageRows, ...offPageRows]
+
+    usersFindMany
+      .mockResolvedValueOnce([]) // 虚拟 id 列表
+      .mockResolvedValueOnce([
+        { id: 'u1', name: '甲' }, { id: 'u2', name: '乙' }, { id: 'u3', name: '丙' },
+      ])
+    tracesGroupBy
+      .mockResolvedValueOnce([
+        { userId: 'u1', _count: { _all: 1 } },
+        { userId: 'u2', _count: { _all: 1 } },
+        { userId: 'u3', _count: { _all: 2 } },
+      ])
+      .mockResolvedValueOnce([])   // due 计数
+      .mockResolvedValueOnce([])   // 未挂靠散键
+    // limit=2：页内（u1,u2）先取一次，补页外（u3）再取一次
+    tracesFindMany
+      .mockResolvedValueOnce(pageRows)
+      .mockResolvedValueOnce(offPageRows)
+
+    const paged = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { limit: '2' } })
+    const pagedRatio = paged.body.data.totals.fragmentation.duplicateLabelRatio
+    // 3 行中 2 行同族 → 0.67；旧实现（只算页内）会得 0
+    expect(pagedRatio).toBe(0.67)
+
+    // 同一份数据、limit 覆盖全部用户 → 单次取数，比率必须一致
+    usersFindMany.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce([
+      { id: 'u1', name: '甲' }, { id: 'u2', name: '乙' }, { id: 'u3', name: '丙' },
+    ])
+    tracesGroupBy.mockReset().mockResolvedValueOnce([
+      { userId: 'u1', _count: { _all: 1 } },
+      { userId: 'u2', _count: { _all: 1 } },
+      { userId: 'u3', _count: { _all: 2 } },
+    ]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    tracesFindMany.mockReset().mockResolvedValue(allRows)
+    const full = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { limit: '50' } })
+    expect(full.body.data.totals.fragmentation.duplicateLabelRatio).toBe(pagedRatio)
   })
 })
 
@@ -259,6 +312,30 @@ describe('总览排序（2026-10-18：跨用户 5 列缺排序）', () => {
     expect(res.body.data.sort).toEqual({ key: 'name', order: 'asc' })
     // 展示行复用排序阶段取到的用户（不重复查一遍用户表）：虚拟列表 + 全量排序各一次
     expect(usersFindMany).toHaveBeenCalledTimes(2)
+  })
+
+  it('归并候选 / 散键也可排序（2026-10-23 从 KPI 下沉到列）', async () => {
+    queueBase()
+    usersFindMany.mockResolvedValue([])
+    tracesGroupBy.mockResolvedValueOnce([
+      { userId: 'u1', _count: { _all: 5 } },
+      { userId: 'u2', _count: { _all: 5 } },
+    ])
+    // u2 提案更多；u1 散键更多
+    projectionsFindMany.mockResolvedValue([
+      { userId: 'u1', payload: JSON.stringify(auditPayload), generatedAt: new Date() },
+      {
+        userId: 'u2',
+        payload: JSON.stringify({ ...auditPayload, stats: { ...auditPayload.stats, proposed: 9 } }),
+        generatedAt: new Date(),
+      },
+    ])
+    const byProposed = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'proposed', order: 'desc' } })
+    expect(byProposed.body.data.users.map((r: any) => r.userId)).toEqual(['u2', 'u1'])
+    expect(byProposed.body.data.sort).toEqual({ key: 'proposed', order: 'desc' })
+
+    const byScatter = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'scatter', order: 'desc' } })
+    expect(byScatter.body.data.sort).toEqual({ key: 'scatter', order: 'desc' })
   })
 
   it('lastReviewed 降序：按最近复习时间排，从未复习的（null）恒在末尾', async () => {

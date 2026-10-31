@@ -1,0 +1,110 @@
+{
+ "label": "BOARD3",
+ "generatedAt": "2026-10-27T07:31:07.915Z",
+ "model": "deepseek-v4.1-flash",
+ "total": 6,
+ "judged": 4,
+ "errors": 2,
+ "verdicts": {
+  "keep": 0,
+  "fix": 2,
+  "drop": 2
+ },
+ "meanUsefulness": 1.5,
+ "meanGeometry": 1.25,
+ "meanReadability": 2.25,
+ "metaShare": 0,
+ "leakShare": 75,
+ "redundantShare": 50,
+ "byKind": {
+  "split-compare": {
+   "n": 1,
+   "keep": 0,
+   "drop": 0,
+   "usefulness": 2
+  },
+  "concept-map": {
+   "n": 2,
+   "keep": 0,
+   "drop": 2,
+   "usefulness": 1
+  },
+  "state-strip": {
+   "n": 1,
+   "keep": 0,
+   "drop": 0,
+   "usefulness": 2
+  }
+ },
+ "results": [
+  {
+   "i": 0,
+   "user": "b1-math-pace·提问态",
+   "kind": "split-compare",
+   "usefulness": 2,
+   "geometry": 2,
+   "meta": false,
+   "leak": true,
+   "readability": 3,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "左边列出 60÷400=0.15 的错法及单位问题，右边留三格让学生补正确配速步骤。",
+   "worstIssue": "左侧副标题「秒没换成分钟，还除成了每米」直接把老师要学生自己说出的单位诊断答案写出来了。"
+  },
+  {
+   "i": 1,
+   "user": "b1-math-pace·揭晓态",
+   "kind": "split-compare",
+   "error": "HTTP 502: {\"error\":{\"message\":\"openai_error\",\"type\":\"bad_response_status_code\",\"param\":\"\",\"code\":\"bad_response_status_code\"}}"
+  },
+  {
+   "i": 2,
+   "user": "b2-phys-buoyancy·提问态",
+   "kind": "concept-map",
+   "usefulness": 1,
+   "geometry": 1,
+   "meta": false,
+   "leak": true,
+   "readability": 2,
+   "redundant": true,
+   "verdict": "drop",
+   "oneLine": "一张把浮力公式的三项决定因素和「深度、自重不影响浮力」的结论并排摆在框里的关系图。",
+   "worstIssue": "节点「浸入深度 h」的副标注直接写「深度变，F浮 不变」，而在同一张图里，「物体重力 G物」也写着「自重不改变 F浮」。这两句正是老师在这一轮让学生自己判断、并且明说「待会儿单独过」的答案；图一发下去，思考就被提前代替了。"
+  },
+  {
+   "i": 3,
+   "user": "b2-phys-buoyancy·揭晓态",
+   "kind": "concept-map",
+   "usefulness": 1,
+   "geometry": 1,
+   "meta": false,
+   "leak": true,
+   "readability": 2,
+   "redundant": true,
+   "verdict": "drop",
+   "oneLine": "一张把浮力只由液体密度和排开体积决定、深度和自重无关的结论概念图，和上一轮学生已说内容重复。",
+   "worstIssue": "老师让学生先自己判断清水/浓盐水时，图已把“密度越大浮力越大”“浸没后V排不再变”的推理结论写出，泄漏答案。"
+  },
+  {
+   "i": 4,
+   "user": "b3-hist-shangyang·提问态",
+   "kind": "state-strip",
+   "error": "bad json: We need answer only JSON. Evaluate image. Need decide. Let's inspect prompt. Student asks whether Shang Yang reforms fully launched at once; heard about moving ",
+   "raw": "We need answer only JSON. Evaluate image. Need decide. Let's inspect prompt. Student asks whether Shang Yang reforms fully launched at once; heard about moving a pole at south gate, relation. Teacher says no, pole shows he couldn't push at first, so first not promulgate laws, but make people believe government keeps promises. Then asks: board \"变法前\" cell empty. First say: before reforms, what did Qin court most lack? 1-2 sentences.\n\nImage: state-strip, title \"商鞅变法怎么落地\"; four frames labeled 变法前, 立木为信, 第一次变法, 第二次变法. Each has ? placeholders: 2,3,3,3. Arrows between frames. This is timeline/sequence with four stages. The current turn focuses on \"变法前\"空缺, asks student to fill what lacking. The image is a structured sequence, showing stages and number of items to fill. Is it useful? It gives sequence of reforms and place for pre-reform state. But does it answer \"student needs to see now\"? Student needs to see relation between pole and not full launch; sequence frames show pole before first reform, etc. Useful maybe 2 or 3? Geometry: sequence order via frames and arrows, number of slots. It carries temporal order; not just sentence boxes? It does show stages. But placeholders are just empty question marks in boxes, no detailed content. The geometry is mostly boxes/arrows. The relation \"not all at once\" is captured by staging. But the image's text only labels stages; no explanation of causality. It could help scaffold board. Yet \"state-strip\" with empty ? placeholders. meta? No, ? slots not meta. leak? No, empty. Readability okay. Redundant? If rewrite all text into sentence: \"商鞅变法怎么落地：变法前（两项待填）→立木为信（三项待填）→第一次变法（三项待填）→第二次变法（三项待填）.\" Does student lose anything? Loss of temporal sequence/parallel structure? The sequence relation is meaningful: pole before first reform, two waves. But the only content labels are stage names; arrows show order. Could be considered non-redundant because sequence layout conveys staged process. But is it too empty? The question asks about \"变法前\", and image has a big timeline with three future stages. It might distract but not harmful. Usefulness 2? Geometry 2? Verdict keep/fix? Worst issue: three subsequent frames are all \"？\" and not related, may dilute; or title \"怎么落地\" but no content. Need strict. Let's parse rubric. Usefulness: 0 pure decor, 3 no image hard to understand. Here student asks relation pole to reform; image shows pole as a stage before first/second reform. That's directly relevant: it places \"立木为信\" before \"第一次变法\", and \"变法前\" separate. It supports answer \"不是一下子全面推开\". But teacher asks about 变法前 lacking trust; image labels 立木为信 as second, before reforms. So yes, useful: 2. Not 3 because can be explained in sentence.\n\nGeometry: position/sequence arrows carry temporal relation. But it's a simple linear sequence. 2 maybe. Values? no. Could be 1 if just labeled boxes. But sequence order is academic relationship (stages). Arrows connect. The number of ? slots indicates expected content count, but arbitrary. Geometry 2.\n\nMeta: false. No instructions/checklists. Title is content question not meta.\n\nLeak: false, answer blank.\n\nReadability: 3? Text legible. There is \"立木为信\" maybe fonts okay. Title and labels clear. ? placeholders fine. 3.\n\nRedundant: If all text extracted: title and frame labels. Student loses the explicit left-to-right order and stage distinction? Rewriting as sentence \"变法前，然后立木为信，再第一次变法，再第二次变法\" preserves order but loses visual parallel side-by-side. Rubric says two-column/frame halves of same relation different side same action/different stages => false. Here it's a four-stage sequence; geometry (arrows) is the relation. So not redundant. false.\n\nVerdict: keep? But maybe \"fix\" due to excessive empty placeholders? The current task only requires filling \"变法前\"; showing 8 empty slots future creates cognitive overload? But it is a state strip for whole lesson. In classroom, teacher says \"看板上「变法前」这一格还空着\" implies board has multiple frames; image matches. It is a board scaffold. The image likely useful. Could keep. OneLine: \"用四格时间轴把商鞅变法按‘变法前—立木为信—两次变法’排成先后阶段，并给每格留出待填内容。\" Worst issue: none? Or \"后续三格全为问号，当前只聚焦第一格，余下空槽可能分散注意\" maybe. But if worst issue then fix? If keep, worst can be none or minor. Need \"最该修的一处（没有就写 none）\". If we keep, can mention minor? They ask if no write none. I think no severe issue. But perhaps image has a real problem: It frames \"立木为信\" as a stage between 变法前 and 第一次变法. Teacher's answer says \"先做的不是颁布法令，而是让百姓相信...\" That fits. The student's question \"跟变法有什么关系?\" The chart shows it as pre-step. Good.\n\nBut wait, \"变法前\" cell has two question marks, \"立木为信\" has three, etc. The teacher only asks \"变法前最缺什么？用一两句话\". The chart gives two slots under \"变法前\". If student gives one thing (信任), the two slots might imply two answers. But not a leak. Could be okay. \"变法前\" maybe should be one item? Hmm.\n\nNeed output JSON only. Need decide between keep and fix. Strict reviewer: Is timeline actually informative? It has no content except labels. The title \"商鞅变法怎么落地\" and four stage labels. The arrows and boxes depict sequence. The teacher's turn is asking a question, not presenting timeline. The image is an empty worksheet. The student needs to answer \"最缺什么\" — chart shows \"变法前\" as first stage with two blanks. Does it help? It situates \"变法前\" as a stage before 立木为信 and reforms. That's key to \"不是一下子\". It doesn't answer; it scaffolds. Usefulness 2. Geometry"
+  },
+  {
+   "i": 5,
+   "user": "b3-hist-shangyang·揭晓态",
+   "kind": "state-strip",
+   "usefulness": 2,
+   "geometry": 1,
+   "meta": false,
+   "leak": false,
+   "readability": 2,
+   "redundant": false,
+   "verdict": "fix",
+   "oneLine": "把商鞅变法的实际推进画成四格时间链：变法前→立木为信→第一次变法→第二次变法，并在第二格里塞进「民信→令必行」这条因果环。",
+   "worstIssue": "本轮问的是反事实（不立木、直接罚太子之师能不能推行），图里却只有真实发生的一条顺链，没有任何「有信 vs 无信」的分叉或依赖标记，学生盯着它推不出反事实结论；「民信：令必行」被压成第二格里的一行小字，没有作为连接「立木为信」与「新法」的关节被视觉化。"
+  }
+ ]
+}

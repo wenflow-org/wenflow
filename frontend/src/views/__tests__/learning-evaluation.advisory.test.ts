@@ -7,7 +7,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import LearningEvaluationPage from '../LearningEvaluationPage.vue';
 
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { taskId: 't1', sessionId: 's1' } }),
+  useRoute: () => ({ params: { taskId: 't1', sessionId: 's1' }, query: { pathId: 'p1' } }),
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
 }));
 
@@ -125,6 +125,13 @@ describe('LearningEvaluationPage 调整卡处置埋点（#35）', () => {
     emitAdvisory(w, 'preview');
     await flushPromises();
     expect(recordAdvisoryResponseMock).toHaveBeenCalledWith('s1', 'preview');
+  });
+
+  it('确认调整且 replan 成功后：上报 adopt（P1-7 漏斗执行档）', async () => {
+    const w = await mountReady();
+    emitAdvisory(w, 'confirm');
+    await flushPromises();
+    expect(recordAdvisoryResponseMock).toHaveBeenCalledWith('s1', 'adopt');
   });
 
   it('埋点失败静默降级：提示照常，页面不炸', async () => {

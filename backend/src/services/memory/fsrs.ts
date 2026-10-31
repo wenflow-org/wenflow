@@ -14,7 +14,7 @@
  *
  * 注意：本文件不落库；持久化与读写由 MemoryTraceService 承担。
  */
-import { fsrs as createFsrsScheduler, createEmptyCard, Rating, State } from 'ts-fsrs';
+import { fsrs as createFsrsScheduler, createEmptyCard, Rating, State, S_MIN } from 'ts-fsrs';
 import type { Card } from 'ts-fsrs';
 
 /** FSRS 成绩码（与 ts-fsrs Rating 对齐：1=Again 2=Hard 3=Good 4=Easy） */
@@ -38,13 +38,22 @@ export interface FsrsMemoryState {
 export const FSRS_DEFAULT_RETENTION = 0.9;
 /** 首个学习周期的最小间隔（天）：保护睡眠巩固窗口（Rasch & Born 2013） */
 export const FSRS_MIN_FIRST_INTERVAL_DAYS = 1;
+/**
+ * 可持久化稳定性的下限（天，与 ts-fsrs S_MIN 同值）。
+ * 理由（2026-10-21 实测）：语义干扰惩罚（×0.85）会把 0.001 的稳定性压到 0.00085，
+ * 落库后下一次复习被 ts-fsrs 判为非法记忆状态（`Invalid memory state`），整条
+ * review:completed 事件重试到死信，FSRS 调度对那个概念永久停摆。持久化与读回都夹这道地板。
+ */
+export const FSRS_MIN_STABILITY = S_MIN;
 
 /**
  * 知识看板状态 → FSRS 成绩码（确定性映射，零 LLM；与 mapKnowledgeStatusToMastery 语义对齐）
  * - mastered + progress≥100 → Easy：完全掌握且达标
  * - mastered → Good：已掌握
  * - review → Hard：到期复习点（尚不稳固，按困难处理）
- * - learning / pending → Again：尚未掌握
+ * - learning → Hard：本节课有推进但尚未掌握；这是「费力回忆出来了」，
+ *   不是「完全没回忆出来」（2026-10-22 审计：99/133 课末证据记 Again，系统性压低 stability）
+ * - pending → Again：尚未开始/无进度（无证据路径实际会被证据门返回 null）
  */
 export function fsrsGradeFromStatus(
   status: 'pending' | 'learning' | 'mastered' | 'review',
@@ -57,6 +66,7 @@ export function fsrsGradeFromStatus(
     case 'review':
       return Rating.Hard;
     case 'learning':
+      return Rating.Hard;
     case 'pending':
     default:
       return Rating.Again;
@@ -76,7 +86,7 @@ export function fsrsGradeFromStatus(
  * |---|---|---|
  * | pending | **无**：本节课未开始该概念（12911 条 pending 中 12854 条 progress≤0）。写 Again 等于把"没学"记成"复习失败"（Review 态还会 lapses+1） | null |
  * | review | **无**：到期复习点的成绩由复习事件链单一写入（ReviewCompletedConsumer，见 memory-trace.service.ts 末尾注释）；仍停留在 review 的点=未响应的待办，不是"复习过但困难" | null |
- * | learning，progress>0 | 有：本节课有进度 | Again（尚未掌握） |
+ * | learning，progress>0 | 有：本节课有进度 | Hard（有推进但未掌握） |
  * | mastered，progress>0 | 有：本节课判定掌握 | progress≥100 → Easy，否则 Good |
  * | learning / mastered，progress≤0 | **无**：无进度变化 | null |
  * | 其他（缺失/非法） | 无状态 | null |
@@ -133,7 +143,8 @@ function cardOf(state: FsrsMemoryState, now: Date): Card {
   const empty = createEmptyCard();
   return {
     due: empty.due,
-    stability: state.stability,
+    // 历史行可能因旧的干扰惩罚低于 S_MIN：读回时夹到地板，否则 ts-fsrs 直接判状态非法
+    stability: state.stability > 0 ? Math.max(FSRS_MIN_STABILITY, state.stability) : 0,
     difficulty: state.difficulty,
     elapsed_days: 0,
     scheduled_days: 0,
@@ -170,14 +181,14 @@ export function fsrsSchedule(
   const result = scheduler.next(card, now, grade);
 
   const stability = Number.isFinite(result.card.stability) && result.card.stability > 0
-    ? result.card.stability
+    ? Math.max(FSRS_MIN_STABILITY, result.card.stability)
     : 1;
   // 下次复习 = lastReview + stability 天（desired retention 下 stability 即"降到阈值的天数"）
   const intervalDays = Math.max(FSRS_MIN_FIRST_INTERVAL_DAYS, Math.round(stability));
 
   return {
     state: {
-      stability: result.card.stability,
+      stability,
       difficulty: result.card.difficulty,
       reps: result.card.reps,
       lapses: result.card.lapses,

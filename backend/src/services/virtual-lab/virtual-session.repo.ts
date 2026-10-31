@@ -51,6 +51,16 @@ export function findSessionsForStoryUsage(profileId: string) {
   });
 }
 
+/** 画像最近一条会话（2026-10-29 审计 M-16）：管理端记忆池解析「该实例当前模拟钟」的锚点——
+ *  会话级时钟（stageResults.simulationClock，advance-day 推进落在这里）优先取自它。 */
+export function findLatestSessionForProfile(profileId: string) {
+  return prisma.virtual_sessions.findFirst({
+    where: { virtualProfileId: profileId },
+    orderBy: { updatedAt: 'desc' },
+    select: { id: true, stageResults: true, createdAt: true },
+  });
+}
+
 /** runDayLearning 前置探测：当前阶段与状态 */
 export function findSessionStageFields(sessionId: string) {
   return prisma.virtual_sessions.findUnique({
@@ -127,10 +137,22 @@ export function createAdminAuditLog(args: { data: Prisma.admin_audit_logsCreateI
   return prisma.admin_audit_logs.create(args);
 }
 
-/** 全量会话状态聚合（列表状态条 / 仿真看板共用） */
+/**
+ * 会话读侧范围：只认派生实例的会话（2026-10-25「不播种，都派生」）。
+ *
+ * 身份池里的模板卡与派生实例同表（`virtual_learner_profiles`），模板卡理论上不该有运行记录，
+ * 但历史库里有（预置卡当年直接当过学习者跑过）。列表既然只列派生实例，全量聚合（状态条 /
+ * 仿真看板 / 卡死候选 / 平均时长）也必须同范围，否则会出现「列表 0 人、完成率却有数」。
+ * 判据与 `virtual-learner-profile.repo` 的 DERIVED_INSTANCE_WHERE 同源（profile JSON 含 derivedFrom）。
+ */
+const DERIVED_PROFILE_FILTER = { profile: { contains: '"derivedFrom"' } } as const
+const DERIVED_SESSION_SCOPE = { virtual_learner_profiles: DERIVED_PROFILE_FILTER } as const
+
+/** 全量会话状态聚合（列表状态条 / 仿真看板共用；范围=派生实例） */
 export function getSessionStatusAggregates() {
   return prisma.virtual_sessions.groupBy({
     by: ['status'],
+    where: DERIVED_SESSION_SCOPE,
     _count: { _all: true }
   });
 }
@@ -156,23 +178,40 @@ export function findStaleSessionsByProfiles(profileIds: string[], staleBefore: D
   });
 }
 
-/** 卡死候选全集（列表 staleCount 用；不含 updatedAt） */
+/** 卡死候选全集（列表 staleCount 用；不含 updatedAt；范围=派生实例） */
 export function findStaleSessionCandidates(staleBefore: Date) {
   return prisma.virtual_sessions.findMany({
-    where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleBefore } },
+    where: { ...DERIVED_SESSION_SCOPE, status: { in: ['running', 'created'] }, updatedAt: { lt: staleBefore } },
     select: { id: true, stageResults: true }
   });
 }
 
-/** 仿真看板卡死候选（含 updatedAt，供 maxStaleMins 计算） */
+/** 仿真看板卡死候选（含 updatedAt，供 maxStaleMins 计算；范围=派生实例） */
 export function findStaleSessionsForStats(staleBefore: Date) {
   return prisma.virtual_sessions.findMany({
-    where: { status: { in: ['running', 'created'] }, updatedAt: { lt: staleBefore } },
+    where: { ...DERIVED_SESSION_SCOPE, status: { in: ['running', 'created'] }, updatedAt: { lt: staleBefore } },
     select: { id: true, stageResults: true, updatedAt: true }
   });
 }
 
-/** 运行中口径细分（识别 autopilot=stopped 的「已暂停」） */
+/** 在跑/暂停/停滞判定的输入（2026-10-21）：非终态会话 + autopilot 状态 + 心跳。
+    不再按 status='running' 取——新会话在 goal/path 阶段是 created，却可能正被自动驾驶推进 */
+export function findLiveSessionsByProfiles(profileIds: string[]) {
+  return prisma.virtual_sessions.findMany({
+    where: { virtualProfileId: { in: profileIds }, status: { in: ['created', 'running'] } },
+    select: { id: true, virtualProfileId: true, status: true, stageResults: true, updatedAt: true }
+  });
+}
+
+/** 全量非终态会话（/stats 与列表同口径：running 由 autopilot 状态推导；范围=派生实例） */
+export function findLiveSessionsAll() {
+  return prisma.virtual_sessions.findMany({
+    where: { ...DERIVED_SESSION_SCOPE, status: { in: ['created', 'running'] } },
+    select: { id: true, status: true, stageResults: true, updatedAt: true }
+  });
+}
+
+/** 运行中口径细分（识别 autopilot=stopped 的「已暂停」）——2026-10-21 起仅存量引用，列表改用 live 会话分类 */
 export function findRunningSessionsByProfiles(profileIds: string[]) {
   return prisma.virtual_sessions.findMany({
     where: { virtualProfileId: { in: profileIds }, status: 'running' },
@@ -180,18 +219,19 @@ export function findRunningSessionsByProfiles(profileIds: string[]) {
   });
 }
 
-/** 全局运行中会话（/stats 同口径细分用：running 扣 autopilot=stopped，与列表逐画像口径一致） */
+/** 全局运行中会话（/stats 同口径细分用：running 扣 autopilot=stopped，与列表逐画像口径一致；
+    范围=派生实例，与 findLiveSessionsAll 同源） */
 export function findRunningSessionsForStats() {
   return prisma.virtual_sessions.findMany({
-    where: { status: 'running' },
+    where: { ...DERIVED_SESSION_SCOPE, status: 'running' },
     select: { id: true, stageResults: true }
   });
 }
 
-/** 终态会话（平均时长计算用） */
+/** 终态会话（平均时长计算用；范围=派生实例） */
 export function findTerminalSessions() {
   return prisma.virtual_sessions.findMany({
-    where: { status: { in: ['completed', 'failed', 'abandoned'] } },
+    where: { ...DERIVED_SESSION_SCOPE, status: { in: ['completed', 'failed', 'abandoned'] } },
     select: { createdAt: true, updatedAt: true }
   });
 }

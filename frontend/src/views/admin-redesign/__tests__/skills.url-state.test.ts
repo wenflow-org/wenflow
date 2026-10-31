@@ -17,6 +17,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory, type Router } from 'vue-router';
 import Skills from '../Skills.vue';
+import { chooseFilter, filterValue } from './filter-controls';
+import { mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 import { dataSource, liveSkillStatsMap } from '../store';
 import { liveSkillProfiles } from '../live';
 
@@ -27,6 +29,7 @@ vi.mock('../live', async () => {
     liveSkillStatsRange: ref('7d'),
     liveFailures: ref<Record<string, string>>({}),
     liveLoading: ref(false),
+    liveRefreshSeq: ref(0),
     refreshLiveSkills: vi.fn(async () => {}),
     errMsg: (e: unknown) => String(e),
     totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / Math.max(1, pageSize)))
@@ -70,7 +73,6 @@ vi.mock('@/api/adminApi', () => {
     adminMcpApi: apiObject(),
     adminGlossaryApi: apiObject(),
     adminPlatformSettingsApi: apiObject(),
-    adminCapabilityProbeApi: apiObject(),
     adminPromptOpsApi: apiObject(),
     adminPromptWorkbenchApi: apiObject(),
     adminSkillWorkbenchApi: apiObject(),
@@ -133,8 +135,7 @@ async function mountAt(url: string): Promise<{ w: ReturnType<typeof mount>; rout
   return { w, router };
 }
 
-const pillOf = (w: ReturnType<typeof mount>, label: string) =>
-  w.findAll('.mk-pill').find((p) => p.text().startsWith(label))!;
+const pillValue = (w: ReturnType<typeof mount>) => filterValue(w as never, '关注');
 
 describe('Skills 列表筛选 ↔ URL', () => {
   it('改筛选写 URL：只写非缺省值，且不动别人的键（?view=&id= 保留）', async () => {
@@ -151,8 +152,8 @@ describe('Skills 列表筛选 ↔ URL', () => {
     expect(router.currentRoute.value.query.page).toBeUndefined();
     expect(router.currentRoute.value.query.size).toBeUndefined();
 
-    // 点「仅看需关注」→ ?pill=attn
-    await pillOf(w, '仅看需关注').trigger('click');
+    // 选「仅看需关注」→ ?pill=attn
+    await chooseFilter(w as never, '关注', '仅看需关注');
     await flushPromises();
     expect(router.currentRoute.value.query.pill).toBe('attn');
     w.unmount();
@@ -161,28 +162,28 @@ describe('Skills 列表筛选 ↔ URL', () => {
   it('深链落位：?page=2&size=10 还原页码与页大小，且不被「筛选变化回第 1 页」拽回', async () => {
     const { w, router } = await mountAt('/admin/skills?page=2&size=10');
     expect(w.text()).toContain('第 2 / 2 页');
-    expect((w.find('.mk-pagination__size').element as HTMLSelectElement).value).toBe('10');
+    expect(mkSelectValue(w as never, '每页条数')).toBe('10');
     // 落位后不回写脏值：URL 上仍是 2 / 10
     expect(router.currentRoute.value.query.page).toBe('2');
     expect(router.currentRoute.value.query.size).toBe('10');
     w.unmount();
   });
 
-  it('深链落位：?q=&pill=&cat=&agent= 四条筛选轴全部还原到控件', async () => {
-    const { w } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching&agent=path-agent');
+  it('深链落位：?q=&pill=&agent= 三条筛选轴全部还原到控件（?cat= 随该列一起退役，不再受理）', async () => {
+    const { w, router } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching&agent=path-agent');
     expect((w.find('input.mk-filter__input').element as HTMLInputElement).value).toBe('教学');
-    expect(pillOf(w, '仅看需关注').attributes('aria-pressed')).toBe('true');
-    // 筛选弹层里的两个下拉
-    await w.find('.mk-adv > button').trigger('click');
-    await nextTick();
-    expect((w.find('#skillAgentFilter').element as HTMLSelectElement).value).toBe('path-agent');
-    expect((w.find('select[aria-label="按类别筛选"]').element as HTMLSelectElement).value).toBe('teaching');
+    expect(pillValue(w)).toBe('attention');
+    // 归属 Agent 下拉已从「筛选」弹层移回卡头一行（2026-10-26），控件直取
+    expect(filterValue(w as never, '归属')).toBe('path-agent');
+    // 类别筛选已撤（2026-10-24）：弹层里没有该下拉，URL 上的 cat 也不再被写回
+    expect(w.find('.mk-pillselect[aria-label="按类别筛选"]').exists()).toBe(false);
+    expect(router.currentRoute.value.query.cat).toBeUndefined();
     w.unmount();
   });
 
   it('脏值回落：非法 pill 当缺省、非法页码 / 页大小回落默认（不把列表筛空）', async () => {
     const { w, router } = await mountAt('/admin/skills?pill=zzz&page=abc&size=0');
-    expect(pillOf(w, '全部').attributes('aria-pressed')).toBe('true');
+    expect(pillValue(w)).toBe('all');
     expect(w.text()).toContain('共 12 条 · 第 1 / 1 页');
     // 脏值被清出 URL，不留一个说不通的状态
     expect(router.currentRoute.value.query.pill).toBeUndefined();
@@ -191,9 +192,11 @@ describe('Skills 列表筛选 ↔ URL', () => {
     w.unmount();
   });
 
-  it('点「清除筛选」把 q / pill / cat / agent 一并从 URL 摘掉', async () => {
+  it('逐个复位控件会把 q / pill 从 URL 摘掉（工具条不再有「清除筛选」文字链）', async () => {
     const { w, router } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching');
-    await w.find('.mk-link').trigger('click');
+    expect(w.findAll('.mk-filter button').some((b) => b.text() === '清除筛选')).toBe(false);
+    await w.find('input.mk-filter__input').setValue('');
+    await chooseFilter(w as never, '关注', '全部');
     await flushPromises();
     expect(router.currentRoute.value.query.q).toBeUndefined();
     expect(router.currentRoute.value.query.pill).toBeUndefined();

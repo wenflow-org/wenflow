@@ -7,6 +7,7 @@
 
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
+import { JSON_OUTPUT_RETRY_STRATEGY } from '../json-output-retry';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 
 export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
@@ -202,7 +203,8 @@ export async function adaptiveGuidanceCopy(
       defaultSystemPrompt: ADAPTIVE_GUIDANCE_COPY_PROMPT,
       requireActivePrompt: true,
       caller: { skillId: 'adaptive-guidance-copy' },
-            buildUserPayload: () => userPayload,
+      retryStrategy: JSON_OUTPUT_RETRY_STRATEGY,
+      buildUserPayload: () => userPayload,
       normalizeOutput: (parsed, payload) => normalizeAdaptiveOutput(parsed, payload),
       validateParsedOutput: (parsed) =>
         parsed && typeof parsed === 'object'

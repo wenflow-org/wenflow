@@ -10,6 +10,31 @@ export default defineConfig({
       '@': resolve(__dirname, 'src')
     }
   },
+  /* D5（2026-10-22 拍板 A）：highlight.js 的语言包是动态可达的深层依赖，长驻 dev server
+     遇到依赖图变化时会留下失效 browserHash，页面表现为整页「资源加载失败」（实际是 3 个
+     highlight__js_lib_* 请求 504）。显式预热进 optimizeDeps，避免每次删 .vite 重启。 */
+  optimizeDeps: {
+    include: [
+      'highlight.js/lib/core',
+      'highlight.js/lib/languages/javascript',
+      'highlight.js/lib/languages/typescript',
+      'highlight.js/lib/languages/python',
+      'highlight.js/lib/languages/java',
+      'highlight.js/lib/languages/c',
+      'highlight.js/lib/languages/cpp',
+      'highlight.js/lib/languages/csharp',
+      'highlight.js/lib/languages/go',
+      'highlight.js/lib/languages/rust',
+      'highlight.js/lib/languages/sql',
+      'highlight.js/lib/languages/bash',
+      'highlight.js/lib/languages/shell',
+      'highlight.js/lib/languages/powershell',
+      'highlight.js/lib/languages/json',
+      'highlight.js/lib/languages/yaml',
+      'highlight.js/lib/languages/xml',
+      'highlight.js/lib/languages/css'
+    ]
+  },
   build: {
     rollupOptions: {
       output: {

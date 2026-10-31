@@ -29,6 +29,8 @@ export interface MaterialRecord {
   anchors: DocumentAnchor[];
   warnings: string[];
   createdAt: string;
+  /** 抽取后正文的 SHA-256；用于内容级去重（旧记录可能缺省）。 */
+  contentHash?: string;
   /**
    * 资料理解摘要（Document Summary Index 摘要节点，2026-09-24）。
    * 惰性生成一次后持久化，goal 对话与 path 生成复用；缺省=尚未生成（fail-open 降级元信息）。
@@ -184,6 +186,37 @@ export function readMaterial(userId: string, id: string): { record: MaterialReco
     markdown = '';
   }
   return { record, markdown };
+}
+
+/**
+ * 清空某归属（账号 userId 或卡归属键 `card-<profileId>`）的全部资料目录：
+ * 正文 / 记录 / 向量侧车 / 历史无前缀目录一并删除。供虚拟学习者与卡的级联删除使用。
+ * 返回删除的文件数；目录被占用或已不存在时静默保留（不阻断删除主流程）。
+ */
+export function purgeOwnerMaterials(ownerKey: string): number {
+  let removed = 0;
+  for (const dir of userDirectories(ownerKey)) {
+    let entries: string[] = [];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      try {
+        fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
+        removed++;
+      } catch {
+        // 单个文件删不掉（占用/权限）不阻断其余清理
+      }
+    }
+    try {
+      fs.rmdirSync(dir);
+    } catch {
+      // 目录非空 / 已被删除 / 被占用：留空目录无害
+    }
+  }
+  return removed;
 }
 
 /** 向量侧车文件名后缀（单点定义：material-vector-store 与本文件的删除路径共用，防两处漂移）。 */

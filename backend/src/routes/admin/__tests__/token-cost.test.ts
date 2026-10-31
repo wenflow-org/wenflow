@@ -19,7 +19,6 @@ jest.mock('../../../services/cost/token-cost.service', () => ({
 import { agentDisplayName, parseMetadataSkillId, __clearTokenCacheForTests } from '../token-cost';
 import router from '../token-cost';
 import {
-  resolveRealUserIds,
   listUsersBasicInfo,
   aggregateWindow,
   aggregateTokenGroups,
@@ -27,7 +26,6 @@ import {
 import { dayKeyOf } from '../../../services/time/day-boundary';
 import * as modelsConfig from '../../../config/models.config';
 
-const mockResolveRealUserIds = resolveRealUserIds as jest.Mock;
 const mockListUsersBasicInfo = listUsersBasicInfo as jest.Mock;
 const mockAggregateWindow = aggregateWindow as jest.Mock;
 const mockAggregateTokenGroups = aggregateTokenGroups as jest.Mock;
@@ -96,6 +94,13 @@ describe('agentDisplayName（manifest 名称映射）', () => {
     expect(agentDisplayName('skill:unknown-skill')).toBe('unknown-skill');
   });
 
+  it('裸 skillId 也能命中 manifest（调用日志前缀不统一）', () => {
+    // 同库既有 `skill:teaching-turn` 也有裸 `teaching-turn`，两者必须同显中文名
+    const withPrefix = agentDisplayName('skill:teaching-turn');
+    expect(agentDisplayName('teaching-turn')).toBe(withPrefix);
+    expect(withPrefix).not.toBe('teaching-turn');
+  });
+
   it('未知 id 原样返回', () => {
     expect(agentDisplayName('random-id')).toBe('random-id');
   });
@@ -118,7 +123,6 @@ describe('GET /token-cost/summary', () => {
   beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
 
   it('缓存命中：同 key 二次请求不重复查库（TTL 5min 内存缓存）', async () => {
-    mockResolveRealUserIds.mockResolvedValue(['u1']);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([group('teaching-turn', 'u1', 'm1', { tokens: 100 })]);
 
@@ -135,7 +139,6 @@ describe('GET /token-cost/summary', () => {
   });
 
   it('注册表版本变化即失效缓存（配完单价不必等 TTL，金额立刻按新单价算）', async () => {
-    mockResolveRealUserIds.mockResolvedValue(['u1']);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([group('teaching-turn', 'u1', 'm1', { tokens: 100 })]);
 
@@ -160,7 +163,6 @@ describe('GET /token-cost/summary', () => {
   });
 
   it('总量 / 调用数 / prompt·completion / 按天趋势', async () => {
-    mockResolveRealUserIds.mockResolvedValue(['u1', 'u2']);
     // 窗口总量：3 次调用（含 1 失败）；今天窗内 3 次调用 1 失败
     mockWindow({ calls: 3, failed: 1, tokens: 300 }, { calls: 3, failed: 1, tokens: 300 });
     mockAggregateTokenGroups.mockResolvedValue([
@@ -185,13 +187,17 @@ describe('GET /token-cost/summary', () => {
     expect(failedDay).toBeDefined();
   });
 
-  it('includeTest=1 跳过真实用户过滤', async () => {
+  it('不按账号类型过滤：成本页统计全部账号（含虚拟学习者）', async () => {
     mockWindow();
     mockEmptyTokenGroups();
     const handler = getRouteHandler('/summary', 'get');
     const res = createResponse();
     await handler(createRequest({ days: '7', includeTest: '1' }), res);
-    expect(mockResolveRealUserIds).not.toHaveBeenCalled();
+    // 2026-10-21 拍板「撤开关，全部混在一起」：聚合查询的 userId 过滤源恒为 null
+    for (const call of mockAggregateWindow.mock.calls) {
+      expect(call[2]).toBeNull();
+    }
+    expect(mockAggregateTokenGroups.mock.calls[0][1]).toBeNull();
     expect(res.json.mock.calls[0][0].data.includeTest).toBe(true);
   });
 });
@@ -200,7 +206,6 @@ describe('GET /token-cost/by-skill', () => {
   beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
 
   it('按 metadata.skillId 聚合：token 降序 + 失败计数 + 可读名', async () => {
-    mockResolveRealUserIds.mockResolvedValue([]);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([
       group('teaching-turn', 'u1', 'm1', { tokens: 1000, calls: 2, failed: 1 }),
@@ -223,7 +228,6 @@ describe('GET /token-cost/by-skill', () => {
   });
 
   it('无 skillId 的 token 行归入「未归因」', async () => {
-    mockResolveRealUserIds.mockResolvedValue([]);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([
       group(null, 'system', 'm1', { tokens: 20, promptTokens: 10, completionTokens: 10 }),
@@ -243,7 +247,6 @@ describe('GET /token-cost/by-user', () => {
   beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
 
   it('top N 排行 + 用户名邮箱补全', async () => {
-    mockResolveRealUserIds.mockResolvedValue(['u1', 'u2']);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([
       group('teaching-turn', 'u1', 'm1', { tokens: 700 }),
@@ -265,7 +268,6 @@ describe('GET /token-cost/by-user', () => {
   });
 
   it('q 过滤：按昵称/邮箱命中，且搜索面覆盖全量（不受 limit 截断）', async () => {
-    mockResolveRealUserIds.mockResolvedValue(['u1', 'u2', 'u3']);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([
       group('teaching-turn', 'u1', 'm1', { tokens: 900 }),
@@ -294,7 +296,6 @@ describe('GET /token-cost/by-model', () => {
   beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
 
   it('按 model 聚合排行', async () => {
-    mockResolveRealUserIds.mockResolvedValue([]);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([
       group('teaching-turn', 'u1', 'deepseek-v4-flash', { tokens: 800 }),
@@ -322,7 +323,6 @@ describe('GET /token-cost · 成本字段与 pricingStatus', () => {
        结束后恢复，而不是依赖文件当前是否已配价 */
     const priceTable = [...modelsConfig.AVAILABLE_MODELS];
     modelsConfig.AVAILABLE_MODELS.length = 0;
-    mockResolveRealUserIds.mockResolvedValue(['u1']);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([
       group('teaching-turn', 'u1', 'deepseek-v4-flash', { tokens: 1000 }),
@@ -350,7 +350,6 @@ describe('GET /token-cost · 成本字段与 pricingStatus', () => {
   });
 
   it('by-model 条目：携带 usd/pricingKnown/callsMissingPricing/pricedCalls', async () => {
-    mockResolveRealUserIds.mockResolvedValue([]);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([
       group('teaching-turn', 'u1', 'deepseek-v4-flash', { tokens: 800 }),

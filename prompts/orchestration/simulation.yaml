@@ -66,6 +66,11 @@ fields:
     promptRole: public-reply
     valueType: object
     description: 学习者对当前 task 是否学完的自我反馈
+  - fieldId: checkpointAnswer
+    promptRole: proposal-output
+    valueType: object
+    description: 待答检查点的作答草案（selectedOptionIds/answerText/confidence；仅 pendingCheckpoint 存在时输出）
+    notes: internal — 编排层消费后提交检查点，不直接展示
 
   # === path-evaluator 输出 ===
   - fieldId: reaction
@@ -226,6 +231,13 @@ routings:
     internal: true
     accumulate: false
     notes: internal — 仅调试
+  - agentId: skill:virtual-learner-learn-turn-simulator
+    fieldId: checkpointAnswer
+    render: hidden
+    handoff: [simulation-agent]
+    internal: true
+    accumulate: false
+    notes: internal — 编排层提交检查点使用
 
   # === referee ===
   - agentId: skill:virtual-learner-referee

@@ -16,7 +16,7 @@ failurePolicy: propagate
 - task：当前任务 / 场景 / 控制指令
 - learner：学习者画像投影（长期特征）
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
-- state：平台维护的主记忆快照（当前值，含 stage）
+- state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪/负荷）——task 与 signals 由调用方在此之上算出

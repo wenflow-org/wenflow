@@ -1,4 +1,4 @@
-import { inferMaxWeeksFromTimeHorizon, derivePlanningHints, derivePlannedOutline, buildFramedNormalizedInput } from '../path-planning-hints';
+import { inferMaxWeeksFromTimeHorizon, derivePlanningHints, derivePlannedOutline, buildFramedNormalizedInput, clampStageMinutesToBudget, orderStageTasksByTopology, remapStageTaskReferences } from '../path-planning-hints';
 import { paceSignalRangeConfig } from '../../../config/pedagogy.config';
 
 /**
@@ -463,5 +463,330 @@ describe('keyStages 缺失时的学时兜底（2026-09-27 横向扩测 heavy-fp#
       totalWeeks: 6, estimatedHours: 21, sessionsPerWeek: 7, sessionsLengthMin: 30, totalSessions: 42,
     });
     expect(hints.targetMilestones).toBe(3);
+  });
+});
+
+/**
+ * 「承诺为顶」（2026-10-25 方向改造 / issue #138 决策 A）：goal 层与用户谈定的节奏总量
+ * （sessionsPerWeek × 单次分钟 × 总周数）是对用户的契约，不允许被「每日分钟 × 7」的
+ * 兜底假设放大。实证：uqcit3l（w05）承诺「4 周每周半小时」= 2h，goal 层结构化推断
+ * 正确（estimatedHours=2），但 inferredBudgetCap 按每日 30min 算出 14h，R1-d 的
+ * 25% 带下限（3.5h）反把承诺抬到 3.5h → 守恒 floor 把模型合规的 2h 拉到 3.4h。
+ */
+describe('derivePlanningHints：承诺为顶（cadence 总量不被「按每日」假设放大）', () => {
+  it('w05 场景回归：每周一次 30 分钟 × 4 周 → targetTotalHours = 2（不是 3.5）', () => {
+    const hints = derivePlanningHints(
+      '未明确（按「接下来4周走完一轮」假设推进）',
+      '每周下班后半小时',
+      '30分钟（每周一次，按原话推断）',
+      null,
+      ['搭最小数据口径', '算第一版周预测', '每周对照校准'],
+      { totalSessions: 4, sessionsLengthMin: 30, totalWeeks: 4, sessionsPerWeek: 1, estimatedHours: 2 },
+    );
+    expect(hints.targetTotalHours).toBe(2);
+  });
+
+  it('每日学习者不受影响：7 次/周 × 30min × 4 周 = 14h 维持原值', () => {
+    const hints = derivePlanningHints(
+      '一个月', '每天半小时', '每天30分钟', 'per_day',
+      ['一', '二', '三'],
+      { totalSessions: 28, sessionsLengthMin: 30, totalWeeks: 4, sessionsPerWeek: 7, estimatedHours: 14 },
+    );
+    expect(hints.targetTotalHours).toBe(14);
+  });
+
+  it('承诺口径字段缺失时不启用钳制（模型自报总量原样透传）', () => {
+    const hints = derivePlanningHints('六周', null, null, null, ['一', '二', '三'], {
+      totalWeeks: 6, estimatedHours: 9, sessionsPerWeek: null, sessionsLengthMin: null,
+    });
+    // cadence 三元组不全 → promisedCadenceHours=null → 钳制不介入，estimatedHours 原样生效
+    expect(hints.targetTotalHours).toBe(9);
+  });
+
+  it('模型自报总量偏离承诺节奏 >1.25× 时不压回（总量估计优先于 cadence 推导）', () => {
+    const hints = derivePlanningHints(
+      '三个月', null, null, null, ['S1', 'S2', 'S3'],
+      { totalWeeks: 2, estimatedHours: 16, sessionsPerWeek: 6, sessionsLengthMin: 60 },
+      'small',
+    );
+    // cadence 推出 12h 但模型自报 16h（>12×1.25）→ 不钳制，16h 生效（既有语义保持）
+    expect(hints.targetTotalHours).toBe(16);
+  });
+});
+
+/**
+ * 阶段分钟预算确定性夹（2026-10-25 承诺二次违约修复）。
+ * 实证 uqcit3l：hints 全对（总量 2h / 每阶段 0.7h / 每任务 20 分钟 / 区间 9-30），
+ * 模型仍排出 80+60+113=253 分钟 ≈ 承诺 120 分钟的 2.1 倍。
+ */
+describe('clampStageMinutesToBudget：阶段总量超预算时确定性压缩', () => {
+  it('未超预算 → 原样返回（零行为变化）', () => {
+    const tasks = [{ estimatedMinutes: 20 }, { estimatedMinutes: 25 }];
+    expect(clampStageMinutesToBudget(tasks, 60, { minMinutes: 9, maxMinutes: 30 })).toBe(tasks);
+  });
+
+  it('uqcit3l 场景：80+60+113 的阶段被压到预算内（45 = 36×1.25）', () => {
+    const tasks = [
+      { estimatedMinutes: 80, title: 'a' },
+      { estimatedMinutes: 60, title: 'b' },
+      { estimatedMinutes: 113, title: 'c' },
+    ];
+    const out = clampStageMinutesToBudget(tasks, 45, { minMinutes: 9, maxMinutes: 30 });
+    const total = out.reduce((s, t) => s + Number(t.estimatedMinutes), 0);
+    expect(total).toBeLessThanOrEqual(45);
+    expect(out.length).toBeGreaterThanOrEqual(1);
+    // 每任务不低于下限、不高于上界
+    for (const t of out) {
+      expect(t.estimatedMinutes).toBeGreaterThanOrEqual(9);
+      expect(t.estimatedMinutes).toBeLessThanOrEqual(30);
+    }
+  });
+
+  it('任务数过多压不动时从尾部截断（宁少勿撑破承诺）', () => {
+    const tasks = Array.from({ length: 6 }, (_, i) => ({ estimatedMinutes: 30, title: `t${i}` }));
+    const out = clampStageMinutesToBudget(tasks, 40, { minMinutes: 10, maxMinutes: 30 });
+    expect(out.reduce((s, t) => s + Number(t.estimatedMinutes), 0)).toBeLessThanOrEqual(40);
+    expect(out.length).toBeLessThan(tasks.length);
+    expect(out.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('预算无效（null/0/负数）→ 原样返回', () => {
+    const tasks = [{ estimatedMinutes: 80 }];
+    expect(clampStageMinutesToBudget(tasks, null)).toBe(tasks);
+    expect(clampStageMinutesToBudget(tasks, 0)).toBe(tasks);
+  });
+});
+
+/**
+ * 显式课次算术不被日历下限抬高（2026-10-25 phil-sci-03 iter3 回归）。
+ *
+ * 实证：goal 提取 totalSessions=8、sessionsLengthMin=60（对话原话「8 层、每层一小时」）
+ * ⇒ 8h 正确；但 timeHorizon「未明确」让 inferredBudgetCap 按每日分钟×7 算出 60h，
+ * R1-d 的 25% 带下限把 8h 抬到 15h，路径实排 11.8h ≈ 承诺的 3 倍，全程无告警。
+ */
+describe('derivePlanningHints：显式课次算术不被日历下限抬高', () => {
+  it('phil-sci 场景：8 次 × 60 分钟、周期未明 → 8h（不是 15h）', () => {
+    const hints = derivePlanningHints(
+      '未明确（明确排除一两个月集中；担心十周拖太长）',
+      '大块时间才学；单次一小时没问题',
+      '一小时',
+      null,
+      ['光电效应与双缝', '培根到休谟', '波普尔', '库恩', '四家对照', '脱稿讲清', '追问应答', '整合'],
+      { totalSessions: 8, sessionsLengthMin: 60, totalWeeks: null, sessionsPerWeek: null, estimatedHours: 8 },
+    );
+    expect(hints.targetTotalHours).toBe(8);
+  });
+
+  it('课次算术仍受日历上限约束（不因免下限而突破现实容量）', () => {
+    // 单次 60 分钟 × 100 次 = 100h，但日历只支持每天 30 分钟 × 2 周 ≈ 7h → 取上限
+    const hints = derivePlanningHints(
+      '两周', '每天半小时', '30分钟', 'per_day',
+      ['一', '二', '三'],
+      { totalSessions: 100, sessionsLengthMin: 60, totalWeeks: 2, sessionsPerWeek: 7, estimatedHours: 100 },
+    );
+    expect(hints.targetTotalHours).toBeLessThanOrEqual(10);
+  });
+
+  it('无课次算术时仍保留下限保护（estimatedHours 极小值被日历下限抬起）', () => {
+    // 没有 totalSessions ⇒ 不走课次分支；estimatedHours=1 属被污染的荒谬小值，
+    // 应被 inferredBudgetCap 的 25% 下限抬起（R1-d 原语义不被本次修改影响）
+    const hints = derivePlanningHints(
+      '半年', '每天半小时', '每天30分钟', 'per_day',
+      ['一', '二', '三'],
+      { totalSessions: null, sessionsLengthMin: null, totalWeeks: 26, sessionsPerWeek: null, estimatedHours: 1 },
+    );
+    expect(hints.targetTotalHours).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * 阶段内认知动作拓扑序（2026-10-25 外部评审实证）。
+ * 三处真实倒挂：py-clean S5 / eng-syntax S4 / power-train S1。
+ */
+describe('orderStageTasksByTopology：阶段内认知动作拓扑序', () => {
+  it('py-clean S5 倒挂：refine 抢跑到 model/execute 之前 → 被压到末尾', () => {
+    const tasks = [
+      { type: 'refine', title: '对照手工流程确认固化脚本' },
+      { type: 'model', title: '把整段收敛成脚本' },
+      { type: 'execute', title: '按业务粒度分组汇总' },
+      { type: 'diagnose', title: '换一月数据跑一次' },
+    ];
+    const out = orderStageTasksByTopology(tasks);
+    const ranks = out.map((t) => t.type);
+    expect(ranks[ranks.length - 1]).toBe('refine');
+  });
+
+  it('eng-syntax S4 倒挂：consolidate 抢跑到 model 之前 → 被压到末尾', () => {
+    const tasks = [
+      { type: 'deconstruct', title: 'a' },
+      { type: 'consolidate', title: 'b' },
+      { type: 'model', title: 'c' },
+      { type: 'diagnose', title: 'd' },
+      { type: 'execute', title: 'e' },
+    ];
+    const out = orderStageTasksByTopology(tasks);
+    expect(out[out.length - 1].type).toBe('consolidate');
+  });
+
+  it('不动建立档与应用档的相对次序（diagnose 可能先摸现状也可能做完再诊断）', () => {
+    // sql-perf S1 实证：execute → diagnose 是「先动手再定位问题」，合法，不该被翻
+    const tasks = [
+      { type: 'execute', title: '在真实报表上定位证据列' },
+      { type: 'diagnose', title: '把 EXPLAIN 读成慢因判断' },
+    ];
+    const out = orderStageTasksByTopology(tasks);
+    expect(out.map((t) => t.type)).toEqual(['execute', 'diagnose']);
+  });
+
+  it('power-train S1 的 acquire→execute→deconstruct→diagnose→refine 保持前四不动、refine 留末位', () => {
+    const tasks = [
+      { type: 'acquire', title: '换算五档区间' },
+      { type: 'execute', title: '逐档踩一遍功率' },
+      { type: 'deconstruct', title: '给轻松日定上限' },
+      { type: 'diagnose', title: '用腿不酸与心率标恢复判据' },
+      { type: 'refine', title: '排下周强度表' },
+    ];
+    const out = orderStageTasksByTopology(tasks);
+    expect(out.map((t) => t.type)).toEqual(['acquire', 'execute', 'deconstruct', 'diagnose', 'refine']);
+  });
+
+  it('同档内保持模型给的相对顺序', () => {
+    const tasks = [
+      { type: 'acquire', title: 'first' },
+      { type: 'deconstruct', title: 'second' },
+      { type: 'diagnose', title: 'third' },
+    ];
+    const out = orderStageTasksByTopology(tasks);
+    expect(out.map((t) => t.title)).toEqual(['first', 'second', 'third']);
+  });
+
+  it('已是正序时原样返回（零行为变化）', () => {
+    const tasks = [
+      { type: 'acquire' }, { type: 'deconstruct' }, { type: 'model' },
+      { type: 'execute' }, { type: 'diagnose' }, { type: 'refine' }, { type: 'consolidate' },
+    ];
+    const out = orderStageTasksByTopology(tasks);
+    expect(out.map((t) => t.type)).toEqual(['acquire', 'deconstruct', 'model', 'execute', 'diagnose', 'refine', 'consolidate']);
+  });
+
+  it('未知 type 视为建立/应用档（不压到收束档之后）', () => {
+    const tasks = [{ type: 'refine' }, { type: 'weird' }, { type: 'acquire' }];
+    const out = orderStageTasksByTopology(tasks);
+    expect(out.map((t) => t.type)).toEqual(['weird', 'acquire', 'refine']);
+  });
+
+  it('空数组 / 单任务 / 非数组 → 原样返回', () => {
+    expect(orderStageTasksByTopology([])).toEqual([]);
+    const one = [{ type: 'refine' }];
+    expect(orderStageTasksByTopology(one)).toBe(one);
+  });
+});
+
+describe('remapStageTaskReferences：重排后同步改写「任务 N」引用', () => {
+  it('sql-perf 场景：execute 提前后，原「任务 1」引用改指新位次', () => {
+    const original = [
+      { type: 'diagnose', description: '抄下 EXPLAIN 四列，形成慢因假设。' },
+      { type: 'execute', description: '沿用任务 1 抄下的同一份 EXPLAIN，收紧判断。' },
+    ];
+    const ordered = orderStageTasksByTopology(original);
+    // 拓扑序：diagnose(建立档) 先于 execute(应用档) → 本来就是正序，不该重排
+    expect(ordered.map((t) => t.type)).toEqual(['diagnose', 'execute']);
+    const remapped = remapStageTaskReferences(original, ordered);
+    expect(remapped[1].description).toContain('任务 1');
+  });
+
+  it('真倒挂：refine 抢跑到 execute 前，引用改指新位次而非自指', () => {
+    const original = [
+      { type: 'refine', description: '复查任务 2 产出的脚本，补说明。' },
+      { type: 'execute', description: '写出脚本。' },
+    ];
+    const ordered = orderStageTasksByTopology(original);
+    expect(ordered.map((t) => t.type)).toEqual(['execute', 'refine']);
+    const remapped = remapStageTaskReferences(original, ordered);
+    // 原「任务 2」= execute，重排后 execute 排第 1 ⇒ refine 里的引用改成「任务 1」
+    expect(remapped[1].description).toContain('任务 1');
+  });
+
+  it('引用被换到本任务位置时改写为「上一步的」，不产生新自指', () => {
+    const original = [
+      { type: 'refine', description: '复查任务 2 产出的脚本。' },
+      { type: 'model', description: '写出脚本。' },
+    ];
+    const ordered = orderStageTasksByTopology(original);
+    // model(应用档) 先于 refine(收束档) → 交换
+    expect(ordered.map((t) => t.type)).toEqual(['model', 'refine']);
+    const remapped = remapStageTaskReferences(original, ordered);
+    // refine 现在第 2 位，原来引用的「任务 2」(model) 现在也是第 1 位 → 改指 1
+    expect(remapped[1].description).toContain('任务 1');
+  });
+
+  it('越界编号与无编号文本原样保留', () => {
+    const original = [
+      { type: 'acquire', description: '看材料。' },
+      { type: 'execute', description: '按任务 99 的做法执行；另见第 3 步。' },
+    ];
+    const ordered = orderStageTasksByTopology(original);
+    const remapped = remapStageTaskReferences(original, ordered);
+    expect(remapped[1].description).toContain('任务 99');
+  });
+
+  it('长度不一致时原样返回（防御）', () => {
+    const a = [{ type: 'acquire', description: 'x' }];
+    const b = [{ type: 'acquire', description: 'x' }, { type: 'execute', description: 'y' }];
+    expect(remapStageTaskReferences(a, b)).toBe(b);
+  });
+});
+
+describe('remapStageTaskReferences：相对指代随重排改写（2026-10-26 评审悖论3）', () => {
+  it('被移动任务里的「上一步」改写为重排前紧邻任务的标题', () => {
+    const original = [
+      { type: 'execute', title: '在琴上把 Em 按到逐根发声', description: '逐根拨弦确认发声。' },
+      { type: 'refine', title: '把按弦要点收拢成口令', description: '沿用上一步的按弦结果，把哪些手指最先就位写成一句口令。' },
+    ];
+    const ordered = orderStageTasksByTopology(original);
+    // refine(收束档) 被推到 execute 之后——本例本来就是正序则不动；构造真倒挂：
+    expect(ordered.map((t) => t.type)).toEqual(['execute', 'refine']);
+    // 倒挂构造：refine 在前 execute 在后才会交换
+    const inverted = [
+      { type: 'refine', title: '把按弦要点收拢成口令', description: '沿用上一步的按弦结果，把要点写成一句口令。' },
+      { type: 'execute', title: '在琴上把 Em 按到逐根发声', description: '对照上一任务的口令逐根拨弦确认发声。' },
+    ];
+    const orderedInverted = orderStageTasksByTopology(inverted);
+    expect(orderedInverted.map((t) => t.type)).toEqual(['execute', 'refine']);
+    const remapped = remapStageTaskReferences(inverted, orderedInverted);
+    // refine 被移到第 2 位：重排前它在第 1 位、没有前任务 ⇒ 不改写（selfOldIndex=1 < 2）
+    expect(remapped[1].description).toContain('上一步');
+    // execute 被牵连位移到第 1 位：它原本在第 2 位，前任务是 refine ⇒「上一任务」改写为 refine 标题
+    expect(remapped[0].description).toContain('把按弦要点收拢成口令');
+    expect(remapped[0].description).not.toContain('上一任务');
+  });
+
+  it('「上一任务」同样被改写；无前任务（首位）不动', () => {
+    const inverted = [
+      { type: 'consolidate', title: '收拢判断卡', description: '合龙本阶段框架。' },
+      { type: 'execute', title: '产出底表', description: '对照上一任务的定义填两列底表。' },
+    ];
+    const ordered = orderStageTasksByTopology(inverted);
+    expect(ordered.map((t) => t.type)).toEqual(['execute', 'consolidate']);
+    const remapped = remapStageTaskReferences(inverted, ordered);
+    // execute 从第 2 位移到第 1 位？倒挂时 consolidate 在前 execute 在后，
+    // 重排后 execute 第 1、consolidate 第 2。execute 原第 2 位、前任务是 consolidate。
+    expect(remapped[0].description).toContain('收拢判断卡');
+    expect(remapped[0].description).not.toContain('上一任务');
+    // consolidate 原第 1 位（无前任务），它的文本不受相对指代改写
+    expect(remapped[1].description).toBe('合龙本阶段框架。');
+  });
+
+  it('未移动的任务不做相对指代改写', () => {
+    const original = [
+      { type: 'acquire', title: '认谱', description: '认识六线谱。' },
+      { type: 'execute', title: '爬格子', description: '沿用上一步的指位。' },
+      { type: 'consolidate', title: '写卡', description: '写一张卡。' },
+      { type: 'refine', title: '收口令', description: '收口令。' },
+    ];
+    const ordered = orderStageTasksByTopology(original);
+    // 4 个任务里 consolidate(3) 在 refine(4) 前——本就正序？consolidate/refine 同收束档、相对次序不动
+    const remapped = remapStageTaskReferences(original, ordered);
+    expect(remapped[1].description).toBe('沿用上一步的指位。');
   });
 });

@@ -50,10 +50,13 @@ describe('知识图谱：节点标签可辨认性', () => {
     expect(Number(perLine![2])).toBeLessThanOrEqual(8);
   });
 
-  it('窄屏枢纽标注数量不多于宽屏（字号放大后窄画布再放 6 个就叠字）', () => {
-    const hub = /const hubCount = narrow \? (\d+) : (\d+)/.exec(source);
-    expect(hub, '读不到 hubCount 的三元表达式').toBeTruthy();
-    expect(Number(hub![1]), '窄屏标注数超过宽屏，与画布面积方向相反').toBeLessThanOrEqual(Number(hub![2]));
-    expect(Number(hub![1])).toBeLessThanOrEqual(4);
+  it('窄屏密集图不常显标签（画布放不下 7 个标签，点按看详情）', () => {
+    // 2026-10-29 像素级走查：320–370px 宽 + 20 多个节点时，无论 4 个还是 6 个常显
+    // 标签都会叠字、最右一列被 canvas 裁掉。改为窄屏密集图一个都不常显；
+    // 桌面密集图仍保留枢纽 + 薄弱节点。
+    expect(source, '窄屏分支应跳过 labelWorthy 填充').toMatch(
+      /if \(!denseGraph\)[\s\S]*?\} else if \(!narrow\) \{/
+    );
+    expect(source).toContain('窄屏密集图刻意一个常显标签都不放');
   });
 });

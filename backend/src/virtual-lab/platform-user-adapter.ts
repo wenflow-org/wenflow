@@ -290,7 +290,7 @@ export class PlatformUserAdapter {
       method: 'POST',
       url: `/ai-teaching/sessions/${encodeURIComponent(sessionId)}/messages`,
       data: { message, revision: expectedRevision },
-      headers: await this.headers()
+      headers: { ...(await this.headers()), 'Idempotency-Key': `vl-msg-${randomUUID()}` }
     })
     const result = unwrap<any>(response)
     const platformText = result?.aiResponse || ''
@@ -388,7 +388,7 @@ export class PlatformUserAdapter {
       method: 'POST',
       url: `/ai-teaching/sessions/${encodeURIComponent(sessionId)}/checkpoints/${encodeURIComponent(action.checkpointId)}/submit`,
       data: payload,
-      headers: await this.headers()
+      headers: { ...(await this.headers()), 'Idempotency-Key': `vl-cp-${action.checkpointId}-${randomUUID()}` }
     })
     const result = unwrap<any>(response)
     const feedback = typeof result?.feedback === 'string' ? result.feedback : ''
@@ -483,11 +483,20 @@ export class PlatformUserAdapter {
     }
   }
 
-  async completeTask(taskId: string): Promise<PlatformInteractionResult> {
+  async completeTask(
+    taskId: string,
+    teachingSessionId?: string | null,
+    teachingRevision?: number | null
+  ): Promise<PlatformInteractionResult> {
     const response = await this.transport.request<any>({
       method: 'POST',
       url: `/learning/tasks/${encodeURIComponent(taskId)}/complete`,
-      data: {},
+      data: teachingSessionId
+        ? {
+            teachingSessionId,
+            ...(Number.isInteger(teachingRevision) ? { teachingRevision } : {}),
+          }
+        : {},
       headers: await this.headers()
     })
     return {

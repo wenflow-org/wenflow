@@ -9,7 +9,7 @@
     :class="[tone ? `mk-kpi--${tone}` : '', { 'mk-kpi--clickable': clickable, 'mk-kpi--compact': compact }]"
   >
     <span class="mk-kpi__label">{{ label }} </span>
-    <strong class="mk-kpi__num">{{ value }}</strong>
+    <strong class="mk-kpi__num">{{ value }}<span v-if="valueNote && !compact" class="mk-kpi__num-note">{{ valueNote }}</span></strong>
     <span v-if="hint && !compact" class="mk-kpi__hint" :class="hintTone ? `mk-kpi__hint--${hintTone}` : ''">{{ hint }}</span>
     <!-- 默认 slot（2026-10-05）：卡内附挂位。空 slot 渲染零节点，既有用法无感。
          2026-10-16 用户拍板「kpi 面板内部进度条不要出现」——原 VL 判例（.mk-minibar 进度槽）
@@ -24,6 +24,9 @@ withDefaults(
   defineProps<{
     label: string
     value: string | number
+    /** 数值行内的分解注记（2026-10-21）：只给「同一条读数拆开看」用（完课量的真实 / 虚拟），
+        不再新开一行副行——五卡里只有一卡有副行会把整排卡抬高 */
+    valueNote?: string
     hint?: string
     /** 数字着色：ok 绿 / warn 琥珀 / bad 红（含失败告警态）/ muted 弱灰（无数据，非异常） */
     tone?: 'ok' | 'warn' | 'bad' | 'muted' | ''
@@ -35,7 +38,7 @@ withDefaults(
     /** 紧凑模式（列表页顶部 KPI）：减内边距/字号、隐藏 hint，压缩垂直空间 */
     compact?: boolean
   }>(),
-  { hint: '', tone: '', hintTone: '', clickable: false, compact: false }
+  { hint: '', valueNote: '', tone: '', hintTone: '', clickable: false, compact: false }
 )
 </script>
 
@@ -70,6 +73,15 @@ withDefaults(
   font-variant-numeric: tabular-nums;
   color: var(--mk-ink);
   line-height: 1.15;
+}
+.mk-kpi__num-note {
+  margin-left: 8px;
+  font-size: var(--mk-fs-micro);
+  font-weight: 400;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--mk-muted);
+  white-space: nowrap;
 }
 .mk-kpi__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.35; }
 .mk-kpi__hint--bad { color: var(--mk-red); }

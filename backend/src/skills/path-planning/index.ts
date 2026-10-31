@@ -23,6 +23,7 @@ import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapt
 
 import { logger } from '../../utils/logger';
 import { buildPromptFriendlyMaterials } from '../../services/materials/material-prompt-projection';
+import { assessMaterialRefCoverage } from '../../services/materials/material-ref-coverage.service';
 import { normalizeMaterialRefs } from '../../services/materials/material-refs';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
 
@@ -348,6 +349,8 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         timePerSession: normalizePromptString(resources.timePerSession),
         timeHorizon: normalizePromptString(resources.timeHorizon),
         deadlineText: normalizePromptString(resources.deadlineText),
+        // R8：绝对截止日（与 timeDimensions.deadlineDate 同源），供提示词直接读。
+        deadlineDate: normalizePromptString(resources.deadlineDate),
         // 资料包（用户附件在前、联网采集在后）：**必须进提示词**，否则规则"路径必须长在资料上"
         // 永远拿不到资料（2026-09-22 实测：装配层送达了、投影层却把它裁掉 ⇒ 模型看不见）。
         // 无资料时不出现该键，冷启动行为不变。
@@ -377,8 +380,13 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
         subtasksPerStageRange: Array.isArray(planningHints.subtasksPerStageRange) ? planningHints.subtasksPerStageRange : null,
         subtaskMinutesRange: Array.isArray(planningHints.subtaskMinutesRange) ? planningHints.subtaskMinutesRange : null,
         maxWeeks: typeof planningHints.maxWeeks === 'number' ? planningHints.maxWeeks : null,
+        maxWeeksSource: typeof planningHints.maxWeeksSource === 'string' ? planningHints.maxWeeksSource : null,
         targetMilestones: typeof planningHints.targetMilestones === 'number' ? planningHints.targetMilestones : null,
         targetSubtasksPerStage: typeof planningHints.targetSubtasksPerStage === 'number' ? planningHints.targetSubtasksPerStage : null,
+        // R8：守恒规则已引用这三个锚，但此前投影漏字段 ⇒ 死引用；必须进提示词。
+        targetTotalHours: typeof planningHints.targetTotalHours === 'number' ? planningHints.targetTotalHours : null,
+        targetHoursPerMilestone: typeof planningHints.targetHoursPerMilestone === 'number' ? planningHints.targetHoursPerMilestone : null,
+        targetMinutesPerTask: typeof planningHints.targetMinutesPerTask === 'number' ? planningHints.targetMinutesPerTask : null,
       } : null,
       prerequisiteCheckResults: Array.isArray(normalizedInput.prerequisiteCheckResults)
         ? normalizedInput.prerequisiteCheckResults.map((item: any) => ({
@@ -394,6 +402,13 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
             estimatedHours: Number.isFinite(normalizedInput.timeDimensions.estimatedHours) ? normalizedInput.timeDimensions.estimatedHours : null,
             sessionsPerWeek: Number.isFinite(normalizedInput.timeDimensions.sessionsPerWeek) ? normalizedInput.timeDimensions.sessionsPerWeek : null,
             sessionsLengthMin: Number.isFinite(normalizedInput.timeDimensions.sessionsLengthMin) ? normalizedInput.timeDimensions.sessionsLengthMin : null,
+            totalSessions: Number.isFinite(normalizedInput.timeDimensions.totalSessions) ? normalizedInput.timeDimensions.totalSessions : null,
+            calendarCapacityHours: Number.isFinite(normalizedInput.timeDimensions.calendarCapacityHours) ? normalizedInput.timeDimensions.calendarCapacityHours : null,
+            scopeAnchorHours: Number.isFinite(normalizedInput.timeDimensions.scopeAnchorHours) ? normalizedInput.timeDimensions.scopeAnchorHours : null,
+            // R8 权威字段：必须进提示词，否则 path LLM 看不到内容体量锚 / 截止日。
+            objectiveScopeHours: Number.isFinite(normalizedInput.timeDimensions.objectiveScopeHours) ? normalizedInput.timeDimensions.objectiveScopeHours : null,
+            deadlineDate: typeof normalizedInput.timeDimensions.deadlineDate === 'string' ? normalizedInput.timeDimensions.deadlineDate : null,
+            timeModelVersion: Number.isFinite(normalizedInput.timeDimensions.timeModelVersion) ? normalizedInput.timeDimensions.timeModelVersion : null,
           }
         : null,
       // 学习证据（规则 53 的唯一依据）：无学习历史时**不出现该键**，冷启动行为与原先完全一致
@@ -549,7 +564,13 @@ interface PathOutput {
 export function validatePathPlanningOutput(
   parsed: any,
   expectedMilestones?: number | null,
-  expectedMilestoneRange?: [number, number] | null
+  expectedMilestoneRange?: [number, number] | null,
+  /**
+   * planningHints.targetMilestones 的强制值（2026-10-29 提示词口径对齐）：
+   * 存在时它优先于 milestoneRange——否则 prompt 说「强制」而 validator 按区间放行，
+   * 模型会稳定输出区间内的数（实测 target=2/range=[4,6] → 模型出 4，校验通过）。
+   */
+  forcedMilestones?: number | null
 ) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { valid: false as const, failureReason: 'PATH_PLANNING_OUTPUT_NOT_OBJECT' };
@@ -639,10 +660,20 @@ export function validatePathPlanningOutput(
     }
   }
 
-  // 里程碑数量：方案乙——**区间校验**（数量由 LLM 在区间内决定），仅越界才阻断；
-  // 未提供区间时保留旧的精确校验（向后兼容，如 replan 只给单点）。
+  // 里程碑数量：targetMilestones 是**强制值**（与 prompt 规则 46 同口径）；
+  // 它缺失时才用区间（数量由 LLM 在区间内决定），再无区间则退回精确校验。
   const milestoneCount = parsed.milestones.length;
-  if (Array.isArray(expectedMilestoneRange) && expectedMilestoneRange.length === 2) {
+  const forcedCount = typeof forcedMilestones === 'number' && Number.isInteger(forcedMilestones) && forcedMilestones >= 1
+    ? forcedMilestones
+    : null;
+  if (forcedCount !== null) {
+    if (milestoneCount !== forcedCount) {
+      return {
+        valid: false as const,
+        failureReason: `PATH_PLANNING_MILESTONE_COUNT_MISMATCH(expected=${forcedCount}, got=${milestoneCount})`,
+      };
+    }
+  } else if (Array.isArray(expectedMilestoneRange) && expectedMilestoneRange.length === 2) {
     const [lo, hi] = expectedMilestoneRange;
     if (Number.isInteger(lo) && Number.isInteger(hi) && (milestoneCount < lo || milestoneCount > hi)) {
       return {
@@ -987,13 +1018,14 @@ async function generatePath(
       : (confirmedStages.length > 0
           ? [Math.min(8, Math.max(2, confirmedStages.length)), Math.min(8, Math.max(2, confirmedStages.length))]
           : null);
-  const expectedMilestones: number | null = Number.isInteger(
+  const forcedMilestones: number | null = Number.isInteger(
     (framingNormalizedInput?.planningHints as any)?.targetMilestones
   )
     ? (framingNormalizedInput?.planningHints as any).targetMilestones
-    : confirmedStages.length > 0
-      ? Math.min(8, Math.max(2, confirmedStages.length))
-      : null;
+    : null;
+  const expectedMilestones: number | null = forcedMilestones ?? (confirmedStages.length > 0
+    ? Math.min(8, Math.max(2, confirmedStages.length))
+    : null);
   const promptFriendlySceneFraming = buildPromptFriendlyNormalizedInput(framingNormalizedInput);
 
   const userPayload = `原始学习目标：${input.goal}
@@ -1056,6 +1088,22 @@ ${replan ? renderReplanSection(replan) : ''}
   const promptMaterials = buildPromptFriendlyMaterials(
     (input as any)?.metadata?.normalizedInput?.resources?.materials,
   );
+  // 引用覆盖度的相关性闸门用“路径诉求”而不是模型输出：资料是否该被引用，取决于目标
+  // 与资料本身的相关性；模型若跑题，不应该反过来为无关资料补引用。
+  const materialRelevanceText = [
+    String(input?.goal || ''),
+    confirmedLearningDirection,
+    confirmedFirstDeliverable,
+    observableResult,
+    acceptanceCheck,
+    ...confirmedStages.map((stage: any) => (
+      typeof stage === 'string' ? stage : stage?.title || stage?.name || ''
+    )),
+  ].filter(Boolean).join(' ');
+  const materialCoverageNodes = (milestones: any[]) => milestones.map((milestone: any, index: number) => ({
+    label: `里程碑 ${index + 1}「${normalizePromptString(milestone?.title) || '未命名'}」`,
+    refs: milestone?.materialRefs,
+  }));
   const result = await callPrompt<any, PathOutput>({
     agentId: 'skill:path-planning',
     defaultSystemPrompt: PATH_PLANNING_PROMPT,
@@ -1090,17 +1138,23 @@ ${replan ? renderReplanSection(replan) : ''}
         });
       }
       const estimatedHours = Math.round(conservation.totalAfter) || clampHours(pathData.estimatedHours);
-      // materialRefs 覆盖度观测（有资料却没引用 → 可观测，不阻断生成）
+      // 里程碑级 materialRefs 覆盖度（只观测）：路径层的任务引用由 stage-designer 产出，
+      // 这里零引用不等于整条路径没有资料引用，故不告警、不触发重试。
       if (promptMaterials?.length) {
         const milestones = Array.isArray(pathData.milestones) ? pathData.milestones : [];
-        const withRefs = milestones.filter((m: any) => Array.isArray(m?.materialRefs) && m.materialRefs.length > 0).length;
-        if (withRefs === 0) {
-          logger.warn('[path-planning] 有资料但没有任何里程碑给出可核对的 materialRefs（规则未被执行）', {
-            userId,
-            materials: promptMaterials.length,
-            milestones: milestones.length,
-          });
-        }
+        const coverage = assessMaterialRefCoverage({
+          materials: promptMaterials,
+          nodes: materialCoverageNodes(milestones),
+          text: materialRelevanceText,
+          scope: 'PATH',
+        });
+        logger.info('[path-planning] 里程碑 materialRefs 覆盖度', {
+          userId,
+          materials: promptMaterials.length,
+          milestones: milestones.length,
+          relevant: coverage.relevant,
+          covered: coverage.covered,
+        });
       }
       return {
         id: `path_${Date.now()}`,
@@ -1134,7 +1188,7 @@ ${replan ? renderReplanSection(replan) : ''}
       };
     },
     coerceParsedForContract: (parsed: any) => coercePathPlanningParsed(parsed, promptMaterials),
-    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange),
+    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange, forcedMilestones),
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
       artifact: output,

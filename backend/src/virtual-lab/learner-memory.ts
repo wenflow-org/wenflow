@@ -17,6 +17,7 @@
 
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import { withKeyedLock } from '../utils/keyed-lock';
 import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
 import { memoryTraceService } from '../services/memory/memory-trace.service';
 import { recordDegradation, degradationCause, type DegradationTelemetry } from '../skills/degradation-telemetry';
@@ -228,6 +229,46 @@ export function deriveCuratedSelfState(
 }
 
 /**
+ * 概念名 → 稳定 kcId（来自 memory_traces.conceptId）。只取已注册概念；
+ * 找不到的概念不造 id，保留文本名兼容旧数据。
+ */
+async function resolveConceptIds(userId: string, names: unknown[]): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(
+    names.map((name) => String(name).trim()).filter(Boolean)
+  ));
+  const out = new Map<string, string>();
+  if (unique.length === 0) return out;
+  try {
+    const rows = await prisma.memory_traces.findMany({
+      where: {
+        userId,
+        conceptId: { not: null },
+        OR: [
+          { label: { in: unique } },
+          { conceptKey: { in: unique } },
+        ],
+      },
+      select: { label: true, conceptKey: true, conceptId: true },
+    });
+    for (const row of rows) {
+      const conceptId = typeof row.conceptId === 'string' ? row.conceptId : '';
+      if (!conceptId) continue;
+      for (const key of [row.label, row.conceptKey]) {
+        const name = typeof key === 'string' ? key.trim() : '';
+        if (name && unique.includes(name)) out.set(name, conceptId);
+      }
+    }
+  } catch (error) {
+    // kcId 回填是增强项：解析失败不应阻断概念名单本身的写回。
+    logger.warn('[vlab-memory] kcId 解析失败，保留概念名写回', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return out;
+}
+
+/**
  * 课后回写画像概念：掌握 → knownConcepts，仍在学/需复习 → struggleConcepts。
  * 记忆来源优先级：
  * ① curator 输出全量名单（curatedConcepts，LLM 提炼）
@@ -244,9 +285,31 @@ export async function writeProfileConceptsAfterLesson(
     selfState?: SelfReportedLearnerState | null;
     /** curator 输出的全量概念名单（P1-2：全量遍历，不再只吃单 conceptName） */
     curatedConcepts?: CuratedConceptLists | null;
+    /**
+     * 本课判决对账降级的概念（mastered → learning）：写回前从画像 knownConcepts 移除，
+     * 否则 knownConcepts 的 union-only 语义会让降级在下一课被读回 mastered（独立评审 P1）。
+     */
+    downgraded?: Array<{ name: string; from?: string; to?: string }> | null;
   } = {},
 ): Promise<void> {
   if (!userId) return;
+  // 画像 profile 是「整包 JSON 读改写」，且 recordCompletedArtifact 会并发写同一行的不同字段：
+  // 两个流各自读旧包整包写回时后写覆盖前写。同一 userId 的临界区在进程内串行（2026-10-24 修）。
+  await withKeyedLock(`vlab-profile:${userId}`, () =>
+    writeProfileConceptsAfterLessonLocked(userId, knowledgePoints, options)
+  );
+}
+
+async function writeProfileConceptsAfterLessonLocked(
+  userId: string,
+  knowledgePoints: LessonKnowledgePoint[],
+  options: {
+    source?: string;
+    selfState?: SelfReportedLearnerState | null;
+    curatedConcepts?: CuratedConceptLists | null;
+    downgraded?: Array<{ name: string; from?: string; to?: string }> | null;
+  } = {},
+): Promise<void> {
   try {
     const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId } });
     if (!profile) return;
@@ -293,15 +356,30 @@ export async function writeProfileConceptsAfterLesson(
       }
     }
 
+    // 判决降级：先从画像 knownConcepts 移除，再把同名概念落进 struggle——只删不加会让
+    // 概念同时从两张表消失（curator 未单独列它时），学员模型直接丢点（独立评审 P2）。
+    const downgradedNames = new Set(
+      (Array.isArray(options.downgraded) ? options.downgraded : [])
+        .map((item) => String(item?.name || '').trim())
+        .filter(Boolean)
+    );
+    for (const name of downgradedNames) {
+      if (!mastered.has(name)) struggling.add(name);
+    }
+
     // 跨表去重（最终防线）：任何路径下同名概念都不得双表共存
     for (const name of mastered) struggling.delete(name);
 
-    if (mastered.size === 0 && struggling.size === 0) return;
+    // 纯降级（无新掌握/新卡点）也必须落库，否则 knownConcepts 的移除永远写不进去
+    if (mastered.size === 0 && struggling.size === 0 && downgradedNames.size === 0) return;
 
     const profileData = safeJsonParse<Record<string, any>>(profile.profile, {});
     const existingKnown = Array.isArray(profileData.knownConcepts) ? profileData.knownConcepts : [];
     const existingStruggle = Array.isArray(profileData.struggleConcepts) ? profileData.struggleConcepts : [];
-    const knownConcepts = Array.from(new Set([...existingKnown, ...mastered]));
+    const survivingKnown = downgradedNames.size > 0
+      ? existingKnown.filter((name: unknown) => !downgradedNames.has(String(name).trim()))
+      : existingKnown;
+    const knownConcepts = Array.from(new Set([...survivingKnown, ...mastered]));
     // 跨表去重（最终防线）：同名概念不得同时进 known 与 struggle（pcl_f9826524 同名双表实录）
     const knownSet = new Set<string>(knownConcepts.map((name) => String(name).trim()));
     const struggleConcepts = Array.from(
@@ -311,14 +389,33 @@ export async function writeProfileConceptsAfterLesson(
     // 逐项比较（不能只比长度：跨表去重可能等长替换，如 ['a','b'] → ['b','c']）
     const sameList = (a: unknown[], b: unknown[]) =>
       a.length === b.length && a.every((value, index) => value === b[index]);
-    if (sameList(knownConcepts, existingKnown) && sameList(struggleConcepts, existingStruggle)) {
+
+    /* #94：durable 修法是按 kcId 键控。已知概念名不变时也补写稳定 id，
+       让后续消费者不必再靠自由文本对概念身份。只写 profile JSON，不动前端形状。 */
+    const idByConcept = await resolveConceptIds(userId, [...knownConcepts, ...struggleConcepts]);
+    const existingKnownIds = Array.isArray(profileData.knownConceptIds) ? profileData.knownConceptIds : [];
+    const existingStruggleIds = Array.isArray(profileData.struggleConceptIds) ? profileData.struggleConceptIds : [];
+    const idsOf = (names: unknown[]) => Array.from(new Set(
+      names
+        .map((name) => idByConcept.get(String(name).trim()))
+        .filter((id): id is string => Boolean(id))
+    ));
+    const knownConceptIds = Array.from(new Set([...existingKnownIds, ...idsOf(knownConcepts)]));
+    const struggleConceptIds = Array.from(new Set([...existingStruggleIds, ...idsOf(struggleConcepts)]));
+
+    if (
+      sameList(knownConcepts, existingKnown)
+      && sameList(struggleConcepts, existingStruggle)
+      && sameList(knownConceptIds, existingKnownIds)
+      && sameList(struggleConceptIds, existingStruggleIds)
+    ) {
       return;
     }
 
     await prisma.virtual_learner_profiles.update({
       where: { userId },
       data: {
-        profile: JSON.stringify({ ...profileData, knownConcepts, struggleConcepts }),
+        profile: JSON.stringify({ ...profileData, knownConcepts, struggleConcepts, knownConceptIds, struggleConceptIds }),
         knownConcepts: JSON.stringify(knownConcepts),
         struggleConcepts: JSON.stringify(struggleConcepts),
         updatedAt: new Date(),
@@ -328,6 +425,8 @@ export async function writeProfileConceptsAfterLesson(
       userId,
       known: knownConcepts.length,
       struggle: struggleConcepts.length,
+      knownIds: knownConceptIds.length,
+      struggleIds: struggleConceptIds.length,
     });
   } catch (error) {
     logger.warn('[vlab-memory] 画像概念回写失败', {
@@ -345,7 +444,7 @@ export async function writeProfileConceptsAfterLesson(
  */
 export async function buildLearnerMemorySnapshot(
   userId: string,
-  options: { limit?: number } = {},
+  options: { limit?: number; now?: Date } = {},
 ): Promise<LearnerMemorySnapshot> {
   const limit = Number.isFinite(options.limit) ? Math.max(1, Math.min(30, Math.round(Number(options.limit) || 8))) : 8;
   const empty: LearnerMemorySnapshot = {
@@ -370,7 +469,10 @@ export async function buildLearnerMemorySnapshot(
       }));
       return null;
     }),
-    memoryTraceService.getDueTraces(userId, { limit }).catch((error: unknown) => {
+    // now 显式下传（2026-10-29 审计 M-16）：管理端读侧不在模拟钟 AsyncLocalStorage 上下文内，
+    // getDueTraces 的 simulatedNowOr() 会回落真实墙钟——调用方解析出实例模拟钟时必须显式传入。
+    // 未传（undefined）时 getDueTraces 维持现行为（simulatedNowOr()）。
+    memoryTraceService.getDueTraces(userId, { limit, now: options.now }).catch((error: unknown) => {
       degraded.push(recordDegradation({
         source: 'virtual-lab/learner-memory',
         faultCategory: 'DB_READ_FAILED',
@@ -593,6 +695,27 @@ export async function recordCompletedArtifact(input: {
   } | null;
 }): Promise<void> {
   if (!input.userId || !input.taskId) return;
+  // 与 writeProfileConceptsAfterLesson 并发写同一画像行的不同字段：进程内按 userId 串行，
+  // 防止「读旧包 → 整包写回」互相覆盖（丢 recentCompleted / 概念名单更新）。
+  await withKeyedLock(`vlab-profile:${input.userId}`, () => recordCompletedArtifactLocked(input));
+}
+
+async function recordCompletedArtifactLocked(input: {
+  userId: string;
+  taskId: string;
+  taskTitle: string;
+  artifactType?: string | null;
+  deliverable?: string | null;
+  knowledgePoints?: LessonKnowledgePoint[];
+  selfState?: SelfReportedLearnerState | null;
+  milestoneTitle?: string | null;
+  memoryDelta?: string | null;
+  memoryCurated?: {
+    mastered: MemoryCuratedMasteredItem[];
+    struggling: MemoryCuratedStruggleItem[];
+    selfCalibration: string;
+  } | null;
+}): Promise<void> {
   try {
     const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId: input.userId } });
     if (!profile) return;

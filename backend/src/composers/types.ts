@@ -174,6 +174,14 @@ export interface PromptCallSpec<TInput, TOutput> {
   normalizeOutput: (parsed: any, input: TInput) => TOutput;
   validateParsedOutput?: (parsed: any, input: TInput) => PromptValidationResult;
   /**
+   * 软校验：**质量要求**，不阻断主流程。
+   * 不通过时带失败原因重试（走 retryStrategy.onValidationFail）；最后一次仍不通过则
+   * 按当前输出继续，而不是让整条路径/阶段失败。
+   * 适合“该有但缺失不应阻断生成”的检查（如资料引用覆盖度）。
+   * 与 validateParsedOutput（硬契约）分开使用。
+   */
+  softValidateParsedOutput?: (parsed: any, input: TInput) => PromptValidationResult;
+  /**
    * 契约校验前的容错归一：把模型输出的等价变体收敛为 core fields 声明的规范形态
    * （例如模型把 object[] 字段写成 string[] 时补成 [{ text }]）。
    * 仅作用于 core fields 契约校验；normalizeOutput 仍各自负责最终业务形态。

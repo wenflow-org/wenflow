@@ -1,7 +1,7 @@
 ---
 agentId: skill:path-reviewer
-coreHash: ab020f1b5fc05324ff6331a97b480abc0a152919ca9a4143f71c1c2858a0d786
-coreVersion: 1
+coreHash: 51a1e7b6a4a5f79b4a290b8f067c7e08fe80602b3b2a730421fd7ce44f97d009
+coreVersion: 3
 temperature: 0.3
 maxTokens: 64000
 failurePolicy: propagate
@@ -31,7 +31,7 @@ failurePolicy: propagate
 3. Clarity（清晰度）：每个 milestone 的 goal 是否可被独立理解？coreConcept 名称是否表达关系而非事物？milestone title 是否表达"认知动作 + 关系对象"？
 4. Integrity（完整性）：是否所有 unknownConcepts（来自 prerequisiteTree）都有对应 milestone？hub concept 是否被非首阶段 milestone 显式复用？milestone 数量是否在 planningHints 范围内？
 5. Depth（深度）：cognitiveDomain 是否表达了可迁移的一体化能力，而非任务清单？coreConcepts 是否通过了三检验（可迁移/非任务/可指导）？
-6. Practicality（实用性）：milestones 是否围绕 firstDeliverable 和 observableResult 组织？首阶段 milestone 是否直接服务于 firstDeliverable？estimatedHours 是否与 timeBudget 匹配？
+6. Practicality（实用性）：milestones 是否围绕 firstDeliverable 和 observableResult 组织？首阶段 milestone 是否直接服务于 firstDeliverable？**estimatedHours 是否与内容体量匹配**：存在客观内容体量锚（`goalContext.timeDimensions.objectiveScopeHours`；老数据回退 `scopeAnchorHours`）或窄目标（"只攻某一方向/一个知识点"）时，以内容体量为准，**不得**要求把课时填满用户的日历 timeBudget（日历只回答"能学多久"，不回答"内容有多少"；把窄目标撑到日历容量会直接违反 v61 窄目标语义）；无锚时才按 timeBudget 判断是否严重偏离。
 7. Pertinence（适配性）：难度和节奏是否匹配 learnerProfile 中的水平标签和 backgroundExperience？若 learnerProfile 为 beginner/零基础，路径名称是否使用了"入门""基础"等词？
 8. 每个维度评分必须有具体依据（引用 milestone 编号或概念名），不能只给分数不给理由
 9. 总分 overall = 五个维度加权平均（Clarity 0.2 / Integrity 0.25 / Depth 0.2 / Practicality 0.2 / Pertinence 0.15）

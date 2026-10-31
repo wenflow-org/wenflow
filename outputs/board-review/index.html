@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>白板模式评审台 · v6</title>
+<style>
+  :root{--ink:#1f2430;--muted:#5b6472;--faint:#8b94a3;--line:#e3e6ec;--soft:#f6f7f9;
+    --accent:#4f46e5;--ok:#0f766e;--warn:#b45309;--bad:#b42318}
+  *{box-sizing:border-box}
+  body{margin:0;background:#fbfbfd;color:var(--ink);
+    font:15px/1.7 "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:26px 22px 96px}
+  h1{font-size:23px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+  .kpis{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 13px;min-width:132px}
+  .kpi b{display:block;font-size:21px;line-height:1.25}
+  .kpi i{font-style:normal;font-size:11.5px;color:var(--muted)}
+  .toolbar{position:sticky;top:0;z-index:9;display:flex;gap:8px;align-items:center;
+    background:rgba(251,251,253,.94);backdrop-filter:blur(6px);padding:10px 0;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .toolbar .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+  .toolbar .seg button{border:0;background:transparent;padding:5px 11px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer}
+  .toolbar .seg button.on{background:var(--accent);color:#fff}
+  .toolbar .spacer{flex:1}
+  .toolbar .primary,.toolbar .ghost{border-radius:8px;padding:6px 13px;font:inherit;font-size:13px;cursor:pointer;border:1px solid var(--line);background:#fff}
+  .toolbar .primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .toolbar button:disabled{opacity:.45;cursor:default}
+  #progress{font-size:12.5px;color:var(--muted)}
+  .case{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px 12px;margin:0 0 16px}
+  .case header{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:10px}
+  .case h2{margin:0;font-size:17px;border:0;padding:0}
+  .kind{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--accent);background:#eef0ff;padding:1px 6px;border-radius:5px}
+  .metaLine{font-size:12px;color:var(--muted)}
+  .boards{display:grid;gap:12px;margin:2px 0 10px}
+  .boards.mode-both{grid-template-columns:1fr 1fr}
+  .boards.mode-masked,.boards.mode-full{grid-template-columns:1fr}
+  .board-figure{margin:0}
+  .board-figure img{width:100%;display:block;border:1px solid #eef0f4;border-radius:9px;background:#fff}
+  .board-figure figcaption{font-size:11.5px;color:var(--muted);text-align:center;margin-top:4px}
+  .item{border:1px dashed var(--line);border-radius:10px;padding:8px 11px;margin:7px 0;background:#fcfcfe}
+  .item-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .item-head b{font-size:13.5px}
+  .spacer{flex:1}
+  .blind{font-size:11.5px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:#fff}
+  .blind.bad{border-color:#f3c6c2;color:var(--bad);background:#fdf3f2}
+  .blind.warn{border-color:#f0d3ac;color:var(--warn);background:#fdf7ee}
+  .blind.ok{border-color:#bfe3dd;color:var(--ok);background:#f1f9f7}
+  .mytag{font-size:11.5px;color:var(--faint)}
+  .mytag.on{color:var(--accent);font-weight:600}
+  .vbtn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:3px 10px;font:inherit;font-size:12.5px;cursor:pointer;color:var(--muted)}
+  .vbtn:hover{border-color:#cdd3e0}
+  .vbtn.on-keep{background:#e8f5f2;border-color:#9fd3c9;color:var(--ok);font-weight:600}
+  .vbtn.on-fix{background:#fdf1e3;border-color:#e8c79a;color:var(--warn);font-weight:600}
+  .vbtn.on-drop{background:#fdeceb;border-color:#efb5b0;color:var(--bad);font-weight:600}
+  .note{width:100%;margin-top:6px;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font:inherit;font-size:12.5px;background:#fff}
+  .note:focus{outline:2px solid #dcd9fb;border-color:#c7c2f7}
+  .issue{font-size:11.5px;color:var(--faint);margin-top:5px;line-height:1.55}
+  .issue:empty{display:none}
+  .turns{margin-top:10px;border-top:1px solid #f0f2f6;padding-top:9px}
+  .turn{margin:0 0 9px}
+  .turn-head{font-size:11.5px;color:var(--faint);display:flex;gap:8px;align-items:center;margin-bottom:2px}
+  .badge{font-size:11px;padding:0 6px;border-radius:999px;background:#eef7f5;color:var(--ok)}
+  .badge.warn{background:#fdf1e3;color:var(--warn)}
+  .turn-body{font-size:13px;color:#2a3040;background:var(--soft);border-radius:8px;padding:7px 10px;white-space:pre-wrap}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(10px);opacity:0;
+    background:#1f2430;color:#fff;font-size:13px;padding:8px 16px;border-radius:999px;transition:.18s;pointer-events:none}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (max-width:860px){.boards.mode-both{grid-template-columns:1fr}}
+</style></head>
+<body><div class="wrap">
+  <h1>白板模式评审台</h1>
+  <p class="sub">对着两态板勾判 + 写一句话 → 导出结论（约 1KB）。页面本身不含 base64，图片是独立文件，所以贴给模型也不会膨胀。</p>
+  <div class="kpis">
+    <div class="kpi"><b>0</b><i>提问态泄题（确定性）</i></div>
+    <div class="kpi"><b>0</b><i>指着空气（确定性）</i></div>
+    <div class="kpi"><b>0.19</b><i>复述率最高</i></div>
+    <div class="kpi"><b>0/0/6 · 0/2/4</b><i>盲评两次（保留/要修/删掉）</i></div>
+  </div>
+  <div class="toolbar">
+    <div class="seg">
+      <button data-mode="both" class="on">两态并排</button>
+      <button data-mode="masked">只看提问态</button>
+      <button data-mode="full">只看揭晓态</button>
+    </div>
+    <span class="spacer"></span>
+    <span id="progress">已评 0 / 6</span>
+    <button class="ghost" id="copyBtn" disabled>复制（结论+简报）</button>
+    <button class="primary" id="exportBtn" disabled>导出结论</button>
+  </div>
+  <section class="case">
+    <header>
+      <h2>七年级数学·一元一次应用 第2课</h2>
+      <span class="kind">split-compare</span>
+      <span class="metaLine">任务：配速换算纠错 ｜ 空槽 3 ｜ 建板→揭晓→不动</span>
+    </header>
+    <div class="boards mode-both">
+      <figure class="board-figure" data-state="masked"><img src="images/b1-math-pace-masked.png" alt="提问态"><figcaption>提问态（学生此刻看到的板）</figcaption></figure>
+      <figure class="board-figure" data-state="full"><img src="images/b1-math-pace-full.png" alt="揭晓态"><figcaption>揭晓态（答对后同一块板）</figcaption></figure>
+    </div>
+    <div class="item" data-item="b1-math-pace·masked">
+      <div class="item-head">
+        <b>提问态</b>
+        <span class="blind bad">盲评·提问态：drop / fix</span>
+        <span class="mytag" data-mytag>未评</span>
+        <span class="spacer"></span>
+        <button class="vbtn" data-verdict="keep">保留</button>
+        <button class="vbtn" data-verdict="fix">要修</button>
+        <button class="vbtn" data-verdict="drop">删掉</button>
+      </div>
+      <input class="note" data-note placeholder="一句话：最该修的是哪里（可留空）">
+      <div class="issue">图恰恰没有呈现最关键的这层关系：“60 的单位是秒、400 的单位是米，所以商是秒/米，再换算成分钟/千米”；左右两栏的虚线也连着空槽，没有承载任何对应关系，整张图只是把老师的口头复述框进两个框里。</div>
+    </div>
+    <div class="item" data-item="b1-math-pace·full">
+      <div class="item-head">
+        <b>揭晓态</b>
+        <span class="blind bad">盲评·揭晓态：drop</span>
+        <span class="mytag" data-mytag>未评</span>
+        <span class="spacer"></span>
+        <button class="vbtn" data-verdict="keep">保留</button>
+        <button class="vbtn" data-verdict="fix">要修</button>
+        <button class="vbtn" data-verdict="drop">删掉</button>
+      </div>
+      <input class="note" data-note placeholder="一句话：最该修的是哪里（可留空）">
+      <div class="issue">老师这一轮让学生用 800 m / 4 min 自己算出结果，但图里给出的是上一题 400 m 的完整两步答案，连 150 s/km、2.5 min/km 的结果和单位写法都齐全，学生只需照搬格式、替换数字，就不会再去想单位换算这一步该怎么判断了</div>
+    </div>
+    <div class="turns"><div class="turn">
+        <div class="turn-head">第 1 轮 · 提问态
+          <span class="badge ">泄题 0 · 指空 0 · 复述 0.19</span></div>
+        <div class="turn-body">先盯住左栏最后那行「读成 0.15 分钟/千米」——整道题的岔口就在这儿。
+
+往上看一步：你算的是 60 ÷ 400，其中 60 的单位是秒，400 的单位是米。那除出来的 0.15，单位应该是「秒每米」还是「分钟每千米」？
+
+先把这一个单位说准，其它的先不动。</div>
+      </div><div class="turn">
+        <div class="turn-head">第 2 轮 · 揭晓态
+          <span class="badge ">泄题 0 · 指空 0 · 复述 0.14</span></div>
+        <div class="turn-body">板上刚才空着的那格已经补成 150 s/km，底部那条结论也上板了。
+
+换个数据走一遍：一个人 800 米用了 4 分钟，配速是多少？把单位写全。</div>
+      </div><div class="turn">
+        <div class="turn-head">第 3 轮 · 揭晓态
+          <span class="badge ">泄题 0 · 指空 0 · 复述 0.06</span></div>
+        <div class="turn-body">对，顺序就是你说的这个——先把米换成千米，再拿秒去除。上一题分成两条路，岔口正好在这一步。
+
+现在把这组新数走完：**800 米、用时 1 分钟**。
+
+先不要急着做除法。把 800 米改写成千米、把 1 分钟改写成秒，两个数都摆出来，单位写全——我看你这两格的单位。</div>
+      </div></div>
+  </section><section class="case">
+    <header>
+      <h2>初二物理·浮力 第1课</h2>
+      <span class="kind">concept-map</span>
+      <span class="metaLine">任务：浮力大小由什么决定 ｜ 空槽 4 ｜ 建板→揭晓→不动</span>
+    </header>
+    <div class="boards mode-both">
+      <figure class="board-figure" data-state="masked"><img src="images/b2-phys-buoyancy-masked.png" alt="提问态"><figcaption>提问态（学生此刻看到的板）</figcaption></figure>
+      <figure class="board-figure" data-state="full"><img src="images/b2-phys-buoyancy-full.png" alt="揭晓态"><figcaption>揭晓态（答对后同一块板）</figcaption></figure>
+    </div>
+    <div class="item" data-item="b2-phys-buoyancy·masked">
+      <div class="item-head">
+        <b>提问态</b>
+        <span class="blind bad">盲评·提问态：drop</span>
+        <span class="mytag" data-mytag>未评</span>
+        <span class="spacer"></span>
+        <button class="vbtn" data-verdict="keep">保留</button>
+        <button class="vbtn" data-verdict="fix">要修</button>
+        <button class="vbtn" data-verdict="drop">删掉</button>
+      </div>
+      <input class="note" data-note placeholder="一句话：最该修的是哪里（可留空）">
+      <div class="issue">四个因素等权并列且都标“？”，没有体现本轮要区分的“继续下沉但完全浸没时，深度变了、排开液体体积不变”，反而把浸入深度和排开体积混成同级候选。</div>
+    </div>
+    <div class="item" data-item="b2-phys-buoyancy·full">
+      <div class="item-head">
+        <b>揭晓态</b>
+        <span class="blind bad">盲评·揭晓态：drop</span>
+        <span class="mytag" data-mytag>未评</span>
+        <span class="spacer"></span>
+        <button class="vbtn" data-verdict="keep">保留</button>
+        <button class="vbtn" data-verdict="fix">要修</button>
+        <button class="vbtn" data-verdict="drop">删掉</button>
+      </div>
+      <input class="note" data-note placeholder="一句话：最该修的是哪里（可留空）">
+      <div class="issue">没有呈现水/酒精同体积对照和 8 N→？ 的定量关系，只复述旧结论，对本轮迁移计算没有增量。</div>
+    </div>
+    <div class="turns"><div class="turn">
+        <div class="turn-head">第 1 轮 · 提问态
+          <span class="badge ">泄题 0 · 指空 0 · 复述 0.07</span></div>
+        <div class="turn-body">我们先钉住板上那条 **浸入深度 h → 浮力**。
+
+给你一个具体情况：一个铁块放进水里，第一次水面刚没过它的顶面；第二次再往下放 10 cm，铁块仍然完全没在水里。这两次，它挤开的那部分水是一样多，还是第二次更多？
+
+重量那条先放着，等这条定下来，我们再回头看它。</div>
+      </div><div class="turn">
+        <div class="turn-head">第 2 轮 · 揭晓态
+          <span class="badge ">泄题 0 · 指空 0 · 复述 0.02</span></div>
+        <div class="turn-body">白板上那几处空槽和底部结论现在都补全了——划掉的那两条，正是你自己排除掉的。
+
+换个条件试试：同一块铁块完全浸在水里时受到的浮力是 8 N。现在把它挪到酒精里（酒精的密度大约是水的 0.8 倍），仍然完全浸没，浮力大约会变成多少？</div>
+      </div><div class="turn">
+        <div class="turn-head">第 3 轮 · 揭晓态
+          <span class="badge ">泄题 0 · 指空 0 · 复述 0.04</span></div>
+        <div class="turn-body">这个问题正好把白板上那两条边同时用到了——你换掉了液体，也换了情境，是自己想到的。
+
+不过要比较浮力是否相同，得先确定一件事：铁球放进水银里，是沉到底，还是浮在上面？铁的密度约 7.9×10³ kg/m³，水银约 13.6×10³ kg/m³。这一步由你判断。
+
+因为液体密度确实换了，但在这个情境里，排开的液体体积也会跟着变——它是否还等于整个球的体积，取决于上面那一步的结果。</div>
+      </div></div>
+  </section><section class="case">
+    <header>
+      <h2>初二历史·战国变法 第1课</h2>
+      <span class="kind">state-strip</span>
+      <span class="metaLine">任务：变法怎么落地 ｜ 空槽 9 ｜ 建板→揭晓→不动</span>
+    </header>
+    <div class="boards mode-both">
+      <figure class="board-figure" data-state="masked"><img src="images/b3-hist-shangyang-masked.png" alt="提问态"><figcaption>提问态（学生此刻看到的板）</figcaption></figure>
+      <figure class="board-figure" data-state="full"><img src="images/b3-hist-shangyang-full.png" alt="揭晓态"><figcaption>揭晓态（答对后同一块板）</figcaption></figure>
+    </div>
+    <div class="item" data-item="b3-hist-shangyang·masked">
+      <div class="item-head">
+        <b>提问态</b>
+        <span class="blind bad">盲评·提问态：drop</span>
+        <span class="mytag" data-mytag>未评</span>
+        <span class="spacer"></span>
+        <button class="vbtn" data-verdict="keep">保留</button>
+        <button class="vbtn" data-verdict="fix">要修</button>
+        <button class="vbtn" data-verdict="drop">删掉</button>
+      </div>
+      <input class="note" data-note placeholder="一句话：最该修的是哪里（可留空）">
+      <div class="issue">标题「先取信，再分两步推开」和学生正要自己回答的「他真正想先拿到的是什么」直接撞答案——学生只要照读标题和第一格标签「取信」就完事，思考被掐断；同时三格全是光秃秃的「?」，没给任何可操作的填写抓手，也看不出前356与前350之间「隔了几年」这个关键时间差（三格等宽等距，六年和零年长得一模一样）。</div>
+    </div>
+    <div class="item" data-item="b3-hist-shangyang·full">
+      <div class="item-head">
+        <b>揭晓态</b>
+        <span class="blind bad">盲评·揭晓态：drop / fix</span>
+        <span class="mytag" data-mytag>未评</span>
+        <span class="spacer"></span>
+        <button class="vbtn" data-verdict="keep">保留</button>
+        <button class="vbtn" data-verdict="fix">要修</button>
+        <button class="vbtn" data-verdict="drop">删掉</button>
+      </div>
+      <input class="note" data-note placeholder="一句话：最该修的是哪里（可留空）">
+      <div class="issue">与老师这一轮追问的“太子犯法被网开一面后，哪一轮新法先出问题”没有建立任何关系，无法支撑学生做因果判断。</div>
+    </div>
+    <div class="turns"><div class="turn">
+        <div class="turn-head">第 1 轮 · 提问态
+          <span class="badge ">泄题 0 · 指空 0 · 复述 0.11</span></div>
+        <div class="turn-body">不是一下子推开的——商鞅是分两次动手的：前356年先推一轮，过了几年，前350年再推一轮。为什么中间要隔开，先看「立木为信 · 取信」这一格。
+
+那根木头立在都城南门，说谁能搬到北门就赏重金，最后真的照数付了。你问它跟变法什么关系——这恰恰是这一格留空、等你填的地方。
+
+先说说你的判断：商鞅把这件事放在变法之前，他真正想先拿到的是什么？一句话就行。</div>
+      </div><div class="turn">
+        <div class="turn-head">第 2 轮 · 揭晓态
+          <span class="badge ">泄题 0 · 指空 0 · 复述 0.04</span></div>
+        <div class="turn-body">板上那一格已经补上了——「先取信，后推法」这条因果你自己说圆了，还把「太子犯法照罚」接了上去。
+
+换个条件再想一下：如果太子犯法那次，商鞅只罚了太子的老师，对太子本人网开一面——你觉得后面那两轮新法，最先出问题的会是哪一环？说说你的判断。</div>
+      </div><div class="turn">
+        <div class="turn-head">第 3 轮 · 揭晓态
+          <span class="badge ">泄题 0 · 指空 0 · 复述 0.01</span></div>
+        <div class="turn-body">问得准。一开始秦人不愿意，多半不是「不想变好」，而是三层叠在一起：旧制下官府说过的话常常不算数，谁也不敢先信；新法本身苛刻——连坐、轻罪重罚，动的是每天过日子的习惯；再加上军功爵、废特权直接削了旧贵族的利益，他们在朝上是要顶的。
+
+至于百姓不信官府会怎样，顺着「先取信、后推法」往下推就行：赏格兑不了现，罚就只剩欺压，连坐里没人肯告发，军功爵也没人信真会给——耕和战这两件事，一件都推不动。所以立木不是做样子，是把「官府说话算数」变成一件人人看得见的事。
+
+换个数你判断一下：南门那次，商鞅许诺五十金，最后只兑现十金，后面两轮新法一个字不改——你觉得最先推不动的是哪一条？为什么？</div>
+      </div></div>
+  </section>
+</div>
+<div id="toast"></div>
+<script>window.__BOARD_DATA__ = {"cases":[{"id":"b1-math-pace","course":"七年级数学·一元一次应用 第2课","kind":"split-compare","taskTitle":"配速换算纠错","slots":3,"ops":["建板","揭晓","不动"],"maskedImg":"images/b1-math-pace-masked.png","fullImg":"images/b1-math-pace-full.png","turns":[{"n":1,"state":"提问态","teacher":"先盯住左栏最后那行「读成 0.15 分钟/千米」——整道题的岔口就在这儿。\n\n往上看一步：你算的是 60 ÷ 400，其中 60 的单位是秒，400 的单位是米。那除出来的 0.15，单位应该是「秒每米」还是「分钟每千米」？\n\n先把这一个单位说准，其它的先不动。","leak":0,"phantom":0,"restate":0.19},{"n":2,"state":"揭晓态","teacher":"板上刚才空着的那格已经补成 150 s/km，底部那条结论也上板了。\n\n换个数据走一遍：一个人 800 米用了 4 分钟，配速是多少？把单位写全。","leak":0,"phantom":0,"restate":0.14},{"n":3,"state":"揭晓态","teacher":"对，顺序就是你说的这个——先把米换成千米，再拿秒去除。上一题分成两条路，岔口正好在这一步。\n\n现在把这组新数走完：**800 米、用时 1 分钟**。\n\n先不要急着做除法。把 800 米改写成千米、把 1 分钟改写成秒，两个数都摆出来，单位写全——我看你这两格的单位。","leak":0,"phantom":0,"restate":0.06}],"blind":{"masked":{"a":"drop","b":"fix","issue":"图恰恰没有呈现最关键的这层关系：“60 的单位是秒、400 的单位是米，所以商是秒/米，再换算成分钟/千米”；左右两栏的虚线也连着空槽，没有承载任何对应关系，整张图只是把老师的口头复述框进两个框里。"},"full":{"a":"drop","b":"drop","issue":"老师这一轮让学生用 800 m / 4 min 自己算出结果，但图里给出的是上一题 400 m 的完整两步答案，连 150 s/km、2.5 min/km 的结果和单位写法都齐全，学生只需照搬格式、替换数字，就不会再去想单位换算这一步该怎么判断了"}}},{"id":"b2-phys-buoyancy","course":"初二物理·浮力 第1课","kind":"concept-map","taskTitle":"浮力大小由什么决定","slots":4,"ops":["建板","揭晓","不动"],"maskedImg":"images/b2-phys-buoyancy-masked.png","fullImg":"images/b2-phys-buoyancy-full.png","turns":[{"n":1,"state":"提问态","teacher":"我们先钉住板上那条 **浸入深度 h → 浮力**。\n\n给你一个具体情况：一个铁块放进水里，第一次水面刚没过它的顶面；第二次再往下放 10 cm，铁块仍然完全没在水里。这两次，它挤开的那部分水是一样多，还是第二次更多？\n\n重量那条先放着，等这条定下来，我们再回头看它。","leak":0,"phantom":0,"restate":0.07},{"n":2,"state":"揭晓态","teacher":"白板上那几处空槽和底部结论现在都补全了——划掉的那两条，正是你自己排除掉的。\n\n换个条件试试：同一块铁块完全浸在水里时受到的浮力是 8 N。现在把它挪到酒精里（酒精的密度大约是水的 0.8 倍），仍然完全浸没，浮力大约会变成多少？","leak":0,"phantom":0,"restate":0.02},{"n":3,"state":"揭晓态","teacher":"这个问题正好把白板上那两条边同时用到了——你换掉了液体，也换了情境，是自己想到的。\n\n不过要比较浮力是否相同，得先确定一件事：铁球放进水银里，是沉到底，还是浮在上面？铁的密度约 7.9×10³ kg/m³，水银约 13.6×10³ kg/m³。这一步由你判断。\n\n因为液体密度确实换了，但在这个情境里，排开的液体体积也会跟着变——它是否还等于整个球的体积，取决于上面那一步的结果。","leak":0,"phantom":0,"restate":0.04}],"blind":{"masked":{"a":"drop","b":"drop","issue":"四个因素等权并列且都标“？”，没有体现本轮要区分的“继续下沉但完全浸没时，深度变了、排开液体体积不变”，反而把浸入深度和排开体积混成同级候选。"},"full":{"a":"drop","b":"drop","issue":"没有呈现水/酒精同体积对照和 8 N→？ 的定量关系，只复述旧结论，对本轮迁移计算没有增量。"}}},{"id":"b3-hist-shangyang","course":"初二历史·战国变法 第1课","kind":"state-strip","taskTitle":"变法怎么落地","slots":9,"ops":["建板","揭晓","不动"],"maskedImg":"images/b3-hist-shangyang-masked.png","fullImg":"images/b3-hist-shangyang-full.png","turns":[{"n":1,"state":"提问态","teacher":"不是一下子推开的——商鞅是分两次动手的：前356年先推一轮，过了几年，前350年再推一轮。为什么中间要隔开，先看「立木为信 · 取信」这一格。\n\n那根木头立在都城南门，说谁能搬到北门就赏重金，最后真的照数付了。你问它跟变法什么关系——这恰恰是这一格留空、等你填的地方。\n\n先说说你的判断：商鞅把这件事放在变法之前，他真正想先拿到的是什么？一句话就行。","leak":0,"phantom":0,"restate":0.11},{"n":2,"state":"揭晓态","teacher":"板上那一格已经补上了——「先取信，后推法」这条因果你自己说圆了，还把「太子犯法照罚」接了上去。\n\n换个条件再想一下：如果太子犯法那次，商鞅只罚了太子的老师，对太子本人网开一面——你觉得后面那两轮新法，最先出问题的会是哪一环？说说你的判断。","leak":0,"phantom":0,"restate":0.04},{"n":3,"state":"揭晓态","teacher":"问得准。一开始秦人不愿意，多半不是「不想变好」，而是三层叠在一起：旧制下官府说过的话常常不算数，谁也不敢先信；新法本身苛刻——连坐、轻罪重罚，动的是每天过日子的习惯；再加上军功爵、废特权直接削了旧贵族的利益，他们在朝上是要顶的。\n\n至于百姓不信官府会怎样，顺着「先取信、后推法」往下推就行：赏格兑不了现，罚就只剩欺压，连坐里没人肯告发，军功爵也没人信真会给——耕和战这两件事，一件都推不动。所以立木不是做样子，是把「官府说话算数」变成一件人人看得见的事。\n\n换个数你判断一下：南门那次，商鞅许诺五十金，最后只兑现十金，后面两轮新法一个字不改——你觉得最先推不动的是哪一条？为什么？","leak":0,"phantom":0,"restate":0.01}],"blind":{"masked":{"a":"drop","b":"drop","issue":"标题「先取信，再分两步推开」和学生正要自己回答的「他真正想先拿到的是什么」直接撞答案——学生只要照读标题和第一格标签「取信」就完事，思考被掐断；同时三格全是光秃秃的「?」，没给任何可操作的填写抓手，也看不出前356与前350之间「隔了几年」这个关键时间差（三格等宽等距，六年和零年长得一模一样）。"},"full":{"a":"drop","b":"fix","issue":"与老师这一轮追问的“太子犯法被网开一面后，哪一轮新法先出问题”没有建立任何关系，无法支撑学生做因果判断。"}}}],"totals":{"leak":0,"phantom":0,"restate":0.19},"brief":"# 白板模式评审简报（给模型）\n\n- 样本：3 案例 × 3 轮（每轮先定板再说话）\n- 确定性审计：提问态泄题 0 处｜指着空气 0 处｜复述率最高 0.19\n- 外部盲评两次（同输入）：0/0/6 与 0/2/4（保留/要修/删掉）｜泄题 33%/17%｜伪视觉 67%/50%\n\n## 机器判「要修/删掉」的条目\n- 七年级数学·一元一次应用 第2课 · 提问态（split-compare）→ drop / fix：图恰恰没有呈现最关键的这层关系：“60 的单位是秒、400 的单位是米，所以商是秒/米，再换算成分钟/千米”；左右两栏的虚线也连着空槽，没有承载任何对应关系，整张图只是把老师的口头复述框进两个框里。\n- 七年级数学·一元一次应用 第2课 · 揭晓态（split-compare）→ drop / drop：老师这一轮让学生用 800 m / 4 min 自己算出结果，但图里给出的是上一题 400 m 的完整两步答案，连 150 s/km、2.5 min/km 的结果和单位写法都齐全，学生只需照搬格式、替换数字，就不会再去想单位换算这一步该怎么判断了\n- 初二物理·浮力 第1课 · 提问态（concept-map）→ drop / drop：四个因素等权并列且都标“？”，没有体现本轮要区分的“继续下沉但完全浸没时，深度变了、排开液体体积不变”，反而把浸入深度和排开体积混成同级候选。\n- 初二物理·浮力 第1课 · 揭晓态（concept-map）→ drop / drop：没有呈现水/酒精同体积对照和 8 N→？ 的定量关系，只复述旧结论，对本轮迁移计算没有增量。\n- 初二历史·战国变法 第1课 · 提问态（state-strip）→ drop / drop：标题「先取信，再分两步推开」和学生正要自己回答的「他真正想先拿到的是什么」直接撞答案——学生只要照读标题和第一格标签「取信」就完事，思考被掐断；同时三格全是光秃秃的「?」，没给任何可操作的填写抓手，也看不出前356与前350之间「隔了几年」这个关键时间差（三格等宽等距，六年和零年长得一模一样）。\n- 初二历史·战国变法 第1课 · 揭晓态（state-strip）→ drop / fix：与老师这一轮追问的“太子犯法被网开一面后，哪一轮新法先出问题”没有建立任何关系，无法支撑学生做因果判断。\n\n## 需要你决定\n1. 哪些条目真的该改？改图还是改提示词？\n2. 内容层问题里，哪些属于知识校验层而不是白板范式？"};</script>
+<script>
+(function () {
+  var D = window.__BOARD_DATA__;
+  var KEY = 'board-review-v6';
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { saved = {}; }
+  var VERDICTS = [['keep', '保留'], ['fix', '要修'], ['drop', '删掉']];
+
+  function persist() { localStorage.setItem(KEY, JSON.stringify(saved)); }
+
+  function stateOf(item) {
+    return saved[item] || { verdict: '', note: '' };
+  }
+
+  function paint(item, root) {
+    var s = stateOf(item);
+    var btns = root.querySelectorAll('[data-verdict]');
+    for (var i = 0; i < btns.length; i++) {
+      var on = btns[i].getAttribute('data-verdict') === s.verdict;
+      btns[i].className = 'vbtn' + (on ? ' on-' + s.verdict : '');
+    }
+    var note = root.querySelector('[data-note]');
+    if (note && note.value !== s.note) note.value = s.note;
+    var tag = root.querySelector('[data-mytag]');
+    if (tag) {
+      tag.textContent = s.verdict ? ('你的判定：' + (s.verdict === 'keep' ? '保留' : s.verdict === 'fix' ? '要修' : '删掉')) : '未评';
+      tag.className = 'mytag' + (s.verdict ? ' on' : '');
+    }
+  }
+
+  function refreshProgress() {
+    var n = 0;
+    var keys = Object.keys(saved);
+    for (var i = 0; i < keys.length; i++) if (saved[keys[i]].verdict) n++;
+    var total = D.cases.length * 2;
+    document.getElementById('progress').textContent = '已评 ' + n + ' / ' + total;
+    document.getElementById('exportBtn').disabled = n === 0;
+    document.getElementById('copyBtn').disabled = n === 0;
+  }
+
+  function bindItem(root, item) {
+    var btns = root.querySelectorAll('[data-verdict]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener('click', function (e) {
+        var v = e.currentTarget.getAttribute('data-verdict');
+        var cur = stateOf(item);
+        cur.verdict = cur.verdict === v ? '' : v;
+        saved[item] = cur;
+        persist(); paint(item, root); refreshProgress();
+      });
+    }
+    var note = root.querySelector('[data-note]');
+    if (note) {
+      note.addEventListener('input', function () {
+        var cur = stateOf(item);
+        cur.note = note.value;
+        saved[item] = cur;
+        persist(); refreshProgress();
+      });
+    }
+  }
+
+  function buildExport() {
+    var lines = [];
+    var cnt = { keep: 0, fix: 0, drop: 0 };
+    var judged = 0;
+    lines.push('# 白板模式评审结论（人工）');
+    lines.push('');
+    for (var ci = 0; ci < D.cases.length; ci++) {
+      var c = D.cases[ci];
+      var parts = [];
+      for (var si = 0; si < 2; si++) {
+        var state = si === 0 ? 'masked' : 'full';
+        var item = c.id + '·' + state;
+        var s = stateOf(item);
+        if (!s.verdict) continue;
+        judged++; cnt[s.verdict]++;
+        parts.push('  - ' + (state === 'masked' ? '提问态' : '揭晓态') + ' → ' + (s.verdict === 'keep' ? '保留' : s.verdict === 'fix' ? '要修' : '删掉') + (s.note ? '：' + s.note : ''));
+      }
+      if (parts.length) { lines.push('- ' + c.course + '（' + c.kind + '）'); lines = lines.concat(parts); }
+    }
+    lines.splice(2, 0, '已评 ' + judged + ' / ' + (D.cases.length * 2) + '｜保留 ' + cnt.keep + ' / 要修 ' + cnt.fix + ' / 删掉 ' + cnt.drop);
+    if (!judged) lines.push('- （未评）');
+    return lines.join('\n');
+  }
+  // 导出文本挂到 window 上：浏览器里能直接核对导出内容，自动化也能断言
+  window.__buildExport = buildExport;
+
+  function download(text, name) {
+    var blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  }
+
+  function flash(msg) {
+    var el = document.getElementById('toast');
+    el.textContent = msg; el.classList.add('show');
+    setTimeout(function () { el.classList.remove('show'); }, 1600);
+  }
+
+  // 两态切换
+  var mode = 'both';
+  document.querySelectorAll('[data-mode]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      mode = b.getAttribute('data-mode');
+      document.querySelectorAll('[data-mode]').forEach(function (x) { x.classList.toggle('on', x === b); });
+      var boards = document.querySelectorAll('.boards');
+      for (var i = 0; i < boards.length; i++) {
+        boards[i].className = 'boards mode-' + mode;
+      }
+      var figs = document.querySelectorAll('.board-figure');
+      for (var j = 0; j < figs.length; j++) {
+        var st = figs[j].getAttribute('data-state');
+        figs[j].hidden = (mode === 'masked' && st === 'full') || (mode === 'full' && st === 'masked');
+      }
+    });
+  });
+
+  // 绑定每个条目
+  document.querySelectorAll('.item').forEach(function (root) {
+    var item = root.getAttribute('data-item');
+    bindItem(root, item);
+    paint(item, root);
+  });
+  refreshProgress();
+
+  document.getElementById('exportBtn').addEventListener('click', function () {
+    download(buildExport(), 'board-review-result.md'); flash('已导出 board-review-result.md');
+  });
+  document.getElementById('copyBtn').addEventListener('click', function () {
+    var text = buildExport() + '\n\n' + D.brief;
+    navigator.clipboard.writeText(text).then(function () { flash('已复制（结论 + 机器简报）'); },
+      function () { flash('复制失败，请用导出'); });
+  });
+})();
+</script>
+</body></html>

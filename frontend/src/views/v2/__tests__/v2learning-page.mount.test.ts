@@ -24,6 +24,7 @@ vi.mock('@/utils/api', () => ({
 }));
 
 vi.mock('@/api/aiTeaching', () => ({
+  createTeachingIdempotencyKey: (scope: string) => `${scope}:test-key`,
   aiTeachingAPI: {
     startSession: api.startSession,
     startReviewSession: vi.fn(),
@@ -215,6 +216,33 @@ describe('V2LearningPage 挂载回归', () => {
     expect(w.find('.checkpoint').exists()).toBe(true);
     expect(w.find('.checkpoint__head strong').text()).toContain('作用域小测');
     expect(w.findAll('.checkpoint__option')).toHaveLength(2);
+
+    w.unmount();
+  });
+
+  it('检查点题干里的 Markdown 加粗渲染为 strong，不出现原始星号', async () => {
+    api.startSession.mockResolvedValue({
+      sessionId: 's_resumed_markdown',
+      revision: 2,
+      mode: 'resumed',
+      scene: { kind: 'resume', title: '接着上次的表头口径' },
+    });
+    api.getSessionDetail.mockResolvedValue({
+      revision: 3,
+      messages: [{ role: 'assistant', content: '继续。', peer: false }],
+      pendingCheckpoint: {
+        ...PENDING_CP,
+        title: '**不能**直接拼接',
+        question: '下面哪种情况**不能**直接拼？',
+      },
+    });
+
+    const w = await mountPage();
+
+    const head = w.find('.checkpoint__head');
+    expect(head.text()).not.toContain('**');
+    expect(head.find('strong strong').text()).toBe('不能');
+    expect(head.text()).toContain('不能直接拼接');
 
     w.unmount();
   });

@@ -9,6 +9,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
+import { mkSelectOptions, mkSelectValue } from '@/components/mk/__tests__/mkSelect';
 import type { TraceSpan } from '../store';
 
 const h = vi.hoisted(() => ({
@@ -180,20 +181,24 @@ describe('分组名与选择器标签（2026-10-14 第二批：英文分组 / �
       span({ id: 'b', ts: new Date('2026-10-14T09:22:31+08:00').getTime(), startMs: 7700, durationMs: 2000 })
     ]);
     await w.vm.$nextTick();
-    const opt = w.find('.wf-tracepick__select option');
-    const label = opt.text();
+    const opt = mkSelectOptions(w, '选择链路')[0];
+    const label = opt.textContent?.trim() ?? '';
     expect(label).toMatch(/\d{2}:\d{2}:\d{2}/);
     expect(label).toContain('2 span');
-    expect(opt.attributes('title')).toBe('tr-1');   // 完整链路 ID 落在 title（可复制核对）
+    // 完整链路 ID 仍是选项的值（自绘 listbox 用 data-value 承载，不再借 option title）
+    expect(opt.getAttribute('data-value')).toBe('tr-1');
+    expect(mkSelectValue(w, '选择链路')).toBe('tr-1');
     w.unmount();
   });
 
-  it('工具条按卡头语法分左右组：左组＝模式/仅失败/排序/搜索，右组＝动作/计数/选择器', async () => {
+  it('工具条按卡头语法分左右组：左组＝模式/结果下拉/排序/搜索，右组＝动作/计数/选择器', async () => {
     const w = mountWith(GATEWAY_ONLY);
     await w.vm.$nextTick();
     const left = w.find('.wf-tracepick__left');
     const right = w.find('.wf-tracepick__right');
     expect(left.exists() && right.exists()).toBe(true);
+    // 2026-10-27 统一：失败筛选从常驻 chip 迁入「结果」下拉
+    expect(left.find('.mk-pillselect[aria-label="按结果筛选"]').exists()).toBe(true);
     expect(left.text()).toContain('仅失败');
     expect(left.find('.wf-tracepick__search').exists()).toBe(true);   // 搜索框归左组
     expect(right.find('.wf-tracepick__count').exists()).toBe(true);   // 计数归右组
@@ -221,6 +226,27 @@ describe('瀑布行行尾耗时', () => {
     expect(gw.exists()).toBe(true);
     expect(gw.text()).toContain('网关 1.2s');
     expect(gw.attributes('title')).toContain('平台侧开销');
+    w.unmount();
+  });
+});
+
+describe('失败定位（会话视图）', () => {
+  it('点“定位”切换到含失败 span 的会话，而不是只改链路选择器', async () => {
+    const w = mountWith([
+      span({ id: 'ok', traceId: 'tr-a', sessionId: 'sess-a', status: 'ok' }),
+      span({ id: 'bad', traceId: 'tr-b', sessionId: 'sess-b', status: 'err' })
+    ]);
+    await w.vm.$nextTick();
+
+    const sessionTab = w.findAll('button').find((b) => b.text().trim() === '会话');
+    expect(sessionTab).toBeTruthy();
+    await sessionTab!.trigger('click');
+    expect(mkSelectValue(w, '选择会话')).toBe('sess-a');
+
+    const locate = w.findAll('button').find((b) => b.text().includes('定位 →'));
+    expect(locate).toBeTruthy();
+    await locate!.trigger('click');
+    expect(mkSelectValue(w, '选择会话')).toBe('sess-b');
     w.unmount();
   });
 });

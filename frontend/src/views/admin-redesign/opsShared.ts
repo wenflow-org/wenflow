@@ -81,17 +81,17 @@ export function loadCaliber(kind: LoadCaliber, at?: string | null): LoadCaliberN
   const stampLine = hasStamp ? `\n取样时刻：${stamp}。` : ''
   if (kind === 'aggregate') {
     return {
-      label: hasStamp ? `学习者级聚合 · 快照 ${stamp}` : '学习者级聚合',
+      label: hasStamp ? `全部路径汇总 · 取样 ${stamp}` : '全部路径汇总',
       title:
-        `LSS/KTL/LF/LSB 取自学习者级聚合快照（按学习者的各条路径汇总，并计入当日课量带来的疲劳），` +
-        `不是某一次会话的读数。${stampLine}\n同一学习者在「虚拟学习者档案」页看到的同名读数取自单次会话当场留下的读数，数值天然不同——那是两套来源，不是其中一处算错。`,
+        '四项状态指标按该学习者的全部路径汇总，并计入当日课量带来的疲劳，不是某一次会话的读数。' +
+        `${stampLine}\n同一账号在「虚拟学习者档案」页看到的同名读数取自单次会话，两处来源不同，数值本就不相等。`,
     }
   }
   return {
-    label: hasStamp ? `单次会话快照 · ${stamp}` : '单次会话快照',
-      title:
-        `LSS/KTL/LF/LSB 取自最近一次带读数的教学会话当场留下的读数（该会话当时记录的状态），` +
-        `不是学习者级聚合。${stampLine}\n同一学习者在「学习者详情」页看到的同名读数是学习者级聚合值，数值天然不同——那是两套来源，不是其中一处算错。`,
+    label: hasStamp ? `单次会话 · 取样 ${stamp}` : '单次会话',
+    title:
+      '四项状态指标取自最近一次带读数的教学会话当场记录的状态，不是跨路径汇总。' +
+      `${stampLine}\n同一账号在「学习者详情」页看到的同名读数按全部路径汇总，两处来源不同，数值本就不相等。`,
   }
 }
 
@@ -112,47 +112,28 @@ export type PanelScope = 'current-path' | 'path' | 'all-paths' | 'all-stories' |
 export interface PanelScopeNote {
   /** 可见短标（进卡头 mk-card__meta / 页头 pill） */
   label: string
-  /** 悬停长释：说清这个块算的是哪些路径 */
+  /** 悬停长释：作用域已由短标与页级开关表达，不再挂解释句（2026-10-22 用户裁定） */
   title: string
 }
-
-/** 路径口径长释的公共尾段：「当前路径 / 所选路径」两种 scope 的取数说明一致，共用一份（R6 复读单源化） */
-const SCOPE_EVIDENCE_TAIL = '的会话与学习证据，同时涵盖该学习者的全部记忆痕迹。其它路径不在这里。'
 
 export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | null } = {}): PanelScopeNote {
   const named = (opts.pathTitle || '').trim()
   if (scope === 'current-path') {
-    return {
-      label: '当前路径',
-      title:
-        `本块取自当前路径${named ? `（${named}）` : ''}${SCOPE_EVIDENCE_TAIL}` +
-        `\n当前路径 = 该学习者正在进行、且最近有更新的一条路径。已归档或生成失败的路径不计入。`,
-    }
+    return { label: '当前路径', title: '' }
   }
   if (scope === 'path') {
     return {
       label: `路径 ${named.length > 12 ? `${named.slice(0, 12)}…` : named || '—'}`,
-      title:
-        `本块取自所选路径${named ? `（${named}）` : ''}${SCOPE_EVIDENCE_TAIL}` +
-        `\n这不是该学习者的「当前路径」——当前路径指正在进行、且最近有更新的一条，与这里的筛选无关。`,
+      title: '',
     }
   }
   if (scope === 'all-paths') {
-    return {
-      label: '跨全部路径',
-      title: '本块按学习者汇总，统计其名下全部路径的数据（含已归档或生成失败的路径），不限于当前路径。',
-    }
+    return { label: '跨全部路径', title: '' }
   }
   if (scope === 'all-stories') {
-    return {
-      label: '跨全部故事',
-      title: '本块按该虚拟学习者汇总，统计其名下全部故事（同一个角色的多条独立学习线）的数据，不限于单条故事。',
-    }
+    return { label: '跨全部故事', title: '' }
   }
-  return {
-    label: '单次会话',
-    title: '本块取自单次会话的读数，不是学习者级聚合。',
-  }
+  return { label: '单次会话', title: '' }
 }
 
 /* retryPathGeneration 的 retryType 文案（守卫自动判定，页面透传不二次解释） */

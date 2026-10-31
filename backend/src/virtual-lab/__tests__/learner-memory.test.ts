@@ -25,7 +25,8 @@ jest.mock('../../config/database', () => {
     findUnique: jest.fn(),
     update: jest.fn(),
   };
-  const mockPrisma = { virtual_learner_profiles: profiles };
+  const memoryTraces = { findMany: jest.fn() };
+  const mockPrisma = { virtual_learner_profiles: profiles, memory_traces: memoryTraces };
   return {
     __esModule: true,
     default: mockPrisma,
@@ -44,10 +45,14 @@ const mockedPrisma = prisma as unknown as {
     findUnique: jest.Mock;
     update: jest.Mock;
   };
+  memory_traces: {
+    findMany: jest.Mock;
+  };
 };
 
 const mockFindUnique = mockedPrisma.virtual_learner_profiles.findUnique;
 const mockUpdate = mockedPrisma.virtual_learner_profiles.update;
+const mockFindManyTraces = mockedPrisma.memory_traces.findMany;
 const mockGetDueTraces = memoryTraceService.getDueTraces as jest.Mock;
 
 function profileRow(profileData: Record<string, unknown>) {
@@ -136,6 +141,7 @@ describe('writeProfileConceptsAfterLesson', () => {
     jest.clearAllMocks();
     mockFindUnique.mockResolvedValue(profileRow({ knownConcepts: [], struggleConcepts: [] }));
     mockUpdate.mockResolvedValue({});
+    mockFindManyTraces.mockResolvedValue([]);
   });
 
   it('mastered 概念并入 knownConcepts，review/learning 并入 struggleConcepts', async () => {
@@ -152,6 +158,21 @@ describe('writeProfileConceptsAfterLesson', () => {
         struggleConcepts: JSON.stringify(['色彩校正', '转场']),
       }),
     });
+  });
+
+  it('已注册概念同时补写稳定 kcId（#94）', async () => {
+    mockFindManyTraces.mockResolvedValue([
+      { label: '剪辑节奏', conceptKey: '剪辑节奏', conceptId: 'kc_edit_rhythm' },
+    ]);
+
+    await writeProfileConceptsAfterLesson('u1', [
+      { name: '剪辑节奏', status: 'mastered', progress: 100 },
+    ]);
+
+    const data = mockUpdate.mock.calls[0][0].data;
+    const profile = JSON.parse(data.profile);
+    expect(profile.knownConceptIds).toEqual(['kc_edit_rhythm']);
+    expect(profile.struggleConceptIds).toEqual([]);
   });
 
   it('mastered 概念同时从 struggleConcepts 中移除', async () => {
@@ -265,6 +286,19 @@ describe('buildLearnerMemorySnapshot', () => {
     expect(memory.dueReview).toEqual([]);
     expect(memory.degraded?.some((d) => d.impactedDimensions.includes('dueReview'))).toBe(true);
   });
+
+  it('M-16：显式 now 下传 getDueTraces；不传时不下发 now 键（现行为不变）', async () => {
+    mockFindUnique.mockResolvedValue(profileRow({ knownConcepts: [], struggleConcepts: [], recentCompleted: [] }));
+    mockGetDueTraces.mockResolvedValue([]);
+
+    const simulatedNow = new Date('2026-10-23T15:59:59.999Z');
+    await buildLearnerMemorySnapshot('u1', { limit: 12, now: simulatedNow });
+    expect(mockGetDueTraces).toHaveBeenCalledWith('u1', { limit: 12, now: simulatedNow });
+
+    await buildLearnerMemorySnapshot('u1', { limit: 12 });
+    // now 为 undefined：getDueTraces 侧走 simulatedNowOr() 回落，调用方不下发该键
+    expect(mockGetDueTraces).toHaveBeenLastCalledWith('u1', { limit: 12, now: undefined });
+  });
 });
 
 describe('recordCompletedArtifact', () => {
@@ -334,6 +368,7 @@ describe('P1-2：写回遍历 curator 全量名单 + 跨表去重', () => {
     jest.clearAllMocks();
     mockFindUnique.mockResolvedValue(profileRow({ knownConcepts: [], struggleConcepts: [] }));
     mockUpdate.mockResolvedValue({});
+    mockFindManyTraces.mockResolvedValue([]);
   });
 
   it('curatedConcepts 全量遍历（mastered→known、struggle→struggle），不再只吃单 conceptName', async () => {
@@ -374,6 +409,33 @@ describe('P1-2：写回遍历 curator 全量名单 + 跨表去重', () => {
     const data = mockUpdate.mock.calls[0][0].data;
     expect(JSON.parse(data.knownConcepts)).toEqual(['剪辑节奏']);
     expect(JSON.parse(data.struggleConcepts)).toEqual(['调色', '曲线']);
+  });
+
+  it('判决降级：known → struggle，且纯降级（无新掌握/新卡点）也会落库', async () => {
+    mockFindUnique.mockResolvedValue(profileRow({
+      knownConcepts: ['剪辑节奏', '转场'],
+      struggleConcepts: [],
+    }));
+    await writeProfileConceptsAfterLesson('u1', [], {
+      downgraded: [{ name: '剪辑节奏', from: 'mastered', to: 'learning' }],
+    });
+    const data = mockUpdate.mock.calls[0][0].data;
+    expect(JSON.parse(data.knownConcepts)).toEqual(['转场']);
+    expect(JSON.parse(data.struggleConcepts)).toEqual(['剪辑节奏']);
+  });
+
+  it('降级后本课又重新掌握 → 以 mastered 为准，不进 struggle', async () => {
+    mockFindUnique.mockResolvedValue(profileRow({
+      knownConcepts: ['剪辑节奏', '转场'],
+      struggleConcepts: [],
+    }));
+    await writeProfileConceptsAfterLesson('u1', [], {
+      curatedConcepts: { mastered: ['剪辑节奏'], struggling: [] },
+      downgraded: [{ name: '剪辑节奏' }],
+    });
+    const data = mockUpdate.mock.calls[0][0].data;
+    expect(JSON.parse(data.knownConcepts)).toEqual(['转场', '剪辑节奏']);
+    expect(JSON.parse(data.struggleConcepts)).toEqual([]);
   });
 });
 

@@ -12,7 +12,26 @@ import {
   VLAB_STALL_MINUTES,
   STORY_RUN_RECENT_N,
   RUNS_TAB_WINDOW,
+  FRICTION_OPTIONS,
+  frictionLabel,
 } from '../vlab';
+
+describe('vlab.FRICTION_OPTIONS（学生对抗度的唯一中文词表）', () => {
+  /* 2026-10-26：同一个后端枚举在启动弹层（无摩擦 / 压力测试）与提示词试跑（配合 / 极端）
+     是两套词，被读成两个参数。词表收在 vlab.ts，启动弹层 / 提示词试跑 / 画像页默认难度共用。 */
+  it('五档中文词与后端枚举一一对应', () => {
+    expect(FRICTION_OPTIONS.map((o) => o.value)).toEqual(['none', 'low', 'normal', 'high', 'stress_test']);
+    expect(FRICTION_OPTIONS.map((o) => o.label)).toEqual(['配合', '犹豫', '正常', '难缠', '极端']);
+  });
+
+  it('frictionLabel：已知值给中文，未知/空回退「正常」', () => {
+    expect(frictionLabel('none')).toBe('配合');
+    expect(frictionLabel('stress_test')).toBe('极端');
+    expect(frictionLabel('')).toBe('正常');
+    expect(frictionLabel(null)).toBe('正常');
+    expect(frictionLabel('unknown')).toBe('正常');
+  });
+});
 
 describe('vlab.sessionStageIndex（V2 阶段映射：Goal→Path→Learn→Wrapup）', () => {
   it('后端 currentStage 原文归一为四段下标', () => {

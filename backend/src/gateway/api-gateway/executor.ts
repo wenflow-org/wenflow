@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../../utils/logger';
 import { redactLogValue } from '../../utils/secret-redaction';
-import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext, ChatContentPart, ChatMessageContent, messagesHaveImages } from './types';
+import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext, ChatMessageContent, messagesHaveImages } from './types';
 import { getDefaultAIRequestTimeoutMs } from '../../services/agentRequestTimeout.service';
 import { buildThinkingPolicy, type ReasoningEffort, type ThinkingMode } from './thinking-policy';
-import { getModelDefinition, getModelFallbacks, supportsVision } from '../../config/models.config';
+import { getModelDefinition, getModelFallbacks, providerSupportsSystemRole, resolveModelRef, supportsVision } from '../../config/models.config';
 import {
   clearCooldown,
   deploymentKey,
@@ -20,6 +20,9 @@ import { GatewayExecutionError, parseRetryAfterMs } from './failure-classificati
 import { consumeUpstreamAttempt, createRetryBudget, RETRY_BUDGET_HARD_LIMITS } from './retry-budget';
 import { hoistLlmParamsFromContext } from '../../services/resolve-llm-call-params';
 import { SseParser } from '../../utils/sse-parser';
+import { renderWireMessages, resolveSystemPromptFoldPolicy } from './wire-format';
+import { applyThinkingPolicyToBody, resolveChatCompletionsUrl } from './chat-protocol-adapter';
+export { foldSystemMessagesIntoUser, resolveSystemPromptFoldPolicy } from './wire-format';
 
 /**
  * 单次上游 attempt 的超时硬上限。
@@ -56,7 +59,7 @@ export function resolveCacheSessionKey(context: ExecutionContext): string {
 }
 /** 降级链最多候选数（主模型 + N 个 fallback），用于限制质量漂移与成本（见 §4.5） */
 /** 运行时模型候选上限（含主模型）：fallback 链超过部分静默截断，registry 据此展示有效链 */
-export const MAX_MODEL_CANDIDATES = 2;
+export const MAX_MODEL_CANDIDATES = 3;
 
 interface RequestResult {
   response: ChatResponse;
@@ -373,23 +376,31 @@ export class APIExecutor {
       attemptTelemetryComplete,
       maxAttempts
     );
-    // 降级：主候选在「值得换部署」的错误上耗尽重试 → 换 fallback 模型重跑（限一跳）。
+    // 降级：主候选在「值得换部署」的错误上耗尽重试 → 换 fallback 模型重跑。
     // 见 doc/MODEL_GATEWAY_DESIGN.md §4.5（成熟参照：LiteLLM fallbacks + deployment cooldown）。
     // 链来源优先级：skill 级声明（skill_model_configs.fallbackChain）> 模型注册表全局链。
-    const fallbackModel = this.resolveModelCandidates(primaryModel, route.skillFallbackChain)[1];
+    // 支持最多 2 跳（MAX_MODEL_CANDIDATES=3）；fallbackTrail 防环并限制总尝试次数。
+    const fallbackTrail = normalizedContext.fallbackTrail || [];
+    const triedModels = new Set([...fallbackTrail, primaryModel]);
+    const fallbackModel = (fallbackTrail.length < MAX_MODEL_CANDIDATES - 1)
+      ? this.resolveModelCandidates(primaryModel, route.skillFallbackChain)
+          .find((candidate) => (
+            candidate !== primaryModel
+            && !triedModels.has(candidate)
+            && !isCoolingDown(deploymentKey({
+              providerId: route.providerId,
+              endpoint: route.endpoint,
+              model: candidate
+            }))
+          ))
+      : undefined;
     const terminalError = lastError as GatewayExecutionError | null;
     if (
-      !normalizedContext.fallbackFrom
-      && fallbackModel
+      fallbackModel
       && !streamStarted
       && terminalError
       && isFallbackWorthyCategory(terminalError.category)
       && retryBudget.used.upstreamAttempts < retryBudget.limits.maxUpstreamAttempts
-      && !isCoolingDown(deploymentKey({
-        providerId: route.providerId,
-        endpoint: route.endpoint,
-        model: fallbackModel
-      }))
     ) {
       markCoolingDown(primaryHealthKey);
       logger.warn('[api-gateway] 主候选耗尽，降级到 fallback 模型', {
@@ -397,6 +408,7 @@ export class APIExecutor {
         llmRequestId,
         primaryModel,
         fallbackModel,
+        fallbackDepth: fallbackTrail.length + 1,
         errorCategory: terminalError.category,
         statusCode: lastStatusCode
       });
@@ -406,6 +418,7 @@ export class APIExecutor {
         {
           ...normalizedContext,
           fallbackFrom: primaryModel,
+          fallbackTrail: [...fallbackTrail, primaryModel],
           // 链来源记账：skill 级声明链 vs 模型注册表全局链（便于回看「空气兜底」治理效果）
           fallbackChainSource: route.skillFallbackChain ? 'skill' : 'registry',
         }
@@ -681,6 +694,19 @@ export class APIExecutor {
               }
             );
           }
+          if (!String(state.content || '').trim()) {
+            // D3（2026-10-22 拍板 A）：流式 200 但一个内容增量都没有（实测 99.4s、completion_tokens=0）
+            // 不能当成功返回——下游会拿到空 userVisible，用户体感是「等了很久没回复」。
+            // 归为 TRUNCATED_EMPTY_OUTPUT：走既有重试链，并在重试时关闭思考
+            // （reasoning 吃掉输出预算是最常见成因）；失败文案带 finish_reason 与用量便于排查。
+            throw new GatewayExecutionError(
+              `API returned empty stream content (no assistant text) from ${requestUrl}. finish_reason=${state.finishReason || 'unknown'}, completion_tokens=${state.usage?.completion_tokens ?? 0}. Body preview: ${this.truncate(fullText, 300)}`,
+              {
+                category: 'protocol', code: 'TRUNCATED_EMPTY_OUTPUT', statusCode,
+                requestUrl, contentType, retryable: true
+              }
+            );
+          }
           parsedResponse = {
             id: state.id || 'stream',
             model: state.model || String(requestBody.model || route.model),
@@ -737,15 +763,13 @@ export class APIExecutor {
       top_p: hoisted.top_p,
       max_tokens: hoisted.max_tokens ?? route.maxTokens
     };
-    // 上游兼容：当前平台的 zijian 网关（101.43.146.102:30001）实测会**静默丢弃 role:'system'**
-    // （2026-09-22 直连实测：带 1467 字 system 与不带 system 的 prompt_tokens 完全相同 = 98，
-    //  且模型对 system 里的"只输出 JSON"约束毫无反应；同一约束写进 user 消息则被完美遵从）。
-    // 后果：所有 skill 的系统提示词从未到达模型，表现为"模型把结构化输入当文档做总结"——
-    // kc-mapper/concept-consolidator 等纯标注类 skill 集体失败的真因。
-    // 这里把 system 内容折叠进首条 user 消息，保证提示词一定被模型看到。
-    // 关闭方式：LLM_SYSTEM_PROMPT_FOLD=0（上游改为支持 system 后可关）。
-    if (process.env.LLM_SYSTEM_PROMPT_FOLD !== '0') {
-      requestBody.messages = foldSystemMessagesIntoUser(requestBody.messages);
+    // 上游兼容：部分聚合网关会**静默丢弃 role:'system'**（2026-09-22 实测 zijian 网关
+    // 带/不带 system 的 prompt_tokens 完全相同，且 system 里的 JSON 约束毫无反应）。
+    // 折叠与否由**通道路由的能力声明**决定（llm-providers.json provider.supportsSystemRole），
+    // 而不是全局环境变量：标准上游按官方格式发 system，只有声明 false 的通道才折叠。
+    // 紧急开关：LLM_SYSTEM_PROMPT_FOLD=0 全局禁用折叠 / =1 全局强制折叠（排查用）。
+    if (shouldFoldSystemPromptForRoute(route)) {
+      requestBody.messages = renderWireMessages(requestBody.messages, { foldSystem: true });
     }
     // 视觉把关（2026-10-18 #123）：请求里含图片内容块时，**最终生效模型**必须声明 vision，
     // 否则明确拒绝（而不是把图发给不认识图的模型：上游要么 400，要么当没看见，两种都难排查）。
@@ -760,6 +784,9 @@ export class APIExecutor {
       requestBody.thinking = explicitThinking;
       if (explicitThinking.type === 'disabled') delete requestBody.reasoning_effort;
     }
+    // 测试缝：把「最终请求体」交给调用方（仅内存回调）。放在所有改写之后、发送之前，
+    // 保证断言的是真正上线的那一份，而不是中间态。
+    context?.onWireRequest?.(requestBody);
     return requestBody;
   }
 
@@ -968,6 +995,7 @@ export class APIExecutor {
       rootExecutionId: context.rootExecutionId || llmRequestId,
       traceId: context.traceId || null,
       userId: context.userId || null,
+      sessionId: context.sessionId || null,
       sourceEntry: context.sourceEntry || 'platform',
       promptAttemptNo: context.promptAttemptNo || 1,
       transportAttemptNo: attempt.attempt,
@@ -1111,6 +1139,7 @@ export class APIExecutor {
         executionMode,
         // 降级记账：本次调用是作为 fallback 发起时的来源模型（P1，见 §4.5）
         fallbackFrom: context.fallbackFrom || null,
+        fallbackTrail: context.fallbackTrail || null,
         fallbackChainSource: context.fallbackChainSource || null,
         skillId: context.skillId || null, agentId: context.agentId || null,
         sessionId: context.sessionId || null,
@@ -1155,9 +1184,7 @@ export class APIExecutor {
       reasoningEffort: route.reasoningEffort as ReasoningEffort,
       maxTokens: typeof requestBody.max_tokens === 'number' ? requestBody.max_tokens : undefined,
     });
-    if (policy.thinking) requestBody.thinking = policy.thinking;
-    if (policy.reasoningEffort) requestBody.reasoning_effort = policy.reasoningEffort;
-    if (policy.maxTokens !== undefined) requestBody.max_tokens = policy.maxTokens;
+    applyThinkingPolicyToBody(requestBody, policy);
   }
 
   private delay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -1247,10 +1274,7 @@ export class APIExecutor {
   }
 
   private resolveChatCompletionsUrl(endpoint: string): string {
-    const normalizedEndpoint = (endpoint || '').trim().replace(/\/+$/, '');
-    if (/\/chat\/completions$/i.test(normalizedEndpoint)) return normalizedEndpoint;
-    if (/\/v1$/i.test(normalizedEndpoint)) return `${normalizedEndpoint}/chat/completions`;
-    return `${normalizedEndpoint}/v1/chat/completions`;
+    return resolveChatCompletionsUrl(endpoint);
   }
 
   private generateTraceId(): string {
@@ -1259,57 +1283,15 @@ export class APIExecutor {
 }
 
 /**
- * 把 `role:'system'` 消息内容折叠进首条 user 消息（上游不支持 system 角色时的兼容层）。
+ * 本次路由是否需要把 system 折叠进 user（见 resolveSystemPromptFoldPolicy）。
  *
- * 背景（2026-09-22 实测）：平台当前的 zijian 网关会静默丢弃 system 消息，导致 skill 的
- * 系统提示词从未到达模型；折叠进 user 消息后同一约束被模型完美遵从。
- *
- * 语义：
- * - 无 system 消息 → 原样返回（引用不变，避免无谓拷贝）；
- * - 多条 system → 按顺序以空行拼接；
- * - 有 user 消息 → system 文本前置到**首条** user 消息，用分隔线隔开，保留原 user 内容与其余消息顺序；
- * - 无 user 消息（只有 system/assistant）→ 生成一条 user 消息承载 system 文本；
- * - 首条 user 是内容块数组（多模态）→ 在首个文本块前插入 system 文本块，图片块原样保留（#123）。
+ * 能力按**模型实际归属的供应商**解析：skill 级端点覆盖会把 route.providerId 改成
+ * `skill:<id>`，直接按 route.providerId 查表会落到「未登记=支持 system」而漏折叠。
+ * 模型不在注册表（用户自有模型）时回落到 route.providerId 的声明。
  */
-export function foldSystemMessagesIntoUser(messages: ChatRequest['messages']): ChatRequest['messages'] {
-  if (!Array.isArray(messages) || messages.length === 0) return messages;
-  // 只折叠**纯文本** system 消息：内容块数组形态的 system 不在此兼容层处理（当前无此调用方）
-  const systems = messages.filter((m) => m?.role === 'system' && typeof m?.content === 'string' && m.content.trim());
-  if (systems.length === 0) return messages;
-
-  const systemText = systems.map((m) => String(m.content)).join('\n\n');
-  const rest = messages.filter((m) => m?.role !== 'system');
-  const firstUserIndex = rest.findIndex((m) => m?.role === 'user');
-  if (firstUserIndex === -1) {
-    return [{ role: 'user', content: systemText }, ...rest];
-  }
-  const merged = [...rest];
-  merged[firstUserIndex] = {
-    ...merged[firstUserIndex],
-    content: mergeSystemTextIntoContent(systemText, merged[firstUserIndex].content),
-  };
-  return merged;
-}
-
-/**
- * 把 system 文本合并进目标内容（2026-10-18 #123 多模态兼容）：
- * - string：前置文本 + 分隔线（原行为不变）；
- * - 内容块数组（含图片）：在**首个文本块**前插入 system 文本块——绝不能走字符串拼接，
- *   否则数组会被 `String()` 成 `[object Object]`，图片块与用户正文一起丢失。
- */
-function mergeSystemTextIntoContent(systemText: string, content: ChatMessageContent | undefined): ChatMessageContent {
-  if (typeof content === 'string') {
-    return `${systemText}\n\n---\n${content}`;
-  }
-  if (!Array.isArray(content)) {
-    return `${systemText}\n\n---\n`;
-  }
-  const parts = [...content];
-  const prefix: ChatContentPart = { type: 'text', text: `${systemText}\n\n---` };
-  const firstTextIndex = parts.findIndex((part) => part?.type === 'text');
-  if (firstTextIndex === -1) return [prefix, ...parts];
-  parts.splice(firstTextIndex, 0, prefix);
-  return parts;
+export function shouldFoldSystemPromptForRoute(route: Pick<ResolvedRoute, 'providerId' | 'model'>): boolean {
+  const declaredProvider = resolveModelRef(String(route.model || ''))?.providerId;
+  return resolveSystemPromptFoldPolicy(providerSupportsSystemRole(declaredProvider || route.providerId));
 }
 
 /**

@@ -52,10 +52,6 @@ jest.mock('../../services/platform-settings.service', () => ({
   getPlatformSettings: jest.fn()
 }))
 
-jest.mock('../../services/ai-capability-health.service', () => ({
-  aiCapabilityHealthService: { isCapabilityBlocked: jest.fn() }
-}))
-
 jest.mock('../../services/auth/register-quota.service', () => ({
   registerQuotaService: {
     assertWithinDailyQuota: jest.fn(),
@@ -153,6 +149,7 @@ describe('/auth/refresh 并发语义（#116 方案 A）', () => {
 
     expect(res.statusCode).toBe(401)
     expect(res.body.error.message).toBe('检测到会话异常，请重新登录')
+    expect(res.body.error.code).toBe('REFRESH_REUSE_DETECTED')
     expect(res.clearCookie).toHaveBeenCalledTimes(2)
     expect(res.cookie).not.toHaveBeenCalled()
   })
@@ -164,7 +161,20 @@ describe('/auth/refresh 并发语义（#116 方案 A）', () => {
 
     expect(res.statusCode).toBe(401)
     expect(res.body.error.message).toBe('会话已失效，请重新登录')
+    expect(res.body.error.code).toBe('REFRESH_ROTATION_REJECTED')
     expect(res.clearCookie).toHaveBeenCalledTimes(2)
     expect(res.cookie).not.toHaveBeenCalled()
+  })
+
+  // #116 埋点：缺 Cookie = 请求没带凭证，与「带了但无效」可区分，便于定位代理/域名问题
+  it('缺 refresh cookie：401 且带 REFRESH_COOKIE_MISSING 原因码', async () => {
+    const handlers = routes['POST /refresh']
+    const req = { cookies: {}, headers: {} } as any
+    const res = createResponse()
+    await handlers[handlers.length - 1](req, res, jest.fn())
+
+    expect(res.statusCode).toBe(401)
+    expect(res.body.error.code).toBe('REFRESH_COOKIE_MISSING')
+    expect(res.clearCookie).not.toHaveBeenCalled()
   })
 })

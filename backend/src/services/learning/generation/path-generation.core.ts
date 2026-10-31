@@ -9,9 +9,10 @@
  */
 import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
+import { clampMilestonesWithLog } from './path-budget-clamp';
 import { ownerContextOverride } from './owner-context';
 import { withTransaction } from '../../../utils/with-transaction';
-import { executeSkill } from '../../../skills';
+import { executeSkill, executeSkillWithResult } from '../../../skills';
 import { pathAgentDefinition } from '../../../skills/path-planning';
 import { pathReviewerDefinition } from '../../../skills/path-reviewer';
 import type { AgentInput } from '../../../agents/protocol';
@@ -460,10 +461,9 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
   }
 }
 
-
 async function persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[], runId?: string) {
   const cognitiveDesign = buildPathCognitiveDesign(data, analysis);
-  const normalizedMilestonesData = normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign);
+  const normalizedMilestonesData = clampMilestonesWithLog(normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign), data, runId);
 
   // 资料引用（materialRefs）：里程碑 → 资料条目，**已在 skill 侧逐字核对**过。
   // 落进 aiPromptTemplate（不新增表列），读侧由 path-views 合并进 milestones/subtasks 返回给学习者。
@@ -829,7 +829,10 @@ async function generateLearningPathCore(data: GeneratePathData) {
     // 路径评审（CIDDP 五维度）：best-effort，不阻断路径生成
     let pathReview: any = null;
     try {
-      const reviewResult = await executeSkill(pathReviewerDefinition, {
+      // 契约：executeSkill 返回已解包 output（无 success/output 包装），此处必须走
+      // executeSkillWithResult 才能拿到评审成功标志；误检 executeSkill 的 success 会让
+      // 评审结论恒被丢弃、CIDDP 自动重规划永不生效（2026-10-22 审计 P1-1）。
+      const reviewResult = await executeSkillWithResult(pathReviewerDefinition, {
         pathPlan: {
           name: analysis.pathName,
           summary: analysis.summary,

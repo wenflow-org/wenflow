@@ -73,6 +73,23 @@ const NAMESPACED_KEY_RE = /^[A-Za-z0-9]+(?::[A-Za-z0-9_-]+)+$/;
 export const STRUGGLING_MASTERY_THRESHOLD = 0.55;
 /** 高严重度卡点线：低于它才允许触发「压缩/加速」这类减法动作（struggling 常态档挡不住它们）。 */
 export const SEVERE_STRUGGLING_MASTERY_THRESHOLD = 0.3;
+/**
+ * 前置缺口掌握线（图法与旧口径回落共用，此前散落两处裸 0.45）：低于它算「掌握不稳、阻塞当前任务」。
+ * 与 STRUGGLING_MASTERY_THRESHOLD(0.55) 的分工：0.55 管「学习中的概念算不算卡点」（名单/文案），
+ * 0.45 管「已接触过的前置概念算不算缺口」（缺口判定）——两线不同不是笔误，缺口判定更保守。
+ */
+export const PREREQUISITE_GAP_MASTERY_THRESHOLD = 0.45;
+
+/**
+ * build 实际消费的 learner_evidence 类型（查询级过滤，与证据循环的分支一一对应）。
+ * 其余类型（checkpoint 结果等）此前被整行取回后逐行 JSON.parse 再丢弃，白占 take 名额。
+ */
+const CONSUMED_EVIDENCE_TYPES = [
+  'session-knowledge-distilled',
+  'dialogue-concepts-extracted',
+  'task:completed',
+  'lesson:completed',
+] as const;
 
 /**
  * fragile 证据门（#59/#60 第 1 条，2026-10-17）：
@@ -140,7 +157,7 @@ async function buildUpstreamPrerequisiteGaps(params: {
         const weak = !state
           || state.stability === 'fragile'
           || state.status === 'review'
-          || state.masteryScore < 0.45;
+          || state.masteryScore < PREREQUISITE_GAP_MASTERY_THRESHOLD;
         if (!weak) return null;
         return {
           conceptKey: state?.conceptKey || item.conceptId,
@@ -379,9 +396,24 @@ export class LearnerKnowledgeMemoryService {
         },
       }),
       prisma.learner_evidence.findMany({
-        where: { userId: input.userId, pathId: { in: pathIds } },
+        // 查询级类型过滤 + 列裁剪：本函数只消费 CONSUMED_EVIDENCE_TYPES 四种，
+        // 旧口径取全量行后逐行 JSON.parse 再在内存丢弃，无关类型白占 take 名额与传输量。
+        where: {
+          userId: input.userId,
+          pathId: { in: pathIds },
+          evidenceType: { in: [...CONSUMED_EVIDENCE_TYPES] },
+        },
         orderBy: { occurredAt: 'desc' },
-        take: 50 * pathIds.length
+        take: 50 * pathIds.length,
+        select: {
+          pathId: true,
+          evidenceType: true,
+          payload: true,
+          taskId: true,
+          sessionId: true,
+          confidence: true,
+          occurredAt: true,
+        },
       }),
       // 记忆引擎 M2 读侧并轨：memory_traces（ACT-R 痕迹）并入概念信号，脆弱/到期概念显式标记
       prisma.memory_traces.findMany({
@@ -404,8 +436,9 @@ export class LearnerKnowledgeMemoryService {
     for (const evidence of allPersistedEvidence) {
       const evidencePathId = evidence.pathId ?? undefined;
       const isCurrentPath = evidencePathId === path.id;
-      const payload = parseJsonSafe<any>(evidence.payload, {});
+      // payload 只在确认要消费该类型后才解析（旧口径对每行先 parse 再判类型）
       if (evidence.evidenceType === 'session-knowledge-distilled') {
+        const payload = parseJsonSafe<any>(evidence.payload, {});
         if (Array.isArray(payload.conceptLedger)) enrichedLedger.push(...payload.conceptLedger);
         if (Array.isArray(payload.reusableFoundations)) enrichedReusableFoundations.push(...payload.reusableFoundations);
         if (Array.isArray(payload.blockedFoundations)) enrichedBlockedFoundations.push(...payload.blockedFoundations);
@@ -413,6 +446,7 @@ export class LearnerKnowledgeMemoryService {
         continue;
       }
       if (evidence.evidenceType === 'dialogue-concepts-extracted') {
+        const payload = parseJsonSafe<any>(evidence.payload, {});
         if (Array.isArray(payload.recurringConfusions)) enrichedConfusions.push(...payload.recurringConfusions);
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
         continue;
@@ -420,6 +454,7 @@ export class LearnerKnowledgeMemoryService {
       if (evidence.evidenceType !== 'task:completed' && evidence.evidenceType !== 'lesson:completed') {
         continue;
       }
+      const payload = parseJsonSafe<any>(evidence.payload, {});
       const conceptKeys = dedupe([
         payload.linkedConceptName,
         ...(Array.isArray(payload.conceptKeys) ? payload.conceptKeys : []),
@@ -444,6 +479,27 @@ export class LearnerKnowledgeMemoryService {
       } satisfies LearnerRecentEvidence;
       globalRecentEvidence.push(recent);
       if (isCurrentPath) recentEvidence.push(recent);
+    }
+
+    // 证据倒排索引（一次 O(E×k) 预构建）：替代台账/反复误解聚合里对每个概念的全量嵌套扫描
+    // （旧口径 O(概念数×证据数×includes)。key → 命中该键的证据行下标集合，Set 保证同一条
+    // 证据同时含 label 与 conceptKey 时只计一次；struggle 计数按 (证据行, 键) 记账，与旧口径一致。
+    const evidenceIndicesByKey = new Map<string, Set<number>>();
+    const struggleCountByKey = new Map<string, number>();
+    for (let i = 0; i < globalRecentEvidence.length; i += 1) {
+      const item = globalRecentEvidence[i];
+      for (const key of item.conceptKeys) {
+        if (!key) continue;
+        let indices = evidenceIndicesByKey.get(key);
+        if (!indices) {
+          indices = new Set<number>();
+          evidenceIndicesByKey.set(key, indices);
+        }
+        indices.add(i);
+        if (item.signal === 'struggle') {
+          struggleCountByKey.set(key, (struggleCountByKey.get(key) ?? 0) + 1);
+        }
+      }
     }
 
     const allTasks = path.milestones.flatMap((milestone) =>
@@ -681,7 +737,10 @@ export class LearnerKnowledgeMemoryService {
       const labels = allSignals.map((signal) => signal.label).filter(Boolean);
       const relatedTaskIds = Array.from(new Set(allSignals.map((signal) => signal.taskId).filter(Boolean) as string[]));
       const relatedMilestoneIds = Array.from(new Set(allSignals.map((signal) => signal.milestoneId).filter(Boolean) as string[]));
-      const lastSeenAt = allSignals.map((signal) => signal.seenAt).filter(Boolean).sort().reverse()[0];
+      const lastSeenAt = allSignals.reduce<string | undefined>((latest, signal) => {
+        const seenAt = signal.seenAt;
+        return seenAt && (!latest || seenAt > latest) ? seenAt : latest;
+      }, undefined);
       // 掌握判定只认「真实接触证据」（会话知识 / 摘要 / 记忆痕迹）。任务标签（task-label）只是
       // "这条任务涉及此概念"的排期事实，不是学习证据：它给**全路径所有任务**（含 todo）推
       // 0.45/0.25/0.1 分值，一旦参与均分，"被后续未开课任务再提一次"就能把从未教过的概念
@@ -783,15 +842,32 @@ export class LearnerKnowledgeMemoryService {
       }
     }
 
+    // 任务→概念倒排索引（一次预构建）：taskMastery 旧口径对每个任务全量扫描 conceptStates
+    // （O(任务数×概念数×includes)），现在按 taskId / conceptKey 两次 Map 命中完成匹配。
+    const conceptsByTaskId = new Map<string, LearnerConceptState[]>();
+    const conceptStateByKey = new Map<string, LearnerConceptState>();
+    for (const concept of conceptStates) {
+      conceptStateByKey.set(concept.conceptKey, concept);
+      for (const taskId of concept.relatedTaskIds) {
+        const list = conceptsByTaskId.get(taskId);
+        if (list) list.push(concept);
+        else conceptsByTaskId.set(taskId, [concept]);
+      }
+    }
+
     const taskMastery: LearnerTaskMastery[] = allTasks.map(({ milestone, task }) => {
       const objectiveConcepts = parseLearningObjectives(task.learningObjectives);
       const conceptCandidates = dedupe(
         [task.linkedConceptName || task.coreConcept, ...objectiveConcepts].filter(isRealConceptKey)
       );
 
-      const matchingConcepts = conceptStates.filter((concept) =>
-        concept.relatedTaskIds.includes(task.id) || conceptCandidates.includes(concept.conceptKey)
-      );
+      const matched = new Map<string, LearnerConceptState>();
+      for (const concept of conceptsByTaskId.get(task.id) ?? []) matched.set(concept.conceptKey, concept);
+      for (const key of conceptCandidates) {
+        const concept = conceptStateByKey.get(key);
+        if (concept) matched.set(concept.conceptKey, concept);
+      }
+      const matchingConcepts = Array.from(matched.values());
 
       const avgScore = matchingConcepts.length > 0
         ? clamp(matchingConcepts.reduce((sum, concept) => sum + concept.masteryScore, 0) / matchingConcepts.length, 0, 1)
@@ -824,7 +900,10 @@ export class LearnerKnowledgeMemoryService {
         status: task.status as 'todo' | 'in_progress' | 'completed',
         masteryState,
         confidence: avgScore,
-        lastEvidenceAt: matchingConcepts.map((concept) => concept.lastSeenAt).filter(Boolean).sort().reverse()[0],
+        lastEvidenceAt: matchingConcepts.reduce<string | undefined>((latest, concept) => {
+          const seenAt = concept.lastSeenAt;
+          return seenAt && (!latest || seenAt > latest) ? seenAt : latest;
+        }, undefined),
       };
     });
 
@@ -920,7 +999,7 @@ export class LearnerKnowledgeMemoryService {
         //   - 上游结构里 `!state` 也曾被算缺口，等于"没见过"=没掌握。
         // status==='pending' 表示没有任何接触证据（无会话、无痕迹、无完成记录），那不是缺口，是没开始。
         .filter((concept) => concept && concept.status !== 'pending'
-          && (concept.stability === 'fragile' || concept.status === 'review' || concept.masteryScore < 0.45))
+          && (concept.stability === 'fragile' || concept.status === 'review' || concept.masteryScore < PREREQUISITE_GAP_MASTERY_THRESHOLD))
         .slice(0, 4)
         .map((concept) => ({
           conceptKey: concept?.conceptKey || 'unknown',
@@ -994,7 +1073,12 @@ export class LearnerKnowledgeMemoryService {
           : concept.status === 'learning'
             ? 'medium'
             : 'low';
-        const evidence = globalRecentEvidence.filter((item) => item.conceptKeys.includes(concept.label) || item.conceptKeys.includes(concept.conceptKey));
+        // 证据计数走倒排索引（label 与 conceptKey 命中的下标并集去重，等价于旧的
+        // globalRecentEvidence.filter(item => conceptKeys.includes(label) || includes(key)).length）
+        const evidenceCount = new Set<number>([
+          ...(evidenceIndicesByKey.get(concept.label) ?? []),
+          ...(evidenceIndicesByKey.get(concept.conceptKey) ?? []),
+        ]).size;
         return {
           conceptKey: concept.conceptKey,
           label: concept.label,
@@ -1007,7 +1091,7 @@ export class LearnerKnowledgeMemoryService {
             ? pathIdsByConceptKey.get(concept.conceptKey) as string[]
             : [path.id],
           sourceTasks: concept.relatedTaskIds,
-          evidenceCount: evidence.length,
+          evidenceCount,
         };
       })
       .slice(0, 40);
@@ -1017,7 +1101,7 @@ export class LearnerKnowledgeMemoryService {
       label,
       pattern: '近期多次出现 review / fragile 信号，后续新目标与新路径中应视为不稳定前置。',
       confidence: 0.7,
-      count: globalRecentEvidence.filter((item) => item.signal === 'struggle' && item.conceptKeys.includes(label)).length || 1,
+      count: struggleCountByKey.get(label) || 1,
       lastSeenAt: globalConceptStates.find((concept) => concept.label === label)?.lastSeenAt,
     }));
 
@@ -1033,10 +1117,12 @@ export class LearnerKnowledgeMemoryService {
       }));
 
     // 概念身份反查表（只读、精确等值）：台账行 → 注册表 conceptId。
-    // 确定性行与 conceptStates 一一同名（1:1 派生），按 conceptKey/label 反查即可锚定身份；
+    // 确定性行由 **globalConceptStates** 派生（2026-10-24 修正：旧实现从路径子集 conceptStates
+    // 建表，而台账行来自全局超集——只在其它路径出现过的概念即使已解析出 conceptId 也查不到
+    // 身份，conceptId 优先归并静默退化为名字键），反查表必须从同一超集构建；
     // 模型行（learner_evidence payload）不带身份 → undefined = 未挂靠 → 聚合退回名字键（旧行为）。
     const conceptIdByLedgerKey = new Map<string, string>();
-    for (const state of conceptStates) {
+    for (const state of globalConceptStates) {
       if (!state.conceptId) continue;
       if (!conceptIdByLedgerKey.has(state.conceptKey)) conceptIdByLedgerKey.set(state.conceptKey, state.conceptId);
       if (state.label && !conceptIdByLedgerKey.has(state.label)) conceptIdByLedgerKey.set(state.label, state.conceptId);

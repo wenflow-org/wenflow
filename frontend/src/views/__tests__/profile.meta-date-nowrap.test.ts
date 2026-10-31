@@ -33,6 +33,14 @@ function decl(body: string, prop: string): string | null {
   return m ? m[1].trim() : null;
 }
 
+describe('账户页 KPI 失败态不再只显示「—」', () => {
+  it('统计源失败时给出「暂时不可用 + 重试」说明', () => {
+    expect(source).toContain('kpiFailed.value = true');
+    expect(source).toContain('部分统计暂时不可用。');
+    expect(source).toContain('@click="loadKpis"');
+  });
+});
+
 describe('账户页两处日期不可在连字符处断行（#50）', () => {
   it('注册日期片段被 nowrap 的 span 包住', () => {
     expect(

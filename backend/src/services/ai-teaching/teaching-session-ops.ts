@@ -14,12 +14,14 @@ import { teachingSessionRepository, TeachingSessionConflictError, type TeachingS
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { applyWarmupExtractionForSession } from './warmup-writeback';
 import { parseSessionArtifacts } from './checkpoint-shared';
+import { recordSessionEvent } from './session-events.service';
 import {
   TeachingCheckpoint,
   CheckpointSubmitPayload,
   CheckpointSubmitResult,
   getPendingCheckpoint,
   judgeCheckpointAnswer,
+  normalizeCheckpointShape,
   recordCheckpointAttemptEvidence,
   stripCheckpointAnswerKeys,
 } from './teaching-checkpoint';
@@ -28,8 +30,62 @@ import { cloneKnowledgePoints } from './teaching-knowledge-state';
 import { computeEffectiveDurationMinutes, pickPeerStrategy } from './teaching-session-views';
 import { requireTeachingRevision } from './teaching-turn-shared';
 import { processStudentMessage } from './teaching-turn-engine';
+import learningStateService from '../learning/learning-state.service';
+import { classifyLoad } from '../learning/learning-load-verdict';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import type { ProcessStudentMessageOptions } from './AITeachingCoordinator';
+
+/**
+ * 检查点提交的对外结果（提交路由与幂等重放共用）：
+ * 回合载荷 → `{passed, feedback, hint?, revision}`。
+ */
+export function buildCheckpointSubmitResult(turn: {
+  aiResponse: string;
+  revision: number;
+  analysis?: { confusionPoints?: string[] } | null;
+  checkpointResolution?: { passed: boolean } | null;
+}): CheckpointSubmitResult {
+  const passed = turn.checkpointResolution?.passed === true;
+  const hint = !passed && turn.analysis?.confusionPoints?.length
+    ? `建议先回顾：${turn.analysis.confusionPoints.join('、')}`
+    : undefined;
+  return {
+    passed,
+    feedback: turn.aiResponse,
+    ...(hint ? { hint } : {}),
+    revision: turn.revision,
+  };
+}
+
+/**
+ * 检查点提交 → 落库学生消息文本。
+ *
+ * 形状先归一再分派：LLM 可能把带 options 的题标成 short_answer，前端按选项渲染并只提交
+ * selectedOptionIds；若死守 type='short_answer' 要求 answerText，就会抛“缺少作答内容”。
+ * 归一后 short_answer+options 按选择题处理，单/多选由答案键数量决定。
+ */
+export function resolveCheckpointAnswer(
+  checkpoint: TeachingCheckpoint,
+  payload: Pick<CheckpointSubmitPayload, 'selectedOptionIds' | 'answerText'>,
+): string {
+  const normalized = normalizeCheckpointShape(checkpoint);
+  if (normalized.type === 'short_answer') {
+    const answer = payload.answerText?.trim() || '';
+    if (!answer) throw new Error('缺少作答内容');
+    return answer;
+  }
+
+  const selectedOptionIds = Array.from(new Set(payload.selectedOptionIds || []));
+  const options = Array.isArray(normalized.options) ? normalized.options : [];
+  const selectedOptions = selectedOptionIds.map((optionId) => options.find((option) => option.id === optionId));
+  if (selectedOptions.length === 0 || selectedOptions.some((option) => !option)) {
+    throw new Error('提交的选项无效');
+  }
+  if (normalized.type === 'single_choice' && selectedOptions.length !== 1) {
+    throw new Error('单选题只能提交一个选项');
+  }
+  return selectedOptions.map((option) => `${option!.id}. ${option!.text}`).join('；');
+}
 
 export async function getSessionHistory(userId: string): Promise<Array<{
   id: string;
@@ -54,6 +110,37 @@ export async function getSessionHistory(userId: string): Promise<Array<{
     status: session.status,
     messageCount: session.messages.length,
   }));
+}
+
+/**
+ * 长期学习状态统一读 PMC 权威口径（与 /state/current、/state/trends 同源）。
+ *
+ * `wrapup.stateUpdate` 是结课时写入侧冻结的旧「按课 EWMA」快照：PMC 改造后它会与
+ * 学习状态页并排矛盾（2026-10-23 走查实测：反馈页 KTL 8.6 / LSB 6.2 vs
+ * 状态页 KTL 1.2 / LSB -6）。评估页走 `/sessions/:id/detail`、任务评估走
+ * `/tasks/:taskId/evaluation/latest`，两条返回路径都必须经过这里。
+ * wrapup 其余字段（总结/知识点/建议）保持冻结不变。
+ */
+async function withPmcLongTermState(
+  wrapup: any,
+  userId: string,
+  asOf: Date | null,
+): Promise<any> {
+  if (!wrapup || !asOf) return wrapup;
+  const pmcState = await learningStateService.getCurrentState(userId, { asOf });
+  if (!pmcState) return wrapup;
+  return {
+    ...wrapup,
+    stateUpdate: {
+      ...(wrapup.stateUpdate ?? {}),
+      lss: pmcState.lss,
+      ktl: pmcState.ktl,
+      lf: pmcState.lf,
+      lsb: pmcState.lsb,
+      mature: classifyLoad({ ktl: pmcState.ktl, lf: pmcState.lf }).mature,
+      timestamp: pmcState.timestamp,
+    },
+  };
 }
 
 export async function getSessionDetail(sessionId: string, userId: string): Promise<{
@@ -90,7 +177,7 @@ export async function getSessionDetail(sessionId: string, userId: string): Promi
     messages: session.messages,
     state: stripCheckpointAnswerKeys(session.teachingState || {}),
     knowledgePoints: session.knowledgeState,
-    wrapup: session.wrapup,
+    wrapup: await withPmcLongTermState(session.wrapup, userId, session.endTime),
     advisory: (session.advisory as ReplanAdvisory | null) || null,
     // 答案键剔除后再给客户端：它只用于服务端代码裁决（审计 §7 P1-1）
     pendingCheckpoint: stripCheckpointAnswerKeys({ pendingCheckpoint: getPendingCheckpoint(session.teachingState) }).pendingCheckpoint ?? null,
@@ -103,6 +190,10 @@ export async function submitCheckpoint(
   checkpointId: string,
   payload: CheckpointSubmitPayload,
   expectedRevision?: number,
+  /** 透传给本回合 processStudentMessage 的选项（#85 双臂：A 臂关闭后续回合肯定语护栏） */
+  turnOptions: { failedConceptFollowupGuard?: boolean } = {},
+  /** 路由幂等键：传入后检查点结果与回合提交同事务落账本（崩溃后可重放） */
+  idempotencyKey?: string,
 ): Promise<CheckpointSubmitResult> {
   const operationClaim = await teachingSessionRepository.claimOperation(
     sessionId,
@@ -140,11 +231,23 @@ export async function submitCheckpoint(
         // 完整题面留档（TONIGHT-BROAD-2026-10-07 同题复问抑制）：跳过也算"已出过这道题"，
         // 后续候选同文时被 teaching-turn-engine 的 isDuplicateCheckpointQuestion 抑制。
         question: checkpoint.question,
+        // 跳过的题也要能还原选项与答案键（答案键读侧统一剥离，不下发客户端）
+        ...(checkpoint.options?.length
+          ? { options: checkpoint.options.map((option) => ({ id: option.id, text: option.text })) }
+          : {}),
+        ...(checkpoint.correctOptionIds?.length
+          ? { correctOptionIds: checkpoint.correctOptionIds.map(String) }
+          : {}),
         submittedAt: new Date().toISOString(),
         passed: false,
         skipped: true,
       });
       teachingState.checkpointHistory = history.slice(-20);
+      const skippedResult: CheckpointSubmitResult = {
+        passed: false,
+        feedback: '已跳过这个检查点，我们继续。',
+        revision: (operationClaim.session.revision ?? 0) + 1,
+      };
       await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
         messages: session.messages,
         messagesBaseCount: operationClaim.messagesBaseCount,
@@ -152,37 +255,28 @@ export async function submitCheckpoint(
         teachingState,
         taskId: session.taskId,
         userId: session.userId,
+        ...(idempotencyKey
+          ? { settlement: { idempotencyKey, result: skippedResult as unknown as Record<string, any>, revision: skippedResult.revision } }
+          : {}),
       });
 
       // H1 失败留痕（LEARNING_SCIENCE_AUDIT §3.9 遗留）：跳过是「未作答」收场，此前只留
       // checkpointHistory、不落证据行（分母缺位）。只留痕、不改写；幂等键防重复计数。
       await recordCheckpointAttemptEvidence(session, checkpoint, { outcome: 'skipped' });
 
-      return {
-        passed: false,
-        feedback: '已跳过这个检查点，我们继续。',
+      await recordSessionEvent({
+        sessionId,
+        kind: 'checkpoint.submitted',
+        actor: 'user',
+        status: 'info',
         revision: (operationClaim.session.revision ?? 0) + 1,
-      };
+        payload: { checkpointId, type: checkpoint.type, skipped: true },
+      });
+
+      return skippedResult;
     }
 
-    let answer: string;
-    if (checkpoint.type === 'short_answer') {
-      answer = payload.answerText?.trim() || '';
-      if (!answer) {
-        throw new Error('缺少作答内容');
-      }
-    } else {
-      const selectedOptionIds = Array.from(new Set(payload.selectedOptionIds || []));
-      const options = Array.isArray(checkpoint.options) ? checkpoint.options : [];
-      const selectedOptions = selectedOptionIds.map((optionId) => options.find((option) => option.id === optionId));
-      if (selectedOptions.length === 0 || selectedOptions.some((option) => !option)) {
-        throw new Error('提交的选项无效');
-      }
-      if (checkpoint.type === 'single_choice' && selectedOptions.length !== 1) {
-        throw new Error('单选题只能提交一个选项');
-      }
-      answer = selectedOptions.map((option) => `${option!.id}. ${option!.text}`).join('；');
-    }
+    const answer = resolveCheckpointAnswer(checkpoint, payload);
 
     const turn = await processStudentMessage(
       sessionId,
@@ -199,18 +293,24 @@ export async function submitCheckpoint(
           // 简答不落原文（可能含学生隐私细节），只留长度特征
           ...(payload.answerText ? { answerText: undefined } : {}),
         },
+        // #85 双臂 A 臂：提交回合后的后续护栏同样受会话级开关控制（此前只覆盖聊天回合）
+        ...(turnOptions.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}),
+        idempotencyKey,
+        // 账本存的是检查点对外结果而非回合原始载荷：重放时直接返回同一形状
+        ...(idempotencyKey ? { settlementResult: (base: any) => buildCheckpointSubmitResult(base) } : {}),
       }
     );
     const passed = turn.checkpointResolution?.passed === true;
-    const hint = !passed && turn.analysis?.confusionPoints?.length
-      ? `建议先回顾：${turn.analysis.confusionPoints.join('、')}`
-      : undefined;
-    return {
-      passed,
-      feedback: turn.aiResponse,
-      ...(hint ? { hint } : {}),
+    const result = buildCheckpointSubmitResult(turn);
+    await recordSessionEvent({
+      sessionId,
+      kind: 'checkpoint.submitted',
+      actor: 'user',
+      status: passed ? 'ok' : 'info',
       revision: turn.revision,
-    };
+      payload: { checkpointId, type: checkpoint.type, passed, skipped: false },
+    });
+    return result;
   } catch (error) {
     await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
     throw error;
@@ -489,6 +589,11 @@ export async function getLatestTaskEvaluation(taskId: string, userId: string): P
     return null;
   }
 
+  // 长期学习状态必须读 PMC 权威口径（与 /state/current、/state/trends 同源）。
+  // wrapup.stateUpdate 是结课时写入侧冻结的旧「按课 EWMA」快照：PMC 改造后它会与
+  // 学习状态页并排矛盾（实测反馈页 KTL 8.6 / LSB 6.2 vs 状态页 KTL 1.2 / LSB -6）。
+  const wrapup = await withPmcLongTermState(target.wrapup, userId, target.endTime);
+
   return {
     sessionId: target.id,
     subject: target.subject,
@@ -498,7 +603,7 @@ export async function getLatestTaskEvaluation(taskId: string, userId: string): P
     duration: target.duration || 0,
     messageCount: target.messages.filter((message) => message.role === 'user').length,
     knowledgePoints: target.knowledgeState,
-    wrapup: target.wrapup,
+    wrapup,
     advisory: (target.advisory as ReplanAdvisory | null) || null,
   };
 }
@@ -588,7 +693,10 @@ export async function applyTimeoutWrapupFallback(sessionId: string): Promise<voi
         // 零证据抑制（全量测试报告 #6）：0 条学员消息的会话（实测 T4/T5 msgs=1/users=0）不写
         // 「学习记录」——这类记录纯占学员评估页展示位、无任何学习证据；终态清理照常做，
         // 状态机行为（timeout + 清 pending 检查点）不变。
-        ...(hasLearnerEvidence ? { wrapup: JSON.stringify(wrapup) } : {}),
+        // 时长与 wrapup 同批落列：超时路径从不写 duration 列（timeoutIfIdle/timeoutIfPaused 只改
+        // status/endTime），列表页读列就会在「停在 x/y」旁边显示「—」——有学员证据时把按消息
+        // 时间戳算出的活跃时长一并写列，别只留在 wrapup.duration 里。
+        ...(hasLearnerEvidence ? { wrapup: JSON.stringify(wrapup), duration: durationMinutes } : {}),
         ...(() => {
           // 终态清理：移除待处理检查点，避免详情接口残留
           const state = session.teachingState && typeof session.teachingState === 'object'

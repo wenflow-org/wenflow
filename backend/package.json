@@ -35,6 +35,12 @@
     "prompts:sync-core": "npm run runtime:validate && ts-node src/scripts/ensure-core-agent-prompts.ts --sync",
     "constants:check": "ts-node src/scripts/check-constants-provenance.ts",
     "constants:report": "ts-node src/scripts/report-unregistered-constants.ts",
+    "pipeline:map": "ts-node src/scripts/export-pipeline-map.ts",
+    "pipeline:map:check": "ts-node src/scripts/export-pipeline-map.ts --check",
+    "preset:invariants": "ts-node --transpile-only scripts/audit-preset-invariants.ts",
+    "preset:invariants:db": "ts-node --transpile-only scripts/audit-preset-invariants.ts --with-db",
+    "offline:eval": "node scripts/offline-eval/run.mjs --target=all",
+    "offline:eval:selftest": "node scripts/offline-eval/run.mjs --selftest",
     "prompts:lint": "ts-node src/scripts/lint-prompts.ts",
     "prompts:check-handoff": "ts-node src/scripts/check-input-handoffs.ts",
     "prompts:snapshots": "ts-node src/scripts/generate-agent-snapshots.ts",
@@ -50,12 +56,19 @@
     "prompts:fields-sync:check": "ts-node src/scripts/check-core-fields-sync.ts --report",
     "prompts:payload-prefix:check": "ts-node src/scripts/check-payload-prefix-stability.ts",
     "prompts:payload-prefix:check:strict": "ts-node src/scripts/check-payload-prefix-stability.ts --strict",
+    "prompts:threshold-coupling:check": "ts-node src/scripts/check-prompt-threshold-coupling.ts",
     "prompts:orchestration:sync": "ts-node src/scripts/field-routing-orchestration-sync.ts",
-    "prompts:check:all": "npm run prompts:lint && npm run prompts:check-handoff:strict && npm run prompts:snapshots:check && npm run prompts:drift-check && npm run retired:check && npm run prompts:skills:check && npm run prompts:data-source:check && npm run prompts:yaml:check && npm run prompts:fields-sync:check && npm run prompts:payload-prefix:check:strict",
+    "prompts:check:all": "npm run prompts:lint && npm run prompts:check-handoff:strict && npm run prompts:snapshots:check && npm run prompts:drift-check && npm run retired:check && npm run prompts:skills:check && npm run prompts:data-source:check && npm run prompts:yaml:check && npm run prompts:fields-sync:check && npm run prompts:payload-prefix:check:strict && npm run prompts:threshold-coupling:check",
     "prompts:check-handoff:strict": "ts-node src/scripts/check-input-handoffs.ts --strict",
     "prompts:core:check": "npm run runtime:validate && ts-node src/scripts/check-core-hash-parity.ts",
     "prompts:runtime-contract:check": "npm run runtime:validate && ts-node src/scripts/check-prompt-runtime-contract-metadata-parity.ts",
     "llm:calls:check": "ts-node src/scripts/check-llm-call-boundary.ts",
+    "test:live:plan": "ts-node scripts/test-live/llm-contract-smoke.ts",
+    "test:live": "ts-node scripts/test-live/llm-contract-smoke.ts --live",
+    "test:e2e:live": "node scripts/test-live/teaching-idempotency-e2e.mjs",
+    "test:contract": "jest --runInBand src/gateway/api-gateway/__tests__/wire-format.test.ts src/gateway/api-gateway/__tests__/system-fold.test.ts src/config/__tests__/provider-capability.test.ts src/routes/__tests__/ai-teaching.routes.test.ts src/services/ai-teaching/__tests__/message-idempotency.service.test.ts src/services/ai-teaching/__tests__/session-init-transaction.test.ts src/scripts/__tests__/frozen-exam-run.test.ts src/config/__tests__/capability-consumers.test.ts && ts-node scripts/test-live/llm-contract-smoke.ts && ts-node src/scripts/check-capability-consumers.ts",
+    "measurement:check": "node scripts/measurement-verify/measurement-check.mjs",
+    "measurement:selftest": "node scripts/measurement-verify/frozen-exam-run.mjs --selftest",
     "search:check": "ts-node src/scripts/check-web-search.ts",
     "fetch:check": "ts-node src/scripts/check-web-fetch.ts",
     "image:check": "ts-node src/scripts/check-text-to-image.ts",
@@ -96,7 +109,13 @@
     "goal:material:answerability": "ts-node src/scripts/eval-goal-material-answerability.ts",
     "goal:material:gate": "ts-node src/scripts/eval-goal-material-gate.ts",
     "decision:check": "ts-node src/scripts/check-decision.ts",
-    "jevbench:public": "ts-node src/scripts/eval-jevbench-public.ts"
+    "jevbench:public": "ts-node src/scripts/eval-jevbench-public.ts",
+    "calibration:audit": "ts-node src/scripts/audit-threshold-calibration.ts",
+    "calibration:review": "ts-node --transpile-only src/scripts/audit-review-calibration.ts",
+    "measurement:frozen-exam": "node scripts/measurement-verify/frozen-exam-run.mjs",
+    "capability:check": "ts-node src/scripts/check-capability-consumers.ts",
+    "test:e2e:long": "node scripts/test-live/teaching-longcourse-e2e.mjs"
+
   },
   "keywords": [
     "ai",
@@ -107,7 +126,7 @@
   "author": "老哥",
   "license": "MIT",
   "engines": {
-    "node": ">=20.17.0"
+    "node": ">=22.23.4"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -152,6 +171,8 @@
     "typescript": "^5.3.3"
   },
   "overrides": {
-    "tar": ">=7.5.21"
+    "tar": ">=7.5.21",
+    "follow-redirects": "^1.16.1",
+    "ip-address": "^10.7.4"
   }
 }

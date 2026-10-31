@@ -6,6 +6,64 @@
  * 有了答案键，对错由代码判定，才是可用于闭环控制的独立观测量。
  */
 import { judgeCheckpointAnswer, stripCheckpointAnswerKeys, checkpointForMessageResult, inheritTeachingState } from '../AITeachingCoordinator';
+import { getPendingCheckpoint, normalizeCheckpointShape } from '../teaching-checkpoint';
+
+describe('normalizeCheckpointShape：简答带选项的混合形状', () => {
+  const options = [
+    { id: 'A', text: 'I am waiting for the server specs' },
+    { id: 'B', text: 'I am waiting on the server specs' },
+  ];
+
+  it('short_answer + 选项 + 单答案键 → single_choice', () => {
+    expect(normalizeCheckpointShape({
+      type: 'short_answer',
+      options,
+      correctOptionIds: ['B'],
+      expectedKeywords: ['resolve', 'request'],
+    }).type).toBe('single_choice');
+  });
+
+  it('short_answer + 选项 + 多答案键 → multi_choice', () => {
+    expect(normalizeCheckpointShape({
+      type: 'short_answer',
+      options,
+      correctOptionIds: ['A', 'B'],
+    }).type).toBe('multi_choice');
+  });
+
+  it('归一后的混合题按选项答案键判分（不再走空 answerText 的简答分支）', () => {
+    const mixed = {
+      type: 'short_answer' as const,
+      question: 'I am ______ on the server specs',
+      options,
+      correctOptionIds: ['B'],
+      expectedKeywords: ['resolve', 'request'],
+    };
+    expect(judgeCheckpointAnswer(mixed, { selectedOptionIds: ['B'] }))
+      .toMatchObject({ judgedBy: 'code', passed: true });
+    expect(judgeCheckpointAnswer(mixed, { selectedOptionIds: ['A'] }))
+      .toMatchObject({ judgedBy: 'code', passed: false });
+  });
+
+  it('无选项的简答保持原样', () => {
+    const short = { type: 'short_answer' as const, expectedKeywords: ['事实'] };
+    expect(normalizeCheckpointShape(short)).toBe(short);
+  });
+
+  it('读取待答检查点时同样归一，旧会话里的混合形状也能恢复', () => {
+    const pending = getPendingCheckpoint({
+      pendingCheckpoint: {
+        id: 'cp-old',
+        type: 'short_answer',
+        title: '旧题',
+        question: '旧题',
+        options,
+        correctOptionIds: ['B'],
+      },
+    });
+    expect(pending?.type).toBe('single_choice');
+  });
+});
 
 describe('judgeCheckpointAnswer：选择题按答案键做集合比对', () => {
   const single = { type: 'single_choice' as const, correctOptionIds: ['B'] };
@@ -99,6 +157,16 @@ describe('stripCheckpointAnswerKeys：答案键绝不下发', () => {
   const state = {
     pendingCheckpoint: { id: 'cp1', question: 'Q', correctOptionIds: ['B'], expectedKeywords: ['事实'] },
     sessionArtifacts: { pendingCheckpoint: { id: 'cp1', correctOptionIds: ['B'] }, other: 1 },
+    checkpointHistory: [
+      {
+        checkpointId: 'cp0',
+        question: '历史题',
+        options: [{ id: 'A', text: '选项 A' }, { id: 'B', text: '选项 B' }],
+        selectedOptionIds: ['B'],
+        correctOptionIds: ['B'],
+        passed: true,
+      },
+    ],
     other: 'kept',
   };
 
@@ -110,9 +178,22 @@ describe('stripCheckpointAnswerKeys：答案键绝不下发', () => {
     expect(safe.other).toBe('kept');
   });
 
+  it('checkpointHistory 也剥离答案键，但保留选项与学员选择（课后报告需要）', () => {
+    const safe = stripCheckpointAnswerKeys(state)!;
+    expect(safe.checkpointHistory[0]).toEqual({
+      checkpointId: 'cp0',
+      question: '历史题',
+      options: [{ id: 'A', text: '选项 A' }, { id: 'B', text: '选项 B' }],
+      selectedOptionIds: ['B'],
+      passed: true,
+    });
+    expect(safe.checkpointHistory[0].correctOptionIds).toBeUndefined();
+  });
+
   it('不修改原对象（纯函数）', () => {
     stripCheckpointAnswerKeys(state);
     expect(state.pendingCheckpoint.correctOptionIds).toEqual(['B']);
+    expect(state.checkpointHistory[0].correctOptionIds).toEqual(['B']);
   });
 
   it('空/非对象输入原样返回', () => {

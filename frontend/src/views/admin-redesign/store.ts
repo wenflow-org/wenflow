@@ -162,10 +162,29 @@ export function investigateTodayFailures() {
 }
 
 /** 总览状态条结论行的动作归属（纯函数，便于单测）：
-    结论讲调用（今日失败 / 今日成功率）→ 去执行日志排查；其余（运行平稳 / 空闲 / 未就绪）
-    → 健康中心入口。此前动作硬编码健康中心，与「今日失败 17 次」的结论不同源（走查 O3）。 */
+    结论讲调用（「需要关注」/旧文案里的今日失败、今日成功率）→ 去执行日志排查；
+    其余（运行平稳 / 空闲 / 未就绪）→ 健康中心入口。 */
 export function statusActionOf(headline: string): 'investigate-today' | 'health' {
-  return /今日失败|今日成功率/.test(headline || '') ? 'investigate-today' : 'health'
+  return /需要关注|今日失败|今日成功率/.test(headline || '') ? 'investigate-today' : 'health'
+}
+
+/**
+ * 总览状态条结论文案合成（纯函数，便于单测；M-1，2026-10-29 夜审）。
+ * base = live 头部结论（运行平稳 / 系统空闲 / 需要关注…），reasons = 健康检查与仿真
+ * 子项事实（「1 项异常」「2 项需关注」「仿真需关注」）。此前直接拼 `${base}（${reasons}）`，
+ * 会产出「运行平稳（1 项异常）」——取色跟 error 级事实走（红点），措辞却还是「平稳」，
+ * 同屏再摆几条红色待办就是三个互相打架的结论。
+ * 规则：hasErrorFact（健康检查 error / 仿真 bad / error 级待办任一在场）时，平稳/空闲类
+ * 措辞一律改口「需要关注」；仅 warn 档事实保留 base 只括注数量（2026-10-24 行为不变）；
+ * base 已是「需要关注」时不重复括注。
+ */
+export function mergeStatusHeadline(input: { base: string; reasons: string[]; hasErrorFact: boolean }): string {
+  const { base, reasons, hasErrorFact } = input
+  if (!base || base.includes('需要关注')) return base
+  if (!reasons.length) return hasErrorFact ? '需要关注' : base
+  const calm = /平稳|空闲|暂无/.test(base)
+  const head = hasErrorFact && calm ? '需要关注' : base
+  return `${head}（${reasons.join(' · ')}）`
 }
 
 /** 任意位置点 Trace → 执行日志页的 Trace tab（预填该链路） */
@@ -251,6 +270,9 @@ export interface SubPageFrom {
   label?: string
   stage?: SubPageStage
   tab?: SubPageTab
+  /** 来源链（2026-10-24）：二级 → 三级 → 四级逐层记住上一跳。
+   *  此前只存一层，从画像进座舱再进真实课堂会话时，返回与面包屑都会丢掉画像/列表。 */
+  parent?: SubPageFrom
 }
 
 export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom } | null>(null)
@@ -264,7 +286,14 @@ export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?
      原先只对 session/session-real 生效，于是「学习者详情 → 路径详情」返回时 from 被
      静默丢弃，直接落回一级列表，原详情与页签上下文全丢（2026-10-08 走查确认）。 */
   if (opts?.from) {
-    subPage.value = { ...base, from: opts.from }
+    /* 叠链：仅当 from 描述的就是「当前页」时，才把当前页的来源挂成 parent。
+       例：列表 → 画像（from=列表）→ 学习详情（from=画像, parent=列表）→ 座舱（三级链）。
+       传的是祖先页（如 PathDetail 把 learner 的 from 原样带下去）时不叠——否则同一条来源
+       会被复制成 parent，返回键会多退一层。 */
+    const cur = subPage.value
+    const fromIsCurrent = !!cur && opts.from.view === cur.view && opts.from.id === cur.id
+    const prev = fromIsCurrent ? cur?.from : null
+    subPage.value = { ...base, from: prev ? { ...opts.from, parent: prev } : opts.from }
   } else {
     subPage.value = base
   }
@@ -276,14 +305,15 @@ export function setSubPageLabel(label: string) {
 }
 
 export function closeSubPage() {
-  // 有来源记忆（从二级进三级）→ 返回来源页；否则回一级列表
+  // 有来源记忆（从二级进三级）→ 返回来源页；来源本身还有 parent 时继续保留链路（逐层回退）
   if (subPage.value?.from) {
-    const { view, id, label, stage, tab } = subPage.value.from
+    const { view, id, label, stage, tab, parent } = subPage.value.from
     subPage.value = {
       view, id,
       ...(label ? { label } : {}),
       ...(stage ? { stage } : {}),
-      ...(tab ? { tab } : {})
+      ...(tab ? { tab } : {}),
+      ...(parent ? { from: parent } : {})
     }
   } else {
     subPage.value = null
@@ -307,8 +337,8 @@ export const overviewHealth = computed(() => {
    金额条（ExecLogs 成本 tab）与成本聚合卡（TokenCost）共用同一份筛选，
    修复「金额条硬编码 7 天、下方可切 30/90 天」的口径漂移；缓存 key 携带
    筛选参数，修复「切换时间窗 60s 内仍显示旧窗口数据」。 */
-export const tokenCostFilters = reactive({ days: 7, includeTest: false })
+export const tokenCostFilters = reactive({ days: 7 })
 
 export function tokenCostCacheKey(): string {
-  return `token-cost:${tokenCostFilters.days}:${tokenCostFilters.includeTest ? 'all' : 'noTest'}`
+  return `token-cost:${tokenCostFilters.days}`
 }

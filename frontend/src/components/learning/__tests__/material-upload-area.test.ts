@@ -10,15 +10,35 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import MaterialUploadArea from '../MaterialUploadArea.vue';
 
-const mockList = vi.fn();
+const mockLibrary = vi.fn();
 const mockUpload = vi.fn();
 const mockRemove = vi.fn();
 
 vi.mock('@/api/materials', () => ({
-  listMaterials: (...args: unknown[]) => mockList(...args),
+  getMaterialLibrary: (...args: unknown[]) => mockLibrary(...args),
   uploadMaterial: (...args: unknown[]) => mockUpload(...args),
   removeMaterial: (...args: unknown[]) => mockRemove(...args),
 }));
+
+function libraryOf(items: Array<Record<string, unknown>>) {
+  const uploads = items.filter((item) => item.origin !== 'web');
+  return {
+    items,
+    library: {
+      total: items.length,
+      uploadCount: uploads.length,
+      webCount: items.length - uploads.length,
+      totalBytes: items.reduce((sum, item) => sum + (Number(item.size) || 0), 0),
+      quotaBytes: 200 * 1024 * 1024,
+    },
+  };
+}
+
+const mountGlobal = {
+  stubs: {
+    RouterLink: { template: '<a><slot /></a>' },
+  },
+};
 
 function baseMaterial(overrides: Record<string, unknown> = {}) {
   return {
@@ -41,20 +61,22 @@ function baseMaterial(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockList.mockResolvedValue([]);
+  mockLibrary.mockResolvedValue(libraryOf([]));
 });
 
 describe('MaterialUploadArea', () => {
   it('无资料时整体退场（display:none，不占输入框上方的行）', async () => {
-    const w = mount(MaterialUploadArea);
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
     expect(w.classes()).toContain('mat-upload--empty');
     expect(w.classes()).toContain('mat-upload--empty');
   });
 
   it('chips 超过 4 份折叠为 +N，点击展开', async () => {
-    mockList.mockResolvedValue([1, 2, 3, 4, 5, 6].map((i) => baseMaterial({ id: `m${i}`, name: `资料${i}.txt` })));
-    const w = mount(MaterialUploadArea);
+    mockLibrary.mockResolvedValue(
+      libraryOf([1, 2, 3, 4, 5, 6].map((i) => baseMaterial({ id: `m${i}`, name: `资料${i}.txt` })))
+    );
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
     const chips = () => w.findAll('.mat-upload__chip:not(.mat-upload__chip--more)');
     expect(chips().length).toBe(4); // 默认只显 4 份
@@ -64,8 +86,20 @@ describe('MaterialUploadArea', () => {
     expect(chips().length).toBe(6);
   });
 
+  it('资料库超过 3 份时提示路径只选 3 份，且不把联网资料冒充上传附件', async () => {
+    const uploads = [1, 2, 3, 4].map((i) => baseMaterial({ id: `m${i}`, name: `资料${i}.txt` }));
+    const web = baseMaterial({ id: 'w1', name: '联网资料.md', origin: 'web' });
+    mockLibrary.mockResolvedValue(libraryOf([...uploads, web]));
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
+    await flushPromises();
+
+    expect(w.find('.mat-upload__note').text()).toContain('资料库共 4 份');
+    expect(w.find('.mat-upload__note').text()).toContain('选用 3 份');
+    expect(w.text()).not.toContain('联网资料.md');
+  });
+
   it('accept 只放开文本型扩展名，不含图片与 legacy .doc', async () => {
-    const w = mount(MaterialUploadArea);
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
     const accept = w.find('input[type="file"]').attributes('accept') || '';
     expect(accept).toContain('.pdf');
@@ -78,7 +112,10 @@ describe('MaterialUploadArea', () => {
 
   it('上传成功 → 出现在列表并展示结构与字数', async () => {
     mockUpload.mockResolvedValue(baseMaterial());
-    const w = mount(MaterialUploadArea);
+    mockLibrary
+      .mockResolvedValueOnce(libraryOf([]))
+      .mockResolvedValueOnce(libraryOf([baseMaterial()]));
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
 
     await (w.vm as unknown as { addFiles: (files: File[]) => Promise<void> })
@@ -95,7 +132,7 @@ describe('MaterialUploadArea', () => {
 
   it('被拒收（扫描件）→ 展示后端中文原因，且不进列表', async () => {
     mockUpload.mockRejectedValue({ message: '这份文件没有可提取的文本（多为扫描件或图片型 PDF），暂时读不了' });
-    const w = mount(MaterialUploadArea);
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
 
     await (w.vm as unknown as { addFiles: (files: File[]) => Promise<void> })
@@ -110,7 +147,10 @@ describe('MaterialUploadArea', () => {
     mockUpload
       .mockRejectedValueOnce({ message: '暂不支持 .doc' })
       .mockResolvedValueOnce(baseMaterial({ id: 'm2', name: '笔记.md', charCount: 800 }));
-    const w = mount(MaterialUploadArea);
+    mockLibrary
+      .mockResolvedValueOnce(libraryOf([]))
+      .mockResolvedValueOnce(libraryOf([baseMaterial({ id: 'm2', name: '笔记.md', charCount: 800 })]));
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
 
     await (w.vm as unknown as { addFiles: (files: File[]) => Promise<void> })
@@ -124,7 +164,7 @@ describe('MaterialUploadArea', () => {
 
   it('选择文件后清空 input.value，保证同名文件可再次选择', async () => {
     mockUpload.mockResolvedValue(baseMaterial());
-    const w = mount(MaterialUploadArea);
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
 
     const input = w.find('input[type="file"]').element as HTMLInputElement;
@@ -140,9 +180,11 @@ describe('MaterialUploadArea', () => {
   });
 
   it('删除资料 → 从列表移除', async () => {
-    mockList.mockResolvedValue([baseMaterial()]);
+    mockLibrary
+      .mockResolvedValueOnce(libraryOf([baseMaterial()]))
+      .mockResolvedValueOnce(libraryOf([]));
     mockRemove.mockResolvedValue(undefined);
-    const w = mount(MaterialUploadArea);
+    const w = mount(MaterialUploadArea, { global: mountGlobal });
     await flushPromises();
     expect(w.text()).toContain('指南.txt');
 

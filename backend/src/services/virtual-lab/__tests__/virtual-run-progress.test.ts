@@ -6,6 +6,7 @@
 import {
   ACTIVE_RUNS_LIMIT,
   deriveActiveRuns,
+  deriveRecentRuns,
   deriveRunProgress,
   isAutopilotPaused,
 } from '../virtual-run-progress';
@@ -93,5 +94,45 @@ describe('deriveActiveRuns', () => {
 
   it('没有活跃会话返回空数组（前端回落「最近」历史进度）', () => {
     expect(deriveActiveRuns([session({ id: 'x', status: 'completed' })])).toEqual([]);
+  });
+});
+
+describe('deriveRecentRuns（没有活跃运行时的历史摘要，按学习路径归并）', () => {
+  it('同一路径的多次运行只保留最近一次；不同路径各一条；目标阶段（无路径）单独成组', () => {
+    const r = deriveRecentRuns([
+      // 路径 A 的两次运行：老的一次应被折叠
+      session({ id: 'a-old', status: 'abandoned', learningPathId: 'path-A', updatedAt: '2026-10-10T00:00:00Z', currentStage: 'path', stageResults: '{}' }),
+      session({ id: 'a-new', status: 'completed', learningPathId: 'path-A', updatedAt: '2026-10-12T00:00:00Z', currentStage: 'learn', completedTasks: 5, totalTasks: 20, stageResults: '{}' }),
+      // 路径 B
+      session({ id: 'b-1', status: 'failed', learningPathId: 'path-B', updatedAt: '2026-10-11T00:00:00Z', currentStage: 'path' }),
+      // 还没产出路径的目标阶段运行
+      session({ id: 'goal-1', status: 'abandoned', learningPathId: null, updatedAt: '2026-10-13T00:00:00Z', currentStage: 'goal' }),
+    ]);
+    expect(r.total).toBe(3);
+    // 组间按最近写入倒序：目标阶段（13 号）→ 路径 A（12 号）→ 路径 B（11 号）
+    expect(r.runs.map((x) => x.sessionId)).toEqual(['goal-1', 'a-new', 'b-1']);
+    expect(r.runs.map((x) => x.pathId)).toEqual([null, 'path-A', 'path-B']);
+    // 折叠后取的是最近那次运行的任务数与终态
+    const a = r.runs.find((x) => x.pathId === 'path-A')!;
+    expect(a.taskDone).toBe(5);
+    expect(a.taskTotal).toBe(20);
+    expect(a.status).toBe('completed');
+    expect(a.updatedAt).toBe('2026-10-12T00:00:00.000Z');
+  });
+
+  it('上限只影响返回条数，total 仍是全部路径数（前端用差出「+N 条路径」）', () => {
+    const many = ['A', 'B', 'C', 'D', 'E'].map((p, i) =>
+      session({ id: `s-${p}`, learningPathId: `path-${p}`, updatedAt: `2026-10-1${i}T00:00:00Z` })
+    );
+    const r = deriveRecentRuns(many, 2);
+    expect(r.runs).toHaveLength(2);
+    expect(r.total).toBe(5);
+    expect(r.runs.map((x) => x.pathId)).toEqual(['path-E', 'path-D']);
+  });
+
+  it('没有会话 → 空摘要（前端据此显示「未运行」而不是「最近」）', () => {
+    const r = deriveRecentRuns([]);
+    expect(r.total).toBe(0);
+    expect(r.runs).toEqual([]);
   });
 });

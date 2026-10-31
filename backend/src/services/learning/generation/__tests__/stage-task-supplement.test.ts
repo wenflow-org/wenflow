@@ -9,16 +9,16 @@ const task = (title: string, minutes = 90, type?: string) => ({ title, estimated
 describe('needsLessonSupplement', () => {
   it('不足锚的 70% 才触发（留 30% 容差）', () => {
     // 锚 10：7 个 = 70% → 不补；6 个 = 60% → 补
-    expect(needsLessonSupplement(Array.from({ length: 7 }, (_, i) => task(`课${i}`)), 10)).toBe(false);
-    expect(needsLessonSupplement(Array.from({ length: 6 }, (_, i) => task(`课${i}`)), 10)).toBe(true);
+    expect(needsLessonSupplement(Array.from({ length: 7 }, (_, i) => task(`课${i}`)), 10, null)).toBe(false);
+    expect(needsLessonSupplement(Array.from({ length: 6 }, (_, i) => task(`课${i}`)), 10, null)).toBe(true);
   });
 
   it('锚小于 2 不触发（一节课量级不该补）', () => {
-    expect(needsLessonSupplement([task('唯一课')], 1)).toBe(false);
+    expect(needsLessonSupplement([task('唯一课')], 1, null)).toBe(false);
   });
 
   it('空产出不补（交由 assertStageTasksPresent 走重试链）', () => {
-    expect(needsLessonSupplement([], 10)).toBe(false);
+    expect(needsLessonSupplement([], 10, null)).toBe(false);
   });
 });
 

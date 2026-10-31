@@ -19,7 +19,11 @@ jest.mock('../../../config/models.config', () => ({
   supportsThinkingMode: () => false,
   getModelDefinition: jest.fn(() => undefined),
   getModelFallbacks: jest.fn(() => []),
-  getModelMaxParallelRequests: jest.fn(() => null)
+  getModelMaxParallelRequests: jest.fn(() => null),
+  supportsVision: jest.fn(() => false),
+  // 默认按标准上游（支持 system）处理；折叠语义另有 system-fold.test.ts 专项
+  providerSupportsSystemRole: jest.fn(() => true),
+  resolveModelRef: jest.fn(() => null)
 }))
 
 jest.mock('../../../utils/safe-http', () => ({
@@ -35,7 +39,7 @@ import type { RetryBudget } from '../retry-budget'
 import { createRetryBudget } from '../retry-budget'
 import { logger } from '../../../utils/logger'
 import { safeHttpRequest, safeHttpStreamRequest } from '../../../utils/safe-http'
-import { getModelDefinition, getModelFallbacks } from '../../../config/models.config'
+import { getModelDefinition, getModelFallbacks, providerSupportsSystemRole } from '../../../config/models.config'
 import { resetDeploymentHealth } from '../deployment-health'
 import { getInFlight, resetModelConcurrency } from '../model-concurrency'
 
@@ -716,6 +720,31 @@ describe('APIExecutor P1：降级链 + 截断空输出', () => {
     expect(fallbackMeta.fallbackFrom).toBe('test-model')
   })
 
+  it('两跳 fallbackChain：第一跳仍失败时继续第二跳，并记录完整轨迹', async () => {
+    fallbacksMock.mockReturnValue(['fallback-1', 'fallback-2'])
+    definitionMock.mockImplementation((id: string) => (id.startsWith('fallback-') ? { id } : undefined))
+    safeHttpRequestMock
+      .mockResolvedValueOnce(jsonResponse(429, { error: 'primary limited' }))
+      .mockResolvedValueOnce(jsonResponse(429, { error: 'fallback-1 limited' }))
+      .mockResolvedValueOnce(jsonResponse(200, {
+        id: 'completion-fallback-2',
+        model: 'fallback-2',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'from-second-fallback' }, finish_reason: 'stop' }]
+      }))
+
+    const response = await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }] },
+      { traceId: 'trace-fallback-2', retryBudget: createRetryBudget({ maxTransportRetries: 0, maxUpstreamAttempts: 4 }) }
+    )
+
+    expect(response.choices[0].message.content).toBe('from-second-fallback')
+    expect(safeHttpRequestMock.mock.calls.map((call) => call[1].body.model))
+      .toEqual(['test-model', 'fallback-1', 'fallback-2'])
+    const fallbackMeta = JSON.parse(agentLogCreate.mock.calls.at(-1)![0].data.metadata)
+    expect(fallbackMeta.fallbackTrail).toEqual(['test-model', 'fallback-1'])
+  })
+
   it('不可降级的错误类（如 protocol）不会触发 fallback', async () => {
     fallbacksMock.mockReturnValue(['fallback-model'])
     definitionMock.mockImplementation((id: string) => (id === 'fallback-model' ? { id } : undefined))
@@ -803,5 +832,67 @@ describe('APIExecutor P2：本地并发闸门', () => {
     expect(response.choices[0].message.content).toBe('ok')
     // 释放后槽位归还（部署键 = provider|endpoint|model）
     expect(getInFlight('test-provider|https://example.com|test-model')).toBe(0)
+  })
+})
+
+describe('APIExecutor onWireRequest（最终请求体测试缝）', () => {
+  const providerSupportsMock = providerSupportsSystemRole as jest.Mock
+
+  beforeEach(() => {
+    jest.restoreAllMocks()
+    safeHttpRequestMock.mockReset()
+    agentLogCreate.mockReset().mockResolvedValue({})
+    attemptCreate.mockReset().mockResolvedValue({})
+    jest.spyOn(APIExecutor.prototype as any, 'delay').mockResolvedValue(undefined)
+    safeHttpRequestMock.mockResolvedValue(jsonResponse(200, {
+      id: 'completion-wire',
+      model: 'test-model',
+      choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 }
+    }))
+  })
+
+  afterEach(() => {
+    providerSupportsMock.mockReturnValue(true)
+  })
+
+  it('折叠通道：钩子拿到的是折叠后请求体（无 system 角色）', async () => {
+    providerSupportsMock.mockReturnValue(false)
+    let captured: any = null
+    await new APIExecutor().execute(
+      route,
+      {
+        messages: [
+          { role: 'system', content: 'SYS-RULES' },
+          { role: 'user', content: 'U1' },
+        ],
+        top_p: 0.9,
+      },
+      { traceId: 'trace-wire-fold', onWireRequest: (body) => { captured = body } }
+    )
+    expect(captured).not.toBeNull()
+    expect(captured.messages).toEqual([{ role: 'user', content: 'SYS-RULES\n\n---\nU1' }])
+    // 参数同样以最终生效值出现在请求体里
+    expect(captured.top_p).toBe(0.9)
+    expect(captured.model).toBe('test-model')
+  })
+
+  it('标准通道：钩子拿到保留 system 的原始消息数组', async () => {
+    providerSupportsMock.mockReturnValue(true)
+    let captured: any = null
+    await new APIExecutor().execute(
+      route,
+      {
+        messages: [
+          { role: 'system', content: 'SYS-RULES' },
+          { role: 'user', content: 'U1' },
+        ],
+      },
+      { traceId: 'trace-wire-native', onWireRequest: (body) => { captured = body } }
+    )
+    expect(captured.messages).toEqual([
+      { role: 'system', content: 'SYS-RULES' },
+      { role: 'user', content: 'U1' },
+    ])
   })
 })

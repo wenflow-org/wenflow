@@ -57,6 +57,9 @@ userStore.initFromStorage();
   flex-direction: column;
   background: var(--canvas);
 }
+/* 路由切换把焦点交给 #app-main，但页面容器不需要默认焦点环（移动端 1px 橙边尤其明显） */
+#app-main:focus,
+#app-main:focus-visible { outline: none; }
 
 /* 无障碍：跳到主要内容（仅键盘聚焦时可见） */
 .skip-link {
@@ -72,11 +75,15 @@ userStore.initFromStorage();
   font-weight: 700;
   text-decoration: none;
   transform: translateY(-200%);
-  transition: transform 0.2s ease;
+  opacity: 0;
+  visibility: hidden;
+  transition: transform 0.2s ease, opacity 0.12s ease;
 }
 
 .skip-link:focus-visible {
   transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
 }
 </style>
 

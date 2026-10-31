@@ -236,3 +236,65 @@ describe('结算链两径（recordSessionOutcome / applyKtEstimate 透传）', (
     expect(mockCreate.mock.calls[1][0].data.conceptId).toBe('cpt_name')
   })
 })
+
+/**
+ * 2026-10-21 数据层重建冒烟抓到的缺口：`source='kt-estimate'` 的痕迹
+ * extractionCount=0 且 fsrsStability/dueAt 全为 null——既不在排程里，
+ * 首次真实提取时也只能回退 fsrsStateFromLegacy 代理。
+ * 修法：KT 估算建痕即写初始 FSRS 状态与 dueAt；幽灵痕（已有行）补空值，不覆盖已排程的行。
+ */
+describe('applyKtEstimate：初始 FSRS 排程', () => {
+  const NOW = new Date('2026-10-19T10:00:00.000Z')
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFindUnique.mockResolvedValue(null)
+    mockUpdateMany.mockResolvedValue({ count: 1 })
+    mockCreate.mockResolvedValue({})
+    mockRegisterAlias.mockResolvedValue({ conceptId: 'cpt_name', registered: true })
+    registryWith(false)
+  })
+
+  it('新建 KT 幽灵痕 → 写入初始 FSRS 四元组与 dueAt（extractionCount 仍为 0）', async () => {
+    await memoryTraceService.applyKtEstimate('u1', [{ conceptKey: '识别对齐关系', mastery: 0.8 }], 'lp_1')
+
+    const data = mockCreate.mock.calls[0][0].data
+    expect(data.source).toBe('kt-estimate')
+    expect(data.extractionCount).toBe(0)
+    expect(data.fsrsStability).toBeGreaterThanOrEqual(1)
+    expect(data.fsrsDifficulty).toBe(5)
+    expect(data.fsrsReps).toBe(0)
+    expect(data.fsrsLapses).toBe(0)
+    expect(data.dueAt).toBeInstanceOf(Date)
+    expect((data.dueAt as Date).getTime()).toBeGreaterThan(NOW.getTime())
+  })
+
+  it('已有幽灵痕（extractionCount=0 且无 FSRS）→ 补空值，EMA 照常更新', async () => {
+    mockFindUnique.mockResolvedValue({
+      conceptKey: '识别对齐关系', conceptId: null, extractionCount: 0,
+      masteryScore: 0.2, ktMasteryEma: 0.2, lastSeenAt: null, fsrsStability: null,
+    })
+
+    await memoryTraceService.applyKtEstimate('u1', [{ conceptKey: '识别对齐关系', mastery: 0.6 }], 'lp_1')
+
+    const data = mockUpdateMany.mock.calls[0][0].data
+    expect(data.fsrsStability).toBeGreaterThanOrEqual(1)
+    expect(data.dueAt).toBeInstanceOf(Date)
+    expect(data.ktMasteryEma).toBeCloseTo(0.28, 5)
+    expect(data).not.toHaveProperty('extractionCount')
+  })
+
+  it('已排程的痕迹 → 不覆盖真实复习算出的 FSRS 状态与 dueAt', async () => {
+    mockFindUnique.mockResolvedValue({
+      conceptKey: '识别对齐关系', conceptId: 'cpt_x', extractionCount: 3,
+      masteryScore: 0.7, ktMasteryEma: 0.7, lastSeenAt: NOW, fsrsStability: 12.5,
+    })
+
+    await memoryTraceService.applyKtEstimate('u1', [{ conceptKey: '识别对齐关系', mastery: 0.7 }], 'lp_1')
+
+    const data = mockUpdateMany.mock.calls[0][0].data
+    expect(data).not.toHaveProperty('fsrsStability')
+    expect(data).not.toHaveProperty('dueAt')
+    expect(data).toHaveProperty('ktMasteryEma')
+  })
+})

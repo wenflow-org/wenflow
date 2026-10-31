@@ -31,6 +31,9 @@ jest.mock('../../config/database', () => ({
     learning_paths: {
       findUnique: mockLearningPathFindUnique
     },
+    teaching_sessions: {
+      findFirst: jest.fn(async () => null)
+    },
     goal_conversations: {
       findFirst: jest.fn()
     }
@@ -94,6 +97,9 @@ jest.mock('../../services/virtual-lab/simulated-day.service', () => ({
 
 import { SimulationOrchestrator } from '../simulation.coordinator'
 import { resolveLearnTurnBudget } from '../simulation.helpers'
+import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository'
+
+const recordLedgerSpy = jest.spyOn(teachingSessionRepository, 'recordDirectTaskCompletion')
 
 describe('SimulationOrchestrator durable task completion recovery', () => {
   let sessionRecord: any
@@ -190,7 +196,8 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       knowledgePoints: [],
       strategies: []
     })
-    mockEndSession.mockResolvedValue({ revision: 3 })
+    mockEndSession.mockResolvedValue({ status: 'completed', revision: 3 })
+    recordLedgerSpy.mockResolvedValue('completed')
     mockStartSession.mockResolvedValue({
       sessionId: 'teaching-2',
       revision: 1,
@@ -311,7 +318,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       if (revision === 7) {
         throw Object.assign(new Error('课堂已在其他页面更新，请刷新后继续'), { code: 'TEACHING_SESSION_STALE' })
       }
-      return { revision: 9 }
+      return { status: 'completed', revision: 9 }
     })
 
     const result = await coordinator.executeLearningStep('simulation-1')
@@ -322,6 +329,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockGetSessionDetail).toHaveBeenCalledWith('teaching-1', 'user-1')
     expect(mockEndSession).toHaveBeenNthCalledWith(2, 'teaching-1', 'task-completed', 8)
     expect(mockEndSession.mock.calls.some(([, , revision]) => revision === undefined)).toBe(false)
+    expect(recordLedgerSpy).toHaveBeenCalledWith('teaching-1', 'user-1', 'timebox-skip', 9)
   })
 
   it('下一步只重试 completeTask，并为路径中的下一任务建立新课堂', async () => {
@@ -355,6 +363,8 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
     // 恢复路径收束授课会话（endSession→wrapup 落库）——2026-10-02 端到端实证
     expect(mockEndSession).toHaveBeenCalledWith('teaching-1', 'task-completed', 3)
+    // P1-3：任务结算后补记 finalization 台账（不重复执行 completeTask）
+    expect(recordLedgerSpy).toHaveBeenCalledWith('teaching-1', 'user-1', 'vl-assisted', 3)
     expect(mockGetSessionDetail).not.toHaveBeenCalled()
     expect(learning.taskRuntime).toEqual(expect.objectContaining({
       status: 'active',
@@ -404,6 +414,8 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
     // 恢复路径收束授课会话（endSession→wrapup 落库）——2026-10-02 端到端实证
     expect(mockEndSession).toHaveBeenCalledWith('teaching-1', 'task-completed', 3)
+    // P1-3：任务结算后补记 finalization 台账（不重复执行 completeTask）
+    expect(recordLedgerSpy).toHaveBeenCalledWith('teaching-1', 'user-1', 'vl-assisted', 3)
     expect(mockGetSessionDetail).not.toHaveBeenCalled()
   })
 

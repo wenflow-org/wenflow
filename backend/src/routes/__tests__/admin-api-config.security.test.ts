@@ -7,8 +7,6 @@ const getConfig = jest.fn()
 const updateConfig = jest.fn()
 const testConnection = jest.fn()
 const safeHttpRequest = jest.fn()
-const refresh = jest.fn()
-const getRuntimeCapabilityProbeEnabled = jest.fn()
 
 jest.mock('express', () => ({
   Router: () => ({
@@ -37,14 +35,6 @@ jest.mock('../../utils/safe-http', () => ({ safeHttpRequest }))
 jest.mock('../../services/runtime-network-policy.service', () => ({
   getRuntimeNetworkPolicy: jest.fn(() => ({})),
   updateRuntimeNetworkPolicy: jest.fn()
-}))
-
-jest.mock('../../services/ai-capability-health.service', () => ({
-  aiCapabilityHealthService: { refresh }
-}))
-
-jest.mock('../../services/capability-probe-settings.service', () => ({
-  getRuntimeCapabilityProbeEnabled
 }))
 
 require('../admin/api-config')
@@ -85,8 +75,27 @@ describe('Admin API 配置 Secret 绑定', () => {
     jest.clearAllMocks()
     getConfig.mockResolvedValue(currentConfig)
     updateConfig.mockResolvedValue(currentConfig)
-    refresh.mockResolvedValue({})
-    getRuntimeCapabilityProbeEnabled.mockResolvedValue(true)
+  })
+
+  it('通道测试留空密钥时沿用已保存密钥（地址未变）', async () => {
+    testConnection.mockResolvedValue({ success: true, modelsCount: 3, models: ['a', 'b', 'c'] })
+    const req: any = { body: { apiUrl: currentConfig.apiUrl, apiKey: '' } }
+    const res = createResponse()
+
+    await routes['POST /test'](req, res)
+
+    expect(testConnection).toHaveBeenCalledWith(currentConfig.apiUrl, 'saved-secret')
+    expect(res.statusCode).toBe(200)
+  })
+
+  it('通道测试换了地址且密钥留空时，不把旧密钥发给新端点', async () => {
+    testConnection.mockResolvedValue({ success: false, error: '缺少密钥' })
+    const req: any = { body: { apiUrl: 'https://other-provider.example/v1', apiKey: '' } }
+    const res = createResponse()
+
+    await routes['POST /test'](req, res)
+
+    expect(testConnection).toHaveBeenCalledWith('https://other-provider.example/v1', '')
   })
 
   it('更换主 Endpoint 时不能复用掩码后的平台密钥', async () => {
@@ -204,5 +213,37 @@ describe('Admin API 配置 Secret 绑定', () => {
 
     expect(res.statusCode).toBe(400)
     expect(updateConfig).not.toHaveBeenCalled()
+  })
+
+  /* 连接健康快照（2026-10-23 接手）：前端「连接并拉取 / 重新拉取」的结果随连接域保存，
+     刷新后徽章时间不再回退。只认三态字符串与合法时间戳。 */
+  it('连接状态与检查时间可随保存落盘', async () => {
+    const checkedAt = '2026-10-23T01:02:03.000Z'
+    const req: any = {
+      body: { apiUrl: currentConfig.apiUrl, apiKey: '', connectionStatus: 'connected', lastCheckedAt: checkedAt }
+    }
+    const res = createResponse()
+
+    await routes['PUT /'](req, res)
+
+    expect(res.statusCode).toBe(200)
+    expect(updateConfig).toHaveBeenCalledWith(expect.objectContaining({
+      connectionStatus: 'connected',
+      lastCheckedAt: new Date(checkedAt)
+    }))
+  })
+
+  it('非法连接状态归一为 unknown，非法时间戳不落盘', async () => {
+    const req: any = {
+      body: { apiUrl: currentConfig.apiUrl, apiKey: '', connectionStatus: 'weird-state', lastCheckedAt: 'not-a-date' }
+    }
+    const res = createResponse()
+
+    await routes['PUT /'](req, res)
+
+    expect(res.statusCode).toBe(200)
+    const payload = updateConfig.mock.calls[0][0]
+    expect(payload.connectionStatus).toBe('unknown')
+    expect(payload).not.toHaveProperty('lastCheckedAt')
   })
 })

@@ -11,14 +11,16 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import HealthCenter from '../HealthCenter.vue';
+import { filterValue } from './filter-controls';
 import { dataSource } from '../store';
 import type {
   HealthCenterItem,
   HealthCenterSummaryReport,
 } from '@/api/adminApi';
 
-const { getSummaryMock } = vi.hoisted(() => ({
+const { getSummaryMock, getReconciliationMock } = vi.hoisted(() => ({
   getSummaryMock: vi.fn(),
+  getReconciliationMock: vi.fn(),
 }));
 
 vi.mock('@/api/adminApi', () => ({
@@ -27,11 +29,26 @@ vi.mock('@/api/adminApi', () => ({
     getSummary: getSummaryMock,
     fix: vi.fn(),
   },
-  // 健康中心内嵌「技能对账」子组件会调用此 API；返回空报告即可（本套件不校验对账内容）
+  // 健康中心内嵌「技能核查」子组件自取对账报告
   adminSkillsApi: {
-    getReconciliation: vi.fn(async () => ({ data: { data: null } })),
+    getReconciliation: getReconciliationMock,
   },
 }));
+
+function makeReconReport() {
+  const row = (skillId: string, status: string, diff: 'unregistered' | 'active-missing' | null) => ({
+    skillId, kind: 'mainline' as const, displayName: null, stage: null, parentAgent: 'goal-agent',
+    book: true, manifest: diff !== 'unregistered', registered: true, active: status === 'live',
+    noPromptFile: false, registrationExempt: false, diff,
+    completion: { status, gates: { draft: { ok: true }, handlerReady: { ok: true }, coreReady: { ok: true }, fieldsSynced: { ok: true }, live: { ok: status === 'live' } } },
+  });
+  return {
+    generatedAt: '2026-08-13T08:00:00.000Z',
+    summary: { total: 3, registered: 3, active: 1, byStatus: { live: 1 }, unregistered: 1, activeMissing: 0, orphanRegistrations: 0 },
+    items: [row('live-a', 'live', null), row('draft-b', 'draft', null), row('ghost-c', 'draft', 'unregistered')],
+    orphanRegistrations: [],
+  };
+}
 
 function makeItem(
   id: HealthCenterItem['id'],
@@ -111,6 +128,8 @@ async function mountWorkbench() {
 describe('健康中心（G1）', () => {
   beforeEach(() => {
     getSummaryMock.mockReset();
+    getReconciliationMock.mockReset();
+    getReconciliationMock.mockResolvedValue({ data: { data: makeReconReport() } });
     dataSource.value = 'live';
   });
 
@@ -126,42 +145,62 @@ describe('健康中心（G1）', () => {
     expect(wrapper.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     expect(wrapper.find('.hc-refresh-note').text()).toContain('更新于');
 
-    // 概要 KPI 四张（P1#30 语义统一：value = 需处理数（0=好），总数/达成数下沉 hint，
-    // tone 只挂真正异常卡——修复「登记总数 8 被着成警示琥珀」）
+    /* 概要 KPI 四张（P1#30 语义统一：value = 需处理数（0=好），
+       tone 只挂真正异常卡——修复「登记总数 8 被着成警示琥珀」）。
+       2026-10-19 用户走查「KPI hint 在报读数」：总数/达成数这一步再往下沉一级——
+       副行只留口径短语，数字进各卡 title 长释（仍在，只是不进卡面副行）。 */
     const cards = wrapper.findAll('.mk-kpi');
     expect(cards.length).toBe(4);
-    expect(cards[0].text()).toContain('4');                    // 检查异常（value=异常数）
-    expect(cards[0].text()).toContain('健康检查共 13 项');       // 总数下沉 hint
-    expect(cards[1].text()).toContain('3');                    // 漂移需处理：契约 1 + W4 2
+    const title = (i: number) => cards[i].attributes('title') || '';
+    /* 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：方法说明型副行
+       （按健康检查清单逐项判定 / 按登记册逐项比对）已撤，卡面只留 label + 读数 */
+    expect(cards[0].text()).toContain('4');                              // 检查异常（value=异常数）
+    expect(cards[0].find('.mk-kpi__hint').exists()).toBe(false);
+    expect(title(0)).toContain('健康检查共 13 项');                        // 总数进长释
+    expect(cards[1].text()).toContain('3');                              // 漂移需处理：契约 1 + W4 2
     /* 2026-10-16 KPI 审计补完：标签原先只有「不一致」没有宾语（谁跟谁不一致？），
-       改用术语表的限定词；hint 同步从「契约 N + 哈希 M」换成两个概念的人话名。 */
-    expect(cards[1].text()).toContain('文件与线上不一致');
-    expect(cards[1].text()).toContain('文件与线上 1 条 · 编译产物 2 条');
-    expect(cards[1].text()).not.toContain('契约');
-    expect(cards[2].text()).toContain('3');                    // 对账异常：登记缺项 1 + 无生效版本 2 + 失效注册 0（zombieActive/unwired 不计入）
-    expect(cards[2].text()).toContain('登记 8 项');
-    expect(cards[3].text()).toContain('2');                    // 完成度未达标
-    expect(cards[3].text()).toContain('已上线 2/8');           // 达成数下沉 hint + 用词统一「已上线」
+       改用术语表的限定词；两类条数（原副行「契约 N + 哈希 M」的人话版）进长释。 */
+    expect(cards[1].text()).toContain('契约与哈希不一致');
+    expect(cards[1].find('.mk-kpi__hint').exists()).toBe(false);
+    expect(title(1)).toContain('文件与线上 1 条、编译产物 2 条');
+    expect(cards[2].text()).toContain('3');                              // 对账异常：登记缺项 1 + 无生效版本 2 + 失效注册 0
+    expect(cards[2].find('.mk-kpi__hint').exists()).toBe(false);
+    expect(title(2)).toContain('登记总数 8 项');
+    expect(cards[3].text()).toContain('2');                              // 完成度未达标
+    expect(cards[3].find('.mk-kpi__hint').exists()).toBe(false);
+    expect(title(3)).toContain('已上线 2/8');                             // 达成数进长释
     // 2026-10-06 审核 #102：本卡 hint 的「共 N 个技能」与相邻对账卡 hint「登记 N 项」同值同屏
     // 复读且两种叫法，已撤（登记总数单源住在页头注记 title 与对账卡 title）。
     expect(cards[3].text()).not.toContain('共 8 个技能');
-    expect(cards[3].attributes('title')).toContain('未完成上线');
+    expect(title(3)).toContain('未完成上线');
 
-    // 健康检查 13 行全部渲染；异常/关注项默认展开，正常项收进折叠组
+    // 健康检查 13 行全部渲染；分域成组，异常组默认展开、全正常组折叠
     const rows = wrapper.findAll('.hc-check__row');
     expect(rows.length).toBe(13);
     expect(wrapper.findAll('.hc-check--error').length).toBe(2);
     expect(wrapper.findAll('.hc-check--warn').length).toBe(2);
-    // 2026-10-06 审核 #100：组头不再一律写「正常」——组内含 info 只读观测项（如「运行时漂移（遥测）」），
-    // 改「无异常」+ 观测条数披露口径。审核 #99：展开/收起文案状态化（点击展开 / 点击收起）。
-    const okSummary = wrapper.find('.hc-ok__summary').text();
-    expect(okSummary).toContain('其余 9 项无异常');
-    expect(okSummary).toContain('点击展开');
+    // 2026-10-21 用户拍板：7 张服务瓦片退役，域分组并进明细列表；页首 KPI 是唯一全局读数
+    expect(wrapper.find('.hc-services').exists()).toBe(false);
+    expect(wrapper.find('#hc-health .mk-card__title').text()).toBe('检查明细');
+    const groups = wrapper.findAll('#hc-health details.hc-group');
+    expect(groups.map((g) => g.find('.hc-group__name').text())).toEqual([
+      '契约清单',
+      '核心文件',
+      '运行时遥测',
+      '双向一致性核查',
+    ]);
+    // 异常域默认展开，组头给域内分布
+    expect(groups[0].attributes('open')).toBeDefined();
+    expect(groups[0].text()).toContain('异常 2');
+    // 全正常域折叠；含 info 观测项时披露观测条数，不冒名「正常」
+    expect(groups[3].attributes('open')).toBeUndefined();
+    expect(groups[3].text()).toContain('正常 8');
+    expect(groups[3].text()).toContain('观测 1');
 
     // 两域页签（2026-10-14 收敛：原四页签与 KPI 四卡一一对应，实测漂移/完成度两页只有
     // 一卡孤行 + 半屏死区；漂移并入健康检查、完成度并入对账，深链旧键走别名）
     const tabs = wrapper.findAll('.hc-tabs .tab');
-    expect(tabs.map((t) => t.text())).toEqual(['健康检查', '一致性核查与完成度']);
+    expect(tabs.map((t) => t.text())).toEqual(['健康检查', '技能核查']);
     expect(tabs[0].attributes('aria-selected')).toBe('true');
 
     // 漂移入口落到检查行（原漂移页签撤除）：W4 行给「去发布 →」，运行时遥测行给「执行日志 →」；
@@ -207,10 +246,10 @@ describe('健康中心（G1）', () => {
     expect(wrapper.find('.stageband').exists()).toBe(false);
     expect(wrapper.find('.hc-fold').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('完成度分布');
-    // 信息没净丢：完成度的结论在页首 KPI hint（已上线 N/N），逐条明细在下方对账表
+    // 信息没净丢：完成度的结论在页首 KPI（读数）与卡 title（已上线 N/N），逐条明细在下方对账表
     const kpi = wrapper.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text().includes('完成度未达标'));
     expect(kpi?.exists()).toBe(true);
-    expect(kpi!.find('.mk-kpi__hint').text()).toContain('已上线');
+    expect(kpi!.attributes('title')).toContain('已上线');
     expect(wrapper.find('#hc-panel-recon .sk-rec').exists()).toBe(true);
     wrapper.unmount();
   });
@@ -219,8 +258,8 @@ describe('健康中心（G1）', () => {
     getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     dataSource.value = 'live';
     for (const [q, expected] of [
-      ['recon', '一致性核查与完成度'],
-      ['completion', '一致性核查与完成度'], // 旧键（2026-10-14 前是独立页签）
+      ['recon', '技能核查'],
+      ['completion', '技能核查'], // 旧键（2026-10-14 前是独立页签）
       ['drift', '健康检查'],        // 旧键
     ] as const) {
       const router = createRouter({
@@ -237,21 +276,76 @@ describe('健康中心（G1）', () => {
     }
   });
 
-  it('P2 顺手 + P1#28：服务卡按 tone 排序（error→warn→ok）；fixHint 常驻在检查行动作区', async () => {
-    getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
+  it('分域组按 tone 排序（error→warn→ok）；运行时告警行给出跳转，不再常驻修复说明', async () => {
+    const report = makeReport();
+    report.health.items.push(
+      { ...makeItem('runtime-degradation', 'warn', 9, ['goal/schema × 5']), base: 'runtime' },
+      { ...makeItem('runtime-outbox-dead', 'warn', 2, ['session.wrapup｜timeout']), base: 'runtime' },
+    );
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: report } });
     const wrapper = await mountWorkbench();
 
-    // 夹具插入序里 ok 卡（双向对账，items[3]）先于 warn 卡（运行时遥测，items[11]）；
-    // 排序后 warn 卡必须排在 ok 卡之前（修复前服务卡按 base 首次出现序渲染）
-    const names = wrapper.findAll('.hc-services .service__name').map((el) => el.text());
+    // 夹具插入序里 ok 组（双向对账）先于 warn 组（运行时遥测）；
+    // 排序后 warn 组必须排在 ok 组之前（修复前按 base 首次出现序渲染）
+    const names = wrapper.findAll('#hc-health .hc-group__name').map((el) => el.text());
     expect(names[0]).toBe('契约清单');
     expect(names.indexOf('运行时遥测')).toBeLessThan(names.indexOf('双向一致性核查'));
 
-    // fixHint 常驻（P1#28）：修复说明渲染在检查行动作区（此前只在 409 错误 toast 里透出）
-    const hints = wrapper.findAll('.hc-check__fixhint');
-    expect(hints.length).toBe(2);
-    expect(hints[0].text()).toContain('一键修复');
-    expect(hints[0].attributes('title')).toContain('一键修复');
+    // 常驻 fixHint 已撤：修复说明只留在确认弹窗里
+    expect(wrapper.findAll('.hc-check__fixhint')).toHaveLength(0);
+
+    // 运行时降级 / 死信两行各给一个可点的去处
+    const labels = wrapper.findAll('.hc-check__actions .mk-link').map((b) => b.text());
+    expect(labels.filter((l) => l === '执行日志 →').length).toBe(2);
+    expect(labels).toContain('运维工具 →');
+  });
+
+  it('概要卡点击落到具体项：异常行定位 / 核查异常与未达标落到对应筛选', async () => {
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+    });
+    await router.push('/admin/health-center');
+    await router.isReady();
+    const wrapper = mount(HealthCenter, { global: { plugins: [router] } });
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+    const cards = wrapper.findAll('.mk-kpi');
+
+    // 已在健康页签：点「检查异常」不再空转，落到首个异常行（w4-corehash）
+    await cards[0].trigger('click');
+    await flushPromises();
+    await nextTick();
+    expect(router.currentRoute.value.query.check).toBe('w4-corehash');
+    expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('健康检查');
+
+    // 「契约与哈希不一致」按行名同词，点击定位契约漂移行
+    await cards[1].trigger('click');
+    await flushPromises();
+    await nextTick();
+    expect(router.currentRoute.value.query.check).toBe('field-routing-contract');
+
+    // 「一致性核查异常」→ 技能核查页 + 仅看异常
+    await cards[2].trigger('click');
+    await flushPromises();
+    await nextTick();
+    expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('技能核查');
+    expect(router.currentRoute.value.query.diff).toBe('abnormal');
+    expect(filterValue(wrapper as never, '范围')).toBe('abnormal');
+
+    // 「完成度未达标」→ 技能核查页 + 仅看未达标
+    await cards[3].trigger('click');
+    await flushPromises();
+    await nextTick();
+    expect(router.currentRoute.value.query.diff).toBe('unmet');
+    expect(filterValue(wrapper as never, '范围')).toBe('unmet');
+    // 未达标档排除已上线行
+    const rows = wrapper.findAll('.sk-rec-table tbody tr.sk-row').map((r) => r.text());
+    expect(rows.some((t) => t.includes('live-a'))).toBe(false);
+    expect(rows.some((t) => t.includes('draft-b'))).toBe(true);
+    wrapper.unmount();
   });
 
   it('行内明细展开：异常项默认展开，点击收起；明细截断提示', async () => {
@@ -278,10 +372,10 @@ describe('健康中心（G1）', () => {
     await nextTick();
     expect(wrapper.findAll('.hc-check__detail').length).toBe(1);
 
-    // 正常项折叠组展开后可见 override-record
-    await wrapper.find('.hc-ok__summary').trigger('click');
-    await nextTick();
-    expect(wrapper.find('.hc-ok .hc-check--info').exists()).toBe(true);
+    // 正常项所在的域组默认折叠，但行仍在（深链 ?check= 会先展开组）
+    const okGroup = wrapper.find('#hc-group-bidirectional');
+    expect(okGroup.attributes('open')).toBeUndefined();
+    expect(okGroup.find('.hc-check--info').exists()).toBe(true);
   });
 
   it('网络失败降级：失败空态 + 重试成功后恢复', async () => {

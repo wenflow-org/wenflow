@@ -16,7 +16,7 @@ failurePolicy: propagate
 
 ## 使用通道
 
-- state：平台维护的主记忆快照（当前值，含 stage）
+- state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 - task：当前任务 / 场景 / 控制指令
 
 ## 执行规则

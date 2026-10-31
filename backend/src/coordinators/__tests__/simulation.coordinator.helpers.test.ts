@@ -9,6 +9,7 @@ import {
   getRunnableTasks,
   countTaskProgress,
   findTaskInPath,
+  resolveStaleTaskRecovery,
   buildProgressAfterTaskCompletion,
   buildDefaultLearnerState,
   buildStoryBehaviorBias,
@@ -30,7 +31,8 @@ import {
   isTransientUpstreamLearnError,
   isPathReviewAlreadyAcceptedForCurrentPath,
   parseProfileData,
-  resolveLearnerLoadProfile
+  resolveLearnerLoadProfile,
+  buildLessonOpeningHistory
 } from '../simulation.helpers'
 import type { VirtualLearnerProfile } from '../simulation.types'
 import type { VirtualLearnerProfileRow } from '../../virtual-lab/vlab-types'
@@ -134,6 +136,25 @@ describe('findTaskInPath', () => {
     expect(findTaskInPath(milestones, 'nope')).toBeNull()
     expect(findTaskInPath(milestones, null)).toBeNull()
     expect(findTaskInPath(milestones, undefined)).toBeNull()
+  })
+})
+
+describe('resolveStaleTaskRecovery', () => {
+  it('保留仍存在于当前路径的任务指针', () => {
+    expect(resolveStaleTaskRecovery(milestones, 't2')).toEqual({ stale: false, taskId: 't2' })
+  })
+
+  it('重排后旧任务已不存在 → 报告 stale，并给出新路径第一个未完成任务', () => {
+    expect(resolveStaleTaskRecovery(milestones, 'st_removed_by_replan')).toEqual({ stale: true, taskId: 't2' })
+  })
+
+  it('没有指针或路径已无未完成任务时安全返回', () => {
+    expect(resolveStaleTaskRecovery(milestones, null)).toEqual({ stale: false, taskId: null })
+    const allDone = milestones.map((m) => ({
+      ...m,
+      subtasks: m.subtasks.map((t) => ({ ...t, status: 'completed' })),
+    }))
+    expect(resolveStaleTaskRecovery(allDone, 'st_removed_by_replan')).toEqual({ stale: true, taskId: null })
   })
 })
 
@@ -682,3 +703,17 @@ describe('resolveLearnerLoadProfile（I-13：负荷画像字段层级容错）',
       .toEqual({ availableTime: null, loadTolerance: null })
   })
 })
+
+describe('buildLessonOpeningHistory（P0-1 切课开场白进入可见历史）', () => {
+  it('有开场白 → 只含一条 teacher 消息（不带上一课历史）', () => {
+    expect(buildLessonOpeningHistory('这节课我们学一页宽缩放。')).toEqual([
+      { role: 'assistant', content: '这节课我们学一页宽缩放。' },
+    ]);
+  })
+
+  it('无开场白/空白 → 空数组', () => {
+    expect(buildLessonOpeningHistory('')).toEqual([]);
+    expect(buildLessonOpeningHistory('   ')).toEqual([]);
+    expect(buildLessonOpeningHistory(null)).toEqual([]);
+  });
+});

@@ -124,6 +124,7 @@
             type="button"
             class="composer__send composer__send--stop"
             aria-label="停止生成"
+            :title="STOP_WAIT_HINT"
             @click="live.stop()"
           >
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
@@ -283,7 +284,7 @@
             <div class="msg__content">
               <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
               <!-- 收窄后的 live region：只播报等待文案，不再让整条消息流进读屏队列 -->
-              <div class="msg__meta" aria-live="polite">{{ chatWaitText }}</div>
+              <div class="msg__meta" aria-live="polite">{{ chatWaitMeta }}</div>
             </div>
           </div>
 
@@ -293,7 +294,7 @@
             <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__content msg__content--actions">
               <div class="msg__bubble msg__bubble--html msg__bubble--streaming" v-html="formatMessage(live.streamingText)"></div>
-              <div class="msg__meta">问流 · {{ chatWaitText }}</div>
+              <div class="msg__meta">问流 · {{ chatWaitMeta }}</div>
             </div>
           </div>
 
@@ -347,6 +348,7 @@
               rows="1"
               :maxlength="INPUT_MAX"
               :placeholder="chatPlaceholder"
+              :disabled="startFailed"
               @keydown.enter.exact.prevent="doSend"
             ></textarea>
             <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
@@ -355,8 +357,8 @@
               v-if="!live.sending"
               type="button"
               class="composer__send"
-              :class="{ 'composer__send--off': !input.trim() }"
-              :disabled="!input.trim()"
+              :class="{ 'composer__send--off': startFailed || !input.trim() }"
+              :disabled="startFailed || !input.trim()"
               aria-label="发送"
               @click="doSend"
             >
@@ -367,6 +369,7 @@
               type="button"
               class="composer__send composer__send--stop"
               aria-label="停止生成"
+              :title="STOP_WAIT_HINT"
               @click="live.stop()"
             >
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
@@ -469,8 +472,8 @@
         </div>
 
         <div class="proposal__note">
-          <span v-if="materialCount">已上传的 {{ materialCount }} 份资料将作为学习主线。</span>
-          <span>确认后在本页生成，通常几分钟；模型重试时会更久。失败可原地重试，信息不会丢。</span>
+          <span v-if="materialCount">已上传 {{ materialCount }} 份资料，生成路径时按目标相关性选用，其余保留在资料库。</span>
+          <span>确认后在本页生成，通常几分钟。失败可原地重试，信息不会丢。</span>
           <AiContentNote />
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
@@ -499,7 +502,9 @@
       <div v-else-if="phase === 'generating'" class="proposal proposal--center">
         <span class="spinner"></span>
         <h2 class="proposal__title">正在生成你的路径…</h2>
-        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，通常几分钟；模型重试时会更久。超过 5 分钟可以离开本页，完成后会出现在路径列表。</p>
+        <!-- 等待态只讲两件事：还要多久、完成后去哪看。「可以离开」由下方的
+             proposal__note 单独承担，同一屏不再说两遍（2026-10-29 全站副文审计） -->
+        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，通常几分钟。完成后会出现在路径列表。</p>
         <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
         <!-- 生成阶段模型输出是 JSON（对用户不可读）：delta 阶段给中性进度文案，不直出原始流（P3） -->
         <div class="proposal__stream">
@@ -529,7 +534,9 @@
              「主结构生成中，一般 1-2 分钟内完成…」并置矛盾（实为主结构已创建、生成刚启动）。
              改为与事实一致的「已创建 + 正在生成」两段式。 -->
         <h2 class="proposal__title">路径已创建</h2>
-        <p class="proposal__generating-note">路径正在生成，可以进入「我的路径」查看阶段与任务的准备进度。</p>
+        <!-- 只保留「还在生成」这一条会改变预期的事实；去哪看进度由正下方的
+             「查看我的路径」按钮表达，不再在句子里指一次路（2026-10-29 全站副文审计） -->
+        <p class="proposal__generating-note">阶段与任务还在生成中。</p>
         <div class="proposal__actions proposal__actions--center">
           <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
           <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->
@@ -592,10 +599,18 @@ const INPUT_MAX = 4096;
 const CONNECT_FAIL_MSG = '连接失败，没能开始对话。';
 const ATTACH_HINT = '添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框';
 const SEND_SHORTCUT_HINT = 'Enter 发送 · Shift+Enter 换行';
+/** 生成中发送键变成停止方块：补一句 hover 说明，纯图标按钮不靠自己猜 */
+const STOP_WAIT_HINT = '停止等待回复';
 const CLOSE_ESC_HINT = '关闭（Esc 可随时关闭）';
+/* 首轮 start 失败且尚无任何 AI 回复：底部输入框不能继续「假装能问」，否则用户会再次失败 */
+const startFailed = computed(() => live.failed === 'start' && !live.stopped);
 /* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */
 const entryPlaceholder = computed(() => isNarrow.value ? '先说说你想解决什么…' : '先说说你最近想解决什么，或现在卡在哪里…');
-const chatPlaceholder = computed(() => isNarrow.value ? '回答问题，或补充基础、时间…' : '回答上面的问题，或补充你的基础、时间和限制…');
+const chatPlaceholder = computed(() => {
+  // 不写「上方」：输入框与重试按钮同屏，点哪儿由位置自明（文案门禁 R2）
+  if (startFailed.value) return '首轮对话失败，请先重试';
+  return isNarrow.value ? '回答问题，或补充基础、时间…' : '回答导师的问题，或补充你的基础、时间和限制…';
+});
 function togglePanel() {
   if (!isNarrow.value) return;
   panelOpen.value = !panelOpen.value;
@@ -678,7 +693,7 @@ function resetToEntry() {
     「恢复失败，点这里重试」按钮承接，不重复弹 */
 function resumeFromRoute(cid: string) {
   void live.resumeById(cid).then((ok) => {
-    if (!ok && !live.hasSession()) toast.error('原会话未能恢复，已为你开启新对话');
+    if (!ok && !live.hasSession()) toast.error('原会话未能恢复，请从最近会话重试或开始新规划');
   });
 }
 
@@ -883,6 +898,10 @@ function stageText(stages: Array<[number, string]>) {
 }
 const chatWaitText = computed(() => stageText(CHAT_WAIT_STAGES));
 const genWaitText = computed(() => stageText(GEN_WAIT_STAGES));
+/** 等待 5 秒后才显示已等待秒数：短回合不闪数字，长回合用户能看到确实在走 */
+const chatWaitMeta = computed(() =>
+  waitTick.value >= 5 ? `${chatWaitText.value} · 已等待 ${waitTick.value}s` : chatWaitText.value
+);
 const supplementMode = ref(false);
 const supplementText = ref('');
 /* 用户消息内联编辑（仅最后一条用户消息可编辑） */
@@ -1077,6 +1096,7 @@ async function doSend(e?: unknown) {
   // 点击调用无事件载荷，自然跳过守卫
   const ke = e as KeyboardEvent | undefined;
   if (ke && (ke.isComposing || ke.keyCode === 229)) return;
+  if (startFailed.value) return;
   const t = input.value.trim();
   if (!t || live.sending) return;
   input.value = '';
@@ -2144,6 +2164,10 @@ function shuffleScenes() {
 .probe__opt:disabled { cursor: default; opacity: .92; }
 .proposal__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .proposal__actions--center { justify-content: center; }
+/* 完成态双按钮等宽：原「查看我的路径」按内容撑到 ~360px，「留在本页」只有 ~80px，
+   视觉重心左偏；等分后两个出口权重一致。 */
+.proposal__actions--center .btn-primary,
+.proposal__actions--center .btn-ghost { flex: 1 1 0; justify-content: center; min-width: 0; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 11px 22px; border-radius: var(--mk-radius-xl);

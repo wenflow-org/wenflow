@@ -1,0 +1,11 @@
+{
+  "modelSnapshot": "agnes-3.0-flash@2026-10-21",
+  "promptHash": "sha256:REPLACE_WITH_PROMPT_HASH",
+  "temperature": 0,
+  "topP": null,
+  "maxTokens": 64000,
+  "seed": null,
+  "k": 1,
+  "coverage": 1,
+  "judgeVersion": "ab-class-audit@2026-10-19"
+}

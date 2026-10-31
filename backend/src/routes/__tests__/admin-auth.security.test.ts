@@ -9,6 +9,8 @@ const jwtSign = jest.fn(() => 'admin-token')
 const jwtVerify = jest.fn()
 const sessionsCreate = jest.fn().mockResolvedValue({})
 const sessionsUpdate = jest.fn().mockResolvedValue({})
+const sessionsUpdateMany = jest.fn().mockResolvedValue({ count: 0 })
+const sessionsFindMany = jest.fn().mockResolvedValue([])
 const adminLoginRateLimitMiddleware = jest.fn((_req, _res, next) => next())
 const recordLoginAttempt = jest.fn()
 
@@ -31,7 +33,9 @@ jest.mock('../../config/database', () => ({
     },
     admin_sessions: {
       create: sessionsCreate,
-      update: sessionsUpdate
+      update: sessionsUpdate,
+      updateMany: sessionsUpdateMany,
+      findMany: sessionsFindMany
     }
   }
 }))
@@ -215,6 +219,28 @@ describe('Admin 登录安全边界', () => {
     })
     const createdData = sessionsCreate.mock.calls[0][0].data
     expect(createdData.expiresAt.getTime() - createdData.issuedAt.getTime()).toBe(7 * 24 * 60 * 60 * 1000)
+    // 同设备旧会话收掉：只保留本次 jti，避免同一浏览器反复登录攒出几十条活跃会话
+    expect(sessionsUpdateMany).toHaveBeenCalledWith({
+      where: {
+        adminId: 'admin-1',
+        ip: '127.0.0.1',
+        userAgent: 'jest-agent',
+        revokedAt: null,
+        jti: { not: createdData.jti }
+      },
+      data: { revokedAt: expect.any(Date) }
+    })
+    // 活跃会话封顶：按 adminId 取活跃会话，保留本次 jti
+    expect(sessionsFindMany).toHaveBeenCalledWith({
+      where: {
+        adminId: 'admin-1',
+        revokedAt: null,
+        expiresAt: { gt: expect.any(Date) },
+        jti: { not: createdData.jti }
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true }
+    })
   })
 
   it('不记住登录（remember=false）时会话表写入 24h 有效期', async () => {

@@ -1,57 +1,54 @@
 /**
- * Skill 模型配置 Seed（File-as-Truth）
+ * Skill 模型配置 Seed（代码 truth → DB，只补行为差异）
  *
- * 代码内固化「flash/pro 分工 + thinking=disabled」作为新库默认配置。
+ * 代码内只固化「思考 = disabled」这类行为差异，**不再写模型**。
+ * 2026-10-24 用户拍板：默认不物化成覆盖——模型留空 = 继承平台默认，平台默认换了全体跟随；
+ * 此前写死的 model 让 18 个技能看起来像被手工配置过（实际是 seed/脚本钉住的），
+ * 覆盖矩阵也无法区分「继承」与「有人选的」。
  * 策略：seed-if-empty —— 每个 skillId 若 DB 无对应行才插入，已有行不动（admin 可手动调整）。
  * 运行时机：purgeRetiredSkills() 之后、initializeGateway() 之前（2026-09-05 纳入启动流）。
  *
- * 维护规则：新增/删除 mainline skill 或调整 pro/flash 分工时，修改 SKILL_MODEL_SEED 一表即可，
- * 不需要改逻辑。skillId 必须与 prompts/skills.yaml 对齐。
+ * 维护规则：新增/删除 mainline skill 或调整 thinking 档时修改本表，不需要改逻辑。
+ * skillId 必须与 prompts/skills.yaml 对齐。
  */
 
 import { logger } from '../utils/logger';
 
 interface SkillModelSeedEntry {
   skillId: string;
-  model: string;          // 显式模型，与 DB 一致；空串 = 平台默认（当前不用于 mainline）
-  thinkingMode: 'disabled' | 'default'; // disabled: 思考档关；default: 跟随上游（仅 aux/handler）
+  /** 空串 = 继承平台默认模型（2026-10-24 起所有条目都为空，保留字段只为兼容旧表结构） */
+  model: string;
+  thinkingMode: 'disabled' | 'default'; // disabled: 思考档关；default: 跟随上游
 }
 
 /**
- * 「flash/pro 分工 + disabled」历史定稿（2026-09-05 双模型×流式实测结论）
+ * 「行为差异」定稿（2026-09-05 双模型×流式实测结论）
  *
- * 分工原则（**两个模型均已下线，仅供考古**；现行标准通道为 dsv4.1-flash，表内主用 agnes-3.0-flash）：
- *   判断/后台设计类 → deepseek-v4-pro（输出更丰富）
- *   实时对话/高频/短输出 → deepseek-v4-flash（TTFT 更快）
- *   全部 thinkingMode=disabled（实测思考档在两个模型上均为纯负担：TTFT 30-120s/524 限流/输出更短）
+ * thinkingMode 全 disabled：实测思考档是纯负担（TTFT 30-120s / 524 限流 / 输出更短）。
+ * 模型一律留空：2026-09 的 flash/pro 分工与 09-15 的 agnes 切换都已失效，
+ * 要换模型应在「Skill 运行时」里显式选择（覆盖矩阵会标成「技能覆盖」）。
  *
- * 2026-09-15 切换：deepseek 资源紧张（tps 低），全部 13 个 mainline skill 暂用 agnes-3.0-flash
- *   （OpenAI-compatible，TPS 更高）；平台默认模型（platform_api_configs.defaultModel）仍为 deepseek，
- *   本次仅 skill 调用模型切到 agnes，后续恢复时改回本表即可。
- *
- * - aux/handler-only skill 不在此表（未在此配置即沿用平台默认，见 runSeedIfEmpty）
- * - 虚拟学习者 5 个 skill 继承平台默认模型 + disabled（未在此显式配置）
+ * - aux/handler-only skill 不在此表（未在此配置即沿用平台默认）
  */
 export const SKILL_MODEL_SEED: SkillModelSeedEntry[] = [
-  // ===== 全部 skill 暂用 agnes-3.0-flash（2026-09-15，deepseek tps 紧张）=====
-  { skillId: 'path-planning',                    model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'kc-mapper',                        model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'path-reviewer',                    model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'stage-designer',                   model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'lesson-knowledge-enricher',        model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-persona-designer', model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'teaching-turn',                    model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'goal-conversation',                model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'teaching-opening-generator',       model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'peer-reinforcement',               model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'adaptive-guidance-copy',           model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'session-wrapup',                   model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'learning-predictor',               model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-goal-dialogue-simulator',    model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-learn-turn-simulator',       model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-memory-curator',             model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-path-evaluator',             model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
-  { skillId: 'virtual-learner-scenario-designer',          model: 'agnes-3.0-flash', thinkingMode: 'disabled' },
+  { skillId: 'path-planning',                    model: '', thinkingMode: 'disabled' },
+  { skillId: 'kc-mapper',                        model: '', thinkingMode: 'disabled' },
+  { skillId: 'path-reviewer',                    model: '', thinkingMode: 'disabled' },
+  { skillId: 'stage-designer',                   model: '', thinkingMode: 'disabled' },
+  { skillId: 'lesson-knowledge-enricher',        model: '', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-persona-designer', model: '', thinkingMode: 'disabled' },
+  { skillId: 'teaching-turn',                    model: '', thinkingMode: 'disabled' },
+  { skillId: 'goal-conversation',                model: '', thinkingMode: 'disabled' },
+  { skillId: 'teaching-opening-generator',       model: '', thinkingMode: 'disabled' },
+  { skillId: 'peer-reinforcement',               model: '', thinkingMode: 'disabled' },
+  { skillId: 'adaptive-guidance-copy',           model: '', thinkingMode: 'disabled' },
+  { skillId: 'session-wrapup',                   model: '', thinkingMode: 'disabled' },
+  { skillId: 'learning-predictor',               model: '', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-goal-dialogue-simulator',    model: '', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-learn-turn-simulator',       model: '', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-memory-curator',             model: '', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-path-evaluator',             model: '', thinkingMode: 'disabled' },
+  { skillId: 'virtual-learner-scenario-designer',          model: '', thinkingMode: 'disabled' },
 
   // semantic-freeze-judge（守门 skill，必须关闭思考，实测中强制 disabled）
   { skillId: 'semantic-freeze-judge',            model: '', thinkingMode: 'disabled' },

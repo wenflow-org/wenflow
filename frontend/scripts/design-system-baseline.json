@@ -26,7 +26,7 @@
     "src/components/ui/ToastHost.vue": 4
   },
   "mediaSpacing": {
-    "src/styles/mk-primitives.css": 34,
+    "src/styles/mk-primitives.css": 35,
     "src/styles/admin-theme.css": 1
   },
   "mediaFontSize": {

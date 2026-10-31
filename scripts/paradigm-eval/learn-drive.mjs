@@ -1,9 +1,11 @@
 // learn 课堂驱动：在已有 path 上启动真实授课会话，按水平脚本答 5-8 轮，采集建议面与配图
 // 用法：node scripts/paradigm-eval/learn-drive.mjs <personaId> [maxTurns=6]
+// 跑批心跳：BATCH_HEARTBEAT=1 + INIT_ADMIN_NAME/INIT_ADMIN_PASSWORD（或 BATCH_RUN_ID）→ 课堂期间向运营吞吐报活
 // 采集面：每轮 aiResponse/analysis(认知水平/迷惑点/情绪)/knowledgePoints/checkpoint/images/state/revision；
 //         完课卡与结算(wrapup)的 actionPlan/建议；配图时机=第几轮+prompt+kind。
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -356,4 +358,37 @@ async function main() {
   log(`DONE lesson_${personaId} | turns=${record.turns.length} images=${images.length} checkpoints=${record.checkpoints.length}`);
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+/* 跑批心跳：真实账号驱动的课堂同样要被运营吞吐监控看到。
+   凭据只从环境变量读；未显式开启或缺凭据时跳过（不影响课堂驱动）。 */
+function startBatchHeartbeat() {
+  if (String(process.env.BATCH_HEARTBEAT || '') !== '1') return null;
+  if (!process.env.INIT_ADMIN_NAME || !process.env.INIT_ADMIN_PASSWORD) {
+    log('BATCH_HEARTBEAT=1 但缺少 INIT_ADMIN_NAME / INIT_ADMIN_PASSWORD，跳过心跳');
+    return null;
+  }
+  const script = path.resolve(__dirname, '..', 'batch-heartbeat.mjs');
+  const runId = process.env.BATCH_RUN_ID || `learn-drive-${personaId}-${Date.now()}`;
+  const child = spawn(process.execPath, [script, `--run-id=${runId}`], {
+    env: process.env,
+    stdio: ['pipe', 'ignore', 'inherit'],
+  });
+  child.on('exit', (code) => { if (code) log(`heartbeat 退出 code=${code}`); });
+  log(`batch heartbeat: ${runId}`);
+  return child;
+}
+
+async function run() {
+  const heartbeat = startBatchHeartbeat();
+  try {
+    await main();
+  } finally {
+    if (heartbeat) {
+      /* stdin stop 是跨平台优雅退出（Windows 的 SIGINT 会直接杀进程，来不及注销心跳）。 */
+      try { heartbeat.stdin?.write('stop\n'); } catch { /* ignore */ }
+      await sleep(1500);
+      if (heartbeat.exitCode === null) heartbeat.kill();
+    }
+  }
+}
+
+run().catch(e => { console.error(e); process.exit(1); });

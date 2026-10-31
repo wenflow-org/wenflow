@@ -11,9 +11,18 @@ export interface StreamSseHandlers {
   /** 每个 SSE 事件回调（event 为 'delta' | 'final' | 'done' | 'error' | 'restart' 等） */
   onEvent: (event: string, data: any) => void;
   signal?: AbortSignal;
+  /** 额外请求头（如 Idempotency-Key）；认证头由本函数统一补齐 */
+  headers?: Record<string, string>;
   /** 空闲超时（ms）：超过该时长未收到任何字节（含注释心跳行）即中止并报错，防服务器挂起导致 typing 永久卡死；默认 60000 */
   idleTimeoutMs?: number;
+  /** 传输层活动回调：服务端心跳注释行（`: hb`）到达时触发——事件解析看不到注释行，
+   *  上层停滞看门狗据此区分「连接健康但模型仍在生成」与「真停滞」（#128/#129） */
+  onActivity?: () => void;
 }
+
+/** 连接阶段超时：响应头到达前的等待上限。请求被网络黑洞吞掉时 fetch 永不返回，
+ *  此前空闲计时在拿到响应头后才启动——goal 首条消息曾因此挂 25 分钟无任何反馈（#129）。 */
+const CONNECT_TIMEOUT_MS = 30_000;
 
 /**
  * POST 并消费 SSE 响应。
@@ -29,19 +38,35 @@ export async function streamSsePost(
   const idleTimeoutMs = handlers.idleTimeoutMs ?? 60_000;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json; charset=utf-8',
-    Accept: 'text/event-stream'
+    Accept: 'text/event-stream',
+    ...(handlers.headers || {}),
   };
   if (projectionToken) headers['X-Projection-Token'] = projectionToken;
+
+  // 中止总线：调用方 signal（停止/离页/上层看门狗）与本层空闲超时都汇到同一个 controller，
+  // fetch 只认它。旧实现 fetch 挂的是 handlers.signal，而空闲超时 abort 的却是无人监听的
+  // controller——60s 空闲看门狗从未真正中止过连接（#111/#113 回归：服务端挂起时流永不收尾，
+  // 无上层看门狗的调用方会永久挂起）。
+  const controller = new AbortController();
+  const onOuterAbort = () => controller.abort();
+  handlers.signal?.addEventListener('abort', onOuterAbort, { once: true });
 
   const send = () => fetch(`${API_BASE_URL}${url}`, {
     method: 'POST',
     headers,
     credentials: 'include',
     body: JSON.stringify(payload),
-    signal: handlers.signal
+    signal: controller.signal
   });
 
   let response: Response;
+  // 连接阶段看门狗：响应头到达前 fetch 可能被网络黑洞吞掉而永不返回（#129 实测挂 25 分钟），
+  // 空闲计时此时尚未启动，必须有独立的连接超时兜底
+  let connectTimedOut = false;
+  const connectTimer = setTimeout(() => {
+    connectTimedOut = true;
+    controller.abort();
+  }, CONNECT_TIMEOUT_MS);
   try {
     response = await send();
     // access token（30m）过期时，axios 通道会静默 refresh，SSE 通道此前直接踢回登录页——
@@ -51,9 +76,12 @@ export async function streamSsePost(
       if (refreshed) response = await send();
     }
   } catch (error) {
+    if (connectTimedOut) throw Object.assign(new Error('连接超时，请重试'), { transport: true });
     // 调用方主动 abort（离页/卸载止损）：单独标记 cancelled，避免被误判为传输层失败而重发
     if (isAbort(error, handlers.signal)) throw markCancelled(error);
     throw error;
+  } finally {
+    clearTimeout(connectTimer);
   }
 
   if (!response.ok) {
@@ -102,12 +130,9 @@ export async function streamSsePost(
     }, idleTimeoutMs);
   };
   kickIdleTimer();
-  const controller = new AbortController();
-  const onAbort = () => controller.abort();
-  handlers.signal?.addEventListener('abort', onAbort, { once: true });
   const cleanup = () => {
     if (idleTimer) clearTimeout(idleTimer);
-    handlers.signal?.removeEventListener('abort', onAbort);
+    handlers.signal?.removeEventListener('abort', onOuterAbort);
   };
 
   const dispatch = (event: string, data: string) => {
@@ -129,7 +154,11 @@ export async function streamSsePost(
       }
       return;
     }
-    if (line.startsWith(':')) return;
+    if (line.startsWith(':')) {
+      // 心跳注释行：不进事件分发，但算传输层活动（喂上层停滞看门狗）
+      handlers.onActivity?.();
+      return;
+    }
     const colonIndex = line.indexOf(':');
     const field = colonIndex === -1 ? line : line.slice(0, colonIndex);
     const value = colonIndex === -1 ? '' : line.slice(colonIndex + 1).replace(/^ /, '');

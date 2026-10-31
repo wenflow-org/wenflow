@@ -4,19 +4,12 @@ import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
 import { executeSkill } from '../../skills';
-import { goalConversationAgentDefinition, type GoalUploadedMaterialSummary } from '../../skills/goal-conversation';
-import { listMaterials } from '../materials/material-store';
-import { collectBriefsWithDeadline } from '../materials/material-brief.service';
-
-/**
- * goal 回合等待资料 brief 就绪的总预算（毫秒）。
- * 到点未就绪的资料降级为 headings 元信息；brief 生成在后台继续落盘，下次对话拾取。
- */
-const GOAL_BRIEF_DEADLINE_MS = 20_000;
+import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
+import { collectGoalUploadedMaterialSummaries } from './goal-material-summaries.service';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 import { normalizeDeadlineDate } from './deadline-date';
-import { derivePlannedOutline, type LearnerLoadProfile } from './path-planning-hints';
+import { derivePlannedOutline, deriveTriageHint, type LearnerLoadProfile, type TriageHint } from './path-planning-hints';
 import {
   normalizeLearnerLoadProfile,
   resolveLearnerLoadProfileFromCollectedData,
@@ -32,6 +25,7 @@ import {
   RESPONSE_TRIAGE_PENDING_KEY,
   RESPONSE_TRIAGE_SETTING_KEY,
   buildTriageAdvisoryLine,
+  isHardBlockResponseTriage,
   normalizeResponseTriageEnforcementMode,
   resolveResponseTriageFromCollectedData,
   triageGoalResponse,
@@ -39,7 +33,9 @@ import {
   type ResponseTriageEnforcementMode,
 } from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
+import { buildCompletedConversationResult, buildHardBlockResult } from './goal-conversation.exit';
 import learningService from './learning.service';
+import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
 
@@ -106,7 +102,8 @@ function buildGoalNormalizedState(data: any): GoalNormalizedStateV1 {
     constraints: {
       availableTime: typeof understanding?.background?.available_time === 'string' ? understanding.background.available_time : null,
       deadlineText: typeof understanding?.deadline_text === 'string' ? understanding.deadline_text : null,
-      deadlineDate: normalizeDeadlineDate(understanding?.deadline_date),
+      deadlineDate: normalizeDeadlineDate(understanding?.deadline_date)
+        ?? normalizeDeadlineDate(understanding?.time_dimensions?.deadlineDate),
     },
     successCriteria: {
       observableResult: typeof understanding?.success_criteria?.observable_result === 'string'
@@ -441,6 +438,26 @@ class GoalConversationService {
   }
 
   /**
+   * 死路修复的依赖注入（2026-10-29 抽取，见 goal-conversation-rejudge.ts）：补充说明重判流程与
+   * 确认共用段被抽到独立模块，本服务用到的私有方法以回调（.bind(this)）注入，避免模块反向依赖。
+   */
+  private rejudgeDeps(): GoalConversationRejudgeDeps {
+    return {
+      createGeneratingPlaceholderPath: this.createGeneratingPlaceholderPath.bind(this),
+      updateConversationLifecycle: this.updateConversationLifecycle.bind(this),
+      buildGoalPathRequest: this.buildGoalPathRequest.bind(this),
+      callAI: this.callAI.bind(this),
+      withConversationId: this.withConversationId.bind(this),
+      getStructuredOutputValid: this.getStructuredOutputValid.bind(this),
+      throwStructuredOutputInvalid: this.throwStructuredOutputInvalid.bind(this),
+      saveMessage: this.saveMessage.bind(this),
+      getGoalExt: this.getGoalExt.bind(this),
+      updateCollectedData: this.updateCollectedData.bind(this),
+      buildConfirmedResult: this.buildConfirmedResult.bind(this),
+    };
+  }
+
+  /**
    * 确认完成后的对外信封（幂等复用 / 并发落败方复用赢家结果时使用）。
    * 注意：路径仍在生成时与已完成时的文案不同。
    */
@@ -599,42 +616,20 @@ async continueConversation(
 
         // 如果已经完成，直接返回
         if (conversation.status === 'completed') {
-          const data = JSON.parse(conversation.collectedData);
-          let learningPath = null;
-          
-          // 查询学习路径状态
-          if (conversation.learningPathId) {
-            const path = await prisma.learning_paths.findFirst({
-              where: { id: conversation.learningPathId }
-            });
-            if (path) {
-              learningPath = {
-                id: path.id,
-                status: path.status
-              };
-            }
+          // 硬阻断终局的补充说明重判（2026-10-29 H-1/H-2、M-10/M-11 修复）：
+          // 存档分诊为硬阻断且尚未绑定路径的 completed 会话，/reply 的新消息不再 0 秒重放旧文案，
+          // 而是追加进对话并对「原目标 + 补充说明」重新分诊，解除硬阻断则按确认链路生成路径。
+          // 其余形态（已绑路径 / 非硬阻断终局）保持原行为，不回归。
+          if (!conversation.learningPathId) {
+            const rejudged = await rejudgeHardBlockedCompletion(this.rejudgeDeps(), conversation, userReply, userId, options);
+            if (rejudged) return rejudged;
           }
-          
-          return {
-            userVisible: '学习路径已经生成，可以去查看啦！',
-            internal: {
-              core: {
-                conversationId,
-                stage: 'completed',
-                confidence: data.confidence || 0,
-                isCompleted: true,
-                learningPath
-              },
-              ext: {
-                goalConversation: {
-                  understanding: data.understanding || {},
-                  nextQuestions: [],
-                  quickReplies: [],
-                  collected: data.collected || {}
-                }
-              }
-            }
-          };
+          return buildCompletedConversationResult({
+            conversationId,
+            collectedData: conversation.collectedData,
+            learningPathId: conversation.learningPathId,
+            findPath: (id) => prisma.learning_paths.findFirst({ where: { id } }),
+          });
         }
 
         // 确认双通道（2026-09-27 绕圈缺陷修复）：①UI 显式标志（首选，优先级不变）；
@@ -689,6 +684,32 @@ async continueConversation(
           const triageMode = await this.resolveResponseTriageEnforcementMode();
           const storedTriage = resolveResponseTriageFromCollectedData(data);
           const triagePending = (data as Record<string, unknown>)[RESPONSE_TRIAGE_PENDING_KEY];
+
+          // ── 硬阻断（2026-10-28 R4 外部评审 P0）：referral / emotional_support /
+          //    not_judgeable×physical_internalized 三类结论，不依赖 advisory/gated、也不允许
+          //    「再次确认」放行。否则 F96/F97 会在分诊判 referral 后仍生成 5.3h/26.4h 路径。
+          const hardBlockTriage = storedTriage ?? triageGoalResponse(understanding);
+          if (isHardBlockResponseTriage(hardBlockTriage, understanding)) {
+            await this.updateConversationLifecycle(conversationId, 'completed', {
+              status: 'completed',
+              appendMessage: { role: 'user', content: userReply },
+              mutateCollectedData: (currentData) => {
+                currentData[RESPONSE_TRIAGE_KEY] = hardBlockTriage;
+                delete currentData[RESPONSE_TRIAGE_PENDING_KEY];
+              },
+            });
+            logger.info('[goal-conversation] 分诊硬阻断：不生成学习路径', {
+              conversationId,
+              mode: hardBlockTriage.mode,
+              confidence: hardBlockTriage.confidence,
+              platformJudgment: (understanding as any)?.platform_judgment ?? (understanding as any)?.platformJudgment ?? null,
+            });
+            return buildHardBlockResult(
+              { conversationId, understanding, confidence: data.confidence || 0, collected: data.collected || {} },
+              hardBlockTriage
+            );
+          }
+
           if (triageMode === 'gated'
             && storedTriage
             && storedTriage.mode !== 'learning_path'
@@ -733,39 +754,14 @@ async continueConversation(
           }
 
           try {
-            const seedResult = {
-              userVisible: '',
-              internal: {
-                core: {
-                  stage: 'ready',
-                  confidence: data.confidence || 0.9,
-                  isCompleted: true
-                },
-                ext: {
-                  goalConversation: {
-                    understanding,
-                    nextQuestions: [],
-                    collected: data.collected || {}
-                  }
-                }
-              }
-            };
-
-            const placeholderPath = await this.createGeneratingPlaceholderPath(conversation, seedResult);
-            const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
-
-            // 原子确认（审计 §1.4）：以 revision 条件把「确认权 + 占位路径」一次性绑定。
-            // 并发/重试的落败方 CAS 失配：不写库、不推进对话，并作废自己刚建的占位路径。
-            const confirmed = await this.updateConversationLifecycle(conversationId, 'completed', {
-              status: 'completed',
-              completedAt: new Date(),
-              learningPathId: placeholderPath.id,
-              learningPath: { id: placeholderPath.id, status: 'generating' },
+            const { bound, placeholderPath, runId, seedResult } = await bindGeneratingPath(this.rejudgeDeps(), {
+              conversation,
+              data,
               appendMessage: { role: 'user', content: userReply },
               expectedRevision: conversation.revision,
               // 同意计量落库（拍板 #2，2026-10-08）：flag=按钮通道 / text=自然语言确认；
               // 计数口径 SELECT json_extract(collectedData,'$.lastConfirmation.channel'), COUNT(*)
-              mutateCollectedData: (currentData) => {
+              onBound: (currentData) => {
                 this.recordConfirmationMetering(
                   currentData,
                   options?.confirmProposal === true ? 'flag' : 'text',
@@ -775,7 +771,7 @@ async continueConversation(
               }
             });
 
-            if (!confirmed) {
+            if (!bound) {
               // 落败方：标记占位路径 failed（不会被生成恢复/自动重试），并复用赢家已绑定的路径
               await learningService
                 .markActiveGenerationFailed(placeholderPath.id, new Error('并发确认，本条占位路径作废'), runId)
@@ -783,23 +779,13 @@ async continueConversation(
               return this.resolveConcurrentConfirmation(conversationId, data);
             }
 
-            pathOrchestrator.runGoalAsync(
-              {
-                ...await this.buildGoalPathRequest(conversation, seedResult, placeholderPath.id, options?.systemPromptOverrides),
-                generationRunId: runId,
-                createdPlaceholder: true
-              },
-              {
-                onSuccess: () => {
-                  logger.info('硬规则触发：异步学习路径生成成功', { conversationId, pathId: placeholderPath.id });
-                },
-                onError: async (pathError) => {
-                  logger.error('硬规则触发：异步学习路径生成失败', { conversationId, pathId: placeholderPath.id, error: String(pathError) });
-                  await learningService.markActiveGenerationFailed(placeholderPath.id, pathError, runId);
-                }
-              }
-            );
-
+            await kickPathGeneration(this.rejudgeDeps(), {
+              conversation,
+              seedResult,
+              pathId: placeholderPath.id,
+              runId,
+              systemPromptOverrides: options?.systemPromptOverrides
+            });
             return {
               userVisible: '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
               internal: {
@@ -920,51 +906,6 @@ async continueConversation(
   }
 
   /**
-   * goal 阶段的「已上传资料清单」（元信息 + 理解摘要）。
-   * brief（material-brief，Document Summary Index 摘要节点）：惰性生成一次、持久化复用；
-   * 本方法受总等待预算约束——到点未就绪的降级为 headings 元信息（生成在后台继续落盘，下次对话拾取）。
-   * 纯本地读盘 + fail-open：任何异常返回空清单，绝不阻塞对话。
-   */
-  private async collectUploadedMaterialSummaries(userId?: string): Promise<GoalUploadedMaterialSummary[]> {
-    const id = typeof userId === 'string' ? userId.trim() : '';
-    if (!id) return [];
-    try {
-      const records = listMaterials(id).slice(0, 5);
-      const briefs = await collectBriefsWithDeadline(records, GOAL_BRIEF_DEADLINE_MS);
-      return records.map((record, index) => {
-        const brief = briefs[index];
-        return {
-          name: record.name,
-          ext: record.ext,
-          format: record.format,
-          charCount: record.charCount,
-          headingCount: record.structure?.headingCount ?? 0,
-          headings: (record.anchors || [])
-            .map((anchor) => String(anchor?.heading || '').trim())
-            .filter((heading) => heading && heading !== '（无标题）')
-            .slice(0, 6),
-          brief: brief
-            ? {
-                docType: brief.docType,
-                subject: brief.subject,
-                audience: brief.audience,
-                overview: brief.overview,
-                naturalDivisions: brief.naturalDivisions,
-                toc: brief.toc,
-              }
-            : null,
-        };
-      });
-    } catch (error) {
-      logger.warn('[goal-conversation] 读取上传资料清单失败，已跳过（fail-open）', {
-        userId: id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return [];
-    }
-  }
-
-  /**
    * 调用AI生成回复
    */
   private async callAI(
@@ -1011,6 +952,13 @@ async continueConversation(
       }
 
       // 调用专用 GoalConversationAgent
+      const materialSelectionQuery = [
+        (previousUnderstanding as { surface_goal?: string }).surface_goal,
+        (previousUnderstanding as { real_problem?: string }).real_problem,
+        userInput,
+      ]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .join(' ');
       const aiResponse = await executeSkill(goalConversationAgentDefinition, {
         input: userInput,
         userId: userId || 'anonymous',
@@ -1026,7 +974,7 @@ async continueConversation(
         systemPromptOverride: options?.systemPromptOverrides?.goalAgent,
         // 已上传资料清单（元信息 + 理解摘要）：让 goal-agent 知道用户提供了什么、资料讲什么，
         // 避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键
-        uploadedMaterials: await this.collectUploadedMaterialSummaries(userId)
+        uploadedMaterials: await collectGoalUploadedMaterialSummaries(userId, materialSelectionQuery)
       }, {
         // 会话标识进 envelope（与教学链 A6 同模式）：此前只有 SSE 流式路由在 ALS 注入
         // conversationId，非流式路径（API 直连/驱动）恒 null → prompt_call_logs 缺值、
@@ -1265,6 +1213,12 @@ async continueConversation(
     // 响应分诊（纯函数）：透传进 GoalPathRequest.responseTriage（仅类型/透传，不改 path 生成逻辑）。
     const responseTriage = resolveResponseTriageFromCollectedData(data)
       || triageGoalResponse(understanding);
+    // 路径体量分诊（2026-10-29）：把 understanding 的阻塞类型 × 复现性翻译成 Path 层
+    // 真正消费的 `{ transferable, recurrence }`。此前只算 responseTriage（mode 轴），
+    // triage 永不为空但 hints 永远收不到 ⇒「低可迁移 × 一次性」钳制在生产链路空转。
+    const triageHint: TriageHint | null = deriveTriageHint(
+      goalExt.understanding || data.understanding || null,
+    );
     const conversationHistory = Array.isArray(data.messages)
       ? data.messages
           .map((message: any) => ({
@@ -1305,6 +1259,8 @@ async continueConversation(
       ...(goalHandoffFields ? { goalHandoffFields: goalHandoffFields.fields } : {}),
       // goal skill 产出的结构化画像透传（learner.identity/learning_context 等），供 path-planning scenario 判定
       structuredData: (data as any)?.structuredData || null,
+      // goal skill 置信度评分：此前 goal 侧存了但 path 侧恒 null（审计 P2 契约断裂）
+      confidenceScores: goalExt.confidenceScores ?? (data as any)?.confidenceScores ?? null,
       conversationHistory,
       finalUserVisible: aiResponse.userVisible || null,
       // 虚拟学习者负荷画像（会话创建时写入 collectedData）；真实用户缺失 → null，
@@ -1315,6 +1271,9 @@ async continueConversation(
       prerequisiteCheckResults: resolvePrerequisiteCheckResultsFromUnderstanding(understanding),
       // 响应分诊结论（advisory 默认；path 侧仅类型透传，不改变生成逻辑）
       responseTriage,
+      // 体量分诊（transferable × recurrence）：path.coordinator 写进 normalizedInput.triage，
+      // 由 derivePlanningHints 消费；缺失时下游行为与今天完全一致。
+      triageHint,
       systemPromptOverrides: systemPromptOverrides?.pathAgent
         ? { pathAgent: systemPromptOverrides.pathAgent }
         : undefined,

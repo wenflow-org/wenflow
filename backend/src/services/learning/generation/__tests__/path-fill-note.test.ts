@@ -176,7 +176,9 @@ describe('#55 写入链接线（源码守卫）', () => {
 
   it('对账结果写回 aiPromptTemplate.budgetConservation，并记录声明层级', () => {
     expect(source).toContain('reconcileDeliveryConservation({');
-    expect(source).toContain("declaration: pathFillNote ? 'path' : stageFillNoteCount > 0 ? 'stage' : 'none'");
+    // 阶段级声明已于 2026-10-25 下线（stage-fill-note.ts 删除）：只剩路径级 path / none 两档。
+    // 存量行的 stage 档由 delivery-ratio 审计侧识别，生成链路不再产出。
+    expect(source).toContain("declaration: pathFillNote ? 'path' : 'none'");
     expect(source).toContain('budgetConservation: reconciledConservation');
   });
 });

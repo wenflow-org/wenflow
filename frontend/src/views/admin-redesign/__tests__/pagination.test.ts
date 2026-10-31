@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import Pagination from '../Pagination.vue';
+import { chooseMkSelect, mkSelectOptions } from '@/components/mk/__tests__/mkSelect';
 
 function mountPagination(props: Record<string, unknown> = {}) {
   return mount(Pagination, {
@@ -55,7 +56,8 @@ describe('Pagination（mk-pagination 传统分页器）', () => {
 
   it('每页条数选择发出 update:pageSize', async () => {
     const w = mountPagination();
-    await w.find('select').setValue('50');
+    // 2026-10-27：原生 select 换成 MkSelect（自绘 listbox），交互 = 展开 + 点选项
+    await chooseMkSelect(w as never, '每页条数', '50');
     expect(w.emitted('update:pageSize')?.at(-1)).toEqual([50]);
   });
 
@@ -98,7 +100,26 @@ describe('Pagination（mk-pagination 传统分页器）', () => {
 
   it('sizes 可自定义（默认 15/30/50/100）', () => {
     const w = mountPagination();
-    const options = w.findAll('option').map((o) => Number(o.attributes('value')));
+    const options = mkSelectOptions(w as never, '每页条数').map((o) => Number(o.getAttribute('data-value')));
     expect(options).toEqual([15, 30, 50, 100]);
+  });
+
+  it('翻页后表格内滚容器回到顶部（fill 卡内滚不在页面顶部）', async () => {
+    const host = document.createElement('div');
+    host.className = 'mk-card';
+    const scroller = document.createElement('div');
+    scroller.className = 'mk-table-scroll';
+    host.appendChild(scroller);
+    document.body.appendChild(host);
+    const w = mount(Pagination, {
+      props: { page: 1, total: 60, pageSize: 15 },
+      attachTo: scroller
+    });
+    scroller.scrollTop = 40;
+    await w.setProps({ page: 2 });
+    await nextTick();
+    expect(scroller.scrollTop).toBe(0);
+    w.unmount();
+    host.remove();
   });
 });

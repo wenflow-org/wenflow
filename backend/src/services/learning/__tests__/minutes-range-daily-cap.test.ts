@@ -29,9 +29,9 @@ describe('课分钟档上界钳制到结构化日槽位', () => {
     expect(h.subtaskMinutesRange[1]).toBe(60);
   });
 
-  it('无结构化字段时照旧认自由文本（行为不变）', () => {
+  it('无结构化字段时仍认自由文本，但单任务受 90 分钟原子硬顶（R8）', () => {
     const h = hints('每次2小时', null);
-    expect(h.subtaskMinutesRange[1]).toBe(120);
+    expect(h.subtaskMinutesRange[1]).toBe(90);
   });
 
   it('20 分钟早读槽位不被抬升（下限随上界收）', () => {
@@ -40,9 +40,9 @@ describe('课分钟档上界钳制到结构化日槽位', () => {
     expect(h.subtaskMinutesRange[0]).toBeLessThanOrEqual(20);
   });
 
-  it('CPA 型：日槽 120 分钟不变（不误伤大块学习者）', () => {
+  it('CPA 型：日槽 120 分钟仍保留大块学习容量，但单任务封在 90 分钟（R8 原子粒度）', () => {
     const h = hints('每次2小时', { totalWeeks: 52, estimatedHours: 416, sessionsPerWeek: 4, sessionsLengthMin: 120 });
-    expect(h.subtaskMinutesRange[1]).toBe(120);
+    expect(h.subtaskMinutesRange[1]).toBe(90);
   });
 });
 

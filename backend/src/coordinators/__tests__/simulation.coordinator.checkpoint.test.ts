@@ -76,7 +76,8 @@ jest.mock('../../utils/logger', () => ({
 import {
   SimulationOrchestrator,
   resolveCheckpointSubmitAction,
-  normalizeCheckpointSubmitTurn
+  normalizeCheckpointSubmitTurn,
+  buildCheckpointLearnerVisibleMessage
 } from '../simulation.coordinator'
 import { logger } from '../../utils/logger'
 
@@ -211,7 +212,11 @@ describe('SimulationOrchestrator.runTeachingTurn 检查点消费', () => {
     })
 
     expect(mockSubmitCheckpoint).toHaveBeenCalledTimes(1)
-    expect(mockSubmitCheckpoint).toHaveBeenCalledWith('teach-1', 'cp-1', { selectedOptionIds: ['B'] }, 7)
+    // #85 双臂开关（d0b1b799）后 submitCheckpoint 多了第 5 参 turnOptions：
+    // 未显式关护栏时传空对象（护栏照常执行），与聊天回合同口径
+    expect(mockSubmitCheckpoint).toHaveBeenCalledWith(
+      'teach-1', 'cp-1', { selectedOptionIds: ['B'] }, 7, {},
+    )
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
     expect(result).toMatchObject({ aiResponse: '答对了', revision: 42 })
   })
@@ -276,5 +281,41 @@ describe('SimulationOrchestrator.runTeachingTurn 检查点消费', () => {
       '[simulation-coordinator] 提交理解检查点失败，回退到普通教学回合',
       expect.objectContaining({ checkpointId: 'cp-1' })
     )
+  })
+})
+
+describe('buildCheckpointLearnerVisibleMessage（P0-4：历史与提交 payload 对齐）', () => {
+  const checkpoint = {
+    id: 'cp-1',
+    type: 'single_choice' as const,
+    options: [
+      { id: 'A', text: '缩放没生效' },
+      { id: 'B', text: '只是等比压窄' }
+    ]
+  }
+
+  it('模拟器原话没提到所选选项 → 用 payload 反写作答，避免历史与老师批改不一致', () => {
+    expect(buildCheckpointLearnerVisibleMessage(
+      checkpoint,
+      { selectedOptionIds: ['B'] },
+      '我选这个吧'
+    )).toBe('我的答案：B. 只是等比压窄')
+  })
+
+  it('模拟器原话已提到所选选项 → 沿用原话（不重复贴答案）', () => {
+    expect(buildCheckpointLearnerVisibleMessage(
+      checkpoint,
+      { selectedOptionIds: ['B'] },
+      '我选 B，因为只是等比压窄'
+    )).toBe('我选 B，因为只是等比压窄')
+  })
+
+  it('简答题用 answerText 反写；无有效 payload 时退回原话', () => {
+    expect(buildCheckpointLearnerVisibleMessage(
+      { id: 'cp-2', type: 'short_answer' },
+      { answerText: '列宽比例没变' },
+      '嗯……'
+    )).toBe('我的答案：列宽比例没变')
+    expect(buildCheckpointLearnerVisibleMessage(checkpoint, null, '原话')).toBe('原话')
   })
 })

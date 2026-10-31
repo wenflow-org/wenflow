@@ -7,7 +7,7 @@
       <transition name="toast">
         <div v-if="goalBanner && hasGenerating" class="goal-banner">
           <span class="goal-banner__dot"></span>
-          这版路径正在生成，通常几分钟；模型重试时会更久。页面会自动刷新，也可以先离开。
+          这版路径正在生成，通常几分钟。页面会自动刷新，也可以先离开。
           <button type="button" class="goal-banner__close" @click="goalBanner = false">×</button>
         </div>
       </transition>
@@ -69,10 +69,9 @@
           </label>
           <label class="paths__sort">
             <span class="paths__sort-label">排序</span>
-            <select v-model="sort" aria-label="排序方式">
-              <option value="default">默认</option>
-              <option value="progress">按进度</option>
-            </select>
+            <div class="paths__sort-select">
+              <MkSelect v-model="sort" :options="SORT_OPTIONS" aria-label="排序方式" block />
+            </div>
           </label>
         </div>
 
@@ -238,6 +237,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
+import MkSelect from '@/components/mk/MkSelect.vue';
 
 type CardKind = 'ready' | 'generating' | 'failed' | 'completed';
 
@@ -279,7 +279,12 @@ const filter = ref<FilterKey>(
 );
 /* 搜索（q 入 URL，与 filter 同口径：返回/刷新不丢）与排序（运行态，不入 URL） */
 const search = ref(typeof route.query.q === 'string' ? route.query.q : '');
-const sort = ref<'default' | 'progress'>('default');
+type PathSortKey = 'default' | 'progress';
+const SORT_OPTIONS: ReadonlyArray<{ value: PathSortKey; label: string }> = [
+  { value: 'default', label: '默认' },
+  { value: 'progress', label: '按进度' }
+];
+const sort = ref<PathSortKey>('default');
 const retrying = ref('');
 const menuFor = ref('');
 const deleting = ref('');
@@ -295,7 +300,7 @@ const deleteBusy = ref(false);
     2026-10-08 走查 #15：这两处原先各写一份，轮询一跑就把「主结构生成中，一般 1-2 分钟内完成…」
     换成「主结构生成中…」，那句用户最需要的时长承诺整段消失（手机档实测只剩短句，
     且本屏 docH=视口高、没有滚动可达的后半段）。抽成一处后不可能再各自漂移。 */
-const CORE_PHASE_TEXT = '路径生成中，通常几分钟；模型重试时会更久，完成后会出现在这里…';
+const CORE_PHASE_TEXT = '路径生成中，通常几分钟，完成后会出现在这里…';
 function phaseTextOf(lc: { phase?: string | null; completedStages?: number | null; totalStages?: number | null }) {
   if (lc.phase === 'core') return CORE_PHASE_TEXT;
   // 阶段数已满但整体未 ready：这是「任务正在写入」而不是 100% 卡死（#112）
@@ -667,11 +672,8 @@ onBeforeUnmount(() => {
 .paths__search-clear { border: 0; background: none; padding: 4px; font-size: 15px; color: var(--faint); cursor: pointer; line-height: 1; }
 .paths__search-clear:hover { color: var(--ink); }
 .paths__sort { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-.paths__sort select {
-  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
-  min-height: 36px; padding: 7px 14px; border-radius: var(--mk-radius-pill);
-  border: 1px solid var(--line); background: var(--surface); cursor: pointer;
-}
+/* 包裹层只定位，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉） */
+.paths__sort-select { flex: 0 0 auto; }
 /* wrapper 沉底：AI 提示与页脚一起贴近底部 */
 .paths__foot { margin-top: auto; }
 .paths__ai-note {
@@ -845,7 +847,6 @@ onBeforeUnmount(() => {
   /* 触诊下限（mobile:spec lt44 只紧不松）：搜索框/排序在 375 抬到 44px */
   .paths__search { min-height: 44px; }
   .paths__search input { min-height: 44px; }
-  .paths__sort select { min-height: 44px; }
   .cards { grid-template-columns: 1fr; }
   /* ⋯ 触发器桌面档已是 36×36（见基座规则），窄屏只在 36 的盒上再外扩热区到 50+：
      它贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */

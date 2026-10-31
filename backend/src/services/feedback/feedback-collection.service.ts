@@ -2,7 +2,8 @@ import { randomUUID } from 'crypto';
 import prisma from '../../config/database';
 import { loadTeachingMessages } from '../ai-teaching/teaching-session-message-store';
 import { logger } from '../../utils/logger';
-import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
+import { buildRealUserWhere, buildTestUserWhere, buildNonVirtualUserWhere } from '../../utils/test-account';
+import { dayKeyOf } from '../time/day-boundary';
 
 export type FeedbackStatus = 'new' | 'triaged' | 'resolved' | 'dismissed';
 export type DifficultyFit = 'too_easy' | 'appropriate' | 'too_hard';
@@ -294,10 +295,9 @@ export class FeedbackCollectionService {
     status?: FeedbackStatus;
     userId?: string;
     taskId?: string;
-    /** 用户域视角（2026-10-10「真实/测试」互斥拍板，2026-10-15 运营待办接入）：
-     *  默认真实（与 learning-content 同判例）；testOnly=true 只看虚拟学习者与测试账号 */
+    /** includeTest=true：按 id 直查虚拟账号（逃生口），不是页面视角；
+     *  默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注） */
     includeTest?: boolean;
-    testOnly?: boolean;
   }) {
     const where: Record<string, any> = {
       ...(input.maxRating ? { rating: { lte: input.maxRating } } : {}),
@@ -305,10 +305,9 @@ export class FeedbackCollectionService {
       ...(input.userId ? { userId: input.userId } : {}),
       ...(input.taskId ? { subtaskId: input.taskId } : {})
     };
-    // 显式 userId 查询（详情定位）不套用户域视角，避免自我矛盾
-    if (!input.userId) {
-      if (input.testOnly) where.users = await buildTestUserWhere();
-      else if (!input.includeTest) where.users = await buildRealUserWhere();
+    // 显式 userId 查询（详情定位）不套用户域口径，避免自我矛盾
+    if (!input.userId && !input.includeTest) {
+      where.users = await buildNonVirtualUserWhere();
     }
     const [items, total] = await Promise.all([
       prisma.content_feedback.findMany({
@@ -433,7 +432,7 @@ export class FeedbackCollectionService {
     const byDay = new Map<string, { sum: number; count: number }>();
 
     for (const feedback of feedbacks) {
-      const day = feedback.createdAt.toISOString().split('T')[0];
+      const day = dayKeyOf(feedback.createdAt);
       const current = byDay.get(day) || { sum: 0, count: 0 };
       current.sum += feedback.rating;
       current.count += 1;

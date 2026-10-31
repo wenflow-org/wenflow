@@ -12,6 +12,7 @@ import { createHash, randomUUID } from 'crypto';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { executeSkill, sessionWrapupAgentDefinition } from '../../skills';
+import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
 import type { ReviewPlan } from '../memory/review-plan.service';
 import { createDomainEvent } from '../../events/contracts';
@@ -19,14 +20,15 @@ import { enqueueDomainEvent } from '../../events/outbox.repository';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { classifyFinalizationError } from './FinalizationErrors';
-import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
+import { hasReliableSessionEvaluation, getSessionFinalizationState, mergeFinalTeachingState } from './SessionFinalizationPolicy';
 import { getPendingCheckpoint, recordCheckpointAttemptEvidence } from './teaching-checkpoint';
+import { appendClosureFollowUp, buildClosureAudit } from './teaching-closure';
 import {
   aggregateSessionEvaluationFromMessages,
   buildSessionEvaluationShadow,
 } from '../learning/session-evaluation-aggregate';
 import { isCalibratableDirection, replanAttributionService, type ReplanAttributionEvidence } from './ReplanAttributionService';
-import { replanAdvisoryService, toAttributionRecall, NO_ADVISORY, type ReplanAdvisory } from './ReplanAdvisoryService';
+import { replanAdvisoryService, shouldBuildReplanAdvisory, toAttributionRecall, NO_ADVISORY, type ReplanAdvisory } from './ReplanAdvisoryService';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { teachingSessionRepository, TeachingSessionConflictError, type TeachingSessionRecord, type TeachingSessionMessage } from './TeachingSessionRepository';
 import { runWithTeachingSession } from './teaching-session-context';
@@ -75,6 +77,7 @@ import { memoryTraceService } from '../memory/memory-trace.service';
 import { reviewQuotaService } from '../memory/review-quota.service';
 import { reviewPlanService } from '../memory/review-plan.service';
 import { dashboardGuidanceSnapshotService } from '../learner/DashboardGuidanceSnapshotService';
+import { runBackgroundTask } from '../background-task-tracker.service';
 import type {
   SessionOpeningScene,
   SessionResumeMode,
@@ -738,7 +741,10 @@ export async function endSession(
 
   const userMessageCount = session.messages.filter((message) => message.role === 'user').length;
   let wrapupOutput: any = null;
+  // M1 兜底原因：用于 summary-only 降级打标（允许降级，不允许未打标的降级）。
+  let wrapupFallbackReason: string | null = null;
   if (userMessageCount < 2) {
+    wrapupFallbackReason = `insufficient-user-messages:${userMessageCount}`;
     // 零证据门（2026-10-03 完结课堂裸审计）：学员消息 0-1 条的会话禁止调 LLM 写总结——
     // 实测 0 学员消息的会话被写成带主题词与量化结论的完整总结（编造），提示词零证据分支压不住，
     // 改为代码确定性兜底（summary-only），并保持收束流程照常继续。
@@ -819,6 +825,7 @@ export async function endSession(
         wrapupOutput = await runWrapupAttempt(240_000);
       }
   } catch (error) {
+    wrapupFallbackReason = degradationCause(error);
     logger.warn('[AITeaching] 课后产出生成异常，改用 summary-only 兜底继续收束', {
       sessionId,
       error: error instanceof Error ? error.message : String(error),
@@ -830,6 +837,16 @@ export async function endSession(
   // 用 summary-only 对象顶替，保证收束流程继续，避免整次收束失败为 finalization_failed。
   const endWrapupFallback = buildEndWrapupFallback(session, durationMinutes);
   const sessionWrapupExt = wrapupOutput?.internal?.ext?.sessionWrapup;
+  if (!sessionWrapupExt) {
+    recordDegradation({
+      source: 'ai-teaching/teaching-session-lifecycle',
+      faultCategory: 'UPSTREAM_EMPTY',
+      severity: 'P2_DEGRADED',
+      impactedDimensions: ['wrapup.summary', 'wrapup.evaluation'],
+      mitigationApplied: 'summary-only-fallback',
+      rootCauseMessage: wrapupFallbackReason || 'sessionWrapup missing from skill output',
+    });
+  }
   const wrapupResult = sessionWrapupExt?.result || endWrapupFallback.result;
   const wrapupArtifact = sessionWrapupExt?.artifact || endWrapupFallback.artifact;
   const wrapupRuntimeEnvelope = wrapupOutput?.runtimeEnvelope
@@ -903,13 +920,27 @@ export async function endSession(
       avgCognitiveLevel: lastAnalyzedMessage?.analysis?.cognitiveLevel || 'understand',
       duration: durationMinutes,
     };
+    // 收口审计（2026-10-24）：end_only/复习课可以带着未答问题收束，但必须把「待验证」写进
+    // wrapup，避免把「会话结束」读成「任务完成/学员已掌握」。不改变任何收束判定。
+    const closureAudit = buildClosureAudit({
+      messages: session.messages,
+      teachingState: session.teachingState,
+      endReason: sessionArtifacts.endReason || endReason,
+    });
+    const finalizationAction = getSessionFinalizationState(session.teachingState)?.lastAction ?? null;
     const persistedWrapup = {
       ...wrapupArtifact,
+      summary: closureAudit.openQuestion
+        ? appendClosureFollowUp(wrapupArtifact.summary, closureAudit)
+        : wrapupArtifact.summary,
       duration: durationMinutes,
       stateUpdate: finalState,
       summarySource: wrapupResult.summarySource,
       evaluationSource: wrapupResult.evaluationSource,
       runtimeEnvelope: wrapupRuntimeEnvelope,
+      // 收口事实（离线评审/前端据此区分「诚实收口」与「假完成」）
+      finalizationAction,
+      ...(closureAudit.openQuestion ? { closureAudit } : {}),
       // 影子双写：确定性聚合 vs LLM，仅供比对，不被任何消费方读取
       shadowDeterministic,
       // 延伸学一期（#124）：只观测——延伸段学了什么、有多重（负荷/回合），
@@ -953,7 +984,8 @@ export async function endSession(
     const nextMilestone = currentPath?.milestoneProgress.find((item) => item.stageNumber === currentStageNumber + 1) || null;
     // 延伸学一期（#124）：只观测，不产生路径调整建议——延伸课不是任务完成课，
     // 其信号也不该在样本积累前推动重排（2026-10-19 拍板「先不进入，先观测」）。
-    const thresholdAdvisory = session.mode === 'extension'
+    // 复习课同理（2026-10-21）：看板是跨路径到期点，建议却会挂到借用的那条路径上，对象错配。
+    const thresholdAdvisory = !shouldBuildReplanAdvisory(session.mode)
       ? NO_ADVISORY
       : replanAdvisoryService.build({
       wrapup: persistedWrapup,
@@ -1062,15 +1094,6 @@ export async function endSession(
       }
     });
 
-    // 非正常终态：session_load 也是 learning_metrics 正式轨，弃跑课不写（改调用点，不动 views 侧签名）。
-    if (!abnormalClosure) {
-      await commitSessionLoadMetric(session).catch((error) => {
-        logger.warn('[AITeaching] session_load 指标写入失败（不影响收束）', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    }
 
     // 误解结算（G-R-R 三态补全，2026-09-26）：本课已展示掌握的概念上的活跃误解 → addressed。
     // 此前全仓无人写 addressed/resolvedAt——活跃误解只增不减，被持续注入后续课堂并压低 FSRS 稳定性。
@@ -1126,6 +1149,18 @@ export async function endSession(
       throw error;
     }
 
+    // 非正常终态：session_load 也是 learning_metrics 正式轨，弃跑课不写。
+    // 2026-10-22 审计 P2：放到 completeWithEvent 成功之后——此前先写指标再收束，
+    // 事务失败会留下「未完结课已有正式轨读数」。
+    if (!abnormalClosure) {
+      await commitSessionLoadMetric(session).catch((error) => {
+        logger.warn('[AITeaching] session_load 指标写入失败（不影响收束）', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+
     // H1 失败留痕：收尾成功且检查点仍未作答 → 落一条 checkpoint:attempt（unresolved）。只留痕、不改写。
     // 非正常终态：该留痕写 learner_evidence，弃跑课不写。
     if (pendingCheckpointAtClose && !abnormalClosure) {
@@ -1177,23 +1212,20 @@ export async function endSession(
       pathId: session.learningPathId ?? undefined,
       completedTaskId: session.taskId ?? undefined,
     }));
-    // 多故事续章（2026-10-11 人物立体化接线）：本节真课完课 → 为当前故事生成下一章，让虚拟学习者
-    // 的叙事宇宙随学习生长（诊断：storyPool 只在创建期注水 → 91/98 单故事 → 人物扁平）。
-    // always best-effort：动态 import 避环依赖 + 彻底吞错，绝不阻断课堂收尾；非虚拟学习者/无可靠
-    // wrapup 由钩子内部静默跳过（见 story-chapter.service.ts onTeachingSessionCompleted）。
+    // 多故事续章（2026-10-11 人物立体化接线）：本节真课完课 → 为当前故事生成下一章；best-effort：
+    // 动态 import 避环依赖，非虚拟学习者/无可靠 wrapup 由钩子内部静默跳过（story-chapter.service）。
+    // M-18：续章是课后即发即忘语义，必须经 runBackgroundTask 剥离请求级 abortSignal——acp-context
+    // 把 res('close') 接到 abort，HTTP 响应一结束还在跑的 scenario-designer LLM 调用就被连带取消
+    // （CALLER_ABORTED，周窗 188 条）；上方 aux 刷新链已由各服务内部 runBackgroundTask 兜底。
     const wrapupReliable = (finalWrapup as any)?.summarySource === 'model';
-    void import('../virtual-lab/story-chapter.service')
-      .then((m) => m.onTeachingSessionCompleted({
+    runBackgroundTask('story-chapter.on-session-completed', async () => {
+      const m = await import('../virtual-lab/story-chapter.service');
+      await m.onTeachingSessionCompleted({
         userId: session.userId,
         learningPathId: session.learningPathId ?? null,
         wrapupReliable,
-      }))
-      .catch((error) => {
-        logger.warn('[AITeaching] 故事续章生长失败', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
       });
+    }, { userId: session.userId, sessionId });
     return {
       status: 'completed',
       operationId,

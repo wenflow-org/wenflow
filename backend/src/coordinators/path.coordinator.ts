@@ -5,16 +5,20 @@ import {
   runBackgroundTask
 } from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
-import { buildFramedNormalizedInput, type LearnerLoadProfile } from '../services/learning/path-planning-hints';
+import { buildFramedNormalizedInput, type LearnerLoadProfile, type TriageHint } from '../services/learning/path-planning-hints';
 import {
   buildUploadedMaterialPacks,
   buildUploadedMaterialPacksAsync,
   buildPackFromMaterial,
   buildPackFromMaterialAsync,
+  MAX_UPLOAD_MATERIAL_PACKS,
 } from '../services/materials/material-pack.builder';
-import { listMaterials, readMaterial } from '../services/materials/material-store';
+import { readMaterial, type MaterialRecord } from '../services/materials/material-store';
+import { materialRecordHasPhraseHit, selectMaterialsRanked } from '../services/materials/material-selection.service';
+import { applyMaterialRerankGate } from '../services/materials/material-rerank.service';
+import { partitionMaterialNeeds } from '../services/materials/material-need-origin';
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
-import { patchPathsWithAsyncMaterials } from '../services/materials/material-async-collect.service';
+import { patchPathsWithAsyncMaterials, type AsyncMaterialPatch } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
 import type { ResponseTriage } from '../services/learning/response-triage';
 import {
@@ -22,7 +26,7 @@ import {
   type PathAgentInputConfig
 } from '../services/agentConfig.service';
 import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
-import { normalizeSchoolAnchorShape } from '../services/learning/goal-path-visible-summary';
+import { normalizeSchoolAnchorShape, normalizeSkillNature, normalizePlatformJudgment } from '../services/learning/goal-path-visible-summary';
 import { normalizeDeadlineDate } from '../services/learning/deadline-date';
 import { isDeadlineExplicitlyUnspecified, deriveRelativeDeadline, parseAbsoluteDeadline } from '../services/learning/deadline-text';
 import { resolveCapacity } from '../services/learning/capacity-authority';
@@ -57,15 +61,17 @@ function isSemanticMaterialPackEnabled(): boolean {
  */
 function resolveMaterialCollectionTimeoutMs(): number {
   const raw = Number(process.env.MATERIAL_COLLECTION_TIMEOUT_MS);
-  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 120_000);
-  return 90_000;
+  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 180_000);
+  // 2026-10-28 R4 外部评审：c20 下 90s 有 34/77 次采集超时；用户已接受路径生成变慢，
+  // 同步注入把默认预算提到 150s（仍为 fail-open，超时后路径照常生成）。
+  return 150_000;
 }
 
 /** 单次生成最多采集几条 need（防批量/恶意大量声明拖慢 path 生成）。 */
 const MATERIAL_COLLECTION_MAX_NEEDS = 3;
 
-/** 后台采集预算（活的 path 批次 B）：脱离 20s 关键路径后放宽——实测书籍类场景 20s 不够。 */
-const MATERIAL_COLLECT_ASYNC_BUDGET_MS = 90_000;
+/** 后台采集预算（活的 path 批次 B）：与同步预算同档，脱离关键路径后仍保留 fail-open。 */
+const MATERIAL_COLLECT_ASYNC_BUDGET_MS = 150_000;
 /** 占位 marker（与 material-async-collect.service 的 prefix 必须一致；回填按 marker 原位替换）。 */
 const ASYNC_COLLECT_MARKER = '__async_collect__';
 
@@ -174,12 +180,24 @@ interface NormalizedPathInputV1 {
     outOfScope: string[];
     scopeSize: string | null;
   };
-  /** LLM 推断的时间维度数值（goal 层 time_dimensions 透传，供 planningHints maxWeeks 推导） */
+  /** 时间模型（R8）：三权威字段 + legacy 诊断字段 */
   timeDimensions?: {
     totalWeeks?: number | null;
     estimatedHours?: number | null;
     sessionsPerWeek?: number | null;
     sessionsLengthMin?: number | null;
+    /** R8：兼容单数拼写 */
+    sessionLengthMin?: number | null;
+    totalSessions?: number | null;
+    calendarCapacityHours?: number | null;
+    /** legacy 内容体量锚（仅兼容/诊断） */
+    scopeAnchorHours?: number | null;
+    /** R8 权威：客观内容体量小时 */
+    objectiveScopeHours?: number | null;
+    /** R8 权威：外部截止绝对日期（YYYY-MM-DD；无期限为 null） */
+    deadlineDate?: string | null;
+    /** R8 形状标记：2=新时间模型 */
+    timeModelVersion?: number | null;
   } | null;
   /** 前置知识探测结果（goal 层透传，path-planning 读入 prerequisiteTree.knownConcepts） */
   prerequisiteCheckResults?: PrerequisiteCheckResult[];
@@ -196,6 +214,11 @@ interface NormalizedPathInputV1 {
    * 由 `derivePlanningHints` 消费以收紧紧预算/低耐受者的里程碑数、单任务分钟与周期。
    */
   learnerLoadProfile?: LearnerLoadProfile | null;
+  /**
+   * 体量分诊（`transferable × recurrence`）：由 Goal 层 understanding 确定性派生。
+   * `buildFramedNormalizedInput` 原样透传并交给 `derivePlanningHints` 收紧体量上界。
+   */
+  triage?: TriageHint | null;
 }
 
 export interface GoalPathRequest {
@@ -225,6 +248,13 @@ export interface GoalPathRequest {
    * 缺失（真实用户/旧会话）⇒ undefined，生成行为与今天完全一致。
    */
   responseTriage?: ResponseTriage | null;
+  /**
+   * 路径体量分诊（goal 层 understanding → `{ transferable, recurrence }`）：
+   * 写进 normalizedInput.triage，由 derivePlanningHints 消费。缺失时不注入、行为不变。
+   */
+  triageHint?: TriageHint | null;
+  /** goal 层置信度评分（goal-conversation skill 产出；仅透传，供 path-planning 参考） */
+  confidenceScores?: any;
   systemPromptOverrides?: {
     pathAgent?: string;
   };
@@ -284,6 +314,36 @@ class PathCoordinator {
   }
 
   /**
+   * R8：timeDimensions 白名单归一化 + 来源合并。
+   * 此前只取 visibleSummary，handoff 的 understanding.time_dimensions 被静默丢弃；
+   * R8 的 objectiveScopeHours/deadlineDate 必须从两条来源都能到 path 层。
+   */
+  private normalizeTimeDimensionsForV1(
+    raw: any,
+    fallbackDeadlineDate: string | null = null,
+  ): NormalizedPathInputV1['timeDimensions'] {
+    if (!raw || typeof raw !== 'object') {
+      // 即使没有 time_dimensions，也允许 deadline 从 understanding.deadline_date 单向下沉。
+      return fallbackDeadlineDate ? { deadlineDate: fallbackDeadlineDate } : null;
+    }
+    const num = (v: any): number | null =>
+      Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null;
+    const td = {
+      totalWeeks: num(raw.totalWeeks),
+      estimatedHours: num(raw.estimatedHours),
+      sessionsPerWeek: num(raw.sessionsPerWeek),
+      sessionsLengthMin: num(raw.sessionsLengthMin) ?? num(raw.sessionLengthMin),
+      totalSessions: num(raw.totalSessions),
+      calendarCapacityHours: num(raw.calendarCapacityHours),
+      scopeAnchorHours: num(raw.scopeAnchorHours),
+      objectiveScopeHours: num(raw.objectiveScopeHours),
+      deadlineDate: normalizeDeadlineDate(raw.deadlineDate) ?? fallbackDeadlineDate,
+      timeModelVersion: num(raw.timeModelVersion),
+    };
+    return Object.values(td).some((v) => v !== null) ? td : null;
+  }
+
+  /**
    * normalizedInputV1 配置式装配（P1/P2 golden 验证后的正式切换）：
    * goal-agent 交付字段（goalHandoffFields，来自 routings 表声明）优先，
    * visibleSummary 确定性投影回退；派生字段（timeBudgetCadence/timePerWeek/
@@ -293,7 +353,8 @@ class PathCoordinator {
     handoffFields: Record<string, any> | null,
     visibleSummary: GoalPathVisibleSummary | null | undefined,
     rawGoal: string | null | undefined,
-    learnerLoadProfile: LearnerLoadProfile | null = null
+    learnerLoadProfile: LearnerLoadProfile | null = null,
+    triageHint: TriageHint | null = null
   ): NormalizedPathInputV1 {
     const pick = (handoffKey: string): any => {
       const value = handoffFields?.[handoffKey];
@@ -321,6 +382,36 @@ class PathCoordinator {
       learnerProfile: {
         surfaceGoal: str('understanding.surface_goal', visibleSummary?.surfaceGoal)
           || this.normalizeString(rawGoal),
+        // 技能性质（2026-10-26）：决定 AI 能否替学习者代跑核心动作。无值时整键不出现，
+        // 下游按通用口径处理（不强制任何一档）。
+        ...(normalizeSkillNature(pick('understanding.skill_nature') ?? visibleSummary?.skillNature)
+          ? {
+              skillNature: normalizeSkillNature(pick('understanding.skill_nature') ?? visibleSummary?.skillNature)!,
+              skillNatureEvidence: this.normalizeString(
+                str('understanding.skill_nature_evidence', visibleSummary?.skillNatureEvidence),
+              ) || null,
+            }
+          : {}),
+        // 平台可判定性（2026-10-26 二拆）：与 skillNature 独立——决定「平台能不能判学习者做对了」。
+        // not_judgeable 时 stage 层只能给「训练计划 + 复盘归因」，不得编自查卡假装可判定。
+        ...(normalizePlatformJudgment(pick('understanding.platform_judgment') ?? visibleSummary?.platformJudgment)
+          ? {
+              platformJudgment: normalizePlatformJudgment(
+                pick('understanding.platform_judgment') ?? visibleSummary?.platformJudgment,
+              )!,
+              platformJudgmentEvidence: this.normalizeString(
+                str('understanding.platform_judgment_evidence', visibleSummary?.platformJudgmentEvidence),
+              ) || null,
+              ...(Array.isArray(pick('understanding.sensor_readouts') ?? visibleSummary?.sensorReadouts)
+                ? {
+                    sensorReadouts: (pick('understanding.sensor_readouts') ?? visibleSummary?.sensorReadouts as unknown[])
+                      .map((v: unknown) => this.normalizeString(v))
+                      .filter((v: string | null): v is string => !!v)
+                      .slice(0, 8),
+                  }
+                : {}),
+            }
+          : {}),
         currentBaseline: {
           level: str('understanding.current_baseline.level', visibleSummary?.currentBaseline?.level),
           evidence: str('understanding.current_baseline.evidence', visibleSummary?.currentBaseline?.evidence),
@@ -345,8 +436,13 @@ class PathCoordinator {
         timePerSession: str('understanding.available_resources.time_per_session', visibleSummary?.resources?.timePerSession),
         timeHorizon: str('understanding.available_resources.time_horizon', visibleSummary?.resources?.timeHorizon),
         deadlineText: str('understanding.deadline_text', visibleSummary?.resources?.deadlineText),
-        // P0.1 绝对日期：模型解析的 deadline_date 优先（handoff 配置式抽取在前，兜底 visibleSummary）
-        deadlineDate: normalizeDeadlineDate(pick('understanding.deadline_date') ?? visibleSummary?.resources?.deadlineDate),
+        // P0.1 + R8 绝对日期：understanding.deadline_date 优先，其次 visibleSummary，
+        // 再次 time_dimensions.deadlineDate（镜像，双保险）。
+        deadlineDate: normalizeDeadlineDate(
+          pick('understanding.deadline_date')
+            ?? visibleSummary?.resources?.deadlineDate
+            ?? visibleSummary?.timeDimensions?.deadlineDate,
+        ),
       },
       successCriteria: {
         observableResult: str('understanding.success_criteria.observable_result', visibleSummary?.successCriteria?.observableResult),
@@ -361,9 +457,22 @@ class PathCoordinator {
         outOfScope: arr('confirmedProposal.out_of_scope', visibleSummary?.confirmedProposal?.outOfScope),
         scopeSize: str('confirmedProposal.scope_size', visibleSummary?.confirmedProposal?.scopeSize ?? null),
       } : null,
-      timeDimensions: visibleSummary?.timeDimensions ?? null,
+      timeDimensions: this.normalizeTimeDimensionsForV1(
+        (pick('understanding.time_dimensions') && typeof pick('understanding.time_dimensions') === 'object'
+          ? pick('understanding.time_dimensions')
+          : visibleSummary?.timeDimensions) ?? null,
+        normalizeDeadlineDate(
+          pick('understanding.deadline_date')
+            ?? visibleSummary?.resources?.deadlineDate
+            ?? visibleSummary?.timeDimensions?.deadlineDate,
+        ),
+      ),
       learnerLoadProfile: learnerLoadProfile && (learnerLoadProfile.availableTime || learnerLoadProfile.loadTolerance)
         ? learnerLoadProfile
+        : null,
+      // 体量分诊：只有真派生出 transferable/recurrence 时才注入；空对象会让下游误判“已声明”。
+      triage: triageHint && (triageHint.transferable !== undefined || triageHint.recurrence)
+        ? triageHint
         : null,
     };
   }
@@ -372,13 +481,17 @@ class PathCoordinator {
    * 纯本地读盘（无网络/LLM），同步且**绝不抛错**；一份都没有时返回空数组（零影响）。
    * 开关：`MATERIAL_UPLOAD_INJECTION_DISABLED=1` 关闭。
    */
-  private async resolveUploadedMaterialPacks(userId: unknown): Promise<MaterialPackResult[]> {
+  private async resolveUploadedMaterialPacks(
+    userId: unknown,
+    records?: MaterialRecord[]
+  ): Promise<MaterialPackResult[]> {
     const id = typeof userId === 'string' ? userId.trim() : '';
     if (!id) return [];
     try {
+      const options = records ? { records } : {};
       return isSemanticMaterialPackEnabled()
-        ? await buildUploadedMaterialPacksAsync(id)
-        : buildUploadedMaterialPacks(id);
+        ? await buildUploadedMaterialPacksAsync(id, options)
+        : buildUploadedMaterialPacks(id, options);
     } catch (error) {
       logger.warn('[path-coordinator] 读取上传附件失败，已跳过（fail-open，不阻塞路径生成）', {
         error: error instanceof Error ? error.message : String(error),
@@ -440,10 +553,22 @@ class PathCoordinator {
     const needs = (Array.isArray(needsMaterial) ? needsMaterial : [needsMaterial])
       .slice(0, MATERIAL_COLLECTION_MAX_NEEDS) as MaterialNeed[];
 
+    // 来源域分流（2026-10-28 Frontier R1/R2：私有材料 26 次联网 0 成功）：
+    // private 不发起检索（公网注定搜不到），由 goal 请用户上传；public 才交给 material-collector。
+    const { publicNeeds, privateNeeds } = partitionMaterialNeeds(needs);
+    if (privateNeeds.length > 0) {
+      logger.info('[path-coordinator] 私有资料跳过联网采集（等待用户上传/按手上原文设计）', {
+        userId: collectorUserId || null,
+        privateTitles: privateNeeds.map((need) => need?.title).filter(Boolean),
+        publicCount: publicNeeds.length,
+      });
+    }
+    if (publicNeeds.length === 0) return null;
+
     // 库优先：已入库的联网资料直接复用（零网络、零 LLM），只对未命中的 need 采集
     const results: MaterialPackResult[] = [];
     const pendingNeeds: MaterialNeed[] = [];
-    for (const need of needs) {
+    for (const need of publicNeeds) {
       const libraryRecord = collectorUserId ? findWebRecordByTitle(collectorUserId, String(need?.title || '')) : null;
       if (libraryRecord) {
         const cached = await this.buildWebRecordPackQuietly(libraryRecord);
@@ -531,31 +656,59 @@ class PathCoordinator {
           () => undefined
         );
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         logger.warn('[path-coordinator] 后台联网采集失败（fail-open，资料下次生成经库优先补齐）', {
           userId,
           needs: needs.map((need) => need?.title).filter(Boolean),
           durationMs: Date.now() - startedAt,
-          error: error instanceof Error ? error.message : String(error),
+          error: message,
         });
+        // 2026-10-28 R4 外部评审：失败也回填 not_found，否则占位永远停在「采集中」
+        // （本轮 34 次 90s 超时 → 46 条 pending 长期挂起）。回填后学习者至少能看到
+        // 「没采到 + 原因」，下次生成走库优先重试。
+        const failedPatches: AsyncMaterialPatch[] = needs
+          .map((need) => ({
+            needTitle: String(need?.title || '').trim(),
+            result: {
+              status: 'not_found' as const,
+              pack: null,
+              provenance: [],
+              coverage: { covered: [], missing: [String(need?.title || '').trim()].filter(Boolean) },
+              notes: [`后台联网采集失败（fail-open）：${message}`],
+            },
+          }))
+          .filter((patch) => patch.needTitle);
+        if (failedPatches.length > 0) {
+          await this.patchPathsWithAsyncMaterials(userId, failedPatches);
+        }
         return;
       }
       if (!Array.isArray(collected)) return;
-      const readyPacks = collected.filter((pack) => pack.pack);
-      if (readyPacks.length === 0) {
-        logger.info('[path-coordinator] 后台联网采集未获可用资料（fail-open）', {
+      // not_found 也要回填：否则 pending 占位永远停在「资料采集中」，
+      // 学习者与后续分析都无法区分「还在采」与「没采到」。
+      const patches = collected
+        .map((result, index) => ({ needTitle: String(needs[index]?.title || '').trim(), result }))
+        .filter((patch) => patch.needTitle);
+      if (patches.length === 0) {
+        logger.info('[path-coordinator] 后台联网采集无结果可回填（fail-open）', {
           userId,
           durationMs: Date.now() - startedAt,
         });
         return;
       }
-      await this.patchPathsWithAsyncMaterials(userId, readyPacks);
+      logger.info('[path-coordinator] 后台联网采集完成，回填结果', {
+        userId,
+        statuses: patches.map((patch) => patch.result?.status),
+        durationMs: Date.now() - startedAt,
+      });
+      await this.patchPathsWithAsyncMaterials(userId, patches);
     });
   }
 
   /** 回填走 materials 域 service（coordinator 无 DB 直连边界）；失败已在其内部 fail-open。 */
-  private async patchPathsWithAsyncMaterials(userId: string, readyPacks: MaterialPackResult[]): Promise<void> {
+  private async patchPathsWithAsyncMaterials(userId: string, patches: AsyncMaterialPatch[]): Promise<void> {
     try {
-      await patchPathsWithAsyncMaterials(userId, readyPacks);
+      await patchPathsWithAsyncMaterials(userId, patches);
     } catch (error) {
       logger.warn('[path-coordinator] 后台资料回填失败（fail-open）', {
         userId,
@@ -628,7 +781,8 @@ class PathCoordinator {
       goalFinalPayload.goalHandoffFields || null,
       visibleSummary,
       goalFinalPayload.rawGoal,
-      input.learnerLoadProfile ?? null
+      input.learnerLoadProfile ?? null,
+      input.triageHint ?? null
     );
     if (goalFinalPayload.prerequisiteCheckResults?.length) {
       normalizedInputV1.prerequisiteCheckResults = goalFinalPayload.prerequisiteCheckResults;
@@ -652,20 +806,68 @@ class PathCoordinator {
     // 附件理解摘要（material-brief）惰性就绪：path 是长流程，值得等 brief（有预算上限）——
     // path-planning 拿到 brief 的 naturalDivisions/目录后才知道「这一堆怎么切分学习」。
     // fail-open：生成失败/超时的附件照常以 pack 进路径（brief=null），下次生成再补。
-    try {
-      const uploadUserId = typeof input.userId === 'string' ? input.userId.trim() : '';
-      if (uploadUserId) {
-        const uploadedRecords = listMaterials(uploadUserId).slice(0, 3);
-        await collectBriefsWithDeadline(uploadedRecords, 90_000);
-      }
-    } catch (error) {
-      logger.warn('[path-coordinator] 附件 brief 就绪失败（fail-open）', {
-        error: error instanceof Error ? error.message : String(error),
+    const uploadUserId = typeof input.userId === 'string' ? input.userId.trim() : '';
+    const materialSelectionQuery = [
+      (goalFinalPayload as any)?.understanding?.surface_goal,
+      (goalFinalPayload as any)?.understanding?.real_problem,
+      (visibleSummary as any)?.surfaceGoal,
+      (visibleSummary as any)?.realProblem,
+      (visibleSummary as any)?.confirmedProposal?.goal,
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .join(' ');
+    // 资料库选择：词面排序 + 决策模型重排（jev-1.14.0，AUC 0.908；未配置/失败退词面序）。
+    const uploadSelection = uploadUserId
+      ? await selectMaterialsRanked({
+          userId: uploadUserId,
+          query: materialSelectionQuery,
+          limit: MAX_UPLOAD_MATERIAL_PACKS,
+          includeWeb: false,
+        })
+      : {
+          selected: [] as MaterialRecord[],
+          omitted: [] as MaterialRecord[],
+          total: 0,
+          strategy: 'recent' as const,
+          hasPhraseHit: false,
+        };
+    // 注入 rerank 闸门（2026-10-21 评测：bge-reranker-v2-m3 误杀≤2% 时拦 57.1%；
+    // 阈值 MATERIAL_RERANK_GATE_MIN_SCORE 缺省 0.29；未配置/失败 fail-open 全放行）。
+    const rerankGate = await applyMaterialRerankGate({
+      query: materialSelectionQuery,
+      records: uploadSelection.selected,
+    });
+    const gatedSelected = rerankGate.kept;
+    // 2026-10-21 离线对比裁决（doc/local/RESOURCE-LIBRARY-OPT-2026-10-20/INJECTION-GATE-COMPARISON.md）：
+    // 片段闸门拿去过滤注入会误杀"学科相关但措辞无 4 字重叠"的真引用资料（60 条真实路径里 9/15），
+    // 故这里只记录不过滤——无片段命中的名单进日志供观测。
+    const noPhraseHit = gatedSelected.filter(
+      (record) => !materialRecordHasPhraseHit(materialSelectionQuery, record)
+    );
+    if (uploadUserId && uploadSelection.total > 0) {
+      logger.info('[path-coordinator] 资料库选择', {
+        total: uploadSelection.total,
+        selected: gatedSelected.map((record) => record.name),
+        omitted: uploadSelection.omitted.map((record) => record.name),
+        gateDropped: rerankGate.dropped.map((record) => record.name),
+        gateApplied: rerankGate.applied,
+        noPhraseHit: noPhraseHit.map((record) => record.name),
+        strategy: uploadSelection.strategy,
+        query: materialSelectionQuery.slice(0, 120),
       });
+      if (gatedSelected.length > 0) {
+        try {
+          await collectBriefsWithDeadline(gatedSelected, 90_000);
+        } catch (error) {
+          logger.warn('[path-coordinator] 附件 brief 就绪失败（fail-open）', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
 
     // 附件是主线：用户上传的资料优先进入路径（本地读盘，无网络、无 LLM）
-    const uploadedPacks = await this.resolveUploadedMaterialPacks(input.userId);
+    const uploadedPacks = await this.resolveUploadedMaterialPacks(input.userId, gatedSelected);
     const uploadedMaterialIds = new Set(
       uploadedPacks.map((pack) => pack.pack?.materialId).filter((id): id is string => !!id)
     );
@@ -676,6 +878,20 @@ class PathCoordinator {
       (pack) => !(pack.pack?.materialId && uploadedMaterialIds.has(pack.pack.materialId))
     );
     const materialPacks = [...uploadedPacks, ...collectedPacks];
+
+    // 死占位惰性清理（2026-10-26 评审 #8）：回填窗口（15 分钟）外仍带 marker 的 pending
+    // 占位永远不会被回填（重启丢后台任务/采集失败后 marker 永挂）——每次走到资料装配
+    // 就顺手把该用户的死占位降级，不引入定时器。fire-and-forget，不阻塞生成。
+    if (typeof input.userId === 'string' && input.userId.trim()) {
+      void import('../services/materials/material-async-collect.service')
+        .then(({ deactivateStaleAsyncPlaceholders }) => deactivateStaleAsyncPlaceholders(input.userId as string))
+        .catch((error) => {
+          logger.warn('[path-coordinator] 死占位惰性清理失败（fail-open）', {
+            userId: input.userId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
 
     // 单一挂载点：定帧层（buildFramedNormalizedInput）负责归一化与字段透传，
     // materials 由本处统一合入（附件在前、联网在后），下游 path-planning 按序消费。
@@ -744,7 +960,12 @@ class PathCoordinator {
     // （understanding.deadline_date，YYYY-MM-DD）是 L1 硬锚，优先采用——「三个月后考试」
     // 由此落成确定日期而不是相对推算。下方 deadlineTextSources + 相对表述正则推算
     // 保留为「无模型日期时的兜底」，行为与原先一致。
-    const modelDeadlineDate = normalizeDeadlineDate(visibleSummary?.resources?.deadlineDate);
+    // R8：handoff 的 understanding.deadline_date 优先，其次 visibleSummary，再次 timeDimensions.deadlineDate（镜像）。
+    const modelDeadlineDate = normalizeDeadlineDate(
+      this.getValueByPath(source, 'understanding.deadline_date')
+        ?? visibleSummary?.resources?.deadlineDate
+        ?? normalizedInputV1.timeDimensions?.deadlineDate,
+    );
     if (modelDeadlineDate) {
       deadline = new Date(`${modelDeadlineDate}T00:00:00`);
     }
@@ -783,7 +1004,7 @@ class PathCoordinator {
         timePerDay: availableTime,
         structuredData: input.structuredData || null,
         confirmedProposal: config.normalizedInput.includeConfirmedProposal ? input.visibleSummary?.confirmedProposal || null : null,
-        confidenceScores: null,
+        confidenceScores: input.confidenceScores ?? null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],
         normalizedInput: framedNormalizedInput,
         goalFinalPayload: {
@@ -810,8 +1031,12 @@ class PathCoordinator {
 
   private async normalizeGoalRequest(input: GoalPathRequest): Promise<PathGenerationInput> {
     const config = await getPathAgentInputConfig();
-    // 生产入口走 async：path 不等联网（批次 B），preview 保持 sync（探针诊断口径不变）
-    return this.buildNormalizedGoalInput(input, config, 'async');
+    // 2026-10-28 R4 外部评审：生产链路原先走 async，公开资料永远在路径生成后才回填，
+    // stage-designer 拿不到正文（公开路径 materialRefs 恒为 0）。用户已明确接受
+    // 路径生成变慢，故默认改 sync：先采后生成，让 pack 真正进入 resources.materials。
+    // 需要旧行为时设 MATERIAL_COLLECTION_MODE=async（保留回滚口）。
+    const mode: 'sync' | 'async' = process.env.MATERIAL_COLLECTION_MODE === 'async' ? 'async' : 'sync';
+    return this.buildNormalizedGoalInput(input, config, mode);
   }
 
   async generate(input: PathGenerationInput) {

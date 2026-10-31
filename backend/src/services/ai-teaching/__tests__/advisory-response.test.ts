@@ -58,16 +58,18 @@ describe('TeachingSessionRepository.recordAdvisoryResponse（#35 轻埋点）', 
     expect(persisted.recommendation).toBe('reinforce');
   });
 
-  it('稍后/预览同样可写入（动作枚举透传）', async () => {
+  it('稍后/预览/已采用同样可写入（动作枚举透传）', async () => {
     jest.spyOn(teachingSessionRepository, 'getById').mockResolvedValue(baseRecord);
     mockPrisma.teaching_sessions.update.mockResolvedValue({});
 
     const later = await teachingSessionRepository.recordAdvisoryResponse('session-1', 'user-1', 'later');
     const preview = await teachingSessionRepository.recordAdvisoryResponse('session-1', 'user-1', 'preview');
+    const adopt = await teachingSessionRepository.recordAdvisoryResponse('session-1', 'user-1', 'adopt');
 
     expect(later.advisory?.learnerResponse.action).toBe('later');
     expect(preview.advisory?.learnerResponse.action).toBe('preview');
-    expect(mockPrisma.teaching_sessions.update).toHaveBeenCalledTimes(2);
+    expect(adopt.advisory?.learnerResponse.action).toBe('adopt');
+    expect(mockPrisma.teaching_sessions.update).toHaveBeenCalledTimes(3);
   });
 
   it('无建议会话（shouldSuggest 非 true）→ no_advisory 且不落库', async () => {

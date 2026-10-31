@@ -55,7 +55,26 @@ function escapeInnerQuotes(raw: string): string {
   return out;
 }
 
-function parseJsonLoose(raw: string): { json: string; parsed: any } | null {
+/**
+ * 双重编码的 JSON：模型把整个对象当字符串又序列化了一遍
+ * （`"{\"reply\":\"…\",\"learnerState\":{…}}"`）。直接 JSON.parse 得到的是字符串，
+ * 上层按字段取值就变成 missing reply——2026-10-22 夜间跑批里韩磊连续三次栽在这上面。
+ */
+function unwrapStringifiedJson(parsed: any): any {
+  let value = parsed;
+  for (let i = 0; i < 2 && typeof value === 'string'; i += 1) {
+    const text = value.trim();
+    if (!/^[[{]/.test(text)) break;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      break;
+    }
+  }
+  return value;
+}
+
+function parseJsonLooseRaw(raw: string): { json: string; parsed: any } | null {
   if (typeof raw !== 'string' || !raw.trim()) return null;
   // 1) 直接 parse
   try {
@@ -110,6 +129,14 @@ function parseJsonLoose(raw: string): { json: string; parsed: any } | null {
     }
   }
   return null;
+}
+
+function parseJsonLoose(raw: string): { json: string; parsed: any } | null {
+  const result = parseJsonLooseRaw(raw);
+  if (!result) return null;
+  const unwrapped = unwrapStringifiedJson(result.parsed);
+  if (unwrapped === result.parsed) return result;
+  return { json: typeof unwrapped === 'string' ? result.json : JSON.stringify(unwrapped), parsed: unwrapped };
 }
 
 export function extractJsonObject(raw: string): { extractedJson: string | null; parsed: any | null } {
@@ -239,23 +266,28 @@ function extractRawTrailingJson(content: string): { parsedJson: any | null; dial
  * 返回 JSON 与"正文"（对话文本）的拆分，供"正文 + 结构化 JSON"混合输出场景消费。
  */
 export function extractStructuredPayloadWithDialogue(content: string): StructuredPayloadParseResult {
+  const unwrap = (r: StructuredPayloadParseResult): StructuredPayloadParseResult => {
+    if (!r.parsedJson) return r;
+    const unwrapped = unwrapStringifiedJson(r.parsedJson);
+    return unwrapped === r.parsedJson ? r : { ...r, parsedJson: unwrapped };
+  };
   let parsedJson: any | null = null;
   let dialogueText = content;
   let parseError = false;
 
   ({ parsedJson, dialogueText, parseError } = extractRawTrailingJson(content));
   if (parsedJson) {
-    return { parsedJson, dialogueText, parseMode: 'raw-json', parseError: false };
+    return unwrap({ parsedJson, dialogueText, parseMode: 'raw-json', parseError: false });
   }
 
   ({ parsedJson, dialogueText, parseError } = extractJsonFromCodeFence(content));
   if (parsedJson) {
-    return { parsedJson, dialogueText, parseMode: 'code-fence', parseError: false };
+    return unwrap({ parsedJson, dialogueText, parseMode: 'code-fence', parseError: false });
   }
 
   ({ parsedJson, dialogueText, parseError } = extractJsonFromJsonMarker(content));
   if (parsedJson) {
-    return { parsedJson, dialogueText, parseMode: 'json-marker', parseError: false };
+    return unwrap({ parsedJson, dialogueText, parseMode: 'json-marker', parseError: false });
   }
 
   return { parsedJson: null, dialogueText: content, parseMode: 'none', parseError };

@@ -1,12 +1,13 @@
 const mockGetActivePrompt = jest.fn()
 const mockGatewayExecute = jest.fn()
+const mockGatewayResolveRoute = jest.fn()
 const mockPromptCallCreate = jest.fn()
 
 jest.mock('../../services/agentConfig.service', () => ({
   agentConfigService: { getActivePrompt: mockGetActivePrompt }
 }))
 jest.mock('../../gateway/api-gateway', () => ({
-  getAPIGateway: () => ({ execute: mockGatewayExecute })
+  getAPIGateway: () => ({ execute: mockGatewayExecute, resolveRoute: mockGatewayResolveRoute })
 }))
 jest.mock('../../config/database', () => ({
   __esModule: true,
@@ -41,6 +42,9 @@ const ACTIVE_METADATA_RUNTIME_CONTRACT = {
 describe('callPrompt runtime overrides', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    // 默认无路由回退（resolveRoute 抛错 → routeFallback=null），与既有用例的基线一致；
+    // 需要 response_format 链路的用例自行 mockResolvedValue。
+    mockGatewayResolveRoute.mockRejectedValue(new Error('no route in test'))
     mockPromptCallCreate.mockResolvedValue({})
     mockGatewayExecute.mockResolvedValue({
       id: 'completion-1',
@@ -51,6 +55,11 @@ describe('callPrompt runtime overrides', () => {
 
   it('冻结 Prompt 可在 ACTIVE 配置缺失时运行并覆盖模型参数与路由', async () => {
     mockGetActivePrompt.mockResolvedValue(null)
+    // 通道级结构化输出默认（路由回退层）打开：json 媒介请求应附 response_format
+    mockGatewayResolveRoute.mockResolvedValue({
+      model: 'route-model', temperature: 0.7, maxTokens: 2000,
+      responseFormat: 'json_object', skillParamOverrides: null
+    })
     const result = await runWithContext({
       promptRuntimeOverride: {
         systemPromptOverride: 'frozen prompt',
@@ -83,6 +92,7 @@ describe('callPrompt runtime overrides', () => {
       model: 'frozen-model',
       max_tokens: 321,
       temperature: 0.15,
+      response_format: { type: 'json_object' },
       stream: true
     }, { skillId: 'test' }, expect.objectContaining({
       userId: 'admin-original',
@@ -303,6 +313,71 @@ describe('callPrompt runtime overrides', () => {
       failureReason: '输出未满足字段约束',
       violations: ['value 不能为空', 'value 必须是有效学习目标']
     }))
+  })
+
+  it('软校验失败会带反馈重试，重试通过则正常成功', async () => {
+    mockGetActivePrompt.mockResolvedValue({ systemPrompt: 'active prompt', version: 1 })
+    mockGatewayExecute
+      .mockResolvedValueOnce({
+        choices: [{ index: 0, message: { role: 'assistant', content: '{"value":"draft"}' }, finish_reason: 'stop' }]
+      })
+      .mockResolvedValueOnce({
+        choices: [{ index: 0, message: { role: 'assistant', content: '{"value":"ok"}' }, finish_reason: 'stop' }]
+      })
+    const softValidate = jest.fn((parsed: any) => parsed.value === 'ok'
+      ? { valid: true }
+      : {
+          valid: false,
+          failureReason: 'MATERIAL_REFS_MISSING_PATH',
+          violations: ['里程碑 1 未给出逐字可核对的资料引用']
+        })
+    const onValidationFail = jest.fn(() => '请补齐资料引用后重新输出。')
+
+    const result = await callPrompt({
+      agentId: 'skill:test',
+      defaultSystemPrompt: 'default prompt',
+      caller: { skillId: 'test' },
+      buildUserPayload: () => 'payload',
+      normalizeOutput: parsed => parsed,
+      softValidateParsedOutput: softValidate,
+      retryStrategy: { maxAttempts: 2, onValidationFail }
+    }, {})
+
+    expect(result.success).toBe(true)
+    expect(result.output).toEqual({ value: 'ok' })
+    expect(softValidate).toHaveBeenCalledTimes(2)
+    expect(mockGatewayExecute).toHaveBeenCalledTimes(2)
+    expect(onValidationFail).toHaveBeenCalledWith(expect.objectContaining({
+      attempt: 2,
+      failureReason: 'MATERIAL_REFS_MISSING_PATH',
+      violations: ['里程碑 1 未给出逐字可核对的资料引用']
+    }))
+  })
+
+  it('软校验最后一次仍不通过时按当前输出继续，不阻断生成', async () => {
+    mockGetActivePrompt.mockResolvedValue({ systemPrompt: 'active prompt', version: 1 })
+    mockGatewayExecute.mockResolvedValue({
+      choices: [{ index: 0, message: { role: 'assistant', content: '{"value":"draft"}' }, finish_reason: 'stop' }]
+    })
+    const onValidationFail = jest.fn(() => '请补齐资料引用后重新输出。')
+
+    const result = await callPrompt({
+      agentId: 'skill:test',
+      defaultSystemPrompt: 'default prompt',
+      caller: { skillId: 'test' },
+      buildUserPayload: () => 'payload',
+      normalizeOutput: parsed => parsed,
+      softValidateParsedOutput: () => ({
+        valid: false,
+        failureReason: 'MATERIAL_REFS_MISSING_PATH'
+      }),
+      retryStrategy: { maxAttempts: 2, onValidationFail }
+    }, {})
+
+    expect(result.success).toBe(true)
+    expect(result.output).toEqual({ value: 'draft' })
+    expect(mockGatewayExecute).toHaveBeenCalledTimes(2)
+    expect(onValidationFail).toHaveBeenCalledTimes(1)
   })
 
   it('为旧式校验器的 failureReason 提供 violations 兼容桥接', async () => {

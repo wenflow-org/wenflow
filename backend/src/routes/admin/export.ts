@@ -14,7 +14,7 @@ import {
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { createAuditLog } from '../../services/audit-log.service';
 import { logger } from '../../utils/logger';
-import { buildRealUserWhere } from '../../utils/test-account';
+import { buildNonVirtualUserWhere } from '../../utils/test-account';
 
 const router = express.Router();
 
@@ -106,7 +106,7 @@ router.get('/users', async (req: Request, res: Response) => {
     // deletedAt 叠加在外层。
     const where: any = includeTest
       ? { deletedAt: null }
-      : await buildRealUserWhere({ deletedAt: null });
+      : await buildNonVirtualUserWhere({ deletedAt: null });
 
     const users = await listExportUsers(where, MAX_ROWS);
 

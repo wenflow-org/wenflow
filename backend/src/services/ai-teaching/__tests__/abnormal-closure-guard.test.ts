@@ -20,6 +20,7 @@ const mockAssertOwnership = jest.fn();
 const mockExecuteSkill = jest.fn();
 const mockPrepareSessionScoreCommit = jest.fn();
 const mockCommitSessionLoadMetric = jest.fn();
+const mockRecordDegradation = jest.fn();
 
 const mockRefreshDashboardGuidance = jest.fn();
 const mockRefreshLearnerStateReview = jest.fn();
@@ -41,6 +42,10 @@ jest.mock('../../../utils/logger', () => ({
 jest.mock('../../../skills', () => ({
   executeSkill: mockExecuteSkill,
   sessionWrapupAgentDefinition: {},
+}));
+jest.mock('../../../skills/degradation-telemetry', () => ({
+  recordDegradation: (...args: unknown[]) => mockRecordDegradation(...args),
+  degradationCause: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }));
 jest.mock('../TeachingSessionRepository', () => {
   const actual = jest.requireActual('../TeachingSessionRepository');
@@ -78,6 +83,8 @@ jest.mock('../ReplanAdvisoryService', () => ({
     applyAttribution: jest.fn(),
   },
   toAttributionRecall: jest.fn(),
+  // 与真实实现同口径：extension/review 不产建议，其余照常
+  shouldBuildReplanAdvisory: (mode: string | null | undefined) => mode !== 'extension' && mode !== 'review',
 }));
 jest.mock('../ReplanAttributionService', () => ({
   replanAttributionService: { attribute: jest.fn() },
@@ -335,6 +342,9 @@ describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', 
     expect(mockPrepareSessionScoreCommit).toHaveBeenCalledTimes(1);
     expect(mockCompleteWithEvent.mock.calls[0][5]).not.toBeNull();
     expect(mockCommitSessionLoadMetric).toHaveBeenCalledTimes(1);
+    // P2：正式轨 session_load 必须在收束事务成功之后写，失败事务不得留下指标。
+    expect(mockCompleteWithEvent.mock.invocationCallOrder[0])
+      .toBeLessThan(mockCommitSessionLoadMetric.mock.invocationCallOrder[0]);
     const wrapup = mockCompleteWithEvent.mock.calls[0][3].wrapup;
     expect(wrapup.stateUpdate).toEqual(expect.objectContaining({ lss: 6.1 }));
     expect(mockRecordSessionOutcome).toHaveBeenCalledTimes(1);
@@ -400,5 +410,20 @@ describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', 
     expect(mockCommitSessionLoadMetric).not.toHaveBeenCalled();
     expect(mockRecordSessionOutcome).not.toHaveBeenCalled();
     expect(mockRefreshDashboardGuidance).not.toHaveBeenCalled();
+  });
+
+  it('wrapup 产出缺失 → summary-only 兜底必须记降级遥测（P1-8）', async () => {
+    mockExecuteSkill.mockResolvedValue({ internal: { ext: {} } });
+
+    const result = await endSession('sess-abandon-1', 'manual-end', 7, 'end-op-degraded');
+
+    expect(result.status).toBe('completed');
+    expect(mockRecordDegradation).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'ai-teaching/teaching-session-lifecycle',
+      faultCategory: 'UPSTREAM_EMPTY',
+      severity: 'P2_DEGRADED',
+      impactedDimensions: ['wrapup.summary', 'wrapup.evaluation'],
+      mitigationApplied: 'summary-only-fallback',
+    }));
   });
 });

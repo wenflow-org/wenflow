@@ -41,6 +41,17 @@ export interface MkGraphEdge {
   toConceptId: string
   relation: string
 }
+/**
+ * 概念台账事实（宿主可选，按概念名索引）：图上没有这些字段，由父级把学习者模型里的
+ * 概念台账映射进来，随节点详情一起展示（可迁移 / 误解风险 / 证据条数）。
+ * 2026-10-20：原概览「概念掌握」卡里的逐概念明细并入图谱侧栏，本类型是同一次搬家的契约。
+ */
+export interface MkGraphConceptFacts {
+  readiness: string
+  risk: string
+  riskTone: 'ok' | 'warn' | 'bad'
+  evidenceCount: number
+}
 
 /**
  * 密集图判据：超过这个节点数就只标「值得标注」的节点（枢纽 + 薄弱），其余靠悬停。
@@ -92,6 +103,7 @@ export function isDenseLabelGraph(nodeCount: number, narrow: boolean): boolean {
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useIsDark } from '@/composables/useIsDark'
+import { wrapGraphLabel } from '@/utils/graphLabel'
 import * as echarts from 'echarts/core'
 import { GraphChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
@@ -111,8 +123,10 @@ const props = withDefaults(
     theme?: 'light' | 'dark'
     /** 是否隐藏"无任何关系"的孤立节点（默认隐藏：实测它们只是散在四周造成噪声） */
     hideIsolated?: boolean
+    /** 需要常显标签并描边高亮的节点 id（课堂知识点浮窗：本节正在学的 1–2 个概念） */
+    highlightIds?: string[]
   }>(),
-  { height: '520px', theme: undefined, hideIsolated: true }
+  { height: '520px', theme: undefined, hideIsolated: true, highlightIds: () => [] }
 )
 
 /* 主题跟随（2026-10-06 审核）：默认原为写死 'light'，不跟随 <html data-theme>——
@@ -131,6 +145,8 @@ interface GraphCallbackParams {
 
 const el = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
+/** 已点选的节点：右栏/底部详情接管信息，画布 tooltip 不再重复弹出 */
+let selectedId: string | null = null
 /** 最近一次 buildOption 烘焙的「值得标注」节点集（批次四：graphRoam 缩放档回填标签用） */
 let lastLabelWorthy = new Set<string>()
 /** 缩放低于该值视为「看不清标签」档：全量收标（hover/emphasis 仍出词），放大恢复 */
@@ -187,17 +203,9 @@ function colorOf(node: MkGraphNode, dark: boolean): string {
 }
 
 /**
- * 折行（最多 2 行，超出加省略号）。中文概念名普遍 10-20 字，
- * 单行会横跨整张图并互相压；两行折行后长度可控、也不再被截成"…"。
+ * 折行（最多 2 行，超出加省略号）。具体规则见 utils/graphLabel.ts：
+ * 英文单词/标识符整体换行，第一行不提前加省略号。
  */
-function wrapLabel(text: string, perLine: number): string {
-  const value = String(text ?? '')
-  if (value.length <= perLine) return value
-  const first = value.slice(0, perLine)
-  const rest = value.slice(perLine)
-  if (rest.length <= perLine) return `${first}\n${rest}`
-  return `${first}\n${rest.slice(0, perLine - 1)}…`
-}
 
 /**
  * 画布上标签的底衬色 = 卡片表面色（`--mk-surface`）随主题切换。
@@ -242,6 +250,7 @@ function buildOption(): EChartsCoreOption {
   // 密集阈值按画布面积给（窄屏更早进密集档），理由与折算见 isDenseLabelGraph 的注释。
   const narrow = isNarrow.value
   const denseGraph = isDenseLabelGraph(nodes.length, narrow)
+  const highlightSet = new Set(props.highlightIds)
   // 力导向总跨度 ≈ 边长·√n；斥力/边长的原值按 ~40 节点校准，故以 40 为基准反比收缩
   const shrink = Math.sqrt(40 / Math.max(1, nodes.length))
   // 每行字数与字号配套：字号提到 12（仓库文本下限）后单字更宽，每行相应收一个字，
@@ -250,12 +259,9 @@ function buildOption(): EChartsCoreOption {
   const labelWorthy = new Set<string>()
   if (!denseGraph) {
     for (const node of nodes) labelWorthy.add(node.id)
-  } else {
-    // 批次四 P2（2026-10-04 全站评审）：枢纽标注 10→6——默认视图密集区标签字压字，
-    // 收紧常显集合让标签碰撞可辨；弱势/脆弱节点仍全标（教学信号优先）。
-    // 2026-10-08：标签字号提到 12 后单字变宽，窄屏那点画布放不下 6 个仍会叠字，
-    // 故窄屏再收到 4——宁少勿叠，其余节点仍可靠悬停/缩放读。
-    const hubCount = narrow ? 4 : 6
+  } else if (!narrow) {
+    // 桌面密集图：枢纽 6 + 薄弱/脆弱全标
+    const hubCount = 6
     const byDegree = [...nodes]
       .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))
       .slice(0, hubCount)
@@ -265,6 +271,11 @@ function buildOption(): EChartsCoreOption {
       if (weak) labelWorthy.add(node.id)
     }
   }
+  // 窄屏密集图刻意一个常显标签都不放：320–370px 宽放 20+ 节点时，任何 7–10 个
+  // 标签都会互相压字，最右一列还会被 canvas 裁掉。点按/悬停节点仍有 tooltip 与
+  // 下方详情（MkGraphExplorer 侧栏 / 课堂知识点浮窗的选中行）。
+  // 例外：课堂浮窗传入的本节 1–2 个概念必须常显并高亮，否则迷你图没有教学锚点。
+  for (const id of highlightSet) labelWorthy.add(id)
   // 供 graphRoam 缩放档回填 label.show 用（buildOption 每次重算，roam 不触发它）
   lastLabelWorthy = labelWorthy
 
@@ -276,6 +287,8 @@ function buildOption(): EChartsCoreOption {
         if (params?.dataType === 'edge') return RELATION_LABEL[params.data?.relation ?? ''] ?? params.data?.relation ?? ''
         const node = params?.data?.raw
         if (!node) return ''
+        // 点选后详情已由右栏/底部面板承载，画布上不再重复弹卡遮挡邻接节点
+        if (selectedId && String(node.id) === selectedId) return ''
         const mastery = node.masteryScore === null || node.masteryScore === undefined
           ? '未评估'
           : `${Math.round(node.masteryScore * 100)}%`
@@ -293,34 +306,41 @@ function buildOption(): EChartsCoreOption {
         layout: 'force',
         roam: true,
         draggable: true,
-        // 布局盒留边（画布内图例已移除，四边等距）
-        top: 16,
-        bottom: 16,
-        left: 16,
-        right: 16,
+        // 约 8% 的留白：力导向只按节点符号收敛，标签（尤其右侧长概念名）会伸出画布。
+        // 缩小 viewport 让最外圈节点离边留出标签宽度，避免被 canvas 裁掉。
+        // 课堂浮窗有高亮节点时整体左移 4%：本节知识点标签在右侧，避免贴边被裁。
+        zoom: narrow ? 1 : 0.9,
+        center: [highlightSet.size ? '46%' : '50%', '50%'],
+        // 布局盒留边：四边都要给节点半径 + 底部标签留空间，否则力导向收边时
+        // 最外圈节点会贴住画布边缘，底部标签被 canvas 的 overflow:clip 切掉。
+        top: narrow ? 22 : 40,
+        bottom: narrow ? 36 : 48,
+        left: narrow ? 28 : 48,
+        right: narrow ? 56 : 96,
         scaleLimit: { min: 0.3, max: 4 },
         label: {
           show: false,
           position: 'bottom',
           distance: 5,
           color: textColor,
-          // 10/11 → 12：原字号低于仓库文本下限，节点名辨认困难（2026-10-08 用户侧视觉检查
-          // 在桌面与移动两档都报出；画布内文字不受 mobile:spec 的 fonts 门禁覆盖，所以一直没被抓到）。
-          // 行高同步抬起，避免 12px 字挤在 12/13 的行高里。
+          // 画布内文字统一 12px（仓库文本下限）；窄画布不再靠缩字号塞标签，
+          // 密集图直接不常显标签（见下方 labelWorthy 分支）。
           fontSize: 12,
-          lineHeight: narrow ? 15 : 16,
+          lineHeight: 16,
           // 与画布同色的底衬（见 labelSurface 注释）：hideOverlap 看不见节点符号，
           // 密集区枢纽标签会压在邻节点上，铺底衬后文字不再被节点色块吃掉。
           backgroundColor: labelSurface(dark),
           padding: [2, 3],
           borderRadius: 2,
-          formatter: (params: { name?: string }) => wrapLabel(params?.name ?? '', perLine)
+          formatter: (params: { name?: string }) => wrapGraphLabel(params?.name ?? '', perLine)
         },
         // hideOverlap 只比较「标签↔标签」，管不到节点符号（评审建议的 forceLayout 键在
         // ECharts 6.1 的 labelLayout 里并不存在，只有 hideOverlap / moveOverlap）；压在
         // 节点上的情况交给上面的同色底衬。moveOverlap 是一维推移，会为了不同行的标签把
         // 标签整体推离自己的节点，故不启用。
-        labelLayout: { hideOverlap: true },
+        // 课堂浮窗只亮 2 个本节知识点；hideOverlap 会把后一个标签当“重叠”直接吞掉。
+        // 有高亮时放开，保证两个黄色标签都出现（普通图仍保留防叠字）。
+        labelLayout: { hideOverlap: highlightSet.size === 0 },
         emphasis: { focus: 'adjacency', label: { show: true, fontWeight: 'bold' } },
         select: { label: { show: true }, itemStyle: { borderWidth: 2 } },
         lineStyle: { curveness: 0.08 },
@@ -332,25 +352,41 @@ function buildOption(): EChartsCoreOption {
           // （实测 300/0.08 时 40 个节点会缩在画布中间一小团里，故上调到 480），
           // 但力导向的总跨度 ≈ 边长·√n，节点再多就撑出画布——实测某学习者 5 条路径的
           // 并集（76 个有边节点）在 802×560 画布上只看得见边缘碎片。
-          // 故按 √n 反比收缩，使总跨度近似不随 n 增长；n≤40 时 shrink=1，校准点行为不变。
-          repulsion: narrow ? 150 : (denseGraph ? Math.round(480 * shrink * shrink) : 240),
+          // 力导向的总跨度 ≈ 边长·√n；上面的 480 / 110-220 是按 ~40 节点校准的。
+          // 2026-10-29：桌面降高后 24 节点仍会顶满 650px 画布，底部标签被裁；
+          // 密集档收紧斥力上限与边长，让最外圈节点离边留出标签高度（n≤40 时 shrink=1）。
+          repulsion: narrow ? 110 : (denseGraph ? Math.min(520, Math.round(480 * shrink * shrink)) : 240),
           edgeLength: narrow
-            ? [45, 100]
-            : (denseGraph ? [Math.round(110 * shrink), Math.round(220 * shrink)] : [80, 160]),
-          gravity: narrow ? 0.12 : (denseGraph ? 0.04 : 0.08),
+            ? [36, 80]
+            : (denseGraph ? [Math.round(90 * shrink), Math.round(170 * shrink)] : [80, 160]),
+          gravity: narrow ? 0.13 : (denseGraph ? 0.06 : 0.08),
           friction: 0.82,
           layoutAnimation: true
         },
-        data: nodes.map((node) => ({
-          id: node.id,
-          name: node.label,
-          symbolSize: Math.min(narrow ? 34 : 44, (narrow ? 12 : 15) + (degree.get(node.id) ?? 0) * 4),
-          itemStyle: { color: colorOf(node, dark), borderColor: dark ? '#2a2c30' : '#ffffff', borderWidth: 1.5 },
-          // 层级：coreConcept 用圆、KC 用圆角方块，一眼区分粒度
-          symbol: node.level === 'concept' ? 'circle' : 'roundRect',
-          label: { show: labelWorthy.has(node.id) },
-          raw: node
-        })),
+        data: nodes.map((node) => {
+          const highlighted = highlightSet.has(node.id)
+          const dimmed = highlightSet.size > 0 && !highlighted
+          const baseSize = Math.min(narrow ? 34 : 44, (narrow ? 12 : 15) + (degree.get(node.id) ?? 0) * 4)
+          return {
+            id: node.id,
+            name: node.label,
+            symbolSize: Math.min(narrow ? 38 : 48, baseSize + (highlighted ? 4 : 0)),
+            itemStyle: {
+              color: colorOf(node, dark),
+              borderColor: highlighted ? (dark ? '#f6c453' : '#b45309') : (dark ? '#2a2c30' : '#ffffff'),
+              borderWidth: highlighted ? 2.5 : 1.5,
+              opacity: dimmed ? 0.48 : 1
+            },
+            // 层级：coreConcept 用圆、KC 用圆角方块，一眼区分粒度
+            symbol: node.level === 'concept' ? 'circle' : 'roundRect',
+            label: {
+              show: labelWorthy.has(node.id),
+              fontWeight: highlighted ? 'bold' : 'normal',
+              color: highlighted ? (dark ? '#ffe08a' : '#8a4b00') : textColor
+            },
+            raw: node
+          }
+        }),
         // 前置边后画（覆盖在"属于"虚线之上），让主结构更清楚
         links: [...edges]
           .sort((a, b) => (a.relation === 'prerequisite' ? 1 : 0) - (b.relation === 'prerequisite' ? 1 : 0))
@@ -381,8 +417,15 @@ function render() {
     chartTheme = resolvedTheme.value
     // 不注解入参（交给 ECharts 的 ECElementEvent），内部按图节点形状取值——避免 any
     chart.on('click', (params) => {
-      if (params?.dataType !== 'node') { emit('select', null); return }
+      if (params?.dataType !== 'node') {
+        selectedId = null
+        chart?.dispatchAction({ type: 'hideTip' })
+        emit('select', null)
+        return
+      }
       const data = params.data as { raw?: MkGraphNode } | undefined
+      selectedId = data?.raw?.id ? String(data.raw.id) : null
+      chart?.dispatchAction({ type: 'hideTip' })
       emit('select', data?.raw ?? null)
     })
     // 批次四 P2：缩放跨档收/放节点标签（setOption(notMerge) 重建会重置缩放档标志）
@@ -441,7 +484,9 @@ onBeforeUnmount(() => {
    砍半档露出核心结构，也少吞一屏滚动距离 */
 @media (max-width: 720px) {
   .mk-graph {
-    height: calc(var(--mkg-h, 520px) / 2);
+    /* 原先是「砍半」，24 概念的全景图只剩 260px 高，节点和标签挤成一团；
+       0.7 倍并保底 280px，课堂 320px 小图也不会小到看不清。 */
+    height: max(260px, calc(var(--mkg-h, 520px) * 0.6));
   }
 }
 .mk-graph__note {

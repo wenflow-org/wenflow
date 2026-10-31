@@ -21,6 +21,14 @@
 
 > **2026-09-24 对账**：上述三个缺口已全部闭环（能力注册表 + 预算分离 = P0；maxTokens 语义 = P0；降级/冷却 = P1）。本节保留为写作时的动机记录。
 
+> **2026-10-24 现状补记（默认模型不再物化）**
+> - 平台默认模型只认 `platform_api_configs.defaultModel`（推理档 `defaultReasoningModel`）；文件 `defaults` 只做展示/校验，运行时不再读。
+> - `env` 的 `AI_MODEL` / `AI_MODEL_REASONING` 只在平台行未配时兜底；`GET /admin/model-registry` 新增 `runtimeDefaults`，明确给出实际默认值与来源（`ui` / `env` / `none`）。
+> - `seed-skill-model-configs` 不再写 `model`：默认就是 `model IS NULL`（继承平台默认），seed 只保留 thinking 等行为差异。注意：已有库里的历史覆盖行不会自动清空，需用「批量模型配置 → 跟随平台默认」清。
+> - `tier=reasoning` 且未配模型 → 继承 `defaultReasoningModel`（此前平台推理默认在运行时没有消费者）。
+> - `POST /admin/skill-model-configs/bulk-apply` 新增 `{ clearModel: true }`：只清 `model`，通道/思考/参数/备用链保持不变。
+> - 仍未收敛：`agent_model_configs` 仍在表内但不在解析链上；`user_agent_model_configs` 无管理界面；文件 `aliases` 与 DB `chatModels/reasoningModels/lightModels` 双源（DB 覆盖文件，但 UI 无入口）。
+
 ---
 
 ## 1. 为什么是「以模型为中心」
@@ -306,7 +314,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
   ①每个模型的能力与限额（`supportsThinking` / `supportsReasoningEffort` / 输出上限 / 缺省 / 推理预留 / 并发上限）、
   ②别名映射（成员、DB 覆盖声明、默认选中、`requireThinking` 下的选中与降级标记）、
   ③平台默认模型的**解析结果与来源**（别名 / 具体 / 未配置）、
-  ④降级链、⑤**当前冷却中的部署**（进程内快照）、⑥配置漂移告警（未注册模型、别名为空、模型未被引用、废弃 `prompt.model` 副本数）。
+  ④降级链、⑤**当前冷却中的部署**（进程内快照）、⑥配置漂移告警（未注册模型、别名为空、废弃 `prompt.model` 副本数；「模型未被任何别名引用」已于 2026-10-28 撤除——控制台不再维护别名，该告警不可行动）。
   该接口**不做写操作**（方案 B）。写源辨析：模型能力以代码注册表为唯一写源；`skill_model_configs` 已于 2026-09-28 落地 File-as-Truth（§4.2a，管理台可写）；`agent_model_configs` 的唯一写方是迁移脚本 `migrate-database-secrets.ts:112`——三处语义不同，勿混淆。
 - **成本金额已接线**：`services/cost/call-cost-aggregation.ts`（纯函数）提供按模型/会话/技能/节点的金额聚合，
   管理端 `routes/admin/token-cost.ts` 的排行条目与 `totals` 追加 `usd / pricingKnown / callsMissingPricing / pricedCalls`，

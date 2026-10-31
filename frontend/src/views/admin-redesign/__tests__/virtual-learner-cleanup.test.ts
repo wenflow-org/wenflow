@@ -1,16 +1,17 @@
 /**
- * 清理旧账号向导（VirtualLearnerCleanup，2026-10-10）回归：
- * 口径 = 建号早于保留期 且 非进行中 且 不命中保留名单 tag；
+ * 按创建时间清理向导（VirtualLearnerCleanup，2026-10-10）回归：
+ * 口径 = 创建时间早于保留期 且 非进行中 且 不命中保留名单 tag；
  * 交互 = 预览（删 N / 豁免分项）→ askConfirm(danger) → 分批（≤100/批）调 batch-delete → toast + 刷新。
  * 断言 = 判定谓词与分批契约（视觉骨架），像素细节归浏览器人工复核。
  * 注意：模态 Teleport 到 body，查询走 document.body（batch 测试同判例）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import VirtualLearnerCleanup from '../VirtualLearnerCleanup.vue';
 import Confirm from '../Confirm.vue';
 import { settleConfirm, confirmState } from '../useConfirm';
+import { chooseMkSelect } from '@/components/mk/__tests__/mkSelect';
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
@@ -64,15 +65,18 @@ const samples = [
   mk({ id: 'no-date', name: '无建号', createdAt: '' })
 ];
 
-const mountWizard = (rows: typeof samples = samples) => mount(VirtualLearnerCleanup, { props: { samples: rows } });
+const mountWizard = (rows: typeof samples = samples) => mount(VirtualLearnerCleanup, {
+  props: { samples: rows },
+  attachTo: document.body,
+  // Teleport 打平到组件内：既能在 body 里断言，也能用 MkSelect 助手按 aria-label 定位
+  global: { stubs: { teleport: true } }
+});
 const bodyText = () => document.body.textContent || '';
 const bodyButton = (match: (b: HTMLButtonElement) => boolean) =>
   Array.from(document.body.querySelectorAll('button')).find(match);
 
-async function setSelect(value: string) {
-  const el = document.body.querySelector('select') as HTMLSelectElement;
-  el.value = value;
-  el.dispatchEvent(new Event('change'));
+async function setSelect(w: VueWrapper, value: string) {
+  await chooseMkSelect(w as never, '保留最近', value);
   await nextTick();
   await flushPromises();
 }
@@ -85,8 +89,8 @@ async function setTextarea(value: string) {
   await flushPromises();
 }
 
-describe('清理旧账号向导 · 判定口径', () => {
-  it('保留期 3 天 + 保留名单：旧账号入选，新账号/进行中/保留名单/无建号全部豁免', async () => {
+describe('按创建时间清理向导 · 判定口径', () => {
+  it('保留期 3 天 + 保留名单：旧账号入选，新账号/进行中/保留名单/创建时间缺失全部豁免', async () => {
     const w = mountWizard();
     (w.vm as unknown as { open: () => void }).open();
     await nextTick();
@@ -97,7 +101,7 @@ describe('清理旧账号向导 · 判定口径', () => {
     expect(summary).toContain('豁免 4 人');
     expect(summary).toContain('进行中 1');
     expect(summary).toContain('保留名单 1');
-    expect(summary).toContain('建号缺失 1');
+    expect(summary).toContain('创建时间缺失 1');
     const names = Array.from(document.body.querySelectorAll('.vl-cleanup-name')).map((el) => el.textContent);
     expect(names).toEqual(['旧账号一', '旧账号二']);
     w.unmount();
@@ -111,8 +115,8 @@ describe('清理旧账号向导 · 判定口径', () => {
     const w = mountWizard(fresh);
     (w.vm as unknown as { open: () => void }).open();
     await nextTick();
-    await setSelect('30');
-    expect(bodyText()).toContain('没有符合条件的旧账号');
+    await setSelect(w, '30');
+    expect(bodyText()).toContain('没有符合条件的账号');
     const del = bodyButton((b) => b.classList.contains('mk-btn--danger')) as HTMLButtonElement;
     expect(del.disabled).toBe(true);
     w.unmount();
@@ -129,7 +133,7 @@ describe('清理旧账号向导 · 判定口径', () => {
   });
 });
 
-describe('清理旧账号向导 · 确认与分批执行', () => {
+describe('按创建时间清理向导 · 确认与分批执行', () => {
   it('确认后分批（≤100/批）调 batch-delete，成功后 toast + done 事件', async () => {
     const many = Array.from({ length: 250 }, (_, i) =>
       mk({ id: `old-${i}`, name: `旧${i}`, createdAt: '2026-09-01T00:00:00+08:00' })
@@ -153,7 +157,7 @@ describe('清理旧账号向导 · 确认与分批执行', () => {
     expect(batchDeleteMock).toHaveBeenCalledTimes(3); // 250 → 100+100+50
     const sizes = batchDeleteMock.mock.calls.map((c) => (c[0] as string[]).length);
     expect(sizes).toEqual([100, 100, 50]);
-    expect(toast.success).toHaveBeenCalledWith('已删除 250 个旧账号');
+    expect(toast.success).toHaveBeenCalledWith('已删除 250 个账号');
     expect(w.emitted('done')).toBeTruthy();
     confirmHost.unmount();
     w.unmount();

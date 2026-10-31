@@ -1,68 +1,58 @@
 <template>
   <div :class="embedded ? 'mk-page--fill ts-embedded' : 'mk-page mk-page--fill'">
-    <!-- 教学会话页头（newui/admin pagehead；embedded 由宿主承载，本组件不渲染页头）。
-         本页 20s 静默轮询，手动「刷新」钮与之重复已撤（对齐执行日志/健康中心先例：
-         轮询页不放刷新钮）；拉取失败走错误条重试钮（refreshNow 仍被错误态与宿主联动使用）。
-         统计口径（2026-10-17 分布带退役后）：不再有整页统计带；观测读数住 KPI 卡
-         （需关注 / 缺总结 / 有建议 / 完结率），筛选出口住卡头 chips，每个数只出现一次。 -->
-    <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 需关注识别与完课质量">
-      <template #actions>
-        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
-        <DataScopeToggle v-model="includeTest" />
-      </template>
-    </MkPageHead>
-    <!-- 页头状态条整体退役（2026-10-04 用户拍板：教学组已有统计带，顶部这条复读）——
-         它的「需关注 / 缺总结」与焦点 chips 同源同数、异常计数与分布条「异常终态」段
-         同源同数（同一数字不两处渲染）；「只看需关注」= 待关注 chip 的同一动作，直接删。
-         两个别处没有的**动作**（有建议服务端过滤 / 异常多选筛选）随迁卡头 chips；
-         总数与窗口截断口径并进卡头 meta（真触上限才算限定，未触限时窗口=全量）。 -->
+    <!-- 教学会话页头（embedded 由宿主承载，本组件不渲染页头）。
+         本页 20s 静默轮询 + 顶栏刷新（watch liveRefreshSeq）；拉取失败走错误条重试钮。 -->
+    <MkPageHead v-if="!embedded" title="教学会话" />
 
-    <!-- 会话 KPI（2026-10-05 用户拍板「像学习路径页面 kpi 面板，统一面板设计」）：
-         三个运维关注量升 MkKpi 卡带，与下方分布卡（状态比例）分属两个维度不重叠。
-         用法守全站家法（TokenCost 判例：hint = 一短句可见口径，长解释收 title 悬停；
-         2026-10-05 用户再纠「自己造了一套」——裸瓦片是离群方言）。
-         2026-10-14（KPI 审计）：本行原注写「同源 chips（待关注 / 缺总结 / 有建议）随之去计数
-         （学习状态判例：KPI 孪生 pill 不再显数）」——与实现不符，且那条旧判例**已于 2026-10-11
-         被用户拍板取代**：筛选 pill 一律显命中数，唯「全部」不显（总数单源 = 分页器），
-         理由是旧规则会让计数忽隐忽现（见 LearnerCenter.vue 卡头同判例注释）。
-         故 pill 继续带计数、与上方 KPI 卡并存是拍板过的形态，不是复读事故；
-         总览/编排图等处的「计数不重复」只约束**同类元素之间**，不跨 KPI 卡与筛选 pill。 -->
-    <section v-if="!embedded && rows.length" class="mk-kpi-grid" aria-label="会话运维关注量">
+    <!-- 会话 KPI：需关注 / 异常 / 缺总结 / 有建议 / 完结率。
+         2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：KPI 是读数的唯一出处，
+         也是可点即筛的快捷入口；卡头不再常驻任何 chip——
+         · 需关注（派生视图）→ 点卡筛选，卡头只出现「已应用」可移除胶囊；
+         · 异常（失败 / 收尾失败 / 超时）→ 点卡落到「状态」下拉的「异常」档；
+         · 缺总结 → 落到「总结」下拉；有建议（服务端开关）→ 点卡筛选，卡头出现可移除胶囊；
+         · 完结率只读。 -->
+    <section v-if="!embedded && rows.length" class="mk-kpi-grid" aria-label="教学会话运维关注量">
       <MkKpi
+        clickable
         label="需关注"
         :value="attentionCount"
         :tone="attentionCount ? 'warn' : ''"
-        hint="关注度 高 / 中"
-        :title="KPI_LIST_SCOPE_TITLE"
+        :class="{ 'ts-kpi--on': pill === 'attention' }"
+        :aria-pressed="pill === 'attention'"
+        @click="pill = pill === 'attention' ? 'all' : 'attention'"
       />
       <MkKpi
+        label="异常"
+        :value="abnormalSessionCount"
+        :tone="abnormalSessionCount ? 'bad' : ''"
+        :hint="abnormalHeap ? '异常堆积' : ''"
+        hint-tone="bad"
+        :clickable="!!abnormalSessionCount || statusFilter === 'abnormal'"
+        :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}${abnormalHeap ? `（≥ ${TS_BAD_THRESHOLD}，异常堆积）` : ''}`"
+        :class="{ 'ts-kpi--on': statusFilter === 'abnormal' }"
+        :aria-pressed="abnormalSessionCount || statusFilter === 'abnormal' ? statusFilter === 'abnormal' : undefined"
+        @click="toggleStatusFilter('abnormal')"
+      />
+      <MkKpi
+        clickable
         label="缺总结"
         :value="missingWrapupCount"
         :tone="missingWrapupCount ? 'warn' : ''"
-        hint="已结束的会话缺课后总结"
-        title="仅统计已结束的会话，进行中的会话总结尚未生成，不计入"
+        :class="{ 'ts-kpi--on': wrapFilter === 'missing' }"
+        :aria-pressed="wrapFilter === 'missing'"
+        @click="wrapFilter = wrapFilter === 'missing' ? '' : 'missing'"
       />
       <MkKpi
+        clickable
         label="有建议"
         :value="advisoryCount"
-        hint="含完课调整 / 复习建议"
-        :title="KPI_LIST_SCOPE_TITLE"
+        :class="{ 'ts-kpi--on': onlyAdvisory }"
+        :aria-pressed="onlyAdvisory"
+        @click="toggleOnlyAdvisory"
       />
-      <!-- 2026-10-17：分布带退役，完结率从带副文升独立 KPI（两位小数 → 四舍五入） -->
       <MkKpi
         label="完结率"
         :value="completionRate"
-        hint="已完成 / 已加载会话"
-        :title="`已完成会话占已加载会话的比例（窗口最多最近 ${LIST_LIMIT} 条），四舍五入到整数`"
-      />
-      <!-- P-49（#74）：异常终态从「非空才出现的 chip」升为首屏卡（0 时不渲染，避免恒 0 占位） -->
-      <MkKpi
-        v-if="abnormalSessionCount > 0"
-        label="异常终态"
-        :value="abnormalSessionCount"
-        tone="bad"
-        hint="失败 / 收尾失败 / 超时"
-        :title="`${KPI_LIST_SCOPE_TITLE}。点列表里的「服务器异常」徽章可按状态筛选`"
       />
     </section>
 
@@ -74,104 +64,73 @@
       class="mk-kpi-grid"
       aria-hidden="true"
     >
-      <div v-for="n in 4" :key="n" class="mk-skeleton ts-skel-kpi"></div>
+      <div v-for="n in 5" :key="n" class="mk-skeleton ts-skel-kpi"></div>
     </section>
 
     <!-- G5（2026-10-10）：深链未命中提示由常驻 alert 横幅改为一次性 toast（见 script 区 watch），
          此前横幅无关闭出口、?session= 不清就永久挂着 -->
 
-    <!-- 会话状态分布带已退役（2026-10-17 用户走查「教学会话也用不到吧」）：
-         四组里此刻两组为 0，条上只剩两段；而进行中 / 异常 / 缺总结 在卡头 chips 已有入口，
-         精确状态在「筛选」下拉里可选。完结率升独立 KPI 卡。 -->
-
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 表前只此一行（2026-10-04 用户拍板：快筛并回卡头，与教学组其余五页一致）：
-               左组 = 焦点 chips（单选 全部/进行中/待关注/缺总结）+ 两枚独立开关
-               （有建议服务端过滤 / 异常多选，aria-pressed 表开关态，故另起 aria group），
-               随后是搜索；放不下主栏的次级筛选（全部状态 / 全部时间 两个下拉）收进
-               右侧「筛选」弹层（与用户与学习者同构，外壳见 .mk-adv 原语）。 -->
-          <div class="mk-pills" role="group" aria-label="焦点筛选">
-            <button
-              v-for="p in pills"
-              :key="p.id"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': pill === p.id }"
-              :aria-pressed="pill === p.id"
-              :title="p.title"
-              @click="pill = pill === p.id && p.id !== 'all' ? 'all' : p.id"
-            >
-              {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
-            </button>
-          </div>
-          <div class="mk-pills" role="group" aria-label="快捷筛选">
-            <button
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': onlyAdvisory }"
-              :aria-pressed="onlyAdvisory"
-              title="只看含教学建议（完课调整 / 复习建议）的会话"
-              @click="toggleOnlyAdvisory"
-            >有建议<span class="mk-pill__count">{{ advisoryCount }}</span></button>
-            <button
-              v-if="abnormalSessionCount"
-              type="button"
-              class="mk-pill ts-abn-chip"
-              :class="{ 'mk-pill--active': abnormalOnly, 'ts-abn-chip--heap': abnormalHeap && !abnormalOnly }"
-              :aria-pressed="abnormalOnly"
-              :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}${abnormalHeap ? `（≥ ${TS_BAD_THRESHOLD}，异常堆积）` : ''}`"
-              @click="abnormalOnly = !abnormalOnly"
-            >异常<span class="mk-pill__count">{{ abnormalSessionCount }}</span></button>
-          </div>
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+          <!-- 筛选区语法（2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」后定稿）：
+               KPI 卡带 = 读数 + 一键筛选入口；卡头只留两种东西——
+               ① 派生视图的「已应用」胶囊：只有当前生效才出现（需关注 / 有建议），点叉即清；
+                  常驻 chip 组（有建议 / 异常）全部退役——它们的读数与入口都在 KPI 卡上；
+               ② 维度（单选）= 一次一维的胶囊下拉，全部可见。
+                  异常是状态维度的组合档（失败 / 收尾失败 / 超时），落在「状态」下拉里，
+                  点 KPI「异常」卡与在下拉里选「异常」是同一个状态，不再各走一套。 -->
+          <button
+            v-for="view in appliedViews"
+            :key="view.key"
+            type="button"
+            class="mk-pill mk-pill--active ts-view-chip"
+            :title="`清除「${view.label}」视图`"
+            @click="view.clear()"
+          >{{ view.label }}<X :size="12" :stroke-width="2.5" aria-hidden="true" /></button>
+          <MkPillSelect
+            v-model="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusSelectOptions"
+            :active="!!statusFilter"
+          />
+          <MkPillSelect
+            v-model="wrapFilter"
+            label="总结"
+            aria-label="按总结筛选"
+            :options="wrapSelectOptions"
+            :active="!!wrapFilter"
+          />
+          <MkPillSelect
+            v-model="modeFilter"
+            label="课型"
+            aria-label="按课型筛选"
+            :options="modeSelectOptions"
+            :active="!!modeFilter"
+          />
+          <MkPillSelect
+            v-model="dateFilter"
+            label="开始时间"
+            aria-label="按开始时间筛选"
+            :options="dateSelectOptions"
+            :active="!!dateFilter"
+          />
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
-          <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱 / ID" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱" />
           <!-- 口径切换/刷新加载反馈（2026-10-06 审核 F2-3）：列表接口实测可滞后数秒，
                此前全程无加载提示；这里给一处文字化「正在加载」（MkLoading 共享原语，
                含 role=status）。常驻卡头，切换口径时位置不跳。 -->
           <MkLoading v-if="refreshing" inline text="加载中…" />
           <MkCols
             :col-defs="tsColDefs"
-            storage-key="wf_teaching_hidden_cols"
+            storage-key="wf_teaching_hidden_cols_v3"
+            :default-hidden="TS_DEFAULT_HIDDEN"
             v-model:hidden="tsHiddenCols"
           />
-          <div class="mk-adv">
-            <!-- 筛选：主栏只留 chips + 搜索；10 档状态枚举与时间窗收进弹层
-                 （点击展开、遮罩吞外点、Esc 关闭）。触发钮标出生效数，收起来也不丢状态 -->
-            <button
-              type="button"
-              class="mk-btn mk-btn--sm"
-              :aria-expanded="advOpen"
-              @click="advOpen = !advOpen"
-            >
-              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
-            </button>
-            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
-            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
-              <label class="mk-adv__field">
-                <span class="mk-cell-sub">状态</span>
-                <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
-                  <option value="">全部状态</option>
-                  <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
-                </select>
-              </label>
-              <label class="mk-adv__field">
-                <span class="mk-cell-sub">开始时间</span>
-                <select v-model="dateFilter" class="mk-filter__select" aria-label="按开始时间筛选">
-                  <option value="">全部时间</option>
-                  <option value="7d">近 7 天</option>
-                  <option value="30d">近 30 天</option>
-                </select>
-              </label>
-            </div>
-          </div>
-          <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
-               这里再写一遍「（真实）」是同一状态复读（2026-10-19 用户走查「这个小文案不要」） -->
-          <span v-if="truncated" class="mk-card__meta" :title="totalTitle">共 {{ listTotal }} 条 · 当前显示最近 {{ LIST_LIMIT }} 条</span>
+          <span v-if="truncated" class="mk-card__meta">共 {{ listTotal }} 条 · 当前显示最近 {{ LIST_LIMIT }} 条</span>
         </div>
       </div>
 
@@ -180,58 +139,64 @@
         <button type="button" class="mk-alert__btn" :disabled="refreshing" @click="refreshNow">{{ refreshing ? '重试中…' : '重试' }}</button>
       </div>
 
-      <MockSkeletonTable v-if="refreshing && !rows.length" :cols="9" />
-      <div v-else class="mk-table-scroll">
-        <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长内容由 .ts-summary(.mk-cell-sub) / .mk-cell-main 的 max-width 截断兜底 -->
-        <table v-if="filtered.length" class="mk-table mk-table--click mk-table--nowrap">
+      <MockSkeletonTable v-if="refreshing && !rows.length" :cols="tsVisibleColCount" />
+      <!-- 0 行不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃满卡高，把空态顶到卡底
+           （实测文案上方 603px 空白）；空态改挂卡级 + min，吃掉卡内剩余高度并居中 -->
+      <div v-else-if="filtered.length" class="mk-table-scroll">
+        <!-- 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：自动布局下课堂/用户
+             两列按当页最长内容分宽，翻页就跳；改 fixed + 逐列表头宽度，课堂列吸收余量。
+             单元格 nowrap 不变，长内容仍由 .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底。 -->
+        <table v-if="filtered.length" class="mk-table mk-table--click mk-table--nowrap mk-table--fixed ts-table">
           <thead>
             <tr>
               <th
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-c-topic"
                 :aria-sort="tsSortState('topic')"
                 @click="toggleTsSort('topic')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('topic')">会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('topic')">课堂<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!tsHiddenCols.has('user')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-c-user"
                 :aria-sort="tsSortState('user')"
                 @click="toggleTsSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!tsHiddenCols.has('status')"
                 scope="col"
-                class="mk-th--sortable ts-status"
+                class="mk-th--sortable ts-c-status"
                 :aria-sort="tsSortState('status')"
                 @click="toggleTsSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
+                v-if="!tsHiddenCols.has('mode')"
+                scope="col"
+                class="ts-c-mode"
+              >课型</th>
+              <th
                 v-if="!isTableNarrow && !tsHiddenCols.has('track')"
                 scope="col"
-                class="ts-track-col"
-                title="收束轨道与完成通道（#105 统一观测）：真人 / 虚拟 / 未标记；副行 = 完成通道。历史记录无标记时不回填、不猜测"
-              >轨道</th>
+                class="ts-c-track"
+              >完成方式</th>
               <th
-                v-if="!tsHiddenCols.has('interact')"
+                v-if="!tsHiddenCols.has('duration')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-c-dur"
                 :aria-sort="tsSortState('interact')"
-                title="互动：时长 / 消息数 / 知识点，时长 ≥ 25 分钟按长时标琥珀（信号，非故障）"
                 @click="toggleTsSort('interact')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">互动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!tsHiddenCols.has('progress')" scope="col" title="任务进度：进行中显示「任务 第几个/共几个」，终态显示「结束于 第几个/共几个」——两种说法都是位置，不是完成数">进度</th>
-              <th v-if="!tsHiddenCols.has('output')">产物</th>
-              <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')">关注</th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th v-if="!tsHiddenCols.has('messages')" scope="col" class="ts-c-msg">消息</th>
+              <th v-if="!isTableMid && !tsHiddenCols.has('knowledge')" scope="col" class="ts-c-kp">知识点</th>
+              <th v-if="!tsHiddenCols.has('output')" scope="col" class="ts-c-out">课后总结</th>
+              <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')" scope="col" class="ts-c-att">关注</th>
               <th
-                v-if="!isTableNarrow && !tsHiddenCols.has('start')"
+                v-if="!isTableCompact && !tsHiddenCols.has('start')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-c-start"
                 :aria-sort="tsSortState('start')"
                 @click="toggleTsSort('start')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('start')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right">操作</th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('start')">开始时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             </tr>
           </thead>
           <tbody>
@@ -240,20 +205,20 @@
               :key="r.id || `row-${i}`"
               class="ts-row"
               tabindex="0"
-              @click="goConsole(r)"
-              @keydown.enter.self.prevent="goConsole(r)"
+              @click="openRow(r)"
+              @keydown.enter.self.prevent="openRow(r)"
             >
               <td>
                 <div class="mk-cell-main">
-                  <strong>{{ r.topic }}</strong>
+                  <strong :title="r.topic">{{ r.topic }}</strong>
                   <!-- 副行并档（2026-10-06 审核 #39）：原「学科·任务类型」与「总结摘要」两行
                        合成一条（全文仍留 title），会话列三行并回两行，行高向全站 66px 档收敛 -->
                   <span class="mk-cell-sub" :class="{ 'ts-summary': tsSubNote(r) }" :title="sessionSubTitle(r)">{{ sessionSubText(r) }}</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('user')">
-                <!-- 用户格对齐全站判例（2026-10-08：六个同格页均 MkCellAvatar，本页是遗漏）：
-                     头像 + 主副行 + 右侧身份徽章，同 Users.ul-user / GoalConversations.gc-user -->
+                <!-- 2026-10-27 用户「还是太多数据了」：用户格只留头像 + 姓名；
+                     邮箱 / 用户 ID 收进姓名的 title，不再每行各占一条副行。 -->
                 <div class="ts-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
                   <div class="mk-cell-main">
@@ -261,143 +226,82 @@
                     <button
                       type="button"
                       class="mk-user-link"
-                      :title="`查看学习者详情：${r.userName}`"
+                      :title="userMetaTitle(r)"
                       @click.stop="openLearner(r.userId)"
                       @keydown.enter.stop.prevent="openLearner(r.userId)"
                     >{{ r.userName }}</button>
-                    <span v-if="r.email" class="mk-cell-sub">{{ r.email }}</span>
-                    <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
-                  </div>
-                  <div class="ts-tags">
-                    <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
-                    <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
+                    <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test">测试</span>
                   </div>
                 </div>
               </td>
-              <td v-if="!tsHiddenCols.has('status')" class="ts-status">
-                <span class="mk-badge ts-status__main" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
-                <!-- 低参与标注（拍板 #1，显示口径）：completed 但用户消息 <2 条（与零证据门同阈值）。
-                     状态机语义不动——会话确实终态结束；运营口径单独标注，避免「完成」被读成「真实参与过」。 -->
-                <span
-                  v-if="r.status === 'completed' && (r.messageCount ?? 0) < 2"
-                  class="mk-badge mk-badge--sm mk-badge--muted"
-                  title="低参与：完成时用户消息不足 2 条，无真实学习参与证据"
-                >低参与</span>
-                <!-- 手动结束（2026-10-18 用户拍板）：completed 只是生命周期终态，用户点「结束学习」
-                     也会走到这里；endReason 从会话收束时已落进 teachingState.sessionArtifacts。
-                     老会话没有该字段时不猜、不加徽章。
-                     title 只说「记为 manual-end」不说「用户点的」——后台收束悬挂会话的那个脚本
-                     也写同一个值，断言成用户动作会冤枉会话也冤枉运营。 -->
-                <span
-                  v-if="r.status === 'completed' && r.endReason === 'manual-end'"
-                  class="mk-badge mk-badge--sm mk-badge--muted"
-                  title="结束原因记为「手动结束」而不是「任务完成」：用户点「结束学习」，或后台自动结束长时间没有动静的会话，都会记这个原因。任务未必做完，进度列显示结束在哪一格"
-                >手动结束</span>
+              <td v-if="!tsHiddenCols.has('status')">
+                <!-- 2026-10-27 用户「还是太多数据了，为什么放那么多」：状态列只留一枚状态徽章。
+                     进度 x/y、低参与 / 手动结束等从属说明全部收进 title，行内不再复述。 -->
+                <div class="ts-status" :title="statusTitle(r)">
+                  <span class="mk-badge ts-status__main" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
+                </div>
+              </td>
+              <td v-if="!tsHiddenCols.has('mode')">
+                <!-- 2026-10-27：课型是分类值（正课/复习课/延伸课），不是需要着色的状态，去掉胶囊改纯文本。 -->
+                <span class="ts-mode">{{ sessionModeText(r.mode) }}</span>
               </td>
               <td v-if="!isTableNarrow && !tsHiddenCols.has('track')">
-                <!-- #105 读侧接入：轨道（真人/虚拟/未标记）+ 通道，来自统一收束事件
-                     （learner_evidence 的 task:completed 投影行，按会话 taskId 关联）。
-                     历史（无 track）行标「未标记」中性呈现、不回填；无收束记录（未完成或
-                     事件未投影）给「—」。不用用户 isVirtualLearner 回填——本列存在的意义
-                     就是消灭「两处口径各算各的」。 -->
-                <div class="ts-track" :title="trackCellTitle(r)">
-                  <span
-                    v-if="r.closure"
-                    class="mk-badge mk-badge--sm"
-                    :class="closureTrackBadgeCls(r.closure.track)"
-                  >{{ closureTrackText(r.closure.track) }}</span>
+                <div class="ts-track">
+                  <span v-if="r.closure" class="ts-track__mode">{{ closureSourceText(r.closure.completionSource) }}</span>
                   <span v-else class="mk-na">—</span>
-                  <span v-if="r.closure" class="mk-cell-sub">{{ closureSourceText(r.closure.completionSource) }}</span>
                 </div>
               </td>
-              <td v-if="!tsHiddenCols.has('interact')">
-                <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟长时标琥珀 / <1 分钟秒退弱化），消息/知识点降 sub 行；
-                     长时阈值（duration ≥ 1500 秒）写进 title 披露（P3）。
-                     2026-10-06 审核：≥25 分钟是「长时」信号而非故障，红色让位给失败/缺总结等真红信号，改用琥珀 -->
-                <div class="ts-ia" :title="interactTitle(r)">
-                  <b class="ts-ia__dur" :class="{ 'ts-ia__dur--long': r.duration >= IDLE_LONG_SECONDS, 'ts-ia__dur--brief': r.duration > 0 && r.duration < 60 }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
-                  <span class="mk-cell-sub">{{ r.messageCount }} 条<template v-if="r.knowledgePointCount"> · 知识 {{ r.knowledgePointCount }} 点</template></span>
+              <td v-if="!tsHiddenCols.has('duration')">
+                <div class="ts-ia ts-ia--dur" :title="interactTitle(r)">
+                  <b v-if="r.duration" class="ts-ia__dur">{{ fmtDuration(r.duration) }}</b>
+                  <span v-else class="mk-na">—</span>
                 </div>
               </td>
-              <td v-if="!tsHiddenCols.has('progress')">
-                <!-- 终态完成：只出「结束于 x/y」，不出进度条（不再说「已完成」——那是状态列的词，
-                     也容易读成任务做到了最后一格；实际 11 条 completed 里 10 条停在半途）。
-                     守卫用「有任务维度」而非「有 progress 对象」：totalTasks=0 时文本回落到 —
-                     却会挂在绿色分数样式里，成了绿色破折号（读起来像「第 0 格也算完成」） -->
-                <template v-if="sessionProgressDone(r.status) && sessionProgressPct(r.progress) !== null">
-                  <span class="ts-prog ts-prog--done" :title="progressTitle(r)">{{ sessionProgressText(r.progress, r.status) }}</span>
-                </template>
-                <template v-else-if="sessionProgressDone(r.status)">
-                  <span class="mk-na" title="这次会话没有任务维度数据">—</span>
-                </template>
-                <template v-else-if="sessionProgressPct(r.progress) !== null">
-                  <span class="ts-prog" :title="progressTitle(r)">
-                    <span class="ts-prog__num">{{ sessionProgressText(r.progress, r.status) }}</span>
-                    <span class="mk-minibar ts-prog__bar">
-                      <i
-                        class="mk-minibar__fill"
-                        :data-tone="sessionProgressTone(r.status)"
-                        :style="{ width: (sessionProgressPct(r.progress) ?? 0) + '%' }"
-                      ></i>
-                    </span>
-                  </span>
-                </template>
-                <span v-else class="mk-na">—</span>
+              <td v-if="!tsHiddenCols.has('messages')">
+                <div class="ts-ia ts-ia--msg" :title="interactTitle(r)">{{ r.messageCount }} 条</div>
+              </td>
+              <td v-if="!isTableMid && !tsHiddenCols.has('knowledge')">
+                <div class="ts-ia ts-ia--kp" :title="interactTitle(r)">
+                  <span v-if="r.knowledgePointCount">{{ r.knowledgePointCount }} 个</span>
+                  <span v-else class="mk-na">—</span>
+                </div>
               </td>
               <td v-if="!tsHiddenCols.has('output')">
-                <!-- 建议徽章可读（评审 §5）：行内直出建议标题（首行预览），title 挂完整建议文本。
-                     「有总结」且 wrapupDegraded（summary-only / fallback 兜底来源）时 badge 文案
-                     改「降级总结」+ title 说明（2026-10-06 审核 #40：该标记此前算出无消费） -->
-                <span class="mk-badge" :class="wrapupBadge(r)" :title="wrapupTitle(r)">{{ wrapupText(r) }}</span>
-                <span
-                  v-if="r.hasAdvisory"
-                  class="mk-badge ts-adv-badge"
-                  :class="advisoryBadge(r.advisory?.priority)"
-                  :title="r.advisory ? `${r.advisory.title || '教学建议'}：${r.advisory.text}` : '教学建议'"
-                ><span class="ts-adv-badge__txt">{{ r.advisory?.title || '建议' }}</span></span>
+                <!-- 2026-10-27 用户「还是太多数据了」：总结格只留结论词。
+                     降级总结与「待确认调整」不再各占一枚行内标记，全部并入 title：
+                     运营视角的处置状态 + 触发原因 + 影响范围仍可在悬停时读到（statusText.advisoryOps*）。 -->
+                <div class="ts-out" :title="wrapupCellTitle(r)">
+                  <!-- 2026-10-27 用户「总结那边还有四类，简化一下」：行内只留两档——
+                       有总结（文字）/ 缺总结（徽章，含降级总结，与 KPI、筛选同一口径）；
+                       未生成是过程态，按空值占位；降级与建议细节留在 title。 -->
+                  <!-- 2026-10-27 用户「有总结可以设计 pill」：总结结果成对用徽章——
+                       有总结=绿色实心，缺总结=琥珀虚线；两者是同一列的两个结论档。 -->
+                  <span v-if="wrapupTier(r) === 'complete'" class="mk-badge mk-badge--ok">有总结</span>
+                  <span v-else-if="wrapupTier(r) === 'missing'" class="mk-badge mk-badge--warn">缺总结</span>
+                  <span v-else class="mk-na">—</span>
+                </div>
               </td>
               <td v-if="!isTableNarrow && !tsHiddenCols.has('attention')">
                 <span
                   class="ts-att"
                   :class="`ts-att--${r.attention}`"
-                  :title="r.attention === 'high' ? '高关注：需优先介入' : r.attention === 'medium' ? '中关注' : '低关注'"
                 >{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span>
               </td>
-              <td v-if="!isTableNarrow && !tsHiddenCols.has('start')">
-                <!-- 原型末数据列「时间」.sub mono 形态：相对时间 + title 绝对时间（Users 判例）。
-                     悬停给本地化绝对时刻（2026-10-06 审核 #38）：原样直出后端 ISO（UTC 带 Z），
-                     跨时区读不出真实时刻 -->
-                <span class="mk-cell-sub mono" :title="startAbsTitle(r)">{{ r.startAt || '—' }}</span>
-              </td>
-              <td>
-                <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）；
-                     右对齐走共享 .mk-actions，与 mk-th--right 表头对齐。
-                     行内曾并列「链路」入口（执行日志按 sessionId 归组的模型调用瀑布），
-                     2026-10-19 用户拍板下线：链路是工程排查面，不是运营面——运营看这节课
-                     教得怎样（详情座舱：对话 / 阶段进度 / 产物），不看模型调用瀑布。
-                     需要链路时从执行日志页按会话查（该页保留归组能力），列表不再摆第二颗钮。 -->
-                <div class="mk-actions">
-                  <button
-                    v-if="r.id"
-                    type="button"
-                    class="mk-btn mk-btn--sm"
-                    title="详情：只读会话座舱（这节课的对话、阶段进度与产物）"
-                    @click.stop="goConsole(r)"
-                  >详情</button>
-                </div>
+              <td v-if="!isTableCompact && !tsHiddenCols.has('start')">
+                <span v-if="r.startAt" class="mk-cell-sub" :title="startAbsTitle(r)">{{ r.startAt }}</span>
+                <span v-else class="mk-na">—</span>
               </td>
             </tr>
           </tbody>
         </table>
-
-        <MkEmptyState
-          v-else-if="!loadFailed"
-          :title="onlyAdvisory ? '「有建议」过滤下无会话' : rows.length ? '当前筛选无会话' : '暂无教学会话'"
-          :description="onlyAdvisory ? '没有含教学建议的会话，可清除筛选查看全部。' : rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。'"
-          :action-text="isFiltered ? '清除筛选' : ''"
-          @action="clearFilters"
-        />
       </div>
+      <MkEmptyState
+        v-else-if="!loadFailed"
+        min
+        :title="isFiltered ? '当前筛选无课堂' : '暂无教学会话'"
+        :action-text="isFiltered ? '清除筛选' : ''"
+        @action="clearFilters"
+      />
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination
         v-if="filtered.length"
@@ -414,32 +318,29 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
+import { isDegradedWrapup } from './cockpitWrapup'
 import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
-import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureTrackText, closureTrackBadgeCls, closureSourceText } from './statusText'
-import type { SessionProgress } from './statusText'
+import { timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched } from './live'
+import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, sessionModeText, advisoryOpsTitle } from './statusText'
+import type { SessionProgress, OpsAdvisoryLike } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
-import DataScopeToggle from './DataScopeToggle.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
-import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 
-/* 文案单源（R6 复读单源化）：两个 KPI 卡的口径悬停释共用一份 */
-const KPI_LIST_SCOPE_TITLE = '统计当前列表中的会话'
-import { Filter } from 'lucide-vue-next'
+import { X } from 'lucide-vue-next'
 import { toast } from '@/utils/toast'
-import { useEscape } from './useEscape'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
     （原 count/stats 上报链随合并宿主退役，2026-10-02 撤页头 KPI 区时一并清除） */
@@ -458,9 +359,11 @@ interface Row {
   topic: string
   subject: string
   taskType: string
+  /** 课堂类型：tutor=正课 / review=复习课 / extension=延伸课（后两者不结算任务） */
+  mode: string
   userName: string
   email: string
-  /** 数据隔离标记（includeTest=true 时后端带回，供灰标） */
+  /** 测试/审计备注标记（行内「测试」） */
   isVirtualLearner: boolean
   isTestAccount: boolean
   status: string
@@ -479,7 +382,9 @@ interface Row {
   wrapup: WrapupSummary | null
   /** 降级总结：超时/收束失败兜底（summary-only/*-fallback），练习建议是学习者向占位，后台不原样展示 */
   wrapupDegraded: boolean
-  advisory: { title: string; text: string; priority: string } | null
+  /** 评估失败：wrapup.sources.evaluation 非 model（failed / unavailable） */
+  wrapupEvalFallback: boolean
+  advisory: OpsAdvisoryLike | null
   progress: SessionProgress | null
   /** #105 收束观测（后端统一口径）：该会话任务完成事件的轨道/通道；null = 无收束记录 */
   closure: { track: string; completionSource: string } | null
@@ -488,13 +393,6 @@ interface Row {
 const rows = ref<Row[]>([])
 const refreshing = ref(false)
 const loadFailed = ref(false)
-
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；口径整组统一（2026-10-04 用户拍板）——
-   get/set 走 live.ts 共享态（页头 DataScopeToggle 同源），本页 watch 只负责按新口径重拉 */
-const includeTest = computed({
-  get: () => liveIncludeVirtual.value,
-  set: (v) => liveSetIncludeVirtual(v)
-})
 
 /* 列表拉取上限：文案与实现共用同一常量，避免再次漂移
    （此前文案写「最近 100 条」而实现是 limit: 1000 —— 审计 附 A #9） */
@@ -509,8 +407,7 @@ const isTerminal = (s: string) => TERMINAL_STATUSES.has(s)
 
 /* 列表真实总量（后端 body.total）：达 LIST_LIMIT 上限时用于真实截断提示 */
 const listTotal = ref(0)
-/* 后端是否真的返回了 total（P1#4）：false 时「共 N」退化为已加载窗口行数，
-   状态条 title 必须如实降级，不得再声称全量 */
+/* 后端是否真的返回了 total：false 时卡头 meta 的「共 N」退化为已加载窗口行数 */
 const totalFromBackend = ref(false)
 /* 「只看有建议」服务端过滤（评审 §5 可点穿）：接 adminApi 既有 onlyWithAdvisory 参数 */
 const onlyAdvisory = ref(false)
@@ -530,9 +427,6 @@ async function fetchRows(force = false): Promise<boolean> {
   try {
     const res = await adminTeachingSessionsApi.list({
       limit: LIST_LIMIT,
-      includeTest: includeTest.value,
-      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的会话
-      testOnly: includeTest.value || undefined,
       ...(onlyAdvisory.value ? { onlyWithAdvisory: true } : {})
     })
     // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
@@ -564,15 +458,6 @@ async function toggleOnlyAdvisory() {
     refreshing.value = false
   }
 }
-
-/** 「共 N」口径 title（P1#4）：后端真返回 total 才可声称全量；
-    「只看有建议」过滤生效时 total 是过滤口径，同样要说明 */
-const totalTitle = computed(() => {
-  if (onlyAdvisory.value) return `当前只显示有教学建议的会话，此处为符合条件的总数。列表最多显示最近 ${LIST_LIMIT} 条`
-  return totalFromBackend.value
-    ? `总数为全部会话。分布条与列表最多显示最近 ${LIST_LIMIT} 条`
-    : `总数未知，此处为已加载的会话数（最多 ${LIST_LIMIT} 条）`
-})
 
 async function refreshNow() {
   if (refreshing.value) return
@@ -614,23 +499,8 @@ watch(
   { immediate: true }
 )
 
-/* 数据隔离切换代际号：只由最新一次切换收尾 refreshing（快速连切时旧一笔不得提前撤下骨架） */
-let scopeSwitchSeq = 0
-watch(includeTest, () => {
-  /* 数据隔离切换：仅真实 ↔ 含虚拟/测试。
-     2026-10-06 审核 F2-3：此前只重拉不清行 —— 列表接口实测滞后数秒，滞后期间开关/KPI 已翻到
-     新口径而表格仍是旧口径行，全程无加载反馈（骨架短路条件 refreshing && !rows.length 恒不成立）。
-     改为切换即清行再按新口径重拉（判例：GoalConversations 的 pendingForce 语义）：
-     清后首载骨架（KPI 占位 + 表骨架）立即接管，KPI 与列表读数不再打架。 */
-  const seq = ++scopeSwitchSeq
-  rows.value = []
-  listTotal.value = 0
-  totalFromBackend.value = false
-  refreshing.value = true
-  void fetchRows(true).finally(() => {
-    if (seq === scopeSwitchSeq) refreshing.value = false
-  })
-})
+/* 顶栏刷新（全站唯一刷新钮）：轮询之外的一次显式重拉 */
+watch(liveRefreshSeq, () => { void fetchRows(true) })
 
 /** 用户名兜底：userName → 邮箱前缀 → 「用户 ·尾4位」（不把裸 cuid 显示给运营） */
 function displayName(s: Record<string, unknown>): string {
@@ -647,49 +517,47 @@ function openLearner(userId: string) {
   const id = String(userId || '')
   if (id) openSubPage('learner', id)
 }
-/** 头像 tone（同 GoalConversations 判例；语义与 MkVariantBadge 一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
+/** 头像 tone（同 GoalConversations 判例；与全站身份色一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
 function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtual' | 'test' | 'default' {
   return r.isVirtualLearner ? 'virtual' : r.isTestAccount ? 'test' : 'default'
 }
 
-/* ===== 轨道列（#105 读侧接入）=====
-   轨道/通道来自后端统一收束观测（closure），不是本页自算——历史行如实展示「未标记」，
-   无记录展示「—」，均不用用户身份字段回填（回填/猜测正是 #105 要消灭的分叉口径）。
-   文案字典单源在 statusText.ts（closureTrackText / closureTrackBadgeCls / closureSourceText），
-   与总览「完课量」KPI 共用。 */
-/** 轨道列悬停长释：轨道语义 + 通道（附原始枚举值供排查） */
-function trackCellTitle(r: Row): string {
-  if (!r.closure) return '无收束记录：该会话任务尚未完成，或完成事件还未投影到观测表'
-  const trackDesc = r.closure.track === 'human'
-    ? '真人学习者'
-    : r.closure.track === 'virtual-learner'
-      ? '虚拟学习者'
-      : r.closure.track === 'legacy'
-        ? '历史完成记录（2026-10-18 前）没有轨道标记，不回填、不猜测'
-        : `轨道取值 ${r.closure.track}`
-  return `完成事件轨道：${trackDesc} · 通道：${closureSourceText(r.closure.completionSource)}（${r.closure.completionSource}）`
-}
+/* ===== 完成方式列（#105 读侧接入）=====
+   方式/轨道来自后端统一收束观测（closure），不是本页自算；无记录展示「—」，
+   不用用户身份字段回填（回填/猜测正是 #105 要消灭的分叉口径）。
+   文案字典单源在 statusText.ts（closureSourceText），与总览「完课量」KPI 共用。 */
+
+/* ===== 课堂类型列（2026-10-21）=====
+   复习课 / 延伸课不结算任务，列表原先与正课无法区分；类型读自 teaching_sessions.mode。
+   文案/徽章单源在 statusText.ts（学习者详情页共用）。 */
 
 function mapRow(s: Record<string, unknown>): Row {
   const wrapup = (s.wrapup as Record<string, unknown>) || null
   const summary = (wrapup?.summary as WrapupSummary) || null
-  /* 后端 ReplanAdvisory：{shouldSuggest, priority, recommendation, scope, rationale, reasonCodes, ui:{title,body,options}} */
+  /* 后端 ReplanAdvisory：{shouldSuggest, priority, recommendation, scope, rationale, reasonCodes,
+     learnerResponse:{action,at}, ui:{title,body,options}}；ui.* 是学员端文案，这里只留运营要用的
+     字段（处置态/原因/范围），措辞由 statusText.advisoryOps* 单点给出 */
   const rawAdvisory = (s.advisory as Record<string, unknown>) || null
-  const advisoryUi = rawAdvisory ? (rawAdvisory.ui as Record<string, unknown>) || {} : {}
   const advisory = rawAdvisory
     ? {
-        title: String(advisoryUi.title || ''),
-        text: String(advisoryUi.body || rawAdvisory.rationale || ''),
-        priority: String(rawAdvisory.priority || '')
+        priority: String(rawAdvisory.priority || ''),
+        recommendation: String(rawAdvisory.recommendation || ''),
+        scope: String(rawAdvisory.scope || ''),
+        reasonCodes: Array.isArray(rawAdvisory.reasonCodes) ? rawAdvisory.reasonCodes.map(String) : [],
+        rationale: String(rawAdvisory.rationale || ''),
+        learnerResponse: (rawAdvisory.learnerResponse as OpsAdvisoryLike['learnerResponse']) || null,
+        ui: (rawAdvisory.ui as OpsAdvisoryLike['ui']) || null
       }
     : null
   const advisoryRelevant = !!advisory && rawAdvisory?.shouldSuggest !== false && !['none', ''].includes(advisory.priority)
   const wrapupStatus = wrapup?.status === 'complete' ? 'complete' : 'missing'
-  const wrapupSources = (wrapup?.sources as Record<string, string>) || {}
   const rawPracticeAdvice = String(summary?.practiceAdvice || '')
-  const wrapupDegraded = wrapup?.status === 'summary-only'
-    || String(wrapupSources.summary || '').includes('fallback')
-    || /重新开始本节|重新完成一次完整的学习/.test(rawPracticeAdvice)
+  const wrapupDegraded = isDegradedWrapup(wrapup, rawPracticeAdvice)
+  /* 评估来源：artifact.sources.evaluation（session-wrapup 落库形状）；兼容顶层 evaluationSource。
+     只有明确记为 model 才算评估成功——缺来源字段的老产物不猜。 */
+  const wrapupSources = (wrapup?.sources as Record<string, unknown>) || null
+  const evalSource = String(wrapupSources?.evaluation ?? wrapup?.evaluationSource ?? '')
+  const wrapupEvalFallback = !!wrapup && evalSource !== '' && evalSource !== 'model'
   const attention: Row['attention'] =
     s.status === 'failed' || s.status === 'timeout' || (s.status === 'completed' && wrapupStatus === 'missing')
       ? 'high'
@@ -705,9 +573,10 @@ function mapRow(s: Record<string, unknown>): Row {
     id: s.id ? String(s.id) : '',
     userId: String(s.userId || ''),
     /* 兜底不展示裸 cuid：主题回「未命名会话」；用户缺失降级邮箱前缀 → 「用户 ·尾4位」 */
-    topic: String(s.topic || '未命名会话'),
+    topic: String(s.topic || '未命名课堂'),
     subject: String(s.subject || '—'),
     taskType: String(s.taskType || ''),
+    mode: String(s.mode || 'tutor'),
     userName: displayName(s),
     email: String(s.email || ''),
     isVirtualLearner: !!s.isVirtualLearner,
@@ -724,6 +593,7 @@ function mapRow(s: Record<string, unknown>): Row {
     startTime: s.startTime ? String(s.startTime) : undefined,
     wrapup: summary,
     wrapupDegraded,
+    wrapupEvalFallback,
     advisory,
     progress: (s.progress as SessionProgress) || null,
     closure: rawClosure
@@ -736,58 +606,72 @@ function mapRow(s: Record<string, unknown>): Row {
 const pill = ref('all')
 const keyword = ref('')
 const statusFilter = ref('')
+const modeFilter = ref('')
 const dateFilter = ref('')
-/* 筛选弹层（状态 / 时间两个下拉）：表前只留一行，放不进主栏的次级筛选收在这里。
-   Esc 关闭走共享 useEscape（与 用户与学习者 同一外壳 .mk-adv*） */
-const advOpen = ref(false)
-useEscape(() => advOpen.value, () => { advOpen.value = false })
-/** 弹层里生效的筛选数：触发钮上标出来，收起来也不丢状态（0 = 不标） */
-const advCount = computed(() => (statusFilter.value ? 1 : 0) + (dateFilter.value ? 1 : 0))
+/* 总结筛选（degraded / eval-failed / missing）：总览「评估失败」「降级总结」的落地入口 */
+const wrapFilter = ref('')
 
-/* P1-3 列显隐（公共组件 MkCols）：用户/状态/互动/进度/产物/关注 可隐藏，会话/详情固定 */
+/* P1-3 列显隐（公共组件 MkCols）：除课堂/操作外都可隐藏。
+   2026-10-22 用户「信息噪点太多了需要优化，可能要拿掉一些列」：默认只留
+   课堂 / 用户 / 状态 / 时长 / 进度 / 产物 / 开始时间 / 操作 八列——
+   · 完成方式：真实视角绝大多数行是「—」，逐条通道在详情/座舱里看；
+   · 消息、知识点：条数读数与「时长 + 进度」重复，且「N 个」本身不可行动；
+   · 关注：高/中/低三档在真实数据里近乎恒定，页头「需关注」KPI 与 chips 已承担分诊。
+   四项都留在「列」菜单里可随时打开（升存储键 v2，旧本地配置不覆盖新默认）。 */
+const TS_DEFAULT_HIDDEN = ['mode', 'track', 'messages', 'knowledge', 'attention'] as const
 const tsColDefs = [
-  { key: 'user', label: '用户', title: '用户姓名 + 邮箱' },
-  { key: 'status', label: '状态', title: '会话状态' },
-  { key: 'track', label: '轨道', title: '收束轨道（真人 / 虚拟 / 未标记）+ 完成通道（#105 统一观测）' },
-  { key: 'interact', label: '互动', title: '时长 / 消息数 / 知识点' },
-  { key: 'progress', label: '进度', title: '学习进度' },
-  { key: 'output', label: '产物', title: '课后总结 / 建议' },
-  { key: 'attention', label: '关注', title: '关注度' },
-  { key: 'start', label: '时间', title: '开始时间' },
+  { key: 'user', label: '用户' },
+  { key: 'status', label: '状态' },
+  { key: 'mode', label: '课型' },
+  { key: 'track', label: '完成方式' },
+  { key: 'duration', label: '时长' },
+  { key: 'messages', label: '消息' },
+  { key: 'knowledge', label: '知识点' },
+  { key: 'output', label: '课后总结' },
+  { key: 'attention', label: '关注' },
+  { key: 'start', label: '开始时间' },
 ] as const
-const tsHiddenCols = ref<Set<string>>(new Set())
-/* 窄档（<1440）：9 列塞不下时，auto 布局会把缺口全压给带 ellipsis 的身份列——1280 下
-   「会话」只剩 113px（20 字标题只露 6 字）、「用户」89px（用户名被截），而「产物」拿满
-   215px 只用 124px。给身份列让宽度只能靠减列：窄档默认收起需求最小、信息含量也最低的
-   「时间 / 关注」两列（56+70=126px），1280 实测会话列 113→191px、用户列 89→124px，且不产生横滚。
-   2026-10-19（#105）：新增「轨道」列在窄档同撤（+70px 会吃掉上述让宽）；≥1440 可见，
-   且它本是可显隐列（MkCols），收起不丢数据——逐条轨道还可在 ≥1440 视口或放宽窗口查看。
-   阈值取 1440：全开时该档会话列已有 191px（1366/1400 只有 167/187px，不够），且 1440 本就是
-   项目自己的档位。与 VirtualLearners 的 useIsNarrow 同一先例（窄档勾了「列」也不显，
-   行详情进座舱，信息不丢）；1920/2560/3840 不受影响（会话列 378/523/764px）。 */
-const isTableNarrow = useIsNarrow(1439)
-/* 焦点 chips（2026-10-05：计数升 KPI 面板后本组退为纯筛选开关——学习状态判例：
-   KPI 孪生 pill 不再显数）。「进行中」保留计数：它是 active 单状态口径，分布卡
-   「进行中」是四状态合并档，两个数互为唯一来源；「全部」不显数 = 卡头 meta 的已加载行数。
-   历史教训：pill 与页头状态条曾各算一遍「高关注」，口径不同（attention==='high' vs
-   !=='low'）致数字打架，该状态条计数已删。 */
-const pills = computed(() => {
-  const all = rows.value
-  return [
-    { id: 'all' as const, label: '全部', count: undefined as number | undefined, title: undefined as string | undefined },
-    {
-      id: 'active' as const,
-      label: '进行中',
-      count: all.filter((r) => r.status === 'active').length,
-      title: '只含进行中单一状态。分布条「进行中」还含初始化 / 暂停 / 收尾中，范围更宽'
-    },
-    /* 2026-10-16 KPI 审计补完：本页 KPI 叫「需关注」、这枚筛选 chip 叫「待关注」，同一件事两个词。
-       全站「需关注」42 处、「待关注」7 处，按多数统一为「需关注」（id 不变，筛选口径不受影响）。 */
-    { id: 'attention' as const, label: '需关注', count: attentionCount, title: '只看需关注的会话组' },
-    { id: 'missing' as const, label: '缺总结', count: missingWrapupCount, title: '只看缺总结的会话组' }
-  ]
+const tsHiddenCols = ref<Set<string>>(new Set<string>(TS_DEFAULT_HIDDEN))
+/* 首载骨架列数 = 当前可见列数（+操作列），避免骨架到真表横向跳一格 */
+const tsVisibleColCount = computed(() => 1 + tsColDefs.filter((c) => !tsHiddenCols.value.has(c.key)).length)
+/* 宽度分三档（auto 布局会把缺口全压给带 ellipsis 的身份列，只能靠减列）：
+   · <1440（isTableCompact）：「会话」在 1280 只剩 113px、用户 89px，默认收起需求最小、
+     信息含量也最低的「开始时间 / 关注」（96+58px）。该阈值沿用 2026-10 的判例
+     （1366/1400 会话列 167/187px，仍不够）。
+   · <1500（isTableNarrow）：#105 的「完成归属」与「关注」也收起（+83/+58px）。前者是
+     可显隐列（MkCols），收起不丢数据——该档仍有「消息」「时长」，逐条归属可在 ≥1500 视口查看；
+     后者只有高/中/低三档，是这几列里信息密度最低的一列。
+   · <1700（isTableMid）：知识点一列收起。1600 实测同时出现会把会话列挤到 99px；读数仍在
+     「消息」列的说明文字里（interactTitle），信息不丢。
+   实测（2026-10-21 归属合列后）：归属只占一列，原先「完成方式」那 88px 还给表宽，1600 档
+   不再需要为它减列。与 VirtualLearners 的 useIsNarrow 同一先例（窄档勾了「列」也不显，
+   行详情进座舱，信息不丢）。 */
+const isTableCompact = useIsNarrow(1439)
+const isTableNarrow = useIsNarrow(1499)
+const isTableMid = useIsNarrow(1699)
+/* 视图态（2026-10-27 筛选重建）：原先「焦点 chips」把三个不同维度的东西并成一组单选胶囊
+   （进行中 = 状态的一档、需关注 = 派生视图、缺总结 = 总结的一档），和右侧维度下拉各自背一份
+   同一个数（选 chip「缺总结」时「总结」下拉仍显示「全部总结」）。现在真正派生的口径只剩
+   「需关注 / 有建议」，以「已应用」胶囊出现，点一下清除；其余维度回到各自的下拉。
+   页头 KPI 卡承接全部一键入口（需关注 / 异常 / 缺总结 / 有建议）。
+   兼容旧深链：?focus=active / missing 仍会筛，胶囊也按同一张表给出可读名。 */
+const VIEW_LABELS: Record<string, string> = { attention: '需关注', active: '进行中', missing: '缺总结' }
+/* 派生视图的「已应用」胶囊（2026-10-27）：只有没有维度下拉可承载的视图才在这里出现；
+   有下拉的（缺总结 / 异常）由下拉自身显示当前值，不再多出一枚重复 token。 */
+const appliedViews = computed(() => {
+  const views: Array<{ key: string; label: string; clear: () => void }> = []
+  if (pill.value !== 'all') {
+    const label = VIEW_LABELS[pill.value]
+    if (label) views.push({ key: 'view', label, clear: () => { pill.value = 'all' } })
+  }
+  if (onlyAdvisory.value) {
+    views.push({ key: 'advisory', label: '有建议', clear: toggleOnlyAdvisory })
+  }
+  return views
 })
-/* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
+
+/* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded）。
+   「异常」是失败 / 收尾失败 / 超时的组合档：KPI 卡与下拉共用这一个值，不再单独维护 abnormalOnly 开关。 */
 const statusOptions = [
   { value: 'initializing', label: '初始化中' },
   { value: 'active', label: '进行中' },
@@ -800,16 +684,37 @@ const statusOptions = [
   { value: 'completed', label: '已完成' },
   { value: 'discarded', label: '已废弃' }
 ]
+/** 胶囊内嵌下拉的选项组（空值 = 不筛该维）。课型 / 开始时间 2026-10-27 从「筛选」弹层提到主栏：
+    Carbon 的筛选模式明确要求「多个类别不得收进菜单/下拉」。 */
+const statusSelectOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'abnormal', label: '异常（失败 · 超时）' },
+  ...statusOptions
+]
+const wrapSelectOptions = [
+  { value: '', label: '全部总结' },
+  { value: 'degraded', label: '降级总结' },
+  { value: 'eval-failed', label: '评估失败' },
+  { value: 'missing', label: '缺总结' },
+]
+const modeSelectOptions = [
+  { value: '', label: '全部课型' },
+  { value: 'tutor', label: '正课' },
+  { value: 'review', label: '复习课' },
+  { value: 'extension', label: '延伸课' },
+]
+const dateSelectOptions = [
+  { value: '', label: '全部时间' },
+  { value: '7d', label: '近 7 天' },
+  { value: '30d', label: '近 30 天' },
+]
 
-/* 卡头异常 badge：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致） */
+/* 异常读数：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致）。
+   KPI 卡与「状态」下拉的「异常」档同源同判据；阈值告警由 KPI 的红色 tone + 「异常堆积」hint 承载。 */
 const ABNORMAL_STATUSES = new Set(['failed', 'finalization_failed', 'timeout'])
 const abnormalSessionCount = computed(() =>
   rows.value.filter((r) => ABNORMAL_STATUSES.has(r.status)).length
 )
-/* 异常 badge 可点穿（评审 §5）：点击 = 异常状态多选筛选（与单选 statusFilter 叠加为 AND）；
-   与分布条「异常终态」段的差别：chip 可与其它筛选叠加 + 承载异常堆积告警（阈值转红），
-   分布条段 = 互斥切片（一次只看一组）。 */
-const abnormalOnly = ref(false)
 
 /* ===== 完结率（2026-10-17 分布带退役后从带副文迁入 KPI）=====
    口径 = 已加载会话窗口（rows，最近 LIST_LIMIT 条），非后端全量；后端两位小数的
@@ -821,7 +726,10 @@ const completionRate = computed(() => {
 })
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
-const { toggle: toggleTsSort, sortState: tsSortState, sortRows: sortTsRows, sortKey: tsSortKey, sortDir: tsSortDir } = useTableSort<Row>({
+const {
+  toggle: toggleTsSort, sortState: tsSortState, sortRows: sortTsRows,
+  sortKey: tsSortKey, sortDir: tsSortDir
+} = useTableSort<Row>({
   accessors: {
     topic: (r) => r.topic,
     user: (r) => r.userName,
@@ -837,9 +745,16 @@ const filtered = computed(() => {
   if (pill.value === 'active') list = list.filter((r) => r.status === 'active')
   if (pill.value === 'attention') list = list.filter((r) => r.attention !== 'low')
   if (pill.value === 'missing') list = list.filter(isMissingWrapup)
-  if (abnormalOnly.value) list = list.filter((r) => ABNORMAL_STATUSES.has(r.status))
-  if (statusFilter.value) {
+  if (statusFilter.value === 'abnormal') {
+    list = list.filter((r) => ABNORMAL_STATUSES.has(r.status))
+  } else if (statusFilter.value) {
     list = list.filter((r) => r.status === statusFilter.value)
+  }
+  if (wrapFilter.value) {
+    list = list.filter((r) => matchesWrapFilter(r, wrapFilter.value))
+  }
+  if (modeFilter.value) {
+    list = list.filter((r) => (r.mode || 'tutor') === modeFilter.value)
   }
   if (dateFilter.value === '7d' || dateFilter.value === '30d') {
     const cutoff = Date.now() - (dateFilter.value === '7d' ? 7 : 30) * 86400000
@@ -854,12 +769,26 @@ const filtered = computed(() => {
   return sortTsRows(list)
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim() || onlyAdvisory.value)
+/** 状态下拉与「异常」KPI 卡共用：再点同一档 = 取消（与 KPI 卡的按下态同一语法） */
+function toggleStatusFilter(value: string) {
+  statusFilter.value = statusFilter.value === value ? '' : value
+}
+
+/** 总结筛选三档：降级总结（兜底来源）/ 评估失败（evaluation 非 model）/ 缺总结（终态无产物） */
+function matchesWrapFilter(r: Row, key: string): boolean {
+  if (key === 'degraded') return r.wrapupDegraded
+  if (key === 'eval-failed') return r.wrapupEvalFallback
+  if (key === 'missing') return isMissingWrapup(r)
+  return true
+}
+
+const isFiltered = computed(() => pill.value !== 'all' || !!statusFilter.value || !!wrapFilter.value || !!modeFilter.value || !!dateFilter.value || !!keyword.value.trim() || onlyAdvisory.value)
 function clearFilters() {
   const hadOnlyAdvisory = onlyAdvisory.value
   pill.value = 'all'
-  abnormalOnly.value = false
   statusFilter.value = ''
+  wrapFilter.value = ''
+  modeFilter.value = ''
   dateFilter.value = ''
   keyword.value = ''
   /* 「有建议」是服务端过滤参数：只改本地不生效，需强制重拉（绕过 TTL 缓存） */
@@ -881,7 +810,7 @@ const pageSize = ref(15)
    而筛选此前只活在内存里——实测点「异常18」→ 进详情 → 返回（或刷新）都回到全部 167 条，
    逐条看要重筛一遍，也没法把「这批异常」的链接发给同事。与 用户与学习者 / 学习状态 /
    虚拟学习者 / 学习路径 同一组合式单点（learner-profile.ts useListQueryState）。
-   焦点 chip、状态组、异常开关、筛选（状态/时间）、有建议开关全部进 URL：
+   焦点视图、状态/总结/课型/时间维度、有建议开关全部进 URL：
    缺省值不写（URL 短且人可读），空结果也不怕深链缺失。
    必须在下方「筛选变化回第 1 页」的 watch 之前调用：URL 落位要发生在监听建立之前，
    否则挂载时还原出来的筛选会被当成用户改筛选、把还原的页码打回 1（Users.vue 判例）。 */
@@ -893,14 +822,18 @@ useListQueryState(
     pageSize,
     allowedPills: ['all', 'active', 'attention', 'missing'],
     extra: [
-      { key: 'abn', get: () => (abnormalOnly.value ? '1' : ''), set: (v) => (abnormalOnly.value = v === '1'), allowed: ['1'] },
       {
         key: 'adv',
         get: () => statusFilter.value,
         set: (v) => (statusFilter.value = v),
-        allowed: statusOptions.map((o) => o.value)
+        allowed: [...statusOptions.map((o) => o.value), 'abnormal']
       },
+      /* 旧深链兼容：2026-10-27 前「异常」是独立开关（abn=1），现并入状态下拉（adv=abnormal）。
+         只读不写：落位时映射到同一个状态，随后由 adv 接管 URL 表达。 */
+      { key: 'abn', get: () => '', set: (v) => { if (v === '1') statusFilter.value = 'abnormal' }, allowed: ['1'] },
+      { key: 'mode', get: () => modeFilter.value, set: (v) => (modeFilter.value = v), allowed: ['tutor', 'review', 'extension'] },
       { key: 'date', get: () => dateFilter.value, set: (v) => (dateFilter.value = v) },
+      { key: 'wrap', get: () => wrapFilter.value, set: (v) => (wrapFilter.value = v), allowed: ['degraded', 'eval-failed', 'missing'] },
       { key: 'advisory', get: () => (onlyAdvisory.value ? '1' : ''), set: (v) => (onlyAdvisory.value = v === '1'), allowed: ['1'] }
     ]
   }
@@ -910,7 +843,7 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, onlyAdvisory, includeTest], () => {
+watch([pill, statusFilter, wrapFilter, modeFilter, dateFilter, keyword, tsSortKey, tsSortDir, onlyAdvisory], () => {
   page.value = 1
 })
 
@@ -925,47 +858,65 @@ const attentionCount = computed(() => rows.value.filter((r) => r.attention !== '
    进行中会话页头就恒 warn、计数虚高。 */
 const wrapupTier = (r: Row): 'complete' | 'missing' | 'pending' =>
   r.wrapupStatus === 'complete' ? 'complete' : isTerminal(r.status) ? 'missing' : 'pending'
-const wrapupText = (r: Row) => {
-  const t = wrapupTier(r)
-  /* 降级总结（#40）：summary-only / fallback 兜底来源与「完全没总结」同档计数，
-     但行内文案区分——否则 wrapupDegraded 算出无消费（死数据） */
-  return t === 'complete' ? '有总结' : t === 'missing' ? (r.wrapupDegraded ? '降级总结' : '缺总结') : '未生成'
+/* 缺总结的悬停说明：降级总结并入同一档（与 KPI / 总结下拉同口径），区别只在 title。 */
+const wrapupMissingTitle = (r: Row): string =>
+  r.wrapupDegraded ? '降级总结：生成走了兜底来源，内容不完整' : '缺总结：会话结束后没有生成总结'
+/* 总结格悬停：结论 + 降级/未生成说明 + 建议处置，行内只显示结论词。 */
+const wrapupCellTitle = (r: Row): string => {
+  const tier = wrapupTier(r)
+  const base =
+    tier === 'complete' ? '有总结' : tier === 'missing' ? wrapupMissingTitle(r) : '未生成：会话进行中，总结尚未到生成时机'
+  return r.hasAdvisory ? `${base} · ${advisoryOpsTitle(r.advisory)}` : base
 }
-const wrapupBadge = (r: Row) =>
-  wrapupTier(r) === 'complete' ? 'mk-badge--ok' : wrapupTier(r) === 'missing' ? 'mk-badge--warn' : 'mk-badge--muted'
-/** 产物徽章悬停（#40）：降级总结说明来源；口径与「缺总结」同档（KPI 计数不含本档差异） */
-const wrapupTitle = (r: Row): string | undefined =>
-  wrapupTier(r) === 'missing' && r.wrapupDegraded
-    ? '降级总结：由系统生成的简要总结，非完整课后总结'
-    : undefined
 const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
+
+/* 状态列从属说明（2026-10-27）：低参与 / 手动结束描述「这次课怎么结束的」，
+   不是独立状态档；2026-10-27 起连行内文本也不占，只进状态格的 title。 */
+const statusNote = (r: Row): string => {
+  if (r.status !== 'completed') return ''
+  const notes: string[] = []
+  if (r.endReason === 'manual-end') notes.push('手动结束')
+  if ((r.messageCount ?? 0) < 2) notes.push('低参与')
+  return notes.join(' · ')
+}
+
+/* 状态格悬停：结果由徽章承担，进度定位与结束方式在这里补全，行内不再复述。 */
+const statusTitle = (r: Row): string => [statusNote(r), progressTitle(r)].filter(Boolean).join(' · ')
+
+/* 用户格悬停：邮箱 / 用户 ID 只留一处可查，不再每行铺一条副行。 */
+const userMetaTitle = (r: Row): string | undefined => [r.email, r.userId].filter(Boolean).join(' · ') || undefined
 
 /* P3（设计评审 4.3-9）：异常态（失败/收尾失败/超时）会话列副行是后端降级模板句
    「本次会话未正常结束，为你保留了基础学习记录。」——与状态徽章同事实且首屏多行同文。
    命中模板句时改显行内已有的增量信息（时长优先，缺时长用开始时间；两者皆缺撤副行不硬凑）。
    后端模板句不动，title 保留降级总结原文供排查。 */
 const ABNORMAL_SUMMARY_MARK = '本次会话未正常结束'
+/* 会话列副行：只报运营扫表要的两件事——学科 · 任务类型，异常态用时长/开始时间替代。
+   课后总结（wrapup.summary.topicSummary）是写给学习者的长句（「本节课围绕…」「为你保留了
+   基础总结」），截断到 300px 后既读不全又占行高，2026-10-23 运营视角走查后只留 title 全文。 */
 const tsSubNote = (r: Row): { text: string; title?: string } | null => {
   const summary = String(r.wrapup?.topicSummary || '')
-  if (!summary) return null
-  if (!ABNORMAL_STATUSES.has(r.status) || !summary.includes(ABNORMAL_SUMMARY_MARK)) {
-    return { text: summary, title: summary }
-  }
-  if (r.duration > 0) return { text: `时长 ${fmtDuration(r.duration)}`, title: '异常会话：此处显示会话时长' }
+  if (!ABNORMAL_STATUSES.has(r.status) || !summary.includes(ABNORMAL_SUMMARY_MARK)) return null
+  /* 2026-10-24：异常行副行不再复述「时长 N」——右侧已有独立时长列，同值同屏两遍；
+     只有没有时长读数时才退回开始时间（那是时长列给不出的信息）。 */
+  if (r.duration > 0) return null
   if (r.startAt) return { text: `开始于 ${r.startAt}`, title: '异常会话：此处显示开始时间' }
   return null
 }
 
-/** 会话列副行文案（#39 行高并档）：学科 · 任务类型 [+ 总结摘要/异常替代]，全文进 title */
+/** 会话列副行文案（#39 行高并档）：学科 · 任务类型 [+ 异常态替代] */
 function sessionSubText(r: Row): string {
   const base = `${r.subject} · ${taskTypeText(r.taskType)}`
   const note = tsSubNote(r)
   return note ? `${base} · ${note.text}` : base
 }
-/** 会话列副行 title：任务类型原文与摘要全文合并披露（各自长文都保留） */
+/** 会话列副行 title：任务类型原文 + 课后总结全文（副行不再承载学员向长句，全文退到悬停） */
 function sessionSubTitle(r: Row): string | undefined {
-  const parts = [taskTypeTitle(r.taskType), tsSubNote(r)?.title].filter(Boolean)
-  return parts.length ? parts.join('；') : undefined
+  const summary = String(r.wrapup?.topicSummary || '')
+  const parts = [taskTypeTitle(r.taskType), tsSubNote(r)?.title]
+  if (summary && !tsSubNote(r)) parts.push(`课后总结：${summary}`)
+  const kept = parts.filter(Boolean)
+  return kept.length ? kept.join('；') : undefined
 }
 
 /* 异常堆积告警（原页头状态条 mk-status--bad 的同一判据，2026-10-04 状态条退役后迁往
@@ -1015,34 +966,47 @@ function closeDetail() {
     故这里不再取 goTrace。 */
 const { goConsole } = useSessionDrill(closeDetail)
 
+/** 行点击落点：缺总结的课堂直接落座舱总结页签（否则默认页签看不到该处理的东西） */
+function openRow(r: Row) {
+  if (!r.id) return
+  if (isMissingWrapup(r)) {
+    closeDetail()
+    openSubPage('session-real', r.id, { stage: 'wrapup' })
+    return
+  }
+  goConsole(r)
+}
+
 /* 状态映射统一走共享字典（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
 /* 状态徽章已上收共享单源 statusText.sessionStatusBadgeCls（收尾批 C10，import 别名 statusBadge——语义逐值等价迁移） */
 /* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
-const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
 /* 任务类型字典已上收共享单源 statusText.ts（F2-2：路径详情同批枚举不再各自维护一份） */
-/* 时长格式化：分钟向下取整（P3：90 秒显示「1 分钟」而非四舍五入成「2 分钟」） */
-const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)} 分钟` : `${sec} 秒`)
+/* 时长格式化。后端 duration 的单位是**分钟**（computeEffectiveDurationMinutes = ms/60000），
+   不是秒——原先按秒解释，3 分钟的课在列表里显示成「3 秒」（2026-10-20 跑数时发现）。
+   1 分钟以内后端已封底为 1，这里只需要「N 分钟 / N 小时 M 分」两档。 */
+const fmtDuration = (minutes: number) => {
+  if (minutes < 60) return `${minutes} 分钟`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m ? `${h} 小时 ${m} 分` : `${h} 小时`
+}
 /** 时间列悬停：本地化绝对时刻（后端原始 ISO 为 UTC 带 Z，直出跨时区读不出真实时刻——审核 #38） */
 function startAbsTitle(r: Row): string | undefined {
   if (!r.startTime) return r.startAt || undefined
   const t = new Date(r.startTime).getTime()
   return Number.isFinite(t) ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : r.startAt || undefined
 }
-/** 长时阈值（秒）：≥1500s（25 分钟）时长标琥珀；阈值写进互动列 title 与表头披露 */
-const IDLE_LONG_SECONDS = 1500
-/** 互动列 title：时长 + 消息数；触发长时着色时披露阈值口径 */
+/** 时长 / 消息 / 知识点共用的悬停读数：拆列后知识点在窄档不占列宽，读数仍可查 */
 function interactTitle(r: Row): string | undefined {
   if (!r.duration) return undefined
-  const base = `时长 ${fmtDuration(r.duration)} · ${r.messageCount} 条消息`
-  return r.duration >= IDLE_LONG_SECONDS ? `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）` : base
+  const parts = [`时长 ${fmtDuration(r.duration)}`, `${r.messageCount} 条消息`]
+  if (r.knowledgePointCount) parts.push(`${r.knowledgePointCount} 个知识点`)
+  return parts.join(' · ')
 }
-/** 进度工具提示（人话）：阶段 n/m · 任务 x/y；无里程碑维度只给任务 */
 /** 进度工具提示（人话）：阶段 n/m · 第 x 个任务（共 y 个）。
  *  写成「第 x 个」而不是「任务 x/y」，是因为后端 taskIndex 是**位置**不是完成数——
  *  「任务 1/4」容易被读成「4 个里做完了 1 个」。 */
 function progressTitle(r: Row): string {
-  // 措辞单源在 statusText.sessionProgressTitle：taskIndex=0（结束时还没定位到具体任务）
-  // 不能 clamp 成「第 1 个」——同一行的可见文本写的是「结束于 0/4」，两处互相打脸
   return sessionProgressTitle(r.progress, { withMilestone: true })
 }
 
@@ -1063,42 +1027,78 @@ defineExpose({ refreshNow })
 /* 行首关注度色条已撤（2026-10-03 用户拍板：与「关注」列同源冗余、语义不可发现）；
    关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }
-/* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 + 右侧身份徽章 */
+/* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：auto 布局下
+   课堂/用户两列按当页最长内容分宽（课堂 135→340px、用户 169→256px），翻页整表跳动。
+   fixed 档下按表头宽度定死，余量按各列宽度权重摊开；断点与 isTableCompact/Narrow/Mid
+   的列显隐对齐，隐藏列的宽度不参与分配。 */
+/* 2026-10-24 视觉修复：状态（204）/课后总结（190）/开始时间（92）在多数行是短内容，
+   富余宽度让给课堂主列；状态列仍够放下「已完成 + x/y」一行。 */
+.ts-c-user { width: 150px; }
+.ts-c-status { width: 150px; }
+.ts-c-track { width: 84px; }
+.ts-c-dur { width: 90px; }
+.ts-c-msg { width: 66px; }
+.ts-c-kp { width: 62px; }
+/* 课型去徽章后是纯文本（最长「复习课」3 字），宽度从 88 收到 72，让给时长列。 */
+.ts-c-mode { width: 72px; }
+.ts-c-out { width: 150px; }
+.ts-c-att { width: 50px; }
+.ts-c-start { width: 80px; }
+/* 课堂列宽度随断点给基准值，余量由 fixed 布局按各列宽度权重摊开（不再是单列吃掉全部余量，
+   否则 1920 下课堂列 ~480px、右侧留大片空白）；断点与列显隐对齐：
+   ≤1439 八列 / 1440-1499 九列 / 1500-1699 十一列 / ≥1700 十二列。 */
+.ts-c-topic { width: 190px; }
+/* 1200 档（125% 缩放的 1440 屏）也要无横滚：八列合计须 ≤914，短列同步收一点 */
+@media (max-width: 1279px) {
+  .ts-c-topic { width: 260px; }
+  .ts-c-user { width: 140px; }
+  .ts-c-status { width: 150px; }
+  .ts-c-dur { width: 86px; }
+  .ts-c-msg { width: 64px; }
+  .ts-c-out { width: 150px; }
+}
+/* 1280 起默认只显示 7–8 列（完成方式/消息/知识点/关注已默认收起）：
+   课堂列是主标识列，优先吃足宽度；状态/总结/开始时间等短列让位。 */
+@media (min-width: 1280px) { .ts-c-topic { width: 330px; } }
+@media (min-width: 1440px) { .ts-c-topic { width: 330px; } }
+@media (min-width: 1500px) { .ts-c-topic { width: 300px; } }
+@media (min-width: 1700px) { .ts-c-topic { width: 300px; } }
+/* 课堂列吸收余量后可能远超 .mk-cell-main 的 300/360 上限，让文本跟着列宽走（否则右侧留空白） */
+.ts-c-topic .mk-cell-main strong, .ts-row td:first-child .mk-cell-sub { max-width: 100%; }
+/* 固定列内不允许内容越界挤压邻列（徽章/按钮按内容裁切，悬停 title 仍在） */
+.ts-table td { overflow: hidden; }
+/* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 */
 .ts-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.ts-user .mk-cell-main { min-width: 0; flex: 1; }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；随头像判例收进用户格右侧） */
-.ts-tags { display: flex; gap: 6px; margin-left: auto; flex: none; }/* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
+.ts-user .mk-cell-main { min-width: 0; flex: 1; }
+/* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
-.ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
+.ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝 *//* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 /* 互动列（批B）：时长主值+副行。副行 messageCount/知识点 nowrap 撑到 109px 溢出 70px 单元格、
    压到「进度」列（走查 #37）：容器限宽到单元格内宽并裁切，副行由 mk-cell-sub 自带省略号截断 */
-/* 轨道列（#105 读侧接入）：徽章（真人 / 虚拟 / 未标记）+ 通道副行垂直两行（同 .ts-ia 判例） */
+/* 完成归属列（#105 读侧接入）：徽章（真实 / 虚拟 / 未标记）+ 通道副行垂直两行（同 .ts-ia 判例）。
+   .ts-track / .ts-ia / .ts-status 这些 display:grid|flex 的容器一律是 td 内层 div：
+   直接挂在 td 上会让表格单元脱离表格布局，整行塌成竖排（2026-10-19 实测行高 271px、
+   各格错位）。改列时只动 td 的 v-if，别把类挪回 td。 */
 .ts-track { display: grid; gap: 2px; justify-items: start; }
-.ts-ia { display: grid; gap: 2px; justify-items: start; max-width: 100%; min-width: 0; overflow: hidden; }.ts-ia > * { min-width: 0; max-width: 100%; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--long { color: var(--mk-amber); }.ts-ia__dur--brief { color: var(--mk-faint); font-weight: 400; }.ts-prog { display: grid; gap: 4px; max-width: 96px; }.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }.ts-prog__bar { width: 88px; height: 5px; }/* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
-.ts-prog--done {
-  display: inline-flex;
-  align-items: center;
-  color: var(--mk-green);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  white-space: nowrap;
-}/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
-   选中态（筛选生效中）由模板守卫——abnormalOnly 时不再加本类，让位给 .mk-pill--active 的蓝 */
-/* 分布带已退役（2026-10-17）：原页面级 .ts-distband 与类名一并下线，状态筛选在卡头 chips
-   与「筛选」下拉；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
-.ts-abn-chip--heap {
-  color: var(--mk-red);
-  border-color: color-mix(in srgb, var(--mk-red) 45%, var(--mk-line));
-}/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字）。
+.ts-ia { display: grid; gap: 2px; justify-items: start; max-width: 100%; min-width: 0; overflow: hidden; }.ts-ia > * { min-width: 0; max-width: 100%; }/* 时长格：容器别再裁主值（2026-10-21 用户「时长被截断」：td 81px / 内容盒 49px /「27 分钟」53px，
+   被 overflow:hidden 切掉 4px）。.ts-ia 的 min-width:0 + overflow:hidden 本是给副行省略号用的，
+   主值只有 4~6 个字，让回 max-content，auto 布局才会按字宽给这列留位 */
+.ts-ia--dur { overflow: visible; }.ts-ia--dur > .ts-ia__dur { min-width: max-content; max-width: none; white-space: nowrap; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }/* 可点 KPI 的选中态（2026-10-27）：与同组 gc-/oc-/lc-/mr- 同一判例，蓝只给可交互与选中 */
+.ts-kpi--on { border-color: var(--mk-blue); }
+/* 分布带已退役（2026-10-17）：原页面级 .ts-distband 与类名一并下线，状态筛选在卡头下拉；
+   页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 *//* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字）。
    锚点用稳定类 .ts-status（2026-10-06 审核 #37）：原 td:nth-child(3) 在用户列被
    隐藏后失配（状态列变第 2 个 td），切换状态筛选时列宽照样跳动——正是本规则要防的。
+   该类挂在 td 内层 div 上（display:flex 不能挂 td，见上方 .ts-track 注释）。
    68px = 4 字 × micro 档 + 徽章内边距，容得下最长档。
-   只给主状态徽章（.ts-status__main）：标注徽章（低参与 / 手动结束）是内容宽，
-   套上 68px 会把「低参与 + 手动结束」撑到 ~150px，把状态列拉宽又没换来任何对齐。 */
-.ts-status .ts-status__main { min-width: 68px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
-   badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
-.ts-adv-badge { margin-left: 4px; max-width: 168px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
+   2026-10-27 用户「还是太多数据了」：格内只留这一枚徽章，进度 / 结束方式全部进 title。 */
+.ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） */
+/* 课型去胶囊（2026-10-27）：分类值直接用正文文本，不为「正课」这类常态值着色；默认收起，列菜单可开。 */
+.ts-mode { white-space: nowrap; }
+/* 产物格：有总结 / 缺总结两档都用徽章，在固定列宽内换行；建议处置并入 title，不再占行内位置。 */
+.ts-out { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
 .ts-error { margin: 0 16px 10px; }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
    4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {

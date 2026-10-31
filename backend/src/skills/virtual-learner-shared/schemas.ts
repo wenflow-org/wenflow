@@ -280,6 +280,15 @@ export function isControlledErrorEnabled(env: NodeJS.ProcessEnv = process.env): 
   return !(env.VIRTUAL_CONTROLLED_ERROR_ENABLED || '').trim().match(/^(0|false|off)$/i);
 }
 
+export interface ControlledErrorMisconception {
+  /** 这条误区「长什么样」——直接进叙事硬约束，学生在回复里按这个错法人演 */
+  statement: string;
+  /** 为什么会错（判卷口径/前提缺失），可空 */
+  why?: string | null;
+  /** 来源链接（真人误区语料库回溯用），可空 */
+  source?: string | null;
+}
+
 export interface ControlledErrorDecision {
   /** true = 本轮注入首答错误（编排层已采样命中） */
   forced: boolean;
@@ -287,6 +296,8 @@ export interface ControlledErrorDecision {
   targetConcept: string | null;
   /** 给判决器/叙事器的硬约束提示（说清「先错、被纠正后接受」的演出要求） */
   hint: string | null;
+  /** 命中真人误区语料库时的具体误区（无命中为 null，演出回退到即兴卡点） */
+  targetMisconception?: ControlledErrorMisconception | null;
 }
 
 /**
@@ -294,15 +305,20 @@ export interface ControlledErrorDecision {
  * 概率采样发生在代码里（可测量、可复现统计），LLM 只负责演出。
  * - 开课头两轮不注入（冷启动保持合作，让开场定位顺利）
  * - 任务概念命中 struggleConcepts 时按 struggleBoost 加权
+ * - 概念能在真人误区语料库命中时，hint 换成「按这条真实误区演」（2026-10-21）
  */
 export function decideControlledError(params: {
   frictionBudget?: FrictionBudget | string | null;
   struggleConcepts?: unknown;
+  /** 当前 task 的概念域（标题/验收标准/看板/里程碑）；提供时只在命中域内取卡点 */
+  currentTaskConcepts?: unknown;
   turnIndex?: number;
   enabled?: boolean;
   random?: () => number;
+  /** 概念 → 真人误区条目（查库/查文件由调用方注入，本函数保持纯逻辑） */
+  resolveMisconception?: (concept: string) => ControlledErrorMisconception | null;
 }): ControlledErrorDecision {
-  const notForced: ControlledErrorDecision = { forced: false, targetConcept: null, hint: null };
+  const notForced: ControlledErrorDecision = { forced: false, targetConcept: null, hint: null, targetMisconception: null };
   const enabled = params.enabled ?? isControlledErrorEnabled();
   if (!enabled) return notForced;
   const turnIndex = Number.isFinite(Number(params.turnIndex)) ? Number(params.turnIndex) : 0;
@@ -313,17 +329,54 @@ export function decideControlledError(params: {
   const struggleConcepts = Array.isArray(params.struggleConcepts)
     ? params.struggleConcepts.filter((item): item is string => typeof item === 'string' && !!item.trim())
     : [];
-  const targetConcept = struggleConcepts.length > 0
-    ? struggleConcepts[turnIndex % struggleConcepts.length].trim()
+  // 当前 task 概念域：只在这些概念里挑卡点，避免把「上周学的别的技能」硬塞进本轮
+  // （外部审计 P1-5：旧实现 struggleBoost 只要列表非空就生效，和本轮教什么无关）。
+  const taskConcepts = Array.isArray(params.currentTaskConcepts)
+    ? params.currentTaskConcepts.filter((item): item is string => typeof item === 'string' && !!item.trim())
+    : [];
+  const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, '');
+  const inCurrentTask = (concept: string): boolean => {
+    if (!taskConcepts.length) return false;
+    const normalized = normalize(concept);
+    if (!normalized) return false;
+    return taskConcepts.some((taskConcept) => {
+      const normalizedTask = normalize(taskConcept);
+      return normalizedTask.includes(normalized) || normalized.includes(normalizedTask);
+    });
+  };
+  const matchedStruggle = taskConcepts.length
+    ? struggleConcepts.filter(inCurrentTask)
+    : struggleConcepts;
+  // 卡点优先取"画像 struggle ∩ 本轮概念"；没有交集时退到本轮概念本身
+  // （受控错误演的是"这一步做错"，不是"把别的课的旧卡点塞进来"）。
+  const fallbackTaskConcept = taskConcepts.length
+    ? taskConcepts[turnIndex % taskConcepts.length].trim()
     : null;
-  const probability = Math.min(0.6, table.wrongProbability * (targetConcept ? table.struggleBoost : 1));
+  const targetConcept = matchedStruggle.length > 0
+    ? matchedStruggle[turnIndex % matchedStruggle.length].trim()
+    : fallbackTaskConcept;
+  // 画像卡点命中本轮概念才加权；不命中则按基线概率（宁可不演，也不演错题）
+  const struggleBoostApplies = matchedStruggle.length > 0 || (taskConcepts.length === 0 && targetConcept !== null);
+  const probability = Math.min(0.6, table.wrongProbability * (struggleBoostApplies ? table.struggleBoost : 1));
   const random = params.random ?? Math.random;
   if (random() >= probability) return notForced;
+  let targetMisconception: ControlledErrorMisconception | null = null;
+  if (targetConcept && params.resolveMisconception) {
+    try {
+      targetMisconception = params.resolveMisconception(targetConcept) || null;
+    } catch {
+      targetMisconception = null;
+    }
+  }
+  const misconceptionHint = targetMisconception
+    ? `——按这条真实误区演：${targetMisconception.statement}${targetMisconception.why ? `（${targetMisconception.why}）` : ''}。不要换个错法，被教师纠正后自然接受，不要秒懂`
+    : '——给出与该卡点一致的具体错误或说不出为什么，被教师纠正后自然接受，不要秒懂';
   return {
     forced: true,
     targetConcept,
+    targetMisconception,
     hint: targetConcept
-      ? `编排层指令（必须服从）：本轮学习者首答判错，卡点围绕「${targetConcept}」——给出与该卡点一致的具体错误或说不出为什么，被教师纠正后自然接受，不要秒懂`
+      ? `编排层指令（必须服从）：本轮学习者首答判错，卡点围绕「${targetConcept}」${misconceptionHint}`
       : '编排层指令（必须服从）：本轮学习者首答判错——给出一个与当前任务相关、符合其水平的具体错误或卡壳，被教师纠正后自然接受，不要秒懂',
   };
 }

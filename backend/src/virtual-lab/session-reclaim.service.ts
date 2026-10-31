@@ -124,7 +124,6 @@ interface SessionRow {
   learningPathId: string | null;
   updatedAt: Date;
   stageResults: string | null;
-  logs: string | null;
 }
 
 /**
@@ -262,8 +261,20 @@ export class VirtualSessionReclaimService {
       },
       orderBy: { updatedAt: 'asc' },
       take: RECLAIM_BATCH_SIZE,
-      select: { id: true, status: true, currentStage: true, learningPathId: true, updatedAt: true, stageResults: true, logs: true }
+      // 不取 logs 大列：本方法只读 stageResults（:438 注释口径——不再读改写 logs）
+      select: { id: true, status: true, currentStage: true, learningPathId: true, updatedAt: true, stageResults: true }
     }) as unknown as SessionRow[];
+
+    // 租约一次批查（旧口径逐会话 findFirst，50 个候选 = 50 次串行往返）
+    const sessionIds = sessions.map((session) => session.id);
+    const activeLeaseIds = sessionIds.length > 0
+      ? new Set((
+          await this.database.virtual_experiment_leases.findMany({
+            where: { sessionId: { in: sessionIds }, expiresAt: { gt: now } },
+            select: { sessionId: true }
+          })
+        ).map((lease) => lease.sessionId))
+      : new Set<string>();
 
     const result: StaleSessionReclaimResult = {
       dryRun,
@@ -296,26 +307,27 @@ export class VirtualSessionReclaimService {
         skippedSessions.push({ ...entry, skipReason: 'live-generation' });
         continue;
       }
-      const activeLease = await this.database.virtual_experiment_leases.findFirst({
-        where: { sessionId: session.id, expiresAt: { gt: now } },
-        select: { sessionId: true }
-      });
-      if (activeLease) {
+      if (activeLeaseIds.has(session.id)) {
         result.skippedActiveLease += 1;
         skippedSessions.push({ ...entry, skipReason: 'active-lease' });
         continue;
       }
-      // 显式 hold（外部驱动申报的「故意停留」）：与暂停同等豁免；带 until 且已到期则不再豁免
-      let holdActive = false;
+      // stageResults 解析一次，hold / teaching.paused / autopilot 三个判定共用
+      // （旧口径对同一份可能很大的 JSON 各 JSON.parse 一遍）
+      let stageState: Record<string, any> = {};
       try {
-        const hold = JSON.parse(session.stageResults || '{}')?.hold;
-        if (hold && typeof hold === 'object') {
-          holdActive = !(typeof hold.until === 'string' && new Date(hold.until).getTime() <= now.getTime());
-        } else {
-          holdActive = hold != null; // 兼容裸 true / 字符串等简写
-        }
+        const parsed = JSON.parse(session.stageResults || '{}');
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) stageState = parsed;
       } catch {
-        holdActive = false;
+        stageState = {};
+      }
+      // 显式 hold（外部驱动申报的「故意停留」）：与暂停同等豁免；带 until 且已到期则不再豁免
+      const hold = stageState.hold;
+      let holdActive = false;
+      if (hold && typeof hold === 'object') {
+        holdActive = !(typeof hold.until === 'string' && new Date(hold.until).getTime() <= now.getTime());
+      } else {
+        holdActive = hold != null; // 兼容裸 true / 字符串等简写
       }
       if (holdActive) {
         result.skippedHeld += 1;
@@ -324,25 +336,15 @@ export class VirtualSessionReclaimService {
       }
       // 管理员主动暂停的会话没有写入是预期行为，不应被当作僵尸回收
       // （否则暂停超阈值后被置 failed，resume 永远 409）。跳过并计入 skippedPaused。
-      let teachingPaused = false;
-      try {
-        teachingPaused = (JSON.parse(session.stageResults || '{}')?.teaching?.paused) === true;
-      } catch {
-        teachingPaused = false;
-      }
+      const teachingPaused = stageState.teaching?.paused === true;
       if (teachingPaused) {
         result.skippedPaused += 1;
         skippedSessions.push({ ...entry, skipReason: 'paused' });
         continue;
       }
       // 仍有在途自动化（autopilot running/queued）→ 有驱动，跳过（短周期收敛尤其需要这层保护）
-      let autopilotActive = false;
-      try {
-        const autopilot = JSON.parse(session.stageResults || '{}')?.autopilot;
-        autopilotActive = autopilot?.status === 'running' || autopilot?.status === 'queued';
-      } catch {
-        autopilotActive = false;
-      }
+      const autopilot = stageState.autopilot;
+      const autopilotActive = autopilot?.status === 'running' || autopilot?.status === 'queued';
       if (autopilotActive) {
         result.skippedActiveAutopilot += 1;
         skippedSessions.push({ ...entry, skipReason: 'active-autopilot' });

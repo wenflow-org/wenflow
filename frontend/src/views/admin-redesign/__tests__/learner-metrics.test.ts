@@ -49,76 +49,66 @@ describe('四读数共享口径', () => {
 });
 
 describe('读数出处（口径透明化）', () => {
-  it('学习者级聚合：标签带「聚合」且长释点明另一页是单次会话快照', () => {
+  /* 2026-10-19 文案优化：短标从术语「学习者级聚合 / 单次会话快照」改成人话
+     「全部路径汇总 / 单次会话」＋「取样 时间」；长释去掉四码罗列与口语化收尾 */
+  it('全部路径汇总：短标说清来源与取样时刻，长释点明另一页是单次会话', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-14T04:00:00Z'));
     const note = loadCaliber('aggregate', '2026-10-14T03:30:00Z');
-    expect(note.label).toContain('学习者级聚合');
-    expect(note.label).toContain('30 分钟前');
-    expect(note.title).toContain('单次会话当场留下的读数');
-    expect(note.title).toContain('不是其中一处算错');
+    expect(note.label).toBe('全部路径汇总 · 取样 30 分钟前');
+    expect(note.title).toContain('全部路径汇总');
+    expect(note.title).toContain('不是某一次会话的读数');
+    expect(note.title).toContain('取自单次会话');
+    expect(note.title).toContain('数值本就不相等');
     vi.useRealTimers();
   });
 
-  it('单次会话快照：标签带「单次会话」且长释点明另一页是聚合态', () => {
+  it('单次会话：短标说清来源与取样时刻，长释点明另一页是汇总值', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-14T04:00:00Z'));
     const note = loadCaliber('session-snapshot', '2026-10-14T01:00:00Z');
-    expect(note.label).toContain('单次会话快照');
-    expect(note.label).toContain('3 小时前');
-    expect(note.title).toContain('学习者级聚合');
-    expect(note.title).toContain('不是其中一处算错');
+    expect(note.label).toBe('单次会话 · 取样 3 小时前');
+    expect(note.title).toContain('按全部路径汇总');
+    expect(note.title).toContain('数值本就不相等');
     vi.useRealTimers();
   });
 
-  it('无取样时刻时不硬造（标签退回纯口径，标题不出时间行）', () => {
+  it('无取样时刻时不硬造（短标退回纯来源，长释不出时间行）', () => {
     const note = loadCaliber('aggregate', null);
-    expect(note.label).toBe('学习者级聚合');
+    expect(note.label).toBe('全部路径汇总');
     expect(note.title).not.toContain('取样时刻');
   });
 });
 
-describe('面板作用域标注（一屏混多种作用域，各块自述 + 页级开关可切）', () => {
-  it('当前路径：带上路径名，并说清其它路径不在这里 + 当前路径怎么选', () => {
+describe('面板作用域标注（只出短标，不挂解释句）', () => {
+  it('当前路径：只给短标', () => {
     const note = panelScopeNote('current-path', { pathTitle: '幼儿园指南五大领域归位速通' });
     expect(note.label).toBe('当前路径');
-    expect(note.title).toContain('幼儿园指南五大领域归位速通');
-    expect(note.title).toContain('其它路径不在这里');
-    expect(note.title).toContain('最近有更新');
+    expect(note.title).toBe('');
   });
 
-  it('当前路径：无路径名时不渲染空括号', () => {
-    const note = panelScopeNote('current-path', { pathTitle: '' });
-    expect(note.title).not.toContain('（）');
-  });
-
-  it('跨全部路径：明说含已归档/失败（非 active 路径不可见是既有事实）', () => {
+  it('跨全部路径：只给短标', () => {
     const note = panelScopeNote('all-paths');
     expect(note.label).toBe('跨全部路径');
-    expect(note.title).toContain('已归档');
-    expect(note.title).toContain('全部');
+    expect(note.title).toBe('');
   });
 
-  it('跨全部故事：虚拟学习者页的对应轴是故事，措辞不串用「路径」', () => {
+  it('跨全部故事：与路径轴分开命名，不串用', () => {
     const note = panelScopeNote('all-stories');
     expect(note.label).toBe('跨全部故事');
-    expect(note.title).toContain('故事');
-    expect(note.title).not.toContain('路径');
+    expect(note.label).not.toContain('路径');
+    expect(note.title).toBe('');
   });
 
-  it('所选路径：标签带路径名，且明说它不是「当前路径」（页级开关可切到非当前路径）', () => {
+  it('所选路径：标签带路径名并截断，不另挂解释', () => {
     const note = panelScopeNote('path', { pathTitle: '产业园选址题材料提点与分类作答' });
     expect(note.label).toBe('路径 产业园选址题材料提点与分…');
-    expect(note.title).toContain('所选路径');
-    expect(note.title).toContain('产业园选址题材料提点与分类作答');
-    expect(note.title).toContain('不是该学习者的「当前路径」');
+    expect(note.title).toBe('');
   });
 
-  it('所选路径：名字很短不截断，无名字时不留空标签也不留空括号', () => {
+  it('所选路径：名字很短不截断，无名字时不留空标签', () => {
     expect(panelScopeNote('path', { pathTitle: '线代' }).label).toBe('路径 线代');
-    const blank = panelScopeNote('path', { pathTitle: '' });
-    expect(blank.label).toBe('路径 —');
-    expect(blank.title).not.toContain('（）');
+    expect(panelScopeNote('path', { pathTitle: '' }).label).toBe('路径 —');
   });
 
   it('五种作用域标签互不相同（同屏并排时可直接分辨）', () => {

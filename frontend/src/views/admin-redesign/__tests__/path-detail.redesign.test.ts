@@ -3,10 +3,9 @@
  *
  * 断言 = 解析行为与数据诚实性：
  *  - 有关联对话 → 就地换开座舱（?view=session-real&id=gc_x&stage=path），from 原样带走
- *  - 无关联对话（孤儿路径）→ 明确空态 + 返回列表，不静默、不假开
+ *  - 无关联对话（孤儿路径，M-2 2026-10-29 夜审）→ 不再落死空态：就地渲染路径自身内容
+ *    （页头注明未关联对话 + PathJourneyPanel 阶段/任务），面包屑回写路径名
  *  - 接口失败 → 错误态可重试
- * 路径内容体（阶段全展开/任务弹层/治理动作）的断言在
- * sessionCockpit.real.test.ts（座舱 Path 页签内嵌 PathJourneyPanel）。
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -22,11 +21,15 @@ vi.mock('@/api/adminApi', () => ({
   }
 }))
 
-vi.mock('../live', () => ({
-  timeAgo: (v?: string | null) => (v ? '3 天前' : '—'),
-  errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
-  shortId: (id: string, h: number, t: number) => (id ? `${id.slice(0, h)}…${id.slice(-t)}` : id)
-}))
+vi.mock('../live', async () => {
+  const { ref } = await import('vue')
+  return {
+    timeAgo: (v?: string | null) => (v ? '3 天前' : '—'),
+    errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+    shortId: (id: string, h: number, t: number) => (id ? `${id.slice(0, h)}…${id.slice(-t)}` : id),
+    liveRefreshSeq: ref(0)
+  }
+})
 
 async function settle() {
   await flushPromises()
@@ -35,7 +38,28 @@ async function settle() {
 }
 
 function mountShim() {
-  return mount(PathDetail)
+  // attachTo：孤儿内容体的治理动作（PathJourneyPanel）Teleport 到页头 [data-path-acts]，
+  // 目标解析走 document 查询——组件必须真实挂进文档树
+  return mount(PathDetail, { attachTo: document.body })
+}
+
+/** 孤儿路径详情行（conversationId=null；带阶段任务供 PathJourneyPanel 渲染断言） */
+function orphanBody() {
+  return {
+    id: 'lp_1',
+    title: '毛笔小楷入门',
+    status: 'active',
+    conversationId: null,
+    milestones: [
+      {
+        id: 'ms_1',
+        stageNumber: 1,
+        title: '执笔与运笔',
+        status: 'active',
+        subtasks: [{ id: 't_1', title: '中锋线条练习', status: 'in_progress', taskType: 'practice', estimatedMinutes: 20 }]
+      }
+    ]
+  }
 }
 
 beforeEach(() => {
@@ -68,18 +92,21 @@ describe('PathDetail 路径深链适配层', () => {
     w.unmount()
   })
 
-  it('无关联对话（孤儿路径）→ 空态明示 + 返回列表；不换开座舱', async () => {
-    detailMock.mockResolvedValue({ data: { data: { id: 'lp_1', title: '孤儿路径', conversationId: null } } })
+  it('孤儿路径 → 不再落死空态：页头注明未关联对话，阶段与任务就地渲染（M-2）', async () => {
+    // 面板内容体自取同一详情接口：第二次调用返回同一条
+    detailMock.mockResolvedValue({ data: { data: orphanBody() } })
     const w = mountShim()
     await settle()
-    expect(w.text()).toContain('该路径没有关联的目标对话')
+    const text = w.text()
+    expect(text).toContain('未关联目标对话')
+    expect(text).toContain('毛笔小楷入门')
+    expect(text).toContain('执笔与运笔')
+    expect(text).toContain('中锋线条练习')
+    // 旧的死空态文案不再出现
+    expect(text).not.toContain('该路径没有关联的目标对话')
+    // 面包屑回写路径名（不再是裸 id）
+    expect(subPage.value?.label).toBe('毛笔小楷入门')
     expect(subPage.value?.view).toBe('path')
-    // 「返回列表」= closeSubPage（无 from → 回一级列表）
-    const btn = w.findAll('button').find((b) => b.text() === '返回列表')
-    expect(btn).toBeTruthy()
-    await btn!.trigger('click')
-    await nextTick()
-    expect(subPage.value).toBeNull()
     w.unmount()
   })
 

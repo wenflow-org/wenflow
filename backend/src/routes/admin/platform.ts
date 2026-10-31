@@ -24,17 +24,6 @@ import {
 , isFallbackEffectivelyDisabled } from '../../services/reliability-settings.service';
 import { applyRpmLimitsFromSettings } from '../../services/rpm-limit-config.service';
 import { telemetryWriter } from '../../services/telemetry-writer.service';
-import {
-  getPlatformCapabilityProbeEnabled,
-  getPlatformCapabilityProbeInterval,
-  DEFAULT_CAPABILITY_PROBE_ENABLED,
-  DEFAULT_CAPABILITY_PROBE_INTERVAL_MS,
-  MIN_CAPABILITY_PROBE_INTERVAL_MS,
-  MAX_CAPABILITY_PROBE_INTERVAL_MS,
-  updatePlatformCapabilityProbeEnabled,
-  updatePlatformCapabilityProbeInterval
-} from '../../services/capability-probe-settings.service';
-import { aiCapabilityHealthService } from '../../services/ai-capability-health.service';
 import { checkIsAdmin } from '../../services/admin-access.service';
 import {
   timeoutErrorSignals,
@@ -997,9 +986,8 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     };
 
     /* 行与统计都走进程内缓存（2026-10-04 性能批三段/四段）：失败行拉取读 7k+ 行 error 文本、
-       200 行样本要读 metadata 大列；夜批持续冲刷页缓存使「页热」不可靠。
-       缓存键覆盖全部影响取数的筛选参数（行键含 page/limit/sort）；读路径 SWR，冷键才阻塞。 */
-    const [logs, [total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount]] = await Promise.all([
+       200 行样本读 metadata 大列，夜批冲刷页缓存使「页热」不可靠；键覆盖全部筛选参数（行键含 page/limit/sort），读路径 SWR。 */
+    const [logs, [total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount, byAgentErrors, latencyPercentiles]] = await Promise.all([
       getExecLogsRowsCached(execLogsRowsKey(req.query as Record<string, unknown>), () =>
         fetchAgentLogRows({ where, skip, limitNum, logOrderBy })
       ),
@@ -1082,8 +1070,9 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
           timeout: timeoutCount,
           error: errorCount,
           bySource,
-          // 测试（金丝雀）日志计数（默认视图排除 canary，行内数不到；驱动前端「测试 N」入口）
           canary: canaryCount,
+          // 全量 by-agent 失败 Top5（error 口径，2026-10-28 审计 P1）；全窗延迟分位（2026-10-29 审计 M-3，与成功率同窗同源）
+          byAgentErrors, latencyPercentiles,
         },
         pagination: {
           total,
@@ -1189,93 +1178,6 @@ router.put('/settings/reliability', async (req: Request, res: Response) => {
     res.json({ success: true, data: { settings, hardLimits: getReliabilityHardLimits(), warnings } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error.message || '更新 AI 可靠性设置失败' } });
-  }
-});
-
-router.get('/settings/capability-probe', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
-    }
-    const [enabled, intervalMs] = await Promise.all([
-      getPlatformCapabilityProbeEnabled(),
-      getPlatformCapabilityProbeInterval()
-    ]);
-    res.json({
-      success: true,
-      data: {
-        enabled,
-        intervalMs,
-        defaultEnabled: DEFAULT_CAPABILITY_PROBE_ENABLED,
-        defaultIntervalMs: DEFAULT_CAPABILITY_PROBE_INTERVAL_MS,
-        minIntervalMs: MIN_CAPABILITY_PROBE_INTERVAL_MS,
-        maxIntervalMs: MAX_CAPABILITY_PROBE_INTERVAL_MS,
-        timerActive: aiCapabilityHealthService.isEnabled()
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error.message || '获取 AI 能力探测设置失败' } });
-  }
-});
-
-router.put('/settings/capability-probe', async (req: Request, res: Response) => {
-  try {
-    const allowed = await ensureAdmin(req.user?.userId);
-    if (!allowed) {
-      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
-    }
-    const { enabled, intervalMs } = req.body || {};
-    if (enabled !== undefined && typeof enabled !== 'boolean') {
-      return res.status(400).json({ success: false, error: { message: 'enabled 必须是布尔值' } });
-    }
-    if (intervalMs !== undefined) {
-      const n = Number(intervalMs);
-      if (!Number.isFinite(n) || !Number.isInteger(n)
-        || n < MIN_CAPABILITY_PROBE_INTERVAL_MS || n > MAX_CAPABILITY_PROBE_INTERVAL_MS) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            message: `intervalMs 必须是 ${MIN_CAPABILITY_PROBE_INTERVAL_MS}～${MAX_CAPABILITY_PROBE_INTERVAL_MS} 之间的整数毫秒`
-          }
-        });
-      }
-    }
-    if (enabled === undefined && intervalMs === undefined) {
-      return res.status(400).json({ success: false, error: { message: '请至少提供 enabled 或 intervalMs' } });
-    }
-
-    let nextEnabled = await getPlatformCapabilityProbeEnabled();
-    let nextInterval = await getPlatformCapabilityProbeInterval();
-    if (typeof enabled === 'boolean') {
-      nextEnabled = await updatePlatformCapabilityProbeEnabled(enabled);
-    }
-    if (intervalMs !== undefined) {
-      nextInterval = await updatePlatformCapabilityProbeInterval(intervalMs);
-      await aiCapabilityHealthService.setIntervalMs(nextInterval);
-    }
-    if (typeof enabled === 'boolean') {
-      await aiCapabilityHealthService.setEnabled(nextEnabled);
-    }
-
-    const intervalSec = Math.round(nextInterval / 1000);
-    res.json({
-      success: true,
-      data: {
-        enabled: nextEnabled,
-        intervalMs: nextInterval,
-        defaultEnabled: DEFAULT_CAPABILITY_PROBE_ENABLED,
-        defaultIntervalMs: DEFAULT_CAPABILITY_PROBE_INTERVAL_MS,
-        minIntervalMs: MIN_CAPABILITY_PROBE_INTERVAL_MS,
-        maxIntervalMs: MAX_CAPABILITY_PROBE_INTERVAL_MS,
-        timerActive: aiCapabilityHealthService.isEnabled()
-      },
-      message: nextEnabled
-        ? `AI 能力探测已开启，将每 ${intervalSec} 秒自动向模型服务发送探活请求`
-        : 'AI 能力探测已关闭，将停止周期性 LLM 探活请求'
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: { message: error.message || '更新 AI 能力探测设置失败' } });
   }
 });
 
@@ -1409,13 +1311,14 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     // 按路径收窄（学习者详情页的路径作用域选择器）：teaching_sessions.learningPathId 实测 248/248 非空
     const pathId = (req.query.pathId as string) || undefined;
     const status = (req.query.status as string) || undefined;
+    // 课堂类型筛选：tutor / review / extension（非法值忽略，不报错——列表筛选按容错处理）
+    const modeRaw = String(req.query.mode || '');
+    const mode = ['tutor', 'review', 'extension'].includes(modeRaw) ? modeRaw : undefined;
     const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';
     const onlyMissingWrapup = String(req.query.onlyMissingWrapup || '') === 'true';
-    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 buildRealUserWhere）；
-    // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）；
-    // testOnly=true（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看虚拟 + 测试账号
+    // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注，没有「真实/测试」视角）；
+    // includeTest=true 是学习者详情按 id 直查虚拟账号会话的逃生口
     const includeTest = String(req.query.includeTest || '') === 'true';
-    const testOnly = String(req.query.testOnly || '') === 'true';
 
     const data = await listTeachingSessionsDebug({
       page,
@@ -1423,10 +1326,10 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
       userId,
       pathId,
       status,
+      mode,
       onlyWithAdvisory,
       onlyMissingWrapup,
       includeTest,
-      testOnly,
     });
 
     res.json({

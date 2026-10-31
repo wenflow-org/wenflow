@@ -1,0 +1,162 @@
+{
+ "label": "LOAD1",
+ "rubric": "load",
+ "generatedAt": "2026-10-27T10:40:30.316Z",
+ "model": "deepseek-v4.1-flash",
+ "total": 9,
+ "judged": 9,
+ "errors": 0,
+ "verdicts": {
+  "keep": 6,
+  "fix": 3,
+  "drop": 0
+ },
+ "meanUsefulness": 0,
+ "meanGeometry": 0,
+ "leakShare": 0,
+ "redundantShare": 0,
+ "meanRelief": 2.78,
+ "meanSelfExplain": 2.56,
+ "preAnswerShare": 22,
+ "meanReadability": 2.67,
+ "metaShare": 0,
+ "byKind": {
+  "split-compare": {
+   "n": 3,
+   "keep": 2,
+   "drop": 0,
+   "relief": 3
+  },
+  "concept-map": {
+   "n": 3,
+   "keep": 1,
+   "drop": 0,
+   "relief": 2.67
+  },
+  "state-strip": {
+   "n": 3,
+   "keep": 3,
+   "drop": 0,
+   "relief": 2.67
+  }
+ },
+ "results": [
+  {
+   "i": 0,
+   "user": "b1-math-pace·第1轮",
+   "kind": "split-compare",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": true,
+   "meta": false,
+   "readability": 3,
+   "verdict": "fix",
+   "oneLine": "把错法与正确做法逐步并排展开，替学生扛住单位换算的多步对比和易混点",
+   "worstIssue": "底部『分叉在第 2 步：直接除米数，还是先换成千米』直接说出了老师要学生判断的『长度换算』答案，应改成中性提示或不写结论"
+  },
+  {
+   "i": 1,
+   "user": "b1-math-pace·第2轮",
+   "kind": "split-compare",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "把配速换算的错法与正法逐步并排，外化单位换算和分叉点，学生不用在脑中同时压住两条流程。",
+   "worstIssue": "none"
+  },
+  {
+   "i": 2,
+   "user": "b1-math-pace·第3轮",
+   "kind": "split-compare",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "把同一组数据的错误路径与正确路径逐行对齐摊开，学生不用在脑中同时压着两条四步链和单位标签，只需盯住分叉点",
+   "worstIssue": "左栏第 3 步「0.075 × 1000 = 75 / 按 min/m 放大」的错因推导牵强，与「秒当分钟除」不连贯，学生不易看出为什么这里要乘 1000"
+  },
+  {
+   "i": 3,
+   "user": "b2-phys-buoyancy·第1轮",
+   "kind": "concept-map",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": true,
+   "meta": false,
+   "readability": 2,
+   "verdict": "fix",
+   "oneLine": "把五个因素与 F浮 的「决定/无关」关系一次摊开，替学生扛住多变量比较和「哪些量进公式」的记忆负担。",
+   "worstIssue": "「物体重力 G物」节点被放在四条连线的汇合处，看上去像中间的汇总点，容易误读成「重力是浮力的中间变量」；应挪到侧边，并用虚线或叉号明确标出「无关」。"
+  },
+  {
+   "i": 4,
+   "user": "b2-phys-buoyancy·第2轮",
+   "kind": "concept-map",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "把浮力公式和“谁决定、谁不影响”摊成关系图，替学生扛住多个变量同时比较的负担。",
+   "worstIssue": "none"
+  },
+  {
+   "i": 5,
+   "user": "b2-phys-buoyancy·第3轮",
+   "kind": "concept-map",
+   "relief": 2,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 2,
+   "verdict": "fix",
+   "oneLine": "这张板把 F浮=ρ液gV排 的多变量结构摊开，并标出 h、G物 与公式的关系，替学生扛住公式记忆和无关量排除。",
+   "worstIssue": "板面只讲通用关系，没有把本题“水中沉没、水银中漂浮”对应的 V排 变化落到节点上；学生仍要自己把情境映射到 ρ液 与 V排。"
+  },
+  {
+   "i": 6,
+   "user": "b3-hist-shangyang·第1轮",
+   "kind": "state-strip",
+   "relief": 3,
+   "selfExplain": 3,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "把两次变法、朝议与徙木立信按时间轴摊开，替学生压住年代顺序和多项变法措施的工作记忆。",
+   "worstIssue": "none"
+  },
+  {
+   "i": 7,
+   "user": "b3-hist-shangyang·第2轮",
+   "kind": "state-strip",
+   "relief": 2,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 3,
+   "verdict": "keep",
+   "oneLine": "把朝议、徙木、两次变法四个节点的时间、地点和举措摊成一条链，替学生扛住「先后顺序＋每步做了什么」的记忆负担。",
+   "worstIssue": "板面只呈现实际时间线（→ 徙木者予五十金 → 垦草令颁行），没有给「只给十金」这一反事实留出位置；学生要对比的十金与五十金两个分支全靠脑内补，板子只帮到背景、没帮到这一轮的比较。"
+  },
+  {
+   "i": 8,
+   "user": "b3-hist-shangyang·第3轮",
+   "kind": "state-strip",
+   "relief": 3,
+   "selfExplain": 2,
+   "preAnswer": false,
+   "meta": false,
+   "readability": 2,
+   "verdict": "keep",
+   "oneLine": "把四个阶段的时间线摊成一条带箭头的进程条，让「朝议上说『不便』的甘龙杜挚」和「南门下不敢挪木头的民」并排摆着，学生不必在脑子里排序、也不必把两拨反对者混成一拨。",
+   "worstIssue": "第四帧文字排得太紧，「废井田、开阡陌、行县制」被拆成「开阡／陌」，「平斗桶、权衡、丈尺」被拆成「权衡、／丈尺」，扫读时会在断词处停一下——把卡片加宽或去掉顿号换行即可。"
+  }
+ ]
+}

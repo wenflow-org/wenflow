@@ -1,8 +1,10 @@
 /**
  * 学习者卡导入服务（卡库 v1，2026-10-01 用户拍板设计）。
  *
- * 设计口径：卡=数据，结构化导入即用，不经过任何 prompt 编译链；一张卡 = 一个系统账号
- * （isVirtualLearner，随机密码不可登录）+ 一份档案 + 故事池，创建原子完成。
+ * 设计口径：卡=数据，结构化导入即用，不经过任何 prompt 编译链。2026-10-29 用户拍板修正：
+ * 卡库不是账号，只是档案——导入一张卡 = 一份档案 + 故事池（userId 为空），随卡资料落在
+ * 卡归属键目录 `card-<profileId>`；只有派生（cloneCardsToLearners）才建虚拟账号。
+ * 预置卡（presetKey 非空）与派生实例仍保留账号。
  * 校验规则源自 2026-10-01 实测教训：来源诚实性（假来源 authored 事故）、预算自洽
  * （18 张虚高）、followUps 数量、同源重复预警（563 张里 60 张重复）。
  * 语义级去重（同场景改写）不在校验器内做——由 LLM 判读流程负责；校验器只做确定性检查。
@@ -24,6 +26,11 @@ import {
   findProfileJsonById,
 } from './virtual-learner-profile.repo';
 import { writeMaterial, listMaterials, readMaterial, type MaterialRecord } from '../materials/material-store';
+import { cardOwnerKey } from './card-owner-key';
+import { CARD_KEY_RE, cleanDisplayName } from './card-display-name';
+
+export { cardOwnerKey } from './card-owner-key';
+export { cleanDisplayName, deriveCardNickname, stripWaveTags } from './card-display-name';
 import type { DocumentAnchor } from '../materials/document-parser.types';
 import { logger } from '../../utils/logger';
 
@@ -66,8 +73,8 @@ export interface LearnerCard {
   notes?: string;
   /**
    * 自带资料（2026-10-02）：「学某课/学某书」的学习者随卡携带的教材/大纲/笔记。
-   * 导入时写入该虚拟用户的资料库（origin='upload'）——路径生成的「附件主线」、
-   * 库优先跳采集、材料 brief 全部零改造复用现网管线。
+   * 导入时写入卡归属键（`card-<profileId>`）的资料目录（origin='upload'）——派生实例时
+   * 再搬到新账号目录；路径生成的「附件主线」、库优先跳采集、材料 brief 零改造复用现网管线。
    */
   materials?: LearnerCardMaterial[];
 }
@@ -80,7 +87,6 @@ export interface CardReport {
   existingProfileId?: string;
 }
 
-const CARD_KEY_RE = /^[a-z0-9][a-z0-9._-]{1,63}$/i;
 
 export function parseCardDocument(content: string, format: 'yaml' | 'json'): { cards: LearnerCard[]; parseError?: string } {
   let doc: unknown;
@@ -210,47 +216,7 @@ function cardToProfile(card: LearnerCard): Record<string, unknown> {
   });
 }
 
-/**
- * 批次产物名清理（2026-10-05 卡库 demo 化）：本地跑批脚本建的 VL 名称形如
- * 「rw-wild6-03（24岁广告公司文案）」——ID（人设短语）。取括号内人设短语作卡面名；
- * 无括号的裸 ID / 正常名原样返回。
- */
-export function cleanDisplayName(raw: string | null | undefined): string | null {
-  const s = String(raw || '').trim();
-  if (!s) return null;
-  const m = s.match(/^[^\s（(]{2,}[（(]([^）)]{2,})[）)]\s*$/);
-  if (m) return m[1].trim();
-  // 竖线形态（批次产物另一族）：「rw-school-02｜二年级学生家长·社区快递驿站店主」取｜后人设短语
-  const pipe = s.match(/^[a-z0-9][a-z0-9._-]{1,63}\s*[｜|]\s*(.+)$/);
-  if (pipe) return pipe[1].trim();
-  return s;
-}
-
-/**
- * 昵称推导（2026-10-05 存量卡规范化）：为没有 nickname 的卡从现有字段派生人设短语——
- * ①nameHint 非 key 形态 → cleanDisplayName（「rw-int6-07（24岁广告公司文案）」→「24岁广告公司文案」）；
- * ②回退 users.name 清理版（仅括号提取成功时——普通名本就是卡面，不重复回填）；
- * ③null = 无可派生（展示链自行兜底）。key 形态的 nameHint（如 w6-math-01）不是人话，跳过。
- */
-export function deriveCardNickname(seed: Record<string, unknown>, usersName: string | null | undefined): string | null {
-  if (typeof seed.nickname === 'string' && seed.nickname.trim()) return null;
-  const hint = typeof seed.nameHint === 'string' ? seed.nameHint.trim() : '';
-  if (hint && !CARD_KEY_RE.test(hint)) {
-    const fromHint = cleanDisplayName(hint);
-    if (fromHint) return fromHint;
-  }
-  const rawName = String(usersName || '').trim();
-  const fromUsers = cleanDisplayName(rawName);
-  if (fromUsers && fromUsers !== rawName) return fromUsers;
-  return null;
-}
-
-/** 波次标签剔除（数据层）：w5/w6 等本地跑批批次代号不入 demo 卡数据 */
-export function stripWaveTags(tags: string[]): string[] {
-  return tags.filter((t) => !/^w\d+$/i.test(t));
-}
-
-/* ---------- 自带资料（卡 → 用户资料库，复用现网上传资料管线） ---------- */
+/* ---------- 自带资料（卡 → 资料目录，复用现网上传资料管线） ---------- */
 
 /** 确定性资料 id：重导入覆盖同一条而非堆积（id 需匹配 UUID 形态的存储校验） */
 function materialId(cardKey: string, title: string): string {
@@ -288,18 +254,22 @@ function markdownAnchors(markdown: string): DocumentAnchor[] {
 }
 
 /** 导出回程兜底：确定性 id 未命中时按标题归一匹配（兼容手工改过名的资料） */
-function findMaterialByTitle(userId: string, title: string): { record: MaterialRecord; markdown: string } | null {
+function findMaterialByTitle(ownerKey: string, title: string): { record: MaterialRecord; markdown: string } | null {
   const target = title.trim().toLowerCase();
-  for (const record of listMaterials(userId)) {
+  for (const record of listMaterials(ownerKey)) {
     if (record.origin === 'web') continue;
     if (record.name.replace(/\.md$/i, '').trim().toLowerCase() !== target) continue;
-    return readMaterial(userId, record.id);
+    return readMaterial(ownerKey, record.id);
   }
   return null;
 }
 
-/** 把卡的资料写进该虚拟用户的资料库（origin='upload'，路径生成的「附件主线」自动消费）。幂等：同卡同名覆盖。 */
-function writeCardMaterials(cardKey: string, userId: string, materials: LearnerCardMaterial[]): number {
+/**
+ * 把卡的资料写进归属目录（origin='upload'，路径生成的「附件主线」自动消费）。
+ * ownerKey 可以是账号 userId（派生实例/老卡），也可以是卡归属键 `card-<profileId>`（纯档案模板卡）。
+ * 幂等：同卡同名覆盖。
+ */
+function writeCardMaterials(cardKey: string, ownerKey: string, materials: LearnerCardMaterial[]): number {
   let written = 0;
   for (const m of materials) {
     const title = String(m.title || '').trim();
@@ -309,7 +279,7 @@ function writeCardMaterials(cardKey: string, userId: string, materials: LearnerC
       const headingCount = (markdown.match(/^#{1,3}\s+/gm) || []).length;
       const record: MaterialRecord = {
         id: materialId(cardKey, title),
-        userId,
+        userId: ownerKey,
         name: `${title}.md`,
         ext: '.md',
         format: 'markdown',
@@ -354,16 +324,17 @@ export async function attachMaterialsToLearner(profileId: string, materials: Lea
     const hasBody = String(m.content || '').trim().length > 0 || (Array.isArray(m.outline) && m.outline.some((s) => String(s || '').trim()));
     if (!hasBody) throw new Error(`资料「${String(m.title).slice(0, 24)}」缺正文：content 与 outline 至少给一个`);
   }
+  const row = await findProfileJsonById(profileId);
+  if (!row) throw new Error('虚拟学习者不存在');
+  // 归属键：实例/老卡按账号 userId；纯档案模板卡按卡归属键（2026-10-29）
   const userId = await findProfileUserIdById(profileId);
-  if (!userId) throw new Error('虚拟学习者不存在');
+  const ownerKey = userId ?? cardOwnerKey(profileId);
 
   // 1) 资料本体落库（路径主线消费的实体）
   const cardKey = `vl-${profileId.slice(0, 8)}`;
-  const written = writeCardMaterials(cardKey, userId, materials);
+  const written = writeCardMaterials(cardKey, ownerKey, materials);
 
   // 2) profile 锚定：读-改-写，只动两个锚点位
-  const row = await findProfileJsonById(profileId);
-  if (!row) throw new Error('虚拟学习者不存在');
   let profile: Record<string, unknown> = {};
   try { profile = JSON.parse(row.profile || '{}'); } catch { /* 空 profile 视为全新 */ }
   const anchorList = materials.map((m) => ({ kind: m.kind || 'note', title: String(m.title).trim() }));
@@ -448,7 +419,8 @@ async function buildExistingIndex(): Promise<{ byKey: Map<string, string>; refs:
 
 export interface CardWallEntry {
   profileId: string;
-  userId: string;
+  /** 账号 id（2026-10-29）：模板卡是纯档案，没有账号 → null */
+  userId: string | null;
   cardKey: string | null;
   /** 卡面昵称（2026-10-05）：nickname → nameHint → users.name 清理版 → key → email */
   name: string;
@@ -462,17 +434,22 @@ export interface CardWallEntry {
   email: string | null;
   /** 派生来源模板名（2026-10-16 卡=身份模板）：非空即「已派生实例」，空为身份池里的模板卡 */
   derivedFrom: string | null;
+  /** 故事池任务数（2026-10-27 卡面密度）：创建实例时要勾任务，卡面先给出「这张卡能开几节课」 */
+  taskCount: number;
+  /** 首个任务标题（2026-10-27）：卡面上真正会被开的那节课叫什么，比抽象的学习目标更能判断要不要用 */
+  firstTaskTitle: string | null;
 }
 
 /**
- * 卡墙索引映射（2026-10-05 卡库改版「导入是功能，卡展示也是」）：profiles 即卡
- * （「卡=账号」2026-10-01 拍板不变），解析 personaSeed.scenarioCard 取展示字段。
+ * 卡墙索引映射（2026-10-05 卡库改版「导入是功能，卡展示也是」）：profiles 即卡，
+ * 解析 personaSeed.scenarioCard 取展示字段。2026-10-29 起模板卡无账号（users/userId 可空），
+ * 展示名走档案内 nickname → nameHint → cardKey 链，不依赖 users 行。
  * 纯函数（可单测）；坏 JSON 行降级为占位卡，不阻断整面卡墙。
  */
 export function buildCardWallEntries(
   rows: Array<{
     id: string;
-    userId: string;
+    userId: string | null;
     profile: string;
     tags: string | null;
     learningGoal: string;
@@ -489,6 +466,8 @@ export function buildCardWallEntries(
     let opening: string | null = null;
     let sourceKind: string | null = null;
     let derivedFrom: string | null = null;
+    let taskCount = 0;
+    let firstTaskTitle: string | null = null;
     try {
       const p = JSON.parse(r.profile || '{}') as Record<string, unknown>;
       const seed = (p.personaSeed || {}) as Record<string, unknown>;
@@ -500,6 +479,11 @@ export function buildCardWallEntries(
       opening = (sc.opening as string) || null;
       sourceKind = (sc.sourceKind as string) || null;
       derivedFrom = ((p.derivedFrom as Record<string, unknown> | undefined)?.name as string) || null;
+      const pool = Array.isArray(p.storyPool) ? (p.storyPool as Array<Record<string, unknown>>) : [];
+      taskCount = pool.length;
+      const first = pool[0];
+      firstTaskTitle =
+        first && typeof first.title === 'string' && first.title.trim() ? first.title.trim() : null;
     } catch {
       /* 坏 JSON：占位展示（名称回退 email/cardKey），不阻断整面卡墙 */
     }
@@ -518,26 +502,28 @@ export function buildCardWallEntries(
       sourceKind,
       email,
       derivedFrom,
+      taskCount,
+      firstTaskTitle,
     };
   });
 }
 
-/** 卡墙索引聚合（GET /cards/index 数据源）：卡列表 + 预置/自建分计 */
+/** 卡墙索引聚合（GET /cards/index 数据源）：身份卡列表 + 预置/自建分计。
+ *  2026-10-24 层级收口：卡库＝身份池，只列未派生的身份卡（克隆实例归虚拟学习者列表）；derived 仍披露实例数。 */
 export async function getCardWallIndex() {
   const rows = await findProfilesForCardWall();
-  const cards = buildCardWallEntries(rows);
+  const all = buildCardWallEntries(rows);
+  const cards = all.filter((c) => !c.derivedFrom);
   return {
     cards,
     summary: {
       total: cards.length,
       builtin: cards.filter((c) => c.preset).length,
       custom: cards.filter((c) => !c.preset).length,
-      /** 已派生实例（带 derivedFrom 的卡）：卡库=身份池，此数说明池里有多少条已派生出虚拟学习者 */
-      derived: cards.filter((c) => c.derivedFrom).length,
+      derived: all.length - cards.length, // 已派生实例数：不在这面墙上，点 KPI 去虚拟学习者列表看
     },
   };
 }
-
 /* ============ 卡 → 虚拟学习者（2026-10-16 用户拍板：卡=身份模板，派生=建运行实例） ============
    卡库是「身份池」：一张卡 = 一份身份模板（人设 + 若干任务），虚拟学习者 = 用某张模板派生的实例。
    派生取「身份克隆」而非「引用」语义——同一张卡可反复派生多个独立实例，源卡留在池里。
@@ -612,11 +598,12 @@ export interface CloneCardOutcome {
   failed: Array<{ profileId: string; reason: string }>;
 }
 
-/** 随卡资料随身份搬一份：资料库按 userId 分目录，不搬则派生实例的 personaSeed 挂着指向源用户的资料。
- *  归属判据与卡导出回程同源（标题清单 → 按标题回查源用户资料库）。 */
+/** 随卡资料随身份搬一份：资料库按归属键分目录，不搬则派生实例的 personaSeed 挂着指向源卡的资料。
+ *  源归属键 = 老卡/预置卡的账号 userId，或纯档案模板卡的 `card-<profileId>`（2026-10-29）；
+ *  归属判据与卡导出回程同源（标题清单 → 按标题回查源资料目录）。 */
 function copyOwnedMaterials(
   sourceProfile: Record<string, unknown>,
-  srcUserId: string,
+  srcOwnerKey: string,
   dstUserId: string,
   newCardKey: string
 ): number {
@@ -628,7 +615,7 @@ function copyOwnedMaterials(
     const title = String(m.title || '').trim();
     if (!title) continue;
     try {
-      const found = findMaterialByTitle(srcUserId, title);
+      const found = findMaterialByTitle(srcOwnerKey, title);
       if (!found) continue;
       writeMaterial({ ...found.record, id: materialId(newCardKey, title), userId: dstUserId }, found.markdown);
       copied++;
@@ -729,7 +716,8 @@ export async function cloneCardsToLearners(items: CloneCardItem[], note?: string
         },
       });
 
-      copyOwnedMaterials(source, row.userId, user.id, cardKey);
+      // 模板卡（纯档案）的随卡资料在卡归属键目录；老卡/预置卡仍按源账号 userId（2026-10-29）
+      copyOwnedMaterials(source, row.userId ?? cardOwnerKey(row.id), user.id, cardKey);
       created.push({ profileId, userId: user.id, name: entry.name, cardKey, taskCount: picked.length });
     } catch (e) {
       logger.warn('[card-clone] 卡派生失败', { profileId: sourceId, error: (e as Error).message });
@@ -742,7 +730,8 @@ export async function cloneCardsToLearners(items: CloneCardItem[], note?: string
 
 export interface CardDetail {
   profileId: string;
-  userId: string;
+  /** 账号 id：模板卡（纯档案）为 null（2026-10-29） */
+  userId: string | null;
   cardKey: string | null;
   name: string;
   goal: string;
@@ -960,26 +949,24 @@ export async function importCards(content: string, format: 'yaml' | 'json', opts
           tags: JSON.stringify([card.cardKey, ...(card.tags || [])]),
           notes: card.notes || card.source?.note || null,
         });
-        // 自带资料同步重写（幂等：同卡同名覆盖）；更新路径按 profile 反查归属 userId
+        // 自带资料同步重写（幂等：同卡同名覆盖）；更新路径按 profile 反查归属键
+        // （老卡/预置卡有账号走 userId；纯档案模板卡无账号走 card-<profileId>）
         const updUserId = await findProfileUserIdById(report.existingProfileId);
-        if (updUserId && (card.materials || []).length) {
-          writeCardMaterials(card.cardKey, updUserId, card.materials || []);
+        if ((card.materials || []).length) {
+          writeCardMaterials(
+            card.cardKey,
+            updUserId ?? cardOwnerKey(report.existingProfileId),
+            card.materials || [],
+          );
         }
         results.push({ cardKey: card.cardKey, action: 'updated' });
         continue;
       }
-      const email = `${(card.account?.emailPrefix || `vl-${card.cardKey}`).replace(/[^a-z0-9._-]/gi, '-')}@cards.local`;
-      const password = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
-      const user = await createVirtualLearnerUser({
-        data: {
-          id: randomUUID(), email, name: card.account?.displayName || String(card.persona?.nameHint || card.cardKey),
-          password, role: 'user', currentLevel: card.knowledgeLevel || 'beginner', isAdmin: false,
-          isVirtualLearner: true, updatedAt: new Date(),
-        },
-      });
+      // 2026-10-29 卡库不是账号：导入只建档案（userId=null），不建 users 行
+      const profileId = randomUUID();
       await createVirtualLearnerProfile({
         data: {
-          id: randomUUID(), userId: user.id, profile: JSON.stringify(profile),
+          id: profileId, userId: null, profile: JSON.stringify(profile),
           learningGoal: String((card.story?.goalSeed?.domain as string) || (card.persona?.background as string) || card.cardKey),
           knowledgeLevel: card.knowledgeLevel || 'beginner',
           knownConcepts: card.persona?.knownConcepts ? JSON.stringify(card.persona.knownConcepts) : null,
@@ -989,9 +976,9 @@ export async function importCards(content: string, format: 'yaml' | 'json', opts
           notes: card.notes || card.source?.note || null,
         },
       });
-      // 自带资料 → 该虚拟用户的资料库（路径生成「附件主线」/材料 brief 零改造复用）
+      // 自带资料 → 卡归属键目录（路径生成「附件主线」/材料 brief 零改造复用；派生时再搬进实例）
       if ((card.materials || []).length) {
-        writeCardMaterials(card.cardKey, user.id, card.materials || []);
+        writeCardMaterials(card.cardKey, cardOwnerKey(profileId), card.materials || []);
       }
       byKey.set(card.cardKey, 'created');
       results.push({ cardKey: card.cardKey, action: 'created' });
@@ -1065,12 +1052,14 @@ export async function exportCards(): Promise<{ format: 'yaml'; content: string; 
     // 标题清单为归属依据）；正文 ≤20k 内嵌保证可回灌，超限只回章节清单
     const ownedMaterials = (scenario.materials as Array<{ kind?: string; title?: string }> | undefined) || [];
     const materials: LearnerCardMaterial[] = [];
-    if (r.userId && ownedMaterials.length) {
+    // 归属键：纯档案模板卡（userId=null）从 card-<profileId> 读；老卡仍按账号 userId（2026-10-29）
+    const ownerKey = r.userId ?? cardOwnerKey(r.id);
+    if (ownedMaterials.length) {
       try {
         for (const owned of ownedMaterials) {
           const title = String(owned.title || '').trim();
           if (!title) continue;
-          const found = readMaterial(r.userId, materialId(cardKey, title)) ?? findMaterialByTitle(r.userId, title);
+          const found = readMaterial(ownerKey, materialId(cardKey, title)) ?? findMaterialByTitle(ownerKey, title);
           if (!found) continue;
           const outline = (found.record.anchors || []).map((a) => a.heading).filter(Boolean);
           materials.push({

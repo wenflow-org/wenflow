@@ -49,7 +49,7 @@
         v-else-if="loadError"
         tone="error"
         title="学习台加载失败"
-        description="网络似乎不太稳定，检查连接后可以重试。"
+        :description="loadErrorDescription"
         action-text="重试"
         @action="loadAll"
       />
@@ -142,16 +142,16 @@
             </div>
           </section>
 
-          <!-- 生成中：等待态（区别于失败红卡，禁用重试） -->
+          <!-- 生成中：等待态（区别于失败红卡，禁用重试）。
+               状态只在标题讲一次：原眉标「路径生成中」+ 标题「路径正在生成」+ 青色 tag「正在生成」
+               是三处同义（2026-10-29 全站副文审计）；眉标只留来源路径。 -->
           <section v-else-if="pageState === 'generating'" class="card action action--gen">
             <div class="action__eyebrow">
-              <span>路径生成中</span>
               <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
             </div>
             <h2 class="action__title">路径正在生成，稍等一下</h2>
-            <p class="action__desc">生成一般需要几分钟；模型重试时会更久。这一页会自动检查进度，完成后直接出现今日行动。你也可以先去别的页面看看。</p>
+            <p class="action__desc">生成一般需要几分钟，完成后会直接出现今日行动。你也可以先去别的页面看看。</p>
             <div class="action__meta">
-              <span class="tag tag--cyan">正在生成</span>
               <span class="tag">信息已保留</span>
             </div>
             <div class="action__footer">
@@ -415,6 +415,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
+import { describeRequestError } from '@/utils/httpError';
 import { computeStreakDays } from './streak';
 import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
@@ -512,6 +513,9 @@ const reviewFooterHint = computed(() => {
 });
 const todaySchedule = ref<Record<string, any> | null>(null);
 const loadError = ref(false);
+/** 整页失败原因：429 明说限流并给等待秒数，不再一律写成“网络不稳定” */
+const NETWORK_FALLBACK = '网络似乎不太稳定，检查连接后可以重试。';
+const loadErrorDescription = ref(NETWORK_FALLBACK);
 /** 各数据源失败标记：区块级降级提示（不整页失败，也不伪装成空态） */
 const sourceFailed = ref<Record<string, boolean>>({
   budget: false,
@@ -552,6 +556,7 @@ async function loadAll() {
     loadError.value = false;
     sourceFailed.value = { budget: false, review: false, week: false };
   }
+  loadErrorDescription.value = NETWORK_FALLBACK;
   const { start: winStart, end: winEnd } = sessionWindowDates();
   const fastGroup = await Promise.allSettled([
     learningAPI.getStats(),
@@ -566,6 +571,12 @@ async function loadAll() {
   // 有快照时保留旧内容静默失败（不闪错误态，下一次进入再重试）
   if (fastGroup.every((r) => r.status === 'rejected')) {
     if (!snap) {
+      // 取第一个失败原因：429 显示「请求过于频繁 + Retry-After」，5xx 显示服务不可用，
+      // 只有真正的传输层错误才保留“网络不稳定”的措辞。
+      const firstRejected = fastGroup.find(
+        (r): r is PromiseRejectedResult => r.status === 'rejected'
+      );
+      loadErrorDescription.value = describeRequestError(firstRejected?.reason);
       loading.value = false;
       loadError.value = true;
     }
@@ -891,18 +902,17 @@ const nearestAchievement = computed(() => {
   if (!locked.length) return null;
   const nearest = locked.sort((a, b) => (b.progress?.percentage ?? 0) - (a.progress?.percentage ?? 0))[0];
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString());
-  /* P3-38（设计评审）：「KTL达到7.0（4.6/7）」目标与进度无缝拼接，读作两个互相矛盾的 KTL 值——
+  /* P3-38（设计评审）：「掌握 5 个知识点（4/5）」目标与进度无缝拼接，读作两个互相矛盾的数字——
      补衔接词分家：「目标 <描述> · 进度 c/t」（description 缺失时只说进度） */
   const prog = `${fmt(nearest.progress?.current ?? 0)}/${fmt(nearest.progress?.total ?? 1)}`;
   return {
     iconUrl: typeof nearest.icon === 'string' && nearest.icon.startsWith('http') ? nearest.icon : '',
     name: nearest.name,
     achieved: (nearest.progress?.current ?? 0) >= (nearest.progress?.total ?? 1),
-    // 走查 2026-10-08 #75：服务端成就条件含内部缩写 KTL，直出会与成就页
-    // 「知识掌握度（KTL）」（V2Achievements.descText）口径不一致且本页无处可查。
-    // 这里做同样的展开，两页文案对齐。
+    // 成就条件由服务端提供可直接展示的中文描述；掌握类自 2026-10-23 起为知识点数，
+    // 不再含 KTL 缩写，无需在前端二次展开。
     hint: nearest.description
-      ? `目标 ${String(nearest.description).replace(/KTL/g, '知识掌握度')} · 进度 ${prog}`
+      ? `目标 ${nearest.description} · 进度 ${prog}`
       : `进度 ${prog}`
   };
 });
@@ -950,7 +960,8 @@ const agendaMeta = computed(() => {
 /** 激励行（原 side-stack mini 卡内容压平）：天数已在问候栏 pill，这里只给行动建议 */
 const streakNote = computed(() => {
   if (streakDays.value > 0) return todayMinutes.value > 0 ? '连续记录保住了，继续保持' : '今天还没点亮 · 学一会儿就能续上';
-  return '今天学 10 分钟，开始连续记录';
+  // 0 天时用条件句，避免「今天学 10 分钟」被读成「今天已学 10 分钟」与 0 分钟打架
+  return `今日学满 10 分钟，即可点亮第 1 天连续记录（当前 ${Math.min(todayMinutes.value, 10)}/10 分钟）`;
 });
 /* P1-6（2026-10-04）：「还剩约 N 分钟」句尾已撤（0/30 镜像复读且 nowrap 下把「去处理」推出视口），
    todayRemaining 计算随之退役 */
@@ -1424,7 +1435,6 @@ onMounted(loadAll);
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
 .tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); border-color: color-mix(in srgb, var(--blue) 30%, transparent); color: var(--blue-deep); }
-.tag--cyan { background: color-mix(in srgb, var(--cyan) 12%, transparent); border-color: color-mix(in srgb, var(--cyan) 35%, transparent); color: var(--cyan-ink); }
 .tag--red { background: color-mix(in srgb, var(--wf-color-danger) 10%, transparent); border-color: color-mix(in srgb, var(--wf-color-danger) 35%, transparent); color: var(--red-ink); }
 .action__footer { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
 /* 行动卡 foot（原型 wf-action__foot 345-349）：grid，今日进度行在按钮行**上方**。
@@ -1487,11 +1497,9 @@ onMounted(loadAll);
 }
 
 /* ---------- 路径进度卡 ---------- */
-/* 走查 2026-10-08 #73：.dash__grid-main 是 align-items:stretch 的等高双列，路径卡
-   内容比左侧行动卡短，被拉到同高后中部留出 130–158px 纯空白，读起来像没加载完。
-   align-self:start 让本卡按内容定高，不再被左卡撑高（.path__foot 的 margin-top:auto
-   在自然高下不再产生内部空档）。 */
-.path { padding: 16px; display: flex; flex-direction: column; gap: 14px; align-self: start; }
+/* 双列等高：右侧路径卡随左卡拉齐底边，避免下方留 100px+ 凹陷（2026-10-29 外部评审）。
+   卡内用 space-between 把尾部动作压到底部，空白集中在中段而不是页面上。 */
+.path { padding: 16px; display: flex; flex-direction: column; gap: 14px; align-self: stretch; justify-content: space-between; }
 .path__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .path__title strong { font-size: 16px; }
 .path__sub { display: block; margin-top: 3px; font-size: 12px; color: var(--faint); }

@@ -4,7 +4,7 @@
 
 | 软件 | 版本 | 说明 |
 |------|------|------|
-| Node.js | 20.17.0+ | 运行环境（engines 要求 `>=20.17.0`） |
+| Node.js | 22.23.4+ | 运行环境（engines 要求 `>=22.23.4`；22.23.4 起修复 2026-10 安全批次） |
 | npm | 9+ | 包管理器 |
 | Git | 2.x | 版本控制 |
 | Nginx | 最新稳定版 | 可选，仅 `-UseNginx` 模式需要 |
@@ -158,6 +158,7 @@ AI_MODEL=deepseek-v4.1-flash
 AI_MODEL_REASONING=deepseek-v4.1-flash
 
 INIT_ADMIN_NAME=admin
+# 必须 ≥12 位且含大小写字母和数字；下面这行是**会被启动校验拒绝**的反例，请自行生成强口令
 INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 ```
 
@@ -286,17 +287,36 @@ Copy-Item frontend/.env.example frontend/.env
 
 ---
 
+## 单实例约束（架构优化批 #3）
+
+后端**只允许单实例运行**（同一数据库一个进程），启动时会做单实例断言：以主库文件路径为键在 `backend/.runtime/` 持锁，检测到另一实例在跑（含换端口共享同一 SQLite 的情形）将**拒绝启动**并输出在跑实例的 PID 与端口。
+
+原因（这些组件都是进程内的，双实例会静默失效）：
+- SQLite 单写者；出站 LLM 限流（RPM 令牌桶）按进程计数；
+- 后台调度器（虚拟实验对账/会话回收/缓存预热/outbox 消费）按进程各起一份 → 双消费、双回收；
+- 进程内互斥锁（虚拟学习者画像写等）跨进程无效。
+
+运维口径：
+- 正确停旧实例：`node backend/restart.mjs --stop`（或按 PID 停止），再启动新实例；
+- 锁在优雅关闭时自动释放；进程被强杀后残留的锁文件会在下次启动时按 PID 探活自动回收；
+- 本地确需同库双实例调试：`WENFLOW_ALLOW_MULTI_INSTANCE=1`（启动日志会高声提示，自担风险）；
+- 不同数据库（如 CI 库）键不同，互不阻塞。
+
+---
+
 ## 管理员账户
 
 系统会在后端启动时尝试自动创建初始管理员：
 
 ```env
 INIT_ADMIN_NAME=admin
+# 必须 ≥12 位且含大小写字母和数字；下面这行是**会被启动校验拒绝**的反例，请自行生成强口令
 INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 ```
 
 说明：
 - 如果数据库里已存在管理员，会自动跳过
+- 首次启动会校验密码强度：少于 12 位、缺少大小写字母或数字、或使用文档示例口令都会导致启动失败
 - 建议首次登录后立即修改密码
 
 详见 [`admin-guide.md`](admin-guide.md)。

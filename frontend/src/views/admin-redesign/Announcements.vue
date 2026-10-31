@@ -8,9 +8,6 @@
       <span class="mk-status__meta">生效中 {{ activeCount }}</span>
       <span class="mk-status__meta">草稿 {{ draftCount }}</span>
       <span class="mk-status__meta">已下线 {{ archivedCount }}</span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建公告</button>
-      </span>
     </div>
 
 
@@ -19,34 +16,33 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <select v-model="severityFilter" class="mk-filter__select" aria-label="按级别筛选">
-            <option value="">全部级别</option>
-            <option value="info">通知</option>
-            <option value="warning">提醒</option>
-            <option value="critical">紧急</option>
-          </select>
-          <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
-            <option value="">全部状态</option>
-            <option value="published">生效中</option>
-            <option value="expired">已过期</option>
-            <option value="draft">草稿</option>
-            <option value="archived">已下线</option>
-          </select>
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+          <!-- 级别 / 状态两维筛选：形态统一走胶囊内嵌下拉（2026-10-26），
+               偏离默认值时整枚转浅蓝激活态，一眼看出筛过 -->
+          <MkPillSelect
+            v-model="severityFilter"
+            label="级别"
+            aria-label="按级别筛选"
+            :options="severityOptions"
+            :active="!!severityFilter"
+          />
+          <MkPillSelect
+            v-model="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusOptions"
+            :active="!!statusFilter"
+          />
         </div>
         <span class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 正文" />
-          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
+          <!-- 命中数只在真筛过时出（2026-10-26 动线收口）：未筛时它与分页器「共 N 条」同数同源 -->
+          <span v-if="filtered.length < rows.length" class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
+          <!-- 主操作归位（2026-10-26 用户「重新设计一下」）：原先它独占页签条下面一整行、
+               靠右悬浮在卡片之外；现在与全站列表页同语法——卡头右组 = 搜索 → 主操作。
+               独立页同一条出口，原先卡内那条 .an-toolbar 也一并撤除。 -->
+          <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openCreate">新建公告</button>
         </span>
-      </div>
-
-      <!-- 工具条（原型 1894-1899 .toolbar：左 sub 说明 + grow + 右侧 primary sm「新建公告」）；
-           置于卡头筛选之下、列表之上，与原型 toolbar→tablewrap 次序一致。
-           embedded 态由宿主 OpsHub 提供同款工具行（避免重复入口），故此处仅独立页渲染。 -->
-      <div v-if="!embedded" class="an-toolbar">
-        <span class="an-toolbar__sub">面向学习者的公告、站内信与推送</span>
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary an-toolbar__new" @click="openCreate">新建公告</button>
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="7" />
@@ -57,7 +53,7 @@
            其余列 nowrap，长内容由全局 mk-cell-main max-width / an-body 截断兜底。
            列向原型对齐（1895-1898）：标题/状态/时间/创建人为原型列；级别/过期为现状真实
            能力保留；渠道/受众后端无对应字段，按纪律不硬造。 -->
-      <table class="mk-table">
+      <table class="mk-table mk-table--nowrap">
         <thead>
           <tr>
             <th>公告</th>
@@ -86,14 +82,14 @@
               @click="toggleAnSort('expires')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleAnSort('expires')">过期<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th>创建人</th>
-            <th class="mk-th--right">操作</th>
+            <th class="mk-th--right mk-c-act">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="r in paged" :key="r.id">
             <td>
               <div class="mk-cell-main">
-                <strong>{{ r.title }}</strong>
+                <strong :title="r.title">{{ r.title }}</strong>
                 <span class="mk-cell-sub an-body" :title="r.body">{{ r.body }}</span>
               </div>
             </td>
@@ -103,7 +99,10 @@
             </td>
             <td :class="{ 'mk-na': !r.publishedAt }" :title="r.publishedAt ? fmtDate(r.publishedAt) : ''">{{ r.publishedAt ? timeAgo(r.publishedAt) : '—' }}</td>
             <td :class="[r.expiresAt ? expiresTone(r.expiresAt) : 'mk-na']" :title="r.expiresAt ? fmtDate(r.expiresAt) : ''">{{ r.expiresAt ? expiresLabel(r.expiresAt) : '不过期' }}</td>
-            <td><span class="mono an-author" :title="r.createdBy || ''">{{ r.createdBy || '—' }}</span></td>
+            <td>
+              <span v-if="r.createdBy" class="mono an-author" :title="r.createdBy">{{ r.createdBy }}</span>
+              <span v-else class="mk-na">—</span>
+            </td>
             <td>
               <div class="mk-actions">
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>
@@ -126,6 +125,7 @@
 
       <MkEmptyState
         v-else-if="liveFailed"
+        min
         tone="error"
         icon="!"
         title="公告加载失败"
@@ -141,8 +141,8 @@
         v-else
         icon="◌"
         :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
-        :description="isFiltered ? '放宽筛选条件试试。' : '维护通知、功能发布、政策变更都会在这里汇总。'"
-        :action-text="isFiltered ? '清除筛选' : '新建公告'"
+        :description="isFiltered ? '放宽筛选条件试试。' : ''"
+        :action-text="isFiltered ? '清除筛选' : embedded ? '' : '新建公告'"
         min
         @action="isFiltered ? clearFilters() : openCreate()"
       />
@@ -158,7 +158,7 @@
     <!-- 新建 / 编辑公告 -->
     <Teleport to="body">
     <div v-if="createOpen" ref="maskRef" class="mk-modal">
-      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="新建公告">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="editingId ? '编辑公告' : '新建公告'">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ editingId ? '编辑公告' : '新建公告' }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeCreate">✕</button>
@@ -173,7 +173,7 @@
           <label class="mk-field">
             <span class="mk-field__label">级别</span>
             <!-- 三选一分组：role=group + aria-label，每个按钮带 aria-pressed（读屏可知当前级别；
-                 选中态不再只靠颜色与描边表达，与 DataScopeToggle / Feedback 状态 pill 同判例） -->
+                 选中态不再只靠颜色与描边表达，与 Feedback 状态 pill 同判例） -->
             <div class="an-severity" role="group" aria-label="公告级别">
               <button
                 v-for="s in severities"
@@ -187,18 +187,17 @@
                 {{ s.label }}
               </button>
             </div>
-            <span class="mk-field__hint">{{ severityHint(form.severity) }}</span>
           </label>
           <label class="mk-field" :class="{ 'mk-field--error': errors.body }">
             <span class="mk-field__label">正文 <em class="mk-field__req">*</em></span>
-            <textarea v-model="form.body" class="mk-field__textarea" rows="4" maxlength="3000" placeholder="给用户看的内容：说清时间、影响与建议动作"></textarea>
+            <textarea v-model="form.body" class="mk-field__textarea" rows="4" maxlength="3000"></textarea>
             <span class="mk-field__hint">{{ form.body.length }} / 3000 字</span>
             <span v-if="errors.body" class="mk-field__err">{{ errors.body }}</span>
           </label>
           <label class="mk-field">
-            <span class="mk-field__label">过期时间（可选）</span>
+            <!-- 必填项已带 *，非必填不再追加「（可选）」：标签后半句只是把「没有 *」再说一遍 -->
+            <span class="mk-field__label">过期时间</span>
             <input v-model="form.expiresAt" type="datetime-local" class="mk-field__input" />
-            <span class="mk-field__hint">留空表示不过期，需手动下线</span>
           </label>
           <!-- 仅新建态显示：编辑走「保存修改」，saveEdit 不读 publishNow（发布由行内「发布」按钮负责），
                编辑态留着会是看得见、改了没用的控件 -->
@@ -221,7 +220,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, getCurrentInstance, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { intent } from './store'
 import {
   liveAnnouncements,
@@ -244,6 +244,7 @@ import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import Pagination from './Pagination.vue'
 
@@ -266,10 +267,6 @@ interface Row {
 
 
 const rows = computed<Row[]>(() => liveAnnouncements.value)
-/* 宿主域计数徽章（embedded 才消费）：公告数就绪/变化即上报 */
-watch(liveAnnouncements, (list) => {
-  emit('count', list.length)
-}, { immediate: true })
 
 /* live 拉取失败态：liveFailures 由 store 的 loadLiveData 填充（announcements 域失败时置位） */
 const liveFailed = ref(false)
@@ -278,14 +275,38 @@ const liveRetrying = ref(false)
 /* 客户端筛选：关键词 + 级别 + 状态（与学习者域列表页同形态） */
 const keyword = ref('')
 const severityFilter = ref('')
-const statusFilter = ref('')
+/* 深链预筛（2026-10-24）：运营待办「草稿公告 →」带 ?status=draft；无 router 上下文时降级为无筛选。
+   2026-10-26：只认本页状态枚举——别的页签留下的 ?status=（如反馈的 new）会让列表静默变成
+   「没有匹配的公告」，读起来像公告全没了。 */
+const ANNOUNCE_STATUSES = new Set(['published', 'expired', 'draft', 'archived'])
+const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.$router
+const announceRoute = hasRouterCtx ? useRoute() : null
+const initialStatus = typeof announceRoute?.query.status === 'string' ? String(announceRoute.query.status) : ''
+const statusFilter = ref(ANNOUNCE_STATUSES.has(initialStatus) ? initialStatus : '')
+
+/* 两维筛选的选项（胶囊内嵌下拉）：空值 = 不筛该维，文案即「全部X」 */
+const severityOptions = [
+  { value: '', label: '全部级别' },
+  { value: 'info', label: '通知' },
+  { value: 'warning', label: '提醒' },
+  { value: 'critical', label: '紧急' },
+]
+const statusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'published', label: '生效中' },
+  { value: 'expired', label: '已过期' },
+  { value: 'draft', label: '草稿' },
+  { value: 'archived', label: '已下线' },
+]
 
 /* 客户端排序：公告全量已在 live 层（拉全量 + 客户端分页），排序诚实。
    级别/状态按语义档位排（非字典序）；发布/过期按时间戳，空值由 useTableSort 恒排末尾。
    与 Feedback/Notifications 同款交互（点击列头切换升降序，localStorage 记忆）。 */
 const SEVERITY_RANK: Record<Row['severity'], number> = { info: 0, warning: 1, critical: 2 }
 const STATUS_RANK: Record<string, number> = { draft: 0, published: 1, archived: 2 }
-const { toggle: toggleAnSort, sortState: anSortState, sortRows: sortAnRows } = useTableSort<Row>({
+const {
+  toggle: toggleAnSort, sortState: anSortState, sortRows: sortAnRows,
+} = useTableSort<Row>({
   accessors: {
     severity: (r) => SEVERITY_RANK[r.severity] ?? 0,
     status: (r) => STATUS_RANK[r.status] ?? 0,
@@ -373,6 +394,11 @@ const activeCount = computed(
   () => rows.value.filter((r) => r.status === 'published' && (!r.expiresAt || new Date(r.expiresAt).getTime() > Date.now())).length
 )
 const draftCount = computed(() => rows.value.filter((r) => r.status === 'draft').length)
+/** 宿主域计数徽章（embedded 才消费）：只报草稿数——角标位被读作待办量，
+    全部公告数在列表卡头自报。与运营待办的「草稿公告」同源。 */
+watch([draftCount, liveAnnouncements], () => {
+  emit('count', draftCount.value)
+}, { immediate: true })
 const archivedCount = computed(() => rows.value.filter((r) => r.status === 'archived').length)
 
 /* 操作 */
@@ -569,8 +595,6 @@ async function create() {
 
 const severityText = (s: string) => ({ info: '通知', warning: '提醒', critical: '紧急' }[s] || s)
 const severityBadge = (s: string) => (s === 'critical' ? 'mk-badge--bad' : s === 'warning' ? 'mk-badge--warn' : 'mk-badge--info')
-const severityHint = (s: string) =>
-  s === 'critical' ? '红色横幅，用于故障、安全事件' : s === 'warning' ? '黄色横幅，用于维护、变更预告' : '蓝色横幅，用于功能发布、常规通知'
 const statusText = (r: Row) => (r.status === 'published' ? (r.expiresAt && new Date(r.expiresAt).getTime() <= Date.now() ? '已过期' : '生效中') : r.status === 'draft' ? '草稿' : '已下线')
 const statusBadge = (r: Row) => (statusText(r) === '生效中' ? 'mk-badge--ok' : statusText(r) === '已过期' ? 'mk-badge--muted' : r.status === 'draft' ? 'mk-badge--info' : 'mk-badge--muted')
 /** 绝对日期：2026-08-06 14:30（公告管理需要精确时间，相对时间入 tooltip） */
@@ -607,9 +631,12 @@ function expiresLabel(iso: string): string {
    （.mk-card--fill 直接子元素），不再用 calc(100dvh - Npx) 撑列表区（T1 硬约束：min-height 撑屏禁令）。
    overflow:hidden 与 Feedback.vue .fb-embedded 同口径：空态带 --mk-empty-min-h 时由宿主裁切而非撑破页面 */
 .an-embedded { flex: 1 1 auto; min-height: 0; overflow: hidden; }
-/* 原型 .tbl td：nowrap（长内容由全局 mk-cell-main max-width 截断兜底）；
+/* 空态居中由共享口径承担（.mk-card--fill > .mk-empty--min { flex:1; min-height:0 } + 全局
+   place-content:center）。2026-10-21 曾按用户「太靠下了」在本页覆写成贴顶（start center）——
+   2026-10-24 全站空态收齐时实测该覆写在本页嵌入 ops-hub 后变成「文案贴顶 + 卡底 545px 空白」，
+   与全站统一形态冲突，故撤除；本页的「新建公告」动作在卡头右组，不依赖空态内的按钮位置。 */
+/* 单元格 nowrap 走表级 .mk-table--nowrap（表元素已挂）；
    标题列例外（原型 td.wrap）：双行 cell-main + 正文两行预览需要换行 */
-.an-list .mk-table td { white-space: nowrap; }
 .an-list .mk-table td:first-child { white-space: normal; }
 .an-body {
   max-width: 380px;
@@ -618,17 +645,7 @@ function expiresLabel(iso: string): string {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* 工具条（原型 249-250 .toolbar）：左说明 + grow + 右侧新建主钮（原型 1894-1899） */
-.an-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.an-toolbar__sub { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.an-toolbar__new { margin-left: auto; }
+/* 工具条（原型 249-250 .toolbar）：右侧新建主钮（原型 1894-1899） */
 /* 创建人列（原型 1898 创建人 mono sub）：mono 由全局 .mono 承载，此处补字号/弱化色 */
 .an-author { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .an-severity { display: flex; gap: 6px; }

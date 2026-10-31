@@ -1,10 +1,10 @@
 /**
  * BGE（new-api 兼容网关）向量化 + 重排 adapter。
  *
- * 同一网关（backend/.env 的 EMBEDDING_API_URL / RERANK_API_URL）提供两类能力：
+ * 同一网关（平台配置 infraModels 优先，backend/.env 回落）提供两类能力：
  *   POST <EMBEDDING_API_URL>  OpenAI 兼容 /v1/embeddings —— body { model, input }
  *   POST <RERANK_API_URL>     常见 rerank 契约 /v1/rerank     —— body { model, query, documents, top_n }
- * 认证统一 Authorization: Bearer <EMBEDDING_API_KEY>（两接口共用一把 key）。
+ * 认证 Authorization: Bearer <key>：优先 provider_secrets 密文，缺省回落环境变量。
  *
  * 注意（实测 2026-10-16）：rerank **必须带 /v1 前缀**，裸 /rerank 会命中网关前端页面（返回 HTML）。
  *
@@ -29,6 +29,7 @@ import type {
   RerankedDocument,
 } from '../types';
 import { asNumber, asString, normalizeVectors, toUpstreamError } from './shared';
+import { getInfraModelConfigSync } from '../infra-config.service';
 
 const DEFAULT_MODEL = 'BAAI/bge-m3';
 const DEFAULT_RERANK_MODEL = 'BAAI/bge-reranker-v2-m3';
@@ -41,20 +42,29 @@ export interface BgeEmbeddingConfig {
   embeddingEndpoint: string;
   rerankEndpoint: string;
   apiKey: string;
+  /** rerank 独立密钥；未配置时沿用 embedding key（当前 BGE 网关两接口共用一把） */
+  rerankApiKey: string;
   model: string;
   rerankModel: string;
   timeoutMs: number;
+  rerankTimeoutMs: number;
 }
 
+/**
+ * 运行时读取顺序：平台配置（platform_settings.infraModels）→ 环境变量。
+ * 同步契约不变：平台配置在启动/管理端保存时水合进进程内快照。
+ */
 export function readBgeConfig(): BgeEmbeddingConfig {
-  const timeout = Number(process.env.EMBEDDING_TIMEOUT_MS);
+  const runtime = getInfraModelConfigSync();
   return {
-    embeddingEndpoint: (process.env.EMBEDDING_API_URL || '').trim(),
-    rerankEndpoint: (process.env.RERANK_API_URL || '').trim(),
-    apiKey: (process.env.EMBEDDING_API_KEY || '').trim(),
-    model: (process.env.EMBEDDING_MODEL || '').trim() || DEFAULT_MODEL,
-    rerankModel: (process.env.RERANK_MODEL || '').trim() || DEFAULT_RERANK_MODEL,
-    timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : DEFAULT_TIMEOUT_MS,
+    embeddingEndpoint: runtime.embedding.endpoint,
+    rerankEndpoint: runtime.rerank.endpoint,
+    apiKey: runtime.embedding.apiKey,
+    rerankApiKey: runtime.rerank.apiKey || runtime.embedding.apiKey,
+    model: runtime.embedding.model || DEFAULT_MODEL,
+    rerankModel: runtime.rerank.model || DEFAULT_RERANK_MODEL,
+    timeoutMs: runtime.embedding.timeoutMs || DEFAULT_TIMEOUT_MS,
+    rerankTimeoutMs: runtime.rerank.timeoutMs || DEFAULT_TIMEOUT_MS,
   };
 }
 
@@ -104,14 +114,15 @@ export class BgeProvider implements EmbeddingProvider, RerankProvider {
   }
 
   isConfigured(): boolean {
-    return Boolean(this.config.apiKey) && Boolean(this.config.embeddingEndpoint || this.config.rerankEndpoint);
+    return Boolean(this.config.apiKey || this.config.rerankApiKey)
+      && Boolean(this.config.embeddingEndpoint || this.config.rerankEndpoint);
   }
 
   private assertEndpoint(endpoint: string, kind: string): void {
     if (!endpoint) {
       throw new EmbeddingError(
         'EMBEDDING_PROVIDER_NOT_CONFIGURED',
-        `BGE ${kind}未配置地址（请在 backend/.env 配置 ${kind === '向量化' ? 'EMBEDDING_API_URL' : 'RERANK_API_URL'}）`
+        `BGE ${kind}未配置地址（请在「模型与接入 → 接入与模型 → 基础设施模型」或 backend/.env 配置 ${kind === '向量化' ? 'EMBEDDING_API_URL' : 'RERANK_API_URL'}）`
       );
     }
   }
@@ -166,10 +177,10 @@ export class BgeProvider implements EmbeddingProvider, RerankProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiKey}`,
+          Authorization: `Bearer ${this.config.rerankApiKey || this.config.apiKey}`,
         },
         body: buildRerankBody(request, model),
-        timeoutMs: options.timeoutMs ?? this.config.timeoutMs,
+        timeoutMs: options.timeoutMs ?? this.config.rerankTimeoutMs,
         maxResponseBytes: MAX_RESPONSE_BYTES,
         privateNetworkPolicy: 'public-only',
         signal: options.signal,

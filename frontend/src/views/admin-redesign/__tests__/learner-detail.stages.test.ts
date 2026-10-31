@@ -4,12 +4,14 @@
  *   单阶段不渲染，多阶段可筛选，meta 显示「N / M 条」；
  * - 到期列三态：timeAgo 对未来时间返回「刚刚」的失真修复（逾期 N 天 / 今天到期 / N 天后）。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
+import { chooseMkSelect, mkSelectLabels } from '@/components/mk/__tests__/mkSelect';
 
 const listSessions = vi.hoisted(() => vi.fn());
+const listGoals = vi.hoisted(() => vi.fn());
 const listPaths = vi.hoisted(() => vi.fn());
 const getMemoryTraces = vi.hoisted(() => vi.fn());
 const getLearnerEvidence = vi.hoisted(() => vi.fn().mockResolvedValue({ items: [], domain: [], loadCurve: [] }));
@@ -84,31 +86,39 @@ vi.mock('../learner-profile', () => ({
 }));
 vi.mock('@/api/adminApi', () => ({
   adminTeachingSessionsApi: { list: listSessions },
+  adminGoalConversationsApi: { list: listGoals },
   // 路径视角开关的选项来源（GET /paths?userId=）
   adminLearningContentApi: { listPaths },
   // 记忆页签嵌入的 MemoryReview 面板会在挂载时拉明细：给 resolved 值防空 catch 炸响
   adminMemoryReviewApi: { detail: vi.fn().mockResolvedValue({ data: { data: null } }), recompute: vi.fn(), apply: vi.fn(), reject: vi.fn(), rollback: vi.fn() },
   // 必须给 resolved 值：loadDetail 对它 .then，undefined 会在 try 内同步抛 TypeError 炸掉后续 loadLdSessions
   getUserIncludingDeleted: vi.fn().mockResolvedValue({ data: { data: {} } }),
+  // 证据页新增的建议归因命中率读侧（2026-10-21）：同样必须有函数，否则同步 TypeError 落进详情 catch
+  adminOpsApi: { insightReliability: vi.fn().mockResolvedValue({ data: { data: null } }) },
 }));
-vi.mock('../statusText', () => ({
-  statusText: (s: string) => s,
-  // C10 上收后教学 pane 徽章走 sessionStatusBadgeCls；本 mock 只需可调用返回空串（断言不涉及配色）
-  sessionStatusBadgeCls: () => '',
-  // 2026-10-11 深设计：进度列复用共享 statusText.sessionProgress* 四件套
-  sessionProgressPct: (p: { taskIndex: number; totalTasks: number } | null) =>
-    p && p.totalTasks > 0 ? Math.round((p.taskIndex / p.totalTasks) * 100) : null,
-  sessionProgressText: (p: { taskIndex: number; totalTasks: number } | null) =>
-    p && p.totalTasks > 0 ? `任务 ${p.taskIndex}/${p.totalTasks}` : '—',
-  sessionProgressTone: () => null,
-  sessionProgressDone: (s: string) => s === 'completed' || s === 'succeeded',
-}));
+vi.mock('../statusText', async () => {
+  // 建议徽章读运营口径（2026-10-22）：用真实实现，别在 mock 里另写一份文案
+  const actual = await vi.importActual<typeof import('../statusText')>('../statusText')
+  return {
+    ...actual,
+    statusText: (s: string) => s,
+    // C10 上收后教学 pane 徽章走 sessionStatusBadgeCls；本 mock 只需可调用返回空串（断言不涉及配色）
+    sessionStatusBadgeCls: () => '',
+    // 2026-10-11 深设计：进度列复用共享 statusText.sessionProgress* 四件套
+    sessionProgressPct: (p: { taskIndex: number; totalTasks: number } | null) =>
+      p && p.totalTasks > 0 ? Math.round((p.taskIndex / p.totalTasks) * 100) : null,
+    sessionProgressText: (p: { taskIndex: number; totalTasks: number } | null) =>
+      p && p.totalTasks > 0 ? `任务 ${p.taskIndex}/${p.totalTasks}` : '—',
+    sessionProgressTone: () => null,
+    sessionProgressDone: (s: string) => s === 'completed' || s === 'succeeded',
+  }
+});
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn() }));
 vi.mock('@/utils/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
 import LearnerDetail from '../LearnerDetail.vue';
-import { liveVirtuals, liveGetLearnerDetail, type LiveVirtual } from '../live';
-import { openSubPage } from '../store';
+import { liveVirtuals, liveGetLearnerDetail, liveLearners, type LiveVirtual } from '../live';
+import { openSubPage, subPage } from '../store';
 
 function sessionRow(id: string, milestoneIndex: number | null, status = 'completed') {
   return {
@@ -144,9 +154,9 @@ async function mountLd(sessions: ReturnType<typeof sessionRow>[]) {
 describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
   /** 工具栏两组 chips 的选择器（2026-10-11 深设计：视角组与阶段组同排分域） */
   const stageChips = (w: ReturnType<typeof mount>) =>
-    w.findAll('.ld-filtbar__grp[aria-label="按阶段筛选会话"] .mk-pill');
+    w.findAll('.ld-filtbar__grp[aria-label="按阶段筛选课堂"] .mk-pill');
   const viewChips = (w: ReturnType<typeof mount>) =>
-    w.findAll('.ld-filtbar__grp[aria-label="会话视角"] .mk-pill');
+    w.findAll('.ld-filtbar__grp[aria-label="课堂视角"] .mk-pill');
 
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -162,8 +172,9 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
       sessionRow('s4', null), // 无归因行不进档位，但留在「全部阶段」
     ]);
     // 列方言回归（2026-10-11 用户走查：阶段从身份副行拆成独立列；列序按叙事重排）
+    // 2026-10-21：状态后补「课堂」列（正课/复习课/延伸课）
     expect(w.findAll('#ld-panel-sessions thead th').map((t) => t.text())).toEqual([
-      '会话', '阶段', '进度', '状态', '互动', '产物', '时间', '会话 ID',
+      '课堂', '阶段', '进度', '状态', '课堂类型', '互动', '课后总结', '时间', '课堂 ID',
     ]);
     const chips = stageChips(w);
     expect(chips.length).toBe(3); // 全部阶段 + 里程碑1 + 里程碑2
@@ -194,7 +205,7 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
 
   it('单阶段：不渲染阶段切换器（单档即全部）', async () => {
     const w = await mountLd([sessionRow('s1', 1), sessionRow('s2', 1)]);
-    expect(w.find('.ld-filtbar__grp[aria-label="按阶段筛选会话"]').exists()).toBe(false);
+    expect(w.find('.ld-filtbar__grp[aria-label="按阶段筛选课堂"]').exists()).toBe(false);
   });
 
   it('视角默认「有效」：隐藏废弃重试；头部读数给 有效/废弃 分档', async () => {
@@ -204,7 +215,10 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
       sessionRow('s3', 1, 'discarded'),
     ]);
     expect(viewChips(w).map((c) => c.text())).toEqual(['有效 · 1', '已废弃 · 2', '窗口全部 · 3']);
-    expect(w.find('.mk-card__meta').text()).toContain('有效 1 · 废弃 2');
+    // 2026-10-23 走查：分档计数只在 pills 上，卡头只留作用域（不再复读 有效/废弃）
+    const meta = w.find('#ld-panel-sessions .mk-card__meta').text();
+    expect(meta).toContain('当前路径');
+    expect(meta).not.toContain('有效');
     const rows = w.findAll('tbody .ld-pane-row');
     expect(rows.length).toBe(1);
     expect(rows[0].text()).toContain('s1');
@@ -274,7 +288,9 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
     const rows = w.findAll('tbody .ld-pane-row');
     expect(rows[0].text()).toContain('知识 3 点');
     expect(rows[0].text()).toContain('有总结');
-    expect(rows[0].text()).toContain('建议重排');
+    // 建议徽章走运营口径（2026-10-22）：不搬学员端标题「建议重排」，只报处置状态
+    expect(rows[0].text()).toContain('待确认调整');
+    expect(rows[0].text()).not.toContain('建议重排');
     expect(rows[1].text()).toContain('降级总结');
   });
 });
@@ -374,10 +390,11 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
       trace({ conceptKey: 'k-b', label: '乙', retrievability: 1, dueAt: new Date(Date.now() + day).toISOString(), extractionCount: 4 }),
       trace({ conceptKey: 'k-c', label: '丙', retrievability: null, dueAt: null, extractionCount: 0, lastSeenAt: null }),
     ]);
+    // 2026-10-23：状态分档由 pills 承载，卡头只留作用域标注
     const meta = w.find('#ld-panel-memory .mk-card__meta');
-    expect(meta.text()).toContain('待复习 1');
-    expect(meta.text()).toContain('稳固 1');
-    expect(meta.text()).toContain('未初始化 1');
+    expect(meta.text()).toContain('跨全部路径');
+    const chips = w.findAll('.ld-filtbar[aria-label="按复习状态筛选"] .mk-pill').map((c) => c.text());
+    expect(chips).toEqual(['全部 · 3', '待复习 · 1', '稳固 · 1', '未初始化 · 1']);
     expect(w.find('#ld-panel-memory tbody tr').text()).toContain('15 次 · 最近');
   });
 
@@ -505,7 +522,8 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
     liveVirtuals.value = [];
   });
 
-  it('卡头标出「学习者级聚合」出处（与虚拟档案页的单次会话快照区分开）', async () => {
+  /* 2026-10-19 文案优化：短标改说「全部路径汇总 · 取样 X」，长释改说「取自单次会话」 */
+  it('卡头标出「全部路径汇总」出处（与虚拟档案页的单次会话快照区分开）', async () => {
     // 共享 mock 的详情没有 dynamicState（学习状态追踪卡随之不渲染），本用例整体替换详情响应
     const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
     const original = detailMock.getMockImplementation();
@@ -523,9 +541,9 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
     try {
       const w = await mountLd([]);
       const metas = w.findAll('.mk-card__meta').map((m) => m.text());
-      expect(metas.some((t) => t.includes('学习者级聚合')), `实际 meta: ${JSON.stringify(metas)}`).toBe(true);
+      expect(metas.some((t) => t.includes('全部路径汇总')), `实际 meta: ${JSON.stringify(metas)}`).toBe(true);
       // 长释必须点明另一页的来源，否则「数字打架」的观感照旧
-      const note = w.find('.mk-card__meta[title*="单次会话当场留下的读数"]');
+      const note = w.find('.mk-card__meta[title*="取自单次会话"]');
       expect(note.exists()).toBe(true);
     } finally {
       routeQuery.tab = prevTab;
@@ -544,6 +562,9 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
     await flushPromises();
     const btn = w.findAll('button').find((b) => b.text().includes('虚拟档案'));
     expect(btn, '虚拟账号应出现互跳入口').toBeTruthy();
+    // 2026-10-20 用户「大小不一致」：hero 动作位统一默认档，不再和「重算档案」一高一矮
+    expect(btn!.classes()).toContain('mk-btn');
+    expect(btn!.classes()).not.toContain('mk-btn--sm');
     await btn!.trigger('click');
     expect(openSubPage).toHaveBeenCalledWith(
       'virtual',
@@ -578,9 +599,8 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
 
   it('选择器列出名下每条路径，当前路径被标出', async () => {
     const w = await mountLd([]);
-    const sel = w.find('#ld-scope-path');
-    expect(sel.exists()).toBe(true);
-    const opts = sel.findAll('option').map((o) => o.text());
+    expect(w.find('#ld-scope-path').exists()).toBe(true);
+    const opts = mkSelectLabels(w as never, '路径范围');
     expect(opts[0]).toContain('测试路径');
     expect(opts[0]).toContain('学习中'); // 路径域文案，不是全局字典的「进行中」
     expect(opts[0]).toContain('当前');
@@ -593,7 +613,7 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
 
   it('不给「全部路径」档：学习者模型快照没有跨路径聚合口径（不传 pathId 是回落到当前路径）', async () => {
     const w = await mountLd([]);
-    const texts = w.find('#ld-scope-path').findAll('option').map((o) => o.text());
+    const texts = mkSelectLabels(w as never, '路径范围');
     expect(texts.some((t) => t.includes('全部路径'))).toBe(false);
   });
 
@@ -624,12 +644,13 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
 
   it('切到非当前路径：标注用所选路径名（不说「当前路径」），请求带该 pathId', async () => {
     const w = await mountLd([]);
-    await w.find('#ld-scope-path').setValue('lp2');
+    await chooseMkSelect(w as never, '路径范围', 'lp2');
     await flushPromises();
     expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ pathId: 'lp2' }));
     const meta = w.find('#ld-panel-sessions .mk-card__meta');
     expect(meta.text()).toContain('路径 另一条路径');
-    expect(meta.attributes('title')).toContain('不是该学习者的「当前路径」');
+    expect(meta.attributes('title')).toContain('节课堂（窗口上限）');
+    expect(meta.attributes('title')).not.toContain('不是该学习者的「当前路径」');
     // 单条路径下串档告警不再出现（档位天然同源）
     expect(meta.attributes('title')).not.toContain('同序号里程碑会合到同一档');
   });
@@ -654,9 +675,9 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     }));
     try {
       const w = await mountLd([]);
-      await w.find('#ld-scope-path').setValue('lp2');
+      await chooseMkSelect(w as never, '路径范围', 'lp2');
       await flushPromises();
-      const opts = w.find('#ld-scope-path').findAll('option').map((o) => o.text());
+      const opts = mkSelectLabels(w as never, '路径范围');
       expect(opts[0]).toContain('· 当前');
       expect(opts[1]).not.toContain('· 当前');
       // 读数也必须说这是「所选路径」而不是「当前路径」
@@ -666,7 +687,7 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     }
   });
 
-  it('记忆块不随开关走：标注恒为跨全部路径，并给出结构性原因', async () => {
+  it('记忆块不随开关走：标注恒为跨全部路径，不再挂解释句', async () => {
     routeQuery.tab = 'memory';
     // 卡体 v-if="memoryPaneRows.length"：无痕迹时整卡不渲染
     getMemoryTraces.mockResolvedValue([
@@ -678,14 +699,12 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
       },
     ]);
     const w = await mountLd([]);
-    await w.find('#ld-scope-path').setValue('lp2');
+    await chooseMkSelect(w as never, '路径范围', 'lp2');
     await flushPromises();
     const meta = w.find('#ld-panel-memory .mk-card__meta');
     expect(meta.text()).toContain('跨全部路径');
-    /* title 里的人话化（2026-10-14 文案批）：库表元组 (userId, conceptKey) 已换成
-       「一个概念只保留一条记忆痕迹」，但要保留的语义是「按路径切会漏掉」这条结构性原因 */
-    expect(meta.attributes('title')).toContain('一个概念只保留一条记忆痕迹');
-    expect(meta.attributes('title')).toContain('按路径切会漏掉');
+    // 2026-10-22 用户裁定：作用域由短标表达，卡头不再挂长释
+    expect(meta.attributes('title')).toBeUndefined();
   });
 
   it('图谱不吃自带的路径轨（作用域已由页级接管，避免一屏两个同义控件）', async () => {
@@ -695,5 +714,138 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     expect(graph.exists()).toBe(true);
     expect(graph.props('showPathRail')).toBe(false);
     expect(graph.props('pathId')).toBe('lp1'); // 取值仍由页级作用域决定
+  });
+});
+
+/**
+ * 概览对象轴（2026-10-19 用户拍板）：
+ * 账号页的「最近活动」把「最近会话」的对象行又列了一遍，已撤；目标对话迁到概览
+ * 成为「最近目标对话」，与会话同轴并列；事件轴卡改名「学习动态」与它们区分。
+ */
+describe('LearnerDetail 概览：最近目标对话 + 学习动态命名', () => {
+  beforeEach(() => {
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listGoals.mockReset().mockResolvedValue({
+      data: {
+        data: {
+          conversations: [
+            { id: 'gc-same-path', description: '地理大题怎么练', status: 'completed', learningPathId: 'lp1', createdAt: '2026-10-18T10:00:00Z' },
+            { id: 'gc-other-path', description: '另一个路径的目标', status: 'active', learningPathId: 'lp-other', createdAt: '2026-10-17T10:00:00Z' }
+          ]
+        }
+      }
+    });
+    routeQuery.tab = 'overview';
+  });
+  afterEach(() => {
+    routeQuery.tab = 'sessions';
+  });
+
+  it('两张卡分工：事件轴叫「学习动态」，对象轴新增「最近目标对话」', async () => {
+    const w = await mountLd([]);
+    const titles = w.findAll('.mk-card__title').map((t) => t.text());
+    expect(titles).toContain('学习动态');
+    expect(titles).toContain('最近目标对话');
+    expect(titles).not.toContain('最近动态');
+    // 会话预览仍在（对象轴的另一张卡）
+    expect(titles).toContain('最近课堂');
+  });
+
+  it('目标对话跟随页级路径作用域，行点击进只读座舱', async () => {
+    const w = await mountLd([]);
+    const text = w.text();
+    expect(text).toContain('地理大题怎么练');
+    // 别的路径的目标不进当前作用域
+    expect(text).not.toContain('另一个路径的目标');
+    expect(text).toContain('最近 1 条 · 当前路径');
+
+    const row = w.findAll('.mk-row').find((r) => r.text().includes('地理大题怎么练'))!;
+    expect(row.exists()).toBe(true);
+    await row.trigger('click');
+    expect(openSubPage).toHaveBeenCalledWith(
+      'session-real',
+      'gc-same-path',
+      expect.objectContaining({ from: expect.objectContaining({ id: 'u1' }) })
+    );
+  });
+
+  /* 2026-10-18 真课实测：目标上存的是路径创建时的临时前缀（lp_x），真实路径末尾还带 _xxxxx。
+     严格相等会把本路径的目标全过滤空；按带 _ 边界的同源 id 匹配两边都认。 */
+  it('目标存临时前缀、路径带后缀时仍归入当前作用域', async () => {
+    const originalPath = liveLearners.value[0].pathId;
+    liveLearners.value[0].pathId = 'lp1_oyjo73i';
+    listGoals.mockResolvedValue({
+      data: {
+        data: {
+          conversations: [
+            { id: 'gc-prefix', description: '临时前缀目标', status: 'completed', learningPathId: 'lp1', createdAt: '2026-10-18T10:00:00Z' }
+          ]
+        }
+      }
+    });
+    try {
+      const w = await mountLd([]);
+      expect(w.text()).toContain('临时前缀目标');
+      expect(w.text()).toContain('最近 1 条 · 当前路径');
+    } finally {
+      liveLearners.value[0].pathId = originalPath;
+    }
+  });
+
+  /* 深链进虚拟学习者不带 ?includeTest 时，靠账号身份兜底：会话与目标两张卡必须与详情同源，
+     否则详情有数据、两张卡空读数（2026-10-18 走查）。 */
+  it('深链进虚拟账号不带 includeTest：会话与目标对话仍按 includeTest 拉取', async () => {
+    const original = subPage.value;
+    subPage.value = { view: 'learner', id: 'virtual_demo', label: '' };
+    listSessions.mockClear();
+    listGoals.mockClear();
+    try {
+      const w = await mountLd([]);
+      expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ userId: 'virtual_demo', includeTest: true }));
+      expect(listGoals).toHaveBeenCalledWith(expect.objectContaining({ userId: 'virtual_demo', includeTest: true }));
+      w.unmount();
+    } finally {
+      subPage.value = original;
+    }
+  });
+});
+
+/* 2026-10-21 教学组剔除虚拟学习者后，「学习详情 →」是唯一进虚拟账号学习档案的入口：
+   列表兜底（liveLearners）永远取不到它，快照也可能没有 userName / 路径（totalTasks=0）。
+   此前这种「稀疏详情」直接落「详情加载失败」，把「还没有学习数据」说成加载错误。 */
+describe('LearnerDetail 稀疏虚拟账号：不报加载失败，读数不造假', () => {
+  it('没有路径/课堂的虚拟账号：按账号记录渲染，hero 不展示默认的趋势/疲劳', async () => {
+    const { getUserIncludingDeleted } = await import('@/api/adminApi');
+    const userMock = getUserIncludingDeleted as unknown as ReturnType<typeof vi.fn>;
+    const origUser = userMock.getMockImplementation();
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    const original = subPage.value;
+    subPage.value = { view: 'learner', id: 'virtual_sparse', includeTest: true };
+    routeQuery.tab = 'overview';
+    userMock.mockResolvedValue({
+      data: { data: { id: 'virtual_sparse', name: '孙浩', email: 'virtual_sparse@test.local', isVirtualLearner: true } },
+    });
+    detailMock.mockResolvedValue({
+      model: { knowledgeMemory: { currentPath: { progress: {} }, globalSignals: {} } },
+    });
+    try {
+      const w = await mountLd([]);
+      const text = w.text();
+      expect(text).not.toContain('详情加载失败');
+      // 名字/邮箱由账号记录兜底（不再是裸 id）
+      expect(text).toContain('孙浩');
+      expect(text).toContain('virtual_sparse@test.local');
+      // 没有学习数据 → 不画「趋势：稳定 / 疲劳：低」（那是默认值，不是读数）
+      expect(w.text()).not.toContain('趋势：');
+      expect(w.text()).not.toContain('疲劳：');
+      w.unmount();
+    } finally {
+      subPage.value = original;
+      if (origUser) userMock.mockImplementation(origUser);
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
   });
 });

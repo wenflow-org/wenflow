@@ -197,7 +197,8 @@ const round = (value: number) => Math.round(value * 1000) / 1000;
 export function evaluateAdjustmentEffect(input: {
   record: TaskDifficultyAdjustmentRecord;
   nextState: { metrics: TaskDifficultyMetricsSnapshot; taskId: string | null; calculatedAt: Date } | null;
-  /** 复算路径级理由用的"本路径"状态（有路径时 = nextState.metrics） */
+  /** 复算路径级理由用的"本路径"状态：仅当锚点判定时确实用了课内（路径级）状态才传
+   *  （`evidence.lessonScopeIsPath`；旧行缺该字段时回退按 pathId 推断，维持历史口径） */
   nextPathState: TaskDifficultyMetricsSnapshot | null;
   globalLfAtNextState: number | null;
   globalKtlAtNextState: number | null;
@@ -353,7 +354,14 @@ export async function measureTaskDifficultyEffects(input: {
       ? await learningStateService.getAggregatedState(record.userId, { asOf: nextState.calculatedAt })
       : null;
 
-    const nextPathState = record.pathId && nextState ? nextState.metrics : null;
+    // 判定侧的 lesson_stress_high / path_load_unbalanced / global_imbalance 以
+    // lessonScopeIsPath（当时是否真的用了课内状态）为准；度量侧必须用同一开关复算，
+    // 否则"路径有 id 但当时走了全局兜底"的锚点永远复算不出 global_imbalance，relieved 率虚高。
+    const evidenceForScope = record.evidence as { lessonScopeIsPath?: boolean } | undefined;
+    const lessonScopeIsPath = typeof evidenceForScope?.lessonScopeIsPath === 'boolean'
+      ? evidenceForScope.lessonScopeIsPath
+      : Boolean(record.pathId);
+    const nextPathState = lessonScopeIsPath && nextState ? nextState.metrics : null;
     effects.push(evaluateAdjustmentEffect({
       record,
       nextState,

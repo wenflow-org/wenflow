@@ -1,7 +1,8 @@
 {
   "generatedAt": "2026-10-14T14:12:21.577Z",
   "rules": {
-    "R4": 3
+    "R4": 3,
+    "R7": 0
   },
   "files": {
     "views/admin-redesign/AdminGlossary.vue": {

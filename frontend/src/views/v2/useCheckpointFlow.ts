@@ -140,8 +140,18 @@ export function useCheckpointFlow(
       return;
     }
     const payload: Record<string, any> = {};
-    if (checkpoint.value.options?.length) payload.selectedOptionIds = selectedOptions.value;
-    else payload.answerText = answerText.value;
+    const options = Array.isArray(checkpoint.value.options) ? checkpoint.value.options : [];
+    if (options.length) {
+      payload.selectedOptionIds = selectedOptions.value;
+      // 兼容旧后端：short_answer 却带选项时后端只认 answerText；补上选中项文本，
+      // 至少不会因空 answerText 抛“缺少作答内容”。新后端会按形状归一成选择题。
+      if (checkpoint.value.type === 'short_answer') {
+        const byId = new Map(options.map((o: any) => [String(o?.id ?? ''), String(o?.text ?? '')]));
+        payload.answerText = selectedOptions.value.map((id) => byId.get(id) || id).join('；');
+      }
+    } else {
+      payload.answerText = answerText.value;
+    }
     // 记住提交时的会话对象：提交含一次教学回合（可达数十秒），期间用户可能「重新开始」
     // 换了新会话——settle 后旧 revision 不得回写到新会话（restart 有等待循环，这里兜底）
     const sessionAtSubmit = session.value;
@@ -180,6 +190,9 @@ export function useCheckpointFlow(
             checkpointFeedback.value = j.passed ? '回答正确' : '这道没答对';
           },
           onDelta: (t: string) => {
+            // 空文本 delta 不算可见进展：不喂看门狗、不上屏（#113——网关若吐空 chunk 心跳，
+            // 「90s 无讲解即中止」会被永久喂住，卡片停在「导师正在讲解…」只能刷新）
+            if (!t) return;
             armSubmitWatchdog();
             streamed += t;
             checkpointFeedback.value = streamed;
@@ -210,13 +223,13 @@ export function useCheckpointFlow(
       checkpointSubmitting.value = true;
       clearDraft();
       if (r.passed) {
-        // 答对：3s 后自动收起；延长自 1.6s，避免「刚看到答对了就消失」
+        // 答对：短暂显示「回答正确」后立即收起，把讲解归档进聊天流并释放小测占用的高度
         window.clearTimeout(checkpointCloseTimer);
         checkpointCloseTimer = window.setTimeout(() => {
           checkpoint.value = null;
           checkpointFeedback.value = '';
           checkpointSubmitting.value = false;
-        }, 3000);
+        }, 1200);
       }
       // 答错：保留卡片让用户读完纠正，由「继续 ›」/Esc 收起（不再提供重交入口）
     } catch (e: any) {

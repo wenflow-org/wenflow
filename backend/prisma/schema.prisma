@@ -121,6 +121,8 @@ model prompt_call_logs {
   routingContextHash  String?
   pathId              String?
   userId              String?
+  /// 教学/学习会话归因（真列；此前只能经 conversationId 间接反推）
+  sessionId           String?
   conversationId      String?
   pipelineRunId       String?
   pipelineStepIndex   Int?
@@ -144,6 +146,7 @@ model prompt_call_logs {
   @@index([pipelineRunId])
   @@index([pathId])
   @@index([userId])
+  @@index([sessionId, createdAt])
   @@index([traceId])
   @@index([parentExecutionId])
   @@index([finalLlmRequestId])
@@ -157,6 +160,8 @@ model llm_execution_attempts {
   rootExecutionId     String?
   traceId             String?
   userId              String?
+  /// 教学/学习会话归因（真列；此前只在 metadata.cacheAffinityKey 里间接出现）
+  sessionId           String?
   sourceEntry         String   @default("platform")
   promptAttemptNo     Int      @default(1)
   transportAttemptNo  Int
@@ -207,6 +212,7 @@ model llm_execution_attempts {
   @@index([providerId, resolvedModel, startedAt])
   @@index([rootExecutionId, startedAt])
   @@index([userId, startedAt])
+  @@index([sessionId, startedAt])
   @@index([errorCategory, startedAt])
   @@index([success, errorCategory, startedAt])
   @@index([userId, startedAt, success])
@@ -330,6 +336,11 @@ model learning_metrics {
   lsb          Float?   @default(0)
   depth_score  Float?   @default(0)
   metadata     String?
+  // 2026-10-24 架构优化批 2a：committed/synthetic/version 从 metadata JSON 文本 LIKE
+  // 拆为实列（读路径绕开索引的全文子串匹配；迁移已按 json_extract 回填存量行）
+  committed     Boolean @default(false)
+  synthetic     Boolean @default(false)
+  metricVersion String?
   recordedAt   DateTime @default(now())
   calculatedAt DateTime @default(now())
   ktlCurrent   Float?   @default(0)
@@ -343,6 +354,32 @@ model learning_metrics {
   users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, calculatedAt])
+  @@index([userId, committed, calculatedAt])
+}
+
+// PMC 滚动 checkpoint（架构优化批 2b，2026-10-24）：当前状态读取此前每次从用户第一行
+// 全量重放，成本随历史线性涨。每满 30 个日历日落一次「该日收盘态」，读取时从最新
+// checkpoint 续放。纯读侧缓存：无外键（users 删除后的孤儿行无害，仅多占一行）、
+// metricVersion 不匹配时种子作废回退全量重放（口径升级自愈）。
+model learning_pmc_checkpoints {
+  id              String   @id @default(uuid())
+  userId          String
+  /// '' = 全局序列（v1 只做全局 scope；预留路径 scope 扩展位）
+  scope           String
+  /// checkpoint 覆盖到的最后一天（应用时区日键 YYYY-MM-DD）——该日**收盘态**
+  dayKey          String
+  ktl             Float
+  lf              Float
+  /// 截至 dayKey 的最后一节课（供 LSS 自然衰减续算；无课时为 null）
+  latestLessonLss Float?
+  latestLessonAt  DateTime?
+  /// 种子适用的指标口径（state-v2）；口径升级时旧 checkpoint 失效跳过
+  metricVersion   String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, scope, dayKey])
+  @@index([userId, scope, dayKey])
 }
 
 model learning_paths {
@@ -533,6 +570,8 @@ model teaching_sessions {
   users                   users     @relation(fields: [userId], references: [id], onDelete: Cascade)
   finalizationOperations  session_finalization_operations[]
   messageRows             teaching_session_messages[]
+  messageOperations       teaching_message_operations[]
+  sessionEvents           session_events[]
 
   @@index([userId, taskId, status])
   @@index([status, updatedAt])
@@ -558,6 +597,49 @@ model teaching_session_messages {
   teaching_sessions teaching_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, id])
+}
+
+/// 教学写操作幂等账本（2026-10-20）：/messages、/continue、checkpoint 提交共用。
+/// 与 session_finalization_operations 同形（key+requestHash+resultJson），但生命周期短：
+/// 成功结果保留供同 key 重放；失败/超时允许同 key 重试。requestHash 不同 = 同 key 复用于
+/// 不同请求，按 409 拒绝（而不是静默返回上一请求的结果）。
+model teaching_message_operations {
+  id             String   @id @default(uuid())
+  sessionId      String
+  idempotencyKey String
+  kind           String
+  requestHash    String
+  status         String   @default("processing")
+  resultJson     String?
+  revision       Int?
+  errorCode      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+  teaching_sessions teaching_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, idempotencyKey])
+  @@index([status, updatedAt])
+}
+
+/// 会话事件统一日志（2026-10-21）：开课/回合/暂停/恢复/检查点/收束/工具/错误。
+/// 旧写入（teachingState.classroomEventHistory、domain_event_outbox）保持不动：
+/// 前者是前端课堂事件源、后者是跨模块持久事件；本表是并列的「按会话可查询时间线」。
+/// id 用自增整数而非 uuid：同会话按 id 排序即写入顺序，无需应用层算 seq。
+model session_events {
+  id         Int      @id @default(autoincrement())
+  eventId    String   @unique @default(uuid())
+  sessionId  String
+  kind       String
+  actor      String?
+  status     String?
+  revision   Int?
+  payload    String?
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  teaching_sessions teaching_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, id])
+  @@index([kind, occurredAt])
 }
 
 model session_finalization_operations {
@@ -748,6 +830,10 @@ model memory_traces {
   fsrsLapses      Int?      // FSRS-6 累计失误次数（Review/Relearning 态再判 Again 时 +1）：null = 未初始化。注：short-term 关闭下不改变调度，只作计数（卡壳率/leech/E4）
   fsrsReps        Int?      // FSRS-6 累计复习次数（**只计 FSRS 调度过的复习**，≠ extractionCount）：null = 未初始化
   ktMasteryEma    Float?    // θ−d 知识状态 EMA（LLM ktEstimate 的跨会话滑动平均，α=0.2；null = 未初始化）
+  // 模型对该估计自报的证据窗（≤200 字，teaching-turn 已截断）。2026-10-22（#133）起随 EMA 落库——
+  // 此前在 engine 组装 ktItems 时被丢弃，事后检查/审计只能拿二手转述核。
+  // null = 旧数据或模型未报。只随最新一次估计覆盖，不累积历史。
+  ktEvidence      String?
   pathId          String?   // 来源路径（写入时从会话带入）：温故解释"这是你在《X》里学过的"、按路径看待办
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -984,7 +1070,10 @@ model password_reset_tokens {
 
 model virtual_learner_profiles {
   id                    String             @id @default(uuid())
-  userId                String             @unique
+  // 卡库档案归属（2026-10-29 拍板：卡库不是账号，只是档案）：
+  // - 模板卡（导入/自建）= 纯档案，userId 为空，随卡资料存 card-<profileId> 目录；
+  // - 只有派生实例 / 预置实例才建账号（isVirtualLearner）。
+  userId                String?            @unique
   profile               String
   learningGoal          String
   knowledgeLevel        String
@@ -1004,7 +1093,7 @@ model virtual_learner_profiles {
   presetVersion         Int?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
-  users                 users              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  users                 users?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions              virtual_sessions[]
 
   @@index([userId])

@@ -1,7 +1,8 @@
 <template>
   <!-- 卡详情二级页（2026-10-06 抽屉退役：用户不喜欢抽屉设计，按 SkillDetail/PathDetail 家族判例
-       改标准二级页 ?view=card&id=<profileId>）。卡=账号拍板不变：本页是卡的全字段可视面，
-       「到虚拟学习者」= openSubPage('virtual', profileId) 切到画像二级页（看运行态）。 -->
+       改标准二级页 ?view=card&id=<profileId>）。卡=身份模板：本页只呈现静态卡片内容与
+       「创建虚拟学习者」；运行 / 记忆属于创建出来的实例，不在卡库开运行入口
+       （2026-10-24 用户「卡不是静态的吗」）。 -->
   <div v-if="d" class="mk-page cd">
     <MkDetailHero :avatar="d.name.slice(0, 1)" :title="d.name" :sub="heroSubText">
       <template #pills>
@@ -11,15 +12,9 @@
         <span v-if="d.tags.length > 4" class="mk-badge mk-badge--muted" :title="d.tags.join(' · ')">+{{ d.tags.length - 4 }}</span>
       </template>
       <template #actions>
-        <button type="button" class="mk-btn" :disabled="loading" @click="load">{{ loading ? '刷新中…' : '刷新' }}</button>
-        <!-- 「从这张卡造一个」的落点（2026-10-18 用户走查：卡库侧只有卡头勾选框，读作没有流程）：
-             身份卡可反复创建、不消耗卡本身，故本页主操作是创建，切画像降为次按钮。
-             文案 2026-10-19 与卡墙同批统一：原「派生虚拟学习者」是本页独有的说法。 -->
-        <button type="button" class="mk-btn" @click="goLearner">到虚拟学习者 →</button>
         <button
           type="button"
           class="mk-btn mk-btn--primary"
-          title="从这张身份卡创建 1 个虚拟学习者，下一步挑要带走的故事。卡留在卡库，可再创建"
           @click="openDerive"
         >创建虚拟学习者</button>
       </template>
@@ -36,23 +31,26 @@
           本卡由身份卡「<a
             href="#"
             class="mk-link"
-            :title="`打开身份卡「${d.derivedFrom.name}」`"
             @click.prevent="goTemplate(d.derivedFrom!.profileId)"
           >{{ d.derivedFrom.name }}</a>」创建，任务取自该身份卡的故事池。创建不消耗身份卡，可重复创建。
         </p>
       </div>
     </section>
 
-    <!-- 概览事实栅格（mk-facts 原语：div>span+strong 契约） -->
+    <!-- 概览事实栅格（mk-facts 原语：div>span+strong 契约）。
+         「已创建 N 个实例」落在本卡卡头：KPI 只说「已创建 2」，卡墙上任何一张卡都不显示是哪张建的。 -->
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">概览</h3>
-        <span class="mk-card__meta mono">{{ d.cardKey || '（无卡号）' }}</span>
+        <div class="mk-card__head-right">
+          <span class="mk-card__meta mono">{{ d.cardKey || '（无卡号）' }}</span>
+          <a v-if="derivedCount > 0" href="#" class="mk-link" @click.prevent="goInstances">已创建 {{ derivedCount }} 个实例 →</a>
+        </div>
       </div>
       <div class="cd-pad">
         <div class="mk-facts mk-facts--rows">
           <div><span>学习目标</span><strong>{{ d.goal || '—' }}</strong></div>
-          <div><span>账号</span><strong class="mono">{{ d.email || '—' }}</strong></div>
+          <div><span>账号</span><strong class="mono">{{ d.email || '—（纯档案卡，无账号）' }}</strong></div>
           <div><span>创建时间</span><strong>{{ fmtDate(d.createdAt) }}</strong></div>
           <div><span>来源</span><strong>
             <template v-if="d.sourceRef"><a :href="d.sourceRef" target="_blank" rel="noopener" class="mk-link">{{ d.sourceRef }}</a></template>
@@ -71,9 +69,9 @@
       <div class="cd-pad cd-sec">
         <p v-if="d.background" class="cd-bg">{{ d.background }}</p>
         <div v-if="d.personaFacts.length" class="mk-facts mk-facts--rows">
-          <div v-for="f in d.personaFacts" :key="f.label"><span>{{ f.label }}</span><strong>{{ f.value }}</strong></div>
+          <div v-for="f in d.personaFacts" :key="f.label"><span>{{ f.label }}</span><strong>{{ personaValue(f.label, f.value) }}</strong></div>
         </div>
-        <p v-if="!d.background && !d.personaFacts.length" class="mk-empty--line">这张卡没有人设字段（可能是批次运行产物，仅有账号与目标）。</p>
+        <p v-if="!d.background && !d.personaFacts.length" class="mk-empty--line">这张卡没有人设字段（可能是批次运行产物，仅有目标）。</p>
       </div>
     </section>
 
@@ -125,30 +123,41 @@
       <MkSkeleton variant="identity" />
       <MkSkeleton variant="rows" :count="3" />
     </div>
-    <MkEmptyState v-else tone="error" title="卡不存在或已删除" description="卡墙数据可能已刷新，返回卡库重试。">
-      <button type="button" class="mk-btn" @click="closeSubPage()">返回卡墙</button>
+    <MkEmptyState
+      v-else
+      tone="error"
+      title="卡不存在或已删除"
+      action-text="重试"
+      :action-busy="loading"
+      action-busy-text="重试中…"
+      @action="load()"
+    >
+      <!-- 顶栏刷新已覆盖本页，但详情取数失败时页内仍要有一个就地重试（失败不得只能离开） -->
+      <button type="button" class="mk-btn mk-btn--ghost" @click="closeSubPage()">返回卡墙</button>
     </MkEmptyState>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import { errMsg } from './live'
+import { errMsg, liveRefreshSeq } from './live'
 import { toast } from '@/utils/toast'
 import { shortHashTag } from '@/utils/shortHash'
 
 /* 文案单源（R6 复读单源化）：hero 副文与来源徽章悬停释共用一份 */
-const PRESET_SYNC_NOTE = '平台预置角色（随版本自动同步）'
+const PRESET_SYNC_NOTE = '平台预置角色（卡库内「一键加载」同步）'
 
 interface CardDetail {
   profileId: string
-  userId: string
+  /** 模板卡是纯档案（2026-10-29），没有账号 → null */
+  userId: string | null
   cardKey: string | null
   name: string
   goal: string
@@ -179,7 +188,26 @@ interface CardDetail {
 
 const d = ref<CardDetail | null>(null)
 const loading = ref(true)
+const router = useRouter()
+/** 本卡派生出的实例数（列表接口每行的 profile.derivedFrom.profileId 指向来源卡） */
+const derivedCount = ref(0)
 const profileId = computed(() => (subPage.value?.view === 'card' ? subPage.value.id || '' : ''))
+
+async function loadDerivedCount(pid: string) {
+  try {
+    const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: 1000 })
+    const body = res.data?.data ?? res.data ?? {}
+    const items = Array.isArray(body.profiles) ? body.profiles : Array.isArray(body.items) ? body.items : []
+    derivedCount.value = items.filter((it: Record<string, unknown>) => {
+      const p = (it.profile || {}) as Record<string, unknown>
+      const df = (p.derivedFrom || {}) as Record<string, unknown>
+      return String(df.profileId || '') === pid
+    }).length
+  } catch {
+    /* 读数为空不是错误态：保持 0，页面其余部分照常可用 */
+    derivedCount.value = 0
+  }
+}
 
 async function load() {
   const pid = profileId.value
@@ -191,6 +219,7 @@ async function load() {
     // 深链/刷新/从卡墙进入时 subPage 只有 id（面包屑退化成裸 ID），加载出名字后回填。
     // id 守卫：慢响应返回时用户可能已切到别的实体详情，不能把别家的面包屑改名。
     if (d.value?.name && subPage.value?.id === pid) setSubPageLabel(d.value.name)
+    void loadDerivedCount(pid)
   } catch (e) {
     toast.error(errMsg(e) || '卡详情加载失败')
   } finally {
@@ -198,22 +227,18 @@ async function load() {
   }
 }
 
-/** 「到虚拟学习者」：切画像二级页（id=profileId，findProfileDetail 按 profile 主键查）；
-    带 from 使画像页面包屑拼出「学习者卡 / 画像名」并可点面包屑回本卡（双向互链）。
-    from.label 用视图名而非卡名——卡与画像同一实体同名，用卡名会拼出「郑凯 / 郑凯」 */
-function goLearner() {
-  const pid = d.value?.profileId
-  if (!pid) return
-  openSubPage('virtual', pid, { from: { view: 'card', id: pid, label: '学习者卡' } })
-}
-
 /** 回派生来源的身份卡（本卡是实例时才有入口；label 用视图名，避免「同名卡 / 同名卡」） */
 function goTemplate(profileId: string) {
   openSubPage('card', profileId, { from: { view: 'card', id: profileId, label: '身份卡' } })
 }
 
+/** 实例不在卡墙上：去虚拟学习者列表看 */
+function goInstances() {
+  void router.push('/admin/virtual-learners')
+}
+
 const heroSubText = computed(() => {
-  return d.value?.preset ? PRESET_SYNC_NOTE : '学习者卡 · 导入即用'
+  return d.value?.preset ? PRESET_SYNC_NOTE : ''
 });
 function sourceText(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
   if (c.preset) return '预置'
@@ -235,6 +260,18 @@ function sourceTitle(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
 function levelText(level: string): string {
   const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
   return map[level] || level || '—'
+}
+/** 人设字段的枚举值 → 运营词（后端原样下发 reading / necessity / minimal / high；
+    2026-10-23 走查「卡片详情人设表在写英文码」，同页等级/预算都已中文化，这里补齐） */
+const PERSONA_ENUM_ZH: Record<string, Record<string, string>> = {
+  学习风格: { reading: '阅读型', video: '视频型', practice: '实践型', project: '项目型', quiz: '测验型', study: '系统学习', mixed: '混合型' },
+  动机类型: { necessity: '必要型', interest: '兴趣型', curiosity: '好奇型', 'external-pressure': '外部压力', career: '职业目标', achievement: '成就型', 'problem-solving': '问题驱动' },
+  可用时间: { minimal: '碎片时间', moderate: '适中', abundant: '充裕', short: '短', long: '长' },
+  技术熟练度: { high: '高', medium: '中', low: '低' },
+  认知风格: { intuitive: '直觉型', logical: '逻辑型', visual: '视觉型', practical: '实践型', mixed: '混合型' }
+}
+function personaValue(label: string, value: string): string {
+  return PERSONA_ENUM_ZH[label]?.[value] || value
 }
 function budgetLabel(k: string): string {
   const map: Record<string, string> = { dailyMinutes: '每日', horizonDays: '周期(天)', expectedHours: '预期(时)', weeklyHours: '每周(时)' }
@@ -263,6 +300,8 @@ function onDerived() {
 }
 
 onMounted(load)
+/* 顶栏刷新：与旧 hero 刷新钮同一入口 */
+watch(liveRefreshSeq, () => { void load() })
 </script>
 
 <style scoped>

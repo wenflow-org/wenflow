@@ -34,8 +34,16 @@ jest.mock('../../../skills/degradation-telemetry', () => ({
   degradationCause: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }))
 
+// M-15：实例模拟钟解析在消费者测试里整体 mock（真实实现会连带拉起 settings/repo 依赖）
+const mockResolveUserSimulatedNow = jest.fn()
+jest.mock('../../../services/virtual-lab/simulation-clock-resolver', () => ({
+  __esModule: true,
+  resolveUserSimulatedNow: (...args: unknown[]) => mockResolveUserSimulatedNow(...args),
+}))
+
 import { mapReviewStatusToRating, ReviewCompletedConsumer } from '../ReviewCompletedConsumer'
 import { createDomainEvent } from '../../../events/contracts'
+import { getSimulatedAsOf, runWithSimulatedClock } from '../../../services/virtual-lab/simulation-clock-context'
 
 describe('mapReviewStatusToRating（复习结果 → FSRS 语义评分映射）', () => {
   it('mastered 满进度 → easy + 0.9', () => {
@@ -518,5 +526,104 @@ describe('ReviewCompletedConsumer kcId 锚定（#94 写入侧稳定键）', () =
     expect(mockResolveConceptIdSafe).not.toHaveBeenCalled()
     expect(tx.memory_traces.upsert).toHaveBeenCalledTimes(1)
     expect(tx.memory_traces.upsert.mock.calls[0][0].create.conceptId).toBeNull()
+  })
+})
+
+/**
+ * M-15（2026-10-29 夜间审计）：消费者跑在 outbox worker 后台上文，此前无模拟钟 ALS。
+ * 消费者自身按 event.occurredAt 落库（C4 纪律，上方用例已钉），绑钟是给消费链内
+ * 任何 now 类读取用的上下文保障；未启用日期模拟的实例行为零变化。
+ */
+describe('ReviewCompletedConsumer 模拟钟绑定（M-15）', () => {
+  interface Tx {
+    domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
+    teaching_sessions: { findUnique: jest.Mock }
+    learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
+    memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
+    learner_projections: { upsert: jest.Mock }
+  }
+
+  const buildTx = (): Tx => ({
+    domain_event_inbox: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({}),
+    },
+    teaching_sessions: { findUnique: jest.fn().mockResolvedValue({ learningPathId: 'path-1' }) },
+    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    memory_traces: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockImplementation(async () => {
+        // 捕获写库时点所处 ALS 上下文（模拟钟绑定行为直接可观测点）
+        capturedAsOf.push(getSimulatedAsOf())
+        return {}
+      }),
+      findMany: jest.fn().mockResolvedValue([{ conceptKey: '光合作用' }]),
+      count: jest.fn().mockResolvedValue(1),
+    },
+    learner_projections: { upsert: jest.fn().mockResolvedValue({}) },
+  })
+
+  let capturedAsOf: Array<Date | null>
+  let tx: Tx
+
+  const clockEvent = () => createDomainEvent({
+    id: 'evt-m15',
+    type: 'review:completed',
+    aggregateType: 'review',
+    aggregateId: 'ts-1',
+    userId: 'user-1',
+    source: 'session-finalization',
+    occurredAt: new Date(1_700_000_000_000),
+    data: {
+      sessionId: 'ts-1',
+      mode: 'tutor',
+      reviewItems: [{ conceptKey: '光合作用', label: '光合作用', status: 'learning', progress: 40, masteryScore: 0.5, rating: 'hard' }],
+    },
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockResolveConceptIdSafe.mockResolvedValue(null)
+    getActiveForConcepts.mockResolvedValue([])
+    capturedAsOf = []
+    tx = buildTx()
+    transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
+  })
+
+  it('实例启用日期模拟 → 消费链在实例模拟钟上下文内执行', async () => {
+    mockResolveUserSimulatedNow.mockResolvedValue(new Date('2026-10-03T15:59:59.999Z'))
+
+    await new ReviewCompletedConsumer().handle(clockEvent())
+
+    expect(mockResolveUserSimulatedNow).toHaveBeenCalledWith('user-1')
+    expect(capturedAsOf.length).toBeGreaterThan(0)
+    for (const asOf of capturedAsOf) {
+      expect(asOf?.toISOString()).toBe('2026-10-03T15:59:59.999Z')
+    }
+  })
+
+  it('未启用日期模拟（解析 null）→ 不建模拟钟上下文（真实墙钟行为零变化），落库照常', async () => {
+    mockResolveUserSimulatedNow.mockResolvedValue(null)
+
+    await new ReviewCompletedConsumer().handle(clockEvent())
+
+    expect(capturedAsOf.length).toBeGreaterThan(0)
+    for (const asOf of capturedAsOf) {
+      expect(asOf).toBeNull()
+    }
+    expect(tx.learner_evidence.create).toHaveBeenCalledTimes(1)
+    expect(tx.memory_traces.upsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('已在模拟钟上下文内 → 不覆盖外层绑定', async () => {
+    mockResolveUserSimulatedNow.mockResolvedValue(new Date('2026-10-03T15:59:59.999Z'))
+
+    await runWithSimulatedClock(new Date('2025-01-01T00:00:00.000Z'), () =>
+      new ReviewCompletedConsumer().handle(clockEvent()))
+
+    expect(mockResolveUserSimulatedNow).not.toHaveBeenCalled()
+    for (const asOf of capturedAsOf) {
+      expect(asOf?.toISOString()).toBe('2025-01-01T00:00:00.000Z')
+    }
   })
 })

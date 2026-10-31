@@ -7,19 +7,20 @@ import { dayKeyOf, addDaysToDayKey } from '../time/day-boundary';
 import type { Prisma } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import AchievementSystem, { ACHIEVEMENTS, type AchievementDefinition } from './achievement-system';
-import learningStateService from '../learning/learning-state.service';
 
 interface UserStats {
   completedTasks: number;
   currentStreak: number;
   completedPaths: number;
   totalPaths: number;
-  ktl: number;
+  masteredConcepts: number;
   weekCompletionRate?: number;
   timeEfficiency?: number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** 「已掌握」判定：与 learner-model-agent/profile-aggregator 同口径（masteryScore 0-1）。 */
+const MASTERED_SCORE_THRESHOLD = 0.8;
 
 function achievementRecordId(userId: string, achievementId: string): string {
   return `ach_${userId}_${achievementId}`;
@@ -249,9 +250,14 @@ class AchievementService {
       ).length;
       const totalPaths = eligiblePaths.length;
 
-      // 成就阈值使用 canonical 内部尺度（0-10），展示 API 继续使用 0-100。
-      const currentState = await learningStateService.getCurrentState(userId);
-      const ktl = currentState?.ktl ?? 0;
+      // 已掌握知识点：只把真正提取过的痕迹当证据，排除 KT 幽灵痕（extractionCount=0）。
+      const masteredConcepts = await prisma.memory_traces.count({
+        where: {
+          userId,
+          masteryScore: { gte: MASTERED_SCORE_THRESHOLD },
+          extractionCount: { gt: 0 }
+        }
+      });
 
       // streak 只需覆盖最长 30 天成就，按 UTC 自然日从今天或昨天连续回溯。
       const streakWindowStart = new Date(Date.now() - 31 * DAY_MS);
@@ -275,7 +281,7 @@ class AchievementService {
         currentStreak,
         completedPaths,
         totalPaths,
-        ktl
+        masteredConcepts
       };
     } catch (error) {
       logger.error('获取用户统计失败:', error);

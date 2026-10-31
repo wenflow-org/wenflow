@@ -109,6 +109,19 @@ export function resolveReplanTaskRatio(mode?: string | null, advisoryAction?: st
   return Number.isFinite(ratio) && ratio > 0 ? ratio : REPLAN_TASK_RATIO_DEFAULT;
 }
 
+/**
+ * 兼容老客户端：只传 `evidence.advisory`（完整建议对象）而不传 `advisoryAction` 时，
+ * 从 `recommendation` 派生动作。否则 accelerate 建议会被当等量重排（审计 P2 33:0）。
+ */
+export function resolveAdvisoryAction(evidence?: Record<string, any> | null): string | undefined {
+  const explicit = typeof evidence?.advisoryAction === 'string' ? evidence.advisoryAction.trim() : '';
+  if (explicit) return explicit;
+  const recommendation = typeof evidence?.advisory?.recommendation === 'string'
+    ? evidence.advisory.recommendation.trim()
+    : '';
+  return recommendation || undefined;
+}
+
 /** 建立/拆解/诊断类任务在压缩时优先让位；交付/应用/收口类是骨干。 */
 const FLEXIBLE_TASK_TYPES = new Set(['acquire', 'deconstruct', 'diagnose']);
 
@@ -204,7 +217,7 @@ async function redesignMilestoneTasks(
   // 保留的已完成任务耗时（不算进新任务预算；下方 stageNewHours 汇总时也用同一个值）
   const completedMinutes = completedTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
   // 重排规模锚：系数 → 任务数（见文件头说明）。无学时锚时不注入，保持旧行为。
-  const replanRatio = resolveReplanTaskRatio(data.mode, (data.evidence as any)?.advisoryAction);
+  const replanRatio = resolveReplanTaskRatio(data.mode, resolveAdvisoryAction(data.evidence));
   const sourceHints = (normalizedInput as any)?.planningHints || null;
   const targetTaskCount = buildReplanTaskCount({
     estimatedHours: milestone.estimatedHours,
@@ -319,16 +332,16 @@ async function redesignMilestoneTasks(
         ? { ignoreCompletedSessionIds: (data.evidence as any).clearedSessionIds as string[] }
         : {})
     });
-    // 事务内重读模板并追加内容快照（写回时用）：避免循环共享旧 path 覆盖先前写入
+    // 事务内重读模板（写回基准）：多阶段重排循环共享循环外的旧 path，
+    // 若只在 contentSnapshot 存在时重读，后续阶段会拿第 0 阶段的陈旧 parsedTemplate
+    // 整包写回，覆盖前一阶段刚写的 stageDesigns/诊断 payload（2026-10-22 审计 P2）。
+    const txCurrentTemplate = parsePathPromptTemplate((await tx.learning_paths.findUnique({
+      where: { id: path.id },
+      select: { aiPromptTemplate: true },
+    }))?.aiPromptTemplate || null);
     const txParsed = contentSnapshot
-      ? appendReplanSnapshot(
-          parsePathPromptTemplate((await tx.learning_paths.findUnique({
-            where: { id: path.id },
-            select: { aiPromptTemplate: true },
-          }))?.aiPromptTemplate || null),
-          contentSnapshot,
-        )
-      : parsedTemplate;
+      ? appendReplanSnapshot(txCurrentTemplate, contentSnapshot)
+      : txCurrentTemplate;
     await tx.subtasks.deleteMany({
       where: {
         milestoneId: milestone.id,
@@ -430,7 +443,7 @@ async function redesignMilestoneTasks(
         aiPromptTemplate: JSON.stringify({
           ...txParsed,
           stageDesigns: {
-            ...(parsedTemplate?.stageDesigns && typeof parsedTemplate.stageDesigns === 'object' ? parsedTemplate.stageDesigns : {}),
+            ...(txParsed?.stageDesigns && typeof txParsed.stageDesigns === 'object' ? txParsed.stageDesigns : {}),
             [`stage-${milestone.stageNumber}`]: {
               inputPayload: stageDesignerInput,
               rawModelOutput: stageResult?._debug?.rawModelOutput || null,
@@ -455,7 +468,7 @@ async function redesignMilestoneTasks(
               }
             : {}),
           _generation: {
-            ...(parsedTemplate?._generation && typeof parsedTemplate._generation === 'object' ? parsedTemplate._generation : {}),
+            ...(txParsed?._generation && typeof txParsed._generation === 'object' ? txParsed._generation : {}),
             stageDesign: 'succeeded',
             lastError: null,
             triggerSource: data.triggerSource || 'api',

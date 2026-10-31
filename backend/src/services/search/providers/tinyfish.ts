@@ -9,6 +9,7 @@
  */
 
 import { safeHttpRequest } from '../../../utils/safe-http';
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import { SearchError } from '../types';
 import type {
   SearchCallOptions,
@@ -31,12 +32,12 @@ export interface TinyFishProviderConfig {
   timeoutMs: number;
 }
 
-/** 从环境变量读取配置；缺 SEARCH_API_KEY 时 isConfigured() 为 false（service 会跳过） */
+/** 从平台配置 / 环境变量读取配置；缺密钥时 isConfigured() 为 false（service 会跳过） */
 export function readTinyFishConfig(): TinyFishProviderConfig {
   const timeout = Number(process.env.SEARCH_TIMEOUT_MS);
   return {
-    endpoint: (process.env.SEARCH_API_URL || '').trim() || DEFAULT_ENDPOINT,
-    apiKey: (process.env.SEARCH_API_KEY || '').trim(),
+    endpoint: readPluginProviderField('web', 'tinyfish', 'searchEndpoint') || DEFAULT_ENDPOINT,
+    apiKey: readPluginProviderSecret('web', 'tinyfish', ['SEARCH_API_KEY']),
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : DEFAULT_TIMEOUT_MS,
   };
 }

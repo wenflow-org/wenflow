@@ -480,7 +480,11 @@ export async function validateExternalUrl(
     }
   }
   if (addresses.some(item => isAlwaysBlockedAddress(item.address))) {
-    throw new UnsafeUrlError('域名解析到了 Link-local、元数据或保留地址')
+    // 带出可行动提示：fake-IP/TUN 代理（Clash 等）会把公网域名解析到 198.18.0.0/15，
+    // 管理员不知道该改什么，只会看到「解析到了保留地址」。
+    throw new UnsafeUrlError(
+      '域名解析到了 Link-local、元数据或保留地址；若本机使用 fake-IP/TUN 代理，请在受控环境把该域名加入 SAFE_HTTP_TRUSTED_HOSTS 后重试'
+    )
   }
   if (addresses.some(item => isLocalOrPrivateAddress(item.address)
     && !canAccessPrivateAddress(hostname, item.address, options.privateNetworkPolicy))) {

@@ -7,21 +7,17 @@
       <span class="mk-status__sep"></span>
       <!-- 三态合计口径：此前全量 no-prompt 时只显示「同步 0 / 待编译发布 0」，
            与「核心文件 N」对不上，用户以为数据没加载 -->
-      <span class="mk-status__meta" :title="coreCountTitle">核心文件 {{ cores.length }}</span>
-      <span class="mk-status__meta pw-ok" :title="`已同步：编译产物与核心文件一致（${syncedCount} 个）`">同步 {{ syncedCount }}</span>
-      <span class="mk-status__meta pw-warn" :title="`待编译发布：核心文件有改动但未重新编译（${pendingCount} 个）`">待编译发布 {{ pendingCount }}</span>
-      <span v-if="noPromptCount" class="mk-status__meta pw-na" :title="`无 Prompt：尚未创建核心文件，不参与编译（${noPromptCount} 个）`">无 Prompt {{ noPromptCount }}</span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="loadList">
-          <MkLoading v-if="loading" inline text="刷新中…" /><span v-else>刷新</span>
-        </button>
-      </span>
+      <span class="mk-status__meta">核心文件 {{ cores.length }}</span>
+      <span class="mk-status__meta pw-ok">同步 {{ syncedCount }}</span>
+      <span class="mk-status__meta pw-warn">待编译发布 {{ pendingCount }}</span>
+      <span v-if="noPromptCount" class="mk-status__meta pw-na">无 Prompt {{ noPromptCount }}</span>
+      <!-- 2026-10-23：顶栏已有刷新（liveRefreshSeq → loadList），状态条不再重复一颗；
+           取数失败时行内 alert 与空态仍带「重试」 -->
     </div>
 
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">核心文件</h3>
-        <span class="mk-card__meta">改提示词与发布在 Skill 详情页「协议」页签。新建 Skill 为开发操作，需由开发人员创建</span>
       </div>
       <!-- 刷新失败但已有清单（2026-10-06 审核 #139）：保留已渲染表格，行内 alert 说明数据可能过期 + 重试入口；
            无数据（首载失败）时才由下方 MkEmptyState 走整页错误态（口径同 MemoryReview / DayTimeline） -->
@@ -34,7 +30,7 @@
       <MockSkeletonTable v-if="loading && !cores.length" :cols="6" :rows="8" />
       <!-- 原型 .tbl 口径：自动布局 + 单元格 nowrap（不用 fixed+colgroup 定宽），
            宽度随内容自适应、横向滚动由 .mk-table-scroll 兜底 -->
-      <table v-else-if="cores.length" class="mk-table mk-table--click pw-table">
+      <table v-else-if="cores.length" class="mk-table mk-table--click mk-table--nowrap pw-table">
         <thead>
           <tr>
             <th>Skill</th>
@@ -42,7 +38,7 @@
             <th>输出</th>
             <th title="核心文件哈希">核心哈希</th>
             <th>状态</th>
-            <th class="mk-th--right">操作</th>
+            <th class="mk-th--right mk-c-act">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -93,12 +89,11 @@
 
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>()
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { adminPromptWorkbenchApi } from '@/api/adminApi';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
-import MkLoading from '@/components/mk/MkLoading.vue';
-import { errMsg } from './live'
+import { errMsg, liveRefreshSeq } from './live'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
@@ -130,10 +125,6 @@ const syncedCount = computed(() => countBy('synced'));
 const pendingCount = computed(() => countBy('pending-compile'));
 const noPromptCount = computed(() => countBy('no-prompt'));
 
-/** 三态合计口径：已同步 + 待编译发布 + 无 Prompt = 核心文件总数（statusBar title） */
-const coreCountTitle = computed(() =>
-  `三态合计：已同步 ${syncedCount.value} + 待编译发布 ${pendingCount.value} + 无 Prompt ${noPromptCount.value} = 核心文件 ${cores.value.length}`
-);
 
 function countBy(status: string) {
   return cores.value.filter((c) => c.status === status).length;
@@ -186,6 +177,8 @@ async function loadList() {
 onMounted(async () => {
   await loadList();
 });
+/* 顶栏刷新广播：与旧状态条刷新钮同一入口（嵌入编排图时编排页已订阅，重复触发只是多拉一次，幂等） */
+watch(liveRefreshSeq, () => { void loadList() });
 </script>
 
 <style scoped>
@@ -195,8 +188,7 @@ onMounted(async () => {
 .pw-hash { font-size: var(--mk-fs-micro); }
 .mk-table--click tbody tr { cursor: pointer; }
 
-/* 原型 .tbl 单元格语言：不换行；首列 skill id 超长时省略号截断（完整 id 挂 title） */
-.pw-table td { white-space: nowrap; }
+/* 首列 skill id 超长时省略号截断（完整 id 挂 title）。nowrap 走表级 .mk-table--nowrap */
 .pw-table td:first-child code {
   display: inline-block;
   max-width: 280px;

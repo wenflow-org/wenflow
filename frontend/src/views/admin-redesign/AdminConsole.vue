@@ -68,7 +68,7 @@ function asyncPage(loader: () => Promise<any>) {
           h('div', { class: 'mk-alert mk-alert--row' }, [
             h('div', { class: 'mk-alert__msg' }, [
               h('strong', { style: 'margin-right: 8px' }, '页面加载失败'),
-              h('span', '资源加载失败（可能是网络异常或平台刚更新）'),
+              h('span', '页面依赖模块加载失败（可能是网络异常、开发态依赖缓存过期，或平台刚更新）'),
             ]),
             h('div', { class: 'mk-alert__act' }, [
               h('button', { type: 'button', class: 'mk-btn mk-btn--sm', onClick: () => window.location.reload() }, '刷新页面'),
@@ -99,6 +99,8 @@ const LearningPaths = asyncPage(() => import('./OpsContent.vue'));
 const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
 const VirtualLearnerCards = asyncPage(() => import('./VirtualLearnerCards.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
+// Prompt 评估（2026-10-25 用户拍板从 skills 宿主页签拆回独立页，归入侧栏 Skill 组）
+const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
 const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
 // 2026-09-29 拆回独立页：成本分析从执行日志宿主释放
@@ -145,7 +147,7 @@ const components: Record<string, unknown> = {
   'goal-conversations': GoalConversations,
   'learning-paths': LearningPaths,
   'virtual-learners': VirtualLearners,
-  // 学习者卡库（2026-10-01）：角色卡结构化导入/导出，卡=账号+档案+故事池，不经编译链
+  // 学习者卡库（2026-10-01，2026-10-29 修正）：角色卡结构化导入/导出，卡=纯档案+故事池（不建账号），不经编译链
   'virtual-learner-cards': VirtualLearnerCards,
   // 「批量实验」2026-10-04 下线（运行态并入 virtual-learners、资产输入归卡库；
   // 建页至今 batch_experiments 两表 0 行）；旧 URL 在 router 重定向到 /admin/virtual-learners
@@ -153,13 +155,15 @@ const components: Record<string, unknown> = {
   'orchestrator': Orchestrator,
   // 外挂能力（2026-10-19 从 api-config 宿主拆回独立场景，侧栏 Skill 组）
   'addons': Addons,
-  // 「Prompt 评估」2026-10-04 下线（折入 skills 宿主「Prompt 评估」页签；
-  // 组件更名 PromptEvalPanel 由 Skills 异步加载）；旧 URL 在 router 重定向 ?tab=cases|runs → ?peTab=
+  // Prompt 评估（2026-10-25 从 skills 宿主页签拆回独立场景，侧栏 Skill 组）：
+  // 面板 PromptEvalPanel 由本页异步加载；旧 /admin/skills?tab=prompt-eval 在 Skills 页改投
+  'prompt-eval': PromptEval,
   'execution-logs': ExecLogs,
   'token-cost': TokenCost,
   'memory-review': MemoryReview,
   'audit-logs': AuditLogs,
   'api-config': ApiConfig,
+  // 访问与注册 2026-10-27 并入运营中心宿主 tab（场景下线，URL 重定向兼容）
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
   // 健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,
@@ -220,26 +224,45 @@ const detailComponent = computed(() => (subPage.value ? detailComponents[subPage
 // 详情组件 key（回归 R3）：id + includeTest 二元化，includeTest 深链变化也强制重建详情组件
 const pageKey = computed(() => (subPage.value ? `${subPage.value.id}:${subPage.value.includeTest ? 1 : 0}` : undefined));
 /* 面包屑：二级页优先显示中文名/短标识（label），未设置时回退 ID 截断；title 始终给全 ID。
-   三级页（会话座舱由画像打开）拼出「二级 / 三级」，否则进详情后会丢掉二级名。 */
+   2026-10-24：from 支持 parent 链（二级 → 三级 → 四级），逐层拼出完整路径；
+   超过 3 段时保留最近 3 段并用「…」占位，避免顶栏被长链撑爆。 */
+const CRUMB_MAX_DEPTH = 3
 function crumbPart(label?: string, id?: string): string {
   const text = label || id || ''
   if (text.length <= 12) return text
   return `${text.slice(0, 8)}…${text.slice(-4)}`
 }
-const crumbLabel = computed(() => {
+/** 从当前 subPage 往上取完整链路（最外层在前） */
+function crumbChain(): string[] {
   const sp = subPage.value
-  if (!sp) return ''
-  const current = crumbPart(sp.label, sp.id)
-  const parent = sp.from ? crumbPart(sp.from.label, sp.from.id) : ''
-  return parent ? `${parent} / ${current}` : current
+  if (!sp) return []
+  const chain: string[] = [crumbPart(sp.label, sp.id)]
+  let from = sp.from
+  while (from) {
+    chain.unshift(crumbPart(from.label, from.id))
+    from = from.parent
+  }
+  return chain
+}
+const crumbLabel = computed(() => {
+  const chain = crumbChain()
+  if (!chain.length) return ''
+  if (chain.length > CRUMB_MAX_DEPTH) {
+    return ['…', ...chain.slice(chain.length - CRUMB_MAX_DEPTH)].join(' / ')
+  }
+  return chain.join(' / ')
 })
 const crumbTitle = computed(() => {
   const sp = subPage.value
   if (!sp) return ''
-  const parent = sp.from ? (sp.from.label || sp.from.id) : ''
   // label 回填后tooltip也应显示中文名（除名，避免裸 UUID）；深链瞬间 label 未到，回退 id
-  const current = sp.label ? `${sp.label}` : sp.id
-  return parent ? `${parent} / ${current}` : current
+  const chain: string[] = [sp.label || sp.id]
+  let from = sp.from
+  while (from) {
+    chain.unshift(from.label || from.id)
+    from = from.parent
+  }
+  return chain.join(' / ')
 })
 
 /* —— 真路由化：scene ↔ URL /admin/:page 双向同步 —— */
@@ -303,8 +326,15 @@ watch(
          不让详情挂载后再补一笔 replace——两笔导航互相竞态时，补参数那笔会把 view/id 冲掉，
          二级页被自己的 URL 同步当场关掉。离开 learner 详情时顺手清掉它，避免列表 URL 上
          留一个无主 tab（skills 宿主的 ?tab= 不受影响：只在 curView=learner 时清）。 */
-      if (sp.tab) q.tab = sp.tab
-      else if (curView === 'learner') delete q.tab
+      /* Skill 详情的页签用独立键 skdTab：?tab= 归宿主列表（Skills/Orchestrator），
+         两边共用会互相覆盖（2026-10-24 层级收口）。 */
+      if (sp.tab) {
+        if (sp.view === 'skill') q.skdTab = sp.tab
+        else q.tab = sp.tab
+      } else {
+        if (curView === 'learner') delete q.tab
+        if (sp.view === 'skill') delete q.skdTab
+      }
       if (curView !== sp.view || curId !== sp.id || (sp.includeTest ? route.query.includeTest !== 'true' : route.query.includeTest != null)) {
         void router.push({ query: q })
       }
@@ -318,8 +348,9 @@ watch(
         delete q.id
         delete q.includeTest
         delete q.stage
-        // 落点页签是详情自己的参数，随详情一起收（判据同上：只清 learner 写的那一个）
+        // 落点页签是详情自己的参数，随详情一起收（learner 用 ?tab=，skill 用 ?skdTab=）
         if (curView === 'learner') delete q.tab
+        if (curView === 'skill') delete q.skdTab
         void router.replace({ query: q })
       }
     }
@@ -346,13 +377,18 @@ watch(
 // scene → URL（侧栏/意图跳转）；push 保留历史，浏览器后退可回到上一页面
 // 门闩 bootstrapped：挂载完成前不主动 push，避免初始化瞬态把深链 URL 改写掉（QA ISSUE-001）
 let bootstrapped = false;
+/* 跨页跳转携带的目标页预筛（侧栏角标点进执行日志即 ?range=week&status=err 等）。
+   与 intent 并存：intent 是模块级共享的排查动线，这里是「这一次导航」的一次性 query，
+   push 落定即清空，不残留到下一次侧栏点击。 */
+let pendingSceneQuery: Record<string, string> | null = null
 watch(scene, (s) => {
   const cur = typeof route.params.page === 'string' ? route.params.page : ''
   if (bootstrapped && cur !== s) {
     /* 排查动线（P0）：intent 筛选随跳转进 URL——执行日志「已过滤故障视图」
        可刷新/分享/前进后退还原（ExecLogs 侧做 URL↔筛选双向同步）。
        只带 intent 参数、不透传当前页 query（避免把 ?view=&id= 等二级页状态漏进目标页） */
-    const q = intentQueryParams(s)
+    const q = { ...intentQueryParams(s), ...(pendingSceneQuery || {}) }
+    pendingSceneQuery = null
     if (Object.keys(q).length) void router.push({ path: `/admin/${s}`, query: q })
     else void router.push(`/admin/${s}`)
     subPage.value = null;
@@ -395,12 +431,16 @@ watch(
   }
 );
 
-function navigate(id: string) {
+function navigate(id: string, query?: Record<string, string>) {
   // 相同 scene 再点击：scene watch 不会触发，这里显式清空 subPage 返回列表
   if (id === scene.value) {
     subPage.value = null;
+    /* 带预筛的同页点击（如已在执行日志再点角标）：直接 replace 到该筛选，
+       否则「点了没反应」。 */
+    if (query) void router.push({ path: `/admin/${id}`, query })
     return;
   }
+  pendingSceneQuery = query || null
   scene.value = id;
 }
 
@@ -493,7 +533,11 @@ onMounted(() => {
 .ac-error__card span { font-size: var(--mk-fs-body); color: var(--mk-muted); }
 .ac-error__actions { display: flex; gap: 10px; margin-top: 6px; }
 .ac-error__diag { max-width: 460px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ac-error__diag summary { cursor: pointer; }
+.ac-error__diag summary { cursor: pointer; list-style: none; }
+/* 系统三角退役：与全站 details（.mk-section__summary）同用自绘 ▸ */
+.ac-error__diag summary::-webkit-details-marker { display: none; }
+.ac-error__diag summary::before { content: '▸'; display: inline-block; margin-right: 6px; transition: transform 0.12s ease; }
+.ac-error__diag[open] summary::before { transform: rotate(90deg); }
 .ac-error__diag code {
   display: block;
   margin-top: 6px;

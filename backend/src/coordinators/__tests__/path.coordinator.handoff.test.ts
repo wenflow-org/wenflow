@@ -132,6 +132,32 @@ describe('path.coordinator normalizedInputV1 配置式装配', () => {
     expect(tightened.planningHints.maxWeeks).toBeLessThanOrEqual(base.planningHints.maxWeeks)
   })
 
+  it('triageHint 透传并真正收紧体量（Goal 分诊生产接线）', async () => {
+    const tightenedInput = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+      triageHint: { transferable: false, recurrence: 'oneoff' },
+    } as any)
+    const baseInput = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+    } as any)
+
+    const tightened = tightenedInput.userProfile.normalizedInput
+    const base = baseInput.userProfile.normalizedInput
+
+    // 1) hint 本身进入 normalizedInput（生产端唯一挂载点）
+    expect(tightened.triage).toEqual({ transferable: false, recurrence: 'oneoff' })
+    // 2) 未传时不注入（真实用户链路行为不变）
+    expect(base.triage ?? null).toBeNull()
+    // 3) 真正影响到 planningHints（一节课量级）
+    expect(tightened.planningHints.targetMilestones ?? 0).toBeLessThanOrEqual(2)
+    expect(tightened.planningHints.maxWeeks).toBeLessThanOrEqual(1)
+    expect(tightened.planningHints.subtaskMinutesRange[1]).toBeLessThanOrEqual(15)
+  })
+
   it('handoff 缺失字段时回退 visibleSummary（不丢数据）', async () => {
     const partial = await pathOrchestrator.previewNormalizedGoalInput({
       userId: 'user-1',
@@ -230,5 +256,16 @@ describe('path.coordinator normalizedInputV1 配置式装配', () => {
     expect(result.userProfile.goalFinalPayload?.goalHandoffFields).toMatchObject({
       'understanding.real_problem': 'HANDOFF 版本的真问题',
     })
+  })
+
+  it('goal 层 confidenceScores 透传到 path 输入的 userProfile', async () => {
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+      confidenceScores: { overall: 0.86, surfaceGoal: 0.9 },
+    } as any)
+
+    expect(result.userProfile.confidenceScores).toEqual({ overall: 0.86, surfaceGoal: 0.9 })
   })
 })

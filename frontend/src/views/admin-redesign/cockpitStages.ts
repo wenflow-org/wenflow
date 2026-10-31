@@ -19,6 +19,8 @@ export function useCockpitStages(deps: {
   stageResults: ComputedRef<Record<string, unknown>>
   isTerminal: ComputedRef<boolean>
   isFailedTerminal: ComputedRef<boolean>
+  /** 中断类终态（failed/abandoned/timeout/finalization_failed/discarded/superseded，#135） */
+  isInterruptedTerminal: ComputedRef<boolean>
   hasWrapup: ComputedRef<boolean>
   goalConversationMessages: ComputedRef<Array<{ role: string; content: string }>>
   pathStatusPath: ComputedRef<Record<string, unknown>>
@@ -27,7 +29,7 @@ export function useCockpitStages(deps: {
 }) {
   const {
     currentStage, bindings, stageStatus, stageResults,
-    isTerminal, isFailedTerminal, hasWrapup,
+    isTerminal, isFailedTerminal, isInterruptedTerminal, hasWrapup,
     goalConversationMessages, pathStatusPath, pathMilestonesView, learnLessons
   } = deps
 
@@ -50,8 +52,9 @@ export function useCockpitStages(deps: {
 
     // Wrapup 不是会话终态的同义词：只有确实写出总结时才算完成。
     if (st === 'wrapup') return hasWrapup.value
-    // 失败终态只确认失败点以前的阶段；当前失败阶段不能伪装成完成。
-    if (isFailedTerminal.value && idx === cur) return false
+    // 中断终态只确认中断点以前的阶段；当前中断阶段不能伪装成完成（#135：timeout/
+    // finalization_failed/discarded/superseded 同 failed/abandoned 口径）。
+    if ((isFailedTerminal.value || isInterruptedTerminal.value) && idx === cur) return false
     if (isTerminal.value && idx <= cur) return true
     if (idx < cur) return true
     // 同阶段但已有下游证据时，也标完成（如 learning 时 Goal/Path 已完成）
@@ -139,6 +142,19 @@ export function useCockpitStages(deps: {
     const started = list.filter((l) => l.teachingSessionId || l.state === 'done').length
     return `已开始 ${started}/${list.length} 课`
   })
+  /* 总结按课走（2026-10-19 用户走查「总结是按课走的，已生成应该也是按课程走吧」）：
+     一节课一份总结，阶段读数不能只说「已生成」这一个有/无的事实。判据与课程映射同源——
+     buildLearnLessons 为每节课挑出「有总结的那条会话」（completed / timeout /
+     finalization_failed）；当前课堂的总结已落库、但历史条目尚未带终态时，按
+     teachingSessionId 补记这一节，避免出现「总结卡有内容、步点却数不到它」。 */
+  const wrapupLessonStat = computed(() => {
+    const list = learnLessons.value
+    const currentId = String(bindings.value.teachingSessionId || '')
+    const done = list.filter(
+      (l) => l.hasSummary || (hasWrapup.value && !!currentId && l.teachingSessionId === currentId)
+    ).length
+    return { done, total: list.length }
+  })
   function stageProgress(st: string) {
     const key = st as StageKey
     switch (key) {
@@ -148,8 +164,11 @@ export function useCockpitStages(deps: {
         return pathProgressText.value
       case 'learning':
         return learnStageRollupText.value
-      case 'wrapup':
+      case 'wrapup': {
+        const { done, total } = wrapupLessonStat.value
+        if (total && done) return `已生成 ${done}/${total} 课`
         return hasWrapup.value ? '总结已生成' : ''
+      }
       default:
         return ''
     }
@@ -178,6 +197,8 @@ export function useCockpitStages(deps: {
       return total ? `${done}/${total}` : ''
     }
     if (st === 'wrapup') {
+      const { done, total } = wrapupLessonStat.value
+      if (total && done) return `${done}/${total}`
       return hasWrapup.value ? '已生成' : ''
     }
     return ''

@@ -15,7 +15,7 @@
 > 仅作 Demo 演示，不提供正式服务，会定期清理账号与数据，请勿用于存放重要信息。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D20.17.0-green.svg)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.23.4-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
 📋 **[更新日志](CHANGELOG.md)** · 按月记录主要功能更新
@@ -137,7 +137,7 @@ WenFlow 的教学行为不是提示词拍脑袋，每条设计都有对应的理
 
 ## 3 分钟快速开始
 
-前置条件：**Node.js >= 20.17.0**；Windows（PowerShell 5.1+）、Linux、macOS 均可；Linux/macOS 也可直接 `./docker-start.sh` 走 Docker。
+前置条件：**Node.js >= 22.23.4**；Windows（PowerShell 5.1+）、Linux、macOS 均可；Linux/macOS 也可直接 `./docker-start.sh` 走 Docker。
 
 ```bash
 # 1) 克隆

@@ -12,7 +12,7 @@
  *     给 .path 加 align-self:start 按内容定高。
  * #74 卡头「到期 9」与正文「先复习 1 个」两个数字量不同且无交代，且裸数字缺量词；
  *     卡头补「个知识点」，正文补一句交代其余去向。
- * #75 成就提示直出内部缩写 KTL，与成就页「知识掌握度（KTL）」口径不一致；同步展开。
+ * #75 成就提示曾直出内部缩写 KTL；2026-10-23 掌握类成就改用知识点数后，直接展示服务端中文描述。
  *
  * 沿用仓库既有的「源码锁」写法：读 SFC 源码、花括号配平取规则、断言声明/文案。
  */
@@ -93,9 +93,11 @@ describe('学习台连续记录药丸（走查 2026-10-08 #56）', () => {
   });
 });
 
-describe('学习台路径卡空白（走查 2026-10-08 #73）', () => {
-  it('.path 不再被等高网格拉高（align-self:start）', () => {
-    expect(decl(ruleAfter('.path {'), 'align-self')).toBe('start');
+describe('学习台双列对齐（2026-10-29 外部评审覆盖 #73）', () => {
+  it('.path 与左卡等高，空白由 space-between 吸收', () => {
+    const rule = ruleAfter('.path {');
+    expect(decl(rule, 'align-self')).toBe('stretch');
+    expect(decl(rule, 'justify-content')).toBe('space-between');
   });
 });
 
@@ -110,8 +112,9 @@ describe('学习台到期/复习口径（走查 2026-10-08 #74）', () => {
   });
 });
 
-describe('学习台成就提示 KTL 释义（走查 2026-10-08 #75）', () => {
-  it('直出前补全中文释义，与成就页口径一致', () => {
-    expect(source).toContain("replace(/KTL/g, '知识掌握度')");
+describe('学习台成就提示口径（走查 2026-10-08 #75）', () => {
+  it('直接展示服务端中文描述，不再二次展开 KTL', () => {
+    expect(source).toContain('`目标 ${nearest.description} · 进度 ${prog}`');
+    expect(source).not.toContain("replace(/KTL/g");
   });
 });

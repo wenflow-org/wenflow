@@ -17,7 +17,7 @@
                可回收的列上面，被豁免的（hold/租约/在途/代际）逐条列下面并注明原因，
                不再出现「按钮 35 / 弹窗 0」两套数字 -->
           <p v-if="candidateCount > 0" class="vl-reclaim-summary">
-            扫描到 <b>{{ candidateCount }}</b> 个超过回收阈值的无响应候选会话{{ state.profileIds ? '（选中虚拟人口径）' : '（与「回收无响应」按钮同一口径）' }}：可回收 <b>{{ state.reclaimable.length }}</b> 个<template v-if="protectedSkipped.length">，豁免 <b>{{ protectedSkipped.length }}</b> 个（{{ skippedBreakdown }}）</template>。
+            扫描到 <b>{{ candidateCount }}</b> 个超过回收阈值的无响应候选会话{{ state.profileIds ? '（仅选中项）' : '（与「回收无响应」按钮同一统计方式）' }}：可回收 <b>{{ state.reclaimable.length }}</b> 个<template v-if="protectedSkipped.length">，豁免 <b>{{ protectedSkipped.length }}</b> 个（{{ skippedBreakdown }}）</template>。
           </p>
           <p v-if="scanTruncated" class="vl-reclaim-footnote">
             单次扫描上限 {{ state.batchLimit }} 个，可能还有未列出的候选。回收后可再次扫描。

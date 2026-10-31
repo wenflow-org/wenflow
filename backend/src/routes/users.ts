@@ -446,6 +446,17 @@ router.get('/me/agent-logs', async (req, res, next) => {
       }
     }
 
+    /* 同一 trace 的业务行与 api-gateway 行是两条日志（agentId 不同、不合并），
+       但模型名只写在网关行的 metadata 里。先按 traceId 建索引，折叠后提到业务行顶层，
+       用户侧「模型」列才显示实际模型而不是笼统的「内置模型」。 */
+    const modelByTrace = new Map<string, string>();
+    for (const value of dedupeMap.values()) {
+      const metadata = parseMetadata(value.metadata);
+      const model = typeof metadata.model === 'string' ? metadata.model.trim() : '';
+      const traceId = String(value.traceId || metadata.traceId || '');
+      if (model && traceId && !modelByTrace.has(traceId)) modelByTrace.set(traceId, model);
+    }
+
     // 组：key=goal/path 会话；rep=组内优先级最高的代表日志；items=组内全部（去重后）调用明细
     const groupMap = new Map<string, { rep: any; items: any[] }>();
     for (const value of dedupeMap.values()) {
@@ -489,6 +500,8 @@ router.get('/me/agent-logs', async (req, res, next) => {
         id: groupKey,
         calledAt: lastAt,
         groupCount: items.length,
+        // 业务层代表行通常没有 model；模型名在同 trace 的网关行 metadata 里
+        model: modelByTrace.get(String(groupRep.traceId || '')) ?? null,
         groupItems: itemsAsc.map((item) => ({
           id: item.id,
           agentId: item.agentId,
@@ -521,6 +534,14 @@ router.get('/me/agent-logs', async (req, res, next) => {
     }
 
     const normalizedLogs = Array.from(collapsed.values())
+      .map((log) => {
+        const ownMetadata = parseMetadata(log.metadata);
+        const model = (typeof log.model === 'string' && log.model.trim())
+          || (typeof ownMetadata.model === 'string' ? ownMetadata.model : '')
+          || modelByTrace.get(String(log.traceId || ownMetadata.traceId || ''))
+          || '';
+        return { ...log, model: model.trim() ? model : null };
+      })
       .sort((a, b) => new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime())
       .slice(0, limit);
 

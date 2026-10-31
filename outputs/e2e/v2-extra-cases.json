@@ -1,0 +1,4 @@
+[
+  {"id":"v2x-ss-blood","course":"初一生物·循环系统 第1课","subject":"生物","topic":"血液循环","taskTitle":"血液怎么循环一圈","taskDescription":"讲解体循环与肺循环的路径推进","taskType":"acquire","intent":"demonstrate","acceptance":"学生能按顺序说出循环路径","expectKind":"state-strip","student":"血液从心脏出来先去哪？肺循环和体循环是怎么接起来的？按顺序给我摆一遍。","assistant":"我们分帧摆开，每帧看血到了哪个部位、发生了什么变化。"},
+  {"id":"v2x-sc-chem-change","course":"初三化学·物质变化 第1课","subject":"化学","topic":"物理变化与化学变化","taskTitle":"冰融化与铁生锈","taskDescription":"学生混淆两类变化的判断依据，需要正误对比","taskType":"diagnose","intent":"co-create","acceptance":"学生能说出分叉在「有没有新物质生成」","expectKind":"split-compare","student":"冰融化成水和铁生锈都是「变了」，为什么一个是物理变化一个是化学变化？我总是判断错。","assistant":"你把两种判断走法各摆一栏，从「检查什么」这一步开始对照，看分叉在哪。"}
+]

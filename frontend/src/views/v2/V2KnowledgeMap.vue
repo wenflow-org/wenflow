@@ -28,7 +28,7 @@
           :theme="theme"
           :loading="loading"
           :error="error"
-          height="clamp(560px, 72vh, 720px)"
+          height="clamp(500px, 57vh, 680px)"
           empty-hint="还没有可展示的概念图。学完一节课、或生成一条学习路径后，概念与关系会自动出现在这里。"
           error-action-text="重试"
           empty-action-text="开始学习"

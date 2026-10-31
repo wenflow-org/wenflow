@@ -30,6 +30,48 @@ export function detectTrailingQuestion(reply: string): boolean {
   return /[？?]/.test(String(reply || ''));
 }
 
+/**
+ * 「请提交/请回答」类未闭合请求：没有问号，但老师在等学员交付。
+ * 离线评审实测的漏网形态：「请更新后的 8 行标签发给我做最后确认。」
+ * 「现在请回答下面的快速题，确认……」——旧判据只认问号，收口审计判成已闭合。
+ *
+ * 只扫末两句，并排除课后建议/下一节预告，避免把「课后建议：整理成记录」
+ * 这类正常收尾误判为未闭合。
+ */
+const OPEN_REQUEST_PATTERNS: RegExp[] = [
+  /(发给我|发我|告诉我|回复我|回答我|提交给我|贴给我|念给我|说给我)/,
+  /(把|将)[^。！？!?\n]{0,60}(写出来|写下来|列出来|算出来|填好|更新|发给我|发我|告诉我|提交)/,
+  /(请|现在|接下来|然后)[^。！？!?\n]{0,30}(回答|复述|写出|写下|列出|说出|算出|填好|更新|修改|重做|完成)[^。！？!?\n]{0,40}(发|告诉|给我看|确认|检查|核对)/,
+];
+const CLOSING_ADVICE_PATTERN = /(课后建议|课后作业|课后可以|下课后|下一节|下次课|下次遇到|有余力|建议你课后)/;
+
+function tailSentences(reply: string, count = 2): string[] {
+  return String(reply || '')
+    .split(/(?<=[。！？!?\n])/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(-count);
+}
+
+export function detectOpenRequest(reply: string): boolean {
+  const tail = tailSentences(reply).join('');
+  if (!tail || CLOSING_ADVICE_PATTERN.test(tail)) return false;
+  return OPEN_REQUEST_PATTERNS.some((pattern) => pattern.test(tail));
+}
+
+function lastOpenRequestSentence(reply: string): string | null {
+  const sentences = String(reply || '')
+    .split(/(?<=[。！？!?\n])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (let i = sentences.length - 1; i >= 0; i -= 1) {
+    const sentence = sentences[i];
+    if (CLOSING_ADVICE_PATTERN.test(sentence)) return null;
+    if (OPEN_REQUEST_PATTERNS.some((pattern) => pattern.test(sentence))) return sentence;
+  }
+  return null;
+}
+
 export interface ClosureGateInput {
   /** 本回合老师的回复文本（teachingOutput.reply） */
   reply: string;
@@ -37,8 +79,16 @@ export interface ClosureGateInput {
   pendingCheckpoint: unknown;
   /** 本回合模型是否又输出了新检查题（control.checkpoint） */
   checkpointEmittedThisTurn: boolean;
-  /** 此前已被延迟过几次（teachingState.completionDeferrals） */
+  /** 本回合新检查题题面（用于识别"是不是同一道题"） */
+  emittedCheckpointQuestion?: string | null;
+  /** 此前已被延迟过几次（teachingState.completionDeferrals，全会话累计） */
   priorDeferrals: number;
+  /** 上一次被延迟时压住的题面（teachingState.completionDeferralQuestion） */
+  previousDeferredQuestion?: string | null;
+  /** 同一题面此前已被延迟过几次（teachingState.completionDeferralQuestionCount） */
+  priorDeferralsForSameQuestion?: number;
+  /** 绝对上限用掉后，是否为「最后一问」再放行一轮（teachingState.completionCapGraceUsed） */
+  capGraceUsed?: boolean;
 }
 
 export interface ClosureGateDecision {
@@ -46,23 +96,62 @@ export interface ClosureGateDecision {
   defer: boolean;
   /** 压住原因（日志/观测用），defer=false 时为 null */
   reason: 'pending-checkpoint-unanswered' | 'checkpoint-emitted-this-turn' | 'trailing-question' | null;
+  /** 本回合被压住的题面归一化键（用于同一题识别；无题面时为 null） */
+  questionKey: string | null;
+  /** true = 这是绝对上限后的最后一次宽限延迟（只发生一次） */
+  capGrace?: boolean;
+}
+
+/** 全会话延迟总上限：防止「老师每回合都换一道新题」把课拖到永不收敛 */
+export const COMPLETION_DEFERRAL_ABSOLUTE_CAP = 6;
+
+function normalizeQuestionKey(text: string): string {
+  return String(text || '').toLowerCase().replace(/\s+/g, '').trim();
+}
+
+function resolveClosureQuestionKey(reply: string, pendingCheckpoint: unknown, emittedQuestion?: string | null): string | null {
+  if (emittedQuestion && String(emittedQuestion).trim()) {
+    return normalizeQuestionKey(String(emittedQuestion));
+  }
+  if (pendingCheckpoint && typeof pendingCheckpoint === 'object') {
+    const question = (pendingCheckpoint as { question?: unknown }).question;
+    if (typeof question === 'string' && question.trim()) return normalizeQuestionKey(question);
+  }
+  const lastSentence = tailSentences(reply, 1).join('');
+  return lastSentence ? normalizeQuestionKey(lastSentence) : null;
 }
 
 export function shouldDeferCompletionForClosure(input: ClosureGateInput): ClosureGateDecision {
   const priorDeferrals = Number(input.priorDeferrals) || 0;
-  if (priorDeferrals >= COMPLETION_DEFERRAL_CAP) {
-    return { defer: false, reason: null };
+  const questionKey = resolveClosureQuestionKey(input.reply, input.pendingCheckpoint, input.emittedCheckpointQuestion);
+  const gateReason: ClosureGateDecision['reason'] = input.pendingCheckpoint
+    ? 'pending-checkpoint-unanswered'
+    : input.checkpointEmittedThisTurn
+      ? 'checkpoint-emitted-this-turn'
+      : detectTrailingQuestion(input.reply)
+        ? 'trailing-question'
+        : null;
+  // 活力兜底：全会话延迟总上限到顶即放行（旧实现按"全会话累计 2 次"封顶，
+  // 前两轮的旧题把预算耗尽后，后面新抛出的、从未作答的末问也会被直接收掉——
+  // 实测 22 分钟课在老师刚问完最后一道时结束，学员永远没机会答。外部审计 P0-2。）
+  if (priorDeferrals >= COMPLETION_DEFERRAL_ABSOLUTE_CAP) {
+    // 到顶后若老师刚好又抛了新问题：先给一次"最后一问"宽限，让学员至少答一次；
+    // 宽限只发生一次，下一回合无论是否还有问句都放行（防永不收敛）。
+    if (gateReason && !input.capGraceUsed) {
+      return { defer: true, reason: gateReason, questionKey, capGrace: true };
+    }
+    return { defer: false, reason: null, questionKey };
   }
-  if (input.pendingCheckpoint) {
-    return { defer: true, reason: 'pending-checkpoint-unanswered' };
+  // 同一道题被延迟到上限后放行；换了一道新题则重新获得延迟额度
+  const sameQuestion = !!questionKey && questionKey === normalizeQuestionKey(String(input.previousDeferredQuestion || ''));
+  const sameQuestionDeferrals = sameQuestion ? Number(input.priorDeferralsForSameQuestion) || 0 : 0;
+  if (sameQuestionDeferrals >= COMPLETION_DEFERRAL_CAP) {
+    return { defer: false, reason: null, questionKey };
   }
-  if (input.checkpointEmittedThisTurn) {
-    return { defer: true, reason: 'checkpoint-emitted-this-turn' };
+  if (gateReason) {
+    return { defer: true, reason: gateReason, questionKey };
   }
-  if (detectTrailingQuestion(input.reply)) {
-    return { defer: true, reason: 'trailing-question' };
-  }
-  return { defer: false, reason: null };
+  return { defer: false, reason: null, questionKey };
 }
 
 
@@ -102,11 +191,20 @@ export function evaluateSessionClosable(input: {
   messages: Array<{ role?: string; content?: string }> | null | undefined;
   teachingState: Record<string, unknown> | null | undefined;
   endReason?: string | null;
+  /**
+   * 允许「教师刚提问、学生还没答」时收束。用于两类非结算场景：
+   * - 复习课（complete_review）：有界课，回合上限到点就收，教师的下一问本来就是被截断的那一问；
+   *   待答检查点同理（未答点按「本次无观测」跳过，由 collectReviewOutcomes 只收集已判定点）。
+   * - 主动退出（end_only「结束学习，不计入完成」）：退出通道不该被「先答题」挡住，
+   *   否则真人只能关页走 abandoned 豁免。
+   * 结算（complete_task）不放行——那正是本门禁要守的假完成。
+   */
+  allowOpenQuestion?: boolean;
 }): SessionClosableDecision {
   if (input.endReason && ABNORMAL_END_REASONS.has(input.endReason)) return { closable: true };
 
   const state = input.teachingState || {};
-  if (state.pendingCheckpoint) {
+  if (state.pendingCheckpoint && !input.allowOpenQuestion) {
     return {
       closable: false,
       code: 'FINALIZATION_PENDING_CHECKPOINT',
@@ -118,11 +216,13 @@ export function evaluateSessionClosable(input: {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message?.role === 'user') break;
-    if (message?.role === 'assistant' && detectTrailingQuestion(String(message.content || ''))) {
+    const content = String(message?.content || '');
+    if (message?.role === 'assistant' && !input.allowOpenQuestion
+      && (detectTrailingQuestion(content) || detectOpenRequest(content))) {
       return {
         closable: false,
         code: 'FINALIZATION_OPEN_QUESTION',
-        message: '老师刚提了一个问题，先回答再结束课堂',
+        message: '老师刚提了一个问题或请学员提交结果，先完成再结束课堂',
       };
     }
   }
@@ -135,7 +235,10 @@ export function evaluateSessionClosable(input: {
       const attempts = Number(entry.attempts);
       // 只有「还能再答」时才拦；到顶（或旧数据没有次数）按既有设计放行，
       // 避免把「记复习清单 → 收课」这条合法收束路径重新焊死。
-      if (Number.isFinite(attempts) && attempts < CLOSURE_CHECKPOINT_MAX_ATTEMPTS) {
+      // allowOpenQuestion（复习课有界收束 / end_only 主动退出）同样放行：
+      // 退出通道不该被「先答题」挡住，否则真人只能关页走 abandoned 豁免。
+      if (!input.allowOpenQuestion
+        && Number.isFinite(attempts) && attempts < CLOSURE_CHECKPOINT_MAX_ATTEMPTS) {
         return {
           closable: false,
           code: 'FINALIZATION_LAST_CHECKPOINT_FAILED',
@@ -147,4 +250,81 @@ export function evaluateSessionClosable(input: {
   }
 
   return { closable: true };
+}
+
+/**
+ * 收口审计（2026-10-24，离线评审基线：85% 课堂未答收口）：
+ * end_only/复习课允许带着未答问题收束，但**必须留下可读的「待验证」事实**，
+ * 不能把「会话结束」写成「任务完成/学员已掌握」。审计随 wrapup 落库，
+ * 供前端、后续课堂与离线评审消费；不改任何收束判定。
+ */
+export interface ClosureAudit {
+  openQuestion: boolean;
+  code: SessionClosableCode | null;
+  question: string | null;
+  /** 回合内收口被延迟过几次（到顶后放行是 liveness 兜底） */
+  deferredTimes: number;
+}
+
+/** 最后一条教师问题/提交请求：从末尾向前找 assistant 消息；遇到 user 消息即停。 */
+export function lastTeacherQuestion(messages: Array<{ role?: string; content?: string }> | null | undefined): string | null {
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const message = list[i];
+    if (message?.role === 'user') break;
+    if (message?.role !== 'assistant') continue;
+    const text = String(message.content || '').trim();
+    if (!detectTrailingQuestion(text) && !detectOpenRequest(text)) continue;
+    const sentences = text.split(/(?<=[。！？!?])/).map((s) => s.trim()).filter(Boolean);
+    const hit = detectTrailingQuestion(text)
+      ? [...sentences].reverse().find((sentence) => detectTrailingQuestion(sentence))
+      : lastOpenRequestSentence(text);
+    const question = (hit || text).replace(/\s+/g, ' ').trim();
+    return question.length > 240 ? question.slice(0, 240) + '…' : question;
+  }
+  return null;
+}
+
+/**
+ * 生成收口审计。判定口径与结算门禁**同源**（allowOpenQuestion=false）：
+ * 若门禁认为尚有未闭合问答，则记录 openQuestion；异常终态（放弃/超时）不算缺陷。
+ */
+export function buildClosureAudit(input: {
+  messages: Array<{ role?: string; content?: string }> | null | undefined;
+  teachingState: Record<string, unknown> | null | undefined;
+  endReason?: string | null;
+}): ClosureAudit {
+  const deferredTimes = Number((input.teachingState as { completionDeferrals?: unknown } | null)?.completionDeferrals) || 0;
+  const decision = evaluateSessionClosable({
+    messages: input.messages,
+    teachingState: input.teachingState,
+    endReason: input.endReason,
+    allowOpenQuestion: false,
+  });
+  if (decision.closable) {
+    return { openQuestion: false, code: null, question: null, deferredTimes };
+  }
+  return {
+    openQuestion: true,
+    code: decision.code ?? null,
+    question: lastTeacherQuestion(input.messages),
+    deferredTimes,
+  };
+}
+
+/**
+ * 把「待验证」确定性写进总结的 actionPlan（去重、置顶）。
+ * 不依赖模型是否诚实：即使 LLM 总结漏掉未答问题，这里也一定留痕。
+ */
+export function appendClosureFollowUp<T extends Record<string, unknown> | null | undefined>(
+  summary: T,
+  audit: ClosureAudit,
+): T {
+  if (!audit.openQuestion) return summary;
+  const source = (summary || {}) as Record<string, unknown>;
+  const note = `待验证：${audit.question || '最后提出的问题尚未得到学员回答'}`;
+  const plan = Array.isArray(source.actionPlan)
+    ? source.actionPlan.filter((item) => !String(item || '').startsWith('待验证'))
+    : [];
+  return { ...source, actionPlan: [note, ...plan] } as unknown as T;
 }

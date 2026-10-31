@@ -43,6 +43,13 @@ jest.mock('../blackbox-runner', () => ({
 jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 }))
+// M-15：模拟钟解析整体 mock（真实实现会连带拉起 settings/repo 依赖，解析链由
+// services/virtual-lab/__tests__/simulation-clock-resolver.test.ts 专测）
+const mockResolveSessionSimulatedNow = jest.fn()
+jest.mock('../../services/virtual-lab/simulation-clock-resolver', () => ({
+  __esModule: true,
+  resolveSessionSimulatedNow: (...args: unknown[]) => mockResolveSessionSimulatedNow(...args),
+}))
 
 import { AutopilotService, AutopilotConflictError, AutopilotTerminalError } from '../autopilot.service'
 
@@ -545,5 +552,62 @@ describe('AutopilotService 全自动模式', () => {
     expect(observeCalls.length).toBeGreaterThanOrEqual(1)
     // 等待期不得推进教学步
     expect(mockAutoStep).not.toHaveBeenCalled()
+  })
+
+  // ===== M-15（2026-10-29 夜间审计）：执行链绑实例模拟钟 =====
+  // 模拟钟解析在 autopilot 测试里整体 mock（真实实现会连带拉起 settings/repo 依赖，
+  // 其解析链由 simulation-clock-resolver.test.ts 专测）；本组只钉 wiring：
+  // 解析出模拟时刻 → 整条执行链包进 runWithSimulatedClock；解析不出 → 行为零变化。
+  it('M-15：实例启用日期模拟 → 执行链内读到模拟钟上下文', async () => {
+    const { getSimulatedAsOf } = await import('../../services/virtual-lab/simulation-clock-context')
+    mockResolveSessionSimulatedNow.mockResolvedValue(new Date('2026-10-03T15:59:59.999Z'))
+    mockExecuteSingleStep.mockResolvedValue({ success: true, goalReady: true })
+    const seen: Array<Date | null> = []
+    const passthrough = mockRunLeasedExclusive.getMockImplementation()
+    mockRunLeasedExclusive.mockImplementation(async (sessionId: string, work: () => Promise<unknown>) => {
+      seen.push(getSimulatedAsOf())
+      return passthrough!(sessionId, work)
+    })
+
+    try {
+      await service.start('s1', { target: 'stage' })
+      await waitTerminal()
+    } finally {
+      mockRunLeasedExclusive.mockImplementation(passthrough!)
+    }
+
+    expect(mockResolveSessionSimulatedNow).toHaveBeenCalledWith(
+      sessionRecord,
+      sessionRecord.virtual_learner_profiles
+    )
+    expect(seen.length).toBeGreaterThan(0)
+    for (const asOf of seen) {
+      expect(asOf?.toISOString()).toBe('2026-10-03T15:59:59.999Z')
+    }
+  })
+
+  it('M-15：未启用日期模拟（解析 null）→ 执行链无模拟钟上下文（行为零变化）', async () => {
+    const { getSimulatedAsOf } = await import('../../services/virtual-lab/simulation-clock-context')
+    mockResolveSessionSimulatedNow.mockResolvedValue(null)
+    mockExecuteSingleStep.mockResolvedValue({ success: true, goalReady: true })
+    const seen: Array<Date | null> = []
+    const passthrough = mockRunLeasedExclusive.getMockImplementation()
+    mockRunLeasedExclusive.mockImplementation(async (sessionId: string, work: () => Promise<unknown>) => {
+      seen.push(getSimulatedAsOf())
+      return passthrough!(sessionId, work)
+    })
+
+    try {
+      await service.start('s1', { target: 'stage' })
+      const final = await waitTerminal()
+      expect(final.status).toBe('completed')
+    } finally {
+      mockRunLeasedExclusive.mockImplementation(passthrough!)
+    }
+
+    expect(seen.length).toBeGreaterThan(0)
+    for (const asOf of seen) {
+      expect(asOf).toBeNull()
+    }
   })
 })

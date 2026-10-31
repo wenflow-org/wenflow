@@ -5,6 +5,7 @@ import {
   updateAnnouncement,
   findAnnouncementById,
   deleteAnnouncement,
+  findAdminNamesByIds,
 } from '../../services/admin/announcement.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
@@ -47,11 +48,27 @@ function shape(a: Record<string, unknown>) {
   };
 }
 
+/** 历史公告的 createdBy 存的是 admin_* id：读取时换成管理员显示名，避免把内部 id 直接上屏。 */
+async function shapeWithCreatorNames(items: Array<Record<string, unknown>>) {
+  const ids = [...new Set(
+    items
+      .map((item) => String(item.createdBy || ''))
+      .filter((id) => id.startsWith('admin_'))
+  )];
+  const admins = ids.length ? await findAdminNamesByIds(ids) : [];
+  const names = new Map(admins.map((admin) => [admin.id, admin.name]));
+  return items.map((item) => shape({
+    ...item,
+    createdBy: (item.createdBy && names.get(String(item.createdBy))) || item.createdBy
+  }));
+}
+
 /** GET / — 全部公告（新→旧） */
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const items = await listAnnouncements();
-    res.json({ success: true, data: { items: items.map((a) => shape(a as unknown as Record<string, unknown>)) } });
+    const shaped = await shapeWithCreatorNames(items as unknown as Array<Record<string, unknown>>);
+    res.json({ success: true, data: { items: shaped } });
   } catch (error) {
     logger.error('[admin-announcements] list failed:', error);
     res.status(500).json({ success: false, error: '获取公告列表失败' });
@@ -78,6 +95,11 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: error.message });
     }
     const admin = (req as Request & { user?: { userId?: string; name?: string } }).user;
+    let creatorName = admin?.name || null;
+    if (!creatorName && admin?.userId) {
+      const [record] = await findAdminNamesByIds([admin.userId]);
+      creatorName = record?.name || admin.userId;
+    }
     const created = await createAnnouncement({
       data: {
         title: String(title).trim(),
@@ -86,7 +108,7 @@ router.post('/', async (req: Request, res: Response) => {
         expiresAt: expiresAtDate,
         status: publishNow ? 'published' : 'draft',
         publishedAt: publishNow ? new Date() : null,
-        createdBy: admin?.name || admin?.userId || null
+        createdBy: creatorName
       }
     });
     res.json({ success: true, data: shape(created as unknown as Record<string, unknown>) });

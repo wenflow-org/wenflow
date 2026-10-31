@@ -4,3 +4,7 @@
 # 自动生成的沙盘说明书：健康中心按字节比对（LF），Windows autocrlf 检出为 CRLF
 # 会导致 snapshots 检查误报 drifted；强制 LF 保持与生成器输出一致
 /prompts/agent-snapshots.md text eol=lf
+
+# 冻结考卷按 sha256 逐字节校验：manifest 的哈希以 LF 计算，Windows autocrlf 检出为 CRLF
+# 会让 `--verify` 整批报 HASH_MISMATCH（2026-10-20 实测），对照因此无法开始
+/doc/measurement/frozen-exam-*/** text eol=lf

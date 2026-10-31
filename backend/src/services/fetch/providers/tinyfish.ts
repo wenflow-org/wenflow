@@ -15,6 +15,7 @@
  */
 
 import { safeHttpRequest } from '../../../utils/safe-http';
+import { readPluginProviderField, readPluginProviderSecret } from '../../plugin-providers.service';
 import { FetchError } from '../types';
 import type {
   FetchCallOptions,
@@ -45,8 +46,8 @@ export interface TinyFishFetchConfig {
 export function readTinyFishFetchConfig(): TinyFishFetchConfig {
   const timeout = Number(process.env.FETCH_TIMEOUT_MS || process.env.SEARCH_TIMEOUT_MS);
   return {
-    endpoint: (process.env.FETCH_API_URL || '').trim() || DEFAULT_ENDPOINT,
-    apiKey: (process.env.FETCH_API_KEY || process.env.SEARCH_API_KEY || '').trim(),
+    endpoint: readPluginProviderField('web', 'tinyfish', 'fetchEndpoint') || DEFAULT_ENDPOINT,
+    apiKey: readPluginProviderSecret('web', 'tinyfish', ['FETCH_API_KEY', 'SEARCH_API_KEY']),
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : DEFAULT_TIMEOUT_MS,
   };
 }

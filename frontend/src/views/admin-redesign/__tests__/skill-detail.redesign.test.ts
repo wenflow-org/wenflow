@@ -64,8 +64,6 @@ vi.mock('@/api/adminApi', () => ({
   adminGlossaryApi: apiObject(),
   adminAnnouncementsApi: apiObject(),
   adminPlatformSettingsApi: apiObject(),
-  adminCapabilityProbeApi: apiObject(),
-  adminSystemApi: apiObject(),
   adminAuditApi: apiObject(),
   adminFieldRoutingsApi: apiObject({ getSkillRoutings: routingsMock }),
   adminPromptWorkbenchApi: apiObject({ getCore: coreMock }),
@@ -116,7 +114,7 @@ metaMock.mockResolvedValue({
   data: {
     data: {
       parentAgent: { id: 'teaching-agent', name: '教学 Agent' },
-      skill: { id: 'skill-a', name: '教学回合', category: 'teaching' },
+      skill: { id: 'skill-a', name: '教学回合', category: 'teaching', description: '按教学回合推进课堂，产出讲解与追问' },
       modelConfig: { model: 'gpt-5.2', tier: 'chat', llmRequest: { model: 'gpt-5.2', source: 'active-prompt' } },
       stats: { source: 'agent_call_logs', range: 'all' }
     }
@@ -215,7 +213,7 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     const w = mount(Skills, { global: { plugins: [router] } })
     await settle()
 
-    const row = w.find('.sk-row')
+    const row = w.find('.sk-item')
     expect(row.exists()).toBe(true)
     await row.trigger('click')
     await settle()
@@ -277,35 +275,35 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain('@pointerdown="onOdgPointerDown"')
   })
 
-  it('编排图导航两级页签（2026-10-13 用户：阶段选择解散成 tab，去掉「字段旅程」页签）', () => {
+  it('编排图导航两级页签（2026-10-26：字段旅程补回阶段内页签）', () => {
     // 一级 = 总览 + 阶段；原来的「阶段选择」胶囊行退役（同一屏两套导航）
     expect(OrchestratorSource).toContain('class="tabs orch-top-tabs"')
     expect(OrchestratorSource).toContain('@click="goOverview"')
     expect(OrchestratorSource).toContain('@click="selectStageTab(s.id)"')
     expect(OrchestratorSource).not.toContain('class="orch-stage-pills"')
     expect(OrchestratorSource).not.toContain('stageScoped')
-    // 「字段旅程」不再是一枚页签：阶段页签点开即它（SUB_PANES 里没有 journey）
+    // 阶段内三枚子视图并列：进了路由/治理仍能点回字段旅程（此前只能再点一次阶段页签）
     expect(OrchestratorSource).toContain("const SUB_PANES: Array<{ id: OrchSubPane; label: string }> = [")
+    expect(OrchestratorSource).toContain("{ id: 'journey', label: '字段旅程' }")
     expect(OrchestratorSource).toContain("{ id: 'routing', label: '字段路由' }")
     expect(OrchestratorSource).toContain("{ id: 'governance', label: '治理' }")
-    expect(OrchestratorSource).not.toContain("{ id: 'journey', label: '字段旅程' }")
+    // 回程逻辑已删：再点当前阶段页签不再有特殊分支
+    expect(OrchestratorSource).not.toContain('pane.value !== \'overview\' && active.value === id')
     // 二级页签与阶段内容同壳（一级页签 aria-controls 指向它）
     expect(OrchestratorSource).toContain('id="orch-stage-view"')
     expect(OrchestratorSource).toContain('class="tabs orch-subtabs"')
-    // 点阶段页签落在该阶段的字段旅程；已在其中时再点一次 = 从子视图回程
     expect(OrchestratorSource).toContain("pane.value = 'journey'")
     expect(OrchestratorSource).toContain('function selectStageTab(id: string)')
+    // SkillFieldRouting 传来的 ?tab=field-routings 必须落在字段路由（此前静默落回总览）
+    expect(OrchestratorSource).toContain("qTab === 'field-routings'")
   })
 
-  it('编排图阶段页签一律英文（2026-10-14 用户：除「总览」外）', () => {
-    // 阶段 id 本身就是流水线英文名（与 <stage>-agent 同源），中文 displayName 只在中文语境用；
-    // 此前页签直接剥 displayName 的「阶段」二字 → Goal/Path（后端名自带英文）与
-    // 教学/画像/仿真（后端名是中文）半中半英并排。
+  it('编排图阶段页签用中文（2026-10-26 评审：与画布列头同名，不再英中对照）', () => {
     expect(OrchestratorSource).toContain('{{ stageTabLabel(s) }}')
     expect(OrchestratorSource).toContain('const STAGE_TAB_LABEL: Record<string, string> = {')
-    expect(OrchestratorSource).toContain("teaching: 'Teaching'")
-    expect(OrchestratorSource).toContain("profile: 'Profile'")
-    expect(OrchestratorSource).toContain("simulation: 'Simulation'")
+    expect(OrchestratorSource).toContain("teaching: '教学'")
+    expect(OrchestratorSource).toContain("profile: '学习者'")
+    expect(OrchestratorSource).toContain("simulation: '仿真'")
     // 未登记的阶段回退中文显示名：不裸出 id、也不留空
     expect(OrchestratorSource).toContain('STAGE_TAB_LABEL[s.id] || s.name.replace(/阶段$/, \'\')')
   })
@@ -327,7 +325,7 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
 })
 
 describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
-  it('hero：S 头像 + 英文 canonical id + 中文别名/归属·类别副文 + 健康/类别/模型/版本 pills + 真实动作', async () => {
+  it('hero：S 头像 + 英文 canonical id + 中文别名/归属·类别副文 + 健康/类别/版本 pills + 真实动作', async () => {
     const w = mountDetail()
     await settle()
 
@@ -337,17 +335,22 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.find('.mk-hero__title').text()).toBe('skill-a')
     // 类别人话（categoryText）：裸枚举 teaching → 「教学」
     expect(w.find('.mk-hero__sub').text()).toBe('教学回合 · 教学 Agent · 教学')
+    // 功能简介（2026-10-25 用户「这个功能简介，可以做到详情页里面」）：从列表副行搬进 hero，
+    // 独立一行、不被截断；sub 只留身份标签
+    expect(w.find('.mk-hero__desc').text()).toBe('按教学回合推进课堂，产出讲解与追问')
+    expect(w.find('.mk-hero__sub').text()).not.toContain('按教学回合推进课堂')
 
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text())
     expect(pills[0]).toBe('健康') // 窗口内 100 调用 0 失败
     expect(pills[1]).toBe('教学')
-    expect(pills.join('|')).toContain('gpt-5.2')
+    // 2026-10-24 用户「还是重复部分」：生效模型只在运行时里出现一次，hero 不再重复
+    expect(pills.join('|')).not.toContain('gpt-5.2')
     expect(pills.join('|')).toContain('线上生效 v2')
 
-    // 动作 = 真实能力（2026-10-15 设计页平铺进本页后，hero 只剩「刷新」——
-    // 原「打开设计页 →」跳转钮随独立页退役撤除，设计能力已在本页各页签就地铺开）
+    // 动作 = 真实能力（2026-10-23 用户「已经有刷新，为什么还有独立刷新」：hero 最后一颗
+    // 刷新钮也撤除，各域跟随顶栏 liveRefreshSeq 广播；hero 动作区不再留按钮）
     const actions = w.findAll('.mk-hero__actions button').map((b) => b.text())
-    expect(actions).toEqual(['刷新'])
+    expect(actions).toEqual([])
 
     w.unmount()
   })
@@ -452,7 +455,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('试跑页签：样例输入可编辑，试跑走 testSkill 真实接口并回显输出', async () => {
+  it('试跑页签：TrialTab 输入可编辑，试跑走 testSkill 真实接口并回显输出', async () => {
     testSkillMock.mockResolvedValueOnce({
       data: { data: { success: true, duration: 1234, cached: false, output: { explain: 'ok' } } }
     })
@@ -461,28 +464,25 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await w.findAll('.mk-subtab')[2].trigger('click') // 试跑（第 3 个）
     await nextTick()
 
-    expect(w.text()).toContain('样例输入')
-    const ta = w.find('.skd-ta')
+    expect(w.text()).toContain('试跑')
+    const ta = w.find('.sdp-json')
     expect(ta.exists()).toBe(true)
-    await ta.setValue('{\n  "input": "讲讲 p 值"\n}')
-    // 注意「试跑」也是页签名：动作钮限定在样例输入卡的 foot 里找
-    await w.find('.skd-ta-foot button').trigger('click')
+    await ta.setValue(JSON.stringify({ input: '讲讲 p 值' }))
+    // 唯一运行入口在 TrialTab 卡头（宿主旧的「样例输入 + 试跑」副本已撤）
+    const runBtn = w.findAll('button').find((b) => b.text().includes('运行预览'))!
+    await runBtn.trigger('click')
     await settle()
 
     expect(testSkillMock).toHaveBeenCalledWith('skill-a', { input: '讲讲 p 值' })
-    expect(w.find('.skd-code--tall').text()).toContain('explain')
-    expect(w.text()).toContain('上次试跑 成功')
-    // 执行链路：testSkill 仅回最终输出（无逐步 steps）→ 空态注明
+    expect(w.find('.sdp-output').text()).toContain('explain')
     expect(w.text()).toContain('执行链路')
     expect(w.text()).toContain('本次试跑仅返回最终输出')
-    // 原型「试跑对比」评分（ranklist 百分比）后端无此数据，不渲染
     expect(w.text()).not.toContain('试跑对比')
     expect(w.text()).not.toContain('结构完整')
-
     w.unmount()
   })
 
-  it('#15 宿主「样例输入」卡按 core 输入契约生成默认载荷（不再硬编码 input 键）', async () => {
+  it('#15 试跑输入按 core 输入契约生成默认载荷（唯一入口在 TrialTab）', async () => {
     // stage-designer 的真实契约：milestone / cognitiveCore 必填，其余可选
     coreMock.mockResolvedValue({
       data: {
@@ -504,13 +504,13 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await w.findAll('.mk-subtab')[2].trigger('click') // 试跑
     await nextTick()
 
-    const ta = w.find('.skd-ta')
+    const ta = w.find('.sdp-json')
     expect(JSON.parse((ta.element as HTMLTextAreaElement).value)).toEqual({ milestone: {}, cognitiveCore: {} })
 
-    await w.find('.skd-ta-foot button').trigger('click')
+    const runBtn = w.findAll('button').find((b) => b.text().includes('运行预览'))!
+    await runBtn.trigger('click')
     await settle()
     expect(testSkillMock).toHaveBeenCalledWith('skill-a', { milestone: {}, cognitiveCore: {} })
-
     w.unmount()
     coreMock.mockResolvedValue({ data: {} })
   })
@@ -548,18 +548,24 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(cards.length).toBe(4)
     const values = cards.map((v) => v.find('.mk-kpi__num').text())
     expect(values).toEqual(['100', '0', '100%', '2.2s'])
-    expect(w.text()).toContain('统计来源')
+    // 2026-10-25 用户「文案去掉」：指标下方的「统计来源：Skill 执行日志」说明行已撤；
+    // 来源字段只在「工程」页签的工程信息里保留（排查口径时才看）
+    expect(w.find('.skd-metric-band + .mk-card__note').exists()).toBe(false)
     // 统计口径对齐真实窗口（liveSkillStatsMap 默认近 7 天）：不再照抄 meta.stats 的「全量」
     expect(w.text()).toContain('近 7 天')
 
     // 模型与路由（2026-10-19 重排：宿主与设计区块原本各渲染一份同配置的可编辑副本，
     // 现由 RuntimeTab 单点承载，卡名从「模型配置」改为「模型与路由」）
     expect(w.text()).toContain('模型与路由')
-    expect(w.text()).toContain('独立配置')
-    expect(w.text()).toContain('保存配置')
-    expect(w.text()).toContain('恢复默认')
-    // 生效值（只读「所配即所得」）：运行时限制独立卡退役后，超时等信息在这里看
-    expect(w.text()).toContain('生效值')
+    // 2026-10-24 用户「什么叫独立配置」：开关改称「覆盖平台默认」，说出独立于谁
+    expect(w.text()).toContain('覆盖平台默认')
+    // 2026-10-28：保存与「恢复默认」都收进配置弹层；卡面只有摘要 + 配置入口
+    expect(w.findAll('.sdp-card__save').length).toBe(0)
+    expect(w.find('.sdp-summary').exists()).toBe(true)
+    expect(w.findAll('button').some((b) => b.text() === '配置')).toBe(true)
+    // 2026-10-24 用户「生效值没意义，拿掉」：只读摘要删掉，换成一行取值顺序（谁压谁）
+    expect(w.text()).not.toContain('只读 · 当前实际生效')
+    expect(w.find('.sdp-order').text()).toContain('取值顺序')
     // 模型测试（右侧验证列）
     expect(w.text()).toContain('模型测试')
     expect(w.text()).toContain('开始探测')

@@ -3,14 +3,17 @@
     <!-- 页签重排（2026-10-11）：①账号轴统计带整条撤除（四个事实各归其主：
          会话→教学会话页签头部读数、XP 与等级→画像、路径→概览当前进度）；
          ②账户信息与许可合并为一张卡（外部评审 #3 成立：许可原独占一卡，
-         卡体只有一句灰字，与左卡等高后下半张全空）；
-         ③最近活动仍全宽（行内含标题+详情+类型，窄列会挤）。 -->
+         卡体只有一句灰字，与左卡等高后下半张全空）。
+         2026-10-19 用户拍板：本页只留账户与许可——「最近活动」的会话行与概览「最近会话」
+         同源同对象，目标对话迁到概览成为「最近目标对话」，此卡整体撤除。 -->
     <div class="ud-pane ud-ov">
         <section class="mk-card">
           <!-- 账号轴的状态与账户操作归「账户信息」卡头（2026-10-08 重做）：沿用全站卡头语法，
                标题吃剩余宽度、尾部元素贴右（「头内成组」规则）。 -->
           <div class="mk-card__head">
-            <h3 class="mk-card__title">账户与许可</h3>
+            <!-- 2026-10-23 走查：标题原为「账户与许可」，页签叫「账号与许可」——同屏两个词；
+                 统一跟页签用「账号」（本卡字段也叫「账号类型」「账号操作」） -->
+            <h3 class="mk-card__title">账号与许可</h3>
             <div class="mk-card__head-right">
               <span class="mk-badge" :class="isDeleted ? 'mk-badge--deleted' : 'mk-badge--ok'">
                 {{ isDeleted ? '已删除' : '正常' }}
@@ -18,10 +21,11 @@
               <button v-if="isDeleted" type="button" class="mk-btn mk-btn--sm" :disabled="restoring" @click="doRestore">
                 {{ restoring ? '恢复中…' : '恢复用户' }}
               </button>
+              <button v-else type="button" class="mk-btn mk-btn--sm" @click="openEdit">编辑</button>
               <div v-if="canDelete" class="mk-menu">
-                <button type="button" class="mk-menu__btn" aria-label="账户操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
+                <button type="button" class="mk-menu__btn" aria-label="账号操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
                 <div v-if="openMenu === 'account'" class="mk-menu__pop" :style="popStyle" @click.stop>
-                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
+                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留" @click="menuDelete">删除账号…</button>
                 </div>
               </div>
             </div>
@@ -65,43 +69,9 @@
           <!-- 区块级提示：走全局 .mk-alert（原型 .alert 词汇），仅错误态展示 -->
           <div v-if="grantMsgTone === 'error'" class="mk-alert ud-grant-row__notice">{{ grantMessage }}</div>
         </section>
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">最近活动</h3>
-            <span class="mk-card__meta">{{ feedMetaText }}</span>
-          </div>
-          <div v-if="feedRows.length" class="ud-feed">
-          <!-- 行结构（2026-10-11 外部评审 #2 采纳）：时间列 → 类型徽章 → 内容两行。
-               原先是单行 nowrap 拉满全宽（长 prompt 一路顶到卡缘、右侧只剩一个孤悬徽章），
-               现标题最多两行折行 + 文本列设可读宽度上限，类型徽章贴内容而非钉在最右 -->
-          <div class="ud-feed__row"
-            v-for="f in feedRows"
-            :key="f.key"
-            :class="{ 'ud-feed__row--link': !!f.sessionId }"
-            :role="f.sessionId ? 'button' : undefined"
-            :tabindex="f.sessionId ? 0 : undefined"
-            @click="f.sessionId && openSession(f.sessionId)"
-            @keydown.enter="f.sessionId && openSession(f.sessionId)"
-            @keydown.space.prevent="f.sessionId && openSession(f.sessionId)"
-          >
-            <span class="ud-feed__time">{{ f.time }}</span>
-            <span class="mk-badge mk-badge--sm mk-badge--muted ud-feed__kind">{{ f.kind }}</span>
-            <div class="ud-feed__grow">
-              <span class="ud-feed__t" :title="f.title">{{ f.title }}</span>
-              <!-- 状态点（2026-10-11 外部评审 #3）：副行状态文案前加 tone 圆点，
-                   一行扫下来就能看出成功/异常，不必逐字读 -->
-              <span class="ud-feed__d" :title="f.detail">
-                <i class="ud-feed__dot" :data-tone="f.tone" aria-hidden="true"></i>{{ f.detail }}
-              </span>
-            </div>
-            <!-- 行尾点击暗示（纯视觉，整行才是点击目标，不做嵌套可聚焦控件）：
-               宽屏下文本列限宽后右端原本是死区，这里给出行可点的信号 -->
-            <span v-if="f.sessionId" class="ud-feed__go" aria-hidden="true">详情 ›</span>
-          </div>
-          </div>
-          <p v-else class="ud-feed__empty">暂无活动记录 —— 该用户上课或发起目标对话后，这里会出现时间线。</p>
-        </section>
     </div>
+    <!-- 与账号列表行内「编辑」同一份表单：改昵称 / 邮箱 / 角色、重置密码 -->
+    <UserFormDialog v-model:open="editOpen" :user="editUser" @saved="onEdited" />
   </div>
 
   <div v-else-if="detailError" class="ud-root">
@@ -127,12 +97,12 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { subPage, openSubPage } from './store'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
-import { liveUsers, timeAgo, errMsg, shortId } from './live'
-import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
-import { statusText } from './statusText'
+import UserFormDialog, { type EditableUser } from './UserFormDialog.vue'
+import { liveUsers, timeAgo, errMsg, shortId, refreshLiveUsers } from './live'
+import { isLive } from './store'
+import { adminUsersApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { toast } from '@/utils/toast'
@@ -159,9 +129,6 @@ interface Detail {
 }
 
 const liveDetail = ref<Detail | null>(null)
-/** 会话总数（P1#14 角标口径）：从列表兜底 _count（live.ts fetchLiveUsers 的 sessions）或详情接口
- *  user._count.teaching_sessions 取；null = 无总数来源，角标退化为「最近 N」 */
-const tsTotal = ref<number | null>(null)
 
 /** 绝对时间（概览 kv 的 title；timeAgo 的相对文案不带完整时刻） */
 function fmtAbs(iso?: string | null): string {
@@ -170,143 +137,6 @@ function fmtAbs(iso?: string | null): string {
   return Number.isNaN(t) ? '' : new Date(t).toLocaleString('zh-CN', { hour12: false })
 }
 
-// ===== 用户维度活动数据（教学会话 / 目标对话，真实接口 userId 过滤） =====
-interface SessionRow {
-  id: string
-  topic: string
-  subText: string
-  status: string
-  startAgo: string
-  /** 概览 feed 排序用（timeAgo 只出相对文案，无法回排） */
-  startTs: number
-}
-interface GoalRow {
-  id: string
-  stage: string
-  /** 原始状态机值（statusText 只出中文，状态点语气要用原值；2026-10-11 外部评审 #3） */
-  status: string
-  summary: string
-  subText: string
-  createdAgo: string
-  createdTs: number
-}
-const tsRows = ref<SessionRow[]>([])
-const gcRows = ref<GoalRow[]>([])
-const tsLoading = ref(false)
-const gcLoading = ref(false)
-const tsError = ref(false)
-const gcError = ref(false)
-
-/** 概览「最近活动」：教学会话 + 目标对话按时间合并（原型 renderLearnerDetail 最近活动 feed 形态），
-    行可下钻只读座舱（session-real 同时收教学会话与目标会话 id） */
-interface FeedItem {
-  key: string
-  kind: '会话' | '目标'
-  ts: number
-  time: string
-  title: string
-  detail: string
-  sessionId: string
-  /** 副行状态点语气 */
-  tone: 'ok' | 'warn' | 'info' | 'muted'
-}
-/** 会话/目标状态 → 活动行状态点语气（ok 绿 / warn 琥珀 / info 蓝 / muted 灰） */
-function statusTone(status: string): 'ok' | 'warn' | 'info' | 'muted' {
-  const s = String(status || '').toLowerCase()
-  if (s === 'completed' || s === 'succeeded') return 'ok'
-  if (['failed', 'timeout', 'finalization_failed', 'discarded'].includes(s)) return 'warn'
-  if (['active', 'running', 'paused', 'initializing', 'finalizing'].includes(s)) return 'info'
-  return 'muted'
-}
-const feedRows = computed<FeedItem[]>(() => {
-  /* 已废弃（学习者点「重新开始」后作废的旧会话）不进活动时间线（2026-10-11）：
-     口径与概览「最近会话」预览、教学会话页签的「有效」档一致——否则时间线会被
-     驱动重开的 1 秒会话顶满。隐藏条数在卡头 meta 如实标注。 */
-  const items: FeedItem[] = [
-    ...tsRows.value
-      .filter((s) => s.status !== 'discarded')
-      .map((s) => ({ key: `ts-${s.id}`, kind: '会话' as const, ts: s.startTs, time: s.startAgo, title: s.topic, detail: s.subText, sessionId: s.id, tone: statusTone(s.status) })),
-    ...gcRows.value.map((g) => ({ key: `gc-${g.id}`, kind: '目标' as const, ts: g.createdTs, time: g.createdAgo, title: g.summary, detail: g.subText, sessionId: g.id, tone: statusTone(g.status) }))
-  ]
-  return items.sort((a, b) => b.ts - a.ts).slice(0, 8)
-})
-/** feed 卡头口径：隐藏的废弃条数不静默（同概览「最近会话」预览写法） */
-const feedMetaText = computed(() => {
-  const hidden = tsRows.value.filter((s) => s.status === 'discarded').length
-  const base = `会话 + 目标 · 最近 ${feedRows.value.length} 条`
-  return hidden ? `${base} · 已隐藏废弃 ${hidden}` : base
-})
-
-/** goal 摘要（对齐 GoalConversations.summaryOf：description 优先，兜底解析 collectedData） */
-function goalSummaryOf(c: Record<string, unknown>): string {
-  if (c.description) return String(c.description)
-  try {
-    const cd = JSON.parse(String(c.collectedData || '{}'))
-    return String(cd.goal || cd.learningGoal || cd.objective || cd.target || '—')
-  } catch {
-    return '—'
-  }
-}
-
-async function loadActivity(id: string) {
-  tsLoading.value = true
-  tsError.value = false
-  gcLoading.value = true
-  gcError.value = false
-  const ts = adminTeachingSessionsApi
-    .list({ userId: id, limit: 5, includeTest: true })
-    .then((res) => {
-      if (uid.value !== id) return
-      const body = res.data?.data ?? res.data ?? {}
-      tsRows.value = ((body.items as Record<string, unknown>[]) || []).map((s) => {
-        const dur = Number(s.duration || 0)
-        const durationText = dur >= 60 ? `${Math.round(dur / 60)} 分钟` : dur > 0 ? `${dur} 秒` : ''
-        return {
-          id: String(s.id),
-          topic: String(s.topic || s.taskId || '未命名会话'),
-          subText: `${String(s.subject || '—')} · ${Number(s.messageCount || 0)} 条消息${durationText ? ` · 时长 ${durationText}` : ''}`,
-          status: String(s.status || ''),
-          startAgo: timeAgo(String(s.startTime || '')),
-          startTs: new Date(String(s.startTime || '')).getTime() || 0
-        }
-      })
-    })
-    .catch(() => {
-      if (uid.value === id) tsError.value = true
-    })
-    .finally(() => {
-      if (uid.value === id) tsLoading.value = false
-    })
-  const gc = adminGoalConversationsApi
-    .list({ userId: id, limit: 4, includeTest: true })
-    .then((res) => {
-      if (uid.value !== id) return
-      const body = res.data?.data ?? res.data ?? {}
-      gcRows.value = ((body.conversations as Record<string, unknown>[]) || []).map((c) => ({
-        id: String(c.id),
-        stage: String(c.stage || ''),
-        status: String(c.status || ''),
-        summary: goalSummaryOf(c),
-        subText: `${statusText(String(c.status || '')) || '—'}${c.learningPathId ? ' · 已生成学习路径' : ''}`,
-        createdAgo: timeAgo(String(c.createdAt || '')),
-        createdTs: new Date(String(c.createdAt || '')).getTime() || 0
-      }))
-    })
-    .catch(() => {
-      if (uid.value === id) gcError.value = true
-    })
-    .finally(() => {
-      if (uid.value === id) gcLoading.value = false
-    })
-  await Promise.all([ts, gc])
-}
-
-/** 会话行 → 真实会话只读座舱（座舱仅服务虚拟会话，真实会话走 session-real）；
-    from 记忆来源，座舱返回时回到本用户详情 */
-function openSession(sessionId: string) {
-  const sp = subPage.value
-  openSubPage('session-real', sessionId, sp ? { from: { view: sp.view, id: sp.id, label: sp.label } } : undefined)
-}
 /** 详情接口失败且无列表兜底 → 明确错误态 + 重试（参照 VirtualProfile.detailError 模式） */
 const detailError = ref(false)
 /** 错误文案：区分「用户不存在/已删除」(404) 与网络/服务异常 */
@@ -424,6 +254,21 @@ async function openDebugStation() {
   if (!id || grantStatus.value !== 'active' || !projectionGrant.value?.id) return
   // 打开前先校验并清掉过期残留：本地不留已被服务端拒收的旧 token（本次会重新签发）
   purgeExpiredProjectionToken()
+  /* 先同步占位开窗再签发 token：window.open 在 await 之后会丢掉用户手势而被弹窗拦截。
+     失败时关掉空白窗并回传错误，不留白页。 */
+  const win = window.open('', '_blank')
+  if (!win) {
+    grantMessage.value = '打开失败：浏览器拦截了新标签页，请允许本站弹窗后重试'
+    grantMsgTone.value = 'error'
+    return
+  }
+  try {
+    win.opener = null
+    win.document.title = '正在打开调试站…'
+    win.document.body.textContent = '正在验证协助许可…'
+  } catch {
+    /* 同源窗口正常可写；受限浏览器忽略占位文案 */
+  }
   grantOpening.value = true
   try {
     const response = await adminUsersApi.createProjectionTokenFromGrant(projectionGrant.value.id, {
@@ -448,8 +293,9 @@ async function openDebugStation() {
     // 与 token 同步落过期时刻：先有 token 后有期限，避免出现无法清理的孤儿 token
     localStorage.setItem(PROJECTION_TOKEN_EXPIRES_KEY, String(expiresAt))
     projectionTokenExpiresAt.value = expiresAt
-    window.open('/admin/console', '_blank')
+    win.location.replace('/admin/console')
   } catch (e) {
+    win.close()
     grantMessage.value = `打开失败：${errMsg(e)}`
     grantMsgTone.value = 'error'
   } finally {
@@ -470,7 +316,6 @@ watch(
     grantMessage.value = ''
     detailError.value = false
     isDeleted.value = false
-    tsTotal.value = null
     const id = uid.value
     if (!id) return
     void loadDetail()
@@ -498,6 +343,29 @@ async function menuDelete() {
   closeMenu()
   await doDelete()
 }
+
+/* 编辑：与账号列表行内「编辑」共用 UserFormDialog（改昵称 / 邮箱 / 角色、重置密码） */
+const editOpen = ref(false)
+const editUser = computed<EditableUser | null>(() => {
+  const d0 = liveDetail.value
+  if (!d0) return null
+  return { id: uid.value, name: d0.name, email: d0.email, admin: d0.role === '管理员' }
+})
+function openEdit() {
+  editOpen.value = true
+}
+function onEdited(p: { mode: 'create' } | { mode: 'edit'; id: string; name: string; email: string; admin: boolean }) {
+  if (p.mode !== 'edit') return
+  // 详情与列表同源：本页改完，列表里的同一行也要同步（列表数据在 live 域）
+  const base = liveUsers.value.find((u) => u.id === p.id)
+  if (base) {
+    base.name = p.name
+    base.email = p.email
+    base.isAdmin = p.admin
+  }
+  void loadDetail()
+}
+
 async function doDelete() {
   const id = uid.value
   const name = liveDetail.value?.name || id
@@ -515,6 +383,12 @@ async function doDelete() {
     doneConfirm()
     // 停在本页：重拉后 isDeleted 翻真，删除入口被「恢复用户」顶替，详情态与后端一致
     void loadDetail()
+    // 列表同源：不重拉 live 域的话，从详情返回列表这一行还在、还显示正常
+    if (isLive.value) {
+      await refreshLiveUsers().catch(() => {
+        toast.error('用户已删除，但列表刷新失败，请手动刷新')
+      })
+    }
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
     failConfirm()
@@ -540,6 +414,12 @@ async function doRestore() {
     toast.success('用户已恢复，可重新登录')
     isDeleted.value = false
     void loadDetail()
+    // 列表同源：与列表页恢复后 refreshLiveUsers 同一口径
+    if (isLive.value) {
+      await refreshLiveUsers().catch(() => {
+        toast.error('用户已恢复，但列表刷新失败，请手动刷新')
+      })
+    }
   } catch (e) {
     toast.error(`恢复失败：${errMsg(e)}`)
   } finally {
@@ -555,9 +435,6 @@ async function loadDetail() {
   detailError.value = false
   detailErrorMsg.value = ''
   void loadGrant()
-  tsRows.value = []
-  gcRows.value = []
-  void loadActivity(id)
   const base = liveUsers.value.find((u) => u.id === id)
   try {
     // 已软删账号默认被详情接口隐藏（404 语义），Phase 2 用 includeDeleted=1 放行恢复入口
@@ -567,15 +444,6 @@ async function loadDetail() {
     const raw = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
     isDeleted.value = !!raw.deletedAt
     const user = (raw.user as Record<string, unknown>) || raw
-    // 详情 _count：会话总数优先它，其次列表兜底（live.ts fetchLiveUsers 的 sessions 即 _count.teaching_sessions）
-    const counts = (user._count as Record<string, number>) || {}
-    const detailSessions = counts.teaching_sessions ?? counts.teachingSessions
-    tsTotal.value =
-      detailSessions != null
-        ? Number(detailSessions)
-        : base?.sessions != null
-          ? base.sessions
-          : null
     liveDetail.value = {
       name: String(user.name || base?.name || id),
       email: String(user.email || base?.email || ''),
@@ -589,7 +457,6 @@ async function loadDetail() {
     if (seq !== detailLoadSeq || uid.value !== id) return
     // 详情接口失败：用列表数据兜底；无兜底 → 明确错误态
     if (base) {
-      tsTotal.value = base.sessions
       liveDetail.value = {
         name: base.name,
         email: base.email,
@@ -612,7 +479,7 @@ async function loadDetail() {
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* 账号类型（2026-10-11 深设计）：这一页的主语标签——数据隔离/排查先要知道看的是谁。
-   口径与列表徽章（MkVariantBadge 判例）、live.ts 的 isVirtualLearner/isTestAccount 一致 */
+   口径与列表身份徽章（虚拟 / 测试两类备注）、live.ts 的 isVirtualLearner/isTestAccount 一致 */
 const acctType = computed(() => {
   const base = liveUsers.value.find((u) => u.id === uid.value)
   if (!base) return '—'
@@ -662,53 +529,6 @@ const acctType = computed(() => {
 /* 用户 ID 等标识符单元格：mono + 稍弱（同全站 mono 判例） */
 .ud-kv__mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 
-/* 最近活动 feed：时间列 → 类型徽章 → 内容两行。
-   标题最多两行（-webkit-line-clamp），文本列设可读宽度上限——长 prompt 原先是
-   nowrap 单行拉满卡宽（4K 下单行 3000+px），横读极累；两行折行 + 限宽后读起来是段落。 */
-.ud-feed { display: grid; padding: 0 8px 8px; }
-.ud-feed__row {
-  /* 四列：时间 | 类型 | 内容（限宽） | 行尾暗示——末列必须有，否则 go 会掉到下一行 */
-  display: grid; grid-template-columns: 84px auto minmax(0, 1fr) auto;
-  gap: 4px 10px; align-items: start; padding: 10px 8px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.ud-feed__row:last-child { border-bottom: 0; }
-.ud-feed__row--link { cursor: pointer; border-radius: var(--mk-radius-md); }
-.ud-feed__row--link:hover { background: var(--mk-surface-2); }
-.ud-feed__row--link:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
-.ud-feed__time {
-  /* 列宽按最长文案（「14 小时前」在最大字号档 ≈66px）留余量 + nowrap：
-     固定列宽是「类型徽章永远同一条竖线」的前提，nowrap 防折行（68px 时实测折成两行） */
-  width: 84px; padding-top: 1px; padding-right: 4px; white-space: nowrap;
-  /* 右对齐（2026-10-11 外部评审 #2）：时间文案长短不一（「14 小时前」/「昨天」），
-     左对齐时文字尾端参差、到类型徽章的空档忽大忽小；右对齐后整列成列 */
-  text-align: right;
-  color: var(--mk-muted); font-size: var(--mk-fs-micro); font-family: var(--mk-mono);
-}
-.ud-feed__kind { margin-top: -1px; }
-/* 内容列吃满剩余宽度（2026-10-11 用户走查「右边空那多」）：
-   原 640px 限宽把宽卡里每行右半截留成死区；标题仍是两行封顶，
-   行内文本因此能整段读完（实测 1080 下 160 字的目标描述两行放得下），不再半途省略 */
-.ud-feed__grow { display: grid; gap: 3px; min-width: 0; }
-.ud-feed__t {
-  font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink);
-  /* 行高 1.6（外部评审 #2「偏小偏紧」）：两行折行 + 限宽后可读性优先 */
-  line-height: 1.6;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.ud-feed__d { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-/* 状态点：8px 圆点，语气色同全站语义（ok 绿 / warn 琥珀 / info 蓝 / muted 灰） */
-.ud-feed__dot {
-  display: inline-block; width: 7px; height: 7px; margin-right: 6px;
-  border-radius: var(--mk-radius-pill); background: var(--mk-line); vertical-align: middle;
-}
-.ud-feed__dot[data-tone='ok'] { background: var(--mk-green); }
-.ud-feed__dot[data-tone='warn'] { background: var(--mk-amber); }
-.ud-feed__dot[data-tone='info'] { background: var(--mk-blue); }
-.ud-feed__empty { padding: 2px 16px 14px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-/* 行尾点击暗示：弱色小字，行 hover 转蓝（整行才是点击目标，它是视觉信号不是控件） */
-.ud-feed__go { align-self: center; color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
-.ud-feed__row--link:hover .ud-feed__go { color: var(--mk-blue); }
 
 /* 许可行的说明小字（辅助层级，不随正文放大）；按内容收宽，
    避免 flex:1 把它拉成整行宽（会读成一条长灰带） */

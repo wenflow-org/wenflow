@@ -7,6 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { getGateway } from '../../gateway';
 import { APIRouter } from '../../gateway/api-gateway/router';
+import { resolveChatCompletionsUrl } from '../../gateway/api-gateway/chat-protocol-adapter';
 import { AgentConfigService } from '../../services/agentConfig.service';
 import { getAgentManifest, getAgentOfSkill, getCanonicalAgentId } from '../../services/agent-manifest.service';
 import {
@@ -38,6 +39,8 @@ import {
   listAgentPromptVersions,
   findAgentContract,
   listActiveAgentPromptAgentIds,
+  listActiveAgentPrompts,
+  pickActivePromptPerAgent,
 } from '../../services/agent-prompt.service';
 import {
   scaffoldSkill,
@@ -164,6 +167,18 @@ function getSkillRuntimeStatsCached(skillNames: string[], range: SkillStatsRange
   return computation;
 }
 
+/** Skill 功能简介的单一来源：代码注册表 `definition.description`（= /admin/skills 列表那一句）。
+ *  manifest 里的 description 是另一份人工摘要（与 prompts/skills.yaml 对齐），实测两者对同一
+ *  Skill 措辞不同（goal-conversation：注册表「…并收敛到第一版学习方向」vs manifest「…收集学习目标」），
+ *  列表与详情各印一句等于同一实体两套说法。注册表未注册（外挂能力 / scaffold 期）时才回落 manifest。 */
+function registrySkillDescription(skillName: string): string {
+  try {
+    return String(getGateway().getSkill(skillName)?.definition?.description || '');
+  } catch {
+    return '';
+  }
+}
+
 /** 启动预热（schedulers 装配调用）：把技能目录页默认窗口的统计重算移出用户路径。
  *  7d 是前端默认窗口、all 是可选长窗——两者共用同一覆盖索引，冷首触合计 ~1s（后台付费一次）。 */
 export async function warmSkillListStatsCache(): Promise<void> {
@@ -185,13 +200,23 @@ router.get('/', async (req: Request, res: Response) => {
     // 实测与声明源 17/34 不同名（如 path-planning：代码「学习路径规划 Skill」vs 声明「路径规划 Skill」），
     // 于是 Skills 页/技能详情 与 编排图（读声明源）对同一技能显示两个中文名。
     const declaredNames = new Map(loadSkillsBookRaw().skills.map((entry) => [entry.skillId, entry.displayName]));
+    /* 「版本」列 = 线上生效的 Prompt 版本（2026-10-24 用户「什么是版本，单一源头」）：
+       与详情 hero / 运行时定义读同一条规则（ACTIVE 基线最高版本），
+       不再拿 definition.version（代码里的语义版本）冒充运营看到的「版本」。
+       definition.version 仍保留在响应里供工程侧使用。 */
+    const activePromptRows = await listActiveAgentPrompts(skills.map((s) => `skill:${s.definition.name}`));
+    const promptByAgent = pickActivePromptPerAgent(activePromptRows);
     
     const skillList = skills.map(s => {
       const stats = runtimeStats.get(s.definition.name) || s.definition.stats;
       const agentOf = getAgentOfSkill(s.definition.name);
+      const activePrompt = promptByAgent.get(`skill:${s.definition.name}`) || null;
       return {
         name: s.definition.name,
         version: s.definition.version,
+        promptVersion: activePrompt?.version ?? null,
+        promptName: activePrompt?.name ?? null,
+        promptPublishedAt: activePrompt?.publishedAt ?? null,
         category: s.definition.category,
         description: s.definition.description,
         capabilities: s.definition.capabilities,
@@ -430,10 +455,7 @@ router.post('/:name/model-probe', async (req: Request, res: Response) => {
     const effectiveEffort = thinkingMode === 'disabled' ? 'default' : reasoningEffort;
 
     // 4) 发流式请求（与 executor 同协议：stream + include_usage）
-    const endpointBase = route.endpoint.replace(/\/$/, '');
-    const endpoint = endpointBase.endsWith('/v1')
-      ? `${endpointBase}/chat/completions`
-      : `${endpointBase}/v1/chat/completions`;
+    const endpoint = resolveChatCompletionsUrl(route.endpoint);
 
     // 4.5) SSRF 防护（安全审计 M3，与运行时执行器同源）：探测目标必须通过 safe-http 地址校验
     // （拒绝私网/本机/链路本地/元数据地址，生产强制 HTTPS）。此前这里是全站唯一绕过 safe-http
@@ -905,7 +927,7 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         skill: {
           id: canonicalId,
           name: manifest.name,
-          description: manifest.description,
+          description: registrySkillDescription(shortSkillId) || manifest.description,
           category: manifest.category,
           aliases: manifest.aliases || [],
           ioContractVersion: manifest.ioContractVersion,

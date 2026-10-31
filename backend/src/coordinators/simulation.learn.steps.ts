@@ -3,6 +3,7 @@ import type {
   SimulationMilestone,
   SimulationTask,
   StageResults,
+  StuckClosureAttributionRecord,
   TeachingState
 } from '../virtual-lab/vlab-types';
 import type {
@@ -39,6 +40,130 @@ export function advanceLearnerDoneStreak(
   return closure.learnerReady && !closure.canCompleteTask ? (Number(priorStreak) || 0) + 1 : 0;
 }
 
+/**
+ * 延伸学（#124）有界回合上限：assisted 轨的延伸课在任务收束后插入，跑满即收尾并回到任务结算。
+ * 与黑盒 runner 的 MAX_EXTENSION_TURNS 同值——两条运行时对「延伸一段」的预算口径保持一致。
+ */
+export const LEARN_EXTENSION_MAX_TURNS = 4;
+
+/**
+ * 复习课（#104 取样）有界回合上限：复习课是测量/巩固课，不是任务推进课——
+ * 到期点可能很多（注入上限 20），教师会围绕任务目标持续发问，必须有界收束，
+ * 否则单节课可无限拖长（实测 24 回合仍在推进）。跑满即收束并回写复习结果。
+ */
+export const LEARN_REVIEW_TURN_CAP = 10;
+
+/**
+ * 卡死判定（课堂探针 2026-10-21）：教师连续多回合不给收束信号、掌握度不再变化、判决持续判错时，
+ * 提前把课堂收为 unclosed 并留归因，避免一道收不了尾的课烧满回合上限（实测每道约 10 分钟）。
+ * 判据刻意保守——回合下限、连续窗口、掌握度不再变化、判错次数四者同时成立才算卡死；
+ * 任一条件缺数据（如模拟器没给掌握度）即 fail-open，不提前收课。
+ */
+export const LEARN_STUCK_MIN_TURNS = 8;
+export const LEARN_STUCK_TRACE_WINDOW = 3;
+export const LEARN_STUCK_MASTERY_EPSILON = 0.03;
+export const LEARN_STUCK_JUDGE_FALSE_MIN = 2;
+
+export type ClosureTraceEntry = {
+  turn: number;
+  teacherReady: boolean;
+  judgeFalse: boolean;
+  mastery: number | null;
+};
+
+/** 追加一回合的收束轨迹（保留最近 window 条；坏数据静默丢弃，不影响主链）。 */
+export function appendClosureTrace(
+  prior: unknown,
+  entry: ClosureTraceEntry,
+  window = LEARN_STUCK_TRACE_WINDOW
+): ClosureTraceEntry[] {
+  const list = Array.isArray(prior)
+    ? prior.filter((item): item is ClosureTraceEntry =>
+        !!item && typeof item === 'object' && typeof (item as ClosureTraceEntry).turn === 'number')
+    : [];
+  return [...list, entry].slice(-Math.max(1, window));
+}
+
+export function evaluateStuckClosure(params: {
+  trace: ClosureTraceEntry[] | null | undefined;
+  totalTurns: number;
+  minTurns?: number;
+  window?: number;
+  masteryEpsilon?: number;
+  judgeFalseMin?: number;
+}): { stuck: boolean; reason: string | null; masteryDelta: number | null; judgeFalseCount: number } {
+  const window = Math.max(1, params.window ?? LEARN_STUCK_TRACE_WINDOW);
+  const minTurns = params.minTurns ?? LEARN_STUCK_MIN_TURNS;
+  const epsilon = params.masteryEpsilon ?? LEARN_STUCK_MASTERY_EPSILON;
+  const judgeFalseMin = params.judgeFalseMin ?? LEARN_STUCK_JUDGE_FALSE_MIN;
+  const trace = (params.trace || []).slice(-window);
+  const judgeFalseCount = trace.filter((item) => item.judgeFalse).length;
+  const quiet = { stuck: false, reason: null, masteryDelta: null, judgeFalseCount } as const;
+  if ((Number(params.totalTurns) || 0) < minTurns) return { ...quiet };
+  if (trace.length < window) return { ...quiet };
+  if (trace.some((item) => item.teacherReady === true)) return { ...quiet };
+  const masteries = trace
+    .map((item) => item.mastery)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (masteries.length < window) return { ...quiet };
+  const masteryDelta = Math.max(...masteries) - Math.min(...masteries);
+  if (masteryDelta > epsilon) return { stuck: false, reason: null, masteryDelta, judgeFalseCount };
+  if (judgeFalseCount < judgeFalseMin) return { stuck: false, reason: null, masteryDelta, judgeFalseCount };
+  return { stuck: true, reason: 'non-convergence', masteryDelta, judgeFalseCount };
+}
+
+/** 卡死归因的 append-only 落点上限（stageResults.stuckAttributions）。 */
+export const STUCK_ATTRIBUTION_CAP = 20;
+
+/**
+ * 追加一条卡死归因（纯函数，供单测）。
+ *
+ * 背景：归因原先只写 taskRuntime.closureAttribution 与 session log，二者都会被
+ * 下一次 `restart-learning` 的整包重写清掉——2026-10-21 实测当天 8 次非收敛，
+ * DB 里只剩课堂记录的 `endReason='non-convergence'`，无法回答「为什么判卡死」。
+ * 改为写到 stageResults 根部的 append-only 数组（reset 只删指定键，不动它）。
+ * 容错：历史值不是数组 / 元素不是对象时忽略，不抛错。
+ */
+export function appendStuckAttributionEntry(
+  prior: unknown,
+  entry: StuckClosureAttributionRecord,
+  cap: number = STUCK_ATTRIBUTION_CAP,
+): StuckClosureAttributionRecord[] {
+  const list = Array.isArray(prior)
+    ? prior.filter((item): item is StuckClosureAttributionRecord => !!item && typeof item === 'object')
+    : [];
+  const limit = Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : STUCK_ATTRIBUTION_CAP;
+  return [...list, entry].slice(-limit);
+}
+
+type ExtensionRuntimeLike = {
+  active?: boolean;
+  turns?: number;
+  maxTurns?: number;
+} | null | undefined;
+
+/** 延伸段是否该收尾（纯函数，供单测）：回合到顶，或学员自评「已学够、不用再问」。 */
+export function shouldCompleteExtension(params: {
+  runtime: ExtensionRuntimeLike;
+  learnerFeedback: Record<string, unknown> | null | undefined;
+}): boolean {
+  const runtime = params.runtime;
+  if (runtime?.active !== true) return false;
+  const turns = Number(runtime.turns) || 0;
+  const maxTurns = Number(runtime.maxTurns) > 0 ? Number(runtime.maxTurns) : LEARN_EXTENSION_MAX_TURNS;
+  const feedback = params.learnerFeedback || null;
+  const learnerSatisfied = feedback?.selfReportedTaskDone === true
+    && feedback?.stopAsking === true
+    && feedback?.wantsMoreHelp !== true
+    && (!Array.isArray(feedback?.remainingBlockers) || feedback.remainingBlockers.length === 0);
+  return turns + 1 >= maxTurns || learnerSatisfied;
+}
+
+/** 延伸段是否应在本轮结束后收尾的估计（不消费学员反馈）：用于任务收束处的挂载判断。 */
+export function isExtensionActive(runtime: ExtensionRuntimeLike): boolean {
+  return runtime?.active === true;
+}
+
 /** 连击是否到顶（纯函数，供单测）。 */
 export function shouldBreakClosureLoop(learnerDoneStreak: number): boolean {
   return learnerDoneStreak >= LEARN_CLOSURE_LOOP_BREAK_TURNS;
@@ -53,8 +178,10 @@ export type LearningClosureDecision = {
    * 结课权威（#46 拍板）：教师判据是「开课冻结的目标集讲完即可下课」，与真人端一致；
    * 学员自评与认知判决只作观测留痕，不再是一票否决。
    * `learner-loop-break` = 学员连续多轮要下课而教师未给信号时的熔断兜底。
+   * `extension-complete` = 延伸学（#124）有界陪学段到达回合上限/学员表示学够后的收尾。
+   * `review-turn-cap` = 复习课（#104）到达有界回合上限后的收束（不结算任务）。
    */
-  closureAuthority: 'teacher' | 'learner-loop-break';
+  closureAuthority: 'teacher' | 'learner-loop-break' | 'extension-complete' | 'review-turn-cap';
   /** 本轮认知判决未放行完成（仅作留痕与知识看板对账，不再否决结课，见 #46） */
   judgeBlocked: boolean;
   judgeBlockReason: string | null;
@@ -143,7 +270,8 @@ export function buildTeachingTurnContext(params: {
 export async function loadTeachTurnKnowledgeAssets(
   userId: string,
   currentTask: SimulationTask,
-  currentMilestone: SimulationMilestone
+  currentMilestone: SimulationMilestone,
+  lessonKnowledgePoints: Array<{ name: string; status: string; progress: number }> = []
 ): Promise<{
   knowledgeSnapshot: Array<{ name: string; status: string; progress: number }>;
   learnerMemoryForSimulator: {
@@ -151,13 +279,22 @@ export async function loadTeachTurnKnowledgeAssets(
     dueReview: string[];
     struggling: string[];
     recentCompleted: string[];
+    recentDetails: Array<{
+      title: string;
+      deliverable: string | null;
+      memoryDelta: string | null;
+      selfCalibration: string | null;
+      mastered: string[];
+      struggling: string[];
+    }>;
   } | null;
 }> {
   // 知识看板快照：当前任务概念为锚 + 学习者记忆（已掌握/到期复习/易混淆/最近成果）
   const knowledgeSnapshot = await buildAssistedKnowledgeSnapshot(
     userId,
     currentTask,
-    currentMilestone
+    currentMilestone,
+    lessonKnowledgePoints
   );
   const learnerMemoryForSimulator = await buildAssistedLearnerMemory(userId);
   return { knowledgeSnapshot, learnerMemoryForSimulator };
@@ -487,6 +624,14 @@ export function buildNextLearningState(params: {
   aiResponse: string;
   /** 本轮教师配图（#123）：随教师消息一起进学习者可见上下文 */
   teacherImages?: ConversationHistoryItem['images'];
+  /** 延伸学（#124）：本轮结束后的延伸运行时（回合计数/收尾），缺省沿用 learningState */
+  extensionRuntime?: TeachingState['extensionRuntime'];
+  /** 本轮写入可见历史的用户消息（检查点提交时与 payload 对齐）；缺省用虚拟学习者原话 */
+  learnerVisibleMessage?: string | null;
+  /** 本课知识看板（P2-9：随 learningState 传递，不写画像基线） */
+  lessonKnowledgePoints?: Array<{ name: string; status: string; progress: number }>;
+  /** 本课被判错降级的看板概念（任务结算画像回写时从 knownConcepts 移除） */
+  lessonDowngradedConcepts?: Array<{ name: string; from: string; to: string }>;
 }): Record<string, unknown> {
   const {
     learningState,
@@ -503,12 +648,19 @@ export function buildNextLearningState(params: {
     currentTask,
     teachingSessionId,
     aiResponse,
-    teacherImages
+    teacherImages,
+    extensionRuntime,
+    learnerVisibleMessage,
+    lessonKnowledgePoints,
+    lessonDowngradedConcepts
   } = params;
 
   return {
     ...learningState,
     teachingRevision,
+    ...(extensionRuntime !== undefined ? { extensionRuntime } : {}),
+    ...(lessonKnowledgePoints !== undefined ? { lessonKnowledgePoints } : {}),
+    ...(lessonDowngradedConcepts !== undefined ? { lessonDowngradedConcepts } : {}),
     ...(isPathCompleted
       ? {
           currentMilestone: milestones.length,
@@ -553,7 +705,7 @@ export function buildNextLearningState(params: {
     },
     conversationHistory: [
       ...(learningState.conversationHistory || []),
-      { role: 'user', content: virtualReply.userVisible },
+      { role: 'user', content: learnerVisibleMessage || virtualReply.userVisible },
       // 教师配图随教师消息回流（#123）：下一轮模拟学习者请求组装时转 image_url 内容块
       {
         role: 'assistant',

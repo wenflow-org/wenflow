@@ -48,6 +48,7 @@ import { logger } from '../../utils/logger'
 
 const collectMock = collectMaterialForGoal as jest.Mock
 const warnMock = logger.warn as jest.Mock
+const infoMock = logger.info as jest.Mock
 
 const NEED = {
   kind: '指南',
@@ -91,6 +92,7 @@ const FAKE_PACK_RESULT = {
 afterEach(() => {
   collectMock.mockReset()
   warnMock.mockReset()
+  infoMock.mockReset()
   delete process.env.MATERIAL_COLLECTION_DISABLED
   delete process.env.MATERIAL_COLLECTION_TIMEOUT_MS
   delete process.env.MATERIAL_UPLOAD_INJECTION_DISABLED
@@ -104,7 +106,18 @@ afterEach(() => {
 // ---- 附件（用户上传资料）测试夹具：真实落盘到临时目录，读路径与生产同构 ----
 let uploadRoot = ''
 
-function seedUpload(userId: string, name = '指南附件.pdf') {
+/** 固定 preview 的锚点（断言依赖第一条 cite 逐字不变）；其余 heading 用通用 preview。 */
+const SEED_ANCHOR_PREVIEWS: Record<string, string> = {
+  '一、健康领域': '健康包括身心状况、动作发展和生活习惯三个方面',
+  '二、语言领域': '语言领域包括倾听与表达、阅读与书写准备',
+}
+
+function seedUpload(
+  userId: string,
+  name = '指南附件.pdf',
+  // 缺省第三条 heading 含查询（按指南设计幼儿活动）的 ≥4 字片段「幼儿活动」→ phrase 排序加权命中
+  headings: string[] = ['一、健康领域', '二、语言领域', '三、幼儿活动设计']
+) {
   if (!uploadRoot) {
     uploadRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wenflow-upload-'))
     process.env.MATERIAL_UPLOAD_DIR = uploadRoot
@@ -118,13 +131,14 @@ function seedUpload(userId: string, name = '指南附件.pdf') {
     size: 100,
     charCount: 400,
     structure: {
-      pageCount: 2, slideCount: 0, sheetCount: 0, headingCount: 2,
+      pageCount: 2, slideCount: 0, sheetCount: 0, headingCount: headings.length,
       tableCount: 0, listCount: 0, paragraphCount: 8, chunkCount: 2,
     },
-    anchors: [
-      { heading: '一、健康领域', location: '1', preview: '健康包括身心状况、动作发展和生活习惯三个方面' },
-      { heading: '二、语言领域', location: '2', preview: '语言领域包括倾听与表达、阅读与书写准备' },
-    ],
+    anchors: headings.map((heading, index) => ({
+      heading,
+      location: String(index + 1),
+      preview: SEED_ANCHOR_PREVIEWS[heading] || `${heading} 的原文片段`,
+    })),
     warnings: [],
     createdAt: '2026-09-22T00:00:00.000Z',
   }, '附件正文……')
@@ -285,5 +299,24 @@ describe('path.coordinator 附件注入（附件是主线）', () => {
     } as any)
 
     expect(result.userProfile.normalizedInput.resources.materials).toBeUndefined()
+  })
+
+  it('附件与目标无 ≥4 字片段命中 → 仍注入（只日志不过滤），日志记 noPhraseHit', async () => {
+    // 2026-10-21 对比裁决：片段闸门过滤会误杀"学科相关但措辞无重叠"的真引用资料（9/15），
+    // 故降级为观测信号——selected 全量进资料包，无片段命中的名单只进日志。
+    seedUpload('u1', '摄影构图笔记.pdf', ['一、摄影构图', '二、三分法'])
+
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u1',
+      rawGoal: '按指南设计活动',
+      visibleSummary: VISIBLE_BASE,
+    } as any)
+
+    expect(collectMock).not.toHaveBeenCalled()
+    expect(result.userProfile.normalizedInput.resources.materials).toHaveLength(1)
+    const selectionLog = infoMock.mock.calls
+      .map((call) => (call[0] === '[path-coordinator] 资料库选择' ? call[1] : null))
+      .find(Boolean)
+    expect(selectionLog?.noPhraseHit).toEqual(['摄影构图笔记.pdf'])
   })
 })

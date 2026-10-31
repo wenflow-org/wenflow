@@ -38,6 +38,7 @@
               class="mshell__item-badge"
               :class="{ 'mshell__item-badge--alarm': isAlarmBadge(item) }"
               :title="badgeTitle(item)"
+              @click.stop="goBadge(item)"
             >{{ badgeOf(item) }}</span>
           </button>
         </div>
@@ -69,6 +70,7 @@
                 class="mshell__item-badge"
                 :class="{ 'mshell__item-badge--alarm': isAlarmBadge(item) }"
                 :title="badgeTitle(item)"
+                @click.stop="goBadge(item)"
               >{{ badgeOf(item) }}</span>
             </button>
           </div>
@@ -176,9 +178,6 @@
             </button>
             <div v-if="!searchHits.length" class="mshell__search-empty">
               <p class="mshell__search-empty-title">没有匹配的页面</p>
-              <p class="mshell__search-empty-hint">
-                搜索只覆盖页面名称。找人 / 路径 / 调用记录请用下面的入口直接搜：
-              </p>
               <button
                 v-for="f in searchFallbacks"
                 :key="f.label"
@@ -291,7 +290,11 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { readTheme, writeTheme, applyDocumentTheme } from '@/utils/theme'
 
 const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; crumbClickable?: boolean; release?: boolean }>()
-const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'glossary'): void; (e: 'crumb-click'): void }>()
+const emit = defineEmits<{
+  (e: 'navigate', id: string, query?: Record<string, string>): void
+  (e: 'glossary'): void
+  (e: 'crumb-click'): void
+}>()
 
 /* 文案单源（R6 复读单源化）：title 与 aria-label 同文案各渲染一份 */
 const COLLAPSE_LOCK_HINT = '窄屏下侧栏保持图标轨'
@@ -366,18 +369,22 @@ const topTitle = computed(() => {
 const topSub = computed(() => {
   if (props.crumb) {
     const parts = props.crumb.split(' / ')
-    if (parts.length > 1) return parts[0] || ''
+    // 深层链会以「…」占位（AdminConsole CRUMB_MAX_DEPTH）：副行取第一个真实段
+    if (parts.length > 1) return parts.find((p) => p && p !== '…') || ''
     const parentPage = currentScene.value?.label ?? ''
     if (parentPage && parentPage !== topTitle.value) return parentPage
     return currentScene.value?.group ?? ''
   }
-  return currentScene.value?.group ?? ''
+  /* L1：副行＝分组；分组名与页面同名时留空（2026-10-23 走查：虚拟学习者页出现过
+     「虚拟学习者 / 虚拟学习者」的头——同详情页「沈奕航 / 沈奕航」同一条判例） */
+  const group = currentScene.value?.group ?? ''
+  return group === currentScene.value?.label ? '' : group
 })
 
 const searchHits = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return []
-  return MOCK_SCENES.filter((s) => `${s.label} ${s.group}`.toLowerCase().includes(q)).slice(0, 8)
+  return MOCK_SCENES.filter((s) => `${s.label} ${s.group} ${(s.keywords || []).join(' ')}`.toLowerCase().includes(q)).slice(0, 8)
 })
 /* 结果项键盘导航（#192）：activeIndex 是列表内高亮位，-1 = 未选（Enter 回落到第一条）。 */
 const searchActiveIndex = ref(-1)
@@ -406,7 +413,7 @@ function searchGo(scene: MockSceneDef) {
     给三条实体列表页的深链：这些页的搜索词住进 URL（?q=，见 learner-profile useListQueryState），
     落地即是筛好的结果。 */
 const searchFallbacks = [
-  { label: '用户与学习者', path: (q: string) => `/admin/people?q=${encodeURIComponent(q)}` },
+  { label: '用户账号', path: (q: string) => `/admin/people?q=${encodeURIComponent(q)}` },
   { label: '学习路径', path: (q: string) => `/admin/learning-paths?q=${encodeURIComponent(q)}` },
   { label: '执行日志', path: (q: string) => `/admin/execution-logs?q=${encodeURIComponent(q)}` }
 ]
@@ -537,13 +544,15 @@ const BADGE_MEANING: Record<string, string> = {
   'virtual-learners': '虚拟学习者数量',
   skills: 'Skill 数量',
   'ops-hub': '已发布公告数量',
-  'execution-logs': '近 7 天执行失败次数（采样窗口）',
+  'execution-logs': '近 7 天执行失败次数',
 }
 function badgeTitle(item: MockSceneDef): string {
   const count = badgeOf(item)
   if (!count) return ''
   if (alarmNavBadges.has(item.id)) {
-    return `近 7 天执行失败 ${count} 次（近 200 条日志内统计，进入执行日志页后自动平息）`
+    /* 2026-10-28 数据审计 P1：角标改读全量 stats.error，与落地页 ?range=week&status=err 的
+       「失败（N）」同源（旧口径是 200 行采样，28 vs 3662 同屏打架） */
+    return `近 7 天执行失败 ${count} 次（与执行日志页同源）`
   }
   return `${BADGE_MEANING[item.id] || item.label}：${count}`
 }
@@ -583,6 +592,19 @@ function isAlarmBadge(item: MockSceneDef): boolean {
 function go(item: MockSceneDef) {
   markAlarmRead(item)
   emit('navigate', item.id)
+}
+
+/* 角标口径与落地页对齐：执行日志角标统计近 7 天失败数，点进落地页默认是「今天」——
+   点角标即带 ?range=week&status=err，看到的数与角标是同一批。 */
+const BADGE_LANDING_QUERY: Record<string, Record<string, string>> = {
+  'execution-logs': { range: 'week', status: 'err' },
+}
+function goBadge(item: MockSceneDef) {
+  const query = BADGE_LANDING_QUERY[item.id]
+  if (item.id === props.current && !query) return
+  markAlarmRead(item)
+  if (query) emit('navigate', item.id, query)
+  else emit('navigate', item.id)
 }
 
 /* release 模式：管理员信息与退出登录 */
@@ -669,7 +691,7 @@ watch(
   { immediate: true }
 )
 /* 组级徽章聚合已随「组头降级为标签」移除：计数仍显示在具体页面项上
-   （虚拟学习者/Skill 与提示词/执行日志…），告警脉冲由 mshell__item-badge--alarm 承担 */
+   （虚拟学习者/Skill 目录/执行日志…），告警脉冲由 mshell__item-badge--alarm 承担 */
 </script>
 
 <style scoped>
@@ -823,11 +845,7 @@ watch(
 .mshell__item-badge--alarm {
   background: var(--mk-red-bg-strong);
   color: var(--mk-red-strong);
-  animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
-}
-@keyframes mshell-alarm-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-red-fill) 32%, transparent); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-red-fill) 0%, transparent); }
+  /* 2026-10-22 用户：不要闪烁特效；告警只靠红底/红字表达 */
 }
 
 /* 左侧底部：收起/展开导航一行（原型 .side__foot = 单个 nav__item）。
@@ -1059,9 +1077,8 @@ watch(
 .mshell__search-hit--active { background: var(--mk-hover-surface); }
 .mshell__search-hit-group { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
 .mshell__search-empty { padding: 10px; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
-/* 无页面命中时的转搜出口（走查 O1）：说清搜索范围 + 三条实体列表页深链 */
-.mshell__search-empty-title { margin: 0 0 4px; font-weight: 600; color: var(--mk-ink); }
-.mshell__search-empty-hint { margin: 0 0 8px; line-height: 1.5; }
+/* 无页面命中时的转搜出口（走查 O1）：三条实体列表页深链，关键词跟着走 */
+.mshell__search-empty-title { margin: 0 0 8px; font-weight: 600; color: var(--mk-ink); }
 .mshell__search-fallback {
   display: block; width: 100%; margin-top: 4px; padding: 6px 8px; text-align: left;
   border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm, 6px);
@@ -1320,5 +1337,18 @@ html[data-theme='dark'] {
     z-index: 200;
     cursor: pointer;
   }
+}
+
+/* 短视口（1080P 及以下）收紧导航纵向节奏：20 个场景 + 6 组标签在 953px 可视高里溢出 78px，
+   末两项（模型与接入 / 用户账号）要滚动才看得到——导航一屏看不全等于没有。
+   只压行高与组间距，字号与图标尺寸不动（可读性不变）。
+   必须放在文件末尾：与 .mshell__group / .mshell__item 的基础规则同优先级，
+   写在前面会被后面那几条覆盖（实测写在 755 行时 margin-top 仍是 12px）。 */
+@media (max-height: 1100px) {
+  .mshell__nav { gap: 2px; }
+  .mshell__item { padding-top: 5px; padding-bottom: 5px; }
+  .mshell__group { margin-top: 6px; }
+  .mshell__pinned { padding-bottom: 6px; }
+  .mshell__caption { margin-bottom: 0; }
 }
 </style>

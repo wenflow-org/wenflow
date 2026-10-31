@@ -21,8 +21,11 @@ import { timeoutErrorSignals } from './failure-classification';
  * 「页热」不可靠；进程内缓存 + 启动预热才让执行日志页稳定毫秒级。
  */
 
-/** 统计四件套：[total, success, timeout, error, bySource, canary] */
-export type AgentLogStatsTuple = [number, number, number, number, any[], number];
+/** 统计八件套：[total, success, timeout, error, bySource, canary, byAgentErrors, latencyPercentiles] */
+export type AgentLogErrorByAgent = { agentId: string; count: number };
+/** 全窗口延迟分位（毫秒；窗口内无成功样本时为 null） */
+export type AgentLogLatencyPercentiles = { p50: number | null; p99: number | null };
+export type AgentLogStatsTuple = [number, number, number, number, any[], number, AgentLogErrorByAgent[], AgentLogLatencyPercentiles];
 
 /** 列表行取数（实时，行窗口受 limit 限制，代价与窗口无关） */
 export async function fetchAgentLogRows(params: {
@@ -80,7 +83,19 @@ export async function fetchAgentLogStats(params: {
 }): Promise<AgentLogStatsTuple> {
   const { where, canaryWhere, statsWhere, canarySourceEntry } = params;
   const canaryFiltered = canaryWhere != null && canarySourceEntry != null;
-  const [sourceSuccessGroups, failedRows] = await Promise.all([
+  /* 延迟分位取数（2026-10-29 审计 M-3）：与 total/success 同窗口同口径（仅成功行、默认视图
+     剔除 canary）的全窗 durationMs——前端 KPI 的 P50/P99 此前只能拿当前页 ≤30 行样本冒充
+     全窗口，与并排的全窗口成功率互相矛盾。窄列（仅 durationMs）一扫，与下方两查询并行；
+     结果随 stats 进程内缓存，代价被 SWR 摊平。取 where（canaryFiltered 时显式补 canary 排除）
+     与下方失败行拉取同构：两种调用形态（路由默认视图/预热）下 where 均已含排除子句，
+     与 statsWhere 的主口径逐行等价。 */
+  // durationMs 是非空列（schema: Int @default(0)）——不能用 `not: null`（真实 Prisma 会抛
+  // Argument `not` must not be null，整条 stats 500）；gte: 0 与前端样本口径的「非负」一致。
+  const latencyWhere: any = { ...where, success: true, durationMs: { gte: 0 } };
+  if (canaryFiltered) {
+    latencyWhere.AND = [...(Array.isArray(latencyWhere.AND) ? latencyWhere.AND : []), { sourceEntry: { not: canarySourceEntry } }];
+  }
+  const [sourceSuccessGroups, failedRows, durationRows] = await Promise.all([
     // total（组计数之和）/ success / bySource / canaryCount 同来自这一次扫描：
     // 默认视图扫 statsWhere（含 canary 行），JS 侧把 canary 分组从主口径剔除、单独计数
     prisma.agent_call_logs.groupBy({
@@ -88,10 +103,16 @@ export async function fetchAgentLogStats(params: {
       where: statsWhere ?? where,
       _count: { _all: true },
     }),
-    // 失败行小拉取（周窗 ~7k 行）：timeout/error 拆分在端内按 buildTimeoutCondition 同口径分类
+    // 失败行小拉取（周窗 ~7k 行）：timeout/error 拆分在端内按 buildTimeoutCondition 同口径分类；
+    // agentId 一并选出（2026-10-28 数据审计）：总览待办/侧栏角标此前只能拿 200 行采样数
+    // 「近 7 天失败 18 次」当全量讲（实际 66/1789），改为由统计侧给全量 by-agent 失败数
     prisma.agent_call_logs.findMany({
       where: { ...where, success: false },
-      select: { errorCode: true, errorCategory: true, error: true },
+      select: { agentId: true, errorCode: true, errorCategory: true, error: true },
+    }),
+    prisma.agent_call_logs.findMany({
+      where: latencyWhere,
+      select: { durationMs: true },
     }),
   ]);
 
@@ -108,6 +129,29 @@ export async function fetchAgentLogStats(params: {
   const successCount = statsGroups.filter((g) => g.success === true).reduce((sum, g) => sum + g._count._all, 0);
   const timeoutCount = failedRows.filter(matchesTimeoutCondition).length;
   const errorCount = failedRows.length - timeoutCount;
+  /* 全量 by-agent 失败数（error 口径，与列表 status=error 筛选/执行日志页「失败（N）」一致）：
+     Top 5 足够总览待办（取前 2）与角标（用总数）消费，不再让采样数冒充全量 */
+  const byAgent = new Map<string, number>();
+  for (const row of failedRows) {
+    if (matchesTimeoutCondition(row)) continue;
+    const agentId = String(row.agentId || '');
+    if (!agentId) continue;
+    byAgent.set(agentId, (byAgent.get(agentId) || 0) + 1);
+  }
+  const byAgentErrors = [...byAgent.entries()]
+    .map(([agentId, count]) => ({ agentId, count }))
+    .sort((a, b) => b.count - a.count || a.agentId.localeCompare(b.agentId))
+    .slice(0, 5);
+  // 全窗延迟分位：算法与前端 fallback 样本口径逐字对齐（ExecLogs.vue percentileMsOf——
+  // 仅成功行、durationMs 为非负数、升序后取 round((n-1)*q) 下标）；空窗返回 null（前端回退样本计算）
+  const durations = durationRows
+    .map((row) => row.durationMs)
+    .filter((d): d is number => typeof d === 'number' && d >= 0)
+    .sort((a, b) => a - b);
+  const latencyPercentiles: AgentLogLatencyPercentiles = {
+    p50: percentileOfSorted(durations, 0.5),
+    p99: percentileOfSorted(durations, 0.99),
+  };
   // 路由消费形态保持 { sourceEntry, _count: { _all } }[]（仅按 sourceEntry 聚合的视图）
   const sourceTotals = new Map<string, number>();
   for (const g of statsGroups) {
@@ -119,7 +163,14 @@ export async function fetchAgentLogStats(params: {
     _count: { _all },
   }));
 
-  return [total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount];
+  return [total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount, byAgentErrors, latencyPercentiles];
+}
+
+/** 分位取值（与前端 percentileMsOf 同式）：升序数组取 round((n-1)*q) 下标，空数组 null */
+function percentileOfSorted(sorted: number[], q: number): number | null {
+  if (sorted.length === 0) return null;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * q)));
+  return sorted[idx];
 }
 
 /** 兼容组合（行 + 统计）：未接缓存的调用方（测试/其他入口）仍可用单函数形态 */
@@ -131,13 +182,13 @@ export async function fetchAgentLogPage(params: {
   canaryWhere?: any;
   statsWhere?: any;
   canarySourceEntry?: string | null;
-}): Promise<[any[], number, number, number, number, any[], number]> {
+}): Promise<[any[], number, number, number, number, any[], number, AgentLogErrorByAgent[], AgentLogLatencyPercentiles]> {
   const { where, skip, limitNum, logOrderBy, canaryWhere, statsWhere, canarySourceEntry } = params;
   const [logs, stats] = await Promise.all([
     fetchAgentLogRows({ where, skip, limitNum, logOrderBy }),
     fetchAgentLogStats({ where, canaryWhere, statsWhere, canarySourceEntry }),
   ]);
-  return [logs, ...stats] as [any[], number, number, number, number, any[], number];
+  return [logs, ...stats] as [any[], number, number, number, number, any[], number, AgentLogErrorByAgent[], AgentLogLatencyPercentiles];
 }
 
 /**

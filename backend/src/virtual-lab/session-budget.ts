@@ -95,12 +95,17 @@ export function resolveSessionBudget(params: {
 
 /**
  * 学习进度指纹：用于无进展看门狗判断「一个分片是否产生净进展」。
- * 组成：已完成任务数 + 当前任务 + 知识看板各状态计数。
+ * 组成：已完成任务数 + 知识看板各状态计数。
  * 指纹跨分片不变 = 这 40 回合没有推进任何东西 = 疑似教学死循环。
+ *
+ * 2026-10-24 修正：**不含 currentTaskId**。指纹含「当前任务」时，教学循环只要在两个任务间
+ * 打转（A,B,A,B——恰是看门狗要抓的死循环形态），每片指纹都与上一片不同，noProgressChunks
+ * 每次归零，看门狗永不触发。真实进展不需要它：任务完成时 completedTasks 必然 +1，
+ * 知识推进时看板计数必然变化；「未完成就切走且零知识增量」本就应判为无净进展。
  */
 export function computeLearnProgressSignature(
   stageResults: Record<string, any> | null | undefined,
-  counters: { completedTasks?: number | null; currentTaskId?: string | null } = {}
+  counters: { completedTasks?: number | null } = {}
 ): string {
   const teaching = isRecord(stageResults) && isRecord((stageResults as Record<string, any>).teaching)
     ? ((stageResults as Record<string, any>).teaching as Record<string, any>)
@@ -115,6 +120,5 @@ export function computeLearnProgressSignature(
     if (status === 'mastered' || status === 'review' || status === 'learning') touched += 1
   }
   const completedTasks = Number(counters.completedTasks) || 0
-  const currentTaskId = counters.currentTaskId ? String(counters.currentTaskId) : ''
-  return `${completedTasks}|${currentTaskId}|${mastered}|${touched}|${kp.length}`
+  return `${completedTasks}|${mastered}|${touched}|${kp.length}`
 }

@@ -41,16 +41,15 @@ describe('顶栏搜索 · 转搜出口', () => {
     wrapper.unmount();
   });
 
-  it('搜人名（无页面命中）→ 说明范围 + 三条转搜出口', async () => {
+  it('搜人名（无页面命中）→ 空态 + 三条转搜出口', async () => {
     const { wrapper } = await mountShellAt('/admin/overview');
     await wrapper.find('.mshell__search-input').setValue('孙浩');
     await flushPromises();
     expect(wrapper.text()).toContain('没有匹配的页面');
-    expect(wrapper.text()).toContain('只覆盖页面名称');
     const fallbacks = wrapper.findAll('.mshell__search-fallback');
     expect(fallbacks).toHaveLength(3);
     expect(fallbacks.map((f) => f.text())).toEqual([
-      '用户与学习者：搜「孙浩」',
+      '用户账号：搜「孙浩」',
       '学习路径：搜「孙浩」',
       '执行日志：搜「孙浩」'
     ]);
