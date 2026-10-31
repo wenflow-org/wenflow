@@ -15,6 +15,7 @@ English Version | [中文版](README.md)
 > Demo only, not for production use, and all accounts and data are periodically purged. Do not store important information.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml/badge.svg?branch=main)](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.23.4-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
@@ -42,7 +43,7 @@ As AI becomes increasingly capable of producing answers, the skills worth cultiv
 
 ## Core Experience Preview
 
-These six screenshots show WenFlow's core experience, from a real problem to a complete learning loop.
+These seven screenshots show WenFlow's core experience, from a real problem to a complete learning loop.
 
 | ① Start from a Real Problem |
 |:---:|
@@ -54,15 +55,20 @@ These six screenshots show WenFlow's core experience, from a real problem to a c
 | ![Clarify the Real Goal](doc/images/goal-clarification.png) | ![Generate a Learning Path](doc/images/learning-path.png) |
 | The AI clarifies the real goal through multi-round questioning | A vague goal becomes phases, tasks, and an actionable first step |
 
-| ④ Enter Round-based Learning | ⑤ Learning Loop Overview |
-|:---:|:---:|
-| ![Enter Round-based Learning](doc/images/round-based-learning.png) | ![Learning Loop Overview](doc/images/learning-loop-overview.png) |
-| The AI teaches, the learner answers, and feedback is immediate; teaching adapts dynamically | A post-session summary and evaluation provide guidance on what to learn next |
-
-| ⑥ Learning State Tracking |
+| ④ Enter Round-based Learning (with the Classroom Whiteboard) |
 |:---:|
-| ![Learning State Tracking](doc/images/learning-state.png) |
-| LSS / KTL / LF / LSB tracked continuously, with rest prompts when fatigue is detected |
+| ![Enter Round-based Learning](doc/images/round-based-learning.png) |
+| While teaching, the AI draws structural content on the whiteboard (mappings, flow loops, comparisons); the board updates as the lesson advances, and answers get immediate feedback |
+
+| ⑤ Post-session Evaluation | ⑥ Learning State Tracking |
+|:---:|:---:|
+| ![Learning Loop Overview](doc/images/learning-loop-overview.png) | ![Learning State Tracking](doc/images/learning-state.png) |
+| A post-session summary with per-knowledge-point evidence and mastery / pressure / fatigue readings, plus next-step advice | LSS / KTL / LF / LSB tracked continuously, with rest prompts when fatigue is detected |
+
+| ⑦ Operations Admin Console |
+|:---:|
+| ![Operations Admin Console](doc/images/admin-overview.png) |
+| 19 scene pages of operations and observability: health, teaching sessions, execution logs, model access, the virtual learner lab |
 
 ---
 
@@ -97,6 +103,7 @@ flowchart TD
 - **Getting stuck is handled**: after repeated wrong answers or an explicit request for help, the session switches into peer reinforcement and rebuilds the missing prerequisites instead of pushing on.
 - **Memory carries across lessons**: each session feeds the learner profile, so the next lesson picks up from the weak spots and schedules reviews according to memory science.
 - **A whiteboard that draws along**: when the tutor hits structural content, the classroom whiteboard puts a figure on the board (script-line-to-manual-step mappings, flow loops, side-by-side comparisons), moving the cognitive weight of dense text onto the board; the board keeps updating as the lesson advances and can be zoomed in.
+- **Your materials join the conversation**: upload materials for "learning a course / a book" and Embedding/Rerank semantic search brings the right passages into the lesson as references instead of stuffing the whole book into the model; without semantic models configured it falls back to keyword search automatically.
 
 ### 2. Managing cognitive load like physical training load
 

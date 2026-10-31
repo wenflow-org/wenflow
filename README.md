@@ -15,6 +15,7 @@
 > 仅作 Demo 演示，不提供正式服务，会定期清理账号与数据，请勿用于存放重要信息。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml/badge.svg?branch=main)](https://github.com/wenflow-org/wenflow/actions/workflows/quality-check.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.23.4-green.svg)](https://nodejs.org)
 [![Vue](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org)
 
@@ -42,7 +43,7 @@
 
 ## 核心体验预览
 
-这 6 张图按“从真实问题出发，到进入完整学习闭环”的顺序展示 WenFlow 的核心体验。
+这 7 张图按“从真实问题出发，到进入完整学习闭环”的顺序展示 WenFlow 的核心体验。
 
 | ① 从一个问题开始 |
 |:---:|
@@ -54,15 +55,20 @@
 | ![澄清真实目标](doc/images/goal-clarification.png) | ![生成学习路径](doc/images/learning-path.png) |
 | AI 通过多轮追问澄清真实目标 | 将模糊目标拆解为阶段、任务与可立即执行的第一步 |
 
-| ④ 进入回合式学习 | ⑤ 学习闭环总览 |
-|:---:|:---:|
-| ![进入回合式学习](doc/images/round-based-learning.png) | ![学习闭环总览](doc/images/learning-loop-overview.png) |
-| AI 讲解、学习者作答并即时获得反馈，教学过程动态调整 | 课后生成总结与评估，并给出后续学习建议 |
-
-| ⑥ 学习状态追踪 |
+| ④ 进入回合式学习（带课堂白板） |
 |:---:|
-| ![学习状态追踪](doc/images/learning-state.png) |
-| LSS / KTL / LF / LSB 持续追踪学习状态，并在疲劳时予以提醒 |
+| ![进入回合式学习](doc/images/round-based-learning.png) |
+| AI 讲解时把结构性内容画在白板上（映射表、流程回路、对照表），随教学推进更新；学习者作答并即时获得反馈 |
+
+| ⑤ 课后评估 | ⑥ 学习状态追踪 |
+|:---:|:---:|
+| ![学习闭环总览](doc/images/learning-loop-overview.png) | ![学习状态追踪](doc/images/learning-state.png) |
+| 课后生成主题总结、知识点证据与掌握/压力/疲劳读数，并给出后续建议 | LSS / KTL / LF / LSB 持续追踪学习状态，并在疲劳时予以提醒 |
+
+| ⑦ 运营管理后台 |
+|:---:|
+| ![运营管理后台](doc/images/admin-overview.png) |
+| 19 个场景页的运营与可观测后台：健康度、教学会话、执行日志、模型接入、虚拟学习者实验室 |
 
 ---
 
@@ -97,6 +103,7 @@ flowchart TD
 - **卡壳有兜底**：连续答错或明确求助时，课堂会切进“伴学补强”，先补齐前置概念再往下走，而不是硬念下一段。
 - **跨课有记忆**：每节课的掌握情况会沉淀进学习画像，下一节课从你上次的薄弱点自然接上，并按记忆规律安排复习。
 - **白板随讲随画**：老师讲到结构性内容时，课堂白板会同步上墙图示（脚本行↔手工动作映射、流程回路、对照表等），把纯文字造成的认知压力搬到板上；学生盯着的板随教学推进更新，可放大细看。
+- **你的资料接得上话**：上传“学某课 / 学某书”的资料后，Embedding/Rerank 语义检索把对的段落带进课堂引用，而不是整本塞给模型；未配置语义模型时自动回退关键词检索。
 
 ### 2. 像管理体能一样管理脑力负荷
 
@@ -126,7 +133,7 @@ WenFlow 的教学行为不是提示词拍脑袋，每条设计都有对应的理
 - **黑盒模拟**：只用产品界面能看到的动作，不改数据、不读内部状态
 - **Quick Learn**：挑一个任务自动上完一节课并生成报告，用于快速回归
 
-### 5. 自带 18 个场景页的管理后台
+### 5. 自带 19 个场景页的管理后台
 
 学习端之外还有一套完整的运营与可观测后台（`/admin`），数据全部来自真实 API：
 
