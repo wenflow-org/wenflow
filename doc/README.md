@@ -5,7 +5,7 @@
 > 需要时以 doc/ 根目录现行文档与代码为准。
 > **登记门禁（2026-09-28 起）**：新文档入库三件套 = 白名单 + 本表登记 + 状态头；实现与「不做」声明相悖须同提交改文档。
 
-## 总索引（doc/ 根 42 篇 · 全覆盖 · 2026-10-29）
+## 总索引（doc/ 根 54 篇 · 全覆盖 · 2026-10-31）
 
 > 每篇文档头部有状态行（📌 类型｜最后核验）。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
 
@@ -50,6 +50,15 @@
 | DEV_SCRIPTS.md | 活规范 | 脚本唯一索引（86 条零失效） |
 | ADMIN_UI_WALKTHROUGH.md | 历史快照 | 已迁 doc/re_test/ |
 | ADMIN_PAGE_AUDIT.md | 历史快照 | 已迁 doc/re_test/ |
+| CLASSROOM_PIPELINE.md | 活规范 | 课堂管线与评价管线单文件口径（文件/函数可直接对照，基线 feat/teaching-figures @ 62108427） |
+| CLASSROOM_SKILLS.md | 活规范 | 课堂用到的提示词全文合集（配套 CLASSROOM_PIPELINE.md） |
+| BOARD_MODE_REPORT.md | 设计留痕 | 白板模式 MVP 报告（图教分离；含 2026-10-27 §九二次定调） |
+| TEACHING_PIPELINE_REPORT.md | 设计留痕 | 教学课堂管线报告（图分支早期版，被 10-26 版推进） |
+| TEACHING_PIPELINE_REPORT_2026-10-26.md | 设计留痕 | 图分支课堂管线现状（出图决策链 9 道闸 / 13 图型 / 五轮盲评） |
+| VERSION_REPORT_V1.md … VERSION_REPORT_V8.md | 历史快照 | 教学图版本报告 V1–V8（外部视觉盲评迭代留痕，V8 为 2026-10-27） |
+| LLM_PACK_GUIDE.md | 参考资料 | 教学图评审包给 LLM 的几种发法（token 膨胀根因与瘦身） |
+| ADMIN_COPY_SEMANTIC_AUDIT.md | 历史审计 | 管理端文案语义审计 |
+| FLOW-ARCH-AUDIT-REMEDIATION-2026-10-22.md | 历史审计 | 流程架构审计修复与数据处置记录（对应审计在 doc/local/） |
 | README.md / README.en.md | 索引 | 本文档 |
 | re_test/（3 篇） | 历史快照 | 归档头已加 |
 

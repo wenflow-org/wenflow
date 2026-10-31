@@ -1,6 +1,6 @@
 # WenFlow 管理端运营操作手册（ADMIN_OPERATIONS_MANUAL）
 
-> 📌 类型：活规范（运营 SOP 单源，随代码核验）｜最后核验：2026-10-05。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（运营 SOP 单源，随代码核验）｜最后核验：2026-10-31。索引见 [doc/README.md](./README.md)。
 
 > **适用范围**：WenFlow 教学平台管理后台（`/admin/*`）。
 > **事实源**：本手册所有路由、筛选谓词、指标口径、动作名均抄自前端代码
@@ -421,7 +421,7 @@
 | 执行日志 | `/admin/execution-logs` | 日志 + Trace 链路排障 | 页签：日志 / Trace 链路。筛选：状态 pills(err/warn/ok)、测试、时间窗(15m/1h/today/yesterday/week/month/all)、节点(Skill)、关键词、Trace ID、sessionId、错误类别。URL 参数：`agent/status/cat/range/q/trace/session/test`（`ExecLogs.vue:18-30, 411-426, 816`） |
 | 成本分析 | `/admin/token-cost` | Token 与成本透视 | 时间窗 7/30/90 天；KPI：调用成本、单次调用均值、总 Token、失败调用。按 Skill / 按用户（支持搜索，单次上限 100，可「查看全部」）/ 按模型排行；CSV 导出（`TokenCost.vue:43-119, 283-345, 418-434`） |
 | 审计日志 | `/admin/audit-logs` | 管理操作 + 管理员登录审计 | 页签：操作审计 / 登录审计（`?tab=login`）。时间窗 today/yesterday/week/month/all；「失败 TOP」chip 下钻。登录审计行可跳「会话安全」（`AuditLogs.vue:405-409, 80-92, 250-253`） |
-| 模型与接入 | `/admin/api-config` | 供应商/路由/安全/外挂 | 页签：接入与验证 / 模型路由 / 调用与健康 / 安全与访问 / 模型总览 / 外挂能力（`?tab=`）。KPI：API 密钥、模型清单、默认路由(x/3)、注册模型、漂移提示（`ApiConfig.vue:22-38, 660-667`） |
+| 模型与接入 | `/admin/api-config` | 供应商/路由/安全/外挂/基础设施模型 | 页签：接入与验证 / 模型路由 / 调用与健康 / 安全与访问 / 模型总览 / 外挂能力（`?tab=`）。KPI：API 密钥、模型清单、默认路由(x/3)、注册模型、漂移提示（`ApiConfig.vue:22-38, 660-667`）。**基础设施模型**：平台供应商详情二级页签「基础设施」与页内 InfraModelsPanel（`ApiConfig.vue:85`），管 Embedding / Reranker 端点·密钥·模型（默认 `BAAI/bge-m3` / `BAAI/bge-reranker-v2-m3`），管理端配置优先于 `EMBEDDING_*`/`RERANK_*` 环境变量；任一未配置则资料语义层 fail-open 回退关键词（不报错、功能降级） |
 | 系统工具 | `/admin/ops-center` | 运维/导出/会话安全 | 页签：运维工具 / 数据导出 / 会话安全（`?tab=tools|export|security`）。运维工具含时间推进（不写库预览）与 outbox 死信重放（按事件类型整批，写操作）；数据导出范围多选 chips（导出为只读，不产生审计记录）（`OpsCenter.vue:16-21, 158-197, 387-401`） |
 | 运营中心 | `/admin/ops-hub` | 运营待办/反馈/成就/公告/站内通知 | 页签：运营待办 / 反馈 / 成就 / 公告 / 站内通知（`?tab=`）；未访问页签计数显「待访问」而非 0（`OpsHub.vue:18-23`） |
 | 学习者详情（二级页） | `?view=learner` 或 `?view=user` | 单学习者画像/证据/预测/路径/会话/记忆/操作记录 | 会话窗口「该学习者最近 20 条教学会话」；记忆页签空态「完成教学回合后自动生成」（`LearnerDetail.vue:672, 750, 873, 1083`） |

@@ -109,6 +109,39 @@ cd backend
 
 ## 配置说明
 
+### 从 0 到可用：必需与可选配置
+
+全新部署到完整可用，配置分三档。**核心学习闭环（澄清目标 → 生成路径 → 回合式上课）只依赖第 1 档**；其余家族不配置时按 documented 语义降级，不阻断启动。
+
+**第 1 档：必需（缺了起不来或核心闭环不可用）**
+
+| 配置 | 怎么配 | 不配的后果 |
+|------|--------|-----------|
+| `backend/.env` | `npm run env:setup` 向导生成（或复制 `.env.example`） | 启动脚本直接退出 |
+| `JWT_SECRET` | 向导可自动生成（≥32 位随机串） | 启动校验失败 |
+| `AI_API_URL` / `AI_API_KEY` / `AI_MODEL` / `AI_MODEL_REASONING` | 向导第 2-4 问；密钥换成所选 provider 的真实值 | 仍是占位值 `sk-your-api-key` 时启动被拦；启动后 `/readyz` 的 `aiConfiguration` 报 warning，**所有 AI 调用不可用**——目标对话、路径生成、课堂全部无响应 |
+| 初始管理员 | 开发环境不配 `INIT_ADMIN_PASSWORD` 时用内置默认 `ChangeMe_2026_Admin`；生产必须显式设置（≥12 位含大小写与数字） | 生产留空则跳过创建，无管理员可登录 |
+| 数据库 | 默认 `DATABASE_URL=file:./dev.db` + `SYSTEM_DATABASE_URL=file:../system.db`，SQLite 零外部依赖；`npm run dev` 内置迁移部署 | — |
+
+首次启动自动完成、**无需任何配置**：双库迁移、核心 prompts 同步（`core/*.yaml` → 数据库 ACTIVE 镜像）、初始管理员创建、学习者卡库自动种子 200 张默认金标卡（仅卡库为空时；`WENFLOW_SEED_LEARNER_CARDS=false` 可关闭）。
+
+**第 2 档：按需增强（不配 → 对应能力整体降级，fail-open，不报错）**
+
+| 家族 | 环境变量 | 配置后提供 | 不配的降级行为 |
+|------|----------|-----------|---------------|
+| 基础设施模型 · Embedding | `EMBEDDING_API_URL/KEY/MODEL`（默认 `BAAI/bge-m3`） | 资料语义检索、语义打包、向量侧车 | 回退关键词/窗口路径；也可在管理端「模型与接入 → 基础设施模型」配置（优先生效） |
+| 基础设施模型 · Rerank | `RERANK_API_URL/KEY/MODEL`（默认 `BAAI/bge-reranker-v2-m3`；密钥留空沿用 Embedding 的） | 召回后语义重排 | 同上 |
+| 决策模型（decision-gate） | `DECISION_PROVIDER`（默认 `alibaba`）+ 对应密钥 | 资料质量闸门的判定 | 闸门自动按放行处理，不阻塞路径生成 |
+| 联网搜索 / 抓取 | `SEARCH_*` / `FETCH_*`（TinyFish 免费） | 目标资料采集（找 URL + 取正文） | 资料采集外挂不可用，其余流程正常 |
+| 生图 | `IMAGE_PROVIDER/URL/KEY/MODEL` | 插件生图外挂 | 插件页显示不可用 |
+| 离线质量评审 | `OFFLINE_EVAL_*` | 课堂/路径质量离线评审 | 评审不可用，不影响在线教学 |
+
+**第 3 档：访问拓扑（本机玩可全部默认；远程/反代必改）**
+
+`CORS_ORIGIN`（去掉尾部 `/`）、`TRUST_PROXY`（直连后端的代理 IP/CIDR，禁止 `true`）、`ADMIN_ACCESS_MODE`（`private` 默认 = 本机+局域网）、`ADMIN_ALLOWED_IPS`、`FRONTEND_URL`。
+
+判定是否配够：`npm run doctor`（只读体检）与 `/readyz`（`aiConfiguration=warning` 即第 1 档 AI 密钥未配真实值）。
+
 ### 后端配置（`backend/.env`）
 
 推荐方式：
@@ -126,7 +159,12 @@ npm run env:setup
 | `SECRET_ENCRYPTION_CURRENT_KEY_ID` | 当前数据库 Secret 加密 Key ID | `v1` |
 | `SECRET_ENCRYPTION_KEYS` | `keyId:32字节Base64` Keyring，生产必填 | `v1:base64-key` |
 | `AI_API_URL` | AI 服务地址 | `https://api.deepseek.com` |
-| `AI_API_KEY` | AI API 密钥 | `sk-xxx` |
+| `AI_API_KEY` | AI API 密钥（对话/推理/评测 LLM 网关共用的主密钥） | `sk-xxx` |
+| `AI_MODEL` / `AI_MODEL_REASONING` | 对话与推理槽默认模型（评测槽沿用对话槽） | `deepseek-v4.1-flash` |
+| `EMBEDDING_API_URL` / `EMBEDDING_MODEL` | 基础设施模型：向量化（资料语义层；不配则 fail-open 回退关键词） | `https://…/v1`、`BAAI/bge-m3` |
+| `RERANK_API_URL` / `RERANK_MODEL` | 基础设施模型：重排（密钥留空沿用 `EMBEDDING_API_KEY`） | `BAAI/bge-reranker-v2-m3` |
+| `DECISION_PROVIDER` | 决策模型 provider 降级链（资料质量闸门） | `alibaba` |
+| `SEARCH_API_KEY` / `FETCH_API_KEY` | 联网搜索与抓取外挂密钥（TinyFish 免费） | `tfk-…` |
 | `DATABASE_URL` | 本地 SQLite 数据库路径 | `file:./dev.db` |
 | `CORS_ORIGIN` | 允许来源（逗号分隔） | `https://demo.example.com` |
 | `FRONTEND_URL` | 前端主地址 | `https://demo.example.com` |
