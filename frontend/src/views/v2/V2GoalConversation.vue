@@ -182,12 +182,13 @@
             <li class="stage-nav__item" :class="stageCls(2)"><i>2</i>确认方案</li>
             <li class="stage-nav__item" :class="stageCls(3)"><i>3</i>生成路径</li>
           </ol>
-          <!-- 方案被 Esc/关闭后提供重开入口，消除「关掉就找不回」的死路 -->
+          <!-- 方案被 Esc/关闭后提供重开入口，消除「关掉就找不回」的死路
+              （2026-10-31 起与输入区上方的协商入口条同一处理器） -->
           <button
             v-if="proposalDismissed && live.proposal && live.stage === 'proposing'"
             type="button"
             class="chat__show-proposal"
-            @click="proposalDismissed = false"
+            @click="openProposalReview"
           >查看方案</button>
           <button type="button" class="chat__clear" @click="doReset">清空重聊</button>
         </div>
@@ -313,6 +314,13 @@
             >{{ q.text }}</button>
           </div>
         </div>
+        <!-- 方案协商入口（2026-10-31 一锤定音修复）：proposing 不再自动盖 modal，
+             方案先在对话流里完整呈现、可直接回复继续调整（一轮二轮都行）；
+             这颗按钮是显式确认入口——点开方案卡审阅，确认动作仍只发生在卡内 -->
+        <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
+          <span class="proposal-invite__hint">方案已就绪——回复即可继续调整，满意了再确认</span>
+          <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">查看方案并确认</button>
+        </div>
         <!-- 输入区：对话卡内的底条（2026-10-06 归位）——回形针资料入口内置输入框，
              已传资料 chips 浮在输入框上方；输入框本身是拖放目标。
              它是 .chat 的最后一个 flex 子项（flex:0 0 auto），宽度天然等于对话列：
@@ -415,7 +423,7 @@
             class="proposal__x"
             aria-label="关闭方案确认"
             :title="CLOSE_ESC_HINT"
-            @click="proposalDismissed = true"
+            @click="proposalDismissed = true; proposalReviewRequested = false"
           >×</button>
         </div>
 
@@ -540,9 +548,9 @@
         <div class="proposal__actions proposal__actions--center">
           <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
           <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->
-          <button v-if="live.stage === 'proposing' && live.proposal" type="button" class="btn-ghost" @click="phase = 'preview'">返回方案</button>
+          <button v-if="live.stage === 'proposing' && live.proposal" type="button" class="btn-ghost" @click="phase = 'preview'; proposalReviewRequested = false">返回方案</button>
           <!-- 留在本页：done 态此前只有 Esc 一个退出途径（触屏无 Esc），补显式次级出口 -->
-          <button type="button" class="btn-ghost" @click="proposalDismissed = true">留在本页</button>
+          <button type="button" class="btn-ghost" @click="proposalDismissed = true; proposalReviewRequested = false">留在本页</button>
         </div>
       </div>
     </div>
@@ -1012,13 +1020,17 @@ const stageLabel = computed(() => {
   return remain > 0 ? `还差 ${remain} 项关键信息` : '关键信息已收齐';
 });
 
-/** Escape 关闭方案浮层（状态保留，对话可继续）；新提案到达时重新显示。
-    注意：声明必须早于 showProposal computed——watch(showProposal, …) 在 setup 期
-    立即求值该 computed，晚于声明会撞 TDZ 导致整个路由白屏（P0 回归）。 */
+/** Escape 关闭方案浮层（状态保留，对话可继续）。
+    【2026-10-31 一锤定音修复】proposing 阶段不再自动弹浮层：方案先在对话流里完整落地
+    （AI 本来就以「你看要不要调整？」收尾，后端非确认回复会再出新方案——多轮协商本就存在），
+    浮层只在用户点「查看方案并确认」显式进入时出现；generating/done 两个阶段仍自动出现
+    （那是生成进度与结果面板，不是方案本身）。 */
 const proposalDismissed = ref(false);
+/** 用户显式请求查看方案卡（对话流内的确认入口按钮） */
+const proposalReviewRequested = ref(false);
 
 const showProposal = computed(
-  () => !proposalDismissed.value && ((live.stage === 'proposing' && !!live.proposal) || phase.value === 'generating' || phase.value === 'done')
+  () => !proposalDismissed.value && (proposalReviewRequested.value || phase.value === 'generating' || phase.value === 'done')
 );
 /* 焦点管理（P2）：浮层打开把焦点移入对话框（读屏按 dialog 播报、Esc 立即可用），
    关闭时归还原焦点，键盘用户不至于被「丢」在页面里 */
@@ -1037,13 +1049,21 @@ watch(showProposal, (open) => {
 function onProposalKey(e: KeyboardEvent) {
   if (e.key === 'Escape' && showProposal.value && !live.sending) {
     proposalDismissed.value = true;
+    proposalReviewRequested.value = false;
   }
 }
 /** 点遮罩关闭：仅 done 态（preview 需用户显式选「确认/再补充」，generating 需等/停止） */
 function onOverlayBackdrop() {
-  if (phase.value === 'done') proposalDismissed.value = true;
+  if (phase.value === 'done') {
+    proposalDismissed.value = true;
+    proposalReviewRequested.value = false;
+  }
 }
-watch(() => live.proposal, () => { proposalDismissed.value = false; });
+/** 对话流内的显式确认入口：打开方案卡审阅（替代旧的 stage 翻转即弹 modal） */
+function openProposalReview() {
+  proposalDismissed.value = false;
+  proposalReviewRequested.value = true;
+}
 
 function stageCls(i: number) {
   return {
@@ -1135,6 +1155,9 @@ async function startWith(seed: string) {
 async function doConfirm() {
   if (live.sending) return;
   confirmError.value = false;
+  // 生成/完成面板取代审阅卡（浮层从审阅态切到进度态，不被 dismissed 拦住）
+  proposalDismissed.value = false;
+  proposalReviewRequested.value = false;
   phase.value = 'generating';
   try {
     await live.confirm();
@@ -1986,6 +2009,28 @@ function shuffleScenes() {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
+
+/* ---------- 方案协商入口条（2026-10-31 一锤定音修复） ----------
+   proposing 不再自动盖 modal 后，这里是「确认动作」在对话流里的常驻入口：
+   左提示（回复可继续调整）+ 右按钮（打开方案卡审阅）。宽度同对话列，贴输入区上方。 */
+.proposal-invite {
+  flex: 0 0 auto;
+  margin: 0 16px 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 34%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+}
+.proposal-invite__hint {
+  font-size: var(--mk-fs-m, 13px);
+  color: var(--mk-muted, #8b93a3);
+  min-width: 0;
+}
+.proposal-invite__btn { flex: 0 0 auto; padding: 8px 16px; }
 
 /* ---------- 输入区：对话卡内的底条（2026-10-06 归位） ----------
    它是 .chat（对话卡）的最后一个 flex 子项：宽度 = 对话列，与上方气泡同列同左右缘。
