@@ -242,7 +242,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 ## 页面地图
 
 <details>
-<summary><b>学习者端（点的展开）</b></summary>
+<summary><b>学习者端（点开）</b></summary>
 
 落地页 `/` 与 `/vision`，登录 `/login`、注册 `/register`，登录后进入学习台。
 
@@ -263,7 +263,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 </details>
 
 <details>
-<summary><b>管理端场景（点的展开）</b></summary>
+<summary><b>管理端场景（点开）</b></summary>
 
 管理后台在 `/admin`，共 **19 个场景页 / 7 个分组**（另有 1 个隐藏的「运营术语表」，仅供页头帮助入口）：
 
