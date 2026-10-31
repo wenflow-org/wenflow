@@ -211,16 +211,12 @@ describe('运营中心宿主：系统工具三页签在位', () => {
     w2.unmount()
   })
 
-  it('页头不再有独立刷新钮；顶栏广播仍刷新页级读数带（导出页签一并生效）', async () => {
-    // 2026-10-18 用户拍板：四张待办读数卡升到页签栏之上，8 个页签都可见（含 export 表单页）。
-    // 2026-10-23 用户「已经有刷新，为什么还有独立刷新」：这枚页头钮撤除，
-    // 刷新入口收敛到顶栏 —— 广播（liveRefreshSeq）必须同样能重拉读数带，否则等于丢掉重试出口。
+  it('页头不再有独立刷新钮；系统页签隐藏页级读数带，顶栏广播仍可刷新', async () => {
+    // 2026-10-30 外部评审：数据导出与运维/会话/访问同属系统页签，0 值读数带不再占首屏。
     const w = await mountWithRouter(OpsHub, '/admin/ops-hub?tab=export')
     const headBtns = w.findAll('.mk-pagehead__actions > button')
     expect(headBtns.some((b) => b.text().includes('刷新')), '页头不再有第二颗刷新钮').toBe(false)
-    // 读数带在导出页签也渲染：四张卡，且位于页签栏之前（页级、非页签体内）
-    expect(w.findAll('.oh-metrics .mk-kpi')).toHaveLength(4)
-    expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
+    expect(w.find('.oh-metrics').exists()).toBe(false)
 
     const before = apiObject.adminLearningContentApi.getStats.mock.calls.length
     liveRefreshSeq.value += 1

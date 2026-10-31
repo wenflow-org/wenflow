@@ -468,21 +468,20 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
-  it('回合记录：虚拟会话两段合并且按序（一个会话就是完整旅程；卡归位 Goal 页）', async () => {
+  it('回合记录：Goal 页只补课堂段（目标段由对话卡承载；卡归位 Goal 页）', async () => {
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
     await w.findAll('.cp-stp')[0].trigger('click'); // Goal 页签（2026-10-12 四页拆分：回合记录归位 Goal 页）
     await settle();
 
+    // 2026-10-31 三轮评审 P1：Goal 页签上方「目标对话」气泡卡已全文渲染目标段，回合表
+    // 再逐字复读且时间列全是「—」——此页签只补课堂段（learn- 行），卡名改「课堂回合」
     const rows = w.findAll('.cp-turns tbody tr');
-    expect(rows).toHaveLength(3); // 1 条 Goal + 2 条课堂
+    expect(rows).toHaveLength(2); // 2 条课堂（目标段 1 条不再复读）
     expect(rows[0].find('.mk-badge').text()).toBe('虚拟学习者');
-    expect(rows[1].find('.mk-badge').text()).toBe('虚拟学习者');
-    expect(rows[2].find('.mk-badge').text()).toBe('教师');
-    expect(w.text()).toContain('3 条对话 · 目标与课堂两段');
-    // 2026-10-22 用户裁定：装配自述句整类撤除，卡头也不再挂合并规则
-    const meta = w.findAll('.mk-card__meta').find((m) => m.text().includes('目标与课堂两段'))!;
-    expect(meta.attributes('title')).toBeUndefined();
+    expect(rows[1].find('.mk-badge').text()).toBe('教师');
+    expect(w.text()).toContain('课堂回合');
+    expect(w.text()).toContain('2 条课堂对话 · 目标段由对话卡全文呈现');
 
     w.unmount();
   });

@@ -141,12 +141,12 @@
         </div>
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': toolErrors.id }">
-            <span class="mk-field__label">工具 ID</span>
+            <span class="mk-field__label">工具 ID <em class="mk-field__req">*</em></span>
             <input v-model="toolForm.id" class="mk-field__input" placeholder="例如：web-search / text-to-image" :disabled="!!toolEditingId" />
             <span v-if="toolErrors.id" class="mk-field__err">{{ toolErrors.id }}</span>
           </label>
           <label class="mk-field" :class="{ 'mk-field--error': toolErrors.name }">
-            <span class="mk-field__label">名称</span>
+            <span class="mk-field__label">名称 <em class="mk-field__req">*</em></span>
             <input v-model="toolForm.name" class="mk-field__input" placeholder="例如：网页搜索" />
             <span v-if="toolErrors.name" class="mk-field__err">{{ toolErrors.name }}</span>
           </label>
@@ -167,7 +167,7 @@
             </label>
           </div>
           <label class="mk-field" :class="{ 'mk-field--error': toolErrors.endpoint }">
-            <span class="mk-field__label">服务地址</span>
+            <span class="mk-field__label">服务地址 <em class="mk-field__req">*</em></span>
             <input
               v-model="toolForm.endpoint"
               class="mk-field__input"
@@ -183,7 +183,7 @@
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" @click="toolOpen = false">取消</button>
-          <button type="button" class="mk-btn mk-btn--primary" :disabled="toolSaving" @click="saveTool">
+          <button type="button" class="mk-btn mk-btn--primary" :disabled="toolSaving || !toolForm.id.trim() || !toolForm.name.trim() || !toolForm.endpoint.trim()" @click="saveTool">
             {{ toolSaving ? '保存中…' : '保存' }}
           </button>
         </div>
@@ -354,9 +354,11 @@ function membersText(p: PluginRow): string {
   if (p.availability) parts.push(p.availability.text)
   return parts.join(' · ')
 }
-/** MCP 工具类型枚举 → 中文（下拉与表格同一套，避免同屏中英两套） */
+/** MCP 工具类型枚举 → 中文（下拉与表格同一套，避免同屏中英两套）。
+    http 档叫「HTTP 工具」而非「HTTP 接口」：连接方式下拉的 http 档已叫后者，
+    并排两框曾显示一模一样的「HTTP 接口」，读作绑定写重（2026-10-31 三轮评审）。 */
 const MCP_TYPE_TEXT: Record<string, string> = {
-  http: 'HTTP 接口', code: '代码执行', search: '搜索', filesystem: '文件系统', image: '生图'
+  http: 'HTTP 工具', code: '代码执行', search: '搜索', filesystem: '文件系统', image: '生图'
 }
 const mcpTypeText = (t: string) => MCP_TYPE_TEXT[t] || t
 

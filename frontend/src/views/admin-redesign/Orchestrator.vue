@@ -644,28 +644,13 @@ function layoutOrch() {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
   let out = '<defs><marker id="orchOdgArrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 z"/></marker></defs>'
   /**
-   * 组的垂直中点（2026-10-24 用户「向右下角的曲线指向下个组的中间，而不是指向第一列的
-   * agent 名字」）：组 = 阶段头 + 该阶段全部 Skill 卡 + 字段列脚，取这条内容带的中点。
-   * 不能取拉伸后的列中点（列被画布拉到同高，中点会落在列底空白里——2026-10-21 的老问题）；
-   * 也不能锚在阶段头那一行，那是标题，不是交接点。
+   * 两端锚点都取列头（标题框）中线（2026-10-31 外部评审拍板）：曲线起止固定连向每列
+   * 顶部的标题框，不再随内容带拉伸。此前的「汇入下一组内容带中点」在末列 Skill 很多时
+   * （组带 800px+）会把曲线拽出一条大斜线，末列越长越歪；锚到标题框后曲线落差只由
+   * 相邻列头的高差决定，各列等高、连线平行整齐。
    * 坐标用 offset*：列的定位祖先是 .orch-odg-canvas，头/脚的 offsetTop 已是画布坐标，
    * 且不随 zoom 变，SVG 因此不用重算。
    */
-  const groupMidY = (col: HTMLElement): number => {
-    const head = col.querySelector<HTMLElement>('.orch-odg-colhead')
-    const foot = col.querySelector<HTMLElement>('.orch-odg-foot')
-    const top = head ? head.offsetTop : col.offsetTop
-    let bottom: number
-    if (foot) {
-      bottom = foot.offsetTop + foot.offsetHeight
-    } else {
-      const nodes = col.querySelectorAll<HTMLElement>('.orch-odg-node')
-      const last = nodes[nodes.length - 1]
-      bottom = last ? last.offsetTop + last.offsetHeight : col.offsetTop + col.offsetHeight
-    }
-    return Math.round((top + bottom) / 2)
-  }
-  /** 出发端仍取阶段头中线：每条线都从本组标题右侧出发，向右下汇入下一组中点 */
   const headMidY = (col: HTMLElement): number => {
     const head = col.querySelector<HTMLElement>('.orch-odg-colhead')
     return head ? head.offsetTop + Math.round(head.offsetHeight / 2) : col.offsetTop
@@ -676,9 +661,9 @@ function layoutOrch() {
     const x1 = a.offsetLeft + a.offsetWidth + 2
     const y1 = headMidY(a)
     const x2 = b.offsetLeft - 6
-    const y2 = groupMidY(b)
-    /* 曲线从本组标题右侧出发，向右下角汇入下一组中点：两端切线都水平——离开时不斜切
-       标题行，到达时箭头水平扎进组心；纵向落差全部在跨列间隙里完成，不压卡片。 */
+    const y2 = headMidY(b)
+    /* 曲线在两列标题框之间平走过河：两端切线都水平——离开时不斜切标题行，
+       到达时箭头水平扎进下一列标题框；纵向落差全部在跨列间隙里完成，不压卡片。 */
     const dx = Math.max(26, Math.round((x2 - x1) / 2))
     const d = `M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`
     out += `<path class="orch-odg-edge" d="${d}" marker-end="url(#orchOdgArrow)"/>`

@@ -115,11 +115,11 @@
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">{{ TRACE_FIELD_LABEL }}</span>
-                <input v-model="traceId" class="mk-filter__input" :aria-label="TRACE_FIELD_LABEL" @keydown.enter="applyServerQuery()" />
+                <input v-model="traceId" class="mk-filter__input" :aria-label="TRACE_FIELD_LABEL" placeholder="粘贴后回车定位" @keydown.enter="applyServerQuery()" />
               </label>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">会话 ID</span>
-                <input v-model="sessionId" class="mk-filter__input" aria-label="按会话 ID 筛选" @keydown.enter="applyServerQuery()" />
+                <input v-model="sessionId" class="mk-filter__input" aria-label="按会话 ID 筛选" placeholder="粘贴后回车筛选" @keydown.enter="applyServerQuery()" />
               </label>
             </div>
           </div>
@@ -307,10 +307,22 @@
                             <span v-if="promptOf(log)!.tokens">{{ promptOf(log)!.tokens }}</span>
                             <span v-if="promptOf(log)!.errorCode">{{ errorCodeLabel(promptOf(log)!.errorCode) ?? `[${promptOf(log)!.errorCode}]` }} {{ promptOf(log)!.errorMessage }}</span>
                           </div>
-                          <pre v-if="promptOf(log)!.userPayload">{{ prettyPayload(promptOf(log)!.userPayload) }}</pre>
-                          <pre v-if="promptOf(log)!.rawModelOutput">{{ prettyPayload(promptOf(log)!.rawModelOutput) }}</pre>
-                          <pre v-if="promptOf(log)!.extractedJson">{{ prettyPayload(promptOf(log)!.extractedJson) }}</pre>
-                          <pre v-if="promptOf(log)!.normalizedOutput">{{ prettyPayload(promptOf(log)!.normalizedOutput) }}</pre>
+                          <template v-if="promptOf(log)!.userPayload">
+                            <span class="tline__sub-label">请求消息</span>
+                            <pre>{{ prettyPayload(promptOf(log)!.userPayload) }}</pre>
+                          </template>
+                          <template v-if="promptOf(log)!.rawModelOutput">
+                            <span class="tline__sub-label">模型原文</span>
+                            <pre>{{ prettyPayload(promptOf(log)!.rawModelOutput) }}</pre>
+                          </template>
+                          <template v-if="promptOf(log)!.extractedJson">
+                            <span class="tline__sub-label">抽取 JSON</span>
+                            <pre>{{ prettyPayload(promptOf(log)!.extractedJson) }}</pre>
+                          </template>
+                          <template v-if="promptOf(log)!.normalizedOutput">
+                            <span class="tline__sub-label">归一化结果</span>
+                            <pre>{{ prettyPayload(promptOf(log)!.normalizedOutput) }}</pre>
+                          </template>
                         </div>
                         <p v-if="detailFailed[log.id]" class="tline__none tline__none--err">详情拉取失败，请稍后重试</p>
                         <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无请求内容记录</p>
@@ -435,7 +447,8 @@ const agentFilter = ref('')
    后两类都不传 timeRange（后端枚举校验会 400），换算成 startTime/endTime（ISO）下发——
    后端精确时间优先且 statsWhere 与行查询同窗口，口径一致。 */
 type ExecTimeRange = 'today' | 'yesterday' | 'week' | 'month' | 'all' | '15m' | '1h' | 'custom'
-const timeRange = ref<ExecTimeRange>('today')
+/* 默认近 7 天：侧栏「执行日志」角标统计的是近 7 天失败数，默认窗口必须同口径 */
+const timeRange = ref<ExecTimeRange>('week')
 const timeRangeOptions: Array<{ value: ExecTimeRange; label: string }> = [
   { value: '15m', label: '近 15 分钟' },
   { value: '1h', label: '近 1 小时' },
@@ -492,7 +505,7 @@ function presetToRange(r: ExecTimeRange): { start: string; end: string } {
   }
 }
 /** 上一次非自定义档（切入自定义时按它回填始末） */
-let lastPresetRange: ExecTimeRange = 'today'
+let lastPresetRange: ExecTimeRange = 'week'
 /** 切档：入自定义先按上一档回填，随后下发；区间矛盾（开始晚于结束）时不下发，行内已报错。
     始末输入就地展开在时间胶囊下方，不再打开「按 ID 定位」弹层。 */
 function onTimeRangeChange(value: string) {
@@ -893,7 +906,7 @@ watch(
     sessionId.value = session
     timeRange.value = (EL_TIME_RANGES as readonly string[]).includes(range)
       ? (range as typeof timeRange.value)
-      : 'today'
+      : 'week' /* 无 range 参数（直接进页）= 页面默认档近 7 天；today 只由显式深链带入（2026-10-31 外部评审复检：fallback=today 让直接打开又回到今天，与侧栏 14 条口径冲突） */
     /* 自定义档的始末：URL 存本地 datetime-local 串，直接回填输入框（不转 ISO，避免时区往返） */
     customStart.value = range === 'custom' ? from : ''
     customEnd.value = range === 'custom' ? to : ''
@@ -916,7 +929,7 @@ function filterSnapshot(): Record<string, string> {
   if (agentFilter.value) desired.agent = agentFilter.value
   if (statusFilter.value) desired.status = statusFilter.value
   if (errorCategory.value) desired.cat = errorCategory.value
-  if (timeRange.value !== 'today') desired.range = timeRange.value
+  if (timeRange.value !== 'week') desired.range = timeRange.value /* 默认档近 7 天不写 URL，与时间档默认值同一口径 */
   /* 自定义档：始末各占一键（缺端不写），URL 存本地串以便刷新/分享精确还原 */
   if (timeRange.value === 'custom') {
     if (customStart.value) desired.from = customStart.value
@@ -957,9 +970,9 @@ const skeletonVisible = computed(() => (liveLoading.value || liveLogsLoading.val
 const listRefreshing = computed(() => (liveLoading.value || liveLogsLoading.value) && logs.value.length > 0)
 /* 筛选弹层生效计数（EG17）：目前面板内仅 Trace ID / 会话 ID 两项；
    面板收起时按钮上仍有徽章，状态不丢。 */
-/** 时间档是否偏离默认（'today'）：自定义档即便两端留空也算非默认（用户显式选过自定义）。
+/** 时间档是否偏离默认（'week'）：自定义档即便两端留空也算非默认（用户显式选过自定义）。
     与 isFiltered、清除筛选同一判据（单源，勿各写一遍）。 */
-const timeRangeActive = computed(() => timeRange.value !== 'today')
+const timeRangeActive = computed(() => timeRange.value !== 'week')
 /** 「按 ID 定位」弹层生效数：Trace ID / 会话 ID 任一激活即计（收起也不丢状态）。
     节点与时间档已提上主行，不再计入。 */
 const advancedFilterCount = computed(
@@ -1012,7 +1025,8 @@ const emptyTitle = computed(() =>
 const emptyDesc = computed(() =>
   traceMiss.value
     ? `完整值为 ${traceMiss.value}`
-    : timeRange.value === 'today' ? '今天没有执行记录' : ''
+    : timeRange.value === 'today' ? '今天没有执行记录'
+      : timeRange.value === 'week' ? '近 7 天没有执行记录' : ''
 )
 const emptyActionText = computed(() =>
   timeRange.value !== 'all' ? '查看全部时间' : isFiltered.value ? '清除筛选' : ''
@@ -1175,8 +1189,8 @@ function clearFilter() {
   traceId.value = ''
   sessionId.value = ''
   errorCategory.value = ''
-  timeRange.value = 'today' // 时间范围计入 isFiltered 口径，清除时需一并还原（默认=当天）
-  lastPresetRange = 'today'
+  timeRange.value = 'week' // 时间范围计入 isFiltered 口径，清除时需一并还原（默认=近 7 天）
+  lastPresetRange = 'week'
   customStart.value = ''
   customEnd.value = ''
   clearInvestigation()
@@ -1570,6 +1584,7 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
 .tline__none--err { color: var(--mk-red); font-weight: 600; }
 .tline__section { display: grid; gap: 4px; }
 .tline__label { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
+.tline__sub-label { display: block; margin: 8px 0 4px; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
 .tline__label--err { color: var(--mk-red); }
 
 /* 重试时间线 */

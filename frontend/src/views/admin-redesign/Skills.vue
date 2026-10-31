@@ -205,7 +205,10 @@
                  只读的 /admin/model-registry，把「registry 默认」解析成实际链，拉不到显 — 不编造 -->
             <section class="mk-kpi-grid" aria-label="Skill 模型路由统计">
               <MkKpi label="承载模型" :value="routeModelCount" />
-              <MkKpi label="已路由 Skill" :value="routedSkillCount" />
+              <!-- 2026-10-31 三轮评审：本卡 29 与下方覆盖表「共 31 个技能」上下相距 20px，
+                   两个裸数并排读作口径打架。hint 引用覆盖表上报的全量数（31 含未入目录列的
+                   辅助 Skill），29/31 的关系读一行就闭合 -->
+              <MkKpi label="已路由 Skill" :value="routedSkillCount" :hint="coverageReady && coverageTotal ? `覆盖表全量 ${coverageTotal} 个技能，未路由的走平台默认` : ''" />
               <MkKpi label="主模型覆盖" :value="primaryCoverageText" />
               <!-- 降级策略：真实口径 = 自定义兜底链计数；无自定义链时给出 registry 默认链的
                    解析结果（F7-5：空数组=「无（空链）」）。registry 未加载显 —，不伪装 -->
@@ -223,6 +226,7 @@
               :platform-default-reasoning-model="registryDefaultReasoningModel"
               @applied="refreshCoverage"
               @open-skill="openSkillFromBulk"
+              @loaded="coverageTotal = $event"
             />
           </div>
         </div>
@@ -507,6 +511,8 @@ const skillMetaById = ref<Map<string, SkillMetaEntry>>(new Map())
 const coverageById = ref<Map<string, SkillRouteEntry>>(new Map())
 /** coverage 是否成功拉到（空列表也算就绪）：区分「没拉到」与「确实无模型配置」 */
 const coverageReady = ref(false)
+/* 覆盖表上报的全量技能数（2026-10-31 三轮评审）：KPI 口径说明与表内「共 N 个技能」同源 */
+const coverageTotal = ref(0)
 
 /* 列表排序（2026-10-28 重设计：列表没有表头，排序走工具条下拉 + 方向按钮）。
    默认「需关注优先」= 失败数降序（问题浮顶，保持既有行为）。

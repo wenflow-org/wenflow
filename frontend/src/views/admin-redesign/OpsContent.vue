@@ -205,7 +205,7 @@
                 <div class="oc-progress">
                   <span class="mk-minibar"><span class="mk-minibar__fill" :data-tone="progressTone(p)" :style="{ width: progressPct(p) + '%' }"></span></span>
                   <span class="oc-progress__num">{{ progressPct(p) }}%</span>
-                  <span class="oc-progress__count mk-cell-sub">{{ p.completedMilestones }}/{{ p.totalMilestones }}</span>
+                  <span class="oc-progress__count mk-cell-sub">{{ progressCount(p) }}</span>
                 </div>
               </td>
               <td v-if="!hiddenCols.has('updated')" :title="fmtDate(activityAt(p))">
@@ -470,9 +470,16 @@ const paged = computed(() => {
 })
 
 const progressPct = (p: PathRow) => {
+  /* 2026-10-31 外部评审 P1-2「进度自相矛盾」：只按已完结里程碑算，学到 1/13 课的路径在列表
+     永远 0%（0/4），而学员概览画的是子任务进度 ~10%。优先子任务口径（与概览/座舱 Path 步点
+     同源同数）；旧部署/无任务数据回退里程碑口径。 */
+  if (p.totalTasks) return Math.min(100, Math.round(((p.completedTasks ?? 0) / p.totalTasks) * 100))
   if (!p.totalMilestones) return 0
   return Math.min(100, Math.round((p.completedMilestones / p.totalMilestones) * 100))
 }
+/* 进度分母读数与百分比同口径（P1-2）：有子任务计数显示 子任务完成数，否则退里程碑 */
+const progressCount = (p: PathRow) =>
+  p.totalTasks ? `${p.completedTasks ?? 0}/${p.totalTasks}` : `${p.completedMilestones}/${p.totalMilestones}`
 /* 进度条三态（P2）：100% = 绿（ok）/ 失败 = 红（bad）/ 其余（含进行中）= 默认中性蓝——
    此前进行中一律琥珀（warn），满屏琥珀稀释真异常，也读不出「快好了」。 */
 const progressTone = (p: PathRow) => {

@@ -81,6 +81,10 @@ router.get('/paths', async (req: Request, res: Response) => {
           estimatedHours: p.estimatedHours,
           totalMilestones: p.totalMilestones,
           completedMilestones: p.completedMilestones,
+          // 子任务口径进度（2026-10-31 外部评审 P1-2）：与学员概览/座舱 Path 步点同源，
+          // 避免列表只按已完结里程碑算成 0%
+          totalTasks: p.milestones.reduce((acc, m) => acc + m.subtasks.length, 0),
+          completedTasks: p.milestones.reduce((acc, m) => acc + m.subtasks.filter((t) => t.status === 'completed').length, 0),
           aiGenerated: p.aiGenerated,
           createdAt: p.createdAt,
           updatedAt: p.updatedAt,

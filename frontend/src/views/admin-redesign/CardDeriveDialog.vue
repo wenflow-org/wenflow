@@ -15,7 +15,8 @@
         </div>
 
         <div class="mk-modal__body">
-          <!-- 选卡步：只有 openPicker 进来才有 -->
+          <!-- 选卡步：只有 openPicker 进来才有。
+               2026-10-31 二轮评审 P1：只列 2 字人名没法区分卡——人名右侧跟卡面目标摘要（浅灰小字）。 -->
           <template v-if="pickerCards.length">
             <p class="cdd-lead">已选 {{ pickerPicked.length }} 张身份卡</p>
             <!-- 选卡搜索（M-4，2026-10-29 夜审）：卡库一次给全（实测 286+ 张），找特定卡
@@ -36,7 +37,7 @@
                     :checked="pickerPicked.includes(c.profileId)"
                     @change="togglePickCard(c.profileId)"
                   />
-                  <span class="cdd-task__title" :title="c.goal || c.name">{{ c.name }}</span>
+                  <span class="cdd-task__title" :title="c.goal || c.summary || c.name">{{ c.name }}<span v-if="c.summary" class="cdd-card__summary">{{ c.summary }}</span></span>
                 </label>
               </li>
             </ul>
@@ -152,8 +153,8 @@ const failed = ref<Array<{ profileId: string; name: string; reason: string }>>([
 const note = ref('')
 /** profileId → 勾中的任务 id（默认全选：一张卡的任务通常都要跑，取消个别才是少数派操作） */
 const picked = ref<Record<string, string[]>>({})
-/** 选卡步（openPicker 才有）：候选卡 + 已勾的卡 id（goal 供搜索命中，2026-10-29 M-4） */
-const pickerCards = ref<Array<{ profileId: string; name: string; goal?: string }>>([])
+/** 选卡步（openPicker 才有）：候选卡 + 已勾的卡 id（goal 供搜索命中，2026-10-29 M-4；summary = 卡面目标，跟人名一起展示——2026-10-31 三轮评审，与上游字段兼容并存） */
+const pickerCards = ref<Array<{ profileId: string; name: string; goal?: string; summary?: string }>>([])
 const pickerPicked = ref<string[]>([])
 /** 选卡搜索：卡多时（实测 286+ 张）平铺长列表找不到特定卡，按名称 / 卡 id / 目标过滤 */
 const pickerKeyword = ref('')
@@ -161,7 +162,7 @@ const filteredPickerCards = computed(() => {
   const kw = pickerKeyword.value.trim().toLowerCase()
   if (!kw) return pickerCards.value
   return pickerCards.value.filter((c) =>
-    [c.name, c.profileId, c.goal]
+    [c.name, c.profileId, c.goal, c.summary]
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(kw))
   )
@@ -221,7 +222,7 @@ function openWith(profileIds: string[]) {
 }
 
 /** 选卡 → 选任务：候选卡一次给全，勾中的卡进入下一步 */
-function openPicker(cards: Array<{ profileId: string; name: string; goal?: string }>) {
+function openPicker(cards: Array<{ profileId: string; name: string; goal?: string; summary?: string }>) {
   if (!cards.length) return
   pickerCards.value = cards
   pickerPicked.value = []
@@ -320,4 +321,5 @@ defineExpose({ openWith, openPicker })
 .cdd-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 320px; overflow-y: auto; }
 .cdd-card__pick { align-items: flex-start; }
 .cdd-card__pick input[type='checkbox'] { accent-color: var(--mk-blue, #2f6ae0); cursor: pointer; margin-top: 2px; flex: none; }
+.cdd-card__summary { margin-left: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 </style>

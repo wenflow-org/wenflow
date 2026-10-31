@@ -185,8 +185,9 @@ export function useCockpitStages(deps: {
   /** 阶段迷你状态文本 */
   function stageMiniStatus(st: StageKey) {
     if (st === 'goal') {
-      const n = goalConversationMessages.value.length
-      return n ? `${n} 轮` : (stageDone(st) ? '已完成' : '')
+      /* 2026-10-31 三轮评审 P1：原 `${全量消息数} 轮` 把「5 学习者发言 + 5 平台回复」
+         说成「目标 10 轮」，与步点副标「学习者发言 N」同屏打架。统一读 goalRoundText。 */
+      return goalRoundText.value || (stageDone(st) ? '已完成' : '')
     }
     if (st === 'path') {
       return pathMilestonesView.value.length ? `${pathMilestonesView.value.length} 个里程碑` : ''

@@ -515,23 +515,15 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     coreMock.mockResolvedValue({ data: {} })
   })
 
-  it('版本页签：版本表格（版本/名称/状态）+ 下方版本管理区块；日期/作者无源不渲染', async () => {
+  it('版本页签：只保留 VersionsTab 单一入口，不再重复渲染 Prompt 版本表', async () => {
     const w = mountDetail()
     await settle()
     await w.findAll('.mk-subtab')[3].trigger('click') // 版本（第 4 个）
     await nextTick()
 
-    const rows = w.find('.mk-table').findAll('tbody tr')
-    expect(rows.length).toBe(2)
-    // ACTIVE 优先排前
-    expect(rows[0].text()).toContain('v2')
-    expect(rows[0].text()).toContain('生效')
-    expect(rows[1].text()).toContain('v1')
-    // 后端列表无日期/作者字段：列不出现
-    expect(w.find('.mk-table thead').text()).not.toContain('日期')
-    expect(w.find('.mk-table thead').text()).not.toContain('作者')
-    // 2026-10-15 设计页平铺：版本管理区块（VersionsTab）就地渲染在只读版本表下方
     expect(w.find('.sdp-versions').exists()).toBe(true)
+    // 2026-10-30 外部评审：顶部与页签内各画一遍 Prompt 版本，删掉顶部那份
+    expect(w.find('.skd-bloc .mk-card__title').text()).not.toBe('Prompt 版本')
 
     w.unmount()
   })
@@ -576,10 +568,10 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // 最近调用（SkillDrawer 概览迁入）：无日志窗口数据 → 明确空态
     expect(w.text()).toContain('最近调用')
     // 2026-10-08 走查 #3：原空态写「日志窗口内无调用」，与同屏近 7 天统计卡（如 27852 次调用）
-    // 互斥。改为点明两者不同源——列表是本页采样，指标走统计接口由服务端聚合。
+    // 2026-10-31 O04：列表改服务端自拉（与指标卡同窗口），采样仅作失败兜底。
     expect(w.text()).toContain('近 7 天暂无该 Skill 的调用记录')
-    expect(w.text()).toContain('统计范围与列表不同')
-    expect(w.text()).toContain('以指标卡为准')
+    expect(w.text()).toContain('与指标卡同窗口')
+    // 服务端自拉后空态与指标卡同口径（O04），不再写「统计范围与列表不同」
 
     w.unmount()
   })
@@ -606,13 +598,18 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('字段路由页签：字段流转表格（角色人话/流向/渲染/属性）+ 下方字段路由设计区块；脱敏列无源不渲染', async () => {
+  it('字段路由页签：默认流向视图（只读表）；「契约编辑」切设计区块——两套大表不再同屏堆叠', async () => {
     const w = mountDetail()
     await settle()
     await w.findAll('.mk-subtab')[5].trigger('click') // 字段路由（第 6 个）
     await nextTick()
 
-    // 平铺后本页有两处字段表（只读概览 + 设计区块的路由表）：断言只读概览那张（首个表）
+    // 2026-10-31 外部评审拍板：页签内加「流向视图 / 契约编辑」切换器，默认流向
+    expect(w.find('.skd-rswitch').exists()).toBe(true)
+    expect(w.text()).toContain('流向视图')
+    expect(w.text()).toContain('契约编辑')
+
+    // 默认流向视图：只读概览表（角色人话/流向/渲染/属性）
     const rows = w.find('.mk-table').findAll('tbody tr')
     expect(rows.length).toBe(2)
     expect(rows[0].text()).toContain('learner_state')
@@ -621,7 +618,11 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(rows[1].text()).toContain('内部')
     // 原型「脱敏」列后端无对应字段：不出现该列
     expect(w.find('.mk-table thead').text()).not.toContain('脱敏')
-    // 2026-10-15 设计页平铺：字段路由设计区块（RoutingTab，根 .sdp-routing）就地渲染
+    // 设计区块默认不挂载（切到契约编辑才拉数据）
+    expect(w.find('.sdp-routing').exists()).toBe(false)
+
+    await w.find('.skd-rswitch__btn:nth-child(2)').trigger('click')
+    await nextTick()
     expect(w.find('.sdp-routing').exists()).toBe(true)
 
     w.unmount()

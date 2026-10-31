@@ -38,7 +38,7 @@
          2026-10-14 KPI 审计：原「卡总数」卡删除——那个数与下方「卡墙」卡头「共 N 张」同屏复读。
          2026-10-26：「预置卡 / 自建卡」合成一张（两个数并排，hint 拆分）；
          「已创建实例」只留读数，跳转改卡头链接（可点这件事此前只有悬停才看得出）。 -->
-    <section class="mk-kpi-grid" aria-label="卡库构成">
+    <section class="mk-kpi-grid vlc-summary" aria-label="卡库构成">
       <MkKpi
         label="身份卡"
         :value="summary?.total ?? '—'"
@@ -62,7 +62,7 @@
           </span>
         </div>
         <div class="mk-card__head-right">
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 卡号 / 目标" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 目标 / 场景" />
           <a v-if="summary?.derived" href="#" class="mk-link" @click.prevent="goInstances">已创建实例 {{ summary.derived }} →</a>
         </div>
       </div>
@@ -141,13 +141,15 @@
             <span class="vlc-avatar" :class="`vlc-avatar--${vlAvatarIndexOf(cardName(c))}`" aria-hidden="true">{{ cardName(c).slice(0, 1) }}</span>
             <strong class="vlc-card__name" :title="cardName(c)">{{ cardName(c) }}</strong>
             <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
+            <!-- 已派生标识（2026-10-31 三轮评审 P3）：派生实例归虚拟学习者列表，卡面只报数 -->
+            <span v-if="(c.derivedCount || 0) > 0" class="mk-badge mk-badge--ok" title="该卡已派生出虚拟学习者实例（实例在虚拟学习者列表）">已派生 {{ c.derivedCount }}</span>
           </header>
           <p v-if="c.goal" class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
           <!-- 首个任务标题（2026-10-27 密度收口）：目标是抽象的（「回本，或者至少别再亏」），
                真正会被开的那节课叫「亏了三万的那只基金」——创建时要勾的就是它，卡面直接给。
                整面墙都是一张一任务的卡时不再重复「1 个任务」，只留标题。 -->
           <p v-if="c.firstTaskTitle" class="vlc-card__task" :title="c.firstTaskTitle">
-            <span class="vlc-card__task-k">任务</span>{{ c.firstTaskTitle }}
+            <span class="vlc-card__task-k">场景</span>{{ c.firstTaskTitle }}
           </p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
           <!-- 标签与卡号同处一行（2026-10-27 密度收口）：卡号只有自定义卡才有区分度，
@@ -253,6 +255,8 @@ interface CardWallEntry {
   taskCount?: number
   /** 首个任务标题（2026-10-27）：卡面上真正会被开的那节课叫什么 */
   firstTaskTitle?: string | null
+  /** 已派生实例数（2026-10-31 三轮评审 P3）：>0 时卡面标「已派生 N」，与从未用过的卡区分 */
+  derivedCount?: number
 }
 
 /* ===== 卡墙 ===== */
@@ -403,9 +407,10 @@ async function doLoadPresets() {
   }
 }
 
-/** 导入卡 → 卡导入二级页（id 为常量占位；返回卡墙时本组件重挂载自动刷新索引） */
+/** 导入卡 → 卡导入二级页（id 为常量占位；返回卡墙时本组件重挂载自动刷新索引）。
+ *  label 覆盖面包屑显示名——'new' 是路由占位不是文案（2026-10-31 二轮评审 P2）。 */
 function openImport() {
-  openSubPage('card-import', 'new')
+  openSubPage('card-import', 'new', { label: '导入卡' })
 }
 
 /* ===== 平台生产（卡库的第二个入卡口）=====
@@ -578,6 +583,8 @@ watch(liveRefreshSeq, () => {
 </script>
 
 <style scoped>
+.vlc-summary { max-width: 720px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) { .vlc-summary { grid-template-columns: minmax(0, 1fr); } }
 /* ===== 卡墙（2026-10-05 卡库改版）：自适应卡网格，260px 起步、窄档降列 ===== */
 .vlc-wall {
   display: grid;

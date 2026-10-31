@@ -100,7 +100,10 @@
         <!-- 工具条：左统计、右视图筛选。统计口径与画布着色一致（待学习 / 记忆偏弱 / 进行中 / 已掌握） -->
         <div class="mk-ge__bar">
           <div class="mk-ge__stats">
-            <span class="mk-ge__stat"><b>{{ levelNodes.length }}</b> 个概念</span>
+            <!-- 2026-10-31 二轮评审 P2：隐藏孤立点时写明「显示 X / Y」，不再让 24 与图例加总对不上 -->
+            <span class="mk-ge__stat" :title="levelNodes.length !== listNodes.length ? `另有 ${levelNodes.length - listNodes.length} 个未评估的孤立概念未画出` : undefined">
+              <b>{{ levelNodes.length !== listNodes.length ? `${listNodes.length} / ${levelNodes.length}` : levelNodes.length }}</b> 个概念
+            </span>
             <span class="mk-ge__stat"><b>{{ levelEdges.length }}</b> 条关系</span>
             <span class="mk-ge__stat mk-ge__stat--ok"><i />已掌握 <b>{{ counts.stable }}</b></span>
             <span class="mk-ge__stat mk-ge__stat--mid"><i />进行中 <b>{{ counts.learning }}</b></span>
@@ -696,8 +699,9 @@ const levelEdges = computed(() => {
   return props.edges.filter((e) => ids.has(e.fromConceptId) && ids.has(e.toConceptId))
 })
 
-/** 读屏清单与画布同口径：MkGraph 内部会按 hideIsolated 滤掉孤立节点（其 visibleNodes 逻辑）。
- *  清单若不复制这条规则，「图上看不到的概念」会出现在读屏清单里，两套信息互相矛盾 */
+/** 读屏清单与画布同口径：MkGraph 内部只裁「未评估的孤立点」（有掌握度读数的孤立
+ *  概念会画出来，2026-10-31 二轮评审），清单复制同一条规则——「图上看不到的概念」
+ *  不出现在读屏清单里，两套信息不互相矛盾 */
 const listNodes = computed(() => {
   if (!hideIsolated.value) return levelNodes.value
   const connected = new Set<string>()
@@ -705,7 +709,9 @@ const listNodes = computed(() => {
     connected.add(e.fromConceptId)
     connected.add(e.toConceptId)
   }
-  const kept = levelNodes.value.filter((n) => connected.has(n.id))
+  const kept = levelNodes.value.filter(
+    (n) => connected.has(n.id) || (n.masteryScore !== null && n.masteryScore !== undefined)
+  )
   return kept.length > 0 ? kept : levelNodes.value
 })
 
@@ -743,16 +749,20 @@ function statusKeyOf(node: MkGraphNode | null): StatusKey {
   return 'learning'
 }
 
-/** 统计口径与画布着色一致 */
+/* 统计口径 = 画布可见节点（2026-10-31 外部评审 P2-4）：此前按全部概念计数，而孤立概念被
+   「显示无关联的概念」默认过滤、画布上看不见——「🟡进行中 1」永远找不到黄点。改与画布
+   同一可见集（listNodes 已实现 hideIsolated 同款规则），图例教的色就是图里画的色；
+   「N 个概念」仍报全量，隐藏的孤立点由画布下方披露行说明。 */
 const counts = computed(() => {
   const out = { stable: 0, learning: 0, fragile: 0, unknown: 0 }
-  for (const n of levelNodes.value) out[statusKeyOf(n)] += 1
+  for (const n of listNodes.value) out[statusKeyOf(n)] += 1
   return out
 })
 
-/** 未选中节点时的侧栏建议：先弱后生，最多 5 个；已掌握的不再占位 */
+/** 未选中节点时的侧栏建议：先弱后生，最多 5 个；已掌握的不再占位。
+ *  同 counts 收窄到画布可见集——推荐一个画布上看不见、点了没反应的节点是死建议。 */
 const suggestedNodes = computed(() =>
-  [...levelNodes.value]
+  [...listNodes.value]
     .filter((n) => statusKeyOf(n) !== 'stable')
     .sort((a, b) => (a.masteryScore ?? 0) - (b.masteryScore ?? 0))
     .slice(0, 5)

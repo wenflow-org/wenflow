@@ -131,8 +131,9 @@
           <ChevronLeft :size="18" :stroke-width="1.75" aria-hidden="true" />
         </button>
         <div class="mshell__top-crumb">
+          <span v-if="topSub" class="mshell__top-sub">{{ topSub }}</span>
+          <span v-if="topSub" class="mshell__top-sep" aria-hidden="true">/</span>
           <strong class="mshell__top-title">{{ topTitle }}</strong>
-          <span v-if="topSub" class="mshell__top-sub">/ {{ topSub }}</span>
         </div>
         <div class="mshell__top-grow" aria-hidden="true"></div>
         <div class="mshell__search" ref="searchRef">
@@ -979,6 +980,7 @@ watch(
   color: var(--mk-faint);
   white-space: nowrap;
 }
+.mshell__top-sep { color: var(--mk-faint); }
 .mshell__top-grow { flex: 1 1 auto; }
 .mshell__top-btn {
   display: grid;

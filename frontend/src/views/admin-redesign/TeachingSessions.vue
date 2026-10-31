@@ -213,7 +213,7 @@
                   <strong :title="r.topic">{{ r.topic }}</strong>
                   <!-- 副行并档（2026-10-06 审核 #39）：原「学科·任务类型」与「总结摘要」两行
                        合成一条（全文仍留 title），会话列三行并回两行，行高向全站 66px 档收敛 -->
-                  <span class="mk-cell-sub" :class="{ 'ts-summary': tsSubNote(r) }" :title="sessionSubTitle(r)">{{ sessionSubText(r) }}</span>
+                  <span class="mk-cell-sub" :class="{ 'ts-summary': tsSubNote(r) }" :title="sessionSubTitle(r)">{{ sessionSubText(r) }}<span v-if="r.id" class="ts-sid mono" :title="String(r.id)"> · {{ String(r.id).slice(-8) }}</span></span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('user')">
@@ -1072,7 +1072,8 @@ defineExpose({ refreshNow })
 .ts-user .mk-cell-main { min-width: 0; flex: 1; }
 /* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
-.ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
+.ts-row td:first-child .mk-cell-sub { max-width: 300px; }
+.ts-sid { color: var(--mk-faint); font-weight: 500; }/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝 *//* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 /* 互动列（批B）：时长主值+副行。副行 messageCount/知识点 nowrap 撑到 109px 溢出 70px 单元格、

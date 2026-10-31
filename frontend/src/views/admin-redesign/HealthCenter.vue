@@ -156,10 +156,14 @@
                   <button type="button" class="hc-check__row" :aria-expanded="detailOpen(item.id)" @click="toggleDetail(item.id)">
                     <span class="hc-check__dot" :class="`hc-check__dot--${item.severity}`"></span>
                     <span class="hc-check__main">
-                      <strong>{{ item.label }}</strong>
+                      <!-- 箭头贴标题行尾（2026-10-31 外部评审）：原先挂在按钮右缘、
+                           距标题远端 ~140px，悬在计数列旁边像没绑定任何东西的孤儿箭头 -->
+                      <span class="hc-check__titleline">
+                        <strong>{{ item.label }}</strong>
+                        <span v-if="item.detail.length" class="hc-check__caret" aria-hidden="true">{{ detailOpen(item.id) ? '▾' : '▸' }}</span>
+                      </span>
                       <span>{{ item.cause }}</span>
                     </span>
-                    <span v-if="item.detail.length" class="hc-check__caret">{{ detailOpen(item.id) ? '▾' : '▸' }}</span>
                   </button>
                   <span class="hc-check__metrics">
                     <span class="hc-check__num" :title="countTitle(item)">{{ item.count }}</span>
@@ -876,6 +880,8 @@ defineExpose({ refresh })
 /* 行标题比说明高一档：异常的主语要压过 cause 小字 */
 .hc-check__main strong { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .hc-check__main span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 展开箭头贴标题尾（2026-10-31 外部评审）：不跨到行右缘 */
+.hc-check__titleline { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .hc-check__num { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
 .hc-check__sem { font-size: var(--mk-fs-micro); color: var(--mk-muted); background: var(--mk-line); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 /* 正常 / 零计数用中性底，不继承异常语义的着色 */

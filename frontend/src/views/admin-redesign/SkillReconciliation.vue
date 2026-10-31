@@ -109,15 +109,17 @@
                   </div>
                 </td>
                 <td>
-                  <span :class="['sk-rec-yn', e.row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.manifest ? '✓' : '✗' }}</span>
+                  <!-- 2026-10-31 外部评审：豁免类缺项不是错误——带豁免徽章的格子画灰色 —，
+                       不再用红 ✗ 报异常（✗ 只留给真异常） -->
+                  <span :class="['sk-rec-yn', e.row.manifest ? 'sk-rec-yn--ok' : e.row.kind === 'aux' ? 'sk-rec-yn--na' : 'sk-rec-yn--no']">{{ e.row.manifest ? '✓' : e.row.kind === 'aux' ? '—' : '✗' }}</span>
                   <span v-if="e.row.kind === 'aux' && !e.row.manifest" class="mk-badge mk-badge--muted sk-rec-tag">免注册</span>
                 </td>
                 <td>
-                  <span :class="['sk-rec-yn', e.row.registered ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.registered ? '✓' : '✗' }}</span>
+                  <span :class="['sk-rec-yn', e.row.registered ? 'sk-rec-yn--ok' : e.row.registrationExempt ? 'sk-rec-yn--na' : 'sk-rec-yn--no']">{{ e.row.registered ? '✓' : e.row.registrationExempt ? '—' : '✗' }}</span>
                   <span v-if="e.row.registrationExempt" class="mk-badge mk-badge--muted sk-rec-tag">豁免</span>
                 </td>
                 <td>
-                  <span :class="['sk-rec-yn', e.row.active ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.active ? '✓' : '✗' }}</span>
+                  <span :class="['sk-rec-yn', e.row.active ? 'sk-rec-yn--ok' : e.row.noPromptFile ? 'sk-rec-yn--na' : 'sk-rec-yn--no']">{{ e.row.active ? '✓' : e.row.noPromptFile ? '—' : '✗' }}</span>
                   <span v-if="e.row.noPromptFile" class="mk-badge mk-badge--muted sk-rec-tag">纯函数</span>
                 </td>
                 <td>
@@ -373,9 +375,15 @@ function recDotTone(row: RecRow) {
   return "idle";
 }
 /** 行级异常判据（2026-10-14）：三源任一为 ✗ 即整行弱告警底——与三列 ✓/✗ 的取值同源，
-    避免「列上有红 ✗ 但整行看着跟健康行一样」 */
+    避免「列上有红 ✗ 但整行看着跟健康行一样」。
+    2026-10-31 外部评审：豁免类缺项不算异常——aux 无 manifest（免注册）、
+    registrationExempt（豁免）、noPromptFile（纯函数不常驻）不参与标记，
+    整行不再泛红（learner-model 行此前被误报成告警行） */
 function recRowFlagged(row: RecRow): boolean {
-  return !row.manifest || !row.registered || !row.active;
+  if (!row.manifest && row.kind !== 'aux') return true
+  if (!row.registered && !row.registrationExempt) return true
+  if (!row.active && !row.noPromptFile) return true
+  return false
 }
 function recGateDetail(completion: SkillCompletion): string {
   const gates: Array<[string, string]> = [
@@ -423,6 +431,8 @@ defineExpose({ refresh, recReport, recDiff });
 .sk-rec-yn { font-weight: 700; font-size: var(--mk-fs-body); }
 .sk-rec-yn--ok { color: var(--mk-green); }
 .sk-rec-yn--no { color: var(--mk-red); }
+/* 豁免类缺项（免注册/豁免/纯函数）：中性灰 —，不参与红绿语义（2026-10-31 外部评审） */
+.sk-rec-yn--na { color: var(--mk-faint); font-weight: 400; }
 /* 免注册 / 豁免 / 纯函数：语气归 mk-badge--muted，本类只留与 ✓/✗ 的间距 */
 .sk-rec-tag { margin-left: 4px; vertical-align: 1px; }
 .sk-rec-orphans { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px dashed var(--mk-line); font-size: var(--mk-fs-micro); color: var(--mk-muted); }

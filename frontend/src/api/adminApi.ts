@@ -2345,6 +2345,9 @@ export interface LearningPathRow {
   estimatedHours: number | null;
   totalMilestones: number;
   completedMilestones: number;
+  /** 子任务口径进度（2026-10-31 外部评审 P1-2）：与学员概览/座舱 Path 步点同源；旧部署缺省回退里程碑口径 */
+  totalTasks?: number;
+  completedTasks?: number;
   aiGenerated: boolean;
   createdAt: string;
   updatedAt: string;

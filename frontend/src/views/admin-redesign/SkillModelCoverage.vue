@@ -218,7 +218,7 @@ import { useTableSort } from './useTableSort'
     仍用挂载时的旧值，与矩阵同屏互相打架）；行内 Skill 名 → 打开该 Skill 运行时页签。
     2026-10-24 起宿主把原只读路由表的上下文（归属 Agent / 完成度 / 平台默认兜底链解析）
     作为映射传入，两张表合成一张。 */
-const emit = defineEmits<{ (e: 'applied'): void; (e: 'open-skill', skillId: string): void }>()
+const emit = defineEmits<{ (e: 'applied'): void; (e: 'open-skill', skillId: string): void; (e: 'loaded', total: number): void }>()
 
 const props = withDefaults(defineProps<{
   /** 嵌在宿主面板里（Skills.vue 的批量模型配置弹窗）：不渲染 mk-card 卡壳与自己的标题 */
@@ -394,9 +394,13 @@ async function load() {
     const res = await adminSkillsApi.getSkillModelCoverage()
     const data = res.data?.data as { skills?: Row[] } | undefined
     rows.value = data?.skills || []
+    /* 2026-10-31 三轮评审：宿主 KPI「已路由 Skill」的口径说明引用本表全量数，
+       否则弹窗里 29（宿主目录）与 31（本表）两个裸数上下并排读作口径打架 */
+    emit('loaded', rows.value.length)
   } catch (e) {
     loadErr.value = httpErrText(e)
     rows.value = []
+    emit('loaded', 0)
   } finally {
     loading.value = false
   }

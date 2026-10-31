@@ -1047,10 +1047,12 @@ const verdictText = computed(() => {
   outline: none;
 }
 .wf-tracepick__search:focus { border-color: var(--mk-blue); }
-/* 包裹层只限宽，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉） */
+/* 包裹层只限宽，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉）。
+   max-width 320 收紧曾把「23:59:49 · 2 span · 20.1s · …1…」截到只剩一个 1 字
+   （2026-10-31 三轮评审）：放宽到 460 容纳完整 traceLabel，窄屏仍可被压缩 */
 .wf-tracepick__select {
-  max-width: 320px;
-  min-width: 0;
+  max-width: 460px;
+  min-width: 240px;
 }
 
 .wf-ruler {
@@ -1080,6 +1082,14 @@ const verdictText = computed(() => {
   color: var(--mk-faint);
   font-family: var(--mk-mono);
   transform: translateX(-50%);
+  /* 末位刻度贴近右缘，禁换行（2026-10-31 三轮评审：「20s」被挤成竖排三行） */
+  white-space: nowrap;
+}
+/* 末刻度右对齐：居中定位会让「20s」跨出右缘一半（多刻度时才生效，单刻度仍居中） */
+.wf-ruler__tick:last-child:not(:first-child) {
+  left: auto !important;
+  right: 0;
+  transform: none;
 }
 .wf-ruler__tick::before {
   content: '';

@@ -260,9 +260,11 @@
 
     <!-- 分页（标准件 · 卡脚）：只分页活跃会话行，跨管理员统一计数（组头/组数随页变）；
          历史折叠组不受分页影响。行窗口被截断时用 note 披露口径——
-         页码器读数是「已加载行数」，卡头「活跃 N」是后端全量，两者不同源须各自标明。 -->
+         页码器读数是「已加载行数」，卡头「活跃 N」是后端全量，两者不同源须各自标明。
+         仅一页时隐藏（2026-10-31 外部评审）：单页页码器只会挂在「已结束会话」折叠组
+         下方，读起来像在给历史列表分页；多页时它仍是活跃表的全站分页，保留。 -->
     <Pagination
-      v-if="groups.length && activeFlat.length"
+      v-if="groups.length && activeFlat.length && ssPages > 1"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="activeFlat.length"
@@ -548,6 +550,8 @@ const groups = computed<SessionGroup[]>(() => {
 const activeFlat = computed(() => groups.value.flatMap((g) => g.active))
 const page = ref(1)
 const pageSize = ref(15)
+/** 总页数：单页时分页器整体隐藏（页脚只有一页读数，挂历史组下有歧义） */
+const ssPages = computed(() => Math.max(1, Math.ceil(activeFlat.value.length / pageSize.value)))
 const pagedActive = computed(() =>
   activeFlat.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value)
 )
@@ -624,9 +628,12 @@ function lastSeenFreshTone(s: AdminSessionRow): string {
 }
 
 async function revoke(s: AdminSessionRow) {
+  /* 设备读人话（浏览器 · 系统 · 记住我），不再塞整段原始 UA——
+     确认框要的是「下线的是哪台设备」，UA 全文留在表格行悬停（deviceOf().uaFull 兜底） */
+  const d = deviceOf(s)
   const confirmed = await askConfirm({
     title: '强制下线该会话',
-    message: `确定强制下线此会话吗？\n设备：${uaFull(s)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
+    message: `确定强制下线此会话吗？\n设备：${[d.browser, d.os, s.remember ? '记住我' : ''].filter(Boolean).join(' · ')}\n登录时间：${fmtDateTime(s.issuedAt)}`,
     confirmText: '强制下线',
     busy: true,
   })
@@ -837,6 +844,9 @@ onMounted(async () => {
 /* 过期/已撤销折叠组（默认收起，summary 行可点击展开）
    折叠头形态走全局 .mk-section__summary（▸ 指示 + open 旋转 + hover），此处只覆配色/内衬 */
 .ss-hist { border-top: 1px solid var(--mk-line); margin-top: auto; }
+/* 历史可能上百条：展开后卡内滚动，不再把整页拉到 4000px（2026-10-30 外部评审）；
+   展开态给滚动容器补下边线——末行被视口拦腰截断时与下方内容仍有分界（2026-10-31 复检） */
+.ss-hist[open] .mk-table-scroll { max-height: 420px; overflow-y: auto; border-bottom: 1px solid var(--mk-line); }
 .ss-hist__summary {
   display: flex;
   align-items: center;

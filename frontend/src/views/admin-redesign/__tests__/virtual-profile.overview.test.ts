@@ -116,7 +116,7 @@ describe('VirtualProfile 概览 · 有运行的画像', () => {
     expect(w.find('.vp-lastrun__story').text()).toBe('永远做不完的理综')
     const meta = w.find('.vp-lastrun__meta').text()
     expect(meta).toContain('任务 3/10')
-    expect(meta).toContain('7 回合')
+    expect(meta).toContain('7 次推进')
     expect(meta).toContain('2 小时')
     w.unmount()
   })

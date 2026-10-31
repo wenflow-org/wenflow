@@ -227,10 +227,10 @@ const pageKey = computed(() => (subPage.value ? `${subPage.value.id}:${subPage.v
    2026-10-24：from 支持 parent 链（二级 → 三级 → 四级），逐层拼出完整路径；
    超过 3 段时保留最近 3 段并用「…」占位，避免顶栏被长链撑爆。 */
 const CRUMB_MAX_DEPTH = 3
+/* 不截断实体名：teaching-turn 这类 13 字符标识按「前 8 + … + 后 4」反而更长，
+   顶栏右侧留白足够，交给 CSS ellipsis 处理（2026-10-30 外部评审）。 */
 function crumbPart(label?: string, id?: string): string {
-  const text = label || id || ''
-  if (text.length <= 12) return text
-  return `${text.slice(0, 8)}…${text.slice(-4)}`
+  return label || id || ''
 }
 /** 从当前 subPage 往上取完整链路（最外层在前） */
 function crumbChain(): string[] {

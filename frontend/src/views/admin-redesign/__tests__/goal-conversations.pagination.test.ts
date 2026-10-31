@@ -328,10 +328,17 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     statsMock.mockResolvedValue({
       data: { success: true, data: { total: 1, active: 1, completed: 0, completionRate: '0' } }
     });
+    /* 2026-10-31 二轮评审 P1 推翻旧拍板「不承诺空动作」：停滞为 0 时 KPI 也必须可点，
+       点卡筛出空集、展示「当前筛选无匹配」——「点击按停滞筛选」的承诺才成立
+       （评审图 L03 抓到 0 时整卡不可点、承诺落空）。 */
     const w = await mountGoals();
     const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '停滞目标对话')!;
-    expect(card.classes()).not.toContain('mk-kpi--clickable');
-    expect(w.find('.mk-card__head .gc-view-chip').exists()).toBe(false);
+    expect(card.classes()).toContain('mk-kpi--clickable');
+    await card.trigger('click');
+    await flushPromises();
+    await flushPromises();
+    expect(w.find('.mk-card__head .gc-view-chip').exists()).toBe(true);
+    expect(w.text()).toContain('当前筛选无匹配');
   });
 
   /* 2026-10-27 综合重做：未生成路径从常驻 chip 升为 KPI 卡（读数 + 一键筛选），
@@ -461,7 +468,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
   /** 2026-10-24 用户「空数据的时候，页面很奇怪，没有统一设计」：
    *  本来就没数据时原走页面级一行裸文字（不在卡里、无说明），现与「筛选无匹配」同骨架同位置。
    *  2026-10-26：空态只留一句事实 + 一个出口（不再有教学第二句），分页器常驻。 */
-  it('0 行：仍渲染列表卡（卡头 + 卡内 min 空态 + 常驻分页器），空态给「查看学习者」出口', async () => {
+  it('0 行：仍渲染列表卡（卡头 + 卡内 min 空态），空态给「查看学习者」出口；分页器自隐', async () => {
     listMock.mockResolvedValue({ data: { success: true, data: { conversations: [] } } });
     statsMock.mockResolvedValue({ data: { success: true, data: { total: 0, active: 0, completed: 0, completionRate: '0' } } });
     const w = await mountGoals();
@@ -474,9 +481,8 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(empty.text()).not.toContain('学习者在学习端提出目标后');
     const action = empty.findAll('button').find((b) => b.text() === '查看学习者');
     expect(action).toBeTruthy();
-    // 分页器常驻：0 行时仍给「共 0 条 · 第 1 / 1 页」，否则整页像数据没了
-    expect(w.find('.mk-pagination').exists()).toBe(true);
-    expect(w.find('.mk-pagination').text()).toContain('共 0 条');
+    // 分页器自隐（2026-10-31 三轮评审）：0 条挂「共 0 条 · 第 1 / 1 页」是纯噪音，空态已说明无数据
+    expect(w.find('.mk-pagination').exists()).toBe(false);
     w.unmount();
   });
 

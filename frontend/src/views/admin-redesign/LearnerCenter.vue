@@ -321,8 +321,10 @@
             <div class="lc-iv__actions">
               <button type="button" class="mk-btn mk-btn--ghost" @click="goInterveneSession(intervene)">查看学习详情</button>
             </div>
+            <!-- 2026-10-31 二轮评审 P2：第一格是标题不是动作复述——Label 改「提醒标题 *」；
+                 内容本就选填（COPY 约定 R7：非必填不标注），不再加误导性必填星号 -->
             <label class="mk-field">
-              <span class="mk-field__label">发送站内提醒 <em class="mk-field__req">*</em></span>
+              <span class="mk-field__label">提醒标题 <em class="mk-field__req">*</em></span>
               <input v-model="interveneTitle" class="mk-field__input" placeholder="例如：学习状态提醒" />
             </label>
             <label class="mk-field">

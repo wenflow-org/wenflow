@@ -28,6 +28,12 @@
           :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'raw' }"
           @click="switchCoreView('raw')"
         >源码</button>
+        <button
+          type="button"
+          class="sdp-pw__viewbtn"
+          :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'preview' }"
+          @click="switchCoreView('preview')"
+        >预览</button>
       </div>
       <div v-if="coreClassification" class="sdp-pw__classify" :class="`sdp-pw__classify--${coreClassification.level}`">
         <strong>编辑分级：{{ coreLevelLabel(coreClassification.level) }}</strong>
@@ -107,6 +113,10 @@
               <code class="mono">sandbox:agent.key</code>（编排注入，对照沙盘说明书 <code class="mono">prompts/agent-snapshots.md</code>）/
               <code class="mono">user:path</code>（用户/平台，绿灯）。保存/发布时核对（skill→移交、sandbox→沙盘注册表、user→通过）。
             </p>
+            <!-- 列头（2026-10-31 三轮评审）：与下方「输出字段」表头同款轻量行，五列网格同模板 -->
+            <div v-if="coreForm.inputs.length" class="sdp-pwform__inputrow sdp-pwform__inputrow--head" aria-hidden="true">
+              <span>name</span><span>type</span><span>ref（来源）</span><span>desc（用途说明）</span><span></span>
+            </div>
             <div v-for="(input, i) in coreForm.inputs" :key="i" class="sdp-pwform__inputrow">
               <!-- 占位符只给字段名（name/type/ref/desc 就是要填的键），不追「（可选）」：
                    ref 已用真实示例演示取值格式，可选性由「只有 ref 是必填」的校验提示表达 -->
@@ -221,8 +231,10 @@
         <p v-else class="sdp-none">该 Skill 暂无核心文件</p>
       </div>
 
-      <!-- 源码视图（YAML 语法高亮覆盖层） -->
-      <div v-else class="sdp-codehl">
+      <!-- 源码视图（YAML 语法高亮覆盖层）。v-else 会连 preview 档一起命中——
+           切到「预览」时 YAML 编辑器仍整块挂在上方（2026-10-31 三轮评审），
+           三档视图互斥改为显式 else-if -->
+      <div v-else-if="coreViewMode === 'raw'" class="sdp-codehl">
         <pre class="sdp-codehl__pre mono" aria-hidden="true"><code v-html="coreHighlighted"></code></pre>
         <textarea
           ref="coreTextareaRef"
@@ -261,10 +273,10 @@
           </li>
         </ul>
       </div>
-    </section>
-
-    <!-- 右：编译预览（门禁 + 编译产物，双层 tab 压平后直接内嵌） -->
-    <section class="sdp-block">
+    <!-- 预览视图（编译门禁 + 产物）。原独立右栏在左表单拉长时右侧留出整条空白列
+         （2026-10-31 外部评审：右 1/3 纯黑真空 ~2900px）；收进「表单 / 源码 / 预览」
+         视图切换后单栏铺满，无空洞。v-show 保留 DOM：门禁/产物状态不随切视图丢。 -->
+    <div v-show="coreViewMode === 'preview'" class="sdp-pw__previewpane">
       <header class="sdp-block__head">
         <h4>编译预览</h4>
         <!-- #126：保存（表单↔源码切换时的自动保存）只写盘、不编译，预览与磁盘可能不一致 →
@@ -304,72 +316,7 @@
         </div>
         <pre class="sdp-pw__pre">{{ coreCompiledPrompt || '点「保存并编译」后显示五块产物（dry run，不写入）。' }}</pre>
       </div>
-    </section>
-
-    <!-- 运行时契约投影（只读，全宽）：契约卡按出/入方向拆两侧 + 状态机 + 终止条件。
-         与上方表单的分工：表单是「改」（写入 core.yaml），本区是「读」（当前生效的契约全貌） -->
-    <section class="sdp-block sdp-proj">
-      <header class="sdp-block__head">
-        <h4>运行时契约（只读投影）</h4>
-      </header>
-      <div class="sdp-proj__grid">
-        <div class="sdp-proj__col">
-          <h5 class="sdp-proj__title">输入契约（按角色） <b class="mono">{{ contractIns.length }}</b> 字段</h5>
-          <MkLoading v-if="contractLoading && !contractFields.length" inline text="字段契约加载中…" />
-          <p v-else-if="contractNotApplicable" class="sdp-none">{{ AUX_CONTRACT_NA_TEXT }}</p>
-          <p v-else-if="contractFailed" class="sdp-none sdp-bad-text">
-            字段契约加载失败。<button type="button" class="mk-link" @click="loadContracts">重试</button>
-          </p>
-          <template v-else>
-            <div v-for="f in contractIns" :key="f.fieldId" class="sdp-vrow">
-              <span class="mono sdp-vrow__name" :title="f.fieldId">{{ f.fieldId }}</span>
-              <span class="sdp-vrow__desc" :title="f.description || ''">{{ f.description || '—' }}</span>
-              <span class="mono sdp-vrow__type">{{ f.valueType || '—' }}</span>
-              <span class="mk-badge" :class="roleCls(f.promptRole)">{{ roleLabel(f.promptRole) }}</span>
-              <span v-if="f.promptRole === 'hard-required'" class="mk-badge mk-badge--warn">必填</span>
-            </div>
-            <p v-if="!contractIns.length" class="sdp-none">该 Skill 暂无输入字段声明（无编排路由或全部为产出字段）。</p>
-          </template>
-        </div>
-        <div class="sdp-proj__col">
-          <h5 class="sdp-proj__title">输出契约（按角色） <b class="mono">{{ contractOuts.length }}</b> 字段</h5>
-          <MkLoading v-if="contractLoading && !contractFields.length" inline text="字段契约加载中…" />
-          <p v-else-if="contractNotApplicable" class="sdp-none">{{ AUX_CONTRACT_NA_TEXT }}</p>
-          <p v-else-if="contractFailed" class="sdp-none sdp-bad-text">
-            字段契约加载失败。<button type="button" class="mk-link" @click="loadContracts">重试</button>
-          </p>
-          <template v-else>
-            <div v-for="f in contractOuts" :key="f.fieldId" class="sdp-vrow">
-              <span class="mono sdp-vrow__name" :title="f.fieldId">{{ f.fieldId }}</span>
-              <span class="sdp-vrow__desc" :title="f.description || ''">{{ f.description || '—' }}</span>
-              <span class="mono sdp-vrow__type">{{ f.valueType || '—' }}</span>
-              <span class="mk-badge" :class="roleCls(f.promptRole)">{{ roleLabel(f.promptRole) }}</span>
-            </div>
-            <p v-if="!contractOuts.length" class="sdp-none">该 Skill 未声明 proposal-output / public-reply / derived-presentation 角色字段。</p>
-          </template>
-        </div>
-      </div>
-      <div class="sdp-proj__grid">
-        <div class="sdp-proj__col">
-          <h5 class="sdp-proj__title">
-            回合状态机
-            <em>{{ coreStateNodes.length ? `${coreStateNodes.length} 个状态` : '无状态机声明' }}</em>
-          </h5>
-          <div v-if="coreStateNodes.length" class="sdp-proj__steps">
-            <span v-for="(n, i) in coreStateNodes" :key="`${n}-${i}`" class="sdp-proj__step">
-              <b class="mono">{{ i + 1 }}</b>{{ n }}
-            </span>
-          </div>
-          <p v-else class="sdp-none" title="core YAML 未声明 stateMachine / states 字段">该 Skill 未声明回合状态机。</p>
-        </div>
-        <div class="sdp-proj__col">
-          <h5 class="sdp-proj__title">终止条件</h5>
-          <div v-if="coreTerminations.length" class="sdp-proj__ranks">
-            <span v-for="(t, i) in coreTerminations" :key="`${t}-${i}`" class="sdp-proj__rank">{{ t }}</span>
-          </div>
-          <p v-else class="sdp-none" title="core YAML 未声明 termination / limits 字段">该 Skill 未声明终止条件。</p>
-        </div>
-      </div>
+    </div>
     </section>
   </div>
 </template>
@@ -397,8 +344,6 @@ const emit = defineEmits<{ (e: 'published'): void }>()
 
 const CORE_CHANNELS = ['dialogue', 'state', 'task', 'evidence', 'learner', 'path'] as const
 
-/* 文案单源（R6 复读单源化）：输入/输出契约两列的辅助类空态共用一句 */
-const AUX_CONTRACT_NA_TEXT = '该 Skill 为辅助类（无编排阶段归属），字段契约不适用。'
 const CORE_FIELD_TYPES = ['string', 'number', 'boolean', 'enum', 'object', 'object[]', 'string[]'] as const
 const CORE_FAILURE_POLICIES = ['retry', 'fallback', 'propagate'] as const
 const CORE_OUTPUT_MEDIA = ['json', 'markdown', 'text'] as const
@@ -461,10 +406,8 @@ const coreCompiledMeta = ref<{ coreHash: string; coreVersion: number } | null>(n
 const corePublishResult = ref<{ ok: boolean; message?: string; agentId?: string; version?: number; coreHash?: string } | null>(null)
 const coreUncertain = ref<any>(null)
 const corePublishIssues = ref<Array<Record<string, unknown>>>([])
-const coreViewMode = ref<'form' | 'raw'>('form')
+const coreViewMode = ref<'form' | 'raw' | 'preview'>('form')
 const coreForm = ref<CoreFormState | null>(null)
-/** getCore 原始 core 对象（只读投影用：回合状态机 / 终止条件），与编辑器共用同一次响应 */
-const coreRaw = ref<Record<string, unknown> | null>(null)
 /** 编译预览是否已过期（#126）：保存只写盘、不重编译，预览内容可能落后于磁盘 */
 const corePreviewStale = ref(false)
 let coreRequested = false
@@ -485,10 +428,10 @@ function toggleFormSection(key: string) {
 }
 
 /**
- * 切换表单/源码视图：当前视图有未保存修改时先保存到磁盘，再重拉使两视图同步，
+ * 切换表单/源码/预览视图：当前视图有未保存修改时先保存到磁盘，再重拉使两视图同步，
  * 避免「表单改动切到源码后保存覆盖」或反向丢失（保存失败阻止切换）。
  */
-async function switchCoreView(mode: 'form' | 'raw') {
+async function switchCoreView(mode: 'form' | 'raw' | 'preview') {
   if (mode === coreViewMode.value) return
   if (coreEditorState.dirty && coreLoaded.value) {
     const saved = await saveCore()
@@ -627,15 +570,12 @@ async function ensureCoreLoaded() {
     if (id !== props.skillId) return
     coreText.value = res.data?.raw || ''
     coreDiagnostics.value = res.data?.diagnostics || []
-    // 同一响应的 core 对象留一份只读投影用（状态机/终止条件），避免第二次请求
-    coreRaw.value = (res.data?.core || null) as Record<string, unknown> | null
     initCoreForm((res.data?.core || null) as Record<string, unknown> | null)
     coreLoaded.value = true
     coreMissing.value = false
   } catch (e) {
     if (id !== props.skillId) return
     coreText.value = ''
-    coreRaw.value = null
     coreLoaded.value = false
     coreMissing.value = true
     const status = (e as { response?: { status?: number } })?.response?.status
@@ -844,7 +784,6 @@ async function publishCore(confirmUncertain: boolean) {
      stateMachine / states / termination / limits → 一律空态，字段名按原型口径防御式读取 */
 interface ContractField { fieldId: string; promptRole?: string; valueType?: string; description?: string }
 interface RoleMetaItem { id: string; label: string; hint?: string }
-const OUT_ROLES = ['proposal-output', 'public-reply', 'derived-presentation']
 const contractFields = ref<ContractField[]>([])
 const roleMeta = ref<RoleMetaItem[]>([])
 const contractLoading = ref(false)
@@ -852,11 +791,6 @@ const contractFailed = ref(false)
 /** 422「无编排阶段归属」= 辅助类技能不适用字段契约，不是「坏了」→ 分开标记，不给重试 */
 const contractNotApplicable = ref(false)
 
-const contractIns = computed(() => contractFields.value.filter((f) => !OUT_ROLES.includes(f.promptRole || '')))
-const contractOuts = computed(() => contractFields.value.filter((f) => OUT_ROLES.includes(f.promptRole || '')))
-/** promptRole 人话：后端 yaml-vocabulary 单源下发（promptRoleMeta），前端不各写一份 */
-const roleLabel = (id?: string) => (id ? roleMeta.value.find((m) => m.id === id)?.label || id : '—')
-const roleCls = (id?: string) => (id ? `mk-badge--role-${id}` : 'mk-badge--muted')
 
 async function loadContracts() {
   const id = props.skillId
@@ -881,37 +815,6 @@ async function loadContracts() {
   }
 }
 
-/** 任意形状 → 字符串列表（原型 steps/ranklist 只吃字符串；对象键值转「键：值」，对象项取 name/label） */
-function toStringList(raw: unknown): string[] {
-  if (raw == null) return []
-  if (typeof raw === 'string') return raw.trim() ? [raw.trim()] : []
-  if (Array.isArray(raw)) {
-    return raw
-      .map((x) => {
-        if (x == null) return ''
-        if (typeof x === 'string') return x
-        if (typeof x === 'object') {
-          const o = x as Record<string, unknown>
-          return String(o.name ?? o.label ?? o.title ?? o.state ?? o.id ?? '')
-        }
-        return String(x)
-      })
-      .filter(Boolean)
-  }
-  if (typeof raw === 'object') {
-    return Object.entries(raw as Record<string, unknown>).map(([k, v]) => `${k}：${v == null ? '—' : String(v)}`)
-  }
-  return [String(raw)]
-}
-const coreStateNodes = computed<string[]>(() => {
-  const c = coreRaw.value
-  return c ? toStringList(c.stateMachine ?? c.states) : []
-})
-const coreTerminations = computed<string[]>(() => {
-  const c = coreRaw.value
-  return c ? toStringList(c.termination ?? c.terminations ?? c.limits) : []
-})
-
 /* 切换 skill / 回滚后：复位编辑器并从磁盘重拉 */
 watch(
   [() => props.skillId, () => props.reloadTick],
@@ -920,7 +823,6 @@ watch(
     coreLoaded.value = false
     coreMissing.value = false
     coreText.value = ''
-    coreRaw.value = null
     coreEditorState.dirty = false
     coreDiagnostics.value = []
     coreInputWarnings.value = []
@@ -948,14 +850,13 @@ watch(
 
 <style scoped>
 /* ---------- 协议（core 编辑与发布） ---------- */
+/* 单栏：编译预览收进「表单 / 源码 / 预览」视图切换（2026-10-31 外部评审），
+   不再有左右分栏——左表单拉长时右栏整条空白的问题随之消失 */
 .sdp-pw {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   align-items: start;
-}
-@media (max-width: 1100px) {
-  .sdp-pw { grid-template-columns: 1fr; }
 }
 .sdp-block {
   border: 1px solid var(--mk-line);
@@ -1017,7 +918,10 @@ watch(
   position: absolute;
   inset: 0;
   margin: 0;
-  padding: 12px;
+  /* 底部 26px = 12px 常规 + 14px 缓冲：容器 620px 与行高 20.8px 不成整倍，
+     最后一行曾被容器下边框横向切半（2026-10-31 三轮评审）；两层 padding 必须一致，
+     否则高亮层与文字错位 */
+  padding: 12px 12px 26px;
   overflow: auto;
   scrollbar-width: none;
   background: var(--mk-code-bg);
@@ -1035,6 +939,7 @@ watch(
   flex: 1 1 auto;
   min-height: 0;
   resize: none;
+  padding: 12px 12px 26px;
   background: transparent;
   color: transparent;
   caret-color: #e8eef5;
@@ -1189,14 +1094,25 @@ watch(
   color: var(--mk-faint);
   line-height: 1.6;
 }
+/* 输入声明行（2026-10-31 三轮评审）：行内实有 5 个控件（name/type/ref/desc/删除），
+   旧规则只给 3 列——desc 与「删除」被挤进隐式第二行，「删除」悬在行宽 60% 处，
+   与下方执行规则段的排序箭头错位成一行，读作两个坏行。五列各归其位，删除贴最右。 */
 .sdp-pwform__inputrow {
   display: grid;
-  grid-template-columns: minmax(220px, 1.2fr) minmax(160px, 1fr) 28px;
+  grid-template-columns: minmax(130px, 0.9fr) minmax(110px, 0.7fr) minmax(260px, 1.7fr) minmax(170px, 1.1fr) auto;
   gap: 10px;
   align-items: center;
 }
 @media (max-width: 860px) {
-  .sdp-pwform__inputrow { grid-template-columns: 1fr 28px; }
+  .sdp-pwform__inputrow { grid-template-columns: 1fr; }
+  .sdp-pwform__inputrow .mk-link { justify-self: start; }
+  .sdp-pwform__inputrow--head { display: none; }
+}
+/* 列头行：与「输出字段」fieldrow--head 同款轻量表头（同字号/同弱色/同字重） */
+.sdp-pwform__inputrow--head {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  font-weight: 700;
 }
 .sdp-pwform__field { display: grid; gap: 6px; }
 .sdp-pwform__field > span { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
@@ -1250,63 +1166,9 @@ watch(
   .sdp-pwform__fieldrow--head { display: none; }
 }
 
-/* ---------- 运行时契约只读投影（协议页签底部全宽区） ---------- */
-/* .sdp-pw 是两列网格：投影区必须显式跨满，否则会被塞进第二行第一列（一半宽） */
-.sdp-proj { grid-column: 1 / -1; }
-.sdp-proj__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-@media (max-width: 860px) {
-  .sdp-proj__grid { grid-template-columns: 1fr; }
-}
-.sdp-proj__col { display: grid; gap: 6px; align-content: start; min-width: 0; }
-.sdp-proj__title {
-  margin: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-muted);
-}
-.sdp-proj__title b { color: var(--mk-ink); }
-.sdp-proj__title em { font-style: normal; font-weight: 400; color: var(--mk-faint); }
-.sdp-vrow {
-  display: grid;
-  grid-template-columns: minmax(96px, 1.1fr) minmax(0, 2fr) 76px auto auto;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  font-size: var(--mk-fs-micro);
-}
-.sdp-vrow__name { color: var(--mk-ink); overflow: hidden; text-overflow: ellipsis; }
-.sdp-vrow__desc { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sdp-vrow__type { color: var(--mk-faint); }
-.sdp-proj__steps { display: flex; flex-wrap: wrap; gap: 6px; }
-.sdp-proj__step {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: 999px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
-.sdp-proj__step b { color: var(--mk-faint); font-weight: 400; }
-.sdp-proj__ranks { display: grid; gap: 5px; }
-.sdp-proj__rank {
-  padding: 6px 10px;
-  border-left: 2px solid rgba(141, 107, 255, 0.45);
-  background: var(--mk-surface-2);
-  border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-ink);
-}
+/* ---------- 预览视图（编译门禁 + 产物，原右栏收编为「预览」视图） ---------- */
+.sdp-pw__previewpane { display: grid; gap: 10px; }
+.sdp-pw__previewpane .sdp-block__head { padding: 2px 2px 0; }
 
 /* 4K：设计页放宽 + 编辑器字号跟随壳层放大 */
 @media (min-width: 2000px) {
@@ -1326,7 +1188,6 @@ watch(
   .sdp-block__head h4 { font-size: var(--mk-fs-body); }
   .sdp-block__meta { font-size: var(--mk-fs-body); }
   .sdp .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
-  .sdp-pw { grid-template-columns: minmax(0, 1fr) 520px; }
   .sdp-pw__textarea,
   .sdp-codehl__pre { font-size: var(--mk-fs-emphasis); }
   .sdp-pwform .mk-input { font-size: var(--mk-fs-emphasis); min-height: 46px; }
@@ -1347,7 +1208,6 @@ watch(
   .sdp-pwform__check { font-size: var(--mk-fs-emphasis); }
   .sdp-pwform__fieldrow--head { font-size: var(--mk-fs-body); }
   .sdp-pwform__idx { font-size: var(--mk-fs-body); }
-  .sdp-proj__title, .sdp-vrow, .sdp-proj__step, .sdp-proj__rank { font-size: var(--mk-fs-body); }
 }
 
 /* 暗色模式 */

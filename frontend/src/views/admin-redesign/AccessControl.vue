@@ -55,7 +55,7 @@
                 rows="2"
                 :value="policy.adminAllowedIps.join('\n')"
                 @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty()"
-                placeholder="203.0.113.10"
+                placeholder="每行一个 IP 或 CIDR 网段，例如 203.0.113.10"
               ></textarea>
             </label>
           </section>
@@ -100,7 +100,7 @@
                 rows="2"
                 :value="policy.privateNetworkHosts.join('\n')"
                 @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty()"
-                placeholder="192.168.1.20"
+                placeholder="每行一个 Host 或 CIDR 网段，例如 192.168.1.20"
               ></textarea>
             </label>
             <p v-if="outboundEmptyWarn" class="ac-risk" role="alert">
@@ -163,6 +163,9 @@
             :disabled="!policyDirty || saving || saveBlocked"
             @click="savePolicy"
           >{{ saving ? '保存中…' : '保存策略' }}</button>
+          <!-- 未修改时保存钮置灰是「暂无可保存的改动」而非无权限（2026-10-31 三轮评审）：
+               灰底主按钮旁补一句弱化说明，避免误读成只读 -->
+          <span v-if="!policyDirty && !saveBlocked" class="ac-foot__hint">调整任一策略后可保存</span>
         </div>
     </section>
   </div>
@@ -479,10 +482,12 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 @media (max-width: 900px) {
   .acl-host--embedded { flex: none; overflow: visible; }
 }
-/* 设置卡限宽：表单不随 1920 视口拉满，内容区保持单列可读宽度（2026-10-30 人工复查） */
-.ac-card { width: 100%; max-width: 760px; }
+/* 卡通栏左对齐（与同页签运维工具/数据导出/会话安全外框同轴，2026-10-31 三轮评审：
+   上一版 1200 居中在左侧导航 + 左对齐页头的后台里砍断了左轴线）；
+   表单控件区单独限宽 720 左对齐，保住单列表单的可读宽度 */
+.ac-card { width: 100%; }
 .ac-reg-rows { display: grid; gap: 12px; }
-.ac-body { display: grid; gap: 18px; padding: 4px 16px 16px; }
+.ac-body { display: grid; gap: 18px; padding: 4px 16px 16px; max-width: 736px; }
 .ac-body .mk-field { margin: 0; min-width: 0; }
 
 /* 三段设置（入站 / 出站 / 注册）：段间用分隔线，不再用大卡占位 */
@@ -565,10 +570,14 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 /* 保存归位到表单末尾：改完整张卡，动作就在手边（2026-10-30 人工复查） */
 .ac-foot {
   display: flex;
+  align-items: center;
   justify-content: flex-start;
+  gap: 12px;
   padding: 14px 16px 18px;
   border-top: 1px solid var(--mk-line);
 }
+.ac-foot__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
-.ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); min-height: 0; width: 100%; max-width: 420px; }
+/* 全宽（2026-10-31 外部评审）：760 卡内上下分段控件都撑满，唯独 textarea 420px 右侧留半截 */
+.ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); min-height: 0; width: 100%; }
 </style>

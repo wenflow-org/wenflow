@@ -141,7 +141,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
      这一块是跨页签的待办读数（反馈/路径/事件/公告各属别的页签），从此不再只长在「运营待办」页签里。
      用「数据导出」页签验证最狠：它是纯表单页、本页签零读数，读数带仍要照常在页签栏之上。
      页签切换走 URL（?tab=），故用带 router 的挂载。 */
-  it('页级读数带在零读数的「数据导出」页签同样可见（跨页签待办不再被某个页签独占）', async () => {
+  it('系统页签（数据导出）隐藏页级读数带，不再用 0 值占首屏', async () => {
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 3 } } })
     h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 2 } } } })
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 1 } } })
@@ -152,12 +152,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     const w = mount(OpsHub, { global: { plugins: [router] } })
     await flushPromises()
 
-    const readings = w.findAll('.oh-metrics .mk-kpi__label').map((x) => x.text().trim())
-    expect(readings).toEqual(['待处理反馈', '生成失败路径', '事件投递失败', '草稿公告'])
-    expect(w.findAll('.oh-metrics .mk-kpi__num').map((x) => x.text())).toEqual(['3', '2', '1', '0'])
-    // 位置：读数带在页签面板之外、页签栏之前（页级，不是某个页签体内的内容）
-    expect(w.find('.oh-metrics').element.closest('[role="tabpanel"]')).toBeNull()
-    expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
+    expect(w.find('.oh-metrics').exists()).toBe(false)
     // 口径开关随读数带走（不再留在某个页签的卡头里）；刷新不再在页头另出一颗（走顶栏）
     // 口径开关已退役（2026-10-21）：页头动作区不再有 真实/测试 控件
     expect(w.find('.mk-pagehead__actions').text()).not.toContain('真实')

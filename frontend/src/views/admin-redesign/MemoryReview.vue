@@ -27,7 +27,7 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">课内温故计划</h3>
           <!-- 2026-10-23 用户走查「还有后面的这几种文案」：撤掉「本节该接几个 · 按负担预算排队」——
-               下面指标条已逐项给出负担预算/已占用/本节接几个/排队中，卡头再说一遍规则是复述 -->
+               下面指标条已逐项给出负担预算/已占用/本节承接数/排队中，卡头再说一遍规则是复述 -->
         </div>
 
         <!-- 温故计划整块按 detail.reviewPlan 有无渲染：reviewPlan=null 时原来只剩一个裸标题 -->
@@ -778,7 +778,7 @@ const planKpiItems = computed<MkStatItem[]>(() => {
   return [
     { key: 'budget', label: '负担预算', value: plan.budget, title: '负担单位，动态校准' },
     { key: 'used', label: '已占用', value: plan.usedLoad },
-    { key: 'items', label: '本节接几个', value: plan.items.length },
+    { key: 'items', label: '本节承接数', value: plan.items.length },
     { key: 'backlog', label: '排队中', value: plan.backlogCount, tone: plan.backlogCount > 15 ? 'warn' : '' },
     {
       key: 'success',

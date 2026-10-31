@@ -193,12 +193,15 @@ let loadSeq = 0
 
 /* 面包屑名（2026-10-12）：座舱的 subPage 不再由（已退役的）路径详情页回写可读名，
    深链/列表进来会露裸会话 id。面板持有详情接口的真标题，成功后回写——仅当本面板
-   所属座舱仍是当前二级页，且现有名为空或座舱 watch 写入的泛型兜底「学习路径」。 */
+   所属座舱仍是当前二级页，且现有名为空或座舱写入的泛型兜底（「学习路径」是
+   buildPathDetailTitle 的无数据兜底；「目标对话 / 真实课堂」是 refresh 的 kind 兜底，
+   2026-10-31 外部评审：真标题要能覆盖这两个泛型名，否则面包屑停在「学习路径 / 目标对话」）。 */
 const ownerSubPageId = subPage.value?.id || ''
+const GENERIC_CRUMB_LABELS = new Set(['学习路径', '目标对话', '真实课堂'])
 function writeBreadcrumbLabel(title: string) {
   const sp = subPage.value
   if (!title || !sp || sp.id !== ownerSubPageId) return
-  if (sp.label && sp.label !== '学习路径') return
+  if (sp.label && !GENERIC_CRUMB_LABELS.has(sp.label)) return
   setSubPageLabel(title)
 }
 

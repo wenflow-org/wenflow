@@ -8,7 +8,10 @@
       <div class="mk-status" :class="`mk-status--${headerHealth}`">
         <span class="mk-status__dot" aria-hidden="true"></span>
         <button type="button" class="mk-back" @click="goBack">← {{ backLabel }}</button>
-        <strong class="mk-status__title">只读监控 <span class="cp-title__id mono">{{ shortId }}</span></strong>
+        <!-- 2026-10-31 四轮评审 R5：本顶栏只渲染虚拟会话（真实会话不进此分支），
+             而下方就是继续/暂停/终止/自动驾驶等全套操控——「只读监控」与实际能力相反，
+             改「仿真操控台」；真实会话的只读声明在 hero chip（真实目标对话 · 只读监控） -->
+        <strong class="mk-status__title">仿真操控台 <span class="cp-title__id mono">{{ shortId }}</span></strong>
         <!-- 自动驾驶进行中的状态指示（停止按钮在控制台） -->
         <span v-if="autopilotRunning" class="mk-status__meta cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
         <span class="mk-status__sep"></span>
@@ -56,6 +59,13 @@
       <template #pills>
         <!-- 状态 pill：生命周期合成态（与原顶栏徽章同源，原型 statusPill 位） -->
         <span class="mk-badge" :class="`mk-badge--${heroStatusTone}`" :title="statusTitle">{{ heroStatusText }}</span>
+        <!-- 路径进度 pill（2026-10-31 外部评审 P1-1）：主标题是路径名后，「已完成」只指本节课堂，
+             首屏须并列路径真实进度（子任务口径，与 Path 阶段步点同源），不再让 1/13 读成学完 -->
+        <span
+          v-if="heroUsesPathTitle && pathProgressText"
+          class="mk-badge mk-badge--muted"
+          :title="`路径进度按子任务统计（与「阶段推进」步点同源）：${pathProgressText}`"
+        >路径 {{ pathProgressText }}</span>
         <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位） -->
         <span class="mk-badge mk-badge--info">{{ stageLabel(currentStage) }}</span>
         <!-- 课堂类型 pill（2026-10-21）：正课/复习课/延伸课；后两者不结算任务 -->
@@ -174,7 +184,11 @@
         </template>
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'path'">
           <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成路径</button>
-          <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动教学</button>
+          <!-- 教学已启动后本页不再挂「待启动」引导态（2026-10-31 四轮评审 R2）：
+               课堂已在「学习」页签推进（甚至已完成第 1 课），主位让给「进入课堂」；
+               启动教学只在真正未开始时出现 -->
+          <button v-if="hasLearningProgress" type="button" class="cp-btn cp-btn--primary" title="教学已在「学习」页签进行中" @click="selectStageTab('learning')">进入课堂 →</button>
+          <button v-else type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动教学</button>
           <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建路径</button>
         </template>
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'learning'">
@@ -245,7 +259,7 @@
               type="button"
               role="tab"
               class="cp-stp"
-              :class="`cp-stp--${stepState(st)}`"
+              :class="[`cp-stp--${stepState(st)}`, { 'cp-stp--current': activeTab === st }]"
               :aria-selected="activeTab === st"
               :aria-controls="`cp-tabpanel-${st}`"
               :tabindex="activeTab === st ? 0 : -1"
@@ -357,7 +371,10 @@
               <span class="cp-goal-u__tag">边界</span>{{ goalUnderstanding.constraints.join('；') }}
             </p>
           </div>
-          <div class="cp-transcripts">
+          <!-- 目标对话自然生长（2026-10-31 四轮评审 R10）：固定高度滚动容器把第 9 条消息
+               削掉大半、12 条只露出 8 条——对话是本卡主体，去掉内部滚动让整卡随页面走，
+               全页走查/截图不再丢消息；课堂转录（cp-transcripts 原用法）保持定高滚动 -->
+          <div class="cp-transcripts cp-transcripts--free">
             <!-- 未加载先骨架，不把「尚未加载」当「确实为空」（2026-10-06 审核 #47） -->
             <MkSkeleton v-if="!session" variant="rows" :count="3" :h="36" :radius="8" />
             <template v-else>
@@ -380,31 +397,32 @@
         <!-- 回合记录（仅虚拟会话，Goal 页）：Goal + 课堂按序合并的旅程表。真实会话的阶段面板
              已各自承载转录，同屏再列一张同样的表就是重复（2026-10-11「goal 阶段对话记录会和记录
              会不会重复了」）。2026-10-12 四页拆分：会话级卡片归位到所属阶段页，不再全页签复读。 -->
-        <section v-if="!isRealMode && activeTab === 'goal'" class="mk-card">
+        <section v-if="!isRealMode && activeTab === 'goal' && turnRowsShown.length" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">回合记录</h3>
+            <h3 class="mk-card__title">课堂回合</h3>
             <!-- 加载中 meta 留空（骨架已在下方承担加载态；不写「暂无对话记录」假空文案） -->
-            <span class="mk-card__meta" :title="turnMetaTitle || undefined">{{ turnMeta }}</span>
+            <span class="mk-card__meta">{{ `${turnRowsShown.length} 条课堂对话 · 目标段由对话卡全文呈现` }}</span>
           </div>
           <!-- 会话未加载（首载/切换会话）先给骨架：不得把「尚未加载」渲染成「暂无对话记录」（2026-10-06 审核 #47） -->
           <div v-if="!session" class="cp-cardbody"><MkSkeleton variant="rows" :count="4" :h="12" :radius="4" /></div>
-          <!-- 列序对齐原型（# / 类型 / 内容 / …）：Token/耗时/解答分接口没有，不硬造，以真实「时间」列收尾 -->
-          <div v-else-if="turnRows.length" class="mk-table-scroll">
+          <!-- 列序对齐原型（# / 类型 / 内容 / …）：Token/耗时/解答分接口没有；时间列仅在有真实
+               时间时渲染（消息体无时间戳时不摆一列「—」，2026-10-31 三轮评审） -->
+          <div v-else-if="turnRowsShown.length" class="mk-table-scroll">
             <table class="mk-table cp-turns">
               <thead>
                 <tr>
                   <th scope="col" class="cp-turns__num">#</th>
                   <th scope="col">类型</th>
                   <th scope="col" class="cp-turns__wrap">内容</th>
-                  <th scope="col">时间</th>
+                  <th v-if="turnRowsHaveTime" scope="col">时间</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in turnRows" :key="row.key">
-                  <td class="mono cp-turns__num">{{ row.index }}</td>
+                <tr v-for="(row, i) in turnRowsShown" :key="row.key">
+                  <td class="mono cp-turns__num">{{ i + 1 }}</td>
                   <td><span class="mk-badge" :class="row.tone">{{ row.type }}</span></td>
                   <td class="cp-turns__wrap">{{ row.content }}</td>
-                  <td class="mono cp-turns__time">{{ row.time }}</td>
+                  <td v-if="turnRowsHaveTime" class="mono cp-turns__time">{{ row.time }}</td>
                 </tr>
               </tbody>
             </table>
@@ -454,8 +472,14 @@
               <template v-if="!learnLessons.length">暂无记录</template>
             </span>
           </div>
-          <!-- 双栏：左侧课程树 + 右侧对话 -->
-          <div class="cp-learn-grid">
+          <!-- 无课程且无课堂数据时整卡收敛为单一空态（2026-10-31 三轮评审 P1：原左右两栏各渲染
+               各的空态文字，左右错位并列读作两句话打架）。真实会话可能只有课堂转录/检查点而没有
+               建课树（里程碑未建课）——此时不能藏掉课堂数据，对话独占整行展示。 -->
+          <div v-if="!lessonTree.length && !learnConversationMessages.length && !checkpointGroups.length" class="cp-learn-empty">
+            <p class="cp-none">尚未生成课程，请先生成学习路径并启动教学。</p>
+          </div>
+          <!-- 双栏：左侧课程树 + 右侧对话；无树有数据时对话独占整行 -->
+          <div v-else class="cp-learn-grid" :class="{ 'cp-learn-grid--notree': !lessonTree.length }">
             <!-- 左侧：里程碑 → 课程树 -->
             <nav class="cp-learn-tree" v-if="lessonTree.length">
               <div v-for="group in lessonTree" :key="group.milestone" class="cp-learn-tree__group">
@@ -479,15 +503,16 @@
                 </button>
               </div>
             </nav>
-            <p v-else class="cp-none">尚未生成课程，请先生成路径并启动教学。</p>
             <!-- 右侧：对话区 -->
             <div class="cp-learn-chat">
               <div v-if="viewedLesson" class="cp-lesson-head">
                 <div class="cp-lesson-head__main">
                   <span class="cp-lesson-head__state" :data-state="viewedLesson.state">{{ lessonStateLabel(viewedLesson.state) }}</span>
                   <strong>第 {{ lessonNumber(viewedLesson.taskId) }} 课 · {{ viewedLesson.title }}</strong>
-                  <span class="cp-lesson-head__ms">{{ viewedLesson.milestone }}</span>
                 </div>
+                <!-- 里程碑名独占一行（2026-10-31 外部评审）：原与标题同行 baseline 排列，
+                     长里程碑名被挤成两行短字；作副标题独立成行读感正常 -->
+                <span v-if="viewedLesson.milestone" class="cp-lesson-head__ms">{{ viewedLesson.milestone }}</span>
               </div>
               <!-- 加载态用骨架，禁止纯文字（T2 硬约束；2026-10-06 审核 #47） -->
               <MkSkeleton v-if="teachingDetailLoading" variant="rows" :count="3" :h="12" :radius="4" />
@@ -907,7 +932,12 @@
             <!-- 跟随钮移出滚动容器（2026-10-06 审核 #52）：原先 sticky 在其网格行内位移余量为 0、
                  上翻日志暂停跟随后按钮随内容滚出视口，恰在最需要「恢复跟随」时看不见它 -->
             <div class="cp-logs-wrap">
-              <button type="button" class="cp-logs__follow" :class="{ 'is-paused': !logFollowsBottom }" :title="logFollowsBottom ? '自动跟随最新日志' : '已暂停跟随'" :aria-label="logFollowsBottom ? '已跟随最新日志' : '恢复跟随最新日志'" @click="scrollToBottom">{{ logFollowsBottom ? '⏵' : '⏸' }}</button>
+              <!-- 跟随恢复钮改为条件行（2026-10-31 外部评审 P1-3）：原先 absolute 悬浮在日志区
+                   右上角，绿色圆点pill直接压在第一行日志文字上；现仅在「已暂停跟随」时出现于
+                   滚动区上方独立一行（下推内容而非遮盖），恢复跟随后整行消失 -->
+              <div v-if="!logFollowsBottom" class="cp-logs-bar">
+                <button type="button" class="cp-logs__follow" title="恢复跟随最新日志" aria-label="恢复跟随最新日志" @click="scrollToBottom">⏸ 已暂停跟随 · 恢复 ⏵</button>
+              </div>
               <div class="cp-logs" ref="logBox" aria-label="实时日志" @scroll="onLogScroll">
                 <!-- aria-live 已从容器移除：5s 轮询整表重渲染会让读屏反复播报全部日志，视觉跟随已足够 -->
                 <template v-if="!session">
@@ -1761,10 +1791,14 @@ const pathMilestonesView = computed(() => buildPathMilestonesView(pathMilestones
 /* 面包屑名（2026-10-12）：路径统一在座舱打开后，控制台的 subPage 不再有详情页替它回写
    可读名，深链/列表进来面包屑会露裸会话 id。本处只在 pathStatus/stageResults 带真标题时
    回写（『学习路径』是 buildPathDetailTitle 的无数据兜底，泛型名与场景名撞车，不写——
-   真标题由 PathJourneyPanel 的详情接口补写）。只在本座舱仍是当前二级页且尚无名时写。 */
+   真标题由 PathJourneyPanel 的详情接口补写）。「目标对话 / 真实课堂」是 refresh 的
+   旧版泛型兜底，真标题到了要能覆盖它（2026-10-31 外部评审：泛型名抢占后路径详情名
+   永远写不进面包屑）。只在本座舱仍是当前二级页时写。 */
 watch(pathDetailTitle, (title) => {
   const sp = subPage.value
-  if (title && title !== '学习路径' && sp && sp.id === sessionId.value && !sp.label) setSubPageLabel(title)
+  if (!title || title === '学习路径' || !sp || sp.id !== sessionId.value) return
+  if (sp.label && sp.label !== '目标对话' && sp.label !== '真实课堂') return
+  setSubPageLabel(title)
 }, { immediate: true })
 
 /* Path 评审展示：stageResults.path_review */
@@ -2065,8 +2099,10 @@ const pathReadinessText = computed(() => {
   if (!hasPath.value) return goalConverged.value ? '目标已确认，等待生成路径。' : '等待目标对话确认后生成路径。'
   if (pathGenerationFailed.value) return learningBlockedReason.value || '路径生成失败，请重新生成。'
   if (pathGenerationInProgress.value) return learningBlockedReason.value || '路径正在生成或补全课程，请稍候。'
+  /* 2026-10-31 四轮评审 R2：教学已启动就不再说「可启动或重启教学」（与主位「进入课堂」一致） */
+  if (hasLearningProgress.value) return '教学已启动，课堂在「学习」页签推进中。'
   if (pathStartable.value) return pathReviewAccepted.value
-    ? '路径已就绪，可启动或重启教学。'
+    ? '路径已就绪，可启动教学。'
     : '路径已就绪，可直接启动教学，无需等待评审。'
   return learningBlockedReason.value || '路径已生成，正在确认教学启动条件。'
 })
@@ -2078,7 +2114,7 @@ const {
 
 const {
   effectiveStageIndex, stageDone, stageActive,
-  stageProgress, stageMiniStatus, learnProgressText
+  stageProgress, stageMiniStatus, learnProgressText, pathProgressText
 } = useCockpitStages({
   currentStage, bindings, stageStatus, stageResults,
   isTerminal, isFailedTerminal, isInterruptedTerminal, hasWrapup,
@@ -2089,13 +2125,18 @@ const {
    原则是真数据灌块：后端没有的字段（learner 名、Token、耗时、解答分、阶段回合数）宁缺勿造。 */
 
 /* hero 副文（原型「学习者 · skill · 开始于时间」对齐真实字段，缺源的段不渲染）：
-   学习者名 = 虚拟会话 profile.userName；skill = 真实会话 teaching.subject；开始于 = startTime / createdAt */
+   学习者名 = 虚拟会话 profile.userName；skill = 真实会话 teaching.subject；开始于 = startTime / createdAt；
+   主标题被路径名占用后（2026-10-31 外部评审 P1-1），最近一节课的主题下放副文，单课身份不丢。
+   2026-10-31 二轮评审 P2：路径会话里 teaching.subject 就是路径名，与主标题同串——删掉这半句
+   （面包屑 + h1 已写两遍，副文不再重复），保留「当前课：…」与开始时间。 */
 const heroSub = computed(() => {
   const segments: string[] = []
   const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
   if (learnerName) segments.push(`学习者 ${learnerName}`)
   const subject = firstText(String(asRecord(session.value?.teaching).subject || ''))
-  if (subject) segments.push(subject)
+  if (subject && !(heroUsesPathTitle.value && subject === pathDetailTitle.value)) segments.push(subject)
+  const topic = firstText(String(asRecord(session.value?.teaching).topic || ''))
+  if (heroUsesPathTitle.value && topic && topic !== pathDetailTitle.value) segments.push(`当前课：${topic}`)
   const startedRaw = firstText(
     String(asRecord(session.value?.teaching).startTime || ''),
     String(session.value?.createdAt || '')
@@ -2105,12 +2146,36 @@ const heroSub = computed(() => {
   return segments.join(' · ')
 })
 
-/* hero 主标题 = 会话主题（2026-10-04 全站评审 P2-7：人类可读主题升 24px/700 主位，
-   截断裸 ID 退位）——真实教学会话取 teaching.topic；无主题（虚拟会话/goal 会话）回退 shortId */
-const heroTitle = computed(() => {
-  const topic = firstText(String(asRecord(session.value?.teaching).topic || ''))
-  return topic || shortId.value
+/* hero 主标题：路径会话 = 学习路径名（2026-10-31 外部评审 P1-1「张冠李戴」：路径详情/目标阶段页
+   的 h1 挂着最近一节单课的课名，真正的路径名缩在 12px 灰色副行——主位还给路径名，单课主题下放副文）；
+   非路径会话仍用会话主题（2026-10-04 全站评审 P2-7：人类可读主题升 24px/700 主位）；都缺回退 shortId */
+const heroUsesPathTitle = computed(() => {
+  if (!hasPath.value || !pathGeneratedOrReady.value) return false
+  const pathTitle = pathDetailTitle.value
+  return !!pathTitle && pathTitle !== '学习路径'
 })
+const heroTitle = computed(() => {
+  if (heroUsesPathTitle.value) return pathDetailTitle.value
+  const topic = firstText(String(asRecord(session.value?.teaching).topic || ''))
+  if (topic) return topic
+  /* 2026-10-31 三轮评审 P1：路径未生成的目标阶段，原回退 shortId 把截断 UUID
+     （...84e-41ce636c170a）顶成 H1 大标题。回退链改：故事名 → 学习者名，UUID 仅最后兜底 */
+  const storyTitle = firstText(String(asRecord(session.value?.storyContext).title || ''))
+  if (storyTitle) return storyTitle
+  const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
+  if (learnerName) return `${learnerName}的目标对话`
+  return shortId.value
+})
+
+/* 面包屑同源穿帮（2026-10-31 三轮评审 P1；四轮评审 R3 自愈化）：H1 已回退到故事名，
+   面包屑仍可能挂着 openSubPage 带入的裸会话 id。监听 [heroTitle, subPage] 元组——
+   不管是载荷晚到、还是 stage 深链让宿主重建 subPage（覆盖掉已写的 label），
+   只要当前标签还是裸 id 就用 hero 真名补写；已有可读名（泛型/路径/真名）不抢。 */
+watch([heroTitle, subPage], ([title, sp]) => {
+  if (!title || title === shortId.value || !sp || sp.id !== sessionId.value) return
+  if (sp.label && sp.label !== sp.id) return
+  setSubPageLabel(title)
+}, { immediate: true })
 
 /* 状态 pill：生命周期合成态（与原顶栏徽章同源）→ mk-badge 档位。
    真实会话载荷没有顶层 status（只有 runtime.status），为不再误报「已创建」，先取顶层 status，缺源回退 runtime。
@@ -2210,19 +2275,14 @@ const turnRows = computed<TurnRow[]>(() => {
   return rows
 })
 
-/** 回合记录卡头：按模式给不同口径（合并规则只在虚拟会话成立，不能当本会话构成的说明）。
-    2026-10-18 用户走查「这类文案」：读数行不再写「目标 + 课堂按序合并」这句装配自述——
-    保留「两段」这个范围事实（N 数的是两段的总和），怎么合并在卡头 title 里说。 */
-const turnMeta = computed(() => {
-  if (!session.value) return ''
-  if (!turnRows.value.length) return '暂无对话记录'
-  if (!isRealMode.value) return `${turnRows.value.length} 条对话 · 目标与课堂两段`
-  return realKind.value === 'goal'
-    ? `${turnRows.value.length} 条对话 · 本目标对话`
-    : `${turnRows.value.length} 条对话 · 本课课堂转录`
-})
-/** 虚拟会话的回合构成（只挂在卡头 title）：本会话一个会话即完整旅程 */
-const turnMetaTitle = computed(() => '')
+/* Goal 页签去重（2026-10-31 三轮评审 P1）：Goal 页签上方「目标对话」气泡卡已全文渲染
+   目标段消息，回合记录表再逐字复读一遍且时间列全是「—」，页面高度膨胀一倍。
+   此页签下本表只补课堂段（没有课堂行就整卡不渲染）；其余页签维持合并旅程表。
+   （原 turnMeta/turnMetaTitle 卡头口径随本轮改版并入下方 meta 行，已删除） */
+const turnRowsShown = computed(() =>
+  activeTab.value === 'goal' ? turnRows.value.filter((r) => r.key.startsWith('learn-')) : turnRows.value
+)
+const turnRowsHaveTime = computed(() => turnRowsShown.value.some((r) => r.time !== '—'))
 
 /* 知识状态更新（真实掌握度）：真实会话 = teaching.knowledgeState（后端 knowledgePointStates）；
    虚拟会话 = 当前课课时总结 knowledgeItems。无数据整卡不渲染，不硬造 ±Δ（后端无增量字段） */
@@ -2459,7 +2519,12 @@ async function refresh() {
       clockTick.value = Date.now()
       const kind = String((session.value as Record<string, unknown>)?.kind || '')
       realKind.value = kind === 'goal' ? 'goal' : 'teaching'
-      /* 面包屑对象名（2026-10-24）：深链进来此前只有裸会话 id，看不出是课堂还是目标对话 */
+      /* 面包屑对象名（2026-10-24）：深链进来此前只有裸会话 id，看不出是课堂还是目标对话。
+         2026-10-31 外部评审复检：这个泛型名抢在 pathDetailTitle / PathJourneyPanel 之前占位后，
+         真标题（路径详情名）被 `!sp.label` 挡住再也写不进来，学习路径页深链座舱的面包屑
+         停留在「学习路径 / 目标对话」。改为：泛型名只在真标题写入后仍缺位时兜底——
+         立即写入会压制后续回写（两个回写点都只认「空名或泛型名」），故真标题写入点
+         （pathDetailTitle watch / writeBreadcrumbLabel）同步放行这两个泛型名。 */
       if (!subPage.value?.label) setSubPageLabel(kind === 'goal' ? '目标对话' : '真实课堂')
       timelineEntries.value = Array.isArray((session.value as Record<string, unknown>)?.timeline)
         ? (session.value as { timeline: Array<{ time: string; kind: string; title: string; detail: string }> }).timeline
@@ -3322,6 +3387,10 @@ async function copyRawJson() {
 .cp-stp:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
 .cp-stp:not(:disabled):hover { border-color: var(--mk-blue); }
 .cp-stp--active { background: var(--mk-blue-bg); border-color: var(--mk-blue); }
+/* 当前查看阶段：即使该阶段已完成（done），也要和其余三个绿勾瓦片区分开 */
+.cp-stp--current { background: var(--mk-blue-bg); border-color: var(--mk-blue); box-shadow: inset 0 0 0 1px var(--mk-blue); }
+.cp-stp--current::before { background: var(--mk-blue); }
+.cp-stp--current .cp-stp__name { color: var(--mk-ink); }
 .cp-stp__dot {
   flex: none; box-sizing: border-box; width: 22px; height: 22px; border-radius: 50%;
   display: grid; place-items: center; background: var(--mk-surface); border: 2px solid var(--mk-faint);
@@ -3494,20 +3563,17 @@ async function copyRawJson() {
   overscroll-behavior: contain;
   display: grid;
   gap: 4px;
+  /* 底部呼吸位（2026-10-31 三轮评审 P2）：无 padding 时滚到底最后一行被裁半行 */
+  padding-bottom: 8px;
 }
+.cp-logs-bar { display: flex; justify-content: flex-end; padding-bottom: 4px; }
 .cp-logs__follow {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  width: fit-content;
   border: none;
   font: inherit;
-  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-green); cursor: pointer;
-  padding: 2px 9px; border-radius: 999px; background: var(--mk-green-bg);
+  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); cursor: pointer;
+  padding: 2px 9px; border-radius: 999px; background: rgba(217, 119, 6, 0.08);
 }
-.cp-logs__follow:hover { background: rgba(16, 185, 129, 0.15); }
-.cp-logs__follow.is-paused { color: var(--mk-amber); background: rgba(217, 119, 6, 0.08); }
+.cp-logs__follow:hover { background: rgba(217, 119, 6, 0.15); }
 .cp-logs__filter { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px solid var(--mk-line); margin-bottom: 4px; }
 .cp-logs__filter-chip {
   padding: 2px 8px; border-radius: 999px; border: 1px solid var(--mk-line);
@@ -3537,6 +3603,9 @@ async function copyRawJson() {
 .cp-btn--sm { padding: 5px 10px; font-size: var(--mk-fs-micro); border-radius: 6px; }
 .cp-btn:hover:not(:disabled) { border-color: rgba(47, 106, 224, 0.4); color: var(--mk-blue); }
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 禁用主钮灰化（2026-10-31 四轮评审 R2）：半透明蓝仍读作「可点的主操作」，
+   与 mk-btn 的禁用语义对齐——教学已在进行中时「启动教学」不再像引导态 */
+.cp-btn--primary:disabled { background: var(--mk-surface-3); border-color: var(--mk-line); color: var(--mk-faint); opacity: 1; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
 .cp-btn--primary:hover:not(:disabled) { color: var(--mk-on-fill); opacity: 0.9; }
 /* 危险动作按钮改用 mk 原语 .mk-btn--danger（hero 动作区）；原 .cp-danger-btn 已删 */
@@ -3551,6 +3620,9 @@ async function copyRawJson() {
 
 /* Log line */
 .cp-log { display: flex; align-items: baseline; gap: 6px; font-size: var(--mk-fs-micro); flex-wrap: wrap; }
+/* 条目分割（2026-10-31 四轮评审 R6）：自动跟随滚到中部时，上一条的尾巴（39.9s / ▸ 原文）
+   紧贴下一条的头部（18:31:20 学习者回复），人眼会把耗时读成时间戳——给一条分隔线 */
+.cp-log + .cp-log { border-top: 1px solid var(--mk-line); padding-top: 6px; }
 .cp-log--error { padding: 4px 8px; border-radius: 6px; background: var(--mk-red-bg); }
 .cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: nowrap; padding-top: 1px; }
 .cp-log__phase {
@@ -3558,7 +3630,13 @@ async function copyRawJson() {
   background: var(--mk-blue-bg); color: var(--mk-accent-deep); white-space: nowrap;
 }
 .cp-log__phase--error { background: var(--mk-red-fill, var(--mk-red)); color: var(--mk-on-fill); }
-.cp-log__text { color: var(--mk-muted); word-break: break-all; min-width: 0; flex: 1 1 auto; }
+/* 长回复窄栏折叠（2026-10-31 三轮评审 P2）：会话日志栏只有 ~320px，数百字的回复
+   全文平铺会把整屏占满——行内截到 3 行省略，全文走同条目的 ▸ 原文（parseLogEntry
+   恒把整条 entry JSON 挂进 rawJson，展开即可读全文），不新增点击通道 */
+.cp-log__text {
+  color: var(--mk-muted); word-break: break-all; min-width: 0; flex: 1 1 auto;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
 .cp-log--error .cp-log__text { color: var(--mk-red); font-weight: 600; }
 /* 折叠行：同一行文字位置的可点读数（跳左侧页签），与正文同字号，下划线表明可点 */
 .cp-log__jump {
@@ -3617,6 +3695,8 @@ async function copyRawJson() {
   max-height: var(--cp-class-h);
   overscroll-behavior: contain;
 }
+/* 目标对话变体（2026-10-31 四轮评审 R10）：解除定高，对话全文随页面自然生长 */
+.cp-transcripts--free { max-height: none; overflow: visible; }
 .cp-transcript {
   display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
 }
@@ -3683,12 +3763,22 @@ async function copyRawJson() {
    max-height calc(100vh - 100px) 是同一把）：下限 560 保证矮屏上仍是一块可用工作区，
    上限 1100 防 4K/超高的屏把整页撑成一张卡。两列同高（只给一处口径，避免再各写一半）——
    口径变量定义在页根 .cp，这里只消费。 */
+/* 无课程时的整卡单一空态：替代原左右两栏各自为政的空态文字（2026-10-31 三轮评审） */
+.cp-learn-empty {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  padding: 24px 16px;
+}
+.cp-learn-empty .cp-none { margin: 0; }
 .cp-learn-grid {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 0;
   min-height: 300px;
 }
+/* 无建课树但有课堂转录/检查点（真实会话）：左栏空缺，对话独占整行，不挤进 260px 窄列 */
+.cp-learn-grid--notree { grid-template-columns: minmax(0, 1fr); }
 .cp-learn-tree {
   border-right: 1px solid var(--mk-line);
   padding: 6px 0;
@@ -3788,7 +3878,7 @@ async function copyRawJson() {
 
 /* Lesson head */
 .cp-lesson-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  display: grid; gap: 2px;
   padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); background: var(--mk-surface-2);
   margin-bottom: 10px;
 }
@@ -3971,7 +4061,8 @@ async function copyRawJson() {
 }
 .cp-lesson-head__main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .cp-lesson-head__main strong { font-size: var(--mk-fs-body); }
-.cp-lesson-head__ms { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 里程碑副标题独立一行（2026-10-31 外部评审）：不再与标题抢同一行 */
+.cp-lesson-head__ms { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .cp-lesson-head__state { padding: 2px 9px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 800; background: var(--mk-surface-2); color: var(--mk-muted); }
 .cp-lesson-head__state[data-state='done'] { background: var(--mk-green-bg); color: var(--mk-green); }
 .cp-lesson-head__state[data-state='active'] { background: var(--mk-blue-bg); color: var(--mk-blue); }
