@@ -232,7 +232,13 @@
       <div class="mk-card__head">
         <h3 class="mk-card__title">阶段推进</h3>
         <span class="cp-stepcard__spacer"></span>
-        <span class="mk-card__meta">已完成 <b class="mono">{{ stageDoneCount }}</b> / {{ stageFlow.length }} 阶段</span>
+        <!-- 2026-11-01 外部评审 P1：「已完成 N/4 阶段」与下方「0/15 课已完成」同屏，
+             易被读成「学习阶段完成＝课学完」。阶段轴的完成只认课堂收尾/出总结（见
+             cockpitStages.stageDone），故卡头改说「已推进 N/4」，并把口径写进 title。 -->
+        <span
+          class="mk-card__meta"
+          :title="`阶段完成＝本会话课堂已收尾或已出总结（与「路径任务是否学完」无关）。当前 ${stageDoneCount}/${stageFlow.length} 个阶段已到达完成态`"
+        >阶段已推进 <b class="mono">{{ stageDoneCount }}</b> / {{ stageFlow.length }}</span>
         <!-- 下游直达（2026-10-11 走查）：Path / Learn 的数据本卡已摆在页签里，但下钻到它们自己的页面
              此前要回列表再点一次。两条出口的取数判据与返回记忆见 stageJumpTargets。 -->
         <span v-if="stageJumpTargets.length" class="cp-stepjumps">

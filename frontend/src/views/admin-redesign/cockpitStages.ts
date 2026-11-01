@@ -152,6 +152,13 @@ export function useCockpitStages(deps: {
     const list = learnLessons.value
     if (!list.length) return ''
     const started = list.filter((l) => l.teachingSessionId || l.state === 'done').length
+    /* 2026-11-01 外部评审 P1：本格与「学习总结」卡的「0/15 课已完成」同屏时，一个说
+       「已开始 1/15」、一个说「已完成 0/15」，读者会外推成自相矛盾。阶段已到完成态
+       （课堂收尾/出总结）而课一节没完成时，把两条轴各自的事实写进格子：
+       「课堂已收尾」是阶段轴，「课程 0/15」是内容轴，二者不可互推。 */
+    if (stageDone('learning') && countDoneLessons(list) === 0) {
+      return `课堂已收尾 · 课程 0/${list.length} 已完成`
+    }
     return `已开始 ${started}/${list.length} 课`
   })
   /* 总结按课走（2026-10-19 用户走查「总结是按课走的，已生成应该也是按课程走吧」）：

@@ -6,7 +6,7 @@
  *    状态 + 阶段 pills——回合 pill 已撤（P3#13：回合数单源=阶段推进卡）/ 真实能力动作）
  *  - 教学闭环定位（原型 .loop 五环）2026-10-19 拍板下线：与下方 stepper 同源同态、属纯重复，
  *    本文件只保留「不得回归」的断言
- *  - 阶段推进（.stepper done/active/idle 三态 + 卡头「已完成 N / 4 阶段」+ statstrip 三读数）
+ *  - 阶段推进（.stepper done/active/idle 三态 + 卡头「阶段已推进 N / 4」+ statstrip 三读数）
  *  - 双栏 grid(1.5fr/1fr)：回合记录表（# / 类型 / 内容 / 时间；原型 Token/耗时/解答分无真数据不硬造）
  *    + 知识状态更新 ranklist（真实掌握度；无数据整卡不渲染）
  *  - 保留功能：advisory 条、stepper 步点即阶段页签导航
@@ -437,9 +437,10 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(steps[0].find('.cp-stp__meta').text()).toBe('学习者发言 1');
     expect(steps[1].find('.cp-stp__meta').text()).toBe('已完成');
 
-    // 卡头右侧完成计数
-    expect(w.find('.cp-stepcard').text()).toContain('已完成');
-    expect(w.find('.cp-stepcard').text()).toContain('/ 4 阶段');
+    // 卡头右侧完成计数（2026-11-01 外部评审 P1：改「阶段已推进 N / 4」——与下方
+    // 「0/15 课已完成」同屏时，旧的「已完成 N / 4 阶段」会被读成「学习阶段完成＝课学完」）
+    expect(w.find('.cp-stepcard').text()).toContain('阶段已推进');
+    expect(w.find('.cp-stepcard').text()).toContain('/ 4');
 
     // 2026-10-12 重设计：卡下方的 MkStatStrip 三读数（当前阶段/已用回合/下一阶段）撤——
     // 前两者步点阵自身已表达，「已用回合」与 Goal 步点「学习者发言 N」近重复且两次被误读

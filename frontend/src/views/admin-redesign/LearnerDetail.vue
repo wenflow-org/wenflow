@@ -503,16 +503,22 @@
           <p
             v-if="evidence.length"
             class="mk-section__conclusion"
-            title="教学类事件接口侧只取近 20 条，目标与路径类事件全量并入，故本行是「最近」而非「共」。低置信计数仅供参考，不构成「证据不足」判定"
+            title="学习事件＝教学类（课堂 / 任务 / 总结 / 评估）与目标·路径类事件合并后的时间线。接口教学类只取近 20 条、目标路径类全量并入，故是「最近」而非「共」。低置信计数仅供参考，不构成「证据不足」判定"
           >
-            最近 {{ evidence.length }} 条学习事件，其中
+            学习事件 {{ evidence.length }} 条（教学 + 目标 / 路径），其中
             {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%。
           </p>
           <!-- 校准明细（2026-10-21）：判分前预测、逐概念复习 rating、难度调整此前只存在于
-               learner_evidence.payload，证据页只有一行泛化标题；这里给出人读摘要。 -->
+               learner_evidence.payload，证据页只有一行泛化标题；这里给出人读摘要。
+               2026-11-01 外部评审 P2：与上方「学习事件 N 条」并列会被读成同一列表的前后不一致——
+               其实校准三类不在事件时间线里（两个不相交集合），标题就地写明统计对象；
+               title 里写死的「最近 30 条」也随之改成按当前条数表述，避免第三个数字漂移。 -->
           <div v-if="calibrationDetails.length" class="ld-calib">
-            <span class="ld-calib__head" title="最近 30 条：检查点判分前预测 · 复习结果（FSRS rating） · 难度调整，来自判分时记录的校准证据">
-              校准明细 · 最近 {{ calibrationDetails.length }} 条
+            <span
+              class="ld-calib__head"
+              :title="`校准记录＝判分前预测 · 复习结果（FSRS rating） · 难度调整。接口按发生时间倒序最多取 30 条，当前 ${calibrationDetails.length} 条。与学习事件时间线是两个不相交的集合`"
+            >
+              校准记录 {{ calibrationDetails.length }} 条（判分预测 / 复习评分 / 难度调整）
             </span>
             <ul class="ld-calib__list">
               <li v-for="(c, i) in calibrationDetails" :key="i" class="ld-calib__item">
