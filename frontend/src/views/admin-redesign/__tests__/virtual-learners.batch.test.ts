@@ -215,7 +215,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     cardsCloneMock.mockClear();
   });
 
-  it('状态条已退役：分区筛选计数迁卡头 chips + 活动会话进完成率 hint + 已截断提示保留', async () => {
+  it('状态条已退役：分区筛选计数迁卡头 chips + 活动会话进完成率卡悬停 + 已截断提示保留', async () => {
     liveVirtualSessionStats.value = { created: 3, running: 2, failed: 1, abandoned: 1, completed: 0, total: 7 };
     // 2026-10-15：活动会话改与完成率卡同源（/stats 的 running/created，F20 已扣已暂停），
     // 不再读列表 sessionStats（未扣减，与逐画像「进行中」打架）。数值仍 running 2 + created 3 = 5。
@@ -253,11 +253,14 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const w = await mountPage();
     const kpiNum = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
-    // 数字不渲染（防 0% 假绿），错误档显「不可用」+ hint 给动作出口
+    // 数字不渲染（防 0% 假绿），错误档显「不可用」；动作出口在卡根悬停里
+    // （2026-11-01：卡内不再渲染解释文字，hint 文案并入 title）
     expect(kpiNum('完成率（全部会话）')).toBe('不可用');
     expect(kpiNum('系统失败率（全部会话）')).toBe('不可用');
     expect(kpiNum('今日调用')).toBe('不可用');
-    expect(w.text()).toContain('统计不可用 · 点击重试');
+    expect(w.findAll('.mk-kpi__hint')).toHaveLength(0);
+    const completion = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完成率（全部会话）');
+    expect(completion!.attributes('title')).toContain('统计不可用 · 点击重试');
     expect(w.find('.mk-kpi--bad').exists()).toBe(true);
     // 点击 KPI 卡 → 调 live 层 retry
     await w.findAll('.mk-kpi')[0].trigger('click');
@@ -272,7 +275,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
     expect(kpiNum('完成率（全部会话）')).toBe('…');
     expect(kpiNum('系统失败率（全部会话）')).toBe('…');
-    expect(w.text()).toContain('统计加载中');
+    const completion = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完成率（全部会话）');
+    expect(completion!.attributes('title')).toContain('统计加载中');
   });
 
   it('完成率非整数比取整（2026-10-11 走查：原样插值渲染出 3.8461538461538463%）', async () => {

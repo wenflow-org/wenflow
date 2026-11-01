@@ -101,7 +101,7 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     (toast.warning as unknown as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it('「身份卡」KPI：两个构成数进 hint（预置 / 自建），定义回退走琥珀档', async () => {
+  it('「身份卡」KPI：两个构成数进同行 value-note（预置 / 自建），定义回退走琥珀档', async () => {
     const w = mount(VirtualLearnerCards);
     await flushPromises();
 
@@ -109,9 +109,11 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     expect(btn, '预置区缺少「一键加载」按钮').toBeTruthy();
     const kpi = w.findAll('.mk-kpi')[0];
     expect(kpi.find('.mk-kpi__label').text()).toBe('身份卡');
-    const hint = kpi.find('.mk-kpi__hint');
-    expect(hint.text()).toContain('预置 1');
-    expect(hint.text()).toContain('自建 0');
+    /* 2026-11-01：构成拆分改挂数值行的 value-note（卡内不再有单独说明行） */
+    expect(kpi.find('.mk-kpi__hint').exists()).toBe(false);
+    const note = kpi.find('.mk-kpi__num-note');
+    expect(note.text()).toContain('预置 1');
+    expect(note.text()).toContain('自建 0');
     w.unmount();
   });
 
@@ -145,7 +147,7 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     // 加载后必须回刷卡墙（新卡要立刻出现在墙上）
     expect(cardsIndexMock.mock.calls.length).toBeGreaterThanOrEqual(1);
     // 服务端返回的新快照回填构成读数
-    expect(w.findAll('.mk-kpi')[0].find('.mk-kpi__hint').text()).toContain('预置 1');
+    expect(w.findAll('.mk-kpi')[0].find('.mk-kpi__num-note').text()).toContain('预置 1');
     w.unmount();
   });
 
@@ -203,8 +205,10 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     expect(msg).toContain('定义回退跳过 1');
     expect(msg).toContain('失败 1');
     expect(toast.success).not.toHaveBeenCalled();
-    // 定义回退是琥珀脚注档（人工要看的异常），不是默认灰
-    expect(w.findAll('.mk-kpi')[0].find('.mk-kpi__hint').classes()).toContain('mk-kpi__hint--warn');
+    // 定义回退是人工要看的异常：不再是琥珀小字，改走 KPI 的数字档位（琥珀），卡内无说明行
+    expect(w.findAll('.mk-kpi')[0].find('.mk-kpi__hint').exists()).toBe(false);
+    expect(w.findAll('.mk-kpi')[0].classes()).toContain('mk-kpi--warn');
+    expect(w.findAll('.mk-kpi')[0].find('.mk-kpi__num-note').text()).toContain('定义回退 1');
     w.unmount();
   });
 });

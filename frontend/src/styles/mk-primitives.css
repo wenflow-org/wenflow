@@ -632,7 +632,6 @@ html[data-density='compact'] .mk-page { gap: 10px; }html[data-density='compact']
 
 html[data-density='compact'] .mk-kpi__num { font-size: 18px; }
 html[data-density='compact'] .mk-kpi__label { font-size: 11.5px; }
-html[data-density='compact'] .mk-kpi__hint { font-size: 11.5px; }
 html[data-density='compact'] .mk-badge { font-size: 11px; padding: 1px 7px; }
 html[data-density='compact'] .mk-pill { font-size: 12px; padding: 4px 11px; }
 html[data-density='compact'] .mk-filter__input,

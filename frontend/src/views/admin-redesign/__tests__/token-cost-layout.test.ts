@@ -97,8 +97,9 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     expect(kpi.exists()).toBe(true);
     expect(kpi.find('.mk-kpi__num').text()).toBe('—');
     expect(kpi.classes()).toContain('mk-kpi--muted');
-    // 原因与动作仍在（页顶那一行轻量提示 + 可点直达）
-    expect(kpi.find('.mk-kpi__hint').text()).toContain('待补 2 个模型单价');
+    // 原因与动作仍在（2026-11-01：卡内解释文字撤除，原因退到卡根 title；可点直达保留）
+    expect(kpi.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(kpi.attributes('title')).toContain('待补 2 个模型单价');
     expect(kpi.classes()).toContain('mk-kpi--clickable');
     // 状态词不得回到数值位
     expect(kpi.find('.mk-kpi__num').text()).not.toContain('未配置');

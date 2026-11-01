@@ -89,7 +89,12 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 2026-10-18 用户拍板：四张读数卡升到页签栏之上（页级概览 + 页签内工作台）。
     const naValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '—')
     expect(naValues).toHaveLength(3)
-    expect(w.findAll('.mk-kpi__hint--bad')).toHaveLength(3)
+    /* 2026-11-01 用户拍板「KPI 面板下方不许有解释说明文字，全站改了」：
+       原先是三张失败卡各挂一句红字脚注（.mk-kpi__hint--bad）。现在卡内不渲染任何说明，
+       失败信号靠数字档位——三张失败卡的数字走 bad 档，文案退到卡根 title（悬停/读屏）。 */
+    expect(w.findAll('.mk-kpi__hint')).toHaveLength(0)
+    expect(w.findAll('.mk-kpi--bad')).toHaveLength(3)
+    expect(w.findAll('.mk-kpi[title*="加载失败"]')).toHaveLength(3)
     const zeroValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '0')
     expect(zeroValues).toHaveLength(1)
     // 2026-10-27：页签内是行动队列——失败行保留但不可操作，清零项压成底部署名

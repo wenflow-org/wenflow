@@ -344,7 +344,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('异常堆积告警：失败/收尾失败/超时合计 ≥ 10 → 「异常」KPI 转红 + hint 披露阈值', async () => {
+  it('异常堆积告警：失败/收尾失败/超时合计 ≥ 10 → 「异常」KPI 转红 + 悬停披露阈值', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -354,7 +354,9 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const wrapper = await mountLive();
     const abn = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '异常')!;
     expect(abn.classes()).toContain('mk-kpi--bad');
-    expect(abn.find('.mk-kpi__hint').text()).toBe('异常堆积');
+    /* 2026-11-01：卡内不再渲染解释文字，「异常堆积」与阈值都在卡根 title 里 */
+    expect(abn.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(abn.attributes('title')).toContain('异常堆积');
     expect(abn.attributes('title')).toContain('≥ 10');
     expect(abn.attributes('title')).toContain('失败 / 收尾失败 / 超时');
     wrapper.unmount();
