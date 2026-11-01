@@ -33,7 +33,14 @@
         <MkRow title="所属用户" :time="pathInfo?.userLabel || '—'" />
         <MkRow title="路径状态" :time="pathStatusText" />
         <MkRow title="里程碑 / 任务" :time="`${pathInfo?.milestones ?? 0} 个 · ${pathInfo?.tasks ?? 0} 条`" />
-        <MkRow title="路径 ID" :time="pathId" />
+        <!-- 2026-11-01 外部评审 P2：原先把 lp_… 裸 ID 平铺在正文行里、且无一键复制。
+             内部分诊不靠读 ID，改成次级信息：短式展示 + 悬停看全 + 复制按钮。 -->
+        <MkRow title="路径 ID">
+          <template #trail>
+            <span class="pdx-id" :title="pathId">{{ shortPathId }}</span>
+            <button type="button" class="mk-link pdx-copy" :aria-label="`复制路径 ID`" @click="copyPathId">复制</button>
+          </template>
+        </MkRow>
       </MkRowList>
       <div class="pdx-orphan__note">
         该路径没有关联的目标对话，因此没有可跳转的学习会话座舱。路径内容仍可在学习者详情里查看。
@@ -55,6 +62,8 @@ import { computed, getCurrentInstance, onMounted, ref } from 'vue'
 import { subPage, openSubPage, closeSubPage, setSubPageLabel } from './store'
 import { errMsg } from './live'
 import { adminLearningContentApi } from '@/api/adminApi'
+import { copyText } from './clipboard'
+import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
@@ -65,6 +74,15 @@ const state = ref<'resolving' | 'error' | 'orphan'>('resolving')
 const errorMsg = ref('')
 const pathInfo = ref<PathInfo | null>(null)
 const pathId = computed(() => subPage.value?.id || '')
+/** 路径 ID 的短式展示：保留可辨认的头尾，中间省略（完整值在 title 与「复制」里） */
+const shortPathId = computed(() => {
+  const id = pathId.value
+  return id.length > 18 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id || '—'
+})
+async function copyPathId() {
+  const ok = await copyText(pathId.value)
+  ok ? toast.success('路径 ID 已复制') : toast.error('复制失败，请手动选中复制')
+}
 const PATH_STATUS_TEXT: Record<string, string> = {
   active: '学习中', generating: '生成中', failed: '生成失败', archived: '已下线', completed: '已完成',
 }
@@ -139,4 +157,7 @@ onMounted(() => { void resolve() })
 .pdx-alt { margin-top: 2px; }
 .pdx-orphan__note { padding: 12px 16px 0; color: var(--mk-muted); font-size: 12.5px; }
 .pdx-orphan__acts { display: flex; align-items: center; gap: 12px; padding: 12px 16px 16px; }
+/* 路径 ID 次级信息区（2026-11-01 外部评审 P2）：等宽 + 弱色，避免与业务字段抢视线 */
+.pdx-id { font-family: var(--mk-mono); color: var(--mk-muted); }
+.pdx-copy { margin-left: 8px; }
 </style>

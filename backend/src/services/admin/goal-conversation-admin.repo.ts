@@ -81,6 +81,18 @@ export async function findGoalConversationsForAdmin(where: Prisma.goal_conversat
       extraMap.set(e.id, { turns: Number(e.ut) || 0, availableTime: e.at == null ? null : String(e.at), deadlineText: e.dl == null ? null : String(e.dl) });
     }
   }
+
+  /* 关联路径名（2026-11-01 外部评审 P1）：一次 IN 查询取回本页用到的路径标题，
+     避免为列表逐行 join；learning_paths 缺失（孤儿/已删）时不兜底 id，交给前端标「未生成」。 */
+  const pathTitleMap = new Map<string, string>();
+  const pathIds = [...new Set(rows.map((r) => r.learningPathId).filter((id): id is string => !!id))];
+  if (pathIds.length) {
+    const paths = await prisma.learning_paths.findMany({
+      where: { id: { in: pathIds } },
+      select: { id: true, title: true }
+    });
+    for (const p of paths) if (p.title) pathTitleMap.set(p.id, p.title);
+  }
   return rows.map((r) => {
     const extra = extraMap.get(r.id);
     return Object.assign(r, {
@@ -89,6 +101,10 @@ export async function findGoalConversationsForAdmin(where: Prisma.goal_conversat
       constraints: extra
         ? [extra.availableTime, extra.deadlineText].filter((v): v is string => !!v)
         : [] as string[],
+      /* 关联路径名（2026-11-01 外部评审 P1）：KPI 卡报「未生成路径 N」，而列表里没有任何
+         一列能指出是哪一条——信息全在状态列（已完成即已生成）里，运营只能逐行点进座舱。
+         这里按 id 批量取路径名下发；无路径时不下发（由前端渲染「未生成」）。 */
+      learningPathTitle: r.learningPathId ? (pathTitleMap.get(r.learningPathId) || null) : null,
     });
   });
 }

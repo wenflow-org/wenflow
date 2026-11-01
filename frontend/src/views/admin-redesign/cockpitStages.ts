@@ -154,10 +154,13 @@ export function useCockpitStages(deps: {
     const started = list.filter((l) => l.teachingSessionId || l.state === 'done').length
     /* 2026-11-01 外部评审 P1：本格与「学习总结」卡的「0/15 课已完成」同屏时，一个说
        「已开始 1/15」、一个说「已完成 0/15」，读者会外推成自相矛盾。阶段已到完成态
-       （课堂收尾/出总结）而课一节没完成时，把两条轴各自的事实写进格子：
-       「课堂已收尾」是阶段轴，「课程 0/15」是内容轴，二者不可互推。 */
+       （课堂收尾/出总结）而课一节没学完时，把两条轴各自的事实写进格子：
+       「课堂已收尾」是阶段轴，「已学完 0/N 课」是内容轴，二者不可互推。
+       2026-11-01 第二轮评审 P0：措辞从「课程 0/N 已完成」改为「已学完 0/N 课」——
+       第 4 步「总结」报的是**已出总结的课次**（同一节课收尾后即为 1），这里报的是
+       **已学完的课**（任务达标才算），两处都用「已完成」会被读成「0 节 vs 1 节」打架。 */
     if (stageDone('learning') && countDoneLessons(list) === 0) {
-      return `课堂已收尾 · 课程 0/${list.length} 已完成`
+      return `课堂已收尾 · 已学完 0/${list.length} 课`
     }
     return `已开始 ${started}/${list.length} 课`
   })
@@ -185,7 +188,10 @@ export function useCockpitStages(deps: {
         return learnStageRollupText.value
       case 'wrapup': {
         const { done, total } = wrapupLessonStat.value
-        if (total && done) return `已生成 ${done}/${total} 课`
+        /* 2026-11-01 外部评审 P0：「已生成 d/t 课」与第 3 步/卡头的「已学完 0/t 课」同屏，
+           被读成「到底 0 节还是 1 节」。本轴数的是**已出总结的课次**（课堂收尾即计入），
+           内容轴的学完与否是另一回事，文案里把轴名写出来。 */
+        if (total && done) return `已出总结 ${done}/${total} 课`
         return hasWrapup.value ? '总结已生成' : ''
       }
       default:
@@ -226,6 +232,9 @@ export function useCockpitStages(deps: {
 
   return {
     effectiveStageIndex, stageDone, stageActive, stageCls, stageMark,
-    stageProgress, stageMiniStatus, goalRoundText, pathProgressText, learnProgressText
+    stageProgress, stageMiniStatus, goalRoundText, pathProgressText, learnProgressText,
+    /* 2026-11-01 外部评审 P0：学习总结卡头要与第 4 步同源报「已出总结 d/t 课」，
+       而卡头在 SFC 里、这个计数在 composable 里——导出后两处共用一份判定，不再各算一遍。 */
+    wrapupLessonStat
   }
 }

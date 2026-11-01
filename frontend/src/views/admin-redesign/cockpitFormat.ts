@@ -46,6 +46,23 @@ export function formatTime(value?: string | null) {
   return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString('zh-CN', { hour12: false })
 }
 
+/**
+ * 会话日志行的时间戳（2026-11-01 外部评审 P2）：
+ * 原先固定 `toLocaleTimeString`，只出 HH:MM:SS——跨天的日志从上往下读会出现
+ * 「23:13:27 之后变成 14:06:19」的时间倒流错觉（同页其它时间线用 formatTime 带日期，
+ * 审计页也用 MM-DD HH:MM:SS，只有这里少了日期）。今天只到时分秒，非今天补 MM-DD。
+ */
+export function formatLogTime(value?: string | null) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const clock = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  const now = new Date()
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  return sameDay ? clock : `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${clock}`
+}
+
 export function stageLabel(st: string) {
   return {
     goal: '目标',

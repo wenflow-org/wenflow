@@ -55,7 +55,7 @@
     <!-- ===== hero（原型 renderSessionDetail）：会话身份 + 状态/阶段 pills + 真实能力动作 =====
          主标题传会话主题（2026-10-04 全站评审 P2-7：截断裸会话 ID 做 24px/700 主标题不可读，
          人类可读主题此前缩在 12.5px 副行）；无主题回退 shortId。会话 ID 降为 pills 行 meta。 -->
-    <MkDetailHero class="cp-hero" avatar="S" :title="heroTitle" :sub="heroSub">
+    <MkDetailHero class="cp-hero" :avatar="heroAvatar" :title="heroTitle" :sub="heroSub">
       <template #pills>
         <!-- 状态 pill：生命周期合成态（与原顶栏徽章同源，原型 statusPill 位） -->
         <span class="mk-badge" :class="`mk-badge--${heroStatusTone}`" :title="statusTitle">{{ heroStatusText }}</span>
@@ -1057,7 +1057,7 @@ import { parseLogEntry, virtualLogPhaseZh } from './sessionLog'
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
   asRecord, normalized, firstText, boolValue, numberValue,
-  conversationMessages, formatTime, stageLabel, wrapupCardIcon
+  conversationMessages, formatTime, formatLogTime, stageLabel, wrapupCardIcon
 } from './cockpitFormat'
 import { useCockpitTraces, timelineKindLabel } from './cockpitTraces'
 import { useCockpitLogs, LOG_WINDOW } from './useCockpitLogs'
@@ -1834,11 +1834,17 @@ const timeoutReadout = computed(() => {
    不再让 summary 顶层 completedTasks 与它并排成为第二个口径。
    summary 的 completedTasks 保留在 hasCompletedTask/hasRunnablePathTask 里做存在性判据。 */
 const doneLessonCount = computed(() => countDoneLessons(learnLessons.value))
-/** 学习总结卡头：课数与卡内课时行同源（learnLessons）；课表未加载时不报 N/0 假读 */
+/** 学习总结卡头：两条轴各自报数，且轴名写在读数里
+ *  （2026-11-01 外部评审 P0：原先只报「N/M 课已完成」，与第 4 步「已生成 d/t 课」同屏时
+ *   被读成「0 节 vs 1 节」打架——一个数的是已出总结的课次（课堂收尾即计入），
+ *   一个数的是已学完的课（任务达标才算）。同一节课完全可以「已收尾但未学完」。） */
 const wrapupHeadMeta = computed(() => {
   /* 2026-10-18 用户走查「这类文案」：读数行只报课数进度。「终局总结已生成」是状态位
      不是读数，卡体正文与阶段状态已表达，并列在读数行会把课进度读成半句话。 */
-  return learnLessons.value.length ? `${doneLessonCount.value}/${learnLessons.value.length} 课已完成` : ''
+  const total = learnLessons.value.length
+  if (!total) return ''
+  const summarized = wrapupLessonStat.value.done
+  return `${summarized}/${total} 课已出总结 · ${doneLessonCount.value}/${total} 课已学完`
 })
 const hasRunnablePathTask = computed(() => pathMilestones.value.some((milestone) => {
   const tasks = milestone.subtasks || milestone.tasks
@@ -2047,7 +2053,7 @@ const {
 
 const {
   effectiveStageIndex, stageDone, stageActive,
-  stageProgress, stageMiniStatus, learnProgressText, pathProgressText
+  stageProgress, stageMiniStatus, learnProgressText, pathProgressText, wrapupLessonStat
 } = useCockpitStages({
   currentStage, bindings, stageStatus, stageResults,
   isTerminal, isFailedTerminal, isInterruptedTerminal, hasWrapup,
@@ -2108,6 +2114,20 @@ const heroTitle = computed(() => {
   const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
   if (learnerName) return `${learnerName}的目标对话`
   return shortId.value
+})
+
+/** hero 头像字母（2026-11-01 外部评审 P2）：原先是写死的 `avatar="S"`——换学员、换路径
+ *  都还是 S，被读成 Session/Stage 的硬编码残留。改为取学习者名首字，无名时取真路径名/
+ *  story 名首字；`buildPathDetailTitle` 的泛型兜底「学习路径」不是身份（谁都会变成「学」），
+ *  与 S 是同一类问题，故显式排除。本页是课堂域，都没有才兜底「课」。 */
+const heroAvatar = computed(() => {
+  const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
+  if (learnerName) return learnerName.slice(0, 1)
+  const pathTitle = firstText(pathDetailTitle.value || '')
+  if (pathTitle && pathTitle !== '学习路径') return pathTitle.slice(0, 1)
+  const storyTitle = firstText(String(asRecord(session.value?.storyContext).title || ''))
+  if (storyTitle && storyTitle !== '学习路径') return storyTitle.slice(0, 1)
+  return '课'
 })
 
 /* 面包屑同源穿帮（2026-10-31 三轮评审 P1；四轮评审 R3 自愈化）：H1 已回退到故事名，
@@ -2603,10 +2623,12 @@ async function loadLogs() {
       resetLogs()
       appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => {
         const view = parseLogEntry(l)
+        // 虚拟会话日志字段是 timestamp（非 createdAt）；兼容两者
+        const stamp = String(l.timestamp || l.createdAt || '')
         return {
           id: String(l.id ?? ''),
-          // 虚拟会话日志字段是 timestamp（非 createdAt）；兼容两者
-          time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+          at: stamp,
+          time: formatLogTime(stamp),
           text: view.text || view.phase,
           // 折叠行没有可排查的载荷：别挂一个只有合成字段的「原文」
           view: { ...view, phase: timelineKindLabel(String(l.phase)), ...(l.jumpTab ? { rawJson: '' } : {}) },
@@ -2630,9 +2652,11 @@ async function loadLogs() {
       /* 阶段徽章中文化（2026-10-18）：虚拟日志 phase 是后端枚举（virtual-reply / goal-response…），
          此前主视觉位直接露英文；筛选项同源取自这里，所以筛选也一并变中文 */
       const phase = virtualLogPhaseZh(view.phase)
+      const stamp = String(l.timestamp || l.createdAt || '')
       return {
         id: String(l.id ?? l.messageId ?? ''),
-        time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+        at: stamp,
+        time: formatLogTime(stamp),
         text: view.text || phase,
         view: { ...view, phase }
       }

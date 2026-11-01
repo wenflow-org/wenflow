@@ -391,6 +391,11 @@ router.get('/', async (req, res) => {
             /* 薄弱 = 强度<40% 的痕迹数（原型 threshold）；平均强度 0-1，null = 无 FSRS 强度数据 */
             weak: agg?.weak ?? 0,
             avgStrength: agg && agg.seen > 0 ? Math.round((agg.sum / agg.seen) * 100) / 100 : null,
+            /* 2026-11-01 外部评审 P1：`traces` 是全部记忆痕迹（含从未看过、无强度的），
+               而 avgStrength 的分母 `agg.seen` 只数有 lastSeenAt 的那些——列表上「记忆痕迹 4」
+               与「记忆强度 83%（=3 条的平均）」并排，读者会以为 4 条都参与了平均。
+               把有强度的条数一并下发，前端才能在列表上把两个口径分开写。 */
+            tracesWithStrength: agg?.seen ?? 0,
             lastReviewedAt: agg?.last ?? null,
             // outlet(D)：重复 label 比率等按用户粒度（供 adminui 渲染「概念碎片」读数）
             fragmentation: fragByUser.get(row.userId) ?? null,

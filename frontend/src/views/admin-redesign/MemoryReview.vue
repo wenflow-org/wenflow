@@ -84,7 +84,7 @@
       </section>
 
       <!-- 2. 概念归并审计：可写动作（勾选执行 / 单条确认 / 驳回 / 回滚），默认观察模式。
-           R7 概念本体治理批：三组建议（归并 / 需人工确认 / 散键清理）全部给出入口——
+           R7 概念本体治理批：三组建议（归并 / 需人工确认 / 未归类记忆清理）全部给出入口——
            此前 dropCandidates 只在类型里声明计数（审计 CC-2）、ambiguous 无操作位； -->
       <section class="mk-card">
         <div class="mk-card__head">
@@ -111,7 +111,7 @@
             @click="historyOpen = !historyOpen"
           >已执行历史（{{ appliedHistoryCount }}）</button>
         </div>
-        <!-- 审计计数（批E）：卡头 6 计数平摊 → 处理队列四格（与概览带同一语言）；R7 补「散键清理」格 -->
+        <!-- 审计计数（批E）：卡头 6 计数平摊 → 处理队列四格（与概览带同一语言）；R7 补「未归类记忆清理」格 -->
         <div v-if="detail.audit" class="mr-audit-queue">
           <div class="mr-audit-queue__item">
             <b>{{ detail.audit.stats.candidates }}</b><span>候选</span>
@@ -126,7 +126,7 @@
             <b>{{ mrAmbiguousCount }}</b><span>需人工确认</span>
           </div>
           <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': mrDropCount > 0 }">
-            <b>{{ mrDropCount }}</b><span>散键清理</span>
+            <b>{{ mrDropCount }}</b><span>未归类记忆清理</span>
           </div>
           <div class="mr-audit-queue__item mr-audit-queue__item--quiet">
             <b>{{ detail.audit.stats.applied }}<i>/{{ detail.audit.stats.deleted }}</i></b><span>已执行 / 删除</span>
@@ -319,7 +319,7 @@
           <p v-else class="mr__sub">没有待人工确认项。</p>
 
           <h4 class="mr__h4">
-            散键清理（误提取的无用概念）
+            未归类记忆清理（误提取的无用概念）
             <span class="mr__sub-inline">误提取的无用概念，确认后清理</span>
           </h4>
           <!-- R7 任务书 B：dropCandidates 此前只在类型里声明计数、从不渲染（审计 CC-2）——补第三组建议列表 -->
@@ -331,7 +331,7 @@
               <col />
               <col style="width: 132px" />
             </colgroup>
-            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念标识）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check">选择</th><th>未归类记忆（概念标识）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
             <tbody>
               <tr v-for="(drop, index) in detail.audit.dropCandidates" :key="`${drop.conceptKey}-${index}`">
                 <td>
@@ -339,7 +339,7 @@
                     type="checkbox"
                     class="mr__check"
                     :checked="selectedDrops[drop.conceptKey] === true"
-                    :aria-label="`勾选清理散键：${drop.conceptKey}`"
+                    :aria-label="`勾选清理未归类记忆：${drop.conceptKey}`"
                     @change="toggleSelectDrop(drop.conceptKey)"
                   />
                 </td>
@@ -354,15 +354,15 @@
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="确认清理该散键"
-                      @click="applyOne({ drops: [drop.conceptKey] }, `清理散键「${drop.conceptKey}」`)"
+                      title="确认清理该未归类记忆"
+                      @click="applyOne({ drops: [drop.conceptKey] }, `清理未归类记忆「${drop.conceptKey}」`)"
                     >确认</button>
                     <button
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
                       :title="REJECT_BTN_HINT"
-                      @click="rejectOne({ drops: [drop.conceptKey] }, `散键清理「${drop.conceptKey}」`)"
+                      @click="rejectOne({ drops: [drop.conceptKey] }, `未归类记忆清理「${drop.conceptKey}」`)"
                     >驳回</button>
                   </div>
                 </td>
@@ -370,7 +370,7 @@
             </tbody>
           </table>
           </div>
-          <p v-else class="mr__sub">没有待清理的散键。</p>
+          <p v-else class="mr__sub">没有待清理的未归类记忆。</p>
 
           <!-- 已执行历史（R7 任务书 B：mode=apply 审计一个入口可见——卡头「已执行历史」开关；
                默认展开保持既有可达性）。含破坏性归并凭据与 alias 式归并凭据两族。
@@ -851,7 +851,7 @@ const selectedPartsText = computed(() => {
   return [
     selectedKeys.value.length ? `归并 ${selectedKeys.value.length}` : '',
     selectedAmbiguousPairs.value.length ? `人工确认对 ${selectedAmbiguousPairs.value.length}` : '',
-    selectedDropKeys.value.length ? `散键 ${selectedDropKeys.value.length}` : ''
+    selectedDropKeys.value.length ? `未归类记忆 ${selectedDropKeys.value.length}` : ''
   ].filter(Boolean).join(' · ')
 })
 /** 0 选中时的引导：无可自动执行项时不摆一枚永远点不动的「全选」按钮 */

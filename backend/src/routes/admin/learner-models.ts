@@ -168,10 +168,18 @@ router.get('/:userId/evidence', async (req, res) => {
         signal,
         score: e.confidence,
         happenedAt: e.occurredAt.toISOString(),
-        // 附加域信息：payload 里的关键摘要
+        // 附加域信息：payload 里的关键摘要。
+        // 2026-11-01 外部评审 P1：path:generated 的 payload 不带 pathTitle，原来这里退成空串，
+        // 「学习动态」只剩「路径生成」四个字——同一学员两条路径的创建/生成读起来一模一样，
+        // 被当成重复事件。生成事件改为报生成结果（任务/里程碑数），与 session-console 同口径。
         detail: e.evidenceType === 'goal:understanding:updated'
           ? String(payload?.understanding?.surface_goal || payload?.surfaceGoal || '目标澄清对话')
-          : String(payload?.pathTitle || payload?.title || ''),
+          : e.evidenceType === 'path:generated'
+            ? [
+                typeof payload?.taskCount === 'number' ? `${payload.taskCount} 个任务` : '',
+                typeof payload?.milestoneCount === 'number' ? `${payload.milestoneCount} 个里程碑` : '',
+              ].filter(Boolean).join(' / ') || '路径生成完成'
+            : String(payload?.pathTitle || payload?.title || ''),
       };
     });
 

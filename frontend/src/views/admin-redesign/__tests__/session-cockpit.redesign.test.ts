@@ -216,11 +216,13 @@ beforeEach(() => {
 });
 
 describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）', () => {
-  it('hero：头像 S + 会话主题主标题 + ID 副行 meta + 科目/开始于副文 + 状态/阶段 pills；真实能力动作，不搬原型假钮', async () => {
+  it('hero：头像取身份首字（不写死 S）+ 会话主题主标题 + ID 副行 meta + 科目/开始于副文 + 状态/阶段 pills；真实能力动作，不搬原型假钮', async () => {
     stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
     const w = await mountCockpit('session-real', 'ts_re_1');
 
-    expect(w.find('.mk-hero__avatar').text()).toBe('S');
+    // 2026-11-01 外部评审 P2：原先写死 avatar="S"（换学员/换路径都还是 S）。
+    // 该 fixture 无 profile.userName、path 与 storyContext 也为空 ⇒ 落到课堂域兜底「课」
+    expect(w.find('.mk-hero__avatar').text()).toBe('课');
     // 主标题 = 会话主题（teaching.topic）：截断裸 ID 不再做 24px/700 主标题（2026-10-04 全站评审 P2-7）
     expect(w.find('.mk-hero__title').text()).toBe('函数');
     // 2026-10-23 走查：截断会话 ID 也从 pills 行撤下（完整 ID 在 URL / 数据包 / 日志里）

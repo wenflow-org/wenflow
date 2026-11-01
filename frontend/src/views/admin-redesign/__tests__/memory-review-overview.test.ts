@@ -213,7 +213,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(card.find('.mk-kpi__num').text()).toBe('4');
   });
 
-  it('列集九列：待复习只出数字、归并候选/散键落到行上、全表仅强度一条比例条', async () => {
+  it('列集九列：待复习只出数字、待合并同义词/未归类记忆落到行上、全表仅强度一条比例条', async () => {
     overview.mockResolvedValue({
       data: { data: {
         totals: { users: 2, traces: 14, due: 6, usersWithAudit: 1, proposed: 2, autoApplicable: 0, ambiguous: 2, applied: 0, deleted: 0, fragmentation: { duplicateLabelRatio: 0.1, unattachedKeys: 3 } },
@@ -230,7 +230,8 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     const w = mount(MemoryReviewOverview);
     await flushPromises();
 
-    expect(w.findAll('thead th').map((t) => t.text())).toEqual(['用户', '记忆痕迹', '待复习', '需关注', '归并候选', '散键', '记忆强度', '最近复习', '操作']);
+    /* 2026-11-01 外部评审 P1：两列表头原为内部黑话（归并候选 / 散键），改成业务可读文案 */
+    expect(w.findAll('thead th').map((t) => t.text())).toEqual(['用户', '记忆痕迹', '待复习', '需关注', '待合并同义词', '未归类记忆', '记忆强度', '最近复习', '操作']);
 
     const trs = w.findAll('tbody tr');
     expect(trs).toHaveLength(2);

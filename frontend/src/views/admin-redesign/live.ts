@@ -1354,6 +1354,8 @@ export interface LiveLearner {
   isTestAccount?: boolean
   pathId?: string
   pathTitle: string | null
+  /** 在学路径总数（后端 activePathCount；列表只展示最近更新的一条） */
+  activePathCount?: number | null
   currentTask: string | null
   currentMilestone: string | null
   trend: 'up' | 'down' | 'flat'
@@ -1400,6 +1402,7 @@ async function fetchLiveLearners(): Promise<void> {
     isTestAccount: !!m.isTestAccount,
     pathId: (m.pathId as string) || undefined,
     pathTitle: (m.pathTitle as string) || null,
+    activePathCount: typeof m.activePathCount === 'number' ? m.activePathCount : null,
     currentTask: (m.currentTask as string) || null,
     currentMilestone: (m.currentMilestone as string) || null,
     trend: mapTrend(m.recentTrend as string),

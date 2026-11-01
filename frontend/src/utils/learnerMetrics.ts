@@ -98,10 +98,25 @@ export const LEARNER_METRIC_CODES = METRICS.map((m) => m.code).join(' · ')
  * 快照读数经本文件换算后再上屏，阈值同步按 10 倍口径判色。
  * ------------------------------------------------------------------------- */
 
-/** 内部 0–10 → 展示 0–100（null/undefined/非有限值按缺值透传） */
+/** 内部 0–10 → 展示 0–100（null/undefined/非有限值按缺值透传）。
+ *  负荷类读数（LSS/KTL/LF）非负，下界裁到 0 只是坏数据兜底。 */
 export function toDisplayHundred(v: number | null | undefined): number | null {
   if (v == null || !Number.isFinite(v)) return null
   return Math.max(0, Math.min(100, v * 10))
+}
+
+/**
+ * **有符号**读数的内部 0–10 → 展示 0–100，不做下界裁剪（LSB 专用）。
+ *
+ * 2026-11-01 外部评审 P1：LSB = KTL − LF 是差值，负数本身就是结论（该休息了）。
+ * 原先这里复用 `toDisplayHundred` 的 `Math.max(0, …)`，把 −0.72 的 LSB 直接冲成 0.0，
+ * 于是同一张「学习压力记录」卡顶部四个大字写 LSB 0.0、下方曲线写 LSB −7.2，
+ * 被读成「同一卡片两个互相打架的读数」。判色用的 `toneOfHundred` 一直是按有符号值写的
+ * （`v <= -30` 才会判坏），所以只补换算、不动阈值。
+ */
+export function toDisplayHundredSigned(v: number | null | undefined): number | null {
+  if (v == null || !Number.isFinite(v)) return null
+  return Math.max(-100, Math.min(100, v * 10))
 }
 
 /**

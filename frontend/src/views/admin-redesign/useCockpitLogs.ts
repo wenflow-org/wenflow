@@ -8,6 +8,9 @@ import type { LogEntryView } from './sessionLog'
 export interface CockpitLogEntry {
   id: string
   time: string
+  /** 原始时间戳（2026-11-01 外部评审 P2）：`time` 是渲染用的短格式（今天只到时分秒），
+   *  拿它做去重键会把「跨天同一时刻同一文案」的两条日志误判成重复，故保留原名比较。 */
+  at?: string
   text: string
   view: LogEntryView
   /** 折叠行：对话全文在左侧页签，点按跳到对应页签（2026-10-22 去重复读） */
@@ -62,12 +65,13 @@ export function useCockpitLogs() {
     logFollowsBottom.value = true
   }
   /* 按消息 id 去重追加，保留窗口上限 */
+  const logKey = (l: CockpitLogEntry) => l.id || `${l.at || l.time}|${l.view.phase}|${l.text}`
   function appendLogs(entries: CockpitLogEntry[]) {
     if (!entries.length) return
-    const seen = new Set(logs.value.map((l) => l.id || `${l.time}|${l.view.phase}|${l.text}`))
+    const seen = new Set(logs.value.map(logKey))
     const added: CockpitLogEntry[] = []
     for (const entry of entries) {
-      const key = entry.id || `${entry.time}|${entry.view.phase}|${entry.text}`
+      const key = logKey(entry)
       if (seen.has(key)) continue
       seen.add(key)
       added.push(entry)
