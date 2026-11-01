@@ -607,6 +607,10 @@
             <!-- 当前读数行（2026-10-11 用户走查）：四张 KPI 卡与曲线卡同族指标合流——当前值并入
                  曲线卡头部，撤页宽 KPI 横排；四个读数全缺省时整行不出现（曲线/空态自足） -->
             <div v-if="metricCards.some((m) => m.value !== '—')" class="ld-load__hits">
+              <!-- 2026-11-01 外部评审 P1 收尾：本行是**当前快照**，下方带日期的那条是**当日记录**，
+                   两条各自留一位小数，LSB 这类差值会骑在四舍五入边界上（实测 −7.1 与 −7.2）。
+                   把来源标出来，读者就不会把它当成同一读数的两个值。 -->
+              <span class="ld-load__hits-src" title="本行取自当前快照，与带日期的当日记录各算各的，都会四舍五入到一位小数">当前快照</span>
               <div v-for="m in metricCards" :key="m.label" class="ld-load__hit" :title="m.title">
                 <span>{{ m.label }}</span>
                 <strong :class="{ 'is-good': m.tone === 'ok', 'is-bad': m.tone === 'bad' }">{{ m.value }}</strong>
@@ -2669,7 +2673,10 @@ const loadZoneCls = (z: 'fresh' | 'optimal' | 'risk') => (z === 'fresh' ? '--fre
    现在胶囊只陈述 LSB 轴自己的事实，并把判据差异写进悬停说明。 */
 const loadZoneChip = computed(() => {
   const z = loadDisplayDay.value ? loadZoneOf(loadDisplayDay.value) : 'fresh'
-  const text = z === 'fresh' ? '状态平衡' : z === 'optimal' ? '疲劳略偏高' : '疲劳明显偏高'
+  /* 档位词里**不出现「疲劳」**：页头那颗胶囊与「趋势与建议」里的「疲劳风险」都按 ACWR 相对量
+     判（实测「疲劳：低」），本胶囊只看 LSB 绝对量，两边同为一种说法时会被读成同屏矛盾——
+     这正是评审上一轮报的那条。改成只陈述 LSB 轴自己的方向。 */
+  const text = z === 'fresh' ? 'LSB 平衡' : z === 'optimal' ? 'LSB 略偏负' : 'LSB 明显偏负'
   return {
     text,
     cls: loadZoneCls(z),
@@ -3256,6 +3263,8 @@ const snapshotHint = computed(() =>
 
 /* 学习压力曲线卡头部当前读数行（2026-10-11 自页宽 KPI 横排合流）：四格 mini hit，
    语气色沿用 is-good/is-bad（与预测校准 hit 同词汇），口径进 title */
+/* 读数行来源标注（2026-11-01 外部评审 P1 收尾）：本行是当前快照，下方带日期的是当日记录 */
+.ld-load__hits-src { align-self: center; color: var(--mk-muted); font-size: var(--mk-fs-micro); margin-right: 4px; }
 .ld-load__hits {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3542,7 +3551,7 @@ const snapshotHint = computed(() =>
   .ld-pf-sub > div + div { border-left: 0; padding-left: 0; }
   .ld-insights--cols { columns: 1; }
   .ld-sig-tiers { grid-template-columns: 1fr; }
-  .ld-load__hits { grid-template-columns: repeat(2, 1fr); }
+.ld-load__hits { grid-template-columns: repeat(2, 1fr); }
   .ld-ev-grid { grid-template-columns: 1fr; grid-template-rows: none; height: auto; min-height: 0; }
   .ld-ev-main .ld-evidence { max-height: none; overflow: visible; }
   .ld-ev-side { overflow: visible; }
