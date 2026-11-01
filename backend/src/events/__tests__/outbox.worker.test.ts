@@ -13,6 +13,7 @@ jest.mock('../../utils/logger', () => ({
 }))
 
 import { DurableOutboxWorker } from '../outbox.worker'
+import { runWithContext, getRequestContext } from '../../gateway/api-gateway/context'
 
 describe('DurableOutboxWorker same-user ordering', () => {
   beforeEach(() => {
@@ -191,6 +192,38 @@ describe('DurableOutboxWorker same-user ordering', () => {
 
     expect(dispatched).toEqual(['plain-now', 'sched-due', 'sched-future'])
     expect(scheduled.status).toBe('published')
+  })
+
+  /* 2026-11-01 实测回归：入队唤醒的防抖定时器会继承入队请求的 ALS 上下文，其中带着
+     那次 HTTP 请求的 abortSignal（绑在 res close 上）。结课响应一关，消费链里的技能
+     调用就在 executor 入口被判 CALLER_ABORTED——两节课各出现一次
+     「持久事件消费者失败（Skill execution aborted by caller）」，课后知识增强晚一轮落地。
+     后台消费不得继承请求的取消信号。 */
+  it('消费不吃入队请求的 abortSignal（摘掉取消信号，保留用户身份）', async () => {
+    const base = new Date(Date.now() - 10_000)
+    records.push(buildRecord('lesson-1', 'user-1', base, 'lesson:completed'))
+    const controller = new AbortController()
+    let seenAborted: boolean | undefined
+    let seenUserId: string | undefined
+    const registry = {
+      dispatch: jest.fn(async () => {
+        const ctx = getRequestContext()
+        seenAborted = ctx.abortSignal?.aborted
+        seenUserId = ctx.userId
+      })
+    }
+
+    const worker = new DurableOutboxWorker(registry as any)
+    // 模拟「请求处理中入队 → 响应已关闭」：请求上下文已中止，唤醒才轮到 worker
+    controller.abort()
+    await runWithContext(
+      { userId: 'user-request', sourceEntry: 'user', abortSignal: controller.signal },
+      () => worker.runOnce()
+    )
+
+    expect(seenAborted).toBeUndefined()
+    expect(seenUserId).toBe('user-request')
+    expect(records[0].status).toBe('published')
   })
 })
 

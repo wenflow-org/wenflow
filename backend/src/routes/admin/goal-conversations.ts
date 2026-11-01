@@ -206,12 +206,19 @@ router.post('/:id/regenerate-path', async (req: any, res) => {
     // 调用服务生成新的学习路径
     const pathData = await generateLearningPathFromConversation(id);
 
+    /* 2026-11-01 实测修复：本入口返回的就是 learning_paths 行本身（`fullPath`），
+       不是 `{ learningPath }` 信封——旧写法读 `pathData.learningPath?.id` 恒取到 undefined，
+       于是前端 toast 只能显示「已生成路径「未命名」」，行上的 pathId 也永远回填不上，
+       对话一直停在「未生成路径」。两种形状都认，服务侧换信封也不会再断。 */
+    const generatedPath = (pathData as { learningPath?: { id?: string; name?: string; title?: string; totalWeeks?: number } })?.learningPath
+      ?? (pathData as { id?: string; name?: string; title?: string; totalWeeks?: number } | null);
+
     res.json({
       success: true,
       data: {
-        learningPathId: pathData.learningPath?.id,
-        learningPathName: pathData.learningPath?.name,
-        totalWeeks: pathData.learningPath?.totalWeeks,
+        learningPathId: generatedPath?.id,
+        learningPathName: generatedPath?.name || generatedPath?.title,
+        totalWeeks: generatedPath?.totalWeeks,
         version: existingPathsCount + 1,
         totalVersions: existingPathsCount + 1
       }

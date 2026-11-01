@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import { DurableEventConsumerRegistry } from './consumer-registry';
 import { mapOutboxRecord } from './outbox.repository';
 import { setOutboxWakeListener } from './outbox-wake';
+import { runWithContext, getRequestContext } from '../gateway/api-gateway/context';
 
 /** 兜底轮询区间（架构优化批 #5）：空闲指数退避 1s→30s；入队唤醒/有产出时复位到下限 */
 const POLL_MIN_MS = 1000;
@@ -72,12 +73,33 @@ export class DurableOutboxWorker {
 
   /** 供测试/运维直接驱动一轮 */
   async runOnce(): Promise<void> {
-    await this.tick();
+    await this.runDetachedFromRequest(() => this.tick());
+  }
+
+  /**
+   * 与「触发入队的那个请求」脱钩后再跑本轮消费。
+   *
+   * 2026-11-01 实测：`notifyOutboxActivity` 的防抖定时器**继承入队方的 ALS 上下文**，
+   * 于是被唤醒的后台消费带着那次 HTTP 请求的 `abortSignal`（`acp-context.middleware` 把
+   * `res.once('close')` 绑到了它上面）。结课响应一关闭，信号即中止，消费链里的技能调用
+   * 在 `executor` 入口就被判 `CALLER_ABORTED`——两节课各出现一次
+   * `[outbox] 持久事件消费者失败（Skill execution aborted by caller）`，
+   * 只能靠退避重投补上（课后知识增强因此晚一轮落地）。
+   *
+   * 后台消费的寿命不该绑在某个请求上：保留身份字段（userId / sourceEntry / traceId，
+   * 执行日志仍能归因），只摘掉 abortSignal；上下文用拷贝，避免回写污染原请求的 store。
+   */
+  private runDetachedFromRequest<T>(fn: () => Promise<T>): Promise<T> {
+    const inherited = getRequestContext();
+    if (!inherited.abortSignal) return fn();
+    const { abortSignal: _detached, ...rest } = inherited;
+    void _detached;
+    return runWithContext(rest, fn);
   }
 
   private async runTickSafely(): Promise<void> {
     try {
-      await this.tick();
+      await this.runDetachedFromRequest(() => this.tick());
     } catch (error) {
       logger.error('持久事件轮询失败', {
         error: error instanceof Error ? error.message : String(error)

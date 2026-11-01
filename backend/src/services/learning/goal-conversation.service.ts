@@ -1671,7 +1671,7 @@ export async function generateLearningPathFromConversation(conversationId: strin
   const surfaceGoal = understanding.surface_goal || collected.surface_goal || '';
 
   // 构造新格式参数
-  return await service['generateLearningPath'](conversation, {
+  const learningPath = await service['generateLearningPath'](conversation, {
     userVisible: '',  // 此场景无对话文本
     internal: {
       core: {
@@ -1692,4 +1692,24 @@ export async function generateLearningPathFromConversation(conversationId: strin
       }
     }
   });
+
+  /* 2026-11-01 实测修复：这里原来只生成、不回写，于是管理端「生成学习路径」之后
+     对话仍停在「未生成路径」，新路径也没有任何对话指向它——学习路径列表点详情只能
+     落在「该路径没有关联的目标对话」空态（孤儿路径）。
+     `regeneratePath` 一直有这段回写，本入口是唯一遗漏的调用点。 */
+  if (learningPath?.id) {
+    await applyConversationLifecycle(
+      prisma as unknown as ConversationLifecycleDb,
+      conversationId,
+      {
+        stage: 'completed',
+        status: 'completed',
+        completedAt: new Date(),
+        learningPathId: learningPath.id,
+        learningPath: { id: learningPath.id, status: learningPath.status },
+      }
+    );
+  }
+
+  return learningPath;
 }
