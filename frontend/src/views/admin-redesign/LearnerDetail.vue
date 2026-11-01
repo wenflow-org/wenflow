@@ -2369,7 +2369,7 @@ const signalTierFoot = computed(() => {
   const head = four.map((t) => t.n).join(' + ')
   const sum = four.reduce((acc, t) => acc + t.n, 0)
   if (!total) return ''
-  const base = `${head} = ${sum}，与卡头「${total} 个概念」四档都只数概念清单里的那些`
+  const base = `${head} = ${sum}，与卡头「${total} 个概念」对得上，四档都只数概念清单里的那些`
   const names = outside && outside.names.length ? outside.names.join('、') : ''
   /* R1：一句只讲一件事——这类说明不写分号，拆成两句 */
   return names ? `${base}。另有 ${outside ? outside.n : 0} 个标签不在当前概念清单里、未计入：${names}` : base
