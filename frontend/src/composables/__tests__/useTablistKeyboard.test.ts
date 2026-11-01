@@ -4,7 +4,7 @@ import { mount } from '@vue/test-utils';
 import { useTablistKeyboard } from '../useTablistKeyboard';
 
 /**
- * #75：三处手搓 tablist（Skills / ExecLogs / PromptEvalPanel）补 ARIA 契约后，
+ * #75：手搓 tablist（Skills / ExecLogs）补 ARIA 契约后，
  * 把「roving tabindex + 方向键循环 + Home/End」这套行为钉在 composable 上。
  */
 const TABS = ['a', 'b', 'c'] as const;

@@ -58,8 +58,8 @@
       />
     </section>
 
-    <!-- Prompt 评估的读数带与页签 2026-10-25 拆到独立页 PromptEval.vue（用户「拆成单页，
-         把这个 tab 撤掉，放到组里」）：本页只剩目录，不再有视图切换。 -->
+    <!-- 2026-10-25 起本页只剩目录（读数带与页签当时拆到独立页）；2026-11-01 那个独立页
+         整体下线，侧栏 Skill 组只剩「字段流转 / Skill 目录 / 插件」。 -->
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -260,7 +260,7 @@ import SkillModelCoverage from './SkillModelCoverage.vue'
 import { adminSkillsApi, adminApiConfigApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
 /* ================= 目录页（2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」：
-   Prompt 评估拆为独立页 PromptEval.vue 并归入侧栏 Skill 组，本页只剩目录；
+   本页只剩目录（Prompt 评估当时拆成的独立页 2026-11-01 已整体下线，旧深链改投回本页）；
    「模型路由」2026-10-24 退役——路由是 Skill 的属性，单技能配置在详情「运行时」里改，
    跨 Skill 对照与批量套用收进页头「批量模型配置」弹窗） ================= */
 
@@ -280,10 +280,8 @@ function openVersions(id: string) {
   openSubPage('skill', id, { tab: 'versions' })
 }
 
-/** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页；Prompt 评估同批改投新独立页 */
+/** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页 */
 const RETIRED_TABS = new Set(['health', 'drift', 'recon'])
-/** 旧「Prompt 评估」页签 → 独立页 /admin/prompt-eval（2026-10-25 拆页；?peTab= 原样带走） */
-const LEGACY_EVAL_TAB = 'prompt-eval'
 /** 旧「模型路由」页签 → 页头弹窗（旧书签/旧文档链接不失效） */
 const LEGACY_ROUTING_TAB = 'model-routing'
 const bulkOpen = ref(false)
@@ -302,9 +300,6 @@ function openSkillFromBulk(id: string) {
 }
 const toHealthCenter = (extra: Record<string, string> = {}) =>
   void router.replace({ path: '/admin/health-center', query: extra })
-/** 旧评估页签 → 独立页：?peTab= 是评估页自己的内层键，原样带走（去掉宿主键 ?tab=） */
-const toPromptEval = (extra: Record<string, string> = {}) =>
-  void router.replace({ path: '/admin/prompt-eval', query: extra })
 /** 去掉宿主页签键后的其余 query（改投别的页时只带走定位参数） */
 function withoutTabKey(): Record<string, string> {
   const q = { ...(route.query as Record<string, string>) }
@@ -318,11 +313,6 @@ watch(
     if (typeof t === 'string' && RETIRED_TABS.has(t)) {
       // 老书签 / 旧文档链接：/admin/skills?tab=health → /admin/health-center（?recon=/?diff= 等定位参数一并带走）
       toHealthCenter(withoutTabKey())
-      return
-    }
-    // 旧「Prompt 评估」页签：2026-10-25 拆为独立页，老深链 /admin/skills?tab=prompt-eval → /admin/prompt-eval
-    if (t === LEGACY_EVAL_TAB) {
-      toPromptEval(withoutTabKey())
       return
     }
     // 旧「模型路由」页签：落到运行列表并打开页头弹窗，地址收敛为 ?tab=run
@@ -344,10 +334,6 @@ watch(
       intent.tab = ''
       toHealthCenter()
       return
-    }
-    if (t === LEGACY_EVAL_TAB) {
-      intent.tab = ''
-      toPromptEval()
     }
   },
   { immediate: true }

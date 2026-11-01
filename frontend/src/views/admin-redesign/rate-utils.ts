@@ -1,8 +1,8 @@
 /**
  * 成功率口径单点（评审「跨页七律 3」阈值私有 / P1#26 精度抹失败）：
- * Skills / SkillDetail / PromptEval（TcRankTable 的 failRate 可复用）共用同一套
- * 「阈值 + 精度 + 兜底」——此前四页四套阈值（Skills <70红/<90琥珀、SkillDetail <95 即 warn、
- * PromptEval 90/60 两档、passTone「全过=ok 否则 warn」两档）互相对不上，
+ * Skills / SkillDetail 等读数页共用同一套「阈值 + 精度 + 兜底」——此前多页各一套阈值
+ * （Skills <70红/<90琥珀、SkillDetail <95 即 warn、评级表 90/60 两档、
+ * passTone「全过=ok 否则 warn」两档）互相对不上，
  * 且 toFixed(0) 把 99.9% 四舍五入成 100%，失败被显示抹掉。
  *
  * 收敛后的唯一口径（2026-10 拍板，四页 title 披露同一句话）：

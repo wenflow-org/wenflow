@@ -246,6 +246,11 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/people'
   },
   {
+    // 已下线场景：/admin/prompt-eval → /admin/skills（该页 2026-10-25 从 Skills 页签拆出）
+    path: '/admin/prompt-eval',
+    redirect: (to) => ({ path: '/admin/skills', query: stripTab(to) })
+  },
+  {
     path: '/admin/learner-center',
     redirect: '/admin/learner-state'
   },
@@ -511,12 +516,14 @@ router.beforeEach(async (to, _from, next) => {
       next({ path: '/admin/health-center', query });
       return;
     }
-    /* Prompt 评估 2026-10-25 拆为独立页：老深链 ?tab=prompt-eval 路由级改投，
-       ?peTab= 原样带走。模型路由是页内弹窗，仍需 Skills 挂载后打开，不在路由层处理。 */
+    /* Prompt 评估 2026-11-01 下线（用户「先下线吧，不需要了」）：?tab=prompt-eval 与
+       /admin/prompt-eval 一并落回 Skill 目录——它 2026-10-25 就是从这里的页签拆出去的，
+       老书签/外链不留 404，也不留一个已经摘掉的空页签（tab 键删掉，Skills 落默认页签）。 */
     if (tab === 'prompt-eval') {
       const query = { ...to.query };
       delete query.tab;
-      next({ path: '/admin/prompt-eval', query });
+      delete query.peTab;
+      next({ path: '/admin/skills', query });
       return;
     }
   }

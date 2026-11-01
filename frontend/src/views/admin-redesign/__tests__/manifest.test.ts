@@ -39,11 +39,12 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-10-27 收口）：5 分组 + 置顶总览，19 个可见场景与目标 IA 一致', () => {
+  it('导航（2026-10-27 收口）：5 分组 + 置顶总览，18 个可见场景与目标 IA 一致', () => {
     // 隐藏场景（hidden: true，如运营术语表）不占侧栏席位：由顶栏帮助按钮跳转，单独断言
+    // 2026-11-01 prompt-eval 下线：注册表 20 → 19，可见场景 19 → 18
     const visible = MOCK_SCENES.filter((s) => !s.hidden);
-    expect(MOCK_SCENES).toHaveLength(20);
-    expect(visible).toHaveLength(19);
+    expect(MOCK_SCENES).toHaveLength(19);
+    expect(visible).toHaveLength(18);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = visible.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '运营', '学习', '仿真', 'Skill', '观测与排查']);
@@ -59,7 +60,8 @@ describe('AdminConsole 页面注册表', () => {
       学习: ['goal-conversations', 'learning-paths', 'teaching-sessions', 'learner-state', 'memory-review'],
       // 组名与总览状态条同词（「仿真 · 仿真空闲」）：实例 + 身份池
       仿真: ['virtual-learners', 'virtual-learner-cards'],
-      Skill: ['orchestrator', 'skills', 'prompt-eval', 'addons'],
+      // prompt-eval 2026-11-01 下线，Skill 组回到三项
+      Skill: ['orchestrator', 'skills', 'addons'],
       // 健康中心 13 项都是排查项，与两份日志同一动线
       观测与排查: ['execution-logs', 'audit-logs', 'token-cost', 'health-center']
     });
@@ -84,11 +86,11 @@ describe('AdminConsole 页面注册表', () => {
     const ids = new Set(MOCK_SCENES.map((s) => s.id));
     // health-center 2026-09-29 回归侧栏（系统组独立场景），故不在退役名单；
     // batch-experiments 2026-10-04 整体下线（运行态并入 virtual-learners、资产输入归卡库，URL 重定向）
-    // prompt-eval 2026-10-25 拆回独立页（此前 2026-10-04 曾折入 skills 页签）——已不在退役名单
+    // prompt-eval 2026-11-01 下线（用户「先下线吧，不需要了」）：页面与侧栏项摘除，旧 URL 改投 /admin/skills
     // memory-review 2026-10-12 一度退役，同日恢复跨用户总览（单用户明细在学习者详情页签）——不再列退役
     // ops-center 2026-10-16 解散并入运营中心（运维工具 / 数据导出 / 会话安全三页签），侧栏撤除
     // addons 2026-10-19 移出退役名单——「外挂能力」拆回独立页，重回侧栏 Skill 组
-    for (const retired of ['feedback', 'ops-achievements', 'messages', 'session-security', 'ops-center', 'batch-experiments']) {
+    for (const retired of ['feedback', 'ops-achievements', 'messages', 'session-security', 'ops-center', 'batch-experiments', 'prompt-eval']) {
       expect(ids.has(retired), `退役场景「${retired}」不应在侧栏清单`).toBe(false);
     }
   });

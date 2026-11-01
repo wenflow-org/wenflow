@@ -244,10 +244,11 @@ describe('Skill 目录 P1 修复批', () => {
 });
 
 /* 2026-09-29 用户拍板：健康检查/漂移/对账三 tab 退役——三者本是同一份报表的三刀，
-   合一后独立成 /admin/health-center（系统组）。2026-10-04 Prompt 评估由独立场景折入，
-   2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」又拆回独立页 /admin/prompt-eval。
-   2026-10-24「模型路由」页签退役（与 Skill 详情「运行时」重复），改为页头弹窗：
-   Skills 现为单一目录视图，无视图切换。 */
+   合一后独立成 /admin/health-center（系统组）。2026-10-24「模型路由」页签退役
+   （与 Skill 详情「运行时」重复），改为页头弹窗：Skills 现为单一目录视图，无视图切换。
+   Prompt 评估 2026-10-25 拆出、2026-11-01 下线，本页从此与评估无涉——
+   老深链 ?tab=prompt-eval 与 /admin/prompt-eval 都在路由层改投回本页，
+   断言见 router/__tests__/admin-routes.test.ts（那里用的是真路由，含全局改投）。 */
 async function mountHost(path: string) {
   dataSource.value = 'live';
   const router = createRouter({
@@ -255,7 +256,6 @@ async function mountHost(path: string) {
     routes: [
       { path: '/admin/:page?', component: { template: '<div />' } },
       { path: '/admin/health-center', component: { template: '<div />' } },
-      { path: '/admin/prompt-eval', component: { template: '<div />' } },
     ],
   });
   await router.push(path);
@@ -275,13 +275,13 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     liveSkillStatsMap.value = null;
   });
 
-  it('单一目录视图：不再有视图切换页签，也不渲染健康中心（Prompt 评估已拆为独立页）', async () => {
+  it('单一目录视图：不再有视图切换页签，也不渲染健康中心', async () => {
     const { wrapper } = await mountHost('/admin/skills');
     expect(wrapper.findAll('.skills-tabs .tab')).toHaveLength(0);
     expect(wrapper.find('.hc-embedded').exists()).toBe(false);
     // 目录在位：KPI 卡带（无档案时 Skill 卡显 0；2026-10-04 状态条已退役）
     expect(wrapper.find('.mk-kpi-grid').exists()).toBe(true);
-    // 页头只剩「批量模型配置」——「批量跑评估」随评估页搬走
+    // 页头只剩「批量模型配置」（「批量跑评估」原属评估页，随该页一并下线）
     const actions = wrapper.findAll('.mk-pagehead__actions button').map((b) => b.text());
     expect(actions).toEqual(['批量模型配置']);
     wrapper.unmount();
@@ -295,15 +295,6 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
       expect(router.currentRoute.value.query.refresh).toBe('1');
       wrapper.unmount();
     }
-  });
-
-  it('老深链 ?tab=prompt-eval 改投独立页 /admin/prompt-eval（?peTab= 原样带走）', async () => {
-    const { wrapper, router } = await mountHost('/admin/skills?tab=prompt-eval&peTab=runs');
-    expect(router.currentRoute.value.path).toBe('/admin/prompt-eval');
-    expect(router.currentRoute.value.query.peTab).toBe('runs');
-    // 宿主键不跟着搬：新页没有 ?tab= 语义，留着只会和页内键混淆
-    expect(router.currentRoute.value.query.tab).toBeUndefined();
-    wrapper.unmount();
   });
 
   it('页头「批量模型配置」打开覆盖矩阵弹窗（原「模型路由」页签的替代落点）', async () => {

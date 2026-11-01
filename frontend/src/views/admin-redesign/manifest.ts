@@ -21,7 +21,7 @@
 
 import type { Component } from 'vue'
 import {
-  Activity, BookOpen, ClipboardCheck, Coins, FlaskConical, HeartPulse, History, IdCard, LayoutDashboard,
+  Activity, BookOpen, Coins, FlaskConical, HeartPulse, History, IdCard, LayoutDashboard,
   Megaphone, MessagesSquare, Plug, Puzzle, Route, ScrollText, ShieldCheck, Sparkles,
   Target, Users, Workflow,
 } from 'lucide-vue-next'
@@ -60,10 +60,9 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 仿真组：实例（虚拟学习者）+ 身份池（学习者卡库）
   { id: 'virtual-learners', label: '虚拟学习者', group: '仿真', glyph: '拟', icon: FlaskConical, keywords: ['仿真', '实例', '故事'] },
   { id: 'virtual-learner-cards', label: '学习者卡库', group: '仿真', glyph: '卡', icon: IdCard, keywords: ['卡库', '角色卡', '身份池'] },
-  // Skill 组：字段流转（管线/字段路由）+ Skill 目录 + Prompt 评估 + 插件
+  // Skill 组：字段流转（管线/字段路由）+ Skill 目录 + 插件
   { id: 'orchestrator', label: '字段流转', group: 'Skill', glyph: '流', icon: Workflow, keywords: ['编排', '管线', '字段路由', '旅程'] },
   { id: 'skills', label: 'Skill 目录', group: 'Skill', glyph: '能', icon: Sparkles, keywords: ['技能', '目录', '模型路由'] },
-  { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill', glyph: '评', icon: ClipboardCheck, keywords: ['评估', '用例', '通过率'] },
   { id: 'addons', label: '插件', group: 'Skill', glyph: '插', icon: Puzzle, keywords: ['密钥', 'MCP', '联网', '决策', '生图', '外挂'] },
   // 观测与排查：两份日志相邻，成本分析接在其后；健康中心 13 项全是排查项，与日志同一动线
   { id: 'execution-logs', label: '执行日志', group: '观测与排查', glyph: '志', icon: ScrollText, keywords: ['日志', '失败', '链路', '调用'] },

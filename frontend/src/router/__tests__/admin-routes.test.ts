@@ -160,10 +160,17 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
     expect(router.currentRoute.value.query.tab).toBe('access');
 
+    /* Prompt 评估 2026-11-01 下线：?tab=prompt-eval 落回 Skill 目录（tab 键与页内键 peTab 都清掉，
+       否则会在已下线的页签上留一个空壳或把无效内层键带给宿主页） */
     await router.push('/admin/skills?tab=prompt-eval&peTab=runs');
-    expect(router.currentRoute.value.path).toBe('/admin/prompt-eval');
+    expect(router.currentRoute.value.path).toBe('/admin/skills');
     expect(router.currentRoute.value.query.tab).toBeUndefined();
-    expect(router.currentRoute.value.query.peTab).toBe('runs');
+    expect(router.currentRoute.value.query.peTab).toBeUndefined();
+  });
+
+  it('已下线场景 /admin/prompt-eval 本身也改投 Skill 目录', async () => {
+    await router.push('/admin/prompt-eval');
+    expect(router.currentRoute.value.path).toBe('/admin/skills');
   });
 
   it('访问与注册独立页深链改投运营中心 access 页签', async () => {
