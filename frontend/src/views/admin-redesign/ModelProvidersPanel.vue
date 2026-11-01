@@ -79,10 +79,11 @@
             <div class="mpp-models__title">
               <span class="mpp-sec">挂载模型</span>
               <span class="mpp-models__count">{{ selected.models.length }} 个</span>
-              <!-- 2026-11-01 外部评审（三轮/四轮连续两次）：把这条说在表头，压掉
-                   「通道连接测试没做过，下面的模型凭什么健康」这个读法——两者不同源。 -->
-              <span class="mpp-models__src" title="每个模型的健康来自对该模型单独发起的轻量探测（拉取清单时逐条探测）。「连接测试」回答的是另一件事：这条地址与密钥通不通。">
-                健康状态：逐模型能力探测
+              <!-- 2026-11-01 外部评审（三轮/四轮/五轮连续三次）：读者一直把这里的绿色徽章
+                   当成「连通过了」。实测它的判定只有一条——该模型有没有在熔断冷却里，
+                   与通道测试根本不是一回事。这里把口径写在表头，徽章本身也改称「可用」。 -->
+              <span class="mpp-models__src" title="这里的「可用」是运行面读数：该模型没有处于熔断冷却中，降级时会被选中。它不是连通性探测结论——通道连不连得上，看通道摘要行里的「连接测试」徽章。">
+                状态＝运行面（未熔断），非连通性探测
               </span>
             </div>
             <span class="mpp-models__acts">
@@ -126,7 +127,11 @@
               </div>
               <div class="mpp-model-row__status">
                 <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
-                <span v-else class="mk-badge mk-badge--ok">● 健康</span>
+                <span
+                  v-else
+                  class="mk-badge mk-badge--ok"
+                  title="运行面读数：该模型未处于熔断冷却，调用时会被选中。不代表刚做过连通性测试。"
+                >● 可用</span>
                 <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
               </div>
               <div class="mpp-rowacts">

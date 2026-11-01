@@ -55,8 +55,9 @@
             class="mk-link"
             :class="{ 'mk-link--active': checkVisible }"
             :aria-pressed="checkVisible"
+            :title="checkVisible ? '收起勾选列并清空已选' : '显示勾选列进入选择态，勾选后才会出现批量操作条'"
             @click="toggleBatchMode"
-          >批量操作</button>
+          >{{ checkVisible ? '退出批量' : '批量操作' }}</button>
           <MkCols
             :col-defs="ulColDefs"
             storage-key="wf_users_hidden_cols_v5"

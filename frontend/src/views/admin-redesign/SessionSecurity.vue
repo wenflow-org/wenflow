@@ -184,6 +184,13 @@
           <summary class="mk-section__summary ss-hist__summary">
             <span class="ss-hist__title">已结束会话（<template v-if="fullHistorical(g) > g.historical.length">显示 {{ g.historical.length }} / 共 {{ fullHistorical(g) }}</template><template v-else>{{ g.historical.length }}</template>）</span>
             <span class="ss-hist__meta">过期 {{ groupCounts(g).expired }} · 已撤销 {{ groupCounts(g).revoked }}</span>
+            <!-- 2026-11-01 外部评审（五轮 P2）：只列最近 92 条、却写着共 183 条，
+                 读者怀疑有 91 条丢了。这里直说取样口径与取全量的出口。 -->
+            <span
+              v-if="fullHistorical(g) > g.historical.length"
+              class="ss-hist__hint"
+              :title="`列表按时间倒序取最近 ${g.historical.length} 条（后端行窗口上限 100）。全部 ${fullHistorical(g)} 条历史会话可经「数据导出」拉全量 CSV。`"
+            >仅显示最近 {{ g.historical.length }} 条，全量走「数据导出」</span>
           </summary>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--fixed">
@@ -861,6 +868,8 @@ onMounted(async () => {
 }
 .ss-hist__summary:hover { background: var(--mk-hover-surface); }
 .ss-hist__meta { color: var(--mk-faint); font-weight: 600; font-size: var(--mk-fs-micro); }
+/* 截断说明：贴在折叠头右端，弱化但不藏（读者要知道列表为什么不等于总数） */
+.ss-hist__hint { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 大屏/4K 适配（全站 mk 体系档位；表格与状态条由 shared.css 档位覆盖）。
    分组名走 --mk-fs-emphasis，随档位自动放大，故不在档位内重复声明。 */

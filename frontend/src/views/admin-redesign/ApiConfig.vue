@@ -484,8 +484,15 @@ const connBadge = computed(() => {
   if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '连接测试：上次失败' }
   /* 2026-11-01 外部评审：「还没连接过」与右侧三个模型的绿色「健康」同屏，被读成
      「没连通却健康」的自相矛盾。它讲的其实只是「没点过获取模型 / 测试连接」这一动作，
-     不是通道与模型的可用性——文案改成描述动作，缺省态不再冒充连通性结论。 */
-  return { cls: 'mk-badge--muted', text: '连接测试：未做过' }
+     不是通道与模型的可用性——文案改成描述动作，缺省态不再冒充连通性结论。
+    2026-11-01 五轮评审仍被判「底层没测、上层全绿」：把另一半写进同一枚徽章。
+    另一半的准确说法是「已登记 N 个模型在跑」——列表里那枚绿标是运行面读数（未熔断），
+    不是探活结论，不能写成「探活正常」。 */
+  const alive = models.value.length
+  return {
+    cls: 'mk-badge--muted',
+    text: alive ? `通道测试：未做过（${alive} 个模型已在用）` : '通道测试：未做过'
+  }
 })
 /** connBadge 悬停口径：说明「成功/失败」是什么时候、什么动作留下的，不冒充实时探活 */
 const connBadgeTitle = computed(() => {

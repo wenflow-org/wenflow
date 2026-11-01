@@ -208,8 +208,37 @@
               <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty != null ? `${detail.difficulty}/5` : '—' }}</strong></div>
               <div><span>节点</span><strong class="mono" :title="detail.agentId || ''">{{ detail.agentId || '—' }}</strong></div>
               <div><span>策略</span><strong :title="detail.strategy || ''">{{ detail.strategy || '—' }}</strong></div>
-              <div><span>任务</span><strong class="mono" :title="detail.taskId || ''">{{ detail.taskId || '—' }}</strong></div>
-              <div><span>会话</span><strong class="mono" :title="detail.sessionId || ''">{{ detail.sessionId || '—' }}</strong></div>
+              <div><span>任务</span>
+                <span class="fb-idrow">
+                  <strong class="mono" :title="detail.taskId || ''">{{ detail.taskId || '—' }}</strong>
+                  <button
+                    v-if="detail.taskId"
+                    type="button"
+                    class="fb-idrow__copy"
+                    :aria-label="`复制任务 ID ${detail.taskId}`"
+                    title="复制任务 ID"
+                    @click="copyField('任务 ID', detail.taskId)"
+                  >
+                    <Copy :size="12" :stroke-width="2" aria-hidden="true" />
+                  </button>
+                </span>
+              </div>
+              <div><span>会话</span>
+                <span class="fb-idrow">
+                  <strong class="mono" :title="detail.sessionId || ''">{{ detail.sessionId || '—' }}</strong>
+                  <!-- 排查 Bad Case 要把会话 ID 贴进日志检索：截断的 id 没法手动选全 -->
+                  <button
+                    v-if="detail.sessionId"
+                    type="button"
+                    class="fb-idrow__copy"
+                    :aria-label="`复制会话 ID ${detail.sessionId}`"
+                    title="复制会话 ID"
+                    @click="copyField('会话 ID', detail.sessionId)"
+                  >
+                    <Copy :size="12" :stroke-width="2" aria-hidden="true" />
+                  </button>
+                </span>
+              </div>
               <!-- 提交时间（审核 #169）：绝对时间入事实格，相对时间留列表列（另三张表同口径） -->
               <div><span>提交时间</span><strong class="mono" :title="detail.createdAtRaw">{{ fmtDateTime(detail.createdAtRaw) }}</strong></div>
             </div>
@@ -243,6 +272,14 @@
             <!-- 2026-11-01 外部评审（二轮）：主次倒置——「分流入库」被做成了饱和蓝主按钮，
                  而真正把反馈处理完的「标记已解决」只是绿描边次级。按动作的终局性排：
                  解决 = 主按钮；分流 = 次级（处理中）；忽略 = ghost。 -->
+            <!-- 只记阶段性跟进、不动处理状态时，此前没有出口（三个按钮都会改状态） -->
+            <button
+              v-if="noteDraft.trim() && noteDraft.trim() !== (detail.internalNote || '')"
+              type="button"
+              class="mk-btn"
+              :disabled="saving"
+              @click="saveNoteOnly"
+            >仅保存备注</button>
             <button type="button" class="mk-btn mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
             <button type="button" class="mk-btn" :disabled="saving" @click="save('triaged')">标记已分流</button>
             <!-- 备注与状态一起提交：写了内部备注时按钮直说「保存备注并解决」，
@@ -537,6 +574,28 @@ async function openDetail(r: Row) {
     noteDraft.value = detail.value.internalNote
   } catch (e) {
     toast.error(`详情加载失败：${errMsg(e)}`)
+  }
+}
+
+async function copyField(label: string, text: string) {
+  const ok = await copyText(text)
+  if (ok) toast.success(`已复制${label}`)
+  else toast.error(`复制失败，请手动复制：${text}`)
+}
+
+/** 只保存内部备注、不改处理状态（后端同一支 PUT，状态原样回传） */
+async function saveNoteOnly() {
+  const d = detail.value
+  if (!d || saving.value) return
+  saving.value = true
+  try {
+    await adminFeedbackApi.update(d.id, { status: d.status, internalNote: noteDraft.value.trim() || null })
+    d.internalNote = noteDraft.value.trim()
+    toast.success('备注已保存（处理状态未变）')
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    saving.value = false
   }
 }
 

@@ -201,8 +201,11 @@
               <span class="rankrow__idx">{{ i + 1 }}</span>
               <!-- 英文主行（2026-10-25 用户「以英文为主」）：与 Skills 列表 / 详情 hero 同口径，
                    canonical id 在前；中文 displayName 只在它确实是别名时括注（同 id 不重复） -->
+              <!-- 2026-11-01 外部评审（五轮 P2）：1920 下长 id 带中文别名会被截成
+                   「teaching-opening-generator · 课…」，被吃掉的是 id 本身。id 是监控键，
+                   优先保它完整：id 长到 22 字符以上就不再续别名（别名仍在悬停里）。 -->
               <span class="rankrow__grow" :title="skillNameTitle(s.agentId)">
-                {{ skillIdOf(s.agentId) }}<template v-if="skillAliasOf(s.agentId)"> · {{ skillAliasOf(s.agentId) }}</template>
+                {{ skillIdOf(s.agentId) }}<template v-if="skillAliasOf(s.agentId) && skillIdOf(s.agentId).length <= 22"> · {{ skillAliasOf(s.agentId) }}</template>
               </span>
               <!-- 占比条（mk-minibar 共享原语）：名次数字只给序，条给「梯队差距」一眼可读；
                    无金银铜——排序徽章是装饰不编码信息 -->
@@ -1476,7 +1479,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 }
 .rankrow--link { cursor: pointer; }
 .rankrow--link:hover .rankrow__grow { color: var(--mk-blue); }
-.rankrow__bar { width: 64px; flex: none; }
+.rankrow__bar { width: 48px; flex: none; }
 .rankrow__val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 /* 调用/失败两列（评审 2026-10-10）：右对齐定宽成列；失败非零红字提示，零给「–」保列形。
    宽度按「调用次数 / 失败次数」四字表头定（2026-10-24 用户「调用次数就写调用次数就可以了」）：

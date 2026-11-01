@@ -196,15 +196,21 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeSend">✕</button>
           </div>
           <div class="mk-modal__body">
+            <!-- 2026-11-01 外部评审（五轮 P2）：公告弹窗有字数计数、通知弹窗没有，
+                 同一后台两套表单规范；端侧气泡/浮窗有长度限制，这里同口径给上限与计数 -->
             <label class="mk-field" :class="{ 'mk-field--error': errors.title }">
-              <span class="mk-field__label">标题 <em class="mk-field__req">*</em></span>
-              <input v-model="form.title" class="mk-field__input" placeholder="通知标题" />
+              <span class="mk-field__label">标题 <em class="mk-field__req">*</em>
+                <span class="mk-field__hint">{{ form.title.length }} / {{ TITLE_MAX }} 字</span>
+              </span>
+              <input v-model="form.title" class="mk-field__input" :maxlength="TITLE_MAX" placeholder="通知标题" />
               <span v-if="errors.title" class="mk-field__err">{{ errors.title }}</span>
             </label>
             <label class="mk-field">
               <!-- 标题带 * 已是唯一必填标记，非必填不再追加「（可选）」 -->
-              <span class="mk-field__label">正文</span>
-              <textarea v-model="form.body" class="mk-field__textarea" rows="3" placeholder="通知正文" />
+              <span class="mk-field__label">正文
+                <span class="mk-field__hint">{{ form.body.length }} / {{ BODY_MAX }} 字</span>
+              </span>
+              <textarea v-model="form.body" class="mk-field__textarea" :maxlength="BODY_MAX" rows="3" placeholder="通知正文" />
             </label>
             <label class="mk-field">
               <span class="mk-field__label">类型</span>
@@ -224,7 +230,7 @@
                   :class="{ 'mk-pill--active': form.scope === 'all' }"
                   :aria-pressed="form.scope === 'all'"
                   @click="form.scope = 'all'"
-                >全员（真实用户）</button>
+                >全体学员（不含管理员）</button>
                 <button
                   type="button"
                   class="mk-pill"
@@ -514,6 +520,9 @@ const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => sendOpen.value), panelRef)
 useMaskClose(maskRef, closeSend)
 
+/** 通知长度上限（与端侧气泡/浮窗的可显示长度对齐；公告弹窗同款计数形态） */
+const TITLE_MAX = 50
+const BODY_MAX = 500
 const form = ref({ title: '', body: '', kind: 'system', scope: 'all' as 'all' | 'user' })
 /** 发送弹窗的类型下拉（文案与旧原生 select 逐字一致） */
 const NOTIFICATION_KIND_OPTIONS = [

@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
-import { findRealUserIds } from '../../utils/test-account';
+import { findRealUserIds, isTestAccountUser } from '../../utils/test-account';
 
 /**
  * 用户表仓储（routes/users.ts 自助域 + routes/admin/users.ts 管理域的取数层）。
@@ -291,4 +291,19 @@ export function findUserIdOnly(userId: string) {
  *  判据单点在 utils/test-account.ts，不用 Prisma startsWith（SQLite LIKE 的 `_` 是通配符）。 */
 export function listRealUserIds() {
   return findRealUserIds().then((ids) => ids.map((id) => ({ id })));
+}
+
+/**
+ * 学员 id 清单（全员通知用）：真实账号里再摘掉管理员。
+ *
+ * 2026-11-01 外部评审（五轮 P2）：站内通知的「全员（真实用户）」会把 admin 也算进去——
+ * 教学向通知（如「学习周报已生成」）发给管理员，受众口径不成立。管理员要收通知就定向发。
+ */
+export function listLearnerIds() {
+  return prisma.users
+    .findMany({
+      where: { isVirtualLearner: false, isAdmin: false, deletedAt: null },
+      select: { id: true, email: true, name: true },
+    })
+    .then((rows) => rows.filter((row) => !isTestAccountUser(row)).map((row) => ({ id: row.id })));
 }
