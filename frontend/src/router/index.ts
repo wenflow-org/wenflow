@@ -246,7 +246,7 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/people'
   },
   {
-    // 已下线场景：/admin/prompt-eval → /admin/skills（该页 2026-10-25 从 Skills 页签拆出）
+    // /admin/prompt-eval → /admin/skills
     path: '/admin/prompt-eval',
     redirect: (to) => ({ path: '/admin/skills', query: stripTab(to) })
   },

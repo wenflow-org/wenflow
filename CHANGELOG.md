@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-11
+
+### 下线
+
+- **Prompt 评估页下线**：侧栏 Skill 组回到三项（字段流转 / Skill 目录 / 插件），页面本体、路由与老深链一并摘除——`/admin/prompt-eval` 与 `/admin/skills?tab=prompt-eval` 改投「Skill 目录」，老书签不留 404。后端 `/api/admin/prompt-ops` 的评估端点（eval-cases / run-eval / eval-runs）暂留，未从界面暴露。
+
 ## 2026-10
 
 ### 新增功能
