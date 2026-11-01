@@ -17,6 +17,7 @@
         label="需关注"
         :value="attentionCount"
         :tone="attentionCount ? 'warn' : ''"
+        hint="点击只看这些"
         :title="`失败 / 超时、已完成但没写出总结、或带建议（附注）的会话合计 ${attentionCount} 节。点击只看这些会话。三档明细可在「列」菜单打开“关注”列`"
         :class="{ 'ts-kpi--on': pill === 'attention' }"
         :aria-pressed="pill === 'attention'"

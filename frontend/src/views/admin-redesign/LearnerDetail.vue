@@ -450,7 +450,7 @@
                 <span class="ld-sig-tier__names" :title="t.names.join('、')">{{ t.names.length ? t.names.join('、') : '—' }}</span>
               </p>
             </div>
-            <p class="ld-sig-sec__foot">四档相加 = 卡头的概念总数</p>
+            <p class="ld-sig-sec__foot">{{ signalTierFoot }}</p>
           </div>
           <div class="ld-sig-sec">
             <h4 class="ld-sig-sec__h">教学基础</h4>
@@ -2329,22 +2329,50 @@ const signalTiers = computed<Record<'mastered' | 'struggling' | 'fragile', strin
  *
  *  2026-11-01 外部评审 P0：卡头写「13 个概念」，三档加起来只有 4 个（0+3+1），
  *  另外 9 个去向不明——因为后端三档是**非穷尽过滤**（`status==='pending'` 与
- *  `status==='learning' && mastery>=0.55` 都不进任何一档）。这里补第四档
- *  「未开始」，用台账全量减去前三档得出，让 0 + 3 + 1 + 9 = 13 闭合、且能把名字列出来。 */
+ *  `status==='learning' && mastery>=0.55` 都不进任何一档）。这里补第四档「未开始」，
+ *  用概念清单减去前三档得出，让四档加总等于卡头总数。
+ *
+ *  四档一律**只数概念清单里的那些**：实测该学员的 `strugglingConcepts` 里有一个
+ *  「读取Excel表对象」，而清单里同一概念写的是完整名
+ *  「用代码把 Excel 源表读成表格对象（header 指定哪一行被抬为列名）」——直接相加会多出 1
+ *  （0+3+1+10=14 ≠ 13，第一版修复实测就是这个结果）。对齐后加总闭合，
+ *  不在清单里的标签单独列出来（`outside`），不静默丢掉。 */
 const signalTierRows = computed(() => {
   const ledgerLabels = conceptLedgerLabels.value
-  const tiered = new Set(
-    [...signalTiers.value.mastered, ...signalTiers.value.struggling, ...signalTiers.value.fragile]
-      .map((n) => n.trim())
-      .filter(Boolean)
-  )
+  const ledgerSet = new Set(ledgerLabels.map((n) => n.trim()))
+  const scoped = (names: string[]) => names.filter((n) => ledgerSet.has(n.trim()))
+  const mastered = scoped(signalTiers.value.mastered)
+  const struggling = scoped(signalTiers.value.struggling)
+  const fragile = scoped(signalTiers.value.fragile)
+  const outside = [
+    ...signalTiers.value.mastered,
+    ...signalTiers.value.struggling,
+    ...signalTiers.value.fragile
+  ].filter((n) => n.trim() && !ledgerSet.has(n.trim()))
+  const tiered = new Set([...mastered, ...struggling, ...fragile].map((n) => n.trim()))
   const untouched = ledgerLabels.filter((n) => !tiered.has(n.trim()))
   return [
-    { key: 'mastered', label: '已掌握', n: signalTiers.value.mastered.length, names: signalTiers.value.mastered },
-    { key: 'struggling', label: '挣扎', n: signalTiers.value.struggling.length, names: signalTiers.value.struggling },
-    { key: 'fragile', label: '脆弱', n: signalTiers.value.fragile.length, names: signalTiers.value.fragile },
-    { key: 'untouched', label: '未开始', n: untouched.length, names: untouched }
+    { key: 'mastered', label: '已掌握', n: mastered.length, names: mastered },
+    { key: 'struggling', label: '挣扎', n: struggling.length, names: struggling },
+    { key: 'fragile', label: '脆弱', n: fragile.length, names: fragile },
+    { key: 'untouched', label: '未开始', n: untouched.length, names: untouched },
+    { key: 'outside', label: '不在概念清单', n: outside.length, names: outside }
   ]
+})
+
+/** 概念信号脚注：把四档与卡头总数的加总关系写出来；有标签不在清单里时说明去哪了
+ *  （否则四档之和会大于卡头总数，读者只能当成又一个对不上的数字）。 */
+const signalTierFoot = computed(() => {
+  const total = conceptLedgerLabels.value.length
+  const outside = signalTierRows.value.find((t) => t.key === 'outside')
+  const four = signalTierRows.value.filter((t) => t.key !== 'outside')
+  const head = four.map((t) => t.n).join(' + ')
+  const sum = four.reduce((acc, t) => acc + t.n, 0)
+  if (!total) return ''
+  const base = `${head} = ${sum}，与卡头「${total} 个概念」四档都只数概念清单里的那些`
+  const names = outside && outside.names.length ? outside.names.join('、') : ''
+  /* R1：一句只讲一件事——这类说明不写分号，拆成两句 */
+  return names ? `${base}。另有 ${outside ? outside.n : 0} 个标签不在当前概念清单里、未计入：${names}` : base
 })
 
 /** 概念台账里的概念名（与卡头「N 个概念」同源，保证第四档能与之加总闭合）。
