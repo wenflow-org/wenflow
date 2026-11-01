@@ -55,7 +55,8 @@ describe('AdminConsole 页面注册表', () => {
       // 运营中心紧跟总览：日循环是「总览看待办 → 运营中心处置」；
       // 模型与接入 / 用户账号 2026-10-27 从「账号与接入」并入，追加在组尾
       // （访问与注册同日并入运营中心宿主 tab，不再单列）
-      运营: ['ops-hub', 'api-config', 'people'],
+      // 2026-11-01：api-config（模型与接入）与系统运维四页签合并为 system-settings
+      运营: ['ops-hub', 'system-settings', 'people'],
       // 排列＝学习流程：Goal 目标对话 → Path 学习路径 → Learn 教学会话 → 学习状态（工作台）→ 复习积压
       学习: ['goal-conversations', 'learning-paths', 'teaching-sessions', 'learner-state', 'memory-review'],
       // 组名与总览状态条同词（「仿真 · 仿真空闲」）：实例 + 身份池
@@ -77,9 +78,9 @@ describe('AdminConsole 页面注册表', () => {
         expect(k.trim().length, `「${scene.id}」keywords 含空串`).toBeGreaterThan(0);
       }
     }
-    // 运营搜「密钥」应命中两处：插件（MCP/联网）与模型与接入（上游密钥）
+    // 运营搜「密钥」应命中两处：插件（MCP/联网）与系统设置（上游密钥）
     const hit = MOCK_SCENES.filter((s) => (s.keywords || []).includes('密钥')).map((s) => s.id);
-    expect(hit).toEqual(expect.arrayContaining(['addons', 'api-config']));
+    expect(hit).toEqual(expect.arrayContaining(['addons', 'system-settings']));
   });
 
   it('退役场景（已折入宿主 tab / 已下线）不再出现在侧栏清单', () => {

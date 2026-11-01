@@ -72,12 +72,12 @@ describe('Shell 导航', () => {
     expect(wrapper.emitted('navigate')?.[0]).toEqual(['skills']);
   });
 
-  it('页面搜索匹配检索词（keywords）：搜「密钥」命中插件与模型与接入', async () => {
+  it('页面搜索匹配检索词（keywords）：搜「密钥」命中插件与系统设置', async () => {
     const wrapper = mountShell();
     await wrapper.find('.mshell__search-input').setValue('密钥');
     const hits = wrapper.findAll('.mshell__search-hit-label').map((n) => n.text());
     expect(hits).toContain('插件');
-    expect(hits).toContain('模型与接入');
+    expect(hits).toContain('系统设置');
   });
 
   it('执行日志角标点进带落地筛选（角标口径=近 7 天失败，落地页默认是今天）', async () => {

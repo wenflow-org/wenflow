@@ -126,12 +126,12 @@ const isDark = useIsDark();
 /* 右侧导览的域清单：分组名与图标与侧栏清单（manifest.ts）同源，是「控制台里有什么」的
    静态事实，不含任何运行期计数——登录页不展示会过期的数字。
    2026-10-27 用户「账号与接入组不要了，组内页面移到运营」：侧栏收成 5 组，
-   本清单同步——模型与接入 / 访问与注册 / 用户账号 并入运营组。 */
+   本清单同步；2026-11-01 模型与接入与系统运维四页签合并为「系统设置」，仍在运营组。 */
 const DOMAINS: { label: string; sub: string; icon: Component }[] = [
-  { label: '运营', sub: '运营待办、反馈、成就与公告，以及模型与接入、访问与注册、用户账号', icon: Megaphone },
+  { label: '运营', sub: '运营待办、反馈、成就与公告，以及系统设置、用户账号', icon: Megaphone },
   { label: '学习', sub: '目标对话、学习路径、教学会话、学习状态与复习积压', icon: Users },
   { label: '仿真', sub: '虚拟学习者的运行与学习者卡库', icon: FlaskConical },
-  { label: 'Skill', sub: '字段流转、Skill 目录、Prompt 评估与插件', icon: Sparkles },
+  { label: 'Skill', sub: '字段流转、Skill 目录与插件', icon: Sparkles },
   { label: '观测与排查', sub: '执行日志、审计日志、成本分析与健康中心', icon: ScrollText }
 ]
 import { useRoute, useRouter } from 'vue-router'

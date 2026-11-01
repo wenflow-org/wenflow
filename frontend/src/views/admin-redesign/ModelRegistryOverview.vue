@@ -342,9 +342,10 @@ const globalWarnings = computed(() => {
 })
 
 const router = useRouter()
-/** 空态出口（R6D）：跳到接入配置所在的「接入与模型」页签，路由与页签参数均为既有契约 */
+/** 空态出口（R6D）：跳到接入配置所在的「系统设置 · 模型与接入」页签
+    （2026-11-01：原 /admin/api-config 已成该系统设置页的第一格视图） */
 function goAccessConfig() {
-  void router.push({ path: '/admin/api-config', query: { tab: 'access' } })
+  void router.push({ path: '/admin/system-settings', query: { tab: 'api' } })
 }
 
 /** 运行时模型候选上限(含主模型);后端 registry runtime 缺失时按现状 2 兜底 */

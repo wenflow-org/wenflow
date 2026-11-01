@@ -1,6 +1,8 @@
 <template>
-  <div class="mk-page mk-page--fill ac-host">
-    <MkPageHead title="模型与接入">
+  <div :class="embedded ? 'ac-host ac-host--embedded' : 'mk-page mk-page--fill ac-host'">
+    <!-- 嵌入「系统设置」时页头归宿主（宿主只在「模型与接入」页签激活时出「刷新注册表」），
+         本组件不再自带页头与主操作——与访问与注册嵌入态同一写法 -->
+    <MkPageHead v-if="!embedded" title="模型与接入">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" @click="providersRef?.refresh?.(true)">刷新注册表</button>
       </template>
@@ -190,7 +192,7 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 /* Eye 与 EyeOff 成对使用（密钥显隐两态）：此前只导入了 EyeOff，
    点「显示密钥」后切到 <Eye> 是空白图标（f66cd78d 漏了孪生图标，2026-09-29 补） */
 import { Eye, EyeOff } from 'lucide-vue-next'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 import { dataSource, isLive } from './store'
 import ModelProvidersPanel from './ModelProvidersPanel.vue'
 import InfraModelsPanel from './InfraModelsPanel.vue'
@@ -215,23 +217,19 @@ import { toast } from '@/utils/toast'
    这个页面我觉得可以和前面的合并了」）----------
    一级页签「接入 / 调用」撤除，本页自上而下两段：供应商面板 / 调用策略。
    平台那条供应商的详情里再分二级页签：模型 / 连接 / 基础设施 / 生成参数。
-   已迁出：虚拟学习者容量 → /admin/virtual-learners；安全与访问 → 运营中心「访问与注册」页签；
-   外挂能力 → /admin/addons（2026-10-19）。旧深链一律由 TAB_ALIAS / 路由改投。 */
+   已迁出：虚拟学习者容量 → /admin/virtual-learners；外挂能力 → /admin/addons（2026-10-19）。
+   2026-11-01 起本页是「系统设置」宿主里的第一个页签（模型与接入），
+   旧键（含 ?tab=model / virtual / security / access 等）的改投**全部在路由层**
+   （router/index.ts 的 /admin/api-config 别名），本组件不再自己读写 ?tab=：
+   组件里那份归一化 watch 会删掉宿主当前合法的页签（它把 access 当旧键清掉、
+   把 security / virtual 整页弹走），合并后必须让位给路由。 */
 
-/** 旧页签键别名归一：站内「配置 →」与量测脚本曾用 ?tab=model / ?tab=registry / ?tab=model-routing。
-    2026-10-26 起本页没有一级页签，所有旧键（含 connection / overview / runtime /
-    model-routing / virtual-learners）都只是「打开这一页」，归一后清掉 tab 参数，
-    书签不 404，也不会在 URL 上留下一个不存在的页签。 */
-const LEGACY_TAB_KEYS = new Set([
-  'model', 'registry', 'connection', 'overview', 'runtime', 'model-routing', 'virtual-learners',
-])
-/** 已迁出的旧页签 → 独立页（旧书签直接落到新家，不在本页停一下再让人自己找） */
-const MOVED_TABS: Record<string, string> = {
-  security: '/admin/access-control',
-  virtual: '/admin/virtual-learners',
-}
-const route = useRoute()
-const router = useRouter()
+defineOptions({ name: 'ApiConfigPage' })
+
+/* 嵌入「系统设置」时不渲染自己的页头（页头与「刷新注册表」归宿主） */
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+void props
+
 /** 供应商面板（BYOK）：页头「刷新注册表」与写后重取都走它的 refresh */
 const providersRef = ref<{ refresh?: (force?: boolean) => void; openHostPull?: () => void } | null>(null)
 /** 供应商面板首次回传即视为注册表已就绪：同步按钮按 apiUrl 判禁用，首屏地址未回填时点不动 */
@@ -254,30 +252,13 @@ function focusPlatformConnection() {
   openConnModal()
 }
 
+/** 宿主（系统设置）的页头「刷新注册表」经此转发，不必去摸供应商面板的子 ref */
+defineExpose({ refresh: () => providersRef.value?.refresh?.(true) })
+
 /** 注册表读数（只读总览回传）：上游清单与「已添加」的对照只用 models 这一段。
-    与生成参数页签的别名映射是同一份接口，不重复请求。 */
-watch(
-  () => route?.query?.tab,
-  (t) => {
-    const raw = typeof t === 'string' ? t : ''
-    // 已迁出的页签：直接送到新家（旧书签/旧文档链接不失效）
-    const moved = MOVED_TABS[raw]
-    if (moved) {
-      const rest = { ...(route.query as Record<string, string>) }
-      delete rest.tab
-      void router.replace({ path: moved, query: rest })
-      return
-    }
-    /* 本页已无一级页签（2026-10-26）：旧键（access / routing / model / runtime…）一律清掉，
-       只保留「打开这一页」的语义。不认识的键同样清掉，避免 URL 上留一个不存在的页签。 */
-    if (raw && (LEGACY_TAB_KEYS.has(raw) || raw === 'access' || raw === 'routing')) {
-      const rest = { ...(route.query as Record<string, string>) }
-      delete rest.tab
-      void router.replace({ query: rest })
-    }
-  },
-  { immediate: true }
-)
+    与生成参数页签的别名映射是同一份接口，不重复请求。
+    2026-11-01：原先这里还有一条 ?tab= 归一化 watch（LEGACY_TAB_KEYS / MOVED_TABS），
+    已随「系统设置」合并整体迁到路由层——宿主自己拥有 ?tab=，组件再删改就会冲掉宿主页签。 */
 /* ---------- 表单状态（live 一套交互） ---------- */
 /**
  * 接入域（live 层 getConfig）读取失败：表单全空 + 卡内 alert 显式说明「下方为空不代表未配置」。
@@ -753,6 +734,19 @@ async function resetConfig() {
 }
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
 .ac-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
+
+/* 嵌入「系统设置」宿主时：根节点不再是 .mk-page--fill，得自己把剩余高度吃下来，
+   否则里面的 .ac-tab-body（flex:1 + overflow-y:auto）没有可解析的父高度，滚动会失效 */
+.ac-host--embedded {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .ac-host--embedded { flex: none; min-height: 0; overflow: visible; display: block; }
+}
 
 /* 接入页 = 供应商面板一张卡（连接与基础设施在平台详情页签里），按内容高度自上而下，页签体统一内滚。
    2026-10-25 用户「这个组整个页面我觉得做的不好」：此前供应商卡被设成 flex:1 吃掉整屏剩余高度，

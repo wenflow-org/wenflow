@@ -121,11 +121,11 @@ describe('Admin 路由重定向', () => {
       ['/admin/notifications', '/admin/ops-hub', 'inapp'],
       // 2026-10-19：「外挂能力」从「模型与接入」宿主拆回独立页 —— /admin/addons 不再是重定向，
       // 而是真实场景路径（下面单独断言）；旧外部别名 /admin/external-capabilities 改投本页。
-      ['/admin/session-security', '/admin/ops-hub', 'security'],
-      // 2026-10-16：「系统工具」解散并入运营中心，旧深链改指 ops-hub 对应页签
-      ['/admin/ops-center', '/admin/ops-hub', 'tools'],
-      ['/admin/devtools', '/admin/ops-hub', 'tools'],
-      ['/admin/export-data', '/admin/ops-hub', 'export'],
+      // 2026-11-01：运维工具/数据导出/会话安全/访问与注册 从运营中心迁入「系统设置」
+      ['/admin/session-security', '/admin/system-settings', 'security'],
+      ['/admin/ops-center', '/admin/system-settings', 'tools'],
+      ['/admin/devtools', '/admin/system-settings', 'tools'],
+      ['/admin/export-data', '/admin/system-settings', 'export'],
     ];
     for (const [from, toPath, tab] of cases) {
       await router.push(from);
@@ -150,14 +150,14 @@ describe('Admin 路由重定向', () => {
 
   it('退役场景深链保留业务 query（会话安全 ?user= 透传）', async () => {
     await router.push('/admin/session-security?user=admin');
-    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
     expect(router.currentRoute.value.query.tab).toBe('security');
     expect(router.currentRoute.value.query.user).toBe('admin');
   });
 
   it('改名/拆页后的旧深链仍在路由层改投：api-config?tab=security / skills?tab=prompt-eval', async () => {
     await router.push('/admin/api-config?tab=security');
-    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
     expect(router.currentRoute.value.query.tab).toBe('access');
 
     /* Prompt 评估 2026-11-01 下线：?tab=prompt-eval 落回 Skill 目录（tab 键与页内键 peTab 都清掉，
@@ -168,14 +168,50 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.query.peTab).toBeUndefined();
   });
 
+  it('模型与接入并入系统设置（2026-11-01）：/admin/api-config 与 /admin/models 落到首页签', async () => {
+    await router.push('/admin/models');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
+    expect(router.currentRoute.value.query.tab).toBe('api');
+
+    // 旧页签键（model / registry / runtime / access…）都只是「打开这一页」，一律回到首页签
+    for (const legacy of ['model', 'registry', 'connection', 'overview', 'runtime', 'model-routing']) {
+      await router.push(`/admin/api-config?tab=${legacy}`);
+      expect(router.currentRoute.value.path, `tab=${legacy}`).toBe('/admin/system-settings');
+      expect(router.currentRoute.value.query.tab, `tab=${legacy}`).toBe('api');
+    }
+
+    // virtual 是迁出去的页签：直接到虚拟学习者，不在本页停一下
+    await router.push('/admin/api-config?tab=virtual');
+    expect(router.currentRoute.value.path).toBe('/admin/virtual-learners');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
+
+    // 无 tab 参数同样落首页签
+    await router.push('/admin/api-config');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
+    expect(router.currentRoute.value.query.tab).toBe('api');
+  });
+
+  it('运营中心四个系统页签的老深链改投系统设置（2026-11-01 拆页）', async () => {
+    for (const t of ['tools', 'export', 'security', 'access']) {
+      await router.push(`/admin/ops-hub?tab=${t}`);
+      expect(router.currentRoute.value.path, `tab=${t}`).toBe('/admin/system-settings');
+      expect(router.currentRoute.value.query.tab, `tab=${t}`).toBe(t);
+    }
+    // 内容运营五页签仍留在运营中心
+    for (const t of ['todo', 'feedback', 'achievements', 'announce', 'inapp']) {
+      await router.push(`/admin/ops-hub?tab=${t}`);
+      expect(router.currentRoute.value.path, `tab=${t}`).toBe('/admin/ops-hub');
+    }
+  });
+
   it('已下线场景 /admin/prompt-eval 本身也改投 Skill 目录', async () => {
     await router.push('/admin/prompt-eval');
     expect(router.currentRoute.value.path).toBe('/admin/skills');
   });
 
-  it('访问与注册独立页深链改投运营中心 access 页签', async () => {
+  it('访问与注册独立页深链改投系统设置 access 页签', async () => {
     await router.push('/admin/access-control?foo=bar');
-    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
     expect(router.currentRoute.value.query.tab).toBe('access');
     expect(router.currentRoute.value.query.foo).toBe('bar');
   });

@@ -549,9 +549,9 @@ function goFailedLogs() {
 function goOverview() {
   intent.scene = 'overview'
 }
-/** P1#25：单价未配置 → 直达「模型与接入」补单价（决策就近） */
+/** P1#25：单价未配置 → 直达「系统设置」的模型与接入页签补单价（决策就近） */
 function goModelConfig() {
-  intent.scene = 'api-config'
+  intent.scene = 'system-settings'
 }
 
 const costLoading = ref(false)
@@ -578,7 +578,7 @@ const failedCallsText = computed(() =>
 /** 失败卡副行：同一张卡内给分母，失败率不再另开一张卡 */
 const failedHintShort = computed(() => `共 ${totalCalls.value} 次调用 · ${failedPct.value}`)
 
-/* P1#25 单价未配置 = 决策态：卡可点直达「模型与接入」补单价 */
+/* P1#25 单价未配置 = 决策态：卡可点直达「系统设置」补单价 */
 const pricingMissing = computed(
   () => !costLoading.value && !costFailed.value && costUsd.value === null && !(costPricedCalls.value === 0 && costMissingCalls.value === 0)
 )

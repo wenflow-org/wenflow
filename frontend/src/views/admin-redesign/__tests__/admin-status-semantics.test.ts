@@ -147,20 +147,21 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
 
   /* 2026-10-18 用户拍板「读数卡升到页签栏之上、任何页签都能看见」：
      这一块是跨页签的待办读数（反馈/路径/事件/公告各属别的页签），从此不再只长在「运营待办」页签里。
-     用「数据导出」页签验证最狠：它是纯表单页、本页签零读数，读数带仍要照常在页签栏之上。
+     2026-11-01 四个系统页签迁去「系统设置」后，本页每个页签都属内容运营、读数带与它们全都相关，
+     原先「系统页签隐藏读数带」的判据（SYSTEM_TABS）随之退役——这里反过来锁住「页签换了读数带还在」。
      页签切换走 URL（?tab=），故用带 router 的挂载。 */
-  it('系统页签（数据导出）隐藏页级读数带，不再用 0 值占首屏', async () => {
+  it('读数带在运营中心任一页签都在（系统页签判据已退役）', async () => {
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 3 } } })
     h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 2 } } } })
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 1 } } })
 
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/:page?', component: { template: '<div />' } }] })
-    await router.push('/admin/ops-hub?tab=export')
+    await router.push('/admin/ops-hub?tab=inapp')
     await router.isReady()
     const w = mount(OpsHub, { global: { plugins: [router] } })
     await flushPromises()
 
-    expect(w.find('.oh-metrics').exists()).toBe(false)
+    expect(w.find('.oh-metrics').exists()).toBe(true)
     // 口径开关随读数带走（不再留在某个页签的卡头里）；刷新不再在页头另出一颗（走顶栏）
     // 口径开关已退役（2026-10-21）：页头动作区不再有 真实/测试 控件
     expect(w.find('.mk-pagehead__actions').text()).not.toContain('真实')

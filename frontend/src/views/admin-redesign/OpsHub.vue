@@ -18,7 +18,6 @@
          失败必须显式落地：取不到 ≠ 没事（原实现把失败写成 0，页面伪装成「全部已清零」） -->
     <!-- 失败态的重试出口不放页头（顶栏已有刷新，页头第二颗钮重复）：失败时本行就地给重试
          2026-10-23，与记忆与复习总览的失败条同一形态 -->
-    <template v-if="showTodoReadings">
     <div v-if="wbHasError" class="mk-alert mk-alert--row" role="alert">
       <span class="mk-alert__msg">待办数据加载失败，对应计数不可信：{{ wbErrorText }}</span>
       <button type="button" class="mk-alert__btn" :disabled="refreshing" @click="refreshActive">{{ refreshing ? '重试中…' : '重试' }}</button>
@@ -38,7 +37,6 @@
         @click="m.failed ? undefined : m.action()"
       />
     </section>
-    </template>
 
     <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签。
@@ -51,16 +49,9 @@
       <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就</button>
       <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告</button>
       <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知</button>
-      <!-- 域分界（2026-10-24）：左四是内容运营，右三是系统运维。两组动作的后果不同
-           （改文案 vs 重放事件/导数据/踢会话），用一条竖线把「谁来处理」分开。 -->
-      <span class="tabs__sep" aria-hidden="true"></span>
-      <!-- 系统工具三页签（2026-10-16 由退役的「系统工具」场景整体迁入：运维工具/数据导出/会话安全） -->
-      <button type="button" class="tab" role="tab" id="oh-tab-tools" :ref="(el) => setTabRef(el, 5)" :tabindex="tab === 'tools' ? 0 : -1" aria-controls="oh-panel-tools" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-export" :ref="(el) => setTabRef(el, 6)" :tabindex="tab === 'export' ? 0 : -1" aria-controls="oh-panel-export" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-security" :ref="(el) => setTabRef(el, 7)" :tabindex="tab === 'security' ? 0 : -1" aria-controls="oh-panel-security" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全</button>
-      <!-- 访问与注册（2026-10-27 由独立场景迁入）：与「会话安全」同属后台入口的访问面，
-           紧排其后；侧栏不再单列该页。 -->
-      <button type="button" class="tab" role="tab" id="oh-tab-access" :ref="(el) => setTabRef(el, 8)" :tabindex="tab === 'access' ? 0 : -1" aria-controls="oh-panel-access" :aria-selected="tab === 'access'" @click="switchTab('access')">访问与注册</button>
+      <!-- 2026-11-01 用户「这四个拆出来，和模型与接入作为一个页面」：第二组页签
+           （运维工具/数据导出/会话安全/访问与注册）连同域分界线一起迁去「系统设置」页。
+           本页只剩内容运营五页签，两类后果不同的动作不再同屏。 -->
     </div>
 
     <!-- ===== Tab1: 运营待办 =====
@@ -146,41 +137,6 @@
       embedded
     />
 
-    <!-- ===== Tab6: 运维工具（时间推进模拟 + outbox 死信重放；原「系统工具」页 Tab1） ===== -->
-    <ServerToolsPanel
-      v-else-if="tab === 'tools'"
-      id="oh-panel-tools"
-      role="tabpanel"
-      aria-labelledby="oh-tab-tools"
-      ref="toolsRef"
-    />
-
-    <!-- ===== Tab7: 数据导出（多表 CSV 快照；原「系统工具」页 Tab2） ===== -->
-    <DataExportPanel v-else-if="tab === 'export'" id="oh-panel-export" role="tabpanel" aria-labelledby="oh-tab-export" />
-
-    <!-- ===== Tab8: 会话安全（SessionSecurity embedded；原「系统工具」页 Tab3） =====
-         role=tabpanel/aria-labelledby 透传到 SessionSecurity 根 div（单根组件） -->
-    <SessionSecurity
-      v-else-if="tab === 'security'"
-      id="oh-panel-security"
-      role="tabpanel"
-      aria-labelledby="oh-tab-security"
-      ref="securityRef"
-      embedded
-    />
-
-    <!-- ===== Tab9: 访问与注册（AccessControl embedded；原独立场景） =====
-         懒挂载 + v-show：首次切到本页签才挂载，之后切走不销毁——策略表单的未保存改动
-         与脏标记跨页签保留（v-if 会在切走时丢掉整份编辑态）。 -->
-    <AccessControl
-      v-if="accessMounted"
-      v-show="tab === 'access'"
-      id="oh-panel-access"
-      role="tabpanel"
-      aria-labelledby="oh-tab-access"
-      ref="accessRef"
-      embedded
-    />
   </div>
 </template>
 
@@ -195,10 +151,6 @@ import Feedback from './Feedback.vue'
 import OpsAchievements from './OpsAchievements.vue'
 import Announcements from './Announcements.vue'
 import Notifications from './Notifications.vue'
-import ServerToolsPanel from './ServerToolsPanel.vue'
-import DataExportPanel from './DataExportPanel.vue'
-import SessionSecurity from './SessionSecurity.vue'
-import AccessControl from './AccessControl.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -212,13 +164,12 @@ import { CheckCircle2 } from 'lucide-vue-next'
    在 router 重定向到对应 tab。
    2026-10-27 用户「这个页面转移到运营中心，作为一个 tab 页面」：访问与注册（原独立场景
    access-control）并入为 access 页签，旧深链 /admin/access-control 重定向过来。 */
-const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp', 'tools', 'export', 'security', 'access'] as const
+const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp'] as const
 
 type OhTab = (typeof OH_TABS)[number]
 const tab = ref<OhTab>('todo')
-/** 系统级页签与运营待办四域无关：隐藏页级读数带，别用四个 0 占掉配置页首屏 */
-const SYSTEM_TABS: readonly OhTab[] = ['tools', 'export', 'security', 'access']
-const showTodoReadings = computed(() => !SYSTEM_TABS.includes(tab.value))
+/* 页级读数带（待办四域）现在恒显：2026-11-01 四个系统页签迁走后，本页每个页签都属内容运营，
+   读数带与它们全都相关（原 SYSTEM_TABS 那套「系统页签隐藏读数带」的判据随之退役）。 */
 const route = useRoute()
 const router = useRouter()
 
@@ -229,11 +180,6 @@ const feedbackRef = ref<{ refresh?: () => void } | null>(null)
 const achievementsRef = ref<{ refresh?: () => void } | null>(null)
 const announceRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
 const notifRef = ref<{ reload?: () => void; openSend?: () => void } | null>(null)
-const toolsRef = ref<{ refresh?: () => void } | null>(null)
-const securityRef = ref<{ refresh?: () => void } | null>(null)
-const accessRef = ref<{ reload?: () => void } | null>(null)
-/* 访问与注册懒挂载：首次进入才挂载，之后常驻（v-show）以保留未保存的策略编辑 */
-const accessMounted = ref(false)
 const refreshing = ref(false)
 /* 顶栏刷新广播：与旧页头刷新钮同一入口（当前页签面板 + 待办读数带） */
 watch(liveRefreshSeq, () => { void refreshActive() })
@@ -246,13 +192,9 @@ async function refreshActive() {
     else if (tab.value === 'achievements') achievementsRef.value?.refresh?.()
     else if (tab.value === 'announce') announceRef.value?.refresh?.()
     else if (tab.value === 'inapp') notifRef.value?.reload?.()
-    else if (tab.value === 'tools') toolsRef.value?.refresh?.()
-    else if (tab.value === 'security') securityRef.value?.refresh?.()
-    else if (tab.value === 'access') accessRef.value?.reload?.()
-    /* 页级读数带在 9 个页签都可见（2026-10-18），所以待办域始终可刷：
-       todo / export 无本页签面板，直接刷读数带；其它页签在刷本面板之后再补一次待办域
-       ——失败态下页头钮是「重试」，点它必须真的重拉读数带，不能刷成别的面板。 */
-    /* 页级读数带常驻 9 个页签，任何页签刷新都要重拉它（2026-10-24 修「切走页签后读数带陈旧」） */
+    /* 页级读数带在每个页签都可见（2026-10-18），所以待办域始终可刷：
+       todo 无本页签面板，直接刷读数带；其它页签在刷本面板之后再补一次待办域
+       ——失败态下重试钮必须真的重拉读数带，不能刷成别的面板。 */
     await loadWorkbench()
   } finally {
     refreshing.value = false
@@ -266,14 +208,6 @@ watch(
     const v = typeof t === 'string' && (OH_TABS as readonly string[]).includes(t) ? (t as OhTab) : null
     if (v && v !== tab.value) tab.value = v
     else if (!v && tab.value !== 'todo') tab.value = 'todo'
-  },
-  { immediate: true }
-)
-/* 访问与注册：任一进入路径（点页签 / ?tab= 深链 / intent）到达后即永久挂载 */
-watch(
-  tab,
-  (t) => {
-    if (t === 'access') accessMounted.value = true
   },
   { immediate: true }
 )
@@ -525,10 +459,10 @@ function goFailedPaths() {
   intent.statusFilter = 'failed'
   intent.scene = 'learning-paths'
 }
-/** outbox 死信 → 本页「运维工具」页签（2026-10-16：系统工具场景解散并入本页后，
-    不再跨页跳转，直接切到同页的重放面板；死信清单由该面板挂载时自拉） */
+/** outbox 死信 → 「系统设置」的运维工具页签（2026-11-01：该面板已从本页拆走，
+    这里恢复成跨页跳转；死信清单由面板挂载时自拉） */
 function goDeadLetters() {
-  switchTab('tools')
+  void router.push({ path: '/admin/system-settings', query: { tab: 'tools' } })
 }
 /** 草稿公告 → 本页「公告」页签并预筛草稿（2026-10-24）：此前只设 intent 不切 tab，
     点「去处理」停在运营待办；预筛进 URL，刷新/复制链接可复原。 */
@@ -549,14 +483,6 @@ onMounted(() => {
 /* ================= 宿主布局（tab 宿主：运营待办内滚；嵌入子页占满剩余高度） ================= */
 /* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
    （含 __count 角标，mk-primitives.css），本页不再私持拷贝。 */
-/* 内容运营 / 系统运维的域分界：竖线与页签底线同色，高度对齐文字行高 */
-.tabs__sep {
-  align-self: center;
-  width: 1px;
-  height: 14px;
-  margin: 0 8px;
-  background: var(--mk-line);
-}
 /* 待办 tab：内容在宿主 flex 列内独立滚动（页头/页签固定） */
 .oh-body {
   flex: 1 1 auto;
@@ -568,15 +494,6 @@ onMounted(() => {
 }
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
 .oh-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
-/* 系统工具迁入的两个面板（2026-10-16）：根节点是普通 div，不占满整高，改为占满剩余高度
-   并自管纵向滚动——原 OpsCenter 的 .oc-card__body 承担同一职责（表单/清单长时卡内滚动） */
-.oh-host > .stp-body,
-.oh-host > .exp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* 窄屏：KPI 竖排后剩余高度只剩几十像素，面板内部滚动变成「一条缝」——退回内容高度，由页面滚动 */
-@media (max-width: 900px) {
-  .oh-host > .stp-body,
-  .oh-host > .exp-body { flex: none; min-height: 0; overflow: visible; }
-}
 /* 公告 / 站内通知页签此前各有一行 .oh-tabbar 只放主操作（2026-10-26 撤除：
    整行一颗钮夹在页签条与卡片之间，既不属于页头也不属于卡；主操作已归位到子页卡头右组）。 */
 
