@@ -79,6 +79,11 @@
             <div class="mpp-models__title">
               <span class="mpp-sec">挂载模型</span>
               <span class="mpp-models__count">{{ selected.models.length }} 个</span>
+              <!-- 2026-11-01 外部评审（三轮/四轮连续两次）：把这条说在表头，压掉
+                   「通道连接测试没做过，下面的模型凭什么健康」这个读法——两者不同源。 -->
+              <span class="mpp-models__src" title="每个模型的健康来自对该模型单独发起的轻量探测（拉取清单时逐条探测）。「连接测试」回答的是另一件事：这条地址与密钥通不通。">
+                健康状态：逐模型能力探测
+              </span>
             </div>
             <span class="mpp-models__acts">
               <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openAdd">
@@ -565,6 +570,10 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-setup__text strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
 .mpp-setup__text span { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
 /* 对话模型区计数：与区名同一基线，弱化处理 */
+.mpp-models__src {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+}
 .mpp-models__count { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 /* 能力标签：跟在模型 ID 后面；没有额外能力时留空，不写占位文案 */
 .mpp-fn__chip {

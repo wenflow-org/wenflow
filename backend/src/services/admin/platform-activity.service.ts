@@ -58,11 +58,15 @@ export async function getPlatformActivityFeed(params: {
   const sessionTaskMap = new Map(sessionTasks.map((task) => [task.id, task]));
 
   // 最近注册的用户（excludeTest 时排除虚拟学习者/测试账号；软删账号一律隐藏）
+  /* 2026-11-01 外部评审（四轮 P0）：注释一直写着「软删账号一律隐藏」，但 excludeTest 分支
+     走的是 buildRealUserWhere()——它只排除虚拟/测试账号，不带 deletedAt 条件，
+     于是软删账号从「用户账号」列表消失、却仍在总览的「最近事件」里报「新用户注册」，
+     同屏两处对不上（截图里 4 笔注册 vs 列表里查无此人）。这里显式补上 deletedAt。 */
   const recentUsers = await prisma.users.findMany({
     take: 20,
     orderBy: { createdAt: 'desc' },
     where: {
-      ...(excludeTest ? await buildRealUserWhere() : { deletedAt: null }),
+      ...(excludeTest ? await buildRealUserWhere({ deletedAt: null }) : { deletedAt: null }),
       createdAt: { gte: activityWindowStart, lte: activityWindowEnd },
     },
     select: {
