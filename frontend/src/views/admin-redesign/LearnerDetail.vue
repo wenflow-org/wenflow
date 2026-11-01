@@ -969,7 +969,13 @@ import { isDegradedWrapup } from './cockpitWrapup'
 import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow, type CalibrationDetailItem } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
-import { learnerMetric, type LearnerMetricKey } from '@/utils/learnerMetrics'
+import {
+  learnerMetric,
+  toDisplayHundred,
+  toneOfHundred,
+  LEARNER_METRIC_BAND_HUNDRED,
+  type LearnerMetricKey,
+} from '@/utils/learnerMetrics'
 // pathStatusText：路径域状态文案（active → 「学习中」；全局字典是「进行中」）。本文件已从
 // './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
 import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
@@ -2214,23 +2220,23 @@ const narrativeSourceTitle = computed(() => {
 
 const metricCards = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
-  const fmt = (v?: number) => (v == null ? '—' : v.toFixed(1))
-  /* 后端语义核实（backend/src/services/learning/learning-state.service.ts）：
-     LSS=Learning Stress Score 学习压力（0-10，越高越累）、KTL=Knowledge Training Load 训练负荷
-     （LSS 的慢 EWMA，高=负荷重）、LF=Learning Fatigue 疲劳（≥6 警戒）；三者均为负荷类——
-     高值是坏（红）、低值是好（绿）。LSB=KTL−LF 状态平衡，正=状态好。
-     标签/参考带/色调阈值单点取自 learnerMetrics.ts——此前本页两处渲染点
-     （metricCards 与 learningStateRows）与 VirtualProfile.lsmRows 各写一套且互相打架。 */
+  const fmt = (v?: number | null) => (v == null ? '—' : v.toFixed(1))
+  /* 2026-11-01 外部评审 P0 修复：本页统一到 0–100 展示刻度。
+     快照 `dynamicState.metrics` 是内部 0–10（learnerMetrics.ts 的阈值即为 0–10 口径），
+     而本卡下方「学习压力记录」曲线读 learning_metrics（0–100，警戒线 60、图例也写 0–100）——
+     此前两处各自直接上屏：同屏两个读数差 10 倍、判色相反（实测卡 1.1 / 曲线 10.8，
+     LF 卡上判绿、曲线上判红）。换算与 0–100 判色单点在 utils/learnerMetrics.ts，本页只调不改口径。 */
   const card = (key: LearnerMetricKey) => {
     const def = learnerMetric(key)
-    const v = m[key]
-    const missing = v == null || v === 0
+    const hundred = toDisplayHundred(m[key])
+    const missing = hundred == null || hundred === 0
+    const bandText = LEARNER_METRIC_BAND_HUNDRED[key]
     return {
       label: def.label,
-      value: fmt(v),
-      band: def.band,
-      title: missing ? '暂无数据' : `${def.band}\n${def.bandTitle}`,
-      tone: def.toneOf(v)
+      value: fmt(hundred),
+      band: bandText.band,
+      title: missing ? '暂无数据' : `${bandText.band}\n${bandText.bandTitle}`,
+      tone: toneOfHundred(key, hundred)
     }
   }
   return [card('lss'), card('ktl'), card('lf'), card('lsb')]
@@ -2564,11 +2570,15 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
 
 const loadDisplayDay = computed(() => loadSeries.value[loadSeries.value.length - 1] ?? null)
 const loadFmt = (v: number | null) => (v == null ? '—' : v.toFixed(1))
-/** 压力语义：LF 高 = 疲劳高；LSB = KTL-LF，负 = 状态不佳 */
+/** 压力语义：LF 高 = 疲劳高；LSB = KTL-LF，负 = 状态不佳。
+ *  2026-11-01 外部评审 P0：阈值原为 LF ≥ 6、LSB ≥ −3——那是**内部 0–10 口径**，
+ *  而这条曲线读 learning_metrics（0–100，同一张卡的警戒线就画在 60）。于是 LF=12.3
+ *  被标成「高风险」，图上离警戒线还远、上方卡片读数又判「低」——同屏三处三种判据。
+ *  这里统一到 0–100 口径（LF 警戒 60、LSB 分档 ±30）。 */
 function loadZoneOf(p: LoadPoint): 'fresh' | 'optimal' | 'risk' {
-  if (p.lsb == null) return p.lf != null && p.lf >= 6 ? 'risk' : 'optimal'
+  if (p.lsb == null) return p.lf != null && p.lf >= 60 ? 'risk' : 'optimal'
   if (p.lsb >= 0) return 'fresh'
-  if (p.lsb >= -3) return 'optimal'
+  if (p.lsb >= -30) return 'optimal'
   return 'risk'
 }
 const loadZoneCls = (z: 'fresh' | 'optimal' | 'risk') => (z === 'fresh' ? '--fresh' : z === 'optimal' ? '--optimal' : '--risk')
@@ -2607,19 +2617,22 @@ const riskFactors = computed(() => (teachingHints.value?.riskFactors || []) as s
    tone 对齐本页 metricCards 的负荷语义（高=坏）。 */
 const learningStateRows = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
-  const width = (v: number | undefined) => (v == null || v === 0 ? 0 : Math.min(100, Math.round((v / 10) * 100)))
+  /* 与 metricCards 同一刻度（0–100）：条形宽度按 /100 取百分比，不再按内部 0–10 的 /10
+     （旧实现把 1.1 画成 11% 宽，而下方曲线同一天的 10.8 画到 108% 被截顶） */
+  const width = (v: number | null | undefined) => (v == null || v === 0 ? 0 : Math.min(100, Math.round(v)))
   const row = (key: LearnerMetricKey) => {
     const def = learnerMetric(key)
-    const v = m[key]
-    const t = def.toneOf(v)
+    const hundred = toDisplayHundred(m[key])
+    const t = toneOfHundred(key, hundred)
+    const bandText = LEARNER_METRIC_BAND_HUNDRED[key]
     return {
       label: def.label,
-      value: v ? (key === 'lsb' ? `${v > 0 ? '+' : ''}${v.toFixed(1)}` : v.toFixed(1)) : '—',
-      width: key === 'lsb' ? (v ? Math.min(100, Math.round(Math.abs(v) * 8 + 10)) : 0) : width(v),
+      value: hundred == null || hundred === 0 ? '—' : (key === 'lsb' ? `${hundred > 0 ? '+' : ''}${hundred.toFixed(1)}` : hundred.toFixed(1)),
+      width: key === 'lsb' ? (hundred == null || hundred === 0 ? 0 : Math.min(100, Math.round(Math.abs(hundred) * 0.8 + 10))) : width(hundred),
       // 共享口径的 '' = 缺值/中性 → 本页条形用 'muted'（本页只有 ok/bad 上色档）
       tone: (t === '' ? 'muted' : t) as 'ok' | 'warn' | 'bad' | 'muted',
-      hint: def.band,
-      hintTitle: def.bandTitle
+      hint: bandText.band,
+      hintTitle: bandText.bandTitle
     }
   }
   return [row('lss'), row('ktl'), row('lf'), row('lsb')]

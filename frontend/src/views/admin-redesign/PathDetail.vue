@@ -21,15 +21,28 @@
       action-text="重试"
       @action="resolve"
     />
-    <MkEmptyState
-      v-else
-      icon="◌"
-      title="该路径没有关联的目标对话"
-      action-text="返回列表"
-      @action="closeSubPage"
-    >
-      <button type="button" class="mk-link pdx-alt" @click="goGoalConversations">去目标对话</button>
-    </MkEmptyState>
+    <!-- 无关联对话的路径（学习端直接生成的那种）：空态照旧，但**不能只剩一个裸 id**——
+         2026-11-01 外部评审 P1：运营进来只看到「学习路径 / lp_1793…」+ 一句空态，
+         无法确认这是谁的哪条路径、是否还在生成。路径基础信息接口已经带回来了，直接摆出来。 -->
+    <section v-else class="mk-card pdx-orphan">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">{{ pathInfo?.title || '未命名路径' }}</h3>
+        <span class="mk-card__meta">{{ pathInfo?.subject || '—' }}</span>
+      </div>
+      <MkRowList>
+        <MkRow title="所属用户" :time="pathInfo?.userLabel || '—'" />
+        <MkRow title="路径状态" :time="pathStatusText" />
+        <MkRow title="里程碑 / 任务" :time="`${pathInfo?.milestones ?? 0} 个 · ${pathInfo?.tasks ?? 0} 条`" />
+        <MkRow title="路径 ID" :time="pathId" />
+      </MkRowList>
+      <div class="pdx-orphan__note">
+        该路径没有关联的目标对话，因此没有可跳转的学习会话座舱。路径内容仍可在学习者详情里查看。
+      </div>
+      <div class="pdx-orphan__acts">
+        <button type="button" class="mk-btn mk-btn--primary" @click="closeSubPage">返回列表</button>
+        <button type="button" class="mk-link pdx-alt" @click="goGoalConversations">去目标对话</button>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -38,14 +51,24 @@
  *  - 「重规划」按钮原型有而管理侧无任何可达能力，按「宁缺勿假」未搬（2026-10-01 核查）；
  *  - 「导出」是原型假按钮，未搬。
  *  内容体（阶段全展开/任务弹层/重试生成/下线恢复）现居 PathJourneyPanel.vue。 */
-import { getCurrentInstance, onMounted, ref } from 'vue'
-import { subPage, openSubPage, closeSubPage } from './store'
+import { computed, getCurrentInstance, onMounted, ref } from 'vue'
+import { subPage, openSubPage, closeSubPage, setSubPageLabel } from './store'
 import { errMsg } from './live'
 import { adminLearningContentApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkRowList from '@/components/mk/MkRowList.vue'
+import MkRow from '@/components/mk/MkRow.vue'
+
+type PathInfo = { title: string; subject: string; userLabel: string; milestones: number; tasks: number; status: string }
 
 const state = ref<'resolving' | 'error' | 'orphan'>('resolving')
 const errorMsg = ref('')
+const pathInfo = ref<PathInfo | null>(null)
+const pathId = computed(() => subPage.value?.id || '')
+const PATH_STATUS_TEXT: Record<string, string> = {
+  active: '学习中', generating: '生成中', failed: '生成失败', archived: '已下线', completed: '已完成',
+}
+const pathStatusText = computed(() => PATH_STATUS_TEXT[pathInfo.value?.status || ''] || pathInfo.value?.status || '—')
 /* 无 Router 上下文（单测直挂）时不注入，避免 useRouter 打警告 */
 const router = getCurrentInstance()?.appContext.config.globalProperties.$router as
   | { push: (to: string) => Promise<unknown> }
@@ -63,8 +86,34 @@ async function resolve() {
   errorMsg.value = ''
   try {
     const res = await adminLearningContentApi.getPathDetail(pid)
-    const body = (res.data?.data ?? res.data ?? null) as { conversationId?: string | null } | null
+    const body = (res.data?.data ?? res.data ?? null) as
+      | {
+          conversationId?: string | null
+          title?: string
+          name?: string
+          subject?: string
+          status?: string
+          totalMilestones?: number
+          /* 详情接口不带 totalTasks：任务数分散在各里程碑的 tasks/subtasks 里 */
+          milestones?: Array<{ tasks?: unknown[]; subtasks?: unknown[] }>
+          /* 归属用户走 users 关系字段（详情接口没有 user / userName） */
+          users?: { name?: string | null; email?: string | null } | null
+        }
+      | null
     if (!body) throw new Error('详情数据为空')
+    const title = String(body.title || body.name || '').trim()
+    pathInfo.value = {
+      title,
+      subject: String(body.subject || ''),
+      userLabel: String(body.users?.name || body.users?.email || ''),
+      milestones: Number(body.totalMilestones || body.milestones?.length || 0),
+      tasks: (body.milestones || []).reduce((n, m) => n + ((m.tasks || m.subtasks || []).length), 0),
+      status: String(body.status || ''),
+    }
+    /* 面包屑：深链进来时 label 就是那个裸 id，解析出真名后就地替换（与座舱同一手法） */
+    if (title && subPage.value?.id === pid && (!subPage.value.label || subPage.value.label === pid)) {
+      setSubPageLabel(title)
+    }
     const conversationId = typeof body.conversationId === 'string' ? body.conversationId : ''
     if (!conversationId) {
       state.value = 'orphan'
@@ -88,4 +137,6 @@ onMounted(() => { void resolve() })
 .pdx { align-content: start; }
 /* 空态里的第二出口：主按钮已是「返回列表」，这条是并列的文字出口 */
 .pdx-alt { margin-top: 2px; }
+.pdx-orphan__note { padding: 12px 16px 0; color: var(--mk-muted); font-size: 12.5px; }
+.pdx-orphan__acts { display: flex; align-items: center; gap: 12px; padding: 12px 16px 16px; }
 </style>
