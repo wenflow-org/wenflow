@@ -5,6 +5,7 @@ import type { TeachingKnowledgePointState, TeachingSessionRecord } from './Teach
 import { logger } from '../../utils/logger';
 import { conceptRegistryService } from '../learner/concept-registry.service';
 import { conceptGraphService, RELATION_PREREQUISITE, RELATION_PART_OF } from '../learner/concept-graph.service';
+import { sanitizeUserFacingText } from '../learning/user-facing-text';
 import type { InteractionMetaRecord, InteractionHistoryEntry, TeachingScenarioContext } from './teaching-context-types';
 
 /** 仅提取每条消息中可用的数值特征（meta 中的合法数字字段） */
@@ -75,6 +76,18 @@ export function dedupeConcepts(values: Array<string | null | undefined>): string
   return Array.from(new Set(values.map((value) => normalizeConcept(value)).filter(Boolean) as string[]));
 }
 
+/**
+ * 任务↔KC 连接键的口径（issue #179）。
+ *
+ * kc-mapper 的输入标题来自 stage-designer 的**原始**标题，而 subtasks 落库前经
+ * `sanitizeUserFacingText()` 收口（内部词表：回捞 → 回顾）；本函数两侧都用同一个
+ * 收口再比较——只 trim/折叠空格消除不了该改写，凡是命中过词表的任务都会静默匹配不到 KC。
+ * 用同一收口也让既有路径（标注里存的仍是原始标题）无需重跑生成即可对上。
+ */
+function taskTitleKey(value: unknown): string | null {
+  return normalizeConcept(sanitizeUserFacingText(value).text);
+}
+
 function parsePathPromptTemplateCore(path: any) {
   const promptTemplate = parsePathPromptTemplate(path?.aiPromptTemplate);
   // #9 退役：统一读 cognitiveCore（旧数据需先跑 scripts/migrate-cognitive-core.ts 迁移）
@@ -88,7 +101,7 @@ export function resolveTaskKcsFromPath(task: any, path: any): Array<{ kcId: stri
     const kcAnnotation = template?.kcAnnotation;
     if (!kcAnnotation || typeof kcAnnotation !== 'object') return [];
     const taskKcLinks = Array.isArray(kcAnnotation.taskKcLinks) ? kcAnnotation.taskKcLinks : [];
-    const matched = taskKcLinks.find((link: any) => normalizeConcept(link?.taskTitle) === normalizeConcept(task?.title));
+    const matched = taskKcLinks.find((link: any) => taskTitleKey(link?.taskTitle) === taskTitleKey(task?.title));
     // 字段兼容：契约是 linkedKCs，但实测弱模型/漂移模型会写成 kcIds / linkedKcIds / kcs（2026-09-22）。
     // 读取侧归一，避免"落了库但下游解析为空"的静默断链。
     const linkedKcIds = matched

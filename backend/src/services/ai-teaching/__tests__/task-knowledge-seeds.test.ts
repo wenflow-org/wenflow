@@ -33,6 +33,25 @@ describe('buildTaskKnowledgeSeeds（本课知识组件种子）', () => {
     expect(seeds.every((s) => s.status === 'pending' && s.progress === 0)).toBe(true);
   });
 
+  it('标题收口不一致（issue #179）：annotation 存原始标题、DB 存 sanitize 后标题 → 仍能对上', () => {
+    // kc-mapper 拿到 stage-designer 的原始标题；subtasks 落库前 sanitizeUserFacingText 把「回捞」→「回顾」，
+    // teaching 侧拿 DB 标题回来查。两侧必须共用同一收口，否则这条链必断（KC 粒度静默丢空）。
+    const rawTitlePath = {
+      aiPromptTemplate: JSON.stringify({
+        kcAnnotation: {
+          taskKcLinks: [{ taskTitle: '回捞学科全景框架并校准理论映射', linkedKCs: ['kc-1a'] }],
+          kcGraph: { nodes: [{ kcId: 'kc-1a', name: '学科全景框架', taxonomy: 'conceptual' }] },
+        },
+      }),
+    };
+    const seeds = buildTaskKnowledgeSeeds({
+      task: { title: '回顾学科全景框架并校准理论映射' }, // subtasks 表里的落库值
+      path: rawTitlePath,
+      resolvedConcept: resolved,
+    });
+    expect(seeds.map((s) => s.name)).toEqual(['学科全景框架']);
+  });
+
   it('契约漂移：linkedKCs 缺失时认 kcIds / linkedKcIds / kcs', () => {
     const mk = (key: string) => ({
       aiPromptTemplate: JSON.stringify({
