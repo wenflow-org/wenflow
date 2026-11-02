@@ -483,7 +483,7 @@ v4 的处理：实心状态按钮**不复用语义文字色令牌**，改用两�
 `mk-primitives.css`——该文件只被 `AdminConsole.vue` 与 `SkillDesignPage.vue` **懒加载**，
 用户侧路由从不加载它。
 
-已实证的既有缺陷：`V2LearningPage.vue:123` 已经在用 `<MkLoading>`，但在 `/v2/*` 下
+已实证的既有缺陷：`V2LearningPage.vue:123` 已经在用 `<MkLoading>`，但在用户侧路由下
 `.mk-spinner` 与 `.mk-loading` 两个类**零命中**，转圈根本不显示。照着规则 5 的报错去改
 用户侧页面，只会把同一个坏组件换一个地方用。
 

@@ -257,7 +257,7 @@ Five entries in the top / bottom navigation:
 
 Core flow: register / log in → `/onboarding` → `/goal-conversation` → after your confirmation the path is generated → `/learning-paths` → `/learning-path/:id` → `/learn/:taskId` round-based learning → `/learn/:taskId/evaluation/:sessionId` post-session evaluation.
 
-The personal centre lives under `/user/*`: account, settings (including API access), call logs, achievements, learning history, plus the library (`/library`, upload materials for "learning a course / a book" so lessons can reference them). Legacy `/v2/*` URLs redirect to the current paths.
+The personal centre lives under `/user/*`: account, settings (including API access), call logs, achievements, learning history, plus the library (`/library`, upload materials for "learning a course / a book" so lessons can reference them).
 
 </details>
 

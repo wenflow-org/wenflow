@@ -281,6 +281,9 @@ doc/re_test/*
 !doc/SESSION_JSON_INCREMENTAL_DESIGN.md
 # 例外：平台测量质量常设化（#85：冻结考卷语料 + 双臂协议 + 质量报告；runner/CI 包装测试按路径校验该语料 sha256）
 !doc/measurement/
+# 例外：两侧旅程地图（用户侧 / 管理台）——产品、运营与外部评审的共同参照，需随代码可查
+!doc/USER-JOURNEY-MAP-2026-11-01.md
+!doc/ADMIN-JOURNEY-MAP-2026-11-01.md
 doc/local/
 
 # Playwright MCP 会话临时文件
@@ -370,3 +373,6 @@ backend/.runtime/
 .audit-probe-data/
 .audit-shots/
 .audit-shots-after/
+
+# 用户旅程走查的证据目录（每一步大截图 / 接口取数 / DOM 体检 / 图文报告，可重跑）
+walkthrough/

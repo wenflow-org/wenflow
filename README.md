@@ -258,7 +258,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 
 核心学习流：注册 / 登录 → `/onboarding` 引导 → `/goal-conversation` 澄清目标 → 你确认后生成路径 → `/learning-paths` → `/learning-path/:id` 路径详情 → `/learn/:taskId` 回合式学习 → `/learn/:taskId/evaluation/:sessionId` 课后评估。
 
-个人中心在 `/user/*`：账户、设置（含 API 接入）、调用日志、成就、学习历史，页内还可进「资料库」（`/library`，上传学某课 / 学某书的资料供课堂引用）。旧的 `/v2/*` 地址会自动重定向到正式路径。
+个人中心在 `/user/*`：账户、设置（含 API 接入）、调用日志、成就、学习历史，页内还可进「资料库」（`/library`，上传学某课 / 学某书的资料供课堂引用）。
 
 </details>
 

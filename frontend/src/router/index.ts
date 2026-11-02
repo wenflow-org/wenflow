@@ -168,39 +168,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/DeveloperDocs.vue'),
     meta: { title: '开发者文档' }
   },
-  // ===== /v2 已上线：旧地址全部重定向到正式路径 =====
-  {
-    path: '/v2',
-    redirect: '/dashboard'
-  },
-  {
-    path: '/v2/dashboard',
-    redirect: '/dashboard'
-  },
-  {
-    path: '/v2/goal-conversation/:conversationId?',
-    redirect: (to) => ({ path: `/goal-conversation/${to.params.conversationId || ''}`, query: to.query })
-  },
-  {
-    path: '/v2/learning-paths',
-    redirect: (to) => ({ path: '/learning-paths', query: to.query })
-  },
-  {
-    path: '/v2/learning-path/:id',
-    redirect: (to) => ({ path: `/learning-path/${to.params.id}`, query: to.query })
-  },
-  {
-    path: '/v2/learn/:taskId',
-    redirect: (to) => ({ path: `/learn/${to.params.taskId}`, query: to.query })
-  },
-  {
-    path: '/v2/learning-state',
-    redirect: '/learning-state'
-  },
-  {
-    path: '/v2/achievements',
-    redirect: '/user/achievements'
-  },
+  // ===== 旧 /v2/* 预览地址已于 2026-11-01 移除（用户拍板）=====
+  // 新 UI 上线后这些地址只是重定向，长期无人引用；连带清理见：巡检脚本
+  // scripts/v4-ui-audit.mjs 的 v2-* 条目、README 的 /v2 说明。
+  // 另注意：组件名与目录仍沿用 views/v2/ + V2* 前缀（只改了 URL，没改命名）。
   {
     path: '/admin/login',
     name: 'AdminLogin',

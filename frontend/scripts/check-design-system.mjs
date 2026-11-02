@@ -160,10 +160,10 @@ const isGoverned = (relPath) =>
  *
  * 为什么需要第二个谓词：规则 5 / 6 的整改建议是「改用 <MkLoading> / .mk-skeleton」，
  * 而这些原语定义在 `mk-primitives.css`，该文件只被 AdminConsole.vue 与
- * SkillDesignPage.vue **懒加载**。用户侧路由（`/v2/*` 等）从不加载它，于是
+ * SkillDesignPage.vue **懒加载**。用户侧路由（`/dashboard`、`/learn/:taskId` 等）从不加载它，于是
  * 用户侧页面照着报错改，会得到一段同样没有定义、同样不渲染的类名。
  *
- * 已实证的坏指令：V2LearningPage.vue:123 已经在用 `<MkLoading>`，但在 `/v2/*`
+ * 已实证的坏指令：V2LearningPage.vue:123 已经在用 `<MkLoading>`，但在用户侧路由
  * 下 `.mk-spinner` 与 `.mk-loading` 零命中 —— 转圈根本不显示。这是**既有缺陷**，
  * 不是守卫报出来的假问题；但它说明「用户侧也该用 MkLoading」这个建议当前是错的。
  *
