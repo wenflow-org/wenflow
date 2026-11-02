@@ -48,8 +48,6 @@
 | CONTEXT_MECHANISM_AUDIT.md | 历史审计 | 缓存基线为改造前口径 |
 | LEARNING_SCIENCE_AUDIT.md | 历史审计 | 科学性判断仍有效 |
 | DEV_SCRIPTS.md | 活规范 | 脚本唯一索引（86 条零失效） |
-| ADMIN_UI_WALKTHROUGH.md | 历史快照 | 已迁 doc/re_test/ |
-| ADMIN_PAGE_AUDIT.md | 历史快照 | 已迁 doc/re_test/ |
 | CLASSROOM_PIPELINE.md | 活规范 | 课堂管线与评价管线单文件口径（文件/函数可直接对照，基线 feat/teaching-figures @ 62108427） |
 | CLASSROOM_SKILLS.md | 活规范 | 课堂用到的提示词全文合集（配套 CLASSROOM_PIPELINE.md） |
 | BOARD_MODE_REPORT.md | 设计留痕 | 白板模式 MVP 报告（图教分离；含 2026-10-27 §九二次定调） |
@@ -60,7 +58,6 @@
 | ADMIN_COPY_SEMANTIC_AUDIT.md | 历史审计 | 管理端文案语义审计 |
 | FLOW-ARCH-AUDIT-REMEDIATION-2026-10-22.md | 历史审计 | 流程架构审计修复与数据处置记录（对应审计在 doc/local/） |
 | README.md / README.en.md | 索引 | 本文档 |
-| re_test/（3 篇） | 历史快照 | 归档头已加 |
 
 
 ## 协议与 Prompt 体系

@@ -44,10 +44,7 @@
 | CONTEXT_MECHANISM_AUDIT.md | Historical audit | Cache baseline predates the refactor |
 | LEARNING_SCIENCE_AUDIT.md | Historical audit | Scientific conclusions still valid |
 | DEV_SCRIPTS.md | Living spec | Single script index (86 paths, none dead) |
-| ADMIN_UI_WALKTHROUGH.md | Historical snapshot | Moved to `doc/re_test/` |
-| ADMIN_PAGE_AUDIT.md | Historical snapshot | Moved to `doc/re_test/` |
 | README.md / README.en.md | Index | This document |
-| re_test/ (3 docs) | Historical snapshots | Archive headers added |
 
 ## Protocols & Prompt System
 
