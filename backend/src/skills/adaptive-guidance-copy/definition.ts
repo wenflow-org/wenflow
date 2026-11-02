@@ -7,12 +7,12 @@ import { RuntimeDefinitionRecord } from '../../composers/definitions/types';
 export const adaptiveGuidanceCopyRuntimeDefinition: RuntimeDefinitionRecord = {
   id: 'skill:adaptive-guidance-copy',
   displayName: '自适应引导文案 Skill',
-  description: '根据学习者状态与路径上下文生成 Dashboard / Path 页面引导文案',
+  description: '根据学习者状态与路径上下文生成 Dashboard / learning-state 页面引导文案',
   category: 'skill',
   inputSchema: {
     type: 'object',
     properties: {
-      view: { type: 'string', description: '页面类型：dashboard|path-list|path-detail|learning-state' },
+      view: { type: 'string', description: '页面类型：dashboard|learning-state' },
       learnerSnapshot: { type: 'object', description: '学习者快照' },
       learningState: { type: 'object', description: '学习状态' },
       path: { type: 'object', description: '路径上下文' },
@@ -34,7 +34,7 @@ export const adaptiveGuidanceCopyRuntimeDefinition: RuntimeDefinitionRecord = {
       warningCopy: { type: 'string', description: '风险/提醒文案' },
     },
   },
-  capabilities: ['adaptive-copy', 'dashboard-copy', 'path-copy', 'learning-guidance'],
+  capabilities: ['adaptive-copy', 'dashboard-copy', 'learning-guidance'],
   defaultMaxTokens: 64000,
   defaultTemperature: 0.6,
   source: 'code',

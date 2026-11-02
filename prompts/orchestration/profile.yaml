@@ -79,7 +79,8 @@ fields:
     description: 课程控制（taskGranularity/conceptDensity/reviewFrequency）
 
   # === skill:adaptive-guidance-copy 产出（2026-10-14 由 teaching 阶段随技能迁入） ===
-  # 学习者可见的页面文案：dashboard / path-list / path-detail / learning-state 首屏投影
+  # 学习者可见的页面文案：dashboard / learning-state 首屏投影
+  # （learning-state 页复用 dashboard 快照文案，快照缺失时才落本地静态兜底；path 视图已退役）
   - fieldId: headline
     promptRole: public-reply
     valueType: string
