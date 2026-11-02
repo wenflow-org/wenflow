@@ -34,6 +34,7 @@ jest.mock('../../utils/logger', () => ({
 
 import { getRequestContext, runWithContext } from '../../gateway/api-gateway/context'
 import { consumeUpstreamAttempt } from '../../gateway/api-gateway/retry-budget'
+import { getAgentOfSkill } from '../../services/agent-manifest.service'
 import { executeSkillHandler } from '../executor'
 
 describe('统一 Skill Executor', () => {
@@ -70,6 +71,42 @@ describe('统一 Skill Executor', () => {
       where: { name: 'path-planning' },
       data: expect.objectContaining({ callCount: 3, successRate: expect.closeTo(2 / 3) })
     }))
+  })
+
+  it('#185：skill span 的 callerAgent 取所属 agent 边界，不继承上层运行来源标记', async () => {
+    const result = await runWithContext({
+      userId: 'user-1',
+      sourceEntry: 'simulation',
+      callerAgent: 'simulation-agent'
+    }, () => executeSkillHandler({ id: 'skill:session-wrapup' }, {}, async () => ({
+      success: true,
+      output: 'ok',
+      duration: 1
+    })))
+
+    expect(result.success).toBe(true)
+    const data = logCreate.mock.calls.at(-1)[0].data
+    expect(data.agentId).toBe('skill:session-wrapup')
+    expect(data.callerAgent).toBe('teaching-agent')
+  })
+
+  it('#185：无归属的 handler-only skill 不再借用上层 callerAgent（记为调用方未知）', async () => {
+    const result = await runWithContext({
+      userId: 'user-1',
+      sourceEntry: 'simulation',
+      callerAgent: 'simulation-agent'
+    }, () => executeSkillHandler({ id: 'skill:replan-attribution' }, {}, async () => ({
+      success: true,
+      output: 'ok',
+      duration: 1
+    })))
+
+    expect(result.success).toBe(true)
+    // 前提：该 skill 无归属 agent（skills.yaml 无 parentAgent），故没有可用的调用方
+    expect(getAgentOfSkill('skill:replan-attribution')).toBeUndefined()
+    const data = logCreate.mock.calls.at(-1)[0].data
+    expect(data.agentId).toBe('skill:replan-attribution')
+    expect(data.callerAgent).toBeNull()
   })
 
   it('把 SkillExecutionResult 失败统一转换为异常并记录失败统计', async () => {
