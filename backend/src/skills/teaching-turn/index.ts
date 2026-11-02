@@ -10,7 +10,7 @@ import type { TeachingLearnerProjection } from '../../agents/learner-model-agent
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 import { recordDegradation } from '../degradation-telemetry';
 import { findArithmeticMismatches, type ArithmeticMismatch } from '../../services/ai-teaching/teaching-arithmetic-guard';
-import { normalizeForKeywordMatch } from '../../services/ai-teaching/checkpoint-shared';
+import { normalizeForKeywordMatch, resolveUnderstandingReading } from '../../services/ai-teaching/checkpoint-shared';
 import { applyObservableEvidenceGate, detectObservableEvidence } from './observable-evidence';
 import type { ChatMessageContent } from '../../gateway/api-gateway/types';
 import { buildVisionContent } from '../../utils/vision-content';
@@ -345,7 +345,11 @@ export interface TeachingTurnOutput {
   analysis: {
     cognitiveLevel: string;
     levelScore: number;
-    understanding: number;
+    /**
+     * 本轮对学习者理解度的读数（0-1）；**没有可引用证据支撑时为 null**（不可观测）。
+     * null 不是「低」：出题节奏与伴学触发都按「无读数」处理，不按 0 处理（2026-11-01）。
+     */
+    understanding: number | null;
     confusionPoints: string[];
     /** 结构化误解台账（G-R-R Phase 1）：每项含 hypothesis/evidence/confidence */
     misconceptions?: Array<{
@@ -723,7 +727,8 @@ function resolveKnowledgeBlock(parsed: Record<string, any>): Record<string, any>
   return block;
 }
 
-function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput): TeachingTurnOutput {
+/** 导出以便回归测试（不可观测口径：understanding 的 null 必须原样保留到闸门层） */
+export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput): TeachingTurnOutput {
   const reply = typeof parsed.reply === 'string' && parsed.reply.trim()
     ? parsed.reply.trim()
     : '我们继续沿着这个主题往下学。';
@@ -836,7 +841,10 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
         ? analysis.cognitiveLevel
         : 'understand',
       levelScore: Number.isFinite(analysis.levelScore) ? Number(analysis.levelScore) : 2,
-      understanding: Number.isFinite(analysis.understanding) ? Number(analysis.understanding) : 0.5,
+      // 无读数保留为 null（2026-11-01）：旧实现把「模型没给出可支撑的读数」一律填成 0.5（中性），
+      // 与「真的读数是 0.5」不可区分；现在 null 一路带到闸门，由消费方按「不可观测」处理
+      // （不加速出题、不触发低理解度伴学），见 services/ai-teaching/checkpoint-shared.ts。
+      understanding: resolveUnderstandingReading(analysis.understanding),
       confusionPoints: resolveConfusionPoints(analysis.confusionPoints, analysis.misconceptions),
       ...(normalizeMisconceptions(
         analysis.misconceptions,
