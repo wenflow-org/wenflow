@@ -220,12 +220,6 @@ nul
 
 # Local architecture docs (track only current spec/result docs; archive, history, design drafts, survey snapshots & changelogs stay untracked locally)
 doc/*
-# 例外：管理端巡检报告（代码注释与守卫规则引用该路径，需随代码可查）
-!doc/re_test/
-doc/re_test/*
-!doc/re_test/admin-audit-2026-09-24.md
-!doc/re_test/ADMIN_PAGE_AUDIT.md
-!doc/re_test/ADMIN_UI_WALKTHROUGH.md
 # 例外：管理端视觉层规范（守卫规则 10/11/12 与巡检脚本按路径引用它作为判据）
 !doc/ADMIN_VISUAL_LAYER_SPEC.md
 # 例外：文案语义审查标准（copy:dump 的审阅依据，代码注释与脚本引用）
@@ -277,8 +271,6 @@ doc/re_test/*
 # 例外：开发脚本手册 与 newui 原型登记规则
 !doc/DEV_SCRIPTS.md
 !doc/NEWUI-PROTOTYPES.md
-# 例外：会话大 JSON 列增量化设计（两侧已落地，设计留痕）
-!doc/SESSION_JSON_INCREMENTAL_DESIGN.md
 # 例外：平台测量质量常设化（#85：冻结考卷语料 + 双臂协议 + 质量报告；runner/CI 包装测试按路径校验该语料 sha256）
 !doc/measurement/
 # 例外：两侧旅程地图（用户侧 / 管理台）——产品、运营与外部评审的共同参照，需随代码可查
@@ -295,7 +287,7 @@ page-*.md
 # UI 审计截图临时目录
 .ui-audit/
 
-# 管理端巡检原始数据（可复跑：node scripts/admin-audit.mjs；结论进 doc/re_test/）
+# 管理端巡检原始数据（可复跑：node scripts/admin-audit.mjs）
 scripts/admin-audit-results/
 
 # 本地实验数据（语料、跑批产物与归档；不入库 —— 见 doc/VIRTUAL_LEARNER_DESIGN.md）
