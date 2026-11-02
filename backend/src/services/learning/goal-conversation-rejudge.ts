@@ -122,6 +122,12 @@ export async function bindGeneratingPath(
       ext: {
         goalConversation: {
           understanding: input.data.understanding || {},
+          // 交接声明（prompts/orchestration/goal.yaml 的 pathInRawOutput）把以下三个键当作
+          // skill 原始输出里的物理位置；seed 是确认链路里 skill 输出的替代品，缺了它们
+          // assembleGoalHandoff 的对应行恒 skip，「配置式交接」退化为 visibleSummary 硬编码投影。
+          confirmedProposal: input.data.confirmedProposal ?? null,
+          structuredData: input.data.structuredData ?? null,
+          confidenceScores: input.data.confidenceScores ?? null,
           nextQuestions: [],
           collected: input.data.collected || {}
         }
