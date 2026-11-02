@@ -3,7 +3,7 @@
 > 这份文档回答一个问题：**管理员进来做什么、每天按什么顺序走、每个页面负责哪一段、哪些操作会真的改到用户侧。**
 > 只覆盖运营/管理员侧；学习者侧见 [USER-JOURNEY-MAP-2026-11-01.md](./USER-JOURNEY-MAP-2026-11-01.md)。
 
-- 版本：2026-11-01
+- 版本：2026-11-02（2026-11-01 初稿；2026-11-02 按实测审计修订：待办读数卡页级化、死信落点、skill-workbench 层级、成本分析拆回、重定向表补录）
 - 事实来源：路由 `frontend/src/router/index.ts`、侧栏单一数据源 `frontend/src/views/admin-redesign/manifest.ts`、页面注册表 `AdminConsole.vue`、运营中心 `OpsHub.vue`、后端挂载 `backend/src/bootstrap/routers.ts`
 - 核实方式：页面清单取自侧栏登记表与页面注册表（两处互为镜像）；动作取自组件里真实存在的按钮与处理函数。凡本文没写到的页面动作，是**没有逐页核实**，不是「没有」。
 
@@ -48,7 +48,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  A["平台总览（置顶）<br/>驾驶舱：待办 · 健康 · 概览"] --> B["运营中心<br/>9 个 tab + 4 张待办卡"]
+  A["平台总览（置顶）<br/>驾驶舱：待办 · 健康 · 概览"] --> B["运营中心<br/>9 个 tab + 4 张待办读数卡"]
   B -->|待处理反馈| B1["反馈：回复用户"]
   B -->|生成失败路径| B2["学习路径 / 路径详情：重建"]
   B -->|事件投递失败| B3["重发（画像与成就更新会延迟）"]
@@ -64,13 +64,13 @@ flowchart TD
 
 一个宿主页里 9 个 tab：**运营待办 · 反馈 · 成就 · 公告 · 站内通知 · 运维工具 · 数据导出 · 会话安全 · 访问与注册**。
 
-其中「运营待办」是四张带计数的卡片，每张都能一键跳到对应处置位置：
+其中待办能力分两层：四张带计数的读数卡是**页级常驻**（2026-10-18 拍板，挂在页签栏之上、任何页签都能看见），每张都能一键跳到对应处置位置；「运营待办」页签本身是一张行动队列（2026-10-27 起，只列未清零/失败事项）。四张读数卡的文案与跳转：
 
 | 待办卡 | 含义（卡上的原话） | 跳到 |
 |---|---|---|
 | 待处理反馈 | 用户反馈还没有人回复 | 反馈待处理列表 |
 | 生成失败路径 | 学习者卡在路径生成，无法进入下一课 | 失败路径列表 |
-| 事件投递失败 | 画像与成就更新会延迟 | 死信列表 |
+| 事件投递失败 | 画像与成就更新会延迟 | 同页「运维工具」页签内的死信重放面板 |
 | 草稿公告 | 公告尚未发布 | 公告页 |
 
 > 注意：反馈、成就、公告、站内通知、会话安全、访问与注册这几个**已不再占侧栏席位**，它们的 URL 会重定向进运营中心；找它们请从运营中心的 tab 进。
@@ -171,6 +171,10 @@ flowchart TD
 | `/admin/batch-experiments` · `/admin/virtual-session/:sessionId` | `/admin/virtual-learners`（后者带 `?view=session&id=…`） |
 | `/admin/content` · `/admin/ops-content` | `/admin/learning-paths` |
 | `/admin/feedback` · `/admin/announcements` · `/admin/notifications` · `/admin/messages` · `/admin/ops-achievements` · `/admin/achievements` · `/admin/session-security` · `/admin/access-control` · `/admin/ops-center` · `/admin/devtools` · `/admin/export-data` | `/admin/ops-hub`（按 tab 落到反馈 / 公告 / 站内通知 / 成就 / 会话安全 / 访问与注册 / 运维工具 / 数据导出） |
+| `/admin/skills/:agentId+` | `/admin/skills?view=skill&id=…`（原 `?tab=` 映射进 `?skdTab=`） |
+| `/admin/virtual-learners/:pathMatch(.*)+` | `/admin/virtual-learners` |
+
+另有写在导航守卫里的 **query 级改投**（不在上表）：`/admin/skills?tab=health|drift|recon` → `/admin/health-center`；`/admin/skills?tab=prompt-eval` → `/admin/prompt-eval`；`/admin/api-config?tab=addons` → `/admin/addons`；`/admin/api-config?tab=security` → `/admin/ops-hub?tab=access`。
 
 ---
 
@@ -178,8 +182,8 @@ flowchart TD
 
 这些场景的**页面不再单独存在**，但业务能力都还在（挪进了宿主页的 tab）：
 
-- 已下线并由 URL 改投：`feedback`、`ops-achievements`、`messages`、`session-security`、`access-control`、`ops-center`、`batch-experiments`、独立的 `skill-workbench`（转为隐藏二级页）。
-- 已并入宿主：反馈 / 成就 / 公告 / 站内通知 / 运维工具 / 数据导出 / 会话安全 / 访问与注册 → 运营中心；成本分析 → 执行日志；记忆复习的单用户明细 → 学习者详情页签。
+- 已下线并由 URL 改投：`feedback`、`ops-achievements`、`messages`、`session-security`、`access-control`、`ops-center`、`batch-experiments`、独立的 `skill-workbench`（转为隐藏**一级**场景页；旧深链 `/admin/skill-workbench/:agentId` 改投 `/admin/skills?view=skill&id=…`）。
+- 已并入宿主：反馈 / 成就 / 公告 / 站内通知 / 运维工具 / 数据导出 / 会话安全 / 访问与注册 → 运营中心；记忆复习的单用户明细 → 学习者详情页签。（成本分析曾于 2026-09-04 并入执行日志，2026-09-29 已拆回独立页 `/admin/token-cost`。）
 
 ### 7.1 这一层「下线 + 保留别名」的代价在哪（2026-11-01 复核）
 
