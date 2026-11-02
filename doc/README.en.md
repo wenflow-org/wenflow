@@ -34,6 +34,7 @@
 | NON_FUNCTIONAL_GOVERNANCE_PLAN.md | Governance plan | ⚠️ status baseline 2026-07-17 |
 | EDUCATIONAL_THEORY_MAP.md | Reference | Theory map (literature verified) |
 | ADMIN_TERMINOLOGY_AUDIT.md | Living spec | Terminology SSOT (must not be archived) |
+| USER-JOURNEY-MAP-2026-11-01.md + ADMIN-JOURNEY-MAP-2026-11-01.md | Living spec (maps) | Learner/admin journey maps: entry points, actions, system behavior (revised by the 2026-11-02 audit; cross-linked) |
 | ADMIN_OPERATIONS_MANUAL.md | Living spec | Admin operations manual (routes → duties, metric definitions, action names, SOP) |
 | ADMIN_VISUAL_LAYER_SPEC.md | Living spec | ⛔ must not be archived (guard hard-references it) · v4 wired to the design system |
 | NEWUI-PROTOTYPES.md | Living spec | newui prototype registry & "protovalue residue" rule |

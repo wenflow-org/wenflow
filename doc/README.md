@@ -17,6 +17,7 @@
 | PROMPT_ADJUSTMENT_GUIDE.md | 活规范 | 提示词调整操作指南 |
 | SKILL_DEVELOPMENT_GUIDE.md | 活规范 | 新建/改造 Skill 指南（§2 CLI 优先） |
 | AGENT_SKILL_MANUAL.md | 活规范 | Agent/Skill 全景 why |
+| USER-JOURNEY-MAP-2026-11-01.md ＋ ADMIN-JOURNEY-MAP-2026-11-01.md | 活规范（地图） | 学习者/管理台两条旅程的入口·动作·系统行为参照（2026-11-02 实测审计修订；两图互链） |
 | PIPELINE_MAP.md | 生成物 | 场景→Agent→Prompt 全管线索引（`pipeline:map` 生成，勿手改） |
 | PIPELINE_PROMPTS.md | 生成物 | 全部提示词原文汇编，按场景归档（同上） |
 | KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md | 活规范 | KC 概念身份+图（95%） |
