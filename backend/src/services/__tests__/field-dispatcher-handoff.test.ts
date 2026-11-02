@@ -74,7 +74,6 @@ function buildGoalSkillOutput(overrides: Record<string, any> = {}) {
             platform_judgment_evidence: '汇报稿与结构图可提交对照',
             sensor_readouts: [],
             needsMaterial: { kind: 'standard', title: '内部汇报规范', why: '需要原文对照结构要求', queries: [], origin: 'private' },
-            prerequisiteDiagnostics: [{ concept: '汇报结构', mastery: 'weak' }],
             prerequisiteCheckResults: [{ questionId: 'q1', correct: true }],
           },
           confirmedProposal: {
@@ -83,8 +82,8 @@ function buildGoalSkillOutput(overrides: Record<string, any> = {}) {
             key_stages: ['识别问题结构', '建立汇报框架', '实战汇报'],
             out_of_scope: [],
             scope_size: 'small',
+            prerequisiteDiagnostics: [{ concept: '汇报结构', mastery: 'weak' }],
           },
-          proposalQuality: { pass: true, issues: [] },
           nextQuestions: ['你希望先解决哪一块？'],
           quickReplies: ['先搭框架', '先练表达'],
           structuredData: { learner: { identity: { role: 'manager' }, learning_context: { context: '工作' } } },

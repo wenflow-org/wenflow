@@ -8,7 +8,6 @@ import { goalConversationAgentDefinition } from '../../skills/goal-conversation'
 import { collectGoalUploadedMaterialSummaries } from './goal-material-summaries.service';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
-import { normalizeDeadlineDate } from './deadline-date';
 import { derivePlannedOutline, deriveTriageHint, type LearnerLoadProfile, type TriageHint } from './path-planning-hints';
 import {
   normalizeLearnerLoadProfile,
@@ -54,70 +53,6 @@ interface GoalConversationOptions {
    * 真实用户不传 ⇒ 不落库、不参与体量推导（行为与今天完全一致）。
    */
   learnerLoadProfile?: LearnerLoadProfile | null;
-}
-
-interface GoalNormalizedStateV1 {
-  version: '1.0';
-  learnerIntent: {
-    surfaceGoal: string | null;
-    realProblem: string | null;
-    motivation: string | null;
-  };
-  baseline: {
-    currentLevel: string | null;
-    priorKnowledgeStructure: string | null;
-  };
-  constraints: {
-    availableTime: string | null;
-    deadlineText: string | null;
-    /** P0.1（TIME-TRUST-SCHEME-20261001）：模型解析的外部截止绝对日期（YYYY-MM-DD），可空 */
-    deadlineDate: string | null;
-  };
-  successCriteria: {
-    observableResult: string | null;
-    acceptanceCheck: string | null;
-  };
-  proposal: {
-    learningDirection: string | null;
-    firstDeliverable: string | null;
-  };
-}
-
-function buildGoalNormalizedState(data: any): GoalNormalizedStateV1 {
-  const understanding = data?.understanding || {};
-  const confirmedProposal = data?.confirmedProposal || {};
-  return {
-    version: '1.0',
-    learnerIntent: {
-      surfaceGoal: typeof understanding?.surface_goal === 'string' ? understanding.surface_goal : null,
-      realProblem: typeof understanding?.real_problem === 'string' ? understanding.real_problem : null,
-      motivation: typeof understanding?.motivation === 'string' ? understanding.motivation : null,
-    },
-    baseline: {
-      currentLevel: typeof understanding?.background?.current_level === 'string' ? understanding.background.current_level : null,
-      priorKnowledgeStructure: typeof understanding?.cognitive_profile?.prior_knowledge_structure === 'string'
-        ? understanding.cognitive_profile.prior_knowledge_structure
-        : null,
-    },
-    constraints: {
-      availableTime: typeof understanding?.background?.available_time === 'string' ? understanding.background.available_time : null,
-      deadlineText: typeof understanding?.deadline_text === 'string' ? understanding.deadline_text : null,
-      deadlineDate: normalizeDeadlineDate(understanding?.deadline_date)
-        ?? normalizeDeadlineDate(understanding?.time_dimensions?.deadlineDate),
-    },
-    successCriteria: {
-      observableResult: typeof understanding?.success_criteria?.observable_result === 'string'
-        ? understanding.success_criteria.observable_result
-        : null,
-      acceptanceCheck: typeof understanding?.success_criteria?.acceptance_check === 'string'
-        ? understanding.success_criteria.acceptance_check
-        : null,
-    },
-    proposal: {
-      learningDirection: typeof confirmedProposal?.learning_direction === 'string' ? confirmedProposal.learning_direction : null,
-      firstDeliverable: typeof confirmedProposal?.first_deliverable === 'string' ? confirmedProposal.first_deliverable : null,
-    },
-  };
 }
 
 /**
@@ -1151,8 +1086,6 @@ async continueConversation(
       data.miFrames = goalExt.miFrames;
     }
 
-    data.normalizedGoalState = buildGoalNormalizedState(data);
-
     if (core.learningPath !== undefined) {
       data.learningPath = core.learningPath || null;
     }
@@ -1182,7 +1115,6 @@ async continueConversation(
             stage,
             confidence,
             understanding: data.understanding,
-            normalizedGoalState: data.normalizedGoalState,
             confirmedProposal: data.confirmedProposal || null,
             structuredData: data.structuredData || null,
             responseTriage

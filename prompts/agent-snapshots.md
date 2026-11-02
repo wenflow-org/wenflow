@@ -50,9 +50,8 @@
 | `understanding.platform_judgment_evidence` | string | path |
 | `understanding.sensor_readouts` | array<string> | path |
 | `understanding.needsMaterial` | object | path |
-| `understanding.prerequisiteDiagnostics` | array<object> | goal-agent |
+| `confirmedProposal.prerequisiteDiagnostics` | array<object> | goal-agent |
 | `understanding.prerequisiteCheckResults` | array<object> | goal-agent |
-| `proposalQuality` | object? | goal-agent |
 | `structuredData` | object? | goal-agent |
 | `confirmedProposal.learning_direction` | string | goal-agent |
 | `confirmedProposal.first_deliverable` | string | goal-agent |

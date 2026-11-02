@@ -185,7 +185,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 #### `goal-conversation`（目标对话 Skill）
 
 - **一句话缘由**：把用户口语化、含糊的诉求，多轮对话穿透成"表面目标 + 真实问题 + 约束/资源 + 一版可确认方向"，为路径生成提供**唯一合法输入**。
-- **关键输入/输出**：输入 `userInput` + `state`（自管理解状态）+ `conversationContext`；输出 `reply/nextQuestions/quickReplies`、累积 `understanding.*`、`confirmedProposal.*`、`proposalQuality`（SMART 自评，overall<60 时自然给一句改善建议但不阻断确认）、`structuredData`（framing 旁路）。
+- **关键输入/输出**：输入 `userInput` + `state`（自管理解状态）+ `conversationContext`；输出 `reply/nextQuestions/quickReplies`、累积 `understanding.*`、`confirmedProposal.*`、`structuredData`（framing 旁路）；proposing 前自检方案质量（SMART 五维），明显不足时在 reply 里给一句改善建议但不阻断确认（不产出结构化自评字段）。
 - **设计意图/边界**：
   - 默认**面向提问者本人**规划（即使用户提第三方，也要转化为"提问者本人要学什么"）——这与产品"真实问题澄清"命题一致。
   - 每轮最多 1 个核心问题；隐藏字段 `background_experience/goal_orientation/learning_signal/cognitive_bandwidth/sdt_needs` **静默累积、不主动追问**，供 path 挑战性设计与教学表扬语言参考，**不作为阶段推进条件、不影响硬条件判断**。
