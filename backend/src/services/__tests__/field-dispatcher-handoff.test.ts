@@ -3,22 +3,38 @@
  * 与既有确定性投影（buildGoalPathVisibleSummary）对同一 goal 输出的值等价。
  */
 
-import { assembleGoalHandoff, extractFieldsByPath } from '../field-dispatcher';
+import { assembleGoalHandoff, clearRoutingCache, extractFieldsByPath, goalHandoffSourceAgentIds } from '../field-dispatcher';
 import { buildGoalPathVisibleSummary } from '../learning/goal-path-visible-summary';
 import { loadOrchestrationFiles } from '../field-routing/orchestration-file';
+
+// 默认路径（不传 rowsOverride）读 DB 路由表：用替身注入编排文件声明，验证真实代码路径（#189）
+jest.mock('../../config/system-database', () => ({
+  __esModule: true,
+  default: {
+    agent_field_routings: { findMany: jest.fn() },
+    field_definitions: { findMany: jest.fn() },
+  },
+}))
+import systemPrisma from '../../config/system-database'
 
 // 字段路由声明源：编排文件（seed TS 已退役）
 const GOAL_STAGE = loadOrchestrationFiles().find((s) => s.stage === 'goal')!;
 const GOAL_FIELD_ROUTING_FIELDS = GOAL_STAGE.fields;
 const GOAL_FIELD_ROUTINGS = GOAL_STAGE.routings;
 
-const GOAL_AGENT_HANDOFF_ROWS = GOAL_FIELD_ROUTINGS
-  .filter((r) => r.agentId === 'goal-agent' && r.handoff.includes('path'))
+// 声明集：goal 阶段全部 handoff→path 的行（含挂在 skill 名下的行——抽取器读取范围=全阶段，#189）
+const GOAL_PATH_HANDOFF_ROUTINGS = GOAL_FIELD_ROUTINGS.filter((r) => r.handoff.includes('path'))
+const GOAL_PATH_HANDOFF_ROWS = GOAL_PATH_HANDOFF_ROUTINGS
   .map((r) => ({
     fieldId: r.fieldId,
     handoff: r.handoff,
     pathInRawOutput: GOAL_FIELD_ROUTING_FIELDS.find((f) => f.fieldId === r.fieldId)?.pathInRawOutput || null,
   }))
+
+// 挂在 skill:goal-conversation 名下、声明 handoff→path 的字段（#189 修复前抽取器读不到）
+const GOAL_SKILL_PATH_HANDOFF_FIELDS = GOAL_PATH_HANDOFF_ROUTINGS
+  .filter((r) => r.agentId === 'skill:goal-conversation')
+  .map((r) => r.fieldId);
 
 function buildGoalSkillOutput(overrides: Record<string, any> = {}) {
   return {
@@ -83,7 +99,7 @@ function buildGoalSkillOutput(overrides: Record<string, any> = {}) {
 describe('assembleGoalHandoff（配置式 goal→path 值抽取）', () => {
   it('抽取的字段值与 visibleSummary 确定性投影等价', async () => {
     const output = buildGoalSkillOutput()
-    const { fields } = await assembleGoalHandoff(output, GOAL_AGENT_HANDOFF_ROWS)
+    const { fields } = await assembleGoalHandoff(output, GOAL_PATH_HANDOFF_ROWS)
     const ext = output.internal.ext.goalConversation
     const visible = buildGoalPathVisibleSummary({
       understanding: ext.understanding,
@@ -116,7 +132,7 @@ describe('assembleGoalHandoff（配置式 goal→path 值抽取）', () => {
         },
       },
     })
-    const { fields, skipped } = await assembleGoalHandoff(output, GOAL_AGENT_HANDOFF_ROWS)
+    const { fields, skipped } = await assembleGoalHandoff(output, GOAL_PATH_HANDOFF_ROWS)
     expect(fields['understanding.surface_goal']).toBe('只给了表面目标')
     expect(fields['understanding.real_problem']).toBeUndefined()
     expect(skipped.some((item) => item.includes('understanding.real_problem'))).toBe(true)
@@ -129,5 +145,70 @@ describe('assembleGoalHandoff（配置式 goal→path 值抽取）', () => {
     const registered = rows.filter((r) => r.pathInRawOutput).map((r) => r.fieldId)
     expect(registered.length).toBeGreaterThan(20)
     expect(registered.every((fieldId) => fieldId in flat)).toBe(true)
+  })
+
+  // 回归守卫（#189）：挂在 skill 名下、声明 handoff→path 的字段此前抽取不到（抽取器只读 agent 名下行）
+  it('skill 名下 handoff→path 的字段可被抽取（#189）', async () => {
+    expect(GOAL_SKILL_PATH_HANDOFF_FIELDS.length).toBe(6)
+    const output = buildGoalSkillOutput()
+    const { fields } = await assembleGoalHandoff(output, GOAL_PATH_HANDOFF_ROWS)
+    for (const fieldId of GOAL_SKILL_PATH_HANDOFF_FIELDS) {
+      expect(Object.prototype.hasOwnProperty.call(fields, fieldId)).toBe(true)
+    }
+    expect(fields['understanding.skill_nature']).toBe('cognitive_internalized')
+    expect(fields['understanding.needsMaterial']).toEqual(
+      expect.objectContaining({ title: '内部汇报规范' }),
+    )
+  })
+
+  // 抽取器读取范围守卫（#189）：若把 loadGoalStageRows 收窄回 goal-agent，本条失败
+  it('抽取器读取范围覆盖 goal 阶段全部 handoff→path 声明行', () => {
+    const scope = goalHandoffSourceAgentIds()
+    const declaredOwners = [...new Set(GOAL_PATH_HANDOFF_ROUTINGS.map((r) => r.agentId))]
+    // 两种声明归属都出现：agent 桥接行 + skill 行
+    expect(declaredOwners.length).toBeGreaterThan(1)
+    for (const owner of declaredOwners) {
+      expect(scope).toContain(owner)
+    }
+    // 直接钉住：goal 的成员 skill 必须在读取范围内
+    expect(scope).toContain('skill:goal-conversation')
+  })
+
+  // 真实代码路径守卫（#189）：默认路径（读 DB 路由表）必须经 goal 阶段成员 skill 行抽取；
+  // 若把 loadGoalStageRows 收窄回 goal-agent，本条的 6 个字段会全部缺失
+  it('默认路径（读 DB 路由表）抽取 skill 名下 handoff→path 的字段', async () => {
+    const mockPrisma = systemPrisma as unknown as {
+      agent_field_routings: { findMany: jest.Mock }
+      field_definitions: { findMany: jest.Mock }
+    }
+    mockPrisma.agent_field_routings.findMany.mockResolvedValue(
+      GOAL_FIELD_ROUTINGS.map((r) => ({
+        agentId: r.agentId,
+        fieldId: r.fieldId,
+        render: r.render,
+        handoff: JSON.stringify(r.handoff),
+        internalFlag: r.internal,
+        accumulate: r.accumulate,
+        notes: r.notes ?? null,
+      })),
+    )
+    mockPrisma.field_definitions.findMany.mockResolvedValue(
+      GOAL_FIELD_ROUTING_FIELDS.map((f) => ({
+        stage: 'goal',
+        fieldId: f.fieldId,
+        promptRole: f.promptRole,
+        valueType: f.valueType,
+        pathInRawOutput: f.pathInRawOutput ?? null,
+      })),
+    )
+    clearRoutingCache()
+    try {
+      const { fields } = await assembleGoalHandoff(buildGoalSkillOutput())
+      for (const fieldId of GOAL_SKILL_PATH_HANDOFF_FIELDS) {
+        expect(Object.prototype.hasOwnProperty.call(fields, fieldId)).toBe(true)
+      }
+    } finally {
+      clearRoutingCache()
+    }
   })
 })

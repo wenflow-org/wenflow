@@ -174,9 +174,58 @@ export function extractFieldsByPath(
 }
 
 /**
+ * goal→path 配置式交接抽取器（assembleGoalHandoff）读取的路由行归属：
+ * goal 阶段编排 agent（goal-agent）及其全部成员 skill。
+ * 导出供门禁 / 测试对账「声明 handoff→path 的行是否落在抽取器读取范围内」（#189）。
+ */
+export function goalHandoffSourceAgentIds(): string[] {
+  const memberIds = getAgentManifest('goal-agent')?.agentMembers ?? [];
+  return ['goal-agent', ...memberIds].map(getCanonicalAgentId);
+}
+
+/**
+ * 配置式跨阶段交接抽取器登记表：登记「某阶段声明 handoff→另一阶段」的行由哪个抽取器交付，
+ * 以及该抽取器实际遍历的 agentId 集合。门禁据此对账：声明行必须落在读取集合内，
+ * 否则该交接声明在运行时永远抽不到值（静默失效，#189）。
+ * 仅登记以**阶段名**为 handoff 目标的跨阶段抽取器；skill→skill 通道
+ * （stage-designer / teaching-turn）由各自在途通道承载，不在本表。
+ */
+export interface ConfigDrivenStageHandoff {
+  /** 抽取器函数名（报错定位用） */
+  extractor: string;
+  /** 声明方 stage（编排文件 stage 名） */
+  sourceStage: string;
+  /** handoff 目标阶段名 */
+  targetStage: string;
+  /** 抽取器实际遍历的 agentId（canonical） */
+  sourceAgentIds: () => string[];
+}
+
+export function listConfigDrivenStageHandoffs(): ConfigDrivenStageHandoff[] {
+  return [
+    { extractor: 'assembleGoalHandoff', sourceStage: 'goal', targetStage: 'path', sourceAgentIds: goalHandoffSourceAgentIds },
+  ];
+}
+
+/**
+ * 收集 goal 阶段（goal-agent 及其下辖 skill）名下的全部路由行。
+ * 声明层允许 skill 行直接 handoff 到后续阶段（seed 白名单含阶段名 goal/path/…），
+ * 只读 agent 名下的桥接行会让这类声明静默失效（#189）。
+ */
+async function loadGoalStageRows(): Promise<FieldRoutingRow[]> {
+  const { byAgent } = await loadRoutings();
+  const rows: FieldRoutingRow[] = [];
+  for (const agentId of goalHandoffSourceAgentIds()) {
+    const inner = byAgent.get(agentId);
+    if (inner) rows.push(...inner.values());
+  }
+  return rows;
+}
+
+/**
  * goal→path 交付字段组装（V3 §5.3 getHandoffInput 的配置化实现）：
- * 读 routings 表 goal-agent 名下 handoff 含 'path' 的行，按 pathInRawOutput
- * 从 goal skill 输出 result 抽取字段值，返回 fieldId → value 映射。
+ * 读 routings 表 goal 阶段（goal-agent 及其下辖 skill）名下 handoff 含 'path' 的行，
+ * 按 pathInRawOutput 从 goal skill 输出 result 抽取字段值，返回 fieldId → value 映射。
  * 仅使用路由声明，不依赖任何硬编码字段清单。
  * rowsOverride 用于测试/离线注入（缺省读 DB 路由表）。
  */
@@ -184,9 +233,7 @@ export async function assembleGoalHandoff(
   result: any,
   rowsOverride?: Array<{ fieldId: string; handoff: string[]; pathInRawOutput?: string | null }>
 ): Promise<{ fields: Record<string, any>; skipped: string[] }> {
-  const rows = rowsOverride
-    ? rowsOverride
-    : Array.from((await loadRoutings()).byAgent.get('goal-agent')?.values() || []);
+  const rows = rowsOverride ?? (await loadGoalStageRows());
   const handingRows = rows.filter((row) => row.handoff.includes('path'));
   const fields = extractFieldsByPath(result, handingRows);
   const skipped = handingRows

@@ -118,7 +118,7 @@ node scripts/<名字>.mjs [参数]
 | 脚本 | 用途 | 入口 |
 |---|---|---|
 | `check-core-hash-parity.ts` | core ↔ 编译产物 ↔ DB 的 hash 对账 | `npm run prompts:core:check` |
-| `check-input-handoffs.ts` | inputs 声明 ↔ 字段路由 handoff 双向对账 | `prompts:check-handoff` / `:strict` |
+| `check-input-handoffs.ts` | inputs 声明 ↔ 字段路由 handoff 双向对账 + 声明边 ↔ 抽取器对账（#189） | `prompts:check-handoff` / `:strict` |
 | `check-core-fields-sync.ts` | 产出字段 ↔ core fields 一致性 | `prompts:fields-sync:check` |
 | `check-payload-prefix-stability.ts` | 稳定键前置护栏（KV 前缀缓存） | `prompts:payload-prefix:check[:strict]` |
 | `check-skills-file.ts` | 技能户口簿 `prompts/skills.yaml` 全量门禁 | `prompts:skills:check` |

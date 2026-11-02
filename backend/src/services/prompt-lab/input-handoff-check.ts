@@ -4,9 +4,16 @@
  * 规则：core 声明的每个 input ref skill:Y.F，上游 skill:Y 的路由表中应存在
  * 与 F 前缀匹配的字段行，且 handoff 包含本 skill。
  * 对不上不阻断（路由表可能滞后于业务演进），以 advisory 告警呈现。
+ *
+ * 另含「声明边 ↔ 抽取器」对账（#189）：配置式跨阶段交接声明的 handoff 行，
+ * 必须落在对应抽取器实际读取的 agentId 集合内，否则该声明在运行时永远抽不到值。
  */
-import { getAgentRoutings, type FieldRoutingRow } from '../field-dispatcher';
-import { getAgentOfSkill } from '../agent-manifest.service';
+import {
+  getAgentRoutings,
+  listConfigDrivenStageHandoffs,
+  type FieldRoutingRow,
+} from '../field-dispatcher';
+import { getAgentOfSkill, getCanonicalAgentId } from '../agent-manifest.service';
 import type { CoreFile, CoreInputRef } from './core-file-loader';
 import type { GateIssue } from './core-compiler';
 
@@ -89,4 +96,45 @@ export async function checkInputHandoffs(core: CoreFile): Promise<GateIssue[]> {
   if (!core.inputs?.length) return [];
   const issues = await Promise.all(core.inputs.map((input) => checkInputRefHandoff(core, input)));
   return issues.filter((issue): issue is GateIssue => issue !== null);
+}
+
+/** 编排文件里一张 stage 的路由声明（结构最小化，便于注入测试） */
+export interface StageRoutingDecl {
+  stage: string;
+  routings: ReadonlyArray<{ agentId: string; fieldId: string; handoff?: string[] }>;
+}
+
+/**
+ * 声明边 ↔ 抽取器对账（#189）：对每个登记在册的配置式跨阶段交接抽取器，
+ * 检查其 source 阶段内所有 handoff 指向 target 阶段的行，是否都落在抽取器
+ * 实际读取的 agentId 集合内。落在范围外 = 该交接声明运行时不生效（静默失效）。
+ */
+export function checkConfigDrivenStageHandoffCoverage(
+  stages: ReadonlyArray<StageRoutingDecl>,
+): GateIssue[] {
+  const issues: GateIssue[] = [];
+  for (const extractor of listConfigDrivenStageHandoffs()) {
+    const stage = stages.find((s) => s.stage === extractor.sourceStage);
+    if (!stage) {
+      issues.push({
+        code: 'handoff-extractor-source-stage-missing',
+        message:
+          `抽取器 ${extractor.extractor} 登记的来源阶段「${extractor.sourceStage}」在编排文件中不存在，` +
+          `声明边无法与其对账`,
+      });
+      continue;
+    }
+    const scope = new Set(extractor.sourceAgentIds());
+    for (const row of stage.routings) {
+      if (!(row.handoff || []).includes(extractor.targetStage)) continue;
+      if (scope.has(getCanonicalAgentId(row.agentId))) continue;
+      issues.push({
+        code: 'declared-handoff-not-extractable',
+        message:
+          `${row.agentId}/${row.fieldId} 声明 handoff→${extractor.targetStage}，` +
+          `但抽取器 ${extractor.extractor} 只读 [${[...scope].join('、')}]，该交接声明运行时不生效`,
+      });
+    }
+  }
+  return issues;
 }

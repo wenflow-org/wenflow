@@ -3,6 +3,8 @@
  *
  * 规则：每个 core 文件的 inputs ref（skill:Y.F）必须能在上游 Y 的路由表中
  * 找到匹配字段且 handoff 包含本 skill。
+ * 另含「声明边 ↔ 抽取器」对账（#189）：配置式跨阶段交接的 handoff 行
+ * 必须落在对应抽取器实际读取的 agentId 集合内。
  * - 默认模式（--strict 缺省关闭）：问题以 warn 输出，退出码 0
  * - --strict：任何问题都失败（退出码 1），供 CI / 发布门禁用
  *
@@ -10,9 +12,13 @@
  */
 
 import { scanCoreFiles } from '../services/prompt-lab/core-file-loader';
-import { checkInputHandoffs } from '../services/prompt-lab/input-handoff-check';
+import {
+  checkConfigDrivenStageHandoffCoverage,
+  checkInputHandoffs,
+} from '../services/prompt-lab/input-handoff-check';
 import type { GateIssue } from '../services/prompt-lab/core-compiler';
 import { bootstrapFieldRoutings } from '../services/field-routing-bootstrap.service';
+import { loadOrchestrationFiles } from '../services/field-routing/orchestration-file';
 import systemPrisma from '../config/system-database';
 
 async function main() {
@@ -29,14 +35,19 @@ async function main() {
     }
   }
 
+  // 声明边 ↔ 抽取器对账（全局，非按 core 文件）
+  for (const issue of checkConfigDrivenStageHandoffCoverage(loadOrchestrationFiles())) {
+    issues.push({ skillId: '声明↔抽取器对账', issue });
+  }
+
   if (issues.length > 0) {
     for (const { skillId, issue } of issues) {
       console.log(`[${issue.code}] ${skillId}: ${issue.message}`);
     }
-    console.log(`\ninputs↔handoff 对账：${issues.length} 个问题（${strict ? 'strict 模式，判定失败' : 'advisory'}）`);
+    console.log(`\ninputs↔handoff / 声明↔抽取器 对账：${issues.length} 个问题（${strict ? 'strict 模式，判定失败' : 'advisory'}）`);
     if (strict) process.exit(1);
   } else {
-    console.log(`inputs↔handoff 对账：${files.length} 个核心文件全部通过`);
+    console.log(`inputs↔handoff / 声明↔抽取器 对账：${files.length} 个核心文件全部通过`);
   }
 }
 

@@ -1228,8 +1228,9 @@ async continueConversation(
           .filter((message: { role: string; content: string }) => message.content)
       : [];
 
-    // 配置式值流转（P1 试点）：按 routings 表 goal-agent 交付行 + pathInRawOutput
-    // 从 skill 输出抽取 goal→path 字段，与 visibleSummary 并行产出（golden 验证/后续装配切换）
+    // 配置式值流转（P1 试点）：按 routings 表 goal 阶段（goal-agent 及其下辖 skill）交付行
+    // + pathInRawOutput 从 skill 输出抽取 goal→path 字段，与 visibleSummary 并行产出
+    // （golden 验证/后续装配切换）
     const goalHandoffFields = await assembleGoalHandoff(aiResponse).catch((err) => {
       logger.warn('[goal-conversation] assembleGoalHandoff failed, falling back to visibleSummary', {
         conversationId: conversation.id,

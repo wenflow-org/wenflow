@@ -93,7 +93,7 @@ prompts/orchestration/<stage>.yaml
 
 ### 流转怎么读
 
-- **handoff**：该字段产完后移交给谁（`goal-agent` / `path` 等阶段或 skill），空 = 不转交。
+- **handoff**：该字段产完后移交给谁（`goal-agent` / `path` 等阶段或 skill），空 = 不转交。合法目标含**阶段名**，且阶段名可写在 skill 行上（如 `skill:goal-conversation` 行直接 `handoff: [path]`）——`prompts:check-handoff` 会核对「声明了 handoff→阶段名 的行必须落在该阶段抽取器的读取范围内」，否则该交接声明在运行时永远抽不到值（#189）。
 - **profile 阶段例外（#180）**：交接装配器只有三个目标——`path` / `skill:stage-designer` / `skill:teaching-turn`（`field-dispatcher` 的 assemble* 函数），`profile` / `profile-agent` 不在其中。但判据不是「有没有装配器」而是「有没有运行时消费者」：`audit-handoff-edges` 实测 `teaching-agent ↔ profile-agent`（10 字段）与 `skill:learner-model ↔ profile-agent`（7 字段）两条边零命中（`skill:learner-model` 是 handler-only 门面，`profile-aggregator` 由 `LearnerProfileService` 按需直调，profile-agent 从不调用它），已置空 handoff；而 `skill:lesson-knowledge-enricher` / `skill:adaptive-guidance-copy → profile-agent` 虽无装配器却对应真实运行边（profile-agent 实际调用这两个 skill），保留声明。画像数据交付语义以运行边 + 事件投影（`learner-event-consumer`：证据投影 → 课后知识增强 → 清画像缓存 → 快照重算）为准。
 - **internal = 是**：仅供 UI 消费、不进业务状态；**accumulate = 是**：累积进学习者状态。
 - 字段的实际物理位置（`pathInRawOutput`）在编排文件 `fields[].pathInRawOutput` 里，admin 表当前版本不展示。
