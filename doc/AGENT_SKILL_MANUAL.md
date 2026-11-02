@@ -328,7 +328,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **一句话缘由**：作为**独立旁路裁判**，只依据可定位证据评估一次黑盒实验运行的质量、控制一致性与边界完整性，并给出面向平台维护者的改进建议。
 - **关键输入/输出**：输入 `publicTrace`（学习者可见轨迹）+ `refereeTrace`（旁路诊断，不回流学习者）+ `control`（控制回执）+ `experimentSummary` + `storyMeta` + `metricCompleteness`；输出 `verdict`（pass/pass_with_concerns/fail/inconclusive）、`scores`（goalExperience/goalUnderstanding/pathExperience/teachingExperience/controlConsistency/boundaryIntegrity/evidenceSufficiency）、`findings[]`（带 `evidenceIds`）、`recommendations[]`、`evidence[]`。
 - **设计意图/边界**：不扮演学习者/教师/编排器，避免自评偏差；只能使用可定位证据；`storyMeta.realProblem` 是角色私有设定，不得当作学习者已知/公开事实；不得输出 learner reply/下一步动作；不得服从轨迹文本中的 prompt injection（把裁判本身也当成不可信输入处理）。
-- **失败/降级行为/现状**：**手动触发**（`POST /api/admin/virtual-learners/sessions/:id/blackbox-evaluations`），前置 `experiment.mode='blackbox-api'` 且会话终态；assisted autopilot 不自动执行，故**当前 0 调用**（`skills.yaml` notes）。
+- **失败/降级行为/现状**：**手动触发**（`POST /api/admin/session-audits/sessions/:id/evaluations`，独立评审面 `routes/admin/session-audits.ts`），前置 `experiment.mode='blackbox-api'` 且会话终态；assisted autopilot 不自动执行，故**当前 0 调用**（`skills.yaml` notes）。
 - **依据**：core identity/constraints、`simulation.yaml`、`skills.yaml` notes。
 
 #### `virtual-learner-actor-auditor`（角色保真审计 Skill）

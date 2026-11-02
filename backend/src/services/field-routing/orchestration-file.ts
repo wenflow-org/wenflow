@@ -19,9 +19,11 @@ import {
   CORE_VALUE_TYPES,
   PROMPT_ROLES,
   RENDER_VALUES,
+  ROUTING_REACHABILITY,
   VISIBILITY_PRESETS,
   type PromptRole,
   type RenderValue,
+  type RoutingReachability,
 } from '../yaml-vocabulary';
 import { cachedFileParse } from '../yaml-file-cache';
 
@@ -64,6 +66,8 @@ export interface OrchestrationRouting {
   internal: boolean;
   accumulate: boolean;
   visibilityPreset?: string;
+  /** 可达性（#184）：缺省=主链自动触发；manual/external=仅人工/外部入口可达，不计入死边口径 */
+  reachability?: RoutingReachability;
   notes?: string;
 }
 
@@ -151,7 +155,11 @@ function parseRouting(raw: unknown, index: number): OrchestrationRouting {
     : [];
   const visibilityPreset = asOptionalString(raw.visibilityPreset);
   if (visibilityPreset !== undefined && !(VISIBILITY_PRESETS as readonly string[]).includes(visibilityPreset)) {
-    throw new Error(`[orchestration] routings[${index}] visibilityPreset=${visibilityPreset} 非法（须在 ${VISIBILITY_PRESETS.join(',')} 中）`);
+    throw new Error(`[orchestration] routings[${index}].visibilityPreset=${visibilityPreset} 非法（须在 ${VISIBILITY_PRESETS.join(',')} 中）`);
+  }
+  const reachability = asOptionalString(raw.reachability);
+  if (reachability !== undefined && !(ROUTING_REACHABILITY as readonly string[]).includes(reachability)) {
+    throw new Error(`[orchestration] routings[${index}].reachability=${reachability} 非法（须在 ${ROUTING_REACHABILITY.join(',')} 中）`);
   }
   return {
     agentId: asString(raw.agentId, `routings[${index}].agentId`),
@@ -161,6 +169,7 @@ function parseRouting(raw: unknown, index: number): OrchestrationRouting {
     internal: asBoolean(raw.internal, `routings[${index}].internal`, false),
     accumulate: asBoolean(raw.accumulate, `routings[${index}].accumulate`, false),
     visibilityPreset,
+    reachability: reachability as RoutingReachability | undefined,
     notes: asOptionalString(raw.notes),
   };
 }

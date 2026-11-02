@@ -108,6 +108,7 @@ async function main() {
         declaredEdges: comparison.declaredEdges.length,
         matchedEdges: comparison.matchedEdgeCount,
         declaredButNeverUsed: comparison.declaredButNeverUsed.length,
+        externalEdges: comparison.externalEdges.length,
         usedButUndeclared: comparison.usedButUndeclared.length,
       },
       topEdges: orchestrationEdges.slice(0, args.top).map((edge) => ({
@@ -115,6 +116,7 @@ async function main() {
         calls: edge.calls, failures: edge.failures, successRate: edge.successRate, lastSeenAt: edge.lastSeenAt,
       })),
       declaredButNeverUsed: comparison.declaredButNeverUsed.slice(0, args.top),
+      externalEdges: comparison.externalEdges.slice(0, args.top),
       usedButUndeclared: comparison.usedButUndeclared.slice(0, args.top).map((edge) => ({ key: edge.key, calls: edge.calls, failures: edge.failures })),
     }, null, 2));
     return;
@@ -148,6 +150,13 @@ async function main() {
   for (const edge of comparison.declaredButNeverUsed.slice(0, args.top)) {
     const key = args.directed ? handoffEdgeKey(edge.caller, edge.callee) : handoffPairKey(edge.caller, edge.callee);
     console.log(`    · ${key}  ← ${edge.stage} / ${edge.fields.length} 字段`);
+  }
+  if (comparison.externalEdges.length > 0) {
+    console.log(`  声明为 manual/external（#184，零命中不计死边）：${comparison.externalEdges.length} 条`);
+    for (const edge of comparison.externalEdges.slice(0, args.top)) {
+      const key = args.directed ? handoffEdgeKey(edge.caller, edge.callee) : handoffPairKey(edge.caller, edge.callee);
+      console.log(`    · ${key}  ← ${edge.stage} / ${edge.fields.length} 字段`);
+    }
   }
   console.log(`  运行但未声明（幽灵边候选）：${comparison.usedButUndeclared.length} 条`);
   for (const edge of comparison.usedButUndeclared.slice(0, args.top)) {
