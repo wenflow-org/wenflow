@@ -529,6 +529,25 @@ export function resolveModelRef(ref: string): { providerId: string; modelId: str
   return null;
 }
 
+/**
+ * 配置里的模型引用能否落到已注册目录：别名 → 展开成员、裸 id / `providerId/modelId` 限定式 → 命中 MAP。
+ * 空值视为「未配置」返回 true（交给下游 env/兜底，不算漂移）。
+ * 读 call-time 注册表，天然跟随热重载；供启动期告警与模型总览漂移检测复用（#177：
+ * 平台默认/技能绑定指向目录外模型时，运行时会因无可用渠道 transport 失败且被静默兜底）。
+ */
+export function resolvesToRegisteredModel(
+  ref: string | null | undefined,
+  aliasOverrides?: Record<string, string[] | null | undefined> | null
+): boolean {
+  const value = String(ref ?? '').trim();
+  if (!value) return true;
+  if (isModelAlias(value)) {
+    // getModelAliasMembers 已过滤未注册/重复项：有成员 = 至少能选中一个目录内模型
+    return getModelAliasMembers(value, aliasOverrides ?? undefined).length > 0;
+  }
+  return resolveModelRef(value) !== null;
+}
+
 // ---------------------------------------------------------------------------
 // 历史查询 API（签名与语义不变；全部读 call-time 状态，天然跟随热重载）
 // ---------------------------------------------------------------------------

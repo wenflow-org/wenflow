@@ -10,9 +10,15 @@
  *
  * 维护规则：新增/删除 mainline skill 或调整 thinking 档时修改本表，不需要改逻辑。
  * skillId 必须与 prompts/skills.yaml 对齐。
+ *
+ * 2026-11-02（#177）新增：平台默认模型目录归一化。平台 defaultModel 若指向 llm-providers.json
+ * 注册目录外的模型（如历史遗留的评测专用 id），运行时无可用渠道、请求直接 transport 失败，
+ * 且未配模型的 skill 会静默继承它（六个 skill 曾长期只产出规则兜底）。启动期按 File-as-Truth
+ * 归一化回目录声明默认并告警——消除故障本身，而不只是留痕。只在值确实解析不到目录时改写。
  */
 
 import { logger } from '../utils/logger';
+import { getModelDefaults, resolvesToRegisteredModel } from '../config/models.config';
 
 interface SkillModelSeedEntry {
   skillId: string;
@@ -131,6 +137,9 @@ export async function seedSkillModelConfigsIfEmpty(
     });
   }
 
+  // #177：平台默认模型目录归一化（消除 transport 失败通路，见文件头注释）
+  await normalizePlatformModelDefaults(systemPrisma);
+
   if (seeded > 0) {
     logger.info('✅ Skill 模型配置 seed 完成（代码 truth → DB，已有行跳过）', {
       skillSeeded: seeded - (platformUpdated ? 1 : 0),
@@ -139,4 +148,71 @@ export async function seedSkillModelConfigsIfEmpty(
   }
 
   return { seeded, platformUpdated };
+}
+
+/** 解析 platform_api_configs 的别名覆盖 JSON（chatModels/reasoningModels/lightModels）。坏值视为未声明。 */
+function parseAliasMembers(raw: unknown): string[] {
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * #177：平台三个默认模型字段（chat/reasoning/evaluation）必须能解析到 llm-providers.json 注册目录。
+ * 解析不到（值非空、且不是已注册别名/裸 id/限定式引用）时按 File-as-Truth 归一化回目录声明的
+ * 默认（{chat, reasoning}）并告警——这是消除故障本身（否则这些模型会被当作字面 id 发给上游，
+ * 无可用渠道 → transport 失败 → skill 静默规则兜底）。空值不算漂移（交给 env/下游兜底）。
+ * 只改「确实解析不到目录」的字段，不覆盖合法配置。
+ */
+export async function normalizePlatformModelDefaults(systemPrisma: any): Promise<number> {
+  try {
+    const platform = await systemPrisma.platform_api_configs.findUnique({
+      where: { id: 'platform' },
+      select: {
+        defaultModel: true,
+        defaultReasoningModel: true,
+        defaultEvaluationModel: true,
+        chatModels: true,
+        reasoningModels: true,
+        lightModels: true,
+      },
+    });
+    if (!platform) return 0;
+
+    const overrides = {
+      chat: parseAliasMembers(platform.chatModels),
+      reasoning: parseAliasMembers(platform.reasoningModels),
+      light: parseAliasMembers(platform.lightModels),
+    };
+    const { chat, reasoning } = getModelDefaults();
+
+    const fixes: Record<string, string> = {};
+    if (!resolvesToRegisteredModel(platform.defaultModel, overrides)) fixes.defaultModel = chat;
+    if (!resolvesToRegisteredModel(platform.defaultReasoningModel, overrides)) fixes.defaultReasoningModel = reasoning;
+    if (!resolvesToRegisteredModel(platform.defaultEvaluationModel, overrides)) fixes.defaultEvaluationModel = chat;
+    if (!Object.keys(fixes).length) return 0;
+
+    await systemPrisma.platform_api_configs.update({
+      where: { id: 'platform' },
+      data: { ...fixes, updatedAt: new Date() },
+    });
+    logger.warn('[seed-skill-model] 平台默认模型指向注册目录外，已按 llm-providers.json 声明默认归一化', {
+      before: {
+        defaultModel: platform.defaultModel,
+        defaultReasoningModel: platform.defaultReasoningModel,
+        defaultEvaluationModel: platform.defaultEvaluationModel,
+      },
+      after: fixes,
+    });
+    return Object.keys(fixes).length;
+  } catch (err) {
+    logger.warn('[seed-skill-model] 平台默认模型归一化失败（不阻断启动）', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return 0;
+  }
 }
