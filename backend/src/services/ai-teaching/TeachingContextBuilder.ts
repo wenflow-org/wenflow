@@ -476,6 +476,9 @@ async function buildLearnerPrediction(
         suggestedDepth: existing.suggestedDepth as LearnerPredictionContext['suggestedDepth'],
         focusConcepts: safeParseStringArray(existing.focusConcepts),
         rationale: existing.rationale,
+        // P1-13 / #181：DB 复用路径同样保真原文（此前只回枚举，第 2 回合起丢失）
+        toneDetail: existing.toneDetail ?? null,
+        depthDetail: existing.depthDetail ?? null,
       });
     }
 

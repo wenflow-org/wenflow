@@ -234,6 +234,9 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
             },
           }
           : {}),
+        // #181：开场生成器此前不在输入白名单里带预测 ⇒ 预测对「学生第一印象/首轮节奏」
+        // 零作用（1–2 回合的短课几乎等于没有回喂）。缺省不进载荷（与 recap 同一口径）。
+        ...(context.learnerPrediction ? { learnerPrediction: context.learnerPrediction } : {}),
         __prompt: {
           userId: context.userId,
           taskId: context.taskId,

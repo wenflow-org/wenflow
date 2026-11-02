@@ -313,6 +313,7 @@ sandbox:teaching-agent.knowledge.points
 sandbox:teaching-agent.knowledge.state
 sandbox:teaching-agent.learner.learnerProjection
 sandbox:teaching-agent.learner.persona
+sandbox:teaching-agent.learnerPrediction
 sandbox:teaching-agent.learningState
 sandbox:teaching-agent.pedagogy.strategies
 sandbox:teaching-agent.scenario

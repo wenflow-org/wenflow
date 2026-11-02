@@ -121,6 +121,9 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'learner.persona',
     'school.anchor',
     'task.profile',
+    // #181：开场生成器新增 learnerPrediction 输入（编排层 TaskContextBuilder 组装、
+    // v4-aux-skills 在调用前注入），同「编排注入」性质，登记后 check-handoff --strict 通过。
+    'learnerPrediction',
   ],
   'profile-agent': [
     'snapshot.dynamicState',

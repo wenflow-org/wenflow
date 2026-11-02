@@ -272,6 +272,9 @@ async function teachingOpeningGeneratorHandler(input: any) {
           ...(d.learnerPersona ? { learnerPersona: d.learnerPersona } : {}),
           ...(d.schoolAnchor?.background || d.schoolAnchor?.baselineEvidence ? { schoolAnchor: d.schoolAnchor } : {}),
           ...(d.taskProfile?.learningObjectives?.length || d.taskProfile?.coreConcept ? { taskProfile: d.taskProfile } : {}),
+          // #181：core rules 已引用 learnerPrediction（开场节奏参考信号）；caller 已传——
+          // 和 priorLearningContext/learnerPersona 同款，漏在 payload 外会被模型无视。
+          ...(d.learnerPrediction ? { learnerPrediction: d.learnerPrediction } : {}),
         }
       : {
           subject: d.subject,
@@ -289,6 +292,7 @@ async function teachingOpeningGeneratorHandler(input: any) {
           ...(d.learnerPersona ? { learnerPersona: d.learnerPersona } : {}),
           ...(d.schoolAnchor?.background || d.schoolAnchor?.baselineEvidence ? { schoolAnchor: d.schoolAnchor } : {}),
           ...(d.taskProfile?.learningObjectives?.length || d.taskProfile?.coreConcept ? { taskProfile: d.taskProfile } : {}),
+          ...(d.learnerPrediction ? { learnerPrediction: d.learnerPrediction } : {}),
         }),
     normalize: (parsed, d) => {
       const message = asTrimmedString(parsed?.message);

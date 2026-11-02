@@ -793,6 +793,11 @@ model prediction_records {
   suggestedDepth String // shallow | standard | deep
   focusConcepts String // JSON string[]
   rationale     String
+  // P1-13 / #181：预测器自由描述原文（枚举 predictedTone/suggestedDepth 仅作机器判定，
+  // 原文供教学层各回合读语义）。此前只透传到首回合内存、未落库 ⇒ 第 2 回合起/重试/续课
+  // 从本表重建时原文丢失，只剩枚举。
+  toneDetail    String?
+  depthDetail   String?
   // 实证对照（任务完成后回写）
   outcome       String? // not_evaluated | smooth | struggled | failed
   outcomeAt     DateTime?
