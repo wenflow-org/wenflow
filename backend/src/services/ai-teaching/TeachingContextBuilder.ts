@@ -17,6 +17,7 @@ import { resolveSuccessBandVerdict } from '../learner/independent-success-band.s
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { executeSkill } from '../../skills';
 import { learningPredictorDefinition, type LearningPredictorOutput } from '../../skills/learning-predictor';
+import { getRequestContext } from '../../gateway/api-gateway/context';
 import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
 import { getActiveForConcepts } from '../learner/misconception-ledger.service';
 import type { ReviewPlan } from '../memory/review-plan.service';
@@ -450,9 +451,34 @@ export async function buildTeachingScenarioContext(
 const PREDICTION_TIMEOUT_MS = 8000;
 /** 实证可靠性的最低样本数：低于此值不给 reliability（防小样本误导） */
 export const PREDICTION_RELIABILITY_MIN_SAMPLE = 5;
+/**
+ * 预测复用的新鲜度上限（issue #182）：任务长期不完成时 outcome 恒为 null，无时间窗则
+ * 陈旧预测被无限期复用、且命中缓存后不再调预测器。超期视为陈旧，重新预测。
+ */
+const PREDICTION_REUSE_TTL_MS = 24 * 60 * 60 * 1000;
+/** 预测失败后的短时冷却（issue #182）：预测器持续故障时避免每个回合都白等一次超时 */
+const PREDICTION_FAILURE_COOLDOWN_MS = 60 * 1000;
+/** 失败冷却登记（进程内，`userId:taskId` → 冷却截止时刻；多实例各自维护，最坏只是多试几次） */
+const predictionFailureCooldown = new Map<string, number>();
 
-/** 幂等获取/生成学习表现预测：优先复用未回写记录，否则调 LLM 并记录（超时→null） */
-async function buildLearnerPrediction(
+/** 登记一次预测失败，短时内不再重试（清理过期项，避免 Map 无界增长） */
+function markPredictionFailure(cooldownKey: string): void {
+  const now = Date.now();
+  predictionFailureCooldown.set(cooldownKey, now + PREDICTION_FAILURE_COOLDOWN_MS);
+  if (predictionFailureCooldown.size > 1000) {
+    for (const [key, until] of predictionFailureCooldown) {
+      if (until <= now) predictionFailureCooldown.delete(key);
+    }
+  }
+}
+
+/**
+ * 幂等获取/生成学习表现预测：优先复用**新鲜且未回写**的记录，否则调 LLM 并记录。
+ * issue #182：①复用加时间窗（TTL）；②超时走 executor 硬超时（抛 SKILL_TIMEOUT → 计入
+ * learning-predictor 失败率）并在超时后中止底层请求（不再任其烧 token）；③失败由 debug
+ * 升级为 warn 并对该 task 短时冷却；④客户端断开信号并入，保留请求级取消的既有行为。
+ */
+export async function buildLearnerPrediction(
   userId: string,
   pathId: string,
   taskId: string,
@@ -463,13 +489,23 @@ async function buildLearnerPrediction(
     taskContext: { title: string; knowledgeType?: string; learningObjectives?: string[] };
   },
 ): Promise<LearnerPredictionContext | null> {
+  const cooldownKey = `${userId}:${taskId}`;
+  // 超时后用于真正中止底层请求（executor 硬超时本身只是「不再等待」，不取消 handler）
+  let llmController: AbortController | null = null;
   try {
-    // 1) 幂等复用：该任务已有未回写的预测 → 直接用（零 LLM 成本）
+    // 1) 幂等复用：该任务已有未回写、且未超过新鲜度上限的预测 → 直接用（零 LLM 成本）
     const existing = await prisma.prediction_records.findFirst({
-      where: { userId, taskId, outcome: null },
+      where: {
+        userId,
+        taskId,
+        outcome: null,
+        // issue #182：时间窗约束，避免任务长期不完成时无限期复用陈旧预测
+        createdAt: { gte: new Date(Date.now() - PREDICTION_REUSE_TTL_MS) },
+      },
       orderBy: { createdAt: 'desc' },
     });
     if (existing) {
+      predictionFailureCooldown.delete(cooldownKey);
       return await withReliability(userId, {
         stallRisk: existing.stallRisk,
         predictedTone: existing.predictedTone as LearnerPredictionContext['predictedTone'],
@@ -482,24 +518,45 @@ async function buildLearnerPrediction(
       });
     }
 
+    // 1b) 预测器近期失败过：冷却期内直接跳过，避免每个回合重复等待超时（最坏 +8s/回合）
+    const coolingUntil = predictionFailureCooldown.get(cooldownKey) ?? 0;
+    if (coolingUntil > Date.now()) return null;
+    if (coolingUntil) predictionFailureCooldown.delete(cooldownKey);
+
     // 2) 无记录 → LLM 预测（读取最近知识状态摘要）+ 超时保护
     const summary = await fetchLatestKnowledgeSummary(userId);
-    const prediction = (await Promise.race([
-      executeSkill(learningPredictorDefinition, process.env.PAYLOAD_STABLE_PREFIX !== '0'
-        ? {
-            fatigueSignal: opts.fatigueSignal || 'low',
-            knowledgeStateSummary: summary || '无历史摘要',
-            taskContext: opts.taskContext,
-          }
-        : {
-            knowledgeStateSummary: summary || '无历史摘要',
-            fatigueSignal: opts.fatigueSignal || 'low',
-            taskContext: opts.taskContext,
-          }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), PREDICTION_TIMEOUT_MS)),
-    ])) as LearningPredictorOutput | null;
+    const controller = new AbortController();
+    llmController = controller;
+    // issue #182 ④：executor 以 options.abortSignal 覆盖请求级信号（skills/executor.ts:241-242），
+    // 故把客户端断开信号并入，否则「切页/断开即时取消」在本调用点会退化为仅守住本地超时。
+    const parentSignal = getRequestContext().abortSignal;
+    const abortSignal = parentSignal
+      ? AbortSignal.any([parentSignal, controller.signal])
+      : controller.signal;
+    const prediction = (await executeSkill(learningPredictorDefinition, process.env.PAYLOAD_STABLE_PREFIX !== '0'
+      ? {
+          fatigueSignal: opts.fatigueSignal || 'low',
+          knowledgeStateSummary: summary || '无历史摘要',
+          taskContext: opts.taskContext,
+        }
+      : {
+          knowledgeStateSummary: summary || '无历史摘要',
+          fatigueSignal: opts.fatigueSignal || 'low',
+          taskContext: opts.taskContext,
+        }, {
+      // issue #182 ②：硬超时抛 SKILL_TIMEOUT（skills/executor.ts:363-381）→ 计入失败率，
+      // 原 Promise.race 版本超时记为成功、从失败率里消失，监控看不见预测器故障。
+      timeout: PREDICTION_TIMEOUT_MS,
+      abortSignal,
+    })) as LearningPredictorOutput | null;
 
-    if (!prediction) return null;
+    if (!prediction) {
+      markPredictionFailure(cooldownKey);
+      logger.warn('[TeachingContext] 学习表现预测无输出（非阻塞，已短时冷却重试）', { userId, taskId });
+      return null;
+    }
+
+    predictionFailureCooldown.delete(cooldownKey);
 
     // 3) 记录校准行（await：保证 outcome 回写时能找到记录）
     await predictionCalibrationService.recordPrediction({
@@ -514,8 +571,22 @@ async function buildLearnerPrediction(
 
     return await withReliability(userId, prediction);
   } catch (error) {
-    logger.debug('[TeachingContext] 学习表现预测失败（非阻塞）', {
+    const code = (error as { code?: string } | null | undefined)?.code;
+    if (code === 'SKILL_TIMEOUT') {
+      // issue #182 ①：超时已计入失败率，这里补一刀真正中止底层 LLM 请求（否则请求继续烧 token）
+      llmController?.abort();
+    }
+    // 客户端断开/切页导致的中止（category=caller_abort）：非预测器故障，不计失败率也不冷却
+    if (code === 'CALLER_ABORTED' || (error instanceof Error && error.name === 'AbortError')) {
+      logger.debug('[TeachingContext] 学习表现预测被调用方取消（非阻塞）', { userId, taskId });
+      return null;
+    }
+    // issue #182 ③：失败/超时不再静默（原 logger.debug 不可观测）。此处按告警记录并对该 task
+    // 短时冷却，避免预测器故障时回合级重复等待。
+    markPredictionFailure(cooldownKey);
+    logger.warn('[TeachingContext] 学习表现预测失败（非阻塞，已短时冷却重试）', {
       userId, taskId,
+      code: typeof code === 'string' ? code : undefined,
       error: error instanceof Error ? error.message : String(error),
     });
     return null;
