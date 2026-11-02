@@ -570,74 +570,75 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
 
-  # teaching-agent → learner（累积画像）
+  # teaching-agent → learner：非 handoff——这些字段随会话落库，并经 lesson 事件投影进画像；
+  # profile 阶段没有交接装配器（#180），原 handoff:[profile] 是永不执行的声明，故置空。
   - agentId: teaching-agent
     fieldId: analysis.understanding
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: analysis.confusionPoints
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: knowledge.points
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: pedagogy.strategies
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: analysis.misconceptions
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: analysis.ktEstimate
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: summary.knowledgeItems
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: evaluation.sessionLss
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: evaluation.sessionKtl
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: evaluation.sessionLf
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
