@@ -10,7 +10,7 @@
  * 2. 有 success+output 才落库，success:false / 抛错 / 空 output 都不落库且不抛；
  * 3. skill 输入带 cognitiveCore 与 prerequisiteTree（kc-mapper 的缺口覆盖校验输入）。
  */
-import { mapAndPersistKcAnnotation } from '../generation/kc-annotation';
+import { mapAndPersistKcAnnotation, bindKcLinksToSubtaskIds } from '../generation/kc-annotation';
 import * as skills from '../../../skills';
 
 jest.mock('../../../skills', () => ({
@@ -207,5 +207,38 @@ describe('coerceKcMapperParsed（契约等价变体归一）', () => {
     const once = coerceKcMapperParsed(input);
     expect(once).toEqual(input);
     expect(coerceKcMapperParsed(once)).toEqual(input);
+  });
+});
+
+describe('bindKcLinksToSubtaskIds（issue #179：稳定键 taskKey 绑真实任务 id）', () => {
+  it('同名任务各带独立 taskKey：各绑到自己的 subtasks.id，不共享', () => {
+    // kc-mapper 逐字回显输入 taskKey；同名任务靠 taskKey 区分（标题相同不再造成歧义）。
+    const annotation = {
+      taskKcLinks: [
+        { taskKey: 'task-1-2', taskTitle: '复述清单', linkedKCs: ['kc-a'] },
+        { taskKey: 'task-3-0', taskTitle: '复述清单', linkedKCs: ['kc-b'] },
+      ],
+    };
+    const ids = new Map([['task-1-2', 'st_first'], ['task-3-0', 'st_second']]);
+    const bound = bindKcLinksToSubtaskIds(annotation, ids)!;
+    expect(bound.taskKcLinks).toEqual([
+      { taskKey: 'task-1-2', taskTitle: '复述清单', linkedKCs: ['kc-a'], taskId: 'st_first' },
+      { taskKey: 'task-3-0', taskTitle: '复述清单', linkedKCs: ['kc-b'], taskId: 'st_second' },
+    ]);
+  });
+
+  it('模型漏回显 taskKey / 键不在本次运行内：链接原样保留（读侧回退标题并集）', () => {
+    const links = [
+      { taskTitle: '旧标注无键', linkedKCs: ['kc-x'] },
+      { taskKey: 'task-9-9', taskTitle: '键不在本次运行', linkedKCs: ['kc-y'] },
+    ];
+    const bound = bindKcLinksToSubtaskIds({ taskKcLinks: links }, new Map([['task-1-0', 'st_1']]))!;
+    expect(bound.taskKcLinks).toEqual(links);
+  });
+
+  it('无 taskKcLinks / 空标注：原样返回（不构造空数组）', () => {
+    const annotation = { conceptKcs: [] };
+    expect(bindKcLinksToSubtaskIds(annotation, new Map())).toBe(annotation);
+    expect(bindKcLinksToSubtaskIds(null, new Map())).toBeNull();
   });
 });

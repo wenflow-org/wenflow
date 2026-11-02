@@ -121,6 +121,33 @@ export function mergeKcStageAnnotation(
   };
 }
 
+/**
+ * 把 kc-mapper 链接绑到真实任务 id 上（issue #179）。
+ *
+ * kc-mapper 的输入里每个子任务带一个稳定键 `taskKey`，prompt 要求模型逐字回显；落库时用它查
+ * 出该任务的 `subtasks.id` 并写进链接的 `taskId`。读侧（resolveTaskKcsFromPath）据此精确匹配，
+ * 不再依赖会被改写的标题、也能区分同名任务。
+ *
+ * 纯函数、幂等：查不到 id 的链接（旧标注 / 模型漏回显 / 键不在本次运行内）原样保留，
+ * 由读侧回退到标题并集；已带 taskId 的旧链接不受影响。
+ */
+export function bindKcLinksToSubtaskIds(
+  kcAnnotation: KcAnnotation | null | undefined,
+  subtaskIdByTaskKey: Map<string, string>
+): KcAnnotation | null | undefined {
+  const links = kcAnnotation && Array.isArray(kcAnnotation.taskKcLinks) ? kcAnnotation.taskKcLinks : null;
+  if (!kcAnnotation || !links || links.length === 0) return kcAnnotation;
+  return {
+    ...kcAnnotation,
+    taskKcLinks: links.map((link) => {
+      const rawKey = link?.taskKey;
+      const taskKey = typeof rawKey === 'string' ? rawKey.trim().replace(/：/g, ':') : '';
+      const taskId = taskKey ? subtaskIdByTaskKey.get(taskKey) : undefined;
+      return taskId ? { ...link, taskId } : link;
+    }),
+  };
+}
+
 /** 已解析 aiPromptTemplate 的最小视图 */
 export interface KcAnnotationTemplate {
   cognitiveCore?: KcCognitiveCoreLike | null;

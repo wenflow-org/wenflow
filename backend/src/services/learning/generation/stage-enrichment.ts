@@ -40,7 +40,7 @@ import {
 } from './stage-material-supplement';
 import { schoolAnchorCoverage, type PathSchoolAnchor } from './school-anchor';
 import { buildAnchorGoalNote } from './school-anchor-goal';
-import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
+import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, bindKcLinksToSubtaskIds, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS, collectMaterialSectionRefs } from '../../materials/material-prompt-projection';
 import { buildSectionSemanticOrder } from '../../materials/material-semantic-order';
@@ -903,6 +903,18 @@ async function enrichLearningPathWithAndersonInner(
     // 渐进式（批次 D）：单阶段输出走 **增量合并**（mergeKcStageAnnotation，v2 顶层与 v1 同形、
     // byStage 存阶段快照）——整包调用会把单阶段输出当全量覆写、抹掉其他阶段的 KC。
     // persist 注入 no-op：合并结果经本函数返回值交给下方 final 事务统一写 template（避免双写竞争）。
+    //
+    // 任务↔KC 的稳定键（issue #179）：连接键不能用会变形的自然语言标题，也不能靠标题自带的唯一性
+    // （同名任务无解）。这里给本次运行的每个任务分配「阶段序号-阶段内序号」的稳定键，随 kc-mapper
+    // 输入下发并要求逐字回显；键存在 WeakMap 里随任务对象走，同阶段重排只挪位置不改键。
+    // subtaskIdByTaskKey 在下方事务内按对象回填真实 subtasks.id（事务重试时清空重建）。
+    const taskKeyByTask = new WeakMap<object, string>();
+    const subtaskIdByTaskKey = new Map<string, string>();
+    for (const stage of stageDesignOutputs) {
+      stage.subtasks.forEach((task: any, index: number) => {
+        if (task && typeof task === 'object') taskKeyByTask.set(task, `task-${stage.stageNumber}-${index}`);
+      });
+    }
     let kcAnnotation: KcAnnotation | null;
     if (progressive) {
       const { executeSkillWithResult } = await import('../../../skills');
@@ -919,6 +931,7 @@ async function enrichLearningPathWithAndersonInner(
           goal: m.goal,
         })),
         subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
+          taskKey: taskKeyByTask.get(t),
           title: t.title,
           type: t.type,
           linkedConcept: t.linkedConcept,
@@ -984,6 +997,7 @@ async function enrichLearningPathWithAndersonInner(
         goal: m.goal,
       })),
       subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
+        taskKey: taskKeyByTask.get(t),
         title: t.title,
         type: t.type,
         linkedConcept: t.linkedConcept,
@@ -1049,6 +1063,7 @@ async function enrichLearningPathWithAndersonInner(
       for (const key of Object.keys(materialRefsByTask)) delete materialRefsByTask[key];
       for (const key of Object.keys(misconceptionHintsByTask)) delete misconceptionHintsByTask[key];
       for (const key of Object.keys(adjustabilityByTask)) delete adjustabilityByTask[key];
+      subtaskIdByTaskKey.clear();
       await assertGenerationRunFence(tx, pathId, runId);
       const lockedPath = await tx.learning_paths.updateMany({
         where: { id: pathId, activeGenerationRunId: runId },
@@ -1102,6 +1117,10 @@ async function enrichLearningPathWithAndersonInner(
             || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
           const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${j}`;
+          // 稳定键 → 真实 id 登记（issue #179）：键在 kc-mapper 之前按原顺序分配，这里按对象取回，
+          // 同阶段重排不影响对应关系（对象引用不变）。
+          const taskKey = taskKeyByTask.get(taskData);
+          if (taskKey) subtaskIdByTaskKey.set(taskKey, subtaskId);
           // 任务 → 可调整性（动态规划）：skill 侧已归一为 core|flexible，未给值时按 core 保守处理
           adjustabilityByTask[subtaskId] = (taskData as any).adjustability === 'flexible' ? 'flexible' : 'core';
           // 任务 → 资料条目（skill 侧已逐字核对）：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask
@@ -1218,6 +1237,13 @@ async function enrichLearningPathWithAndersonInner(
             }
           });
         }
+      }
+      // 任务↔KC 连接键收稳（issue #179）：kc-mapper 只能按标题回写链接，而标题是会被改写的
+      // 自然语言（落库前经 sanitizeUserFacingText），同名任务更无法在标题上区分。落库前按模型
+      // 逐字回显的 taskKey 把链路绑到真实 subtasks.id 上，读侧即可按 id 精确匹配，标题退为兜底键。
+      // 未回显 taskKey 的链接（旧标注 / 模型漏回显）原样保留，由读侧回退标题并集。
+      if (kcAnnotation) {
+        kcAnnotation = bindKcLinksToSubtaskIds(kcAnnotation, subtaskIdByTaskKey);
       }
       // 终局预算夹（Frontier-100 R1 实证 F81：目标 3h，core 骨架 3h，stageDesign 按任务分钟
       // 回写后 4.5h）：core 夹只作用于骨架，逐阶段 1.25× 容差累加仍可把总量放大到目标 1.5×。

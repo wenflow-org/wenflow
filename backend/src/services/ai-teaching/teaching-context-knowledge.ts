@@ -83,9 +83,22 @@ export function dedupeConcepts(values: Array<string | null | undefined>): string
  * `sanitizeUserFacingText()` 收口（内部词表：回捞 → 回顾）；本函数两侧都用同一个
  * 收口再比较——只 trim/折叠空格消除不了该改写，凡是命中过词表的任务都会静默匹配不到 KC。
  * 用同一收口也让既有路径（标注里存的仍是原始标题）无需重跑生成即可对上。
+ *
+ * 这只是**兜底键**：写侧已在落库时为每条链接绑上稳定键 `subtasks.id`（见 stage-enrichment），
+ * 读侧优先按 id 匹配（见 resolveTaskKcsFromPath）。
  */
 function taskTitleKey(value: unknown): string | null {
   return normalizeConcept(sanitizeUserFacingText(value).text);
+}
+
+/** 契约是 linkedKCs，但实测弱模型/漂移模型会写成 kcIds / linkedKcIds / kcs（2026-09-22）。 */
+function linkedKcIdsOf(link: any): unknown[] {
+  if (!link || typeof link !== 'object') return [];
+  if (Array.isArray(link.linkedKCs)) return link.linkedKCs;
+  if (Array.isArray(link.kcIds)) return link.kcIds;
+  if (Array.isArray(link.linkedKcIds)) return link.linkedKcIds;
+  if (Array.isArray(link.kcs)) return link.kcs;
+  return [];
 }
 
 function parsePathPromptTemplateCore(path: any) {
@@ -101,17 +114,31 @@ export function resolveTaskKcsFromPath(task: any, path: any): Array<{ kcId: stri
     const kcAnnotation = template?.kcAnnotation;
     if (!kcAnnotation || typeof kcAnnotation !== 'object') return [];
     const taskKcLinks = Array.isArray(kcAnnotation.taskKcLinks) ? kcAnnotation.taskKcLinks : [];
-    const matched = taskKcLinks.find((link: any) => taskTitleKey(link?.taskTitle) === taskTitleKey(task?.title));
-    // 字段兼容：契约是 linkedKCs，但实测弱模型/漂移模型会写成 kcIds / linkedKcIds / kcs（2026-09-22）。
-    // 读取侧归一，避免"落了库但下游解析为空"的静默断链。
-    const linkedKcIds = matched
-      ? (Array.isArray(matched.linkedKCs) ? matched.linkedKCs
-        : Array.isArray(matched.kcIds) ? matched.kcIds
-        : Array.isArray(matched.linkedKcIds) ? matched.linkedKcIds
-        : Array.isArray(matched.kcs) ? matched.kcs
-        : [])
+    // 连接键优先用稳定键 subtasks.id（写侧落库时回填，见 stage-enrichment）；旧标注无 id 时回退标题。
+    // 回退也必须**收集全部同键链接**而非取首条——同一标题的不同任务各有一条链接，
+    // `find` 取首条会把别的任务的 KC 挂到本任务上（静默挂错，比丢失更难发现）。
+    const taskIdKey = normalizeConcept(typeof task?.id === 'string' ? task.id : null);
+    const matchedById = taskIdKey
+      ? taskKcLinks.filter((link: any) => normalizeConcept(typeof link?.taskId === 'string' ? link.taskId : null) === taskIdKey)
       : [];
-    if (!matched || linkedKcIds.length === 0) return [];
+    const normalizedTaskTitle = taskTitleKey(task?.title);
+    const matched = matchedById.length > 0
+      ? matchedById
+      : (normalizedTaskTitle
+        ? taskKcLinks.filter((link: any) => taskTitleKey(link?.taskTitle) === normalizedTaskTitle)
+        : []);
+    // 同键多条时取并集（保序去重），不再只取首条
+    const seenKc = new Set<string>();
+    const linkedKcIds: unknown[] = [];
+    for (const link of matched) {
+      for (const kcId of linkedKcIdsOf(link)) {
+        const key = normalizeConcept(typeof kcId === 'string' ? kcId : null);
+        if (!key || seenKc.has(key)) continue;
+        seenKc.add(key);
+        linkedKcIds.push(kcId);
+      }
+    }
+    if (linkedKcIds.length === 0) return [];
     const kcGraphNodes = Array.isArray(kcAnnotation.kcGraph?.nodes) ? kcAnnotation.kcGraph.nodes : [];
     return linkedKcIds.map((kcId: any) => {
       const node = kcGraphNodes.find((n: any) => normalizeConcept(n?.kcId) === normalizeConcept(kcId));
