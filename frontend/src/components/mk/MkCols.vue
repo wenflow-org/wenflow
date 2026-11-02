@@ -15,10 +15,21 @@
     <div v-if="open" class="mk-cols__menu" role="group" aria-label="显示列" @click.stop>
       <div class="mk-cols__head">
         <span class="mk-cols__title">显示列</span>
-        <span class="mk-cols__hint">{{ colDefs.length - hidden.size }} / {{ colDefs.length }}</span>
+        <span class="mk-cols__hint">{{ visibleCount }} / {{ colDefs.length }}</span>
       </div>
-      <label v-for="c in colDefs" :key="c.key" class="mk-cols__item" :title="c.title">
-        <input type="checkbox" :checked="!hidden.has(c.key)" @change="toggle(c.key)" />
+      <label
+        v-for="c in colDefs"
+        :key="c.key"
+        class="mk-cols__item"
+        :class="{ 'mk-cols__item--off': unavailableSet.has(c.key) }"
+        :title="unavailableSet.has(c.key) ? UNAVAILABLE_HINT : c.title"
+      >
+        <input
+          type="checkbox"
+          :checked="!unavailableSet.has(c.key) && !hidden.has(c.key)"
+          :disabled="unavailableSet.has(c.key)"
+          @change="toggle(c.key)"
+        />
         <span>{{ c.label }}</span>
       </label>
       <!-- 「恢复默认」= 回到该页首访的默认集（不是一律全显）：
@@ -38,16 +49,30 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
  * 可访问名与 title 仍写全「列设置：显示或隐藏表格列」，鼠标悬停 / 读屏能自解释。
  * 用法：<MkCols :col-defs="[...]" storage-key="wf_xxx_hidden_cols" v-model:hidden="hiddenCols" />
  * 页面表头/行用 hidden.has('key') 控制 v-if。
+ *
+ * unavailable（P41「勾选即所见」）：页面按视口宽度强制收起、不随本菜单显隐的列 key。
+ * 这类列若照常渲染成可勾选项，勾上后表头仍不出现＝菜单撒谎（2026-11-01 走查 P41）。
+ * 菜单里改为禁用 + 未勾选 + 悬停说明，不写入 hidden 集（视口变宽自动恢复可选）。
  */
 const props = defineProps<{
   colDefs: ReadonlyArray<{ key: string; label: string; title?: string }>
   storageKey: string
   /** 首次访问（本地尚无记录）时默认隐藏的列 key；已有记录则尊重用户配置 */
   defaultHidden?: ReadonlyArray<string>
+  /** 当前视口下页面强制收起的列 key；缺省/空数组 = 无此行为 */
+  unavailable?: ReadonlyArray<string>
 }>()
 const hidden = defineModel<Set<string>>('hidden', { default: () => new Set<string>() })
 const open = ref(false)
 const rootEl = ref<HTMLElement | null>(null)
+
+const UNAVAILABLE_HINT = '当前窗口宽度下自动收起，放大窗口后可在此开启'
+
+const unavailableSet = computed(() => new Set(props.unavailable ?? []))
+/** 菜单头「N / M」：真实可渲染的列数（强制收起的列不计入可见） */
+const visibleCount = computed(
+  () => props.colDefs.filter((c) => !unavailableSet.value.has(c.key) && !hidden.value.has(c.key)).length
+)
 
 const defaultSet = computed(() => new Set(props.defaultHidden ?? []))
 /** 当前是否仍是「该页首访的默认集」——决定要不要出「恢复默认」 */
@@ -99,6 +124,8 @@ watch(hidden, (s) => {
 }, { deep: true })
 
 function toggle(key: string) {
+  /* 强制收起的列不可勾（复选框已 disabled，这里兜底程序化调用） */
+  if (unavailableSet.value.has(key)) return
   const next = new Set(hidden.value)
   if (next.has(key)) next.delete(key)
   else next.add(key)
@@ -155,6 +182,10 @@ function resetToDefault() {
   user-select: none;
 }
 .mk-cols__item:hover { background: var(--mk-graph-flow-bg); } /* #f0f5ff/暗#252627 的成对令牌，字面量+暗色覆写退役 */
+/* 视口强制收起的列：禁用态（不撒谎的「不可勾」），悬停说明见 UNAVAILABLE_HINT */
+.mk-cols__item--off { opacity: 0.55; cursor: default; }
+.mk-cols__item--off:hover { background: transparent; }
+.mk-cols__item--off input { cursor: default; }
 .mk-cols__item input { accent-color: var(--mk-blue); }
 .mk-cols__reset {
   margin-top: 4px;

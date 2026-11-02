@@ -4,10 +4,10 @@
  * - /admin/:page 主路由与 /admin/skills/:agentId 设计页路由解析
  * - requiresAdminAuth 守卫：无会话 → /admin/login 重定向，有会话 → 放行
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import router from '../index';
-import { ADMIN_SESSION_KEY } from '@/api/adminApi';
+import { ADMIN_SESSION_KEY, adminAuthApi, hasAdminSession } from '@/api/adminApi';
 
 function setAdminSession(on: boolean) {
   if (on) {
@@ -257,5 +257,57 @@ describe('Admin 鉴权守卫', () => {
   it('有会话访问受保护页 → 放行', async () => {
     await router.push('/admin/overview');
     expect(router.currentRoute.value.path).toBe('/admin/overview');
+  });
+
+  it('有会话标记访问登录页且后端确认会话有效 → 弹回 /admin/overview（原行为保留）', async () => {
+    // 先落一个非登录路由：同路由重复 push 不触发守卫，测试间需真实导航
+    await router.push('/admin/overview');
+    const getMeSpy = vi.spyOn(adminAuthApi, 'getMe').mockResolvedValue({ status: 200 } as never);
+    try {
+      await router.push('/admin/login');
+      expect(router.currentRoute.value.path).toBe('/admin/overview');
+      expect(hasAdminSession()).toBe(true);
+    } finally {
+      getMeSpy.mockRestore();
+    }
+  });
+
+  it('有会话标记访问登录页但后端返回 403（会话已吊销）→ 清标记放行登录页（错误门死锁出口）', async () => {
+    await router.push('/admin/overview');
+    // http.ts 错误归一化形态：{ message, status, response }（无 response.data 依赖）
+    const getMeSpy = vi.spyOn(adminAuthApi, 'getMe').mockRejectedValue({ message: '会话已吊销或过期', status: 403 });
+    try {
+      await router.push('/admin/login');
+      expect(router.currentRoute.value.path).toBe('/admin/login');
+      expect(hasAdminSession()).toBe(false);
+    } finally {
+      getMeSpy.mockRestore();
+      setAdminSession(true);
+    }
+  });
+
+  it('有会话标记访问登录页但后端 401（Token 过期）→ 清标记放行登录页', async () => {
+    await router.push('/admin/overview');
+    const getMeSpy = vi.spyOn(adminAuthApi, 'getMe').mockRejectedValue({ message: 'Token 已过期', status: 401 });
+    try {
+      await router.push('/admin/login');
+      expect(router.currentRoute.value.path).toBe('/admin/login');
+      expect(hasAdminSession()).toBe(false);
+    } finally {
+      getMeSpy.mockRestore();
+      setAdminSession(true);
+    }
+  });
+
+  it('有会话标记访问登录页但网络故障（无 status）→ 维持弹回 overview（不因抖动误送登录页）', async () => {
+    await router.push('/admin/overview');
+    const getMeSpy = vi.spyOn(adminAuthApi, 'getMe').mockRejectedValue({ message: '网络错误，请检查连接' });
+    try {
+      await router.push('/admin/login');
+      expect(router.currentRoute.value.path).toBe('/admin/overview');
+      expect(hasAdminSession()).toBe(true);
+    } finally {
+      getMeSpy.mockRestore();
+    }
   });
 });

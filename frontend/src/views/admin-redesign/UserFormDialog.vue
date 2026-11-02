@@ -7,6 +7,12 @@
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
         </div>
         <div class="mk-modal__body">
+          <!-- 提交失败错误条（P32：POST /api/admin/users 403 时此前只发 4s toast，
+               截图取证时已消失，管理员只看到弹窗原样不动＝静默失败。
+               改为弹窗内常驻错误条直出后端 message，与 ModelEditor/ProviderEditor 弹窗同款。 -->
+          <div v-if="submitError" class="mk-alert mk-alert--row" role="alert">
+            <span class="mk-alert__msg">{{ submitError }}</span>
+          </div>
           <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
             <span class="mk-field__label">昵称 <em class="mk-field__req">*</em></span>
             <input v-model="form.name" class="mk-field__input" placeholder="例如：陈晓" />
@@ -84,6 +90,8 @@ const ROLE_OPTIONS: Array<{ value: boolean; label: string }> = [
 const saving = ref(false)
 const form = ref({ name: '', email: '', password: '', confirmPassword: '', admin: false })
 const errors = ref<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({})
+/** 提交失败（请求层）错误：区别于 errors（字段校验），直出后端 message，常驻弹窗内（P32） */
+const submitError = ref('')
 
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -102,6 +110,7 @@ function resetForm() {
     ? { name: u.name, email: u.email, password: '', confirmPassword: '', admin: u.admin }
     : { name: '', email: '', password: '', confirmPassword: '', admin: false }
   errors.value = {}
+  submitError.value = ''
 }
 
 watch(() => [props.open, props.user?.id], () => {
@@ -110,6 +119,7 @@ watch(() => [props.open, props.user?.id], () => {
 
 async function save() {
   errors.value = {}
+  submitError.value = ''
   if (!form.value.name.trim()) errors.value.name = '请输入昵称'
   if (!form.value.email.trim()) errors.value.email = '请输入邮箱'
   else if (!/^\S+@\S+\.\S+$/.test(form.value.email.trim())) errors.value.email = '邮箱格式不正确'
@@ -151,7 +161,8 @@ async function save() {
     }
     emit('update:open', false)
   } catch (e) {
-    toast.error(`保存失败：${errMsg(e)}`)
+    // P32：不再只发 4s toast（实测取证时已消失＝静默失败）；错误条常驻弹窗内，弹窗保持打开
+    submitError.value = errMsg(e)
   } finally {
     saving.value = false
   }

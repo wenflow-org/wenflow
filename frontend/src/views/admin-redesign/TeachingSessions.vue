@@ -128,6 +128,7 @@
             :col-defs="tsColDefs"
             storage-key="wf_teaching_hidden_cols_v3"
             :default-hidden="TS_DEFAULT_HIDDEN"
+            :unavailable="tsUnavailableCols"
             v-model:hidden="tsHiddenCols"
           />
           <span v-if="truncated" class="mk-card__meta">共 {{ listTotal }} 条 · 当前显示最近 {{ LIST_LIMIT }} 条</span>
@@ -175,7 +176,7 @@
                 class="ts-c-mode"
               >课型</th>
               <th
-                v-if="!isTableNarrow && !tsHiddenCols.has('track')"
+                v-if="!tsHiddenCols.has('track')"
                 scope="col"
                 class="ts-c-track"
               >完成方式</th>
@@ -187,9 +188,9 @@
                 @click="toggleTsSort('interact')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!tsHiddenCols.has('messages')" scope="col" class="ts-c-msg">消息</th>
-              <th v-if="!isTableMid && !tsHiddenCols.has('knowledge')" scope="col" class="ts-c-kp">知识点</th>
+              <th v-if="!tsHiddenCols.has('knowledge')" scope="col" class="ts-c-kp">知识点</th>
               <th v-if="!tsHiddenCols.has('output')" scope="col" class="ts-c-out">课后总结</th>
-              <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')" scope="col" class="ts-c-att">关注</th>
+              <th v-if="!tsHiddenCols.has('attention')" scope="col" class="ts-c-att">关注</th>
               <th
                 v-if="!isTableCompact && !tsHiddenCols.has('start')"
                 scope="col"
@@ -245,7 +246,7 @@
                 <!-- 2026-10-27：课型是分类值（正课/复习课/延伸课），不是需要着色的状态，去掉胶囊改纯文本。 -->
                 <span class="ts-mode">{{ sessionModeText(r.mode) }}</span>
               </td>
-              <td v-if="!isTableNarrow && !tsHiddenCols.has('track')">
+              <td v-if="!tsHiddenCols.has('track')">
                 <div class="ts-track">
                   <span v-if="r.closure" class="ts-track__mode">{{ closureSourceText(r.closure.completionSource) }}</span>
                   <span v-else class="mk-na">—</span>
@@ -260,7 +261,7 @@
               <td v-if="!tsHiddenCols.has('messages')">
                 <div class="ts-ia ts-ia--msg" :title="interactTitle(r)">{{ r.messageCount }} 条</div>
               </td>
-              <td v-if="!isTableMid && !tsHiddenCols.has('knowledge')">
+              <td v-if="!tsHiddenCols.has('knowledge')">
                 <div class="ts-ia ts-ia--kp" :title="interactTitle(r)">
                   <span v-if="r.knowledgePointCount">{{ r.knowledgePointCount }} 个</span>
                   <span v-else class="mk-na">—</span>
@@ -281,7 +282,7 @@
                   <span v-else class="mk-na">—</span>
                 </div>
               </td>
-              <td v-if="!isTableNarrow && !tsHiddenCols.has('attention')">
+              <td v-if="!tsHiddenCols.has('attention')">
                 <span
                   class="ts-att"
                   :class="`ts-att--${r.attention}`"
@@ -632,23 +633,21 @@ const tsColDefs = [
   { key: 'start', label: '开始时间' },
 ] as const
 const tsHiddenCols = ref<Set<string>>(new Set<string>(TS_DEFAULT_HIDDEN))
-/* 首载骨架列数 = 当前可见列数（+操作列），避免骨架到真表横向跳一格 */
-const tsVisibleColCount = computed(() => 1 + tsColDefs.filter((c) => !tsHiddenCols.value.has(c.key)).length)
-/* 宽度分三档（auto 布局会把缺口全压给带 ellipsis 的身份列，只能靠减列）：
-   · <1440（isTableCompact）：「会话」在 1280 只剩 113px、用户 89px，默认收起需求最小、
-     信息含量也最低的「开始时间 / 关注」（96+58px）。该阈值沿用 2026-10 的判例
-     （1366/1400 会话列 167/187px，仍不够）。
-   · <1500（isTableNarrow）：#105 的「完成归属」与「关注」也收起（+83/+58px）。前者是
-     可显隐列（MkCols），收起不丢数据——该档仍有「消息」「时长」，逐条归属可在 ≥1500 视口查看；
-     后者只有高/中/低三档，是这几列里信息密度最低的一列。
-   · <1700（isTableMid）：知识点一列收起。1600 实测同时出现会把会话列挤到 99px；读数仍在
-     「消息」列的说明文字里（interactTitle），信息不丢。
-   实测（2026-10-21 归属合列后）：归属只占一列，原先「完成方式」那 88px 还给表宽，1600 档
-   不再需要为它减列。与 VirtualLearners 的 useIsNarrow 同一先例（窄档勾了「列」也不显，
-   行详情进座舱，信息不丢）。 */
+/* 宽度分档（2026-10-22 起的默认密度；2026-11-01 走查 P41 重构显隐规则）：
+   · 默认隐藏交给 TS_DEFAULT_HIDDEN（各断点同一份）：完成方式/消息/知识点/关注在
+     任何窗口宽度都默认收起，默认密度不随视口变化。
+   · 用户勾选即所见（P41）：完成方式/知识点/关注不再按视口强制覆盖——旧规则「窄档勾了
+     也不显」让列菜单出现勾了却不出现的列（实测 1264px 勾「完成方式」无效）。现在窄档
+     勾选即出现，多出的宽度走 .mk-table-scroll 横向滚动（列宽仍按 .ts-c-* 定死）。
+   · 「开始时间」是默认可见列，<1440（isTableCompact）仍按 2026-10-21 判例默认收起
+     （1366/1400 会话列 167/187px 实测不够，2026-10-21 归属合列后维持）——该收起通过
+     MkCols 的 unavailable 透出：窄档菜单里它是禁用 + 未勾选（放大窗口后可勾开），
+     不再是「勾了却不出现」。 */
 const isTableCompact = useIsNarrow(1439)
-const isTableNarrow = useIsNarrow(1499)
-const isTableMid = useIsNarrow(1699)
+/** 视口强制收起、菜单里以禁用态呈现的列（见上注；仅「开始时间」，P41） */
+const tsUnavailableCols = computed<string[]>(() => (isTableCompact.value ? ['start'] : []))
+/* 首载骨架列数 = 当前可见列数（+操作列），避免骨架到真表横向跳一格 */
+const tsVisibleColCount = computed(() => 1 + tsColDefs.filter((c) => !tsHiddenCols.value.has(c.key) && !tsUnavailableCols.value.includes(c.key)).length)
 /* 视图态（2026-10-27 筛选重建）：原先「焦点 chips」把三个不同维度的东西并成一组单选胶囊
    （进行中 = 状态的一档、需关注 = 派生视图、缺总结 = 总结的一档），和右侧维度下拉各自背一份
    同一个数（选 chip「缺总结」时「总结」下拉仍显示「全部总结」）。现在真正派生的口径只剩
@@ -1029,8 +1028,8 @@ defineExpose({ refreshNow })
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：auto 布局下
    课堂/用户两列按当页最长内容分宽（课堂 135→340px、用户 169→256px），翻页整表跳动。
-   fixed 档下按表头宽度定死，余量按各列宽度权重摊开；断点与 isTableCompact/Narrow/Mid
-   的列显隐对齐，隐藏列的宽度不参与分配。 */
+   fixed 档下按表头宽度定死，余量按各列宽度权重摊开；隐藏列（显隐集 / 窄档 unavailable）
+   的宽度不参与分配。 */
 /* 2026-10-24 视觉修复：状态（204）/课后总结（190）/开始时间（92）在多数行是短内容，
    富余宽度让给课堂主列；状态列仍够放下「已完成 + x/y」一行。 */
 .ts-c-user { width: 150px; }
@@ -1045,8 +1044,10 @@ defineExpose({ refreshNow })
 .ts-c-att { width: 50px; }
 .ts-c-start { width: 80px; }
 /* 课堂列宽度随断点给基准值，余量由 fixed 布局按各列宽度权重摊开（不再是单列吃掉全部余量，
-   否则 1920 下课堂列 ~480px、右侧留大片空白）；断点与列显隐对齐：
-   ≤1439 八列 / 1440-1499 九列 / 1500-1699 十一列 / ≥1700 十二列。 */
+   否则 1920 下课堂列 ~480px、右侧留大片空白）。全表 11 列（课堂 + 10 可显隐，行点击进详情
+   无操作列）；默认视图 6 列（<1440 时「开始时间」由 unavailable 收起 → 5 列）。
+   2026-11-01 P41 起用户可在任意宽度勾开默认收起的列（多出宽度走 .mk-table-scroll 横滚），
+   档位只约束默认视图。 */
 .ts-c-topic { width: 190px; }
 /* 1200 档（125% 缩放的 1440 屏）也要无横滚：八列合计须 ≤914，短列同步收一点 */
 @media (max-width: 1279px) {

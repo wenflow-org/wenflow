@@ -17,10 +17,10 @@
         </router-link>
       </nav>
 
-      <!-- 分段器只覆盖三个能力页；深页（设置/调用日志）保留可见标题与动作区。
-           走查 2026-10-08 #52：深页不再出现「三段全无选中」——按 owns 归属到父级分区，
-           「账户」段保持选中胶囊（aria-current="true" 表示所属分区，不是当前页本身；
-           真正的当前页是下面这个可见 h1）。 -->
+      <!-- 分段器只覆盖四个能力页；深页（调用日志）保留可见标题与动作区。
+           走查 2026-11-01 P20：深页不再点亮父段——此前的 owns 归属会让
+           /user/agent-logs 高亮错停在「设置」上；激活判定改为与当前路由精确对应，
+           深页的当前页由下面这个可见 h1 承担。 -->
       <div v-if="!onCapabilityTab" class="uc__deeptitle">
         <h1>{{ title }}</h1>
         <p v-if="description">{{ description }}</p>
@@ -52,31 +52,27 @@ const route = useRoute()
 /* 2026-09-27 撤入口留能力：「API 接入」「调用日志」从学习者可见的 tab 栏撤下
    （面向开发者/排查的面板，全量库实测零使用；后端路由/网关分支/数据表全部保留，
    需要时直达 URL 仍可用）。未来做开发者/团队版再放出。 */
-/* owns = 该段归属的深页（自身路径之外）：
-   走查 2026-10-08 #52 —— /user/settings（设置）与 /user/agent-logs（调用日志）
-   都是「账户」分区的下一层，单独列出才能既选中父段、又不让 /user/account 前缀
-   把两者继续漏掉（原来三个 match 只覆盖能力页，深页进页面即三段全无选中）。 */
+/* 激活判定与当前路由精确对应（走查 2026-11-01 P20）：此前是 startsWith 前缀匹配 +
+   owns 归属（2026-10-08 #52 的口径），/user/agent-logs（调用日志）会点亮「设置」段
+   ——高亮错停在上一站。现在每个 tab 只对准自己的路径段，深页（/user/agent-logs）
+   四段全不选中，可见页名由 uc__deeptitle 的 h1 承担。 */
 const tabs = [
-  { to: '/user/account', label: '账户', match: ['/user/account'], owns: [] },
-  { to: '/user/achievements', label: '成就', match: ['/user/achievements'], owns: [] },
-  { to: '/user/learning-history', label: '学习历史', match: ['/user/learning-history'], owns: [] },
-  /* 设置不再「无 tab 可回」：作为一级分段，调用日志归属其下 */
-  { to: '/user/settings', label: '设置', match: ['/user/settings'], owns: ['/user/agent-logs'] }
+  { to: '/user/account', label: '账户' },
+  { to: '/user/achievements', label: '成就' },
+  { to: '/user/learning-history', label: '学习历史' },
+  { to: '/user/settings', label: '设置' }
 ]
 
-function isActive(t: { match: string[]; owns: string[] }) {
-  return [...t.match, ...t.owns].some((m) => route.path.startsWith(m))
+function isActive(t: { to: string }) {
+  return route.path === t.to
 }
 
-/* 当前页正好是该段自身路径 → 'page'；只是归属该分区的深页 → 'true'（所属分区）；
-   都不属于 → 不出 aria-current（与原先 undefined 一致） */
-function ariaCurrent(t: { match: string[]; owns: string[] }): 'page' | 'true' | undefined {
-  if (t.match.some((m) => route.path.startsWith(m))) return 'page'
-  if (t.owns.some((m) => route.path.startsWith(m))) return 'true'
-  return undefined
+/* 当前页正好是该段自身路径 → 'page'；深页不点亮任何段 → 不出 aria-current */
+function ariaCurrent(t: { to: string }): 'page' | undefined {
+  return isActive(t) ? 'page' : undefined
 }
 
-const onCapabilityTab = computed(() => tabs.some((t) => t.match.some((m) => route.path.startsWith(m))))
+const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
 </script>
 
 <style scoped>

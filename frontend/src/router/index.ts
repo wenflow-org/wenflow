@@ -1,7 +1,7 @@
 ﻿import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { useUserStore } from '../stores/user';
-import { hasAdminSession } from '../api/adminApi';
+import { adminAuthApi, clearAdminSession, hasAdminSession } from '../api/adminApi';
 import { getProjectionToken } from '../utils/projection';
 import { applyDocumentTheme, readTheme } from '../utils/theme';
 
@@ -592,9 +592,24 @@ router.beforeEach(async (to, _from, next) => {
     return;
   }
 
-  // 已登录管理员访问管理登录页
+  // 已登录管理员访问管理登录页：先向后端确认会话真的有效再弹回总览。
+  // 本地标记（localStorage）无从感知服务端吊销——会话被吊销/过期后（403 错误门场景）
+  // 用户主动来登录页时，若照旧直接弹回 overview 就死锁（唯一出口只剩错误门上不显眼的
+  // 「退出登录」）。确认失效（401/403）则清掉标记放行登录页；非认证失败（网络抖动等）
+  // 维持原弹回行为，避免瞬时故障把有效管理员误送到登录页。
   if (to.name === 'AdminLogin' && adminSession) {
-    next('/admin/overview');
+    try {
+      await adminAuthApi.getMe();
+      next('/admin/overview');
+    } catch (error) {
+      const status = (error as { status?: number } | null)?.status;
+      if (status === 401 || status === 403) {
+        clearAdminSession();
+        next();
+      } else {
+        next('/admin/overview');
+      }
+    }
     return;
   }
   
