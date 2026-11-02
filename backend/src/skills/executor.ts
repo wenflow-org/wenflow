@@ -15,6 +15,7 @@ import {
   createRuntimeRetryBudget,
   getEffectiveLogicalRetryLimit
 } from '../services/reliability-settings.service';
+import { isFallbackWorthyCategory } from '../gateway/api-gateway/deployment-health';
 import {
   ToolApprovalRequiredError,
   isToolApprovalRequired,
@@ -41,6 +42,19 @@ function isCallerAbort(error: any): boolean {
   if (String(error.code || '') === 'CALLER_ABORTED') return true;
   if (String(error.name || '') === 'AbortError') return true;
   return /aborted by caller/i.test(String(error.message || ''));
+}
+
+/**
+ * 是否为**上游/基础设施类**失败（限流、上游 HTTP、网络、上游超时）。
+ * 与 {@link isCallerAbort} 同口径：这类错误不代表 Skill 逻辑失败，不应计入技能成功率——
+ * 否则一次上游故障（含 #177 的「目录外模型无可用渠道」）会把整列 skill 打成 0 失败，
+ * 污染健康度面板。类别集合复用网关既有的「上游不稳定」判定（deployment-health），
+ * 不再维护第二份清单；网关终止错误 `RETRY_BUDGET_EXHAUSTED` 会继承最后一次真实失败的
+ * category，故本判定同样覆盖它。认证/配额/协议/配置类失败仍照常计入。
+ */
+function isUpstreamFailure(error: any): boolean {
+  if (!error || typeof error !== 'object') return false;
+  return isFallbackWorthyCategory(error.category);
 }
 
 function summarizeSkillPayload(value: any, depth = 0): any {
@@ -307,9 +321,10 @@ export async function executeSkillHandler(
       if (error && typeof error === 'object') {
         error.skillDurationMs = durationMs;
       }
-      // 调用方取消不算技能失败：仍记 span 供观测，但不计入 successRate，
-      // 否则客户端超时/切页会把技能成功率拉低（QA skill 调查 P3）。
-      if (!isCallerAbort(error)) {
+      // 调用方取消 / 上游基础设施故障不算技能失败：仍记 span 供观测，但不计入 successRate，
+      // 否则客户端超时/切页、单次上游 5xx（含无可用渠道的目录外模型）会把技能成功率拉低
+      // （QA skill 调查 P3 / #177 健康度面板污染）。
+      if (!isCallerAbort(error) && !isUpstreamFailure(error)) {
         await recordSkillStats(skillId, false, durationMs);
       }
       void recordSkillSpan(

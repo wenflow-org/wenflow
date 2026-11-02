@@ -12,6 +12,8 @@ const mockSetAuditAction = jest.fn();
 const mockSafeHttpRequest = jest.fn();
 const mockTestConnection = jest.fn();
 const mockGetConfig = jest.fn();
+/** #177 删除门禁读到的启用 skill 绑定（默认空，按需在用例里覆写）。 */
+const mockSkillBindings: Array<{ skillId: string; model: string | null; endpoint: string | null }> = [];
 
 jest.mock('../../../config/system-database', () => ({
   __esModule: true,
@@ -25,6 +27,10 @@ jest.mock('../../../config/system-database', () => ({
       deleteMany: async ({ where }: { where: { providerId: string } }) => {
         mockSecretRows.delete(where.providerId);
       }
+    },
+    // #177 删除门禁会读启用中的 skill 绑定；默认无绑定，按需在用例里覆写。
+    skill_model_configs: {
+      findMany: async () => mockSkillBindings
     }
   }
 }));
@@ -101,6 +107,7 @@ beforeEach(() => {
   process.env.LLM_PROVIDERS_CONFIG = tempConfig;
   fs.writeFileSync(tempConfig, `${JSON.stringify(FIXTURE, null, 2)}\n`, 'utf-8');
   mockSecretRows.clear();
+  mockSkillBindings.length = 0;
   mockSetAuditAction.mockClear();
   mockSafeHttpRequest.mockReset();
   mockTestConnection.mockReset();
@@ -167,6 +174,47 @@ describe('错误映射', () => {
     const payload = res.json.mock.calls[0][0];
     expect(payload.success).toBe(true);
     expect(payload.warnings.join(' ')).toContain('别名「chat」');
+  });
+
+  /* #177：目录收缩门禁——文件 root.defaults 之外，DB 平台默认与 skill 显式绑定同样不能被删空。 */
+  it('删除仍被平台 DB 默认模型引用的模型 → 400（文件 defaults 并不指向它）', async () => {
+    mockGetConfig.mockResolvedValue({
+      apiUrl: 'https://platform.example.com/v1',
+      apiKey: 'platform-key',
+      defaultModel: 'cm-1',
+      defaultReasoningModel: 'cm-1',
+      defaultEvaluationModel: 'cm-1',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    });
+    const res = createRes();
+    await handlerFor('delete', '/:id/models/:modelId')({ params: { id: 'custom', modelId: 'cm-1' }, body: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'invalid',
+      error: expect.stringContaining('平台默认模型')
+    }));
+    // 模型仍在文件里（未删）
+    const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
+    expect(file.providers.custom.models['cm-1']).toBeDefined();
+  });
+
+  it('删除仍被走平台通道的 skill 显式绑定的模型 → 400', async () => {
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: null });
+    const res = createRes();
+    await handlerFor('delete', '/:id/models/:modelId')({ params: { id: 'custom', modelId: 'cm-1' }, body: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.stringContaining('goal-conversation')
+    }));
+  });
+
+  it('自带独立 endpoint 的 skill 绑定不阻止删除（模型由其实例通道提供）', async () => {
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: 'http://127.0.0.1:30001/v1' });
+    const res = createRes();
+    await handlerFor('delete', '/:id/models/:modelId')({ params: { id: 'custom', modelId: 'cm-1' }, body: {} }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 });
 

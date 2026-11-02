@@ -89,6 +89,20 @@ describe('统一 Skill Executor', () => {
     }))
   })
 
+  it('上游/基础设施失败（provider_http 等）不计入技能成功率（#177 健康度口径）', async () => {
+    await expect(executeSkillHandler(
+      { name: 'concept-consolidator' },
+      {},
+      async () => {
+        throw Object.assign(new Error('Provider request retry budget exhausted'), { category: 'provider_http' })
+      }
+    )).rejects.toMatchObject({ message: 'Provider request retry budget exhausted' })
+
+    // span 照记（观测不丢），但成功率不被上游故障拉低
+    expect(logCreate).toHaveBeenCalled()
+    expect(skillUpdate).not.toHaveBeenCalled()
+  })
+
   it('quality 与 cached 双向桥接：legacy cached 派生 quality', async () => {
     const result = await executeSkillHandler(
       { name: 'text-structure-analyzer' },

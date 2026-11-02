@@ -2,7 +2,9 @@ import { Router } from 'express';
 import apiConfigService from '../../services/apiConfig.service';
 import { safeHttpRequest } from '../../utils/safe-http';
 import { resolveChatCompletionsUrl } from '../../gateway/api-gateway/chat-protocol-adapter';
-import { getProviderCatalog } from '../../config/models.config';
+import { getProviderCatalog, resolveModelRef } from '../../config/models.config';
+import { selectModelForAlias } from '../../gateway/api-gateway/model-alias';
+import systemPrisma from '../../config/system-database';
 import { resolveProviderApiKey } from '../../services/provider-secrets.service';
 import {
   PLATFORM_PROVIDER_ID,
@@ -48,6 +50,66 @@ function fail(res: import('express').Response, error: unknown): void {
 /** 写操作统一回吐最新视图：弹层保存后前端不用再拉一次列表 */
 async function okWithView(res: import('express').Response, warnings: string[], message: string): Promise<void> {
   res.json({ success: true, data: await buildProvidersView(), warnings, message });
+}
+
+/**
+ * #177 目录收缩门禁：删模型前，除 service 已挡的文件 `root.defaults` 外，还要挡两类
+ * **运行时仍然指向该模型的引用**——否则「默认值写对后再把目录删小」会让目录外值在运行期生效
+ * （与原故障同一通路：路由对解析不到的值原样透传 → 无可用渠道 transport 失败）：
+ *  - platform_api_configs 的三个平台默认（按 DB 别名覆盖展开后选中该模型，或字面就是它）；
+ *  - 启用的 skill_model_configs 显式绑定该模型、且该 skill 未自带 endpoint（即走继承通道）。
+ * 自带独立 endpoint 的 skill 由自家通道提供模型，不受平台目录约束，不计。
+ */
+async function assertModelNotReferencedByRuntime(providerId: string, modelId: string): Promise<void> {
+  const bare = modelId;
+  const qualified = `${providerId}/${modelId}`;
+  const matches = (value: string): boolean => value === bare || value === qualified;
+
+  const config = await apiConfigService.getConfig();
+  const overrides = {
+    chat: config.chatModels ?? [],
+    reasoning: config.reasoningModels ?? [],
+    light: config.lightModels ?? [],
+  };
+  const platformDefaults: Array<[string, string]> = [
+    ['默认模型', config.defaultModel],
+    ['推理默认模型', config.defaultReasoningModel],
+    ['评估默认模型', config.defaultEvaluationModel],
+  ];
+  for (const [label, value] of platformDefaults) {
+    const configured = String(value || '').trim();
+    if (!configured) continue;
+    const resolved = selectModelForAlias(configured, { overrides })?.model ?? configured;
+    if (matches(configured) || matches(resolved)) {
+      throw new RegistryEditError(
+        `模型「${modelId}」仍是平台${label}的生效值（${configured}），删掉会让全平台默认路由落到目录外模型。`
+          + '请先在「路由与调用」把该默认改到别的目录内模型再删。',
+        400,
+        'invalid'
+      );
+    }
+  }
+
+  const boundRows = await systemPrisma.skill_model_configs.findMany({
+    where: { enabled: true, NOT: [{ model: null }, { model: '' }] },
+    select: { skillId: true, model: true, endpoint: true },
+  });
+  const boundSkills = boundRows
+    .filter((row) => !String(row.endpoint || '').trim())
+    .filter((row) => {
+      const value = String(row.model || '').trim();
+      const ref = resolveModelRef(value);
+      return ref ? ref.modelId === bare && ref.providerId === providerId : matches(value);
+    })
+    .map((row) => row.skillId);
+  if (boundSkills.length) {
+    throw new RegistryEditError(
+      `模型「${modelId}」仍被 ${boundSkills.length} 个走平台通道的 skill 显式绑定（${boundSkills.join('、')}），`
+        + '删掉后它们运行时会因无可用渠道失败。请先在「Skill 运行时」改到别的目录内模型再删。',
+      400,
+      'invalid'
+    );
+  }
 }
 
 router.get('/', async (_req, res) => {
@@ -152,6 +214,7 @@ router.patch('/:id/models/:modelId', async (req, res) => {
 
 router.delete('/:id/models/:modelId', async (req, res) => {
   try {
+    await assertModelNotReferencedByRuntime(req.params.id, req.params.modelId);
     const result = await deleteModel(req.params.id, req.params.modelId);
     setAuditAction(res, 'model-provider-model-delete', { targetType: 'model-provider', targetId: req.params.id });
     await okWithView(res, result.warnings, `模型「${req.params.modelId}」已删除`);
