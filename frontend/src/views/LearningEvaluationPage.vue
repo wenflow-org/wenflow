@@ -195,6 +195,7 @@ import ImmersiveMenu from '@/components/ImmersiveMenu.vue';
 import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
+import { unwrap } from '@/views/v2/unwrap';
 import { isProjectionMode } from '@/utils/projection';
 import { replanModeForRecommendation } from '@/utils/replanSignal';
 
@@ -599,6 +600,21 @@ const goBackToPath = (forceRefresh?: boolean) => {
 
 const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') => {
   if (action === 'continue-task') {
+    /* P27（2026-11-01 走查实锤）：任务已结算时直进课堂，boot() 会拿到 mode:'completed'
+       并原路 replace 回本页（后端拒绝为已完成任务开新课的守卫），一来一回表现为
+       「点了没反应」。先探任务态：已完成 → 带 ?mode=extension 进延伸课（课堂页既有通道，
+       #124——基于本课加练，不结算任务）；未完成/探测失败 → 维持原语义回课堂继续本任务。 */
+    try {
+      const task = unwrap<{ status?: string } | null>(await api.get(`/learning/tasks/${taskId.value}`));
+      if (task?.status === 'completed') {
+        const pathId = route.query.pathId as string | undefined;
+        router.push({
+          path: `${learnBasePath.value}/${taskId.value}`,
+          query: { mode: 'extension', ...(pathId ? { pathId } : {}) },
+        });
+        return;
+      }
+    } catch { /* 探测失败按未完成处理：常规课堂入口本来就能进 */ }
     router.push(`${learnBasePath.value}/${taskId.value}`);
     return;
   }

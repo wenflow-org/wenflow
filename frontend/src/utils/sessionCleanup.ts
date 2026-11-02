@@ -9,6 +9,8 @@ export const LEGACY_GOAL_CONVERSATION_MSGS_KEY = 'v2_goal_msgs';
 const GOAL_CID_PREFIX = 'v2_goal_cid';
 const GOAL_MSGS_PREFIX = 'v2_goal_msgs';
 const RECENT_GOALS_PREFIX = 'wf_goal_recent';
+/** 目标页生成跟踪键前缀：确认后记住 pathId，刷新/重进目标页时凭它恢复「正在生成」pill（P22） */
+const GOAL_GEN_PREFIX = 'v2_goal_gen';
 /** 旧版未按用户隔离的最近会话列表键；无法证明归属，只能丢弃，不能迁移 */
 export const LEGACY_RECENT_GOALS_KEY = RECENT_GOALS_PREFIX;
 
@@ -90,6 +92,45 @@ export function removeGoalConversationStorage(userId?: string | null): void {
   localStorage.removeItem(goalConversationMsgsKey(id));
 }
 
+/** 生成跟踪键：按 userId 作用域（同会话缓存口径） */
+export function goalGenTrackingKey(userId: string): string {
+  return `${GOAL_GEN_PREFIX}:${userId}`;
+}
+
+export interface GoalGenTrackingEntry {
+  pathId: string;
+  at: number;
+}
+
+/** 读取当前用户的生成跟踪（坏数据 / 未登录返回 null，不让恢复流程挂掉） */
+export function getGoalGenTracking(userId: string | null): GoalGenTrackingEntry | null {
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(goalGenTrackingKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<GoalGenTrackingEntry>;
+    const pathId = typeof parsed?.pathId === 'string' ? parsed.pathId.trim() : '';
+    if (!pathId) return null;
+    return { pathId, at: typeof parsed?.at === 'number' && Number.isFinite(parsed.at) ? parsed.at : 0 };
+  } catch {
+    return null;
+  }
+}
+
+/** 确认拿到 pathId 时写入；生成仍在后端跑时刷新/离页后凭它恢复 pill */
+export function setGoalGenTracking(userId: string | null, pathId: string): void {
+  if (!userId || !pathId) return;
+  try {
+    localStorage.setItem(goalGenTrackingKey(userId), JSON.stringify({ pathId, at: Date.now() } satisfies GoalGenTrackingEntry));
+  } catch { /* 隐私模式忽略 */ }
+}
+
+/** 生成已到终态（完成/失败）后清除：下次挂载不再回查、不再显示 pill */
+export function clearGoalGenTracking(userId: string | null): void {
+  if (!userId) return;
+  localStorage.removeItem(goalGenTrackingKey(userId));
+}
+
 /** 丢弃旧版未作用域缓存——本地无法核实归属，绝不迁移给当前账号 */
 export function dropLegacyGoalConversationStorage(): void {
   localStorage.removeItem(LEGACY_GOAL_CONVERSATION_CID_KEY);
@@ -128,6 +169,7 @@ export function clearGoalConversationStorage(): void {
       || key.startsWith(`${GOAL_CID_PREFIX}:`)
       || key.startsWith(`${GOAL_MSGS_PREFIX}:`)
       || key.startsWith(`${RECENT_GOALS_PREFIX}:`)
+      || key.startsWith(`${GOAL_GEN_PREFIX}:`)
     ) {
       keys.push(key);
     }

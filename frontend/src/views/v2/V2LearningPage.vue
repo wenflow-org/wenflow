@@ -344,6 +344,14 @@
             <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
           </div>
+
+          <!-- 本回合未完成提示（2026-11-01 课堂走查）：正文上屏后用户反复翻页找板书，
+               而板书等图只随 final 一次下发、流式中途无法区分「会有板书」与「没有板书」，
+               因此不承诺板书，只说必然为真的「仍在生成」。讲解文本已开始上屏（流式气泡已建）
+               但 final 未到时显示，final 到达（typing 复位）、失败与停止即消失。 -->
+          <div v-if="typing && streamingBubbleIndex >= 0" class="msg__turnstate" role="status">
+            <span class="msg__chip msg__chip--turnstate"><i aria-hidden="true"></i>本回合仍在生成…</span>
+          </div>
         </div>
 
         <!-- 回到底部浮标：用户上翻看旧内容期间显示，点击回到最新消息 -->
@@ -392,7 +400,7 @@
               <span class="reply__text">{{ q }}</span>
             </button>
           </div>
-          <p v-if="allKpMastered" class="replies__nudge">本节知识点已全部过完，可以点上方「完成本节」收束这节课。</p>
+          <p v-if="allKpMastered" class="replies__nudge">本节知识点已全部过完，点「完成本节」即可完成这节课。</p>
         </div>
 
         <!-- 知识点确认（动态行动台）：AI 讲完一个点、给出 confirmCheck 时出现 -->
@@ -506,6 +514,7 @@
             <div class="gate__body">
               <strong>{{ settleBlock.title }}</strong>
               <p>{{ settleBlock.message }}</p>
+              <p v-if="settleBlock.guide" class="gate__guide">{{ settleBlock.guide }}</p>
             </div>
             <div class="gate__actions">
               <button type="button" class="gate__go" @click="jumpToSettleGate">{{ settleBlock.actionLabel }}</button>
@@ -816,7 +825,7 @@ import xml from 'highlight.js/lib/languages/xml';
 import yaml from 'highlight.js/lib/languages/yaml';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { unwrap } from './unwrap';
-import { nowTime, isAutoRetryableSendError, type ChatMsg, type ChatSupplement } from './learningChat';
+import { nowTime, formatMsgTime, isAutoRetryableSendError, type ChatMsg, type ChatSupplement } from './learningChat';
 import MkGraph from '@/components/mk/MkGraph.vue'
 import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -1039,21 +1048,38 @@ function onFinalizeProgress(state: {
 /* ---------- 结算门禁（409）常驻提示 ----------
    后端 teaching-closure 的三个「现在不能结」错误码原本只落 toast（约 4s 消失）。
    这类信息不是通知而是前置条件，必须留到用户真的做完（发出回复 / 收起检查点）。 */
-type SettleGateAction = 'composer' | 'checkpoint'
+type SettleGateAction = 'composer' | 'checkpoint' | 'dismiss'
 interface SettleGate {
   code: string
   title: string
   message: string
+  /** 按 409 原因细分的引导：为什么又被拦 + 现在该做什么（回答 / 等老师讲完这一轮再来结算） */
+  guide?: string
   action: SettleGateAction
   actionLabel: string
+  /** 服务端 409 亲口拒绝（finish catch）才算 true：这类门禁不能被本地的检查点收卡顺手清掉 */
+  server?: boolean
 }
 const settleBlock = ref<SettleGate | null>(null)
-const SETTLE_GATE_COPY: Record<string, { title: string; action: SettleGateAction; actionLabel: string }> = {
-  FINALIZATION_OPEN_QUESTION: { title: '先回答老师的问题', action: 'composer', actionLabel: '去回答' },
-  FINALIZATION_PENDING_CHECKPOINT: { title: '先完成这道小测', action: 'checkpoint', actionLabel: '去作答' },
+const SETTLE_GATE_COPY: Record<string, { title: string; action: SettleGateAction; actionLabel: string; guide?: string }> = {
+  /* 2026-11-01 课堂走查：答完一问后老师常紧接新问题 / 新小测，再点结算又吃 409——
+     循环缺「先把这一轮讲完再结算」的引导。服务端 409 响应体带 error.code（ai-teaching
+     路由统一错误出口），按原因各补一句「为什么被拦 + 现在该做什么」。 */
+  FINALIZATION_OPEN_QUESTION: {
+    title: '先回答老师的问题',
+    action: 'composer',
+    actionLabel: '去回答',
+    guide: '先回答它。老师回应完这一轮，再来结算课堂。'
+  },
+  FINALIZATION_PENDING_CHECKPOINT: {
+    title: '先完成这道小测',
+    action: 'checkpoint',
+    actionLabel: '去作答',
+    guide: '先答完这道小测。等老师讲完这一轮，再来结算课堂。'
+  },
   FINALIZATION_LAST_CHECKPOINT_FAILED: { title: '先把最后一道小测处理完', action: 'checkpoint', actionLabel: '去查看' }
 }
-function showSettleGate(code: string, message: string) {
+function showSettleGate(code: string, message: string, server = false) {
   const copy = SETTLE_GATE_COPY[code] || {
     title: '课堂还有未完成的问答',
     action: 'composer' as SettleGateAction,
@@ -1064,16 +1090,22 @@ function showSettleGate(code: string, message: string) {
     title: copy.title,
     action: copy.action,
     actionLabel: copy.actionLabel,
-    message: message || '先完成课内问答，再结束课堂。'
+    message: message || '先完成课内问答，再结束课堂。',
+    guide: copy.guide,
+    server
   }
 }
 function dismissSettleGate() {
   settleBlock.value = null
 }
-/** 门禁提示的去向：老师末问 → 焦点回输入区；检查点 → 滚到卡片并聚焦第一个控件 */
+/** 门禁提示的去向：老师末问 → 焦点回输入区；检查点 → 滚到卡片并聚焦第一个控件；纯提示类 → 关掉 */
 function jumpToSettleGate() {
   const block = settleBlock.value
   if (!block) return
+  if (block.action === 'dismiss') {
+    dismissSettleGate()
+    return
+  }
   if (block.action === 'checkpoint') {
     checkpointEl.value?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     const target = checkpointEl.value?.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea')
@@ -1242,7 +1274,7 @@ const shouldAskSelfAssess = computed(() => {
 const completed = ref(false);
 const {
   checkpoint, selectedOptions, answerText, checkpointFeedback, checkpointPassed,
-  checkpointPending, checkpointSubmitting, checkpointStreaming, lastSettledReply,
+  checkpointPending, checkpointSubmitting, checkpointStreaming, lastSettledReply, lastAnswerEcho,
   toggleOption, dismissCheckpoint, submitCheckpoint, skipCheckpoint, disposeCheckpoint
 } = useCheckpointFlow(session, typing, completed)
 /* F-W（2026-10-10 新人走查实锤）：检查点裁决+讲解此前只渲染在卡片内——答对后卡片 3 秒自动收起，
@@ -1266,10 +1298,36 @@ watch(checkpoint, (now) => {
 const postQuizReplies = ref<string[]>([]);
 const allKpMastered = computed(() => knowledgePoints.value.length > 0 && masteredCount.value >= knowledgePoints.value.length);
 
+/* 作答回显（2026-10-31 复验）：提交路径此前从不追加用户气泡，后端却把这条作答落了库
+   —— 刷新前看不见、刷新后看得见。成功落库后补一条（文本与后端落库一致，见 useCheckpointFlow）。 */
+watch(lastAnswerEcho, (pending) => {
+  if (!pending) return
+  lastAnswerEcho.value = null
+  pushMsg({ role: 'user', text: pending.text, time: nowTime() })
+})
+
 /* 结算门禁提示随条件解除：检查点卡片收起（作答 / 跳过 / 已处理）即撤掉，不再要求手动关 */
 watch(checkpoint, (cp) => {
   if (cp) postQuizReplies.value = [] // 新检查点到达：续接 chips 让位给小测卡
-  if (!cp && settleBlock.value?.action === 'checkpoint') settleBlock.value = null
+  if (!cp && settleBlock.value?.action === 'checkpoint') {
+    /* P25（2026-11-01 走查实锤，后端日志 3×409 + 截图佐证）：小测提交内含一次教学回合（数十秒），
+       用户在回合落库前点「完成并结算任务」必吃 409 FINALIZATION_PENDING_CHECKPOINT，横幅刚亮起；
+       随后回合落库、卡片按通过态 1.2s 自动收起，这条 watcher 把刚亮的横幅一并抹掉——
+       用户再点还是 409，全程零反馈只能干等。服务端亲口拒绝的门禁不随收卡消失：
+       小测此刻已提交完成，横幅改述为「可再次结算」，直到结算成功（finish 成功路径清）或用户关闭。 */
+    if (settleBlock.value.server) {
+      settleBlock.value = {
+        code: settleBlock.value.code,
+        server: true,
+        title: '小测已收起，可再次结算',
+        message: '刚才的结算被拦下：这道小测当时还没有处理完。再次点「完成并结算任务」即可继续结算。若仍不满足条件，会再次提示原因。',
+        action: 'dismiss',
+        actionLabel: '知道了'
+      }
+    } else {
+      settleBlock.value = null
+    }
+  }
   if (cp) collapseOpeningScene()
 })
 /** 检查点选项前缀（A/B/C/D…）：原型 .wf-cp__opt 里是字母小方块 + 文本两段 */
@@ -1700,7 +1758,9 @@ async function boot() {
               .map((m) => pushMsg({
                 role: m.role === 'user' ? 'user' : 'ai',
                 text: String(m.content || ''),
-                time: nowTime(),
+                // 用后端时间戳（2026-10-31 走查 P1-2）：此前一律 nowTime()，刷新一次全部历史
+                // 消息都变成刷新那一刻的钟点，几条消息之间的真实间隔被抹平
+                time: formatMsgTime(m.timestamp),
                 ...(Array.isArray(m.images) && m.images.length ? { images: m.images } : {}),
                 ...(Array.isArray(m.diagrams) && m.diagrams.length ? { diagrams: m.diagrams } : {}),
                 ...(Array.isArray(m.figures) && m.figures.length ? { figures: m.figures } : {}),
@@ -2072,7 +2132,11 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
  */
 async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; text: string; confusion?: unknown[] } | undefined) {
   // 导师回复（附带本轮捕获到的卡点，作为气泡下方的依据 chip）
-  const confusion = Array.isArray(r.analysis?.confusionPoints)
+  // 口径（2026-11-01 走查修复）：只有**有原话证据**的卡点才上 chip。`confusionPoints` 是软通道，
+  // 模型可自由给出且无证据要求（实测 51.9% 的回合都有，chip 出现在 32.7% 的回合）——学生会觉得
+  // 老师每句话都在「挖卡点」。`confusionEvidenced` 由后端按硬通道（misconceptions 的 evidence
+  // 能逐字定位到学生原话）算出；软通道数据仍随 analysis 下发，供遥测与复盘，只是不进 chip。
+  const confusion = r.analysis?.confusionEvidenced === true && Array.isArray(r.analysis?.confusionPoints)
     ? r.analysis.confusionPoints.map((p: unknown) => String(p || '').trim()).filter(Boolean).slice(0, 2)
     : [];
   if (aiMsg?.role === 'ai') {
@@ -2213,7 +2277,8 @@ async function finish(
     // 该提示常驻到条件解除，避免 4s toast 一闪而过、用户误以为结算没反应。
     const gateCode = String(e?.response?.data?.error?.code || e?.code || '');
     if (gateCode === 'FINALIZATION_PENDING_CHECKPOINT' || gateCode === 'FINALIZATION_OPEN_QUESTION' || gateCode === 'FINALIZATION_LAST_CHECKPOINT_FAILED') {
-      showSettleGate(gateCode, e?.response?.data?.error?.message || e?.message || '');
+      // server=true：这是服务端的拒绝，常驻提示不能被本地检查点收卡（见 watch(checkpoint)）顺手清掉
+      showSettleGate(gateCode, e?.response?.data?.error?.message || e?.message || '', true);
       return;
     }
     // 结算失败不冒充完成：保留重试入口，用户仍可去学习反馈页查看
@@ -3147,6 +3212,15 @@ onBeforeUnmount(() => {
 }
 .msg__chip--confuse { color: var(--amber-ink); background: color-mix(in srgb, var(--wf-color-warning) 12%, transparent); border: 1px solid color-mix(in srgb, var(--wf-color-warning) 20%, transparent); margin-top: 6px; margin-bottom: 8px; }
 
+/* 本回合仍在生成（流式中、final 未到）——消息流尾部的轻量状态 chip，诚实口径见模板注释 */
+.msg__turnstate { padding: 2px 0 6px; }
+.msg__chip--turnstate { color: var(--muted); background: color-mix(in srgb, var(--ink) 5%, transparent); border: 1px solid var(--line); margin-bottom: 8px; font-weight: 600; }
+.msg__chip--turnstate i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--faint);
+  animation: learn-typing 1.2s ease-in-out infinite;
+}
+
 /* ---------- 伴学浮窗（角色「小启」· 暖橙系，dock 式不占主对话区） ---------- */
 /* 移动端浮窗遮罩：只在小屏出现，盖住主课堂输入区，避免双输入框/双免责声明叠罗汉 */
 .peer-backdrop { display: none; }
@@ -3775,6 +3849,8 @@ onBeforeUnmount(() => {
 .gate__body { flex: 1 1 auto; min-width: 0; display: grid; gap: 3px; }
 .gate__body strong { font-size: 13px; color: var(--ink); }
 .gate__body p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+/* 按 409 原因细分的引导行：比原因原文（muted）略重，指向「现在该做什么」 */
+.gate__guide { color: var(--ink); }
 .gate__actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .gate__go {
   border: 0; border-radius: 999px; padding: 7px 12px;

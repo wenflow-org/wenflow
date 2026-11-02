@@ -59,6 +59,19 @@
         已停止生成。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
       </div>
 
+      <!-- 生成跟踪 pill 的入口态位置（P22 缺陷2 跨刷新常驻）：确认后刷新/重进目标页
+           （本地无会话缓存）时，凭持久化的 pathId 恢复「正在生成」pill 与轮询——
+           生成要在后端跑约 7 分钟，只挂在会话态里会随刷新消失。点击回路径列表。 -->
+      <button
+        v-if="genPill"
+        type="button"
+        class="gen-pill gen-pill--entry"
+        :class="[`gen-pill--${genPill.tone}`]"
+        @click="onGenPillClick"
+      >
+        <span class="gen-pill__dot" aria-hidden="true"></span>{{ genPill.text }}
+      </button>
+
       <div class="entry__cards">
           <div class="entry__cards-head">
             <span class="entry__cards-title">试试这些方向</span>
@@ -261,7 +274,9 @@
                     type="button"
                     class="msg__reply"
                     :class="{ 'msg__reply--on': pickedReplySet.has(q.text.trim()) }"
-                    @click="toggleReply(q.text)"
+                    @click="pickReply(q.text)"
+                    @keydown.enter.prevent="keyboardReply(q.text)"
+                    @keydown.space.prevent="keyboardReply(q.text)"
                   >{{ q.text }}</button>
                 </div>
                 <MessageActions
@@ -303,6 +318,8 @@
                改整行 .wf-reply 按钮组（蓝描边 + 蓝 5% 底 + 前置 6px 蓝点，选中变 ✓）。
                勾选语义不变：点选打勾进输入框，再点取消 -->
           <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies">
+            <!-- 可见标签（2026-10-31 走查）：此前说明只给读屏器，用户把快选读成「和确认按钮并列的选项」 -->
+            <span class="replies__label">{{ repliesLabel }}</span>
             <span class="visually-hidden">快捷补充：点选填入输入框，可多选</span>
             <button
               v-for="q in availableReplies"
@@ -310,16 +327,33 @@
               type="button"
               class="reply"
               :class="{ 'reply--on': pickedReplySet.has(q.text.trim()) }"
-              @click="toggleReply(q.text)"
+              @click="pickReply(q.text)"
+              @keydown.enter.prevent="keyboardReply(q.text)"
+              @keydown.space.prevent="keyboardReply(q.text)"
             >{{ q.text }}</button>
           </div>
         </div>
+        <!-- 生成状态 pill（走查 2026-11-01 P22 / 2026-11-02 P22 复验）：确认生成后选「留在本页」关掉浮层，
+             页面上除步条第 3 步高亮外没有任何持续状态，用户不知道生成还在不在走。
+             2026-11-02 起跟真实状态：拿到 pathId 后轮询 generation-status（复用 /learning-paths
+             的接口与节奏），文案与终态由 genPillCopy 统一映射——生成未确认完成前不给平静终态。
+             浮层出现期间让位（genPill 返回 null）——浮层内已有同等进度，双份状态互相抢焦点。
+             放在消息区与输入区之间：桌面/移动同位，不与移动端「目标信息」锚点带抢位置。 -->
+        <button
+          v-if="genPill"
+          type="button"
+          class="gen-pill"
+          :class="[`gen-pill--${genPill.tone}`]"
+          @click="onGenPillClick"
+        >
+          <span class="gen-pill__dot" aria-hidden="true"></span>{{ genPill.text }}
+        </button>
         <!-- 方案协商入口（2026-10-31 一锤定音修复）：proposing 不再自动盖 modal，
              方案先在对话流里完整呈现、可直接回复继续调整（一轮二轮都行）；
              这颗按钮是显式确认入口——点开方案卡审阅，确认动作仍只发生在卡内 -->
         <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
-          <span class="proposal-invite__hint">方案已就绪——回复即可继续调整，满意了再确认</span>
-          <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">查看方案并确认</button>
+          <span class="proposal-invite__hint">{{ entryCopy.hint }}</span>
+          <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
         </div>
         <!-- 输入区：对话卡内的底条（2026-10-06 归位）——回形针资料入口内置输入框，
              已传资料 chips 浮在输入框上方；输入框本身是拖放目标。
@@ -330,6 +364,7 @@
         <div
           v-if="loggedIn && live.started"
           class="composer"
+          :class="{ 'composer--locked': showProposal }"
           @dragenter.prevent="onBoxDragEnter"
           @dragover.prevent="onBoxDragOver"
           @dragleave.prevent="onBoxDragLeave"
@@ -356,17 +391,19 @@
               rows="1"
               :maxlength="INPUT_MAX"
               :placeholder="chatPlaceholder"
-              :disabled="startFailed"
+              :disabled="startFailed || showProposal"
               @keydown.enter.exact.prevent="doSend"
             ></textarea>
             <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
-            <!-- 发送/停止 同位置切换：生成中变停止（主流聊天交互，位置固定不占额外空间） -->
+            <!-- 发送/停止 同位置切换：生成中变停止（主流聊天交互，位置固定不占额外空间）；
+                 方案浮层打开期间两者一并锁定（P21）：遮罩物理挡住它们，此前保持可点外观、
+                 点了没反应——禁用 + 哑火（.composer--locked）让「不能发」可见可预期 -->
             <button
               v-if="!live.sending"
               type="button"
               class="composer__send"
-              :class="{ 'composer__send--off': startFailed || !input.trim() }"
-              :disabled="startFailed || !input.trim()"
+              :class="{ 'composer__send--off': startFailed || showProposal || !input.trim() }"
+              :disabled="startFailed || showProposal || !input.trim()"
               aria-label="发送"
               @click="doSend"
             >
@@ -378,6 +415,7 @@
               class="composer__send composer__send--stop"
               aria-label="停止生成"
               :title="STOP_WAIT_HINT"
+              :disabled="showProposal"
               @click="live.stop()"
             >
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
@@ -543,8 +581,10 @@
              改为与事实一致的「已创建 + 正在生成」两段式。 -->
         <h2 class="proposal__title">路径已创建</h2>
         <!-- 只保留「还在生成」这一条会改变预期的事实；去哪看进度由正下方的
-             「查看我的路径」按钮表达，不再在句子里指一次路（2026-10-29 全站副文审计） -->
-        <p class="proposal__generating-note">阶段与任务还在生成中。</p>
+             「查看我的路径」按钮表达，不再在句子指一次路（2026-10-29 全站副文审计）。
+             P22 缺陷3：句子跟随 generation-status 真实状态——生成完成后不再说
+             「还在生成中」，换成完成/失败的事实（见 doneGenNote）。 -->
+        <p class="proposal__generating-note">{{ doneGenNote }}</p>
         <div class="proposal__actions proposal__actions--center">
           <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
           <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->
@@ -582,11 +622,14 @@ import MessageActions from '@/components/chat/MessageActions.vue';
 import MaterialUploadArea from '@/components/learning/MaterialUploadArea.vue';
 import { hasUserSession } from '@/utils/api';
 import { useUserStore } from '@/stores/user';
-import { currentUserId, dropLegacyRecentGoalsStorage, getGoalConversationCid } from '@/utils/sessionCleanup';
+import { currentUserId, dropLegacyRecentGoalsStorage, getGoalConversationCid, clearGoalGenTracking, getGoalGenTracking, setGoalGenTracking } from '@/utils/sessionCleanup';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
 import { feedbackApi } from '@/api/feedback';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
+import { goalRepliesLabel, isAwaitingAnswer, proposalEntryCopy } from './goalStageCopy';
+import { learningAPI, type GenerationLifecycleDTO } from '@/api/learning';
+import { genPillCopy, genStageLabel, isGenerationSettled } from './learningPathProgress';
 
 const route = useRoute();
 const router = useRouter();
@@ -615,6 +658,14 @@ const startFailed = computed(() => live.failed === 'start' && !live.stopped);
 /* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */
 const entryPlaceholder = computed(() => isNarrow.value ? '先说说你想解决什么…' : '先说说你最近想解决什么，或现在卡在哪里…');
 const chatPlaceholder = computed(() => {
+  // 浮层打开期间输入区随遮罩锁定（P21 走查）：占位符改为交代「为什么发不了、出路在哪」。
+  // 三个分支各说各的事实：Esc 只在审阅/完成态能关浮层，generating 态只能等或停止；
+  // 不写「上方/下面」这类方位指路（文案门禁 R2）
+  if (showProposal.value) {
+    if (phase.value === 'generating') return '正在生成路径，进度见弹窗';
+    if (phase.value === 'done') return '路径已创建，先在弹窗里选择下一步';
+    return '先处理方案确认弹窗，Esc 可回到对话';
+  }
   // 不写「上方」：输入框与重试按钮同屏，点哪儿由位置自明（文案门禁 R2）
   if (startFailed.value) return '首轮对话失败，请先重试';
   return isNarrow.value ? '回答问题，或补充基础、时间…' : '回答导师的问题，或补充你的基础、时间和限制…';
@@ -642,6 +693,18 @@ const lastAiKey = computed(() => {
   }
   return '';
 });
+/* 本轮导师是否还在提问（2026-10-31 用户走查）：proposing 轮的提问会让「方案已就绪」与
+   「我还有个问题」同时成立——用户不知道该回答还是该确认。判据见 goalStageCopy.ts。 */
+const awaitingAnswer = computed(() => {
+  for (let i = live.messages.length - 1; i >= 0; i -= 1) {
+    if (live.messages[i].role === 'ai') return isAwaitingAnswer(live.stage, String(live.messages[i].content || ''));
+  }
+  return false;
+});
+const entryCopy = computed(() => proposalEntryCopy(awaitingAnswer.value));
+/* 快选行标签：understanding 阶段也存在这一行（那里的快选是「本轮问题的候选项」），
+   不能一律说成「调整方案」——按阶段取文案，见 goalStageCopy.goalRepliesLabel。 */
+const repliesLabel = computed(() => goalRepliesLabel(live.stage, awaitingAnswer.value));
 
 onMounted(() => {
   window.addEventListener('keydown', onProposalKey);
@@ -675,6 +738,9 @@ onMounted(() => {
   if (restoreDraft()) {
     void nextTick(() => (chatInputEl.value ?? entryInputEl.value)?.focus());
   }
+  // 生成跟踪恢复（P22 缺陷2）：本地记着 pathId 且仍在生成 → 重显 pill 并续轮询。
+  // 放 onMounted（而非 immediate watcher）：genTrack 声明在下方，避免引用未初始化绑定。
+  void restoreGenTracking();
 });
 
 onBeforeUnmount(() => {
@@ -685,6 +751,8 @@ onBeforeUnmount(() => {
   // 离页/刷新前把在途草稿落盘（防抖窗口内未落的那一版）
   window.clearTimeout(draftTimer);
   saveDraft();
+  // 生成状态轮询只属于本页存活期：离页即停，不留后台常驻请求（P22 缺陷4 修法要求）
+  stopGenPolling();
 });
 
 /** 清回初始态（内存 + 组件局部状态；live.resetView 保留 localStorage 恢复入口） */
@@ -815,6 +883,10 @@ watch(recentGoalsUserId, (nextId, previousId) => {
     if (typeof route.params.conversationId === 'string') {
       void router.replace({ name: 'V2GoalConversation' });
     }
+    // 切号：上一账号的生成跟踪作废，改读新账号的持久键（键按 userId 作用域）
+    stopGenPolling();
+    genTrack.value = null;
+    void restoreGenTracking();
   }
 }, { immediate: true });
 
@@ -873,6 +945,27 @@ function toggleReply(text: string) {
     cur.push(t);
     input.value = cur.join('\n');
   }
+}
+/** 快捷 chip 的激活路径（走查 2026-11-01 P24）：chips 是多选勾选语义——点击 = 填入、
+    再点 = 取消。原生 button 的 Enter/Space 等价一次点击：点选后焦点仍留在 chip 上，
+    用户按 Enter 想发送，实际触发的是「取消」——刚填入的选项被反选、输入框静默清空、
+    无任何请求。两条修法（多选勾选语义保持不变）：
+    1) 任何激活（点击/键盘）后把焦点交还输入框——下一次 Enter 落在 textarea 上就是发送；
+    2) 键盘 Enter/Space 只做「填入」半边：已勾选的 chip 再按只还焦点、不反选，
+       杜绝键盘路径上的静默丢字（取消仍可点 chip，或聚焦后直接编辑输入框文本）。 */
+function focusComposerInput() {
+  void nextTick(() => (chatInputEl.value ?? entryInputEl.value)?.focus());
+}
+function pickReply(text: string) {
+  toggleReply(text);
+  focusComposerInput();
+}
+function keyboardReply(text: string) {
+  if (pickedReplySet.value.has(text.trim())) {
+    focusComposerInput();
+    return;
+  }
+  pickReply(text);
 }
 /** 面板选项 = 当前轮全部快选，常驻展示（不随选中隐藏，保证再点可取消） */
 const availableReplies = computed(() => currentQuickReplies.value);
@@ -1018,6 +1111,136 @@ const stageLabel = computed(() => {
      还差 N 项直接对得上左栏计数器与进度条，收满即说明该轮到「确认方案」。 */
   const remain = Math.max(0, live.totalFields - live.filledCount);
   return remain > 0 ? `还差 ${remain} 项关键信息` : '关键信息已收齐';
+});
+
+/* ---------- 真实生成进度跟踪（走查 2026-11-02 P22） ----------
+   确认约 1.5s 后端就落路径记录、会话 isCompleted，但阶段/课时生成还在后端跑（实测约 7 分钟）。
+   会话 phase 只能证明「任务受理」，不能证明「生成完成」——pill 与完成弹层注一律以
+   generation-status（复用 /learning-paths 的接口与 5s 节奏）为准。 */
+const genTrack = ref<{ pathId: string; lc: GenerationLifecycleDTO | null } | null>(null);
+let genPollTimer = 0;
+let genPollFails = 0;
+/** 轮询间隔与列表页 schedulePolling 同节奏 */
+const GEN_POLL_MS = 5000;
+function stopGenPolling() {
+  if (genPollTimer) { window.clearTimeout(genPollTimer); genPollTimer = 0; }
+}
+function scheduleGenPolling() {
+  stopGenPolling();
+  if (!genTrack.value) return;
+  genPollTimer = window.setTimeout(() => { void pollGenStatus(); }, GEN_POLL_MS);
+}
+async function pollGenStatus() {
+  const track = genTrack.value;
+  if (!track) return;
+  try {
+    const lc = await learningAPI.getPathGenerationStatus(track.pathId);
+    // 跟踪目标已被替换（重新确认出了新路径）：过期响应丢弃
+    if (genTrack.value?.pathId !== track.pathId) return;
+    genPollFails = 0;
+    genTrack.value = { pathId: track.pathId, lc };
+    if (isGenerationSettled(lc)) {
+      // 终态已确认：清持久键（下次挂载不再回查），pill 保留终态直至离页
+      clearGoalGenTracking(recentGoalsUserId.value);
+      stopGenPolling();
+      return;
+    }
+    scheduleGenPolling();
+  } catch {
+    if (genTrack.value?.pathId !== track.pathId) return;
+    // 单次失败静默续轮询；连续多次失败停表（状态接口不可用时不空转，与列表页断路口径一致）
+    genPollFails += 1;
+    if (genPollFails < 6) scheduleGenPolling();
+  }
+}
+/** 会话内拿到 pathId（确认信封 / 恢复信封）即开始跟踪并持久化（跨刷新恢复用） */
+function trackPathGeneration(pathId: string) {
+  if (genTrack.value?.pathId === pathId) return;
+  stopGenPolling();
+  genPollFails = 0;
+  genTrack.value = { pathId, lc: null };
+  setGoalGenTracking(recentGoalsUserId.value, pathId);
+  scheduleGenPolling();
+}
+/** 挂载/切号恢复（P22 缺陷2）：本地记着 pathId 且其仍在生成 → 重显 pill 并续轮询。
+    终态则清键；状态接口暂不可得则本次不显示（下次挂载再试），不凭空造进行态。 */
+let genRestoreSeq = 0;
+async function restoreGenTracking() {
+  const seq = ++genRestoreSeq;
+  const saved = getGoalGenTracking(recentGoalsUserId.value);
+  if (!saved?.pathId || genTrack.value?.pathId === saved.pathId) return;
+  try {
+    const lc = await learningAPI.getPathGenerationStatus(saved.pathId);
+    if (seq !== genRestoreSeq || genTrack.value?.pathId === saved.pathId) return;
+    if (isGenerationSettled(lc)) {
+      clearGoalGenTracking(recentGoalsUserId.value);
+      return;
+    }
+    genPollFails = 0;
+    genTrack.value = { pathId: saved.pathId, lc };
+    scheduleGenPolling();
+  } catch {
+    /* 状态不可得：不显示、不轮询，等下次挂载 */
+  }
+}
+watch(
+  () => live.learningPath?.id,
+  (pathId) => {
+    if (pathId) trackPathGeneration(pathId);
+  },
+  { immediate: true }
+);
+
+/* 生成状态 pill（走查 2026-11-01 P22 / 2026-11-02 复验）：只在浮层被关掉（「留在本页」/Esc）后承担持续指示。
+   确认在途按等待时长给阶段字（刻度同 GEN_WAIT_STAGES）；pathId 在手后一切以 generation-status
+   为准（genPillCopy 统一映射）：生成中带真实阶段、完成给 done 终态（点击去路径详情）、失败给
+   fail（点击去路径列表的重试入口）。跟踪未建立的短暂窗口给进行态过渡——生成未确认完成前
+   不得给平静终态（P22 缺陷1）。浮层打开期间返回 null 让位。 */
+const genPill = computed(() => {
+  if (!live.started && !genTrack.value) return null;
+  if (showProposal.value) return null;
+  if (phase.value === 'generating') {
+    const stage = waitTick.value < 8 ? '梳理目标' : waitTick.value < 25 ? '拆解阶段' : waitTick.value < 60 ? '排布任务' : '即将完成';
+    return { tone: 'run' as const, text: `正在生成路径 · ${stage}` };
+  }
+  if (genTrack.value) {
+    return genPillCopy(genTrack.value.lc);
+  }
+  if (phase.value === 'done') {
+    return { tone: 'run' as const, text: '路径已创建 · 生成中' };
+  }
+  if (confirmError.value) {
+    return live.stopped === 'confirm'
+      ? { tone: 'fail' as const, text: '已停止生成' }
+      : { tone: 'fail' as const, text: '确认失败' };
+  }
+  return null;
+});
+
+/** pill 点击：done 去路径详情；fail 去路径列表（失败卡上有重试）；
+    进行态回浮层面板（会话态）或去路径列表（入口态无浮层可回） */
+function onGenPillClick() {
+  const pill = genPill.value;
+  if (!pill) return;
+  if (pill.tone === 'done' && genTrack.value?.pathId) {
+    router.push(`/learning-path/${genTrack.value.pathId}`);
+    return;
+  }
+  if (pill.tone === 'fail' || !live.started) {
+    router.push('/learning-paths?from=goal');
+    return;
+  }
+  openProposalReview();
+}
+
+/** 完成弹层的副文（P22 缺陷3）：跟随真实状态——生成完成后不再说「还在生成中」。
+    跟踪未建立（旧信封无 learningPath 等）回退原句，不做无凭据的宣称。 */
+const doneGenNote = computed(() => {
+  const lc = genTrack.value?.lc;
+  if (!lc) return '阶段与任务还在生成中。';
+  if (lc.status === 'failed' || lc.status === 'stale') return '生成没有完成，可在学习路径里重试。';
+  if (lc.phase === 'ready') return '生成完成，可去学习路径查看。';
+  return `阶段与任务还在生成中 · ${genStageLabel(lc)}。`;
 });
 
 /** Escape 关闭方案浮层（状态保留，对话可继续）。
@@ -1949,6 +2172,11 @@ function shuffleScenes() {
   display: flex; flex-direction: column; gap: 8px;
   margin-left: 40px;
 }
+/* 快选行的可见标签（2026-10-31 走查）：说明这一行是「帮你打字」，不是与确认按钮并列的选项 */
+.replies__label {
+  font-size: var(--mk-fs-body);
+  color: var(--mk-muted);
+}
 .reply {
   display: flex; align-items: flex-start; gap: 9px; width: 100%;
   min-height: 44px; padding: 11px 14px; border-radius: 12px;
@@ -2032,6 +2260,51 @@ function shuffleScenes() {
 }
 .proposal-invite__btn { flex: 0 0 auto; padding: 8px 16px; }
 
+/* ---------- 生成状态 pill（走查 2026-11-01 P22） ----------
+   三档语言：run=蓝描边脉点（与 .proposal__stop 同族的进行态）、done=平静绿档
+   （同 done-ring 的成功语言）、fail=红档（同 .errorbar）。min-height 36：触屏下沿。 */
+.gen-pill {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin: 0 16px 8px;
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 36px; padding: 6px 12px;
+  border-radius: var(--mk-radius-pill);
+  font: inherit; font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.gen-pill--run {
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+  color: var(--blue-deep);
+}
+.gen-pill--run:hover { background: color-mix(in srgb, var(--blue) 14%, var(--surface)); }
+.gen-pill--done {
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+  background: color-mix(in srgb, var(--green) 10%, var(--surface));
+  color: var(--green-ink);
+}
+.gen-pill--fail {
+  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  color: var(--red-ink);
+}
+.gen-pill__dot {
+  flex: 0 0 auto;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+}
+/* 入口态位置：.entry 是 28px 内缩的 flex 列（会话态是 16px 内缩的 chat 列），对齐各自列缘 */
+.gen-pill--entry { margin: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .gen-pill--run .gen-pill__dot { animation: gen-pill-pulse 1.6s ease-in-out infinite; }
+}
+@keyframes gen-pill-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 /* ---------- 输入区：对话卡内的底条（2026-10-06 归位） ----------
    它是 .chat（对话卡）的最后一个 flex 子项：宽度 = 对话列，与上方气泡同列同左右缘。
    历史教训：2026-10-02 曾把输入区拆成「页级通栏底条 + 复刻 .work 栅格的 .composer__inner」，
@@ -2049,6 +2322,10 @@ function shuffleScenes() {
      （移动端媒体查询里会改掉，因为那档有底部 tab 栏接管该区域） */
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
+/* 方案浮层打开期间（P21 走查）：遮罩本就物理挡住输入区，此前它却保持高亮可点的样子——
+   点发送无请求、焦点落 overlay，看起来像坏了。与消息流（.chat__scroll--dim）同款哑火档，
+   控件再配真实 disabled（读屏也不给假象）；不追加 blur：草稿隔着遮罩仍要能认出来 */
+.composer--locked { opacity: .45; pointer-events: none; }
 /* ---------- 方案确认浮层 ---------- */
 /* 页面级模态（原型 .wf-modal / .wf-dialog）：fixed 铺满视口，
    遮罩盖住页级 composer 与导航（原先 absolute 只盖住 .chat 一块） */

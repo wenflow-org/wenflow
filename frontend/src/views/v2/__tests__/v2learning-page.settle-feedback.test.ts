@@ -223,4 +223,98 @@ describe('#115 结算进度与成功后的反馈入口', () => {
 
     w.unmount();
   });
+
+  it('P25 回归：服务端 409 门禁不随检查点收卡消失，改述为可再次结算', async () => {
+    // 小测提交内含一次教学回合（数十秒）：回合落库前点结算必吃 PENDING_CHECKPOINT 409（横幅刚亮），
+    // 回合落库后卡片按通过态自动收起——旧实现把刚亮的横幅一并抹掉，用户再点还是 409、全程零反馈
+    // （2026-11-01 走查实测：后端日志 3×409、第 3 次无横幅截图）。
+    api.startSession.mockResolvedValue({
+      sessionId: 's_cp409',
+      revision: 3,
+      mode: 'resumed',
+    });
+    api.getSessionDetail.mockResolvedValue({
+      revision: 3,
+      messages: [
+        { role: 'user', content: '什么是线性一致？' },
+        { role: 'assistant', content: '先看这张时序图。' },
+      ],
+      pendingCheckpoint: {
+        id: 'cp_p25',
+        type: 'single_choice',
+        question: '下面哪个说法正确？',
+        options: [
+          { id: 'opt_a', text: '写后读总能看到新值' },
+          { id: 'opt_b', text: '读到旧值不一定违反线性一致' },
+        ],
+      },
+    });
+
+    const w = await mountPage();
+    expect(w.find('.checkpoint').exists(), '恢复的待处理检查点应挂卡').toBe(true);
+
+    // 本地预检放行（判定已出、卡片仍在收尾窗口）后点结算：服务端仍拒绝（作答回合尚未落库）
+    (w.vm as any).checkpointPassed = true;
+    api.finalizeSessionReliably.mockRejectedValue({
+      message: '还有一道题没有作答，先完成这道题再结束课堂',
+      status: 409,
+      response: {
+        status: 409,
+        data: { error: { code: 'FINALIZATION_PENDING_CHECKPOINT', message: '还有一道题没有作答，先完成这道题再结束课堂' } },
+      },
+    });
+    await clickCompleteAndSettle(w);
+    expect(w.find('.gate').exists(), '服务端 409 应亮常驻门禁').toBe(true);
+    expect(w.find('.gate').text()).toContain('先完成这道小测');
+
+    // 卡片随后收起（提交回合落库后自动收卡 / 用户处理完收卡）：横幅不得被顺手清掉
+    (w.vm as any).checkpoint = null;
+    await flushPromises();
+    const gate = w.find('.gate');
+    expect(gate.exists(), 'P25：服务端亲口拒绝的门禁不能被收卡抹掉').toBe(true);
+    expect(gate.text()).toContain('可再次结算');
+
+    // 「知道了」仍是显式出口
+    await gate.find('.gate__go').trigger('click');
+    expect(w.find('.gate').exists()).toBe(false);
+
+    w.unmount();
+  });
+
+  it('门禁按 409 原因细分引导：答了又被拦时说明「先回答 / 等这一轮讲完再结算」', async () => {
+    // 2026-11-01 课堂走查：补答一次文字问题后导师紧接新问题 / 新小测，再点结算又吃 409——
+    // 「答了又被拦」的循环缺少「先把这一轮讲完再结算」的引导。服务端 409 响应体带 error.code，
+    // 横幅按原因各补一句「为什么被拦 + 现在该做什么」。
+    api.finalizeSessionReliably.mockRejectedValueOnce({
+      message: '老师刚提了一个问题或请学员提交结果，先完成再结束课堂',
+      status: 409,
+      response: {
+        status: 409,
+        data: { error: { code: 'FINALIZATION_OPEN_QUESTION', message: '老师刚提了一个问题或请学员提交结果，先完成再结束课堂' } },
+      },
+    });
+    const w = await mountPage();
+    await clickCompleteAndSettle(w);
+    let gate = w.find('.gate');
+    expect(gate.exists(), 'OPEN_QUESTION 409 应亮常驻门禁').toBe(true);
+    expect(gate.text()).toContain('老师刚提了一个问题或请学员提交结果，先完成再结束课堂');
+    expect(gate.find('.gate__guide').text(), 'OPEN_QUESTION 应引导先回答、等回应完这轮再结算').toContain('先回答它');
+    expect(gate.find('.gate__guide').text()).toContain('再来结算课堂');
+    // 再次结算、换一种原因：引导随原因切换
+    api.finalizeSessionReliably.mockRejectedValueOnce({
+      message: '还有一道题没有作答，先完成这道题再结束课堂',
+      status: 409,
+      response: {
+        status: 409,
+        data: { error: { code: 'FINALIZATION_PENDING_CHECKPOINT', message: '还有一道题没有作答，先完成这道题再结束课堂' } },
+      },
+    });
+    await clickCompleteAndSettle(w);
+    gate = w.find('.gate');
+    expect(gate.exists(), 'PENDING_CHECKPOINT 409 应亮常驻门禁').toBe(true);
+    expect(gate.find('.gate__guide').text(), 'PENDING_CHECKPOINT 应引导答完小测、等老师讲完这轮').toContain('先答完这道小测');
+    expect(gate.find('.gate__guide').text()).toContain('再来结算课堂');
+
+    w.unmount();
+  });
 });
