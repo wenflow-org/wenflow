@@ -28,6 +28,8 @@ export function useCheckpointFlow(
       答对 3 秒自动收起后连同「下一问」一起消失，聊天流不追加、刷新才在历史里见到。
       页面在卡片关闭/被下一个检查点替换时消费它补一条导师消息，保证所见即所存） */
   const lastSettledReply = ref<{ checkpointId: string; text: string } | null>(null);
+  /** 本轮的作答回显（2026-10-31 复验）：成功落库后由页面补一条 user 气泡，与刷新后的历史一致 */
+  const lastAnswerEcho = ref<{ checkpointId: string; text: string } | null>(null);
   /** 检查点通过后的自动关闭 timer（提交/卸载时清理，防竞态） */
   let checkpointCloseTimer = 0;
   /** 讲解流停滞阈值：流式提交在「导师正在讲解…」阶段挂住时，超时后保留判定并允许继续（#113） */
@@ -152,6 +154,18 @@ export function useCheckpointFlow(
     } else {
       payload.answerText = answerText.value;
     }
+    /* 作答回显（2026-10-31 复验 P0-2 遗留）：后端把这条作答作为 user 消息落库，但直播流从不追加气泡
+       —— 刷新后历史里能看见、刷新前看不见，同一段对话两种样子。文本格式必须与后端落库一致
+       （teaching-session-ops.ts resolveCheckpointAnswer：简答取 answerText，选择题 `${id}. ${text}` 用「；」连）。
+       这里只生成文本，由页面在成功落库后补一条用户气泡。 */
+    const answerEcho = payload.answerText
+      ? `我的答案：${payload.answerText}`
+      : `我的答案：${selectedOptions.value
+          .map((id) => {
+            const option = options.find((o: any) => String(o?.id ?? '') === String(id));
+            return option ? `${option.id}. ${option.text}` : String(id);
+          })
+          .join('；')}`;
     // 记住提交时的会话对象：提交含一次教学回合（可达数十秒），期间用户可能「重新开始」
     // 换了新会话——settle 后旧 revision 不得回写到新会话（restart 有等待循环，这里兜底）
     const sessionAtSubmit = session.value;
@@ -179,6 +193,9 @@ export function useCheckpointFlow(
         // 导师讲解随后用 delta 逐段补齐；因此用户可以"秒知对错"而不用干等整个教学回合。
         r = await aiTeachingAPI.streamSubmitCheckpoint(sessionId, checkpointId, payload, revision, {
           signal: submitCtrl.signal,
+          // 心跳也算进展（2026-10-31 走查 P0-2）：讲解回合 final 前可整段无字节，只靠
+          // onDelta 喂狗会在 90s 处把健康慢回合掐断，用户看到的是「回答正确，可继续」+ 丢了讲解
+          onActivity: armSubmitWatchdog,
           onJudgement: (j: { passed: boolean; judgedBy: string; detail: string | null }) => {
             armSubmitWatchdog();
             checkpointPassed.value = j.passed === true;
@@ -213,6 +230,10 @@ export function useCheckpointFlow(
       checkpointPassed.value = r.passed === true;
       // 后端把整段导师回复放在 feedback（答错时即纠正正文），需要留足阅读时间
       checkpointFeedback.value = r.feedback || (r.passed ? '回答正确' : r.hint || '再想想');
+      // 作答气泡先入流、讲解随后（与刷新后历史的顺序一致）
+      if (session.value === sessionAtSubmit) {
+        lastAnswerEcho.value = { checkpointId, text: answerEcho };
+      }
       // F-W：完整导师回复挂起，待卡片关闭时由页面补进聊天流（仅成功路径；降级提示文案不入流）
       if (r.feedback && session.value === sessionAtSubmit) {
         lastSettledReply.value = { checkpointId, text: String(r.feedback) };
@@ -290,7 +311,7 @@ export function useCheckpointFlow(
 
   return {
     checkpoint, selectedOptions, answerText, checkpointFeedback, checkpointPassed,
-    checkpointPending, checkpointSubmitting, checkpointStreaming, lastSettledReply,
+    checkpointPending, checkpointSubmitting, checkpointStreaming, lastSettledReply, lastAnswerEcho,
     toggleOption, dismissCheckpoint, submitCheckpoint, skipCheckpoint, disposeCheckpoint
   };
 }

@@ -111,6 +111,12 @@ export interface MessageResult {
     levelScore: number;
     understanding: string;
     confusionPoints: string[];
+    /**
+     * 困惑点是否有原话证据支撑（2026-11-01）：true 才渲染「发现卡点」chip。
+     * confusionPoints 是软通道（模型可自由给出、无证据要求，实测过半回合都有）；
+     * 学生可见结论只认硬口径（misconceptions 的 evidence 必须逐字定位到学生原话）。
+     */
+    confusionEvidenced?: boolean;
     engagement: string;
     emotionalState: string;
     loadIndex?: number;
@@ -891,6 +897,13 @@ export const aiTeachingAPI = {
       onJudgement?: (judgement: { passed: boolean; judgedBy: string; detail: string | null }) => void;
       onDelta?: (text: string) => void;
       onRestart?: () => void;
+      /**
+       * 传输层活动（含 `: hb` 心跳注释行）。2026-10-31 用户走查 P0-2：讲解回合在 final 前
+       * 可以整段无字节，页面 90s 停滞看门狗此前只被 onDelta 喂，于是「答对 → 讲解」正好在
+       * 90s 处被自家 abort 掐断，卡片停在「回答正确，可继续」，讲解要刷新才出现。
+       * 与 streamSendMessage / streamContinue 对齐：心跳也算进展。
+       */
+      onActivity?: () => void;
       signal?: AbortSignal;
       idempotencyKey?: string;
     } = {}
@@ -908,6 +921,8 @@ export const aiTeachingAPI = {
           // 同 streamSendMessage：讲解回合 final 前可整段无字节，60s 默认会误杀慢回合
           headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey(`cp-${checkpointId}`) },
           idleTimeoutMs: 120_000,
+          // 心跳注释行喂上层停滞看门狗（后端每 15s 一条 `: hb`，见 ai-teaching.routes.ts startSseHeartbeat）
+          onActivity: handlers.onActivity,
           onEvent: (event, data) => {
             if (event === 'judgement') {
               receivedAnything = true;

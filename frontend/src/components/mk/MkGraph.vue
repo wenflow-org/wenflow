@@ -307,7 +307,7 @@ function buildOption(): EChartsCoreOption {
         return [
           `<b>${escapeHtml(node.label)}</b>`,
           `${node.level === 'concept' ? '核心概念' : '知识组件'}`,
-          `掌握度：${mastery}${node.stability ? ` · ${node.stability}` : ''}`,
+          `掌握度：${mastery}`,
           `提取次数：${node.extractionCount ?? 0}`
         ].join('<br/>')
       }

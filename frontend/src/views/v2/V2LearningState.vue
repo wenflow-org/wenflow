@@ -567,9 +567,14 @@ function toneOf(key: MetricKey, v: number, mature?: boolean): { tone: string; co
     return { tone: 'amber', color: 'var(--amber-ink)', note: '需要休息' };
   }
   if (key === 'ktl') {
-    if (v > 0) return { tone: 'purple', color: 'var(--accent)', note: '上升' };
-    if (v === 0) return { tone: 'blue', color: 'var(--blue-deep)', note: '持平' };
-    return { tone: 'amber', color: 'var(--amber-ink)', note: '下降' };
+    /* KTL 是负荷**水平值**（高=压力累积久），不是趋势。此前用 v 的符号判「上升/持平/下降」：
+       只有一天数据也显示「上升」，与后端「长期负荷仍在积累，暂不评估负荷趋势」正好相反；
+       而 KTL 恒非负（learning-state.service 里已 clamp 到 0..10），「下降」是死分支。
+       分档与 utils/learnerMetrics.loadTone 同源：≥7 偏高 / ≤4 较低 / 其间适中，0 与未成熟都算积累中。 */
+    if (mature === false || !v) return { tone: 'blue', color: 'var(--blue-deep)', note: '积累中' };
+    if (v >= 7) return { tone: 'amber', color: 'var(--amber-ink)', note: '偏高' };
+    if (v <= 4) return { tone: 'green', color: 'var(--green-ink)', note: '较低' };
+    return { tone: 'blue', color: 'var(--blue-deep)', note: '适中' };
   }
   // lss / lf 越低越好；分档对齐后端 LearningMetricService 建议阈值
   // （lss ≤50 无提示/50-75「压力适中」/>75「压力过大」；lf >60 才提示「疲劳度较高」）——
@@ -1104,7 +1109,19 @@ function setRange(r: 42 | 90) {
 const guidance = ref<Record<string, any> | null>(null);
 
 const router = useRouter();
-const skillCopy = computed(() => guidance.value?.copy || null);
+/* 模型偶尔自带字段说明前缀（「下一步最值得做：…」「节奏保持稳定：…」），模板又加了一次标签，
+   于是渲染成「下一步：下一步最值得做：」（2026-10-31 走查 P1-9）。统一在这里剥掉前缀，
+   前端标签才是唯一口径；兜底文案本身不带前缀，剥不到也无副作用。 */
+const stripCopyLabel = (text: unknown, pattern: RegExp): string => String(text ?? '').replace(pattern, '').trim();
+const skillCopy = computed<Record<string, any> | null>(() => {
+  const copy = guidance.value?.copy as Record<string, any> | null | undefined;
+  if (!copy) return null;
+  return {
+    ...copy,
+    nextStep: stripCopyLabel(copy.nextStep, /^(?:下一步最值得做|下一步)\s*[：:]\s*/),
+    paceHint: stripCopyLabel(copy.paceHint, /^(?:节奏保持稳定|节奏保持|节奏正常|节奏)\s*[：:]\s*/),
+  };
+});
 
 /* ---------- 状态评审诊断（diagnosis 层，Slice 2c） ---------- */
 const reviewDiagnosis = computed(() => guidance.value?.review?.diagnosis || null);

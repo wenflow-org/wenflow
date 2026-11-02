@@ -440,6 +440,54 @@ function enforceSingleQuestionForUnderstanding(text: string, stage: 'understandi
   return normalizedLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/**
+ * 快选里的「确认/放行」语义（2026-10-31 用户走查）。
+ *
+ * 为什么在 proposing 阶段剔掉：界面在 proposing 已有一处显式确认入口
+ * （`V2GoalConversation.vue` 的 `.proposal-invite` 条 → 方案卡内确认），那里写明
+ * 「确认动作仍只发生在卡内」。快选再给一条「就按这个方向来」= 同屏两个并列的确认动作，
+ * 用户不知道点哪个（用户原话：「又有快选，又有确认方案，到底让用户干什么」）。
+ *
+ * 而且那条快选点下去**并不会确认**：前端 `isProposalConfirmText` / 后端
+ * `isProposalConfirmationText` 都是"整段等于确认短语"的白名单，认的是「就按这个走」「按这个来」，
+ * 不认「就按这个方向来」——照原样发出去只是普通回复，模型自报 ready 又被强制回落 proposing，
+ * 用户看到的是点了没反应。
+ *
+ * 判据取实测语料（prompt_call_logs 里 136 个 proposing 回合的快选原文）：
+ * 确认项都以「就按这个…/方向对…/可以，就按…」这类确认意图开头，调整项则不带；
+ * 宁可多剔（少一个可点的调整捷径，用户仍可打字）也不漏剔（漏剔＝原样复现用户报的那个状态）。
+ */
+const PROPOSAL_CONFIRM_CHIP_PATTERN =
+  /(就按|直接按|按)(这个|这版|这样|此方案|这个方案|你的|你说的|你建议的)|^(确认|确定|同意|可以|行|好的?|没问题|就这(么|样)|生成|开始吧)|方向(对|没错|可以)|(^|[，,、\s])确认([，,、\s]|$)/;
+
+/** 该快选是否在表达「确认/放行方案」 */
+export function isProposalConfirmChip(text: string): boolean {
+  return PROPOSAL_CONFIRM_CHIP_PATTERN.test(String(text ?? '').trim());
+}
+
+/**
+ * proposing 阶段的快选归一化：剔除确认语义项，且**不再凭空补齐**。
+ *
+ * 历史行为：模型没给快选时补一对 `[确认，生成学习路径][需要调整]`（旧实现），
+ * 于是实测 136/136 个 proposing 回合都带着快选，与确认条同屏。
+ * 现在 proposing 的快选只承担「调整方向」，确认由界面确认条唯一承担；
+ * 剔空＝整行不渲染，页面只剩一个下一步。
+ *
+ * 只做归一化、不判 invalid：这不是格式错误，不该让整轮重试
+ * （goal 回合重试成本高，且连续失败会以 422 掉到用户脸上）。
+ */
+export function normalizeProposingQuickReplies(quickReplies: QuickReply[], stage: string): QuickReply[] {
+  if (stage !== 'proposing') return quickReplies;
+  const dropped = quickReplies.filter((item) => isProposalConfirmChip(item.text));
+  if (!dropped.length) return quickReplies;
+  logger.warn('[skill:goal-conversation] proposing 剔除确认类快选（确认动作归界面确认条）', {
+    droppedCount: dropped.length,
+    droppedTexts: dropped.map((item) => item.text),
+    keptCount: quickReplies.length - dropped.length,
+  });
+  return quickReplies.filter((item) => !isProposalConfirmChip(item.text));
+}
+
 function inferQuickRepliesFromList(content: string): QuickReply[] {
   const listItems = content.match(/(?:^|\n)\s*(?:\d+[.、]|[•-])\s*(.+?)(?=\n|$)/g);
   if (!listItems || listItems.length < 2 || listItems.length > 5) return [];
@@ -874,12 +922,7 @@ export function parseGoalConversationResponse(
     nextQuestions = nextQuestions.slice(0, 1);
   }
 
-  if (!quickReplies.length && stage === 'proposing') {
-    quickReplies = [
-      { text: '确认，生成学习路径' },
-      { text: '需要调整' }
-    ];
-  }
+  quickReplies = normalizeProposingQuickReplies(quickReplies, stage);
 
   const parsed: GoalConversationAgentResult = {
     userVisible: dialogueText,

@@ -209,7 +209,7 @@
               <!-- 字段分区（2026-09-27）：概览条带 + 关系分区（发丝线分隔）；掌握度/提取次数已由上方 bar 承载 -->
               <dl class="mk-ge__kv">
                 <div class="mk-ge__cell"><dt>层级</dt><dd>{{ selected.level === 'concept' ? '核心概念' : '知识组件' }}</dd></div>
-                <div class="mk-ge__cell"><dt>稳定性</dt><dd>{{ selected.stability || '—' }}</dd></div>
+                <div class="mk-ge__cell"><dt>稳定性</dt><dd>{{ STABILITY_LABEL[String(selected.stability ?? '')] || '—' }}</dd></div>
                 <!-- 概念台账事实（2026-10-20 从概览「概念掌握」卡的逐概念明细搬来）：
                      可迁移 / 误解风险 / 证据条数原本在概览卡里按概念平铺一遍，与这里的
                      记忆强度、提取练习是同一个概念的两种读数；合并到节点详情后
@@ -747,6 +747,15 @@ function statusKeyOf(node: MkGraphNode | null): StatusKey {
   if (node.stability === 'fragile' || node.masteryScore < 0.45) return 'fragile'
   if (node.stability === 'stable' || node.masteryScore >= 0.8) return 'stable'
   return 'learning'
+}
+
+/** 记忆强度枚举（后端 MemoryStability: unknown|fragile|developing|stable）→ 用户可读。
+    2026-10-31 走查 P1-8：此前把 developing 原样渲染成英文小写，和旁边的中文「知识组件」并排。 */
+const STABILITY_LABEL: Record<string, string> = {
+  stable: '稳固',
+  developing: '形成中',
+  fragile: '较弱',
+  unknown: '尚未形成',
 }
 
 /* 统计口径 = 画布可见节点（2026-10-31 外部评审 P2-4）：此前按全部概念计数，而孤立概念被

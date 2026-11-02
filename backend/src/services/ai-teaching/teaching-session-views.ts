@@ -1,4 +1,22 @@
 /**
+ * 回合分析投影（路由出参用）。软/硬困惑口径分开给（2026-11-01）：
+ * `confusionPoints` 是全量软通道（遥测/复盘用）；`confusionEvidenced` 是有原话证据的硬口径，
+ * 学生可见的「发现卡点」chip 只认后者。放这里而不是留在路由里，是因为 ai-teaching 路由已超过
+ * 分层棘轮的行数上限（只许缩短）。
+ */
+export function buildTurnAnalysisView(analysis: Record<string, any>) {
+  return {
+    cognitiveLevel: analysis.cognitiveLevel ?? null,
+    levelScore: analysis.levelScore ?? null,
+    understanding: analysis.understanding ?? null,
+    confusionPoints: analysis.confusionPoints ?? [],
+    confusionEvidenced: countEvidencedConfusions(analysis) > 0,
+    engagement: analysis.engagement ?? null,
+    emotionalState: analysis.emotionalState ?? null,
+  };
+}
+
+/**
  * 教学会话视图与证据纯函数域（架构审计 §5 行动 #2：AITeachingCoordinator 按领域拆分）
  *
  * 职责：有效时长计算（终态取 duration，活跃按流逝分钟）、开场恢复/确定性兜底、
@@ -9,6 +27,7 @@
  */
 import prisma from '../../config/database';
 import { detectAwaitingLearnerWork } from '../../config/pedagogy.config';
+import { countEvidencedConfusions, resolveUnderstandingReading } from './checkpoint-shared';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { cloneKnowledgePoints } from './teaching-knowledge-state';
 import { parseSessionArtifacts } from './checkpoint-shared';
@@ -276,8 +295,8 @@ export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排
   const analyzedMessages = session.messages.filter((message) => !!message.analysis && !message.checkpoint);
   const avg = (values: number[]) => values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   const understandingScores = analyzedMessages
-    .map((message) => Number(message.analysis?.understanding))
-    .filter((value) => Number.isFinite(value));
+    .map((message) => resolveUnderstandingReading(message.analysis?.understanding))
+    .filter((value): value is number => value !== null);
   const engagementScores = analyzedMessages
     .map((message) => Number(message.analysis?.engagement))
     .filter((value) => Number.isFinite(value));

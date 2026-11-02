@@ -23,6 +23,8 @@ import {
 } from '@/api/goalConversation';
 import { useInteractionMeta, type InteractionMeta } from '@/composables/useInteractionMeta';
 import { buildProbeAnswerText } from './probeAnswer';
+// 气泡时间标签单一实现（nowTime / formatMsgTime 同源），见 learningChat.ts 注释
+import { nowTime, formatMsgTime } from './learningChat';
 
 export interface LiveMessage {
   role: 'user' | 'ai';
@@ -83,21 +85,7 @@ function toList(input: unknown): string[] {
   return out;
 }
 
-function nowTime(): string {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-function formatMsgTime(raw?: string): string {
-  if (!raw) return nowTime();
-  // 后端可能回 ISO；统一成 HH:mm
-  const d = new Date(raw);
-  if (!Number.isNaN(d.getTime()) && (raw.includes('T') || raw.includes('-'))) {
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  }
-  if (/^\d{1,2}:\d{2}/.test(raw)) return raw.slice(0, 5);
-  return raw;
-}
+/* 时间标签实现已统一到 learningChat.ts（nowTime / formatMsgTime），此处不再保留副本。 */
 
 const conversationId = ref('');
 const messages = ref<LiveMessage[]>([]);

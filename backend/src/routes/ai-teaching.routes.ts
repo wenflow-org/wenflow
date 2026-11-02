@@ -21,6 +21,7 @@ import {
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { startWrapupRegeneration } from '../services/ai-teaching/teaching-wrapup-regen';
 import { listSessionEvents, type SessionEventKind } from '../services/ai-teaching/session-events.service';
+import { buildTurnAnalysisView } from '../services/ai-teaching/teaching-session-views';
 import { reviewPlanService } from '../services/memory/review-plan.service';
 import { learnerExitService } from '../services/learner/LearnerExitService';
 import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
@@ -432,14 +433,7 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
   }
   return {
     aiResponse: result.aiResponse,
-    analysis: {
-      cognitiveLevel: analysis.cognitiveLevel ?? null,
-      levelScore: analysis.levelScore ?? null,
-      understanding: analysis.understanding ?? null,
-      confusionPoints: analysis.confusionPoints ?? [],
-      engagement: analysis.engagement ?? null,
-      emotionalState: analysis.emotionalState ?? null,
-    },
+    analysis: buildTurnAnalysisView(analysis),
     state: {
       // 0-10 内部尺度 → 0-100 展示尺度（与 /api/state/current 一致）
       lss: Math.round((result.currentState?.lss ?? 0) * 10),

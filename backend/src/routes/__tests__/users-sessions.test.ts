@@ -34,6 +34,12 @@ jest.mock('../../services/learner/LearnerSnapshotRefreshService', () => ({
   learnerSnapshotRefreshService: { refresh: jest.fn() },
 }));
 
+/** 旁表消息水合（时长同源修复 2026-10-31）：默认无消息，按用例覆写 */
+const mockLoadMessages = jest.fn(async (_ids: string[]) => new Map<string, unknown>());
+jest.mock('../../services/ai-teaching/teaching-session-message-store', () => ({
+  loadTeachingMessagesForIds: (ids: string[]) => mockLoadMessages(ids),
+}));
+
 import '../users';
 
 function createResponse() {
@@ -104,5 +110,49 @@ describe('GET /me/sessions（学习历史：分页 + 内部会话过滤）', () 
     const items = (res.body as any).data as Array<{ id: string; durationMinutes: number }>;
     expect(items.find((i) => i.id === 's1')?.durationMinutes).toBe(30); // 17 天 → 封顶 30
     expect(items.find((i) => i.id === 's2')?.durationMinutes).toBe(42); // 有 duration 列则优先
+  });
+
+  it('无 duration 的会话先补旁表消息再算时长，且有 duration 的会话不触发水合', async () => {
+    // 事故：暂停会话在列表侧算 0 分钟、/learning/stats 侧水合后算 9 分钟，
+    // 同一页出现「累计 63 分钟」与「本月 54 分钟」两个总数（2026-10-31 复验）。
+    teachingSessionMocks.findMany.mockResolvedValue([
+      {
+        id: 'p1',
+        userId: 'user-1',
+        status: 'paused',
+        duration: null,
+        startTime: new Date('2026-11-01T03:36:09Z'),
+        endTime: null,
+        messages: null,
+        teachingState: null,
+        taskId: null,
+      },
+    ]);
+    teachingSessionMocks.count.mockResolvedValue(1);
+    mockLoadMessages.mockResolvedValue(new Map());
+
+    const res = await callSessions({});
+    expect(mockLoadMessages).toHaveBeenCalledWith(['p1']);
+    // 旁表也没有消息 → 仍按「无学习证据 = 0」，不许猜
+    expect(((res.body as any).data as Array<{ durationMinutes: number }>)[0].durationMinutes).toBe(0);
+
+    // 有 duration 的会话直接走列值，不做多余查询
+    mockLoadMessages.mockClear();
+    teachingSessionMocks.findMany.mockResolvedValue([
+      {
+        id: 's9',
+        userId: 'user-1',
+        status: 'completed',
+        duration: 42,
+        startTime: new Date('2026-11-01T03:36:09Z'),
+        endTime: new Date('2026-11-01T04:18:09Z'),
+        messages: null,
+        teachingState: null,
+        taskId: null,
+      },
+    ]);
+    const res2 = await callSessions({});
+    expect(mockLoadMessages).not.toHaveBeenCalled();
+    expect(((res2.body as any).data as Array<{ durationMinutes: number }>)[0].durationMinutes).toBe(42);
   });
 });

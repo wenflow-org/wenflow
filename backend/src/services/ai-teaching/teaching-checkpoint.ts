@@ -22,6 +22,7 @@ import {
   checkpointRhythmMinTurns,
   normalizeForKeywordMatch,
   parseSessionArtifacts,
+  resolveUnderstandingReading,
   type CheckpointConceptAttribution,
 } from './checkpoint-shared';
 
@@ -97,12 +98,15 @@ export function shouldEmitCheckpoint(
   const stage = String(teachingState?.classroomContext?.stage?.current ?? '');
   if (stage === 'wrapup') return false;
   const lastAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
-  const understanding = Number(lastAnalysis?.understanding);
-  // 无理解度读数不出题（没有可依据的观测；沿用旧行为）
-  if (!Number.isFinite(understanding)) return false;
+  // 一条可依据的观测都没有（还没产生过 analysis）→ 不出题（沿用旧行为）。
+  if (!lastAnalysis) return false;
+  // 有 analysis 但理解度读数为空 = 本轮**不可观测**（2026-11-01 修复）：不再等于「理解度低」，
+  // 因此**不加速**出题节奏（checkpointRhythmMinTurns(null) 回常规 4 条），也**不否决**出题——
+  // 「测不出来就不测」与拍板 #10 否掉的 0.6 硬闸是同一类测量盲区。
+  const understanding = resolveUnderstandingReading(lastAnalysis.understanding);
   // 出题时机与自评解耦（拍板 #10，2026-10-08）：理解度只调节奏、不再否决出题——
   // <0.6 缩到 2 条消息优先探测（恰是此前 0.6 硬闸造成 0.71% vs 52.3% 候选率差的盲区），
-  // ≥0.6 维持 4 条消息常规节奏。
+  // ≥0.6 与无读数均维持 4 条消息常规节奏。
   const lastTurn = Number(teachingState?.lastCheckpointTurn);
   if (Number.isFinite(lastTurn)
     && session.messages.length - lastTurn < checkpointRhythmMinTurns(understanding)) return false;

@@ -21,6 +21,8 @@ import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapsh
 import { getLevelFromXp } from '../services/learner/level.util';
 import { normalizeSessionDurationMinutes } from '../services/learning/learning.helpers';
 import { listAgentManifest } from '../services/agent-manifest.service';
+import { parseDayKeyRange } from '../services/time/day-boundary';
+import { loadTeachingMessagesForIds } from '../services/ai-teaching/teaching-session-message-store';
 
 // 与 auth.service 等价的假哈希：密码比对失败时保持恒定时间，防时序探测
 const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtBNBD6VSlBa5T4nwkdG';
@@ -74,14 +76,15 @@ function buildAgentLogWhere(userId: string, query: any) {
   }
 
   if (startDate || endDate) {
+    // 日期键按应用时区本地日解析（P0-3：此前 startDate 走 UTC 零点、endDate 走机器本地 23:59:59，
+    // 起止口径不对称，UTC+8 用户 00:00–08:00 的记录会被整段漏掉）
+    const range = parseDayKeyRange(startDate, endDate);
     where.calledAt = {};
-    if (startDate) {
-      where.calledAt.gte = new Date(startDate);
+    if (range.from) {
+      where.calledAt.gte = range.from;
     }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      where.calledAt.lte = end;
+    if (range.to) {
+      where.calledAt.lte = range.to;
     }
   }
 
@@ -297,17 +300,17 @@ router.get('/me/sessions', async (req, res, next) => {
       where.status = { notIn: ['superseded'] };
     }
     
-    // 添加日期范围过滤
+    // 日期范围过滤：日期键按应用时区本地日解析（2026-10-31 走查 P0-3——
+    // 此前 startDate 解析成 UTC 零点（本地 08:00）、endDate 用机器本地 23:59:59，
+    // 导致「今天 54 分钟」与「本月 0 分钟」同页并存、月历一格不上色）
     if (startDate || endDate) {
+      const range = parseDayKeyRange(startDate, endDate);
       where.startTime = {};
-      if (startDate) {
-        where.startTime.gte = new Date(startDate);
+      if (range.from) {
+        where.startTime.gte = range.from;
       }
-      if (endDate) {
-        // 设置为当天的最后一秒
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.startTime.lte = end;
+      if (range.to) {
+        where.startTime.lte = range.to;
       }
     }
 
@@ -328,7 +331,18 @@ router.get('/me/sessions', async (req, res, next) => {
 
     const taskMap = new Map(tasks.map((task) => [task.id, task]));
 
-    const enrichedSessions = sessions.map((session) => {
+    /* 时长同源（2026-10-31 复验）：无 duration 的会话（暂停/中止）此前在列表侧算 0 分钟，
+       而 /learning/stats 侧会先水合旁表消息再估出真实分钟——同一节课两处不同
+       （页头「累计 63 分钟」/ 本月卡「54 分钟」/ 列表那条显示「—」）。列表侧补同一份水合。 */
+    const needMessages = sessions
+      .filter((session) => !(Number(session.duration) > 0) && !session.messages)
+      .map((session) => session.id);
+    const messagesById = needMessages.length ? await loadTeachingMessagesForIds(needMessages) : null;
+    const durationSessions = messagesById
+      ? sessions.map((session) => (messagesById.has(session.id) ? { ...session, messages: messagesById.get(session.id) ?? session.messages } : session))
+      : sessions;
+
+    const enrichedSessions = durationSessions.map((session) => {
       const task = session.taskId ? taskMap.get(session.taskId) : null;
       let parsedState: any = null;
 

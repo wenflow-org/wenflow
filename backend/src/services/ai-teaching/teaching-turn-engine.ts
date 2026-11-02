@@ -20,7 +20,7 @@ import { fenceLearnerMessagesForModel } from './input-fence';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions, rerouteMisconceptionConceptKey } from '../learner/misconception-ledger.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
-import { CHECKPOINT_MAX_ATTEMPTS, checkpointRhythmMinTurns, parseSessionArtifacts, resolveCheckpointConceptAttribution } from './checkpoint-shared';
+import { CHECKPOINT_MAX_ATTEMPTS, checkpointRhythmMinTurns, parseSessionArtifacts, resolveCheckpointConceptAttribution, resolveUnderstandingReading } from './checkpoint-shared';
 import { shouldDeferCompletionForClosure } from './teaching-closure';
 import {
   promoteSupplementSlot,
@@ -77,6 +77,7 @@ import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENIN
 import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, maskFigureForQuestion, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
+import { emitEarlyReplyDelta } from './teaching-stream-emit';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
 import type { TeachingSessionMessage } from './TeachingSessionRepository';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
@@ -805,6 +806,8 @@ export async function processStudentMessage(
       isCompletionCandidate: completionReady,
     },
   };
+  // 正文已定稿（护栏与收束判定都过了）：先把这句话发给用户，别让他等后面的伴学与板书。
+  emitEarlyReplyDelta(effectiveTeachingOutput.reply);
   const previousClassroomStage = (previousTeachingState.classroomContext?.stage?.current as LearnStage) || 'opening';
   // 恢复续讲首回合不触发伴学（无学生新输入，伴学模拟"同学插话"无意义）
   const peerTriggered = !isResumeContinue && peerTriggerService.shouldTrigger(session, teachingOutput, message);
@@ -1523,10 +1526,12 @@ export async function processStudentMessage(
       applyCheckpointQuestionVisibility(checkpointCandidate.question);
     }
 
-    let checkpointResolution: { passed: boolean; understanding: number; judgedBy: 'code' | 'model-reference' } | undefined;
+    let checkpointResolution: { passed: boolean; understanding: number | null; judgedBy: 'code' | 'model-reference' } | undefined;
     if (submittedCheckpoint) {
       const rawUnderstanding = teachingOutput.analysis?.understanding;
-      const understanding = Number(rawUnderstanding ?? 0);
+      // 无读数记 null，不记 0（2026-11-01）：`Number(null ?? 0)` 会把「不可观测」写成「理解度 0」，
+      // 与 checkpoint-shared 的出题节奏/伴学触发是同一处语义混淆。
+      const understanding = resolveUnderstandingReading(rawUnderstanding);
       const currentPoint = effectiveTeachingOutput.knowledge.currentPoint?.trim().toLowerCase();
       const modelDerivedPassed = completionReady || !!currentPoint && mergedKnowledge.some(
         (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'

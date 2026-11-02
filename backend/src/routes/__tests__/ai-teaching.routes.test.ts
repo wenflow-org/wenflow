@@ -283,6 +283,8 @@ describe('ai-teaching routes', () => {
           levelScore: 4,
           understanding: 0.81,
           confusionPoints: ['条件类型'],
+          // 软通道有困惑点、但台账里没有原话证据 → 学生可见 chip 不显示（2026-11-01 硬口径）
+          confusionEvidenced: false,
           engagement: 0.93,
           emotionalState: 'focused',
         },

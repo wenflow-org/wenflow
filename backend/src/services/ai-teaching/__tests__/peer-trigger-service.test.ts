@@ -174,3 +174,36 @@ describe('PeerTriggerService：等待作答态让路（P1-14 修复②）', () =
     expect(detectAwaitingLearnerWork(null).awaiting).toBe(false);
   });
 });
+
+/**
+ * 2026-11-01 追加（「不可观测 ≠ 低理解度」走查修复）：
+ * 低理解度窗口原先用 `item.understanding || 0` 与裸 `<` 比较——**无读数（null）被当成 0**，
+ * 于是「这轮模型看不到学生状态」反而成了「理解度很低，快插话」。锁住：null 不触发、
+ * 真低读数仍触发。
+ */
+describe('PeerTriggerService · 低理解度窗口（不可观测不触发）', () => {
+  const lowWindowSession = (understanding: unknown) => sessionWith([
+    { role: 'assistant', content: '老师讲解一', analysis: { understanding } },
+    { role: 'user', content: '学生回应一' },
+    { role: 'assistant', content: '老师讲解二', analysis: { understanding } },
+    { role: 'user', content: '学生回应二' },
+  ]);
+
+  it('无读数（null）连续两轮 → 不触发（旧实现按 0 计，会触发）', () => {
+    const session = lowWindowSession(null);
+    const out = output({ analysis: { understanding: null, cognitiveLevel: 'understand' } });
+    expect(service.shouldTrigger(session, out, '接着说')).toBe(false);
+  });
+
+  it('真的有低读数 → 仍触发（特性未被削弱）', () => {
+    const session = lowWindowSession(0.2);
+    const out = output({ analysis: { understanding: 0.25, cognitiveLevel: 'understand' } });
+    expect(service.shouldTrigger(session, out, '接着说')).toBe(true);
+  });
+
+  it('历史无读数但本轮有低读数 → 不触发（历史不可观测不参与均值）', () => {
+    const session = lowWindowSession(null);
+    const out = output({ analysis: { understanding: 0.1, cognitiveLevel: 'understand' } });
+    expect(service.shouldTrigger(session, out, '接着说')).toBe(false);
+  });
+});
