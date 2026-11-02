@@ -1002,9 +1002,12 @@ class PathCoordinator {
         skillLevel,
         currentSkillLevel: skillLevel,
         timePerDay: availableTime,
-        structuredData: input.structuredData || null,
+        // structuredData/confidenceScores 的 routings 声明 handoff:[path]（goal-agent 行），
+        // 配置式交接取用优先、旧直连字段回退——与同函数内 needsMaterial 同款取用顺序。
+        // 此前这两行只读直连字段，声明为交接的 handoff 值无人消费（审计 #178）。
+        structuredData: (goalFinalPayload.goalHandoffFields as any)?.['structuredData'] ?? input.structuredData ?? null,
         confirmedProposal: config.normalizedInput.includeConfirmedProposal ? input.visibleSummary?.confirmedProposal || null : null,
-        confidenceScores: input.confidenceScores ?? null,
+        confidenceScores: (goalFinalPayload.goalHandoffFields as any)?.['confidenceScores'] ?? input.confidenceScores ?? null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],
         normalizedInput: framedNormalizedInput,
         goalFinalPayload: {

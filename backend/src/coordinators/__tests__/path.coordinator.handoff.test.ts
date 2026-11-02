@@ -268,4 +268,32 @@ describe('path.coordinator normalizedInputV1 配置式装配', () => {
 
     expect(result.userProfile.confidenceScores).toEqual({ overall: 0.86, surfaceGoal: 0.9 })
   })
+
+  // 回归（审计 #178）：structuredData/confidenceScores 的 routings 声明 handoff:[path]，
+  // 但 userProfile 此前只读直连字段，声明的 handoff 值无人消费（配置式交接空转）。
+  it('goalHandoffFields 的 structuredData/confidenceScores 被 userProfile 消费（优先于直连字段，缺失时回退）', async () => {
+    const viaHandoff = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+      structuredData: { learner: { identity: '直连旧值' } },
+      confidenceScores: { overall: 0.1 },
+      goalHandoffFields: {
+        structuredData: { learner: { identity: '交接新值' } },
+        confidenceScores: { overall: 0.9 },
+      },
+    } as any)
+
+    expect(viaHandoff.userProfile.structuredData).toEqual({ learner: { identity: '交接新值' } })
+    expect(viaHandoff.userProfile.confidenceScores).toEqual({ overall: 0.9 })
+
+    // handoff 缺失时回退直连字段（行为不回归）
+    const withoutHandoff = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想学会向上汇报',
+      visibleSummary: VISIBLE_SUMMARY,
+      structuredData: { learner: { identity: '直连旧值' } },
+    } as any)
+    expect(withoutHandoff.userProfile.structuredData).toEqual({ learner: { identity: '直连旧值' } })
+  })
 })

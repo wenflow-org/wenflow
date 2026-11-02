@@ -122,12 +122,14 @@ export async function bindGeneratingPath(
       ext: {
         goalConversation: {
           understanding: input.data.understanding || {},
-          // 交接声明（prompts/orchestration/goal.yaml 的 pathInRawOutput）把以下三个键当作
-          // skill 原始输出里的物理位置；seed 是确认链路里 skill 输出的替代品，缺了它们
-          // assembleGoalHandoff 的对应行恒 skip，「配置式交接」退化为 visibleSummary 硬编码投影。
+          // 交接声明（prompts/orchestration/goal.yaml 的 pathInRawOutput）把以下键当作
+          // skill 原始输出里的物理位置；seed 是确认链路里 skill 输出的替代品。
           confirmedProposal: input.data.confirmedProposal ?? null,
-          structuredData: input.data.structuredData ?? null,
-          confidenceScores: input.data.confidenceScores ?? null,
+          // structuredData/confidenceScores 只在确有值时落键：写成 `?? null` 会把「skill 没产出
+          // 该字段」伪装成「产出为 null」，assembleGoalHandoff 的 skip 诊断（goal-conversation
+          // .service 的 warn）随之静默——缺值就照实报缺，由消费方回退旧的直连字段。
+          ...(input.data.structuredData != null ? { structuredData: input.data.structuredData } : {}),
+          ...(input.data.confidenceScores != null ? { confidenceScores: input.data.confidenceScores } : {}),
           nextQuestions: [],
           collected: input.data.collected || {}
         }
