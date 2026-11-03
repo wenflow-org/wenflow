@@ -19,8 +19,8 @@
         "skill:goal-conversation",
         "goal-agent"
       ],
-      "fieldCount": 49,
-      "routingCount": 79,
+      "fieldCount": 48,
+      "routingCount": 78,
       "codeEntry": [
         {
           "label": "真实用户 Goal 对话（多轮状态机）",
@@ -93,7 +93,7 @@
           ],
           "identity": "学习目标澄清与方向收敛助手，通过自然对话澄清学习目标，信息足够时收敛到第一版学习方向。",
           "inputs": 3,
-          "outputs": 10,
+          "outputs": 8,
           "params": {
             "temperature": 0.7,
             "maxTokens": 64000,
@@ -130,8 +130,8 @@
         "skill:kc-mapper",
         "path-agent"
       ],
-      "fieldCount": 48,
-      "routingCount": 54,
+      "fieldCount": 47,
+      "routingCount": 53,
       "codeEntry": [
         {
           "label": "路径生成主链（path-planning → stage-designer）",
@@ -325,7 +325,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 53,
+          "ruleCount": 54,
           "constraintCount": 1,
           "conditionalRuleCount": 2,
           "phases": [
@@ -391,7 +391,7 @@
           ],
           "identity": "对给定的认知核心（cognitiveCore）与任务列表（subtasks）做机器可读的结构标注：",
           "inputs": 4,
-          "outputs": 4,
+          "outputs": 3,
           "params": {
             "temperature": 0.3,
             "maxTokens": 64000,
@@ -401,7 +401,7 @@
           "artifactKind": "extraction",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 14,
+          "ruleCount": 15,
           "constraintCount": 11,
           "conditionalRuleCount": 0,
           "phases": [
@@ -424,8 +424,8 @@
         "skill:session-wrapup",
         "teaching-agent"
       ],
-      "fieldCount": 48,
-      "routingCount": 58,
+      "fieldCount": 47,
+      "routingCount": 57,
       "codeEntry": [
         {
           "label": "教学会话状态机（开课/回合/收束）",
@@ -629,8 +629,8 @@
           "artifactKind": "conversation",
           "interactionMode": "turn",
           "contractFields": 16,
-          "ruleCount": 83,
-          "constraintCount": 14,
+          "ruleCount": 84,
+          "constraintCount": 15,
           "conditionalRuleCount": 14,
           "phases": [
             "turn-generated",
@@ -700,7 +700,7 @@
             "path"
           ],
           "identity": "一位课后产出助手。请基于本节课的结构化证据生成课后总结与评估。",
-          "inputs": 5,
+          "inputs": 7,
           "outputs": 2,
           "params": {
             "temperature": 0.7,
@@ -740,7 +740,7 @@
             "dialogue"
           ],
           "identity": "课堂开场交互生成器。基于课堂场景、当前阶段与学习者状态，为一个教学 Session 生成短、低门槛、可直接渲染的开场交互块。",
-          "inputs": 6,
+          "inputs": 7,
           "outputs": 4,
           "params": {
             "temperature": 0.4,
@@ -751,7 +751,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 18,
+          "ruleCount": 19,
           "constraintCount": 3,
           "conditionalRuleCount": 0,
           "phases": [
@@ -943,7 +943,7 @@
           "artifactKind": "copy",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 10,
+          "ruleCount": 9,
           "constraintCount": 2,
           "conditionalRuleCount": 0,
           "phases": [
@@ -1350,7 +1350,7 @@
           ],
           "identity": "学习目标澄清与方向收敛助手，通过自然对话澄清学习目标，信息足够时收敛到第一版学习方向。",
           "inputs": 3,
-          "outputs": 10,
+          "outputs": 8,
           "params": {
             "temperature": 0.7,
             "maxTokens": 64000,
@@ -1743,7 +1743,7 @@
       ],
       "identity": "学习目标澄清与方向收敛助手，通过自然对话澄清学习目标，信息足够时收敛到第一版学习方向。",
       "inputs": 3,
-      "outputs": 10,
+      "outputs": 8,
       "params": {
         "temperature": 0.7,
         "maxTokens": 64000,
@@ -1840,7 +1840,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 53,
+      "ruleCount": 54,
       "constraintCount": 1,
       "conditionalRuleCount": 2,
       "phases": [
@@ -1910,7 +1910,7 @@
       ],
       "identity": "对给定的认知核心（cognitiveCore）与任务列表（subtasks）做机器可读的结构标注：",
       "inputs": 4,
-      "outputs": 4,
+      "outputs": 3,
       "params": {
         "temperature": 0.3,
         "maxTokens": 64000,
@@ -1920,7 +1920,7 @@
       "artifactKind": "extraction",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 14,
+      "ruleCount": 15,
       "constraintCount": 11,
       "conditionalRuleCount": 0,
       "phases": [
@@ -1962,8 +1962,8 @@
       "artifactKind": "conversation",
       "interactionMode": "turn",
       "contractFields": 16,
-      "ruleCount": 83,
-      "constraintCount": 14,
+      "ruleCount": 84,
+      "constraintCount": 15,
       "conditionalRuleCount": 14,
       "phases": [
         "turn-generated",
@@ -2037,7 +2037,7 @@
         "path"
       ],
       "identity": "一位课后产出助手。请基于本节课的结构化证据生成课后总结与评估。",
-      "inputs": 5,
+      "inputs": 7,
       "outputs": 2,
       "params": {
         "temperature": 0.7,
@@ -2090,7 +2090,7 @@
       "artifactKind": "copy",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 10,
+      "ruleCount": 9,
       "constraintCount": 2,
       "conditionalRuleCount": 0,
       "phases": [
@@ -2790,6 +2790,34 @@
       "usedInStages": []
     },
     {
+      "skillId": "board-designer",
+      "stage": null,
+      "agentId": null,
+      "kind": "handler-only",
+      "displayName": "课堂板书设计器 Skill",
+      "description": "按本轮教学意图生成课堂白板（认知减负区）的板面 spec，经 teaching-turn 归一化后上墙",
+      "coreFile": null,
+      "manifestFile": null,
+      "hasCore": false,
+      "hasManifest": false,
+      "baseVersion": null,
+      "channels": [],
+      "identity": "",
+      "inputs": 0,
+      "outputs": 0,
+      "params": null,
+      "executionMode": null,
+      "artifactKind": null,
+      "interactionMode": null,
+      "contractFields": 0,
+      "ruleCount": 0,
+      "constraintCount": 0,
+      "conditionalRuleCount": 0,
+      "phases": [],
+      "contextMode": null,
+      "usedInStages": []
+    },
+    {
       "skillId": "teaching-opening-generator",
       "stage": null,
       "agentId": "teaching-agent",
@@ -2808,7 +2836,7 @@
         "dialogue"
       ],
       "identity": "课堂开场交互生成器。基于课堂场景、当前阶段与学习者状态，为一个教学 Session 生成短、低门槛、可直接渲染的开场交互块。",
-      "inputs": 6,
+      "inputs": 7,
       "outputs": 4,
       "params": {
         "temperature": 0.4,
@@ -2819,7 +2847,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 18,
+      "ruleCount": 19,
       "constraintCount": 3,
       "conditionalRuleCount": 0,
       "phases": [
@@ -3204,12 +3232,7 @@
       "coreFile": null
     }
   ],
-  "compiledOnlyPrompts": [
-    {
-      "skillId": "board-designer",
-      "promptFile": "prompts/skill.board-designer.md"
-    }
-  ],
+  "compiledOnlyPrompts": [],
   "skillsWithoutPrompt": [
     {
       "skillId": "learner-model",
@@ -3246,18 +3269,24 @@
       "kind": "handler-only",
       "displayName": "文生图 Skill",
       "reason": "handler-only：无 LLM 提示词，逻辑在代码 handler"
+    },
+    {
+      "skillId": "board-designer",
+      "kind": "handler-only",
+      "displayName": "课堂板书设计器 Skill",
+      "reason": "handler-only：无 LLM 提示词，逻辑在代码 handler"
     }
   ],
   "counts": {
-    "skills": 37,
+    "skills": 38,
     "byKind": {
       "mainline": 20,
-      "handler-only": 8,
+      "handler-only": 9,
       "aux": 9
     },
     "prompts": 31,
     "mainline": 20,
     "aux": 9,
-    "handlerOnly": 8
+    "handlerOnly": 9
   }
 }
