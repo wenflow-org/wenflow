@@ -110,6 +110,23 @@ describe('CompletionCard 归因注记', () => {
 });
 
 /**
+ * 摘要区排版契约（2026-11-03 排版优化）。
+ * 报告宽屏下摘要区是 4 等分格（每格 231px）：「主题」这种整句标题被压成 3 行，
+ * 而同排的「31 分钟」只占一行。修法是主题独占整行、其余读数平分下面一行。
+ * CSS 行为 jsdom 量不到，这里锁住"哪一项带整行类"这个 DOM 契约。
+ */
+describe('CompletionCard 摘要区排版', () => {
+  it('主题独占整行，其余读数不带该类（不被挤进等分格）', () => {
+    const w = mountCard(baseAdvisory);
+    const items = w.findAll('.summary-item');
+    expect(items.length).toBe(4);
+    expect(items[0].classes()).toContain('summary-item--topic');
+    expect(items[0].text()).toContain('测试主题');
+    expect(items.slice(1).some((it) => it.classes().includes('summary-item--topic'))).toBe(false);
+  });
+});
+
+/**
  * 知识点读数（2026-11-03 走查 S4-3）。
  * 实测：当堂两次小测都答对、导师说"动作你已经独立走完了"，页头却单摆「知识点 0/2 已学会」——
  * 数字没错（两条都还在 learning、进度 80/90），错在把它当结论单独呈现。

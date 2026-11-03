@@ -30,7 +30,9 @@
       </div>
 
       <div class="completion-summary">
-        <div class="summary-item"><span class="summary-label">主题</span><span class="summary-value">{{ topic }}</span></div>
+        <!-- 主题独占一行：任务标题是一整句话，和「31 分钟」这类短读数挤在同一行的等分格里
+             只会把它压成多行、并把其余格子撑出大片空白（2026-11-03 排版优化）。 -->
+        <div class="summary-item summary-item--topic"><span class="summary-label">主题</span><span class="summary-value">{{ topic }}</span></div>
         <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ knowledgeCountText }}</span></div>
         <div class="summary-item"><span class="summary-label">用时</span><span class="summary-value">{{ duration }}</span></div>
         <div class="summary-item"><span class="summary-label">学习消息</span><span class="summary-value">{{ summaryCounters.display.messages ?? messageCount }} 条</span></div>
@@ -410,7 +412,10 @@ const tagClass = (type: string) => ({
 .completion-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .completion-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--green); }
 .completion-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
-.summary-item { display: flex; flex-direction: column; gap: 2px; }
+.summary-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* 主题独占整行：任务标题是一整句话，塞进与「31 分钟」同宽的格子里会被压成 3 行，
+   同排其余格子又空出大片（2026-11-03 排版优化，评估页报告模式同样按这条走）。 */
+.summary-item--topic { grid-column: 1 / -1; }
 .summary-label { font-size: 12px; color: var(--muted); }
 .summary-value { font-size: 13px; font-weight: 600; color: var(--green); }
 .completion-section { margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
@@ -438,6 +443,12 @@ const tagClass = (type: string) => ({
 .review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red); text-decoration: none; }
 .review-link:hover { text-decoration: underline; }
 .section-content { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); }
+/* 阅读行宽上限（2026-11-03 排版优化）：卡在宽屏上可到 1080px，正文一行能排到 60+ 汉字，
+   眼睛回行时找不到下一行的开头。用 em 跟随各自字号（正文 13px → 约 39 汉字/行），
+   窄屏时 max-width 大于可用宽度，等于不生效。 */
+.section-content,
+.section-attribution,
+.section-hint { max-width: 46em; }
 .advisory-options { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .metrics-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }

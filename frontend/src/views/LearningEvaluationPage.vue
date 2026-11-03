@@ -1173,7 +1173,11 @@ onUnmounted(() => {
 }
 
 .evaluation-shell :deep(.completion-summary) {
-  grid-template-columns: repeat(4, 1fr);
+  /* 3 列而不是 4 等分（2026-11-03 排版优化）：报告宽屏下 4 等分格只有 231px，
+     「主题」这种整句标题被压成 3 行，而同排的「31 分钟」只占一行、其余全是空白。
+     「主题」改为独占整行（组件里的 .summary-item--topic），余下三个读数三等分。 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
   gap: 16px;
   padding: 16px 20px;
   background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
@@ -1202,6 +1206,34 @@ onUnmounted(() => {
   border: 1px solid var(--line);
   border-radius: 12px;
   margin-bottom: 14px;
+}
+
+/* 宽屏报告两栏（2026-11-03 排版优化第二轮）：
+   上一轮把正文行宽收到 ~46 汉字后，宽屏（shell 1240）下每个纯文字分区的右半边全是空白
+   ——用户实测「右侧还是白的」。单栏下「行宽合格」与「不空」不可兼得，
+   所以 ≥1100 时卡体改两栏栅格：纯文字/列表分区两两并排（每栏 ~570px ≈ 40 汉字），
+   横向内容（建议卡、摘要、指标网格）跨双栏。栏内 46em 行宽上限自然失效，不再有内空白。 */
+@media (min-width: 1100px) {
+  .evaluation-shell :deep(.completion-body) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* dense 回填：建议卡落 (1,1) 后，摘要跨双栏去 (2)，主题总结回填 (1,2)——
+       否则建议卡右侧会留一个空洞，正是用户指出的「右边白的」。 */
+    grid-auto-flow: row dense;
+    gap: 16px 20px;
+    align-items: start;
+  }
+
+  /* 分区间距交给栅格 gap，组件自带的 margin-bottom 会在栅格里叠成双份 */
+  .evaluation-shell :deep(.completion-body > *) {
+    margin-bottom: 0;
+  }
+
+  .evaluation-shell :deep(.completion-body > .completion-summary),
+  .evaluation-shell :deep(.completion-body > #sec-perf),
+  .evaluation-shell :deep(.completion-body > #sec-longterm) {
+    grid-column: 1 / -1;
+  }
 }
 
 .evaluation-shell :deep(.section-title) {
