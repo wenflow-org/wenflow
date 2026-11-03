@@ -95,6 +95,25 @@ describe('LearnerProjectionService.toGuidanceProjection', () => {
     expect(JSON.stringify(review)).not.toContain('taskMastery');
     expect(JSON.stringify(review).length).toBeLessThan(3000);
   });
+
+  // issue #196：transferSignals 此前被硬置空，成为「产出后无人消费」的字段。
+  it('transferSignals 与其余台账项同口径透传（有界截断，不再硬置空）', () => {
+    const snapshot = heavySnapshot();
+    snapshot.knowledgeMemory.globalBackground.transferSignals = Array.from({ length: 6 }, (_, i) => ({
+      conceptKey: `t${i}`, label: `T${i}`, readiness: 'high', confidence: 0.8,
+    }));
+    const { learnerSnapshot } = learnerProjectionService.toGuidanceProjection(snapshot, null);
+    const signals = (learnerSnapshot as any).knowledgeMemory.globalBackground.transferSignals;
+    expect(signals).toHaveLength(3);
+    expect(signals[0].conceptKey).toBe('t0');
+  });
+
+  it('globalBackground.transferSignals 缺失时投影回落空数组（不抛错）', () => {
+    const snapshot = heavySnapshot() as any;
+    delete snapshot.knowledgeMemory.globalBackground.transferSignals;
+    const { learnerSnapshot } = learnerProjectionService.toGuidanceProjection(snapshot, null);
+    expect((learnerSnapshot as any).knowledgeMemory.globalBackground.transferSignals).toEqual([]);
+  });
 });
 
 describe('toPlanningProjection（新建路径时的难度校准证据）', () => {
@@ -166,5 +185,49 @@ describe('toTeachingProjection · 概念身份接口（kcid 读取侧契约）',
     const projection = learnerProjectionService.toTeachingProjection(snapshot);
     expect(projection.relevantKnowledge.mastered).toEqual(heavySnapshot().knowledgeMemory.globalSignals.masteredConcepts);
     expect(projection.backgroundKnowledge.recentConceptLedger[0].label).toBe('判断两个元素间的对齐关系');
+  });
+
+  // issue #196：transferSignals 此前不进任何投影响应（无确定性消费方），现送达课堂投影并被 teaching-turn 规则读取。
+  it('backgroundKnowledge 透传 transferSignals（有界截断，供课堂读取）', () => {
+    const withSignals = {
+      ...heavySnapshot(),
+      knowledgeMemory: {
+        ...heavySnapshot().knowledgeMemory,
+        globalBackground: {
+          ...heavySnapshot().knowledgeMemory.globalBackground,
+          transferSignals: Array.from({ length: 12 }, (_, i) => ({
+            conceptKey: `ts${i}`, label: `TS${i}`, readiness: 'high', confidence: 0.8,
+          })),
+        },
+      },
+    } as any;
+    const projection = learnerProjectionService.toTeachingProjection(withSignals);
+    expect(projection.backgroundKnowledge.transferSignals).toHaveLength(8);
+    expect(projection.backgroundKnowledge.transferSignals[0].conceptKey).toBe('ts0');
+  });
+
+  // issue #196 守卫：写入快照台账（globalBackground，来源 learner_evidence 蒸馏）的每一项，
+  // 都必须被至少一个消费侧投影承载——这正是原先 transferSignals 缺失的那一环。
+  it('globalBackground 台账项被消费侧投影逐一承载（防「产出后无人消费」）', () => {
+    const withAll = {
+      ...heavySnapshot(),
+      knowledgeMemory: {
+        ...heavySnapshot().knowledgeMemory,
+        globalBackground: {
+          reusableFoundations: ['R1'],
+          blockedFoundations: ['B1'],
+          conceptLedger: [{ conceptKey: 'c1', label: 'C1' }],
+          recurringConfusions: [{ conceptKey: 'x1', label: 'X1', pattern: 'p', confidence: 0.5, count: 1 }],
+          transferSignals: [{ conceptKey: 't1', label: 'T1', readiness: 'high', confidence: 0.8 }],
+        },
+      },
+    } as any;
+    const bk = learnerProjectionService.toTeachingProjection(withAll).backgroundKnowledge;
+    expect(bk.reusableFoundations.length).toBeGreaterThan(0);
+    expect(bk.blockedFoundations.length).toBeGreaterThan(0);
+    expect(bk.recurringConfusions.length).toBeGreaterThan(0);
+    expect(bk.transferSignals.length).toBeGreaterThan(0);
+    // conceptLedger 在课堂投影里以 recentConceptLedger 承载
+    expect(bk.recentConceptLedger.length).toBeGreaterThan(0);
   });
 });

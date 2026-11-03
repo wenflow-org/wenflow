@@ -427,6 +427,9 @@ export interface TeachingLearnerProjection {
     blockedFoundations: string[];
     recentConceptLedger: LearnerBackgroundConceptLedgerItem[];
     recurringConfusions: LearnerRecurringConfusion[];
+    /** 迁移就绪度信号（lesson-knowledge-enricher 产出、经快照 globalBackground 聚合）。
+     *  供课堂在联系迁移目标时点名可迁移概念（issue #196：此前该字段无任何确定性消费方）。 */
+    transferSignals: LearnerTransferSignal[];
   };
   learningControlState: LearnerLearningControlState;
   /**
@@ -526,7 +529,9 @@ export interface LearnerPersonalizationConfig {
 export interface ProfileUpdateSource {
   agentId: string;
   timestamp: string;
-  dataType: 'cognitive' | 'behavioral' | 'learning' | 'preferences' | 'emotional' | 'interaction' | 'knowledge-background';
+  // 'knowledge-background' 已随 applyUpdate 的合并分支一并移除：原先的写入方（learner.coordinator）
+  // 在 1b3cf644 退役后无人调用，该 dataType 只会被静默忽略（issue #196）。
+  dataType: 'cognitive' | 'behavioral' | 'learning' | 'preferences' | 'emotional' | 'interaction';
   data: Partial<
     CognitiveProfile & 
     BehavioralBaseline & 
@@ -534,9 +539,7 @@ export interface ProfileUpdateSource {
     LearningPreferences & 
     EmotionalProfile &
     InteractionHistory
-  > & {
-    learnerBackground?: Partial<LearnerGlobalBackgroundKnowledge>;
-  };
+  >;
   confidence: number;
 }
 

@@ -32,10 +32,6 @@ import {
 } from './types';
 import { logger } from '../../utils/logger';
 
-function mergeStringArrays(...values: Array<Array<string> | undefined>): string[] {
-  return Array.from(new Set(values.flatMap((items) => Array.isArray(items) ? items.filter(Boolean) : [])));
-}
-
 /**
  * 互动历史里主题/概念列表的服务端上限（前端再截 8 条展示）。
  */
@@ -201,20 +197,6 @@ export class ProfileAggregator {
       curriculumControls
     });
 
-    const learnerBackground = (goalConversation as any)?.learnerBackground;
-    if (learnerBackground?.reusableFoundations?.length) {
-      derivedInsights.strengths = mergeStringArrays(
-        derivedInsights.strengths,
-        learnerBackground.reusableFoundations.map((item: string) => `可复用基础：${item}`)
-      );
-    }
-    if (learnerBackground?.blockedFoundations?.length) {
-      derivedInsights.riskFactors = mergeStringArrays(
-        derivedInsights.riskFactors,
-        learnerBackground.blockedFoundations.map((item: string) => `不稳定前置：${item}`)
-      );
-    }
-    
   const profile: LearnerModelProfile = {
       userId,
       lastUpdated: new Date().toISOString(),
@@ -248,7 +230,6 @@ export class ProfileAggregator {
       availableTime?: string;
     };
     narratives?: LearnerGoalNarratives;
-    learnerBackground?: any;
     source?: LearnerModelProfile['narrativeSource'];
   } | null> {
     try {
@@ -272,9 +253,6 @@ export class ProfileAggregator {
       // （实测同一账号并存「幼师考指南」「AI 教育平台」「和猫沟通」），并集只会串味。
       // 单对话的局限由 narrativeSource 透明化，见 LearnerModelProfile.narrativeSource。
       const understanding = (evidenceData?.understanding || data.understanding || {}) as GoalUnderstandingPayload;
-      const learnerBackground = data.learner_background && typeof data.learner_background === 'object'
-        ? data.learner_background
-        : null;
       const source = conversation
         ? {
             conversationId: conversation.id,
@@ -325,7 +303,6 @@ export class ProfileAggregator {
             || understanding.available_resources?.time_horizon
             || understanding.background?.available_time
         },
-        learnerBackground,
         source,
       };
     } catch (error) {
@@ -859,32 +836,14 @@ export class ProfileAggregator {
             changes.push('情绪画像已更新');
             break;
 
-          case 'knowledge-background': {
-            const existing = data.learner_background && typeof data.learner_background === 'object'
-              ? data.learner_background
-              : {};
-            const incoming = source.data?.learnerBackground && typeof source.data.learnerBackground === 'object'
-              ? source.data.learnerBackground
-              : {};
-
-            data.learner_background = {
-              ...existing,
-              ...incoming,
-              conceptLedger: Array.isArray(incoming.conceptLedger)
-                ? incoming.conceptLedger
-                : existing.conceptLedger || [],
-              recurringConfusions: Array.isArray(incoming.recurringConfusions)
-                ? incoming.recurringConfusions
-                : existing.recurringConfusions || [],
-              reusableFoundations: mergeStringArrays(existing.reusableFoundations, incoming.reusableFoundations),
-              blockedFoundations: mergeStringArrays(existing.blockedFoundations, incoming.blockedFoundations),
-              transferSignals: Array.isArray(incoming.transferSignals)
-                ? incoming.transferSignals
-                : existing.transferSignals || [],
-            };
-            changes.push('知识背景已更新');
-            break;
-          }
+          default:
+            // 不再静默吞掉未知 dataType（issue #196）：此前未匹配的取值会落到这里、
+            // 写回未改动的 collectedData 并返回 success，缺失被静默化。
+            logger.warn('[profile-aggregator] 收到未支持的 dataType，已忽略', {
+              userId,
+              dataType: source.dataType,
+            });
+            return { success: false, changes: [] };
         }
         
         await prisma.goal_conversations.update({
