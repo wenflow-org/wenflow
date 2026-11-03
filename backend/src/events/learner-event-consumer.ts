@@ -16,6 +16,18 @@ import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapsh
 import { logger } from '../utils/logger';
 import type { DurableDomainEvent, DurableEventType } from './contracts';
 
+/**
+ * #148：只作废画像缓存、不触发快照重算的事件类型。
+ *
+ * `goal:understanding:updated` 的载荷不含 `pathId` / `taskId`（goal 阶段本就没有路径），
+ * 消费侧的 scope 推断恒为 `'global'` —— 于是目标对话每澄清一轮都重建一次用户级全量快照。
+ * 该快照在 goal 阶段没有消费方：目标对话本身不读快照，路径生成（path-generation.core）在
+ * goal 收尾时会自行 `refresh({ scope: 'global' })` 重建并把学习证据注入首版难度校准；
+ * 管理端读路径是 `getLatest`（10 分钟内先用持久化投影、过期才重建）。
+ * 画像缓存仍然作废：profile-aggregator 读的正是本事件写入的 goal 证据，需按轮更新（惰性重算）。
+ */
+const PROFILE_ONLY_EVENT_TYPES: ReadonlySet<DurableEventType> = new Set(['goal:understanding:updated']);
+
 /** 该消费者负责的事件类型（与 outbox 注册保持一致） */
 export const LEARNER_EVENT_TYPES: DurableEventType[] = [
   'goal:understanding:updated',
@@ -51,7 +63,7 @@ export async function handleLearnerEvent(event: DurableDomainEvent): Promise<voi
     // 该行已被 lesson:completed 的消费刷新过——再刷一次是同一 projectionKey 的重复重算。
     // 证据投影仍照做（幂等）；纯路径任务（无 sessionId）不在此列，仍由本消费者刷新。
     const isTeachingTaskCompletion = event.type === 'task:completed' && !!data.sessionId;
-    if (!isTeachingTaskCompletion) {
+    if (!isTeachingTaskCompletion && !PROFILE_ONLY_EVENT_TYPES.has(event.type)) {
       await learnerSnapshotRefreshService.refresh({
         userId: event.userId,
         pathId: data.pathId || undefined,

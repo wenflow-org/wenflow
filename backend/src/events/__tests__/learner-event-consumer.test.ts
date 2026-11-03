@@ -144,4 +144,20 @@ describe('handleLearnerEvent（课后增强失败不得阻断画像快照刷新�
     await handleLearnerEvent(lessonEvent())
     expect(mockSnapshotRefresh).toHaveBeenCalledTimes(1)
   })
+
+  it('#148：goal:understanding:updated 只作废画像缓存，不再触发 global 全量快照重算', async () => {
+    await handleLearnerEvent(buildEvent({
+      id: 'evt-goal',
+      type: 'goal:understanding:updated',
+      aggregateType: 'goal',
+      aggregateId: 'gc-1',
+      data: { conversationId: 'gc-1', stage: 'clarify', confidence: 0.4 },
+    }))
+
+    // 证据投影与画像缓存作废照常（profile-aggregator 读的正是本事件写入的 goal 证据）
+    expect(mockEvidenceHandle).toHaveBeenCalledTimes(1)
+    expect(mockProfileClear).toHaveBeenCalledWith('user-1')
+    // 载荷无 pathId → 旧实现恒落到 scope:'global'，每轮重建用户级全量快照
+    expect(mockSnapshotRefresh).not.toHaveBeenCalled()
+  })
 })
