@@ -416,6 +416,16 @@ export class LearnerKnowledgeMemoryService {
       })
     ]);
 
+    // issue #156（复核补修）：蒸馏/对话证据的取胜时间必须取所属会话的**业务 endTime**
+    // （与确定性通道 :615-617 同源：模拟/回填链路经 simulatedNowOr 落模拟日），
+    // 而不是 learner_evidence.occurredAt——它由 createDomainEvent 缺省 new Date() 生成
+    // （teaching-session-lifecycle.ts:1064 未传值）＝真墙钟，与本文件 :550-552 / :615-617
+    // 及 anchor-probe 守卫禁止的跨时钟域比较同源违规。
+    const sessionEndTimeById = new Map<string, string>();
+    for (const session of allSessions) {
+      if (session.endTime) sessionEndTimeById.set(session.id, session.endTime.toISOString());
+    }
+
     const conceptSignals = new Map<string, ConceptSignal[]>();
     const recentEvidence: LearnerRecentEvidence[] = [];
     // 用户级证据（跨路径）：只喂 globalBackground 台账聚合；currentPath.recentEvidence 仍按路径取。
@@ -435,14 +445,15 @@ export class LearnerKnowledgeMemoryService {
       // payload 只在确认要消费该类型后才解析（旧口径对每行先 parse 再判类型）
       if (evidence.evidenceType === 'session-knowledge-distilled') {
         const payload = parseJsonSafe<any>(evidence.payload, {});
-        // issue #156：概念台账「最旧证据覆盖最新证据」。证据按 occurredAt desc 取，聚合又是
-        // 「后者覆盖标量」，而模型行本身不带时间戳（lesson-knowledge-enricher 输出无 lastSeenAt）。
-        // 这里把每条证据的 occurredAt 显式盖到 lastSeenAt，让下游可按证据新旧取胜；
-        // 否则数组末尾（最旧一课）在 last-wins 合并里反而赢，画像回退到旧掌握度。
-        const occurredAtIso = evidence.occurredAt ? new Date(evidence.occurredAt).toISOString() : undefined;
+        // issue #156（复核补修）：概念台账「最旧证据覆盖最新证据」。模型行本身不带时间戳
+        // （lesson-knowledge-enricher 输出无 lastSeenAt），需用**同源业务时间**补齐才能按证据
+        // 新旧取胜；此处取所属会话的 endTime（确定性通道用的是同一个 session.endTime），
+        // 不用证据墙钟 occurredAt——否则与确定性通道跨时钟域比较，模拟/回填链路下回退到旧课
+        // 掌握度仍可复现。查不到业务时间（会话未结束/未加载）就**不记**时间，绝不回退墙钟。
+        const businessAtIso = evidence.sessionId ? sessionEndTimeById.get(evidence.sessionId) : undefined;
         if (Array.isArray(payload.conceptLedger)) {
-          enrichedLedger.push(...payload.conceptLedger.map((item: any) => occurredAtIso
-            ? { ...item, firstSeenAt: item?.firstSeenAt ?? occurredAtIso, lastSeenAt: occurredAtIso }
+          enrichedLedger.push(...payload.conceptLedger.map((item: any) => businessAtIso
+            ? { ...item, firstSeenAt: item?.firstSeenAt ?? businessAtIso, lastSeenAt: businessAtIso }
             : item));
         }
         if (Array.isArray(payload.reusableFoundations)) enrichedReusableFoundations.push(...payload.reusableFoundations);
@@ -458,9 +469,10 @@ export class LearnerKnowledgeMemoryService {
       if (evidence.evidenceType === 'dialogue-concepts-extracted') {
         const payload = parseJsonSafe<any>(evidence.payload, {});
         if (Array.isArray(payload.recurringConfusions)) {
-          const occurredAtIso = evidence.occurredAt ? new Date(evidence.occurredAt).toISOString() : undefined;
-          enrichedConfusions.push(...payload.recurringConfusions.map((item: any) => occurredAtIso
-            ? { ...item, lastSeenAt: occurredAtIso }
+          // 同上：recurringConfusions 的 lastSeenAt 取所属会话业务 endTime，不用证据墙钟 occurredAt。
+          const businessAtIso = evidence.sessionId ? sessionEndTimeById.get(evidence.sessionId) : undefined;
+          enrichedConfusions.push(...payload.recurringConfusions.map((item: any) => businessAtIso
+            ? { ...item, lastSeenAt: businessAtIso }
             : item));
         }
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
@@ -1185,7 +1197,9 @@ export class LearnerKnowledgeMemoryService {
     // 模型行无条件覆盖确定性行，于是「更新的 session knowledgeState / memory_trace」反被「更旧的
     // 模型蒸馏行」改写（新课 mastered→stable 被旧课 seen 覆盖，lastSeenAt 却取新课 → 自相矛盾）。
     // 组内按 lastSeenAt 选赢家（无任何时间戳时退回数组末位 = 既有「模型行优先」口径），
-    // firstSeenAt 取最早、lastSeenAt 取最晚；label/conceptKey 仍走原有身份归并口径（P1-16 契约：
+    // firstSeenAt 取最早、lastSeenAt 取最晚；比较的 lastSeenAt 全部是**业务时间**（确定性行=
+    // session.endTime/trace.lastSeenAt、模型行=所属会话 endTime），同源可比较，不含墙钟。
+    // label/conceptKey 仍走原有身份归并口径（P1-16 契约：
     // 合并后保留模型 slug 键），集合字段两侧求并、evidenceCount 取大。
     const enrichedLedgerAsc = [...enrichedLedger].sort(
       (a, b) => (seenMs(a.lastSeenAt) ?? Number.NEGATIVE_INFINITY) - (seenMs(b.lastSeenAt) ?? Number.NEGATIVE_INFINITY),
