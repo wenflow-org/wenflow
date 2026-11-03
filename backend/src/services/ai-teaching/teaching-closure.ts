@@ -200,6 +200,23 @@ export function evaluateSessionClosable(input: {
    * 结算（complete_task）不放行——那正是本门禁要守的假完成。
    */
   allowOpenQuestion?: boolean;
+  /**
+   * 学员**明确确认**后放行「末问未答」（2026-11-03 真人走查补的活力兜底）。
+   *
+   * 与 `allowOpenQuestion` 的区别：后者是整条通道豁免（复习课有界收束 / 主动退出），
+   * 三类判据一起放行；本参数**只豁免末问这一条启发式判据**，客观待答（小测未答 /
+   * 末次检查题还有重答机会）仍然硬拦——那些是学员自己就能确定性地解决的状态，
+   * 不会把人卡死在循环里，没有放行的理由。
+   *
+   * 为什么要有它：本模块自己的注释就写了「活力兜底……防止**老师每回合都带问号**把课拖到
+   * 永不收敛」，但那个上限只加在**模型侧**的收束判决上；学员主动点「完成并结算」这条路
+   * 没有任何兜底。真人走查实测：这门课的老师每轮都以提问收尾，学员连答 4 轮才等到一次
+   * 不问的回应，期间点结算一直被拒——即「末问未答」在**这种授课形态下不可被学员的动作满足**。
+   * 所以补的是活力兜底，不是放宽标准：把「我确实要收课」这个决定交回学员，
+   * 而未答的那一问**一定会留痕**（见下方 buildClosureAudit / appendClosureFollowUp：
+   * 审计与门禁同源、故意不看本参数，收口时把「待验证：<末问>」确定性写进总结的 actionPlan）。
+   */
+  waiveOpenQuestion?: boolean;
 }): SessionClosableDecision {
   if (input.endReason && ABNORMAL_END_REASONS.has(input.endReason)) return { closable: true };
 
@@ -217,7 +234,7 @@ export function evaluateSessionClosable(input: {
     const message = messages[i];
     if (message?.role === 'user') break;
     const content = String(message?.content || '');
-    if (message?.role === 'assistant' && !input.allowOpenQuestion
+    if (message?.role === 'assistant' && !input.allowOpenQuestion && !input.waiveOpenQuestion
       && (detectTrailingQuestion(content) || detectOpenRequest(content))) {
       return {
         closable: false,

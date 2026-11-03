@@ -20,6 +20,7 @@ import {
 } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { startWrapupRegeneration } from '../services/ai-teaching/teaching-wrapup-regen';
+import { projectActiveSession } from '../services/ai-teaching/session-activity';
 import { listSessionEvents, type SessionEventKind } from '../services/ai-teaching/session-events.service';
 import { buildTurnAnalysisView } from '../services/ai-teaching/teaching-session-views';
 import { reviewPlanService } from '../services/memory/review-plan.service';
@@ -1279,7 +1280,10 @@ router.post('/sessions/:sessionId/finalize', async (req: any, res) => {
       subjectiveDifficulty,
       endReason: req.body?.reason === 'learner-abandoned'
         ? 'learner-abandoned'
-        : req.body?.reason === 'task-completed' ? 'task-completed' : 'manual-end'
+        : req.body?.reason === 'task-completed' ? 'task-completed' : 'manual-end',
+      // 学员在门禁提示后明确确认「末问没答也结算」（2026-11-03）：只放行末问，未答小测仍拦。
+      // 只在确认时带该字段——常规结算的入参形状保持不变（既有契约与测试不受影响）。
+      ...(req.body?.confirmOpenQuestion === true ? { confirmOpenQuestion: true } : {})
     });
     return res.status(result.status === 'processing' ? 202 : 200).json({ success: true, data: result });
   } catch (error: any) {
@@ -1468,29 +1472,19 @@ router.get('/sessions/active', async (req: any, res) => {
 
     const sessions = await aiTeachingCoordinator.getSessionHistory(userId);
     const activeSessions = sessions.filter(s => s.status === 'active');
-    
+
+    // 活跃度分档（2026-11-03）：lastActiveAt = 每会话最近一条消息时间；activity 与断线恢复窗口同源。
+    // 投影逻辑在 session-activity.ts（本文件受超大文件棘轮约束，只许缩短）。
     if (taskId) {
       const filtered = activeSessions
         .filter(s => s.taskId === taskId)
-        .map(s => ({
-          sessionId: s.id,
-          subject: s.subject,
-          topic: s.topic,
-          startTime: s.startTime,
-          messageCount: s.messageCount,
-        }));
+        .map(s => projectActiveSession(s));
       return res.json({ success: true, data: filtered });
     }
 
     res.json({
       success: true,
-      data: activeSessions.map(s => ({
-        sessionId: s.id,
-        subject: s.subject,
-        topic: s.topic,
-        startTime: s.startTime,
-        messageCount: s.messageCount,
-      })),
+      data: activeSessions.map(s => projectActiveSession(s)),
     });
   } catch (error: any) {
     logger.error('获取活跃会话失败:', error);

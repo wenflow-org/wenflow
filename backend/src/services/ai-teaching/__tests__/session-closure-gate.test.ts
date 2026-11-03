@@ -46,6 +46,61 @@ describe('evaluateSessionClosable', () => {
     expect(decision.closable).toBe(true)
   })
 
+  /**
+   * 2026-11-03 真人走查：这位老师每轮都以提问收尾，学员连答 4 轮才等到一次不问的回应——
+   * 「末问未答」在这类授课形态下**无法被学员的动作满足**，而模块自己的活力兜底
+   * （"防止老师每回合都带问号把课拖到永不收敛"）只加在模型侧。学员明确确认后放行末问。
+   */
+  it('waiveOpenQuestion（学员明确确认）→ 末问未答放行', () => {
+    const decision = evaluateSessionClosable({
+      messages: [
+        { role: 'user', content: '我做完了' },
+        { role: 'assistant', content: '那这一步为什么要先乘？' },
+      ],
+      teachingState: {},
+      waiveOpenQuestion: true,
+    })
+    expect(decision.closable).toBe(true)
+  })
+
+  it('waiveOpenQuestion 只放行末问：未答检查点仍硬拦（那是学员自己能解决的状态）', () => {
+    const decision = evaluateSessionClosable({
+      ...base,
+      teachingState: { pendingCheckpoint: { id: 'cp-1', question: '先算什么？' } },
+      waiveOpenQuestion: true,
+    })
+    expect(decision.closable).toBe(false)
+    expect(decision.code).toBe('FINALIZATION_PENDING_CHECKPOINT')
+  })
+
+  it('waiveOpenQuestion 不放行末次检查答错（还有重答机会时仍拦）', () => {
+    const decision = evaluateSessionClosable({
+      ...base,
+      teachingState: {
+        checkpointHistory: [{ passed: false, attempts: 1 }],
+      },
+      waiveOpenQuestion: true,
+    })
+    expect(decision.closable).toBe(false)
+    expect(decision.code).toBe('FINALIZATION_LAST_CHECKPOINT_FAILED')
+  })
+
+  it('放行不影响留痕：审计与门禁同源且不看放行参数，未答末问一定写进待验证', () => {
+    // 诚实记录是放行的前提：buildClosureAudit 故意不传 waiveOpenQuestion，
+    // 所以「学员确认放行」的课照样被审计判为 openQuestion，由 appendClosureFollowUp
+    // 把「待验证：<末问>」确定性置顶进总结的 actionPlan（不依赖 LLM 是否诚实）。
+    const messages = [
+      { role: 'user', content: '我做完了' },
+      { role: 'assistant', content: '那这一步为什么要先乘？' },
+    ]
+    const audit = buildClosureAudit({ messages, teachingState: {}, endReason: 'manual-end' })
+    expect(audit.openQuestion).toBe(true)
+    expect(audit.question).toContain('为什么要先乘')
+    const summary = appendClosureFollowUp({ actionPlan: ['继续练下一组'] }, audit)
+    expect((summary as { actionPlan: string[] }).actionPlan[0]).toContain('待验证')
+    expect((summary as { actionPlan: string[] }).actionPlan[0]).toContain('为什么要先乘')
+  })
+
   it('allowOpenQuestion（复习课有界收束）→ 未答检查点也放行（未答点按无观测跳过）', () => {
     const decision = evaluateSessionClosable({
       messages: [{ role: 'assistant', content: '选一个吧' }],

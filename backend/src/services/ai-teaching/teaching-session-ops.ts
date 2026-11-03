@@ -97,6 +97,8 @@ export async function getSessionHistory(userId: string): Promise<Array<{
   duration: number | null;
   status: string;
   messageCount: number;
+  /** 最近一条消息的时间（无消息回退到 startTime）：通知面板据此区分「进行中 / 空闲中」 */
+  lastActiveAt: Date;
 }>> {
   const sessions = await teachingSessionRepository.listByUser(userId);
   return sessions.map((session) => ({
@@ -109,7 +111,21 @@ export async function getSessionHistory(userId: string): Promise<Array<{
     duration: session.duration,
     status: session.status,
     messageCount: session.messages.length,
+    lastActiveAt: lastMessageAt(session.messages) ?? session.startTime,
   }));
+}
+
+/**
+ * 会话的最近活跃时刻 = 消息里最大的 timestamp；一条消息都没有（刚开课还没说话）时返回 null，
+ * 由调用方回退到 startTime。坏时间戳一律跳过（不让一条脏数据把整条读数拖成 null）。
+ */
+function lastMessageAt(messages: TeachingSessionMessage[]): Date | null {
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const m of messages) {
+    const ms = m?.timestamp ? Date.parse(String(m.timestamp)) : NaN;
+    if (Number.isFinite(ms) && ms > latestMs) latestMs = ms;
+  }
+  return Number.isFinite(latestMs) ? new Date(latestMs) : null;
 }
 
 /**

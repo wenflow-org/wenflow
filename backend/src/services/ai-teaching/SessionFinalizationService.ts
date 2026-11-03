@@ -30,6 +30,11 @@ export interface FinalizeSessionInput {
   actualMinutes?: number;
   subjectiveDifficulty?: number;
   endReason?: 'manual-end' | 'learner-abandoned' | 'task-completed';
+  /**
+   * 学员在门禁提示后**明确确认**「最后一问没答也照样结算」（2026-11-03）。
+   * 只豁免末问那条启发式判据；未答小测 / 末次检查题仍硬拦（见 evaluateSessionClosable 参数说明）。
+   */
+  confirmOpenQuestion?: boolean;
 }
 
 function finalizationState(session: TeachingSessionRecord): SessionFinalizationState | null {
@@ -115,6 +120,8 @@ export class SessionFinalizationService {
       // end_only = 主动退出（结束学习，不计入完成）：退出通道不该被「先答题」挡住，
       // 否则真人只能关页走 abandoned 豁免（2026-10-21）。
       allowOpenQuestion: input.action === 'complete_review' || input.action === 'end_only',
+      // 学员明确确认（页内门禁卡上的第二颗按钮）→ 只放行末问，客观待答仍拦
+      waiveOpenQuestion: input.confirmOpenQuestion === true,
     });
     if (!closable.closable) {
       const error = new Error(closable.message || '课堂还有未完成的问答');

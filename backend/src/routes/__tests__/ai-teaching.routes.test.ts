@@ -3,6 +3,8 @@
   submitCheckpoint: jest.fn(),
   processPeerMessage: jest.fn(),
   startSession: jest.fn(),
+  // GET /sessions/active 的读数来源（2026-11-03 起要带 lastActiveAt / activity 分档）
+  getSessionHistory: jest.fn(),
 };
 
 const mockSessionFinalizationService = {
@@ -647,6 +649,43 @@ describe('ai-teaching routes', () => {
       .toEqual({ status: 'completed', alreadyCompleted: false });
   });
 
+  /**
+   * 2026-11-03 真人走查：老师每轮都以提问收尾时，学员连答 4 轮才等到一次不问的回应——
+   * 门禁卡给了「仍然完成结算」这颗明确确认 → 路由必须把这个意图透传给服务层（只放行末问）。
+   */
+  it('学员明确确认末问未答 → confirmOpenQuestion 透传给 Finalization 服务', async () => {
+    mockSessionFinalizationService.finalize.mockResolvedValue({ status: 'completed', revision: 9 });
+    const handler = getRouteHandler('/sessions/:sessionId/finalize');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'finalize-confirm-open-1' },
+      body: { action: 'complete_task', revision: 8, reason: 'manual-end', confirmOpenQuestion: true },
+    }, res);
+
+    expect(mockSessionFinalizationService.finalize).toHaveBeenCalledWith(
+      expect.objectContaining({ confirmOpenQuestion: true, action: 'complete_task' }),
+    );
+  });
+
+  it('未确认时入参形状不变（不带 confirmOpenQuestion 字段）', async () => {
+    mockSessionFinalizationService.finalize.mockResolvedValue({ status: 'completed', revision: 9 });
+    const handler = getRouteHandler('/sessions/:sessionId/finalize');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'finalize-plain-1' },
+      body: { action: 'complete_task', revision: 8, reason: 'manual-end' },
+    }, res);
+
+    const payload = (mockSessionFinalizationService.finalize as jest.Mock).mock.calls.at(-1)[0];
+    expect('confirmOpenQuestion' in payload).toBe(false);
+  });
+
   it('Finalization 拒绝缺少 Idempotency-Key', async () => {
     const handler = getRouteHandler('/sessions/:sessionId/finalize');
     const res = createResponse();
@@ -973,6 +1012,81 @@ describe('ai-teaching routes', () => {
       const res = createResponse();
       await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, query: {} }, res);
       expect(res.json.mock.calls[0][0].data.events[0].payload).toBe('not-json{');
+    });
+  });
+
+  /**
+   * 2026-11-03：通知面板把「可继续的课堂」拆成进行中 / 空闲中两档，
+   * 依据是服务端给的 lastActiveAt（每会话最近一条消息时间）与 activity。
+   * 分档阈值与断线恢复窗口同源（RECOVERY_WINDOW_MS = 48h），前端不自己造阈值。
+   */
+  describe('活跃会话读数（GET /sessions/active）', () => {
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000);
+
+    it('带上 lastActiveAt，并按恢复窗口判出 activity 两档', async () => {
+      mockCoordinator.getSessionHistory.mockResolvedValue([
+        {
+          id: 's_live', subject: '英语', topic: '时态', taskId: 't1', startTime: hoursAgo(1),
+          endTime: null, duration: null, status: 'active', messageCount: 5, lastActiveAt: hoursAgo(0.2),
+        },
+        {
+          id: 's_idle', subject: '心理学', topic: '流派', taskId: 't2', startTime: hoursAgo(200),
+          endTime: null, duration: null, status: 'active', messageCount: 9, lastActiveAt: hoursAgo(199),
+        },
+        {
+          // 非 active 的课不出现在这个端点（已结束/超时）
+          id: 's_done', subject: '历史', topic: '旧课', taskId: 't3', startTime: hoursAgo(300),
+          endTime: hoursAgo(299), duration: 60, status: 'completed', messageCount: 4, lastActiveAt: hoursAgo(299),
+        },
+      ]);
+      const handler = getRouteHandler('/sessions/active', 'get');
+      const res = createResponse();
+      await handler({ user: { userId: 'user-1' }, query: {} }, res);
+
+      const data = res.json.mock.calls[0][0].data;
+      expect(data).toHaveLength(2);
+      const live = data.find((s: any) => s.sessionId === 's_live');
+      const idle = data.find((s: any) => s.sessionId === 's_idle');
+      expect(live.activity).toBe('active');
+      expect(idle.activity).toBe('idle');
+      // lastActiveAt 必须原样透出（面板空闲档要显示「最近活跃多久前」）
+      expect(new Date(live.lastActiveAt).getTime()).toBeCloseTo(hoursAgo(0.2).getTime(), -3);
+      expect(new Date(idle.lastActiveAt).getTime()).toBeCloseTo(hoursAgo(199).getTime(), -3);
+    });
+
+    it('缺 lastActiveAt 时按 idle 处理（不让无读数的会话冒充进行中）', async () => {
+      mockCoordinator.getSessionHistory.mockResolvedValue([
+        {
+          id: 's_unknown', subject: '数学', topic: '无读数的课', taskId: 't9', startTime: hoursAgo(2),
+          endTime: null, duration: null, status: 'active', messageCount: 0, lastActiveAt: null,
+        },
+      ]);
+      const handler = getRouteHandler('/sessions/active', 'get');
+      const res = createResponse();
+      await handler({ user: { userId: 'user-1' }, query: {} }, res);
+      expect(res.json.mock.calls[0][0].data[0].activity).toBe('idle');
+    });
+
+    it('按 taskId 过滤时同样带上 lastActiveAt / activity', async () => {
+      mockCoordinator.getSessionHistory.mockResolvedValue([
+        {
+          id: 's_a', subject: '英语', topic: 'A', taskId: 't1', startTime: hoursAgo(1),
+          endTime: null, duration: null, status: 'active', messageCount: 2, lastActiveAt: hoursAgo(0.5),
+        },
+        {
+          id: 's_b', subject: '英语', topic: 'B', taskId: 't2', startTime: hoursAgo(1),
+          endTime: null, duration: null, status: 'active', messageCount: 2, lastActiveAt: hoursAgo(0.5),
+        },
+      ]);
+      const handler = getRouteHandler('/sessions/active', 'get');
+      const res = createResponse();
+      await handler({ user: { userId: 'user-1' }, query: { taskId: 't2' } }, res);
+
+      const data = res.json.mock.calls[0][0].data;
+      expect(data).toHaveLength(1);
+      expect(data[0].sessionId).toBe('s_b');
+      expect(data[0].activity).toBe('active');
+      expect(data[0].lastActiveAt).toBeTruthy();
     });
   });
 });
