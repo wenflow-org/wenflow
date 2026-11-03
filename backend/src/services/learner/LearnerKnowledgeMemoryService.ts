@@ -609,9 +609,17 @@ export class LearnerKnowledgeMemoryService {
       // 会话未结束（endTime=null）时不回退 updatedAt（真墙钟）——无结束时间 = 不记 seenAt。
       const sessionSeenAt = session.endTime ? session.endTime.toISOString() : undefined;
 
+      // #195：同一课同一概念的掌握贡献只计一次。session.knowledgeState（结构化看板）是权威源，
+      // wrapup.summary.knowledgeItems（LLM 摘要）按提示词规则 6「优先复用输入 knowledgePoints 的
+      // 名称/状态/progress」——二者同名时本会各推一条信号、等权落进同一个 mastery 均值（一课双计、
+      // 且摘要受 ≤5 项预算截断会让同名概念权重不一致）。这里以结构化信号为准跳过同名项；
+      // 摘要独有的概念在下方的「幽灵概念」判定里另行排除出掌握均值。
+      const structuredConceptKeys = new Set<string>();
+
       for (const point of knowledgeState) {
         const conceptKey = normalizeConceptKey(point.name);
         if (!conceptKey) continue;
+        structuredConceptKeys.add(conceptKey);
         const { score, stability } = signalFromProgress(point.progress, point.status);
         const current = conceptSignals.get(conceptKey) || [];
         current.push({
@@ -648,6 +656,8 @@ export class LearnerKnowledgeMemoryService {
         for (const item of summaryPayload.knowledgeItems) {
           const conceptKey = normalizeConceptKey(item?.name);
           if (!conceptKey) continue;
+          // #195：本课已在结构化看板里记过的概念不再由摘要重复计一次。
+          if (structuredConceptKeys.has(conceptKey)) continue;
           const score = typeof item.progress === 'number' ? clamp(item.progress / 100, 0, 1) : 0.5;
           const status = item.status === 'mastered' || item.status === 'review' || item.status === 'learning'
             ? item.status
@@ -756,17 +766,26 @@ export class LearnerKnowledgeMemoryService {
       // 名单里混着纯任务标签与 DISPLAY_LABEL_MAP 兜底词；口径与下方 prerequisiteGaps 回落
       // 过滤的「只认接触过且证据为负」一致）。只有标签信号的概念 = 未评估 → pending。
       const evidence = allSignals.filter((signal) => signal.sourceType !== 'task-label');
-      const masteryScore = evidence.length > 0
-        ? clamp(evidence.reduce((sum, signal) => sum + signal.score, 0) / evidence.length, 0, 1)
+      // #195：仅由 LLM 摘要（derived）、无任何结构化看板 / 记忆痕迹接触证据的概念 = 幽灵概念。
+      // session-wrapup 的 knowledgeItems 是模型对课堂的判断，可能造出看板里不存在的知识点；
+      // 这类概念不得混入掌握均值（issue 建议的独立标记）——与「只有 task-label 信号 = 未评估」
+      // 同口径：masteryScore=0 / status=pending，仅保留 sourceType='derived' 的身份，不进
+      // mastered / struggling / fragile 名单。有真实接触证据（session-knowledge / memory-trace）
+      // 在场时，可靠摘要仍按 #70 P-45 作为补充证据参与（沿用原口径，不改 task-label/memory-trace）。
+      const isDerivedOnly = evidence.length > 0
+        && evidence.every((signal) => signal.sourceType === 'derived');
+      const masteryEvidence = isDerivedOnly ? [] : evidence;
+      const masteryScore = masteryEvidence.length > 0
+        ? clamp(masteryEvidence.reduce((sum, signal) => sum + signal.score, 0) / masteryEvidence.length, 0, 1)
         : 0;
 
       // #59/#60 第 2 条：消灭 OR 吸收——此前任一条历史 review 会永久压住后来的 mastered。
       // 现改为「最近一条有业务时间的证据说了算」，让后来真的掌握能翻案；
       // 全部无时间戳（旧数据/测试桩）时退回保守 OR 口径（行为不变）。
-      const hasReview = evidence.some((signal) => signal.status === 'review' || signal.stability === 'fragile');
-      const hasMastery = evidence.some((signal) => signal.status === 'mastered' || signal.stability === 'stable');
-      const hasLearning = evidence.some((signal) => signal.status === 'learning' || signal.stability === 'developing');
-      const latestTimed = evidence
+      const hasReview = masteryEvidence.some((signal) => signal.status === 'review' || signal.stability === 'fragile');
+      const hasMastery = masteryEvidence.some((signal) => signal.status === 'mastered' || signal.stability === 'stable');
+      const hasLearning = masteryEvidence.some((signal) => signal.status === 'learning' || signal.stability === 'developing');
+      const latestTimed = masteryEvidence
         .filter((signal) => typeof signal.seenAt === 'string' && signal.seenAt.length > 0)
         .sort((a, b) => String(b.seenAt).localeCompare(String(a.seenAt)))[0];
       const statusFromLatest: 'pending' | 'learning' | 'mastered' | 'review' | null = latestTimed
