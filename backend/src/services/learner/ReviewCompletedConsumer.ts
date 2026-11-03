@@ -4,7 +4,10 @@
  * 背景：复习课收束后，复习结果此前只通过 applyReviewExtraction 旁路直写
  * memory_traces（fire-and-forget，失败静默丢失，不进事件链，不可追溯）。
  * 本消费者把复习结果沉淀为可追溯、可重放、幂等的领域数据：
- *   - learner_evidence：复习观测（review:completed 类型），供画像聚合与未来 BKT 使用
+ *   - learner_evidence：复习观测（review:completed 类型）。实际消费方是复习调度
+ *     （review-plan.service：成功率/间隔）与管理端画像明细（learner-models.repo）；**不**在
+ *     快照画像聚合（LearnerKnowledgeMemoryService）的白名单里——那里复习课掌握度由
+ *     session.knowledgeState 承担。未来 BKT 亦以此为数据源。
  *   - memory_traces：复习调度数据源（rating 语义：mastered→Good、推进→Hard、未推进→Again）
  *
  * 幂等：domain_event_inbox 记录（consumerId=review-completed-consumer-v1 + eventId 唯一）。
@@ -83,6 +86,11 @@ export interface ReviewCompletedItem {
 export interface ReviewCompletedPayload {
   sessionId: string;
   mode: string;
+  /**
+   * 事件发生会话所属路径（#157）：消费侧据此刷新「路径」作用域的画像快照。
+   * 旧事件（引入前入队）无此字段 → 消费侧回落 global 作用域。
+   */
+  pathId?: string | null;
   reviewItems: ReviewCompletedItem[];
 }
 
@@ -223,7 +231,8 @@ export class ReviewCompletedConsumer {
         // #94：本条的概念身份（事务外已解析；null = 未挂靠，写入侧照旧不写 conceptId）
         const anchoredConceptId = conceptAnchors.get(conceptKey) ?? null;
 
-        // 1) 复习观测 → learner_evidence（可追溯、可重放，供画像/BKT）
+        // 1) 复习观测 → learner_evidence（可追溯、可重放；消费方为复习调度与管理端
+        //    画像明细，未来 BKT 亦复用）
         await tx.learner_evidence.create({
           data: {
             id: `lev_${event.id}_${conceptKey.slice(0, 40)}`,
