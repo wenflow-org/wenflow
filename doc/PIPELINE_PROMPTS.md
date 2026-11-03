@@ -2976,5 +2976,6 @@ deltaOutput: false
 
 ## 未随包输出的条目
 
-- 无 LLM 正文的 Skill：`learner-model`、`mcp-tool`、`web-search`、`web-fetch`、`decision-gate`、`text-to-image`、`board-designer`（代码 handler 实现）
+- 无 LLM 正文的 Skill：`learner-model`、`mcp-tool`、`web-search`、`web-fetch`、`decision-gate`、`text-to-image`（代码 handler 实现）
 - 未在 `skills.yaml` 登记、仅存 Manifest 的条目：`concept-priority`、`path-adjustment-generator`（改动前先确认是否仍在用）
+- 只有编译产物、未登记 core/manifest 的条目：`board-designer`（prompts/skill.board-designer.md）

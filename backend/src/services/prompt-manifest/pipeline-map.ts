@@ -410,15 +410,18 @@ export function buildPipelineMap(): PipelineMap {
       coreFile: cores.has(id) ? `prompts/core/${id}.yaml` : null,
     }));
 
-  // 编译产物 prompts/skill.<id>.md：正常应与 core 同源；只剩 .md 说明该 Skill 绕过了户口簿与 core/manifest。
+  // 编译产物 prompts/skill.<id>.md：正常应与 core 同源；只剩 .md（无 core、无 manifest）说明该 Skill 的提示词
+  // 仅以编译产物承载。是否已登户口簿不参与该判定——board-designer 就是「登记为 handler-only、无 core yaml 源、
+  // 正文只在 prompts/skill.board-designer.md」的成例；若按户口簿排除，会把「确有 LLM 提示词」的 Skill 误报为纯代码 handler。
   const compiledOnlyPrompts = fs
     .readdirSync(PROMPTS_DIR)
     .filter((f) => /^skill\..+\.md$/.test(f))
     .map((f) => ({ skillId: f.replace(/^skill\./, '').replace(/\.md$/, ''), promptFile: `prompts/${f}` }))
-    .filter((x) => !skillById.has(x.skillId) && !cores.has(x.skillId) && !manifests.has(x.skillId));
+    .filter((x) => !cores.has(x.skillId) && !manifests.has(x.skillId));
 
+  const compiledOnlyIds = new Set(compiledOnlyPrompts.map((x) => x.skillId));
   const skillsWithoutPrompt = skills
-    .filter((s) => !cores.has(s.skillId) && !manifests.has(s.skillId))
+    .filter((s) => !cores.has(s.skillId) && !manifests.has(s.skillId) && !compiledOnlyIds.has(s.skillId))
     .map((s) => ({
       skillId: s.skillId,
       kind: s.kind || 'unknown',
@@ -615,9 +618,9 @@ export function renderPipelineMarkdown(map: PipelineMap): string {
   }
 
   if (map.compiledOnlyPrompts.length) {
-    L.push('## 6. 有编译产物但未登记');
+    L.push('## 6. 只有编译产物、无 core/manifest 源');
     L.push('');
-    L.push('这些条目只有 `prompts/skill.<id>.md`，既没有 `prompts/core/<id>.yaml`，也没有 manifest，且未进 `skills.yaml`；属于绕过 File-as-Truth 的旁路，改动前先确认是否应正式登记。');
+    L.push('这些条目只有 `prompts/skill.<id>.md`，既没有 `prompts/core/<id>.yaml`，也没有 manifest；提示词正文仅以编译产物承载（可能已在 `skills.yaml` 登记为 handler-only，如 `board-designer`），改动前先确认是否应补 core 源。');
     L.push('');
     L.push('| Skill | 编译产物 |');
     L.push('| --- | --- |');

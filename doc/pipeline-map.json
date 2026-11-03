@@ -3232,7 +3232,12 @@
       "coreFile": null
     }
   ],
-  "compiledOnlyPrompts": [],
+  "compiledOnlyPrompts": [
+    {
+      "skillId": "board-designer",
+      "promptFile": "prompts/skill.board-designer.md"
+    }
+  ],
   "skillsWithoutPrompt": [
     {
       "skillId": "learner-model",
@@ -3268,12 +3273,6 @@
       "skillId": "text-to-image",
       "kind": "handler-only",
       "displayName": "文生图 Skill",
-      "reason": "handler-only：无 LLM 提示词，逻辑在代码 handler"
-    },
-    {
-      "skillId": "board-designer",
-      "kind": "handler-only",
-      "displayName": "课堂板书设计器 Skill",
       "reason": "handler-only：无 LLM 提示词，逻辑在代码 handler"
     }
   ],

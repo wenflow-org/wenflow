@@ -254,7 +254,6 @@ flowchart LR
 | `web-fetch` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 | `decision-gate` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 | `text-to-image` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
-| `board-designer` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 
 ## 5. 未在 skills.yaml 登记、但仍有 Manifest 的条目
 
@@ -264,6 +263,14 @@ flowchart LR
 | --- | --- | --- |
 | `concept-priority` | `prompts/manifests/concept-priority.yaml` | — |
 | `path-adjustment-generator` | `prompts/manifests/path-adjustment-generator.yaml` | — |
+
+## 6. 只有编译产物、无 core/manifest 源
+
+这些条目只有 `prompts/skill.<id>.md`，既没有 `prompts/core/<id>.yaml`，也没有 manifest；提示词正文仅以编译产物承载（可能已在 `skills.yaml` 登记为 handler-only，如 `board-designer`），改动前先确认是否应补 core 源。
+
+| Skill | 编译产物 |
+| --- | --- |
+| `board-designer` | `prompts/skill.board-designer.md` |
 
 ## 7. 维护
 
