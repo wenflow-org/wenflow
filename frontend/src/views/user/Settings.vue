@@ -1090,7 +1090,7 @@ const handleDeactivate = async () => {
   border-radius: 999px;
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   color: var(--blue-deep, #1f57cc);
-  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--mk-mono);
   font-size: 12px;
 }
 
@@ -1165,7 +1165,7 @@ const handleDeactivate = async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--mk-mono);
 }
 
 .mcp-item__toolname {
@@ -1200,7 +1200,7 @@ const handleDeactivate = async () => {
 }
 
 .mcp-hint code {
-  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--mk-mono);
   font-size: 12px;
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   color: var(--blue-deep, #1f57cc);

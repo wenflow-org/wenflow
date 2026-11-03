@@ -1069,7 +1069,7 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--mk-mono);
   font-size: 12px;
   color: var(--ink, #172033);
   margin: 12px;

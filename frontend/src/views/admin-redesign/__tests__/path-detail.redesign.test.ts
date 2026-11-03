@@ -103,9 +103,10 @@ describe('PathDetail 路径深链适配层', () => {
     expect(text).toContain('学习中')
     expect(text).toContain('1 个 · 1 条')
     expect(text).toContain('复制')
-    // 说明句带出「内容在哪里看」的去处，不再是死路
+    // 说明句只留状态事实（2026-11-02 文案清理：纯指路的「路径内容仍可在学习者详情里查看」
+    // 已撤——本卡下方已有「返回列表」「去目标对话」两个出口）
     expect(text).toContain('该路径没有关联的目标对话，因此没有可跳转的学习会话座舱')
-    expect(text).toContain('路径内容仍可在学习者详情里查看')
+    expect(text).not.toContain('路径内容仍可在学习者详情里查看')
     expect(text).toContain('去目标对话')
     // 面包屑回写路径名（不再是裸 id）
     expect(subPage.value?.label).toBe('毛笔小楷入门')

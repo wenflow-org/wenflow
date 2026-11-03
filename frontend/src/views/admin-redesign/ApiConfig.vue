@@ -1,12 +1,13 @@
 <template>
   <div :class="embedded ? 'ac-host ac-host--embedded' : 'mk-page mk-page--fill ac-host'">
-    <!-- 嵌入「系统设置」时页头归宿主（宿主只在「模型与接入」页签激活时出「刷新注册表」），
-         本组件不再自带页头与主操作——与访问与注册嵌入态同一写法 -->
-    <MkPageHead v-if="!embedded" title="模型与接入">
-      <template #actions>
-        <button type="button" class="mk-btn mk-btn--sm" @click="providersRef?.refresh?.(true)">刷新注册表</button>
-      </template>
-    </MkPageHead>
+    <!-- 2026-11-03 用户拍板：本页**不做限宽，通栏**（推翻了当天上午按 SPEC §10 加的 .mk-narrow）。
+         理由是同页五个页签宽度必须一致——「会话安全」是表格、「数据导出」是三列勾选，
+         两者只能通栏；只有本页与「访问与注册」被收到 1200，来回切页签卡片会一宽一窄地跳。 -->
+    <!-- 嵌入「系统设置」时页头归宿主，本组件不再自带页头与主操作——与访问与注册嵌入态同一写法。
+         2026-11-03：页面级「刷新注册表」按钮从两个页头一并撤除（用户「最右上角那个多余的
+         按钮…移入运维工具或合并处理，保持顶部干净」）——它重读的是本机登记文件，与卡片同源，
+         现收进卡片右上的图标钮，悬停说明「不向上游拉取」。 -->
+    <MkPageHead v-if="!embedded" title="模型与接入" />
     <!-- 页首 KPI 带已撤（2026-10-14 用户拍板「模型与接入的 kpi 也不要了」）：原两处带
          都是把下方卡里已有的读数抄一遍——密钥在连接页签（API Key 行的「留空 = 沿用已配置」
          + 连接徽标）、模型清单在模型页签、默认模型在生成参数页签。
@@ -29,6 +30,7 @@
         ref="providersRef"
         :upstream="models"
         @registered="onProvidersRegistered"
+        @fetch-upstream="onFetchClick"
       >
         <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：通道身份、连接状态与动作
              统一收到卡头一行。2026-10-28：连接编辑收进弹层，卡头只留「获取模型」。 -->
@@ -38,25 +40,64 @@
              与「密钥已配置 / 重试策略」并排，作为通道自身的一条事实。 -->
         <template #head-status />
 
-        <template #head-actions>
-          <div class="ac-conn__acts">
-            <!-- 接入流程第 2 步：用这条通道的地址与密钥获取模型。
-                 成功后连接一并落盘，不再要求先点「保存连接」。 -->
+        <!-- 上游清单的出口（2026-11-03）：落在模型列表工具栏里，与「＋ 添加模型」同一行——
+             它俩是同一件事的两半（先有清单，才能挑）。用这条通道的地址与密钥获取模型，
+             成功后连接一并落盘，不再要求先点「保存连接」。 -->
+        <template #upstream-actions>
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :disabled="fetching || !providersReady"
+            :title="models.length ? '按当前服务地址与密钥向上游重新拉取模型清单' : '按当前服务地址与密钥向上游拉取模型清单'"
+            @click="onFetchClick"
+          >
+            <MkLoading v-if="fetching" inline text="获取中…" />
+            <span v-else>↻ {{ models.length ? '重新获取' : '获取模型' }}</span>
+          </button>
+        </template>
+        <template #platform-detail>
+          <!-- 第一块：灰底连接条（2026-11-03 两段式）。
+               未配置时它就是表单：Base URL + API Key 两格 +「保存并获取模型」，
+               不必先点「连接设置」弹层填完再回来（用户「如果尚未配置地址和密钥，
+               则在此处直接展示 Base URL 和 API Key 输入框及 [保存并获取模型] 按钮」）。
+               2026-11-03 评审：这行原先与下面的模型行长得一样（同样的字重、同样的发丝线），
+               父级网关与子级模型读不出主次。现收进一块浅底内嵌面板，右侧动作也升为描边次级按钮——
+               面板 = 「这条通道接在哪」，面板之下才是「挂了哪些模型」。 -->
+          <div v-if="connUnset" class="ac-conn-setup">
+            <label class="mk-field">
+              <span class="mk-field__label">Base URL</span>
+              <input
+                class="mk-field__input"
+                v-model="form.apiUrl"
+                placeholder="https://api.example.com/v1"
+                autocomplete="off"
+                @input="markDirty('conn')"
+              />
+            </label>
+            <label class="mk-field">
+              <span class="mk-field__label">API Key</span>
+              <input
+                class="mk-field__input"
+                :type="keyVisible ? 'text' : 'password'"
+                v-model="form.apiKey"
+                autocomplete="new-password"
+                placeholder="粘贴密钥"
+                @input="markDirty('conn')"
+              />
+            </label>
             <button
               type="button"
-              class="mk-btn mk-btn--sm"
-              :disabled="fetching || !providersReady"
+              class="mk-btn mk-btn--primary"
+              :disabled="fetching || !providersReady || !form.apiUrl.trim()"
+              title="把地址与密钥落盘，并按它向上游拉取模型清单"
               @click="onFetchClick"
             >
               <MkLoading v-if="fetching" inline text="获取中…" />
-              <span v-else>{{ models.length ? '重新获取模型' : '获取模型' }}</span>
+              <span v-else>保存并获取模型</span>
             </button>
           </div>
-        </template>
-        <template #platform-detail>
-          <!-- 卡面不再裸露连接表单：一行摘要回答「连的是哪、密钥有没有、重试怎么配」，
-               所有编辑进「连接设置」弹层，一次保存。 -->
-          <div class="ac-conn-summary">
+
+          <div v-else class="ac-conn-summary">
             <span class="ac-conn-summary__url mono" :title="form.apiUrl">{{ form.apiUrl || '未配置服务地址' }}</span>
             <span class="mk-badge" :class="keySet ? 'mk-badge--ok' : 'mk-badge--warn'">
               {{ keySet ? '密钥已配置' : '未配置密钥' }}
@@ -65,7 +106,7 @@
             <span v-if="reliability" class="ac-conn-summary__policy" :title="policyTitle">
               重试 {{ reliability.maxUpstreamAttempts }} 次 · 间隔 {{ reliability.retryBaseDelayMs }}ms · RPM {{ reliability.platformRpmLimit || '不限' }}
             </span>
-            <button type="button" class="mk-link ac-conn-summary__edit" @click="openConnModal">连接设置</button>
+            <button type="button" class="mk-btn mk-btn--sm ac-conn-summary__edit" @click="openConnModal">连接设置</button>
           </div>
 
           <!-- 调用策略读取失败仍在卡面提示；重试预算告警跟着参数走，只在连接设置弹层里出现 -->
@@ -134,31 +175,21 @@
             <template v-if="isLive && reliability">
               <div class="ac-conn-modal__policy">
                 <label class="mk-field">
-                  <span class="mk-field__label" title="总尝试上限，含首次调用与改用备用模型">最大重试</span>
+                  <span class="mk-field__label">最大重试</span>
                   <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
+                  <span class="mk-field__hint">含首次调用，单位为次</span>
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">重试间隔（毫秒）</span>
                   <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
-                  <span class="mk-field__label" title="0 = 不限，超出后排队等待">RPM 上限</span>
+                  <span class="mk-field__label">RPM 上限</span>
                   <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
+                  <span class="mk-field__hint">0 表示不限</span>
                 </label>
               </div>
             </template>
-
-            <div class="ac-conn-modal__test">
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="channelTesting" @click="testChannel">
-                {{ channelTesting ? '测试中…' : '测试连通性' }}
-              </button>
-              <span
-                v-if="channelResult && channelTestedUrl === form.apiUrl.trim()"
-                class="ac-conn__testres"
-                :class="{ 'is-bad': !channelResult.ok }"
-                :title="channelResult.text"
-              >{{ channelResult.ok ? `连通 · ${channelResult.text}` : '连接失败' }}</span>
-            </div>
 
             <div v-if="configLoadFailed && !reliability" class="mk-alert mk-alert--row" role="alert">
               <span class="mk-alert__msg">调用策略读取失败</span>
@@ -169,12 +200,17 @@
             </div>
           </div>
           <div class="mk-modal__foot ac-conn-modal__foot">
-            <button
-              type="button"
-              class="mk-btn mk-btn--sm mk-btn--danger-ghost"
-              :disabled="resetting"
-              @click="resetConfig"
-            >{{ resetting ? '重置中…' : '重置此通道' }}</button>
+            <!-- 危险动作写明作用范围（只清本条通道的接入配置，不动全站策略与其它通道），
+                 并保留二次确认 -->
+            <span class="ac-conn-modal__resetwrap">
+              <button
+                type="button"
+                class="mk-btn mk-btn--sm mk-btn--danger-ghost"
+                :disabled="resetting"
+                @click="resetConfig"
+              >{{ resetting ? '重置中…' : '重置此通道' }}</button>
+              <span class="ac-conn-modal__resethint">只清本条通道的地址、密钥与模型清单</span>
+            </span>
             <span class="ac-conn-modal__spacer"></span>
             <button type="button" class="mk-btn" @click="cancelConnModal">取消</button>
             <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="saveConnModal">
@@ -199,6 +235,7 @@ import InfraModelsPanel from './InfraModelsPanel.vue'
 import {
   liveApiConfig as cfg,
   liveFetchModels,
+  liveLoading,
   liveSaveApiConfig,
   timeAgo,
   errMsg,
@@ -239,6 +276,11 @@ function onProvidersRegistered() {
 }
 /** 注册表已就绪：面板首次回传，或 live 配置已到（首屏未回填地址时按钮不该点不动） */
 const providersReady = computed(() => providersLoaded.value || !!cfg.value)
+/** 连接条未配置态（2026-11-03 两段式）：地址还空着、也不在读取中/读取失败——
+    这时连接条原地变成表单，省掉「先点连接设置」那一步。
+    读取中或读取失败不给表单：空地址不代表没配过（读取失败由卡内 alert 说清）。 */
+const connUnset = computed(() => !form.apiUrl.trim() && !liveLoading.value && !apiConfigFailed.value)
+
 function onFetchClick() {
   if (!providersReady.value || !form.apiUrl) {
     focusPlatformConnection()
@@ -460,9 +502,12 @@ const connBadge = computed(() => {
   // （与 connectionStatus 同源；不用健康快照 checkedAt——那是能力探测时间，语义不同）
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
   if (connectionStatus.value === 'connected') {
-    return { cls: 'mk-badge--ok', text: at ? `连接测试：${timeAgo(at)}成功` : '连接测试：最近成功' }
+    /* 2026-11-02 评审：历史测试结果与「密钥已配置」并排时都用了成功绿，
+       18 小时前的快照被读成当前状态。改成中性徽标并把「上次」写进文案，
+       绿色只留给「当前成立」的事实（密钥已配置）。 */
+    return { cls: 'mk-badge--muted', text: at ? `上次获取模型：${timeAgo(at)}成功` : '上次获取模型：已成功' }
   }
-  if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '连接测试：上次失败' }
+  if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次获取模型：失败' }
   /* 2026-11-01 外部评审：「还没连接过」与右侧三个模型的绿色「健康」同屏，被读成
      「没连通却健康」的自相矛盾。它讲的其实只是「没点过获取模型 / 测试连接」这一动作，
      不是通道与模型的可用性——文案改成描述动作，缺省态不再冒充连通性结论。
@@ -472,16 +517,16 @@ const connBadge = computed(() => {
   const alive = models.value.length
   return {
     cls: 'mk-badge--muted',
-    text: alive ? `通道测试：未做过（${alive} 个模型已在用）` : '通道测试：未做过'
+    text: alive ? `还没获取过清单（${alive} 个模型已在用）` : '还没获取过清单'
   }
 })
 /** connBadge 悬停口径：说明「成功/失败」是什么时候、什么动作留下的，不冒充实时探活 */
 const connBadgeTitle = computed(() => {
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
   if (!at) {
-    return '还没有点过「获取模型」或「测试连接」。这里只记这一步的结果，通道能不能用见下方网关地址与密钥；模型的健康状态由能力探测单独给出。'
+    return '还没有获取过上游清单。这里只记这一步的结果；模型能不能调由列表里逐模型的「测试」回答。'
   }
-  const when = `上次连接：${new Date(at).toLocaleString('zh-CN', { hour12: false })}`
+  const when = `上次获取：${new Date(at).toLocaleString('zh-CN', { hour12: false })}`
   return `${when}（点「获取模型」时更新）。展示的是上次结果，不是实时探测。`
 })
 
@@ -494,39 +539,10 @@ const keyHintNeeded = computed(
 const fetching = ref(false)
 const saving = ref(false)
 
-/* 通道级连通性测试：只回答「这个地址与密钥通不通」，与模型测试分开口径。
-   密钥留空时后端会用已保存的那把（地址未变才回落），前端不接触明文。 */
-const channelTesting = ref(false)
-const channelResult = ref<{ ok: boolean; text: string } | null>(null)
-const channelTestedUrl = ref('')
-
-async function testChannel(): Promise<void> {
-  if (channelTesting.value) return
-  const apiUrl = form.apiUrl.trim()
-  if (!apiUrl) {
-    toast.error('先填写服务地址')
-    focusPlatformConnection()
-    return
-  }
-  if (keyHintNeeded.value) {
-    toast.error('地址已更换，请先重填 API Key')
-    return
-  }
-  channelTesting.value = true
-  channelResult.value = null
-  try {
-    const res = await adminApiConfigApi.testConnection({ apiUrl, apiKey: form.apiKey.trim() })
-    const data = res.data?.data ?? {}
-    const count = Number(data.modelsCount ?? 0)
-    channelResult.value = { ok: true, text: count ? `${count} 个模型` : '服务可达' }
-    channelTestedUrl.value = apiUrl
-  } catch (e) {
-    channelResult.value = { ok: false, text: errMsg(e) }
-    channelTestedUrl.value = apiUrl
-  } finally {
-    channelTesting.value = false
-  }
-}
+/* 通道级「测试连通性」按钮 2026-11-03 撤除（用户「只有模型级别的连通性」）：
+   连通性是模型自己的事实——同一个地址上，A 模型能调、B 模型可能没权限或已被上游下线，
+   通道级那枚绿勾既盖不住这种差异，又会与列表里逐模型的「测试」读成两套口径。
+   现在通道层面只保留一件事：获取上游清单（它本身就要连一次上游），结果就是连接条上那枚读数。 */
 
 /* ---------- 连接设置弹层：一次保存连接 + 调用策略 ---------- */
 const connOpen = ref(false)
@@ -545,8 +561,6 @@ const policyTitle = computed(() => {
 })
 
 function openConnModal(): void {
-  channelResult.value = null
-  channelTestedUrl.value = ''
   connBackup.value = {
     apiUrl: form.apiUrl,
     apiKey: form.apiKey,
@@ -763,12 +777,32 @@ async function resetConfig() {
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
 /* 卡面连接摘要（2026-10-28 用户「表单不要直接裸露」）：一行回答连到哪、密钥是否就绪、
    重试怎么配；地址 / 密钥 / 策略的编辑都在「连接设置」弹层里，一次保存。 */
+/* 父级网关摘要：包成一块浅底内嵌面板，与下方的模型列举区拉开父子层级（2026-11-03 评审）。
+   面板内的 URL 是这一整块的主语，故给正文色 + mono。 */
+/* 未配置时的连接条（2026-11-03 两段式）：同一条灰底，原地给两格 + 一颗主操作 */
+.ac-conn-setup {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+}
+@media (max-width: 900px) {
+  .ac-conn-setup { grid-template-columns: minmax(0, 1fr); }
+}
 .ac-conn-summary {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 10px 0 2px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
   font-size: var(--mk-fs-micro);
 }
 .ac-conn-summary__url {
@@ -781,7 +815,6 @@ async function resetConfig() {
 .ac-conn-summary__policy { color: var(--mk-muted); }
 .ac-conn-summary__edit { margin-left: auto; }
 /* 连接块头右组：获取模型 */
-.ac-conn__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* 连接设置弹层 */
 .ac-conn-modal { width: min(560px, 94vw); }
@@ -790,11 +823,20 @@ async function resetConfig() {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
+/* 三列等宽时两个错位同源于 .mk-field（display:grid 未写 align-content，默认 stretch
+   会把自动行拉高填满容器）：
+   ① 没有提示行的那一列，多出来的高度全灌进输入框（实测 53px vs 另有提示的 39px）；
+   ② 「重试间隔（毫秒）」比另两个标签长，在 163px 栏里折成两行，把输入框顶下 14px。
+   所以既要把行钉在顶部，也要让标签不折行——单加 align-items:start 治不了②（2026-11-03 实测）。 */
+.ac-conn-modal__policy .mk-field { align-content: start; }
+.ac-conn-modal__policy .mk-field__label { white-space: nowrap; }
 @media (max-width: 640px) {
   .ac-conn-modal__policy { grid-template-columns: minmax(0, 1fr); }
 }
-.ac-conn-modal__test { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ac-conn-modal__foot { display: flex; align-items: center; gap: 8px; }
+.ac-conn-modal__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 重置按钮与作用范围说明成组，避免红按钮孤零零贴着其它动作 */
+.ac-conn-modal__resetwrap { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ac-conn-modal__resethint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .ac-conn-modal__spacer { flex: 1 1 auto; }
 
 .ac-key-wrap { display: grid; gap: 4px; min-width: 0; }
@@ -823,13 +865,6 @@ async function resetConfig() {
   font-style: normal;
   white-space: normal;
 }
-.ac-conn__testres {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-green);
-  white-space: nowrap;
-}
-.ac-conn__testres.is-bad { color: var(--mk-red); font-weight: 600; }
-
 /* 上游清单关系句（2026-10-16 用户走查重排）：原 30+ 枚模型胶囊（.ac-models/.ac-model）退役——
    与下方登记表并列成两份模型名单，被读成「同一件事说两遍」。现在只说关系，逐个名字在登记表折叠里。 */
 .ac-models__line { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
@@ -859,18 +894,14 @@ async function resetConfig() {
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .mk-field__label { font-size: var(--mk-fs-micro); }
-  .mk-seg { border-radius: 12px; }
-  .mk-seg__item { font-size: var(--mk-fs-micro); padding: 8px 14px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号继续放大 */
   .mk-field__label { font-size: var(--mk-fs-micro); }
-  .mk-seg__item { font-size: var(--mk-fs-micro); padding: 9px 16px; }
 }
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
   .mk-field__label { font-size: var(--mk-fs-body); }
-  .mk-seg__item { font-size: var(--mk-fs-body); padding: 11px 19px; }
 }
 
 /* ================= 暗色模式（D1 补完）：模型与接入 ================= */

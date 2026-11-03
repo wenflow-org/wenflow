@@ -122,6 +122,7 @@
               声明本 Skill 消费的输入。ref 前缀 = 来源分类：<code class="mono">skill:xxx.fieldPath</code>（上游 Skill 模型输出）/
               <code class="mono">sandbox:agent.key</code>（编排注入，对照沙盘说明书 <code class="mono">prompts/agent-snapshots.md</code>）/
               <code class="mono">user:path</code>（用户/平台，绿灯）。保存/发布时核对（skill→移交、sandbox→沙盘注册表、user→通过）。
+              这一份就是同页签只读「输入契约」卡的数据源，两处条目数一致。
             </p>
             <!-- 列头（2026-10-31 三轮评审）：与下方「输出字段」表头同款轻量行，五列网格同模板 -->
             <div v-if="coreForm.inputs.length" class="sdp-pwform__inputrow sdp-pwform__inputrow--head" aria-hidden="true">
@@ -166,6 +167,11 @@
             </button>
             <div id="core-sec-fields" v-show="openFormSections.has('fields')" class="sdp-pwform__cardbody">
             <p class="sdp-pwform__warn">增删字段、改型、改名会触发字段冻结守门。</p>
+            <!-- 2026-11-02 评审：同屏两套条目数（只读「输出契约」26 行 vs 这里 8 个字段）
+                 没交代层级关系，读作互相打脸。这里说清两者各是什么。 -->
+            <p class="sdp-pwform__note">
+              这里是 core 文件声明的输出字段，可直接编辑。同页签只读的「输出契约」取的是编排产出行的全量，含隐式推断与控制信号这类内部出参，条目数通常更多。
+            </p>
             <div class="sdp-pwform__fields">
               <div class="sdp-pwform__fieldrow sdp-pwform__fieldrow--head">
                 <span>name</span><span>type</span><span>可选</span><span>desc（生成指令）</span><span>turn</span><span></span>
@@ -293,10 +299,9 @@
       <header class="sdp-block__head">
         <h4>编译预览</h4>
         <!-- #126：保存（表单↔源码切换时的自动保存）只写盘、不编译，预览与磁盘可能不一致 →
-             文案改为明确指向「保存并编译」，并在内容变更后显式标「待重新编译」 -->
+             内容变更后显式标「待重新编译」 -->
         <span class="sdp-block__meta">
           <span v-if="corePreviewStale" class="mk-badge mk-badge--warn">内容已变更，待重新编译</span>
-          点「保存并编译」后自动编译（dry run，不写入）
         </span>
       </header>
       <div class="sdp-pw__pane">

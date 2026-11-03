@@ -51,7 +51,7 @@
                     <span class="mono skd-vrow__type">{{ f.type || '—' }}</span>
                   </div>
                   <p v-if="!contractIns.length" class="mk-empty--line">该 Skill 的 core YAML 未声明输入（inputs）。</p>
-                  <p class="mk-card__note" title="来源说明：core YAML 的 inputs 声明（name / type / ref / desc）">输入契约取 core YAML 的 inputs 声明，ref 前缀标来源。可编辑表单在同页签内。</p>
+                  <p class="mk-card__note" title="来源说明：core 文件的 inputs 声明（name / type / ref / desc）">输入契约取 core 文件的 inputs 声明，ref 前缀标来源。</p>
                 </template>
               </div>
             </section>
@@ -81,6 +81,7 @@
                     <span class="mono skd-vrow__type">{{ f.valueType || '—' }}</span>
                   </div>
                   <p v-if="!contractOuts.length" class="mk-empty--line">该 Skill 暂无产出字段声明。</p>
+                  <p class="mk-card__note" title="来源说明：字段路由的产出行（编排文件每个 skill:xxx 产出段）">输出契约取编排产出行的全量，含隐式推断与控制信号这类内部出参。core YAML 里声明的输出字段是另一份，见同页签的核心文件表单。</p>
                 </template>
               </div>
             </section>
@@ -104,7 +105,9 @@
                   <span class="skd-step__n">{{ i + 1 }}</span>{{ n }}
                 </div>
               </div>
-              <p v-else class="mk-empty--line" title="core YAML 未声明 stateMachine / states 字段">该 Skill 未声明回合状态机。</p>
+              <!-- 2026-11-02 评审：这里读的是 core YAML，而阶段集合写在 Prompt 清单的运行时契约里，
+                   两处结论同屏读作互相打脸。空态显式说清读的是哪份文件、另一份在哪个页签。 -->
+              <p v-else class="mk-empty--line" title="core YAML 没有 stateMachine / states 字段（回合阶段来自 Prompt 清单的运行时契约）">core YAML 未声明回合状态机。运行时的回合阶段集合见「工程」页签的运行时契约。</p>
             </div>
           </section>
           <div class="skd-grid">
@@ -117,7 +120,7 @@
                 <div v-if="coreTerminations.length" class="skd-ranklist">
                   <div v-for="(t, i) in coreTerminations" :key="`${t}-${i}`" class="skd-rankrow">{{ t }}</div>
                 </div>
-                <p v-else class="mk-empty--line" title="core YAML 未声明 termination / limits 字段">该 Skill 未声明终止条件。</p>
+                <p v-else class="mk-empty--line" title="core YAML 没有 termination / limits 字段（终止阶段来自 Prompt 清单的运行时契约）">core YAML 未声明终止条件。运行时的终止阶段见「工程」页签的运行时契约。</p>
               </div>
             </section>
             <section class="mk-card">
@@ -171,7 +174,10 @@
           <div class="skd-metric-band">
             <div class="mk-section__head">
               <h4 class="mk-section__title">运行指标</h4>
-              <span class="mk-card__meta">{{ statsRangeLabel }}</span>
+              <!-- 账号范围与窗口一起挂在带头（2026-11-02 评审 R2）：本页读数含虚拟学习者，
+                   平台总览的 Skill 调用量 Top 5 只数真实账号——同一 Skill 同一窗口下
+                   197 与 72 并存，不写范围就会被读成同一条数据对不上。 -->
+              <span class="mk-card__meta" title="统计窗口内全部账号：真实账号与虚拟学习者的调用都计入">{{ statsRangeLabel }} · 含虚拟学习者</span>
             </div>
             <section class="mk-kpi-grid" aria-label="运行指标">
               <MkKpi label="调用次数" :value="stat.calls" />
@@ -230,7 +236,7 @@
                   <div><span>Skill ID</span><strong class="mono" :title="view.id">{{ view.id }}</strong></div>
                   <div><span>归属 Agent</span><strong>{{ view.agentName || view.agentId || '—' }}</strong></div>
                   <div><span>类别</span><strong :title="`类别枚举：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</strong></div>
-                  <div v-if="coreFilePath"><span>核心文件</span><strong class="mono" :title="coreFilePath">{{ coreFilePath }}</strong></div>
+                  <div v-if="coreFilePath"><span>Prompt 文件</span><strong class="mono" :title="promptFilePathTitle">{{ coreFilePath }}</strong></div>
                   <div><span>统计来源</span><strong>{{ statsNote || '—' }}</strong></div>
                 </div>
               </div>
@@ -274,7 +280,7 @@
               <table v-if="routingRows.length" class="mk-table mk-table--nowrap">
                 <thead>
                   <tr>
-                    <th>字段</th><th>角色</th><th class="skd-th-wrap">说明</th><th>流向</th><th>渲染</th><th>属性</th>
+                    <th>字段</th><th>角色</th><th class="skd-th-wrap">说明</th><th>流向</th><th>渲染</th><th title="字段的两种属性：内部（不进用户可见回复）/ 累积（进学习者状态）">内部 / 累积</th>
                     <th v-if="hasMaskedCol">脱敏</th>
                   </tr>
                 </thead>
@@ -290,7 +296,9 @@
                     <td><span class="mk-badge" :class="r.render === 'visible' ? 'mk-badge--render-visible' : 'mk-badge--render-hidden'">{{ r.render === 'visible' ? '可见' : '隐藏' }}</span></td>
                     <td>
                       <span v-if="r.internal" class="mk-badge mk-badge--flow-internal">内部</span>
-                      <span v-if="r.accumulate" class="mk-badge mk-badge--flow-accumulate">累计</span>
+                      <!-- 2026-11-02 评审：同一个属性在契约编辑页写「累积」、这里写「累计」，
+                           一个词两种写法。统一成「累积」（字段路由图例 / 编排图 / 加字段向导同词） -->
+                      <span v-if="r.accumulate" class="mk-badge mk-badge--flow-accumulate">累积</span>
                       <span v-if="!r.internal && !r.accumulate" class="mk-na">—</span>
                     </td>
                     <td v-if="hasMaskedCol">
@@ -308,9 +316,6 @@
                 </div>
                 <p v-else class="mk-empty--line">该 Skill 暂无产出行（无编排路由声明）。</p>
               </div>
-            </div>
-            <div class="skd-pad">
-              <p class="mk-card__note">标注「内部」的字段不进入用户可见回复。</p>
             </div>
           </section>
           <!-- 设计页「字段路由」内容（字段影响范围血缘 + 加字段向导）：
@@ -332,11 +337,11 @@
             <!-- #135：此处是「起草」区，草稿不再随关闭/跳转静默丢弃——关闭或跳设计页前写
                  sessionStorage（skd-prompt-draft:<skillId>），下次打开自动恢复并提示；另给「复制」带走 -->
             <p v-if="pmDraftRestored" class="skd-draft-note" role="status">
-              已恢复上次未提交的草稿（{{ pmDraftSavedAt }}）。「前往核心文件编辑」不会携带草稿，可先「复制内容」。
+              已恢复上次未提交的草稿（{{ pmDraftSavedAt }}）。
             </p>
             <label class="skd-field">
               <span>system</span>
-              <textarea v-model="pmText" class="mk-input mono skd-ta" rows="12" spellcheck="false"></textarea>
+              <textarea ref="pmTextRef" v-model="pmText" class="mk-input mono skd-ta" rows="12" spellcheck="false"></textarea>
             </label>
             <label class="skd-field">
               <span>变更说明</span>
@@ -346,6 +351,9 @@
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="copyPromptDraft">复制内容</button>
+            <!-- 2026-11-02 评审：底排只有「复制内容 / 取消 / 前往核心文件编辑」，
+                 读起来像没有保存动作。这里明写一颗「保存草稿」（落本机浏览器，见 persistPromptDraft） -->
+            <button type="button" class="mk-btn" @click="savePromptDraft">保存草稿</button>
             <button type="button" class="mk-btn" @click="closePromptModal">取消</button>
             <button type="button" class="mk-btn mk-btn--primary" @click="goDesignWithDraft()">前往核心文件编辑 →</button>
           </div>
@@ -357,12 +365,15 @@
   <!-- ===== 未找到：ID 未注册或 live/meta 均不可得 ===== -->
   <div v-else-if="notFound" class="mk-page skd">
     <MkEmptyState
-      icon="◌"
       title="未找到该 Skill"
-      :description="`「${skillId}」可能未注册或 ID 有误。`"
+      :description="`「${skillId}」不在已登记的 Skill 列表里：ID 可能有误，或该 Skill 已下线并从目录移除。`"
       action-text="返回列表"
       @action="closeSubPage"
-    />
+    >
+      <!-- 图标走 #icon 插槽（2026-11-02 评审：原 ◌ 字形在这个尺寸下几乎看不见，像图标没渲染）。
+           线性图标是全站既有语汇，此处只是避开那个过小的字符字形。 -->
+      <template #icon><FileQuestionMark :size="22" aria-hidden="true" /></template>
+    </MkEmptyState>
   </div>
 
   <!-- ===== 首次加载：骨架屏（形状走 MkSkeleton 版式） ===== -->
@@ -397,14 +408,13 @@
  * 重复暂留（用户拍板「先平铺」）；脏态守卫（协议编辑器 / 运行时 / 试跑 / 版本）见文件尾。
  * /admin/skills/:agentId 与 /admin/skill-workbench/:agentId 深链已重定向到本页。
  */
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace, type TraceSpan } from './store'
 import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange, liveRefreshSeq, mapLogsToSpans, type RawLog } from './live'
 /* P2-15（设计评审）：版本状态走共享字典（与设计页 versions-tab 同域同词：ARCHIVED→已归档），
    删本页本地 versionStatusText（只映射 ACTIVE/DRAFT，ARCHIVED 直出英文） */
-import { categoryText, errorCategoryText } from './statusText'
-import { errorCodeLabel } from './terms'
+import { categoryText } from './statusText'
 import { successRateText, successRateTone } from './rate-utils'
 import {
   adminSkillsApi,
@@ -419,6 +429,7 @@ import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
+import { FileQuestionMark } from 'lucide-vue-next'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -428,7 +439,7 @@ import { toast } from '@/utils/toast'
 /* 设计页能力平铺（2026-10-15 用户拍板：独立设计页退役，内容就地铺进本页）——
    6 个 tab 正文是自包含子组件（各自 scoped 样式），直接挂到本页各页签只读区块下方。
    各子组件的脏态经 @dirty 上报，离开守卫见文件尾（原 SkillDesignPage 的守卫整套迁入）。 */
-import { coreEditorState, type TrialInputDecl } from './skill-design/sdp-shared'
+import { coreEditorState, callTimeFull, callTimeLabel, failureText, type TrialInputDecl } from './skill-design/sdp-shared'
 import ProtocolTab from './skill-design/protocol-tab.vue'
 import TrialTab from './skill-design/trial-tab.vue'
 import VersionsTab from './skill-design/versions-tab.vue'
@@ -905,6 +916,15 @@ const versionsFailed = ref(false)
 
 /* ===== core 文件路径（工程页签；prompt-ops agent-overview 真实字段） ===== */
 const coreFilePath = ref('')
+/** 工程页签这行路径是**编译产物**（prompt-ops agent-overview 的 file.path，形如
+    prompts/skill.<id>.md），而模拟可编辑的源文件是 prompts/core/<id>.yaml。此前这行叫
+    「核心文件」，与协议页签写的 prompts/core/<id>.yaml 同屏读作同一份文件的两个名字
+    （2026-11-02 评审 P0）。改叫 Prompt 文件，并在悬停里点明源文件是谁。 */
+const promptFilePathTitle = computed(() =>
+  coreFilePath.value
+    ? `编译产物（由核心文件 prompts/core/${skillId.value}.yaml 生成，不要直接改这里）`
+    : ''
+)
 
 /* ===== core YAML 投影（协议页签「回合状态机 / 终止条件」+ 工程页签「依赖」） =====
    原型 SKILL_STATE_MACHINE / SKILL_TERMINATIONS / SKILL_ENGINEERING.deps（index.html 1229-1250）
@@ -1072,7 +1092,13 @@ async function load(force = false) {
   if (seq !== loadSeq || skillId.value !== id) return
   loading.value = false
   // 身份双源（live 档案 / meta）都拿不到才算未找到：live boot 未完成时 meta 兜底
-  if (!view.value) notFound.value = true
+  if (!view.value) {
+    notFound.value = true
+    /* 面包屑用的是 subPage.label，未找到时没人写它 → 原样露出调用方传的机器 id
+       （2026-11-02 评审：面包屑里出现 _no_such_skill_ 这种原始 ID）。这里补一句人话，
+       id 本身仍留在空态正文里，排障不受影响。 */
+    setSubPageLabel('未找到的 Skill')
+  }
   // 面包屑与标题同源（英文 canonical id）：中文别名只在 hero 副行出现一次，
   // 否则「面包屑中文 / 标题英文」又成一件事两种说法
   else setSubPageLabel(view.value.id)
@@ -1132,17 +1158,13 @@ const recent = computed(() => {
 })
 const statusDotLabel = (s: string) => (s === 'ok' ? '成功' : s === 'err' ? '失败' : '超时')
 /** F7-4：失败行的行标题此前直出 span.title（live.ts:193 把引擎异常原文 slice(0,40) 塞进标题），
-    列表里读到的是一串截断代码异常，既不可读也不指向动作。现失败行标题 = 错误类别人话
-    （errorCategoryText 单源；无类别时回落 errorCodeLabel，再回落「执行失败」），
+    列表里读到的是一串截断代码异常，既不可读也不指向动作。现失败行标题 = 人话文案
+    （failureText 单源，category → 错误码字典 → 「执行失败」），
     原始异常原文与 traceId 一并进 title（详情/tooltip），点行仍跳执行日志 Trace。 */
 function recentRowText(s: TraceSpan): string {
   if (s.status === 'ok') return s.title || '执行完成'
   if (s.status === 'warn') return '执行超时'
-  // 兜底类别 'error' 的字典值是「失败」：与前缀重复，按无类别处理（不渲染「执行失败 · 失败」）
-  const cat = errorCategoryText(s.errorCategory)
-  if (cat && cat !== '失败') return `执行失败 · ${cat}`
-  const code = errorCodeLabel(s.errorCode)
-  return code ? `执行失败 · ${code}` : '执行失败'
+  return failureText(s.errorCategory, s.errorCode)
 }
 function recentRowTitle(s: TraceSpan): string {
   const parts = [`traceId：${s.traceId}`]
@@ -1153,18 +1175,8 @@ function recentRowTitle(s: TraceSpan): string {
   }
   return parts.join('\n')
 }
-/** 最近调用的发生时间：今天只给时:分，跨天带月-日（等宽数字，避免行内抖动） */
-function callTimeLabel(ts: number): string {
-  const d = new Date(ts)
-  const p = (n: number) => String(n).padStart(2, '0')
-  const hm = `${p(d.getHours())}:${p(d.getMinutes())}`
-  const now = new Date()
-  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
-  return sameDay ? hm : `${p(d.getMonth() + 1)}-${p(d.getDate())} ${hm}`
-}
-function callTimeFull(ts: number): string {
-  return new Date(ts).toLocaleString('zh-CN', { hour12: false })
-}
+/** 最近调用的发生时间：与试跑页同源（sdp-shared 的 callTimeLabel），
+    同一记录在详情与试跑页不再一处相对、一处绝对；完整时刻在 title（callTimeFull） */
 
 /* 模型配置 / 模型测试的状态与动作 2026-10-19 迁出本页：
    宿主原本自己维护一份 rtForm/probeForm 并渲染同名的两张卡，与设计区块 RuntimeTab 构成
@@ -1212,10 +1224,11 @@ const pmDraftRestored = ref(false)
 const pmDraftSavedAt = ref('')
 const pmMaskRef = ref<HTMLElement | null>(null)
 const pmPanelRef = ref<HTMLElement | null>(null)
+const pmTextRef = ref<HTMLTextAreaElement | null>(null)
 
 const pmDraftKey = () => `skd-prompt-draft:${skillId.value}`
 
-function openPromptModal() {
+async function openPromptModal() {
   pmDraftRestored.value = false
   pmDraftSavedAt.value = ''
   let draft: { text?: string; note?: string; at?: string } | null = null
@@ -1233,6 +1246,14 @@ function openPromptModal() {
     pmNote.value = ''
   }
   pmOpen.value = true
+  /* 2026-11-02 评审：文本框打开时停在正文中段（写入长文本后浏览器把插入点留在了末尾，
+     顺带把滚动位带到后半截），读者看不到提示词开头。挂载后把插入点与滚动位复位到首行。 */
+  await nextTick()
+  const ta = pmTextRef.value
+  if (ta) {
+    ta.setSelectionRange(0, 0)
+    ta.scrollTop = 0
+  }
 }
 /** 关闭时保留草稿（与生效内容一致则清掉，避免残留过期草稿） */
 function persistPromptDraft() {
@@ -1247,6 +1268,12 @@ function persistPromptDraft() {
 function closePromptModal() {
   persistPromptDraft()
   pmOpen.value = false
+}
+/** 显式保存草稿（2026-11-02 评审：底排没有任何保存类动作）：
+ *  草稿落在本机浏览器会话里，关闭或跳转后下次打开本弹层会自动恢复，不写库、也不发布。 */
+function savePromptDraft() {
+  persistPromptDraft()
+  toast.success('草稿已保存（本机浏览器），下次打开自动恢复')
 }
 /** 跳设计页：先落草稿（设计页无接收通道，草稿留在本页下次可恢复），再走既有跳转 */
 function goDesignWithDraft() {
@@ -1301,7 +1328,10 @@ useEscape(
    .skd-tablewrap 的 overflow-x:auto 拿不到滚动条（右侧「属性/脱敏」列不可达）。
    与 mk-primitives 的 `.mk-page > * { min-width: 0 }` 同款修法，让子项可收缩、横滚真正接管。 */
 .skd-pane > * { min-width: 0; }
-.skd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+/* 2026-11-02 评审：左右两张同类字段表（输入契约 7 行 / 输出契约 26 行）行高差数倍——
+   行数少的那张被同排更高的卡片拉到一样高，7 行摊在一张很高的卡里，行距看着像排版坏了。
+   align-items: start 让每张卡按内容高排，行距回到与行数无关的固定节奏。 */
+.skd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
 .skd-grid > .mk-card { box-shadow: none; }
 .skd-pad { padding: 12px 16px; display: grid; gap: 10px; align-content: start; }
 
@@ -1368,8 +1398,15 @@ useEscape(
   font: var(--mk-fs-micro)/1.65 var(--mk-mono);
   white-space: pre-wrap;
   word-break: break-word;
+  /* 2026-11-02 评审：定高 300px 与行高（1.65 × 字号）不成整数倍，最后一行被下边框切掉半行，
+     框内既没有省略号也看不出能滚。改为按行盒计量（15 行）——可视区恒为整数行不切字；
+     content-box 让 max-height 只算文本区，不必把内边距算进去；
+     认不得 lh 的浏览器回落上面的 300px，行为与旧版一致。 */
+  box-sizing: content-box;
   max-height: 300px;
+  max-height: 15lh;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 /* ===== 试跑 ===== */

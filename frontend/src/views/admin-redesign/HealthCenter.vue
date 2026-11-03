@@ -143,13 +143,16 @@
               <summary class="hc-group__summary">
                 <span class="hc-check__dot" :class="`hc-check__dot--${group.tone}`"></span>
                 <span class="hc-group__name">{{ group.name }}</span>
-                <span class="hc-group__sep" aria-hidden="true">·</span>
-                <span class="hc-group__stats">
-                  <span v-if="group.error" class="hc-group__stat hc-group__stat--error">异常 <b>{{ group.error }}</b></span>
-                  <span v-if="group.warn" class="hc-group__stat hc-group__stat--warn">需关注 <b>{{ group.warn }}</b></span>
-                  <span v-if="group.ok" class="hc-group__stat">正常 <b>{{ group.ok }}</b></span>
-                  <span v-if="group.info" class="hc-group__stat">观测 <b>{{ group.info }}</b></span>
-                </span>
+                <!-- 域内没有任何状态计数时（只读记录组会走到这一档）不留一个孤零零的分隔符 -->
+                <template v-if="group.hasStats">
+                  <span class="hc-group__sep" aria-hidden="true">·</span>
+                  <span class="hc-group__stats">
+                    <span v-if="group.error" class="hc-group__stat hc-group__stat--error">异常 <b>{{ group.error }}</b></span>
+                    <span v-if="group.warn" class="hc-group__stat hc-group__stat--warn">需关注 <b>{{ group.warn }}</b></span>
+                    <span v-if="group.ok" class="hc-group__stat">正常 <b>{{ group.ok }}</b></span>
+                    <span v-if="group.info" class="hc-group__stat">观测 <b>{{ group.info }}</b></span>
+                  </span>
+                </template>
               </summary>
               <div class="hc-checks">
                 <div v-for="item in group.items" :id="`hc-check-${item.id}`" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
@@ -473,8 +476,13 @@ const healthGroups = computed(() => {
       const severityCount = (s: HealthCenterItem['severity']): number => list.filter((i) => i.severity === s).length
       const error = severityCount('error')
       const warn = severityCount('warn')
-      const ok = severityCount('ok')
-      const info = severityCount('info')
+      /* 状态计数与行内语义词同源（2026-11-02 评审）：原先 ok/info 各按 severity 计一档，
+         零计数的 info 行读「无异常」、组头却把它计进「观测」，同屏三种说法讲同一件事。
+         现在「观测」只收真有读数的只读观测项，零计数的读「正常」、也计进「正常」；
+         覆盖行是记录数不是检查项（行内读「无覆盖 / N 条覆盖」），不进这两档。 */
+      const checkable = list.filter((i) => i.semantics !== 'override-record')
+      const ok = checkable.filter((i) => i.severity === 'ok' || (i.severity === 'info' && !i.count)).length
+      const info = checkable.filter((i) => i.severity === 'info' && i.count > 0).length
       return {
         base,
         name: SERVICE_GROUP_NAMES[base] || base,
@@ -484,6 +492,7 @@ const healthGroups = computed(() => {
         error,
         warn,
         info,
+        hasStats: error + warn + ok + info > 0,
         abnormal: list.filter(isHealthAbnormal).length,
         // 审核 #100：info-only 域不再亮绿「正常」——绿只代表真正查过且无异常
         tone: error > 0 ? 'error' : warn > 0 ? 'warn' : ok > 0 ? 'ok' : 'info',
@@ -573,7 +582,33 @@ const DETAIL_LIMIT = 20
 function visibleDetail(item: HealthCenterItem): string[] {
   // 运行时遥测：后端按 Skill 归并 + 带最近时间 → 先本地化再截断（归并后行数通常很少）
   if (item.id === 'runtime-prompt') return runtimePromptLines(item).slice(0, DETAIL_LIMIT)
+  if (item.id === 'runtime-degradation') return degradationLines(item).slice(0, DETAIL_LIMIT)
   return item.detail.slice(0, DETAIL_LIMIT)
+}
+/* 降级事件的故障类别 → 人话。后端按 `来源/类别 × 次数` 聚合（health-center-summary.service.ts），
+   类别是内部英文码（枚举与释义见 backend/src/skills/degradation-telemetry.ts）——
+   原样印出来读者判断不出这是什么问题（2026-11-02 评审）。
+   注意：后端这一项只有次数、没有逐次发生时间，行内不编时间，时间窗由检查项标题「近 7 天」承担。 */
+const DEGRADATION_FAULT_LABELS: Record<string, string> = {
+  NETWORK_TIMEOUT: '上游请求超时',
+  SCHEMA_VIOLATION: '返回的数据结构不符合约定',
+  RATE_LIMITED: '被上游限流',
+  UPSTREAM_EMPTY: '上游返回空内容',
+  DB_READ_FAILED: '数据库读取失败',
+  PARSE_FAILED: '返回内容解析失败',
+  MODEL_ARITHMETIC_MISMATCH: '模型算式与判分结果不一致',
+  MODEL_ANSWER_LEAK: '模型把答案写进了学生可见的文本',
+  MODEL_AFFIRMATION_MISMATCH: '判错的作答回合里老师回复仍出现肯定语',
+  MODEL_AFFIRMATION_AFTER_FAILED_CHECKPOINT: '判分失败后的回合仍出现肯定语',
+  UNKNOWN: '未分类原因',
+}
+/** 降级明细本地化：`来源/类别 × 次数` → `人话 × 次数（来源）`；非该形态的行（读取失败的说明）原样返回 */
+function degradationLines(item: HealthCenterItem): string[] {
+  return item.detail.map((line) => {
+    const m = /^(.*)\/([A-Z_]+) × (\d+)$/.exec(line)
+    if (!m) return line
+    return `${DEGRADATION_FAULT_LABELS[m[2]] || m[2]} × ${m[3]}（${m[1]}）`
+  })
 }
 /** 运行时遥测明细本地化：后端 `agent ×N @ ISO` → `agent ×N｜最近 9月6日 10:14` */
 function runtimePromptLines(item: HealthCenterItem): string[] {
@@ -618,11 +653,13 @@ function semHint(semantics: HealthCenterItem['semantics']): string {
 function semanticsLabel(semantics: HealthCenterItem['semantics']) {
   return SEMANTICS_META.find((m) => m.id === semantics)?.label || semantics
 }
-/** 行内语义词（2026-10-24）：正常项 / 零计数不再挂「偏差 / 不一致」这类异常词，
-    改为中性描述，避免正常行自带告警语义。 */
+/** 行内语义词（2026-10-24 / 2026-11-02）：正常项与零计数一律读「正常」——此前零计数的
+    ok 行读「正常」、info 行读「无异常」，同屏用两个词讲同一件事。
+    覆盖行是「管理员手工覆盖的行数」这个记录数，不是检查项，按有无覆盖如实说——
+    给它下「无异常」结论时读者分不出 0 是好是坏（0 只表示没有覆盖）。 */
 function semanticsText(item: HealthCenterItem): string {
-  if (item.severity === 'ok') return '正常'
-  if (!item.count) return '无异常'
+  if (item.semantics === 'override-record') return item.count > 0 ? `${item.count} 条覆盖` : '无覆盖'
+  if (item.severity === 'ok' || !item.count) return '正常'
   return semanticsLabel(item.semantics)
 }
 

@@ -8,7 +8,8 @@
  *  2) ?tab= 是宿主自己的键：只做成员校验、不认识的回落首页签且不改写地址栏；
  *  3) 「模型与接入」面板懒挂载 + v-show 常驻——它在切页签时**不能**被销毁，
  *     否则未保存的接入配置会静默丢掉（它的 onBeforeRouteLeave 拦不住同 route 的 ?tab= 变化）；
- *  4) 页头「刷新注册表」只在「模型与接入」页签出现（它刷的是那个面板的注册表）。
+ *  4) 页头保持干净——「刷新注册表」已收进那张卡的右上图标钮（2026-11-03 用户
+ *     「最右上角那个多余的按钮…保持顶部干净」），任何页签、任何挂载形态都不再出现在页头。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -130,16 +131,15 @@ describe('系统设置宿主：五个页签', () => {
     wrapper.unmount()
   })
 
-  it('页头「刷新注册表」只在模型与接入页签出现（它刷的是那个面板的注册表）', async () => {
+  it('页头保持干净：任何页签都不再有页面级动作（刷新注册表进了卡片右上）', async () => {
     const at = async (tab: string) => {
       const { wrapper } = await mountHost(`/admin/system-settings?tab=${tab}`)
       const has = wrapper.findAll('.mk-pagehead__actions > button').some((b) => b.text().includes('刷新注册表'))
       wrapper.unmount()
       return has
     }
-    expect(await at('api')).toBe(true)
-    for (const t of ['tools', 'export', 'security', 'access']) {
-      expect(await at(t), `tab=${t} 不该出现刷新注册表`).toBe(false)
+    for (const t of ['api', 'tools', 'export', 'security', 'access']) {
+      expect(await at(t), `tab=${t} 不该出现页面级刷新注册表`).toBe(false)
     }
   })
 
@@ -178,6 +178,39 @@ describe('切页签不得丢掉未保存的接入配置', () => {
     wrapper.unmount()
   })
 
+  it('进过「模型与接入」之后，其余四个页签照常渲染（2026-11-02 空白页回归）', async () => {
+    /* 回归：其余四页签一度写成 `v-if="apiMounted" v-show=…` 那条链上的 v-else-if。
+       apiMounted 一旦为真就再不变假，v-else-if 只在链头为假时求值——于是「先看过模型与接入」
+       之后再点任何页签都是空白，且不报错。下面的 it.each 用「每个页签各挂一次新宿主」跑，
+       apiMounted 每次都是 false，正好绕开这条路径，所以必须在这里串起来测。 */
+    const { wrapper, router } = await mountHost('/admin/system-settings?tab=api')
+    expect(wrapper.findComponent(ApiConfig).exists()).toBe(true)
+    const cases = [
+      ['tools', ServerToolsPanel, '#ss-panel-tools'],
+      ['export', DataExportPanel, '#ss-panel-export'],
+      ['security', SessionSecurity, '#ss-panel-security'],
+      ['access', AccessControl, '#ss-panel-access'],
+    ] as const
+    for (const [key, comp, sel] of cases) {
+      await router.push(`/admin/system-settings?tab=${key}`)
+      await flushPromises()
+      expect(wrapper.find(sel).exists(), `tab=${key} 接在 v-else-if 链上会整条空白`).toBe(true)
+      expect(wrapper.findComponent(comp as never).exists()).toBe(true)
+    }
+    wrapper.unmount()
+  })
+
+  it('挂载时若 route 还停在上一个页面，不得把 ?tab= 写到那个页面（2026-11-02 修）', async () => {
+    /* 本组件由 scene 驱动挂载，早于 AdminConsole 的「scene → URL」push 落定；挂载时那次
+       「补 ?tab=」用不带 path 的 replace，会把 tab 写到当时的 route 上并顶掉在途 push。
+       这里模拟那个时刻：router 停在 /admin/people，宿主被挂起。 */
+    const { wrapper, router } = await mountHost('/admin/people')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/admin/people')
+    expect(router.currentRoute.value.query.tab).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('首屏不是模型与接入时不预挂载（懒挂载），一旦进过就常驻', async () => {
     const { wrapper, router } = await mountHost('/admin/system-settings?tab=export')
     expect(wrapper.findComponent(ApiConfig).exists()).toBe(false)
@@ -207,15 +240,16 @@ describe('嵌入态：面板不自带页头', () => {
     w.unmount()
   })
 
-  it('独立挂载（不传 embedded）时页头仍在，且动作只有刷新注册表', async () => {
+  it('独立挂载（不传 embedded）时页头仍在，且页头没有动作（刷新注册表在卡片右上）', async () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/:page?', component: { template: '<div/>' } }] })
     await router.push('/admin/system-settings?tab=api')
     await router.isReady()
     const w = mount(ApiConfig, { global: { plugins: [router], stubs: { MkLoading: true } } })
     await flushPromises()
     expect(w.find('.mk-pagehead__title').text()).toBe('模型与接入')
-    const actions = w.findAll('.mk-pagehead__actions > button').map((b) => b.text())
-    expect(actions).toEqual(['刷新注册表'])
+    expect(w.findAll('.mk-pagehead__actions > button')).toHaveLength(0)
+    // 重读本机注册表仍可达——它现在是那张卡右上的图标钮
+    expect(w.find('.mpp > .mk-card__head .mpp-regreload').exists()).toBe(true)
     expect(w.classes()).toContain('mk-page--fill')
     expect(w.classes()).not.toContain('ac-host--embedded')
     w.unmount()

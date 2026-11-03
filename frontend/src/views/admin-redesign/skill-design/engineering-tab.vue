@@ -7,8 +7,10 @@
         <tbody>
           <tr><th title="kind">类型</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
           <tr><th title="agentId">Agent 标识</th><td><code class="mono">{{ overview.agentId }}</code></td></tr>
-          <tr v-if="overview.file"><th title="file.path">文件路径</th><td><code class="mono">{{ overview.file.path }}</code></td></tr>
-          <tr v-if="overview.file?.hash"><th title="file.hash">文件哈希</th><td><code class="mono" :title="overview.file.hash">{{ shortHash(overview.file.hash) }}</code></td></tr>
+          <!-- 2026-11-02 评审：这一行是 core 编译出来的 Prompt 文件（agent-overview 的 file.path），
+               不是可编辑的核心文件；标签写「文件路径」会与协议页签的 prompts/core/<id>.yaml 撞名。 -->
+          <tr v-if="overview.file"><th title="file.path">Prompt 文件路径</th><td><code class="mono" :title="overview.file.path">{{ overview.file.path }}</code></td></tr>
+          <tr v-if="overview.file?.hash"><th title="file.hash">Prompt 文件哈希</th><td><code class="mono" :title="`${overview.file.hash}（编译产物 prompts/${skillId}.md 的正文哈希）`">{{ shortHash(overview.file.hash) }}</code></td></tr>
           <tr v-if="overview.db?.id"><th title="db.id">生效记录 ID</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
           <tr v-if="overview.db?.version"><th title="db.version">生效版本</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
           <!-- B19-F7-3：agent_prompts.useCount 列（2026-10-31 四轮评审撤除）——

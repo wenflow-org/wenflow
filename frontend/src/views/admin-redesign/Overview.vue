@@ -118,7 +118,10 @@
 
     <!-- 教学闭环（原型 .loop 招牌块）：五环各一卡，读数全真实。
          口径：对话/路径/评估来自 overview/stats（随 10s 轮询）；
-         教学回合=会话累计、记忆复习=到期待办（进页拉一次）。 -->
+         教学回合=会话累计、记忆复习=到期待办（进页拉一次）。
+         卡内不再画行尾箭头（2026-11-02 评审 R4）：卡间已有指向下一环的连线箭头，
+         同一行同方向再挂一个蓝色「→」等于两套箭头说同一件事。可点线索保留在
+         悬停边框与 cursor 上（同页 KPI 卡的可点语言）。 -->
     <div class="mk-card">
       <div class="mk-card__head">
         <span class="mk-card__title">教学闭环</span>
@@ -159,7 +162,6 @@
                   title="生成失败的路径数"
                   @click.stop="jumpToFailedPaths()"
                 >失败 {{ s.failN }}</button>
-                <span class="loop__go" aria-hidden="true">→</span>
               </span>
             </div>
           </template>
@@ -173,9 +175,14 @@
       <div class="mk-card ov-card--rank">
         <div class="mk-card__head">
           <span class="mk-card__title">Skill 调用量 Top 5</span>
-          <!-- 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：卡头 meta 只留时间窗，
-               账号口径（仅真实账号 / 含管理员发起的仿真任务）进 title -->
-          <span class="mk-card__meta">近 7 天</span>
+          <!-- 卡头 meta = 时间窗 + 账号范围。2026-10-21 曾把账号口径只写进 title
+               （当时嫌可见副文啰嗦），2026-11-02 评审 R2 推翻了这一处理：同一 Skill
+               在详情页读 197 次、这里读 72 次，两边都写「近 7 天」，差别只在这一卡不含
+               虚拟学习者——范围不可见就会被读成数据对不上。meta 只留这一句，完整说明进 title。 -->
+          <span
+            class="mk-card__meta"
+            title="近 7 天 · 只统计真实账号发起的 Skill 执行，不含虚拟学习者"
+          >近 7 天 · 不含虚拟学习者</span>
         </div>
         <div class="ov-card__body">
           <div class="ranklist">
@@ -332,15 +339,18 @@
               </div>
             </div>
           </div>
+          <!-- 图标走 #icon 插槽（2026-11-02 评审 R7）：原来传字符「◌」，19px 字号在 46px 圆角块里
+               只剩一个几乎看不见的点，读成图标没渲染。线性图标按同页空态惯例给 22px。 -->
           <MkEmptyState
             v-else
             class="ov-card__empty"
-            icon="◌"
             :title="data.feed.length ? '动态均来自测试 / 模拟账号' : '近 24h 暂无动态'"
             :description="data.feed.length
               ? '按真实视角已隐藏这些动态。'
               : '近 24 小时没有执行失败、新用户注册、教学会话或任务完成记录。'"
-          />
+          >
+            <template #icon><Inbox :size="22" :stroke-width="1.7" aria-hidden="true" /></template>
+          </MkEmptyState>
         </div>
       </div>
     </div>
@@ -362,6 +372,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue';
+import { Inbox } from 'lucide-vue-next';
 import { overviewHealth, investigateAgent, investigateTodayFailures, statusActionOf, mergeStatusHeadline, intent, dataSource, openSubPage } from './store';
 import {
   liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing,
@@ -430,7 +441,8 @@ const loopStages = computed<LoopStage[]>(() => {
          蓝被读成「选中/当前」，五环里只有它一个蓝，语义自相矛盾。五环只保留两档：
          正常（done）/ 有失败（alert），进行中与否由读数本身说明。 */
       val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'done',
-      title: '进行中的目标对话数',
+      /* title 撤（2026-11-02 文案清理）：卡名「目标对话」+ 读数「N 进行中」已把这句话说过一遍，
+         tooltip 只是把同屏文字重新组合，不带任何屏上没有的信息。 */
       scene: 'goal-conversations',
     },
     {
@@ -466,7 +478,8 @@ const loopStages = computed<LoopStage[]>(() => {
       // 视觉修复 2026-10-24：评估失败数 > 0 时阶段卡必须与「路径规划」同档转 alert，
       // 不能继续绿框（同屏「失败 N」+ 绿色阶段卡会被读成互相矛盾）
       tone: evalFailed > 0 ? 'alert' : 'done',
-      title: `最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结中 ${evalOk} 次评估完成 · 失败 ${evalFailed}`,
+      /* title 撤（2026-11-02 文案清理）：分母（最近 N 次总结）/ 完成 / 失败三个数都印在本卡读数行上，
+         tooltip 把同一组数换个说法再讲一遍；口径的可见出口仍是读数行本身。 */
       scene: 'teaching-sessions',
       sceneQuery: evalFailed > 0 ? { wrap: 'eval-failed' } : undefined,
     },
@@ -479,8 +492,10 @@ const loopStages = computed<LoopStage[]>(() => {
           : `${memDue.value ?? 0} 待办`,
       tone: memState.value === 'failed' || (memDue.value ?? 0) > 0 ? 'alert' : 'done',
       ringFailed: memState.value === 'failed',
+      /* 失败态不再附「点「重试」重新获取」（2026-11-02 文案清理）：同一状态下本卡指标行就渲染着
+         「重试」钮（ringFailed），这句是对那个控件的复述；失败事实与到期口径保留。 */
       title: memState.value === 'failed'
-        ? '到期待办数获取失败 · 点「重试」重新获取'
+        ? '到期待办数获取失败'
         : '到期未复习的记忆条数',
       scene: 'memory-review',
     },
@@ -700,12 +715,22 @@ const todayFailed = computed(() => {
 
 /** 结论行右端动作：按结论自己的口径派生。
     「需要关注」（今日失败 / 今日成功率两类触发）→ 去执行日志按「失败 + 今天」排查；
+    「近 7 天失败 N 次」这一类结论（今日无调用时的待办接管）→ 去同一批失败调用，
+    否则横幅报 24 次、右端只给健康检查清单，这 24 次由哪些调用组成无处可查
+    （2026-11-02 评审 R3）；
     其余（运行平稳 / 空闲 / 统计未就绪）→ 健康中心入口（健康明细已从状态条撤除，这里只剩这一个出口）。 */
 const statusAction = computed(() => {
   if (statusActionOf(health.value?.headline || '') === 'investigate-today') {
     return {
       label: '去排查',
       run: investigateTodayFailures
+    }
+  }
+  if (todoTakesOver.value && failed7d.value > 0) {
+    return {
+      label: '查看失败明细',
+      title: '近 7 天失败的调用，落到执行日志的失败筛选',
+      run: () => jumpToFailures('')
     }
   }
   return { label: '查看健康中心', title: healthTitle.value, run: () => jump('health-center') }
@@ -1103,10 +1128,7 @@ watch(feedRef, (el) => {
 })
 watch(feedRows, () => { void nextTick(measureFeedOverflow) })
 
-/* 待处理事项（原型 Row B 第二卡）：与状态条同源，不另起口径。
-   密度优化（2026-10-03）：text 里末尾括号是口径标注（「近 7 天 · 200 条采样」），
-   与主句挤一行读着冗长 → 拆成主行 + 口径副行（副行弱化为 faint 小字）。
-   只做展示层拆分，文案单一事实源仍在 live.ts。 */
+/* 待处理事项（原型 Row B 第二卡）：与状态条同源，不另起口径。 */
 const topMaxCalls = computed(() => Math.max(1, ...(data.value?.topSkills || []).map((s) => Number(s.calls) || 0)));
 /** Top5 占比条：以榜首调用量为分母，下限 4% 保证末名可见（数字仍为唯一精确口径） */
 const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls.value) * 100), 4)}%`;
@@ -1116,11 +1138,15 @@ const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls
     定义位置见文件上方「Skill 标签三件套」：必须早于 feedRows（TDZ）。 */
 
 interface TodoItem { key: string; text: string; main: string; tone: Tone; actLabel: string; action: () => void; title?: string }
-/** 去掉末尾括号口径（完整句仍进 title）：可见行只留动作本身 */
-function splitTodoMain(text: string): string {
-  const m = text.match(/^(.*?)\s*[（(]([^（）()]+)[）)]\s*$/)
-  return m ? m[1] : text
-}
+/** 全量近 7 天失败数（按 Skill，与 Top 5 卡同一份聚合）。
+    待办清单本身来自 live.ts 的「最近 200 条调用」采样，采样数不能加「近 7 天」的标签：
+    同一 Skill 在同屏 Top 5 里是 7 次、在待办里是 1 次（2026-11-02 评审 R1）。
+    这里只认全量聚合里的读数；不在聚合里（Top 5 按调用量截断）的 Skill 不给数。 */
+const failed7dBySkill = computed(() => {
+  const map = new Map<string, number>();
+  for (const s of data.value?.topSkills || []) map.set(skillIdOf(s.agentId), Number(s.failed) || 0);
+  return map;
+});
 const todoItems = computed<TodoItem[]>(() => {
   const items: TodoItem[] = [];
   // 健康检查异常（#5）：状态条已红/琥珀报「N 项异常」，此处必须有对应条目，
@@ -1144,11 +1170,17 @@ const todoItems = computed<TodoItem[]>(() => {
   for (const a of effectiveActions.value) {
     // 事项标题里带内部 Skill id（live.ts 原文 `${agentId} 近 7 天失败…`）：换成「id · 中文别名」
     // （2026-10-25 英文为主；别名缺失时只剩 id，不再替换成纯中文名）
-    const text = a.agentId ? a.text.replace(a.agentId, skillLabelOf(a.agentId)) : a.text
+    const label = a.agentId ? skillLabelOf(a.agentId) : ''
+    const failed = failed7dBySkill.value.get(skillIdOf(a.agentId)) ?? 0
+    const text = label
+      ? failed > 0
+        ? `${label} 近 7 天失败 ${failed} 次`
+        : `${label} 近 7 天有失败调用`
+      : a.text
     items.push({
       key: `a-${a.agentId}-${a.text}`,
       text,
-      main: splitTodoMain(text),
+      main: text,
       tone: a.tone,
       actLabel: '去排查',
       action: () => investigateAgent(a.agentId),
@@ -1156,7 +1188,7 @@ const todoItems = computed<TodoItem[]>(() => {
   }
   const w = wrapupIssue.value;
   if (w) {
-    items.push({ key: 'wrapup', text: w.text, main: splitTodoMain(w.text), tone: w.tone as Tone, actLabel: '教学会话', action: () => openSceneWith('teaching-sessions', { wrap: 'degraded' }) });
+    items.push({ key: 'wrapup', text: w.text, main: w.text, tone: w.tone as Tone, actLabel: '教学会话', action: () => openSceneWith('teaching-sessions', { wrap: 'degraded' }) });
   }
   return items;
 });
@@ -1348,7 +1380,8 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
   cursor: pointer;
   transition: border-color 0.12s var(--mk-ease-out), background 0.12s var(--mk-ease-out);
 }
-/* 可点线索：悬停只换边框与底色（全站判例，不做位移），行尾箭头常显 */
+/* 可点线索：悬停只换边框与底色（全站判例，不做位移）。
+   阶段卡不挂行尾箭头：卡间连线已经表达「下一环」，卡内再画一个同向箭头是重复（2026-11-02 评审 R4） */
 .loop__step:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); background: var(--mk-btn-hover-bg); }
 .loop__step:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
@@ -1359,8 +1392,6 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 .loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
 /* 指标行 = 数值 + 失败徽章（错误内联，2026-10-03）：徽章可点，需手型与文字对齐 */
 .loop__valrow { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
-/* 行尾箭头：role=button 的可点线索，与页内文字链「→」同词汇 */
-.loop__go { margin-left: auto; color: var(--mk-blue); font-weight: 700; }
 .loop__fail { cursor: pointer; font-family: inherit; }
 /* 对比度（#0）：暗色 --mk-red-bg 是 14% 半透明红，红字压在本页 .loop__step--alert 的
    半透明琥珀底上合成 3.49:1（<小字 AA 4.5）。徽章自铺不透明底板：暗色取 --mk-surface-2

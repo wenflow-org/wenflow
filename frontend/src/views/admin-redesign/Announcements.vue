@@ -36,8 +36,10 @@
         <span class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 正文" />
-          <!-- 命中数只在真筛过时出（2026-10-26 动线收口）：未筛时它与分页器「共 N 条」同数同源 -->
-          <span v-if="filtered.length < rows.length" class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
+          <!-- 命中数只在真筛过时出（2026-10-26 动线收口）：未筛时它与分页器「共 N 条」同数同源。
+               带上「匹配」二字（2026-11-02 评审）：空态下单独一个「0 / 3 条」没有主语，
+               被读成工具栏里的无名计数。 -->
+          <span v-if="isFiltered && filtered.length < rows.length" class="mk-card__meta">匹配 {{ filtered.length }} / 共 {{ rows.length }} 条</span>
           <!-- 主操作归位（2026-10-26 用户「重新设计一下」）：原先它独占页签条下面一整行、
                靠右悬浮在卡片之外；现在与全站列表页同语法——卡头右组 = 搜索 → 主操作。
                独立页同一条出口，原先卡内那条 .an-toolbar 也一并撤除。 -->
@@ -106,7 +108,7 @@
             <td>
               <div class="mk-actions">
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>
-                <button v-if="r.status === 'published'" type="button" class="mk-link an-act--danger" :disabled="r.busy" @click="archive(r)">下线</button>
+                <button v-if="r.status === 'published'" type="button" class="mk-link mk-link--danger" :disabled="r.busy" @click="archive(r)">下线</button>
                 <button type="button" class="mk-link" :disabled="r.busy" @click="openEdit(r)">编辑</button>
                 <div class="mk-menu">
                   <!-- aria-expanded 按行判定（审核 #168）：menuOpen 是 useRowMenu 的全局布尔，
@@ -136,16 +138,19 @@
         @action="retryLive"
       />
 
-      <!-- 空态补 icon（审核 #170）：同单元反馈/通知/成就三处均为 icon="◌"，此处漏挂致骨架不同形 -->
+      <!-- 空态补 icon（审核 #170）：同单元反馈/通知/成就三处均为「◌」。
+           2026-11-02 评审：字符图标在缺字字体下渲染成豆腐方块，改走 #icon 插槽的线性图标。
+           2026-11-03：描述句「放宽筛选条件试试。」撤除——它教人操作，而「清除筛选」就在同一行；
+           反馈与目标对话两页早已按同一判例删掉，此处只是补齐一致性。 -->
       <MkEmptyState
         v-else
-        icon="◌"
         :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
-        :description="isFiltered ? '放宽筛选条件试试。' : ''"
         :action-text="isFiltered ? '清除筛选' : embedded ? '' : '新建公告'"
         min
         @action="isFiltered ? clearFilters() : openCreate()"
-      />
+      >
+        <template #icon><Megaphone :size="22" aria-hidden="true" /></template>
+      </MkEmptyState>
       <!-- 客户端分页（T1 硬约束「列表必须分页」）：筛选后按页切片，卡内尾部吸底 -->
       <Pagination
         v-if="filtered.length"
@@ -214,15 +219,15 @@
           <!-- 统一关闭路径：提交中禁关（此前绕过 closeCreate，与 Esc/遮罩/✕ 的守卫不一致） -->
           <button type="button" class="mk-btn" @click="closeCreate">取消</button>
           <template v-if="editingId">
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="saveEdit()">
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="creating || !formComplete" @click="saveEdit()">
               {{ creating ? '保存中…' : '保存修改' }}
             </button>
           </template>
           <template v-else>
-            <button type="button" class="mk-btn" :disabled="creating" @click="create(false)">
+            <button type="button" class="mk-btn" :disabled="creating || !formComplete" @click="create(false)">
               {{ creating ? '保存中…' : '存为草稿' }}
             </button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="create(true)">
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="creating || !formComplete" @click="create(true)">
               {{ creating ? '保存中…' : '创建并发布' }}
             </button>
           </template>
@@ -262,6 +267,7 @@ import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkDateTime from '@/components/mk/MkDateTime.vue'
 import Pagination from './Pagination.vue'
+import { Megaphone } from 'lucide-vue-next'
 
 /** 嵌入模式：作为「通知与公告」页「公告」tab 渲染（仅去掉外层壳，状态条/新建/编辑弹窗保留）。
     count 事件：公告总数上报（宿主「公告 N」徽章；embedded 才消费） */
@@ -518,6 +524,9 @@ watch(
 const editingId = ref('')
 const form = ref({ title: '', body: '', severity: 'info' as 'info' | 'warning' | 'critical', expiresAt: '', publishNow: true })
 const errors = ref<{ title?: string; body?: string }>({})
+/** 两个必填项都填了才允许提交（2026-11-02 评审）：标题/正文为空时主按钮原本仍是实心可点，
+   与发送通知弹窗「标题为空即置灰」的处理相反；提交时的校验保留作兜底。 */
+const formComplete = computed(() => !!form.value.title.trim() && !!form.value.body.trim())
 
 const severities = [
   { id: 'info' as const, label: '通知' },
@@ -686,10 +695,8 @@ function expiresLabel(iso: string): string {
 .an-sev--on.an-sev--info { border-color: var(--mk-blue); color: var(--mk-blue); background: var(--mk-blue-bg, #eef5ff); }
 .an-sev--on.an-sev--warning { border-color: var(--mk-amber); color: var(--mk-amber); background: var(--mk-amber-bg); }
 .an-sev--on.an-sev--critical { border-color: var(--mk-red); color: var(--mk-red); background: var(--mk-red-bg); }
-/* 下行类动作（下线公告）用危险色，与「编辑」这条日常动作拉开：2026-11-01 外部评审指出
-   两者同为蓝字链接，误点即让用户端公告消失（弹窗有二次确认，但颜色仍应先劝退） */
-.an-act--danger { color: var(--mk-amber); }
-.an-act--danger:hover { color: var(--mk-red); }
+/* 破坏性动作统一走全局 .mk-link--danger（红字）：2026-11-02 评审指出「下线」
+   在此是琥珀色，而同一后台的「撤回」「删除」是红色，危险动作在同屏有两种颜色。 */
 /* 过期时间快捷档：与字段同宽左对齐，一颗颗小链接，不抢主操作 */
 .an-exp-quick { display: flex; gap: 14px; margin-top: 2px; }
 .an-exp-quick .mk-link { font-size: var(--mk-fs-micro); }

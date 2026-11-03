@@ -236,9 +236,11 @@
      不能用 --mk-blue-hover——它在暗色档被有意提亮成 #6a9cf3（供文字 hover），
      当背景会让白字对比掉到 2.6:1（审计 VS1「主按钮 3.23」同族）。 */
   --mk-blue-fill-hover: #1f57cc;
-  --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  /* 回退字体用 Cascadia Code 而非规范的 Fira Code：本机实测栈更完整，保留。
-     规范值见 tokens.css --wf-font-mono。 */
+  /* 等宽型号指向规范档（--wf-font-mono，与 --mk-sans 同一写法）。2026-11-02 字体检查前
+     这里写的是一份独立型号串，第二档 Cascadia Code 与规范档的 Fira Code 不一致：
+     本机两档后备都没装，于是管理台组件落到 Cascadia Code、走设计系统基座的落到 Consolas，
+     同一界面两种等宽。规范档现已采用本机实测更优的 Cascadia Code，故改为反向别名。 */
+  --mk-mono: var(--wf-font-mono);
   /* 唯一的键盘焦点环（focus-visible）：全站控件同一圈。此前按钮/输入/胶囊各写各的
      ring（0 0 0 2px / 3px、不同透明度），焦点态也是"语言"的一部分。
      注意与 tokens.css --wf-focus-ring 的区别：规范那枚是**纯颜色**令牌（亮 20% / 暗 32%），

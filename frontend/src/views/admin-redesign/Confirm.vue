@@ -12,6 +12,8 @@
              ovl__body 正文 / ovl__foot（取消左、危险确认右，均右对齐）三段贴边排布 -->
         <div class="mk-confirm__head">
           <svg
+            class="mk-confirm__icon"
+            :class="{ 'mk-confirm__icon--danger': confirmState.danger }"
             viewBox="0 0 24 24"
             width="18"
             height="18"
@@ -23,6 +25,10 @@
             aria-hidden="true"
           >
             <path d="M12 3l7 3v5.5c0 4.4-3 7.6-7 9.5-4-1.9-7-5.1-7-9.5V6z" />
+            <!-- 盾形里补一个感叹号（2026-11-02 评审）：此前只有一圈中空外轮廓，
+                 看不出是警示图标；颜色只随危险档变化，普通确认仍保持中性 -->
+            <path d="M12 8.4v4.2" />
+            <circle cx="12" cy="15.6" r="0.9" fill="currentColor" stroke="none" />
           </svg>
           <h2 id="mk-confirm-title" class="mk-confirm__title">{{ confirmState.title }}</h2>
         </div>
@@ -117,6 +123,8 @@ function confirm() {
   border-bottom: 1px solid var(--mk-line);
 }
 .mk-confirm__head svg { flex: none; }
+/* 危险确认：图标与标题同取警示色，与普通确认区分（图标形状本身已带感叹号） */
+.mk-confirm__icon--danger { color: var(--mk-red, #dc2626); }
 .mk-confirm__title { margin: 0; font-size: var(--mk-fs-16); font-weight: 700; }
 .mk-confirm__body {
   padding: 16px;

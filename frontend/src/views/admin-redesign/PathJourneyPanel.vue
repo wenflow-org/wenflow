@@ -87,30 +87,40 @@
             <span class="mk-badge" :class="milestoneBadge(m.status)">{{ milestoneText(m.status) }}</span>
           </div>
           <div class="pd-stage__body">
-            <!-- 阶段内容层（2026-10-06 审核 #54）：描述/目标/核心概念/预计学时，无值不渲染、不硬造 -->
+            <!-- 阶段内容层（2026-10-06 审核 #54）：描述/目标/核心概念/预计学时，无值不渲染、不硬造。
+                 2026-11-02 文案清理：核心概念徽章原挂 title「该阶段的核心概念」——与可见前缀
+                 「核心概念：」逐字同义（复述），撤；预计学时的「估算值」title 是预测口径，留。 -->
             <div v-if="m.description || m.goal || m.coreConceptName || m.estimatedHours" class="pd-stage__brief">
               <p v-if="m.description" class="pd-stage__desc">{{ m.description }}</p>
               <p v-if="m.goal" class="pd-stage__goal"><span class="pd-stage__brief-label">目标</span>{{ m.goal }}</p>
               <div class="pd-stage__brief-meta">
-                <span v-if="m.coreConceptName" class="mk-badge mk-badge--muted" title="该阶段的核心概念">核心概念：{{ m.coreConceptName }}</span>
+                <span v-if="m.coreConceptName" class="mk-badge mk-badge--muted">核心概念：{{ m.coreConceptName }}</span>
                 <span v-if="m.estimatedHours" class="pd-stage__hours" title="预计时长为估算值">预计 ~{{ m.estimatedHours }}h</span>
               </div>
             </div>
             <!-- 2026-10-22 用户「先去掉，我觉得没用」：任务详情弹层退役——
                  它展示的状态/类型/时长与行内重复，唯一新字段「认知负荷」不值得开一层弹窗；
-                 行不再是按钮，回归纯展示（与阶段分区标题同口径）。 -->
+                 行不再是按钮，回归纯展示（与阶段分区标题同口径）。
+                 2026-10-18 拍板「所有阶段的任务行始终渲染」，故未解锁阶段仍列出任务；
+                 但锁定态原先与「未开始」完全同形（同样的方框、同样的「未开始」徽章），
+                 读者分不出哪些任务现在能动手（2026-11-02 评审 R54/R63）。
+                 锁定行去掉复选框与状态徽章、整体压一档——信息不少，可操作性不再冒充。 -->
             <div
               v-for="t in m.subtasks"
               :key="t.id"
               class="pd-task"
-              :class="{ 'pd-task--done': t.status === 'completed', 'pd-task--active': t.status === 'in_progress' }"
+              :class="{
+                'pd-task--done': t.status === 'completed',
+                'pd-task--active': t.status === 'in_progress',
+                'pd-task--locked': m.status === 'locked'
+              }"
             >
-              <span class="pd-task__box" aria-hidden="true">✓</span>
+              <span v-if="m.status !== 'locked'" class="pd-task__box" aria-hidden="true">✓</span>
               <span class="pd-task__main">
                 <strong class="pd-task__title">{{ t.title }}</strong>
                 <span class="pd-task__sub" :title="taskSubTitle(t)">{{ taskSub(t) }}</span>
               </span>
-              <span class="mk-badge" :class="taskBadge(t.status)">{{ taskText(t.status) }}</span>
+              <span v-if="m.status !== 'locked'" class="mk-badge" :class="taskBadge(t.status)">{{ taskText(t.status) }}</span>
             </div>
             <!-- .pd-none 仅作既有单测钩子保留（样式由共享 .mk-empty--line 承担，审核 #76） -->
             <p v-if="!m.subtasks.length" class="mk-empty mk-empty--line pd-none">该阶段暂无任务</p>
@@ -430,6 +440,9 @@ async function retryGeneration() {
 }
 .pd-task--done .pd-task__box { background: var(--mk-green); border-color: var(--mk-green); color: var(--mk-on-fill, #ffffff); }
 .pd-task--active .pd-task__box { border-color: var(--mk-blue); }
+/* 未解锁阶段的任务行：没有复选框与状态徽章，整行压到次级色，读作「还不能动手」 */
+.pd-task--locked { opacity: 0.55; }
+.pd-task--locked .pd-task__title { font-weight: 500; color: var(--mk-muted); }
 .pd-task__main { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .pd-task__title { font-size: var(--mk-fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pd-task__sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }

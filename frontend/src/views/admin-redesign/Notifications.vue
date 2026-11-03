@@ -31,6 +31,15 @@
             <span>{{ userFilterLabel }}</span>
             <button type="button" class="mk-link" @click="clearUserFilter">清除</button>
           </span>
+          <!-- 已读率（2026-11-02 改）：原先是表格上方一条独立聚合带，同一个数说了三遍
+               （占比条 / 百分数 / 已读-送达），其中分数与页头「共 / 未读」重复；0% 时占比条
+               只剩一条空槽，读起来像坏了。现收成筛选行尾的一枚读数——条与分数都去掉，
+               口径（只反映类型/未读筛选，关键词只过滤本页明细、不参与此比例）移进 title。 -->
+          <span
+            v-if="!failed && total > 0"
+            class="nt-rate-meta"
+            :title="`服务端在「类型 / 仅未读」筛选范围内的已读比例（关键词搜索只过滤本页明细，不参与此比例）`"
+          >已读率 {{ readRate }}%</span>
         </div>
         <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组。
              关键词：后端列表接口无关键词参数（adminApi list 无 search），按当前页客户端过滤；
@@ -45,23 +54,6 @@
                悬浮在卡片之外；现在与全站列表页同语法——卡头右组 = 搜索 → 主操作。 -->
           <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openSend">发送通知</button>
         </div>
-      </div>
-
-      <!-- 已读率聚合行（原型 1900-1904 表内「已读率」meter+mono% 列）。
-           粒度差：原型是「投放批次」级聚合（一行一批次），本页数据是逐用户通知
-           （粒度更细，行级已读点保留）；此处据服务端 total/unreadTotal 在同筛选域内
-           补一条聚合已读率，形态对齐原型 meterrow，不改变逐用户明细。 -->
-      <div v-if="!failed && total > 0" class="nt-rate">
-        <span class="nt-rate__label">已读率</span>
-        <span class="nt-rate__bar">
-          <span class="mk-minibar" role="img" :aria-label="`已读率 ${readRate}%`">
-            <i class="mk-minibar__fill" :style="{ width: readRate + '%' }"></i>
-          </span>
-        </span>
-        <b class="mono nt-rate__pct">{{ readRate }}%</b>
-        <!-- 口径：已读率来自服务端 total/unreadTotal，只反映类型/未读筛选；
-             关键词只过滤当前页明细，不参与此聚合，故此处不以「当前筛选」误标 -->
-        <span class="nt-rate__note">已读 {{ readCount }} / 送达 {{ total }}<template v-if="kindFilter || unreadOnly">（当前筛选）</template></span>
       </div>
 
       <MockSkeletonTable v-if="loading && !items.length" :cols="5" />
@@ -175,8 +167,10 @@
         :action-text="embedded ? '' : '发送第一条通知'"
         @action="openSend"
       />
+      <!-- 分页器常驻（2026-11-02 评审）：单页时也给出「共 N 条 / 每页条数」，
+           与反馈、公告两表一致；此前个位数数据下整条编号器消失，表格直接贴住卡片底边 -->
       <Pagination
-        v-if="total > pageSize"
+        v-if="total > 0"
         v-model:page="page"
         v-model:pageSize="pageSize"
         :total="total"
@@ -197,20 +191,21 @@
           </div>
           <div class="mk-modal__body">
             <!-- 2026-11-01 外部评审（五轮 P2）：公告弹窗有字数计数、通知弹窗没有，
-                 同一后台两套表单规范；端侧气泡/浮窗有长度限制，这里同口径给上限与计数 -->
+                 同一后台两套表单规范；端侧气泡/浮窗有长度限制，这里同口径给上限与计数。
+                 计数与标签分属两行（公告弹窗同款）：塞进标签里会与必填星号同行挤在一起。 -->
             <label class="mk-field" :class="{ 'mk-field--error': errors.title }">
-              <span class="mk-field__label">标题 <em class="mk-field__req">*</em>
-                <span class="mk-field__hint">{{ form.title.length }} / {{ TITLE_MAX }} 字</span>
-              </span>
+              <span class="mk-field__label">标题 <em class="mk-field__req">*</em></span>
               <input v-model="form.title" class="mk-field__input" :maxlength="TITLE_MAX" placeholder="通知标题" />
+              <span class="mk-field__hint">{{ form.title.length }} / {{ TITLE_MAX }} 字</span>
               <span v-if="errors.title" class="mk-field__err">{{ errors.title }}</span>
             </label>
             <label class="mk-field">
-              <!-- 标题带 * 已是唯一必填标记，非必填不再追加「（可选）」 -->
-              <span class="mk-field__label">正文
-                <span class="mk-field__hint">{{ form.body.length }} / {{ BODY_MAX }} 字</span>
-              </span>
+              <!-- 标题带 * 已是唯一必填标记，非必填不再追加「（可选）」。
+                   正文确实可以不填（发送时按空值处理）：把留空后果写出来，
+                   与公告弹窗「正文必填」的差异才讲得清（2026-11-02 评审） -->
+              <span class="mk-field__label">正文</span>
               <textarea v-model="form.body" class="mk-field__textarea" :maxlength="BODY_MAX" rows="3" placeholder="通知正文" />
+              <span class="mk-field__hint">不填则只发送标题 · {{ form.body.length }} / {{ BODY_MAX }} 字</span>
             </label>
             <label class="mk-field">
               <span class="mk-field__label">类型</span>
@@ -263,7 +258,7 @@
           <div class="mk-modal__foot">
             <!-- 统一关闭路径：发送中禁关（与 Esc/遮罩/✕ 同守卫） -->
             <button type="button" class="mk-btn" @click="closeSend">取消</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="sending" @click="confirmSend">
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="!canSend || sending" @click="confirmSend">
               {{ sending ? '发送中…' : '发送' }}
             </button>
           </div>
@@ -538,6 +533,10 @@ const targetResults = ref<Array<{ id: string; name: string; email: string }>>([]
 const targetSearched = ref(false)
 const targetId = ref('')
 
+/** 前置未满足即置灰（与成就发放弹窗同判例）：标题为空、或定向发送还没选用户时，
+    按钮就该是禁用的，不必等点下去才回一句「请输入标题」。提交时的校验保留作兜底。 */
+const canSend = computed(() => !!form.value.title.trim() && (form.value.scope !== 'user' || !!targetId.value))
+
 function openSend() {
   form.value = { title: '', body: '', kind: 'system', scope: 'all' }
   errors.value = {}
@@ -621,21 +620,9 @@ void reload()
   color: var(--mk-muted);
 }
 .nt-list { flex: 1; min-height: 0; overflow-y: auto; }
-/* 已读率聚合行（原型 meterrow：meter 条 + mono %）：条沿用共享 .mk-minibar 原语 */
-.nt-rate {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.nt-rate__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-/* 2026-10-26 重新设计：条收窄、口径说明推到右缘——原先进度条 + 百分数挤在左侧，
-   右侧大片空白让这行读成「没排完的表格」。现在左侧「已读率 + 条 + %」，右侧「已读 N / 送达 M」。 */
-.nt-rate__bar { flex: 0 1 160px; min-width: 80px; display: block; }
-.nt-rate__pct { font-size: var(--mk-fs-micro); color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.nt-rate__note { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 已读率读数（2026-11-02）：从表格上方的独立聚合带收成筛选行尾的一枚小灰字。
+   与页头状态条的 .mk-status__meta 同级，但不借用那个类（它按父级 .mk-status 排版）。 */
+.nt-rate-meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
 /* 未读信号（2026-10-26 重新设计）：整行蓝底撤除。
    原实现给每条未读行铺 --mk-blue-bg，而这批通知 90% 未读 → 整张表读成一块浅蓝、
    像全选态；规范里蓝只给交互与选中。未读现在只由「状态」列的蓝点 + 蓝字表达，

@@ -119,7 +119,8 @@ describe('InfraModelsPanel', () => {
     expect(modal.findAll('.infra-choice__opt')).toHaveLength(2);
     expect((modal.find('input[value="own"]').element as HTMLInputElement).checked).toBe(true);
     const labels = modal.findAll('.mk-field__label').map((l) => l.text());
-    expect(labels).toContain('模型 id');
+    // 「id」统一写作「ID」，与模型编辑弹窗同一写法（2026-11-02 评审）
+    expect(labels).toContain('模型 ID');
     expect(labels).toContain('服务地址');
     expect(labels).toContain('API Key');
     expect(labels).toContain('超时（毫秒）');

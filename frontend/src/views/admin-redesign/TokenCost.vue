@@ -118,7 +118,11 @@
            系列（失败数移入卡尾 note 与柱 title，不再与用量混读）。 -->
       <section class="mk-card">
         <div class="mk-card__head">
-          <!-- 卡头 = 标题 + 单位；右侧只留跨页跳转 -->
+          <!-- 卡头 = 标题 + 单位；右侧只留跨页跳转。
+               零值列的柱顶「·」（OvBars 的零值写法，见该组件的 sparse/num 约定）原先靠卡头一句
+               「柱顶『·』表示当天没有 Token 用量」解码——那是给图例找的补丁（2026-11-02 评审）。
+               2026-11-03 收进柱自己：零值列的 title 直接写「当天没有 Token 用量」，鼠标悬到哪根柱
+               就在哪根上得到答案，卡头不必替图表说话。 -->
           <div class="tc-card-head__main">
             <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
             <span class="mk-card__meta">单位：Token</span>
@@ -226,7 +230,7 @@
             <div class="mk-card__head-right">
               <!-- D13：中小用户此前不可见——加按 用户ID/昵称/邮箱 的服务端搜索（不改动 summary/趋势） -->
               <MkFilterSearch v-model="userQuery" placeholder="搜索用户 ID / 昵称 / 邮箱" />
-              <span class="mk-card__meta">{{ userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}<template v-if="!userAll && byUser.length > userLimit"> · 显示前 {{ userLimit }}</template></span>
+              <span class="mk-card__meta">{{ userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}</span>
               <!-- G8（2026-10-10）：搜索失败静默保留旧列表时的行内 stale 提示——此前失败无任何反馈，
                    meta「匹配 N」仍按输入框实时读数，与表格脱源（N 是旧结果的行数）。对齐 Skills.vue
                    liveSkillsError 行内告警判例：辅助数据失败不弹遮主表的 toast，但必须指认数据来源 -->
@@ -575,8 +579,13 @@ const failedPct = computed(() => {
 const failedCallsText = computed(() =>
   failedCalls.value > 0 ? `${failedCalls.value} 次` : '0 次'
 )
-/** 失败卡副行：同一张卡内给分母，失败率不再另开一张卡 */
-const failedHintShort = computed(() => `共 ${totalCalls.value} 次调用 · ${failedPct.value}`)
+/** 失败卡副行：同一张卡内给分母，失败率不再另开一张卡。
+    统计范围单独说明（2026-11-02 评审）：本卡数是窗口内全部失败调用，下面三张明细表
+    只收产生 Token 用量的网关调用——不加这句，51 次失败在任何明细行上都找不到，
+    会被读成「数字对不上」。 */
+const failedHintShort = computed(
+  () => `共 ${totalCalls.value} 次调用 · ${failedPct.value} · 三张明细排行只统计产生 Token 用量的网关调用，其余失败不在明细行里`
+)
 
 /* P1#25 单价未配置 = 决策态：卡可点直达「系统设置」补单价 */
 const pricingMissing = computed(
@@ -718,7 +727,10 @@ const trendCols = computed(() => trend.value.map((d) => ({
   label: d.date === todayKey.value ? '今日' : dayLabel(d.date),
   today: d.date === todayKey.value,
   num: fmtTokens(d.tokens),
-  title: `${d.date}：Token ${fmtTokens(d.tokens)} · ${d.calls.toLocaleString()} 次调用 · 失败 ${d.failed.toLocaleString()} 次`,
+  title: d.tokens > 0
+    ? `${d.date}：Token ${fmtTokens(d.tokens)} · ${d.calls.toLocaleString()} 次调用 · 失败 ${d.failed.toLocaleString()} 次`
+    /* 零值柱柱顶渲染「·」：说清它是「没有用量」而不是「有 0 条」（2026-11-03 从卡头图例移入） */
+    : `${d.date}：当天没有 Token 用量 · ${d.calls.toLocaleString()} 次调用 · 失败 ${d.failed.toLocaleString()} 次`,
   bars: [
     { pct: barPct(d.tokens, trendMax.value), tone: 'blue' as const },
   ],

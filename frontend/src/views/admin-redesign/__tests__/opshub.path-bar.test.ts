@@ -87,9 +87,8 @@ describe('运营中心：运营待办页签只留行动清单', () => {
     expect(w.findAll('.oh-task')).toHaveLength(1)
     expect(w.find('.oh-task').text()).toContain('生成失败路径')
     expect(w.find('.oh-task').text()).toContain('去处理 →')
-    expect(w.find('.oh-queue__cleared').text()).toContain('已清零')
-    expect(w.find('.oh-queue__cleared').text()).toContain('未处理反馈')
-    expect(w.find('.oh-queue__cleared').text()).toContain('草稿公告')
+    // 清零项不再点名一行（2026-11-03）：那行点的标签与值就是上方四张读数卡，同一读数说两遍
+    expect(w.find('.oh-queue__cleared').exists()).toBe(false)
 
     w.unmount()
   })

@@ -107,7 +107,6 @@
             aria-label="更多操作"
             aria-haspopup="menu"
             :aria-expanded="openMenu === 'ops'"
-            title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
             @click.stop="toggleMenu('ops')"
           >⋯</button>
           <div v-if="openMenu === 'ops'" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -390,9 +389,8 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
             <div class="mk-card__head-right">
-              <span class="mk-card__meta">课后沉淀</span>
               <!-- 账号级记忆与复习（2026-10-24）：本页只列本档案的记忆痕迹，跨路径明细在账号详情。
-                   2026-10-31 四轮评审 R8：刷新挪到行尾——插在中间会把「课后沉淀 · 账号级记忆与复习 →」
+                   2026-10-31 四轮评审 R8：刷新挪到行尾——插在中间会把「账号级记忆与复习 →」
                    这组词组劈成两半 -->
               <button
                 v-if="d.userId"
@@ -477,8 +475,9 @@
             <!-- 记忆保持曲线（Q2/Q8）：到期 / 已掌握概念的保留率随天数衰减 -->
             <div v-if="memoryCurveConcepts.length" class="vp-memory__group">
               <div class="vp-memory__group-head">
-                <h4 class="vp-memory__group-title">记忆保持曲线</h4>
-                <span class="mk-card__meta">横轴为距上次复习天数 · 纵轴为预计还记得的比例</span>
+                <!-- 坐标轴含义收进卡题 title（2026-11-02 文案清理）：轴刻度只有「第 N 天 / %」，
+                     横轴单位与纵轴口径别处没有出口，随卡题悬停给；屏上不再单起一行图例 -->
+                <h4 class="vp-memory__group-title" title="横轴为距上次复习天数 · 纵轴为预计还记得的比例">记忆保持曲线</h4>
               </div>
               <div class="vp-memory__curve-legend">
                 <span
@@ -502,7 +501,6 @@
             <div v-if="memoryCompleted.length" class="vp-memory__group">
               <div class="vp-memory__group-head">
                 <h4 class="vp-memory__group-title">最近完成的事</h4>
-                <span class="mk-card__meta">成果物</span>
               </div>
               <div class="vp-memory__completed">
                 <div v-for="(c, ci) in memoryCompleted" :key="c.taskId || `mc-${ci}`" class="vp-memory__completed-item">
@@ -639,7 +637,6 @@
                       aria-label="更多故事操作"
                       aria-haspopup="menu"
                       :aria-expanded="openMenu === `story-${storyKey(s, i)}`"
-                      title="编辑 / 诊断 / 删除故事"
                       @click.stop="toggleMenu(`story-${storyKey(s, i)}`)"
                     >⋯</button>
                     <div v-if="openMenu === `story-${storyKey(s, i)}`" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -699,7 +696,6 @@
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">运行记录 · {{ allRuns.length }}</h3>
-            <span class="mk-card__meta">按时间倒序</span>
             <!-- 截断披露（#96）：详情接口最多 200 条，本页只渲染最近 RUNS_TAB_WINDOW 条 -->
             <span
               v-if="runsTruncated"
@@ -836,13 +832,13 @@
               <input v-model="editStoryForm.problemKnowledge.hiddenGaps" class="mk-field__input" />
             </label>
             <label class="mk-field">
-              <span class="mk-field__label">自我评估（自评表述）</span>
+              <span class="mk-field__label">自我评估</span>
               <input v-model="editStoryForm.problemKnowledge.selfAssessment" class="mk-field__input" />
             </label>
           </div>
           <!-- 故事级预算覆盖（可选）：缺省按角色级预算取值 -->
           <div class="vp-pk">
-            <span class="mk-field__label">故事级预算（可选，留空按角色级取值）</span>
+            <span class="mk-field__label">故事级预算</span>
             <label class="mk-field" :class="{ 'mk-field--error': storyBudgetErrors.maxRetriesPerStep }">
               <span class="mk-field__label">单步最大重试</span>
               <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空按角色级取值（默认 8）" />
@@ -917,7 +913,7 @@
               maxlength="120"
               placeholder="例如：化学实验误差分析、期末前一周的复习取舍"
             />
-            <span class="mk-field__hint">写具体学科、考试节点或情境。留空则由画像与学习记忆自由发挥。{{ genForm.direction.length }}/120</span>
+            <span class="mk-field__hint">留空则由画像与学习记忆自由发挥。{{ genForm.direction.length }}/120</span>
           </label>
 
           <div class="vp-gen__group" role="radiogroup" aria-label="生成数量">

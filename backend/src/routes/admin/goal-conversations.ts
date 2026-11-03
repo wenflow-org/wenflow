@@ -9,6 +9,7 @@ import {
   findGoalConversationWithUser,
   countAiGeneratedPathsByUser,
   getGoalConversationStatusCounts,
+  bucketGoalConversationStatusCounts,
   findRecentGoalConversationsForTrend,
   countDistinctGoalConversationUsers,
 } from '../../services/admin/goal-conversation-admin.repo';
@@ -242,10 +243,13 @@ router.get('/stats/overview', async (req: any, res) => {
     // （与 GET / 的分支同一判据，否则分布条/完成率与列表不同源）
     const includeTest = String(req.query.includeTest || '') === 'true';
     const userWhere = includeTest ? {} : await resolveStatsUserWhere();
-    const [[total, active, completed, cancelled], distinctUsers] = await Promise.all([
+    const [statusRows, distinctUsers] = await Promise.all([
       getGoalConversationStatusCounts(userWhere),
       countDistinctGoalConversationUsers(userWhere)
     ]);
+    /* 分桶口径（2026-11-02 P2-2）：与列表的四个状态档一一对应，「已取消」含回收、
+       total 含列表没单列一档的 discarded——四档之和可以不等于 total，属预期。 */
+    const { total, active, completed, cancelled, failed } = bucketGoalConversationStatusCounts(statusRows);
 
     // 获取最近 7 天的对话趋势（含 7 天内完成但更早创建的对话，保证「当日完成」完整）
     const sevenDaysAgo = new Date();
@@ -282,6 +286,7 @@ router.get('/stats/overview', async (req: any, res) => {
         active,
         completed,
         cancelled,
+        failed,
         distinctUsers,
         completionRate: total > 0 ? ((completed / total) * 100).toFixed(2) : '0',
         dailyStats: Object.entries(dailyStats).map(([date, stats]) => ({

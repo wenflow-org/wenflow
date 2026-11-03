@@ -549,9 +549,9 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   border-radius: 4px; /* 圆角阶梯：内芯 */
   font-size: 12px;
   color: var(--blue-deep);
-  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-family: var(--mk-mono);
 }
-.mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+.mono { font-family: var(--mk-mono); }
 .docs-main a { color: var(--blue); text-decoration: none; padding: 4px 0; }
 .docs-main a:hover { text-decoration: underline; }
 
@@ -654,7 +654,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   margin: 0;
   padding: 14px 16px;
   overflow-x: auto;
-  font: 12px/1.7 'JetBrains Mono', Consolas, monospace;
+  font: 12px/1.7 var(--mk-mono);
   color: #b8cbe4;
   white-space: pre;
 }
@@ -707,7 +707,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   display: grid;
   place-content: center;
   flex-shrink: 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--mk-mono);
 }
 .steps strong { font-size: 13.5px; display: block; margin-bottom: 3px; }
 .steps p { margin: 0; font-size: 12.5px; }

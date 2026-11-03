@@ -331,6 +331,19 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
+  it('虚拟控制台：H1 同为路径名，状态 pill 仍报运行态（不由真实控制台的路径状态规则改写）', async () => {
+    // 2026-11-02 P0-3 的规则只改真实控制台：虚拟控制台的可操作对象是整个虚拟运行，
+    // 运行态（进行中/已放弃）不能被「路径学习中」顶掉。
+    stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
+    stableVirtualApi.getVirtualSessionPathStatus.mockResolvedValue({
+      data: { status: 'active', path: { id: 'lp_v1', title: 'Python 虚拟路径', status: 'active' } }
+    });
+    const w = await mountCockpit('session', 'vs_1');
+    expect(w.find('.mk-hero__title').text()).toBe('Python 虚拟路径');
+    expect(w.find('.mk-hero__pills .mk-badge').text()).toBe('进行中');
+    w.unmount();
+  });
+
   it('自动驾驶启动前二次确认：说清终点/回合上限/预算，取消则不调用后端（D9）', async () => {
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
@@ -486,7 +499,8 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(rows[0].find('.mk-badge').text()).toBe('虚拟学习者');
     expect(rows[1].find('.mk-badge').text()).toBe('教师');
     expect(w.text()).toContain('课堂回合');
-    expect(w.text()).toContain('2 条课堂对话 · 目标段由对话卡全文呈现');
+    // 尾部「目标段由对话卡全文呈现」已撤（2026-11-03）：它解释哪张卡承载哪一段，属布局自述
+    expect(w.text()).toContain('2 条课堂对话');
 
     w.unmount();
   });

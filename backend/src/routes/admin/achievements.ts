@@ -31,7 +31,9 @@ router.get('/definitions', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    const unlockCounts = await groupAchievementUnlockCounts();
+    // 口径与下方解锁记录表一致（都排除虚拟学习者）：定义卡「已解锁 N 人」若把虚拟
+    // 学习者算进去，切换页签就会看到两个数，谁也说不清哪个是真的。
+    const unlockCounts = await groupAchievementUnlockCounts({ users: await buildNonVirtualUserWhere() });
     const countMap = new Map<string, number>();
     for (const g of unlockCounts) {
       countMap.set(`${g.type}-${g.title}`, g._count._all);

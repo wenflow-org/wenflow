@@ -27,6 +27,13 @@
           @scroll="syncTrialHlScroll"
         ></textarea>
       </div>
+      <!-- 默认载荷是按输入契约生成的骨架（值为类型示例），此前只有空白 JSON，读者不知道该填什么
+           （2026-11-02 评审）。这里把契约里的输入字段列出来，并说明骨架各值的来处。 -->
+      <p v-if="inputDecls.length" class="sdp-none sdp-trial__decl">
+        输入字段（{{ inputDecls.length }} 项，按输入契约生成骨架，值为类型示例）：
+        <code v-for="d in inputDecls" :key="d.name" class="mono">{{ d.name }}{{ d.type ? `: ${d.type}` : '' }}</code>
+      </p>
+      <p v-else class="sdp-none sdp-trial__decl">该 Skill 的输入契约没有声明必填输入，可直接在编辑器里写任意 JSON。</p>
       <div v-if="trialResult" class="sdp-trial__meta">
         <span class="mk-badge" :class="trialResult.success ? 'mk-badge--ok' : 'mk-badge--bad'">
           {{ trialResult.success ? '成功' : '失败' }}
@@ -50,7 +57,7 @@
           <span class="mono sdp-step__ms">{{ s.ms != null ? `${s.ms} ms` : '—' }}</span>
         </div>
         <p v-if="!trialSteps.length" class="sdp-none" :title="trialResult ? '本次试跑仅返回最终输出' : '尚未试跑'">
-          {{ trialResult ? '本次试跑仅返回最终输出，暂无逐步明细。' : '—' }}
+          {{ trialResult ? '本次试跑仅返回最终输出，暂无逐步明细。' : '还没运行过，点「运行预览」后这里显示每一步的耗时。' }}
         </p>
       </div>
     </section>
@@ -68,8 +75,10 @@
       </div>
       <p v-if="inspectError" class="sdp-none sdp-bad-text">Prompt 检视加载失败。<button type="button" class="mk-link" @click="loadInspect">重试</button></p>
       <pre class="sdp-prompt__code">{{ effectivePrompt?.prompt?.systemPrompt || (inspectError ? '加载失败，请重试' : '暂无内容') }}</pre>
+      <!-- 2026-11-02 评审 P0：这里原本让人去改 prompts/skill.<id>.md——那是 core 编译出来的产物，
+           人工编辑入口只有核心文件（协议页签写的那份）。改错文件是白改。 -->
       <p class="sdp-prompt__hint">
-        正式内容以源文件为准：修改 <code class="mono">{{ filePath || 'prompts/skill.*.md' }}</code>，经部署同步生效。
+        正式内容以核心文件为准：改 <code class="mono">prompts/core/{{ skillId }}.yaml</code> 后保存并发布重新编译。<code class="mono">{{ filePath || 'prompts/skill.<id>.md' }}</code> 是它的编译产物，直接改会被下次编译覆盖。
       </p>
     </section>
   </div>
@@ -88,9 +97,9 @@
       >
         <button type="button" class="sdp-log__main" @click="toggleLogDetail(log)">
           <span class="sdp-log__dot" :class="`is-${log.status}`"></span>
-          <span class="sdp-log__time mono">{{ log.time }}</span>
+          <span class="sdp-log__time mono" :title="callTimeFull(log.ts)">{{ callTimeLabel(log.ts) }}</span>
           <span class="sdp-log__dur mono">{{ fmtMs(log.durationMs) }}</span>
-          <span class="sdp-log__summary">{{ log.summary }}</span>
+          <span class="sdp-log__summary" :title="log.detailText">{{ log.summary }}</span>
         </button>
         <button
           type="button"
@@ -160,7 +169,7 @@ import {
   adminSkillsApi
 } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
-import { fmtMs, errText, buildTrialInputFromContract, type TrialInputDecl } from './sdp-shared'
+import { fmtMs, errText, buildTrialInputFromContract, callTimeFull, callTimeLabel, failureText, type TrialInputDecl } from './sdp-shared'
 import { humanizeHttpError } from '../terms'
 import { openTrace } from '../store'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -288,9 +297,12 @@ const trialHighlighted = computed(() => {
 interface LogRow {
   id: string
   status: 'ok' | 'err' | 'timeout'
-  time: string
+  /** 调用发生时刻（毫秒）：展示走 sdp-shared 的 callTimeLabel，与运行时页同一口径 */
+  ts: number
   durationMs: number
   summary: string
+  /** 失败行的原始错误原文（悬停可见）：标题已人话化，原文不丢 */
+  detailText: string
   /** 链路 id（agent_call_logs.traceId）：空则「看 Trace」不可用 */
   traceId: string
   loading: boolean
@@ -322,14 +334,20 @@ async function loadRecentLogs() {
     recentLogs.value = items.map((l) => {
       const status = mapLogStatus(l.status)
       const rawErr = String(l.errorMessage || l.error || '')
-      // 网关黑话人话（terms.ts 单源）：失败摘要与展开详情同步人话化
+      // 网关黑话人话（terms.ts 单源）：展开详情的错误文本也同步人话化
       const err = humanizeHttpError(rawErr) || rawErr
+      // 接口字段未定型，非字符串的类别/错误码按「无」处理，failureText 只认字符串
+      const errCategory = typeof l.errorCategory === 'string' ? l.errorCategory : undefined
+      const errCode = typeof l.errorCode === 'string' ? l.errorCode : undefined
       return {
         id: String(l.id),
         status,
-        time: timeAgo(String(l.createdAt || '')),
+        ts: l.createdAt ? new Date(String(l.createdAt)).getTime() : 0,
         durationMs: Number(l.durationMs || 0),
-        summary: status === 'ok' ? '成功' : err.slice(0, 60) || (status === 'timeout' ? '超时' : '失败'),
+        // 失败行文案与运行时页同源（failureText）：此前这里直出原始错误码，
+        // 同一条记录在运行时页显示「执行失败 · 系统内部错误」（2026-11-02 评审）
+        summary: status === 'ok' ? '成功' : status === 'timeout' ? '执行超时' : failureText(errCategory, errCode),
+        detailText: status === 'ok' ? '' : err,
         traceId: String(l.traceId || ''),
         loading: false,
         detail: null
@@ -406,20 +424,9 @@ function displayCap(v?: string) {
   return v && v.length > 3000 ? `${v.slice(0, 3000)}\n…（截断）` : v || ''
 }
 
-function timeAgo(iso?: string | null): string {
-  if (!iso) return '—'
-  const t = new Date(iso).getTime()
-  if (!t || Number.isNaN(t)) return '—'
-  const diff = Date.now() - t
-  if (diff < 0) return '刚刚'
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return '刚刚'
-  if (m < 60) return `${m} 分钟前`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h} 小时前`
-  const d = Math.floor(h / 24)
-  return d < 30 ? `${d} 天前` : new Date(t).toLocaleDateString('zh-CN')
-}
+/* 时间格式化改走 sdp-shared 的 callTimeLabel / callTimeFull（与运行时页同一口径）：
+   本地 timeAgo 只在这里用过，已删——它给出的「1 天前」与运行时页的「11-01 13:22」
+   同一条记录两种说法（2026-11-02 评审） */
 
 /** 看 Trace：预填该链路并跳到执行日志页的 Trace tab（store.openTrace 跨页动线单源） */
 function goTrace(traceId: string) {
@@ -453,6 +460,11 @@ watch(
   { immediate: true }
 )
 
+/** 该 Skill 输入契约里的必填输入（展示用）：默认载荷就是按它生成的骨架。
+ *  2026-11-02 评审「只给一个每字段都是空对象的 JSON，没有字段说明或示例」——
+ *  把字段名与类型列在编辑器下方，读者才知道该往哪儿填。 */
+const inputDecls = ref<TrialInputDecl[]>([])
+
 /** 按该 Skill 输入契约生成默认载荷（#15）：契约不可读时回落空对象 `{}`，绝不再塞无关的 input 键 */
 async function loadTrialDefault(id: string) {
   const res = await adminPromptWorkbenchApi.getCore(id).catch(() => null)
@@ -461,6 +473,8 @@ async function loadTrialDefault(id: string) {
   const next = buildTrialInputFromContract(inputs)
   trialInput.value = next
   trialBase = next
+  // 骨架里的键就是这些必填输入（buildTrialInputFromContract 只收必填项，可选的不注入）
+  inputDecls.value = inputs.filter((i) => i?.name && !String(i.type || '').trim().endsWith('?'))
   emit('dirty', { dirty: false, label: '试跑输入' })
 }
 
@@ -510,6 +524,9 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
 .sdp-block__meta { display: inline-flex; align-items: center; gap: 10px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sdp-bad-text { color: var(--mk-red); font-weight: 700; }
+/* 输入契约字段清单（编辑器下方）：一行小字 + 等宽字段名，避免再开一块表格占版面 */
+.sdp-trial__decl { line-height: 1.9; }
+.sdp-trial__decl code { margin-right: 8px; padding: 1px 6px; border-radius: var(--mk-radius-sm); background: var(--mk-surface-2); color: var(--mk-muted); }
 
 /* Prompt 面板（视图切换已收敛为全局 mk-pills） */
 .sdp-prompt__facts {
@@ -523,8 +540,14 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
 .sdp-prompt__facts code { font-size: var(--mk-fs-micro); }
 .sdp-prompt__code {
   margin: 0;
-  height: min(58vh, 620px);
+  /* 2026-11-02 评审：原定高 min(58vh, 620px) 与行高不成整数倍，最后一行被下方边框切掉半行，
+     框内也看不出还能滚。改为恒 30 行的可视区：整数行不切字，细滚动条给出「还有内容」的提示；
+     content-box 让 max-height 只算文本区。认不得 lh 的浏览器回落 620px，行为与旧版一致。 */
+  box-sizing: content-box;
+  max-height: 620px;
+  max-height: 30lh;
   overflow: auto;
+  scrollbar-width: thin;
   padding: 12px;
   border-radius: var(--mk-radius-xl);
   background: #fbfcfe;

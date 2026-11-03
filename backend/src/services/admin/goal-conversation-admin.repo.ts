@@ -169,14 +169,38 @@ export function countAiGeneratedPathsByUser(userId: string) {
   });
 }
 
-/** 漏斗统计：按状态计数（口径 userWhere 由路由层单点定义） */
+/** 漏斗统计：按状态计数（口径 userWhere 由路由层单点定义）。
+ *  2026-11-02 P2-2：原先只数 total/active/completed/cancelled——failed 从来没被统计，
+ *  而列表的「已取消」档实际含 cancelled / canceled / abandoned（前端 CANCELLED_STATUSES），
+ *  单数一个 'cancelled' 既漏了失败档、也盖不住取消档。改成一次 groupBy 交出全状态，
+ *  由下面的 bucketGoalConversationStatusCounts 按列表档位分桶。 */
 export function getGoalConversationStatusCounts(userWhere: Prisma.usersWhereInput) {
-  return Promise.all([
-    prisma.goal_conversations.count({ where: { users: userWhere } }),
-    prisma.goal_conversations.count({ where: { users: userWhere, status: 'active' } }),
-    prisma.goal_conversations.count({ where: { users: userWhere, status: 'completed' } }),
-    prisma.goal_conversations.count({ where: { users: userWhere, status: 'cancelled' } })
-  ]);
+  return prisma.goal_conversations.groupBy({
+    by: ['status'],
+    where: { users: userWhere },
+    _count: { _all: true }
+  });
+}
+
+/** 状态行 → 列表那四档的桶（与前端 gcStatusPills 一一对应）+ 总数。
+ *  「已取消」= cancelled / canceled / abandoned（与列表该档的筛法同一判据），「失败」单列 failed；
+ *  total 是全部状态之和（含列表没单列一档的 discarded，故四档之和可以不等于 total）。
+ *  分桶从路由里提出来，是为了能直接对「哪些状态算哪一档」下断言。 */
+export function bucketGoalConversationStatusCounts(
+  rows: Array<{ status?: string | null; _count: { _all: number } }>
+) {
+  const countOf = (...statuses: string[]) =>
+    rows.reduce(
+      (sum, row) => (statuses.includes(String(row.status || '').toLowerCase()) ? sum + row._count._all : sum),
+      0
+    );
+  return {
+    total: rows.reduce((sum, row) => sum + row._count._all, 0),
+    active: countOf('active'),
+    completed: countOf('completed'),
+    cancelled: countOf('cancelled', 'canceled', 'abandoned'),
+    failed: countOf('failed')
+  };
 }
 
 /** 最近 7 天趋势行（含 7 天内完成但更早创建的对话，保证「当日完成」完整） */

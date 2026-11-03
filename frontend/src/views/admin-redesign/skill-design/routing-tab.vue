@@ -2,10 +2,20 @@
   <!-- 字段路由（skill 维度 · 加字段向导闭环）+ 字段血缘（原协议 pill 并入，折叠块） -->
   <div class="sdp-pane sdp-routing">
     <details class="sdp-routing__lineage" @toggle="onLineageToggle">
-      <summary>字段影响范围（产出字段 → 下游消费者）</summary>
+      <!-- 2026-11-02 评审：这里只列出有下游消费者的字段（9 个），而下方「契约 · 阶段 x」写产出 26 行，
+           两个数字没交代关系。标题与说明显式说清「没有下游消费者的字段不在此列」。 -->
+      <summary>字段影响范围（有下游消费者的产出字段 → 下游消费者）</summary>
       <MkLoading v-if="lineageLoading" inline text="影响范围加载中…" />
       <table v-else-if="lineage.length" class="mk-table mk-table--dense sdp-routing__table">
-        <thead><tr><th>字段</th><th>消费者</th></tr></thead>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>
+              消费者
+              <span class="sdp-routing__scope">（{{ lineage.length }} 个字段有下游消费者，其余产出字段没有消费者，不在本表）</span>
+            </th>
+          </tr>
+        </thead>
         <tbody>
           <tr v-for="(entry, i) in lineage" :key="i">
             <td class="mono">{{ entry.field }}</td>
@@ -91,6 +101,10 @@ watch(
 
 <style scoped>
 .sdp-pane { display: grid; gap: 14px; align-content: start; }
+/* 2026-11-02 评审：契约编辑页右端被窗口边缘裁掉（操作列只剩半个按钮、状态条的按钮文字被切）。
+   grid 子项默认 min-width:auto 会被宽表撑开，内层 overflow-x 的滚动条因此拿不到宽度；
+   与 SkillDetail `.skd-pane > *` / mk-primitives `.mk-page > *` 同款修法。 */
+.sdp-pane > * { min-width: 0; }
 .sdp-routing__lineage {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
@@ -108,6 +122,8 @@ watch(
 /* 血缘明细是页内嵌小表：走共享 .mk-table + --dense 密度档，不再自带一套表头/行线/内边距
    （此前它连 .mk-table 都没挂，是页内第三套表格方言）。 */
 .sdp-routing__table { margin-top: 8px; }
+/* 表头里的范围说明：小字弱色，与列名同排（不是新开一行的卡内说明） */
+.sdp-routing__scope { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-faint); }
 .sdp-routing__consumer { font-size: var(--mk-fs-micro); color: var(--mk-muted); padding: 1px 0; }
 .sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 血缘加载失败：红字（与同单元 SkillFieldRouting 错误态同语言） */

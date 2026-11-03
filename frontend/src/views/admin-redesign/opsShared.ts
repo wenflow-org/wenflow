@@ -103,9 +103,11 @@ export function loadCaliber(kind: LoadCaliber, at?: string | null): LoadCaliberN
    文案单点在此，各卡头取用，避免各写一套说法。
 
    2026-10-14 第二步：路径作用域升为**页级开关**（LearnerDetail 的 ld-scope），
-   「概念掌握/证据/当前进度/图谱/教学会话」随选择走 → 新增 'path' 档（读者选中的那条，
-   可能不是当前路径）。「记忆与复习」「行为基线」不随开关走（前者结构性不可分区，
-   后者本就用户级），仍标 all-paths。 */
+   「当前进度/证据时间线/图谱/教学会话」随选择走 → 新增 'path' 档（读者选中的那条，
+   可能不是当前路径）。「概念掌握」「全局信号与背景」「记忆与复习」「行为基线」不随开关走：
+   前三者的数据源是学习者级概念清单与记忆痕迹（跨全部路径，backend #93），后者本就用户级，
+   仍标 all-paths。2026-11-02 外部评审 P1 前，「概念掌握」「全局信号与背景」两张卡的卡头
+   挂的是「当前路径」，与不随开关变的数据互相矛盾，正是这次改掉的。 */
 
 export type PanelScope = 'current-path' | 'path' | 'all-paths' | 'all-stories' | 'single-conversation'
 

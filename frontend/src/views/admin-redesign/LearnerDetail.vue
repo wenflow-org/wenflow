@@ -120,11 +120,11 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">概念掌握</h3>
-            <span class="mk-card__meta">{{ conceptBars.length }} 个概念 · {{ scopeNote.label }}</span>
+            <span class="mk-card__meta">{{ conceptBars.length }} 个概念 · {{ conceptScopeMeta }}</span>
           </div>
           <!-- T2 硬约束 2：结论行常驻（数字全部由现有 conceptBars 的 tone 派生，未新增判断） -->
           <p v-if="conceptBars.length" class="mk-section__conclusion">
-            共 {{ conceptBars.length }} 个概念：{{ conceptBars.filter((c) => c.tone === 'ok').length }} 个可迁移、{{
+            {{ conceptBars.filter((c) => c.tone === 'ok').length }} 个可迁移、{{
               conceptBars.filter((c) => c.tone === 'warn' || c.tone === 'bad').length
             }} 个待巩固<template v-if="conceptBars.filter((c) => c.tone === 'muted').length"
               >、{{ conceptBars.filter((c) => c.tone === 'muted').length }} 个证据不足</template
@@ -247,7 +247,10 @@
             <!-- 「学习动态」：卡内是合并后的学习事件（教学/目标/路径域），与对象轴的
                  「最近会话」「最近目标对话」区分命名，避免两个「最近 X」读成一回事 -->
             <h3 class="mk-card__title">学习动态</h3>
-            <span class="mk-card__meta">最近 {{ d.sessions.length }} 条事件</span>
+            <!-- 读数按合并后的行数报（2026-11-02 评审 R28）：原先写的是原始事件条数，
+                 而卡内逐行是合并后的一条动态——「最近 5 条事件」下只列 3 行，
+                 读者以为漏了 2 条。 -->
+            <span class="mk-card__meta">最近 {{ recentActivityMerged.length }} 条动态</span>
           </div>
           <div class="ld-sessions">
             <div v-for="(s, i) in recentActivityMerged" :key="i" class="ld-session">
@@ -268,7 +271,6 @@
         <section v-if="teachingHints" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">建议行动</h3>
-            <span class="mk-card__meta">教学建议摘要</span>
           </div>
           <div class="ld-actions">
             <p v-if="teachingHints.recommendedApproach"><span class="ld-actions__k">方式</span>{{ cleanHint(teachingHints.recommendedApproach) }}</p>
@@ -311,20 +313,18 @@
     <!-- ============ 画像：认知 + 偏好情绪 + 行为历史 + 课程控制 + 派生 + 记忆 + 教学建议 ============ -->
     <div v-else-if="tab === 'profile'" class="ld-tabpage" id="ld-panel-profile" role="tabpanel" aria-labelledby="ld-tab-profile">
       <template v-if="profile">
-        <!-- 2026-10-10 走查（低危登记转修）：零证据账号的三张画像卡直渲先验常量
-             （自评准确度=准确 / 平均响应=10s…），逐卡阅读易把先验当实测；页级「证据不足」
-             徽章兜底之外，卡内再挂一枚「初始先验」标注。判据=证据列表为空（本页同源数据）。
-             2026-10-11 走查：六张 kv 卡改双列栅格——单列竖排时每卡 5 行内容占满全宽，右半屏全空。 -->
-        <!-- 2026-10-10 走查（低危登记转修）：零证据账号的画像卡直渲先验常量
-             （自评准确度=准确 / 平均响应=10s…），逐卡阅读易把先验当实测；页级「证据不足」
-             徽章兜底之外，卡内再挂一枚「初始先验」标注。判据=证据列表为空（本页同源数据）。
-             2026-10-11 走查重构：六张散卡并为三张（卡内 .ld-pf-sub 双列子组），叙述洞察为第四卡；
-             FSRS 表撤（记忆与复习页签单源）；全局信号与背景迁证据页签；教学控制/强调避免迁概览建议行动。 -->
+        <!-- 2026-10-10 走查：零证据账号的画像卡直渲先验常量（自评准确度=准确 / 平均响应=10s…），
+             逐卡阅读易把先验当成实测。
+             2026-10-11 走查：六张 kv 卡改双列栅格，六张散卡并为三张（卡内 .ld-pf-sub 双列子组），
+             叙述洞察为第四卡；FSRS 表撤（记忆与复习页签单源）；全局信号与背景迁证据页签；
+             教学控制/强调避免迁概览建议行动。
+             2026-11-02 P1-8：卡头那枚「初始默认值」徽章只看「证据列表为空」——有目标对话、
+             还没上过课时，认知/偏好来自对话（实测）而行为基线仍是默认常量，一枚徽章会把整卡
+             一起标错。改为逐格标注（后端 profileSources 逐字段判来源），每行自己说这一格是不是默认值。 -->
         <div class="ld-pf-grid">
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">认知与偏好</h3>
-            <span v-if="!evidence.length" class="mk-card__meta" :title="PRIOR_EMPTY_TITLE">{{ PRIOR_EMPTY_LABEL }}</span>
           </div>
           <div class="ld-pf-sub">
             <div>
@@ -332,7 +332,7 @@
               <div class="ld-kv">
                 <div v-for="kv in cognitiveRows" :key="kv.label" class="ld-kv__row">
                   <span>{{ kv.label }}</span>
-                  <strong>{{ kv.value }}</strong>
+                  <strong :title="kv.hint || undefined">{{ kv.value }}<em v-if="kv.prior" class="ld-kv__prior" :title="PRIOR_FIELD_TITLE">{{ PRIOR_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -341,7 +341,7 @@
               <div class="ld-kv">
                 <div v-for="kv in preferenceRows" :key="kv.label" class="ld-kv__row">
                   <span>{{ kv.label }}</span>
-                  <strong>{{ kv.value }}</strong>
+                  <strong :title="kv.hint || undefined">{{ kv.value }}<em v-if="kv.prior" class="ld-kv__prior" :title="PRIOR_FIELD_TITLE">{{ PRIOR_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -350,7 +350,6 @@
         <section v-if="behaviorRows.length || historyRows.length" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">行为基线与互动</h3>
-            <span v-if="!evidence.length" class="mk-card__meta" :title="PRIOR_EMPTY_TITLE">{{ PRIOR_EMPTY_LABEL }}</span>
             <span class="mk-card__meta" :title="allPathsScope.title">{{ allPathsScope.label }}</span>
           </div>
           <div class="ld-pf-sub">
@@ -359,7 +358,7 @@
               <div class="ld-kv">
                 <div v-for="kv in behaviorRows" :key="kv.label" class="ld-kv__row">
                   <span>{{ kv.label }}</span>
-                  <strong>{{ kv.value }}</strong>
+                  <strong :title="kv.hint || undefined">{{ kv.value }}<em v-if="kv.prior" class="ld-kv__prior" :title="PRIOR_FIELD_TITLE">{{ PRIOR_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -368,7 +367,7 @@
               <div class="ld-kv">
                 <div v-for="kv in historyRows" :key="kv.label" class="ld-kv__row">
                   <span>{{ kv.label }}</span>
-                  <strong>{{ kv.value }}</strong>
+                  <strong :title="kv.hint || undefined">{{ kv.value }}<em v-if="kv.prior" class="ld-kv__prior" :title="PRIOR_FIELD_TITLE">{{ PRIOR_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -384,7 +383,7 @@
               <div class="ld-kv">
                 <div v-for="kv in curriculumRows" :key="kv.label" class="ld-kv__row">
                   <span>{{ kv.label }}</span>
-                  <strong>{{ kv.value }}</strong>
+                  <strong :title="kv.hint || undefined">{{ kv.value }}<em v-if="kv.prior" class="ld-kv__prior" :title="PRIOR_FIELD_TITLE">{{ PRIOR_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -393,7 +392,7 @@
               <div class="ld-kv">
                 <div v-for="kv in derivedRows" :key="kv.label" class="ld-kv__row">
                   <span>{{ kv.label }}</span>
-                  <strong>{{ kv.value }}</strong>
+                  <strong :title="kv.hint || undefined">{{ kv.value }}<em v-if="kv.prior" class="ld-kv__prior" :title="PRIOR_FIELD_TITLE">{{ PRIOR_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -434,9 +433,11 @@
       <section v-if="signalTierRows.some((t) => t.n > 0) || foundations.reusable.length || foundations.blocked.length || recurringConfusions.length" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">全局信号与背景</h3>
-          <!-- 口径纠错：原 title 写「跨全部学习路径汇总」，实测数据源是当前路径的会话与学习证据
-               （sessions/learner_evidence 均按 pathId 过滤）+ 该学习者全部记忆痕迹，不是跨全部路径 -->
-          <span class="mk-card__meta" :title="SIG_SCOPE_NOTE">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
+          <!-- 作用域纠错（2026-11-02 外部评审 P1）：卡内三组（概念信号 / 教学基础 / 反复困惑）
+               全部取自 globalBackground 与 globalSignals，这两份是学习者级、跨全部路径的数据，
+               原先卡头挂「当前路径」而数字不随页级开关变，同一页的图谱又确实是路径级，两套概念
+               集合并列在同一个词下；作用域改写进可见的卡头文字，不再只藏在悬停里 -->
+          <span class="mk-card__meta">{{ sigHeadMeta }} · {{ conceptScopeMeta }}</span>
         </div>
         <div class="ld-sigbody">
           <div class="ld-sig-sec">
@@ -450,7 +451,7 @@
                 <span class="ld-sig-tier__names" :title="t.names.join('、')">{{ t.names.length ? t.names.join('、') : '—' }}</span>
               </p>
             </div>
-            <p class="ld-sig-sec__foot">{{ signalTierFoot }}</p>
+            <p v-if="signalTierFoot" class="ld-sig-sec__foot">{{ signalTierFoot }}</p>
           </div>
           <div class="ld-sig-sec">
             <h4 class="ld-sig-sec__h">教学基础</h4>
@@ -617,10 +618,11 @@
               </div>
             </div>
             <div v-if="hasLoad" class="ld-load__body">
+              <!-- 2026-11-02「让布局自己说话」：撤掉三枚纯名词图例（LSS 压力 / LF 疲劳 / LSB 状态）——
+                   它们只复述图形怎么读，且同屏已有两处逐字承担同一个映射：上方四读数行的标签
+                   （LSS 学习压力 / LF 疲劳度 / LSB 状态平衡）与下方参考带三行（同色点 + 单位 + 警戒线）。
+                   图例本身不含读数，从屏上收掉；口径与单位仍由参考带那三行承担。 -->
               <div class="ld-load__legend">
-                <span><i class="ld-load__dot is-lss"></i>LSS 压力</span>
-                <span><i class="ld-load__dot is-lf"></i>LF 疲劳</span>
-                <span><i class="ld-load__dot is-lsb"></i>LSB 状态</span>
                 <span v-if="loadDisplayDay" class="ld-load__chip" :class="`ld-load__chip${loadZoneChip.cls}`" :title="loadZoneChip.title">
                   {{ loadZoneChip.text }}
                 </span>
@@ -988,9 +990,10 @@ import {
   LEARNER_METRIC_BAND_HUNDRED,
   type LearnerMetricKey,
 } from '@/utils/learnerMetrics'
-// pathStatusText：路径域状态文案（active → 「学习中」；全局字典是「进行中」）。本文件已从
-// './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
-import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
+// pathStatusText / pathStatusBadge：路径域状态文案与徽章（active → 「学习中」；全局字典是「进行中」）。
+// 本文件已从 './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
+import { loadCaliber, panelScopeNote, statusText as pathStatusText, statusBadge as pathStatusBadge } from './opsShared'
+import { profileFieldText, profileFieldHint, type ProfileSection } from './learner-profile-fields'
 import { useTableSort } from './useTableSort'
 import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, adminGoalConversationsApi, adminOpsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
@@ -1028,13 +1031,14 @@ import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
 import { useIsDark } from '@/composables/useIsDark'
 import { MK_CHART_PALETTES } from '@/components/mk/chartPalette'
+import { CONCEPT_BAND_LABEL } from '@/utils/conceptBands'
 
 const isDark = useIsDark()
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const CONCEPT_NONE_HINT = '重算快照后自动生成。'
-const PRIOR_EMPTY_LABEL = '初始默认值 · 暂无学习记录'
-const PRIOR_EMPTY_TITLE = '该账号尚无学习记录，以下展示的是初始默认值，会随学习记录积累更新，不是实测结论'
+const PRIOR_FIELD_LABEL = '初始默认值'
+const PRIOR_FIELD_TITLE = '这一格还没有学习记录支撑，展示的是平台初始默认值，会随学习记录积累更新'
 const EVIDENCE_NONE_HINT = '学习事件累积后自动生成。'
 const LOAD_ZONE_LSS = 'LSS 学习压力（0-100，越高越累）'
 const LOAD_ZONE_LF = 'LF 疲劳度（0-100，≥60 警戒）'
@@ -1042,13 +1046,9 @@ const LOAD_ZONE_LSB = 'LSB 状态平衡（训练负荷减疲劳，负值表示�
 const LOAD_NONE_HINT = '学习者完成课堂/任务后，系统会记录每次的压力评估。'
 /* 2026-11-01 外部评审 P0：证据 Tab 的概念信号（掌握度）与「记忆与复习」里的记忆强度
    （FSRS 可提取率）是两条独立轴，各自都对，但同屏并列且不说明关系时会被读成自相矛盾
-   （「挣扎」vs「稳固 93%」）。这里把两条轴的关系写在概念信号的悬停说明里。 */
+   （「进行中」vs「稳固 93%」）。这里把两条轴的关系写在概念信号的悬停说明里。 */
 const SIG_TIER_NOTE = '概念信号按掌握度分档（来自学习证据与课堂表现）。'
-  + '\n「记忆与复习」里的记忆强度是按 FSRS 可提取率算的另一条轴：一个概念可以先在掌握度上仍是「挣扎」，同时因为刚刚复习过而记忆强度回升。两条轴判据不同，可以同时出现，不是互相矛盾。'
-/* 卡片 meta 的「当前路径」只限定会话/学习证据那一侧；概念清单是学习者级、跨全部路径的，
-   两段数据在卡内混排，不写清就会被读成「当前路径只有 4 个概念」。 */
-const SIG_SCOPE_NOTE = '「当前路径」限定的是本卡的会话与学习证据（按 pathId 过滤）。'
-  + '\n概念清单与记忆痕迹是该学习者的用户级数据，跨全部路径，不随页内「路径范围」开关变化。'
+  + '\n「记忆与复习」里的记忆强度是按 FSRS 可提取率算的另一条轴：一个概念可以先在掌握度上仍是「进行中」，同时因为刚刚复习过而记忆强度回升。两条轴判据不同，可以同时出现，不是互相矛盾。'
 const CALIB_META_TITLE = '预测与实际情况的吻合率（非学习者自评）'
 const GRAPH_TRUNCATED_NOTE = '仅显示部分概念，共'
 const MEMORY_PANE_TITLE = '记忆与复习'
@@ -1218,6 +1218,11 @@ const scopeNote = computed(() => {
     : panelScopeNote('path', { pathTitle: title })
 })
 const allPathsScope = computed(() => panelScopeNote('all-paths'))
+/** 概念卡（概览「概念掌握」、证据「全局信号与背景」）的作用域短标：
+ *  数据源是学习者级概念清单与记忆痕迹（#93），页级「路径范围」收窄不了它。与「记忆与复习」
+ *  卡同一处理——写进卡头可见文字，而不是只藏在悬停说明里：读者选了某条路径却发现这两张卡的
+ *  数字纹丝不动，会以为是数据没刷新。 */
+const conceptScopeMeta = computed(() => `${allPathsScope.value.label} · 按学员统计，不随「路径范围」收窄`)
 /** 学习者画像 kv 卡：用户详情补充的层级/路径数/注册时间（后端 findUserDetailForAdmin） */
 const userRecord = ref<{ currentLevel: string; xp: number; pathCount: number; createdAt: string } | null>(null)
 /** 跟随 admin 主题（暗色用同族配色，见 MkGraph 的 colorOf）。
@@ -2083,8 +2088,25 @@ function calibBadgeCls(type: string): string {
   return 'mk-badge--muted'
 }
 
-function kvRows(obj: Record<string, unknown> | null, labels: Record<string, string>) {
-  if (!obj) return [] as { label: string; value: string }[]
+/** 逐字段来源（后端 profileSources，2026-11-02 P1-8）：旧快照没有这个字段时为 null */
+const profileSources = computed<Record<string, string[]> | null>(() => {
+  const s = rawDetail.value?.profileSources
+  return s && typeof s === 'object' ? (s as Record<string, string[]>) : null
+})
+/** 这一格是「初始默认值」还是「有数据支撑」：后端逐字段下发后不再只看整页证据空不空——
+    有目标对话但没上过课时，认知/偏好是对话产出的，行为基线仍是默认常量。 */
+function isPriorProfileField(section: ProfileSection, key: string): boolean {
+  const sources = profileSources.value
+  // 旧后端没有逐字段来源：退回原来的全局判据（该账号没有任何学习证据）
+  if (!sources) return !evidence.value.length
+  return !(sources[section] || []).includes(key)
+}
+
+/** 画像 KV 的一行：value 已按画像口径翻译，hint 是量纲说明，prior 表示这格是初始默认值 */
+interface ProfileKvRow { label: string; value: string; hint: string; prior: boolean }
+
+function kvRows(obj: Record<string, unknown> | null, labels: Record<string, string>, section?: ProfileSection): ProfileKvRow[] {
+  if (!obj) return []
   /* 后端原始浮点直出（23.06896551724138 / 0.9266399999999999）显示层收敛：
      小数 ≥5 位 → 四舍五入到 2 位（2026-10-11 走查） */
   const tidy = (v: unknown) => {
@@ -2093,7 +2115,13 @@ function kvRows(obj: Record<string, unknown> | null, labels: Record<string, stri
   }
   return Object.entries(labels)
     .filter(([key]) => obj[key] != null && obj[key] !== '')
-    .map(([key, label]) => ({ label, value: tidy(obj[key]) }))
+    .map(([key, label]) => ({
+      label,
+      // 枚举/比率按画像口径翻译（moderate → 一般、0.5 → 50%），其余仍走原兜底
+      value: profileFieldText(key, obj[key], tidy),
+      hint: profileFieldHint(key),
+      prior: section ? isPriorProfileField(section, key) : false
+    }))
 }
 
 const cognitiveRows = computed(() =>
@@ -2103,7 +2131,7 @@ const cognitiveRows = computed(() =>
     confusionPattern: '困惑模式',
     priorKnowledgeStructure: '先备知识结构',
     selfAssessmentAccuracy: '自评准确度'
-  })
+  }, 'cognitive')
 )
 
 const preferenceRows = computed(() => [
@@ -2113,14 +2141,14 @@ const preferenceRows = computed(() => [
     sessionLength: '单次时长',
     preferredDifficulty: '难度偏好',
     prefersHints: '是否偏好提示'
-  }),
+  }, 'preferences'),
   ...kvRows((profile.value?.emotional || null) as Record<string, unknown> | null, {
     motivationTrigger: '动机触发',
     urgencyLevel: '紧迫感',
     confidenceLevel: '自信水平',
     frustrationTolerance: '挫败耐受',
     rewardSensitivity: '奖励敏感度'
-  })
+  }, 'emotional')
 ])
 
 /** 画像补充展示：学习行为基线（behavioral）——运营价值：判断「节奏是否适合当前干预」 */
@@ -2131,7 +2159,7 @@ const behaviorRows = computed(() =>
     avgInteractionInterval: '互动间隔（分钟）',
     engagementLevel: '投入度',
     consistencyScore: '一致性'
-  })
+  }, 'behavioral')
 )
 
 /** 画像补充展示：互动历史（history）——运营价值：总盘子与主题分布，判断是否深耕单一主题。
@@ -2139,12 +2167,12 @@ const behaviorRows = computed(() =>
     （2026-10-31 外部评审拍板：数值暂缓、仅挪这两项）→ 移到下方叙述洞察通栏卡；此处只留数值行 */
 const historyRows = computed(() => {
   const h = (profile.value?.history || null) as Record<string, unknown> | null
-  if (!h) return [] as { label: string; value: string }[]
+  if (!h) return [] as ProfileKvRow[]
   return kvRows(h, {
     totalSessions: '总课堂数',
     totalMessages: '总消息数',
     avgSessionDuration: '平均课堂时长（分钟）'
-  })
+  }, 'history')
 })
 
 /** 叙述洞察追加段：互动历史里的两个长列表（探索主题 / 挣扎过概念）。
@@ -2169,22 +2197,22 @@ const curriculumRows = computed(() =>
     conceptDensityLevel: '概念密度',
     reviewFrequencyLevel: '复习频率',
     progressionStrategyNote: '推进策略'
-  })
+  }, 'curriculumControls')
 )
 
 /** 画像补充展示：派生洞察（derivedInsights）——运营价值：速度/最佳时长/建议方式直接落到干预动作 */
 const derivedRows = computed(() => {
   const dv = (profile.value?.derivedInsights || null) as Record<string, unknown> | null
-  if (!dv) return [] as { label: string; value: string }[]
+  if (!dv) return [] as ProfileKvRow[]
   const rows = kvRows(dv, {
     learningVelocity: '学习速度',
     optimalSessionLength: '最佳单次时长（分钟）',
     recommendedDifficulty: '推荐难度',
     suggestedApproach: '建议方式'
-  })
+  }, 'derivedInsights')
   const arr = (v: unknown) => (Array.isArray(v) ? v.map(String) : [])
-  if (arr(dv.strengths).length) rows.push({ label: '优势', value: arr(dv.strengths).slice(0, 5).join('、') })
-  if (arr(dv.riskFactors).length) rows.push({ label: '风险因素', value: arr(dv.riskFactors).slice(0, 5).join('、') })
+  if (arr(dv.strengths).length) rows.push({ label: '优势', value: arr(dv.strengths).slice(0, 5).join('、'), hint: '', prior: false })
+  if (arr(dv.riskFactors).length) rows.push({ label: '风险因素', value: arr(dv.riskFactors).slice(0, 5).join('、'), hint: '', prior: false })
   return rows
 })
 
@@ -2328,13 +2356,17 @@ const signalTiers = computed<Record<'mastered' | 'struggling' | 'fragile', strin
   return { mastered: arr('masteredConcepts'), struggling: arr('strugglingConcepts'), fragile: arr('fragileConcepts') }
 })
 
-/** 信号四档（学没学会）：已掌握=stable/mastered，脆弱=fragile/待复习，挣扎=learning 且掌握度<55%。
+/** 信号四档（学没学会）：已掌握=stable/mastered，记忆偏弱=fragile/待复习，进行中=learning 且掌握度<55%。
  *  分档依据是 performance 信号，与概览概念条的迁移准备度分档不同维。
+ *
+ *  名字与图谱四档同源（utils/conceptBands）：键名仍是 mastered/struggling/fragile（点的颜色按它走，
+ *  依次对应图谱的 stable/learning/fragile），但**叫法**不再自造一套——此前这套行叫
+ *  「挣扎 / 脆弱 / 未开始」，同页图谱叫「进行中 / 记忆偏弱 / 待学习」，同一批概念两套名字。
  *
  *  2026-11-01 外部评审 P0：卡头写「13 个概念」，三档加起来只有 4 个（0+3+1），
  *  另外 9 个去向不明——因为后端三档是**非穷尽过滤**（`status==='pending'` 与
- *  `status==='learning' && mastery>=0.55` 都不进任何一档）。这里补第四档「未开始」，
- *  用概念清单减去前三档得出，让四档加总等于卡头总数。
+ *  `status==='learning' && mastery>=0.55` 都不进任何一档）。这里补第四档，
+ *  用概念清单减去前三档得出，让四档加总等于卡头总数（该档因此也含已起步但没进信号的那批）。
  *
  *  四档一律**只数概念清单里的那些**：实测该学员的 `strugglingConcepts` 里有一个
  *  「读取Excel表对象」，而清单里同一概念写的是完整名
@@ -2356,31 +2388,27 @@ const signalTierRows = computed(() => {
   const tiered = new Set([...mastered, ...struggling, ...fragile].map((n) => n.trim()))
   const untouched = ledgerLabels.filter((n) => !tiered.has(n.trim()))
   return [
-    { key: 'mastered', label: '已掌握', n: mastered.length, names: mastered },
-    { key: 'struggling', label: '挣扎', n: struggling.length, names: struggling },
-    { key: 'fragile', label: '脆弱', n: fragile.length, names: fragile },
-    { key: 'untouched', label: '未开始', n: untouched.length, names: untouched },
+    { key: 'mastered', label: CONCEPT_BAND_LABEL.stable, n: mastered.length, names: mastered },
+    { key: 'struggling', label: CONCEPT_BAND_LABEL.learning, n: struggling.length, names: struggling },
+    { key: 'fragile', label: CONCEPT_BAND_LABEL.fragile, n: fragile.length, names: fragile },
+    { key: 'untouched', label: CONCEPT_BAND_LABEL.unknown, n: untouched.length, names: untouched },
     { key: 'outside', label: '不在概念清单', n: outside.length, names: outside }
   ]
 })
 
-/** 概念信号脚注：把四档与卡头总数的加总关系写出来；有标签不在清单里时说明去哪了
- *  （否则四档之和会大于卡头总数，读者只能当成又一个对不上的数字）。 */
+/** 概念信号脚注：只披露读者需要知道的那一件异常——有标签不在卡头的概念清单里时点名它们
+ *  （四档只数清单里的概念，不点名就成了「四档加起来比卡头总数多」的说不清）。
+ *  「0 + 1 + 1 + 2 = 4，与卡头对得上」这类加总自检是写代码时的验证手段，不是用户要读的信息，
+ *  2026-11-02 P1-6 起不再印出来。 */
 const signalTierFoot = computed(() => {
-  const total = conceptLedgerLabels.value.length
   const outside = signalTierRows.value.find((t) => t.key === 'outside')
-  const four = signalTierRows.value.filter((t) => t.key !== 'outside')
-  const head = four.map((t) => t.n).join(' + ')
-  const sum = four.reduce((acc, t) => acc + t.n, 0)
-  if (!total) return ''
-  const base = `${head} = ${sum}，与卡头「${total} 个概念」对得上，四档都只数概念清单里的那些`
-  const names = outside && outside.names.length ? outside.names.join('、') : ''
-  /* R1：一句只讲一件事——这类说明不写分号，拆成两句 */
-  return names ? `${base}。另有 ${outside ? outside.n : 0} 个标签不在当前概念清单里、未计入：${names}` : base
+  if (!outside || !outside.names.length) return ''
+  return `另有 ${outside.n} 个标签不在当前概念清单里、未计入：${outside.names.join('、')}`
 })
 
 /** 概念台账里的概念名（与卡头「N 个概念」同源，保证第四档能与之加总闭合）。
- *  台账缺失（旧快照）时退三档本身的并集，至少不会凭空多报。 */
+ *  台账缺失（旧快照）时返回空：四档一档也数不到，信号里的标签全部由脚注披露为
+ *  「不在当前概念清单里」，重算快照后自然补齐。 */
 const conceptLedgerLabels = computed<string[]>(() => {
   const gb = (knowledgeMemory.value as Record<string, unknown> | null)?.globalBackground
   const ledger = (gb && typeof gb === 'object' ? (gb as Record<string, unknown>).conceptLedger : undefined)
@@ -2479,9 +2507,11 @@ const conceptStats = computed<{ label: string; count: number; tone: ConceptBarTo
         label: String(item.label || item.conceptKey || '未命名概念'),
         count: Number(item.evidenceCount || 0),
         tone: conceptBarTone(item),
+        /* 0 条就画 0 宽：原先给 8% 的「可见性下限」，于是标着「暂无」的四行各挂一小截
+           有色条，读起来像"有证据但很少"（2026-11-02 评审 R23）。 */
         width: Number(item.evidenceCount || 0) > 0
           ? Math.max(8, Math.round((Number(item.evidenceCount || 0) / max) * 100))
-          : 8
+          : 0
       }))
       .sort((a, b) => (b.count > 0 ? 1 : 0) - (a.count > 0 ? 1 : 0) || b.count - a.count || a.label.localeCompare(b.label, 'zh'))
       .slice(0, 16)
@@ -2742,10 +2772,22 @@ const learningStateRows = computed(() => {
   return [row('lss'), row('ktl'), row('lf'), row('lsb')]
 })
 
-/* ---------- 学习路径 pane：路径卡（原型 2165-2171） ---------- */
-const pathStatus = computed<{ text: string; tone: 'ok' | 'info' | 'muted' }>(() => {
+/* ---------- 总览：路径卡（原型 2165-2171） ---------- */
+/* 路径状态徽章以 learning_paths.status 为准（active→学习中），不再只由任务完成率推导：
+   路径已经上过课、但子任务还没有一条被标记完成时 pct=0，旧口径把它推成「未开始」，
+   与同屏的路径状态、最近课堂互相打架（2026-11-02 P1-1）。
+   路径清单没给出状态（取数失败/该路径不在名下清单）时才回落到完成率推导。
+   文案与徽章走 opsShared 的唯一映射（路径域 active 是「学习中」，与会话域的「进行中」不同）。 */
+const pathStatus = computed<{ text: string; tone: 'ok' | 'info' | 'bad' | 'muted' }>(() => {
   const p = pathInfo.value
   if (!p) return { text: '未开始', tone: 'muted' }
+  const declared = pathOptions.value.find((o) => o.id === p.id)?.status || ''
+  if (declared) {
+    return {
+      text: pathStatusText(declared),
+      tone: pathStatusBadge(declared).replace('mk-badge--', '') as 'ok' | 'info' | 'bad' | 'muted'
+    }
+  }
   if (p.pct >= 100) return { text: '已完成', tone: 'ok' }
   if (p.pct > 0) return { text: '进行中', tone: 'info' }
   return { text: '未开始', tone: 'muted' }
@@ -3166,6 +3208,20 @@ const snapshotHint = computed(() =>
 .ld-kv__row { display: contents; }
 .ld-kv__row span { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .ld-kv__row strong { font-weight: 400; font-size: var(--mk-fs-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 逐格来源标注（2026-11-02 P1-8）：这一格是平台初始默认值，不是实测。贴着读数放，
+   比卡头一枚「整卡默认」徽章更准——同一张卡里两种来源可以并存 */
+.ld-kv__prior {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-style: normal;
+  font-size: var(--mk-fs-micro);
+  white-space: nowrap;
+  vertical-align: 1px;
+  cursor: help;
+}
 
 /* 记忆强度（原型 meterrow：meter 条 + mono %，沿用 .mk-minibar 原语） */
 .ld-mt { display: inline-flex; align-items: center; gap: 8px; }
@@ -3309,12 +3365,13 @@ const snapshotHint = computed(() =>
 .ld-sig-tier__dot.is-mastered { background: var(--mk-green); }
 .ld-sig-tier__dot.is-struggling { background: var(--mk-amber); }
 .ld-sig-tier__dot.is-fragile { background: var(--mk-red); }
-/* 第四档「未开始」（2026-11-01 外部评审 P0）：中性灰，与前两档的正/负色区分开，
+/* 第四档「待学习」（2026-11-01 外部评审 P0）：中性灰，与前两档的正/负色区分开，
    避免读成第三种「学会程度」 */
 .ld-sig-tier__dot.is-untouched { background: var(--mk-muted); }
 .ld-sig-tier strong { font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
 .ld-sig-tier__names { color: var(--mk-muted); line-height: 1.6; min-width: 0; }
-/* 加总口径脚注（2026-11-01 外部评审 P0）：四档必须闭合到卡头的概念总数 */
+/* 脚注（2026-11-02 P1-6）：只在有标签落在卡头概念清单外时出现，点名它们去哪儿了。
+   四档加总自检已不印给用户（实现侧的验证，不是读者要的信息） */
 .ld-sig-sec__foot { margin: 6px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 反复困惑行（2026-10-11 外部评审二轮）：概念加粗句首、说明降一档灰、频次改右侧轻徽标 */
 .ld-fnd--rc .ld-fnd__item { display: flex; align-items: baseline; gap: 10px; }
@@ -3458,27 +3515,19 @@ const snapshotHint = computed(() =>
 .ld-ev-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  /* 双栏等高监控窗（2026-10-11 走查，外部评审「左右平齐」采纳）：高度锚定视口
-     （页头+hero+页签栏约占 300px），行高锁 minmax(0,1fr)——左时间线与
-     右曲线·趋势·密度各自内滚，两侧卡片框永远等高，任一侧内容多寡都不再拖出黑洞。
-     4K zoom 档（≥2800→1.15 / ≥3600→1.3）内 100vh 会被 zoom 放大，须 ÷zoom 换算回
-     逻辑坐标（与 admin-theme.css 的 .mshell 同一处理），否则卡片底越出视口 */
-  grid-template-rows: minmax(0, 1fr);
-  height: calc(100vh - 300px);
-  min-height: 560px;
   gap: 14px;
-}
-@media (min-width: 2800px) {
-  .ld-ev-grid { height: calc((100vh - 300px) / 1.15); }
-}
-@media (min-width: 3600px) {
-  .ld-ev-grid { height: calc((100vh - 300px) / 1.3); }
+  /* 双栏等高、随内容增高（2026-11-02 P2-5）：此前两栏同锁视口高内滚窗，右栏第 4 张卡
+     （预测校准）超出窗高后正好在窗口底边被横切成半行，收起态的摘要行看上去像渲染截断。
+     页面壳 .mshell__content 本来就承载纵向滚动，两栏不需要自带视口级窗高——行高改由
+     内容撑开（短的一栏留白落在卡片内/卡间，不再出现半截行）；行内仍按内容撑高，两栏
+     卡片框等高这一条不变。4K zoom 档的 ÷zoom 换算随之取消（本规则不再用 100vh）。 */
 }
 
 /* 图谱画布高度（2026-10-11 走查：固定 560px 在 4K 下卡下方留大块空 → 视口锚定；
-   zoom 档 ÷zoom 换算同 .ld-ev-grid——壳内 100vh 会被 zoom 等比放大，且页头/hero/
+   zoom 档 ÷zoom 换算：壳内 100vh 会被 zoom 等比放大，且页头/hero/
    页签/卡头这些 chrome 同被放大，故常数随 zoom 抬升（4K 实测 420 档溢出 141px）；
-   再统一留 ~29px 页底呼吸，与页侧边距同档） */
+   再统一留 ~29px 页底呼吸，与页侧边距同档。证据页两栏已不再锚定视口高（P2-5），
+   仍吃这套换算的只剩本画布） */
 /* 卡体 padding 由页面自管（mk-card 本体无 padding，mk-card__head 自带 12px 16px）：
    此前漏给 mk-ge 体补边距——统计行/底注/图例 1px 贴卡缘，与卡头 16px 缩进同卡错位
    （4K zoom 放大后尤其扎眼）。横向对齐卡头 16px；画布随体内缩，节点不再顶到卡框。
@@ -3494,13 +3543,13 @@ const snapshotHint = computed(() =>
   #ld-panel-graph { --ld-graph-h: calc((100vh - 616px) / 1.3); }
 }
 .ld-ev-main { min-width: 0; display: flex; flex-direction: column; }
-/* 左卡随窗拉伸，时间线在卡内弹性内滚（flex-basis 0 + min-height 0 链路） */
-.ld-ev-main .ld-ev-details { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.ld-ev-main .ld-evidence { flex: 1; min-height: 0; overflow-y: auto; }
-.ld-ev-side { display: grid; gap: 14px; min-width: 0; align-content: start; min-height: 0; overflow-y: auto; }
+/* 时间线随卡片增高（卡片不再锁视口高）：卡比内容高时多出的空间由链路吸收、落在列表下方，
+   列表本身不再需要内滚 */
+.ld-ev-main .ld-ev-details { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.ld-ev-main .ld-evidence { min-height: 0; }
+.ld-ev-side { display: grid; gap: 14px; min-width: 0; align-content: start; }
 /* 滚动条不再局部覆盖（2026-10-11 用户走查：硬编码浅色 thumb 在暗色主题下成亮条）——
-   回归 design-system.css 全站规范（8px、主题 token），左侧时间线与右侧栏同规 */
-.ld-ev-side { display: grid; gap: 14px; min-width: 0; }
+   回归 design-system.css 全站规范（8px、主题 token） */
 
 /* ---------- 学习压力曲线（健康度/疲劳度 EWMA，风格对齐用户侧 V2LearningState） ---------- */
 .ld-load__controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -3552,9 +3601,7 @@ const snapshotHint = computed(() =>
   .ld-insights--cols { columns: 1; }
   .ld-sig-tiers { grid-template-columns: 1fr; }
 .ld-load__hits { grid-template-columns: repeat(2, 1fr); }
-  .ld-ev-grid { grid-template-columns: 1fr; grid-template-rows: none; height: auto; min-height: 0; }
-  .ld-ev-main .ld-evidence { max-height: none; overflow: visible; }
-  .ld-ev-side { overflow: visible; }
+  .ld-ev-grid { grid-template-columns: 1fr; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */

@@ -58,29 +58,37 @@
           :options="resultSelectOptions"
           :active="failuresOnly"
         />
-        <span class="wf-sort" title="按耗时排序">
+        <!-- 2026-11-02 文案清理：原挂 title「按耗时排序」——排序控件自己的选项
+             （默认（时间序）/ 耗时 ↓ / 耗时 ↑）与 aria-label「排序方式」已把这件事说全，
+             title 只是把控件标签再讲一遍，删。 -->
+        <span class="wf-sort">
           <MkSelect v-model="sortMode" :options="SORT_OPTIONS" aria-label="排序方式" mono />
         </span>
       </div>
-        <!-- 链路 ID 搜索属左组（全站卡头语法：快筛 chips → 搜索框） -->
+        <!-- 链路 ID 搜索属左组（全站卡头语法：快筛 chips → 搜索框）。
+             2026-11-02 文案清理：title 原为「按链路 ID 片段过滤（回车直达该链路）」——
+             前半句是 placeholder「筛选链路 ID」的同义复述，去掉；后半句是键盘口径
+             （回车才走服务端直达，键入只本地过滤），无第二出口，留下。 -->
         <input
           v-if="viewMode === 'trace'"
           v-model="traceKeyword"
           class="wf-tracepick__search mono"
           placeholder="筛选链路 ID"
-          title="按链路 ID 片段过滤（回车直达该链路）"
+          title="回车直达该链路"
           @keydown.enter.prevent="searchTrace"
         />
       </div>
       <!-- 右组：贴右缘的动作 + 计数 + 选择器 -->
       <div class="wf-tracepick__right">
         <!-- 嵌入态（执行日志「Trace 链路」tab）不渲染整条状态条：失败定位入口随状态条一起消失，
-             空瀑布时用户没有任何「去看失败链路」的抓手，故在筛选条上补回同一入口 -->
+             空瀑布时用户没有任何「去看失败链路」的抓手，故在筛选条上补回同一入口。
+             2026-11-02 文案清理：原挂 title「定位到样本内第一条含失败的链路」，与按钮自身的
+             可见文案（「样本内 N 条链路含失败，定位 →」）说同一件事，且独立态同一入口本就不带
+             title——删 title，两态同形。 -->
         <button
           v-if="embedded && failedTraceIds.length"
           type="button"
           class="wf-locate mk-link"
-          :title="'定位到样本内第一条含失败的链路'"
           @click="locateFailure"
         >
           {{ locateLabel }}
@@ -111,9 +119,16 @@
     <!-- 链路概要卡 -->
     <div v-if="traceSummary" class="wf-summary">
       <div class="wf-summary__item"><b>{{ traceSummary.spanCount }}</b><span>span</span></div>
-      <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.total) }}</b><span>总耗时</span></div>
+      <!-- 总耗时/平均耗时是两个不同口径的读数（2026-11-02 评审：只并排三个数字，读者会拿
+           span 数去乘平均耗时跟总耗时对账）。总耗时是本条链路的端到端跨度，含行与行之间的等待；
+           平均耗时是各行自身耗时的均值，两者本就不该相乘相等，说明挂在各自格上。 -->
+      <div class="wf-summary__item" title="本条链路的端到端跨度：从第一行开始到最后一行结束，含行与行之间的等待">
+        <b>{{ fmtMs(traceSummary.total) }}</b><span>总耗时</span>
+      </div>
       <div class="wf-summary__item" :class="{ 'wf-summary__item--bad': traceSummary.errorCount }" title="所选链路内的失败 span 数（「仅失败」按钮统计全部样本的失败 span，定位链接统计含失败的链路数）"><b>{{ traceSummary.errorCount }}</b><span>失败</span></div>
-      <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.avg) }}</b><span>平均耗时</span></div>
+      <div class="wf-summary__item" title="所选链路内各行自身耗时的平均值，不含行与行之间的等待">
+        <b>{{ fmtMs(traceSummary.avg) }}</b><span>平均耗时</span>
+      </div>
       <div class="wf-summary__item" :title="'链路内各行的耗时分位'">
         <b class="mono">P50 {{ fmtMs(traceSummary.p50) }} · P99 {{ fmtMs(traceSummary.p99) }}</b><span>耗时分位</span>
       </div>
@@ -128,7 +143,9 @@
         <div class="wf-summary__item" :title="costTitle">
           <b>{{ traceSummary.estCost ? `≈ $${traceSummary.estCost}` : '—' }}</b><span>估算成本</span>
         </div>
-        <div class="wf-summary__item wf-summary__models"><span>模型</span><b class="mono">{{ traceSummary.models.join(' / ') }}</b></div>
+        <!-- 模型名完整值挂 title（2026-11-02 评审：末格被省略号截成 deepseek-v4…，
+             截掉的部分无处可查）；列宽见 .wf-summary__models 的最小宽 -->
+        <div class="wf-summary__item wf-summary__models" :title="traceSummary.models.join(' / ')"><span>模型</span><b class="mono">{{ traceSummary.models.join(' / ') }}</b></div>
       </template>
       <span v-else class="wf-summary__note">无 LLM 调用</span>
     </div>
@@ -138,7 +155,7 @@
       <div class="wf-ruler">
         <span class="wf-ruler__label">{{ viewMode === 'session' ? '会话内 span' : '分组 / Skill' }}</span>
         <div class="wf-ruler__track" :style="rulerTrackW ? { width: rulerTrackW } : undefined">
-          <span v-for="tick in ticks" :key="tick" class="wf-ruler__tick" :style="{ left: tickLeft(tick) }">
+          <span v-for="tick in ticks" :key="tick" class="wf-ruler__tick" :class="{ 'wf-ruler__tick--edge': tickEdge(tick) }" :style="{ left: tickLeft(tick) }">
             {{ fmtTick(tick) }}
           </span>
         </div>
@@ -158,6 +175,9 @@
               <span class="wf-row__stage-name" :title="`监控分组 ${span.stage} · Skill ${span.agent}`">{{ monitoringGroupText(span.stage) }}</span>
               <span class="wf-row__stage-id mono" :title="span.agent">{{ span.agent }}</span>
             </span>
+            <!-- 起点偏移（2026-11-02 评审）：同一条链路里同名 Skill 会重复出现（实测 5 行 stage-designer），
+                 行首只有 Skill 名时无法区分是哪一次调用 -->
+            <span class="wf-row__start mono" :title="`距链路起点 ${fmtMs(span.startMs)} 开始`">+{{ fmtMs(span.startMs) }}</span>
           </span>
           <span class="wf-row__track">
             <span
@@ -170,9 +190,11 @@
             <span v-if="span.errorCode" class="wf-row__errcode mono" :title="span.errorMessage">{{ errorCodeLabel(span.errorCode) ?? `[${span.errorCategory || 'err'}] ${span.errorCode}` }}</span>
             <span v-if="promptOf(span)?.drift" class="wf-row__drift">{{ TERMS.driftRuntime }}</span>
             <!-- 网关耗时只在「与总耗时读起来不同」时显示：网关＝上游耗时、总耗时＝端到端，
-                 两者格式化后同值（多数纯网关调用）时并列＝同一个数字写两遍 -->
-            <span v-if="span.gatewayDurMs && fmtMs(span.gatewayDurMs) !== fmtMs(span.durationMs)" class="wf-row__gw mono" :title="`上游网关 ${fmtMs(span.gatewayDurMs)}，本行端到端 ${fmtMs(span.durationMs)}（差值＝平台侧开销）`">网关 {{ fmtMs(span.gatewayDurMs) }}</span>
-            <span class="wf-row__dur mono">{{ fmtMs(span.durationMs) }}</span>
+                 两者格式化后同值（多数纯网关调用）时并列＝同一个数字写两遍。
+                 行尾两颗数字并排（网关 12.1s / 12.2s）看不出各是什么，两颗各挂名头
+                 （2026-11-02 评审）。 -->
+            <span v-if="span.gatewayDurMs && fmtMs(span.gatewayDurMs) !== fmtMs(span.durationMs)" class="wf-row__gw mono" :title="`上游网关 ${fmtMs(span.gatewayDurMs)} · 本行端到端 ${fmtMs(span.durationMs)} · 差值＝平台侧开销。仅在两者不同的行显示`">网关 {{ fmtMs(span.gatewayDurMs) }}</span>
+            <span class="wf-row__dur mono" :title="`本行端到端耗时 ${fmtMs(span.durationMs)}`">{{ fmtMs(span.durationMs) }}</span>
             <span class="wf-row__arrow" aria-hidden="true">▸</span>
           </span>
         </button>
@@ -253,13 +275,14 @@
         <p>{{ verdictText }}</p>
       </div>
 
-      <!-- 翻页：追加下一页样本（统一 mk-list-more 页脚形态，与全局加载更多页脚同构） -->
+      <!-- 翻页：追加下一页样本（统一 mk-list-more 页脚形态，与全局加载更多页脚同构）。
+           2026-11-02 文案清理：原挂 title「加载下一页样本」，与按钮可见文案
+           「加载更多样本」逐义重复，删。 -->
       <div v-if="canLoadMoreWaterfall" class="mk-list-more">
         <button
           type="button"
           class="mk-link"
           :disabled="waterfallLoading"
-          :title="'加载下一页样本'"
           @click="loadMoreWaterfall"
         >
           <MkLoading v-if="waterfallLoading" inline /><template v-else>加载更多样本</template>
@@ -654,8 +677,10 @@ const statusTone = computed(() => (!activeSpans.value.length ? 'mk-status--muted
 
 /* 全链路失败提示 + 定位 */
 const failedTraceIds = computed(() => [...new Set(baseSpans.value.filter((s) => s.status === 'err').map((s) => s.traceId))])
-/* 定位钮文案单源（R6 复读单源化）：状态条与内嵌态两个入口共用一份 */
-const locateLabel = computed(() => `${failedTraceIds.value.length} 条链路含失败，定位 →`)
+/* 定位钮文案单源（R6 复读单源化）：状态条与内嵌态两个入口共用一份。
+   点名「样本内」（2026-11-02 评审）：它数的是已加载的全部样本，与概要卡里
+   「所选链路」的失败数不是一回事，原文案与概要卡的「失败 0」并排看着自相矛盾。 */
+const locateLabel = computed(() => `样本内 ${failedTraceIds.value.length} 条链路含失败，定位 →`)
 function locateFailure() {
   const ids = failedTraceIds.value
   if (!ids.length) return
@@ -782,6 +807,10 @@ const fmtTick = (t: number) =>
     : `${t}ms`
 
 const tickLeft = (t: number) => `${(t / maxEnd.value) * 100}%`
+/** 末刻度贴右缘只在该刻度本来就落在量程末端时成立（居中定位会让标签跨出右缘一半）。
+    刻度按固定步长生成，末刻度通常小于量程——那时把它钉到右缘等于把 8m 画在 9.7m 的位置，
+    6m→8m 一档拉成其余档的两倍，条形也看着画到了轴外（2026-11-02 评审）。 */
+const tickEdge = (t: number) => t >= maxEnd.value * 0.995
 const barLeft = (s: TraceSpan) => `${(s.startMs / maxEnd.value) * 100}%`
 const barWidth = (s: TraceSpan) => `${Math.max((s.durationMs / maxEnd.value) * 100, 1.2)}%`
 
@@ -1023,7 +1052,7 @@ const verdictText = computed(() => {
 /* 无 LLM 调用链路的替代说明（取代 Token / 成本 / 模型三格空读数）：与读数同栏居中，
    固定在读数格之后，不参与等分（读数格吃满其余宽度） */
 .wf-summary__note { align-self: center; flex: 0 0 auto; margin-left: 18px; margin-right: 18px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.wf-summary__models { flex: 1; align-items: flex-start; justify-content: center; min-width: 0; }
+.wf-summary__models { flex: 1; align-items: flex-start; justify-content: center; min-width: 150px; }
 .wf-summary__models b {
   font-size: var(--mk-fs-micro);
   font-weight: 600;
@@ -1032,6 +1061,8 @@ const verdictText = computed(() => {
   text-overflow: ellipsis;
   max-width: 100%;
 }
+/* 行首起点偏移（与 Skill 名同列，等宽小字贴列右缘）：同链路同名 Skill 靠它区分是哪一次调用 */
+.wf-row__start { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .wf-tracepick__count { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 /* 卡头语法分组：左组吃剩余宽度（窄屏可折行），右组贴右缘不参与折行 */
 .wf-tracepick__left { display: flex; align-items: center; gap: 10px; flex: 1 1 420px; min-width: 0; flex-wrap: wrap; }
@@ -1085,8 +1116,9 @@ const verdictText = computed(() => {
   /* 末位刻度贴近右缘，禁换行（2026-10-31 三轮评审：「20s」被挤成竖排三行） */
   white-space: nowrap;
 }
-/* 末刻度右对齐：居中定位会让「20s」跨出右缘一半（多刻度时才生效，单刻度仍居中） */
-.wf-ruler__tick:last-child:not(:first-child) {
+/* 末刻度右对齐：只给「本来就在量程末端」的刻度（居中定位会让标签跨出右缘一半）；
+   中间刻度即使排在最后也按真实位置居中。判定见 tickEdge() */
+.wf-ruler__tick--edge {
   left: auto !important;
   right: 0;
   transform: none;

@@ -422,19 +422,20 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '运行时');
     // 2026-10-28 用户「skill 详情的模型也改一下」：卡面先给当前值，表单收进弹层
-    const order = wrapper.find('.sdp-order');
-    expect(order.exists()).toBe(true);
-    expect(order.text()).toContain('取值顺序');
-    expect(order.text()).toContain('本 Skill 设置');
-    expect(order.text()).toContain('Prompt 文件声明');
-    expect(order.text()).toContain('平台默认');
+    // 2026-11-03 二稿：卡面 = 模型当主角 + 六项两列读数（不再套描边盒）
+    const live = wrapper.find('.sdp-live');
+    expect(live.exists()).toBe(true);
+    expect(live.find('.sdp-live__id').text()).toContain('gpt-4o-mini');
+    // 取值顺序（谁压谁）降成模型 id 的悬停说明，不再占一行读数
+    expect(live.find('.sdp-live__id').attributes('title') ?? '').toContain('本 Skill 指定');
 
-    const summary = wrapper.find('.sdp-summary');
-    expect(summary.exists()).toBe(true);
-    expect(summary.text()).toContain('gpt-4o-mini');
+    const facts = live.findAll('.sdp-live__facts > div');
+    expect(facts.map((d) => d.find('span').text())).toEqual([
+      '思考模式', '推理强度', 'temperature', '请求超时', '逻辑重试', '备用模型'
+    ]);
     // 真实值仍取自配置：mock requestTimeoutMs=30000 / T=0.4
-    expect(summary.find('.sdp-summary__line').text()).toContain('30s');
-    expect(summary.find('.sdp-summary__line').text()).toContain('T=0.4');
+    expect(live.find('.sdp-live__facts').text()).toContain('0.4');
+    expect(live.find('.sdp-live__facts').text()).toContain('30s');
     expect(wrapper.find('.sdp-nav').exists()).toBe(false);
 
     // 详细分段只在弹层里；打开后当前值仍读段头
@@ -522,8 +523,9 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '协议');
     // 空态落在页签顶部的详情卡（.skd-steps/.skd-ranklist 容器），不再有底部投影
-    expect(wrapper.text()).toContain('该 Skill 未声明回合状态机。');
-    expect(wrapper.text()).toContain('该 Skill 未声明终止条件。');
+    // 2026-11-02 评审：空态要说明读的是哪份文件（运行时阶段集合来自 Prompt 清单的运行时契约）
+    expect(wrapper.text()).toContain('core YAML 未声明回合状态机。');
+    expect(wrapper.text()).toContain('core YAML 未声明终止条件。');
     expect(wrapper.find('.skd-step').exists()).toBe(false);
     wrapper.unmount();
   });

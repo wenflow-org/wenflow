@@ -4,7 +4,10 @@
     <details class="mk-card fdp__box" open>
       <summary class="mk-card__head mk-section__summary">
         <span class="mk-card__title">不一致报告</span>
-        <span class="mk-card__meta">{{ TERMS.driftContractQualified }}</span>
+        <!-- 卡头读数随状态给（2026-11-02 评审）：原先恒显「文件与线上不一致」，与卡片正中的
+             「✓ 无不一致」在同一屏里互相打架——一句说的是这一分区查的是什么，另一句说的是
+             这次查出来什么，两句得像同一个人说的 -->
+        <span class="mk-card__meta">{{ driftMeta }}</span>
       </summary>
       <div v-if="driftLoading" class="fdp__loading"><MkLoading text="不一致检测中…" inline /></div>
       <MkEmptyState
@@ -62,23 +65,24 @@
         compact
         @action="loadChanges"
       />
+      <!-- 空态不再挂「刷新」动作（2026-11-02 评审）：空列表里那颗主按钮是整页唯一的强调色块，
+           而「刷新」是列表动作、不是空态结论。动作移到下面的列表脚，与「在审计日志看全部」并列。 -->
       <MkEmptyState
         v-else
         icon="⇄"
         title="暂无变更记录"
-        action-text="刷新"
         compact
-        @action="loadChanges"
       />
-      <div v-if="changes.length" class="fdp__changes-foot">
-        <RouterLink class="mk-link" :to="{ path: '/admin/audit-logs' }">在审计日志看全部</RouterLink>
+      <div class="fdp__changes-foot">
+        <RouterLink v-if="changes.length" class="mk-link" :to="{ path: '/admin/audit-logs' }">在审计日志看全部</RouterLink>
+        <button type="button" class="mk-btn mk-btn--sm" @click="loadChanges">刷新</button>
       </div>
     </details>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { TERMS } from './terms';
@@ -93,6 +97,16 @@ const driftLoading = ref(false);
 const driftFailed = ref(false);
 const changes = ref<Array<Record<string, unknown>>>([]);
 const changesFailed = ref(false);
+
+/** 不一致报告卡头读数：说清这次查出来的结果（术语仍取 terms.ts 单源）。
+    三态与卡体的加载/失败/空态一一对应，不再恒显「文件与线上不一致」。 */
+const driftMeta = computed(() => {
+  if (driftLoading.value) return '核查中…';
+  if (driftFailed.value) return '核查未完成';
+  return drift.value.items.length
+    ? `${TERMS.driftContractQualified} ${drift.value.items.length} 项`
+    : '文件与线上已一致';
+});
 
 function stringify(value: unknown) {
   if (value === null || value === undefined) return 'null';
@@ -238,7 +252,10 @@ watch(() => props.stage, () => {
 /* 时间列等宽数字防跳动；操作人弱化，完整原因/角色在 title（审核 #81） */
 .fdp__change-time { color: var(--mk-faint, var(--mk-muted)); font-variant-numeric: tabular-nums; }
 .fdp__change-actor { color: var(--mk-muted, #5b6577); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
-.fdp__changes-foot { display: flex; justify-content: flex-end; padding: 4px 14px 12px; }
+.fdp__changes-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 4px 14px 12px; }
+/* 分区空态收口（2026-11-02 评审）：合计 48px 上下留白 + 46px 图标块让一行结论占掉约 300px，
+   在折叠区展开后就是一大片空白。分区内空态只留「一句结论」，留白收到列表行级别。 */
+.fdp__box .mk-empty { padding: 18px 16px; }
 
 @media (min-width: 2000px) {
   .fdp__drift-item { font-size: var(--mk-fs-micro); padding: 9px 14px; }

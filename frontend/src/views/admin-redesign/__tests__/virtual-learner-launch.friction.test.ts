@@ -28,7 +28,13 @@ vi.mock('@/api/adminApi', () => ({
     startVirtualSession: vi.fn(async () => ({ data: { data: { id: 'sess-1', autopilot: 'running' } } })),
     startBlackboxVirtualSession: vi.fn(async () => ({ data: { data: { id: 'sess-1', autopilot: 'running' } } }))
   },
-  adminPromptOpsApi: { runEval: vi.fn(async () => ({ data: { data: { results: [] } } })) }
+  adminPromptOpsApi: { runEval: vi.fn(async () => ({ data: { data: { results: [] } } })) },
+  /* 试跑弹窗会读所选能力的生效提示词（R7：面板里要能看见跑的是哪条） */
+  adminSkillsApi: {
+    getEffectiveSkillPrompt: vi.fn(async () => ({
+      data: { data: { prompt: { version: 3, systemPrompt: '你是目标对话助手' } } }
+    }))
+  }
 }));
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), close: vi.fn() } }));
 vi.mock('../live', () => ({ errMsg: (e: unknown) => String(e), refreshLiveVirtuals: vi.fn() }));
@@ -59,13 +65,19 @@ async function openLaunch() {
 }
 
 describe('启动弹层：故事 + 启动，低频调参折进更多设置', () => {
-  it('主行只有故事下拉与「启动」；运行模式 / 对抗预算在「更多设置」里', async () => {
+  it('表单只留故事下拉；「启动」与「取消」同在页脚', async () => {
     const w = await openLaunch();
-    const mainRow = document.body.querySelector('.vl-launch-row')!;
-    expect(mainRow.textContent).toContain('选择故事');
-    expect(mainRow.textContent).toContain('启动');
-    expect(mainRow.textContent).not.toContain('运行模式');
-    expect(mainRow.textContent).not.toContain('学生对抗度');
+    const storyField = document.body.querySelector('.vl-launch-story')!;
+    expect(storyField.textContent).toContain('选择故事');
+    expect(storyField.textContent).not.toContain('运行模式');
+    expect(storyField.textContent).not.toContain('学习者对抗度');
+    expect(document.body.querySelector('.vl-launch-story')!.querySelectorAll('button.mk-btn').length).toBe(0);
+
+    /* 2026-11-02 评审 R1/R3：主操作在表单行里会被下拉挤成竖排，两个操作拆在两端 */
+    const foot = document.body.querySelector('.mk-modal__foot')!;
+    expect(foot.textContent).toContain('取消');
+    expect(foot.textContent).toContain('启动');
+    expect(storyField.textContent).not.toContain('启动');
 
     const more = document.body.querySelector('.vl-launch-more')!;
     expect(more).toBeTruthy();
@@ -76,7 +88,7 @@ describe('启动弹层：故事 + 启动，低频调参折进更多设置', () =
 
   it('对抗度用与提示词试跑同一套中文词（vlab.FRICTION_OPTIONS）', async () => {
     const w = await openLaunch();
-    expect(mkSelectLabels(w as never, '学生对抗度')).toEqual(EXPECTED_LABELS);
+    expect(mkSelectLabels(w as never, '学习者对抗度')).toEqual(EXPECTED_LABELS);
     w.unmount();
   });
 });
@@ -86,7 +98,7 @@ describe('提示词试跑：对抗度同一套中文词', () => {
     const w = mount(VirtualLearnerPromptTest, mountOpts);
     (w.vm as unknown as { open: (s: unknown) => void }).open({ id: 'p1', name: '小陈' });
     await flushPromises();
-    expect(mkSelectLabels(w as never, '学生对抗度')).toEqual(EXPECTED_LABELS);
+    expect(mkSelectLabels(w as never, '学习者对抗度')).toEqual(EXPECTED_LABELS);
     w.unmount();
   });
 });

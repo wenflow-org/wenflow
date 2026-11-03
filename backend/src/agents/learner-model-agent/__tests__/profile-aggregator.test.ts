@@ -194,3 +194,47 @@ describe('P1-2 画像已掌握概念不得吃 KT 幽灵痕', () => {
     });
   });
 });
+
+/* 2026-11-02 P1-8：画像页要逐格区分「实测」与「初始默认值」，只靠「证据为空」一个全局条件
+   会把同卡里两种来源一起标错（有目标对话但没上过课时，认知/偏好来自对话、行为基线仍是默认）。 */
+describe('画像字段来源 profileSources', () => {
+  it('无任何数据：各段来源为空（界面逐格标默认值）', async () => {
+    const { sources } = await new ProfileAggregator().aggregateProfile('u1');
+    expect(sources).toEqual({
+      cognitive: [],
+      behavioral: [],
+      learning: [],
+      preferences: [],
+      emotional: [],
+      history: [],
+      curriculumControls: [],
+      derivedInsights: [],
+    });
+  });
+
+  it('只有目标对话：认知/偏好/情绪按对话字段记来源；行为基线与其派生读数仍算默认', async () => {
+    mockGoalFindFirst.mockResolvedValue(
+      conv({
+        cognitive_profile: { thinking_style: 'practical', metacognition_level: 'high' },
+        learning_style: { preferred_format: 'practice', theory_vs_practice: 'practice-first' },
+        emotional_profile: { confidence_level: 'anxious' },
+      })
+    );
+
+    const { sources } = await new ProfileAggregator().aggregateProfile('u1');
+
+    expect(sources.cognitive).toContain('thinkingStyle');
+    expect(sources.cognitive).toContain('metacognitionLevel');
+    expect(sources.cognitive).not.toContain('confusionPattern');
+    // 对话里没给时间预算时 sessionLength 是 inferSessionLength 的兜底值，不算实测
+    expect(sources.preferences).toEqual(['preferredStyle', 'theoryVsPractice']);
+    expect(sources.emotional).toEqual(['confidenceLevel']);
+    expect(sources.behavioral).toEqual([]);
+    expect(sources.learning).toEqual([]);
+    expect(sources.history).toEqual([]);
+    expect(sources.derivedInsights).not.toContain('learningVelocity');
+    expect(sources.derivedInsights).not.toContain('optimalSessionLength');
+    expect(sources.derivedInsights).toContain('recommendedDifficulty');
+    expect(sources.derivedInsights).toContain('suggestedApproach');
+  });
+});

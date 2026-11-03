@@ -25,11 +25,14 @@
         <button v-if="(summary?.custom ?? 0) > 0" type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出卡库' }}
         </button>
+        <!-- 加图标 + 悬停说明（2026-11-02 评审 R15）：一排文字按钮里，「平台生产」四个字
+             既像状态又像入口；后缀这枚加号把它定成「新建一张卡」的动作。 -->
         <button
           type="button"
           class="mk-btn mk-btn--sm"
+          title="用平台生成一张新的身份卡（人设 + 第一个故事）"
           @click="openProduce"
-        >平台生产</button>
+        ><Plus :size="14" :stroke-width="1.75" />平台生产</button>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openImport">导入卡</button>
       </template>
     </MkPageHead>
@@ -59,21 +62,34 @@
       <div class="mk-card__head">
         <div>
           <h3 class="mk-card__title">身份卡</h3>
-          <span class="mk-card__meta">
-            <template v-if="keyword">命中 {{ filtered.length }} / 共 {{ cards.length }} 张</template>
-            <template v-else>共 {{ cards.length }} 张</template>
-          </span>
+          <!-- 不加筛选时张数与上方「身份卡」KPI 是同一个读数，只在搜索时补命中数（2026-11-02 评审 R16） -->
+          <span v-if="keyword" class="mk-card__meta">命中 {{ filtered.length }} / 共 {{ cards.length }} 张</span>
         </div>
         <div class="mk-card__head-right">
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 目标 / 场景" />
-          <a v-if="summary?.derived" href="#" class="mk-link" @click.prevent="goInstances">已创建实例 {{ summary.derived }} →</a>
+          <label v-if="pagedCards.length" class="vlc-pick-all">
+            <input
+              type="checkbox"
+              :checked="allPicked"
+              :indeterminate="pickIndeterminate"
+              aria-label="全选本页身份卡"
+              @change="togglePickAll"
+            />
+            <span>全选本页</span>
+          </label>
+          <!-- 「查看已创建实例 →」原在此处（2026-11-02 评审 R16 加的出口）。2026-11-02 用户指出
+               它是无意义跳转：目标虚拟学习者列表不区分来源、也不筛，落地与侧栏直达无异，
+               兑现不了「看已创建的实例」；实例数在上方 KPI「已派生 N」里已有唯一出口。
+               创建成功后的结果条仍保留「去虚拟学习者 →」——那句只承诺"去列表"，是诚实的。 -->
         </div>
       </div>
 
       <!-- 创建成功后的持久结果条（toast 3 秒消失，而实例不在这面墙上）：一句结果 + 一个出口 -->
       <div v-if="lastCreated" class="vlc-created mk-alert mk-alert--ok" role="status">
         <span>已创建 {{ lastCreated }} 个虚拟学习者</span>
-        <a href="#" class="mk-link" @click.prevent="goInstances">去虚拟学习者 →</a>
+        <!-- 真路由跳转用 RouterLink（2026-11-02）：此前是 href="#" + @click.prevent，假地址——
+             中键打不开新标签、悬停看不到落点、读屏读到的是「#」 -->
+        <RouterLink to="/admin/virtual-learners" class="mk-link">去虚拟学习者 →</RouterLink>
       </div>
 
       <!-- 卡墙加载态：用 MkSkeleton variant="cards" 原语（表格骨架自带 .mk-card 边框会与
@@ -210,7 +226,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
+import { Plus } from 'lucide-vue-next'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
@@ -220,6 +237,7 @@ import Pagination from './Pagination.vue'
 import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
 import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
+import { isInternalTag, isPlaceholderCardKey } from './cardTags'
 import { openSubPage } from './store'
 import { errMsg, liveRefreshSeq } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -282,7 +300,7 @@ const filtered = computed(() => {
     return [
       c.name, c.cardKey, c.goal, c.opening, c.email,
       ...wallTags(c).map((t) => t.text),
-      ...c.tags.filter((t) => !INTERNAL_TAG_RE.test(t))
+      ...c.tags.filter((t) => !isInternalTag(t))
     ]
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(kw))
@@ -472,14 +490,13 @@ const GOAL_TAG_LABELS: Record<string, string> = {
   problem_driven: '问题驱动',
   interest_exploration: '兴趣探索'
 }
-const INTERNAL_TAG_RE = /^(?:preset:|hash:|builtin$|in_scope$|out_of_scope$|v\d+(?:\.\d+)*$|w\d+$)/i
 interface WallTag {
   text: string
 }
 function wallTags(c: CardWallEntry): WallTag[] {
   const out: WallTag[] = []
   for (const tag of c.tags) {
-    if (INTERNAL_TAG_RE.test(tag)) continue
+    if (isInternalTag(tag)) continue
     const text = SOURCE_TAG_LABELS[tag] || GOAL_TAG_LABELS[tag] || tag
     if (!out.some((x) => x.text === text)) out.push({ text })
     if (out.length === 2) break
@@ -489,11 +506,10 @@ function wallTags(c: CardWallEntry): WallTag[] {
 /** 卡号与内部 profileId 相同、或整面墙都是同一个卡号时，卡号行没有区分度，不渲染。
  *  2026-10-27 再收紧：`builtin` 是预置卡的系统占位值（整面墙 20 张卡全印这两个字），
  *  它既不是卡号也不区分任何两张卡，按内部标记处理。 */
-const PLACEHOLDER_CARD_KEYS = new Set(['builtin'])
 function showCardKey(c: CardWallEntry): boolean {
   const key = (c.cardKey || '').trim()
   if (!key) return false
-  if (PLACEHOLDER_CARD_KEYS.has(key)) return false
+  if (isPlaceholderCardKey(key)) return false
   if (key === c.profileId || key === c.userId) return false
   const wall = cards.value
   return !(wall.length > 1 && wall.every((x) => (x.cardKey || '').trim() === key))
@@ -525,6 +541,23 @@ function togglePick(profileId: string) {
 }
 function clearPick() {
   selected.value = []
+}
+/* 全选本页（2026-11-02 评审 R14）：卡面每张都有勾选框，却没有「全选」也没有批量入口的
+   交代；给卡头一枚全选，勾完底部批量条才露面（跨页勾选靠逐张点，与虚拟学习者页同一规则）。 */
+const allPicked = computed(
+  () => pagedCards.value.length > 0 && pagedCards.value.every((c) => selected.value.includes(c.profileId))
+)
+const pickIndeterminate = computed(
+  () => !allPicked.value && pagedCards.value.some((c) => selected.value.includes(c.profileId))
+)
+function togglePickAll() {
+  const ids = pagedCards.value.map((c) => c.profileId)
+  if (allPicked.value) {
+    const drop = new Set(ids)
+    selected.value = selected.value.filter((id) => !drop.has(id))
+    return
+  }
+  selected.value = [...new Set([...selected.value, ...ids])]
 }
 
 const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)
@@ -588,6 +621,22 @@ watch(liveRefreshSeq, () => {
 <style scoped>
 .vlc-summary { max-width: 720px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 640px) { .vlc-summary { grid-template-columns: minmax(0, 1fr); } }
+/* 卡头全选：与卡面勾选框同一套尺寸语言，只在卡墙有卡时出现 */
+.vlc-pick-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.vlc-pick-all input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--mk-blue, #2f6ae0);
+  cursor: pointer;
+}
 /* ===== 卡墙（2026-10-05 卡库改版）：自适应卡网格，260px 起步、窄档降列 ===== */
 .vlc-wall {
   display: grid;

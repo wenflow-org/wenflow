@@ -20,7 +20,7 @@
 
     <!-- 成就定义（原型 1890-1893 卡片栅格：每卡 名 strong + grow + 状态 badge；
          副行 描述 sub；底行 已解锁 b mono N 人 + grow）。原型底行右侧为「解锁率」，
-         但 /admin/achievements/definitions 只回 unlockCount（全量含虚拟），
+         但 /admin/achievements/definitions 只回 unlockCount（默认口径，已排除虚拟学习者），
          缺「总学习者」分母——按无数据不硬造，右侧改显真实奖励 +XP；「手动发放」能力保留。 -->
     <div v-if="achTab === 'defs'" id="oa-panel-defs" role="tabpanel" aria-labelledby="oa-tab-defs" class="mk-card">
       <MockSkeletonTable v-if="defsLoading && !defs.length" :cols="3" />
@@ -30,9 +30,11 @@
             <strong class="ac-card__name"><AchIcon :type="d.type" /> {{ d.name }}</strong>
             <span class="mk-badge" :class="typeBadge(d.type)">{{ typeText(d.type) }}</span>
           </div>
-          <span class="ac-card__desc">{{ d.description }}</span>
+          <!-- 一张卡只说一件事（2026-11-02 评审）：描述与「条件」原先各占一行、说的是同一句
+               （「完成第一个任务」/「条件：完成 1 个任务」）。条件行给具体阈值，
+               定义里的 description 只在条件无法数值化时（custom 类）顶上来当规则说明。 -->
           <span class="ac-card__cond" :title="reqTitle(d.requirement)">
-            条件：<template v-if="d.requirement.type === 'mastered_concepts'"><RouterLink class="ac-card__term" :to="glossaryTermLink('已掌握知识点')">已掌握知识点</RouterLink> {{ d.requirement.value }} 个</template><template v-else>{{ reqText(d.requirement) }}</template>
+            条件：<template v-if="d.requirement.type === 'mastered_concepts'"><RouterLink class="ac-card__term" :to="glossaryTermLink('已掌握知识点')">已掌握知识点</RouterLink> {{ d.requirement.value }} 个</template><template v-else-if="d.requirement.type === 'custom'">{{ d.description || '由后台规则判定' }}</template><template v-else>{{ reqText(d.requirement) }}</template>
           </span>
           <div class="ac-card__foot">
             <span class="ac-card__unlocked">已解锁 <b class="mono">{{ d.unlockCount }}</b> 人</span>
@@ -146,8 +148,10 @@
         :action-text="isRecordsFiltered ? '清除筛选' : ''"
         @action="clearRecordsFilters"
       />
+      <!-- 分页器常驻（2026-11-02 评审）：此前只有超过一页才出现，个位数记录时
+           连「共 N 条」都没有，与反馈 / 公告列表的读数方式不一致 -->
       <Pagination
-        v-if="totalRecords > pageSize"
+        v-if="totalRecords > 0"
         v-model:page="recordPage"
         v-model:pageSize="pageSize"
         :total="totalRecords"
@@ -174,8 +178,13 @@
                   <strong>{{ grantTarget?.name }}</strong>
                   <span class="mk-cell-sub">{{ grantTarget?.description }}</span>
                 </div>
-                <span class="mk-badge mk-badge--ok">+{{ grantTarget?.xpReward }} XP</span>
+                <!-- XP 标签与成就定义卡的 .oa-xp 同款（2026-11-02 评审：同一枚奖励标签
+                     在定义页是蓝、在发放弹窗是绿） -->
+                <span class="oa-xp" :title="`解锁可得 ${grantTarget?.xpReward} XP`">+{{ grantTarget?.xpReward }} XP</span>
               </div>
+              <!-- 发放对象由发起入口决定，不是可切换的选择项：这块带描边的身份卡容易被读成
+                   单选卡，补一句说明（2026-11-02 评审） -->
+              <span class="mk-field__hint">本次发放的成就由发起入口确定，不可在此更换</span>
             </div>
             <label class="mk-field" :class="{ 'mk-field--error': errors.user }">
               <span class="mk-field__label">用户</span>
@@ -202,7 +211,8 @@
             <!-- 统一关闭路径：发放中禁关（与 Esc/遮罩/✕ 同守卫） -->
             <button type="button" class="mk-btn" @click="closeGrant">取消</button>
             <button type="button" class="mk-btn mk-btn--primary" :disabled="!grantUserId || granting" @click="confirmGrant">
-              {{ granting ? '发放中…' : '确认发放（+XP）' }}
+              <!-- 按钮直说这次会发多少经验：原先写死「+XP」，读不出数值（2026-11-02 评审） -->
+              {{ granting ? '发放中…' : `确认发放（+${grantTarget?.xpReward ?? 0} XP）` }}
             </button>
           </div>
         </div>
@@ -596,7 +606,6 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ac-card__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 .ac-card__cond {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);

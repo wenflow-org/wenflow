@@ -8,7 +8,7 @@
         <div class="mk-modal__head">
           <div class="pmd-head">
             <h3 class="mk-modal__title">添加对话模型</h3>
-            <span class="pmd-head__sub">从上游 {{ providerName || '当前通道' }} 拉取到 {{ models.length }} 个模型</span>
+            <span class="pmd-head__sub">从上游{{ providerName || '当前通道' }}拉取到 {{ models.length }} 个模型</span>
           </div>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
         </div>
@@ -17,7 +17,7 @@
           <div class="pmd-toolbar">
             <div class="pmd-tabs" role="tablist" aria-label="模型分类" @keydown="onTabKeydown">
               <button
-                v-for="tab in visibleTabs"
+                v-for="tab in tabs"
                 :key="tab.key"
                 type="button"
                 class="pmd-tab"
@@ -26,10 +26,10 @@
                 :aria-selected="activeTab === tab.key"
                 :tabindex="activeTab === tab.key ? 0 : -1"
                 :class="{ 'is-active': activeTab === tab.key }"
-                :disabled="tab.key !== 'all' && tab.count === 0"
                 @click="activeTab = tab.key"
               >{{ tab.label }} ({{ tab.count }})</button>
-            </div>            <input
+            </div>
+            <input
               v-model="query"
               class="mk-field__input pmd-filter"
               :placeholder="`搜索模型名称或厂商…`"
@@ -89,14 +89,14 @@
                 <span v-else class="pmd-row__res" aria-hidden="true"></span>
               </span>
             </div>
-            <p v-if="!visibleRows.length" class="pmd-empty">
-              {{ models.length ? '没有匹配的模型' : '这次没有拉取到模型' }}
-            </p>
+            <p v-if="!visibleRows.length" class="pmd-empty">{{ emptyText }}</p>
           </div>
 
           <div class="pmd-hint">
-            <span>勾选后按模型名推断能力标签，推断不出的留空，可在添加后编辑。</span>
-            <label class="pmd-all">
+            <!-- 「可引入」只数对话模型，「已添加」与「非对话模型」互不重叠，三个数字相加才是上游总数。
+                 不写清就会被当成互相矛盾（2026-11-02 评审）。 -->
+            <span>能力标签按模型名推断，判不出的记「—」。图像、视频与向量模型只列出，不在此添加。</span>
+            <label v-if="selectableVisibleRows.length" class="pmd-all">
               <input
                 type="checkbox"
                 :checked="allVisibleSelected"
@@ -104,7 +104,7 @@
                 :disabled="!selectableVisibleRows.length"
                 @change="toggleAll"
               />
-              <span>全选当前可添加 {{ selectableVisibleRows.length }} 个</span>
+              <span>全选当前可添加的 {{ selectableVisibleRows.length }} 个对话模型</span>
             </label>
           </div>
         </div>
@@ -120,7 +120,7 @@
             class="mk-btn mk-btn--primary"
             :disabled="!selected.length"
             @click="confirm"
-          >确认引入（已选 {{ selected.length }}）</button>
+          >确认引入</button>
         </div>
       </div>
     </div>
@@ -143,7 +143,7 @@ import {
   type ModelRole,
 } from './modelCapabilityInference'
 
-type TabKey = 'all' | 'reasoning' | 'vision'
+type TabKey = 'addable' | 'added' | 'other'
 
 interface PickerRow {
   id: string
@@ -176,7 +176,7 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const query = ref('')
-const activeTab = ref<TabKey>('all')
+const activeTab = ref<TabKey>('addable')
 const selected = ref<string[]>([])
 /** 正在测试的模型 id（同一时刻只跑一个：串行避免一把把上游打满） */
 const testing = ref('')
@@ -187,8 +187,8 @@ const panelRef = ref<HTMLElement | null>(null)
 
 const registeredSet = computed(() => new Set(props.registered))
 
-const rows = computed<PickerRow[]>(() =>
-  props.models.map((id) => {
+const rows = computed<PickerRow[]>(() => {
+  const list = props.models.map((id) => {
     const inference = inferModelCapabilities(id)
     const added = registeredSet.value.has(id)
     const suggestion = roleSuggestion(inference.role)
@@ -203,29 +203,44 @@ const rows = computed<PickerRow[]>(() =>
       selectable: !added && inference.role === 'chat',
     }
   })
-)
+  /* 上游清单常把向量 / 重排排在对话模型前面，而它们在这里勾不动。沉到末尾，
+     首屏先给能直接添加的对话模型，免得一打开满屏都是不能选的行。sort 稳定，
+     同一组内仍保持上游原序。 */
+  return list.sort((a, b) => Number(b.selectable) - Number(a.selectable))
+})
 
+/** 页签按**能不能引入**分拣，不按能力分（2026-11-03 外部评审）：原先「全部 / 深度思考·推理 /
+    多模态读图」后两个靠模型名推断，第三方 agnes-* 之类判不出来 → 恒为 (0)，读起来像筛选坏了；
+    而默认落在「全部」时，36 行里 20 行是勾不动的（已添加 / Reranker / 生图），要在里面扫雷。
+    现在默认落「可引入」，打开就是干净的可勾选清单；另两类各有去处。
+    三项恒定保留（0 也显示）——0 本身是结论：「可引入 (0)」= 上游都挂好了。 */
 const tabs = computed(() => [
-  { key: 'all' as const, label: '全部', count: rows.value.length },
-  { key: 'reasoning' as const, label: '深度思考/推理', count: rows.value.filter((r) => r.inference.supportsThinking).length },
-  { key: 'vision' as const, label: '多模态读图', count: rows.value.filter((r) => r.inference.vision).length },
+  { key: 'addable' as const, label: '可引入', count: rows.value.filter((r) => r.selectable).length },
+  { key: 'added' as const, label: '已添加', count: rows.value.filter((r) => r.added).length },
+  { key: 'other' as const, label: '非对话模型', count: rows.value.filter((r) => !r.added && r.role !== 'chat').length },
 ])
-
-/** 0 命中的分类不占位：上游名称推断不出能力时（如第三方 agnes-*），
-    两个空页签只会让用户以为筛选坏了；有命中时再出现。 */
-const visibleTabs = computed(() => tabs.value.filter((tab) => tab.key === 'all' || tab.count > 0))
 
 const visibleRows = computed(() => {
   const q = query.value.trim().toLowerCase()
   return rows.value.filter((row) => {
     if (q && !row.id.toLowerCase().includes(q) && !row.display.toLowerCase().includes(q)) return false
-    if (activeTab.value === 'reasoning') return row.inference.supportsThinking
-    if (activeTab.value === 'vision') return row.inference.vision
+    if (activeTab.value === 'addable') return row.selectable
+    if (activeTab.value === 'added') return row.added
+    if (activeTab.value === 'other') return !row.added && row.role !== 'chat'
     return true
   })
 })
 
 const selectableVisibleRows = computed(() => visibleRows.value.filter((row) => row.selectable))
+
+/** 空列表按当前页签说清缘由：搜索无果与「这个分类本来就没有」是两回事。 */
+const emptyText = computed(() => {
+  if (query.value.trim()) return '没有匹配的模型'
+  if (!props.models.length) return '这次没有拉取到模型'
+  if (activeTab.value === 'addable') return '上游的对话模型都已添加'
+  if (activeTab.value === 'added') return '这个供应商还没有已添加的模型'
+  return '上游没有图像、视频或向量模型'
+})
 const allVisibleSelected = computed(() =>
   selectableVisibleRows.value.length > 0
   && selectableVisibleRows.value.every((row) => selected.value.includes(row.id))
@@ -247,7 +262,7 @@ function toggleAll(): void {
 async function onTabKeydown(event: KeyboardEvent): Promise<void> {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
   event.preventDefault()
-  const available = tabs.value.filter((tab) => tab.key === 'all' || tab.count > 0)
+  const available = tabs.value
   if (!available.length) return
   const current = available.findIndex((tab) => tab.key === activeTab.value)
   let next = current < 0 ? 0 : current
@@ -264,7 +279,7 @@ async function onTabKeydown(event: KeyboardEvent): Promise<void> {
 function openWith(): void {
   selected.value = []
   query.value = ''
-  activeTab.value = 'all'
+  activeTab.value = 'addable'
   results.value = {}
   testing.value = ''
   open.value = true

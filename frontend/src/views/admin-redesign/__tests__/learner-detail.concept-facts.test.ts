@@ -39,3 +39,25 @@ describe('LearnerDetail · 概念掌握卡只留结论行', () => {
     expect(Source).toContain('const conceptFacts = computed<Record<string, MkGraphConceptFacts>>')
   })
 })
+
+/* 2026-11-02 P1-2：掌握四档原先图谱一套名（进行中/记忆偏弱/待学习）、本页概念信号一套名
+   （挣扎/脆弱/未开始），同一批概念两种叫法。锁住两处都读 utils/conceptBands 单源。 */
+describe('概念分档名：图谱与学习者详情同源', () => {
+  it('图谱组件的统计条 / 图例 / 概览 / 徽章都取自共享标签', async () => {
+    const graph = (await import('@/components/mk/MkGraphExplorer.vue?raw')).default
+    for (const key of ['stable', 'learning', 'fragile', 'unknown']) {
+      expect(graph).toContain(`CONCEPT_BAND_LABEL.${key}`)
+    }
+    // 不再在模板里手写四档名
+    expect(graph).not.toContain('>记忆偏弱')
+    expect(graph).not.toContain('>待学习')
+  })
+
+  it('概念信号四档的 label 取自同一份标签表', async () => {
+    expect(Source).toContain("label: CONCEPT_BAND_LABEL.stable")
+    expect(Source).toContain("label: CONCEPT_BAND_LABEL.learning")
+    expect(Source).toContain("label: CONCEPT_BAND_LABEL.fragile")
+    expect(Source).toContain("label: CONCEPT_BAND_LABEL.unknown")
+    expect(Source).toContain("import { CONCEPT_BAND_LABEL } from '@/utils/conceptBands'")
+  })
+})

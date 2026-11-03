@@ -407,11 +407,19 @@ describe('ApiConfig P1 修复批', () => {
     // 上游读数文案撤掉（2026-10-28）：无异常、无未保存时不占卡头
     expect(wrapper.find('.mpp-head__id .ac-models-meta').exists()).toBe(false);
     // 模型是否可用由行内「测试」回答；通道测试在连接设置弹层里
-    const acts = wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text());
-    expect(acts[0]).toContain('＋ 添加模型');
-    expect(acts[0]).toContain('上游有 2 个待选');
+    // 两段式（2026-11-03 用户「把步骤序号和分层彻底删掉」）：没有步号、没有步骤标题行
+    expect(wrapper.findAll('.mpp-step, .mpp-step__no')).toHaveLength(0);
+    // 工具栏同一行：左「已挂载模型 (N)」，右侧上游读数 + 重新获取 + 添加模型 + 手动录入
+    const toolbar = wrapper.find('.mpp-toolbar');
+    expect(toolbar.find('.mpp-toolbar__title').text()).toContain('已挂载模型');
+    expect(toolbar.find('.mpp-models__count').text()).toMatch(/^\(\d+\)$/);
+    expect(toolbar.findAll('.mpp-toolbar__acts .mk-btn').map((b) => b.text())).toEqual(['↻ 重新获取', '＋ 添加模型']);
+    expect(toolbar.find('.mpp-toolbar__acts .mk-link').text()).toBe('手动录入');
+    // 上游读数只上屏条数，未挂载数进 title（工具栏已经四件东西）
+    expect(toolbar.find('.mpp-toolbar__meta').text()).toMatch(/^已获取 \d+ 个$/);
     await openConnSettings(wrapper);
-    expect(wrapper.findAll('.ac-conn-modal__test button').map((b) => b.text())).toEqual(['测试连通性']);
+    // 2026-11-03 用户「只有模型级别的连通性」：弹层里的通道级「测试连通性」撤除
+    expect(wrapper.findAll('.ac-conn-modal__test')).toHaveLength(0);
     // 只读能力表与别名映射都已从本页退役
     expect(wrapper.find('.ac-registry--aliases').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('接入通道与能力限额');
@@ -443,11 +451,14 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.findAll('#ac-panel-access .mk-card')).toHaveLength(3);
     expect(wrapper.find('.mpp #mpp-platform-panel-models').exists()).toBe(true);
     expect(wrapper.find('.mpp-config').exists()).toBe(false);
-    // 添加入口在挂载模型区标题行，不再塞回卡头
+    // 两段式：卡片里只有「连接条 + 模型列表区」，没有步号与步骤标题行
+    expect(wrapper.findAll('.mpp-step, .mpp-step__no, .mpp-step__name')).toHaveLength(0);
+    expect(wrapper.find('.mpp-conn').exists()).toBe(true);
+    expect(wrapper.find('.mpp-models').exists()).toBe(true);
+    // 卡头不再挂任何流程按钮（两颗出口都在列表工具栏里）；右上只留重读注册表的图标钮
     const head = wrapper.find('.mpp > .mk-card__head');
-    expect(head.find('.mpp-models__acts').exists()).toBe(false);
-    const sectionHead = wrapper.find('.mpp-models__head');
-    expect(sectionHead.find('.mpp-models__acts').exists()).toBe(true);
+    expect(head.find('.mk-btn').exists()).toBe(false);
+    expect(head.find('.mpp-regreload').exists()).toBe(true);
     // 二级页签也撤了：没有 tab 控件，内容常驻
     expect(wrapper.findAll('.mpp-subtabs').length).toBe(0);
     expect(wrapper.findAll('.mk-subtab').length).toBe(0);
@@ -460,7 +471,7 @@ describe('ApiConfig P1 修复批', () => {
     }
     // 三张卡各有能力角色标签
     expect(wrapper.text()).toContain('对话与推理模型');
-    expect(wrapper.text()).toContain('挂载模型');
+    expect(wrapper.text()).toContain('已挂载模型');
     expect(wrapper.text()).toContain('向量模型');
     expect(wrapper.text()).toContain('重排模型');
     expect(wrapper.text()).not.toContain('基础设施');
@@ -579,31 +590,51 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-10-27 用户「不再做独立连通性验证」的原始约束是：不维护测试用模型下拉。
-     2026-10-28 起连接测试回归，但只验证地址与密钥，模型测试仍在行内。 */
-  it('连接测试只验证通道，不出现测试用模型下拉', async () => {
+  /* 2026-10-27 用户「不再做独立连通性验证」：不维护测试用模型下拉。
+     2026-11-03 用户「只有模型级别的连通性」：通道级测试整块撤除——连通性只由
+     列表里逐模型的「测试」回答；通道层面只保留「获取上游清单」这一件事。 */
+  it('连通性只在模型级别：连接弹层没有测试钮，也不出现测试用模型下拉', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     expect(wrapper.text()).not.toContain('测试用模型');
     expect(wrapper.find('.ac-test').exists()).toBe(false);
     await openConnSettings(wrapper);
-    expect(wrapper.find('.ac-conn-modal__test button').text()).toBe('测试连通性');
+    expect(wrapper.text()).not.toContain('测试连通性');
+    expect(wrapper.find('.ac-conn-modal__test').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('运行测试');
     wrapper.unmount();
   });
 
-  /* 2026-10-27 P1：获取与重置都绑定到当前通道，页头只保留注册表刷新；
-     2026-10-28：连接类动作全部收进「连接设置」弹层。 */
-  it('P1：页头只留刷新；获取模型在卡头，重置在连接设置里', async () => {
+  /* 2026-10-27 P1：获取与重置都绑定到当前通道；
+     2026-10-28：连接类动作全部收进「连接设置」弹层；
+     2026-11-03：页面级「刷新注册表」撤除，收进卡片右上图标钮；「重新获取」进列表工具栏。 */
+  /* 2026-11-03 两段式：连接条未配置时原地就是表单，不再要求先进弹层 */
+  it('连接未配置：连接条原地给 Base URL / API Key + 保存并获取模型', async () => {
+    // 空配置：地址与密钥都没配过 → 连接条应原地变成表单
+    liveApiConfig.value = null
+    const wrapper = await mountApiConfig()
+    await flushPromises()
+    const setup = wrapper.find('.ac-conn-setup')
+    expect(setup.exists()).toBe(true)
+    expect(setup.findAll('.mk-field__label').map((l) => l.text())).toEqual(['Base URL', 'API Key'])
+    expect(setup.find('.mk-btn--primary').text()).toBe('保存并获取模型')
+    // 已配置态的那条摘要不与之同时出现
+    expect(wrapper.find('.ac-conn-summary').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('P1：页头干净；获取在列表工具栏，重读注册表在卡片右上，重置在连接设置里', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
-    const headBtns = wrapper.findAll('.mk-pagehead__actions > button').map((b) => b.text())
-    expect(headBtns).toEqual(['刷新注册表'])
+    // 页头不再有任何动作（用户「最右上角那个多余的按钮…保持顶部干净」）
+    expect(wrapper.findAll('.mk-pagehead__actions > button').map((b) => b.text())).toEqual([])
     expect(wrapper.text()).not.toContain('连接并拉取')
-    expect(wrapper.find('.ac-conn__acts').text()).toContain('获取模型')
-    // 卡头不再有第二颗保存 / 重置，避免「先点哪个」的分裂
-    expect(wrapper.find('.ac-conn__acts').text()).not.toContain('重置此通道')
-    expect(wrapper.find('.ac-conn__acts').text()).not.toContain('保存')
+    expect(wrapper.find('.mpp-toolbar__acts').text()).toContain('重新获取')
+    // 重读本机注册表（读盘）与重新获取（拉上游）是两件事，各在一处
+    expect(wrapper.find('.mpp > .mk-card__head .mpp-regreload').exists()).toBe(true)
+    // 工具栏里没有第二颗保存 / 重置，避免「先点哪个」的分裂
+    expect(wrapper.find('.mpp-toolbar__acts').text()).not.toContain('重置此通道')
+    expect(wrapper.find('.mpp-toolbar__acts').text()).not.toContain('保存')
     await openConnSettings(wrapper)
     expect(wrapper.find('.ac-conn-modal__foot').text()).toContain('重置此通道')
     expect(wrapper.find('.ac-conn__danger').exists()).toBe(false)
@@ -683,9 +714,9 @@ describe('ApiConfig P1 修复批', () => {
     expect(policy).toHaveLength(3);
     const labels = policy.map((f) => f.find('.mk-field__label').text());
     expect(labels).toEqual(['最大重试', '重试间隔（毫秒）', 'RPM 上限']);
-    // 2026-10-28 用户「文案不要」：必要语义收进标签 title，屏上不再有解释句
-    expect(policy[0].find('.mk-field__label').attributes('title')).toContain('总尝试上限');
-    expect(policy[2].find('.mk-field__label').attributes('title')).toContain('0 = 不限');
+    // 2026-11-02 评审：「0 = 不限」「含首次」原先只藏在标签 title 里，改成每个字段下的可见提示
+    expect(policy[0].find('.mk-field__hint').text()).toContain('含首次调用');
+    expect(policy[2].find('.mk-field__hint').text()).toContain('0 表示不限');
     expect(modal.text()).not.toContain('所有供应商共用');
     expect(modal.text()).not.toContain('传输重试');
     expect(modal.text()).not.toContain('Retry-After');

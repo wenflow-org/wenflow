@@ -163,19 +163,31 @@
           <div v-if="searchOpen && searchQuery.trim()" id="mshell-search-list" class="mshell__search-pop" role="listbox" aria-label="页面搜索结果">
             <button
               v-for="(hit, i) in searchHits"
-              :id="`mshell-search-opt-${hit.id}`"
-              :key="hit.id"
+              :id="`mshell-search-opt-${hit.scene.id}`"
+              :key="hit.scene.id"
               type="button"
               role="option"
               :aria-selected="i === searchActiveIndex"
               class="mshell__search-hit"
               :class="{ 'mshell__search-hit--active': i === searchActiveIndex }"
               @mousemove="searchActiveIndex = i"
-              @click="searchGo(hit)"
+              @click="searchGo(hit.scene)"
             >
-              <component :is="hit.icon" :size="15" :stroke-width="1.75" aria-hidden="true" />
-              <span class="mshell__search-hit-label">{{ hit.label }}</span>
-              <span class="mshell__search-hit-group">{{ hit.group }}</span>
+              <component :is="hit.scene.icon" :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span class="mshell__search-hit-label">
+                <template v-for="(part, pi) in hitParts(hit.scene.label)" :key="`l${pi}`">
+                  <mark v-if="part.hit" class="mshell__search-hit-mark">{{ part.text }}</mark>
+                  <template v-else>{{ part.text }}</template>
+                </template>
+              </span>
+              <!-- 命中只在关键词上时说清是哪个词（页名/分组命中已在原地高亮，不再解释一遍） -->
+              <span v-if="hit.keyword" class="mshell__search-hit-why">相关词「{{ hit.keyword }}」</span>
+              <span class="mshell__search-hit-group">
+                <template v-for="(part, pi) in hitParts(hit.scene.group)" :key="`g${pi}`">
+                  <mark v-if="part.hit" class="mshell__search-hit-mark">{{ part.text }}</mark>
+                  <template v-else>{{ part.text }}</template>
+                </template>
+              </span>
             </button>
             <div v-if="!searchHits.length" class="mshell__search-empty">
               <p class="mshell__search-empty-title">没有匹配的页面</p>
@@ -244,6 +256,17 @@
             <span class="mshell__user-name">{{ adminName }}</span>
           </button>
           <div v-if="userMenuOpen" class="mshell__user-menu" role="menu">
+            <!-- 身份行（2026-11-02 评审 R5）：此前菜单只有「退出登录」，看不出当前登的是哪个账号。
+                 身份不是动作项，不加 role=menuitem、不进 Tab 序，只做认人用的抬头。 -->
+            <div class="mshell__user-meta">
+              <span class="mshell__user-meta-name">{{ adminName }}</span>
+              <span v-if="adminRoleLabel" class="mshell__user-meta-role">{{ adminRoleLabel }}</span>
+              <span
+                v-if="adminUser.email"
+                class="mshell__user-meta-line"
+                :title="adminUser.email"
+              >{{ adminUser.email }}</span>
+            </div>
             <!-- 账户菜单只剩动作项：退出登录（销毁当前会话）。
                  原型的「登录页预览 / 账户设置」2026-10-05 用户拍板删除——前者是原型残留
                  （已登录守卫会把新标签页弹回总览，永远看不到登录页），后者开到用户侧
@@ -382,16 +405,48 @@ const topSub = computed(() => {
   return group === currentScene.value?.label ? '' : group
 })
 
-const searchHits = computed(() => {
+/** 页面搜索结果：额外带上「为什么命中」（2026-11-02 评审 R6）。
+    此前只回 MOCK_SCENES 条目，搜「健康」时「健康中心」（页面名命中）与「平台总览」
+    （只是 keywords 里登记了「健康」）并排出现，两条都不说命中在哪，读起来像误报。
+    现在页名/分组命中就照亮那一段文字，只在 keywords 命中时把该词亮出来。 */
+interface SearchHit { scene: MockSceneDef; keyword: string }
+const searchHits = computed<SearchHit[]>(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return []
-  return MOCK_SCENES.filter((s) => `${s.label} ${s.group} ${(s.keywords || []).join(' ')}`.toLowerCase().includes(q)).slice(0, 8)
+  const hits: SearchHit[] = []
+  for (const s of MOCK_SCENES) {
+    const inLabel = s.label.toLowerCase().includes(q)
+    const inGroup = s.group.toLowerCase().includes(q)
+    const keyword = (s.keywords || []).find((k) => k.toLowerCase().includes(q)) || ''
+    if (!inLabel && !inGroup && !keyword) continue
+    hits.push({ scene: s, keyword: inLabel || inGroup ? '' : keyword })
+    if (hits.length >= 8) break
+  }
+  return hits
 })
+/** 把命中片段切成「高亮/普通」两段文本（大小写不敏感，查询词只取原文一段） */
+function hitParts(text: string): Array<{ text: string; hit: boolean }> {
+  const q = searchQuery.value.trim().toLowerCase()
+  const src = String(text || '')
+  if (!q) return [{ text: src, hit: false }]
+  const lower = src.toLowerCase()
+  const parts: Array<{ text: string; hit: boolean }> = []
+  let from = 0
+  let at = lower.indexOf(q, from)
+  while (at >= 0) {
+    if (at > from) parts.push({ text: src.slice(from, at), hit: false })
+    parts.push({ text: src.slice(at, at + q.length), hit: true })
+    from = at + q.length
+    at = lower.indexOf(q, from)
+  }
+  if (from < src.length) parts.push({ text: src.slice(from), hit: false })
+  return parts
+}
 /* 结果项键盘导航（#192）：activeIndex 是列表内高亮位，-1 = 未选（Enter 回落到第一条）。 */
 const searchActiveIndex = ref(-1)
 const searchActiveId = computed(() => {
   const hit = searchHits.value[searchActiveIndex.value]
-  return hit ? `mshell-search-opt-${hit.id}` : ''
+  return hit ? `mshell-search-opt-${hit.scene.id}` : ''
 })
 function onSearchInput() {
   searchOpen.value = true
@@ -427,7 +482,7 @@ function searchTo(f: { label: string; path: (q: string) => string }) {
 /* Enter：落到当前高亮项；无高亮（未用方向键）时回落到第一条，保持既有手感 */
 function searchGoActive() {
   const hit = searchHits.value[searchActiveIndex.value] ?? searchHits.value[0]
-  if (hit) searchGo(hit)
+  if (hit) searchGo(hit.scene)
 }
 function closeSearch() {
   searchOpen.value = false
@@ -612,20 +667,28 @@ function goBadge(item: MockSceneDef) {
 
 /* release 模式：管理员信息与退出登录 */
 /** localStorage 非响应式：computed 无响应式依赖会永久缓存，登录写入后本页不刷新名字。
-     改为 setup 时读一次 ref + storage 事件（跨标签页写入也会同步刷新）。 */
+     改为 setup 时读一次 ref + storage 事件（跨标签页写入也会同步刷新）。
+     2026-11-02 评审 R5：菜单里只剩「退出登录」，看不出当前登的是哪个账号——
+     名字/邮箱/角色随登录响应一起落在这个键里（admin-auth 返回 id/email/name/role），
+     一次读出整份身份，头像与菜单共用同一份来源。 */
 const ADMIN_USER_KEY = 'admin_user'
-function readAdminName(): string {
+interface AdminIdentity { name: string; email: string; role: string }
+function readAdminUser(): AdminIdentity {
   try {
     const raw = localStorage.getItem(ADMIN_USER_KEY) || sessionStorage.getItem(ADMIN_USER_KEY)
-    if (!raw) return 'admin'
-    return String(JSON.parse(raw).name || 'admin')
+    if (!raw) return { name: 'admin', email: '', role: '' }
+    const d = JSON.parse(raw)
+    return { name: String(d.name || 'admin'), email: String(d.email || ''), role: String(d.role || '') }
   } catch {
-    return 'admin'
+    return { name: 'admin', email: '', role: '' }
   }
 }
-const adminName = ref(readAdminName())
+const adminUser = ref(readAdminUser())
+const adminName = computed(() => adminUser.value.name)
+/** 角色枚举只有 admin / user 两档（鉴权看 isAdmin）；未知值不硬翻成「管理员」 */
+const adminRoleLabel = computed(() => (adminUser.value.role === 'admin' ? '管理员' : adminUser.value.role === 'user' ? '普通用户' : ''))
 window.addEventListener('storage', (e) => {
-  if (e.key === ADMIN_USER_KEY || e.key === null) adminName.value = readAdminName()
+  if (e.key === ADMIN_USER_KEY || e.key === null) adminUser.value = readAdminUser()
 })
 
 /* 退出登录确认（2026-10-06 审核）：一次点击即销毁管理会话并跳转登录页的不可逆动作，
@@ -1080,6 +1143,16 @@ watch(
 /* 键盘高亮项与 hover 同款（方向键导航时鼠标可能不在项上） */
 .mshell__search-hit--active { background: var(--mk-hover-surface); }
 .mshell__search-hit-group { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
+/* 命中高亮：只提亮字形，不铺底色——弹层本身就是浮层，再叠一层色块会把「这是一项可点的结果」读淡 */
+.mshell__search-hit-mark { background: transparent; color: var(--mk-blue); font-weight: 800; }
+.mshell__search-hit-why {
+  padding: 1px 6px;
+  border-radius: var(--mk-radius-pill);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
 .mshell__search-empty { padding: 10px; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
 /* 无页面命中时的转搜出口（走查 O1）：三条实体列表页深链，关键词跟着走 */
 .mshell__search-empty-title { margin: 0 0 8px; font-weight: 600; color: var(--mk-ink); }
@@ -1114,7 +1187,7 @@ watch(
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 150px;
+  min-width: 210px;
   padding: 6px;
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: var(--mk-radius-lg);
@@ -1126,6 +1199,44 @@ watch(
   transform-origin: top right;
   /* 进场动效直接用 animation（Vue Transition 的 name 派生类会被死类门禁误报） */
   animation: mshell-pop-in 0.14s var(--mk-ease-out, ease);
+}
+/* 身份抬头（2026-11-02 评审 R5）：名字 + 角色 + 邮箱。邮箱可能很长，
+   单行省略并把全文留在 title 上，避免把菜单撑成一条宽带 */
+.mshell__user-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px 12px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.mshell__user-meta-name {
+  font-size: var(--mk-fs-micro, 12px);
+  font-weight: 700;
+  color: var(--mk-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mshell__user-meta-role {
+  grid-row: 1;
+  grid-column: 2;
+  padding: 1px 6px;
+  border-radius: var(--mk-radius-pill);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro, 12px);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mshell__user-meta-line {
+  grid-column: 1 / -1;
+  font-size: var(--mk-fs-micro, 12px);
+  color: var(--mk-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 @keyframes mshell-pop-in {
   from { opacity: 0; transform: translateY(-6px) scale(0.97); }

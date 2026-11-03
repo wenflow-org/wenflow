@@ -530,13 +530,15 @@ router.beforeEach(async (to, _from, next) => {
       return;
     }
   }
-  /* 复习积压的单用户明细（?userId=）是学习者详情的「记忆调度」页签：
-     路由级改投，页面不必先挂载再转发。 */
+  /* 复习积压的单用户明细（?userId=）落在学习者详情的「记忆与复习」页签：
+     复习积压列表读的是 FSRS 普查（记忆痕迹 / 待复习 / 记忆强度），与同名页签同源；
+     改投「记忆调度」会只给出温故计划与归并审计——对一个刚在列表里点进来的用户
+     全是 0 与 —，被点的那条记忆根本不在屏上（2026-11-02 评审 R58）。 */
   if (to.path === '/admin/memory-review' && typeof to.query.userId === 'string' && to.query.userId) {
     const query = { ...to.query };
     const userId = String(query.userId);
     delete query.userId;
-    next({ path: '/admin/learner-state', query: { ...query, view: 'learner', id: userId, tab: 'memory-ops' } });
+    next({ path: '/admin/learner-state', query: { ...query, view: 'learner', id: userId, tab: 'memory' } });
     return;
   }
   /* 运营中心的 ?status= 只认当前页签的枚举：别的页签留下的值（反馈的 new 落到公告）

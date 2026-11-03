@@ -382,6 +382,8 @@ export interface LearnerSnapshot {
     };
   };
   profile: LearnerModelProfile;
+  /** 逐字段来源（可选：虚拟会话/预览等不跑画像聚合的快照没有） */
+  profileSources?: ProfileFieldSources;
   dynamicState: LearnerDynamicState;
   learningControlState: LearnerLearningControlState;
   replanSignal: LearnerReplanSignal;
@@ -537,8 +539,31 @@ export interface ProfileUpdateSource {
   confidence: number;
 }
 
+/**
+ * 画像字段的来源（2026-11-02 P1-8）：每段只列**有数据支撑**的字段名。
+ *
+ * profile-aggregator 在没数据时会填 DEFAULT_*，界面必须能逐格区分「实测」与「初始默认值」。
+ * 只靠「该账号没有任何学习证据」这一个全局条件不够：有目标对话但还没上过课时，
+ * 认知/偏好/情绪来自对话（实测），行为基线/学习状态仍是默认常量，同一张卡里两种来源。
+ */
+export interface ProfileFieldSources {
+  cognitive: string[];
+  behavioral: string[];
+  learning: string[];
+  preferences: string[];
+  emotional: string[];
+  history: string[];
+  /** 课程控制（任务粒度/概念密度/复习频率/推进策略）是按画像规则推出来的，
+   *  只有输入画像有数据时才算「有支撑」，否则同样是默认常量 */
+  curriculumControls: string[];
+  /** 派生建议只有数值/分档三项需要标来源（learningVelocity / optimalSessionLength / recommendedDifficulty）；
+   *  建议文本、优势、风险因素是规则产出，不是「实测 vs 默认」 */
+  derivedInsights: string[];
+}
+
 export interface ProfileAggregationResult {
   profile: LearnerModelProfile;
   changes: string[];
   confidence: number;
+  sources: ProfileFieldSources;
 }

@@ -20,6 +20,7 @@ import {
   LearnerGoalNarratives,
   ProfileUpdateSource,
   ProfileAggregationResult,
+  ProfileFieldSources,
   MetacognitionLevel,
   ThinkingStyle,
   ConfusionPattern,
@@ -34,6 +35,17 @@ import { logger } from '../../utils/logger';
 
 function mergeStringArrays(...values: Array<Array<string> | undefined>): string[] {
   return Array.from(new Set(values.flatMap((items) => Array.isArray(items) ? items.filter(Boolean) : [])));
+}
+
+/** 入参里「真的有值」的字段名：null/undefined/空串不算（画像 merge 也按这个判空回落默认常量）。
+ *  behavioral 走的是 `data.x || DEFAULT.x`，0 同样会落默认，故单独开 truthyOnly。 */
+function observedFieldKeys(obj: unknown, truthyOnly = false): string[] {
+  if (!obj || typeof obj !== 'object') return [];
+  const record = obj as Record<string, unknown>;
+  return Object.keys(record).filter((key) => {
+    const value = record[key];
+    return truthyOnly ? !!value : value !== undefined && value !== null && value !== '';
+  });
 }
 
 /**
@@ -235,8 +247,58 @@ export class ProfileAggregator {
     };
     
     const confidence = this.calculateConfidence(profile);
-    
-    return { profile, changes, confidence };
+
+    /* 逐字段来源（2026-11-02 P1-8）：merge* 在没有数据时回落到 DEFAULT_*，这里按「入参里有没有这个字段」
+       如实记录；派生读数按它的输入是否实测判定，规则文本类（建议方式/优势/风险因素）不是实测口径，不列。
+       界面据此逐格标「初始默认值」，不再用一个全局的「证据为空」条件把两张卡一起标掉。 */
+    const cognitiveObserved = observedFieldKeys(goalConversation?.cognitive);
+    // 校准偏差命中时 selfAssessmentAccuracy 由 memory_traces 实测覆盖，属于有数据支撑
+    if (calibrationBias !== 'accurate' && !cognitiveObserved.includes('selfAssessmentAccuracy')) {
+      cognitiveObserved.push('selfAssessmentAccuracy');
+    }
+    const behavioralObserved = observedFieldKeys(baseline, true);
+    const learningObserved = observedFieldKeys(metrics);
+    /* 单次时长是 inferSessionLength 推出来的：没有时间预算时它同样返回 'medium'（兜底值），
+       不能当成实测——否则学员会看到「中（约 30 分钟）」后面没有默认值标注。 */
+    const preferenceObserved = observedFieldKeys(goalConversation?.preferences)
+      .filter((key) => key !== 'sessionLength' || !!goalConversation?.background?.availableTime);
+    const emotionalObserved = observedFieldKeys(goalConversation?.emotional);
+    const derivedObserved: string[] = [];
+    const anyProfileInputObserved = cognitiveObserved.length > 0 || preferenceObserved.length > 0
+      || emotionalObserved.length > 0 || learningObserved.length > 0;
+    if (learningObserved.includes('ktl') || learningObserved.includes('recentProgress')) derivedObserved.push('learningVelocity');
+    if (preferenceObserved.includes('sessionLength') || behavioralObserved.includes('avgInteractionInterval')) {
+      derivedObserved.push('optimalSessionLength');
+    }
+    if (learningObserved.length > 0 || cognitiveObserved.includes('metacognitionLevel')) {
+      derivedObserved.push('recommendedDifficulty');
+    }
+    if (anyProfileInputObserved) derivedObserved.push('suggestedApproach');
+    /* 课程控制是规则产出：只有它读的那几个输入有实测值时才不算默认（buildCurriculumControls 的判据） */
+    const curriculumObserved: string[] = [];
+    if (preferenceObserved.includes('sessionLength') || learningObserved.includes('lf')) {
+      curriculumObserved.push('taskGranularityLevel');
+    }
+    if (learningObserved.includes('lf') || emotionalObserved.includes('confidenceLevel')) {
+      curriculumObserved.push('conceptDensityLevel');
+    }
+    if (learningObserved.includes('lf') || learningObserved.includes('ktl')
+      || preferenceObserved.includes('theoryVsPractice')) {
+      curriculumObserved.push('reviewFrequencyLevel');
+    }
+    if (curriculumObserved.length > 0) curriculumObserved.push('progressionStrategyNote');
+    const sources: ProfileFieldSources = {
+      cognitive: cognitiveObserved,
+      behavioral: behavioralObserved,
+      learning: learningObserved,
+      preferences: preferenceObserved,
+      emotional: emotionalObserved,
+      history: observedFieldKeys(sessions),
+      curriculumControls: curriculumObserved,
+      derivedInsights: derivedObserved,
+    };
+
+    return { profile, changes, confidence, sources };
   }
   
   private async fetchGoalConversationData(userId: string): Promise<{

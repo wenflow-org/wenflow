@@ -14,12 +14,24 @@
       </button>
     </div>
 
-    <!-- 审计日志深链横幅（?user=用户名 → 只看该管理员的会话；含分工说明 + 反向跳转）：
+    <!-- 审计日志深链横幅（?user=用户名 → 只看该管理员的会话；2026-11-02 起屏上只剩
+         横幅标题 + 反向跳转，范围释义（成功登录 / 失败尝试两页不同源）收进卡根 title）：
          走全局 .mk-alert--info（原型 .alert--info 词汇），本地只补行内布局 -->
-    <div v-if="deepLinkUser" class="mk-alert mk-alert--info ss-deeplink">
-      <strong>来自审计日志 · 查看「{{ deepLinkUser }}」的登录会话</strong>
-      <span>仅列登录成功产生的会话（可强制下线），登录事件完整历史（含失败尝试）见</span>
-      <button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
+    <div
+      v-if="deepLinkUser"
+      class="mk-alert mk-alert--info ss-deeplink"
+      :title="DEEPLINK_SCOPE_HINT"
+    >
+      <div class="ss-deeplink__text">
+        <strong>来自审计日志 · 查看「{{ deepLinkUser }}」的登录会话</strong>
+        <!-- 2026-11-02「让布局自己说话」：屏上那句「仅列登录成功产生的会话，可强制下线。
+             完整登录历史含失败尝试，在〔审计日志〕」整句在自我介绍本页有什么 / 能做什么 /
+             去哪看全量（复述控件 + 按钮分工 + 指路），横幅标题与跳转钮本身已说清，故收掉。
+             句里唯一会改变判断的限定——本页只列成功登录产生的会话、审计日志的登录尝试含失败、
+             两页计数因此不同源——收进横幅卡根 title（DEEPLINK_SCOPE_HINT），不再占一行版面。
+             （更早 2026-11-02 评审曾把跳转动作并进这句、清除筛选单独靠右；本轮在其上再收一层。） -->
+        <span><button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button></span>
+      </div>
       <button type="button" class="mk-link ss-deeplink__clear" @click="clearDeepLink">× 清除筛选</button>
     </div>
     <!-- 常驻分工说明已撤（2026-10-27 用户「这文案没用吧」）：登录成功/失败的口径从页面文案
@@ -81,6 +93,12 @@
           >下线其他会话（{{ bulkRevokeCount }}）</button>
         </div>
       </div>
+
+    <!-- 2026-11-02 评审指出「前几行亮绿点+琥珀倒计时、后几行灰点+灰白时间，看不出差别」，
+         当时在卡头下加了一行图例解释这两种记号。2026-11-02 二次走查撤掉：图例是在给记号
+         配说明书，正确做法是让记号自己带释义——圆点的含义挂到「最后活跃」单元格的 title
+         （见 lastSeenTitle），琥珀时间本就配着「剩 N 小时」这行文字（F6-5：文字才是信号）。
+         「为什么会有两种显示」这个背景仍留在本注释里，不再占一行版面。 -->
 
     <MockSkeletonTable v-if="loading && !sessions.length" :cols="7" :rows="6" />
 
@@ -145,8 +163,9 @@
                 </td>
                 <td class="ss-ip mono" :title="s.ip || ''">{{ ipText(s.ip) }}</td>
                 <td class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</td>
-                <td class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
-                  <!-- 批C：新鲜度点做活跃度视觉锚；绝对时间保留（安全审计回溯刚需，不藏 title） -->
+                <td class="ss-time mono" :title="lastSeenTitle(s)">
+                  <!-- 批C：新鲜度点做活跃度视觉锚；绝对时间保留（安全审计回溯刚需，不藏 title）。
+                       圆点含义（24 小时内有没有活动）原在卡下一行图例里，2026-11-02 收进本单元格 title。 -->
                   <span class="mk-fresh" :class="lastSeenFreshTone(s)" style="justify-content: flex-end">
                     <template v-if="s.lastSeenAt">{{ fmtDateTime(s.lastSeenAt) }}</template>
                     <template v-else>—</template>
@@ -215,7 +234,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="s in g.historical" :key="s.id" class="ss-tr">
+                <tr v-for="s in g.historical.slice(0, histShown)" :key="s.id" class="ss-tr">
                   <td :title="uaFull(s)">
                     <div class="mk-cell-main">
                       <strong class="ss-device">
@@ -249,6 +268,12 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <!-- 历史行默认只铺一屏（2026-11-02 评审：94 条一次性展开，整页高 7000+ px，
+               行与行几乎一样，只能一路滚）。逐段放行，滚动区仍带吸顶表头。 -->
+          <div v-if="g.historical.length > histShown" class="ss-hist__more">
+            <span class="ss-hist__morecount">已显示 {{ histShown }} / {{ g.historical.length }} 条</span>
+            <button type="button" class="mk-link" @click="showMoreHistory">再显示 30 条</button>
           </div>
         </details>
       </div>
@@ -307,6 +332,10 @@ const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 /* 文案单源（R6 复读单源化）：审计深链横幅与常驻分工说明的同一跳转钮、表格/卡片两种视图的同一「当前」标 */
 const AUDIT_LINK_LABEL = '审计日志 · 登录审计 →'
+/* 深链横幅卡根释义（原为屏上一句「仅列登录成功产生的会话，可强制下线。完整登录历史含失败
+   尝试，在〔审计日志〕」，2026-11-02 收进 title）：本页只列成功登录产生的会话，而审计日志的
+   登录尝试含失败，两页计数因此不同源——读到两处数字不等时先看这条，别当成丢数据。 */
+const DEEPLINK_SCOPE_HINT = '仅列登录成功产生的会话（审计日志的登录尝试含失败，两页计数不同源）'
 const CURRENT_TAB_HINT = '当前登录标签页的会话，不可下线'
 
 /** admin_sessions 行（与后端 Prisma 模型一致 + adminName/adminEmail 联查字段） */
@@ -560,6 +589,11 @@ const groups = computed<SessionGroup[]>(() => {
 const activeFlat = computed(() => groups.value.flatMap((g) => g.active))
 const page = ref(1)
 const pageSize = ref(15)
+/** 已结束会话一次渲染多少行：逐段放行，避免上百行把页面拉成一条长带 */
+const histShown = ref(15)
+function showMoreHistory(): void {
+  histShown.value += 30
+}
 /** 总页数：单页时分页器整体隐藏（页脚只有一页读数，挂历史组下有歧义） */
 const ssPages = computed(() => Math.max(1, Math.ceil(activeFlat.value.length / pageSize.value)))
 const pagedActive = computed(() =>
@@ -637,13 +671,21 @@ function lastSeenFreshTone(s: AdminSessionRow): string {
   return Date.now() - new Date(s.lastSeenAt).getTime() < 24 * 60 * 60 * 1000 ? 'mk-fresh--fresh' : ''
 }
 
+/** 「最后活跃」列的悬停释义（原卡下图例的上一半，2026-11-02 收进这里）：
+    圆点=24 小时内有没有活动，绝对时间照旧供安全回溯。 */
+function lastSeenTitle(s: AdminSessionRow): string {
+  if (!s.lastSeenAt) return '该会话没有活跃记录'
+  const fresh = Date.now() - new Date(s.lastSeenAt).getTime() < 24 * 60 * 60 * 1000
+  return `${fmtFull(s.lastSeenAt)}（24 小时内${fresh ? '有过' : '没有'}活动）`
+}
+
 async function revoke(s: AdminSessionRow) {
   /* 设备读人话（浏览器 · 系统 · 记住我），不再塞整段原始 UA——
      确认框要的是「下线的是哪台设备」，UA 全文留在表格行悬停（deviceOf().uaFull 兜底） */
   const d = deviceOf(s)
   const confirmed = await askConfirm({
     title: '强制下线该会话',
-    message: `确定强制下线此会话吗？\n设备：${[d.browser, d.os, s.remember ? '记住我' : ''].filter(Boolean).join(' · ')}\n登录时间：${fmtDateTime(s.issuedAt)}`,
+    message: `确定强制下线此会话吗？\n设备：${[d.browser, d.os, s.remember ? '记住我' : ''].filter(Boolean).join(' · ')}\nIP：${ipText(s.ip)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
     confirmText: '强制下线',
     busy: true,
   })
@@ -755,14 +797,28 @@ onMounted(async () => {
 /* 深链横幅：底色/字色/圆角由 .mk-alert--info 承担，这里只补行内布局 */
 .ss-deeplink {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
   border-radius: var(--mk-radius-xl);
   font-size: var(--mk-fs-micro);
 }
+/* 标题一句、说明一句，各自成行（原先四处内容挤在一行里连读） */
+.ss-deeplink__text { display: grid; gap: 4px; min-width: 0; }
 .ss-deeplink strong { font-weight: 700; color: var(--mk-ink); }
 .ss-deeplink__clear { color: var(--mk-muted); }
+/* 历史列表的分段放行：与滚动区同宽，弱化展示进度 */
+.ss-hist__more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--mk-line);
+  font-size: var(--mk-fs-micro);
+}
+.ss-hist__morecount { color: var(--mk-muted); }
 
 /* 加载失败错误态走 MkEmptyState（模板内），此处不再自建错误卡 */
 
@@ -815,7 +871,16 @@ onMounted(async () => {
 .ss-dot--android { background: var(--mk-purple); }
 .ss-dot--ios { background: var(--mk-muted); }
 .ss-dot--other { background: var(--mk-badge-virtual-line); }
-.ss-ip { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* IP 与「（本机）」标记整体换行（2026-11-03 视觉走查）：地址列宽 130px 与
+   「127.0.0.1（本机）」等宽，默认的中日韩逐字断行会把它拆成「127.0.0.1（本」/「机）」，
+   读起来像两个坏值。keep-all 禁止逐字断行，整段跟着换行；overflow-wrap:anywhere 兜底——
+   真遇上放不下的长 IPv6 时按任意位置断，而不是撑出列外。 */
+.ss-ip {
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
 .ss-time {
   color: var(--mk-muted);
   font-variant-numeric: tabular-nums;

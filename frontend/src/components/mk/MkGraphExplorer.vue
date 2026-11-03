@@ -97,7 +97,7 @@
       <!-- 图卡：卡壳（border / radius / padding 10px 10px 4px）由宿主出——
            页面走 .km__card :deep(.mk-ge__card)，admin 嵌在 .mk-card 里不再套一层 -->
       <div class="mk-ge__card">
-        <!-- 工具条：左统计、右视图筛选。统计口径与画布着色一致（待学习 / 记忆偏弱 / 进行中 / 已掌握） -->
+        <!-- 工具条：左统计、右视图筛选。统计口径与画布着色一致，四档名见 utils/conceptBands -->
         <div class="mk-ge__bar">
           <div class="mk-ge__stats">
             <!-- 2026-10-31 二轮评审 P2：隐藏孤立点时写明「显示 X / Y」，不再让 24 与图例加总对不上 -->
@@ -105,10 +105,10 @@
               <b>{{ levelNodes.length !== listNodes.length ? `${listNodes.length} / ${levelNodes.length}` : levelNodes.length }}</b> 个概念
             </span>
             <span class="mk-ge__stat"><b>{{ levelEdges.length }}</b> 条关系</span>
-            <span class="mk-ge__stat mk-ge__stat--ok"><i />已掌握 <b>{{ counts.stable }}</b></span>
-            <span class="mk-ge__stat mk-ge__stat--mid"><i />进行中 <b>{{ counts.learning }}</b></span>
-            <span class="mk-ge__stat mk-ge__stat--weak"><i />记忆偏弱 <b>{{ counts.fragile }}</b></span>
-            <span class="mk-ge__stat mk-ge__stat--none"><i />待学习 <b>{{ counts.unknown }}</b></span>
+            <span class="mk-ge__stat mk-ge__stat--ok"><i />{{ CONCEPT_BAND_LABEL.stable }} <b>{{ counts.stable }}</b></span>
+            <span class="mk-ge__stat mk-ge__stat--mid"><i />{{ CONCEPT_BAND_LABEL.learning }} <b>{{ counts.learning }}</b></span>
+            <span class="mk-ge__stat mk-ge__stat--weak"><i />{{ CONCEPT_BAND_LABEL.fragile }} <b>{{ counts.fragile }}</b></span>
+            <span class="mk-ge__stat mk-ge__stat--none"><i />{{ CONCEPT_BAND_LABEL.unknown }} <b>{{ counts.unknown }}</b></span>
           </div>
           <div class="mk-ge__controls">
             <div class="mk-ge__seg" role="group" aria-label="概念层级">
@@ -140,10 +140,10 @@
             <!-- 图例走 DOM：画布内图例在 graph 系列里会误导（categories 是节点分组，不是关系） -->
             <div class="mk-ge__legend">
               <span class="mk-ge__legend-group">
-                <i class="mk-ge__dot mk-ge__dot--ok" />已掌握
-                <i class="mk-ge__dot mk-ge__dot--mid" />进行中
-                <i class="mk-ge__dot mk-ge__dot--weak" />记忆偏弱
-                <i class="mk-ge__dot mk-ge__dot--none" />待学习
+                <i class="mk-ge__dot mk-ge__dot--ok" />{{ CONCEPT_BAND_LABEL.stable }}
+                <i class="mk-ge__dot mk-ge__dot--mid" />{{ CONCEPT_BAND_LABEL.learning }}
+                <i class="mk-ge__dot mk-ge__dot--weak" />{{ CONCEPT_BAND_LABEL.fragile }}
+                <i class="mk-ge__dot mk-ge__dot--none" />{{ CONCEPT_BAND_LABEL.unknown }}
               </span>
               <span class="mk-ge__legend-group">
                 <i
@@ -248,7 +248,7 @@
                       <span>{{ n.label }}</span>
                       <!-- 列表本身排除了已掌握；全列「待学习」时徽标列零信息，
                            只在行有别的状态原因（记忆偏弱/进行中）时才标 -->
-                      <span v-if="statusKeyOf(n) !== 'unknown'" class="mk-badge" :class="STATUS_BADGE[statusKeyOf(n)]">{{ STATUS_LABEL[statusKeyOf(n)] }}</span>
+                      <span v-if="statusKeyOf(n) !== 'unknown'" class="mk-badge" :class="STATUS_BADGE[statusKeyOf(n)]">{{ CONCEPT_BAND_LABEL[statusKeyOf(n)] }}</span>
                     </button>
                   </li>
                 </ul>
@@ -299,6 +299,7 @@ import { ChevronDown } from 'lucide-vue-next'
 import MkGraph, { relationStyleOf } from './MkGraph.vue'
 import { useIsDark } from '@/composables/useIsDark'
 import type { MkGraphConceptFacts, MkGraphEdge, MkGraphNode } from './MkGraph.vue'
+import { CONCEPT_BAND_LABEL, type ConceptBandKey } from '@/utils/conceptBands'
 import SkeletonLoader from '../ui/SkeletonLoader.vue'
 import V2ResultState from '../ui/V2ResultState.vue'
 
@@ -715,15 +716,10 @@ function masteryText(n: MkGraphNode): string {
 
 /* ---------- 掌握状态四档（统计 / 徽章 / 图例共用一个口径） ---------- */
 
-type StatusKey = 'stable' | 'learning' | 'fragile' | 'unknown'
+/** 四档名走 utils/conceptBands 单源：管理台学习者的「概念信号」行读同一份，
+ *  同一批概念不再一处叫「进行中」一处叫「挣扎」 */
+type StatusKey = ConceptBandKey
 
-/** 文案对齐原型四色口径：已掌握 / 进行中 / 记忆偏弱 / 待学习 */
-const STATUS_LABEL: Record<StatusKey, string> = {
-  stable: '已掌握',
-  learning: '进行中',
-  fragile: '记忆偏弱',
-  unknown: '待学习',
-}
 /** 徽章色跟随画布着色（MkGraph.colorOf 同为绿/琥珀/红/中性灰）：图例教的色必须是图里画的色 */
 const STATUS_BADGE: Record<StatusKey, string> = {
   stable: 'mk-badge--ok',
@@ -732,7 +728,7 @@ const STATUS_BADGE: Record<StatusKey, string> = {
   unknown: 'mk-badge--muted',
 }
 
-/** 与画布着色同一套阈值（未评估 / 脆弱 / 已掌握 / 其余在学），避免"图上红一片、统计说都好" */
+/** 与画布着色同一套阈值（四档名见 utils/conceptBands），避免"图上红一片、统计说都好" */
 function statusKeyOf(node: MkGraphNode | null): StatusKey {
   if (!node || node.masteryScore === null || node.masteryScore === undefined) return 'unknown'
   if (node.stability === 'fragile' || node.masteryScore < 0.45) return 'fragile'
@@ -770,7 +766,7 @@ const suggestedNodes = computed(() =>
 
 const selectedStatus = computed(() => {
   const key = statusKeyOf(selected.value)
-  return { key, label: STATUS_LABEL[key], badge: STATUS_BADGE[key] }
+  return { key, label: CONCEPT_BAND_LABEL[key], badge: STATUS_BADGE[key] }
 })
 
 /** 选中节点的概念台账事实：按概念名索引（台账 conceptKey 就是概念名），
@@ -1222,12 +1218,19 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 }
 .mk-ge__overview-list {
   display: grid;
-  /* 同上：轨道收窄，长概念名交给 .mk-ge__overview-item > span 的 ellipsis */
+  /* 单列轨道按容器宽收窄：默认 auto 轨道 + li 的 min-width:auto 按 min-content 撑宽，
+     长概念名与右侧 nowrap 徽章一起把整个行盒顶出侧栏，右端徽章正好落在卡片裁切边界上
+     被切掉（2026-11-02 P2-6） */
   grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+/* li 自己也要 min-width:0：父级轨道收了，但 grid item 的 min-width:auto 仍会按内容
+   把行盒撑回 min-content 宽（只把 min-width:0 加在下面那个标签 span 上约束不住它） */
+.mk-ge__overview-list > li {
+  min-width: 0;
 }
 .mk-ge__overview-item {
   display: flex;

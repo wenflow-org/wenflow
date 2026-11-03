@@ -368,7 +368,7 @@ export function deriveReplanSignal(input: {
 
 export class LearnerSnapshotService {
   async getSnapshot(input: LearnerSnapshotScopeInput): Promise<LearnerSnapshot> {
-    const [{ profile, confidence }, knowledgeMemory, latestGoalEvidence, latestMetricAt, latestSession, latestCompletedTask] = await Promise.all([
+    const [{ profile, confidence, sources }, knowledgeMemory, latestGoalEvidence, latestMetricAt, latestSession, latestCompletedTask] = await Promise.all([
       learnerProfileService.getProfile(input.userId),
       learnerKnowledgeMemoryService.build({
         userId: input.userId,
@@ -478,6 +478,8 @@ export class LearnerSnapshotService {
         },
       },
       profile,
+      // 逐字段来源（2026-11-02 P1-8）：画像页据此逐格标「初始默认值」，与 profile 同一份聚合结果
+      profileSources: sources,
       dynamicState,
       learningControlState,
       replanSignal,
@@ -495,7 +497,7 @@ export class LearnerSnapshotService {
     };
     generatedAt?: Date;
   }): Promise<LearnerSnapshot> {
-    const [{ profile, confidence }, knowledgeMemory, latestConversation, latestSession, latestCompletedTask] = await Promise.all([
+    const [{ profile, confidence, sources }, knowledgeMemory, latestConversation, latestSession, latestCompletedTask] = await Promise.all([
       learnerProfileService.getProfile(input.userId),
       learnerKnowledgeMemoryService.build({
         userId: input.userId,
@@ -603,6 +605,8 @@ export class LearnerSnapshotService {
         },
       },
       profile,
+      // 逐字段来源（2026-11-02 P1-8）：画像页据此逐格标「初始默认值」，与 profile 同一份聚合结果
+      profileSources: sources,
       dynamicState,
       learningControlState,
       replanSignal,
