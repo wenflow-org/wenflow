@@ -310,8 +310,6 @@ label 必须是具体的错误理解陈述（如"以为整理就是把东西全�
 - kcGraph · object — KC 依赖图，结构（edges 每项必须含 relation 字段，值为 "prerequisite"）：
 { "nodes": [{ "kcId": "kc-1a", "name": "KC名", "taxonomy": "factual|conceptual|procedural|metacognitive" }],
   "edges": [{ "from": "kc-1a", "to": "kc-1b", "relation": "prerequisite" }] }
-- gapCoverage · object? — 前提缺口覆盖报告（仅在提供 prerequisiteTree 时输出；未提供时整个字段省略，不要输出 null 或空数组）。
-结构：{ "covered": ["已覆盖的缺口概念"], "uncovered": [{ "concept": "未覆盖的缺口概念", "reason": "原因" }] }
 
 #### 边界约束
 

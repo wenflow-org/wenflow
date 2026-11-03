@@ -48,7 +48,6 @@ export interface KcCognitiveCoreLike {
 export interface KcAnnotation {
   conceptKcs?: Array<Record<string, unknown>>;
   taskKcLinks?: Array<Record<string, unknown>>;
-  gapCoverage?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -117,7 +116,6 @@ export function mergeKcStageAnnotation(
       edges: unionByKey(previousEdges, incomingEdges, (edge) =>
         `${edge.from ?? ''}->${edge.to ?? ''}:${edge.type ?? ''}`),
     },
-    ...(stageOutput.gapCoverage ? { gapCoverage: stageOutput.gapCoverage } : {}),
   };
 }
 

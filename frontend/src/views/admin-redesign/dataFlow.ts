@@ -42,7 +42,6 @@ const FAMILY_COLORS: Record<string, string> = {
   evaluation: '#db2777',        // 学习评估 · 粉
   summary: '#c026d3',           // 课后总结 · 紫红
   learner: '#a21caf',
-  visibleDialogueContext: '#6d28d9',
   snapshot: '#1d4ed8',          // 学习者快照 · 靛
   profile: '#4338ca',           // 画像 · 靛蓝
   blockedFoundations: '#b45309',

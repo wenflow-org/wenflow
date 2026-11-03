@@ -82,25 +82,6 @@ fields:
       KC 依赖图，结构（edges 每项必须含 relation 字段，值为 "prerequisite"）：
       { "nodes": [{ "kcId": "kc-1a", "name": "KC名", "taxonomy": "factual|conceptual|procedural|metacognitive" }],
         "edges": [{ "from": "kc-1a", "to": "kc-1b", "relation": "prerequisite" }] }
-  - name: gapCoverage
-    type: object?
-    desc: |
-      前提缺口覆盖报告（仅在提供 prerequisiteTree 时输出；未提供时整个字段省略，不要输出 null 或空数组）。
-      结构：{ "covered": ["已覆盖的缺口概念"], "uncovered": [{ "concept": "未覆盖的缺口概念", "reason": "原因" }] }
-    properties:
-      - name: covered
-        type: string[]
-        desc: 已被 KC 覆盖的缺口概念名（取自输入 prerequisiteTree.unknownConcepts，禁止新造）
-      - name: uncovered
-        type: "object[]"
-        desc: 尚未被 KC 覆盖的缺口概念及原因
-        properties:
-          - name: concept
-            type: string
-            desc: 未覆盖的缺口概念名（取自输入）
-          - name: reason
-            type: string
-            desc: 未被覆盖的原因（一句话）
 constraints:
   - 不编造不存在于输入中的概念或 KC
   - KC 命名必须是动词+可观测对象，不能是名词标签

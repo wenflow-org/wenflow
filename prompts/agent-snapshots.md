@@ -182,7 +182,6 @@ sandbox:goal-agent.understanding.urgency
 | `conceptKcs` | object[] | path-agent |
 | `taskKcLinks` | object[] | path-agent |
 | `kcGraph` | object | path-agent |
-| `gapCoverage` | object? | path-agent |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 
@@ -239,7 +238,6 @@ sandbox:path-agent.supplementRequest
 | `sandbox:teaching-agent.knowledge.state` | `knowledge.state` | object | session.knowledgeState |
 | `sandbox:teaching-agent.controls.teachingControlContext` | `controls.teachingControlContext` | object | teachingState.teachingControlContext |
 | `sandbox:teaching-agent.classroomContext` | `classroomContext` | object | teachingState.classroomContext |
-| `sandbox:teaching-agent.visibleDialogueContext` | `visibleDialogueContext` | array<object> | session.messages |
 
 ### 输出/交付字段
 
@@ -275,7 +273,6 @@ sandbox:path-agent.supplementRequest
 | `knowledge.state` | object | skill:teaching-turn |
 | `controls.teachingControlContext` | object | skill:teaching-turn |
 | `classroomContext` | object | skill:teaching-turn |
-| `visibleDialogueContext` | array<object> | skill:teaching-turn |
 | `message` | string | teaching-agent |
 | `followUpQuestions` | string[]? | teaching-agent |
 | `summary.topicSummary` | string | teaching-agent |
@@ -330,7 +327,6 @@ sandbox:teaching-agent.task.profile
 sandbox:teaching-agent.teachingState.classroomContext
 sandbox:teaching-agent.teachingState.classroomEventHistory
 sandbox:teaching-agent.teachingState.teachingControlContext
-sandbox:teaching-agent.visibleDialogueContext
 ```
 
 ## 学习者 Agent（Profile）（profile-agent）

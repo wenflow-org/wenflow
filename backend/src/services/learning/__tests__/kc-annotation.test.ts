@@ -155,19 +155,14 @@ describe('mapAndPersistKcAnnotation（契约事故回归）', () => {
 import { coerceKcMapperParsed } from '../../../skills/kc-mapper';
 
 describe('coerceKcMapperParsed（契约等价变体归一）', () => {
-  it('空 gapCoverage（[]/{}）移除，非空归为 {covered,uncovered}', () => {
+  it('gapCoverage 已非契约字段（#193）：模型残留该键一律丢弃', () => {
     expect(coerceKcMapperParsed({ conceptKcs: [], gapCoverage: [] }).gapCoverage).toBeUndefined();
     expect(coerceKcMapperParsed({ conceptKcs: [], gapCoverage: {} }).gapCoverage).toBeUndefined();
     const r = coerceKcMapperParsed({
       conceptKcs: [],
       gapCoverage: [{ conceptId: 'c1', coveredKCs: ['kc-1'], gaps: [] }, { conceptId: 'c2', gaps: ['没覆盖'] }],
     });
-    expect(r.gapCoverage).toEqual({ covered: ['c1'], uncovered: [{ concept: 'c2', reason: '没覆盖' }] });
-  });
-
-  it('单条明细对象也归为契约形态', () => {
-    const r = coerceKcMapperParsed({ conceptKcs: [], gapCoverage: { conceptId: 'c1', gaps: [] } });
-    expect(r.gapCoverage).toEqual({ covered: ['c1'], uncovered: [] });
+    expect(r.gapCoverage).toBeUndefined();
   });
 
   it('taskKcLinks 的 kcIds 别名补出 linkedKCs（保留原字段）', () => {
@@ -202,7 +197,6 @@ describe('coerceKcMapperParsed（契约等价变体归一）', () => {
       conceptKcs: [{ conceptId: 'c1', kcs: [{ kcId: 'kc-1', name: 'n', taxonomy: 'factual' }] }],
       taskKcLinks: [{ taskTitle: 't', linkedKCs: ['kc-1'] }],
       kcGraph: { nodes: [{ kcId: 'kc-1', name: 'n', taxonomy: 'factual' }], edges: [{ from: 'a', to: 'b', relation: 'prerequisite' }] },
-      gapCoverage: { covered: ['c1'], uncovered: [] },
     };
     const once = coerceKcMapperParsed(input);
     expect(once).toEqual(input);

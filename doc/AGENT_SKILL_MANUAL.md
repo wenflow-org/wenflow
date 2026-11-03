@@ -222,7 +222,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 #### `kc-mapper`（知识组件映射 Skill）
 
 - **一句话缘由**：把 `cognitiveCore` 的概念与 `subtasks` 分解为**细粒度、可评估的知识组件（KC）**及依赖图，作为后续可测评/知识追踪的刻度。
-- **关键输入/输出**：输入 `cognitiveCore` + `milestones` + `subtasks` + `prerequisiteTree`；输出 `conceptKcs[]`、`taskKcLinks[]`、`kcGraph`（nodes/edges）、`gapCoverage`（缺口覆盖报告，可选）。
+- **关键输入/输出**：输入 `cognitiveCore` + `milestones` + `subtasks` + `prerequisiteTree`；输出 `conceptKcs[]`、`taskKcLinks[]`、`kcGraph`（nodes/edges）。（原 `gapCoverage` 产出全仓无消费方，issue #193 已从 core 契约移除。）
 - **设计意图/边界**：KC 命名必须是"动词 + 可观测对象"，不能是名词标签；taxonomy ∈ factual|conceptual|procedural|metacognitive；不编造输入中不存在的概念。**缘由：代码/文档未显式记载其产品消费方与完整设计动机；按实现推断为**——概念/任务粒度太粗，无法直接作为可评估单元与依赖图节点，故需要一个"概念→KC"的降维层。实现上由 `learning.service.ts` 服务侧调用，不在 coordinator steps（`skills.yaml` notes）。
 - **依据**：core identity、`skills.yaml` notes、[`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md)（实测 payload 仅 3.6KB，被评为"低价值/可降级"——说明其消费面很薄）。
 

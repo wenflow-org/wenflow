@@ -247,7 +247,6 @@
 - `conceptKcs`（`object[]`）：每个 coreConcept 的 KC 分解，每项： { "conceptId": "concept-1", "kcs": [{ "kcId": "kc-1a", "name": "识别半联动点", "taxonomy": "procedural", "prerequisiteKCs": ["kc-1a-prereq"] }] }
 - `taskKcLinks`（`object[]`）：每个 subtask 关联的 KC，每项（字段名必须逐字为 taskTitle 与 linkedKCs，不得写成 kcIds/kcs 等别名）： { "taskTitle": "识别个人高唤醒触发模式", "linkedKCs": ["kc-1a", "kc-1b"] }
 - `kcGraph`（`object`）：KC 依赖图，结构（edges 每项必须含 relation 字段，值为 "prerequisite"）： { "nodes": [{ "kcId": "kc-1a", "name": "KC名", "taxonomy": "factual|conceptual|procedural|metacognitive" }], "edges": [{ "from": "kc-1a", "to": "kc-1b", "relation": "prerequisite" }] }
-- `gapCoverage`（`object?`）：前提缺口覆盖报告（仅在提供 prerequisiteTree 时输出；未提供时整个字段省略，不要输出 null 或空数组）。 结构：{ "covered": ["已覆盖的缺口概念"], "uncovered": [{ "concept": "未覆盖的缺口概念", "reason": "原因" }] }
 
 ### 我与谁协作
 

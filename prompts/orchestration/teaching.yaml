@@ -145,11 +145,6 @@ fields:
     valueType: object
     pathInRawOutput: teachingState.classroomContext
     description: 课堂上下文（上轮持久化）
-  - fieldId: visibleDialogueContext
-    promptRole: soft-info
-    valueType: array<object>
-    pathInRawOutput: session.messages
-    description: 最近可见对话（role/content）
 
   # === skill:peer-reinforcement 产出 ===
   - fieldId: message
@@ -441,14 +436,6 @@ routings:
     notes: 回合输入通道（AITeachingOrchestrator 组装注入）
   - agentId: teaching-agent
     fieldId: classroomContext
-    render: hidden
-    handoff: [skill:teaching-turn]
-    internal: true
-    accumulate: false
-    visibilityPreset: agent-internal
-    notes: 回合输入通道（AITeachingOrchestrator 组装注入）
-  - agentId: teaching-agent
-    fieldId: visibleDialogueContext
     render: hidden
     handoff: [skill:teaching-turn]
     internal: true

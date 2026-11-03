@@ -1,6 +1,6 @@
 ---
 agentId: skill:kc-mapper
-coreHash: f1e2c403354bc58e6747482bb2bfb459eb15cc8215e56ecf79786e0fb7640123
+coreHash: 46dfa082bee1423a513014cab2ce39cac12185d971eae7410f67645b9eda2e75
 coreVersion: 3
 temperature: 0.3
 maxTokens: 64000
@@ -59,8 +59,6 @@ taskKey/taskTitle/linkedKCs，不得写成 kcIds/kcs 等别名）：
 - kcGraph · object — KC 依赖图，结构（edges 每项必须含 relation 字段，值为 "prerequisite"）：
 { "nodes": [{ "kcId": "kc-1a", "name": "KC名", "taxonomy": "factual|conceptual|procedural|metacognitive" }],
   "edges": [{ "from": "kc-1a", "to": "kc-1b", "relation": "prerequisite" }] }
-- gapCoverage · object? — 前提缺口覆盖报告（仅在提供 prerequisiteTree 时输出；未提供时整个字段省略，不要输出 null 或空数组）。
-结构：{ "covered": ["已覆盖的缺口概念"], "uncovered": [{ "concept": "未覆盖的缺口概念", "reason": "原因" }] }
 
 ## 边界约束
 
