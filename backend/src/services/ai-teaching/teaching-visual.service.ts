@@ -178,73 +178,11 @@ export function detectExerciseLeakInReply(reply: string | null | undefined): boo
 }
 
 /**
- * 指向「图」的显式引用（A/B 报告 D10，2026-10-13）：回复里出现"（见图）/（如下图）/我画了一个结构示意"
- * 这类指向本轮附图的指引，但消息实际不带任何图（images/diagrams/figures 全空）→ 学生看到的是一句指向虚空的话。
- *
- * 判据取紧（宁漏不误，只剥真悬空）：① 括号里的图指引（见图/如下图/详见下图…）；
- * ② 第一人称"我（给你）画了…图/示意"的落笔声称——只认"我…画了"，不碰祈使句
- * （"你可以画一张""自己画一条"是布置练习，不是声称已画）。
- */
-const DANGLING_FIGURE_PARENTHETICAL = /[（(]\s*(?:详见|参见|见|如|如下图|见下图)?\s*(?:上|下|左|右|本)?图(?:示|解|表)?\s*[）)]/g;
-const DANGLING_FIGURE_CLAIM = /我(?:给(?:你|您))?画(?:了|好|上)(?:[一二两三四五几]|张|幅|个)?[^，。；！？\n]{0,8}?(?:示意图|结构图|结构示意|示意图|图|示意)/g;
 /**
- * 板书/课堂图指代（2026-10-28 真实课堂实测）：模型在没有图的回合里仍会说
- * 「这条链我摆成图了」「图上两个问号」「你照着图说一遍」。旧正则只认
- * 「（见图）」和「我画了…图」，拦不住这些变体，学生界面上就是对着空气喊看图。
+ * 悬空「图/板」引用的识别与剥离已独立成模块（2026-11-03 超大文件棘轮：本文件只许缩短）。
+ * 导出签名保持不变，调用方（teaching-turn-engine / 各测试）与原先一致。
  */
-const DANGLING_FIGURE_DEIXIS =
-  /(?:看|对|照|盯|按|比|顺着|沿着)(?:着|下|一下)?(?:上面|下面|左边|右边|这张|那张|刚才)?(?:图|箭头)|图(?:上|里|中)|(?:摆成|画成|做成|整理成)(?:了)?[^，。；！？\n]{0,6}图|箭头(?:上|里|中)?的?(?:字|方向)|两个问号|(?:下面|上面|下方|上方|如|见)?(?:这|那)(?:张|幅|个)?图(?:表|示)?|下(?:面|方)?图|如图(?:所示)?|白板|板上/;
-
-/** 把指代不存在的图的话换成不依赖图的说法（尽量保留教学推进）。 */
-const DANGLING_FIGURE_REWRITES: Array<[RegExp, string]> = [
-  // 「我把 X 画在图里了」——2026-10-29 真 LLM 实测变体：旧规则只认「画成/摆成」，
-  // 漏掉「画在…图里」，回复会留下「我把两条对比画在图里了」这类指代不存在的图。
-  [/我(?:已经)?把([^，。；！？\n]{0,12}?)(?:画|摆|放|做|整理)(?:在|到|成)(?:了)?[^，。；！？\n]{0,6}?图(?:里|上|中)?(?:了)?/g, '我已经把$1整理了一遍'],
-  [/(?:这条|这个|这)?(?:链|关系|结构|东西)?我(?:已经)?(?:把|给)?[^，。；！？\n]{0,12}?(?:摆成|画成|做成|整理成)了?[^，。；！？\n]{0,6}?图/g, '我已经按刚才的顺序整理了一遍'],
-  [/我(?:已经)?把[^，。；！？\n]{0,12}?(?:摆成|画成|做成|整理成)了?[^，。；！？\n]{0,6}?图/g, '我已经按刚才的顺序整理了一遍'],
-  [/你(?:就)?(?:对着|照着|看着|按着|顺着|沿着)?(?:图|箭头)(?:上|里|中)?的?[^，。；！？\n]{0,10}?(?:核|看|说|走|找|对|填)/g, '你按刚才的顺序核'],
-  [/图(?:上|里|中)(?:的)?[^，。；！？\n]{0,10}?(?:两个问号|问号|空|两条|这条|关系)/g, '刚才那两处'],
-  [/三处的先后看图/g, '三处的先后按刚才的顺序'],
-  [/(?:直接)?看图|照着图|看着图/g, '按刚才的顺序'],
-  [/(?:下面|上面|下方|上方)?(?:这|那)(?:张|幅|个)?图(?:表|示)?/g, '下面的对比'],
-  [/下(?:面|方)?图|如图(?:所示)?/g, '下面的对比'],
-  [/白板|板上/g, '刚才的对比'],
-  [/(?:顺着|沿着|对着)箭头(?:上|里|中)?的?(?:字|方向)?/g, '按刚才的顺序'],
-  // 兜底（仅在确认本轮无图时调用）：任何残留的「图上/图里/图中」与「箭头」都指向不存在的图。
-  [/图(?:上|里|中)/g, '刚才的对比'],
-  [/箭头(?:上|里|中)?/g, '刚才的顺序'],
-];
-
-/** 回复里是否存在指向「本轮并不存在的图」的悬空引用。 */
-export function hasDanglingFigureReference(reply: string | null | undefined): boolean {
-  const text = String(reply ?? '');
-  if (!text) return false;
-  DANGLING_FIGURE_PARENTHETICAL.lastIndex = 0;
-  DANGLING_FIGURE_CLAIM.lastIndex = 0;
-  return DANGLING_FIGURE_PARENTHETICAL.test(text)
-    || DANGLING_FIGURE_CLAIM.test(text)
-    || DANGLING_FIGURE_DEIXIS.test(text);
-}
-
-/**
- * 剥离指向「不存在的图」的悬空引用，并清理删除括号后遗留的空标点/多余空格。
- * 仅在消息确认不带图时调用（见 teaching-turn-engine 调用点）。
- */
-export function stripDanglingFigureReferences(reply: string | null | undefined): string {
-  const text = String(reply ?? '');
-  if (!text) return text;
-  let out = text
-    .replace(DANGLING_FIGURE_PARENTHETICAL, '')
-    .replace(DANGLING_FIGURE_CLAIM, '');
-  for (const [pattern, replacement] of DANGLING_FIGURE_REWRITES) {
-    out = out.replace(pattern, replacement);
-  }
-  return out
-    .replace(/\s+([，。；！？、：])/g, '$1')
-    .replace(/([，。；！？、：])\1+/g, '$1')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim();
-}
+export { hasDanglingFigureReference, stripDanglingFigureReferences } from './dangling-figure-reference';
 
 /** ASCII 结构图特征字符：箭头 / 方框 / 圆点 / 长横线 —— 老师"用字符硬画结构"的痕迹。 */
 const ASCII_STRUCTURE_CHARS = /[→←↑↓─━│┃┌┐└┘├┤┬┴┼●○■□▲▼◆◇]/g;

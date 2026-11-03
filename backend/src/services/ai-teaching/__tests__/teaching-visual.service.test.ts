@@ -652,19 +652,66 @@ describe('悬空图引用剥离（hasDanglingFigureReference / stripDanglingFigu
     expect(hasDanglingFigureReference('白板上已经有这条直线了，y = 2x + 1。')).toBe(true);
   });
 
-  it('真实变体剥离后不再出现「图/箭头」指代，且保留后续指令', () => {
+  it('真实变体剥离后逐字成句（不是"不含某些词"就算过）', () => {
+    const samples: Array<[string, string]> = [
+      ['这条链我摆成图了，你对着箭头上的字核一遍就行。核完选一下下面这道：', '你核一遍就行。核完选一下下面这道：'],
+      ['三处的先后看图，你只需盯住最后那个还没填的空。把它的行号补给我。', '三处的先后，你只需盯住最后那个还没填的空。把它的行号补给我。'],
+      ['图上两个问号，就是这条关系在两侧各占的位置。下面这道小题你选一下。', '两个问号，就是这条关系在两侧各占的位置。下面这道小题你选一下。'],
+      ['图里这条关系已经摆好了：同一个温度轴，往上往下各占一边。你照着图，用自己的话说一遍整条。', '这条关系已经摆好了：同一个温度轴，往上往下各占一边。用自己的话说一遍整条。'],
+      ['我把两条对比画在图里了，你先只看一眼：它们 b 一样、k 一个正一个负。', '我已经把两条对比整理了一遍，你先只看一眼：它们 b 一样、k 一个正一个负。'],
+    ];
+    for (const [sample, expected] of samples) {
+      expect(stripDanglingFigureReferences(sample)).toBe(expected);
+    }
+  });
+
+  /**
+   * 2026-11-03 收口：改写口径从「把指代换成一个中性短语」改成「删掉指代本身」。
+   * 上一版换进去的是**新的指代对象**（板上→「刚才的对比」、这张图→「下面的对比」），
+   * 真人原句一过就露馅——「看这张对照图，左右两栏并排摆着了」被改成
+   * 「下面的对比，左右刚才左右对照的两组」（读不通），而屏上根本没有「刚才的对比」这东西。
+   * 本用例把"不许引入新指代对象"与"读得通"钉成断言。
+   */
+  it('删指代而不换新指代：析出文本里不出现凭空造的指代对象，也不留悬空标点', () => {
     const samples = [
-      '这条链我摆成图了，你对着箭头上的字核一遍就行。核完选一下下面这道：',
-      '三处的先后看图，你只需盯住最后那个还没填的空。把它的行号补给我。',
-      '图上两个问号，就是这条关系在两侧各占的位置。下面这道小题你选一下。',
-      '图里这条关系已经摆好了：同一个温度轴，往上往下各占一边。你照着图，用自己的话说一遍整条。',
-      '我把两条对比画在图里了，你先只看一眼：它们 b 一样、k 一个正一个负。',
+      '板上这张图把「总迟到」拆成了两栏——左边是常识解释，右边是心理学解释。',
+      '看这张对照图，左右两栏并排摆着了，你自己对一眼。',
+      '再看板上两个圈。',
+      '图上两个圈，你看中间重叠那格。',
+      '图已经放到板上了——左边那圈是常识解释，右边那圈是心理学解释。',
+      '白板上已经有这条直线了，y = 2x + 1。',
+      '这张结构图就是这两步的先后顺序。',
+      '为了帮你把这张图看得更清楚，我画了一个结构示意（见图），你对照一下自己刚填好的三条线。',
     ];
     for (const sample of samples) {
       const out = stripDanglingFigureReferences(sample);
-      expect(out).not.toMatch(/[看对照顾盯按]着?图|图上|图里|箭头/);
-      expect(out.length).toBeGreaterThan(8);
+      expect(out).not.toMatch(/刚才的对比|下面的对比|刚才的顺序|刚才那两处/);
+      expect(out).not.toMatch(/[看对照顾盯按]着?图|图上|图里|箭头|板上|白板/);
+      expect(out).not.toMatch(/^[，,、；;—]/);
+      expect(out).not.toMatch(/[，,]{2}|[，,]\s*[。！？]/);
     }
+  });
+
+  it('真人走查原句逐条对齐（2026-11-03 心理课 · 学员实拍）', () => {
+    const samples: Array<[string, string]> = [
+      ['板上这张图把「总迟到」拆成了两栏——左边是常识解释，右边是心理学解释。', '「总迟到」拆成了两栏——左边是常识解释，右边是心理学解释。'],
+      ['看这张对照图，左右两栏并排摆着了，你自己对一眼。', '你自己对一眼。'],
+      ['再看板上两个圈。', '再看两个圈。'],
+      ['图上两个圈，你看中间重叠那格。', '两个圈，你看中间重叠那格。'],
+      ['图已经放到板上了——左边那圈是常识解释，右边那圈是心理学解释，中间重叠那格是它们共用的起点。', '左边那圈是常识解释，右边那圈是心理学解释，中间重叠那格是它们共用的起点。'],
+    ];
+    for (const [sample, expected] of samples) {
+      expect(stripDanglingFigureReferences(sample)).toBe(expected);
+    }
+  });
+
+  it('删指代不会拼出叠词（2026-11-03 心理课真人走查实锤）', () => {
+    // 原句「板上这张对照图把「总迟到」拆成了两栏」曾因两条替换规则各改写一次，拼出
+    // 「刚才的对比下面的对比把…」。改为删除后不再有替换短语，本用例守住这个结果。
+    const out = stripDanglingFigureReferences('板上这张对照图把「总迟到」拆成了两栏——左边是常识解释，右边是心理学解释。');
+    expect(out).not.toMatch(/(?:刚才的对比|下面的对比)\s*(?:刚才的对比|下面的对比)/);
+    expect(out).toContain('拆成了两栏');
+    expect(out).toContain('左边是常识解释');
   });
 
   it('「下面这张图/白板上」等无动词指代也被剥离（2026-10-29 真 LLM 实测变体）', () => {
@@ -678,6 +725,30 @@ describe('悬空图引用剥离（hasDanglingFigureReference / stripDanglingFigu
     expect(out).not.toContain('图里');
     expect(out).toContain('两条对比');
     expect(out).toContain('一个正一个负');
+  });
+
+  it('「看这张对照图 / 那张结构图」这类「指代词+修饰语+图」也被识别并剥离（2026-11-02 走查实锤）', () => {
+    // 旧正则要求「这张」与「图」紧邻，中间夹「对照/结构」就整条漏网——真课堂上出现的正是这种。
+    expect(hasDanglingFigureReference('看这张对照图，左右两栏并排摆着了，你自己对一眼。')).toBe(true);
+    expect(hasDanglingFigureReference('这张结构图就是这两步的先后顺序。')).toBe(true);
+    expect(hasDanglingFigureReference('那张关系图里 b 一样、k 一个正一个负。')).toBe(true);
+    const out = stripDanglingFigureReferences('看这张对照图，左右两栏并排摆着了，你自己对一眼。');
+    expect(out).not.toMatch(/(?:这|那)(?:张|幅|个|块)[^，。；！？\n]{0,4}?图/);
+    expect(out).not.toMatch(/左右两栏|摆着了/);
+    expect(out).toContain('你自己对一眼');
+  });
+
+  it('不误伤：无修饰的「左右两列」保留（markdown 表格真的有列）', () => {
+    expect(hasDanglingFigureReference('上一轮的分叉就在第一行：左右两列一比就清楚了。')).toBe(false);
+    expect(stripDanglingFigureReferences('上一轮的分叉就在第一行：左右两列一比就清楚了。'))
+      .toContain('左右两列');
+  });
+
+  it('「图已经放到板上了」整段删掉，不留下「图已经放到了」半句（2026-11-03 心理课真人走查实锤）', () => {
+    const out = stripDanglingFigureReferences('图已经放到板上了——左边那圈是常识解释，右边那圈是心理学解释，中间重叠那格是它们共用的起点。');
+    expect(out).not.toMatch(/板上|放到了|放到/);
+    expect(out.startsWith('左边那圈是常识解释')).toBe(true);
+    expect(out).toContain('中间重叠那格是它们共用的起点');
   });
 
   it('剥离后不留悬空括号/重复标点（D10 逐字稿样本）', () => {
