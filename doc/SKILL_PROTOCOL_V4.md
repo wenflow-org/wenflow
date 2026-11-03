@@ -101,7 +101,7 @@ deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5
 **L2 落地注记（2026-08，配置式值流转）**：运行时装配声明化已开始落地——
 - `field_definitions.pathInRawOutput`：字段值在产出方原始输出的物理抽取路径（goal 阶段 28 字段已登记）。
 - `assembleGoalHandoff`（field-dispatcher）：按 routings 表 goal-agent 交付行 + pathInRawOutput 从 skill 输出抽取 goal→path 字段；`buildNormalizedInputV1`（path.coordinator）已正式切换为"handoff 字段优先 + visibleSummary 回退"（golden 等价验证）。
-- 输入通道：teaching 回合 4 通道（learner.learnerProjection/knowledge.state/controls.teachingControlContext/classroomContext）已登记（teaching-agent 注入行）；stage-designer 的 milestones/previousMilestone/normalizedInput 通道已有等价验证。
+- 输入通道：teaching 回合 4 条「配置式」通道（learner.learnerProjection/knowledge.state/controls.teachingControlContext/classroomContext）已登记（teaching-agent 注入行，可按 pathInRawOutput 装配）；另有「编排层整块组装」通道 scenario（承载 taskKcs/cognitiveFrame/materials/taskProfile/pathProgress 等）——由 buildTeachingTurnInput 组装成单个顶层对象注入、无单点抽取路径，故不设 routings 行，在编排文件 `prompts/orchestration/teaching.yaml` 以 fields 行声明，并在 core inputs（`sandbox:teaching.scenario`）+ 沙盘键注册表（`SANDBOX_EXTRA_KEYS`）登记；classroomEventContext / interactionProfile 属同类（不设 routings 行）。stage-designer 的 milestones/previousMilestone/normalizedInput 通道已有等价验证。
 - 治理：`prompts:check-handoff --strict`（inputs↔routings 双向对账）、`detectFieldRoutingDrift`（声明 vs DB 漂移启动 warn）、`validateFieldRoutingSeedSemantics`（handoff 白名单/组合语义 fail-fast）。
 
 ### 2.6 数据面配置（编排文件）
