@@ -36,6 +36,8 @@ jest.mock('../../services/learner/LearnerSnapshotRefreshService', () => ({
   learnerSnapshotRefreshService: { refresh: jest.fn() }
 }));
 
+import { parseDayKeyRange } from '../../services/time/day-boundary';
+
 import '../users';
 
 function createResponse() {
@@ -83,14 +85,18 @@ describe('users agent log routes', () => {
 
     await routes['GET /me/agent-logs/export'](req, res, jest.fn());
 
+    // 日界口径同源（#201）：buildAgentLogWhere 自 b54e0b31 起用 parseDayKeyRange 按
+    // **应用时区本地日**解析日期键。此处直接引用被测实现所用的同一 helper，避免断言
+    // 与实现口径二次漂移（旧断言写死 new Date('2026-07-01')，即 P0-3 已废止的 UTC 零点口径）。
+    const range = parseDayKeyRange('2026-07-01', '2026-07-16');
     expect(agentLogMocks.findMany).toHaveBeenCalledWith({
       where: {
         userId: 'user-1',
         agentId: 'skill:path-planning',
         success: false,
         calledAt: {
-          gte: new Date('2026-07-01'),
-          lte: expect.any(Date)
+          gte: range.from,
+          lte: range.to
         }
       },
       orderBy: { calledAt: 'desc' },
