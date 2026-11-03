@@ -289,10 +289,24 @@ class GoalConversationService {
     isCompleted?: boolean;
     learningPath?: any;
     userVisible?: string;
+    /**
+     * 持久化快照回填（#159）：落库侧 updateCollectedData 是「字段缺席保留旧值」，
+     * 但响应侧此前只取本轮模型输出。模型某轮没再复述 confirmedProposal（delta 语义缺席=不变，
+     * 见 skill 层注释）时，响应会是 undefined 而 DB 仍有值 → 前端把 confirmedProposal 清空，
+     * proposing 阶段提案卡/确认入口消失。此处仅在字段真的缺席时用持久化值补齐。
+     */
+    fallbackGoalExt?: { confirmedProposal?: any; structuredData?: any; confidenceScores?: any } | null;
   }) {
     const stage = overrides?.stage || this.resolveStageFromResponse(aiResponse);
     const confidence = this.resolveConfidenceFromResponse(aiResponse);
     const goalExt = this.getGoalExt(aiResponse?.internal);
+    const fallback = overrides?.fallbackGoalExt || null;
+    const resolvedGoalExt = {
+      ...goalExt,
+      confirmedProposal: goalExt.confirmedProposal !== undefined ? goalExt.confirmedProposal : (fallback?.confirmedProposal ?? undefined),
+      structuredData: goalExt.structuredData !== undefined ? goalExt.structuredData : (fallback?.structuredData ?? undefined),
+      confidenceScores: goalExt.confidenceScores !== undefined ? goalExt.confidenceScores : (fallback?.confidenceScores ?? undefined)
+    };
     return {
       userVisible: overrides?.userVisible ?? aiResponse?.userVisible ?? '',
       runtimeEnvelope: aiResponse?.runtimeEnvelope || null,
@@ -306,9 +320,9 @@ class GoalConversationService {
         },
         ext: {
           goalConversation: {
-            ...goalExt,
+            ...resolvedGoalExt,
             // 分诊结论（纯函数）：随结果透出，供虚拟会话遥测统计「分诊命中率」
-            responseTriage: triageGoalResponse(goalExt.understanding)
+            responseTriage: triageGoalResponse(resolvedGoalExt.understanding)
           }
         }
       }
@@ -767,10 +781,18 @@ async continueConversation(
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: this.getGoalExt(aiResponse.internal).quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
-      await this.updateCollectedData(conversation.id, responseWithConversationId);
+      const persistedData = await this.updateCollectedData(conversation.id, responseWithConversationId);
       const stage = this.resolveStageFromResponse(responseWithConversationId);
       const confidence = this.resolveConfidenceFromResponse(responseWithConversationId);
       const goalExt = this.getGoalExt(responseWithConversationId.internal);
+
+      // 模型本轮未复述的持久化字段回填（#159）：响应与 DB 保持同口径，
+      // 否则 proposing 阶段前端会因 confirmedProposal 为空清掉提案卡与确认入口。
+      const fallbackGoalExt = persistedData ? {
+        confirmedProposal: persistedData.confirmedProposal,
+        structuredData: persistedData.structuredData,
+        confidenceScores: persistedData.confidenceScores
+      } : null;
 
       // 模型自报 ready/completed 不产生学习路径：路径生成只能由用户通过 UI 按钮显式确认触发
       // （见上方 confirmProposal 硬规则路径）。模型自报一律回落 proposing，等待用户确认方案。
@@ -789,6 +811,7 @@ async continueConversation(
         return this.toServiceResult(responseWithConversationId, conversationId, {
           stage: 'proposing',
           isCompleted: false,
+          fallbackGoalExt,
         });
       }
 
@@ -796,6 +819,7 @@ async continueConversation(
       return this.toServiceResult(responseWithConversationId, conversationId, {
         stage,
         isCompleted: false,
+        fallbackGoalExt,
       });
 
     } catch (error) {
@@ -1017,7 +1041,7 @@ async continueConversation(
     userVisible: string;
     internal: any;
     runtimeEnvelope?: any;
-  }) {
+  }): Promise<any> {
     // 乐观锁：与 saveMessage 同理，防止并发回合互相覆盖 collectedData
     for (let attempt = 0; attempt < 3; attempt++) {
     const conversation = await prisma.goal_conversations.findUnique({
@@ -1121,7 +1145,8 @@ async continueConversation(
           }
         }));
       }, { label: 'goal-conversation.persistUnderstanding' });
-      return;
+      // 返回写入后的持久化快照，供本轮响应回填模型未复述的字段（#159）
+      return data;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes('GOAL_REVISION_CONFLICT') || attempt === 2) {
