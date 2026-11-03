@@ -73,7 +73,8 @@ export interface GoalConversationRejudgeDeps {
     userInput: string,
     isFirst: boolean,
     userId?: string,
-    options?: RejudgeConversationOptions
+    options?: RejudgeConversationOptions,
+    callOptions?: { excludeTrailingUserInput?: boolean }
   ) => Promise<unknown>;
   withConversationId: (result: unknown, conversationId: string) => unknown;
   getStructuredOutputValid: (aiResponse: unknown) => boolean;
@@ -83,7 +84,7 @@ export interface GoalConversationRejudgeDeps {
     role: string,
     content: string,
     meta?: Record<string, number> | null,
-    extra?: { quickReplies?: unknown }
+    extra?: { quickReplies?: unknown; idempotentUserTurn?: boolean }
   ) => Promise<void>;
   getGoalExt: (internal: unknown) => { quickReplies?: unknown };
   updateCollectedData: (conversationId: string, aiResponse: unknown) => Promise<void>;
@@ -222,13 +223,18 @@ export async function rejudgeHardBlockedCompletion(
     replyPreview: userReply.slice(0, 40),
   });
 
-  // 调模型把补充说明并进 understanding（先不写当前用户消息，避免本轮输入重复进入上下文）
-  const aiResponse = (await deps.callAI(conversation.id, userReply, false, userId, options)) as AiTurnResponse;
+  // 用户补充说明**先落库再调模型**（#160：落库与调用解耦，callAI 非结构化失败也不丢这一轮输入）。
+  // 本条已在历史里，故 callAI 侧传 excludeTrailingUserInput 把它剔出上下文，避免重复喂入；
+  // 失败重试由 saveMessage 的回合级幂等（pendingUserTurn）护栏挡住重复写入。
+  await deps.saveMessage(conversation.id, 'user', userReply, options?.meta, { idempotentUserTurn: true });
+
+  const aiResponse = (await deps.callAI(conversation.id, userReply, false, userId, options, {
+    excludeTrailingUserInput: true
+  })) as AiTurnResponse;
   const responseWithConversationId = deps.withConversationId(aiResponse, conversation.id);
 
   if (!deps.getStructuredOutputValid(aiResponse)) {
-    // 422 恢复信封前先持久化本轮用户消息，保证补充说明不丢（与普通回合同款兜底）
-    await deps.saveMessage(conversation.id, 'user', userReply, options?.meta);
+    // 用户补充说明已落库（上方），AI 回复不落库 → 422 恢复信封刷新后仍不丢（与普通回合同款兜底）
     logger.warn('[goal-conversation] 硬阻断重判结构化输出失败，状态未更新', {
       conversationId: conversation.id,
       userId,
@@ -237,8 +243,7 @@ export async function rejudgeHardBlockedCompletion(
     deps.throwStructuredOutputInvalid(responseWithConversationId);
   }
 
-  // 追加进对话：用户补充说明 + 模型回合（补充说明从此在库有痕迹，不再被短路丢弃）
-  await deps.saveMessage(conversation.id, 'user', userReply, options?.meta);
+  // 模型回合追加进对话（补充说明已在上方落库，不再重复写）
   await deps.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: deps.getGoalExt(aiResponse.internal).quickReplies });
 
   // 持久化更新后的 understanding，并重算落库分诊结论（updateCollectedData 内重算 RESPONSE_TRIAGE_KEY）

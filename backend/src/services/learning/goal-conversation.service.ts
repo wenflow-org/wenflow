@@ -1,5 +1,6 @@
 // 对话式学习目标收集服务 - 问题穿透模式 V2
 // 核心理念：穿透表象，找到真问题，渐进式收集信息
+import { createHash } from 'crypto';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
@@ -509,13 +510,19 @@ class GoalConversationService {
         });
       }
 
+      // 本轮用户输入（目标）与 continueConversation 同口径（#160）：先落库再调模型。
+      // callAI 抛错时目标仍留在 collectedData.messages（description 列之外多一处痕迹），
+      // 重试时按 pendingUserTurn 幂等去重；callAI 侧剔除末尾同内容用户消息，避免重复喂入。
+      await this.saveMessage(conversation.id, 'user', initialGoal, null, { idempotentUserTurn: true });
+
       // 让AI生成第一个回复
-      const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options);
+      const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options, {
+        excludeTrailingUserInput: true
+      });
       const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
-        // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后上下文丢失（AI 回复不落库）
-        await this.saveMessage(conversation.id, 'user', initialGoal);
+        // 用户目标已落库（上方），AI 回复不落库 → 422 恢复信封刷新后对话上下文不丢
         logger.warn('开始对话结构化输出失败，状态未更新', {
           conversationId: conversation.id,
           userId,
@@ -524,7 +531,6 @@ class GoalConversationService {
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
-      await this.saveMessage(conversation.id, 'user', initialGoal);
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: this.getGoalExt(aiResponse.internal).quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
@@ -761,13 +767,20 @@ async continueConversation(
           }
         }
 
-      // 调用AI生成回复。先不写当前用户消息，避免本轮输入重复进入上下文。
-      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options);
+      // 本轮用户消息**先落库再调模型**（#160）：落库与调用解耦后，任何失败路径用户输入都不丢。
+      // 旧实现只在 422（结构化失败）与成功两支补写，网关/网络/LLM 抖动让 callAI 抛错时，
+      // 用户这一轮输入在库与模型上下文里都不存在（刷新即消失），与 422「先落库避免丢上下文」自相矛盾。
+      // 代价是本条已在历史里，故 callAI 侧传 excludeTrailingUserInput 把它剔出上下文，避免重复喂入；
+      // 失败重试由 saveMessage 的回合级幂等（pendingUserTurn）护栏挡住重复写入。
+      await this.saveMessage(conversation.id, 'user', userReply, options?.meta, { idempotentUserTurn: true });
+
+      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options, {
+        excludeTrailingUserInput: true
+      });
       const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
-        // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后对话上下文丢失（AI 回复不落库）
-        await this.saveMessage(conversation.id, 'user', userReply, options?.meta);
+        // 用户消息已落库（上方），AI 回复不落库 → 422 恢复信封刷新后对话上下文不丢
         logger.warn('继续对话结构化输出失败，状态未更新', {
           conversationId,
           userId,
@@ -777,7 +790,6 @@ async continueConversation(
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
-      await this.saveMessage(conversation.id, 'user', userReply, options?.meta);
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: this.getGoalExt(aiResponse.internal).quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
@@ -865,6 +877,18 @@ async continueConversation(
   }
 
   /**
+   * 剔除历史末尾那条与「本轮即将发送的输入」完全相同的用户消息（#160 落库/调用解耦的配套）。
+   * 只认最后一条、且必须同角色同（清洗后）内容；不匹配时原样返回，不复制数组。
+   */
+  private stripTrailingUserInput(history: any[], userInput: string): any[] {
+    const last = history[history.length - 1];
+    if (last && last.role === 'user' && String(last.content ?? '') === this.sanitizeVisibleContent(userInput)) {
+      return history.slice(0, -1);
+    }
+    return history;
+  }
+
+  /**
    * 调用AI生成回复
    */
   private async callAI(
@@ -872,7 +896,8 @@ async continueConversation(
     userInput: string,
     isFirst: boolean,
     userId?: string,
-    options?: GoalConversationOptions
+    options?: GoalConversationOptions,
+    callOptions?: { excludeTrailingUserInput?: boolean }
   ) {
     const startTime = Date.now();
 
@@ -883,7 +908,12 @@ async continueConversation(
       });
 
       const data = JSON.parse(conversation.collectedData);
-      const history = data.messages || [];
+      const rawHistory = data.messages || [];
+      // 落库/调用解耦（#160）：本轮用户消息在 callAI 之前已落库，若原样当历史喂入，
+      // 同一句输入会既走 input 又出现在历史最后一条（重复喂给模型）。调用方声明后剔除。
+      const history = callOptions?.excludeTrailingUserInput
+        ? this.stripTrailingUserInput(rawHistory, userInput)
+        : rawHistory;
       const previousState = this.buildPreviousState(data, conversation.stage);
       const previousUnderstanding = previousState.understanding || data.understanding || {};
 
@@ -995,7 +1025,33 @@ async continueConversation(
     return out;
   }
 
-  private async saveMessage(conversationId: string, role: string, content: string, meta?: Record<string, number> | null, extra?: { quickReplies?: unknown }) {
+  /**
+   * 回合级幂等（#160）：判定本次用户消息要不要追加；返回 false 表示本回合的用户消息此前已落库
+   * （前端「重试」重发同一句），不再重复追加。
+   * 判据是「本回合是否已落过库」而非「本条是否为 messages 最后一条」：`pendingUserTurn` 在回合
+   * 开始落用户消息时写入、在 `updateCollectedData`（回合提交）时清除，它存在 ⇒ 上一回合未提交
+   * （callAI 抛错 / updateCollectedData 三次 revision 冲突后抛出 / 进程中断）。此时库里可能已留下
+   * 该回合的 AI 回复，一并丢弃——那条回复从未交付给用户（提交成功才会返回响应）。
+   * 提交成功的回合会清掉标记，故用户合法地再次发送同一句话不会被误吞。
+   */
+  private resolveUserTurnAppend(data: Record<string, any>, sanitizedContent: string): boolean {
+    const replyHash = this.hashTurnReply(sanitizedContent);
+    const pending = data.pendingUserTurn as { replyHash?: string } | undefined;
+    if (pending && pending.replyHash === replyHash) {
+      const last = data.messages[data.messages.length - 1];
+      if (last && (last.role === 'ai' || last.role === 'assistant')) data.messages.pop();
+      return false;
+    }
+    data.pendingUserTurn = { replyHash };
+    return true;
+  }
+
+  /** 回合幂等标记用：只存哈希，避免把整句用户原文在 collectedData 里再存一份 */
+  private hashTurnReply(content: string): string {
+    return createHash('sha256').update(content).digest('hex').slice(0, 16);
+  }
+
+  private async saveMessage(conversationId: string, role: string, content: string, meta?: Record<string, number> | null, extra?: { quickReplies?: unknown; idempotentUserTurn?: boolean }) {
     // 乐观锁：messages/collectedData 是整包 JSON 读改写，同一会话的并发提交
     // （双击/重试）会互相覆盖丢消息。以 revision 条件更新，冲突时重读重放。
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -1009,15 +1065,26 @@ async continueConversation(
       const data = JSON.parse(conversation.collectedData);
       data.messages = data.messages || [];
       const sanitizedContent = this.sanitizeVisibleContent(content);
-      // P2-14：快捷补充随消息持久化（渲染时随历史消息一起回来，刷新不再只剩输入框）
-      const quickReplies = this.normalizeQuickReplies(extra?.quickReplies);
-      data.messages.push({
-        role,
-        content: sanitizedContent,
-        time: new Date().toISOString(),
-        ...(meta && Object.keys(meta).length > 0 ? { meta } : {}),
-        ...(quickReplies.length ? { quickReplies } : {})
-      });
+      const lengthBeforeIdempotency = data.messages.length;
+      let shouldAppend = true;
+      if (extra?.idempotentUserTurn && role === 'user') {
+        shouldAppend = this.resolveUserTurnAppend(data, sanitizedContent);
+      }
+      if (!shouldAppend) {
+        // 本回合用户消息此前已落库（重试）：无需追加；仅当同时丢弃了上一回合未交付的
+        // AI 回复、确实改动了 messages 时才需要写回。
+        if (data.messages.length === lengthBeforeIdempotency) return;
+      } else {
+        // P2-14：快捷补充随消息持久化（渲染时随历史消息一起回来，刷新不再只剩输入框）
+        const quickReplies = this.normalizeQuickReplies(extra?.quickReplies);
+        data.messages.push({
+          role,
+          content: sanitizedContent,
+          time: new Date().toISOString(),
+          ...(meta && Object.keys(meta).length > 0 ? { meta } : {}),
+          ...(quickReplies.length ? { quickReplies } : {})
+        });
+      }
 
       // S1 数据质量修复：messages 列与 collectedData.messages 双写（追加后整列同步为完整对话数组）。
       // 消费方（admin 详情兜底解析）按 {role, content, time} 数组读取该列，与 collectedData 语义一致。
@@ -1113,6 +1180,10 @@ async continueConversation(
     if (core.learningPath !== undefined) {
       data.learningPath = core.learningPath || null;
     }
+
+    // 回合提交（#160）：清除回合级幂等标记——本回合成功收尾后，同一句话再发按新回合处理。
+    // 提交失败（下方 3 次 revision 冲突后抛出）时标记保留，重试才能被识别为同一回合。
+    delete data.pendingUserTurn;
 
     try {
       await withTransaction(async (tx) => {
