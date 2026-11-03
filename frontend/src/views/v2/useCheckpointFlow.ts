@@ -3,15 +3,30 @@
  * 状态 refs + 流式提交（onJudgement 先行上锁、判定后 delta 逐段补齐）、
  * 跳过、传输失败回退非流式、「已处理」对账收起；checkpointCloseTimer 内聚并在 dispose 清理
  */
-import { ref, watch, type Ref } from 'vue';
+import { nextTick, ref, watch, type Ref } from 'vue';
 import { toast } from '@/utils/toast';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { isCheckpointAlreadyHandled } from '@/utils/checkpoint';
 
+/**
+ * 讲解的落点（2026-11-02 用户定调：讲解是教学正文，归对话区）。
+ *
+ * 此前讲解用 delta 逐段填进**小测卡**（checkpointFeedback），答对后再整段归档进聊天流——
+ * 同一段文字先在卡里播一遍、收起后又完整出现一遍；而卡片操作行里的「导师正在讲解…」读起来
+ * 像"讲解会留在这个面板"。现在：卡片只报判定（短暂显示后收起），讲解直接由页面在对话区
+ * 建一条流式导师气泡（与正常发送路径同一套机制），无 delta 的非流式回退也走 settle 落全文。
+ */
+export interface ExplanationSink {
+  append(delta: string): void;
+  /** 收尾：以整段正文补齐/落定（流式被截断、或根本没走流式时都靠它） */
+  settle(fullText: string): void;
+}
+
 export function useCheckpointFlow(
   session: Ref<{ sessionId: string; revision: number } | null>,
   typing: Ref<boolean>,
-  completed: Ref<boolean>
+  completed: Ref<boolean>,
+  explanation?: ExplanationSink
 ) {
   const checkpoint = ref<Record<string, any> | null>(null);
   const selectedOptions = ref<string[]>([]);
@@ -32,6 +47,17 @@ export function useCheckpointFlow(
   const lastAnswerEcho = ref<{ checkpointId: string; text: string } | null>(null);
   /** 检查点通过后的自动关闭 timer（提交/卸载时清理，防竞态） */
   let checkpointCloseTimer = 0;
+  /** 判定窗：代码裁决到位后卡片只亮这么久就收起（讲解此时已在对话区流式上屏） */
+  const VERDICT_FLASH_MS = 900;
+  /** 判定到位 → 亮一下判定再收起卡片（答对/答错一致；重复调用只保留最后一次） */
+  function scheduleCardCollapse() {
+    window.clearTimeout(checkpointCloseTimer);
+    checkpointCloseTimer = window.setTimeout(() => {
+      checkpoint.value = null;
+      checkpointFeedback.value = '';
+      checkpointSubmitting.value = false;
+    }, VERDICT_FLASH_MS);
+  }
   /** 讲解流停滞阈值：流式提交在「导师正在讲解…」阶段挂住时，超时后保留判定并允许继续（#113） */
   const CHECKPOINT_STALL_TIMEOUT_MS = 90_000;
 
@@ -169,6 +195,8 @@ export function useCheckpointFlow(
     // 记住提交时的会话对象：提交含一次教学回合（可达数十秒），期间用户可能「重新开始」
     // 换了新会话——settle 后旧 revision 不得回写到新会话（restart 有等待循环，这里兜底）
     const sessionAtSubmit = session.value;
+    /** 代码裁决是否已到（决定失败分支是"讲解没送达"还是"提交失败"）；catch 里要读，故在 try 外声明 */
+    let judgementArrived = false;
     // 先落草稿再发请求：挂起/刷新时用户的选择还在（#113）
     saveDraft(String(checkpoint.value.id));
     checkpointPending.value = true;
@@ -198,21 +226,31 @@ export function useCheckpointFlow(
           onActivity: armSubmitWatchdog,
           onJudgement: (j: { passed: boolean; judgedBy: string; detail: string | null }) => {
             armSubmitWatchdog();
+            judgementArrived = true;
             checkpointPassed.value = j.passed === true;
             // 立即上锁：代码已判定，不再允许重交（重交必然 404，见走查 P2）
             checkpointSubmitting.value = true;
             checkpointStreaming.value = true;
-            // feedback 只报对错判定；「讲解中」由操作行的「导师正在讲解…」独占——
-            // 此前这里写「导师接着讲…」，与状态行同屏语义重复（2026-10-09 用户反馈）
+            // 卡片只报对错判定，不承载讲解（讲解归对话区，见 ExplanationSink 注释）
             checkpointFeedback.value = j.passed ? '回答正确' : '这道没答对';
+            // 作答气泡在**判定到位**时就入流（不能等 settle）：讲解 delta 紧随其后到达，
+            // 晚一步补气泡会让「我的答案：…」排在讲解后面，对话顺序就反了。
+            // 判定已到 = 服务端消费了该检查点，这条作答必然已落库，回显不会凭空多一条。
+            if (session.value === sessionAtSubmit) {
+              lastAnswerEcho.value = { checkpointId, text: answerEcho };
+            }
+            // 判定一瞬 + 立即收起：小测卡腾出的高度还给对话流，讲解随即在对话区流式上屏。
+            // 答错也一样收——纠正正文现在走对话区，卡片留着反而挡住讲解。
+            scheduleCardCollapse();
           },
           onDelta: (t: string) => {
             // 空文本 delta 不算可见进展：不喂看门狗、不上屏（#113——网关若吐空 chunk 心跳，
-            // 「90s 无讲解即中止」会被永久喂住，卡片停在「导师正在讲解…」只能刷新）
+            // 「90s 无讲解即中止」会被永久喂住，状态行一直挂着只能刷新）
             if (!t) return;
             armSubmitWatchdog();
             streamed += t;
-            checkpointFeedback.value = streamed;
+            // 会话已被替换（重新开课）时不再往新会话的对话流里写旧回合的讲解
+            if (session.value === sessionAtSubmit) explanation?.append(t);
           },
         }) as unknown as Record<string, any>;
       } catch (streamError: any) {
@@ -228,31 +266,29 @@ export function useCheckpointFlow(
         session.value.revision = r.revision ?? session.value.revision + 1;
       }
       checkpointPassed.value = r.passed === true;
-      // 后端把整段导师回复放在 feedback（答错时即纠正正文），需要留足阅读时间
-      checkpointFeedback.value = r.feedback || (r.passed ? '回答正确' : r.hint || '再想想');
-      // 作答气泡先入流、讲解随后（与刷新后历史的顺序一致）
+      // 卡片只报判定（讲解正文归对话区，不再回写进卡片）
+      checkpointFeedback.value = r.passed ? '回答正确' : '这道没答对';
       if (session.value === sessionAtSubmit) {
-        lastAnswerEcho.value = { checkpointId, text: answerEcho };
-      }
-      // F-W：完整导师回复挂起，待卡片关闭时由页面补进聊天流（仅成功路径；降级提示文案不入流）
-      if (r.feedback && session.value === sessionAtSubmit) {
-        lastSettledReply.value = { checkpointId, text: String(r.feedback) };
+        // 流式路径已在 onJudgement 补过作答气泡；非流式回退（没有 judgement 回调）在这里补，
+        // 并等 watcher 把它推进对话流后再落讲解——否则「我的答案」会排在讲解后面。
+        if (!judgementArrived) {
+          lastAnswerEcho.value = { checkpointId, text: answerEcho };
+          await nextTick();
+        }
+        // 讲解全文收尾（2026-11-02：归对话区）。流式已建的走 settle 补齐/落定；
+        // 没有 delta 的（传输回退非流式、或网关只吐 final）由 settle 直接落一条。
+        // 未注入 sink 的宿主保留旧口径：挂给 lastSettledReply，由页面在卡片关闭时补进聊天流。
+        const fullText = String(r.feedback || r.hint || '');
+        if (explanation) explanation.settle(fullText);
+        else if (fullText) lastSettledReply.value = { checkpointId, text: fullText };
       }
       checkpointStreaming.value = false;
       // 提交成功后服务端已消费该检查点：一律上锁。
       // 答错时旧实现保持可提交（nextAction='review'），用户重交必然 404（走查 P2）
       checkpointSubmitting.value = true;
       clearDraft();
-      if (r.passed) {
-        // 答对：短暂显示「回答正确」后立即收起，把讲解归档进聊天流并释放小测占用的高度
-        window.clearTimeout(checkpointCloseTimer);
-        checkpointCloseTimer = window.setTimeout(() => {
-          checkpoint.value = null;
-          checkpointFeedback.value = '';
-          checkpointSubmitting.value = false;
-        }, 1200);
-      }
-      // 答错：保留卡片让用户读完纠正，由「继续 ›」/Esc 收起（不再提供重交入口）
+      // 流式路径的卡片收起由 onJudgement 的判定窗负责；非流式回退没有 judgement，从这里起算
+      if (!judgementArrived) scheduleCardCollapse();
     } catch (e: any) {
       if (isCheckpointAlreadyHandled(e)) {
         // 服务端已消费（重复提交 / 响应丢失后重试）：不算失败，收起卡片并向前同步
@@ -262,12 +298,15 @@ export function useCheckpointFlow(
         toast.info('这个检查点已经提交过了，已为你同步进度');
       } else {
         // 判错路径已经「上锁 + 只有继续按钮」，若此后流断掉（讲解没到 final），
-        // 必须把讲解中状态清掉，否则卡片会永远卡在「导师正在讲解…」没有出口
-        // （子代理回归走查发现的边界）。对错已由代码裁决得到，保留它即可。
-        if (checkpointStreaming.value) {
+        // 必须把讲解中状态清掉，否则状态行会一直挂着（子代理回归走查发现的边界）。
+        // 对错已由代码裁决得到，保留它即可。
+        if (judgementArrived) {
           checkpointStreaming.value = false;
-          // 卡片只报判定结果；「导师讲解没能送达」这件事由 toast 单说一次，不再两处复读
-          checkpointFeedback.value = checkpointPassed.value ? '回答正确，可继续。' : '这道没答对，可继续。';
+          // 卡片已在判定窗内收起，讲解没送达这件事由 toast 单说一次，不再往卡片回写文本
+          // （2026-11-02：卡片只报判定；回写会让一个已经不存在的卡片复活一句话）
+          if (checkpoint.value) {
+            checkpointFeedback.value = checkpointPassed.value ? '回答正确，可继续。' : '这道没答对，可继续。';
+          }
           toast.info('导师讲解没能送达，对错判定不受影响，可继续。');
         } else {
           checkpointFeedback.value = '提交失败，再试一次';

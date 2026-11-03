@@ -16,6 +16,13 @@ import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 const props = defineProps<{
   show?: boolean;
   streaming?: boolean;
+  /**
+   * 复制实现（由父组件注入，返回是否成功）。为什么不在这里 emit：
+   * 只有拿到「真成功」才敢画对勾——局域网 http 下 Clipboard API 不可用，
+   * 原来无论成败都显示对勾，用户看到对勾却粘不出内容（2026-11-02 走查）。
+   * 不传时退化为 emit('copy')，保持组件的既有用法。
+   */
+  copyHandler?: (() => Promise<boolean> | boolean) | null;
 }>();
 
 const emit = defineEmits<{
@@ -48,7 +55,23 @@ onBeforeUnmount(() => {
 const visible = computed(() => touchMode.value || props.show === true);
 
 async function handleCopy() {
-  emit('copy');
+  if (!props.copyHandler) {
+    emit('copy');
+    markCopied(true);
+    return;
+  }
+  let ok = false;
+  try {
+    ok = (await props.copyHandler()) !== false;
+  } catch {
+    ok = false;
+  }
+  markCopied(ok);
+}
+
+/** 只有真的复制成功才显示对勾（失败时由 copyHandler 负责 toast 提示） */
+function markCopied(ok: boolean) {
+  if (!ok) return;
   copied.value = true;
   setTimeout(() => { copied.value = false; }, 1500);
 }
