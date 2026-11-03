@@ -9,10 +9,13 @@
       <div v-if="advisory?.shouldSuggest" class="completion-section advisory-section" :class="`advisory-section--${advisory.priority}`">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><MagicStick /></span>{{ advisory.ui.title }}</h4>
         <p class="section-content">{{ advisoryBody }}</p>
+        <!-- 安抚句顺着上一句流下去，不另起一段（2026-11-03 用户反馈「这句话还是换段了」）：
+             宽屏下「主要原因…」「确认后会…」各自独立成行，一句一行的碎排版就是用户指的问题。 -->
         <p v-if="advisory.attribution?.reason" class="section-attribution">
           <span class="attribution-tag">主要原因</span>{{ advisory.attribution.reason }}
+          <span class="section-hint section-hint--inline">{{ settleReassurance }}</span>
         </p>
-        <p class="section-hint">确认后会调整后续学习安排，已完成的内容不会改变。</p>
+        <p v-else class="section-hint">{{ settleReassurance }}</p>
         <div v-if="advisoryKept" class="section-hint">你已选择保持原计划，这条建议不会再调整后续安排。</div>
         <div v-else class="advisory-options">
           <button
@@ -199,6 +202,8 @@ const advisory = computed(() => props.advisory || null);
  * （「该调整只会调整后续阶段的课程安排，不会覆盖/不影响你已完成的内容。」），
  * 已存库的建议仍带着它——渲染时剥掉，避免同义重复和孤行；模板侧已不再生成这句。
  */
+/** 结算安抚句：有归因时并进同一段流，无归因时独立成行（文案单源，防 R6 同文件重复） */
+const settleReassurance = '确认后会调整后续学习安排，已完成的内容不会改变。';
 const advisoryBody = computed(() => (advisory.value?.ui.body || '')
   .replace(/该调整只会调整后续阶段的课程安排，(?:不会覆盖|不影响)你已完成的内容。/g, '')
   .trim());
@@ -448,6 +453,8 @@ const tagClass = (type: string) => ({
 .completion-icon--header { width: 24px; height: 24px; font-size: 24px; color: var(--green); }
 .section-title .completion-icon { color: var(--accent, var(--mk-blue)); }
 .section-hint { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+/* 并进上一段时的行内形态：跟随正文的流，不再自带换行与下边距 */
+.section-hint--inline { display: inline; margin: 0 0 0 4px; }
 .review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red); text-decoration: none; }
 .review-link:hover { text-decoration: underline; }
 .section-content { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); }
