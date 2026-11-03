@@ -457,8 +457,14 @@ export function decideBoardAttachment(
   return { kind: 'attached', figures: attachment.figures, figureSource: attachment.figureSource };
 }
 
-export function describeBoardForTeacher(board: BoardState): string {
-  const f = board.figure;
+/**
+ * 给老师的白板描述。`board` 为 null（本任务从未生成过板书）时返回那句正向的
+ * 「本任务暂无板书」——这句原先就写好了，却因调用点的 `if (board)` 守卫成了不可达分支
+ * （2026-11-03 心理学走查 S3-3：无板回合模型自己假设有一块板并描述它的排布，
+ * 一手「两栏」一手「两个圈」。改口径见 teaching-turn-engine 的注入点注释）。
+ */
+export function describeBoardForTeacher(board: BoardState | null | undefined): string {
+  const f = board?.figure;
   if (!f) return '【白板】本任务暂无板书。请纯用语言推进，不要提及或假设任何图。';
 
   const spec = visibleSpec(f);

@@ -487,10 +487,14 @@ export async function processStudentMessage(
   if (visualOpportunity) {
     (turnInput as { visualOpportunity?: typeof visualOpportunity }).visualOpportunity = visualOpportunity;
   }
-  // 白板描述：只有板真实存在时才注入；提示词据此允许/禁止「看图」指代。
-  if (board) {
-    (turnInput as { boardContext?: string | null }).boardContext = describeBoardForTeacher(board);
-  }
+  // 白板上下文：**每轮都注入**——有板时是「板上写了什么」，没板时是一句正向的
+  // 「本任务暂无板书，不要提及或假设任何图」（2026-11-03 心理学走查 S3-3）。
+  // 为什么没板也要说话：提示词里「无 boardContext 则禁止看图指代」埋在 system prompt 里，
+  // 真人走查实测会被忽略——模型靠"字段缺席"自己推断不出限制，于是假设有一块板并描述它的
+  // 排布（一手「两栏」、一手「两个圈」）。正向告知写进本轮输入才生效。
+  // 语义不翻转：figure/diagram 丢弃闸（下方）看的是 `board` 真值，不看这个字段在不在；
+  // 提示词侧的判据也已同步改为按内容判（2026-11-03，见 prompts/core/teaching-turn.yaml rule15）。
+  (turnInput as { boardContext?: string | null }).boardContext = describeBoardForTeacher(board);
   // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
   // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
   // 阈值对齐 platform_settings.aiReliability.defaultRequestTimeoutMs（300s）：
