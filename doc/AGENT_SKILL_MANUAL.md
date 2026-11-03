@@ -1,6 +1,6 @@
 # Agent / Skill 全景与缘由（开发者向）
 
-> 📌 类型：活规范｜最后核验：2026-09-28（CIDDP/32 字段/retryPathEnrichment 已更正）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范｜最后核验：2026-11-03（session-wrapup 输入补 knowledgeContext / sessionStructure，并新增「规则引用键 ↔ inputs 声明」门禁，#197）。索引见 [doc/README.md](./README.md)。
 
 > 本文回答一个问题：**每个顶层 Agent 和每个 Skill 为什么存在**——功能缘由、设计意图、解决什么问题、边界在哪。
 >
@@ -249,8 +249,8 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 #### `session-wrapup`（课后产出 Skill）
 
 - **一句话缘由**：课末产出**双份**结果——给学生看的课后总结（`summary` v2）+ 给系统用的会话评估（LSS/KTL/LF + confidence + 效度元数据），供跨课闭环与状态机消费。
-- **关键输入/输出**：输入 `messages`（含 analysis）、`knowledgePoints`、`sessionInfo`、`learningState`、`sessionEvidence`；输出 `summary.*`（topicSummary/knowledgeSummary/knowledgeItems/practiceAdvice/learningEvaluation/keyTakeaways/actionPlan/evaluationHighlights/metricInterpretation/summaryVersion="v2"）、`evaluation.*`（sessionLss/sessionKtl/sessionLf/confidence/reasoning/metricMetadata）。
-- **设计意图/边界**：只基于输入证据、不虚构；summary 不直接复述内部字段名/状态码；不把历史已掌握误写为本节新增。`metricMetadata` 明确标注 LSS/LF 是**基于对话的代理推断、非生理测量**——这是"内容诚实层"的一部分（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §2 Q15）。合并了退役的 `session-evaluation-fallback`（[`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md) 附录 A）。**风险**：其 LLM 自评是状态机输入，存在自证回路（审计 §5.3）。
+- **关键输入/输出**：输入 `messages`（含 analysis）、`knowledgePoints`、`sessionInfo`、`learningState`、`sessionEvidence`、`knowledgeContext`（课前初始知识点快照 + 本节 delta + 记忆保持率提示 reviewHints）、`sessionStructure`（路径背景/课堂最终状态/课堂事件历史/阶段轨迹/结束原因）——后两个由编排层现场拼装（`teaching-session-lifecycle` / `wrapup-regen`），是「证据优先级」与「记忆保持率引用」两条规则直接依赖的键（#197 补齐声明）；输出 `summary.*`（topicSummary/knowledgeSummary/knowledgeItems/practiceAdvice/learningEvaluation/keyTakeaways/actionPlan/evaluationHighlights/metricInterpretation/summaryVersion="v2"）、`evaluation.*`（sessionLss/sessionKtl/sessionLf/confidence/reasoning/metricMetadata）。
+- **设计意图/边界**：只基于输入证据、不虚构；summary 不直接复述内部字段名/状态码；不把历史已掌握误写为本节新增。`metricMetadata` 明确标注 LSS/LF 是**基于对话的代理推断、非生理测量**——这是"内容诚实层"的一部分（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §2 Q15）。合并了退役的 `session-evaluation-fallback`（[`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md) 附录 A）。**风险**：其 LLM 自评是状态机输入，存在自证回路（审计 §5.3）。规则引用的键必须能在 `inputs` 声明层定位到，由 `prompts:check-handoff` 的「规则引用键 ↔ inputs 声明」对账拦下（#197）；存量合法的子键简写/编排注入键逐条登记在 `backend/src/services/prompt-lab/input-handoff-check.ts` 的 `RULE_KEY_SOURCES`。
 - **依据**：core identity、`teaching.yaml`、`SKILL_PROTOCOL_V4.md` 附录 A、审计 §5.3、`UPGRADE_DIRECTION_20Q.md` §2 Q15。
 
 #### `adaptive-guidance-copy`（自适应引导文案 Skill）
