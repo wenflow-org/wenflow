@@ -913,13 +913,15 @@ async function enrichLearningPathWithAndersonInner(
     //
     // 任务↔KC 的稳定键（issue #179）：连接键不能用会变形的自然语言标题，也不能靠标题自带的唯一性
     // （同名任务无解）。这里给本次运行的每个任务分配「阶段序号-阶段内序号」的稳定键，随 kc-mapper
-    // 输入下发并要求逐字回显；键存在 WeakMap 里随任务对象走，同阶段重排只挪位置不改键。
-    // subtaskIdByTaskKey 在下方事务内按对象回填真实 subtasks.id（事务重试时清空重建）。
-    const taskKeyByTask = new WeakMap<object, string>();
+    // 输入下发并要求逐字回显。
+    // 键**写在任务对象自己的属性上**（而非 WeakMap）：同阶段重排（reorderStageTasks →
+    // remapStageTaskReferences/repairForwardReferences）用浅拷贝 `{ ...task }` 换掉任务对象，
+    // 弱引用表会因对象身份被换而查不到；自身属性则随浅拷贝一起流动，重排只挪位置不改键。
+    // subtaskIdByTaskKey 在下方事务内按属性回填真实 subtasks.id（事务重试时清空重建）。
     const subtaskIdByTaskKey = new Map<string, string>();
     for (const stage of stageDesignOutputs) {
       stage.subtasks.forEach((task: any, index: number) => {
-        if (task && typeof task === 'object') taskKeyByTask.set(task, `task-${stage.stageNumber}-${index}`);
+        if (task && typeof task === 'object') task.taskKey = `task-${stage.stageNumber}-${index}`;
       });
     }
     let kcAnnotation: KcAnnotation | null;
@@ -938,7 +940,7 @@ async function enrichLearningPathWithAndersonInner(
           goal: m.goal,
         })),
         subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
-          taskKey: taskKeyByTask.get(t),
+          taskKey: t.taskKey,
           title: t.title,
           type: t.type,
           linkedConcept: t.linkedConcept,
@@ -1004,7 +1006,7 @@ async function enrichLearningPathWithAndersonInner(
         goal: m.goal,
       })),
       subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
-        taskKey: taskKeyByTask.get(t),
+        taskKey: t.taskKey,
         title: t.title,
         type: t.type,
         linkedConcept: t.linkedConcept,
@@ -1133,9 +1135,9 @@ async function enrichLearningPathWithAndersonInner(
             || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
           const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${j}`;
-          // 稳定键 → 真实 id 登记（issue #179）：键在 kc-mapper 之前按原顺序分配，这里按对象取回，
-          // 同阶段重排不影响对应关系（对象引用不变）。
-          const taskKey = taskKeyByTask.get(taskData);
+          // 稳定键 → 真实 id 登记（issue #179）：键在 kc-mapper 之前按原顺序分配并写在任务对象上，
+          // 同阶段重排的浅拷贝会带着它流动，这里按属性取回即可（不再依赖对象身份）。
+          const taskKey = (taskData as any)?.taskKey;
           if (taskKey) subtaskIdByTaskKey.set(taskKey, subtaskId);
           // 任务 → 可调整性（动态规划）：skill 侧已归一为 core|flexible，未给值时按 core 保守处理
           adjustabilityByTask[subtaskId] = (taskData as any).adjustability === 'flexible' ? 'flexible' : 'core';
