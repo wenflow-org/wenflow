@@ -300,7 +300,7 @@ function resolveEvaluationSignal(evaluation: {
 
 export class LearnerKnowledgeMemoryService {
   async build(input: BuildInput): Promise<LearnerKnowledgeMemory> {
-    const path = input.learningPathId
+    const resolvedPath = input.learningPathId
       ? await prisma.learning_paths.findUnique({
           where: { id: input.learningPathId },
           include: {
@@ -331,24 +331,11 @@ export class LearnerKnowledgeMemoryService {
           },
         });
 
-    if (!path || path.userId !== input.userId) {
-      return {
-        currentPath: undefined,
-        globalSignals: {
-          masteredConcepts: [],
-          fragileConcepts: [],
-          strugglingConcepts: [],
-          severeStrugglingConcepts: [],
-        },
-        globalBackground: {
-          conceptLedger: [],
-          recurringConfusions: [],
-          reusableFoundations: [],
-          blockedFoundations: [],
-          transferSignals: [],
-        },
-      };
-    }
+    // #155：无 active 路径（路径已完成/归档）或路径不属于本用户时，不再整体清零。
+    // globalSignals / globalBackground 是**用户级**画像（按 userId 聚合痕迹与各路径证据），
+    // 不依赖具体路径；只有 currentPath 依赖它。此前这里直接 return 空结构，导致路径完成或
+    // 归档后管理端 / learner-center 的已掌握、脆弱名单凭空归零（连用户级 memory_traces 都不读）。
+    const path = resolvedPath && resolvedPath.userId === input.userId ? resolvedPath : null;
 
     // #93：globalSignals / globalBackground 是**用户级**画像，不能只从当前路径取数——
     // 多路径学习者的跨路径概念信号、反复误解、迁移信号此前全部漏掉。
@@ -356,7 +343,13 @@ export class LearnerKnowledgeMemoryService {
     // 当前路径若不在最近 N 条里也会被显式并入（allPaths 首位）。
     const OTHER_PATHS_LIMIT = 8;
     const otherPaths = (await prisma.learning_paths.findMany({
-      where: { userId: input.userId, id: { not: path.id } },
+      where: {
+        userId: input.userId,
+        // #155：状态白名单——被放弃（abandoned）的路径不是用户的学习证据，不参与用户级并集；
+        // active/completed/archived 仍参与（#93「完成/换目标后不失忆」）。
+        status: { not: 'abandoned' },
+        ...(path ? { id: { not: path.id } } : {}),
+      },
       orderBy: { updatedAt: 'desc' },
       take: OTHER_PATHS_LIMIT,
       include: {
@@ -370,10 +363,10 @@ export class LearnerKnowledgeMemoryService {
         },
       },
     })) ?? [];
-    const allPaths = [path, ...otherPaths];
+    const allPaths = path ? [path, ...otherPaths] : otherPaths;
     const pathIds = allPaths.map((item) => item.id);
     const currentPathTaskIds = new Set(
-      path.milestones.flatMap((milestone) => (milestone.subtasks || []).map((task) => task.id))
+      (path?.milestones ?? []).flatMap((milestone) => (milestone.subtasks || []).map((task) => task.id))
     );
 
     const [allSessions, allPersistedEvidence, memoryTraces] = await Promise.all([
@@ -438,7 +431,7 @@ export class LearnerKnowledgeMemoryService {
 
     for (const evidence of allPersistedEvidence) {
       const evidencePathId = evidence.pathId ?? undefined;
-      const isCurrentPath = evidencePathId === path.id;
+      const isCurrentPath = evidencePathId === path?.id;
       // payload 只在确认要消费该类型后才解析（旧口径对每行先 parse 再判类型）
       if (evidence.evidenceType === 'session-knowledge-distilled') {
         const payload = parseJsonSafe<any>(evidence.payload, {});
@@ -510,7 +503,7 @@ export class LearnerKnowledgeMemoryService {
       }
     }
 
-    const allTasks = path.milestones.flatMap((milestone) =>
+    const allTasks = (path?.milestones ?? []).flatMap((milestone) =>
       (milestone.subtasks || []).map((task) => ({ milestone, task }))
     );
     // 其它路径的任务只作为用户级概念台账/前置的排期事实（task-label），
@@ -539,7 +532,7 @@ export class LearnerKnowledgeMemoryService {
           sourceType: 'task-label',
           taskId: task.id,
           milestoneId: milestone.id,
-          pathId: path.id,
+          pathId: path?.id,
           // 时钟域：只用业务写入的 completedAt（模拟链路经 simulatedNowOr/asOf 落模拟日）；
           // 绝不回退 Prisma @updatedAt（真墙钟基础设施列）——否则真/模拟时间混入 lastSeenAt，
           // 使延迟锚题跨域比较。无 completedAt = 无"接触"证据，宁可不记时间。
@@ -589,7 +582,7 @@ export class LearnerKnowledgeMemoryService {
 
     for (const session of allSessions) {
       const sessionPathId = session.learningPathId ?? undefined;
-      const isCurrentPath = sessionPathId === path.id;
+      const isCurrentPath = sessionPathId === path?.id;
       const pushEvidence = (entry: LearnerRecentEvidence) => {
         globalRecentEvidence.push(entry);
         if (isCurrentPath) recentEvidence.push(entry);
@@ -843,7 +836,7 @@ export class LearnerKnowledgeMemoryService {
     // 当前路径视图：本路径产出的信号 + 用户级痕迹（pathId 缺省）参与过的概念；
     // 只在其它路径出现过的概念不进 currentPath（不影响 taskMastery / 前置缺口）。
     const conceptStates: LearnerConceptState[] = conceptStateRows
-      .filter((row) => row.allSignals.some((signal) => signal.pathId === undefined || signal.pathId === path.id))
+      .filter((row) => row.allSignals.some((signal) => signal.pathId === undefined || signal.pathId === path?.id))
       .map((row) => row.state);
 
     // 概念身份补齐（只读）：来源不含痕迹的信号（会话知识/摘要/任务标签）没有 conceptId，
@@ -934,7 +927,7 @@ export class LearnerKnowledgeMemoryService {
       };
     });
 
-    const milestoneProgress = path.milestones.map((milestone) => {
+    const milestoneProgress = (path?.milestones ?? []).map((milestone) => {
       const tasks = taskMastery.filter((task) => task.milestoneId === milestone.id);
       const completedTasks = tasks.filter((task) => task.status === 'completed').length;
       const fragileCount = tasks.filter((task) => task.masteryState === 'fragile').length;
@@ -961,10 +954,12 @@ export class LearnerKnowledgeMemoryService {
       };
     });
 
-    const currentMilestone = path.milestones.find((milestone) => milestone.id === input.milestoneId)
-      || path.milestones.find((milestone) => milestone.subtasks.some((task) => task.id === input.taskId))
-      || path.milestones.find((milestone) => milestone.status === 'active')
-      || path.milestones[0];
+    const currentMilestone = path
+      ? path.milestones.find((milestone) => milestone.id === input.milestoneId)
+        || path.milestones.find((milestone) => milestone.subtasks.some((task) => task.id === input.taskId))
+        || path.milestones.find((milestone) => milestone.status === 'active')
+        || path.milestones[0]
+      : undefined;
 
     const currentTask = currentMilestone?.subtasks.find((task) => task.id === input.taskId);
     const currentTaskOrder = currentTask ? currentMilestone.subtasks.findIndex((task) => task.id === currentTask.id) + 1 : undefined;
@@ -1009,12 +1004,14 @@ export class LearnerKnowledgeMemoryService {
     // 旧口径算的是"**当前概念自己**没掌握"，那不是缺口——缺口是"**当前任务依赖的上游前置**没掌握"。
     // 新口径：当前任务的 canonical → 沿 prerequisite 边向上游闭包 → 取其中未掌握者。
     // **图缺失/无上游时回落旧口径**，保证未回填路径行为与改造前逐字一致。
-    const graphGaps = await buildUpstreamPrerequisiteGaps({
-      userId: input.userId,
-      pathId: path.id,
-      currentTask: currentTask ?? null,
-      conceptStates,
-    });
+    const graphGaps = path
+      ? await buildUpstreamPrerequisiteGaps({
+          userId: input.userId,
+          pathId: path.id,
+          currentTask: currentTask ?? null,
+          conceptStates,
+        })
+      : [];
     const prerequisiteGaps = graphGaps.length > 0
       ? graphGaps
       : currentTaskConcepts
@@ -1036,41 +1033,43 @@ export class LearnerKnowledgeMemoryService {
           source: 'fallback' as const,
         }));
 
-    const currentPath: LearnerPathKnowledgeMemory = {
-      learningPathId: path.id,
-      pathTitle: path.title || path.name || '未命名路径',
-      pathSummary: null,
-      // P1.6 落后触发器的时间判据输入：外部截止（L1 硬锚）与路径起点（时间进度分母）。
-      // 无 deadline 的路径 deadline=null，判据整体不启用（行为与原先一致）。
-      deadline: path.deadline ? new Date(path.deadline).toISOString() : null,
-      startedAt: path.createdAt ? new Date(path.createdAt).toISOString() : null,
-      progress: {
-        totalMilestones: path.milestones.length,
-        completedMilestones: milestoneProgress.filter((milestone) => milestone.completedTasks === milestone.totalTasks && milestone.totalTasks > 0).length,
-        totalTasks: taskMastery.length,
-        completedTasks: taskMastery.filter((task) => task.status === 'completed').length,
-      },
-      currentPosition: {
-        milestoneId: currentMilestone?.id || '',
-        stageNumber: currentMilestone?.stageNumber || 1,
-        milestoneTitle: currentMilestone?.title || '当前阶段',
-        milestoneGoal: currentMilestone?.goal,
-        taskId: currentTask?.id,
-        taskTitle: currentTask?.title,
-        taskOrder: currentTaskOrder || 1,
-        totalTasksInMilestone: currentMilestone?.subtasks.length || 0,
-        completedTasksInMilestone: currentMilestone?.subtasks.filter((task) => task.status === 'completed').length || 0,
-      },
-      milestoneProgress,
-      taskMastery,
-      conceptStates,
-      prerequisiteGaps,
-      recentEvidence: Array.from(new Map(
-        recentEvidence
-          .sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime())
-          .map((item) => [`${item.type}:${item.sessionId || item.taskId || item.happenedAt}`, item])
-      ).values()).slice(0, 20),
-    };
+    const currentPath: LearnerPathKnowledgeMemory | undefined = path
+      ? {
+          learningPathId: path.id,
+          pathTitle: path.title || path.name || '未命名路径',
+          pathSummary: null,
+          // P1.6 落后触发器的时间判据输入：外部截止（L1 硬锚）与路径起点（时间进度分母）。
+          // 无 deadline 的路径 deadline=null，判据整体不启用（行为与原先一致）。
+          deadline: path.deadline ? new Date(path.deadline).toISOString() : null,
+          startedAt: path.createdAt ? new Date(path.createdAt).toISOString() : null,
+          progress: {
+            totalMilestones: path.milestones.length,
+            completedMilestones: milestoneProgress.filter((milestone) => milestone.completedTasks === milestone.totalTasks && milestone.totalTasks > 0).length,
+            totalTasks: taskMastery.length,
+            completedTasks: taskMastery.filter((task) => task.status === 'completed').length,
+          },
+          currentPosition: {
+            milestoneId: currentMilestone?.id || '',
+            stageNumber: currentMilestone?.stageNumber || 1,
+            milestoneTitle: currentMilestone?.title || '当前阶段',
+            milestoneGoal: currentMilestone?.goal,
+            taskId: currentTask?.id,
+            taskTitle: currentTask?.title,
+            taskOrder: currentTaskOrder || 1,
+            totalTasksInMilestone: currentMilestone?.subtasks.length || 0,
+            completedTasksInMilestone: currentMilestone?.subtasks.filter((task) => task.status === 'completed').length || 0,
+          },
+          milestoneProgress,
+          taskMastery,
+          conceptStates,
+          prerequisiteGaps,
+          recentEvidence: Array.from(new Map(
+            recentEvidence
+              .sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime())
+              .map((item) => [`${item.type}:${item.sessionId || item.taskId || item.happenedAt}`, item])
+          ).values()).slice(0, 20),
+        }
+      : undefined;
 
     // 概念 → 出现过的路径（globalBackground 是用户级台账，sourcePaths 必须如实跨路径）。
     const pathIdsByConceptKey = new Map<string, string[]>();
@@ -1116,7 +1115,7 @@ export class LearnerKnowledgeMemoryService {
           lastSeenAt: concept.lastSeenAt,
           sourcePaths: pathIdsByConceptKey.get(concept.conceptKey)?.length
             ? pathIdsByConceptKey.get(concept.conceptKey) as string[]
-            : [path.id],
+            : path ? [path.id] : [],
           sourceTasks: concept.relatedTaskIds,
           evidenceCount,
         };
@@ -1234,7 +1233,7 @@ export class LearnerKnowledgeMemoryService {
     };
 
     return {
-      currentPath,
+      ...(currentPath ? { currentPath } : {}),
       globalSignals: {
         masteredConcepts,
         fragileConcepts,
