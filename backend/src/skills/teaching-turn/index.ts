@@ -626,6 +626,8 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
     'knowledge-state-suggestion',
     'teaching-strategy-selection'
   ],
+  // 文档性元数据，不参与运行时分发/发布（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）：
+  // 下列事件名均为描述性说明，全仓无对应 dispatch 调用点，请勿据此排查真实订阅关系。
   subscribes: ['teaching:turn:requested'],
   publishes: ['teaching:turn:generated'],
   inputSchema: {
