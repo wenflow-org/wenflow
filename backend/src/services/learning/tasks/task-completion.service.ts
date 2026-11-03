@@ -555,13 +555,19 @@ export async function completeTask(data: CompleteTaskData) {
 
     logger.info(`任务完成：${subtask.id}`, { userId: data.userId });
 
-    runBackgroundTask('learner-snapshot.task-completed', () => learnerSnapshotRefreshService.refresh({
-      userId: data.userId,
-      pathId: subtask.milestones?.learningPathId || undefined,
-      taskId: data.taskId,
-      milestoneId: subtask.milestoneId,
-      scope: 'teaching',
-    }), { userId: data.userId, taskId: data.taskId });
+    // #147：带 sessionId = 教学收尾中的任务结算。该画像快照键（teaching:path:milestone:task）与同一次
+    // 收尾的 lesson:completed 完全相同，且由 lesson:completed 的消费者统一刷新（endSession 已在
+    // completeTask 之前或紧随其后）。这里再 eager 刷一次是同一 projectionKey 的重复重算，故教学链路
+    // 不刷；纯路径任务（无 sessionId，无 lesson:completed 事件）保持原有的立即刷新不变。
+    if (!data.sessionId) {
+      runBackgroundTask('learner-snapshot.task-completed', () => learnerSnapshotRefreshService.refresh({
+        userId: data.userId,
+        pathId: subtask.milestones?.learningPathId || undefined,
+        taskId: data.taskId,
+        milestoneId: subtask.milestoneId,
+        scope: 'teaching',
+      }), { userId: data.userId, taskId: data.taskId });
+    }
     dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'task-completed');
     learnerStateReviewService.refreshInBackground(data.userId);
     conceptConsolidatorService.refreshInBackground(data.userId);

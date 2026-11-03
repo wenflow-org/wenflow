@@ -45,15 +45,23 @@ export async function handleLearnerEvent(event: DurableDomainEvent): Promise<voi
   if (event.userId) {
     learnerProfileService.clear(event.userId);
     const data = event.data || {};
-    await learnerSnapshotRefreshService.refresh({
-      userId: event.userId,
-      pathId: data.pathId || undefined,
-      milestoneId: data.milestoneId || undefined,
-      taskId: data.taskId || undefined,
-      scope: data.pathId ? (data.taskId ? 'teaching' : 'path') : 'global',
-      lastEventId: event.id,
-      lastEventAt: event.occurredAt,
-    });
+    // #147：教学的 task:completed 带 sessionId（见 task-completion.service 的 completionContext）。
+    // 它的投影键（teaching:path:milestone:task）与同一次收尾的 lesson:completed 完全相同，而
+    // lesson:completed 一定先于它入队（endSession 在 completeTask 之前）且同用户受队头保护，
+    // 该行已被 lesson:completed 的消费刷新过——再刷一次是同一 projectionKey 的重复重算。
+    // 证据投影仍照做（幂等）；纯路径任务（无 sessionId）不在此列，仍由本消费者刷新。
+    const isTeachingTaskCompletion = event.type === 'task:completed' && !!data.sessionId;
+    if (!isTeachingTaskCompletion) {
+      await learnerSnapshotRefreshService.refresh({
+        userId: event.userId,
+        pathId: data.pathId || undefined,
+        milestoneId: data.milestoneId || undefined,
+        taskId: data.taskId || undefined,
+        scope: data.pathId ? (data.taskId ? 'teaching' : 'path') : 'global',
+        lastEventId: event.id,
+        lastEventAt: event.occurredAt,
+      });
+    }
   }
 
   // 增强失败在链尾重抛：快照已刷新，但事件仍需重投以补齐增强产物
