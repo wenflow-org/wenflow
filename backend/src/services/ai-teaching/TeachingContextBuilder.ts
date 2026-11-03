@@ -157,9 +157,10 @@ export async function buildTeachingScenarioContext(
     }),
   });
   // Q8 延迟锚题数据供给修复：从**未截断**的权威来源为所有已掌握概念派生 lastSeenAt。
-  // 优先 currentPath.conceptStates（全量、正是 masteredConcepts 的出处），再并入全局账本；
-  // 两条都不受 recentConceptLedger.slice(0,12)（乃至账本内部 40/60 条）截断——否则排在后面的
-  // 老概念永远拿不到时间戳，延迟锚题在真实长跑中永不触发。只在此处查表（probe 保持纯函数无 I/O）。
+  // 优先 currentPath.conceptStates（**本路径全量**，正是 masteredConcepts 的出处）；再并入全局账本
+  // ——但注意 globalBackground.conceptLedger 是**已按 lastSeenAt 排序并截断到 60 条**的产物
+  // （issue #156），跨路径的老概念可能不在其中，因此全量覆盖只能靠 conceptStates。
+  // 两条都不是 recentConceptLedger.slice(0,12) 的子集。只在此处查表（probe 保持纯函数无 I/O）。
   const anchorMasteredLastSeenAt = buildMasteredLastSeenAtMap(
     [
       ...(learnerSnapshot.knowledgeMemory.currentPath?.conceptStates ?? []),

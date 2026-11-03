@@ -142,7 +142,30 @@ export async function assembleLearningState(
   const messagesById = await loadTeachingMessagesForIds(timeSessions.map((s) => s.id));
   const timeSessionsHydrated = timeSessions.map((s) => ({ ...s, messages: messagesById.get(s.id) ?? s.messages }));
 
-  const primaryPath = pickPrimaryPath(paths) || paths[0] || null;
+  let primaryPath = pickPrimaryPath(paths) || paths[0] || null;
+  if (!primaryPath) {
+    // #155：无 active 路径（路径已完成/归档）时，用户级画像不再整体清零。这里回退到该用户最近的
+    // 非 abandoned 路径作为画像锚点，使 dashboard / learning-state-guidance / review 仍能构建
+    // learnerSnapshot（其 globalSignals/globalBackground 是按 userId 聚合的跨路径并集，不依赖具体
+    // 路径；只有 currentPath 依赖这条锚点路径）。有 active 路径的用户不走这条回退，paths 口径不变。
+    primaryPath = await prisma.learning_paths.findFirst({
+      where: { userId, status: { not: 'abandoned' } },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        milestones: {
+          orderBy: { stageNumber: 'asc' },
+          include: {
+            subtasks: {
+              orderBy: { order: 'asc' },
+              select: { id: true, title: true, status: true, estimatedMinutes: true, completedAt: true },
+            },
+          },
+        },
+      },
+    });
+    if (primaryPath) paths.push(primaryPath);
+  }
+
   if (!primaryPath) {
     return {
       user: { id: user.id, name: user.name, xp: user.xp },
