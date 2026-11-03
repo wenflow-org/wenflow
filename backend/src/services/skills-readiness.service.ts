@@ -71,6 +71,7 @@ export const W3_STEPS_EMPTY_EXEMPT: Record<string, string> = {
   'kc-mapper': 'service 侧调用（learning.service.ts KC 映射），非 path.coordinator 编排，不在 path.definition.ts steps 内',
   'learning-predictor': 'service 侧调用（ai-teaching/TeachingContextBuilder 任务前预测），非 profile.coordinator 编排',
   'virtual-learner-epistemic-grounding': 'teaching 回合内部辅助（blackbox-runner.ts / simulation.coordinator.ts 认知判决），在 learn-turn-simulator 前调用，不在 simulation.definition.ts 主链 steps 内',
+  'learner-model': 'handler-only 拉取式 API（按 action 取快照/写增量），不在 learner.definition.ts steps 内；事件链四步为证据投影/课后增强/清缓存/快照重算',
 };
 
 export interface ReadinessWarningItem {

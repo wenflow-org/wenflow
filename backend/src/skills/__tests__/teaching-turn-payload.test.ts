@@ -434,4 +434,34 @@ describe('teaching-turn 完成判定（2026-08-30 起 LLM 语义判定，不再�
 
     expect(validation).toEqual({ valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' })
   })
+
+  it('validateParsedOutput：回复含「已完成一半」的进度陈述但非完成候选时不判废（#163）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '这个练习已完成了一半，我们把剩下的线索再排一排。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['scaffold'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: true })
+  })
+
+  it('retryStrategy.onValidationFail：COMPLETION_MISMATCH 时把该约束显式回灌给重试（#163）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const notice = spec.retryStrategy.onValidationFail({ failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' })
+    expect(notice).toContain('control.isCompletionCandidate=true')
+    expect(notice).toContain('进入下一环节')
+
+    const otherNotice = spec.retryStrategy.onValidationFail({ failureReason: 'TEACHING_TURN_REPLY_MISSING' })
+    expect(otherNotice).not.toContain('control.isCompletionCandidate=true')
+  })
 })

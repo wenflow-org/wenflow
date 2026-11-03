@@ -150,7 +150,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **依据**：[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md)、[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md)、`backend/src/coordinators/learner.definition.ts`、`prompts/orchestration/profile.yaml`。
 - **缘由（要解决什么）**：把用户长期画像、近期学习状态、路径级知识记忆从教学链路中**解耦**，为教学、路径重调、后台诊断提供**统一的学习者快照**（`LearnerSnapshot`）。没有它，教学只能靠 `completedTaskIds` 之类的碎片推断学习者状态（[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) §1、§14 Phase5）。
 - **为什么单独设 Agent（且明确不建 orchestrator）**：它是**跨路径/教学/admin 的共享上游状态层**，不是一个独立用户流程；主要工作是确定性聚合 + 事件刷新 + 按需读取。文档明确：过早引入 orchestrator 会放大复杂度；只有"多子 Agent 共同产出 / 多阶段刷新 / 高成本异步重算 / 需要失败重试"时才考虑（[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) §3）。
-- **编排什么 Skill**：`skill:learner-model`（step1，增量摄取）、`skill:lesson-knowledge-enricher`（step2，`when lesson ends`）；`learning-predictor` 不在 `learner.definition.ts` steps 内，由 `TeachingContextBuilder` 任务前调用（`skills.yaml` notes）。`profile.yaml` 的 routing 终点为 `handoff: []`（画像终点，写 snapshot 与 projection）。
+- **编排什么 Skill**：`skill:lesson-knowledge-enricher`（step2，`when lesson ends`）；`learner.definition.ts` 的其余步骤都是确定性 service（step1 `LearnerEvidenceProjector` 证据投影、step3 `LearnerProfileService` 清画像缓存、step4 `LearnerSnapshotRefreshService` 快照重算，真实序列见 `backend/src/events/learner-event-consumer.ts`）。`skill:learner-model` 不在事件链 steps 内——它是按 `action` 取快照/写增量的拉取式 API（`agents/learner-model-agent/index.ts`）；`learning-predictor` 由 `TeachingContextBuilder` 任务前调用（`skills.yaml` notes）。`profile.yaml` 的 routing 终点为 `handoff: []`（画像终点，写 snapshot 与 projection）。
 - **输入/输出**：输入 = `goal:understanding:updated` / `path:generated` / `lesson:completed` / `task:completed` / `path:adjusted` 事件；输出 = `snapshot.dynamicState` / `snapshot.learningControlState` / `snapshot.replanSignal` / `snapshot.teachingHints` / `snapshot.knowledgeMemory.*` / `profile.curriculumControls`（全部 `render: hidden`，内部沉淀）。
 - **边界与不负责**：不生成课堂回复/路径结构、不直接改写路径；admin v1 **只读 + 重算**，不做人工编辑 snapshot / mastery / teaching hints（[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) §10.1）。
 - **失败/降级行为**：事件驱动刷新 + 按需读取；`learning-predictor` 进入校准闭环，样本 `n<5` 不展示置信度（[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md) §6.5）。已知真静默降级点（如 `learner-memory.ts`）正在补结构化降级标记（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §2 Q3、§8 第一波）。BKT 参数有启动校验，`pKnowL` 只做**有界**消费（信念背离→回路径重学建议），**不驱动间隔/难度**（审计 §4.2(3)、§7 P1-3）。
@@ -178,7 +178,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 
 ## 3. 主线 Skill 缘由（按阶段）
 
-> 本节覆盖五阶段全部 **mainline** Skill（含 `profile` 下标注为 handler-only 但属阶段主链的 `learner-model`）。每条格式：**缘由** → **关键输入/输出** → **设计意图/边界** → **依据**。
+> 本节覆盖五阶段全部 **mainline** Skill（含 `profile` 下 handler-only 的 `learner-model`：由调用方按 `action` 拉取，不在事件链 steps 内）。每条格式：**缘由** → **关键输入/输出** → **设计意图/边界** → **依据**。
 
 ### 3.1 Goal 阶段
 
@@ -382,7 +382,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 | `web-fetch` | 调外部抓取 provider 取回指定 URL 的正文内容 | 同上；provider/密钥由 `FETCH_PROVIDER`/`FETCH_API_KEY`（缺省复用 SEARCH）承担 |
 | `text-to-image` | 调外部文生图 provider（Agnes / OpenAI 兼容端点）按 prompt 生成图片 | 同上；provider/密钥由 `IMAGE_*` 环境变量承担 |
 
-> 说明：`learner-model` 虽为 `kind: handler-only`，但它挂在 `profile-agent` 下且是 profile 阶段主链节点，故在 [§3.4](#34-profile-阶段) 深读，不在本表重复。
+> 说明：`learner-model` 虽为 `kind: handler-only`，但它挂在 `profile-agent` 下且是 profile 阶段的核心画像聚合组件（拉取式 API，不在事件链 steps 内），故在 [§3.4](#34-profile-阶段) 深读，不在本表重复。
 
 ---
 

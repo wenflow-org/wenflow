@@ -626,6 +626,8 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
     'knowledge-state-suggestion',
     'teaching-strategy-selection'
   ],
+  // 文档性元数据，不参与运行时分发/发布（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）：
+  // 下列事件名均为描述性说明，全仓无对应 dispatch 调用点，请勿据此排查真实订阅关系。
   subscribes: ['teaching:turn:requested'],
   publishes: ['teaching:turn:generated'],
   inputSchema: {
@@ -3119,6 +3121,24 @@ function evaluateCompletionByTaskProfile(input: TeachingTurnInput) {
   });
 }
 
+/**
+ * 「过早收束」语言判据（#163 收窄）：
+ * 原判据是裸词 `/已完成/`，任何进度陈述（如「这个练习已完成了一半」）都会整轮判废；
+ * 课中 `input.knowledge.points` 常含冻结的 pending 点，`allKnowledgeMastered` 几乎恒 false，
+ * 误伤是常态而非边界。现只认两类信号：
+ * - **结论式**完成语：已完成 / 已满足（要求|标准|条件），且收在句读或行尾/串尾——
+ *   「已完成了一半」这类进行中的陈述不再命中；
+ * - 显式推进指令：与 teaching-knowledge-state.hasPrematureNextStepLanguage 同源。
+ */
+const PREMATURE_COMPLETION_LANGUAGE: RegExp[] = [
+  /(?:已|已经)完成(?:了)?(?:要求|标准|条件)?(?=[。！？!?；;\n]|$)/,
+  /(?:已|已经)满足[^。！？!?\n]{0,10}(?:要求|标准|条件)(?=[。！？!?；;\n]|$)/,
+  /进入下一环节/,
+  /进入下一个任务/,
+  /接下来.*下一环节/,
+  /接下来.*下一个任务/,
+];
+
 function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   if (!parsed || typeof parsed !== 'object') {
     return { valid: false, failureReason: 'TEACHING_TURN_OUTPUT_NOT_OBJECT' };
@@ -3163,7 +3183,7 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
 
   const allKnowledgeMastered = Array.from(inputPointMap.values()).length > 0
     && Array.from(inputPointMap.values()).every((point: any) => point?.status === 'mastered');
-  const hasPrematureCompletionLanguage = /已完成|满足.*要求|满足.*标准|进入下一环节|进入下一个任务|接下来.*下一环节|接下来.*下一个任务/.test(reply);
+  const hasPrematureCompletionLanguage = PREMATURE_COMPLETION_LANGUAGE.some((pattern) => pattern.test(reply));
   const completionLanguageAllowed = rawCompletionCandidate && allKnowledgeMastered;
 
   if (hasPrematureCompletionLanguage && !completionLanguageAllowed) {
@@ -3339,7 +3359,14 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
       + `knowledge（对象，含 points 数组）、pedagogy（对象，含 strategies）、control（对象）；缺任一块整轮都会失败，不能只给其中一部分；`
       + `1) knowledge.points 要围绕当前任务、验收标准和最近课堂对话动态生成，不要偏题；`
       + `2) pedagogy.strategies 只能使用允许的枚举；`
-      + `3) 保持当前任务的 core concept 与 target relation 不偏移。`,
+      + `3) 保持当前任务的 core concept 与 target relation 不偏移。`
+      // #163：此前该失败原因不在重试文案里，模型无信号可改，两轮同类失败即整轮丢弃
+      // （teaching-turn-engine 直接 throw，本轮消息不落库）。仅在命中该原因时附加，避免每轮灌无关约束。
+      + (failureReason === 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH'
+        ? `4) reply 里不得出现收束结论或推进指令：只有当 control.isCompletionCandidate=true 且所有知识点均为 mastered 时，`
+          + `才允许写「（本节/本任务）已完成」「已满足要求」这类结论，或「进入下一环节/下一个任务」这类推进语；`
+          + `本轮条件不满足，请改写为仍在当前环节推进的说法（例如「这个练习已完成了一半」是允许的）。`
+        : ''),
   },
 };
 

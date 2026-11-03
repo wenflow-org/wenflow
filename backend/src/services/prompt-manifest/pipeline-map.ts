@@ -497,7 +497,7 @@ export function renderPipelineMarkdown(map: PipelineMap): string {
   L.push(`  U[用户 / 虚拟学习者] --> G${nodeLabel('goal', 'Goal 阶段', 'goal-agent', 'goal-conversation')}`);
   L.push(`  G -->|"goal handoff（字段路由）"| P${nodeLabel('path', 'Path 阶段', 'path-agent', 'path-planning → stage-designer')}`);
   L.push(`  P -->|"path ready"| T${nodeLabel('teaching', 'Teaching 阶段', 'teaching-agent', 'opening → teaching-turn → wrapup')}`);
-  L.push(`  T -.->|"lesson 事件"| F${nodeLabel('profile', 'Profile 阶段', 'profile-agent', 'learner-model → enricher → snapshot')}`);
+  L.push(`  T -.->|"lesson 事件"| F${nodeLabel('profile', 'Profile 阶段', 'profile-agent', 'lesson-knowledge-enricher')}`);
   L.push('  F -.->|"LearnerSnapshot / hints"| P');
   L.push('  F -.->|"LearnerSnapshot / hints"| T');
   L.push(`  S${nodeLabel('simulation', 'Simulation 阶段', 'simulation-agent', 'virtual learner / referee')} --> G`);
