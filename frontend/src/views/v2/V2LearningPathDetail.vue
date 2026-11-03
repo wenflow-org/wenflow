@@ -213,7 +213,12 @@
                   </button>
                   <button type="button" v-else-if="task.status === 'completed'" class="task__done-label" @click="viewFeedback(task)">查看反馈</button>
                   <span v-else-if="taskCls(task) === 'locked'" class="task__lock-label">待解锁</span>
-                  <button type="button" v-else-if="task.status === 'in_progress'" class="task__cta" @click="goLearn(task.id)">继续学习</button>
+                  <!-- 未锁且未完成的课次都得有入口（2026-11-03 真人走查根因修复）：
+                       此前只给「当前任务」一颗 CTA，其余未完成课次落到不可点的「待开始」文案上——
+                       一门已解锁、待开始的课在路径页没有任何进入方式。 -->
+                  <button v-else-if="canLearn" type="button" class="task__cta" @click="goLearn(task.id)">
+                    {{ task.status === 'in_progress' ? '继续学习' : '开始学习' }}
+                  </button>
                   <span v-else class="task__todo-label">待开始</span>
                   <button
                     v-if="canEditTask(task)"
@@ -1578,9 +1583,19 @@ onMounted(() => {
 onBeforeUnmount(() => cancelAnimationFrame(percentRaf));
 const allDone = computed(() => totalTasks.value > 0 && doneTasks.value === totalTasks.value);
 
-/* 当前任务 = 全局第一个 in_progress，否则第一个 todo；与学习台「今日行动」共用
-   pickCurrentTask（决策链同源：两页必须指向同一节课，2026-09-25 收口） */
-const currentTask = computed(() => pickCurrentTask(allTasks.value));
+/* 锁定态以**阶段状态**为权威（2026-11-03 真人走查根因修复）。
+   此前锁定由「位置相对当前任务」推断，而当前任务又只按课次状态挑——循环自证：锁着阶段里
+   只要有一条 in_progress，它就成了「当前任务」，页头「继续当前任务」指向它、点进去是
+   「本节暂时开不了课」，而真正能学的待学课在行内反而落到不可点的「待开始」。 */
+function stageLockedOf(task: Record<string, any>) {
+  const stage = stages.value.find((s) => stageTasks(s).some((t) => t.id === task.id));
+  return String(stage?.status || '') === 'locked';
+}
+
+/* 当前任务 = 未锁阶段里第一个 in_progress，否则第一个 todo；与学习台「今日行动」共用
+   pickCurrentTask（决策链同源：两页必须指向同一节课，2026-09-25 收口）。
+   传入阶段锁定判定，锁着阶段的课次不再被选成「当前任务」（2026-11-03 根因修复）。 */
+const currentTask = computed(() => pickCurrentTask(allTasks.value, stageLockedOf));
 
 const currentStageNo = computed(() => {
   if (!currentTask.value) return stages.value.length;
@@ -1664,9 +1679,12 @@ const badgeCls = computed(() => {
 
 function taskCls(task: Record<string, any>) {
   if (task.status === 'completed') return 'completed';
+  if (!canLearn.value) return 'locked';
+  // 阶段锁是权威（2026-11-03 根因修复）：锁着阶段的课次一律 locked，不看它自己的 status，
+  // 否则残留/异常的 in_progress 会让锁着的行显示成「可继续」。
+  if (stageLockedOf(task)) return 'locked';
   if (task.status === 'in_progress') return 'current';
   if (currentTask.value && task.id === currentTask.value.id) return 'current';
-  if (!canLearn.value) return 'locked';
   const curIdx = allTasks.value.findIndex((t) => t.id === currentTask.value?.id);
   const myIdx = allTasks.value.findIndex((t) => t.id === task.id);
   return curIdx >= 0 && myIdx > curIdx ? 'locked' : 'todo';
