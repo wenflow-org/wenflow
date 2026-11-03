@@ -284,6 +284,111 @@ describe('SimulationOrchestrator.runTeachingTurn 检查点消费', () => {
   })
 })
 
+describe('SimulationOrchestrator.runTeachingTurnWithStepRetry（#153 revision 过期兜底）', () => {
+  let coordinator: SimulationOrchestrator
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    coordinator = new SimulationOrchestrator()
+    mockSessionFindUnique.mockResolvedValue(undefined)
+    mockSessionUpdate.mockResolvedValue(undefined)
+  })
+
+  const staleError = () => Object.assign(new Error('课堂已在其他页面更新，请刷新后继续'), {
+    code: 'TEACHING_SESSION_STALE',
+    category: 'conflict'
+  })
+
+  it('构造「回合已提交但状态未写回」的重入：旧 revision 撞 STALE → 现读 revision 重试一次并成功推进', async () => {
+    // 虚拟侧快照仍是 7，但课堂其实已被上一回合推进到 8（进程重启/网关超时丢响应）
+    mockGetSessionDetail.mockResolvedValue({ id: 'teach-1', status: 'active', revision: 8 })
+    mockProcessStudentMessage
+      .mockRejectedValueOnce(staleError())
+      .mockResolvedValueOnce({
+        aiResponse: '我们继续讲下一点',
+        revision: 9,
+        knowledgePoints: [],
+        isCompletion: false,
+        strategies: []
+      })
+
+    const result = await coordinator.runTeachingTurnWithStepRetry({
+      sessionId: 'sim-1',
+      userId: 'user-1',
+      teachingSessionId: 'teach-1',
+      learnerMessage: '老师我有个疑问',
+      teachingRevision: 7,
+      pendingCheckpoint: null,
+      checkpointAnswer: null
+    })
+
+    // 首次仍按快照 revision；冲突后现读当前 revision（8）重试
+    expect(mockProcessStudentMessage).toHaveBeenNthCalledWith(1, 'teach-1', '老师我有个疑问', { expectedRevision: 7 })
+    expect(mockGetSessionDetail).toHaveBeenCalledWith('teach-1', 'user-1')
+    expect(mockProcessStudentMessage).toHaveBeenNthCalledWith(2, 'teach-1', '老师我有个疑问', { expectedRevision: 8 })
+    expect(result).toMatchObject({ aiResponse: '我们继续讲下一点', revision: 9 })
+  })
+
+  it('现读 revision 后仍撞 STALE → 原样抛出（交上层 #153 归类为非终局暂停，不在此吞掉）', async () => {
+    mockGetSessionDetail.mockResolvedValue({ id: 'teach-1', status: 'active', revision: 8 })
+    mockProcessStudentMessage.mockRejectedValueOnce(staleError()).mockRejectedValueOnce(staleError())
+
+    await expect(coordinator.runTeachingTurnWithStepRetry({
+      sessionId: 'sim-1',
+      userId: 'user-1',
+      teachingSessionId: 'teach-1',
+      learnerMessage: '老师我有个疑问',
+      teachingRevision: 7,
+      pendingCheckpoint: null,
+      checkpointAnswer: null
+    })).rejects.toMatchObject({ code: 'TEACHING_SESSION_STALE' })
+    expect(mockProcessStudentMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('重试期间课堂被并发收束换码（STATE_CHANGED）→ 仍抛原始 STALE，不因重试把可续跑升级为终局', async () => {
+    mockGetSessionDetail.mockResolvedValue({ id: 'teach-1', status: 'active', revision: 8 })
+    mockProcessStudentMessage
+      .mockRejectedValueOnce(staleError())
+      .mockRejectedValueOnce(Object.assign(new Error('当前课堂状态不允许此操作'), {
+        code: 'TEACHING_SESSION_STATE_CHANGED',
+        category: 'conflict'
+      }))
+
+    // 抛出的是中断窗口类的 STALE（上层 isTransientUpstreamLearnError=true → 可续跑暂停），
+    // 而不是把终局类的 STATE_CHANGED 漏给上层
+    await expect(coordinator.runTeachingTurnWithStepRetry({
+      sessionId: 'sim-1',
+      userId: 'user-1',
+      teachingSessionId: 'teach-1',
+      learnerMessage: '老师我有个疑问',
+      teachingRevision: 7,
+      pendingCheckpoint: null,
+      checkpointAnswer: null
+    })).rejects.toMatchObject({ code: 'TEACHING_SESSION_STALE' })
+    expect(mockProcessStudentMessage).toHaveBeenCalledTimes(2)
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[simulation-coordinator] 教学回合 revision 过期后重试仍失败，按中断窗口（可续跑）处理',
+      expect.objectContaining({ retryErrorCode: 'TEACHING_SESSION_STATE_CHANGED' })
+    )
+  })
+
+  it('非 revision 冲突类错误原样抛出，不做多余重试', async () => {
+    mockProcessStudentMessage.mockRejectedValue(new Error('业务校验失败：缺少必填字段'))
+
+    await expect(coordinator.runTeachingTurnWithStepRetry({
+      sessionId: 'sim-1',
+      userId: 'user-1',
+      teachingSessionId: 'teach-1',
+      learnerMessage: '老师我有个疑问',
+      teachingRevision: 7,
+      pendingCheckpoint: null,
+      checkpointAnswer: null
+    })).rejects.toThrow('业务校验失败：缺少必填字段')
+    expect(mockProcessStudentMessage).toHaveBeenCalledTimes(1)
+    expect(mockGetSessionDetail).not.toHaveBeenCalled()
+  })
+})
+
 describe('buildCheckpointLearnerVisibleMessage（P0-4：历史与提交 payload 对齐）', () => {
   const checkpoint = {
     id: 'cp-1',

@@ -245,4 +245,62 @@ describe('SimulationOrchestrator 教学回合抖动（新发现问题 #3）', ()
     const stats = JSON.parse(sessionRecord.stageResults).runtimeStats
     expect(stats.lastError).toBeUndefined()
   })
+
+  it('#153 验收：构造「回合已提交但状态未写回」的重入（旧 revision 撞 STALE）→ 会话不失败，且能继续推进', async () => {
+    // 虚拟侧快照仍是 revision 1，但课堂已被上一回合推进到 8（写入端重启/网关超时丢响应）
+    mockGetSessionDetail.mockResolvedValue({ id: 'teaching-1', status: 'active', revision: 8, pendingCheckpoint: null })
+    mockProcessStudentMessage
+      .mockRejectedValueOnce(Object.assign(new Error('课堂已在其他页面更新，请刷新后继续'), {
+        code: 'TEACHING_SESSION_STALE',
+        category: 'conflict'
+      }))
+      .mockResolvedValueOnce({
+        revision: 9,
+        aiResponse: '好，我们继续。',
+        isCompletion: false,
+        autoEnded: false,
+        analysis: { cognitiveLevel: 'understand' },
+        knowledgePoints: [],
+        strategies: []
+      })
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+
+    // 首次仍按快照 revision=1；冲突后现读 8 再重试 → 本回合正常推进
+    expect(mockProcessStudentMessage).toHaveBeenNthCalledWith(1, 'teaching-1', expect.any(String), { expectedRevision: 1 })
+    expect(mockProcessStudentMessage).toHaveBeenNthCalledWith(2, 'teaching-1', expect.any(String), { expectedRevision: 8 })
+    expect(result.success).toBe(true)
+
+    // 验收断言：会话不进入 failed，且下一回合可续（taskRuntime 保持 active、回合已记入历史）
+    expect(sessionRecord.status).toBe('running')
+    expect(mockVirtualSessionUpdate.mock.calls.some(([input]: any) => input?.data?.status === 'failed')).toBe(false)
+    expect(getLearningState().taskRuntime.status).toBe('active')
+    expect(getLearningState().conversationHistory).toHaveLength(2)
+  })
+
+  it('#153：崩溃遗留操作租约（TEACHING_SESSION_BUSY）→ 非终局暂停，等租约到期后续跑', async () => {
+    mockGetSessionDetail.mockResolvedValue({ id: 'teaching-1', status: 'active', revision: 1, pendingCheckpoint: null })
+    mockProcessStudentMessage.mockRejectedValue(Object.assign(new Error('课堂正在处理另一项操作，请稍后重试'), {
+      code: 'TEACHING_SESSION_BUSY',
+      category: 'conflict'
+    }))
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+
+    // BUSY 不靠"现读 revision 重试"恢复（revision 未变、租约仍被占），只重试 1 次
+    expect(mockProcessStudentMessage).toHaveBeenCalledTimes(1)
+    expect(result).toEqual(expect.objectContaining({ success: false }))
+    // 会话非终局：保持 running，落可续跑标记，不写 failed、不收束
+    expect(sessionRecord.status).toBe('running')
+    expect(mockVirtualSessionUpdate.mock.calls.some(([input]: any) => input?.data?.status === 'failed')).toBe(false)
+    expect(mockEndSession).not.toHaveBeenCalled()
+    const stats = JSON.parse(sessionRecord.stageResults).runtimeStats
+    expect(stats.lastError).toEqual(expect.objectContaining({
+      code: 'LEARN_UPSTREAM_TRANSIENT_PAUSED',
+      retryable: true
+    }))
+    // 不伪造教师回复：暂停路径不追加对话
+    expect(getLearningState().conversationHistory).toEqual([])
+    expect(getLearningState().taskRuntime.status).toBe('active')
+  })
 })
