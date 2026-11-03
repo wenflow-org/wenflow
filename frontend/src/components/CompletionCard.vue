@@ -443,12 +443,6 @@ const tagClass = (type: string) => ({
 .review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red); text-decoration: none; }
 .review-link:hover { text-decoration: underline; }
 .section-content { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); }
-/* 阅读行宽上限（2026-11-03 排版优化）：卡在宽屏上可到 1080px，正文一行能排到 60+ 汉字，
-   眼睛回行时找不到下一行的开头。用 em 跟随各自字号（正文 13px → 约 39 汉字/行），
-   窄屏时 max-width 大于可用宽度，等于不生效。 */
-.section-content,
-.section-attribution,
-.section-hint { max-width: 46em; }
 .advisory-options { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .metrics-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
