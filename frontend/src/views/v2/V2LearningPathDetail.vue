@@ -1767,7 +1767,7 @@ onBeforeUnmount(() => {
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 26px 28px; align-items: center; }
 .hero__tags { display: flex; align-items: center; gap: 10px; }
 .hero h1 { margin: 8px 0 6px; font-size: 20px; letter-spacing: -0.01em; }
-.hero p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.7; max-width: 56ch; }
+.hero p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.7; }
 /* Hero 描述：默认 3 行截断，展开后完整显示（老数据无 summary 时兜底原文，避免整段糊屏） */
 .hero__desc {
   display: -webkit-box;
