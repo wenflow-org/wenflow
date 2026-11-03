@@ -124,6 +124,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // #181：开场生成器新增 learnerPrediction 输入（编排层 TaskContextBuilder 组装、
     // v4-aux-skills 在调用前注入），同「编排注入」性质，登记后 check-handoff --strict 通过。
     'learnerPrediction',
+    // #197：session-wrapup 实收 7 键，其中 knowledgeContext / sessionStructure 由编排层
+    // 现场拼装（teaching-session-lifecycle / wrapup-regen），提示词规则依赖但 core inputs 未声明。
+    // 补声明后这两个「编排注入」键需登记，否则 prompts:check-handoff --strict 判 sandbox-path-unregistered。
+    'session.knowledgeContext',
+    'session.structure',
   ],
   'profile-agent': [
     'snapshot.dynamicState',

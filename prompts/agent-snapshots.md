@@ -317,9 +317,11 @@ sandbox:teaching-agent.scenario.interactionProfile
 sandbox:teaching-agent.school.anchor
 sandbox:teaching-agent.session.evidence
 sandbox:teaching-agent.session.info
+sandbox:teaching-agent.session.knowledgeContext
 sandbox:teaching-agent.session.knowledgeState
 sandbox:teaching-agent.session.messages
 sandbox:teaching-agent.session.mode
+sandbox:teaching-agent.session.structure
 sandbox:teaching-agent.session.topic
 sandbox:teaching-agent.session.wrapup
 sandbox:teaching-agent.summary.knowledgeItems

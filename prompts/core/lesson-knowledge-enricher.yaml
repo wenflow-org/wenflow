@@ -13,9 +13,10 @@ channels: [evidence, task]
 stateAdvance: false
 inputs:
   # 本 skill 的输入由 lesson:completed 领域事件直供（消费者 LessonKnowledgeEnrichmentConsumer），
-  # 不经沙盘通道，故只登记提示词规则真正引用的这一个键；其余事件键（knowledgeState / wrapup /
-  # sessionEvidence / visibleDialogueContext / classroomEventHistory / taskContext / knowledgeDelta）
-  # 由执行信封承载，不在此声明（与本族其它 skill 一致）。
+  # 不经沙盘通道，故只登记提示词规则真正引用的这一个键；其余输入由执行信封承载，不在此声明
+  # （与本族其它 skill 一致）——其中 knowledgeState / wrapup / sessionEvidence / visibleDialogueContext
+  # 是事件原样携带的键，classroomEventHistory / taskContext / knowledgeDelta 则是消费者在投递前
+  # 派生的键（见 LessonKnowledgeEnrichmentConsumer.ts 的 classroomEventHistory/taskContext/knowledgeDelta 组装）。
   - name: transferGoal
     type: string?
     ref: user:lessonCompleted.transferGoal

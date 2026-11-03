@@ -14,6 +14,9 @@ export const sessionWrapupRuntimeDefinition: RuntimeDefinitionRecord = {
       learningState: { type: 'object' },
       knowledgeContext: { type: 'object' },
       sessionEvidence: { type: 'object' },
+      // #197：运行时（teaching-session-lifecycle / wrapup-regen）实际投递的 7 键之一，
+      // 此前 inputSchema 漏列，与实际载荷及 core inputs 声明不一致。
+      sessionStructure: { type: 'object' },
     },
     required: ['messages', 'knowledgePoints', 'sessionInfo'],
   },
@@ -38,6 +41,7 @@ export const sessionWrapupRuntimeDefinition: RuntimeDefinitionRecord = {
       'learningState',
       'knowledgeContext.delta',
       'sessionEvidence',
+      'sessionStructure',
     ],
     produces: [
       'summary.topicSummary',
