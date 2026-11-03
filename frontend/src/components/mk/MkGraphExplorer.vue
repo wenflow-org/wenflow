@@ -234,35 +234,26 @@
             </template>
             <div v-else class="mk-ge__overview">
               <h4 class="mk-ge__side-title">图谱概览</h4>
-              <p class="mk-ge__side-hint">点图中节点，查看掌握度与前后关系。</p>
               <!-- 未选中时侧栏不能只剩一句提示、把 800px 高的右栏留空（2026-10-29
-                   像素级走查）：先给分布，再给最多 5 个「最该先看」的概念，点名字等同
-                   点画布节点，侧栏即刻切到详情。 -->
-              <div class="mk-ge__overview-stats">
-                <div class="mk-ge__overview-stat">
-                  <b>{{ counts.unknown }}</b><span>待学习</span>
-                </div>
-                <div class="mk-ge__overview-stat">
-                  <b>{{ counts.fragile }}</b><span>记忆偏弱</span>
-                </div>
-                <div class="mk-ge__overview-stat">
-                  <b>{{ counts.learning }}</b><span>进行中</span>
-                </div>
-                <div class="mk-ge__overview-stat">
-                  <b>{{ counts.stable }}</b><span>已掌握</span>
-                </div>
-              </div>
+                   像素级走查）：给最多 5 个「最该先看」的概念，点名字等同点画布节点，
+                   侧栏即刻切到详情。原来的 2×2 分布数字块删去（2026-11-03 真机走查）：
+                   画布头图例同屏已有同一套「已掌握/进行中/记忆偏弱/待学习」计数，
+                   同一信息两种呈现是重复；「点图中节点…」用法句也删——画布底图例
+                   已有「点节点看名称」，同屏教两遍。 -->
               <template v-if="suggestedNodes.length">
                 <p class="mk-ge__overview-label">建议先看</p>
                 <ul class="mk-ge__overview-list">
                   <li v-for="n in suggestedNodes" :key="n.id">
                     <button type="button" class="mk-ge__overview-item" @click="focusNode(n.id)">
                       <span>{{ n.label }}</span>
-                      <span class="mk-badge" :class="STATUS_BADGE[statusKeyOf(n)]">{{ STATUS_LABEL[statusKeyOf(n)] }}</span>
+                      <!-- 列表本身排除了已掌握；全列「待学习」时徽标列零信息，
+                           只在行有别的状态原因（记忆偏弱/进行中）时才标 -->
+                      <span v-if="statusKeyOf(n) !== 'unknown'" class="mk-badge" :class="STATUS_BADGE[statusKeyOf(n)]">{{ STATUS_LABEL[statusKeyOf(n)] }}</span>
                     </button>
                   </li>
                 </ul>
               </template>
+              <p v-else class="mk-ge__side-hint">这个图谱里的概念都已掌握。</p>
             </div>
           </aside>
         </div>
@@ -1214,33 +1205,11 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   line-height: 1.6;
   color: var(--mk-muted);
 }
-/* 未选中态的概览：把原先把 800px 右栏留空的单句提示，换成分布 + 建议入口 */
+/* 未选中态的概览：建议入口清单（分布计数画布头图例已有，不再重复呈现） */
 .mk-ge__overview {
   display: grid;
   gap: var(--mk-space-3);
   align-content: start;
-}
-.mk-ge__overview-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--mk-space-2);
-}
-.mk-ge__overview-stat {
-  display: grid;
-  gap: 2px;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-}
-.mk-ge__overview-stat b {
-  font-size: 20px;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-.mk-ge__overview-stat span {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
 }
 .mk-ge__overview-label {
   margin: 0;
