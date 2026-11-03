@@ -76,6 +76,48 @@ interface BuildInput {
     /** 阶段序号（#58：建议落点随建议一起落库，确认时不再靠缺省推断） */
     stageNumber?: number;
   } | null;
+  /**
+   * 本条路径涉及的概念名（2026-11-03 真人走查根因修复）。
+   *
+   * `learnerReplanProjection.mastery.strugglingConcepts` 是**全学习者**的投影，不按路径切；
+   * 账号同时有多条路径时，别的路径上的卡点会被点名到本节课的评估页上。实测原文：
+   * 「系统检测到 区分分数与能力推断、识别字段的变量角色 这些点仍会影响后续推进」——这两个短语
+   * 在本节课任何画面都没出现过，它们属于该账号另一条「用教育测量学核对 AI 测评建议」路径。
+   * 传入本条路径的概念名后，点名只允许落在这些概念上；为空时不做收窄（旧调用方行为不变）。
+   */
+  pathConceptNames?: readonly string[];
+}
+
+/** 概念名比较用归一：去空白与常见标点，避免「区分 A 与 B」和「区分A与B」判成不同。 */
+function normalizeConceptName(name: unknown): string {
+  return String(name ?? '').replace(/[\s，。、；：·\-—_（）()【】\[\]「」“”"']/g, '').toLowerCase();
+}
+
+/**
+ * 组装建议点名的概念（两处产出共用一份口径，避免过滤规则两处漂移）。
+ *
+ * 收窄只作用于 `strugglingConcepts`（投影 = 全学习者，必须收窄）；
+ * `movedToReview` 由教学层本节课写进复习队列、天然属于本条路径，不参与收窄——
+ * 否则本节课自己的复习项会被路径概念名不匹配误删，文案退化成通用句。
+ */
+function buildFocusPoints(
+  strugglingConcepts: readonly string[],
+  movedToReview: readonly unknown[],
+  pathConceptNames?: readonly string[],
+): string[] {
+  const allow = (pathConceptNames ?? [])
+    .map((name) => normalizeConceptName(name))
+    .filter((name) => name.length >= 2);
+  const isOnThisPath = (name: unknown): boolean => {
+    if (allow.length === 0) return true;
+    const normalized = normalizeConceptName(name);
+    if (!normalized) return false;
+    return allow.some((allowed) => normalized === allowed || normalized.includes(allowed) || allowed.includes(normalized));
+  };
+  return [
+    ...strugglingConcepts.filter(isOnThisPath).slice(0, 2),
+    ...movedToReview.filter(isRealConceptName).slice(0, 2),
+  ].filter(Boolean);
 }
 
 /** 「无建议」单例：延伸课一期只观测（#124），与其它不满足建议条件的场景共用。 */
@@ -249,11 +291,9 @@ export class ReplanAdvisoryService {
       const recommendation = learnerSignal.recommendation === 'keep' ? 'reinforce' : learnerSignal.recommendation;
       const scope = learnerSignal.scope === 'none' ? 'next_milestone' : learnerSignal.scope;
       const priority = learnerSignal.priority === 'none' ? 'low' : learnerSignal.priority;
-      // 点名只列真卡点与真实复习项：fragile 是饱和通道（会挤掉真名字），movedToReview 过兜底词/占位 id。
-      const focusPoints = [
-        ...strugglingConcepts.slice(0, 2),
-        ...wrapup.progress.movedToReview.filter(isRealConceptName).slice(0, 2),
-      ].filter(Boolean);
+      // 点名只列真卡点与真实复习项：fragile 是饱和通道（会挤掉真名字），movedToReview 过兜底词/占位 id；
+      // 投影来源的卡点再按本条路径收窄（见 BuildInput.pathConceptNames 注释）。
+      const focusPoints = buildFocusPoints(strugglingConcepts, wrapup.progress.movedToReview, input.pathConceptNames);
       // accelerate（压缩）走专用文案：界面语义是「把下一阶段压得更聚焦」，不是通用的「确认调整」。
       const isAccelerate = recommendation === 'accelerate';
       return {
@@ -321,11 +361,9 @@ export class ReplanAdvisoryService {
       if (wrapup.progress.movedToReview.length > 0) reasonCodes.push('moved_to_review');
       if (repeatedConfusion) reasonCodes.push('repeated_confusion');
 
-      // 与信号分支同口径：点名只列真卡点与真实复习项（fragile 饱和会挤掉真名字）。
-      const focusPoints = [
-        ...strugglingConcepts.slice(0, 2),
-        ...wrapup.progress.movedToReview.filter(isRealConceptName).slice(0, 2),
-      ].filter(Boolean);
+      // 与信号分支同口径：点名只列真卡点与真实复习项（fragile 饱和会挤掉真名字），
+      // 投影来源的卡点同样按本条路径收窄。
+      const focusPoints = buildFocusPoints(strugglingConcepts, wrapup.progress.movedToReview, input.pathConceptNames);
 
       return {
         shouldSuggest: true,
