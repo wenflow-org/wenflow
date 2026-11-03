@@ -347,6 +347,33 @@ export interface BoardFigureAttachment {
 }
 
 /**
+ * 首版空壳矩阵守卫（2026-11-02 真实课堂实测）。
+ *
+ * 矩阵板的 tone 语义是「学生标到什么程度」：hit=已标出 / miss=漏标 / dup=重叠 / key=关键。
+ * 首版板书时学生一项都还没标，全 hit 等于把「要标的东西」直接说成「已经标完」——实测
+ * 6×3=18 格全 hit，配图例「✓ 已标出」，学生看到一屏勾却读不出任何内容（同一任务的材料
+ * 本身也没写出来，见 subtask-material-completeness）。
+ *
+ * 判据（高精度，只在首版生效，避免误伤「全部识别完」的合法复盘板）：
+ * 首版（revision ≤ 1）+ matrix + 铺满整格 + 全 hit。
+ */
+export function isDegenerateFirstBoard(board: BoardState | null | undefined): boolean {
+  if (!board || board.revision > 1) return false;
+  const figure = board.figure;
+  if (!figure || figure.kind !== 'matrix') return false;
+  const spec = figure.maskedSpec as {
+    rowLabels?: unknown;
+    colLabels?: unknown;
+    cells?: unknown;
+  };
+  const rows = Array.isArray(spec.rowLabels) ? spec.rowLabels.length : 0;
+  const cols = Array.isArray(spec.colLabels) ? spec.colLabels.length : 0;
+  const cells = Array.isArray(spec.cells) ? (spec.cells as Array<{ tone?: unknown }>) : [];
+  if (!rows || !cols || cells.length < rows * cols) return false;
+  return cells.every((cell) => String(cell?.tone ?? '') === 'hit');
+}
+
+/**
  * 本轮消息应挂的白板附件：板存在、本轮没有其他配图、且板版本与上次下发不同
  * （板没变化 ⇒ 不重发，老师文本对「板上」的指代仍由紧邻上一条消息承接）。
  * 首轮开板（历史无白板图）与换板（revision 提升）照常下发。返回 null = 本轮不挂。
@@ -391,6 +418,43 @@ export function buildBoardFigureAttachment(
 function visibleSpec(f: BoardFigureState): Record<string, unknown> {
   if (f.conceal === 'full') return f.stage === 'revealed' ? f.fullSpec : f.maskedSpec;
   return f.maskedSpec;
+}
+
+/**
+ * 板书设计请求的基础指令（2026-11-03 从 teaching-turn-engine 搬来，便于该文件缩短：
+ * 超大文件棘轮只许缩短）。首轮不再是「必须出图」：材料本身就是要读/要标的文字对象时，
+ * 绘图员应当声明不画（2026-11-02 实测：一条「6 个句子标时间标志词」的课被硬画成 6 格结论短语）。
+ */
+export const BOARD_DESIGN_BASE_INSTRUCTION =
+  '先判断这块任务要不要板书：图必须承载关系（位置/数值/区间/指向/包含/并排/分帧）；'
+  + '若学习对象只是一组待读、待标注的句子/段落/题目，或画出来只是把句子装进框，'
+  + '直接输出 {"figure":null,"reason":"材料是要读的文字，没有几何"}。'
+  + '确实要画时，画完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。'
+  + '标题只点题，不写结论。';
+
+/** 本轮该不该把板挂到消息上：判据全在这里，调用方只按 kind 分派日志/赋值。 */
+export type BoardAttachmentDecision =
+  | { kind: 'degenerate' }
+  | { kind: 'unchanged' }
+  | { kind: 'attached'; figures: BoardFigureAttachment['figures']; figureSource?: BoardFigureAttachment['figureSource'] };
+
+/**
+ * 决定本轮的板挂载（2026-11-03 从 teaching-turn-engine 搬来）。
+ *
+ * - `degenerate`：首版空壳矩阵不摆（2026-11-02 实测）——首版矩阵全格 hit = 宣称"全部已标出"，
+ *   学生看到一屏 ✓ 却读不出内容。宁可不摆板，也不摆一张假状态板。
+ * - `unchanged`：板版本与上次下发一致 ⇒ 板没变，不随本轮消息重发（2026-10-31 用户走查）。
+ * - `attached`：正常挂载，附件构造在 buildBoardFigureAttachment。
+ */
+export function decideBoardAttachment(
+  board: BoardState,
+  previousMessages: ReadonlyArray<{ role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined }>,
+  palette: string,
+): BoardAttachmentDecision {
+  if (isDegenerateFirstBoard(board)) return { kind: 'degenerate' };
+  const attachment = buildBoardFigureAttachment(board, previousMessages, palette);
+  if (!attachment) return { kind: 'unchanged' };
+  return { kind: 'attached', figures: attachment.figures, figureSource: attachment.figureSource };
 }
 
 export function describeBoardForTeacher(board: BoardState): string {

@@ -73,7 +73,7 @@ import {
   normalizeKnowledgePoints,
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
-import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
+import { buildDeterministicOpening, ensureOpeningActionLine, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
 import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, maskFigureForQuestion, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
@@ -86,7 +86,7 @@ import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stri
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
 import { decideBoardIntent, numbersOnBoard } from './board-intent';
 import { applyBoardOp } from './board-controller';
-import { buildBoardFigureAttachment, describeBoardForTeacher, openBoard, type BoardState } from './board-state';
+import { BOARD_DESIGN_BASE_INSTRUCTION, decideBoardAttachment, describeBoardForTeacher, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
@@ -257,7 +257,10 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
   }
 
   if (parsed) {
-    return parsed as TeachingOpening;
+    // 「一条行动线」契约的确定性兜底（2026-11-02 用户反馈「开场很不舒服」）：
+    // 模型可省略 quickReplies，实测 39.5% 的开场落库为空数组 → 第一屏没有任何可点的东西；
+    // question 里还会写"也可以直接往下走"这种没有控件的动作承诺。这里统一收口。
+    return ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context);
   }
 
   logger.warn('[AITeaching] 开场交互块缺少有效结构，降级为确定性开场', {
@@ -441,7 +444,7 @@ export async function processStudentMessage(
       questionIntent: intent,
       lastTeacherReply: null,
       instruction:
-        '画出这张白板的完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。标题只点题，不写结论。'
+        BOARD_DESIGN_BASE_INSTRUCTION
         + intent.instruction,
     }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
     if (designed.figure) {
@@ -1180,12 +1183,16 @@ export async function processStudentMessage(
     }
   }
   if (board && !assistantMessage.figures?.length && !detectExerciseLeakInReply(teachingOutput.reply)) {
-    // 防复读（2026-10-31 用户走查）：板版本与上次下发一致 ⇒ 板没变，不随本轮消息重发。
-    // 决策与附件构造在 board-state.buildBoardFigureAttachment。
-    const attachment = buildBoardFigureAttachment(board, updatedMessages, paletteOfSubject(session.subject));
-    if (attachment) {
-      assistantMessage.figures = attachment.figures;
-      assistantMessage.figureSource = attachment.figureSource;
+    const boardDecision = decideBoardAttachment(board, updatedMessages, paletteOfSubject(session.subject));
+    if (boardDecision.kind === 'degenerate') {
+      logger.warn('[AITeaching] 首版板书是空壳矩阵（全格已标出、无留白），本轮不摆板', {
+        sessionId,
+        taskId: session.taskId,
+        kind: board.figure?.kind ?? null,
+      });
+    } else if (boardDecision.kind === 'attached') {
+      assistantMessage.figures = boardDecision.figures;
+      assistantMessage.figureSource = boardDecision.figureSource;
     }
   }
 
