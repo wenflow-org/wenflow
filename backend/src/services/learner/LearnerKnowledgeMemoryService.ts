@@ -273,6 +273,12 @@ function signalFromProgress(progress: number, status: 'pending' | 'learning' | '
   return { score, stability } as const;
 }
 
+/** 知识状态行 → 证据信号：review→struggle、mastered→mastery、其余（含 learning）→incomplete，不再把「仍在学」当掌握。 */
+function signalFromKnowledgeState(items: Array<{ status?: string | null }>): LearnerRecentEvidence['signal'] {
+  if (items.some((item) => item?.status === 'review')) return 'struggle';
+  if (items.some((item) => item?.status === 'mastered')) return 'mastery';
+  return 'incomplete';
+}
 
 /**
  * 会话评估 → 记忆信号（2026-09-22 档位化修正）。
@@ -464,9 +470,7 @@ export class LearnerKnowledgeMemoryService {
         ? 'task-completed'
         : 'teaching-session';
       const signal: LearnerRecentEvidence['signal'] = evidence.evidenceType === 'lesson:completed'
-        ? Array.isArray(payload.knowledgeState) && payload.knowledgeState.some((item: any) => item?.status === 'review')
-          ? 'struggle'
-          : 'mastery'
+        ? signalFromKnowledgeState(Array.isArray(payload.knowledgeState) ? payload.knowledgeState : [])
         : 'mastery';
       const recent = {
         type,
@@ -626,11 +630,7 @@ export class LearnerKnowledgeMemoryService {
         taskId: session.taskId,
         sessionId: session.id,
         conceptKeys: knowledgeState.map((item) => item.name).filter(Boolean),
-        signal: knowledgeState.some((item) => item.status === 'review')
-          ? 'struggle'
-          : knowledgeState.some((item) => item.status === 'mastered')
-            ? 'mastery'
-            : 'incomplete',
+        signal: signalFromKnowledgeState(knowledgeState),
         score: knowledgeState.reduce((sum, item) => sum + item.progress, 0) / Math.max(1, knowledgeState.length) / 100,
         happenedAt,
       });
@@ -665,7 +665,7 @@ export class LearnerKnowledgeMemoryService {
           taskId: session.taskId,
           sessionId: session.id,
           conceptKeys: summaryPayload.knowledgeItems.map((item: any) => item?.name).filter(Boolean),
-          signal: summaryPayload.knowledgeItems.some((item: any) => item?.status === 'mastered') ? 'mastery' : 'incomplete',
+          signal: signalFromKnowledgeState(summaryPayload.knowledgeItems),
           happenedAt,
         });
       }

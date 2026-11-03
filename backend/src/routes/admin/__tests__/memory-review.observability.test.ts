@@ -208,6 +208,30 @@ describe('总览', () => {
     // 默认口径排除清单＝只有虚拟学习者（2026-10-21 拍板：测试账号照常计入）
     expect(tracesGroupBy.mock.calls[0][0].where.userId).toEqual({ notIn: ['virtual-1'] })
   })
+
+  /* 2026-11-02 P1-5：审计投影是全库取的，虚拟学习者的也在里面；若人数照投影条数算，
+     默认视图里一个真实用户都没被观察过时 usersWithAudit 仍 > 0，前端就把「需人工确认」
+     印成 0（读作「看过、很干净」）而不是「—」（还没观察）。实测 dev-sim/dev-cap 正是这种形态：
+     concept-consolidation 投影只挂在虚拟学习者上，真实用户只有痕迹。 */
+  it('审计投影只属于虚拟学习者时：默认视图没人被观察过 → usersWithAudit 计 0', async () => {
+    usersFindMany
+      .mockResolvedValueOnce([
+        { id: 'virtual-1', name: '虚拟甲', email: 'virtual_a@test.local', isVirtualLearner: true },
+      ])
+      .mockResolvedValueOnce([{ id: 'u1', name: '小明', email: 'a@b.c', isVirtualLearner: false }])
+    tracesGroupBy
+      .mockResolvedValueOnce([{ userId: 'u1', _count: { _all: 3 } }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    projectionsFindMany.mockResolvedValue([
+      { userId: 'virtual-1', payload: JSON.stringify(auditPayload), generatedAt: new Date('2026-09-15T10:00:00Z') },
+    ])
+
+    const res = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq })
+    expect(res.body.data.totals).toMatchObject({ users: 1, traces: 3, usersWithAudit: 0, proposed: 0 })
+    // 视图外的审计不挂到任何展示行上
+    expect(res.body.data.users[0].audit).toBeNull()
+  })
 })
 
 describe('总览排序（2026-10-18：跨用户 5 列缺排序）', () => {

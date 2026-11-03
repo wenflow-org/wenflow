@@ -168,19 +168,21 @@ router.get('/', async (req, res) => {
     const now = simulatedNowOr();
 
     let baseWhere: Record<string, unknown>;
+    // 默认视图排除的虚拟学习者；审计投影与痕迹计数共用同一份排除清单（P1-5：两处口径必须同源）
+    let excludedUserIds: string[] = [];
     if (String(req.query.includeVirtual || '') === 'true') {
       // 按 id 直查虚拟账号（学习者详情的记忆侧逃生口，不删数据只改默认视图）
       baseWhere = {};
     } else {
       /* 默认 = 全部非虚拟账号。测试/审计账号照常计入（2026-10-21 用户拍板「照常计入，只加备注」），
          这里只把虚拟学习者挡在外面——它们的记忆在虚拟学习者详情「记忆池」与学习详情里看。 */
-      const virtualIds = (await listVirtualLearnerIds()).map((row) => row.id);
-      baseWhere = virtualIds.length > 0 ? { userId: { notIn: virtualIds } } : {};
+      excludedUserIds = (await listVirtualLearnerIds()).map((row) => row.id);
+      baseWhere = excludedUserIds.length > 0 ? { userId: { notIn: excludedUserIds } } : {};
     }
     const [traceCounts, dueCounts, audits, mergeRecords, unattachedCounts] = await Promise.all([
       groupTraceCountsByUser(baseWhere),
       groupDueCountsByUser(baseWhere, now),
-      findConsolidationAuditProjections(),
+      findConsolidationAuditProjections(excludedUserIds),
       // 按次留档的归并凭据（权威、长期有效）：概览必须基于它，否则"审计窗口滚出去的旧归并"在界面上消失
       findMergeRecordEvidence(),
       // outlet(D)：未挂靠散键（conceptId 为空）跨用户计数——全量口径，供 totals 聚合
@@ -325,7 +327,10 @@ router.get('/', async (req, res) => {
       users: ranked.length,
       traces: ranked.reduce((sum, row) => sum + row.traces, 0),
       due: ranked.reduce((sum, row) => sum + row.due, 0),
-      usersWithAudit: auditByUser.size,
+      /* 观察过的人数必须与上面三项同源（2026-11-02 P1-5）。投影取数已按默认视图排除虚拟学习者，
+         但「有记忆痕迹的用户」清单仍可能不含个别有投影却无痕迹的账号；
+         这里只以 ranked 里的人为限——users/traces/due 与「需人工确认」的加总都出自这一批。 */
+      usersWithAudit: ranked.filter((row) => auditByUser.has(row.userId)).length,
       proposed: 0,
       autoApplicable: 0,
       ambiguous: 0,

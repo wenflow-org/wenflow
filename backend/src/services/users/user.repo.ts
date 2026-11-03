@@ -135,6 +135,12 @@ export function markOnboardingCompleted(userId: string) {
 
 // ---------- 管理域（/admin/users） ----------
 
+/** 「课堂（节）」不计的会话状态：discarded 是用户点「重新开始」丢掉的旧会话、timeout 是
+ *  跑飞后被打断的会话，两者都没真正上成一节课——直接取关系计数会把它们算进节数
+ *  （演示数据里该列 19 节有 12 节是这两类，真上成的只有 7 节）。与 learning-state-reads
+ *  里「真实学习时长」排除终态会话同向。 */
+const UNCOUNTED_SESSION_STATUSES = ['discarded', 'timeout'] as const;
+
 export function findUsersForAdminList(where: Prisma.usersWhereInput, skip: number, take: number) {
   return prisma.users.findMany({
     where,
@@ -154,7 +160,9 @@ export function findUsersForAdminList(where: Prisma.usersWhereInput, skip: numbe
       _count: {
         select: {
           learning_paths: true,
-          teaching_sessions: true
+          /* 过滤计数而非新增字段：响应里 _count.teaching_sessions 仍是数字，
+             live.ts 与已删视图（同走本函数）的取数都不用跟着改 */
+          teaching_sessions: { where: { status: { notIn: [...UNCOUNTED_SESSION_STATUSES] } } }
         }
       }
     },

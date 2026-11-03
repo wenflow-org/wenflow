@@ -47,10 +47,15 @@ export function groupUnattachedCountsByUser(baseWhere: Prisma.memory_tracesWhere
   });
 }
 
-/** 概念归并审计投影（滚动窗口，界面参考） */
-export function findConsolidationAuditProjections() {
+/** 概念归并审计投影（滚动窗口，界面参考）。
+    excludedUserIds：总览默认视图排除的账号（虚拟学习者）——「是否观察过」的人数与
+    「需人工确认」的加总必须落在同一用户集，投影取数不能全库取（2026-11-02 P1-5）。 */
+export function findConsolidationAuditProjections(excludedUserIds: string[] = []) {
   return prisma.learner_projections.findMany({
-    where: { scope: CONSOLIDATION_AUDIT_PROJECTION_SCOPE },
+    where: {
+      scope: CONSOLIDATION_AUDIT_PROJECTION_SCOPE,
+      ...(excludedUserIds.length > 0 ? { userId: { notIn: excludedUserIds } } : {}),
+    },
     select: { userId: true, payload: true, generatedAt: true },
   });
 }

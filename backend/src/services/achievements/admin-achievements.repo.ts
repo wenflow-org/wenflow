@@ -6,10 +6,12 @@ import type { Prisma } from '@prisma/client';
  * 发放/撤回走 withTransaction（tx.* 在路由内编排），此处只承载非事务取数。
  */
 
-/** 每个成就定义（type×title）已被解锁的用户数 */
-export function groupAchievementUnlockCounts() {
+/** 每个成就定义（type×title）已被解锁的用户数。
+ *  where 由调用方给定读数口径：定义卡与解锁记录表必须同源，否则同一页两套数对不上。 */
+export function groupAchievementUnlockCounts(where: Prisma.achievementsWhereInput = {}) {
   return prisma.achievements.groupBy({
     by: ['type', 'title'],
+    where,
     _count: { _all: true },
   });
 }
