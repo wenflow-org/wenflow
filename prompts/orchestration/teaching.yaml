@@ -146,6 +146,21 @@ fields:
     pathInRawOutput: teachingState.classroomContext
     description: 课堂上下文（上轮持久化）
 
+  # #193（实例 1）：scenario 是「编排层整块组装」的输入通道——buildTeachingTurnInput
+  # （services/ai-teaching/teaching-turn-shared.ts）逐回合把 taskKcs/cognitiveFrame/materials/taskProfile/
+  # pathProgress 等组装成**单个顶层对象**注入，没有单点可抽取路径。故在此登记为**字段声明（fields 行）**，
+  # 但**不设 routings 通道行、不填 pathInRawOutput**：field-dispatcher 的通道行不变式要求
+  # 「teaching-agent → skill:teaching-turn 的每一行都可按 pathInRawOutput 装配」
+  # （见 backend/src/services/__tests__/field-dispatcher-teaching-channels.test.ts）——把没有抽取路径的
+  # 复合通道塞进 routings 会造出装配时恒被 skip 的假通道。fields 行则无此约束（pathInRawOutput 可选）。
+  - fieldId: scenario
+    promptRole: soft-info
+    valueType: object
+    description: 任务与路径上下文（编排层整块组装：taskKcs/cognitiveFrame/materials/taskProfile/pathProgress 等；无单点抽取路径，故无 routings 行）
+  # 同类的 classroomEventContext / interactionProfile（同样是编排层组装、无单点抽取路径）亦不作 routings 行；
+  # 三者的沙盘引用声明在 core inputs（prompts/core/teaching-turn.yaml，ref sandbox:teaching.*）与
+  # 沙盘键注册表（services/agent-contract-view.ts 的 SANDBOX_EXTRA_KEYS），门禁 prompts:check-handoff 据此对账。
+
   # === skill:peer-reinforcement 产出 ===
   - fieldId: message
     promptRole: public-reply

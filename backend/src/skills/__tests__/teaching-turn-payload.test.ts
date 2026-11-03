@@ -453,6 +453,100 @@ describe('teaching-turn 完成判定（2026-08-30 起 LLM 语义判定，不再�
     expect(validation).toEqual({ valid: true })
   })
 
+  it('validateParsedOutput：模型自标完成候选、知识点未全 mastered 时收束语不再判废整轮（#163 拆掉 allKnowledgeMastered 硬门禁）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    // 复现 issue 点名的「常态误伤」：课中 points 含冻结的 pending/learning 点，旧门禁几乎恒 false，
+    // 于是即便模型正确标记了完成候选，任何收束措辞仍把整轮判废。现由引擎的 completionReady 兜底。
+    const validation = spec.validateParsedOutput({
+      reply: '本节已完成，我们进入下一环节。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['reflect'] },
+      control: { isCompletionCandidate: true, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: true })
+  })
+
+  it('validateParsedOutput：句中推进语（非句末结论）非完成候选时不判废（#163 推进模式同样收窄）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '我们先把这三条线索列完，再进入下一环节，好吗？',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['scaffold'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: true })
+  })
+
+  it('validateParsedOutput：句末「进入下一环节。」推进结论仍报 MISMATCH', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '这一节就到这里，我们进入下一环节。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['reflect'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' })
+  })
+
+  it('validateParsedOutput：句末「已经完成。」非完成候选时不新判废（#163 收窄不得新增命中）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    // 旧裸词 `/已完成/` 本就不命中「已经完成。」（已-经-完-成不连续）；收窄时若扩成 `(?:已|已经)`，
+    // 会把「前两步已经完成。」这类合法进度陈述新判废整轮，故此处断言仍有效。
+    const validation = spec.validateParsedOutput({
+      reply: '前两步已经完成。我们把剩下的线索再排一排。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['scaffold'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: true })
+  })
+
+  it('validateParsedOutput：句末「满足要求。」（不含「已」）非完成候选时仍报 MISMATCH（#163 找回护栏覆盖）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '这份点单记录满足要求。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['scaffold'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' })
+  })
+
   it('retryStrategy.onValidationFail：COMPLETION_MISMATCH 时把该约束显式回灌给重试（#163）', async () => {
     await teachingTurnAgentHandler(EDITING_INPUT as any)
 

@@ -3124,22 +3124,27 @@ function evaluateCompletionByTaskProfile(input: TeachingTurnInput) {
 /**
  * 「过早收束」语言判据（#163 收窄）：
  * 原判据是裸词 `/已完成/`，任何进度陈述（如「这个练习已完成了一半」）都会整轮判废；
- * 课中 `input.knowledge.points` 常含冻结的 pending 点，`allKnowledgeMastered` 几乎恒 false，
- * 误伤是常态而非边界。现只认两类信号：
- * - **结论式**完成语：已完成 / 已满足（要求|标准|条件），且收在句读或行尾/串尾——
+ * 课中 `input.knowledge.points` 常含冻结的 pending 点，旧的「全 mastered」硬门禁几乎恒 false，
+ * 误伤是常态而非边界（该门禁已从 validateTeachingTurnOutput 移除）。现只认两类信号，且命中集是原裸词的**真子集**（收窄不得新增命中）：
+ * - **结论式**完成语：已完成 / 满足（要求|标准），且收在句读或行尾/串尾——
  *   「已完成了一半」这类进行中的陈述不再命中；
- * - 显式推进指令：与 teaching-knowledge-state.hasPrematureNextStepLanguage 同源。
+ *   两处刻意不扩：① 不带「已经」前缀——旧裸词 `/已完成/` 本就不命中「已经完成。」
+ *   （已-经-完-成不连续），若在此扩成 `(?:已|已经)` 会凭空新增同类误伤（如「前两步已经完成。」判废整轮）；
+ *   ② 不认「满足条件」——旧裸词只认「满足…要求/标准」，加上等于新增命中。
+ * - 显式推进指令：与 teaching-knowledge-state.hasPrematureNextStepLanguage 同源，同样只认收在
+ *   句读/串尾的**推进结论**——「稍后进入下一环节，我们先做…」这类半句陈述不再整轮判废
+ *   （旧裸词 `/进入下一环节/` 会命中句中任意位置）。
  */
 const PREMATURE_COMPLETION_LANGUAGE: RegExp[] = [
-  /(?:已|已经)完成(?:了)?(?:要求|标准|条件)?(?=[。！？!?；;\n]|$)/,
-  /(?:已|已经)满足[^。！？!?\n]{0,10}(?:要求|标准|条件)(?=[。！？!?；;\n]|$)/,
-  /进入下一环节/,
-  /进入下一个任务/,
-  /接下来.*下一环节/,
-  /接下来.*下一个任务/,
+  /已完成(?:了)?(?:要求|标准|条件)?(?=[。！？!?；;\n]|$)/,
+  /满足[^。！？!?\n]{0,10}(?:要求|标准)(?=[。！？!?；;\n]|$)/,
+  /进入下一环节(?=[。！？!?；;\n]|$)/,
+  /进入下一个任务(?=[。！？!?；;\n]|$)/,
+  /接下来[^。！？!?\n]{0,10}下一环节(?=[。！？!?；;\n]|$)/,
+  /接下来[^。！？!?\n]{0,10}下一个任务(?=[。！？!?；;\n]|$)/,
 ];
 
-function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
+function validateTeachingTurnOutput(parsed: any) {
   if (!parsed || typeof parsed !== 'object') {
     return { valid: false, failureReason: 'TEACHING_TURN_OUTPUT_NOT_OBJECT' };
   }
@@ -3161,30 +3166,16 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   }
 
   const reply = typeof parsed.reply === 'string' ? parsed.reply.trim() : '';
+  // #163（缺口③）：此前这里用「模型自称完成 + input.knowledge.points 全 mastered」派生
+  // `completionLanguageAllowed`。但课中 points 含冻结的 pending 点，该门禁几乎恒 false，
+  // 且这里的 mastered 读数发生在知识合并之前（引擎后续会以「冻结目标集」与 soft 收口重判）——
+  // 于是任何命中收束措辞的合法回合都会被整轮判废（issue 点名的「误伤面是常态而非边界」）。
+  // 改为**信任模型自己的完成信号**（与收束判据完全同源）：`control.isCompletionCandidate=true`
+  // 即放行收束措辞，其正确性由引擎的冻结目标集 / soft 收口门禁兜底（虚假完成仍会被 soft-AND 拦）。
+  // 收窄后的 `PREMATURE_COMPLETION_LANGUAGE` 只捕获会被硬门禁误伤的边界，不会放大检查成本。
   const rawCompletionCandidate = parsed.control?.isCompletionCandidate === true;
-  // 2026-08-30：完成一致性校验不再使用关键词硬匹配（evaluateByCriteria/evaluateByProfile），
-  // 改为 LLM 语义判定 + 知识硬门禁：模型说完成 + 知识点全 mastered 才允许宣布完成。
-  const resolvedKnowledge = resolveKnowledgeBlock(parsed);
-  const rawPoints = Array.isArray(resolvedKnowledge.points) ? resolvedKnowledge.points : [];
-  const inputPointMap = new Map(
-    (Array.isArray(input.knowledge?.points) ? input.knowledge.points : [])
-      .filter((point) => typeof point?.name === 'string' && point.name.trim())
-      .map((point) => [point.name.trim().toLowerCase(), point])
-  );
-
-  rawPoints.forEach((point: any) => {
-    if (typeof point?.name !== 'string' || !point.name.trim()) return;
-    inputPointMap.set(point.name.trim().toLowerCase(), {
-      name: point.name.trim(),
-      status: point.status,
-      progress: point.progress,
-    });
-  });
-
-  const allKnowledgeMastered = Array.from(inputPointMap.values()).length > 0
-    && Array.from(inputPointMap.values()).every((point: any) => point?.status === 'mastered');
   const hasPrematureCompletionLanguage = PREMATURE_COMPLETION_LANGUAGE.some((pattern) => pattern.test(reply));
-  const completionLanguageAllowed = rawCompletionCandidate && allKnowledgeMastered;
+  const completionLanguageAllowed = rawCompletionCandidate;
 
   if (hasPrematureCompletionLanguage && !completionLanguageAllowed) {
     return { valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' };
@@ -3329,7 +3320,7 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   coerceParsedForContract: (parsed) => (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
     ? { ...parsed, knowledge: resolveKnowledgeBlock(parsed) }
     : parsed),
-  validateParsedOutput: (parsed, input) => validateTeachingTurnOutput(parsed, input),
+  validateParsedOutput: (parsed) => validateTeachingTurnOutput(parsed),
   mapEnvelope: (output, _input, runtimeContract) => {
     const isCompletion = !!output.control?.isCompletionCandidate;
     const phase = isCompletion ? 'completion-candidate' : 'turn-generated';
@@ -3363,9 +3354,9 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
       // #163：此前该失败原因不在重试文案里，模型无信号可改，两轮同类失败即整轮丢弃
       // （teaching-turn-engine 直接 throw，本轮消息不落库）。仅在命中该原因时附加，避免每轮灌无关约束。
       + (failureReason === 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH'
-        ? `4) reply 里不得出现收束结论或推进指令：只有当 control.isCompletionCandidate=true 且所有知识点均为 mastered 时，`
+        ? `4) reply 里不得出现收束结论或推进指令：只有当 control.isCompletionCandidate=true 时，`
           + `才允许写「（本节/本任务）已完成」「已满足要求」这类结论，或「进入下一环节/下一个任务」这类推进语；`
-          + `本轮条件不满足，请改写为仍在当前环节推进的说法（例如「这个练习已完成了一半」是允许的）。`
+          + `本轮 control.isCompletionCandidate 为 false，请改写为仍在当前环节推进的说法（例如「这个练习已完成了一半」是允许的）。`
         : ''),
   },
 };

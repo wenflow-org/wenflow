@@ -34,7 +34,6 @@ import {
   determineTaskMode,
   fetchGraphNeighbors,
   normalizeConcept,
-  parseLearningObjectives,
   parsePathSummary,
   pickPrerequisiteConcepts,
   resolveTaskConceptFromPath,
@@ -169,13 +168,13 @@ export async function buildTeachingScenarioContext(
     learnerSnapshot.knowledgeMemory.globalSignals.masteredConcepts,
   );
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
-  const persistedLearningObjectives = parseLearningObjectives((task as any).learningObjectives);
   const taskKnowledgeSeeds = buildTaskKnowledgeSeeds({ task, path, resolvedConcept });
   // issue #193：subtasks.learningObjectives 在主链生成里结构性为空——core/stage-designer.yaml 明令
   // 「不要输出 learningObjectives」，stage-enrichment 每个 subtask 写 null，实测 2037/2037 为空；
   // 曾把它当 primaryConcepts 的「首选源」是一段永远走不到的次优分支。这里把 fallback 定为唯一路径：
   // 本课概念一律取 KC 种子（取不到 KC 时 buildTaskKnowledgeSeeds 回落任务 canonical 概念）。
-  // （persistedLearningObjectives 仍供下方 determineTaskMode 判「是否已有既定学习目标」，语义不同，保留。）
+  // 同一字段在 determineTaskMode 侧的消费点也已移除（#193 复核）：PF 判据不再挂在这条恒空分支上，
+  // 见 teaching-context-knowledge.ts determineTaskMode 头注。
   const primaryConcepts = taskKnowledgeSeeds.map((point) => point.name).slice(0, 2);
   // 前置概念：`prerequisiteGaps` 本来就是按**本任务**的上游闭包算出来的，`source==='graph'` 可直接采用。
   // 回落口径（`source==='fallback'`）给的是"本任务自身薄弱概念"，不是前置 → 只保留能对上本课概念的（旧行为）。
@@ -431,7 +430,7 @@ export async function buildTeachingScenarioContext(
     interactionProfile: buildInteractionProfile(interactionMeta, previousSession?.messages ?? []),
     learnerPrediction: null,
     priorMisconceptions,
-    taskMode: determineTaskMode(task, persistedLearningObjectives, cognitiveFrame),
+    taskMode: determineTaskMode(task, cognitiveFrame),
     behavioralProfile,
   };
 

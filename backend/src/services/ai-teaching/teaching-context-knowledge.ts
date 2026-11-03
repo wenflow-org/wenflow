@@ -319,24 +319,6 @@ export function buildCognitiveFrame(params: {
   } as TeachingScenarioContext['cognitiveFrame'];
 }
 
-export function parseLearningObjectives(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return dedupeConcepts(parsed.map((item) => String(item)));
-    }
-    if (typeof parsed === 'string') {
-      return dedupeConcepts([parsed]);
-    }
-  } catch {
-    return dedupeConcepts([raw]);
-  }
-  return [];
-}
-
-
-
 /**
  * 本课的"知识组件种子"：kc-mapper 已经把任务↔KC 的映射落在 `kcAnnotation.taskKcLinks` 里，
  * 复用 `resolveTaskKcsFromPath`（含契约漂移归一）取出来即可，**不新增 LLM 调用**。
@@ -361,17 +343,28 @@ export function buildTaskKnowledgeSeeds(params: {
   return dedupeConcepts(names).slice(0, 4).map((name) => ({ name, status: 'pending' as const, progress: 0 }));
 }
 
-/** 有效失败（PF）触发条件：概念性任务 + 无既定学习目标（新概念）+ 有迁移目标 + 练习/项目型 */
+/**
+ * 有效失败（PF）触发条件：概念性任务 + 有迁移目标 + 练习/项目型。
+ *
+ * issue #193（复核收口）：原判据还含「无既定学习目标（新概念）」一项，判据源是
+ * `subtasks.learningObjectives` 是否为空。该字段在**生成链**结构性为空——`prompts/core/stage-designer.yaml`
+ * 明令「不要输出 learningObjectives」，stage-enrichment 每个 subtask 写 null（实测 2037/2037 为空）
+ * ⇒ 对生成出来的任务该条件恒真、从不判别，等于把 PF 是否触发挂在与生成链无关的分支上，故移除。
+ *
+ * 注意这是**行为变更**而非等价改写：该字段并非全链恒空——path-structural-edit 的 insert_task
+ * （routes/learning.ts 可达）可显式写入非空值；对这类手工插入任务，旧实现 isNewConcept=false 会抑制 PF，
+ * 移除后它们也按上述三条件判 PF（当前前端不发送该字段，属 API-only 路径）。
+ * 另：「本课学习目标」若要用，请读 taskProfile.learningObjectives（= 本课 KC 种子，TeachingContextBuilder 组装），
+ * 那才是被填充的通道。
+ */
 export function determineTaskMode(
   task: any,
-  persistedLearningObjectives: string[],
   cognitiveFrame: { targetRelation: string | null },
 ): 'normal' | 'productiveFailure' {
   const isConceptual = task.knowledgeType === 'conceptual';
-  const isNewConcept = persistedLearningObjectives.length === 0;
   const hasTransferGoal = cognitiveFrame.targetRelation !== null;
   const isPracticeOrProject = task.taskType === 'practice' || task.taskType === 'project';
-  if (isConceptual && isNewConcept && hasTransferGoal && isPracticeOrProject) {
+  if (isConceptual && hasTransferGoal && isPracticeOrProject) {
     return 'productiveFailure';
   }
   return 'normal';
