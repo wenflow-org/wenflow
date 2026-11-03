@@ -905,9 +905,11 @@ async function enrichLearningPathWithAndersonInner(
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。
     // 契约收口在 kc-annotation 模块（executeSkillWithResult；2026-09-22 判空错配事故修复见该文件头注）。
-    // 渐进式（批次 D）：单阶段输出走 **增量合并**（mergeKcStageAnnotation，v2 顶层与 v1 同形、
-    // byStage 存阶段快照）——整包调用会把单阶段输出当全量覆写、抹掉其他阶段的 KC。
-    // persist 注入 no-op：合并结果经本函数返回值交给下方 final 事务统一写 template（避免双写竞争）。
+    // 渐进式（批次 D）与追加补齐（appendOnly，仅对空白阶段生成）都走 **增量合并**
+    // （mergeKcStageAnnotation，v2 顶层与 v1 同形、byStage 存阶段快照）：两者的 kc-mapper
+    // 输入都只含本轮的阶段/任务，整包调用会把这段输出当全量覆写、抹掉**已设计阶段**的
+    // taskKcLinks（issue #169：append 自愈通道只判 progressive，未判 appendOnly）。
+    // 合并结果经本函数返回值交给下方 final 事务统一写 template（避免双写竞争）。
     //
     // 任务↔KC 的稳定键（issue #179）：连接键不能用会变形的自然语言标题，也不能靠标题自带的唯一性
     // （同名任务无解）。这里给本次运行的每个任务分配「阶段序号-阶段内序号」的稳定键，随 kc-mapper
@@ -921,7 +923,7 @@ async function enrichLearningPathWithAndersonInner(
       });
     }
     let kcAnnotation: KcAnnotation | null;
-    if (progressive) {
+    if (progressive || appendOnly) {
       const { executeSkillWithResult } = await import('../../../skills');
       const { kcMapperDefinition } = await import('../../../skills/kc-mapper');
       const kcParams = {
@@ -1457,7 +1459,7 @@ async function enrichLearningPathWithAndersonInner(
       // 离线评审才发现 3 条路径 KC/审计双双丢失）。落显式标记：可见、可统计、可告警。
       const auditDisabledReason = kcAnnotation
         ? null
-        : (progressive ? 'kc-mapper-failed' : 'kc-mapper-persist-failed');
+        : ((progressive || appendOnly) ? 'kc-mapper-failed' : 'kc-mapper-persist-failed');
       if (structureAudit && structureAudit.issues.length > 0) {
         logger.warn('[stage-enrichment] 路径结构审计发现问题（只记录，不重排）', {
           pathId: learningPath.id,
