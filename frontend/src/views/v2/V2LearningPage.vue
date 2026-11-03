@@ -731,7 +731,7 @@
       <span class="peerfab__q" aria-hidden="true">Q</span>
       <span class="peerfab__label" aria-hidden="true">伴学</span>
       <i v-if="peerUnread" class="peerfab__dot"></i>
-      <span v-if="peerUnread" class="peerfab__hint" role="status">卡住了？找小启聊聊</span>
+      <span v-if="peerUnread" class="peerfab__hint" role="status">小启有新消息</span>
     </button>
     <!-- 教师补充材料弹层（批次 E） -->
     <div v-if="supplementPreview.open" class="supmodal" @click.self="closeSupplement">
@@ -1102,7 +1102,7 @@ const SETTLE_GATE_COPY: Record<string, { title: string; action: SettleGateAction
     title: '先回答老师的问题',
     action: 'composer',
     actionLabel: '去回答',
-    guide: '回答它之后就能结算。若老师这一轮又以新问题收尾，这里会再拦你一次——不想继续答，可以点「仍然完成结算」（那一问会记进本次总结的待验证清单），或选「结束学习」（总结照常生成，只是本次不计入完成）。'
+    guide: '回答它之后就能结算。若老师这一轮又以新问题收尾，这里会再拦一次。也可以点「仍然完成结算」（那一问会记进本次总结的待验证清单），或选「结束学习」（总结照常生成，本次不计入完成）。'
   },
   FINALIZATION_PENDING_CHECKPOINT: {
     title: '先完成这道小测',

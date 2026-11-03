@@ -402,7 +402,7 @@
         <div class="adjust-dialog__head">
           <div>
             <h3 id="adjustDialogTitle" class="adjust-dialog__title">调整这条路径</h3>
-            <p class="adjust-dialog__desc">说说你的情况和想法，选一种调整方式。已学完的内容我们会帮你保留衔接。</p>
+            <p class="adjust-dialog__desc">说说你的情况和想法，选一种调整方式。已学完的内容会保留并衔接。</p>
           </div>
           <button type="button" class="adjust-dialog__close" aria-label="关闭" @click="adjustDialogOpen = false">
             <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>

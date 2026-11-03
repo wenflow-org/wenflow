@@ -303,7 +303,7 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     const openGuide = gate.find('.gate__guide').text();
     expect(openGuide, 'OPEN_QUESTION 应引导先回答').toContain('回答它之后就能结算');
     expect(openGuide, '不得再承诺「老师回应完这一轮就能结算」这个可能不来的状态').not.toContain('再来结算课堂');
-    expect(openGuide, '应如实说明可能被再拦一次').toContain('这里会再拦你一次');
+    expect(openGuide, '应如实说明可能被再拦一次').toContain('这里会再拦一次');
     expect(openGuide, '应指出随时可用的出口（结束学习不计入完成）').toContain('结束学习');
     // 再次结算、换一种原因：引导随原因切换
     api.finalizeSessionReliably.mockRejectedValueOnce({

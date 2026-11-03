@@ -59,7 +59,7 @@
           <div v-else-if="step === 2" key="s2" class="ob__page">
             <span class="ob__kicker">第一步 · 输入</span>
             <h1 class="ob__title">说出你想解决的事</h1>
-            <p class="ob__sub">从最近卡住的事开始，一句话也行。问流会追问边界、基础和时间，帮你说清问题，而不是让你先整理出完美目标。</p>
+            <p class="ob__sub">从最近卡住的事开始。问流会追问边界、基础和时间，把问题梳理成目标和阶段安排。</p>
 
             <div class="ob__demo" aria-hidden="true">
               <div class="ob__demo-bar">
@@ -97,7 +97,7 @@
           <div v-else-if="step === 3" key="s3" class="ob__page">
             <span class="ob__kicker">第二步 · 生成路径</span>
             <h1 class="ob__title">聊几句，得到能执行的路径</h1>
-            <p class="ob__sub">问流把目标拆成阶段和任务——每一步都知道学什么，今天就能动手。学到一半想改，也可以随时调整。</p>
+            <p class="ob__sub">问流把目标拆成阶段和任务——每一步都知道学什么，今天就能动手。学到一半可随时调整。</p>
 
             <div class="ob__demo" aria-hidden="true">
               <div class="ob__demo-bar">

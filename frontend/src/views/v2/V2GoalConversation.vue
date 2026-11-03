@@ -18,7 +18,7 @@
       <div class="entry__hero">
         <div class="entry__hero-text">
           <h1>从一件真实的小事开始</h1>
-          <p>不用整理、不用说得很准。聊 2 分钟，问流帮你梳理出目标和第一阶段安排。</p>
+          <p>聊几句话，问流会梳理出目标和第一阶段安排。</p>
         </div>
         <button v-if="live.hasSession()" type="button" class="resume" @click="doResume">
           <span class="resume__dot"></span>
@@ -651,7 +651,7 @@ const ATTACH_HINT = '添加资料：PDF / Word / PPT / Excel / TXT / Markdown，
 const SEND_SHORTCUT_HINT = 'Enter 发送 · Shift+Enter 换行';
 /** 生成中发送键变成停止方块：补一句 hover 说明，纯图标按钮不靠自己猜 */
 const STOP_WAIT_HINT = '停止等待回复';
-const CLOSE_ESC_HINT = '关闭（Esc 可随时关闭）';
+const CLOSE_ESC_HINT = '关闭（Esc）';
 /* 首轮 start 失败且尚无任何 AI 回复：底部输入框不能继续「假装能问」，否则用户会再次失败 */
 const startFailed = computed(() => live.failed === 'start' && !live.stopped);
 /* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */

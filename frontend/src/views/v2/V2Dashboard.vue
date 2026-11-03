@@ -60,9 +60,8 @@
           <!-- 进行中：今日行动卡 -->
           <section v-if="pageState === 'active'" class="card action">
             <template v-if="resting">
-              <div class="action__eyebrow action__eyebrow--rest"><span>今天休息</span></div>
-              <h2 class="action__title">给自己放个小假</h2>
-              <p class="action__desc">想回来的时候，任务还在这里等你。</p>
+              <h2 class="action__title">今天休息</h2>
+              <p class="action__desc">任务与进度原样保留。</p>
               <div class="action__footer">
                 <button type="button" class="btn-primary" @click="setResting(false)">恢复学习</button>
               </div>
@@ -737,7 +736,7 @@ const stageInfo = computed(() => {
   return `${(idx >= 0 ? idx : 0) + 1} / ${primaryPath.value.stages.length || '?'}`;
 });
 
-const guidanceEmptyText = computed(() => guidanceCopy.value?.emptyStateCopy || '不用整理、不用说得很准。讲讲最近想解决的事，问流会帮你梳理成目标和阶段安排。');
+const guidanceEmptyText = computed(() => guidanceCopy.value?.emptyStateCopy || '讲讲最近想解决的事，问流会梳理成目标和阶段安排。');
 
 /* skill 今日行动（todayActions 语义跳转解析） */
 interface SkillAction { label: string; to: string; primary: boolean }
@@ -1190,7 +1189,7 @@ const daySheet = computed(() => {
     else if (stateSummary === '专注度较好') analysis = `今天学习时长较长，累计 ${fmtDuration(minutes)}，但整体专注度不错。后续注意恢复，就能把这个节奏维持住。${taskFragment}`;
     else analysis = `今天学习时长较长，累计 ${fmtDuration(minutes)}，过程整体平稳。建议之后安排恢复。${taskFragment}`;
   } else if (minutes >= 60) {
-    if (stateSummary === '有卡点需要巩固') analysis = `今天学习投入比较扎实，累计 ${fmtDuration(minutes)}，但也遇到了卡点。可以继续推进，同时记得回头巩固卡住的部分。${taskFragment}`;
+    if (stateSummary === '有卡点需要巩固') analysis = `今天学习投入比较扎实，累计 ${fmtDuration(minutes)}，但也遇到了卡点。可以继续推进，也可安排一次复习巩固卡住的部分。${taskFragment}`;
     else if (stateSummary === '专注度较好') analysis = `今天学习投入比较扎实，累计 ${fmtDuration(minutes)}，专注度也不错。保持这个节奏就好。${taskFragment}`;
     else analysis = `今天学习投入比较扎实，累计 ${fmtDuration(minutes)}，过程也比较平稳。适合继续稳步推进。${taskFragment}`;
   } else {
@@ -1611,8 +1610,6 @@ onMounted(loadAll);
 /* ---------- 交互补充 ---------- */
 a.btn-primary { text-decoration: none; }
 .example { text-decoration: none; }
-
-.action__eyebrow--rest { color: var(--faint); }
 
 </style>
 
