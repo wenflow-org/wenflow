@@ -62,6 +62,7 @@ import {
   normalizePathTaskType,
   parsePathCognitiveDesign,
   parsePathPromptTemplate,
+  resolveMilestoneConcept,
   resolvePersistedNormalizedInput,
   resolveTaskConcept,
 } from '../learning.helpers';
@@ -1033,24 +1034,33 @@ async function enrichLearningPathWithAndersonInner(
     //
     // 只收 `conceptSource === 'linked-concept'`：回退文本（'fallback-text'）可能是 path 内局部序号
     // `concept-N`，把它当 canonical 注册会重造"同键不同义"污染（实测别名表出现 aliasRaw="concept-1"）。
-    const subtaskConceptIds = new Map<string, string>();
+    //
+    // 里程碑核心概念（milestones.conceptId 的目标）与子任务共用同一张 `canonicalName → conceptId` 表：
+    // 两侧写的都是「认知设计里的概念名」，故合并成一次 resolveMany（少一次 concepts/aliases 写事务）。
+    const canonicalConceptIdsByName = new Map<string, string>();
     try {
-      const names = stageDesignOutputs
-        .flatMap((s) => s.subtasks)
-        .map((t: any) => {
-          const linked = typeof t?.linkedConcept === 'string' ? t.linkedConcept : null;
-          const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked, taskConceptMap);
-          return resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null;
-        })
-        .filter((name): name is string => !!name && !!name.trim());
+      const names = [
+        ...stageDesignOutputs
+          .flatMap((s) => s.subtasks)
+          .map((t: any) => {
+            const linked = typeof t?.linkedConcept === 'string' ? t.linkedConcept : null;
+            const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked, taskConceptMap);
+            return resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null;
+          }),
+        // 里程碑核心概念（与 path-generation.core 落 coreConceptName 同源同函数）
+        ...learningPath.milestones.map((milestone) => {
+          const resolved = resolveMilestoneConcept(milestone.coreConceptId, pathCognitiveDesign, milestone.coreConceptId);
+          return resolved.conceptSource === 'linked-concept' ? resolved.coreConceptName : null;
+        }),
+      ].filter((name): name is string => !!name && !!name.trim());
       if (names.length > 0) {
         const resolved = await conceptRegistryService.resolveMany(data.userId, names, {
           source: 'write_time', level: 'concept', originPathId: pathId,
         });
-        for (const [key, conceptId] of resolved) subtaskConceptIds.set(key, conceptId);
+        for (const [key, conceptId] of resolved) canonicalConceptIdsByName.set(key, conceptId);
       }
     } catch (error) {
-      logger.warn('[stage-enrichment] 子任务概念身份预解析失败（best-effort，conceptId 留空）', {
+      logger.warn('[stage-enrichment] 任务/里程碑概念身份预解析失败（best-effort，conceptId 留空）', {
         pathId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1164,7 +1174,7 @@ async function enrichLearningPathWithAndersonInner(
               linkedConceptId: resolvedConcept.linkedConceptId || null,
               linkedConceptName: resolvedConcept.linkedConceptName || null,
               // canonical 身份（事务外预解析；未命中留 null，回填脚本可补）
-              conceptId: subtaskConceptIds.get(normalizeConceptKey(resolvedConcept.linkedConceptName)) ?? null,
+              conceptId: canonicalConceptIdsByName.get(normalizeConceptKey(resolvedConcept.linkedConceptName)) ?? null,
               knowledgeType: taskData.knowledgeType || null,
               cognitiveLevel: taskData.cognitiveLevel || null,
               icapLevel: taskData.icapLevel || null,
@@ -1214,6 +1224,15 @@ async function enrichLearningPathWithAndersonInner(
           title: milestone.title ?? null,
           estimatedHours: stageHours,
         });
+        // 里程碑 canonical 概念身份（issue #166）：`coreConceptId` 是 path 内局部序号（concept-N），
+        // 概念图「去练习」锚点按 canonical `conceptId` 跨表 join；落库侧此前从不写该列，故在此用
+        // 与子任务同一张预解析表回填（同一 `resolveMilestoneConcept` 语义，命中认知设计才取 canonical）。
+        const milestoneConcept = resolveMilestoneConcept(
+          milestone.coreConceptId, pathCognitiveDesign, milestone.coreConceptId,
+        );
+        const milestoneCanonicalId = milestoneConcept.conceptSource === 'linked-concept' && milestoneConcept.coreConceptName
+          ? canonicalConceptIdsByName.get(normalizeConceptKey(milestoneConcept.coreConceptName)) ?? null
+          : null;
         if (stageHours !== null) {
           pathNormalizedHours += stageHours;
           // 阶段级「时间说明」拼接已下线（2026-10-25 方向改造）：实证它把内部预算口径差
@@ -1232,9 +1251,16 @@ async function enrichLearningPathWithAndersonInner(
             where: { id: milestone.id },
             data: {
               estimatedHours: stageHours,
+              ...(milestoneCanonicalId ? { conceptId: milestoneCanonicalId } : {}),
               ...(anchorNote && anchorGoalBase !== null ? { goal: `${anchorGoalBase}${anchorNote}` } : {}),
               updatedAt: new Date(),
             }
+          });
+        } else if (milestoneCanonicalId) {
+          // 无任务阶段不会走进上面的学时回写分支，但仍需补 canonical 身份（否则该里程碑锚点恒空）
+          await tx.milestones.update({
+            where: { id: milestone.id },
+            data: { conceptId: milestoneCanonicalId },
           });
         }
       }
