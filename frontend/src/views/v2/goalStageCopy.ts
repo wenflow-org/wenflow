@@ -36,7 +36,7 @@ export interface ProposalEntryCopy {
 /**
  * 两行入口的文案：一行是「回答导师」、一行是「看/确认方案」。
  * 导师在问会改方案的问题时，入口条不再宣称「方案已就绪」——因为方案里正有一个待表态的点。
- * （快选行的标签见 {@link goalRepliesLabel}：那一行在 understanding 也存在，文案不能只说「调整」。）
+ * （快选行在 understanding 也存在，文案不能只说「调整」。）
  */
 export function proposalEntryCopy(awaitingAnswer: boolean): ProposalEntryCopy {
   if (awaitingAnswer) {
@@ -51,18 +51,4 @@ export function proposalEntryCopy(awaitingAnswer: boolean): ProposalEntryCopy {
     hint: '方案已就绪——回复即可继续调整，满意了再确认',
     button: '查看方案并确认',
   };
-}
-
-/**
- * 快选行前的可见标签（此前只有读屏器能看到，用户会把两行读成同一组选项）。
- * understanding 阶段的快选是「本轮问题的候选项」，不能说成「调整方案」——
- * 实测：只按 proposing 的两套文案取，会在澄清阶段打出「也可以这样调整」（2026-11-01 自测截图）。
- */
-export function goalRepliesLabel(stage: string | null | undefined, awaitingAnswer: boolean): string {
-  if (stage === 'proposing') {
-    return awaitingAnswer
-      ? '回应导师这一问（点选填入输入框，可多选）'
-      : '也可以这样调整（点选填入输入框，可多选）';
-  }
-  return '也可以直接选（点选填入输入框，可多选）';
 }

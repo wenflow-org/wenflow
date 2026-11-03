@@ -318,8 +318,7 @@
                改整行 .wf-reply 按钮组（蓝描边 + 蓝 5% 底 + 前置 6px 蓝点，选中变 ✓）。
                勾选语义不变：点选打勾进输入框，再点取消 -->
           <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies">
-            <!-- 可见标签（2026-10-31 走查）：此前说明只给读屏器，用户把快选读成「和确认按钮并列的选项」 -->
-            <span class="replies__label">{{ repliesLabel }}</span>
+            <!-- 可见标签已移除（2026-11-03 用户反馈「直接不要这个提示」）：快选用法说明只保留给读屏器 -->
             <span class="visually-hidden">快捷补充：点选填入输入框，可多选</span>
             <button
               v-for="q in availableReplies"
@@ -627,7 +626,7 @@ import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
 import { feedbackApi } from '@/api/feedback';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
-import { goalRepliesLabel, isAwaitingAnswer, proposalEntryCopy } from './goalStageCopy';
+import { isAwaitingAnswer, proposalEntryCopy } from './goalStageCopy';
 import { learningAPI, type GenerationLifecycleDTO } from '@/api/learning';
 import { genPillCopy, genStageLabel, isGenerationSettled } from './learningPathProgress';
 
@@ -702,9 +701,7 @@ const awaitingAnswer = computed(() => {
   return false;
 });
 const entryCopy = computed(() => proposalEntryCopy(awaitingAnswer.value));
-/* 快选行标签：understanding 阶段也存在这一行（那里的快选是「本轮问题的候选项」），
-   不能一律说成「调整方案」——按阶段取文案，见 goalStageCopy.goalRepliesLabel。 */
-const repliesLabel = computed(() => goalRepliesLabel(live.stage, awaitingAnswer.value));
+/* 快选行不再显示可见标签（2026-11-03 用户反馈「直接不要这个提示」）：用法说明只保留给读屏器。 */
 
 onMounted(() => {
   window.addEventListener('keydown', onProposalKey);
@@ -2171,11 +2168,6 @@ function shuffleScenes() {
 .replies {
   display: flex; flex-direction: column; gap: 8px;
   margin-left: 40px;
-}
-/* 快选行的可见标签（2026-10-31 走查）：说明这一行是「帮你打字」，不是与确认按钮并列的选项 */
-.replies__label {
-  font-size: var(--mk-fs-body);
-  color: var(--mk-muted);
 }
 .reply {
   display: flex; align-items: flex-start; gap: 9px; width: 100%;

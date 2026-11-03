@@ -7,7 +7,7 @@
  * 语料取自 prompt_call_logs 里 136 个真实 proposing 回合的回复收尾。
  */
 import { describe, expect, it } from 'vitest';
-import { goalRepliesLabel, isAwaitingAnswer, proposalEntryCopy } from '../goalStageCopy';
+import { isAwaitingAnswer, proposalEntryCopy } from '../goalStageCopy';
 
 describe('isAwaitingAnswer：proposing 且收尾问句是「向你要信息」', () => {
   it('确认式问句不算「要信息」——导师是在请你拍板（实测语料 5 条）', () => {
@@ -58,27 +58,5 @@ describe('proposalEntryCopy：确认入口条只说确认这一件事', () => {
     const copy = proposalEntryCopy(false);
     expect(copy.button).toBe('查看方案并确认');
     expect(copy.hint).toContain('方案已就绪');
-  });
-});
-
-describe('goalRepliesLabel：快选行的标签按阶段说人话', () => {
-  it('understanding 的快选是「本轮问题的候选项」，不能说成「调整方案」', () => {
-    const label = goalRepliesLabel('understanding', false);
-    expect(label).not.toContain('调整');
-    expect(label).toContain('填入输入框');
-  });
-
-  it('proposing + 导师在要信息：标签是「回应导师这一问」', () => {
-    expect(goalRepliesLabel('proposing', true)).toContain('回应导师这一问');
-  });
-
-  it('proposing + 方案就绪：标签说明它只是「调整」捷径', () => {
-    const label = goalRepliesLabel('proposing', false);
-    expect(label).toContain('调整');
-    expect(label).toContain('填入输入框');
-  });
-
-  it('stage 缺失也给出可读标签（不出现 undefined）', () => {
-    expect(goalRepliesLabel(null, false)).toContain('填入输入框');
   });
 });
