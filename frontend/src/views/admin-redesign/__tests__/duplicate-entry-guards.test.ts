@@ -44,9 +44,14 @@ describe('重复操作入口守卫', () => {
 
   it('运行时配置只有配置弹层里一颗保存钮，卡头不再有分段保存', () => {
     const src = read('skill-design/runtime-tab.vue')
-    expect(src.match(/@click="saveRuntime"/g) ?? []).toHaveLength(1)
+    // 保存钮只有弹层里一颗（2026-11-03 卡头改「翻转即落盘」后仍只有这一颗按钮；
+    // 覆盖开关走 onOverrideToggle 内部调同一套保存，不是第二颗保存钮）
+    expect(src.match(/@click="saveRuntime(\(\))?/g) ?? []).toHaveLength(1)
     expect(src).not.toContain('sdp-card__save')
     expect(src).toContain('@click="openConfig"')
+    // 覆盖开关必须真的落盘：绑 onOverrideToggle，而不是只改本地 v-model
+    expect(src).toContain('@update:model-value="onOverrideToggle"')
+    expect(src).toContain('async function onOverrideToggle')
   })
 
   it('接入页：连接与策略只在连接设置弹层里有一颗保存钮，不再有整页保存条', () => {
@@ -119,6 +124,8 @@ describe('重复操作入口守卫', () => {
     // 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
     // 行点击已落默认页签，操作列不再重复「详情」；路径页签入口收进 ⋯ 菜单，
     // 操作列只留溢出菜单，不再出现整行可见的文本链接。
+    // 2026-11-02 P2-3：行内仍不留按钮，但 ⋯ 菜单补回一条「查看详情」——
+    // 行点击这个入口本身没有文字，菜单里得有它的可见同义词（判据仍是「行内没有详情按钮」）。
     const src = read('GoalConversations.vue')
     expect(src).toContain('@click="openDetail(r)"')
     expect(src).not.toContain('>详情</button>')

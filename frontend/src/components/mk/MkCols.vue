@@ -21,6 +21,9 @@
         <input type="checkbox" :checked="!hidden.has(c.key)" @change="toggle(c.key)" />
         <span>{{ c.label }}</span>
       </label>
+      <!-- 固定列不在勾选名单里，却没有一行字说明它们不可隐藏：
+           菜单写「5 / 10」而屏幕上还多出两列时，计数看起来就是错的（2026-11-02 评审 R3/R15）。 -->
+      <p v-if="fixedCols?.length" class="mk-cols__fixed">固定列 {{ fixedCols.join('、') }} 始终显示</p>
       <!-- 「恢复默认」= 回到该页首访的默认集（不是一律全显）：
            像目标对话的「约束条件」、用户页的「选择框」本就默认收起，
            旧按钮写「恢复全部列」会把它们翻出来，与页面意图相反。 -->
@@ -44,6 +47,9 @@ const props = defineProps<{
   storageKey: string
   /** 首次访问（本地尚无记录）时默认隐藏的列 key；已有记录则尊重用户配置 */
   defaultHidden?: ReadonlyArray<string>
+  /** 不可隐藏的列名（渲染在勾选名单下方）：菜单计数只统计可勾选项，
+      不点名固定列时读者会把「N / M」当成屏幕上真实的列数 */
+  fixedCols?: ReadonlyArray<string>
 }>()
 const hidden = defineModel<Set<string>>('hidden', { default: () => new Set<string>() })
 const open = ref(false)
@@ -142,6 +148,15 @@ function resetToDefault() {
 }
 .mk-cols__title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
 .mk-cols__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+/* 固定列说明：与勾选项同缩进、更弱一档，读作脚注而不是第 N 个可勾选项 */
+.mk-cols__fixed {
+  margin: 2px 0 0;
+  padding: 4px 8px 2px;
+  border-top: 1px dashed var(--mk-line);
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  line-height: 1.4;
+}
 .mk-cols__item {
   display: flex;
   align-items: center;

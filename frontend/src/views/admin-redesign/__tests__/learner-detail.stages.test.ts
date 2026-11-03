@@ -856,3 +856,309 @@ describe('LearnerDetail 稀疏虚拟账号：不报加载失败，读数不造�
     }
   });
 });
+
+/* 2026-11-02 P1-1：进度卡的路径状态徽章原先只由任务完成率推导（0/16=0 → 「未开始」），
+   不看 learning_paths.status。真实场景里路径已上过课、子任务却还没被标记完成，
+   徽章于是与同屏的路径状态、最近课堂互相打架。改为以路径清单带来的 status 为准
+   （active → 学习中），清单给不出状态时才回落到完成率推导。 */
+describe('LearnerDetail 进度卡路径状态徽章（P1-1）', () => {
+  /** 详情载荷：路径 active、但一条子任务都没标完成（看板尚未回写任务完成） */
+  function zeroProgressDetail() {
+    return {
+      model: {
+        name: '测试学习者',
+        knowledgeMemory: {
+          currentPath: {
+            learningPathId: 'lp1',
+            pathTitle: '测试路径',
+            progress: { totalTasks: 16, completedTasks: 0, totalMilestones: 3, completedMilestones: 0 },
+            conceptStates: [],
+          },
+          globalSignals: {},
+        },
+      },
+    };
+  }
+
+  it('已开课但 0/16 任务完成：徽章报路径状态「学习中」，不再推导成「未开始」', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    setActivePinia(createPinia());
+    routeQuery.tab = 'overview';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({
+      data: { data: { paths: [{ id: 'lp1', title: '测试路径', status: 'active', updatedAt: '2026-10-14T00:00:00Z' }] } },
+    });
+    detailMock.mockResolvedValue(zeroProgressDetail() as never);
+    try {
+      const w = await mountLd([]);
+      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '当前进度');
+      expect(card, '当前进度卡应存在').toBeTruthy();
+      const badge = card!.find('.mk-badge');
+      expect(badge.text()).toBe('学习中');
+      expect(badge.classes()).toContain('mk-badge--ok');
+      expect(badge.attributes('title')).toBe('路径状态：学习中');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+
+  it('路径清单给不出状态时回落到完成率推导（0/16 → 未开始），不凭空写「学习中」', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    setActivePinia(createPinia());
+    routeQuery.tab = 'overview';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({ data: { data: { paths: [] } } });
+    detailMock.mockResolvedValue(zeroProgressDetail() as never);
+    try {
+      const w = await mountLd([]);
+      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '当前进度');
+      expect(card!.find('.mk-badge').text()).toBe('未开始');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+});
+
+/* 2026-11-02 P1-2：概览「概念掌握」与证据「全局信号与背景」原先在「当前路径」标签下摆的
+   是学习者级概念清单（同页图谱才是路径级），掌握分档还各叫一套名字。这里锁住：
+   （a）两张概念卡把真实作用域写进可见卡头，（b）四档名与图谱同源（utils/conceptBands）。 */
+describe('LearnerDetail 概念卡作用域与分档名（P1-2）', () => {
+  function ledgerDetail() {
+    // 与真实响应同形：接口把快照摊在 data 顶层（route 里读 snapshot.knowledgeMemory），
+    // 页内 computeds 也读 rawDetail.knowledgeMemory；model 只为 hero 的姓名兜底
+    const knowledgeMemory = {
+      currentPath: {
+        learningPathId: 'lp1',
+        pathTitle: '测试路径',
+        progress: { totalTasks: 16, completedTasks: 0, totalMilestones: 3, completedMilestones: 0 },
+        conceptStates: [],
+      },
+      globalSignals: {
+        masteredConcepts: ['变量'],
+        strugglingConcepts: ['递归'],
+        fragileConcepts: ['闭包'],
+      },
+      globalBackground: {
+        conceptLedger: [{ label: '变量' }, { label: '递归' }, { label: '闭包' }, { label: '生成器' }],
+      },
+    };
+    return {
+      userName: '测试学习者',
+      knowledgeMemory,
+      model: { name: '测试学习者', knowledgeMemory },
+    };
+  }
+
+  it('概览「概念掌握」卡头报用户级作用域，不再挂「当前路径」', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    setActivePinia(createPinia());
+    routeQuery.tab = 'overview';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({ data: { data: { paths: [] } } });
+    detailMock.mockResolvedValue(ledgerDetail() as never);
+    try {
+      const w = await mountLd([]);
+      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '概念掌握');
+      expect(card, '概念掌握卡应存在').toBeTruthy();
+      const meta = card!.find('.mk-card__meta').text();
+      expect(meta).toContain('4 个概念');
+      expect(meta).toContain('跨全部路径');
+      expect(meta).toContain('按学员统计');
+      expect(meta).not.toContain('当前路径');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+
+  it('证据「全局信号与背景」卡头同样报用户级作用域，四档名与图谱一致', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    setActivePinia(createPinia());
+    routeQuery.tab = 'evidence';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({ data: { data: { paths: [] } } });
+    detailMock.mockResolvedValue(ledgerDetail() as never);
+    try {
+      const w = await mountLd([]);
+      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '全局信号与背景');
+      expect(card, '全局信号与背景卡应存在').toBeTruthy();
+      const meta = card!.find('.mk-card__meta').text();
+      expect(meta).toContain('跨全部路径');
+      expect(meta).toContain('按学员统计');
+      expect(card!.findAll('.ld-sig-tier strong').map((s) => s.text())).toEqual([
+        '已掌握 1',
+        '进行中 1',
+        '记忆偏弱 1',
+        '待学习 1',
+        '不在概念清单 0',
+      ]);
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+
+  /* 2026-11-02 P1-6：脚注原先把「0 + 1 + 1 + 2 = 4，与卡头对得上」这种实现侧加总自检
+     直接印给用户。只保留「另有 N 个标签不在当前概念清单里」这一句对读者有意义的披露；
+     没有清单外标签时整行不出现。 */
+  it('概念信号脚注只披露清单外的标签，不输出四档加总自检', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    setActivePinia(createPinia());
+    routeQuery.tab = 'evidence';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({ data: { data: { paths: [] } } });
+    try {
+      const clean = ledgerDetail();
+      detailMock.mockResolvedValue(clean as never);
+      const noOutside = await mountLd([]);
+      const cleanCard = noOutside.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '全局信号与背景');
+      expect(cleanCard!.find('.ld-sig-sec__foot').exists()).toBe(false);
+      expect(cleanCard!.text()).not.toContain('对得上');
+      noOutside.unmount();
+
+      // 清单外多一个标签：脚注点名它，且不再出现「a + b + c = N」这类算式
+      const withOutside = ledgerDetail();
+      withOutside.knowledgeMemory.globalSignals.masteredConcepts = ['变量', '读取Excel表对象'];
+      detailMock.mockResolvedValue(withOutside as never);
+      const w = await mountLd([]);
+      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '全局信号与背景');
+      const foot = card!.find('.ld-sig-sec__foot');
+      expect(foot.exists()).toBe(true);
+      expect(foot.text()).toBe('另有 1 个标签不在当前概念清单里、未计入：读取Excel表对象');
+      expect(card!.text()).not.toContain('对得上');
+      expect(card!.text()).not.toContain('只数概念清单里的那些');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+});
+
+/* 2026-11-02 P1-8：画像 KV 原先按字段原样 String()（读到 moderate / 0.5 / true），
+   「这格是实测还是默认常量」又只靠整页「证据为空」一枚徽章兜底——有目标对话没上过课时，
+   认知/偏好来自对话、行为基线仍是默认值，一枚徽章会把整卡标错。改为逐格标注 + 口径翻译。 */
+describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8）', () => {
+  function profileDetail() {
+    return {
+      userName: '测试学习者',
+      knowledgeMemory: {
+        currentPath: {
+          learningPathId: 'lp1',
+          pathTitle: '测试路径',
+          progress: { totalTasks: 16, completedTasks: 0, totalMilestones: 3, completedMilestones: 0 },
+          conceptStates: [],
+        },
+        globalSignals: {},
+      },
+      profile: {
+        cognitive: {
+          metacognitionLevel: 'high', thinkingStyle: 'practical', confusionPattern: 'none',
+          priorKnowledgeStructure: 'blank', selfAssessmentAccuracy: 'accurate',
+        },
+        behavioral: {
+          avgResponseTime: 10, avgMessageLength: 50, avgInteractionInterval: 5,
+          engagementLevel: 0.5, consistencyScore: 0.5,
+        },
+        preferences: {
+          preferredStyle: 'practice', theoryVsPractice: 'practice-first', sessionLength: 'medium',
+          preferredDifficulty: 'medium', prefersHints: true,
+        },
+        emotional: {
+          motivationTrigger: 'interest', urgencyLevel: 'medium', confidenceLevel: 'anxious',
+          frustrationTolerance: 0.5, rewardSensitivity: 'medium',
+        },
+        history: { totalSessions: 0, totalMessages: 0, avgSessionDuration: 0 },
+        curriculumControls: { taskGranularityLevel: 'medium', conceptDensityLevel: 'medium', reviewFrequencyLevel: 'medium' },
+        derivedInsights: {
+          learningVelocity: 0.5, optimalSessionLength: 30, recommendedDifficulty: 'medium',
+          suggestedApproach: '采用平衡的学习方式',
+        },
+      },
+      /* 只有认知两项/偏好两项/情绪一项来自对话；行为基线、课程控制与派生数值仍是默认常量 */
+      profileSources: {
+        cognitive: ['metacognitionLevel', 'thinkingStyle'],
+        behavioral: [],
+        learning: [],
+        preferences: ['preferredStyle', 'theoryVsPractice'],
+        emotional: ['confidenceLevel'],
+        history: [],
+        curriculumControls: [],
+        derivedInsights: ['suggestedApproach'],
+      },
+    };
+  }
+
+  async function mountProfile() {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    setActivePinia(createPinia());
+    routeQuery.tab = 'profile';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({ data: { data: { paths: [] } } });
+    detailMock.mockResolvedValue(profileDetail() as never);
+    return mountLd([]);
+  }
+
+  function kvRow(w: Awaited<ReturnType<typeof mountProfile>>, label: string) {
+    return w.findAll('.ld-kv__row').find((r) => r.find('span').text() === label)!;
+  }
+  /** 读数文本（不含紧随其后的「初始默认值」标注） */
+  function kvValue(w: Awaited<ReturnType<typeof mountProfile>>, label: string) {
+    return kvRow(w, label).find('strong').text().replace('初始默认值', '');
+  }
+
+  it('枚举翻成中文分档，比率标成百分比并带量纲说明', async () => {
+    const w = await mountProfile();
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    try {
+      expect(kvValue(w, '元认知水平')).toBe('高');
+      expect(kvValue(w, '困惑模式')).toBe('暂无明显模式');
+      expect(kvValue(w, '是否偏好提示')).toBe('需要提示');
+      expect(kvValue(w, '自信水平')).toBe('容易紧张');
+      // 0.5 不再裸上屏；量纲写在 title
+      expect(kvValue(w, '投入度')).toBe('50%');
+      expect(kvRow(w, '投入度').find('strong').attributes('title')).toBe('课堂互动的投入程度，0-100%');
+      expect(kvValue(w, '学习速度')).toBe('50%');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+
+  it('逐格标「初始默认值」：实测格不标，默认格每行都标，不再用整卡徽章兜底', async () => {
+    const w = await mountProfile();
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    try {
+      // 实测：不标
+      expect(kvRow(w, '元认知水平').find('.ld-kv__prior').exists()).toBe(false);
+      expect(kvRow(w, '自信水平').find('.ld-kv__prior').exists()).toBe(false);
+      // 默认：逐格标
+      for (const label of ['困惑模式', '平均响应（秒）', '平均消息长度（字）', '互动间隔（分钟）', '投入度', '一致性']) {
+        expect(kvRow(w, label).find('.ld-kv__prior').text()).toBe('初始默认值');
+      }
+      expect(kvRow(w, '学习速度').find('.ld-kv__prior').exists()).toBe(true);
+      // 规则建议（非实测非默认）不标
+      expect(kvRow(w, '建议方式').find('.ld-kv__prior').exists()).toBe(false);
+      // 旧的整卡徽章撤除
+      expect(w.text()).not.toContain('初始默认值 · 暂无学习记录');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+});

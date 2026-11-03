@@ -9,6 +9,23 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="closePromptTest">✕</button>
       </div>
       <div class="mk-modal__body">
+        <!-- 试跑对象（2026-11-02 评审 R7）：标题写「提示词试跑」，面板里就得能看到
+             这次要跑的那条提示词——此前只有三个参数，标题与内容对不上。
+             默认折起，避免长提示词把参数区和结果区挤到弹窗下方。 -->
+        <div class="pt-prompt">
+          <div class="pt-prompt__head">
+            <span class="pt-prompt__title">试跑用的提示词</span>
+            <span class="pt-prompt__meta">{{ agentLabelText }}{{ promptVersionText ? ` · ${promptVersionText}` : '' }}</span>
+          </div>
+          <p v-if="promptLoading" class="pt-prompt__state">读取提示词中…</p>
+          <p v-else-if="promptError" class="pt-prompt__state">提示词没读到：{{ promptError }}。仍可用当前参数试跑。</p>
+          <details v-else-if="promptText" class="pt-prompt__box">
+            <summary>展开提示词全文</summary>
+            <pre class="pt-prompt__text">{{ promptText }}</pre>
+          </details>
+          <p v-else class="pt-prompt__state">这个能力没有已生效的提示词版本。</p>
+        </div>
+
         <!-- 配置行 -->
         <div class="pt-config">
           <label class="mk-field">
@@ -25,11 +42,11 @@
             <input v-model.number="testForm.dialogueRounds" type="number" min="1" max="5" class="mk-field__input mono" />
           </label>
           <label class="mk-field">
-            <span class="mk-field__label">学生对抗度</span>
+            <span class="mk-field__label">学习者对抗度</span>
             <MkSelect
               v-model="testForm.friction"
               :options="FRICTION_OPTIONS"
-              aria-label="学生对抗度"
+              aria-label="学习者对抗度"
               block
             />
           </label>
@@ -94,8 +111,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { adminPromptOpsApi } from '@/api/adminApi'
+import { computed, ref, watch } from 'vue'
+import { adminPromptOpsApi, adminSkillsApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
@@ -157,6 +174,40 @@ const testForm = ref({
   dialogueRounds: 2,
   friction: 'normal' as FrictionBudget,
 })
+/** 试跑对象 = 所选能力的已生效提示词（R7：标题写「提示词试跑」，就得看得见跑的是哪条） */
+const promptText = ref('')
+const promptVersion = ref('')
+const promptLoading = ref(false)
+const promptError = ref('')
+const agentLabelText = computed(
+  () => AGENT_OPTIONS.find((o) => o.value === testForm.value.agentId)?.label || ''
+)
+const promptVersionText = computed(() => (promptVersion.value ? `v${promptVersion.value}` : ''))
+/** 连续切换能力时只认最后一次请求，避免先发后到的旧回答覆盖当前能力 */
+let promptSeq = 0
+async function loadPrompt() {
+  const seq = ++promptSeq
+  const skillId = testForm.value.agentId.replace(/^skill:/, '')
+  promptLoading.value = true
+  promptError.value = ''
+  promptText.value = ''
+  promptVersion.value = ''
+  try {
+    const res = await adminSkillsApi.getEffectiveSkillPrompt(skillId)
+    if (seq !== promptSeq) return
+    const body = (res.data?.data ?? res.data ?? {}) as {
+      prompt?: { version?: number | string; systemPrompt?: string }
+    }
+    promptText.value = String(body.prompt?.systemPrompt || '')
+    promptVersion.value = body.prompt?.version == null ? '' : String(body.prompt.version)
+  } catch (e) {
+    if (seq !== promptSeq) return
+    promptError.value = errMsg(e)
+  } finally {
+    if (seq === promptSeq) promptLoading.value = false
+  }
+}
+watch(() => testForm.value.agentId, () => { void loadPrompt() })
 const testPanelRef = ref<HTMLElement | null>(null)
 const testMaskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => !!testTarget.value), testPanelRef)
@@ -168,6 +219,7 @@ function open(s: PromptTestTarget) {
   testTarget.value = s
   testResult.value = null
   testForm.value = { agentId: 'skill:goal-conversation', dialogueRounds: 2, friction: 'normal' }
+  void loadPrompt()
 }
 function closePromptTest() {
   /* 试跑期间也允许关闭（此前直接 return，请求 30s-2min 把弹窗完全锁死）：
@@ -263,8 +315,35 @@ defineExpose({ open })
 
 <style scoped>
 /* ===== 单步 Prompt 测试面板（区块间距由 mk-modal__body 的 grid gap 承担） ===== */
-.pt-config { display: grid; grid-template-columns: 1fr 100px 170px; gap: 10px; align-items: end; }
+/* 三格同宽（2026-11-02 评审 R8）：原来是 1fr / 100px / 170px，一屏三种宽度、间隙只有 10px，
+   读不出对齐规则。两个下拉等宽、数字框居中一档，列间距与弹窗正文同档。 */
+.pt-config { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: end; }
 .pt-config .mk-field { margin-bottom: 0; }
+/* 试跑用的提示词：一行标题 + 折起的全文，不抢参数区的视线 */
+.pt-prompt { display: grid; gap: 4px; }
+.pt-prompt__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pt-prompt__title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
+.pt-prompt__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.pt-prompt__state { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.pt-prompt__box > summary { cursor: pointer; font-size: var(--mk-fs-micro); color: var(--mk-blue); list-style: none; width: fit-content; }
+.pt-prompt__box > summary::-webkit-details-marker { display: none; }
+.pt-prompt__box > summary::before { content: '▸'; margin-right: 6px; }
+.pt-prompt__box[open] > summary::before { content: '▾'; }
+.pt-prompt__text {
+  margin: 6px 0 0;
+  max-height: 200px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+  font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
+  line-height: 1.6;
+  color: var(--mk-ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .pt-result { display: grid; gap: 10px; }
 .pt-verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pt-meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }

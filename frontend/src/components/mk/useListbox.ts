@@ -42,9 +42,11 @@ export function useListbox<O>(
     item?.scrollIntoView({ block: 'nearest' })
   }
 
-  /** 估算弹层高度：选项行 ≈29px + 内衬；实际展开后再用 scrollHeight 校正 */
+  /** 估算弹层高度：选项行 ≈32px（实测：内衬 12 + 行高 20）+ 内衬；
+      上限与 `.mk-listbox-pop` 的 max-height 同步，否则「向上弹」的判据会为
+      一个按 CSS 收窄后的真实高度算错方向 */
   function estimateMenuHeight(): number {
-    return Math.min(options().length * 29 + 12, 320)
+    return Math.min(options().length * 32 + 8, 440)
   }
   function placeMenu() {
     const el = triggerEl.value

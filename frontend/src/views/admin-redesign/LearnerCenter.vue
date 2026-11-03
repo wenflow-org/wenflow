@@ -217,16 +217,21 @@ ${r.email}` : r.name">{{ r.name }}</strong>
               <div class="mk-cell-main lc-task">
                 <strong class="progress-title" :title="r.task || '未开始'">{{ r.task || '未开始' }}</strong>
                 <!-- 副行只放路径真值：任务为空时主行已写「未开始」，副行再补一句「尚未开始学习」
-                     等于同一状态写两遍（2026-10-29 冗余副文审计） -->
-                <span v-if="r.path" class="mk-cell-sub" :title="r.path">{{ r.path }}</span>
-                <!-- 2026-11-01 外部评审 P1：本列只展示「最近更新的那条在学路径」，
-                     多路径学员看起来像只有一条（同一学员在学习路径列表里明明有 2 条）。
-                     这里把总数标出来，读成「其中一条」而不是「全部」。 -->
-                <span
-                  v-if="extraPathCount(r) > 0"
-                  class="mk-badge mk-badge--sm mk-badge--muted"
-                  :title="`该学员共有 ${r.pathCount} 条在学路径，本列展示的是最近更新的那条，另外 ${extraPathCount(r)} 条可在「学习路径」列表查看`"
-                >共 {{ r.pathCount }} 条路径</span>
+                     等于同一状态写两遍（2026-10-29 冗余副文审计）。
+                     路径与「共 N 条路径」角标同一行（2026-11-02 P1-7）：角标原先独占第三行，
+                     被本列的限高整段裁掉，多路径学员在表里又只剩一条路径。 -->
+                <span v-if="r.path || extraPathCount(r) > 0" class="mk-cell-subline">
+                  <span v-if="r.path" class="mk-cell-sub" :title="r.path">{{ r.path }}</span>
+                  <!-- 2026-11-01 外部评审 P1：本列只展示「最近更新的那条在学路径」，
+                       多路径学员看起来像只有一条（同一学员在学习路径列表里明明有 2 条）。
+                       这里把总数标出来，读成「其中一条」而不是「全部」；单路径学员不标，
+                       因为上一行路径名已经就是全部了。 -->
+                  <span
+                    v-if="extraPathCount(r) > 0"
+                    class="mk-badge mk-badge--sm mk-badge--muted"
+                    :title="`该学员共有 ${r.pathCount} 条在学路径，本列展示的是最近更新的那条，另外 ${extraPathCount(r)} 条可在「学习路径」列表查看`"
+                  >共 {{ r.pathCount }} 条路径</span>
+                </span>
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('status')">
@@ -880,12 +885,10 @@ async function recomputeAll() {
 /* 主任务与风险摘要都是「一眼要读完」的句子：两行截断（title 仍有全文），
    不再用单行 nowrap 把语义切成半句（2026-10-24 复核）。
    2026-10-26 有数据走查：主行两行 + 副行一行 = 93px，而同行其他行是 68px，
-   一张表里两种行高看起来像排版坏了。主行保持两行能力，但整格限高，
-   超出部分由 clamp 收敛——行高由列内容的上限决定，不由当页最长那条决定。 */
-.lc-table .lc-task {
-  max-height: 44px;
-  overflow: hidden;
-}
+   一张表里两种行高看起来像排版坏了 → 当时给整格加了 44px 限高。
+   2026-11-02 P1-7：这个限高只够两行主任务，路径副行和「共 N 条路径」角标被整段裁掉
+   （裁剪不报错，所以一直没人发现）。行高的边界交给下面的主行 clamp 就够：最多两行主任务
+   + 一行路径/角标，不会被当页最长的那条任务撑高，也不再裁掉信息。 */
 .lc-table .lc-task .progress-title {
   font-weight: 600;
   display: -webkit-box;
@@ -958,4 +961,9 @@ async function recomputeAll() {
 .lc-iv__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 /* 可点 KPI 的选中态：蓝只给可交互与选中（2026-10-26：KPI 即筛选入口） */
 .lc-kpi--on { border-color: var(--mk-blue); }
+/* 本页是 6 张卡的 KPI 带，共享原语的 180px 换行基准下，1280 与 1440 两档都只排得下 5 张，
+   第 6 张独占第二行并被 flex-grow 拉成整行（卡面 986px 里只有「数据覆盖率 27%」约 90px 内容，
+   2026-11-03 视觉走查）——正是外部评审在「访问与注册」点出的「左挤右空大白板」同款。
+   收到 150px：1280 内容宽 986 恰好容得下 6×151 + 5×16 间距，六个读数一行读齐。 */
+.lc-kpi > * { flex-basis: 150px; }
 </style>

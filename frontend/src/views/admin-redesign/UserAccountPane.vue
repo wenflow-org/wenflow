@@ -38,18 +38,32 @@
             <dt>账号类型</dt><dd>{{ acctType }}</dd>
             <dt>加入时间</dt><dd :title="d.joinedAbs || undefined">{{ d.joined || '—' }}</dd>
             <dt>最后登录</dt><dd :title="d.lastLoginAbs || undefined">{{ d.lastLogin || '—' }}</dd>
-            <!-- 支持排查要对齐 ID（会话/座舱/日志里的引用都是它）：列短号，全文进 title -->
-            <dt>用户 ID</dt><dd class="ud-kv__mono" :title="uid">{{ shortId(uid) }}</dd>
+            <!-- 支持排查要对齐 ID（会话/座舱/日志里的引用都是它）：列短号供扫读，全 UUID 给复制入口。
+                 2026-11-01 外部评审 P2：此前只有短号 + title 悬停，取全文要靠手动框选十几位，
+                 而这一行存在的理由正是把 UUID 贴进日志/会话检索——补复制钮（判例同路径 ID、反馈 ID）。 -->
+            <dt>用户 ID</dt>
+            <dd class="ud-kv__id">
+              <span class="ud-kv__mono" :title="uid">{{ shortId(uid) }}</span>
+              <button
+                type="button"
+                class="ud-kv__copy"
+                title="复制用户 ID"
+                :aria-label="`复制用户 ID ${uid}`"
+                @click="copyUserId"
+              >
+                <Copy :size="12" :stroke-width="2" aria-hidden="true" />
+              </button>
+            </dd>
             <!-- 许可按「账户属性的一行」收编（外部评审 #2 原建议）：标签 + 徽章 + 说明 + 右端动作
                  同处一行——比另起一个带分隔线的许可块更紧凑，也避免徽章与动作之间拉出长空档 -->
             <dt>开发视角许可</dt>
             <dd class="ud-kv__wide">
-              <span class="mk-badge" :class="grantBadgeCls">{{ grantStatusLabel }}</span>
-              <span class="ud-grant-row__meta" :title="grantStatus === 'active' ? grantNoteLabel : undefined">
-                <template v-if="grantStatus === 'active'">
-                  {{ grantScopeLabel }}<template v-if="projectionGrant?.expiresAt"> · 至 {{ grantExpiresLabel }}</template><template v-if="projectionTokenExpiryLabel"> · {{ projectionTokenExpiryLabel }}</template>
-                </template>
-                <template v-else>用户授予协助许可后，可打开开发调试站进入其视角排查问题</template>
+              <!-- 2026-11-02 布局自述轮：未授权/过期/撤销时行内只剩徽章与动作——状态词自明，
+                   屏上原那句「用户授予协助许可后，可打开开发调试站进入其视角排查问题」只在解释
+                   徽章含义与入口作用，删；机制说明收进它所描述的徽章 title（原有 else 支 title 迁此）。 -->
+              <span class="mk-badge" :class="grantBadgeCls" :title="grantStatus === 'active' ? undefined : '开发视角许可由学员授予，未授权时无法进入其视角'">{{ grantStatusLabel }}</span>
+              <span v-if="grantStatus === 'active'" class="ud-grant-row__meta" :title="grantNoteLabel">
+                {{ grantScopeLabel }}<template v-if="projectionGrant?.expiresAt"> · 至 {{ grantExpiresLabel }}</template><template v-if="projectionTokenExpiryLabel"> · {{ projectionTokenExpiryLabel }}</template>
               </span>
               <span class="ud-grant-row__acts">
                 <button type="button" class="mk-btn mk-btn--sm" :disabled="grantLoading" @click="loadGrant">
@@ -108,6 +122,8 @@ import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { toast } from '@/utils/toast'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { useRowMenu } from './useRowMenu'
+import { Copy } from 'lucide-vue-next'
+import { copyText } from './clipboard'
 
 /* 本组件 = LearnerDetail「账号与许可」tab 的 pane（2026-10-03 人员详情合并）：
    由整页降为嵌入 pane，userId 走 props；hero/页签归宿主，账号轴内容原地保留。
@@ -135,6 +151,16 @@ function fmtAbs(iso?: string | null): string {
   if (!iso) return ''
   const t = new Date(iso).getTime()
   return Number.isNaN(t) ? '' : new Date(t).toLocaleString('zh-CN', { hour12: false })
+}
+
+/** 复制完整用户 ID：支持排查要把它贴进会话/座舱/日志，截断的短号没法手动选全；
+    失败时把 id 一起打出来，保证兜底可手动复制（判例同反馈 ID、路径 ID） */
+async function copyUserId() {
+  const id = uid.value
+  if (!id) return
+  const ok = await copyText(id)
+  if (ok) toast.success('用户 ID 已复制')
+  else toast.error(`复制失败，请手动复制：${id}`)
 }
 
 /** 详情接口失败且无列表兜底 → 明确错误态 + 重试（参照 VirtualProfile.detailError 模式） */
@@ -528,11 +554,37 @@ const acctType = computed(() => {
 }
 /* 用户 ID 等标识符单元格：mono + 稍弱（同全站 mono 判例） */
 .ud-kv__mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* ID 格 = 短号 + 复制钮并排：dd 默认单行截断会把钮挤掉，flex 让短号自身省略、钮不被压缩 */
+.ud-kv__id { display: flex; align-items: center; gap: 4px; }
+.ud-kv__id .ud-kv__mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 复制钮：与反馈 ID 行同款 20px 图标钮，静息无框、悬停才显形 */
+.ud-kv__copy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--mk-radius-sm);
+  background: transparent;
+  color: var(--mk-faint);
+  cursor: pointer;
+}
+.ud-kv__copy:hover { color: var(--mk-ink); border-color: var(--mk-line); background: var(--mk-hover-surface); }
+.ud-kv__copy:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 
 
 /* 许可行的说明小字（辅助层级，不随正文放大）；按内容收宽，
-   避免 flex:1 把它拉成整行宽（会读成一条长灰带） */
-.ud-grant-row__meta { margin: 0; flex: 0 1 auto; min-width: 0; max-width: 640px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+   避免 flex:1 把它拉成整行宽（会读成一条长灰带）。
+   单行省略而不是任其换行：未授权那句说明较长时会把右侧动作整排挤到下一行，
+   「刷新」于是孤零零落在卡片底边、看起来不属于这一行（2026-11-02 评审 R39）。
+   全文仍在 title 里。 */
+.ud-grant-row__meta {
+  margin: 0; flex: 0 1 auto; min-width: 0; max-width: 640px;
+  color: var(--mk-faint); font-size: var(--mk-fs-micro);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .ud-grant-row__acts { display: flex; gap: 8px; margin-left: auto; }
 /* 区块级提示走全局 .mk-alert（阴影/圆角/配色由原语负责），留白由 pane 栅格负责 */
 .ud-grant-row__notice { margin: 0 16px 12px; }

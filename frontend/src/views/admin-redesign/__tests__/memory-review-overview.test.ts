@@ -184,13 +184,14 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
    *  最近复习）成片「—」，0 到期还各画一条空轨。
    *  二次调整：相邻两列各画一条比例条会读成一排重叠的条——待复习只留数字，
    *  记忆强度单独一列带条，需关注与最近复习各自成列。 */
-  it('全部用户都没跑过归并观察 → 需人工确认显示「—」，不把没观察写成 0', async () => {
+  it('全部用户都没跑过归并观察 → 需人工确认写「未观察」，不把没观察写成 0', async () => {
     // 2026-10-23 用户「为什么包括测试的也是很多0」：测试视角 26 位用户、55 条痕迹，
     // 但归并审计投影一条都没有——0 是「没算过」，不是「很干净」。
-    // 2026-10-26：卡面与 title 都不再挂解释句，「没观察过」只靠「—」与 0 区分。
+    // 2026-11-02 评审 R67：同排其它四张都是数字，独独一张「—」会被读成取数失败；
+    // 改写成「未观察」，与列表同状态列的措辞一致。
     const w = await mountWithRows(ROWS, { usersWithAudit: 0, ambiguous: 0 });
     const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '需人工确认')!;
-    expect(card.find('.mk-kpi__num').text()).toBe('—');
+    expect(card.find('.mk-kpi__num').text()).toBe('未观察');
     expect(card.find('.mk-kpi__hint').exists()).toBe(false);
     expect(card.text()).not.toContain('尚未观察');
     expect(card.text()).not.toContain('已观察');

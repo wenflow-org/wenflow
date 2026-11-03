@@ -155,7 +155,10 @@
               </template>
               <template v-else>
                 <span class="mr-bulk__count">批量处理</span>
-                <span class="mr-bulk__parts">{{ bulkHintText }}</span>
+                <!-- 0 选中且「有可自动执行项」时不再写一行操作说明（2026-11-03）：
+                     右侧就有「全选可自动执行的建议」按钮，句子只是把按钮念一遍。
+                     只有「本次没有可自动执行的建议」这个状态说不出于版面，才留字。 -->
+                <span v-if="bulkHintText" class="mr-bulk__parts">{{ bulkHintText }}</span>
               </template>
             </div>
             <div class="mr-bulk__actions">
@@ -259,9 +262,12 @@
           </div>
           <p v-else class="mr__sub">本次没有达到置信度阈值的归并建议。</p>
 
+          <!-- 2026-11-02「让布局自己说话」：撤掉 h4 里那枚副标「置信度不足，需人工确认」——
+               它与上级标题「需人工确认」逐字重复（同级「归并建议」「未归类记忆清理」两组也都没有
+               这层副标）；判据（相似度阈值）与动作后果已在每行的「名称相似度」列悬停说明与复选框
+               可访问名里各说一次，屏上不再复读。 -->
           <h4 class="mr__h4">
             需人工确认（不会自动执行）
-            <span class="mr__sub-inline">置信度不足，需人工确认</span>
           </h4>
           <div v-if="detail.audit.ambiguous.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -318,9 +324,10 @@
           </div>
           <p v-else class="mr__sub">没有待人工确认项。</p>
 
+          <!-- 2026-11-02 冗余副文清理：撤掉副标「误提取的无用概念，确认后清理」——释义与上级
+               标题括号逐字重复；「确认后」由本组表格的操作列（确认 / 驳回）自明 -->
           <h4 class="mr__h4">
             未归类记忆清理（误提取的无用概念）
-            <span class="mr__sub-inline">误提取的无用概念，确认后清理</span>
           </h4>
           <!-- R7 任务书 B：dropCandidates 此前只在类型里声明计数、从不渲染（审计 CC-2）——补第三组建议列表 -->
           <div v-if="mrDropCount" class="mk-table-scroll">
@@ -854,11 +861,10 @@ const selectedPartsText = computed(() => {
     selectedDropKeys.value.length ? `未归类记忆 ${selectedDropKeys.value.length}` : ''
   ].filter(Boolean).join(' · ')
 })
-/** 0 选中时的引导：无可自动执行项时不摆一枚永远点不动的「全选」按钮 */
+/** 0 选中时只留「说不出于版面」的那半句：有可自动执行项时不写引导（按钮已说明做法），
+    没有时点明「本次没有可自动执行的建议」——这也是「不摆一枚永远点不动的全选按钮」的说明。 */
 const bulkHintText = computed(() =>
-  autoApplicableCount.value
-    ? '勾选条目后批量执行，或全选可自动执行的建议'
-    : '逐条核对后勾选，本次没有可自动执行的建议'
+  autoApplicableCount.value ? '' : '本次没有可自动执行的建议'
 )
 const bulkWarnText = computed(() => {
   const parts = [
@@ -1099,7 +1105,9 @@ async function recompute() {
      服务端 observe 语义（只记录建议），仍写审计投影行，所以不能免确认。 */
   const ok = await askConfirm({
     title: '重新观察',
-    message: `确认对「${detail.value?.user.name || shortId(props.userId)}」重新跑一次记忆复盘？将重新观察其记忆痕迹与归并建议（只记录建议，不改动记忆痕迹），结果实时刷新。`,
+    /* 标题、按钮、列表行都叫「重新观察」，正文原先写「重新跑一次记忆复盘」——
+       同一个动作两个名字，读起来像点下去的是另一件事。 */
+    message: `确认对「${detail.value?.user.name || shortId(props.userId)}」重新观察一次？将重新观察其记忆痕迹与归并建议（只记录建议，不改动记忆痕迹），结果实时刷新。`,
     confirmText: '重新观察',
     danger: false
   })
@@ -1183,7 +1191,7 @@ td.mr__sub { display: table-cell; }
 .mr-audit-queue__item b { font-size: 18px; font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
 .mr-audit-queue__item b i { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); }
 .mr-audit-queue__item span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
+/* （.mr__sub-inline 随「需人工确认」组那枚复读副标一并撤除，2026-11-02） */
 /* 归并处理条（2026-10-19 重设计）：卡内工具条，左读数 / 右动作 / 警告独立一行。
    0 选中保持静默表面，选中后点亮描边，避免与下方三张表争视觉。 */
 .mr-bulk {

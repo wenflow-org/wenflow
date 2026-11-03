@@ -146,7 +146,9 @@
             <span class="mk-field__label">
               工具 ID
               <em v-if="!toolEditingId" class="mk-field__req">*</em>
-              <em v-else class="ac-field__locked">创建后不可修改</em>
+              <!-- 加全角括号并复用字段次级提示档：不写括号时它和「工具 ID」同字号同色位，
+                   整行会被读成一个连写的长标签，看不出后半句是对字段的说明 -->
+              <span v-else class="mk-field__opt">（创建后不可修改）</span>
             </span>
             <input v-model="toolForm.id" class="mk-field__input" placeholder="例如：web-search / text-to-image" :disabled="!!toolEditingId" />
             <span v-if="toolErrors.id" class="mk-field__err">{{ toolErrors.id }}</span>
@@ -247,11 +249,14 @@
                   </span>
                 </span>
                 <!-- 2026-10-27 原生 select → MkSelect：触发器常驻「＋ 加入备用」，
-                     选中后由 setOrder 追加并保持 modelValue=''（原生 select 需手动复位已不需要） -->
+                     选中后由 setOrder 追加并保持 modelValue=''（原生 select 需手动复位已不需要）。
+                     「＋ 加入备用」走 MkSelect 的 placeholder，不再作为列表首项：同名同义的
+                     一项会让人以为它已选中/已添加，而 modelValue 恒为 '' 还会给它挂上蓝勾。 -->
                 <MkSelect
                   v-if="availableOf(channel.id).length"
                   :model-value="''"
                   :options="addOptionsOf(channel)"
+                  placeholder="＋ 加入备用"
                   :aria-label="`把 provider 加入${channel.label}备用`"
                   size="sm"
                   @change="onAddToOrder(channel.id, $event)"
@@ -275,7 +280,7 @@
                     v-model="draft[provider.id][field.key]"
                     class="mk-field__input"
                     :type="field.type"
-                    :placeholder="field.placeholder"
+                    :placeholder="fieldPlaceholder(field)"
                     :autocomplete="field.secret ? 'new-password' : 'off'"
                   />
                 </label>
@@ -623,11 +628,13 @@ function openConfig(group: PluginRow) {
     return
   }
   configTarget.value = cfg
+  /* 非密钥字段：平台存了值就用值，没存就用服务端给的「当前生效值」（环境变量 / 目录默认）。
+     生效值不再挂 placeholder——占位符是灰的，与真正的空字段提示同色，读不出哪个地址已经在生效。 */
   const next: Record<string, Record<string, string>> = {}
   for (const provider of cfg.providers) {
     next[provider.id] = {}
     for (const field of provider.fields) {
-      if (!field.secret) next[provider.id][field.key] = field.value
+      if (!field.secret) next[provider.id][field.key] = field.value || field.placeholder
     }
   }
   draft.value = next
@@ -663,12 +670,16 @@ function availableOf(channelId: string) {
   const used = new Set(orderOf(channelId))
   return (configTarget.value?.providers ?? []).filter((p) => !used.has(p.id))
 }
-/** 「加入备用」下拉的选项：首项是常驻占位，其余为该通道尚未上链的 provider */
+/** 「加入备用」下拉的选项：只放该通道尚未上链的 provider。
+    触发器的「＋ 加入备用」由 MkSelect 的 placeholder 承担（见模板注释），
+    不把触发器文案再塞成首项——同名同义的一项会被读成「备用项已添加」。 */
 function addOptionsOf(channel: { id: string }) {
-  return [
-    { value: '', label: '＋ 加入备用' },
-    ...availableOf(channel.id).map((p) => ({ value: p.id, label: p.label }))
-  ]
+  return availableOf(channel.id).map((p) => ({ value: p.id, label: p.label }))
+}
+/** 密钥框不重复 provider 头部的「已配置 / 缺少密钥」徽标：状态看徽标，
+    框内只说明这个输入框的行为——密钥留空 = 不改动已存密钥。 */
+function fieldPlaceholder(field: PluginProviderField): string {
+  return field.secret ? '留空表示不修改' : field.placeholder
 }
 function providerConfiguredOf(providerId: string): boolean {
   return configTarget.value?.providers.find((p) => p.id === providerId)?.configured ?? false
@@ -722,8 +733,8 @@ async function saveConfig() {
       const now = (draft.value[provider.id]?.[field.key] ?? '').trim()
       if (field.secret) {
         if (now) patch[field.key] = now
-      } else if (now !== field.value) {
-        // 空串 = 删除界面覆盖，回落服务端环境变量
+      } else if (now !== (field.value || field.placeholder).trim()) {
+        // 与打开弹窗时的初始值比对：生效值原样带出时不算脏，空串 = 删除界面覆盖，回落服务端环境变量
         patch[field.key] = now
       }
     }
@@ -985,14 +996,6 @@ function goLogs(skillId: string) {
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
-}
-/* 编辑态锁定说明（P0-3）：替代必填红星的位置，弱色小字（页面前缀，不占 mk- 原语命名空间） */
-.ac-field__locked {
-  font-style: normal;
-  font-weight: 400;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  margin-left: 5px;
 }
 /* MCP 服务编辑弹窗：先排通道优先级（主用 + 备用，用户可自己调），再填链上 provider 的密钥/入口。
    2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。

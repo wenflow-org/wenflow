@@ -23,7 +23,7 @@
           class="mk-status__meta cp-simday"
           :title="simClock.enabled
             ? `日期模拟：起点 ${simClock.baseDate}。已推进 ${simClock.dayIndex}/${simClock.maxSimulatedDays} 天。课表 ${simClock.courseWeekdays.join('/')} · 每天 ${simClock.lessonsPerDay} 节${simClock.autoAdvance ? ' · 自动推进已开' : ''}`
-            : '日期模拟未开启（可在「日期模拟」设置开启）'"
+            : '日期模拟未开启'"
         >
           模拟 {{ simClock.enabled ? `第 ${simClock.dayIndex} 天` : '未开启' }}
         </span>
@@ -34,8 +34,8 @@
           class="cp-budget"
           :class="`is-${budgetTone}`"
           :title="budgetUsage.unlimited
-            ? `本会话累计 AI 调用 ${budgetUsage.used}（含重试）。当前未设置成本上限（不限）。可在画像/故事预算中设置上限`
-            : `本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）。可在画像/故事预算中调整上限`"
+            ? `本会话累计 AI 调用 ${budgetUsage.used}（含重试）。当前未设置成本上限（不限）`
+            : `本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）`"
         >
           <span class="cp-budget__label">AI 调用</span>
           <!-- 进度量化统一走 .mk-minibar：预算三档（默认 / warn / full）与 ok/warn/bad 语义一一对应 -->
@@ -66,8 +66,13 @@
           class="mk-badge mk-badge--muted"
           :title="`路径进度按子任务统计（与「阶段推进」步点同源）：${pathProgressText}`"
         >路径 {{ pathProgressText }}</span>
-        <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位） -->
-        <span class="mk-badge mk-badge--info">{{ stageLabel(displayStage) }}</span>
+        <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位）。
+             当前阶段是「路径」且上一枚已经在写「路径 任务 x/y」时不再重复一枚只写「路径」的
+             蓝底徽章——同一行两个「路径」，后一个没有值（2026-11-02 评审 R60）。 -->
+        <span
+          v-if="!(heroUsesPathTitle && pathProgressText && displayStage === 'path')"
+          class="mk-badge mk-badge--info"
+        >{{ stageLabel(displayStage) }}</span>
         <!-- 课堂类型 pill（2026-10-21）：正课/复习课/延伸课；后两者不结算任务 -->
         <span v-if="classroomMode" class="mk-badge" :class="classroomModeBadge" :title="classroomModeTitle">{{ classroomModeText }}</span>
         <!-- 只读模式声明（原顶栏 .mk-status__meta 迁入，2026-10-11 走查）：真实会话控制台只读，
@@ -165,11 +170,11 @@
         <!-- ① 执行推进（跨阶段：自动驾驶（全流程后台）/ 停止自动驾驶；黑盒与真实会话不提供） -->
         <template v-if="!isRealMode && !isBlackbox">
           <template v-if="autopilotQueued">
-            <button type="button" class="cp-btn" :disabled="busy" title="自动驾驶运行名额已满，正在排队等待，点击取消排队" @click="act('autopilotStop')">取消排队（第 {{ autopilot.queuePosition || 1 }} 位）</button>
+            <button type="button" class="cp-btn" :disabled="busy" title="自动驾驶运行名额已满，正在排队等待" @click="act('autopilotStop')">取消排队（第 {{ autopilot.queuePosition || 1 }} 位）</button>
           </template>
           <template v-else-if="!autopilotRunning">
             <button v-if="!autopilotStopping" type="button" class="cp-btn cp-btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">自动驾驶</button>
-            <button v-else type="button" class="cp-btn" disabled title="已请求停止自动驾驶：后台已停止推进，可点击「自动驾驶」重新启动" @click="act('autopilotStart')">已请求停止</button>
+            <button v-else type="button" class="cp-btn" disabled title="已请求停止自动驾驶：后台已停止推进" @click="act('autopilotStart')">已请求停止</button>
           </template>
           <button v-else type="button" class="cp-btn" :disabled="busy" title="停止自动驾驶：当前课推进完本轮后停止后台自动运行（学习进度与对话保留，可随时再次启动）" @click="act('autopilotStop')">停止自动驾驶</button>
           <span class="cp-console__sep"></span>
@@ -269,7 +274,7 @@
               :aria-selected="activeTab === st"
               :aria-controls="`cp-tabpanel-${st}`"
               :tabindex="activeTab === st ? 0 : -1"
-              :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `打开「${stageLabel(st)}」页签`"
+              :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : undefined"
               :disabled="isBlackbox"
               @click="selectStageTab(st)"
             >
@@ -355,8 +360,10 @@
         <section v-if="!isRealMode && activeTab === 'goal' && turnRowsShown.length" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">课堂回合</h3>
-            <!-- 加载中 meta 留空（骨架已在下方承担加载态；不写「暂无对话记录」假空文案） -->
-            <span class="mk-card__meta">{{ `${turnRowsShown.length} 条课堂对话 · 目标段由对话卡全文呈现` }}</span>
+            <!-- 加载中 meta 留空（骨架已在下方承担加载态；不写「暂无对话记录」假空文案）。
+                 2026-11-03：尾部「目标段由对话卡全文呈现」撤除——它在解释哪张卡承载哪一段，
+                 属布局自述；「目标对话」卡就在本页上方，读者自己看得见。 -->
+            <span class="mk-card__meta">{{ `${turnRowsShown.length} 条课堂对话` }}</span>
           </div>
           <!-- 会话未加载（首载/切换会话）先给骨架：不得把「尚未加载」渲染成「暂无对话记录」（2026-10-06 审核 #47） -->
           <div v-if="!session" class="cp-cardbody"><MkSkeleton variant="rows" :count="4" :h="12" :radius="4" /></div>
@@ -533,7 +540,7 @@
             <span class="mk-card__meta">{{ wrapupHeadMeta }}</span>
             <!-- 跨页指引（2026-10-12 走查「为啥资料看不到」）：四页拆分后资料归 Goal 页，
                  本页不留正文，给一颗确定性出口——点 stepper 也能到，这里免找 -->
-            <button v-if="realMaterials.length" type="button" class="mk-link" title="学习者资料在目标页" @click="selectStageTab('goal')">学习者资料在目标页 →</button>
+            <button v-if="realMaterials.length" type="button" class="mk-link" @click="selectStageTab('goal')">学习者资料在目标页 →</button>
           </div>
 
           <!-- 终局总结（已生成时；总在前、单课分列在后） -->
@@ -724,7 +731,7 @@
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'goal'" class="mk-card">
           <div class="mk-card__head">
             <h4 class="mk-card__title">预生成路径 <span class="cp-aside-dot" :class="hasPath ? 'is-ok' : pathGenerationFailed ? 'is-bad' : goalConverged ? 'is-warn' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ hasPath ? `已生成 ${pathMilestonesView.length} 个里程碑` : goalConverged ? '目标已确认，待生成' : '未生成（目标未确认）' }}</span>
+            <span class="mk-card__meta">{{ hasPath ? `已生成 ${pathMilestonesView.length} 个里程碑` : goalConverged ? '目标已确认，待生成' : '未生成' }}</span>
           </div>
           <div class="cp-aside-body">
             <template v-if="hasPath">
@@ -756,7 +763,6 @@
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'path'" class="mk-card">
           <div class="mk-card__head">
             <h4 class="mk-card__title">路径评审 <span class="cp-aside-dot" :class="pathReviewStatus ? 'is-ok' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审' }}</span>
           </div>
           <div class="cp-aside-body">
             <!-- 已接受后动作行整行撤下（2026-10-31 五轮评审 P6）：此前「评审/接受」按钮与
@@ -884,6 +890,9 @@
           </button>
           <div v-if="sidebarOpen.logs" class="cp-sidebar__body">
             <div v-if="session && logPhases.length > 1" class="cp-logs__filter">
+              <!-- 常驻「全部」项：没有它时三个类型 chip 在未筛选态长得一模一样，
+                   读者既看不出当前是「全部」还是「没选中」也找不到清空入口（2026-11-02 评审 R61） -->
+              <button type="button" class="cp-logs__filter-chip" :class="{ 'is-active': !logPhaseFilter }" @click="logPhaseFilter = ''">全部</button>
               <button v-for="p in logPhases" :key="p" type="button" class="cp-logs__filter-chip" :class="{ 'is-active': logPhaseFilter === p }" @click="logPhaseFilter = logPhaseFilter === p ? '' : p">{{ p }}</button>
             </div>
             <!-- 跟随钮移出滚动容器（2026-10-06 审核 #52）：原先 sticky 在其网格行内位移余量为 0、
@@ -1016,7 +1025,6 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeRaw">✕</button>
           </div>
           <div class="mk-modal__body">
-            <p class="cp-rawview__note">接口返回的完整会话数据</p>
             <pre class="cp-rawview__pre">{{ rawJsonFull }}</pre>
           </div>
           <div class="mk-modal__foot">
@@ -1051,7 +1059,9 @@ import { renderAiMessageHtml } from '@/utils/sanitize'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import { runHealthTone, statusText, sessionModeText, sessionModeBadgeCls, sessionModeTitle } from './statusText'
+import { runHealthTone, statusText, sessionModeText, sessionModeBadgeCls, sessionModeTitle, sessionStatusBadgeCls } from './statusText'
+// 路径域状态文案/徽章的唯一映射在 opsShared（active 在路径域是「学习中」，与会话域的「进行中」不同）
+import { PATH_STATUS_TEXT, PATH_STATUS_BADGE } from './opsShared'
 import { parseLogEntry, virtualLogPhaseZh } from './sessionLog'
 // 评分助手（evalScore）原供终局评估面板使用；面板已随裁判独立面移除（2026-09-27），本组件不再引用
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -1269,21 +1279,24 @@ const isPaused = computed(() =>
   || stageStatus.value.learning?.paused === true
 )
 
-const statusTitle = computed(() =>
-  !session.value
-    ? '加载中…'
-    : terminalStatus.value === 'created'
-      ? '课堂未开始'
-      : isFailedTerminal.value
-        ? manualStopped.value ? '已手动停止' : teachingTimedOut.value ? '课堂失败 · 授课超时' : '课堂失败'
-        : isInterruptedTerminal.value
-          ? '课堂中断'
-          : isTerminal.value
-            ? '课堂已完成'
-            : isPaused.value
-              ? '已暂停 · 自动推进已冻结（可继续或终止）'
-              : '课堂进行中'
-)
+const statusTitle = computed(() => {
+  if (!session.value) return '加载中…'
+  // pill 改报路径状态时（H1 是路径名），悬停说明也必须说同一个对象，不能仍写「课堂已完成」
+  if (heroUsesPathStatus.value) return `路径${PATH_STATUS_TEXT[pathLifecycleStatus.value] || statusText(pathLifecycleStatus.value)}`
+  // 徽章改报课堂终态时（P1-3），悬停同样按课堂状态说，不能仍拿目标对话的终态冒充
+  const state = heroUsesLessonStatus.value ? lessonLifecycleStatus.value : terminalStatus.value
+  return state === 'created'
+    ? '课堂未开始'
+    : ['failed', 'abandoned'].includes(state)
+      ? manualStopped.value ? '已手动停止' : teachingTimedOut.value ? '课堂失败 · 授课超时' : '课堂失败'
+      : INTERRUPTED_TERMINAL_STATUSES.includes(state)
+        ? '课堂中断'
+        : TERMINAL_STATUSES.includes(state)
+          ? '课堂已完成'
+          : isPaused.value
+            ? '已暂停 · 自动推进已冻结（可继续或终止）'
+            : '课堂进行中'
+})
 
 /* 双轴状态（与一/二级页同源）：生命周期合成态 + 阶段条输入。
    派生本体在 vlab-controls（单一实现，画像页与这里共用同一套优先级）；本计算只把字段喂进去。 */
@@ -1721,6 +1734,16 @@ const pathMilestones = computed(() => collectPathMilestones(pathStatusPath.value
 const pathDetailTitle = computed(() => buildPathDetailTitle(pathStatusPath.value, stageResults.value.path))
 const pathDetailMeta = computed(() => buildPathDetailMeta(hasPath.value, pathStatusPath.value, stageResults.value.path, pathMilestones.value.length))
 const pathMilestonesView = computed(() => buildPathMilestonesView(pathMilestones.value, firstText(bindings.value.currentTaskId)))
+/* 路径自身生命周期状态（active/completed/…）：真实控制台由 session-console 的 resolvePathView
+   带在 stageResults.path（顶层 path 同源），虚拟控制台走 path-status 接口。
+   H1 换成路径名后 hero 状态 pill 要用它，不能再拿目标对话/课堂会话的 status 顶替
+   （2026-11-02 P0-3：目标对话已完成、它生成的路径仍在学，同一枚绿「已完成」被读成路径学完了）。 */
+const pathLifecycleStatus = computed(() => normalized(firstText(
+  pathStatusPath.value.status,
+  pathStatus.value?.status,
+  asRecord(stageResults.value.path).status,
+  asRecord(session.value?.path).status
+)))
 /* 面包屑名（2026-10-12）：路径统一在座舱打开后，控制台的 subPage 不再有详情页替它回写
    可读名，深链/列表进来面包屑会露裸会话 id。本处只在 pathStatus/stageResults 带真标题时
    回写（『学习路径』是 buildPathDetailTitle 的无数据兜底，泛型名与场景名撞车，不写——
@@ -2149,12 +2172,44 @@ const heroLifecycleState = computed(() => {
   if (isPaused.value) return 'paused'
   return normalized(session.value?.status) || terminalStatus.value || runLifecycleState.value
 })
+/* 状态 pill 的主语必须与 H1 同一个对象（2026-11-02 P0-3）：真实控制台里 H1 已换成路径名
+   （heroUsesPathTitle），徽章却仍报目标对话/课堂会话的 status——目标对话完成后会话 status=completed，
+   而它生成的路径仍在学，同一枚绿「已完成」被读成路径学完了。路径状态未知时回落会话生命周期；
+   虚拟控制台保留运行态徽章（页面的可操作对象是整个虚拟运行，不由本规则改写）。 */
+const heroUsesPathStatus = computed(() =>
+  isRealMode.value && heroUsesPathTitle.value && !!pathLifecycleStatus.value
+)
+/* 课堂真实终态（2026-11-02 P1-3）：目标对话入口的 runtime.status 是 goal_conversations.status，
+   同一节课在教学会话入口读的是 teaching_sessions.status——同一节课两个入口两个答案
+   （教学入口「超时」、目标入口「已完成」）。课堂终态由 session-console 单独下发：
+   runtime.stageStatus.learning.status / stageResults.teaching.taskRuntime.status（真实控制台），
+   stageResults.learning.status（其它生产者）。hero 的「课堂…」徽章改读它，与路径名作 H1 时的
+   路径状态互不抢占：路径优先（P0-3），没有路径状态时才轮到课堂。 */
+const lessonLifecycleStatus = computed(() => normalized(firstText(
+  asRecord(stageResults.value.learning).status,
+  asRecord(stageStatus.value.learning).status,
+  asRecord(learningResult.value.taskRuntime).status,
+  asRecord(session.value?.teaching).status
+)))
+const heroUsesLessonStatus = computed(() =>
+  isRealMode.value && !heroUsesPathStatus.value && !!lessonLifecycleStatus.value
+)
 const heroStatusText = computed(() => {
   if (!session.value) return '加载中'
+  if (heroUsesPathStatus.value) return PATH_STATUS_TEXT[pathLifecycleStatus.value] || statusText(pathLifecycleStatus.value)
+  if (heroUsesLessonStatus.value) return statusText(lessonLifecycleStatus.value) || lessonLifecycleStatus.value
   return statusText(heroLifecycleState.value) || statusText(runLifecycleState.value) || '—'
 })
 const heroStatusTone = computed(() => {
   if (!session.value) return 'muted'
+  // 路径域徽章映射给的是完整类名（mk-badge--ok），本页 pill 只拼后缀 → 去掉前缀
+  if (heroUsesPathStatus.value) {
+    return (PATH_STATUS_BADGE[pathLifecycleStatus.value] || 'mk-badge--muted').replace('mk-badge--', '')
+  }
+  // 课堂档位走教学会话状态单源：timeout / finalization_failed 是 bad（旧 switch 会把它们落到蓝「info」）
+  if (heroUsesLessonStatus.value) {
+    return sessionStatusBadgeCls(lessonLifecycleStatus.value).replace('mk-badge--', '')
+  }
   switch (heroLifecycleState.value) {
     case 'completed': return 'ok'
     case 'failed': return 'bad'
@@ -2166,7 +2221,15 @@ const heroStatusTone = computed(() => {
 })
 
 /* 阶段推进 stepper 三态（done/active/idle 由真实阶段状态机推导）与 meta 文案 */
+/** 当前所处阶段（未终态时一律算「进行中」，即便 stageDone 已成立） */
+function isCurrentStage(st: StageKey): boolean {
+  return !isTerminal.value && stageFlow.indexOf(st) === effectiveStageIndex.value
+}
+/* 「已推进」≠「已学完」：当前阶段原先只要 stageDone 成立就照打对勾，于是一整排四个绿色
+   对勾与同排的「任务 1/13」「已开始 2/13 课」读成同一件事（2026-11-02 评审 R41/R59）。
+   当前阶段永远用序号 + 描边表示，对勾只留给真的走过的阶段。 */
 function stepState(st: StageKey): 'done' | 'active' | 'idle' {
+  if (isCurrentStage(st)) return 'active'
   if (stageDone(st)) return 'done'
   if (stageActive(st)) return 'active'
   return 'idle'
@@ -2178,7 +2241,10 @@ function stepMeta(st: StageKey) {
   if (stageActive(st)) return isTerminal.value ? '中断' : '进行中'
   return '待进入'
 }
-const stageDoneCount = computed(() => stageFlow.reduce((n, st) => n + (stageDone(st as StageKey) ? 1 : 0), 0))
+/* 与瓦片同一判据：卡头计数只数真正走完的阶段，否则「4 / 4」会和只亮三枚对勾的瓦片打架 */
+const stageDoneCount = computed(() =>
+  stageFlow.reduce((n, st) => n + (stageDone(st as StageKey) && !isCurrentStage(st as StageKey) ? 1 : 0), 0)
+)
 
 /** 阶段推进卡的下游直达入口（2026-10-11 走查；2026-10-12 收敛）：
  *  Path 出口已撤——Path 页签自本拍板起就是路径内容本体（阶段全展开/任务弹层/治理动作），
@@ -2592,7 +2658,10 @@ async function loadLogs() {
             createdAt: t.time || '',
             timestamp: t.time || '',
             phase: t.kind,
-            message: '查看全文',
+            /* 「查看全文」与同行右侧的「原文」是两件事（跳页签 / 展开 JSON），
+               两个词在紧邻位置各说一半，读起来像同一个入口的两种叫法。
+               跳转项写明跳的是什么全文（2026-11-02 评审 R65）。 */
+            message: '在页签查看对话全文',
             jumpTab: tab
           })
           continue
@@ -3218,7 +3287,7 @@ const rawJsonLength = computed(() => rawJsonFull.value.length)
 const packageFacts = computed(() => {
   const s = session.value as { timeline?: unknown[] } | null
   if (!s) return '加载中…'
-  return Array.isArray(s.timeline) ? `${s.timeline.length} 条时间线` : '完整会话数据'
+  return Array.isArray(s.timeline) ? `${s.timeline.length} 条时间线` : ''
 })
 
 async function copyRawJson() {
@@ -4155,10 +4224,18 @@ async function copyRawJson() {
 .cp-raw__acts { display: flex; align-items: center; gap: 12px; }
 .cp-rawview__head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .cp-rawview__meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.cp-rawview__note { margin: 0 0 10px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .cp-rawview__pre {
   margin: 0; padding: 12px; border-radius: var(--mk-radius-sm); background: var(--mk-code-bg); color: var(--mk-code-fg);
-  font: 10.5px/1.6 var(--mk-mono); max-height: 56vh; overflow: auto; white-space: pre-wrap; word-break: break-all;
+  /* 不折行（pre）：pre-wrap + break-all 会把超长字符串从第 0 列接着排，JSON 的缩进层级
+     因此整段失真——排查时最需要的正是层级。超长行走横向滚动。
+     上限取行高（10.5×1.6=16.8px）的整数倍，避免最后一行被下缘横向切成半截字；
+     scrollbar-width: auto 让「下面还有」有可见的滚动条，而不是像内容到此为止。 */
+  font: 10.5px/1.6 var(--mk-mono);
+  max-height: calc(16.8px * 33);
+  overflow: auto;
+  white-space: pre;
+  scrollbar-width: auto;
+  overscroll-behavior: contain;
 }
 
 /* 终局评估样式已随裁判独立面移除（2026-09-27） */

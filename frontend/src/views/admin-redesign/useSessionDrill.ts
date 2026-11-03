@@ -2,7 +2,8 @@
  * 会话列表下钻共享（TeachingSessions / GoalConversations 同构复用）。
  * 真实会话与控制台数据契约不兼容（座舱仅服务虚拟会话），三跳转提供轻量深链：
  * - goLearner：学习者画像（openSubPage learner）
- * - goTrace：执行日志 Trace 按 sessionId 归组（openSession）
+ * - goTrace：执行日志 Trace 按 sessionId 归组（openSession）——调用方的动作文案写
+ *   「查看执行日志」，不写裸「链路」：工程侧叫 Trace 链路，读者看不出那是执行日志的哪个视图
  * - goConsole：真实会话只读座舱（openSubPage session-real）
  * 各页关闭抽屉逻辑不同（URL 参数名 session/goal），由调用方传入 closeDetail。
  */

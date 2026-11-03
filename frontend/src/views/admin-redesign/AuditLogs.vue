@@ -14,7 +14,9 @@
          失败下钻收敛为两条入口——「失败记录」卡（一键只看失败）与「失败动作」下拉
          （按动作下钻，选项自带次数）；卡头不再挂一排动作胶囊。
          2026-10-27 用户「kpi 和 tab 位置反了」：KPI 是页面级读数，放在页签之上；
-         页签下才是筛选头与表体。 -->
+         页签下才是筛选头与表体。
+         2026-11-02 评审：三张与失败同源的卡（失败记录 / 失败率 / 失败动作）同一套着色，
+         此前「失败动作」是白字，同排三个读数用两种强调方式。 -->
     <section class="mk-kpi-grid" aria-label="审计日志统计" :aria-busy="statsLoading || undefined">
       <MkKpi
         label="记录总数"
@@ -38,6 +40,7 @@
         v-if="tab === 'operation'"
         label="失败动作"
         :value="statsLoading || statsError ? '—' : failureByAction.length"
+        :tone="failureByAction.length && !statsError ? 'bad' : ''"
       />
     </section>
 

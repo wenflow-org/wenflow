@@ -19,7 +19,12 @@ const { openSubPageMock, cardsIndexMock, liveCreateVirtualMock, draftStoriesMock
   cardsCloneMock: vi.fn(),
 }));
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+// RouterLink 也 mock 掉：创建成功结果条用真路由链接（2026-11-03 起，替代 href="#" + @click.prevent），
+// 不 stub 的话模板解析不到组件、整棵渲染失败（本条 mock 原先只有 useRouter）。
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+}));
 vi.mock('../store', async () => {
   const { ref } = await import('vue');
   return {
@@ -127,7 +132,8 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     expect(w.find('.mk-kpi__hint').exists()).toBe(false);
     expect(w.find('.mk-kpi__num-note').text()).toContain('预置 1');
     expect(w.find('.mk-kpi__num-note').text()).toContain('自建 1');
-    expect(w.find('.mk-card__meta').text()).toContain('共 2 张');
+    /* 2026-11-02 评审 R16：张数只在 KPI 上出现一次，卡墙卡头不再复读同一读数 */
+    expect(w.findAll('.mk-card__meta').some((m) => m.text().includes('共 2 张'))).toBe(false);
     const wall = w.findAll('.vlc-card');
     expect(wall).toHaveLength(2);
     expect(wall[0].text()).toContain('高一学生小陈');

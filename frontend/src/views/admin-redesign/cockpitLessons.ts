@@ -6,6 +6,14 @@ import type { PathMilestoneView } from './cockpitPathViews'
 
 export type LessonState = 'done' | 'active' | 'failed' | 'pending'
 
+/** 结课但没走完的终态（timeout / finalization_failed / discarded / superseded 同属 #135 终态集，
+ *  只是不是 error）。taskRuntime 还会带路径管线自己的 error / next_task_start_failed 别名，一并收进来。
+ *  不用 statusText.isRunTerminal：那个判据面向虚拟运行，缺后三个，正是「超时课标进行中」的来源。 */
+const ABORTED_LESSON_STATUSES = [
+  'failed', 'error', 'abandoned', 'cancelled', 'canceled',
+  'timeout', 'finalization_failed', 'discarded', 'superseded', 'next_task_start_failed'
+]
+
 export interface LearnLesson {
   taskId: string
   title: string
@@ -72,7 +80,13 @@ export function buildLearnLessons(
         if (t.completed) {
           teachingSessionId = current.currentTeachingId || teachingSessionId
         } else {
-          state = ['error', 'next_task_start_failed'].includes(current.runtimeStatus) ? 'failed' : 'active'
+          /* 2026-11-02 P1-4：原先只把 error / next_task_start_failed 判成 failed，timeout、
+             finalization_failed、discarded、superseded 这些**结课终态**全落进 else 写成 active——
+             已超时终局的课在 Learn 树里仍标「进行中」，与课头、总结页的「超时」互相打架。
+             终态名单与 SessionCockpit 的 #135 同口径；completed 不在此列（任务没标完成时
+             仍按在课处理，那是任务回写问题，不归本行判定）。 */
+          const st = String(current.runtimeStatus || '').toLowerCase()
+          state = ABORTED_LESSON_STATUSES.includes(st) ? 'failed' : 'active'
           teachingSessionId = current.currentTeachingId
         }
       }

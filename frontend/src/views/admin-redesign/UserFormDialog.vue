@@ -19,7 +19,16 @@
           </label>
           <label v-if="isLive" class="mk-field" :class="{ 'mk-field--error': errors.password }">
             <span class="mk-field__label">{{ user ? '重置密码' : '初始密码' }} <em v-if="!user" class="mk-field__req">*</em></span>
-            <input v-model="form.password" type="password" class="mk-field__input" :placeholder="user ? '留空表示不修改' : '至少 8 位，含字母和数字'" />
+            <input
+              v-model="form.password"
+              type="password"
+              class="mk-field__input"
+              :aria-describedby="user ? 'ufd-password-hint' : undefined"
+              :placeholder="user ? '留空表示不修改' : '至少 8 位，含字母和数字'"
+            />
+            <!-- 编辑态只有一句占位文字，读者不知道点保存会发生什么（2026-11-02 评审 R40）：
+                 规则、留空语义、生效时机写在同一行，不必先踩一次校验错误才知道。 -->
+            <span v-if="user" id="ufd-password-hint" class="mk-field__hint">留空则保持原密码不变。填写则至少 8 位，且同时包含字母和数字，保存后立即生效</span>
             <span v-if="errors.password" class="mk-field__err">{{ errors.password }}</span>
           </label>
           <label v-if="isLive && !user" class="mk-field" :class="{ 'mk-field--error': errors.confirmPassword }">
@@ -35,6 +44,9 @@
               aria-label="角色"
               block
             />
+            <!-- 昵称/邮箱带必填星号而角色没有，读者无从判断它是不是必填（2026-11-02 评审 R40）。
+                 角色恒有初值、不会留空，故不加星号，改用一行说明讲清它决定什么。 -->
+            <span class="mk-field__hint">必选，决定该账号能否进入管理台</span>
           </label>
         </div>
         <div class="mk-modal__foot">

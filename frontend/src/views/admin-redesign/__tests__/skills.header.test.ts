@@ -2,7 +2,7 @@
  * Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）+ 可读性批（2026-10）：
  * - 成功率精度/阈值/兜底走 rate-utils 单点（99.9% 不再显示 100%；<90 红 / <97 琥珀）
  * - liveCount 三态（… / ? / 红 0）
- * - 「状态」列更名「完成度」；失败行「查失败」intent 直达；P95 默认隐藏
+ * - 「状态」列更名「完成度」；失败行「查看失败记录」intent 直达；P95 默认隐藏
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -234,12 +234,13 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
-  it('失败行「查失败」：挂在 Skill 身份副行，携 agent+status intent 深链执行日志', async () => {
+  it('失败行「查看失败记录」：挂在 Skill 身份副行，携 agent+status intent 深链执行日志', async () => {
     const w = await mountSkills()
     // 默认按失败数降序：第一行 = skill:a（30 失败）
+    // 2026-11-02 评审：标签由「查失败」改成「查看失败记录」——三个字的旧标签读不出是动作还是状态标记
     const rowBtns = w.findAll('.sk-list .sk-item')[0].findAll('button').map((b) => b.text())
-    expect(rowBtns).toContain('查失败')
-    const failBtn = w.findAll('.sk-list .sk-item')[0].findAll('button').find((b) => b.text() === '查失败')!
+    expect(rowBtns).toContain('查看失败记录')
+    const failBtn = w.findAll('.sk-list .sk-item')[0].findAll('button').find((b) => b.text() === '查看失败记录')!
     expect(failBtn.classes()).toContain('sk-fail-link')
     await failBtn.trigger('click')
     expect(intent.scene).toBe('execution-logs')

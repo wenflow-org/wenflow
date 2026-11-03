@@ -225,9 +225,19 @@
   /* ==========================================
      六、排版
      ========================================== */
-  --wf-font-sans: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB',
-    'Inter', 'Helvetica Neue', '微软雅黑', sans-serif;
-  --wf-font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  /* Inter 必须排在 CJK 族之前：PingFang SC / Microsoft YaHei / Hiragino Sans GB 都自带拉丁
+     字形，排在它们后面的西文字体永远轮不到（2026-11-02 字体检查实测：本机整栈解析到
+     Microsoft YaHei，Inter 与 Helvetica Neue 全程未被选中）。挪到最前只影响**装了 Inter**
+     的机器；Windows / macOS 上 Inter 未装，解析结果与调整前逐字相同。
+     Helvetica Neue 留在 CJK 之后作末位回退（前四档都缺时才轮到）。
+     '微软雅黑' 与 'Microsoft YaHei' 是同一款字，保留两个名字是为极少数只登记本地化名的
+     Windows 版本兜底，不去重。 */
+  --wf-font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB',
+    'Helvetica Neue', '微软雅黑', sans-serif;
+  /* 全仓唯一的等宽型号。此前本项第二档是 Fira Code、main.css 的 --mk-mono 是 Cascadia Code，
+     同一件事两处各写一份；本机两者都没装，于是管理台落到 Cascadia Code、走设计系统基座的
+     落到 Consolas——同一界面两种等宽。2026-11-02 收口为本档，--mk-mono 反向别名到此。 */
+  --wf-font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
 
   /* 文本角色（同一视口 ≤3 档） */
   --wf-fs-micro: 12px;
@@ -335,7 +345,7 @@
        --mk-blue-bg(-strong) 蓝底用色混而非纯色 → 批次 D
        --mk-shadow-drawer  规范只有三档，抽屉并入 overlay → 批次 C
        --mk-green/amber/red 深色文字基线（白底对比 ≥4.5:1 的取舍）→ 保留，待规范补「语义文字色」档
-       --mk-mono           回退字体为 Cascadia Code 而非 Fira Code → 保留（本机栈实测更优）
+       --mk-mono           2026-11-02 已收口：规范档改用 Cascadia Code，--mk-mono 反向别名到 --wf-font-mono
        --mk-faint(-soft)   弱化文字无规范等价物 → 保留
        --mk-* 业务 tint（badge- / graph- / col- / rec- 前缀族）→ 保留，非设计语言的一部分
      ========================================== */

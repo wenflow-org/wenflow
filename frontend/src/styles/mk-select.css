@@ -18,8 +18,15 @@
   top: 0;
   z-index: var(--mk-z-menu);
   min-width: 0;
-  max-height: 320px;
+  /* 2026-11-02 P2-1：教学会话的「状态」有 12 项（全部 + 异常 + 10 个后端枚举），
+     行高实测 32px ⇒ 内容约 392px。360px 的旧上限会把末两项（已完成 / 已废弃）
+     顶出可视区：末行从字的中间被切断，而「已废弃」整项看不见——它正是列表里
+     数量最多的一档，读起来像"下拉里根本没有这个状态"。上限抬到 440px 让 12 项
+     一次性排完；真超长时弹层用标准宽度滚动条，并让滚到头不再带动页面。 */
+  max-height: min(70vh, 440px);
   overflow-y: auto;
+  scrollbar-width: auto;
+  overscroll-behavior: contain;
   margin: 0;
   padding: 4px;
   list-style: none;

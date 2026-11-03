@@ -4,7 +4,9 @@
   <div class="mk-page">
     <MkDetailHero avatar="＋" title="导入卡文档" sub="YAML / JSON 的 { cards: [...] }">
       <template #actions>
-        <button type="button" class="mk-btn" @click="closeSubPage()">返回卡墙</button>
+        <!-- 页面名统一叫「学习者卡库」（2026-11-02 评审 R20）：此前这里写「卡墙」，
+             与面包屑、列表页的称呼对不上 -->
+        <button type="button" class="mk-btn" @click="closeSubPage()">返回学习者卡库</button>
       </template>
     </MkDetailHero>
 
@@ -24,16 +26,42 @@
           @drop.prevent="onDrop"
         >
           <span class="ci-drop__title">{{ isDragOver ? '松开导入卡文档' : (fileName || '拖入或点击选择 .yaml / .json 卡文档') }}</span>
-          <span class="ci-drop__hint">{{ isDragOver ? '松开后将读取并填入文本框' : '也可以直接粘贴到文本框' }}</span>
+          <!-- 常态副文「也可以直接粘贴到文本框」已撤（2026-11-02 文案清理）：对同屏文本框的隔空指路，
+               且正下方文本框的 placeholder（「在此粘贴卡文档，也可以把 .yaml / .json 文件拖进来」）已说同一件事。
+               悬停那句是「松手不会直接导入、只读进文本框」的预期限定，留。 -->
+          <span v-if="isDragOver" class="ci-drop__hint">松开后将读取并填入文本框</span>
+        </div>
+        <!-- 格式说明与示例（2026-11-02 评审 R21/R22）：识别格式跟着它描述的输入框，
+             不再漂在按钮行末尾；示例单独折起，进框的是真空，不会和已载入内容混淆 -->
+        <div class="ci-text-head">
+          <span class="mk-field__label">卡文档内容</span>
+          <span class="ci-format">识别格式：{{ formatHint.toUpperCase() }}</span>
         </div>
         <textarea
           v-model="rawText"
           class="mk-field__textarea ci-text"
           rows="12"
           spellcheck="false"
-          placeholder="cards:&#10;  - cardKey: gaozhong-math-01&#10;    nickname: 想补函数的高一学生&#10;    persona:&#10;      nameHint: 高一学生&#10;      background: …&#10;    story:&#10;      visibleOpening: …&#10;      followUps: [ … ]&#10;    source:&#10;      kind: web   # 或 synthetic&#10;      ref: https://…"
+          placeholder="在此粘贴卡文档，也可以把 .yaml / .json 文件拖进来"
           @input="resetReports"
         ></textarea>
+        <details class="ci-sample">
+          <summary>看一份 YAML 示例</summary>
+          <pre class="ci-sample__code">cards:
+  - cardKey: gaozhong-math-01
+    nickname: 想补函数的高一学生
+    persona:
+      nameHint: 高一学生
+      background: 县城高中高一在读，函数基础薄弱
+    story:
+      visibleOpening: 这次月考函数只考了 58 分。
+      followUps:
+        - 平时函数作业完成得怎么样？
+        - 上课跟得上老师的节奏吗？
+    source:
+      kind: web
+      ref: https://example.com/note</pre>
+        </details>
         <div class="ci-opts">
           <label class="ci-check">
             <input v-model="enrich" type="checkbox" />
@@ -51,8 +79,7 @@
           <button type="button" class="mk-btn mk-btn--primary" :disabled="!canImport || importing || validating" @click="doImport">
             {{ importing ? '导入中…' : '导入' }}
           </button>
-          <span class="ci-format">识别格式：{{ formatHint }}</span>
-          <button v-if="imported" type="button" class="mk-link ci-back" @click="closeSubPage()">导入完成 · 返回卡墙 →</button>
+          <button v-if="imported" type="button" class="mk-link ci-back" @click="closeSubPage()">导入完成 · 返回学习者卡库 →</button>
         </div>
       </div>
     </section>
@@ -122,9 +149,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
-import { closeSubPage } from './store'
+import { closeSubPage, setSubPageLabel } from './store'
 import { errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
@@ -165,6 +192,11 @@ const importResult = ref<ImportPayload | null>(null)
 const imported = ref(false)
 
 const hasText = computed(() => rawText.value.trim().length > 0)
+
+/* 面包屑显示本页的名字而不是路由占位 id「new」（2026-11-02 评审 R19）：
+   从卡库打开时入口已带 label，但刷新/深链只剩 ?view=card-import&id=new，
+   这里补齐，两条进入路径的面包屑才一致。 */
+onMounted(() => setSubPageLabel('导入卡'))
 
 /** 格式识别：文件名后缀优先，其次按内容形态（YAML 是 JSON 超集，默认 yaml 也能吃 JSON） */
 const formatHint = computed<CardFormat>(() => {
@@ -308,11 +340,40 @@ async function doImport() {
 .ci-drop__title { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
 .ci-drop__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .ci-text { width: 100%; font-family: var(--mk-mono); font-size: var(--mk-fs-micro); line-height: 1.5; resize: vertical; }
+/* 占位提示走弱化色令牌：浏览器默认灰在深底上只有约 3.5:1，读起来像禁用态
+   （2026-11-02 评审 R22） */
+.ci-text::placeholder { color: var(--mk-faint); opacity: 1; }
+.ci-text-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ci-format { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+/* 示例：折起来，一眼能看出是「参考资料」而不是已填进框里的内容 */
+.ci-sample > summary { cursor: pointer; font-size: var(--mk-fs-micro); color: var(--mk-blue); list-style: none; width: fit-content; }
+.ci-sample > summary::-webkit-details-marker { display: none; }
+.ci-sample > summary::before { content: '▸'; margin-right: 6px; }
+.ci-sample[open] > summary::before { content: '▾'; }
+.ci-sample__code {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+  font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
+  line-height: 1.6;
+  color: var(--mk-ink);
+  overflow-x: auto;
+}
 .ci-opts { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 .ci-check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; }
 .ci-actions { display: flex; align-items: center; gap: 10px; }
-.ci-format { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-.ci-back { font-size: var(--mk-fs-micro); }
+/* 空文本框时两个按钮都禁用，全局禁用态把实心主按钮也刷成中性灰，于是「导入」和
+   「校验」读成两个平级操作（2026-11-02 评审 R21）。这里让主操作在禁用态保留主色
+   的浅底 + 蓝字：仍读得出「先填内容才能导入」，又不会和次要按钮糊成一片。 */
+.ci-actions .mk-btn--primary:disabled:not(.mk-btn--danger-ghost) {
+  background: var(--mk-blue-bg);
+  border-color: color-mix(in srgb, var(--mk-blue) 40%, transparent);
+  color: var(--mk-blue);
+}
+.ci-back { margin-left: auto; font-size: var(--mk-fs-micro); }
 .ci-key { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 .ci-issues { display: flex; flex-direction: column; gap: 2px; white-space: normal; }
 .ci-issue { font-size: var(--mk-fs-micro); line-height: 1.45; }

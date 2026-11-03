@@ -86,7 +86,7 @@
         action-busy-text="重试中…"
         @action="reload(true)"
       />
-      <div v-else-if="filtered.length" class="mk-table-scroll">
+      <div v-else class="mk-table-scroll">
         <!-- 固定列宽（2026-10-22 与教学会话/目标对话同判例）：自动布局下路径/用户两列按当页
              最长文本分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
              单元格 nowrap 仍走全局 .mk-table--nowrap，长标题/主题由 .mk-cell-main/.mk-cell-text 截断 -->
@@ -145,6 +145,7 @@
               v-for="p in paged"
               :key="p.id"
               tabindex="0"
+              :class="{ 'oc-row--menu': openMenu === p.id }"
               @click="openPath(p)"
               @keydown.enter.self.prevent="openPath(p)"
             >
@@ -243,16 +244,21 @@ ${p.user?.email}` : (p.user?.name || '—')">{{ p.user?.name || '—' }}</strong
             </tr>
           </tbody>
         </table>
+        <!-- 空态长在表格内部：筛到 0 条时整张表连同表头一起消失，两态之间列宽与列上下文
+             全断（2026-11-02 评审 R12）。compact 而非 min——min 的视口高常量会在
+             滚动容器里撑出一整屏空白。 -->
+        <MkEmptyState
+          v-if="!filtered.length"
+          compact
+          :title="emptyStateTitle"
+          :action-text="isFiltered ? '清除筛选' : '去目标对话'"
+          @action="isFiltered ? clearFilters() : goGoalConversations()"
+        >
+          <!-- 图标用线性图标而不是「◌」字符：字体缺 U+25CC 时只剩两笔几乎看不见的短线，
+               读作"图标没加载出来"（2026-11-02 评审 R11）。 -->
+          <template #icon><Inbox :size="22" :stroke-width="1.7" /></template>
+        </MkEmptyState>
       </div>
-      <MkLoading v-else-if="loading" />
-      <MkEmptyState
-        v-else
-        min
-        icon="◌"
-        :title="emptyStateTitle"
-        :action-text="isFiltered ? '清除筛选' : '去目标对话'"
-        @action="isFiltered ? clearFilters() : goGoalConversations()"
-      />
 
       <!-- 翻页器常驻（判例 GoalConversations/TeachingSessions）：0 行时也保留页码与条数，
            否则整页像数据没了。Pagination 自带越界收敛 watcher。 -->
@@ -273,6 +279,7 @@ ${p.user?.email}` : (p.user?.name || '—')">{{ p.user?.name || '—' }}</strong
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, onMounted, ref, watch } from 'vue'
+import { Inbox } from 'lucide-vue-next'
 import { timeAgo, errMsg, isPageCacheFresh, liveRefreshSeq, markPageFetched } from './live'
 import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
@@ -757,6 +764,8 @@ defineExpose({ reload: () => void reload(true) })
 .oc-stats-error__msg { font-size: var(--mk-fs-micro); color: var(--mk-red); }
 /* 可点 KPI 的选中态（2026-10-26）：蓝只给可交互与选中，与 .lc-kpi--on / .mr-kpi--on 同一判例 */
 .oc-kpi--on { border-color: var(--mk-blue); }
+/* 行菜单打开中的所属行：浮层 fixed 脱离行盒，不加底色时看不出它属于哪条路径 */
+.oc-row--menu { background: var(--mk-graph-flow-bg); }
 /* 分布条已退役（2026-10-17）：原页面级 .oc-distband 与类名一并下线，状态筛选在卡头 pills；
    页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
 /* 加载失败错误态已收敛共享 MkEmptyState tone="error"（role=alert + 失败原因 + 重试/busy），

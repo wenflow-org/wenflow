@@ -19,7 +19,7 @@
       <div class="dfg-toolbar">
         <div class="dfg-toolbar__status">
           <span class="dfg-stage-dot" :style="{ background: toneOf(flow?.stageId || '').hue }"></span>
-          <strong class="dfg-title">{{ flow?.stageName || '' }}<span class="dfg-title__agent mono"> {{ flow?.agentId }}</span></strong>
+          <strong class="dfg-title">{{ flow?.stageName || '' }}&nbsp;<span class="dfg-title__agent mono">{{ flow?.agentId }}</span></strong>
           <span class="dfg-meta">{{ flow ? flow.fieldCount : '—' }} 字段 · {{ flow ? flow.steps.length : '—' }} 步</span>
           <!-- 搜索命中反馈（审核 #114）：无命中此前与空闲态完全一致（画布原样、无提示），
                用户分不清「没这个字段」还是「搜索没生效」；有输入即报命中数，0 命中给醒目提示。
@@ -44,7 +44,7 @@
             <input type="checkbox" v-model="showHidden" />
             <span>隐藏字段</span>
           </label>
-          <label class="dfg-switch" title="显示步间连线（默认淡显，聚焦时点亮）">
+          <label class="dfg-switch" title="显示步间连线">
             <input type="checkbox" v-model="edgeFaded" />
             <span>连线</span>
           </label>
@@ -120,7 +120,9 @@
                 :title="`前往 ${flow.entryFrom?.stageName}（${flow.entryFrom?.stageId}-agent），看这些字段在那边是怎么产出的`"
                 @click="switchStage(flow.entryFrom!.stageId)"
               >入口 · 来自 {{ flow.entryFrom?.stageName }}<span class="dfg-gate__jump">↗</span></button>
-              <span class="dfg-gate__sub" :title="`${entryVisible.length} 个字段经 ${flow.entryFrom?.stageId}-agent 移交进入本阶段`">{{ entryVisible.length }} 个字段经 {{ flow.entryFrom?.stageId }}-agent 移交本阶段</span>
+              <!-- 入口卡与出口卡同构：字段数由右侧「N 字段」徽章给出，对端 agent 由上面卡题
+                   title 给出——此处不再复读一句「N 个字段经 X-agent 移交本阶段」
+                   （2026-11-02 走查：出口卡那句已同批删除） -->
             </div>
             <span class="dfg-gate__count">{{ entryVisible.length }} 字段</span>
             <button type="button" v-for="p in farPorts['__entry__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
@@ -159,7 +161,10 @@
           <!-- 桥接闸口（入口整装 / 分发） -->
           <section v-if="step.kind === 'bridge-entry' && step.outputChips.length" :data-card-key="step.agentId" class="dfg-step dfg-step--gate" :class="{ 'is-flash': flashKey === step.agentId }" :style="{ '--hz': toneOf(flow!.stageId).hue }">
             <header class="dfg-step__head">
-              <span class="dfg-step__idx">⇡</span>
+              <!-- 闸口也占一个步号（2026-11-02 评审）：桥接分发在 defSteps 里就是第 1 步，
+                   原先这里画的是 ⇡ 图标，页面上可见编号从 2 起，与页头「N 步」对不上。
+                   闸口的圆形序号框（.dfg-step--gate .dfg-step__idx）已足够区分它与 Skill 步骤卡 -->
+              <span class="dfg-step__idx">{{ step.index }}</span>
               <strong class="dfg-step__name">{{ step.name }}</strong>
               <span class="dfg-step__badge dfg-step__badge--gate">分发上游字段</span>
               <span class="dfg-step__agent mono">{{ step.agentId }}</span>
@@ -216,7 +221,6 @@
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
-              <span v-if="step.kind === 'orphan'" class="dfg-step__count" title="该 Skill 没有字段的路由记录，不参与阶段内数据流转">无字段流转</span>
               <button type="button" v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
             </header>
           </section>
@@ -303,7 +307,15 @@
                           :key="t.target"
                           class="dfg-chip__to mono"
                           :class="{ 'dfg-chip__to--stage': t.kind === 'stage' }"
-                        >{{ t.kind === 'stage' ? `→ ${t.label}` : `→ ${t.label}` }}</span>
+                          :title="t.label"
+                        >→ {{ t.label }}</span>
+                        <!-- 多于两个去向时给余量（2026-11-02 评审后补）：原实现 slice(0,2) 静默丢掉其余去向，
+                             一个字段交给 3 个目标时读者会以为只交了 2 个 -->
+                        <span
+                          v-if="c.toTags.length > 2"
+                          class="dfg-chip__to dfg-chip__to--more mono"
+                          :title="`去向：${c.toTags.map((t) => t.label).join('、')}`"
+                        >+{{ c.toTags.length - 2 }}</span>
                       </template>
                     </button>
                     <button v-if="stepOverflow(step, 'out')" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
@@ -329,7 +341,6 @@
                 :title="`前往 ${flow.exitTo?.stageName}（${flow.exitTo?.stageId}-agent），看这些字段在那边是怎么被消费的`"
                 @click="switchStage(flow.exitTo!.stageId)"
               >出口 · 交给 {{ flow.exitTo?.stageName }}<span class="dfg-gate__jump">↗</span></button>
-              <span class="dfg-gate__sub" :title="`${flow.agentId} 汇总 ${flow.exit.length} 个字段，整体移交下一阶段`">{{ flow.agentId }} 汇总 {{ flow.exit.length }} 个字段移交下一阶段</span>
             </div>
             <span class="dfg-gate__count">{{ flow.exit.length }} 字段</span>
             <button type="button" v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></button>
@@ -414,7 +425,9 @@
             <!-- 首段徽章行（原型 .ovl__body 首段 pills）：角色 / 可见性 / 锁定 / 内部信令 / 累积，均为字段既有属性 -->
             <div class="dfg-drawer__pills">
               <span class="mk-badge" :class="`mk-badge--role-${selected.role}`">{{ roleLabel(selected.role) }}（{{ selected.role }}）</span>
-              <span class="mk-badge" :class="`mk-badge--render-${selected.render}`">{{ selected.render }}</span>
+              <!-- 可见性徽章说中文（2026-11-02 评审）：同一屏下方「可见性」控件写的是「可见 / 隐藏」，
+                   这里却直出 render 枚举（visible / hidden），一个状态两种语言 -->
+              <span class="mk-badge" :class="`mk-badge--render-${selected.render}`">{{ renderLabel(selected.render) }}</span>
               <span class="mk-badge" :class="`mk-badge--lock-${selected.lockLevel}`">{{ lockLabel(selected.lockLevel) }}</span>
               <span v-if="selected.internal" class="mk-badge dfg-badge--internal">内部字段</span>
               <span v-if="selected.accumulate" class="mk-badge dfg-badge--accum">累积进学习者状态</span>
@@ -436,7 +449,10 @@
                 <span>类型</span>
                 <strong class="mono">{{ selected.valueType || '—' }}</strong>
               </div>
-              <div>
+              <!-- 存储字段名整行（2026-11-02 评审）：50 字上下的标识（normalizedInput.confirmedProposal
+                   .firstDeliverable）在 203px 的值列里被硬断成三行、断在词中间，看着像三个名字；
+                   整行后值列约 526px，常见标识一行放得下 -->
+              <div class="dfg-fact--wide">
                 <span>存储字段名</span>
                 <strong class="mono">{{ selected.persistKey || selected.fieldId }}</strong>
               </div>
@@ -686,6 +702,13 @@ function lockLabel(level?: string) {
   if (level === 'system-locked') return '平台锁定'
   if (level === 'structure-locked') return '平台锁定'
   return '可编辑'
+}
+/** render 枚举 → 中文：与抽屉「可见性」控件、字段路由表的同一枚徽章同一个词；
+ *  未知取值原样回显，避免被误标成「可见」 */
+function renderLabel(render: string) {
+  if (render === 'hidden') return '隐藏'
+  if (render === 'visible') return '可见'
+  return render
 }
 function stageNameOf(id: string) {
   return stageNames.value[id] || STAGE_LABELS[id] || id
@@ -1287,7 +1310,11 @@ function journeyOf(part: 'producer' | 'consumers' | 'handoff'): string[] | strin
     return out
   }
   if (c.handoffTargets.length) {
-    return c.handoffTargets.map((t) => `${t}`).join(' / ')
+    /* 阶段去向写中文（2026-11-02 评审）：与「字段路由」的移交行同一套标识——
+       阶段原值 teaching 混在 skill:xxx / agent 之间，读不出这是「交给教学阶段」 */
+    return c.handoffTargets
+      .map((t) => (STAGE_ORDER.includes(t as (typeof STAGE_ORDER)[number]) ? `${stageNameOf(t)}阶段` : t))
+      .join(' / ')
   }
   return c.accumulate ? '学习者状态（累积）' : '对话终点（不转交）'
 }
@@ -1414,6 +1441,9 @@ function stepHue(step: FlowStep): string {
 .dfg-toolbar__status { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .dfg-stage-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-muted) 12%, transparent); }
 .dfg-title { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
+/* 阶段名与 agent 名之间用不换行空格（2026-11-02 评审：普通空格会被 Vue 编译器压掉，
+   实测 outerHTML 是「规划<span>path-agent</span>」，页面上读作「规划path-agent」）。
+   &nbsp; 既留在文本里（读屏/复制得到空格），也不会被压缩；顺带避免两段在窄档分行 */
 .dfg-title__agent { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); }
 .dfg-meta { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 /* 搜索命中反馈（审核 #114）：0 命中用琥珀强调，与「命中 N」的中性读数区分 */
@@ -1576,7 +1606,6 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-gate__src:hover { color: var(--mk-blue); text-decoration: underline; text-underline-offset: 2px; }
 .dfg-gate__jump { color: var(--mk-faint); }
 .dfg-gate__src:hover .dfg-gate__jump { color: var(--mk-blue); }
-.dfg-gate__sub { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dfg-gate__count {
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted);
   background: var(--mk-graph-badge-bg); padding: 2px 9px; border-radius: 999px; font-variant-numeric: tabular-nums;
@@ -1641,10 +1670,13 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
    只有 id 长过整卡时才落回省略号。spacer 仍把触发/循环条件推到行尾。 */
 .dfg-step__agent { font-size: var(--mk-fs-micro); color: var(--mk-faint); flex: 0 1 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dfg-step__spacer { flex: 1; }
+/* 触发/循环条件不再截断（2026-11-02 评审）：原 max-width:220px + 省略号把「触发：when goal
+   handoff received」（实测 235px）裁成「…rec…」，全文只在 title 里，截图与走查都读不到。
+   改整行折行：卡头本就 flex-wrap，条件独占一行时不会把 Skill id 挤到省略号。 */
 .dfg-step__cond {
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber);
   background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 7px;
-  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%; overflow-wrap: anywhere;
 }
 .dfg-step__role { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); }
 .dfg-step__stage {
@@ -1709,9 +1741,14 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-chip__to {
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
   background: var(--mk-blue-bg); border-radius: 6px; padding: 0 6px; line-height: 1.8;
-  max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* 上限 160px（2026-11-02 评审）：原 110px 把最常见的目的地都截了
+       （「→ stage-designer」实测 134px →「stage-des…」，chip 上的去向等于没写）。
+       再长的 skill id 仍省略，全文在 title */
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dfg-chip__to--stage { background: color-mix(in srgb, var(--hz) 12%, var(--mk-graph-node-bg)); color: var(--mk-ink); font-weight: 800; }
+/* 余量计数：陈述而不是另一个去向，弱一档（与「+N 更多」同一语气） */
+.dfg-chip__to--more { background: var(--mk-graph-tag-bg); color: var(--mk-faint); }
 
 /* 图例（数据族） */
 .dfg-legend {

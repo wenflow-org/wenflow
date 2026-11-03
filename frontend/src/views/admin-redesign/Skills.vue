@@ -145,7 +145,7 @@
             <div class="sk-meta">
               <button type="button" class="mono sk-version-link" :title="versionTitleOf(s.id)" @click.stop="openVersions(s.id)">{{ versionOf(s.id) }}</button>
               <span class="sk-recent" :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span>
-              <button v-if="s.errors > 0" type="button" class="mk-link sk-fail-link" @click.stop="investigateAgent(s.id)">查失败</button>
+              <button v-if="s.errors > 0" type="button" class="mk-link sk-fail-link" :title="failLinkTitle(s)" @click.stop="investigateAgent(s.id)">查看失败记录</button>
             </div>
           </div>
           <div class="sk-stats">
@@ -168,6 +168,7 @@
         v-else-if="!filtered.length"
         min
         :title="onlyAttention ? '没有需关注的 Skill' : isFiltered ? '当前筛选无 Skill' : '暂无 Skill'"
+        :description="isFiltered ? `筛掉的都是这些条件：${emptyFilterText}。` : '目录里还没有登记 Skill。'"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -206,11 +207,9 @@
             <section class="mk-kpi-grid" aria-label="Skill 模型路由统计">
               <MkKpi label="承载模型" :value="routeModelCount" />
               <!-- 2026-10-31 三轮评审：本卡 29 与下方覆盖表「共 31 个技能」上下相距 20px，
-                   两个裸数并排读作口径打架。hint 引用覆盖表上报的全量数（31 含未入目录的
-                   辅助 Skill），29/31 的关系读一行就闭合；
-                   2026-10-31 四轮评审补充：说清「多出来的是什么」（平台内部 / 工具类 Skill，
-                   未登记进 Skill 目录），并补齐了它们的展示名与归属（裸 id 行不再出现） -->
-              <MkKpi label="已路由 Skill" :value="routedSkillCount" :hint="coverageReady && coverageTotal ? `覆盖表全量 ${coverageTotal} 个技能（含未入目录的平台内部/工具 Skill），未路由的走平台默认` : ''" />
+                   两个裸数并排读作口径打架。2026-11-02 起本卡与覆盖表同源计数（分母就是覆盖表），
+                   两个数字天然一致，悬停只留一句「这一行数的是什么」。 -->
+              <MkKpi label="已路由 Skill" :value="routedSkillCount" :hint="coverageReady ? '覆盖表已登记的路由行数（含未入目录的平台内部 / 工具 Skill）' : ''" />
               <MkKpi label="主模型覆盖" :value="primaryCoverageText" />
               <!-- 降级策略：真实口径 = 自定义兜底链计数；无自定义链时给出 registry 默认链的
                    解析结果（F7-5：空数组=「无（空链）」）。registry 未加载显 —，不伪装 -->
@@ -228,7 +227,6 @@
               :platform-default-reasoning-model="registryDefaultReasoningModel"
               @applied="refreshCoverage"
               @open-skill="openSkillFromBulk"
-              @loaded="coverageTotal = $event"
             />
           </div>
         </div>
@@ -386,11 +384,18 @@ const agentOptions = computed<AgentOption[]>(() => {
   return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh'))
 })
 /** 胶囊内嵌下拉的两组选项（2026-10-26 卡头统一）：
- *  归属 = 空值「全部 Agent」+ 带计数的 Agent 名；窗口 = 统计范围（默认近 7 天）。 */
-const agentSelectOptions = computed(() => [
-  { value: '', label: '全部 Agent' },
-  ...agentOptions.value.map((a) => ({ value: a.id, label: `${a.label}（${a.count}）` }))
-])
+ *  归属 = 空值「全部 Agent」+ 带计数的 Agent 名；窗口 = 统计范围（默认近 7 天）。
+ *  2026-11-02 评审两处：①「全部 Agent」不给计数，读者对不上其余各项之和；
+ *  ②「未归属」按拼音插在各类 Agent 之间，读起来像一个 Agent 名。现补齐计数，
+ *  并把「未归属」固定压尾——它是「没有归属」这一桶，不是某类 Agent。 */
+const agentSelectOptions = computed(() => {
+  const withCount = (a: AgentOption) => ({ value: a.id, label: `${a.label}（${a.count}）` })
+  return [
+    { value: '', label: `全部 Agent（${cards.value.length}）` },
+    ...agentOptions.value.filter((a) => a.id !== '__none__').map(withCount),
+    ...agentOptions.value.filter((a) => a.id === '__none__').map(withCount)
+  ]
+})
 const statsRangeOptions = [
   { value: '7d', label: '近 7 天' },
   { value: '24h', label: '近 24 小时' },
@@ -404,6 +409,12 @@ const statsRangeOptions = [
 function rowRateTitle(s: { calls: number; errors: number }): string {
   if (!s.calls) return '该窗口内暂无调用，暂无成功率'
   return `成功率 ${s.calls - s.errors}/${s.calls}。${RATE_THRESHOLD_NOTE}`
+}
+
+/** 失败入口的悬停说明：这是一个动作（跳执行日志看失败），不是状态标记。
+ *  2026-11-02 评审：三个字的「查失败」看不出是标记还是可点操作，标签本身也说不出跳去哪。 */
+function failLinkTitle(s: { id: string; errors: number }): string {
+  return `在执行日志里查看 ${s.id} 的 ${s.errors} 条失败调用（${rangeLabel.value}）`
 }
 
 /** tone → 本页 sk-rate 类名（显式映射，rate-utils 只产语义 tone；ok/muted 不着色） */
@@ -499,8 +510,6 @@ const skillMetaById = ref<Map<string, SkillMetaEntry>>(new Map())
 const coverageById = ref<Map<string, SkillRouteEntry>>(new Map())
 /** coverage 是否成功拉到（空列表也算就绪）：区分「没拉到」与「确实无模型配置」 */
 const coverageReady = ref(false)
-/* 覆盖表上报的全量技能数（2026-10-31 三轮评审）：KPI 口径说明与表内「共 N 个技能」同源 */
-const coverageTotal = ref(0)
 
 /* 列表排序（2026-10-28 重设计：列表没有表头，排序走工具条下拉 + 方向按钮）。
    默认「需关注优先」= 失败数降序（问题浮顶，保持既有行为）。
@@ -609,6 +618,21 @@ const rangeLabel = computed(() => RANGE_LABELS[appliedRange.value] || '近期')
 const rangeLabelOf = (r: string) => RANGE_LABELS[r] || '近期'
 
 const isFiltered = computed(() => onlyAttention.value || !!keyword.value.trim() || !!agentFilter.value)
+/** 筛选空态「筛掉的是什么」单源：把当前生效的条件列成一句人话。
+ *  2026-11-02 评审：空态此前只有「当前筛选无 Skill」，读者看不出是哪条条件筛没的，
+ *  也不知道该松哪一项（工具栏上只留一个搜索词标签时尤其难认）。 */
+const emptyFilterText = computed(() => {
+  const parts: string[] = []
+  if (onlyAttention.value) parts.push('关注 = 仅看需关注')
+  if (agentFilter.value === '__none__') parts.push('归属 = 未归属')
+  else if (agentFilter.value) {
+    const hit = agentOptions.value.find((a) => a.id === agentFilter.value)
+    parts.push(`归属 = ${hit?.label || agentFilter.value}`)
+  }
+  const q = keyword.value.trim()
+  if (q) parts.push(`搜索词 = ${q}`)
+  return parts.join('，')
+})
 function clearFilters() {
   onlyAttention.value = false
   keyword.value = ''
@@ -952,21 +976,21 @@ function agentLabelOf(s: { agentId: string; agentName?: string }): string {
 }
 
 /* ---- 批量模型配置弹窗的 4 张读数（原「模型路由」页签 KPI 带）---- */
-/** 有生效路由标签的 Skill（含「平台默认」桶）；未加载 coverage 时为空 */
-const routingLabels = computed(() =>
-  coverageReady.value
-    ? cards.value.map((c) => routingOf(c.id)).filter((v) => v !== '—')
-    : []
+/** 有生效路由标签的 Skill：**与覆盖表同一份数据**——这四张卡说的就是下面那张覆盖表。
+    2026-11-02 评审：此前取 Skill 目录（29 行）当分母，与表头「共 31 个技能」上下并排
+    读作两个数字打架，且 29 行全走同一个模型时算出的「主模型覆盖 100%」与 31 也对不上。
+    覆盖表已登记的行本身就是「已路由」（行内 source 三档必居其一），故直接按覆盖表计数。 */
+const routingLabels = computed<string[]>(() =>
+  coverageReady.value ? [...coverageById.value.values()].map((r) => r.model || '平台默认') : []
 )
 const routeModelCount = computed<number | string>(() =>
   routingLabels.value.length ? new Set(routingLabels.value).size : '—'
 )
-/** 有生效路由的 Skill 数（2026-10-15 KPI 审计）：原值取 cards.length「全部 Skill」，
-   与标签「已路由」矛盾——没配路由的 Skill 也被算进去了。改与同屏另两张同源（routingLabels）。 */
+/** 已路由 Skill 数 = 覆盖表已登记的行数（与表头「共 N 个技能」同源，不再与目录数混用） */
 const routedSkillCount = computed<number | string>(() =>
   coverageReady.value ? routingLabels.value.length : '—'
 )
-/** 主模型覆盖 = 使用最多的那个模型占全部 Skill 的比例 */
+/** 主模型覆盖 = 使用最多的那个模型占全部已路由 Skill 的比例 */
 const primaryModel = computed(() => {
   const counts = new Map<string, number>()
   for (const v of routingLabels.value) counts.set(v, (counts.get(v) || 0) + 1)
@@ -976,11 +1000,11 @@ const primaryModel = computed(() => {
   return { label, count }
 })
 const primaryCoverageText = computed(() =>
-  routingLabels.value.length ? `${Math.round((primaryModel.value.count / cards.value.length) * 100)}%` : '—'
+  routingLabels.value.length ? `${Math.round((primaryModel.value.count / routingLabels.value.length) * 100)}%` : '—'
 )
-/** 降级策略副行：有自定义兜底链数 → 计数；否则 registry 默认 */
+/** 降级策略副行：有自定义兜底链数 → 计数；否则 registry 默认（分母同样取覆盖表全量） */
 const fallbackConfigured = computed(() =>
-  cards.value.filter((c) => (coverageById.value.get(c.id)?.fallbackChain?.length ?? 0) > 0).length
+  [...coverageById.value.values()].filter((r) => (r.fallbackChain?.length ?? 0) > 0).length
 )
 /** 主模型（覆盖占比最高）对应的 registry 模型 id：「平台默认」桶 → registry 解析后的平台默认模型 */
 const primaryModelId = computed(() => {

@@ -17,8 +17,7 @@
         label="需关注"
         :value="attentionCount"
         :tone="attentionCount ? 'warn' : ''"
-        hint="点击只看这些"
-        :title="`失败 / 超时、已完成但没写出总结、或带建议（附注）的会话合计 ${attentionCount} 节。点击只看这些会话。三档明细可在「列」菜单打开“关注”列`"
+        :title="`失败 / 超时、已完成但没写出总结、或带建议（附注）的会话合计 ${attentionCount} 节`"
         :class="{ 'ts-kpi--on': pill === 'attention' }"
         :aria-pressed="pill === 'attention'"
         @click="pill = pill === 'attention' ? 'all' : 'attention'"
@@ -40,7 +39,7 @@
         label="缺总结"
         :value="missingWrapupCount"
         :tone="missingWrapupCount ? 'warn' : ''"
-        :title="`已结束（完成 / 失败 / 超时 / 已废弃 / 收尾失败）但没有写出总结的会话合计 ${missingWrapupCount} 节。点击只看这些会话。与「需关注」不是包含关系：已废弃的课缺总结但不算需关注，进行中带建议的课算需关注但不缺总结`"
+        :title="`已结束（完成 / 失败 / 超时 / 已废弃 / 收尾失败）但没有写出总结的会话合计 ${missingWrapupCount} 节。与「需关注」不是包含关系：已废弃的课缺总结但不算需关注，进行中带建议的课算需关注但不缺总结`"
         :class="{ 'ts-kpi--on': wrapFilter === 'missing' }"
         :aria-pressed="wrapFilter === 'missing'"
         @click="wrapFilter = wrapFilter === 'missing' ? '' : 'missing'"
@@ -49,7 +48,7 @@
         clickable
         label="有建议"
         :value="advisoryCount"
-        :title="`带课后建议（附注）的会话合计 ${advisoryCount} 节。点击只看这些会话`"
+        :title="`带课后建议（附注）的会话合计 ${advisoryCount} 节`"
         :class="{ 'ts-kpi--on': onlyAdvisory }"
         :aria-pressed="onlyAdvisory"
         @click="toggleOnlyAdvisory"
@@ -132,6 +131,7 @@
             :col-defs="tsColDefs"
             storage-key="wf_teaching_hidden_cols_v3"
             :default-hidden="TS_DEFAULT_HIDDEN"
+            :fixed-cols="['课堂', '操作']"
             v-model:hidden="tsHiddenCols"
           />
           <span v-if="truncated" class="mk-card__meta">共 {{ listTotal }} 条 · 当前显示最近 {{ LIST_LIMIT }} 条</span>
@@ -692,12 +692,23 @@ const statusOptions = [
   { value: 'discarded', label: '已废弃' }
 ]
 /** 胶囊内嵌下拉的选项组（空值 = 不筛该维）。课型 / 开始时间 2026-10-27 从「筛选」弹层提到主栏：
-    Carbon 的筛选模式明确要求「多个类别不得收进菜单/下拉」。 */
-const statusSelectOptions = [
-  { value: '', label: '全部状态' },
-  { value: 'abnormal', label: '异常（失败 · 超时）' },
-  ...statusOptions
-]
+    Carbon 的筛选模式明确要求「多个类别不得收进菜单/下拉」。
+    2026-11-02 P2-1：每档带上当前窗口的条数，与 KPI 卡同源同批 rows（执行日志 / 反馈 /
+    虚拟学习者三页的下拉都是这么标的）。计数取**未筛**的 rows，否则选中一档后其它档会全变 0；
+    首载/失败时 rows 为空且分不清「没有数据」和「还没到」，此时只列名字不写 0。 */
+const statusOptionCounts = computed<Record<string, number>>(() => {
+  const out: Record<string, number> = {}
+  for (const row of rows.value) out[row.status] = (out[row.status] || 0) + 1
+  return out
+})
+const statusSelectOptions = computed(() => {
+  const withCount = (label: string, count: number) => (rows.value.length ? `${label}（${count}）` : label)
+  return [
+    { value: '', label: '全部状态' },
+    { value: 'abnormal', label: withCount('异常（失败 · 超时）', abnormalSessionCount.value) },
+    ...statusOptions.map((o) => ({ value: o.value, label: withCount(o.label, statusOptionCounts.value[o.value] || 0) }))
+  ]
+})
 const wrapSelectOptions = [
   { value: '', label: '全部总结' },
   { value: 'degraded', label: '降级总结' },
@@ -1072,8 +1083,11 @@ defineExpose({ refreshNow })
 @media (min-width: 1440px) { .ts-c-topic { width: 330px; } }
 @media (min-width: 1500px) { .ts-c-topic { width: 300px; } }
 @media (min-width: 1700px) { .ts-c-topic { width: 300px; } }
-/* 课堂列吸收余量后可能远超 .mk-cell-main 的 300/360 上限，让文本跟着列宽走（否则右侧留空白） */
-.ts-c-topic .mk-cell-main strong, .ts-row td:first-child .mk-cell-sub { max-width: 100%; }
+/* 课堂列吸收余量后可能远超 .mk-cell-main 的 300/360 上限，让文本跟着列宽走（否则右侧留空白）。
+   选择器必须落到表体的 td：ts-c-topic 只挂在 th 上，写成 `.ts-c-topic .mk-cell-main strong`
+   时从不命中单元格，主行仍按 --mk-cell-main-max 的 300px 截断，而这一列可宽到 ~520px——
+   整屏标题因此都断在同一串前缀上。 */
+.ts-row td:first-child .mk-cell-main strong, .ts-row td:first-child .mk-cell-sub { max-width: 100%; }
 /* 固定列内不允许内容越界挤压邻列（徽章/按钮按内容裁切，悬停 title 仍在） */
 .ts-table td { overflow: hidden; }
 /* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 */

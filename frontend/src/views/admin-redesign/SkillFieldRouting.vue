@@ -90,7 +90,7 @@
 
       <!-- 搜索 -->
       <div class="mk-filter sfr__filter">
-        <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色 / 移交" />
+        <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色" />
         <MkSelect
           v-model="roleFilter"
           :options="roleFilterOptions"
@@ -143,8 +143,17 @@
                   <span class="mk-badge" :class="`mk-badge--render-${row.render}`" :title="renderHintOf(row)">{{ renderText(row.render) }}</span>
                 </td>
                 <td><span class="mono sfr__handoff" :title="handoffTitleOf(row)">{{ formatHandoff(row.handoff) }}</span></td>
-                <td>{{ row.internal ? '是' : '否' }}</td>
-                <td>{{ row.accumulate ? '是' : '否' }}</td>
+                <!-- 内部 / 累积两列（2026-11-02 评审）：同一属性在流向视图里是「有则显色胶囊、
+                     无则 —」，这里却是「是 / 否」文本。改成与流向视图同款呈现——
+                     两列都在图例里登记了胶囊语义，默认态给「—」并在悬停说清含义。 -->
+                <td>
+                  <span v-if="row.internal" class="mk-badge mk-badge--flow-internal" title="仅供平台内部使用，不进业务状态">内部</span>
+                  <span v-else class="mk-na" title="不标记内部：该字段会进入业务状态">—</span>
+                </td>
+                <td>
+                  <span v-if="row.accumulate" class="mk-badge mk-badge--flow-accumulate" title="值会累积进学习者状态，供后续阶段持续使用">累积</span>
+                  <span v-else class="mk-na" title="不累积：只在本回合内使用">—</span>
+                </td>
                 <td>
                   <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '存储字段名与字段名一致' : `值实际保存到 ${row.persistKey}`">{{ row.persistKey === row.fieldId ? '同字段名' : '别名' }}</span>
                 </td>
@@ -603,6 +612,11 @@ onMounted(() => void load())
 </script>
 
 <style scoped>
+/* 本块是 grid 容器的子项：默认 min-width:auto 会被宽表撑开，内层 .sfr__scroll 的
+   overflow-x 拿不到滚动条，右端「操作」列被外层容器裁掉（2026-11-02 评审：
+   表头「core 状态」之后只露出半个字的按钮，状态条上的「→ 字段流转页」也被切断）。
+   与 SkillDetail `.skd-pane > *` / mk-primitives `.mk-page > *` 同款修法。 */
+.sfr { min-width: 0; }
 .sfr__status-actions { margin-left: auto; display: inline-flex; gap: 8px; }
 /* 原型 .note：说明/告警行（surface-2 底 + muted 小字；--warn 走琥珀底） */
 .note {

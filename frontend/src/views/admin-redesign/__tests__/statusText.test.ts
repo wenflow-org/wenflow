@@ -173,13 +173,25 @@ describe('targetTypeText（审计目标类型）', () => {
     expect(targetTypeText('plugin')).toBe('插件');
   });
 
+  /* 2026-11-02 评审：后端这些路由也会写审计（prompt-lab / learning-content / api-config /
+     mcp / infra-models / notifications / skill-model-configs），漏映射就在「目标类型」列直出英文 */
+  it('后端会写进审计、但此前漏映射的取值', () => {
+    expect(targetTypeText('skill')).toBe('技能');
+    expect(targetTypeText('skill-model-config')).toBe('技能模型配置');
+    expect(targetTypeText('learning-path')).toBe('学习路径');
+    expect(targetTypeText('api-config')).toBe('接入配置');
+    expect(targetTypeText('infra-models')).toBe('基础模型');
+    expect(targetTypeText('mcp-tool')).toBe('MCP 工具');
+    expect(targetTypeText('notification')).toBe('站内通知');
+  });
+
   it('空值 → —', () => {
     expect(targetTypeText('')).toBe('—');
     expect(targetTypeText(null)).toBe('—');
   });
 
   it('未知类型回退原文', () => {
-    expect(targetTypeText('skill')).toBe('skill');
+    expect(targetTypeText('whatever-new-type')).toBe('whatever-new-type');
   });
 });
 
@@ -268,13 +280,14 @@ describe('sessionProgress（教学会话进度列单源：任务 x/y + 迷你条
     expect(sessionProgressPct(null)).toBe(null);
   });
 
-  it('文本 = 任务 x/y；中断「中断于 x/y」；完成「结束于 x/y」；无数据 → —', () => {
+  /* 2026-11-02 P2-4：三种状态都要带单位「任务」——裸 x/y 与同屏「里程碑 x/y」无法分辨 */
+  it('文本 = 任务 x/y；中断「中断于任务 x/y」；完成「结束于任务 x/y」；无数据 → —', () => {
     expect(sessionProgressText(p, 'active')).toBe('任务 3/5');
-    expect(sessionProgressText(p, 'completed')).toBe('结束于 3/5');
-    expect(sessionProgressText(p, 'succeeded')).toBe('结束于 3/5');
-    expect(sessionProgressText(p, 'failed')).toBe('中断于 3/5');
-    expect(sessionProgressText(p, 'timeout')).toBe('中断于 3/5');
-    expect(sessionProgressText(p, 'finalization_failed')).toBe('中断于 3/5');
+    expect(sessionProgressText(p, 'completed')).toBe('结束于任务 3/5');
+    expect(sessionProgressText(p, 'succeeded')).toBe('结束于任务 3/5');
+    expect(sessionProgressText(p, 'failed')).toBe('中断于任务 3/5');
+    expect(sessionProgressText(p, 'timeout')).toBe('中断于任务 3/5');
+    expect(sessionProgressText(p, 'finalization_failed')).toBe('中断于任务 3/5');
     expect(sessionProgressText(null, 'active')).toBe('—');
     expect(sessionProgressText({ taskIndex: 9, totalTasks: 5, milestoneIndex: 1, totalMilestones: 4 }, 'active')).toBe('任务 5/5');
   });

@@ -130,14 +130,14 @@ describe('CardDetailPage（卡详情二级页）', () => {
     w.unmount();
   });
 
-  it('#16：hero 的 hash: 标签走 shortHashTag 截断、完整值进 title（不再整串溢出被裁）', async () => {
+  it('R18：hash: / preset: 这类内部标识不进徽标行，改在概览「标识」行给全值', async () => {
     const HASH = 'hash:f6c06c0a45c595c1572dc3106721f65b0593f16b8';
     const { adminVirtualLearnersApi } = await import('@/api/adminApi');
     vi.mocked(adminVirtualLearnersApi.cardsDetail).mockResolvedValueOnce({
       data: {
         data: {
           profileId: 'p1', userId: 'u1', cardKey: 'k1', name: '高一学生小陈', goal: '函数补差',
-          knowledgeLevel: 'beginner', tags: [HASH, '数学'], preset: false, sourceKind: 'web',
+          knowledgeLevel: 'beginner', tags: ['preset:kaoyan-retake', 'v4', HASH, '数学'], preset: false, sourceKind: 'web',
           sourceRef: null, email: null, notes: null, createdAt: '2026-10-05T00:00:00Z',
           personaFacts: [], nickname: null, nameHint: null, background: null, stories: [], materials: [],
         },
@@ -145,11 +145,53 @@ describe('CardDetailPage（卡详情二级页）', () => {
     } as never);
     const w = mount(CardDetailPage);
     await flushPromises();
-    const chip = w.findAll('.mk-hero__pills .mk-badge').find((c) => c.text().startsWith('hash:'))!;
-    expect(chip).toBeTruthy();
-    expect(chip.text()).toBe('hash:f6c06c0a…');
-    expect(chip.attributes('title')).toBe(HASH);
-    // 短标签原样
-    expect(w.findAll('.mk-hero__pills .mk-badge').some((c) => c.text() === '数学')).toBe(true);
+    const pills = w.find('.mk-hero__pills');
+    expect(pills.text()).not.toContain('hash:');
+    expect(pills.text()).not.toContain('preset:');
+    // 运营读得懂的标签仍留在徽标行
+    expect(pills.findAll('.mk-badge').some((c) => c.text() === '数学')).toBe(true);
+    // 核对用的内部标识移到概览，整串（不截断）可读
+    const ident = w.find('.cd-ident');
+    expect(ident.exists()).toBe(true);
+    expect(ident.text()).toContain(HASH);
+    expect(ident.text()).toContain('preset:kaoyan-retake');
+  });
+
+  it('R10：人设里已有「背景」字段时，不再用同一段原文再铺一遍首段', async () => {
+    const { adminVirtualLearnersApi } = await import('@/api/adminApi');
+    vi.mocked(adminVirtualLearnersApi.cardsDetail).mockResolvedValueOnce({
+      data: {
+        data: {
+          profileId: 'p1', userId: 'u1', cardKey: 'k1', name: '高一学生小陈', goal: '函数补差',
+          knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web',
+          sourceRef: null, email: null, notes: null, createdAt: '2026-10-05T00:00:00Z',
+          personaFacts: [{ label: '背景', value: '县城重点高中在读，函数基础薄弱' }],
+          nickname: null, nameHint: null, background: '县城重点高中在读，函数基础薄弱', stories: [], materials: [],
+        },
+      },
+    } as never);
+    const w = mount(CardDetailPage);
+    await flushPromises();
+    expect(w.findAll('.cd-bg')).toHaveLength(0);
+    // 同一段原文只出现一次（人设表里的「背景」行）
+    expect(w.text().split('县城重点高中在读，函数基础薄弱')).toHaveLength(2);
+  });
+
+  it('R17：占位卡号 builtin 不进概览卡头', async () => {
+    const { adminVirtualLearnersApi } = await import('@/api/adminApi');
+    vi.mocked(adminVirtualLearnersApi.cardsDetail).mockResolvedValueOnce({
+      data: {
+        data: {
+          profileId: 'p2', userId: 'u2', cardKey: 'builtin', name: '吴倩', goal: '二战上岸',
+          knowledgeLevel: 'beginner', tags: [], preset: true, sourceKind: null,
+          sourceRef: null, email: null, notes: null, createdAt: '2026-10-05T00:00:00Z',
+          personaFacts: [], nickname: null, nameHint: null, background: null, stories: [], materials: [],
+        },
+      },
+    } as never);
+    const w = mount(CardDetailPage);
+    await flushPromises();
+    const overview = w.findAll('.mk-card').find((c) => c.text().includes('概览'))!;
+    expect(overview.text()).not.toContain('builtin');
   });
 });

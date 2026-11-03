@@ -69,16 +69,24 @@
             class="mk-btn mk-btn--sm"
             @click="retryStageContracts"
           >字段契约重试</button>
+          <!-- 溢出提示（2026-11-02 评审：139% 下五列被两侧裁掉却「无处可看」）：一度写成卡头
+               一行「画布比可视区宽，可拖动画布平移」。2026-11-02 二次走查撤掉——它是在教
+               读者怎么操作画布，而拖动手势本身就是布局的可供性。同一句改挂到画布容器的
+               title 上（见 .orch-odg-scroll 绑定的 :title），悬停仍能读到，不占版面。 -->
           <!-- 画布缩放（2026-10-13 用户：居中 / 可拖动 / 可放大）：**滚轮直接缩放**，连续无档位
                （触控板双指捏合走同一条，浏览器把它合成 ctrlKey 的 wheel）；指针处为锚点。
-               这里只留一枚读数 —— 当前比例，点它回到 100%（默认态 = 撑满可视宽） -->
-          <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" @click="odgZoom = 1">{{ Math.round(odgZoom * 100) }}%</button>
+               放大后按钮文案带出「适应宽度」动作（2026-11-02 评审）：原先只有一枚百分比读数，
+               被裁掉的两侧没有可见的收束入口 -->
+          <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" @click="odgZoom = 1">
+            {{ odgZoom === 1 ? '100%' : `适应宽度 · ${Math.round(odgZoom * 100)}%` }}
+          </button>
         </div>
       </div>
       <div
         ref="odgScrollEl"
         class="orch-odg-scroll"
         :class="{ 'is-panning': odgPanning }"
+        :title="odgOverflowX ? '画布比可视区宽，可拖动画布平移' : undefined"
         @pointerdown="onOdgPointerDown"
         @pointermove="onOdgPointerMove"
         @pointerup="onOdgPointerUp"
@@ -258,6 +266,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import { STAGE_LABELS } from './dataFlow'
 import { onTabRowKeydown } from '@/utils/rovingTablist'
 
 /** 阶段工作区子面板：总览（五阶段全貌，缺省）+ 阶段内三枚子视图（字段旅程 / 字段路由 / 治理）。
@@ -705,6 +714,15 @@ const ODG_ZOOM_WHEEL_K = 0.0015
 const odgZoom = ref(1)
 /** 画布基准宽 = 滚动区内容宽（clientWidth − 左右 padding），zoom=1 时的可视宽 */
 const odgBaseW = ref(0)
+/** 画布是否比可视区宽（放大后 / 窄档 100% 都会命中）：驱动卡头的溢出提示与「适应宽度」入口。
+    放大后画布两轴都有真实滚动范围（zoom 参与布局），但滚动条是叠加式的、截图与静止画面里看不见，
+    所以「两侧还有内容」这件事必须由量出来的溢出量说出口，不能指望滚动条自己表达。 */
+const odgOverflowX = ref(false)
+function sampleOdgOverflow() {
+  const el = odgScrollEl.value
+  if (!el) return
+  odgOverflowX.value = el.scrollWidth - el.clientWidth > 1
+}
 /* 宽度为什么必须显式给 px：zoom 的百分比语义会把 `width: 100%` 钉死在容器宽
    （实测 50%~200% 下画布可视宽恒为容器宽，缩小时根本看不出变小）。撤掉画布级
    min-width 后语义变得干净：**指定 px = 画布自有宽，肉眼宽 = 自有宽 × zoom**——
@@ -822,6 +840,8 @@ function layoutOrchWhenSettled(attempt = 0) {
   const settled = !canvas || !want || Math.abs(canvas.offsetWidth - want) < 1
   if (settled || attempt >= 8) {
     layoutOrch()
+    /* 溢出量与连线同源同节奏：缩放/列宽落地后一起量（滚动条出现与否会改 clientWidth） */
+    sampleOdgOverflow()
     return
   }
   odgLayoutTimer = setTimeout(() => {
@@ -919,15 +939,11 @@ async function retryStages() {
 
 /** 阶段页签名与画布列头同名（2026-10-26 评审）：此前页签是英文 Goal/Path/…、列头是中文
  *  「目标 Agent / 路径 Agent…」，读一屏要在脑子里做一次英中对照。阶段 id 仍是英文
- *  （与 `<stage>-agent` 同源），只在展示层换成中文；未登记的阶段回退后端显示名。 */
-const STAGE_TAB_LABEL: Record<string, string> = {
-  goal: '目标',
-  path: '路径',
-  teaching: '教学',
-  profile: '学习者',
-  simulation: '仿真'
-}
-const stageTabLabel = (s: Stage) => STAGE_TAB_LABEL[s.id] || s.name.replace(/阶段$/, '')
+ *  （与 `<stage>-agent` 同源），只在展示层换成中文。
+ *  2026-11-02 评审：页签此前另挂一份手写译名（目标 / 路径 / 学习者），与列头和旅程页头
+ *  （澄清 / 规划 / 画像，均取后端显示名）对不上——同一阶段在一屏里有两个叫法。
+ *  名以列头那份为准（后端显示名去「阶段」），拿不到显示名才回退 dataFlow 的阶段译名。 */
+const stageTabLabel = (s: Stage) => (s.name || '').replace(/阶段$/, '') || STAGE_LABELS[s.id] || s.id
 
 function stageTabTitle(s: Stage): string {
   return [s.name, `Agent: ${s.agentId}`, `Skill: ${s.skills.length} 个`].join('\n')
@@ -1073,12 +1089,12 @@ html[data-theme='dark'] {
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 .orch-odg-node:hover { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.1)); }
-.orch-odg-idx { font-family: var(--mk-mono, Consolas, monospace); font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
+.orch-odg-idx { font-family: var(--mk-mono); font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
 .orch-odg-nodename { font-size: var(--mk-fs-micro, 12px); font-weight: 600; color: var(--mk-ink); }
 /* Skill id（英文名）：与中文显示名分行。允许折行而不是省略号——运营要照着这枚 id
    去对 Skill 目录 / 执行日志，截断了反而对不上（长 id 如 virtual-learner-* 会占两行）。 */
 .orch-odg-slug {
-  font-family: var(--mk-mono, Consolas, monospace);
+  font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
   overflow-wrap: anywhere;
 }
@@ -1112,7 +1128,7 @@ html[data-theme='dark'] {
   border-radius: var(--mk-radius-sm, 6px);
   border: 1px solid var(--mk-line, #e6ebf4);
   background: var(--mk-surface, #fff);
-  font-family: var(--mk-mono, Consolas, monospace);
+  font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro, 12px);
   color: var(--mk-muted);
   white-space: nowrap;

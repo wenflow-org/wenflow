@@ -142,10 +142,13 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
                     <!-- 2026-10-23 走查：副行原为截断的内部 userId（user_9f559a6…abf073），
                          既不可读也不能检索；改与其它列表同口径显示邮箱，无邮箱才退回短 id -->
                     <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
-                    <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时跳过；无邮箱才退回短 id -->
-                    <span v-if="emailSubline(row.email, row.name) || !row.email || row.isTestAccount" class="mk-cell-subline">
+                    <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时跳过。
+                         但整条副行不能因此消失：三行里两行有邮箱、一行直接少一行，
+                         读起来像这一行渲染坏了（2026-11-02 评审 R66）。去重后同样退回短 id，
+                         结构与他人一致、也不复读同一串字。 -->
+                    <span class="mk-cell-subline">
                       <span v-if="emailSubline(row.email, row.name)" class="mk-cell-sub" :title="row.email || undefined">{{ row.email }}</span>
-                      <span v-else-if="!row.email" class="mk-cell-sub mono" :title="row.userId">{{ shortId(row.userId) }}</span>
+                      <span v-else class="mk-cell-sub mono" :title="row.userId">{{ shortId(row.userId) }}</span>
                       <span v-if="row.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test">测试</span>
                     </span>
                   </div>
@@ -169,12 +172,15 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
               <td class="mk-num">
                 <div v-if="row.weak > 0 || row.audit?.ambiguous" class="mr__focus">
                   <span v-if="row.weak > 0" class="mk-badge mk-badge--sm mk-badge--warn">薄弱 {{ row.weak }}</span>
-                  <!-- 待人工确认的同义归并：确认 / 驳回在「记忆调度」页签，点数字直达 -->
+                  <!-- 待人工确认的同义归并：确认 / 驳回在「记忆调度」页签，点数字直达。
+                       2026-11-02 走查：title 原为「…记忆条目：点击到「记忆调度」确认或驳回」，
+                       后半句是操作说明 + 隔空指路（去哪一页改），撤除；只留对读数的定义——
+                       「待确认 N」去掉定义就无从解读，且定义不描述本页版面。 -->
                   <button
                     v-if="row.audit?.ambiguous"
                     type="button"
                     class="mk-link mr__act"
-                    title="模型判定为同义、等待人工确认合并的记忆条目：点击到「记忆调度」确认或驳回"
+                    title="模型判定为同义、等待人工确认合并的记忆条目"
                     @click.stop="openOps(row.userId)"
                   >待确认 {{ row.audit.ambiguous }}</button>
                 </div>
@@ -471,7 +477,10 @@ const overviewCards = computed<OverviewCard[]>(() => {
   const reviewQueue = totals.value.fragmentation?.pendingReview
   /* 归并审计是「按用户跑观察」才有的投影：一条都没有时，需人工确认/待合并同义词的 0 不是
      「观察过、很干净」，而是「还没观察」。两者必须分开显示（2026-10-23 用户
-     「为什么包括测试的也是很多0」——26 位测试用户、55 条痕迹，审计读数全是 0）。 */
+     「为什么包括测试的也是很多0」——26 位测试用户、55 条痕迹，审计读数全是 0）。
+     这个数必须与卡内其它读数同一个用户集（默认视图已排除虚拟学习者）：投影按全库数时，
+     只有虚拟学习者被观察过也会 > 0，本卡于是把「没人观察」印成 0（2026-11-02 P1-5，
+     后端 totals 已改成只在当前视图内计数）。 */
   const noAudit = (t.usersWithAudit ?? 0) === 0
   return [
     { label: '有记忆痕迹的用户', value: val(t.users), hint: numHint(''), tone: numTone('') },
@@ -479,7 +488,9 @@ const overviewCards = computed<OverviewCard[]>(() => {
     { label: '当前到期', value: val(t.due), hint: numHint(''), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
     {
       label: '需人工确认',
-      value: noAudit ? '—' : val(reviewQueue ?? t.ambiguous),
+      /* 还没跑过观察时不用「—」：同排其它四张都是数字，一道横杠读作"取数失败/漏了"。
+         直接写「未观察」——与列表里同一状态列的措辞一致，说的是这个数还没有依据。 */
+      value: na ? '—' : noAudit ? '未观察' : (reviewQueue ?? t.ambiguous),
       hint: numHint(''),
       tone: numTone(!noAudit && (reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
       /* 确认 / 驳回 / 回滚在「记忆调度」页签：卡可点，落到需关注快筛（同一批人） */
@@ -633,12 +644,12 @@ function goTeachingSessions() {
 }
 
 onMounted(async () => {
-  // 旧深链 /admin/memory-review?userId=… → 学习者详情「记忆调度」页签（单用户明细单家，
-  // 2026-10-12 拍板）；总览页自己只服务无 userId 的跨用户视图
+  // 旧深链 /admin/memory-review?userId=… → 学习者详情「记忆与复习」页签：
+  // 本列表读的就是 FSRS 普查，落到同名页签才看得到被点的那条记忆（与行点击同一落点常量）
   const queryUserId = typeof route.query.userId === 'string' ? route.query.userId : ''
   if (queryUserId) {
     const { userId: _drop, ...rest } = route.query
-    router.replace({ path: '/admin/learner-state', query: { ...rest, view: 'learner', id: queryUserId, tab: 'memory-ops' } })
+    router.replace({ path: '/admin/learner-state', query: { ...rest, view: 'learner', id: queryUserId, tab: LEARNER_DETAIL_LANDING.memoryReview } })
     return
   }
   await loadOverview()
@@ -647,15 +658,21 @@ onMounted(async () => {
 
 <style scoped>
 /* 固定列宽（2026-10-22 与教学组三表同判例）：学习者列在 auto 布局下按当页最长姓名分宽，
-   翻页整表跳动；fixed 后按表头定死，余量按权重摊开。宽度按 1280 现值校准，1200 档无横滚。 */
-.mr-c-user { width: 230px; }
-.mr-c-traces { width: 96px; }
-.mr-c-due { width: 84px; }
-.mr-c-weak { width: 84px; }
+   翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
+   2026-11-03 视觉走查重校：上一版在校准后又长出两处——身份列改显邮箱（最长
+   lin.jianwei@wenflow.local ≈146px）、操作列随全局 .mk-c-act 提到 140px，
+   九列合计 1052 超出行宽 985，1280 下表底出现横滚条、且被切掉的正好是「详情 / 重新观察」
+   （要横向滚动才能点到行操作）。按各列实测所需重分余量：身份 207 / 痕迹 83 / 待复习 72 /
+   需关注 72 / 待合并同义词 98 / 未归类记忆 86 / 记忆强度 134 / 最近复习 86 / 操作 132，
+   合计 978 ≤ 985，1280 无横滚。 */
+.mr-c-user { width: 216px; }
+.mr-c-traces { width: 92px; }
+.mr-c-due { width: 74px; }
+.mr-c-weak { width: 74px; }
 .mr-c-prop { width: 92px; }
 .mr-c-scatter { width: 76px; }
-.mr-c-strength { width: 150px; }
-.mr-c-last { width: 100px; }
+.mr-c-strength { width: 132px; }
+.mr-c-last { width: 88px; }
 /* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
 
 .mr { display: flex; flex-direction: column; }

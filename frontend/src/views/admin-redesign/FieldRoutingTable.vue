@@ -34,7 +34,18 @@
         @action="loadStage"
       />
       <template v-else>
-        <div v-for="agent in agents" :key="agent.agentId" class="mk-card frt__agent">
+        <!-- 整表无命中（2026-11-02 评审）：此前每个 Agent 分组各渲染一份「无匹配行 + 清除筛选」，
+             五个分组 = 五份同样的空态 + 五颗同款按钮，一屏被空卡拉到 1600px。筛选是整表的事，
+             空态也只该有一份（筛选态下没有命中的分组本身也不再渲染） -->
+        <MkEmptyState
+          v-if="filterActive && !filteredTotal"
+          title="无匹配行"
+          description="当前筛选在全部 Agent 分组里都没有命中。"
+          action-text="清除筛选"
+          compact
+          @action="clearFilter"
+        />
+        <div v-for="agent in visibleAgents" :key="agent.agentId" class="mk-card frt__agent">
           <!-- 原型 .card__head：title（agent）+ sub（描述）+ 右侧行数（mk-badge--muted） -->
           <div class="mk-card__head frt__agenthead">
             <h4 class="mk-card__title frt__agentname mono">{{ agent.agentId }}</h4>
@@ -65,8 +76,11 @@
                       :class="`mk-badge--render-${row.render}`"
                       :title="renderHint(row)"
                     >{{ renderText(row.render) }}</span>
-                    <span v-if="row.internal" class="mk-badge mk-badge--muted">内部</span>
-                    <span v-if="row.accumulate" class="mk-badge mk-badge--muted">累积</span>
+                    <!-- 属性旗标与可见性徽章不同色（2026-11-02 评审）：原先三枚都是同一款灰胶囊，
+                         同一列里分不清哪枚是可见性（状态）、哪枚是「内部 / 累积」（属性）。
+                         配色沿用画布与抽屉的既有语言：内=紫、累=琥珀（main.css 的 flag-purple / amber 族） -->
+                    <span v-if="row.internal" class="mk-badge frt__flag frt__flag--internal" title="内部字段：仅供平台内部使用，不对外交付">内部</span>
+                    <span v-if="row.accumulate" class="mk-badge frt__flag frt__flag--accum" title="累积进学习者状态">累积</span>
                   </div>
                   <p class="frt__meaning" :title="meaningTitle(row)">{{ descOf(row.fieldId) || '—' }}</p>
                   <div class="frt__metaline">
@@ -92,13 +106,11 @@
               </li>
             </ul>
           </div>
-          <!-- 空态带 CTA：筛选无命中 → 清除筛选；否则仅说明 -->
+          <!-- 空态：分组本身没有任何路由行时只说明；「筛选无命中」的清除入口已上移到整表空态 -->
           <MkEmptyState
             v-else
             compact
-            :title="filterActive ? '无匹配行' : '该 Agent 没有字段的路由记录'"
-            :action-text="filterActive ? '清除筛选' : ''"
-            @action="clearFilter"
+            title="该 Agent 没有字段的路由记录"
           />
           <!-- 每 agent 组分页（统一 mk-pagination 页码器：固定 15 行/页，隐藏每页条数）。
                审核 #112：0 命中时原无条件渲染「共 0 条 · 第 1 / 1 页」+禁用翻页，五张卡叠五份
@@ -138,6 +150,7 @@
             <span class="frt__orch-quick-item"><b>存储字段名</b>仅存储字段名与字段名不一致时标注</span>
           </div>
           <textarea
+            ref="orchTextareaRef"
             v-model="orchContent"
             class="frt__orch-textarea mono"
             rows="26"
@@ -182,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue';
+import { onMounted, ref, computed, watch, nextTick } from 'vue';
 import { adminFieldRoutingsApi } from '@/api/adminApi';
 import { useEscape } from './useEscape';
 import { useOverlay, useMaskClose } from './useOverlay';
@@ -194,6 +207,7 @@ import Pagination from './Pagination.vue';
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue';
 import MkSelect from '@/components/mk/MkSelect.vue';
 import { useTableSort } from './useTableSort';
+import { STAGE_LABELS, STAGE_ORDER } from './dataFlow';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 
@@ -332,6 +346,9 @@ function matches(r: RoutingItem) {
     r.render,
     r.visibilityPreset || '',
     formatHandoff(r.handoff),
+    /* 移交原值（英文阶段 id / skill: 前缀）也进检索：展示层已换算成中文，
+       但拿着编排文件对的人仍会按 teaching 这种原值搜 */
+    handoffList(r.handoff).join(' '),
     lockLabel(r.locks?.level),
     r.notes || '',
     pathOf(r.fieldId),
@@ -344,15 +361,33 @@ function filteredOf(agentId: string) {
   return sortRows(routingsOf(agentId).filter(matches));
 }
 
-function formatHandoff(raw: string | string[] | null) {
-  if (!raw) return '';
-  if (Array.isArray(raw)) return raw.join(', ');
+/** 筛选态下只渲染有命中的分组（2026-11-02 评审）：没命中的分组留着就是一排「无匹配行」空卡。
+ *  未筛选时保持全部分组，空分组「该 Agent 没有字段的路由记录」本身是要看的信息。 */
+const visibleAgents = computed(() =>
+  filterActive.value ? agents.value.filter((a) => filteredOf(a.agentId).length) : agents.value
+);
+
+/** 移交去向的展示标识（2026-11-02 评审）：原先直出编排文件里的原值——阶段写英文 id（teaching），
+ *  和同一句里的 skill:xxx / <stage>-agent 混在一起，读不出「交给谁」。
+ *  这里只做展示层归一，不动编排文件：阶段 → 中文阶段名（与页签、画布列头同名）；
+ *  skill / agent 标识原样保留（编排文件里本就是带前缀的统一形态，不另造写法）。 */
+function handoffTargetLabel(target: string) {
+  if ((STAGE_ORDER as readonly string[]).includes(target)) return `${STAGE_LABELS[target] || target}阶段`;
+  return target;
+}
+/** 移交去向的原始列表（编排文件里可能是数组 / JSON 串 / 单值三种形态）：展示换算与检索共用一份解析 */
+function handoffList(raw: string | string[] | null) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(String);
   try {
     const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr.join(', ') : raw;
+    return Array.isArray(arr) ? arr.map(String) : [String(raw)];
   } catch {
-    return raw;
+    return [String(raw)];
   }
+}
+function formatHandoff(raw: string | string[] | null) {
+  return handoffList(raw).map((t) => handoffTargetLabel(t)).join(', ');
 }
 function handoffTitle(row: RoutingItem) {
   const parts: string[] = [];
@@ -446,6 +481,7 @@ const pruneConfirming = ref(false);
 const orchMsg = ref('');
 const orchPanelRef = ref<HTMLElement | null>(null);
 const orchMaskRef = ref<HTMLElement | null>(null);
+const orchTextareaRef = ref<HTMLTextAreaElement | null>(null);
 const orchMoreOpen = ref(false);
 
 function menuSync() {
@@ -494,6 +530,15 @@ async function openOrchestration() {
     orchBaseline.value = orchContent.value; // 记录打开时快照，供脏检查比对
     orchSummary.value = data.parsed || { contractCount: 0, fieldCount: 0, routingCount: 0 };
     orchOpen.value = true;
+    /* 打开后把编辑区推回开头（2026-11-02 评审「第一行被裁掉上半截」）：useOverlay 会把焦点
+       落到本框，而 v-model 落值后光标本就停在文末 → 浏览器滚到文件末尾（实测 scrollTop=11983），
+       截到的那一屏既不是开头、行盒还错位。光标一并复位，之后再滚动只由用户自己定。 */
+    await nextTick();
+    const area = orchTextareaRef.value;
+    if (area) {
+      area.scrollTop = 0;
+      area.setSelectionRange(0, 0);
+    }
   } catch (e: any) {
     toast.error(errOf(e));
   }
@@ -753,7 +798,17 @@ html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
 .frt__type { color: var(--mk-muted); }
 .frt__alias { color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: var(--mk-radius-sm); padding: 0 5px; }
 .frt__handoff { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 搜索框宽度（2026-11-02 评审）：占位文案「搜索字段 / 含义 / 角色 / 移交」实测 196px，
+   而 .mk-filter 语境只给 180px 下限、输入框自然宽 197px（内容盒 173px）→ 占位被裁成
+   「…角色 / 角」。本工具条按占位全文给下限（196 + 左右内衬 24 = 220，取 230 留余量）。 */
+.frt__filter :deep(.mk-filter__input) { min-width: 230px; }
+
 .frt__lockchip { font-size: var(--mk-fs-micro); padding: 0 5px; line-height: 1.5; }
+/* 属性旗标（内部 / 累积）：与可见性徽章同一列并排，靠色相区分——紫=内部信令、琥珀=累积，
+   与画布字段卡的「内 / 累」、抽屉的「内部字段 / 累积进学习者状态」同一套色彩语言 */
+.frt__flag { font-size: var(--mk-fs-micro); padding: 0 5px; line-height: 1.5; }
+.frt__flag--internal { background: var(--mk-graph-flag-purple-bg); color: var(--mk-graph-flag-purple-ink); }
+.frt__flag--accum { background: var(--mk-amber-bg); color: var(--mk-amber); }
 
 /* 编排弹窗值域速查条：视觉走 .note--info，本类只留排版 */
 .frt__orch-quick {

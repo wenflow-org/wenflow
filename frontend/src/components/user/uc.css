@@ -406,7 +406,7 @@ table.uc-table {
   display: block;
   font-size: 12px;
   color: var(--faint);
-  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--mk-mono);
   margin-top: 1px;
 }
 

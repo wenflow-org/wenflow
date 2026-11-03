@@ -42,8 +42,10 @@
           </template>
         </MkRow>
       </MkRowList>
+      <!-- 2026-11-02 文案清理：删第二句「路径内容仍可在学习者详情里查看。」——纯指路（去另一个
+           页面看），本卡下方已有「返回列表」「去目标对话」两个出口；只留状态事实一句。 -->
       <div class="pdx-orphan__note">
-        该路径没有关联的目标对话，因此没有可跳转的学习会话座舱。路径内容仍可在学习者详情里查看。
+        该路径没有关联的目标对话，因此没有可跳转的学习会话座舱。
       </div>
       <div class="pdx-orphan__acts">
         <button type="button" class="mk-btn mk-btn--primary" @click="closeSubPage">返回列表</button>

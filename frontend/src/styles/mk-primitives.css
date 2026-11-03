@@ -668,7 +668,10 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   display: grid;
   gap: 2px;
   background: var(--mk-surface);
-  border: 1px solid var(--mk-line);
+  /* 弹层与底下的卡片同为 --mk-surface：暗色下 --mk-line 只有 1.36:1，菜单压在卡上时
+     会被读成「卡片被切掉一块」。与 .mk-listbox-pop / 卡片同用 --mk-card-line
+     （暗色 3.25:1），亮色两枚同值、观感不变。 */
+  border: 1px solid var(--mk-card-line);
   border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-pop);
 }
@@ -690,6 +693,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   white-space: nowrap;
 }
 .mk-menu__item:hover { background: var(--mk-menu-item-hover-bg); color: var(--mk-ink); }
+/* 暗色下弹层与页面底色只差一档，菜单像「页面被切掉一块」（2026-11-02 评审：
+   行尾菜单只靠一圈细边勾边界）。弹层取次级表面，比卡面再亮一档。 */
+html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
 .mk-menu__item--danger { color: var(--mk-red, #dc2626); }
 .mk-menu__item--danger:hover { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-menu__sep { height: 1px; margin: 3px 4px; background: var(--mk-line); }

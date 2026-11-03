@@ -109,7 +109,7 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
 
   it('主模型显示当前目录条目；「用平台默认模型」是显式选项', async () => {
     const w = await mountTab()
-    expect(w.find('.sdp-summary').text()).toContain('deepseek-v4.1-flash')
+    expect(w.find('.sdp-live__id').text()).toContain('deepseek-v4.1-flash')
     await openConfig(w)
     const control = w.find('.sdp-form__grid .mk-mp')
     expect(control.text()).toContain('deepseek-v4.1-flash')
@@ -140,7 +140,7 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
   it('卡面只留摘要，配置弹层含模型 / 生成参数 / 请求容错三段；模型测试常驻', async () => {
     const w = await mountTab()
     expect(w.find('.sdp-nav').exists()).toBe(false)
-    expect(w.find('.sdp-summary').exists()).toBe(true)
+    expect(w.find('.sdp-live').exists()).toBe(true)
     expect(w.find('#sdp-panel-test').exists()).toBe(true)
     // 未打开弹层时，详细配置不在卡面
     expect(w.find('#sdp-panel-model').exists()).toBe(false)
@@ -149,6 +149,9 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     const panels = w.findAll('.sdp-sections > .sdp-panel')
     expect(panels.map((p) => p.find('h4').text())).toEqual(['模型', '生成参数', '请求与容错'])
     expect(w.find('#sdp-panel-params .sdp-panel__state').text()).toContain('T=')
+    // 2026-11-02 评审：四行原先都只写「按 Prompt 声明」，每行看不到自己的取值——
+    // 现在继承档各行的取值都摆出来（只读，来源在悬停里）
+    expect(w.find('#sdp-panel-params .sdp-param__val').exists()).toBe(true)
     expect(w.find('#sdp-panel-request .sdp-panel__state').text()).toContain('重试')
     w.unmount()
   })
@@ -179,4 +182,24 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     expect(optionIds(w)).toEqual([])
     w.unmount()
   })
+
+  it('卡头「覆盖平台默认」翻转即落盘：调一次保存接口，且不丢当前配置', async () => {
+    const w = await mountTab()
+    const api = (await import('@/api/adminApi')).adminSkillsApi as unknown as {
+      updateSkillModelConfig: ReturnType<typeof vi.fn>
+    }
+    api.updateSkillModelConfig.mockClear()
+    const sw = w.find('.sdp-head__switch')
+    expect(sw.exists(), '卡头应有覆盖开关').toBe(true)
+    await sw.trigger('click')
+    await flushPromises()
+    // 开关本身没有保存钮：翻转必须自己发一次 PUT，否则改动只留在内存里
+    expect(api.updateSkillModelConfig).toHaveBeenCalledTimes(1)
+    const payload = api.updateSkillModelConfig.mock.calls[0][1] as Record<string, unknown>
+    expect(payload.enabled).toBe(false)
+    // 其余字段照旧（关掉覆盖只改 enabled 这一项）
+    expect(payload.model).toBe('deepseek-v4.1-flash')
+    w.unmount()
+  })
 })
+

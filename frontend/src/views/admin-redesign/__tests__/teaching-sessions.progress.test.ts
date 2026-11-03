@@ -1,7 +1,7 @@
 /**
  * TeachingSessions 进度列冒烟（遗留项「教学会话进度列」）：
  * 1. live 模式：后端补字段 progress → 任务 x/y + mk-minibar 迷你条（档位色：完成 ok / 失败 bad）
- * 2. 中断态：失败/超时显示「中断于 x/y」
+ * 2. 中断态：失败/超时显示「中断于任务 x/y」
  * 3. 无进度数据（老数据）→ —
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -332,8 +332,8 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(wrapper.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     // 卡头不再有「全部 / 进行中 / 需关注 / 缺总结」这组单选胶囊
     expect(wrapper.find('.mk-card__head .mk-pills[aria-label="焦点筛选"]').exists()).toBe(false);
-    // 「进行中」归状态下拉
-    expect(filterOptions(wrapper as never, '状态')).toContain('进行中');
+    // 「进行中」归状态下拉（2026-11-02 P2-1 起 option 文案带条数，按前缀判）
+    expect(filterOptions(wrapper as never, '状态').some((o) => o.startsWith('进行中'))).toBe(true);
     // 「缺总结」归总结下拉：点 KPI 卡 → 下拉落到 missing，整枚胶囊激活，列表只剩缺总结行
     const missingTile = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '缺总结')!;
     await missingTile.trigger('click');
@@ -341,6 +341,34 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(filterValue(wrapper as never, '总结')).toBe('missing');
     expect(wrapper.find('.mk-filter button.mk-pill--active').text()).toContain('缺总结');
     expect(wrapper.findAll('tbody tr')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  /* 2026-11-02 P2-1：状态下拉原先只有名字——长列表里看不出每档多少、也看不出哪几档是空的；
+     同组其它页（执行日志 / 反馈 / 虚拟学习者）的维度下拉都带计数。计数取未筛的已载入窗口，
+     否则选中一档后其它档会全变 0。 */
+  it('状态下拉每档带当前窗口条数（与 KPI 同源），未载入时不把未知写成 0', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('a', { status: 'failed' }),
+            makeItem('b', { status: 'failed' }),
+            makeItem('c', { status: 'completed' })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const options = filterOptions(wrapper as never, '状态');
+    expect(options).toContain('失败（2）');
+    expect(options).toContain('已完成（1）');
+    expect(options).toContain('超时（0）');
+    expect(options).toContain('异常（失败 · 超时）（2）');
+    // 选中一档后计数不变（仍按未筛窗口）
+    await chooseFilter(wrapper as never, '状态', '失败');
+    expect(filterOptions(wrapper as never, '状态')).toContain('已完成（1）');
     wrapper.unmount();
   });
 
@@ -560,8 +588,20 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     // 2026-10-27：卡头维度下拉统一为 MkPillSelect（描边胶囊触发器 + 自绘 listbox），
     // 原生 select 已退役——option 文案与选择结果不变，查询走 filter-controls。
     expect(filterTrigger(wrapper as never, '状态').exists()).toBe(true);
+    // 2026-11-02 P2-1：每档带当前窗口的条数（与 KPI 同源；本夹具两行：failed / active 各 1）
     expect(filterOptions(wrapper as never, '状态')).toEqual([
-      '全部状态', '异常（失败 · 超时）', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
+      '全部状态',
+      '异常（失败 · 超时）（1）',
+      '初始化中（0）',
+      '进行中（1）',
+      '已暂停（0）',
+      '超时（0）',
+      '已被替代（0）',
+      '失败（1）',
+      '收尾中（0）',
+      '收尾失败（0）',
+      '已完成（0）',
+      '已废弃（0）'
     ]);
     // 总结三档筛选（总览「评估失败 / 降级总结」的落地入口）也在主栏
     expect(filterOptions(wrapper as never, '总结')).toEqual(['全部总结', '降级总结', '评估失败', '缺总结']);

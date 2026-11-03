@@ -16,7 +16,7 @@
             <tr>
               <th>变体</th>
               <th>版本</th>
-              <th title="占在线流量百分比，基线=剩余流量">权重</th>
+              <th title="占在线流量百分比，基线=各对照臂之外的剩余流量">权重</th>
               <th class="mk-num" title="近 7 天按版本归因">近7天调用</th>
               <th class="mk-num">成功率</th>
               <th class="mk-num">均耗时</th>
@@ -27,7 +27,10 @@
             <tr v-if="variantBaseline">
               <td><span class="mk-badge mk-badge--ok">基线</span></td>
               <td><span class="sdp-vtag mono">v{{ variantBaseline.version }}</span></td>
-              <td class="mk-na">剩余 {{ baselineRemainder }}%</td>
+              <!-- 基线不给权重：它吃的是各对照臂之外的剩余流量。
+                   2026-11-02 评审：这一格只写「剩余 100%」，与新建臂表单里默认的 10% 并排
+                   读作「110%」。补悬停说清基线的权重不是自己设的，下面表单再给出建臂后的剩余值。 -->
+              <td class="mk-na" title="基线不单独设权重，取各对照臂之外的剩余流量">剩余 {{ baselineRemainder }}%</td>
               <td class="mk-num">{{ variantBaseline.metrics.calls }}</td>
               <td class="mk-num">{{ fmtRate(variantBaseline.metrics.successRate) }}</td>
               <td class="mk-num">{{ fmtDur(variantBaseline.metrics.avgDurationMs) }}</td>
@@ -78,38 +81,45 @@
         </table>
       </div>
 
-      <!-- 建变体：源版本默认为当前基线；新内容必须先经协议发布成为版本 -->
+      <!-- 建变体：源版本默认为当前基线；新内容必须先经协议发布成为版本。
+           2026-11-02 评审：这一行把「变体键 / 权重% / 源版本 / 创建」和一句说明全挤在同一行，
+           标签对不齐、也看不出新建后基线会剩多少——拆成字段栅格，说明另起一行。 -->
       <div v-if="variantBaseline" class="sdp-var__create">
-        <span class="sdp-sec-meta">建对照臂：</span>
-        <label class="sdp-var__field">
-          变体键
-          <input v-model.trim="variantNewKey" class="sdp-var__key" placeholder="B" maxlength="8" />
-        </label>
-        <label class="sdp-var__field">
-          权重%
-          <input v-model.number="variantNewWeight" class="sdp-var__w" type="number" min="1" max="99" />
-        </label>
-        <label class="sdp-var__field">
-          源版本
-          <MkSelect
-            v-model="variantNewSource"
-            :options="variantSourceSelectOptions"
-            aria-label="源版本"
-          />
-        </label>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="variantCreating" @click="createVariant">
-          {{ variantCreating ? '创建中…' : '创建变体' }}
-        </button>
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm"
-          :disabled="variantCorePublishing || !variantNewKey"
-          title="需先在协议页签保存核心文件"
-          @click="publishCoreAsVariant"
-        >
-          {{ variantCorePublishing ? '发布中…' : '把当前核心文件改动发布为变体' }}
-        </button>
-        <span class="mk-na">评测钉变体：虚拟学习者试跑时可指定按某个变体执行</span>
+        <span class="sdp-var__create-title">建对照臂</span>
+        <div class="sdp-var__create-grid">
+          <label class="sdp-var__field">
+            <span>变体键</span>
+            <input v-model.trim="variantNewKey" class="sdp-var__key" placeholder="B" maxlength="8" />
+          </label>
+          <label class="sdp-var__field">
+            <span>权重%</span>
+            <input v-model.number="variantNewWeight" class="sdp-var__w" type="number" min="1" max="99" />
+            <em class="sdp-var__field-hint">建好后基线剩余 {{ remainderAfterCreate }}%</em>
+          </label>
+          <label class="sdp-var__field">
+            <span>源版本</span>
+            <MkSelect
+              v-model="variantNewSource"
+              :options="variantSourceSelectOptions"
+              aria-label="源版本"
+            />
+          </label>
+          <div class="sdp-var__create-actions">
+            <button type="button" class="mk-btn mk-btn--sm" :disabled="variantCreating" @click="createVariant">
+              {{ variantCreating ? '创建中…' : '创建变体' }}
+            </button>
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :disabled="variantCorePublishing || !variantNewKey"
+              title="需先在协议页签保存核心文件"
+              @click="publishCoreAsVariant"
+            >
+              {{ variantCorePublishing ? '发布中…' : '把当前核心文件改动发布为变体' }}
+            </button>
+          </div>
+        </div>
+        <p class="sdp-var__create-note">评测时可以指定虚拟学习者按某个变体试跑。</p>
       </div>
     </section>
     <section class="sdp-eng">
@@ -145,6 +155,9 @@
                     @click="rollbackCore(v.version)"
                   >回滚</button>
                   <span v-else-if="v.status !== 'ACTIVE'" class="sdp-pw__audit" title="该历史版本没有可验证的源文件快照，只保留审计用途">仅审计</span>
+                  <!-- 无可操作项的行给一个「—」（2026-11-02 评审：当前生效版本占满整列时，
+                       操作列只剩表头，看着像按钮没渲染出来） -->
+                  <span v-else class="mk-na">—</span>
                 </div>
               </td>
             </tr>
@@ -181,7 +194,9 @@
               <td><span class="sdp-vname" :title="v.name">{{ v.name || '—' }}</span></td>
               <td>
                 <!-- 不可操作行留空（2026-10-31 外部评审）：ACTIVE 的状态词只住状态列胶囊，
-                     不再在操作列复读一遍 -->
+                     不再在操作列复读一遍。
+                     2026-11-02 评审：整列都是 ACTIVE 时操作列只剩表头，补一个「—」表明
+                     「这行确实没有可做的动作」，而不是按钮没渲染。 -->
                 <div class="mk-actions">
                   <button
                     v-if="v.status !== 'ACTIVE'"
@@ -192,6 +207,7 @@
                   >
                     {{ compareLoading === v.id ? '对比中…' : '对比生效版' }}
                   </button>
+                  <span v-else class="mk-na">—</span>
                 </div>
               </td>
             </tr>
@@ -242,6 +258,7 @@ import { adminAgentPromptsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
 import { coreShortHash, errText } from './sdp-shared'
+import { formatRate } from '../rate-utils'
 import { versionStatusText } from '../statusText'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSelect from '@/components/mk/MkSelect.vue'
@@ -271,6 +288,11 @@ const variantNewWeight = ref(10)
 const variantNewSource = ref<number | null>(null)
 
 const baselineRemainder = computed(() => Math.max(0, 100 - variantArms.value.reduce((a, v) => a + (Number(v.trafficWeight) || 0), 0)))
+/** 按当前表单里的权重把臂建出来之后，基线会剩多少：让「剩余 100%」与默认权重 10% 的关系
+ *  当场闭合（2026-11-02 评审：两个数并排读作相加超过 100） */
+const remainderAfterCreate = computed(() =>
+  Math.max(0, baselineRemainder.value - (Number(variantNewWeight.value) || 0))
+)
 const variantSourceOptions = computed(() => promptVersions.value.filter((v) => Number(v.version) !== variantBaseline.value?.version))
 /** 源版本下拉（MkSelect）：基线 + 其他 Prompt 版本；值保留 number */
 const variantSourceSelectOptions = computed<Array<{ value: number; label: string }>>(() => {
@@ -293,7 +315,9 @@ const nextAvailableKey = computed(() => {
 })
 
 function fmtRate(rate: number | null) {
-  return rate == null ? '—' : `${Math.round(rate * 100)}%`
+  // 2026-11-02 评审：原 Math.round(rate*100) 把 197 次调用的 96.4% 舍成 96%，
+  // 与列表页/运行时页的 96.4% 变成同一指标两个数。改走 rate-utils 单点（1 位小数、整值省 .0）。
+  return rate == null ? '—' : (formatRate(rate * 100) ?? '—')
 }
 function fmtDur(ms: number | null) {
   if (ms == null) return '—'
@@ -732,8 +756,16 @@ watch(() => props.skillId, () => {
 /* 权重非法（空/越界）：字段级红边提示（#117） */
 .sdp-var__w--err { border-color: var(--mk-red); background: var(--mk-red-bg); }
 .sdp-var__key { width: 56px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
-.sdp-var__create { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 10px; border: 1px dashed var(--mk-line); border-radius: 12px; background: var(--mk-surface); }
-.sdp-var__field { display: inline-flex; gap: 6px; align-items: center; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 建对照臂：标题 + 字段栅格 + 说明（2026-11-02 评审：原为一行 flex，标签与控件全挤在一起，
+   字段名对不齐，说明也混在按钮之间） */
+.sdp-var__create { display: grid; gap: 10px; padding: 10px 12px; border: 1px dashed var(--mk-line); border-radius: 12px; background: var(--mk-surface); }
+.sdp-var__create-title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
+.sdp-var__create-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 14px; align-items: start; }
+.sdp-var__create-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; align-self: end; }
+.sdp-var__create-note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 字段：标签在上、控件在下（原为同行，标签与输入框对不齐） */
+.sdp-var__field { display: grid; gap: 5px; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
+.sdp-var__field-hint { font-style: normal; font-weight: 400; color: var(--mk-faint); }
 
 /* 分区头 */
 .sdp-eng { display: grid; gap: 8px; }

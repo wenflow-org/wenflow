@@ -7,7 +7,7 @@
  * （课堂发生过，常有 summary-only 降级总结）> 其余；同分保持先到（后端历史新→旧，先到=最新）。
  */
 import { describe, expect, it } from 'vitest';
-import { buildLearnLessons, type TeachHistoryItem } from '../cockpitLessons';
+import { buildLearnLessons, lessonStateLabel, type TeachHistoryItem } from '../cockpitLessons';
 import type { PathMilestoneView } from '../cockpitPathViews';
 
 const milestones: PathMilestoneView[] = [
@@ -65,5 +65,43 @@ describe('buildLearnLessons：同课多会话的课堂映射分级', () => {
     const result = lessons([{ id: 'ts_disc', taskId: 'task_1', taskTitle: '', status: 'discarded' }]);
     expect(result[0].teachingSessionId).toBe('ts_disc');
     expect(result[0].hasSummary).toBe(false);
+  });
+});
+
+/* 2026-11-02 P1-4：当前课的状态原先只把 error / next_task_start_failed 判成 failed，
+   timeout、finalization_failed、discarded、superseded 这些结课终态全落进 else 写成 active——
+   已超时终局的课在 Learn 树里标「进行中」，与课头/总结页的「超时」同屏打架。 */
+describe('buildLearnLessons：当前课的结课终态判定', () => {
+  const currentMilestones: PathMilestoneView[] = [
+    {
+      stageNumber: 1,
+      title: 'M1',
+      description: '',
+      estimatedHours: null,
+      tasks: [{ id: 'task_1', title: '第1课', completed: false, current: true }]
+    }
+  ];
+
+  function currentLesson(runtimeStatus: string) {
+    return buildLearnLessons(
+      currentMilestones,
+      [{ id: 'ts_1', taskId: 'task_1', taskTitle: '', status: runtimeStatus }],
+      { currentTaskId: 'task_1', currentTeachingId: 'ts_1', runtimeStatus }
+    )[0];
+  }
+
+  it.each(['timeout', 'finalization_failed', 'discarded', 'superseded', 'failed', 'error', 'next_task_start_failed'])(
+    '结课终态 %s → failed，不再标「进行中」',
+    (status) => {
+      const lesson = currentLesson(status);
+      expect(lesson.state).toBe('failed');
+      expect(lessonStateLabel(lesson.state)).toBe('失败，可重启恢复');
+    }
+  );
+
+  it('仍在跑的课 → active', () => {
+    for (const status of ['active', 'running', 'in_progress']) {
+      expect(currentLesson(status).state).toBe('active');
+    }
   });
 });

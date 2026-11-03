@@ -25,6 +25,8 @@ import SkillDetail from '../SkillDetail.vue'
 import Skills from '../Skills.vue'
 import { subPage, closeSubPage, dataSource, liveSkillStatsMap } from '../store'
 import { liveSkillProfiles } from '../live'
+// 阶段页签断言消费画布列头同一份译名表（决策：页签与列头同名，取同一数据源）
+import { STAGE_ORDER, STAGE_LABELS } from '../dataFlow'
 
 const { apiObject, metaMock, promptMock, cfgMock, routingsMock, versionsMock, overviewMock, coreMock, testSkillMock, probeMock } =
   vi.hoisted(() => ({
@@ -318,12 +320,20 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
 
   it('编排图阶段页签用中文（2026-10-26 评审：与画布列头同名，不再英中对照）', () => {
     expect(OrchestratorSource).toContain('{{ stageTabLabel(s) }}')
-    expect(OrchestratorSource).toContain('const STAGE_TAB_LABEL: Record<string, string> = {')
-    expect(OrchestratorSource).toContain("teaching: '教学'")
-    expect(OrchestratorSource).toContain("profile: '学习者'")
-    expect(OrchestratorSource).toContain("simulation: '仿真'")
-    // 未登记的阶段回退中文显示名：不裸出 id、也不留空
-    expect(OrchestratorSource).toContain('STAGE_TAB_LABEL[s.id] || s.name.replace(/阶段$/, \'\')')
+    /* 2026-11-02 评审：名以列头 / 字段旅程页头那份为准——后端显示名去「阶段」，
+       与 DataFlowGraph 的 stageNames（同为 displayName 去「阶段」）同一数据源。
+       断言数据源与回退，不钉某个常量名：常量改名不该让决策失守。 */
+    expect(OrchestratorSource).toContain("(s.name || '').replace(/阶段$/, '')")
+    // 拿不到后端显示名才回退 dataFlow 的共享中文译名表（画布列头用的同一份），不裸出英文 id
+    expect(OrchestratorSource).toContain('STAGE_LABELS[s.id]')
+    // 第二份手写译名表已撤：同一阶段不再有两个叫法
+    expect(OrchestratorSource).not.toContain('const STAGE_TAB_LABEL')
+    // 共享译名表覆盖全部阶段且均为中文 → 回退路径不会把 s.id（英文）露出来
+    for (const id of STAGE_ORDER) {
+      const label = STAGE_LABELS[id]
+      expect(label, `STAGE_LABELS[${id}] 应有中文名`).toBeTruthy()
+      expect(/[A-Za-z]/.test(label), `STAGE_LABELS[${id}] 不应含英文 id`).toBe(false)
+    }
   })
 
   it('编排图悬停信息双层结构（2026-10-14 用户：业务名 + 技术查验）', () => {
@@ -439,11 +449,12 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(bloc.find('.skd-code').text()).toContain('SYSTEM PROMPT BODY')
     expect(bloc.text()).not.toContain('已截断')
     // 回合状态机 / 终止条件：core YAML 无 stateMachine/states/termination/limits → 明确空态（不硬造）。
-    // 文案 2026-10-04 P3-21（设计评审）人话化：人话领句「该 Skill 未声明…」，schema 细节挪 title
+    // 2026-11-02 评审：空态必须说清读的是哪份文件——运行时阶段集合写在 Prompt 清单的运行时契约里
+    // （工程页签），两处同屏读作结论相反。
     expect(bloc.text()).toContain('回合状态机')
-    expect(bloc.text()).toContain('该 Skill 未声明回合状态机')
+    expect(bloc.text()).toContain('core YAML 未声明回合状态机')
     expect(bloc.text()).toContain('终止条件')
-    expect(bloc.text()).toContain('该 Skill 未声明终止条件')
+    expect(bloc.text()).toContain('core YAML 未声明终止条件')
 
     w.unmount()
   })
@@ -461,8 +472,10 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(modal!.querySelector('.mk-modal__title')!.textContent).toContain('编辑 Prompt · 教学回合')
     const ta = modal!.querySelector('textarea') as HTMLTextAreaElement
     expect(ta.value).toBe('SYSTEM PROMPT BODY')
-    // 原型的「保存草稿」无后端草稿接口：主操作 = 切到核心文件编辑（本页协议页签），不放假保存钮
-    expect(modal!.textContent).not.toContain('保存草稿')
+    // 2026-11-02 评审：底排此前只有「复制内容 / 取消 / 前往核心文件编辑」，读起来像没有保存动作。
+    // 草稿本来就落在本机浏览器（关闭时 persistPromptDraft → sessionStorage，下次打开自动恢复），
+    // 这颗钮只是把已有的持久化显式化，不是假保存（后端仍无草稿接口）。
+    expect(modal!.textContent).toContain('保存草稿')
     expect(modal!.textContent).toContain('前往核心文件编辑')
 
     // 关闭钮收起；再开 → Esc 收起（弹层在 Esc 栈顶，先于页面关闭）
@@ -579,11 +592,12 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.text()).toContain('覆盖平台默认')
     // 2026-10-28：保存与「恢复默认」都收进配置弹层；卡面只有摘要 + 配置入口
     expect(w.findAll('.sdp-card__save').length).toBe(0)
-    expect(w.find('.sdp-summary').exists()).toBe(true)
+    expect(w.find('.sdp-live').exists()).toBe(true)
     expect(w.findAll('button').some((b) => b.text() === '配置')).toBe(true)
-    // 2026-10-24 用户「生效值没意义，拿掉」：只读摘要删掉，换成一行取值顺序（谁压谁）
+    // 2026-10-24 用户「生效值没意义，拿掉」：只读摘要删掉，换成「谁压谁」的说明
     expect(w.text()).not.toContain('只读 · 当前实际生效')
-    expect(w.find('.sdp-order').text()).toContain('取值顺序')
+    // 2026-11-03：这条说明降成模型 id 的悬停全文（不再占一行读数）
+    expect(w.find('.sdp-live__id').attributes('title') ?? '').toContain('本 Skill 指定')
     // 模型测试（右侧验证列）
     expect(w.text()).toContain('模型测试')
     expect(w.text()).toContain('开始探测')

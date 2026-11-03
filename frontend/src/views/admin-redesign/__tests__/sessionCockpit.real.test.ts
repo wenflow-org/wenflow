@@ -274,7 +274,9 @@ describe('SessionCockpit 双模式', () => {
     const logText = wrapper.find('.cp-logs').text();
     expect(logText).toContain('学习路径已生成');
     expect(logText).toContain('会话总结已生成');
-    expect(logText).toContain('查看全文');
+    // 2026-11-02 评审 R65：折叠行的入口写明跳去页签看对话全文，
+    // 与同行「原文」JSON 展开区分开（两个词原先都读作"看全文"）
+    expect(logText).toContain('在页签查看对话全文');
     expect(logText).not.toContain('我想学 Python');
 
     // wrapup 字段卡 + 来源徽章（模型生成）
@@ -376,6 +378,91 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('真实目标对话 · 只读监控');
     expect(wrapper.text()).not.toContain('真实课堂 · 只读监控');
     expect(subPage.value?.label).toBe('目标对话');
+
+    wrapper.unmount();
+  });
+
+  /* 2026-11-02 P0-3：路径深链落进目标对话座舱后，H1 与正文已换成路径，状态 pill 却仍取
+     目标对话的 status（completed）→ 同一枚绿「已完成」被读成路径学完了。徽章必须与 H1 同对象。 */
+  it('目标对话控制台：H1 是路径名时状态 pill 报路径状态，不再贴目标对话的「已完成」', async () => {
+    const payload = realTeachingPayload();
+    payload.data.kind = 'goal';
+    // 真实载荷里 stageResults.path 与 path 同构（resolvePathView 带 title/status），fixture 按同构补齐
+    payload.data.stageResults.path = payload.data.path;
+    // 目标对话已澄清结束（真实数据：conversation.status=completed），它生成的路径仍在学
+    payload.data.goal.status = 'completed';
+    payload.data.runtime.status = 'completed';
+    payload.data.path.status = 'active';
+    payload.data.stageResults.path.status = 'active';
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'gc_1');
+
+    expect(wrapper.find('.mk-hero__title').text()).toBe('Python 入门学习路径');
+    const pill = wrapper.find('.mk-hero__pills .mk-badge');
+    expect(pill.text()).toBe('学习中');
+    expect(pill.text()).not.toBe('已完成');
+    expect(pill.classes()).toContain('mk-badge--ok');
+    expect(pill.attributes('title')).toBe('路径学习中');
+
+    // 路径状态未知（载荷不带 status）时回落课堂/会话生命周期，不凭空造路径状态
+    const noStatus = realTeachingPayload();
+    noStatus.data.kind = 'goal';
+    noStatus.data.runtime.status = 'completed';
+    getRealSessionConsole.mockResolvedValue(noStatus);
+    const fallback = await mountCockpit('session-real', 'gc_1');
+    expect(fallback.find('.mk-hero__pills .mk-badge').text()).toBe('已完成');
+
+    wrapper.unmount();
+    fallback.unmount();
+  });
+
+  /* 2026-11-02 P1-3：目标对话入口的 runtime.status 是 goal_conversations.status（completed），
+     同一节课在教学会话入口读的是 teaching_sessions.status（timeout）——同一节课两个入口两个答案。
+     课堂终态由 session-console 单独下发在 stageStatus.learning / taskRuntime 上，徽章必须读它。 */
+  it('目标对话控制台：课在超时里结束、目标对话已完成时，pill 报课堂「超时」而不是目标对话的「已完成」', async () => {
+    const payload = realTeachingPayload();
+    payload.data.kind = 'goal';
+    // 这条路径没有可展示的路径名（路径行缺失/无 status），H1 落在课名上，pill 的主语就是课堂
+    payload.data.path = null;
+    payload.data.stageResults.path = null;
+    payload.data.stageResults.learning = { status: 'timeout', manualStop: false };
+    payload.data.teaching.status = 'timeout';
+    payload.data.teaching.wrapup = null;
+    payload.data.runtime.currentStage = 'teaching';
+    payload.data.runtime.status = 'completed';
+    payload.data.runtime.stageStatus.path = { learningPathId: null, generated: false, totalMilestones: null, completedMilestones: null };
+    payload.data.runtime.stageStatus.learning = { teachingSessionId: 'ts_real_1', status: 'timeout', manualStop: false };
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'gc_1');
+
+    const pill = wrapper.find('.mk-hero__pills .mk-badge');
+    expect(pill.text()).toBe('超时');
+    expect(pill.text()).not.toBe('已完成');
+    // 教学会话状态单源：timeout 是 bad（旧 switch 会把它落到蓝「info」），悬停与课堂入口同词
+    expect(pill.classes()).toContain('mk-badge--bad');
+    expect(pill.attributes('title')).toBe('课堂中断');
+
+    wrapper.unmount();
+  });
+
+  it('目标对话控制台：H1 是路径名时仍报路径状态（课堂终态不与路径标题抢主语）', async () => {
+    const payload = realTeachingPayload();
+    payload.data.kind = 'goal';
+    payload.data.stageResults.path = payload.data.path;
+    payload.data.path.status = 'active';
+    payload.data.stageResults.path.status = 'active';
+    payload.data.runtime.status = 'completed';
+    payload.data.runtime.stageStatus.learning = { teachingSessionId: 'ts_real_1', status: 'timeout', manualStop: false };
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'gc_1');
+
+    expect(wrapper.find('.mk-hero__title').text()).toBe('Python 入门学习路径');
+    const pill = wrapper.find('.mk-hero__pills .mk-badge');
+    expect(pill.text()).toBe('学习中');
+    expect(pill.attributes('title')).toBe('路径学习中');
 
     wrapper.unmount();
   });

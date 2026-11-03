@@ -225,7 +225,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in paged" :key="s.id" :class="{ 'vl-row--fresh': freshIds.includes(s.id) }">
+          <tr v-for="s in paged" :key="s.id" :class="{ 'vl-row--fresh': freshIds.includes(s.id), 'vl-row--menu': openMenu === s.id }">
             <td v-if="isLive && !isNarrow && !hiddenCols.has('check')"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
               <div class="vl-cell vl-cell--click" role="button" tabindex="0" :title="s.name" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
@@ -1143,6 +1143,10 @@ function onBatchReclaim(ids: string[]) {
 /* 刚派生的行：短暂高亮，让「创建完在哪一条」一眼可见（绿=成功，蓝色只留给可交互/选中） */
 .vl-row--fresh { background: var(--mk-green-bg); }
 .vl-row--fresh td:first-child { box-shadow: inset 2px 0 0 var(--mk-green); }
+/* 行尾 ⋯ 菜单开着的那一行（2026-11-02 评审 R6）：菜单浮在下两行之上，
+   不给来源行选中态就读不出「提示词试跑 / 查看来源卡 / 删除」作用在谁身上 */
+.vl-row--menu { background: var(--mk-blue-bg); }
+.vl-row--menu td:first-child { box-shadow: inset 2px 0 0 var(--mk-blue); }
 /* 「故事 / 路径」两数的分隔符：弱化到次级色，数字本身仍是 mk-num 的等宽口径 */
 .vl-story-path__sep { color: var(--mk-faint); padding: 0 1px; }
 /* 异常列：两类问题信号各自带词，零值时整格「—」不出声（用户：分两列时整片 0 0 最响） */

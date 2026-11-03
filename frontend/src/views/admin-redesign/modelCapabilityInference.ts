@@ -5,7 +5,7 @@
  * 用途判断优先于能力判断：向量 / 重排模型不应出现在对话模型的待选清单里。
  */
 
-export type ModelRole = 'chat' | 'embedding' | 'rerank'
+export type ModelRole = 'chat' | 'embedding' | 'rerank' | 'image'
 
 export interface ModelInference {
   role: ModelRole
@@ -19,6 +19,14 @@ export interface ModelInference {
 const RERANK_RE = /rerank|bge-reranker|jina-reranker|cross-encoder|cohere.*rerank/i
 const EMBEDDING_RE =
   /embedding|text-embedding|embed[-_]|bge[-_/]|(^|[/_.-])(gte|e5|m3e|jina-embed|voyage|nomic-embed)([/_.-]|$)/i
+/* 图像 / 视频生成模型（2026-11-02 评审）：此前一律按「对话」处理，
+   它们会出现在可勾选清单里，与「只有对话模型可以添加」的说法自相矛盾。 */
+const IMAGE_RE =
+  /(^|[/_.-])(image|imagen|dall-e|dalle|flux|sdxl|stable-diffusion|video|veo|sora|kling|seedance|t2i|i2v)([/_.-]|$)|midjourney/i
+
+/* 2026-11-03 用户：「不建议本地维护模型列表分类，由运营人员自行配置」。
+   试过的那条 asr / tts / realtime → audio 规则已撤（本地认词表判用途，判错还要靠运营绕开）。
+   新增用途前先想清楚：这份词表该不该由前端维护，别再把模型名当配置项。 */
 
 const THINKING_RE =
   /(^|[/_.-])(r1|reasoner|reasoning|thinking?|qwq|o1|o3|o4)([/_.-]|$)|deepseek-r1|deepseek-reasoner|qwen[\d.]*[-_]?qwq|gpt-5|magistral/i
@@ -32,11 +40,13 @@ const TOOL_RE =
 
 export function inferModelCapabilities(id: string): ModelInference {
   const name = String(id || '').trim()
-  const role: ModelRole = RERANK_RE.test(name)
-    ? 'rerank'
-    : EMBEDDING_RE.test(name)
-      ? 'embedding'
-      : 'chat'
+  const role: ModelRole = IMAGE_RE.test(name)
+    ? 'image'
+    : RERANK_RE.test(name)
+      ? 'rerank'
+      : EMBEDDING_RE.test(name)
+        ? 'embedding'
+        : 'chat'
   const chat = role === 'chat'
   const thinking = chat && THINKING_RE.test(name)
   return {
@@ -65,6 +75,7 @@ export function inferenceLabels(inference: ModelInference): string[] {
 export function roleSuggestion(role: ModelRole): string {
   if (role === 'embedding') return '建议归入向量模型'
   if (role === 'rerank') return '建议归入重排模型'
+  if (role === 'image') return '图像 / 视频生成，不在此添加'
   return ''
 }
 

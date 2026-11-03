@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import LearnerCenter from '../LearnerCenter.vue';
+import LearnerCenterSource from '../LearnerCenter.vue?raw';
 import { chooseFilter, filterOptions, filterValue } from './filter-controls';
 import UserAccountPane from '../UserAccountPane.vue';
 import { liveLearners } from '../live';
@@ -515,5 +516,50 @@ describe('UserAccountPane 账户信息卡头（状态与账户操作归位）', 
     expect(head.findAll('button').some((b) => b.text() === '编辑')).toBe(false);
     expect(head.findAll('button').some((b) => b.text().includes('恢复用户'))).toBe(true);
     w.unmount();
+  });
+});
+
+/* 2026-11-02 P1-7：「当前进度」格原先 max-height:44px + overflow:hidden，只够两行主任务；
+   路径副行与「共 N 条路径」角标（第三行）被整段裁掉，多路径学员在列表里又只剩一条路径。
+   裁切是布局级的，jsdom 量不到像素高度，这里锁两件事：角标与路径同一副行、整格不再限高。 */
+describe('LearnerCenter 当前进度格：路径与路径数角标不被裁（P1-7）', () => {
+  beforeEach(() => {
+    liveLearners.value = [
+      learner({ userId: 'duo', name: '多路径', currentTask: '整理周报', pathTitle: '运营周报自动合并清洗出表', activePathCount: 2 }),
+      learner({ userId: 'one', name: '单路径', currentTask: '函数练习', pathTitle: 'Python 入门', activePathCount: 1 })
+    ];
+    subPage.value = null;
+  });
+
+  function progressCell(w: ReturnType<typeof mount>, name: string) {
+    const row = w.findAll('tbody tr').find((r) => r.text().includes(name))!;
+    return row.find('.lc-task');
+  }
+
+  it('路径与「共 N 条路径」角标同一副行，整格只有主任务 + 一行副文', async () => {
+    const w = mount(LearnerCenter);
+    await settle();
+    const cell = progressCell(w, '多路径');
+    const subline = cell.find('.mk-cell-subline');
+    expect(subline.exists(), '副行要包住路径与角标').toBe(true);
+    expect(subline.find('.mk-cell-sub').text()).toBe('运营周报自动合并清洗出表');
+    expect(subline.find('.mk-badge').text()).toBe('共 2 条路径');
+    // 副行只占一格：主任务 + 副行；第三行不存在，也就没有可裁掉的东西
+    expect(Array.from(cell.element.children).map((el) => el.tagName.toLowerCase())).toEqual(['strong', 'span']);
+    w.unmount();
+  });
+
+  it('单路径学员不标路径数（上一行路径名就是全部）', async () => {
+    const w = mount(LearnerCenter);
+    await settle();
+    const cell = progressCell(w, '单路径');
+    expect(cell.find('.mk-cell-sub').text()).toBe('Python 入门');
+    expect(cell.find('.mk-badge').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('源码不再给该格加 44px 限高（主行两行截断仍保留）', () => {
+    expect(LearnerCenterSource).not.toContain('max-height: 44px');
+    expect(LearnerCenterSource).toContain('-webkit-line-clamp: 2');
   });
 });

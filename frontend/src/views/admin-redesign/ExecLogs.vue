@@ -151,9 +151,12 @@
         <table class="mk-table mk-table--click mk-table--fixed mk-table--nowrap exec-table">
           <thead>
             <tr>
-              <!-- 列序 = 原型 renderObserve 日志表：时间 | 级别 | Skill | Trace | 消息 | 耗时
+              <!-- 列序 = 原型 renderObserve 日志表：时间 | 状态 | Skill | Trace | 消息 | 耗时
                    （2026-10-02 用户拍板「表格的列按新UI调整」）；类型/模型/输入输出为
-                   真实数据扩展列，收进列设置 -->
+                   真实数据扩展列，收进列设置。
+                   表头写「状态」不写「级别」（2026-11-02 评审）：格内是成功/超时/失败，
+                   与卡头「状态」筛选、审计页「结果」同一批状态词；「级别」会被读成
+                   日志等级（信息/警告/错误）。内部 key 仍叫 status，不动存储键。 -->
               <th
                 v-if="!hiddenCols.has('time')"
                 scope="col"
@@ -161,7 +164,7 @@
                 :aria-sort="logSortState('calledAt')"
                 @click="toggleLogSort('calledAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('calledAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('status')" scope="col" class="ex-c-level">级别</th>
+              <th v-if="!hiddenCols.has('status')" scope="col" class="ex-c-level">状态</th>
               <th v-if="!hiddenCols.has('kind')" scope="col" class="ex-c-kind">类型</th>
               <th v-if="!hiddenCols.has('agent')" scope="col" class="ex-c-agent">Skill</th>
               <th v-if="!hiddenCols.has('trace')" scope="col" class="ex-c-trace">Trace</th>
@@ -174,7 +177,7 @@
                 class="right mk-th--sortable ex-c-dur"
                 :aria-sort="logSortState('durationMs')"
                 @click="toggleLogSort('durationMs')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('durationMs')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" :title="durTierTitle" @click.stop="toggleLogSort('durationMs')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             </tr>
           </thead>
           <tbody>
@@ -210,11 +213,12 @@
                   <div class="exec-cell">
                     <div class="exec-cell__line">
                       <!-- 主行：错误行显示错误摘要（红）；成功行显示调用内容预览（prompt 提取），
-                           无内容时弱化「执行完成」——避免与级别列"成功"重复占位（原恒显"执行完成"零信息量）。
+                           无内容时留一个弱的「—」（2026-11-02 评审：原「执行完成」与状态列的
+                           「成功」徽章说的是同一件事，整列 15 行复读一遍零信息量）。
                            链路入口/复制已前移到 Trace 列（原型 renderObserve 的列位），本格只留消息 -->
                       <strong v-if="log.status === 'err'" class="exec-title exec-title--err" :title="log.title || log.detail">{{ log.title || log.detail }}</strong>
                       <strong v-else-if="contentPreview(log)" class="exec-title exec-title--preview" :title="contentPreview(log)">{{ contentPreview(log) }}</strong>
-                      <strong v-else class="exec-title exec-title--ok" :title="log.title">{{ log.title }}</strong>
+                      <strong v-else class="exec-title exec-title--ok" title="这次调用没有记录内容摘要">—</strong>
                     </div>
                     <div class="exec-cell__line exec-cell__sub">
                       <span v-if="log.errorCode" class="tline__errcode mono" :title="log.errorCode">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
@@ -245,11 +249,13 @@
                       <!-- 展开区同款口径：短 Trace 显示 + title 全值（不裸奔整条 UUID） -->
                       <span class="mono" :title="log.traceId">trace {{ shortTrace(log.traceId) }}</span>
                     </div>
-                    <!-- 摘要行：表格弱化列的完整值（类型/模型/输入输出），展开即看全不丢信息 -->
+                    <!-- 摘要行：表格弱化列的完整值（类型/模型/输入输出），展开即看全不丢信息。
+                         除类型徽章外每格自带名头（2026-11-02 评审）：原先模型名紧跟在「Skill」
+                         徽章后，被读成「Skill 就是 deepseek-v4.1-flash」 -->
                     <div class="exec-detail__meta mono">
                       <span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span>
                       <span v-if="detailCache[log.id]?.fallbackFrom" class="tline__recovered">已从 {{ detailCache[log.id]?.fallbackFrom }} 降级</span>
-                      <span v-if="log.model" :title="log.model">{{ log.model }}</span>
+                      <span v-if="log.model" :title="log.model">模型 {{ log.model }}</span>
                       <span v-if="log.promptTokens != null || log.completionTokens != null || promptOf(log)?.tokens" :title="tokensTitle(log)">{{ tokensText(log) }}</span>
                       <span v-if="log.errorCode" class="tline__errcode">{{ errorCodeLabel(log.errorCode) ?? log.errorCode }}</span>
                       <span v-if="log.statusCode && log.statusCode >= 400">HTTP {{ log.statusCode }}</span>
@@ -267,15 +273,17 @@
                                 <span v-if="a.willRetry" class="tline-attempt__retry">将在 {{ a.backoffMs ?? '—' }}ms 后自动重试</span>
                                 <span class="tline-attempt__dur mono">{{ fmtMs(a.durationMs) }}</span>
                               </div>
+                              <!-- 逐项自带名头（2026-11-02 评审）：原来首个字段只印供应商、
+                                   第二个只印模型名，一行连读时分不清哪个是哪个 -->
                               <div class="tline-attempt__meta mono">
-                                <span>{{ a.provider || 'provider?' }}</span>
-                                <span>{{ a.model || 'model?' }}</span>
+                                <span :title="a.provider || ''">供应商 {{ a.provider || '未知' }}</span>
+                                <span :title="a.model || ''">模型 {{ a.model || '未知' }}</span>
                                 <span v-if="a.statusCode">HTTP {{ a.statusCode }}</span>
                                 <span v-if="a.promptTokens != null">输入 {{ a.promptTokens }} / 输出 {{ a.completionTokens ?? 0 }}</span>
                                 <span v-if="a.ttftMs != null" :title="'TTFT（首字节）'">TTFT {{ a.ttftMs }}ms</span>
                                 <span v-if="a.promptCacheHitTokens" class="tline-attempt__cache" :title="'DeepSeek 自动前缀缓存命中'">缓存 {{ a.promptCacheHitTokens }} token</span>
                                 <span v-if="a.routeSource" :title="a.routeSource">路由 {{ routeSourceLabel(a.routeSource) ?? a.routeSource }}</span>
-                                <span v-if="a.endpointHost">{{ a.endpointHost }}</span>
+                                <span v-if="a.endpointHost" :title="'请求发往的上游域名'">{{ a.endpointHost }}</span>
                               </div>
                               <p v-if="a.errorMessage" class="tline-attempt__err">{{ a.errorCode ? `${errorCodeLabel(a.errorCode) ?? a.errorCode} · ` : '' }}{{ a.errorMessage }}</p>
                             </div>
@@ -287,16 +295,24 @@
                         </div>
                         <div v-if="log.gatewayDurMs" class="tline__section">
                           <span class="tline__label">网关合并</span>
-                          <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}</p>
+                          <!-- 这一行是「同链路的网关调用耗时」——skill 行与网关行合并后，网关行的
+                               时长只留在这里。原样只印一个数字，读者看不出它是哪个量。 -->
+                          <p class="tline__none">同链路网关调用耗时 {{ fmtMs(log.gatewayDurMs) }}</p>
                         </div>
                         <div v-if="detailCache[log.id].input" class="tline__section">
-                          <span class="tline__label">输入</span>
+                          <div class="tline__label-row">
+                            <span class="tline__label">输入</span>
+                            <button v-if="payloadToggleNeeded(detailCache[log.id].input)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~input`)">{{ payloadExpanded(`${log.id}~input`) ? '收起' : '展开全部' }}</button>
+                          </div>
                           <!-- 负载美化（2026-10-04 外部评审）：紧凑单行 JSON 两格缩进展示，非 JSON 原样 -->
-                          <pre>{{ prettyPayload(detailCache[log.id].input) }}</pre>
+                          <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~input`) }">{{ payloadText(detailCache[log.id].input) }}</pre>
                         </div>
                         <div v-if="detailCache[log.id].output" class="tline__section">
-                          <span class="tline__label">输出</span>
-                          <pre>{{ prettyPayload(detailCache[log.id].output) }}</pre>
+                          <div class="tline__label-row">
+                            <span class="tline__label">输出</span>
+                            <button v-if="payloadToggleNeeded(detailCache[log.id].output)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~output`)">{{ payloadExpanded(`${log.id}~output`) ? '收起' : '展开全部' }}</button>
+                          </div>
+                          <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~output`) }">{{ payloadText(detailCache[log.id].output) }}</pre>
                         </div>
                         <!-- Prompt 契约维度（prompt_call_logs，同 traceId 关联） -->
                         <div v-if="promptOf(log)" class="tline__section tline__prompt">
@@ -308,20 +324,32 @@
                             <span v-if="promptOf(log)!.errorCode">{{ errorCodeLabel(promptOf(log)!.errorCode) ?? `[${promptOf(log)!.errorCode}]` }} {{ promptOf(log)!.errorMessage }}</span>
                           </div>
                           <template v-if="promptOf(log)!.userPayload">
-                            <span class="tline__sub-label">请求消息</span>
-                            <pre>{{ prettyPayload(promptOf(log)!.userPayload) }}</pre>
+                            <div class="tline__label-row">
+                              <span class="tline__sub-label">请求消息</span>
+                              <button v-if="payloadToggleNeeded(promptOf(log)!.userPayload)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~request`)">{{ payloadExpanded(`${log.id}~request`) ? '收起' : '展开全部' }}</button>
+                            </div>
+                            <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~request`) }">{{ payloadText(promptOf(log)!.userPayload) }}</pre>
                           </template>
                           <template v-if="promptOf(log)!.rawModelOutput">
-                            <span class="tline__sub-label">模型原文</span>
-                            <pre>{{ prettyPayload(promptOf(log)!.rawModelOutput) }}</pre>
+                            <div class="tline__label-row">
+                              <span class="tline__sub-label">模型原文</span>
+                              <button v-if="payloadToggleNeeded(promptOf(log)!.rawModelOutput)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~raw`)">{{ payloadExpanded(`${log.id}~raw`) ? '收起' : '展开全部' }}</button>
+                            </div>
+                            <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~raw`) }">{{ payloadText(promptOf(log)!.rawModelOutput) }}</pre>
                           </template>
                           <template v-if="promptOf(log)!.extractedJson">
-                            <span class="tline__sub-label">抽取 JSON</span>
-                            <pre>{{ prettyPayload(promptOf(log)!.extractedJson) }}</pre>
+                            <div class="tline__label-row">
+                              <span class="tline__sub-label">抽取 JSON</span>
+                              <button v-if="payloadToggleNeeded(promptOf(log)!.extractedJson)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~extracted`)">{{ payloadExpanded(`${log.id}~extracted`) ? '收起' : '展开全部' }}</button>
+                            </div>
+                            <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~extracted`) }">{{ payloadText(promptOf(log)!.extractedJson) }}</pre>
                           </template>
                           <template v-if="promptOf(log)!.normalizedOutput">
-                            <span class="tline__sub-label">归一化结果</span>
-                            <pre>{{ prettyPayload(promptOf(log)!.normalizedOutput) }}</pre>
+                            <div class="tline__label-row">
+                              <span class="tline__sub-label">归一化结果</span>
+                              <button v-if="payloadToggleNeeded(promptOf(log)!.normalizedOutput)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~normalized`)">{{ payloadExpanded(`${log.id}~normalized`) ? '收起' : '展开全部' }}</button>
+                            </div>
+                            <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~normalized`) }">{{ payloadText(promptOf(log)!.normalizedOutput) }}</pre>
                           </template>
                         </div>
                         <p v-if="detailFailed[log.id]" class="tline__none tline__none--err">详情拉取失败，请稍后重试</p>
@@ -587,11 +615,11 @@ async function copyTrace(traceId: string) {
 }
 
 /* D3 表格增强：列显隐（localStorage 持久化）。列集/列序 2026-10-02 对齐原型 renderObserve
-   （时间|级别|Skill|Trace|消息|耗时），key 升 v2：旧存储按旧列集持久化，不清会盖掉新默认 */
+   （时间|状态|Skill|Trace|消息|耗时），key 升 v2：旧存储按旧列集持久化，不清会盖掉新默认 */
 const COLS_KEY = 'wf_exec_hidden_cols_v2'
 const colDefs = [
   { key: 'time', label: '时间' },
-  { key: 'status', label: '级别' },
+  { key: 'status', label: '状态' },
   { key: 'kind', label: '类型' },
   { key: 'agent', label: 'Skill' },
   { key: 'trace', label: 'Trace' },
@@ -627,10 +655,10 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
 
 /* 成功调用的内容预览（消息列主行）：从契约层提取输出摘要，
    让列表行有信息量而非恒显「执行完成」（与状态列冗余）。
-   优先级：extractedJson 的键列表 > normalizedOutput 摘要 > userPayload 摘要；均无则空（回落弱化「执行完成」）。 */
+   优先级：extractedJson 的键列表 > normalizedOutput 摘要 > userPayload 摘要；均无则空（回落弱化「—」）。 */
 /** 内容预览：返回单行全量文本，由 .exec-title 的 ellipsis 负责视觉截断（title 悬停看全）。
  *  2026-10-24 修复：原在数据层硬切 32 字并补「…」，title 却挂的是「执行完成」——
- *  截掉的部分无处可查；纯 JSON 键名预览（{"a":…}）无信息量，回落「执行完成」。 */
+ *  截掉的部分无处可查；纯 JSON 键名预览（{"a":…}）无信息量，回落空值（消息格显「—」）。 */
 function contentPreview(log: { traceId: string; agent: string }): string {
   const p = promptOf(log)
   if (!p) return ''
@@ -638,6 +666,30 @@ function contentPreview(log: { traceId: string; agent: string }): string {
   if (!out) return ''
   if (/^[{[]/.test(out)) return ''
   return out.replace(/\s+/g, ' ').trim()
+}
+
+/* ── 展开区负载展示（2026-11-02 评审）──
+   ① 落库时超过裁剪深度（≥2 层）的字段被 executor 写成 '[max-depth]' 占位符，原样印出来
+      读者只看到一串内部标记，不知道这次调用传了什么、回了什么 → 展示层换成一句人话；
+   ② 负载盒限高 240px 且只有内部滚动条，长 JSON 看着像「被分页条截断」→ 给一个展开出口。 */
+const payloadExpandedIds = ref<Set<string>>(new Set())
+function payloadExpanded(key: string): boolean { return payloadExpandedIds.value.has(key) }
+function togglePayload(key: string) {
+  const s = new Set(payloadExpandedIds.value)
+  if (s.has(key)) s.delete(key)
+  else s.add(key)
+  payloadExpandedIds.value = s
+}
+/** 负载展示文本：美化后把深度裁剪占位符替换成人话（占位符可能带 JSON 引号，也可能裸露） */
+const DEPTH_CLIPPED_PLACEHOLDER = '「层级过深，未记录」'
+function payloadText(text: unknown): string {
+  return prettyPayload(text).replace(/"?\[max-depth\]"?/g, DEPTH_CLIPPED_PLACEHOLDER)
+}
+/** 是否需要「展开全部」：限高 240px ≈ 12 行；长单行（未格式化的截断串）按字符数兜底 */
+const PAYLOAD_COLLAPSE_LINES = 12
+function payloadToggleNeeded(text: unknown): boolean {
+  const t = payloadText(text)
+  return t.split('\n').length > PAYLOAD_COLLAPSE_LINES || t.length > 900
 }
 
 /* Tokens 列语义（P2）：传输层（agent_call_logs.promptTokens/completionTokens）优先——
@@ -657,7 +709,10 @@ function tokensSum(log: TokenRow): number | null {
 function tokensSplitText(log: TokenRow): string {
   if (log.promptTokens != null || log.completionTokens != null) return `输入 ${log.promptTokens ?? 0} · 输出 ${log.completionTokens ?? 0}`
   const p = promptOf(log)
-  return p?.tokens || '未统计'
+  /* 2026-11-02 文案清理：契约层也没有 token 时回空串，不再回「未统计」——该格的
+     主行（tokensSum 为 null 时）已经写着「未统计」，副行再写一遍＝同一格同一句话
+     说两遍。有契约 token 时仍照旧显示（那时主行是「未统计」而副行是唯一的用量）。 */
+  return p?.tokens || ''
 }
 function tokensTitle(log: TokenRow): string {
   if (log.promptTokens != null || log.completionTokens != null) {
@@ -1112,6 +1167,18 @@ function latencyTone(durationMs: unknown): string {
   if (latencyP90Ms.value != null && d >= latencyP90Ms.value) return 'mk-latency--warn'
   return ''
 }
+/** 耗时列分档说明（2026-11-02 评审）：行耗时按窗口分位着色（≥P90 琥珀 / ≥P99 红），
+    阈值此前只在一个个格子的悬停提示里，列头没有任何说法；这里把分档与当前阈值挂在列头上。
+    阈值取自当前窗口（与行着色同一个 latencyP9*Ms），冷启动未就绪时不编数字。 */
+const durTierTitle = computed(() => {
+  const p90 = latencyP90Ms.value
+  const p99 = latencyP99Ms.value
+  if (p90 == null && p99 == null) return '当前时间窗内的单次调用耗时，慢的调用会着色'
+  const parts = ['当前时间窗内的单次调用耗时']
+  if (p90 != null) parts.push(`≥ P90 ${fmtMs(p90)} 显琥珀色`)
+  if (p99 != null) parts.push(`≥ P99 ${fmtMs(p99)} 显红色`)
+  return parts.join(' · ')
+})
 /* 2026-10-04 状态条退役：原状态条基调 statusTone（muted/bad/ok）随条删除，ok/bad 语义改由
    成功率 KPI 卡着色承载；muted 空态档不再需要（KPI 带 v-if="logs.length"）。
    2026-10-04 外部评审拍板再解耦：成功率是监控指标不是故障告警——「有失败就标红」把 95%
@@ -1226,7 +1293,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .ex-c-kind { width: 70px; }
 .ex-c-agent { width: 160px; }
 .ex-c-trace { width: 120px; }
-.ex-c-msg { width: 240px; }
+.ex-c-msg { width: 200px; }
 .ex-c-model { width: 120px; }
 .ex-c-tokens { width: 100px; }
 .ex-c-dur { width: 68px; }
@@ -1356,7 +1423,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 消息列语义变体：错误摘要(红) / 内容预览(灰蓝) / 成功弱化——告别恒显「执行完成」与状态列重复 */
+/* 消息列语义变体：错误摘要(红) / 内容预览(灰蓝) / 无内容(弱化占位)——告别恒显「执行完成」与状态列重复 */
 .exec-title--err { color: var(--mk-red, #dc2626); font-weight: 650; }
 .exec-title--err:hover { text-decoration: underline; }
 .exec-title--preview { color: var(--mk-muted, #5b6577); font-weight: 550; }
@@ -1569,6 +1636,12 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
 .tline__label { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 .tline__sub-label { display: block; margin: 8px 0 4px; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
 .tline__label--err { color: var(--mk-red); }
+/* 负载区标签行（标签 + 展开出口，2026-11-02）：展开钮贴标签右侧，不占负载盒空间 */
+.tline__label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.tline__label-row .tline__sub-label { margin-bottom: 0; }
+.tline__payload-toggle { font-size: var(--mk-fs-micro); white-space: nowrap; }
+/* 展开态放开限高：限高在 .exec-detail__box pre，这里用更长选择器覆盖（不限高） */
+.exec-detail__box pre.tline__payload--expanded { max-height: none; }
 
 /* 重试时间线 */
 .tline-attempts { display: grid; gap: 6px; }
