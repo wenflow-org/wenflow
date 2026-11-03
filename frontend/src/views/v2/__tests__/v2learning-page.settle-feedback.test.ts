@@ -285,6 +285,8 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     // 2026-11-01 课堂走查：补答一次文字问题后导师紧接新问题 / 新小测，再点结算又吃 409——
     // 「答了又被拦」的循环缺少「先把这一轮讲完再结算」的引导。服务端 409 响应体带 error.code，
     // 横幅按原因各补一句「为什么被拦 + 现在该做什么」。
+    // 2026-11-03 真人走查修正文案：原话「老师回应完这一轮，再来结算课堂」是空头支票（这位老师每轮
+    // 都以提问收尾，实测连答 4 轮），改成如实说明「还可能再拦」+ 指出随时可用的出口。
     api.finalizeSessionReliably.mockRejectedValueOnce({
       message: '老师刚提了一个问题或请学员提交结果，先完成再结束课堂',
       status: 409,
@@ -298,8 +300,11 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     let gate = w.find('.gate');
     expect(gate.exists(), 'OPEN_QUESTION 409 应亮常驻门禁').toBe(true);
     expect(gate.text()).toContain('老师刚提了一个问题或请学员提交结果，先完成再结束课堂');
-    expect(gate.find('.gate__guide').text(), 'OPEN_QUESTION 应引导先回答、等回应完这轮再结算').toContain('先回答它');
-    expect(gate.find('.gate__guide').text()).toContain('再来结算课堂');
+    const openGuide = gate.find('.gate__guide').text();
+    expect(openGuide, 'OPEN_QUESTION 应引导先回答').toContain('回答它之后就能结算');
+    expect(openGuide, '不得再承诺「老师回应完这一轮就能结算」这个可能不来的状态').not.toContain('再来结算课堂');
+    expect(openGuide, '应如实说明可能被再拦一次').toContain('这里会再拦你一次');
+    expect(openGuide, '应指出随时可用的出口（结束学习不计入完成）').toContain('结束学习');
     // 再次结算、换一种原因：引导随原因切换
     api.finalizeSessionReliably.mockRejectedValueOnce({
       message: '还有一道题没有作答，先完成这道题再结束课堂',
@@ -314,6 +319,103 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     expect(gate.exists(), 'PENDING_CHECKPOINT 409 应亮常驻门禁').toBe(true);
     expect(gate.find('.gate__guide').text(), 'PENDING_CHECKPOINT 应引导答完小测、等老师讲完这轮').toContain('先答完这道小测');
     expect(gate.find('.gate__guide').text()).toContain('再来结算课堂');
+
+    w.unmount();
+  });
+
+  /**
+   * 活力兜底（2026-11-03 真人走查）：这位老师每轮都以提问收尾，「末问未答」无法被学员的动作满足
+   * （实测连答 4 轮才等到一次不问的回应）。门禁卡给一颗明确确认按钮 → 照常结算，服务端只放行末问。
+   */
+  it('末问门禁可被学员明确确认放行：点「仍然完成结算」带 confirmOpenQuestion 重试', async () => {
+    api.finalizeSessionReliably.mockRejectedValueOnce({
+      message: '老师刚提了一个问题或请学员提交结果，先完成再结束课堂',
+      status: 409,
+      response: {
+        status: 409,
+        data: { error: { code: 'FINALIZATION_OPEN_QUESTION', message: '老师刚提了一个问题或请学员提交结果，先完成再结束课堂' } },
+      },
+    });
+    const w = await mountPage();
+    await clickCompleteAndSettle(w);
+
+    const gate = w.find('.gate');
+    const still = gate.find('.gate__still');
+    expect(still.exists(), '末问门禁应给「仍然完成结算」这颗明确确认').toBe(true);
+    expect(gate.find('.gate__guide').text(), '文案要说明那一问会记进待验证').toContain('待验证');
+
+    // 第二次结算：带上 confirmOpenQuestion，且门禁卡先收起
+    api.finalizeSessionReliably.mockResolvedValueOnce({
+      status: 'completed',
+      revision: 3,
+      session: { status: 'completed' },
+      finalization: { taskCompletion: 'completed' },
+      wrapup: { summary: { topicSummary: '这节课你理解了作用域。' } },
+    });
+    await still.trigger('click');
+    await flushPromises();
+    await flushPromises();
+
+    const lastPayload = api.finalizeSessionReliably.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    expect(lastPayload, '确认后的结算必须带 confirmOpenQuestion').toMatchObject({
+      action: 'complete_task',
+      confirmOpenQuestion: true,
+    });
+    expect(w.find('.gate').exists(), '确认后门禁卡应收起').toBe(false);
+    expect(w.find('.finish').exists(), '确认后应正常进入结算完成态').toBe(true);
+
+    w.unmount();
+  });
+
+  it('未答小测的门禁不给「仍然完成结算」（那是学员自己能解决的状态，仍硬拦）', async () => {
+    api.finalizeSessionReliably.mockRejectedValueOnce({
+      message: '还有一道题没有作答，先完成这道题再结束课堂',
+      status: 409,
+      response: {
+        status: 409,
+        data: { error: { code: 'FINALIZATION_PENDING_CHECKPOINT', message: '还有一道题没有作答，先完成这道题再结束课堂' } },
+      },
+    });
+    const w = await mountPage();
+    await clickCompleteAndSettle(w);
+    expect(w.find('.gate').exists()).toBe(true);
+    expect(w.find('.gate__still').exists(), '未答小测不应给放行按钮').toBe(false);
+
+    w.unmount();
+  });
+
+  /**
+   * 教室 ⋯「完成并结算任务」在本节已结算后仍然可点、点完毫无变化（2026-11-03 走查实锤）。
+   * 那一刻 finish() 因 completed 直接 return，而确认框照常弹——用户得到的是一个会骗人的按钮。
+   * 口径与解锁页、评估页一致：已结算就整组收起，换成一句状态说明。
+   */
+  it('本节已结算后，⋯ 菜单不再摆「完成并结算任务 / 结束学习」，改为一句话', async () => {
+    api.finalizeSessionReliably.mockResolvedValue({
+      status: 'completed',
+      revision: 2,
+      session: { status: 'completed' },
+      finalization: { taskCompletion: 'completed' },
+      wrapup: { summary: { topicSummary: '这节课你理解了作用域。' } },
+    });
+
+    const w = await mountPage();
+    await clickCompleteAndSettle(w);
+    await flushPromises();
+    expect(w.find('.finish').exists(), '结算成功后应出结算浮层').toBe(true);
+
+    // 再开 ⋯ 菜单：结算/结束两个入口都必须消失，换成「查看本次学习反馈」这个真动作
+    await w.find('.imm-menu__btn').trigger('click');
+    const labels = w.findAll('.learn__menu-item').map((b) => b.text());
+    expect(labels.some((t) => t.includes('完成并结算任务')), '已结算不应再摆「完成并结算任务」').toBe(false);
+    expect(labels.some((t) => t.includes('结束学习')), '已结算不应再摆「结束学习」').toBe(false);
+    expect(labels.some((t) => t.includes('查看本次学习反馈')), '已结算应给反馈入口').toBe(true);
+    // 「返回路径详情」仍在：已结算也要有离开课堂的出口
+    expect(labels.some((t) => t.includes('返回路径详情'))).toBe(true);
+
+    // 反馈入口：replace 到本会话的评估页（回退不该再回到终态教室）
+    const feedback = w.findAll('.learn__menu-item').find((b) => b.text().includes('查看本次学习反馈'));
+    await feedback!.trigger('click');
+    expect(router.replace).toHaveBeenCalledWith(expect.stringContaining('/learn/task_1/evaluation/s_settle'));
 
     w.unmount();
   });

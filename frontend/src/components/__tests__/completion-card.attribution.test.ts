@@ -28,7 +28,7 @@ const wrapup = {
   },
 } as WrapupArtifact;
 
-function mountCard(advisory: ReplanAdvisory | null) {
+function mountCard(advisory: ReplanAdvisory | null, extraProps: Record<string, unknown> = {}) {
   return mount(CompletionCard, {
     props: {
       topic: '测试主题',
@@ -38,6 +38,7 @@ function mountCard(advisory: ReplanAdvisory | null) {
       messageCount: 10,
       wrapup,
       advisory,
+      ...extraProps,
     },
     global: {
       stubs: {
@@ -105,5 +106,83 @@ describe('CompletionCard 归因注记', () => {
     const w = mountCard(baseAdvisory);
     expect(w.findAll('svg').length).toBeGreaterThan(0);
     expect(w.html()).not.toContain('completion-glyph');
+  });
+});
+
+/**
+ * 知识点读数（2026-11-03 走查 S4-3）。
+ * 实测：当堂两次小测都答对、导师说"动作你已经独立走完了"，页头却单摆「知识点 0/2 已学会」——
+ * 数字没错（两条都还在 learning、进度 80/90），错在把它当结论单独呈现。
+ * 修法：把同源的进行中进度一并说出来，判定阈值不动。
+ */
+describe('CompletionCard 知识点读数', () => {
+  const knowledgeCell = (w: ReturnType<typeof mountCard>) => w.findAll('.summary-item')
+    .find((el) => el.text().includes('知识点'))?.text() || '';
+
+  it('一条都没判定时，补出进行中进度（0/2 不再单独成句）', () => {
+    const w = mountCard(baseAdvisory, {
+      masteredCount: 0,
+      totalCount: 2,
+      knowledgePoints: [
+        { status: 'learning', progress: 90 },
+        { status: 'learning', progress: 80 },
+      ],
+    });
+    expect(knowledgeCell(w)).toContain('0/2 已学会 · 2 项在学，最高 90%');
+  });
+
+  it('部分判定时，只数剩下的在学项', () => {
+    const w = mountCard(baseAdvisory, {
+      masteredCount: 1,
+      totalCount: 2,
+      knowledgePoints: [
+        { status: 'mastered', progress: 100 },
+        { status: 'learning', progress: 60 },
+      ],
+    });
+    expect(knowledgeCell(w)).toContain('1/2 已学会 · 1 项在学，最高 60%');
+  });
+
+  it('全部判定后不再带尾巴', () => {
+    const w = mountCard(baseAdvisory, {
+      masteredCount: 2,
+      totalCount: 2,
+      knowledgePoints: [
+        { status: 'mastered', progress: 100 },
+        { status: 'mastered', progress: 100 },
+      ],
+    });
+    const cell = knowledgeCell(w);
+    expect(cell).toContain('已学会');
+    expect(cell).not.toContain('项在学');
+  });
+
+  it('不传知识点（旧调用方）时保持原口径', () => {
+    const w = mountCard(baseAdvisory, { masteredCount: 0 });
+    expect(knowledgeCell(w)).toContain('0/3 已学会');
+    expect(knowledgeCell(w)).not.toContain('项在学');
+  });
+});
+
+/**
+ * 已结算的任务不再递「完成任务」（2026-11-03 走查 S4-5 根因修复）。
+ * 实测：评估页顶部写「本次学习已结束」，同页底部又给一颗「完成任务」并注明会推进路径进度，
+ * 而路径页早已把这节算进完成（阶段 1 = 1/2）——同一件事像是没做完、还能再做一遍。
+ */
+describe('CompletionCard 动作栏 · 已结算任务', () => {
+  it('taskCompleted=true 时不渲染「完成任务」，只留继续练习与返回路径', () => {
+    const w = mountCard(baseAdvisory, { taskCompleted: true });
+    const labels = w.findAll('.completion-actions__row button').map((b) => b.text());
+    expect(labels.some((t) => t.includes('完成任务'))).toBe(false);
+    expect(labels.some((t) => t.includes('继续练习'))).toBe(true);
+    expect(labels.some((t) => t.includes('返回学习路径'))).toBe(true);
+    expect(w.find('.completion-actions__hint').text()).toContain('已计入路径进度');
+  });
+
+  it('未结算（默认）仍渲染「完成任务」，提示句保持原口径', () => {
+    const w = mountCard(baseAdvisory);
+    const labels = w.findAll('.completion-actions__row button').map((b) => b.text());
+    expect(labels.some((t) => t.includes('完成任务'))).toBe(true);
+    expect(w.find('.completion-actions__hint').text()).toContain('完成任务会推进路径进度');
   });
 });

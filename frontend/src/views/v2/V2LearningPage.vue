@@ -17,7 +17,7 @@
           type="button"
           class="learn__finishbtn"
           :title="finishHint"
-          @click="completeAndSettle"
+          @click="completeAndSettle()"
         >完成本节</button>
         <!-- 知识点入口：原型单列无侧栏 → 常驻左栏降级为头部入口 + 浮窗（功能不删） -->
         <button
@@ -43,12 +43,23 @@
           </div>
           <div class="learn__menu-group">
               <span class="learn__menu-label">结束本节课</span>
-              <button type="button" class="learn__menu-item learn__menu-item--primary" v-if="!extensionMode" @click="completeAndSettle">
+              <!-- 结算/结束只在真有活会话、且本节还没结算时才有意义（2026-11-03 锁课走查 + 教室 ⋯ 静默实锤）：
+                   本节课没开起来（未解锁 / 开课失败）时 session 为空，这两个入口点了必然无反应；
+                   本节已结算（completed）时更糟——确认框照常弹、点了「完成并结算」后 finish() 因
+                   completed 直接 return，等于摆了一个会骗人的按钮。两种情况都整组收起，换成一句状态说明。 -->
+              <button type="button" class="learn__menu-item learn__menu-item--primary" v-if="session && !completed && !extensionMode" @click="completeAndSettle()">
                 <span class="learn__menu-item-main"><strong>完成并结算任务</strong><small>{{ finishHint }}</small></span>
               </button>
-              <button type="button" class="learn__menu-item" @click="endSession">
+              <button type="button" class="learn__menu-item" v-if="session && !completed" @click="endSession">
                 <span class="learn__menu-item-main"><strong>{{ END_WITHOUT_FINISH_LABEL }}</strong><small>生成本次总结，不推进任务进度</small></span>
               </button>
+              <!-- 已结算：不给「说明文字」，给一个真动作（copy:check §6「变控件」。
+                   原来这里是一句「本节已结算…」，与 finish() 里兜底 toast 同一句话，同文件重复被拦下，
+                   而且已结算时用户真正要的是反馈页——入口比说明有用。 -->
+              <button type="button" class="learn__menu-item" v-if="session && completed" @click="goToFeedback">
+                <span class="learn__menu-item-main"><strong>查看本次学习反馈</strong><small>本节已结算，总结在反馈页</small></span>
+              </button>
+              <span v-if="!session" class="learn__menu-label">本节还没有开起来，先返回路径详情处理解锁或重开。</span>
             </div>
             <div class="learn__menu-sep"></div>
             <div class="learn__menu-group">
@@ -58,10 +69,11 @@
               <button type="button" class="learn__menu-item" @click="leaveWithoutSideEffect">
                 <span class="learn__menu-item-main"><strong>返回路径详情</strong><small>不结束会话，进度原样保留</small></span>
               </button>
-              <button type="button" class="learn__menu-item" @click="pauseAndLeave">
+              <button type="button" class="learn__menu-item" v-if="session" @click="pauseAndLeave">
                 <span class="learn__menu-item-main"><strong>暂停并离开</strong><small>进度保留，下次从这继续</small></span>
               </button>
-              <button type="button" class="learn__menu-item learn__menu-item--danger" @click="restart">
+              <!-- 重新开始同样依赖活会话（2026-11-03 锁课走查）：本节课没开起来时点它只会空转。 -->
+              <button type="button" class="learn__menu-item learn__menu-item--danger" v-if="session" @click="restart">
                 <span class="learn__menu-item-main"><strong>重新开始</strong><small>清空当前进度与消息</small></span>
               </button>
             </div>
@@ -172,8 +184,9 @@
         <p>{{ friendlyError }}</p>
         <div class="stage-card__actions">
           <template v-if="isLocked">
+            <!-- 锁课分支不给「重新尝试」（2026-11-03 锁课走查实锤）：阶段没解锁时重试不可能成功，
+                 点了页面毫无变化，等于给了一个会骗人的按钮。解锁状态变了再从路径页进来即可。 -->
             <button type="button" class="btn-primary" @click="goBack">返回路径详情</button>
-            <button type="button" class="btn-ghost" @click="boot">重新尝试</button>
             <router-link to="/learning-paths" class="btn-ghost">查看路径列表</router-link>
           </template>
           <template v-else>
@@ -326,9 +339,9 @@
                      非最后一条 AI 消息一律不可重生成（避免历史中段重生成导致顺序错乱） -->
                 <MessageActions
                   :show="hoveredMsgId === m.id"
-                  :streaming="(typing && streamingBubbleIndex === mi) || mi !== lastAiIndex"
+                  :streaming="((typing || checkpointStreaming) && streamingBubbleIndex === mi) || mi !== lastAiIndex"
+                  :copy-handler="() => copyMessage(m.text)"
                   @regenerate="regenerateMessage(m)"
-                  @copy="copyMessage(m.text)"
                   @feedback="(up) => sendMessageFeedback(m, up)"
                 />
                 <span v-if="confusionDeltas[mi]?.length" class="msg__chip msg__chip--confuse">发现卡点：「{{ confusionDeltas[mi]?.join('、') }}」</span>
@@ -351,6 +364,12 @@
                但 final 未到时显示，final 到达（typing 复位）、失败与停止即消失。 -->
           <div v-if="typing && streamingBubbleIndex >= 0" class="msg__turnstate" role="status">
             <span class="msg__chip msg__chip--turnstate"><i aria-hidden="true"></i>本回合仍在生成…</span>
+          </div>
+
+          <!-- 小测讲解进行中（2026-11-02）：讲解归对话区，所以这条状态行也放对话区底部——
+               原先它挂在小测卡的操作行里，读起来像"讲解会留在这个面板"（用户走查原话）。 -->
+          <div v-if="checkpointStreaming && !typing" class="msg__turnstate" role="status">
+            <span class="msg__chip msg__chip--turnstate"><i aria-hidden="true"></i>导师正在讲解…</span>
           </div>
         </div>
 
@@ -495,7 +514,6 @@
               @keydown.enter="dismissCheckpoint"
               @keydown.space.prevent="dismissCheckpoint"
             >继续 ›</span>
-            <span v-else-if="checkpointStreaming" class="checkpoint__streaming">导师正在讲解…</span>
             <button
               v-if="!peerOpen"
               type="button"
@@ -518,6 +536,16 @@
             </div>
             <div class="gate__actions">
               <button type="button" class="gate__go" @click="jumpToSettleGate">{{ settleBlock.actionLabel }}</button>
+              <!-- 活力兜底（2026-11-03 真人走查）：这位老师每轮都以提问收尾，「末问未答」不是学员
+                   的动作能满足的状态——连答 4 轮才等到一次不问的回应，期间结算一直被拒。
+                   给一颗明确的确认按钮：点了照样结算，那一问会被写进总结的「待验证」清单。
+                   只在末问这一类门禁上出现（未答小测/末次检查答错仍硬拦，那些学员自己能解决）。 -->
+              <button
+                v-if="settleBlock.code === 'FINALIZATION_OPEN_QUESTION'"
+                type="button"
+                class="gate__still"
+                @click="settleAnyway"
+              >仍然完成结算</button>
               <button type="button" class="gate__close" aria-label="关闭提示" @click="dismissSettleGate">✕</button>
             </div>
           </div>
@@ -1064,12 +1092,15 @@ const settleBlock = ref<SettleGate | null>(null)
 const SETTLE_GATE_COPY: Record<string, { title: string; action: SettleGateAction; actionLabel: string; guide?: string }> = {
   /* 2026-11-01 课堂走查：答完一问后老师常紧接新问题 / 新小测，再点结算又吃 409——
      循环缺「先把这一轮讲完再结算」的引导。服务端 409 响应体带 error.code（ai-teaching
-     路由统一错误出口），按原因各补一句「为什么被拦 + 现在该做什么」。 */
+     路由统一错误出口），按原因各补一句「为什么被拦 + 现在该做什么」。
+     2026-11-03 真人走查修正：原话「老师回应完这一轮，再来结算课堂」是**空头支票**——
+     这位老师每轮都以提问收尾，实测连答 4 轮才等到一次不问的回应。改成如实说明
+     「可能还会再拦」+ 指出随时可用的出口（结束学习不计入完成），学员不必在循环里干等。 */
   FINALIZATION_OPEN_QUESTION: {
     title: '先回答老师的问题',
     action: 'composer',
     actionLabel: '去回答',
-    guide: '先回答它。老师回应完这一轮，再来结算课堂。'
+    guide: '回答它之后就能结算。若老师这一轮又以新问题收尾，这里会再拦你一次——不想继续答，可以点「仍然完成结算」（那一问会记进本次总结的待验证清单），或选「结束学习」（总结照常生成，只是本次不计入完成）。'
   },
   FINALIZATION_PENDING_CHECKPOINT: {
     title: '先完成这道小测',
@@ -1254,6 +1285,8 @@ function collapseOpeningScene() {
 /** 卡片已被用户处理（点主按钮/关闭）后不再展示 */
 const openingSceneDone = ref(false);
 const knowledgePoints = ref<Array<Record<string, any>>>([]);
+/** 最近一轮讲师点到的知识点名：续接快选据此写具体动作，避免「继续往下讲」这类无内容空话 */
+const lastTaughtPoint = ref('');
 /**
  * 「快选确认」出现条件：AI 本轮抛出了需要学习者表态的确认点（当前知识点的掌握边界）
  * - 有 checkpoint 客观验证时不出（避免与验证题重复）
@@ -1272,11 +1305,43 @@ const shouldAskSelfAssess = computed(() => {
 });
 
 const completed = ref(false);
+
+/* 讲解气泡（2026-11-02 用户定调「讲解归对话区」）：复用与正常发送同一条流式气泡机制——
+   首个 delta 建气泡、逐段追加，收尾时用整段正文补齐（覆盖非流式回退、以及流被截断的情况）。
+   小测卡从此只报判定；讲解不再在卡里播一遍又归档一遍。 */
+function appendExplanationDelta(delta: string) {
+  if (!delta) return;
+  let m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+  if (!m || m.role !== 'ai') {
+    pushMsg({ role: 'ai', text: '', time: nowTime() });
+    streamingBubbleIndex.value = msgs.value.length - 1;
+    m = msgs.value[streamingBubbleIndex.value];
+  }
+  if (!m) return;
+  m.text += delta;
+  if (nearBottom.value) void scrollDown();
+}
+function settleExplanation(fullText: string) {
+  const text = String(fullText || '');
+  const m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+  if (m?.role === 'ai') {
+    // 流式文本短于全文（被截断 / 只走到判定）→ 用全文补齐；不删已有内容
+    if (text && m.text.length < text.length) m.text = text;
+  } else if (text) {
+    pushMsg({ role: 'ai', text, time: nowTime() });
+  }
+  streamingBubbleIndex.value = -1;
+  if (nearBottom.value) void scrollDown();
+}
+
 const {
   checkpoint, selectedOptions, answerText, checkpointFeedback, checkpointPassed,
   checkpointPending, checkpointSubmitting, checkpointStreaming, lastSettledReply, lastAnswerEcho,
   toggleOption, dismissCheckpoint, submitCheckpoint, skipCheckpoint, disposeCheckpoint
-} = useCheckpointFlow(session, typing, completed)
+} = useCheckpointFlow(session, typing, completed, {
+  append: appendExplanationDelta,
+  settle: settleExplanation,
+})
 /* F-W（2026-10-10 新人走查实锤）：检查点裁决+讲解此前只渲染在卡片内——答对后卡片 3 秒自动收起，
    整段回复（含「下一问」）随之消失，聊天流不追加该回合（刷新才在历史里见到），新人会以为
    答完没反应、也不知道下一问是什么。现于卡片关闭（或仍待落流时被下一个检查点替换）时，
@@ -1291,8 +1356,21 @@ watch(checkpoint, (now) => {
   /* 小测收起后的下一步（2026-10-31 用户走查）：讲解入流后页面没有任何续接提示，
      用户不知道该继续听讲、再练一道还是完课。给两个最常用的续接动作（点击即发送）；
      知识点全掌握时叠加完课提示。 */
-  postQuizReplies.value = ['继续往下讲', '同类题再练一个']
+  postQuizReplies.value = buildPostQuizReplies()
 })
+
+/**
+ * 小测收起后的续接快选（2026-11-02 用户反馈「快选没什么意义」）：
+ * 原先是写死的「继续往下讲 / 同类题再练一个」——每节课、每道题后一字不差，
+ * 读起来像两个万能按钮，学生看不出选完会发生什么。改为带本轮知识点名的具体动作，
+ * 学生只看按钮就知道下一步会讲什么、练什么（点下去仍原样作为学生发言发出）。
+ */
+function buildPostQuizReplies(): string[] {
+  const point = lastTaughtPoint.value.trim();
+  if (!point) return ['换种方式再讲一遍', '再出一道同类题'];
+  const name = point.length > 12 ? `${point.slice(0, 12)}…` : point;
+  return [`换个说法讲「${name}」`, `再出一道「${name}」的题`];
+}
 
 /** 小测答完后的续接动作（见 watch(checkpoint) 内注释）；发送任意消息即清 */
 const postQuizReplies = ref<string[]>([]);
@@ -1350,15 +1428,30 @@ function cpOptionMark(id: string): 'ok' | 'wrong' | '' {
  * 只按「完全相同」去重的旧逻辑会让两个版本同时上屏：大标题是断了半截的
  * 「日志里秒数写成一位数时（如 14:23:…」，其下紧接完整题干。改成「title 去掉尾部省略号后
  * 是 question 的前缀」即视为同源，只渲染完整题干；title 确为独立短文案时才分两行。
+ *
+ * 第二层去重（2026-11-02 走查实锤）：后端 ensureCheckpointQuestionVisible 为保证「刷新后
+ * 逐字稿里仍能看到题面」会把题干补进本轮导师气泡；于是卡片抬头再打印一次完整题干，就成了
+ * 「导师气泡末尾 + 卡片抬头」同一句话紧挨着出现两遍。题面在气泡里已可见时，卡片只出选项/输入。
  */
+function questionAlreadyInLastBubble(question: string): boolean {
+  const q = String(question || '').replace(/\s+/g, '');
+  if (!q) return false;
+  const lastAi = [...msgs.value].reverse().find((m) => m.role === 'ai');
+  return !!lastAi?.text && String(lastAi.text).replace(/\s+/g, '').includes(q);
+}
 function checkpointTitlePair(): { heading: string; detail: string } {
   const cp = checkpoint.value;
   const question = (cp?.question || '').trim();
   const title = (cp?.title || '').trim();
   if (!question) return { heading: title, detail: '' };
-  if (!title || title === question) return { heading: question, detail: '' };
   const stem = title.replace(/[.…]+$/, '').trim();
-  if (stem && question.startsWith(stem)) return { heading: question, detail: '' };
+  const titleIsIndependent = !!title && title !== question && !(stem && question.startsWith(stem));
+  if (questionAlreadyInLastBubble(question)) {
+    // 题面在上一句气泡里已完整可见：卡片让位，只保留独立短标题（无则留白，徽标「小测」仍在）。
+    return { heading: titleIsIndependent ? title : '', detail: '' };
+  }
+  if (!title || title === question) return { heading: question, detail: '' };
+  if (!titleIsIndependent) return { heading: question, detail: '' };
   return { heading: title, detail: question };
 }
 const checkpointHeading = computed(() => checkpointTitlePair().heading);
@@ -1680,6 +1773,22 @@ async function boot() {
   assessTarget.value = null;
   confirmCheck.value = null;
   openingQuestion.value = '';
+  /* boot 是「重开这一屏」，必须自带重置（2026-11-02 走查实锤）：此前只清 openingQuestion，
+     消息列表/动作选项/检查点都留着上一次的状态。同一页面实例里 boot 跑第二遍（重进、重新尝试、
+     路由重入）时，旧会话的气泡就会与新开课的开场白并存——其中最刺眼的是开场引导重复出现。 */
+  msgs.value = [];
+  quickReplies.value = [];
+  postQuizReplies.value = [];
+  checkpoint.value = null;
+  checkpointFeedback.value = '';
+  checkpointPending.value = false;
+  checkpointSubmitting.value = false;
+  completed.value = false;
+  finalizing.value = false;
+  /* pathId 先用 query 兜底落一次（2026-11-03 锁课走查根因修复）：原先只在 startSessionByMode()
+     之后才赋值，而「本节暂时开不了课」这条失败路径根本走不到那一行 —— 锁页的「返回路径详情」
+     于是在 pathId 为空时退回列表页。失败路径也要知道自己在哪条路径上。 */
+  pathId.value = (route.query.pathId as string) || pathId.value;
   try {
     // 任务详情与开课无数据依赖(仅回填标题/路径名),与 LLM 开场生成并行,
     // 省掉开课路径上一个串行 RTT;拿不到任务信息也能上课(原语义)
@@ -1767,6 +1876,25 @@ async function boot() {
               }));
             restoredCount = restored.length;
             if (restored.length) scrollDown();
+            /* 开场引导的恢复对位（2026-11-02）：question/quickReplies 是面板上方那行的原料，
+               落库时与开场白分开存（见后端 messages[0].analysis）。只有当学习者还没开口
+               （历史里只有那条开场白）时才摆回面板——与直播时的形态逐字一致；
+               已经上过课再刷新，动作选项不该重新冒出来。 */
+            const nonPeerMessages = detail.messages.filter(
+              (m) => (m.role === 'user' || m.role === 'assistant') && !m.peer,
+            );
+            const openingAnalysis = nonPeerMessages.length === 1 && nonPeerMessages[0].role === 'assistant'
+              ? (nonPeerMessages[0].analysis as Record<string, any> | undefined)
+              : undefined;
+            const restoredReplies = (openingAnalysis?.quickReplies || [])
+              .map((q: Record<string, any> | string) => (typeof q === 'string' ? q : q?.text))
+              .filter(Boolean);
+            if (restoredReplies.length) quickReplies.value = restoredReplies;
+            if (openingAnalysis?.question) {
+              // 与直播同口径：有动作选项 → question 收进面板；没有动作选项 → question 自己成气泡
+              if (restoredReplies.length) openingQuestion.value = String(openingAnalysis.question);
+              else msgs.value.push({ role: 'ai', text: String(openingAnalysis.question), time: nowTime() });
+            }
             // 伴学历史回填进小启浮窗（刷新后不丢失）：
             // ① 主动伴学 = peer 标记消息；② 自动触发伴学 = assistant 消息内嵌的 peerMessage
             const peerRestored: Array<{ role: 'me' | 'peer'; text: string; strategy: string | null }> = [];
@@ -2015,6 +2143,11 @@ async function sendTurnOnce(
 
 async function doSend(text: string, allowStaleRetry = true, skipUserPush = false, retryKey?: string) {
   if (!session.value) return;
+  /* 学员真的推进了一轮 → 恢复横幅的使命结束（2026-11-03 心理课走查实锤）：
+     横幅此前只在「输入框有字」（watch(input)）和「勾选小测选项」时收起，而真人常用
+     「点快选」推进——那条路走 sendDirect → 这里，没人清，于是答完多轮它仍挂在聊天区顶部，
+     与正在推进的内容长期并列。这里是所有发送路径的唯一漏斗，挂在这里一处即全覆盖。 */
+  resumedNotice.value = false;
   lastUserText = text;
   // 同一逻辑发送的所有重试共用一个幂等键（自动退避 / 流式→非流式回退 / 刷新后手动重试）。
   // 丢失响应后的重发因此只会重放服务端已提交的结果，不会重复追加用户消息。
@@ -2174,6 +2307,7 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
   }
   if (Array.isArray(r.knowledgePoints) && r.knowledgePoints.length) {
     knowledgePoints.value = r.knowledgePoints;
+    if (r.knowledgePoint) lastTaughtPoint.value = String(r.knowledgePoint);
     // AI 本轮讲完后：若指向某个当前点且没有客观 checkpoint，则在该点形成待确认边界
     assessTarget.value = !r.checkpoint && r.knowledgePoint
       ? { name: String(r.knowledgePoint) }
@@ -2225,9 +2359,15 @@ async function retryLast() {
 /* ---------- 结束 ---------- */
 async function finish(
   action: 'complete_task' | 'end_only' | 'complete_review',
-  opts: { enterEvaluation?: boolean } = {}
+  opts: { enterEvaluation?: boolean; confirmOpenQuestion?: boolean } = {}
 ) {
-  if (!session.value || completed.value) return;
+  if (!session.value) return;
+  // 本节已结算：不再静默返回（2026-11-03 教室 ⋯ 走查实锤：确认框照样弹、点了「完成并结算」后毫无变化）。
+  // 入口侧已按 completed 收起，这里兜其余残留/程序化通道——把"没反应"换成一句说得清的反馈。
+  if (completed.value) {
+    toast.info('本节已结算，学习反馈里可以看到本次总结。');
+    return;
+  }
   finalizing.value = true;
   startSettleProgress(action === 'end_only' ? 'end' : 'complete', opts.enterEvaluation === true);
   try {
@@ -2238,7 +2378,9 @@ async function finish(
       action,
       revision: session.value.revision,
       // 三种 action 的收尾原因统一为 manual-end（task-completed 由后端 task 完成事件单独判定）
-      reason: 'manual-end'
+      reason: 'manual-end',
+      // 学员在门禁卡上明确点了「仍然完成结算」：只放行末问，未答小测仍由服务端硬拦
+      ...(opts.confirmOpenQuestion ? { confirmOpenQuestion: true } : {})
     }, onFinalizeProgress) as unknown as Record<string, any>;
     completed.value = true;
     // 结算成功：此前若残留门禁提示（例如上一轮 409 后用户已补答），一并收掉
@@ -2303,8 +2445,14 @@ async function finish(
   }
 }
 
+/** 门禁卡上的「仍然完成结算」：学员明确确认末问未答也结算（见 SETTLE_GATE_COPY） */
+function settleAnyway() {
+  settleBlock.value = null;
+  void completeAndSettle({ confirmOpenQuestion: true });
+}
+
 /** 完成并结算（拍板 2026-08-21 方案 B 主路径）：计入任务/里程碑/路径完成进度 */
-async function completeAndSettle() {
+async function completeAndSettle(opts: { confirmOpenQuestion?: boolean } = {}) {
   // 延伸课不结算任务（服务端也会 409）；入口在延伸模式下已隐藏，这里防程序化调用
   if (extensionMode.value) return;
   if (actionBusy.value) return;
@@ -2331,10 +2479,20 @@ async function completeAndSettle() {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
-    await finish('complete_task', { enterEvaluation: true });
+    await finish('complete_task', { enterEvaluation: true, confirmOpenQuestion: opts.confirmOpenQuestion });
   } finally {
     actionBusy.value = false;
   }
+}
+
+/** 已结算后 ⋯ 菜单的唯一动作：去看本次学习反馈（2026-11-03；取代原来的说明文字，见模板注释） */
+function goToFeedback() {
+  const sid = session.value?.sessionId;
+  if (!sid) return;
+  const url = evaluationUrl.value
+    || `/learn/${taskId}/evaluation/${sid}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
+  // replace 而非 push：本节已是终态，回退不该再回到这间教室（与结算后的自动跳转同口径）
+  router.replace(url);
 }
 
 async function endSession() {
@@ -3857,6 +4015,15 @@ onBeforeUnmount(() => {
   background: var(--mk-amber-fill); color: var(--mk-on-fill);
   font-size: 12.5px; font-weight: 700; cursor: pointer;
 }
+/* 「仍然完成结算」：与「去回答」同域但低一级权重（描边文字钮）——它是一条明确但非首选的出口，
+   主路径仍是先回答。与「返回」类次级动作同口径，不用第二颗实心块抢注意力。 */
+.gate__still {
+  border: 1px solid var(--wf-color-warning-border);
+  border-radius: 999px; padding: 6px 11px;
+  background: transparent;
+  color: var(--ink); font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.gate__still:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .gate__close {
   width: 26px; height: 26px; border: 0; border-radius: 50%;
   background: transparent; color: var(--muted);
@@ -4225,16 +4392,18 @@ onBeforeUnmount(() => {
   color: var(--blue-deep);
 }
 .replies__hint { font-size: 12px; color: var(--faint); }
-/* 开场引导（opening.question 收进面板）：一行可选的小字，想回答就打字，不答可直接选动作 */
+/* 开场引导（opening.question 收进面板）：一行可选的小字，想回答就打字，不答可直接选动作。
+   2026-11-02 首屏观感：此前是虚线圆角框，学生误以为又有一个输入框要填；改成带左侧引导线的提示行。 */
 .replies__question {
   margin: 0 2px;
-  padding: 8px 10px;
+  padding: 2px 0 2px 10px;
   font-size: 12px;
   line-height: 1.6;
   color: var(--muted);
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--blue) 30%, transparent);
-  border-radius: 8px; /* 圆角阶梯：控件 */
+  background: none;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  border-radius: 0;
 }
 /* 暗色：底/字已令牌化自动翻转，原字面量覆写退役 */
 .replies__row { display: flex; flex-direction: column; gap: 8px; }

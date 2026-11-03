@@ -31,7 +31,7 @@
 
       <div class="completion-summary">
         <div class="summary-item"><span class="summary-label">主题</span><span class="summary-value">{{ topic }}</span></div>
-        <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ summaryCounters.display.mastered ?? masteredCount }}/{{ totalCount }} 已学会</span></div>
+        <div class="summary-item"><span class="summary-label">知识点</span><span class="summary-value">{{ knowledgeCountText }}</span></div>
         <div class="summary-item"><span class="summary-label">用时</span><span class="summary-value">{{ duration }}</span></div>
         <div class="summary-item"><span class="summary-label">学习消息</span><span class="summary-value">{{ summaryCounters.display.messages ?? messageCount }} 条</span></div>
       </div>
@@ -120,11 +120,14 @@
 
     <div v-if="!blocked" class="completion-actions">
       <!-- 三个动作的后果写清楚：用户反馈「又是继续、又是返回、又是完成，不知道什么意思」 -->
-      <p class="completion-actions__hint">完成任务会推进路径进度，其余不会。</p>
+      <p class="completion-actions__hint">{{ taskCompleted ? '本节任务已计入路径进度，下面两项不会重复推进。' : '完成任务会推进路径进度，其余不会。' }}</p>
       <div class="completion-actions__row">
         <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'continue-task')"><span class="completion-icon" aria-hidden="true"><VideoPlay /></span>继续练习</button>
         <button type="button" class="completion-btn completion-btn--action completion-btn--link" :disabled="busy" @click="emit('action', 'end')"><span class="completion-icon" aria-hidden="true"><ArrowLeft /></span>返回学习路径</button>
-        <button type="button" class="completion-btn completion-btn--action completion-btn--primary" :disabled="busy" @click="emit('action', 'complete-task')">
+        <!-- 已结算的任务不再给「完成任务」（2026-11-03 走查 S4-5 根因修复）：那一刻路径页早已把这节
+             计入完成（阶段 1 = 1/2），再递一颗「完成任务」等于让同一件事做两遍；入口由课次状态
+             （task.status === 'completed'）决定，而不是由页面自己猜。 -->
+        <button v-if="!taskCompleted" type="button" class="completion-btn completion-btn--action completion-btn--primary" :disabled="busy" @click="emit('action', 'complete-task')">
           <span v-if="busy" class="spinner--sm completion-spinner" aria-hidden="true"></span>
           <span v-else class="completion-icon" aria-hidden="true"><CircleCheckFilled /></span>完成任务
         </button>
@@ -177,6 +180,10 @@ const props = defineProps<{
   taskId?: string;
   /** 结算门禁：末问/小测未完成时隐藏常规动作栏，只保留下方恢复卡 */
   blocked?: boolean;
+  /** 该任务在路径侧已经计入完成（task.status === 'completed'）：不再递「完成任务」，见动作栏注释 */
+  taskCompleted?: boolean;
+  /** 与 masteredCount/totalCount 同源的课次知识点（含进行中进度）；只用于把「0/2 已学会」补成完整读数 */
+  knowledgePoints?: Array<{ status?: string; progress?: number }>;
 }>();
 
 const emit = defineEmits<{ action: [action: 'end' | 'continue-task' | 'complete-task']; 'advisory-action': [action: string] }>();
@@ -244,6 +251,31 @@ const summaryCounters = useCountUpMap(() => ({
   mastered: props.masteredCount,
   messages: props.messageCount,
 }));
+
+/**
+ * 知识点读数（2026-11-03 走查 S4-3）。
+ *
+ * 实测：学员当堂两次小测都答对、导师说「这个任务要练的动作你已经独立走完了」，
+ * 页头却单摆一句「知识点 0/2 已学会」——数字本身没错（两条都还在 learning、进度 80/90），
+ * 错在把它当结论单独呈现，读者只会得到"全没学会"的印象，与同屏的当堂反馈相反。
+ * 修法：把同源知识点里的**进行中进度**一并说出来，让读数完整，不改判定阈值
+ * （是否升为 mastered 属教学口径，不在展示层动）。
+ */
+const inProgressPoints = computed(() => (props.knowledgePoints || [])
+  .filter((p) => String(p.status || '') === 'learning' && Number(p.progress) > 0));
+const topProgress = computed(() => inProgressPoints.value
+  .reduce((max, p) => Math.max(max, Number(p.progress) || 0), 0));
+const knowledgeCountText = computed(() => {
+  const mastered = summaryCounters.display.mastered ?? props.masteredCount;
+  const base = `${mastered}/${props.totalCount} 已学会`;
+  // 尾巴的去留用真值判定：数字在滚动动画里会经过 0，不能让「全部已学会」的课闪一帧「2 项在学」
+  const allMastered = props.masteredCount >= props.totalCount;
+  if (inProgressPoints.value.length === 0 || allMastered) return base;
+  const tail = topProgress.value > 0
+    ? `${inProgressPoints.value.length} 项在学，最高 ${topProgress.value}%`
+    : `${inProgressPoints.value.length} 项在学`;
+  return `${base} · ${tail}`;
+});
 const sessionCounters = useCountUpMap(() => {
   const out: Record<string, number> = {};
   for (const card of sessionMetricCards.value) out[card.key] = Number(card.raw);

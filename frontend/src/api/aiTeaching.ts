@@ -200,6 +200,14 @@ export interface ActiveSessionInfo {
   topic: string;
   startTime: string;
   messageCount: number;
+  /** 最近一条消息时间（无消息回退到 startTime）：2026-11-03 起由服务端给出 */
+  lastActiveAt?: string | null;
+  /**
+   * 活跃度分档，与断线恢复窗口（48h）同源、由服务端判定：
+   * `active` = 还在带的课；`idle` = 最近活跃已超过恢复窗口。
+   * 旧接口/旧数据无此字段时按 active 处理（保持既有行为）。
+   */
+  activity?: 'active' | 'idle';
 }
 
 export interface SessionDetail {

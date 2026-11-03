@@ -98,8 +98,33 @@
 
           <!-- ============ AI 任务 Tab ============ -->
           <template v-else>
+            <!-- 课堂两档（2026-11-03）：由服务端给的 lastActiveAt/activity 判定，与断线恢复窗口同源。
+                 不叫「进行中/运行中」混排——那会和后台任务的「运行中」读成一回事，故两档都冠以「课堂」。 -->
+            <div v-if="liveSessions.length" class="nc__section">
+              <div class="nc__section-label">课堂进行中</div>
+              <div v-for="s in liveSessions" :key="s.sessionId" class="nc__task">
+                <div class="nc__task-content">
+                  <div class="nc__task-row">
+                    <strong>{{ s.topic || s.subject || '未命名课堂' }}</strong>
+                  </div>
+                  <span class="nc__task-detail">{{ openSessionDetail(s) }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="idleSessions.length" class="nc__section" :class="{ 'nc__section--border': liveSessions.length }">
+              <div class="nc__section-label">课堂空闲中</div>
+              <div v-for="s in idleSessions" :key="s.sessionId" class="nc__task">
+                <div class="nc__task-content">
+                  <div class="nc__task-row">
+                    <strong>{{ s.topic || s.subject || '未命名课堂' }}</strong>
+                  </div>
+                  <span class="nc__task-detail">{{ idleSessionDetail(s) }}</span>
+                </div>
+              </div>
+            </div>
+
             <!-- 进行中任务 -->
-            <div v-if="busyItems.length" class="nc__section">
+            <div v-if="busyItems.length" class="nc__section" :class="{ 'nc__section--border': liveSessions.length || idleSessions.length }">
               <div class="nc__section-label">
                 <span class="nc__section-label-icon nc__section-label-icon--running" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
@@ -177,7 +202,7 @@
 
             <!-- 空态给出口（R6D）：照抄上方通知空态的出口结构（.nc__empty-links + 去学习台），
                  原句尾「可以先去学习台或路径页开始一次学习」的指路由按钮承担 -->
-            <div v-if="!busyItems.length && !feed.length" class="nc__empty">
+            <div v-if="!busyItems.length && !openSessions.length && !feed.length" class="nc__empty">
               <span class="nc__empty-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="28" height="28"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M9 7h6M9 12h6M9 17h3"/><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
               </span>
@@ -205,7 +230,7 @@ import { useRouter } from 'vue-router';
 import api from '@/utils/api';
 import { timeAgo } from '@/views/admin-redesign/live';
 import { learningAPI } from '@/api/learning';
-import { aiTeachingAPI } from '@/api/aiTeaching';
+import { aiTeachingAPI, type ActiveSessionInfo } from '@/api/aiTeaching';
 import { getAgentLogs } from '@/api/userCustom';
 import { agentLabelOf } from './agent-labels';
 import { onTabRowKeydown } from '@/utils/rovingTablist';
@@ -307,6 +332,8 @@ function onNotifClick(n: NotifItem) {
 
 /* ---------- AI 任务（原 V2TaskCenter 逻辑） ---------- */
 const busyItems = ref<BusyItem[]>([]);
+/** 可继续的课堂（2026-11-03 口径修正）：不是后台任务，不进 busyItems/角标；按服务端 activity 分「进行中 / 空闲中」两档 */
+const openSessions = ref<ActiveSessionInfo[]>([]);
 const feed = ref<FeedEvent[]>([]);
 const refreshing = ref(false);
 const lastSync = ref<number | null>(null);
@@ -380,17 +407,59 @@ async function collectBusy(): Promise<void> {
       });
     }
   } catch { /* 忽略 */ }
+}
+
+/**
+ * 「可继续的课堂」——原先这些会话被塞进「运行中 / AI 任务进行中」，还挂着进度条动画：
+ * 课堂**不是后台任务**，没有任何东西在跑；而 `sessions/active` 只给 startTime/messageCount、
+ * **不给最近活跃时间**，所以「进行中」是面板验证不了的宣称。真人走查实锤：面板说「课堂进行中」
+ * 而路径列表说「待开始」（那条会话是数据残留 + 2h 空闲回收窗口内的）。
+ *
+ * 现在：服务端补上 `lastActiveAt`（每会话最近一条消息时间）并按断线恢复窗口判出 `activity`，
+ * 面板只做两件事——进行中的课说「始于几点 · 已几轮」，空闲中的课说「最近活跃多久前 · 已几轮」。
+ * 阈值不在前端：档位口径与 RECOVERY_WINDOW_MS 同源（见后端 sessions/active 路由注释）。
+ */
+async function collectOpenSessions(): Promise<void> {
   try {
     const active = await aiTeachingAPI.getActiveSessions();
-    for (const s of active) {
-      busyItems.value.push({
-        key: `session-${s.sessionId}`,
-        title: '课堂进行中',
-        detail: s.topic || s.subject || undefined
-      });
-    }
-  } catch { /* 忽略 */ }
+    openSessions.value = Array.isArray(active) ? active : [];
+  } catch {
+    openSessions.value = [];
+  }
 }
+
+/** 会话条目副文：起始时刻 + 已进行轮次（都来自接口，不猜测状态） */
+function openSessionDetail(s: ActiveSessionInfo): string {
+  const parts: string[] = [];
+  const started = s.startTime ? new Date(s.startTime) : null;
+  if (started && !Number.isNaN(started.getTime())) {
+    const hh = String(started.getHours()).padStart(2, '0');
+    const mm = String(started.getMinutes()).padStart(2, '0');
+    parts.push(`始于 ${hh}:${mm}`);
+  }
+  if (s.messageCount) parts.push(`已 ${s.messageCount} 轮`);
+  return parts.join(' · ') || '尚未开始对话';
+}
+
+/**
+ * 空闲档副文：说清"多久没动了"——这是空闲与进行中的唯一差别所在。
+ * 服务端给的 lastActiveAt 是每会话最近一条消息时间；缺失时退回起始时刻口径。
+ */
+function idleSessionDetail(s: ActiveSessionInfo): string {
+  const parts: string[] = [];
+  if (s.lastActiveAt) {
+    const t = new Date(s.lastActiveAt);
+    if (!Number.isNaN(t.getTime())) parts.push(`最近活跃 ${timeAgo(s.lastActiveAt)}`);
+  }
+  if (!parts.length) parts.push(openSessionDetail(s));
+  else if (s.messageCount) parts.push(`已 ${s.messageCount} 轮`);
+  return parts.join(' · ');
+}
+
+/** 进行中：服务端判定的 activity（缺字段按 active，保持旧接口行为不变） */
+const liveSessions = computed(() => openSessions.value.filter((s) => s.activity !== 'idle'));
+/** 空闲中：最近活跃已超过断线恢复窗口，课还在、可以接着上 */
+const idleSessions = computed(() => openSessions.value.filter((s) => s.activity === 'idle'));
 async function refresh() {
   if (refreshing.value) return;
   refreshing.value = true;
@@ -398,7 +467,9 @@ async function refresh() {
   const prevCount = busyItems.value.length;
   busyItems.value = [];
   // 未读角标刷新挂在同一轮询上：轮询本来就在跑（忙 12s/闲 60s），不另起定时器
-  await Promise.allSettled([collectBusy(), feedRefresh(), refreshUnread()]);
+  await Promise.allSettled([collectBusy(), collectOpenSessions(), feedRefresh(), refreshUnread()]);
+  // busy 只认后台任务（路径生成）：课堂是"有东西可继续"，不是"有东西在跑"，
+  // 更不该按 12s 快轮询去追它（会话状态不会秒级变化）
   busy = busyItems.value.length > 0;
   if (busy !== prevBusy && !busy && prevCount > 0) await feedRefresh();
   lastSync.value = Date.now();
@@ -443,8 +514,8 @@ function closePanel() {
 function toggle() {
   if (open.value) { closePanel(); return; }
   open.value = true;
-  // 默认落有内容的一栏；都空则通知
-  tab.value = busyItems.value.length || feed.value.length ? 'tasks' : 'notif';
+  // 默认落有内容的一栏；都空则通知（可继续的课堂也算"有内容"）
+  tab.value = busyItems.value.length || openSessions.value.length || feed.value.length ? 'tasks' : 'notif';
   if (!notifItems.value.length) void notifLoad();
   void nextTick(() => panelRef.value?.focus({ preventScroll: true }));
 }

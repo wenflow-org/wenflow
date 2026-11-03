@@ -94,6 +94,8 @@
           :advisory="sessionDetail.advisory || null"
           :busy="completeTaskBusy"
           :blocked="!!settleBlocked"
+          :task-completed="taskCompleted"
+          :knowledge-points="knowledgePoints"
           @action="handleAction"
           @advisory-action="handleAdvisoryAction"
         />
@@ -215,6 +217,9 @@ const learnBasePath = computed(() => '/learn');
 
 const loading = ref(true);
 const error = ref('');
+/** 课次是否已结算（见 probeTaskCompleted）：已结算则不再递「完成任务」入口 */
+const taskCompleted = ref(false);
+let taskProbeDone = false;
 /** 结算失败时继续轮询：后端每 2 分钟自动重结算一次（预算 ≤3），前端不再让用户「重新进入」空等 */
 const finalizationRetrying = ref(false);
 let finalizationRetryPolls = 0;
@@ -417,6 +422,7 @@ const pollEvaluation = async () => {
     if (componentUnmounted || !pollingActive) return;
     if (!detail) throw new Error(EVAL_NOT_FOUND_MSG);
     sessionDetail.value = detail;
+    void probeTaskCompleted();
     if (shouldContinuePolling(detail)) {
       schedulePoll(finalizationRetrying.value ? FINALIZATION_RETRY_POLL_MS : POLL_INTERVAL_MS);
     } else {
@@ -560,6 +566,8 @@ const fetchEvaluation = async () => {
     const detail = await aiTeachingAPI.getSessionDetail(sessionId.value);
     if (componentUnmounted) return;
     sessionDetail.value = detail;
+    // 已结束的会话不会再进轮询，首屏这一跳是它唯一的机会（probeTaskCompleted 自带一次守卫）
+    void probeTaskCompleted();
     if (!detail) {
       error.value = EVAL_NOT_FOUND_MSG;
       return;
@@ -597,6 +605,23 @@ const goBackToPath = (forceRefresh?: boolean) => {
   }
   router.push(learningPathsPath.value);
 };
+
+/**
+ * 课次是否已在路径侧计入完成（2026-11-03 走查 S4-5 根因修复）。
+ *
+ * 实测：评估页顶部写「本次学习已结束」，同页底部却又递一颗「完成任务」并注明"会推进路径进度"，
+ * 而路径页早已把这节算进完成（阶段 1 = 1/2）——同一件事像是没做完，还能再做一遍。
+ * 判据不靠页面猜，直接用课次状态（`task.status === 'completed'`），
+ * 与 handleAction('continue-task') 里的 P27 探针同源。只探一次，失败按未结算处理（保持原入口）。
+ */
+async function probeTaskCompleted() {
+  if (taskProbeDone) return;
+  taskProbeDone = true;
+  try {
+    const task = unwrap<{ status?: string } | null>(await api.get(`/learning/tasks/${taskId.value}`));
+    taskCompleted.value = task?.status === 'completed';
+  } catch { /* 探测失败：按未结算处理，不改变既有入口 */ }
+}
 
 const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') => {
   if (action === 'continue-task') {
