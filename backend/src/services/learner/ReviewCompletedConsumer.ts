@@ -281,6 +281,14 @@ export class ReviewCompletedConsumer {
         // 整条事件重试到死信，该概念的调度永久停摆（2026-10-21 实测 2 条事件 / 29 次重试）。
         const adjustedStability = Math.max(FSRS_MIN_STABILITY, result.state.stability * interferenceMultiplier);
         const dueAt = new Date(now.getTime() + Math.round(result.intervalDays * interferenceMultiplier) * DAY_MS);
+        // #158：复习落库的 stability 不能再「没到 mastered 一律 fragile」——那会让一次「复习了但只到
+        // hard」（status=learning）直接绕过 LearnerKnowledgeMemoryService 的脆弱证据门
+        // （extractionCount≥3 且已过 7 天），把「刚学一半」判成 fragile / misconceptionRisk:high。
+        // 与课内 canonical 映射（mapKnowledgeStatusToMastery）同口径：mastered→stable、
+        // learning→developing；只有本次真未答出（rating=again）才维持 fragile。
+        const traceStability = item.rating === 'again'
+          ? 'fragile'
+          : item.status === 'mastered' ? 'stable' : 'developing';
         await tx.memory_traces.upsert({
           where: {
             userId_conceptKey: { userId: event.userId, conceptKey }
@@ -293,7 +301,7 @@ export class ReviewCompletedConsumer {
             conceptId: anchoredConceptId,
             label: item.label ?? null,
             masteryScore: clamp01(item.masteryScore),
-            stability: item.status === 'mastered' ? 'stable' : 'fragile',
+            stability: traceStability,
             lastSeenAt: now,
             extractionCount: 1,
             source: 'review-event',
@@ -309,7 +317,7 @@ export class ReviewCompletedConsumer {
             // #94：只在解析成功时覆盖（未解析出不得把已锚定的行写回 null，同写入主链契约）
             ...(anchoredConceptId !== null ? { conceptId: anchoredConceptId } : {}),
             masteryScore: clamp01(item.masteryScore),
-            stability: item.status === 'mastered' ? 'stable' : 'fragile',
+            stability: traceStability,
             lastSeenAt: now,
             extractionCount: { increment: 1 },
             source: 'review-event',
