@@ -435,7 +435,16 @@ export class LearnerKnowledgeMemoryService {
       // payload 只在确认要消费该类型后才解析（旧口径对每行先 parse 再判类型）
       if (evidence.evidenceType === 'session-knowledge-distilled') {
         const payload = parseJsonSafe<any>(evidence.payload, {});
-        if (Array.isArray(payload.conceptLedger)) enrichedLedger.push(...payload.conceptLedger);
+        // issue #156：概念台账「最旧证据覆盖最新证据」。证据按 occurredAt desc 取，聚合又是
+        // 「后者覆盖标量」，而模型行本身不带时间戳（lesson-knowledge-enricher 输出无 lastSeenAt）。
+        // 这里把每条证据的 occurredAt 显式盖到 lastSeenAt，让下游可按证据新旧取胜；
+        // 否则数组末尾（最旧一课）在 last-wins 合并里反而赢，画像回退到旧掌握度。
+        const occurredAtIso = evidence.occurredAt ? new Date(evidence.occurredAt).toISOString() : undefined;
+        if (Array.isArray(payload.conceptLedger)) {
+          enrichedLedger.push(...payload.conceptLedger.map((item: any) => occurredAtIso
+            ? { ...item, firstSeenAt: item?.firstSeenAt ?? occurredAtIso, lastSeenAt: occurredAtIso }
+            : item));
+        }
         if (Array.isArray(payload.reusableFoundations)) enrichedReusableFoundations.push(...payload.reusableFoundations);
         if (Array.isArray(payload.blockedFoundations)) enrichedBlockedFoundations.push(...payload.blockedFoundations);
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
@@ -448,7 +457,12 @@ export class LearnerKnowledgeMemoryService {
       }
       if (evidence.evidenceType === 'dialogue-concepts-extracted') {
         const payload = parseJsonSafe<any>(evidence.payload, {});
-        if (Array.isArray(payload.recurringConfusions)) enrichedConfusions.push(...payload.recurringConfusions);
+        if (Array.isArray(payload.recurringConfusions)) {
+          const occurredAtIso = evidence.occurredAt ? new Date(evidence.occurredAt).toISOString() : undefined;
+          enrichedConfusions.push(...payload.recurringConfusions.map((item: any) => occurredAtIso
+            ? { ...item, lastSeenAt: occurredAtIso }
+            : item));
+        }
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
         continue;
       }
@@ -1119,8 +1133,10 @@ export class LearnerKnowledgeMemoryService {
           sourceTasks: concept.relatedTaskIds,
           evidenceCount,
         };
-      })
-      .slice(0, 40);
+      });
+    // issue #156：此处旧实现 `.slice(0, 40)` 在**合并前**截断确定性台账，模型独有概念只能吃
+    // 60 条里剩余的 20 个额度，且排序是任务插入序而非证据新旧。改为不截断，交给合并后的
+    // 「按 lastSeenAt 排序 + slice(0,60)」（见下方 conceptLedger），口径统一为「越新越优先」。
 
     const deterministicConfusions: LearnerRecurringConfusion[] = fragileConcepts.slice(0, 12).map((label) => ({
       conceptKey: label,
@@ -1158,44 +1174,104 @@ export class LearnerKnowledgeMemoryService {
       ?? (item?.label ? conceptIdByLedgerKey.get(item.label) : undefined);
 
     // 台账聚合：conceptId 优先归并（同一 canonical 的痕迹键/任务标签键收敛为一行），名字键兜底
+    const seenMs = (value?: string): number | null => {
+      if (!value) return null;
+      const ms = new Date(value).getTime();
+      return Number.isFinite(ms) ? ms : null;
+    };
     const ledgerMap = new Map<string, LearnerBackgroundConceptLedgerItem>();
+    // issue #156（复核补修）：`familiarity/transferReadiness/misconceptionRisk` 必须由**证据时间最新**
+    // 的那一行决定，而不是数组位置。旧合并体把 deterministicConceptLedger 恒排在前、模型行恒在后 →
+    // 模型行无条件覆盖确定性行，于是「更新的 session knowledgeState / memory_trace」反被「更旧的
+    // 模型蒸馏行」改写（新课 mastered→stable 被旧课 seen 覆盖，lastSeenAt 却取新课 → 自相矛盾）。
+    // 组内按 lastSeenAt 选赢家（无任何时间戳时退回数组末位 = 既有「模型行优先」口径），
+    // firstSeenAt 取最早、lastSeenAt 取最晚；label/conceptKey 仍走原有身份归并口径（P1-16 契约：
+    // 合并后保留模型 slug 键），集合字段两侧求并、evidenceCount 取大。
+    const enrichedLedgerAsc = [...enrichedLedger].sort(
+      (a, b) => (seenMs(a.lastSeenAt) ?? Number.NEGATIVE_INFINITY) - (seenMs(b.lastSeenAt) ?? Number.NEGATIVE_INFINITY),
+    );
     for (const [key, group] of groupItemsByConceptIdentity<LearnerBackgroundConceptLedgerItem>(
-      [...deterministicConceptLedger, ...enrichedLedger],
+      [...deterministicConceptLedger, ...enrichedLedgerAsc],
       identityOfLedgerItem,
     )) {
       let merged = group[0];
+      let firstSeenAt = group[0].firstSeenAt;
+      let lastSeenAt = group[0].lastSeenAt;
       for (let i = 1; i < group.length; i += 1) {
         const item = group[i];
-        // P1-16 既有合并体：后者覆盖标量、集合字段求并（聚合语义与改造前逐字一致）
         merged = {
           ...merged,
           ...item,
           sourcePaths: dedupe([...(merged.sourcePaths || []), ...(item.sourcePaths || [])]),
           sourceTasks: dedupe([...(merged.sourceTasks || []), ...(item.sourceTasks || [])]),
-          evidenceCount: Math.max(merged.evidenceCount || 0, item.evidenceCount || 0)
+          evidenceCount: Math.max(merged.evidenceCount || 0, item.evidenceCount || 0),
         };
+        const curFirst = seenMs(firstSeenAt);
+        const itemFirst = seenMs(item.firstSeenAt);
+        if (itemFirst !== null && (curFirst === null || itemFirst < curFirst)) firstSeenAt = item.firstSeenAt;
+        const curLast = seenMs(lastSeenAt);
+        const itemLast = seenMs(item.lastSeenAt);
+        if (itemLast !== null && (curLast === null || itemLast > curLast)) lastSeenAt = item.lastSeenAt;
       }
+      // 赢家：时间戳最大者；并列取数组靠后者（保持「无时间戳时模型行优先」的既有口径）。
+      let winner = group[group.length - 1];
+      for (const item of group) {
+        const winnerLast = seenMs(winner.lastSeenAt);
+        const itemLast = seenMs(item.lastSeenAt);
+        if (itemLast !== null && (winnerLast === null || itemLast >= winnerLast)) winner = item;
+      }
+      merged = {
+        ...merged,
+        familiarity: winner.familiarity ?? merged.familiarity,
+        transferReadiness: winner.transferReadiness ?? merged.transferReadiness,
+        misconceptionRisk: winner.misconceptionRisk ?? merged.misconceptionRisk,
+        firstSeenAt,
+        lastSeenAt,
+      };
       ledgerMap.set(key, merged);
     }
-    const conceptLedger = Array.from(ledgerMap.values()).slice(0, 60);
+    // issue #156：确定性台账此前在合并前就 slice(0,40)，模型独有概念只能吃 60 条里剩余的额度，
+    // 且排序是任务插入序而非证据新旧。改为先合并、再按 lastSeenAt（越新越靠前）排序截断到 60
+    // ——注意：无 lastSeenAt 的行排在最末，>60 时可能被挤出（旧实现靠 slice(0,40) 保确定性行）。
+    const conceptLedger = Array.from(ledgerMap.values())
+      .sort((a, b) => (seenMs(b.lastSeenAt) ?? Number.NEGATIVE_INFINITY) - (seenMs(a.lastSeenAt) ?? Number.NEGATIVE_INFINITY))
+      .slice(0, 60);
 
-    // 反复误解聚合：与台账同口径（conceptId 优先归并，名字键兜底）
+    // 反复误解聚合：与台账同口径（conceptId 优先归并，名字键兜底；pattern 同样取最新证据）
     const confusionMap = new Map<string, LearnerRecurringConfusion>();
+    const enrichedConfusionsAsc = [...enrichedConfusions].sort(
+      (a, b) => (seenMs(a.lastSeenAt) ?? Number.NEGATIVE_INFINITY) - (seenMs(b.lastSeenAt) ?? Number.NEGATIVE_INFINITY),
+    );
     for (const [key, group] of groupItemsByConceptIdentity<LearnerRecurringConfusion>(
-      [...deterministicConfusions, ...enrichedConfusions],
+      [...deterministicConfusions, ...enrichedConfusionsAsc],
       identityOfLedgerItem,
     )) {
       let merged = group[0];
+      let lastSeenAt = group[0].lastSeenAt;
       for (let i = 1; i < group.length; i += 1) {
         const item = group[i];
         merged = {
           ...merged,
           ...item,
           confidence: Math.max(merged.confidence || 0, item.confidence || 0),
-          count: Math.max(merged.count || 0, item.count || 0)
+          count: Math.max(merged.count || 0, item.count || 0),
         };
+        const curLast = seenMs(lastSeenAt);
+        const itemLast = seenMs(item.lastSeenAt);
+        if (itemLast !== null && (curLast === null || itemLast > curLast)) lastSeenAt = item.lastSeenAt;
       }
-      confusionMap.set(key, merged);
+      // issue #156：pattern 同样取最新证据、lastSeenAt 取 max，别停在旧课。
+      let winner = group[group.length - 1];
+      for (const item of group) {
+        const winnerLast = seenMs(winner.lastSeenAt);
+        const itemLast = seenMs(item.lastSeenAt);
+        if (itemLast !== null && (winnerLast === null || itemLast >= winnerLast)) winner = item;
+      }
+      confusionMap.set(key, {
+        ...merged,
+        pattern: winner.pattern ?? merged.pattern,
+        lastSeenAt,
+      });
     }
     const recurringConfusions = Array.from(confusionMap.values()).slice(0, 20);
 
