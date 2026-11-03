@@ -1215,6 +1215,14 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
       subjectiveDifficulty: data.subjectiveDifficulty,
       notes: data.notes,
       completionSource: resolveTaskCompletionSource(req),
+      // #147（回归 #204）：blackbox VL 先 endTeaching(end_only) 再走本端点——会话已闭合，
+      // 本次完成不会再产出 lesson:completed；带上会话 id 让事件消费者跳过重复刷新，并由
+      // sessionClosedBeforeCompletion 让 completeTask 补做一次 eager 刷新（否则本路
+      // 不传 sessionId 时 eager + 消费者会双刷同一投影键）。「已闭合」前提由紧随其后的
+      // recordDirectTaskCompletion 强制（未闭合会以 FINALIZATION_SESSION_NOT_CLOSED 拒绝）。
+      ...(data.teachingSessionId
+        ? { sessionId: data.teachingSessionId, sessionClosedBeforeCompletion: true }
+        : {}),
     });
 
     // P1-3：blackbox VL 先 endTeaching(end_only) 再走本端点结算任务；

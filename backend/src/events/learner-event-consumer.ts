@@ -58,9 +58,13 @@ export async function handleLearnerEvent(event: DurableDomainEvent): Promise<voi
     learnerProfileService.clear(event.userId);
     const data = event.data || {};
     // #147：教学的 task:completed 带 sessionId（见 task-completion.service 的 completionContext）。
-    // 它的投影键（teaching:path:milestone:task）与同一次收尾的 lesson:completed 完全相同，而
-    // lesson:completed 一定先于它入队（endSession 在 completeTask 之前）且同用户受队头保护，
-    // 该行已被 lesson:completed 的消费刷新过——再刷一次是同一 projectionKey 的重复重算。
+    // 它的投影键（teaching:path:milestone:task）与同一节课的 lesson:completed 完全相同，本次刷新
+    // 由 lesson:completed 的消费承担——该事件在两条链路上都会刷新同一个 projectionKey（真人 finalize
+    // 的 auto-end 在 completeTask 之前入队；VL 仿真 completeTask→endSession 反序），故这里与消费顺序
+    // 无关地按 sessionId 跳过，避免同一键重复重算。
+    // 例外（回归 #204）：本次结算前会话已闭合（end_only 补结算 / complete_task 重试）时不会再产出
+    // lesson:completed，刷新改由 completeTask 的 eager 路径补做（sessionClosedBeforeCompletion），
+    // 否则该次收尾对投影键 0 次刷新、快照静默陈旧。
     // 证据投影仍照做（幂等）；纯路径任务（无 sessionId）不在此列，仍由本消费者刷新。
     const isTeachingTaskCompletion = event.type === 'task:completed' && !!data.sessionId;
     if (!isTeachingTaskCompletion && !PROFILE_ONLY_EVENT_TYPES.has(event.type)) {
